@@ -12,7 +12,7 @@ From crypto Require Import basic.
 
 Section Terms.
 
-Context `{heapG Σ, cfgSG Σ, symbolSG Σ, symbol2SG Σ}.
+Context `{heapG Σ, cfgSG Σ, symbolSG Σ}.
 
 Inductive term  :=
 | TInt of Z
@@ -31,26 +31,23 @@ Fixpoint val_of_term t : val :=
   end.
 
 Class termSG := TermSG {
-  term_inG    :> inG Σ (authR (gsetUR (prodO valO valO)));
-  key_name    :  gname;
-  key2_name   :  gname;
-  nonce_name  :  gname;
-  nonce2_name :  gname;
-  term_name   :  gname;
+  term_inG :> inG Σ (authR (gsetUR (prodO valO valO)));
+  hi_key_name : gname;
+  lo_key_name : gname;
+  hi_nonce_name : gname;
+  lo_nonce_name : gname;
+  term_name : gname;
 }.
 
 Context `{termSG}.
 
-
-
-
-Fixpoint opaque s t : iProp Σ :=
+Fixpoint lo_opaque s t : iProp Σ :=
   match t with
   | TInt _ => False%I
   | TPair _ _ => False%I
-  | TNonce l => symbol s lo_nonce l
+  | TNonce l => symbol lo_nonce (if s then L l else R l)
   | TKey l => False%I
-  | TEnc l t => symbol s hi_key l
+  | TEnc l t => symbol
   end.
 
 Implicit Types TT : gsetUR (prodO valO valO).

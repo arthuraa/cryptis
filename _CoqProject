@@ -3,4 +3,5 @@
 -R . crypto
 
 basic.v
+symbols.v
 crypto.v
