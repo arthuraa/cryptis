@@ -1,14 +1,14 @@
 From mathcomp Require Import ssreflect.
 From iris.algebra Require Import excl auth frac agree gmap list.
 From iris.proofmode Require Import tactics.
-From iris.program_logic Require Export language ectx_language ectxi_language.
+From iris.program_logic Require Import language.
 From iris.program_logic Require Import lifting.
 From iris.algebra Require Import gmap auth gset numbers excl agree ofe.
 From iris.heap_lang Require Import notation proofmode metatheory.
 From iris.heap_lang Require Import primitive_laws.
 From iris.base_logic.lib Require Import invariants.
+From iris_string_ident Require Import ltac2_string_ident.
 Import uPred.
-
 
 Definition specN := nroot .@ "spec".
 
@@ -27,25 +27,27 @@ Definition to_tpool : list expr → tpoolUR := to_tpool_go 0.
 Class cfgSG Σ := CFGSG { cfg_inG :> inG Σ (authR cfgUR); cfg_name : gname }.
 
 Section definitionsS.
-  Context `{cfgSG Σ, invG Σ}.
 
-  Definition heapS_mapsto (l : loc) (q : Qp) (v: valO) : iProp Σ :=
-    own cfg_name (◯ (ε, {[ l := (q, to_agree (Some v : leibnizO (option val))) ]})).
+Context `{cfgSG Σ, invG Σ}.
 
-  Definition tpool_mapsto (j : nat) (e: expr) : iProp Σ :=
-    own cfg_name (◯ ({[ j := Excl e ]}, ∅)).
+Definition heapS_mapsto (l : loc) (q : Qp) (v: valO) : iProp Σ :=
+  own cfg_name (◯ (ε, {[ l := (q, to_agree (Some v : leibnizO (option val))) ]})).
 
-  Definition spec_inv (ρ : cfg heap_lang) : iProp Σ :=
-    (∃ tp (σ : state),
+Definition tpool_mapsto (j : nat) (e: expr) : iProp Σ :=
+  own cfg_name (◯ ({[ j := Excl e ]}, ∅)).
+
+Definition spec_inv (ρ : cfg heap_lang) : iProp Σ :=
+  (∃ tp (σ : state),
       own cfg_name (● (to_tpool tp, to_gen_heap (heap σ)))
       ∗ ⌜rtc erased_step ρ (tp,σ)⌝)%I.
-  Definition spec_ctx : iProp Σ :=
-    (∃ ρ, inv specN (spec_inv ρ))%I.
 
-  Global Instance heapS_mapsto_timeless l q v : Timeless (heapS_mapsto l q v).
-  Proof. apply _. Qed.
-  Global Instance spec_ctx_persistent : Persistent spec_ctx.
-  Proof. apply _. Qed.
+Definition spec_ctx : iProp Σ :=
+  (∃ ρ, inv specN (spec_inv ρ))%I.
+
+Global Instance heapS_mapsto_timeless l q v : Timeless (heapS_mapsto l q v).
+Proof. apply _. Qed.
+Global Instance spec_ctx_persistent : Persistent spec_ctx.
+Proof. apply _. Qed.
 End definitionsS.
 Typeclasses Opaque heapS_mapsto tpool_mapsto.
 
@@ -455,121 +457,91 @@ Section cfg.
 End cfg.
 
 Definition perm `{!EqDecision T, !Countable T} (X : gset (T * T)) :=
-  forall p1 p2, p1 ∈ X → p2 ∈ X → (p1.1 = p1.2 ↔ p2.1 = p2.2).
+  forall p1 p2, p1 ∈ X → p2 ∈ X → (p1.1 = p2.1 ↔ p1.2 = p2.2).
+
+Definition symbol_kind : ofeT := positiveO.
+
+Definition side := boolO.
+Definition Left  : side := true.
+Definition Right : side := false.
+
+Definition symbol_store := gsetUR (prodO symbol_kind (prodO side locO)).
 
 Class symbolSG Σ := SymbolSG {
-  symbol_inG :> inG Σ (authR (gsetUR (prodO locO locO)))
+  symbol_inG :> inG Σ (authR symbol_store);
+  symbol_name : gname;
 }.
 
 Section Symbol.
 
-Context `{!heapG Σ, !cfgSG Σ, !symbolSG Σ}.
+Context `{!heapG Σ, !cfgSG Σ, symbolSG Σ}.
 
-Implicit Types γ : gname.
-Implicit Types LL : gsetUR (prodO locO locO).
+Implicit Types i : symbol_kind.
+Implicit Types s : side.
 Implicit Types l : loc.
+Implicit Types sl : prodO symbol_kind (prodO boolO locO).
+Implicit Types L : symbol_store.
 Implicit Types v : val.
 
-Definition symbols γ : iProp Σ :=
-  ∃ LL, own γ (● LL) ∗ [∗ set] ll ∈ LL, ll.1 ↦ #() ∗ ll.2 ↦ₛ #().
+Definition symbol_inv : iProp Σ :=
+  ∃ L, own symbol_name (● L)
+       ∗ [∗ set] sl ∈ L,
+         if sl.2.1 : side then sl.2.2 ↦ #() else sl.2.2 ↦ₛ #().
 
-Definition symbol γ v1 v2 : iProp Σ :=
-  ∃ l1 l2, ⌜v1 = #l1⌝ ∗ ⌜v2 = #l2⌝ ∗ own γ (◯ {[l1, l2]}).
+Definition symbol s i l :=
+  own symbol_name (◯ {[i, (s, l)]}).
 
-Lemma persistent_symbol γ v1 v2 : Persistent (symbol γ v1 v2).
+Lemma persistent_symbol s i l : Persistent (symbol s i l).
 Proof. apply _. Qed.
 
 Definition mksymbol : val := λ: <>, ref #().
 
-Lemma wp_mksymbol γ j K :
+Lemma step_mksymbol E j K i :
+  nclose specN ⊆ E →
   spec_ctx -∗
-  symbols γ -∗
-  j ⤇ fill K (mksymbol #()%V) -∗
-  WP mksymbol #()%V {{ v1, ∃ v2, symbol γ v1 v2 ∗ j ⤇ fill K v2}}.
+  symbol_inv -∗
+  j ⤇ fill K (mksymbol #()%V)
+  ={E}=∗ ∃ l, j ⤇ fill K #l ∗ symbol Right i l.
 Proof.
-rewrite /symbols /mksymbol.
-iIntros "#Hinv"; iDestruct 1 as (LL) "[Hown Hlocs]"; iIntros "Hspec".
-iPoseProof (step_lam ⊤ with "[Hinv Hspec]") as "> Hspec"; first done.
+rewrite /symbol_inv /mksymbol.
+iIntros (HE) "#Hinv"; iDestruct 1 as (L) "[Hown Hlocs]"; iIntros "Hspec".
+iMod (step_lam E with "[Hinv Hspec]") as "Hspec"; first done.
   by iSplit.
 rewrite /=.
-iPoseProof (step_alloc ⊤ with "[Hinv Hspec]") as "> Hspec"; first done.
+iMod (step_alloc E with "[Hinv Hspec]") as (l) "[Hspec Hl]"; first done.
   by iSplit.
-iDestruct "Hspec" as (l2) "[Hspec Hl2]".
-iApply wp_fupd; wp_pures; wp_alloc l1 as "Hl1".
-pose (Fl := ◯ {[l1, l2]}).
-iMod (own_update _ _ (● (LL ⋅ {[l1, l2]}) ⋅ Fl) with "Hown") as "Hown".
-  etrans.
-  - eapply auth_update_auth.
-    by apply gset_local_update, union_subseteq_l.
-  - apply auth_update_core_id.
-    + by apply gset_core_id.
-    + by apply gset_included, union_subseteq_r.
-rewrite own_op; iDestruct "Hown" as "[Hown Hl1l2]".
-iModIntro; iExists #l2; iSplit=> //.
-iExists l1, l2; do !iSplit; eauto.
+pose (frag := {[i, (Right, l)]} : symbol_store).
+iMod (own_update _ _ (_ ⋅ ◯ (L ⋅ frag)) with "Hown") as "[Hown [_ Hfrag]]".
+  by apply auth_update_alloc, gset_local_update, union_subseteq_l.
+by iModIntro; iExists l; iFrame.
 Qed.
 
-Lemma symbols_alloc : ⊢ |==> ∃ γ, symbols γ.
+
+Lemma wp_mksymbol i E :
+  spec_ctx -∗
+  symbol_inv -∗
+  WP mksymbol #()%V @ E {{ v, ∃ l, ⌜v = #l⌝ ∗ symbol Left i l }}.
 Proof.
-iMod (own_alloc (● ∅ : auth (gset (loc * loc)))) as (γ) "Hown".
-  by apply/auth_auth_valid.
-by iModIntro; iExists γ, ∅; iFrame.
+rewrite /symbol_inv /mksymbol.
+iIntros "#Hinv"; iDestruct 1 as (L) "[Hown Hlocs]".
+iApply wp_fupd; wp_alloc l as "Hl".
+pose (frag := {[i, (Left, l)]} : symbol_store).
+iMod (own_update _ _ (_ ⋅ ◯ (L ⋅ frag)) with "Hown") as "[Hown [_ Hfrag]]".
+  apply auth_update_alloc, gset_local_update, union_subseteq_l.
+by iModIntro; iExists l; iSplit.
 Qed.
 
 End Symbol.
 
-Inductive term  :=
-| TInt of Z
-| TPair of term & term
-| TNonce of loc
-| TKey of loc
-| TEnc of loc & term.
+Lemma symbol_inv_alloc `{!heapG Σ, cfgSG Σ, inG Σ (authR symbol_store)} :
+  ⊢ |==> ∃ (_ : symbolSG Σ), symbol_inv.
+Proof.
+iMod (own_alloc (● ∅ : auth symbol_store)) as (γ) "Hown".
+  by apply/auth_auth_valid.
+by iModIntro; iExists (SymbolSG _ _ γ), ∅; simpl; iFrame.
+Qed.
 
-Fixpoint val_of_term t : val :=
-  match t with
-  | TInt n => (#0, #n)
-  | TPair t1 t2 => (#1, (val_of_term t1, val_of_term t2))%V
-  | TNonce l => (#2, #l)%V
-  | TKey l => (#3, #l)%V
-  | TEnc l t => (#4, (#l, val_of_term t))
-  end.
-
-
-
-
-
-
-
-Class keysSG Σ := KeysSG {
-  keys_inG  :> inG Σ (authR (gsetUR (prodO boolO locO)));
-  keys_inG2 :> inG Σ (authR (gsetUR (prodO locO locO)));
-  keys_name : gname;
-  keys_name2 : gname;
-}.
-
-
-Definition keysN := nroot .@ "keys".
-
-Section Keys.
-
-Context `{!heapG Σ, !cfgSG Σ, !keysSG Σ, !invG Σ}.
-
-Implicit Types bl : bool * loc.
-Implicit Types L : gsetUR (prodO boolO locO).
-Implicit Types LL : gsetUR (prodO locO locO).
-
-Definition keys_inv : iProp Σ :=
-  ∃ L LL,
-    own keys_name (● L) ∗ own keys_name2 (● LL)
-    ∗ ([∗ set] bl ∈ L, if bl.1 : bool then bl.2 ↦ #() else bl.2 ↦ₛ #())
-    ∗ ([∗ set] ll ∈ LL, ll.1 ↦ #() ∗ ll.2 ↦ₛ #()).
-
-Definition keys_ctx : iProp Σ :=
-  inv keysN keys_inv.
-
-End Keys.
-
-
+(*
 (* HACK: move somewhere else *)
 Ltac auto_equiv :=
   (* Deal with "pointwise_relation" *)
@@ -591,328 +563,309 @@ Ltac solve_proper_alt :=
 
 Ltac solve_proper ::= (repeat intros ?; simpl; auto_equiv).
 
+Definition termN : namespace := nroot .@ "term".
 
+Notation D := (prodO valO valO -n> iPropO Σ).
+Implicit Types τi : D.
+Implicit Types Δ : gmapO string D.
+Implicit Types interp : gmapO string D -n> D.
+Implicit Types ee : prodO exprO exprO.
 
-
-
-Definition logN : namespace := nroot .@ "logN".
-
-(** interp : is a unary logical relation. *)
-Section logrel.
-  Context `{heapG Σ, cfgSG Σ}.
-  Notation D := (prodO valO valO -n> iPropO Σ).
-  Implicit Types τi : D.
-  Implicit Types Δ : gmapO string D.
-  Implicit Types interp : gmapO string D -n> D.
-
-  Definition interp_expr (τi : gmapO string D -n> D) Δ
-      (ee : expr * expr) : iProp Σ := (∀ j K,
+Definition interp_expr (τi : gmapO string D -n> D) Δ ee : iProp Σ :=
+  ∀ j K,
     j ⤇ fill K (ee.2) →
-    WP ee.1 {{ v, ∃ v', j ⤇ fill K (of_val v') ∗ τi Δ (v, v') }})%I.
-  Global Instance interp_expr_ne n :
-    Proper (dist n ==> dist n ==> (=) ==> dist n) interp_expr.
-  Proof. unfold interp_expr; solve_proper. Qed.
+    WP ee.1 {{ v, ∃ v', j ⤇ fill K (of_val v') ∗ τi Δ (v, v') }}.
+Global Instance interp_expr_ne n :
+  Proper (dist n ==> dist n ==> (=) ==> dist n) interp_expr.
+Proof. unfold interp_expr; solve_proper. Qed.
 
-  Program Definition ctx_lookup (x : string) : gmapO string D -n> D := λne Δ,
-    from_option id (cconst True)%I (Δ !! x).
-  Solve Obligations with solve_proper.
+Program Definition ctx_lookup (x : string) : gmapO string D -n> D :=
+  λne Δ, from_option id (cconst True)%I (Δ !! x).
+Solve Obligations with solve_proper.
 
-  Program Definition interp_unit : gmapO string D -n> D := λne Δ ww,
-    (⌜ww.1 = #()⌝ ∧ ⌜ww.2 = #()⌝)%I.
-  Solve Obligations with solve_proper_alt.
-  Program Definition interp_nat : gmapO string D -n> D := λne Δ ww,
-    (∃ n : nat, ⌜ww.1 = #n⌝ ∧ ⌜ww.2 = #n⌝)%I.
-  Solve Obligations with solve_proper.
+Program Definition interp_unit : gmapO string D -n> D :=
+  λne Δ ww, (⌜ww.1 = #()⌝ ∧ ⌜ww.2 = #()⌝)%I.
+Solve Obligations with solve_proper_alt.
+Program Definition interp_nat : gmapO string D -n> D :=
+  λne Δ ww, (∃ n : nat, ⌜ww.1 = #n⌝ ∧ ⌜ww.2 = #n⌝)%I.
+Solve Obligations with solve_proper.
 
-  Program Definition interp_bool : gmapO string D -n> D := λne Δ ww,
-    (∃ b : bool, ⌜ww.1 = #b⌝ ∧ ⌜ww.2 = #b⌝)%I.
-  Solve Obligations with solve_proper.
+Program Definition interp_bool : gmapO string D -n> D :=
+  λne Δ ww, (∃ b : bool, ⌜ww.1 = #b⌝ ∧ ⌜ww.2 = #b⌝)%I.
+Solve Obligations with solve_proper.
 
-  Program Definition interp_prod
-      interp1 interp2 : gmapO string D -n> D := λne Δ ww,
-    (∃ vv1 vv2, ⌜ww = (PairV (vv1.1) (vv2.1), PairV (vv1.2) (vv2.2))⌝ ∧
-                interp1 Δ vv1 ∧ interp2 Δ vv2)%I.
-  Solve Obligations with solve_proper.
+Program Definition interp_prod interp1 interp2 : gmapO string D -n> D :=
+  λne Δ ww, (∃ vv1 vv2, ⌜ww = (PairV (vv1.1) (vv2.1), PairV (vv1.2) (vv2.2))⌝ ∧
+                        interp1 Δ vv1 ∧ interp2 Δ vv2)%I.
+Solve Obligations with solve_proper.
 
-  Program Definition interp_sum
-      interp1 interp2 : gmapO string D -n> D := λne Δ ww,
-    ((∃ vv, ⌜ww = (InjLV (vv.1), InjLV (vv.2))⌝ ∧ interp1 Δ vv) ∨
-     (∃ vv, ⌜ww = (InjRV (vv.1), InjRV (vv.2))⌝ ∧ interp2 Δ vv))%I.
-  Solve Obligations with solve_proper.
+Program Definition interp_sum interp1 interp2 : gmapO string D -n> D :=
+  λne Δ ww, ((∃ vv, ⌜ww = (InjLV (vv.1), InjLV (vv.2))⌝ ∧ interp1 Δ vv) ∨
+             (∃ vv, ⌜ww = (InjRV (vv.1), InjRV (vv.2))⌝ ∧ interp2 Δ vv))%I.
+Solve Obligations with solve_proper.
 
-  Program Definition interp_arrow
-          interp1 interp2 : gmapO string D -n> D :=
-    λne Δ ww,
-    (□ ∀ vv, interp1 Δ vv →
-             interp_expr
-               interp2 Δ (App (of_val (ww.1)) (of_val (vv.1)),
-                          App (of_val (ww.2)) (of_val (vv.2))))%I.
-  Solve Obligations with solve_proper.
+Program Definition interp_arrow interp1 interp2 : gmapO string D -n> D :=
+  λne Δ ww,
+  (□ ∀ vv, interp1 Δ vv →
+           interp_expr
+             interp2 Δ (App (of_val (ww.1)) (of_val (vv.1)),
+                        App (of_val (ww.2)) (of_val (vv.2))))%I.
+Solve Obligations with solve_proper.
 
-  Program Definition interp_ref_inv (ll : loc * loc) : D -n> iPropO Σ := λne τi,
-    (∃ vv, ll.1 ↦ vv.1 ∗ ll.2 ↦ₛ vv.2 ∗ τi vv)%I.
-  Solve Obligations with solve_proper.
+Program Definition interp_ref_inv (ll : loc * loc) : D -n> iPropO Σ :=
+  λne τi, (∃ vv, ll.1 ↦ vv.1 ∗ ll.2 ↦ₛ vv.2 ∗ τi vv)%I.
+Solve Obligations with solve_proper.
 
-  Program Definition interp_ref
-      interp : gmapO string D -n> D := λne Δ ww,
-    (∃ ll : loc * loc, ⌜ww = (#ll.1, #ll.2)⌝ ∧
-           inv (logN .@ ll) (interp_ref_inv ll (interp Δ)))%I.
-  Solve Obligations with solve_proper.
+Program Definition interp_ref interp : gmapO string D -n> D := 
+  λne Δ ww, (∃ ll : loc * loc, ⌜ww = (#ll.1, #ll.2)⌝ ∧
+            inv (termN .@ ll) (interp_ref_inv ll (interp Δ)))%I.
+Solve Obligations with solve_proper.
 
-  Fixpoint interp (τ : type) : listO D -n> D :=
-    match τ return _ with
-    | TUnit => interp_unit
-    | TNat => interp_nat
-    | TBool => interp_bool
-    | TProd τ1 τ2 => interp_prod (interp τ1) (interp τ2)
-    | TSum τ1 τ2 => interp_sum (interp τ1) (interp τ2)
-    | TArrow τ1 τ2 => interp_arrow (interp τ1) (interp τ2)
-    | TVar x => ctx_lookup x
-    | TForall τ' => interp_forall (interp τ')
-    | TRec τ' => interp_rec (interp τ')
-    | Tref τ' => interp_ref (interp τ')
-    end.
-  Notation "⟦ τ ⟧" := (interp τ).
+Program Definition interp_lo_term : D := λne vv,
+  (∃ t1 t2, ⌜vv.1 = val_of_term t1⌝ ∗
+            ⌜vv.2 = val_of_term t2⌝ ∗
+            lo_term' t1 t2)%I.
+Solve Obligations with solve_proper.
 
-  Definition interp_env (Γ : list type)
-      (Δ : listO D) (vvs : list (val * val)) : iProp Σ :=
-    (⌜length Γ = length vvs⌝ ∗ [∗] zip_with (λ τ, ⟦ τ ⟧ Δ) Γ vvs)%I.
-  Notation "⟦ Γ ⟧*" := (interp_env Γ).
+Class env_Persistent Δ :=
+  ctx_persistentP : ∀ α τi, Δ !! α = Some τi → ∀ vv, Persistent (τi vv).
+Global Instance ctx_persistent_empty : env_Persistent ∅.
+Proof. by constructor. Qed.
+Global Instance ctx_persistent_insert α τi Δ :
+  (∀ vv, Persistent (τi vv)) → env_Persistent Δ → env_Persistent (<[α:=τi]>Δ).
+Proof.
+move=> τiP ΔP β τi'.
+case: (decide (α = β))=> [<-{β}|ne].
+  by rewrite lookup_insert; case=> {τi'} <-.
+rewrite lookup_insert_ne //; exact: ΔP.
+Qed.
 
-  Class env_Persistent Δ :=
-    ctx_persistentP : Forall (λ τi, ∀ vv, Persistent (τi vv)) Δ.
-  Global Instance ctx_persistent_nil : env_Persistent [].
-  Proof. by constructor. Qed.
-  Global Instance ctx_persistent_cons τi Δ :
-    (∀ vv, Persistent (τi vv)) → env_Persistent Δ → env_Persistent (τi :: Δ).
-  Proof. by constructor. Qed.
-  Global Instance ctx_persistent_lookup Δ x vv :
-    env_Persistent Δ → Persistent (ctx_lookup x Δ vv).
-  Proof. intros HΔ; revert x; induction HΔ=>-[|?] /=; apply _. Qed.
-  Global Instance interp_persistent τ Δ vv :
-    env_Persistent Δ → Persistent (⟦ τ ⟧ Δ vv).
-  Proof.
-    revert vv Δ; induction τ=> vv Δ HΔ; simpl; try apply _.
-    rewrite /Persistent fixpoint_interp_rec1_eq /interp_rec1 /= intuitionistically_into_persistently.
-    by apply persistently_intro'.
-  Qed.
-  Global Instance interp_env_base_persistent Δ Γ vs :
+Global Instance ctx_persistent_lookup Δ α vv :
+  env_Persistent Δ → Persistent (ctx_lookup α Δ vv).
+Proof.
+move=> ΔP; rewrite /ctx_lookup /=.
+case e: (Δ !! α)=> [τi|] //=; last by apply _.
+by apply: ΔP.
+Qed.
+
+Global Instance interp_env_base_persistent Δ Γ vs :
   env_Persistent Δ → TCForall Persistent (zip_with (λ τ, ⟦ τ ⟧ Δ) Γ vs).
-  Proof.
-    intros HΔ. revert vs.
-    induction Γ => vs; simpl; destruct vs; constructor; apply _.
-  Qed.
-  Global Instance interp_env_persistent Γ Δ vvs :
-    env_Persistent Δ → Persistent (⟦ Γ ⟧* Δ vvs) := _.
+Proof.
+  intros HΔ. revert vs.
+  induction Γ => vs; simpl; destruct vs; constructor; apply _.
+Qed.
+Global Instance interp_env_persistent Γ Δ vvs :
+  env_Persistent Δ → Persistent (⟦ Γ ⟧* Δ vvs) := _.
 
-  Lemma interp_weaken Δ1 Π Δ2 τ :
-    ⟦ τ.[upn (length Δ1) (ren (+ length Π))] ⟧ (Δ1 ++ Π ++ Δ2)
-    ≡ ⟦ τ ⟧ (Δ1 ++ Δ2).
-  Proof.
-    revert Δ1 Π Δ2. induction τ=> Δ1 Π Δ2; simpl; auto.
-    - intros ww; simpl; properness; auto. by apply IHτ1. by apply IHτ2.
-    - intros ww; simpl; properness; auto. by apply IHτ1. by apply IHτ2.
-    - unfold interp_expr.
-      intros ww; simpl; properness; auto. by apply IHτ1. by apply IHτ2.
-    - apply fixpoint_proper=> τi ww /=.
-      properness; auto. apply (IHτ (_ :: _)).
-    - rewrite iter_up; destruct lt_dec as [Hl | Hl]; simpl.
-      { by rewrite !lookup_app_l. }
-      (* FIXME: Ideally we wouldn't have to do this kinf of surgery. *)
-      change (bi_ofeO (uPredI (iResUR Σ))) with (uPredO (iResUR Σ)).
-      rewrite !lookup_app_r; [|lia ..]. do 2 f_equiv. lia.
-    - unfold interp_expr.
-      intros ww; simpl; properness; auto. by apply (IHτ (_ :: _)).
-    - intros ww; simpl; properness; auto. by apply IHτ.
-  Qed.
+Lemma interp_weaken Δ1 Π Δ2 τ :
+  ⟦ τ.[upn (length Δ1) (ren (+ length Π))] ⟧ (Δ1 ++ Π ++ Δ2)
+                                             ≡ ⟦ τ ⟧ (Δ1 ++ Δ2).
+Proof.
+  revert Δ1 Π Δ2. induction τ=> Δ1 Π Δ2; simpl; auto.
+  - intros ww; simpl; properness; auto. by apply IHτ1. by apply IHτ2.
+  - intros ww; simpl; properness; auto. by apply IHτ1. by apply IHτ2.
+  - unfold interp_expr.
+    intros ww; simpl; properness; auto. by apply IHτ1. by apply IHτ2.
+  - apply fixpoint_proper=> τi ww /=.
+    properness; auto. apply (IHτ (_ :: _)).
+  - rewrite iter_up; destruct lt_dec as [Hl | Hl]; simpl.
+    { by rewrite !lookup_app_l. }
+    (* FIXME: Ideally we wouldn't have to do this kinf of surgery. *)
+    change (bi_ofeO (uPredI (iResUR Σ))) with (uPredO (iResUR Σ)).
+    rewrite !lookup_app_r; [|lia ..]. do 2 f_equiv. lia.
+  - unfold interp_expr.
+    intros ww; simpl; properness; auto. by apply (IHτ (_ :: _)).
+  - intros ww; simpl; properness; auto. by apply IHτ.
+Qed.
 
-  Lemma interp_subst_up Δ1 Δ2 τ τ' :
-    ⟦ τ ⟧ (Δ1 ++ interp τ' Δ2 :: Δ2)
-    ≡ ⟦ τ.[upn (length Δ1) (τ' .: ids)] ⟧ (Δ1 ++ Δ2).
-  Proof.
-    revert Δ1 Δ2; induction τ=> Δ1 Δ2; simpl; auto.
-    - intros ww; simpl; properness; auto. by apply IHτ1. by apply IHτ2.
-    - intros ww; simpl; properness; auto. by apply IHτ1. by apply IHτ2.
-    - unfold interp_expr.
-      intros ww; simpl; properness; auto. by apply IHτ1. by apply IHτ2.
-    - apply fixpoint_proper=> τi ww /=.
-      properness; auto. apply (IHτ (_ :: _)).
-    - rewrite iter_up; destruct lt_dec as [Hl | Hl]; simpl.
-      { by rewrite !lookup_app_l. }
-      (* FIXME: Ideally we wouldn't have to do this kinf of surgery. *)
-      change (bi_ofeO (uPredI (iResUR Σ))) with (uPredO (iResUR Σ)).
-      rewrite !lookup_app_r; [|lia ..].
-      case EQ: (x - length Δ1) => [|n]; simpl.
-      { symmetry. asimpl. apply (interp_weaken [] Δ1 Δ2 τ'). }
-      change (bi_ofeO (uPredI (iResUR Σ))) with (uPredO (iResUR Σ)).
-      rewrite !lookup_app_r; [|lia ..]. do 2 f_equiv. lia.
-    - unfold interp_expr.
-      intros ww; simpl; properness; auto. apply (IHτ (_ :: _)).
-    - intros ww; simpl; properness; auto. by apply IHτ.
-  Qed.
+Lemma interp_subst_up Δ1 Δ2 τ τ' :
+  ⟦ τ ⟧ (Δ1 ++ interp τ' Δ2 :: Δ2)
+        ≡ ⟦ τ.[upn (length Δ1) (τ' .: ids)] ⟧ (Δ1 ++ Δ2).
+Proof.
+  revert Δ1 Δ2; induction τ=> Δ1 Δ2; simpl; auto.
+  - intros ww; simpl; properness; auto. by apply IHτ1. by apply IHτ2.
+  - intros ww; simpl; properness; auto. by apply IHτ1. by apply IHτ2.
+  - unfold interp_expr.
+    intros ww; simpl; properness; auto. by apply IHτ1. by apply IHτ2.
+  - apply fixpoint_proper=> τi ww /=.
+    properness; auto. apply (IHτ (_ :: _)).
+  - rewrite iter_up; destruct lt_dec as [Hl | Hl]; simpl.
+    { by rewrite !lookup_app_l. }
+    (* FIXME: Ideally we wouldn't have to do this kinf of surgery. *)
+    change (bi_ofeO (uPredI (iResUR Σ))) with (uPredO (iResUR Σ)).
+    rewrite !lookup_app_r; [|lia ..].
+    case EQ: (x - length Δ1) => [|n]; simpl.
+    { symmetry. asimpl. apply (interp_weaken [] Δ1 Δ2 τ'). }
+    change (bi_ofeO (uPredI (iResUR Σ))) with (uPredO (iResUR Σ)).
+    rewrite !lookup_app_r; [|lia ..]. do 2 f_equiv. lia.
+  - unfold interp_expr.
+    intros ww; simpl; properness; auto. apply (IHτ (_ :: _)).
+  - intros ww; simpl; properness; auto. by apply IHτ.
+Qed.
 
-  Lemma interp_subst Δ2 τ τ' v : ⟦ τ ⟧ (⟦ τ' ⟧ Δ2 :: Δ2) v ≡ ⟦ τ.[τ'/] ⟧ Δ2 v.
-  Proof. apply (interp_subst_up []). Qed.
+Lemma interp_subst Δ2 τ τ' v : ⟦ τ ⟧ (⟦ τ' ⟧ Δ2 :: Δ2) v ≡ ⟦ τ.[τ'/] ⟧ Δ2 v.
+Proof. apply (interp_subst_up []). Qed.
 
-  Lemma interp_env_length Δ Γ vvs : ⟦ Γ ⟧* Δ vvs ⊢ ⌜length Γ = length vvs⌝.
-  Proof. by iIntros "[% ?]". Qed.
+Lemma interp_env_length Δ Γ vvs : ⟦ Γ ⟧* Δ vvs ⊢ ⌜length Γ = length vvs⌝.
+Proof. by iIntros "[% ?]". Qed.
 
-  Lemma interp_env_Some_l Δ Γ vvs x τ :
-    Γ !! x = Some τ → ⟦ Γ ⟧* Δ vvs ⊢ ∃ vv, ⌜vvs !! x = Some vv⌝ ∧ ⟦ τ ⟧ Δ vv.
-  Proof.
-    iIntros (?) "[Hlen HΓ]"; iDestruct "Hlen" as %Hlen.
-    destruct (lookup_lt_is_Some_2 vvs x) as [v Hv].
-    { by rewrite -Hlen; apply lookup_lt_Some with τ. }
-    iExists v; iSplit. done. iApply (big_sepL_elem_of with "HΓ").
-    apply elem_of_list_lookup_2 with x.
-    rewrite lookup_zip_with; by simplify_option_eq.
-  Qed.
+Lemma interp_env_Some_l Δ Γ vvs x τ :
+  Γ !! x = Some τ → ⟦ Γ ⟧* Δ vvs ⊢ ∃ vv, ⌜vvs !! x = Some vv⌝ ∧ ⟦ τ ⟧ Δ vv.
+Proof.
+  iIntros (?) "[Hlen HΓ]"; iDestruct "Hlen" as %Hlen.
+  destruct (lookup_lt_is_Some_2 vvs x) as [v Hv].
+  { by rewrite -Hlen; apply lookup_lt_Some with τ. }
+  iExists v; iSplit. done. iApply (big_sepL_elem_of with "HΓ").
+  apply elem_of_list_lookup_2 with x.
+  rewrite lookup_zip_with; by simplify_option_eq.
+Qed.
 
-  Lemma interp_env_nil Δ : ⊢ ⟦ [] ⟧* Δ [].
-  Proof. iSplit; simpl; auto. Qed.
-  Lemma interp_env_cons Δ Γ vvs τ vv :
-    ⟦ τ :: Γ ⟧* Δ (vv :: vvs) ⊣⊢ ⟦ τ ⟧ Δ vv ∗ ⟦ Γ ⟧* Δ vvs.
-  Proof.
-    rewrite /interp_env /= (assoc _ (⟦ _ ⟧ _ _)) -(comm _ ⌜(_ = _)⌝%I) -assoc.
+Lemma interp_env_nil Δ : ⊢ ⟦ [] ⟧* Δ [].
+Proof. iSplit; simpl; auto. Qed.
+Lemma interp_env_cons Δ Γ vvs τ vv :
+  ⟦ τ :: Γ ⟧* Δ (vv :: vvs) ⊣⊢ ⟦ τ ⟧ Δ vv ∗ ⟦ Γ ⟧* Δ vvs.
+Proof.
+  rewrite /interp_env /= (assoc _ (⟦ _ ⟧ _ _)) -(comm _ ⌜(_ = _)⌝%I) -assoc.
     by apply sep_proper; [apply pure_proper; lia|].
-  Qed.
+Qed.
 
-  Lemma interp_env_ren Δ (Γ : list type) vvs τi :
-    ⟦ subst (ren (+1)) <$> Γ ⟧* (τi :: Δ) vvs ⊣⊢ ⟦ Γ ⟧* Δ vvs.
-  Proof.
-    apply sep_proper; [apply pure_proper; by rewrite fmap_length|].
-    revert Δ vvs τi; induction Γ=> Δ [|v vs] τi; csimpl; auto.
-    apply sep_proper; auto. apply (interp_weaken [] [τi] Δ).
-  Qed.
+Lemma interp_env_ren Δ (Γ : list type) vvs τi :
+  ⟦ subst (ren (+1)) <$> Γ ⟧* (τi :: Δ) vvs ⊣⊢ ⟦ Γ ⟧* Δ vvs.
+Proof.
+  apply sep_proper; [apply pure_proper; by rewrite fmap_length|].
+  revert Δ vvs τi; induction Γ=> Δ [|v vs] τi; csimpl; auto.
+  apply sep_proper; auto. apply (interp_weaken [] [τi] Δ).
+Qed.
 
-  Lemma interp_ref_pointsto_neq E Δ τ l w (l1 l2 l3 l4 : loc) :
-    ↑logN.@(l1, l2) ⊆ E →
-    l2 ≠ l4 →
-    l ↦ᵢ w -∗ interp (Tref τ) Δ (LocV l1, LocV l2) -∗
-      |={E ∖ ↑logN.@(l3, l4)}=> l ↦ᵢ w ∗ ⌜l ≠ l1⌝.
-  Proof.
-    intros Hnin Hneq.
-    destruct (decide (l = l1)); subst; last auto.
-    iIntros "Hl1"; simpl; iDestruct 1 as ((l5, l6)) "[% Hl2]"; simplify_eq.
-    iInv (logN.@(l5, l6)) as "Hi" "Hcl"; simpl.
-    iDestruct "Hi" as ((v1, v2))  "(Hl3 & Hl2' & ?)".
-    iMod "Hl3".
+Lemma interp_ref_pointsto_neq E Δ τ l w (l1 l2 l3 l4 : loc) :
+  ↑logN.@(l1, l2) ⊆ E →
+  l2 ≠ l4 →
+  l ↦ᵢ w -∗ interp (Tref τ) Δ (LocV l1, LocV l2) -∗
+    |={E ∖ ↑logN.@(l3, l4)}=> l ↦ᵢ w ∗ ⌜l ≠ l1⌝.
+Proof.
+  intros Hnin Hneq.
+  destruct (decide (l = l1)); subst; last auto.
+  iIntros "Hl1"; simpl; iDestruct 1 as ((l5, l6)) "[% Hl2]"; simplify_eq.
+  iInv (logN.@(l5, l6)) as "Hi" "Hcl"; simpl.
+  iDestruct "Hi" as ((v1, v2))  "(Hl3 & Hl2' & ?)".
+  iMod "Hl3".
     by iDestruct (@mapsto_valid_2 with "Hl1 Hl3") as %?.
-  Qed.
+Qed.
 
-  Lemma interp_ref_pointsto_neq' E Δ τ l w (l1 l2 l3 l4 : loc) :
-    ↑logN.@(l1, l2) ⊆ E →
-    l1 ≠ l3 →
-    l ↦ₛ w -∗ interp (Tref τ) Δ (LocV l1, LocV l2) -∗
-      |={E ∖ ↑logN.@(l3, l4)}=> l ↦ₛ w ∗ ⌜l ≠ l2⌝.
-  Proof.
-    intros Hnin Hneq.
-    destruct (decide (l = l2)); subst; last auto.
-    iIntros "Hl1"; simpl; iDestruct 1 as ((l5, l6)) "[% Hl2]"; simplify_eq.
-    iInv (logN.@(l5, l6)) as "Hi" "Hcl"; simpl.
-    iDestruct "Hi" as ((v1, v2)) "(Hl3 & >Hl2' & ?)".
+Lemma interp_ref_pointsto_neq' E Δ τ l w (l1 l2 l3 l4 : loc) :
+  ↑logN.@(l1, l2) ⊆ E →
+  l1 ≠ l3 →
+  l ↦ₛ w -∗ interp (Tref τ) Δ (LocV l1, LocV l2) -∗
+    |={E ∖ ↑logN.@(l3, l4)}=> l ↦ₛ w ∗ ⌜l ≠ l2⌝.
+Proof.
+  intros Hnin Hneq.
+  destruct (decide (l = l2)); subst; last auto.
+  iIntros "Hl1"; simpl; iDestruct 1 as ((l5, l6)) "[% Hl2]"; simplify_eq.
+  iInv (logN.@(l5, l6)) as "Hi" "Hcl"; simpl.
+  iDestruct "Hi" as ((v1, v2)) "(Hl3 & >Hl2' & ?)".
     by iDestruct (mapstoS_valid_2 with "Hl1 Hl2'") as %[].
-  Qed.
+Qed.
 
-  Lemma interp_ref_open' Δ τ l l' :
-    env_Persistent Δ → EqType τ →
-    ⟦ Tref τ ⟧ Δ (LocV l, LocV l') -∗
-               |={⊤, ⊤ ∖ ↑logN.@(l, l')}=>
-  ∃ w w', ▷ l ↦ᵢ w ∗ ▷ l' ↦ₛ w' ∗ ▷ ⟦ τ ⟧ Δ (w, w') ∗
-            ▷ (∀ z z' u u' v v',
-                  l ↦ᵢ z -∗ l' ↦ₛ z' -∗ ⟦ τ ⟧ Δ (u, u') -∗ ⟦ τ ⟧ Δ (v, v') -∗
-                    |={⊤ ∖ ↑logN.@(l, l')}=> l ↦ᵢ z ∗
-                                              l' ↦ₛ z' ∗ ⌜v = u ↔ v' = u'⌝)
-            ∗ (▷ (∃ vv : val * val, l ↦ᵢ vv.1 ∗ l' ↦ₛ vv.2 ∗ ⟦ τ ⟧ Δ vv)
-          ={⊤ ∖ ↑logN.@(l, l'), ⊤}=∗ True).
-  Proof.
-    iIntros (HΔ Heqt); simpl.
-    iDestruct 1 as ((l1, l1')) "[% H1]"; simplify_eq.
-    iInv (logN.@(l1, l1')) as "Hi" "$"; simpl.
-    iDestruct "Hi" as ((v1, v2))  "(Hl1 & Hl1' & Hrl)"; simpl in *.
-    destruct Heqt; simpl in *.
-    - iModIntro; iExists _, _; iFrame.
-      iNext. iIntros (??????) "? ?". iIntros ([??] [??]); subst.
+Lemma interp_ref_open' Δ τ l l' :
+  env_Persistent Δ → EqType τ →
+  ⟦ Tref τ ⟧ Δ (LocV l, LocV l') -∗
+             |={⊤, ⊤ ∖ ↑logN.@(l, l')}=>
+∃ w w', ▷ l ↦ᵢ w ∗ ▷ l' ↦ₛ w' ∗ ▷ ⟦ τ ⟧ Δ (w, w') ∗
+          ▷ (∀ z z' u u' v v',
+                l ↦ᵢ z -∗ l' ↦ₛ z' -∗ ⟦ τ ⟧ Δ (u, u') -∗ ⟦ τ ⟧ Δ (v, v') -∗
+                  |={⊤ ∖ ↑logN.@(l, l')}=> l ↦ᵢ z ∗
+                                             l' ↦ₛ z' ∗ ⌜v = u ↔ v' = u'⌝)
+          ∗ (▷ (∃ vv : val * val, l ↦ᵢ vv.1 ∗ l' ↦ₛ vv.2 ∗ ⟦ τ ⟧ Δ vv)
+             ={⊤ ∖ ↑logN.@(l, l'), ⊤}=∗ True).
+Proof.
+  iIntros (HΔ Heqt); simpl.
+  iDestruct 1 as ((l1, l1')) "[% H1]"; simplify_eq.
+  iInv (logN.@(l1, l1')) as "Hi" "$"; simpl.
+  iDestruct "Hi" as ((v1, v2))  "(Hl1 & Hl1' & Hrl)"; simpl in *.
+  destruct Heqt; simpl in *.
+  - iModIntro; iExists _, _; iFrame.
+    iNext. iIntros (??????) "? ?". iIntros ([??] [??]); subst.
       by iModIntro; iFrame.
-    - iModIntro; iExists _, _; iFrame.
-      iNext. iIntros (??????) "? ?".
-      iDestruct 1 as (?) "[% %]". iDestruct 1 as (?) "[% %]".
-      simplify_eq. by iModIntro; iFrame.
-    - iModIntro; iExists _, _; iFrame.
-      iNext. iIntros (??????) "? ?".
-      iDestruct 1 as (?) "[% %]". iDestruct 1 as (?) "[% %]".
-      simplify_eq. by iModIntro; iFrame.
-    - iModIntro; iExists _, _; iFrame; iFrame "#". iNext.
-      iIntros (z z' u u' v v') "Hl1 Hl1' Huu". iDestruct 1 as ((l2, l2')) "[% #Hl2]";
-        simplify_eq; simpl in *.
-      iDestruct "Huu" as ((l3, l3')) "[% #Hl3]";
-        simplify_eq; simpl in *.
-      destruct (decide ((l1, l1') = (l2, l2'))); simplify_eq.
-      + destruct (decide ((l2, l2') = (l3, l3'))); simplify_eq; first by iFrame.
-        destruct (decide (l2 = l3)); destruct (decide (l2' = l3')); subst.
-        * iMod (interp_ref_pointsto_neq with "Hl1 []")
+  - iModIntro; iExists _, _; iFrame.
+    iNext. iIntros (??????) "? ?".
+    iDestruct 1 as (?) "[% %]". iDestruct 1 as (?) "[% %]".
+    simplify_eq. by iModIntro; iFrame.
+  - iModIntro; iExists _, _; iFrame.
+    iNext. iIntros (??????) "? ?".
+    iDestruct 1 as (?) "[% %]". iDestruct 1 as (?) "[% %]".
+    simplify_eq. by iModIntro; iFrame.
+  - iModIntro; iExists _, _; iFrame; iFrame "#". iNext.
+    iIntros (z z' u u' v v') "Hl1 Hl1' Huu". iDestruct 1 as ((l2, l2')) "[% #Hl2]";
+                                               simplify_eq; simpl in *.
+    iDestruct "Huu" as ((l3, l3')) "[% #Hl3]";
+      simplify_eq; simpl in *.
+    destruct (decide ((l1, l1') = (l2, l2'))); simplify_eq.
+    + destruct (decide ((l2, l2') = (l3, l3'))); simplify_eq; first by iFrame.
+      destruct (decide (l2 = l3)); destruct (decide (l2' = l3')); subst.
+      * iMod (interp_ref_pointsto_neq with "Hl1 []")
+          as "[Hl1 %]"; simpl; eauto.
+          by iFrame.
+      * iMod (interp_ref_pointsto_neq with "Hl1 []")
+          as "[Hl1 %]"; simpl; eauto.
+        { by iExists (_, _); iFrame "#". }
+          by iFrame.
+      * iMod (interp_ref_pointsto_neq' with "Hl1' []")
+          as "[Hl1' %]";
+          simpl; eauto.
+        { by iExists (_, _); iFrame "#". }
+          by iFrame.
+      * iFrame; iModIntro; iPureIntro; split; by inversion 1.
+    + destruct (decide ((l1, l1') = (l3, l3'))); simplify_eq.
+      * destruct (decide (l2 = l3)); destruct (decide (l2' = l3')); subst.
+        -- iMod (interp_ref_pointsto_neq with "Hl1 []")
+            as "[Hl1 %]"; simpl; eauto.
+             by iFrame.
+        -- iMod (interp_ref_pointsto_neq with "Hl1 []")
+            as "[Hl1 %]"; simpl; eauto.
+           { iExists (_, _); iSplit; first eauto. iFrame "#". }
+             by iFrame.
+        -- iMod (interp_ref_pointsto_neq' with "Hl1' []")
+            as "[Hl1' %]";
+             simpl; eauto.
+           { iExists (_, _); iSplit; first eauto. iFrame "#". }
+             by iFrame.
+        -- iFrame; iModIntro; iPureIntro; split; by inversion 1.
+      * destruct (decide ((l2, l2') = (l3, l3'))); simplify_eq.
+        -- destruct (decide (l1 = l3)); destruct (decide (l1' = l3')); subst.
+           ++ iMod (interp_ref_pointsto_neq with "Hl1 []")
                as "[Hl1 %]"; simpl; eauto.
-             by iFrame.
-        * iMod (interp_ref_pointsto_neq with "Hl1 []")
-               as "[Hl1 %]"; simpl; eauto.
-             { by iExists (_, _); iFrame "#". }
-             by iFrame.
-        * iMod (interp_ref_pointsto_neq' with "Hl1' []")
-               as "[Hl1' %]";
-               simpl; eauto.
-             { by iExists (_, _); iFrame "#". }
-             by iFrame.
-        * iFrame; iModIntro; iPureIntro; split; by inversion 1.
-      + destruct (decide ((l1, l1') = (l3, l3'))); simplify_eq.
-        * destruct (decide (l2 = l3)); destruct (decide (l2' = l3')); subst.
-          -- iMod (interp_ref_pointsto_neq with "Hl1 []")
-              as "[Hl1 %]"; simpl; eauto.
-             by iFrame.
-          -- iMod (interp_ref_pointsto_neq with "Hl1 []")
-               as "[Hl1 %]"; simpl; eauto.
-             { iExists (_, _); iSplit; first eauto. iFrame "#". }
-             by iFrame.
-          -- iMod (interp_ref_pointsto_neq' with "Hl1' []")
-               as "[Hl1' %]";
-               simpl; eauto.
-             { iExists (_, _); iSplit; first eauto. iFrame "#". }
-             by iFrame.
-          -- iFrame; iModIntro; iPureIntro; split; by inversion 1.
-        * destruct (decide ((l2, l2') = (l3, l3'))); simplify_eq.
-          -- destruct (decide (l1 = l3)); destruct (decide (l1' = l3')); subst.
-             ++ iMod (interp_ref_pointsto_neq with "Hl1 []")
-                 as "[Hl1 %]"; simpl; eauto.
                 by iFrame.
-             ++ iMod (interp_ref_pointsto_neq with "Hl1 []")
+           ++ iMod (interp_ref_pointsto_neq with "Hl1 []")
                as "[Hl1 %]"; simpl; eauto.
-                { by iExists (_, _); iFrame "#". }
-                  by iFrame.
-             ++ iMod (interp_ref_pointsto_neq' with "Hl1' []")
-                 as "[Hl1' %]";
-                  simpl; eauto.
-                { by iExists (_, _); iFrame "#". }
-                  by iFrame.
-             ++ iFrame; iModIntro; iPureIntro; split; by inversion 1.
-          -- iFrame.
-             { destruct (decide (l2 = l3)); destruct (decide (l2' = l3'));
-                 simplify_eq; auto.
-               + iInv (logN.@(l3, l2')) as "Hib1" "Hcl1".
-                 iInv (logN.@(l3, l3')) as "Hib2" "Hcl2".
-                 iDestruct "Hib1" as ((v11, v12)) "(Hlx1' & Hlx2 & Hr1)".
-                 iDestruct "Hib2" as ((v11', v12')) "(Hl1'' & Hl2' & Hr2)".
-                 simpl.
-                 iMod "Hlx1'"; iMod "Hl1''".
-                   by iDestruct (@mapsto_valid_2 with "Hlx1' Hl1''") as %?.
-               + iInv (logN.@(l2, l3')) as "Hib1" "Hcl1".
-                 iInv (logN.@(l3, l3')) as "Hib2" "Hcl2".
-                 iDestruct "Hib1" as ((v11, v12)) "(>Hl1 & >Hl2' & Hr1)".
-                 iDestruct "Hib2" as ((v11', v12')) "(>Hl1' & >Hl2'' & Hr2) /=".
+              { by iExists (_, _); iFrame "#". }
+                by iFrame.
+           ++ iMod (interp_ref_pointsto_neq' with "Hl1' []")
+               as "[Hl1' %]";
+                simpl; eauto.
+              { by iExists (_, _); iFrame "#". }
+                by iFrame.
+           ++ iFrame; iModIntro; iPureIntro; split; by inversion 1.
+        -- iFrame.
+           { destruct (decide (l2 = l3)); destruct (decide (l2' = l3'));
+               simplify_eq; auto.
+             + iInv (logN.@(l3, l2')) as "Hib1" "Hcl1".
+               iInv (logN.@(l3, l3')) as "Hib2" "Hcl2".
+               iDestruct "Hib1" as ((v11, v12)) "(Hlx1' & Hlx2 & Hr1)".
+               iDestruct "Hib2" as ((v11', v12')) "(Hl1'' & Hl2' & Hr2)".
+               simpl.
+               iMod "Hlx1'"; iMod "Hl1''".
+                 by iDestruct (@mapsto_valid_2 with "Hlx1' Hl1''") as %?.
+             + iInv (logN.@(l2, l3')) as "Hib1" "Hcl1".
+               iInv (logN.@(l3, l3')) as "Hib2" "Hcl2".
+               iDestruct "Hib1" as ((v11, v12)) "(>Hl1 & >Hl2' & Hr1)".
+               iDestruct "Hib2" as ((v11', v12')) "(>Hl1' & >Hl2'' & Hr2) /=".
                  by iDestruct (mapstoS_valid_2 with "Hl2' Hl2''") as %[].
-               + iModIntro; iPureIntro; split; intros; simplify_eq. }
-  Qed.
+             + iModIntro; iPureIntro; split; intros; simplify_eq. }
+Qed.
 End logrel.
 
 Typeclasses Opaque interp_env.
 Notation "⟦ τ ⟧" := (interp τ).
 Notation "⟦ τ ⟧ₑ" := (interp_expr (interp τ)).
 Notation "⟦ Γ ⟧*" := (interp_env Γ).
+*)

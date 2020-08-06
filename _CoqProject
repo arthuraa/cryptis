@@ -1,0 +1,6 @@
+-arg "-w -convert_concl_no_check"
+
+-R . crypto
+
+basic.v
+crypto.v
