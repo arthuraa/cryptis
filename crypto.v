@@ -12,10 +12,10 @@ From crypto Require Import basic.
 
 Section Keys.
 
-Class keySG Σ := KeySG {
+Class key2SG Σ := KeySG {
   key_inG :> inG Σ (authR (gsetUR (prodO locO locO)));
-  key2_symbol : symbol_kind;
-  key1_symbol : symbol_kind;
+  key2_symbol : gname;
+  key1_symbol : gname;
   key_name : gname;
 }.
 
