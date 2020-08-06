@@ -76,8 +76,14 @@ Definition symbol_inv : iProp Σ := ∃ RL,
   own γ (● RL) ∗ [∗ set] rl ∈ RL, symbol_own rl.
 
 Definition symbol rl := own γ (◯ {[rl]}).
+Global Instance persistent_symbol rl : Persistent (symbol rl).
+Proof. apply _. Qed.
 
-Lemma persistent_symbol rl : Persistent (symbol rl).
+Definition symbol1 (s : bool) l : iProp Σ :=
+  let i1 := if s then L  else R in
+  let i2 := if s then LR else flip LR in
+  symbol (i1 l) ∨ ∃ l', symbol (i2 l l').
+Global Instance persistent_symbol1 s l : Persistent (symbol1 s l).
 Proof. apply _. Qed.
 
 Definition mksymbol : val := λ: <>, ref #().
