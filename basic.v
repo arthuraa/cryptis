@@ -459,11 +459,42 @@ End cfg.
 Definition perm `{!EqDecision T, !Countable T} (X : gset (T * T)) :=
   forall p1 p2, p1 ∈ X → p2 ∈ X → (p1.1 = p2.1 ↔ p1.2 = p2.2).
 
-Definition side := boolO.
-Definition Left  : side := true.
-Definition Right : side := false.
+Inductive rloc := L of loc | R of loc | LR of loc & loc.
+Canonical rlocO := leibnizO rloc.
 
-Definition symbol_store := gsetUR (prodO side locO).
+Instance rloc_dec : EqDecision rloc.
+Proof.
+  refine (λ rl1 rl2,
+            match rl1, rl2 with
+            | L l1, L l2 =>
+              if decide (l1 = l2) then _ else _
+            | R l1, R l2 =>
+              if decide (l1 = l2) then _ else _
+            | LR l11 l12, LR l21 l22 =>
+              if decide (l11 = l21) then
+                if decide (l12 = l22) then _ else _
+              else _
+            | _, _ => _
+            end); try by [left; congruence|right; congruence].
+Qed.
+
+Instance rloc_countable : Countable rloc.
+Proof.
+apply
+  (inj_countable (λ rl, match rl with
+                        | L l => inl l
+                        | R l => inr (inl l)
+                        | LR l1 l2 => inr (inr (l1, l2))
+                        end)
+                 (λ rl, match rl with
+                        | inl l => Some (L l)
+                        | inr (inl l) => Some (R l)
+                        | inr (inr (l1, l2)) => Some (LR l1 l2)
+                        end));
+by case.
+Qed.
+
+Definition symbol_store := gsetUR rlocO.
 
 Class symbolSG Σ := SymbolSG {
   symbol_inG :> inG Σ (authR symbol_store);
@@ -474,20 +505,24 @@ Section Symbol.
 Context `{!heapG Σ, !cfgSG Σ, symbolSG Σ}.
 Variable γ : gname.
 
-Implicit Types s : side.
+Implicit Types rl : rloc.
 Implicit Types l : loc.
-Implicit Types sl : prodO boolO locO.
-Implicit Types L : symbol_store.
+Implicit Types RL : symbol_store.
 Implicit Types v : val.
 
-Definition symbol_inv : iProp Σ := ∃ L,
-  own γ (● L) ∗
-  [∗ set] sl ∈ L,
-    if sl.1 : side then sl.2 ↦ #() else sl.2 ↦ₛ #().
+Definition symbol_own rl : iProp Σ :=
+  match rl with
+  | L l => l ↦  #()
+  | R l => l ↦ₛ #()
+  | LR l1 l2 => l1 ↦ #() ∗ l2 ↦ₛ #()
+  end.
 
-Definition symbol s l := own γ (◯ {[s, l]}).
+Definition symbol_inv : iProp Σ := ∃ RL,
+  own γ (● RL) ∗ [∗ set] rl ∈ RL, symbol_own rl.
 
-Lemma persistent_symbol s l : Persistent (symbol s l).
+Definition symbol rl := own γ (◯ {[rl]}).
+
+Lemma persistent_symbol rl : Persistent (symbol rl).
 Proof. apply _. Qed.
 
 Definition mksymbol : val := λ: <>, ref #().
@@ -497,17 +532,17 @@ Lemma step_mksymbol E j K :
   spec_ctx -∗
   symbol_inv -∗
   j ⤇ fill K (mksymbol #()%V)
-  ={E}=∗ ∃ l, j ⤇ fill K #l ∗ symbol Right l.
+  ={E}=∗ ∃ l, j ⤇ fill K #l ∗ symbol (R l).
 Proof.
 rewrite /symbol_inv /mksymbol.
-iIntros (HE) "#Hinv"; iDestruct 1 as (L) "[Hown Hlocs]"; iIntros "Hspec".
+iIntros (HE) "#Hinv"; iDestruct 1 as (RL) "[Hown Hlocs]"; iIntros "Hspec".
 iMod (step_lam E with "[Hinv Hspec]") as "Hspec"; first done.
   by iSplit.
 rewrite /=.
 iMod (step_alloc E with "[Hinv Hspec]") as (l) "[Hspec Hl]"; first done.
   by iSplit.
-pose (frag := {[Right, l]} : symbol_store).
-iMod (own_update _ _ (_ ⋅ ◯ (L ⋅ frag)) with "Hown") as "[Hown [_ Hfrag]]".
+pose (frag := {[R l]} : symbol_store).
+iMod (own_update _ _ (_ ⋅ ◯ (RL ⋅ frag)) with "Hown") as "[Hown [_ Hfrag]]".
   by apply auth_update_alloc, gset_local_update, union_subseteq_l.
 by iModIntro; iExists l; iFrame.
 Qed.
@@ -515,64 +550,55 @@ Qed.
 Lemma wp_mksymbol E :
   spec_ctx -∗
   symbol_inv -∗
-  WP mksymbol #()%V @ E {{ v, ∃ l, ⌜v = #l⌝ ∗ symbol Left l }}.
+  WP mksymbol #()%V @ E {{ v, ∃ l, ⌜v = #l⌝ ∗ symbol (L l) }}.
 Proof.
 rewrite /symbol_inv /mksymbol.
-iIntros "#Hinv"; iDestruct 1 as (L) "[Hown Hlocs]".
+iIntros "#Hinv"; iDestruct 1 as (RL) "[Hown Hlocs]".
 iApply wp_fupd; wp_alloc l as "Hl".
-pose (frag := {[Left, l]} : symbol_store).
-iMod (own_update _ _ (_ ⋅ ◯ (L ⋅ frag)) with "Hown") as "[Hown [_ Hfrag]]".
+pose (frag := {[L l]} : symbol_store).
+iMod (own_update _ _ (_ ⋅ ◯ (RL ⋅ frag)) with "Hown") as "[Hown [_ Hfrag]]".
   apply auth_update_alloc, gset_local_update, union_subseteq_l.
 by iModIntro; iExists l; iSplit.
 Qed.
 
-End Symbol.
-
-Lemma symbol_inv_alloc `{!heapG Σ, cfgSG Σ, symbolSG Σ} :
-  ⊢ |==> ∃ γ, symbol_inv γ.
+Lemma wp_mksymbol2 E j K :
+  nclose specN ⊆ E →
+  spec_ctx -∗
+  symbol_inv -∗
+  j ⤇ fill K (mksymbol #()%V) -∗
+  WP mksymbol #()%V @ E {{ v1, ∃ l1 l2,
+    ⌜v1 = #l1⌝ ∗ j ⤇ fill K #l2 ∗ symbol (LR l1 l2) }}.
 Proof.
-iMod (own_alloc (● ∅ : auth symbol_store)) as (γ) "Hown".
-  by apply/auth_auth_valid.
-by iModIntro; iExists γ, ∅; simpl; iFrame.
+rewrite /symbol_inv /mksymbol => Hclose.
+iIntros "#Hinv"; iDestruct 1 as (RL) "[Hown Hlocs]".
+iIntros "Hspec".
+iApply wp_fupd; wp_alloc l1 as "Hl1".
+iMod (step_lam E with "[Hinv Hspec]") as "Hspec"=> //.
+  by iFrame.
+rewrite /=.
+iMod (step_alloc E with "[Hinv Hspec]") as "Hspec"=> //.
+  by iFrame.
+iDestruct "Hspec" as (l2) "[Hspec Hl2]".
+iMod (own_update _ _ (_ ⋅ ◯ (RL ⋅ {[LR l1 l2]})) with "Hown") as "[Hown [_ H]]".
+  apply auth_update_alloc, gset_local_update, union_subseteq_l.
+by iModIntro; iExists l1, l2; iFrame.
 Qed.
 
-Section Symbol2.
-
-Class symbol2SG Σ := Symbol2SG {
-  key_inG :> inG Σ (authR (gsetUR (prodO locO locO)));
-}.
-
-Context `{!heapG Σ, !cfgSG Σ, symbol2SG Σ}.
-Variables γ : gname.
-
-Implicit Types LL : gsetUR (prodO locO locO).
-Implicit Types ll : prodO locO locO.
-Implicit Types Lb : gsetUR (prodO boolO locO).
-Implicit Types l : locO.
-
-Definition symbol2_inv : iProp Σ :=
-  ∃ LL,
-    own γ (● LL) ∗
-    [∗ set] ll ∈ LL, ll.1 ↦ #() ∗ ll.2 ↦ₛ #().
-
-Definition symbol2 l1 l2 : iProp Σ :=
-  own γ (◯ {[l1, l2]}).
-
-Global Instance symbol2_persistent l1 l2 : Persistent (symbol2 l1 l2).
-Proof. apply _. Qed.
-
-Lemma symbol2_inv_perm LL :
-  symbol2_inv -∗ own γ (◯ LL) -∗ ⌜perm LL⌝.
+Lemma symbol_eq_iff l11 l12 l21 l22 :
+  symbol_inv -∗
+  symbol (LR l11 l12) -∗
+  symbol (LR l21 l22) -∗
+  ⌜l11 = l21 ↔ l12 = l22⌝.
 Proof.
-iDestruct 1 as (LL') "[Hown' Halloc]".
-iIntros "Hown" ([l11 l21] [l12 l22] Hin1 Hin2).
-iPoseProof (own_valid_2 with "Hown' Hown") as "%Hsub".
-rewrite auth_both_valid gset_included in Hsub *; case=> Hsub _ /=.
-have {Hsub Hin1 Hin2}Hsub : {[(l11, l21); (l12, l22)]} ⊆ LL'.
-  move=> p /elem_of_union [] /elem_of_singleton ->; exact: Hsub.
+iDestruct 1 as (RL) "[Hown Halloc]".
+rewrite /symbol; iIntros "Hown1 Hown2".
+iCombine "Hown1 Hown2" as "Hown'".
+iPoseProof (own_valid_2 with "Hown Hown'") as "%Hvalid".
+rewrite auth_both_valid gset_op_union gset_included in Hvalid *.
+case=> Hsub _.
 iPoseProof (big_sepS_subseteq _ _ _ Hsub with "Halloc") as "Halloc".
-case: (decide (l11 = l12))=> [e1|ne1];
-case: (decide (l21 = l22))=> [e2|ne2].
+case: (decide (l11 = l21))=> [e1|ne1];
+case: (decide (l12 = l22))=> [e2|ne2].
 - iPureIntro; split; move=> *; congruence.
 - rewrite big_sepS_insert ?elem_of_singleton; try congruence.
   rewrite big_sepS_singleton /=.
@@ -585,57 +611,28 @@ case: (decide (l21 = l22))=> [e2|ne2].
 - iPureIntro; split; move=> *; congruence.
 Qed.
 
-Lemma symbol2_eqR l1 l21 l22 :
-  symbol2_inv -∗ symbol2 l1 l21 -∗ symbol2 l1 l22 -∗ ⌜l21 = l22⌝.
+Lemma symbol_eqR l1 l21 l22 :
+  symbol_inv -∗ symbol (LR l1 l21) -∗ symbol (LR l1 l22) -∗ ⌜l21 = l22⌝.
 Proof.
-rewrite /symbol2; iIntros "Hinv Hown1 Hown2".
-iCombine "Hown1 Hown2" as "Hown"; rewrite gset_op_union.
-iPoseProof (symbol2_inv_perm with "Hinv Hown") as "%Hperm".
-iPureIntro; set LL := {[(l1, l21); (l1, l22)]} in Hperm.
-apply/(Hperm (l1, l21) (l1, l22));
-rewrite // /LL elem_of_union !elem_of_singleton; eauto.
+iIntros "Hinv Hown1 Hown2".
+iPoseProof (symbol_eq_iff with "Hinv Hown1 Hown2") as "%Hperm".
+iPureIntro; exact/Hperm.
 Qed.
 
-Lemma symbol2_eqL l11 l12 l2 :
-  symbol2_inv -∗ symbol2 l11 l2 -∗ symbol2 l12 l2 -∗ ⌜l11 = l12⌝.
+Lemma symbol_eqL l11 l12 l2 :
+  symbol_inv -∗ symbol (LR l11 l2) -∗ symbol (LR l12 l2) -∗ ⌜l11 = l12⌝.
 Proof.
-rewrite /symbol2; iIntros "Hinv Hown1 Hown2".
-iCombine "Hown1 Hown2" as "Hown"; rewrite gset_op_union.
-iPoseProof (symbol2_inv_perm with "Hinv Hown") as "%Hperm".
-iPureIntro; set LL := {[(l11, l2); (l12, l2)]} in Hperm.
-apply/(Hperm (l11, l2) (l12, l2));
-rewrite // /LL elem_of_union !elem_of_singleton; eauto.
+iIntros "Hinv Hown1 Hown2".
+iPoseProof (symbol_eq_iff with "Hinv Hown1 Hown2") as "%Hperm".
+iPureIntro; exact/Hperm.
 Qed.
 
-Lemma wp_mksymbol2 E j K :
-  nclose specN ⊆ E →
-  spec_ctx -∗
-  symbol2_inv -∗
-  j ⤇ fill K (mksymbol #()%V) -∗
-  WP mksymbol #()%V @ E {{ v1, ∃ l1 l2,
-    ⌜v1 = #l1⌝ ∗ j ⤇ fill K #l2 ∗ symbol2 l1 l2 }}.
-Proof.
-rewrite /symbol2_inv /mksymbol => Hclose.
-iIntros "#Hinv"; iDestruct 1 as (LL) "[Hown Hlocs]".
-iIntros "Hspec".
-iApply wp_fupd; wp_alloc l1 as "Hl1".
-iMod (step_lam E with "[Hinv Hspec]") as "Hspec"=> //.
-  by iFrame.
-rewrite /=.
-iMod (step_alloc E with "[Hinv Hspec]") as "Hspec"=> //.
-  by iFrame.
-iDestruct "Hspec" as (l2) "[Hspec Hl2]".
-iMod (own_update _ _ (_ ⋅ ◯ (LL ⋅ {[l1, l2]})) with "Hown") as "[Hown [_ H]]".
-  apply auth_update_alloc, gset_local_update, union_subseteq_l.
-by iModIntro; iExists l1, l2; iFrame.
-Qed.
+End Symbol.
 
-End Symbol2.
-
-Lemma symbol2_inv_alloc `{!heapG Σ, cfgSG Σ, symbol2SG Σ} :
-  ⊢ |==> ∃ γ, symbol2_inv γ.
+Lemma symbol_inv_alloc `{!heapG Σ, cfgSG Σ, symbolSG Σ} :
+  ⊢ |==> ∃ γ, symbol_inv γ.
 Proof.
-iMod (own_alloc (● ∅ : auth (gsetUR (prodO locO locO)))) as (γ) "Hown".
+iMod (own_alloc (● ∅ : auth symbol_store)) as (γ) "Hown".
   by apply/auth_auth_valid.
 by iModIntro; iExists γ, ∅; simpl; iFrame.
 Qed.
