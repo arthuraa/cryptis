@@ -101,6 +101,9 @@ Definition opaque_inv : iProp Σ :=
 Definition opaque v1 v2 : iProp Σ :=
   own term_name (◯ {[v1, v2]}).
 
+Global Instance persistent_opaque v1 v2 : Persistent (opaque v1 v2).
+Proof. apply _. Qed.
+
 Fixpoint lo_term_aux t1 t2 : iProp Σ :=
   opaque (val_of_term t1) (val_of_term t2) ∨
   match t1, t2 with
@@ -116,13 +119,75 @@ Fixpoint lo_term_aux t1 t2 : iProp Σ :=
   | _, _ => False%I
   end.
 
+Global Instance persistent_lo_term_aux t1 t2 : Persistent (lo_term_aux t1 t2).
+Proof.
+elim: t1 t2=> /=.
+- by move=> ?; case=> *; apply _.
+- by move=> ????; case=> *; apply _.
+- by move=> ?; case=> *; apply _.
+- by move=> ?; case=> *; apply _.
+- by move=> ???; case=> *; apply _.
+Qed.
+
 Definition lo_term v1 v2 : iProp Σ :=
   ∃ t1 t2, ⌜v1 = val_of_term t1⌝ ∗
            ⌜v2 = val_of_term t2⌝ ∗
            lo_term_aux t1 t2.
 
+Global Instance persistent_lo_term v1 v2 : Persistent (lo_term v1 v2).
+Proof. apply _. Qed.
 
+Definition eq_term : val := (rec: "eq" "x" "y" :=
+  if: (Fst "x" = #0) && (Fst "y" = #0) then
+    Snd "x" = Snd "y"
+  else if: (Fst "x" = #1) && (Fst "y" = #1) then
+    ("eq" (Fst (Snd "x")) (Fst (Snd "y"))) &&
+    ("eq" (Snd (Snd "x")) (Snd (Snd "y")))
+  else if: (Fst "x" = #2) && (Fst "y" = #2) then
+    Snd "x" = Snd "y"
+  else if: (Fst "x" = #3) && (Fst "y" = #3) then
+    Snd "x" = Snd "y"
+  else if: (Fst "x" = #4) && (Fst "y" = #4) then
+    (Fst (Snd "x") = Fst (Snd "y")) &&
+    ("eq" (Snd (Snd "x")) (Snd (Snd "y")))
+  else #false)%V.
 
+Ltac wp_eq_term_trivialF :=
+  wp_rec; wp_pures; iPureIntro; right; split; congruence.
+
+Lemma wp_eq_term t1 t2 :
+  ⊢ WP (eq_term (val_of_term t1) (val_of_term t2)) {{ v,
+      ⌜t1 = t2 ∧ v = #true ∨ t1 ≠ t2 ∧ v = #false⌝ }}.
+Proof.
+iLöb as "IH" forall (t1 t2).
+case: t1=> [n1|t11 t12|l1|l1|l1 t1];
+case: t2=> [n2|t21 t22|l2|l2|l2 t2] /=;
+try by wp_eq_term_trivialF.
+- wp_rec; wp_pures; iPureIntro.
+  case: bool_decide_reflect=> e; [left|right]; split; congruence.
+- wp_rec; wp_pures; wp_bind (eq_term _ _).
+  iPoseProof ("IH" $! t11 t21) as "H1".
+  iApply (wp_wand with "H1").
+  iClear "H1"; iIntros (v1) "%Hv1".
+  case: Hv1 => - [e1 ->].
+  + wp_pures.
+    iSpecialize ("IH" $! t12 t22).
+    iApply (wp_wand with "IH").
+    iIntros (v2) "%Hv2"; iPureIntro.
+    case: Hv2=> - [e2 ->]; [left|right]; split; congruence.
+  + wp_pures; iPureIntro; right; split; congruence.
+- wp_rec; wp_pures; iPureIntro.
+  case: bool_decide_reflect=> e; [left|right]; split; congruence.
+- wp_rec; wp_pures; iPureIntro.
+  case: bool_decide_reflect=> e; [left|right]; split; congruence.
+- wp_rec; wp_pures.
+  case: bool_decide_reflect=> e; wp_pures; last first.
+    by iPureIntro; right; split; congruence.
+  iSpecialize ("IH" $! t1 t2).
+  iApply (wp_wand with "IH").
+  iIntros (v) "%Hv"; iPureIntro.
+  case: Hv=> - [e' ->]; [left|right]; split; congruence.
+Qed.
 
 Definition ty_nonce v1 v2 : iProp Σ :=
   symbol lo_nonce v1 v2 ∨ symbol hi_nonce v1 v2.
