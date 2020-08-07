@@ -21,6 +21,25 @@ Inductive term  :=
 | TKey of loc
 | TEnc of loc & term.
 
+Global Instance term_eq_dec : EqDecision term.
+Proof.
+refine (
+  fix go t1 t2 {struct t1} : Decision (t1 = t2) :=
+    match t1, t2 with
+    | TInt n1, TInt n2 =>
+      cast_if (decide (n1 = n2))
+    | TPair t11 t12, TPair t21 t22  =>
+      cast_if_and (decide (t11 = t21)) (decide (t12 = t22))
+    | TNonce l1, TNonce l2 =>
+      cast_if (decide (l1 = l2))
+    | TKey l1, TKey l2 =>
+      cast_if (decide (l1 = l2))
+    | TEnc l1 t1, TEnc l2 t2 =>
+      cast_if_and (decide (l1 = l2)) (decide (t1 = t2))
+    | _, _ => right _
+    end); clear go; abstract intuition congruence.
+Defined.
+
 Fixpoint val_of_term t : val :=
   match t with
   | TInt n => (#0, #n)
@@ -152,41 +171,34 @@ Definition eq_term : val := (rec: "eq" "x" "y" :=
     ("eq" (Snd (Snd "x")) (Snd (Snd "y")))
   else #false)%V.
 
-Ltac wp_eq_term_trivialF :=
-  wp_rec; wp_pures; iPureIntro; right; split; congruence.
-
 Lemma wp_eq_term t1 t2 :
   ⊢ WP (eq_term (val_of_term t1) (val_of_term t2)) {{ v,
-      ⌜t1 = t2 ∧ v = #true ∨ t1 ≠ t2 ∧ v = #false⌝ }}.
+      ⌜v = #(bool_decide (t1 = t2))⌝ }}.
 Proof.
 iLöb as "IH" forall (t1 t2).
 case: t1=> [n1|t11 t12|l1|l1|l1 t1];
 case: t2=> [n2|t21 t22|l2|l2|l2 t2] /=;
-try by wp_eq_term_trivialF.
-- wp_rec; wp_pures; iPureIntro.
-  case: bool_decide_reflect=> e; [left|right]; split; congruence.
-- wp_rec; wp_pures; wp_bind (eq_term _ _).
-  iPoseProof ("IH" $! t11 t21) as "H1".
-  iApply (wp_wand with "H1").
-  iClear "H1"; iIntros (v1) "%Hv1".
-  case: Hv1 => - [e1 ->].
-  + wp_pures.
-    iSpecialize ("IH" $! t12 t22).
-    iApply (wp_wand with "IH").
-    iIntros (v2) "%Hv2"; iPureIntro.
-    case: Hv2=> - [e2 ->]; [left|right]; split; congruence.
-  + wp_pures; iPureIntro; right; split; congruence.
-- wp_rec; wp_pures; iPureIntro.
-  case: bool_decide_reflect=> e; [left|right]; split; congruence.
-- wp_rec; wp_pures; iPureIntro.
-  case: bool_decide_reflect=> e; [left|right]; split; congruence.
-- wp_rec; wp_pures.
-  case: bool_decide_reflect=> e; wp_pures; last first.
-    by iPureIntro; right; split; congruence.
-  iSpecialize ("IH" $! t1 t2).
-  iApply (wp_wand with "IH").
-  iIntros (v) "%Hv"; iPureIntro.
-  case: Hv=> - [e' ->]; [left|right]; split; congruence.
+wp_rec; wp_pures=> //.
+- iPureIntro; congr (# (LitBool _)).
+  apply: bool_decide_iff; intuition congruence.
+- wp_bind (eq_term _ _).
+  iApply (wp_wand with "IH"); iIntros (?) "->".
+  case: bool_decide_reflect=> e1.
+  + wp_pures; iApply (wp_wand with "IH"); iIntros (?) "->".
+    iPureIntro; congr (# (LitBool _)).
+    apply: bool_decide_iff; intuition congruence.
+  + wp_pures; iPureIntro; congr (# (LitBool _)).
+    rewrite bool_decide_false; congruence.
+- iPureIntro; congr (# (LitBool _)).
+  apply: bool_decide_iff; intuition congruence.
+- iPureIntro; congr (# (LitBool _)).
+  apply: bool_decide_iff; intuition congruence.
+- case: bool_decide_reflect=> e1.
+  + wp_pures; iApply (wp_wand with "IH"); iIntros (?) "->".
+    iPureIntro; congr (# (LitBool _)).
+    apply: bool_decide_iff; intuition congruence.
+  + wp_pures; iPureIntro; congr (# (LitBool _)).
+    rewrite bool_decide_false; congruence.
 Qed.
 
 Definition ty_nonce v1 v2 : iProp Σ :=
