@@ -49,6 +49,29 @@ Fixpoint val_of_term t : val :=
   | TEnc l t => (#4, (#l, val_of_term t))
   end.
 
+Fixpoint term_of_val v : term :=
+  match v with
+  | PairV (# (LitInt 0)) (# (LitInt n)) =>
+    TInt n
+  | PairV (# (LitInt 1)) (PairV v1 v2) =>
+    TPair (term_of_val v1) (term_of_val v2)
+  | PairV (# (LitInt 2)) (# (LitLoc l)) =>
+    TNonce l
+  | PairV (# (LitInt 3)) (# (LitLoc l)) =>
+    TKey l
+  | PairV (# (LitInt 4)) (PairV (# (LitLoc l)) v) =>
+    TEnc l (term_of_val v)
+  | _ => TInt 0
+  end.
+
+Global Instance val_of_termK : Cancel (=) term_of_val val_of_term.
+Proof. elim=> //= *; congruence. Qed.
+
+Global Instance val_of_term_inj : Inj (=) (=) val_of_term.
+Proof.
+by apply (@cancel_inj _ _ _ term_of_val); apply _.
+Qed.
+
 Class termSG := TermSG {
   term_inG :> inG Σ (authR (gsetUR (prodO valO valO)));
   hi_key_name : gname;
@@ -122,6 +145,37 @@ Definition opaque v1 v2 : iProp Σ :=
 
 Global Instance persistent_opaque v1 v2 : Persistent (opaque v1 v2).
 Proof. apply _. Qed.
+
+Lemma opaque_opaque1 v1 v2 :
+  opaque_inv -∗
+  opaque v1 v2 -∗
+  opaque1 true (term_of_val v1) ∗ opaque1 false (term_of_val v2).
+Proof.
+iDestruct 1 as (TT) "(Hown & %Hperm & HTT)"; iIntros "#Ht1t2".
+iPoseProof (own_valid_2 with "Hown Ht1t2") as "%Hvalid".
+move: Hvalid; rewrite auth_both_valid gset_included.
+rewrite -elem_of_subseteq_singleton; case=> Ht1t2 _.
+iDestruct ("HTT" $! _ _ Ht1t2) as (t1 t2) "(-> & -> & Ht1 & Ht2)".
+by rewrite !cancel; iFrame.
+Qed.
+
+Lemma opaque_opaque1L v1 v2 :
+  opaque_inv -∗
+  opaque v1 v2 -∗
+  opaque1 true (term_of_val v1).
+Proof.
+iIntros "Hinv Ht1t2".
+by iDestruct (opaque_opaque1 with "Hinv Ht1t2") as "[? _]".
+Qed.
+
+Lemma opaque_opaque1R v1 v2 :
+  opaque_inv -∗
+  opaque v1 v2 -∗
+  opaque1 false (term_of_val v2).
+Proof.
+iIntros "Hinv Ht1t2".
+by iDestruct (opaque_opaque1 with "Hinv Ht1t2") as "[_ ?]".
+Qed.
 
 Fixpoint lo_term_aux t1 t2 : iProp Σ :=
   opaque (val_of_term t1) (val_of_term t2) ∨
