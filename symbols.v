@@ -54,7 +54,7 @@ Class symbolSG Σ := SymbolSG {
 
 Section Symbol.
 
-Context `{!heapG Σ, !cfgSG Σ, symbolSG Σ}.
+Context `{!heapG Σ, !cfgSG Σ, !symbolSG Σ}.
 Variable γ : gname.
 
 Implicit Types rl : rloc.
@@ -84,10 +84,32 @@ Proof. apply _. Qed.
 
 Definition symbol12 b l : iProp Σ :=
   let i1 := if b then L  else R in
-  let i2 := if b then LR else flip LR in
+  let i2 := flipb b LR in
   symbol (i1 l) ∨ ∃ l', symbol (i2 l l').
 Global Instance persistent_symbol12 b l : Persistent (symbol12 b l).
 Proof. apply _. Qed.
+
+Lemma symbol12_mapsto b l :
+  symbol_inv -∗
+  symbol12 b l -∗
+  if b then l ↦ #() else l ↦ₛ #().
+Proof.
+iDestruct 1 as (RL) "[Hown Hsymb]".
+iDestruct 1 as "[H|H]".
+- iPoseProof (own_valid_2 with "Hown H") as "%H".
+  rewrite auth_both_valid gset_included -elem_of_subseteq_singleton in H *.
+  case=> H _.
+  rewrite (big_sepS_delete _ _ _ H).
+  iDestruct "Hsymb" as "[Hsymb _]".
+  by rewrite /symbol_own; case: (b).
+- iDestruct "H" as (l') "H".
+  iPoseProof (own_valid_2 with "Hown H") as "%H".
+  rewrite auth_both_valid gset_included -elem_of_subseteq_singleton in H *.
+  case=> H _.
+  rewrite (big_sepS_delete _ _ _ H).
+  iDestruct "Hsymb" as "[Hsymb _]".
+  by case: (b); iDestruct "Hsymb" as "[??]".
+Qed.
 
 Definition mksymbol : val := λ: <>, ref #().
 
@@ -210,4 +232,19 @@ Proof.
 iMod (own_alloc (● ∅ : auth symbol_store)) as (γ) "Hown".
   by apply/auth_auth_valid.
 by iModIntro; iExists γ, ∅; simpl; iFrame.
+Qed.
+
+Lemma symbol_disj `{!heapG Σ, !cfgSG Σ, !symbolSG Σ} γ1 γ2 b l :
+  symbol_inv γ1 -∗
+  symbol_inv γ2 -∗
+  symbol12 γ1 b l -∗
+  symbol12 γ2 b l -∗
+  False.
+Proof.
+iIntros "Hinv1 Hinv2 Hsymb1 Hsymb2".
+iPoseProof (symbol12_mapsto with "Hinv1 Hsymb1") as "H1".
+iPoseProof (symbol12_mapsto with "Hinv2 Hsymb2") as "H2".
+case: b.
+- by iPoseProof (mapsto_valid_2 with "H1 H2") as "%H".
+- by iPoseProof (mapstoS_valid_2 with "H1 H2") as "%H".
 Qed.

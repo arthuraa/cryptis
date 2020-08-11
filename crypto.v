@@ -284,7 +284,7 @@ rewrite /flipb; case: b=> /=.
 - exact: opaque_opaque1R.
 Qed.
 
-Lemma flipb_lo_term_perm b t1 t21 t22 :
+Lemma flipb_lo_term_aux_perm b t1 t21 t22 :
   opaque_inv -∗
   flipb b lo_term_aux t1 t21 -∗
   flipb b lo_term_aux t1 t22 -∗
@@ -336,13 +336,21 @@ elim: t1 t21 t22.
   + case: t22=> //= l22 t22; iDestruct "H2" as "[H2 _]".
     iPoseProof (flipb_opaque_opaque1 with "Hinv H1") as "#H1' /=".
     iDestruct "H1'" as "[H1' _]".
-    (* Need to ensure that different key types are disjoint *)
-    admit.
+    iAssert (symbol12 lo_key_name b l1) as "H2'".
+      by iRight; iExists l22.
+    iDestruct "Hinv" as (TT) "[Hsymb _]".
+    rewrite !(big_sepL_singleton, big_sepL_cons).
+    iDestruct "Hsymb" as "(_ & _ & Hlo_key & Hhi_key)".
+    by iDestruct (symbol_disj with "Hhi_key Hlo_key H1' H2'") as "[]".
   + case: t21=> //= l21 t21; iDestruct "H1" as "[H1 _]".
     iPoseProof (flipb_opaque_opaque1 with "Hinv H2") as "#H2' /=".
     iDestruct "H2'" as "[H2' _]".
-    (* Need to ensure that different key types are disjoint *)
-    admit.
+    iAssert (symbol12 lo_key_name b l1) as "H1'".
+      by iRight; iExists l21.
+    iDestruct "Hinv" as (TT) "[Hsymb _]".
+    rewrite !(big_sepL_singleton, big_sepL_cons).
+    iDestruct "Hsymb" as "(_ & _ & Hlo_key & Hhi_key)".
+    by iDestruct (symbol_disj with "Hhi_key Hlo_key H2' H1'") as "[]".
   + case: t21 t22=> //= l21 t21 [] //= l22 t22.
     iDestruct "H1" as "[Hl21 Ht21]".
     iDestruct "H2" as "[Hl22 Ht22]".
@@ -352,54 +360,20 @@ elim: t1 t21 t22.
     iDestruct "Hsymb" as "(? & ? & Hlo_key & ?)".
     iPoseProof (flipb_symbol_perm with "Hlo_key Hl21 Hl22") as "%El".
     iPureIntro; congruence.
-Admitted.
+Qed.
 
-Lemma lo_term_perm t11 t12 t21 t22 :
+Lemma lo_term_aux_perm t11 t12 t21 t22 :
   opaque_inv -∗
   lo_term_aux t11 t12 -∗
   lo_term_aux t21 t22 -∗
   ⌜t11 = t21 ↔ t12 = t22⌝.
 Proof.
-elim: t11 t12 t21 t22.
-- move=> n1 t12 t21 t22; iIntros "Hinv #H1 #H2".
-  iDestruct "H1" as "[H1|H1]".
-    by iDestruct (opaque_opaque1L with "Hinv H1") as "[]".
-  case: t12=> //= ?; iDestruct "H1" as "<-".
-  rewrite /iff; iSplit; iIntros (e).
-  + rewrite -{t21}e; iDestruct "H2" as "[H2|H2]".
-      by iDestruct (opaque_opaque1L with "Hinv H2") as "[]".
-    by case: t22=> //= n2; iDestruct "H2" as "<-".
-  + rewrite lo_term_auxE -{t22}e; iDestruct "H2" as "[H2|H2]".
-      by iDestruct (opaque_opaque1R with "Hinv H2") as "[]".
-    by case: t21=> //= n2; iDestruct "H2" as "<-".
-- move=> t111 IH1 t112 IH2 t12 t21 t22; iIntros "Hinv #H1 #H2 /=".
-  iDestruct "H1" as "[H1|H1]".
-    by iDestruct (opaque_opaque1L with "Hinv H1") as "[]".
-  case: t12=> //= t121 t122.
-  iDestruct "H1" as "[H11 H12]".
-  rewrite /iff; iSplit; iIntros (e).
-  + rewrite -{t21}e /=; iDestruct "H2" as "[H2|H2]".
-      by iDestruct (opaque_opaque1L with "Hinv H2") as "[]".
-    case: t22=> //= t221 t222.
-    iDestruct "H2" as "[H21 H22]".
-    iPoseProof (IH1 with "Hinv H11 H21") as "%e1".
-    iPoseProof (IH2 with "Hinv H12 H22") as "%e2".
-    iPureIntro.
-
-
-[n2| | | |] //=.
-  + move=> t21 t22.
-    iDestruct "H1" as "[H1|<-]".
-      by iPoseProof (opaque_opaque1R with "Hinv H1") as "#? /=".
-    rewrite /iff; iSplit; iIntros (e).
-    * rewrite -{}e.
-      iDestruct "H2" as "[H2|H2]".
-
-  match goal with
-  | |- context[environments.Esnoc _ (INamed ?H) (_ ∨ False)%I] =>
-    idtac H
-  end.
-
+iIntros "Hinv #H1 #H2"; rewrite /iff; iSplit.
+- iIntros (E); rewrite -{}E.
+  by iApply (@flipb_lo_term_aux_perm true with "Hinv H1 H2").
+- iIntros (E); rewrite -{}E.
+  by iApply (@flipb_lo_term_aux_perm false with "Hinv H1 H2").
+Qed.
 
 Definition lo_term v1 v2 : iProp Σ :=
   ∃ t1 t2, ⌜v1 = val_of_term t1⌝ ∗
@@ -453,23 +427,3 @@ wp_rec; wp_pures=> //.
   + wp_pures; iPureIntro; congr (# (LitBool _)).
     rewrite bool_decide_false; congruence.
 Qed.
-
-Definition ty_nonce v1 v2 : iProp Σ :=
-  symbol lo_nonce v1 v2 ∨ symbol hi_nonce v1 v2.
-
-Definition ty_hi_nonce v1 v2 : iProp Σ :=
-  symbol hi_nonce v1 v2.
-
-Definition ty_key v1 v2 : iProp Σ :=
-  symbol lo_key v1 v2 ∨ symbol hi_key v1 v2.
-
-Definition ty_hi_key v1 v2 : iProp Σ :=
-  symbol hi_key v1 v2.
-
-Definition ty1 (ty : val → val → iProp Σ) left v : iProp Σ :=
-  ∃ v', if left then ty v v' else ty v' v.
-
-Definition ty_key1 := ty1 ty_key.
-Definition ty_hi_key1 := ty1 ty_hi_key.
-Definition ty_nonce1 := ty1 ty_nonce.
-Definition ty_hi_nonce1 := ty1 ty_hi_nonce.
