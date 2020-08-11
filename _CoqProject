@@ -2,6 +2,7 @@
 
 -R . crypto
 
+lib.v
 basic.v
 symbols.v
 crypto.v

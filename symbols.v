@@ -8,11 +8,8 @@ From iris.heap_lang Require Import notation proofmode metatheory.
 From iris.heap_lang Require Import primitive_laws.
 From iris.base_logic.lib Require Import invariants.
 From iris_string_ident Require Import ltac2_string_ident.
-From crypto Require Import basic.
+From crypto Require Import lib basic.
 Import uPred.
-
-Definition perm `{!EqDecision T, !Countable T} (X : gset (T * T)) :=
-  forall p1 p2, p1 ∈ X → p2 ∈ X → (p1.1 = p2.1 ↔ p1.2 = p2.2).
 
 Inductive rloc := L of loc | R of loc | LR of loc & loc.
 Canonical rlocO := leibnizO rloc.
@@ -64,6 +61,7 @@ Implicit Types rl : rloc.
 Implicit Types l : loc.
 Implicit Types RL : symbol_store.
 Implicit Types v : val.
+Implicit Types b : bool.
 
 Definition symbol_own rl : iProp Σ :=
   match rl with
@@ -79,11 +77,16 @@ Definition symbol rl := own γ (◯ {[rl]}).
 Global Instance persistent_symbol rl : Persistent (symbol rl).
 Proof. apply _. Qed.
 
-Definition symbol1 (s : bool) l : iProp Σ :=
-  let i1 := if s then L  else R in
-  let i2 := if s then LR else flip LR in
+Definition symbol1 b l :=
+  symbol ((if b then L else R) l).
+Global Instance persistent_symbol1 b l : Persistent (symbol1 b l).
+Proof. apply _. Qed.
+
+Definition symbol12 b l : iProp Σ :=
+  let i1 := if b then L  else R in
+  let i2 := if b then LR else flip LR in
   symbol (i1 l) ∨ ∃ l', symbol (i2 l l').
-Global Instance persistent_symbol1 s l : Persistent (symbol1 s l).
+Global Instance persistent_symbol12 b l : Persistent (symbol12 b l).
 Proof. apply _. Qed.
 
 Definition mksymbol : val := λ: <>, ref #().
@@ -186,6 +189,17 @@ Proof.
 iIntros "Hinv Hown1 Hown2".
 iPoseProof (symbol_eq_iff with "Hinv Hown1 Hown2") as "%Hperm".
 iPureIntro; exact/Hperm.
+Qed.
+
+Lemma flipb_symbol_perm b l1 l21 l22 :
+  symbol_inv -∗
+  symbol (flipb b LR l1 l21) -∗
+  symbol (flipb b LR l1 l22) -∗
+  ⌜l21 = l22⌝.
+Proof.
+rewrite /flipb; case: b=> /=.
+- exact: symbol_eqR.
+- exact: symbol_eqL.
 Qed.
 
 End Symbol.
