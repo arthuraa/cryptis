@@ -438,62 +438,63 @@ swp_rec; swp_pures=> //.
 - iPureIntro; congr (# (LitBool _)).
   apply: bool_decide_iff; intuition congruence.
 - swp_bind (eq_term _ _).
-  twp_wand
+  iPoseProof (IH1 t21) as "IH1"; iPoseProof (IH2 t22) as "IH2".
+  iApply (swp_wand with "IH1"); iIntros (?) "->".
+  case: bool_decide_reflect=> e1.
+  + swp_pures; iApply (swp_wand with "IH2"); iIntros (?) "->".
+    iPureIntro; congr (# (LitBool _)).
+    apply: bool_decide_iff; intuition congruence.
+  + swp_pures; iPureIntro; congr (# (LitBool _)).
+    rewrite bool_decide_false; congruence.
+- iPureIntro; congr (# (LitBool _)).
+  apply: bool_decide_iff; intuition congruence.
+- iPureIntro; congr (# (LitBool _)).
+  apply: bool_decide_iff; intuition congruence.
+- case: bool_decide_reflect=> e1.
+  + swp_pures.
+    iPoseProof (IH1 t2) as "IH1".
+    iApply (swp_wand with "IH1"); iIntros (?) "->".
+    iPureIntro; congr (# (LitBool _)).
+    apply: bool_decide_iff; intuition congruence.
+  + swp_pures; iPureIntro; congr (# (LitBool _)).
+    rewrite bool_decide_false; congruence.
+Qed.
 
+Lemma swp_elim E e Φ j K :
+  nclose specN ⊆ E →
+  swp e Φ -∗
+  spec_ctx -∗
+  j ⤇ fill K e ={E}=∗
+  ∃ v : val, j ⤇ fill K v ∗ Φ v.
+Proof.
+rewrite swp_eq; move=> HE; iIntros "Hswp Hspec Hj".
+iCombine "Hspec Hj" as "Hspec".
+by iApply "Hswp".
+Qed.
 
-  done.
-
-swp_pure' _.
-  iSolveTC.
-
-reshape_expr (eq_term (#0, #n1)%V) ltac:(fun K e' => idtac e').
-
-
-
-swp_pure' _.
-
- iStartProof.
-
-
-  reshape_expr (eq_term (#0, #n1)%V (#0, #n2)%V) ltac:(fun K' e' =>
-    unify e' (eq_term (#0, #n1)%V);
-    iApply (swp_bind K' e')
-  ).
-  iApply swp_rec. apply AsRecV_recv. rewrite /=.
-  iApply swp_pure; eauto.
-  iApply swp_value. simpl.
-  iApply swp_rec. simpl.
-  iApply swp_pure; eauto.
-
-
-iDestruct 1 as "[#Hspec HK]".
-  wp_pure_spec E "HK" (App (Val eq_term) _).
-
-  iPoseProof (do_step_pure E j ([AppLCtx (#0, #n2)] ++ K) (eq_term (#0, #n1)%V)) as "?".
-
-
-
-  unify (eq_term (#0, #n1)%V (#0, #n2)%V) (App eq_term _).
-  lazymatch goal with
-  | |- envs_entails ?ENV _ =>
-    match ENV with
-    | context[Esnoc _ (INamed "HK") (?j ⤇ fill ?K ?e)] =>
-      reshape_expr e ltac:(fun K' e' =>
-        unify e' (App (Val eq_term) _);
-        let H := fresh in
-        assert (H := AsRecV_recv);
-        iPoseProof (do_step_pure E j (K' ++ K) e' with "[Hspec HK]") as "?";
-        [idtac|idtac|idtac |idtac])
-    end
-  end.
-eauto.
-
-  rewrite -[eq_term (#0, #n1)%V (#0, #n2)%V]/(fill [AppLCtx (#0, #n2)%V] (eq_term (#0, #n1)%V)).
-  rewrite -fill_app.
-  assert (HH := AsRecV_recv).
-  iMod (step_rec with "[Hspec HK]") as "H"; try iSolveTC; eauto.
-  simpl.
-
-
+Lemma wp_eq_term2 v11 v12 v21 v22 j K :
+  lo_term v11 v12 -∗
+  lo_term v21 v22 -∗
+  opaque_inv -∗
+  spec_ctx -∗
+  j ⤇ fill K (eq_term v12 v22) -∗
+  WP eq_term v11 v21
+     {{ v, ⌜v = #(bool_decide (v11 = v21))⌝ ∗ j ⤇ fill K v }}.
+Proof.
+iDestruct 1 as (t11 t12) "(-> & -> & #Ht1)".
+iDestruct 1 as (t21 t22) "(-> & -> & #Ht2)".
+iIntros "Hopaque Hspec Hj"; iApply fupd_wp.
+iPoseProof (step_eq_term t12 t22) as "Hswp".
+iMod (swp_elim with "Hswp Hspec Hj") as (v) "[Hj ->]"; first done.
+iModIntro; iPoseProof (wp_eq_term t11 t21) as "Hwp".
+iApply (wp_wand with "Hwp"); iIntros (v) "->".
+iAssert ⌜bool_decide (t12 = t22) = bool_decide (t11 = t21)⌝%I
+        with "[Hopaque]" as "->".
+  iPoseProof (lo_term_aux_perm with "Hopaque Ht1 Ht2") as "%HE".
+  by iPureIntro; apply: bool_decide_iff.
+iFrame; iPureIntro; congr (# (LitBool _)).
+apply: bool_decide_iff; split; try congruence.
+apply: val_of_term_inj.
+Qed.
 
 End Terms.

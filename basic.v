@@ -483,6 +483,16 @@ Lemma tac_swp_bind `{!heapG Σ} K Δ Φ e f :
   envs_entails Δ (swp (fill K e) Φ).
 Proof. rewrite envs_entails_eq=> -> ->. by apply: swp_bind. Qed.
 
+Lemma swp_wand e Φ Ψ :
+  swp e Φ -∗
+  (∀ v, Φ v -∗ Ψ v) -∗
+  swp e Ψ.
+Proof.
+rewrite !swp_eq; iIntros "He Hweak" (E j K) "%HE Hspec".
+iMod ("He" $! E j K HE with "Hspec") as (v) "[Hj Hv]".
+by iModIntro; iExists v; iFrame; iApply "Hweak".
+Qed.
+
 Lemma swp_value Φ e v :
   IntoVal e v → Φ v -∗ swp e Φ.
 Proof.
