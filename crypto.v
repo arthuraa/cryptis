@@ -427,3 +427,73 @@ wp_rec; wp_pures=> //.
   + wp_pures; iPureIntro; congr (# (LitBool _)).
     rewrite bool_decide_false; congruence.
 Qed.
+
+Lemma step_eq_term t1 t2 :
+  ⊢ swp (eq_term (val_of_term t1) (val_of_term t2))
+        (λ v, ⌜v = #(bool_decide (t1 = t2))⌝)%I.
+Proof.
+elim: t1 t2=> [n1|t11 IH1 t12 IH2|l1|l1|l1 t1 IH1];
+case=> [n2|t21 t22|l2|l2|l2 t2] /=;
+swp_rec; swp_pures=> //.
+- iPureIntro; congr (# (LitBool _)).
+  apply: bool_decide_iff; intuition congruence.
+- swp_bind (eq_term _ _).
+  twp_wand
+
+
+  done.
+
+swp_pure' _.
+  iSolveTC.
+
+reshape_expr (eq_term (#0, #n1)%V) ltac:(fun K e' => idtac e').
+
+
+
+swp_pure' _.
+
+ iStartProof.
+
+
+  reshape_expr (eq_term (#0, #n1)%V (#0, #n2)%V) ltac:(fun K' e' =>
+    unify e' (eq_term (#0, #n1)%V);
+    iApply (swp_bind K' e')
+  ).
+  iApply swp_rec. apply AsRecV_recv. rewrite /=.
+  iApply swp_pure; eauto.
+  iApply swp_value. simpl.
+  iApply swp_rec. simpl.
+  iApply swp_pure; eauto.
+
+
+iDestruct 1 as "[#Hspec HK]".
+  wp_pure_spec E "HK" (App (Val eq_term) _).
+
+  iPoseProof (do_step_pure E j ([AppLCtx (#0, #n2)] ++ K) (eq_term (#0, #n1)%V)) as "?".
+
+
+
+  unify (eq_term (#0, #n1)%V (#0, #n2)%V) (App eq_term _).
+  lazymatch goal with
+  | |- envs_entails ?ENV _ =>
+    match ENV with
+    | context[Esnoc _ (INamed "HK") (?j ⤇ fill ?K ?e)] =>
+      reshape_expr e ltac:(fun K' e' =>
+        unify e' (App (Val eq_term) _);
+        let H := fresh in
+        assert (H := AsRecV_recv);
+        iPoseProof (do_step_pure E j (K' ++ K) e' with "[Hspec HK]") as "?";
+        [idtac|idtac|idtac |idtac])
+    end
+  end.
+eauto.
+
+  rewrite -[eq_term (#0, #n1)%V (#0, #n2)%V]/(fill [AppLCtx (#0, #n2)%V] (eq_term (#0, #n1)%V)).
+  rewrite -fill_app.
+  assert (HH := AsRecV_recv).
+  iMod (step_rec with "[Hspec HK]") as "H"; try iSolveTC; eauto.
+  simpl.
+
+
+
+End Terms.

@@ -1,6 +1,6 @@
 From mathcomp Require Import ssreflect.
 From iris.algebra Require Import excl auth frac agree gmap list.
-From iris.proofmode Require Import tactics.
+From iris.proofmode Require Import environments tactics.
 From iris.program_logic Require Import language.
 From iris.program_logic Require Import lifting.
 From iris.algebra Require Import gmap auth gset numbers excl agree ofe.
@@ -454,7 +454,142 @@ Section cfg.
     rewrite to_tpool_snoc insert_length to_tpool_insert //. iFrame. iPureIntro.
     eapply rtc_r, step_insert; eauto. econstructor; eauto.
   Qed.
+
+Definition swp_def e Φ : iProp Σ :=
+  (∀ E j K,
+    ⌜nclose specN ⊆ E⌝ →
+    spec_ctx ∗ j ⤇ fill K e
+    ={E}=∗ ∃ v, j ⤇ fill K v ∗ Φ v).
+
+Definition swp_aux e Φ : seal (swp_def e Φ). Proof. by eexists. Qed.
+Definition swp e Φ := (swp_aux e Φ).(unseal).
+Definition swp_eq e Φ : swp e Φ = swp_def e Φ := (swp_aux e Φ).(seal_eq).
+
+Lemma swp_bind K e Φ :
+  swp e (λ v, swp (fill K (Val v)) Φ)
+  -∗ swp (fill K e) Φ.
+Proof.
+rewrite !swp_eq; iIntros "He" (E j K') "%HE [#Hspec Hj]"; rewrite -fill_app.
+iCombine "Hspec Hj" as "Hj".
+iMod ("He" $! E j (K ++ K') HE with "Hj") as "Hj"; eauto.
+iDestruct "Hj" as (v) "[Hj Hv]"; rewrite fill_app swp_eq.
+iCombine "Hspec Hj" as "Hj".
+by iApply "Hv".
+Qed.
+
+Lemma tac_swp_bind `{!heapG Σ} K Δ Φ e f :
+  f = (λ e, fill K e) → (* as an eta expanded hypothesis so that we can `simpl` it *)
+  envs_entails Δ (swp e (λ v, swp (f (Val v)) Φ)) →
+  envs_entails Δ (swp (fill K e) Φ).
+Proof. rewrite envs_entails_eq=> -> ->. by apply: swp_bind. Qed.
+
+Lemma swp_value Φ e v :
+  IntoVal e v → Φ v -∗ swp e Φ.
+Proof.
+rewrite swp_eq; move=> <-; iIntros "Hv" (E j K) "%HE [#Hspec ?]".
+iModIntro; iExists v; iFrame.
+Qed.
+
+Lemma tac_swp_expr_eval Δ Φ e e' :
+  (∀ (e'':=e'), e = e'') →
+  envs_entails Δ (swp e' Φ) → envs_entails Δ (swp e Φ).
+Proof. by intros ->. Qed.
+
+Lemma tac_swp_value Δ Φ v :
+  envs_entails Δ (Φ v) →
+  envs_entails Δ (swp v Φ).
+Proof. by move=> ?; rewrite -swp_value. Qed.
+
+Lemma swp_alloc v : ⊢ swp (ref v) (λ v', ∃ l, ⌜v' = #l⌝ ∗ l ↦ₛ v)%I.
+Proof.
+rewrite swp_eq; iIntros (E j K) "%HE Hj".
+iMod (step_alloc with "Hj") as (l) "[Hj Hl]"; eauto.
+by iModIntro; iExists #l; iFrame; iExists l; iFrame.
+Qed.
+
+Lemma swp_pure (P : Prop) n e1 e2 Φ :
+  PureExec P n e1 e2 →
+  P →
+  swp e2 Φ -∗
+  swp e1 Φ.
+Proof.
+rewrite !swp_eq; move=> HP Hstep; iIntros "He2" (E j K) "%HE [#Hspec Hj]".
+iCombine "Hspec Hj" as "Hj".
+iMod (step_pure' with "Hj") as "Hj"; eauto.
+iCombine "Hspec Hj" as "Hj".
+by iApply "He2".
+Qed.
+
+Lemma tac_swp_pure Δ K e1 e2 (P : Prop) n Φ :
+  PureExec P n e1 e2 →
+  P →
+  envs_entails Δ (swp (fill K e2) Φ) →
+  envs_entails Δ (swp (fill K e1) Φ).
+Proof.
+move=> Hstep HP He2; by rewrite -swp_pure.
+Qed.
+
+Lemma swp_rec Φ f x v1 v2 `{!AsRecV v1 f x erec}:
+  swp (subst' x v2 (subst' f v1 erec)) Φ
+  -∗ swp (App v1 v2) Φ.
+Proof. apply (swp_pure True 1); eauto; apply _. Qed.
+
 End cfg.
+
+Ltac swp_bind_core K :=
+  lazymatch eval hnf in K with
+  | [] => idtac
+  | _ => eapply (tac_swp_bind K); [simpl; reflexivity|reduction.pm_prettify]
+  end.
+
+Tactic Notation "swp_bind" open_constr(efoc) :=
+  iStartProof;
+  lazymatch goal with
+  | |- envs_entails _ (swp ?e ?Q) =>
+    reshape_expr e ltac:(fun K e' => unify e' efoc; swp_bind_core K)
+    || fail "swp_bind: cannot find" efoc "in" e
+  | _ => fail "swp_bind: not an 'swp'"
+  end.
+
+Tactic Notation "swp_expr_eval" tactic3(t) :=
+  iStartProof;
+  lazymatch goal with
+  | |- envs_entails _ (swp ?e ?Q) =>
+    eapply tac_swp_expr_eval;
+      [let x := fresh in intros x; t; unfold x; reflexivity|]
+  | _ => fail "swp_expr_eval: not an 'swp'"
+  end.
+
+Ltac swp_finish :=
+  swp_expr_eval simpl;
+  try first [eapply tac_swp_value].
+
+Tactic Notation "swp_pure" open_constr(efoc) :=
+  iStartProof;
+  lazymatch goal with
+  | |- envs_entails _ (swp ?e ?Q) =>
+    let e := eval simpl in e in
+    reshape_expr e ltac:(fun K e' =>
+      unify e' efoc;
+      eapply (tac_swp_pure _ K e');
+      [iSolveTC                       (* PureExec *)
+      |try solve_vals_compare_safe    (* The pure condition for PureExec -- handles trivial goals, including [vals_compare_safe] *)
+      |swp_finish                      (* new goal *)
+      ])
+    || fail "swp_pure: cannot find" efoc "in" e "or" efoc "is not a redex"
+  | _ => fail "swp_pure: not an 'swp'"
+  end.
+
+Ltac swp_rec :=
+  let H := fresh in
+  assert (H := AsRecV_recv);
+  swp_pure (App _ _);
+  clear H.
+
+Ltac swp_pures :=
+  repeat (swp_pure _; []).
+
+
 
 (*
 (* HACK: move somewhere else *)
