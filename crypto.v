@@ -21,6 +21,8 @@ Inductive term  :=
 | TKey of loc
 | TEnc of loc & term.
 
+Canonical termO := leibnizO term.
+
 Global Instance term_eq_dec : EqDecision term.
 Proof.
 refine (
@@ -72,8 +74,11 @@ Proof.
 by apply (@cancel_inj _ _ _ term_of_val); apply _.
 Qed.
 
+Global Instance countable_term : Countable term.
+Proof. apply (inj_countable' _ _ val_of_termK). Qed.
+
 Class termSG := TermSG {
-  term_inG :> inG Σ (authR (gsetUR (prodO valO valO)));
+  term_inG :> inG Σ (authR (gsetUR (prodO termO termO)));
   hi_key_name : gname;
   lo_key_name : gname;
   hi_nonce_name : gname;
@@ -130,7 +135,49 @@ case: t=> /=.
 - by iIntros (??) "[??]"; iFrame.
 Qed.
 
-Implicit Types TT : gsetUR (prodO valO valO).
+(*Fixpoint hi_term1 s t : iProp Σ :=
+  match t with
+  | TInt _ => True%I
+  | TPair t1 t2 => hi_term1 s t1 ∗ hi_term1 s t2
+  | TNonce l => wf_nonce s l
+  | TKey l => wf_key s l
+  | TEnc l t => wf_key s l ∗ hi_term1 s t
+  end.
+
+Global Instance persistent_hi_term1 s t : Persistent (hi_term1 s t).
+Proof. apply _. Qed.*)
+
+Fixpoint lo_term1 s t : iProp Σ :=
+  match t with
+  | TInt _ => True%I
+  | TPair t1 t2 => lo_term1 s t1 ∗ lo_term1 s t2
+  | TNonce l => symbol1 lo_nonce_name s l
+  | TKey l => symbol1 lo_key_name s l
+  | TEnc l t => symbol12 lo_key_name s l ∗ lo_term1 s t ∨
+                symbol12 hi_key_name s l ∗ wf_term s t
+  end.
+
+Lemma persistent_lo_term1 s t : Persistent (lo_term1 s t).
+Proof. elim: t=> *; apply _. Qed.
+
+Lemma lo_term1_hi_term1 s t : lo_term1 s t -∗ wf_term s t.
+Proof.
+elim: t=> [n|t1 IH1 t2 IH2|l|l|l t IH] //=.
+- by rewrite IH1 IH2.
+- rewrite /wf_nonce; eauto.
+- rewrite /wf_key /symbol12; eauto.
+- rewrite /wf_key /symbol12; iDestruct 1 as "[[??]|[??]]"; eauto.
+  by rewrite IH; iFrame.
+Qed.
+
+Lemma opaque1_lo_term1 s t : opaque1 s t -∗ lo_term1 s t.
+Proof.
+elim: t=> [n|t1 IH1 t2 IH2|l|l|l t IH] //=;
+do 1? by iDestruct 1 as "[]".
+eauto.
+Qed.
+
+Implicit Types TT : gsetUR (prodO termO termO).
 
 Definition term_names :=
   [lo_nonce_name; hi_nonce_name; lo_key_name; hi_key_name].
@@ -139,50 +186,47 @@ Definition opaque_inv : iProp Σ :=
   ∃ TT, ([∗ list] γ ∈ term_names, symbol_inv γ)
         ∗ own term_name (● TT)
         ∗ ⌜perm TT⌝
-        ∗ (∀ v1 v2, ⌜(v1, v2) ∈ TT⌝ -∗
-           ∃ t1 t2, ⌜v1 = val_of_term t1⌝ ∗
-                    ⌜v2 = val_of_term t2⌝ ∗
-                    opaque1 true t1 ∗ opaque1 false t2).
+        ∗ (∀ t1 t2, ⌜(t1, t2) ∈ TT⌝ -∗ opaque1 true t1 ∗ opaque1 false t2).
 
-Definition opaque v1 v2 : iProp Σ :=
-  own term_name (◯ {[v1, v2]}).
+Definition opaque t1 t2 : iProp Σ :=
+  own term_name (◯ {[t1, t2]}).
 
-Global Instance persistent_opaque v1 v2 : Persistent (opaque v1 v2).
+Global Instance persistent_opaque t1 t2 : Persistent (opaque t1 t2).
 Proof. apply _. Qed.
 
-Lemma opaque_opaque1 v1 v2 :
+Lemma opaque_opaque1 t1 t2 :
   opaque_inv -∗
-  opaque v1 v2 -∗
-  opaque1 true (term_of_val v1) ∗ opaque1 false (term_of_val v2).
+  opaque t1 t2 -∗
+  opaque1 true t1 ∗ opaque1 false t2.
 Proof.
 iDestruct 1 as (TT) "(Hsymb & Hown & %Hperm & HTT)"; iIntros "#Ht1t2".
 iPoseProof (own_valid_2 with "Hown Ht1t2") as "%Hvalid".
 move: Hvalid; rewrite auth_both_valid gset_included.
 rewrite -elem_of_subseteq_singleton; case=> Ht1t2 _.
-iDestruct ("HTT" $! _ _ Ht1t2) as (t1 t2) "(-> & -> & Ht1 & Ht2)".
-by rewrite !cancel; iFrame.
+iDestruct ("HTT" $! _ _ Ht1t2) as "(Ht1 & Ht2)".
+by iFrame.
 Qed.
 
-Lemma opaque_opaque1L v1 v2 :
+Lemma opaque_opaque1L t1 t2:
   opaque_inv -∗
-  opaque v1 v2 -∗
-  opaque1 true (term_of_val v1).
+  opaque t1 t2 -∗
+  opaque1 true t1.
 Proof.
 iIntros "Hinv Ht1t2".
 by iDestruct (opaque_opaque1 with "Hinv Ht1t2") as "[? _]".
 Qed.
 
-Lemma opaque_opaque1R v1 v2 :
+Lemma opaque_opaque1R t1 t2 :
   opaque_inv -∗
-  opaque v1 v2 -∗
-  opaque1 false (term_of_val v2).
+  opaque t1 t2 -∗
+  opaque1 false t2.
 Proof.
 iIntros "Hinv Ht1t2".
 by iDestruct (opaque_opaque1 with "Hinv Ht1t2") as "[_ ?]".
 Qed.
 
 Fixpoint lo_term_aux t1 t2 : iProp Σ :=
-  opaque (val_of_term t1) (val_of_term t2) ∨
+  opaque t1 t2 ∨
   match t1, t2 with
   | TInt n1, TInt n2 => ⌜n1 = n2⌝
   | TPair t11 t12, TPair t21 t22 =>
@@ -211,8 +255,7 @@ Definition lo_term_aux_rec t1 t2 : iProp Σ :=
 
 Lemma lo_term_auxE t1 t2 :
   lo_term_aux t1 t2 =
-  (opaque (val_of_term t1) (val_of_term t2) ∨
-   lo_term_aux_rec t1 t2)%I.
+  (opaque t1 t2 ∨ lo_term_aux_rec t1 t2)%I.
 Proof. by case: t1. Qed.
 
 Global Instance persistent_lo_term_aux t1 t2 : Persistent (lo_term_aux t1 t2).
@@ -227,7 +270,7 @@ Qed.
 
 Lemma flipb_lo_termE b t1 t2 :
   flipb b lo_term_aux t1 t2 ⊣⊢
-  (flipb b opaque (val_of_term t1) (val_of_term t2) ∨
+  (flipb b opaque t1 t2 ∨
    match t1, t2 with
    | TInt n1, TInt n2 => ⌜n1 = n2⌝
    | TPair t11 t12, TPair t21 t22 =>
@@ -250,11 +293,11 @@ case: b=> //; iSplit.
   by iDestruct "H" as "->".
 Qed.
 
-Lemma flipb_opaque_perm b v1 v21 v22 :
+Lemma flipb_opaque_perm b t1 t21 t22 :
   opaque_inv -∗
-  flipb b opaque v1 v21 -∗
-  flipb b opaque v1 v22 -∗
-  ⌜v21 = v22⌝.
+  flipb b opaque t1 t21 -∗
+  flipb b opaque t1 t22 -∗
+  ⌜t21 = t22⌝.
 Proof.
 iDestruct 1 as (TT) "(_ & Hown & %Hperm & HTT)".
 rewrite /flipb /opaque; case: b=> /=.
@@ -274,10 +317,10 @@ rewrite /flipb /opaque; case: b=> /=.
   iPureIntro; by apply (Hperm _ _ Hval1 Hval2).
 Qed.
 
-Lemma flipb_opaque_opaque1 b v1 v2 :
+Lemma flipb_opaque_opaque1 b t1 t2 :
   opaque_inv -∗
-  flipb b opaque v1 v2 -∗
-  opaque1 b (term_of_val v1).
+  flipb b opaque t1 t2 -∗
+  opaque1 b t1.
 Proof.
 rewrite /flipb; case: b=> /=.
 - exact: opaque_opaque1L.
@@ -315,7 +358,7 @@ elim: t1 t21 t22.
   iDestruct "H1" as "[H1|H1]"; last by case: t21.
   iDestruct "H2" as "[H2|H2]"; last by case: t22.
   iPoseProof (flipb_opaque_perm with "Hinv H1 H2") as "%E".
-  by iPureIntro; apply: val_of_term_inj.
+  by iPureIntro.
 - move=> l t21 t22; iIntros "Hinv #H1 #H2".
   rewrite !flipb_lo_termE /=.
   iDestruct "H1" as "[H1|H1]".
@@ -332,7 +375,7 @@ elim: t1 t21 t22.
   rewrite !flipb_lo_termE.
   iDestruct "H1" as "[H1|H1]"; iDestruct "H2" as "[H2|H2]".
   + iPoseProof (flipb_opaque_perm with "Hinv H1 H2") as "%E".
-    iPureIntro; exact: val_of_term_inj.
+    by iPureIntro.
   + case: t22=> //= l22 t22; iDestruct "H2" as "[H2 _]".
     iPoseProof (flipb_opaque_opaque1 with "Hinv H1") as "#H1' /=".
     iDestruct "H1'" as "[H1' _]".
@@ -374,6 +417,44 @@ iIntros "Hinv #H1 #H2"; rewrite /iff; iSplit.
 - iIntros (E); rewrite -{}E.
   by iApply (@flipb_lo_term_aux_perm false with "Hinv H1 H2").
 Qed.
+
+Implicit Types T : gset term.
+
+Fixpoint symbols_of_term t : gset loc :=
+  match t with
+  | TInt _ => ∅
+  | TPair t1 t2 => symbols_of_term t1 ∪ symbols_of_term t2
+  | TNonce l => {[l]}
+  | TKey l => {[l]}
+  | TEnc l t => {[l]} ∪ symbols_of_term t
+  end.
+
+(* l does not occur in t, except in occurrences that appear in T. *)
+Fixpoint protected_aux l T t :=
+  t ∈ T ∨
+  match t with
+  | TInt _ => True
+  | TPair t1 t2 => protected_aux l T t1 ∧ protected_aux l T t2
+  | TNonce l' => l ≠ l'
+  | TKey l' => l ≠ l'
+  | TEnc _ t2 => protected_aux l T t2
+  end.
+
+Definition protected s l (T : gset term) : iProp Σ :=
+  (∀ t, lo_term1 s t → ⌜protected_aux l T t⌝)%I.
+
+Lemma protected_extend l1 l2 T1 T2 t1 t2 :
+  l1 ∈ symbols_of_term t1 →
+  l2 ∈ symbols_of_term t2 →
+  t1 ∉ T1 →
+  t2 ∉ T2 →
+  opaque_inv -∗
+  protected true  l1 T1 -∗
+  protected false l2 T2 -∗
+  opaque1 true  t1 -∗
+  opaque1 false t2 -∗
+  |==> lo_term_aux t1 t2.
+Proof. Admitted.
 
 Definition lo_term v1 v2 : iProp Σ :=
   ∃ t1 t2, ⌜v1 = val_of_term t1⌝ ∗
