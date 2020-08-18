@@ -78,7 +78,7 @@ Global Instance countable_term : Countable term.
 Proof. apply (inj_countable' _ _ val_of_termK). Qed.
 
 Class termSG := TermSG {
-  term_inG :> inG Σ (authR (gsetUR (prodO termO termO)));
+  term_inG :> inG Σ (authR (gsetUR (matchingO termO)));
   hi_key_name : gname;
   lo_key_name : gname;
   hi_nonce_name : gname;
@@ -177,7 +177,7 @@ do 1? by iDestruct 1 as "[]".
 eauto.
 Qed.
 
-Implicit Types TT : gsetUR (prodO termO termO).
+Implicit Types TT : gsetUR (matchingO termO).
 
 Definition term_names :=
   [lo_nonce_name; hi_nonce_name; lo_key_name; hi_key_name].
@@ -185,11 +185,14 @@ Definition term_names :=
 Definition opaque_inv : iProp Σ :=
   ∃ TT, ([∗ list] γ ∈ term_names, symbol_inv γ)
         ∗ own term_name (● TT)
-        ∗ ⌜perm TT⌝
-        ∗ (∀ t1 t2, ⌜(t1, t2) ∈ TT⌝ -∗ opaque1 true t1 ∗ opaque1 false t2).
+        ∗ ⌜part_perm TT⌝
+        ∗ (∀ tt t1 pt2 b,
+             ⌜tt ∈ TT⌝ -∗
+             ⌜prod_of_matching tt = flipb b pair (Some t1) pt2⌝ -∗
+             opaque1 b t1).
 
 Definition opaque t1 t2 : iProp Σ :=
-  own term_name (◯ {[t1, t2]}).
+  own term_name (◯ {[LR t1 t2]}).
 
 Global Instance persistent_opaque t1 t2 : Persistent (opaque t1 t2).
 Proof. apply _. Qed.
@@ -199,12 +202,13 @@ Lemma opaque_opaque1 t1 t2 :
   opaque t1 t2 -∗
   opaque1 true t1 ∗ opaque1 false t2.
 Proof.
-iDestruct 1 as (TT) "(Hsymb & Hown & %Hperm & HTT)"; iIntros "#Ht1t2".
+iDestruct 1 as (TT) "(Hsymb & Hown & %Hperm & #HTT)"; iIntros "#Ht1t2".
 iPoseProof (own_valid_2 with "Hown Ht1t2") as "%Hvalid".
 move: Hvalid; rewrite auth_both_valid gset_included.
 rewrite -elem_of_subseteq_singleton; case=> Ht1t2 _.
-iDestruct ("HTT" $! _ _ Ht1t2) as "(Ht1 & Ht2)".
-by iFrame.
+iPoseProof ("HTT" $! _ t1 (Some t2) true Ht1t2 eq_refl) as "#H1".
+iPoseProof ("HTT" $! _ t2 (Some t1) false Ht1t2 eq_refl) as "#H2".
+by iSplit.
 Qed.
 
 Lemma opaque_opaque1L t1 t2:
@@ -299,7 +303,7 @@ Lemma flipb_opaque_perm b t1 t21 t22 :
   flipb b opaque t1 t22 -∗
   ⌜t21 = t22⌝.
 Proof.
-iDestruct 1 as (TT) "(_ & Hown & %Hperm & HTT)".
+iDestruct 1 as (TT) "(_ & Hown & %Hperm & #HTT)".
 rewrite /flipb /opaque; case: b=> /=.
 - iIntros "Hown1 Hown2".
   iPoseProof (own_valid_2 with "Hown Hown1") as "%Hval1".
@@ -307,14 +311,14 @@ rewrite /flipb /opaque; case: b=> /=.
   move: Hval1; rewrite auth_both_valid gset_included; case=> Hval1 _.
   move: Hval2; rewrite auth_both_valid gset_included; case=> Hval2 _.
   move: Hval1 Hval2; rewrite -!elem_of_subseteq_singleton=> Hval1 Hval2.
-  iPureIntro; by apply (Hperm _ _ Hval1 Hval2).
+  iPureIntro; by case: (Hperm _ _ _ _ _ true Hval1 Hval2 eq_refl eq_refl).
 - iIntros "Hown1 Hown2".
   iPoseProof (own_valid_2 with "Hown Hown1") as "%Hval1".
   iPoseProof (own_valid_2 with "Hown Hown2") as "%Hval2".
   move: Hval1; rewrite auth_both_valid gset_included; case=> Hval1 _.
   move: Hval2; rewrite auth_both_valid gset_included; case=> Hval2 _.
   move: Hval1 Hval2; rewrite -!elem_of_subseteq_singleton=> Hval1 Hval2.
-  iPureIntro; by apply (Hperm _ _ Hval1 Hval2).
+  iPureIntro; by case: (Hperm _ _ _ _ _ false Hval1 Hval2 eq_refl eq_refl).
 Qed.
 
 Lemma flipb_opaque_opaque1 b t1 t2 :
