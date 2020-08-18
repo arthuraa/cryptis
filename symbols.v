@@ -11,10 +11,14 @@ From iris_string_ident Require Import ltac2_string_ident.
 From crypto Require Import lib basic.
 Import uPred.
 
-Inductive rloc := L of loc | R of loc | LR of loc & loc.
-Canonical rlocO := leibnizO rloc.
+Section Matching.
 
-Instance rloc_dec : EqDecision rloc.
+Context `{!EqDecision T, !Countable T}.
+
+Inductive matching := L of T | R of T | LR of T & T.
+Canonical matchingO := leibnizO matching.
+
+Global Instance matching_dec : EqDecision matching.
 Proof.
   refine (λ rl1 rl2,
             match rl1, rl2 with
@@ -28,9 +32,9 @@ Proof.
               else _
             | _, _ => _
             end); try by [left; congruence|right; congruence].
-Qed.
+Defined.
 
-Instance rloc_countable : Countable rloc.
+Global Instance matching_countable : Countable matching.
 Proof.
 apply
   (inj_countable (λ rl, match rl with
@@ -46,7 +50,27 @@ apply
 by case.
 Qed.
 
-Definition symbol_store := gsetUR rlocO.
+Definition prod_of_matching xy :=
+  match xy with
+  | L x => (Some x, None)
+  | R y => (None, Some y)
+  | LR x y => (Some x, Some y)
+  end.
+
+Definition part_perm (X : gset matching) :=
+  ∀ xy1 xy2 x y1 y2 b,
+    xy1 ∈ X →
+    xy2 ∈ X →
+    prod_of_matching xy1 = flipb b pair (Some x) y1 →
+    prod_of_matching xy2 = flipb b pair (Some x) y2 →
+    y1 = y2.
+
+End Matching.
+
+Arguments matching T : clear implicits.
+Arguments matchingO T : clear implicits.
+
+Definition symbol_store := gsetUR (matchingO locO).
 
 Class symbolSG Σ := SymbolSG {
   symbol_inG :> inG Σ (authR symbol_store);
@@ -57,7 +81,7 @@ Section Symbol.
 Context `{!heapG Σ, !cfgSG Σ, !symbolSG Σ}.
 Variable γ : gname.
 
-Implicit Types rl : rloc.
+Implicit Types rl : matchingO loc.
 Implicit Types l : loc.
 Implicit Types RL : symbol_store.
 Implicit Types v : val.
