@@ -88,28 +88,28 @@ Class termSG := TermSG {
 
 Context `{termSG}.
 
-Definition wf_nonce s l : iProp Σ :=
+Definition al_nonce s l : iProp Σ :=
   symbol1 lo_nonce_name s l ∨
   symbol1 hi_nonce_name s l.
-Global Instance persistent_wf_nonce s l : Persistent (wf_nonce s l).
+Global Instance persistent_al_nonce s l : Persistent (al_nonce s l).
 Proof. apply _. Qed.
 
-Definition wf_key s l : iProp Σ :=
+Definition al_key s l : iProp Σ :=
   symbol12 lo_key_name s l ∨
   symbol12 hi_key_name s l.
-Global Instance persistent_wf_key s l : Persistent (wf_key s l).
+Global Instance persistent_al_key s l : Persistent (al_key s l).
 Proof. apply _. Qed.
 
 (* Holds iff all the symbols that appear in the term have been allocated. *)
-Fixpoint wf_term s t : iProp Σ :=
+Fixpoint al_term s t : iProp Σ :=
   match t with
   | TInt _ => True%I
-  | TPair t1 t2 => wf_term s t1 ∗ wf_term s t2
-  | TNonce l => wf_nonce s l
-  | TKey l => wf_key s l
-  | TEnc l t => wf_key s l ∗ wf_term s t
+  | TPair t1 t2 => al_term s t1 ∗ al_term s t2
+  | TNonce l => al_nonce s l
+  | TKey l => al_key s l
+  | TEnc l t => al_key s l ∗ al_term s t
   end.
-Global Instance persistent_wf_term s t : Persistent (wf_term s t).
+Global Instance persistent_al_term s t : Persistent (al_term s t).
 Proof. elim: t=> /=; apply _. Qed.
 
 (* Opaque terms are those that cannot be inspected by the attacker. *)
@@ -119,13 +119,13 @@ Definition opaque s t : iProp Σ :=
   | TPair _ _ => False%I
   | TNonce l => symbol1 lo_nonce_name s l
   | TKey l => False%I
-  | TEnc l t => symbol12 hi_key_name s l ∗ wf_term s t
+  | TEnc l t => symbol12 hi_key_name s l ∗ al_term s t
   end.
 
 Global Instance persistent_opaque s t : Persistent (opaque s t).
 Proof. elim: t=> /=; apply _. Qed.
 
-Lemma opaque_wf_term s t : opaque s t -∗ wf_term s t.
+Lemma opaque_al_term s t : opaque s t -∗ al_term s t.
 Proof.
 case: t=> /=.
 - by iIntros (_) "?".
@@ -133,36 +133,6 @@ case: t=> /=.
 - by iIntros (?) "?"; iLeft.
 - by iIntros (?) "?".
 - by iIntros (??) "[??]"; iFrame.
-Qed.
-
-Fixpoint lo_term1 s t : iProp Σ :=
-  match t with
-  | TInt _ => True%I
-  | TPair t1 t2 => lo_term1 s t1 ∗ lo_term1 s t2
-  | TNonce l => symbol1 lo_nonce_name s l
-  | TKey l => symbol1 lo_key_name s l
-  | TEnc l t => symbol12 lo_key_name s l ∗ lo_term1 s t ∨
-                symbol12 hi_key_name s l ∗ wf_term s t
-  end.
-
-Lemma persistent_lo_term1 s t : Persistent (lo_term1 s t).
-Proof. elim: t=> *; apply _. Qed.
-
-Lemma lo_term1_wf_term1 s t : lo_term1 s t -∗ wf_term s t.
-Proof.
-elim: t=> [n|t1 IH1 t2 IH2|l|l|l t IH] //=.
-- by rewrite IH1 IH2.
-- rewrite /wf_nonce; eauto.
-- rewrite /wf_key /symbol12; eauto.
-- rewrite /wf_key /symbol12; iDestruct 1 as "[[??]|[??]]"; eauto.
-  by rewrite IH; iFrame.
-Qed.
-
-Lemma opaque_lo_term1 s t : opaque s t -∗ lo_term1 s t.
-Proof.
-elim: t=> [n|t1 IH1 t2 IH2|l|l|l t IH] //=;
-do 1? by iDestruct 1 as "[]".
-eauto.
 Qed.
 
 Implicit Types TT : gsetUR (matchingO termO).
@@ -185,39 +155,90 @@ Definition published tt : iProp Σ :=
 Definition published1 (s : bool) t :=
   published ((if s then L else R) t).
 
+Definition published12 s t : iProp Σ :=
+  published1 s t ∨
+  (∃ t', published (flipb s LR t t')).
+
 Global Instance persistent_published tt : Persistent (published tt).
 Proof. apply _. Qed.
 
-Lemma published_opaque t1 t2 :
+Global Instance persistent_published1 s t : Persistent (published1 s t).
+Proof. apply _. Qed.
+
+Global Instance persistent_published12 s t : Persistent (published12 s t).
+Proof. apply _. Qed.
+
+Lemma published_opaque b tt t1 pt2 :
   published_inv -∗
-  published (LR t1 t2) -∗
-  opaque true t1 ∗ opaque false t2.
+  published tt -∗
+  ⌜prod_of_matching tt = flipb b pair (Some t1) pt2⌝ -∗
+  opaque b t1.
 Proof.
-iDestruct 1 as (TT) "(Hsymb & Hown & %Hperm & #HTT)"; iIntros "#Ht1t2".
+iDestruct 1 as (TT) "(Hsymb & Hown & %Hperm & #HTT)"; iIntros "#Ht1t2 #He".
 iPoseProof (own_valid_2 with "Hown Ht1t2") as "%Hvalid".
 move: Hvalid; rewrite auth_both_valid gset_included.
 rewrite -elem_of_subseteq_singleton; case=> Ht1t2 _.
-iPoseProof ("HTT" $! _ t1 (Some t2) true Ht1t2 eq_refl) as "#H1".
-iPoseProof ("HTT" $! _ t2 (Some t1) false Ht1t2 eq_refl) as "#H2".
-by iSplit.
+by iPoseProof ("HTT" $! _ t1 pt2 b Ht1t2 with "He") as "#Hopaque".
 Qed.
 
-Lemma published_opaqueL t1 t2:
+Lemma published1_opaque b t:
   published_inv -∗
-  published (LR t1 t2) -∗
-  opaque true t1.
+  published1 b t -∗
+  opaque b t.
 Proof.
 iIntros "Hinv Ht1t2".
-by iDestruct (published_opaque with "Hinv Ht1t2") as "[? _]".
+iApply (published_opaque with "Hinv Ht1t2").
+iPureIntro; by case: b.
 Qed.
 
-Lemma published_opaqueR t1 t2 :
+Lemma published12_opaque b t :
   published_inv -∗
-  published (LR t1 t2) -∗
-  opaque false t2.
+  published12 b t -∗
+  opaque b t.
 Proof.
-iIntros "Hinv Ht1t2".
-by iDestruct (published_opaque with "Hinv Ht1t2") as "[_ ?]".
+iIntros "Hinv [Ht1t2|Ht1t2]".
+  by iApply (published1_opaque with "Hinv").
+iDestruct "Ht1t2" as (t') "#Ht1t2".
+iApply (published_opaque _ _ _ (Some t') with "Hinv Ht1t2").
+by case: b.
+Qed.
+
+Fixpoint lo_term1 s t : iProp Σ :=
+  published12 s t ∨
+  match t with
+  | TInt _ => True%I
+  | TPair t1 t2 => lo_term1 s t1 ∗ lo_term1 s t2
+  | TNonce l => False%I
+  | TKey l => symbol12 lo_key_name s l
+  | TEnc l t => symbol12 lo_key_name s l ∗ lo_term1 s t
+  end.
+
+Global Instance persistent_lo_term1 s t : Persistent (lo_term1 s t).
+Proof. elim: t=> *; apply _. Qed.
+
+Lemma lo_term1_al_term1 s t :
+  published_inv -∗
+  lo_term1 s t -∗
+  al_term s t.
+Proof.
+elim: t=> [n|t1 IH1 t2 IH2|l|l|l t IH] //=; eauto.
+- iIntros "Hinv [H|H]".
+    iAssert (opaque s (TPair t1 t2)) with "[Hinv H]" as "?"=> //.
+    by iApply (published12_opaque with "Hinv H").
+  iDestruct "H" as "[#H1 #H2]".
+  iPoseProof (IH1 with "Hinv H1") as "#?".
+  iPoseProof (IH2 with "Hinv H2") as "#?".
+  by iSplit.
+- iIntros "Hinv [H|?] //".
+  iPoseProof (published12_opaque with "Hinv H") as "?".
+  by iLeft.
+- iIntros "Hinv [H|H]".
+    by iPoseProof (published12_opaque with "Hinv H") as "?".
+  by iLeft.
+- iIntros "Hinv [H|[Hl Ht]]".
+    iDestruct (published12_opaque with "Hinv H") as "[Hl Ht]".
+    by iFrame.
+  iFrame; iApply (IH with "Hinv Ht").
 Qed.
 
 Fixpoint lo_term_aux t1 t2 : iProp Σ :=
@@ -318,8 +339,8 @@ Lemma flipb_published_opaque b t1 t2 :
   opaque b t1.
 Proof.
 rewrite /flipb; case: b=> /=.
-- exact: published_opaqueL.
-- exact: published_opaqueR.
+- by iIntros "Hinv Htt"; iApply (published_opaque with "Hinv Htt").
+- by iIntros "Hinv Htt"; iApply (published_opaque with "Hinv Htt").
 Qed.
 
 Lemma flipb_lo_term_aux_perm b t1 t21 t22 :
