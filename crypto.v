@@ -111,6 +111,8 @@ Fixpoint al_term s t : iProp Σ :=
   end.
 Global Instance persistent_al_term s t : Persistent (al_term s t).
 Proof. elim: t=> /=; apply _. Qed.
+Global Instance timeless_al_term s t : Timeless (al_term s t).
+Proof. elim: t=> /=; apply _. Qed.
 
 (* Opaque terms are those that cannot be inspected by the attacker. *)
 Definition opaque s t : iProp Σ :=
@@ -123,6 +125,8 @@ Definition opaque s t : iProp Σ :=
   end.
 
 Global Instance persistent_opaque s t : Persistent (opaque s t).
+Proof. elim: t=> /=; apply _. Qed.
+Global Instance timeless_opaque s t : Timeless (opaque s t).
 Proof. elim: t=> /=; apply _. Qed.
 
 Lemma opaque_al_term s t : opaque s t -∗ al_term s t.
@@ -148,6 +152,9 @@ Definition published_inv : iProp Σ :=
              ⌜tt ∈ TT⌝ -∗
              ⌜prod_of_matching tt = flipb b pair (Some t1) pt2⌝ -∗
              opaque b t1).
+
+Global Instance timeless_published_inv : Timeless published_inv.
+Proof. apply _. Qed.
 
 Definition published tt : iProp Σ :=
   own term_name (◯ {[tt]}).
@@ -216,7 +223,7 @@ Fixpoint lo_term1 s t : iProp Σ :=
 Global Instance persistent_lo_term1 s t : Persistent (lo_term1 s t).
 Proof. elim: t=> *; apply _. Qed.
 
-Lemma lo_term1_al_term1 s t :
+Lemma lo_term1_al_term s t :
   published_inv -∗
   lo_term1 s t -∗
   al_term s t.
@@ -247,11 +254,13 @@ Fixpoint lo_term_aux t1 t2 : iProp Σ :=
   | TInt n1, TInt n2 => ⌜n1 = n2⌝
   | TPair t11 t12, TPair t21 t22 =>
     lo_term_aux t11 t21 ∗ lo_term_aux t12 t22
-  | TNonce l1, TNonce l2 => False%I (* Nonces are covered by the opaque case
-    above *)
+  | TNonce l1, TNonce l2 =>
+    (* Nonces are covered by the published case above *)
+    False%I
   | TKey l1, TKey l2 =>
     symbol lo_key_name (LR l1 l2)
   | TEnc l1 t1, TEnc l2 t2 =>
+    (* Ditto for terms encrypted with a high key *)
     symbol lo_key_name (LR l1 l2) ∗ lo_term_aux t1 t2
   | _, _ => False%I
   end.
