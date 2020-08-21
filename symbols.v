@@ -135,65 +135,6 @@ iDestruct 1 as "[H|H]".
   by case: (b); iDestruct "Hsymb" as "[??]".
 Qed.
 
-Definition mksymbol : val := λ: <>, ref #().
-
-Lemma step_mksymbol E j K :
-  nclose specN ⊆ E →
-  spec_ctx -∗
-  symbol_inv -∗
-  j ⤇ fill K (mksymbol #()%V)
-  ={E}=∗ ∃ l, j ⤇ fill K #l ∗ symbol (R l).
-Proof.
-rewrite /symbol_inv /mksymbol.
-iIntros (HE) "#Hinv"; iDestruct 1 as (RL) "[Hown Hlocs]"; iIntros "Hspec".
-iMod (step_lam E with "[Hinv Hspec]") as "Hspec"; first done.
-  by iSplit.
-rewrite /=.
-iMod (step_alloc E with "[Hinv Hspec]") as (l) "[Hspec Hl]"; first done.
-  by iSplit.
-pose (frag := {[R l]} : symbol_store).
-iMod (own_update _ _ (_ ⋅ ◯ (RL ⋅ frag)) with "Hown") as "[Hown [_ Hfrag]]".
-  by apply auth_update_alloc, gset_local_update, union_subseteq_l.
-by iModIntro; iExists l; iFrame.
-Qed.
-
-Lemma wp_mksymbol E :
-  spec_ctx -∗
-  symbol_inv -∗
-  WP mksymbol #()%V @ E {{ v, ∃ l, ⌜v = #l⌝ ∗ symbol (L l) }}.
-Proof.
-rewrite /symbol_inv /mksymbol.
-iIntros "#Hinv"; iDestruct 1 as (RL) "[Hown Hlocs]".
-iApply wp_fupd; wp_alloc l as "Hl".
-pose (frag := {[L l]} : symbol_store).
-iMod (own_update _ _ (_ ⋅ ◯ (RL ⋅ frag)) with "Hown") as "[Hown [_ Hfrag]]".
-  apply auth_update_alloc, gset_local_update, union_subseteq_l.
-by iModIntro; iExists l; iSplit.
-Qed.
-
-Lemma wp_mksymbol2 E j K :
-  nclose specN ⊆ E →
-  spec_ctx -∗
-  symbol_inv -∗
-  j ⤇ fill K (mksymbol #()%V) -∗
-  WP mksymbol #()%V @ E {{ v1, ∃ l1 l2,
-    ⌜v1 = #l1⌝ ∗ j ⤇ fill K #l2 ∗ symbol (LR l1 l2) }}.
-Proof.
-rewrite /symbol_inv /mksymbol => Hclose.
-iIntros "#Hinv"; iDestruct 1 as (RL) "[Hown Hlocs]".
-iIntros "Hspec".
-iApply wp_fupd; wp_alloc l1 as "Hl1".
-iMod (step_lam E with "[Hinv Hspec]") as "Hspec"=> //.
-  by iFrame.
-rewrite /=.
-iMod (step_alloc E with "[Hinv Hspec]") as "Hspec"=> //.
-  by iFrame.
-iDestruct "Hspec" as (l2) "[Hspec Hl2]".
-iMod (own_update _ _ (_ ⋅ ◯ (RL ⋅ {[LR l1 l2]})) with "Hown") as "[Hown [_ H]]".
-  apply auth_update_alloc, gset_local_update, union_subseteq_l.
-by iModIntro; iExists l1, l2; iFrame.
-Qed.
-
 Lemma symbol_eq_iff l11 l12 l21 l22 :
   symbol_inv -∗
   symbol (LR l11 l12) -∗
@@ -250,15 +191,79 @@ Qed.
 
 End Symbol.
 
-Lemma symbol_inv_alloc `{!heapG Σ, cfgSG Σ, symbolSG Σ} :
-  ⊢ |==> ∃ γ, symbol_inv γ.
+Section Allocation.
+
+Context `{!heapG Σ, !cfgSG Σ, !symbolSG Σ}.
+
+Implicit Types l : loc.
+
+Definition mksymbol : val := λ: <>, ref #().
+
+Lemma step_mksymbol γ E j K :
+  nclose specN ⊆ E →
+  spec_ctx -∗
+  symbol_inv γ -∗
+  j ⤇ fill K (mksymbol #()%V)
+  ={E}=∗ ∃ l, j ⤇ fill K #l ∗ symbol γ (R l).
+Proof.
+rewrite /symbol_inv /mksymbol.
+iIntros (HE) "#Hinv"; iDestruct 1 as (RL) "[Hown Hlocs]"; iIntros "Hspec".
+iMod (step_lam E with "[Hinv Hspec]") as "Hspec"; first done.
+  by iSplit.
+rewrite /=.
+iMod (step_alloc E with "[Hinv Hspec]") as (l) "[Hspec Hl]"; first done.
+  by iSplit.
+pose (frag := {[R l]} : symbol_store).
+iMod (own_update _ _ (_ ⋅ ◯ (RL ⋅ frag)) with "Hown") as "[Hown [_ Hfrag]]".
+  by apply auth_update_alloc, gset_local_update, union_subseteq_l.
+by iModIntro; iExists l; iFrame.
+Qed.
+
+Lemma wp_mksymbol γ E :
+  spec_ctx -∗
+  symbol_inv γ -∗
+  WP mksymbol #()%V @ E {{ v, ∃ l, ⌜v = #l⌝ ∗ symbol γ (L l) }}.
+Proof.
+rewrite /symbol_inv /mksymbol.
+iIntros "#Hinv"; iDestruct 1 as (RL) "[Hown Hlocs]".
+iApply wp_fupd; wp_alloc l as "Hl".
+pose (frag := {[L l]} : symbol_store).
+iMod (own_update _ _ (_ ⋅ ◯ (RL ⋅ frag)) with "Hown") as "[Hown [_ Hfrag]]".
+  apply auth_update_alloc, gset_local_update, union_subseteq_l.
+by iModIntro; iExists l; iSplit.
+Qed.
+
+Lemma wp_mksymbol2 γ E j K :
+  nclose specN ⊆ E →
+  spec_ctx -∗
+  symbol_inv γ -∗
+  j ⤇ fill K (mksymbol #()%V) -∗
+  WP mksymbol #()%V @ E {{ v1, ∃ l1 l2,
+    ⌜v1 = #l1⌝ ∗ j ⤇ fill K #l2 ∗ symbol γ (LR l1 l2) }}.
+Proof.
+rewrite /symbol_inv /mksymbol => Hclose.
+iIntros "#Hinv"; iDestruct 1 as (RL) "[Hown Hlocs]".
+iIntros "Hspec".
+iApply wp_fupd; wp_alloc l1 as "Hl1".
+iMod (step_lam E with "[Hinv Hspec]") as "Hspec"=> //.
+  by iFrame.
+rewrite /=.
+iMod (step_alloc E with "[Hinv Hspec]") as "Hspec"=> //.
+  by iFrame.
+iDestruct "Hspec" as (l2) "[Hspec Hl2]".
+iMod (own_update _ _ (_ ⋅ ◯ (RL ⋅ {[LR l1 l2]})) with "Hown") as "[Hown [_ H]]".
+  apply auth_update_alloc, gset_local_update, union_subseteq_l.
+by iModIntro; iExists l1, l2; iFrame.
+Qed.
+
+Lemma symbol_inv_alloc : ⊢ |==> ∃ γ, symbol_inv γ.
 Proof.
 iMod (own_alloc (● ∅ : auth symbol_store)) as (γ) "Hown".
   by apply/auth_auth_valid.
 by iModIntro; iExists γ, ∅; simpl; iFrame.
 Qed.
 
-Lemma symbol_disj `{!heapG Σ, !cfgSG Σ, !symbolSG Σ} γ1 γ2 b l :
+Lemma symbol_disj γ1 γ2 b l :
   symbol_inv γ1 -∗
   symbol_inv γ2 -∗
   symbol12 γ1 b l -∗
@@ -272,3 +277,5 @@ case: b.
 - by iPoseProof (mapsto_valid_2 with "H1 H2") as "%H".
 - by iPoseProof (mapstoS_valid_2 with "H1 H2") as "%H".
 Qed.
+
+End Allocation.
