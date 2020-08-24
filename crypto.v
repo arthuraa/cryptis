@@ -147,7 +147,7 @@ Implicit Types E : coPset.
 Definition term_names :=
   [lo_nonce_name; hi_nonce_name; lo_key_name; hi_key_name].
 
-Definition published_inv : iProp Σ :=
+Definition term_inv : iProp Σ :=
   ∃ TT, own term_name (● TT)
         ∗ ⌜part_perm TT⌝
         ∗ (∀ tt t1 pt2 b,
@@ -155,11 +155,11 @@ Definition published_inv : iProp Σ :=
              ⌜prod_of_matching tt = flipb b pair (Some t1) pt2⌝ -∗
              opaque b t1).
 
-Global Instance timeless_published_inv : Timeless published_inv.
+Global Instance timeless_term_inv : Timeless term_inv.
 Proof. apply _. Qed.
 
-Definition published_ctx :=
-  inv termN published_inv.
+Definition term_ctx :=
+  inv termN term_inv.
 
 Definition published tt : iProp Σ :=
   own term_name (◯ {[tt]}).
@@ -181,7 +181,7 @@ Global Instance persistent_published12 s t : Persistent (published12 s t).
 Proof. apply _. Qed.
 
 Lemma published_opaque b tt t1 pt2 :
-  published_inv -∗
+  term_inv -∗
   published tt -∗
   ⌜prod_of_matching tt = flipb b pair (Some t1) pt2⌝ -∗
   opaque b t1.
@@ -194,7 +194,7 @@ by iPoseProof ("HTT" $! _ t1 pt2 b Ht1t2 with "He") as "#Hopaque".
 Qed.
 
 Lemma published1_opaque b t:
-  published_inv -∗
+  term_inv -∗
   published1 b t -∗
   opaque b t.
 Proof.
@@ -204,7 +204,7 @@ iPureIntro; by case: b.
 Qed.
 
 Lemma published12_opaque b t :
-  published_inv -∗
+  term_inv -∗
   published12 b t -∗
   opaque b t.
 Proof.
@@ -217,7 +217,7 @@ Qed.
 
 Lemma publish2 E t1 t2 :
   nclose termN ⊆ E →
-  published_ctx -∗
+  term_ctx -∗
   (published12 true  t1 -∗ False) -∗
   (published12 false t2 -∗ False) -∗
   opaque true t1 -∗
@@ -259,7 +259,7 @@ Global Instance persistent_lo_term1 s t : Persistent (lo_term1 s t).
 Proof. elim: t=> *; apply _. Qed.
 
 Lemma lo_term1_al_term s t :
-  published_inv -∗
+  term_inv -∗
   lo_term1 s t -∗
   al_term s t.
 Proof.
@@ -354,7 +354,7 @@ case: b=> //; iSplit.
 Qed.
 
 Lemma flipb_published_perm b t1 t21 t22 :
-  published_inv -∗
+  term_inv -∗
   published (flipb b LR t1 t21) -∗
   published (flipb b LR t1 t22) -∗
   ⌜t21 = t22⌝.
@@ -378,7 +378,7 @@ rewrite /flipb /opaque; case: b=> /=.
 Qed.
 
 Lemma flipb_published_opaque b t1 t2 :
-  published_inv -∗
+  term_inv -∗
   published (flipb b LR t1 t2) -∗
   opaque b t1.
 Proof.
@@ -389,7 +389,7 @@ Qed.
 
 Lemma flipb_lo_term_aux_perm b t1 t21 t22 :
   symbols_inv term_names -∗
-  published_inv -∗
+  term_inv -∗
   flipb b lo_term_aux t1 t21 -∗
   flipb b lo_term_aux t1 t22 -∗
   ⌜t21 = t22⌝.
@@ -464,7 +464,7 @@ Qed.
 
 Lemma lo_term_aux_perm t11 t12 t21 t22 :
   symbols_inv term_names -∗
-  published_inv -∗
+  term_inv -∗
   lo_term_aux t11 t12 -∗
   lo_term_aux t21 t22 -∗
   ⌜t11 = t21 ↔ t12 = t22⌝.
@@ -506,7 +506,7 @@ Lemma protected_extend l1 l2 T1 T2 t1 t2 :
   l2 ∈ symbols_of_term t2 →
   t1 ∉ T1 →
   t2 ∉ T2 →
-  published_inv -∗
+  term_inv -∗
   protected true  l1 T1 -∗
   protected false l2 T2 -∗
   opaque true  t1 -∗
@@ -615,7 +615,7 @@ Lemma wp_eq_term2 v11 v12 v21 v22 j K :
   lo_term v11 v12 -∗
   lo_term v21 v22 -∗
   symbols_inv term_names -∗
-  published_inv -∗
+  term_inv -∗
   spec_ctx -∗
   j ⤇ fill K (eq_term v12 v22) -∗
   WP eq_term v11 v21
