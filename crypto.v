@@ -81,11 +81,13 @@ Proof. apply (inj_countable' _ _ val_of_termK). Qed.
 
 Class termSG := TermSG {
   term_inG :> inG Σ (authR (gsetUR (matchingO termO)));
+  nonce_inG :> inG Σ (authR (gmapUR (loc * bool) (gsetUR loc)));
   hi_key_name : gname;
   lo_key_name : gname;
   hi_nonce_name : gname;
   lo_nonce_name : gname;
   term_name : gname;
+  nonce_name : gname;
 }.
 
 Context `{termSG}.
@@ -142,18 +144,37 @@ case: t=> /=.
 Qed.
 
 Implicit Types TT : gsetUR (matchingO termO).
+Implicit Types NM : gmapUR (loc * bool) (gsetUR loc).
 Implicit Types E : coPset.
+Implicit Types KS : gset loc.
 
 Definition term_names :=
   [lo_nonce_name; hi_nonce_name; lo_key_name; hi_key_name].
 
+Fixpoint guarded_nonce l KS t :=
+  match t with
+  | TInt _ => True
+  | TPair t1 t2 => guarded_nonce l KS t1 ∧ guarded_nonce l KS t2
+  | TNonce l' => l' ≠ l
+  | TKey _ => True
+  | TEnc l' t => l' ∈ KS ∨ guarded_nonce l KS t
+  end.
+
 Definition term_inv : iProp Σ :=
-  ∃ TT, own term_name (● TT)
-        ∗ ⌜part_perm TT⌝
-        ∗ (∀ tt t1 pt2 b,
-             ⌜tt ∈ TT⌝ -∗
-             ⌜prod_of_matching tt = flipb b pair (Some t1) pt2⌝ -∗
-             opaque b t1).
+  ∃ TT NM,
+    own term_name (● TT)
+    ∗ own nonce_name (● NM)
+    ∗ ([∗ map] lb ↦ _ ∈ NM, symbol12 hi_nonce_name lb.2 lb.1)
+    ∗ (∀ tt t1 pt2 l b K,
+          ⌜tt ∈ TT⌝ -∗
+          ⌜prod_of_matching tt = flipb b pair (Some t1) pt2⌝ -∗
+          own nonce_name (● {[(l, b) := K]}) -∗
+          ⌜guarded_nonce l K t1⌝)
+    ∗ ⌜part_perm TT⌝
+    ∗ (∀ tt t1 pt2 b,
+          ⌜tt ∈ TT⌝ -∗
+          ⌜prod_of_matching tt = flipb b pair (Some t1) pt2⌝ -∗
+          opaque b t1).
 
 Global Instance timeless_term_inv : Timeless term_inv.
 Proof. apply _. Qed.
@@ -186,7 +207,8 @@ Lemma published_opaque b tt t1 pt2 :
   ⌜prod_of_matching tt = flipb b pair (Some t1) pt2⌝ -∗
   opaque b t1.
 Proof.
-iDestruct 1 as (TT) "(Hown & %Hperm & #HTT)"; iIntros "#Ht1t2 #He".
+iDestruct 1 as (TT NM) "(Hown & _ & _ & _ & %Hperm & #HTT)".
+iIntros "#Ht1t2 #He".
 iPoseProof (own_valid_2 with "Hown Ht1t2") as "%Hvalid".
 move: Hvalid; rewrite auth_both_valid gset_included.
 rewrite -elem_of_subseteq_singleton; case=> Ht1t2 _.
@@ -226,7 +248,7 @@ Lemma publish2 E t1 t2 :
 Proof.
 iIntros (HE) "Hinv unpub1 unpub2 #op1 #op2".
 iInv "Hinv" as ">Hinv" "Hclose".
-iDestruct "Hinv" as (TT) "(Hown & %Hperm & Hopaque)".
+iDestruct "Hinv" as (TT NM) "(Hown & _ & _ & _ & %Hperm & Hopaque)".
 iAssert ⌜part_perm ({[LR t1 t2]} ∪ TT)⌝%I as "%Hperm'".
   iIntros (tt1 tt2 t1' t21' t22' b Htt1 Htt2 E1 E2).
   case/elem_of_union: Htt1 E1=> [/elem_of_singleton ->|Htt1] E1;
@@ -359,7 +381,7 @@ Lemma flipb_published_perm b t1 t21 t22 :
   published (flipb b LR t1 t22) -∗
   ⌜t21 = t22⌝.
 Proof.
-iDestruct 1 as (TT) "(Hown & %Hperm & #HTT)".
+iDestruct 1 as (TT NM) "(Hown & _ & _ & _ & %Hperm & #HTT)".
 rewrite /flipb /opaque; case: b=> /=.
 - iIntros "Hown1 Hown2".
   iPoseProof (own_valid_2 with "Hown Hown1") as "%Hval1".
