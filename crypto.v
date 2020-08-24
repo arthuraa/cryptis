@@ -167,11 +167,11 @@ Definition term_inv : iProp Σ :=
     ∗ ([∗ map] lb ↦ KS ∈ NM,
          symbol12 hi_nonce_name lb.2 lb.1
          ∗ [∗ set] l ∈ KS, al_key lb.2 l)
-    ∗ (∀ tt t1 pt2 l b K,
+    ∗ (∀ tt t1 pt2 l b KS,
           ⌜tt ∈ TT⌝ -∗
           ⌜prod_of_matching tt = flipb b pair (Some t1) pt2⌝ -∗
-          own nonce_name (● {[(l, b) := K]}) -∗
-          ⌜guarded_nonce l K t1⌝)
+          ⌜NM !! (l, b) = Some KS⌝ -∗
+          ⌜guarded_nonce l KS t1⌝)
     ∗ ⌜part_perm TT⌝
     ∗ (∀ tt t1 pt2 b,
           ⌜tt ∈ TT⌝ -∗
