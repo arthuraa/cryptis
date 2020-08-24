@@ -227,13 +227,23 @@ Implicit Types E : coPset.
 
 Definition mksymbol : val := λ: <>, ref #().
 
+Definition symbols_inv G : iProp Σ :=
+  [∗ list] γ ∈ G, symbol_inv γ.
 Definition symbols_ctx G : iProp Σ :=
   [∗ list] γ ∈ G, symbol_ctx γ.
 Definition symbols G RL : iProp Σ :=
   ∀ rl, ⌜rl ∈ RL⌝ -∗ ∃ γ, ⌜γ ∈ G⌝ ∗ symbol γ rl.
 
+Global Instance timeless_symbols_inv G :
+  Timeless (symbols_inv G).
+Proof. apply _. Qed.
+
 Global Instance persistent_symbols_ctx G :
   Persistent (symbols_ctx G).
+Proof. apply _. Qed.
+
+Global Instance persistent_symbols G RL :
+  Persistent (symbols G RL).
 Proof. apply _. Qed.
 
 Lemma relinquish  E G γ RL rl :

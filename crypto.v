@@ -142,13 +142,13 @@ case: t=> /=.
 Qed.
 
 Implicit Types TT : gsetUR (matchingO termO).
+Implicit Types E : coPset.
 
 Definition term_names :=
   [lo_nonce_name; hi_nonce_name; lo_key_name; hi_key_name].
 
 Definition published_inv : iProp Σ :=
-  ∃ TT, ([∗ list] γ ∈ term_names, symbol_inv γ)
-        ∗ own term_name (● TT)
+  ∃ TT, own term_name (● TT)
         ∗ ⌜part_perm TT⌝
         ∗ (∀ tt t1 pt2 b,
              ⌜tt ∈ TT⌝ -∗
@@ -186,7 +186,7 @@ Lemma published_opaque b tt t1 pt2 :
   ⌜prod_of_matching tt = flipb b pair (Some t1) pt2⌝ -∗
   opaque b t1.
 Proof.
-iDestruct 1 as (TT) "(Hsymb & Hown & %Hperm & #HTT)"; iIntros "#Ht1t2 #He".
+iDestruct 1 as (TT) "(Hown & %Hperm & #HTT)"; iIntros "#Ht1t2 #He".
 iPoseProof (own_valid_2 with "Hown Ht1t2") as "%Hvalid".
 move: Hvalid; rewrite auth_both_valid gset_included.
 rewrite -elem_of_subseteq_singleton; case=> Ht1t2 _.
@@ -226,7 +226,7 @@ Lemma publish2 E t1 t2 :
 Proof.
 iIntros (HE) "Hinv unpub1 unpub2 #op1 #op2".
 iInv "Hinv" as ">Hinv" "Hclose".
-iDestruct "Hinv" as (TT) "(Hsymb & Hown & %Hperm & Hopaque)".
+iDestruct "Hinv" as (TT) "(Hown & %Hperm & Hopaque)".
 iAssert ⌜part_perm ({[LR t1 t2]} ∪ TT)⌝%I as "%Hperm'".
   iIntros (tt1 tt2 t1' t21' t22' b Htt1 Htt2 E1 E2).
   case/elem_of_union: Htt1 E1=> [/elem_of_singleton ->|Htt1] E1;
@@ -359,7 +359,7 @@ Lemma flipb_published_perm b t1 t21 t22 :
   published (flipb b LR t1 t22) -∗
   ⌜t21 = t22⌝.
 Proof.
-iDestruct 1 as (TT) "(_ & Hown & %Hperm & #HTT)".
+iDestruct 1 as (TT) "(Hown & %Hperm & #HTT)".
 rewrite /flipb /opaque; case: b=> /=.
 - iIntros "Hown1 Hown2".
   iPoseProof (own_valid_2 with "Hown Hown1") as "%Hval1".
@@ -388,13 +388,14 @@ rewrite /flipb; case: b=> /=.
 Qed.
 
 Lemma flipb_lo_term_aux_perm b t1 t21 t22 :
+  symbols_inv term_names -∗
   published_inv -∗
   flipb b lo_term_aux t1 t21 -∗
   flipb b lo_term_aux t1 t22 -∗
   ⌜t21 = t22⌝.
 Proof.
 elim: t1 t21 t22.
-- move=> n1 t21 t22; iIntros "Hinv #H1 #H2".
+- move=> n1 t21 t22; iIntros "Hsymb Hinv #H1 #H2".
   rewrite !flipb_lo_termE.
   iDestruct "H1" as "[H1|H1]".
     by iDestruct (flipb_published_opaque with "Hinv H1") as "[]".
@@ -402,7 +403,7 @@ elim: t1 t21 t22.
     by iDestruct (flipb_published_opaque with "Hinv H2") as "[]".
   case: t21=> // ?; iDestruct "H1" as "<-".
   by case: t22=> // ?; iDestruct "H2" as "<-".
-- move=> t11 IH1 t12 IH2 t21 t22; iIntros "Hinv #H1 #H2".
+- move=> t11 IH1 t12 IH2 t21 t22; iIntros "Hsymb Hinv #H1 #H2".
   rewrite !flipb_lo_termE.
   iDestruct "H1" as "[H1|H1]".
     by iDestruct (flipb_published_opaque with "Hinv H1") as "[]".
@@ -410,28 +411,27 @@ elim: t1 t21 t22.
     by iDestruct (flipb_published_opaque with "Hinv H2") as "[]".
   case: t21=> //= t211 t212; iDestruct "H1" as "[H11 H12]".
   case: t22=> //= t221 t222; iDestruct "H2" as "[H21 H22]".
-  iDestruct (IH1 with "Hinv H11 H21") as "%".
-  iDestruct (IH2 with "Hinv H12 H22") as "%".
+  iPoseProof (IH1 with "Hsymb Hinv H11 H21") as "%".
+  iPoseProof (IH2 with "Hsymb Hinv H12 H22") as "%".
   iPureIntro; congruence.
-- move=> l t21 t22; iIntros "Hinv #H1 #H2".
+- move=> l t21 t22; iIntros "Hsymb Hinv #H1 #H2".
   rewrite !flipb_lo_termE /=.
   iDestruct "H1" as "[H1|H1]"; last by case: t21.
   iDestruct "H2" as "[H2|H2]"; last by case: t22.
-  iPoseProof (flipb_published_perm with "Hinv H1 H2") as "%E".
+  iPoseProof (flipb_published_perm with "Hinv H1 H2") as "%".
   by iPureIntro.
-- move=> l t21 t22; iIntros "Hinv #H1 #H2".
+- move=> l t21 t22; iIntros "Hsymb Hinv #H1 #H2".
   rewrite !flipb_lo_termE /=.
   iDestruct "H1" as "[H1|H1]".
     by iDestruct (flipb_published_opaque with "Hinv H1") as "[]".
   iDestruct "H2" as "[H2|H2]".
     by iDestruct (flipb_published_opaque with "Hinv H2") as "[]".
   case: t21=> //= l21; case: t22=> //= l22.
-  iDestruct "Hinv" as (?) "[Hsymb _]".
-  rewrite !(big_sepL_singleton, big_sepL_cons).
+  rewrite /symbols_inv !(big_sepL_singleton, big_sepL_cons).
   iDestruct "Hsymb" as "(_ & _ & Hlo_key & _)".
   iPoseProof (flipb_symbol_perm with "Hlo_key H1 H2") as "%E".
   by rewrite E.
-- move=> l1 t1 IH t21 t22; iIntros "Hinv #H1 #H2".
+- move=> l1 t1 IH t21 t22; iIntros "Hsymb Hinv #H1 #H2".
   rewrite !flipb_lo_termE.
   iDestruct "H1" as "[H1|H1]"; iDestruct "H2" as "[H2|H2]".
   + iPoseProof (flipb_published_perm with "Hinv H1 H2") as "%E".
@@ -441,8 +441,7 @@ elim: t1 t21 t22.
     iDestruct "H1'" as "[H1' _]".
     iAssert (symbol12 lo_key_name b l1) as "H2'".
       by iRight; iExists l22.
-    iDestruct "Hinv" as (TT) "[Hsymb _]".
-    rewrite !(big_sepL_singleton, big_sepL_cons).
+    rewrite /symbols_inv !(big_sepL_singleton, big_sepL_cons).
     iDestruct "Hsymb" as "(_ & _ & Hlo_key & Hhi_key)".
     by iDestruct (symbol_disj with "Hhi_key Hlo_key H1' H2'") as "[]".
   + case: t21=> //= l21 t21; iDestruct "H1" as "[H1 _]".
@@ -450,32 +449,31 @@ elim: t1 t21 t22.
     iDestruct "H2'" as "[H2' _]".
     iAssert (symbol12 lo_key_name b l1) as "H1'".
       by iRight; iExists l21.
-    iDestruct "Hinv" as (TT) "[Hsymb _]".
-    rewrite !(big_sepL_singleton, big_sepL_cons).
+    rewrite /symbols_inv !(big_sepL_singleton, big_sepL_cons).
     iDestruct "Hsymb" as "(_ & _ & Hlo_key & Hhi_key)".
     by iDestruct (symbol_disj with "Hhi_key Hlo_key H2' H1'") as "[]".
   + case: t21 t22=> //= l21 t21 [] //= l22 t22.
     iDestruct "H1" as "[Hl21 Ht21]".
     iDestruct "H2" as "[Hl22 Ht22]".
-    iPoseProof (IH with "Hinv Ht21 Ht22") as "%Et".
-    iDestruct "Hinv" as (TT) "[Hsymb _]".
-    rewrite !(big_sepL_singleton, big_sepL_cons).
+    iPoseProof (IH with "Hsymb Hinv Ht21 Ht22") as "%Et".
+    rewrite /symbols_inv !(big_sepL_singleton, big_sepL_cons).
     iDestruct "Hsymb" as "(? & ? & Hlo_key & ?)".
     iPoseProof (flipb_symbol_perm with "Hlo_key Hl21 Hl22") as "%El".
     iPureIntro; congruence.
 Qed.
 
 Lemma lo_term_aux_perm t11 t12 t21 t22 :
+  symbols_inv term_names -∗
   published_inv -∗
   lo_term_aux t11 t12 -∗
   lo_term_aux t21 t22 -∗
   ⌜t11 = t21 ↔ t12 = t22⌝.
 Proof.
-iIntros "Hinv #H1 #H2"; rewrite /iff; iSplit.
+iIntros "Hsymb Hinv #H1 #H2"; rewrite /iff; iSplit.
 - iIntros (E); rewrite -{}E.
-  by iApply (@flipb_lo_term_aux_perm true with "Hinv H1 H2").
+  by iApply (@flipb_lo_term_aux_perm true with "Hsymb Hinv H1 H2").
 - iIntros (E); rewrite -{}E.
-  by iApply (@flipb_lo_term_aux_perm false with "Hinv H1 H2").
+  by iApply (@flipb_lo_term_aux_perm false with "Hsymb Hinv H1 H2").
 Qed.
 
 Implicit Types T : gset term.
@@ -616,6 +614,7 @@ Qed.
 Lemma wp_eq_term2 v11 v12 v21 v22 j K :
   lo_term v11 v12 -∗
   lo_term v21 v22 -∗
+  symbols_inv term_names -∗
   published_inv -∗
   spec_ctx -∗
   j ⤇ fill K (eq_term v12 v22) -∗
@@ -624,14 +623,14 @@ Lemma wp_eq_term2 v11 v12 v21 v22 j K :
 Proof.
 iDestruct 1 as (t11 t12) "(-> & -> & #Ht1)".
 iDestruct 1 as (t21 t22) "(-> & -> & #Ht2)".
-iIntros "Hopaque Hspec Hj"; iApply fupd_wp.
+iIntros "Hsymb Hopaque Hspec Hj"; iApply fupd_wp.
 iPoseProof (step_eq_term t12 t22) as "Hswp".
 iMod (swp_elim with "Hswp Hspec Hj") as (v) "[Hj ->]"; first done.
 iModIntro; iPoseProof (wp_eq_term t11 t21) as "Hwp".
 iApply (wp_wand with "Hwp"); iIntros (v) "->".
 iAssert ⌜bool_decide (t12 = t22) = bool_decide (t11 = t21)⌝%I
-        with "[Hopaque]" as "->".
-  iPoseProof (lo_term_aux_perm with "Hopaque Ht1 Ht2") as "%HE".
+        with "[Hsymb Hopaque]" as "->".
+  iPoseProof (lo_term_aux_perm with "Hsymb Hopaque Ht1 Ht2") as "%HE".
   by iPureIntro; apply: bool_decide_iff.
 iFrame; iPureIntro; congr (# (LitBool _)).
 apply: bool_decide_iff; split; try congruence.
