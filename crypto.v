@@ -164,7 +164,9 @@ Definition term_inv : iProp Σ :=
   ∃ TT NM,
     own term_name (● TT)
     ∗ own nonce_name (● NM)
-    ∗ ([∗ map] lb ↦ _ ∈ NM, symbol12 hi_nonce_name lb.2 lb.1)
+    ∗ ([∗ map] lb ↦ KS ∈ NM,
+         symbol12 hi_nonce_name lb.2 lb.1
+         ∗ [∗ set] l ∈ KS, al_key lb.2 l)
     ∗ (∀ tt t1 pt2 l b K,
           ⌜tt ∈ TT⌝ -∗
           ⌜prod_of_matching tt = flipb b pair (Some t1) pt2⌝ -∗
