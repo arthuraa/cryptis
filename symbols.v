@@ -222,15 +222,19 @@ Context `{!heapG Σ, !cfgSG Σ, !symbolSG Σ}.
 Implicit Types l : loc.
 Implicit Types rl : matching loc.
 Implicit Types RL : gset (matching loc).
-Implicit Types G : gset gname.
+Implicit Types G : list gname.
 Implicit Types E : coPset.
 
 Definition mksymbol : val := λ: <>, ref #().
 
 Definition symbols_ctx G : iProp Σ :=
-  ∀ γ, ⌜γ ∈ G⌝ -∗ symbol_ctx γ.
+  [∗ list] γ ∈ G, symbol_ctx γ.
 Definition symbols G RL : iProp Σ :=
   ∀ rl, ⌜rl ∈ RL⌝ -∗ ∃ γ, ⌜γ ∈ G⌝ ∗ symbol γ rl.
+
+Global Instance persistent_symbols_ctx G :
+  Persistent (symbols_ctx G).
+Proof. apply _. Qed.
 
 Lemma relinquish  E G γ RL rl :
   ↑symbolN ⊆ E →
@@ -243,7 +247,7 @@ Proof.
 move=> HE γ_G; iIntros "#HG #G_RL Hrl".
 case: (decide (rl ∈ RL))=> rl_RL.
   iDestruct ("G_RL" $! _ rl_RL) as (γ') "[%Hγ' γ'_rl]".
-  iSpecialize ("HG" $! γ' Hγ').
+  iPoseProof (big_sepL_elem_of _ _ _ Hγ' with "HG") as "{HG} HG".
   iInv "HG" as "> Hγ'".
   iDestruct "Hγ'" as (RL') "[Hown Hsymbols]".
   iAssert ⌜rl ∈ RL'⌝%I as "%Hr".
@@ -254,7 +258,8 @@ case: (decide (rl ∈ RL))=> rl_RL.
   rewrite big_sepS_delete; eauto.
   iDestruct "Hsymbols" as "[Hsymbols _]".
   iDestruct (symbol_own_dup with "Hrl Hsymbols") as "[]".
-iSpecialize ("HG" $! γ γ_G); iInv "HG" as "> Hγ".
+iPoseProof (big_sepL_elem_of _ _ _ γ_G with "HG") as "{HG} HG".
+iInv "HG" as "> Hγ".
 iDestruct "Hγ" as (RL') "[Hown Hsymbols]".
 iMod (own_update _ _ (_ ⋅ (◯ ({[rl]} ⋅ RL'))) with "Hown") as "[Hown Hfrag]".
   by apply auth_update_alloc, gset_local_update, union_subseteq_r.

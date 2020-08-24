@@ -10,6 +10,8 @@ From iris.base_logic.lib Require Import invariants.
 From iris_string_ident Require Import ltac2_string_ident.
 From crypto Require Import lib basic symbols.
 
+Definition termN := nroot.@"term".
+
 Section Terms.
 
 Context `{heapG Σ, cfgSG Σ, symbolSG Σ}.
@@ -156,6 +158,9 @@ Definition published_inv : iProp Σ :=
 Global Instance timeless_published_inv : Timeless published_inv.
 Proof. apply _. Qed.
 
+Definition published_ctx :=
+  inv termN published_inv.
+
 Definition published tt : iProp Σ :=
   own term_name (◯ {[tt]}).
 
@@ -209,6 +214,36 @@ iDestruct "Ht1t2" as (t') "#Ht1t2".
 iApply (published_opaque _ _ _ (Some t') with "Hinv Ht1t2").
 by case: b.
 Qed.
+
+Lemma publish2 E t1 t2 :
+  nclose termN ⊆ E →
+  published_ctx -∗
+  (published12 true  t1 -∗ False) -∗
+  (published12 false t2 -∗ False) -∗
+  opaque true t1 -∗
+  opaque false t2 -∗
+  |={E}=> published (LR t1 t2).
+Proof.
+iIntros (HE) "Hinv unpub1 unpub2 #op1 #op2".
+iInv "Hinv" as ">Hinv" "Hclose".
+iDestruct "Hinv" as (TT) "(Hsymb & Hown & %Hperm & Hopaque)".
+iAssert ⌜part_perm ({[LR t1 t2]} ∪ TT)⌝%I as "%Hperm'".
+  iIntros (tt1 tt2 t1' t21' t22' b Htt1 Htt2 E1 E2).
+  case/elem_of_union: Htt1 E1=> [/elem_of_singleton ->|Htt1] E1;
+  case/elem_of_union: Htt2 E2=> [/elem_of_singleton ->|Htt2] E2.
+  - by iPureIntro; case: b E1 E2=> /= [[_ <-] [_ <-]|[<- _] [<- _]].
+  - admit.
+  - admit.
+  - by iPureIntro; apply: Hperm E1 E2.
+iMod (own_update _ _ (_ ⋅ ◯ ({[LR t1 t2]} ⋅ TT)) with "Hown")
+     as "[Hown [#Hfrag _]]".
+  by apply auth_update_alloc, gset_local_update, union_subseteq_r.
+(* This assertion should not be possible after the update. I probably do not
+   understand how to express that something is not published... *)
+iAssert (published12 true t1) as "H".
+  by iRight; iExists t2.
+iDestruct ("unpub1" with "H") as "[]".
+Admitted.
 
 Fixpoint lo_term1 s t : iProp Σ :=
   published12 s t ∨
