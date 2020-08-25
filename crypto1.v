@@ -180,7 +180,9 @@ Fixpoint term_readers t rs : iProp Σ :=
   | TPair t1 t2 => term_readers t1 rs ∗ term_readers t2 rs
   | TNonce l => ∃ rs', own res_name (◯ {[l := RNonce rs']}) ∗ ⌜rs ⊆ rs'⌝
   | TKey l => True (* Wrong for now; keys should also be private *)
-  | TEnc l t => term_readers t {[l]}
+  | TEnc l t => ∃ Φ, own res_name (◯ {[l := RKey (to_agree Φ)]})
+                     ∗ Φ t
+                     ∗ term_readers t {[l]}
   end.
 
 End Resources.
