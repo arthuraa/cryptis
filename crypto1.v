@@ -61,26 +61,29 @@ Proof. split=> //; case=> // rs; congr RPriv; set_solver+. Qed.
 Section Resources.
 
 Context (Σ : gFunctors).
-Implicit Types P : agree (termO -n> iPropO Σ).
+Implicit Types Φ : termO -n> iPropO Σ.
 
 Inductive res :=
 | RNonce of readers
-| RKey of agree (termO -n> iPropO Σ)
-| RBot.
+| RKey of readers & termO -n> iPropO Σ.
+
+Definition readers_of_res r :=
+  match r with
+  | RNonce rs => rs
+  | RKey rs _ => rs
+  end.
 
 Global Instance res_equiv : Equiv res := λ r1 r2,
   match r1, r2 with
   | RNonce rs1, RNonce rs2 => rs1 = rs2
-  | RKey P1, RKey P2 => P1 ≡ P2
-  | RBot, RBot => True
+  | RKey rs1 P1, RKey rs2 P2 => rs1 = rs2 ∧ P1 ≡ P2
   | _, _ => False
   end.
 
 Global Instance res_dist : Dist res := λ n r1 r2,
   match r1, r2 with
   | RNonce rs1, RNonce rs2 => rs1 = rs2
-  | RKey P1, RKey P2 => P1 ≡{n}≡ P2
-  | RBot, RBot => True
+  | RKey rs1 P1, RKey rs2 P2 => rs1 = rs2 ∧ P1 ≡{n}≡ P2
   | _, _ => False
   end.
 
@@ -88,101 +91,78 @@ Lemma res_ofe_mixin : OfeMixin res.
 Proof.
 split.
 - move=> r1 r2; case: r1=> *; case: r2=> *;
-  split=> //; by move/(_ 0).
+  rewrite /equiv /dist /= ?forall_and_distr ?equiv_dist;
+  intuition eauto using 0.
 - move=> n; split.
   + case=> * //=; by apply equiv_dist.
-  + case=> [?|?|] [?|?|] // e.
+  + case=> [rs1|rs1 P1] [rs2|rs2 P2] // [-> e2].
     by rewrite /dist /=.
-  + case=> [?|?|] [?|?|] // [?|?|] //.
+  + case=> [?|??] [?|??] // [?|??] //.
       by move=> ->.
-    by rewrite /dist /= => ->.
-- rewrite /dist => n [?|?|] [?|?|] //=.
-  exact: dist_S.
+    by rewrite /dist /=; case=> -> ->.
+- rewrite /dist => n [?|??] [?|??] //=.
+  by case=> -> /dist_S ->.
 Qed.
 Canonical resO := OfeT res res_ofe_mixin.
 
-(* NB: [res] is probably not complete because [agree _] is not complete in
-general. *)
-
-Global Instance res_valid : Valid res := λ r,
-  match r with
-  | RNonce _ => True
-  | RKey P => ✓ P
-  | RBot => False
-  end.
-Global Instance res_validN : ValidN res := λ n r,
-  match r with
-  | RNonce _ => True
-  | RKey P => ✓{n} P
-  | RBot => False
-  end.
-Global Instance res_pcore : PCore res := Some.
-Global Instance res_op : Op res := λ r1 r2,
-  match r1, r2 with
-  | RNonce rs1, RNonce rs2 => RNonce (rs1 ⋅ rs2)
-  | RKey P1, RKey P2 => RKey (P1 ⋅ P2)
-  | _, _ => RBot
-  end.
-
-Lemma res_cmra_mixin : CmraMixin res.
-Proof.
-split.
-- case=> [rs1|P1|] n [?|?|] [?|?|] //;
-  by rewrite /dist /=; move=> ->.
-- move=> n x y _ exy [<-]; by exists y.
-- move=> n [?|?|] [?|?|] //.
-  by rewrite /dist /= /validN /= => ->.
-- case=> *; rewrite /valid /validN /=; try by intuition eauto.
-  split=> //; apply; exact: 0.
-- move=> n [?|?|] //; rewrite /validN //=; apply cmra_validN_S.
-- by case=> [?|?|] [?|?|] [?|?|] //; rewrite /= /op /equiv /= assoc.
-- by case=> [?|?|] [?|?|]; rewrite // /op /equiv /= cmra_comm.
-- move=> r _ [<-]; case: r=> [rs|P|]; rewrite // /op /=.
-  + by apply: (cmra_pcore_l rs rs).
-  + by apply: (cmra_pcore_l P P).
-- by move=> ? _ [<-].
-- by move=> r1 r2 _ r12 [<-]; exists r2; split.
-- by move=> n [rs1|P1|] [rs2|P2|] // /cmra_validN_op_l.
-- move=> n [rs1|P1|] // [rs21|P21|] [rs22|P22|] //.
-  + by move=> _ e; exists (RNonce rs21), (RNonce rs22); intuition.
-  + move=> P1val e; rewrite /validN /dist /= in P1val e.
-    destruct (cmra_extend _ _ _ _ P1val e) as (P21' & P22' & ? & ? & ?).
-    by exists (RKey P21'), (RKey P22'); intuition eauto.
-Qed.
-Canonical resR := CmraT res res_cmra_mixin.
-
-Definition resM := gmapUR loc resR.
+Definition resM := gmap loc res.
+Definition resR := gmapUR loc (agreeR resO).
 Implicit Types RM : resM.
 
+Definition to_resR : resM → resR :=
+  fmap to_agree.
+
 Class resG := {
-  res_inG :> inG Σ (authR resM);
+  res_inG :> inG Σ (authR resR);
   res_name : gname
 }.
 
-Context `{!resG}.
+Context `{!resG, !heapG Σ}.
 
-Definition wf_readers rs RM :=
+Definition nonceT l rs : iProp Σ :=
+  own res_name (◯ {[l := to_agree (RNonce rs)]}).
+
+Global Instance persistent_nonceT l rs :
+  Persistent (nonceT l rs).
+Proof. apply _. Qed.
+
+Definition keyT l rs Φ : iProp Σ :=
+  own res_name (◯ {[l := to_agree (RKey rs Φ)]}).
+
+Global Instance persistent_keyT l rs Φ :
+  Persistent (keyT l rs Φ).
+Proof. apply _. Qed.
+
+Definition wf_readers rs : iProp Σ :=
   match rs with
   | RPub     => True
-  | RPriv rs => ∀l, l ∈ rs → ∃ P, RM !! l = Some (RKey P)
+  | RPriv rs => ∀l, ⌜l ∈ rs⌝ → ∃ rs' Φ, keyT l rs' Φ
   end.
 
-Definition wf_resM RM :=
-  ∀ l rs, RM !! l = Some (RNonce rs) → wf_readers rs RM.
+Global Instance persistent_wf_readers rs :
+  Persistent (wf_readers rs).
+Proof. case: rs=> *; apply _. Qed.
 
-(** [term_readers t rs] holds when the term [t] can be declared public after
-encrypting it with the readers rs.  If [rs = RPub], [t] does not have to be
-encrypted. *)
+Definition res_inv : iProp Σ :=
+  ∃ RM, own res_name (● (to_resR RM))
+        ∗ [∗ map] l ↦ r ∈ RM, l ↦ #() ∗ wf_readers (readers_of_res r).
 
-Fixpoint term_readers t rs : iProp Σ :=
+(** [termT t rs] holds when the term [t] can be declared public after encrypting
+it with any of the readers rs.  If [rs = RPub], [t] is considered public and
+does not have to be encrypted. *)
+
+Fixpoint termT t rs : iProp Σ :=
   match t with
   | TInt _ => True
-  | TPair t1 t2 => term_readers t1 rs ∗ term_readers t2 rs
-  | TNonce l => ∃ rs', own res_name (◯ {[l := RNonce rs']}) ∗ ⌜rs ⊆ rs'⌝
-  | TKey l => True (* Wrong for now; keys should also be private *)
-  | TEnc l t => ∃ Φ, own res_name (◯ {[l := RKey (to_agree Φ)]})
-                     ∗ Φ t
-                     ∗ term_readers t {[l]}
+  | TPair t1 t2 => termT t1 rs ∗ termT t2 rs
+  | TNonce l => ∃ rs', nonceT l rs' ∗ ⌜rs ⊆ rs'⌝
+  | TKey l   => ∃ rs' Φ, keyT l rs' Φ ∗ ⌜rs ⊆ rs'⌝
+  | TEnc l t => ∃ rs' Φ, keyT l rs' Φ
+                ∗ (□ Φ t ∗ termT t {[l]} ∨ ⌜rs' = RPub⌝ ∗ termT t RPub)
   end.
+
+Global Instance persistent_termT t rs :
+  Persistent (termT t rs).
+Proof. elim: t rs=> *; apply _. Qed.
 
 End Resources.
