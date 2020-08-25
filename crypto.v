@@ -82,12 +82,14 @@ Proof. apply (inj_countable' _ _ val_of_termK). Qed.
 Class termSG := TermSG {
   term_inG :> inG Σ (authR (gsetUR (matchingO termO)));
   nonce_inG :> inG Σ (authR (gmapUR (loc * bool) (gsetUR loc)));
+  key_inG :> inG Σ (authR (gmapUR (loc * bool) (agreeR (termO -n> iPropO Σ))));
   hi_key_name : gname;
   lo_key_name : gname;
   hi_nonce_name : gname;
   lo_nonce_name : gname;
   term_name : gname;
   nonce_name : gname;
+  key_name : gname;
 }.
 
 Context `{termSG}.
@@ -145,11 +147,20 @@ Qed.
 
 Implicit Types TT : gsetUR (matchingO termO).
 Implicit Types NM : gmapUR (loc * bool) (gsetUR loc).
+Implicit Types KM : gmapUR (loc * bool) (agreeR (termO -n> iPropO Σ)).
 Implicit Types E : coPset.
 Implicit Types KS : gset loc.
+Implicit Types φ : termO -n> iPropO Σ.
 
 Definition term_names :=
   [lo_nonce_name; hi_nonce_name; lo_key_name; hi_key_name].
+
+(** When we create a secret nonce, we must specify which keys can be used to
+encrypt it.  The [guarded_nonce l KS t] predicate below holds when every
+occurrence of the nonce [l] in [t] appears in a subterm encrypted with one of
+the keys in [KS].  The map between nonces and encryption keys, [NM], is stored
+in ghost state in the [nonce_inv TT] predicate below.  The predicate ensures
+that every published term in [TT] respects [NM]. *)
 
 Fixpoint guarded_nonce l KS t :=
   match t with
@@ -160,26 +171,57 @@ Fixpoint guarded_nonce l KS t :=
   | TEnc l' t => l' ∈ KS ∨ guarded_nonce l KS t
   end.
 
+Definition nonce_inv TT : iProp Σ :=
+  ∃ NM, own nonce_name (● NM)
+        ∗ ([∗ map] lb ↦ KS ∈ NM,
+           symbol12 hi_nonce_name lb.2 lb.1
+           ∗ [∗ set] l ∈ KS, symbol12 hi_key_name lb.2 l)
+        ∗ (∀ tt t1 pt2 l b KS,
+            ⌜tt ∈ TT⌝ -∗
+            ⌜prod_of_matching tt = flipb b pair (Some t1) pt2⌝ -∗
+            ⌜NM !! (l, b) = Some KS⌝ -∗
+            ⌜guarded_nonce l KS t1⌝).
+
+Global Instance persistent_nonce_inv TT :
+  Timeless (nonce_inv TT).
+Proof. apply _. Qed.
+
+(** When we create a secret (high) key, we must specify a predicate that must
+hold of all the terms encrypted with that key.  *)
+
+Fixpoint correct_enc l φ t : iProp Σ :=
+  match t with
+  | TInt _ => True
+  | TPair t1 t2 => correct_enc l φ t1 ∗ correct_enc l φ t2
+  | TNonce _ => True
+  | TKey _ => True
+  | TEnc l' t' => if decide (l' = l) then φ t' else correct_enc l φ t'
+  end.
+
+Definition key_inv TT : iProp Σ :=
+  ∃ KM, own key_name (● KM)
+        ∗ ([∗ map] lb ↦ _ ∈ KM, symbol12 hi_key_name lb.2 lb.1)
+        ∗ (∀ tt t1 pt2 l b φ,
+              ⌜tt ∈ TT⌝ -∗
+              ⌜prod_of_matching tt = flipb b pair (Some t1) pt2⌝ -∗
+              ⌜KM !! (l, b) ≡ Some (to_agree φ)⌝ -∗
+              correct_enc l φ t1).
+
+(** Finally, every opaque term must be registered in a set [TT] in order for it
+to be considered public.  The set [TT] must be correct with respect to the
+invariants imposed on nonces and keys.  The invariant is not necessarily
+timeless, since the predicates associated with keys could be arbitrary. *)
+
 Definition term_inv : iProp Σ :=
-  ∃ TT NM,
+  ∃ TT,
     own term_name (● TT)
-    ∗ own nonce_name (● NM)
-    ∗ ([∗ map] lb ↦ KS ∈ NM,
-         symbol12 hi_nonce_name lb.2 lb.1
-         ∗ [∗ set] l ∈ KS, al_key lb.2 l)
-    ∗ (∀ tt t1 pt2 l b KS,
-          ⌜tt ∈ TT⌝ -∗
-          ⌜prod_of_matching tt = flipb b pair (Some t1) pt2⌝ -∗
-          ⌜NM !! (l, b) = Some KS⌝ -∗
-          ⌜guarded_nonce l KS t1⌝)
+    ∗ nonce_inv TT
+    ∗ key_inv TT
     ∗ ⌜part_perm TT⌝
     ∗ (∀ tt t1 pt2 b,
           ⌜tt ∈ TT⌝ -∗
           ⌜prod_of_matching tt = flipb b pair (Some t1) pt2⌝ -∗
           opaque b t1).
-
-Global Instance timeless_term_inv : Timeless term_inv.
-Proof. apply _. Qed.
 
 Definition term_ctx :=
   inv termN term_inv.
@@ -209,7 +251,7 @@ Lemma published_opaque b tt t1 pt2 :
   ⌜prod_of_matching tt = flipb b pair (Some t1) pt2⌝ -∗
   opaque b t1.
 Proof.
-iDestruct 1 as (TT NM) "(Hown & _ & _ & _ & %Hperm & #HTT)".
+iDestruct 1 as (TT) "(Hown & _ & _ & %Hperm & #HTT)".
 iIntros "#Ht1t2 #He".
 iPoseProof (own_valid_2 with "Hown Ht1t2") as "%Hvalid".
 move: Hvalid; rewrite auth_both_valid gset_included.
@@ -238,36 +280,6 @@ iDestruct "Ht1t2" as (t') "#Ht1t2".
 iApply (published_opaque _ _ _ (Some t') with "Hinv Ht1t2").
 by case: b.
 Qed.
-
-Lemma publish2 E t1 t2 :
-  nclose termN ⊆ E →
-  term_ctx -∗
-  (published12 true  t1 -∗ False) -∗
-  (published12 false t2 -∗ False) -∗
-  opaque true t1 -∗
-  opaque false t2 -∗
-  |={E}=> published (LR t1 t2).
-Proof.
-iIntros (HE) "Hinv unpub1 unpub2 #op1 #op2".
-iInv "Hinv" as ">Hinv" "Hclose".
-iDestruct "Hinv" as (TT NM) "(Hown & _ & _ & _ & %Hperm & Hopaque)".
-iAssert ⌜part_perm ({[LR t1 t2]} ∪ TT)⌝%I as "%Hperm'".
-  iIntros (tt1 tt2 t1' t21' t22' b Htt1 Htt2 E1 E2).
-  case/elem_of_union: Htt1 E1=> [/elem_of_singleton ->|Htt1] E1;
-  case/elem_of_union: Htt2 E2=> [/elem_of_singleton ->|Htt2] E2.
-  - by iPureIntro; case: b E1 E2=> /= [[_ <-] [_ <-]|[<- _] [<- _]].
-  - admit.
-  - admit.
-  - by iPureIntro; apply: Hperm E1 E2.
-iMod (own_update _ _ (_ ⋅ ◯ ({[LR t1 t2]} ⋅ TT)) with "Hown")
-     as "[Hown [#Hfrag _]]".
-  by apply auth_update_alloc, gset_local_update, union_subseteq_r.
-(* This assertion should not be possible after the update. I probably do not
-   understand how to express that something is not published... *)
-iAssert (published12 true t1) as "H".
-  by iRight; iExists t2.
-iDestruct ("unpub1" with "H") as "[]".
-Admitted.
 
 Fixpoint lo_term1 s t : iProp Σ :=
   published12 s t ∨
@@ -383,7 +395,7 @@ Lemma flipb_published_perm b t1 t21 t22 :
   published (flipb b LR t1 t22) -∗
   ⌜t21 = t22⌝.
 Proof.
-iDestruct 1 as (TT NM) "(Hown & _ & _ & _ & %Hperm & #HTT)".
+iDestruct 1 as (TT) "(Hown & _ & _ & %Hperm & #HTT)".
 rewrite /flipb /opaque; case: b=> /=.
 - iIntros "Hown1 Hown2".
   iPoseProof (own_valid_2 with "Hown Hown1") as "%Hval1".
