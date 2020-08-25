@@ -3,6 +3,7 @@
 -R . crypto
 
 lib.v
+term.v
 basic.v
 symbols.v
 crypto.v
