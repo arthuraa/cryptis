@@ -136,7 +136,7 @@ Proof. apply _. Qed.
 Definition wf_readers rs : iProp Σ :=
   match rs with
   | RPub     => True
-  | RPriv rs => ∀l, ⌜l ∈ rs⌝ → ∃ rs' Φ, keyT l rs' Φ
+  | RPriv rs => ∀l, ⌜l ∈ rs⌝ → ∃ rs' Φ, keyT l (RPriv rs') Φ
   end.
 
 Global Instance persistent_wf_readers rs :
