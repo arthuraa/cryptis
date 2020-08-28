@@ -165,6 +165,19 @@ Global Instance persistent_termT t rs :
   Persistent (termT t rs).
 Proof. elim: t rs=> *; apply _. Qed.
 
+Lemma sub_termT t rs rs' :
+  rs' ⊆ rs →
+  termT t rs -∗
+  termT t rs'.
+Proof.
+elim: t rs=> [n|t1 IH1 t2 IH2|l|l|l t IH] rs sub //=.
+- by iIntros "[#Ht1 #Ht2]"; rewrite IH1 // IH2 //; iSplit.
+- iDestruct 1 as (rs0) "[#Hnonce %sub0]".
+  iExists rs0; iSplit=> //; iPureIntro; by etransitivity.
+- iDestruct 1 as (rs0 Φ) "[#Hkey %sub0]".
+  iExists rs0, Φ; iSplit=> //; iPureIntro; by etransitivity.
+Qed.
+
 Lemma nonce_alloc l rs :
   res_inv -∗
   l ↦ #() -∗
