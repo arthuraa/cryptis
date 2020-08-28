@@ -65,17 +65,14 @@ Implicit Types Φ : termO -n> iPropO Σ.
 
 Inductive res :=
 | RNonce of readers
+| RAKey of readers & readers & termO -n> iPropO Σ
 | RSKey of readers & termO -n> iPropO Σ.
-
-Definition readers_of_res r :=
-  match r with
-  | RNonce rs => rs
-  | RSKey rs _ => rs
-  end.
 
 Global Instance res_equiv : Equiv res := λ r1 r2,
   match r1, r2 with
   | RNonce rs1, RNonce rs2 => rs1 = rs2
+  | RAKey rs11 rs12 P1, RAKey rs21 rs22 P2 =>
+    rs11 = rs21 ∧ rs12 = rs22 ∧ P1 ≡ P2
   | RSKey rs1 P1, RSKey rs2 P2 => rs1 = rs2 ∧ P1 ≡ P2
   | _, _ => False
   end.
@@ -83,6 +80,8 @@ Global Instance res_equiv : Equiv res := λ r1 r2,
 Global Instance res_dist : Dist res := λ n r1 r2,
   match r1, r2 with
   | RNonce rs1, RNonce rs2 => rs1 = rs2
+  | RAKey rs11 rs12 P1, RAKey rs21 rs22 P2 =>
+    rs11 = rs21 ∧ rs12 = rs22 ∧ P1 ≡{n}≡ P2
   | RSKey rs1 P1, RSKey rs2 P2 => rs1 = rs2 ∧ P1 ≡{n}≡ P2
   | _, _ => False
   end.
@@ -93,15 +92,14 @@ split.
 - move=> r1 r2; case: r1=> *; case: r2=> *;
   rewrite /equiv /dist /= ?forall_and_distr ?equiv_dist;
   intuition eauto using 0.
-- move=> n; split.
+- rewrite /dist; move=> n; split.
   + case=> * //=; by apply equiv_dist.
-  + case=> [rs1|rs1 P1] [rs2|rs2 P2] // [-> e2].
-    by rewrite /dist /=.
-  + case=> [?|??] [?|??] // [?|??] //.
-      by move=> ->.
-    by rewrite /dist /=; case=> -> ->.
-- rewrite /dist => n [?|??] [?|??] //=.
-  by case=> -> /dist_S ->.
+  + case=> [rs1|rs11 rs12 P1|rs1 P1] [rs2|rs21 rs22 P2|rs2 P2] //=;
+    intuition eauto.
+  + case=> [?|???|??] [?|???|??] //= [?|???|??] //=;
+    intuition (try congruence); etransitivity; eauto.
+- rewrite /dist => n [?|???|??] [?|???|??] //=;
+  intuition eauto using dist_S.
 Qed.
 Canonical resO := OfeT res res_ofe_mixin.
 
@@ -143,9 +141,19 @@ Global Instance persistent_wf_readers rs :
   Persistent (wf_readers rs).
 Proof. case: rs=> *; apply _. Qed.
 
+Definition wf_res r : iProp Σ :=
+  match r with
+  | RNonce rs => wf_readers rs
+  | RAKey rs1 rs2 _ => wf_readers rs1 ∗ wf_readers rs2
+  | RSKey rs _ => wf_readers rs
+  end.
+
+Global Instance persistent_wf_res r : Persistent (wf_res r).
+Proof. case: r=> *; apply _. Qed.
+
 Definition res_inv : iProp Σ :=
   ∃ RM, own res_name (● (to_resR RM))
-        ∗ [∗ map] l ↦ r ∈ RM, l ↦ #() ∗ wf_readers (readers_of_res r).
+        ∗ [∗ map] l ↦ r ∈ RM, l ↦ #() ∗ wf_res r.
 
 (** [termT t rs] holds when the term [t] can be declared public after encrypting
 it with any of the readers rs.  If [rs = RPub], [t] is considered public and
@@ -193,7 +201,7 @@ destruct (RM !! l) as [rs'|] eqn:e.
   iDestruct "Hreaders" as "[[Hl' _] _]".
   by iPoseProof (mapsto_valid_2 with "Hl Hl'") as "%".
 pose (RM' := <[l := RNonce rs]>RM).
-iAssert ([∗ map] l' ↦ rs' ∈ RM', l' ↦ #() ∗ wf_readers (readers_of_res rs'))%I
+iAssert ([∗ map] l' ↦ rs' ∈ RM', l' ↦ #() ∗ wf_res rs')%I
     with "[Hreaders Hl Hrs]" as "Hreaders".
   by rewrite /RM' big_sepM_insert //; iFrame.
 iMod (own_update _ _ (_ ⋅ ◯ {[l := to_agree (RNonce rs)]}) with "Hown")
@@ -217,7 +225,7 @@ destruct (RM !! l) as [rs'|] eqn:e.
   iDestruct "Hreaders" as "[[Hl' _] _]".
   by iPoseProof (mapsto_valid_2 with "Hl Hl'") as "%".
 pose (RM' := <[l := RSKey rs Φ]>RM).
-iAssert ([∗ map] l' ↦ rs' ∈ RM', l' ↦ #() ∗ wf_readers (readers_of_res rs'))%I
+iAssert ([∗ map] l' ↦ rs' ∈ RM', l' ↦ #() ∗ wf_res rs')%I
     with "[Hreaders Hl Hrs]" as "Hreaders".
   by rewrite /RM' big_sepM_insert //; iFrame.
 iMod (own_update _ _ (_ ⋅ ◯ {[l := to_agree (RSKey rs Φ)]}) with "Hown")
