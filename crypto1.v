@@ -229,6 +229,31 @@ iModIntro; iSplitL=> //.
 iExists RM'; iFrame; by rewrite /RM' /to_resR fmap_insert.
 Qed.
 
+Lemma akey_alloc l rs_enc rs_dec Φ :
+  res_inv -∗
+  l ↦ #() -∗
+  wf_readers rs_enc -∗
+  wf_readers rs_dec -∗
+  |==> res_inv ∗ akeyT l rs_enc rs_dec Φ.
+Proof.
+iDestruct 1 as (RM) "[Hown Hreaders]".
+iIntros "Hl Henc Hdec".
+destruct (RM !! l) as [rs'|] eqn:e.
+  rewrite big_sepM_delete //.
+  iDestruct "Hreaders" as "[[Hl' _] _]".
+  by iPoseProof (mapsto_valid_2 with "Hl Hl'") as "%".
+pose (RM' := <[l := RAKey rs_enc rs_dec Φ]>RM).
+iAssert ([∗ map] l' ↦ rs' ∈ RM', l' ↦ #() ∗ wf_res rs')%I
+    with "[Hreaders Hl Henc Hdec]" as "Hreaders".
+  by rewrite /RM' big_sepM_insert //; iFrame.
+iMod (own_update _ _ (_ ⋅ ◯ {[l := to_agree (RAKey rs_enc rs_dec Φ)]})
+       with "Hown") as "[Hown #Hfrag]".
+  apply auth_update_alloc, alloc_singleton_local_update=> //.
+  by rewrite lookup_fmap e.
+iModIntro; iSplitL=> //.
+iExists RM'; iFrame; by rewrite /RM' /to_resR fmap_insert.
+Qed.
+
 Lemma skey_alloc l rs Φ :
   res_inv -∗
   l ↦ #() -∗
