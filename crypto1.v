@@ -124,6 +124,13 @@ Global Instance persistent_nonceT l rs :
   Persistent (nonceT l rs).
 Proof. apply _. Qed.
 
+Definition akeyT l rs_enc rs_dec Φ : iProp Σ :=
+  own res_name (◯ {[l := to_agree (RAKey rs_enc rs_dec Φ)]}).
+
+Global Instance persistent_akeyT l rs_enc rs_dec Φ :
+  Persistent (akeyT l rs_enc rs_dec Φ).
+Proof. apply _. Qed.
+
 Definition skeyT l rs Φ : iProp Σ :=
   own res_name (◯ {[l := to_agree (RSKey rs Φ)]}).
 
@@ -131,10 +138,14 @@ Global Instance persistent_skeyT l rs Φ :
   Persistent (skeyT l rs Φ).
 Proof. apply _. Qed.
 
+Definition priv_keyT l rs : iProp Σ :=
+    (∃ rs_enc Φ, akeyT l rs_enc (RPriv rs) Φ)
+  ∨ (∃ Φ, skeyT l (RPriv rs) Φ).
+
 Definition wf_readers rs : iProp Σ :=
   match rs with
   | RPub     => True
-  | RPriv rs => ∀l, ⌜l ∈ rs⌝ → ∃ rs' Φ, skeyT l (RPriv rs') Φ
+  | RPriv rs => ∀l, ⌜l ∈ rs⌝ → ∃ rs', priv_keyT l rs'
   end.
 
 Global Instance persistent_wf_readers rs :
@@ -164,8 +175,12 @@ Fixpoint termT t rs : iProp Σ :=
   | TInt _ => True
   | TPair t1 t2 => termT t1 rs ∗ termT t2 rs
   | TNonce l => ∃ rs', nonceT l rs' ∗ ⌜rs ⊆ rs'⌝
-  | TAKey _ _ => False
-  | TAEnc _ _ => False
+  | TAKey l enc => ∃ rs_enc rs_dec Φ,
+                     akeyT l rs_enc rs_dec Φ
+                     ∗ ⌜rs ⊆ if enc then rs_enc else rs_dec⌝
+  | TAEnc l t => ∃ rs_enc rs_dec Φ,
+                   akeyT l rs_enc rs_dec Φ
+                   ∗ (□ Φ t ∗ termT t {[l]} ∨ ⌜rs_enc = RPub⌝ ∗ termT t RPub)
   | TSKey l   => ∃ rs' Φ, skeyT l rs' Φ ∗ ⌜rs ⊆ rs'⌝
   | TSEnc l t => ∃ rs' Φ, skeyT l rs' Φ
                  ∗ (□ Φ t ∗ termT t {[l]} ∨ ⌜rs' = RPub⌝ ∗ termT t RPub)
@@ -184,6 +199,8 @@ elim: t rs=> [n|t1 IH1 t2 IH2|l|l b|l t IH|l|l t IH] rs sub //=.
 - by iIntros "[#Ht1 #Ht2]"; rewrite IH1 // IH2 //; iSplit.
 - iDestruct 1 as (rs0) "[#Hnonce %sub0]".
   iExists rs0; iSplit=> //; iPureIntro; by etransitivity.
+- iDestruct 1 as (rs_enc rs_dec Φ) "[#Hkey %sub0]".
+  iExists rs_enc, rs_dec, Φ; iSplit=> //; iPureIntro; by etransitivity.
 - iDestruct 1 as (rs0 Φ) "[#Hkey %sub0]".
   iExists rs0, Φ; iSplit=> //; iPureIntro; by etransitivity.
 Qed.
