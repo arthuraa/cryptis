@@ -165,4 +165,52 @@ Global Instance persistent_termT t rs :
   Persistent (termT t rs).
 Proof. elim: t rs=> *; apply _. Qed.
 
+Lemma nonce_alloc l rs :
+  res_inv -∗
+  l ↦ #() -∗
+  wf_readers rs -∗
+  |==> res_inv ∗ nonceT l rs.
+Proof.
+iDestruct 1 as (RM) "[Hown Hreaders]".
+iIntros "Hl Hrs".
+destruct (RM !! l) as [rs'|] eqn:e.
+  rewrite big_sepM_delete //.
+  iDestruct "Hreaders" as "[[Hl' _] _]".
+  by iPoseProof (mapsto_valid_2 with "Hl Hl'") as "%".
+pose (RM' := <[l := RNonce rs]>RM).
+iAssert ([∗ map] l' ↦ rs' ∈ RM', l' ↦ #() ∗ wf_readers (readers_of_res rs'))%I
+    with "[Hreaders Hl Hrs]" as "Hreaders".
+  by rewrite /RM' big_sepM_insert //; iFrame.
+iMod (own_update _ _ (_ ⋅ ◯ {[l := to_agree (RNonce rs)]}) with "Hown")
+    as "[Hown #Hfrag]".
+  apply auth_update_alloc, alloc_singleton_local_update=> //.
+  by rewrite lookup_fmap e.
+iModIntro; iSplitL=> //.
+iExists RM'; iFrame; by rewrite /RM' /to_resR fmap_insert.
+Qed.
+
+Lemma key_alloc l rs Φ :
+  res_inv -∗
+  l ↦ #() -∗
+  wf_readers rs -∗
+  |==> res_inv ∗ keyT l rs Φ.
+Proof.
+iDestruct 1 as (RM) "[Hown Hreaders]".
+iIntros "Hl Hrs".
+destruct (RM !! l) as [rs'|] eqn:e.
+  rewrite big_sepM_delete //.
+  iDestruct "Hreaders" as "[[Hl' _] _]".
+  by iPoseProof (mapsto_valid_2 with "Hl Hl'") as "%".
+pose (RM' := <[l := RKey rs Φ]>RM).
+iAssert ([∗ map] l' ↦ rs' ∈ RM', l' ↦ #() ∗ wf_readers (readers_of_res rs'))%I
+    with "[Hreaders Hl Hrs]" as "Hreaders".
+  by rewrite /RM' big_sepM_insert //; iFrame.
+iMod (own_update _ _ (_ ⋅ ◯ {[l := to_agree (RKey rs Φ)]}) with "Hown")
+    as "[Hown #Hfrag]".
+  apply auth_update_alloc, alloc_singleton_local_update=> //.
+  by rewrite lookup_fmap e.
+iModIntro; iSplitL=> //.
+iExists RM'; iFrame; by rewrite /RM' /to_resR fmap_insert.
+Qed.
+
 End Resources.
