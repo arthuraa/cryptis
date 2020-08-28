@@ -49,6 +49,8 @@ Fixpoint al_term s t : iProp Σ :=
   | TInt _ => True%I
   | TPair t1 t2 => al_term s t1 ∗ al_term s t2
   | TNonce l => al_nonce s l
+  | TAKey l b => False
+  | TAEnc l t => False
   | TSKey l => al_key s l
   | TSEnc l t => al_key s l ∗ al_term s t
   end.
@@ -63,6 +65,8 @@ Definition opaque s t : iProp Σ :=
   | TInt _ => False%I
   | TPair _ _ => False%I
   | TNonce l => symbol1 lo_nonce_name s l
+  | TAKey l b => False
+  | TAEnc l t => False
   | TSKey l => False%I
   | TSEnc l t => symbol12 hi_key_name s l ∗ al_term s t
   end.
@@ -74,7 +78,7 @@ Proof. elim: t=> /=; apply _. Qed.
 
 Lemma opaque_al_term s t : opaque s t -∗ al_term s t.
 Proof.
-case: t=> /=.
+case: t=> //=.
 - by iIntros (_) "?".
 - by iIntros (??) "?".
 - by iIntros (?) "?"; iLeft.
@@ -104,6 +108,8 @@ Fixpoint guarded_nonce l KS t :=
   | TInt _ => True
   | TPair t1 t2 => guarded_nonce l KS t1 ∧ guarded_nonce l KS t2
   | TNonce l' => l' ≠ l
+  | TAKey l b => False
+  | TAEnc l t => False
   | TSKey _ => True
   | TSEnc l' t => l' ∈ KS ∨ guarded_nonce l KS t
   end.
@@ -131,6 +137,8 @@ Fixpoint correct_enc l φ t : iProp Σ :=
   | TInt _ => True
   | TPair t1 t2 => correct_enc l φ t1 ∗ correct_enc l φ t2
   | TNonce _ => True
+  | TAKey _ _ => False
+  | TAEnc _ _ => False
   | TSKey _ => True
   | TSEnc l' t' => if decide (l' = l) then φ t' else correct_enc l φ t'
   end.
@@ -224,6 +232,8 @@ Fixpoint lo_term1 s t : iProp Σ :=
   | TInt _ => True%I
   | TPair t1 t2 => lo_term1 s t1 ∗ lo_term1 s t2
   | TNonce l => False%I
+  | TAKey _ _ => False
+  | TAEnc _ _ => False
   | TSKey l => symbol12 lo_key_name s l
   | TSEnc l t => symbol12 lo_key_name s l ∗ lo_term1 s t
   end.
@@ -236,7 +246,7 @@ Lemma lo_term1_al_term s t :
   lo_term1 s t -∗
   al_term s t.
 Proof.
-elim: t=> [n|t1 IH1 t2 IH2|l|l|l t IH] //=; eauto.
+elim: t=> [n|t1 IH1 t2 IH2|l|l b|l t IH|l|l t IH] //=; eauto.
 - iIntros "Hinv [H|H]".
     iAssert (opaque s (TPair t1 t2)) with "[Hinv H]" as "?"=> //.
     by iApply (published12_opaque with "Hinv H").
@@ -247,6 +257,10 @@ elim: t=> [n|t1 IH1 t2 IH2|l|l|l t IH] //=; eauto.
 - iIntros "Hinv [H|?] //".
   iPoseProof (published12_opaque with "Hinv H") as "?".
   by iLeft.
+- iIntros "Hinv [H|[]]".
+  by iPoseProof (published12_opaque with "Hinv H") as "?".
+- iIntros "Hinv [H|[]]".
+  iDestruct (published12_opaque with "Hinv H") as "[]".
 - iIntros "Hinv [H|H]".
     by iPoseProof (published12_opaque with "Hinv H") as "?".
   by iLeft.
@@ -297,6 +311,8 @@ elim: t1 t2=> /=.
 - by move=> ?; case=> *; apply _.
 - by move=> ????; case=> *; apply _.
 - by move=> ?; case=> *; apply _.
+- by move=> ??; apply _.
+- by move=> ??; apply _.
 - by move=> ?; case=> *; apply _.
 - by move=> ???; case=> *; apply _.
 Qed.
@@ -393,6 +409,15 @@ elim: t1 t21 t22.
   iDestruct "H2" as "[H2|H2]"; last by case: t22.
   iPoseProof (flipb_published_perm with "Hinv H1 H2") as "%".
   by iPureIntro.
+- move=> l b' t21 t22; iIntros "Hsymb Hinv #H1 #H2".
+  rewrite !flipb_lo_termE /=.
+  iDestruct "H1" as "[H1|[]]".
+  by iDestruct (flipb_published_opaque with "Hinv H1") as "[]".
+- move=> l1 t1 IH t21 t22; iIntros "Hsymb Hinv #H1 #H2".
+  rewrite !flipb_lo_termE.
+  iDestruct "H1" as "[H1|[]]"; iDestruct "H2" as "[H2|[]]".
+  iPoseProof (flipb_published_perm with "Hinv H1 H2") as "%E".
+  by iPureIntro.
 - move=> l t21 t22; iIntros "Hsymb Hinv #H1 #H2".
   rewrite !flipb_lo_termE /=.
   iDestruct "H1" as "[H1|H1]".
@@ -456,6 +481,8 @@ Fixpoint symbols_of_term t : gset loc :=
   | TInt _ => ∅
   | TPair t1 t2 => symbols_of_term t1 ∪ symbols_of_term t2
   | TNonce l => {[l]}
+  | TAKey l _ => {[l]}
+  | TAEnc l t => {[l]} ∪ symbols_of_term t
   | TSKey l => {[l]}
   | TSEnc l t => {[l]} ∪ symbols_of_term t
   end.
@@ -467,6 +494,8 @@ Fixpoint protected_aux l T t :=
   | TInt _ => True
   | TPair t1 t2 => protected_aux l T t1 ∧ protected_aux l T t2
   | TNonce l' => l ≠ l'
+  | TAKey _ _ => False
+  | TAEnc _ _ => False
   | TSKey l' => l ≠ l'
   | TSEnc _ t2 => protected_aux l T t2
   end.
@@ -506,8 +535,14 @@ Definition eq_term : val := (rec: "eq" "x" "y" :=
   else if: (Fst "x" = #2) && (Fst "y" = #2) then
     Snd "x" = Snd "y"
   else if: (Fst "x" = #3) && (Fst "y" = #3) then
-    Snd "x" = Snd "y"
+    (Fst (Snd "x") = Fst (Snd "y")) &&
+    (Snd (Snd "x") = Snd (Snd "y"))
   else if: (Fst "x" = #4) && (Fst "y" = #4) then
+    (Fst (Snd "x") = Fst (Snd "y")) &&
+    ("eq" (Snd (Snd "x")) (Snd (Snd "y")))
+  else if: (Fst "x" = #5) && (Fst "y" = #5) then
+    Snd "x" = Snd "y"
+  else if: (Fst "x" = #6) && (Fst "y" = #6) then
     (Fst (Snd "x") = Fst (Snd "y")) &&
     ("eq" (Snd (Snd "x")) (Snd (Snd "y")))
   else #false)%V.
@@ -517,8 +552,8 @@ Lemma wp_eq_term t1 t2 :
       ⌜v = #(bool_decide (t1 = t2))⌝ }}.
 Proof.
 iLöb as "IH" forall (t1 t2).
-case: t1=> [n1|t11 t12|l1|l1|l1 t1];
-case: t2=> [n2|t21 t22|l2|l2|l2 t2] /=;
+case: t1=> [n1|t11 t12|l1|l1 b1|l1 t1|l1|l1 t1];
+case: t2=> [n2|t21 t22|l2|l2 b2|l2 t2|l2|l2 t2] /=;
 wp_rec; wp_pures=> //.
 - iPureIntro; congr (# (LitBool _)).
   apply: bool_decide_iff; intuition congruence.
@@ -532,6 +567,17 @@ wp_rec; wp_pures=> //.
     rewrite bool_decide_false; congruence.
 - iPureIntro; congr (# (LitBool _)).
   apply: bool_decide_iff; intuition congruence.
+- case: bool_decide_reflect=> e1.
+  + wp_pures; iPureIntro; congr (# (LitBool _)).
+    apply: bool_decide_iff; intuition congruence.
+  + wp_pures; iPureIntro; congr (# (LitBool _)).
+    rewrite bool_decide_false; congruence.
+- case: bool_decide_reflect=> e1.
+  + wp_pures; iApply (wp_wand with "IH"); iIntros (?) "->".
+    iPureIntro; congr (# (LitBool _)).
+    apply: bool_decide_iff; intuition congruence.
+  + wp_pures; iPureIntro; congr (# (LitBool _)).
+    rewrite bool_decide_false; congruence.
 - iPureIntro; congr (# (LitBool _)).
   apply: bool_decide_iff; intuition congruence.
 - case: bool_decide_reflect=> e1.
@@ -546,8 +592,8 @@ Lemma step_eq_term t1 t2 :
   ⊢ swp (eq_term (val_of_term t1) (val_of_term t2))
         (λ v, ⌜v = #(bool_decide (t1 = t2))⌝)%I.
 Proof.
-elim: t1 t2=> [n1|t11 IH1 t12 IH2|l1|l1|l1 t1 IH1];
-case=> [n2|t21 t22|l2|l2|l2 t2] /=;
+elim: t1 t2=> [n1|t11 IH1 t12 IH2|l1|l1 b1|l1 t1 IH1|l1|l1 t1 IH1];
+case=> [n2|t21 t22|l2|l2 b2|l2 t2|l2|l2 t2] /=;
 swp_rec; swp_pures=> //.
 - iPureIntro; congr (# (LitBool _)).
   apply: bool_decide_iff; intuition congruence.
@@ -562,6 +608,19 @@ swp_rec; swp_pures=> //.
     rewrite bool_decide_false; congruence.
 - iPureIntro; congr (# (LitBool _)).
   apply: bool_decide_iff; intuition congruence.
+- case: bool_decide_reflect=> e1.
+  + swp_pures; iPureIntro; congr (# (LitBool _)).
+    apply: bool_decide_iff; intuition congruence.
+  + swp_pures; iPureIntro; congr (# (LitBool _)).
+    rewrite bool_decide_false; congruence.
+- case: bool_decide_reflect=> e1.
+  + swp_pures.
+    iPoseProof (IH1 t2) as "IH1".
+    iApply (swp_wand with "IH1"); iIntros (?) "->".
+    iPureIntro; congr (# (LitBool _)).
+    apply: bool_decide_iff; intuition congruence.
+  + swp_pures; iPureIntro; congr (# (LitBool _)).
+    rewrite bool_decide_false; congruence.
 - iPureIntro; congr (# (LitBool _)).
   apply: bool_decide_iff; intuition congruence.
 - case: bool_decide_reflect=> e1.

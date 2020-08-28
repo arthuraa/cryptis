@@ -156,6 +156,8 @@ Fixpoint termT t rs : iProp Σ :=
   | TInt _ => True
   | TPair t1 t2 => termT t1 rs ∗ termT t2 rs
   | TNonce l => ∃ rs', nonceT l rs' ∗ ⌜rs ⊆ rs'⌝
+  | TAKey _ _ => False
+  | TAEnc _ _ => False
   | TSKey l   => ∃ rs' Φ, skeyT l rs' Φ ∗ ⌜rs ⊆ rs'⌝
   | TSEnc l t => ∃ rs' Φ, skeyT l rs' Φ
                  ∗ (□ Φ t ∗ termT t {[l]} ∨ ⌜rs' = RPub⌝ ∗ termT t RPub)
@@ -170,7 +172,7 @@ Lemma sub_termT t rs rs' :
   termT t rs -∗
   termT t rs'.
 Proof.
-elim: t rs=> [n|t1 IH1 t2 IH2|l|l|l t IH] rs sub //=.
+elim: t rs=> [n|t1 IH1 t2 IH2|l|l b|l t IH|l|l t IH] rs sub //=.
 - by iIntros "[#Ht1 #Ht2]"; rewrite IH1 // IH2 //; iSplit.
 - iDestruct 1 as (rs0) "[#Hnonce %sub0]".
   iExists rs0; iSplit=> //; iPureIntro; by etransitivity.

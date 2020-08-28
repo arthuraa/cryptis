@@ -7,6 +7,8 @@ Inductive term  :=
 | TInt of Z
 | TPair of term & term
 | TNonce of loc
+| TAKey of loc & bool
+| TAEnc of loc & term
 | TSKey of loc
 | TSEnc of loc & term.
 
@@ -23,6 +25,10 @@ refine (
       cast_if_and (decide (t11 = t21)) (decide (t12 = t22))
     | TNonce l1, TNonce l2 =>
       cast_if (decide (l1 = l2))
+    | TAKey l1 b1, TAKey l2 b2 =>
+      cast_if_and (decide (l1 = l2)) (decide (b1 = b2))
+    | TAEnc l1 t1, TAEnc l2 t2 =>
+      cast_if_and (decide (l1 = l2)) (decide (t1 = t2))
     | TSKey l1, TSKey l2 =>
       cast_if (decide (l1 = l2))
     | TSEnc l1 t1, TSEnc l2 t2 =>
@@ -36,8 +42,10 @@ Fixpoint val_of_term t : val :=
   | TInt n => (#0, #n)
   | TPair t1 t2 => (#1, (val_of_term t1, val_of_term t2))%V
   | TNonce l => (#2, #l)%V
-  | TSKey l => (#3, #l)%V
-  | TSEnc l t => (#4, (#l, val_of_term t))
+  | TAKey l b => (#3, (#l, #b))%V
+  | TAEnc l t => (#4, (#l, val_of_term t))%V
+  | TSKey l => (#5, #l)%V
+  | TSEnc l t => (#6, (#l, val_of_term t))
   end.
 
 Fixpoint term_of_val v : term :=
@@ -48,9 +56,13 @@ Fixpoint term_of_val v : term :=
     TPair (term_of_val v1) (term_of_val v2)
   | PairV (# (LitInt 2)) (# (LitLoc l)) =>
     TNonce l
-  | PairV (# (LitInt 3)) (# (LitLoc l)) =>
+  | PairV #(LitInt 3) (PairV #(LitLoc l) #(LitBool b)) =>
+    TAKey l b
+  | PairV #(LitInt 4) (PairV #(LitLoc l) v) =>
+    TAEnc l (term_of_val v)
+  | PairV (# (LitInt 5)) (# (LitLoc l)) =>
     TSKey l
-  | PairV (# (LitInt 4)) (PairV (# (LitLoc l)) v) =>
+  | PairV (# (LitInt 6)) (PairV (# (LitLoc l)) v) =>
     TSEnc l (term_of_val v)
   | _ => TInt 0
   end.
