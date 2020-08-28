@@ -49,8 +49,8 @@ Fixpoint al_term s t : iProp Σ :=
   | TInt _ => True%I
   | TPair t1 t2 => al_term s t1 ∗ al_term s t2
   | TNonce l => al_nonce s l
-  | TKey l => al_key s l
-  | TEnc l t => al_key s l ∗ al_term s t
+  | TSKey l => al_key s l
+  | TSEnc l t => al_key s l ∗ al_term s t
   end.
 Global Instance persistent_al_term s t : Persistent (al_term s t).
 Proof. elim: t=> /=; apply _. Qed.
@@ -63,8 +63,8 @@ Definition opaque s t : iProp Σ :=
   | TInt _ => False%I
   | TPair _ _ => False%I
   | TNonce l => symbol1 lo_nonce_name s l
-  | TKey l => False%I
-  | TEnc l t => symbol12 hi_key_name s l ∗ al_term s t
+  | TSKey l => False%I
+  | TSEnc l t => symbol12 hi_key_name s l ∗ al_term s t
   end.
 
 Global Instance persistent_opaque s t : Persistent (opaque s t).
@@ -104,8 +104,8 @@ Fixpoint guarded_nonce l KS t :=
   | TInt _ => True
   | TPair t1 t2 => guarded_nonce l KS t1 ∧ guarded_nonce l KS t2
   | TNonce l' => l' ≠ l
-  | TKey _ => True
-  | TEnc l' t => l' ∈ KS ∨ guarded_nonce l KS t
+  | TSKey _ => True
+  | TSEnc l' t => l' ∈ KS ∨ guarded_nonce l KS t
   end.
 
 Definition nonce_inv TT : iProp Σ :=
@@ -131,8 +131,8 @@ Fixpoint correct_enc l φ t : iProp Σ :=
   | TInt _ => True
   | TPair t1 t2 => correct_enc l φ t1 ∗ correct_enc l φ t2
   | TNonce _ => True
-  | TKey _ => True
-  | TEnc l' t' => if decide (l' = l) then φ t' else correct_enc l φ t'
+  | TSKey _ => True
+  | TSEnc l' t' => if decide (l' = l) then φ t' else correct_enc l φ t'
   end.
 
 Definition key_inv TT : iProp Σ :=
@@ -224,8 +224,8 @@ Fixpoint lo_term1 s t : iProp Σ :=
   | TInt _ => True%I
   | TPair t1 t2 => lo_term1 s t1 ∗ lo_term1 s t2
   | TNonce l => False%I
-  | TKey l => symbol12 lo_key_name s l
-  | TEnc l t => symbol12 lo_key_name s l ∗ lo_term1 s t
+  | TSKey l => symbol12 lo_key_name s l
+  | TSEnc l t => symbol12 lo_key_name s l ∗ lo_term1 s t
   end.
 
 Global Instance persistent_lo_term1 s t : Persistent (lo_term1 s t).
@@ -265,9 +265,9 @@ Fixpoint lo_term_aux t1 t2 : iProp Σ :=
   | TNonce l1, TNonce l2 =>
     (* Nonces are covered by the published case above *)
     False%I
-  | TKey l1, TKey l2 =>
+  | TSKey l1, TSKey l2 =>
     symbol lo_key_name (LR l1 l2)
-  | TEnc l1 t1, TEnc l2 t2 =>
+  | TSEnc l1 t1, TSEnc l2 t2 =>
     (* Ditto for terms encrypted with a high key *)
     symbol lo_key_name (LR l1 l2) ∗ lo_term_aux t1 t2
   | _, _ => False%I
@@ -279,9 +279,9 @@ Definition lo_term_aux_rec t1 t2 : iProp Σ :=
   | TPair t11 t12, TPair t21 t22 =>
     lo_term_aux t11 t21 ∗ lo_term_aux t12 t22
   | TNonce l1, TNonce l2 => False%I
-  | TKey l1, TKey l2 =>
+  | TSKey l1, TSKey l2 =>
     symbol lo_key_name (LR l1 l2)
-  | TEnc l1 t1, TEnc l2 t2 =>
+  | TSEnc l1 t1, TSEnc l2 t2 =>
     symbol lo_key_name (LR l1 l2) ∗ lo_term_aux t1 t2
   | _, _ => False%I
   end.
@@ -309,9 +309,9 @@ Lemma flipb_lo_termE b t1 t2 :
    | TPair t11 t12, TPair t21 t22 =>
      flipb b lo_term_aux t11 t21 ∗ flipb b lo_term_aux t12 t22
    | TNonce l1, TNonce l2 => False%I
-   | TKey l1, TKey l2 =>
+   | TSKey l1, TSKey l2 =>
      symbol lo_key_name (flipb b LR l1 l2)
-   | TEnc l1 t1, TEnc l2 t2 =>
+   | TSEnc l1 t1, TSEnc l2 t2 =>
     symbol lo_key_name (flipb b LR l1 l2) ∗ flipb b lo_term_aux t1 t2
   | _, _ => False%I
   end)%I.
@@ -456,8 +456,8 @@ Fixpoint symbols_of_term t : gset loc :=
   | TInt _ => ∅
   | TPair t1 t2 => symbols_of_term t1 ∪ symbols_of_term t2
   | TNonce l => {[l]}
-  | TKey l => {[l]}
-  | TEnc l t => {[l]} ∪ symbols_of_term t
+  | TSKey l => {[l]}
+  | TSEnc l t => {[l]} ∪ symbols_of_term t
   end.
 
 (* l does not occur in t, except in occurrences that appear in T. *)
@@ -467,8 +467,8 @@ Fixpoint protected_aux l T t :=
   | TInt _ => True
   | TPair t1 t2 => protected_aux l T t1 ∧ protected_aux l T t2
   | TNonce l' => l ≠ l'
-  | TKey l' => l ≠ l'
-  | TEnc _ t2 => protected_aux l T t2
+  | TSKey l' => l ≠ l'
+  | TSEnc _ t2 => protected_aux l T t2
   end.
 
 Definition protected s l (T : gset term) : iProp Σ :=

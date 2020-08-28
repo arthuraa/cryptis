@@ -7,8 +7,8 @@ Inductive term  :=
 | TInt of Z
 | TPair of term & term
 | TNonce of loc
-| TKey of loc
-| TEnc of loc & term.
+| TSKey of loc
+| TSEnc of loc & term.
 
 Canonical termO := leibnizO term.
 
@@ -23,9 +23,9 @@ refine (
       cast_if_and (decide (t11 = t21)) (decide (t12 = t22))
     | TNonce l1, TNonce l2 =>
       cast_if (decide (l1 = l2))
-    | TKey l1, TKey l2 =>
+    | TSKey l1, TSKey l2 =>
       cast_if (decide (l1 = l2))
-    | TEnc l1 t1, TEnc l2 t2 =>
+    | TSEnc l1 t1, TSEnc l2 t2 =>
       cast_if_and (decide (l1 = l2)) (decide (t1 = t2))
     | _, _ => right _
     end); clear go; abstract intuition congruence.
@@ -36,8 +36,8 @@ Fixpoint val_of_term t : val :=
   | TInt n => (#0, #n)
   | TPair t1 t2 => (#1, (val_of_term t1, val_of_term t2))%V
   | TNonce l => (#2, #l)%V
-  | TKey l => (#3, #l)%V
-  | TEnc l t => (#4, (#l, val_of_term t))
+  | TSKey l => (#3, #l)%V
+  | TSEnc l t => (#4, (#l, val_of_term t))
   end.
 
 Fixpoint term_of_val v : term :=
@@ -49,9 +49,9 @@ Fixpoint term_of_val v : term :=
   | PairV (# (LitInt 2)) (# (LitLoc l)) =>
     TNonce l
   | PairV (# (LitInt 3)) (# (LitLoc l)) =>
-    TKey l
+    TSKey l
   | PairV (# (LitInt 4)) (PairV (# (LitLoc l)) v) =>
-    TEnc l (term_of_val v)
+    TSEnc l (term_of_val v)
   | _ => TInt 0
   end.
 

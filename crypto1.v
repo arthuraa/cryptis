@@ -65,25 +65,25 @@ Implicit Types Φ : termO -n> iPropO Σ.
 
 Inductive res :=
 | RNonce of readers
-| RKey of readers & termO -n> iPropO Σ.
+| RSKey of readers & termO -n> iPropO Σ.
 
 Definition readers_of_res r :=
   match r with
   | RNonce rs => rs
-  | RKey rs _ => rs
+  | RSKey rs _ => rs
   end.
 
 Global Instance res_equiv : Equiv res := λ r1 r2,
   match r1, r2 with
   | RNonce rs1, RNonce rs2 => rs1 = rs2
-  | RKey rs1 P1, RKey rs2 P2 => rs1 = rs2 ∧ P1 ≡ P2
+  | RSKey rs1 P1, RSKey rs2 P2 => rs1 = rs2 ∧ P1 ≡ P2
   | _, _ => False
   end.
 
 Global Instance res_dist : Dist res := λ n r1 r2,
   match r1, r2 with
   | RNonce rs1, RNonce rs2 => rs1 = rs2
-  | RKey rs1 P1, RKey rs2 P2 => rs1 = rs2 ∧ P1 ≡{n}≡ P2
+  | RSKey rs1 P1, RSKey rs2 P2 => rs1 = rs2 ∧ P1 ≡{n}≡ P2
   | _, _ => False
   end.
 
@@ -126,17 +126,17 @@ Global Instance persistent_nonceT l rs :
   Persistent (nonceT l rs).
 Proof. apply _. Qed.
 
-Definition keyT l rs Φ : iProp Σ :=
-  own res_name (◯ {[l := to_agree (RKey rs Φ)]}).
+Definition skeyT l rs Φ : iProp Σ :=
+  own res_name (◯ {[l := to_agree (RSKey rs Φ)]}).
 
-Global Instance persistent_keyT l rs Φ :
-  Persistent (keyT l rs Φ).
+Global Instance persistent_skeyT l rs Φ :
+  Persistent (skeyT l rs Φ).
 Proof. apply _. Qed.
 
 Definition wf_readers rs : iProp Σ :=
   match rs with
   | RPub     => True
-  | RPriv rs => ∀l, ⌜l ∈ rs⌝ → ∃ rs' Φ, keyT l (RPriv rs') Φ
+  | RPriv rs => ∀l, ⌜l ∈ rs⌝ → ∃ rs' Φ, skeyT l (RPriv rs') Φ
   end.
 
 Global Instance persistent_wf_readers rs :
@@ -156,9 +156,9 @@ Fixpoint termT t rs : iProp Σ :=
   | TInt _ => True
   | TPair t1 t2 => termT t1 rs ∗ termT t2 rs
   | TNonce l => ∃ rs', nonceT l rs' ∗ ⌜rs ⊆ rs'⌝
-  | TKey l   => ∃ rs' Φ, keyT l rs' Φ ∗ ⌜rs ⊆ rs'⌝
-  | TEnc l t => ∃ rs' Φ, keyT l rs' Φ
-                ∗ (□ Φ t ∗ termT t {[l]} ∨ ⌜rs' = RPub⌝ ∗ termT t RPub)
+  | TSKey l   => ∃ rs' Φ, skeyT l rs' Φ ∗ ⌜rs ⊆ rs'⌝
+  | TSEnc l t => ∃ rs' Φ, skeyT l rs' Φ
+                 ∗ (□ Φ t ∗ termT t {[l]} ∨ ⌜rs' = RPub⌝ ∗ termT t RPub)
   end.
 
 Global Instance persistent_termT t rs :
@@ -202,11 +202,11 @@ iModIntro; iSplitL=> //.
 iExists RM'; iFrame; by rewrite /RM' /to_resR fmap_insert.
 Qed.
 
-Lemma key_alloc l rs Φ :
+Lemma skey_alloc l rs Φ :
   res_inv -∗
   l ↦ #() -∗
   wf_readers rs -∗
-  |==> res_inv ∗ keyT l rs Φ.
+  |==> res_inv ∗ skeyT l rs Φ.
 Proof.
 iDestruct 1 as (RM) "[Hown Hreaders]".
 iIntros "Hl Hrs".
@@ -214,11 +214,11 @@ destruct (RM !! l) as [rs'|] eqn:e.
   rewrite big_sepM_delete //.
   iDestruct "Hreaders" as "[[Hl' _] _]".
   by iPoseProof (mapsto_valid_2 with "Hl Hl'") as "%".
-pose (RM' := <[l := RKey rs Φ]>RM).
+pose (RM' := <[l := RSKey rs Φ]>RM).
 iAssert ([∗ map] l' ↦ rs' ∈ RM', l' ↦ #() ∗ wf_readers (readers_of_res rs'))%I
     with "[Hreaders Hl Hrs]" as "Hreaders".
   by rewrite /RM' big_sepM_insert //; iFrame.
-iMod (own_update _ _ (_ ⋅ ◯ {[l := to_agree (RKey rs Φ)]}) with "Hown")
+iMod (own_update _ _ (_ ⋅ ◯ {[l := to_agree (RSKey rs Φ)]}) with "Hown")
     as "[Hown #Hfrag]".
   apply auth_update_alloc, alloc_singleton_local_update=> //.
   by rewrite lookup_fmap e.
