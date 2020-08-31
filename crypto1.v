@@ -10,6 +10,9 @@ Inductive readers :=
 
 Canonical readersO := leibnizO readers.
 
+Instance inhabited_readers : Inhabited readers :=
+  populate RPub.
+
 Instance readers_elem_of : ElemOf loc readers := λ l rs,
   match rs with
   | RPub => True
@@ -103,6 +106,9 @@ split.
 Qed.
 Canonical resO := OfeT res res_ofe_mixin.
 
+Global Instance discrete_RNonce rs : Discrete (RNonce rs).
+Proof. by case. Qed.
+
 Definition resM := gmap loc res.
 Definition resR := gmapUR loc (agreeR resO).
 Implicit Types RM : resM.
@@ -124,6 +130,10 @@ Global Instance persistent_nonceT l rs :
   Persistent (nonceT l rs).
 Proof. apply _. Qed.
 
+Global Instance timeless_nonceT l rs :
+  Timeless (nonceT l rs).
+Proof. apply _. Qed.
+
 Definition akeyT l rs_enc rs_dec Φ : iProp Σ :=
   own res_name (◯ {[l := to_agree (RAKey rs_enc rs_dec Φ)]}).
 
@@ -141,6 +151,10 @@ Proof. apply _. Qed.
 Definition priv_keyT l rs : iProp Σ :=
     (∃ rs_enc Φ, akeyT l rs_enc (RPriv rs) Φ)
   ∨ (∃ Φ, skeyT l (RPriv rs) Φ).
+
+Global Instance persistent_priv_keyT l rs :
+  Persistent (priv_keyT l rs).
+Proof. apply _. Qed.
 
 Definition wf_readers rs : iProp Σ :=
   match rs with
@@ -279,3 +293,11 @@ iExists RM'; iFrame; by rewrite /RM' /to_resR fmap_insert.
 Qed.
 
 End Resources.
+
+Arguments nonceT {_ _} _ _.
+Arguments skeyT {_ _} _ _ _.
+Arguments akeyT {_ _} _ _ _ _.
+Arguments priv_keyT {_ _} _ _.
+Arguments wf_readers {_ _} _.
+Arguments wf_res {_ _} _.
+Arguments res_inv {_ _ _}.
