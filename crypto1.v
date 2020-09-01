@@ -123,10 +123,31 @@ Proof. by case. Qed.
 
 Definition resM := gmap loc res.
 Definition resR := gmapUR loc (agreeR resO).
-Implicit Types RM : resM.
+Implicit Types (RM : resM) (RR : resR).
 
 Definition to_resR : resM → resR :=
   fmap to_agree.
+
+Lemma to_resR_uninjI RR : ✓ RR ⊢@{iPropI Σ} ∃ RM, to_resR RM ≡ RR.
+Proof.
+move: RR; apply: map_ind.
+  by iIntros "_"; iExists ∅; rewrite /to_resR fmap_empty.
+move=> l ag RR RR_l IH; iIntros "#valid"; rewrite gmap_validI.
+iAssert (✓ ag)%I as "valid_ag".
+  by iSpecialize ("valid" $! l); rewrite lookup_insert uPred.option_validI.
+iAssert (✓ RR)%I as "valid_RR".
+  rewrite gmap_validI; iIntros (l').
+  iSpecialize ("valid" $! l').
+  destruct (decide (l' = l)) as [->|ne ].
+  - by rewrite RR_l !uPred.option_validI.
+  - by rewrite lookup_insert_ne //.
+iDestruct (to_agree_uninjI with "valid_ag") as (r) "Hr".
+iDestruct (IH with "valid_RR") as (RM) "IH".
+iExists (<[l := r]>RM).
+rewrite /to_resR fmap_insert.
+iRewrite -"Hr".
+by iRewrite -"IH".
+Qed.
 
 Class resG := {
   res_inG :> inG Σ (authR resR);
