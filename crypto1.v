@@ -4,6 +4,31 @@ From iris.algebra Require Import agree auth gset gmap.
 From iris.heap_lang Require Import notation proofmode.
 From crypto Require Import term.
 
+(* TODO: Move to Iris? *)
+Instance dom_ne {T : ofeT} :
+  NonExpansive (dom (gset loc) : gmap loc T -> gset loc).
+Proof. by move=> ??? e ?; rewrite !elem_of_dom e. Qed.
+
+(* I've made an MR for this. *)
+Lemma gmap_equivI `{!EqDecision K, !Countable K, A : ofeT, M : ucmraT}
+  (m1 m2 : gmap K A) :
+  m1 ≡ m2 ⊣⊢@{uPredI M} (∀ i : K, m1 !! i ≡ m2 !! i).
+Proof. by uPred.unseal. Qed.
+
+Lemma dom_singleton_eq `{EqDecision K, Countable K} {T} (m : gmap K T) x :
+  dom (gset K) m = {[x]} →
+  ∃ y, m = {[x := y]}.
+Proof.
+move=> e.
+have {}e: ∀ x' : K, x' ∈ dom (gset K) m ↔ x' ∈ ({[x]} : gset K) by rewrite e.
+have: x ∈ ({[x]} : gset K) by rewrite elem_of_singleton.
+rewrite -e elem_of_dom; case=> y m_x; exists y.
+apply: map_eq=> x'; case: (decide (x' = x))=> [ {x'}->|ne].
+  by rewrite lookup_singleton.
+by rewrite lookup_singleton_ne // -not_elem_of_dom e elem_of_singleton.
+Qed.
+
+(* TODO: Move to Iris *)
 Inductive readers :=
 | RPub
 | RPriv of gset loc.
@@ -149,6 +174,22 @@ iRewrite -"Hr".
 by iRewrite -"IH".
 Qed.
 
+Lemma to_resR_equivI RM1 RM2 :
+  to_resR RM1 ≡ to_resR RM2 ⊣⊢@{iPropI Σ} RM1 ≡ RM2.
+Proof.
+rewrite /to_resR !gmap_equivI; iSplit.
+- iIntros "e" (l).
+  iSpecialize ("e" $! l).
+  rewrite !lookup_fmap !option_equivI.
+  case: (RM1 !! l) (RM2 !! l)=> [v1|] [v2|] //=.
+  by rewrite agree_equivI.
+- iIntros "e" (l).
+  iSpecialize ("e" $! l).
+  rewrite !lookup_fmap !option_equivI.
+  case: (RM1 !! l) (RM2 !! l) => [v1|] [v2|] //=.
+  by rewrite agree_equivI.
+Qed.
+
 Class resG := {
   res_inG :> inG Σ (authR resR);
   res_name : gname
@@ -185,27 +226,20 @@ Definition priv_keyT l rs : iProp Σ :=
     (∃ rs_enc Φ, akeyT l rs_enc (RPriv rs) Φ)
   ∨ (∃ Φ, skeyT l (RPriv rs) Φ).
 
+Global Instance priv_keyT_proper : Proper (equiv ==> equiv ==> equiv) priv_keyT.
+Proof.
+by move=> l1 l2 /(leibniz_equiv l1 l2) -> rs1 rs2 /(leibniz_equiv rs1 rs2) ->.
+Qed.
+
+Global Instance priv_keyT_ne : NonExpansive2 priv_keyT.
+Proof.
+move=> n.
+by move=> l1 l2 /(leibniz_equiv l1 l2) -> rs1 rs2 /(leibniz_equiv rs1 rs2) ->.
+Qed.
+
 Global Instance persistent_priv_keyT l rs :
   Persistent (priv_keyT l rs).
 Proof. apply _. Qed.
-
-(* TODO: Move to Iris? *)
-Global Instance dom_ne {T : ofeT} :
-  NonExpansive (dom (gset loc) : gmap loc T -> gset loc).
-Proof. by move=> ??? e ?; rewrite !elem_of_dom e. Qed.
-
-Lemma dom_singleton_eq `{EqDecision K, Countable K} {T} (m : gmap K T) x :
-  dom (gset K) m = {[x]} →
-  ∃ y, m = {[x := y]}.
-Proof.
-move=> e.
-have {}e: ∀ x' : K, x' ∈ dom (gset K) m ↔ x' ∈ ({[x]} : gset K) by rewrite e.
-have: x ∈ ({[x]} : gset K) by rewrite elem_of_singleton.
-rewrite -e elem_of_dom; case=> y m_x; exists y.
-apply: map_eq=> x'; case: (decide (x' = x))=> [ {x'}->|ne].
-  by rewrite lookup_singleton.
-by rewrite lookup_singleton_ne // -not_elem_of_dom e elem_of_singleton.
-Qed.
 
 Global Instance timeless_priv_keyT l rs :
   Timeless (priv_keyT l rs).
@@ -269,6 +303,12 @@ Definition wf_readers rs : iProp Σ :=
   | RPriv rs => ∀l, ⌜l ∈ rs⌝ → ∃ rs', priv_keyT l rs'
   end.
 
+Global Instance wf_readers_proper : Proper (equiv ==> equiv) wf_readers.
+Proof. by move=> rs1 rs2 ->. Qed.
+
+Global Instance wf_readers_ne : NonExpansive wf_readers.
+Proof. by move=> n rs1 rs2 ->. Qed.
+
 Global Instance persistent_wf_readers rs :
   Persistent (wf_readers rs).
 Proof. case: rs=> *; apply _. Qed.
@@ -289,6 +329,26 @@ Proof. case: r=> *; apply _. Qed.
 
 Global Instance timeless_wf_res r : Timeless (wf_res r).
 Proof. case: r=> *; apply _. Qed.
+
+Global Instance wf_res_proper : Proper (equiv ==> equiv) wf_res.
+Proof.
+move=> r1 r2.
+case: r1=> [rs1|rs1_enc rs1_dec Φ1|rs1 Φ1];
+case: r2=> [rs2|rs2_enc rs2_dec Φ2|rs2 Φ2] //=.
+- by solve_proper.
+- by intros (-> & -> & _).
+- by intros (-> & _).
+Qed.
+
+Global Instance wf_res_ne : NonExpansive wf_res.
+Proof.
+move=> n r1 r2.
+case: r1=> [rs1|rs1_enc rs1_dec Φ1|rs1 Φ1];
+case: r2=> [rs2|rs2_enc rs2_dec Φ2|rs2 Φ2] //=.
+- by solve_proper.
+- by intros (-> & -> & _).
+- by intros (-> & _).
+Qed.
 
 Definition res_inv : iProp Σ :=
   ∃ RM, own res_name (● (to_resR RM))
@@ -408,6 +468,8 @@ Qed.
 
 End Resources.
 
+Arguments RNonce {_} _.
+Arguments to_resR {_} _.
 Arguments nonceT {_ _} _ _.
 Arguments skeyT {_ _} _ _ _.
 Arguments akeyT {_ _} _ _ _ _.
