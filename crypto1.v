@@ -94,6 +94,7 @@ Section Resources.
 
 Context (Σ : gFunctors).
 Implicit Types Φ : termO -n> iPropO Σ.
+Implicit Types l : loc.
 
 Inductive res :=
 | RNonce of readers
@@ -201,52 +202,52 @@ Class resG := {
 
 Context `{!resG, !heapG Σ}.
 
-Definition nonceT l rs : iProp Σ :=
+Definition nonceT rs l : iProp Σ :=
   own res_name (◯ {[l := to_agree (RNonce rs)]}).
 
-Global Instance persistent_nonceT l rs :
-  Persistent (nonceT l rs).
+Global Instance persistent_nonceT rs l :
+  Persistent (nonceT rs l).
 Proof. apply _. Qed.
 
-Global Instance timeless_nonceT l rs :
-  Timeless (nonceT l rs).
+Global Instance timeless_nonceT rs l :
+  Timeless (nonceT rs l).
 Proof. apply _. Qed.
 
-Definition akeyT l rs_enc rs_dec Φ : iProp Σ :=
+Definition akeyT rs_enc rs_dec Φ l : iProp Σ :=
   own res_name (◯ {[l := to_agree (RAKey rs_enc rs_dec Φ)]}).
 
-Global Instance persistent_akeyT l rs_enc rs_dec Φ :
-  Persistent (akeyT l rs_enc rs_dec Φ).
+Global Instance persistent_akeyT rs_enc rs_dec Φ l :
+  Persistent (akeyT rs_enc rs_dec Φ l).
 Proof. apply _. Qed.
 
-Definition skeyT l rs Φ : iProp Σ :=
+Definition skeyT rs Φ l : iProp Σ :=
   own res_name (◯ {[l := to_agree (RSKey rs Φ)]}).
 
-Global Instance persistent_skeyT l rs Φ :
-  Persistent (skeyT l rs Φ).
+Global Instance persistent_skeyT rs Φ l :
+  Persistent (skeyT rs Φ l).
 Proof. apply _. Qed.
 
-Definition priv_keyT l rs : iProp Σ :=
-    (∃ rs_enc Φ, akeyT l rs_enc (RPriv rs) Φ)
-  ∨ (∃ Φ, skeyT l (RPriv rs) Φ).
+Definition priv_keyT rs l : iProp Σ :=
+    (∃ rs_enc Φ, akeyT rs_enc (RPriv rs) Φ l)
+  ∨ (∃ Φ, skeyT (RPriv rs) Φ l).
 
 Global Instance priv_keyT_proper : Proper (equiv ==> equiv ==> equiv) priv_keyT.
 Proof.
-by move=> l1 l2 /(leibniz_equiv l1 l2) -> rs1 rs2 /(leibniz_equiv rs1 rs2) ->.
+by move=> rs1 rs2 /(leibniz_equiv rs1 rs2) -> l1 l2 /(leibniz_equiv l1 l2) ->.
 Qed.
 
 Global Instance priv_keyT_ne : NonExpansive2 priv_keyT.
 Proof.
 move=> n.
-by move=> l1 l2 /(leibniz_equiv l1 l2) -> rs1 rs2 /(leibniz_equiv rs1 rs2) ->.
+by move=> rs1 rs2 /(leibniz_equiv rs1 rs2) -> l1 l2 /(leibniz_equiv l1 l2) ->.
 Qed.
 
-Global Instance persistent_priv_keyT l rs :
-  Persistent (priv_keyT l rs).
+Global Instance persistent_priv_keyT rs l :
+  Persistent (priv_keyT rs l).
 Proof. apply _. Qed.
 
-Global Instance timeless_priv_keyT l rs :
-  Timeless (priv_keyT l rs).
+Global Instance timeless_priv_keyT rs l :
+  Timeless (priv_keyT rs l).
 Proof.
 rewrite /Timeless; iDestruct 1 as "[H|H]".
 - iDestruct "H" as (rs_enc Φ) "H"; iLeft.
@@ -304,7 +305,7 @@ Qed.
 Definition wf_readers rs : iProp Σ :=
   match rs with
   | RPub     => True
-  | RPriv rs => ∀l, ⌜l ∈ rs⌝ → ∃ rs', priv_keyT l rs'
+  | RPriv rs => ∀l, ⌜l ∈ rs⌝ → ∃ rs', priv_keyT rs' l
   end.
 
 Global Instance wf_readers_proper : Proper (equiv ==> equiv) wf_readers.
@@ -358,34 +359,34 @@ Definition res_inv : iProp Σ :=
   ∃ RM, own res_name (● (to_resR RM))
         ∗ [∗ map] l ↦ r ∈ RM, l ↦ #() ∗ wf_res r.
 
-(** [termT t rs] holds when the term [t] can be declared public after encrypting
+(** [termT rs t] holds when the term [t] can be declared public after encrypting
 it with any of the readers rs.  If [rs = RPub], [t] is considered public and
 does not have to be encrypted. *)
 
-Fixpoint termT t rs : iProp Σ :=
+Fixpoint termT rs t : iProp Σ :=
   match t with
   | TInt _ => True
-  | TPair t1 t2 => termT t1 rs ∗ termT t2 rs
-  | TNonce l => ∃ rs', nonceT l rs' ∗ ⌜rs ⊆ rs'⌝
+  | TPair t1 t2 => termT rs t1 ∗ termT rs t2
+  | TNonce l => ∃ rs', nonceT rs' l ∗ ⌜rs ⊆ rs'⌝
   | TAKey l enc => ∃ rs_enc rs_dec Φ,
-                     akeyT l rs_enc rs_dec Φ
+                     akeyT rs_enc rs_dec Φ l
                      ∗ ⌜rs ⊆ if enc then rs_enc else rs_dec⌝
   | TAEnc l t => ∃ rs_enc rs_dec Φ,
-                   akeyT l rs_enc rs_dec Φ
-                   ∗ (□ Φ t ∗ termT t {[l]} ∨ ⌜rs_enc = RPub⌝ ∗ termT t RPub)
-  | TSKey l   => ∃ rs' Φ, skeyT l rs' Φ ∗ ⌜rs ⊆ rs'⌝
-  | TSEnc l t => ∃ rs' Φ, skeyT l rs' Φ
-                 ∗ (□ Φ t ∗ termT t {[l]} ∨ ⌜rs' = RPub⌝ ∗ termT t RPub)
+                   akeyT rs_enc rs_dec Φ l
+                   ∗ (□ Φ t ∗ termT {[l]} t ∨ ⌜rs_enc = RPub⌝ ∗ termT RPub t)
+  | TSKey l   => ∃ rs' Φ, skeyT rs' Φ l ∗ ⌜rs ⊆ rs'⌝
+  | TSEnc l t => ∃ rs' Φ, skeyT rs' Φ l
+                 ∗ (□ Φ t ∗ termT {[l]} t ∨ ⌜rs' = RPub⌝ ∗ termT RPub t)
   end.
 
-Global Instance persistent_termT t rs :
-  Persistent (termT t rs).
+Global Instance persistent_termT rs t :
+  Persistent (termT rs t).
 Proof. elim: t rs=> *; apply _. Qed.
 
-Lemma sub_termT t rs rs' :
+Lemma sub_termT rs rs' t :
   rs' ⊆ rs →
-  termT t rs -∗
-  termT t rs'.
+  termT rs t -∗
+  termT rs' t.
 Proof.
 elim: t rs=> [n|t1 IH1 t2 IH2|l|l b|l t IH|l|l t IH] rs sub //=.
 - by iIntros "[#Ht1 #Ht2]"; rewrite IH1 // IH2 //; iSplit.
@@ -397,11 +398,11 @@ elim: t rs=> [n|t1 IH1 t2 IH2|l|l b|l t IH|l|l t IH] rs sub //=.
   iExists rs0, Φ; iSplit=> //; iPureIntro; by etransitivity.
 Qed.
 
-Lemma nonce_alloc l rs :
+Lemma nonce_alloc rs l :
   res_inv -∗
   l ↦ #() -∗
   wf_readers rs -∗
-  |==> res_inv ∗ nonceT l rs.
+  |==> res_inv ∗ nonceT rs l.
 Proof.
 iDestruct 1 as (RM) "[Hown Hreaders]".
 iIntros "Hl Hrs".
@@ -421,12 +422,12 @@ iModIntro; iSplitL=> //.
 iExists RM'; iFrame; by rewrite /RM' /to_resR fmap_insert.
 Qed.
 
-Lemma akey_alloc l rs_enc rs_dec Φ :
+Lemma akey_alloc rs_enc rs_dec Φ l :
   res_inv -∗
   l ↦ #() -∗
   wf_readers rs_enc -∗
   wf_readers rs_dec -∗
-  |==> res_inv ∗ akeyT l rs_enc rs_dec Φ.
+  |==> res_inv ∗ akeyT rs_enc rs_dec Φ l.
 Proof.
 iDestruct 1 as (RM) "[Hown Hreaders]".
 iIntros "Hl Henc Hdec".
@@ -446,11 +447,11 @@ iModIntro; iSplitL=> //.
 iExists RM'; iFrame; by rewrite /RM' /to_resR fmap_insert.
 Qed.
 
-Lemma skey_alloc l rs Φ :
+Lemma skey_alloc rs Φ l :
   res_inv -∗
   l ↦ #() -∗
   wf_readers rs -∗
-  |==> res_inv ∗ skeyT l rs Φ.
+  |==> res_inv ∗ skeyT rs Φ l.
 Proof.
 iDestruct 1 as (RM) "[Hown Hreaders]".
 iIntros "Hl Hrs".
@@ -470,7 +471,7 @@ iModIntro; iSplitL=> //.
 iExists RM'; iFrame; by rewrite /RM' /to_resR fmap_insert.
 Qed.
 
-Lemma res_alloc E l r :
+Lemma res_alloc E r l :
   ▷ res_inv -∗
   l ↦ #() -∗
   wf_res r ={E}=∗

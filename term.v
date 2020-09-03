@@ -14,6 +14,14 @@ Inductive term  :=
 
 Canonical termO := leibnizO term.
 
+Notation TInt_tag := 0%Z.
+Notation TPair_tag := 1%Z.
+Notation TNonce_tag := 2%Z.
+Notation TAKey_tag := 3%Z.
+Notation TAEnc_tag := 4%Z.
+Notation TSKey_tag := 5%Z.
+Notation TSEnc_tag := 6%Z.
+
 Global Instance term_eq_dec : EqDecision term.
 Proof.
 refine (
@@ -39,30 +47,30 @@ Defined.
 
 Fixpoint val_of_term t : val :=
   match t with
-  | TInt n => (#0, #n)
-  | TPair t1 t2 => (#1, (val_of_term t1, val_of_term t2))%V
-  | TNonce l => (#2, #l)%V
-  | TAKey l b => (#3, (#l, #b))%V
-  | TAEnc l t => (#4, (#l, val_of_term t))%V
-  | TSKey l => (#5, #l)%V
-  | TSEnc l t => (#6, (#l, val_of_term t))
+  | TInt n => (#TInt_tag, #n)
+  | TPair t1 t2 => (#TPair_tag, (val_of_term t1, val_of_term t2))%V
+  | TNonce l => (#TNonce_tag, #l)%V
+  | TAKey l b => (#TAKey_tag, (#l, #b))%V
+  | TAEnc l t => (#TAEnc_tag, (#l, val_of_term t))%V
+  | TSKey l => (#TSKey_tag, #l)%V
+  | TSEnc l t => (#TSEnc_tag, (#l, val_of_term t))
   end.
 
 Fixpoint term_of_val v : term :=
   match v with
-  | PairV (# (LitInt 0)) (# (LitInt n)) =>
+  | PairV (# (LitInt TInt_tag)) (# (LitInt n)) =>
     TInt n
-  | PairV (# (LitInt 1)) (PairV v1 v2) =>
+  | PairV (# (LitInt TPair_tag)) (PairV v1 v2) =>
     TPair (term_of_val v1) (term_of_val v2)
-  | PairV (# (LitInt 2)) (# (LitLoc l)) =>
+  | PairV (# (LitInt TNonce_tag)) (# (LitLoc l)) =>
     TNonce l
-  | PairV #(LitInt 3) (PairV #(LitLoc l) #(LitBool b)) =>
+  | PairV #(LitInt TAKey_tag) (PairV #(LitLoc l) #(LitBool b)) =>
     TAKey l b
-  | PairV #(LitInt 4) (PairV #(LitLoc l) v) =>
+  | PairV #(LitInt TAEnc_tag) (PairV #(LitLoc l) v) =>
     TAEnc l (term_of_val v)
-  | PairV (# (LitInt 5)) (# (LitLoc l)) =>
+  | PairV (# (LitInt TSKey_tag)) (# (LitLoc l)) =>
     TSKey l
-  | PairV (# (LitInt 6)) (PairV (# (LitLoc l)) v) =>
+  | PairV (# (LitInt TSEnc_tag)) (PairV (# (LitLoc l)) v) =>
     TSEnc l (term_of_val v)
   | _ => TInt 0
   end.

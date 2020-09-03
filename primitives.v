@@ -11,33 +11,41 @@ Unset Printing Implicit Defensive.
 
 Definition mknonce : val := λ: <>,
   let: "n" := ref #() in
-  (#2, "n").
+  (#TNonce_tag, "n").
 
 Definition mkakey : val := λ: <>,
   let: "k" := ref #() in
-  ((#3, ("k", #true)), (#3, ("k", #false))).
+  ((#TAKey_tag, ("k", #true)), (#TAKey_tag, ("k", #false))).
+
+Definition aenc : val := λ: "k" "t",
+  (Fst (Snd "k"), "t").
+
+Definition adec : val := λ: "k" "t",
+  if: (Fst "t" = #TAEnc_tag) && (Fst (Snd "k") = Fst (Snd "t")) then
+    InjL (Snd (Snd "t"))
+  else InjR #().
 
 Definition mkskey : val := λ: <>,
   let: "k" := ref #() in
-  (#5, "k").
+  (#TSKey_tag, "k").
 
 Definition eq_term : val := (rec: "eq" "x" "y" :=
-  if: (Fst "x" = #0) && (Fst "y" = #0) then
+  if: (Fst "x" = #TInt_tag) && (Fst "y" = #TInt_tag) then
     Snd "x" = Snd "y"
-  else if: (Fst "x" = #1) && (Fst "y" = #1) then
+  else if: (Fst "x" = #TPair_tag) && (Fst "y" = #TPair_tag) then
     ("eq" (Fst (Snd "x")) (Fst (Snd "y"))) &&
     ("eq" (Snd (Snd "x")) (Snd (Snd "y")))
-  else if: (Fst "x" = #2) && (Fst "y" = #2) then
+  else if: (Fst "x" = #TNonce_tag) && (Fst "y" = #TNonce_tag) then
     Snd "x" = Snd "y"
-  else if: (Fst "x" = #3) && (Fst "y" = #3) then
+  else if: (Fst "x" = #TAKey_tag) && (Fst "y" = #TAKey_tag) then
     (Fst (Snd "x") = Fst (Snd "y")) &&
     (Snd (Snd "x") = Snd (Snd "y"))
-  else if: (Fst "x" = #4) && (Fst "y" = #4) then
+  else if: (Fst "x" = #TAEnc_tag) && (Fst "y" = #TAEnc_tag) then
     (Fst (Snd "x") = Fst (Snd "y")) &&
     ("eq" (Snd (Snd "x")) (Snd (Snd "y")))
-  else if: (Fst "x" = #5) && (Fst "y" = #5) then
+  else if: (Fst "x" = #TSKey_tag) && (Fst "y" = #TSKey_tag) then
     Snd "x" = Snd "y"
-  else if: (Fst "x" = #6) && (Fst "y" = #6) then
+  else if: (Fst "x" = #TSEnc_tag) && (Fst "y" = #TSEnc_tag) then
     (Fst (Snd "x") = Fst (Snd "y")) &&
     ("eq" (Snd (Snd "x")) (Snd (Snd "y")))
   else #false)%V.
