@@ -51,6 +51,7 @@ Context `{!heapG Σ, !resG Σ}.
 Implicit Types E : coPset.
 Implicit Types l : loc.
 Implicit Types rs : readers.
+Implicit Types v : val.
 
 Definition res_ctx : iProp Σ :=
   inv resN res_inv.
@@ -64,12 +65,12 @@ Lemma twp_mknonce E rs :
   wf_readers rs -∗
   WP mknonce #()%V @ E
      [{v, ∃ l, ⌜v = val_of_term (TNonce l)⌝
-               ∗ nonceT l rs}].
+               ∗ nonceT rs l}].
 Proof.
 move=> HE; iIntros "#? #wf_rs"; rewrite /mknonce.
 wp_pures; wp_alloc l as "Hl"; iApply fupd_twp.
 iInv resN as "Hinv" "Hclose".
-iMod (res_alloc _ l (RNonce rs) with "Hinv Hl wf_rs") as "[Hinv Hown]".
+iMod (res_alloc _ (RNonce rs) l with "Hinv Hl wf_rs") as "[Hinv Hown]".
 iMod ("Hclose" with "Hinv") as "_".
 by iModIntro; wp_pures; eauto.
 Qed.
@@ -82,12 +83,12 @@ Lemma twp_mkakey E rs_enc rs_dec Φ :
   WP mkakey #()%V @ E
      [{v, ∃ l, ⌜v = (val_of_term (TAKey l true),
                      val_of_term (TAKey l false))%V⌝
-               ∗ akeyT l rs_enc rs_dec Φ}].
+               ∗ akeyT rs_enc rs_dec Φ l}].
 Proof.
 move=> HE; iIntros "#? #wf_enc #wf_dec"; rewrite /mkakey.
 wp_pures; wp_alloc l as "Hl"; iApply fupd_twp.
 iInv resN as "Hinv" "Hclose".
-iMod (res_alloc _ l (RAKey rs_enc rs_dec Φ)
+iMod (res_alloc _ (RAKey rs_enc rs_dec Φ) l
         with "Hinv Hl [wf_enc wf_dec]") as "[Hinv Hown]".
   by rewrite /=; eauto.
 iMod ("Hclose" with "Hinv") as "_".
@@ -100,12 +101,12 @@ Lemma twp_mkskey E rs Φ :
   wf_readers rs -∗
   WP mkskey #()%V @ E
      [{v, ∃ l, ⌜v = val_of_term (TSKey l)⌝
-               ∗ skeyT l rs Φ}].
+               ∗ skeyT rs Φ l}].
 Proof.
 move=> HE; iIntros "#? #wf_rs"; rewrite /mkskey.
 wp_pures; wp_alloc l as "Hl"; iApply fupd_twp.
 iInv resN as "Hinv" "Hclose".
-iMod (res_alloc _ l (RSKey rs Φ)
+iMod (res_alloc _ (RSKey rs Φ) l
         with "Hinv Hl wf_rs") as "[Hinv Hown]".
 iMod ("Hclose" with "Hinv") as "_".
 by iModIntro; wp_pures; eauto.
