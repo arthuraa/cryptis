@@ -5,9 +5,21 @@ From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From crypto Require Import term crypto1.
 
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
 Definition mknonce : val := λ: <>,
   let: "n" := ref #() in
   (#2, "n").
+
+Definition mkakey : val := λ: <>,
+  let: "k" := ref #() in
+  ((#3, ("k", #true)), (#3, ("k", #false))).
+
+Definition mkskey : val := λ: <>,
+  let: "k" := ref #() in
+  (#5, "k").
 
 Definition eq_term : val := (rec: "eq" "x" "y" :=
   if: (Fst "x" = #0) && (Fst "y" = #0) then
@@ -37,6 +49,7 @@ Section Proofs.
 Context `{!heapG Σ, !resG Σ}.
 
 Implicit Types E : coPset.
+Implicit Types l : loc.
 Implicit Types rs : readers.
 
 Definition res_ctx : iProp Σ :=
@@ -55,38 +68,45 @@ Lemma twp_mknonce E rs :
 Proof.
 move=> HE; iIntros "#? #wf_rs"; rewrite /mknonce.
 wp_pures; wp_alloc l as "Hl"; iApply fupd_twp.
-iInv resN as (RM1) "[Hown >wf_RM1]" "Hclose".
-iMod (later_own with "Hown") as (a) "[Hown Ha]".
-case: a=> [aa af]; rewrite auth_equivI /=.
-iDestruct "Ha" as "[Ha >Haf]"; iRewrite -"Haf" in "Hown".
-rewrite option_equivI; case: aa=> [[q a]|]; last by iMod "Ha" as "[]".
-rewrite prod_equivI /=; iDestruct "Ha" as "[> <- #Ha]".
-iPoseProof (own_valid with "Hown") as "#Hvalid".
-rewrite auth_validI /=.
-iDestruct "Hvalid" as "(_&Hvalid)".
-iDestruct "Hvalid" as (RR) "(e & _ & Hvalid)".
-iRewrite "e" in "Hown"; iRewrite "e" in "Ha"; iClear "e"; clear a af.
-rewrite -[Auth _ _]/(● RR) agree_equivI.
-iDestruct (to_resR_uninjI with "Hvalid") as (RM2) "e".
-iRewrite -"e" in "Hown"; iRewrite -"e" in "Ha".
-rewrite to_resR_equivI.
-iAssert (▷ (dom (gset loc) RM1 ≡ dom (gset loc) RM2))%I as "> %e".
-  by iModIntro; iRewrite "Ha".
-iAssert (⌜l ∉ dom (gset loc) RM2⌝)%I as "%Hfresh".
-  rewrite -e elem_of_dom; iIntros "%contra".
-  case: contra=> v RM_l; rewrite big_sepM_delete //.
-  iDestruct "wf_RM1" as "[[Hl' _] _]".
-  by iPoseProof (mapsto_valid_2 with "Hl Hl'") as "%".
-iMod (own_update _ _ (_ ⋅ ◯ {[l := to_agree (RNonce rs)]}) with "Hown")
-    as "[Hown ?]".
-  apply auth_update_alloc, alloc_singleton_local_update; last done.
-  by rewrite -not_elem_of_dom dom_fmap.
-iAssert (▷ res_inv)%I with "[Hl wf_RM1 Hown]" as "Hinv".
-  iModIntro. iRewrite -"Ha" in "Hown".
-  iExists (<[l:=RNonce rs]> RM1).
-  rewrite -fmap_insert; iFrame.
-  rewrite big_sepM_insert /=; first by iFrame.
-  by apply/not_elem_of_dom; rewrite e.
+iInv resN as "Hinv" "Hclose".
+iMod (res_alloc _ l (RNonce rs) with "Hinv Hl wf_rs") as "[Hinv Hown]".
+iMod ("Hclose" with "Hinv") as "_".
+by iModIntro; wp_pures; eauto.
+Qed.
+
+Lemma twp_mkakey E rs_enc rs_dec Φ :
+  ↑resN ⊆ E →
+  res_ctx -∗
+  wf_readers rs_enc -∗
+  wf_readers rs_dec -∗
+  WP mkakey #()%V @ E
+     [{v, ∃ l, ⌜v = (val_of_term (TAKey l true),
+                     val_of_term (TAKey l false))%V⌝
+               ∗ akeyT l rs_enc rs_dec Φ}].
+Proof.
+move=> HE; iIntros "#? #wf_enc #wf_dec"; rewrite /mkakey.
+wp_pures; wp_alloc l as "Hl"; iApply fupd_twp.
+iInv resN as "Hinv" "Hclose".
+iMod (res_alloc _ l (RAKey rs_enc rs_dec Φ)
+        with "Hinv Hl [wf_enc wf_dec]") as "[Hinv Hown]".
+  by rewrite /=; eauto.
+iMod ("Hclose" with "Hinv") as "_".
+by iModIntro; wp_pures; eauto.
+Qed.
+
+Lemma twp_mkskey E rs Φ :
+  ↑resN ⊆ E →
+  res_ctx -∗
+  wf_readers rs -∗
+  WP mkskey #()%V @ E
+     [{v, ∃ l, ⌜v = val_of_term (TSKey l)⌝
+               ∗ skeyT l rs Φ}].
+Proof.
+move=> HE; iIntros "#? #wf_rs"; rewrite /mkskey.
+wp_pures; wp_alloc l as "Hl"; iApply fupd_twp.
+iInv resN as "Hinv" "Hclose".
+iMod (res_alloc _ l (RSKey rs Φ)
+        with "Hinv Hl wf_rs") as "[Hinv Hown]".
 iMod ("Hclose" with "Hinv") as "_".
 by iModIntro; wp_pures; eauto.
 Qed.

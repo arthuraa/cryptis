@@ -4,6 +4,10 @@ From iris.algebra Require Import agree auth gset gmap.
 From iris.heap_lang Require Import notation proofmode.
 From crypto Require Import term.
 
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
 (* TODO: Move to Iris? *)
 Instance dom_ne {T : ofeT} :
   NonExpansive (dom (gset loc) : gmap loc T -> gset loc).
@@ -253,7 +257,7 @@ rewrite /Timeless; iDestruct 1 as "[H|H]".
   iAssert (▷ (dom (gset loc) rm ≡ {[l]}))%I as "> %Hdom".
     by iModIntro; iRewrite -"Hfrag"; rewrite dom_singleton.
   apply leibniz_equiv in Hdom.
-  have {Hdom rm} [ag ->] := dom_singleton_eq rm l Hdom.
+  have {Hdom rm} [ag ->] := dom_singleton_eq Hdom.
   iPoseProof (own_valid with "Hown") as "#Hvalid".
   iAssert (✓ {[l := ag]})%I as "#Hvalid'".
     by rewrite auth_validI /=.
@@ -278,7 +282,7 @@ rewrite /Timeless; iDestruct 1 as "[H|H]".
   iAssert (▷ (dom (gset loc) rm ≡ {[l]}))%I as "> %Hdom".
     by iModIntro; iRewrite -"Hfrag"; rewrite dom_singleton.
   apply leibniz_equiv in Hdom.
-  have {Hdom rm} [ag ->] := dom_singleton_eq rm l Hdom.
+  have {Hdom rm} [ag ->] := dom_singleton_eq Hdom.
   iPoseProof (own_valid with "Hown") as "#Hvalid".
   iAssert (✓ {[l := ag]})%I as "#Hvalid'".
     by rewrite auth_validI /=.
@@ -466,8 +470,50 @@ iModIntro; iSplitL=> //.
 iExists RM'; iFrame; by rewrite /RM' /to_resR fmap_insert.
 Qed.
 
+Lemma res_alloc E l r :
+  ▷ res_inv -∗
+  l ↦ #() -∗
+  wf_res r ={E}=∗
+  ▷ res_inv ∗ own res_name (◯ {[l := to_agree r]}).
+Proof.
+iDestruct 1 as (RM1) "[Hown >wf_RM1]"; iIntros "Hl #wf_r".
+iMod (later_own with "Hown") as (a) "[Hown Ha]".
+case: a=> [aa af]; rewrite auth_equivI /=.
+iDestruct "Ha" as "[Ha >Haf]"; iRewrite -"Haf" in "Hown".
+rewrite option_equivI; case: aa=> [[q a]|]; last by iMod "Ha" as "[]".
+rewrite prod_equivI /=; iDestruct "Ha" as "[> <- #Ha]".
+iPoseProof (own_valid with "Hown") as "#Hvalid".
+rewrite auth_validI /=.
+iDestruct "Hvalid" as "(_&Hvalid)".
+iDestruct "Hvalid" as (RR) "(e & _ & Hvalid)".
+iRewrite "e" in "Hown"; iRewrite "e" in "Ha"; iClear "e"; clear a af.
+rewrite -[Auth _ _]/(● RR) agree_equivI.
+iDestruct (to_resR_uninjI with "Hvalid") as (RM2) "e".
+iRewrite -"e" in "Hown"; iRewrite -"e" in "Ha".
+rewrite to_resR_equivI.
+iAssert (▷ (dom (gset loc) RM1 ≡ dom (gset loc) RM2))%I as "> %e".
+  by iModIntro; iRewrite "Ha".
+iAssert (⌜l ∉ dom (gset loc) RM2⌝)%I as "%Hfresh".
+  rewrite -e elem_of_dom; iIntros "%contra".
+  case: contra=> v RM_l; rewrite big_sepM_delete //.
+  iDestruct "wf_RM1" as "[[Hl' _] _]".
+  by iPoseProof (mapsto_valid_2 with "Hl Hl'") as "%".
+iMod (own_update _ _ (_ ⋅ ◯ {[l := to_agree r]}) with "Hown")
+    as "[Hown ?]".
+  apply auth_update_alloc, alloc_singleton_local_update; last done.
+  by rewrite -not_elem_of_dom dom_fmap.
+iAssert (▷ res_inv)%I with "[Hl wf_RM1 Hown]" as "Hinv".
+  iModIntro. iRewrite -"Ha" in "Hown".
+  iExists (<[l:=r]> RM1).
+  rewrite -fmap_insert; iFrame.
+  rewrite big_sepM_insert /=; first by iFrame.
+  by apply/not_elem_of_dom; rewrite e.
+by iModIntro; iFrame.
+Qed.
+
 End Resources.
 
+Arguments res_name {_ _}.
 Arguments RNonce {_} _.
 Arguments to_resR {_} _.
 Arguments nonceT {_ _} _ _.
