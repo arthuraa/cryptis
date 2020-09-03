@@ -45,16 +45,22 @@ refine (
     end); clear go; abstract intuition congruence.
 Defined.
 
-Fixpoint val_of_term t : val :=
+Fixpoint val_of_term_rec t : val :=
   match t with
   | TInt n => (#TInt_tag, #n)
-  | TPair t1 t2 => (#TPair_tag, (val_of_term t1, val_of_term t2))%V
+  | TPair t1 t2 => (#TPair_tag, (val_of_term_rec t1, val_of_term_rec t2))%V
   | TNonce l => (#TNonce_tag, #l)%V
   | TAKey l b => (#TAKey_tag, (#l, #b))%V
-  | TAEnc l t => (#TAEnc_tag, (#l, val_of_term t))%V
+  | TAEnc l t => (#TAEnc_tag, (#l, val_of_term_rec t))%V
   | TSKey l => (#TSKey_tag, #l)%V
-  | TSEnc l t => (#TSEnc_tag, (#l, val_of_term t))
+  | TSEnc l t => (#TSEnc_tag, (#l, val_of_term_rec t))
   end.
+
+Definition val_of_term := locked val_of_term_rec.
+Lemma val_of_termE : val_of_term = val_of_term_rec.
+Proof. by rewrite /val_of_term -lock. Qed.
+Coercion val_of_term : term >-> val.
+Instance as_val_term : AsVal term := val_of_term.
 
 Fixpoint term_of_val v : term :=
   match v with
@@ -76,7 +82,7 @@ Fixpoint term_of_val v : term :=
   end.
 
 Global Instance val_of_termK : Cancel (=) term_of_val val_of_term.
-Proof. elim=> //= *; congruence. Qed.
+Proof. rewrite val_of_termE; elim=> //= *; congruence. Qed.
 
 Global Instance val_of_term_inj : Inj (=) (=) val_of_term.
 Proof.

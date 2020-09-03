@@ -59,6 +59,7 @@ Context `{!heapG Σ, !resG Σ}.
 Implicit Types E : coPset.
 Implicit Types l : loc.
 Implicit Types rs : readers.
+Implicit Types t : term.
 Implicit Types v : val.
 
 Definition res_ctx : iProp Σ :=
@@ -72,15 +73,14 @@ Lemma twp_mknonce E rs :
   res_ctx -∗
   wf_readers rs -∗
   WP mknonce #()%V @ E
-     [{v, ∃ l, ⌜v = val_of_term (TNonce l)⌝
-               ∗ nonceT rs l}].
+     [{v, ∃ l, ⌜v = TNonce l⌝ ∗ nonceT rs l}].
 Proof.
 move=> HE; iIntros "#? #wf_rs"; rewrite /mknonce.
 wp_pures; wp_alloc l as "Hl"; iApply fupd_twp.
 iInv resN as "Hinv" "Hclose".
 iMod (res_alloc _ (RNonce rs) l with "Hinv Hl wf_rs") as "[Hinv Hown]".
 iMod ("Hclose" with "Hinv") as "_".
-by iModIntro; wp_pures; eauto.
+by iModIntro; wp_pures; rewrite val_of_termE; eauto.
 Qed.
 
 Lemma twp_mkakey E rs_enc rs_dec Φ :
@@ -89,8 +89,7 @@ Lemma twp_mkakey E rs_enc rs_dec Φ :
   wf_readers rs_enc -∗
   wf_readers rs_dec -∗
   WP mkakey #()%V @ E
-     [{v, ∃ l, ⌜v = (val_of_term (TAKey l true),
-                     val_of_term (TAKey l false))%V⌝
+     [{v, ∃ l, ⌜v = (TAKey l true, TAKey l false)%V⌝
                ∗ akeyT rs_enc rs_dec Φ l}].
 Proof.
 move=> HE; iIntros "#? #wf_enc #wf_dec"; rewrite /mkakey.
@@ -100,7 +99,7 @@ iMod (res_alloc _ (RAKey rs_enc rs_dec Φ) l
         with "Hinv Hl [wf_enc wf_dec]") as "[Hinv Hown]".
   by rewrite /=; eauto.
 iMod ("Hclose" with "Hinv") as "_".
-by iModIntro; wp_pures; eauto.
+by iModIntro; wp_pures; rewrite val_of_termE; eauto.
 Qed.
 
 Lemma twp_mkskey E rs Φ :
@@ -108,8 +107,7 @@ Lemma twp_mkskey E rs Φ :
   res_ctx -∗
   wf_readers rs -∗
   WP mkskey #()%V @ E
-     [{v, ∃ l, ⌜v = val_of_term (TSKey l)⌝
-               ∗ skeyT rs Φ l}].
+     [{v, ∃ l, ⌜v = TSKey l⌝ ∗ skeyT rs Φ l}].
 Proof.
 move=> HE; iIntros "#? #wf_rs"; rewrite /mkskey.
 wp_pures; wp_alloc l as "Hl"; iApply fupd_twp.
@@ -117,13 +115,13 @@ iInv resN as "Hinv" "Hclose".
 iMod (res_alloc _ (RSKey rs Φ) l
         with "Hinv Hl wf_rs") as "[Hinv Hown]".
 iMod ("Hclose" with "Hinv") as "_".
-by iModIntro; wp_pures; eauto.
+by iModIntro; wp_pures; rewrite val_of_termE; eauto.
 Qed.
 
 Lemma twp_eq_term t1 t2 :
-  ⊢ WP (eq_term (val_of_term t1) (val_of_term t2))
-       [{ v, ⌜v = #(bool_decide (t1 = t2))⌝ }].
+  ⊢ WP (eq_term t1 t2) [{ v, ⌜v = #(bool_decide (t1 = t2))⌝ }].
 Proof.
+rewrite val_of_termE.
 elim: t1 t2=> [n1|t11 IH1 t12 IH2|l1|l1 b1|l1 t1 IH1|l1|l1 t1 IH1];
 case=> [n2|t21 t22|l2|l2 b2|l2 t2|l2|l2 t2] /=;
 wp_rec; wp_pures=> //.
