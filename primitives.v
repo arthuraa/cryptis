@@ -34,6 +34,17 @@ Definition mkskey : val := λ: <>,
   let: "k" := ref #() in
   (#TSKey_tag, "k").
 
+Definition senc : val := λ: "k" "t",
+  (#TSEnc_tag, (Snd "k", "t")).
+
+Definition sdec : val := λ: "k" "t",
+  if: (Fst "t" = #TSEnc_tag) && (Snd "k" = Fst (Snd "t")) then
+    SOME (Snd (Snd "t"))
+  else NONE.
+
+Definition is_skey : val := λ: "t",
+  Fst "t" = #TSKey_tag.
+
 Definition eq_term : val := (rec: "eq" "x" "y" :=
   if: (Fst "x" = #TInt_tag) && (Fst "y" = #TInt_tag) then
     Snd "x" = Snd "y"
@@ -215,6 +226,100 @@ iMod (res_alloc _ (RSKey rs Φ) l
         with "Hinv Hl wf_rs") as "[Hinv Hown]".
 iMod ("Hclose" with "Hinv") as "_".
 by iModIntro; wp_pures; rewrite val_of_termE; eauto.
+Qed.
+
+Lemma twp_senc rs Φ l t :
+  skeyT rs Φ l -∗
+  (□ Φ t ∗ termT {[l]} t ∨ ⌜rs = RPub⌝ ∗ termT RPub t) -∗
+  WP senc (TSKey l) t
+     [{v, ⌜v = TSEnc l t⌝ ∗ termT RPub (TSEnc l t)}].
+Proof.
+rewrite val_of_termE /= /senc; iIntros "Hl Ht".
+wp_pures; iSplit=> //.
+by iExists rs, Φ; iFrame.
+Qed.
+
+Lemma twp_sencL rs Φ l t :
+  skeyT RPub Φ l -∗
+  termT RPub t -∗
+  WP senc (TSKey l) t
+     [{v, ⌜v = TSEnc l t⌝ ∗ termT RPub (TSEnc l t)}].
+Proof.
+iIntros "Hl Ht"; iApply (twp_senc with "Hl"); eauto.
+Qed.
+
+Lemma twp_sencH rs Φ l t :
+  skeyT rs Φ l -∗
+  □ Φ t -∗
+  termT {[l]} t -∗
+  WP senc (TSKey l) t
+     [{v, ⌜v = TSEnc l t⌝ ∗ termT RPub (TSEnc l t)}].
+Proof.
+iIntros "Hl Ht1 Ht2"; iApply (twp_senc with "Hl"); eauto.
+Qed.
+
+Lemma twp_sdec rs Φ l rs_t t :
+  skeyT rs Φ l -∗
+  termT rs_t t -∗
+  WP sdec (TSKey l) t
+     [{v, match t with
+          | TSEnc l' t' =>
+            if decide (l' = l) then
+              ⌜v = SOMEV t'⌝ ∗
+              (□ Φ t' ∗ termT {[l]} t' ∨ ⌜rs = RPub⌝ ∗ termT RPub t')
+            else
+              ⌜v = NONEV⌝
+          | _ => ⌜v = NONEV⌝
+          end}].
+Proof.
+rewrite val_of_termE /= /sdec; iIntros "Hl Ht".
+case: t; try by move=> *; wp_pures.
+move=> l' t' /=; wp_pures.
+destruct decide as [->|ne].
+- rewrite bool_decide_true //.
+  wp_pures; iSplit=> //.
+  iDestruct "Ht" as (rs' Φ') "[Hl' Ht']".
+  iPoseProof (own_valid_2 with "Hl Hl'") as "#Hvalid".
+  rewrite auth_validI /= singleton_op gmap_validI.
+  iSpecialize ("Hvalid" $! l); rewrite lookup_singleton.
+  rewrite uPred.option_validI agree_validI agree_equivI res_equivI.
+  iDestruct "Hvalid" as "(-> & HΦ)".
+  by rewrite ofe_morO_equivI; iRewrite ("HΦ" $! t'); eauto.
+- rewrite bool_decide_false; last by congruence.
+  by wp_pures.
+Qed.
+
+Lemma twp_sdecH rd Φ l rs_t t :
+  skeyT (RPriv rd) Φ l -∗
+  termT rs_t t -∗
+  WP sdec (TSKey l) t
+     [{v, match t with
+          | TSEnc l' t' =>
+            if decide (l' = l) then
+              ⌜v = SOMEV t'⌝ ∗ □ Φ t' ∗ termT {[l]} t'
+            else
+              ⌜v = NONEV⌝
+          | _ => ⌜v = NONEV⌝
+          end}].
+Proof.
+iIntros "Hl Ht".
+iPoseProof (twp_sdec with "Hl Ht") as "wp".
+iApply (twp_wand with "wp").
+iIntros (v) "Ht".
+case: t; eauto.
+move=> l' t'; destruct decide as [->|ne]; trivial.
+iDestruct "Ht" as "[?[?|[%?]]]"; by iFrame.
+Qed.
+
+Lemma twp_is_skey t :
+  ⊢ WP is_skey t
+       [{v, ⌜v = match t with
+                 | TSKey l => #true
+                 | _ => #false
+                 end⌝}].
+Proof.
+rewrite val_of_termE /is_skey.
+by case: t=> *; wp_pures.
 Qed.
 
 Lemma twp_eq_term t1 t2 :
