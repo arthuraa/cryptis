@@ -524,10 +524,11 @@ Definition lo_term v1 v2 : iProp Σ :=
 Global Instance persistent_lo_term v1 v2 : Persistent (lo_term v1 v2).
 Proof. apply _. Qed.
 
-Lemma step_eq_term t1 t2 :
-  ⊢ swp (eq_term (val_of_term t1) (val_of_term t2))
+Lemma step_eq_term (t1 t2 : term) :
+  ⊢ swp (eq_term t1 t2)
         (λ v, ⌜v = #(bool_decide (t1 = t2))⌝)%I.
 Proof.
+rewrite val_of_termE.
 elim: t1 t2=> [n1|t11 IH1 t12 IH2|l1|l1 b1|l1 t1 IH1|l1|l1 t1 IH1];
 case=> [n2|t21 t22|l2|l2 b2|l2 t2|l2|l2 t2] /=;
 swp_rec; swp_pures=> //.
