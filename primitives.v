@@ -9,6 +9,13 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Definition tuple : val := λ: "t1" "t2",
+  (#TPair_tag, ("t1", "t2")).
+
+Definition untuple : val := λ: "t",
+  if: Fst "t" = #TPair_tag then SOME (Snd "t")
+  else NONE.
+
 Definition mknonce : val := λ: <>,
   let: "n" := ref #() in
   (#TNonce_tag, "n").
@@ -83,6 +90,22 @@ Definition res_ctx : iProp Σ :=
 
 Global Instance persistent_res_ctx : Persistent res_ctx.
 Proof. apply _. Qed.
+
+Lemma twp_tuple E t1 t2 :
+  ⊢ WP tuple t1 t2 @ E
+       [{v, ⌜v = TPair t1 t2⌝}].
+Proof. by rewrite val_of_termE /tuple; wp_pures. Qed.
+
+Lemma twp_untuple E t :
+  ⊢ WP untuple t @ E
+       [{v, ⌜v = match t with
+                 | TPair t1 t2 => SOMEV (t1, t2)
+                 | _ => NONEV
+                 end⌝}].
+Proof.
+rewrite val_of_termE /untuple.
+by case: t=> *; wp_pures.
+Qed.
 
 Lemma twp_mknonce E rs :
   ↑resN ⊆ E →
