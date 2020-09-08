@@ -49,10 +49,8 @@ Fixpoint al_term s t : iProp Σ :=
   | TInt _ => True%I
   | TPair t1 t2 => al_term s t1 ∗ al_term s t2
   | TNonce l => al_nonce s l
-  | TAKey l b => False
-  | TAEnc l t => False
-  | TSKey l => al_key s l
-  | TSEnc l t => al_key s l ∗ al_term s t
+  | TKey kt l => ⌜kt = KSym⌝ ∗ al_key s l
+  | TEnc b l t => ⌜~ b⌝ ∗ al_key s l ∗ al_term s t
   end.
 Global Instance persistent_al_term s t : Persistent (al_term s t).
 Proof. elim: t=> /=; apply _. Qed.
@@ -65,10 +63,8 @@ Definition opaque s t : iProp Σ :=
   | TInt _ => False%I
   | TPair _ _ => False%I
   | TNonce l => symbol1 lo_nonce_name s l
-  | TAKey l b => False
-  | TAEnc l t => False
-  | TSKey l => False%I
-  | TSEnc l t => symbol12 hi_key_name s l ∗ al_term s t
+  | TKey kt l => False%I
+  | TEnc b l t => ⌜~ b⌝ ∗ symbol12 hi_key_name s l ∗ al_term s t
   end.
 
 Global Instance persistent_opaque s t : Persistent (opaque s t).
@@ -82,8 +78,8 @@ case: t=> //=.
 - by iIntros (_) "?".
 - by iIntros (??) "?".
 - by iIntros (?) "?"; iLeft.
-- by iIntros (?) "?".
-- by iIntros (??) "[??]"; iFrame.
+- by iIntros (??) "?".
+- by iIntros (???) "(?&?&?)"; iFrame.
 Qed.
 
 Implicit Types TT : gsetUR (matchingO termO).
@@ -108,10 +104,8 @@ Fixpoint guarded_nonce l KS t :=
   | TInt _ => True
   | TPair t1 t2 => guarded_nonce l KS t1 ∧ guarded_nonce l KS t2
   | TNonce l' => l' ≠ l
-  | TAKey l b => False
-  | TAEnc l t => False
-  | TSKey _ => True
-  | TSEnc l' t => l' ∈ KS ∨ guarded_nonce l KS t
+  | TKey _ _ => True
+  | TEnc b l' t => ~ b ∧ (l' ∈ KS ∨ guarded_nonce l KS t)
   end.
 
 Definition nonce_inv TT : iProp Σ :=
@@ -137,10 +131,8 @@ Fixpoint correct_enc l φ t : iProp Σ :=
   | TInt _ => True
   | TPair t1 t2 => correct_enc l φ t1 ∗ correct_enc l φ t2
   | TNonce _ => True
-  | TAKey _ _ => False
-  | TAEnc _ _ => False
-  | TSKey _ => True
-  | TSEnc l' t' => if decide (l' = l) then φ t' else correct_enc l φ t'
+  | TKey _ _ => True
+  | TEnc b l' t' => if decide (l' = l) then φ t' else correct_enc l φ t'
   end.
 
 Definition key_inv TT : iProp Σ :=
@@ -232,10 +224,8 @@ Fixpoint lo_term1 s t : iProp Σ :=
   | TInt _ => True%I
   | TPair t1 t2 => lo_term1 s t1 ∗ lo_term1 s t2
   | TNonce l => False%I
-  | TAKey _ _ => False
-  | TAEnc _ _ => False
-  | TSKey l => symbol12 lo_key_name s l
-  | TSEnc l t => symbol12 lo_key_name s l ∗ lo_term1 s t
+  | TKey kt l => ⌜kt = KSym⌝ ∗ symbol12 lo_key_name s l
+  | TEnc b l t => ⌜~ b⌝ ∗ symbol12 lo_key_name s l ∗ lo_term1 s t
   end.
 
 Global Instance persistent_lo_term1 s t : Persistent (lo_term1 s t).
@@ -246,7 +236,7 @@ Lemma lo_term1_al_term s t :
   lo_term1 s t -∗
   al_term s t.
 Proof.
-elim: t=> [n|t1 IH1 t2 IH2|l|l b|l t IH|l|l t IH] //=; eauto.
+elim: t=> [n|t1 IH1 t2 IH2|l|kt l|b l t IH] //=; eauto.
 - iIntros "Hinv [H|H]".
     iAssert (opaque s (TPair t1 t2)) with "[Hinv H]" as "?"=> //.
     by iApply (published12_opaque with "Hinv H").
@@ -257,15 +247,11 @@ elim: t=> [n|t1 IH1 t2 IH2|l|l b|l t IH|l|l t IH] //=; eauto.
 - iIntros "Hinv [H|?] //".
   iPoseProof (published12_opaque with "Hinv H") as "?".
   by iLeft.
-- iIntros "Hinv [H|[]]".
-  by iPoseProof (published12_opaque with "Hinv H") as "?".
-- iIntros "Hinv [H|[]]".
-  iDestruct (published12_opaque with "Hinv H") as "[]".
-- iIntros "Hinv [H|H]".
+- iIntros "Hinv [H|[??]]".
     by iPoseProof (published12_opaque with "Hinv H") as "?".
-  by iLeft.
-- iIntros "Hinv [H|[Hl Ht]]".
-    iDestruct (published12_opaque with "Hinv H") as "[Hl Ht]".
+  by iFrame.
+- iIntros "Hinv [H|(?&Hl&Ht)]".
+    iDestruct (published12_opaque with "Hinv H") as "(? & Hl & Ht)".
     by iFrame.
   iFrame; iApply (IH with "Hinv Ht").
 Qed.
@@ -279,10 +265,13 @@ Fixpoint lo_term_aux t1 t2 : iProp Σ :=
   | TNonce l1, TNonce l2 =>
     (* Nonces are covered by the published case above *)
     False%I
-  | TSKey l1, TSKey l2 =>
+  | TKey kt1 l1, TKey kt2 l2 =>
+    ⌜kt1 = KSym⌝ ∗
+    ⌜kt2 = KSym⌝ ∗
     symbol lo_key_name (LR l1 l2)
-  | TSEnc l1 t1, TSEnc l2 t2 =>
+  | TEnc b1 l1 t1, TEnc b2 l2 t2 =>
     (* Ditto for terms encrypted with a high key *)
+    ⌜~ b1⌝ ∗ ⌜~ b2⌝ ∗
     symbol lo_key_name (LR l1 l2) ∗ lo_term_aux t1 t2
   | _, _ => False%I
   end.
@@ -293,9 +282,12 @@ Definition lo_term_aux_rec t1 t2 : iProp Σ :=
   | TPair t11 t12, TPair t21 t22 =>
     lo_term_aux t11 t21 ∗ lo_term_aux t12 t22
   | TNonce l1, TNonce l2 => False%I
-  | TSKey l1, TSKey l2 =>
+  | TKey kt1 l1, TKey kt2 l2 =>
+    ⌜kt1 = KSym⌝ ∗
+    ⌜kt2 = KSym⌝ ∗
     symbol lo_key_name (LR l1 l2)
-  | TSEnc l1 t1, TSEnc l2 t2 =>
+  | TEnc b1 l1 t1, TEnc b2 l2 t2 =>
+    ⌜~ b1⌝ ∗ ⌜~ b2⌝ ∗
     symbol lo_key_name (LR l1 l2) ∗ lo_term_aux t1 t2
   | _, _ => False%I
   end.
@@ -311,10 +303,8 @@ elim: t1 t2=> /=.
 - by move=> ?; case=> *; apply _.
 - by move=> ????; case=> *; apply _.
 - by move=> ?; case=> *; apply _.
-- by move=> ??; apply _.
-- by move=> ??; apply _.
-- by move=> ?; case=> *; apply _.
-- by move=> ???; case=> *; apply _.
+- by move=> ??; case=> *; apply _.
+- by move=> ????; case=> *; apply _.
 Qed.
 
 Lemma flipb_lo_termE b t1 t2 :
@@ -325,21 +315,27 @@ Lemma flipb_lo_termE b t1 t2 :
    | TPair t11 t12, TPair t21 t22 =>
      flipb b lo_term_aux t11 t21 ∗ flipb b lo_term_aux t12 t22
    | TNonce l1, TNonce l2 => False%I
-   | TSKey l1, TSKey l2 =>
+   | TKey kt1 l1, TKey kt2 l2 =>
+     ⌜kt1 = KSym⌝ ∗ ⌜kt2 = KSym⌝ ∗
      symbol lo_key_name (flipb b LR l1 l2)
-   | TSEnc l1 t1, TSEnc l2 t2 =>
-    symbol lo_key_name (flipb b LR l1 l2) ∗ flipb b lo_term_aux t1 t2
-  | _, _ => False%I
-  end)%I.
+   | TEnc b1 l1 t1, TEnc b2 l2 t2 =>
+     ⌜~ b1⌝ ∗ ⌜~ b2⌝ ∗
+     symbol lo_key_name (flipb b LR l1 l2) ∗ flipb b lo_term_aux t1 t2
+   | _, _ => False%I
+   end)%I.
 Proof.
 rewrite /flipb lo_term_auxE.
 case: b=> //; iSplit.
 - iDestruct 1 as "[H|H]"; eauto; iRight.
-  case: t1=> // *; case: t2=> //= *.
-  by iDestruct "H" as "->".
+  case: t1=> // *; case: t2=> //= *; eauto.
+  + by iRevert "H"; iIntros "->".
+  + by iDestruct "H" as "(?&?&?)"; iFrame.
+  + by iDestruct "H" as "(?&?&?&?)"; iFrame.
 - iDestruct 1 as "[H|H]"; eauto; iRight.
   case: t1=> // *; case: t2=> //= *.
-  by iDestruct "H" as "->".
+  + by iRevert "H"; iIntros "->".
+  + by iDestruct "H" as "(?&?&?)"; iFrame.
+  + by iDestruct "H" as "(?&?&?&?)"; iFrame.
 Qed.
 
 Lemma flipb_published_perm b t1 t21 t22 :
@@ -409,54 +405,48 @@ elim: t1 t21 t22.
   iDestruct "H2" as "[H2|H2]"; last by case: t22.
   iPoseProof (flipb_published_perm with "Hinv H1 H2") as "%".
   by iPureIntro.
-- move=> l b' t21 t22; iIntros "Hsymb Hinv #H1 #H2".
-  rewrite !flipb_lo_termE /=.
-  iDestruct "H1" as "[H1|[]]".
-  by iDestruct (flipb_published_opaque with "Hinv H1") as "[]".
-- move=> l1 t1 IH t21 t22; iIntros "Hsymb Hinv #H1 #H2".
-  rewrite !flipb_lo_termE.
-  iDestruct "H1" as "[H1|[]]"; iDestruct "H2" as "[H2|[]]".
-  iPoseProof (flipb_published_perm with "Hinv H1 H2") as "%E".
-  by iPureIntro.
-- move=> l t21 t22; iIntros "Hsymb Hinv #H1 #H2".
+- move=> kt l t21 t22; iIntros "Hsymb Hinv #H1 #H2".
   rewrite !flipb_lo_termE /=.
   iDestruct "H1" as "[H1|H1]".
     by iDestruct (flipb_published_opaque with "Hinv H1") as "[]".
   iDestruct "H2" as "[H2|H2]".
     by iDestruct (flipb_published_opaque with "Hinv H2") as "[]".
-  case: t21=> //= l21; case: t22=> //= l22.
+  case: t21=> //= kt21 l21; case: t22=> //= kt22 l22.
   rewrite /symbols_inv !(big_sepL_singleton, big_sepL_cons).
   iDestruct "Hsymb" as "(_ & _ & Hlo_key & _)".
+  iDestruct "H1" as "(_ & -> & H1)".
+  iDestruct "H2" as "(_ & -> & H2)".
   iPoseProof (flipb_symbol_perm with "Hlo_key H1 H2") as "%E".
   by rewrite E.
-- move=> l1 t1 IH t21 t22; iIntros "Hsymb Hinv #H1 #H2".
+- move=> b1 l1 t1 IH t21 t22; iIntros "Hsymb Hinv #H1 #H2".
   rewrite !flipb_lo_termE.
   iDestruct "H1" as "[H1|H1]"; iDestruct "H2" as "[H2|H2]".
   + iPoseProof (flipb_published_perm with "Hinv H1 H2") as "%E".
     by iPureIntro.
-  + case: t22=> //= l22 t22; iDestruct "H2" as "[H2 _]".
+  + case: t22=> //= b22 l22 t22; iDestruct "H2" as "(_ & _ & H2 & _)".
     iPoseProof (flipb_published_opaque with "Hinv H1") as "#H1' /=".
-    iDestruct "H1'" as "[H1' _]".
+    iDestruct "H1'" as "(_ & H1' & _)".
     iAssert (symbol12 lo_key_name b l1) as "H2'".
       by iRight; iExists l22.
     rewrite /symbols_inv !(big_sepL_singleton, big_sepL_cons).
     iDestruct "Hsymb" as "(_ & _ & Hlo_key & Hhi_key)".
     by iDestruct (symbol_disj with "Hhi_key Hlo_key H1' H2'") as "[]".
-  + case: t21=> //= l21 t21; iDestruct "H1" as "[H1 _]".
+  + case: t21=> //= b21 l21 t21; iDestruct "H1" as "(_ & _ & H1 & _)".
     iPoseProof (flipb_published_opaque with "Hinv H2") as "#H2' /=".
-    iDestruct "H2'" as "[H2' _]".
+    iDestruct "H2'" as "(_ & H2' & _)".
     iAssert (symbol12 lo_key_name b l1) as "H1'".
       by iRight; iExists l21.
     rewrite /symbols_inv !(big_sepL_singleton, big_sepL_cons).
     iDestruct "Hsymb" as "(_ & _ & Hlo_key & Hhi_key)".
     by iDestruct (symbol_disj with "Hhi_key Hlo_key H2' H1'") as "[]".
-  + case: t21 t22=> //= l21 t21 [] //= l22 t22.
-    iDestruct "H1" as "[Hl21 Ht21]".
-    iDestruct "H2" as "[Hl22 Ht22]".
+  + case: t21 t22=> //= b21 l21 t21 [] //= b22 l22 t22.
+    iDestruct "H1" as "(? & %Hb21 & Hl21 & Ht21)".
+    iDestruct "H2" as "(? & %Hb22 & Hl22 & Ht22)".
     iPoseProof (IH with "Hsymb Hinv Ht21 Ht22") as "%Et".
     rewrite /symbols_inv !(big_sepL_singleton, big_sepL_cons).
     iDestruct "Hsymb" as "(? & ? & Hlo_key & ?)".
     iPoseProof (flipb_symbol_perm with "Hlo_key Hl21 Hl22") as "%El".
+    case: b21 b22 Hb21 Hb22=> [|] [|] // _ _.
     iPureIntro; congruence.
 Qed.
 
@@ -481,10 +471,8 @@ Fixpoint symbols_of_term t : gset loc :=
   | TInt _ => ∅
   | TPair t1 t2 => symbols_of_term t1 ∪ symbols_of_term t2
   | TNonce l => {[l]}
-  | TAKey l _ => {[l]}
-  | TAEnc l t => {[l]} ∪ symbols_of_term t
-  | TSKey l => {[l]}
-  | TSEnc l t => {[l]} ∪ symbols_of_term t
+  | TKey _ l => {[l]}
+  | TEnc _ l t => {[l]} ∪ symbols_of_term t
   end.
 
 (* l does not occur in t, except in occurrences that appear in T. *)
@@ -494,10 +482,8 @@ Fixpoint protected_aux l T t :=
   | TInt _ => True
   | TPair t1 t2 => protected_aux l T t1 ∧ protected_aux l T t2
   | TNonce l' => l ≠ l'
-  | TAKey _ _ => False
-  | TAEnc _ _ => False
-  | TSKey l' => l ≠ l'
-  | TSEnc _ t2 => protected_aux l T t2
+  | TKey kt l' => l ≠ l'
+  | TEnc _ _ t2 => protected_aux l T t2
   end.
 
 Definition protected s l (T : gset term) : iProp Σ :=
@@ -529,8 +515,8 @@ Lemma step_eq_term (t1 t2 : term) :
         (λ v, ⌜v = #(bool_decide (t1 = t2))⌝)%I.
 Proof.
 rewrite val_of_termE.
-elim: t1 t2=> [n1|t11 IH1 t12 IH2|l1|l1 b1|l1 t1 IH1|l1|l1 t1 IH1];
-case=> [n2|t21 t22|l2|l2 b2|l2 t2|l2|l2 t2] /=;
+elim: t1 t2=> [n1|t11 IH1 t12 IH2|l1|kt1 l1|b1 l1 t1 IH1];
+case=> [n2|t21 t22|l2|kt2 l2|b2 l2 t2] /=;
 swp_rec; swp_pures=> //.
 - iPureIntro; congr (# (LitBool _)).
   apply: bool_decide_iff; intuition congruence.
@@ -545,29 +531,19 @@ swp_rec; swp_pures=> //.
     rewrite bool_decide_false; congruence.
 - iPureIntro; congr (# (LitBool _)).
   apply: bool_decide_iff; intuition congruence.
-- case: bool_decide_reflect=> e1.
+- case: bool_decide_reflect=> [[/int_of_key_type_inj e1]|e1].
   + swp_pures; iPureIntro; congr (# (LitBool _)).
     apply: bool_decide_iff; intuition congruence.
   + swp_pures; iPureIntro; congr (# (LitBool _)).
     rewrite bool_decide_false; congruence.
-- case: bool_decide_reflect=> e1.
-  + swp_pures.
-    iPoseProof (IH1 t2) as "IH1".
-    iApply (swp_wand with "IH1"); iIntros (?) "->".
-    iPureIntro; congr (# (LitBool _)).
-    apply: bool_decide_iff; intuition congruence.
-  + swp_pures; iPureIntro; congr (# (LitBool _)).
-    rewrite bool_decide_false; congruence.
-- iPureIntro; congr (# (LitBool _)).
+- case: bool_decide_reflect=> e1; swp_pures; last first.
+    rewrite bool_decide_false //; congruence.
+  case: bool_decide_reflect=> e2; swp_pures; last first.
+    rewrite bool_decide_false //; congruence.
+  iPoseProof (IH1 t2) as "IH1".
+  iApply (swp_wand with "IH1"); iIntros (?) "->".
+  iPureIntro; congr (# (LitBool _)).
   apply: bool_decide_iff; intuition congruence.
-- case: bool_decide_reflect=> e1.
-  + swp_pures.
-    iPoseProof (IH1 t2) as "IH1".
-    iApply (swp_wand with "IH1"); iIntros (?) "->".
-    iPureIntro; congr (# (LitBool _)).
-    apply: bool_decide_iff; intuition congruence.
-  + swp_pures; iPureIntro; congr (# (LitBool _)).
-    rewrite bool_decide_false; congruence.
 Qed.
 
 Lemma swp_elim E e Φ j K :

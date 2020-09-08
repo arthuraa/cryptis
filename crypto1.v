@@ -227,6 +227,16 @@ Global Instance persistent_skeyT rs Φ l :
   Persistent (skeyT rs Φ l).
 Proof. apply _. Qed.
 
+Definition keyT kt rs Φ l : iProp Σ :=
+  match kt with
+  | KSym => skeyT rs Φ l
+  | KAEnc => ∃ rs_dec, akeyT rs rs_dec Φ l
+  | KADec => ∃ rs_enc, akeyT rs_enc rs Φ l
+  end.
+
+Global Instance persistent_keyT kt rs Φ l : Persistent (keyT kt rs Φ l).
+Proof. by case: kt; apply _. Qed.
+
 Definition priv_keyT rs l : iProp Σ :=
     (∃ rs_enc Φ, akeyT rs_enc (RPriv rs) Φ l)
   ∨ (∃ Φ, skeyT (RPriv rs) Φ l).
@@ -367,16 +377,12 @@ Fixpoint termT rs t : iProp Σ :=
   match t with
   | TInt _ => True
   | TPair t1 t2 => termT rs t1 ∗ termT rs t2
-  | TNonce l => ∃ rs', nonceT rs' l ∗ ⌜rs ⊆ rs'⌝
-  | TAKey l enc => ∃ rs_enc rs_dec Φ,
-                     akeyT rs_enc rs_dec Φ l
-                     ∗ ⌜rs ⊆ if enc then rs_enc else rs_dec⌝
-  | TAEnc l t => ∃ rs_enc rs_dec Φ,
-                   akeyT rs_enc rs_dec Φ l
-                   ∗ (□ Φ t ∗ termT {[l]} t ∨ ⌜rs_enc = RPub⌝ ∗ termT RPub t)
-  | TSKey l   => ∃ rs' Φ, skeyT rs' Φ l ∗ ⌜rs ⊆ rs'⌝
-  | TSEnc l t => ∃ rs' Φ, skeyT rs' Φ l
-                 ∗ (□ Φ t ∗ termT {[l]} t ∨ ⌜rs' = RPub⌝ ∗ termT RPub t)
+  | TNonce l  => ∃ rs', nonceT rs' l ∗ ⌜rs ⊆ rs'⌝
+  | TKey kt l => ∃ rs' Φ, keyT kt rs' Φ l ∗ ⌜rs ⊆ rs'⌝
+  | TEnc asym l t =>
+    let kt := if asym then KAEnc else KSym in
+    ∃ rs' Φ, keyT kt rs' Φ l
+             ∗ (□ Φ t ∗ termT {[l]} t ∨ ⌜rs' = RPub⌝ ∗ termT RPub t)
   end.
 
 Global Instance persistent_termT rs t :
@@ -388,12 +394,10 @@ Lemma sub_termT rs rs' t :
   termT rs t -∗
   termT rs' t.
 Proof.
-elim: t rs=> [n|t1 IH1 t2 IH2|l|l b|l t IH|l|l t IH] rs sub //=.
+elim: t rs=> [n|t1 IH1 t2 IH2|l|kt l|b l t IH] rs sub //=.
 - by iIntros "[#Ht1 #Ht2]"; rewrite IH1 // IH2 //; iSplit.
 - iDestruct 1 as (rs0) "[#Hnonce %sub0]".
   iExists rs0; iSplit=> //; iPureIntro; by etransitivity.
-- iDestruct 1 as (rs_enc rs_dec Φ) "[#Hkey %sub0]".
-  iExists rs_enc, rs_dec, Φ; iSplit=> //; iPureIntro; by etransitivity.
 - iDestruct 1 as (rs0 Φ) "[#Hkey %sub0]".
   iExists rs0, Φ; iSplit=> //; iPureIntro; by etransitivity.
 Qed.

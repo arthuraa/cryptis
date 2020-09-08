@@ -20,37 +20,40 @@ Definition mknonce : val := λ: <>,
   let: "n" := ref #() in
   (#TNonce_tag, "n").
 
+Definition is_key : val := λ: "t",
+  if: Fst "t" = #TKey_tag then SOME (Fst (Snd "t"))
+  else NONE.
+
 Definition mkakey : val := λ: <>,
   let: "k" := ref #() in
-  ((#TAKey_tag, ("k", #true)), (#TAKey_tag, ("k", #false))).
+  ((#TKey_tag, (#(int_of_key_type KAEnc), "k")),
+   (#TKey_tag, (#(int_of_key_type KADec), "k"))).
 
 Definition aenc : val := λ: "k" "t",
-  (#TAEnc_tag, (Fst (Snd "k"), "t")).
+  (#TEnc_tag, (#true, Snd (Snd "k"), "t")).
 
 Definition adec : val := λ: "k" "t",
-  if: (Fst "t" = #TAEnc_tag) && (Fst (Snd "k") = Fst (Snd "t")) then
+  if: (Fst "t" = #TEnc_tag)
+      && Fst (Fst (Snd "t"))
+      && (Snd (Snd "k") = Snd (Fst (Snd "t"))) then
     SOME (Snd (Snd "t"))
-  else NONE.
-
-Definition is_akey : val := λ: "t",
-  if: Fst "t" = #TAKey_tag then
-    SOME (Snd (Snd "t"))
-  else NONE.
+  else
+    NONE.
 
 Definition mkskey : val := λ: <>,
   let: "k" := ref #() in
-  (#TSKey_tag, "k").
+  (#TKey_tag, (#(int_of_key_type KSym), "k")).
 
 Definition senc : val := λ: "k" "t",
-  (#TSEnc_tag, (Snd "k", "t")).
+  (#TEnc_tag, (#false, Snd (Snd "k"), "t")).
 
 Definition sdec : val := λ: "k" "t",
-  if: (Fst "t" = #TSEnc_tag) && (Snd "k" = Fst (Snd "t")) then
+  if: (Fst "t" = #TEnc_tag)
+      && (~ Fst (Fst (Snd "t")))
+      && (Snd (Snd "k") = Snd (Fst (Snd "t"))) then
     SOME (Snd (Snd "t"))
-  else NONE.
-
-Definition is_skey : val := λ: "t",
-  Fst "t" = #TSKey_tag.
+  else
+    NONE.
 
 Definition eq_term : val := (rec: "eq" "x" "y" :=
   if: (Fst "x" = #TInt_tag) && (Fst "y" = #TInt_tag) then
@@ -60,16 +63,12 @@ Definition eq_term : val := (rec: "eq" "x" "y" :=
     ("eq" (Snd (Snd "x")) (Snd (Snd "y")))
   else if: (Fst "x" = #TNonce_tag) && (Fst "y" = #TNonce_tag) then
     Snd "x" = Snd "y"
-  else if: (Fst "x" = #TAKey_tag) && (Fst "y" = #TAKey_tag) then
+  else if: (Fst "x" = #TKey_tag) && (Fst "y" = #TKey_tag) then
     (Fst (Snd "x") = Fst (Snd "y")) &&
     (Snd (Snd "x") = Snd (Snd "y"))
-  else if: (Fst "x" = #TAEnc_tag) && (Fst "y" = #TAEnc_tag) then
-    (Fst (Snd "x") = Fst (Snd "y")) &&
-    ("eq" (Snd (Snd "x")) (Snd (Snd "y")))
-  else if: (Fst "x" = #TSKey_tag) && (Fst "y" = #TSKey_tag) then
-    Snd "x" = Snd "y"
-  else if: (Fst "x" = #TSEnc_tag) && (Fst "y" = #TSEnc_tag) then
-    (Fst (Snd "x") = Fst (Snd "y")) &&
+  else if: (Fst "x" = #TEnc_tag) && (Fst "y" = #TEnc_tag) then
+    (Fst (Fst (Snd "x")) = Fst (Fst (Snd "y"))) &&
+    (Snd (Fst (Snd "x")) = Snd (Fst (Snd "y"))) &&
     ("eq" (Snd (Snd "x")) (Snd (Snd "y")))
   else #false)%V.
 
@@ -128,7 +127,7 @@ Lemma twp_mkakey E rs_enc rs_dec Φ :
   wf_readers rs_enc -∗
   wf_readers rs_dec -∗
   WP mkakey #()%V @ E
-     [{v, ∃ l, ⌜v = (TAKey l true, TAKey l false)%V⌝
+     [{v, ∃ l, ⌜v = (TKey KAEnc l, TKey KADec l)%V⌝
                ∗ akeyT rs_enc rs_dec Φ l}].
 Proof.
 move=> HE; iIntros "#? #wf_enc #wf_dec"; rewrite /mkakey.
@@ -141,32 +140,32 @@ iMod ("Hclose" with "Hinv") as "_".
 by iModIntro; wp_pures; rewrite val_of_termE; eauto.
 Qed.
 
-Lemma twp_aenc rs_enc rs_dec Φ l t :
-  akeyT rs_enc rs_dec Φ l -∗
-  (□ Φ t ∗ termT {[l]} t ∨ ⌜rs_enc = RPub⌝ ∗ termT RPub t) -∗
-  WP aenc (TAKey l true) t
-     [{v, ⌜v = TAEnc l t⌝ ∗ termT RPub (TAEnc l t)}].
+Lemma twp_aenc rs Φ l t :
+  keyT KAEnc rs Φ l -∗
+  (□ Φ t ∗ termT {[l]} t ∨ ⌜rs = RPub⌝ ∗ termT RPub t) -∗
+  WP aenc (TKey KAEnc l) t
+     [{v, ⌜v = TEnc true l t⌝ ∗ termT RPub (TEnc true l t)}].
 Proof.
 rewrite val_of_termE /= /aenc; iIntros "Hl Ht".
 wp_pures; iSplit=> //.
-by iExists rs_enc, rs_dec, Φ; iFrame.
+by iExists rs, Φ; iFrame.
 Qed.
 
-Lemma twp_aencL rs_dec Φ l t :
-  akeyT RPub rs_dec Φ l -∗
+Lemma twp_aencL rs Φ l t :
+  keyT KAEnc RPub Φ l -∗
   termT RPub t -∗
-  WP aenc (TAKey l true) t
-     [{v, ⌜v = TAEnc l t⌝ ∗ termT RPub (TAEnc l t)}].
+  WP aenc (TKey KAEnc l) t
+     [{v, ⌜v = TEnc true l t⌝ ∗ termT RPub (TEnc true l t)}].
 Proof.
 iIntros "Hl Ht"; iApply (twp_aenc with "Hl"); eauto.
 Qed.
 
-Lemma twp_aencH rs_enc rs_dec Φ l t :
-  akeyT rs_enc rs_dec Φ l -∗
+Lemma twp_aencH rs Φ l t :
+  keyT KAEnc RPub Φ l -∗
   □ Φ t -∗
   termT {[l]} t -∗
-  WP aenc (TAKey l true) t
-     [{v, ⌜v = TAEnc l t⌝ ∗ termT RPub (TAEnc l t)}].
+  WP aenc (TKey KAEnc l) t
+     [{v, ⌜v = TEnc true l t⌝ ∗ termT RPub (TEnc true l t)}].
 Proof.
 iIntros "Hl Ht1 Ht2"; iApply (twp_aenc with "Hl"); eauto.
 Qed.
@@ -174,9 +173,9 @@ Qed.
 Lemma twp_adec rs_enc rs_dec Φ l rs_t t :
   akeyT rs_enc rs_dec Φ l -∗
   termT rs_t t -∗
-  WP adec (TAKey l false) t
+  WP adec (TKey KADec l) t
      [{v, match t with
-          | TAEnc l' t' =>
+          | TEnc true l' t' =>
             if decide (l' = l) then
               ⌜v = SOMEV t'⌝ ∗
               (□ Φ t' ∗ termT {[l]} t' ∨ ⌜rs_enc = RPub⌝ ∗ termT RPub t')
@@ -187,12 +186,14 @@ Lemma twp_adec rs_enc rs_dec Φ l rs_t t :
 Proof.
 rewrite val_of_termE /= /adec; iIntros "Hl Ht".
 case: t; try by move=> *; wp_pures.
-move=> l' t' /=; wp_pures.
+move=> b l' t' /=; wp_pures.
+case: b=> /=; wp_pures; eauto.
+iDestruct "Ht" as (rs_enc' Φ') "[Hl' Ht']".
+iDestruct "Hl'" as (rs_dec') "Hl'".
+iPoseProof (own_valid_2 with "Hl Hl'") as "#Hvalid".
 destruct decide as [->|ne].
 - rewrite bool_decide_true //.
   wp_pures; iSplit=> //.
-  iDestruct "Ht" as (rs_enc' rs_dec' Φ') "[Hl' Ht']".
-  iPoseProof (own_valid_2 with "Hl Hl'") as "#Hvalid".
   rewrite auth_validI /= singleton_op gmap_validI.
   iSpecialize ("Hvalid" $! l); rewrite lookup_singleton.
   rewrite uPred.option_validI agree_validI agree_equivI res_equivI.
@@ -205,9 +206,9 @@ Qed.
 Lemma twp_adecH rs_enc rs_dec Φ l rs_t t :
   akeyT (RPriv rs_enc) rs_dec Φ l -∗
   termT rs_t t -∗
-  WP adec (TAKey l false) t
+  WP adec (TKey KADec l) t
      [{v, match t with
-          | TAEnc l' t' =>
+          | TEnc true l' t' =>
             if decide (l' = l) then
               ⌜v = SOMEV t'⌝ ∗ □ Φ t' ∗ termT {[l]} t'
             else
@@ -220,18 +221,19 @@ iPoseProof (twp_adec with "Hl Ht") as "wp".
 iApply (twp_wand with "wp").
 iIntros (v) "Ht".
 case: t; eauto.
+case; eauto.
 move=> l' t'; destruct decide as [->|ne]; trivial.
 iDestruct "Ht" as "[?[?|[%?]]]"; by iFrame.
 Qed.
 
 Lemma twp_is_akey t :
-  ⊢ WP is_akey t
+  ⊢ WP is_key t
        [{v, ⌜v = match t with
-                 | TAKey l is_enc => SOMEV #is_enc
+                 | TKey kt l => SOMEV #(int_of_key_type kt)
                  | _ => NONEV
                  end⌝}].
 Proof.
-rewrite val_of_termE /is_akey.
+rewrite val_of_termE /is_key.
 by case: t=> *; wp_pures.
 Qed.
 
@@ -240,7 +242,7 @@ Lemma twp_mkskey E rs Φ :
   res_ctx -∗
   wf_readers rs -∗
   WP mkskey #()%V @ E
-     [{v, ∃ l, ⌜v = TSKey l⌝ ∗ skeyT rs Φ l}].
+     [{v, ∃ l, ⌜v = TKey KSym l⌝ ∗ skeyT rs Φ l}].
 Proof.
 move=> HE; iIntros "#? #wf_rs"; rewrite /mkskey.
 wp_pures; wp_alloc l as "Hl"; iApply fupd_twp.
@@ -254,8 +256,8 @@ Qed.
 Lemma twp_senc rs Φ l t :
   skeyT rs Φ l -∗
   (□ Φ t ∗ termT {[l]} t ∨ ⌜rs = RPub⌝ ∗ termT RPub t) -∗
-  WP senc (TSKey l) t
-     [{v, ⌜v = TSEnc l t⌝ ∗ termT RPub (TSEnc l t)}].
+  WP senc (TKey KSym l) t
+     [{v, ⌜v = TEnc false l t⌝ ∗ termT RPub (TEnc false l t)}].
 Proof.
 rewrite val_of_termE /= /senc; iIntros "Hl Ht".
 wp_pures; iSplit=> //.
@@ -265,8 +267,8 @@ Qed.
 Lemma twp_sencL rs Φ l t :
   skeyT RPub Φ l -∗
   termT RPub t -∗
-  WP senc (TSKey l) t
-     [{v, ⌜v = TSEnc l t⌝ ∗ termT RPub (TSEnc l t)}].
+  WP senc (TKey KSym l) t
+     [{v, ⌜v = TEnc false l t⌝ ∗ termT RPub (TEnc false l t)}].
 Proof.
 iIntros "Hl Ht"; iApply (twp_senc with "Hl"); eauto.
 Qed.
@@ -275,8 +277,8 @@ Lemma twp_sencH rs Φ l t :
   skeyT rs Φ l -∗
   □ Φ t -∗
   termT {[l]} t -∗
-  WP senc (TSKey l) t
-     [{v, ⌜v = TSEnc l t⌝ ∗ termT RPub (TSEnc l t)}].
+  WP senc (TKey KSym l) t
+     [{v, ⌜v = TEnc false l t⌝ ∗ termT RPub (TEnc false l t)}].
 Proof.
 iIntros "Hl Ht1 Ht2"; iApply (twp_senc with "Hl"); eauto.
 Qed.
@@ -284,9 +286,9 @@ Qed.
 Lemma twp_sdec rs Φ l rs_t t :
   skeyT rs Φ l -∗
   termT rs_t t -∗
-  WP sdec (TSKey l) t
+  WP sdec (TKey KSym l) t
      [{v, match t with
-          | TSEnc l' t' =>
+          | TEnc false l' t' =>
             if decide (l' = l) then
               ⌜v = SOMEV t'⌝ ∗
               (□ Φ t' ∗ termT {[l]} t' ∨ ⌜rs = RPub⌝ ∗ termT RPub t')
@@ -297,12 +299,13 @@ Lemma twp_sdec rs Φ l rs_t t :
 Proof.
 rewrite val_of_termE /= /sdec; iIntros "Hl Ht".
 case: t; try by move=> *; wp_pures.
-move=> l' t' /=; wp_pures.
+move=> b l' t' /=; wp_pures.
+case: b=> /=; wp_pures; eauto.
+iDestruct "Ht" as (rs' Φ') "[Hl' Ht']".
+iPoseProof (own_valid_2 with "Hl Hl'") as "#Hvalid".
 destruct decide as [->|ne].
 - rewrite bool_decide_true //.
   wp_pures; iSplit=> //.
-  iDestruct "Ht" as (rs' Φ') "[Hl' Ht']".
-  iPoseProof (own_valid_2 with "Hl Hl'") as "#Hvalid".
   rewrite auth_validI /= singleton_op gmap_validI.
   iSpecialize ("Hvalid" $! l); rewrite lookup_singleton.
   rewrite uPred.option_validI agree_validI agree_equivI res_equivI.
@@ -315,9 +318,9 @@ Qed.
 Lemma twp_sdecH rd Φ l rs_t t :
   skeyT (RPriv rd) Φ l -∗
   termT rs_t t -∗
-  WP sdec (TSKey l) t
+  WP sdec (TKey KSym l) t
      [{v, match t with
-          | TSEnc l' t' =>
+          | TEnc false l' t' =>
             if decide (l' = l) then
               ⌜v = SOMEV t'⌝ ∗ □ Φ t' ∗ termT {[l]} t'
             else
@@ -330,27 +333,17 @@ iPoseProof (twp_sdec with "Hl Ht") as "wp".
 iApply (twp_wand with "wp").
 iIntros (v) "Ht".
 case: t; eauto.
+case; eauto.
 move=> l' t'; destruct decide as [->|ne]; trivial.
 iDestruct "Ht" as "[?[?|[%?]]]"; by iFrame.
-Qed.
-
-Lemma twp_is_skey t :
-  ⊢ WP is_skey t
-       [{v, ⌜v = match t with
-                 | TSKey l => #true
-                 | _ => #false
-                 end⌝}].
-Proof.
-rewrite val_of_termE /is_skey.
-by case: t=> *; wp_pures.
 Qed.
 
 Lemma twp_eq_term t1 t2 :
   ⊢ WP (eq_term t1 t2) [{ v, ⌜v = #(bool_decide (t1 = t2))⌝ }].
 Proof.
 rewrite val_of_termE.
-elim: t1 t2=> [n1|t11 IH1 t12 IH2|l1|l1 b1|l1 t1 IH1|l1|l1 t1 IH1];
-case=> [n2|t21 t22|l2|l2 b2|l2 t2|l2|l2 t2] /=;
+elim: t1 t2=> [n1|t11 IH1 t12 IH2|l1|kt1 l1|b1 l1 t1 IH1];
+case=> [n2|t21 t22|l2|kt2 l2|b2 l2 t2] /=;
 wp_rec; wp_pures=> //.
 - iPureIntro; congr (# (LitBool _)).
   apply: bool_decide_iff; intuition congruence.
@@ -365,29 +358,19 @@ wp_rec; wp_pures=> //.
     rewrite bool_decide_false; congruence.
 - iPureIntro; congr (# (LitBool _)).
   apply: bool_decide_iff; intuition congruence.
-- case: bool_decide_reflect=> e1.
+- case: bool_decide_reflect=> [[/int_of_key_type_inj e1]|e1].
   + wp_pures; iPureIntro; congr (# (LitBool _)).
     apply: bool_decide_iff; intuition congruence.
   + wp_pures; iPureIntro; congr (# (LitBool _)).
     rewrite bool_decide_false; congruence.
-- case: bool_decide_reflect=> e1.
-  + wp_pures.
-    iPoseProof (IH1 t2) as "IH1".
-    iApply (twp_wand with "IH1"); iIntros (?) "->".
-    iPureIntro; congr (# (LitBool _)).
-    apply: bool_decide_iff; intuition congruence.
-  + wp_pures; iPureIntro; congr (# (LitBool _)).
-    rewrite bool_decide_false; congruence.
-- iPureIntro; congr (# (LitBool _)).
+- case: bool_decide_reflect=> e1; wp_pures; last first.
+    rewrite bool_decide_false //; congruence.
+  case: bool_decide_reflect=> e2; wp_pures; last first.
+    rewrite bool_decide_false //; congruence.
+  iPoseProof (IH1 t2) as "IH1".
+  iApply (twp_wand with "IH1"); iIntros (?) "->".
+  iPureIntro; congr (# (LitBool _)).
   apply: bool_decide_iff; intuition congruence.
-- case: bool_decide_reflect=> e1.
-  + wp_pures.
-    iPoseProof (IH1 t2) as "IH1".
-    iApply (twp_wand with "IH1"); iIntros (?) "->".
-    iPureIntro; congr (# (LitBool _)).
-    apply: bool_decide_iff; intuition congruence.
-  + wp_pures; iPureIntro; congr (# (LitBool _)).
-    rewrite bool_decide_false; congruence.
 Qed.
 
 End Proofs.
