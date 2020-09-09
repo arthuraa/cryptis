@@ -41,7 +41,10 @@ Definition mkakey : val := λ: <>,
    (#TKey_tag, (#(int_of_key_type KADec), "k"))).
 
 Definition aenc : val := λ: "k" "t",
-  (#TEnc_tag, (#true, Snd (Snd "k"), "t")).
+  if: (Fst "k" = #TKey_tag) &&
+      (Fst (Snd "k") = #(int_of_key_type KAEnc)) then
+    SOME (#TEnc_tag, (#true, Snd (Snd "k"), "t"))
+  else NONE.
 
 Definition adec : val := λ: "k" "t",
   if: (Fst "t" = #TEnc_tag)
@@ -162,34 +165,55 @@ iMod ("Hclose" with "Hinv") as "_".
 by iModIntro; wp_pures; rewrite val_of_termE; eauto.
 Qed.
 
-Lemma twp_aenc rs Φ l t :
-  keyT KAEnc rs Φ l -∗
-  (□ Φ t ∗ termT {[l]} t ∨ ⌜rs = RPub⌝ ∗ termT RPub t) -∗
-  WP aenc (TKey KAEnc l) t
-     [{v, ⌜v = TEnc true l t⌝ ∗ termT RPub (TEnc true l t)}].
+Definition maybe_keyT rs Φ t : iProp Σ :=
+  match t with
+  | TKey kt l => keyT kt rs Φ l
+  | _ => True
+  end.
+
+Definition key_readers t : readers :=
+  match t with
+  | TKey kt l => {[l]}
+  | _ => ∅
+  end.
+
+Lemma twp_aenc rs Φ tk t  :
+  maybe_keyT rs Φ tk -∗
+  (□ Φ t ∗ termT (key_readers tk) t ∨ ⌜rs = RPub⌝ ∗ termT RPub t) -∗
+  WP aenc tk t
+     [{v, match tk with
+          | TKey KAEnc l =>
+            ⌜v = SOMEV (TEnc true l t)⌝ ∗ termT RPub (TEnc true l t)
+          | _ => ⌜v = NONEV⌝
+          end}].
 Proof.
 rewrite val_of_termE /= /aenc; iIntros "Hl Ht".
-wp_pures; iSplit=> //.
-by iExists rs, Φ; iFrame.
+case: tk; try by move=> *; wp_pures; eauto.
+by case=> *; wp_pures; eauto.
 Qed.
 
-Lemma twp_aencL rs Φ l t :
-  keyT KAEnc RPub Φ l -∗
+Lemma twp_aencL Φ tk t :
+  maybe_keyT RPub Φ tk -∗
   termT RPub t -∗
-  WP aenc (TKey KAEnc l) t
-     [{v, ⌜v = TEnc true l t⌝ ∗ termT RPub (TEnc true l t)}].
+  WP aenc tk t
+     [{v, match tk with
+          | TKey KAEnc l =>
+            ⌜v = SOMEV (TEnc true l t)⌝ ∗ termT RPub (TEnc true l t)
+          | _ => ⌜v = NONEV⌝
+          end}].
 Proof.
 iIntros "Hl Ht"; iApply (twp_aenc with "Hl"); eauto.
 Qed.
 
 Lemma twp_aencH rs Φ l t :
-  keyT KAEnc RPub Φ l -∗
+  keyT KAEnc rs Φ l -∗
   □ Φ t -∗
   termT {[l]} t -∗
   WP aenc (TKey KAEnc l) t
-     [{v, ⌜v = TEnc true l t⌝ ∗ termT RPub (TEnc true l t)}].
+     [{v, ⌜v = SOMEV (TEnc true l t)⌝ ∗ termT RPub (TEnc true l t)}].
 Proof.
-iIntros "Hl Ht1 Ht2"; iApply (twp_aenc with "Hl"); eauto.
+iIntros "Hl Ht1 Ht2".
+by iApply (twp_aenc _ _ (TKey KAEnc l) with "Hl"); eauto.
 Qed.
 
 Lemma twp_adec rs_enc rs_dec Φ l rs_t t :
