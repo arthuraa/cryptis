@@ -57,6 +57,13 @@ Notation TNonce_tag := 2%Z.
 Notation TKey_tag := 3%Z.
 Notation TEnc_tag := 4%Z.
 
+Fixpoint term_proj t n {struct t} :=
+  match t, n with
+  | TPair t _, 0 => Some t
+  | TPair _ t, S n => term_proj t n
+  | _, _ => None
+  end.
+
 Global Instance term_eq_dec : EqDecision term.
 Proof.
 refine (
@@ -89,7 +96,7 @@ Definition val_of_term := locked val_of_term_rec.
 Lemma val_of_termE : val_of_term = val_of_term_rec.
 Proof. by rewrite /val_of_term -lock. Qed.
 Coercion val_of_term : term >-> val.
-Instance as_val_term : AsVal term := val_of_term.
+Instance repr_term : Repr term := val_of_term.
 
 Fixpoint term_of_val v : term :=
   match v with

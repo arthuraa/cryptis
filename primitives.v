@@ -3,7 +3,7 @@ From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import term crypto1.
+From crypto Require Import lib term crypto1.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -14,6 +14,17 @@ Definition tuple : val := λ: "t1" "t2",
 
 Definition untuple : val := λ: "t",
   if: Fst "t" = #TPair_tag then SOME (Snd "t")
+  else NONE.
+
+Notation "'bind:' x := e1 'in' e2" :=
+  (match: e1 with SOME x => e2  | NONE => NONE end)%E
+  (at level 200, x at level 1, e1, e2 at level 200,
+  format "'[' 'bind:'  x  :=  '[' e1 ']'  'in'  '/' e2 ']'") : expr_scope.
+
+Definition term_projV : val := rec: "loop" "t" "n" :=
+  if: Fst "t" = #TPair_tag then
+    if: "n" = #0 then SOME (Fst (Snd "t"))
+    else "loop" (Snd (Snd "t")) ("n" - #1)
   else NONE.
 
 Definition mknonce : val := λ: <>,
@@ -104,6 +115,17 @@ Lemma twp_untuple E t :
 Proof.
 rewrite val_of_termE /untuple.
 by case: t=> *; wp_pures.
+Qed.
+
+Lemma twp_term_projV E t (n : nat) :
+  ⊢ WP term_projV t #n @ E
+       [{v, ⌜v = repr (term_proj t n)⌝}].
+Proof.
+rewrite val_of_termE; elim: t n; try by move=> *; wp_rec; wp_pures.
+move=> t1 IH1 t2 IH2 [|n]; wp_rec; wp_pures.
+  by rewrite -val_of_termE.
+rewrite (_ : (S n - 1)%Z = n) /=; try lia.
+by iApply IH2.
 Qed.
 
 Lemma twp_mknonce E rs :
