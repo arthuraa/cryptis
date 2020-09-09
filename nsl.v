@@ -69,22 +69,25 @@ split.
 Qed.
 
 Definition initiator (send recv skA pkA pkB nA : val) : val := λ: <>,
-  send (aenc pkB (tuple nA pkA));;
-  bind: "m"    := adec skA (recv #()) in
-  bind: "nA'"  := term_projV "m" #0 in
-  bind: "nB"   := term_projV "m" #1 in
-  bind: "pkB'" := term_projV "m" #2 in
+  bind: "m1"   := aenc pkB (tuple nA pkA) in
+  send "m1";;
+  bind: "m2"   := adec skA (recv #()) in
+  bind: "nA'"  := term_projV "m2" #0 in
+  bind: "nB"   := term_projV "m2" #1 in
+  bind: "pkB'" := term_projV "m2" #2 in
   if: eq_term "pkB'" pkB then
-    send (aenc pkB "nB");;
+    bind: "m3" := aenc pkB "nB" in
+    send "nB";;
     SOME "nB"
   else NONE.
 
 Definition responder (send recv skB pkB nB : val) : val := λ: <>,
-  bind: "m"  := adec skB (recv #()) in
-  bind: "nA" := term_projV "m" #0 in
-  bind: "pkA" := term_projV "m" #1 in
-  send (aenc "pkA" (tuple "nA" (tuple nB pkB)));;
+  bind: "m1"  := adec skB (recv #()) in
+  bind: "nA" := term_projV "m1" #0 in
+  bind: "pkA" := term_projV "m1" #1 in
+  bind: "m2" := aenc "pkA" (tuple "nA" (tuple nB pkB)) in
+  send "m2";;
   bind: "nB'" := adec skB (recv #()) in
-  SOME "nA".
+  if: "nB'" = nB then SOME "nA" else NONE.
 
 End NSL.
