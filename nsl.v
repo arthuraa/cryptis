@@ -1,6 +1,6 @@
 From mathcomp Require Import ssreflect.
 From stdpp Require Import gmap.
-From iris.algebra Require Import agree auth gset gmap.
+From iris.algebra Require Import agree auth gset gmap excl dra sts.
 From iris.heap_lang Require Import notation proofmode.
 From crypto Require Import term crypto1 primitives.
 
@@ -10,63 +10,65 @@ Unset Printing Implicit Defensive.
 
 Section NSL.
 
+Import sts.
+
 Context `{!resG Σ, !heapG Σ}.
 
 Inductive session :=
 | SNew
-| SAnswered of term & bool
-| SInvalid.
+| SAnswered of term & bool.
 
-Canonical sessionO := leibnizO session.
+Inductive turn := Init | Resp.
 
-Global Instance session_op : Op session := λ s1 s2,
+Canonical turnO := leibnizO turn.
+
+Implicit Types (s : session) (t : term).
+
+Definition session_step : relation session := λ s1 s2,
   match s1, s2 with
-  | SNew, s | s , SNew => s
-  | SInvalid, _ | _, SInvalid => SInvalid
-  | SAnswered t1 b1, SAnswered t2 b2 =>
-    if bool_decide (t1 = t2) then SAnswered t1 (b1 || b2)
-    else SInvalid
+  | SNew, SAnswered _ false => True
+  | SAnswered t1 false, SAnswered t2 true => t1 = t2
+  | _, _ => False
   end.
 
-Global Instance session_valid : Valid session := λ s,
+Definition session_token s : propset turn :=
   match s with
-  | SInvalid => False
-  | _ => True
+  | SNew => {[Init]}
+  | SAnswered _ b => {[if b then Init else Resp]}
   end.
 
-Global Instance session_validN : ValidN session := λ _, valid.
+Canonical session_sts : stsT := Sts session_step session_token.
 
-Global Instance session_pcore : PCore session := Some.
+Class nslG := {
+  in_nsl_sessG :> inG Σ (gmapUR term (stsR session_sts));
+  in_nsl_keysG :> inG Σ (authR (gmapUR loc (agreeR turnO)));
+  nsl_sess_name : gname;
+  nsl_keys_name : gname;
+}.
 
-Lemma session_cmra_mixin : CmraMixin session.
-Proof.
-split.
-- solve_contractive.
-- move=> n x _ _ <- [<-]; eauto.
-- by move=> n x _ <-.
-- move=> x; split; first by eauto.
-  apply; exact: 0.
-- move=> ??; apply.
-- rewrite /op; case=> [|t1 b1|] [|t2 b2|] [|t3 b3|] //=;
-  try by case: bool_decide.
-  case: (bool_decide_reflect (t1 = t2))=> [e12|ne12] //=;
-  try subst t1;
-  case: (bool_decide_reflect (t2 = t3))=> [e23|ne23] //=;
-  try subst t2.
-  + by rewrite bool_decide_true // orb_assoc.
-  + by rewrite bool_decide_false.
-- rewrite /op; case=> [|t1 b1|] [|t2 b2|] //=.
-  case: (bool_decide_reflect (t1 = t2))=> [<-|ne12].
-  + by rewrite bool_decide_true // orb_comm.
-  + by rewrite bool_decide_false.
-- rewrite /op; case=> [|t b|] _ [<-] //=.
-  by rewrite bool_decide_true // orb_diag.
-- by move=> ? _ [<-].
-- by move=> x y _ xy [<-]; exists y.
-- by move=> ? [|??|] [|??|].
-- move=> ? x y1 y2 valid_x e.
-  rewrite e in valid_x *; by exists y1, y2.
-Qed.
+Context `{!nslG}.
+
+Definition initiator_key l : iProp Σ :=
+  own nsl_keys_name (◯ {[l := to_agree Init]}).
+
+Definition responder_key l : iProp Σ :=
+  own nsl_keys_name (◯ {[l := to_agree Resp]}).
+
+Definition initiator_pred lA t : iProp Σ :=
+  match t with
+  | TPair (TNonce nA) (TPair (TNonce nB) (TKey KAEnc lB)) =>
+    nonceT {[lA; lB]} nA ∗ nonceT {[lA; lB]} nB ∗ responder_key lB
+  | _ => False
+  end.
+
+Definition responder_pred lB t : iProp Σ :=
+  match t with
+  | TPair (TNonce nA) (TKey KAEnc lA) =>
+    nonceT {[lA; lB]} nA ∗ initiator_key lA
+  | TNonce nB =>
+    ∃ lA, nonceT {[lA; lB]} nB ∗ initiator_key lA
+  | _ => False
+  end.
 
 Definition initiator (send recv skA pkA pkB nA : val) : val := λ: <>,
   bind: "m1"   := aenc pkB (tuple nA pkA) in
