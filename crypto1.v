@@ -70,6 +70,19 @@ Instance readers_validN : ValidN readers := λ _ _, True.
 Instance readers_pcore : PCore readers := λ x, Some x.
 Instance readers_op : Op readers := union.
 
+Lemma readers_subseteq_equiv (rs1 rs2 : readers) :
+  rs1 ⊆ rs2 ↔
+  match rs1, rs2 with
+  | _, RPub => True
+  | RPub, _ => False
+  | RPriv rs1, RPriv rs2 => rs1 ⊆ rs2
+  end.
+Proof.
+case: rs1 rs2=> [|rs1] [|rs2] //=.
+split=> // /(_ (fresh rs2) I).
+rewrite /elem_of /=; exact: is_fresh.
+Qed.
+
 Lemma readers_cmra_mixin : CmraMixin readers.
 Proof.
 apply cmra_total_mixin; eauto.
@@ -388,6 +401,17 @@ Fixpoint termT rs t : iProp Σ :=
 Global Instance persistent_termT rs t :
   Persistent (termT rs t).
 Proof. elim: t rs=> *; apply _. Qed.
+
+Lemma term_proj_termT t n rs t' :
+  term_proj t n = Some t' →
+  termT rs t -∗
+  termT rs t'.
+Proof.
+elim: t n=> // t1 IH1 t2 IH2 [|n] /=.
+  by move=> [<-]; iIntros "[??]".
+move=> {}/IH2 IH2; iIntros "[??]".
+by iApply IH2.
+Qed.
 
 Lemma sub_termT rs rs' t :
   rs' ⊆ rs →
