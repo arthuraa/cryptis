@@ -218,6 +218,16 @@ Context `{!resG, !heapG Σ}.
 Definition nonceT rs l : iProp Σ :=
   own res_name (◯ {[l := to_agree (RNonce rs)]}).
 
+Lemma nonceT_agree rs1 rs2 l :
+  nonceT rs1 l -∗ nonceT rs2 l -∗ ⌜rs1 = rs2⌝.
+Proof.
+iIntros "Hown1 Hown2".
+iPoseProof (own_valid_2 with "Hown1 Hown2") as "#Hvalid".
+rewrite auth_validI /= singleton_op gmap_validI.
+iSpecialize ("Hvalid" $! l); rewrite lookup_singleton uPred.option_validI.
+by rewrite agree_validI agree_equivI res_equivI.
+Qed.
+
 Global Instance persistent_nonceT rs l :
   Persistent (nonceT rs l).
 Proof. apply _. Qed.
@@ -246,6 +256,32 @@ Definition keyT kt rs Φ l : iProp Σ :=
   | KAEnc => ∃ rs_dec, akeyT rs rs_dec Φ l
   | KADec => ∃ rs_enc, akeyT rs_enc rs Φ l
   end.
+
+Lemma keyT_agree kt rs1 rs2 Φ1 Φ2 l :
+  keyT kt rs1 Φ1 l -∗ keyT kt rs2 Φ2 l -∗ ⌜rs1 = rs2⌝ ∗ Φ1 ≡ Φ2.
+Proof.
+case: kt.
+- iIntros "Hown1 Hown2".
+  iPoseProof (own_valid_2 with "Hown1 Hown2") as "#Hvalid".
+  rewrite auth_validI /= singleton_op gmap_validI.
+  iSpecialize ("Hvalid" $! l); rewrite lookup_singleton uPred.option_validI.
+  rewrite agree_validI agree_equivI res_equivI.
+  by iDestruct "Hvalid" as "[??]"; iSplit.
+- iDestruct 1 as (rs1') "Hown1".
+  iDestruct 1 as (rs2') "Hown2".
+  iPoseProof (own_valid_2 with "Hown1 Hown2") as "#Hvalid".
+  rewrite auth_validI /= singleton_op gmap_validI.
+  iSpecialize ("Hvalid" $! l); rewrite lookup_singleton uPred.option_validI.
+  rewrite agree_validI agree_equivI res_equivI.
+  by iDestruct "Hvalid" as "(?&?&?)"; iSplit.
+- iDestruct 1 as (rs1') "Hown1".
+  iDestruct 1 as (rs2') "Hown2".
+  iPoseProof (own_valid_2 with "Hown1 Hown2") as "#Hvalid".
+  rewrite auth_validI /= singleton_op gmap_validI.
+  iSpecialize ("Hvalid" $! l); rewrite lookup_singleton uPred.option_validI.
+  rewrite agree_validI agree_equivI res_equivI.
+  by iDestruct "Hvalid" as "(?&?&?)"; iSplit.
+Qed.
 
 Global Instance persistent_keyT kt rs Φ l : Persistent (keyT kt rs Φ l).
 Proof. by case: kt; apply _. Qed.
@@ -425,6 +461,31 @@ elim: t rs=> [n|t1 IH1 t2 IH2|l|kt l|b l t IH] rs sub //=.
 - iDestruct 1 as (rs0 Φ) "[#Hkey %sub0]".
   iExists rs0, Φ; iSplit=> //; iPureIntro; by etransitivity.
 Qed.
+
+(** Because of [sub_termT], the definition of [termT] does not allow us to track
+the owners of a term exactly.  To remedy that, we introduce the [secretT rs t]
+predicate below, which says that [t] is private exactly to the readers in
+[rs].  *)
+
+Fixpoint secretT_def (rs : gset loc) t : iProp Σ :=
+  match t with
+  | TInt _ => False
+  | TPair t1 t2 => secretT_def rs t1 ∨ secretT_def rs t2
+  | TNonce l => nonceT (RPriv rs) l
+  | TKey kt l => ∃ Φ, keyT kt (RPriv rs) Φ l
+  | TEnc _ _ _ => False
+  end.
+
+Global Instance secretT_def_persistent (rs : gset loc) t :
+  Persistent (secretT_def rs t).
+Proof. by elim: t=> *; apply _. Qed.
+
+Definition secretT (rs : gset loc) t : iProp Σ :=
+  termT (RPriv rs) t ∗ secretT_def rs t.
+
+Global Instance secretT_persistent (rs : gset loc) t :
+  Persistent (secretT rs t).
+Proof. by apply _. Qed.
 
 Lemma nonce_alloc rs l :
   res_inv -∗
