@@ -238,18 +238,6 @@ Hypothesis wp_recv : forall E,
 Ltac protocol_failure :=
   by move=> *; iIntros "->"; wp_pures; iExists None.
 
-Lemma res_own l (r1 r2 : res Σ) :
-  own res_name (◯ {[l := to_agree r1]}) -∗
-  own res_name (◯ {[l := to_agree r2]}) -∗
-  r1 ≡ r2.
-Proof.
-iIntros "Hown1 Hown2".
-iPoseProof (own_valid_2 with "Hown1 Hown2") as "#Hvalid".
-rewrite auth_validI /= singleton_op gmap_validI.
-iSpecialize ("Hvalid" $! l).
-by rewrite lookup_singleton uPred.option_validI agree_validI agree_equivI.
-Qed.
-
 Lemma wp_initiator kA kB nA :
   nsl_keys_inv -∗
   nsl_sess_inv -∗
@@ -322,7 +310,7 @@ iDestruct "Ht" as "[Ht|(_&Ht)]"; last first.
   iDestruct "contra" as (rs_nB) "[contra1 contra2]".
   rewrite readers_subseteq_equiv.
   case: rs_nB=> [|rs_nB]; last by iDestruct "contra2" as "[]".
-  iPoseProof (res_own with "HnA contra1") as "contra".
+  iPoseProof (resT_agree with "HnA contra1") as "contra".
   rewrite res_equivI.
   by iPoseProof "contra" as "%contra".
 iDestruct "Ht" as "[#Hagent Ht]".

@@ -32,6 +32,8 @@ apply: map_eq=> x'; case: (decide (x' = x))=> [ {x'}->|ne].
 by rewrite lookup_singleton_ne // -not_elem_of_dom e elem_of_singleton.
 Qed.
 
+Definition cryptoN := nroot.@"crypto".
+
 (* TODO: Move to Iris *)
 Inductive readers :=
 | RPub
@@ -108,6 +110,7 @@ Section Resources.
 Context (Σ : gFunctors).
 Implicit Types Φ : termO -n> iPropO Σ.
 Implicit Types l : loc.
+Implicit Types γ : gname.
 
 Inductive res :=
 | RNonce of readers
@@ -164,68 +167,172 @@ Proof. case: r1=> *; case: r2=> * /=; by uPred.unseal. Qed.
 Global Instance discrete_RNonce rs : Discrete (RNonce rs).
 Proof. by case. Qed.
 
-Definition resM := gmap loc res.
-Definition resR := gmapUR loc (agreeR resO).
-Implicit Types (RM : resM) (RR : resR).
+Definition priv_dec_key (rs : gset loc) r : Prop :=
+  match r with
+  | RAKey _ (RPriv rs') _ | RSKey (RPriv rs') _ => rs' ⊆ rs
+  | _ => False
+  end.
 
-Definition to_resR : resM → resR :=
-  fmap to_agree.
-
-Lemma to_resR_uninjI RR : ✓ RR ⊢@{iPropI Σ} ∃ RM, to_resR RM ≡ RR.
+Lemma priv_dec_key_sub rs rs' r :
+  rs ⊆ rs' → priv_dec_key rs r → priv_dec_key rs' r.
 Proof.
-move: RR; apply: map_ind.
-  by iIntros "_"; iExists ∅; rewrite /to_resR fmap_empty.
-move=> l ag RR RR_l IH; iIntros "#valid"; rewrite gmap_validI.
-iAssert (✓ ag)%I as "valid_ag".
-  by iSpecialize ("valid" $! l); rewrite lookup_insert uPred.option_validI.
-iAssert (✓ RR)%I as "valid_RR".
-  rewrite gmap_validI; iIntros (l').
-  iSpecialize ("valid" $! l').
-  destruct (decide (l' = l)) as [->|ne ].
-  - by rewrite RR_l !uPred.option_validI.
-  - by rewrite lookup_insert_ne //.
-iDestruct (to_agree_uninjI with "valid_ag") as (r) "Hr".
-iDestruct (IH with "valid_RR") as (RM) "IH".
-iExists (<[l := r]>RM).
-rewrite /to_resR fmap_insert.
-iRewrite -"Hr".
-by iRewrite -"IH".
-Qed.
-
-Lemma to_resR_equivI RM1 RM2 :
-  to_resR RM1 ≡ to_resR RM2 ⊣⊢@{iPropI Σ} RM1 ≡ RM2.
-Proof.
-rewrite /to_resR !gmap_equivI; iSplit.
-- iIntros "e" (l).
-  iSpecialize ("e" $! l).
-  rewrite !lookup_fmap !option_equivI.
-  case: (RM1 !! l) (RM2 !! l)=> [v1|] [v2|] //=.
-  by rewrite agree_equivI.
-- iIntros "e" (l).
-  iSpecialize ("e" $! l).
-  rewrite !lookup_fmap !option_equivI.
-  case: (RM1 !! l) (RM2 !! l) => [v1|] [v2|] //=.
-  by rewrite agree_equivI.
+case: r=> [?|?[|?]?|[|?]?] //=; set_solver.
 Qed.
 
 Class resG := {
-  res_inG :> inG Σ (authR resR);
-  res_name : gname
+  res_inG :> inG Σ (agreeR resO);
 }.
 
 Context `{!resG, !heapG Σ}.
 
-Definition nonceT rs l : iProp Σ :=
-  own res_name (◯ {[l := to_agree (RNonce rs)]}).
+Definition pre_resT r l : iProp Σ :=
+  ∃ γ, meta l (cryptoN.@"res") γ ∗ own γ (to_agree r).
 
-Lemma nonceT_agree rs1 rs2 l :
-  nonceT rs1 l -∗ nonceT rs2 l -∗ ⌜rs1 = rs2⌝.
+Lemma pre_resT_persistent r l : Persistent (pre_resT r l).
+Proof. apply _. Qed.
+
+Lemma pre_resT_agree r1 r2 l : pre_resT r1 l -∗ pre_resT r2 l -∗ r1 ≡ r2.
+Proof.
+iDestruct 1 as (γ) "[#Hl #Hγ]".
+iDestruct 1 as (γ') "[#Hl' #Hγ']".
+iPoseProof (meta_agree with "Hl Hl'") as "<-".
+iPoseProof (own_valid_2 with "Hγ Hγ'") as "Hvalid".
+by rewrite agree_validI agree_equivI.
+Qed.
+
+Lemma later_pre_resT r l :
+  ▷ pre_resT r l -∗ ◇ ∃ r', pre_resT r' l ∗ ▷ (r ≡ r').
+Proof.
+iDestruct 1 as (γ) "[> #Hmeta Hown]".
+iMod (later_own with "Hown") as (ag) "[#Hown #Hr]".
+iPoseProof (own_valid with "Hown") as "#Hvalid".
+iDestruct (to_agree_uninjI with "Hvalid") as (r') "Hr'".
+iRewrite -"Hr'" in "Hr"; iRewrite -"Hr'" in "Hown"; rewrite agree_equivI.
+iModIntro; iExists r'; iSplit=> //.
+by iExists γ; iSplit.
+Qed.
+
+Definition pre_wf_readers rs_priv rs :=
+  match rs with
+  | RPub     => True
+  | RPriv rs => rs ⊆ rs_priv
+  end.
+
+Lemma pre_wf_readers_sub rs_priv rs_priv' rs :
+  rs_priv ⊆ rs_priv' → pre_wf_readers rs_priv rs → pre_wf_readers rs_priv' rs.
+Proof. case: rs=> //= rs *; set_solver. Qed.
+
+Definition pre_wf_res rs_priv r :=
+  match r with
+  | RNonce rs => pre_wf_readers rs_priv rs
+  | RAKey rs1 rs2 _ => pre_wf_readers rs_priv rs1 ∧ pre_wf_readers rs_priv rs2
+  | RSKey rs _ => pre_wf_readers rs_priv rs
+  end.
+
+Definition priv_keyT rs_priv l : iProp Σ :=
+  ∃ r, pre_resT r l ∗ ⌜priv_dec_key rs_priv r⌝.
+
+Global Instance priv_keyT_proper :
+  Proper (equiv ==> equiv ==> equiv) priv_keyT.
+Proof.
+by move=> rs1 rs2 /(leibniz_equiv rs1 rs2) -> l1 l2 /(leibniz_equiv l1 l2) ->.
+Qed.
+
+Global Instance priv_keyT_ne : NonExpansive2 priv_keyT.
+Proof.
+move=> n.
+by move=> rs1 rs2 /(leibniz_equiv rs1 rs2) -> l1 l2 /(leibniz_equiv l1 l2) ->.
+Qed.
+
+Global Instance priv_keyT_persistent rs_priv l :
+  Persistent (priv_keyT rs_priv l).
+Proof. apply _. Qed.
+
+Global Instance priv_keyT_timeless rs_priv l :
+  Timeless (priv_keyT rs_priv l).
+Proof.
+rewrite /Timeless /priv_keyT bi.later_exist_except_0.
+iMod 1 as (r) "[#Hown >%Hpriv]".
+iMod (later_pre_resT with "Hown") as (r') "[Hown' He]".
+iExists r'; iSplit; eauto; rewrite res_equivI.
+case: r Hpriv => [rs|rs_enc [|rs_dec] Φ|[|rs_dec] Φ] //= Hpriv;
+case: r'=> [?|???|??]; try by iDestruct "He" as "> []".
+- by iDestruct "He" as "(><-&><-&?)".
+- by iDestruct "He" as "(><-&?)".
+Qed.
+
+Lemma priv_keyT_sub rs_priv rs_priv' l :
+  rs_priv ⊆ rs_priv' → priv_keyT rs_priv l -∗ priv_keyT rs_priv' l.
+Proof.
+move=> sub; iDestruct 1 as (r) "[Hr %Hpriv]".
+iExists r; iFrame; iPureIntro.
+by eapply priv_dec_key_sub.
+Qed.
+
+Definition priv_keysT rs_priv : iProp Σ :=
+  ∀ l, ⌜l ∈ rs_priv⌝ -∗ priv_keyT rs_priv l.
+
+Definition wf_readers rs : iProp Σ :=
+  ∃ rs_priv, priv_keysT rs_priv ∗ ⌜pre_wf_readers rs_priv rs⌝.
+
+Global Instance wf_readers_persistent rs : Persistent (wf_readers rs).
+Proof. apply _. Qed.
+
+Global Instance wf_readers_timeless rs : Timeless (wf_readers rs).
+Proof. apply _. Qed.
+
+Definition wf_res r : iProp Σ :=
+  ∃ rs_priv, priv_keysT rs_priv ∗ ⌜pre_wf_res rs_priv r⌝.
+
+Global Instance wf_res_persistent r : Persistent (wf_res r).
+Proof. apply _. Qed.
+
+Global Instance wf_res_timeless r : Timeless (wf_res r).
+Proof. apply _. Qed.
+
+Lemma wf_resE r :
+  wf_res r ⊣⊢@{iPropI Σ}
+  match r with
+  | RNonce rs => wf_readers rs
+  | RAKey rs_enc rs_dec _ => wf_readers rs_enc ∧ wf_readers rs_dec
+  | RSKey rs _ => wf_readers rs
+  end.
+Proof.
+case: r; try by move=> *; iSplit; eauto.
+move=> rs_enc rs_dec Φ /=; iSplit.
+- iDestruct 1 as (rs_priv) "(wf_rs_priv & %wf_rs_enc & %wf_rs_dec)".
+  by iSplit; iExists rs_priv; iSplit.
+- iIntros "[Henc Hdec]".
+  iDestruct "Henc" as (rs_priv_enc) "[Hpriv_enc %Hwf_enc]".
+  iDestruct "Hdec" as (rs_priv_dec) "[Hpriv_dec %Hwf_dec]".
+  iExists (rs_priv_enc ∪ rs_priv_dec); iSplit; last first.
+    iPureIntro; split; eapply pre_wf_readers_sub; try eassumption;
+    set_solver.
+  iIntros (l) "%Hl"; case/elem_of_union: Hl=> Hl.
+  + iSpecialize ("Hpriv_enc" $! _ Hl).
+    iApply (priv_keyT_sub with "Hpriv_enc"); set_solver.
+  + iSpecialize ("Hpriv_dec" $! _ Hl).
+    iApply (priv_keyT_sub with "Hpriv_dec"); set_solver.
+Qed.
+
+Definition resT r l : iProp Σ :=
+  pre_resT r l ∗ wf_res r.
+
+Lemma resT_agree r1 r2 l : resT r1 l -∗ resT r2 l -∗ r1 ≡ r2.
+Proof.
+iIntros "[Hr1 _] [Hr2 _]". iApply (pre_resT_agree with "Hr1 Hr2").
+Qed.
+
+Global Instance resT_persistent r l : Persistent (resT r l).
+Proof. apply _. Qed.
+
+Definition nonceT rs l : iProp Σ := resT (RNonce rs) l.
+
+Lemma nonceT_agree rs1 rs2 l : nonceT rs1 l -∗ nonceT rs2 l -∗ ⌜rs1 = rs2⌝.
 Proof.
 iIntros "Hown1 Hown2".
-iPoseProof (own_valid_2 with "Hown1 Hown2") as "#Hvalid".
-rewrite auth_validI /= singleton_op gmap_validI.
-iSpecialize ("Hvalid" $! l); rewrite lookup_singleton uPred.option_validI.
-by rewrite agree_validI agree_equivI res_equivI.
+iPoseProof (resT_agree with "Hown1 Hown2") as "#Hvalid".
+by rewrite res_equivI.
 Qed.
 
 Global Instance persistent_nonceT rs l :
@@ -237,14 +344,13 @@ Global Instance timeless_nonceT rs l :
 Proof. apply _. Qed.
 
 Definition akeyT rs_enc rs_dec Φ l : iProp Σ :=
-  own res_name (◯ {[l := to_agree (RAKey rs_enc rs_dec Φ)]}).
+  resT (RAKey rs_enc rs_dec Φ) l.
 
 Global Instance persistent_akeyT rs_enc rs_dec Φ l :
   Persistent (akeyT rs_enc rs_dec Φ l).
 Proof. apply _. Qed.
 
-Definition skeyT rs Φ l : iProp Σ :=
-  own res_name (◯ {[l := to_agree (RSKey rs Φ)]}).
+Definition skeyT rs Φ l : iProp Σ := resT (RSKey rs Φ) l.
 
 Global Instance persistent_skeyT rs Φ l :
   Persistent (skeyT rs Φ l).
@@ -260,163 +366,24 @@ Definition keyT kt rs Φ l : iProp Σ :=
 Lemma keyT_agree kt rs1 rs2 Φ1 Φ2 l :
   keyT kt rs1 Φ1 l -∗ keyT kt rs2 Φ2 l -∗ ⌜rs1 = rs2⌝ ∗ Φ1 ≡ Φ2.
 Proof.
-case: kt.
+case: kt=> /=.
 - iIntros "Hown1 Hown2".
-  iPoseProof (own_valid_2 with "Hown1 Hown2") as "#Hvalid".
-  rewrite auth_validI /= singleton_op gmap_validI.
-  iSpecialize ("Hvalid" $! l); rewrite lookup_singleton uPred.option_validI.
-  rewrite agree_validI agree_equivI res_equivI.
-  by iDestruct "Hvalid" as "[??]"; iSplit.
+  iPoseProof (resT_agree with "Hown1 Hown2") as "#Hvalid".
+  by rewrite res_equivI /=; iDestruct "Hvalid" as "(?&?)"; iSplit.
 - iDestruct 1 as (rs1') "Hown1".
   iDestruct 1 as (rs2') "Hown2".
-  iPoseProof (own_valid_2 with "Hown1 Hown2") as "#Hvalid".
-  rewrite auth_validI /= singleton_op gmap_validI.
-  iSpecialize ("Hvalid" $! l); rewrite lookup_singleton uPred.option_validI.
-  rewrite agree_validI agree_equivI res_equivI.
+  iPoseProof (resT_agree with "Hown1 Hown2") as "#Hvalid".
+  rewrite res_equivI.
   by iDestruct "Hvalid" as "(?&?&?)"; iSplit.
 - iDestruct 1 as (rs1') "Hown1".
   iDestruct 1 as (rs2') "Hown2".
-  iPoseProof (own_valid_2 with "Hown1 Hown2") as "#Hvalid".
-  rewrite auth_validI /= singleton_op gmap_validI.
-  iSpecialize ("Hvalid" $! l); rewrite lookup_singleton uPred.option_validI.
-  rewrite agree_validI agree_equivI res_equivI.
+  iPoseProof (resT_agree with "Hown1 Hown2") as "#Hvalid".
+  rewrite res_equivI.
   by iDestruct "Hvalid" as "(?&?&?)"; iSplit.
 Qed.
 
 Global Instance persistent_keyT kt rs Φ l : Persistent (keyT kt rs Φ l).
 Proof. by case: kt; apply _. Qed.
-
-Definition priv_keyT rs l : iProp Σ :=
-    (∃ rs_enc Φ, akeyT rs_enc (RPriv rs) Φ l)
-  ∨ (∃ Φ, skeyT (RPriv rs) Φ l).
-
-Global Instance priv_keyT_proper : Proper (equiv ==> equiv ==> equiv) priv_keyT.
-Proof.
-by move=> rs1 rs2 /(leibniz_equiv rs1 rs2) -> l1 l2 /(leibniz_equiv l1 l2) ->.
-Qed.
-
-Global Instance priv_keyT_ne : NonExpansive2 priv_keyT.
-Proof.
-move=> n.
-by move=> rs1 rs2 /(leibniz_equiv rs1 rs2) -> l1 l2 /(leibniz_equiv l1 l2) ->.
-Qed.
-
-Global Instance persistent_priv_keyT rs l :
-  Persistent (priv_keyT rs l).
-Proof. apply _. Qed.
-
-Global Instance timeless_priv_keyT rs l :
-  Timeless (priv_keyT rs l).
-Proof.
-rewrite /Timeless; iDestruct 1 as "[H|H]".
-- iDestruct "H" as (rs_enc Φ) "H"; iLeft.
-  iExists rs_enc; iMod (later_own with "H") as (rm) "[Hown #He]".
-  case: rm=> ? rm.
-  rewrite auth_equivI /=; iDestruct "He" as "(> <- & Hfrag)".
-  rewrite -[Auth None rm]/(◯ rm).
-  iAssert (▷ (dom (gset loc) rm ≡ {[l]}))%I as "> %Hdom".
-    by iModIntro; iRewrite -"Hfrag"; rewrite dom_singleton.
-  apply leibniz_equiv in Hdom.
-  have {Hdom rm} [ag ->] := dom_singleton_eq Hdom.
-  iPoseProof (own_valid with "Hown") as "#Hvalid".
-  iAssert (✓ {[l := ag]})%I as "#Hvalid'".
-    by rewrite auth_validI /=.
-  rewrite gmap_validI; iSpecialize ("Hvalid'" $! l); rewrite lookup_singleton.
-  rewrite uPred.option_validI.
-  iDestruct (to_agree_uninjI with "Hvalid'") as (r) "Hr".
-  iRewrite -"Hr" in "Hown".
-  iAssert (▷ (r ≡ RAKey rs_enc (RPriv rs) Φ))%I as "H".
-    iModIntro; rewrite -[(r ≡ _)%I]agree_equivI; iRewrite "Hr".
-    rewrite gmap_equivI; iSpecialize ("Hfrag" $! l); rewrite !lookup_singleton.
-    by rewrite option_equivI; iRewrite -"Hfrag".
-  destruct r as [rs'|rs_enc' rs_dec' Φ'|rs' Φ'] eqn:er.
-  + iAssert (▷ False)%I as "> []"; iModIntro; by rewrite res_equivI.
-  + rewrite res_equivI; iDestruct "H" as "(>% & >% & H)".
-    by subst r rs_enc' rs_dec'; iExists Φ'; iModIntro.
-  + iAssert (▷ False)%I as "> []"; iModIntro; by rewrite res_equivI.
-- iDestruct "H" as (Φ) "H"; iRight.
-  iMod (later_own with "H") as (rm) "[Hown #He]".
-  case: rm=> ? rm.
-  rewrite auth_equivI /=; iDestruct "He" as "(> <- & Hfrag)".
-  rewrite -[Auth None rm]/(◯ rm).
-  iAssert (▷ (dom (gset loc) rm ≡ {[l]}))%I as "> %Hdom".
-    by iModIntro; iRewrite -"Hfrag"; rewrite dom_singleton.
-  apply leibniz_equiv in Hdom.
-  have {Hdom rm} [ag ->] := dom_singleton_eq Hdom.
-  iPoseProof (own_valid with "Hown") as "#Hvalid".
-  iAssert (✓ {[l := ag]})%I as "#Hvalid'".
-    by rewrite auth_validI /=.
-  rewrite gmap_validI; iSpecialize ("Hvalid'" $! l); rewrite lookup_singleton.
-  rewrite uPred.option_validI.
-  iDestruct (to_agree_uninjI with "Hvalid'") as (r) "Hr".
-  iRewrite -"Hr" in "Hown".
-  iAssert (▷ (r ≡ RSKey (RPriv rs) Φ))%I as "H".
-    iModIntro; rewrite -[(r ≡ _)%I]agree_equivI; iRewrite "Hr".
-    rewrite gmap_equivI; iSpecialize ("Hfrag" $! l); rewrite !lookup_singleton.
-    by rewrite option_equivI; iRewrite -"Hfrag".
-  destruct r as [rs'|rs_enc' rs_dec' Φ'|rs' Φ'] eqn:er.
-  + iAssert (▷ False)%I as "> []"; iModIntro; by rewrite res_equivI.
-  + iAssert (▷ False)%I as "> []"; iModIntro; by rewrite res_equivI.
-  + rewrite res_equivI; iDestruct "H" as "(>% & H)".
-    by subst r rs'; iExists Φ'; iModIntro.
-Qed.
-
-Definition wf_readers rs : iProp Σ :=
-  match rs with
-  | RPub     => True
-  | RPriv rs => ∀l, ⌜l ∈ rs⌝ → ∃ rs', priv_keyT rs' l
-  end.
-
-Global Instance wf_readers_proper : Proper (equiv ==> equiv) wf_readers.
-Proof. by move=> rs1 rs2 ->. Qed.
-
-Global Instance wf_readers_ne : NonExpansive wf_readers.
-Proof. by move=> n rs1 rs2 ->. Qed.
-
-Global Instance persistent_wf_readers rs :
-  Persistent (wf_readers rs).
-Proof. case: rs=> *; apply _. Qed.
-
-Global Instance timeless_wf_readers rs :
-  Timeless (wf_readers rs).
-Proof. case: rs=> *; apply _. Qed.
-
-Definition wf_res r : iProp Σ :=
-  match r with
-  | RNonce rs => wf_readers rs
-  | RAKey rs1 rs2 _ => wf_readers rs1 ∗ wf_readers rs2
-  | RSKey rs _ => wf_readers rs
-  end.
-
-Global Instance persistent_wf_res r : Persistent (wf_res r).
-Proof. case: r=> *; apply _. Qed.
-
-Global Instance timeless_wf_res r : Timeless (wf_res r).
-Proof. case: r=> *; apply _. Qed.
-
-Global Instance wf_res_proper : Proper (equiv ==> equiv) wf_res.
-Proof.
-move=> r1 r2.
-case: r1=> [rs1|rs1_enc rs1_dec Φ1|rs1 Φ1];
-case: r2=> [rs2|rs2_enc rs2_dec Φ2|rs2 Φ2] //=.
-- by solve_proper.
-- by intros (-> & -> & _).
-- by intros (-> & _).
-Qed.
-
-Global Instance wf_res_ne : NonExpansive wf_res.
-Proof.
-move=> n r1 r2.
-case: r1=> [rs1|rs1_enc rs1_dec Φ1|rs1 Φ1];
-case: r2=> [rs2|rs2_enc rs2_dec Φ2|rs2 Φ2] //=.
-- by solve_proper.
-- by intros (-> & -> & _).
-- by intros (-> & _).
-Qed.
-
-Definition res_inv : iProp Σ :=
-  ∃ RM, own res_name (● (to_resR RM))
-        ∗ [∗ map] l ↦ r ∈ RM, l ↦ #() ∗ wf_res r.
 
 (** [termT rs t] holds when the term [t] can be declared public after encrypting
 it with any of the readers rs.  If [rs = RPub], [t] is considered public and
@@ -487,129 +454,23 @@ Global Instance secretT_persistent (rs : gset loc) t :
   Persistent (secretT rs t).
 Proof. by apply _. Qed.
 
-Lemma nonce_alloc rs l :
-  res_inv -∗
-  l ↦ #() -∗
-  wf_readers rs -∗
-  |==> res_inv ∗ nonceT rs l.
-Proof.
-iDestruct 1 as (RM) "[Hown Hreaders]".
-iIntros "Hl Hrs".
-destruct (RM !! l) as [rs'|] eqn:e.
-  rewrite big_sepM_delete //.
-  iDestruct "Hreaders" as "[[Hl' _] _]".
-  by iPoseProof (mapsto_valid_2 with "Hl Hl'") as "%".
-pose (RM' := <[l := RNonce rs]>RM).
-iAssert ([∗ map] l' ↦ rs' ∈ RM', l' ↦ #() ∗ wf_res rs')%I
-    with "[Hreaders Hl Hrs]" as "Hreaders".
-  by rewrite /RM' big_sepM_insert //; iFrame.
-iMod (own_update _ _ (_ ⋅ ◯ {[l := to_agree (RNonce rs)]}) with "Hown")
-    as "[Hown #Hfrag]".
-  apply auth_update_alloc, alloc_singleton_local_update=> //.
-  by rewrite lookup_fmap e.
-iModIntro; iSplitL=> //.
-iExists RM'; iFrame; by rewrite /RM' /to_resR fmap_insert.
-Qed.
-
-Lemma akey_alloc rs_enc rs_dec Φ l :
-  res_inv -∗
-  l ↦ #() -∗
-  wf_readers rs_enc -∗
-  wf_readers rs_dec -∗
-  |==> res_inv ∗ akeyT rs_enc rs_dec Φ l.
-Proof.
-iDestruct 1 as (RM) "[Hown Hreaders]".
-iIntros "Hl Henc Hdec".
-destruct (RM !! l) as [rs'|] eqn:e.
-  rewrite big_sepM_delete //.
-  iDestruct "Hreaders" as "[[Hl' _] _]".
-  by iPoseProof (mapsto_valid_2 with "Hl Hl'") as "%".
-pose (RM' := <[l := RAKey rs_enc rs_dec Φ]>RM).
-iAssert ([∗ map] l' ↦ rs' ∈ RM', l' ↦ #() ∗ wf_res rs')%I
-    with "[Hreaders Hl Henc Hdec]" as "Hreaders".
-  by rewrite /RM' big_sepM_insert //; iFrame.
-iMod (own_update _ _ (_ ⋅ ◯ {[l := to_agree (RAKey rs_enc rs_dec Φ)]})
-       with "Hown") as "[Hown #Hfrag]".
-  apply auth_update_alloc, alloc_singleton_local_update=> //.
-  by rewrite lookup_fmap e.
-iModIntro; iSplitL=> //.
-iExists RM'; iFrame; by rewrite /RM' /to_resR fmap_insert.
-Qed.
-
-Lemma skey_alloc rs Φ l :
-  res_inv -∗
-  l ↦ #() -∗
-  wf_readers rs -∗
-  |==> res_inv ∗ skeyT rs Φ l.
-Proof.
-iDestruct 1 as (RM) "[Hown Hreaders]".
-iIntros "Hl Hrs".
-destruct (RM !! l) as [rs'|] eqn:e.
-  rewrite big_sepM_delete //.
-  iDestruct "Hreaders" as "[[Hl' _] _]".
-  by iPoseProof (mapsto_valid_2 with "Hl Hl'") as "%".
-pose (RM' := <[l := RSKey rs Φ]>RM).
-iAssert ([∗ map] l' ↦ rs' ∈ RM', l' ↦ #() ∗ wf_res rs')%I
-    with "[Hreaders Hl Hrs]" as "Hreaders".
-  by rewrite /RM' big_sepM_insert //; iFrame.
-iMod (own_update _ _ (_ ⋅ ◯ {[l := to_agree (RSKey rs Φ)]}) with "Hown")
-    as "[Hown #Hfrag]".
-  apply auth_update_alloc, alloc_singleton_local_update=> //.
-  by rewrite lookup_fmap e.
-iModIntro; iSplitL=> //.
-iExists RM'; iFrame; by rewrite /RM' /to_resR fmap_insert.
-Qed.
-
 Lemma res_alloc E r l :
-  ▷ res_inv -∗
-  l ↦ #() -∗
-  wf_res r ={E}=∗
-  ▷ res_inv ∗ own res_name (◯ {[l := to_agree r]}).
+  ↑cryptoN.@"res" ⊆ E →
+  meta_token l E -∗
+  wf_res r ==∗
+  resT r l.
 Proof.
-iDestruct 1 as (RM1) "[Hown >wf_RM1]"; iIntros "Hl #wf_r".
-iMod (later_own with "Hown") as (a) "[Hown Ha]".
-case: a=> [aa af]; rewrite auth_equivI /=.
-iDestruct "Ha" as "[Ha >Haf]"; iRewrite -"Haf" in "Hown".
-rewrite option_equivI; case: aa=> [[q a]|]; last by iMod "Ha" as "[]".
-rewrite prod_equivI /=; iDestruct "Ha" as "[> <- #Ha]".
-iPoseProof (own_valid with "Hown") as "#Hvalid".
-rewrite auth_validI /=.
-iDestruct "Hvalid" as "(_&Hvalid)".
-iDestruct "Hvalid" as (RR) "(e & _ & Hvalid)".
-iRewrite "e" in "Hown"; iRewrite "e" in "Ha"; iClear "e"; clear a af.
-rewrite -[Auth _ _]/(● RR) agree_equivI.
-iDestruct (to_resR_uninjI with "Hvalid") as (RM2) "e".
-iRewrite -"e" in "Hown"; iRewrite -"e" in "Ha".
-rewrite to_resR_equivI.
-iAssert (▷ (dom (gset loc) RM1 ≡ dom (gset loc) RM2))%I as "> %e".
-  by iModIntro; iRewrite "Ha".
-iAssert (⌜l ∉ dom (gset loc) RM2⌝)%I as "%Hfresh".
-  rewrite -e elem_of_dom; iIntros "%contra".
-  case: contra=> v RM_l; rewrite big_sepM_delete //.
-  iDestruct "wf_RM1" as "[[Hl' _] _]".
-  by iPoseProof (mapsto_valid_2 with "Hl Hl'") as "%".
-iMod (own_update _ _ (_ ⋅ ◯ {[l := to_agree r]}) with "Hown")
-    as "[Hown ?]".
-  apply auth_update_alloc, alloc_singleton_local_update; last done.
-  by rewrite -not_elem_of_dom dom_fmap.
-iAssert (▷ res_inv)%I with "[Hl wf_RM1 Hown]" as "Hinv".
-  iModIntro. iRewrite -"Ha" in "Hown".
-  iExists (<[l:=r]> RM1).
-  rewrite -fmap_insert; iFrame.
-  rewrite big_sepM_insert /=; first by iFrame.
-  by apply/not_elem_of_dom; rewrite e.
-by iModIntro; iFrame.
+iIntros (Hsub) "Hmeta #Hr".
+iMod (own_alloc (to_agree r)) as (γ) "#Hown" => //.
+iMod (meta_set E l γ with "Hmeta") as "Hmeta"=> //.
+by iModIntro; iSplit=> //; iExists γ; iSplit.
 Qed.
 
 End Resources.
 
-Arguments res_name {_ _}.
 Arguments RNonce {_} _.
-Arguments to_resR {_} _.
-Arguments nonceT {_ _} _ _.
-Arguments skeyT {_ _} _ _ _.
-Arguments akeyT {_ _} _ _ _ _.
-Arguments priv_keyT {_ _} _ _.
-Arguments wf_readers {_ _} _.
-Arguments wf_res {_ _} _.
-Arguments res_inv {_ _ _}.
+Arguments nonceT {_ _ _} _ _.
+Arguments skeyT {_ _ _} _ _ _.
+Arguments akeyT {_ _ _} _ _ _ _.
+Arguments wf_readers {_ _ _} _.
+Arguments wf_res {_ _ _} _.

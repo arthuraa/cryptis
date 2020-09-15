@@ -86,8 +86,6 @@ Definition eq_term : val := (rec: "eq" "x" "y" :=
     ("eq" (Snd (Snd "x")) (Snd (Snd "y")))
   else #false)%V.
 
-Definition resN := nroot .@ "res".
-
 Section Proofs.
 
 Context `{!heapG Σ, !resG Σ}.
@@ -97,12 +95,6 @@ Implicit Types l : loc.
 Implicit Types rs : readers.
 Implicit Types t : term.
 Implicit Types v : val.
-
-Definition res_ctx : iProp Σ :=
-  inv resN res_inv.
-
-Global Instance persistent_res_ctx : Persistent res_ctx.
-Proof. apply _. Qed.
 
 Lemma twp_tuple E t1 t2 :
   ⊢ WP tuple t1 t2 @ E
@@ -132,37 +124,32 @@ by iApply IH2.
 Qed.
 
 Lemma twp_mknonce E rs :
-  ↑resN ⊆ E →
-  res_ctx -∗
   wf_readers rs -∗
   WP mknonce #()%V @ E
      [{v, ∃ l, ⌜v = TNonce l⌝ ∗ nonceT rs l}].
 Proof.
-move=> HE; iIntros "#? #wf_rs"; rewrite /mknonce.
-wp_pures; wp_alloc l as "Hl"; iApply fupd_twp.
-iInv resN as "Hinv" "Hclose".
-iMod (res_alloc _ (RNonce rs) l with "Hinv Hl wf_rs") as "[Hinv Hown]".
-iMod ("Hclose" with "Hinv") as "_".
-by iModIntro; wp_pures; rewrite val_of_termE; eauto.
+iIntros "#wf_rs"; rewrite /mknonce.
+wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
+iIntros (l) "[Hl Hmeta]".
+iMod (res_alloc (RNonce rs) l with "Hmeta wf_rs") as "Hinv"=> //.
+by wp_pures; rewrite val_of_termE; eauto.
 Qed.
 
 Lemma twp_mkakey E rs_enc rs_dec Φ :
-  ↑resN ⊆ E →
-  res_ctx -∗
   wf_readers rs_enc -∗
   wf_readers rs_dec -∗
   WP mkakey #()%V @ E
      [{v, ∃ l, ⌜v = (TKey KAEnc l, TKey KADec l)%V⌝
                ∗ akeyT rs_enc rs_dec Φ l}].
 Proof.
-move=> HE; iIntros "#? #wf_enc #wf_dec"; rewrite /mkakey.
-wp_pures; wp_alloc l as "Hl"; iApply fupd_twp.
-iInv resN as "Hinv" "Hclose".
-iMod (res_alloc _ (RAKey rs_enc rs_dec Φ) l
-        with "Hinv Hl [wf_enc wf_dec]") as "[Hinv Hown]".
-  by rewrite /=; eauto.
-iMod ("Hclose" with "Hinv") as "_".
-by iModIntro; wp_pures; rewrite val_of_termE; eauto.
+iIntros "#wf_enc #wf_dec"; rewrite /mkakey.
+wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
+iIntros (l) "[Hl Hmeta]".
+iMod (res_alloc (RAKey rs_enc rs_dec Φ) l
+        with "Hmeta [wf_enc wf_dec]") as "[Hinv Hown]"=> //.
+  by rewrite wf_resE; iSplit.
+wp_pures; rewrite val_of_termE /=; iExists l; iSplit; eauto. 
+by iSplit.
 Qed.
 
 Definition maybe_keyT rs Φ t : iProp Σ :=
@@ -236,14 +223,11 @@ move=> b l' t' /=; wp_pures.
 case: b=> /=; wp_pures; eauto.
 iDestruct "Ht" as (rs_enc' Φ') "[Hl' Ht']".
 iDestruct "Hl'" as (rs_dec') "Hl'".
-iPoseProof (own_valid_2 with "Hl Hl'") as "#Hvalid".
 destruct decide as [->|ne].
 - rewrite bool_decide_true //.
   wp_pures; iSplit=> //.
-  rewrite auth_validI /= singleton_op gmap_validI.
-  iSpecialize ("Hvalid" $! l); rewrite lookup_singleton.
-  rewrite uPred.option_validI agree_validI agree_equivI res_equivI.
-  iDestruct "Hvalid" as "(-> & -> & HΦ)".
+  iPoseProof (resT_agree with "Hl Hl'") as "#He".
+  rewrite res_equivI; iDestruct "He" as "(-> & -> & HΦ)".
   by rewrite ofe_morO_equivI; iRewrite ("HΦ" $! t'); eauto.
 - rewrite bool_decide_false; last by congruence.
   by wp_pures.
@@ -284,19 +268,16 @@ by case: t=> *; wp_pures.
 Qed.
 
 Lemma twp_mkskey E rs Φ :
-  ↑resN ⊆ E →
-  res_ctx -∗
   wf_readers rs -∗
   WP mkskey #()%V @ E
      [{v, ∃ l, ⌜v = TKey KSym l⌝ ∗ skeyT rs Φ l}].
 Proof.
-move=> HE; iIntros "#? #wf_rs"; rewrite /mkskey.
-wp_pures; wp_alloc l as "Hl"; iApply fupd_twp.
-iInv resN as "Hinv" "Hclose".
-iMod (res_alloc _ (RSKey rs Φ) l
-        with "Hinv Hl wf_rs") as "[Hinv Hown]".
-iMod ("Hclose" with "Hinv") as "_".
-by iModIntro; wp_pures; rewrite val_of_termE; eauto.
+iIntros "#wf_rs"; rewrite /mkskey.
+wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
+iIntros (l) "[Hl Htoken]".
+iMod (res_alloc (RSKey rs Φ) l
+        with "Htoken wf_rs") as "#Hres"=> //.
+by wp_pures; rewrite val_of_termE; iExists l; iSplit.
 Qed.
 
 Lemma twp_senc rs Φ l t :
@@ -348,14 +329,11 @@ case: t; try by move=> *; wp_pures.
 move=> b l' t' /=; wp_pures.
 case: b=> /=; wp_pures; eauto.
 iDestruct "Ht" as (rs' Φ') "[Hl' Ht']".
-iPoseProof (own_valid_2 with "Hl Hl'") as "#Hvalid".
 destruct decide as [->|ne].
 - rewrite bool_decide_true //.
   wp_pures; iSplit=> //.
-  rewrite auth_validI /= singleton_op gmap_validI.
-  iSpecialize ("Hvalid" $! l); rewrite lookup_singleton.
-  rewrite uPred.option_validI agree_validI agree_equivI res_equivI.
-  iDestruct "Hvalid" as "(-> & HΦ)".
+  iPoseProof (resT_agree with "Hl Hl'") as "He".
+  rewrite res_equivI; iDestruct "He" as "(-> & HΦ)".
   by rewrite ofe_morO_equivI; iRewrite ("HΦ" $! t'); eauto.
 - rewrite bool_decide_false; last by congruence.
   by wp_pures.
