@@ -466,15 +466,6 @@ Qed.
 
 Implicit Types T : gset term.
 
-Fixpoint symbols_of_term t : gset loc :=
-  match t with
-  | TInt _ => ∅
-  | TPair t1 t2 => symbols_of_term t1 ∪ symbols_of_term t2
-  | TNonce l => {[l]}
-  | TKey _ l => {[l]}
-  | TEnc _ l t => {[l]} ∪ symbols_of_term t
-  end.
-
 (* l does not occur in t, except in occurrences that appear in T. *)
 Fixpoint protected_aux l T t :=
   t ∈ T ∨

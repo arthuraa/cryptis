@@ -1,4 +1,5 @@
 From mathcomp Require Import ssreflect.
+From stdpp Require Import gmap.
 From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
 From crypto Require Import lib basic symbols.
@@ -126,3 +127,12 @@ Qed.
 
 Global Instance countable_term : Countable term.
 Proof. apply (inj_countable' _ _ val_of_termK). Qed.
+
+Fixpoint symbols_of_term t : gset loc :=
+  match t with
+  | TInt _ => ∅
+  | TPair t1 t2 => symbols_of_term t1 ∪ symbols_of_term t2
+  | TNonce l => {[l]}
+  | TKey _ l => {[l]}
+  | TEnc _ l t => {[l]} ∪ symbols_of_term t
+  end.
