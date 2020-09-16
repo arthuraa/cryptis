@@ -126,12 +126,15 @@ Qed.
 Lemma twp_mknonce E rs :
   wf_readers rs -∗
   WP mknonce #()%V @ E
-     [{v, ∃ l, ⌜v = TNonce l⌝ ∗ nonceT rs l}].
+     [{v, ∃ l, ⌜v = TNonce l⌝ ∗ nonceT rs l
+               ∗ meta_token l (⊤ ∖ ↑cryptoN.@"res")}].
 Proof.
 iIntros "#wf_rs"; rewrite /mknonce.
 wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
 iIntros (l) "[Hl Hmeta]".
-iMod (res_alloc (RNonce rs) l with "Hmeta wf_rs") as "Hinv"=> //.
+rewrite (meta_token_difference l (↑cryptoN.@"res")) //.
+iDestruct "Hmeta" as "[Hmeta1 Hmeta2]".
+iMod (res_alloc (RNonce rs) l with "Hmeta1 wf_rs") as "Hinv"=> //.
 by wp_pures; rewrite val_of_termE; eauto.
 Qed.
 
@@ -140,16 +143,19 @@ Lemma twp_mkakey E rs_enc rs_dec Φ :
   wf_readers rs_dec -∗
   WP mkakey #()%V @ E
      [{v, ∃ l, ⌜v = (TKey KAEnc l, TKey KADec l)%V⌝
-               ∗ akeyT rs_enc rs_dec Φ l}].
+               ∗ akeyT rs_enc rs_dec Φ l
+               ∗ meta_token l (⊤ ∖ ↑cryptoN.@"res")}].
 Proof.
 iIntros "#wf_enc #wf_dec"; rewrite /mkakey.
 wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
 iIntros (l) "[Hl Hmeta]".
+rewrite (meta_token_difference l (↑cryptoN.@"res")) //.
+iDestruct "Hmeta" as "[Hmeta1 Hmeta2]".
 iMod (res_alloc (RAKey rs_enc rs_dec Φ) l
-        with "Hmeta [wf_enc wf_dec]") as "[Hinv Hown]"=> //.
+        with "Hmeta1 [wf_enc wf_dec]") as "[Hinv Hown]"=> //.
   by rewrite wf_resE; iSplit.
 wp_pures; rewrite val_of_termE /=; iExists l; iSplit; eauto. 
-by iSplit.
+by repeat iSplit.
 Qed.
 
 Definition maybe_keyT rs Φ t : iProp Σ :=
@@ -270,14 +276,17 @@ Qed.
 Lemma twp_mkskey E rs Φ :
   wf_readers rs -∗
   WP mkskey #()%V @ E
-     [{v, ∃ l, ⌜v = TKey KSym l⌝ ∗ skeyT rs Φ l}].
+     [{v, ∃ l, ⌜v = TKey KSym l⌝ ∗ skeyT rs Φ l
+               ∗ meta_token l (⊤ ∖ ↑cryptoN.@"res")}].
 Proof.
 iIntros "#wf_rs"; rewrite /mkskey.
 wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
-iIntros (l) "[Hl Htoken]".
+iIntros (l) "[Hl Hmeta]".
+rewrite (meta_token_difference l (↑cryptoN.@"res")) //.
+iDestruct "Hmeta" as "[Hmeta1 Hmeta2]".
 iMod (res_alloc (RSKey rs Φ) l
-        with "Htoken wf_rs") as "#Hres"=> //.
-by wp_pures; rewrite val_of_termE; iExists l; iSplit.
+        with "Hmeta1 wf_rs") as "#Hres"=> //.
+by wp_pures; rewrite val_of_termE; iExists l; repeat iSplit=> //.
 Qed.
 
 Lemma twp_senc rs Φ l t :
