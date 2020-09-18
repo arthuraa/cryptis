@@ -429,6 +429,13 @@ elim: t rs=> [n|t1 IH1 t2 IH2|l|kt l|b l t IH] rs sub //=.
   iExists rs0, Φ; iSplit=> //; iPureIntro; by etransitivity.
 Qed.
 
+(** A stricter version of [termT] that does not allow subtyping *)
+Definition stermT rs t : iProp Σ :=
+  termT rs t ∗ □ (∀ rs', termT rs' t -∗ ⌜rs' ⊆ rs⌝).
+
+Global Instance stermT_persistent rs t : Persistent (stermT rs t).
+Proof. apply _. Qed.
+
 (** Because of [sub_termT], the definition of [termT] does not allow us to track
 the owners of a term exactly.  To remedy that, we introduce the [secretT rs t]
 predicate below, which says that [t] is private exactly to the readers in

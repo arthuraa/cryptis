@@ -172,13 +172,28 @@ Definition key_readers t : readers :=
 
 Lemma twp_aenc E rs Φ tk t  :
   maybe_keyT rs Φ tk -∗
-  (□ Φ t ∗ termT (key_readers tk) t ∨ ⌜rs = RPub⌝ ∗ termT RPub t) -∗
+  □ Φ t ∗ termT (key_readers tk) t ∨ ⌜rs = RPub⌝ ∗ termT RPub t -∗
   WP aenc tk t @ E
      [{v, match tk with
           | TKey KAEnc l =>
             ⌜v = SOMEV (TEnc true l t)⌝ ∗ termT RPub (TEnc true l t)
           | _ => ⌜v = NONEV⌝
           end}].
+Proof.
+rewrite val_of_termE /= /aenc; iIntros "Hl Ht".
+case: tk; try by move=> *; wp_pures; eauto.
+by case=> *; wp_pures; eauto.
+Qed.
+
+Lemma wp_aenc E rs Φ tk t  :
+  maybe_keyT rs Φ tk -∗
+  ▷ (□ Φ t ∗ termT (key_readers tk) t ∨ ⌜rs = RPub⌝ ∗ termT RPub t) -∗
+  WP aenc tk t @ E
+     {{v, match tk with
+          | TKey KAEnc l =>
+            ⌜v = SOMEV (TEnc true l t)⌝ ∗ termT RPub (TEnc true l t)
+          | _ => ⌜v = NONEV⌝
+          end}}.
 Proof.
 rewrite val_of_termE /= /aenc; iIntros "Hl Ht".
 case: tk; try by move=> *; wp_pures; eauto.
@@ -207,6 +222,17 @@ Lemma twp_aencH E rs Φ l t :
 Proof.
 iIntros "Hl Ht1 Ht2".
 by iApply (twp_aenc _ _ _ (TKey KAEnc l) with "Hl"); eauto.
+Qed.
+
+Lemma wp_aencH E rs Φ l t :
+  keyT KAEnc rs Φ l -∗
+  ▷ □ Φ t -∗
+  ▷ termT {[l]} t -∗
+  WP aenc (TKey KAEnc l) t @ E
+     {{v, ⌜v = SOMEV (TEnc true l t)⌝ ∗ termT RPub (TEnc true l t)}}.
+Proof.
+iIntros "Hl Ht1 Ht2".
+iApply (wp_aenc _ _ _ (TKey KAEnc l) with "Hl"); eauto.
 Qed.
 
 Lemma twp_adec E rs_enc rs_dec Φ l rs_t t :
