@@ -549,22 +549,24 @@ iCombine "Hspec Hj" as "Hspec".
 by iApply "Hswp".
 Qed.
 
-Lemma twp_eq_term2 v11 v12 v21 v22 j K :
+Lemma twp_eq_term2 E v11 v12 v21 v22 j K :
+  ↑specN ⊆ E →
   lo_term v11 v12 -∗
   lo_term v21 v22 -∗
   symbols_inv term_names -∗
   term_inv -∗
   spec_ctx -∗
   j ⤇ fill K (eq_term v12 v22) -∗
-  WP eq_term v11 v21
+  WP eq_term v11 v21 @ E
      [{ v, ⌜v = #(bool_decide (v11 = v21))⌝ ∗ j ⤇ fill K v }].
 Proof.
+move=> ?.
 iDestruct 1 as (t11 t12) "(-> & -> & #Ht1)".
 iDestruct 1 as (t21 t22) "(-> & -> & #Ht2)".
 iIntros "Hsymb Hopaque Hspec Hj"; iApply fupd_twp.
 iPoseProof (step_eq_term t12 t22) as "Hswp".
 iMod (swp_elim with "Hswp Hspec Hj") as (v) "[Hj ->]"; first done.
-iModIntro; iPoseProof (twp_eq_term t11 t21) as "Hwp".
+iModIntro; iPoseProof (twp_eq_term _ t11 t21) as "Hwp".
 iApply (twp_wand with "Hwp"); iIntros (v) "->".
 iAssert ⌜bool_decide (t12 = t22) = bool_decide (t11 = t21)⌝%I
         with "[Hsymb Hopaque]" as "->".

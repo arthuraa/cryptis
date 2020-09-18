@@ -170,10 +170,10 @@ Definition key_readers t : readers :=
   | _ => ∅
   end.
 
-Lemma twp_aenc rs Φ tk t  :
+Lemma twp_aenc E rs Φ tk t  :
   maybe_keyT rs Φ tk -∗
   (□ Φ t ∗ termT (key_readers tk) t ∨ ⌜rs = RPub⌝ ∗ termT RPub t) -∗
-  WP aenc tk t
+  WP aenc tk t @ E
      [{v, match tk with
           | TKey KAEnc l =>
             ⌜v = SOMEV (TEnc true l t)⌝ ∗ termT RPub (TEnc true l t)
@@ -185,10 +185,10 @@ case: tk; try by move=> *; wp_pures; eauto.
 by case=> *; wp_pures; eauto.
 Qed.
 
-Lemma twp_aencL Φ tk t :
+Lemma twp_aencL E Φ tk t :
   maybe_keyT RPub Φ tk -∗
   termT RPub t -∗
-  WP aenc tk t
+  WP aenc tk t @ E
      [{v, match tk with
           | TKey KAEnc l =>
             ⌜v = SOMEV (TEnc true l t)⌝ ∗ termT RPub (TEnc true l t)
@@ -198,21 +198,21 @@ Proof.
 iIntros "Hl Ht"; iApply (twp_aenc with "Hl"); eauto.
 Qed.
 
-Lemma twp_aencH rs Φ l t :
+Lemma twp_aencH E rs Φ l t :
   keyT KAEnc rs Φ l -∗
   □ Φ t -∗
   termT {[l]} t -∗
-  WP aenc (TKey KAEnc l) t
+  WP aenc (TKey KAEnc l) t @ E
      [{v, ⌜v = SOMEV (TEnc true l t)⌝ ∗ termT RPub (TEnc true l t)}].
 Proof.
 iIntros "Hl Ht1 Ht2".
-by iApply (twp_aenc _ _ (TKey KAEnc l) with "Hl"); eauto.
+by iApply (twp_aenc _ _ _ (TKey KAEnc l) with "Hl"); eauto.
 Qed.
 
-Lemma twp_adec rs_enc rs_dec Φ l rs_t t :
+Lemma twp_adec E rs_enc rs_dec Φ l rs_t t :
   akeyT rs_enc rs_dec Φ l -∗
   termT rs_t t -∗
-  WP adec (TKey KADec l) t
+  WP adec (TKey KADec l) t @ E
      [{v, match t with
           | TEnc true l' t' =>
             if decide (l' = l) then
@@ -239,10 +239,10 @@ destruct decide as [->|ne].
   by wp_pures.
 Qed.
 
-Lemma twp_adecH rs_enc rs_dec Φ l rs_t t :
+Lemma twp_adecH E rs_enc rs_dec Φ l rs_t t :
   akeyT (RPriv rs_enc) rs_dec Φ l -∗
   termT rs_t t -∗
-  WP adec (TKey KADec l) t
+  WP adec (TKey KADec l) t @ E
      [{v, match t with
           | TEnc true l' t' =>
             if decide (l' = l) then
@@ -262,8 +262,8 @@ move=> l' t'; destruct decide as [->|ne]; trivial.
 iDestruct "Ht" as "[?[?|[%?]]]"; by iFrame.
 Qed.
 
-Lemma twp_is_akey t :
-  ⊢ WP is_key t
+Lemma twp_is_akey E t :
+  ⊢ WP is_key t @ E
        [{v, ⌜v = match t with
                  | TKey kt l => SOMEV #(int_of_key_type kt)
                  | _ => NONEV
@@ -289,10 +289,10 @@ iMod (res_alloc (RSKey rs Φ) l
 by wp_pures; rewrite val_of_termE; iExists l; repeat iSplit=> //.
 Qed.
 
-Lemma twp_senc rs Φ l t :
+Lemma twp_senc E rs Φ l t :
   skeyT rs Φ l -∗
   (□ Φ t ∗ termT {[l]} t ∨ ⌜rs = RPub⌝ ∗ termT RPub t) -∗
-  WP senc (TKey KSym l) t
+  WP senc (TKey KSym l) t @ E
      [{v, ⌜v = TEnc false l t⌝ ∗ termT RPub (TEnc false l t)}].
 Proof.
 rewrite val_of_termE /= /senc; iIntros "Hl Ht".
@@ -300,29 +300,29 @@ wp_pures; iSplit=> //.
 by iExists rs, Φ; iFrame.
 Qed.
 
-Lemma twp_sencL rs Φ l t :
+Lemma twp_sencL E rs Φ l t :
   skeyT RPub Φ l -∗
   termT RPub t -∗
-  WP senc (TKey KSym l) t
+  WP senc (TKey KSym l) t @ E
      [{v, ⌜v = TEnc false l t⌝ ∗ termT RPub (TEnc false l t)}].
 Proof.
 iIntros "Hl Ht"; iApply (twp_senc with "Hl"); eauto.
 Qed.
 
-Lemma twp_sencH rs Φ l t :
+Lemma twp_sencH E rs Φ l t :
   skeyT rs Φ l -∗
   □ Φ t -∗
   termT {[l]} t -∗
-  WP senc (TKey KSym l) t
+  WP senc (TKey KSym l) t @ E
      [{v, ⌜v = TEnc false l t⌝ ∗ termT RPub (TEnc false l t)}].
 Proof.
 iIntros "Hl Ht1 Ht2"; iApply (twp_senc with "Hl"); eauto.
 Qed.
 
-Lemma twp_sdec rs Φ l rs_t t :
+Lemma twp_sdec E rs Φ l rs_t t :
   skeyT rs Φ l -∗
   termT rs_t t -∗
-  WP sdec (TKey KSym l) t
+  WP sdec (TKey KSym l) t @ E
      [{v, match t with
           | TEnc false l' t' =>
             if decide (l' = l) then
@@ -348,10 +348,10 @@ destruct decide as [->|ne].
   by wp_pures.
 Qed.
 
-Lemma twp_sdecH rd Φ l rs_t t :
+Lemma twp_sdecH E rd Φ l rs_t t :
   skeyT (RPriv rd) Φ l -∗
   termT rs_t t -∗
-  WP sdec (TKey KSym l) t
+  WP sdec (TKey KSym l) t @ E
      [{v, match t with
           | TEnc false l' t' =>
             if decide (l' = l) then
@@ -371,8 +371,8 @@ move=> l' t'; destruct decide as [->|ne]; trivial.
 iDestruct "Ht" as "[?[?|[%?]]]"; by iFrame.
 Qed.
 
-Lemma twp_eq_term t1 t2 :
-  ⊢ WP (eq_term t1 t2) [{ v, ⌜v = #(bool_decide (t1 = t2))⌝ }].
+Lemma twp_eq_term E t1 t2 :
+  ⊢ WP (eq_term t1 t2) @ E [{ v, ⌜v = #(bool_decide (t1 = t2))⌝ }].
 Proof.
 rewrite val_of_termE.
 elim: t1 t2=> [n1|t11 IH1 t12 IH2|l1|kt1 l1|b1 l1 t1 IH1];
