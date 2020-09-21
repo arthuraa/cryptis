@@ -153,7 +153,7 @@ rewrite (meta_token_difference l (↑cryptoN.@"res")) //.
 iDestruct "Hmeta" as "[Hmeta1 Hmeta2]".
 iMod (res_alloc (RAKey rs_enc rs_dec Φ) l
         with "Hmeta1 [wf_enc wf_dec]") as "[Hinv Hown]"=> //.
-  by rewrite wf_resE; iSplit.
+  by rewrite /=; iSplit.
 wp_pures; rewrite val_of_termE /=; iExists l; iSplit; eauto. 
 by repeat iSplit.
 Qed.

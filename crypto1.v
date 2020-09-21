@@ -179,6 +179,12 @@ Proof.
 case: r=> [?|?[|?]?|[|?]?] //=; set_solver.
 Qed.
 
+Definition pub_dec_key r : Prop :=
+  match r with
+  | RAKey _ RPub _ | RSKey RPub _ => True
+  | _ => False
+  end.
+
 Class resG := {
   res_inG :> inG Σ (agreeR resO);
 }.
@@ -272,30 +278,70 @@ Qed.
 Definition priv_keysT rs_priv : iProp Σ :=
   ∀ l, ⌜l ∈ rs_priv⌝ -∗ priv_keyT rs_priv l.
 
-Definition wf_readers rs : iProp Σ :=
+Definition pub_keyT l : iProp Σ :=
+  ∃ r, pre_resT r l ∗ ⌜pub_dec_key r⌝.
+
+Global Instance pub_keyT_persistent l : Persistent (pub_keyT l).
+Proof. apply _. Qed.
+
+Global Instance pub_keyT_timeless l : Timeless (pub_keyT l).
+Proof.
+rewrite /Timeless /pub_keyT bi.later_exist_except_0.
+iMod 1 as (r) "[#Hown >%Hpriv]".
+iMod (later_pre_resT with "Hown") as (r') "[Hown' He]".
+iExists r'; iSplit; eauto; rewrite res_equivI.
+case: r Hpriv => [rs|rs_enc [|rs_dec] Φ|[|rs_dec] Φ] //= Hpriv;
+case: r'=> [?|???|??]; try by iDestruct "He" as "> []".
+- by iDestruct "He" as "(><-&><-&?)".
+- by iDestruct "He" as "(><-&?)".
+Qed.
+
+Definition pub_keysT (rs_pub : gset loc) : iProp Σ :=
+  ∀ l, ⌜l ∈ rs_pub⌝ -∗ pub_keyT l.
+
+Global Instance pub_keysT_persistent rs_pub : Persistent (pub_keysT rs_pub).
+Proof. apply _. Qed.
+
+Global Instance pub_keysT_timeless rs_pub : Timeless (pub_keysT rs_pub).
+Proof. apply _. Qed.
+
+Definition wf_readers_priv rs : iProp Σ :=
   ∃ rs_priv, priv_keysT rs_priv ∗ ⌜pre_wf_readers rs_priv rs⌝.
 
-Global Instance wf_readers_persistent rs : Persistent (wf_readers rs).
+Global Instance wf_readers_priv_persistent rs : Persistent (wf_readers_priv rs).
 Proof. apply _. Qed.
+
+Global Instance wf_readers_priv_timeless rs : Timeless (wf_readers_priv rs).
+Proof. apply _. Qed.
+
+Definition wf_readers rs : iProp Σ :=
+  match rs with
+  | RPub => True
+  | RPriv rs =>
+    ∃ rs1 rs2, ⌜rs = rs1 ∪ rs2⌝ ∗ wf_readers_priv (RPriv rs1) ∗ pub_keysT rs2
+  end.
+
+Global Instance wf_readers_persistent rs : Persistent (wf_readers rs).
+Proof. case: rs=> *; apply _. Qed.
 
 Global Instance wf_readers_timeless rs : Timeless (wf_readers rs).
-Proof. apply _. Qed.
+Proof. case: rs=> *; apply _. Qed.
 
-Definition wf_res r : iProp Σ :=
+Definition wf_res_priv r : iProp Σ :=
   ∃ rs_priv, priv_keysT rs_priv ∗ ⌜pre_wf_res rs_priv r⌝.
 
-Global Instance wf_res_persistent r : Persistent (wf_res r).
+Global Instance wf_res_priv_persistent r : Persistent (wf_res_priv r).
 Proof. apply _. Qed.
 
-Global Instance wf_res_timeless r : Timeless (wf_res r).
+Global Instance wf_res_priv_timeless r : Timeless (wf_res_priv r).
 Proof. apply _. Qed.
 
-Lemma wf_resE r :
-  wf_res r ⊣⊢@{iPropI Σ}
+Lemma wf_res_privE r :
+  wf_res_priv r ⊣⊢@{iPropI Σ}
   match r with
-  | RNonce rs => wf_readers rs
-  | RAKey rs_enc rs_dec _ => wf_readers rs_enc ∧ wf_readers rs_dec
-  | RSKey rs _ => wf_readers rs
+  | RNonce rs => wf_readers_priv rs
+  | RAKey rs_enc rs_dec _ => wf_readers_priv rs_enc ∧ wf_readers_priv rs_dec
+  | RSKey rs _ => wf_readers_priv rs
   end.
 Proof.
 case: r; try by move=> *; iSplit; eauto.
@@ -315,6 +361,30 @@ move=> rs_enc rs_dec Φ /=; iSplit.
     iApply (priv_keyT_sub with "Hpriv_dec"); set_solver.
 Qed.
 
+Definition res_privT r l : iProp Σ :=
+  pre_resT r l ∗ wf_res_priv r.
+
+Lemma res_privT_agree r1 r2 l : res_privT r1 l -∗ res_privT r2 l -∗ r1 ≡ r2.
+Proof.
+iIntros "[Hr1 _] [Hr2 _]". iApply (pre_resT_agree with "Hr1 Hr2").
+Qed.
+
+Global Instance res_privT_persistent r l : Persistent (res_privT r l).
+Proof. apply _. Qed.
+
+Definition wf_res r : iProp Σ :=
+  match r with
+  | RNonce rs => wf_readers rs
+  | RAKey rs_enc rs_dec _ => wf_readers rs_enc ∧ wf_readers rs_dec
+  | RSKey rs _ => wf_readers rs
+  end.
+
+Global Instance wf_resT_persistent r : Persistent (wf_res r).
+Proof. case: r=> *; apply _. Qed.
+
+Global Instance wf_resT_timeless r : Timeless (wf_res r).
+Proof. case: r=> *; apply _. Qed.
+
 Definition resT r l : iProp Σ :=
   pre_resT r l ∗ wf_res r.
 
@@ -324,7 +394,7 @@ iIntros "[Hr1 _] [Hr2 _]". iApply (pre_resT_agree with "Hr1 Hr2").
 Qed.
 
 Global Instance resT_persistent r l : Persistent (resT r l).
-Proof. apply _. Qed.
+Proof. case: r=> *; apply _. Qed.
 
 Definition nonceT rs l : iProp Σ := resT (RNonce rs) l.
 
@@ -436,6 +506,12 @@ Definition stermT rs t : iProp Σ :=
 Global Instance stermT_persistent rs t : Persistent (stermT rs t).
 Proof. apply _. Qed.
 
+Definition termT' rs t : iProp Σ :=
+  termT rs t ∨ ∃ l, ⌜l ∈ rs⌝ ∗ pub_keyT l ∗ termT RPub t.
+
+Definition stermT' rs t : iProp Σ :=
+  stermT rs t ∨ ∃ l, ⌜l ∈ rs⌝ ∗ pub_keyT l ∗ termT RPub t.
+
 (** Because of [sub_termT], the definition of [termT] does not allow us to track
 the owners of a term exactly.  To remedy that, we introduce the [secretT rs t]
 predicate below, which says that [t] is private exactly to the readers in
@@ -479,5 +555,7 @@ Arguments RNonce {_} _.
 Arguments nonceT {_ _ _} _ _.
 Arguments skeyT {_ _ _} _ _ _.
 Arguments akeyT {_ _ _} _ _ _ _.
+Arguments wf_readers_priv {_ _ _} _.
 Arguments wf_readers {_ _ _} _.
+Arguments wf_res_priv {_ _ _} _.
 Arguments wf_res {_ _ _} _.
