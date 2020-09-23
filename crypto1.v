@@ -105,33 +105,83 @@ Instance readers_unit : Unit readers := RPriv ∅.
 Lemma readers_ucmra_mixin : UcmraMixin readersR.
 Proof. split=> //; case=> // rs; congr RPriv; set_solver+. Qed.
 
+Section Levels.
+
+Inductive level := Pub | Sec.
+
+Canonical levelO := leibnizO level.
+
+Implicit Types lvl : level.
+
+Global Instance level_sqsubseteq : SqSubsetEq level := λ lvl1 lvl2,
+  match lvl1, lvl2 with
+  | Sec, Pub => False
+  | _, _ => True
+  end.
+
+Global Instance level_sqsubseteq_refl : Reflexive level_sqsubseteq.
+Proof. by case. Qed.
+
+Global Instance level_sqsubseteq_tran : Transitive level_sqsubseteq.
+Proof. by case=> [] [] []. Qed.
+
+Global Instance level_join : Join level := λ lvl1 lvl2,
+  match lvl1, lvl2 with
+  | Pub, Pub => Pub
+  | _, _ => Sec
+  end.
+
+Lemma level_joinP lvl1 lvl2 lvl3 :
+  lvl1 ⊔ lvl2 ⊑ lvl3 ↔ (lvl1 ⊑ lvl3 ∧ lvl2 ⊑ lvl3).
+Proof.
+by case: lvl1 lvl2 lvl3=> [] [] []; intuition eauto.
+Qed.
+
+Global Instance level_meet : Meet level := λ lvl1 lvl2,
+  match lvl1, lvl2 with
+  | Sec, Sec => Sec
+  | _, _ => Pub
+  end.
+
+Lemma level_meetP lvl1 lvl2 lvl3 :
+  lvl3 ⊑ lvl1 ⊓ lvl2 ↔ (lvl3 ⊑ lvl1 ∧ lvl3 ⊑ lvl2).
+Proof.
+by case: lvl1 lvl2 lvl3=> [] [] []; intuition eauto.
+Qed.
+
+Global Instance level_inhabited : Inhabited level :=
+  populate Pub.
+
+End Levels.
+
 Section Resources.
 
 Context (Σ : gFunctors).
 Implicit Types Φ : termO -n> iPropO Σ.
 Implicit Types l : loc.
+Implicit Types lvl : level.
 Implicit Types γ : gname.
 
 Inductive res :=
-| RNonce of readers
-| RAKey of readers & readers & termO -n> iPropO Σ
-| RSKey of readers & termO -n> iPropO Σ.
+| RNonce of level
+| RAKey of level & level & termO -n> iPropO Σ
+| RSKey of level & termO -n> iPropO Σ.
 
 Global Instance res_equiv : Equiv res := λ r1 r2,
   match r1, r2 with
-  | RNonce rs1, RNonce rs2 => rs1 = rs2
-  | RAKey rs11 rs12 P1, RAKey rs21 rs22 P2 =>
-    rs11 = rs21 ∧ rs12 = rs22 ∧ P1 ≡ P2
-  | RSKey rs1 P1, RSKey rs2 P2 => rs1 = rs2 ∧ P1 ≡ P2
+  | RNonce lvl1, RNonce lvl2 => lvl1 = lvl2
+  | RAKey lvl11 lvl12 P1, RAKey lvl21 lvl22 P2 =>
+    lvl11 = lvl21 ∧ lvl12 = lvl22 ∧ P1 ≡ P2
+  | RSKey lvl1 P1, RSKey lvl2 P2 => lvl1 = lvl2 ∧ P1 ≡ P2
   | _, _ => False
   end.
 
 Global Instance res_dist : Dist res := λ n r1 r2,
   match r1, r2 with
-  | RNonce rs1, RNonce rs2 => rs1 = rs2
-  | RAKey rs11 rs12 P1, RAKey rs21 rs22 P2 =>
-    rs11 = rs21 ∧ rs12 = rs22 ∧ P1 ≡{n}≡ P2
-  | RSKey rs1 P1, RSKey rs2 P2 => rs1 = rs2 ∧ P1 ≡{n}≡ P2
+  | RNonce lvl1, RNonce lvl2 => lvl1 = lvl2
+  | RAKey lvl11 lvl12 P1, RAKey lvl21 lvl22 P2 =>
+    lvl11 = lvl21 ∧ lvl12 = lvl22 ∧ P1 ≡{n}≡ P2
+  | RSKey lvl1 P1, RSKey lvl2 P2 => lvl1 = lvl2 ∧ P1 ≡{n}≡ P2
   | _, _ => False
   end.
 
@@ -143,7 +193,7 @@ split.
   intuition eauto using 0.
 - rewrite /dist; move=> n; split.
   + case=> * //=; by apply equiv_dist.
-  + case=> [rs1|rs11 rs12 P1|rs1 P1] [rs2|rs21 rs22 P2|rs2 P2] //=;
+  + case=> [lvl1|lvl11 lvl12 P1|lvl1 P1] [lvl2|lvl21 lvl22 P2|lvl2 P2] //=;
     intuition eauto.
   + case=> [?|???|??] [?|???|??] //= [?|???|??] //=;
     intuition (try congruence); etransitivity; eauto.
@@ -155,35 +205,17 @@ Canonical resO := OfeT res res_ofe_mixin.
 Lemma res_equivI (r1 r2 : res) :
   r1 ≡ r2 ⊣⊢@{iPropI Σ}
   match r1, r2 with
-  | RNonce rs1, RNonce rs2 => ⌜rs1 = rs2⌝
-  | RAKey rs_enc1 rs_dec1 Φ1, RAKey rs_enc2 rs_dec2 Φ2 =>
-    ⌜rs_enc1 = rs_enc2⌝ ∧ ⌜rs_dec1 = rs_dec2⌝ ∧ Φ1 ≡ Φ2
-  | RSKey rs1 Φ1, RSKey rs2 Φ2 =>
-    ⌜rs1 = rs2⌝ ∧ Φ1 ≡ Φ2
+  | RNonce lvl1, RNonce lvl2 => ⌜lvl1 = lvl2⌝
+  | RAKey lvl_enc1 lvl_dec1 Φ1, RAKey lvl_enc2 lvl_dec2 Φ2 =>
+    ⌜lvl_enc1 = lvl_enc2⌝ ∧ ⌜lvl_dec1 = lvl_dec2⌝ ∧ Φ1 ≡ Φ2
+  | RSKey lvl1 Φ1, RSKey lvl2 Φ2 =>
+    ⌜lvl1 = lvl2⌝ ∧ Φ1 ≡ Φ2
   | _, _ => False
   end.
 Proof. case: r1=> *; case: r2=> * /=; by uPred.unseal. Qed.
 
-Global Instance discrete_RNonce rs : Discrete (RNonce rs).
+Global Instance discrete_RNonce lvl : Discrete (RNonce lvl).
 Proof. by case. Qed.
-
-Definition priv_dec_key (rs : gset loc) r : Prop :=
-  match r with
-  | RAKey _ (RPriv rs') _ | RSKey (RPriv rs') _ => rs' ⊆ rs
-  | _ => False
-  end.
-
-Lemma priv_dec_key_sub rs rs' r :
-  rs ⊆ rs' → priv_dec_key rs r → priv_dec_key rs' r.
-Proof.
-case: r=> [?|?[|?]?|[|?]?] //=; set_solver.
-Qed.
-
-Definition pub_dec_key r : Prop :=
-  match r with
-  | RAKey _ RPub _ | RSKey RPub _ => True
-  | _ => False
-  end.
 
 Class resG := {
   res_inG :> inG Σ (agreeR resO);
@@ -191,13 +223,13 @@ Class resG := {
 
 Context `{!resG, !heapG Σ}.
 
-Definition pre_resT r l : iProp Σ :=
+Definition resT r l : iProp Σ :=
   ∃ γ, meta l (cryptoN.@"res") γ ∗ own γ (to_agree r).
 
-Lemma pre_resT_persistent r l : Persistent (pre_resT r l).
+Lemma resT_persistent r l : Persistent (resT r l).
 Proof. apply _. Qed.
 
-Lemma pre_resT_agree r1 r2 l : pre_resT r1 l -∗ pre_resT r2 l -∗ r1 ≡ r2.
+Lemma resT_agree r1 r2 l : resT r1 l -∗ resT r2 l -∗ r1 ≡ r2.
 Proof.
 iDestruct 1 as (γ) "[#Hl #Hγ]".
 iDestruct 1 as (γ') "[#Hl' #Hγ']".
@@ -206,8 +238,8 @@ iPoseProof (own_valid_2 with "Hγ Hγ'") as "Hvalid".
 by rewrite agree_validI agree_equivI.
 Qed.
 
-Lemma later_pre_resT r l :
-  ▷ pre_resT r l -∗ ◇ ∃ r', pre_resT r' l ∗ ▷ (r ≡ r').
+Lemma later_resT r l :
+  ▷ resT r l -∗ ◇ ∃ r', resT r' l ∗ ▷ (r ≡ r').
 Proof.
 iDestruct 1 as (γ) "[> #Hmeta Hown]".
 iMod (later_own with "Hown") as (ag) "[#Hown #Hr]".
@@ -218,212 +250,32 @@ iModIntro; iExists r'; iSplit=> //.
 by iExists γ; iSplit.
 Qed.
 
-Definition pre_wf_readers rs_priv rs :=
-  match rs with
-  | RPub     => True
-  | RPriv rs => rs ⊆ rs_priv
-  end.
+Definition nonceT lvl l : iProp Σ := resT (RNonce lvl) l.
 
-Lemma pre_wf_readers_sub rs_priv rs_priv' rs :
-  rs_priv ⊆ rs_priv' → pre_wf_readers rs_priv rs → pre_wf_readers rs_priv' rs.
-Proof. case: rs=> //= rs *; set_solver. Qed.
-
-Definition pre_wf_res rs_priv r :=
-  match r with
-  | RNonce rs => pre_wf_readers rs_priv rs
-  | RAKey rs1 rs2 _ => pre_wf_readers rs_priv rs1 ∧ pre_wf_readers rs_priv rs2
-  | RSKey rs _ => pre_wf_readers rs_priv rs
-  end.
-
-Definition priv_keyT rs_priv l : iProp Σ :=
-  ∃ r, pre_resT r l ∗ ⌜priv_dec_key rs_priv r⌝.
-
-Global Instance priv_keyT_proper :
-  Proper (equiv ==> equiv ==> equiv) priv_keyT.
-Proof.
-by move=> rs1 rs2 /(leibniz_equiv rs1 rs2) -> l1 l2 /(leibniz_equiv l1 l2) ->.
-Qed.
-
-Global Instance priv_keyT_ne : NonExpansive2 priv_keyT.
-Proof.
-move=> n.
-by move=> rs1 rs2 /(leibniz_equiv rs1 rs2) -> l1 l2 /(leibniz_equiv l1 l2) ->.
-Qed.
-
-Global Instance priv_keyT_persistent rs_priv l :
-  Persistent (priv_keyT rs_priv l).
-Proof. apply _. Qed.
-
-Global Instance priv_keyT_timeless rs_priv l :
-  Timeless (priv_keyT rs_priv l).
-Proof.
-rewrite /Timeless /priv_keyT bi.later_exist_except_0.
-iMod 1 as (r) "[#Hown >%Hpriv]".
-iMod (later_pre_resT with "Hown") as (r') "[Hown' He]".
-iExists r'; iSplit; eauto; rewrite res_equivI.
-case: r Hpriv => [rs|rs_enc [|rs_dec] Φ|[|rs_dec] Φ] //= Hpriv;
-case: r'=> [?|???|??]; try by iDestruct "He" as "> []".
-- by iDestruct "He" as "(><-&><-&?)".
-- by iDestruct "He" as "(><-&?)".
-Qed.
-
-Lemma priv_keyT_sub rs_priv rs_priv' l :
-  rs_priv ⊆ rs_priv' → priv_keyT rs_priv l -∗ priv_keyT rs_priv' l.
-Proof.
-move=> sub; iDestruct 1 as (r) "[Hr %Hpriv]".
-iExists r; iFrame; iPureIntro.
-by eapply priv_dec_key_sub.
-Qed.
-
-Definition priv_keysT rs_priv : iProp Σ :=
-  ∀ l, ⌜l ∈ rs_priv⌝ -∗ priv_keyT rs_priv l.
-
-Definition pub_keyT l : iProp Σ :=
-  ∃ r, pre_resT r l ∗ ⌜pub_dec_key r⌝.
-
-Global Instance pub_keyT_persistent l : Persistent (pub_keyT l).
-Proof. apply _. Qed.
-
-Global Instance pub_keyT_timeless l : Timeless (pub_keyT l).
-Proof.
-rewrite /Timeless /pub_keyT bi.later_exist_except_0.
-iMod 1 as (r) "[#Hown >%Hpriv]".
-iMod (later_pre_resT with "Hown") as (r') "[Hown' He]".
-iExists r'; iSplit; eauto; rewrite res_equivI.
-case: r Hpriv => [rs|rs_enc [|rs_dec] Φ|[|rs_dec] Φ] //= Hpriv;
-case: r'=> [?|???|??]; try by iDestruct "He" as "> []".
-- by iDestruct "He" as "(><-&><-&?)".
-- by iDestruct "He" as "(><-&?)".
-Qed.
-
-Definition pub_keysT (rs_pub : gset loc) : iProp Σ :=
-  ∀ l, ⌜l ∈ rs_pub⌝ -∗ pub_keyT l.
-
-Global Instance pub_keysT_persistent rs_pub : Persistent (pub_keysT rs_pub).
-Proof. apply _. Qed.
-
-Global Instance pub_keysT_timeless rs_pub : Timeless (pub_keysT rs_pub).
-Proof. apply _. Qed.
-
-Definition wf_readers_priv rs : iProp Σ :=
-  ∃ rs_priv, priv_keysT rs_priv ∗ ⌜pre_wf_readers rs_priv rs⌝.
-
-Global Instance wf_readers_priv_persistent rs : Persistent (wf_readers_priv rs).
-Proof. apply _. Qed.
-
-Global Instance wf_readers_priv_timeless rs : Timeless (wf_readers_priv rs).
-Proof. apply _. Qed.
-
-Definition wf_readers rs : iProp Σ :=
-  match rs with
-  | RPub => True
-  | RPriv rs =>
-    ∃ rs1 rs2, ⌜rs = rs1 ∪ rs2⌝ ∗ wf_readers_priv (RPriv rs1) ∗ pub_keysT rs2
-  end.
-
-Global Instance wf_readers_persistent rs : Persistent (wf_readers rs).
-Proof. case: rs=> *; apply _. Qed.
-
-Global Instance wf_readers_timeless rs : Timeless (wf_readers rs).
-Proof. case: rs=> *; apply _. Qed.
-
-Definition wf_res_priv r : iProp Σ :=
-  ∃ rs_priv, priv_keysT rs_priv ∗ ⌜pre_wf_res rs_priv r⌝.
-
-Global Instance wf_res_priv_persistent r : Persistent (wf_res_priv r).
-Proof. apply _. Qed.
-
-Global Instance wf_res_priv_timeless r : Timeless (wf_res_priv r).
-Proof. apply _. Qed.
-
-Lemma wf_res_privE r :
-  wf_res_priv r ⊣⊢@{iPropI Σ}
-  match r with
-  | RNonce rs => wf_readers_priv rs
-  | RAKey rs_enc rs_dec _ => wf_readers_priv rs_enc ∧ wf_readers_priv rs_dec
-  | RSKey rs _ => wf_readers_priv rs
-  end.
-Proof.
-case: r; try by move=> *; iSplit; eauto.
-move=> rs_enc rs_dec Φ /=; iSplit.
-- iDestruct 1 as (rs_priv) "(wf_rs_priv & %wf_rs_enc & %wf_rs_dec)".
-  by iSplit; iExists rs_priv; iSplit.
-- iIntros "[Henc Hdec]".
-  iDestruct "Henc" as (rs_priv_enc) "[Hpriv_enc %Hwf_enc]".
-  iDestruct "Hdec" as (rs_priv_dec) "[Hpriv_dec %Hwf_dec]".
-  iExists (rs_priv_enc ∪ rs_priv_dec); iSplit; last first.
-    iPureIntro; split; eapply pre_wf_readers_sub; try eassumption;
-    set_solver.
-  iIntros (l) "%Hl"; case/elem_of_union: Hl=> Hl.
-  + iSpecialize ("Hpriv_enc" $! _ Hl).
-    iApply (priv_keyT_sub with "Hpriv_enc"); set_solver.
-  + iSpecialize ("Hpriv_dec" $! _ Hl).
-    iApply (priv_keyT_sub with "Hpriv_dec"); set_solver.
-Qed.
-
-Definition res_privT r l : iProp Σ :=
-  pre_resT r l ∗ wf_res_priv r.
-
-Lemma res_privT_agree r1 r2 l : res_privT r1 l -∗ res_privT r2 l -∗ r1 ≡ r2.
-Proof.
-iIntros "[Hr1 _] [Hr2 _]". iApply (pre_resT_agree with "Hr1 Hr2").
-Qed.
-
-Global Instance res_privT_persistent r l : Persistent (res_privT r l).
-Proof. apply _. Qed.
-
-Definition wf_res r : iProp Σ :=
-  match r with
-  | RNonce rs => wf_readers rs
-  | RAKey rs_enc rs_dec _ => wf_readers rs_enc ∧ wf_readers rs_dec
-  | RSKey rs _ => wf_readers rs
-  end.
-
-Global Instance wf_resT_persistent r : Persistent (wf_res r).
-Proof. case: r=> *; apply _. Qed.
-
-Global Instance wf_resT_timeless r : Timeless (wf_res r).
-Proof. case: r=> *; apply _. Qed.
-
-Definition resT r l : iProp Σ :=
-  pre_resT r l ∗ wf_res r.
-
-Lemma resT_agree r1 r2 l : resT r1 l -∗ resT r2 l -∗ r1 ≡ r2.
-Proof.
-iIntros "[Hr1 _] [Hr2 _]". iApply (pre_resT_agree with "Hr1 Hr2").
-Qed.
-
-Global Instance resT_persistent r l : Persistent (resT r l).
-Proof. case: r=> *; apply _. Qed.
-
-Definition nonceT rs l : iProp Σ := resT (RNonce rs) l.
-
-Lemma nonceT_agree rs1 rs2 l : nonceT rs1 l -∗ nonceT rs2 l -∗ ⌜rs1 = rs2⌝.
+Lemma nonceT_agree lvl1 lvl2 l : nonceT lvl1 l -∗ nonceT lvl2 l -∗ ⌜lvl1 = lvl2⌝.
 Proof.
 iIntros "Hown1 Hown2".
 iPoseProof (resT_agree with "Hown1 Hown2") as "#Hvalid".
 by rewrite res_equivI.
 Qed.
 
-Global Instance persistent_nonceT rs l :
-  Persistent (nonceT rs l).
+Global Instance persistent_nonceT lvl l : Persistent (nonceT lvl l).
 Proof. apply _. Qed.
 
-Global Instance timeless_nonceT rs l :
-  Timeless (nonceT rs l).
+Global Instance timeless_nonceT lvl l : Timeless (nonceT lvl l).
 Proof. apply _. Qed.
 
-Definition akeyT rs_enc rs_dec Φ l : iProp Σ :=
-  resT (RAKey rs_enc rs_dec Φ) l.
+Definition akeyT lvl_enc lvl_dec Φ l : iProp Σ :=
+  resT (RAKey lvl_enc lvl_dec Φ) l.
 
-Global Instance persistent_akeyT rs_enc rs_dec Φ l :
-  Persistent (akeyT rs_enc rs_dec Φ l).
+Global Instance persistent_akeyT lvl_enc lvl_dec Φ l :
+  Persistent (akeyT lvl_enc lvl_dec Φ l).
 Proof. apply _. Qed.
 
-Definition skeyT rs Φ l : iProp Σ := resT (RSKey rs Φ) l.
+Definition skeyT lvl Φ l : iProp Σ := resT (RSKey lvl Φ) l.
 
-Global Instance persistent_skeyT rs Φ l :
-  Persistent (skeyT rs Φ l).
+Global Instance persistent_skeyT lvl Φ l :
+  Persistent (skeyT lvl Φ l).
 Proof. apply _. Qed.
 
 Definition keyT kt rs Φ l : iProp Σ :=
@@ -455,30 +307,59 @@ Qed.
 Global Instance persistent_keyT kt rs Φ l : Persistent (keyT kt rs Φ l).
 Proof. by case: kt; apply _. Qed.
 
-(** [termT rs t] holds when the term [t] can be declared public after encrypting
-it with any of the readers rs.  If [rs = RPub], [t] is considered public and
-does not have to be encrypted. *)
+Definition key_info (asym : bool) lvl_enc lvl_dec Φ l : iProp Σ :=
+  if asym then akeyT lvl_enc lvl_dec Φ l
+  else (⌜lvl_enc = lvl_dec⌝ ∗ skeyT lvl_enc Φ l)%I.
 
-Fixpoint termT rs t : iProp Σ :=
+Lemma key_info_agree asym1 asym2 lvl_enc1 lvl_dec1 lvl_enc2 lvl_dec2  Φ1 Φ2 l :
+  key_info asym1 lvl_enc1 lvl_dec1 Φ1 l -∗
+  key_info asym2 lvl_enc2 lvl_dec2 Φ2 l -∗
+  ⌜asym1 = asym2⌝ ∗ ⌜lvl_enc1 = lvl_enc2⌝ ∗ ⌜lvl_dec1 = lvl_dec2⌝ ∗ Φ1 ≡ Φ2.
+Proof.
+case: asym1 asym2=> [] [] /=.
+- iIntros "Hown1 Hown2".
+  iPoseProof (resT_agree with "Hown1 Hown2") as "#Hvalid".
+  by rewrite res_equivI /=; iDestruct "Hvalid" as "(?&?&?)"; repeat iSplit.
+- iIntros "Hown1 [_ Hown2]".
+  iPoseProof (resT_agree with "Hown1 Hown2") as "#Hvalid".
+  by rewrite res_equivI.
+- iIntros "[_ Hown1] Hown2".
+  iPoseProof (resT_agree with "Hown1 Hown2") as "#Hvalid".
+  by rewrite res_equivI.
+- iIntros "[<- Hown1] [<- Hown2]".
+  iPoseProof (resT_agree with "Hown1 Hown2") as "#Hvalid".
+  by rewrite res_equivI /=; iDestruct "Hvalid" as "(?&?)"; repeat iSplit.
+Qed.
+
+Global Instance persistent_key_info asym lvl_enc lvl_dec Φ l :
+  Persistent (key_info asym lvl_enc lvl_dec Φ l).
+Proof. by case: asym; apply _. Qed.
+
+(** [termT lvl t] holds when the term [t] can be declared public after
+encrypting it with any of the readers lvl.  If [lvl = Pub], [t] is considered
+public and does not have to be encrypted. *)
+
+Fixpoint termT lvl t : iProp Σ :=
   match t with
   | TInt _ => True
-  | TPair t1 t2 => termT rs t1 ∗ termT rs t2
-  | TNonce l  => ∃ rs', nonceT rs' l ∗ ⌜rs ⊆ rs'⌝
-  | TKey kt l => ∃ rs' Φ, keyT kt rs' Φ l ∗ ⌜rs ⊆ rs'⌝
+  | TPair t1 t2 => termT lvl t1 ∗ termT lvl t2
+  | TNonce l  => ∃ lvl', nonceT lvl' l ∗ ⌜lvl' ⊑ lvl⌝
+  | TKey kt l => ∃ lvl' Φ, keyT kt lvl' Φ l ∗ ⌜lvl' ⊑ lvl⌝
   | TEnc asym l t =>
-    let kt := if asym then KAEnc else KSym in
-    ∃ rs' Φ, keyT kt rs' Φ l
-             ∗ (□ Φ t ∗ termT {[l]} t ∨ ⌜rs' = RPub⌝ ∗ termT RPub t)
+    ∃ lvl_enc lvl_dec Φ,
+      key_info asym lvl_enc lvl_dec Φ l
+      ∗ (□ Φ t ∗ termT (lvl ⊔ lvl_dec) t ∨
+         ⌜lvl_enc = Pub⌝ ∗ termT Pub t)
   end.
 
-Global Instance persistent_termT rs t :
-  Persistent (termT rs t).
-Proof. elim: t rs=> *; apply _. Qed.
+Global Instance persistent_termT lvl t :
+  Persistent (termT lvl t).
+Proof. elim: t lvl=> *; apply _. Qed.
 
-Lemma term_proj_termT t n rs t' :
-  term_proj t n = Some t' →
-  termT rs t -∗
-  termT rs t'.
+Lemma proj_termT t n lvl t' :
+  Spec.proj t n = Some t' →
+  termT lvl t -∗
+  termT lvl t'.
 Proof.
 elim: t n=> // t1 IH1 t2 IH2 [|n] /=.
   by move=> [<-]; iIntros "[??]".
@@ -486,67 +367,40 @@ move=> {}/IH2 IH2; iIntros "[??]".
 by iApply IH2.
 Qed.
 
-Lemma sub_termT rs rs' t :
-  rs' ⊆ rs →
-  termT rs t -∗
-  termT rs' t.
+Lemma sub_termT lvl lvl' t :
+  lvl ⊑ lvl' →
+  termT lvl t -∗
+  termT lvl' t.
 Proof.
-elim: t rs=> [n|t1 IH1 t2 IH2|l|kt l|b l t IH] rs sub //=.
+elim: t lvl lvl'=> [n|t1 IH1 t2 IH2|l|kt l|b l t IH] lvl lvl' sub //=.
 - by iIntros "[#Ht1 #Ht2]"; rewrite IH1 // IH2 //; iSplit.
-- iDestruct 1 as (rs0) "[#Hnonce %sub0]".
-  iExists rs0; iSplit=> //; iPureIntro; by etransitivity.
-- iDestruct 1 as (rs0 Φ) "[#Hkey %sub0]".
-  iExists rs0, Φ; iSplit=> //; iPureIntro; by etransitivity.
+- iDestruct 1 as (lvl0) "[#Hnonce %sub0]".
+  iExists lvl0; iSplit=> //; iPureIntro; by etransitivity.
+- iDestruct 1 as (lvl0 Φ) "[#Hkey %sub0]".
+  iExists lvl0, Φ; iSplit=> //; iPureIntro; by etransitivity.
+- iDestruct 1 as (lvl_enc lvl_dec Φ) "[#Hkey #Ht]".
+  iExists lvl_enc, lvl_dec, Φ; iSplit=> //.
+  iDestruct "Ht" as "[[? Ht]|Ht]"; last by iRight.
+  iLeft; iSplit=> //; iApply (IH with "Ht").
+  by case: lvl lvl' lvl_dec sub=> [] [] [].
 Qed.
 
 (** A stricter version of [termT] that does not allow subtyping *)
-Definition stermT rs t : iProp Σ :=
-  termT rs t ∗ □ (∀ rs', termT rs' t -∗ ⌜rs' ⊆ rs⌝).
+Definition stermT lvl t : iProp Σ :=
+  termT lvl t ∗ □ (∀ lvl', termT lvl' t -∗ ⌜lvl ⊑ lvl'⌝).
 
-Global Instance stermT_persistent rs t : Persistent (stermT rs t).
+Global Instance stermT_persistent lvl t : Persistent (stermT lvl t).
 Proof. apply _. Qed.
-
-Definition termT' rs t : iProp Σ :=
-  termT rs t ∨ ∃ l, ⌜l ∈ rs⌝ ∗ pub_keyT l ∗ termT RPub t.
-
-Definition stermT' rs t : iProp Σ :=
-  stermT rs t ∨ ∃ l, ⌜l ∈ rs⌝ ∗ pub_keyT l ∗ termT RPub t.
-
-(** Because of [sub_termT], the definition of [termT] does not allow us to track
-the owners of a term exactly.  To remedy that, we introduce the [secretT rs t]
-predicate below, which says that [t] is private exactly to the readers in
-[rs].  *)
-
-Fixpoint secretT_def (rs : gset loc) t : iProp Σ :=
-  match t with
-  | TInt _ => False
-  | TPair t1 t2 => secretT_def rs t1 ∨ secretT_def rs t2
-  | TNonce l => nonceT (RPriv rs) l
-  | TKey kt l => ∃ Φ, keyT kt (RPriv rs) Φ l
-  | TEnc _ _ _ => False
-  end.
-
-Global Instance secretT_def_persistent (rs : gset loc) t :
-  Persistent (secretT_def rs t).
-Proof. by elim: t=> *; apply _. Qed.
-
-Definition secretT (rs : gset loc) t : iProp Σ :=
-  termT (RPriv rs) t ∗ secretT_def rs t.
-
-Global Instance secretT_persistent (rs : gset loc) t :
-  Persistent (secretT rs t).
-Proof. by apply _. Qed.
 
 Lemma res_alloc E r l :
   ↑cryptoN.@"res" ⊆ E →
-  meta_token l E -∗
-  wf_res r ==∗
+  meta_token l E ==∗
   resT r l.
 Proof.
-iIntros (Hsub) "Hmeta #Hr".
+iIntros (Hsub) "Hmeta".
 iMod (own_alloc (to_agree r)) as (γ) "#Hown" => //.
 iMod (meta_set E l γ with "Hmeta") as "Hmeta"=> //.
-by iModIntro; iSplit=> //; iExists γ; iSplit.
+by iModIntro; iExists γ; iSplit.
 Qed.
 
 End Resources.
@@ -555,7 +409,3 @@ Arguments RNonce {_} _.
 Arguments nonceT {_ _ _} _ _.
 Arguments skeyT {_ _ _} _ _ _.
 Arguments akeyT {_ _ _} _ _ _ _.
-Arguments wf_readers_priv {_ _ _} _.
-Arguments wf_readers {_ _ _} _.
-Arguments wf_res_priv {_ _ _} _.
-Arguments wf_res {_ _ _} _.

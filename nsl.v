@@ -138,6 +138,9 @@ Global Instance session_inhabited : Inhabited session :=
 Definition sowner s :=
   if s.(srole) is Init then s.(sinit) else s.(sresp).
 
+Definition sother s :=
+  if s.(srole) is Init then s.(sresp) else s.(sinit).
+
 Definition sessionR : cmraT :=
   prodR (prodR (prodR (agreeR roleO) (agreeR locO)) (agreeR locO))
         (optionR (agreeR termO)).
@@ -145,6 +148,7 @@ Definition sessionR : cmraT :=
 Implicit Types t : term.
 Implicit Types SM : gmap term session.
 Implicit Types s : session.
+Implicit Types lvl : level.
 
 Class nslG := {
   in_nsl_sessG :> inG Σ (authR (gmapUR term (authR (optionUR sessionR))));
@@ -362,7 +366,7 @@ Proof. apply _. Qed.
 
 Definition nsl_key rl k : iProp Σ :=
   meta k (cryptoN.@"nsl") rl
-  ∗ akeyT RPub ∅ (agent_pred rl k) k.
+  ∗ akeyT Pub Sec (agent_pred rl k) k.
 
 Global Instance nsl_key_persistent rl k :
   Persistent (nsl_key rl k).
@@ -378,10 +382,11 @@ Definition coherent_views SM t1 s1 : Prop :=
   end.
 
 Definition session_inv SM : iProp Σ :=
-  ∀ t1 s1, ⌜SM !! t1 = Some s1⌝ -∗ ∃ l1,
+  ∀ t1 s1, ⌜SM !! t1 = Some s1⌝ -∗ ∃ l1 lvl_enc lvl_dec Φ,
     registered t1 l1
-    ∗ stermT {[s1.(sinit); s1.(sresp)]} t1
+    ∗ stermT lvl_dec t1
     ∗ nsl_key s1.(srole) (sowner s1)
+    ∗ akeyT lvl_enc lvl_dec Φ (sother s1)
     ∗ ⌜coherent_views SM t1 s1⌝.
 
 Definition nsl_inv : iProp Σ :=
@@ -390,18 +395,19 @@ Definition nsl_inv : iProp Σ :=
 Definition nsl_ctx : iProp Σ :=
   auth_ctx nsl_sess_name (cryptoN.@"nsl") to_session_map session_inv.
 
-Lemma nsl_sess_alloc kA kB t rl l E ot :
+Lemma nsl_sess_alloc kA kB t rl l E ot lvl_enc lvl_dec Φ :
   ↑cryptoN.@"nsl" ⊆ E →
   symbols_of_term t = {[l]} →
   (if rl is Init then ot = None else is_Some ot) →
   nsl_ctx -∗
   nsl_key rl (if rl is Init then kA else kB) -∗
   unregistered l -∗
-  stermT {[kA; kB]} t ={E}=∗
+  akeyT lvl_enc lvl_dec Φ (if rl is Init then kB else kA) -∗
+  stermT lvl_dec t ={E}=∗
   term_session_auth t (Session rl kA kB ot) ∗
   term_session_frag t (Session rl kA kB ot).
 Proof.
-move=> sub t_l rl_ot; iIntros "#Hctx #HkA Hl #Ht".
+move=> sub t_l rl_ot; iIntros "#Hctx #Howner Hl #Hother #Ht".
 iMod (auth_empty nsl_sess_name) as "#Hinit".
 (* FIXME Why do I have to provide this instance? *)
 iMod (auth_acc to_session_map _ _ _ _ ε
@@ -411,7 +417,7 @@ iAssert (▷ ⌜∀ t', symbols_of_term t' = {[l]} → SM !! t' = None⌝)%I
         as "# > %Hfresh".
   iIntros (t') "%t'_l".
   destruct (SM !! t') as [s_t|] eqn:SM_t=> //.
-  iDestruct ("Hinv" $! _ _ SM_t) as (l') "(>Hreg&_&_)".
+  iDestruct ("Hinv" $! _ _ SM_t) as (l' lvl_enc' lvl_dec' Φ') "(>Hreg&_&_&?)".
   iDestruct "Hreg" as "[%t'_l' Hreg]".
   have -> : l' = l by apply/elem_of_singleton; set_solver.
   by iDestruct (meta_contra with "Hl Hreg") as "[]".
@@ -427,38 +433,41 @@ iIntros "!>" (t1' s1').
 case: (decide (t = t1')) => [<-|ne].
   rewrite lookup_insert.
   iIntros (Hs); case: Hs=> {s1'}<-.
-  iExists l; iSplit; first by iSplit.
+  iExists l, lvl_enc, lvl_dec, Φ; iSplit; first by iSplit.
   iSplit=> //.
-  rewrite /s; iSplit; case: (rl) rl_ot=> // rl_ot.
-    by rewrite rl_ot /=.
+  rewrite /s; do 2![iSplit=> //]; case: (rl) rl_ot=> // rl_ot.
+    by rewrite rl_ot.
   by case: rl_ot=> t' -> /=.
 rewrite lookup_insert_ne //; iIntros (SM_t1').
-iDestruct ("Hinv" $! _ _ SM_t1') as (l1) "(Hreg & Ht1' & Hkey & %Hcoh)".
-iExists l1; iFrame; iPureIntro.
+iDestruct ("Hinv" $! _ _ SM_t1') as (l1 lvl_enc' lvl_dec' Φ')
+  "(Hreg & Ht1' & Howner' & Hother' & %Hcoh)".
+iExists l1, lvl_enc', lvl_dec', Φ'; iFrame; iPureIntro.
 move: Hcoh; rewrite /coherent_views.
 case: (srole s1') (sdata s1')=> [|] [t2'|] //.
 case: (decide (t = t2'))=> [<-|?]; first by rewrite Hfresh.
 by rewrite lookup_insert_ne.
 Qed.
 
-Lemma nsl_sess_alloc_init kA kB tA l E :
+Lemma nsl_sess_alloc_init kA kB tA l E lvl_enc lvl_dec Φ :
   ↑cryptoN.@"nsl" ⊆ E →
   symbols_of_term tA = {[l]} →
   nsl_ctx -∗
   nsl_key Init kA -∗
   unregistered l -∗
-  stermT {[kA; kB]} tA ={E}=∗
+  akeyT lvl_enc lvl_dec Φ kB -∗
+  stermT lvl_dec tA ={E}=∗
   term_session_auth tA (Session Init kA kB None) ∗
   term_session_frag tA (Session Init kA kB None).
 Proof. by move=> ??; iApply nsl_sess_alloc. Qed.
 
-Lemma nsl_sess_alloc_resp kA kB tA tB l E :
+Lemma nsl_sess_alloc_resp kA kB tA tB l E lvl_enc lvl_dec Φ :
   ↑cryptoN.@"nsl" ⊆ E →
   symbols_of_term tB = {[l]} →
   nsl_ctx -∗
   nsl_key Resp kB -∗
   unregistered l -∗
-  stermT {[kA; kB]} tB ={E}=∗
+  akeyT lvl_enc lvl_dec Φ kA -∗
+  stermT lvl_dec tB ={E}=∗
   term_session_auth tB (Session Resp kA kB (Some tA)) ∗
   term_session_frag tB (Session Resp kA kB (Some tA)).
 Proof. by move=> ??; iApply nsl_sess_alloc=> /=; eauto. Qed.
@@ -502,18 +511,24 @@ Lemma term_session_auth_termT E t s :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗
   term_session_frag t s ={E}=∗
-  ▷ termT {[s.(sinit); s.(sresp)]} t.
+  ▷ ∃ lvl_enc lvl_dec Φ,
+    akeyT lvl_enc lvl_dec Φ (sother s) ∗
+    stermT lvl_dec t.
 Proof.
 move=> sub.
 iIntros "#Hctx Hterm".
 iMod (auth_acc to_session_map _ _ _ _ {[t := session_frag s]}
          with "[Hctx Hterm]") as "Hinv"; try by eauto.
 iDestruct "Hinv" as (SM) "(%Hincl & Hinv & Hclose)".
-iAssert (▷ termT {[s.(sinit); s.(sresp)]} t)%I with "[Hinv]" as "#Ht".
+iAssert (▷ ∃ lvl_enc lvl_dec Φ,
+             akeyT lvl_enc lvl_dec Φ (sother s)
+             ∗ stermT lvl_dec t)%I with "[Hinv]" as "#Ht".
   case/session_map_frag_included: Hincl=> s' [SM_t ss'].
   iModIntro.
-  iDestruct ("Hinv" $! _ _ SM_t) as (l) "(?& [??]& _)".
-  by case/to_session_included: ss'=> _ [-> [-> _]].
+  iDestruct ("Hinv" $! _ _ SM_t) as (l lvl_enc lvl_dec Φ) "(?&?&?&?&?)".
+  iExists lvl_enc, lvl_dec, Φ.
+  rewrite /sother; case/to_session_included: ss'=> [<- [<- [<- ?]]].
+  by iFrame.
 by iMod ("Hclose" $! SM {[t := session_frag s]} with "[Hinv]"); eauto.
 Qed.
 
@@ -563,15 +578,17 @@ iSplit.
 iIntros "!>" (t s).
 case: (decide (tA = t))=> [<-|ne].
   rewrite lookup_insert; iIntros (e); case: e=> ?; subst s.
-  iDestruct ("Hinv" $! _ _ SM_tA) as (l1) "(Hreg & Ht & Hkey & %Hcoh)".
-  iExists l1; do 3![iSplit=> //].
+  iDestruct ("Hinv" $! _ _ SM_tA)
+    as (l1 lvl_enc lvl_dec Φ) "(Hreg & Ht & Howner & Hother & %Hcoh)".
+  iExists l1, lvl_enc, lvl_dec, Φ; do 4![iSplit=> //].
   iPureIntro.
   rewrite /coherent_views /= lookup_insert_ne // SM_tB.
   rewrite to_session_included /= in s2_incl *.
   by destruct 1 as (-> & -> & -> & ->); case: (s2').
 rewrite lookup_insert_ne //.
-iIntros "%SM_t"; iDestruct ("Hinv" $! _ _ SM_t) as (l) "(?&?&?&%Hcoh)".
-iExists l; do 3![iSplit=> //]; iPureIntro.
+iIntros "%SM_t"; iDestruct ("Hinv" $! _ _ SM_t)
+  as (l lvl_enc lvl_dec Φ) "(?&?&?&?&%Hcoh)".
+iExists l, lvl_enc, lvl_dec, Φ; do 4![iSplit=> //]; iPureIntro.
 move: Hcoh; rewrite /coherent_views.
 case erole: (srole s)=> //.
 case edata: (sdata s)=> [t'|] //.
@@ -579,35 +596,43 @@ case: (decide (tA = t'))=> [<-|?]; first by rewrite SM_tA.
 by rewrite lookup_insert_ne.
 Qed.
 
-Variable send recv : val.
+Variable send recv gen : val.
 
 Definition initiator (skA pkA pkB nA : val) : val := λ: <>,
-  bind: "m1"   := aenc pkB (tuple nA pkA) in
+  bind: "m1"   := enc pkB (tuple nA pkA) in
   send "m1";;
-  bind: "m2"   := adec skA (recv #()) in
-  bind: "nA'"  := term_projV "m2" #0 in
-  bind: "nB"   := term_projV "m2" #1 in
-  bind: "pkB'" := term_projV "m2" #2 in
+  bind: "m2"   := dec skA (recv #()) in
+  bind: "nA'"  := term_proj "m2" #0 in
+  bind: "nB"   := term_proj "m2" #1 in
+  bind: "pkB'" := term_proj "m2" #2 in
   if: eq_term "nA'" nA && eq_term "pkB'" pkB then
-    bind: "m3" := aenc pkB "nB" in
-    send "nB";;
+    bind: "m3" := enc pkB "nB" in
+    send "m3";;
     SOME "nB"
   else NONE.
 
-Definition responder (skB pkB nB : val) : val := λ: <>,
-  bind: "m1"  := adec skB (recv #()) in
-  bind: "nA" := term_projV "m1" #0 in
-  bind: "pkA" := term_projV "m1" #1 in
-  bind: "m2" := aenc "pkA" (tuple "nA" (tuple nB pkB)) in
+Definition responder (skB pkB : val) : val := λ: <>,
+  bind: "m1"  := dec skB (recv #()) in
+  bind: "nA" := term_proj "m1" #0 in
+  bind: "pkA" := term_proj "m1" #1 in
+  let: "nB" := gen #() in
+  bind: "m2" := enc "pkA" (tuple "nA" (tuple "nB" (tuple pkB (TInt 0)))) in
   send "m2";;
-  bind: "nB'" := adec skB (recv #()) in
-  if: "nB'" = nB then SOME "nA" else NONE.
+  bind: "nB'" := dec skB (recv #()) in
+  if: "nB'" = "nB" then SOME ("pkA", "nA", "nB") else NONE.
 
 Hypothesis wp_send : forall E t,
-  ⊢ WP send t @ E {{v, ⌜v = #()⌝}}.
+  termT Pub t -∗
+  WP send t @ E {{v, ⌜v = #()⌝}}.
 
 Hypothesis wp_recv : forall E,
-  ⊢ WP recv #() @ E {{v, ∃ t, ⌜v = t⌝ ∗ termT RPub t}}.
+  ⊢ WP recv #() @ E {{v, ∃ t, ⌜v = t⌝ ∗ termT Pub t}}.
+
+Hypothesis wp_gen : forall E lvl,
+  ⊢ WP gen #() @ E {{v, ∃ t l, ⌜v = t⌝ ∗
+                               ⌜symbols_of_term t = {[l]}⌝ ∗
+                               stermT lvl t ∗
+                               unregistered l}}.
 
 Ltac protocol_failure :=
   by move=> *; iIntros "->"; wp_pures; iExists None.
@@ -616,7 +641,7 @@ Lemma wp_initiator kA kB (tA : term) l E :
   ↑cryptoN.@"nsl" ⊆ E →
   symbols_of_term tA = {[l]} →
   nsl_ctx -∗
-  stermT {[kA; kB]} tA -∗
+  stermT Sec tA -∗
   unregistered l -∗
   nsl_key Init kA -∗
   nsl_key Resp kB -∗
@@ -633,41 +658,49 @@ iIntros (? Hfresh) "#Hctx #HtA Hown #HkA #HkB".
 wp_pures; wp_bind (tuple _ _).
 iApply twp_wp; iApply twp_wand; first by iApply twp_tuple.
 iIntros (?) "->".
-iMod (nsl_sess_alloc_init kA kB with "Hctx HkA Hown HtA") as "[tok #?]"=> //.
-wp_bind (aenc _ _); iApply twp_wp; iApply twp_wand.
-  iApply twp_aenc; first by iExists ∅; iDestruct "HkB" as "[??]".
+iMod (nsl_sess_alloc_init kA kB with "Hctx HkA Hown [HkB] HtA") as "[tok #?]"=> //.
+  by iDestruct "HkB" as "[??]".
+wp_bind (enc _ _); iApply twp_wp; iApply twp_wand.
+  iApply twp_enc.
+iIntros (?) "->"; wp_pures.
+wp_bind (send _); iApply wp_wand; first iApply wp_send.
+  rewrite /=; iExists Pub, Sec, _=> /=.
+  iDestruct "HkB" as "[??]".
+  iSplit; eauto.
   iLeft; iSplit; rewrite /=; first by iModIntro; iLeft.
   iSplit.
-    iApply (@sub_termT _ _ _ {[kA; kB]} with "[HtA]"); first set_solver.
     by iDestruct "HtA" as "[??]".
-  iExists RPub, (agent_pred Init kA); iSplit; last by iPureIntro.
-  by iExists ∅; iDestruct "HkA" as "[??]".
-iIntros (?) "[-> #Hm1]".
-wp_pures; wp_bind (send _); iApply wp_wand; first by iApply wp_send.
+  iExists Pub, (agent_pred Init kA); iSplit; last by iPureIntro.
+  iExists Sec; by iDestruct "HkA" as "[??]".
 iIntros (?) "->"; wp_pures.
 wp_bind (recv _); iApply wp_wand; first by iApply wp_recv.
 iIntros (?); iDestruct 1 as (m2) "[-> #Hm2]".
-wp_bind (adec _ _); iApply twp_wp; iApply twp_wand.
-  by iApply twp_adec; iDestruct "HkA" as "[??]".
+wp_bind (dec _ _); iApply twp_wp; iApply twp_wand; first by iApply twp_dec.
 iIntros (v).
 case: m2; try by protocol_failure.
 case; last by protocol_failure.
-move=> k t.
-case: decide; last by protocol_failure.
-move=> {k} ->; iDestruct 1 as "[-> #Ht]"; wp_pures.
-wp_bind (term_projV _ _).
-iApply twp_wp; iApply twp_wand; first by iApply (twp_term_projV _ _ 0).
+move=> k t; iIntros "->"; rewrite /=.
+case: decide=> [ {k}<-|ne]; last by wp_pures; iExists None.
+iDestruct "Hm2" as (lvl_enc lvl_dec Φ) "[HkA1 Ht]".
+iPoseProof "HkA" as "[_ HkA2]".
+iPoseProof (resT_agree with "HkA1 HkA2") as "e".
+rewrite res_equivI.
+iDestruct "e" as "(->&->&eΦ)".
+rewrite ofe_morO_equivI.
+iRewrite ("eΦ" $! t) in "Ht".
+wp_pures; wp_bind (term_proj _ _).
+iApply twp_wp; iApply twp_wand; first by iApply (twp_term_proj _ _ 0).
 iIntros (?) "->".
-case etA': (term_proj t 0)=> [tA'|]; last by wp_pures; iExists None.
+case etA': (Spec.proj t 0)=> [tA'|]; last by wp_pures; iExists None.
 wp_pures.
-wp_bind (term_projV _ _).
-iApply twp_wp; iApply twp_wand; first by iApply (twp_term_projV _ _ 1).
+wp_bind (term_proj _ _).
+iApply twp_wp; iApply twp_wand; first by iApply (twp_term_proj _ _ 1).
 iIntros (?) "->".
-case etB: (term_proj t 1)=> [tB|]; wp_pures; try by iExists None.
-wp_bind (term_projV _ _).
-iApply twp_wp; iApply twp_wand; first by iApply (twp_term_projV _ _ 2).
+case etB: (Spec.proj t 1)=> [tB|]; wp_pures; try by iExists None.
+wp_bind (term_proj _ _).
+iApply twp_wp; iApply twp_wand; first by iApply (twp_term_proj _ _ 2).
 iIntros (?) "->".
-case epkB': (term_proj t 2)=> [pkB'|]; wp_pures; try by iExists None.
+case epkB': (Spec.proj t 2)=> [pkB'|]; wp_pures; try by iExists None.
 wp_bind (eq_term _ _).
 iApply twp_wp; iApply twp_wand; first by iApply twp_eq_term.
 iIntros (?) "->".
@@ -679,27 +712,32 @@ iIntros (?) "->".
 case: bool_decide_reflect=> e; wp_pures; try by iExists None.
 subst pkB'.
 iDestruct "Ht" as "[Ht|(_&Ht)]"; last first.
-  iPoseProof (term_proj_termT _ etA' with "Ht") as "contra".
+  iPoseProof (proj_termT _ etA' with "Ht") as "contra".
   iDestruct "HtA" as "[_ #HtA]".
-  iPoseProof ("HtA" with "contra") as "%contra".
-  by rewrite readers_subseteq_equiv in contra *.
+  by iPoseProof ("HtA" with "contra") as "%contra".
 iDestruct "Ht" as "[#Hagent Ht]".
 case: t etA' etB epkB'=> // tA' [] // tB' [] // pkB' t' enA' enB epkB'.
 rewrite /= in enA' enB epkB'; move: enA' enB epkB'=> [->] [->] [->] {tA' tB' pkB'}.
 iSimpl in "Hagent".
 iMod (nsl_sess_update with "Hctx tok Hagent") as "[tok #?]"=> //.
 iMod (term_session_auth_termT with "Hctx Hagent") as "#HtB"=> //.
-wp_bind (aenc _ _).
-iApply wp_wand; first iApply wp_aencH.
-- iExists ∅. by iDestruct "HkB" as "[??]".
-- iModIntro. iModIntro. iSimpl. iRight. by iExists kA, tA.
-- iModIntro. iApply (sub_termT with "HtB"); set_solver.
-iIntros (?) "[-> #Hm3]".
-wp_pures.
+wp_bind (enc _ _).
+iApply (twp_wp_step with "HtB"); iApply twp_wand; first iApply twp_enc.
+iIntros (?) "-> #HtB'"; iModIntro; wp_pures.
 wp_bind (send _).
 iApply wp_wand; first iApply wp_send.
+  rewrite /=. iExists Pub, Sec, _; iSplit.
+    by iDestruct "HkB" as "[??]"; eauto.
+  iLeft.
+  iDestruct "Ht" as "(?&?&?&?)"; iSplit=> //.
+  iModIntro; rewrite /=; iRight.
+  by iExists kA, tA.
 iIntros (?) "->"; wp_pures; iExists (Some tB).
 by iSplit.
 Qed.
+
+(* MOVE *)
+Global Instance prod_repr `{Repr A, Repr B} : Repr (A * B) :=
+  λ p, (repr p.1, repr p.2)%V.
 
 End NSL.
