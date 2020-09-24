@@ -387,10 +387,69 @@ Qed.
 
 (** A stricter version of [termT] that does not allow subtyping *)
 Definition stermT lvl t : iProp Σ :=
-  termT lvl t ∗ □ (∀ lvl', termT lvl' t -∗ ⌜lvl ⊑ lvl'⌝).
+  termT lvl t ∗ □ ∀ lvl', termT lvl' t -∗ ⌜lvl ⊑ lvl'⌝.
 
 Global Instance stermT_persistent lvl t : Persistent (stermT lvl t).
 Proof. apply _. Qed.
+
+Lemma stermT_pair lvl1 t1 lvl2 t2 :
+  stermT lvl1 t1 -∗
+  stermT lvl2 t2 -∗
+  stermT (lvl1 ⊔ lvl2) (TPair t1 t2).
+Proof.
+iIntros "[#type1 #min1] [#type2 #min2]"; iSplit.
+- rewrite /=; iSplit; iApply sub_termT; try by [iApply "type1"|iApply "type2"];
+  by case: lvl1 lvl2=> [] [].
+- rewrite /=; iIntros "!>" (lvl') "[#type1' #type2']".
+  iPoseProof ("min1" with "type1'") as "%".
+  iPoseProof ("min2" with "type2'") as "%".
+  by iPureIntro; rewrite level_joinP; split.
+Qed.
+
+Lemma termT_lvlP lvl t : termT lvl t -∗ ∃ lvl', stermT lvl' t.
+Proof.
+elim: t lvl=> [n|t1 IH1 t2 IH2|n|kt k|b k t IH] lvl /=.
+- iIntros "_"; iExists Pub; iSplit=> //.
+- iIntros "[#type1 #type2]".
+  iDestruct (IH1 with "type1") as (lvl1) "type1'".
+  iDestruct (IH2 with "type2") as (lvl2) "type2'".
+  by iExists (lvl1 ⊔ lvl2); iApply stermT_pair.
+- iDestruct 1 as (lvl') "[#Hn %Hsub]".
+  iExists lvl'; iSplit; first by iExists lvl'; eauto.
+  iIntros "!> /=" (lvl''); iDestruct 1 as (lvl''') "[#Hn' %Hsub']".
+  iPoseProof (resT_agree with "Hn Hn'") as "e".
+  by rewrite res_equivI; iPoseProof "e" as "->".
+- iDestruct 1 as (lvl' Φ) "[#Hk %Hsub]".
+  iExists lvl'; iSplit; first by iExists lvl', Φ; iSplit.
+  iIntros "/= !>" (lvl''); iDestruct 1 as (lvl''' Φ') "[#Hk' %Hsub']".
+  by iPoseProof (keyT_agree with "Hk Hk'") as "(<-&_)".
+- case: lvl.
+    iIntros "#Ht"; iExists Pub; iSplit=> //.
+    by iIntros "!>" (lvl) "_".
+  iDestruct 1 as (lvl_enc lvl_dec Φ) "[#Hk #Ht]".
+  iDestruct "Ht" as "[[#Ht type]|[-> type]]"; last first.
+    iExists Pub; iSplit=> /=; first by iExists _, _, _; iSplit; eauto.
+    by iIntros "!>" (lvl) "_".
+  iDestruct (IH with "type") as (lvl) "[type' #min']".
+  case: lvl.
+    iExists Pub; iSplit=> /=.
+      iExists _, _, _; iSplit=> //.
+      by iLeft; iSplit=> //; case: lvl_dec.
+    by iIntros "!>" (lvl) "_".
+  case: lvl_dec.
+    iExists Sec; iSplit=> /=.
+      iExists _, _, _; iSplit=> //.
+      by iLeft; iSplit=> //; case: lvl_dec.
+    iIntros "!>" (lvl); iDestruct 1 as (lvl_enc' lvl_dec' Φ') "[#Hk' #type'']".
+    iDestruct (key_info_agree with "Hk Hk'") as "(_&<-&<-&_)".
+    iDestruct "type''" as "[[_ type'']|[_ type'']]";
+    iPoseProof ("min'" with "type''") as "?"=> //.
+    by case: lvl.
+  iExists Pub; iSplit=> /=.
+    iExists _, _, _; iSplit=> //.
+    by iLeft; iSplit.
+  by iIntros "!>" (lvl) "_".
+Qed.
 
 Lemma res_alloc E r l :
   ↑cryptoN.@"res" ⊆ E →
