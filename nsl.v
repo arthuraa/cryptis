@@ -370,8 +370,7 @@ Definition role_name rl : gname :=
   if rl is Init then nsl_init_name else nsl_resp_name.
 
 Definition nsl_key rl k : iProp Σ :=
-  meta k (cryptoN.@"nsl") rl
-  ∗ akeyT Pub Sec (role_name rl) (agent_pred rl k) k.
+  akeyT Pub Sec (role_name rl) (agent_pred rl k) k.
 
 Global Instance nsl_key_persistent rl k :
   Persistent (nsl_key rl k).
@@ -690,13 +689,12 @@ iMod (nsl_sess_alloc_init kA kB with "Hctx HkA Hown HtA") as "[tok #?]"=> //.
 wp_bind (enc _ _); iApply wp_enc; wp_pures.
 wp_bind (send _); iApply wp_send.
   rewrite /=; iExists Pub, Sec, _, _=> /=.
-  iDestruct "HkB" as "[??]".
   iSplit; eauto.
   iLeft; iSplit; rewrite /=; first by iModIntro; iLeft.
   iSplit.
     by iDestruct "HtA" as "[??]".
   iExists Pub, _, (agent_pred Init kA); iSplit; last by iPureIntro.
-  iExists Sec; by iDestruct "HkA" as "[??]".
+  by iExists Sec; eauto.
 wp_pures; wp_bind (recv _); iApply wp_recv.
 iIntros (m2) "#Hm2".
 wp_bind (dec _ _); iApply wp_dec.
@@ -705,8 +703,7 @@ case; last by protocol_failure.
 move=> k t; rewrite /=.
 case: decide=> [ {k}<-|ne]; last by protocol_failure.
 iDestruct "Hm2" as (lvl_enc lvl_dec γ Φ) "[HkA1 Ht]".
-iPoseProof "HkA" as "[_ HkA2]".
-iPoseProof (akeyT_agree with "HkA1 HkA2") as "(->&->&->&e)".
+iPoseProof (akeyT_agree with "HkA1 HkA") as "(->&->&->&e)".
 rewrite ofe_morO_equivI.
 iRewrite ("e" $! t) in "Ht".
 wp_pures; wp_bind (term_proj _ _); iApply (wp_term_proj _ _ 0).
@@ -735,8 +732,7 @@ wp_bind (enc _ _).
 iApply (twp_wp_step with "HtB"); iApply twp_enc.
 iIntros "#HtB'"; iModIntro; wp_pures.
 wp_bind (send _); iApply wp_send.
-  rewrite /=. iExists Pub, Sec, _, _; iSplit.
-    by iDestruct "HkB" as "[??]"; eauto.
+  rewrite /=. iExists Pub, Sec, _, _; iSplit; eauto.
   iLeft.
   iDestruct "Ht" as "(?&?&?&?)"; iSplit=> //.
   iModIntro; rewrite /=; iRight.
@@ -771,7 +767,7 @@ wp_pures; wp_bind (send _); iApply wp_send.
   iSplit.
     by iDestruct "HtA" as "[??]".
   iExists Pub, _, (agent_pred Init kA); iSplit; last by iPureIntro.
-  iExists Sec; by iDestruct "HkA" as "[??]".
+  by iExists Sec; eauto.
 wp_pures; wp_bind (recv _); iApply wp_recv.
 iIntros (m2) "#Hm2".
 wp_bind (dec _ _); iApply wp_dec.
@@ -780,8 +776,7 @@ case; last by protocol_failure.
 move=> k t /=.
 case: decide=> [ {k}<-|ne]; last by protocol_failure.
 iDestruct "Hm2" as (lvl_enc' γ' lvl_dec' Φ') "[HkA1 Ht]".
-iPoseProof "HkA" as "[_ HkA2]".
-iPoseProof (akeyT_agree with "HkA1 HkA2") as "(->&->&->&e)".
+iPoseProof (akeyT_agree with "HkA1 HkA") as "(->&->&->&e)".
 rewrite ofe_morO_equivI.
 iRewrite ("e" $! t) in "Ht".
 wp_pures; wp_bind (term_proj _ _).
