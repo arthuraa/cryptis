@@ -660,9 +660,9 @@ Hypothesis wp_gen : forall E lvl Ψ,
   WP gen #() @ E {{ Ψ }}.
 
 Ltac protocol_failure :=
-  by move=> *; wp_pures; iExists None.
+  by intros; wp_pures; iApply ("Hpost" $! None).
 
-Lemma wp_initiator_honest kA kB (tA : term) l E :
+Lemma wp_initiator_honest kA kB (tA : term) l E Ψ :
   ↑cryptoN.@"nsl" ⊆ E →
   symbols_of_term tA = {[l]} →
   nsl_ctx -∗
@@ -670,16 +670,16 @@ Lemma wp_initiator_honest kA kB (tA : term) l E :
   unregistered l -∗
   nsl_key Init kA -∗
   nsl_key Resp kB -∗
+  (∀ onB : option term,
+      (if onB is Some tB then
+         term_session_auth tA (Session Init kA kB (Some tB))
+       else True) -∗
+      Ψ (repr onB)) -∗
   WP initiator (TKey KADec kA) (TKey KAEnc kA) (TKey KAEnc kB) tA #() @ E
-     {{v, ∃ onB : option term,
-          ⌜v = repr onB⌝ ∗
-          match onB with
-          | Some tB => term_session_auth tA (Session Init kA kB (Some tB))
-          | None => True
-          end}}.
+     {{ Ψ }}.
 Proof.
 rewrite /initiator.
-iIntros (? Hfresh) "#Hctx #HtA Hown #HkA #HkB".
+iIntros (? Hfresh) "#Hctx #HtA Hown #HkA #HkB Hpost".
 wp_pures; wp_bind (tuple _ _); iApply wp_tuple.
 iMod (nsl_sess_alloc_init kA kB with "Hctx HkA Hown HtA") as "[tok #?]"=> //.
 wp_bind (enc _ _); iApply wp_enc; wp_pures.
@@ -698,7 +698,7 @@ wp_bind (dec _ _); iApply wp_dec.
 case: m2; try by protocol_failure.
 case; last by protocol_failure.
 move=> k t; rewrite /=.
-case: decide=> [ {k}<-|ne]; last by wp_pures; iExists None.
+case: decide=> [ {k}<-|ne]; last by protocol_failure.
 iDestruct "Hm2" as (lvl_enc lvl_dec Φ) "[HkA1 Ht]".
 iPoseProof "HkA" as "[_ HkA2]".
 iPoseProof (resT_agree with "HkA1 HkA2") as "e".
@@ -707,17 +707,17 @@ iDestruct "e" as "(->&->&eΦ)".
 rewrite ofe_morO_equivI.
 iRewrite ("eΦ" $! t) in "Ht".
 wp_pures; wp_bind (term_proj _ _); iApply (wp_term_proj _ _ 0).
-case etA': (Spec.proj t 0)=> [tA'|]; last by wp_pures; iExists None.
+case etA': (Spec.proj t 0)=> [tA'|]; last by protocol_failure.
 wp_pures; wp_bind (term_proj _ _); iApply (wp_term_proj _ _ 1).
-case etB: (Spec.proj t 1)=> [tB|]; wp_pures; try by iExists None.
-wp_bind (term_proj _ _); iApply (wp_term_proj _ _ 2).
-case epkB': (Spec.proj t 2)=> [pkB'|]; wp_pures; try by iExists None.
-wp_bind (eq_term _ _); iApply wp_eq_term.
-case: bool_decide_reflect=> e; wp_pures; try by iExists None.
+case etB: (Spec.proj t 1)=> [tB|]; last by protocol_failure.
+wp_pures; wp_bind (term_proj _ _); iApply (wp_term_proj _ _ 2).
+case epkB': (Spec.proj t 2)=> [pkB'|]; try by protocol_failure.
+wp_pures; wp_bind (eq_term _ _); iApply wp_eq_term.
+case: bool_decide_reflect=> e; last by protocol_failure.
 subst tA'.
-wp_bind (eq_term _ _); iApply wp_eq_term.
-case: bool_decide_reflect=> e; wp_pures; try by iExists None.
-subst pkB'.
+wp_pures; wp_bind (eq_term _ _); iApply wp_eq_term.
+case: bool_decide_reflect=> e; last by protocol_failure.
+wp_pures; subst pkB'.
 iDestruct "Ht" as "[Ht|(_&Ht)]"; last first.
   iPoseProof (proj_termT _ etA' with "Ht") as "contra".
   iDestruct "HtA" as "[_ #HtA]".
@@ -738,10 +738,10 @@ wp_bind (send _); iApply wp_send.
   iDestruct "Ht" as "(?&?&?&?)"; iSplit=> //.
   iModIntro; rewrite /=; iRight.
   by iExists kA, tA.
-wp_pures; iExists (Some tB); by iSplit.
+by wp_pures; iApply ("Hpost" $! (Some tB)).
 Qed.
 
-Lemma wp_initiator_other kA kB (tA : term) l E lvl_dec Φ :
+Lemma wp_initiator_other kA kB (tA : term) l E lvl_dec Φ Ψ :
   ↑cryptoN.@"nsl" ⊆ E →
   symbols_of_term tA = {[l]} →
   nsl_ctx -∗
@@ -749,18 +749,17 @@ Lemma wp_initiator_other kA kB (tA : term) l E lvl_dec Φ :
   unregistered l -∗
   nsl_key Init kA -∗
   akeyT Pub lvl_dec Φ kB -∗
+  (∀ onB : option term,
+      (if onB is Some tB then
+         termT Pub tB
+       else True) -∗
+      Ψ (repr onB)) -∗
   WP initiator (TKey KADec kA) (TKey KAEnc kA) (TKey KAEnc kB) tA #() @ E
-     {{v, ∃ onB : option term,
-          ⌜v = repr onB⌝ ∗
-          match onB with
-          | Some tB => termT Pub tB
-          | None => True
-          end}}.
+     {{ Ψ }}.
 Proof.
 rewrite /initiator.
-iIntros (? Hfresh) "#Hctx #HtA Hown #HkA #HkB".
-wp_pures; wp_bind (tuple _ _).
-iApply wp_tuple.
+iIntros (? Hfresh) "#Hctx #HtA Hown #HkA #HkB Hpost".
+wp_pures; wp_bind (tuple _ _); iApply wp_tuple.
 wp_bind (enc _ _); iApply wp_enc.
 wp_pures; wp_bind (send _); iApply wp_send.
   rewrite /=; iExists Pub, lvl_dec, Φ=> /=.
@@ -776,7 +775,7 @@ wp_bind (dec _ _); iApply wp_dec.
 case: m2; try by protocol_failure.
 case; last by protocol_failure.
 move=> k t /=.
-case: decide=> [ {k}<-|ne]; last by wp_pures; iExists None.
+case: decide=> [ {k}<-|ne]; last by protocol_failure.
 iDestruct "Hm2" as (lvl_enc' lvl_dec' Φ') "[HkA1 Ht]".
 iPoseProof "HkA" as "[_ HkA2]".
 iPoseProof (resT_agree with "HkA1 HkA2") as "e".
@@ -786,19 +785,18 @@ rewrite ofe_morO_equivI.
 iRewrite ("eΦ" $! t) in "Ht".
 wp_pures; wp_bind (term_proj _ _).
 iApply (wp_term_proj _ _ 0).
-case etA': (Spec.proj t 0)=> [tA'|]; last by wp_pures; iExists None.
+case etA': (Spec.proj t 0)=> [tA'|]; last by protocol_failure.
 wp_pures; wp_bind (term_proj _ _).
 iApply (wp_term_proj _ _ 1).
-case etB: (Spec.proj t 1)=> [tB|]; wp_pures; try by iExists None.
-wp_bind (term_proj _ _); iApply (wp_term_proj _ _ 2).
-case epkB': (Spec.proj t 2)=> [pkB'|]; wp_pures; try by iExists None.
-wp_bind (eq_term _ _).
-iApply wp_eq_term.
-case: bool_decide_reflect=> e; wp_pures; try by iExists None.
-subst tA'.
+case etB: (Spec.proj t 1)=> [tB|]; last by protocol_failure.
+wp_pures; wp_bind (term_proj _ _); iApply (wp_term_proj _ _ 2).
+case epkB': (Spec.proj t 2)=> [pkB'|]; last by protocol_failure.
+wp_pures; wp_bind (eq_term _ _); iApply wp_eq_term.
+case: bool_decide_reflect=> e; last by protocol_failure.
+wp_pures; subst tA'.
 wp_bind (eq_term _ _); iApply wp_eq_term.
-case: bool_decide_reflect=> e; wp_pures; try by iExists None.
-subst pkB'.
+case: bool_decide_reflect=> e; last by protocol_failure.
+wp_pures; subst pkB'.
 case: t etA' etB epkB'=> // tA' [] // tB' [] // pkB' t' enA' enB epkB'.
 rewrite /= in enA' enB epkB'; move: enA' enB epkB'=> [->] [->] [->] {tA' tB' pkB'}.
 iDestruct "Ht" as "[Ht|(_&Ht)]".
@@ -820,7 +818,7 @@ wp_bind (send _); iApply wp_send.
   iModIntro.
   rewrite /=; iExists Pub, lvl_dec, Φ; iSplit=> //.
   by iRight; iSplit.
-wp_pures; by iExists (Some tB); eauto.
+wp_pures; by iApply ("Hpost" $! (Some tB)); eauto.
 Qed.
 
 End NSL.
