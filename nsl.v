@@ -680,10 +680,9 @@ Lemma wp_initiator_honest kA kB (tA : term) l E :
 Proof.
 rewrite /initiator.
 iIntros (? Hfresh) "#Hctx #HtA Hown #HkA #HkB".
-wp_pures; wp_bind (tuple _ _).
-iApply twp_wp; iApply twp_tuple.
+wp_pures; wp_bind (tuple _ _); iApply wp_tuple.
 iMod (nsl_sess_alloc_init kA kB with "Hctx HkA Hown HtA") as "[tok #?]"=> //.
-wp_bind (enc _ _); iApply twp_wp; iApply twp_enc; wp_pures.
+wp_bind (enc _ _); iApply wp_enc; wp_pures.
 wp_bind (send _); iApply wp_send.
   rewrite /=; iExists Pub, Sec, _=> /=.
   iDestruct "HkB" as "[??]".
@@ -693,10 +692,9 @@ wp_bind (send _); iApply wp_send.
     by iDestruct "HtA" as "[??]".
   iExists Pub, (agent_pred Init kA); iSplit; last by iPureIntro.
   iExists Sec; by iDestruct "HkA" as "[??]".
-wp_pures.
-wp_bind (recv _); iApply wp_recv.
+wp_pures; wp_bind (recv _); iApply wp_recv.
 iIntros (m2) "#Hm2".
-wp_bind (dec _ _); iApply twp_wp; iApply twp_dec.
+wp_bind (dec _ _); iApply wp_dec.
 case: m2; try by protocol_failure.
 case; last by protocol_failure.
 move=> k t; rewrite /=.
@@ -708,22 +706,16 @@ rewrite res_equivI.
 iDestruct "e" as "(->&->&eΦ)".
 rewrite ofe_morO_equivI.
 iRewrite ("eΦ" $! t) in "Ht".
-wp_pures; wp_bind (term_proj _ _).
-iApply twp_wp; iApply (twp_term_proj _ _ 0).
+wp_pures; wp_bind (term_proj _ _); iApply (wp_term_proj _ _ 0).
 case etA': (Spec.proj t 0)=> [tA'|]; last by wp_pures; iExists None.
-wp_pures.
-wp_bind (term_proj _ _).
-iApply twp_wp; iApply (twp_term_proj _ _ 1).
+wp_pures; wp_bind (term_proj _ _); iApply (wp_term_proj _ _ 1).
 case etB: (Spec.proj t 1)=> [tB|]; wp_pures; try by iExists None.
-wp_bind (term_proj _ _).
-iApply twp_wp; iApply (twp_term_proj _ _ 2).
+wp_bind (term_proj _ _); iApply (wp_term_proj _ _ 2).
 case epkB': (Spec.proj t 2)=> [pkB'|]; wp_pures; try by iExists None.
-wp_bind (eq_term _ _).
-iApply twp_wp; iApply twp_eq_term.
+wp_bind (eq_term _ _); iApply wp_eq_term.
 case: bool_decide_reflect=> e; wp_pures; try by iExists None.
 subst tA'.
-wp_bind (eq_term _ _).
-iApply twp_wp; iApply twp_eq_term.
+wp_bind (eq_term _ _); iApply wp_eq_term.
 case: bool_decide_reflect=> e; wp_pures; try by iExists None.
 subst pkB'.
 iDestruct "Ht" as "[Ht|(_&Ht)]"; last first.
@@ -768,8 +760,8 @@ Proof.
 rewrite /initiator.
 iIntros (? Hfresh) "#Hctx #HtA Hown #HkA #HkB".
 wp_pures; wp_bind (tuple _ _).
-iApply twp_wp; iApply twp_tuple.
-wp_bind (enc _ _); iApply twp_wp; iApply twp_enc.
+iApply wp_tuple.
+wp_bind (enc _ _); iApply wp_enc.
 wp_pures; wp_bind (send _); iApply wp_send.
   rewrite /=; iExists Pub, lvl_dec, Φ=> /=.
   iSplit; eauto.
@@ -780,7 +772,7 @@ wp_pures; wp_bind (send _); iApply wp_send.
   iExists Sec; by iDestruct "HkA" as "[??]".
 wp_pures; wp_bind (recv _); iApply wp_recv.
 iIntros (m2) "#Hm2".
-wp_bind (dec _ _); iApply twp_wp; iApply twp_dec.
+wp_bind (dec _ _); iApply wp_dec.
 case: m2; try by protocol_failure.
 case; last by protocol_failure.
 move=> k t /=.
@@ -793,18 +785,18 @@ iDestruct "e" as "(->&->&eΦ)".
 rewrite ofe_morO_equivI.
 iRewrite ("eΦ" $! t) in "Ht".
 wp_pures; wp_bind (term_proj _ _).
-iApply twp_wp; iApply (twp_term_proj _ _ 0).
+iApply (wp_term_proj _ _ 0).
 case etA': (Spec.proj t 0)=> [tA'|]; last by wp_pures; iExists None.
 wp_pures; wp_bind (term_proj _ _).
-iApply twp_wp; iApply (twp_term_proj _ _ 1).
+iApply (wp_term_proj _ _ 1).
 case etB: (Spec.proj t 1)=> [tB|]; wp_pures; try by iExists None.
-wp_bind (term_proj _ _); iApply twp_wp; iApply (twp_term_proj _ _ 2).
+wp_bind (term_proj _ _); iApply (wp_term_proj _ _ 2).
 case epkB': (Spec.proj t 2)=> [pkB'|]; wp_pures; try by iExists None.
 wp_bind (eq_term _ _).
-iApply twp_wp; iApply twp_eq_term.
+iApply wp_eq_term.
 case: bool_decide_reflect=> e; wp_pures; try by iExists None.
 subst tA'.
-wp_bind (eq_term _ _); iApply twp_wp; iApply twp_eq_term.
+wp_bind (eq_term _ _); iApply wp_eq_term.
 case: bool_decide_reflect=> e; wp_pures; try by iExists None.
 subst pkB'.
 case: t etA' etB epkB'=> // tA' [] // tB' [] // pkB' t' enA' enB epkB'.
@@ -816,13 +808,13 @@ iDestruct "Ht" as "[Ht|(_&Ht)]".
   iMod (term_session_nsl_key with "Hctx Hagent") as "#HkB'"=> //.
   wp_bind (enc _ _).
   iApply wp_fupd.
-  iApply twp_wp; iApply twp_enc.
+  iApply wp_enc.
   iModIntro; wp_pures.
   iDestruct "HtA"  as "[HtA _]".
   iDestruct "HtA'" as "[_ #min]".
   by iPoseProof ("min" with "HtA") as "%".
 wp_bind (enc _ _).
-iApply twp_wp; iApply twp_enc.
+iApply wp_enc.
 wp_pures; iSimpl in "Ht"; iDestruct "Ht" as "(_ & HtB & _)".
 wp_bind (send _); iApply wp_send.
   iModIntro.
