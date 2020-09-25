@@ -31,3 +31,6 @@ rewrite /repr; elim: n l=> [|n IH] [|x l] /=; wp_rec; wp_pures; eauto.
 rewrite (_ : (S n - 1)%Z = n); try lia.
 by iApply IH.
 Qed.
+
+Instance prod_repr `{Repr A, Repr B} : Repr (A * B) :=
+  λ p, (repr p.1, repr p.2)%V.

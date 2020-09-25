@@ -95,75 +95,74 @@ Implicit Types l : loc.
 Implicit Types lvl : level.
 Implicit Types t : term.
 Implicit Types v : val.
+Implicit Types Φ : termO -n> iPropO Σ.
+Implicit Types Ψ : val → iProp Σ.
 
-Lemma twp_tuple E t1 t2 :
-  ⊢ WP tuple t1 t2 @ E
-       [{v, ⌜v = TPair t1 t2⌝}].
-Proof. by rewrite val_of_termE /tuple; wp_pures. Qed.
-
-Lemma twp_untuple E t :
-  ⊢ WP untuple t @ E
-       [{v, ⌜v = match t with
-                 | TPair t1 t2 => SOMEV (t1, t2)
-                 | _ => NONEV
-                 end⌝}].
+Lemma twp_tuple E t1 t2 Ψ :
+  Ψ (TPair t1 t2) -∗
+  WP tuple t1 t2 @ E [{ Ψ }].
 Proof.
-rewrite val_of_termE /untuple.
-by case: t=> *; wp_pures.
+rewrite val_of_termE /tuple; by iIntros "?"; wp_pures.
 Qed.
 
-Lemma twp_term_proj E t (n : nat) :
-  ⊢ WP term_proj t #n @ E
-       [{v, ⌜v = repr (Spec.proj t n)⌝}].
+Lemma twp_term_proj E t (n : nat) Ψ :
+  Ψ (repr (Spec.proj t n)) -∗
+  WP term_proj t #n @ E [{ Ψ }].
 Proof.
-rewrite val_of_termE; elim: t n; try by move=> *; wp_rec; wp_pures.
-move=> t1 IH1 t2 IH2 [|n]; wp_rec; wp_pures.
+rewrite val_of_termE; elim: t n Ψ;
+try by move=> *; iIntros "?"; wp_rec; wp_pures.
+move=> t1 IH1 t2 IH2 [|n] Ψ; iIntros "?"; wp_rec; wp_pures.
   by rewrite -val_of_termE.
 rewrite (_ : (S n - 1)%Z = n) /=; try lia.
 by iApply IH2.
 Qed.
 
-Lemma twp_mknonce E lvl :
-  ⊢ WP mknonce #()%V @ E
-       [{v, ∃ l, ⌜v = TNonce l⌝ ∗ nonceT lvl l
-                 ∗ meta_token l (⊤ ∖ ↑cryptoN.@"res")}].
+Lemma twp_mknonce E lvl Ψ :
+  (∀ l, nonceT lvl l -∗
+        meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
+        Ψ (TNonce l)) -∗
+  WP mknonce #()%V @ E [{ Ψ }].
 Proof.
-rewrite /mknonce.
+rewrite /mknonce; iIntros "H".
 wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
 iIntros (l) "[Hl Hmeta]".
 rewrite (meta_token_difference l (↑cryptoN.@"res")) //.
 iDestruct "Hmeta" as "[Hmeta1 Hmeta2]".
-iMod (res_alloc (RNonce lvl) l with "Hmeta1") as "Hinv"=> //.
-by wp_pures; rewrite val_of_termE; eauto.
+iMod (res_alloc (RNonce lvl) l with "Hmeta1") as "#Hinv"=> //.
+by wp_pures; rewrite val_of_termE; iApply "H"; eauto.
 Qed.
 
-Lemma twp_mkakey E lvl_enc lvl_dec Φ :
-  ⊢ WP mkakey #()%V @ E
-       [{v, ∃ l, ⌜v = (TKey KAEnc l, TKey KADec l)%V⌝
-                 ∗ akeyT lvl_enc lvl_dec Φ l
-                 ∗ meta_token l (⊤ ∖ ↑cryptoN.@"res")}].
+Lemma twp_mkakey E lvl_enc lvl_dec Φ Ψ :
+  (∀ l, akeyT lvl_enc lvl_dec Φ l -∗
+        meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
+        Ψ (TKey KAEnc l, TKey KADec l)%V) -∗
+  WP mkakey #()%V @ E [{ Ψ }].
 Proof.
-rewrite /mkakey.
+rewrite /mkakey; iIntros "H".
 wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
 iIntros (l) "[Hl Hmeta]".
 rewrite (meta_token_difference l (↑cryptoN.@"res")) //.
 iDestruct "Hmeta" as "[Hmeta1 Hmeta2]".
 iMod (res_alloc (RAKey lvl_enc lvl_dec Φ) l with "Hmeta1") as "#Hown"=> //.
-by wp_pures; rewrite val_of_termE /=; iExists l; iSplit; eauto.
+by wp_pures; rewrite val_of_termE /=; iApply "H".
 Qed.
 
-Lemma twp_enc E t1 t2  :
-  ⊢ WP enc t1 t2 @ E [{v, ⌜v = repr (Spec.enc t1 t2)⌝}].
+Lemma twp_enc E t1 t2 Ψ :
+  Ψ (repr (Spec.enc t1 t2)) -∗
+  WP enc t1 t2 @ E [{ Ψ }].
 Proof.
 rewrite /repr /repr_option /repr /repr_term !val_of_termE /enc.
+iIntros "H".
 case: t1; try by move=> *; wp_pures; eauto.
 case; try by move=> *; wp_pures; eauto.
 Qed.
 
-Lemma twp_dec E t1 t2 :
-  ⊢ WP dec t1 t2 @ E [{v, ⌜v = repr (Spec.dec t1 t2)⌝}].
+Lemma twp_dec E t1 t2 Ψ :
+  Ψ (repr (Spec.dec t1 t2)) -∗
+  WP dec t1 t2 @ E [{ Ψ }].
 Proof.
 rewrite /repr /repr_option /repr /repr_term !val_of_termE /dec.
+iIntros "H".
 wp_pures.
 case: t1; try by move=> /= *; wp_pures.
 case; try by move=> /= *; wp_pures.
@@ -185,29 +184,30 @@ case; try by move=> /= *; wp_pures.
   by rewrite bool_decide_true //; wp_pures.
 Qed.
 
-Lemma twp_is_key E t : 
-  ⊢ WP is_key t @ E
-       [{v, ⌜v = repr (Spec.is_key t)⌝}].
+Lemma twp_is_key E t Ψ :
+  Ψ (repr (Spec.is_key t)) -∗
+  WP is_key t @ E [{ Ψ }].
 Proof.
 rewrite /repr /repr_option val_of_termE /is_key.
-by case: t=> *; wp_pures.
+iIntros "?"; by case: t=> *; wp_pures.
 Qed.
 
-Lemma twp_mkskey E rs Φ :
-  ⊢ WP mkskey #()%V @ E
-       [{v, ∃ l, ⌜v = TKey KSym l⌝ ∗ skeyT rs Φ l
-                 ∗ meta_token l (⊤ ∖ ↑cryptoN.@"res")}].
+Lemma twp_mkskey E lvl Φ Ψ :
+  (∀ l, skeyT lvl Φ l -∗
+        meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
+        Ψ (TKey KSym l)) -∗
+  WP mkskey #()%V @ E [{ Ψ }].
 Proof.
-rewrite /mkskey.
+rewrite /mkskey; iIntros "H".
 wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
 iIntros (l) "[Hl Hmeta]".
 rewrite (meta_token_difference l (↑cryptoN.@"res")) //.
 iDestruct "Hmeta" as "[Hmeta1 Hmeta2]".
-iMod (res_alloc (RSKey rs Φ) l with "Hmeta1") as "#Hres"=> //.
-by wp_pures; rewrite val_of_termE; iExists l; repeat iSplit=> //.
+iMod (res_alloc (RSKey lvl Φ) l with "Hmeta1") as "#Hres"=> //.
+by wp_pures; rewrite val_of_termE; iApply "H".
 Qed.
 
-Lemma twp_eq_term E t1 t2 :
+Lemma twp_eq_term_aux E t1 t2 :
   ⊢ WP (eq_term t1 t2) @ E [{ v, ⌜v = #(bool_decide (t1 = t2))⌝ }].
 Proof.
 rewrite val_of_termE.
@@ -240,6 +240,15 @@ wp_rec; wp_pures=> //.
   iApply (twp_wand with "IH1"); iIntros (?) "->".
   iPureIntro; congr (# (LitBool _)).
   apply: bool_decide_iff; intuition congruence.
+Qed.
+
+Lemma twp_eq_term E t1 t2 Ψ :
+  Ψ #(bool_decide (t1 = t2)) -∗
+  WP (eq_term t1 t2) @ E [{ Ψ }].
+Proof.
+iIntros "H".
+iApply twp_wand; first iApply twp_eq_term_aux.
+by iIntros (?) "->".
 Qed.
 
 End Proofs.

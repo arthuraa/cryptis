@@ -566,7 +566,7 @@ iDestruct 1 as (t21 t22) "(-> & -> & #Ht2)".
 iIntros "Hsymb Hopaque Hspec Hj"; iApply fupd_twp.
 iPoseProof (step_eq_term t12 t22) as "Hswp".
 iMod (swp_elim with "Hswp Hspec Hj") as (v) "[Hj ->]"; first done.
-iModIntro; iPoseProof (twp_eq_term _ t11 t21) as "Hwp".
+iModIntro; iPoseProof (twp_eq_term_aux _ t11 t21) as "Hwp".
 iApply (twp_wand with "Hwp"); iIntros (v) "->".
 iAssert ⌜bool_decide (t12 = t22) = bool_decide (t11 = t21)⌝%I
         with "[Hsymb Hopaque]" as "->".
