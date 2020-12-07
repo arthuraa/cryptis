@@ -9,6 +9,10 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Definition as_int : val := λ: "t",
+  if: Fst "t" = #TInt_tag then SOME (Snd "t")
+  else NONE.
+
 Definition tuple : val := λ: "t1" "t2",
   (#TPair_tag, ("t1", "t2")).
 
@@ -97,6 +101,21 @@ Implicit Types t : term.
 Implicit Types v : val.
 Implicit Types Φ : prodO locO termO -n> iPropO Σ.
 Implicit Types Ψ : val → iProp Σ.
+
+Lemma twp_as_int E t Ψ :
+  Ψ (repr (Spec.as_int t)) -∗
+  WP as_int t @ E [{ Ψ }].
+Proof.
+rewrite /as_int val_of_termE; iIntros "Hpost"; wp_pures.
+case: t; by move=> *; wp_pures; eauto.
+Qed.
+
+Lemma wp_as_int E t Ψ :
+  Ψ (repr (Spec.as_int t)) -∗
+  WP as_int t @ E {{ Ψ }}.
+Proof.
+by iIntros "?"; iApply twp_wp; iApply twp_as_int.
+Qed.
 
 Lemma twp_tuple E t1 t2 Ψ :
   Ψ (TPair t1 t2) -∗

@@ -134,6 +134,9 @@ Fixpoint symbols_of_term t : gset loc :=
 
 Module Spec.
 
+Definition as_int t :=
+  if t is TInt n then Some n else None.
+
 Fixpoint proj t n {struct t} :=
   match t, n with
   | TPair t _, 0 => Some t

@@ -331,10 +331,22 @@ Qed.
 
 Definition responder_pred p : iProp Σ :=
   match p.2 with
-  | TPair nA (TKey KAEnc kA) => term_session_frag nA (Session Init kA p.1 None)
+  | TPair (TInt tag) m =>
+    if decide (tag = 1) then
+      match m with
+      | TPair nA (TPair (TKey KAEnc kA) _) =>
+        term_session_frag nA (Session Init kA p.1 None)
+      | _ => False%I
+      end
+    else if decide (tag = 3) then
+      match m with
+      | TPair nB _ =>
+        (∃ kA nA, term_session_frag nA (Session Init kA p.1 (Some nB)))%I
+      | _ => False%I
+      end
+    else False%I
   | _ => False
-  end
-  ∨ ∃ kA nA, term_session_frag nA (Session Init kA p.1 (Some p.2)).
+  end.
 
 Global Instance responder_pred_proper : NonExpansive responder_pred.
 Proof.
@@ -356,10 +368,16 @@ Qed.
 Global Instance responder_pred_persistent p :
   Persistent (responder_pred p).
 Proof.
-case: p=> kB t.
+rewrite /responder_pred.
+case: p=> kB t /=.
 case: t; try by move=> *; apply _.
-move=> nA; case; try by move=> *; apply _.
 case; try by move=> *; apply _.
+move=> tag m.
+case: (decide (tag = 1))=> // _.
+  case: m; try by move=> *; apply _.
+  move=> nA; do 3![case; try by move=> *; apply _].
+case: (decide (tag = 3)) => //; try by apply _.
+case: m; try by apply _.
 Qed.
 
 Definition agent_pred rl :=
@@ -654,28 +672,142 @@ Qed.
 
 Variable send recv gen : val.
 
+Definition msg1 : val := (λ: "nA" "pkA",
+  tuple (TInt 1) (tuple "nA" (tuple "pkA" (TInt 0)))
+).
+
+Definition msg1_spec nA pkA :=
+  TPair (TInt 1) (TPair nA (TPair pkA (TInt 0))).
+
+Lemma wp_msg1 (nA pkA : term) E Ψ :
+  Ψ (repr (msg1_spec nA pkA)) -∗
+  WP msg1 nA pkA @ E {{ Ψ }}.
+Proof.
+iIntros "H".
+rewrite /msg1; wp_pures.
+wp_bind (tuple pkA _); iApply wp_tuple.
+wp_bind (tuple nA _); iApply wp_tuple.
+by iApply wp_tuple.
+Qed.
+
+Definition get_msg1 : val := (λ: "m",
+  bind: "tag" := term_proj "m" #0 in
+  bind: "tag" := as_int "tag" in
+  if: "tag" = #1 then
+    bind: "nA" := term_proj "m" #1 in
+    bind: "pkA" := term_proj "m" #2 in
+    SOME ("nA", "pkA")
+  else NONE).
+
+Definition get_msg1_spec t :=
+  match t with
+  | TPair (TInt tag) m =>
+    if decide (tag = 1) then
+      if m is TPair nA (TPair pkA _) then Some (nA, pkA)
+      else None
+    else None
+  | _ => None
+  end.
+
+Ltac protocol_failure :=
+  by intros; wp_pures; iApply ("Hpost" $! None).
+
+Lemma wp_get_msg1 t E Ψ :
+  Ψ (repr (get_msg1_spec t)) -∗
+  WP get_msg1 t @ E {{ Ψ }}.
+Proof.
+rewrite /get_msg1; iIntros "Hpost"; wp_pures.
+wp_bind (term_proj _ _); iApply (wp_term_proj _ _ 0).
+case: t; try by move=> *; wp_pures; eauto.
+move=> tag t; wp_pures; wp_bind (as_int _); iApply wp_as_int.
+case: tag; try by move=> *; wp_pures; eauto.
+move=> /= tag; wp_pures.
+case: (bool_decide_reflect (repr tag = #1)) => [[->]|d] /=.
+  wp_pures.
+  wp_bind (term_proj _ _); iApply (wp_term_proj _ _ 1).
+  case: t; try by move=> *; wp_pures; eauto.
+  move=> nA m /=; wp_pures.
+  wp_bind (term_proj _ _); iApply (wp_term_proj _ _ 2).
+  by case: m; try by move=> *; wp_pures; eauto.
+case: decide d=> [-> //|] _ _.
+by wp_pures.
+Qed.
+
+Definition msg3 : val := (λ: "nB",
+  tuple (TInt 3) (tuple "nB" (TInt 0))
+).
+
+Definition msg3_spec nB :=
+  TPair (TInt 3) (TPair nB (TInt 0)).
+
+Lemma wp_msg3 (nB : term) E Ψ :
+  Ψ (repr (msg3_spec nB)) -∗
+  WP msg3 nB @ E {{ Ψ }}.
+Proof.
+iIntros "H".
+rewrite /msg3; wp_pures.
+wp_bind (tuple nB _); iApply wp_tuple.
+by iApply wp_tuple.
+Qed.
+
+Definition get_msg3 : val := (λ: "m",
+  bind: "tag" := term_proj "m" #0 in
+  bind: "tag" := as_int "tag" in
+  if: "tag" = #3 then term_proj "m" #1
+  else NONE).
+
+Definition get_msg3_spec t :=
+  match t with
+  | TPair (TInt tag) m =>
+    if decide (tag = 3) then Spec.proj m 0
+    else None
+  | _ => None
+  end.
+
+Lemma wp_get_msg3 t E Ψ :
+  Ψ (repr (get_msg3_spec t)) -∗
+  WP get_msg3 t @ E {{ Ψ }}.
+Proof.
+rewrite /get_msg3; iIntros "Hpost"; wp_pures.
+wp_bind (term_proj _ _); iApply (wp_term_proj _ _ 0).
+case: t; try by move=> *; wp_pures; eauto.
+move=> tag t; wp_pures; wp_bind (as_int _); iApply wp_as_int.
+case: tag; try by move=> *; wp_pures; eauto.
+move=> /= tag; wp_pures.
+case: (bool_decide_reflect (repr tag = #3)) => [[->]|d] /=.
+  wp_pures.
+  by iApply (wp_term_proj _ _ 1).
+case: decide d=> [-> //|] _ _.
+by wp_pures.
+Qed.
+
 Definition initiator (skA pkA pkB nA : val) : val := λ: <>,
-  bind: "m1"   := enc pkB (tuple nA pkA) in
+  bind: "m1"   := enc pkB (msg1 nA pkA) in
   send "m1";;
   bind: "m2"   := dec skA (recv #()) in
   bind: "nA'"  := term_proj "m2" #0 in
   bind: "nB"   := term_proj "m2" #1 in
   bind: "pkB'" := term_proj "m2" #2 in
   if: eq_term "nA'" nA && eq_term "pkB'" pkB then
-    bind: "m3" := enc pkB "nB" in
+    bind: "m3" := enc pkB (msg3 "nB") in
     send "m3";;
     SOME "nB"
   else NONE.
 
 Definition responder (skB pkB : val) : val := λ: <>,
-  bind: "m1"  := dec skB (recv #()) in
-  bind: "nA" := term_proj "m1" #0 in
-  bind: "pkA" := term_proj "m1" #1 in
-  let: "nB" := gen #() in
-  bind: "m2" := enc "pkA" (tuple "nA" (tuple "nB" (tuple pkB (TInt 0)))) in
-  send "m2";;
-  bind: "nB'" := dec skB (recv #()) in
-  if: "nB'" = "nB" then SOME ("pkA", "nA", "nB") else NONE.
+  bind: "m1" := dec skB (recv #()) in
+  bind: "m1" := get_msg1 "m1" in
+  bind: "nA" := Fst "m1" in
+  bind: "pkA" := Snd "m1" in
+  bind: "kt" := is_key "pkA" in
+  if: "kt" = repr KAEnc then
+    let: "nB" := gen #() in
+    bind: "m2" := enc "pkA" (tuple "nA" (tuple "nB" (tuple pkB (TInt 0)))) in
+    send "m2";;
+    bind: "m3" := dec skB (recv #()) in
+    bind: "nB'" := get_msg3 "m3" in
+    if: eq_term "nB'" "nB" then SOME ("pkA", "nA", "nB") else NONE
+  else NONE.
 
 Implicit Types Ψ : val → iProp Σ.
 
@@ -693,15 +825,12 @@ Hypothesis wp_gen : forall E lvl Ψ,
         Ψ t) -∗
   WP gen #() @ E {{ Ψ }}.
 
-Ltac protocol_failure :=
-  by intros; wp_pures; iApply ("Hpost" $! None).
-
 Lemma tc1 kA kB (tA : term) :
   own nsl_resp_name (Some (to_agree (agent_pred Resp))) -∗
   nsl_data_for Resp kB tA -∗
   nsl_key Init kA -∗
   term_session_frag tA (Session Init kA kB None) -∗
-  termT Pub (TEnc true kB (TPair tA (TKey KAEnc kA))).
+  termT Pub (TEnc true kB (msg1_spec tA (TKey KAEnc kA))).
 Proof.
 iIntros "#Hresp HtA HkA #frag".
 iDestruct "HtA" as (lvl) "[HtA HkB]".
@@ -712,7 +841,9 @@ case: lvl e => e.
   iSplit; eauto.
   iRight.
   iSplit => //.
+  iSplit => //.
   iSplit; first by iDestruct "HtA" as "[??]".
+  iSplit=> //.
   iExists Pub, _, _; iSplit => //.
   by iExists _; eauto.
 - have {}/e [??] := eq_refl Sec; subst lvl_dec γ.
@@ -722,8 +853,10 @@ case: lvl e => e.
   iExists Pub, _, _, _.
   iSplit; eauto.
   iLeft.
-  iSplit; first by iModIntro; iLeft.
+  iSplit; first by iModIntro.
+  iSplit=> //.
   iSplit; first by iDestruct "HtA" as "[??]".
+  iSplit=> //.
   iExists Pub, _, _.
   by iSplit; eauto.
 Qed.
@@ -754,7 +887,8 @@ Lemma wp_initiator kA kB (tA : term) lvl_dec γ Φ E Ψ :
   (∀ onB : option term,
       (if onB is Some tB then
          if is_sec then
-           term_session_auth tA (Session Init kA kB (Some tB))
+           term_session_auth tA (Session Init kA kB (Some tB)) ∗
+           term_session_frag tB (Session Resp kA kB (Some tA))
          else termT Pub tB
        else True) -∗
       Ψ (repr onB)) -∗
@@ -763,7 +897,7 @@ Lemma wp_initiator kA kB (tA : term) lvl_dec γ Φ E Ψ :
 Proof.
 rewrite /initiator.
 iIntros (?) "#Hctx #Hown #HtA Hl #HkA #HkB Hpost".
-wp_pures; wp_bind (tuple _ _); iApply wp_tuple.
+wp_pures; wp_bind (msg1 _ _); iApply wp_msg1.
 iMod (nsl_sess_alloc_init kA kB with "Hctx HkA Hl HtA") as "[tok #Hfrag]"=> //.
 wp_bind (enc _ _); iApply wp_enc; wp_pures.
 wp_bind (send _); iApply wp_send.
@@ -794,6 +928,7 @@ case: (bool_decide_reflect (pkB' = _)) => e; last by protocol_failure.
 wp_pures; subst pkB'.
 iDestruct "Ht" as "[Ht|(_&Ht)]"; last first.
   iPoseProof (proj_termT _ etB with "Ht") as "HtB".
+  wp_bind (msg3 _); iApply wp_msg3.
   wp_bind (enc _ _); iApply wp_enc; wp_pures.
   wp_bind (send _); iApply wp_send.
     iModIntro => /=.
@@ -823,6 +958,7 @@ iSimpl in "Hagent".
 iClear "Hfrag".
 iMod (nsl_sess_update with "Hctx tok Hagent") as "[tok #Hfrag]"=> //.
 rewrite /=.
+wp_bind (msg3 _); iApply wp_msg3.
 wp_bind (enc _ _).
 iDestruct "Ht" as "(HtA'&HtB&_&_)".
 iApply (twp_wp_step with "HtB"); iApply twp_enc.
@@ -840,11 +976,12 @@ wp_bind (send _); iApply wp_send.
   iModIntro.
   rewrite /=. iExists Pub, Sec, _, _; iSplit; eauto.
   iLeft; iSplit => //.
-  iModIntro.
-  iRight.
-  by iExists kA, tA.
+    iModIntro.
+    rewrite /= {2}/responder_pred /=.
+    by iExists kA, tA.
+  eauto.
 wp_pures; iApply ("Hpost" $! (Some tB)).
-by rewrite bool_decide_eq_true_2.
+by rewrite bool_decide_eq_true_2 //; iSplit.
 Qed.
 
 End NSL.

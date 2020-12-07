@@ -9,6 +9,8 @@ Definition flipb {T S} (b : bool) (f : T → T → S) x y :=
 
 Class Repr A := repr : A -> val.
 
+Instance repr_Z : Repr Z := λ x, #x.
+
 Instance repr_option `{Repr A} : Repr (option A) := λ x,
   match x with
   | Some x => SOMEV (repr x)
