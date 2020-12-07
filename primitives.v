@@ -95,7 +95,7 @@ Implicit Types l : loc.
 Implicit Types lvl : level.
 Implicit Types t : term.
 Implicit Types v : val.
-Implicit Types Φ : termO -n> iPropO Σ.
+Implicit Types Φ : prodO locO termO -n> iPropO Σ.
 Implicit Types Ψ : val → iProp Σ.
 
 Lemma twp_tuple E t1 t2 Ψ :

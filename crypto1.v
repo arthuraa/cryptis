@@ -181,7 +181,7 @@ End Levels.
 Section Resources.
 
 Context (Σ : gFunctors).
-Implicit Types Φ : termO -n> iPropO Σ.
+Implicit Types Φ : prodO locO termO -n> iPropO Σ.
 Implicit Types l : loc.
 Implicit Types lvl : level.
 Implicit Types γ : gname.
@@ -234,7 +234,7 @@ eapply (inj_countable' _ _ sum_of_resK).
 Qed.
 
 Class resG := {
-  res_inG :> inG Σ (optionUR (agreeR (termO -n> iPropO Σ)));
+  res_inG :> inG Σ (optionUR (agreeR (prodO locO termO -n> iPropO Σ)));
 }.
 
 Context `{!resG, !heapG Σ}.
@@ -379,7 +379,7 @@ Fixpoint termT lvl t : iProp Σ :=
   | TEnc asym l t =>
     ∃ lvl_enc lvl_dec γ Φ,
       key_info asym lvl_enc lvl_dec γ Φ l
-      ∗ (□ Φ t ∗ termT (lvl ⊔ lvl_dec) t ∨
+      ∗ (□ Φ (l, t) ∗ termT (lvl ⊔ lvl_dec) t ∨
          ⌜lvl_enc = Pub⌝ ∗ termT Pub t)
   end.
 
