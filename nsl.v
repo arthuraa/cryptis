@@ -418,6 +418,16 @@ Global Instance nsl_key_persistent rl k :
   Persistent (nsl_key rl k).
 Proof. apply _. Qed.
 
+Definition nsl_key_cond lvl rl k : iProp Σ :=
+  ∃ lvl_dec γ Φ,
+    akeyT Pub lvl_dec γ Φ k ∗
+    ⌜lvl_dec = Sec ∧ γ = role_name rl ↔
+     lvl = Sec⌝.
+
+Global Instance nsl_key_cond_persistent lvl rl k :
+  Persistent (nsl_key_cond lvl rl k).
+Proof. apply _. Qed.
+
 Definition coherent_views SM t1 s1 : Prop :=
   match s1.(srole), s1.(sdata) with
   | Init, None => True
@@ -428,15 +438,12 @@ Definition coherent_views SM t1 s1 : Prop :=
   end.
 
 Definition nsl_data_for rl k t : iProp Σ :=
-  ∃ lvl, stermT lvl t ∗ (nsl_key rl k ≡ ⌜lvl = Sec⌝).
+  ∃ lvl, stermT lvl t ∗ nsl_key_cond lvl rl k.
 
 Definition session_inv SM : iProp Σ :=
   ∀ t1 s1, ⌜SM !! t1 = Some s1⌝ -∗
     registered t1
     ∗ nsl_data_for (sroleo s1) (sother s1) t1
-    ∗ (if s1.(sdata) is Some t2 then
-         nsl_data_for s1.(srole) (sowner s1) t2
-       else True)
     ∗ nsl_key s1.(srole) (sowner s1)
     ∗ ⌜coherent_views SM t1 s1⌝.
 
@@ -463,14 +470,11 @@ Lemma nsl_sess_alloc kA kB t rl E ot :
   nsl_ctx -∗
   nsl_key rl (if rl is Init then kA else kB) -∗
   unregistered t -∗
-  nsl_data_for (swap_role rl) (if rl is Init then kB else kA) t -∗
-  (if ot is Some t' then
-     nsl_data_for rl (if rl is Init then kA else kB) t'
-   else True) ={E}=∗
+  nsl_data_for (swap_role rl) (if rl is Init then kB else kA) t ={E}=∗
   term_session_auth t (Session rl kA kB ot) ∗
   term_session_frag t (Session rl kA kB ot).
 Proof.
-move=> sub rl_ot; iIntros "#Hctx #Howner Hunreg #Ht #Ht'".
+move=> sub rl_ot; iIntros "#Hctx #Howner Hunreg #Ht".
 iMod (auth_empty nsl_sess_name) as "#Hinit".
 (* FIXME Why do I have to provide this instance? *)
 iMod (auth_acc to_session_map _ _ _ _ ε
@@ -492,12 +496,12 @@ case: (decide (t = t1')) => [<-|ne].
   rewrite lookup_insert.
   iIntros (Hs); case: Hs=> {s1'}<-.
   do 2![iSplit=> //].
-  rewrite /s; do 2![iSplit=> //]; case: (rl) rl_ot=> // rl_ot.
+  rewrite /s; iSplit=> //; case: (rl) rl_ot=> // rl_ot.
     by rewrite rl_ot.
   by case: rl_ot=> t' -> /=.
 rewrite lookup_insert_ne //; iIntros (SM_t1').
 iDestruct ("Hinv" $! _ _ SM_t1')
-  as "(Hreg' & Ht1' & Ht2' & Howner' & %Hcoh)".
+  as "(Hreg' & Ht1' & Howner' & %Hcoh)".
 iFrame; iPureIntro.
 move: Hcoh; rewrite /coherent_views.
 case: (srole s1') (sdata s1')=> [|] [t2'|] //.
@@ -523,12 +527,11 @@ Lemma nsl_sess_alloc_resp kA kB tA tB E :
   nsl_ctx -∗
   nsl_key Resp kB -∗
   unregistered tB -∗
-  nsl_data_for Init kA tB -∗
-  nsl_data_for Resp kB tA ={E}=∗
+  nsl_data_for Init kA tB ={E}=∗
   term_session_auth tB (Session Resp kA kB (Some tA)) ∗
   term_session_frag tB (Session Resp kA kB (Some tA)).
 Proof.
-iIntros (?) "#Hctx #HkA Hunreg #HtB #HtA".
+iIntros (?) "#Hctx #HkA Hunreg #HtB".
 by iApply (nsl_sess_alloc with "Hctx HkA Hunreg HtB")=> /=; eauto.
 Qed.
 
@@ -567,33 +570,6 @@ split.
   by rewrite Some_included session_frag_included; right.
 Qed.
 
-Lemma term_session_auth_termT E t s :
-  ↑cryptoN.@"nsl" ⊆ E →
-  nsl_ctx -∗
-  term_session_frag t s ={E}=∗
-  ▷ (nsl_data_for (sroleo s) (sother s) t
-     ∗ if s.(sdata) is Some t' then
-         nsl_data_for s.(srole) (sowner s) t'
-       else True).
-Proof.
-move=> sub.
-iIntros "#Hctx Hterm".
-iMod (auth_acc to_session_map _ _ _ _ {[t := session_frag s]}
-         with "[Hctx Hterm]") as "Hinv"; try by eauto.
-iDestruct "Hinv" as (SM) "(%Hincl & Hinv & Hclose)".
-iAssert (▷ (nsl_data_for (sroleo s) (sother s) t ∗
-            if s.(sdata) is Some t' then
-              nsl_data_for s.(srole) (sowner s) t'
-            else True))%I with "[Hinv]" as "#Ht".
-  case/session_map_frag_included: Hincl=> s' [SM_t ss'].
-  iModIntro.
-  iDestruct ("Hinv" $! _ _ SM_t) as "(?&?&?&?&?)"; iFrame.
-  rewrite /sroleo /sother /sowner.
-  case/to_session_included: ss' => <- [<- [<-] edata]; iFrame.
-  by case: (sdata s) edata=> [? <-|].
-by iMod ("Hclose" $! SM {[t := session_frag s]} with "[Hinv]"); eauto.
-Qed.
-
 Lemma term_session_nsl_key E t s :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗
@@ -609,7 +585,7 @@ iAssert (▷ nsl_key s.(srole) (sowner s))%I with "[Hinv]" as "#Hs".
   case/session_map_frag_included: Hincl=> s' [SM_t ss'].
   iModIntro.
   rewrite /sowner; case/to_session_included: ss'=> -> [-> [-> _]].
-  by iDestruct ("Hinv" $! _ _ SM_t) as "(?&?&?&?&?)".
+  by iDestruct ("Hinv" $! _ _ SM_t) as "(?&?&?&?)".
 by iMod ("Hclose" $! SM {[t := session_frag s]} with "[Hinv]"); eauto.
 Qed.
 
@@ -661,14 +637,14 @@ iSplit.
 iIntros "!>" (t s).
 case: (decide (tA = t))=> [<-|ne].
   rewrite lookup_insert; iIntros (e); case: e=> ?; subst s.
-  iDestruct ("Hinv" $! _ _ SM_tA) as "(Hreg & Ht & _ & Howner & %Hcoh)".
-  iDestruct ("Hinv" $! _ _ SM_tB) as "(_ & Ht' & _ & _ & _)".
-  do 4![iSplit=> //]; iPureIntro.
+  iDestruct ("Hinv" $! _ _ SM_tA) as "(Hreg & Ht & Howner & %Hcoh)".
+  iDestruct ("Hinv" $! _ _ SM_tB) as "(_ & Ht' & _ & _)".
+  do 3![iSplit=> //]; iPureIntro.
   rewrite /s1' /=.
   by rewrite /coherent_views /= lookup_insert_ne // SM_tB.
 rewrite lookup_insert_ne //.
-iIntros "%SM_t"; iDestruct ("Hinv" $! _ _ SM_t) as "(?&?&?&?&%Hcoh)".
-do 4![iSplit=> //]; iPureIntro.
+iIntros "%SM_t"; iDestruct ("Hinv" $! _ _ SM_t) as "(?&?&?&%Hcoh)".
+do 3![iSplit=> //]; iPureIntro.
 move: Hcoh; rewrite /coherent_views.
 case erole: (srole s)=> //.
 case edata: (sdata s)=> [t'|] //.
@@ -720,17 +696,17 @@ Hypothesis wp_gen : forall E lvl Ψ,
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None).
 
-Lemma tc1 kA kB (tA : term) lvl_dec γ Φ :
+Lemma tc1 kA kB (tA : term) :
   own nsl_resp_name (Some (to_agree (agent_pred Resp))) -∗
   nsl_data_for Resp kB tA -∗
   nsl_key Init kA -∗
-  akeyT Pub lvl_dec γ Φ kB -∗
   term_session_frag tA (Session Init kA kB None) -∗
   termT Pub (TEnc true kB (TPair tA (TKey KAEnc kA))).
 Proof.
-  iIntros "Hresp HtA HkA HkB #frag".
-iDestruct "HtA" as (lvl) "[HtA HkB']".
-case: lvl.
+iIntros "#Hresp HtA HkA #frag".
+iDestruct "HtA" as (lvl) "[HtA HkB]".
+iDestruct "HkB" as (lvl_dec γ Φ) "[#HkB %e]".
+case: lvl e => e.
 - rewrite /=.
   iExists Pub, lvl_dec, _, _ => /=.
   iSplit; eauto.
@@ -739,8 +715,9 @@ case: lvl.
   iSplit; first by iDestruct "HtA" as "[??]".
   iExists Pub, _, _; iSplit => //.
   by iExists _; eauto.
-- iAssert (nsl_key Resp kB) with "[HkB']" as "HkB'".
-    by iRewrite "HkB'".
+- have {}/e [??] := eq_refl Sec; subst lvl_dec γ.
+  iAssert (nsl_key Resp kB) as "{HkB} HkB".
+    by iDestruct "HkB" as "[??]"; iSplit.
   rewrite /=.
   iExists Pub, _, _, _.
   iSplit; eauto.
@@ -765,8 +742,7 @@ Qed.
 Global Instance akeyT_Proper n :
   Proper ((=) ==> (=) ==> (=) ==> dist n ==> (=) ==> dist n) akeyT.
 Proof. solve_proper. Qed.
-
-Lemma wp_initiator_honest kA kB (tA : term) lvl_dec γ Φ E Ψ :
+Lemma wp_initiator kA kB (tA : term) lvl_dec γ Φ E Ψ :
   ↑cryptoN.@"nsl" ⊆ E →
   let is_sec := bool_decide (γ = nsl_resp_name ∧ lvl_dec = Sec) in
   nsl_ctx -∗
@@ -837,21 +813,21 @@ iDestruct "Ht" as "[Ht|(_&Ht)]"; last first.
   iPoseProof (own_valid_2 with "Hown HownB") as "HΦ".
   rewrite /= -Some_op uPred.option_validI agree_validI agree_equivI.
   iRewrite -"HΦ" in "HkB".
-  iRewrite "contra" in "HkB".
-  by iPoseProof "HkB" as "%".
+  iDestruct "contra" as (lvl_dec γ Φ'') "[HkB' %e]".
+  iPoseProof (akeyT_agree with "HkB' HkB") as "(_ & -> & -> & ?)".
+  by have // : Pub = Sec by apply/e.
 iDestruct "Ht" as "[#Hagent Ht]".
 case: t etA' etB epkB'=> // tA' [] // tB' [] // pkB' t' enA' enB epkB'.
 rewrite /= in enA' enB epkB'; move: enA' enB epkB'=> [->] [->] [->] {tA' tB' pkB'}.
 iSimpl in "Hagent".
 iClear "Hfrag".
 iMod (nsl_sess_update with "Hctx tok Hagent") as "[tok #Hfrag]"=> //.
-iMod (term_session_auth_termT with "Hctx Hagent") as "[#HtB _]"=> //.
+rewrite /=.
 wp_bind (enc _ _).
+iDestruct "Ht" as "(HtA'&HtB&_&_)".
 iApply (twp_wp_step with "HtB"); iApply twp_enc.
 iIntros "_"; iModIntro; wp_pures.
-rewrite -[sroleo _]/Init -[sother _]/kA.
 rewrite /sroleo /sother /initiator_pred /=.
-iDestruct "Ht" as "(HtA'&HtB'&_&_)"; clear t'.
 iMod (term_session_nsl_key with "Hctx Hagent") as "#HkB'" => //.
 rewrite /sowner /=.
 iAssert (▷ (⌜Pub = Pub⌝ ∗
