@@ -148,31 +148,33 @@ Lemma wp_term_proj E t (n : nat) Ψ :
   WP term_proj t #n @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_term_proj. Qed.
 
-Lemma twp_mknonce E lvl Ψ :
-  (∀ l, nonceT lvl l -∗
+Lemma twp_mknonce E γ lvl Ψ :
+  is_res γ (RNonce lvl) -∗
+  (∀ l, nonceT γ lvl l -∗
         meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
         Ψ (TNonce l)) -∗
   WP mknonce #()%V @ E [{ Ψ }].
 Proof.
-rewrite /mknonce; iIntros "H".
+rewrite /mknonce; iIntros "own H".
 wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
 iIntros (l) "[Hl Hmeta]".
 rewrite (meta_token_difference l (↑cryptoN.@"res")) //.
 iDestruct "Hmeta" as "[Hmeta1 Hmeta2]".
-iMod (res_alloc (RNonce lvl) l with "Hmeta1") as "#Hinv"=> //.
+iMod (res_alloc γ (RNonce lvl) l with "own Hmeta1") as "#Hinv"=> //.
 by wp_pures; rewrite val_of_termE; iApply "H"; eauto.
 Qed.
 
-Lemma wp_mknonce E lvl Ψ :
-  (∀ l, nonceT lvl l -∗
+Lemma wp_mknonce E γ lvl Ψ :
+  is_res γ (RNonce lvl) -∗
+  (∀ l, nonceT γ lvl l -∗
         meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
         Ψ (TNonce l)) -∗
   WP mknonce #()%V @ E {{ Ψ }}.
-Proof. by iIntros "?"; iApply twp_wp; iApply twp_mknonce. Qed.
+Proof. by iIntros "#??"; iApply twp_wp; iApply twp_mknonce. Qed.
 
-Lemma twp_mkakey E lvl_enc lvl_dec γ Φ Ψ :
-  own γ (Some (to_agree Φ)) -∗
-  (∀ l, akeyT lvl_enc lvl_dec γ Φ l -∗
+Lemma twp_mkakey E γ lvl_enc lvl_dec Φ Ψ :
+  is_res γ (RAKey lvl_enc lvl_dec Φ) -∗
+  (∀ l, akeyT γ lvl_enc lvl_dec Φ l -∗
         meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
         Ψ (TKey KAEnc l, TKey KADec l)%V) -∗
   WP mkakey #()%V @ E [{ Ψ }].
@@ -182,14 +184,13 @@ wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
 iIntros (l) "[Hl Hmeta]".
 rewrite (meta_token_difference l (↑cryptoN.@"res")) //.
 iDestruct "Hmeta" as "[Hmeta1 Hmeta2]".
-iMod (res_alloc (RAKey lvl_enc lvl_dec γ) l with "Hmeta1") as "#Hmeta"=> //.
+iMod (res_alloc _ (RAKey lvl_enc lvl_dec Φ) l with "Hown Hmeta1") as "#Hmeta"=> //.
 wp_pures; rewrite val_of_termE /=; iApply "H"=> //.
-by iSplit.
 Qed.
 
 Lemma wp_mkakey E lvl_enc lvl_dec γ Φ Ψ :
-  own γ (Some (to_agree Φ)) -∗
-  (∀ l, akeyT lvl_enc lvl_dec γ Φ l -∗
+  is_res γ (RAKey lvl_enc lvl_dec Φ) -∗
+  (∀ l, akeyT γ lvl_enc lvl_dec Φ l -∗
         meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
         Ψ (TKey KAEnc l, TKey KADec l)%V) -∗
   WP mkakey #()%V @ E {{ Ψ }}.
@@ -255,9 +256,9 @@ Lemma wp_is_key E t Ψ :
   WP is_key t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_is_key. Qed.
 
-Lemma twp_mkskey E lvl γ Φ Ψ :
-  own γ (Some (to_agree Φ)) -∗
-  (∀ l, skeyT lvl γ Φ l -∗
+Lemma twp_mkskey E γ lvl Φ Ψ :
+  is_res γ (RSKey lvl Φ) -∗
+  (∀ l, skeyT γ lvl Φ l -∗
         meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
         Ψ (TKey KSym l)) -∗
   WP mkskey #()%V @ E [{ Ψ }].
@@ -267,14 +268,13 @@ wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
 iIntros (l) "[Hl Hmeta]".
 rewrite (meta_token_difference l (↑cryptoN.@"res")) //.
 iDestruct "Hmeta" as "[Hmeta1 Hmeta2]".
-iMod (res_alloc (RSKey lvl γ) l with "Hmeta1") as "#Hres"=> //.
+iMod (res_alloc _ (RSKey lvl Φ) l with "Hown Hmeta1") as "#Hres"=> //.
 wp_pures; rewrite val_of_termE; iApply "H"=> //.
-by iSplit.
 Qed.
 
 Lemma wp_mkskey E lvl γ Φ Ψ :
-  own γ (Some (to_agree Φ)) -∗
-  (∀ l, skeyT lvl γ Φ l -∗
+  is_res γ (RSKey lvl Φ) -∗
+  (∀ l, skeyT γ lvl Φ l -∗
         meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
         Ψ (TKey KSym l)) -∗
   WP mkskey #()%V @ E {{ Ψ }}.

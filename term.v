@@ -134,6 +134,33 @@ Fixpoint symbols_of_term t : gset loc :=
 
 Module Spec.
 
+Definition tag_def (n : nat) (t : term) := TPair (TInt n) t.
+Definition tag_aux : seal tag_def. by eexists. Qed.
+Definition tag := unseal tag_aux.
+Lemma tag_eq : tag = tag_def. Proof. exact: seal_eq. Qed.
+
+Definition untag_def (n : nat) (t : term) :=
+  match t with
+  | TPair (TInt m) t =>
+    if decide (Z.of_nat n = m) then Some t else None
+  | _ => None
+  end.
+Definition untag_aux : seal untag_def. by eexists. Qed.
+Definition untag := unseal untag_aux.
+Lemma untag_eq : untag = untag_def. Proof. exact: seal_eq. Qed.
+
+Lemma tagK n t : untag n (tag n t) = Some t.
+Proof.
+rewrite untag_eq tag_eq /untag_def /tag_def /=.
+by rewrite decide_left.
+Qed.
+
+Instance tag_inj : Inj2 (=) (=) (=) tag.
+Proof.
+rewrite tag_eq /tag_def => n1 t1 n2 t2 [] e ->.
+split=> //; by apply (inj Z.of_nat).
+Qed.
+
 Definition as_int t :=
   if t is TInt n then Some n else None.
 
