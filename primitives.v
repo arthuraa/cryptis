@@ -31,6 +31,28 @@ Definition term_proj : val := rec: "loop" "t" "n" :=
     else "loop" (Snd (Snd "t")) ("n" - #1)
   else NONE.
 
+Definition list_of_term : val := rec: "loop" "t" :=
+  if: Fst "t" = #TInt_tag then
+    if: Snd "t" = #0 then SOMEV NONEV else NONEV
+  else if: Fst "t" = #TPair_tag then
+    let: "t" := Snd "t" in
+    bind: "l" := "loop" (Snd "t") in
+    SOME (SOME (Fst "t", "l"))
+  else NONE.
+
+Definition term_of_list : val := rec: "loop" "l" :=
+  match: "l" with NONE => (#TInt_tag, #0)
+  | SOME "p" => tuple (Fst "p") ("loop" (Snd "p"))
+  end.
+
+Definition tag (n : nat) : val := λ: "t",
+  tuple (TInt n) "t".
+
+Definition untag (n : nat) : val := λ: "t",
+  bind: "t" := untuple "t" in
+  bind: "tag" := as_int (Fst "t") in
+  if: "tag" = #n then SOME (Snd "t") else NONE.
+
 Definition mknonce : val := λ: <>,
   let: "n" := ref #() in
   (#TNonce_tag, "n").
@@ -131,11 +153,27 @@ Proof.
 by iIntros "?"; iApply twp_wp; iApply twp_tuple.
 Qed.
 
+Lemma twp_untuple E t Ψ :
+  Ψ (repr (Spec.untuple t)) -∗
+  WP untuple t @ E [{ Ψ }].
+Proof.
+iIntros "post".
+rewrite /Spec.untuple /untuple /= val_of_termE.
+case: t; by move=> *; wp_pures; rewrite -?val_of_termE; iApply "post".
+Qed.
+
+Lemma wp_untuple E t Ψ :
+  Ψ (repr (Spec.untuple t)) -∗
+  WP untuple t @ E {{ Ψ }}.
+Proof.
+by iIntros "?"; iApply twp_wp; iApply twp_untuple.
+Qed.
+
 Lemma twp_term_proj E t (n : nat) Ψ :
   Ψ (repr (Spec.proj t n)) -∗
   WP term_proj t #n @ E [{ Ψ }].
 Proof.
-rewrite val_of_termE; elim: t n Ψ;
+rewrite /= val_of_termE; elim: t n Ψ;
 try by move=> *; iIntros "?"; wp_rec; wp_pures.
 move=> t1 IH1 t2 IH2 [|n] Ψ; iIntros "?"; wp_rec; wp_pures.
   by rewrite -val_of_termE.
@@ -147,6 +185,87 @@ Lemma wp_term_proj E t (n : nat) Ψ :
   Ψ (repr (Spec.proj t n)) -∗
   WP term_proj t #n @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_term_proj. Qed.
+
+Lemma twp_term_of_list E ts Ψ :
+  Ψ (repr (Spec.of_list ts)) -∗
+  WP term_of_list (repr ts) @ E [{ Ψ }].
+Proof.
+rewrite /= val_of_termE repr_list_eq Spec.of_list_eq.
+elim: ts Ψ => [|t ts IH] Ψ /=; iIntros "post"; wp_rec; wp_pures => //.
+wp_bind (term_of_list _); iApply IH; wp_pures.
+rewrite -val_of_termE; iApply twp_tuple; wp_pures.
+by rewrite val_of_termE.
+Qed.
+
+Lemma wp_term_of_list E ts Ψ :
+  Ψ (repr (Spec.of_list ts)) -∗
+  WP term_of_list (repr ts) @ E {{ Ψ }}.
+Proof.
+by iIntros "?"; iApply twp_wp; iApply twp_term_of_list.
+Qed.
+
+Lemma twp_list_of_term E t Ψ :
+  Ψ (repr (Spec.to_list t)) -∗
+  WP list_of_term t @ E [{ Ψ }].
+Proof.
+rewrite val_of_termE /= repr_list_eq.
+elim: t Ψ; try by [move=> *; iIntros "post"; wp_rec; wp_pures; iApply "post"].
+  move=> n Ψ /=; iIntros "post"; wp_rec; wp_pures.
+  case: bool_decide_reflect => [[->]|]; first by wp_pures.
+  case: n => *; by wp_pures.
+move=> thead _ trest IH Ψ /=; iIntros "post".
+wp_rec; wp_pures; wp_bind (list_of_term _); iApply IH.
+case: (Spec.to_list trest) => [ts|] /=; wp_pures; eauto.
+by rewrite -val_of_termE.
+Qed.
+
+Lemma wp_list_of_term E t Ψ :
+  Ψ (repr (Spec.to_list t)) -∗
+  WP list_of_term t @ E {{ Ψ }}.
+Proof.
+by iIntros "?"; iApply twp_wp; iApply twp_list_of_term.
+Qed.
+
+Lemma twp_tag E (n : nat) t Ψ :
+  Ψ (repr (Spec.tag n t)) -∗
+  WP tag n t @ E [{ Ψ }].
+Proof.
+iIntros "post".
+by rewrite Spec.tag_eq /tag; wp_pures; iApply twp_tuple.
+Qed.
+
+Lemma wp_tag E (n : nat) t Ψ :
+  Ψ (repr (Spec.tag n t)) -∗
+  WP tag n t @ E {{ Ψ }}.
+Proof.
+iIntros "post".
+by rewrite Spec.tag_eq /tag; wp_pures; iApply wp_tuple.
+Qed.
+
+Lemma twp_untag E (n : nat) t Ψ :
+  Ψ (repr (Spec.untag n t)) -∗
+  WP untag n t @ E [{ Ψ }].
+Proof.
+iIntros "post".
+rewrite Spec.untag_eq /untag /=; wp_pures.
+wp_bind (untuple _); iApply twp_untuple.
+case: t; try by [move=> *; wp_pures; iApply "post"].
+move=> t1 t2; wp_pures.
+wp_bind (as_int _); iApply twp_as_int.
+case: t1; try by [move=> *; wp_pures; iApply "post"].
+move=> n'; wp_pures.
+case: bool_decide_reflect => [[->]|ne]; wp_pures.
+  by rewrite decide_left.
+case: decide => e; try iApply "post".
+congruence.
+Qed.
+
+Lemma wp_untag E (n : nat) t Ψ :
+  Ψ (repr (Spec.untag n t)) -∗
+  WP untag n t @ E {{ Ψ }}.
+Proof.
+by iIntros "?"; iApply twp_wp; iApply twp_untag.
+Qed.
 
 Lemma twp_mknonce E γ lvl Ψ :
   is_res γ (RNonce lvl) -∗

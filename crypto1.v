@@ -240,6 +240,19 @@ rewrite Spec.tag_eq /Spec.tag_def Z2Nat.id //.
 by eauto.
 Qed.
 
+Lemma tagged_inv_persistent Φs :
+  (∀ n Φ p, Φs !! n = Some Φ → Persistent (Φ p)) →
+  ∀ p, Persistent (tagged_inv Φs p).
+Proof.
+move=> ΦsP [k t].
+rewrite /Persistent; iIntros "ktP".
+iDestruct (tagged_inv_elim with "ktP") as (n t' Φ) "(-> & %e & ktP)".
+move/(_ _ _ (k, t') e) in ΦsP.
+iPoseProof "ktP" as "#ktP".
+iModIntro.
+by iApply tagged_inv_intro; eauto.
+Qed.
+
 Lemma tagged_inv_elim' Φs k n t :
   tagged_inv Φs (k, Spec.tag n t) -∗
   match Φs !! n with
@@ -624,6 +637,7 @@ Qed.
 
 End Resources.
 
+Arguments tagged_inv_def {_} /.
 Arguments RNonce {_} _.
 Arguments nonceT {_ _ _} _ _ _.
 Arguments skeyT {_ _ _} _ _ _ _.

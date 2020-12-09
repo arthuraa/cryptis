@@ -89,7 +89,7 @@ Implicit Types E : coPset.
 Implicit Types KS : gset loc.
 Implicit Types φ : termO -n> iPropO Σ.
 
-Definition term_names :=
+Definition term_names : list _ :=
   [lo_nonce_name; hi_nonce_name; lo_key_name; hi_key_name].
 
 (** When we create a secret nonce, we must specify which keys can be used to

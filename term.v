@@ -164,6 +164,12 @@ Qed.
 Definition as_int t :=
   if t is TInt n then Some n else None.
 
+Definition untuple t :=
+  match t with
+  | TPair t1 t2 => Some (t1, t2)
+  | _ => None
+  end.
+
 Fixpoint proj t n {struct t} :=
   match t, n with
   | TPair t _, 0 => Some t
@@ -192,4 +198,27 @@ Definition is_key t :=
   | _ => None
   end.
 
+Definition of_list_aux : seal (foldr TPair (TInt 0)). by eexists. Qed.
+Definition of_list := unseal of_list_aux.
+Lemma of_list_eq : of_list = foldr TPair (TInt 0).
+Proof. exact: seal_eq. Qed.
+
+Fixpoint to_list t : option (list term) :=
+  match t with
+  | TInt 0 => Some []
+  | TPair t1 t2 =>
+    match to_list t2 with
+    | Some l => Some (t1 :: l)
+    | None => None
+    end
+  | _ => None
+  end.
+
+Lemma of_listK l : to_list (of_list l) = Some l.
+Proof. rewrite of_list_eq; by elim: l => //= t l ->. Qed.
+
 End Spec.
+
+Arguments repr_term /.
+Arguments Spec.tag_def /.
+Arguments Spec.untag_def /.
