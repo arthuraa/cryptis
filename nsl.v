@@ -3,7 +3,7 @@ From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl namespace_map frac.
 From iris.base_logic.lib Require Import auth.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import lib term crypto1 primitives.
+From crypto Require Import lib term crypto1 primitives tactics.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -808,76 +808,47 @@ Lemma wp_initiator kA kB (tA : term) γ E Ψ :
 Proof.
 rewrite /initiator.
 iIntros (?) "#Hctx #Hown #HtA Hl #HkA #HkB Hpost".
-wp_pures.
-wp_bind (_ :: _)%E; iApply (wp_list (_ :: _ :: [])).
-wp_bind (term_of_list _); iApply wp_term_of_list.
-(* FIXME maybe term_of_list shouldn't unfold *)
-wp_bind (tag _ _); iApply wp_tag.
-wp_bind (enc _ _); iApply wp_enc.
-wp_pures.
+wp_list (_ :: _ :: []).
+wp_term_of_list.
+wp_tag.
+wp_enc.
 iMod (nsl_sess_alloc_init γ kA kB with "Hctx HkA Hl HkB HtA") as "[auth #frag]"=> //.
-wp_bind (send _); iApply wp_send.
+wp_pures; wp_bind (send _); iApply wp_send.
   by iModIntro; iApply termT_msg1.
 wp_pures; wp_bind (recv _); iApply wp_recv.
-iIntros (m2) "Hm2"; wp_bind (dec _ _); iApply wp_dec.
-case: m2; try by protocol_failure.
-case; try by protocol_failure.
-move=> k m2 /=.
-case: decide=> [ {k}<-|ne]; last by protocol_failure.
-wp_pures; wp_bind (list_of_term _); iApply wp_list_of_term.
-case e: (Spec.to_list m2) => [args|]; try by protocol_failure.
+iIntros (m2) "#Hm2"; wp_dec m2; last protocol_failure.
+wp_list_of_term m2; last protocol_failure.
+wp_lookup nA' enA'; last protocol_failure.
+wp_lookup nB  enB; last protocol_failure.
+wp_lookup pkB' epkB'; last protocol_failure.
+wp_eq_term e; last protocol_failure; subst nA'.
+wp_eq_term e; last protocol_failure; subst pkB'.
+wp_tag.
+wp_enc.
 iPoseProof (termT_adec_pub with "Hm2 [//]") as "{Hm2} [#Hm2|#Hm2]".
-  iPoseProof (termT_to_list with "Hm2") as "{Hm2} Hargs" => // {m2 e}.
-  wp_pures; wp_bind (_ !! _)%E; wp_get_list.
-  case e0: (args !! _) => [arg0|]; last protocol_failure.
-  wp_pures; wp_bind (_ !! _)%E; wp_get_list.
-  case e1: (args !! _) => [arg1|]; last protocol_failure.
-  wp_pures; wp_bind (_ !! _)%E; wp_get_list.
-  case e2: (args !! _) => [arg2|]; last protocol_failure.
-  iPoseProof (big_sepL_lookup with "Hargs") as "H0"; first exact: e0.
-  iPoseProof (big_sepL_lookup with "Hargs") as "H1"; first exact: e1.
-  iPoseProof (big_sepL_lookup with "Hargs") as "H2"; first exact: e2.
-  iClear (e0 e1 e2 args) "Hargs".
-  wp_pures; wp_bind (eq_term _ _); iApply wp_eq_term.
-  case: (bool_decide_reflect (arg0 = tA)); last protocol_failure.
-  move=> ?; subst arg0; wp_pures.
-  wp_pures; wp_bind (eq_term _ _); iApply wp_eq_term.
-  case: (bool_decide_reflect (arg2 = TKey KAEnc kB)); last protocol_failure.
-  move=> ?; subst arg2; wp_pures.
-  wp_pures; wp_bind (tag _ _); iApply wp_tag.
-  wp_pures; wp_bind (enc _ _); iApply wp_enc.
+  iPoseProof (termT_of_listE with "Hm2") as "{Hm2} Hm2".
+  iPoseProof (big_sepL_lookup with "Hm2") as "H0"; first exact: enA'.
+  iPoseProof (big_sepL_lookup with "Hm2") as "H1"; first exact: enB.
+  iPoseProof (big_sepL_lookup with "Hm2") as "H2"; first exact: epkB'.
+  iClear (enA' enB epkB') "Hm2".
   wp_pures; wp_bind (send _); iApply wp_send.
     iModIntro.
     iDestruct "HkB" as (??) "HkB".
     iApply termT_aenc_pub_pub => //.
     by iApply termT_tag.
-  wp_pures; iApply ("Hpost" $! (Some arg1)).
+  wp_pures; iApply ("Hpost" $! (Some nB)).
   rewrite /nsl_data_for bool_decide_decide.
   case: decide => // ?; subst γ.
   iDestruct "HtA" as "[_ #HtA]".
   by iPoseProof ("HtA" with "H0") as "%".
 iDestruct "Hm2" as "[#Hprot Hm2]".
-wp_pures.
-iDestruct "Hprot" as (nA' nB kB') "[%Hm2 frag']".
-rewrite /= in Hm2; subst m2.
-move: e; rewrite Spec.of_listK; case => ?; subst args.
-wp_pures; wp_bind (_ !! _)%E; wp_get_list.
-wp_pures; wp_bind (_ !! _)%E; wp_get_list.
-wp_pures; wp_bind (_ !! _)%E; wp_get_list.
-wp_pures; wp_bind (eq_term _ _); iApply wp_eq_term.
-case: (bool_decide_reflect (nA' = tA)); last protocol_failure.
-move=> ?; subst nA'.
-wp_pures; wp_bind (eq_term _ _); iApply wp_eq_term.
-case: (bool_decide_reflect (TKey _ _ = _)); last protocol_failure.
-case=> ?; subst kB'.
-wp_pures; wp_bind (tag _ _); iApply wp_tag.
-wp_pures; wp_bind (enc _ _); iApply wp_enc.
-iMod (nsl_sess_update with "Hctx auth frag'") as "{frag} [tok #frag]"=> //.
-iMod (term_session_nsl_key with "Hctx frag'") as "#HkB'" => //.
-iSimpl in "HkB'".
+iDestruct "Hprot" as (nA' nB' kB') "[%Hm2 frag']".
+move/Spec.of_list_inj in Hm2; subst m2.
+case: enA' enB epkB' => [] -> [] -> [] -> /=.
 iPoseProof (termT_of_listE with "Hm2") as "{Hm2} Hm2".
-iSimpl in "Hm2".
-iDestruct "Hm2" as "(HtA' & HnB & _)".
+iSimpl in "Hm2"; iDestruct "Hm2" as "(H0 & H1 & H2 & _)".
+iMod (nsl_sess_update with "Hctx auth frag'") as "{frag} [tok #frag]"=> //=.
+iMod (term_session_nsl_key with "Hctx frag'") as "#HkB'" => //=.
 wp_pures; wp_bind (send _); iApply wp_send.
   iModIntro.
   iApply termT_aenc_pub_sec; eauto.
@@ -910,188 +881,3 @@ Lemma wp_responder kB E Ψ :
 Proof. Admitted.
 
 End NSL.
-
-(*
-rewrite /responder.
-iIntros (?) "#Hctx #Hown #HkB Hpost".
-wp_pures; wp_bind (recv _); iApply wp_recv.
-iIntros (m1) "#Hm1".
-wp_bind (dec _ _); iApply wp_dec.
-case: m1; try by protocol_failure.
-case; try by protocol_failure.
-move=> k m1 /=.
-case: decide; last protocol_failure.
-move=> <- {k}; wp_pures.
-wp_bind (untag _ _); iApply wp_untag.
-case e: (Spec.untag _ _) => [m1'|]; last protocol_failure.
-move: m1' {e} (untagK e) => {}m1 ->.
-wp_pures; wp_bind (list_of_term _); iApply wp_list_of_term.
-case e: Spec.to_list => [m1'|].
-
-
-
-  match goal with
-  | |- environments.envs_entails ?Γ
-         (wp _ _ (App (App (Val get_list) _) (Val (LitV (LitInt ?n)))%E) _) =>
-    iApply (@wp_get_list _ _ _ _ _ _ (Z.to_nat n))
-  end.
-
-
-
-
-
-
-
-wp_pures; wp_bind (recv _); iApply wp_recv; iIntros (t) "Ht".
-wp_bind (dec _ _); iApply wp_dec.
-case: t; try by protocol_failure.
-move=> is_sym k t; case: is_sym; try by protocol_failure.
-rewrite /=.
-case: (decide (kB = k)); last by protocol_failure.
-move=> <- {k}.
-wp_pures.
-iDestruct "Ht" as (lvl_enc lvl_dec γ Φ) "[#HkB' #Ht]".
-iDestruct (akeyT_agree with "HkB' HkB") as "(-> & -> & -> & e)".
-rewrite ofe_morO_equivI.
-iRewrite ("e" $! (kB, t)) in "Ht".
-iClear (Φ) "e HkB'".
-wp_pures.
-wp_bind (get_msg1 _); iApply wp_get_msg1.
-case: t; try by protocol_failure.
-case; try by protocol_failure.
-move=> tag /=.
-case: (decide _)=> [ {tag}->|?]; last by protocol_failure.
-case; try by protocol_failure.
-move=> nA; case; try by protocol_failure.
-move=> pkA t.
-wp_pures.
-wp_bind (is_key _); iApply wp_is_key.
-case: pkA; try protocol_failure.
-move=> kt kA; wp_pures.
-case: bool_decide_reflect; try by protocol_failure.
-case: kt=> // _.
-wp_pures.
-iDestruct "Ht" as "[[#Hinv Ht] | [_ Ht]]"; last first.
-  iPoseProof (proj_termT _ et0 with "Ht") as "HtA".
-  iPoseProof (proj_termT _ et1 with "Ht") as "HkA".
-  iDestruct "HkA" as (lvl' γ Φ') "[HkA %Hlvl']".
-  case: lvl' Hlvl'=> //= _.
-  iDestruct "HkA" as (lvl_dec) "HkA".
-  pose (is_sec := lvl_dec = Sec ∧ γ = nsl_init_name).
-  wp_bind (gen _); iApply (wp_gen _ (if bool_decide is_sec then Sec else Pub)).
-  iIntros (tB) "unreg #HtB".
-  iAssert (nsl_data_for Init kA tB) as "HtB'".
-    iExists _; iSplit=> //.
-    rewrite /is_sec; case: bool_decide_reflect.
-      case=> -> ->.
-      by iExists Sec, nsl_init_name, _; iSplit; eauto.
-    move=> contra.
-    by iExists lvl_dec, γ, Φ'; iSplit.
-  iMod (nsl_sess_alloc_resp _ _ tA with "Hctx HkB unreg HtB'")
-      as "[Hauth #Hfrag]" => //.
-  wp_pures.
-  wp_bind (tuple _ (TInt 0)); iApply wp_tuple.
-  wp_bind (tuple tB _); iApply wp_tuple.
-  wp_bind (tuple (repr tA) _); iApply wp_tuple.
-  wp_bind (enc _ _); iApply wp_enc.
-  wp_pures.
-  wp_bind (send _); iApply wp_send.
-    iModIntro.
-    rewrite /=.
-    case: bool_decide_reflect=> [[??]|not_sec].
-    - subst lvl_dec γ.
-      iAssert (nsl_key Init kA) as "{HkA} HkA".
-      by iDestruct "HkA" as "[??]"; iSplit.
-      iExists _, _, _, _; iSplitL; eauto.
-      iLeft.
-      iSplit=> //.
-      iSplit; first by iApply (sub_termT with "HtA").
-      iSplit; first by iDestruct "HtB" as "[??]".
-      iSplit=> //.
-      by iExists Pub, _, _; iSplit; eauto.
-    - iExists _, _, _, _; iSplitL; eauto.
-      iRight.
-      iSplit=> //.
-      iSplit=> //.
-      iSplit; first by iDestruct "HtB" as "[??]".
-      iSplit=> //.
-      by iExists _, _, _; iSplit; eauto.
-  wp_pures.
-  wp_bind (recv _); iApply wp_recv.
-  iIntros (t') "#Ht'".
-  wp_bind (dec _ _); iApply wp_dec.
-  case: t'; try by protocol_failure.
-  case; try by protocol_failure.
-  move=> k t' /=.
-  case: (decide _)=> ?; try by protocol_failure.
-  subst k.
-  wp_pures.
-  wp_bind (eq_term _ _); iApply wp_eq_term.
-  case: (bool_decide_reflect (t' = tB)); try by protocol_failure.
-  move=> {t'}->.
-  wp_pures.
-  iApply ("Hpost" $! (Some (_, _, _)) with "[Hauth]").
-  iExists _; iSplitL; eauto.
-  iIntros "#HkA'".
-  rewrite /is_sec.
-  iDestruct (akeyT_agree with "HkA HkA'") as "(_ & -> & -> & _)".
-  rewrite bool_decide_eq_true_2 //.
-  iDestruct "Ht'" as (??? Φ) "(HkB' & Ht')".
-  iDestruct (akeyT_agree with "HkB' HkB") as "(-> & -> & -> & e)".
-  rewrite ofe_morO_equivI.
-  iRewrite ("e" $! (kB, tB)) in "Ht'".
-  iClear (Φ) "HtB' HkB' e".
-  iDestruct "Ht'" as "[[#Ht' _] | [_ HtB']]"; last first.
-    iDestruct "HtB" as "[_ #Hmin]".
-    by iPoseProof ("Hmin" with "HtB'") as "%".
-  rewrite /=.
-  pose (is_sec := bool_decide (lvl_dec = Sec ∧ γ = nsl_init_name)).
-  wp_bind (gen _); iApply (wp_gen _ (if is_sec then Sec else Pub)).
-  iIntros (tB) "unreg #HtB".
-  iAssert (nsl_data_for Init kA tB) as "{HtB} HtB".
-    iExists _; iSplit=> //.
-    rewrite /is_sec; case: bool_decide_reflect.
-      case=> -> ->.
-      by iExists Sec, nsl_init_name, _; iSplit; eauto.
-    move=> contra.
-    by iExists lvl_dec, γ, Φ'; iSplit.
-  iMod (nsl_sess_alloc_resp _ _ tA with "Hctx HkB unreg HtB")
-      as "[Hauth #Hfrag]" => //.
-  wp_pures.
-  wp_bind (tuple _ (TInt 0)); iApply wp_tuple.
-  wp_bind (tuple tB _); iApply wp_tuple.
-  wp_bind (tuple (repr tA) _); iApply wp_tuple.
-  wp_bind (enc _ _); iApply wp_enc.
-  wp_pures.
-  wp_bind (send _); iApply wp_send.
-    iModIntro.
-    rewrite /=.
-    iExists _, _, _, _; iSplitL; eauto.
-    iRight.
-    iSplit=> //.
-    iSplit=> //.
-    iSplit=> //.
-        iSplit=> //.
-        by iExists _, _, _; iSplit; eauto.
-      wp_pures.
-      wp_bind (recv _); iApply wp_recv.
-      iIntros (t') "#Ht'".
-      wp_bind (dec _ _); iApply wp_dec.
-      case: t'; try by protocol_failure.
-      case; try by protocol_failure.
-      move=> k t' /=.
-      case: (decide _)=> ?; try by protocol_failure.
-      subst k.
-      wp_pures.
-      wp_bind (eq_term _ _); iApply wp_eq_term.
-      case: bool_decide_reflect; try by protocol_failure.
-      move=> {t'}->.
-      wp_pures.
-
-
-iIntros (tB).
-
-
-iDestruct "Ht" as "[Ht | (_ & Ht)]"; last first.
-  wp_bind (term_proj _ _).
-*)

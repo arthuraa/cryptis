@@ -170,6 +170,16 @@ case: t1=> [] // [] //= m.
 by case: decide => // <- _ [->].
 Qed.
 
+Inductive untag_spec n : term → option term → Type :=
+| UntagSome t : untag_spec n (tag n t) (Some t)
+| UntagNone t : untag_spec n t None.
+
+Lemma untagP n t : untag_spec n t (untag n t).
+Proof.
+case e: untag => [t'|]; last constructor.
+by rewrite (untagK _ _ _ e); constructor.
+Qed.
+
 Definition as_int t :=
   if t is TInt n then Some n else None.
 
@@ -237,8 +247,26 @@ case e: to_list => [ts''|] // [<-].
 by rewrite /= (IH _ e).
 Qed.
 
+Inductive to_list_spec : term → option (list term) → Type :=
+| ToListSome ts : to_list_spec (of_list ts) (Some ts)
+| ToListNone t  : to_list_spec t None.
+
+Lemma to_listP t : to_list_spec t (to_list t).
+Proof.
+case e: to_list => [ts|]; last constructor.
+by rewrite (to_listK _ _ e); constructor.
+Qed.
+
+Lemma of_list_inj : Inj eq eq of_list.
+Proof.
+move=> ts1 ts2 e; apply: Some_inj.
+by rewrite -of_listK e of_listK.
+Qed.
+
 End Spec.
 
 Arguments repr_term /.
 Arguments Spec.tag_def /.
 Arguments Spec.untag_def /.
+
+Existing Instance Spec.of_list_inj.
