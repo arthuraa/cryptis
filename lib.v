@@ -103,6 +103,9 @@ Lemma wp_cons E x xs Ψ :
   WP repr x :: repr xs @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_cons. Qed.
 
+Definition list_to_expr :=
+  foldr (fun (x : A) e => CONS (repr x) e) NILV.
+
 End ListLemmas.
 
 Instance repr_prod `{Repr A, Repr B} : Repr (A * B) :=

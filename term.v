@@ -161,6 +161,15 @@ rewrite tag_eq /tag_def => n1 t1 n2 t2 [] e ->.
 split=> //; by apply (inj Z.of_nat).
 Qed.
 
+Lemma untagK n t1 t2 :
+  untag n t1 = Some t2 ->
+  t1 = tag n t2.
+Proof.
+rewrite untag_eq tag_eq /=.
+case: t1=> [] // [] //= m.
+by case: decide => // <- _ [->].
+Qed.
+
 Definition as_int t :=
   if t is TInt n then Some n else None.
 
@@ -216,6 +225,17 @@ Fixpoint to_list t : option (list term) :=
 
 Lemma of_listK l : to_list (of_list l) = Some l.
 Proof. rewrite of_list_eq; by elim: l => //= t l ->. Qed.
+
+Lemma to_listK t ts :
+  to_list t = Some ts →
+  t = of_list ts.
+Proof.
+rewrite of_list_eq /=; elim: t ts => //.
+  by case=> [] // _ [<-].
+move=> t _ ts' IH /= ts.
+case e: to_list => [ts''|] // [<-].
+by rewrite /= (IH _ e).
+Qed.
 
 End Spec.
 

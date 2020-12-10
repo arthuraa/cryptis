@@ -323,6 +323,13 @@ Proof. case: r1=> *; case: r2=> * /=; by uPred.unseal. Qed.
 Global Instance discrete_RNonce lvl : Discrete (RNonce lvl).
 Proof. by case. Qed.
 
+Global Instance RAKey_proper n :
+  Proper ((=) ==> (=) ==> dist n ==> dist n) RAKey.
+Proof.
+move=> ?? -> ?? -> Φ1 Φ2 e /=.
+rewrite /dist /=; eauto.
+Qed.
+
 Class resG := {
   res_inG :> inG Σ (agreeR resO);
 }.
@@ -330,6 +337,17 @@ Class resG := {
 Context `{!resG, !heapG Σ}.
 
 Definition is_res γ r : iProp Σ := own γ (to_agree r).
+
+Global Instance is_res_proper n : Proper ((=) ==> dist n ==> dist n) is_res.
+Proof. solve_proper. Qed.
+
+Lemma is_res_agree γ r1 r2 :
+  is_res γ r1 -∗ is_res γ r2 -∗ r1 ≡ r2.
+Proof.
+iIntros "#own1 #own2".
+iPoseProof (own_valid_2 with "own1 own2") as "e".
+by rewrite agree_validI agree_equivI.
+Qed.
 
 Definition resT γ l : iProp Σ :=
   meta l (cryptoN.@"res") γ.
@@ -377,6 +395,10 @@ Definition akeyT γ lvl_enc lvl_dec Φ l : iProp Σ :=
 Global Instance persistent_akeyT γ lvl_enc lvl_dec Φ l :
   Persistent (akeyT γ lvl_enc lvl_dec Φ l).
 Proof. apply _. Qed.
+
+Global Instance akeyT_proper n :
+  Proper ((=) ==> (=) ==> (=) ==> dist n ==> (=) ==> dist n) akeyT.
+Proof. rewrite /akeyT /resT'; solve_proper. Qed.
 
 Lemma akeyT_agree γ1 γ2 lvl_enc1 lvl_enc2 lvl_dec1 lvl_dec2 Φ1 Φ2 l :
   akeyT γ1 lvl_enc1 lvl_dec1 Φ1 l -∗
@@ -501,6 +523,106 @@ Proof.
 by iIntros "#Hl"; rewrite termT_eq; iExists γ, lvl; eauto.
 Qed.
 
+Lemma termT_aenc_pub_pub γ lvl Φ k t :
+  akeyT γ Pub lvl Φ k -∗
+  termT Pub t -∗
+  termT Pub (TEnc true k t).
+Proof.
+rewrite {2}termT_eq /= -termT_eq.
+iIntros "#Hk #Ht"; by iExists γ, Pub, lvl, Φ; eauto.
+Qed.
+
+Lemma termT_aenc_pub_sec γ Φ k t :
+  akeyT γ Pub Sec Φ k -∗
+  □ Φ (k, t) -∗
+  termT Sec t -∗
+  termT Pub (TEnc true k t).
+Proof.
+rewrite {2}termT_eq /= -termT_eq.
+iIntros "#Hk #Φt #Ht".
+by iExists γ, Pub, Sec, Φ; eauto.
+Qed.
+
+Lemma termT_adec_pub γ lvl Φ k t :
+  termT Pub (TEnc true k t) -∗
+  akeyT γ Pub lvl Φ k -∗
+  termT Pub t ∨ □ Φ (k, t) ∗ termT lvl t.
+Proof.
+rewrite {1}termT_eq /= -termT_eq.
+iDestruct 1 as (γ' lvl_enc lvl_dec Φ') "[Hk' Ht]".
+iIntros "Hk".
+iPoseProof (akeyT_agree with "Hk' Hk") as "(-> & -> & -> & e)".
+rewrite ofe_morO_equivI; iRewrite -("e" $! (k, t)).
+iDestruct "Ht" as "[[Ht1 Ht2]|[_ Ht]]"; eauto.
+iRight; iFrame; by case: lvl.
+Qed.
+
+Lemma termT_to_list t ts lvl :
+  Spec.to_list t = Some ts →
+  termT lvl t -∗
+  [∗ list] t' ∈ ts, termT lvl t'.
+Proof.
+elim: t ts => //=.
+  by case=> // ts [<-] /=; iIntros "?".
+move=> t _ tl IH ts.
+case e: (Spec.to_list tl) => [ts'|] // [<-] /=.
+rewrite {1}termT_eq /= -termT_eq; iIntros "[??]"; iFrame.
+by iApply IH.
+Qed.
+
+Lemma termT_tag lvl n t :
+  termT lvl t -∗
+  termT lvl (Spec.tag n t).
+Proof.
+by iIntros "#?"; rewrite termT_eq Spec.tag_eq /=; iSplit.
+Qed.
+
+Lemma termT_untag lvl n t :
+  termT lvl (Spec.tag n t) -∗
+  termT lvl t.
+Proof.
+by rewrite Spec.tag_eq /= termT_eq /=; iDestruct 1 as "[??]".
+Qed.
+
+Lemma termT_of_list lvl ts :
+  ([∗ list] t ∈ ts, termT lvl t) -∗
+  termT lvl (Spec.of_list ts).
+Proof.
+rewrite Spec.of_list_eq.
+elim: ts => [|t ts IH]; first by rewrite termT_eq.
+rewrite {2}termT_eq /= -termT_eq.
+iDestruct 1 as "[??]".
+by iFrame; iApply IH.
+Qed.
+
+Lemma termT_of_listE lvl ts :
+  termT lvl (Spec.of_list ts) -∗
+  [∗ list] t ∈ ts, termT lvl t.
+Proof.
+rewrite Spec.of_list_eq.
+elim: ts => [|t ts IH] //=; iIntros "Hts" => //.
+rewrite termT_eq /= -termT_eq; iDestruct "Hts" as "[??]".
+by iFrame; iApply IH.
+Qed.
+
+Lemma termT_kenc γ lvl_enc lvl_dec Φ k :
+  akeyT γ lvl_enc lvl_dec Φ k -∗
+  termT lvl_enc (TKey KAEnc k).
+Proof.
+iIntros "kP"; rewrite termT_eq /=.
+iExists γ, lvl_enc, Φ; iSplit => //.
+by eauto.
+Qed.
+
+Lemma termT_kdec γ lvl_enc lvl_dec Φ k :
+  akeyT γ lvl_enc lvl_dec Φ k -∗
+  termT lvl_dec (TKey KADec k).
+Proof.
+iIntros "kP"; rewrite termT_eq /=.
+iExists γ, lvl_dec, Φ; iSplit => //.
+by eauto.
+Qed.
+
 Lemma proj_termT t n lvl t' :
   Spec.proj t n = Some t' →
   termT lvl t -∗
@@ -580,6 +702,16 @@ iIntros "/= !>" (lvl'); iDestruct 1 as (γ' lvl'' Φ') "[#Hk' %Hsub']".
 by iPoseProof (keyT_agree with "Hk Hk'") as "(<-&<-&_)".
 Qed.
 
+Lemma stermTS lvl t :
+  termT Pub t -∗
+  stermT lvl t -∗
+  ⌜lvl = Pub⌝.
+Proof.
+iIntros "Ht1 [Ht2 #Hmin]".
+iSpecialize ("Hmin" with "Ht1").
+by case: lvl.
+Qed.
+
 Lemma termT_lvlP lvl t : termT lvl t -∗ ∃ lvl', stermT lvl' t.
 Proof.
 elim: t lvl=> [n|t1 IH1 t2 IH2|n|kt k|b k t IH] lvl /=;
@@ -642,3 +774,5 @@ Arguments RNonce {_} _.
 Arguments nonceT {_ _ _} _ _ _.
 Arguments skeyT {_ _ _} _ _ _ _.
 Arguments akeyT {_ _ _} _ _ _ _ _.
+Arguments is_res {Σ _} _ _.
+Arguments RAKey {Σ} _ _ _.

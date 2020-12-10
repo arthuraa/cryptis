@@ -330,27 +330,6 @@ Qed.
 Definition msg1_spec nA pkA :=
   TPair (TInt 1) (TPair nA (TPair pkA (TInt 0))).
 
-(* MOVE *)
-Lemma termT_aenc_pub_pub γ lvl Φ k t :
-  akeyT γ Pub lvl Φ k -∗
-  termT Pub t -∗
-  termT Pub (TEnc true k t).
-Proof.
-rewrite {2}termT_eq /= -termT_eq.
-iIntros "#Hk #Ht"; by iExists γ, Pub, lvl, Φ; eauto.
-Qed.
-
-Lemma termT_aenc_pub_sec γ Φ k t :
-  akeyT γ Pub Sec Φ k -∗
-  □ Φ (k, t) -∗
-  termT Sec t -∗
-  termT Pub (TEnc true k t).
-Proof.
-rewrite {2}termT_eq /= -termT_eq.
-iIntros "#Hk #Φt #Ht".
-by iExists γ, Pub, Sec, Φ; eauto.
-Qed.
-
 Definition responder1_pred p : iProp Σ :=
   ∃ nA kA, ⌜p.2 = Spec.of_list [nA; TKey KAEnc kA]⌝ ∗
            term_session_frag nA (Session Init kA p.1 None).
@@ -467,15 +446,6 @@ Definition pub_enc_key γ k : iProp Σ :=
 
 Global Instance pub_enc_key_persistent γ k : Persistent (pub_enc_key γ k).
 Proof. apply _. Qed.
-
-(* MOVE *)
-Lemma is_res_agree γ r1 r2 :
-  is_res γ r1 -∗ is_res γ r2 -∗ r1 ≡ r2.
-Proof.
-iIntros "#own1 #own2".
-iPoseProof (own_valid_2 with "own1 own2") as "e".
-by rewrite agree_validI agree_equivI.
-Qed.
 
 Lemma pub_enc_keyS rl k :
   nsl_res -∗
@@ -746,14 +716,18 @@ Definition initiator (skA pkA pkB nA : val) : val := λ: <>,
 
 Definition responder (skB pkB : val) : val := λ: <>,
   bind: "m1" := dec skB (recv #()) in
-  let: "nA" := Fst "m1" in
-  let: "pkA" := Snd "m1" in
+  bind: "m1" := untag 0 "m1" in
+  bind: "m1" := list_of_term "m1" in
+  let: "nA" := "m1" !! #0 in
+  let: "pkA" := "m1" !! #1 in
   bind: "kt" := is_key "pkA" in
   if: "kt" = repr KAEnc then
     let: "nB" := gen #() in
-    bind: "m2" := enc "pkA" (tuple "nA" (tuple "nB" (tuple pkB (TInt 0)))) in
+    let: "m2" := term_of_list ["pkA"; "nA"; "nB"] in
+    bind: "m2" := enc "pkA" "m2" in
     send "m2";;
     bind: "m3" := dec skB (recv #()) in
+    bind: "nB'" := untag 1 "m3" in
     if: eq_term "nB'" "nB" then SOME ("pkA", "nA", "nB") else NONE
   else NONE.
 
@@ -772,53 +746,6 @@ Hypothesis wp_gen : forall E lvl Ψ,
   (∀ t, unregistered t -∗ stermT lvl t -∗
         Ψ t) -∗
   WP gen #() @ E {{ Ψ }}.
-
-(* MOVE *)
-Lemma termT_tag lvl n t :
-  termT lvl t -∗
-  termT lvl (Spec.tag n t).
-Proof.
-by iIntros "#?"; rewrite termT_eq Spec.tag_eq /=; iSplit.
-Qed.
-
-Lemma termT_of_list lvl ts :
-  ([∗ list] t ∈ ts, termT lvl t) -∗
-  termT lvl (Spec.of_list ts).
-Proof.
-rewrite Spec.of_list_eq.
-elim: ts => [|t ts IH]; first by rewrite termT_eq.
-rewrite {2}termT_eq /= -termT_eq.
-iDestruct 1 as "[??]".
-by iFrame; iApply IH.
-Qed.
-
-Lemma termT_of_listE lvl ts :
-  termT lvl (Spec.of_list ts) -∗
-  [∗ list] t ∈ ts, termT lvl t.
-Proof.
-rewrite Spec.of_list_eq.
-elim: ts => [|t ts IH] //=; iIntros "Hts" => //.
-rewrite termT_eq /= -termT_eq; iDestruct "Hts" as "[??]".
-by iFrame; iApply IH.
-Qed.
-
-Lemma termT_kenc γ lvl_enc lvl_dec Φ k :
-  akeyT γ lvl_enc lvl_dec Φ k -∗
-  termT lvl_enc (TKey KAEnc k).
-Proof.
-iIntros "kP"; rewrite termT_eq /=.
-iExists γ, lvl_enc, Φ; iSplit => //.
-by eauto.
-Qed.
-
-Lemma termT_kdec γ lvl_enc lvl_dec Φ k :
-  akeyT γ lvl_enc lvl_dec Φ k -∗
-  termT lvl_dec (TKey KADec k).
-Proof.
-iIntros "kP"; rewrite termT_eq /=.
-iExists γ, lvl_dec, Φ; iSplit => //.
-by eauto.
-Qed.
 
 Lemma termT_msg1 γ kA kB (tA : term) :
   nsl_res -∗
@@ -846,103 +773,6 @@ iPoseProof "HkB" as (??) "H"; iApply (termT_aenc_pub_pub); eauto.
 iApply termT_tag; iApply termT_of_list; rewrite /=; iSplit.
   by rewrite /nsl_data_for /= decide_False //; iDestruct "HtA" as "[??]".
 by iSplit => //; iApply termT_kenc; eauto.
-Qed.
-
-(* MOVE *)
-Lemma stermTS lvl t :
-  termT Pub t -∗
-  stermT lvl t -∗
-  ⌜lvl = Pub⌝.
-Proof.
-iIntros "Ht1 [Ht2 #Hmin]".
-iSpecialize ("Hmin" with "Ht1").
-by case: lvl.
-Qed.
-
-(* MOVE *)
-Arguments is_res {Σ _} _ _.
-Arguments RAKey {Σ} _ _ _.
-
-Global Instance is_res_proper n : Proper ((=) ==> dist n ==> dist n) is_res.
-Proof. solve_proper. Qed.
-
-Global Instance RAKey_proper n :
-  Proper ((=) ==> (=) ==> dist n ==> dist n) (@RAKey Σ).
-Proof.
-move=> ?? -> ?? -> Φ1 Φ2 e /=.
-rewrite /dist /=; eauto.
-Qed.
-
-Global Instance akeyT_proper n :
-  Proper ((=) ==> (=) ==> (=) ==> dist n ==> (=) ==> dist n) akeyT.
-Proof. rewrite /akeyT /resT'; solve_proper. Qed.
-
-Definition list_to_expr `{!Repr A} :=
-  foldr (fun (x : A) e => CONS (repr x) e) NILV.
-
-Lemma twp_list `{!Repr A} (xs : list A) E Ψ :
-  Ψ (repr xs) -∗
-  WP list_to_expr xs @ E [{ Ψ }].
-Proof.
-elim: xs Ψ => [|x xs IH] /= Ψ; iIntros "post".
-  by iApply (@twp_nil A _).
-wp_bind (list_to_expr _); iApply IH.
-by iApply (@twp_cons A).
-Qed.
-
-Lemma wp_list `{!Repr A} (xs : list A) E Ψ :
-  Ψ (repr xs) -∗
-  WP list_to_expr xs @ E {{ Ψ }}.
-Proof. by iIntros "?"; iApply twp_wp; iApply twp_list. Qed.
-
-Lemma termT_adec_pub γ lvl Φ k t :
-  termT Pub (TEnc true k t) -∗
-  akeyT γ Pub lvl Φ k -∗
-  termT Pub t ∨ □ Φ (k, t) ∗ termT lvl t.
-Proof.
-rewrite {1}termT_eq /= -termT_eq.
-iDestruct 1 as (γ' lvl_enc lvl_dec Φ') "[Hk' Ht]".
-iIntros "Hk".
-iPoseProof (akeyT_agree with "Hk' Hk") as "(-> & -> & -> & e)".
-rewrite ofe_morO_equivI; iRewrite -("e" $! (k, t)).
-iDestruct "Ht" as "[[Ht1 Ht2]|[_ Ht]]"; eauto.
-iRight; iFrame; by case: lvl.
-Qed.
-
-Lemma termT_to_list t ts lvl :
-  Spec.to_list t = Some ts →
-  termT lvl t -∗
-  [∗ list] t' ∈ ts, termT lvl t'.
-Proof.
-elim: t ts => //=.
-  by case=> // ts [<-] /=; iIntros "?".
-move=> t _ tl IH ts.
-case e: (Spec.to_list tl) => [ts'|] // [<-] /=.
-rewrite {1}termT_eq /= -termT_eq; iIntros "[??]"; iFrame.
-by iApply IH.
-Qed.
-
-Ltac wp_get_list :=
-  match goal with
-  | |- environments.envs_entails ?Γ
-         (wp _ _ (App (App (Val get_list) _) (Val (LitV (LitInt ?n)))%E) _) =>
-    iApply (@wp_get_list _ _ _ _ _ _ (Z.to_nat n))
-  end.
-
-Lemma untagK n t1 t2 :
-  Spec.untag n t1 = Some t2 ->
-  t1 = Spec.tag n t2.
-Proof.
-rewrite Spec.untag_eq Spec.tag_eq /=.
-case: t1=> [] // [] // m.
-by case: decide => // <- _ [->].
-Qed.
-
-Lemma termT_untag lvl n t :
-  termT lvl (Spec.tag n t) -∗
-  termT lvl t.
-Proof.
-by rewrite Spec.tag_eq /= termT_eq /=; iDestruct 1 as "[??]".
 Qed.
 
 Lemma pub_enc_keyS' γ k rl :
@@ -1059,27 +889,59 @@ rewrite bool_decide_decide decide_True //.
 by iSplit.
 Qed.
 
-End NSL.
-
-(*
-
 Lemma wp_responder kB E Ψ :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗
-  own nsl_init_name (Some (to_agree (agent_pred Init))) -∗
+  nsl_res -∗
   nsl_key Resp kB -∗
   (∀ ot : option (term * term * term),
       (if ot is Some (pkA, nA, nB) then
-         ∃ kA, ⌜pkA = TKey KAEnc kA⌝ ∗
-               (nsl_key Init kA -∗
-                term_session_frag nA (Session Init kA kB (Some nB)) ∗
-                term_session_auth nB (Session Resp kA kB (Some nA)))
+         ∃ γ kA,
+           ⌜pkA = TKey KAEnc kA⌝ ∗
+           pub_enc_key γ kA ∗
+           termT Sec nA ∗
+           termT Sec nB ∗
+           (nsl_key Init kA -∗
+            term_session_frag nA (Session Init kA kB (Some nB)) ∗
+            term_session_auth nB (Session Resp kA kB (Some nA)))
        else True) -∗
        Ψ (repr ot)) -∗
   WP responder (TKey KADec kB) (TKey KAEnc kB) #() @ E {{ Ψ }}.
-Proof.
+Proof. Admitted.
+
+End NSL.
+
+(*
 rewrite /responder.
 iIntros (?) "#Hctx #Hown #HkB Hpost".
+wp_pures; wp_bind (recv _); iApply wp_recv.
+iIntros (m1) "#Hm1".
+wp_bind (dec _ _); iApply wp_dec.
+case: m1; try by protocol_failure.
+case; try by protocol_failure.
+move=> k m1 /=.
+case: decide; last protocol_failure.
+move=> <- {k}; wp_pures.
+wp_bind (untag _ _); iApply wp_untag.
+case e: (Spec.untag _ _) => [m1'|]; last protocol_failure.
+move: m1' {e} (untagK e) => {}m1 ->.
+wp_pures; wp_bind (list_of_term _); iApply wp_list_of_term.
+case e: Spec.to_list => [m1'|].
+
+
+
+  match goal with
+  | |- environments.envs_entails ?Γ
+         (wp _ _ (App (App (Val get_list) _) (Val (LitV (LitInt ?n)))%E) _) =>
+    iApply (@wp_get_list _ _ _ _ _ _ (Z.to_nat n))
+  end.
+
+
+
+
+
+
+
 wp_pures; wp_bind (recv _); iApply wp_recv; iIntros (t) "Ht".
 wp_bind (dec _ _); iApply wp_dec.
 case: t; try by protocol_failure.

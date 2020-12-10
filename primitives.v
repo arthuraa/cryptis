@@ -226,6 +226,21 @@ Proof.
 by iIntros "?"; iApply twp_wp; iApply twp_list_of_term.
 Qed.
 
+Lemma twp_list `{!Repr A} (xs : list A) E Ψ :
+  Ψ (repr xs) -∗
+  WP list_to_expr xs @ E [{ Ψ }].
+Proof.
+elim: xs Ψ => [|x xs IH] /= Ψ; iIntros "post".
+  by iApply (@twp_nil A _).
+wp_bind (list_to_expr _); iApply IH.
+by iApply (@twp_cons A).
+Qed.
+
+Lemma wp_list `{!Repr A} (xs : list A) E Ψ :
+  Ψ (repr xs) -∗
+  WP list_to_expr xs @ E {{ Ψ }}.
+Proof. by iIntros "?"; iApply twp_wp; iApply twp_list. Qed.
+
 Lemma twp_tag E (n : nat) t Ψ :
   Ψ (repr (Spec.tag n t)) -∗
   WP tag n t @ E [{ Ψ }].
@@ -453,3 +468,10 @@ by iIntros "H"; iApply twp_wp; iApply twp_eq_term.
 Qed.
 
 End Proofs.
+
+Ltac wp_get_list :=
+  match goal with
+  | |- environments.envs_entails ?Γ
+         (wp _ _ (App (App (Val get_list) _) (Val (LitV (LitInt ?n)))%E) _) =>
+    iApply (@wp_get_list _ _ _ _ _ _ (Z.to_nat n))
+  end.
