@@ -877,7 +877,7 @@ Lemma wp_responder kB E Ψ :
            pub_enc_key γ kA ∗
            termT Sec nA ∗
            termT Sec nB ∗
-           (nsl_key Init kA -∗
+           guarded (nsl_lvl γ Init) (
             term_session_frag nA (Session Init kA kB (Some nB)) ∗
             term_session_auth nB (Session Resp kA kB (Some nA)))
        else True) -∗
@@ -934,7 +934,7 @@ iAssert (|={E}=> guarded lm2 (term_session_frag nB sB ∗ term_session_auth nB s
     with "[unreg]" as "> [#Hfrag Hauth]".
   rewrite /lm2; case: decide => [->|_]; last by iModIntro.
   iAssert (nsl_data_for (role_name Init) Init nB) as "{HnB} HnB".
-    by rewrite /nsl_data_for decide_True //.
+    by rewrite /nsl_data_for /nsl_lvl decide_True //.
   iMod (nsl_sess_alloc_resp _ kA kB nA with "Hctx HkB unreg HkA HnB")
     as "[auth #frag]"=> //=.
   by iModIntro; iSplit.
@@ -951,7 +951,8 @@ wp_bind (send _); iApply wp_send.
   case: (lm2) => //.
   rewrite /=.
   iModIntro.
-  iExists nA, nB, kB; iSplit => //.
+  rewrite /initiator_pred /=.
+  iExists nA, nB, kB. iSplit; first trivial.
 wp_pures; wp_bind (recv _); iApply wp_recv; iIntros (m3) "#Hm3".
 wp_dec m3; last protocol_failure.
 iDestruct (termT_adec_pub_sec with "Hm3 HkB") as (lm3) "/= {Hm3} [#Hm3 #Hprot3]".
@@ -968,11 +969,8 @@ iExists _, _; iSplit => //.
 iSplit => //.
 iSplit; first by iApply (sub_termT with "HnA"); case: (lm2).
 iSplit; first by iDestruct "HnB" as "[HnB _]"; iApply (sub_termT with "HnB"); case: (lm2).
-iIntros "#HkA'".
-rewrite /lm2.
-iPoseProof (pub_enc_keyS' with "Hctx HkA HkA'") as "->".
-rewrite decide_True //=.
-iDestruct "Hprot3" as "#Hprot3".
+rewrite /lm2 /nsl_lvl.
+case: decide => //= ?.
 iDestruct (tagged_inv_elim' with "Hprot3") as (nA' kA') "[frag1 frag2]".
 set sB' := (Session Resp _ _ _).
 iPoseProof (term_session_agree with "Hauth frag2") as "%sess".
