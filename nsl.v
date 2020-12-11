@@ -789,7 +789,18 @@ iApply termT_tag; iApply termT_of_list; rewrite /=; iSplit.
 by iSplit => //; iApply termT_kenc; eauto.
 Qed.
 
+Lemma guarded_box lvl (P : iProp Σ) : □ guarded lvl P ⊣⊢ guarded lvl (□ P).
+Proof.
+case: lvl => //=; by rewrite bi.intuitionistically_emp.
+Qed.
 
+Global Instance guarded_box_into_persistent p lvl (P Q : iProp Σ) :
+  IntoPersistent p P Q →
+  IntoPersistent p (guarded lvl P) (guarded lvl Q).
+Proof.
+case: lvl => //= _.
+by rewrite /IntoPersistent; rewrite -bi.persistently_emp_intro; eauto.
+Qed.
 
 Lemma wp_initiator kA kB (tA : term) γ E Ψ :
   ↑cryptoN.@"nsl" ⊆ E →
@@ -830,39 +841,52 @@ wp_eq_term e; last protocol_failure; subst nA'.
 wp_eq_term e; last protocol_failure; subst pkB'.
 wp_tag.
 wp_enc.
-iPoseProof (termT_adec_pub with "Hm2 [//]") as "{Hm2} [#Hm2|#Hm2]".
-  iPoseProof (termT_of_listE with "Hm2") as "{Hm2} Hm2".
-  iPoseProof (big_sepL_lookup with "Hm2") as "H0"; first exact: enA'.
-  iPoseProof (big_sepL_lookup with "Hm2") as "H1"; first exact: enB.
-  iPoseProof (big_sepL_lookup with "Hm2") as "H2"; first exact: epkB'.
-  iClear (enA' enB epkB') "Hm2".
-  wp_pures; wp_bind (send _); iApply wp_send.
-    iModIntro.
-    iDestruct "HkB" as (??) "HkB".
-    iApply termT_aenc_pub_pub => //.
-    by iApply termT_tag.
-  wp_pures; iApply ("Hpost" $! (Some nB)).
-  rewrite /nsl_data_for /nsl_lvl.
-  iDestruct "HtA" as "[_ #HtA]".
-  iPoseProof ("HtA" with "H0") as "%leq".
-  by case: decide leq => // ? _; last iSplit.
-iDestruct "Hm2" as "[#Hprot Hm2]".
-iDestruct "Hprot" as (nA' nB' kB') "[%Hm2 frag']".
-move/Spec.of_list_inj in Hm2; subst m2.
-case: enA' enB epkB' => [] -> [] -> [] -> /=.
+iDestruct (termT_adec_pub_sec with "Hm2 [//]") as (lm2) "{Hm2} [#Hm2 #Hfrag2]".
 iPoseProof (termT_of_listE with "Hm2") as "{Hm2} Hm2".
-iSimpl in "Hm2"; iDestruct "Hm2" as "(H0 & H1 & H2 & _)".
-iMod (nsl_sess_update with "Hctx auth frag'") as "{frag} [tok #frag]"=> //=.
-iMod (term_session_nsl_key with "Hctx frag'") as "#HkB'" => //=.
-wp_pures; wp_bind (send _); iApply wp_send.
+iPoseProof (big_sepL_lookup with "Hm2") as "H0"; first exact: enA'.
+iPoseProof (big_sepL_lookup with "Hm2") as "H1"; first exact: enB.
+iPoseProof (big_sepL_lookup with "Hm2") as "H2"; first exact: epkB'.
+set  sA := Session Init kA kB _.
+pose sB := Session Resp kA kB (Some tA).
+pose sA' := Session Init kA kB (Some nB).
+iAssert (guarded lm2 (term_session_frag nB sB)) as "{Hfrag2} #Hfrag2".
+  case: lm2 => //=.
+  iDestruct "Hfrag2" as (nA' nB' kB') "/= (%em2 & Hfrag)".
+  move/Spec.of_list_inj in em2; subst m2.
+  by case: enA' epkB' enB => [] -> [] -> [] -> {nA' nB' kB'}.
+iClear (enA' enB epkB') "Hm2".
+iDestruct "HtA" as "[HtA #min]".
+iPoseProof ("min" with "H0") as "{H0} %Hlm2".
+wp_pures.
+set m3 := TEnc _ _ _.
+(* TODO: Extract as separate lemma *)
+iAssert (|={E}=> ▷ (termT Pub m3 ∗
+                    guarded lm2 (term_session_auth tA sA') ∗
+                    guarded lm2 (nsl_key Resp kB)))%I
+    with "[auth]" as "> (#Hm3 & auth & #HkB')".
+  iAssert (|={E}=> ▷ guarded lm2 (nsl_key Resp kB))%I as "> #HkB'".
+    case: (lm2) => //=.
+    by iApply (term_session_nsl_key with "Hctx Hfrag2").
+  iAssert (|={E}=> ▷ guarded lm2 (term_session_frag tA sA' ∗ term_session_auth tA sA'))%I
+      with "[auth]" as "> [#frag3 auth3]".
+    case: (lm2) => //=.
+    iMod (nsl_sess_update with "Hctx auth Hfrag2") as "{frag} [tok #frag]"=> //=.
+    by do 2!iModIntro; iSplit.
+  do 2!iModIntro; iFrame; iSplit => //.
+  iApply (termT_aenc_pub_secG _ _ _ _ lm2); eauto.
+    by iApply termT_tag.
+  case: (lm2) => //=.
   iModIntro.
-  iApply termT_aenc_pub_sec; eauto.
-    by iModIntro; iApply tagged_inv_intro; eauto; iExists tA, kA; iSplit.
-  by iApply termT_tag.
-wp_pures; iApply ("Hpost" $! (Some nB)).
-iPoseProof (pub_enc_keyS' with "Hctx HkB HkB'") as "%"; subst γ.
-rewrite /nsl_lvl decide_True //=.
-iFrame; by iSplit.
+  iApply tagged_inv_intro; eauto.
+  by iExists tA, kA; iSplit.
+wp_pures; wp_bind (send _); iApply wp_send => //.
+wp_pures.
+iApply ("Hpost" $! (Some nB)).
+case: lm2 Hlm2 => /=.
+  by case: nsl_lvl => //= _; eauto.
+move=> Hlm2.
+iPoseProof (pub_enc_keyS' with "Hctx HkB HkB'") as "->".
+by rewrite /nsl_lvl decide_True //=; iFrame; iSplit.
 Qed.
 
 Lemma wp_responder kB E Ψ :
@@ -952,7 +976,7 @@ wp_bind (send _); iApply wp_send.
   rewrite /=.
   iModIntro.
   rewrite /initiator_pred /=.
-  iExists nA, nB, kB. iSplit; first trivial.
+  by iExists nA, nB, kB; iSplit; first trivial.
 wp_pures; wp_bind (recv _); iApply wp_recv; iIntros (m3) "#Hm3".
 wp_dec m3; last protocol_failure.
 iDestruct (termT_adec_pub_sec with "Hm3 HkB") as (lm3) "/= {Hm3} [#Hm3 #Hprot3]".
