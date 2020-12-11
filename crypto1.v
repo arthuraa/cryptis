@@ -187,6 +187,64 @@ Implicit Types l : loc.
 Implicit Types lvl : level.
 Implicit Types γ : gname.
 
+Implicit Types P Q : iProp Σ.
+
+Definition guarded lvl P : iProp Σ :=
+  if lvl is Sec then P else emp.
+
+Lemma guarded_leq lvl1 lvl2 P :
+  lvl2 ⊑ lvl1 →
+  guarded lvl1 P -∗ guarded lvl2 P.
+Proof. by case: lvl1 lvl2 => [] [] //= _; iIntros. Qed.
+
+Global Instance guarded_persistent lvl P :
+  Persistent P →
+  Persistent (guarded lvl P).
+Proof. case: lvl; apply _. Qed.
+
+Lemma guarded_sep lvl P Q :
+  guarded lvl (P ∗ Q) ⊣⊢ guarded lvl P ∗ guarded lvl Q.
+Proof.
+case: lvl => /=; eauto.
+by rewrite -bi.intuitionistically_emp -bi.intuitionistically_sep_dup.
+Qed.
+
+Global Instance guarded_from_sep lvl P Q R :
+  FromSep P Q R →
+  FromSep (guarded lvl P) (guarded lvl Q) (guarded lvl R).
+Proof.
+rewrite {2}/FromSep; iIntros (FS) "H".
+rewrite -guarded_sep; case: lvl => //=.
+by iApply from_sep.
+Qed.
+
+Global Instance guarded_into_sep lvl P Q R :
+  IntoSep P Q R →
+  IntoSep (guarded lvl P) (guarded lvl Q) (guarded lvl R).
+Proof.
+rewrite {2}/IntoSep; iIntros (FS) "H".
+rewrite -guarded_sep; case: lvl => //=.
+by iApply into_sep.
+Qed.
+
+Lemma guarded_fupd `{!invG Σ} lvl E P :
+  guarded lvl (|={E}=> P) ⊣⊢ |={E}=> guarded lvl P.
+Proof.
+by case: lvl => //=; apply (anti_symm _); iIntros => //.
+Qed.
+
+Lemma guarded_later lvl P :
+  guarded lvl (▷ P) ⊣⊢ ▷ guarded lvl P.
+Proof. by case: lvl => //=; rewrite bi.later_emp. Qed.
+
+Lemma guarded_mono lvl P Q :
+  guarded lvl P -∗
+  □ (P -∗ Q) -∗
+  guarded lvl Q.
+Proof.
+iIntros "HP #PQ"; by case: lvl => //; iApply "PQ".
+Qed.
+
 Definition tagged_inv_def (Φs : list key_inv) (p : loc * term) : iProp Σ :=
   match p.2 with
   | TPair (TInt n) t =>
@@ -754,6 +812,55 @@ rewrite termT_eq /= -?termT_eq.
     iExists _, _, _, _; iSplit=> //.
     by iLeft; iSplit.
   by iIntros "!>" (lvl) "_".
+Qed.
+
+Lemma termT_adec_pub_sec γ Φ k t :
+  termT Pub (TEnc true k t) -∗
+  akeyT γ Pub Sec Φ k -∗
+  ∃ lvl, termT lvl t ∗ guarded lvl (□ Φ (k, t)).
+Proof.
+iIntros "Ht Hk".
+iPoseProof (termT_adec_pub with "Ht Hk") as "[Ht|Ht]".
+- by iExists Pub; iSplit.
+- by iExists Sec; iDestruct "Ht" as "[??]"; iSplit.
+Qed.
+
+Lemma termT_TAEncE k :
+  termT Pub (TKey KAEnc k) -∗
+  ∃ γ lvl Φ, akeyT γ Pub lvl Φ k.
+Proof.
+rewrite termT_eq /=.
+iDestruct 1 as (γ lvl Φ) "[Hk %Hlvl]".
+case: lvl Hlvl => // _.
+iDestruct "Hk" as (lvl_dec) "Hk".
+by eauto.
+Qed.
+
+Lemma termT_TAEnc γ lvl_enc lvl_dec Φ k :
+  akeyT γ lvl_enc lvl_dec Φ k -∗
+  termT lvl_enc (TKey KAEnc k).
+Proof.
+iIntros; rewrite termT_eq /=.
+by iExists γ, lvl_enc, Φ; iSplit; eauto.
+Qed.
+
+Definition pub_enc_key γ k : iProp Σ :=
+  ∃ lvl_dec Φ, akeyT γ Pub lvl_dec Φ k.
+
+Global Instance pub_enc_key_persistent γ k : Persistent (pub_enc_key γ k).
+Proof. apply _. Qed.
+
+Lemma termT_aenc_pub_secG γ γ' k Φ lvl t :
+  pub_enc_key γ k -∗
+  termT lvl t -∗
+  guarded lvl (akeyT γ' Pub Sec Φ k) -∗
+  guarded lvl (□ Φ (k, t)) -∗
+  termT Pub (TEnc true k t).
+Proof.
+iIntros "#Hk #Ht #Hk' #HG"; case: lvl => /=.
+- iDestruct "Hk" as (??) "Hk".
+  by iApply termT_aenc_pub_pub.
+- by iApply termT_aenc_pub_sec.
 Qed.
 
 Lemma res_alloc E γ r l :
