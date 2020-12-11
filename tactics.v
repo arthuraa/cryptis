@@ -148,6 +148,19 @@ rewrite -wp_bind -wp_eq_term.
 by case: bool_decide_reflect; eauto.
 Qed.
 
+Lemma tac_wp_is_key Γ E K t Ψ :
+  (∀ kt k, t = TKey kt k →
+           envs_entails Γ (WP fill K (Val (SOMEV (repr kt))) @ E {{ Ψ }})) →
+  (Spec.is_key t = None →
+   envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →
+  envs_entails Γ (WP fill K (is_key t) @ E {{ Ψ }}).
+Proof.
+rewrite envs_entails_eq => HSome HNone.
+rewrite -wp_bind -wp_is_key.
+case: t HSome HNone; eauto.
+by move=> kt k HSome _ /=; eapply HSome.
+Qed.
+
 End Proofs.
 
 Tactic Notation "wp_list" open_constr(t) :=
@@ -224,4 +237,37 @@ Tactic Notation "wp_eq_term" ident(H) :=
       first
         [eapply (tac_wp_eq_term _ _ K _ _); intros H; wp_finish
         |fail 1 "wp_eq_term: Cannot decode"])
+  end.
+
+Tactic Notation "wp_untag_eq" ident(t) ident(H) :=
+  wp_pures;
+  lazymatch goal with
+  | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
+    reshape_expr e ltac:(fun K e' =>
+      first
+        [eapply (tac_wp_untag _ _ K _ _);
+         [intros t H|intros H];
+         wp_finish
+        |fail 1 "wp_untag_eq: Cannot decode"])
+  end.
+
+Tactic Notation "wp_untag" ident(t) :=
+  let tf := fresh "tf" in
+  let H := fresh "H" in
+  wp_untag_eq tf H; [
+    first [revert t tf H; intros _ t ->
+          |revert tf H; intros _ t ->
+          |revert tf H; intros t _]
+  | clear H].
+
+Tactic Notation "wp_is_key_eq" ident(kt) ident(k) ident(H) :=
+  wp_pures;
+  lazymatch goal with
+  | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
+    reshape_expr e ltac:(fun K e' =>
+      first
+        [eapply (tac_wp_is_key _ _ K _ _);
+         [intros kt k H|intros H];
+         wp_finish
+        |fail 1 "wp_untag_eq: Cannot decode"])
   end.
