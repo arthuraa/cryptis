@@ -344,7 +344,9 @@ Global Instance responder1_pred_persistent p : Persistent (responder1_pred p).
 Proof. apply _. Qed.
 
 Definition responder2_pred p : iProp Σ :=
-  ∃ nA kA, term_session_frag nA (Session Init kA p.1 (Some p.2)).
+  ∃ nA kA,
+    term_session_frag nA (Session Init kA p.1 (Some p.2)) ∗
+    term_session_frag p.2 (Session Resp kA p.1 (Some nA)).
 
 Global Instance responder2_pred_proper : NonExpansive responder2_pred.
 Proof.
@@ -649,13 +651,6 @@ iDestruct "pub_k" as (??) "pub_k".
 by iDestruct (akeyT_agree with "pub_k nsl_k") as "(-> & ?)".
 Qed.
 
-Lemma term_session_flip E kA kB nA nB :
-  ↑cryptoN.@"nsl" ⊆ E →
-  nsl_ctx -∗
-  term_session_frag nA (Session Init kA kB (Some nB)) ={E}=∗
-  ▷ (term_session_frag nB (Session Resp kA kB (Some nA))).
-Proof. Admitted.
-
 Lemma nsl_sess_update kA kB tA tB E :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗
@@ -866,7 +861,7 @@ iMod (term_session_nsl_key with "Hctx frag'") as "#HkB'" => //=.
 wp_pures; wp_bind (send _); iApply wp_send.
   iModIntro.
   iApply termT_aenc_pub_sec; eauto.
-    iModIntro; iApply tagged_inv_intro; eauto; by iExists tA, kA.
+    by iModIntro; iApply tagged_inv_intro; eauto; iExists tA, kA; iSplit.
   by iApply termT_tag.
 wp_pures; iApply ("Hpost" $! (Some nB)).
 iPoseProof (pub_enc_keyS' with "Hctx HkB HkB'") as "%"; subst γ.
@@ -1103,18 +1098,6 @@ iAssert (⌜lm2 ⊑ lm3⌝)%I as "%lm2_lm3".
   by iDestruct "HnB" as "[_ #Hmin]"; iApply "Hmin".
 iPoseProof (guarded_leq with "Hprot3") as "{Hprot3 Hm3} Hprot3"; first eassumption.
 clear lm2_lm3 lm3.
-iAssert (|={E}=> guarded lm2 (term_session_auth nB sB) ∗
-                 ▷ guarded lm2 (term_session_frag nA (Session Init kA kB (Some nB))))%I
-    with "[Hauth]" as "{Hprot3} > [Hauth #Hprot3]".
-  rewrite /lm2; case: decide => [->|_] //=.
-  iDestruct "Hprot3" as "#Hprot3".
-  iPoseProof (tagged_inv_elim' with "Hprot3") as "{Hprot3} Hprot3".
-  iDestruct "Hprot3" as (nA' kA') "/= Hprot3".
-  iMod (term_session_flip with "Hctx Hprot3") as ">#Hprot3'" => //.
-  set sB' := (Session Resp _ _ _).
-  iPoseProof (term_session_agree with "Hauth Hprot3'") as "%sess".
-  have [-> ->] : sB' = sB by apply: to_session_included_eq => //=; eauto.
-  by eauto.
 wp_pures.
 iApply ("Hpost" $! (Some (_, _, _))).
 iExists _, _; iSplit => //.
@@ -1125,6 +1108,11 @@ iIntros "#HkA'".
 rewrite /lm2.
 iPoseProof (pub_enc_keyS' with "Hctx HkA HkA'") as "->".
 rewrite decide_True //=.
+iDestruct "Hprot3" as "#Hprot3".
+iDestruct (tagged_inv_elim' with "Hprot3") as (nA' kA') "[frag1 frag2]".
+set sB' := (Session Resp _ _ _).
+iPoseProof (term_session_agree with "Hauth frag2") as "%sess".
+have [-> ->] : sB' = sB by apply: to_session_included_eq => //=; eauto.
 by iSplit=> //.
 Qed.
 
