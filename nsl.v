@@ -461,11 +461,11 @@ Definition coherent_views SM t1 s1 : Prop :=
   | Resp, Some _ => True
   end.
 
+Definition nsl_lvl γ rl :=
+  if decide (γ = role_name rl) then Sec else Pub.
+
 Definition nsl_data_for γ rl t :=
-  stermT (if decide (γ = role_name rl) then
-            Sec
-          else Pub)
-         t.
+  stermT (nsl_lvl γ rl) t.
 
 Global Instance nsl_data_for_persistent γ rl t :
   Persistent (nsl_data_for γ rl t).
@@ -780,18 +780,19 @@ destruct (decide (γ = role_name Resp)) as [->|e].
   - iApply termT_tag.
     iApply termT_of_list.
     rewrite /=; iSplit.
-    + by rewrite /nsl_data_for /= decide_True //; iDestruct "HtA" as "[??]".
+    + by rewrite /nsl_data_for /nsl_lvl /= decide_True //; iDestruct "HtA" as "[??]".
     + iSplit=> //; iApply (@sub_termT _ _ _ Pub) => //.
       by iApply termT_kenc; eauto.
 iPoseProof "HkB" as (??) "H"; iApply (termT_aenc_pub_pub); eauto.
 iApply termT_tag; iApply termT_of_list; rewrite /=; iSplit.
-  by rewrite /nsl_data_for /= decide_False //; iDestruct "HtA" as "[??]".
+  by rewrite /nsl_data_for /nsl_lvl /= decide_False //; iDestruct "HtA" as "[??]".
 by iSplit => //; iApply termT_kenc; eauto.
 Qed.
 
+
+
 Lemma wp_initiator kA kB (tA : term) γ E Ψ :
   ↑cryptoN.@"nsl" ⊆ E →
-  let is_sec := bool_decide (γ = nsl_resp_name) in
   nsl_ctx -∗
   nsl_res -∗
   nsl_data_for γ Resp tA -∗
@@ -800,10 +801,11 @@ Lemma wp_initiator kA kB (tA : term) γ E Ψ :
   pub_enc_key γ kB -∗
   (∀ onB : option term,
       (if onB is Some tB then
-         if is_sec then
+         termT (nsl_lvl γ Resp) tB ∗
+         guarded (nsl_lvl γ Resp) (
            term_session_auth tA (Session Init kA kB (Some tB)) ∗
            term_session_frag tB (Session Resp kA kB (Some tA))
-         else termT Pub tB
+         )
        else True) -∗
       Ψ (repr onB)) -∗
   WP initiator (TKey KADec kA) (TKey KAEnc kA) (TKey KAEnc kB) tA #() @ E
@@ -840,10 +842,10 @@ iPoseProof (termT_adec_pub with "Hm2 [//]") as "{Hm2} [#Hm2|#Hm2]".
     iApply termT_aenc_pub_pub => //.
     by iApply termT_tag.
   wp_pures; iApply ("Hpost" $! (Some nB)).
-  rewrite /nsl_data_for bool_decide_decide.
-  case: decide => // ?; subst γ.
+  rewrite /nsl_data_for /nsl_lvl.
   iDestruct "HtA" as "[_ #HtA]".
-  by iPoseProof ("HtA" with "H0") as "%".
+  iPoseProof ("HtA" with "H0") as "%leq".
+  by case: decide leq => // ? _; last iSplit.
 iDestruct "Hm2" as "[#Hprot Hm2]".
 iDestruct "Hprot" as (nA' nB' kB') "[%Hm2 frag']".
 move/Spec.of_list_inj in Hm2; subst m2.
@@ -859,8 +861,8 @@ wp_pures; wp_bind (send _); iApply wp_send.
   by iApply termT_tag.
 wp_pures; iApply ("Hpost" $! (Some nB)).
 iPoseProof (pub_enc_keyS' with "Hctx HkB HkB'") as "%"; subst γ.
-rewrite bool_decide_decide decide_True //.
-by iSplit.
+rewrite /nsl_lvl decide_True //=.
+iFrame; by iSplit.
 Qed.
 
 Lemma wp_responder kB E Ψ :
