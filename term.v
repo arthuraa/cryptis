@@ -134,22 +134,23 @@ Fixpoint symbols_of_term t : gset loc :=
 
 Module Spec.
 
-Definition tag_def (n : nat) (t : term) := TPair (TInt n) t.
+Definition tag_def (c : string) (t : term) :=
+  TPair (TInt (Zpos (encode c))) t.
 Definition tag_aux : seal tag_def. by eexists. Qed.
 Definition tag := unseal tag_aux.
 Lemma tag_eq : tag = tag_def. Proof. exact: seal_eq. Qed.
 
-Definition untag_def (n : nat) (t : term) :=
+Definition untag_def (c : string) (t : term) :=
   match t with
-  | TPair (TInt m) t =>
-    if decide (Z.of_nat n = m) then Some t else None
+  | TPair (TInt (Zpos m)) t =>
+    if decide (encode c = m) then Some t else None
   | _ => None
   end.
 Definition untag_aux : seal untag_def. by eexists. Qed.
 Definition untag := unseal untag_aux.
 Lemma untag_eq : untag = untag_def. Proof. exact: seal_eq. Qed.
 
-Lemma tagK n t : untag n (tag n t) = Some t.
+Lemma tagK c t : untag c (tag c t) = Some t.
 Proof.
 rewrite untag_eq tag_eq /untag_def /tag_def /=.
 by rewrite decide_left.
@@ -157,27 +158,17 @@ Qed.
 
 Instance tag_inj : Inj2 (=) (=) (=) tag.
 Proof.
-rewrite tag_eq /tag_def => n1 t1 n2 t2 [] e ->.
-split=> //; by apply (inj Z.of_nat).
+rewrite tag_eq /tag_def => c1 t1 c2 t2 [] e ->.
+split=> //; by apply: inj e.
 Qed.
 
-Lemma untagK n t1 t2 :
-  untag n t1 = Some t2 ->
-  t1 = tag n t2.
+Lemma untagK c t1 t2 :
+  untag c t1 = Some t2 ->
+  t1 = tag c t2.
 Proof.
 rewrite untag_eq tag_eq /=.
-case: t1=> [] // [] //= m.
+case: t1=> [] // [] // [] //= m.
 by case: decide => // <- _ [->].
-Qed.
-
-Inductive untag_spec n : term → option term → Type :=
-| UntagSome t : untag_spec n (tag n t) (Some t)
-| UntagNone t : untag_spec n t None.
-
-Lemma untagP n t : untag_spec n t (untag n t).
-Proof.
-case e: untag => [t'|]; last constructor.
-by rewrite (untagK _ _ _ e); constructor.
 Qed.
 
 Definition as_int t :=

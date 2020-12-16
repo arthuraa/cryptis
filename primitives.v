@@ -45,13 +45,13 @@ Definition term_of_list : val := rec: "loop" "l" :=
   | SOME "p" => tuple (Fst "p") ("loop" (Snd "p"))
   end.
 
-Definition tag (n : nat) : val := λ: "t",
-  tuple (TInt n) "t".
+Definition tag (c : string) : val := λ: "t",
+  tuple (TInt (Zpos (encode c))) "t".
 
-Definition untag (n : nat) : val := λ: "t",
+Definition untag (c : string) : val := λ: "t",
   bind: "t" := untuple "t" in
   bind: "tag" := as_int (Fst "t") in
-  if: "tag" = #n then SOME (Snd "t") else NONE.
+  if: "tag" = #(Zpos (encode c))then SOME (Snd "t") else NONE.
 
 Definition mknonce : val := λ: <>,
   let: "n" := ref #() in
@@ -123,6 +123,7 @@ Implicit Types t : term.
 Implicit Types v : val.
 Implicit Types Φ : prodO locO termO -n> iPropO Σ.
 Implicit Types Ψ : val → iProp Σ.
+Implicit Types c : string.
 
 Lemma twp_as_int E t Ψ :
   Ψ (repr (Spec.as_int t)) -∗
@@ -241,25 +242,25 @@ Lemma wp_list `{!Repr A} (xs : list A) E Ψ :
   WP list_to_expr xs @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_list. Qed.
 
-Lemma twp_tag E (n : nat) t Ψ :
-  Ψ (repr (Spec.tag n t)) -∗
-  WP tag n t @ E [{ Ψ }].
+Lemma twp_tag E c t Ψ :
+  Ψ (repr (Spec.tag c t)) -∗
+  WP tag c t @ E [{ Ψ }].
 Proof.
 iIntros "post".
 by rewrite Spec.tag_eq /tag; wp_pures; iApply twp_tuple.
 Qed.
 
-Lemma wp_tag E (n : nat) t Ψ :
-  Ψ (repr (Spec.tag n t)) -∗
-  WP tag n t @ E {{ Ψ }}.
+Lemma wp_tag E c t Ψ :
+  Ψ (repr (Spec.tag c t)) -∗
+  WP tag c t @ E {{ Ψ }}.
 Proof.
 iIntros "post".
 by rewrite Spec.tag_eq /tag; wp_pures; iApply wp_tuple.
 Qed.
 
-Lemma twp_untag E (n : nat) t Ψ :
-  Ψ (repr (Spec.untag n t)) -∗
-  WP untag n t @ E [{ Ψ }].
+Lemma twp_untag E c t Ψ :
+  Ψ (repr (Spec.untag c t)) -∗
+  WP untag c t @ E [{ Ψ }].
 Proof.
 iIntros "post".
 rewrite Spec.untag_eq /untag /=; wp_pures.
@@ -271,20 +272,21 @@ case: t1; try by [move=> *; wp_pures; iApply "post"].
 move=> n'; wp_pures.
 case: bool_decide_reflect => [[->]|ne]; wp_pures.
   by rewrite decide_left.
-case: decide => e; try iApply "post".
+case: n' ne; try by move=> *; iApply "post".
+move=> n' ne; case: decide => e; try iApply "post".
 congruence.
 Qed.
 
-Lemma wp_untag E (n : nat) t Ψ :
-  Ψ (repr (Spec.untag n t)) -∗
-  WP untag n t @ E {{ Ψ }}.
+Lemma wp_untag E c t Ψ :
+  Ψ (repr (Spec.untag c t)) -∗
+  WP untag c t @ E {{ Ψ }}.
 Proof.
 by iIntros "?"; iApply twp_wp; iApply twp_untag.
 Qed.
 
 Lemma twp_mknonce E γ lvl Ψ :
   is_res γ (RNonce lvl) -∗
-  (∀ l, nonceT γ lvl l -∗
+  (∀ l, nonceT lvl l -∗
         meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
         Ψ (TNonce l)) -∗
   WP mknonce #()%V @ E [{ Ψ }].
@@ -300,7 +302,7 @@ Qed.
 
 Lemma wp_mknonce E γ lvl Ψ :
   is_res γ (RNonce lvl) -∗
-  (∀ l, nonceT γ lvl l -∗
+  (∀ l, nonceT lvl l -∗
         meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
         Ψ (TNonce l)) -∗
   WP mknonce #()%V @ E {{ Ψ }}.
@@ -308,7 +310,7 @@ Proof. by iIntros "#??"; iApply twp_wp; iApply twp_mknonce. Qed.
 
 Lemma twp_mkakey E γ lvl_enc lvl_dec Φ Ψ :
   is_res γ (RAKey lvl_enc lvl_dec Φ) -∗
-  (∀ l, akeyT γ lvl_enc lvl_dec Φ l -∗
+  (∀ l, akeyT lvl_enc lvl_dec Φ l -∗
         meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
         Ψ (TKey KAEnc l, TKey KADec l)%V) -∗
   WP mkakey #()%V @ E [{ Ψ }].
@@ -324,7 +326,7 @@ Qed.
 
 Lemma wp_mkakey E lvl_enc lvl_dec γ Φ Ψ :
   is_res γ (RAKey lvl_enc lvl_dec Φ) -∗
-  (∀ l, akeyT γ lvl_enc lvl_dec Φ l -∗
+  (∀ l, akeyT lvl_enc lvl_dec Φ l -∗
         meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
         Ψ (TKey KAEnc l, TKey KADec l)%V) -∗
   WP mkakey #()%V @ E {{ Ψ }}.
@@ -392,7 +394,7 @@ Proof. by iIntros "?"; iApply twp_wp; iApply twp_is_key. Qed.
 
 Lemma twp_mkskey E γ lvl Φ Ψ :
   is_res γ (RSKey lvl Φ) -∗
-  (∀ l, skeyT γ lvl Φ l -∗
+  (∀ l, skeyT lvl Φ l -∗
         meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
         Ψ (TKey KSym l)) -∗
   WP mkskey #()%V @ E [{ Ψ }].
@@ -408,7 +410,7 @@ Qed.
 
 Lemma wp_mkskey E lvl γ Φ Ψ :
   is_res γ (RSKey lvl Φ) -∗
-  (∀ l, skeyT γ lvl Φ l -∗
+  (∀ l, skeyT lvl Φ l -∗
         meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
         Ψ (TKey KSym l)) -∗
   WP mkskey #()%V @ E {{ Ψ }}.

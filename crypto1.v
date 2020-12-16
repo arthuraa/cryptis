@@ -245,83 +245,41 @@ Proof.
 iIntros "HP #PQ"; by case: lvl => //; iApply "PQ".
 Qed.
 
-Definition tagged_inv_def (Φs : list key_inv) (p : loc * term) : iProp Σ :=
-  match p.2 with
-  | TPair (TInt n) t =>
-    ⌜(0 <= n)%Z⌝ ∗
-    match Φs !! Z.to_nat n with
-    | Some Φ => (Φ : key_inv) (p.1, t)
-    | None => False
-    end
-  | _ => False
-  end.
-Definition tagged_inv_aux : seal tagged_inv_def. by eexists. Qed.
-Definition tagged_inv := unseal tagged_inv_aux.
-Lemma tagged_inv_eq : tagged_inv = tagged_inv_def. Proof. exact: seal_eq. Qed.
 
-Global Instance tagged_inv_proper : NonExpansive2 tagged_inv.
+Lemma guarded_exist T lvl (φ : T -> iProp Σ) :
+  Inhabited T →
+  guarded lvl (∃ x : T, φ x) ⊣⊢ ∃ x : T, guarded lvl (φ x).
 Proof.
-rewrite tagged_inv_eq.
-move=> n Φs1 Φs2 eΦs [l1 t1] [l2 t2] [/= e1 e2].
-rewrite /tagged_inv /= (leibniz_equiv _ _ e1) (leibniz_equiv _ _ e2).
-rewrite /tagged_inv_def /=.
-case: t2 {e1 e2} => [] // [] // tag t.
-assert (e : Φs1 !! Z.to_nat tag ≡{n}≡ Φs2 !! Z.to_nat tag).
-  by rewrite eΦs.
-apply bi.sep_ne=> //.
-by destruct e.
+move=> ?; case: lvl=> //=.
+apply (anti_symm _); last by eauto.
+by iIntros "_"; iExists inhabitant.
 Qed.
 
-Lemma tagged_inv_intro Φs n Φ k t :
-  Φs !! n = Some Φ →
-  Φ (k, t) -∗
-  tagged_inv Φs (k, Spec.tag n t).
+Global Instance guarded_from_exist T lvl (φ : T -> iProp Σ) :
+  Inhabited T →
+  FromExist (guarded lvl (∃ x, φ x)) (λ x, guarded lvl (φ x)).
 Proof.
-rewrite tagged_inv_eq /tagged_inv_def Spec.tag_eq /=.
-rewrite Nat2Z.id => ->.
-iIntros "H"; iSplit => //; iPureIntro; lia.
+by move => ?; rewrite /FromExist guarded_exist.
 Qed.
 
-Lemma tagged_inv_elim Φs k t :
-  tagged_inv Φs (k, t) -∗
-  ∃ n t' Φ, ⌜t = Spec.tag n t'⌝ ∗
-            ⌜Φs !! n = Some Φ⌝ ∗
-            Φ (k, t').
+Global Instance guarded_into_exist T lvl (φ : T -> iProp Σ) :
+  Inhabited T →
+  IntoExist (guarded lvl (∃ x, φ x)) (λ x, guarded lvl (φ x)).
 Proof.
-rewrite tagged_inv_eq /tagged_inv_def /=.
-iIntros "H".
-case: t => [] // [] // n t.
-iDestruct "H" as "[%pos H]".
-case e: (Φs !! Z.to_nat n) => [Φ|] //.
-iExists (Z.to_nat n), t, Φ.
-rewrite Spec.tag_eq /Spec.tag_def Z2Nat.id //.
-by eauto.
+by move => ?; rewrite /IntoExist guarded_exist.
 Qed.
 
-Lemma tagged_inv_persistent Φs :
-  (∀ n Φ p, Φs !! n = Some Φ → Persistent (Φ p)) →
-  ∀ p, Persistent (tagged_inv Φs p).
+Lemma guarded_box lvl (P : iProp Σ) : □ guarded lvl P ⊣⊢ guarded lvl (□ P).
 Proof.
-move=> ΦsP [k t].
-rewrite /Persistent; iIntros "ktP".
-iDestruct (tagged_inv_elim with "ktP") as (n t' Φ) "(-> & %e & ktP)".
-move/(_ _ _ (k, t') e) in ΦsP.
-iPoseProof "ktP" as "#ktP".
-iModIntro.
-by iApply tagged_inv_intro; eauto.
+case: lvl => //=; by rewrite bi.intuitionistically_emp.
 Qed.
 
-Lemma tagged_inv_elim' Φs k n t :
-  tagged_inv Φs (k, Spec.tag n t) -∗
-  match Φs !! n with
-  | Some Φ => (Φ : key_inv) (k, t)
-  | None => False
-  end.
+Global Instance guarded_box_into_persistent p lvl (P Q : iProp Σ) :
+  IntoPersistent p P Q →
+  IntoPersistent p (guarded lvl P) (guarded lvl Q).
 Proof.
-iIntros "H".
-iDestruct (tagged_inv_elim with "H") as (n' t' Φ) "(%Ht & %HΦ & H)".
-case: (Spec.tag_inj _ _ _ _ Ht) => ??; subst n' t'.
-by rewrite HΦ.
+case: lvl => //= _.
+by rewrite /IntoPersistent; rewrite -bi.persistently_emp_intro; eauto.
 Qed.
 
 Inductive res :=
@@ -417,133 +375,131 @@ Lemma resT_agree γ1 γ2 l :
   resT γ1 l -∗ resT γ2 l -∗ ⌜γ1 = γ2⌝.
 Proof. iApply meta_agree. Qed.
 
-Definition resT' γ r l : iProp Σ := resT γ l ∗ is_res γ r.
+Definition resT' r l : iProp Σ := ∃ γ, resT γ l ∗ is_res γ r.
 
-Lemma resT'_persistent γ r l : Persistent (resT' γ r l).
+Lemma resT'_persistent r l : Persistent (resT' r l).
 Proof. apply _. Qed.
 
-Lemma resT'_agree γ1 γ2 r1 r2 l :
-  resT' γ1 r1 l -∗ resT' γ2 r2 l -∗ ⌜γ1 = γ2⌝ ∗ r1 ≡ r2.
+Lemma resT'_agree r1 r2 l :
+  resT' r1 l -∗ resT' r2 l -∗ r1 ≡ r2.
 Proof.
-iIntros "[meta1 own1] [meta2 own2]".
+iDestruct 1 as (γ1) "[meta1 own1]".
+iDestruct 1 as (γ2) "[meta2 own2]".
 iPoseProof (meta_agree with "meta1 meta2") as "->".
 iPoseProof (own_valid_2 with "own1 own2") as "#valid".
-by rewrite agree_validI agree_equivI; iSplit.
+by rewrite agree_validI agree_equivI.
 Qed.
 
-Definition nonceT γ lvl l : iProp Σ := resT' γ (RNonce lvl) l.
+Definition nonceT lvl l : iProp Σ := resT' (RNonce lvl) l.
 
-Lemma nonceT_agree γ1 γ2 lvl1 lvl2 l :
-  nonceT γ1 lvl1 l -∗ nonceT γ2 lvl2 l -∗ ⌜γ1 = γ2⌝ ∗ ⌜lvl1 = lvl2⌝.
+Lemma nonceT_agree lvl1 lvl2 l :
+  nonceT lvl1 l -∗ nonceT lvl2 l -∗ ⌜lvl1 = lvl2⌝.
 Proof.
 iIntros "Hown1 Hown2".
-iPoseProof (resT'_agree with "Hown1 Hown2") as "%Hvalid".
-by case: Hvalid.
+by iPoseProof (resT'_agree with "Hown1 Hown2") as "%Hvalid".
 Qed.
 
-Global Instance persistent_nonceT γ lvl l : Persistent (nonceT γ lvl l).
+Global Instance persistent_nonceT lvl l : Persistent (nonceT lvl l).
 Proof. apply _. Qed.
 
-Global Instance timeless_nonceT γ lvl l : Timeless (nonceT γ lvl l).
+Global Instance timeless_nonceT lvl l : Timeless (nonceT lvl l).
 Proof. apply _. Qed.
 
-Definition akeyT γ lvl_enc lvl_dec Φ l : iProp Σ :=
-  resT' γ (RAKey lvl_enc lvl_dec Φ) l.
+Definition akeyT lvl_enc lvl_dec Φ l : iProp Σ :=
+  resT' (RAKey lvl_enc lvl_dec Φ) l.
 
-Global Instance persistent_akeyT γ lvl_enc lvl_dec Φ l :
-  Persistent (akeyT γ lvl_enc lvl_dec Φ l).
+Global Instance persistent_akeyT lvl_enc lvl_dec Φ l :
+  Persistent (akeyT lvl_enc lvl_dec Φ l).
 Proof. apply _. Qed.
 
 Global Instance akeyT_proper n :
-  Proper ((=) ==> (=) ==> (=) ==> dist n ==> (=) ==> dist n) akeyT.
+  Proper ((=) ==> (=) ==> dist n ==> (=) ==> dist n) akeyT.
 Proof. rewrite /akeyT /resT'; solve_proper. Qed.
 
-Lemma akeyT_agree γ1 γ2 lvl_enc1 lvl_enc2 lvl_dec1 lvl_dec2 Φ1 Φ2 l :
-  akeyT γ1 lvl_enc1 lvl_dec1 Φ1 l -∗
-  akeyT γ2 lvl_enc2 lvl_dec2 Φ2 l -∗
-  ⌜γ1 = γ2⌝ ∗
+Lemma akeyT_agree lvl_enc1 lvl_enc2 lvl_dec1 lvl_dec2 Φ1 Φ2 l :
+  akeyT lvl_enc1 lvl_dec1 Φ1 l -∗
+  akeyT lvl_enc2 lvl_dec2 Φ2 l -∗
   ⌜lvl_enc1 = lvl_enc2⌝ ∗
   ⌜lvl_dec1 = lvl_dec2⌝ ∗
   Φ1 ≡ Φ2.
 Proof.
 iIntros "Hres1 Hres2".
-iPoseProof (resT'_agree with "Hres1 Hres2") as "[-> #Hres]".
+iPoseProof (resT'_agree with "Hres1 Hres2") as "#Hres".
 by rewrite res_equivI; iDestruct "Hres" as "(? & ? & ?)"; eauto.
 Qed.
 
-Definition skeyT γ lvl Φ l : iProp Σ :=
-  resT' γ (RSKey lvl Φ) l.
+Definition skeyT lvl Φ l : iProp Σ :=
+  resT' (RSKey lvl Φ) l.
 
-Global Instance persistent_skeyT γ lvl Φ l :
-  Persistent (skeyT γ lvl Φ l).
+Global Instance persistent_skeyT lvl Φ l :
+  Persistent (skeyT lvl Φ l).
 Proof. apply _. Qed.
 
-Lemma skeyT_agree γ1 γ2 lvl1 lvl2 Φ1 Φ2 l :
-  skeyT γ1 lvl1 Φ1 l -∗
-  skeyT γ2 lvl2 Φ2 l -∗
-  ⌜γ1 = γ2⌝ ∗
+Lemma skeyT_agree lvl1 lvl2 Φ1 Φ2 l :
+  skeyT lvl1 Φ1 l -∗
+  skeyT lvl2 Φ2 l -∗
   ⌜lvl1 = lvl2⌝ ∗
   Φ1 ≡ Φ2.
 Proof.
 iIntros "Hres1 Hres2".
-iPoseProof (resT'_agree with "Hres1 Hres2") as "[-> #Hres]".
+iPoseProof (resT'_agree with "Hres1 Hres2") as "#Hres".
 by rewrite res_equivI; iDestruct "Hres" as "[??]"; eauto.
 Qed.
 
-Definition keyT γ kt rs Φ l : iProp Σ :=
+Definition keyT kt rs Φ l : iProp Σ :=
   match kt with
-  | KSym => skeyT γ rs Φ l
-  | KAEnc => ∃ rs_dec, akeyT γ rs rs_dec Φ l
-  | KADec => ∃ rs_enc, akeyT γ rs_enc rs Φ l
+  | KSym => skeyT rs Φ l
+  | KAEnc => ∃ rs_dec, akeyT rs rs_dec Φ l
+  | KADec => ∃ rs_enc, akeyT rs_enc rs Φ l
   end.
 
-Lemma keyT_agree γ1 γ2 kt rs1 rs2 Φ1 Φ2 l :
-  keyT γ1 kt rs1 Φ1 l -∗
-  keyT γ2 kt rs2 Φ2 l -∗
-  ⌜γ1 = γ2⌝ ∗ ⌜rs1 = rs2⌝ ∗ Φ1 ≡ Φ2.
+Lemma keyT_agree kt rs1 rs2 Φ1 Φ2 l :
+  keyT kt rs1 Φ1 l -∗
+  keyT kt rs2 Φ2 l -∗
+  ⌜rs1 = rs2⌝ ∗ Φ1 ≡ Φ2.
 Proof.
 case: kt=> /=.
 - by iApply skeyT_agree.
 - iDestruct 1 as (rs1') "Hres1".
   iDestruct 1 as (rs2') "Hres2".
-  by iPoseProof (akeyT_agree with "Hres1 Hres2") as "(<-&<-&<-&?)";
+  by iPoseProof (akeyT_agree with "Hres1 Hres2") as "(<-&<-&?)";
   eauto.
 - iDestruct 1 as (rs1') "Hres1".
   iDestruct 1 as (rs2') "Hres2".
-  by iPoseProof (akeyT_agree with "Hres1 Hres2") as "(<-&<-&<-&?)";
+  by iPoseProof (akeyT_agree with "Hres1 Hres2") as "(<-&<-&?)";
   eauto.
 Qed.
 
-Global Instance persistent_keyT γ kt rs Φ l : Persistent (keyT γ kt rs Φ l).
+Global Instance persistent_keyT kt rs Φ l : Persistent (keyT kt rs Φ l).
 Proof. by case: kt; apply _. Qed.
 
-Definition key_info (asym : bool) γ lvl_enc lvl_dec Φ l : iProp Σ :=
-  if asym then akeyT γ lvl_enc lvl_dec Φ l
-  else (⌜lvl_enc = lvl_dec⌝ ∗ skeyT γ lvl_enc Φ l)%I.
+Definition key_info (asym : bool) lvl_enc lvl_dec Φ l : iProp Σ :=
+  if asym then akeyT lvl_enc lvl_dec Φ l
+  else (⌜lvl_enc = lvl_dec⌝ ∗ skeyT lvl_enc Φ l)%I.
 
-Lemma key_info_agree asym1 asym2 lvl_enc1 lvl_dec1 lvl_enc2 lvl_dec2 γ1 γ2 Φ1 Φ2 l :
-  key_info asym1 γ1 lvl_enc1 lvl_dec1 Φ1 l -∗
-  key_info asym2 γ2 lvl_enc2 lvl_dec2 Φ2 l -∗
-  ⌜asym1 = asym2⌝ ∗ ⌜γ1 = γ2⌝ ∗ ⌜lvl_enc1 = lvl_enc2⌝ ∗ ⌜lvl_dec1 = lvl_dec2⌝ ∗
+Lemma key_info_agree asym1 asym2 lvl_enc1 lvl_dec1 lvl_enc2 lvl_dec2 Φ1 Φ2 l :
+  key_info asym1 lvl_enc1 lvl_dec1 Φ1 l -∗
+  key_info asym2 lvl_enc2 lvl_dec2 Φ2 l -∗
+  ⌜asym1 = asym2⌝ ∗ ⌜lvl_enc1 = lvl_enc2⌝ ∗ ⌜lvl_dec1 = lvl_dec2⌝ ∗
   Φ1 ≡ Φ2.
 Proof.
 case: asym1 asym2=> [] [] /=.
 - iIntros "Hown1 Hown2".
-  iPoseProof (akeyT_agree with "Hown1 Hown2") as "(<-&<-&<-&?)".
+  iPoseProof (akeyT_agree with "Hown1 Hown2") as "(<-&<-&?)".
   by eauto.
 - iIntros "Hown1 [_ Hown2]".
-  iPoseProof (resT'_agree with "Hown1 Hown2") as "[_ #Hvalid]".
+  iPoseProof (resT'_agree with "Hown1 Hown2") as "#Hvalid".
   by rewrite res_equivI.
 - iIntros "[_ Hown1] Hown2".
-  iPoseProof (resT'_agree with "Hown1 Hown2") as "[_ #Hvalid]".
+  iPoseProof (resT'_agree with "Hown1 Hown2") as "#Hvalid".
   by rewrite res_equivI.
 - iIntros "[<- Hown1] [<- Hown2]".
-  iPoseProof (skeyT_agree with "Hown1 Hown2") as "(<-&<-&#Hvalid)".
+  iPoseProof (skeyT_agree with "Hown1 Hown2") as "(<-&#Hvalid)".
   by eauto.
 Qed.
 
-Global Instance persistent_key_info asym γ lvl_enc lvl_dec Φ l :
-  Persistent (key_info asym γ lvl_enc lvl_dec Φ l).
+Global Instance persistent_key_info asym lvl_enc lvl_dec Φ l :
+  Persistent (key_info asym lvl_enc lvl_dec Φ l).
 Proof. by case: asym; apply _. Qed.
 
 (** [termT lvl t] holds when the term [t] can be declared public after
@@ -554,11 +510,11 @@ Fixpoint termT_def lvl t : iProp Σ :=
   match t with
   | TInt _ => True
   | TPair t1 t2 => termT_def lvl t1 ∗ termT_def lvl t2
-  | TNonce l  => ∃ γ lvl', nonceT γ lvl' l ∗ ⌜lvl' ⊑ lvl⌝
-  | TKey kt l => ∃ γ lvl' Φ, keyT γ kt lvl' Φ l ∗ ⌜lvl' ⊑ lvl⌝
+  | TNonce l  => ∃ lvl', nonceT lvl' l ∗ ⌜lvl' ⊑ lvl⌝
+  | TKey kt l => ∃ lvl' Φ, keyT kt lvl' Φ l ∗ ⌜lvl' ⊑ lvl⌝
   | TEnc asym l t =>
-    ∃ γ lvl_enc lvl_dec Φ,
-      key_info asym γ lvl_enc lvl_dec Φ l
+    ∃ lvl_enc lvl_dec Φ,
+      key_info asym lvl_enc lvl_dec Φ l
       ∗ (□ Φ (l, t) ∗ termT_def (lvl ⊔ lvl_dec) t ∨
          ⌜lvl_enc = Pub⌝ ∗ termT_def Pub t)
   end.
@@ -574,42 +530,42 @@ Proof. rewrite termT_eq; elim: t lvl=> *; apply _. Qed.
 Lemma termT_int lvl n : ⊢ termT lvl (TInt n).
 Proof. by rewrite termT_eq. Qed.
 
-Lemma termT_nonce γ lvl l :
-  nonceT γ lvl l -∗
+Lemma termT_nonce lvl l :
+  nonceT lvl l -∗
   termT lvl (TNonce l).
 Proof.
-by iIntros "#Hl"; rewrite termT_eq; iExists γ, lvl; eauto.
+by iIntros "#Hl"; rewrite termT_eq; iExists lvl; eauto.
 Qed.
 
-Lemma termT_aenc_pub_pub γ lvl Φ k t :
-  akeyT γ Pub lvl Φ k -∗
+Lemma termT_aenc_pub_pub lvl Φ k t :
+  akeyT Pub lvl Φ k -∗
   termT Pub t -∗
   termT Pub (TEnc true k t).
 Proof.
 rewrite {2}termT_eq /= -termT_eq.
-iIntros "#Hk #Ht"; by iExists γ, Pub, lvl, Φ; eauto.
+iIntros "#Hk #Ht"; by iExists Pub, lvl, Φ; eauto.
 Qed.
 
-Lemma termT_aenc_pub_sec γ Φ k t :
-  akeyT γ Pub Sec Φ k -∗
+Lemma termT_aenc_pub_sec Φ k t :
+  akeyT Pub Sec Φ k -∗
   □ Φ (k, t) -∗
   termT Sec t -∗
   termT Pub (TEnc true k t).
 Proof.
 rewrite {2}termT_eq /= -termT_eq.
 iIntros "#Hk #Φt #Ht".
-by iExists γ, Pub, Sec, Φ; eauto.
+by iExists Pub, Sec, Φ; eauto.
 Qed.
 
-Lemma termT_adec_pub γ lvl Φ k t :
+Lemma termT_adec_pub lvl Φ k t :
   termT Pub (TEnc true k t) -∗
-  akeyT γ Pub lvl Φ k -∗
+  akeyT Pub lvl Φ k -∗
   termT Pub t ∨ □ Φ (k, t) ∗ termT lvl t.
 Proof.
 rewrite {1}termT_eq /= -termT_eq.
-iDestruct 1 as (γ' lvl_enc lvl_dec Φ') "[Hk' Ht]".
+iDestruct 1 as (lvl_enc lvl_dec Φ') "[Hk' Ht]".
 iIntros "Hk".
-iPoseProof (akeyT_agree with "Hk' Hk") as "(-> & -> & -> & e)".
+iPoseProof (akeyT_agree with "Hk' Hk") as "(-> & -> & e)".
 rewrite ofe_morO_equivI; iRewrite -("e" $! (k, t)).
 iDestruct "Ht" as "[[Ht1 Ht2]|[_ Ht]]"; eauto.
 iRight; iFrame; by case: lvl.
@@ -663,21 +619,21 @@ rewrite termT_eq /= -termT_eq; iDestruct "Hts" as "[??]".
 by iFrame; iApply IH.
 Qed.
 
-Lemma termT_kenc γ lvl_enc lvl_dec Φ k :
-  akeyT γ lvl_enc lvl_dec Φ k -∗
+Lemma termT_kenc lvl_enc lvl_dec Φ k :
+  akeyT lvl_enc lvl_dec Φ k -∗
   termT lvl_enc (TKey KAEnc k).
 Proof.
 iIntros "kP"; rewrite termT_eq /=.
-iExists γ, lvl_enc, Φ; iSplit => //.
+iExists lvl_enc, Φ; iSplit => //.
 by eauto.
 Qed.
 
-Lemma termT_kdec γ lvl_enc lvl_dec Φ k :
-  akeyT γ lvl_enc lvl_dec Φ k -∗
+Lemma termT_kdec lvl_enc lvl_dec Φ k :
+  akeyT lvl_enc lvl_dec Φ k -∗
   termT lvl_dec (TKey KADec k).
 Proof.
 iIntros "kP"; rewrite termT_eq /=.
-iExists γ, lvl_dec, Φ; iSplit => //.
+iExists lvl_dec, Φ; iSplit => //.
 by eauto.
 Qed.
 
@@ -701,12 +657,12 @@ Proof.
 elim: t lvl lvl' => [n|t1 IH1 t2 IH2|l|kt l|b l t IH] lvl lvl' sub;
 rewrite termT_eq /= -?termT_eq //.
 - by iIntros "[#Ht1 #Ht2]"; rewrite IH1 // IH2 //; iSplit.
-- iDestruct 1 as (γ lvl0) "[#Hnonce %sub0]".
-  iExists γ, lvl0; iSplit=> //; iPureIntro; by etransitivity.
-- iDestruct 1 as (γ lvl0 Φ) "[#Hkey %sub0]".
-  iExists γ, lvl0, Φ; iSplit=> //; iPureIntro; by etransitivity.
-- iDestruct 1 as (γ lvl_enc lvl_dec Φ) "[#Hkey #Ht]".
-  iExists γ, lvl_enc, lvl_dec, Φ; iSplit=> //.
+- iDestruct 1 as (lvl0) "[#Hnonce %sub0]".
+  iExists lvl0; iSplit=> //; iPureIntro; by etransitivity.
+- iDestruct 1 as (lvl0 Φ) "[#Hkey %sub0]".
+  iExists lvl0, Φ; iSplit=> //; iPureIntro; by etransitivity.
+- iDestruct 1 as (lvl_enc lvl_dec Φ) "[#Hkey #Ht]".
+  iExists lvl_enc, lvl_dec, Φ; iSplit=> //.
   iDestruct "Ht" as "[[? Ht]|Ht]"; last by iRight.
   iLeft; iSplit=> //; iApply (IH with "Ht").
   by case: lvl lvl' lvl_dec sub=> [] [] [].
@@ -739,25 +695,25 @@ iIntros "[#type1 #min1] [#type2 #min2]"; iSplit.
   by iPureIntro; rewrite level_joinP; split.
 Qed.
 
-Lemma stermT_nonce γ lvl l :
-  nonceT γ lvl l -∗
+Lemma stermT_nonce lvl l :
+  nonceT lvl l -∗
   stermT lvl (TNonce l).
 Proof.
 iIntros "#Hn"; iSplit; first by iApply termT_nonce.
 rewrite termT_eq /=; iIntros "!>" (lvl').
-iDestruct 1 as (γ' lvl'') "[#Hn' %Hsub']".
-iPoseProof (resT'_agree with "Hn Hn'") as "[-> e]".
+iDestruct 1 as (lvl'') "[#Hn' %Hsub']".
+iPoseProof (resT'_agree with "Hn Hn'") as "e".
 by rewrite res_equivI; iPoseProof "e" as "->".
 Qed.
 
-Lemma stermT_key γ lvl kt Φ l :
-  keyT γ kt lvl Φ l -∗
+Lemma stermT_key lvl kt Φ l :
+  keyT kt lvl Φ l -∗
   stermT lvl (TKey kt l).
 Proof.
 iIntros "#Hk"; rewrite /stermT termT_eq /=.
-iSplit; first by iExists γ, lvl, Φ; iSplit.
-iIntros "/= !>" (lvl'); iDestruct 1 as (γ' lvl'' Φ') "[#Hk' %Hsub']".
-by iPoseProof (keyT_agree with "Hk Hk'") as "(<-&<-&_)".
+iSplit; first by iExists lvl, Φ; iSplit.
+iIntros "/= !>" (lvl'); iDestruct 1 as (lvl'' Φ') "[#Hk' %Hsub']".
+by iPoseProof (keyT_agree with "Hk Hk'") as "(<-&_)".
 Qed.
 
 Lemma stermTS lvl t :
@@ -779,44 +735,44 @@ rewrite termT_eq /= -?termT_eq.
   iDestruct (IH1 with "type1") as (lvl1) "type1'".
   iDestruct (IH2 with "type2") as (lvl2) "type2'".
   by iExists (lvl1 ⊔ lvl2); iApply stermT_pair.
-- iDestruct 1 as (γ lvl') "[#Hn %Hsub]".
+- iDestruct 1 as (lvl') "[#Hn %Hsub]".
   by iExists lvl'; iApply stermT_nonce.
-- iDestruct 1 as (γ lvl' Φ) "[#Hk %Hsub]".
+- iDestruct 1 as (lvl' Φ) "[#Hk %Hsub]".
   by iExists lvl'; iApply stermT_key.
 - case: lvl.
     iIntros "#Ht"; iExists Pub; iSplit=> //.
       by rewrite termT_eq /= -termT_eq.
     by iIntros "!>" (lvl) "_".
-  iDestruct 1 as (γ lvl_enc lvl_dec Φ) "[#Hk #Ht]".
+  iDestruct 1 as (lvl_enc lvl_dec Φ) "[#Hk #Ht]".
   rewrite /stermT {3 4}termT_eq /= -termT_eq.
   iDestruct "Ht" as "[[#Ht type]|[-> type]]"; last first.
-    iExists Pub; iSplit=> /=; first by iExists _, _, _, _; iSplit; eauto.
+    iExists Pub; iSplit=> /=; first by iExists _, _, _; iSplit; eauto.
     by iIntros "!>" (lvl) "_".
   iDestruct (IH with "type") as (lvl) "[type' #min']".
   case: lvl.
     iExists Pub; iSplit=> /=.
-      iExists _, _, _, _; iSplit=> //.
+      iExists _, _, _; iSplit=> //.
       by iLeft; iSplit=> //; case: lvl_dec.
     by iIntros "!>" (lvl) "_".
   case: lvl_dec.
     iExists Sec; iSplit=> /=.
-      iExists _, _, _, _; iSplit=> //.
+      iExists _, _, _; iSplit=> //.
       by iLeft; iSplit=> //; case: lvl_dec.
     iIntros "!>" (lvl).
-    iDestruct 1 as (γ' lvl_enc' lvl_dec' Φ') "[#Hk' #type'']".
-    iDestruct (key_info_agree with "Hk Hk'") as "(_&<-&<-&<-&_)".
+    iDestruct 1 as (lvl_enc' lvl_dec' Φ') "[#Hk' #type'']".
+    iDestruct (key_info_agree with "Hk Hk'") as "(_&<-&<-&_)".
     iDestruct "type''" as "[[_ type'']|[_ type'']]";
     iPoseProof ("min'" with "type''") as "?"=> //.
     by case: lvl.
   iExists Pub; iSplit=> /=.
-    iExists _, _, _, _; iSplit=> //.
+    iExists _, _, _; iSplit=> //.
     by iLeft; iSplit.
   by iIntros "!>" (lvl) "_".
 Qed.
 
-Lemma termT_adec_pub_sec γ Φ k t :
+Lemma termT_adec_pub_sec Φ k t :
   termT Pub (TEnc true k t) -∗
-  akeyT γ Pub Sec Φ k -∗
+  akeyT Pub Sec Φ k -∗
   ∃ lvl, termT lvl t ∗ guarded lvl (□ Φ (k, t)).
 Proof.
 iIntros "Ht Hk".
@@ -825,35 +781,34 @@ iPoseProof (termT_adec_pub with "Ht Hk") as "[Ht|Ht]".
 - by iExists Sec; iDestruct "Ht" as "[??]"; iSplit.
 Qed.
 
+Definition pub_enc_key k : iProp Σ :=
+  ∃ lvl_dec Φ, akeyT Pub lvl_dec Φ k.
+
+Global Instance pub_enc_key_persistent k : Persistent (pub_enc_key k).
+Proof. apply _. Qed.
+
 Lemma termT_TAEncE k :
-  termT Pub (TKey KAEnc k) -∗
-  ∃ γ lvl Φ, akeyT γ Pub lvl Φ k.
+  termT Pub (TKey KAEnc k) -∗ pub_enc_key k.
 Proof.
 rewrite termT_eq /=.
-iDestruct 1 as (γ lvl Φ) "[Hk %Hlvl]".
+iDestruct 1 as (lvl Φ) "[Hk %Hlvl]".
 case: lvl Hlvl => // _.
 iDestruct "Hk" as (lvl_dec) "Hk".
-by eauto.
+by rewrite /pub_enc_key; eauto.
 Qed.
 
-Lemma termT_TAEnc γ lvl_enc lvl_dec Φ k :
-  akeyT γ lvl_enc lvl_dec Φ k -∗
+Lemma termT_TAEnc lvl_enc lvl_dec Φ k :
+  akeyT lvl_enc lvl_dec Φ k -∗
   termT lvl_enc (TKey KAEnc k).
 Proof.
 iIntros; rewrite termT_eq /=.
-by iExists γ, lvl_enc, Φ; iSplit; eauto.
+by iExists lvl_enc, Φ; iSplit; eauto.
 Qed.
 
-Definition pub_enc_key γ k : iProp Σ :=
-  ∃ lvl_dec Φ, akeyT γ Pub lvl_dec Φ k.
-
-Global Instance pub_enc_key_persistent γ k : Persistent (pub_enc_key γ k).
-Proof. apply _. Qed.
-
-Lemma termT_aenc_pub_secG γ γ' k Φ lvl t :
-  pub_enc_key γ k -∗
+Lemma termT_aenc_pub_secG k Φ lvl t :
+  pub_enc_key k -∗
   termT lvl t -∗
-  guarded lvl (akeyT γ' Pub Sec Φ k) -∗
+  guarded lvl (akeyT Pub Sec Φ k) -∗
   guarded lvl (□ Φ (k, t)) -∗
   termT Pub (TEnc true k t).
 Proof.
@@ -863,11 +818,11 @@ iIntros "#Hk #Ht #Hk' #HG"; case: lvl => /=.
 - by iApply termT_aenc_pub_sec.
 Qed.
 
-Lemma res_alloc E γ r l :
+Lemma res_alloc γ E r l :
   ↑cryptoN.@"res" ⊆ E →
   is_res γ r -∗
   meta_token l E ==∗
-  resT' γ r l.
+  resT' r l.
 Proof.
 iIntros (Hsub) "Hown Hmeta".
 iMod (meta_set E l γ with "Hmeta") as "Hmeta"=> //.
@@ -876,10 +831,114 @@ Qed.
 
 End Resources.
 
-Arguments tagged_inv_def {_} /.
 Arguments RNonce {_} _.
-Arguments nonceT {_ _ _} _ _ _.
-Arguments skeyT {_ _ _} _ _ _ _.
-Arguments akeyT {_ _ _} _ _ _ _ _.
+Arguments nonceT {_ _ _} _ _.
+Arguments skeyT {_ _ _} _ _ _.
+Arguments akeyT {_ _ _} _ _ _ _.
 Arguments is_res {Σ _} _ _.
 Arguments RAKey {Σ} _ _ _.
+
+Section Tagging.
+
+Context (Σ : gFunctors).
+Notation iProp := (iProp Σ).
+Notation iPropO := (iPropO Σ).
+Notation key_inv := (prodO locO termO -n> iPropO).
+Implicit Types Φ : key_inv.
+Implicit Types l k : loc.
+Implicit Types lvl : level.
+Implicit Types γ : gname.
+Implicit Types c : string.
+
+Class tagG := TagG {
+  tag_inG :> inG Σ (gmapR (loc * string) (agreeR key_inv));
+  tag_name : gname;
+}.
+
+Context `{!tagG}.
+
+Definition own_tag k c Φ : iProp :=
+  own tag_name {[(k, c) := to_agree Φ]}.
+
+Lemma own_tag_persistent k c Φ : Persistent (own_tag k c Φ).
+Proof. apply _. Qed.
+
+Lemma own_tag_agree k c Φ1 Φ2 :
+  own_tag k c Φ1 -∗
+  own_tag k c Φ2 -∗
+  Φ1 ≡ Φ2.
+Proof.
+iIntros "own1 own2".
+iPoseProof (own_valid_2 with "own1 own2") as "#valid".
+rewrite singleton_op gmap_validI; iSpecialize ("valid" $! (k, c)).
+by rewrite lookup_singleton uPred.option_validI agree_validI agree_equivI.
+Qed.
+
+Lemma own_tag_proper n : Proper (eq ==> eq ==> dist n ==> dist n) own_tag.
+Proof. solve_contractive. Qed.
+
+Definition tagged_inv_def (p : loc * term) : iProp :=
+  match p.2 with
+  | TPair (TInt (Zpos n)) t =>
+    ∃ c Φ, ⌜n = encode c⌝ ∗ own_tag p.1 c Φ ∗ □ (Φ : key_inv) (p.1, t)
+  | _ => False
+  end.
+Definition tagged_inv_aux : seal tagged_inv_def. by eexists. Qed.
+Definition tagged_inv := unseal tagged_inv_aux.
+Lemma tagged_inv_eq : tagged_inv = tagged_inv_def. Proof. exact: seal_eq. Qed.
+
+Global Instance tagged_inv_proper : NonExpansive tagged_inv.
+Proof.
+rewrite tagged_inv_eq /tagged_inv_def.
+move=> n [l1 t1] [l2 t2] [/= e1 e2].
+by rewrite /tagged_inv /= (leibniz_equiv _ _ e1) (leibniz_equiv _ _ e2).
+Qed.
+
+Lemma tagged_inv_intro k c Φ t :
+  own_tag k c Φ -∗
+  □ Φ (k, t) -∗
+  tagged_inv (k, Spec.tag c t).
+Proof.
+rewrite tagged_inv_eq /tagged_inv_def Spec.tag_eq /=.
+by iIntros "own Ht"; eauto.
+Qed.
+
+Lemma tagged_inv_elim k t :
+  tagged_inv (k, t) -∗
+  ∃ c t' Φ, ⌜t = Spec.tag c t'⌝ ∗
+            own_tag k c Φ ∗
+            □ Φ (k, t').
+Proof.
+rewrite tagged_inv_eq /tagged_inv_def /=.
+iIntros "H".
+case: t => [] // [] // [] // n t.
+iDestruct "H" as (c Φ) "(-> & own & Ht)".
+iExists _, t, Φ.
+by rewrite Spec.tag_eq /Spec.tag_def //; eauto.
+Qed.
+
+Global Instance tagged_inv_persistent p :
+  Persistent (tagged_inv p).
+Proof.
+rewrite tagged_inv_eq /tagged_inv_def.
+case: p=> [] k []; try by apply _.
+by do 2![case; try by apply _].
+Qed.
+
+Lemma tagged_inv_elim' Φ k c t :
+  own_tag k c Φ -∗
+  tagged_inv (k, Spec.tag c t) -∗
+  □ Φ (k, t).
+Proof.
+iIntros "#own #H".
+iDestruct (tagged_inv_elim with "H") as (c' t' Φ') "{H} (%e & #own' & #Ht)".
+case: (Spec.tag_inj _ _ _ _ e) => ??; subst c' t'.
+iPoseProof (own_tag_agree with "own own'") as "#e".
+rewrite ofe_morO_equivI.
+by iRewrite -("e" $! (k, t)) in "Ht".
+Qed.
+
+End Tagging.
+
+Arguments tagged_inv_def {_} /.
+Arguments tagged_inv {_ _}.
