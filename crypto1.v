@@ -855,7 +855,7 @@ Class tagG := TagG {
   tag_name : gname;
 }.
 
-Context `{!tagG}.
+Context `{!heapG Σ, !resG Σ, !tagG}.
 
 Definition own_tag k c Φ : iProp :=
   own tag_name {[(k, c) := to_agree Φ]}.
@@ -894,6 +894,29 @@ move=> n [l1 t1] [l2 t2] [/= e1 e2].
 by rewrite /tagged_inv /= (leibniz_equiv _ _ e1) (leibniz_equiv _ _ e2).
 Qed.
 
+Global Instance tagged_inv_persistent p :
+  Persistent (tagged_inv p).
+Proof.
+rewrite tagged_inv_eq /tagged_inv_def.
+case: p=> [] k []; try by apply _.
+by do 2![case; try by apply _].
+Qed.
+
+Definition tag_akeyT lvl c Φ k : iProp :=
+  akeyT lvl Sec (OfeMor tagged_inv) k ∗
+  own_tag k c Φ.
+
+Lemma tag_akeyT_persistent lvl c Φ k : Persistent (tag_akeyT lvl c Φ k).
+Proof. apply _. Qed.
+
+Lemma tag_akeyT_agree lvl c Φ1 Φ2 k :
+  tag_akeyT lvl c Φ1 k -∗
+  tag_akeyT lvl c Φ2 k -∗
+  Φ1 ≡ Φ2.
+Proof.
+iIntros "[_ #H1] [_ #H2]"; by iApply own_tag_agree.
+Qed.
+
 Lemma tagged_inv_intro k c Φ t :
   own_tag k c Φ -∗
   □ Φ (k, t) -∗
@@ -917,14 +940,6 @@ iExists _, t, Φ.
 by rewrite Spec.tag_eq /Spec.tag_def //; eauto.
 Qed.
 
-Global Instance tagged_inv_persistent p :
-  Persistent (tagged_inv p).
-Proof.
-rewrite tagged_inv_eq /tagged_inv_def.
-case: p=> [] k []; try by apply _.
-by do 2![case; try by apply _].
-Qed.
-
 Lemma tagged_inv_elim' Φ k c t :
   own_tag k c Φ -∗
   tagged_inv (k, Spec.tag c t) -∗
@@ -936,6 +951,32 @@ case: (Spec.tag_inj _ _ _ _ e) => ??; subst c' t'.
 iPoseProof (own_tag_agree with "own own'") as "#e".
 rewrite ofe_morO_equivI.
 by iRewrite -("e" $! (k, t)) in "Ht".
+Qed.
+
+Lemma termT_tag_aenc_pub_secG k lvl c Φ t :
+  pub_enc_key k -∗
+  termT lvl t -∗
+  guarded lvl (tag_akeyT Pub c Φ k) -∗
+  guarded lvl (□ Φ (k, t)) -∗
+  termT Pub (TEnc true k (Spec.tag c t)).
+Proof.
+iIntros "#k_lo #t_lo [#k_hi #own] #t_hi".
+iApply termT_aenc_pub_secG; eauto.
+  iApply termT_tag; eauto.
+case: lvl => //=; iModIntro.
+by iApply tagged_inv_intro.
+Qed.
+
+Lemma termT_tag_adec_pub_sec k c Φ t :
+  termT Pub (TEnc true k (Spec.tag c t)) -∗
+  tag_akeyT Pub c Φ k -∗
+  ∃ lvl, termT lvl t ∗ guarded lvl (□ Φ (k, t)).
+Proof.
+iIntros "#Ht [#Hk #Hown]".
+iDestruct (termT_adec_pub_sec with "Ht Hk") as (lvl) "{Ht} [#Ht #guard]".
+iDestruct (termT_untag with "Ht") as "{Ht} #Ht".
+iExists lvl; iSplit => //; case: lvl => //=; iModIntro.
+by iApply (tagged_inv_elim' with "Hown guard").
 Qed.
 
 End Tagging.

@@ -77,6 +77,38 @@ case; eauto => k' /=.
 by case: decide => [<-|]; eauto.
 Qed.
 
+Lemma tac_wp_tenc Γ E K c k t Ψ :
+  envs_entails Γ (WP fill K (Val (SOMEV (TEnc true k (Spec.tag c t)))) @ E {{ Ψ }}) →
+  envs_entails Γ (WP fill K (tenc c (TKey KAEnc k) t) @ E {{ Ψ }}).
+Proof.
+rewrite envs_entails_eq => H.
+by rewrite -wp_bind -wp_tenc.
+Qed.
+
+(* MOVE *)
+Lemma tdecK c k t t' :
+  Spec.tdec c (TKey KADec k) t = Some t' →
+  t = TEnc true k (Spec.tag c t').
+Proof.
+rewrite /Spec.tdec /=.
+case: t => [] //= [] //= k'.
+by case: decide => //= <- _ /Spec.untagK ->.
+Qed.
+(* /MOVE *)
+
+Lemma tac_wp_tdec Γ E K c k t Ψ :
+  (∀ t', t = TEnc true k (Spec.tag c t') →
+         envs_entails Γ (WP fill K (Val (SOMEV t')) @ E {{ Ψ }})) →
+  (Spec.tdec c (TKey KADec k) t = None →
+   envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →
+  envs_entails Γ (WP fill K (tdec c (TKey KADec k) t) @ E {{ Ψ }}).
+Proof.
+rewrite envs_entails_eq => HSome HNone.
+rewrite -wp_bind -wp_tdec.
+case e: Spec.tdec => [t'|]; eauto.
+by apply: HSome; apply: tdecK.
+Qed.
+
 Lemma tac_twp_list_of_term Γ E K t Ψ :
   (∀ ts, t = Spec.of_list ts →
          envs_entails Γ (WP fill K (Val (SOMEV (repr ts))) @ E [{ Ψ }])) →
@@ -175,6 +207,9 @@ Tactic Notation "wp_tag" :=
 Tactic Notation "wp_enc" :=
   wp_pures; wp_bind (enc _ _); iApply wp_enc.
 
+Tactic Notation "wp_tenc" :=
+  wp_pures; wp_bind (tenc _ _ _); iApply wp_tenc.
+
 Tactic Notation "wp_dec_eq" ident(t) ident(H) :=
   wp_pures;
   lazymatch goal with
@@ -191,6 +226,27 @@ Tactic Notation "wp_dec" ident(t) :=
   let tf := fresh "tf" in
   let H := fresh "H" in
   wp_dec_eq tf H; [
+    first [revert t tf H; intros _ t ->
+          |revert tf H; intros _ t ->
+          |revert tf H; intros t _]
+  | clear H].
+
+Tactic Notation "wp_tdec_eq" ident(t) ident(H) :=
+  wp_pures;
+  lazymatch goal with
+  | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
+    reshape_expr e ltac:(fun K e' =>
+      first
+        [eapply (tac_wp_tdec _ _ K _ _);
+         [intros t H|intros H];
+         wp_finish
+        |fail 1 "wp_tdec: Cannot decode"])
+  end.
+
+Tactic Notation "wp_tdec" ident(t) :=
+  let tf := fresh "tf" in
+  let H := fresh "H" in
+  wp_tdec_eq tf H; [
     first [revert t tf H; intros _ t ->
           |revert tf H; intros _ t ->
           |revert tf H; intros t _]

@@ -254,6 +254,14 @@ move=> ts1 ts2 e; apply: Some_inj.
 by rewrite -of_listK e of_listK.
 Qed.
 
+Definition tenc c k t := enc k (tag c t).
+
+Definition tdec c k t :=
+  match dec k t with
+  | Some t => untag c t
+  | None => None
+  end.
+
 End Spec.
 
 Arguments repr_term /.

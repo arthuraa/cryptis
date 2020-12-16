@@ -403,18 +403,23 @@ Definition role_name rl : gname :=
   if rl is Init then nsl_init_name else nsl_resp_name.
 
 Definition nsl_key rl k : iProp Σ :=
-  akeyT Pub Sec (OfeMor tagged_inv) k ∗
   match rl with
-  | Init =>
-    own_tag k "m2" (OfeMor msg2_pred)
-  | Resp =>
-    own_tag k "m1" (OfeMor msg1_pred) ∗
-    own_tag k "m3" (OfeMor msg3_pred)
+  | Init => tag_akeyT Pub "m2" (OfeMor msg2_pred) k
+  | Resp => tag_akeyT Pub "m1" (OfeMor msg1_pred) k ∗
+            tag_akeyT Pub "m3" (OfeMor msg3_pred) k
   end.
+Arguments nsl_key : simpl never.
 
 Global Instance nsl_key_persistent rl k :
   Persistent (nsl_key rl k).
 Proof. rewrite /nsl_key; case: rl; apply _. Qed.
+
+Lemma nsl_key_pub rl k : nsl_key rl k -∗ pub_enc_key k.
+Proof.
+rewrite /nsl_key; case: rl => /=.
+- iIntros "[H _]"; iExists _, _; eauto.
+- iIntros "[[H _] _]"; iExists _, _; eauto.
+Qed.
 
 Definition coherent_views SM t1 s1 : Prop :=
   match s1.(srole), s1.(sdata) with
@@ -655,7 +660,7 @@ case: lvl=> //=; do 2!iModIntro.
   by iApply termT_TAEncE.
 rewrite /sowner.
 case/to_session_included: s_s' => [] <- [] <- [] <- _.
-by iDestruct "Hk" as "[??]"; iExists _, _; eauto.
+by iApply nsl_key_pub.
 Qed.
 
 Lemma term_session_session_inv4 E lvl t s :
@@ -745,35 +750,31 @@ Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None).
 
 Definition initiator (skA pkA pkB nA : val) : val := λ: <>,
-  bind: "m1"   := enc pkB (tag "m1" (term_of_list [nA; pkA])) in
+  bind: "m1"   := tenc "m1" pkB (term_of_list [nA; pkA]) in
   send "m1";;
-  bind: "m2"   := dec skA (recv #()) in
-  bind: "m2"   := untag "m2" "m2" in
+  bind: "m2"   := tdec "m2" skA (recv #()) in
   bind: "m2"   := list_of_term "m2" in
   bind: "nA'"  := "m2" !! #0 in
   bind: "nB"   := "m2" !! #1 in
   bind: "pkB'" := "m2" !! #2 in
   if: eq_term "nA'" nA && eq_term "pkB'" pkB then
-    bind: "m3" := enc pkB (tag "m3" "nB") in
+    bind: "m3" := tenc "m3" pkB "nB" in
     send "m3";;
     SOME "nB"
   else NONE.
 
 Definition responder (skB pkB : val) : val := λ: <>,
-  bind: "m1" := dec skB (recv #()) in
-  bind: "m1" := untag "m1" "m1" in
+  bind: "m1" := tdec "m1" skB (recv #()) in
   bind: "m1" := list_of_term "m1" in
   bind: "nA" := "m1" !! #0 in
   bind: "pkA" := "m1" !! #1 in
   bind: "kt" := is_key "pkA" in
   if: "kt" = repr KAEnc then
     let: "nB" := gen #() in
-    let: "m2" := tag "m2" (term_of_list ["nA"; "nB"; pkB]) in
-    bind: "m2" := enc "pkA" "m2" in
+    bind: "m2" := tenc "m2" "pkA" (term_of_list ["nA"; "nB"; pkB]) in
     send "m2";;
-    bind: "m3" := dec skB (recv #()) in
-    bind: "nB'" := untag "m3" "m3" in
-    if: eq_term "nB'" "nB" then SOME ("pkA", "nA", "nB") else NONE
+    bind: "m3" := tdec "m3" skB (recv #()) in
+    if: eq_term "m3" "nB" then SOME ("pkA", "nA", "nB") else NONE
   else NONE.
 
 Implicit Types Ψ : val → iProp Σ.
@@ -800,16 +801,14 @@ Lemma termT_msg1 lvl kA kB (tA : term) :
   guarded lvl (term_session_frag tA (Session Init kA kB None)) -∗
   termT Pub (TEnc true kB (Spec.tag "m1" (Spec.of_list [tA; TKey KAEnc kA]))).
 Proof.
-iIntros "#HkA #HtA #HkB_lo (#HkB_hi & #HkB_m1 & _) #frag".
-iApply termT_aenc_pub_secG; eauto.
-  iApply termT_tag; iApply termT_of_list => /=.
+iIntros "#HkA #HtA #HkB_lo (#HkB_hi & _) #frag".
+iApply termT_tag_aenc_pub_secG; eauto.
+  iApply termT_of_list => /=.
   iSplit; first by iDestruct "HtA" as "[??]".
   iSplit => //.
   iApply (@sub_termT _ _ _ Pub) => //.
   by iDestruct "HkA" as "[HkA _]"; iApply termT_TAEnc.
-case: lvl => //=; iModIntro.
-iApply (tagged_inv_intro with "HkB_m1"); iModIntro => /=.
-by iExists _, _; eauto.
+case: lvl => //=; iModIntro; by iExists _, _; eauto.
 Qed.
 
 (* MOVE *)
@@ -858,26 +857,21 @@ rewrite /initiator.
 iIntros (?) "#Hctx #HtA unreg #HkA #HkB_lo #HkB_hi Hpost".
 wp_list (_ :: _ :: []).
 wp_term_of_list.
-wp_tag.
-wp_enc.
+wp_tenc => /=.
 iMod (nsl_sess_alloc_init lvl kA kB
         with "Hctx HkA unreg HkB_lo HkB_hi HtA") as "[auth #fragA]"=> //.
 wp_pures; wp_bind (send _); iApply wp_send.
   by iModIntro; iApply termT_msg1.
 wp_pures; wp_bind (recv _); iApply wp_recv.
-iIntros (m2) "#Hm2"; wp_dec m2; last protocol_failure.
-wp_untag m2; last protocol_failure.
+iIntros (m2) "#Hm2"; wp_tdec m2; last protocol_failure.
 wp_list_of_term m2; last protocol_failure.
 wp_lookup nA' enA'; last protocol_failure.
 wp_lookup nB  enB; last protocol_failure.
 wp_lookup pkB' epkB'; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst nA'.
 wp_eq_term e; last protocol_failure; subst pkB'.
-wp_tag.
-wp_enc.
-iPoseProof "HkA" as "[??]".
-iDestruct (termT_adec_pub_sec with "Hm2 [//]") as (lm2) "{Hm2} [#Hm2 #fragB]".
-iPoseProof (termT_untag with "Hm2") as "{Hm2} Hm2".
+wp_tenc.
+iDestruct (termT_tag_adec_pub_sec with "Hm2 [//]") as (lm2) "{Hm2} [#Hm2 #fragB]".
 iPoseProof (termT_of_listE with "Hm2") as "{Hm2} Hm2".
 iPoseProof (big_sepL_lookup with "Hm2") as "m2_tA"; first exact: enA'.
 iPoseProof (big_sepL_lookup with "Hm2") as "m2_nB"; first exact: enB.
@@ -887,7 +881,6 @@ pose sB := Session Resp kA kB (Some tA).
 pose sA' := Session Init kA kB (Some nB).
 iAssert (guarded lm2 (term_session_frag nB sB)) as "{fragB} #fragB".
   case: lm2 => //=.
-  iDestruct (tagged_inv_elim' with "[//] fragB") as "{fragB} #fragB".
   iDestruct "fragB" as (nA' nB' kB') "/= (%em2 & fragB)".
   move/Spec.of_list_inj in em2; subst m2.
   by case: enA' epkB' enB => [] -> [] -> [] -> {nA' nB' kB'}.
@@ -904,23 +897,22 @@ iMod (nsl_sess_update with "Hctx auth fragB") as "{fragA} [auth #fragA]" => //.
 set m3 := TEnc _ _ _.
 wp_bind (send _); iApply wp_send.
   iModIntro.
-  iDestruct "HkB_hi" as "(HkB_hi & _ & HhB_m3)".
-  iApply (termT_aenc_pub_secG _ _ lvl) => //; eauto.
-    by iApply termT_tag.
-  case: (lvl) => //=; iModIntro.
-  iApply tagged_inv_intro; eauto.
-  by iModIntro; iExists tA, kA; iSplit.
+  iDestruct "HkB_hi" as "(HkB_m1 & HhB_m3)".
+  iApply (termT_tag_aenc_pub_secG _ lvl) => //; eauto.
+  by case: (lvl) => //=; iModIntro; iExists tA, kA; iSplit.
 wp_pures; iApply ("Hpost" $! (Some nB)).
 case: lvl {Hlm2} => /=.
   do 2![iSplit => //]; by iModIntro; iIntros (lvl') "?".
 iFrame; iSplit; by iDestruct "sessB" as "(?&?&?&?&?&?)".
 Qed.
 
+(* MOVE *)
 Lemma stermT_termT lvl t : stermT lvl t -∗ termT lvl t.
 Proof. by iDestruct 1 as "[??]". Qed.
 
 Lemma sub_termT_pub lvl t : termT Pub t -∗ termT lvl t.
 Proof. by iApply sub_termT. Qed.
+(* /MOVE *)
 
 Lemma wp_responder kB E Ψ :
   ↑cryptoN.@"nsl" ⊆ E →
@@ -943,8 +935,7 @@ Proof.
 iIntros (?) "#Hctx #HkB Hpost".
 rewrite /responder; wp_pures.
 wp_bind (recv _); iApply wp_recv; iIntros (m1) "#Hm1".
-wp_dec m1; last protocol_failure.
-wp_untag m1; last protocol_failure.
+wp_tdec m1; last protocol_failure.
 wp_list_of_term m1; last protocol_failure.
 wp_lookup nA enA; last protocol_failure.
 wp_lookup pkA epkA; last protocol_failure.
@@ -952,9 +943,8 @@ wp_is_key_eq kt kA et; last protocol_failure; subst pkA.
 wp_pures.
 case: (bool_decide_reflect (_ = repr_key_type KAEnc)); last protocol_failure.
 case: kt epkA=> // epkA _.
-iPoseProof "HkB" as "(?& HkB_m1 & HkB_m3)".
-iDestruct (termT_adec_pub_sec with "Hm1 [//]") as (lm1) "{Hm1} [Hm1 fragA]".
-iPoseProof (termT_untag with "Hm1") as "{Hm1} Hm1".
+iPoseProof "HkB" as "(HkB_m1 & HkB_m3)".
+iDestruct (termT_tag_adec_pub_sec with "Hm1 [//]") as (lm1) "{Hm1} [Hm1 fragA]".
 iPoseProof (termT_of_listE with "Hm1") as "{Hm1} Hm1".
 iPoseProof (big_sepL_lookup with "Hm1") as "HnA"; first exact: enA.
 iPoseProof (big_sepL_lookup with "Hm1") as "HpkA"; first exact: epkA.
@@ -962,7 +952,6 @@ pose Pm1 := term_session_frag nA (Session Init kA kB None).
 iAssert (guarded lm1 Pm1) as "{fragA} fragA".
   iApply (guarded_mono with "fragA").
   iIntros "!> {fragA} #fragA".
-  iPoseProof (tagged_inv_elim' with "HkB_m1 fragA") as "{fragA} fragA".
   iDestruct "fragA" as (nA' kA') "/= [%em1 #fragA]".
   move/Spec.of_list_inj in em1; subst m1.
   by case: enA epkA => [] -> [] -> {nA' kA'}.
@@ -972,28 +961,23 @@ iMod (term_session_session_inv4 with "Hctx fragA") as "#HkA_hi" => //.
 wp_pures; wp_bind (gen _); iApply (wp_gen _ lm1); iIntros (nB) "unreg #HnB".
 wp_pures.
 wp_list (_ :: _ :: _ :: []); wp_term_of_list. 
-wp_tag; wp_enc; wp_pures.
+wp_tenc; wp_pures.
 set m2 := Spec.of_list [nA; nB; TKey KAEnc kB].
 set sB := Session Resp kA kB (Some nA).
 iMod (nsl_sess_alloc_resp _ kA kB nA with "Hctx HkB unreg HkA_lo HkA_hi HnB HnA")
     as "[auth #fragB]"=> //=.
 wp_bind (send _); iApply wp_send.
   iModIntro.
-  iDestruct "HkA_hi" as "(HkA_hi & HkA_m2)".
-  iApply termT_aenc_pub_secG; eauto.
-    iApply termT_tag; iApply termT_of_list => /=.
+  iApply termT_tag_aenc_pub_secG; eauto.
+    iApply termT_of_list => /=.
     do !iSplit => //; try by iApply stermT_termT.
-    by iApply sub_termT_pub; iApply termT_TAEnc.
+    by iApply sub_termT_pub; iApply termT_TAEnc; iDestruct "HkB_m1" as "[??]".
   case: lm1 => //=; iModIntro.
-  iApply tagged_inv_intro; eauto.
-  by iModIntro; iExists nA, nB, kB; iSplit; first trivial.
+  by iExists nA, nB, kB; iSplit; first trivial.
 wp_pures; wp_bind (recv _); iApply wp_recv; iIntros (m3) "#Hm3".
-wp_dec m3; last protocol_failure.
-iPoseProof "HkB" as "[? _]".
-iDestruct (termT_adec_pub_sec with "Hm3 [//]") as (lm3) "/= {Hm3} [#Hm3 #Hprot3]".
-wp_untag m3; last protocol_failure.
+wp_tdec m3; last protocol_failure.
+iDestruct (termT_tag_adec_pub_sec with "Hm3 [//]") as (lm3) "/= {Hm3} [#Hm3 #Hprot3]".
 wp_eq_term e; last protocol_failure; subst m3.
-iPoseProof (termT_untag with "Hm3") as "{Hm3} Hm3".
 iAssert (⌜lm1 ⊑ lm3⌝)%I as "%lm1_lm3".
   by iDestruct "HnB" as "[_ #Hmin]"; iApply "Hmin".
 iPoseProof (guarded_leq with "Hprot3") as "{Hprot3 Hm3} Hprot3"; first eassumption.
@@ -1002,7 +986,7 @@ wp_pures.
 iApply ("Hpost" $! (Some (_, _, _))).
 iExists _, _; do 4![iSplit => //].
 case: lm1 => //=.
-iDestruct (tagged_inv_elim' with "HkB_m3 Hprot3") as (nA' kA') "[#frag1 #frag2]".
+iDestruct "Hprot3" as (nA' kA') "[#frag1 #frag2]".
 set sB' := (Session Resp kA' _ _).
 iPoseProof (term_session_agree with "auth frag2") as "%sess".
 have [-> ->] : sB' = sB by apply: to_session_included_eq => //=; eauto.

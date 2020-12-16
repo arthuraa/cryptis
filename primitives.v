@@ -86,6 +86,13 @@ Definition dec : val := λ: "k" "t",
   else
     NONE.
 
+Definition tenc c : val := λ: "k" "t",
+  enc "k" (tag c "t").
+
+Definition tdec c : val := λ: "k" "t",
+  bind: "t" := dec "k" "t" in
+  untag c "t".
+
 Definition mkakey : val := λ: <>,
   let: "k" := ref #() in
   ((#TKey_tag, (#(int_of_key_type KAEnc), "k")),
@@ -378,6 +385,36 @@ Lemma wp_dec E t1 t2 Ψ :
   Ψ (repr (Spec.dec t1 t2)) -∗
   WP dec t1 t2 @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_dec. Qed.
+
+Lemma twp_tenc E c k t Ψ :
+  Ψ (repr (Spec.tenc c k t)) -∗
+  WP tenc c k t @ E [{ Ψ }].
+Proof.
+iIntros "post"; rewrite /tenc; wp_pures.
+wp_bind (tag _ _); iApply twp_tag.
+by iApply twp_enc.
+Qed.
+
+Lemma wp_tenc E c k t Ψ :
+  Ψ (repr (Spec.tenc c k t)) -∗
+  WP tenc c k t @ E {{ Ψ }}.
+Proof. by iIntros "?"; iApply twp_wp; iApply twp_tenc. Qed.
+
+Lemma twp_tdec E c k t Ψ :
+  Ψ (repr (Spec.tdec c k t)) -∗
+  WP tdec c k t @ E [{ Ψ }].
+Proof.
+iIntros "post"; rewrite /tdec; wp_pures.
+wp_bind (dec _ _); iApply twp_dec.
+rewrite /Spec.tdec.
+case e: (Spec.dec _ _) => [t'|]; wp_pures => //.
+by iApply twp_untag.
+Qed.
+
+Lemma wp_tdec E c k t Ψ :
+  Ψ (repr (Spec.tdec c k t)) -∗
+  WP tdec c k t @ E {{ Ψ }}.
+Proof. by iIntros "?"; iApply twp_wp; iApply twp_tdec. Qed.
 
 Lemma twp_is_key E t Ψ :
   Ψ (repr (Spec.is_key t)) -∗
