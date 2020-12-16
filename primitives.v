@@ -470,10 +470,3 @@ by iIntros "H"; iApply twp_wp; iApply twp_eq_term.
 Qed.
 
 End Proofs.
-
-Ltac wp_get_list :=
-  match goal with
-  | |- environments.envs_entails ?Γ
-         (wp _ _ (App (App (Val get_list) _) (Val (LitV (LitInt ?n)))%E) _) =>
-    iApply (@wp_get_list _ _ _ _ _ _ (Z.to_nat n))
-  end.
