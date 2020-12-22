@@ -63,25 +63,31 @@ Definition is_key : val := λ: "t",
 
 Definition enc : val := λ: "k" "t",
   if: (Fst "k" = #TKey_tag) &&
-      (Fst (Snd "k") = #(int_of_key_type KAEnc)) then
-    SOME (#TEnc_tag, (#true, Snd (Snd "k"), "t"))
-  else if: (Fst "k" = #TKey_tag) &&
-           (Fst (Snd "k") = #(int_of_key_type KSym)) then
-    SOME (#TEnc_tag, (#false, Snd (Snd "k"), "t"))
+      (Fst (Snd "k") = #(int_of_key_type Enc)) then
+    SOME (#TEnc_tag, (Snd (Snd "k"), "t"))
   else NONE.
+
+Definition eq_term : val := (rec: "eq" "x" "y" :=
+  if: (Fst "x" = #TInt_tag) && (Fst "y" = #TInt_tag) then
+    Snd "x" = Snd "y"
+  else if: (Fst "x" = #TPair_tag) && (Fst "y" = #TPair_tag) then
+    ("eq" (Fst (Snd "x")) (Fst (Snd "y"))) &&
+    ("eq" (Snd (Snd "x")) (Snd (Snd "y")))
+  else if: (Fst "x" = #TNonce_tag) && (Fst "y" = #TNonce_tag) then
+    Snd "x" = Snd "y"
+  else if: (Fst "x" = #TKey_tag) && (Fst "y" = #TKey_tag) then
+    (Fst (Snd "x") = Fst (Snd "y")) &&
+    "eq" (Snd (Snd "x")) (Snd (Snd "y"))
+  else if: (Fst "x" = #TEnc_tag) && (Fst "y" = #TEnc_tag) then
+    "eq" (Fst (Snd "x")) (Fst (Snd "y")) &&
+    "eq" (Snd (Snd "x")) (Snd (Snd "y"))
+  else #false)%V.
 
 Definition dec : val := λ: "k" "t",
   if: (Fst "k" = #TKey_tag)
-      && (Fst (Snd "k") = #(int_of_key_type KADec))
+      && (Fst (Snd "k") = #(int_of_key_type Dec))
       && (Fst "t" = #TEnc_tag)
-      && Fst (Fst (Snd "t"))
-      && (Snd (Snd "k") = Snd (Fst (Snd "t"))) then
-    SOME (Snd (Snd "t"))
-  else if: (Fst "k" = #TKey_tag)
-      && (Fst (Snd "k") = #(int_of_key_type KSym))
-      && (Fst "t" = #TEnc_tag)
-      && (~ Fst (Fst (Snd "t")))
-      && (Snd (Snd "k") = Snd (Fst (Snd "t"))) then
+      && (eq_term (Snd (Snd "k")) (Fst (Snd "t"))) then
     SOME (Snd (Snd "t"))
   else
     NONE.
@@ -95,29 +101,9 @@ Definition tdec c : val := λ: "k" "t",
 
 Definition mkakey : val := λ: <>,
   let: "k" := ref #() in
-  ((#TKey_tag, (#(int_of_key_type KAEnc), "k")),
-   (#TKey_tag, (#(int_of_key_type KADec), "k"))).
-
-Definition mkskey : val := λ: <>,
-  let: "k" := ref #() in
-  (#TKey_tag, (#(int_of_key_type KSym), "k")).
-
-Definition eq_term : val := (rec: "eq" "x" "y" :=
-  if: (Fst "x" = #TInt_tag) && (Fst "y" = #TInt_tag) then
-    Snd "x" = Snd "y"
-  else if: (Fst "x" = #TPair_tag) && (Fst "y" = #TPair_tag) then
-    ("eq" (Fst (Snd "x")) (Fst (Snd "y"))) &&
-    ("eq" (Snd (Snd "x")) (Snd (Snd "y")))
-  else if: (Fst "x" = #TNonce_tag) && (Fst "y" = #TNonce_tag) then
-    Snd "x" = Snd "y"
-  else if: (Fst "x" = #TKey_tag) && (Fst "y" = #TKey_tag) then
-    (Fst (Snd "x") = Fst (Snd "y")) &&
-    (Snd (Snd "x") = Snd (Snd "y"))
-  else if: (Fst "x" = #TEnc_tag) && (Fst "y" = #TEnc_tag) then
-    (Fst (Fst (Snd "x")) = Fst (Fst (Snd "y"))) &&
-    (Snd (Fst (Snd "x")) = Snd (Fst (Snd "y"))) &&
-    ("eq" (Snd (Snd "x")) (Snd (Snd "y")))
-  else #false)%V.
+  let: "k" := (#TNonce_tag, "k") in
+  ((#TKey_tag, (#(int_of_key_type Enc), "k")),
+   (#TKey_tag, (#(int_of_key_type Dec), "k"))).
 
 Section Proofs.
 
@@ -316,10 +302,10 @@ Lemma wp_mknonce E γ lvl Ψ :
 Proof. by iIntros "#??"; iApply twp_wp; iApply twp_mknonce. Qed.
 
 Lemma twp_mkakey E γ lvl_enc lvl_dec Φ Ψ :
-  is_res γ (RAKey lvl_enc lvl_dec Φ) -∗
+  is_res γ (RKey lvl_enc lvl_dec Φ) -∗
   (∀ l, akeyT lvl_enc lvl_dec Φ l -∗
         meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
-        Ψ (TKey KAEnc l, TKey KADec l)%V) -∗
+        Ψ (TKey Enc (TNonce l), TKey Dec (TNonce l))%V) -∗
   WP mkakey #()%V @ E [{ Ψ }].
 Proof.
 rewrite /mkakey; iIntros "#Hown H".
@@ -327,15 +313,15 @@ wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
 iIntros (l) "[Hl Hmeta]".
 rewrite (meta_token_difference l (↑cryptoN.@"res")) //.
 iDestruct "Hmeta" as "[Hmeta1 Hmeta2]".
-iMod (res_alloc _ (RAKey lvl_enc lvl_dec Φ) l with "Hown Hmeta1") as "#Hmeta"=> //.
+iMod (res_alloc _ (RKey lvl_enc lvl_dec Φ) l with "Hown Hmeta1") as "#Hmeta"=> //.
 wp_pures; rewrite val_of_termE /=; iApply "H"=> //.
 Qed.
 
 Lemma wp_mkakey E lvl_enc lvl_dec γ Φ Ψ :
-  is_res γ (RAKey lvl_enc lvl_dec Φ) -∗
+  is_res γ (RKey lvl_enc lvl_dec Φ) -∗
   (∀ l, akeyT lvl_enc lvl_dec Φ l -∗
         meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
-        Ψ (TKey KAEnc l, TKey KADec l)%V) -∗
+        Ψ (TKey Enc (TNonce l), TKey Dec (TNonce l))%V) -∗
   WP mkakey #()%V @ E {{ Ψ }}.
 Proof. by iIntros "#??"; iApply twp_wp; iApply twp_mkakey. Qed.
 
@@ -354,6 +340,58 @@ Lemma wp_enc E t1 t2 Ψ :
   WP enc t1 t2 @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_enc. Qed.
 
+Lemma twp_eq_term_aux E t1 t2 :
+  ⊢ WP (eq_term t1 t2) @ E [{ v, ⌜v = #(bool_decide (t1 = t2))⌝ }].
+Proof.
+rewrite val_of_termE.
+elim: t1 t2=> [n1|t11 IH1 t12 IH2|l1|kt1 t1 IH1|t11 IH1 t12 IH2];
+case=> [n2|t21 t22|l2|kt2 t2|t21 t22] /=;
+wp_rec; wp_pures=> //.
+- iPureIntro; congr (# (LitBool _)).
+  apply: bool_decide_iff; intuition congruence.
+- wp_bind (eq_term _ _).
+  iPoseProof (IH1 t21) as "IH1"; iPoseProof (IH2 t22) as "IH2".
+  iApply (twp_wand with "IH1"); iIntros (?) "->".
+  case: bool_decide_reflect=> e1.
+  + wp_pures; iApply (twp_wand with "IH2"); iIntros (?) "->".
+    iPureIntro; congr (# (LitBool _)).
+    apply: bool_decide_iff; intuition congruence.
+  + wp_pures; iPureIntro; congr (# (LitBool _)).
+    rewrite bool_decide_false; congruence.
+- iPureIntro; congr (# (LitBool _)).
+  apply: bool_decide_iff; intuition congruence.
+- case: bool_decide_reflect=> [[/int_of_key_type_inj e1]|e1].
+  + wp_pures; iApply twp_wand; first iApply IH1.
+    iPureIntro => _ ->; congr (# (LitBool _)).
+    apply: bool_decide_iff; intuition congruence.
+  + wp_pures; iPureIntro; congr (# (LitBool _)).
+    rewrite bool_decide_false; congruence.
+- wp_pures; wp_bind (eq_term _ _); iApply twp_wand; first iApply IH1.
+  iIntros (?) "->"; case: bool_decide_reflect=> e1; wp_pures; last first.
+    iPureIntro; rewrite bool_decide_false //; congruence.
+  iApply twp_wand; first iApply IH2.
+  iIntros (?) "->"; case: bool_decide_reflect=> e2; wp_pures; last first.
+    rewrite bool_decide_false //; congruence.
+  iPureIntro; congr (# (LitBool _)).
+  by rewrite bool_decide_true //; congruence.
+Qed.
+
+Lemma twp_eq_term E t1 t2 Ψ :
+  Ψ #(bool_decide (t1 = t2)) -∗
+  WP (eq_term t1 t2) @ E [{ Ψ }].
+Proof.
+iIntros "H".
+iApply twp_wand; first iApply twp_eq_term_aux.
+by iIntros (?) "->".
+Qed.
+
+Lemma wp_eq_term E t1 t2 Ψ :
+  Ψ #(bool_decide (t1 = t2)) -∗
+  WP (eq_term t1 t2) @ E {{ Ψ }}.
+Proof.
+by iIntros "H"; iApply twp_wp; iApply twp_eq_term.
+Qed.
+
 Lemma twp_dec E t1 t2 Ψ :
   Ψ (repr (Spec.dec t1 t2)) -∗
   WP dec t1 t2 @ E [{ Ψ }].
@@ -363,22 +401,11 @@ iIntros "H".
 wp_pures.
 case: t1; try by move=> /= *; wp_pures.
 case; try by move=> /= *; wp_pures.
-- move=> l1; wp_pures.
-  case: t2; try by move=> /= *; wp_pures.
-  case; try by move=> /= *; wp_pures.
-  move=> /= l2 t; wp_pures.
-  case: decide=> [<-|ne]; last first.
-    rewrite bool_decide_false; try congruence.
-    by wp_pures.
-  by rewrite bool_decide_true //; wp_pures.
-- move=> l1; wp_pures.
-  case: t2; try by move=> /= *; wp_pures.
-  case; try by move=> /= *; wp_pures.
-  move=> /= l2 t; wp_pures.
-  case: decide=> [<-|ne]; last first.
-    rewrite bool_decide_false; try congruence.
-    by wp_pures.
-  by rewrite bool_decide_true //; wp_pures.
+move=> tk; wp_pures.
+case: t2; try by move=> /= *; wp_pures.
+move=> tk' t; wp_pures; rewrite -val_of_termE.
+wp_bind (eq_term _ _); iApply twp_eq_term.
+by rewrite bool_decide_decide /=; case: decide => [<-|e]; wp_pures.
 Qed.
 
 Lemma wp_dec E t1 t2 Ψ :
@@ -428,82 +455,5 @@ Lemma wp_is_key E t Ψ :
   Ψ (repr (Spec.is_key t)) -∗
   WP is_key t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_is_key. Qed.
-
-Lemma twp_mkskey E γ lvl Φ Ψ :
-  is_res γ (RSKey lvl Φ) -∗
-  (∀ l, skeyT lvl Φ l -∗
-        meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
-        Ψ (TKey KSym l)) -∗
-  WP mkskey #()%V @ E [{ Ψ }].
-Proof.
-rewrite /mkskey; iIntros "#Hown H".
-wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
-iIntros (l) "[Hl Hmeta]".
-rewrite (meta_token_difference l (↑cryptoN.@"res")) //.
-iDestruct "Hmeta" as "[Hmeta1 Hmeta2]".
-iMod (res_alloc _ (RSKey lvl Φ) l with "Hown Hmeta1") as "#Hres"=> //.
-wp_pures; rewrite val_of_termE; iApply "H"=> //.
-Qed.
-
-Lemma wp_mkskey E lvl γ Φ Ψ :
-  is_res γ (RSKey lvl Φ) -∗
-  (∀ l, skeyT lvl Φ l -∗
-        meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
-        Ψ (TKey KSym l)) -∗
-  WP mkskey #()%V @ E {{ Ψ }}.
-Proof.
-by iIntros "#??"; iApply twp_wp; iApply twp_mkskey.
-Qed.
-
-Lemma twp_eq_term_aux E t1 t2 :
-  ⊢ WP (eq_term t1 t2) @ E [{ v, ⌜v = #(bool_decide (t1 = t2))⌝ }].
-Proof.
-rewrite val_of_termE.
-elim: t1 t2=> [n1|t11 IH1 t12 IH2|l1|kt1 l1|b1 l1 t1 IH1];
-case=> [n2|t21 t22|l2|kt2 l2|b2 l2 t2] /=;
-wp_rec; wp_pures=> //.
-- iPureIntro; congr (# (LitBool _)).
-  apply: bool_decide_iff; intuition congruence.
-- wp_bind (eq_term _ _).
-  iPoseProof (IH1 t21) as "IH1"; iPoseProof (IH2 t22) as "IH2".
-  iApply (twp_wand with "IH1"); iIntros (?) "->".
-  case: bool_decide_reflect=> e1.
-  + wp_pures; iApply (twp_wand with "IH2"); iIntros (?) "->".
-    iPureIntro; congr (# (LitBool _)).
-    apply: bool_decide_iff; intuition congruence.
-  + wp_pures; iPureIntro; congr (# (LitBool _)).
-    rewrite bool_decide_false; congruence.
-- iPureIntro; congr (# (LitBool _)).
-  apply: bool_decide_iff; intuition congruence.
-- case: bool_decide_reflect=> [[/int_of_key_type_inj e1]|e1].
-  + wp_pures; iPureIntro; congr (# (LitBool _)).
-    apply: bool_decide_iff; intuition congruence.
-  + wp_pures; iPureIntro; congr (# (LitBool _)).
-    rewrite bool_decide_false; congruence.
-- case: bool_decide_reflect=> e1; wp_pures; last first.
-    rewrite bool_decide_false //; congruence.
-  case: bool_decide_reflect=> e2; wp_pures; last first.
-    rewrite bool_decide_false //; congruence.
-  iPoseProof (IH1 t2) as "IH1".
-  iApply (twp_wand with "IH1"); iIntros (?) "->".
-  iPureIntro; congr (# (LitBool _)).
-  apply: bool_decide_iff; intuition congruence.
-Qed.
-
-Lemma twp_eq_term E t1 t2 Ψ :
-  Ψ #(bool_decide (t1 = t2)) -∗
-  WP (eq_term t1 t2) @ E [{ Ψ }].
-Proof.
-iIntros "H".
-iApply twp_wand; first iApply twp_eq_term_aux.
-by iIntros (?) "->".
-Qed.
-
-Lemma wp_eq_term E t1 t2 Ψ :
-  Ψ #(bool_decide (t1 = t2)) -∗
-  WP (eq_term t1 t2) @ E {{ Ψ }}.
-Proof.
-by iIntros "H"; iApply twp_wp; iApply twp_eq_term.
-Qed.
 
 End Proofs.

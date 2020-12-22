@@ -320,7 +320,7 @@ Definition msg1_spec nA pkA :=
   TPair (TInt 1) (TPair nA (TPair pkA (TInt 0))).
 
 Definition msg1_pred p : iProp Σ :=
-  ∃ nA kA, ⌜p.2 = Spec.of_list [nA; TKey KAEnc kA]⌝ ∗
+  ∃ nA kA, ⌜p.2 = Spec.of_list [nA; TKey Enc (TNonce kA)]⌝ ∗
            term_session_frag nA (Session Init kA p.1 None).
 
 Global Instance msg1_pred_proper : NonExpansive msg1_pred.
@@ -333,7 +333,7 @@ Proof. apply _. Qed.
 
 Definition msg2_pred p : iProp Σ :=
   ∃ nA nB kB,
-    ⌜p.2 = Spec.of_list [nA; nB; TKey KAEnc kB]⌝ ∗
+    ⌜p.2 = Spec.of_list [nA; nB; TKey Enc (TNonce kB)]⌝ ∗
     term_session_frag nB (Session Resp p.1 kB (Some nA)).
 
 Global Instance msg2_pred_proper : NonExpansive msg2_pred.
@@ -364,11 +364,11 @@ Global Instance msg3_pred_persistent p : Persistent (msg3_pred p).
 Proof. apply _. Qed.
 
 Definition unregistered t : iProp Σ :=
-  ∃ l, ⌜symbols_of_term t = {[l]}⌝
+  ∃ l, ⌜nonces_of_term t = {[l]}⌝
        ∗ meta_token l (↑cryptoN.@"nsl".@"secret").
 
 Definition registered t : iProp Σ :=
-  ∃ l, ⌜symbols_of_term t = {[l]}⌝
+  ∃ l, ⌜nonces_of_term t = {[l]}⌝
        ∗ meta l (cryptoN.@"nsl".@"secret") ().
 
 Lemma registered_unregistered t :
@@ -649,7 +649,7 @@ Qed.
 Lemma term_session_session_inv3 E lvl t s :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗
-  termT lvl (TKey KAEnc (sowner s)) -∗
+  termT lvl (TKey Enc (TNonce (sowner s))) -∗
   guarded lvl (term_session_frag t s) ={E}=∗
   ▷ pub_enc_key (sowner s).
 Proof.
@@ -769,7 +769,7 @@ Definition responder (skB pkB : val) : val := λ: <>,
   bind: "nA" := "m1" !! #0 in
   bind: "pkA" := "m1" !! #1 in
   bind: "kt" := is_key "pkA" in
-  if: "kt" = repr KAEnc then
+  if: "kt" = repr Enc then
     let: "nB" := gen #() in
     bind: "m2" := tenc "m2" "pkA" (term_of_list ["nA"; "nB"; pkB]) in
     send "m2";;
@@ -799,7 +799,7 @@ Lemma termT_msg1 lvl kA kB (tA : term) :
   pub_enc_key kB -∗
   guarded lvl (nsl_key Resp kB) -∗
   guarded lvl (term_session_frag tA (Session Init kA kB None)) -∗
-  termT Pub (TEnc true kB (Spec.tag "m1" (Spec.of_list [tA; TKey KAEnc kA]))).
+  termT Pub (TEnc (TNonce kB) (Spec.tag "m1" (Spec.of_list [tA; TKey Enc (TNonce kA)]))).
 Proof.
 iIntros "#HkA #HtA #HkB_lo (#HkB_hi & _) #frag".
 iApply termT_tag_aenc_pub_secG; eauto.
@@ -850,7 +850,7 @@ Lemma wp_initiator kA kB (tA : term) lvl E Ψ :
          )
        else True) -∗
       Ψ (repr onB)) -∗
-  WP initiator (TKey KADec kA) (TKey KAEnc kA) (TKey KAEnc kB) tA #() @ E
+  WP initiator (TKey Dec (TNonce kA)) (TKey Enc (TNonce kA)) (TKey Enc (TNonce kB)) tA #() @ E
      {{ Ψ }}.
 Proof.
 rewrite /initiator.
@@ -894,7 +894,7 @@ iAssert (▷ ⌜lm2 = lvl⌝)%I as "e".
   by iApply (stermT_eq with "HtA' HtA").
 wp_pures; iDestruct "e" as "->".
 iMod (nsl_sess_update with "Hctx auth fragB") as "{fragA} [auth #fragA]" => //.
-set m3 := TEnc _ _ _.
+set m3 := TEnc _ _.
 wp_bind (send _); iApply wp_send.
   iModIntro.
   iDestruct "HkB_hi" as "(HkB_m1 & HhB_m3)".
@@ -914,6 +914,14 @@ Lemma sub_termT_pub lvl t : termT Pub t -∗ termT lvl t.
 Proof. by iApply sub_termT. Qed.
 (* /MOVE *)
 
+Lemma termT_TKeyE lvl kt t :
+  termT lvl (TKey kt t) -∗
+  ∃ k, ⌜t = TNonce k⌝.
+Proof.
+iIntros "H"; rewrite termT_eq /=.
+by case: t => [] // k; eauto.
+Qed.
+
 Lemma wp_responder kB E Ψ :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗
@@ -921,7 +929,7 @@ Lemma wp_responder kB E Ψ :
   (∀ ot : option (term * term * term),
       (if ot is Some (pkA, nA, nB) then
          ∃ lvl kA,
-           ⌜pkA = TKey KAEnc kA⌝ ∗
+           ⌜pkA = TKey Enc (TNonce kA)⌝ ∗
            pub_enc_key kA ∗
            stermT lvl nA ∗
            stermT lvl nB ∗
@@ -930,7 +938,7 @@ Lemma wp_responder kB E Ψ :
             term_session_auth nB (Session Resp kA kB (Some nA)))
        else True) -∗
        Ψ (repr ot)) -∗
-  WP responder (TKey KADec kB) (TKey KAEnc kB) #() @ E {{ Ψ }}.
+  WP responder (TKey Dec (TNonce kB)) (TKey Enc (TNonce kB)) #() @ E {{ Ψ }}.
 Proof.
 iIntros (?) "#Hctx #HkB Hpost".
 rewrite /responder; wp_pures.
@@ -939,15 +947,16 @@ wp_tdec m1; last protocol_failure.
 wp_list_of_term m1; last protocol_failure.
 wp_lookup nA enA; last protocol_failure.
 wp_lookup pkA epkA; last protocol_failure.
-wp_is_key_eq kt kA et; last protocol_failure; subst pkA.
+wp_is_key_eq kt kA' et; last protocol_failure; subst pkA.
 wp_pures.
-case: (bool_decide_reflect (_ = repr_key_type KAEnc)); last protocol_failure.
+case: (bool_decide_reflect (_ = repr_key_type Enc)); last protocol_failure.
 case: kt epkA=> // epkA _.
 iPoseProof "HkB" as "(HkB_m1 & HkB_m3)".
 iDestruct (termT_tag_adec_pub_sec with "Hm1 [//]") as (lm1) "{Hm1} [Hm1 fragA]".
 iPoseProof (termT_of_listE with "Hm1") as "{Hm1} Hm1".
 iPoseProof (big_sepL_lookup with "Hm1") as "HnA"; first exact: enA.
 iPoseProof (big_sepL_lookup with "Hm1") as "HpkA"; first exact: epkA.
+iDestruct (termT_TKeyE with "HpkA") as (kA) "->".
 pose Pm1 := term_session_frag nA (Session Init kA kB None).
 iAssert (guarded lm1 Pm1) as "{fragA} fragA".
   iApply (guarded_mono with "fragA").
@@ -962,7 +971,7 @@ wp_pures; wp_bind (gen _); iApply (wp_gen _ lm1); iIntros (nB) "unreg #HnB".
 wp_pures.
 wp_list (_ :: _ :: _ :: []); wp_term_of_list. 
 wp_tenc; wp_pures.
-set m2 := Spec.of_list [nA; nB; TKey KAEnc kB].
+set m2 := Spec.of_list [nA; nB; TKey Enc (TNonce kB)].
 set sB := Session Resp kA kB (Some nA).
 iMod (nsl_sess_alloc_resp _ kA kB nA with "Hctx HkB unreg HkA_lo HkA_hi HnB HnA")
     as "[auth #fragB]"=> //=.
