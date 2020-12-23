@@ -4,7 +4,7 @@ From iris.algebra Require Import agree auth gset gmap.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From iris.proofmode Require Import base environments.
-From crypto Require Import lib basic term crypto1 primitives.
+From crypto Require Import lib basic term crypto primitives.
 Import bi.
 Import env_notations.
 

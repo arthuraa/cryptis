@@ -1,6 +1,7 @@
 From mathcomp Require Import ssreflect.
 From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap list.
+From iris.base_logic.lib Require Import auth.
 From iris.heap_lang Require Import notation proofmode.
 From crypto Require Import term.
 
@@ -280,6 +281,49 @@ Proof.
 case: lvl => //= _.
 by rewrite /IntoPersistent; rewrite -bi.persistently_emp_intro; eauto.
 Qed.
+
+Definition atomic t : bool :=
+  match t with
+  | TInt _ => false
+  | TPair _ _ => false
+  | TNonce _ => true
+  | TKey _ _ => true
+  | TEnc _ _ => false
+  end.
+
+Fixpoint atoms t : gset term :=
+  match t with
+  | TInt _ => ∅
+  | TPair t1 t2 => atoms t1 ∪ atoms t2
+  | TNonce _ => {[t]}
+  | TKey _ _ => {[t]}
+  | TEnc _ _ => ∅
+  end.
+
+Notation nonce := loc (only parsing).
+Implicit Types (n : nonce).
+
+Context `{!heapG Σ}.
+
+Definition nonceT lvl n : iProp Σ :=
+  meta n (nroot.@"crypto".@"nonce") lvl.
+
+Definition allocationUR :=
+  authUR (gmapUR term (gset_disjUR term)).
+
+Class cryptoG := CryptoG {
+  crypto_inG :> inG Σ allocationUR;
+  crypto_name : gname;
+}.
+
+Definition to_allocation (AM : gmap term (gset term)) :=
+  fmap GSet AM.
+
+Definition crypto_inv (AM : gmap term (gset term)) : Prop :=
+  ∀ t, t ∈ dom (gset term) AM →
+  ∀ t', t' ∈ atoms t →
+  ∃ T, AM !! t' = Some T ∧ t ∈ T.
+coPset
 
 Inductive res :=
 | RNonce of level

@@ -3,7 +3,7 @@ From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import lib term crypto1.
+From crypto Require Import lib term crypto.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

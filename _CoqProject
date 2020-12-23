@@ -3,10 +3,11 @@
 -R . crypto
 
 lib.v
+coGset_disj.v
 term.v
 basic.v
 symbols.v
-crypto1.v
+crypto.v
 primitives.v
 tactics.v
 nsl.v
