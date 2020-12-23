@@ -120,6 +120,12 @@ Qed.
 Global Instance countable_term : Countable term.
 Proof. apply (inj_countable' _ _ val_of_termK). Qed.
 
+Definition int_of_term (t : term) :=
+  match t with TInt n => Some n | _ => None end.
+
+Global Instance infinite_term : Infinite term.
+Proof. by apply (inj_infinite TInt int_of_term). Qed.
+
 Fixpoint nonces_of_term t : gset loc :=
   match t with
   | TInt _ => ∅
