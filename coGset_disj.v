@@ -69,3 +69,5 @@ Section coGset_disj.
   Proof. split; try apply _ || done. intros [X|]; coGset_disj_solve. Qed.
   Canonical Structure coGset_disjUR := UcmraT (coGset_disj A) coGset_disj_ucmra_mixin.
 End coGset_disj.
+
+Arguments coGset_disjUR A {_ _ _} : assert.

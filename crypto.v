@@ -3,7 +3,7 @@ From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap list.
 From iris.base_logic.lib Require Import auth.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import term.
+From crypto Require Import term coGset_disj.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -30,7 +30,8 @@ have: x ∈ ({[x]} : gset K) by rewrite elem_of_singleton.
 rewrite -e elem_of_dom; case=> y m_x; exists y.
 apply: map_eq=> x'; case: (decide (x' = x))=> [ {x'}->|ne].
   by rewrite lookup_singleton.
-by rewrite lookup_singleton_ne // -not_elem_of_dom e elem_of_singleton.
+rewrite lookup_singleton_ne // -(@not_elem_of_dom _ _ (gset K)).
+by rewrite e elem_of_singleton.
 Qed.
 
 Definition cryptoN := nroot.@"crypto".
@@ -182,15 +183,18 @@ End Levels.
 Section Resources.
 
 Context (Σ : gFunctors).
-Notation key_inv := (prodO locO termO -n> iPropO Σ).
-Implicit Types Φ : key_inv.
+Notation iProp := (iProp Σ).
+Notation iPropO := (iPropO Σ).
+Notation iPropI := (iPropI Σ).
+Notation key_pred := (prodO termO termO -n> iPropO).
+Implicit Types Φ : key_pred.
 Implicit Types l : loc.
 Implicit Types lvl : level.
 Implicit Types γ : gname.
 
-Implicit Types P Q : iProp Σ.
+Implicit Types P Q : iProp.
 
-Definition guarded lvl P : iProp Σ :=
+Definition guarded lvl P : iProp :=
   if lvl is Sec then P else emp.
 
 Lemma guarded_leq lvl1 lvl2 P :
@@ -246,7 +250,7 @@ Proof.
 iIntros "HP #PQ"; by case: lvl => //; iApply "PQ".
 Qed.
 
-Lemma guarded_exist T lvl (φ : T -> iProp Σ) :
+Lemma guarded_exist T lvl (φ : T -> iProp) :
   Inhabited T →
   guarded lvl (∃ x : T, φ x) ⊣⊢ ∃ x : T, guarded lvl (φ x).
 Proof.
@@ -255,26 +259,26 @@ apply (anti_symm _); last by eauto.
 by iIntros "_"; iExists inhabitant.
 Qed.
 
-Global Instance guarded_from_exist T lvl (φ : T -> iProp Σ) :
+Global Instance guarded_from_exist T lvl (φ : T -> iProp) :
   Inhabited T →
   FromExist (guarded lvl (∃ x, φ x)) (λ x, guarded lvl (φ x)).
 Proof.
 by move => ?; rewrite /FromExist guarded_exist.
 Qed.
 
-Global Instance guarded_into_exist T lvl (φ : T -> iProp Σ) :
+Global Instance guarded_into_exist T lvl (φ : T -> iProp) :
   Inhabited T →
   IntoExist (guarded lvl (∃ x, φ x)) (λ x, guarded lvl (φ x)).
 Proof.
 by move => ?; rewrite /IntoExist guarded_exist.
 Qed.
 
-Lemma guarded_box lvl (P : iProp Σ) : □ guarded lvl P ⊣⊢ guarded lvl (□ P).
+Lemma guarded_box lvl (P : iProp) : □ guarded lvl P ⊣⊢ guarded lvl (□ P).
 Proof.
 case: lvl => //=; by rewrite bi.intuitionistically_emp.
 Qed.
 
-Global Instance guarded_box_into_persistent p lvl (P Q : iProp Σ) :
+Global Instance guarded_box_into_persistent p lvl (P Q : iProp) :
   IntoPersistent p P Q →
   IntoPersistent p (guarded lvl P) (guarded lvl Q).
 Proof.
@@ -300,216 +304,182 @@ Fixpoint atoms t : gset term :=
   | TEnc _ _ => ∅
   end.
 
+Definition owners t : gset term :=
+  match t with
+  | TKey _ t => atoms t
+  | _ => ∅
+  end.
+
 Notation nonce := loc (only parsing).
-Implicit Types (n : nonce).
+Implicit Types (a : nonce).
 
 Context `{!heapG Σ}.
 
-Definition nonceT lvl n : iProp Σ :=
-  meta n (nroot.@"crypto".@"nonce") lvl.
+Inductive key_data :=
+| KeyData of level & level & prodO termO termO -n> iPropO.
 
-Definition allocationUR :=
-  authUR (gmapUR term (gset_disjUR term)).
+Implicit Types kd : key_data.
 
-Class cryptoG := CryptoG {
-  crypto_inG :> inG Σ allocationUR;
-  crypto_name : gname;
-}.
-
-Definition to_allocation (AM : gmap term (gset term)) :=
-  fmap GSet AM.
-
-Definition crypto_inv (AM : gmap term (gset term)) : Prop :=
-  ∀ t, t ∈ dom (gset term) AM →
-  ∀ t', t' ∈ atoms t →
-  ∃ T, AM !! t' = Some T ∧ t ∈ T.
-coPset
-
-Inductive res :=
-| RNonce of level
-| RKey of level & level & prodO locO termO -n> iPropO Σ.
-
-Global Instance res_equiv : Equiv res := λ r1 r2,
-  match r1, r2 with
-  | RNonce lvl1, RNonce lvl2 => lvl1 = lvl2
-  | RKey lvl11 lvl12 P1, RKey lvl21 lvl22 P2 =>
+Global Instance key_data_equiv : Equiv key_data := λ kd1 kd2,
+  match kd1, kd2 with
+  | KeyData lvl11 lvl12 P1, KeyData lvl21 lvl22 P2 =>
     lvl11 = lvl21 ∧ lvl12 = lvl22 ∧ P1 ≡ P2
-  | _, _ => False
   end.
 
-Implicit Types r : res.
-
-Global Instance res_dist : Dist res := λ n r1 r2,
-  match r1, r2 with
-  | RNonce lvl1, RNonce lvl2 => lvl1 = lvl2
-  | RKey lvl11 lvl12 P1, RKey lvl21 lvl22 P2 =>
+Global Instance key_data_dist : Dist key_data := λ n kd1 kd2,
+  match kd1, kd2 with
+  | KeyData lvl11 lvl12 P1, KeyData lvl21 lvl22 P2 =>
     lvl11 = lvl21 ∧ lvl12 = lvl22 ∧ P1 ≡{n}≡ P2
-  | _, _ => False
   end.
 
-Lemma res_ofe_mixin : OfeMixin res.
+Lemma key_data_ofe_mixin : OfeMixin key_data.
 Proof.
 split.
-- move=> r1 r2; case: r1=> *; case: r2=> *;
+- move=> kd1 kd2; case: kd1=> *; case: kd2=> *;
   rewrite /equiv /dist /= ?forall_and_distr ?equiv_dist;
   intuition eauto using 0.
 - rewrite /dist; move=> n; split.
   + case=> * //=; by apply equiv_dist.
-  + case=> [lvl1|lvl11 lvl12 P1] [lvl2|lvl21 lvl22 P2] //=;
+  + case=> [lvl11 lvl12 P1] [lvl21 lvl22 P2] //=;
     intuition eauto.
-  + case=> [?|???] [?|???] //= [?|???] //=;
+  + case=> [???] [???] //= [???] //=;
     intuition (try congruence); etransitivity; eauto.
-- rewrite /dist => n [?|???] [?|???] //=;
+- rewrite /dist => n [???] [???] //=;
   intuition eauto using dist_S.
 Qed.
-Canonical resO := OfeT res res_ofe_mixin.
+Canonical key_dataO := OfeT key_data key_data_ofe_mixin.
 
-Lemma res_equivI (r1 r2 : res) :
-  r1 ≡ r2 ⊣⊢@{iPropI Σ}
-  match r1, r2 with
-  | RNonce lvl1, RNonce lvl2 => ⌜lvl1 = lvl2⌝
-  | RKey lvl_enc1 lvl_dec1 Φ1, RKey lvl_enc2 lvl_dec2 Φ2 =>
+Lemma key_data_equivI (kd1 kd2 : key_data) :
+  kd1 ≡ kd2 ⊣⊢@{iPropI}
+  match kd1, kd2 with
+  | KeyData lvl_enc1 lvl_dec1 Φ1, KeyData lvl_enc2 lvl_dec2 Φ2 =>
     ⌜lvl_enc1 = lvl_enc2⌝ ∧ ⌜lvl_dec1 = lvl_dec2⌝ ∧ Φ1 ≡ Φ2
-  | _, _ => False
   end.
-Proof. case: r1=> *; case: r2=> * /=; by uPred.unseal. Qed.
+Proof. case: kd1=> *; case: kd2=> * /=; by uPred.unseal. Qed.
 
-Global Instance discrete_RNonce lvl : Discrete (RNonce lvl).
-Proof. by case. Qed.
-
-Global Instance RKey_proper n :
-  Proper ((=) ==> (=) ==> dist n ==> dist n) RKey.
+Global Instance KeyData_proper n :
+  Proper ((=) ==> (=) ==> dist n ==> dist n) KeyData.
 Proof.
 move=> ?? -> ?? -> Φ1 Φ2 e /=.
 rewrite /dist /=; eauto.
 Qed.
 
-Class resG := {
-  res_inG :> inG Σ (agreeR resO);
+Definition term_data : Type :=
+  gmap term level *
+  gmap term (coGset term) *
+  gmap term key_pred.
+
+Definition term_data' : Type :=
+  gmap term (agree level) *
+  gmap term (coGset_disj term) *
+  gmap term (agree key_pred).
+
+Definition term_data'UR :=
+  Eval hnf in (fun (sT : ucmraT) (f : term_data' -> sT) => sT) _ (fun x => x).
+
+Definition to_term_data' (td : term_data) : term_data' :=
+  let '(lvls, Ts, kps) := td in
+  (fmap to_agree lvls, fmap CoGset Ts, fmap to_agree kps).
+
+Class cryptoG := CryptoG {
+  crypto_inG :> authG Σ term_data'UR;
+  crypto_name : gname;
 }.
 
-Context `{!resG, !heapG Σ}.
+Context `{!cryptoG}.
 
-Definition is_res γ r : iProp Σ := own γ (to_agree r).
+Definition declared_nonces (ts : gset term) : iProp :=
+  ∀ a, ⌜TNonce a ∈ ts⌝ → meta a (cryptoN.@"nonce") ().
 
-Global Instance is_res_proper n : Proper ((=) ==> dist n ==> dist n) is_res.
-Proof. solve_proper. Qed.
+Definition term_data_inv (td : term_data) : iProp :=
+  let '(lvls, Ts, kps) := td in
+  declared_nonces (dom _ lvls) ∗
+  ⌜∀ t, t ∈ dom (gset term) lvls → atomic t⌝ ∗
+  ⌜∀ t, lvls !! t = Some Sec ↔ is_Some (Ts !! t)⌝ ∗
+  ⌜∀ t, t ∈ dom (gset term) lvls →
+   ∀ t' T, t' ∈ owners t → lvls !! t' = Some Sec → Ts !! t' = Some T →
+   t ∉ T⌝ ∗
+  ⌜∀ t T t', Ts !! t = Some T → t' ∉ T →
+   t ∈ owners t' ∧ t' ∈ dom (gset term) lvls⌝.
 
-Lemma is_res_agree γ r1 r2 :
-  is_res γ r1 -∗ is_res γ r2 -∗ r1 ≡ r2.
+Definition crypto_inv :=
+  auth_inv crypto_name to_term_data' term_data_inv.
+
+Definition crypto_ctx :=
+  auth_ctx crypto_name cryptoN to_term_data' term_data_inv.
+
+Definition crypto_own td :=
+  auth_own crypto_name (to_term_data' td).
+
+Definition atomicT lvl t :=
+  crypto_own ({[t := lvl]}, ∅, ∅).
+
+Global Instance atomicT_persistent lvl t : Persistent (atomicT lvl t).
 Proof.
-iIntros "#own1 #own2".
-iPoseProof (own_valid_2 with "own1 own2") as "e".
-by rewrite agree_validI agree_equivI.
+rewrite /atomicT /crypto_own /to_term_data' !fmap_empty.
+by apply _.
 Qed.
 
-Definition resT γ l : iProp Σ :=
-  meta l (cryptoN.@"res") γ.
-
-Lemma resT_persistent γ l : Persistent (resT γ l).
-Proof. apply _. Qed.
-
-Lemma resT_agree γ1 γ2 l :
-  resT γ1 l -∗ resT γ2 l -∗ ⌜γ1 = γ2⌝.
-Proof. iApply meta_agree. Qed.
-
-Definition resT' r l : iProp Σ := ∃ γ, resT γ l ∗ is_res γ r.
-
-Lemma resT'_persistent r l : Persistent (resT' r l).
-Proof. apply _. Qed.
-
-Lemma resT'_agree r1 r2 l :
-  resT' r1 l -∗ resT' r2 l -∗ r1 ≡ r2.
+Lemma atomicT_agree lvl1 lvl2 t :
+  atomicT lvl1 t -∗
+  atomicT lvl2 t -∗
+  ⌜lvl1 = lvl2⌝.
 Proof.
-iDestruct 1 as (γ1) "[meta1 own1]".
-iDestruct 1 as (γ2) "[meta2 own2]".
-iPoseProof (meta_agree with "meta1 meta2") as "->".
+iIntros "own1 own2".
 iPoseProof (own_valid_2 with "own1 own2") as "#valid".
-by rewrite agree_validI agree_equivI.
+rewrite auth_validI /= -!pair_op !uPred.prod_validI /=.
+iDestruct "valid" as "([#valid _] & _)".
+rewrite !map_fmap_singleton singleton_op gmap_validI.
+iSpecialize ("valid" $! t); rewrite lookup_singleton.
+rewrite uPred.option_validI agree_validI agree_equivI.
+by iPoseProof "valid" as "->".
 Qed.
 
-Definition nonceT lvl l : iProp Σ := resT' (RNonce lvl) l.
+Definition freshT t T :=
+  crypto_own (∅, {[t := T]}, ∅).
 
-Lemma nonceT_agree lvl1 lvl2 l :
-  nonceT lvl1 l -∗ nonceT lvl2 l -∗ ⌜lvl1 = lvl2⌝.
+Definition key_predT Φ t :=
+  crypto_own (∅, ∅, {[t := Φ]}).
+
+Global Instance key_predT_persistent Φ t : Persistent (key_predT Φ t).
 Proof.
-iIntros "Hown1 Hown2".
-by iPoseProof (resT'_agree with "Hown1 Hown2") as "%Hvalid".
+rewrite /key_predT /crypto_own /to_term_data' !fmap_empty.
+by apply _.
 Qed.
 
-Global Instance persistent_nonceT lvl l : Persistent (nonceT lvl l).
-Proof. apply _. Qed.
-
-Global Instance timeless_nonceT lvl l : Timeless (nonceT lvl l).
-Proof. apply _. Qed.
-
-Definition akeyT lvl_enc lvl_dec Φ l : iProp Σ :=
-  resT' (RKey lvl_enc lvl_dec Φ) l.
-
-Global Instance persistent_akeyT lvl_enc lvl_dec Φ l :
-  Persistent (akeyT lvl_enc lvl_dec Φ l).
-Proof. apply _. Qed.
-
-Global Instance akeyT_proper n :
-  Proper ((=) ==> (=) ==> dist n ==> (=) ==> dist n) akeyT.
-Proof. rewrite /akeyT /resT'; solve_proper. Qed.
-
-Lemma akeyT_agree lvl_enc1 lvl_enc2 lvl_dec1 lvl_dec2 Φ1 Φ2 l :
-  akeyT lvl_enc1 lvl_dec1 Φ1 l -∗
-  akeyT lvl_enc2 lvl_dec2 Φ2 l -∗
-  ⌜lvl_enc1 = lvl_enc2⌝ ∗
-  ⌜lvl_dec1 = lvl_dec2⌝ ∗
+Lemma key_predT_agree Φ1 Φ2 t :
+  key_predT Φ1 t -∗
+  key_predT Φ2 t -∗
   Φ1 ≡ Φ2.
 Proof.
-iIntros "Hres1 Hres2".
-iPoseProof (resT'_agree with "Hres1 Hres2") as "#Hres".
-by rewrite res_equivI; iDestruct "Hres" as "(? & ? & ?)"; eauto.
+iIntros "own1 own2".
+iPoseProof (own_valid_2 with "own1 own2") as "#valid".
+rewrite auth_validI /= -!pair_op !uPred.prod_validI /=.
+iDestruct "valid" as "([_ _] & #valid)".
+rewrite !map_fmap_singleton singleton_op gmap_validI.
+iSpecialize ("valid" $! t); rewrite lookup_singleton.
+by rewrite uPred.option_validI agree_validI agree_equivI.
 Qed.
-
-Definition keyT kt rs Φ l : iProp Σ :=
-  match kt with
-  | Enc => ∃ rs_dec, akeyT rs rs_dec Φ l
-  | Dec => ∃ rs_enc, akeyT rs_enc rs Φ l
-  end.
-
-Lemma keyT_agree kt rs1 rs2 Φ1 Φ2 l :
-  keyT kt rs1 Φ1 l -∗
-  keyT kt rs2 Φ2 l -∗
-  ⌜rs1 = rs2⌝ ∗ Φ1 ≡ Φ2.
-Proof.
-case: kt=> /=.
-- iDestruct 1 as (rs1') "Hres1".
-  iDestruct 1 as (rs2') "Hres2".
-  by iPoseProof (akeyT_agree with "Hres1 Hres2") as "(<-&<-&?)";
-  eauto.
-- iDestruct 1 as (rs1') "Hres1".
-  iDestruct 1 as (rs2') "Hres2".
-  by iPoseProof (akeyT_agree with "Hres1 Hres2") as "(<-&<-&?)";
-  eauto.
-Qed.
-
-Global Instance persistent_keyT kt rs Φ l : Persistent (keyT kt rs Φ l).
-Proof. by case: kt; apply _. Qed.
 
 (** [termT lvl t] holds when the term [t] can be declared public after
-encrypting it with any of the readers lvl.  If [lvl = Pub], [t] is considered
-public and does not have to be encrypted.
+encrypting it.  If [lvl = Pub], [t] is considered public and does not have to be
+encrypted.  *)
 
-TODO: Allow keys of more general forms.
-*)
-
-Fixpoint termT_def lvl t : iProp Σ :=
+Fixpoint termT_def lvl t : iProp :=
   match t with
   | TInt _ => True
   | TPair t1 t2 => termT_def lvl t1 ∗ termT_def lvl t2
-  | TNonce l  => ∃ lvl', nonceT lvl' l ∗ ⌜lvl' ⊑ lvl⌝
-  | TKey kt (TNonce l) => ∃ lvl' Φ, keyT kt lvl' Φ l ∗ ⌜lvl' ⊑ lvl⌝
-  | TEnc (TNonce l) t =>
-    ∃ lvl_enc lvl_dec Φ,
-      akeyT lvl_enc lvl_dec Φ l
-      ∗ (□ Φ (l, t) ∗ termT_def (lvl ⊔ lvl_dec) t ∨
-         ⌜lvl_enc = Pub⌝ ∗ termT_def Pub t)
-  | _ => False
+  | TNonce _  => ∃ lvl', atomicT lvl' t ∗ ⌜lvl' ⊑ lvl⌝
+  | TKey _ _ => ∃ lvl', atomicT lvl' t ∗ ⌜lvl' ⊑ lvl⌝
+  | TEnc k t =>
+    ∃ lvl_enc,
+      atomicT lvl_enc (TKey Enc k) ∗ (
+      ⌜lvl_enc = Pub⌝ ∗ termT_def Pub t ∨
+      ∃ lvl_dec Φ,
+        atomicT lvl_dec (TKey Dec k) ∗
+        key_predT Φ k ∗
+        □ Φ (k, t) ∗
+        termT_def (lvl ⊔ lvl_dec) t)
   end.
 
 Definition termT_aux : seal termT_def. by eexists. Qed.
@@ -519,53 +489,127 @@ Definition termT_eq : termT = termT_def := seal_eq termT_aux.
 Global Instance persistent_termT lvl t :
   Persistent (termT lvl t).
 Proof.
-rewrite termT_eq; elim: t lvl; try by [move => *; apply _].
-- by move=> ?; case=> *; apply _.
-- by case=> *; apply _.
+by rewrite termT_eq; elim: t lvl => /= *; apply _.
+Qed.
+
+(** A stricter version of [termT] that does not allow subtyping *)
+Definition stermT lvl t : iProp :=
+  termT lvl t ∗ □ ∀ lvl', termT lvl' t -∗ ⌜lvl ⊑ lvl'⌝.
+
+Global Instance stermT_persistent lvl t : Persistent (stermT lvl t).
+Proof. apply _. Qed.
+
+Lemma sub_termT lvl lvl' t :
+  lvl ⊑ lvl' →
+  termT lvl t -∗
+  termT lvl' t.
+Proof.
+elim: t lvl lvl' => [n|t1 IH1 t2 IH2|l|kt k _|k _ t IH] lvl lvl' sub;
+rewrite termT_eq /= -?termT_eq //.
+- by iIntros "[#Ht1 #Ht2]"; rewrite IH1 // IH2 //; iSplit.
+- iDestruct 1 as (lvl0) "[#Hnonce %sub0]".
+  iExists lvl0; iSplit=> //; iPureIntro; by etransitivity.
+- iDestruct 1 as (lvl0) "[#Hkey %sub0]".
+  iExists lvl0; iSplit=> //; iPureIntro; by etransitivity.
+- iDestruct 1 as (lvl_enc) "[#enc #Ht]".
+  iExists lvl_enc; iSplit => //.
+  iDestruct "Ht" as "[Ht|Ht]"; first by iLeft.
+  iDestruct "Ht" as (lvl_dec Φ) "(dec & HΦ & tP & Ht)".
+  iRight; iExists lvl_dec, Φ; do 3![iSplit => //].
+  iApply (IH with "Ht").
+  by case: lvl lvl' lvl_dec sub=> [] [] [].
 Qed.
 
 Lemma termT_int lvl n : ⊢ termT lvl (TInt n).
 Proof. by rewrite termT_eq. Qed.
 
-Lemma termT_nonce lvl l :
-  nonceT lvl l -∗
-  termT lvl (TNonce l).
-Proof.
-by iIntros "#Hl"; rewrite termT_eq; iExists lvl; eauto.
-Qed.
+Lemma stermT_int n : ⊢ stermT Pub (TInt n).
+Proof. by rewrite /stermT termT_eq /=; iSplit; eauto. Qed.
+Hint Resolve stermT_int : typing.
 
-Lemma termT_aenc_pub_pub lvl Φ k t :
-  akeyT Pub lvl Φ k -∗
+Lemma termT_aenc_pub_pub k t :
+  termT Pub (TKey Enc k) -∗
   termT Pub t -∗
-  termT Pub (TEnc (TNonce k) t).
+  termT Pub (TEnc k t).
 Proof.
-rewrite {2}termT_eq /= -termT_eq.
-iIntros "#Hk #Ht"; by iExists Pub, lvl, Φ; eauto.
+rewrite {1 3}termT_eq /= -termT_eq.
+iDestruct 1 as (lvl') "[Hk %leq]".
+case: lvl' leq => [] // _.
+by iIntros "Ht"; iExists Pub; eauto.
 Qed.
 
-Lemma termT_aenc_pub_sec Φ k t :
-  akeyT Pub Sec Φ k -∗
+Lemma termT_atomic lvl t : atomic t → atomicT lvl t -∗ termT lvl t.
+Proof.
+iIntros (Ht) "H"; rewrite termT_eq; case: t Ht => //= *; eauto.
+Qed.
+
+Lemma termT_atomicE lvl t :
+  atomic t →
+  termT lvl t -∗
+  ∃ lvl', atomicT lvl' t ∗ ⌜lvl' ⊑ lvl⌝.
+Proof.
+by case: t => // [a|kt k] _; rewrite termT_eq.
+Qed.
+
+Lemma stermT_atomic lvl t :
+  atomic t →
+  atomicT lvl t -∗
+  stermT lvl t.
+Proof.
+move=> atomic_t; iIntros "#atomic"; iSplit; first by iApply termT_atomic.
+iIntros "!>" (lvl') "#Ht".
+iDestruct (termT_atomicE with "Ht") as (lvl'') "[atomic' %leq]" => //.
+by iPoseProof (atomicT_agree with "atomic atomic'") as "->".
+Qed.
+
+Lemma stermT_atomicE lvl t :
+  atomic t →
+  stermT lvl t -∗
+  atomicT lvl t.
+Proof.
+iIntros (atomic_t) "[#Ht #Hmin]".
+iDestruct (termT_atomicE with "Ht") as (lvl') "[atomic %leq]" => //.
+iPoseProof (termT_atomic with "atomic") as "Ht'" => //.
+iPoseProof ("Hmin" with "Ht'") as "%leq'".
+by case: lvl lvl' leq leq' => [] // [].
+Qed.
+
+Lemma stermT_TKeyE lvl kt k : stermT lvl (TKey kt k) -∗ atomicT lvl (TKey kt k).
+Proof. by apply: stermT_atomicE. Qed.
+
+Lemma termT_aenc_pub_sec lvl Φ k t :
+  termT  lvl (TKey Enc k) -∗
+  stermT Sec (TKey Dec k) -∗
+  key_predT Φ k -∗
   □ Φ (k, t) -∗
   termT Sec t -∗
-  termT Pub (TEnc (TNonce k) t).
+  termT Pub (TEnc k t).
 Proof.
-rewrite {2}termT_eq /= -termT_eq.
-iIntros "#Hk #Φt #Ht".
-by iExists Pub, Sec, Φ; eauto.
+iIntros "#Henc #Hdec #HΦ #HΦt #Ht".
+iDestruct (termT_atomicE with "Henc") as (lvl') "[Henc' %leq]" => //.
+iPoseProof (stermT_TKeyE with "Hdec") as "Hdec'".
+rewrite {3}termT_eq /=.
+iExists lvl'; iSplit => //; iRight.
+by iExists Sec, Φ; rewrite -termT_eq; eauto.
 Qed.
 
 Lemma termT_adec_pub lvl Φ k t :
-  termT Pub (TEnc (TNonce k) t) -∗
-  akeyT Pub lvl Φ k -∗
+  termT Pub (TEnc k t) -∗
+  termT Pub (TKey Enc k) -∗
+  termT lvl (TKey Dec k) -∗
+  key_predT Φ k -∗
   termT Pub t ∨ □ Φ (k, t) ∗ termT lvl t.
 Proof.
 rewrite {1}termT_eq /= -termT_eq.
-iDestruct 1 as (lvl_enc lvl_dec Φ') "[Hk' Ht]".
-iIntros "Hk".
-iPoseProof (akeyT_agree with "Hk' Hk") as "(-> & -> & e)".
-rewrite ofe_morO_equivI; iRewrite -("e" $! (k, t)).
-iDestruct "Ht" as "[[Ht1 Ht2]|[_ Ht]]"; eauto.
-iRight; iFrame; by case: lvl.
+iDestruct 1 as (lvl_enc) "[#atomic_enc [[-> ?]|#Ht]]"; eauto.
+iIntros "#enc #dec #HΦ".
+iDestruct "Ht" as (lvl_dec Φ') "(atomic_dec & HΦ' & tP & Ht)".
+iPoseProof (key_predT_agree with "HΦ' HΦ") as "e".
+rewrite ofe_morO_equivI; iRewrite ("e" $! (k, t)) in "tP"; iClear "e".
+iDestruct (termT_atomicE with "dec") as (lvl_dec') "[atomic_dec' %leq]" => //.
+iPoseProof (atomicT_agree with "atomic_dec' atomic_dec") as "->".
+iRight; iSplit => //.
+iApply (sub_termT with "Ht"); by case: lvl_dec leq.
 Qed.
 
 Lemma termT_to_list t ts lvl :
@@ -616,24 +660,6 @@ rewrite termT_eq /= -termT_eq; iDestruct "Hts" as "[??]".
 by iFrame; iApply IH.
 Qed.
 
-Lemma termT_kenc lvl_enc lvl_dec Φ k :
-  akeyT lvl_enc lvl_dec Φ k -∗
-  termT lvl_enc (TKey Enc (TNonce k)).
-Proof.
-iIntros "kP"; rewrite termT_eq /=.
-iExists lvl_enc, Φ; iSplit => //.
-by eauto.
-Qed.
-
-Lemma termT_kdec lvl_enc lvl_dec Φ k :
-  akeyT lvl_enc lvl_dec Φ k -∗
-  termT lvl_dec (TKey Dec (TNonce k)).
-Proof.
-iIntros "kP"; rewrite termT_eq /=.
-iExists lvl_dec, Φ; iSplit => //.
-by eauto.
-Qed.
-
 Lemma proj_termT t n lvl t' :
   Spec.proj t n = Some t' →
   termT lvl t -∗
@@ -645,38 +671,6 @@ elim: t n=> // t1 IH1 t2 IH2 [|n] /=.
 move=> {}/IH2 IH2; iIntros "[??]".
 by iApply IH2.
 Qed.
-
-Lemma sub_termT lvl lvl' t :
-  lvl ⊑ lvl' →
-  termT lvl t -∗
-  termT lvl' t.
-Proof.
-elim: t lvl lvl' => [n|t1 IH1 t2 IH2|l|kt k _|k _ t IH] lvl lvl' sub;
-rewrite termT_eq /= -?termT_eq //.
-- by iIntros "[#Ht1 #Ht2]"; rewrite IH1 // IH2 //; iSplit.
-- iDestruct 1 as (lvl0) "[#Hnonce %sub0]".
-  iExists lvl0; iSplit=> //; iPureIntro; by etransitivity.
-- case: k => //= k.
-  iDestruct 1 as (lvl0 Φ) "[#Hkey %sub0]".
-  iExists lvl0, Φ; iSplit=> //; iPureIntro; by etransitivity.
-- case: k => //= k.
-  iDestruct 1 as (lvl_enc lvl_dec Φ) "[#Hkey #Ht]".
-  iExists lvl_enc, lvl_dec, Φ; iSplit=> //.
-  iDestruct "Ht" as "[[? Ht]|Ht]"; last by iRight.
-  iLeft; iSplit=> //; iApply (IH with "Ht").
-  by case: lvl lvl' lvl_dec sub=> [] [] [].
-Qed.
-
-(** A stricter version of [termT] that does not allow subtyping *)
-Definition stermT lvl t : iProp Σ :=
-  termT lvl t ∗ □ ∀ lvl', termT lvl' t -∗ ⌜lvl ⊑ lvl'⌝.
-
-Global Instance stermT_persistent lvl t : Persistent (stermT lvl t).
-Proof. apply _. Qed.
-
-Lemma stermT_int n : ⊢ stermT Pub (TInt n).
-Proof. by rewrite /stermT termT_eq /=; iSplit. Qed.
-Hint Resolve stermT_int : typing.
 
 Lemma stermT_pair lvl1 t1 lvl2 t2 :
   stermT lvl1 t1 -∗
@@ -694,27 +688,6 @@ iIntros "[#type1 #min1] [#type2 #min2]"; iSplit.
   by iPureIntro; rewrite level_joinP; split.
 Qed.
 
-Lemma stermT_nonce lvl l :
-  nonceT lvl l -∗
-  stermT lvl (TNonce l).
-Proof.
-iIntros "#Hn"; iSplit; first by iApply termT_nonce.
-rewrite termT_eq /=; iIntros "!>" (lvl').
-iDestruct 1 as (lvl'') "[#Hn' %Hsub']".
-iPoseProof (resT'_agree with "Hn Hn'") as "e".
-by rewrite res_equivI; iPoseProof "e" as "->".
-Qed.
-
-Lemma stermT_key lvl kt Φ l :
-  keyT kt lvl Φ l -∗
-  stermT lvl (TKey kt (TNonce l)).
-Proof.
-iIntros "#Hk"; rewrite /stermT termT_eq /=.
-iSplit; first by iExists lvl, Φ; iSplit.
-iIntros "/= !>" (lvl'); iDestruct 1 as (lvl'' Φ') "[#Hk' %Hsub']".
-by iPoseProof (keyT_agree with "Hk Hk'") as "(<-&_)".
-Qed.
-
 Lemma stermTS lvl t :
   termT Pub t -∗
   stermT lvl t -∗
@@ -727,7 +700,7 @@ Qed.
 
 Lemma termT_lvlP lvl t : termT lvl t -∗ ∃ lvl', stermT lvl' t.
 Proof.
-elim: t lvl=> [n|t1 IH1 t2 IH2|n|kt k _|k _ t IH] lvl /=;
+elim: t lvl=> [n|t1 IH1 t2 IH2|n|kt k IHk|k IHk t IHt] lvl /=;
 rewrite termT_eq /= -?termT_eq.
 - iIntros "_"; iExists Pub; iApply stermT_int.
 - iIntros "[#type1 #type2]".
@@ -735,129 +708,93 @@ rewrite termT_eq /= -?termT_eq.
   iDestruct (IH2 with "type2") as (lvl2) "type2'".
   by iExists (lvl1 ⊔ lvl2); iApply stermT_pair.
 - iDestruct 1 as (lvl') "[#Hn %Hsub]".
-  by iExists lvl'; iApply stermT_nonce.
-- case: k; try by [move=> *; iIntros "[]"].
-  move=> k; iDestruct 1 as (lvl' Φ) "[#Hk %Hsub]".
-  by iExists lvl'; iApply stermT_key.
-- case: k; try by [move=> *; iIntros "[]"].
-  move=> k; case: lvl.
+  by iExists lvl'; iApply stermT_atomic.
+- iDestruct 1 as (lvl') "[#Hk %Hsub]".
+  by iExists lvl'; iApply stermT_atomic.
+- case: lvl.
     iIntros "#Ht"; iExists Pub; iSplit=> //.
       by rewrite termT_eq /= -termT_eq.
     by iIntros "!>" (lvl) "_".
-  iDestruct 1 as (lvl_enc lvl_dec Φ) "[#Hk #Ht]".
+  iDestruct 1 as (lvl_enc) "[#Hk #Ht]".
   rewrite /stermT {3 4}termT_eq /= -termT_eq.
-  iDestruct "Ht" as "[[#Ht type]|[-> type]]"; last first.
-    iExists Pub; iSplit=> /=; first by iExists _, _, _; iSplit; eauto.
+  iDestruct "Ht" as "[[-> type]|Ht]".
+    iExists Pub; iSplit; first by iExists _; iSplit; eauto.
     by iIntros "!>" (lvl) "_".
-  iDestruct (IH with "type") as (lvl) "[type' #min']".
+  iDestruct "Ht" as (lvl_dec Φ) "(Hdec & HΦ & tP & type)".
+  iDestruct (IHt with "type") as (lvl) "[type' #min']".
   case: lvl.
     iExists Pub; iSplit=> /=.
-      iExists _, _, _; iSplit=> //.
-      by iLeft; iSplit=> //; case: lvl_dec.
+      iExists _; iSplit => //.
+      by iRight; iExists lvl_dec, Φ; do 3![iSplit => //]; case: lvl_dec.
     by iIntros "!>" (lvl) "_".
   case: lvl_dec.
     iExists Sec; iSplit=> /=.
-      iExists _, _, _; iSplit=> //.
-      by iLeft; iSplit=> //; case: lvl_dec.
+      iExists _; iSplit => //.
+      by iRight; iExists _, _; do 3![iSplit=> //]; case: lvl_dec.
     iIntros "!>" (lvl).
-    iDestruct 1 as (lvl_enc' lvl_dec' Φ') "[#Hk' #type'']".
-    iDestruct (akeyT_agree with "Hk Hk'") as "(<-&<-&_)".
-    iDestruct "type''" as "[[_ type'']|[_ type'']]";
-    iPoseProof ("min'" with "type''") as "?"=> //.
-    by case: lvl.
+    iDestruct 1 as (lvl_enc') "[#Hk' #Ht]".
+    iPoseProof (atomicT_agree with "Hk' Hk") as "->".
+    iDestruct "Ht" as "[[_ Ht]|Ht]".
+      case: lvl=> //; by iApply ("min'" with "Ht").
+    iDestruct "Ht" as (lvl_dec' Φ') "(Hdec' & _ & _ & type'')".
+    iPoseProof (atomicT_agree with "Hdec' Hdec") as "->".
+    case: lvl => //.
+    by iPoseProof ("min'" with "type''") as "?".
   iExists Pub; iSplit=> /=.
-    iExists _, _, _; iSplit=> //.
-    by iLeft; iSplit.
+    iExists _; iSplit => //.
+    by iRight; iExists _, _; do 3![iSplit => //]; eauto.
   by iIntros "!>" (lvl) "_".
 Qed.
 
 Lemma termT_adec_pub_sec Φ k t :
-  termT Pub (TEnc (TNonce k) t) -∗
-  akeyT Pub Sec Φ k -∗
+  termT Pub (TEnc k t) -∗
+  termT Pub (TKey Enc k) -∗
+  termT Sec (TKey Dec k) -∗
+  key_predT Φ k -∗
   ∃ lvl, termT lvl t ∗ guarded lvl (□ Φ (k, t)).
 Proof.
-iIntros "Ht Hk".
-iPoseProof (termT_adec_pub with "Ht Hk") as "[Ht|Ht]".
+iIntros "Ht Henc Hdec Hpred".
+iPoseProof (termT_adec_pub with "Ht Henc Hdec Hpred") as "[Ht|Ht]".
 - by iExists Pub; iSplit.
 - by iExists Sec; iDestruct "Ht" as "[??]"; iSplit.
 Qed.
 
-Definition pub_enc_key k : iProp Σ :=
-  ∃ lvl_dec Φ, akeyT Pub lvl_dec Φ k.
-
-Global Instance pub_enc_key_persistent k : Persistent (pub_enc_key k).
-Proof. apply _. Qed.
-
-Lemma termT_TAEncE k :
-  termT Pub (TKey Enc (TNonce k)) -∗ pub_enc_key k.
-Proof.
-rewrite termT_eq /=.
-iDestruct 1 as (lvl Φ) "[Hk %Hlvl]".
-case: lvl Hlvl => // _.
-iDestruct "Hk" as (lvl_dec) "Hk".
-by rewrite /pub_enc_key; eauto.
-Qed.
-
-Lemma termT_TAEnc lvl_enc lvl_dec Φ k :
-  akeyT lvl_enc lvl_dec Φ k -∗
-  termT lvl_enc (TKey Enc (TNonce k)).
-Proof.
-iIntros; rewrite termT_eq /=.
-by iExists lvl_enc, Φ; iSplit; eauto.
-Qed.
-
 Lemma termT_aenc_pub_secG k Φ lvl t :
-  pub_enc_key k -∗
+  termT Pub (TKey Enc k) -∗
   termT lvl t -∗
-  guarded lvl (akeyT Pub Sec Φ k) -∗
+  guarded lvl (stermT Sec (TKey Dec k)) -∗
+  guarded lvl (key_predT Φ k) -∗
   guarded lvl (□ Φ (k, t)) -∗
-  termT Pub (TEnc (TNonce k) t).
+  termT Pub (TEnc k t).
 Proof.
-iIntros "#Hk #Ht #Hk' #HG"; case: lvl => /=.
-- iDestruct "Hk" as (??) "Hk".
-  by iApply termT_aenc_pub_pub.
+iIntros "#Henc #Ht #Hdec #Hpred #HG"; case: lvl => /=.
+- by iApply termT_aenc_pub_pub.
 - by iApply termT_aenc_pub_sec.
 Qed.
 
-Lemma res_alloc γ E r l :
-  ↑cryptoN.@"res" ⊆ E →
-  is_res γ r -∗
-  meta_token l E ==∗
-  resT' r l.
-Proof.
-iIntros (Hsub) "Hown Hmeta".
-iMod (meta_set E l γ with "Hmeta") as "Hmeta"=> //.
-by rewrite /resT'; eauto.
-Qed.
-
 End Resources.
-
-Arguments RNonce {_} _.
-Arguments nonceT {_ _ _} _ _.
-Arguments akeyT {_ _ _} _ _ _ _.
-Arguments is_res {Σ _} _ _.
-Arguments RKey {Σ} _ _ _.
 
 Section Tagging.
 
 Context (Σ : gFunctors).
 Notation iProp := (iProp Σ).
 Notation iPropO := (iPropO Σ).
-Notation key_inv := (prodO locO termO -n> iPropO).
+Notation key_inv := (prodO termO termO -n> iPropO).
 Implicit Types Φ : key_inv.
-Implicit Types l k : loc.
+Implicit Types l : loc.
 Implicit Types lvl : level.
 Implicit Types γ : gname.
 Implicit Types c : string.
+Implicit Types k t : term.
 
 Class tagG := TagG {
-  tag_inG :> inG Σ (gmapR (loc * string) (agreeR key_inv));
-  tag_name : gname;
+  tag_inG :> inG Σ (gmapR string (agreeR key_inv));
 }.
 
-Context `{!heapG Σ, !resG Σ, !tagG}.
+Context `{!heapG Σ, !cryptoG Σ, !tagG}.
 
 Definition own_tag k c Φ : iProp :=
+  ∃ γ, meta
   own tag_name {[(k, c) := to_agree Φ]}.
 
 Lemma own_tag_persistent k c Φ : Persistent (own_tag k c Φ).
@@ -877,7 +814,7 @@ Qed.
 Lemma own_tag_proper n : Proper (eq ==> eq ==> dist n ==> dist n) own_tag.
 Proof. solve_contractive. Qed.
 
-Definition tagged_inv_def (p : loc * term) : iProp :=
+Definition tagged_inv_def (p : term * term) : iProp :=
   match p.2 with
   | TPair (TInt (Zpos n)) t =>
     ∃ c Φ, ⌜n = encode c⌝ ∗ own_tag p.1 c Φ ∗ □ (Φ : key_inv) (p.1, t)
@@ -902,9 +839,10 @@ case: p=> [] k []; try by apply _.
 by do 2![case; try by apply _].
 Qed.
 
-Definition tag_akeyT lvl c Φ k : iProp :=
-  akeyT lvl Sec (OfeMor tagged_inv) k ∗
+Definition tkey_predT c Φ k : iProp :=
+  key_predT (OfeMor tagged_inv) k ∗
   own_tag k c Φ.
+
 
 Lemma tag_akeyT_persistent lvl c Φ k : Persistent (tag_akeyT lvl c Φ k).
 Proof. apply _. Qed.
