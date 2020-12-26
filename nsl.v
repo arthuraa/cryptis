@@ -812,25 +812,6 @@ case: lvl => //=; iModIntro; by iExists _, _; eauto.
 Qed.
 
 (* MOVE *)
-Global Instance guarded_into_and b lvl (P Q R : iProp Σ) :
-  IntoAnd b P Q R →
-  IntoAnd b (guarded lvl P) (guarded lvl Q) (guarded lvl R).
-Proof.
-by case: b lvl=> [] //= [] //= _; rewrite /IntoAnd /=; eauto.
-Qed.
-
-Lemma stermTP lvl lvl' t :
-  stermT lvl t -∗ termT lvl' t -∗ ⌜lvl ⊑ lvl'⌝.
-Proof. by iIntros "[_ #min]". Qed.
-
-Lemma stermT_eq lvl lvl' t :
-  stermT lvl t -∗ stermT lvl' t -∗ ⌜lvl = lvl'⌝.
-Proof.
-iIntros "[#Ht #min] [#Ht' #min']".
-iPoseProof ("min" with "Ht'") as "%l1".
-iPoseProof ("min'" with "Ht") as "%l2".
-by case: lvl lvl' l1 l2 => [] // [] //.
-Qed.
 (* /MOVE *)
 
 Lemma wp_initiator kA kB (tA : term) lvl E Ψ :
