@@ -283,18 +283,23 @@ Arguments crypto_name {_ _}.
 Global Instance term_data_inhabited : Inhabited term_data.
 Proof. apply _. Qed.
 
-Global Instance declared_nonces_persistent ts :
-  Persistent (declared_nonces ts).
-Proof. apply _. Qed.
+Global Instance declared_persistent t lvl td : Persistent (declared t lvl td).
+Proof. by case: t=> *; apply _. Qed.
+
+Global Instance declared_timeless t lvl td : Timeless (declared t lvl td).
+Proof. by case: t=> *; apply _. Qed.
 
 Global Instance term_data_inv_persistent td : Persistent (term_data_inv td).
-Proof. by case: td => [] [] ???; apply _. Qed.
+Proof. by apply _. Qed.
+
+Global Instance term_data_inv_timeless td : Timeless (term_data_inv td).
+Proof. by apply _. Qed.
 (* /MOVE *)
 
 Lemma twp_mknonce E lvl Ψ :
   ↑cryptoN ⊆ E →
   crypto_ctx -∗
-  (∀ t, termT lvl t -∗ freshT t ⊤ -∗ crypto_meta_token t ⊤ -∗ Ψ t) -∗
+  (∀ t, termT lvl t -∗ owned_terms t ⊤ -∗ crypto_meta_token t ⊤ -∗ Ψ t) -∗
   WP mknonce #()%V @ E [{ Ψ }].
 Proof.
 rewrite /mknonce; iIntros (sub) "#ctx post".
@@ -303,14 +308,14 @@ wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
 iIntros (l) "[Hl Hmeta]".
 iApply fupd_twp.
 iMod (auth_acc to_term_data' with "[ctx own0]") as (td) "(_ & tdP & close)"; eauto.
-iPoseProof "tdP" as "> # (nonces & %atomic & %freed & %owners)".
+iDestruct "tdP" as "> # tdP".
 pose (t := TNonce l); iAssert (⌜td !! t = None⌝)%I as "%undef".
   case e: (td !! t) => [m|] //=.
-  assert (Ht : t ∈ dom (gset term) td) by (apply/elem_of_dom; eauto).
-  iSpecialize ("nonces" $! _ Ht).
-  rewrite meta_eq meta_token_eq.
+  rewrite /term_data_inv big_sepM_forall.
+  iSpecialize ("tdP" $! _ _ e).
+  rewrite /= meta_eq meta_token_eq.
   (* TODO This should be a separate lemma *)
-  iDestruct "nonces" as (γm1) "[own1 meta1]".
+  iDestruct "tdP" as (γm1) "[own1 meta1]".
   iDestruct "Hmeta" as (γm2) "[#own2 meta2]".
   iPoseProof (own_valid_2 with "own1 own2") as "valid".
   rewrite auth_validI /= singleton_op gmap_validI.
@@ -340,68 +345,42 @@ iMod ("close" $! td' (to_term_data' {[t := data]}) with "[]") as "own"; first iS
   rewrite /= /td' fmap_insert map_fmap_singleton /=.
   apply alloc_singleton_local_update => //.
   by rewrite lookup_fmap undef.
-- iModIntro; iSplit.
-    iIntros (l') "%Hl'".
-    move: Hl'; rewrite dom_insert elem_of_union elem_of_singleton.
-    case=> [[->]|Hl'] //.
-    by iApply "nonces".
-  iSplit.
-    iPureIntro => t'.
-    rewrite dom_insert elem_of_union elem_of_singleton.
-    case => [->|] //; exact: atomic.
-  iSplit.
-    iPureIntro => t'.
-    rewrite dom_insert elem_of_union elem_of_singleton.
-    case => [-> //|t'_in t'' T'' γm''].
-    destruct (decide (t'' = t)) as [->|ne].
-      move => _ owned.
-      case/(_ _ t'_in)/(_ _ owned)/elem_of_dom: owners => ?.
-      by rewrite undef.
-    rewrite /td' lookup_insert_ne //.
-    by apply: freed.
-  iPureIntro => t'.
-  rewrite dom_insert elem_of_union elem_of_singleton.
-  by case=> [-> //|/owners]; set_solver.
-iSpecialize ("post" $! (TNonce l)); rewrite val_of_termE /=.
+- iModIntro; rewrite /term_data_inv !big_sepM_forall.
+  iIntros (t'); destruct (decide (t' = t)) as [->|ne].
+    by rewrite lookup_insert; iIntros (?) "%H"; case: H => <- /=.
+  iIntros (m'); rewrite lookup_insert_ne //; iIntros "%def".
+  iSpecialize ("tdP" $! _ _ def).
+  case: t' {def ne} => //= kt k.
+  iDestruct "tdP" as "(%decl & %all_pub & %own)"; iPureIntro.
+  rewrite dom_insert; split; first set_solver.
+  split.
+    move=> all_pub'; apply: all_pub => t' lvl' T' γm' t'_k.
+    have ne: t' ≠ t.
+      move => ?; subst t'.
+      by case/decl/elem_of_dom: t'_k => ?; rewrite undef.
+    by move/(all_pub' _ lvl' T' γm'): t'_k; rewrite lookup_insert_ne //.
+  move=> t' T' γm' t'_k.
+  destruct (decide (t' = t)) as [->|ne].
+    rewrite lookup_insert.
+    by case/decl/elem_of_dom: t'_k => ?; rewrite undef.
+  by rewrite lookup_insert_ne //; apply: own.
 rewrite /to_term_data' !map_fmap_singleton /= pair_split.
 rewrite auth_own_op; iDestruct "own" as "[own #Hγm]".
 rewrite (pair_split {[t := to_agree lvl]}).
 rewrite pair_op_1 auth_own_op; iDestruct "own" as "[#Hlvl own]".
-iModIntro; wp_pures; iApply ("post" with "[] [own] [token]") => //.
-  by iApply termT_atomic; eauto.
-by iExists γm; iSplit.
+rewrite pair_split.
+iModIntro; wp_pures; iSpecialize ("post" $! (TNonce l)).
+rewrite val_of_termE /=; iApply ("post" with "[] [own]") => //.
+  by rewrite termT_eq; eauto.
+by iExists γm; rewrite ucmra_unit_left_id; eauto.
 Qed.
 
 Lemma wp_mknonce E lvl Ψ :
   ↑cryptoN ⊆ E →
   crypto_ctx -∗
-  (∀ t, termT lvl t -∗ freshT t ⊤ -∗ crypto_meta_token t ⊤ -∗ Ψ t) -∗
+  (∀ t, termT lvl t -∗ owned_terms t ⊤ -∗ crypto_meta_token t ⊤ -∗ Ψ t) -∗
   WP mknonce #()%V @ E {{ Ψ }}.
 Proof. by iIntros (?) "#??"; iApply twp_wp; iApply twp_mknonce. Qed.
-
-Lemma twp_mkakey E γ lvl_enc lvl_dec Φ Ψ :
-  is_res γ (RKey lvl_enc lvl_dec Φ) -∗
-  (∀ l, akeyT lvl_enc lvl_dec Φ l -∗
-        meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
-        Ψ (TKey Enc (TNonce l), TKey Dec (TNonce l))%V) -∗
-  WP mkakey #()%V @ E [{ Ψ }].
-Proof.
-rewrite /mkakey; iIntros "#Hown H".
-wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
-iIntros (l) "[Hl Hmeta]".
-rewrite (meta_token_difference l (↑cryptoN.@"res")) //.
-iDestruct "Hmeta" as "[Hmeta1 Hmeta2]".
-iMod (res_alloc _ (RKey lvl_enc lvl_dec Φ) l with "Hown Hmeta1") as "#Hmeta"=> //.
-wp_pures; rewrite val_of_termE /=; iApply "H"=> //.
-Qed.
-
-Lemma wp_mkakey E lvl_enc lvl_dec γ Φ Ψ :
-  is_res γ (RKey lvl_enc lvl_dec Φ) -∗
-  (∀ l, akeyT lvl_enc lvl_dec Φ l -∗
-        meta_token l (⊤ ∖ ↑cryptoN.@"res") -∗
-        Ψ (TKey Enc (TNonce l), TKey Dec (TNonce l))%V) -∗
-  WP mkakey #()%V @ E {{ Ψ }}.
-Proof. by iIntros "#??"; iApply twp_wp; iApply twp_mkakey. Qed.
 
 Lemma twp_enc E t1 t2 Ψ :
   Ψ (repr (Spec.enc t1 t2)) -∗

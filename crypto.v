@@ -348,18 +348,20 @@ Context `{!cryptoG}.
 
 Global Instance cryptoG_authG : authG Σ term_data'UR := @AuthG _ _ _ _.
 
-Definition declared t (td : term_data) : iProp :=
+Definition declared t lvl (td : term_data) : iProp :=
   match t with
   | TNonce a =>
     meta a (cryptoN.@"nonce") ()
   | TKey _ k =>
-    ⌜∀ t T γm, t ∈ atoms k → td !! t = Some (Sec, T, γm)⌝ ∗
-    ⌜∃ t T γm, t ∈ atoms k ∧ td !! t = Some (Sec, T, γm)⌝
+    ⌜atoms k ⊆ dom _ td⌝ ∧
+    ⌜(∀ t' lvl' T γm, t' ∈ atoms k → td !! t' = Some (lvl', T, γm) → lvl' = Pub) →
+     lvl = Pub⌝ ∧
+    ⌜∀ t' T γm, t' ∈ atoms k → td !! t' = Some (Sec, T, γm) → t ∉ T⌝
   | _ => False
   end.
 
 Definition term_data_inv (td : term_data) : iProp :=
-  [∗ set] t ∈ dom (gset term) td, declared t td.
+  [∗ map] t ↦ d ∈ td, declared t d.1.1 td.
 
 Definition crypto_inv :=
   auth_inv crypto_name to_term_data' term_data_inv.
