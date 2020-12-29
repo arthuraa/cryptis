@@ -10,7 +10,7 @@ Import env_notations.
 
 Section Proofs.
 
-Context `{!heapG Σ, !resG Σ}.
+Context `{!heapG Σ, !cryptoG Σ}.
 
 Implicit Types E : coPset.
 Implicit Types l : loc.

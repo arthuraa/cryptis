@@ -57,6 +57,9 @@ Notation TNonce_tag := 2%Z.
 Notation TKey_tag := 3%Z.
 Notation TEnc_tag := 4%Z.
 
+Global Instance term_inhabited : Inhabited term.
+Proof. exact: (populate (TInt 0)). Qed.
+
 Global Instance term_eq_dec : EqDecision term.
 Proof.
 refine (
