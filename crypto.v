@@ -14,6 +14,32 @@ Instance dom_ne {T : ofeT} :
   NonExpansive (dom (gset loc) : gmap loc T -> gset loc).
 Proof. by move=> ??? e ?; rewrite !elem_of_dom e. Qed.
 
+Lemma meta_meta_token `{!heapG Σ, !EqDecision A, !Countable A} l (N : namespace) (E : coPset) (x : A) :
+  ↑N ⊆ E →
+  meta l N x -∗
+  meta_token l E -∗
+  False.
+Proof.
+iIntros (sub) "#meta token".
+rewrite /= meta_eq meta_token_eq.
+iDestruct "token" as (γm1) "[own1 meta1]".
+iDestruct "meta"  as (γm2) "[#own2 meta2]".
+iPoseProof (own_valid_2 with "own1 own2") as "valid".
+rewrite auth_validI /= singleton_op gmap_validI.
+iSpecialize ("valid" $! l).
+rewrite lookup_singleton uPred.option_validI agree_validI agree_equivI.
+iRewrite -"valid" in "meta2".
+iPoseProof (own_valid_2 with "meta1 meta2") as "%valid".
+rewrite namespace_map_valid_eq /= in valid.
+move: valid; rewrite ucmra_unit_right_id.
+case => _ /(_ (positives_flatten N)) valid.
+rewrite lookup_op lookup_empty lookup_singleton in valid.
+assert (positives_flatten N ∈ (↑N : coPset)).
+{ rewrite nclose_eq. apply elem_coPset_suffixes.
+  exists 1%positive. by rewrite left_id_L. }
+case: valid => [//|]; set_solver.
+Qed.
+
 (* I've made an MR for this. *)
 Lemma gmap_equivI `{!EqDecision K, !Countable K, A : ofeT, M : ucmraT}
   (m1 m2 : gmap K A) :
@@ -298,16 +324,16 @@ Definition atomic t : bool :=
   | TInt _ => false
   | TPair _ _ => false
   | TNonce _ => true
-  | TKey _ _ => true
+  | TKey _ _ => false
   | TEnc _ _ => false
   end.
 
-Fixpoint atoms t : gset term :=
+Definition atoms t : gset term :=
   match t with
   | TInt _ => ∅
-  | TPair t1 t2 => atoms t1 ∪ atoms t2
+  | TPair t1 t2 => ∅
   | TNonce _ => {[t]}
-  | TKey _ _ => {[t]}
+  | TKey _ _ => ∅
   | TEnc _ _ => ∅
   end.
 
@@ -323,6 +349,9 @@ Implicit Types (a : nonce).
 Context `{!heapG Σ}.
 
 Definition term_data : Type := gmap term (level * coGset term * gname).
+
+Global Instance term_data_inhabited : Inhabited term_data.
+Proof. apply _. Qed.
 
 Definition term_data' : Type :=
   gmap term (agree level) *
@@ -360,8 +389,20 @@ Definition declared t lvl (td : term_data) : iProp :=
   | _ => False
   end.
 
+Global Instance declared_persistent t lvl td : Persistent (declared t lvl td).
+Proof. by case: t=> *; apply _. Qed.
+
+Global Instance declared_timeless t lvl td : Timeless (declared t lvl td).
+Proof. by case: t=> *; apply _. Qed.
+
 Definition term_data_inv (td : term_data) : iProp :=
   [∗ map] t ↦ d ∈ td, declared t d.1.1 td.
+
+Global Instance term_data_inv_persistent td : Persistent (term_data_inv td).
+Proof. by apply _. Qed.
+
+Global Instance term_data_inv_timeless td : Timeless (term_data_inv td).
+Proof. by apply _. Qed.
 
 Definition crypto_inv :=
   auth_inv crypto_name to_term_data' term_data_inv.
@@ -883,8 +924,79 @@ iIntros "#Henc #Ht #Hdec #Hpred #HG"; case: lvl => /=.
 - by iApply termT_aenc_pub_sec.
 Qed.
 
+Lemma declare_nonce E1 E2 lvl a :
+  ↑cryptoN ⊆ E1 →
+  ↑cryptoN.@"nonce" ⊆ E2 →
+  crypto_ctx -∗
+  meta_token a E2 ={E1}=∗
+  stermT lvl (TNonce a) ∗
+  owned_terms (TNonce a) ⊤ ∗
+  crypto_meta_token (TNonce a) ⊤.
+Proof.
+iIntros (sub1 sub2) "#ctx Hmeta".
+iMod (auth_empty crypto_name) as "#own0".
+iMod (auth_acc to_term_data' with "[ctx own0]") as (td) "(_ & tdP & close)"; eauto.
+iDestruct "tdP" as "> # tdP".
+pose (t := TNonce a); iAssert (⌜td !! t = None⌝)%I as "%undef".
+  case e: (td !! t) => [m|] //=.
+  rewrite /term_data_inv big_sepM_forall.
+  iSpecialize ("tdP" $! _ _ e).
+  rewrite /=.
+  by iDestruct (meta_meta_token with "tdP Hmeta") as "[]".
+iMod (own_alloc (namespace_map_token ⊤)) as (γm) "token" => //.
+  exact: namespace_map_token_valid.
+iMod (meta_set ⊤ a () (cryptoN.@"nonce") with "Hmeta") as "#l_nonce"; eauto.
+pose (data  := (lvl, ⊤ : coGset term, γm)).
+pose (td'   := <[t := data]>td).
+iMod ("close" $! td' (to_term_data' {[t := data]}) with "[]") as "own"; first iSplit.
+- iPureIntro; apply: prod_local_update => /=; last first.
+    rewrite /td' fmap_insert map_fmap_singleton /=.
+    apply alloc_singleton_local_update => //.
+    by rewrite lookup_fmap undef.
+  apply: prod_local_update.
+    rewrite /td' fmap_insert map_fmap_singleton /=.
+    apply alloc_singleton_local_update => //.
+    by rewrite lookup_fmap undef.
+  rewrite /= /td' fmap_insert map_fmap_singleton /=.
+  apply alloc_singleton_local_update => //.
+  by rewrite lookup_fmap undef.
+- iModIntro; rewrite /term_data_inv !big_sepM_forall.
+  iIntros (t'); destruct (decide (t' = t)) as [->|ne].
+    by rewrite lookup_insert; iIntros (?) "%Hlookup"; case: Hlookup => <- /=.
+  iIntros (m'); rewrite lookup_insert_ne //; iIntros "%def".
+  iSpecialize ("tdP" $! _ _ def).
+  case: t' {def ne} => //= kt k.
+  iDestruct "tdP" as "(%decl & %all_pub & %own)"; iPureIntro.
+  rewrite dom_insert; split; first set_solver.
+  split.
+    move=> all_pub'; apply: all_pub => t' lvl' T' γm' t'_k.
+    have ne: t' ≠ t.
+      move => ?; subst t'.
+      by case/decl/elem_of_dom: t'_k => ?; rewrite undef.
+    by move/(all_pub' _ lvl' T' γm'): t'_k; rewrite lookup_insert_ne //.
+  move=> t' T' γm' t'_k.
+  destruct (decide (t' = t)) as [->|ne].
+    rewrite lookup_insert.
+    by case/decl/elem_of_dom: t'_k => ?; rewrite undef.
+  by rewrite lookup_insert_ne //; apply: own.
+rewrite /to_term_data' !map_fmap_singleton /= pair_split.
+rewrite auth_own_op; iDestruct "own" as "[own #Hγm]".
+rewrite (pair_split {[t := to_agree lvl]}).
+rewrite pair_op_1 auth_own_op; iDestruct "own" as "[#Hlvl own]".
+rewrite pair_split.
+iModIntro; iSplit.
+  iSplit; first by rewrite termT_eq; iExists lvl; eauto.
+  iIntros "!>" (lvl').
+  rewrite termT_eq.
+  iDestruct 1 as (lvl'') "[Ha %sub']".
+  by iDestruct (atomicT_agree with "Ha Hlvl") as "->".
+iSplitL "own" => //.
+by iExists γm; rewrite ucmra_unit_left_id; eauto.
+Qed.
+
 End Resources.
 
+Arguments crypto_name {Σ _}.
 Arguments crypto_inv {Σ _ _}.
 Arguments crypto_ctx {Σ _ _}.
 
