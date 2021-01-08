@@ -1001,20 +1001,80 @@ iSplitL "Hown" => //.
 by iExists γm; eauto.
 Qed.
 
-Lemma declare_key E lvl_k kt k lvl :
-  ↑cryptoN ⊆ E →
-  lvl ⊑ lvl_k →
-  crypto_ctx -∗
-  stermT lvl_k k -∗
-  guarded lvl_k ⌜atomic k⌝ -∗
-  guarded lvl_k ([∗ set] t ∈ atoms k, owned_terms t {[TKey kt k]}) ={E}=∗
-  stermT lvl (TKey kt k) ∗
-  guarded lvl_k (owned_terms (TKey kt k) ⊤) ∗
-  guarded lvl_k (crypto_meta_token (TKey kt k) ⊤).
+Lemma termT_atoms lvl t t' :
+  t' ∈ atoms t →
+  termT lvl t -∗ termT Sec t'.
 Proof.
-case: lvl_k.
-- case: lvl=> //=.
-  iIntros (sub _) "#ctx #Hk _ _".
+elim: t lvl => //=.
+- move=> t1 IH1 t2 IH2 lvl t'_atom.
+  rewrite termT_eq; iIntros "[#Ht1 #Ht2]".
+  case/elem_of_union: t'_atom => t'_atom.
+  + by iApply IH1.
+  + by iApply IH2.
+- move=> a lvl /elem_of_singleton ->.
+  by apply sub_termT; case: lvl.
+- move=> kt k IH lvl /elem_of_singleton ->.
+  by apply sub_termT; case: lvl.
+- move=> k IHk t IHt lvl t'_atom.
+  iIntros "Ht".
+  rewrite termT_eq.
+  iDestruct "Ht" as (lvl_enc lvl_dec) "(_ & Ht)".
+  iDestruct "Ht" as "[(_ & Ht)|Ht]"; first by iApply IHt.
+  iDestruct "Ht" as (?) "(_ & _ & Ht)"; by iApply IHt.
+Qed.
+
+Definition secret_terms (T T' : gset term) : iProp :=
+  □ (∀ t, ⌜t ∈ T'⌝ ∗-∗ ⌜t ∈ T⌝ ∧ stermT Sec t).
+
+Lemma secret_termsP T :
+  ([∗ set] t ∈ T, termT Sec t) -∗
+  ∃ T', secret_terms T T'.
+Proof.
+induction T as [|t T t_T IH] using set_ind_L.
+- iIntros "_"; iExists ∅.
+  iIntros "!>" (t); iSplit.
+  + iIntros (?); set_solver.
+  + iIntros "[%Ht _]"; case: H; set_solver.
+- rewrite big_sepS_insert //.
+  iIntros "[#Ht #HT]".
+  iDestruct (IH with "HT") as (T') "#HT'".
+  iDestruct (termT_lvlP with "Ht") as (lvl) "{Ht} Ht".
+  pose (T'' := if lvl is Sec then {[t]} : gset _ else ∅).
+  iExists (T'' ∪ T'); iIntros "!>" (t'); iSplit.
+  + iIntros "%t'_T'".
+    case/elem_of_union: t'_T' => t'_T'.
+      move: t'_T'; rewrite {}/T''; case: lvl; first set_solver.
+      move/elem_of_singleton=> ->.
+      iSplit => //.
+      iPureIntro; set_solver.
+    iDestruct ("HT'" $! t') as "{HT'} [HT' _]".
+    iDestruct ("HT'" $! t'_T') as "[%t'_T #Ht']".
+    iSplit => //.
+    iPureIntro; set_solver.
+  + iIntros "[%t'_T #Ht']".
+    case/elem_of_union: t'_T => [/elem_of_singleton ->|t'_T].
+      iDestruct (stermT_agree with "Ht Ht'") as "->".
+      by iPureIntro; set_solver.
+    iDestruct ("HT'" $! t') as "{HT'} [_ HT']".
+    rewrite elem_of_union; iRight.
+    iApply "HT'"; eauto.
+Qed.
+
+Lemma owned_termsD T T' T'' :
+  secret_terms T T' -∗
+  ([∗ set] t ∈ T, owned_terms t T'') -∗
+
+
+Lemma declare_sec_key E kt k lvl :
+  ↑cryptoN ⊆ E →
+  crypto_ctx -∗
+  stermT Sec k -∗
+  ([∗ set] t ∈ atoms k, owned_terms t {[TKey kt k]}) ={E}=∗
+  stermT lvl (TKey kt k) ∗
+  owned_terms (TKey kt k) ⊤ ∗
+  crypto_meta_token (TKey kt k) ⊤.
+Proof.
+iIntros (sub) "#ctx #Hk own".
   iMod (auth_empty crypto_name) as "#own0".
   iMod (auth_acc to_term_data' with "[ctx own0]") as (td) "(_ & tdP & close)"; eauto.
   iDestruct "tdP" as "> # tdP".
