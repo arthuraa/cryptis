@@ -328,19 +328,13 @@ Definition atomic t : bool :=
   | TEnc _ _ => false
   end.
 
-Definition atoms t : gset term :=
+Fixpoint atoms t : gset term :=
   match t with
   | TInt _ => ∅
-  | TPair t1 t2 => ∅
+  | TPair t1 t2 => atoms t1 ∪ atoms t2
   | TNonce _ => {[t]}
-  | TKey _ _ => ∅
-  | TEnc _ _ => ∅
-  end.
-
-Definition owners t : gset term :=
-  match t with
-  | TKey _ t => atoms t
-  | _ => ∅
+  | TKey _ _ => {[t]}
+  | TEnc _ t => atoms t
   end.
 
 Notation nonce := loc (only parsing).
@@ -348,7 +342,8 @@ Implicit Types (a : nonce).
 
 Context `{!heapG Σ}.
 
-Definition term_data : Type := gmap term (level * coGset term * gname).
+Definition term_data : Type :=
+  gmap term (level * coGset term * coGset term * gname).
 
 Global Instance term_data_inhabited : Inhabited term_data.
 Proof. apply _. Qed.
@@ -356,15 +351,17 @@ Proof. apply _. Qed.
 Definition term_data' : Type :=
   gmap term (agree level) *
   gmap term (coGset_disj term) *
+  gmap term (coGset term) *
   gmap term (agree gname).
 
 Canonical term_data'UR :=
-  Eval hnf in (fun (sT : ucmraT) (f : term_data' -> sT) => sT) _ (fun x => x).
+  (fun (sT : ucmraT) (f : term_data' -> sT) => sT) _ (fun x => x).
 
 Definition to_term_data' (td : term_data) : term_data'UR :=
-  (fmap (fun '(lvl, _, _) => to_agree lvl) td,
-   fmap (fun '(_  , T, _) => CoGset T)     td,
-   fmap (fun '(_  , _, γ) => to_agree γ)   td).
+  (fmap (fun '(lvl, _, _, _) => to_agree lvl) td,
+   fmap (fun '(_  , T, _, _) => CoGset T)     td,
+   fmap (fun '(_  , _, D, _) => D)            td,
+   fmap (fun '(_  , _, _, γ) => to_agree γ)   td).
 
 Class cryptoG := CryptoG {
   crypto_inG :> inG Σ (authUR term_data'UR);
@@ -377,26 +374,25 @@ Context `{!cryptoG}.
 
 Global Instance cryptoG_authG : authG Σ term_data'UR := @AuthG _ _ _ _.
 
-Definition declared t lvl (td : term_data) : iProp :=
+Definition declared t (td : term_data) : iProp :=
   match t with
   | TNonce a =>
     meta a (cryptoN.@"nonce") ()
-  | TKey _ k =>
-    ⌜atoms k ⊆ dom _ td⌝ ∧
-    ⌜(∀ t' lvl' T γm, t' ∈ atoms k → td !! t' = Some (lvl', T, γm) → lvl' = Pub) →
-     lvl = Pub⌝ ∧
-    ⌜∀ t' T γm, t' ∈ atoms k → td !! t' = Some (Sec, T, γm) → t ∉ T⌝
+  | TKey _ _ => True
   | _ => False
   end.
 
-Global Instance declared_persistent t lvl td : Persistent (declared t lvl td).
+Global Instance declared_persistent t td : Persistent (declared t td).
 Proof. by case: t=> *; apply _. Qed.
 
-Global Instance declared_timeless t lvl td : Timeless (declared t lvl td).
+Global Instance declared_timeless t td : Timeless (declared t td).
 Proof. by case: t=> *; apply _. Qed.
+
+Definition owned_disj (meta : level * coGset term * coGset term * gname) :=
+  let '(_, T, D, _) := meta in T ## D.
 
 Definition term_data_inv (td : term_data) : iProp :=
-  [∗ map] t ↦ d ∈ td, declared t d.1.1 td.
+  ([∗ map] t ↦ d ∈ td, declared t td ∧ ⌜owned_disj d⌝)%I.
 
 Global Instance term_data_inv_persistent td : Persistent (term_data_inv td).
 Proof. by apply _. Qed.
@@ -414,7 +410,7 @@ Definition crypto_own (td : term_data'UR) :=
   auth_own crypto_name td.
 
 Definition atomicT lvl t :=
-  crypto_own ({[t := to_agree lvl]}, ∅, ∅).
+  crypto_own ({[t := to_agree lvl]}, ∅, ∅, ∅).
 
 Global Instance atomicT_persistent lvl t : Persistent (atomicT lvl t).
 Proof.
@@ -429,18 +425,25 @@ Proof.
 iIntros "own1 own2".
 iPoseProof (own_valid_2 with "own1 own2") as "#valid".
 rewrite auth_validI /= -!pair_op !uPred.prod_validI /=.
-iDestruct "valid" as "([#valid _] & _)".
+iDestruct "valid" as "([[#valid _] _] & _)".
 rewrite singleton_op gmap_validI.
 iSpecialize ("valid" $! t); rewrite lookup_singleton.
 rewrite uPred.option_validI agree_validI agree_equivI.
 by iPoseProof "valid" as "->".
 Qed.
 
-Definition owned_terms t T :=
-  crypto_own (∅, {[t := CoGset T]}, ∅).
+Definition owned_terms t T : iProp :=
+  atomicT Sec t -∗ crypto_own (∅, {[t := CoGset T]}, ∅, ∅).
+
+Definition declared_term t1 t2 : iProp :=
+  □ (atomicT Sec t1 -∗ crypto_own (∅, ∅, {[t1 := {[t2]}]}, ∅)).
+
+Global Instance declared_term_persistent t1 t2 :
+  Persistent (declared_term t1 t2).
+Proof. apply _. Qed.
 
 Definition crypto_meta_name t γm : iProp :=
-  crypto_own (∅, ∅, {[t := to_agree γm]}).
+  crypto_own (∅, ∅, ∅, {[t := to_agree γm]}).
 
 Global Instance crypto_meta_name_persistent t γm :
   Persistent (crypto_meta_name t γm).
@@ -924,6 +927,20 @@ iIntros "#Henc #Ht #Hdec #Hpred #HG"; case: lvl => /=.
 - by iApply termT_aenc_pub_sec.
 Qed.
 
+Lemma auth_own_4 (a : gmap term (agree level)) (b : gmap term (coGset_disj term))
+  (c : gmap term (coGset term))
+  (d : gmap term (agree gname)) :
+  auth_own crypto_name (a, b, c, d) ⊣⊢
+  auth_own crypto_name (a, ε, ε, ε) ∗
+  auth_own crypto_name (ε, b, ε, ε) ∗
+  auth_own crypto_name (ε, ε, c, ε) ∗
+  auth_own crypto_name (ε, ε, ε, d).
+Proof.
+rewrite -auth_own_op -auth_own_op -auth_own_op.
+rewrite -!pair_op /=.
+by rewrite !(ucmra_unit_left_id, ucmra_unit_right_id).
+Qed.
+
 Lemma declare_nonce E1 E2 lvl a :
   ↑cryptoN ⊆ E1 →
   ↑cryptoN.@"nonce" ⊆ E2 →
@@ -941,20 +958,25 @@ pose (t := TNonce a); iAssert (⌜td !! t = None⌝)%I as "%undef".
   case e: (td !! t) => [m|] //=.
   rewrite /term_data_inv big_sepM_forall.
   iSpecialize ("tdP" $! _ _ e).
+  iDestruct "tdP" as "[tdP _]".
   rewrite /=.
   by iDestruct (meta_meta_token with "tdP Hmeta") as "[]".
 iMod (own_alloc (namespace_map_token ⊤)) as (γm) "token" => //.
   exact: namespace_map_token_valid.
 iMod (meta_set ⊤ a () (cryptoN.@"nonce") with "Hmeta") as "#l_nonce"; eauto.
-pose (data  := (lvl, ⊤ : coGset term, γm)).
+pose (data  := (lvl, ⊤ : coGset term, ∅ : coGset term, γm)).
 pose (td'   := <[t := data]>td).
 iMod ("close" $! td' (to_term_data' {[t := data]}) with "[]") as "own"; first iSplit.
 - iPureIntro; apply: prod_local_update => /=; last first.
     rewrite /td' fmap_insert map_fmap_singleton /=.
     apply alloc_singleton_local_update => //.
     by rewrite lookup_fmap undef.
-  apply: prod_local_update.
-    rewrite /td' fmap_insert map_fmap_singleton /=.
+  apply: prod_local_update; last first.
+    rewrite /= /td' fmap_insert map_fmap_singleton /=.
+    apply alloc_singleton_local_update => //.
+    by rewrite lookup_fmap undef.
+  apply: prod_local_update; last first.
+    rewrite /= /td' fmap_insert map_fmap_singleton /=.
     apply alloc_singleton_local_update => //.
     by rewrite lookup_fmap undef.
   rewrite /= /td' fmap_insert map_fmap_singleton /=.
@@ -962,37 +984,83 @@ iMod ("close" $! td' (to_term_data' {[t := data]}) with "[]") as "own"; first iS
   by rewrite lookup_fmap undef.
 - iModIntro; rewrite /term_data_inv !big_sepM_forall.
   iIntros (t'); destruct (decide (t' = t)) as [->|ne].
-    by rewrite lookup_insert; iIntros (?) "%Hlookup"; case: Hlookup => <- /=.
-  iIntros (m'); rewrite lookup_insert_ne //; iIntros "%def".
-  iSpecialize ("tdP" $! _ _ def).
-  case: t' {def ne} => //= kt k.
-  iDestruct "tdP" as "(%decl & %all_pub & %own)"; iPureIntro.
-  rewrite dom_insert; split; first set_solver.
-  split.
-    move=> all_pub'; apply: all_pub => t' lvl' T' γm' t'_k.
-    have ne: t' ≠ t.
-      move => ?; subst t'.
-      by case/decl/elem_of_dom: t'_k => ?; rewrite undef.
-    by move/(all_pub' _ lvl' T' γm'): t'_k; rewrite lookup_insert_ne //.
-  move=> t' T' γm' t'_k.
-  destruct (decide (t' = t)) as [->|ne].
-    rewrite lookup_insert.
-    by case/decl/elem_of_dom: t'_k => ?; rewrite undef.
-  by rewrite lookup_insert_ne //; apply: own.
-rewrite /to_term_data' !map_fmap_singleton /= pair_split.
-rewrite auth_own_op; iDestruct "own" as "[own #Hγm]".
-rewrite (pair_split {[t := to_agree lvl]}).
-rewrite pair_op_1 auth_own_op; iDestruct "own" as "[#Hlvl own]".
-rewrite pair_split.
+    rewrite lookup_insert; iIntros (?) "%Hlookup"; case: Hlookup => <-.
+    by iSplit => //.
+  by iIntros (m'); rewrite lookup_insert_ne //.
+rewrite /to_term_data' !map_fmap_singleton /=.
+iClear "own0"; rewrite auth_own_4.
+iDestruct "own" as "(#Hlvl & Hown & _ & #Hγm)".
 iModIntro; iSplit.
   iSplit; first by rewrite termT_eq; iExists lvl; eauto.
   iIntros "!>" (lvl').
   rewrite termT_eq.
   iDestruct 1 as (lvl'') "[Ha %sub']".
   by iDestruct (atomicT_agree with "Ha Hlvl") as "->".
-iSplitL "own" => //.
-by iExists γm; rewrite ucmra_unit_left_id; eauto.
+iSplitL "Hown" => //.
+  by iIntros "_".
+by iExists γm; eauto.
 Qed.
+
+Lemma declare_key E lvl_k kt k lvl :
+  ↑cryptoN ⊆ E →
+  lvl ⊑ lvl_k →
+  crypto_ctx -∗
+  stermT lvl_k k -∗
+  guarded lvl_k ⌜atomic k⌝ -∗
+  guarded lvl_k ([∗ set] t ∈ atoms k, owned_terms t {[TKey kt k]}) ={E}=∗
+  stermT lvl (TKey kt k) ∗
+  guarded lvl_k (owned_terms (TKey kt k) ⊤) ∗
+  guarded lvl_k (crypto_meta_token (TKey kt k) ⊤).
+Proof.
+case: lvl_k.
+- case: lvl=> //=.
+  iIntros (sub _) "#ctx #Hk _ _".
+  iMod (auth_empty crypto_name) as "#own0".
+  iMod (auth_acc to_term_data' with "[ctx own0]") as (td) "(_ & tdP & close)"; eauto.
+  iDestruct "tdP" as "> # tdP".
+  destruct (td !! TKey kt k) as [meta|] eqn:td_key.
+  + case: meta td_key => [] [] lvl_key T γ td_key.
+    iPoseProof "tdP" as "#keyP".
+    rewrite {2}/term_data_inv big_sepM_forall.
+    iDestruct ("keyP" $! _ _ td_key) as "/= (%k_td & %all_pub & %own)".
+    pose (frag := ({[TKey kt k := to_agree lvl_key]}, ∅, ∅) : term_data'UR).
+    iMod ("close" $! td frag with "[]") as "#own".
+      iSplit => //. iPureIntro.
+      rewrite -[frag]ucmra_unit_left_id.
+      apply core_id_local_update; first apply _.
+      do 2![apply pair_included; split; last exact: ucmra_unit_least].
+      apply lookup_included => t. rewrite lookup_fmap.
+      destruct (decide (t = TKey kt k)) as [->|ne].
+        by rewrite td_key lookup_singleton /=.
+      rewrite lookup_singleton_ne //. exact: ucmra_unit_least.
+      iModIntro; iSplit => //.
+
+
+    rewrite ![termT _ (TKey kt k)]termT_eq.
+
+       by rewrite td_key lookup_singleton /= -Some_op agree_idemp.
+
+
+
+\
+
+      assert (e : to_term_data' td ≡ frag ⋅ to_term_data' td).
+        do 2![split => /=; last by rewrite ucmra_unit_left_id].
+        move=> t.
+        rewrite lookup_op lookup_fmap.
+        destruct (decide (t = TKey kt k)) as [->|ne].
+          by rewrite td_key lookup_singleton /= -Some_op agree_idemp.
+        by rewrite lookup_singleton_ne // ucmra_unit_left_id.
+      rewrite -[frag]ucmra_unit_right_id {2}e.
+
+
+      do 2![apply prod_local_update_1].
+      apply local_update_discrete.
+      case => [frame|] /= td_valid e; last first.
+        move/(_ (TKey kt k)): e.
+        by rewrite lookup_fmap td_key lookup_empty /= equiv_None.
+      move: e; rewrite ucmra_unit_left_id => <-.
+      split => //.
 
 End Resources.
 
