@@ -41,6 +41,9 @@ Section coGset.
   Qed.
   Canonical Structure coGsetR `{Infinite A} := discreteR (coGset A) coGset_ra_mixin.
 
+  Global Instance coGset_core_id `{Infinite A} X : CoreId X.
+  Proof. by rewrite /CoreId. Qed.
+
   Global Instance coGset_cmra_discrete `{Infinite A} : CmraDiscrete coGsetR.
   Proof. apply discrete_cmra_discrete. Qed.
 
