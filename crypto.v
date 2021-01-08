@@ -732,7 +732,7 @@ Lemma stermTP lvl lvl' t :
   stermT lvl t -∗ termT lvl' t -∗ ⌜lvl ⊑ lvl'⌝.
 Proof. by iIntros "[_ #min]". Qed.
 
-Lemma stermT_eq' lvl lvl' t :
+Lemma stermT_agree lvl lvl' t :
   stermT lvl t -∗ stermT lvl' t -∗ ⌜lvl = lvl'⌝.
 Proof.
 iIntros "[#Ht #min] [#Ht' #min']".
