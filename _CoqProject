@@ -3,7 +3,7 @@
 -R . crypto
 
 lib.v
-coGset_disj.v
+coGset.v
 term.v
 basic.v
 symbols.v

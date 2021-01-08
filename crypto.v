@@ -3,7 +3,7 @@ From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap list namespace_map.
 From iris.base_logic.lib Require Import auth.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import term coGset_disj.
+From crypto Require Import term coGset.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
