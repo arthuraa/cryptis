@@ -1026,6 +1026,14 @@ Qed.
 Definition secret_terms (T T' : gset term) : iProp :=
   □ (∀ t, ⌜t ∈ T'⌝ ∗-∗ ⌜t ∈ T⌝ ∧ stermT Sec t).
 
+Lemma secret_terms_sub T T' : secret_terms T T' -∗ ⌜T' ⊆ T⌝.
+Proof.
+rewrite elem_of_subseteq.
+iIntros "#secret" (t t_in).
+iDestruct ("secret" $! t) as "{secret} [secret _]".
+by iDestruct ("secret" with "[]") as "[??]" => //.
+Qed.
+
 Lemma secret_termsP T :
   ([∗ set] t ∈ T, termT Sec t) -∗
   ∃ T', secret_terms T T'.
@@ -1060,21 +1068,82 @@ induction T as [|t T t_T IH] using set_ind_L.
     iApply "HT'"; eauto.
 Qed.
 
-Lemma owned_termsD T T' T'' :
+(* TODO Rename *)
+Lemma unpublished_secret T T' T'' :
   secret_terms T T' -∗
-  ([∗ set] t ∈ T, owned_terms t T'') -∗
+  ([∗ set] t ∈ T, stermT Sec t → unpublished t T'') -∗
+  [∗ set] t ∈ T', unpublished t T''.
+Proof.
+move: T'.
+induction T as [|t T t_T IH] using set_ind_L.
+  iIntros (T') "secret _".
+  iPoseProof (secret_terms_sub with "secret") as "%sub".
+  assert (e : T' = ∅); first set_solver.
+  by rewrite e big_sepS_empty.
+iIntros (T') "secret unpub".
+destruct (decide (t ∈ T')) as [t_in|t_nin]; last first.
+  rewrite big_sepS_union; last set_solver.
+  iDestruct "unpub" as "[_ unpub]".
+  iApply (IH with "[secret]"); eauto.
+  iPoseProof "secret" as "#secret".
+  iIntros "!>" (t'); iDestruct ("secret" $! t') as "[s1 s2]".
+  iSplit.
+  - iIntros "%t'_T'".
+    iDestruct ("s1" with "[//]") as "[%t'_T ?]".
+    iSplit => //.
+    case/elem_of_union: t'_T => // /elem_of_singleton e.
+    congruence.
+  - iIntros "[%t'_T Ht']"; iApply "s2".
+    iSplit => //.
+    iPureIntro; set_solver.
+rewrite big_sepS_insert // (big_sepS_delete _ T' t) //.
+iPoseProof "secret" as "#secret".
+iDestruct "unpub" as "[u1 u2]".
+iSplitL "u1".
+  iApply "u1".
+  iDestruct ("secret" $! t) as "[s1 _]".
+  by iDestruct ("s1" with "[//]") as "[??]".
+iApply IH => //.
+iIntros "!>" (t'); iDestruct ("secret" $! t') as "[s1 s2]".
+iSplit.
+  iIntros ([t'_T' ne]%elem_of_difference).
+  iDestruct ("s1" with "[//]") as "{s1} [%s11 s12]".
+  iSplit => //.
+  iPureIntro; set_solver.
+iIntros "[%t'_T #?]".
+iDestruct ("s2" with "[]") as "%".
+  iSplit => //.
+  iPureIntro; set_solver.
+by iPureIntro; set_solver.
+Qed.
+
 
 
 Lemma declare_sec_key E kt k lvl :
   ↑cryptoN ⊆ E →
   crypto_ctx -∗
   stermT Sec k -∗
-  ([∗ set] t ∈ atoms k, owned_terms t {[TKey kt k]}) ={E}=∗
-  stermT lvl (TKey kt k) ∗
-  owned_terms (TKey kt k) ⊤ ∗
+  ([∗ set] t ∈ atoms k, stermT Sec t → unpublished t {[TKey kt k]}) ={E}=∗
+  published lvl (TKey kt k) ∗
+  unpublished (TKey kt k) ⊤ ∗
   crypto_meta_token (TKey kt k) ⊤.
 Proof.
 iIntros (sub) "#ctx #Hk own".
+iAssert (∃ T, secret_terms (atoms k) T)%I as "secret".
+  iApply secret_termsP.
+  rewrite big_sepS_forall.
+  iIntros (t t_atom).
+  iApply (termT_atoms _ t_atom).
+  by iDestruct "Hk" as "[??]".
+iDestruct "secret" as (T) "secret".
+iAssert ([∗ set] t ∈ T, unpublished t {[TKey kt k]})%I with "[own]" as "own".
+  by iApply unpublished_secret.
+
+
+
+
+
+
   iMod (auth_empty crypto_name) as "#own0".
   iMod (auth_acc to_term_data' with "[ctx own0]") as (td) "(_ & tdP & close)"; eauto.
   iDestruct "tdP" as "> # tdP".
