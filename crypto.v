@@ -3,62 +3,11 @@ From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap list namespace_map.
 From iris.base_logic.lib Require Import auth.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import term coGset.
+From crypto Require Import lib term coGset.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
-
-(* TODO: Move to Iris? *)
-Instance dom_ne {T : ofeT} :
-  NonExpansive (dom (gset loc) : gmap loc T -> gset loc).
-Proof. by move=> ??? e ?; rewrite !elem_of_dom e. Qed.
-
-Lemma meta_meta_token `{!heapG Σ, !EqDecision A, !Countable A} l (N : namespace) (E : coPset) (x : A) :
-  ↑N ⊆ E →
-  meta l N x -∗
-  meta_token l E -∗
-  False.
-Proof.
-iIntros (sub) "#meta token".
-rewrite /= meta_eq meta_token_eq.
-iDestruct "token" as (γm1) "[own1 meta1]".
-iDestruct "meta"  as (γm2) "[#own2 meta2]".
-iPoseProof (own_valid_2 with "own1 own2") as "valid".
-rewrite auth_validI /= singleton_op gmap_validI.
-iSpecialize ("valid" $! l).
-rewrite lookup_singleton uPred.option_validI agree_validI agree_equivI.
-iRewrite -"valid" in "meta2".
-iPoseProof (own_valid_2 with "meta1 meta2") as "%valid".
-rewrite namespace_map_valid_eq /= in valid.
-move: valid; rewrite ucmra_unit_right_id.
-case => _ /(_ (positives_flatten N)) valid.
-rewrite lookup_op lookup_empty lookup_singleton in valid.
-assert (positives_flatten N ∈ (↑N : coPset)).
-{ rewrite nclose_eq. apply elem_coPset_suffixes.
-  exists 1%positive. by rewrite left_id_L. }
-case: valid => [//|]; set_solver.
-Qed.
-
-(* I've made an MR for this. *)
-Lemma gmap_equivI `{!EqDecision K, !Countable K, A : ofeT, M : ucmraT}
-  (m1 m2 : gmap K A) :
-  m1 ≡ m2 ⊣⊢@{uPredI M} (∀ i : K, m1 !! i ≡ m2 !! i).
-Proof. by uPred.unseal. Qed.
-
-Lemma dom_singleton_eq `{EqDecision K, Countable K} {T} (m : gmap K T) x :
-  dom (gset K) m = {[x]} →
-  ∃ y, m = {[x := y]}.
-Proof.
-move=> e.
-have {}e: ∀ x' : K, x' ∈ dom (gset K) m ↔ x' ∈ ({[x]} : gset K) by rewrite e.
-have: x ∈ ({[x]} : gset K) by rewrite elem_of_singleton.
-rewrite -e elem_of_dom; case=> y m_x; exists y.
-apply: map_eq=> x'; case: (decide (x' = x))=> [ {x'}->|ne].
-  by rewrite lookup_singleton.
-rewrite lookup_singleton_ne // -(@not_elem_of_dom _ _ (gset K)).
-by rewrite e elem_of_singleton.
-Qed.
 
 Definition cryptoN := nroot.@"crypto".
 
