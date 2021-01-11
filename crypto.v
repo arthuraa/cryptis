@@ -286,6 +286,18 @@ Fixpoint atoms t : gset term :=
   | TEnc _ t => atoms t
   end.
 
+Lemma atoms_term_height t1 t2 :
+  t1 ∈ atoms t2 →
+  term_height t1 <= term_height t2.
+Proof.
+elim: t2 => //=.
+- move=> t21 IH1 t22 IH2 /elem_of_union [] t1_atom;
+  [move/(_ t1_atom) in IH1|move/(_ t1_atom) in IH2]; lia.
+- by move=> a /elem_of_singleton ->.
+- by move=> kt k IH /elem_of_singleton ->.
+- move=> k IHk t IHt /IHt ?; lia.
+Qed.
+
 Lemma atomic_atom t1 t2 : t1 ∈ atoms t2 → atomic t1.
 Proof.
 elim: t2 => //=.
@@ -300,25 +312,24 @@ Implicit Types (a : nonce).
 Context `{!heapG Σ}.
 
 Definition term_data : Type :=
-  gmap term (level * coGset term * coGset term * gname).
+  gmap term (level * gname * coGset term * coGset term).
 
 Global Instance term_data_inhabited : Inhabited term_data.
 Proof. apply _. Qed.
 
 Definition term_data' : Type :=
   gmap term (agree level) *
-  gmap term (coGset_disj term) *
-  gmap term (coGset term) *
-  gmap term (agree gname).
+  gmap term (agree gname) *
+  gmap term (coGset_pair term).
 
 Canonical term_data'UR :=
   (fun (sT : ucmraT) (f : term_data' -> sT) => sT) _ (fun x => x).
 
 Definition to_term_data' (td : term_data) : term_data'UR :=
-  (fmap (fun '(lvl, _ , _ , _) => to_agree lvl) td,
-   fmap (fun '(_  , Ts, _ , _) => CoGset Ts)    td,
-   fmap (fun '(_  , _ , Ds, _) => Ds)           td,
-   fmap (fun '(_  , _ , _ , γ) => to_agree γ)   td).
+  (fmap (fun '(lvl, _, _ , _) => to_agree lvl) td,
+   fmap (fun '(_  , γ, _ , _) => to_agree γ)   td,
+   fmap (fun '(_  , _, Ts, Ds) =>
+           coGset_pair_unset Ts ⋅ coGset_pair_set Ds) td).
 
 Class cryptoG := CryptoG {
   crypto_inG :> inG Σ (authUR term_data'UR);
@@ -331,18 +342,18 @@ Context `{!cryptoG}.
 
 Global Instance cryptoG_authG : authG Σ term_data'UR := @AuthG _ _ _ _.
 
-Implicit Types d : level * coGset term * coGset term * gname.
+Implicit Types d : level * gname * coGset term * coGset term.
 Implicit Types td : term_data.
 
 Definition wf_key_data k d td : Prop :=
   let '(lvl, _, _, _) := d in
   atoms k ⊆ dom _ td ∧
-  ((∀ t' lvl' Ts' Ds' γ', t' ∈ atoms k →
-      td !! t' = Some (lvl', Ts', Ds', γ') →
+  ((∀ t' lvl' γ' Ts' Ds', t' ∈ atoms k →
+      td !! t' = Some (lvl', γ', Ts', Ds') →
       lvl' = Pub) →
       lvl = Pub) ∧
-   ∀ t' Ts' Ds' γ', t' ∈ atoms k →
-     td !! t' = Some (Sec, Ts', Ds', γ') →
+   ∀ t' γ' Ts' Ds', t' ∈ atoms k →
+     td !! t' = Some (Sec, γ', Ts', Ds') →
      k ∈ Ds'.
 
 Definition declared t d td : iProp :=
@@ -359,12 +370,8 @@ Proof. by case: t=> *; apply _. Qed.
 Global Instance declared_timeless t d td : Timeless (declared t d td).
 Proof. by case: t=> *; apply _. Qed.
 
-Definition owned_disj (d : level * coGset term * coGset term * gname) :=
-  let '(lvl, T, D, _) := d in
-  T ## D.
-
 Definition term_data_inv (td : term_data) : iProp :=
-  ([∗ map] t ↦ d ∈ td, declared t d td ∧ ⌜owned_disj d⌝)%I.
+  ([∗ map] t ↦ d ∈ td, declared t d td)%I.
 
 Global Instance term_data_inv_persistent td : Persistent (term_data_inv td).
 Proof. by apply _. Qed.
@@ -382,7 +389,7 @@ Definition crypto_own (td : term_data'UR) :=
   auth_own crypto_name td.
 
 Definition atomicT lvl t :=
-  crypto_own ({[t := to_agree lvl]}, ∅, ∅, ∅).
+  crypto_own ({[t := to_agree lvl]}, ∅, ∅).
 
 Global Instance atomicT_persistent lvl t : Persistent (atomicT lvl t).
 Proof.
@@ -397,7 +404,7 @@ Proof.
 iIntros "own1 own2".
 iPoseProof (own_valid_2 with "own1 own2") as "#valid".
 rewrite auth_validI /= -!pair_op !uPred.prod_validI /=.
-iDestruct "valid" as "([[#valid _] _] & _)".
+iDestruct "valid" as "[[#valid _] _]".
 rewrite singleton_op gmap_validI.
 iSpecialize ("valid" $! t); rewrite lookup_singleton.
 rewrite uPred.option_validI agree_validI agree_equivI.
@@ -405,7 +412,7 @@ by iPoseProof "valid" as "->".
 Qed.
 
 Definition crypto_meta_name t γm : iProp :=
-  crypto_own (∅, ∅, ∅, {[t := to_agree γm]}).
+  crypto_own (∅, {[t := to_agree γm]}, ∅).
 
 Global Instance crypto_meta_name_persistent t γm :
   Persistent (crypto_meta_name t γm).
@@ -421,7 +428,7 @@ Proof.
 iIntros "own1 own2".
 iPoseProof (own_valid_2 with "own1 own2") as "#valid".
 rewrite auth_validI /= -!pair_op !uPred.prod_validI /=.
-iDestruct "valid" as "([_ _] & #valid)".
+iDestruct "valid" as "((_ & #valid) & _)".
 rewrite singleton_op gmap_validI.
 iSpecialize ("valid" $! t); rewrite lookup_singleton.
 rewrite uPred.option_validI agree_validI agree_equivI.
@@ -889,28 +896,123 @@ iIntros "#Henc #Ht #Hdec #Hpred #HG"; case: lvl => /=.
 - by iApply termT_aenc_pub_sec.
 Qed.
 
-Lemma auth_own_4 (a : gmap term (agree level)) (b : gmap term (coGset_disj term))
-  (c : gmap term (coGset term))
-  (d : gmap term (agree gname)) :
-  auth_own crypto_name (a, b, c, d) ⊣⊢
-  auth_own crypto_name (a, ε, ε, ε) ∗
-  auth_own crypto_name (ε, b, ε, ε) ∗
-  auth_own crypto_name (ε, ε, c, ε) ∗
-  auth_own crypto_name (ε, ε, ε, d).
+Lemma auth_own_4
+  (a : gmap term (agree level))
+  (b : gmap term (agree gname))
+  (c : gmap term (coGset_pair term)) :
+  auth_own crypto_name (a, b, c) ⊣⊢
+  auth_own crypto_name (a, ε, ε) ∗
+  auth_own crypto_name (ε, b, ε) ∗
+  auth_own crypto_name (ε, ε, c).
 Proof.
-rewrite -auth_own_op -auth_own_op -auth_own_op.
+rewrite -auth_own_op -auth_own_op.
 rewrite -!pair_op /=.
 by rewrite !(ucmra_unit_left_id, ucmra_unit_right_id).
 Qed.
 
 Definition unpublished t Ts : iProp :=
-  stermT Sec t -∗ crypto_own (∅, {[t := CoGset Ts]}, ∅, ∅).
+  stermT Sec t -∗ crypto_own (∅, ∅, {[t := coGset_pair_unset Ts]}).
 
 Definition published t Ts : iProp :=
-  □ (stermT Sec t -∗ crypto_own (∅, ∅, {[t := Ts]}, ∅)).
+  □ (stermT Sec t -∗ crypto_own (∅, ∅, {[t := coGset_pair_set Ts]})).
 
 Global Instance published_persistent t Ts : Persistent (published t Ts).
 Proof. apply _. Qed.
+
+(* MOVE *)
+Lemma Some_included_ucmra {A : ucmraT} (a b : A) : Some a ≼ Some b ↔ a ≼ b.
+Proof.
+split; last exact: Some_included_2.
+case=> [mc]; rewrite option_equivE.
+case: mc => [c|] //= e; [by exists c|exists ε].
+by rewrite ucmra_unit_right_id.
+Qed.
+(* /MOVE *)
+
+
+Lemma term_data_inv_insert td t lvl γm Ts1 Ts2 Ds :
+  Ts1 ⊆ Ts2 →
+  td !! t = Some (lvl, γm, Ts2, Ds) →
+  term_data_inv td -∗
+  term_data_inv (<[t := (lvl, γm, Ts2 ∖ Ts1, Ds ∪ Ts1)]>td).
+Proof.
+iIntros (sub td_t) "#inv".
+rewrite /term_data_inv !big_sepM_forall.
+iIntros (t' d'); destruct (decide (t' = t)) as [->|ne].
+- rewrite lookup_insert; iIntros "%e"; case: e=> ?; subst d'.
+  iSpecialize ("inv" $! t with "[]"); eauto.
+  case: t td_t => //= kt k td_t.
+  iDestruct "inv" as % (sub_dom & all_pub & publ).
+  iPureIntro; repeat split.
+  + set_solver.
+  + move=> pub; apply: all_pub => t' lvl' γm' Ts' Ds' t'_atom td_t'.
+    apply: pub (t'_atom) _.
+    rewrite lookup_insert_ne // => ?; subst t'.
+    move/atoms_term_height: t'_atom => /=; lia.
+  + move=> t' γm' Ts' Ds' t'_atom.
+    destruct (decide (t' = TKey kt k)) as [->|ne].
+      rewrite lookup_insert; case => ????; subst lvl γm' Ts' Ds'.
+      move/atoms_term_height: t'_atom => /=; lia.
+    rewrite lookup_insert_ne //. exact: publ.
+- rewrite lookup_insert_ne //.
+  iIntros (td_t').
+  iSpecialize ("inv" $! t' d' with "[//]").
+  case: d' td_t' => [] [] [] lvl' γm' Ts' Ds' td_t'.
+  case: t' td_t' ne => //= kt k td_t' ne.
+  iDestruct "inv" as % (sub_dom & all_pub & publ).
+  iPureIntro; repeat split.
+  + set_solver.
+  + move=> pub; apply: all_pub => t'' lvl'' γm'' Ts'' Ds'' t''_atom td_t''.
+    destruct (decide (t'' = t)) as [->|ne''].
+      apply: pub (t''_atom) _.
+      rewrite lookup_insert //; eauto.
+      move: td_t''; rewrite td_t; case => <- _ _ _.
+      by eauto.
+    apply: pub (t''_atom) _.
+    by rewrite lookup_insert_ne //.
+  + move=> t'' γm'' Ts'' Ds'' t''_atom.
+    destruct (decide (t'' = t)) as [->|ne''].
+      rewrite lookup_insert; case => ????; subst lvl γm'' Ts'' Ds''.
+      move/(_ _ _ _ _ t''_atom td_t) in publ; set_solver.
+    rewrite lookup_insert_ne //. exact: publ.
+Qed.
+
+Lemma publish E lvl t Ts :
+  ↑cryptoN ⊆ E →
+  crypto_ctx -∗
+  termT lvl t -∗
+  unpublished t Ts ={E}=∗
+  published t Ts.
+Proof.
+iIntros (sub) "#ctx #Ht unpubl".
+iDestruct (termT_lvlP with "Ht") as (lvl') "{Ht} Ht".
+case: lvl' {lvl}.
+  iIntros "!> !> #contra".
+  by iDestruct (stermT_agree with "Ht contra") as "%".
+iSpecialize ("unpubl" with "Ht").
+iMod (auth_acc to_term_data' term_data_inv with "[ctx unpubl]")
+  as (td) "(%lb & >#tdP & close)"; eauto.
+move: lb; rewrite !prod_included; case=> [] [] [] /= _ _ _ lb.
+move: lb; rewrite singleton_included_l; case=> [] Ts' [].
+rewrite lookup_fmap option_equivE.
+case td_t: (td !! t) Ts' => [[] [] [] lvl' γm' Ts' Ds'|] //= _ <-.
+rewrite Some_included_ucmra coGset_pair_included /=.
+rewrite ucmra_unit_right_id coGset_disj_included /=.
+case=> _ incl.
+pose (d' := (lvl', γm', Ts' ∖ Ts, Ds' ∪ Ts)).
+pose (td' := <[t := d']>td).
+iMod ("close" $! td' (∅, ∅, {[t := coGset_pair_set Ts]}) with "[]")
+  as "#own"; first iSplit.
+- iPureIntro.
+  apply prod_local_update => //=.
+    by rewrite !fmap_insert /= !insert_id ?lookup_fmap ?td_t.
+  rewrite !fmap_insert /=.
+  apply: singleton_local_update.
+    by rewrite lookup_fmap td_t.
+  exact: coGset_pair_local_update.
+- iModIntro; by iApply term_data_inv_insert.
+by iIntros "!> !> _".
+Qed.
 
 Lemma declare_nonce E1 E2 lvl a :
   ↑cryptoN ⊆ E1 →

@@ -129,6 +129,15 @@ Definition int_of_term (t : term) :=
 Global Instance infinite_term : Infinite term.
 Proof. by apply (inj_infinite TInt int_of_term). Qed.
 
+Fixpoint term_height t :=
+  match t with
+  | TInt _ => 1
+  | TPair t1 t2 => S (max (term_height t1) (term_height t2))
+  | TNonce _ => 1
+  | TKey _ t => S (term_height t)
+  | TEnc k t => S (max (term_height k) (term_height t))
+  end.
+
 Fixpoint nonces_of_term t : gset loc :=
   match t with
   | TInt _ => ∅

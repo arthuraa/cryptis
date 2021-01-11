@@ -147,7 +147,7 @@ Instance: Params (@coGset_pair_unset_proj) 1 := {}.
 Definition coGset_pair_set `{Countable A, Infinite A} (X : coGset A) : coGset_pair A :=
   CoGsetPair X ε.
 Definition coGset_pair_unset `{Countable A, Infinite A} (X : coGset A) : coGset_pair A :=
-  CoGsetPair ∅ (CoGset X).
+  CoGsetPair ε (CoGset X).
 Instance: Params (@coGset_pair_set) 2 := {}.
 
 (* Ofe *)
@@ -332,7 +332,30 @@ rewrite [ε ⋅ CoGset Y2]ucmra_unit_left_id.
 rewrite {1}/op /cmra_op /=.
 case: decide => //. set_solver.
 Qed.
+
+Lemma coGset_pair_local_update `{Infinite A} X Y Z :
+  (coGset_pair_unset X ⋅ coGset_pair_set Y, coGset_pair_unset Z) ~l~>
+  (coGset_pair_unset (X ∖ Z) ⋅ coGset_pair_set (Y ∪ Z), coGset_pair_set Z).
+Proof.
+move=> n [[W1 W2]|] /=.
+- rewrite coGset_pair_validN_eq /= right_id left_id => disj.
+  case; rewrite !left_id_L !right_id => <-.
+  case: W2 => [W2|//] e.
+  split; first set_solver.
+  congr CoGsetPair => /=; first set_solver.
+  assert (Z ## W2). by apply coGset_disj_valid_op; rewrite -e.
+  move: e; rewrite coGset_disj_union //; case=> e; subst X.
+  rewrite left_id right_id; congr CoGset.
+  set_solver.
+- rewrite coGset_pair_validN_eq /= right_id left_id => disj.
+  case; rewrite !left_id_L !right_id => -> [<-].
+  split; first set_solver.
+  congr CoGsetPair => /=; first set_solver.
+  by rewrite difference_diag_L right_id.
+Qed.
+
 End cmra.
+
 
 Arguments coGset_pairR : clear implicits.
 Arguments coGset_pairUR : clear implicits.
