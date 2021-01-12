@@ -357,5 +357,5 @@ Qed.
 End cmra.
 
 
-Arguments coGset_pairR : clear implicits.
-Arguments coGset_pairUR : clear implicits.
+Arguments coGset_pairR A {_ _ _}.
+Arguments coGset_pairUR A {_ _ _}.
