@@ -344,46 +344,6 @@ Global Instance cryptoG_authG : authG Σ term_data'UR := @AuthG _ _ _ _.
 Implicit Types d : level * gname * gname.
 Implicit Types td : term_data.
 
-Definition wf_key_data kt k d td : iProp :=
-  let '(lvl, _, _) := d in
-  ⌜atoms k ⊆ dom _ td⌝ ∧
-  ⌜(∀ t' lvl' γ_pub' γ_meta', t' ∈ atoms k →
-      td !! t' = Some (lvl', γ_pub', γ_meta') →
-      lvl' = Pub) →
-      lvl = Pub⌝ ∧
-   □ (∀ t' γ_pub' γ_meta', ⌜t' ∈ atoms k⌝ →
-       ⌜td !! t' = Some (Sec, γ_pub', γ_meta')⌝ →
-       own γ_pub' (coGset_pair_set {[TKey kt k]})).
-
-Definition declared t d td : iProp :=
-  match t with
-  | TNonce a =>
-    meta a (cryptoN.@"nonce") ()
-  | TKey kt k => wf_key_data kt k d td
-  | _ => False
-  end.
-
-Global Instance declared_persistent t d td : Persistent (declared t d td).
-Proof. by case: t=> *; case: d => [] [] ???; apply _. Qed.
-
-Global Instance declared_timeless t d td : Timeless (declared t d td).
-Proof. by case: t=> *; case: d => [] [] ???; apply _. Qed.
-
-Definition term_data_inv (td : term_data) : iProp :=
-  ([∗ map] t ↦ d ∈ td, declared t d td)%I.
-
-Global Instance term_data_inv_persistent td : Persistent (term_data_inv td).
-Proof. by apply _. Qed.
-
-Global Instance term_data_inv_timeless td : Timeless (term_data_inv td).
-Proof. by apply _. Qed.
-
-Definition crypto_inv :=
-  auth_inv crypto_name to_term_data' term_data_inv.
-
-Definition crypto_ctx :=
-  auth_ctx crypto_name cryptoN to_term_data' term_data_inv.
-
 Definition crypto_own (td : term_data'UR) :=
   auth_own crypto_name td.
 
@@ -477,6 +437,18 @@ iPoseProof (own_valid_2 with "own1 own2") as "#valid".
 by rewrite agree_validI agree_equivI.
 Qed.
 
+Definition own_publish t (Ti : coGset_pair term) : iProp :=
+  ∃ γ_pub, crypto_own (∅, {[t := to_agree γ_pub]}, ∅) ∗ own γ_pub Ti.
+
+Definition unpublished t Ts : iProp :=
+  own_publish t (coGset_pair_unset Ts).
+
+Definition published t Ts : iProp :=
+  □ (atomicT Sec t -∗ own_publish t (coGset_pair_set Ts)).
+
+Global Instance published_persistent t Ts : Persistent (published t Ts).
+Proof. apply _. Qed.
+
 (** [termT lvl t] holds when the term [t] can be declared public after
 encrypting it.  If [lvl = Pub], [t] is considered public and does not have to be
 encrypted.  *)
@@ -484,7 +456,9 @@ encrypted.  *)
 Fixpoint termT_def lvl t : iProp :=
   let keyT lvl_enc lvl_dec k :=
     (atomicT lvl_enc (TKey Enc k) ∗
+     ([∗ set] t' ∈ atoms k, published t' {[TKey Enc k]}) ∗
      atomicT lvl_dec (TKey Dec k) ∗
+     ([∗ set] t' ∈ atoms k, published t' {[TKey Dec k]}) ∗
      termT_def Sec k ∗
      □ (termT_def Pub k → False) ∨
      termT_def Pub k ∗
@@ -493,8 +467,10 @@ Fixpoint termT_def lvl t : iProp :=
   match t with
   | TInt _ => True
   | TPair t1 t2 => termT_def lvl t1 ∗ termT_def lvl t2
-  | TNonce _  =>
-    ∃ lvl', atomicT lvl' t ∗ ⌜lvl' ⊑ lvl⌝
+  | TNonce a =>
+    ∃ lvl', atomicT lvl' t ∗
+            meta a (cryptoN.@"nonce") () ∗
+            ⌜lvl' ⊑ lvl⌝
   | TKey kt k =>
     ∃ lvl_enc lvl_dec,
       keyT lvl_enc lvl_dec k ∗
@@ -510,7 +486,9 @@ Definition termT_aux : seal termT_def. by eexists. Qed.
 Definition termT := unseal termT_aux.
 Definition keyT lvl_enc lvl_dec k : iProp :=
   atomicT lvl_enc (TKey Enc k) ∗
+  ([∗ set] t' ∈ atoms k, published t' {[TKey Enc k]}) ∗
   atomicT lvl_dec (TKey Dec k) ∗
+  ([∗ set] t' ∈ atoms k, published t' {[TKey Dec k]}) ∗
   termT Sec k ∗
   □ (termT Pub k → False) ∨
   termT Pub k ∗
@@ -522,8 +500,10 @@ Lemma termT_eq lvl t :
   match t with
   | TInt _ => True
   | TPair t1 t2 => termT lvl t1 ∗ termT lvl t2
-  | TNonce _  =>
-    ∃ lvl', atomicT lvl' t ∗ ⌜lvl' ⊑ lvl⌝
+  | TNonce a =>
+    ∃ lvl', atomicT lvl' t ∗
+            meta a (cryptoN.@"nonce") () ∗
+            ⌜lvl' ⊑ lvl⌝
   | TKey kt k =>
     ∃ lvl_enc lvl_dec,
       keyT lvl_enc lvl_dec k ∗
@@ -579,15 +559,15 @@ Lemma keyT_agree lvl_enc lvl_enc' lvl_dec lvl_dec' k :
   ⌜lvl_dec = lvl_dec'⌝.
 Proof.
 iIntros "[Hk|Hk] [Hk'|Hk']".
-- iDestruct "Hk" as "(enc & dec & _)".
-  iDestruct "Hk'" as "(enc' & dec' & _)".
+- iDestruct "Hk" as "(enc & _ & dec & _ & _)".
+  iDestruct "Hk'" as "(enc' & _ & dec' & _ & _ )".
   iDestruct (atomicT_agree with "enc enc'") as "->".
   by iDestruct (atomicT_agree with "dec dec'") as "->".
-- iDestruct "Hk" as "(enc & dec & sec & #npub)".
+- iDestruct "Hk" as "(enc & _ & dec & _ & sec & #npub)".
   iDestruct "Hk'" as "(pub & _)".
   by iDestruct ("npub" with "pub") as "[]".
 - iDestruct "Hk" as "(pub & _)".
-  iDestruct "Hk'" as "(_ & _ & _ & npub)".
+  iDestruct "Hk'" as "(_ & _ & _ & _ & _ & npub)".
   by iDestruct ("npub" with "pub") as "[]".
 - iDestruct "Hk" as "(_ & -> & ->)".
   by iDestruct "Hk'" as "(_ & -> & ->)".
@@ -632,8 +612,8 @@ elim: t lvl lvl' => [n|t1 IH1 t2 IH2|l|kt k _|k _ t IH] lvl lvl' sub.
 - rewrite ![termT _ (TPair t1 t2)]termT_eq /=.
   by iIntros "[#Ht1 #Ht2]"; rewrite IH1 // IH2 //; iSplit.
 - rewrite !termT_eq /=.
-  iDestruct 1 as (lvl0) "[#Hnonce %sub0]".
-  iExists lvl0; iSplit=> //; iPureIntro; by etransitivity.
+  iDestruct 1 as (lvl0) "(#Hnonce & #Hmeta & %sub0)".
+  iExists lvl0; repeat iSplit=> //; iPureIntro; by etransitivity.
 - rewrite ![termT _ (TKey _ k)]termT_eq.
   iDestruct 1 as (lvl_enc lvl_dec) "(#Hkey & %sub0)".
   iExists lvl_enc, lvl_dec; iSplit=> //; iPureIntro; by etransitivity.
@@ -801,11 +781,11 @@ rewrite termT_eq /=.
   iDestruct (IH1 with "type1") as (lvl1) "type1'".
   iDestruct (IH2 with "type2") as (lvl2) "type2'".
   by iExists (lvl1 ⊔ lvl2); iApply stermT_pair.
-- iDestruct 1 as (lvl') "[#Hn %Hsub]".
+- iDestruct 1 as (lvl') "(#Hn & #Hmeta & %Hsub)".
   iExists lvl'.
   iSplit; first by rewrite termT_eq /=; eauto.
   iIntros "!>" (lvl''); rewrite termT_eq /=.
-  iDestruct 1 as (lvl''') "# [Hn' %leq']".
+  iDestruct 1 as (lvl''') "# (Hn' & _ & %leq')".
   by iPoseProof (atomicT_agree with "Hn' Hn") as "->".
 - iDestruct 1 as (lvl_enc lvl_dec) "[Hk _]".
   rewrite keyT_eq; iDestruct "Hk" as "[??]".
@@ -895,7 +875,7 @@ iIntros "#Henc #Ht #Hdec #Hpred #HG"; case: lvl => /=.
 - by iApply termT_aenc_pub_sec.
 Qed.
 
-Lemma auth_own_4
+Lemma auth_own_3
   (a : gmap term (agree level))
   (b : gmap term (agree gname))
   (c : gmap term (agree gname)) :
@@ -909,17 +889,17 @@ rewrite -!pair_op /=.
 by rewrite !(ucmra_unit_left_id, ucmra_unit_right_id).
 Qed.
 
-Definition own_publish t (Ti : coGset_pair term) : iProp :=
-  ∃ γ_pub, crypto_own (∅, {[t := to_agree γ_pub]}, ∅) ∗ own γ_pub Ti.
+Definition term_data_inv (td : term_data) : iProp :=
+  ([∗ map] t ↦ _ ∈ td, ⌜atomic t⌝ ∗ termT Sec t)%I.
 
-Definition unpublished t Ts : iProp :=
-  stermT Sec t -∗ own_publish t (coGset_pair_unset Ts).
+Global Instance term_data_inv_persistent td : Persistent (term_data_inv td).
+Proof. by apply _. Qed.
 
-Definition published t Ts : iProp :=
-  □ (stermT Sec t -∗ own_publish t (coGset_pair_set Ts)).
+Definition crypto_inv :=
+  auth_inv crypto_name to_term_data' term_data_inv.
 
-Global Instance published_persistent t Ts : Persistent (published t Ts).
-Proof. apply _. Qed.
+Definition crypto_ctx :=
+  auth_ctx crypto_name cryptoN to_term_data' term_data_inv.
 
 (* MOVE *)
 Lemma Some_included_ucmra {A : ucmraT} (a b : A) : Some a ≼ Some b ↔ a ≼ b.
@@ -980,15 +960,23 @@ iIntros (t' d'); destruct (decide (t' = t)) as [->|ne].
 Qed.
 *)
 
-
-Lemma publish lvl t Ts :
+(*Lemma publish E lvl t Ts :
+  ↑cryptoN ⊆ E →
+  crypto_ctx -∗
   termT lvl t -∗
-  unpublished t Ts ==∗
+  unpublished t Ts ={E}=∗
   published t Ts.
 Proof.
-iIntros "#Ht unpubl".
+iIntros (?) "#ctx #Ht unpubl".
 iDestruct (termT_lvlP with "Ht") as (lvl') "{Ht} Ht".
 case: lvl' {lvl}.
+  rewrite /crypto_ctx /auth_ctx.
+  rewrite /published.
+  iAssert (|={E}=> ▷ □ (atomicT Sec t -∗ False))%I as "H".
+
+  iInv "ctx" as "?".
+  iModIntro.
+
   iIntros "!> !> #contra".
   by iDestruct (stermT_agree with "Ht contra") as "%".
 iDestruct ("unpubl" with "Ht") as (γ_pub) "[#own unpubl]".
@@ -996,6 +984,55 @@ iMod (own_update _ _ (coGset_pair_set Ts) with "unpubl") as "#publ".
   apply: coGset_pair_alloc_update.
 by iIntros "!> !> _"; iExists γ_pub; iSplit.
 Qed.
+*)
+
+Global Instance term_data'_cmra_total : CmraTotal term_data'UR.
+Proof. apply _. Qed.
+
+Global Instance term_data'_core_id (a : term_data'UR) : CoreId a.
+Proof.
+case: a => [] [] ???.
+apply _.
+Qed.
+
+(* MOVE *)
+Lemma auth_inv_acc' E (a : term_data'UR) :
+  ▷ auth_inv crypto_name to_term_data' term_data_inv ∗
+  crypto_own a ={E}=∗ ∃ t,
+    ⌜a ≼ to_term_data' t⌝ ∗ ▷ term_data_inv t ∗ ∀ u b,
+    ⌜(to_term_data' t, a) ~l~> (to_term_data' u, b)⌝ ∗
+    (crypto_own b -∗ ▷ term_data_inv u) ={E}=∗
+    ▷ auth_inv crypto_name to_term_data' term_data_inv ∗
+    crypto_own b.
+Proof using Type*.
+  iIntros "[Hinv Hγf]". rewrite /crypto_own /auth_inv /auth_own.
+  iDestruct "Hinv" as (t) "[>Hγa Hφ]".
+  iModIntro. iExists t.
+  iDestruct (own_valid_2 with "Hγa Hγf") as % [? ?]%auth_both_valid.
+  iSplit; first done. iFrame. iIntros (u b) "[% Hφ]".
+  iMod (own_update_2 with "Hγa Hγf") as "[Hγa Hγf]".
+  { eapply auth_update; eassumption. }
+  iPoseProof "Hγf" as "#Hγf".
+  iModIntro. iSplit => //. iExists u. iFrame. by iApply "Hφ".
+Qed.
+
+Lemma auth_acc' E (a : term_data'UR) :
+  ↑cryptoN ⊆ E →
+  crypto_ctx ∗ crypto_own a ={E,E ∖ ↑cryptoN}=∗
+  ∃ t, ⌜a ≼ to_term_data' t⌝ ∗
+       ▷ term_data_inv t ∗
+       (∀ u b,
+           ⌜(to_term_data' t, a) ~l~> (to_term_data' u, b)⌝ ∗
+           (crypto_own b -∗ ▷ term_data_inv u)
+           ={E ∖ ↑cryptoN,E}=∗ crypto_own b).
+Proof.
+  iIntros (?) "[#ctx Hγf]". rewrite /crypto_ctx /crypto_own /crypto_ctx /auth_ctx.
+  iInv "ctx" as "Hinv" "Hclose".
+  iMod (auth_inv_acc' with "[$Hinv $Hγf]") as (t) "(?&?&HclAuth)".
+  iModIntro. iExists t. iFrame. iIntros (u b) "H".
+  iMod ("HclAuth" $! u b with "H") as "(Hinv & ?)". by iMod ("Hclose" with "Hinv").
+Qed.
+(* /MOVE *)
 
 Lemma declare_nonce E1 E2 lvl a :
   ↑cryptoN ⊆ E1 →
@@ -1008,12 +1045,15 @@ Lemma declare_nonce E1 E2 lvl a :
 Proof.
 iIntros (sub1 sub2) "#ctx Hmeta".
 iMod (auth_empty crypto_name) as "#own0".
-iMod (auth_acc to_term_data' term_data_inv with "[ctx own0]")
-  as (td) "(_ & >#tdP & close)"; eauto.
-pose (t := TNonce a); iAssert (⌜td !! t = None⌝)%I as "%undef".
+iMod (auth_acc' with "[ctx own0]")
+  as (td) "(_ & #tdP & close)"; eauto.
+pose (t := TNonce a); iAssert (▷ ⌜td !! t = None⌝)%I as "#>%undef".
   case e: (td !! t) => [[] [] ???|] //=.
   rewrite /term_data_inv big_sepM_forall.
   iSpecialize ("tdP" $! _ _ e) => /=.
+  rewrite termT_eq /=.
+  iDestruct "tdP" as "> [_ tdP]".
+  iDestruct "tdP" as (?) "(_ & tdP & _)".
   by iDestruct (meta_meta_token with "Hmeta tdP") as "[]".
 iMod (own_alloc (coGset_pair_unset ⊤)) as (γ_pub) "unpubl" => //.
 iMod (own_alloc (namespace_map_token ⊤)) as (γ_meta) "token" => //.
@@ -1033,40 +1073,27 @@ iMod ("close" $! td' (to_term_data' {[t := d]}) with "[]") as "own"; first iSpli
   rewrite /= /td' fmap_insert map_fmap_singleton /=.
   apply alloc_singleton_local_update => //.
   by rewrite lookup_fmap undef.
-- iModIntro; rewrite /term_data_inv !big_sepM_forall.
-  iIntros (t'); destruct (decide (t' = t)) as [->|ne].
-    by rewrite lookup_insert; iIntros (?) "%Hlookup"; case: Hlookup => <- //.
-  iIntros (d'); rewrite lookup_insert_ne //; iIntros (td_t').
-  iDestruct ("tdP" $! _ _ td_t') as "decl".
-  case: t' ne {td_t'} => //= kt k ne.
-  case: d' => [] [] lvl' γ_pub' γ_meta' /=.
-  iDestruct "decl" as "(%k_td & %pub & #sec)".
-  iSplit.
-    rewrite dom_insert; iPureIntro; set_solver.
-  iSplit.
-    iPureIntro.
-    move=> all_pub; apply: pub.
-    move=> t'' lvl'' γ_pub'' γ_meta'' t''_atom td_t''.
-    destruct (decide (t'' = t)) as [->|ne'']; first by congruence.
-    apply: all_pub; eauto.
-    by rewrite lookup_insert_ne //.
-  iIntros "!>" (t'' γ_pub'' γ_meta'' t''_atom td'_t'').
-  destruct (decide (t'' = t)) as [->|ne''].
-    case/(_ _ t''_atom)/elem_of_dom: k_td => ? k_td.
-    by rewrite undef in k_td.
-  rewrite lookup_insert_ne // in td'_t''.
-  by iApply "sec".
-rewrite /to_term_data' !map_fmap_singleton /=.
-iClear "own0"; rewrite auth_own_4.
+- iIntros "#own !> {own0}".
+  rewrite /term_data_inv big_sepM_insert //.
+  iSplit => //.
+  iSplit => //.
+  rewrite termT_eq /=.
+  iExists lvl; iSplit.
+    rewrite /to_term_data' !map_fmap_singleton /= /crypto_own.
+    rewrite auth_own_3.
+    by iDestruct "own" as "(?&?&?)".
+  iSplit => //. by case: (lvl).
+rewrite /to_term_data' !map_fmap_singleton /= /crypto_own.
+iClear "own0"; rewrite auth_own_3.
 iDestruct "own" as "# (Hlvl & Hpub & Hmeta)".
 iModIntro; iSplit.
   iSplit; first by rewrite termT_eq; iExists lvl; eauto.
   iIntros "!>" (lvl').
   rewrite termT_eq.
-  iDestruct 1 as (lvl'') "[Ha %sub']".
+  iDestruct 1 as (lvl'') "(Ha & _ & %sub')".
   by iDestruct (atomicT_agree with "Ha Hlvl") as "->".
 iSplitL "unpubl" => //.
-  by iIntros "_"; iExists γ_pub; iSplit.
+  by iExists γ_pub; iSplit.
 by iExists γ_meta; eauto.
 Qed.
 
@@ -1196,10 +1223,10 @@ case: t => //=.
 - move => a _.
   rewrite !termT_eq.
   iDestruct 1 as "[#sec #pub]".
-  iDestruct "sec" as (lvl) "[sec %leq]".
+  iDestruct "sec" as (lvl) "(sec & ? & %leq)".
   case: lvl leq => // _.
   iDestruct ("pub" with "[]") as "[]".
-  by iExists Pub; iSplit.
+  by iExists Pub; do 2![iSplit => //].
 - move=> kt k _.
   rewrite !termT_eq.
   iDestruct 1 as "[#sec #pub]".
