@@ -444,7 +444,7 @@ Definition unpublished t Ts : iProp :=
   own_publish t (coGset_pair_unset Ts).
 
 Definition published t Ts : iProp :=
-  □ (atomicT Sec t -∗ own_publish t (coGset_pair_set Ts)).
+  own_publish t (coGset_pair_set Ts).
 
 Global Instance published_persistent t Ts : Persistent (published t Ts).
 Proof. apply _. Qed.
@@ -889,8 +889,18 @@ rewrite -!pair_op /=.
 by rewrite !(ucmra_unit_left_id, ucmra_unit_right_id).
 Qed.
 
+Definition term_inv t d : iProp :=
+  let '(lvl, _, _) := d in
+  ⌜atomic t⌝ ∗ stermT lvl t ∗
+  if lvl is Pub then published t ⊤ else emp.
+
+Global Instance term_inv_persistent t d : Persistent (term_inv t d).
+Proof.
+by case: t => *; case: d => [] [] [] * /=; apply _.
+Qed.
+
 Definition term_data_inv (td : term_data) : iProp :=
-  ([∗ map] t ↦ _ ∈ td, ⌜atomic t⌝ ∗ termT Sec t)%I.
+  ([∗ map] t ↦ d ∈ td, term_inv t d)%I.
 
 Global Instance term_data_inv_persistent td : Persistent (term_data_inv td).
 Proof. by apply _. Qed.
@@ -1040,7 +1050,7 @@ Lemma declare_nonce E1 E2 lvl a :
   crypto_ctx -∗
   meta_token a E2 ={E1}=∗
   stermT lvl (TNonce a) ∗
-  unpublished (TNonce a) ⊤ ∗
+  guarded lvl (unpublished (TNonce a) ⊤) ∗
   crypto_meta_token (TNonce a) ⊤.
 Proof.
 iIntros (sub1 sub2) "#ctx Hmeta".
@@ -1048,19 +1058,28 @@ iMod (auth_empty crypto_name) as "#own0".
 iMod (auth_acc' with "[ctx own0]")
   as (td) "(_ & #tdP & close)"; eauto.
 pose (t := TNonce a); iAssert (▷ ⌜td !! t = None⌝)%I as "#>%undef".
-  case e: (td !! t) => [[] [] ???|] //=.
+  case e: (td !! t) => [[] [] lvl' γ_pub_t γ_meta_t|] //=.
   rewrite /term_data_inv big_sepM_forall.
   iSpecialize ("tdP" $! _ _ e) => /=.
+  iDestruct "tdP" as "(_ & (tdP & _) & _)".
   rewrite termT_eq /=.
-  iDestruct "tdP" as "> [_ tdP]".
   iDestruct "tdP" as (?) "(_ & tdP & _)".
+  iModIntro.
   by iDestruct (meta_meta_token with "Hmeta tdP") as "[]".
-iMod (own_alloc (coGset_pair_unset ⊤)) as (γ_pub) "unpubl" => //.
+pose (publ := if lvl is Pub then coGset_pair_set ⊤
+              else coGset_pair_unset ⊤).
+iMod (own_alloc publ) as (γ_pub) "publ" => //.
+  rewrite /publ; case: (lvl) => //.
 iMod (own_alloc (namespace_map_token ⊤)) as (γ_meta) "token" => //.
   exact: namespace_map_token_valid.
 iMod (meta_set ⊤ a () (cryptoN.@"nonce") with "Hmeta") as "#l_nonce"; eauto.
 pose (d   := (lvl, γ_pub, γ_meta)).
 pose (td' := <[t := d]>td).
+iAssert (□ (⌜lvl = Pub⌝ -∗ own γ_pub (coGset_pair_set ⊤)))%I
+  with "[publ]" as "#publ'".
+  rewrite /publ; case: (lvl).
+  - by iDestruct "publ" as "#publ"; iIntros "!> _".
+  - by iIntros "!> %".
 iMod ("close" $! td' (to_term_data' {[t := d]}) with "[]") as "own"; first iSplit.
 - iPureIntro; apply: prod_local_update => /=; last first.
     rewrite /td' fmap_insert map_fmap_singleton /=.
@@ -1077,12 +1096,19 @@ iMod ("close" $! td' (to_term_data' {[t := d]}) with "[]") as "own"; first iSpli
   rewrite /term_data_inv big_sepM_insert //.
   iSplit => //.
   iSplit => //.
-  rewrite termT_eq /=.
-  iExists lvl; iSplit.
-    rewrite /to_term_data' !map_fmap_singleton /= /crypto_own.
-    rewrite auth_own_3.
-    by iDestruct "own" as "(?&?&?)".
-  iSplit => //. by case: (lvl).
+  rewrite /to_term_data' !map_fmap_singleton /= /crypto_own.
+  rewrite auth_own_3.
+  iDestruct "own" as "(own_lvl & own_pub & own_meta)".
+  iSplit; first iSplit.
+  + rewrite termT_eq /=.
+    iExists lvl; do 2![iSplit => //].
+  + iIntros "!>" (lvl').
+    rewrite termT_eq /=.
+    iDestruct 1 as (lvl'') "(own_lvl' & _ & %sub)".
+    by iDestruct (atomicT_agree with "own_lvl own_lvl'") as "<-".
+  + case: (lvl) => //.
+    iExists γ_pub; iSplit => //.
+    by iApply "publ'".
 rewrite /to_term_data' !map_fmap_singleton /= /crypto_own.
 iClear "own0"; rewrite auth_own_3.
 iDestruct "own" as "# (Hlvl & Hpub & Hmeta)".
@@ -1092,7 +1118,8 @@ iModIntro; iSplit.
   rewrite termT_eq.
   iDestruct 1 as (lvl'') "(Ha & _ & %sub')".
   by iDestruct (atomicT_agree with "Ha Hlvl") as "->".
-iSplitL "unpubl" => //.
+iSplitL "publ" => //.
+  rewrite /publ; case: (lvl) => //=.
   by iExists γ_pub; iSplit.
 by iExists γ_meta; eauto.
 Qed.
