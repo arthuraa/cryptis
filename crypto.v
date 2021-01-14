@@ -440,6 +440,24 @@ Qed.
 Definition own_publish t (Ti : coGset_pair term) : iProp :=
   ∃ γ_pub, crypto_own (∅, {[t := to_agree γ_pub]}, ∅) ∗ own γ_pub Ti.
 
+Lemma own_publish_op t Ti1 Ti2 :
+  own_publish t (Ti1 ⋅ Ti2) ⊣⊢ own_publish t Ti1 ∗ own_publish t Ti2.
+Proof.
+apply (anti_symm _).
+- iDestruct 1 as (γ_pub) "[#own1 [H1 H2]]".
+  by iSplitL "H1"; iExists γ_pub; eauto.
+- iDestruct 1 as "[H1 H2]".
+  iDestruct "H1" as (γ_pub1) "[#own1 H1]".
+  iDestruct "H2" as (γ_pub2) "[#own2 H2]".
+  iDestruct (own_valid_2 with "own1 own2") as % valid.
+  move: valid.
+  rewrite -auth_frag_op auth_frag_valid -!pair_op !pair_valid.
+  rewrite singleton_op singleton_valid.
+  case=> [] [] _ valid _.
+  apply agree_op_invL' in valid; subst γ_pub2.
+  by iExists γ_pub1; iSplit => //; rewrite own_op; iFrame.
+Qed.
+
 Definition unpublished t Ts : iProp :=
   own_publish t (coGset_pair_unset Ts).
 
@@ -448,6 +466,12 @@ Definition published t Ts : iProp :=
 
 Global Instance published_persistent t Ts : Persistent (published t Ts).
 Proof. apply _. Qed.
+
+Lemma published_op t Ts1 Ts2 :
+  published t (Ts1 ⋅ Ts2) ⊣⊢ published t Ts1 ∗ published t Ts2.
+Proof.
+by rewrite /published coGset_pair_set_op own_publish_op.
+Qed.
 
 (** [termT lvl t] holds when the term [t] can be declared public after
 encrypting it.  If [lvl = Pub], [t] is considered public and does not have to be
@@ -1043,7 +1067,8 @@ case: lvl => /=.
     iMod ("close" $! td ε with "[]") as "_".
       by iSplit => //; iIntros "_ !>".
     iModIntro.
-    admit. (* Easy *)
+    rewrite (union_difference_L Ts ⊤) // published_op.
+    by iDestruct "publ" as "[??]".
   + iMod (own_alloc (coGset_pair_set ⊤)) as (γ_pub) "#publ" => //.
     iMod (own_alloc (namespace_map_token ⊤)) as (γ_meta) "meta" => //.
       apply namespace_map_token_valid.
@@ -1071,14 +1096,16 @@ case: lvl => /=.
       by iExists γ_pub; eauto.
     rewrite /crypto_own auth_own_3.
     iDestruct "own" as "(_ & ? & _)".
-    iModIntro; iExists γ_pub; iSplit => //.
-    admit. (* Easy *)
+    iAssert (published t ⊤) as "{publ} publ".
+      by iExists γ_pub; eauto.
+    rewrite (union_difference_L Ts ⊤) // published_op.
+    by iModIntro; iDestruct "publ" as "[??]".
 - iIntros (_ atomic_t) "#ctx #Ht unpubl".
   iDestruct "unpubl" as (γ_pub) "[#own unpubl]".
   iMod (own_update _ _ (coGset_pair_set Ts) with "unpubl") as "#publ".
     apply: coGset_pair_alloc_update.
   by iIntros "!>"; iExists γ_pub; iSplit.
-Admitted.
+Qed.
 
 Lemma declare_nonce E1 E2 lvl a :
   ↑cryptoN ⊆ E1 →
