@@ -970,31 +970,6 @@ iIntros (t' d'); destruct (decide (t' = t)) as [->|ne].
 Qed.
 *)
 
-(*Lemma publish E lvl t Ts :
-  ↑cryptoN ⊆ E →
-  crypto_ctx -∗
-  termT lvl t -∗
-  unpublished t Ts ={E}=∗
-  published t Ts.
-Proof.
-iIntros (?) "#ctx #Ht unpubl".
-iDestruct (termT_lvlP with "Ht") as (lvl') "{Ht} Ht".
-case: lvl' {lvl}.
-  rewrite /crypto_ctx /auth_ctx.
-  rewrite /published.
-  iAssert (|={E}=> ▷ □ (atomicT Sec t -∗ False))%I as "H".
-
-  iInv "ctx" as "?".
-  iModIntro.
-
-  iIntros "!> !> #contra".
-  by iDestruct (stermT_agree with "Ht contra") as "%".
-iDestruct ("unpubl" with "Ht") as (γ_pub) "[#own unpubl]".
-iMod (own_update _ _ (coGset_pair_set Ts) with "unpubl") as "#publ".
-  apply: coGset_pair_alloc_update.
-by iIntros "!> !> _"; iExists γ_pub; iSplit.
-Qed.
-*)
 
 Global Instance term_data'_cmra_total : CmraTotal term_data'UR.
 Proof. apply _. Qed.
@@ -1043,6 +1018,67 @@ Proof.
   iMod ("HclAuth" $! u b with "H") as "(Hinv & ?)". by iMod ("Hclose" with "Hinv").
 Qed.
 (* /MOVE *)
+
+Lemma publish E lvl t Ts :
+  ↑cryptoN ⊆ E →
+  atomic t →
+  crypto_ctx -∗
+  stermT lvl t -∗
+  guarded lvl (unpublished t Ts) ={E}=∗
+  published t Ts.
+Proof.
+case: lvl => /=.
+- iIntros (? atomic_t) "#ctx #Ht _".
+  iMod (auth_empty crypto_name) as "#own0".
+  iMod (auth_acc' with "[ctx own0]") as (td) "{own0} (_ & #tdP & close)"; eauto.
+  destruct (td !! t) as [d|] eqn:td_t.
+  + case: d td_t => [] [] lvl' γ_pub γ_meta td_t.
+    iAssert (▷ term_inv t (lvl', γ_pub, γ_meta))%I as "#Ht'".
+    { iModIntro; rewrite /term_data_inv big_sepM_forall.
+      by iApply "tdP". }
+    iDestruct "Ht'" as "(_ & Ht' & publ)".
+    iAssert (▷ ⌜lvl' = Pub⌝)%I as ">->".
+    { iModIntro; iApply (stermT_agree with "Ht' Ht"). }
+    iDestruct "publ" as ">publ".
+    iMod ("close" $! td ε with "[]") as "_".
+      by iSplit => //; iIntros "_ !>".
+    iModIntro.
+    admit. (* Easy *)
+  + iMod (own_alloc (coGset_pair_set ⊤)) as (γ_pub) "#publ" => //.
+    iMod (own_alloc (namespace_map_token ⊤)) as (γ_meta) "meta" => //.
+      apply namespace_map_token_valid.
+    pose (td' := <[t := (Pub, γ_pub, γ_meta)]>td).
+    pose (d'  := ({[t := to_agree Pub]} : gmap _ _,
+                  {[t := to_agree γ_pub]} : gmap _ _,
+                  {[t := to_agree γ_meta]} : gmap _ _)).
+    iMod ("close" $! td' d' with "[]") as "#own"; first iSplit.
+    * iPureIntro; apply: prod_local_update => /=; last first.
+        rewrite /td' fmap_insert.
+        apply alloc_singleton_local_update => //.
+        by rewrite lookup_fmap td_t.
+      apply: prod_local_update; last first.
+        rewrite /= /td' fmap_insert /=.
+        apply alloc_singleton_local_update => //.
+        by rewrite lookup_fmap td_t.
+      rewrite /= /td' fmap_insert /=.
+      apply alloc_singleton_local_update => //.
+      by rewrite lookup_fmap td_t.
+    * iIntros "#own !>".
+      rewrite /crypto_own auth_own_3 /term_data_inv.
+      rewrite big_sepM_insert //; iSplit => //=.
+      do 2![iSplit => //].
+      iDestruct "own" as "(_ & ? & _)".
+      by iExists γ_pub; eauto.
+    rewrite /crypto_own auth_own_3.
+    iDestruct "own" as "(_ & ? & _)".
+    iModIntro; iExists γ_pub; iSplit => //.
+    admit. (* Easy *)
+- iIntros (_ atomic_t) "#ctx #Ht unpubl".
+  iDestruct "unpubl" as (γ_pub) "[#own unpubl]".
+  iMod (own_update _ _ (coGset_pair_set Ts) with "unpubl") as "#publ".
+    apply: coGset_pair_alloc_update.
+  by iIntros "!>"; iExists γ_pub; iSplit.
+Admitted.
 
 Lemma declare_nonce E1 E2 lvl a :
   ↑cryptoN ⊆ E1 →
