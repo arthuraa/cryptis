@@ -1,5 +1,110 @@
 From stdpp Require Import base countable gmap.
 From iris.heap_lang Require Import lang notation proofmode.
+From iris.algebra Require Import namespace_map gmap gset auth.
+From iris.base_logic Require Import gen_heap.
+From iris_string_ident Require Import ltac2_string_ident.
+
+(* TODO: Move to Iris? *)
+Instance dom_ne {T : ofeT} :
+  NonExpansive (dom (gset loc) : gmap loc T -> gset loc).
+Proof. by move=> ??? e ?; rewrite !elem_of_dom e. Qed.
+
+Lemma meta_meta_token `{Countable L, !gen_heapG L V Σ, Countable A} l (x : A) N E :
+  ↑N ⊆ E →
+  meta_token l E -∗
+  meta l N x -∗
+  False.
+Proof.
+iIntros (sub) "Htoken #Hmeta1".
+pose (X := {[encode x]} : gset positive).
+iMod (meta_set _ _ (fresh X) with "Htoken") as "#Hmeta2"=> //.
+iAssert (meta l N (encode x)) as "Hmeta1'".
+  by rewrite {1 3}/meta seal_eq.
+iPoseProof (meta_agree with "Hmeta1' Hmeta2") as "%e"; iPureIntro.
+assert (contra : encode x ∈ X). { by apply/elem_of_singleton. }
+destruct (is_fresh X); by rewrite -e.
+Qed.
+
+(* I've made an MR for this. *)
+Lemma gmap_equivI `{!EqDecision K, !Countable K, A : ofeT, M : ucmraT}
+  (m1 m2 : gmap K A) :
+  m1 ≡ m2 ⊣⊢@{uPredI M} (∀ i : K, m1 !! i ≡ m2 !! i).
+Proof. by uPred.unseal. Qed.
+
+Lemma dom_singleton_eq `{EqDecision K, Countable K} {T} (m : gmap K T) x :
+  dom (gset K) m = {[x]} →
+  ∃ y, m = {[x := y]}.
+Proof.
+move=> e.
+have {}e: ∀ x' : K, x' ∈ dom (gset K) m ↔ x' ∈ ({[x]} : gset K) by rewrite e.
+have: x ∈ ({[x]} : gset K) by rewrite elem_of_singleton.
+rewrite -e elem_of_dom; case=> y m_x; exists y.
+apply: map_eq=> x'; case: (decide (x' = x))=> [ {x'}->|ne].
+  by rewrite lookup_singleton.
+rewrite lookup_singleton_ne // -(@not_elem_of_dom _ _ (gset K)).
+by rewrite e elem_of_singleton.
+Qed.
+
+Lemma option_Forall2E {A B} {R : A → B → Prop} ox oy :
+  option_Forall2 R ox oy ↔
+  match ox, oy with
+  | Some x, Some y => R x y
+  | None, None => True
+  | _, _ => False
+  end.
+Proof.
+split; first by case.
+by case: ox oy=> [x|] [y|] //; constructor.
+Qed.
+
+Lemma option_equivE `{Equiv A} (ox oy : option A) :
+  ox ≡ oy ↔
+  match ox, oy with
+  | Some x, Some y => x ≡ y
+  | None, None => True
+  | _, _ => False
+  end.
+Proof. apply option_Forall2E. Qed.
+
+Lemma namespace_map_validI Σ (A : cmraT) (x : namespace_map A) :
+  ✓ x ⊣⊢@{iPropI Σ}
+  match namespace_map_token_proj x with
+  | CoPset E =>
+    ✓ namespace_map_data_proj x
+    ∧ ⌜∀ i, namespace_map_data_proj x !! i = None ∨ i ∉ E⌝
+  | CoPsetBot => False
+  end.
+Proof. by uPred.unseal; case: x=> [? [?|]]. Qed.
+
+
+Global Instance auth_auth_cancelable (T : ucmraT) (x : T) : Cancelable (● x).
+Proof.
+intros n [yauth yfrag] [zauth zfrag].
+rewrite auth_validN_eq /=; destruct yauth as [[yfrac yauth]|]; rewrite /=.
+  destruct 1 as [contra _].
+  apply exclusiveN_l in contra; first by destruct contra.
+  exact frac_full_exclusive. (* ??? *)
+destruct 1 as [_ (x' & ex & dec & valid)].
+destruct 1 as [eauth efrag]; simpl in *.
+rewrite !ucmra_unit_left_id in efrag *; move=> efrag.
+split=> //.
+destruct zauth as [[zfrac zauth]|]; trivial.
+rewrite ucmra_unit_right_id -Some_op -pair_op in eauth * => eauth.
+move/Some_dist_inj: eauth=> [/= eauth _].
+enough (contra : ✓ (1%Qp ⋅ zfrac)).
+  apply exclusive_l in contra; first by case: contra.
+  apply frac_full_exclusive.
+by rewrite -eauth.
+Qed.
+
+(* Double-check this does not exist *)
+Lemma singleton_inj `{!EqDecision T, !Countable T} :
+  Inj eq eq (singleton : T -> gset T).
+Proof.
+move=> x1 x2 e.
+have : x1 ∈ ({[x1]} : gset _) by apply elem_of_singleton.
+by rewrite e => /elem_of_singleton.
+Qed.
 
 Definition perm `{!EqDecision T, !Countable T} (X : gset (T * T)) :=
   forall p1 p2, p1 ∈ X → p2 ∈ X → (p1.1 = p2.1 ↔ p1.2 = p2.2).

@@ -3,91 +3,15 @@ From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl namespace_map frac.
 From iris.base_logic.lib Require Import auth.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import lib term crypto1 primitives tactics.
+From crypto Require Import lib term crypto primitives tactics.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Lemma option_Forall2E {A B} {R : A → B → Prop} ox oy :
-  option_Forall2 R ox oy ↔
-  match ox, oy with
-  | Some x, Some y => R x y
-  | None, None => True
-  | _, _ => False
-  end.
-Proof.
-split; first by case.
-by case: ox oy=> [x|] [y|] //; constructor.
-Qed.
-
-Lemma option_equivE `{Equiv A} (ox oy : option A) :
-  ox ≡ oy ↔
-  match ox, oy with
-  | Some x, Some y => x ≡ y
-  | None, None => True
-  | _, _ => False
-  end.
-Proof. apply option_Forall2E. Qed.
-
-Lemma namespace_map_validI Σ (A : cmraT) (x : namespace_map A) :
-  ✓ x ⊣⊢@{iPropI Σ}
-  match namespace_map_token_proj x with
-  | CoPset E =>
-    ✓ namespace_map_data_proj x
-    ∧ ⌜∀ i, namespace_map_data_proj x !! i = None ∨ i ∉ E⌝
-  | CoPsetBot => False
-  end.
-Proof. by uPred.unseal; case: x=> [? [?|]]. Qed.
-
-Lemma meta_contra `{Countable L, !gen_heapG L V Σ, Countable A} l (x : A) N E :
-  ↑N ⊆ E →
-  meta_token l E -∗
-  meta l N x -∗
-  False.
-Proof.
-iIntros (sub) "Htoken #Hmeta1".
-pose (X := {[encode x]} : gset positive).
-iMod (meta_set _ _ (fresh X) with "Htoken") as "#Hmeta2"=> //.
-iAssert (meta l N (encode x)) as "Hmeta1'".
-  by rewrite {1 3}/meta seal_eq.
-iPoseProof (meta_agree with "Hmeta1' Hmeta2") as "%e"; iPureIntro.
-assert (contra : encode x ∈ X). { by apply/elem_of_singleton. }
-destruct (is_fresh X); by rewrite -e.
-Qed.
-
-Global Instance auth_auth_cancelable (T : ucmraT) (x : T) : Cancelable (● x).
-Proof.
-intros n [yauth yfrag] [zauth zfrag].
-rewrite auth_validN_eq /=; destruct yauth as [[yfrac yauth]|]; rewrite /=.
-  destruct 1 as [contra _].
-  apply exclusiveN_l in contra; first by destruct contra.
-  exact frac_full_exclusive. (* ??? *)
-destruct 1 as [_ (x' & ex & dec & valid)].
-destruct 1 as [eauth efrag]; simpl in *.
-rewrite !ucmra_unit_left_id in efrag *; move=> efrag.
-split=> //.
-destruct zauth as [[zfrac zauth]|]; trivial.
-rewrite ucmra_unit_right_id -Some_op -pair_op in eauth * => eauth.
-move/Some_dist_inj: eauth=> [/= eauth _].
-enough (contra : ✓ (1%Qp ⋅ zfrac)).
-  apply exclusive_l in contra; first by case: contra.
-  apply frac_full_exclusive.
-by rewrite -eauth.
-Qed.
-
-(* Double-check this does not exist *)
-Lemma singleton_inj `{!EqDecision T, !Countable T} :
-  Inj eq eq (singleton : T -> gset T).
-Proof.
-move=> x1 x2 e.
-have : x1 ∈ ({[x1]} : gset _) by apply elem_of_singleton.
-by rewrite e => /elem_of_singleton.
-Qed.
-
 Section NSL.
 
-Context `{!resG Σ, !heapG Σ}.
+Context `{!cryptoG Σ, !heapG Σ}.
 
 Inductive role := Init | Resp.
 
@@ -134,8 +58,8 @@ Definition swap_role rl :=
 
 Inductive session := Session {
   srole : role;
-  sinit : loc;
-  sresp : loc;
+  sinit : term;
+  sresp : term;
   sdata : option term;
 }.
 
@@ -153,7 +77,7 @@ Definition sother s :=
   if s.(srole) is Init then s.(sresp) else s.(sinit).
 
 Definition sessionR : cmraT :=
-  prodR (prodR (prodR (agreeR roleO) (agreeR locO)) (agreeR locO))
+  prodR (prodR (prodR (agreeR roleO) (agreeR termO)) (agreeR termO))
         (optionR (agreeR termO)).
 
 Implicit Types t : term.
@@ -320,7 +244,7 @@ Definition msg1_spec nA pkA :=
   TPair (TInt 1) (TPair nA (TPair pkA (TInt 0))).
 
 Definition msg1_pred p : iProp Σ :=
-  ∃ nA kA, ⌜p.2 = Spec.of_list [nA; TKey KAEnc kA]⌝ ∗
+  ∃ nA kA, ⌜p.2 = Spec.of_list [nA; TKey Enc kA]⌝ ∗
            term_session_frag nA (Session Init kA p.1 None).
 
 Global Instance msg1_pred_proper : NonExpansive msg1_pred.
@@ -333,7 +257,7 @@ Proof. apply _. Qed.
 
 Definition msg2_pred p : iProp Σ :=
   ∃ nA nB kB,
-    ⌜p.2 = Spec.of_list [nA; nB; TKey KAEnc kB]⌝ ∗
+    ⌜p.2 = Spec.of_list [nA; nB; TKey Enc kB]⌝ ∗
     term_session_frag nB (Session Resp p.1 kB (Some nA)).
 
 Global Instance msg2_pred_proper : NonExpansive msg2_pred.
@@ -363,50 +287,16 @@ Qed.
 Global Instance msg3_pred_persistent p : Persistent (msg3_pred p).
 Proof. apply _. Qed.
 
-Definition unregistered t : iProp Σ :=
-  ∃ l, ⌜symbols_of_term t = {[l]}⌝
-       ∗ meta_token l (↑cryptoN.@"nsl".@"secret").
-
-Definition registered t : iProp Σ :=
-  ∃ l, ⌜symbols_of_term t = {[l]}⌝
-       ∗ meta l (cryptoN.@"nsl".@"secret") ().
-
-Lemma registered_unregistered t :
-  registered t -∗
-  unregistered t -∗
-  False.
-Proof.
-iDestruct 1 as (l1) "[%Hl1 Hmeta1]".
-iDestruct 1 as (l2) "[%Hl2 Hmeta2]".
-move: Hl1; rewrite Hl2 => e; rewrite (singleton_inj e).
-by iApply (meta_contra with "Hmeta2 Hmeta1").
-Qed.
-
-Lemma registered_set t :
-  unregistered t ==∗
-  registered t.
-Proof.
-iDestruct 1 as (l) "[%t_l Hmeta]".
-iMod (meta_set _ _ () with "Hmeta") as "#Hmeta"; eauto.
-by iModIntro; iExists l; iSplit.
-Qed.
-
-Global Instance registered_persistent t :
-  Persistent (registered t).
-Proof. apply _. Qed.
-
-Global Instance registered_timeless t :
-  Timeless (registered t).
-Proof. apply _. Qed.
-
 Definition role_name rl : gname :=
   if rl is Init then nsl_init_name else nsl_resp_name.
 
 Definition nsl_key rl k : iProp Σ :=
+  termT Pub (TKey Enc k) ∗
+  stermT Sec (TKey Dec k) ∗
   match rl with
-  | Init => tag_akeyT Pub "m2" (OfeMor msg2_pred) k
-  | Resp => tag_akeyT Pub "m1" (OfeMor msg1_pred) k ∗
-            tag_akeyT Pub "m3" (OfeMor msg3_pred) k
+  | Init => tkey_predT "m2" (OfeMor msg2_pred) k
+  | Resp => tkey_predT "m1" (OfeMor msg1_pred) k ∗
+            tkey_predT "m3" (OfeMor msg3_pred) k
   end.
 Arguments nsl_key : simpl never.
 
@@ -414,12 +304,8 @@ Global Instance nsl_key_persistent rl k :
   Persistent (nsl_key rl k).
 Proof. rewrite /nsl_key; case: rl; apply _. Qed.
 
-Lemma nsl_key_pub rl k : nsl_key rl k -∗ pub_enc_key k.
-Proof.
-rewrite /nsl_key; case: rl => /=.
-- iIntros "[H _]"; iExists _, _; eauto.
-- iIntros "[[H _] _]"; iExists _, _; eauto.
-Qed.
+Lemma nsl_key_pub rl k : nsl_key rl k -∗ termT Pub (TKey Enc k).
+Proof. by iDestruct 1 as "[??]". Qed.
 
 Definition coherent_views SM t1 s1 : Prop :=
   match s1.(srole), s1.(sdata) with
@@ -434,7 +320,7 @@ Definition session_inv SM : iProp Σ :=
   ∀ t1 s1, ⌜SM !! t1 = Some s1⌝ -∗
     nsl_key s1.(srole) (sowner s1)
     ∗ nsl_key (sroleo s1) (sother s1)
-    ∗ registered t1
+    ∗ crypto_meta t1 (cryptoN.@"nsl") ()
     ∗ stermT Sec t1
     ∗ (if sdata s1 is Some t2 then stermT Sec t2 else True)
     ∗ ⌜coherent_views SM t1 s1⌝.
@@ -443,14 +329,14 @@ Global Instance session_inv_persistent SM : Persistent (session_inv SM).
 Proof. apply _. Qed.
 
 Lemma session_inv_unregistered SM t :
-  unregistered t -∗
+  crypto_meta_token t (↑cryptoN.@"nsl") -∗
   session_inv SM -∗
   ⌜SM !! t = None⌝.
 Proof.
 iIntros "Hunreg Hinv".
 destruct (SM !! t) as [s_t|] eqn:SM_t=> //.
 iDestruct ("Hinv" $! _ _ SM_t) as "(?&?&Hreg&?)".
-by iDestruct (registered_unregistered with "Hreg Hunreg") as "[]".
+by iDestruct (crypto_meta_meta_token with "Hunreg Hreg") as "[]".
 Qed.
 
 Definition nsl_inv : iProp Σ :=
@@ -467,8 +353,8 @@ Lemma nsl_sess_alloc lvl kI kR t rl E ot :
   (if rl is Init then ot = None else is_Some ot) →
   nsl_ctx -∗
   nsl_key rl kA -∗
-  unregistered t -∗
-  pub_enc_key kB -∗
+  crypto_meta_token t (↑cryptoN.@"nsl") -∗
+  termT Pub (TKey Enc kB) -∗
   guarded lvl (nsl_key (swap_role rl) kB) -∗
   stermT lvl t -∗
   (if ot is Some t' then stermT lvl t' else True) ={E}=∗
@@ -477,14 +363,13 @@ Proof.
 move=> kA kB s sub rl_ot; iIntros "#Hctx #Howner Hunreg #HkB #HkB' #Ht #Ht'".
 case: lvl => //=.
 iMod (auth_empty nsl_sess_name) as "#Hinit".
-(* FIXME Why do I have to provide this instance? *)
-iMod (auth_acc to_session_map _ _ _ _ ε
+iMod (auth_acc to_session_map session_inv
          with "[Hctx Hinit]") as "Hinv"; try by eauto.
 iDestruct "Hinv" as (SM) "(_ & Hinv & Hclose)".
 iAssert (▷ ⌜SM !! t = None⌝)%I as "# > %Hfresh".
   iModIntro.
   by iApply (session_inv_unregistered with "[Hunreg] [Hinv]").
-iMod (registered_set with "Hunreg") as "#Hreg"; eauto.
+iMod (crypto_meta_set _ () with "Hunreg") as "#Hreg"; eauto.
 rewrite -auth_own_op singleton_op.
 iApply ("Hclose" $! (<[t:=s]>SM)); iSplit.
   iPureIntro. rewrite /to_session_map fmap_insert.
@@ -512,8 +397,8 @@ Lemma nsl_sess_alloc_init lvl kA kB tA E :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗
   nsl_key Init kA -∗
-  unregistered tA -∗
-  pub_enc_key kB -∗
+  crypto_meta_token tA (↑cryptoN.@"nsl") -∗
+  termT Pub (TKey Enc kB) -∗
   guarded lvl (nsl_key Resp kB) -∗
   stermT lvl tA ={E}=∗
   guarded lvl (term_session_auth tA (Session Init kA kB None) ∗
@@ -527,8 +412,8 @@ Lemma nsl_sess_alloc_resp lvl kA kB tA tB E :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗
   nsl_key Resp kB -∗
-  unregistered tB -∗
-  pub_enc_key kA -∗
+  crypto_meta_token tB (↑cryptoN.@"nsl") -∗
+  termT Pub (TKey Enc kA) -∗
   guarded lvl (nsl_key Init kA) -∗
   stermT lvl tB -∗
   stermT lvl tA ={E}=∗
@@ -595,7 +480,7 @@ Qed.
 Definition session_inv' t1 s1 : iProp Σ :=
   nsl_key s1.(srole) (sowner s1)
   ∗ nsl_key (sroleo s1) (sother s1)
-  ∗ registered t1
+  ∗ crypto_meta t1 (cryptoN.@"nsl") ()
   ∗ stermT Sec t1
   ∗ (if sdata s1 is Some t2 then stermT Sec t2 else True).
 
@@ -607,7 +492,7 @@ Lemma term_session_session_inv0 E lvl t s :
 Proof.
 move=> sub; iIntros "#Hctx Hterm"; case: lvl => //=.
   by iExists s.
-iMod (auth_acc to_session_map _ _ _ _ {[t := session_frag s]}
+iMod (auth_acc to_session_map session_inv
          with "[Hctx Hterm]") as "Hinv"; try by eauto.
 iDestruct "Hinv" as (SM) "(%Hincl & #Hinv & Hclose)".
 case/session_map_frag_included: Hincl=> s' [SM_t ss'].
@@ -649,15 +534,14 @@ Qed.
 Lemma term_session_session_inv3 E lvl t s :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗
-  termT lvl (TKey KAEnc (sowner s)) -∗
+  termT lvl (TKey Enc (sowner s)) -∗
   guarded lvl (term_session_frag t s) ={E}=∗
-  ▷ pub_enc_key (sowner s).
+  ▷ termT Pub (TKey Enc (sowner s)).
 Proof.
 iIntros (sub) "#Hctx #Ht #Hsess".
 iMod (term_session_session_inv0 with "Hctx Hsess") as (s') "[%s_s' Hs']" => //.
 iDestruct "Hs'" as "(#Hk&_)".
 case: lvl=> //=; do 2!iModIntro.
-  by iApply termT_TAEncE.
 rewrite /sowner.
 case/to_session_included: s_s' => [] <- [] <- [] <- _.
 by iApply nsl_key_pub.
@@ -769,7 +653,7 @@ Definition responder (skB pkB : val) : val := λ: <>,
   bind: "nA" := "m1" !! #0 in
   bind: "pkA" := "m1" !! #1 in
   bind: "kt" := is_key "pkA" in
-  if: "kt" = repr KAEnc then
+  if: "kt" = repr Enc then
     let: "nB" := gen #() in
     bind: "m2" := tenc "m2" "pkA" (term_of_list ["nA"; "nB"; pkB]) in
     send "m2";;
@@ -789,57 +673,36 @@ Hypothesis wp_recv : forall E Ψ,
   WP recv #() @ E {{ Ψ }}.
 
 Hypothesis wp_gen : forall E lvl Ψ,
-  (∀ t, unregistered t -∗ stermT lvl t -∗
+  (∀ t, crypto_meta_token t (↑cryptoN.@"nsl") -∗
+        stermT lvl t -∗
         Ψ t) -∗
   WP gen #() @ E {{ Ψ }}.
 
 Lemma termT_msg1 lvl kA kB (tA : term) :
   nsl_key Init kA -∗
   stermT lvl tA -∗
-  pub_enc_key kB -∗
+  termT Pub (TKey Enc kB) -∗
   guarded lvl (nsl_key Resp kB) -∗
   guarded lvl (term_session_frag tA (Session Init kA kB None)) -∗
-  termT Pub (TEnc true kB (Spec.tag "m1" (Spec.of_list [tA; TKey KAEnc kA]))).
+  termT Pub (TEnc kB (Spec.tag "m1" (Spec.of_list [tA; TKey Enc kA]))).
 Proof.
-iIntros "#HkA #HtA #HkB_lo (#HkB_hi & _) #frag".
+iIntros "#HkA #HtA #HkB_lo (#HkB_hi & #HkB_hi' & #? & _) #frag".
 iApply termT_tag_aenc_pub_secG; eauto.
   iApply termT_of_list => /=.
   iSplit; first by iDestruct "HtA" as "[??]".
   iSplit => //.
   iApply (@sub_termT _ _ _ Pub) => //.
-  by iDestruct "HkA" as "[HkA _]"; iApply termT_TAEnc.
+  by iDestruct "HkA" as "[HkA _]".
 case: lvl => //=; iModIntro; by iExists _, _; eauto.
 Qed.
-
-(* MOVE *)
-Global Instance guarded_into_and b lvl (P Q R : iProp Σ) :
-  IntoAnd b P Q R →
-  IntoAnd b (guarded lvl P) (guarded lvl Q) (guarded lvl R).
-Proof.
-by case: b lvl=> [] //= [] //= _; rewrite /IntoAnd /=; eauto.
-Qed.
-
-Lemma stermTP lvl lvl' t :
-  stermT lvl t -∗ termT lvl' t -∗ ⌜lvl ⊑ lvl'⌝.
-Proof. by iIntros "[_ #min]". Qed.
-
-Lemma stermT_eq lvl lvl' t :
-  stermT lvl t -∗ stermT lvl' t -∗ ⌜lvl = lvl'⌝.
-Proof.
-iIntros "[#Ht #min] [#Ht' #min']".
-iPoseProof ("min" with "Ht'") as "%l1".
-iPoseProof ("min'" with "Ht") as "%l2".
-by case: lvl lvl' l1 l2 => [] // [] //.
-Qed.
-(* /MOVE *)
 
 Lemma wp_initiator kA kB (tA : term) lvl E Ψ :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗
   stermT lvl tA -∗
-  unregistered tA -∗
+  crypto_meta_token tA (↑cryptoN.@"nsl") -∗
   nsl_key Init kA -∗
-  pub_enc_key kB -∗
+  termT Pub (TKey Enc kB) -∗
   guarded lvl (nsl_key Resp kB) -∗
   (∀ onB : option term,
       (if onB is Some tB then
@@ -850,7 +713,7 @@ Lemma wp_initiator kA kB (tA : term) lvl E Ψ :
          )
        else True) -∗
       Ψ (repr onB)) -∗
-  WP initiator (TKey KADec kA) (TKey KAEnc kA) (TKey KAEnc kB) tA #() @ E
+  WP initiator (TKey Dec kA) (TKey Enc kA) (TKey Enc kB) tA #() @ E
      {{ Ψ }}.
 Proof.
 rewrite /initiator.
@@ -871,8 +734,9 @@ wp_lookup pkB' epkB'; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst nA'.
 wp_eq_term e; last protocol_failure; subst pkB'.
 wp_tenc.
-iDestruct (termT_tag_adec_pub_sec with "Hm2 [//]") as (lm2) "{Hm2} [#Hm2 #fragB]".
-iPoseProof (termT_of_listE with "Hm2") as "{Hm2} Hm2".
+iDestruct (termT_tag_adec_pub_sec with "Hm2 []") as (lm2) "{Hm2} [#Hm2 #fragB]".
+  by iDestruct "HkA" as "(?&?&?)".
+rewrite termT_of_list.
 iPoseProof (big_sepL_lookup with "Hm2") as "m2_tA"; first exact: enA'.
 iPoseProof (big_sepL_lookup with "Hm2") as "m2_nB"; first exact: enB.
 iPoseProof (big_sepL_lookup with "Hm2") as "m2_kB"; first exact: epkB'.
@@ -891,13 +755,13 @@ iAssert (▷ ⌜lm2 = lvl⌝)%I as "e".
   iModIntro.
   case: lvl lm2 Hlm2 => [] // [] //= _.
   iDestruct "sessB" as "(_&_&_&_&HtA')".
-  by iApply (stermT_eq with "HtA' HtA").
+  by iApply (stermT_agree with "HtA' HtA").
 wp_pures; iDestruct "e" as "->".
 iMod (nsl_sess_update with "Hctx auth fragB") as "{fragA} [auth #fragA]" => //.
-set m3 := TEnc _ _ _.
+set m3 := TEnc _ _.
 wp_bind (send _); iApply wp_send.
   iModIntro.
-  iDestruct "HkB_hi" as "(HkB_m1 & HhB_m3)".
+  iDestruct "HkB_hi" as "(HkB_m1 & HkB_m3 & ? & ?)".
   iApply (termT_tag_aenc_pub_secG _ lvl) => //; eauto.
   by case: (lvl) => //=; iModIntro; iExists tA, kA; iSplit.
 wp_pures; iApply ("Hpost" $! (Some nB)).
@@ -906,14 +770,6 @@ case: lvl {Hlm2} => /=.
 iFrame; iSplit; by iDestruct "sessB" as "(?&?&?&?&?&?)".
 Qed.
 
-(* MOVE *)
-Lemma stermT_termT lvl t : stermT lvl t -∗ termT lvl t.
-Proof. by iDestruct 1 as "[??]". Qed.
-
-Lemma sub_termT_pub lvl t : termT Pub t -∗ termT lvl t.
-Proof. by iApply sub_termT. Qed.
-(* /MOVE *)
-
 Lemma wp_responder kB E Ψ :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗
@@ -921,8 +777,8 @@ Lemma wp_responder kB E Ψ :
   (∀ ot : option (term * term * term),
       (if ot is Some (pkA, nA, nB) then
          ∃ lvl kA,
-           ⌜pkA = TKey KAEnc kA⌝ ∗
-           pub_enc_key kA ∗
+           ⌜pkA = TKey Enc kA⌝ ∗
+           termT Pub pkA ∗
            stermT lvl nA ∗
            stermT lvl nB ∗
            guarded lvl (
@@ -930,7 +786,7 @@ Lemma wp_responder kB E Ψ :
             term_session_auth nB (Session Resp kA kB (Some nA)))
        else True) -∗
        Ψ (repr ot)) -∗
-  WP responder (TKey KADec kB) (TKey KAEnc kB) #() @ E {{ Ψ }}.
+  WP responder (TKey Dec kB) (TKey Enc kB) #() @ E {{ Ψ }}.
 Proof.
 iIntros (?) "#Hctx #HkB Hpost".
 rewrite /responder; wp_pures.
@@ -941,11 +797,11 @@ wp_lookup nA enA; last protocol_failure.
 wp_lookup pkA epkA; last protocol_failure.
 wp_is_key_eq kt kA et; last protocol_failure; subst pkA.
 wp_pures.
-case: (bool_decide_reflect (_ = repr_key_type KAEnc)); last protocol_failure.
+case: (bool_decide_reflect (_ = repr_key_type Enc)); last protocol_failure.
 case: kt epkA=> // epkA _.
-iPoseProof "HkB" as "(HkB_m1 & HkB_m3)".
-iDestruct (termT_tag_adec_pub_sec with "Hm1 [//]") as (lm1) "{Hm1} [Hm1 fragA]".
-iPoseProof (termT_of_listE with "Hm1") as "{Hm1} Hm1".
+iPoseProof "HkB" as "(? & ? & HkB_m1 & HkB_m3)".
+iDestruct (termT_tag_adec_pub_sec with "Hm1 []") as (lm1) "{Hm1} [Hm1 fragA]"; eauto.
+rewrite termT_of_list.
 iPoseProof (big_sepL_lookup with "Hm1") as "HnA"; first exact: enA.
 iPoseProof (big_sepL_lookup with "Hm1") as "HpkA"; first exact: epkA.
 pose Pm1 := term_session_frag nA (Session Init kA kB None).
@@ -962,16 +818,17 @@ wp_pures; wp_bind (gen _); iApply (wp_gen _ lm1); iIntros (nB) "unreg #HnB".
 wp_pures.
 wp_list (_ :: _ :: _ :: []); wp_term_of_list. 
 wp_tenc; wp_pures.
-set m2 := Spec.of_list [nA; nB; TKey KAEnc kB].
+set m2 := Spec.of_list [nA; nB; TKey Enc kB].
 set sB := Session Resp kA kB (Some nA).
 iMod (nsl_sess_alloc_resp _ kA kB nA with "Hctx HkB unreg HkA_lo HkA_hi HnB HnA")
     as "[auth #fragB]"=> //=.
 wp_bind (send _); iApply wp_send.
   iModIntro.
+  iDestruct "HkA_hi" as "(?&?&?)".
   iApply termT_tag_aenc_pub_secG; eauto.
     iApply termT_of_list => /=.
     do !iSplit => //; try by iApply stermT_termT.
-    by iApply sub_termT_pub; iApply termT_TAEnc; iDestruct "HkB_m1" as "[??]".
+    by iApply sub_termT_pub.
   case: lm1 => //=; iModIntro.
   by iExists nA, nB, kB; iSplit; first trivial.
 wp_pures; wp_bind (recv _); iApply wp_recv; iIntros (m3) "#Hm3".

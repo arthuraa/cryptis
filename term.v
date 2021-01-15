@@ -4,20 +4,18 @@ From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
 From crypto Require Import lib basic symbols.
 
-Inductive key_type := KSym | KAEnc | KADec.
+Inductive key_type := Enc | Dec.
 
 Definition int_of_key_type kt : Z :=
   match kt with
-  | KSym => 0
-  | KAEnc => 1
-  | KADec => 2
+  | Enc => 0
+  | Dec => 1
   end.
 
 Definition key_type_of_int (n : Z) :=
   match n with
-  | 0%Z => KSym
-  | 1%Z => KAEnc
-  | _ => KADec
+  | 0%Z => Enc
+  | _   => Dec
   end.
 
 Canonical key_typeO := leibnizO key_type.
@@ -27,9 +25,8 @@ Proof.
 refine (
   fun kt1 kt2 =>
     match kt1, kt2 with
-    | KSym, KSym => left _
-    | KAEnc, KAEnc => left _
-    | KADec, KADec => left _
+    | Enc, Enc => left _
+    | Dec, Dec => left _
     | _, _ => right _
     end); congruence.
 Defined.
@@ -49,8 +46,8 @@ Inductive term  :=
 | TInt of Z
 | TPair of term & term
 | TNonce of loc
-| TKey of key_type & loc
-| TEnc of bool & loc & term.
+| TKey of key_type & term
+| TEnc of term & term.
 
 Canonical termO := leibnizO term.
 
@@ -59,6 +56,9 @@ Notation TPair_tag := 1%Z.
 Notation TNonce_tag := 2%Z.
 Notation TKey_tag := 3%Z.
 Notation TEnc_tag := 4%Z.
+
+Global Instance term_inhabited : Inhabited term.
+Proof. exact: (populate (TInt 0)). Qed.
 
 Global Instance term_eq_dec : EqDecision term.
 Proof.
@@ -73,8 +73,8 @@ refine (
       cast_if (decide (l1 = l2))
     | TKey kt1 l1, TKey kt2 l2 =>
       cast_if_and (decide (kt1 = kt2)) (decide (l1 = l2))
-    | TEnc asym1 l1 t1, TEnc asym2 l2 t2 =>
-      cast_if_and3 (decide (asym1 = asym2)) (decide (l1 = l2)) (decide (t1 = t2))
+    | TEnc t11 t12, TEnc t21 t22 =>
+      cast_if_and (decide (t11 = t21)) (decide (t12 = t22))
     | _, _ => right _
     end); clear go; abstract intuition congruence.
 Defined.
@@ -84,8 +84,8 @@ Fixpoint val_of_term_rec t : val :=
   | TInt n => (#TInt_tag, #n)
   | TPair t1 t2 => (#TPair_tag, (val_of_term_rec t1, val_of_term_rec t2))%V
   | TNonce l => (#TNonce_tag, #l)%V
-  | TKey kt l => (#TKey_tag, (#(int_of_key_type kt), #l))%V
-  | TEnc b l t => (#TEnc_tag, (#b, #l, val_of_term_rec t))%V
+  | TKey kt t => (#TKey_tag, (#(int_of_key_type kt), val_of_term_rec t))%V
+  | TEnc t1 t2 => (#TEnc_tag, (val_of_term_rec t1, val_of_term_rec t2))%V
   end.
 
 Definition val_of_term := locked val_of_term_rec.
@@ -102,17 +102,17 @@ Fixpoint term_of_val v : term :=
     TPair (term_of_val v1) (term_of_val v2)
   | PairV (# (LitInt TNonce_tag)) (# (LitLoc l)) =>
     TNonce l
-  | PairV #(LitInt TKey_tag) (#(LitInt n), #(LitLoc l)) =>
-    TKey (key_type_of_int n) l
-  | PairV #(LitInt TEnc_tag) (#(LitBool b), #(LitLoc l), v) =>
-    TEnc b l (term_of_val v)
+  | PairV #(LitInt TKey_tag) (#(LitInt n), v) =>
+    TKey (key_type_of_int n) (term_of_val v)
+  | PairV #(LitInt TEnc_tag) (v1, v2) =>
+    TEnc (term_of_val v1) (term_of_val v2)
   | _ => TInt 0
   end.
 
 Global Instance val_of_termK : Cancel (=) term_of_val val_of_term.
 Proof.
 rewrite val_of_termE; elim=> //= *; try by congruence.
-by rewrite cancel.
+by rewrite cancel; congruence.
 Qed.
 
 Global Instance val_of_term_inj : Inj (=) (=) val_of_term.
@@ -123,13 +123,28 @@ Qed.
 Global Instance countable_term : Countable term.
 Proof. apply (inj_countable' _ _ val_of_termK). Qed.
 
-Fixpoint symbols_of_term t : gset loc :=
+Definition int_of_term (t : term) :=
+  match t with TInt n => Some n | _ => None end.
+
+Global Instance infinite_term : Infinite term.
+Proof. by apply (inj_infinite TInt int_of_term). Qed.
+
+Fixpoint term_height t :=
+  match t with
+  | TInt _ => 1
+  | TPair t1 t2 => S (max (term_height t1) (term_height t2))
+  | TNonce _ => 1
+  | TKey _ t => S (term_height t)
+  | TEnc k t => S (max (term_height k) (term_height t))
+  end.
+
+Fixpoint nonces_of_term t : gset loc :=
   match t with
   | TInt _ => ∅
-  | TPair t1 t2 => symbols_of_term t1 ∪ symbols_of_term t2
+  | TPair t1 t2 => nonces_of_term t1 ∪ nonces_of_term t2
   | TNonce l => {[l]}
-  | TKey _ l => {[l]}
-  | TEnc _ l t => {[l]} ∪ symbols_of_term t
+  | TKey _ t => nonces_of_term t
+  | TEnc t1 t2 => nonces_of_term t1 ∪ nonces_of_term t2
   end.
 
 Module Spec.
@@ -189,16 +204,14 @@ Fixpoint proj t n {struct t} :=
 
 Definition enc k t : option term :=
   match k with
-  | TKey KSym l => Some (TEnc false l t)
-  | TKey KAEnc l => Some (TEnc true l t)
+  | TKey Enc k => Some (TEnc k t)
   | _ => None
   end.
 
 Definition dec k t : option term :=
   match k, t with
-  | TKey KSym  l1, TEnc false l2 t
-  | TKey KADec l1, TEnc true  l2 t =>
-    if decide (l1 = l2) then Some t else None
+  | TKey Dec k1, TEnc k2 t =>
+    if decide (k1 = k2) then Some t else None
   | _, _ => None
   end.
 

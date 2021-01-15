@@ -4,13 +4,13 @@ From iris.algebra Require Import agree auth gset gmap.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From iris.proofmode Require Import base environments.
-From crypto Require Import lib basic term crypto1 primitives.
+From crypto Require Import lib basic term crypto primitives.
 Import bi.
 Import env_notations.
 
 Section Proofs.
 
-Context `{!heapG Σ, !resG Σ}.
+Context `{!heapG Σ, !cryptoG Σ}.
 
 Implicit Types E : coPset.
 Implicit Types l : loc.
@@ -48,38 +48,35 @@ case e: Spec.untag => [t'|].
 - exact: HNone.
 Qed.
 
-(* TODO: Generalize to symmetric encryption *)
 Lemma tac_twp_dec Γ E K k t Ψ :
-  (∀ t', t = TEnc true k t' →
+  (∀ t', t = TEnc k t' →
          envs_entails Γ (WP fill K (Val (SOMEV t')) @ E [{ Ψ }])) →
-  (Spec.dec (TKey KADec k) t = None →
+  (Spec.dec (TKey Dec k) t = None →
    envs_entails Γ (WP fill K (Val NONEV) @ E [{ Ψ }])) →
-  envs_entails Γ (WP fill K (dec (TKey KADec k) t) @ E [{ Ψ }]).
+  envs_entails Γ (WP fill K (dec (TKey Dec k) t) @ E [{ Ψ }]).
 Proof.
 rewrite envs_entails_eq => HSome HNone.
 rewrite -twp_bind -twp_dec.
-case: t HSome HNone; eauto.
-case; eauto => k' /=.
+case: t HSome HNone; eauto => k' /=.
 by case: decide => [<-|]; eauto.
 Qed.
 
 Lemma tac_wp_dec Γ E K k t Ψ :
-  (∀ t', t = TEnc true k t' →
+  (∀ t', t = TEnc k t' →
          envs_entails Γ (WP fill K (Val (SOMEV t')) @ E {{ Ψ }})) →
-  (Spec.dec (TKey KADec k) t = None →
+  (Spec.dec (TKey Dec k) t = None →
    envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →
-  envs_entails Γ (WP fill K (dec (TKey KADec k) t) @ E {{ Ψ }}).
+  envs_entails Γ (WP fill K (dec (TKey Dec k) t) @ E {{ Ψ }}).
 Proof.
 rewrite envs_entails_eq => HSome HNone.
 rewrite -wp_bind -wp_dec.
-case: t HSome HNone; eauto.
-case; eauto => k' /=.
+case: t HSome HNone; eauto => k' /=.
 by case: decide => [<-|]; eauto.
 Qed.
 
 Lemma tac_wp_tenc Γ E K c k t Ψ :
-  envs_entails Γ (WP fill K (Val (SOMEV (TEnc true k (Spec.tag c t)))) @ E {{ Ψ }}) →
-  envs_entails Γ (WP fill K (tenc c (TKey KAEnc k) t) @ E {{ Ψ }}).
+  envs_entails Γ (WP fill K (Val (SOMEV (TEnc k (Spec.tag c t)))) @ E {{ Ψ }}) →
+  envs_entails Γ (WP fill K (tenc c (TKey Enc k) t) @ E {{ Ψ }}).
 Proof.
 rewrite envs_entails_eq => H.
 by rewrite -wp_bind -wp_tenc.
@@ -87,21 +84,21 @@ Qed.
 
 (* MOVE *)
 Lemma tdecK c k t t' :
-  Spec.tdec c (TKey KADec k) t = Some t' →
-  t = TEnc true k (Spec.tag c t').
+  Spec.tdec c (TKey Dec k) t = Some t' →
+  t = TEnc k (Spec.tag c t').
 Proof.
 rewrite /Spec.tdec /=.
-case: t => [] //= [] //= k'.
-by case: decide => //= <- _ /Spec.untagK ->.
+case: t => [] //= k' t.
+by case: decide => //= <- /Spec.untagK ->.
 Qed.
 (* /MOVE *)
 
 Lemma tac_wp_tdec Γ E K c k t Ψ :
-  (∀ t', t = TEnc true k (Spec.tag c t') →
+  (∀ t', t = TEnc k (Spec.tag c t') →
          envs_entails Γ (WP fill K (Val (SOMEV t')) @ E {{ Ψ }})) →
-  (Spec.tdec c (TKey KADec k) t = None →
+  (Spec.tdec c (TKey Dec k) t = None →
    envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →
-  envs_entails Γ (WP fill K (tdec c (TKey KADec k) t) @ E {{ Ψ }}).
+  envs_entails Γ (WP fill K (tdec c (TKey Dec k) t) @ E {{ Ψ }}).
 Proof.
 rewrite envs_entails_eq => HSome HNone.
 rewrite -wp_bind -wp_tdec.
