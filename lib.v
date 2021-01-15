@@ -79,14 +79,6 @@ Lemma option_equivE `{Equiv A} (ox oy : option A) :
   end.
 Proof. apply option_Forall2E. Qed.
 
-Lemma Some_included_ucmra {A : ucmraT} (a b : A) : Some a ≼ Some b ↔ a ≼ b.
-Proof.
-split; last exact: Some_included_2.
-case=> [mc]; rewrite option_equivE.
-case: mc => [c|] //= e; [by exists c|exists ε].
-by rewrite ucmra_unit_right_id.
-Qed.
-
 Lemma namespace_map_validI Σ (A : cmraT) (x : namespace_map A) :
   ✓ x ⊣⊢@{iPropI Σ}
   match namespace_map_token_proj x with
