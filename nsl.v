@@ -287,42 +287,6 @@ Qed.
 Global Instance msg3_pred_persistent p : Persistent (msg3_pred p).
 Proof. apply _. Qed.
 
-Definition unregistered t : iProp Σ :=
-  ∃ l, ⌜nonces_of_term t = {[l]}⌝
-       ∗ meta_token l (↑cryptoN.@"nsl".@"secret").
-
-Definition registered t : iProp Σ :=
-  ∃ l, ⌜nonces_of_term t = {[l]}⌝
-       ∗ meta l (cryptoN.@"nsl".@"secret") ().
-
-Lemma registered_unregistered t :
-  registered t -∗
-  unregistered t -∗
-  False.
-Proof.
-iDestruct 1 as (l1) "[%Hl1 Hmeta1]".
-iDestruct 1 as (l2) "[%Hl2 Hmeta2]".
-move: Hl1; rewrite Hl2 => e; rewrite (singleton_inj e).
-by iApply (meta_contra with "Hmeta2 Hmeta1").
-Qed.
-
-Lemma registered_set t :
-  unregistered t ==∗
-  registered t.
-Proof.
-iDestruct 1 as (l) "[%t_l Hmeta]".
-iMod (meta_set _ _ () with "Hmeta") as "#Hmeta"; eauto.
-by iModIntro; iExists l; iSplit.
-Qed.
-
-Global Instance registered_persistent t :
-  Persistent (registered t).
-Proof. apply _. Qed.
-
-Global Instance registered_timeless t :
-  Timeless (registered t).
-Proof. apply _. Qed.
-
 Definition role_name rl : gname :=
   if rl is Init then nsl_init_name else nsl_resp_name.
 
@@ -356,7 +320,7 @@ Definition session_inv SM : iProp Σ :=
   ∀ t1 s1, ⌜SM !! t1 = Some s1⌝ -∗
     nsl_key s1.(srole) (sowner s1)
     ∗ nsl_key (sroleo s1) (sother s1)
-    ∗ registered t1
+    ∗ crypto_meta t1 (cryptoN.@"nsl") ()
     ∗ stermT Sec t1
     ∗ (if sdata s1 is Some t2 then stermT Sec t2 else True)
     ∗ ⌜coherent_views SM t1 s1⌝.
@@ -365,14 +329,14 @@ Global Instance session_inv_persistent SM : Persistent (session_inv SM).
 Proof. apply _. Qed.
 
 Lemma session_inv_unregistered SM t :
-  unregistered t -∗
+  crypto_meta_token t (↑cryptoN.@"nsl") -∗
   session_inv SM -∗
   ⌜SM !! t = None⌝.
 Proof.
 iIntros "Hunreg Hinv".
 destruct (SM !! t) as [s_t|] eqn:SM_t=> //.
 iDestruct ("Hinv" $! _ _ SM_t) as "(?&?&Hreg&?)".
-by iDestruct (registered_unregistered with "Hreg Hunreg") as "[]".
+by iDestruct (crypto_meta_meta_token with "Hunreg Hreg") as "[]".
 Qed.
 
 Definition nsl_inv : iProp Σ :=
@@ -389,7 +353,7 @@ Lemma nsl_sess_alloc lvl kI kR t rl E ot :
   (if rl is Init then ot = None else is_Some ot) →
   nsl_ctx -∗
   nsl_key rl kA -∗
-  unregistered t -∗
+  crypto_meta_token t (↑cryptoN.@"nsl") -∗
   termT Pub (TKey Enc kB) -∗
   guarded lvl (nsl_key (swap_role rl) kB) -∗
   stermT lvl t -∗
@@ -399,14 +363,13 @@ Proof.
 move=> kA kB s sub rl_ot; iIntros "#Hctx #Howner Hunreg #HkB #HkB' #Ht #Ht'".
 case: lvl => //=.
 iMod (auth_empty nsl_sess_name) as "#Hinit".
-(* FIXME Why do I have to provide this instance? *)
-iMod (auth_acc to_session_map _ _ _ _ ε
+iMod (auth_acc to_session_map session_inv
          with "[Hctx Hinit]") as "Hinv"; try by eauto.
 iDestruct "Hinv" as (SM) "(_ & Hinv & Hclose)".
 iAssert (▷ ⌜SM !! t = None⌝)%I as "# > %Hfresh".
   iModIntro.
   by iApply (session_inv_unregistered with "[Hunreg] [Hinv]").
-iMod (registered_set with "Hunreg") as "#Hreg"; eauto.
+iMod (crypto_meta_set _ () with "Hunreg") as "#Hreg"; eauto.
 rewrite -auth_own_op singleton_op.
 iApply ("Hclose" $! (<[t:=s]>SM)); iSplit.
   iPureIntro. rewrite /to_session_map fmap_insert.
@@ -434,7 +397,7 @@ Lemma nsl_sess_alloc_init lvl kA kB tA E :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗
   nsl_key Init kA -∗
-  unregistered tA -∗
+  crypto_meta_token tA (↑cryptoN.@"nsl") -∗
   termT Pub (TKey Enc kB) -∗
   guarded lvl (nsl_key Resp kB) -∗
   stermT lvl tA ={E}=∗
@@ -449,7 +412,7 @@ Lemma nsl_sess_alloc_resp lvl kA kB tA tB E :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗
   nsl_key Resp kB -∗
-  unregistered tB -∗
+  crypto_meta_token tB (↑cryptoN.@"nsl") -∗
   termT Pub (TKey Enc kA) -∗
   guarded lvl (nsl_key Init kA) -∗
   stermT lvl tB -∗
@@ -517,7 +480,7 @@ Qed.
 Definition session_inv' t1 s1 : iProp Σ :=
   nsl_key s1.(srole) (sowner s1)
   ∗ nsl_key (sroleo s1) (sother s1)
-  ∗ registered t1
+  ∗ crypto_meta t1 (cryptoN.@"nsl") ()
   ∗ stermT Sec t1
   ∗ (if sdata s1 is Some t2 then stermT Sec t2 else True).
 
@@ -529,7 +492,7 @@ Lemma term_session_session_inv0 E lvl t s :
 Proof.
 move=> sub; iIntros "#Hctx Hterm"; case: lvl => //=.
   by iExists s.
-iMod (auth_acc to_session_map _ _ _ _ {[t := session_frag s]}
+iMod (auth_acc to_session_map session_inv
          with "[Hctx Hterm]") as "Hinv"; try by eauto.
 iDestruct "Hinv" as (SM) "(%Hincl & #Hinv & Hclose)".
 case/session_map_frag_included: Hincl=> s' [SM_t ss'].
@@ -710,7 +673,8 @@ Hypothesis wp_recv : forall E Ψ,
   WP recv #() @ E {{ Ψ }}.
 
 Hypothesis wp_gen : forall E lvl Ψ,
-  (∀ t, unregistered t -∗ stermT lvl t -∗
+  (∀ t, crypto_meta_token t (↑cryptoN.@"nsl") -∗
+        stermT lvl t -∗
         Ψ t) -∗
   WP gen #() @ E {{ Ψ }}.
 
@@ -727,19 +691,16 @@ iApply termT_tag_aenc_pub_secG; eauto.
   iApply termT_of_list => /=.
   iSplit; first by iDestruct "HtA" as "[??]".
   iSplit => //.
-  iApply (@sub_termT _ _ Pub) => //.
+  iApply (@sub_termT _ _ _ Pub) => //.
   by iDestruct "HkA" as "[HkA _]".
 case: lvl => //=; iModIntro; by iExists _, _; eauto.
 Qed.
-
-(* MOVE *)
-(* /MOVE *)
 
 Lemma wp_initiator kA kB (tA : term) lvl E Ψ :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗
   stermT lvl tA -∗
-  unregistered tA -∗
+  crypto_meta_token tA (↑cryptoN.@"nsl") -∗
   nsl_key Init kA -∗
   termT Pub (TKey Enc kB) -∗
   guarded lvl (nsl_key Resp kB) -∗
@@ -794,7 +755,7 @@ iAssert (▷ ⌜lm2 = lvl⌝)%I as "e".
   iModIntro.
   case: lvl lm2 Hlm2 => [] // [] //= _.
   iDestruct "sessB" as "(_&_&_&_&HtA')".
-  by iApply (stermT_eq' with "HtA' HtA").
+  by iApply (stermT_agree with "HtA' HtA").
 wp_pures; iDestruct "e" as "->".
 iMod (nsl_sess_update with "Hctx auth fragB") as "{fragA} [auth #fragA]" => //.
 set m3 := TEnc _ _.
@@ -808,14 +769,6 @@ case: lvl {Hlm2} => /=.
   do 2![iSplit => //]; by iModIntro; iIntros (lvl') "?".
 iFrame; iSplit; by iDestruct "sessB" as "(?&?&?&?&?&?)".
 Qed.
-
-(* MOVE *)
-Lemma stermT_termT lvl t : stermT lvl t -∗ termT lvl t.
-Proof. by iDestruct 1 as "[??]". Qed.
-
-Lemma sub_termT_pub lvl t : termT Pub t -∗ termT lvl t.
-Proof. by iApply sub_termT. Qed.
-(* /MOVE *)
 
 Lemma wp_responder kB E Ψ :
   ↑cryptoN.@"nsl" ⊆ E →

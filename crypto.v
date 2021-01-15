@@ -418,6 +418,33 @@ move: valid; rewrite -namespace_map_data_op namespace_map_data_valid.
 move=> /agree_op_invL'. naive_solver.
 Qed.
 
+Lemma crypto_meta_set `{Countable A} E t (x : A) (N : namespace) :
+  ↑N ⊆ E →
+  crypto_meta_token t E ==∗
+  crypto_meta t N x.
+Proof.
+iIntros (?) "token"; iDestruct "token" as (γ) "[own token]".
+iMod (own_update with "token").
+  by eapply (namespace_map_alloc_update _ _ (to_agree (encode x))) => //.
+by iModIntro; iExists γ; iSplit.
+Qed.
+
+Lemma crypto_meta_meta_token `{Countable A} t (x : A) N E :
+  ↑N ⊆ E →
+  crypto_meta_token t E -∗
+  crypto_meta t N x -∗
+  False.
+Proof.
+iIntros (sub) "Htoken #Hmeta1".
+pose (X := {[encode x]} : gset positive).
+iMod (crypto_meta_set _ (fresh X) with "Htoken") as "#Hmeta2"=> //.
+iAssert (crypto_meta t N (encode x)) as "Hmeta1'".
+  by rewrite {1 3}/crypto_meta.
+iPoseProof (crypto_meta_agree with "Hmeta1' Hmeta2") as "%e"; iPureIntro.
+assert (contra : encode x ∈ X). { by apply/elem_of_singleton. }
+destruct (is_fresh X); by rewrite -e.
+Qed.
+
 Definition key_predT Φ t : iProp :=
   ∃ γ, crypto_meta t (cryptoN.@"key") γ ∗
        own γ (to_agree Φ).
@@ -879,6 +906,13 @@ iIntros "#Henc #Ht #Hdec #Hpred #HG"; case: lvl => /=.
 - by iApply termT_aenc_pub_sec.
 Qed.
 
+Lemma stermT_termT lvl t : stermT lvl t -∗ termT lvl t.
+Proof. by iDestruct 1 as "[??]". Qed.
+
+Lemma sub_termT_pub lvl t : termT Pub t -∗ termT lvl t.
+Proof. by iApply sub_termT. Qed.
+
+(* MOVE *)
 Lemma auth_own_3
   (a : gmap term (agree level))
   (b : gmap term (agree gname))
@@ -892,6 +926,7 @@ rewrite -auth_own_op -auth_own_op.
 rewrite -!pair_op /=.
 by rewrite !(ucmra_unit_left_id, ucmra_unit_right_id).
 Qed.
+(* /MOVE *)
 
 Definition term_inv t d : iProp :=
   let '(lvl, _, _) := d in
@@ -1588,6 +1623,17 @@ iSplitL "pub_d" => //.
   case: (lvl_dec) @Ts_d => //=.
   by iExists γ_pub_d; iSplit.
 by iSplitL "meta_e"; [iExists γ_meta_e|iExists γ_meta_d]; eauto.
+Qed.
+
+Lemma declare_pub_key k :
+  stermT Pub k -∗
+  stermT Pub (TKey Enc k) ∗
+  stermT Pub (TKey Dec k).
+Proof.
+iIntros "#Hk"; rewrite -keyT_eq.
+iRight.
+iSplit; first by iDestruct "Hk" as "[??]".
+by eauto.
 Qed.
 
 End Resources.

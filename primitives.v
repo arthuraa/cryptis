@@ -275,14 +275,13 @@ Proof.
 by iIntros "?"; iApply twp_wp; iApply twp_untag.
 Qed.
 
-(* MOVE *)
-(* /MOVE *)
-
 Lemma twp_mknonce E lvl Ψ :
   ↑cryptoN ⊆ E →
   crypto_ctx -∗
   (∀ t, stermT lvl t -∗ ⌜atomic t⌝ -∗
-        owned_terms t ⊤ -∗ crypto_meta_token t ⊤ -∗ Ψ t) -∗
+        guarded lvl (unpublished t ⊤) -∗
+        crypto_meta_token t ⊤ -∗
+        Ψ t) -∗
   WP mknonce #()%V @ E [{ Ψ }].
 Proof.
 rewrite /mknonce; iIntros (sub) "#ctx post".
@@ -298,48 +297,26 @@ Lemma wp_mknonce E lvl Ψ :
   ↑cryptoN ⊆ E →
   crypto_ctx -∗
   (∀ t, stermT lvl t -∗ ⌜atomic t⌝ -∗
-        owned_terms t ⊤ -∗ crypto_meta_token t ⊤ -∗ Ψ t) -∗
+        guarded lvl (unpublished t ⊤) -∗
+        crypto_meta_token t ⊤ -∗
+        Ψ t) -∗
   WP mknonce #()%V @ E {{ Ψ }}.
 Proof. by iIntros (?) "#??"; iApply twp_wp; iApply twp_mknonce. Qed.
 
-Lemma twp_mkkey E lvl_k k lvl_enc lvl_dec Ψ :
-  ↑cryptoN ⊆ E →
-  lvl_enc ⊔ lvl_dec ⊑ lvl_k →
-  crypto_ctx -∗
-  stermT lvl_k k -∗
-  guarded lvl_k ⌜atomic k⌝ -∗
-  guarded lvl_k ([∗ set] t ∈ atoms k, owned_terms t {[TKey Enc k; TKey Dec k]}) -∗
-  (termT lvl_enc (TKey Enc k) -∗ termT lvl_dec (TKey Dec k) -∗
-   Ψ (TKey Enc k, TKey Dec k)%V) -∗
+Lemma twp_mkkey E (k : term) Ψ :
+  Ψ (TKey Enc k, TKey Dec k)%V -∗
   WP mkkey k @ E [{ Ψ }].
 Proof.
-case: lvl_k.
-- case: lvl_enc lvl_dec => [] // [] //.
-  iIntros (sub _) "#ctx #Hk _ _ post".
-  iMod (auth_empty crypto_name) as "#own0".
-  iApply fupd_twp.
-  iMod (auth_acc to_term_data' with "[ctx own0]") as (td) "(_ & tdP & close)"; eauto.
-  iDestruct "tdP" as "> # tdP".
+rewrite val_of_termE /= /mkkey.
+by iIntros "post"; wp_pures.
+Qed.
 
-
-
-
--
- 
-iIntros (sub ub) "#ctx #Hk #atomic tokens post".
-case: lvl_k.
-
-
-pose (f t := {[t := CoGset {[TKey Enc k; TKey Dec k]}]} : gmap term _).
-pose (frag := [^op set] t ∈ atoms k, ((∅, f t, ∅) : term_data'UR)).
-iAssert (auth_own crypto_name frag) with "[tokens]" as "tokens".
-
-
-
-iApply fupd_twp.
-iMod (auth_acc to_term_data' with "[ctx own0]") as (td) "(_ & tdP & close)"; eauto.
-iDestruct "tdP" as "> # tdP".
-
+Lemma wp_mkkey E (k : term) Ψ :
+  Ψ (TKey Enc k, TKey Dec k)%V -∗
+  WP mkkey k @ E {{ Ψ }}.
+Proof.
+by iIntros "post"; iApply twp_wp; iApply twp_mkkey.
+Qed.
 
 Lemma twp_enc E t1 t2 Ψ :
   Ψ (repr (Spec.enc t1 t2)) -∗
