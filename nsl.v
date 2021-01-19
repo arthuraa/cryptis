@@ -26,9 +26,6 @@ Class nslG := {
 
 Context `{!tagG Σ, !nslG}.
 
-Definition msg1_spec nA pkA :=
-  TPair (TInt 1) (TPair nA (TPair pkA (TInt 0))).
-
 Definition msg1_pred p : iProp :=
   ∃ nA kA, ⌜p.2 = Spec.of_list [nA; TKey Enc kA]⌝ ∗
            session_frag nsl_name nA (SessionData Init kA p.1 None).
@@ -95,22 +92,6 @@ Definition nsl_inv : iProp :=
 
 Definition nsl_ctx : iProp :=
   session_ctx nsl_name (cryptoN.@"nsl") nsl_key_inv.
-
-(*Lemma term_session_session_inv3 E lvl t s :
-  ↑cryptoN.@"nsl" ⊆ E →
-  nsl_ctx -∗
-  termT lvl (TKey Enc (sowner s)) -∗
-  guarded lvl (term_session_frag t s) ={E}=∗
-  ▷ termT Pub (TKey Enc (sowner s)).
-Proof.
-iIntros (sub) "#Hctx #Ht #Hsess".
-iMod (term_session_session_inv0 with "Hctx Hsess") as (s') "[%s_s' Hs']" => //.
-iDestruct "Hs'" as "(#Hk&_)".
-case: lvl=> //=; do 2!iModIntro.
-rewrite /sowner.
-case/to_session_included: s_s' => [] <- [] <- [] <- _.
-by iApply nsl_key_pub.
-Qed.*)
 
 Variable send recv gen : val.
 
