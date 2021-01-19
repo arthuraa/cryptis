@@ -3,7 +3,7 @@ From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl namespace_map frac.
 From iris.base_logic.lib Require Import auth.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import lib term crypto primitives tactics.
+From crypto Require Import lib term crypto primitives tactics session.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -13,239 +13,24 @@ Section NSL.
 
 Context `{!cryptoG Σ, !heapG Σ}.
 
-Inductive role := Init | Resp.
-
-Canonical roleO := leibnizO role.
-
-Implicit Types rl : role.
-
-Global Instance role_inhabited : Inhabited role := populate Init.
-
-Lemma role_equivI rl1 rl2 :
-  rl1 ≡ rl2 ⊣⊢@{iPropI Σ}
-  match rl1, rl2 with
-  | Init, Init | Resp, Resp => True
-  | _, _ => False
-  end.
-Proof.
-by case: rl1 rl2=> [] []; iSplit=> //.
-Qed.
-
-Definition bool_of_role rl :=
-  if rl is Init then true else false.
-
-Definition role_of_bool (b : bool) : role :=
-  if b then Init else Resp.
-
-Lemma bool_of_roleK : Cancel (=) role_of_bool bool_of_role.
-Proof. by case. Qed.
-
-Global Instance role_eq_dec : EqDecision role.
-Proof.
-refine (λ rl1 rl2,
-          match rl1, rl2 with
-          | Init, Init => left _
-          | Resp, Resp => left _
-          | _, _ => right _
-          end); abstract intuition congruence.
-Defined.
-
-Global Instance role_countable : Countable role.
-Proof. apply (inj_countable' _ _ bool_of_roleK). Qed.
-
-Definition swap_role rl :=
-  if rl is Init then Resp else Init.
-
-Inductive session := Session {
-  srole : role;
-  sinit : term;
-  sresp : term;
-  sdata : option term;
-}.
-
-Canonical sessionO := leibnizO session.
-
-Global Instance session_inhabited : Inhabited session :=
-  populate (Session inhabitant inhabitant inhabitant inhabitant).
-
-Definition sroleo s := swap_role s.(srole).
-
-Definition sowner s :=
-  if s.(srole) is Init then s.(sinit) else s.(sresp).
-
-Definition sother s :=
-  if s.(srole) is Init then s.(sresp) else s.(sinit).
-
-Definition sessionR : cmraT :=
-  prodR (prodR (prodR (agreeR roleO) (agreeR termO)) (agreeR termO))
-        (optionR (agreeR termO)).
-
 Implicit Types t : term.
-Implicit Types SM : gmap term session.
-Implicit Types s : session.
+Implicit Types SM : gmap term session_data.
+Implicit Types s : session_data.
 Implicit Types lvl : level.
 
 Class nslG := {
-  in_nsl_sessG :> inG Σ (authR (gmapUR term (authR (optionUR sessionR))));
+  in_nsl_sessG :> inG Σ (authR session_mapUR);
   nsl_sess_name : gname;
-  nsl_init_name : gname;
-  nsl_resp_name : gname;
 }.
 
 Context `{!tagG Σ, !nslG}.
-
-Global Instance nslG_authG : authG _ _ :=
-  AuthG Σ (gmapUR term (authR (optionUR sessionR))) in_nsl_sessG _.
-
-Definition to_session s : sessionR :=
-  (to_agree s.(srole), to_agree s.(sinit),
-   to_agree s.(sresp), to_agree <$> s.(sdata)).
-
-Global Instance to_session_inj : Inj (=) (≡) to_session.
-Proof.
-case=> [??? ot1] [??? ot2]; do 3![case]=> /=.
-do 3![move=> /to_agree_inj ->].
-case: ot2=> [t2|] /=; last first.
-  by move=> /equiv_None; case: ot1.
-case/fmap_Some_equiv=> t1 [-> /to_agree_inj e].
-by apply leibniz_equiv in e; congruence.
-Qed.
-
-Lemma to_session_valid s : ✓ to_session s.
-Proof.
-rewrite /to_session; repeat split=> //=.
-by case: (sdata s).
-Qed.
-
-Lemma to_session_validN n s : ✓{n} to_session s.
-Proof.
-rewrite /to_session; repeat split=> //=.
-by case: (sdata s).
-Qed.
-
-Lemma to_session_included s1 s2 :
-  to_session s1 ≼ to_session s2 ↔
-  s1.(srole) = s2.(srole) ∧
-  s1.(sinit) = s2.(sinit) ∧
-  s1.(sresp) = s2.(sresp) ∧
-  match s1.(sdata) with
-  | Some _ => s1.(sdata) = s2.(sdata)
-  | _ => True
-  end.
-Proof.
-rewrite !pair_included; split.
-- do 3![case]=> /=.
-  rewrite !to_agree_included => -> -> -> edata.
-  repeat split; case: (sdata s1) edata=> [t1|] //=.
-  rewrite option_included; case=> //.
-  destruct 1 as (t1' & s2' & e1 & e2 & e3).
-  case: (sdata s2) e1 e2 e3=> [t2|] //= [<-] [<-].
-  by rewrite to_agree_included; case=> [/to_agree_inj ->|->].
-- do 3![case=> ->]; move=> edata; intuition.
-  rewrite option_included.
-  case: (sdata s1) edata=> [t1|] /=; last by left.
-  by move=> <-; right; exists (to_agree t1), (to_agree t1); eauto.
-Qed.
-
-Lemma to_session_included_eq s1 s2 :
-  to_session s1 ≼ to_session s2 →
-  is_Some s1.(sdata) →
-  s1 = s2.
-Proof.
-move=> eincl [t e].
-case: s1 s2 e eincl => [????] [????] /= ->.
-rewrite to_session_included /=.
-by case=> <- [<- [<- <-]].
-Qed.
-
-Definition session_auth s := ● (Some (to_session s)).
-Definition session_frag s := ◯ (Some (to_session s)).
-Definition session_auth_frag s :=
-  session_auth s ⋅ session_frag s.
-
-Lemma session_auth_included s1 s2 :
-  session_auth s1 ≼ session_auth_frag s2 ↔ s1 = s2.
-Proof.
-split; last by move=> ->; exists (session_frag s2).
-rewrite auth_included /= Some_included.
-destruct 1 as [[[_ e]|e] _].
-- rewrite /= in e.
-  apply to_agree_inj in e.
-  apply Some_equiv_inj in e.
-  by apply to_session_inj in e.
-- move: e; rewrite pair_included; case=> _.
-  rewrite to_agree_included=> e.
-  by apply Some_equiv_inj, to_session_inj in e.
-Qed.
-
-Lemma session_frag_included s1 s2 :
-  session_frag s1 ≼ session_auth_frag s2 ↔
-  to_session s1 ≼ to_session s2.
-Proof.
-split.
-- rewrite auth_included.
-  case=> _ /=; rewrite ucmra_unit_left_id.
-  by rewrite Some_included; case=> [->|].
-- move=> e; transitivity (session_frag s2).
-    by rewrite auth_included /= Some_included; eauto.
-  by exists (session_auth s2); rewrite cmra_comm.
-Qed.
-
-Lemma session_auth_valid s : ✓ session_auth s.
-Proof.
-rewrite auth_valid_eq /=; split=> // n.
-exists (Some (to_session s)); split=> //.
-split.
-- by exists (Some (to_session s)); rewrite ucmra_unit_left_id.
-- apply Some_validN, to_session_validN.
-Qed.
-
-Lemma session_frag_valid s : ✓ session_frag s.
-Proof. by apply auth_frag_valid, to_session_valid. Qed.
-
-Lemma session_valid s1 s2 :
-  ✓ (session_auth s1 ⋅ session_frag s2) ↔
-  to_session s2 ≼ to_session s1.
-Proof.
-rewrite auth_both_valid Some_included; split.
-- by case=> [[->|?] _].
-- move=> e; intuition eauto.
-  rewrite Some_valid; exact: to_session_valid.
-Qed.
-
-Lemma session_auth_frag_valid s : ✓ session_auth_frag s.
-Proof. exact/session_valid. Qed.
-
-Definition to_session_map SM : gmap term _ :=
-  session_auth_frag <$> SM.
-
-Definition term_session_auth t s : iProp Σ :=
-  auth_own nsl_sess_name {[t := session_auth s]}.
-
-Definition term_session_frag t s : iProp Σ :=
-  auth_own nsl_sess_name {[t := session_frag s]}.
-
-Global Instance term_session_persistent t s :
-  Persistent (term_session_frag t s).
-Proof. apply _. Qed.
-
-Lemma term_session_agree t s1 s2 :
-  term_session_auth t s1 -∗
-  term_session_frag t s2 -∗
-  ⌜to_session s2 ≼ to_session s1⌝.
-Proof.
-iIntros "Hown1 Hown2".
-iPoseProof (own_valid_2 with "Hown1 Hown2") as "%Hvalid".
-iPureIntro; apply/session_valid.
-by rewrite auth_valid_discrete /= singleton_op singleton_valid in Hvalid *.
-Qed.
 
 Definition msg1_spec nA pkA :=
   TPair (TInt 1) (TPair nA (TPair pkA (TInt 0))).
 
 Definition msg1_pred p : iProp Σ :=
   ∃ nA kA, ⌜p.2 = Spec.of_list [nA; TKey Enc kA]⌝ ∗
-           term_session_frag nA (Session Init kA p.1 None).
+           session_frag nA (SessionData Init kA p.1 None).
 
 Global Instance msg1_pred_proper : NonExpansive msg1_pred.
 Proof.
