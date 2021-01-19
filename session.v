@@ -95,13 +95,10 @@ Definition session_mapUR :=
 
 Class sessionG := {
   session_inG  :> inG Σ (authR session_mapUR);
-  session_name :  gname;
-  key_inv      :  role → term → iProp;
-  key_inv_persistent :> ∀ rl t, Persistent (key_inv rl t);
-  sessionN     :  namespace;
 }.
 
-Context `{!sessionG}.
+Context `{!sessionG} (γ : gname) (N : namespace).
+Context (key_inv : role → term → iProp) `{∀ rl k, Persistent (key_inv rl k)}.
 
 Global Instance sessionG_authG : authG _ _ :=
   AuthG Σ session_mapUR session_inG _.
@@ -229,10 +226,10 @@ Definition to_session_map SM : gmap term _ :=
   session_data_auth_frag <$> SM.
 
 Definition session_auth t s : iProp :=
-  auth_own session_name {[t := session_data_auth s]}.
+  auth_own γ {[t := session_data_auth s]}.
 
 Definition session_frag t s : iProp :=
-  auth_own session_name {[t := session_data_frag s]}.
+  auth_own γ {[t := session_data_frag s]}.
 
 Global Instance session_frag_persistent t s :
   Persistent (session_frag t s).
@@ -262,7 +259,7 @@ Definition session_map_inv SM : iProp :=
   ∀ t1 s1, ⌜SM !! t1 = Some s1⌝ -∗
     key_inv s1.(srole) (sowner s1)
     ∗ key_inv (sroleo s1) (sother s1)
-    ∗ crypto_meta t1 sessionN ()
+    ∗ crypto_meta t1 N ()
     ∗ stermT Sec t1
     ∗ (if sdata s1 is Some t2 then stermT Sec t2 else True)
     ∗ ⌜coherent_views SM t1 s1⌝.
@@ -272,7 +269,7 @@ Global Instance session_map_inv_persistent SM :
 Proof. apply _. Qed.
 
 Lemma session_map_inv_unregistered SM t :
-  crypto_meta_token t (↑sessionN) -∗
+  crypto_meta_token t (↑N) -∗
   session_map_inv SM -∗
   ⌜SM !! t = None⌝.
 Proof.
@@ -283,20 +280,20 @@ by iDestruct (crypto_meta_meta_token with "Hunreg Hreg") as "[]".
 Qed.
 
 Definition session_inv : iProp :=
-  auth_inv session_name to_session_map session_map_inv.
+  auth_inv γ to_session_map session_map_inv.
 
 Definition session_ctx : iProp :=
-  auth_ctx session_name sessionN to_session_map session_map_inv.
+  auth_ctx γ N to_session_map session_map_inv.
 
 Lemma session_alloc lvl kI kR t rl E ot :
   let kA := if rl is Init then kI else kR in
   let kB := if rl is Init then kR else kI in
   let s  := SessionData rl kI kR ot       in
-  ↑sessionN ⊆ E →
+  ↑N ⊆ E →
   (if rl is Init then ot = None else is_Some ot) →
   session_ctx -∗
   key_inv rl kA -∗
-  crypto_meta_token t (↑sessionN) -∗
+  crypto_meta_token t (↑N) -∗
   termT Pub (TKey Enc kB) -∗
   guarded lvl (key_inv (swap_role rl) kB) -∗
   stermT lvl t -∗
@@ -305,7 +302,7 @@ Lemma session_alloc lvl kI kR t rl E ot :
 Proof.
 move=> kA kB s sub rl_ot; iIntros "#Hctx #Howner Hunreg #HkB #HkB' #Ht #Ht'".
 case: lvl => //=.
-iMod (auth_empty session_name) as "#Hinit".
+iMod (auth_empty γ) as "#Hinit".
 iMod (auth_acc to_session_map session_map_inv
          with "[Hctx Hinit]") as "Hinv"; try by eauto.
 iDestruct "Hinv" as (SM) "(_ & Hinv & Hclose)".
@@ -337,10 +334,10 @@ by rewrite lookup_insert_ne.
 Qed.
 
 Lemma session_alloc_init lvl kA kB tA E :
-  ↑sessionN ⊆ E →
+  ↑N ⊆ E →
   session_ctx -∗
   key_inv Init kA -∗
-  crypto_meta_token tA (↑sessionN) -∗
+  crypto_meta_token tA (↑N) -∗
   termT Pub (TKey Enc kB) -∗
   guarded lvl (key_inv Resp kB) -∗
   stermT lvl tA ={E}=∗
@@ -352,10 +349,10 @@ by iApply (session_alloc with "Hctx HkA Hunreg HkB HkB' HtA").
 Qed.
 
 Lemma session_alloc_resp lvl kA kB tA tB E :
-  ↑sessionN ⊆ E →
+  ↑N ⊆ E →
   session_ctx -∗
   key_inv Resp kB -∗
-  crypto_meta_token tB (↑sessionN) -∗
+  crypto_meta_token tB (↑N) -∗
   termT Pub (TKey Enc kA) -∗
   guarded lvl (key_inv Init kA) -∗
   stermT lvl tB -∗
@@ -403,7 +400,7 @@ split.
 Qed.
 
 Lemma session_key_inv E lvl t s :
-  ↑sessionN ⊆ E →
+  ↑N ⊆ E →
   session_ctx -∗
   guarded lvl (session_frag t s) ={E}=∗
   ▷ guarded lvl (key_inv s.(srole) (sowner s)).
@@ -423,12 +420,12 @@ Qed.
 Definition session_inv' t1 s1 : iProp :=
   key_inv s1.(srole) (sowner s1)
   ∗ key_inv (sroleo s1) (sother s1)
-  ∗ crypto_meta t1 sessionN ()
+  ∗ crypto_meta t1 N ()
   ∗ stermT Sec t1
   ∗ (if sdata s1 is Some t2 then stermT Sec t2 else True).
 
 Lemma session_frag_session_inv0 E lvl t s :
-  ↑sessionN ⊆ E →
+  ↑N ⊆ E →
   session_ctx -∗
   guarded lvl (session_frag t s) ={E}=∗
   ∃ s', ⌜to_session_data' s ≼ to_session_data' s'⌝ ∗
@@ -449,7 +446,7 @@ by iMod ("Hclose" $! SM {[t := session_data_frag s]} with "[Hinv]"); eauto.
 Qed.
 
 Lemma session_frag_session_inv1 E lvl rl kA kB t t' :
-  ↑sessionN ⊆ E →
+  ↑N ⊆ E →
   let s := SessionData rl kA kB (Some t') in
   session_ctx -∗
   guarded lvl (session_frag t s) ={E}=∗
@@ -464,7 +461,7 @@ Qed.
 
 (* TODO: rename *)
 Lemma session_frag_session_inv2 E lvl t s :
-  ↑sessionN ⊆ E →
+  ↑N ⊆ E →
   session_ctx -∗
   termT lvl t -∗
   guarded lvl (session_frag t s) ={E}=∗
@@ -477,7 +474,7 @@ by case: lvl=> //=; do 2!iModIntro; iSplit; eauto.
 Qed.
 
 Lemma session_frag_key_inv E lvl t s :
-  ↑sessionN ⊆ E →
+  ↑N ⊆ E →
   session_ctx -∗
   guarded lvl (session_frag t s) ={E}=∗
   ▷ guarded lvl (key_inv (srole s) (sowner s)).
@@ -495,7 +492,7 @@ Arguments sother !_ /.
 Arguments sowner !_ /.
 
 Lemma session_update lvl kA kB tA tB E :
-  ↑sessionN ⊆ E →
+  ↑N ⊆ E →
   session_ctx -∗
   guarded lvl (session_auth tA (SessionData Init kA kB None)) -∗
   guarded lvl (session_frag tB (SessionData Resp kA kB (Some tA))) ={E}=∗
@@ -558,3 +555,5 @@ by rewrite lookup_insert_ne.
 Qed.
 
 End Session.
+
+Arguments sessionG : clear implicits.
