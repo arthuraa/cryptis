@@ -1,3 +1,58 @@
+(**
+
+This file defines infrastructure for reasoning about correspondence properties,
+which are common correctness criteria for authentication protocols.  A protocol
+satisfies correspondence if the protocol participants agree on which data items
+were exchanged in the protocol (assuming that the participants are honest).  The
+data items are often fresh secrets used to establish a shared session key
+between the participants.
+
+We formalize correspondence by means of a predicate [correspondence kI kR tI
+tR], which says that the participants identified by [kI] and [kR] agree that the
+data items [tI] and [tR] correspond to the same session.  This predicate
+satisfies two important properties:
+
+1. it is persistent (cf. [correspondence_persistent]);
+
+2. it guarantees that the data items completely determine each other (cf.
+   [correspondence_agreeL] and [correspondence_agreeR]);
+
+3. each data item was chosen by exactly one role (cf. [correspondence_agreeLR]).
+
+Taken together, these properties imply that, once we know that two terms are
+connected to some session, they will never be connected to other sessions of the
+same protocol.
+
+Suppose that Alice wants to communicate with Bob.  To prove correspondence for a
+protocol, we follow these steps:
+
+1. Alice uses [session_alloc_init] to associate some data item [tA] with a fresh
+session with Bob.  To ensure that [tA] has not been used for other sessions,
+Alice must prove that it has ownership of [crypto_meta_token tA (↑N)], where [N]
+is some fixed namespace associated with the protocol.  Alice obtains two
+predicates [session_auth] and [session_frag], which describe the state of the
+new session.  (The predicates are guarded by a secrecy level because if we try
+to communicate with a dishonest party, there is nothing we can guarantee.)  The
+[None] argument signals that Alice has not attached any data items to this
+session belonging to Bob.
+
+2. When Bob receives a data item [tA], it generates another data item [tB] and
+binds [tB] to [tA] (cf. [session_alloc_resp]).  The result of this lemma is
+similar to Alice's, except that [session_frag] and [session_auth] record that
+Bob does have a putative data item from Alice.
+
+3. Alice combines her [session_auth] knowledge with a matching [session_frag]
+from Bob (cf. [session_update]).  This causes [tA] to be irreversibly tied to
+[tB].
+
+4. Each agent combines their matching fragments to conclude [correspondence].
+
+The agents may communicate their fragments to each other via encrypted messages
+or signatures.  The implementation of the NSL protocol in [nsl.v] illustrates
+this pattern for encryption.
+
+*)
+
 From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl namespace_map frac.
@@ -98,7 +153,7 @@ Class sessionG := {
 }.
 
 Context `{!sessionG} (γ : gname) (N : namespace).
-Context (key_inv : role → term → iProp) `{∀ rl k, Persistent (key_inv rl k)}.
+Context (id_inv : role → term → iProp) `{∀ rl k, Persistent (id_inv rl k)}.
 
 Global Instance sessionG_authG : authG _ _ :=
   AuthG Σ session_mapUR session_inG _.
@@ -235,7 +290,15 @@ Global Instance session_frag_persistent t s :
   Persistent (session_frag t s).
 Proof. apply _. Qed.
 
-Lemma session_agree t s1 s2 :
+Definition correspondence kI kR tI tR : iProp :=
+  session_frag tI (SessionData Init kI kR (Some tR)) ∗
+  session_frag tR (SessionData Resp kI kR (Some tI)).
+
+Global Instance correspondence_persistent kI kR tI tR :
+  Persistent (correspondence kI kR tI tR).
+Proof. apply _. Qed.
+
+Lemma session_auth_frag_agree t s1 s2 :
   session_auth t s1 -∗
   session_frag t s2 -∗
   ⌜to_session_data' s2 ≼ to_session_data' s1⌝.
@@ -244,6 +307,57 @@ iIntros "Hown1 Hown2".
 iPoseProof (own_valid_2 with "Hown1 Hown2") as "%Hvalid".
 iPureIntro; apply/session_data_valid.
 by rewrite auth_valid_discrete /= singleton_op singleton_valid in Hvalid *.
+Qed.
+
+Lemma session_frag_agree t s1 s2 :
+  session_frag t s1 -∗
+  session_frag t s2 -∗
+  ⌜s1.(srole) = s2.(srole) ∧
+   s1.(sinit) = s2.(sinit) ∧
+   s1.(sresp) = s2.(sresp) ∧
+   (is_Some s1.(sdata) → is_Some s2.(sdata) → s1.(sdata) = s2.(sdata))⌝.
+Proof.
+iIntros "Hown1 Hown2".
+iPoseProof (own_valid_2 with "Hown1 Hown2") as "%Hvalid".
+iPureIntro.
+move: Hvalid; rewrite auth_valid_eq /= singleton_op singleton_valid.
+rewrite /session_data_frag auth_valid_eq /= -Some_op Some_valid.
+rewrite -!pair_op !pair_valid.
+case=> [] [] [] /agree_op_invL' ? /agree_op_invL' ? /agree_op_invL' ? Hdata.
+do ![split => //].
+move=> H1 H2; case: H1 H2 Hdata => [t1 ->] [t2 ->] /=.
+by rewrite -Some_op Some_valid => /agree_op_invL' ->.
+Qed.
+
+Lemma correspondence_agreeL kI1 kI2 kR1 kR2 tI tR1 tR2 :
+  correspondence kI1 kR1 tI tR1 -∗
+  correspondence kI2 kR2 tI tR2 -∗
+  ⌜kI1 = kI2 ∧ kR1 = kR2 ∧ tR1 = tR2⌝.
+Proof.
+iIntros "[H1 _] [H2 _]".
+iPoseProof (session_frag_agree with "H1 H2") as "/= (_ & -> & -> & %Hdata)".
+iPureIntro; do ![split => //].
+by apply Some_inj; apply: Hdata; eauto.
+Qed.
+
+Lemma correspondence_agreeR kI1 kI2 kR1 kR2 tI1 tI2 tR :
+  correspondence kI1 kR1 tI1 tR -∗
+  correspondence kI2 kR2 tI2 tR -∗
+  ⌜kI1 = kI2 ∧ kR1 = kR2 ∧ tI1 = tI2⌝.
+Proof.
+iIntros "[_ H1] [_ H2]".
+iPoseProof (session_frag_agree with "H1 H2") as "/= (_ & -> & -> & %Hdata)".
+iPureIntro; do ![split => //].
+by apply Some_inj; apply: Hdata; eauto.
+Qed.
+
+Lemma correspondence_agreeLR kI1 kI2 kR1 kR2 t tI tR :
+  correspondence kI1 kR1 t tR -∗
+  correspondence kI2 kR2 tI t -∗
+  False.
+Proof.
+iIntros "[H1 _] [_ H2]".
+by iPoseProof (session_frag_agree with "H1 H2") as "/= (% & _)".
 Qed.
 
 Definition coherent_views SM t1 s1 : Prop :=
@@ -257,8 +371,8 @@ Definition coherent_views SM t1 s1 : Prop :=
 
 Definition session_map_inv SM : iProp :=
   ∀ t1 s1, ⌜SM !! t1 = Some s1⌝ -∗
-    key_inv s1.(srole) (sowner s1)
-    ∗ key_inv (sroleo s1) (sother s1)
+    id_inv s1.(srole) (sowner s1)
+    ∗ id_inv (sroleo s1) (sother s1)
     ∗ crypto_meta t1 N ()
     ∗ stermT Sec t1
     ∗ (if sdata s1 is Some t2 then stermT Sec t2 else True)
@@ -285,6 +399,30 @@ Definition session_inv : iProp :=
 Definition session_ctx : iProp :=
   auth_ctx γ N to_session_map session_map_inv.
 
+Lemma session_auth_session_frag E t s :
+  ↑N ⊆ E →
+  session_ctx -∗
+  session_auth t s ={E}=∗
+  session_auth t s ∗ session_frag t s.
+Proof.
+iIntros (?) "#ctx auth".
+iMod (auth_acc to_session_map session_map_inv
+        with "[ctx auth]") as (SM) "(%lb & inv & close)" => //; eauto.
+iMod ("close" $! SM {[t := session_data_auth_frag s]} with "[inv]") as "own".
+  iFrame; iPureIntro.
+  case/singleton_included_l: lb => [x []].
+  rewrite lookup_fmap option_equivE.
+  case SM_t: (SM !! t) => [s'|] //= <-.
+  rewrite Some_included_total session_data_auth_included => ?; subst s'.
+  rewrite /session_data_auth_frag -singleton_op.
+  apply: core_id_local_update.
+  apply/singleton_included_l; exists (session_data_auth_frag s).
+  rewrite lookup_fmap SM_t; split => //.
+  rewrite Some_included_total; exists (session_data_auth s).
+  by rewrite comm.
+by rewrite /session_data_auth_frag -singleton_op auth_own_op.
+Qed.
+
 Lemma session_alloc lvl kI kR t rl E ot :
   let kA := if rl is Init then kI else kR in
   let kB := if rl is Init then kR else kI in
@@ -292,10 +430,10 @@ Lemma session_alloc lvl kI kR t rl E ot :
   ↑N ⊆ E →
   (if rl is Init then ot = None else is_Some ot) →
   session_ctx -∗
-  key_inv rl kA -∗
+  id_inv rl kA -∗
   crypto_meta_token t (↑N) -∗
   termT Pub (TKey Enc kB) -∗
-  guarded lvl (key_inv (swap_role rl) kB) -∗
+  guarded lvl (id_inv (swap_role rl) kB) -∗
   stermT lvl t -∗
   (if ot is Some t' then stermT lvl t' else True) ={E}=∗
   guarded lvl (session_auth t s ∗ session_frag t s).
@@ -336,10 +474,10 @@ Qed.
 Lemma session_alloc_init lvl kA kB tA E :
   ↑N ⊆ E →
   session_ctx -∗
-  key_inv Init kA -∗
+  id_inv Init kA -∗
   crypto_meta_token tA (↑N) -∗
   termT Pub (TKey Enc kB) -∗
-  guarded lvl (key_inv Resp kB) -∗
+  guarded lvl (id_inv Resp kB) -∗
   stermT lvl tA ={E}=∗
   guarded lvl (session_auth tA (SessionData Init kA kB None) ∗
                session_frag tA (SessionData Init kA kB None)).
@@ -351,10 +489,10 @@ Qed.
 Lemma session_alloc_resp lvl kA kB tA tB E :
   ↑N ⊆ E →
   session_ctx -∗
-  key_inv Resp kB -∗
+  id_inv Resp kB -∗
   crypto_meta_token tB (↑N) -∗
   termT Pub (TKey Enc kA) -∗
-  guarded lvl (key_inv Init kA) -∗
+  guarded lvl (id_inv Init kA) -∗
   stermT lvl tB -∗
   stermT lvl tA ={E}=∗
   guarded lvl (session_auth tB (SessionData Resp kA kB (Some tA)) ∗
@@ -403,13 +541,13 @@ Lemma session_key_inv E lvl t s :
   ↑N ⊆ E →
   session_ctx -∗
   guarded lvl (session_frag t s) ={E}=∗
-  ▷ guarded lvl (key_inv s.(srole) (sowner s)).
+  ▷ guarded lvl (id_inv s.(srole) (sowner s)).
 Proof.
 move=> sub; iIntros "#Hctx Hterm"; case: lvl => //=.
 iMod (auth_acc to_session_map _ _ _ _ {[t := session_data_frag s]}
          with "[Hctx Hterm]") as "Hinv"; try by eauto.
 iDestruct "Hinv" as (SM) "(%Hincl & Hinv & Hclose)".
-iAssert (▷ key_inv s.(srole) (sowner s))%I with "[Hinv]" as "#Hs".
+iAssert (▷ id_inv s.(srole) (sowner s))%I with "[Hinv]" as "#Hs".
   case/session_map_frag_included: Hincl=> s' [SM_t ss'].
   iModIntro.
   rewrite /sowner; case/to_session_data'_included: ss'=> -> [-> [-> _]].
@@ -418,8 +556,8 @@ by iMod ("Hclose" $! SM {[t := session_data_frag s]} with "[Hinv]"); eauto.
 Qed.
 
 Definition session_inv' t1 s1 : iProp :=
-  key_inv s1.(srole) (sowner s1)
-  ∗ key_inv (sroleo s1) (sother s1)
+  id_inv s1.(srole) (sowner s1)
+  ∗ id_inv (sroleo s1) (sother s1)
   ∗ crypto_meta t1 N ()
   ∗ stermT Sec t1
   ∗ (if sdata s1 is Some t2 then stermT Sec t2 else True).
@@ -473,11 +611,11 @@ iDestruct "Hs'" as "(_&_&_&#Ht'&_)".
 by case: lvl=> //=; do 2!iModIntro; iSplit; eauto.
 Qed.
 
-Lemma session_frag_key_inv E lvl t s :
+Lemma session_frag_id_inv E lvl t s :
   ↑N ⊆ E →
   session_ctx -∗
   guarded lvl (session_frag t s) ={E}=∗
-  ▷ guarded lvl (key_inv (srole s) (sowner s)).
+  ▷ guarded lvl (id_inv (srole s) (sowner s)).
 Proof.
 iIntros (sub) "#Hctx #Hsess".
 iMod (session_frag_session_inv0 with "Hctx Hsess") as (s') "[%s_s' Hs']" => //.
@@ -501,7 +639,7 @@ Lemma session_update lvl kA kB tA tB E :
 Proof.
 iIntros (sub) "Hctx HA HB"; case: lvl => //=.
 case: (decide (tA = tB))=> [<-|tAB].
-  iPoseProof (session_agree with "HA HB") as "%agree".
+  iPoseProof (session_auth_frag_agree with "HA HB") as "%agree".
   by rewrite to_session_data'_included /= in agree *; intuition.
 set s1 := SessionData Init _ _ _; set s2 := SessionData Resp _ _ _.
 pose (f1 := {[tA := session_data_auth s1]} : gmap _ _).

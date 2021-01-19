@@ -174,7 +174,7 @@ Lemma wp_initiator kA kB (tA : term) lvl E Ψ :
          stermT lvl tB ∗
          guarded lvl (
            session_auth nsl_name tA (SessionData Init kA kB (Some tB)) ∗
-           session_frag nsl_name tB (SessionData Resp kA kB (Some tA))
+           correspondence nsl_name kA kB tA tB
          )
        else True) -∗
       Ψ (repr onB)) -∗
@@ -232,7 +232,8 @@ wp_bind (send _); iApply wp_send.
 wp_pures; iApply ("Hpost" $! (Some nB)).
 case: lvl {Hlm2} => /=.
   do 2![iSplit => //]; by iModIntro; iIntros (lvl') "?".
-iFrame; iSplit; by iDestruct "sessB" as "(?&?&?&?&?&?)".
+iDestruct "sessB" as "(?&?&?&?&?&?)".
+by iFrame; iSplit => //; iSplit.
 Qed.
 
 Lemma wp_responder kB E Ψ :
@@ -247,8 +248,9 @@ Lemma wp_responder kB E Ψ :
            stermT lvl nA ∗
            stermT lvl nB ∗
            guarded lvl (
-            session_frag nsl_name nA (SessionData Init kA kB (Some nB)) ∗
-            session_auth nsl_name nB (SessionData Resp kA kB (Some nA)))
+             session_auth nsl_name nB (SessionData Resp kA kB (Some nA)) ∗
+             correspondence nsl_name kA kB nA nB
+           )
        else True) -∗
        Ψ (repr ot)) -∗
   WP responder (TKey Dec kB) (TKey Enc kB) #() @ E {{ Ψ }}.
@@ -277,7 +279,7 @@ iAssert (guarded lm1 Pm1) as "{fragA} fragA".
   move/Spec.of_list_inj in em1; subst m1.
   by case: enA epkA => [] -> [] -> {nA' kA'}.
 iMod (session_frag_session_inv2 with "Hctx HnA fragA") as "{HnA} #HnA" => //.
-iMod (session_frag_key_inv with "Hctx fragA") as "#HkA_hi" => //.
+iMod (session_frag_id_inv with "Hctx fragA") as "#HkA_hi" => //.
 iAssert (▷ termT Pub (TKey Enc kA))%I as "#HkA_lo".
   case: lm1=> //=; iModIntro.
   by iDestruct "HkA_hi" as "(?&?)".
@@ -312,9 +314,9 @@ iExists _, _; do 4![iSplit => //].
 case: lm1 => //=.
 iDestruct "Hprot3" as (nA' kA') "[#frag1 #frag2]".
 set sB' := (SessionData Resp kA' _ _).
-iPoseProof (session_agree with "auth frag2") as "%sess".
+iPoseProof (session_auth_frag_agree with "auth frag2") as "%sess".
 have [-> ->] : sB' = sB by apply: to_session_data'_included_eq => //=; eauto.
-by iSplit=> //.
+by iSplit=> //; iSplit.
 Qed.
 
 End NSL.
