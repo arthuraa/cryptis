@@ -18,6 +18,7 @@ Implicit Types t : term.
 Implicit Types SM : gmap term session_data.
 Implicit Types s : session_data.
 Implicit Types lvl : level.
+Implicit Types rl : role.
 
 Class nslG := {
   in_nsl_sessG :> sessionG Σ;
@@ -87,11 +88,14 @@ Proof. rewrite /nsl_key_inv; case: rl; apply _. Qed.
 Lemma nsl_key_inv_pub rl k : nsl_key_inv rl k -∗ termT Pub (TKey Enc k).
 Proof. by iDestruct 1 as "[??]". Qed.
 
+Definition nsl_sess_inv rl kA (kB : term) t : iProp :=
+  nsl_key_inv rl kA ∗ stermT Sec t.
+
 Definition nsl_inv : iProp :=
-  session_inv nsl_name (cryptoN.@"nsl") nsl_key_inv.
+  session_inv nsl_name (cryptoN.@"nsl") nsl_sess_inv.
 
 Definition nsl_ctx : iProp :=
-  session_ctx nsl_name (cryptoN.@"nsl") nsl_key_inv.
+  session_ctx nsl_name (cryptoN.@"nsl") nsl_sess_inv.
 
 Variable send recv gen : val.
 
@@ -186,8 +190,10 @@ iIntros (?) "#Hctx #HtA unreg #HkA #HkB_lo #HkB_hi Hpost".
 wp_list (_ :: _ :: []).
 wp_term_of_list.
 wp_tenc => /=.
-iMod (session_alloc_init nsl_name lvl kA kB
-        with "Hctx HkA unreg HkB_lo HkB_hi HtA") as "[auth #fragA]"=> //.
+iMod (@session_alloc_initG _ _ _ _ _ _ _ (lvl = Sec)
+        with "Hctx [] [unreg]") as "[auth #fragA]" => //.
+- by iIntros "-> /= !>"; iSplit; eauto.
+- by iIntros "_".
 wp_pures; wp_bind (send _); iApply wp_send.
   by iModIntro; iApply termT_msg1.
 wp_pures; wp_bind (recv _); iApply wp_recv.
@@ -205,24 +211,29 @@ rewrite termT_of_list.
 iPoseProof (big_sepL_lookup with "Hm2") as "m2_tA"; first exact: enA'.
 iPoseProof (big_sepL_lookup with "Hm2") as "m2_nB"; first exact: enB.
 iPoseProof (big_sepL_lookup with "Hm2") as "m2_kB"; first exact: epkB'.
-set  sA := SessionData Init kA kB _.
+set  sA := SessionData Init _ _ _.
 pose sB := SessionData Resp kA kB (Some tA).
 pose sA' := SessionData Init kA kB (Some nB).
-iAssert (guarded (lm2 = Sec) (session_frag nsl_name nB sB)) as "{fragB} #fragB".
-  case: lm2 => //=.
+iAssert (guarded (lm2 = Sec) (session_frag nsl_name nB sB))
+    as "{fragB} #fragB".
+  iIntros "-> /=".
   iDestruct "fragB" as (nA' nB' kB') "/= (%em2 & fragB)".
   move/Spec.of_list_inj in em2; subst m2.
   by case: enA' epkB' enB => [] -> [] -> [] -> {nA' nB' kB'}.
 iClear (enA' enB epkB') "Hm2".
+iMod (session_frag_invG with "Hctx fragB") as "[#sessB #coh]" => //.
+wp_pures.
+iSpecialize ("coh" with "[]"); first by eauto.
+rewrite /coherent_views /=.
 iPoseProof (stermTP with "HtA m2_tA") as "{m2_tA} %Hlm2".
-iMod (session_frag_session_inv1 with "Hctx fragB") as "#sessB" => //.
-iAssert (▷ ⌜lm2 = lvl⌝)%I as "e".
-  iModIntro.
+iAssert (|={E}=> ▷ ⌜lm2 = lvl⌝)%I as "> > ->".
   case: lvl lm2 Hlm2 => [] // [] //= _.
-  iDestruct "sessB" as "(_&_&_&_&HtA')".
+  iMod (session_frag_inv with "Hctx coh") as "[sessA _]"=> //.
+  iDestruct "sessA" as "(_&#HtA')".
+  do 2![iModIntro].
   by iApply (stermT_agree with "HtA' HtA").
-wp_pures; iDestruct "e" as "->".
-iMod (session_update with "Hctx auth fragB") as "{fragA} [auth #fragA]" => //.
+iMod (session_updateG with "Hctx auth [fragB]")
+    as "{fragA} [auth #fragA]" => //.
 set m3 := TEnc _ _.
 wp_bind (send _); iApply wp_send.
   iModIntro.
@@ -232,7 +243,7 @@ wp_bind (send _); iApply wp_send.
 wp_pures; iApply ("Hpost" $! (Some nB)).
 case: lvl {Hlm2} => /=.
   do 2![iSplit => //]; by iModIntro; iIntros (lvl') "?".
-iDestruct "sessB" as "(?&?&?&?&?&?)".
+iDestruct "sessB" as "(?&?&?)".
 by iFrame; iSplit => //; iSplit.
 Qed.
 
@@ -278,19 +289,21 @@ iAssert (guarded (lm1 = Sec) Pm1) as "{fragA} fragA".
   iDestruct "fragA" as (nA' kA') "/= [%em1 #fragA]".
   move/Spec.of_list_inj in em1; subst m1.
   by case: enA epkA => [] -> [] -> {nA' kA'}.
-iMod (session_frag_session_inv2 with "Hctx HnA fragA") as "{HnA} #HnA" => //.
-iMod (session_frag_id_inv with "Hctx fragA") as "#HkA_hi" => //.
+iMod (session_frag_invG with "Hctx fragA") as "[#HnA' _]" => //=.
 iAssert (▷ termT Pub (TKey Enc kA))%I as "#HkA_lo".
   case: lm1=> //=; iModIntro.
-  by iDestruct "HkA_hi" as "(?&?)".
+  by iDestruct "HnA'" as "(#[??]&?)".
 wp_pures; wp_bind (gen _); iApply (wp_gen _ lm1); iIntros (nB) "unreg #HnB".
+iDestruct "HnA'" as "/= # [HkA_hi HnA']".
 wp_pures.
 wp_list (_ :: _ :: _ :: []); wp_term_of_list. 
 wp_tenc; wp_pures.
 set m2 := Spec.of_list [nA; nB; TKey Enc kB].
 set sB := SessionData Resp kA kB (Some nA).
-iMod (session_alloc_resp _ _ kA kB nA with "Hctx HkB unreg HkA_lo HkA_hi HnB HnA")
-    as "[auth #fragB]"=> //=.
+iMod (session_alloc_respG with "Hctx [] fragA [unreg]")
+    as "[auth #fragB]" => //=.
+- by iIntros "-> !>"; iSplit; [done|iApply "HnB"].
+- by iIntros "->".
 wp_bind (send _); iApply wp_send.
   iModIntro.
   iDestruct "HkA_hi" as "(?&?&?)".
@@ -298,8 +311,8 @@ wp_bind (send _); iApply wp_send.
     iApply termT_of_list => /=.
     do !iSplit => //; try by iApply stermT_termT.
     by iApply sub_termT_pub.
-  case: lm1 => //=; iModIntro.
-  by iExists nA, nB, kB; iSplit; first trivial.
+  case: lm1 => //=.
+  by iModIntro; iExists nA, nB, kB; iSplit; first trivial.
 wp_pures; wp_bind (recv _); iApply wp_recv; iIntros (m3) "#Hm3".
 wp_tdec m3; last protocol_failure.
 iDestruct (termT_tag_adec_pub_sec with "Hm3 [//]") as (lm3) "/= {Hm3} [#Hm3 #Hprot3]".
@@ -307,18 +320,19 @@ wp_eq_term e; last protocol_failure; subst m3.
 iAssert (⌜lm1 ⊑ lm3⌝)%I as "%lm1_lm3".
   by iDestruct "HnB" as "[_ #Hmin]"; iApply "Hmin".
 iAssert (guarded (lm1 = Sec) (msg3_pred (kB, nB))) as "{Hprot3 Hm3} Hprot3".
-  iApply (guarded_leq with "Hprot3").
-  by move=> ?; subst lm1; case: lm3 lm1_lm3.
+  iIntros "->"; by case: lm3 lm1_lm3.
 clear lm1_lm3 lm3.
 wp_pures.
 iApply ("Hpost" $! (Some (_, _, _))).
-iExists _, _; do 4![iSplit => //].
-case: lm1 => //=.
+iExists lm1, _; do 3![iSplit => //].
+  by case: lm1 => //=; rewrite (stermT_eq Pub nA).
+iSplit => //.
+iIntros "-> /=".
 iDestruct "Hprot3" as (nA' kA') "[#frag1 #frag2]".
 set sB' := (SessionData Resp kA' _ _).
 iPoseProof (session_auth_frag_agree with "auth frag2") as "%sess".
 have [-> ->] : sB' = sB by apply: to_session_data'_included_eq => //=; eauto.
-by iSplit=> //; iSplit.
+iFrame; by iSplit.
 Qed.
 
 End NSL.

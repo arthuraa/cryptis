@@ -143,7 +143,6 @@ Definition session_data'R : cmraT :=
 Implicit Types t : term.
 Implicit Types SM : gmap term session_data.
 Implicit Types s : session_data.
-Implicit Types lvl : level.
 
 Definition session_mapUR :=
   gmapUR term (authR (optionUR session_data'R)).
@@ -153,7 +152,7 @@ Class sessionG := {
 }.
 
 Context `{!sessionG} (γ : gname) (N : namespace).
-Context (id_inv : role → term → iProp) `{∀ rl k, Persistent (id_inv rl k)}.
+Context (sinv : role → term → term → term → iProp).
 
 Global Instance sessionG_authG : authG _ _ :=
   AuthG Σ session_mapUR session_inG _.
@@ -360,23 +359,28 @@ iIntros "[H1 _] [_ H2]".
 by iPoseProof (session_frag_agree with "H1 H2") as "/= (% & _)".
 Qed.
 
-Definition coherent_views SM t1 s1 : Prop :=
+Definition coherent_views t1 s1 : iProp :=
   match s1.(srole), s1.(sdata) with
   | Init, None => True
   | Init, Some t2 =>
-    SM !! t2 = Some (SessionData Resp s1.(sinit) s1.(sresp) (Some t1))
+    session_frag t2 (SessionData Resp s1.(sinit) s1.(sresp) (Some t1))
   | Resp, None => False
-  | Resp, Some _ => True
+  | Resp, Some t2 =>
+    session_frag t2 (SessionData Init s1.(sinit) s1.(sresp) None)
   end.
+
+Global Instance coherent_views_persistent t1 s1 :
+  Persistent (coherent_views t1 s1).
+Proof.
+rewrite /coherent_views; case: (srole s1) (sdata s1) => [] [?|] /=;
+apply _.
+Qed.
 
 Definition session_map_inv SM : iProp :=
   ∀ t1 s1, ⌜SM !! t1 = Some s1⌝ -∗
-    id_inv s1.(srole) (sowner s1)
-    ∗ id_inv (sroleo s1) (sother s1)
+    □ sinv s1.(srole) (sowner s1) (sother s1) t1
     ∗ crypto_meta t1 N ()
-    ∗ stermT Sec t1
-    ∗ (if sdata s1 is Some t2 then stermT Sec t2 else True)
-    ∗ ⌜coherent_views SM t1 s1⌝.
+    ∗ coherent_views t1 s1.
 
 Global Instance session_map_inv_persistent SM :
   Persistent (session_map_inv SM).
@@ -389,7 +393,7 @@ Lemma session_map_inv_unregistered SM t :
 Proof.
 iIntros "Hunreg Hinv".
 destruct (SM !! t) as [s_t|] eqn:SM_t=> //.
-iDestruct ("Hinv" $! _ _ SM_t) as "(?&?&Hreg&?)".
+iDestruct ("Hinv" $! _ _ SM_t) as "(?&Hreg&?)".
 by iDestruct (crypto_meta_meta_token with "Hunreg Hreg") as "[]".
 Qed.
 
@@ -423,85 +427,97 @@ iMod ("close" $! SM {[t := session_data_auth_frag s]} with "[inv]") as "own".
 by rewrite /session_data_auth_frag -singleton_op auth_own_op.
 Qed.
 
-Lemma session_alloc lvl kI kR t rl E ot :
-  let kA := if rl is Init then kI else kR in
-  let kB := if rl is Init then kR else kI in
-  let s  := SessionData rl kI kR ot       in
+Lemma session_alloc_init kA kB tA E :
   ↑N ⊆ E →
-  (if rl is Init then ot = None else is_Some ot) →
   session_ctx -∗
-  id_inv rl kA -∗
-  crypto_meta_token t (↑N) -∗
-  termT Pub (TKey Enc kB) -∗
-  guarded (lvl = Sec) (id_inv (swap_role rl) kB) -∗
-  stermT lvl t -∗
-  (if ot is Some t' then stermT lvl t' else True) ={E}=∗
-  guarded (lvl = Sec) (session_auth t s ∗ session_frag t s).
+  □ sinv Init kA kB tA -∗
+  crypto_meta_token tA (↑N) ={E}=∗
+  session_auth tA (SessionData Init kA kB None) ∗
+  session_frag tA (SessionData Init kA kB None).
 Proof.
-move=> kA kB s sub rl_ot; iIntros "#Hctx #Howner Hunreg #HkB #HkB' #Ht #Ht'".
-case: lvl => //=.
+iIntros (?) "#Hctx #Hsinv Hunreg".
+set sA := SessionData Init kA kB None.
 iMod (auth_empty γ) as "#Hinit".
 iMod (auth_acc to_session_map session_map_inv
          with "[Hctx Hinit]") as "Hinv"; try by eauto.
 iDestruct "Hinv" as (SM) "(_ & Hinv & Hclose)".
-iAssert (▷ ⌜SM !! t = None⌝)%I as "# > %Hfresh".
+iAssert (▷ ⌜SM !! tA = None⌝)%I as "# > %Hfresh".
   iModIntro.
   by iApply (session_map_inv_unregistered with "[Hunreg] [Hinv]").
 iMod (crypto_meta_set _ () with "Hunreg") as "#Hreg"; eauto.
 rewrite -auth_own_op singleton_op.
-iApply ("Hclose" $! (<[t:=s]>SM)); iSplit.
+iApply ("Hclose" $! (<[tA := sA]>SM)); iSplit.
   iPureIntro. rewrite /to_session_map fmap_insert.
   apply alloc_singleton_local_update.
     by rewrite lookup_fmap Hfresh.
   by apply session_data_valid.
 iIntros "!>" (t1' s1').
-case: (decide (t = t1')) => [<-|ne].
+case: (decide (tA = t1')) => [<-|ne].
   rewrite lookup_insert.
   iIntros (Hs); case: Hs=> {s1'}<-.
-  do 5![iSplit=> //].
-  rewrite /s; case: (rl) rl_ot=> // rl_ot.
-    by rewrite rl_ot.
-  by case: rl_ot=> t' -> /=.
-rewrite lookup_insert_ne //; iIntros (SM_t1').
-iDestruct ("Hinv" $! _ _ SM_t1') as "(? & ? & ? & ? & ? & %Hcoh)".
-iFrame; iPureIntro.
-move: Hcoh; rewrite /coherent_views.
-case: (srole s1') (sdata s1')=> [|] [t2'|] //.
-case: (decide (t = t2'))=> [<-|?]; first by rewrite Hfresh.
-by rewrite lookup_insert_ne.
+  by do 2![iSplit=> //].
+by rewrite lookup_insert_ne //; iIntros (SM_t1').
 Qed.
 
-Lemma session_alloc_init lvl kA kB tA E :
+Lemma session_alloc_initG `{Decision G} kA kB tA E :
   ↑N ⊆ E →
   session_ctx -∗
-  id_inv Init kA -∗
-  crypto_meta_token tA (↑N) -∗
-  termT Pub (TKey Enc kB) -∗
-  guarded (lvl = Sec) (id_inv Resp kB) -∗
-  stermT lvl tA ={E}=∗
-  guarded (lvl = Sec)
-    (session_auth tA (SessionData Init kA kB None) ∗
-     session_frag tA (SessionData Init kA kB None)).
+  guarded G (□ sinv Init kA kB tA) -∗
+  guarded G (crypto_meta_token tA (↑N)) ={E}=∗
+  let s := SessionData Init kA kB None in
+  guarded G (session_auth tA s ∗ session_frag tA s).
 Proof.
-iIntros (HE) "#Hctx #HkA Hunreg #HkB #HkB' #HtA".
-by iApply (session_alloc with "Hctx HkA Hunreg HkB HkB' HtA").
+iIntros (?) "#ctx #inv token".
+rewrite /guarded; case: decide => // _.
+by iApply session_alloc_init.
 Qed.
 
-Lemma session_alloc_resp lvl kA kB tA tB E :
+Lemma session_alloc_resp kA kB tA tB E :
   ↑N ⊆ E →
   session_ctx -∗
-  id_inv Resp kB -∗
-  crypto_meta_token tB (↑N) -∗
-  termT Pub (TKey Enc kA) -∗
-  guarded (lvl = Sec) (id_inv Init kA) -∗
-  stermT lvl tB -∗
-  stermT lvl tA ={E}=∗
-  guarded (lvl = Sec)
-    (session_auth tB (SessionData Resp kA kB (Some tA)) ∗
-     session_frag tB (SessionData Resp kA kB (Some tA))).
+  □ sinv Resp kB kA tB -∗
+  session_frag tA (SessionData Init kA kB None) -∗
+  crypto_meta_token tB (↑N) ={E}=∗
+  session_auth tB (SessionData Resp kA kB (Some tA)) ∗
+  session_frag tB (SessionData Resp kA kB (Some tA)).
 Proof.
-iIntros (?) "#Hctx #HkB Hunreg #HkA #HkA' #HtB #HtA".
-by iApply (session_alloc with "Hctx HkB Hunreg HkA HkA' HtB")=> /=; eauto.
+iIntros (?) "#Hctx #Hsinv #fragA Hunreg".
+set sA := SessionData Init kA kB None.
+set sB := SessionData Resp kA kB (Some tA).
+iMod (auth_empty γ) as "#Hinit".
+iMod (auth_acc to_session_map session_map_inv
+         with "[Hctx Hinit]") as "Hinv"; try by eauto.
+iDestruct "Hinv" as (SM) "(_ & Hinv & Hclose)".
+iAssert (▷ ⌜SM !! tB = None⌝)%I as "# > %Hfresh".
+  iModIntro.
+  by iApply (session_map_inv_unregistered with "[Hunreg] [Hinv]").
+iMod (crypto_meta_set _ () with "Hunreg") as "#Hreg"; eauto.
+rewrite -auth_own_op singleton_op.
+iApply ("Hclose" $! (<[tB := sB]>SM)); iSplit.
+  iPureIntro. rewrite /to_session_map fmap_insert.
+  apply alloc_singleton_local_update.
+    by rewrite lookup_fmap Hfresh.
+  by apply session_data_valid.
+iIntros "!>" (t1' s1').
+case: (decide (tB = t1')) => [<-|ne].
+  rewrite lookup_insert.
+  iIntros (Hs); case: Hs=> {s1'}<-.
+  by do 2![iSplit=> //].
+by rewrite lookup_insert_ne //; iIntros (SM_t1').
+Qed.
+
+Lemma session_alloc_respG `{Decision G} kA kB tA tB E :
+  ↑N ⊆ E →
+  session_ctx -∗
+  guarded G (□ sinv Resp kB kA tB) -∗
+  guarded G (session_frag tA (SessionData Init kA kB None)) -∗
+  guarded G (crypto_meta_token tB (↑N)) ={E}=∗
+  let s := SessionData Resp kA kB (Some tA) in
+  guarded G (session_auth tB s ∗ session_frag tB s).
+Proof.
+iIntros (?) "#Hctx #Hsinv #Hfrag Hunreg".
+rewrite /guarded; case: decide => //= _.
+by iApply session_alloc_resp.
 Qed.
 
 Lemma session_map_auth_included t s SM :
@@ -539,138 +555,74 @@ split.
   by rewrite Some_included session_data_frag_included; right.
 Qed.
 
-Lemma session_key_inv E lvl t s :
+Lemma session_frag_inv E t s :
   ↑N ⊆ E →
   session_ctx -∗
-  guarded (lvl = Sec) (session_frag t s) ={E}=∗
-  ▷ guarded (lvl = Sec) (id_inv s.(srole) (sowner s)).
+  session_frag t s ={E}=∗
+  ▷ □ sinv (srole s) (sowner s) (sother s) t ∗
+  ▷ (⌜is_Some (sdata s)⌝ → coherent_views t s).
 Proof.
-move=> sub; iIntros "#Hctx Hterm"; case: lvl => //=.
+move=> sub; iIntros "#Hctx Hterm".
 iMod (auth_acc to_session_map _ _ _ _ {[t := session_data_frag s]}
          with "[Hctx Hterm]") as "Hinv"; try by eauto.
-iDestruct "Hinv" as (SM) "(%Hincl & Hinv & Hclose)".
-iAssert (▷ id_inv s.(srole) (sowner s))%I with "[Hinv]" as "#Hs".
-  case/session_map_frag_included: Hincl=> s' [SM_t ss'].
-  iModIntro.
-  rewrite /sowner; case/to_session_data'_included: ss'=> -> [-> [-> _]].
-  by iDestruct ("Hinv" $! _ _ SM_t) as "(?&?&?&?&?&?)".
-by iMod ("Hclose" $! SM {[t := session_data_frag s]} with "[Hinv]"); eauto.
-Qed.
-
-Definition session_inv' t1 s1 : iProp :=
-  id_inv s1.(srole) (sowner s1)
-  ∗ id_inv (sroleo s1) (sother s1)
-  ∗ crypto_meta t1 N ()
-  ∗ stermT Sec t1
-  ∗ (if sdata s1 is Some t2 then stermT Sec t2 else True).
-
-Lemma session_frag_session_inv0 E lvl t s :
-  ↑N ⊆ E →
-  session_ctx -∗
-  guarded (lvl = Sec) (session_frag t s) ={E}=∗
-  ∃ s', ⌜to_session_data' s ≼ to_session_data' s'⌝ ∗
-        ▷ guarded (lvl = Sec) (session_inv' t s').
-Proof.
-move=> sub; iIntros "#Hctx Hterm"; case: lvl => //=.
-  by iExists s.
-iMod (auth_acc to_session_map session_map_inv
-         with "[Hctx Hterm]") as "Hinv"; try by eauto.
 iDestruct "Hinv" as (SM) "(%Hincl & #Hinv & Hclose)".
+iMod ("Hclose" $! SM {[t := session_data_frag s]} with "[Hinv]").
+  by eauto.
 case/session_map_frag_included: Hincl=> s' [SM_t ss'].
-iExists s'.
-iAssert (▷ session_inv' t s')%I with "[Hinv]" as "#Hs".
-  iModIntro.
-  iDestruct ("Hinv" $! _ _ SM_t) as "(?&?&?&?&?&?)".
-  by iSplit => //; eauto.
-by iMod ("Hclose" $! SM {[t := session_data_frag s]} with "[Hinv]"); eauto.
+iModIntro.
+rewrite /sowner /sother /coherent_views.
+case/to_session_data'_included: ss'=> -> [-> [-> e]].
+iDestruct ("Hinv" $! _ _ SM_t) as "(?&?&?)".
+iSplit => //; rewrite /coherent_views; iModIntro.
+iDestruct 1 as (t') "%e'".
+by move: e; rewrite e' => <-.
 Qed.
 
-Lemma session_frag_session_inv1 E lvl rl kA kB t t' :
-  ↑N ⊆ E →
-  let s := SessionData rl kA kB (Some t') in
-  session_ctx -∗
-  guarded (lvl = Sec) (session_frag t s) ={E}=∗
-  ▷ guarded (lvl = Sec) (session_inv' t s).
-Proof.
-move=> sub s; iIntros "#Hctx #Hterm".
-iMod (session_frag_session_inv0 with "Hctx Hterm") as (s') "[%s_s' Hs']" => //.
-do 2!iModIntro.
-rewrite /session_inv' /sowner /sother /sroleo /=.
-by case/to_session_data'_included: s_s' => <- [] <- [] <- <- /=.
-Qed.
-
-(* TODO: rename *)
-Lemma session_frag_session_inv2 E lvl t s :
+Lemma session_frag_invG `{Decision G} E t s :
   ↑N ⊆ E →
   session_ctx -∗
-  termT lvl t -∗
-  guarded (lvl = Sec) (session_frag t s) ={E}=∗
-  ▷ stermT lvl t.
+  guarded G (session_frag t s) ={E}=∗
+  ▷ guarded G (□ sinv (srole s) (sowner s) (sother s) t) ∗
+  ▷ (⌜is_Some (sdata s)⌝ → guarded G (coherent_views t s)).
 Proof.
-iIntros (sub) "#Hctx #Ht #Hsess".
-iMod (session_frag_session_inv0 with "Hctx Hsess") as (s') "[%s_s' Hs']" => //.
-iDestruct "Hs'" as "(_&_&_&#Ht'&_)".
-by case: lvl=> //=; do 2!iModIntro; iSplit; eauto.
-Qed.
-
-Lemma session_frag_id_inv E lvl t s :
-  ↑N ⊆ E →
-  session_ctx -∗
-  guarded (lvl = Sec) (session_frag t s) ={E}=∗
-  ▷ guarded (lvl = Sec) (id_inv (srole s) (sowner s)).
-Proof.
-iIntros (sub) "#Hctx #Hsess".
-iMod (session_frag_session_inv0 with "Hctx Hsess") as (s') "[%s_s' Hs']" => //.
-iDestruct "Hs'" as "(#Hk&_)".
-case: lvl=> //=; do 2!iModIntro.
-rewrite /sowner.
-by case/to_session_data'_included: s_s' => [] <- [] <- [] <- _.
+iIntros (?) "#ctx #frag"; rewrite /guarded.
+case: decide => // _.
+by iApply session_frag_inv.
 Qed.
 
 Arguments sroleo !_ /.
 Arguments sother !_ /.
 Arguments sowner !_ /.
 
-Lemma session_update lvl kA kB tA tB E :
+Lemma session_update kA kB tA tB E :
   ↑N ⊆ E →
   session_ctx -∗
-  guarded (lvl = Sec) (session_auth tA (SessionData Init kA kB None)) -∗
-  guarded (lvl = Sec) (session_frag tB (SessionData Resp kA kB (Some tA))) ={E}=∗
-  guarded (lvl = Sec) (session_auth tA (SessionData Init kA kB (Some tB)) ∗
-                       session_frag tA (SessionData Init kA kB (Some tB))).
+  session_auth tA (SessionData Init kA kB None) -∗
+  session_frag tB (SessionData Resp kA kB (Some tA)) ={E}=∗
+  session_auth tA (SessionData Init kA kB (Some tB)) ∗
+  session_frag tA (SessionData Init kA kB (Some tB)).
 Proof.
-iIntros (sub) "Hctx HA HB"; case: lvl => //=.
+iIntros (sub) "#Hctx HA #HB".
 case: (decide (tA = tB))=> [<-|tAB].
   iPoseProof (session_auth_frag_agree with "HA HB") as "%agree".
   by rewrite to_session_data'_included /= in agree *; intuition.
 set s1 := SessionData Init _ _ _; set s2 := SessionData Resp _ _ _.
 pose (f1 := {[tA := session_data_auth s1]} : gmap _ _).
 pose (f2 := {[tB := session_data_frag s2]} : gmap _ _).
-iMod (auth_acc to_session_map _ _ _ _
-         (f1 ⋅ f2) with "[Hctx HA HB]") as "Hinv"; try by eauto.
-  by rewrite auth_own_op; iFrame.
-iDestruct "Hinv" as (SM) "(%Hincl & #Hinv & Hclose)".
-have /session_map_auth_included SM_tA : f1 ≼ to_session_map SM.
-  apply: cmra_included_trans Hincl; exact: cmra_included_l.
-have /session_map_frag_included SM_tB: f2 ≼ to_session_map SM.
-  apply: cmra_included_trans Hincl; exact: cmra_included_r.
-case: SM_tB=> s2' [SM_tB s2_incl].
-move: SM_tB; rewrite -(to_session_data'_included_eq s2_incl) /=; last by eauto.
-move=> SM_tB {s2' s2_incl}.
+iMod (auth_acc to_session_map session_map_inv with "[Hctx HA]")
+    as "Hinv"; try by try iClear "HB"; eauto.
+iDestruct "Hinv" as (SM) "(%SM_tA & #Hinv & Hclose)".
+move/session_map_auth_included in SM_tA.
 set s1' := SessionData Init kA kB (Some tB).
 pose (f1' := {[tA := session_data_auth_frag s1']} : gmap _ _).
 pose (SM' := <[tA := s1']> SM).
-iMod ("Hclose" $! (<[tA := s1']>SM) (f1' ⋅ f2) with "[]") as "Hown"; last first.
+iMod ("Hclose" $! (<[tA := s1']>SM) f1' with "[]") as "Hown"; last first.
   rewrite /f1' -singleton_op !auth_own_op; iModIntro.
-  by iDestruct "Hown" as "[[??]?]"; iFrame.
-have f2_tA : f2 !! tA = None by rewrite lookup_singleton_ne.
+  by iDestruct "Hown" as "[??]"; iFrame.
 iSplit.
   iPureIntro.
-  rewrite /to_session_map fmap_insert -![_ ⋅ f2]insert_singleton_op //.
-  rewrite -(insert_insert f2 tA (session_data_auth_frag s1') (session_data_auth s1)).
-  eapply insert_local_update.
-  - by rewrite lookup_fmap SM_tA.
-  - by rewrite lookup_insert.
+  rewrite /to_session_map fmap_insert //.
+  apply: singleton_local_update; first by rewrite lookup_fmap SM_tA.
   apply local_update_unital_discrete.
   intros a _ <-%cancelable=> //; last by apply _.
   split=> //; first exact: session_data_auth_frag_valid.
@@ -679,19 +631,21 @@ iSplit.
 iIntros "!>" (t s).
 case: (decide (tA = t))=> [<-|ne].
   rewrite lookup_insert; iIntros (e); case: e=> ?; subst s.
-  iDestruct ("Hinv" $! _ _ SM_tA) as "(?&?&?&?&?&?)".
-  iDestruct ("Hinv" $! _ _ SM_tB) as "(?&?&?&?&?&?)".
-  do 5![iSplit=> //]; iPureIntro.
-  rewrite /s1' /=.
-  by rewrite /coherent_views /= lookup_insert_ne // SM_tB.
-rewrite lookup_insert_ne //.
-iIntros "%SM_t"; iDestruct ("Hinv" $! _ _ SM_t) as "(?&?&?&?&?&%Hcoh)".
-do 5![iSplit=> //]; iPureIntro.
-move: Hcoh; rewrite /coherent_views.
-case erole: (srole s)=> //.
-case edata: (sdata s)=> [t'|] //.
-case: (decide (tA = t'))=> [<-|?]; first by rewrite SM_tA.
-by rewrite lookup_insert_ne.
+  iDestruct ("Hinv" $! _ _ SM_tA) as "(?&?&?)".
+  by do 2![iSplit=> //=].
+by rewrite lookup_insert_ne //.
+Qed.
+
+Lemma session_updateG `{Decision G} kA kB tA tB E :
+  ↑N ⊆ E →
+  session_ctx -∗
+  guarded G (session_auth tA (SessionData Init kA kB None)) -∗
+  guarded G (session_frag tB (SessionData Resp kA kB (Some tA))) ={E}=∗
+  let s := SessionData Init kA kB (Some tB) in
+  guarded G (session_auth tA s ∗ session_frag tA s).
+Proof.
+iIntros (?) "#ctx H1 #H2"; rewrite /guarded; case: decide => //= _.
+by iApply (session_update with "ctx H1 H2").
 Qed.
 
 End Session.

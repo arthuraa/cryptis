@@ -14,7 +14,27 @@ Implicit Types (P Q : iProp) (G : Prop).
 Definition guarded G `{Decision G} P : iProp :=
   (if decide G then P else emp)%I.
 
-Lemma guarded_leq G1 G2 `{Decision G1, Decision G2} P :
+Global Instance guarded_from_wand `{Decision G} P :
+  FromWand (guarded G P) ⌜G⌝ P.
+Proof.
+rewrite /FromWand /guarded; iIntros "H".
+by case: decide => //= HG; iApply "H"; eauto.
+Qed.
+
+Global Instance guarded_into_wand b `{Decision G} P :
+  IntoWand false b (guarded G P) ⌜G⌝ P.
+Proof.
+rewrite /IntoWand /guarded /=; iIntros "H HG".
+iPoseProof (bi.intuitionistically_if_elim with "HG") as "%".
+by rewrite decide_True.
+Qed.
+
+Lemma guarded_eq `{Decision G} P : guarded G P ⊣⊢ (⌜G⌝ -∗ P).
+Proof.
+apply (anti_symm _); by iIntros "H1 H2"; iApply "H1".
+Qed.
+
+Lemma guarded_impl G1 G2 `{Decision G1, Decision G2} P :
   (G2 → G1) →
   guarded G1 P -∗ guarded G2 P.
 Proof.
