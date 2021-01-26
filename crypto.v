@@ -3,7 +3,7 @@ From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap list namespace_map.
 From iris.base_logic.lib Require Import auth.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import lib term coGset.
+From crypto Require Import lib term coGset guarded.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -168,105 +168,6 @@ Implicit Types lvl : level.
 Implicit Types γ : gname.
 
 Implicit Types P Q : iProp.
-
-Definition guarded lvl P : iProp :=
-  if lvl is Sec then P else emp.
-
-Lemma guarded_leq lvl1 lvl2 P :
-  lvl2 ⊑ lvl1 →
-  guarded lvl1 P -∗ guarded lvl2 P.
-Proof. by case: lvl1 lvl2 => [] [] //= _; iIntros. Qed.
-
-Global Instance guarded_persistent lvl P :
-  Persistent P →
-  Persistent (guarded lvl P).
-Proof. case: lvl; apply _. Qed.
-
-Lemma guarded_sep lvl P Q :
-  guarded lvl (P ∗ Q) ⊣⊢ guarded lvl P ∗ guarded lvl Q.
-Proof.
-case: lvl => /=; eauto.
-by rewrite -bi.intuitionistically_emp -bi.intuitionistically_sep_dup.
-Qed.
-
-Global Instance guarded_from_sep lvl P Q R :
-  FromSep P Q R →
-  FromSep (guarded lvl P) (guarded lvl Q) (guarded lvl R).
-Proof.
-rewrite {2}/FromSep; iIntros (FS) "H".
-rewrite -guarded_sep; case: lvl => //=.
-by iApply from_sep.
-Qed.
-
-Global Instance guarded_into_sep lvl P Q R :
-  IntoSep P Q R →
-  IntoSep (guarded lvl P) (guarded lvl Q) (guarded lvl R).
-Proof.
-rewrite {2}/IntoSep; iIntros (FS) "H".
-rewrite -guarded_sep; case: lvl => //=.
-by iApply into_sep.
-Qed.
-
-Global Instance guarded_into_and b lvl (P Q R : iProp) :
-  IntoAnd b P Q R →
-  IntoAnd b (guarded lvl P) (guarded lvl Q) (guarded lvl R).
-Proof.
-by case: b lvl=> [] //= [] //= _; rewrite /IntoAnd /=; eauto.
-Qed.
-
-Lemma guarded_fupd `{!invG Σ} lvl E P :
-  guarded lvl (|={E}=> P) ⊣⊢ |={E}=> guarded lvl P.
-Proof.
-by case: lvl => //=; apply (anti_symm _); iIntros => //.
-Qed.
-
-Lemma guarded_later lvl P :
-  guarded lvl (▷ P) ⊣⊢ ▷ guarded lvl P.
-Proof. by case: lvl => //=; rewrite bi.later_emp. Qed.
-
-Lemma guarded_mono lvl P Q :
-  guarded lvl P -∗
-  □ (P -∗ Q) -∗
-  guarded lvl Q.
-Proof.
-iIntros "HP #PQ"; by case: lvl => //; iApply "PQ".
-Qed.
-
-Lemma guarded_exist T lvl (φ : T -> iProp) :
-  Inhabited T →
-  guarded lvl (∃ x : T, φ x) ⊣⊢ ∃ x : T, guarded lvl (φ x).
-Proof.
-move=> ?; case: lvl=> //=.
-apply (anti_symm _); last by eauto.
-by iIntros "_"; iExists inhabitant.
-Qed.
-
-Global Instance guarded_from_exist T lvl (φ : T -> iProp) :
-  Inhabited T →
-  FromExist (guarded lvl (∃ x, φ x)) (λ x, guarded lvl (φ x)).
-Proof.
-by move => ?; rewrite /FromExist guarded_exist.
-Qed.
-
-Global Instance guarded_into_exist T lvl (φ : T -> iProp) :
-  Inhabited T →
-  IntoExist (guarded lvl (∃ x, φ x)) (λ x, guarded lvl (φ x)).
-Proof.
-by move => ?; rewrite /IntoExist guarded_exist.
-Qed.
-
-Lemma guarded_box lvl (P : iProp) : □ guarded lvl P ⊣⊢ guarded lvl (□ P).
-Proof.
-case: lvl => //=; by rewrite bi.intuitionistically_emp.
-Qed.
-
-Global Instance guarded_box_into_persistent p lvl (P Q : iProp) :
-  IntoPersistent p P Q →
-  IntoPersistent p (guarded lvl P) (guarded lvl Q).
-Proof.
-case: lvl => //= _.
-by rewrite /IntoPersistent; rewrite -bi.persistently_emp_intro; eauto.
-Qed.
 
 Definition atomic t : bool :=
   match t with
@@ -871,7 +772,7 @@ Qed.
 Lemma termT_adec_pub_sec Φ k t :
   termT Pub (TEnc k t) -∗
   key_predT Φ k -∗
-  ∃ lvl, termT lvl t ∗ guarded lvl (□ Φ (k, t)).
+  ∃ lvl, termT lvl t ∗ guarded (lvl = Sec) (□ Φ (k, t)).
 Proof.
 iIntros "Ht Hpred".
 iPoseProof (termT_adec_pub with "Ht Hpred") as "[Ht|Ht]".
@@ -896,9 +797,9 @@ Qed.
 Lemma termT_aenc_pub_secG k Φ lvl t :
   termT Pub (TKey Enc k) -∗
   termT lvl t -∗
-  guarded lvl (stermT Sec (TKey Dec k)) -∗
-  guarded lvl (key_predT Φ k) -∗
-  guarded lvl (□ Φ (k, t)) -∗
+  guarded (lvl = Sec) (stermT Sec (TKey Dec k)) -∗
+  guarded (lvl = Sec) (key_predT Φ k) -∗
+  guarded (lvl = Sec) (□ Φ (k, t)) -∗
   termT Pub (TEnc k t).
 Proof.
 iIntros "#Henc #Ht #Hdec #Hpred #HG"; case: lvl => /=.
@@ -1022,7 +923,7 @@ Lemma publish E lvl t Ts :
   atomic t →
   crypto_ctx -∗
   stermT lvl t -∗
-  guarded lvl (unpublished t Ts) ={E}=∗
+  guarded (lvl = Sec) (unpublished t Ts) ={E}=∗
   published t Ts.
 Proof.
 case: lvl => /=.
@@ -1075,7 +976,7 @@ Lemma declare_nonce E1 E2 lvl a :
   crypto_ctx -∗
   meta_token a E2 ={E1}=∗
   stermT lvl (TNonce a) ∗
-  guarded lvl (unpublished (TNonce a) ⊤) ∗
+  guarded (lvl = Sec) (unpublished (TNonce a) ⊤) ∗
   crypto_meta_token (TNonce a) ⊤.
 Proof.
 iIntros (sub1 sub2) "#ctx Hmeta".
@@ -1393,8 +1294,8 @@ Lemma declare_sec_key E k t lvl_enc lvl_dec :
   ([∗ set] t' ∈ atoms k ∖ {[t]}, published t' {[TKey Enc k; TKey Dec k]}) ={E}=∗
   stermT lvl_enc (TKey Enc k) ∗
   stermT lvl_dec (TKey Dec k) ∗
-  guarded lvl_enc (unpublished (TKey Enc k) ⊤) ∗
-  guarded lvl_dec (unpublished (TKey Dec k) ⊤) ∗
+  guarded (lvl_enc = Sec) (unpublished (TKey Enc k) ⊤) ∗
+  guarded (lvl_dec = Sec) (unpublished (TKey Dec k) ⊤) ∗
   crypto_meta_token (TKey Enc k) ⊤ ∗
   crypto_meta_token (TKey Dec k) ⊤.
 Proof.
@@ -1676,9 +1577,9 @@ Qed.
 Lemma termT_tag_aenc_pub_secG k lvl c Φ t :
   termT Pub (TKey Enc k) -∗
   termT lvl t -∗
-  guarded lvl (stermT Sec (TKey Dec k)) -∗
-  guarded lvl (tkey_predT c Φ k) -∗
-  guarded lvl (□ Φ (k, t)) -∗
+  guarded (lvl = Sec) (stermT Sec (TKey Dec k)) -∗
+  guarded (lvl = Sec) (tkey_predT c Φ k) -∗
+  guarded (lvl = Sec) (□ Φ (k, t)) -∗
   termT Pub (TEnc k (Spec.tag c t)).
 Proof.
 rewrite /tkey_predT; iIntros "#k_lo #t_lo #k_hi [#pred #k_c] #t_hi".
@@ -1691,7 +1592,7 @@ Qed.
 Lemma termT_tag_adec_pub_sec k c Φ t :
   termT Pub (TEnc k (Spec.tag c t)) -∗
   tkey_predT c Φ k -∗
-  ∃ lvl, termT lvl t ∗ guarded lvl (□ Φ (k, t)).
+  ∃ lvl, termT lvl t ∗ guarded (lvl = Sec) (□ Φ (k, t)).
 Proof.
 iIntros "#Ht [#Hk #Hown]".
 iDestruct (termT_adec_pub_sec with "Ht Hk") as (lvl) "{Ht} [#Ht #guard]".

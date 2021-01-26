@@ -3,7 +3,7 @@ From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl namespace_map frac.
 From iris.base_logic.lib Require Import auth.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import lib term crypto primitives tactics session.
+From crypto Require Import lib guarded term crypto primitives tactics session.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -147,8 +147,8 @@ Lemma termT_msg1 lvl kA kB (tA : term) :
   nsl_key_inv Init kA -∗
   stermT lvl tA -∗
   termT Pub (TKey Enc kB) -∗
-  guarded lvl (nsl_key_inv Resp kB) -∗
-  guarded lvl (session_frag nsl_name tA (SessionData Init kA kB None)) -∗
+  guarded (lvl = Sec) (nsl_key_inv Resp kB) -∗
+  guarded (lvl = Sec) (session_frag nsl_name tA (SessionData Init kA kB None)) -∗
   termT Pub (TEnc kB (Spec.tag "m1" (Spec.of_list [tA; TKey Enc kA]))).
 Proof.
 iIntros "#HkA #HtA #HkB_lo (#HkB_hi & #HkB_hi' & #? & _) #frag".
@@ -168,11 +168,11 @@ Lemma wp_initiator kA kB (tA : term) lvl E Ψ :
   crypto_meta_token tA (↑cryptoN.@"nsl") -∗
   nsl_key_inv Init kA -∗
   termT Pub (TKey Enc kB) -∗
-  guarded lvl (nsl_key_inv Resp kB) -∗
+  guarded (lvl = Sec) (nsl_key_inv Resp kB) -∗
   (∀ onB : option term,
       (if onB is Some tB then
          stermT lvl tB ∗
-         guarded lvl (
+         guarded (lvl = Sec) (
            session_auth nsl_name tA (SessionData Init kA kB (Some tB)) ∗
            correspondence nsl_name kA kB tA tB
          )
@@ -208,7 +208,7 @@ iPoseProof (big_sepL_lookup with "Hm2") as "m2_kB"; first exact: epkB'.
 set  sA := SessionData Init kA kB _.
 pose sB := SessionData Resp kA kB (Some tA).
 pose sA' := SessionData Init kA kB (Some nB).
-iAssert (guarded lm2 (session_frag nsl_name nB sB)) as "{fragB} #fragB".
+iAssert (guarded (lm2 = Sec) (session_frag nsl_name nB sB)) as "{fragB} #fragB".
   case: lm2 => //=.
   iDestruct "fragB" as (nA' nB' kB') "/= (%em2 & fragB)".
   move/Spec.of_list_inj in em2; subst m2.
@@ -247,7 +247,7 @@ Lemma wp_responder kB E Ψ :
            termT Pub pkA ∗
            stermT lvl nA ∗
            stermT lvl nB ∗
-           guarded lvl (
+           guarded (lvl = Sec) (
              session_auth nsl_name nB (SessionData Resp kA kB (Some nA)) ∗
              correspondence nsl_name kA kB nA nB
            )
@@ -272,7 +272,7 @@ rewrite termT_of_list.
 iPoseProof (big_sepL_lookup with "Hm1") as "HnA"; first exact: enA.
 iPoseProof (big_sepL_lookup with "Hm1") as "HpkA"; first exact: epkA.
 pose (Pm1 := session_frag nsl_name nA (SessionData Init kA kB None)).
-iAssert (guarded lm1 Pm1) as "{fragA} fragA".
+iAssert (guarded (lm1 = Sec) Pm1) as "{fragA} fragA".
   iApply (guarded_mono with "fragA").
   iIntros "!> {fragA} #fragA".
   iDestruct "fragA" as (nA' kA') "/= [%em1 #fragA]".
@@ -306,7 +306,9 @@ iDestruct (termT_tag_adec_pub_sec with "Hm3 [//]") as (lm3) "/= {Hm3} [#Hm3 #Hpr
 wp_eq_term e; last protocol_failure; subst m3.
 iAssert (⌜lm1 ⊑ lm3⌝)%I as "%lm1_lm3".
   by iDestruct "HnB" as "[_ #Hmin]"; iApply "Hmin".
-iPoseProof (guarded_leq with "Hprot3") as "{Hprot3 Hm3} Hprot3"; first eassumption.
+iAssert (guarded (lm1 = Sec) (msg3_pred (kB, nB))) as "{Hprot3 Hm3} Hprot3".
+  iApply (guarded_leq with "Hprot3").
+  by move=> ?; subst lm1; case: lm3 lm1_lm3.
 clear lm1_lm3 lm3.
 wp_pures.
 iApply ("Hpost" $! (Some (_, _, _))).

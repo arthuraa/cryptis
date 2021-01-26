@@ -3,6 +3,7 @@
 -R . crypto
 
 lib.v
+guarded.v
 coGset.v
 term.v
 basic.v

@@ -3,7 +3,7 @@ From stdpp Require Import gmap coGset.
 From iris.algebra Require Import agree auth gset gmap namespace_map.
 From iris.base_logic.lib Require Import invariants auth.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import lib term crypto coGset_disj.
+From crypto Require Import lib term crypto coGset_disj guarded.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -279,7 +279,7 @@ Lemma twp_mknonce E lvl Ψ :
   ↑cryptoN ⊆ E →
   crypto_ctx -∗
   (∀ t, stermT lvl t -∗ ⌜atomic t⌝ -∗
-        guarded lvl (unpublished t ⊤) -∗
+        guarded (lvl = Sec) (unpublished t ⊤) -∗
         crypto_meta_token t ⊤ -∗
         Ψ t) -∗
   WP mknonce #()%V @ E [{ Ψ }].
@@ -297,7 +297,7 @@ Lemma wp_mknonce E lvl Ψ :
   ↑cryptoN ⊆ E →
   crypto_ctx -∗
   (∀ t, stermT lvl t -∗ ⌜atomic t⌝ -∗
-        guarded lvl (unpublished t ⊤) -∗
+        guarded (lvl = Sec) (unpublished t ⊤) -∗
         crypto_meta_token t ⊤ -∗
         Ψ t) -∗
   WP mknonce #()%V @ E {{ Ψ }}.

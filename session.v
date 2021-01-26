@@ -58,7 +58,7 @@ From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl namespace_map frac.
 From iris.base_logic.lib Require Import auth.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import lib term crypto primitives tactics.
+From crypto Require Import lib guarded term crypto primitives tactics.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -433,10 +433,10 @@ Lemma session_alloc lvl kI kR t rl E ot :
   id_inv rl kA -∗
   crypto_meta_token t (↑N) -∗
   termT Pub (TKey Enc kB) -∗
-  guarded lvl (id_inv (swap_role rl) kB) -∗
+  guarded (lvl = Sec) (id_inv (swap_role rl) kB) -∗
   stermT lvl t -∗
   (if ot is Some t' then stermT lvl t' else True) ={E}=∗
-  guarded lvl (session_auth t s ∗ session_frag t s).
+  guarded (lvl = Sec) (session_auth t s ∗ session_frag t s).
 Proof.
 move=> kA kB s sub rl_ot; iIntros "#Hctx #Howner Hunreg #HkB #HkB' #Ht #Ht'".
 case: lvl => //=.
@@ -477,10 +477,11 @@ Lemma session_alloc_init lvl kA kB tA E :
   id_inv Init kA -∗
   crypto_meta_token tA (↑N) -∗
   termT Pub (TKey Enc kB) -∗
-  guarded lvl (id_inv Resp kB) -∗
+  guarded (lvl = Sec) (id_inv Resp kB) -∗
   stermT lvl tA ={E}=∗
-  guarded lvl (session_auth tA (SessionData Init kA kB None) ∗
-               session_frag tA (SessionData Init kA kB None)).
+  guarded (lvl = Sec)
+    (session_auth tA (SessionData Init kA kB None) ∗
+     session_frag tA (SessionData Init kA kB None)).
 Proof.
 iIntros (HE) "#Hctx #HkA Hunreg #HkB #HkB' #HtA".
 by iApply (session_alloc with "Hctx HkA Hunreg HkB HkB' HtA").
@@ -492,11 +493,12 @@ Lemma session_alloc_resp lvl kA kB tA tB E :
   id_inv Resp kB -∗
   crypto_meta_token tB (↑N) -∗
   termT Pub (TKey Enc kA) -∗
-  guarded lvl (id_inv Init kA) -∗
+  guarded (lvl = Sec) (id_inv Init kA) -∗
   stermT lvl tB -∗
   stermT lvl tA ={E}=∗
-  guarded lvl (session_auth tB (SessionData Resp kA kB (Some tA)) ∗
-               session_frag tB (SessionData Resp kA kB (Some tA))).
+  guarded (lvl = Sec)
+    (session_auth tB (SessionData Resp kA kB (Some tA)) ∗
+     session_frag tB (SessionData Resp kA kB (Some tA))).
 Proof.
 iIntros (?) "#Hctx #HkB Hunreg #HkA #HkA' #HtB #HtA".
 by iApply (session_alloc with "Hctx HkB Hunreg HkA HkA' HtB")=> /=; eauto.
@@ -540,8 +542,8 @@ Qed.
 Lemma session_key_inv E lvl t s :
   ↑N ⊆ E →
   session_ctx -∗
-  guarded lvl (session_frag t s) ={E}=∗
-  ▷ guarded lvl (id_inv s.(srole) (sowner s)).
+  guarded (lvl = Sec) (session_frag t s) ={E}=∗
+  ▷ guarded (lvl = Sec) (id_inv s.(srole) (sowner s)).
 Proof.
 move=> sub; iIntros "#Hctx Hterm"; case: lvl => //=.
 iMod (auth_acc to_session_map _ _ _ _ {[t := session_data_frag s]}
@@ -565,9 +567,9 @@ Definition session_inv' t1 s1 : iProp :=
 Lemma session_frag_session_inv0 E lvl t s :
   ↑N ⊆ E →
   session_ctx -∗
-  guarded lvl (session_frag t s) ={E}=∗
+  guarded (lvl = Sec) (session_frag t s) ={E}=∗
   ∃ s', ⌜to_session_data' s ≼ to_session_data' s'⌝ ∗
-        ▷ guarded lvl (session_inv' t s').
+        ▷ guarded (lvl = Sec) (session_inv' t s').
 Proof.
 move=> sub; iIntros "#Hctx Hterm"; case: lvl => //=.
   by iExists s.
@@ -587,8 +589,8 @@ Lemma session_frag_session_inv1 E lvl rl kA kB t t' :
   ↑N ⊆ E →
   let s := SessionData rl kA kB (Some t') in
   session_ctx -∗
-  guarded lvl (session_frag t s) ={E}=∗
-  ▷ guarded lvl (session_inv' t s).
+  guarded (lvl = Sec) (session_frag t s) ={E}=∗
+  ▷ guarded (lvl = Sec) (session_inv' t s).
 Proof.
 move=> sub s; iIntros "#Hctx #Hterm".
 iMod (session_frag_session_inv0 with "Hctx Hterm") as (s') "[%s_s' Hs']" => //.
@@ -602,7 +604,7 @@ Lemma session_frag_session_inv2 E lvl t s :
   ↑N ⊆ E →
   session_ctx -∗
   termT lvl t -∗
-  guarded lvl (session_frag t s) ={E}=∗
+  guarded (lvl = Sec) (session_frag t s) ={E}=∗
   ▷ stermT lvl t.
 Proof.
 iIntros (sub) "#Hctx #Ht #Hsess".
@@ -614,8 +616,8 @@ Qed.
 Lemma session_frag_id_inv E lvl t s :
   ↑N ⊆ E →
   session_ctx -∗
-  guarded lvl (session_frag t s) ={E}=∗
-  ▷ guarded lvl (id_inv (srole s) (sowner s)).
+  guarded (lvl = Sec) (session_frag t s) ={E}=∗
+  ▷ guarded (lvl = Sec) (id_inv (srole s) (sowner s)).
 Proof.
 iIntros (sub) "#Hctx #Hsess".
 iMod (session_frag_session_inv0 with "Hctx Hsess") as (s') "[%s_s' Hs']" => //.
@@ -632,10 +634,10 @@ Arguments sowner !_ /.
 Lemma session_update lvl kA kB tA tB E :
   ↑N ⊆ E →
   session_ctx -∗
-  guarded lvl (session_auth tA (SessionData Init kA kB None)) -∗
-  guarded lvl (session_frag tB (SessionData Resp kA kB (Some tA))) ={E}=∗
-  guarded lvl (session_auth tA (SessionData Init kA kB (Some tB)) ∗
-               session_frag tA (SessionData Init kA kB (Some tB))).
+  guarded (lvl = Sec) (session_auth tA (SessionData Init kA kB None)) -∗
+  guarded (lvl = Sec) (session_frag tB (SessionData Resp kA kB (Some tA))) ={E}=∗
+  guarded (lvl = Sec) (session_auth tA (SessionData Init kA kB (Some tB)) ∗
+                       session_frag tA (SessionData Init kA kB (Some tB))).
 Proof.
 iIntros (sub) "Hctx HA HB"; case: lvl => //=.
 case: (decide (tA = tB))=> [<-|tAB].
