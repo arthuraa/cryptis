@@ -25,59 +25,40 @@ Class nslG := {
   nsl_name : gname;
 }.
 
-Context `{!tagG Σ, !nslG}.
+Context `{!nslG}.
 
-Definition msg1_pred p : iProp :=
-  ∃ nA kA, ⌜p.2 = Spec.of_list [nA; TKey Enc kA]⌝ ∗
-           session_frag nsl_name nA (SessionData Init kA p.1 None).
+Definition msg1_pred kB m1 : iProp :=
+  ∃ nA kA, ⌜m1 = Spec.of_list [nA; TKey Enc kA]⌝ ∗
+           session_frag nsl_name nA (SessionData Init kA kB None).
 
-Global Instance msg1_pred_proper : NonExpansive msg1_pred.
-Proof.
-move=> n; case=> [??] [??] [/= ??]; solve_contractive.
-Qed.
-
-Global Instance msg1_pred_persistent p : Persistent (msg1_pred p).
+Global Instance msg1_pred_persistent kB m1 : Persistent (msg1_pred kB m1).
 Proof. apply _. Qed.
 
-Definition msg2_pred p : iProp :=
+Definition msg2_pred kA m2 : iProp :=
   ∃ nA nB kB,
-    ⌜p.2 = Spec.of_list [nA; nB; TKey Enc kB]⌝ ∗
-    session_frag nsl_name nB (SessionData Resp p.1 kB (Some nA)).
+    ⌜m2 = Spec.of_list [nA; nB; TKey Enc kB]⌝ ∗
+    session_frag nsl_name nB (SessionData Resp kA kB (Some nA)).
 
-Global Instance msg2_pred_proper : NonExpansive msg2_pred.
+Global Instance msg2_pred_persistent kB m2 : Persistent (msg2_pred kB m2).
 Proof.
-move=> n; case=> [??] [??] [/= ??].
-solve_contractive.
+case: m2; try by move=> *; apply _.
 Qed.
 
-Global Instance msg2_pred_persistent p :
-  Persistent (msg2_pred p).
-Proof.
-case: p=> kA t.
-case: t; try by move=> *; apply _.
-Qed.
-
-Definition msg3_pred p : iProp :=
+Definition msg3_pred kB nB : iProp :=
   ∃ nA kA,
-    session_frag nsl_name nA (SessionData Init kA p.1 (Some p.2)) ∗
-    session_frag nsl_name p.2 (SessionData Resp kA p.1 (Some nA)).
+    session_frag nsl_name nA (SessionData Init kA kB (Some nB)) ∗
+    session_frag nsl_name nB (SessionData Resp kA kB (Some nA)).
 
-Global Instance msg3_pred_proper : NonExpansive msg3_pred.
-Proof.
-move=> n; case=> [??] [??] [/= ??].
-solve_contractive.
-Qed.
-
-Global Instance msg3_pred_persistent p : Persistent (msg3_pred p).
+Global Instance msg3_pred_persistent kB nB : Persistent (msg3_pred kB nB).
 Proof. apply _. Qed.
 
 Definition nsl_key_inv rl k : iProp :=
   termT Pub (TKey Enc k) ∗
   stermT Sec (TKey Dec k) ∗
   match rl with
-  | Init => tkey_predT "m2" (OfeMor msg2_pred) k
-  | Resp => tkey_predT "m1" (OfeMor msg1_pred) k ∗
-            tkey_predT "m3" (OfeMor msg3_pred) k
+  | Init => tkey_predT "m2" (msg2_pred k) k
+  | Resp => tkey_predT "m1" (msg1_pred k) k ∗
+            tkey_predT "m3" (msg3_pred k) k
   end.
 Arguments nsl_key_inv : simpl never.
 
@@ -214,20 +195,22 @@ iPoseProof (big_sepL_lookup with "Hm2") as "m2_kB"; first exact: epkB'.
 set  sA := SessionData Init _ _ _.
 pose sB := SessionData Resp kA kB (Some tA).
 pose sA' := SessionData Init kA kB (Some nB).
-iAssert (guarded (lm2 = Sec) (session_frag nsl_name nB sB))
+iAssert (guarded (lm2 = Sec) (▷^2 session_frag nsl_name nB sB))
     as "{fragB} #fragB".
-  iIntros "-> /=".
-  iDestruct "fragB" as (nA' nB' kB') "/= (%em2 & fragB)".
+  iIntros "-> /= !> !>".
+  iDestruct "fragB" as (nA' nB' kB') "/= (%em2 & #fragB)".
   move/Spec.of_list_inj in em2; subst m2.
   by case: enA' epkB' enB => [] -> [] -> [] -> {nA' nB' kB'}.
 iClear (enA' enB epkB') "Hm2".
-iMod (session_frag_invG with "Hctx fragB") as "[#sessB #coh]" => //.
+rewrite !guarded_later.
 wp_pures.
+iMod (session_frag_invG with "Hctx fragB") as "[#sessB #coh]" => //.
 iSpecialize ("coh" with "[]"); first by eauto.
 rewrite /coherent_views /=.
 iPoseProof (stermTP with "HtA m2_tA") as "{m2_tA} %Hlm2".
 iAssert (|={E}=> ▷ ⌜lm2 = lvl⌝)%I as "> > ->".
   case: lvl lm2 Hlm2 => [] // [] //= _.
+  iDestruct "coh" as ">coh".
   iMod (session_frag_inv with "Hctx coh") as "[sessA _]"=> //.
   iDestruct "sessA" as "(_&#HtA')".
   do 2![iModIntro].
@@ -283,17 +266,19 @@ rewrite termT_of_list.
 iPoseProof (big_sepL_lookup with "Hm1") as "HnA"; first exact: enA.
 iPoseProof (big_sepL_lookup with "Hm1") as "HpkA"; first exact: epkA.
 pose (Pm1 := session_frag nsl_name nA (SessionData Init kA kB None)).
-iAssert (guarded (lm1 = Sec) Pm1) as "{fragA} fragA".
+iAssert (guarded (lm1 = Sec) (▷^2 Pm1)) as "{fragA} fragA".
   iApply (guarded_mono with "fragA").
-  iIntros "!> {fragA} #fragA".
+  iIntros "!> {fragA} #fragA !> !>".
   iDestruct "fragA" as (nA' kA') "/= [%em1 #fragA]".
   move/Spec.of_list_inj in em1; subst m1.
   by case: enA epkA => [] -> [] -> {nA' kA'}.
+rewrite !guarded_later.
+wp_pures; wp_bind (gen _); iApply (wp_gen _ lm1); iIntros (nB) "unreg #HnB".
+wp_let.
 iMod (session_frag_invG with "Hctx fragA") as "[#HnA' _]" => //=.
 iAssert (▷ termT Pub (TKey Enc kA))%I as "#HkA_lo".
   case: lm1=> //=; iModIntro.
   by iDestruct "HnA'" as "(#[??]&?)".
-wp_pures; wp_bind (gen _); iApply (wp_gen _ lm1); iIntros (nB) "unreg #HnB".
 iDestruct "HnA'" as "/= # [HkA_hi HnA']".
 wp_pures.
 wp_list (_ :: _ :: _ :: []); wp_term_of_list. 
@@ -306,20 +291,21 @@ iMod (session_alloc_respG with "Hctx [] fragA [unreg]")
 - by iIntros "->".
 wp_bind (send _); iApply wp_send.
   iModIntro.
-  iDestruct "HkA_hi" as "(?&?&?)".
+  iDestruct "HkA_hi" as "#(?&?&?)".
   iApply termT_tag_aenc_pub_secG; eauto.
     iApply termT_of_list => /=.
     do !iSplit => //; try by iApply stermT_termT.
     by iApply sub_termT_pub.
-  case: lm1 => //=.
+  case: lm1 => //=; eauto.
   by iModIntro; iExists nA, nB, kB; iSplit; first trivial.
 wp_pures; wp_bind (recv _); iApply wp_recv; iIntros (m3) "#Hm3".
 wp_tdec m3; last protocol_failure.
 iDestruct (termT_tag_adec_pub_sec with "Hm3 [//]") as (lm3) "/= {Hm3} [#Hm3 #Hprot3]".
+rewrite !guarded_later.
 wp_eq_term e; last protocol_failure; subst m3.
 iAssert (⌜lm1 ⊑ lm3⌝)%I as "%lm1_lm3".
   by iDestruct "HnB" as "[_ #Hmin]"; iApply "Hmin".
-iAssert (guarded (lm1 = Sec) (msg3_pred (kB, nB))) as "{Hprot3 Hm3} Hprot3".
+iAssert (guarded (lm1 = Sec) (msg3_pred kB nB)) as "{Hprot3 Hm3} Hprot3".
   iIntros "->"; by case: lm3 lm1_lm3.
 clear lm1_lm3 lm3.
 wp_pures.
