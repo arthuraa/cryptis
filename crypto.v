@@ -635,6 +635,22 @@ iExists lvl_enc, lvl_dec; iSplit => //; iLeft; iSplit => //.
 by case: lvl_enc leq.
 Qed.
 
+Lemma termT_aenc_sec_pub Φ lvl_k k t :
+  termT lvl_k (TKey Enc k) -∗
+  key_predT Φ k -∗
+  termT Pub t -∗
+  □ Φ t -∗
+  termT Pub (TEnc k t).
+Proof.
+iIntros "#k_lo #pred #t_lo #inv".
+rewrite [termT _ (TEnc _ _)]termT_eq.
+rewrite [termT _ (TKey Enc _)]termT_eq.
+iDestruct "k_lo" as (lvl_enc lvl_dec) "[k_lo %leq]".
+iExists lvl_enc, lvl_dec; iSplit => //.
+iRight; iExists Φ; do 2![iSplit => //].
+iApply (sub_termT with "t_lo"); by case: (lvl_dec).
+Qed.
+
 Lemma stermTP lvl lvl' t :
   stermT lvl t -∗ termT lvl' t -∗ ⌜lvl ⊑ lvl'⌝.
 Proof. by iIntros "[_ #min]". Qed.
@@ -1558,6 +1574,19 @@ iDestruct (tagged_inv_elim with "H") as (c' t' Φ') "{H} (%e & #own' & #Ht)".
 case: (Spec.tag_inj _ _ _ _ e) => ??; subst c' t'.
 iPoseProof (key_tag_agree t with "own own'") as "#e".
 by iModIntro; iRewrite "e".
+Qed.
+
+Lemma termT_tag_aenc_sec_pub k lvl c Φ t :
+  termT Pub (TKey Enc k) -∗
+  tkey_predT c Φ k -∗
+  termT Pub t -∗
+  □ Φ t -∗
+  termT Pub (TEnc k (Spec.tag c t)).
+Proof.
+iIntros "#k_lo [#pred #k_c] #t_lo #inv".
+iApply termT_aenc_sec_pub; eauto.
+  by rewrite termT_tag.
+by iIntros "!> /="; iApply tagged_inv_intro.
 Qed.
 
 Lemma termT_tag_aenc_pub_secG k lvl c Φ t :
