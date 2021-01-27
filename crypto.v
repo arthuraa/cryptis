@@ -353,7 +353,7 @@ Definition key_predT Φ t : iProp :=
 Global Instance key_predT_persistent Φ t : Persistent (key_predT Φ t).
 Proof. by apply _. Qed.
 
-Lemma key_predT_agree Φ1 Φ2 k t :
+Lemma key_predT_agree t Φ1 Φ2 k :
   key_predT Φ1 k -∗
   key_predT Φ2 k -∗
   ▷ (Φ1 t ≡ Φ2 t).
@@ -773,27 +773,88 @@ Qed.
 Lemma termT_adec_pub Φ k t :
   termT Pub (TEnc k t) -∗
   key_predT Φ k -∗
-  termT Pub t ∨ ▷ □ Φ t ∗ termT Sec t.
+  termT Pub t ∨ □ ▷ Φ t ∗ termT Sec t.
 Proof.
 rewrite termT_eq; iIntros "#Ht #HΦ".
 iDestruct "Ht" as (lvl_enc lvl_dec) "# (Hk & Ht)".
 iDestruct "Ht" as "[(?&?)|Ht]"; eauto.
 iDestruct "Ht" as (Φ') "(HΦ' & #inv & Ht)".
-iPoseProof (key_predT_agree _ _ _ t with "HΦ' HΦ") as "e".
+iPoseProof (key_predT_agree t with "HΦ' HΦ") as "e".
 iRight; iSplit => //.
-  by iModIntro; iRewrite -"e".
+  by do 2![iModIntro]; iRewrite -"e".
 iApply (sub_termT with "Ht"); by case: lvl_dec.
 Qed.
 
 Lemma termT_adec_pub_sec Φ k t :
   termT Pub (TEnc k t) -∗
   key_predT Φ k -∗
-  ∃ lvl, termT lvl t ∗ guarded (lvl = Sec) (▷ □ Φ t).
+  ∃ lvl, termT lvl t ∗ □ ▷ guarded (lvl = Sec) (Φ t).
 Proof.
 iIntros "Ht Hpred".
 iPoseProof (termT_adec_pub with "Ht Hpred") as "[Ht|Ht]".
 - by iExists Pub; iSplit.
 - by iExists Sec; iDestruct "Ht" as "[??]"; iSplit.
+Qed.
+
+Lemma termT_adec_sec Φ k lvl t :
+  stermT Sec (TKey Enc k) -∗
+  key_predT Φ k -∗
+  termT lvl (TEnc k t) -∗
+  termT Sec t ∗ □ ▷ Φ t.
+Proof.
+iIntros "#Hk #HΦ #Ht".
+rewrite stermT_TKey_eq.
+iDestruct "Hk" as (? lvl_dec) "[Hk <-]".
+rewrite termT_eq.
+iDestruct "Ht" as (lvl_enc' lvl_dec') "(Hk' & Ht)".
+iDestruct (keyT_agree with "Hk' Hk") as "[-> ->]".
+iDestruct "Ht" as "[[% ?]|Ht]" => //.
+iDestruct "Ht" as (Φ') "(HΦ' & #inv & Ht)".
+iSplit.
+  iApply (sub_termT with "Ht"); by case: (_ ⊔ _).
+iPoseProof (key_predT_agree t with "HΦ HΦ'") as "e".
+by do 2![iModIntro]; iRewrite "e".
+Qed.
+
+Lemma termT_adec_sec_pub Φ k t :
+  stermT Sec (TKey Enc k) -∗
+  key_predT Φ k -∗
+  termT Pub (TKey Dec k) -∗
+  termT Pub (TEnc k t) -∗
+  termT Pub t ∗ □ ▷ Φ t.
+Proof.
+iIntros "#enc #HΦ #dec #Ht".
+iAssert (keyT Sec Pub k) as "{enc dec} Hk".
+  by rewrite keyT_eq [stermT Pub _]stermT_eq; iSplit.
+rewrite termT_eq.
+iDestruct "Ht" as (lvl_enc lvl_dec) "[Hk' Ht]".
+iDestruct (keyT_agree with "Hk' Hk") as "[-> ->]".
+iDestruct "Ht" as "[[% ?]|Ht]" => //.
+iDestruct "Ht" as (Φ') "(HΦ' & #inv & Ht)".
+iSplit => //.
+iPoseProof (key_predT_agree t with "HΦ' HΦ") as "#e".
+by do 2![iModIntro]; iRewrite -"e".
+Qed.
+
+Lemma termT_adec_sec_pubG `{Decision G} Φ k t :
+  guarded G (stermT Sec (TKey Enc k)) -∗
+  guarded G (key_predT Φ k) -∗
+  termT Pub (TKey Dec k) -∗
+  termT Pub (TEnc k t) -∗
+  termT Pub t ∗ □ ▷ guarded G (Φ t).
+Proof.
+rewrite /guarded; case: decide => _; last first.
+  iIntros "_ _ #Hk #Ht".
+  iAssert (stermT Pub (TKey Dec k)) as "{Hk} Hk".
+    by rewrite stermT_eq.
+  rewrite stermT_TKey_eq.
+  iDestruct "Hk" as (lvl_enc ?) "[Hk <-]".
+  rewrite termT_eq.
+  iDestruct "Ht" as (lvl_enc' lvl_dec') "[Hk' Ht]".
+  iDestruct (keyT_agree with "Hk' Hk") as "[-> ->]".
+  iDestruct "Ht" as "[[??]|Ht]"; eauto.
+  by iDestruct "Ht" as (?) "(?&?&?)"; eauto.
+by iApply termT_adec_sec_pub.
 Qed.
 
 Lemma termT_aenc_pub_sec lvl Φ k t :
@@ -815,7 +876,7 @@ Lemma termT_aenc_pub_secG k Φ lvl t :
   termT lvl t -∗
   guarded (lvl = Sec) (stermT Sec (TKey Dec k)) -∗
   guarded (lvl = Sec) (key_predT Φ k) -∗
-  guarded (lvl = Sec) (□ Φ t) -∗
+  □ guarded (lvl = Sec) (Φ t) -∗
   termT Pub (TEnc k t).
 Proof.
 iIntros "#Henc #Ht #Hdec #Hpred #HG"; case: lvl => /=.
@@ -1538,7 +1599,7 @@ by do 2![case; try by apply _].
 Qed.
 
 Definition tkey_predT c Φ k : iProp :=
-  key_predT (OfeMor (tagged_inv k)) k ∗
+  key_predT (tagged_inv k) k ∗
   key_tag k c Φ.
 
 Lemma tagged_inv_intro k c Φ t :
@@ -1567,13 +1628,13 @@ Qed.
 Lemma tagged_inv_elim' Φ k c t :
   key_tag k c Φ -∗
   tagged_inv k (Spec.tag c t) -∗
-  ▷ □ Φ t.
+  □ ▷ Φ t.
 Proof.
 iIntros "#own #H".
 iDestruct (tagged_inv_elim with "H") as (c' t' Φ') "{H} (%e & #own' & #Ht)".
 case: (Spec.tag_inj _ _ _ _ e) => ??; subst c' t'.
 iPoseProof (key_tag_agree t with "own own'") as "#e".
-by iModIntro; iRewrite "e".
+by do 2![iModIntro]; iRewrite "e".
 Qed.
 
 Lemma termT_tag_aenc_sec_pub lvl k c Φ t :
@@ -1594,7 +1655,7 @@ Lemma termT_tag_aenc_pub_secG k lvl c Φ t :
   termT lvl t -∗
   guarded (lvl = Sec) (stermT Sec (TKey Dec k)) -∗
   guarded (lvl = Sec) (tkey_predT c Φ k) -∗
-  guarded (lvl = Sec) (□ Φ t) -∗
+  □ guarded (lvl = Sec) (Φ t) -∗
   termT Pub (TEnc k (Spec.tag c t)).
 Proof.
 rewrite /tkey_predT; iIntros "#k_lo #t_lo #k_hi [#pred #k_c] #t_hi".
@@ -1607,13 +1668,55 @@ Qed.
 Lemma termT_tag_adec_pub_sec k c Φ t :
   termT Pub (TEnc k (Spec.tag c t)) -∗
   tkey_predT c Φ k -∗
-  ∃ lvl, termT lvl t ∗ guarded (lvl = Sec) (▷^2 □ Φ t).
+  ∃ lvl, termT lvl t ∗ □ ▷^2 guarded (lvl = Sec) (Φ t).
 Proof.
 iIntros "#Ht [#Hk #Hown]".
 iDestruct (termT_adec_pub_sec with "Ht Hk") as (lvl) "{Ht} [#Ht #guard]".
 rewrite termT_tag.
-iExists lvl; iSplit => //; case: lvl => //=; iModIntro.
+iExists lvl; iSplit => //; case: lvl => //=; do 2![iModIntro].
 by iApply (tagged_inv_elim' with "Hown guard").
+Qed.
+
+Lemma termT_tag_adec_sec lvl k c Φ t :
+  stermT Sec (TKey Enc k) -∗
+  tkey_predT c Φ k -∗
+  termT lvl (TEnc k (Spec.tag c t)) -∗
+  termT Sec t ∧ □ ▷^2 Φ t.
+Proof.
+iIntros "#Hk [#pred #HΦ] #Henc".
+iDestruct (termT_adec_sec with "Hk pred Henc") as "[Ht #inv]".
+rewrite termT_tag; iSplit => //; do 2![iModIntro].
+by iApply (tagged_inv_elim' with "HΦ inv").
+Qed.
+
+Lemma termT_tag_adec_sec_pub k c Φ t :
+  stermT Sec (TKey Enc k) -∗
+  tkey_predT c Φ k -∗
+  termT Pub (TKey Dec k) -∗
+  termT Pub (TEnc k (Spec.tag c t)) -∗
+  termT Pub t ∧ □ ▷^2 Φ t.
+Proof.
+iIntros "#Henc [#pred #HΦ] #Hdec #Ht".
+iDestruct (termT_adec_sec_pub with "Henc pred Hdec Ht") as "{Ht} [Ht #inv]".
+rewrite termT_tag; iSplit => //; do 2![iModIntro].
+by iApply (tagged_inv_elim' with "HΦ inv").
+Qed.
+
+Lemma termT_tag_adec_sec_pubG `{Decision G} k c Φ t :
+  guarded G (stermT Sec (TKey Enc k)) -∗
+  guarded G (tkey_predT c Φ k) -∗
+  termT Pub (TKey Dec k) -∗
+  termT Pub (TEnc k (Spec.tag c t)) -∗
+  termT Pub t ∧ □ ▷^2 guarded G (Φ t).
+Proof.
+iIntros "#Henc [#pred #HΦ] #Hdec Ht".
+iDestruct (termT_adec_sec_pubG with "Henc pred Hdec Ht") as "{Ht} [#Ht #inv]".
+rewrite termT_tag; iSplit => //.
+do 2![iModIntro]; rewrite -guarded_later.
+iIntros "#HG".
+rewrite !guarded_eq; iSpecialize ("inv" with "HG").
+iSpecialize ("HΦ" with "HG").
+by iApply (tagged_inv_elim' with "HΦ inv").
 Qed.
 
 End Tagging.

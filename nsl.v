@@ -261,18 +261,17 @@ wp_pures.
 case: (bool_decide_reflect (_ = repr_key_type Enc)); last protocol_failure.
 case: kt epkA=> // epkA _.
 iPoseProof "HkB" as "(? & ? & HkB_m1 & HkB_m3)".
-iDestruct (termT_tag_adec_pub_sec with "Hm1 []") as (lm1) "{Hm1} [Hm1 fragA]"; eauto.
+iDestruct (termT_tag_adec_pub_sec with "Hm1 []") as (lm1) "{Hm1} [Hm1 #fragA]"; eauto.
 rewrite termT_of_list.
 iPoseProof (big_sepL_lookup with "Hm1") as "HnA"; first exact: enA.
 iPoseProof (big_sepL_lookup with "Hm1") as "HpkA"; first exact: epkA.
 pose (Pm1 := session_frag nsl_name nA (SessionData Init kA kB None)).
-iAssert (guarded (lm1 = Sec) (▷^2 Pm1)) as "{fragA} fragA".
+iAssert (▷^2 guarded (lm1 = Sec) Pm1)%I as "{fragA} fragA".
   iApply (guarded_mono with "fragA").
-  iIntros "!> {fragA} #fragA !> !>".
+  iIntros "!> {fragA} !> !> #fragA".
   iDestruct "fragA" as (nA' kA') "/= [%em1 #fragA]".
   move/Spec.of_list_inj in em1; subst m1.
   by case: enA epkA => [] -> [] -> {nA' kA'}.
-rewrite !guarded_later.
 wp_pures; wp_bind (gen _); iApply (wp_gen _ lm1); iIntros (nB) "unreg #HnB".
 wp_let.
 iMod (session_frag_invG with "Hctx fragA") as "[#HnA' _]" => //=.
@@ -301,7 +300,6 @@ wp_bind (send _); iApply wp_send.
 wp_pures; wp_bind (recv _); iApply wp_recv; iIntros (m3) "#Hm3".
 wp_tdec m3; last protocol_failure.
 iDestruct (termT_tag_adec_pub_sec with "Hm3 [//]") as (lm3) "/= {Hm3} [#Hm3 #Hprot3]".
-rewrite !guarded_later.
 wp_eq_term e; last protocol_failure; subst m3.
 iAssert (⌜lm1 ⊑ lm3⌝)%I as "%lm1_lm3".
   by iDestruct "HnB" as "[_ #Hmin]"; iApply "Hmin".
