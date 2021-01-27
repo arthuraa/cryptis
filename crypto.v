@@ -1576,8 +1576,8 @@ iPoseProof (key_tag_agree t with "own own'") as "#e".
 by iModIntro; iRewrite "e".
 Qed.
 
-Lemma termT_tag_aenc_sec_pub k lvl c Φ t :
-  termT Pub (TKey Enc k) -∗
+Lemma termT_tag_aenc_sec_pub lvl k c Φ t :
+  termT lvl (TKey Enc k) -∗
   tkey_predT c Φ k -∗
   termT Pub t -∗
   □ Φ t -∗
