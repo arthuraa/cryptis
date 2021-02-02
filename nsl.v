@@ -45,9 +45,9 @@ case: m2; try by move=> *; apply _.
 Qed.
 
 Definition msg3_pred kB nB : iProp :=
-  ∃ nA kA,
-    session_frag nsl_name nA (SessionData Init kA kB (Some nB)) ∗
-    session_frag nsl_name nB (SessionData Resp kA kB (Some nA)).
+  □ ∀ nA kA,
+    session_frag nsl_name nB (SessionData Resp kA kB (Some nA)) -∗
+    session_frag nsl_name nA (SessionData Init kA kB (Some nB)).
 
 Global Instance msg3_pred_persistent kB nB : Persistent (msg3_pred kB nB).
 Proof. apply _. Qed.
@@ -222,7 +222,9 @@ wp_bind (send _); iApply wp_send.
   iModIntro.
   iDestruct "HkB_hi" as "(HkB_m1 & HkB_m3 & ? & ?)".
   iApply (termT_tag_aenc_pub_secG _ lvl) => //; eauto.
-  by case: (lvl) => //=; iModIntro; iExists tA, kA; iSplit.
+  case: (lvl) => //=; iIntros "!> !> %nA' %kA' #fragB'".
+  iDestruct (session_frag_agree with "fragB' fragB") as "/= %e".
+  by case: e => [] _ [] -> [] _ ->.
 wp_pures; iApply ("Hpost" $! (Some nB)).
 case: lvl {Hlm2} => /=.
   do 2![iSplit => //]; by iModIntro; iIntros (lvl') "?".
@@ -312,10 +314,7 @@ iExists lm1, _; do 3![iSplit => //].
   by case: lm1 => //=; rewrite (stermT_eq Pub nA).
 iSplit => //.
 iIntros "-> /=".
-iDestruct "Hprot3" as (nA' kA') "[#frag1 #frag2]".
-set sB' := (SessionData Resp kA' _ _).
-iPoseProof (session_auth_frag_agree with "auth frag2") as "%sess".
-have [-> ->] : sB' = sB by apply: to_session_data'_included_eq => //=; eauto.
+iSpecialize ("Hprot3" with "fragB").
 iFrame; by iSplit.
 Qed.
 

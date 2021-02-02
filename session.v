@@ -314,7 +314,10 @@ Lemma session_frag_agree t s1 s2 :
   ⌜s1.(srole) = s2.(srole) ∧
    s1.(sinit) = s2.(sinit) ∧
    s1.(sresp) = s2.(sresp) ∧
-   (is_Some s1.(sdata) → is_Some s2.(sdata) → s1.(sdata) = s2.(sdata))⌝.
+   match s1.(sdata), s2.(sdata) with
+   | Some t1, Some t2 => t1 = t2
+   | _      , _       => True
+   end⌝.
 Proof.
 iIntros "Hown1 Hown2".
 iPoseProof (own_valid_2 with "Hown1 Hown2") as "%Hvalid".
@@ -324,7 +327,7 @@ rewrite /session_data_frag auth_valid_eq /= -Some_op Some_valid.
 rewrite -!pair_op !pair_valid.
 case=> [] [] [] /agree_op_invL' ? /agree_op_invL' ? /agree_op_invL' ? Hdata.
 do ![split => //].
-move=> H1 H2; case: H1 H2 Hdata => [t1 ->] [t2 ->] /=.
+case: (sdata s1) (sdata s2) Hdata => [t1|] [t2|] //=.
 by rewrite -Some_op Some_valid => /agree_op_invL' ->.
 Qed.
 
@@ -335,8 +338,7 @@ Lemma correspondence_agreeL kI1 kI2 kR1 kR2 tI tR1 tR2 :
 Proof.
 iIntros "[H1 _] [H2 _]".
 iPoseProof (session_frag_agree with "H1 H2") as "/= (_ & -> & -> & %Hdata)".
-iPureIntro; do ![split => //].
-by apply Some_inj; apply: Hdata; eauto.
+by iPureIntro; do ![split => //].
 Qed.
 
 Lemma correspondence_agreeR kI1 kI2 kR1 kR2 tI1 tI2 tR :
@@ -347,7 +349,6 @@ Proof.
 iIntros "[_ H1] [_ H2]".
 iPoseProof (session_frag_agree with "H1 H2") as "/= (_ & -> & -> & %Hdata)".
 iPureIntro; do ![split => //].
-by apply Some_inj; apply: Hdata; eauto.
 Qed.
 
 Lemma correspondence_agreeLR kI1 kI2 kR1 kR2 t tI tR :
