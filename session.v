@@ -342,6 +342,18 @@ iModIntro; rewrite /session_map_inv big_sepM_insert //=.
 by iFrame; iSplit.
 Qed.
 
+Lemma session_beginG `{Decision G} s E :
+  ↑N ⊆ E →
+  session_ctx -∗
+  guarded G (sinv s) -∗
+  guarded G (crypto_meta_token (s_key s) (↑N)) ={E}=∗
+  guarded G (session_auth (None, s) ∗ session_frag (None, s)).
+Proof.
+iIntros (?) "ctx inv meta".
+rewrite /guarded; case: decide => _ //.
+by iApply (session_begin with "ctx inv meta").
+Qed.
+
 (*
 Lemma session_map_auth_included p SM :
   session_status_auth
@@ -421,7 +433,7 @@ Proof.
 by rewrite /session_status_both -pair_op agree_idemp.
 Qed.
 
-Lemma session_end E s :
+Lemma session_end s E :
   ↑N ⊆ E →
   session_ctx -∗
   session_auth (None, s) -∗
@@ -509,6 +521,22 @@ iModIntro; iSplitL "own inv".
 eauto.
 Qed.
 
+Lemma session_endG `{Decision G} s E :
+  ↑N ⊆ E →
+  session_ctx -∗
+  guarded G (session_auth (None, s)) -∗
+  guarded G (session_frag (None, swap_view s)) ={E}=∗
+  ▷ guarded G (sinv (swap_view s)).
+Proof.
+iIntros (?) "ctx auth frag".
+rewrite /guarded; case: decide => [ye|no]; eauto.
+by iApply (session_end with "ctx auth frag").
+Qed.
+
 End Session.
 
 Arguments sessionG : clear implicits.
+Arguments session_begin {Σ _ _ _} {γ N sinv} s E.
+Arguments session_beginG {Σ _ _ _} {γ N sinv} G {_} s E.
+Arguments session_end {Σ _ _ _} {γ N sinv} s E.
+Arguments session_endG {Σ _ _ _} {γ N sinv} G {_} s E.
