@@ -1,55 +1,26 @@
 (**
 
-This file defines infrastructure for reasoning about correspondence properties,
-which are common correctness criteria for authentication protocols.  A protocol
-satisfies correspondence if the protocol participants agree on which data items
-were exchanged in the protocol (assuming that the participants are honest).  The
-data items are often fresh secrets used to establish a shared session key
-between the participants.
+This file includes definitions and lemmas for reasoning about session
+authentication.  To initiate a session, two agents [A] and [B] exchange terms
+[tA] and [tB].  Typically, these terms are secrets and used to generate a new
+key to encrypt the communication during the session.  We _define_ authentication
+as the ability to exchange resources: if an honest agent [A] owns some resource
+[P A B tA tB], and an honest [B] owns [Q A B tA tB], after authenticating the
+session they swap ownership of these resources.  This is formalized by the
+[session_begin] lemma below.  The lemma states that A can give up their
+resources in exchange for two things:
 
-We formalize correspondence by means of a predicate [correspondence kI kR tI
-tR], which says that the participants identified by [kI] and [kR] agree that the
-data items [tI] and [tR] correspond to the same session.  This predicate
-satisfies two important properties:
+1. A [session] "certificate", which represents A's intent to initiate a session
+   with B.
 
-1. it is persistent (cf. [correspondence_persistent]);
+2. The ability to obtain B's resources, provided that A can exhibit a [session]
+   certificate for B.
 
-2. it guarantees that the data items completely determine each other (cf.
-   [correspondence_agreeL] and [correspondence_agreeR]);
-
-3. each data item was chosen by exactly one role (cf. [correspondence_agreeLR]).
-
-Taken together, these properties imply that, once we know that two terms are
-connected to some session, they will never be connected to other sessions of the
-same protocol.
-
-Suppose that Alice wants to communicate with Bob.  To prove correspondence for a
-protocol, we follow these steps:
-
-1. Alice uses [session_alloc_init] to associate some data item [tA] with a fresh
-session with Bob.  To ensure that [tA] has not been used for other sessions,
-Alice must prove that it has ownership of [crypto_meta_token tA (↑N)], where [N]
-is some fixed namespace associated with the protocol.  Alice obtains two
-predicates [session_auth] and [session_frag], which describe the state of the
-new session.  (The predicates are guarded by a secrecy level because if we try
-to communicate with a dishonest party, there is nothing we can guarantee.)  The
-[None] argument signals that Alice has not attached any data items to this
-session belonging to Bob.
-
-2. When Bob receives a data item [tA], it generates another data item [tB] and
-binds [tB] to [tA] (cf. [session_alloc_resp]).  The result of this lemma is
-similar to Alice's, except that [session_frag] and [session_auth] record that
-Bob does have a putative data item from Alice.
-
-3. Alice combines her [session_auth] knowledge with a matching [session_frag]
-from Bob (cf. [session_update]).  This causes [tA] to be irreversibly tied to
-[tB].
-
-4. Each agent combines their matching fragments to conclude [correspondence].
-
-The agents may communicate their fragments to each other via encrypted messages
-or signatures.  The implementation of the NSL protocol in [nsl.v] illustrates
-this pattern for encryption.
+The [session] certificate is persistent, and thus can be included in terms. To
+verify an authentication protocol, A uses [session_begin] to declare a new
+session.  It sends its certificate to B via an encrypted message or a digital
+signature.  It then waits for a reply from B with a matching certificate to
+obtain B's resource.  The file nsl.v contains an example of this idiom.
 
 *)
 
@@ -163,7 +134,11 @@ Class sessionG := {
 }.
 
 Context `{!sessionG} (γ : gname) (N : namespace).
-Context (sinv : session_view → iProp).
+Context (sinv : role → term → term → term → term → iProp).
+
+Definition sinv_int s :=
+  let 'SessionView rl kA kB tA tB := s in
+  sinv rl kA kB tA tB.
 
 Global Instance sessionG_authG : authG _ _ :=
   AuthG Σ session_mapUR session_inG _.
@@ -189,14 +164,6 @@ Definition session_frag p : iProp :=
 
 Global Instance session_frag_persistent p :
   Persistent (session_frag p).
-Proof. apply _. Qed.
-
-Definition correspondence kI kR tI tR : iProp :=
-  session_frag (None, SessionView Init kI kR tI tR) ∗
-  session_frag (None, SessionView Resp kI kR tI tR).
-
-Global Instance correspondence_persistent kI kR tI tR :
-  Persistent (correspondence kI kR tI tR).
 Proof. apply _. Qed.
 
 Lemma session_auth_frag_agree o1 s1 o2 s2 :
@@ -227,40 +194,11 @@ rewrite -pair_op singleton_valid pair_valid; case=> [] _.
 exact/agree_op_invL'.
 Qed.
 
-Lemma correspondence_agreeL kI1 kI2 kR1 kR2 tI tR1 tR2 :
-  correspondence kI1 kR1 tI tR1 -∗
-  correspondence kI2 kR2 tI tR2 -∗
-  ⌜kI1 = kI2 ∧ kR1 = kR2 ∧ tR1 = tR2⌝.
-Proof.
-iIntros "[H1 _] [H2 _]".
-iPoseProof (session_frag_agree with "H1 H2") as "/= %e" => //.
-by iPureIntro; repeat split; congruence.
-Qed.
-
-Lemma correspondence_agreeR kI1 kI2 kR1 kR2 tI1 tI2 tR :
-  correspondence kI1 kR1 tI1 tR -∗
-  correspondence kI2 kR2 tI2 tR -∗
-  ⌜kI1 = kI2 ∧ kR1 = kR2 ∧ tI1 = tI2⌝.
-Proof.
-iIntros "[_ H1] [_ H2]".
-iPoseProof (session_frag_agree with "H1 H2") as "/= %e" => //.
-by iPureIntro; repeat split; congruence.
-Qed.
-
-Lemma correspondence_agreeLR kI1 kI2 kR1 kR2 t tI tR :
-  correspondence kI1 kR1 t tR -∗
-  correspondence kI2 kR2 tI t -∗
-  False.
-Proof.
-iIntros "[H1 _] [_ H2]".
-by iPoseProof (session_frag_agree with "H1 H2") as "/= %e".
-Qed.
-
 Definition session_map_inv SM : iProp :=
   ([∗ map] t ↦ p ∈ SM,
      ⌜t = s_key p.2⌝ ∗
      crypto_meta t N () ∗
-     (sinv p.2 ∨ session_frag (Some (), swap_view p.2)))%I.
+     (sinv_int p.2 ∨ session_frag (Some (), swap_view p.2)))%I.
 
 Lemma session_map_inv_unregistered SM t :
   crypto_meta_token t (↑N) -∗
@@ -316,10 +254,10 @@ rewrite lookup_fmap SM_t /session_status_both -pair_op; split.
 apply: Some_included_2; rewrite pair_op; exact: cmra_included_r.
 Qed.
 
-Lemma session_begin s E :
+Lemma session_begin_aux s E :
   ↑N ⊆ E →
   session_ctx -∗
-  sinv s -∗
+  sinv_int s -∗
   crypto_meta_token (s_key s) (↑N) ={E}=∗
   session_auth (None, s) ∗ session_frag (None, s).
 Proof.
@@ -342,103 +280,18 @@ iModIntro; rewrite /session_map_inv big_sepM_insert //=.
 by iFrame; iSplit.
 Qed.
 
-Lemma session_beginG `{Decision G} s E :
-  ↑N ⊆ E →
-  session_ctx -∗
-  guarded G (sinv s) -∗
-  guarded G (crypto_meta_token (s_key s) (↑N)) ={E}=∗
-  guarded G (session_auth (None, s) ∗ session_frag (None, s)).
-Proof.
-iIntros (?) "ctx inv meta".
-rewrite /guarded; case: decide => _ //.
-by iApply (session_begin with "ctx inv meta").
-Qed.
-
-(*
-Lemma session_map_auth_included p SM :
-  session_status_auth
-{[t := session_status_auth s]} ≼ to_session_map SM ↔
-  SM !! t = Some s.
-Proof.
-split.
-- move=> e; apply/leibniz_equiv.
-  case/singleton_included_l: e=> x [].
-  rewrite lookup_fmap option_equivE.
-  case: (SM !! t)=> [s'|] //= <-.
-  rewrite Some_included; case.
-  + by case=> /= _; rewrite option_equivE.
-  + by rewrite session_status_auth_included=> <-.
-- move=> e; apply/singleton_included_l.
-  exists (session_status_both s).
-  by rewrite lookup_fmap e /= Some_included session_status_auth_included; eauto.
-Qed.
-
-Lemma session_map_frag_included t s SM :
-  {[t := session_view_frag s]} ≼ to_session_map SM ↔
-  ∃ s', SM !! t = Some s' ∧ to_session_view' s ≼ to_session_view' s'.
-Proof.
-split.
-- case/singleton_included_l=> x [].
-  rewrite lookup_fmap option_equivE.
-  case: (SM !! t)=> [s'|] //= <-.
-  rewrite Some_included; case.
-  + by case=> /=; rewrite option_equivE.
-  + rewrite session_view_frag_included; eauto.
-- case=> s' [H1 H2].
-  apply/singleton_included_l.
-  rewrite lookup_fmap H1 /=.
-  exists (session_status_both s'); split=> //.
-  by rewrite Some_included session_view_frag_included; right.
-Qed.
-
-Lemma session_frag_inv E t s :
-  ↑N ⊆ E →
-  session_ctx -∗
-  session_frag t s ={E}=∗
-  ▷ □ sinv (srole s) (sowner s) (sother s) t ∗
-  ▷ (⌜is_Some (sdata s)⌝ → coherent_views t s).
-Proof.
-move=> sub; iIntros "#Hctx Hterm".
-iMod (auth_acc to_session_map _ _ _ _ {[t := session_view_frag s]}
-         with "[Hctx Hterm]") as "Hinv"; try by eauto.
-iDestruct "Hinv" as (SM) "(%Hincl & #Hinv & Hclose)".
-iMod ("Hclose" $! SM {[t := session_view_frag s]} with "[Hinv]").
-  by eauto.
-case/session_map_frag_included: Hincl=> s' [SM_t ss'].
-iModIntro.
-rewrite /sowner /sother /coherent_views.
-case/to_session_view'_included: ss'=> -> [-> [-> e]].
-iDestruct ("Hinv" $! _ _ SM_t) as "(?&?&?)".
-iSplit => //; rewrite /coherent_views; iModIntro.
-iDestruct 1 as (t') "%e'".
-by move: e; rewrite e' => <-.
-Qed.
-
-Lemma session_frag_invG `{Decision G} E t s :
-  ↑N ⊆ E →
-  session_ctx -∗
-  guarded G (session_frag t s) ={E}=∗
-  ▷ guarded G (□ sinv (srole s) (sowner s) (sother s) t) ∗
-  ▷ (⌜is_Some (sdata s)⌝ → guarded G (coherent_views t s)).
-Proof.
-iIntros (?) "#ctx #frag"; rewrite /guarded.
-case: decide => // _.
-by iApply session_frag_inv.
-Qed.
-*)
-
 Lemma session_status_both_eq p :
   session_status_both p ≡ (● p.1 ⋅ ◯ p.1, to_agree p.2).
 Proof.
 by rewrite /session_status_both -pair_op agree_idemp.
 Qed.
 
-Lemma session_end s E :
+Lemma session_end_aux s E :
   ↑N ⊆ E →
   session_ctx -∗
   session_auth (None, s) -∗
   session_frag (None, swap_view s) ={E}=∗
-  ▷ sinv (swap_view s).
+  ▷ sinv_int (swap_view s).
 Proof.
 iIntros (sub) "ctx sessA #sessB".
 rewrite /session_frag /session_auth /= /session_ctx.
@@ -476,7 +329,7 @@ have ne: s_key s ≠ s_key (swap_view s).
   by case: (s_role s).
 rewrite {1}/session_map_inv (big_sepM_delete _ SM (s_key (swap_view s))) //.
 iDestruct "inv" as "[(_ & #meta & inv_s) inv]".
-iAssert (▷ (sinv (swap_view s) ∗ own γ (◯ f1)))%I
+iAssert (▷ (sinv_int (swap_view s) ∗ own γ (◯ f1)))%I
     with "[sessA inv_s]" as "(res & >sessA)".
   iModIntro.
   iDestruct "inv_s" as "[H|sessA']"; first by iSplitL "H".
@@ -521,22 +374,56 @@ iModIntro; iSplitL "own inv".
 eauto.
 Qed.
 
-Lemma session_endG `{Decision G} s E :
+Definition session rl kA kB tA tB : iProp :=
+  session_frag (None, SessionView rl kA kB tA tB).
+
+Global Instance session_persistent rl kA kB tA tB :
+  Persistent (session rl kA kB tA tB).
+Proof. apply _. Qed.
+
+Lemma session_agree rl kA1 kB1 tA1 tB1 kA2 kB2 tA2 tB2 :
+  (if rl is Init then tA1 else tB1) =
+  (if rl is Init then tA2 else tB2) →
+  session rl kA1 kB1 tA1 tB1 -∗
+  session rl kA2 kB2 tA2 tB2 -∗
+  ⌜kA1 = kA2 ∧ kB1 = kB2 ∧ tA1 = tA2 ∧ tB1 = tB2⌝.
+Proof.
+iIntros (?) "s1 s2".
+iDestruct (session_frag_agree with "s1 s2") as "%e" => //.
+by case: e.
+Qed.
+
+Lemma session_begin E rl kA kB tA tB :
   ↑N ⊆ E →
   session_ctx -∗
-  guarded G (session_auth (None, s)) -∗
-  guarded G (session_frag (None, swap_view s)) ={E}=∗
-  ▷ guarded G (sinv (swap_view s)).
+  sinv rl kA kB tA tB -∗
+  crypto_meta_token (if rl is Init then tA else tB) (↑N) ={E}=∗
+  session rl kA kB tA tB ∗
+  (session (swap_role rl) kA kB tA tB ={E}=∗ ▷ sinv (swap_role rl) kA kB tA tB).
 Proof.
-iIntros (?) "ctx auth frag".
-rewrite /guarded; case: decide => [ye|no]; eauto.
-by iApply (session_end with "ctx auth frag").
+iIntros (?) "#ctx inv token".
+iMod (@session_begin_aux (SessionView rl kA kB tA tB)
+        with "ctx inv token") as "[auth frag]" => //.
+iModIntro; iSplitR "auth" => //.
+by iIntros "frag"; iApply (session_end_aux with "ctx auth frag").
+Qed.
+
+Lemma session_beginG `{Decision G} E rl kA kB tA tB :
+  ↑N ⊆ E →
+  session_ctx -∗
+  guarded G (sinv rl kA kB tA tB) -∗
+  guarded G (crypto_meta_token (if rl is Init then tA else tB) (↑N)) ={E}=∗
+  guarded G (session rl kA kB tA tB) ∗
+  (guarded G (session (swap_role rl) kA kB tA tB) ={E}=∗
+   ▷ guarded G (sinv (swap_role rl) kA kB tA tB)).
+Proof.
+iIntros (?) "#ctx inv token".
+rewrite /guarded; case: decide => //= _.
+by iApply (session_begin with "ctx inv token").
 Qed.
 
 End Session.
 
 Arguments sessionG : clear implicits.
-Arguments session_begin {Σ _ _ _} {γ N sinv} s E.
-Arguments session_beginG {Σ _ _ _} {γ N sinv} G {_} s E.
-Arguments session_end {Σ _ _ _} {γ N sinv} s E.
-Arguments session_endG {Σ _ _ _} {γ N sinv} G {_} s E.
+Arguments session_begin {Σ _ _ _} {γ N sinv} E rl kA kB tA tB.
+Arguments session_beginG {Σ _ _ _} {γ N sinv} G {_} E rl kA kB tA tB.
