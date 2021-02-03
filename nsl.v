@@ -73,21 +73,6 @@ Proof.
 case: m2; try by move=> *; apply _.
 Qed.
 
-Lemma msg2_pred_elimG `{Decision G} (ts : list term) kA kB nA nB :
-  ts !! 0 = Some nA →
-  ts !! 1 = Some nB →
-  ts !! 2 = Some (TKey Enc kB) →
-  guarded G (msg2_pred kA (Spec.of_list ts)) -∗
-  guarded G (stermT Sec nA ∧ stermT Sec nB ∧
-             session_frag nsl_sess_name (None, SessionView Resp kA kB nA nB)).
-Proof.
-iIntros (get_nA get_nB get_kB) "mP".
-rewrite /guarded; case: decide => //= _.
-iDestruct "mP" as (nA' nB' kB') "(%e_m & nAP & nBP & frag)".
-move/Spec.of_list_inj: e_m get_nA get_nB get_kB => -> /= [] -> [] -> [] ->.
-by eauto.
-Qed.
-
 Definition msg3_pred kB nB : iProp :=
   □ ∀ nA kA,
     session_frag nsl_sess_name (None, SessionView Resp kA kB nA nB) -∗
@@ -237,42 +222,6 @@ iApply termT_tag_aenc_pub_secG; eauto.
 case: lvl => //=; iModIntro; by iExists _, _; eauto.
 Qed.
 
-Lemma msg1_pred_elimG E lvl (ts : list term) kA kB nA :
-  ↑cryptoN.@"nsl" ⊆ E →
-  ts !! 0 = Some nA →
-  ts !! 1 = Some (TKey Enc kA) →
-  nsl_ctx -∗
-  termT lvl (Spec.of_list ts) -∗
-  guarded (lvl = Sec) (msg1_pred kB (Spec.of_list ts)) ={E}=∗
-  stermT lvl nA ∧
-  ▷ termT Pub (TKey Enc kA) ∧
-  guarded (lvl = Sec) (nsl_key Init kA).
-Proof.
-iIntros (? get_nA get_kA) "#ctx #term_ts mP".
-rewrite termT_of_list.
-iPoseProof (big_sepL_lookup with "term_ts") as "HnA"; first exact: get_nA.
-iPoseProof (big_sepL_lookup with "term_ts") as "HkA"; first exact: get_kA.
-case: lvl => /=; first by iModIntro; rewrite stermT_eq; eauto.
-iDestruct "mP" as (nA' kA') "{HnA HkA} (%e & HnA & #HkA)".
-move/Spec.of_list_inj: e get_nA get_kA => -> [] -> [] ->; eauto.
-by iMod (nsl_key_elim with "ctx HkA") as "(?&?&?)" => //; eauto.
-Qed.
-
-Lemma msg3_pred_elimG E lvl kA kB nA nB :
-  ↑cryptoN.@"nsl" ⊆ E →
-  nsl_ctx -∗
-  guarded (lvl = Sec) (msg3_pred kB nB) -∗
-  let s := SessionView Resp kA kB nA nB in
-  guarded (lvl = Sec) (session_auth nsl_sess_name (None, s)) ={E}=∗
-  ▷ guarded (lvl = Sec) (nsl_sess_inv (swap_view s)).
-Proof.
-iIntros (?) "[#ctx _] #HnB auth".
-case: lvl => //=.
-iMod (session_auth_session_frag with "ctx auth") as "[auth #frag]" => //.
-iSpecialize ("HnB" with "frag").
-by iMod (session_end with "ctx auth HnB") as "inv".
-Qed.
-
 Lemma termT_msg2 E lvl kA kB nA nB :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗
@@ -295,6 +244,57 @@ iApply termT_tag_aenc_pub_secG; eauto.
   iSplit; first by iApply stermT_termT.
   by iSplit; first iApply sub_termT_pub.
 by iIntros "!> -> /="; iExists _, _, _; do ![iSplit => //].
+Qed.
+
+Lemma msg1_pred_elimG E lvl (ts : list term) kA kB nA :
+  ↑cryptoN.@"nsl" ⊆ E →
+  ts !! 0 = Some nA →
+  ts !! 1 = Some (TKey Enc kA) →
+  nsl_ctx -∗
+  termT lvl (Spec.of_list ts) -∗
+  guarded (lvl = Sec) (msg1_pred kB (Spec.of_list ts)) ={E}=∗
+  stermT lvl nA ∧
+  ▷ termT Pub (TKey Enc kA) ∧
+  guarded (lvl = Sec) (nsl_key Init kA).
+Proof.
+iIntros (? get_nA get_kA) "#ctx #term_ts mP".
+rewrite termT_of_list.
+iPoseProof (big_sepL_lookup with "term_ts") as "HnA"; first exact: get_nA.
+iPoseProof (big_sepL_lookup with "term_ts") as "HkA"; first exact: get_kA.
+case: lvl => /=; first by iModIntro; rewrite stermT_eq; eauto.
+iDestruct "mP" as (nA' kA') "{HnA HkA} (%e & HnA & #HkA)".
+move/Spec.of_list_inj: e get_nA get_kA => -> [] -> [] ->; eauto.
+by iMod (nsl_key_elim with "ctx HkA") as "(?&?&?)" => //; eauto.
+Qed.
+
+Lemma msg2_pred_elimG `{Decision G} (ts : list term) kA kB nA nB :
+  ts !! 0 = Some nA →
+  ts !! 1 = Some nB →
+  ts !! 2 = Some (TKey Enc kB) →
+  guarded G (msg2_pred kA (Spec.of_list ts)) -∗
+  guarded G (stermT Sec nA ∧ stermT Sec nB ∧
+             session_frag nsl_sess_name (None, SessionView Resp kA kB nA nB)).
+Proof.
+iIntros (get_nA get_nB get_kB) "mP".
+rewrite /guarded; case: decide => //= _.
+iDestruct "mP" as (nA' nB' kB') "(%e_m & nAP & nBP & frag)".
+move/Spec.of_list_inj: e_m get_nA get_nB get_kB => -> /= [] -> [] -> [] ->.
+by eauto.
+Qed.
+
+Lemma msg3_pred_elimG E lvl kA kB nA nB :
+  ↑cryptoN.@"nsl" ⊆ E →
+  nsl_ctx -∗
+  guarded (lvl = Sec) (msg3_pred kB nB) -∗
+  let s := SessionView Resp kA kB nA nB in
+  guarded (lvl = Sec) (session_auth nsl_sess_name (None, s)) ={E}=∗
+  ▷ guarded (lvl = Sec) (nsl_sess_inv (swap_view s)).
+Proof.
+iIntros (?) "[#ctx _] #HnB auth".
+case: lvl => //=.
+iMod (session_auth_session_frag with "ctx auth") as "[auth #frag]" => //.
+iSpecialize ("HnB" with "frag").
+by iMod (session_end with "ctx auth HnB") as "inv".
 Qed.
 
 Lemma wp_initiator kA kB (nA : term) lvl E Ψ :
