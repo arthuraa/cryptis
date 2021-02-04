@@ -50,6 +50,11 @@ Global Instance guarded_persistent P :
   Persistent (guarded G P).
 Proof. rewrite /guarded; case: decide => //= _; apply _. Qed.
 
+Global Instance guarded_timeless P :
+  Timeless P →
+  Timeless (guarded G P).
+Proof. rewrite /guarded; case: decide => //= _ _. apply _. Qed.
+
 Lemma guarded_sep P Q :
   guarded G (P ∗ Q) ⊣⊢ guarded G P ∗ guarded G Q.
 Proof.

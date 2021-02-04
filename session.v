@@ -381,6 +381,10 @@ Global Instance session_persistent rl kA kB tA tB :
   Persistent (session rl kA kB tA tB).
 Proof. apply _. Qed.
 
+Global Instance session_timeless rl kA kB tA tB :
+  Timeless (session rl kA kB tA tB).
+Proof. apply _. Qed.
+
 Lemma session_agree rl kA1 kB1 tA1 tB1 kA2 kB2 tA2 tB2 :
   (if rl is Init then tA1 else tB1) =
   (if rl is Init then tA2 else tB2) →
