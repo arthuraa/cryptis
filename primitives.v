@@ -45,13 +45,13 @@ Definition term_of_list : val := rec: "loop" "l" :=
   | SOME "p" => tuple (Fst "p") ("loop" (Snd "p"))
   end.
 
-Definition tag (c : string) : val := λ: "t",
-  tuple (TInt (Zpos (encode c))) "t".
+Definition tag (N : namespace) : val := λ: "t",
+  tuple (TInt (Zpos (encode N))) "t".
 
-Definition untag (c : string) : val := λ: "t",
+Definition untag (N : namespace) : val := λ: "t",
   bind: "t" := untuple "t" in
   bind: "tag" := as_int (Fst "t") in
-  if: "tag" = #(Zpos (encode c))then SOME (Snd "t") else NONE.
+  if: "tag" = #(Zpos (encode N))then SOME (Snd "t") else NONE.
 
 Definition mknonce : val := λ: <>,
   let: "n" := ref #() in
@@ -115,7 +115,7 @@ Implicit Types t : term.
 Implicit Types v : val.
 Implicit Types Φ : prodO locO termO -n> iPropO Σ.
 Implicit Types Ψ : val → iProp Σ.
-Implicit Types c : string.
+Implicit Types N : namespace.
 
 Lemma twp_as_int E t Ψ :
   Ψ (repr (Spec.as_int t)) -∗
@@ -234,25 +234,25 @@ Lemma wp_list `{!Repr A} (xs : list A) E Ψ :
   WP list_to_expr xs @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_list. Qed.
 
-Lemma twp_tag E c t Ψ :
-  Ψ (repr (Spec.tag c t)) -∗
-  WP tag c t @ E [{ Ψ }].
+Lemma twp_tag E N t Ψ :
+  Ψ (repr (Spec.tag N t)) -∗
+  WP tag N t @ E [{ Ψ }].
 Proof.
 iIntros "post".
 by rewrite Spec.tag_eq /tag; wp_pures; iApply twp_tuple.
 Qed.
 
-Lemma wp_tag E c t Ψ :
-  Ψ (repr (Spec.tag c t)) -∗
-  WP tag c t @ E {{ Ψ }}.
+Lemma wp_tag E N t Ψ :
+  Ψ (repr (Spec.tag N t)) -∗
+  WP tag N t @ E {{ Ψ }}.
 Proof.
 iIntros "post".
 by rewrite Spec.tag_eq /tag; wp_pures; iApply wp_tuple.
 Qed.
 
-Lemma twp_untag E c t Ψ :
-  Ψ (repr (Spec.untag c t)) -∗
-  WP untag c t @ E [{ Ψ }].
+Lemma twp_untag E N t Ψ :
+  Ψ (repr (Spec.untag N t)) -∗
+  WP untag N t @ E [{ Ψ }].
 Proof.
 iIntros "post".
 rewrite Spec.untag_eq /untag /=; wp_pures.
@@ -269,9 +269,9 @@ move=> n' ne; case: decide => e; try iApply "post".
 congruence.
 Qed.
 
-Lemma wp_untag E c t Ψ :
-  Ψ (repr (Spec.untag c t)) -∗
-  WP untag c t @ E {{ Ψ }}.
+Lemma wp_untag E N t Ψ :
+  Ψ (repr (Spec.untag N t)) -∗
+  WP untag N t @ E {{ Ψ }}.
 Proof.
 by iIntros "?"; iApply twp_wp; iApply twp_untag.
 Qed.
@@ -407,23 +407,23 @@ Lemma wp_dec E t1 t2 Ψ :
   WP dec t1 t2 @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_dec. Qed.
 
-Lemma twp_tenc E c k t Ψ :
-  Ψ (repr (Spec.tenc c k t)) -∗
-  WP tenc c k t @ E [{ Ψ }].
+Lemma twp_tenc E N k t Ψ :
+  Ψ (repr (Spec.tenc N k t)) -∗
+  WP tenc N k t @ E [{ Ψ }].
 Proof.
 iIntros "post"; rewrite /tenc; wp_pures.
 wp_bind (tag _ _); iApply twp_tag.
 by iApply twp_enc.
 Qed.
 
-Lemma wp_tenc E c k t Ψ :
-  Ψ (repr (Spec.tenc c k t)) -∗
-  WP tenc c k t @ E {{ Ψ }}.
+Lemma wp_tenc E N k t Ψ :
+  Ψ (repr (Spec.tenc N k t)) -∗
+  WP tenc N k t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_tenc. Qed.
 
-Lemma twp_tdec E c k t Ψ :
-  Ψ (repr (Spec.tdec c k t)) -∗
-  WP tdec c k t @ E [{ Ψ }].
+Lemma twp_tdec E N k t Ψ :
+  Ψ (repr (Spec.tdec N k t)) -∗
+  WP tdec N k t @ E [{ Ψ }].
 Proof.
 iIntros "post"; rewrite /tdec; wp_pures.
 wp_bind (dec _ _); iApply twp_dec.
@@ -432,9 +432,9 @@ case e: (Spec.dec _ _) => [t'|]; wp_pures => //.
 by iApply twp_untag.
 Qed.
 
-Lemma wp_tdec E c k t Ψ :
-  Ψ (repr (Spec.tdec c k t)) -∗
-  WP tdec c k t @ E {{ Ψ }}.
+Lemma wp_tdec E N k t Ψ :
+  Ψ (repr (Spec.tdec N k t)) -∗
+  WP tdec N k t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_tdec. Qed.
 
 Lemma twp_is_key E t Ψ :

@@ -84,9 +84,9 @@ Definition nsl_key_inv rl k : iProp :=
   termT Pub (TKey Enc k) ∗
   stermT Sec (TKey Dec k) ∗
   match rl with
-  | Init => tkey_predT "m2" (msg2_pred k) k
-  | Resp => tkey_predT "m1" (msg1_pred k) k ∗
-            tkey_predT "m3" (msg3_pred k) k
+  | Init => tkey_predT (nroot.@"m2") (msg2_pred k) k
+  | Resp => tkey_predT (nroot.@"m1") (msg1_pred k) k ∗
+            tkey_predT (nroot.@"m3") (msg3_pred k) k
   end.
 Arguments nsl_key_inv : simpl never.
 
@@ -154,30 +154,30 @@ Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None).
 
 Definition initiator (skA pkA pkB nA : val) : val := λ: <>,
-  bind: "m1"   := tenc "m1" pkB (term_of_list [nA; pkA]) in
+  bind: "m1"   := tenc (nroot.@"m1") pkB (term_of_list [nA; pkA]) in
   send "m1";;
-  bind: "m2"   := tdec "m2" skA (recv #()) in
+  bind: "m2"   := tdec (nroot.@"m2") skA (recv #()) in
   bind: "m2"   := list_of_term "m2" in
   bind: "nA'"  := "m2" !! #0 in
   bind: "nB"   := "m2" !! #1 in
   bind: "pkB'" := "m2" !! #2 in
   if: eq_term "nA'" nA && eq_term "pkB'" pkB then
-    bind: "m3" := tenc "m3" pkB "nB" in
+    bind: "m3" := tenc (nroot.@"m3") pkB "nB" in
     send "m3";;
     SOME "nB"
   else NONE.
 
 Definition responder (skB pkB : val) : val := λ: <>,
-  bind: "m1" := tdec "m1" skB (recv #()) in
+  bind: "m1" := tdec (nroot.@"m1") skB (recv #()) in
   bind: "m1" := list_of_term "m1" in
   bind: "nA" := "m1" !! #0 in
   bind: "pkA" := "m1" !! #1 in
   bind: "kt" := is_key "pkA" in
   if: "kt" = repr Enc then
     let: "nB" := gen #() in
-    bind: "m2" := tenc "m2" "pkA" (term_of_list ["nA"; "nB"; pkB]) in
+    bind: "m2" := tenc (nroot.@"m2") "pkA" (term_of_list ["nA"; "nB"; pkB]) in
     send "m2";;
-    bind: "m3" := tdec "m3" skB (recv #()) in
+    bind: "m3" := tdec (nroot.@"m3") skB (recv #()) in
     if: eq_term "m3" "nB" then SOME ("pkA", "nA", "nB") else NONE
   else NONE.
 
@@ -207,7 +207,7 @@ Lemma termT_msg1 E l kA kB (nA : term) :
   stermT l nA -∗
   termT Pub (TKey Enc kB) -∗
   guarded (l = Sec) (nsl_key Resp kB) ={E}=∗
-  ▷ termT Pub (TEnc kB (Spec.tag "m1" (Spec.of_list [nA; TKey Enc kA]))).
+  ▷ termT Pub (TEnc kB (Spec.tag (nroot.@"m1") (Spec.of_list [nA; TKey Enc kA]))).
 Proof.
 iIntros (?) "#ctx #HkA #HnA #HkB_lo #HkB_hi".
 iMod (nsl_key_elim with "ctx HkA") as "# (?&?&?)" => //.
@@ -230,7 +230,7 @@ Lemma termT_msg2 E l kA kB nA nB :
   stermT l nA -∗
   stermT l nB -∗
   guarded (l = Sec) (session nsl_sess_name Resp kA kB nA nB) ={E}=∗
-  ▷ termT Pub (TEnc kA (Spec.tag "m2" (Spec.of_list [nA; nB; TKey Enc kB]))).
+  ▷ termT Pub (TEnc kA (Spec.tag (nroot.@"m2") (Spec.of_list [nA; nB; TKey Enc kB]))).
 Proof.
 iIntros (?) "#ctx #HkA_enc #HkA #HkB #HnA #HnB #fragB".
 iMod (nsl_key_elim  with "ctx HkB") as "# (?&?&?&?)" => //.

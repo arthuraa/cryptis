@@ -111,8 +111,8 @@ Definition cr_key_inv rl k : iProp :=
   termT Pub (TKey Dec k) ∗
   stermT Sec (TKey Enc k) ∗
   match rl with
-  | Resp => tkey_predT "m2" (msg2_pred k) k
-  | Init => tkey_predT "m3" (msg3_pred k) k
+  | Resp => tkey_predT (nroot.@"m2") (msg2_pred k) k
+  | Init => tkey_predT (nroot.@"m3") (msg3_pred k) k
   end.
 Arguments cr_key_inv : simpl never.
 
@@ -182,14 +182,14 @@ Ltac protocol_failure :=
 Definition initiator (skA pkA pkB nA : val) : val := λ: <>,
   let:  "m1"   := term_of_list [nA; pkA] in
   send  "m1";;
-  bind: "m2"   := tdec "m2" pkB (recv #()) in
+  bind: "m2"   := tdec (nroot.@"m2") pkB (recv #()) in
   bind: "m2"   := list_of_term "m2" in
   bind: "nA'"  := "m2" !! #0 in
   bind: "nB"   := "m2" !! #1 in
   bind: "pkA'" := "m2" !! #2 in
   if: eq_term "nA'" nA && eq_term "pkA'" pkA then
     let:  "m3" := term_of_list [nA; "nB"; pkB] in
-    bind: "m3" := tenc "m3" skA "m3" in
+    bind: "m3" := tenc (nroot.@"m3") skA "m3" in
     send "m3";;
     SOME "nB"
   else NONE.
@@ -201,9 +201,9 @@ Definition responder (skB pkB : val) : val := λ: <>,
   bind: "kt"   := is_key "pkA" in
   if: "kt" = repr Dec then
     let:  "nB"   := gen #() in
-    bind: "m2"   := tenc "m2" skB (term_of_list ["nA"; "nB"; "pkA"]) in
+    bind: "m2"   := tenc (nroot.@"m2") skB (term_of_list ["nA"; "nB"; "pkA"]) in
     send  "m2";;
-    bind: "m3"   := tdec "m3" "pkA" (recv #()) in
+    bind: "m3"   := tdec (nroot.@"m3") "pkA" (recv #()) in
     bind: "m3"   := list_of_term "m3" in
     bind: "nA'"  := "m3" !! #0 in
     bind: "nB'"  := "m3" !! #1 in
@@ -347,7 +347,7 @@ wp_list_of_term m3; last protocol_failure.
 iAssert (▷^2 guarded (kA' = kA) (msg3_pred kA (Spec.of_list m3)))%I
     as "{Hm3} Hm3".
   rewrite /guarded; case: decide => [e|//]; subst kA'.
-  by iPoseProof (termT_tag_adec_sec_pub kA "m3" with "[//] [//] [//] Hm3")
+  by iPoseProof (termT_tag_adec_sec_pub kA (nroot.@"m3") with "[//] [//] [//] Hm3")
     as "[_ #sessA]".
 wp_lookup nA' enA'; last protocol_failure.
 wp_lookup nB' enB'; last protocol_failure.
