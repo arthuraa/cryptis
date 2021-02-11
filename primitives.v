@@ -106,10 +106,11 @@ Definition mkkey : val := λ: "k",
 Section Proofs.
 
 Context `{!heapG Σ, !cryptoG Σ}.
+Notation nonce := loc.
 
 Implicit Types E : coPset.
-Implicit Types l : loc.
-Implicit Types lvl : level.
+Implicit Types a : nonce.
+Implicit Types l : level.
 Implicit Types t : term.
 Implicit Types v : val.
 Implicit Types Φ : prodO locO termO -n> iPropO Σ.

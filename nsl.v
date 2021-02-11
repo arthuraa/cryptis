@@ -16,7 +16,7 @@ Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
 Implicit Types s : session_view.
-Implicit Types lvl : level.
+Implicit Types l : level.
 Implicit Types rl : role.
 
 Class nslG := {
@@ -192,21 +192,21 @@ Hypothesis wp_recv : forall E Ψ,
   (∀ t, termT Pub t -∗ Ψ t) -∗
   WP recv #() @ E {{ Ψ }}.
 
-Hypothesis wp_gen : forall E lvl kA kB nA Ψ,
+Hypothesis wp_gen : forall E l kA kB nA Ψ,
   (∀ nB,
       crypto_meta_token nB (↑cryptoN.@"nsl") -∗
-      stermT lvl nB -∗
-      guarded (lvl = Sec) (nsl_sess_inv Resp kA kB nA nB) -∗
+      stermT l nB -∗
+      guarded (l = Sec) (nsl_sess_inv Resp kA kB nA nB) -∗
       Ψ nB) -∗
   WP gen #() @ E {{ Ψ }}.
 
-Lemma termT_msg1 E lvl kA kB (nA : term) :
+Lemma termT_msg1 E l kA kB (nA : term) :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗
   nsl_key Init kA -∗
-  stermT lvl nA -∗
+  stermT l nA -∗
   termT Pub (TKey Enc kB) -∗
-  guarded (lvl = Sec) (nsl_key Resp kB) ={E}=∗
+  guarded (l = Sec) (nsl_key Resp kB) ={E}=∗
   ▷ termT Pub (TEnc kB (Spec.tag "m1" (Spec.of_list [nA; TKey Enc kA]))).
 Proof.
 iIntros (?) "#ctx #HkA #HnA #HkB_lo #HkB_hi".
@@ -218,18 +218,18 @@ iApply termT_tag_aenc_pub_secG; eauto.
   iSplit; first by iApply stermT_termT.
   iSplit => //.
   by iApply (@sub_termT _ _ _ Pub) => //.
-case: lvl => //=; iModIntro; by iExists _, _; eauto.
+case: l => //=; iModIntro; by iExists _, _; eauto.
 Qed.
 
-Lemma termT_msg2 E lvl kA kB nA nB :
+Lemma termT_msg2 E l kA kB nA nB :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗
   ▷ termT Pub (TKey Enc kA) -∗
-  guarded (lvl = Sec) (nsl_key Init kA) -∗
+  guarded (l = Sec) (nsl_key Init kA) -∗
   nsl_key Resp kB -∗
-  stermT lvl nA -∗
-  stermT lvl nB -∗
-  guarded (lvl = Sec) (session nsl_sess_name Resp kA kB nA nB) ={E}=∗
+  stermT l nA -∗
+  stermT l nB -∗
+  guarded (l = Sec) (session nsl_sess_name Resp kA kB nA nB) ={E}=∗
   ▷ termT Pub (TEnc kA (Spec.tag "m2" (Spec.of_list [nA; nB; TKey Enc kB]))).
 Proof.
 iIntros (?) "#ctx #HkA_enc #HkA #HkB #HnA #HnB #fragB".
@@ -244,22 +244,22 @@ iApply termT_tag_aenc_pub_secG; eauto.
 by iIntros "!> -> /="; iExists _, _, _; do ![iSplit => //].
 Qed.
 
-Lemma msg1_pred_elimG E lvl (ts : list term) kA kB nA :
+Lemma msg1_pred_elimG E l (ts : list term) kA kB nA :
   ↑cryptoN.@"nsl" ⊆ E →
   ts !! 0 = Some nA →
   ts !! 1 = Some (TKey Enc kA) →
   nsl_ctx -∗
-  termT lvl (Spec.of_list ts) -∗
-  guarded (lvl = Sec) (msg1_pred kB (Spec.of_list ts)) ={E}=∗
-  stermT lvl nA ∧
+  termT l (Spec.of_list ts) -∗
+  guarded (l = Sec) (msg1_pred kB (Spec.of_list ts)) ={E}=∗
+  stermT l nA ∧
   ▷ termT Pub (TKey Enc kA) ∧
-  guarded (lvl = Sec) (nsl_key Init kA).
+  guarded (l = Sec) (nsl_key Init kA).
 Proof.
 iIntros (? get_nA get_kA) "#ctx #term_ts mP".
 rewrite termT_of_list.
 iPoseProof (big_sepL_lookup with "term_ts") as "HnA"; first exact: get_nA.
 iPoseProof (big_sepL_lookup with "term_ts") as "HkA"; first exact: get_kA.
-case: lvl => /=; first by iModIntro; rewrite stermT_eq; eauto.
+case: l => /=; first by iModIntro; rewrite stermT_eq; eauto.
 iDestruct "mP" as (nA' kA') "{HnA HkA} (%e & HnA & #HkA)".
 move/Spec.of_list_inj: e get_nA get_kA => -> [] -> [] ->; eauto.
 by iMod (nsl_key_elim with "ctx HkA") as "(?&?&?)" => //; eauto.
@@ -280,28 +280,28 @@ move/Spec.of_list_inj: e_m get_nA get_nB get_kB => -> /= [] -> [] -> [] ->.
 by eauto.
 Qed.
 
-Lemma msg3_pred_elimG lvl kA kB nA nB :
-  guarded (lvl = Sec) (msg3_pred kB nB) -∗
-  guarded (lvl = Sec) (session nsl_sess_name Resp kA kB nA nB) -∗
-  guarded (lvl = Sec) (session nsl_sess_name Init kA kB nA nB).
+Lemma msg3_pred_elimG l kA kB nA nB :
+  guarded (l = Sec) (msg3_pred kB nB) -∗
+  guarded (l = Sec) (session nsl_sess_name Resp kA kB nA nB) -∗
+  guarded (l = Sec) (session nsl_sess_name Init kA kB nA nB).
 Proof.
 iIntros "#HnB #sess -> /=".
 by iApply "HnB"; iApply "sess".
 Qed.
 
-Lemma wp_initiator kA kB (nA : term) lvl E Ψ :
+Lemma wp_initiator kA kB (nA : term) l E Ψ :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗
-  stermT lvl nA -∗
-  (∀ nB, guarded (lvl = Sec) (nsl_sess_inv Init kA kB nA nB)) -∗
+  stermT l nA -∗
+  (∀ nB, guarded (l = Sec) (nsl_sess_inv Init kA kB nA nB)) -∗
   crypto_meta_token nA (↑cryptoN.@"nsl") -∗
   nsl_key Init kA -∗
   termT Pub (TKey Enc kB) -∗
-  guarded (lvl = Sec) (nsl_key Resp kB) -∗
+  guarded (l = Sec) (nsl_key Resp kB) -∗
   (∀ onB : option term,
       (if onB is Some nB then
-         stermT lvl nB ∗
-         guarded (lvl = Sec) (nsl_sess_inv Resp kA kB nA nB)
+         stermT l nB ∗
+         guarded (l = Sec) (nsl_sess_inv Resp kA kB nA nB)
        else True) -∗
       Ψ (repr onB)) -∗
   WP initiator (TKey Dec kA) (TKey Enc kA) (TKey Enc kB) nA #() @ E
@@ -335,13 +335,13 @@ rewrite termT_of_list.
 iPoseProof (big_sepL_lookup with "Hm2") as "m2_nA"; first exact: enA'.
 iPoseProof (big_sepL_lookup with "Hm2") as "m2_nB"; first exact: enB.
 iPoseProof (big_sepL_lookup with "Hm2") as "m2_pkB"; first exact: epkB'.
-iAssert (⌜lm2 = lvl⌝)%I as "->".
-  case: lvl lm2 => [] [] //=.
+iAssert (⌜lm2 = l⌝)%I as "->".
+  case: l lm2 => [] [] //=.
     by iDestruct (stermT_agree with "HnA HnA'") as "%".
   rewrite stermT_eq; iDestruct "HnA" as "[_ #contra]".
   by iDestruct ("contra" with "m2_nA") as "[]".
 iSpecialize ("inv_nA" $! nB).
-iMod (session_beginG (lvl = Sec) with "[] inv_nA [unreg]")
+iMod (session_beginG (l = Sec) with "[] inv_nA [unreg]")
     as "[#sessA close]" => //.
 - by iDestruct "ctx" as "[??]".
 - by iIntros "_".
@@ -349,12 +349,12 @@ iMod ("close" with "sessB") as "inv_resp" => //=.
 wp_bind (send _); iApply wp_send.
   iModIntro.
   iDestruct "HkB_inv" as "(? & ? & ? & ?)".
-  iApply (termT_tag_aenc_pub_secG _ lvl) => //; eauto.
+  iApply (termT_tag_aenc_pub_secG _ l) => //; eauto.
   iIntros "!> -> !> %nA' %kA' #sessB'".
   iDestruct (session_agree with "sessB' sessB") as "/= %e" => //.
   by case: e => [] -> [] _ [] ->.
 wp_pures; iApply ("Hpost" $! (Some nB)); iFrame.
-by case: (lvl); rewrite // [stermT Pub nB]stermT_eq.
+by case: (l); rewrite // [stermT Pub nB]stermT_eq.
 Qed.
 
 Lemma wp_responder kB E Ψ :
@@ -363,12 +363,12 @@ Lemma wp_responder kB E Ψ :
   nsl_key Resp kB -∗
   (∀ ot : option (term * term * term),
       (if ot is Some (pkA, nA, nB) then
-         ∃ lvl kA,
+         ∃ l kA,
            ⌜pkA = TKey Enc kA⌝ ∗
            termT Pub pkA ∗
-           stermT lvl nA ∗
-           stermT lvl nB ∗
-           guarded (lvl = Sec) (nsl_sess_inv Init kA kB nA nB)
+           stermT l nA ∗
+           stermT l nB ∗
+           guarded (l = Sec) (nsl_sess_inv Init kA kB nA nB)
        else True) -∗
        Ψ (repr ot)) -∗
   WP responder (TKey Dec kB) (TKey Enc kB) #() @ E {{ Ψ }}.

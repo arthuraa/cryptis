@@ -25,7 +25,7 @@ Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
 Implicit Types s : session_view.
-Implicit Types lvl : level.
+Implicit Types l : level.
 Implicit Types rl : role.
 
 Class crG := {

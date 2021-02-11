@@ -91,9 +91,10 @@ Notation iProp := (iProp Σ).
 Notation iPropO := (iPropO Σ).
 Notation iPropI := (iPropI Σ).
 Notation term_pred := (term -d> iPropO).
+Notation nonce := loc.
 Implicit Types Φ : term_pred.
-Implicit Types l : loc.
-Implicit Types lvl : level.
+Implicit Types a : loc.
+Implicit Types l : level.
 Implicit Types γ : gname.
 
 Implicit Types P Q : iProp.
@@ -135,9 +136,6 @@ elim: t2 => //=.
 - by move=> ? /elem_of_singleton ->; eauto.
 - by move=> ? t2 IH /elem_of_singleton ->; eauto.
 Qed.
-
-Notation nonce := loc (only parsing).
-Implicit Types (a : nonce).
 
 Context `{!heapG Σ}.
 
