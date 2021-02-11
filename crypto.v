@@ -798,7 +798,7 @@ iSplit => //; first by rewrite termT_tag.
 by iApply enc_inv_elim.
 Qed.
 
-Lemma termT_adec_sec_pubG `{Decision G} N Φ l k t :
+Lemma termT_adec_sec_pubG N Φ l k t :
   stermT l (TKey Enc k) -∗
   crypto_inv_meta N Φ -∗
   termT Pub (TKey Dec k) -∗
