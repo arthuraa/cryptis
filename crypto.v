@@ -90,10 +90,11 @@ Context (Σ : gFunctors).
 Notation iProp := (iProp Σ).
 Notation iPropO := (iPropO Σ).
 Notation iPropI := (iPropI Σ).
-Notation term_pred := (term -d> iPropO).
-Implicit Types Φ : term_pred.
-Implicit Types l : loc.
-Implicit Types lvl : level.
+Notation enc_pred := (term → term → iProp).
+Notation nonce := loc.
+Implicit Types Φ : enc_pred.
+Implicit Types a : loc.
+Implicit Types l : level.
 Implicit Types γ : gname.
 
 Implicit Types P Q : iProp.
@@ -136,9 +137,6 @@ elim: t2 => //=.
 - by move=> ? t2 IH /elem_of_singleton ->; eauto.
 Qed.
 
-Notation nonce := loc (only parsing).
-Implicit Types (a : nonce).
-
 Context `{!heapG Σ}.
 
 Definition term_data : Type := gmap term (level * gname * gname).
@@ -163,8 +161,9 @@ Class cryptoG := CryptoG {
   crypto_inG :> inG Σ (authUR term_data'UR);
   crypto_pub_inG :> inG Σ (coGset_pairUR term);
   crypto_meta_inG :> inG Σ (namespace_mapR (agreeR positiveO));
-  crypto_pred_inG :> savedPredG Σ term;
+  crypto_pred_inG :> savedPredG Σ (term * term);
   crypto_name : gname;
+  crypto_inv_name : gname;
 }.
 
 Context `{!cryptoG}.
@@ -275,22 +274,57 @@ assert (contra : encode x ∈ X). { by apply/elem_of_singleton. }
 destruct (is_fresh X); by rewrite -e.
 Qed.
 
-Definition key_predT Φ t : iProp :=
-  ∃ γ, crypto_meta t (cryptoN.@"key") γ ∗
-       saved_pred_own γ Φ.
+Definition crypto_inv_token E : iProp :=
+  own crypto_inv_name (namespace_map_token E).
 
-Global Instance key_predT_persistent Φ t : Persistent (key_predT Φ t).
+Definition crypto_inv_meta N Φ : iProp :=
+  ∃ γ, own crypto_inv_name (namespace_map_data N (to_agree γ)) ∧
+       saved_pred_own γ (fun '(k, t) => Φ k t).
+
+Global Instance crypto_inv_meta_persistent N Φ :
+  Persistent (crypto_inv_meta N Φ).
+Proof. apply _. Qed.
+
+Lemma crypto_inv_meta_agree k t N Φ1 Φ2 :
+  crypto_inv_meta N Φ1 -∗
+  crypto_inv_meta N Φ2 -∗
+  ▷ (Φ1 k t ≡ Φ2 k t).
+Proof.
+iDestruct 1 as (γm1) "[#meta1 #own1]".
+iDestruct 1 as (γm2) "[#meta2 #own2]".
+iPoseProof (own_valid_2 with "meta1 meta2") as "%valid".
+move: valid; rewrite -namespace_map_data_op namespace_map_data_valid.
+move=> /agree_op_invL' ->.
+by iApply (saved_pred_agree _ _ _ (k, t) with "own1 own2").
+Qed.
+
+Lemma crypto_inv_meta_set E Φ N :
+  ↑N ⊆ E →
+  crypto_inv_token E ==∗
+  crypto_inv_meta N Φ.
+Proof.
+iIntros (?) "token".
+iMod (saved_pred_alloc (λ '(k, t), Φ k t)) as (γ) "own".
+iMod (own_update with "token").
+  by eapply (namespace_map_alloc_update _ _ (to_agree γ)) => //.
+by iModIntro; iExists γ; iSplit.
+Qed.
+
+Definition enc_inv k t : iProp :=
+  ∃ N t' Φ, ⌜t = Spec.tag N t'⌝ ∧ crypto_inv_meta N Φ ∧ □ Φ k t'.
+
+Global Instance enc_inv_persistent k t : Persistent (enc_inv k t).
 Proof. by apply _. Qed.
 
-Lemma key_predT_agree t Φ1 Φ2 k :
-  key_predT Φ1 k -∗
-  key_predT Φ2 k -∗
-  ▷ (Φ1 t ≡ Φ2 t).
+Lemma enc_inv_elim k N t Φ :
+  enc_inv k (Spec.tag N t) -∗
+  crypto_inv_meta N Φ -∗
+  □ ▷ Φ k t.
 Proof.
-iDestruct 1 as (γ1) "[#meta1 #own1]".
-iDestruct 1 as (γ2) "[#meta2 #own2]".
-iPoseProof (crypto_meta_agree with "meta2 meta1") as "->".
-by iApply saved_pred_agree.
+iDestruct 1 as (N' t' Φ') "(%t_t' & #HΦ' & #inv)"; iIntros "#HΦ".
+case/Spec.tag_inj: t_t' => <- <-.
+iPoseProof (crypto_inv_meta_agree k t with "HΦ HΦ'") as "e".
+by iIntros "!> !>"; iRewrite "e".
 Qed.
 
 Definition own_publish t (Ti : coGset_pair term) : iProp :=
@@ -373,7 +407,7 @@ Fixpoint termT_def lvl t : iProp :=
     ∃ lvl_enc lvl_dec,
       keyT lvl_enc lvl_dec k ∗
       (⌜lvl_enc = Pub⌝ ∗ termT_def Pub t ∨
-       ∃ Φ, key_predT Φ k ∗ □ Φ t ∗ termT_def (lvl ⊔ lvl_dec) t)
+       enc_inv k t ∗ termT_def (lvl ⊔ lvl_dec) t)
   end.
 
 Definition termT_aux : seal termT_def. by eexists. Qed.
@@ -405,7 +439,7 @@ Lemma termT_eq lvl t :
     ∃ lvl_enc lvl_dec,
       keyT lvl_enc lvl_dec k ∗
       (⌜lvl_enc = Pub⌝ ∗ termT Pub t ∨
-       ∃ Φ, key_predT Φ k ∗ □ Φ t ∗ termT (lvl ⊔ lvl_dec) t)
+       enc_inv k t ∗ termT (lvl ⊔ lvl_dec) t)
   end%I.
 Proof. by rewrite /keyT /termT seal_eq; case: t. Qed.
 
@@ -539,8 +573,8 @@ elim: t lvl lvl' => [n|t1 IH1 t2 IH2|l|kt k _|k _ t IH] lvl lvl' sub.
   iDestruct 1 as (lvl_enc lvl_dec) "# (Hk & Ht)".
   iExists lvl_enc, lvl_dec; iSplit => //.
   iDestruct "Ht" as "[Ht|Ht]"; eauto.
-  iDestruct "Ht" as (Φ) "(HΦ & tP & Ht)".
-  iRight; iExists Φ; do 2![iSplit => //].
+  iDestruct "Ht" as "(tP & Ht)".
+  iRight; iSplit => //.
   iApply (IH with "Ht").
   by case: lvl lvl' lvl_dec sub=> [] [] [].
 Qed.
@@ -564,20 +598,28 @@ iExists lvl_enc, lvl_dec; iSplit => //; iLeft; iSplit => //.
 by case: lvl_enc leq.
 Qed.
 
-Lemma termT_aenc_sec_pub Φ lvl_k k t :
+Lemma termT_tag lvl n t :
+  termT lvl (Spec.tag n t) ⊣⊢ termT lvl t.
+Proof.
+by rewrite Spec.tag_eq termT_eq /= termT_eq bi.True_sep.
+Qed.
+
+Lemma termT_aenc_sec_pub N Φ lvl_k k t :
   termT lvl_k (TKey Enc k) -∗
-  key_predT Φ k -∗
+  crypto_inv_meta N Φ -∗
   termT Pub t -∗
-  □ Φ t -∗
-  termT Pub (TEnc k t).
+  □ Φ k t -∗
+  termT Pub (TEnc k (Spec.tag N t)).
 Proof.
 iIntros "#k_lo #pred #t_lo #inv".
 rewrite [termT _ (TEnc _ _)]termT_eq.
 rewrite [termT _ (TKey Enc _)]termT_eq.
 iDestruct "k_lo" as (lvl_enc lvl_dec) "[k_lo %leq]".
 iExists lvl_enc, lvl_dec; iSplit => //.
-iRight; iExists Φ; do 2![iSplit => //].
-iApply (sub_termT with "t_lo"); by case: (lvl_dec).
+iRight; iSplit => //; last first.
+  rewrite termT_tag.
+  iApply (sub_termT with "t_lo"); by case: (lvl_dec).
+by iExists N, t, Φ; eauto.
 Qed.
 
 Lemma stermTP lvl lvl' t :
@@ -604,12 +646,6 @@ move=> t _ tl IH ts.
 case e: (Spec.to_list tl) => [ts'|] // [<-] /=.
 rewrite {1}termT_eq /=; iIntros "[??]"; iFrame.
 by iApply IH.
-Qed.
-
-Lemma termT_tag lvl n t :
-  termT lvl (Spec.tag n t) ⊣⊢ termT lvl t.
-Proof.
-by rewrite Spec.tag_eq termT_eq /= termT_eq bi.True_sep.
 Qed.
 
 Lemma termT_of_list lvl ts :
@@ -671,14 +707,14 @@ rewrite termT_eq /=.
     iExists Pub; rewrite stermT_eq keyT_eq stermT_eq.
     iApply termT_aenc_pub_pub => //.
     by iDestruct "Hk" as "[??]".
-  iDestruct "Ht" as (Φ) "(HΦ & #tP & Ht)".
+  iDestruct "Ht" as "(#tP & Ht)".
   iDestruct (IHt with "Ht") as (lvl') "Ht'".
   case: lvl'.
     iExists Pub; rewrite !stermT_eq /=.
     rewrite [termT Pub (TEnc _ _)]termT_eq.
     iExists lvl_enc, lvl_dec; iSplit => //.
     case: lvl_enc; eauto.
-    iRight; iExists Φ; do 2![iSplit => //].
+    iRight; iSplit => //.
     by iApply (sub_termT with "Ht'").
   rewrite stermT_eq; iDestruct "Ht'" as "[sec #pub]".
   iExists (if lvl_dec is Sec then Pub else Sec).
@@ -695,29 +731,28 @@ rewrite termT_eq /=.
   iDestruct (keyT_agree with "Hk' Hk") as "[-> ->]".
   iDestruct "Ht'" as "[[_ Ht']|Ht']".
     by iApply "pub".
-  iDestruct "Ht'" as (?) "(? & ? & Ht')".
+  iDestruct "Ht'" as "(? & Ht')".
   by iApply "pub".
 Qed.
 
-Lemma termT_adec_pub Φ k t :
-  termT Pub (TEnc k t) -∗
-  key_predT Φ k -∗
-  termT Pub t ∨ □ ▷ Φ t ∗ termT Sec t.
+Lemma termT_adec_pub N Φ k t :
+  termT Pub (TEnc k (Spec.tag N t)) -∗
+  crypto_inv_meta N Φ -∗
+  termT Pub t ∨ □ ▷ Φ k t ∗ termT Sec t.
 Proof.
 rewrite termT_eq; iIntros "#Ht #HΦ".
 iDestruct "Ht" as (lvl_enc lvl_dec) "# (Hk & Ht)".
+rewrite !termT_tag.
 iDestruct "Ht" as "[(?&?)|Ht]"; eauto.
-iDestruct "Ht" as (Φ') "(HΦ' & #inv & Ht)".
-iPoseProof (key_predT_agree t with "HΦ' HΦ") as "e".
-iRight; iSplit => //.
-  by do 2![iModIntro]; iRewrite -"e".
+iDestruct "Ht" as "(inv & Ht)".
+iRight; iSplit; first by iApply enc_inv_elim.
 iApply (sub_termT with "Ht"); by case: lvl_dec.
 Qed.
 
-Lemma termT_adec_pub_sec Φ k t :
-  termT Pub (TEnc k t) -∗
-  key_predT Φ k -∗
-  ∃ lvl, termT lvl t ∗ □ ▷ guarded (lvl = Sec) (Φ t).
+Lemma termT_adec_pub_sec N Φ k t :
+  termT Pub (TEnc k (Spec.tag N t)) -∗
+  crypto_inv_meta N Φ -∗
+  ∃ lvl, termT lvl t ∗ □ ▷ guarded (lvl = Sec) (Φ k t).
 Proof.
 iIntros "Ht Hpred".
 iPoseProof (termT_adec_pub with "Ht Hpred") as "[Ht|Ht]".
@@ -725,11 +760,11 @@ iPoseProof (termT_adec_pub with "Ht Hpred") as "[Ht|Ht]".
 - by iExists Sec; iDestruct "Ht" as "[??]"; iSplit.
 Qed.
 
-Lemma termT_adec_sec Φ k lvl t :
+Lemma termT_adec_sec N Φ k lvl t :
   stermT Sec (TKey Enc k) -∗
-  key_predT Φ k -∗
-  termT lvl (TEnc k t) -∗
-  termT Sec t ∗ □ ▷ Φ t.
+  crypto_inv_meta N Φ -∗
+  termT lvl (TEnc k (Spec.tag N t)) -∗
+  termT Sec t ∗ □ ▷ Φ k t.
 Proof.
 iIntros "#Hk #HΦ #Ht".
 rewrite stermT_TKey_eq.
@@ -738,19 +773,18 @@ rewrite termT_eq.
 iDestruct "Ht" as (lvl_enc' lvl_dec') "(Hk' & Ht)".
 iDestruct (keyT_agree with "Hk' Hk") as "[-> ->]".
 iDestruct "Ht" as "[[% ?]|Ht]" => //.
-iDestruct "Ht" as (Φ') "(HΦ' & #inv & Ht)".
+iDestruct "Ht" as "(#inv & Ht)"; rewrite termT_tag.
 iSplit.
   iApply (sub_termT with "Ht"); by case: (_ ⊔ _).
-iPoseProof (key_predT_agree t with "HΦ HΦ'") as "e".
-by do 2![iModIntro]; iRewrite "e".
+by iApply enc_inv_elim.
 Qed.
 
-Lemma termT_adec_sec_pub Φ k t :
+Lemma termT_adec_sec_pub N Φ k t :
   stermT Sec (TKey Enc k) -∗
-  key_predT Φ k -∗
+  crypto_inv_meta N Φ -∗
   termT Pub (TKey Dec k) -∗
-  termT Pub (TEnc k t) -∗
-  termT Pub t ∗ □ ▷ Φ t.
+  termT Pub (TEnc k (Spec.tag N t)) -∗
+  termT Pub t ∗ □ ▷ Φ k t.
 Proof.
 iIntros "#enc #HΦ #dec #Ht".
 iAssert (keyT Sec Pub k) as "{enc dec} Hk".
@@ -759,58 +793,59 @@ rewrite termT_eq.
 iDestruct "Ht" as (lvl_enc lvl_dec) "[Hk' Ht]".
 iDestruct (keyT_agree with "Hk' Hk") as "[-> ->]".
 iDestruct "Ht" as "[[% ?]|Ht]" => //.
-iDestruct "Ht" as (Φ') "(HΦ' & #inv & Ht)".
-iSplit => //.
-iPoseProof (key_predT_agree t with "HΦ' HΦ") as "#e".
-by do 2![iModIntro]; iRewrite -"e".
+iDestruct "Ht" as "(#inv & Ht)".
+iSplit => //; first by rewrite termT_tag.
+by iApply enc_inv_elim.
 Qed.
 
-Lemma termT_adec_sec_pubG `{Decision G} Φ k t :
-  guarded G (stermT Sec (TKey Enc k)) -∗
-  guarded G (key_predT Φ k) -∗
+Lemma termT_adec_sec_pubG N Φ l k t :
+  stermT l (TKey Enc k) -∗
+  crypto_inv_meta N Φ -∗
   termT Pub (TKey Dec k) -∗
-  termT Pub (TEnc k t) -∗
-  termT Pub t ∗ □ ▷ guarded G (Φ t).
+  termT Pub (TEnc k (Spec.tag N t)) -∗
+  termT Pub t ∗ □ ▷ guarded (l = Sec) (Φ k t).
 Proof.
-rewrite /guarded; case: decide => _; last first.
-  iIntros "_ _ #Hk #Ht".
-  iAssert (stermT Pub (TKey Dec k)) as "{Hk} Hk".
-    by rewrite stermT_eq.
-  rewrite stermT_TKey_eq.
-  iDestruct "Hk" as (lvl_enc ?) "[Hk <-]".
-  rewrite termT_eq.
-  iDestruct "Ht" as (lvl_enc' lvl_dec') "[Hk' Ht]".
-  iDestruct (keyT_agree with "Hk' Hk") as "[-> ->]".
-  iDestruct "Ht" as "[[??]|Ht]"; eauto.
-  by iDestruct "Ht" as (?) "(?&?&?)"; eauto.
-by iApply termT_adec_sec_pub.
+rewrite /guarded; case: decide => [->|_].
+  by iApply termT_adec_sec_pub.
+iIntros "_ _ #Hk #Ht".
+iAssert (stermT Pub (TKey Dec k)) as "{Hk} Hk".
+  by rewrite stermT_eq.
+rewrite stermT_TKey_eq.
+iDestruct "Hk" as (lvl_enc ?) "[Hk <-]".
+rewrite termT_eq.
+iDestruct "Ht" as (lvl_enc' lvl_dec') "[Hk' Ht]".
+iDestruct (keyT_agree with "Hk' Hk") as "[-> ->]".
+rewrite !termT_tag.
+iDestruct "Ht" as "[[??]|Ht]"; eauto.
+by iDestruct "Ht" as "(?&?)"; eauto.
 Qed.
 
-Lemma termT_aenc_pub_sec lvl Φ k t :
-  termT  lvl (TKey Enc k) -∗
+Lemma termT_aenc_pub_sec l N Φ k t :
+  termT  l (TKey Enc k) -∗
   stermT Sec (TKey Dec k) -∗
-  key_predT Φ k -∗
-  □ Φ t -∗
+  crypto_inv_meta N Φ -∗
+  □ Φ k t -∗
   termT Sec t -∗
-  termT Pub (TEnc k t).
+  termT Pub (TEnc k (Spec.tag N t)).
 Proof.
 iIntros "#Henc #Hdec #HΦ #HΦt #Ht".
 iDestruct (termT_lvlP with "Henc") as (lvl') "{Henc} Henc".
 rewrite [termT _ (TEnc _ _)]termT_eq.
-by iExists lvl', Sec; rewrite keyT_eq; iSplit; eauto.
+iExists lvl', Sec; rewrite keyT_eq !termT_tag; iSplit; eauto.
+iRight; iSplit => //; iExists N, t, Φ; eauto.
 Qed.
 
-Lemma termT_aenc_pub_secG k Φ lvl t :
+Lemma termT_aenc_pub_secG k N Φ l t :
   termT Pub (TKey Enc k) -∗
-  termT lvl t -∗
-  guarded (lvl = Sec) (stermT Sec (TKey Dec k)) -∗
-  guarded (lvl = Sec) (key_predT Φ k) -∗
-  □ guarded (lvl = Sec) (Φ t) -∗
-  termT Pub (TEnc k t).
+  termT l t -∗
+  guarded (l = Sec) (stermT Sec (TKey Dec k)) -∗
+  crypto_inv_meta N Φ -∗
+  □ guarded (l = Sec) (Φ k t) -∗
+  termT Pub (TEnc k (Spec.tag N t)).
 Proof.
-iIntros "#Henc #Ht #Hdec #Hpred #HG"; case: lvl => /=.
-- by iApply termT_aenc_pub_pub.
-- by iApply termT_aenc_pub_sec.
+iIntros "#Henc #Ht #Hdec #Hpred #HG"; case: l => /=.
+- by iApply termT_aenc_pub_pub; rewrite // termT_tag.
+- by iApply termT_aenc_pub_sec; rewrite // termT_tag.
 Qed.
 
 Lemma stermT_termT lvl t : stermT lvl t -∗ termT lvl t.
@@ -1067,7 +1102,7 @@ elim: t lvl => //=.
   rewrite termT_eq.
   iDestruct "Ht" as (lvl_enc lvl_dec) "(_ & Ht)".
   iDestruct "Ht" as "[(_ & Ht)|Ht]"; first by iApply IHt.
-  iDestruct "Ht" as (?) "(_ & _ & Ht)"; by iApply IHt.
+  iDestruct "Ht" as "(_ & Ht)"; by iApply IHt.
 Qed.
 
 Definition secret_terms (T T' : gset term) : iProp :=
@@ -1472,183 +1507,3 @@ End Resources.
 Arguments crypto_name {Σ _}.
 Arguments crypto_inv {Σ _ _}.
 Arguments crypto_ctx {Σ _ _}.
-
-Section Tagging.
-
-Context (Σ : gFunctors).
-Notation iProp := (iProp Σ).
-Notation iPropO := (iPropO Σ).
-Notation term_pred := (term -d> iPropO).
-Implicit Types Φ : term_pred.
-Implicit Types l : loc.
-Implicit Types lvl : level.
-Implicit Types γ : gname.
-Implicit Types c : string.
-Implicit Types k t : term.
-
-Context `{!heapG Σ, !cryptoG Σ}.
-
-Definition key_tag k c Φ : iProp :=
-  ∃ γ, crypto_meta k (cryptoN.@"tag".@c) γ ∗
-       saved_pred_own γ Φ.
-
-Lemma key_tag_persistent k c Φ : Persistent (key_tag k c Φ).
-Proof. apply _. Qed.
-
-Lemma key_tag_agree t k c Φ1 Φ2 :
-  key_tag k c Φ1 -∗
-  key_tag k c Φ2 -∗
-  ▷ (Φ1 t ≡ Φ2 t).
-Proof.
-iDestruct 1 as (γ1) "[#meta1 #own1]".
-iDestruct 1 as (γ2) "[#meta2 #own2]".
-iPoseProof (crypto_meta_agree with "meta2 meta1") as "->".
-by iApply saved_pred_agree.
-Qed.
-
-Lemma key_tag_proper k c : Contractive (key_tag k c).
-Proof. solve_proper. Qed.
-
-Definition tagged_inv_def k t : iProp :=
-  match t with
-  | TPair (TInt (Zpos n)) t =>
-    ∃ c Φ, ⌜n = encode c⌝ ∗ key_tag k c Φ ∗ □ Φ t
-  | _ => False
-  end.
-Definition tagged_inv_aux : seal tagged_inv_def. by eexists. Qed.
-Definition tagged_inv := unseal tagged_inv_aux.
-Lemma tagged_inv_eq : tagged_inv = tagged_inv_def. Proof. exact: seal_eq. Qed.
-
-Global Instance tagged_inv_persistent k t :
-  Persistent (tagged_inv k t).
-Proof.
-rewrite tagged_inv_eq /tagged_inv_def.
-case: t=> []; try by apply _.
-by do 2![case; try by apply _].
-Qed.
-
-Definition tkey_predT c Φ k : iProp :=
-  key_predT (tagged_inv k) k ∗
-  key_tag k c Φ.
-
-Lemma tagged_inv_intro k c Φ t :
-  key_tag k c Φ -∗
-  □ Φ t -∗
-  tagged_inv k (Spec.tag c t).
-Proof.
-rewrite tagged_inv_eq /tagged_inv_def Spec.tag_eq /=.
-by iIntros "own Ht"; eauto.
-Qed.
-
-Lemma tagged_inv_elim k t :
-  tagged_inv k t -∗
-  ∃ c t' Φ, ⌜t = Spec.tag c t'⌝ ∗
-            key_tag k c Φ ∗
-            □ Φ t'.
-Proof.
-rewrite tagged_inv_eq /tagged_inv_def /=.
-iIntros "H".
-case: t => [] // [] // [] // n t.
-iDestruct "H" as (c Φ) "(-> & own & Ht)".
-iExists _, t, Φ.
-by rewrite Spec.tag_eq /Spec.tag_def //; eauto.
-Qed.
-
-Lemma tagged_inv_elim' Φ k c t :
-  key_tag k c Φ -∗
-  tagged_inv k (Spec.tag c t) -∗
-  □ ▷ Φ t.
-Proof.
-iIntros "#own #H".
-iDestruct (tagged_inv_elim with "H") as (c' t' Φ') "{H} (%e & #own' & #Ht)".
-case: (Spec.tag_inj _ _ _ _ e) => ??; subst c' t'.
-iPoseProof (key_tag_agree t with "own own'") as "#e".
-by do 2![iModIntro]; iRewrite "e".
-Qed.
-
-Lemma termT_tag_aenc_sec_pub lvl k c Φ t :
-  termT lvl (TKey Enc k) -∗
-  tkey_predT c Φ k -∗
-  termT Pub t -∗
-  □ Φ t -∗
-  termT Pub (TEnc k (Spec.tag c t)).
-Proof.
-iIntros "#k_lo [#pred #k_c] #t_lo #inv".
-iApply termT_aenc_sec_pub; eauto.
-  by rewrite termT_tag.
-by iIntros "!> /="; iApply tagged_inv_intro.
-Qed.
-
-Lemma termT_tag_aenc_pub_secG k lvl c Φ t :
-  termT Pub (TKey Enc k) -∗
-  termT lvl t -∗
-  guarded (lvl = Sec) (stermT Sec (TKey Dec k)) -∗
-  guarded (lvl = Sec) (tkey_predT c Φ k) -∗
-  □ guarded (lvl = Sec) (Φ t) -∗
-  termT Pub (TEnc k (Spec.tag c t)).
-Proof.
-rewrite /tkey_predT; iIntros "#k_lo #t_lo #k_hi [#pred #k_c] #t_hi".
-iApply termT_aenc_pub_secG; eauto.
-  iApply termT_tag; eauto.
-case: lvl => //=; iModIntro.
-by iApply tagged_inv_intro.
-Qed.
-
-Lemma termT_tag_adec_pub_sec k c Φ t :
-  termT Pub (TEnc k (Spec.tag c t)) -∗
-  tkey_predT c Φ k -∗
-  ∃ lvl, termT lvl t ∗ □ ▷^2 guarded (lvl = Sec) (Φ t).
-Proof.
-iIntros "#Ht [#Hk #Hown]".
-iDestruct (termT_adec_pub_sec with "Ht Hk") as (lvl) "{Ht} [#Ht #guard]".
-rewrite termT_tag.
-iExists lvl; iSplit => //; case: lvl => //=; do 2![iModIntro].
-by iApply (tagged_inv_elim' with "Hown guard").
-Qed.
-
-Lemma termT_tag_adec_sec lvl k c Φ t :
-  stermT Sec (TKey Enc k) -∗
-  tkey_predT c Φ k -∗
-  termT lvl (TEnc k (Spec.tag c t)) -∗
-  termT Sec t ∧ □ ▷^2 Φ t.
-Proof.
-iIntros "#Hk [#pred #HΦ] #Henc".
-iDestruct (termT_adec_sec with "Hk pred Henc") as "[Ht #inv]".
-rewrite termT_tag; iSplit => //; do 2![iModIntro].
-by iApply (tagged_inv_elim' with "HΦ inv").
-Qed.
-
-Lemma termT_tag_adec_sec_pub k c Φ t :
-  stermT Sec (TKey Enc k) -∗
-  tkey_predT c Φ k -∗
-  termT Pub (TKey Dec k) -∗
-  termT Pub (TEnc k (Spec.tag c t)) -∗
-  termT Pub t ∧ □ ▷^2 Φ t.
-Proof.
-iIntros "#Henc [#pred #HΦ] #Hdec #Ht".
-iDestruct (termT_adec_sec_pub with "Henc pred Hdec Ht") as "{Ht} [Ht #inv]".
-rewrite termT_tag; iSplit => //; do 2![iModIntro].
-by iApply (tagged_inv_elim' with "HΦ inv").
-Qed.
-
-Lemma termT_tag_adec_sec_pubG `{Decision G} k c Φ t :
-  guarded G (stermT Sec (TKey Enc k)) -∗
-  guarded G (tkey_predT c Φ k) -∗
-  termT Pub (TKey Dec k) -∗
-  termT Pub (TEnc k (Spec.tag c t)) -∗
-  termT Pub t ∧ □ ▷^2 guarded G (Φ t).
-Proof.
-iIntros "#Henc [#pred #HΦ] #Hdec Ht".
-iDestruct (termT_adec_sec_pubG with "Henc pred Hdec Ht") as "{Ht} [#Ht #inv]".
-rewrite termT_tag; iSplit => //.
-do 2![iModIntro]; rewrite -guarded_later.
-iIntros "#HG".
-rewrite !guarded_eq; iSpecialize ("inv" with "HG").
-iSpecialize ("HΦ" with "HG").
-by iApply (tagged_inv_elim' with "HΦ inv").
-Qed.
-
-End Tagging.
-
-Arguments tagged_inv_def {_} /.
-Arguments tagged_inv {_ _}.
