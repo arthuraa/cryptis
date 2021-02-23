@@ -47,7 +47,8 @@ Inductive term  :=
 | TPair of term & term
 | TNonce of loc
 | TKey of key_type & term
-| TEnc of term & term.
+| TEnc of term & term
+| THash of term.
 
 Canonical termO := leibnizO term.
 
@@ -56,6 +57,7 @@ Notation TPair_tag := 1%Z.
 Notation TNonce_tag := 2%Z.
 Notation TKey_tag := 3%Z.
 Notation TEnc_tag := 4%Z.
+Notation THash_tag := 5%Z.
 
 Global Instance term_inhabited : Inhabited term.
 Proof. exact: (populate (TInt 0)). Qed.
@@ -75,6 +77,8 @@ refine (
       cast_if_and (decide (kt1 = kt2)) (decide (l1 = l2))
     | TEnc t11 t12, TEnc t21 t22 =>
       cast_if_and (decide (t11 = t21)) (decide (t12 = t22))
+    | THash t1, THash t2 =>
+      cast_if (decide (t1 = t2))
     | _, _ => right _
     end); clear go; abstract intuition congruence.
 Defined.
@@ -86,6 +90,7 @@ Fixpoint val_of_term_rec t : val :=
   | TNonce l => (#TNonce_tag, #l)%V
   | TKey kt t => (#TKey_tag, (#(int_of_key_type kt), val_of_term_rec t))%V
   | TEnc t1 t2 => (#TEnc_tag, (val_of_term_rec t1, val_of_term_rec t2))%V
+  | THash t => (#THash_tag, val_of_term_rec t)
   end.
 
 Definition val_of_term := locked val_of_term_rec.
@@ -106,6 +111,8 @@ Fixpoint term_of_val v : term :=
     TKey (key_type_of_int n) (term_of_val v)
   | PairV #(LitInt TEnc_tag) (v1, v2) =>
     TEnc (term_of_val v1) (term_of_val v2)
+  | PairV #(LitInt THash_tag) v =>
+    THash (term_of_val v)
   | _ => TInt 0
   end.
 
@@ -136,6 +143,7 @@ Fixpoint term_height t :=
   | TNonce _ => 1
   | TKey _ t => S (term_height t)
   | TEnc k t => S (max (term_height k) (term_height t))
+  | THash t => S (term_height t)
   end.
 
 Fixpoint nonces_of_term t : gset loc :=
@@ -145,6 +153,7 @@ Fixpoint nonces_of_term t : gset loc :=
   | TNonce l => {[l]}
   | TKey _ t => nonces_of_term t
   | TEnc t1 t2 => nonces_of_term t1 ∪ nonces_of_term t2
+  | THash t => nonces_of_term t
   end.
 
 Module Spec.

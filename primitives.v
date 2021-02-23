@@ -81,6 +81,8 @@ Definition eq_term : val := (rec: "eq" "x" "y" :=
   else if: (Fst "x" = #TEnc_tag) && (Fst "y" = #TEnc_tag) then
     "eq" (Fst (Snd "x")) (Fst (Snd "y")) &&
     "eq" (Snd (Snd "x")) (Snd (Snd "y"))
+  else if: (Fst "x" = #THash_tag) && (Fst "y" = #THash_tag) then
+    "eq" (Snd "x") (Snd "y")
   else #false)%V.
 
 Definition dec : val := λ: "k" "t",
@@ -338,8 +340,8 @@ Lemma twp_eq_term_aux E t1 t2 :
   ⊢ WP (eq_term t1 t2) @ E [{ v, ⌜v = #(bool_decide (t1 = t2))⌝ }].
 Proof.
 rewrite val_of_termE.
-elim: t1 t2=> [n1|t11 IH1 t12 IH2|l1|kt1 t1 IH1|t11 IH1 t12 IH2];
-case=> [n2|t21 t22|l2|kt2 t2|t21 t22] /=;
+elim: t1 t2=> [n1|t11 IH1 t12 IH2|l1|kt1 t1 IH1|t11 IH1 t12 IH2|t1 IH];
+case=> [n2|t21 t22|l2|kt2 t2|t21 t22|t2] /=;
 wp_rec; wp_pures=> //.
 - iPureIntro; congr (# (LitBool _)).
   apply: bool_decide_iff; intuition congruence.
@@ -368,6 +370,9 @@ wp_rec; wp_pures=> //.
     rewrite bool_decide_false //; congruence.
   iPureIntro; congr (# (LitBool _)).
   by rewrite bool_decide_true //; congruence.
+- wp_pures; iApply twp_wand; first iApply IH.
+  iIntros (?) "->"; iPureIntro; congr (# (LitBool _)).
+  apply: bool_decide_iff; intuition congruence.
 Qed.
 
 Lemma twp_eq_term E t1 t2 Ψ :

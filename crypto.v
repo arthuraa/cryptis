@@ -109,6 +109,8 @@ Definition atomic t : bool :=
   | TNonce _ => true
   | TKey _ _ => true
   | TEnc _ _ => false
+  | THash _ => false (* We do not treat hashes as atomic because they are always
+    considered public *)
   end.
 
 Fixpoint atoms t : gset term :=
@@ -118,6 +120,7 @@ Fixpoint atoms t : gset term :=
   | TNonce _ => {[t]}
   | TKey _ _ => {[t]}
   | TEnc _ t => atoms t
+  | THash _ => ∅
   end.
 
 Lemma atoms_term_height t1 t2 :
@@ -383,7 +386,7 @@ Qed.
 
 (** [termT lvl t] holds when the term [t] can be declared public after
 encrypting it.  If [lvl = Pub], [t] is considered public and does not have to be
-encrypted.  *)
+encrypted.  All hashes are considered public for now. *)
 
 Fixpoint termT_def lvl t : iProp :=
   let keyT lvl_enc lvl_dec k :=
@@ -411,6 +414,7 @@ Fixpoint termT_def lvl t : iProp :=
       keyT lvl_enc lvl_dec k ∗
       (⌜lvl_enc = Pub⌝ ∗ termT_def Pub t ∨
        enc_inv k t ∗ termT_def (lvl ⊔ lvl_dec) t)
+  | THash t => termT_def Sec t
   end.
 
 Definition termT_aux : seal termT_def. by eexists. Qed.
@@ -443,6 +447,7 @@ Lemma termT_eq lvl t :
       keyT lvl_enc lvl_dec k ∗
       (⌜lvl_enc = Pub⌝ ∗ termT Pub t ∨
        enc_inv k t ∗ termT (lvl ⊔ lvl_dec) t)
+  | THash t => termT Sec t
   end%I.
 Proof. by rewrite /keyT /termT seal_eq; case: t. Qed.
 
@@ -562,7 +567,7 @@ Lemma sub_termT lvl lvl' t :
   termT lvl t -∗
   termT lvl' t.
 Proof.
-elim: t lvl lvl' => [n|t1 IH1 t2 IH2|l|kt k _|k _ t IH] lvl lvl' sub.
+elim: t lvl lvl' => [n|t1 IH1 t2 IH2|l|kt k _|k _ t IH|t IH] lvl lvl' sub.
 - by rewrite !termT_eq.
 - rewrite ![termT _ (TPair t1 t2)]termT_eq /=.
   by iIntros "[#Ht1 #Ht2]"; rewrite IH1 // IH2 //; iSplit.
@@ -580,6 +585,7 @@ elim: t lvl lvl' => [n|t1 IH1 t2 IH2|l|kt k _|k _ t IH] lvl lvl' sub.
   iRight; iSplit => //.
   iApply (IH with "Ht").
   by case: lvl lvl' lvl_dec sub=> [] [] [].
+- by rewrite ![termT _ (THash _)]termT_eq.
 Qed.
 
 Lemma termT_int lvl n : ⊢ termT lvl (TInt n).
@@ -689,7 +695,7 @@ Qed.
 
 Lemma termT_lvlP lvl t : termT lvl t -∗ ∃ lvl', stermT lvl' t.
 Proof.
-elim: t lvl=> [n|t1 IH1 t2 IH2|n|kt k IHk|k IHk t IHt] lvl /=;
+elim: t lvl=> [n|t1 IH1 t2 IH2|n|kt k IHk|k IHk t IHt|t IH] lvl /=;
 rewrite termT_eq /=.
 - iIntros "_"; iExists Pub; iApply stermT_int.
 - iIntros "[#type1 #type2]".
@@ -736,6 +742,8 @@ rewrite termT_eq /=.
     by iApply "pub".
   iDestruct "Ht'" as "(? & Ht')".
   by iApply "pub".
+- iIntros "Ht"; iExists Pub; rewrite stermT_eq.
+  by rewrite [termT _ (THash t)]termT_eq.
 Qed.
 
 Lemma termT_TKey_swap l kt k :
