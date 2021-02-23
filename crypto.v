@@ -67,6 +67,9 @@ Proof.
 by case: lvl1 lvl2 lvl3=> [] [] []; intuition eauto.
 Qed.
 
+Lemma level_join_idemp (l : level) : l ⊔ l = l.
+Proof. by case: l. Qed.
+
 Global Instance level_meet : Meet level := λ lvl1 lvl2,
   match lvl1, lvl2 with
   | Sec, Sec => Sec
@@ -733,6 +736,20 @@ rewrite termT_eq /=.
     by iApply "pub".
   iDestruct "Ht'" as "(? & Ht')".
   by iApply "pub".
+Qed.
+
+Lemma termT_TKey_swap l kt k :
+  termT l (TKey kt k) -∗
+  ∃ l', stermT l' (TKey (if kt is Enc then Dec else Enc) k).
+Proof.
+iIntros "Hk".
+iDestruct (termT_lvlP with "Hk") as (l') "Hk".
+rewrite stermT_TKey_eq.
+iDestruct "Hk" as (l_e l_d) "[Hk' ?]".
+iExists (if kt is Enc then l_d else l_e).
+rewrite stermT_TKey_eq.
+iExists l_e, l_d; iSplit => //.
+by case: (kt).
 Qed.
 
 Lemma termT_adec_pub N Φ k t :
