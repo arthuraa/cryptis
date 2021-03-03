@@ -1527,6 +1527,31 @@ iSplit; first by iDestruct "Hk" as "[??]".
 by eauto.
 Qed.
 
+Lemma declare_key E k t lvl lvl_enc lvl_dec :
+  ↑cryptoN ⊆ E →
+  t ∈ atoms k →
+  lvl_enc ⊔ lvl_dec ⊑ lvl→
+  crypto_ctx -∗
+  stermT lvl k -∗
+  stermT lvl t -∗
+  guarded (lvl = Sec) (unpublished t {[TKey Enc k; TKey Dec k]}) -∗
+  guarded (lvl = Sec) (
+    [∗ set] t' ∈ atoms k ∖ {[t]}, published t' {[TKey Enc k; TKey Dec k]}) ={E}=∗
+  stermT lvl_enc (TKey Enc k) ∗
+  stermT lvl_dec (TKey Dec k) ∗
+  guarded (lvl_enc = Sec) (unpublished (TKey Enc k) ⊤) ∗
+  guarded (lvl_dec = Sec) (unpublished (TKey Dec k) ⊤) ∗
+  guarded (lvl = Sec) (crypto_meta_token (TKey Enc k) ⊤) ∗
+  guarded (lvl = Sec) (crypto_meta_token (TKey Dec k) ⊤).
+Proof.
+case: lvl => /=.
+  case: lvl_enc lvl_dec => [] // [] //= _ _ _.
+  iIntros "_ Hk _ _ _".
+  iDestruct (declare_pub_key with "Hk") as "[??]".
+  by iModIntro; iFrame.
+by iIntros (? ? ?); iApply declare_sec_key.
+Qed.
+
 End Resources.
 
 Arguments crypto_name {Σ _}.

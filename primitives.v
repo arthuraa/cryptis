@@ -20,6 +20,11 @@ Definition untuple : val := λ: "t",
   if: Fst "t" = #TPair_tag then SOME (Snd "t")
   else NONE.
 
+Notation "'assert:' e1 'in' e2" :=
+  (if: e1 then e2 else NONE)%E
+  (at level 200, e1, e2 at level 200,
+  format "'[' 'assert:' '[' e1 ']'  'in'  '/' e2 ']'") : expr_scope.
+
 Notation "'bind:' x := e1 'in' e2" :=
   (match: e1 with SOME x => e2  | NONE => NONE end)%E
   (at level 200, x at level 1, e1, e2 at level 200,
