@@ -67,6 +67,8 @@ Definition enc : val := λ: "k" "t",
     SOME (#TEnc_tag, (Snd (Snd "k"), "t"))
   else NONE.
 
+Definition hash : val := λ: "t", (#THash_tag, "t").
+
 Definition eq_term : val := (rec: "eq" "x" "y" :=
   if: (Fst "x" = #TInt_tag) && (Fst "y" = #TInt_tag) then
     Snd "x" = Snd "y"
@@ -335,6 +337,14 @@ Lemma wp_enc E t1 t2 Ψ :
   Ψ (repr (Spec.enc t1 t2)) -∗
   WP enc t1 t2 @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_enc. Qed.
+
+Lemma twp_hash E t Ψ : Ψ (THash t) -∗ WP hash t @ E [{ Ψ }].
+Proof.
+by rewrite /hash val_of_termE; iIntros "?"; wp_pures.
+Qed.
+
+Lemma wp_hash E t Ψ : Ψ (THash t) -∗ WP hash t @ E {{ Ψ }}.
+Proof. by iIntros "?"; iApply twp_wp; iApply twp_hash. Qed.
 
 Lemma twp_eq_term_aux E t1 t2 :
   ⊢ WP (eq_term t1 t2) @ E [{ v, ⌜v = #(bool_decide (t1 = t2))⌝ }].
