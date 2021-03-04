@@ -128,6 +128,9 @@ Definition flipb {T S} (b : bool) (f : T → T → S) x y :=
 Class Repr A := repr : A -> val.
 Arguments repr / .
 
+Instance repr_val : Repr val := λ x, x.
+Arguments repr_val / .
+
 Instance repr_Z : Repr Z := λ x, #x.
 Arguments repr_Z / .
 
@@ -176,6 +179,173 @@ Notation "[ x ]" := (CONS x%V NIL) : expr_scope.
 Notation "[ x ; y ; .. ; z ]" :=
   (CONS x%E (CONS y%E .. (CONS z%E NIL) ..)) : expr_scope.
 
+Fixpoint list_match_aux (vars : list string) (l : string) (k : expr) : expr :=
+  match vars with
+  | [] =>
+    match: l with SOME <> => NONEV | NONE => k end
+  | v :: vars =>
+    match: l with
+      SOME l =>
+      let: v := Fst l in
+      let: l := Snd l in
+      list_match_aux vars l k
+    | NONE => NONEV
+    end
+  end.
+
+Ltac substC :=
+  repeat match goal with
+  | |- context [decide ?P] => destruct (decide P) as [?|?]; simpl
+  | H : ?P ∧ ?Q |- _ => destruct H as [?|?]
+  end.
+
+Lemma substC x1 x2 v1 v2 e :
+  x1 ≠ x2 →
+  subst x1 v1 (subst x2 v2 e) = subst x2 v2 (subst x1 v1 e).
+Proof. by move=> x12; elim: e => //= *; substC; congruence. Qed.
+
+Lemma subst_list_match_aux_in var v vars l k :
+  var ∈ vars → l ∉ vars →
+  subst var v (list_match_aux vars l k) = list_match_aux vars l k.
+Proof.
+elim: vars => [|var' vars IH]; first by set_solver.
+case: (decide (var = var')) => [<- _|ne].
+- rewrite elem_of_cons.
+  case/Decidable.not_or=> l_var l_fresh /=.
+  rewrite decide_False //.
+  rewrite decide_True; last by split; congruence.
+  rewrite decide_False //; by case; congruence.
+- rewrite !elem_of_cons; case => var_in; first congruence.
+  case/Decidable.not_or=> l_var' l_fresh /=.
+  rewrite decide_False; last congruence.
+  rewrite decide_True; last by split; congruence.
+  do 2![rewrite decide_True; last by split; congruence].
+  by rewrite IH.
+Qed.
+
+Lemma subst_list_match_aux var v vars l k :
+  var ∉ vars → l ≠ var → l ∉ vars →
+  subst var v (list_match_aux vars l k) =
+  list_match_aux vars l (subst var v k).
+Proof.
+move=> var_in var_l.
+elim: vars var_in => [|var' vars IH] /=; rewrite decide_False //.
+rewrite !elem_of_cons.
+case/Decidable.not_or => var_var' var_in.
+case/Decidable.not_or => l_var' l_vars.
+do ![rewrite decide_True; last by split; congruence].
+by rewrite IH.
+Qed.
+
+Definition binder_vars x : gset string :=
+  match x with
+  | BAnon => ∅
+  | BNamed x => {[x]}
+  end.
+
+Lemma elem_of_binder_vars (x : string) (y : binder) :
+  x ∈ binder_vars y ↔ x = y :> binder.
+Proof.
+case: y => /=; first by split.
+by move=> ?; rewrite elem_of_singleton; split; congruence.
+Qed.
+
+Fixpoint free_vars e : gset string :=
+  match e with
+  | Val _ => ∅
+  | Var x => {[x]}
+  | Rec f x e => free_vars e ∖ binder_vars f ∖ binder_vars x
+  | App e1 e2 => free_vars e1 ∪ free_vars e2
+  | UnOp _ e => free_vars e
+  | BinOp _ e1 e2 => free_vars e1 ∪ free_vars e2
+  | If e1 e2 e3 => free_vars e1 ∪ free_vars e2 ∪ free_vars e3
+  | Pair e1 e2 => free_vars e1 ∪ free_vars e2
+  | Fst e | Snd e => free_vars e
+  | InjL e | InjR e => free_vars e
+  | Case e1 e2 e3 => free_vars e1 ∪ free_vars e2 ∪ free_vars e3
+  | Fork e => free_vars e
+  | AllocN e1 e2 => free_vars e1 ∪ free_vars e2
+  | Free e => free_vars e
+  | Load e => free_vars e
+  | Store e1 e2 => free_vars e1 ∪ free_vars e2
+  | CmpXchg e1 e2 e3 => free_vars e1 ∪ free_vars e2 ∪ free_vars e3
+  | FAA e1 e2 => free_vars e1 ∪ free_vars e2
+  | NewProph => ∅
+  | Resolve e1 e2 e3 => free_vars e1 ∪ free_vars e2 ∪ free_vars e3
+  end.
+
+Ltac subst_free_vars :=
+  repeat match goal with
+  | |- context [decide ?P] => destruct (decide P) as [?|?]
+  | H : context[?x ∈ {[?y]}] |- _ => rewrite elem_of_singleton in H * => *
+  | H : context[?x ∈ _ ∪ _] |- _ => rewrite elem_of_union in H * => *
+  | H : context[?x ∈ _ ∖ _] |- _ => rewrite elem_of_difference in H * => *
+  | H : context[?x ∈ binder_vars _] |- _ => rewrite elem_of_binder_vars in H * => *
+  | H : _ ∧ _ |- _ => destruct H as [??]
+  | H : ¬ (_ ∨ _) |- _ => apply Decidable.not_or in H
+  | HQP : ¬ (?Q ∧ ?P), HP : ?P |- _ =>
+    assert (¬ Q); [intros ?; apply HQP; by split|clear HQP]
+  | HP : ?P, HPQ : ?P -> ?Q |- _ => specialize (HPQ HP)
+  end.
+
+Lemma subst_free_vars x v e : x ∉ free_vars e → subst x v e = e.
+Proof.
+elim: e => //=; try by intros; subst_free_vars; congruence.
+Qed.
+
+Fixpoint nsubst (vars : list string) (vs : list val) (k : expr) : expr :=
+  match vars, vs with
+  | [], [] => k
+  | var :: vars, v :: vs => subst var v (nsubst vars vs k)
+  | _, _ => NONEV
+  end.
+
+Ltac subst_free_vars_rem :=
+  repeat (
+    simpl in *;
+    match goal with
+    | |- context [decide ?P] => destruct (decide P) as [?|?]
+    | |- ¬ _ => intros ?
+    | H : context[?x ∈ {[?y]}] |- _ => rewrite elem_of_singleton in H * => *
+    | H : context[?x ∈ _ ∪ _] |- _ => rewrite elem_of_union in H * => *
+    | H : context[?x ∈ _ ∖ _] |- _ => rewrite elem_of_difference in H * => *
+    | H : context[?x ∈ binder_vars _] |- _ => rewrite elem_of_binder_vars in H * => *
+    | H : _ ∧ _ |- _ => destruct H as [??]
+    | H : ¬ (_ ∨ _) |- _ => apply Decidable.not_or in H
+    | H : context[_ ∈ ∅] |- _ => rewrite -> elem_of_empty in H
+    | HQP : ¬ (?Q ∧ ?P), HP : ?P |- _ =>
+      assert (¬ Q); [intros ?; apply HQP; by split|clear HQP]
+    | HP : ?P, HPQ : ?P -> ?Q |- _ => specialize (HPQ HP)
+    | HNP : ¬ ?P, HP : ?P |- _ => destruct (HNP HP)
+    | H : _ ∨ _ |- _ => destruct H
+    end
+  ).
+
+Lemma subst_free_vars_rem var v e : var ∉ free_vars (subst var v e).
+Proof.
+by elim: e => /=; try by intros; subst_free_vars_rem; congruence.
+Qed.
+
+Lemma subst_nsubst var v vars vs e :
+  var ∈ vars →
+  subst var v (nsubst vars vs e) = nsubst vars vs e.
+Proof.
+elim: vars vs=> [|var' vars IH] [|v' vs]; try by rewrite ?elem_of_nil //=.
+case: (decide (var = var')) => [<- _|var_var'].
+  rewrite subst_free_vars //; exact: subst_free_vars_rem.
+rewrite elem_of_cons; case => var_in /=; first congruence.
+by rewrite substC // IH.
+Qed.
+
+Lemma subst_nsubst_nin var v vars vs e :
+  var ∉ vars →
+  subst var v (nsubst vars vs e) = nsubst vars vs (subst var v e).
+Proof.
+elim: vars vs=> [|var' vars IH] [|v' vs]; try by rewrite ?elem_of_nil //=.
+rewrite elem_of_cons; case/Decidable.not_or => var_var' var_nin.
+by rewrite /= substC // IH.
+Qed.
+
 Section ListLemmas.
 
 Context `{!Repr A, !heapG Σ}.
@@ -223,6 +393,32 @@ Proof. by iIntros "?"; iApply twp_wp; iApply twp_cons. Qed.
 
 Definition list_to_expr :=
   foldr (fun (x : A) e => CONS (repr x) e) NILV.
+
+Lemma wp_list_match_aux E vs vars (l : string) k Ψ :
+  l ∉ vars →
+  WP nsubst vars vs (subst l [] k) @ E {{ Ψ }} -∗
+  WP subst l (repr_list vs) (list_match_aux vars l k) @ E {{ Ψ }}.
+Proof.
+rewrite repr_list_eq.
+elim: vars vs k => [|var vars IH] [|v vs] k l_fresh /=.
+- by iIntros "post"; wp_pures; rewrite decide_True //=; wp_pures.
+- iIntros "post"; wp_pures; rewrite decide_True //= (lock (Val NONEV)).
+  by wp_pures.
+- iIntros "post"; wp_pures; rewrite decide_True //= {-2}(lock (Val NONEV)).
+  by wp_pures.
+- iIntros "post"; wp_pures; rewrite decide_True //=.
+  wp_pures; rewrite decide_False; last by case.
+  rewrite /= (@decide_True _ (l = l)) //.
+  move: l_fresh; rewrite elem_of_cons => /Decidable.not_or [l_var l_fresh].
+  rewrite decide_True; last by split => ?; congruence.
+  rewrite decide_False; last by case.
+  wp_pures.
+  rewrite decide_True; last by split=> ?; congruence.
+  case: (decide (var ∈ vars)) => [var_in|var_out].
+    rewrite subst_list_match_aux_in // subst_nsubst //; by iApply IH.
+  rewrite subst_list_match_aux // subst_nsubst_nin // substC //.
+  by iApply IH.
+Qed.
 
 End ListLemmas.
 
