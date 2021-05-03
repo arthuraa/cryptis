@@ -1552,6 +1552,51 @@ case: lvl => /=.
 by iIntros (? ? ?); iApply declare_sec_key.
 Qed.
 
+Lemma atomic_atoms t : atomic t → atoms t = {[t]}.
+Proof. by case: t. Qed.
+
+Lemma crypto_own_valid_2 (td1 td2 : term_data') :
+  crypto_own td1 -∗
+  crypto_own td2 -∗
+  ✓ (td1 ⋅ td2).
+Proof.
+iIntros "#own1 #own2".
+iAssert (crypto_own (td1 ⋅ td2)) as "own".
+  by rewrite /crypto_own auth_own_op; iSplit.
+iApply (auth_own_valid with "own").
+Qed.
+
+Lemma unpublished_op t Ts1 Ts2 :
+  Ts1 ## Ts2 →
+  unpublished t (Ts1 ⋅ Ts2) ⊣⊢ unpublished t Ts1 ∗ unpublished t Ts2.
+Proof.
+move=> disj; apply (anti_symm _).
+- iDestruct 1 as (γ) "[#H1 H2]".
+  rewrite coGset_pair_unset_union //.
+  by iDestruct "H2" as "[H21 H22]"; iSplitL "H21"; iExists γ; iSplit.
+- iIntros "[H1 H2]".
+  iDestruct "H1" as (γ1) "[#H11 H12]".
+  iDestruct "H2" as (γ2) "[#H21 H22]".
+  iPoseProof (crypto_own_valid_2 with "H11 H21") as "%valid".
+  case: valid => [] /= [] _ /= valid _.
+  rewrite singleton_op singleton_valid in valid *.
+  move=> /agree_op_invL' ->.
+  iExists γ2; iSplit => //.
+  by rewrite coGset_pair_unset_union // own_op; iFrame.
+Qed.
+
+Lemma unpublished_difference t Ts1 Ts2 :
+  Ts1 ⊆ Ts2 →
+  unpublished t Ts2 ⊣⊢ unpublished t Ts1 ∗ unpublished t (Ts2 ∖ Ts1).
+Proof.
+move=> sub.
+rewrite {1}(_ : Ts2 = Ts1 ∪ (Ts2 ∖ Ts1)) ?unpublished_op //; first set_solver.
+rewrite [_ ∪ _]comm_L difference_union_L. set_solver.
+Qed.
+
+Lemma termT_hash l t : termT l (THash t) ⊣⊢ termT Sec t.
+Proof. by rewrite termT_eq. Qed.
+
 End Resources.
 
 Arguments crypto_name {Σ _}.
