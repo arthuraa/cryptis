@@ -4,7 +4,8 @@ From deriving Require Import deriving.
 From stdpp Require Import gmap.
 From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
-From crypto Require Import mathcomp_compat lib basic symbols pre_term.
+From crypto Require Import mathcomp_compat lib basic symbols.
+From crypto Require Export pre_term.
 
 Definition int_of_key_type kt : Z :=
   match kt with
@@ -75,7 +76,7 @@ Fixpoint val_of_term_rec pt : val :=
 Fact val_of_term_key : unit. Proof. exact: tt. Qed.
 Definition val_of_term :=
   locked_with val_of_term_key (
-    fun t => val_of_term_rec (pre_term_of_term t)
+    fun t => val_of_term_rec (unfold_term t)
   ).
 Lemma val_of_termE t :
   val_of_term t =
@@ -86,7 +87,7 @@ Lemma val_of_termE t :
   | TKey kt t => (#TKey_tag, (#(int_of_key_type kt), val_of_term t))%V
   | TEnc t1 t2 => (#TEnc_tag, (val_of_term t1, val_of_term t2))%V
   | THash t => (#THash_tag, val_of_term t)%V
-  | _ => val_of_term t
+  | TExp' pt _ _ => val_of_term_rec pt
   end.
 Proof.
 rewrite /val_of_term locked_withE.
@@ -105,7 +106,7 @@ Lemma val_of_term_TExp t ts :
   = (#TExp_tag, (val_of_term t, repr (map val_of_term ts)))%V.
 Proof.
 move=> nexp sorted_ts.
-rewrite /val_of_term locked_withE /= pre_term_of_term_TExp.
+rewrite /val_of_term locked_withE /= unfold_TExp.
 rewrite PreTerm.exp_nexp //=; last by case: t nexp => //=.
 rewrite order.Order.POrderTheory.sort_le_id // ?path.sorted_map.
   by rewrite map_map.
@@ -115,9 +116,9 @@ Qed.
 
 Global Instance val_of_term_inj : Inj (=) (=) val_of_term.
 Proof.
-move=> t1 t2 e_t1t2; apply: pre_term_of_term_inj.
+move=> t1 t2 e_t1t2; apply: unfold_term_inj.
 move: e_t1t2; rewrite /val_of_term locked_withE.
-move: {t1 t2} (pre_term_of_term t1) (pre_term_of_term t2).
+move: {t1 t2} (unfold_term t1) (unfold_term t2).
 elim.
 - by move=> n1 [] //= n2 [] ->.
 - by move=> t11 IH1 t12 IH2 [] //= t21 t22 [] /IH1 -> /IH2 ->.
@@ -143,7 +144,7 @@ by move=> n; rewrite /int_of_term.
 Qed.
 
 Definition term_height t :=
-  PreTerm.height (pre_term_of_term t).
+  PreTerm.height (unfold_term t).
 
 Fixpoint nonces_of_pre_term pt : gset loc :=
   match pt with
@@ -157,7 +158,7 @@ Fixpoint nonces_of_pre_term pt : gset loc :=
   end.
 
 Definition nonces_of_term_def (t : term) :=
-  nonces_of_pre_term (pre_term_of_term t).
+  nonces_of_pre_term (unfold_term t).
 Arguments nonces_of_term_def /.
 Definition nonces_of_term_aux : seal nonces_of_term_def. by eexists. Qed.
 Definition nonces_of_term := unseal nonces_of_term_aux.
@@ -183,7 +184,7 @@ Lemma nonces_of_term_TExp t ts :
   nonces_of_term (TExp t ts)
   = nonces_of_term t ∪ ⋃ map nonces_of_term ts.
 Proof.
-rewrite nonces_of_term_eq /nonces_of_term_def pre_term_of_term_TExp.
+rewrite nonces_of_term_eq /nonces_of_term_def unfold_TExp.
 case: PreTerm.expP' => [pt' pts' pts'' -> e_pts''|pts' _ e_pts'] //=.
 - by rewrite [in LHS]e_pts'' map_app union_list_app_L assoc_L map_map.
 - by rewrite [in LHS]e_pts' map_map.
@@ -288,12 +289,11 @@ Lemma to_listK t ts :
   to_list t = Some ts →
   t = of_list ts.
 Proof.
-rewrite of_list_eq /=; elim: t ts => //.
-- by case=> [] // _ [<-].
-- move=> t _ ts' IH /= ts.
-  case e: to_list => [ts''|] // [<-].
-  by rewrite /= (IH _ e).
-- by rewrite unlock.
+rewrite of_list_eq /=; elim/term_ind': t ts => //.
+  by case=> [] // _ [<-].
+move=> t _ ts' IH /= ts.
+case e: to_list => [ts''|] // [<-].
+by rewrite /= (IH _ e).
 Qed.
 
 Inductive to_list_spec : term → option (list term) → Type :=
