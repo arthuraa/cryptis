@@ -4,6 +4,8 @@ From iris.algebra Require Import namespace_map gmap gset auth.
 From iris.base_logic Require Import gen_heap.
 From iris.base_logic.lib Require Import auth.
 From iris_string_ident Require Import ltac2_string_ident.
+From crypto Require Export mathcomp_compat.
+
 
 (* TODO: Move to Iris? *)
 Instance dom_ne {T : ofeT} :

@@ -2,9 +2,11 @@
 
 -R . crypto
 
+mathcomp_compat.v
 lib.v
 guarded.v
 coGset.v
+pre_term.v
 term.v
 basic.v
 symbols.v

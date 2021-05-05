@@ -1,10 +1,10 @@
 From mathcomp Require Import ssreflect.
+From mathcomp Require eqtype ssrbool path.
+From deriving Require Import deriving.
 From stdpp Require Import gmap.
 From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
-From crypto Require Import lib basic symbols.
-
-Inductive key_type := Enc | Dec.
+From crypto Require Import mathcomp_compat lib basic symbols pre_term.
 
 Definition int_of_key_type kt : Z :=
   match kt with
@@ -42,14 +42,6 @@ Proof. apply (inj_countable' _ _ int_of_key_typeK). Qed.
 
 Instance repr_key_type : Repr key_type := λ kt, #(int_of_key_type kt).
 
-Inductive term  :=
-| TInt of Z
-| TPair of term & term
-| TNonce of loc
-| TKey of key_type & term
-| TEnc of term & term
-| THash of term.
-
 Canonical termO := leibnizO term.
 
 Notation TInt_tag := 0%Z.
@@ -58,105 +50,151 @@ Notation TNonce_tag := 2%Z.
 Notation TKey_tag := 3%Z.
 Notation TEnc_tag := 4%Z.
 Notation THash_tag := 5%Z.
+Notation TExp_tag := 6%Z.
 
 Global Instance term_inhabited : Inhabited term.
 Proof. exact: (populate (TInt 0)). Qed.
 
-Global Instance term_eq_dec : EqDecision term.
-Proof.
-refine (
-  fix go t1 t2 {struct t1} : Decision (t1 = t2) :=
-    match t1, t2 with
-    | TInt n1, TInt n2 =>
-      cast_if (decide (n1 = n2))
-    | TPair t11 t12, TPair t21 t22  =>
-      cast_if_and (decide (t11 = t21)) (decide (t12 = t22))
-    | TNonce l1, TNonce l2 =>
-      cast_if (decide (l1 = l2))
-    | TKey kt1 l1, TKey kt2 l2 =>
-      cast_if_and (decide (kt1 = kt2)) (decide (l1 = l2))
-    | TEnc t11 t12, TEnc t21 t22 =>
-      cast_if_and (decide (t11 = t21)) (decide (t12 = t22))
-    | THash t1, THash t2 =>
-      cast_if (decide (t1 = t2))
-    | _, _ => right _
-    end); clear go; abstract intuition congruence.
-Defined.
+Global Instance term_eq_dec : EqDecision term := def_eq_decision _.
 
-Fixpoint val_of_term_rec t : val :=
-  match t with
-  | TInt n => (#TInt_tag, #n)
-  | TPair t1 t2 => (#TPair_tag, (val_of_term_rec t1, val_of_term_rec t2))%V
-  | TNonce l => (#TNonce_tag, #l)%V
-  | TKey kt t => (#TKey_tag, (#(int_of_key_type kt), val_of_term_rec t))%V
-  | TEnc t1 t2 => (#TEnc_tag, (val_of_term_rec t1, val_of_term_rec t2))%V
-  | THash t => (#THash_tag, val_of_term_rec t)
+Section ValOfTerm.
+
+Import PreTerm.
+
+Fixpoint val_of_term_rec pt : val :=
+  match pt with
+  | PTInt n => (#TInt_tag, #n)
+  | PTPair t1 t2 => (#TPair_tag, (val_of_term_rec t1, val_of_term_rec t2))%V
+  | PTNonce l => (#TNonce_tag, #l)%V
+  | PTKey kt t => (#TKey_tag, (#(int_of_key_type kt), val_of_term_rec t))%V
+  | PTEnc t1 t2 => (#TEnc_tag, (val_of_term_rec t1, val_of_term_rec t2))%V
+  | PTHash t => (#THash_tag, val_of_term_rec t)
+  | PTExp t ts => (#TExp_tag, (val_of_term_rec t, repr (map val_of_term_rec ts)))
   end.
 
-Definition val_of_term := locked val_of_term_rec.
-Lemma val_of_termE : val_of_term = val_of_term_rec.
-Proof. by rewrite /val_of_term -lock. Qed.
+Fact val_of_term_key : unit. Proof. exact: tt. Qed.
+Definition val_of_term :=
+  locked_with val_of_term_key (fun t => val_of_term_rec (val_term t)).
+Canonical val_of_term_unlock := [unlockable of val_of_term].
 Coercion val_of_term : term >-> val.
 Global Instance repr_term : Repr term := val_of_term.
 
-Fixpoint term_of_val v : term :=
-  match v with
-  | PairV (# (LitInt TInt_tag)) (# (LitInt n)) =>
-    TInt n
-  | PairV (# (LitInt TPair_tag)) (PairV v1 v2) =>
-    TPair (term_of_val v1) (term_of_val v2)
-  | PairV (# (LitInt TNonce_tag)) (# (LitLoc l)) =>
-    TNonce l
-  | PairV #(LitInt TKey_tag) (#(LitInt n), v) =>
-    TKey (key_type_of_int n) (term_of_val v)
-  | PairV #(LitInt TEnc_tag) (v1, v2) =>
-    TEnc (term_of_val v1) (term_of_val v2)
-  | PairV #(LitInt THash_tag) v =>
-    THash (term_of_val v)
-  | _ => TInt 0
-  end.
+Lemma val_of_term_TInt n :
+  val_of_term (TInt n) = (#TInt_tag, #n)%V.
+Proof. by rewrite unlock /= val_termE. Qed.
 
-Global Instance val_of_termK : Cancel (=) term_of_val val_of_term.
-Proof.
-rewrite val_of_termE; elim=> //= *; try by congruence.
-by rewrite cancel; congruence.
-Qed.
+Lemma val_of_term_TPair t1 t2 :
+  val_of_term (TPair t1 t2)
+  = (#TPair_tag, (val_of_term t1, (val_of_term t2)))%V.
+Proof. by rewrite unlock /= val_termE. Qed.
+
+Lemma val_of_term_TNonce (a : loc) :
+  val_of_term (TNonce a) = (#TNonce_tag, #a)%V.
+Proof. by rewrite unlock /= val_termE. Qed.
+
+Lemma val_of_term_TKey kt t :
+  val_of_term (TKey kt t) =
+  (#TKey_tag, (#(int_of_key_type kt), val_of_term t))%V.
+Proof. by rewrite unlock /= val_termE. Qed.
+
+Lemma val_of_term_TEnc k t :
+  val_of_term (TEnc k t) =
+  (#TEnc_tag, (val_of_term k, val_of_term t))%V.
+Proof. by rewrite unlock /= val_termE. Qed.
+
+Lemma val_of_term_THash t :
+  val_of_term (THash t) = (#THash_tag, val_of_term t)%V.
+Proof. by rewrite unlock /= val_termE. Qed.
+
+Definition val_of_termE :=
+  (val_of_term_TInt,
+   val_of_term_TPair,
+   val_of_term_TNonce,
+   val_of_term_TKey,
+   val_of_term_TEnc,
+   val_of_term_THash).
 
 Global Instance val_of_term_inj : Inj (=) (=) val_of_term.
 Proof.
-by apply (@cancel_inj _ _ _ term_of_val); apply _.
+move=> t1 t2 e_t1t2; apply: eqtype.val_inj => /=.
+move: e_t1t2; rewrite unlock; move: {t1 t2} (val_term t1) (val_term t2).
+elim.
+- by move=> n1 [] //= n2 [] ->.
+- by move=> t11 IH1 t12 IH2 [] //= t21 t22 [] /IH1 -> /IH2 ->.
+- by move=> l1 [] //= l2 [] //= ->.
+- by move=> kt1 t1 IH [] //= kt2 t2 [] /int_of_key_type_inj -> /IH ->.
+- by move=> t11 IH1 t12 IH2 [] //= ?? [] /IH1 -> /IH2 ->.
+- by move=> ? IH [] //= ? [] /IH ->.
+- move=> t1 IHt ts1 IHts [] //= t2 ts2 [] /IHt -> e_ts; congr PTExp.
+  move: e_ts; rewrite repr_list_eq.
+  elim: ts1 IHts ts2 {t1 t2 IHt} => /= [_ [] //|t1 ts1 H [] IHt {}/H IHts].
+  by case=> //= t2 ts2 [] /IHt -> /IHts ->.
 Qed.
 
 Global Instance countable_term : Countable term.
-Proof. apply (inj_countable' _ _ val_of_termK). Qed.
-
-Definition int_of_term (t : term) :=
-  match t with TInt n => Some n | _ => None end.
+Proof. exact: def_countable. Qed.
 
 Global Instance infinite_term : Infinite term.
-Proof. by apply (inj_infinite TInt int_of_term). Qed.
+Proof.
+pose int_of_term (t : term) :=
+  if val_term t is PreTerm.PTInt n then Some n else None.
+apply (inj_infinite TInt int_of_term).
+by move=> n; rewrite /int_of_term val_termE.
+Qed.
 
-Fixpoint term_height t :=
-  match t with
-  | TInt _ => 1
-  | TPair t1 t2 => S (max (term_height t1) (term_height t2))
-  | TNonce _ => 1
-  | TKey _ t => S (term_height t)
-  | TEnc k t => S (max (term_height k) (term_height t))
-  | THash t => S (term_height t)
+Definition term_height t :=
+  PreTerm.height (val_term t).
+
+Fixpoint nonces_of_pre_term pt : gset loc :=
+  match pt with
+  | PreTerm.PTInt _ => ∅
+  | PreTerm.PTPair t1 t2 => nonces_of_pre_term t1 ∪ nonces_of_pre_term t2
+  | PreTerm.PTNonce l => {[l]}
+  | PreTerm.PTKey _ t => nonces_of_pre_term t
+  | PreTerm.PTEnc t1 t2 => nonces_of_pre_term t1 ∪ nonces_of_pre_term t2
+  | PreTerm.PTHash t => nonces_of_pre_term t
+  | PreTerm.PTExp t ts => nonces_of_pre_term t ∪ ⋃ map nonces_of_pre_term ts
   end.
 
-Fixpoint nonces_of_term t : gset loc :=
-  match t with
-  | TInt _ => ∅
-  | TPair t1 t2 => nonces_of_term t1 ∪ nonces_of_term t2
-  | TNonce l => {[l]}
-  | TKey _ t => nonces_of_term t
-  | TEnc t1 t2 => nonces_of_term t1 ∪ nonces_of_term t2
-  | THash t => nonces_of_term t
-  end.
+Definition nonces_of_term_def (t : term) :=
+  nonces_of_pre_term (val_term t).
+Arguments nonces_of_term_def /.
+Definition nonces_of_term_aux : seal nonces_of_term_def. by eexists. Qed.
+Definition nonces_of_term := unseal nonces_of_term_aux.
+Lemma nonces_of_term_eq : nonces_of_term = nonces_of_term_def.
+Proof. exact: seal_eq. Qed.
 
-Module Spec.
+Lemma nonces_of_term_TInt n : nonces_of_term (TInt n) = ∅.
+Proof. by rewrite nonces_of_term_eq /= val_termE. Qed.
+
+Lemma nonces_of_term_TPair t1 t2 :
+  nonces_of_term (TPair t1 t2) =
+  nonces_of_term t1 ∪ nonces_of_term t2.
+Proof. by rewrite nonces_of_term_eq /= val_termE. Qed.
+
+Lemma nonces_of_term_TNonce l : nonces_of_term (TNonce l) = {[l]}.
+Proof. by rewrite nonces_of_term_eq /= val_termE. Qed.
+
+Lemma nonces_of_term_TKey k t : nonces_of_term (TKey k t) = nonces_of_term t.
+Proof. by rewrite nonces_of_term_eq /= val_termE. Qed.
+
+Lemma nonces_of_term_TEnc k t :
+  nonces_of_term (TEnc k t) = nonces_of_term k ∪ nonces_of_term t.
+Proof. by rewrite nonces_of_term_eq /= val_termE. Qed.
+
+Lemma nonces_of_term_THash t :
+  nonces_of_term (THash t) = nonces_of_term t.
+Proof. by rewrite nonces_of_term_eq /= val_termE. Qed.
+
+Lemma nonces_of_term_TExp t ts :
+  nonces_of_term (TExp t ts) = nonces_of_term t ∪ ⋃ map nonces_of_term ts.
+Proof.
+rewrite nonces_of_term_eq /= val_termE -map_map.
+move: (val_term t) (map val_term ts) => {}t {}ts.
+case: expP'=> [pt' pts' pts'' -> e_pts''|pts' _ e_pts'] /=.
+- by rewrite [in LHS]e_pts'' map_app union_list_app_L assoc_L.
+- by rewrite [in LHS]e_pts'.
+Qed.
 
 Implicit Types N : namespace.
 
@@ -167,9 +205,9 @@ Definition tag := unseal tag_aux.
 Lemma tag_eq : tag = tag_def. Proof. exact: seal_eq. Qed.
 
 Definition untag_def N (t : term) :=
-  match t with
-  | TPair (TInt (Zpos m)) t =>
-    if decide (encode N = m) then Some t else None
+  match val_term t with
+  | PreTerm.PTPair (PreTerm.PTInt (Zpos m)) pt =>
+    if decide (encode N = m) then Some (Term pt) else None
   | _ => None
   end.
 Definition untag_aux : seal untag_def. by eexists. Qed.
