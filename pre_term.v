@@ -155,6 +155,11 @@ Definition exp pt pts :=
   | _ => PTExp pt (sort <=%O pts)
   end.
 
+Lemma exp_nexp pt pts :
+  ~~ is_exp pt ->
+  exp pt pts = PTExp pt (sort <=%O pts).
+Proof. by case: pt. Qed.
+
 Variant exp_spec pt pts : pre_term -> Type :=
 | PTExpExp pt' pts' of pt = PTExp pt' pts'
 : exp_spec pt pts (PTExp pt' (sort <=%O (pts' ++ pts)))
@@ -263,22 +268,128 @@ Canonical PreTerm.pre_term_latticeType.
 Canonical PreTerm.pre_term_distrLatticeType.
 Canonical PreTerm.pre_term_orderType.
 
-Record term := Term_ {
-  val_term : PreTerm.pre_term;
-  _ : PreTerm.wf_term val_term;
-}.
+Unset Elimination Schemes.
+Inductive term :=
+| TInt of Z
+| TPair of term & term
+| TNonce of loc
+| TKey of key_type & term
+| TEnc of term & term
+| THash of term
+| TExp' pt of PreTerm.wf_term pt & PreTerm.is_exp pt.
+Set Elimination Schemes.
 
-Canonical term_subType := [subType for val_term].
-Definition term_eqMixin := [eqMixin of term by <:].
+(* We use a different name for the default induction scheme, as it does not
+   allow us to recurse under exponentials.  Later, we'll prove term_ind, which
+   does allow this. *)
+Scheme term_ind' := Induction for term Sort Prop.
+
+Fixpoint pre_term_of_term t :=
+  match t with
+  | TInt n => PreTerm.PTInt n
+  | TPair t1 t2 => PreTerm.PTPair (pre_term_of_term t1) (pre_term_of_term t2)
+  | TNonce l => PreTerm.PTNonce l
+  | TKey kt t => PreTerm.PTKey kt (pre_term_of_term t)
+  | TEnc k t => PreTerm.PTEnc (pre_term_of_term k) (pre_term_of_term t)
+  | THash t => PreTerm.PTHash (pre_term_of_term t)
+  | TExp' pt _ _ => pt
+  end.
+
+Fixpoint term_of_pre_term pt : PreTerm.wf_term pt -> term :=
+  match pt with
+  | PreTerm.PTInt n => fun _ => TInt n
+  | PreTerm.PTPair pt1 pt2 => fun wf =>
+    TPair (term_of_pre_term pt1 (andP wf).1)
+          (term_of_pre_term pt2 (andP wf).2)
+  | PreTerm.PTNonce l => fun _ => TNonce l
+  | PreTerm.PTKey kt pt => fun wf => TKey kt (term_of_pre_term pt wf)
+  | PreTerm.PTEnc k pt => fun wf =>
+    TEnc (term_of_pre_term k (andP wf).1)
+         (term_of_pre_term pt (andP wf).2)
+  | PreTerm.PTHash pt => fun wf =>
+    THash (term_of_pre_term pt wf)
+  | PreTerm.PTExp pt' pts' as pt => fun wf =>
+    TExp' pt wf erefl
+  end.
+
+Lemma wf_pre_term_of_term t : PreTerm.wf_term (pre_term_of_term t).
+Proof. by elim/term_ind': t=> //= ? -> ? ->. Qed.
+
+Lemma pre_term_of_termK t wf :
+  term_of_pre_term (pre_term_of_term t) wf = t.
+Proof.
+elim/term_ind': t wf => //=.
+- by move=> t1 IH1 t2 IH2 wf; rewrite IH1 IH2.
+- by move=> kt t IH wf; rewrite IH.
+- by move=> t1 IH1 t2 IH2 wf; rewrite IH1 IH2.
+- by move=> t IH wf; rewrite IH.
+- case=> //= pt pts wf1 exp_pt wf2.
+  by rewrite (bool_irrelevance wf1 wf2) [exp_pt]eq_axiomK.
+Qed.
+
+Lemma term_of_pre_termK pt wf :
+  pre_term_of_term (term_of_pre_term pt wf) = pt.
+Proof.
+elim: pt wf => //=.
+- by move=> pt1 IH1 pt2 IH2 wf; rewrite IH1 IH2.
+- by move=> kt t IH wf; rewrite IH.
+- by move=> pt1 IH1 pt2 IH2 wf; rewrite IH1 IH2.
+- by move=> t IH wf; rewrite IH.
+Qed.
+
+Lemma pre_term_of_term_inj : injective pre_term_of_term.
+Proof.
+move=> t1 t2 e_t1t2.
+rewrite -(pre_term_of_termK _ (wf_pre_term_of_term t1)).
+rewrite -(pre_term_of_termK _ (wf_pre_term_of_term t2)).
+move: (wf_pre_term_of_term t1) (wf_pre_term_of_term t2).
+by rewrite e_t1t2 => wf1 wf2; rewrite (bool_irrelevance wf1 wf2).
+Qed.
+
+Definition unfold_term t : {pt | PreTerm.wf_term pt} :=
+  Sub (pre_term_of_term t) (wf_pre_term_of_term t).
+
+Definition fold_term (pt : {pt | PreTerm.wf_term pt}) :=
+  term_of_pre_term (val pt) (valP pt).
+
+Lemma unfold_termK : cancel unfold_term fold_term.
+Proof.
+by move=> t; rewrite /unfold_term /fold_term pre_term_of_termK.
+Qed.
+
+Implicit Types (t k : term) (ts : seq term).
+
+Section TExp.
+
+Notation TExp_def t ts :=
+  (let pt  := pre_term_of_term t in
+   let pts := map pre_term_of_term ts in
+   PreTerm.normalize (PreTerm.PTExp pt pts)).
+
+Lemma TExp_subproof1 t ts : PreTerm.wf_term (TExp_def t ts).
+Proof. exact: PreTerm.wf_normalize. Qed.
+
+Lemma TExp_subproof2 t ts : PreTerm.is_exp (TExp_def t ts).
+Proof. by rewrite /=; case: PreTerm.expP. Qed.
+
+Fact TExp_key : unit. Proof. exact: tt. Qed.
+Definition TExp :=
+  locked_with TExp_key (
+    fun t ts => TExp' _ (TExp_subproof1 t ts) (TExp_subproof2 t ts)
+  ).
+Canonical TExp_unlock := [unlockable of TExp].
+
+End TExp.
+
+Definition term_eqMixin := InjEqMixin pre_term_of_term_inj.
 Canonical term_eqType := EqType term term_eqMixin.
-Definition term_choiceMixin := [choiceMixin of term by <:].
+Definition term_choiceMixin := CanChoiceMixin unfold_termK.
 Canonical term_choiceType := Eval hnf in ChoiceType term term_choiceMixin.
-Definition term_countMixin := [countMixin of term by <:].
+Definition term_countMixin := CanCountMixin unfold_termK.
 Canonical term_countType := Eval hnf in CountType term term_countMixin.
-Definition term_porderMixin := [porderMixin of term by <:].
+Definition term_orderMixin := CanOrderMixin unfold_termK.
 Canonical term_porderType :=
-  Eval hnf in POrderType tt term term_porderMixin.
-Definition term_orderMixin := [totalOrderMixin of term by <:].
+  Eval hnf in POrderType tt term term_orderMixin.
 Canonical term_latticeType :=
   Eval hnf in LatticeType term term_orderMixin.
 Canonical term_distrLatticeType :=
@@ -286,115 +397,21 @@ Canonical term_distrLatticeType :=
 Canonical term_orderType :=
   Eval hnf in OrderType term term_orderMixin.
 
-Fact Term_key : unit. Proof. exact: tt. Qed.
-Definition Term :=
-  locked_with Term_key (
-    fun t => @Term_ (PreTerm.normalize t) (PreTerm.wf_normalize t)
-  ).
-Canonical Term_unlockable := [unlockable of Term].
-
-Implicit Types (t k : term) (ts : seq term).
-
-Definition TInt n := Term (PreTerm.PTInt n).
-Definition TPair t1 t2 := Term (PreTerm.PTPair (val t1) (val t2)).
-Definition TNonce a := Term (PreTerm.PTNonce a).
-Definition TKey kt t := Term (PreTerm.PTKey kt (val t)).
-Definition TEnc k t := Term (PreTerm.PTEnc (val k) (val t)).
-Definition THash t := Term (PreTerm.PTHash (val t)).
-Definition TExp t ts := Term (PreTerm.PTExp (val t) [seq val t | t <- ts]).
-
-Lemma val_termK : cancel val_term Term.
-Proof.
-case/SubP=> pt wf_pt; rewrite unlock; apply: val_inj.
-exact: PreTerm.normalize_wf.
-Qed.
-
-Lemma val_term_TInt n : val_term (TInt n) = PreTerm.PTInt n.
-Proof. by rewrite /TInt unlock. Qed.
-
-Lemma val_term_TPair t1 t2 :
-  val_term (TPair t1 t2) = PreTerm.PTPair (val_term t1) (val_term t2).
-Proof. by rewrite /TPair unlock /= !PreTerm.normalize_wf ?valP. Qed.
-
-Lemma val_term_TNonce a : val_term (TNonce a) = PreTerm.PTNonce a.
-Proof. by rewrite /TNonce unlock. Qed.
-
-Lemma val_term_TKey kt t : val_term (TKey kt t) = PreTerm.PTKey kt (val_term t).
-Proof. by rewrite /TKey unlock /= PreTerm.normalize_wf ?valP. Qed.
-
-Lemma val_term_TEnc k t :
-  val_term (TEnc k t) = PreTerm.PTEnc (val_term k) (val_term t).
-Proof. by rewrite /TEnc unlock /= !PreTerm.normalize_wf ?valP. Qed.
-
-Lemma val_term_THash t :
-  val_term (THash t) = PreTerm.PTHash (val_term t).
-Proof. by rewrite /THash unlock /= !PreTerm.normalize_wf ?valP. Qed.
-
 Lemma normalize_terms ts :
-  map PreTerm.normalize (map val_term ts) = map val_term ts.
+  map PreTerm.normalize (map pre_term_of_term ts)
+  = map pre_term_of_term ts.
 Proof.
-rewrite map_id_in // => _ /mapP [] {}t t_ts ->.
-apply: PreTerm.normalize_wf; apply: valP.
+rewrite map_id_in // => ? /mapP [] {}t t_ts ->.
+by apply: PreTerm.normalize_wf; apply: wf_pre_term_of_term.
 Qed.
 
-Lemma val_term_TExp t ts :
-  val_term (TExp t ts) = PreTerm.exp (val_term t) (List.map val_term ts).
+Lemma pre_term_of_term_TExp t ts :
+  pre_term_of_term (TExp t ts)
+  = PreTerm.exp (pre_term_of_term t) (List.map pre_term_of_term ts).
 Proof.
-by rewrite /TExp unlock /= PreTerm.normalize_wf ?valP // normalize_terms.
+rewrite unlock /= PreTerm.normalize_wf ?wf_pre_term_of_term //.
+by rewrite normalize_terms.
 Qed.
-
-Definition val_termE :=
-  (val_term_TInt,
-   val_term_TPair,
-   val_term_TNonce,
-   val_term_TKey,
-   val_term_TEnc,
-   val_term_THash,
-   val_term_TExp).
-
-Lemma Term_PTInt n : Term (PreTerm.PTInt n) = TInt n.
-Proof. by []. Qed.
-
-Lemma Term_PTPair pt1 pt2 :
-  Term (PreTerm.PTPair pt1 pt2) = TPair (Term pt1) (Term pt2).
-Proof.
-by apply: val_inj; rewrite /TPair unlock /= !PreTerm.normalize_idem.
-Qed.
-
-Lemma Term_PTNonce a : Term (PreTerm.PTNonce a) = TNonce a.
-Proof. by []. Qed.
-
-Lemma Term_PTKey kt pt : Term (PreTerm.PTKey kt pt) = TKey kt (Term pt).
-Proof.
-by apply: val_inj; rewrite /TKey unlock /= !PreTerm.normalize_idem.
-Qed.
-
-Lemma Term_PTEnc pt1 pt2 :
-  Term (PreTerm.PTEnc pt1 pt2) = TEnc (Term pt1) (Term pt2).
-Proof.
-by apply: val_inj; rewrite /TEnc unlock /= !PreTerm.normalize_idem.
-Qed.
-
-Lemma Term_PTHash pt : Term (PreTerm.PTHash pt) = THash (Term pt).
-Proof.
-by apply: val_inj; rewrite /THash unlock /= !PreTerm.normalize_idem.
-Qed.
-
-Lemma Term_PTExp pt pts :
-  Term (PreTerm.PTExp pt pts) = TExp (Term pt) (map Term pts).
-Proof.
-apply: val_inj; rewrite /TExp unlock /= PreTerm.normalize_idem.
-by rewrite normalize_terms -map_comp.
-Qed.
-
-Definition TermE :=
-  (Term_PTInt,
-   Term_PTPair,
-   Term_PTNonce,
-   Term_PTKey,
-   Term_PTEnc,
-   Term_PTHash,
-   Term_PTExp).
 
 Lemma perm_sort_leP d (T : orderType d) (s1 s2 : seq T) :
   reflect (sort <=%O s1 = sort <=%O s2) (perm_eq s1 s2).
@@ -404,8 +421,9 @@ Qed.
 
 Lemma TExpA t ts1 ts2 : TExp (TExp t ts1) ts2 = TExp t (ts1 ++ ts2)%list.
 Proof.
-apply: val_inj => /=; rewrite !val_termE -[List.map]/@map map_cat.
-case: (PreTerm.expP (val_term t)) => [pt' pts' e_t|_ nexp] /=.
+apply: pre_term_of_term_inj.
+rewrite !pre_term_of_term_TExp /= -[List.map]/@map map_cat.
+case: (PreTerm.expP (pre_term_of_term t)) => [pt' pts' e_t|_ nexp] /=.
   rewrite e_t /=; congr PreTerm.PTExp.
   by apply/perm_sort_leP; rewrite catA perm_cat2r perm_sort.
 case: PreTerm.expP nexp => [? ? -> //|_ _ _].
@@ -414,15 +432,16 @@ Qed.
 
 Lemma TExp_perm t ts1 ts2 : perm_eq ts1 ts2 -> TExp t ts1 = TExp t ts2.
 Proof.
-move=> perm_ts12; apply: val_inj => /=.
-rewrite !val_termE -[List.map]/@map.
+move=> perm_ts12; apply: pre_term_of_term_inj.
+rewrite !pre_term_of_term_TExp -[List.map]/@map.
 case: PreTerm.expP => [pt' pts' ->|_ nexp] /=.
   by congr PreTerm.PTExp; apply/perm_sort_leP; rewrite perm_cat2l perm_map.
 case: PreTerm.expP nexp => [? ? -> //|_ _ _].
 by congr PreTerm.PTExp; apply/perm_sort_leP; rewrite perm_map.
 Qed.
 
-Definition is_exp t := PreTerm.is_exp (val_term t).
+Definition is_exp t :=
+  if t is TExp' _ _ _ then true else false.
 
 Lemma term_rect (T : term -> Type)
   (H1 : forall n, T (TInt n))
@@ -439,21 +458,30 @@ Lemma term_rect (T : term -> Type)
         T (TExp t ts)) :
   forall t, T t.
 Proof.
-move=> t; move: (valP t); rewrite -{2}[t]val_termK /=.
-elim: (val_term t) => {t};
-do ?by move=> *; rewrite /= TermE; eauto.
-- by move=> t1 IH1 t2 IH2 /= /andP [] ??; rewrite TermE; eauto.
-- by move=> t1 IH1 t2 IH2 /= /andP [] ??; rewrite TermE; eauto.
-move=> t IHt ts IHts; rewrite TermE /=.
-case/and4P=> nexp wf_t wf_ts sorted_ts; apply: H7; eauto.
-- by rewrite /is_exp unlock /= PreTerm.normalize_wf.
-- elim: ts IHts wf_ts {sorted_ts} => //= {IHt nexp wf_t}t ts IH [??].
-  by case/andP=> wf_t wf_ts; split; eauto.
-have e_ts: ts = map val_term (map Term ts).
-  rewrite -map_comp map_id_in // => t' t'_ts.
-  rewrite unlock /= PreTerm.normalize_wf //.
-  exact: (allP wf_ts).
-by rewrite e_ts sorted_map in sorted_ts.
+move=> t; rewrite -(pre_term_of_termK t (wf_pre_term_of_term t)).
+elim: (pre_term_of_term t) (wf_pre_term_of_term _) => {t} /=;
+do ?by move=> *; rewrite /=; eauto.
+move=> pt IHpt pts IHpts wf.
+case/and4P: {-}(wf) => nexp wf_pt wf_pts sorted_pts.
+have [t e_pt] : {t | pt = pre_term_of_term t}.
+  exists (term_of_pre_term pt wf_pt); by rewrite term_of_pre_termK.
+rewrite {}e_pt {pt wf_pt} in IHpt wf nexp *.
+have [ts e_pts] : {ts | pts = map pre_term_of_term ts}.
+  exists (map (fun pt => term_of_pre_term _ (PreTerm.wf_normalize pt)) pts).
+  rewrite -map_comp map_id_in // => pt' pt'_pts.
+  rewrite /= term_of_pre_termK PreTerm.normalize_wf //.
+  by rewrite (allP wf_pts).
+rewrite {}e_pts {pts wf_pts} in IHpts wf sorted_pts *.
+rewrite (_ : TExp' _ _ _ = TExp t ts); last first.
+  apply: pre_term_of_term_inj => /=.
+  by rewrite pre_term_of_term_TExp PreTerm.exp_nexp // sort_le_id.
+apply: H7.
+- by move/(_ (wf_pre_term_of_term _)): IHpt; rewrite pre_term_of_termK.
+- by case: (t) nexp => //= ? _ ->.
+- elim: ts IHpts {wf sorted_pts} => /= [[] //|t' ts ? [] IHt IHts].
+  split; last by eauto.
+  by rewrite -(pre_term_of_termK _ (wf_pre_term_of_term t')); apply: IHt.
+- by move: sorted_pts; rewrite sorted_map.
 Qed.
 
 Definition term_ind (P : term -> Prop) := @term_rect P.

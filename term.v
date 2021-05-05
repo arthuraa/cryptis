@@ -74,50 +74,50 @@ Fixpoint val_of_term_rec pt : val :=
 
 Fact val_of_term_key : unit. Proof. exact: tt. Qed.
 Definition val_of_term :=
-  locked_with val_of_term_key (fun t => val_of_term_rec (val_term t)).
-Canonical val_of_term_unlock := [unlockable of val_of_term].
+  locked_with val_of_term_key (
+    fun t => val_of_term_rec (pre_term_of_term t)
+  ).
+Lemma val_of_termE t :
+  val_of_term t =
+  match t with
+  | TInt n => (#TInt_tag, #n)%V
+  | TPair t1 t2 => (#TPair_tag, (val_of_term t1, val_of_term t2))%V
+  | TNonce l => (#TNonce_tag, #l)%V
+  | TKey kt t => (#TKey_tag, (#(int_of_key_type kt), val_of_term t))%V
+  | TEnc t1 t2 => (#TEnc_tag, (val_of_term t1, val_of_term t2))%V
+  | THash t => (#THash_tag, val_of_term t)%V
+  | _ => val_of_term t
+  end.
+Proof.
+rewrite /val_of_term locked_withE.
+by case: t=> //=.
+Qed.
+Canonical val_of_term_unlock t := Unlockable (val_of_termE t).
 Coercion val_of_term : term >-> val.
 Global Instance repr_term : Repr term := val_of_term.
 
-Lemma val_of_term_TInt n :
-  val_of_term (TInt n) = (#TInt_tag, #n)%V.
-Proof. by rewrite unlock /= val_termE. Qed.
+End ValOfTerm.
 
-Lemma val_of_term_TPair t1 t2 :
-  val_of_term (TPair t1 t2)
-  = (#TPair_tag, (val_of_term t1, (val_of_term t2)))%V.
-Proof. by rewrite unlock /= val_termE. Qed.
-
-Lemma val_of_term_TNonce (a : loc) :
-  val_of_term (TNonce a) = (#TNonce_tag, #a)%V.
-Proof. by rewrite unlock /= val_termE. Qed.
-
-Lemma val_of_term_TKey kt t :
-  val_of_term (TKey kt t) =
-  (#TKey_tag, (#(int_of_key_type kt), val_of_term t))%V.
-Proof. by rewrite unlock /= val_termE. Qed.
-
-Lemma val_of_term_TEnc k t :
-  val_of_term (TEnc k t) =
-  (#TEnc_tag, (val_of_term k, val_of_term t))%V.
-Proof. by rewrite unlock /= val_termE. Qed.
-
-Lemma val_of_term_THash t :
-  val_of_term (THash t) = (#THash_tag, val_of_term t)%V.
-Proof. by rewrite unlock /= val_termE. Qed.
-
-Definition val_of_termE :=
-  (val_of_term_TInt,
-   val_of_term_TPair,
-   val_of_term_TNonce,
-   val_of_term_TKey,
-   val_of_term_TEnc,
-   val_of_term_THash).
+Lemma val_of_term_TExp t ts :
+  ~ is_exp t ->
+  path.sorted order.Order.le ts ->
+  val_of_term (TExp t ts)
+  = (#TExp_tag, (val_of_term t, repr (map val_of_term ts)))%V.
+Proof.
+move=> nexp sorted_ts.
+rewrite /val_of_term locked_withE /= pre_term_of_term_TExp.
+rewrite PreTerm.exp_nexp //=; last by case: t nexp => //=.
+rewrite order.Order.POrderTheory.sort_le_id // ?path.sorted_map.
+  by rewrite map_map.
+rewrite (_ : path.sorted _ _ = path.sorted order.Order.le ts) //.
+by case: (path.sorted _ _) sorted_ts.
+Qed.
 
 Global Instance val_of_term_inj : Inj (=) (=) val_of_term.
 Proof.
-move=> t1 t2 e_t1t2; apply: eqtype.val_inj => /=.
-move: e_t1t2; rewrite unlock; move: {t1 t2} (val_term t1) (val_term t2).
+move=> t1 t2 e_t1t2; apply: pre_term_of_term_inj.
+move: e_t1t2; rewrite /val_of_term locked_withE.
+move: {t1 t2} (pre_term_of_term t1) (pre_term_of_term t2).
 elim.
 - by move=> n1 [] //= n2 [] ->.
 - by move=> t11 IH1 t12 IH2 [] //= t21 t22 [] /IH1 -> /IH2 ->.
@@ -125,7 +125,7 @@ elim.
 - by move=> kt1 t1 IH [] //= kt2 t2 [] /int_of_key_type_inj -> /IH ->.
 - by move=> t11 IH1 t12 IH2 [] //= ?? [] /IH1 -> /IH2 ->.
 - by move=> ? IH [] //= ? [] /IH ->.
-- move=> t1 IHt ts1 IHts [] //= t2 ts2 [] /IHt -> e_ts; congr PTExp.
+- move=> t1 IHt ts1 IHts [] //= t2 ts2 [] /IHt -> e_ts; congr PreTerm.PTExp.
   move: e_ts; rewrite repr_list_eq.
   elim: ts1 IHts ts2 {t1 t2 IHt} => /= [_ [] //|t1 ts1 H [] IHt {}/H IHts].
   by case=> //= t2 ts2 [] /IHt -> /IHts ->.
@@ -137,13 +137,13 @@ Proof. exact: def_countable. Qed.
 Global Instance infinite_term : Infinite term.
 Proof.
 pose int_of_term (t : term) :=
-  if val_term t is PreTerm.PTInt n then Some n else None.
+  if t is TInt n then Some n else None.
 apply (inj_infinite TInt int_of_term).
-by move=> n; rewrite /int_of_term val_termE.
+by move=> n; rewrite /int_of_term.
 Qed.
 
 Definition term_height t :=
-  PreTerm.height (val_term t).
+  PreTerm.height (pre_term_of_term t).
 
 Fixpoint nonces_of_pre_term pt : gset loc :=
   match pt with
@@ -157,44 +157,39 @@ Fixpoint nonces_of_pre_term pt : gset loc :=
   end.
 
 Definition nonces_of_term_def (t : term) :=
-  nonces_of_pre_term (val_term t).
+  nonces_of_pre_term (pre_term_of_term t).
 Arguments nonces_of_term_def /.
 Definition nonces_of_term_aux : seal nonces_of_term_def. by eexists. Qed.
 Definition nonces_of_term := unseal nonces_of_term_aux.
 Lemma nonces_of_term_eq : nonces_of_term = nonces_of_term_def.
 Proof. exact: seal_eq. Qed.
 
-Lemma nonces_of_term_TInt n : nonces_of_term (TInt n) = ∅.
-Proof. by rewrite nonces_of_term_eq /= val_termE. Qed.
-
-Lemma nonces_of_term_TPair t1 t2 :
-  nonces_of_term (TPair t1 t2) =
-  nonces_of_term t1 ∪ nonces_of_term t2.
-Proof. by rewrite nonces_of_term_eq /= val_termE. Qed.
-
-Lemma nonces_of_term_TNonce l : nonces_of_term (TNonce l) = {[l]}.
-Proof. by rewrite nonces_of_term_eq /= val_termE. Qed.
-
-Lemma nonces_of_term_TKey k t : nonces_of_term (TKey k t) = nonces_of_term t.
-Proof. by rewrite nonces_of_term_eq /= val_termE. Qed.
-
-Lemma nonces_of_term_TEnc k t :
-  nonces_of_term (TEnc k t) = nonces_of_term k ∪ nonces_of_term t.
-Proof. by rewrite nonces_of_term_eq /= val_termE. Qed.
-
-Lemma nonces_of_term_THash t :
-  nonces_of_term (THash t) = nonces_of_term t.
-Proof. by rewrite nonces_of_term_eq /= val_termE. Qed.
+Lemma nonces_of_termE t :
+  nonces_of_term t =
+  match t with
+  | TInt _ => ∅
+  | TPair t1 t2 => nonces_of_term t1 ∪ nonces_of_term t2
+  | TNonce l => {[l]}
+  | TKey _ t => nonces_of_term t
+  | TEnc t1 t2 => nonces_of_term t1 ∪ nonces_of_term t2
+  | THash t => nonces_of_term t
+  | TExp' pt _ _ => nonces_of_pre_term pt
+  end.
+Proof.
+by rewrite nonces_of_term_eq; case: t => //=.
+Qed.
 
 Lemma nonces_of_term_TExp t ts :
-  nonces_of_term (TExp t ts) = nonces_of_term t ∪ ⋃ map nonces_of_term ts.
+  nonces_of_term (TExp t ts)
+  = nonces_of_term t ∪ ⋃ map nonces_of_term ts.
 Proof.
-rewrite nonces_of_term_eq /= val_termE -map_map.
-move: (val_term t) (map val_term ts) => {}t {}ts.
-case: expP'=> [pt' pts' pts'' -> e_pts''|pts' _ e_pts'] /=.
-- by rewrite [in LHS]e_pts'' map_app union_list_app_L assoc_L.
-- by rewrite [in LHS]e_pts'.
+rewrite nonces_of_term_eq /nonces_of_term_def pre_term_of_term_TExp.
+case: PreTerm.expP' => [pt' pts' pts'' -> e_pts''|pts' _ e_pts'] //=.
+- by rewrite [in LHS]e_pts'' map_app union_list_app_L assoc_L map_map.
+- by rewrite [in LHS]e_pts' map_map.
 Qed.
+
+Module Spec.
 
 Implicit Types N : namespace.
 
@@ -205,9 +200,9 @@ Definition tag := unseal tag_aux.
 Lemma tag_eq : tag = tag_def. Proof. exact: seal_eq. Qed.
 
 Definition untag_def N (t : term) :=
-  match val_term t with
-  | PreTerm.PTPair (PreTerm.PTInt (Zpos m)) pt =>
-    if decide (encode N = m) then Some (Term pt) else None
+  match t with
+  | TPair (TInt (Zpos m)) t =>
+    if decide (encode N = m) then Some t else None
   | _ => None
   end.
 Definition untag_aux : seal untag_def. by eexists. Qed.
@@ -294,10 +289,11 @@ Lemma to_listK t ts :
   t = of_list ts.
 Proof.
 rewrite of_list_eq /=; elim: t ts => //.
-  by case=> [] // _ [<-].
-move=> t _ ts' IH /= ts.
-case e: to_list => [ts''|] // [<-].
-by rewrite /= (IH _ e).
+- by case=> [] // _ [<-].
+- move=> t _ ts' IH /= ts.
+  case e: to_list => [ts''|] // [<-].
+  by rewrite /= (IH _ e).
+- by rewrite unlock.
 Qed.
 
 Inductive to_list_spec : term → option (list term) → Type :=
