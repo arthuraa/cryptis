@@ -276,7 +276,7 @@ Inductive term :=
 | TKey of key_type & term
 | TEnc of term & term
 | THash of term
-| TExp' pt of PreTerm.wf_term pt & PreTerm.is_exp pt.
+| TExp' pt pts of PreTerm.wf_term (PreTerm.PTExp pt pts).
 Set Elimination Schemes.
 
 (* We use a different name for the default induction scheme, as it does not
@@ -292,7 +292,7 @@ Fixpoint unfold_term t :=
   | TKey kt t => PreTerm.PTKey kt (unfold_term t)
   | TEnc k t => PreTerm.PTEnc (unfold_term k) (unfold_term t)
   | THash t => PreTerm.PTHash (unfold_term t)
-  | TExp' pt _ _ => pt
+  | TExp' pt pts _ => PreTerm.PTExp pt pts
   end.
 
 Fixpoint fold_wf_term pt : PreTerm.wf_term pt -> term :=
@@ -308,8 +308,8 @@ Fixpoint fold_wf_term pt : PreTerm.wf_term pt -> term :=
          (fold_wf_term pt (andP wf).2)
   | PreTerm.PTHash pt => fun wf =>
     THash (fold_wf_term pt wf)
-  | PreTerm.PTExp pt' pts' as pt => fun wf =>
-    TExp' pt wf erefl
+  | PreTerm.PTExp pt' pts' => fun wf =>
+    TExp' pt' pts' wf
   end.
 
 Lemma wf_unfold_term t : PreTerm.wf_term (unfold_term t).
@@ -327,8 +327,8 @@ elim/term_ind': t => //=.
 - by move=> kt t IH wf; rewrite IH.
 - by move=> t1 IH1 t2 IH2 wf; rewrite IH1 IH2.
 - by move=> t IH wf; rewrite IH.
-- case=> //= pt pts wf1 exp_pt wf2.
-  by rewrite (bool_irrelevance wf1 wf2) [exp_pt]eq_axiomK.
+- move=> //= pt pts wf1 wf2.
+  by rewrite (bool_irrelevance wf1 wf2).
 Qed.
 
 Lemma fold_termK pt : PreTerm.wf_term pt -> unfold_term (fold_term pt) = pt.

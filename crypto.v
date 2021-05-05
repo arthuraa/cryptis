@@ -111,6 +111,18 @@ Definition atomic t : bool :=
   | TEnc _ _ => false
   | THash _ => false (* We do not treat hashes as atomic because they are always
     considered public *)
+  | TExp' _ _ _ => false
+  end.
+
+Fixpoint atoms_pre pt : gset term :=
+  match pt with
+  | PreTerm.PTInt _ => ∅
+  | PreTerm.PTPair pt1 pt2 => atoms_pre pt1 ∪ atoms_pre pt2
+  | PreTerm.PTNonce l => {[TNonce l]}
+  | PreTerm.PTKey kt t => {[TKey kt (fold_term t)]}
+  | PreTerm.PTEnc _ t => atoms_pre t
+  | PreTerm.PTHash _ => ∅
+  | PreTerm.PTExp pt pts => atoms_pre pt ∪ ⋃ map atoms_pre pts
   end.
 
 Fixpoint atoms t : gset term :=
@@ -121,18 +133,24 @@ Fixpoint atoms t : gset term :=
   | TKey _ _ => {[t]}
   | TEnc _ t => atoms t
   | THash _ => ∅
+  | TExp' pt pts _ => atoms_pre pt ∪ ⋃ map atoms_pre pts
   end.
 
-Lemma atoms_term_height t1 t2 :
-  t1 ∈ atoms t2 →
-  term_height t1 <= term_height t2.
+Lemma atoms_pre_unfold t : atoms_pre (unfold_term t) = atoms t.
 Proof.
-elim: t2 => //=.
-- move=> t21 IH1 t22 IH2 /elem_of_union [] t1_atom;
-  [move/(_ t1_atom) in IH1|move/(_ t1_atom) in IH2]; lia.
-- by move=> a /elem_of_singleton ->.
-- by move=> kt k IH /elem_of_singleton ->.
-- move=> k IHk t IHt /IHt ?; lia.
+elim/term_ind': t; do ?by move=> /= *; congruence.
+by move=> kt t _; rewrite /= unfold_termK.
+Qed.
+
+Lemma atoms_TExp t ts :
+  atoms (TExp t ts) = atoms t ∪ ⋃ map atoms ts.
+Proof.
+rewrite -[LHS]atoms_pre_unfold unfold_TExp.
+case: PreTerm.expP' => [pt' pts' pts'' e_pt' e_pts''|pts' e_exp e_pts'] /=.
+- rewrite [in LHS]e_pts'' map_app union_list_app_L assoc_L map_map.
+  by rewrite (map_ext _ _ atoms_pre_unfold) -atoms_pre_unfold e_pt' /=.
+- rewrite [in LHS]e_pts' map_map.
+  by rewrite atoms_pre_unfold (map_ext _ _ atoms_pre_unfold).
 Qed.
 
 Lemma atomic_atom t1 t2 : t1 ∈ atoms t2 → atomic t1.
@@ -141,6 +159,14 @@ elim: t2 => //=.
 - by move=> t21 IH1 t22 IH2 /elem_of_union [] ?; eauto.
 - by move=> ? /elem_of_singleton ->; eauto.
 - by move=> ? t2 IH /elem_of_singleton ->; eauto.
+move=> t IHt nexp ts IHts _.
+rewrite atoms_TExp elem_of_union elem_of_union_list.
+case; first by eauto.
+case=> _ [] /elem_of_list_fmap [] t1' [] ->.
+elim: ts IHts {t IHt nexp} => //=.
+  by move=> _ /elem_of_nil.
+move=> t ts IH [] IHt /IH IHts.
+by case/elem_of_cons=> [-> //|in_ts]; eauto.
 Qed.
 
 Context `{!heapG Σ}.
@@ -415,6 +441,7 @@ Fixpoint termT_def lvl t : iProp :=
       (⌜lvl_enc = Pub⌝ ∗ termT_def Pub t ∨
        enc_inv k t ∗ termT_def (lvl ⊔ lvl_dec) t)
   | THash t => termT_def Sec t
+  | TExp' _ _ _ => False
   end.
 
 Definition termT_aux : seal termT_def. by eexists. Qed.
@@ -448,13 +475,14 @@ Lemma termT_eq lvl t :
       (⌜lvl_enc = Pub⌝ ∗ termT Pub t ∨
        enc_inv k t ∗ termT (lvl ⊔ lvl_dec) t)
   | THash t => termT Sec t
+  | TExp' _ _ _ => False
   end%I.
 Proof. by rewrite /keyT /termT seal_eq; case: t. Qed.
 
 Global Instance persistent_termT lvl t :
   Persistent (termT lvl t).
 Proof.
-elim: t lvl => /= *; rewrite termT_eq /= /keyT; apply _.
+elim/term_ind': t lvl => /= *; rewrite termT_eq /= /keyT; apply _.
 Qed.
 
 Global Instance keyT_persistent lvl_enc lvl_dec k :
@@ -567,7 +595,8 @@ Lemma sub_termT lvl lvl' t :
   termT lvl t -∗
   termT lvl' t.
 Proof.
-elim: t lvl lvl' => [n|t1 IH1 t2 IH2|l|kt k _|k _ t IH|t IH] lvl lvl' sub.
+elim/term_ind': t lvl lvl' =>
+  //= [n|t1 IH1 t2 IH2|l|kt k _|k _ t IH|t IH|???] lvl lvl' sub.
 - by rewrite !termT_eq.
 - rewrite ![termT _ (TPair t1 t2)]termT_eq /=.
   by iIntros "[#Ht1 #Ht2]"; rewrite IH1 // IH2 //; iSplit.
@@ -586,6 +615,7 @@ elim: t lvl lvl' => [n|t1 IH1 t2 IH2|l|kt k _|k _ t IH|t IH] lvl lvl' sub.
   iApply (IH with "Ht").
   by case: lvl lvl' lvl_dec sub=> [] [] [].
 - by rewrite ![termT _ (THash _)]termT_eq.
+- by rewrite ![termT _ (TExp' _ _ _)]termT_eq.
 Qed.
 
 Lemma termT_int lvl n : ⊢ termT lvl (TInt n).
@@ -649,7 +679,7 @@ Lemma termT_to_list t ts lvl :
   termT lvl t -∗
   [∗ list] t' ∈ ts, termT lvl t'.
 Proof.
-elim: t ts => //=.
+elim/term_ind': t ts => //=.
   by case=> // ts [<-] /=; iIntros "?".
 move=> t _ tl IH ts.
 case e: (Spec.to_list tl) => [ts'|] // [<-] /=.
@@ -695,7 +725,7 @@ Qed.
 
 Lemma termT_lvlP lvl t : termT lvl t -∗ ∃ lvl', stermT lvl' t.
 Proof.
-elim: t lvl=> [n|t1 IH1 t2 IH2|n|kt k IHk|k IHk t IHt|t IH] lvl /=;
+elim/term_ind': t lvl=> [n|t1 IH1 t2 IH2|n|kt k IHk|k IHk t IHt|t IH|???] lvl /=;
 rewrite termT_eq /=.
 - iIntros "_"; iExists Pub; iApply stermT_int.
 - iIntros "[#type1 #type2]".
@@ -744,6 +774,7 @@ rewrite termT_eq /=.
   by iApply "pub".
 - iIntros "Ht"; iExists Pub; rewrite stermT_eq.
   by rewrite [termT _ (THash t)]termT_eq.
+- by iIntros "[]".
 Qed.
 
 Lemma termT_TKey_swap l kt k :
@@ -1112,7 +1143,7 @@ Lemma termT_atoms lvl t t' :
   t' ∈ atoms t →
   termT lvl t -∗ termT Sec t'.
 Proof.
-elim: t lvl => //=.
+elim/term_ind': t lvl => //=.
 - move=> t1 IH1 t2 IH2 lvl t'_atom.
   rewrite termT_eq; iIntros "[#Ht1 #Ht2]".
   case/elem_of_union: t'_atom => t'_atom.
@@ -1128,6 +1159,7 @@ elim: t lvl => //=.
   iDestruct "Ht" as (lvl_enc lvl_dec) "(_ & Ht)".
   iDestruct "Ht" as "[(_ & Ht)|Ht]"; first by iApply IHt.
   iDestruct "Ht" as "(_ & Ht)"; by iApply IHt.
+- by move=> ?????; rewrite termT_eq; iIntros "[]".
 Qed.
 
 Definition secret_terms (T T' : gset term) : iProp :=

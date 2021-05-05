@@ -87,7 +87,8 @@ Lemma val_of_termE t :
   | TKey kt t => (#TKey_tag, (#(int_of_key_type kt), val_of_term t))%V
   | TEnc t1 t2 => (#TEnc_tag, (val_of_term t1, val_of_term t2))%V
   | THash t => (#THash_tag, val_of_term t)%V
-  | TExp' pt _ _ => val_of_term_rec pt
+  | TExp' pt pts _ =>
+    (#TExp_tag, (val_of_term_rec pt, repr (map val_of_term_rec pts)))%V
   end.
 Proof.
 rewrite /val_of_term locked_withE.
@@ -174,7 +175,7 @@ Lemma nonces_of_termE t :
   | TKey _ t => nonces_of_term t
   | TEnc t1 t2 => nonces_of_term t1 ∪ nonces_of_term t2
   | THash t => nonces_of_term t
-  | TExp' pt _ _ => nonces_of_pre_term pt
+  | TExp' pt pts _ => nonces_of_pre_term pt ∪ ⋃ map nonces_of_pre_term pts
   end.
 Proof.
 by rewrite nonces_of_term_eq; case: t => //=.
