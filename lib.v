@@ -447,13 +447,13 @@ elim: vars vs k => [|var vars IH] [|v vs] k l_fresh /=.
   by iApply IH.
 Qed.
 
-Lemma twp_eq_list `{EqDecision A} (f : val) (l1 l2 : list A) Φ :
+Lemma twp_eq_list `{EqDecision A} (f : val) (l1 l2 : list A) Φ E :
   (∀ (x1 x2 : A) Ψ,
       x1 ∈ l1 →
       Ψ #(bool_decide (x1 = x2)) -∗
-      WP f (repr x1) (repr x2) [{ Ψ }]) →
+      WP f (repr x1) (repr x2) @ E [{ Ψ }]) →
   Φ #(bool_decide (l1 = l2)) -∗
-  WP eq_list f (repr l1) (repr l2) [{ Φ }].
+  WP eq_list f (repr l1) (repr l2) @ E [{ Φ }].
 Proof.
 rewrite repr_list_eq /=.
 elim: l1 l2 Φ => [|x1 l1 IH] [|x2 l2] Φ wp_f /=;

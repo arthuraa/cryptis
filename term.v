@@ -53,73 +53,106 @@ Notation TEnc_tag := 4%Z.
 Notation THash_tag := 5%Z.
 Notation TExp_tag := 6%Z.
 
+Global Instance pre_term_inhabited : Inhabited PreTerm.pre_term.
+Proof. exact: (populate (PreTerm.PTInt 0)). Qed.
+
+Definition pre_term_eq_dec : EqDecision PreTerm.pre_term :=
+  Eval hnf in def_eq_decision _.
+Global Existing Instance pre_term_eq_dec.
+
 Global Instance term_inhabited : Inhabited term.
 Proof. exact: (populate (TInt 0)). Qed.
 
-Global Instance term_eq_dec : EqDecision term := def_eq_decision _.
+Definition term_eq_dec : EqDecision term :=
+  Eval hnf in def_eq_decision _.
+Global Existing Instance term_eq_dec.
 
 Section ValOfTerm.
 
 Import PreTerm.
 
-Fixpoint val_of_term_rec pt : val :=
+Fixpoint val_of_pre_term_rec pt : val :=
   match pt with
-  | PTInt n => (#TInt_tag, #n)
-  | PTPair t1 t2 => (#TPair_tag, (val_of_term_rec t1, val_of_term_rec t2))%V
-  | PTNonce l => (#TNonce_tag, #l)%V
-  | PTKey kt t => (#TKey_tag, (#(int_of_key_type kt), val_of_term_rec t))%V
-  | PTEnc t1 t2 => (#TEnc_tag, (val_of_term_rec t1, val_of_term_rec t2))%V
-  | PTHash t => (#THash_tag, val_of_term_rec t)
-  | PTExp t ts => (#TExp_tag, (val_of_term_rec t, repr (map val_of_term_rec ts)))
+  | PTInt n =>
+    (#TInt_tag, #n)
+  | PTPair t1 t2 =>
+    (#TPair_tag, (val_of_pre_term_rec t1, val_of_pre_term_rec t2))%V
+  | PTNonce l =>
+    (#TNonce_tag, #l)%V
+  | PTKey kt t =>
+    (#TKey_tag, (#(int_of_key_type kt), val_of_pre_term_rec t))%V
+  | PTEnc t1 t2 =>
+    (#TEnc_tag, (val_of_pre_term_rec t1, val_of_pre_term_rec t2))%V
+  | PTHash t =>
+    (#THash_tag, val_of_pre_term_rec t)
+  | PTExp t ts =>
+    (#TExp_tag, (val_of_pre_term_rec t,
+                 repr_list (map val_of_pre_term_rec ts)))
   end.
 
-Fact val_of_term_key : unit. Proof. exact: tt. Qed.
-Definition val_of_term :=
-  locked_with val_of_term_key (
-    fun t => val_of_term_rec (unfold_term t)
-  ).
-Lemma val_of_termE t :
-  val_of_term t =
+Definition val_of_pre_term_aux : seal val_of_pre_term_rec. by eexists. Qed.
+Definition val_of_pre_term : Repr pre_term := unseal val_of_pre_term_aux.
+Lemma val_of_pre_term_eq : val_of_pre_term = val_of_pre_term_rec.
+Proof. exact: seal_eq. Qed.
+Global Existing Instance val_of_pre_term.
+
+Fixpoint val_of_term_rec t : val :=
   match t with
-  | TInt n => (#TInt_tag, #n)%V
-  | TPair t1 t2 => (#TPair_tag, (val_of_term t1, val_of_term t2))%V
-  | TNonce l => (#TNonce_tag, #l)%V
-  | TKey kt t => (#TKey_tag, (#(int_of_key_type kt), val_of_term t))%V
-  | TEnc t1 t2 => (#TEnc_tag, (val_of_term t1, val_of_term t2))%V
-  | THash t => (#THash_tag, val_of_term t)%V
-  | TExp' pt pts _ =>
-    (#TExp_tag, (val_of_term_rec pt, repr (map val_of_term_rec pts)))%V
+  | TInt n =>
+    (#TInt_tag, #n)
+  | TPair t1 t2 =>
+    (#TPair_tag, (val_of_term_rec t1, val_of_term_rec t2))%V
+  | TNonce l =>
+    (#TNonce_tag, #l)%V
+  | TKey kt t =>
+    (#TKey_tag, (#(int_of_key_type kt), val_of_term_rec t))%V
+  | TEnc t1 t2 =>
+    (#TEnc_tag, (val_of_term_rec t1, val_of_term_rec t2))%V
+  | THash t =>
+    (#THash_tag, val_of_term_rec t)
+  | TExp' t ts _ =>
+    (#TExp_tag, (val_of_pre_term t, repr ts))
   end.
-Proof.
-rewrite /val_of_term locked_withE.
-by case: t=> //=.
-Qed.
-Canonical val_of_term_unlock t := Unlockable (val_of_termE t).
+
+Definition val_of_term_aux : seal val_of_term_rec. by eexists. Qed.
+Definition val_of_term : term -> val := unseal val_of_term_aux.
+Lemma val_of_term_eq : val_of_term = val_of_term_rec.
+Proof. exact: seal_eq. Qed.
 Coercion val_of_term : term >-> val.
 Global Instance repr_term : Repr term := val_of_term.
+
+Lemma val_of_pre_term_unfold t :
+  val_of_pre_term (unfold_term t) = val_of_term t.
+Proof.
+rewrite val_of_term_eq val_of_pre_term_eq.
+elim/term_ind': t => //=; try by move=> *; congruence.
+move=> pt pts _.
+by rewrite [repr_list pts]repr_list_val /repr val_of_pre_term_eq.
+Qed.
 
 End ValOfTerm.
 
 Lemma val_of_term_TExp t ts :
   ~ is_exp t ->
   path.sorted order.Order.le ts ->
-  val_of_term (TExp t ts)
-  = (#TExp_tag, (val_of_term t, repr (map val_of_term ts)))%V.
+  val_of_term (TExp t ts) = (#TExp_tag, (val_of_term t, repr ts))%V.
 Proof.
 move=> nexp sorted_ts.
-rewrite /val_of_term locked_withE /= unfold_TExp.
-rewrite PreTerm.exp_nexp //=; last by case: t nexp => //=.
-rewrite order.Order.POrderTheory.sort_le_id // ?path.sorted_map.
-  by rewrite map_map.
-rewrite (_ : path.sorted _ _ = path.sorted order.Order.le ts) //.
-by case: (path.sorted _ _) sorted_ts.
+rewrite -[LHS]val_of_pre_term_unfold unfold_TExp.
+rewrite PreTerm.exp_nexp; last by case: t nexp => //=.
+rewrite order.Order.POrderTheory.sort_le_id // ?path.sorted_map; last first.
+  rewrite (_ : path.sorted _ _ = path.sorted order.Order.le ts) //.
+  by case: (path.sorted _ _) sorted_ts.
+rewrite -[in RHS](val_of_pre_term_unfold t) val_of_pre_term_eq /=.
+rewrite [repr_list ts]repr_list_val map_map.
+do !congr PairV; congr repr_list.
+elim: ts {sorted_ts} => //= {nexp}t ts -> /=.
+by rewrite /repr_term -val_of_pre_term_unfold val_of_pre_term_eq.
 Qed.
 
-Global Instance val_of_term_inj : Inj (=) (=) val_of_term.
+Global Instance val_of_pre_term_inj : Inj (=) (=) val_of_pre_term.
 Proof.
-move=> t1 t2 e_t1t2; apply: unfold_term_inj.
-move: e_t1t2; rewrite /val_of_term locked_withE.
-move: {t1 t2} (unfold_term t1) (unfold_term t2).
+rewrite val_of_pre_term_eq.
 elim.
 - by move=> n1 [] //= n2 [] ->.
 - by move=> t11 IH1 t12 IH2 [] //= t21 t22 [] /IH1 -> /IH2 ->.
@@ -131,6 +164,13 @@ elim.
   move: e_ts; rewrite repr_list_eq.
   elim: ts1 IHts ts2 {t1 t2 IHt} => /= [_ [] //|t1 ts1 H [] IHt {}/H IHts].
   by case=> //= t2 ts2 [] /IHt -> /IHts ->.
+Qed.
+
+Global Instance val_of_term_inj : Inj (=) (=) val_of_term.
+Proof.
+move=> t1 t2 e_t1t2; apply: unfold_term_inj.
+apply: val_of_pre_term_inj.
+by rewrite !val_of_pre_term_unfold.
 Qed.
 
 Global Instance countable_term : Countable term.

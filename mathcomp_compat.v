@@ -50,7 +50,11 @@ Canonical loc_orderType :=
   Eval hnf in OrderType locations.loc loc_orderMixin.
 
 Definition def_eq_decision (T : eqType) : base.RelDecision (@eq T) :=
-  fun x y => Bool.reflect_dec _ _ (x =P y).
+  fun x y =>
+    match x == y as b return (x == y) = b -> {x = y} + {x <> y} with
+    | true  => fun H => left  (elimT (x =P y) H)
+    | false => fun H => right (elimF (x =P y) H)
+    end erefl.
 
 Definition def_countable (T : countType) (H : base.RelDecision (@eq T)) : countable.Countable T.
 Proof.
