@@ -49,7 +49,7 @@ have lvlP : lvl ⊔ lvl ⊑ lvl by rewrite level_join_idemp.
 iMod (declare_key with "ctx Hk Hk [unpubl] []") as "(Hkey & _)" => //.
 - by rewrite atomic_atoms // elem_of_singleton.
 - iIntros "-> /=".
-  rewrite (@unpublished_difference _ {[TKey Enc k; TKey Dec k]}); last set_solver.
+  rewrite (@unpublished_difference _ _ _ {[TKey Enc k; TKey Dec k]}); last set_solver.
   by iDestruct "unpubl" as "[??]".
 - rewrite atomic_atoms // difference_diag_L; iIntros "_".
   by rewrite big_sepS_empty.
