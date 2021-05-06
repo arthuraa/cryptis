@@ -1,4 +1,5 @@
 From mathcomp Require Import ssreflect.
+From mathcomp Require order.
 From stdpp Require Import gmap coGset.
 From iris.algebra Require Import agree auth gset gmap namespace_map.
 From iris.base_logic.lib Require Import invariants auth.
@@ -111,6 +112,24 @@ Definition tdec c : val := λ: "k" "t",
 Definition mkkey : val := λ: "k",
   ((#TKey_tag, (#(int_of_key_type Enc), "k")),
    (#TKey_tag, (#(int_of_key_type Dec), "k"))).
+
+Axiom leq_term : val.
+
+Axiom twp_leq_term :
+  ∀ Σ (H : heapG Σ),
+  ∀ E (pt1 pt2 : PreTerm.pre_term) Ψ,
+    Ψ #(order.Order.le pt1 pt2) -∗
+    WP leq_term (repr pt1) (repr pt2) @ E [{ Ψ }].
+
+Definition tgroup : val := λ: "t",
+  (#TExp_tag, ("t", NONEV)).
+
+Definition texp : val := λ: "t1" "t2",
+  if: Fst "t1" = #TExp_tag then
+    let: "base" := Fst (Snd "t1") in
+    let: "exp"  := Snd (Snd "t1") in
+    (#TExp_tag, ("base", insert_sorted leq_term "t2" "exp"))
+  else (#TInt_tag, #0).
 
 Section Proofs.
 
@@ -474,5 +493,29 @@ Lemma wp_is_key E t Ψ :
   Ψ (repr (Spec.is_key t)) -∗
   WP is_key t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_is_key. Qed.
+
+Import ssrbool seq path.
+
+Lemma twp_texp E t1 t2 Ψ :
+  Ψ (Spec.texp t1 t2) -∗
+  WP texp t1 t2 @ E [{ Ψ }].
+Proof.
+iIntros "post"; rewrite /texp /= val_of_term_eq.
+wp_pures.
+case: t1; try by move=> *; wp_pures.
+move=> /= pt pts wf; wp_pures.
+case/and4P: {-}(wf) => nexp wf_pt wf_pts sorted_pts.
+wp_bind (insert_sorted _ _ _).
+rewrite -val_of_term_eq -[val_of_term t2]val_of_pre_term_unfold.
+iApply (@twp_insert_sorted _ PreTerm.pre_term_orderType) => //.
+  exact: twp_leq_term.
+wp_pures.
+rewrite -val_of_pre_term_unfold /Spec.texp /= unfold_TExp /=.
+rewrite val_of_pre_term_eq /=.
+have -> : sort order.Order.le (seq.cat pts [unfold_term t2])
+          = sort order.Order.le (unfold_term t2 :: pts).
+  by apply/perm_sort_leP; rewrite perm_catC.
+by rewrite -repr_list_val.
+Qed.
 
 End Proofs.

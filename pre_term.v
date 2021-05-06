@@ -433,8 +433,18 @@ case: PreTerm.expP nexp => [? ? -> //|_ _ _].
 by congr PreTerm.PTExp; apply/perm_sort_leP; rewrite perm_map.
 Qed.
 
+Lemma TExpC t ts1 ts2 : TExp t (ts1 ++ ts2) = TExp t (ts2 ++ ts1).
+Proof. by apply: TExp_perm; rewrite perm_catC. Qed.
+
 Definition is_exp t :=
   if t is TExp' _ _ _ then true else false.
+
+Lemma is_exp_TExp t ts : is_exp (TExp t ts).
+Proof.
+rewrite unlock /fold_term /=.
+move: (PreTerm.wf_normalize _) => /=.
+by case: PreTerm.expP'.
+Qed.
 
 Lemma term_rect (T : term -> Type)
   (H1 : forall n, T (TInt n))

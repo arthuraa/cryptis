@@ -361,6 +361,14 @@ Definition tdec c k t :=
   | None => None
   end.
 
+Definition texp t1 t2 :=
+  if is_exp t1 then TExp t1 [t2] else TInt 0.
+
+Lemma texpA t1 ts1 t2 : texp (TExp t1 ts1) t2 = TExp t1 (t2 :: ts1).
+Proof.
+by rewrite /texp is_exp_TExp TExpA TExpC.
+Qed.
+
 End Spec.
 
 Arguments repr_term /.
