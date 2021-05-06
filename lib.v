@@ -4,6 +4,8 @@ From iris.algebra Require Import namespace_map gmap gset auth.
 From iris.base_logic Require Import gen_heap.
 From iris.base_logic.lib Require Import auth.
 From iris_string_ident Require Import ltac2_string_ident.
+From crypto Require Export mathcomp_compat.
+
 
 (* TODO: Move to Iris? *)
 Instance dom_ne {T : ofeT} :
@@ -152,6 +154,12 @@ Lemma repr_list_eq `{Repr A} :
   repr_list = foldr (fun x v => SOMEV (repr x, v)%V) NONEV.
 Proof. exact: seal_eq. Qed.
 
+Lemma repr_list_val `{Repr A} (xs : list A) :
+  repr_list xs = repr_list (map repr xs).
+Proof.
+rewrite !repr_list_eq; by elim: xs => //= x xs ->.
+Qed.
+
 Existing Instance repr_list.
 
 Definition get_list : val := rec: "loop" "l" "n" :=
@@ -178,6 +186,25 @@ Notation "[ ]" := (NIL) : expr_scope.
 Notation "[ x ]" := (CONS x%V NIL) : expr_scope.
 Notation "[ x ; y ; .. ; z ]" :=
   (CONS x%E (CONS y%E .. (CONS z%E NIL) ..)) : expr_scope.
+
+Definition eq_list : val := rec: "loop" "eq" "l1" "l2" :=
+  match: "l1" with
+    SOME "l1" =>
+      match: "l2" with
+        SOME "l2" =>
+          let: "v1" := Fst "l1" in
+          let: "l1" := Snd "l1" in
+          let: "v2" := Fst "l2" in
+          let: "l2" := Snd "l2" in
+          "eq" "v1" "v2" && "loop" "eq" "l1" "l2"
+      | NONE => #false
+      end
+   | NONE =>
+     match: "l2" with
+       SOME <> => #false
+     | NONE => #true
+     end
+  end.
 
 Fixpoint list_match_aux (vars : list string) (l : string) (k : expr) : expr :=
   match vars with
@@ -418,6 +445,26 @@ elim: vars vs k => [|var vars IH] [|v vs] k l_fresh /=.
     rewrite subst_list_match_aux_in // subst_nsubst //; by iApply IH.
   rewrite subst_list_match_aux // subst_nsubst_nin // substC //.
   by iApply IH.
+Qed.
+
+Lemma twp_eq_list `{EqDecision A} (f : val) (l1 l2 : list A) Φ E :
+  (∀ (x1 x2 : A) Ψ,
+      x1 ∈ l1 →
+      Ψ #(bool_decide (x1 = x2)) -∗
+      WP f (repr x1) (repr x2) @ E [{ Ψ }]) →
+  Φ #(bool_decide (l1 = l2)) -∗
+  WP eq_list f (repr l1) (repr l2) @ E [{ Φ }].
+Proof.
+rewrite repr_list_eq /=.
+elim: l1 l2 Φ => [|x1 l1 IH] [|x2 l2] Φ wp_f /=;
+iIntros "post" ; wp_rec; wp_pures; do 1?by iApply "post".
+wp_bind (f _ _); iApply (wp_f x1 x2); first by set_solver.
+case: (bool_decide_reflect (x1 = x2)) => [->|n_x1x2]; wp_pures; last first.
+  rewrite bool_decide_decide decide_False; by [iApply "post"|congruence].
+iApply IH; first by move=> *; iApply wp_f; set_solver.
+case: (bool_decide_reflect (l1 = l2)) => [->|n_l1l2].
+- by rewrite bool_decide_decide decide_True.
+- by rewrite bool_decide_decide decide_False //; congruence.
 Qed.
 
 End ListLemmas.

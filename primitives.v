@@ -30,12 +30,6 @@ Notation "'bind:' x := e1 'in' e2" :=
   (at level 200, x at level 1, e1, e2 at level 200,
   format "'[' 'bind:'  x  :=  '[' e1 ']'  'in'  '/' e2 ']'") : expr_scope.
 
-Definition term_proj : val := rec: "loop" "t" "n" :=
-  if: Fst "t" = #TPair_tag then
-    if: "n" = #0 then SOME (Fst (Snd "t"))
-    else "loop" (Snd (Snd "t")) ("n" - #1)
-  else NONE.
-
 Definition list_of_term : val := rec: "loop" "t" :=
   if: Fst "t" = #TInt_tag then
     if: Snd "t" = #0 then SOMEV NONEV else NONEV
@@ -75,21 +69,27 @@ Definition enc : val := λ: "k" "t",
 Definition hash : val := λ: "t", (#THash_tag, "t").
 
 Definition eq_term : val := (rec: "eq" "x" "y" :=
-  if: (Fst "x" = #TInt_tag) && (Fst "y" = #TInt_tag) then
-    Snd "x" = Snd "y"
-  else if: (Fst "x" = #TPair_tag) && (Fst "y" = #TPair_tag) then
-    ("eq" (Fst (Snd "x")) (Fst (Snd "y"))) &&
-    ("eq" (Snd (Snd "x")) (Snd (Snd "y")))
-  else if: (Fst "x" = #TNonce_tag) && (Fst "y" = #TNonce_tag) then
-    Snd "x" = Snd "y"
-  else if: (Fst "x" = #TKey_tag) && (Fst "y" = #TKey_tag) then
-    (Fst (Snd "x") = Fst (Snd "y")) &&
-    "eq" (Snd (Snd "x")) (Snd (Snd "y"))
-  else if: (Fst "x" = #TEnc_tag) && (Fst "y" = #TEnc_tag) then
-    "eq" (Fst (Snd "x")) (Fst (Snd "y")) &&
-    "eq" (Snd (Snd "x")) (Snd (Snd "y"))
-  else if: (Fst "x" = #THash_tag) && (Fst "y" = #THash_tag) then
-    "eq" (Snd "x") (Snd "y")
+  if: (Fst "x" = Fst "y") then
+    let: "tag" := Fst "x" in
+    if: "tag" = #TInt_tag then
+      Snd "x" = Snd "y"
+    else if: "tag" = #TPair_tag then
+      ("eq" (Fst (Snd "x")) (Fst (Snd "y"))) &&
+      ("eq" (Snd (Snd "x")) (Snd (Snd "y")))
+    else if: "tag" = #TNonce_tag then
+      Snd "x" = Snd "y"
+    else if: "tag" = #TKey_tag then
+      (Fst (Snd "x") = Fst (Snd "y")) &&
+      "eq" (Snd (Snd "x")) (Snd (Snd "y"))
+    else if: "tag" = #TEnc_tag then
+      "eq" (Fst (Snd "x")) (Fst (Snd "y")) &&
+      "eq" (Snd (Snd "x")) (Snd (Snd "y"))
+    else if: "tag" = #THash_tag then
+      "eq" (Snd "x") (Snd "y")
+    else if: "tag" = #TExp_tag then
+      "eq" (Fst (Snd "x")) (Fst (Snd "y")) &&
+      eq_list "eq" (Snd (Snd "x")) (Snd (Snd "y"))
+    else #false
   else #false)%V.
 
 Definition dec : val := λ: "k" "t",
@@ -130,7 +130,7 @@ Lemma twp_as_int E t Ψ :
   Ψ (repr (Spec.as_int t)) -∗
   WP as_int t @ E [{ Ψ }].
 Proof.
-rewrite /as_int val_of_termE; iIntros "Hpost"; wp_pures.
+rewrite /as_int val_of_term_eq; iIntros "Hpost"; wp_pures.
 case: t; by move=> *; wp_pures; eauto.
 Qed.
 
@@ -145,7 +145,7 @@ Lemma twp_tuple E t1 t2 Ψ :
   Ψ (TPair t1 t2) -∗
   WP tuple t1 t2 @ E [{ Ψ }].
 Proof.
-rewrite val_of_termE /tuple; by iIntros "?"; wp_pures.
+rewrite val_of_term_eq /tuple; by iIntros "?"; wp_pures.
 Qed.
 
 Lemma wp_tuple E t1 t2 Ψ :
@@ -160,8 +160,8 @@ Lemma twp_untuple E t Ψ :
   WP untuple t @ E [{ Ψ }].
 Proof.
 iIntros "post".
-rewrite /Spec.untuple /untuple /= val_of_termE.
-case: t; by move=> *; wp_pures; rewrite -?val_of_termE; iApply "post".
+rewrite /Spec.untuple /untuple /= val_of_term_eq.
+case: t; by move=> *; wp_pures; iApply "post".
 Qed.
 
 Lemma wp_untuple E t Ψ :
@@ -171,32 +171,15 @@ Proof.
 by iIntros "?"; iApply twp_wp; iApply twp_untuple.
 Qed.
 
-Lemma twp_term_proj E t (n : nat) Ψ :
-  Ψ (repr (Spec.proj t n)) -∗
-  WP term_proj t #n @ E [{ Ψ }].
-Proof.
-rewrite /= val_of_termE; elim: t n Ψ;
-try by move=> *; iIntros "?"; wp_rec; wp_pures.
-move=> t1 IH1 t2 IH2 [|n] Ψ; iIntros "?"; wp_rec; wp_pures.
-  by rewrite -val_of_termE.
-rewrite (_ : (S n - 1)%Z = n) /=; try lia.
-by iApply IH2.
-Qed.
-
-Lemma wp_term_proj E t (n : nat) Ψ :
-  Ψ (repr (Spec.proj t n)) -∗
-  WP term_proj t #n @ E {{ Ψ }}.
-Proof. by iIntros "?"; iApply twp_wp; iApply twp_term_proj. Qed.
-
 Lemma twp_term_of_list E ts Ψ :
   Ψ (repr (Spec.of_list ts)) -∗
   WP term_of_list (repr ts) @ E [{ Ψ }].
 Proof.
-rewrite /= val_of_termE repr_list_eq Spec.of_list_eq.
-elim: ts Ψ => [|t ts IH] Ψ /=; iIntros "post"; wp_rec; wp_pures => //.
+rewrite /= [in repr_list ts]repr_list_eq Spec.of_list_eq.
+elim: ts Ψ => [|t ts IH] Ψ /=; iIntros "post"; wp_rec; wp_pures.
+  by rewrite val_of_term_eq.
 wp_bind (term_of_list _); iApply IH; wp_pures.
-rewrite -val_of_termE; iApply twp_tuple; wp_pures.
-by rewrite val_of_termE.
+by iApply twp_tuple; wp_pures.
 Qed.
 
 Lemma wp_term_of_list E ts Ψ :
@@ -210,15 +193,16 @@ Lemma twp_list_of_term E t Ψ :
   Ψ (repr (Spec.to_list t)) -∗
   WP list_of_term t @ E [{ Ψ }].
 Proof.
-rewrite val_of_termE /= repr_list_eq.
-elim: t Ψ; try by [move=> *; iIntros "post"; wp_rec; wp_pures; iApply "post"].
+rewrite val_of_term_eq /= repr_list_eq.
+elim/term_ind': t Ψ;
+try by move=> *; iIntros "post"; wp_rec; wp_pures; iApply "post".
   move=> n Ψ /=; iIntros "post"; wp_rec; wp_pures.
   case: bool_decide_reflect => [[->]|]; first by wp_pures.
   case: n => *; by wp_pures.
 move=> thead _ trest IH Ψ /=; iIntros "post".
 wp_rec; wp_pures; wp_bind (list_of_term _); iApply IH.
 case: (Spec.to_list trest) => [ts|] /=; wp_pures; eauto.
-by rewrite -val_of_termE.
+by rewrite -val_of_term_eq.
 Qed.
 
 Lemma wp_list_of_term E t Ψ :
@@ -299,7 +283,7 @@ wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
 iIntros (a) "[_ token]".
 iMod (declare_nonce with "ctx token") as "(Ha & own & token)" => //.
 iSpecialize ("post" $! (TNonce a)).
-rewrite val_of_termE.
+rewrite val_of_term_eq.
 by wp_pures; iApply ("post" with "Ha [] own token").
 Qed.
 
@@ -317,7 +301,7 @@ Lemma twp_mkkey E (k : term) Ψ :
   Ψ (TKey Enc k, TKey Dec k)%V -∗
   WP mkkey k @ E [{ Ψ }].
 Proof.
-rewrite val_of_termE /= /mkkey.
+rewrite val_of_term_eq /= /mkkey.
 by iIntros "post"; wp_pures.
 Qed.
 
@@ -332,7 +316,7 @@ Lemma twp_enc E t1 t2 Ψ :
   Ψ (repr (Spec.enc t1 t2)) -∗
   WP enc t1 t2 @ E [{ Ψ }].
 Proof.
-rewrite /repr /repr_option /repr /repr_term !val_of_termE /enc.
+rewrite /repr /repr_option /repr /repr_term !val_of_term_eq /enc.
 iIntros "H".
 case: t1; try by move=> *; wp_pures; eauto.
 case; try by move=> *; wp_pures; eauto.
@@ -345,18 +329,20 @@ Proof. by iIntros "?"; iApply twp_wp; iApply twp_enc. Qed.
 
 Lemma twp_hash E t Ψ : Ψ (THash t) -∗ WP hash t @ E [{ Ψ }].
 Proof.
-by rewrite /hash val_of_termE; iIntros "?"; wp_pures.
+by rewrite /hash val_of_term_eq; iIntros "?"; wp_pures.
 Qed.
 
 Lemma wp_hash E t Ψ : Ψ (THash t) -∗ WP hash t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_hash. Qed.
 
-Lemma twp_eq_term_aux E t1 t2 :
-  ⊢ WP (eq_term t1 t2) @ E [{ v, ⌜v = #(bool_decide (t1 = t2))⌝ }].
+Lemma twp_eq_pre_term_aux E (pt1 pt2 : PreTerm.pre_term) :
+  ⊢ WP (eq_term (repr pt1) (repr pt2)) @ E
+       [{ v, ⌜v = #(bool_decide (pt1 = pt2))⌝ }].
 Proof.
-rewrite val_of_termE.
-elim: t1 t2=> [n1|t11 IH1 t12 IH2|l1|kt1 t1 IH1|t11 IH1 t12 IH2|t1 IH];
-case=> [n2|t21 t22|l2|kt2 t2|t21 t22|t2] /=;
+rewrite /= val_of_pre_term_eq.
+elim: pt1 pt2
+  => [n1|t11 IH1 t12 IH2|l1|kt1 t1 IH1|t11 IH1 t12 IH2|t1 IH|t1 IHt1 ts1 IHts1];
+case=> [n2|t21 t22|l2|kt2 t2|t21 t22|t2|t2 ts2] /=;
 wp_rec; wp_pures=> //.
 - iPureIntro; congr (# (LitBool _)).
   apply: bool_decide_iff; intuition congruence.
@@ -388,6 +374,21 @@ wp_rec; wp_pures=> //.
 - wp_pures; iApply twp_wand; first iApply IH.
   iIntros (?) "->"; iPureIntro; congr (# (LitBool _)).
   apply: bool_decide_iff; intuition congruence.
+- wp_bind (eq_term _ _); iApply twp_wand; first iApply IHt1.
+  iIntros (?) "->"; case: bool_decide_reflect=> e1; wp_pures; last first.
+    rewrite bool_decide_false //; congruence.
+  rewrite -val_of_pre_term_eq -!repr_list_val.
+  iApply (@twp_eq_list PreTerm.pre_term); last first.
+    iPureIntro; congr (# (LitBool _)); apply: bool_decide_iff.
+    rewrite e1; split; congruence.
+  rewrite /=.
+  elim: ts1 IHts1 {e1} => //= [|x1 ts1 IH].
+    by move=> *; exfalso; set_solver.
+  case=> IHx1 /IH IHts1 x1' x2' Ψ.
+  rewrite elem_of_cons; case=> [->|x1'_in]; iIntros "post"; last first.
+    by iApply IHts1.
+  rewrite -/val_of_pre_term val_of_pre_term_eq.
+  iApply twp_wand; first iApply IHx1; by iIntros (?) "->".
 Qed.
 
 Lemma twp_eq_term E t1 t2 Ψ :
@@ -395,8 +396,12 @@ Lemma twp_eq_term E t1 t2 Ψ :
   WP (eq_term t1 t2) @ E [{ Ψ }].
 Proof.
 iIntros "H".
-iApply twp_wand; first iApply twp_eq_term_aux.
-by iIntros (?) "->".
+rewrite -!val_of_pre_term_unfold.
+iApply twp_wand; first iApply twp_eq_pre_term_aux.
+iIntros (?) "->".
+rewrite (_ : bool_decide (t1 = t2) =
+             bool_decide (unfold_term t1 = unfold_term t2)) //.
+by apply: bool_decide_iff; split => [->|/unfold_term_inj] //.
 Qed.
 
 Lemma wp_eq_term E t1 t2 Ψ :
@@ -410,14 +415,14 @@ Lemma twp_dec E t1 t2 Ψ :
   Ψ (repr (Spec.dec t1 t2)) -∗
   WP dec t1 t2 @ E [{ Ψ }].
 Proof.
-rewrite /repr /repr_option /repr /repr_term !val_of_termE /dec.
+rewrite /repr /repr_option /repr /repr_term !val_of_term_eq /dec.
 iIntros "H".
 wp_pures.
 case: t1; try by move=> /= *; wp_pures.
 case; try by move=> /= *; wp_pures.
 move=> tk; wp_pures.
 case: t2; try by move=> /= *; wp_pures.
-move=> tk' t; wp_pures; rewrite -val_of_termE.
+move=> tk' t; wp_pures; rewrite -val_of_term_eq.
 wp_bind (eq_term _ _); iApply twp_eq_term.
 by rewrite bool_decide_decide /=; case: decide => [<-|e]; wp_pures.
 Qed.
@@ -461,7 +466,7 @@ Lemma twp_is_key E t Ψ :
   Ψ (repr (Spec.is_key t)) -∗
   WP is_key t @ E [{ Ψ }].
 Proof.
-rewrite /repr /repr_option val_of_termE /is_key.
+rewrite /repr /repr_option val_of_term_eq /is_key.
 iIntros "?"; by case: t=> *; wp_pures.
 Qed.
 
