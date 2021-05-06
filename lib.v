@@ -4,8 +4,8 @@ From iris.algebra Require Import namespace_map gmap gset auth.
 From iris.base_logic Require Import gen_heap.
 From iris.base_logic.lib Require Import auth.
 From iris_string_ident Require Import ltac2_string_ident.
+From mathcomp Require ssrbool order path.
 From crypto Require Export mathcomp_compat.
-
 
 (* TODO: Move to Iris? *)
 Instance dom_ne {T : ofeT} :
@@ -218,6 +218,16 @@ Fixpoint list_match_aux (vars : list string) (l : string) (k : expr) : expr :=
       list_match_aux vars l k
     | NONE => NONEV
     end
+  end.
+
+Definition insert_sorted : val := rec: "loop" "le" "x" "l" :=
+  match: "l" with
+    NONE => SOME ("x", NONE)
+  | SOME "l" =>
+    let: "y" := Fst "l" in
+    let: "l" := Snd "l" in
+    if: "le" "x" "y" then SOME ("x", SOME ("y", "l"))
+    else SOME ("y", "loop" "le" "x" "l")
   end.
 
 Ltac substC :=
@@ -468,6 +478,41 @@ case: (bool_decide_reflect (l1 = l2)) => [->|n_l1l2].
 Qed.
 
 End ListLemmas.
+
+Section Insertion.
+
+Import ssrbool seq ssreflect.order path.
+Variable (d : unit) (A : orderType d).
+Context `{!Repr A, !heapG Σ}.
+Import Order Order.POrderTheory Order.TotalTheory.
+
+Lemma twp_insert_sorted (f : val) (x : A) (l : list A) E (Φ : val → iProp Σ) :
+  is_true (sorted le l) →
+  (∀ (y z : A) Ψ,
+    Ψ #(le y z) -∗
+    WP f (repr y) (repr z) @ E [{ Ψ }]) →
+  Φ (repr (sort le (x :: l))) -∗
+  WP insert_sorted f (repr x) (repr l) @ E [{ Φ }].
+Proof.
+rewrite repr_list_eq => sorted_l wp_f.
+elim: l sorted_l Φ => //= [|y l IH] path_l Φ;
+iIntros "post"; wp_rec; wp_pures => //.
+move/(_ (path_sorted path_l)) in IH.
+wp_bind (f _ _); iApply wp_f.
+have [le_xy|le_yx] := boolP (x <= y)%O; wp_pures.
+  by rewrite sort_le_id //= le_xy.
+move: le_yx; rewrite -ltNge => /ltW le_yx.
+wp_bind (insert_sorted _ _ _); iApply IH.
+suff -> : sort le [:: x, y & l] = y :: sort le (x :: l) by wp_pures.
+rewrite -[RHS]sort_le_id /=.
+  apply/perm_sort_leP/perm_consP.
+  exists 1, (l ++ [:: x])%SEQ.
+  by rewrite /= perm_catC perm_sym /= perm_sort; split.
+rewrite path_min_sorted ?sort_le_sorted // all_sort /= le_yx /=.
+apply: order_path_min => //; apply: le_trans.
+Qed.
+
+End Insertion.
 
 Instance repr_prod `{Repr A, Repr B} : Repr (A * B) :=
   λ p, (repr p.1, repr p.2)%V.

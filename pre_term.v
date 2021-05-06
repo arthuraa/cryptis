@@ -412,12 +412,6 @@ Proof.
 by rewrite unlock /= unfold_foldE /= normalize_unfold1 normalize_unfoldn.
 Qed.
 
-Lemma perm_sort_leP d (T : orderType d) (s1 s2 : seq T) :
-  reflect (sort <=%O s1 = sort <=%O s2) (perm_eq s1 s2).
-Proof.
-apply/perm_sortP; by [apply: le_total|apply: le_trans|apply: le_anti].
-Qed.
-
 Lemma TExpA t ts1 ts2 : TExp (TExp t ts1) ts2 = TExp t (ts1 ++ ts2)%list.
 Proof.
 apply: unfold_term_inj.

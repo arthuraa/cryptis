@@ -81,3 +81,12 @@ elim: s1 s2 / => //.
   by rewrite -cat1s -[[:: x1; x2]]cat1s perm_catC.
 - by move=> ? ? ? _ ? _; apply: seq.perm_trans.
 Qed.
+
+Lemma perm_sort_leP d (T : orderType d) (s1 s2 : seq T) :
+  reflect (sort <=%O s1 = sort <=%O s2) (perm_eq s1 s2).
+Proof.
+apply/perm_sortP.
+- exact: Order.TotalTheory.le_total.
+- exact: Order.POrderTheory.le_trans.
+- exact: Order.POrderTheory.le_anti.
+Qed.
