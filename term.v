@@ -111,7 +111,7 @@ Fixpoint val_of_term_rec t : val :=
   | THash t =>
     (#THash_tag, val_of_term_rec t)
   | TExp' t ts _ =>
-    (#TExp_tag, (val_of_pre_term t, repr ts))
+    (#TExp_tag, (val_of_term_rec t, repr ts))
   end.
 
 Definition val_of_term_aux : seal val_of_term_rec. by eexists. Qed.
@@ -126,7 +126,7 @@ Lemma val_of_pre_term_unfold t :
 Proof.
 rewrite val_of_term_eq val_of_pre_term_eq.
 elim/term_ind': t => //=; try by move=> *; congruence.
-move=> pt pts _.
+move=> t -> pts _.
 by rewrite [repr_list pts]repr_list_val /repr val_of_pre_term_eq.
 Qed.
 
@@ -139,7 +139,6 @@ Lemma val_of_term_TExp t ts :
 Proof.
 move=> nexp sorted_ts.
 rewrite -[LHS]val_of_pre_term_unfold unfold_TExp.
-rewrite PreTerm.exp_nexp; last by case: t nexp => //=.
 rewrite order.Order.POrderTheory.sort_le_id // ?path.sorted_map; last first.
   rewrite (_ : path.sorted _ _ = path.sorted order.Order.le ts) //.
   by case: (path.sorted _ _) sorted_ts.
@@ -215,7 +214,7 @@ Lemma nonces_of_termE t :
   | TKey _ t => nonces_of_term t
   | TEnc t1 t2 => nonces_of_term t1 ∪ nonces_of_term t2
   | THash t => nonces_of_term t
-  | TExp' pt pts _ => nonces_of_pre_term pt ∪ ⋃ map nonces_of_pre_term pts
+  | TExp' t pts _ => nonces_of_term t ∪ ⋃ map nonces_of_pre_term pts
   end.
 Proof.
 by rewrite nonces_of_term_eq; case: t => //=.
@@ -225,10 +224,9 @@ Lemma nonces_of_term_TExp t ts :
   nonces_of_term (TExp t ts)
   = nonces_of_term t ∪ ⋃ map nonces_of_term ts.
 Proof.
-rewrite nonces_of_term_eq /nonces_of_term_def unfold_TExp.
-case: PreTerm.expP' => [pt' pts' pts'' -> e_pts''|pts' _ e_pts'] //=.
-- by rewrite [in LHS]e_pts'' map_app union_list_app_L assoc_L map_map.
-- by rewrite [in LHS]e_pts' map_map.
+rewrite nonces_of_term_eq /nonces_of_term_def.
+case: unfold_TExpP => pts' e_pts' /=.
+by rewrite [in LHS]e_pts' map_map.
 Qed.
 
 Module Spec.
@@ -362,11 +360,18 @@ Definition tdec c k t :=
   end.
 
 Definition texp t1 t2 :=
-  if is_exp t1 then TExp t1 [t2] else TInt 0.
+  if t1 is TExp' base exp _ then
+    TExp base (t2 :: map fold_term exp)
+  else TInt 0.
+
+Import ssrfun seq path.
 
 Lemma texpA t1 ts1 t2 : texp (TExp t1 ts1) t2 = TExp t1 (t2 :: ts1).
 Proof.
-by rewrite /texp is_exp_TExp TExpA TExpC.
+rewrite /texp {1}unlock /= fold_wf_termE normalize_unfold1 normalize_unfoldn.
+rewrite unfold_termK.
+apply: TExp_perm.
+by rewrite perm_cons -{2}[ts1](mapK unfold_termK) perm_map // perm_sort.
 Qed.
 
 End Spec.

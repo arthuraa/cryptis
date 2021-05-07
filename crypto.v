@@ -133,7 +133,7 @@ Fixpoint atoms t : gset term :=
   | TKey _ _ => {[t]}
   | TEnc _ t => atoms t
   | THash _ => ∅
-  | TExp' pt pts _ => atoms_pre pt ∪ ⋃ map atoms_pre pts
+  | TExp' t pts _ => atoms t ∪ ⋃ map atoms_pre pts
   end.
 
 Lemma atoms_pre_unfold t : atoms_pre (unfold_term t) = atoms t.
@@ -145,12 +145,10 @@ Qed.
 Lemma atoms_TExp t ts :
   atoms (TExp t ts) = atoms t ∪ ⋃ map atoms ts.
 Proof.
-rewrite -[LHS]atoms_pre_unfold unfold_TExp.
-case: PreTerm.expP' => [pt' pts' pts'' e_pt' e_pts''|pts' e_exp e_pts'] /=.
-- rewrite [in LHS]e_pts'' map_app union_list_app_L assoc_L map_map.
-  by rewrite (map_ext _ _ atoms_pre_unfold) -atoms_pre_unfold e_pt' /=.
-- rewrite [in LHS]e_pts' map_map.
-  by rewrite atoms_pre_unfold (map_ext _ _ atoms_pre_unfold).
+rewrite -[LHS]atoms_pre_unfold.
+case: unfold_TExpP => pts' e_pts' /=.
+rewrite [in LHS]e_pts' map_map.
+by rewrite atoms_pre_unfold (map_ext _ _ atoms_pre_unfold).
 Qed.
 
 Lemma atomic_atom t1 t2 : t1 ∈ atoms t2 → atomic t1.
@@ -159,11 +157,11 @@ elim: t2 => //=.
 - by move=> t21 IH1 t22 IH2 /elem_of_union [] ?; eauto.
 - by move=> ? /elem_of_singleton ->; eauto.
 - by move=> ? t2 IH /elem_of_singleton ->; eauto.
-move=> t IHt nexp ts IHts _.
+move=> t IHt ts IHts _.
 rewrite atoms_TExp elem_of_union elem_of_union_list.
 case; first by eauto.
 case=> _ [] /elem_of_list_fmap [] t1' [] ->.
-elim: ts IHts {t IHt nexp} => //=.
+elim: ts IHts {t IHt} => //=.
   by move=> _ /elem_of_nil.
 move=> t ts IH [] IHt /IH IHts.
 by case/elem_of_cons=> [-> //|in_ts]; eauto.
@@ -725,7 +723,7 @@ Qed.
 
 Lemma termT_lvlP lvl t : termT lvl t -∗ ∃ lvl', stermT lvl' t.
 Proof.
-elim/term_ind': t lvl=> [n|t1 IH1 t2 IH2|n|kt k IHk|k IHk t IHt|t IH|???] lvl /=;
+elim/term_ind': t lvl=> [n|t1 IH1 t2 IH2|n|kt k IHk|k IHk t IHt|t IH|????] lvl /=;
 rewrite termT_eq /=.
 - iIntros "_"; iExists Pub; iApply stermT_int.
 - iIntros "[#type1 #type2]".
@@ -1159,7 +1157,7 @@ elim/term_ind': t lvl => //=.
   iDestruct "Ht" as (lvl_enc lvl_dec) "(_ & Ht)".
   iDestruct "Ht" as "[(_ & Ht)|Ht]"; first by iApply IHt.
   iDestruct "Ht" as "(_ & Ht)"; by iApply IHt.
-- by move=> ?????; rewrite termT_eq; iIntros "[]".
+- by move=> ??????; rewrite termT_eq; iIntros "[]".
 Qed.
 
 Definition secret_terms (T T' : gset term) : iProp :=

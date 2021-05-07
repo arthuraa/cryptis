@@ -494,6 +494,16 @@ Lemma wp_is_key E t Ψ :
   WP is_key t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_is_key. Qed.
 
+Lemma twp_tgroup E t Ψ :
+  Ψ (TExp t []) -∗
+  WP tgroup t @ E [{ Ψ }].
+Proof.
+iIntros "post".
+rewrite /tgroup -val_of_pre_term_unfold; wp_pures.
+rewrite val_of_pre_term_eq /= unfold_TExp /=.
+by rewrite -val_of_pre_term_eq val_of_pre_term_unfold repr_list_eq.
+Qed.
+
 Import ssrbool seq path.
 
 Lemma twp_texp E t1 t2 Ψ :
@@ -504,18 +514,16 @@ iIntros "post"; rewrite /texp /= val_of_term_eq.
 wp_pures.
 case: t1; try by move=> *; wp_pures.
 move=> /= pt pts wf; wp_pures.
-case/and4P: {-}(wf) => nexp wf_pt wf_pts sorted_pts.
+case/andP: {-}(wf) => wf_pts sorted_pts.
 wp_bind (insert_sorted _ _ _).
 rewrite -val_of_term_eq -[val_of_term t2]val_of_pre_term_unfold.
 iApply (@twp_insert_sorted _ PreTerm.pre_term_orderType) => //.
   exact: twp_leq_term.
 wp_pures.
 rewrite -val_of_pre_term_unfold /Spec.texp /= unfold_TExp /=.
-rewrite val_of_pre_term_eq /=.
-have -> : sort order.Order.le (seq.cat pts [unfold_term t2])
-          = sort order.Order.le (unfold_term t2 :: pts).
-  by apply/perm_sort_leP; rewrite perm_catC.
-by rewrite -repr_list_val.
+rewrite val_of_pre_term_eq /= -val_of_pre_term_eq val_of_pre_term_unfold.
+rewrite -repr_list_val -[ @List.map ]/@map -map_comp map_id_in //.
+by move=> {}pt /(allP wf_pts) wf_pt; rewrite /= fold_termK.
 Qed.
 
 End Proofs.
