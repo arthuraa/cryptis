@@ -29,6 +29,14 @@ Canonical key_type_distrLatticeType :=
 Canonical key_type_orderType :=
   Eval hnf in OrderType key_type key_type_orderMixin.
 
+Notation TInt_tag := 0%Z.
+Notation TPair_tag := 1%Z.
+Notation TNonce_tag := 2%Z.
+Notation TKey_tag := 3%Z.
+Notation TEnc_tag := 4%Z.
+Notation THash_tag := 5%Z.
+Notation TExp_tag := 6%Z.
+
 Module PreTerm.
 
 Unset Elimination Schemes.
@@ -135,6 +143,78 @@ Defined.
 
 Definition pre_term_ind (T : pre_term -> Prop) :=
   @pre_term_rect T.
+
+Definition seq_pre_term := seq pre_term.
+Definition seq_pre_term_orderMixin :=
+  [derive orderMixin for seq pre_term].
+Canonical seq_pre_term_porderType :=
+  Eval hnf in POrderType tt seq_pre_term seq_pre_term_orderMixin.
+Canonical seq_pre_term_latticeType :=
+  Eval hnf in LatticeType seq_pre_term seq_pre_term_orderMixin.
+Canonical seq_pre_term_distrLatticeType :=
+  Eval hnf in DistrLatticeType seq_pre_term seq_pre_term_orderMixin.
+Canonical seq_pre_term_orderType :=
+  Eval hnf in OrderType seq_pre_term seq_pre_term_orderMixin.
+
+Definition cons_num pt : Z :=
+  match pt with
+  | PTInt _ => TInt_tag
+  | PTPair _ _ => TPair_tag
+  | PTNonce _ => TNonce_tag
+  | PTKey _ _ => TKey_tag
+  | PTEnc _ _ => TEnc_tag
+  | PTHash _ => THash_tag
+  | PTExp _ _ => TExp_tag
+  end.
+
+Open Scope order_scope.
+
+Lemma leqE pt1 pt2 :
+  (pt1 <= pt2)%O =
+  if cons_num pt1 == cons_num pt2 then
+    match pt1, pt2 with
+    | PTInt n1, PTInt n2 => (n1 <= n2)%O
+    | PTPair pt11 pt12, PTPair pt21 pt22 =>
+      if pt11 == pt21 then (pt12 <= pt22)%O
+      else (pt11 <= pt21)%O
+    | PTNonce a1, PTNonce a2 => (a1 <= a2)%O
+    | PTKey kt1 pt1, PTKey kt2 pt2 =>
+      if kt1 == kt2 then (pt1 <= pt2)%O
+      else (kt1 <= kt2)%O
+    | PTEnc k1 pt1, PTEnc k2 pt2 =>
+      if k1 == k2 then (pt1 <= pt2)%O
+      else (k1 <= k2)%O
+    | PTHash pt1, PTHash pt2 => (pt1 <= pt2)%O
+    | PTExp pt1 pts1, PTExp pt2 pts2 =>
+      if pt1 == pt2 then ((pts1 : seqlexi_with tt _) <= pts2)%O
+      else (pt1 <= pt2)%O
+    | _, _ => false
+    end
+  else (cons_num pt1 <=? cons_num pt2)%Z.
+Proof.
+have le_alt (T : orderType _) (x y : T) :
+    (x <= y)%O = if x == y then true else (x <= y)%O.
+  by case: (ltgtP x y).
+case: pt1 pt2
+    => [n1|pt11 pt12|a1|kt1 pt1|pt11 pt12|pt1|pt1 pts1]
+       [n2|pt21 pt22|a2|kt2 pt2|pt21 pt22|pt2|pt2 pts2] //=.
+- by rewrite [RHS]le_alt.
+- by rewrite [(pt12 <= pt22)%O]le_alt.
+- by rewrite [RHS]le_alt.
+- by rewrite (le_alt _ _ pt1).
+- by rewrite (le_alt _ _ pt12).
+- by rewrite (le_alt _ _ pt1).
+have -> : ((pts1 : seqlexi_with tt _) <= pts2)%O = ((pts1 : seq_pre_term) <= pts2)%O.
+  elim: pts1 pts2 {pt1 pt2} => [|pt1 pts1 IH] [|pt2 pts2] //=.
+    rewrite [LHS](_ : _ = if pt1 == pt2 then if pts1 == pts2 then true
+                                             else ((pts1 : seq_pre_term) <= pts2)%O
+                          else (pt1 <= pt2)%O) //.
+    rewrite lexi_cons IH.
+    case: ltgtP => //= _; exact: le_alt.
+by rewrite [(pts1 : seq_pre_term)  <= pts2]le_alt.
+Qed.
+
+Close Scope order_scope.
 
 Fixpoint height pt :=
   match pt with

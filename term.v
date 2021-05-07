@@ -45,14 +45,6 @@ Instance repr_key_type : Repr key_type := λ kt, #(int_of_key_type kt).
 
 Canonical termO := leibnizO term.
 
-Notation TInt_tag := 0%Z.
-Notation TPair_tag := 1%Z.
-Notation TNonce_tag := 2%Z.
-Notation TKey_tag := 3%Z.
-Notation TEnc_tag := 4%Z.
-Notation THash_tag := 5%Z.
-Notation TExp_tag := 6%Z.
-
 Global Instance pre_term_inhabited : Inhabited PreTerm.pre_term.
 Proof. exact: (populate (PreTerm.PTInt 0)). Qed.
 

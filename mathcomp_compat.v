@@ -4,7 +4,7 @@ mathcomp and stdpp definitions. *)
 From mathcomp Require Import all_ssreflect.
 From deriving Require Import deriving.
 From stdpp Require base countable.
-Require Import Coq.ZArith.ZArith.
+Require Import Coq.ZArith.ZArith Lia.
 Require Import Permutation.
 From iris.heap_lang Require locations.
 
@@ -20,8 +20,27 @@ Canonical positive_distrLatticeType :=
 Canonical positive_orderType :=
   Eval hnf in OrderType positive positive_orderMixin.
 
+Lemma Z_leb_anti : antisymmetric Z.leb.
+Proof.
+move=> ?? /andP [] /Z.leb_spec0 ? /Z.leb_spec0 ?; lia.
+Qed.
+
+Lemma Z_leb_trans : transitive Z.leb.
+Proof.
+move=> ??? /Z.leb_spec0 ? /Z.leb_spec0 ?.
+apply/Z.leb_spec0; lia.
+Qed.
+
+Lemma Z_leb_total : total Z.leb.
+Proof.
+move=> ??; apply/orP.
+rewrite /is_true !Z.leb_le; lia.
+Qed.
+
 Definition Z_orderMixin :=
-  [derive orderMixin for Z].
+  @LeOrderMixin _ Z.leb _ _ _
+                (fun _ _ => erefl) (fun _ _ => erefl) (fun _ _ => erefl)
+                Z_leb_anti Z_leb_trans Z_leb_total.
 Canonical Z_porderType :=
   Eval hnf in POrderType tt Z Z_orderMixin.
 Canonical Z_latticeType :=
@@ -89,4 +108,11 @@ apply/perm_sortP.
 - exact: Order.TotalTheory.le_total.
 - exact: Order.POrderTheory.le_trans.
 - exact: Order.POrderTheory.le_anti.
+Qed.
+
+Lemma foldr_in (T : eqType) (S : T -> Type) xs :
+  foldr (fun x R => S x * R)%type unit xs -> forall x, x \in xs -> S x.
+Proof.
+elim: xs => [//|x xs IH] /= [] Sx Sxs x'; rewrite inE.
+case: eqP => [-> _|_] //=; exact: IH.
 Qed.

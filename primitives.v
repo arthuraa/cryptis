@@ -113,13 +113,50 @@ Definition mkkey : val := λ: "k",
   ((#TKey_tag, (#(int_of_key_type Enc), "k")),
    (#TKey_tag, (#(int_of_key_type Dec), "k"))).
 
-Axiom leq_term : val.
-
-Axiom twp_leq_term :
-  ∀ Σ (H : heapG Σ),
-  ∀ E (pt1 pt2 : PreTerm.pre_term) Ψ,
-    Ψ #(order.Order.le pt1 pt2) -∗
-    WP leq_term (repr pt1) (repr pt2) @ E [{ Ψ }].
+Definition leq_term : val := rec: "loop" "t1" "t2" :=
+ (if: (Fst "t1" < Fst "t2") then #true
+  else if: (Fst "t1" = Fst "t2") then
+    let: "tag" := Fst "t1" in
+    let: "a1"  := Snd "t1" in
+    let: "a2"  := Snd "t2" in
+    if: "tag" = #TInt_tag then "a1" ≤ "a2"
+    else if: "tag" = #TPair_tag then
+      let: "t11" := Fst "a1" in
+      let: "t12" := Snd "a1" in
+      let: "t21" := Fst "a2" in
+      let: "t22" := Snd "a2" in
+      if: eq_term "t11" "t21" then "loop" "t12" "t22"
+      else "loop" "t11" "t21"
+    else if: "tag" = #TNonce_tag then
+      (* Currently does not work, because nonces are not
+         comparable in heap lang... *)
+      "a1" ≤ "a2"
+    else if: "tag" = #TKey_tag then
+      let: "kt1" := Fst "a1" in
+      let: "t1"  := Snd "a1" in
+      let: "kt2" := Fst "a2" in
+      let: "t2"  := Snd "a2" in
+      if: "kt1" = "kt2" then "loop" "t1" "t2"
+      else "kt1" ≤ "kt2"
+    else if: "tag" = #TEnc_tag then
+      let: "t11" := Fst "a1" in
+      let: "t12" := Snd "a1" in
+      let: "t21" := Fst "a2" in
+      let: "t22" := Snd "a2" in
+      if: eq_term "t11" "t21" then "loop" "t12" "t22"
+      else "loop" "t11" "t21"
+    else if: "tag" = #THash_tag then
+      "loop" "a1" "a2"
+    else if: "tag" = #TExp_tag then
+      let: "t1" := Fst "a1" in
+      let: "ts1" := Snd "a1" in
+      let: "t2" := Fst "a2" in
+      let: "ts2" := Snd "a2" in
+      if: eq_term "t1" "t2" then
+        leq_list eq_term "loop" "ts1" "ts2"
+      else "loop" "t1" "t2"
+    else #false
+  else #false)%V.
 
 Definition tgroup : val := λ: "t",
   (#TExp_tag, ("t", NONEV)).
@@ -410,6 +447,15 @@ wp_rec; wp_pures=> //.
   iApply twp_wand; first iApply IHx1; by iIntros (?) "->".
 Qed.
 
+Lemma twp_eq_pre_term E (pt1 pt2 : PreTerm.pre_term) Ψ :
+  Ψ #(bool_decide (pt1 = pt2)) -∗
+  WP (eq_term (repr pt1) (repr pt2)) @ E [{ Ψ }].
+Proof.
+iIntros "H".
+iApply twp_wand; first iApply twp_eq_pre_term_aux.
+by iIntros (?) "->".
+Qed.
+
 Lemma twp_eq_term E t1 t2 Ψ :
   Ψ #(bool_decide (t1 = t2)) -∗
   WP (eq_term t1 t2) @ E [{ Ψ }].
@@ -506,6 +552,61 @@ Qed.
 
 Import ssrbool seq path.
 
+Import ssreflect.eqtype ssreflect.order.
+
+Lemma decide_eq_op {T : eqType} `{EqDecision T} (t1 t2 : T) :
+  bool_decide (t1 = t2) = (t1 == t2).
+Proof. by apply/(sameP (bool_decide_reflect _))/eqP. Qed.
+
+Lemma twp_leq_pre_term E (pt1 pt2 : PreTerm.pre_term) Ψ :
+  Ψ #(pt1 <= pt2)%O -∗
+  WP (leq_term (repr pt1) (repr pt2)) @ E [{ Ψ }].
+Proof.
+rewrite /= val_of_pre_term_eq.
+elim: pt1 pt2 Ψ
+  => [n1|t11 IH1 t12 IH2|l1|kt1 t1 IH1|t11 IH1 t12 IH2|t1 IH|t1 IHt1 ts1 IHts1];
+case=> [n2|t21 t22|l2|kt2 t2|t21 t22|t2|t2 ts2] /= Ψ;
+iIntros "post"; wp_rec; wp_pures; try by iApply "post".
+- rewrite PreTerm.leqE /= (_ : (_ <= _)%O = bool_decide (n1 ≤ n2)%Z) //.
+  exact/(sameP (Z.leb_spec0 _ _))/bool_decide_reflect.
+- rewrite -{1 2}val_of_pre_term_eq; wp_bind (eq_term _ _).
+  rewrite PreTerm.leqE /=; iApply twp_eq_pre_term.
+  rewrite decide_eq_op; case: eqP => [->|_]; wp_pures.
+    by iApply IH2.
+  by iApply IH1.
+- admit. (* Nonces; not yet possible *)
+- rewrite PreTerm.leqE /=; case: eqP => [->|neq].
+    rewrite bool_decide_eq_true_2 //; wp_pures; by iApply IH1.
+  rewrite bool_decide_eq_false_2; last first.
+    move=> [e]; apply: neq.
+    by apply: int_of_key_type_inj.
+  wp_pures.
+  by case: kt1 kt2 {neq} => [] [].
+- rewrite PreTerm.leqE /=; wp_bind (eq_term _ _).
+  rewrite -{1 2}val_of_pre_term_eq; iApply twp_eq_pre_term.
+  rewrite decide_eq_op; case: eqP => [->|neq]; wp_pures.
+    by iApply IH2.
+  by iApply IH1.
+- rewrite PreTerm.leqE /=; by iApply IH.
+- rewrite PreTerm.leqE /=; wp_bind (eq_term _ _).
+  rewrite -{1 2}val_of_pre_term_eq.
+  iApply twp_eq_pre_term; rewrite decide_eq_op.
+  case: eqP=> [->|neq]; wp_pures; last by iApply IHt1.
+  rewrite -!repr_list_val -val_of_pre_term_eq; iApply twp_leq_list => //.
+  + move=> pt1 pt2 Ψ'; iIntros "post".
+    by iApply twp_eq_pre_term; rewrite decide_eq_op.
+  + move/foldr_in in IHts1.
+    by move=> ????; rewrite /= val_of_pre_term_eq; iApply IHts1.
+Admitted.
+
+Lemma twp_leq_term E t1 t2 Ψ :
+  Ψ #(t1 <= t2)%O -∗
+  WP leq_term t1 t2 @ E [{ Ψ }].
+Proof.
+rewrite -2!val_of_pre_term_unfold.
+by iApply twp_leq_pre_term.
+Qed.
+
 Lemma twp_texp E t1 t2 Ψ :
   Ψ (Spec.texp t1 t2) -∗
   WP texp t1 t2 @ E [{ Ψ }].
@@ -518,12 +619,13 @@ case/andP: {-}(wf) => wf_pts sorted_pts.
 wp_bind (insert_sorted _ _ _).
 rewrite -val_of_term_eq -[val_of_term t2]val_of_pre_term_unfold.
 iApply (@twp_insert_sorted _ PreTerm.pre_term_orderType) => //.
-  exact: twp_leq_term.
+  by move=> * /=; iApply twp_leq_pre_term.
 wp_pures.
 rewrite -val_of_pre_term_unfold /Spec.texp /= unfold_TExp /=.
 rewrite val_of_pre_term_eq /= -val_of_pre_term_eq val_of_pre_term_unfold.
 rewrite -repr_list_val -[ @List.map ]/@map -map_comp map_id_in //.
 by move=> {}pt /(allP wf_pts) wf_pt; rewrite /= fold_termK.
 Qed.
+
 
 End Proofs.

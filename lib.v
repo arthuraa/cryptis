@@ -5,6 +5,7 @@ From iris.base_logic Require Import gen_heap.
 From iris.base_logic.lib Require Import auth.
 From iris_string_ident Require Import ltac2_string_ident.
 From mathcomp Require ssrbool order path.
+From deriving Require deriving.
 From crypto Require Export mathcomp_compat.
 
 (* TODO: Move to Iris? *)
@@ -228,6 +229,22 @@ Definition insert_sorted : val := rec: "loop" "le" "x" "l" :=
     let: "l" := Snd "l" in
     if: "le" "x" "y" then SOME ("x", SOME ("y", "l"))
     else SOME ("y", "loop" "le" "x" "l")
+  end.
+
+Definition leq_list : val := rec: "loop" "eq" "le" "l1" "l2" :=
+  match: "l1" with
+    NONE => #true
+  | SOME "l1" =>
+    match: "l2" with
+      NONE => #false
+    | SOME "l2" =>
+      let: "x1" := Fst "l1" in
+      let: "x2" := Fst "l2" in
+      let: "l1" := Snd "l1" in
+      let: "l2" := Snd "l2" in
+      if: "eq" "x1" "x2" then "loop" "eq" "le" "l1" "l2"
+      else "le" "x1" "x2"
+    end
   end.
 
 Ltac substC :=
@@ -479,12 +496,13 @@ Qed.
 
 End ListLemmas.
 
-Section Insertion.
+Section Ordered.
 
-Import ssrbool seq ssreflect.order path.
+Import ssrbool seq ssreflect.order path deriving.instances.
 Variable (d : unit) (A : orderType d).
 Context `{!Repr A, !heapG Σ}.
 Import Order Order.POrderTheory Order.TotalTheory.
+Implicit Types (x y z : A) (s : seqlexi_with d A).
 
 Lemma twp_insert_sorted (f : val) (x : A) (l : list A) E (Φ : val → iProp Σ) :
   is_true (sorted le l) →
@@ -512,7 +530,28 @@ rewrite path_min_sorted ?sort_le_sorted // all_sort /= le_yx /=.
 apply: order_path_min => //; apply: le_trans.
 Qed.
 
-End Insertion.
+Lemma twp_leq_list (feq : val) (fle : val) s1 s2 E (Φ : val → iProp Σ) :
+  (∀ x1 x2 Ψ,
+      Ψ #(eqtype.eq_op x1 x2) -∗
+      WP feq (repr x1) (repr x2) @ E [{ Ψ }]) →
+  (∀ x1 x2 Ψ,
+      is_true (x1 \in s1) →
+      Ψ #(le x1 x2) -∗
+      WP fle (repr x1) (repr x2) @ E [{ Ψ }]) →
+  Φ #(le s1 s2) -∗
+  WP leq_list feq fle (repr s1) (repr s2) @ E [{ Φ }].
+Proof.
+move=> feqP.
+rewrite /= repr_list_eq.
+elim: s1 s2 => [|x1 s1 IH] [|x2 s2] fleP; iIntros "HΦ"; wp_rec; wp_pures => //.
+rewrite lexi_cons; wp_bind (feq _ _); iApply feqP.
+case: (ltgtP x1 x2) => [l_x1x2|l_x2x1|<-] /=; wp_pures.
+- by iApply fleP; rewrite ?inE ?eqtype.eqxx // ltW.
+- by iApply fleP; rewrite ?inE ?eqtype.eqxx // leNgt l_x2x1.
+- by iApply IH => // x1' ?? x1'_in; iApply fleP; rewrite inE x1'_in orbT.
+Qed.
+
+End Ordered.
 
 Instance repr_prod `{Repr A, Repr B} : Repr (A * B) :=
   λ p, (repr p.1, repr p.2)%V.
