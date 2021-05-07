@@ -128,9 +128,7 @@ Definition leq_term : val := rec: "loop" "t1" "t2" :=
       if: eq_term "t11" "t21" then "loop" "t12" "t22"
       else "loop" "t11" "t21"
     else if: "tag" = #TNonce_tag then
-      (* Currently does not work, because nonces are not
-         comparable in heap lang... *)
-      "a1" ≤ "a2"
+      leq_loc "a1" "a2"
     else if: "tag" = #TKey_tag then
       let: "kt1" := Fst "a1" in
       let: "t1"  := Snd "a1" in
@@ -574,7 +572,7 @@ iIntros "post"; wp_rec; wp_pures; try by iApply "post".
   rewrite decide_eq_op; case: eqP => [->|_]; wp_pures.
     by iApply IH2.
   by iApply IH1.
-- admit. (* Nonces; not yet possible *)
+- by rewrite PreTerm.leqE /=; iApply twp_leq_loc.
 - rewrite PreTerm.leqE /=; case: eqP => [->|neq].
     rewrite bool_decide_eq_true_2 //; wp_pures; by iApply IH1.
   rewrite bool_decide_eq_false_2; last first.
@@ -597,7 +595,7 @@ iIntros "post"; wp_rec; wp_pures; try by iApply "post".
     by iApply twp_eq_pre_term; rewrite decide_eq_op.
   + move/foldr_in in IHts1.
     by move=> ????; rewrite /= val_of_pre_term_eq; iApply IHts1.
-Admitted.
+Qed.
 
 Lemma twp_leq_term E t1 t2 Ψ :
   Ψ #(t1 <= t2)%O -∗

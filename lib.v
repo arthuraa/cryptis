@@ -163,6 +163,14 @@ Qed.
 
 Existing Instance repr_list.
 
+Definition leq_loc_loop : val := rec: "loop" "l1" "l2" "n" :=
+  if: "l1" +ₗ "n" = "l2" then #true
+  else if: "l2" +ₗ "n" = "l1" then #false
+  else "loop" "l1" "l2" ("n" + #1).
+
+Definition leq_loc : val := λ: "l1" "l2",
+  leq_loc_loop "l1" "l2" #0.
+
 Definition get_list : val := rec: "loop" "l" "n" :=
   match: "l" with NONE => NONE
   | SOME "p" =>
@@ -495,6 +503,54 @@ case: (bool_decide_reflect (l1 = l2)) => [->|n_l1l2].
 Qed.
 
 End ListLemmas.
+
+Section Loc.
+
+Context `{!heapG Σ}.
+Import ssreflect.order deriving.instances.
+
+Lemma twp_leq_loc_loop E (l1 l2 : loc) (n k : nat) Ψ :
+  loc_car l2 = (loc_car l1 + (n + k)%nat)%Z ∨
+  loc_car l1 = (loc_car l2 + (n + k)%nat)%Z ∧ n + k ≠ 0%nat →
+  Ψ #(l1 <= l2)%O -∗
+  WP leq_loc_loop #l1 #l2 #n @ E [{ Ψ }].
+Proof.
+have leq_locE l1' l2' :
+    (l1' <= l2')%O = bool_decide (loc_car l1' ≤ loc_car l2')%Z.
+  exact/(ssrbool.sameP (Z.leb_spec0 _ _))/bool_decide_reflect.
+have eq_locE (l1' l2' : loc) :
+    bool_decide (#l1' = #l2') = bool_decide (loc_car l1' = loc_car l2').
+  apply: bool_decide_iff; split => [[->] //|].
+  by case: l1' l2' => [?] [?] /= ->.
+elim: k n => [|k IH] n e_l1l2; iIntros "post"; wp_pures; wp_rec; wp_pures.
+- rewrite eq_locE.
+  case: bool_decide_reflect => /= [eq|neq]; wp_pures.
+    rewrite leq_locE bool_decide_decide decide_True //=.
+    lia.
+  rewrite eq_locE bool_decide_decide decide_True /=; try lia.
+  wp_pures; rewrite leq_locE bool_decide_decide decide_False //.
+  move=> H; apply: neq; rewrite /loc_add /= in H; lia.
+- rewrite eq_locE bool_decide_decide decide_False; last by move=> /= ?; lia.
+  wp_pures.
+  rewrite eq_locE bool_decide_decide decide_False; last by move=> /= ?; lia.
+  wp_pures.
+  rewrite (_ : (n + 1)%Z = S n :> Z); try lia.
+  iApply IH => //; lia.
+Qed.
+
+Lemma twp_leq_loc E (l1 l2 : loc) Ψ :
+  Ψ #(l1 <= l2)%O -∗
+  WP leq_loc #l1 #l2 @ E [{ Ψ }].
+Proof.
+have [off offP] :
+    ∃ off : nat, (loc_car l2 = loc_car l1 + off ∨
+                  loc_car l1 = loc_car l2 + off ∧ off ≠ 0%nat)%Z.
+  exists (Z.to_nat (Z.abs (loc_car l1 - loc_car l2))); lia.
+iIntros "post"; rewrite /leq_loc -[0%Z]/(Z.of_nat 0); wp_pures.
+by iApply twp_leq_loc_loop => //.
+Qed.
+
+End Loc.
 
 Section Ordered.
 
