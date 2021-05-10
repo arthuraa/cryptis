@@ -351,21 +351,6 @@ Definition tdec c k t :=
   | None => None
   end.
 
-Definition texp t1 t2 :=
-  if t1 is TExp' base exp _ then
-    TExp base (t2 :: map fold_term exp)
-  else TInt 0.
-
-Import ssrfun seq path.
-
-Lemma texpA t1 ts1 t2 : texp (TExp t1 ts1) t2 = TExp t1 (t2 :: ts1).
-Proof.
-rewrite /texp {1}unlock /= fold_wf_termE normalize_unfold1 normalize_unfoldn.
-rewrite unfold_termK.
-apply: TExp_perm.
-by rewrite perm_cons -{2}[ts1](mapK unfold_termK) perm_map // perm_sort.
-Qed.
-
 End Spec.
 
 Arguments repr_term /.

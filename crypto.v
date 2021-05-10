@@ -189,7 +189,7 @@ Definition to_term_data' (td : term_data) : term_data'UR :=
 
 Class cryptoG := CryptoG {
   crypto_inG :> inG Σ (authUR term_data'UR);
-  crypto_pub_inG :> inG Σ (coGset_pairUR term);
+  crypto_pub_inG :> savedPredG Σ term;
   crypto_meta_inG :> inG Σ (namespace_mapR (agreeR positiveO));
   crypto_pred_inG :> savedPredG Σ (term * term);
   crypto_name : gname;
@@ -357,125 +357,124 @@ iPoseProof (crypto_inv_meta_agree k t with "HΦ HΦ'") as "e".
 by iIntros "!> !>"; iRewrite "e".
 Qed.
 
-Definition own_publish t (Ti : coGset_pair term) : iProp :=
-  ∃ γ_pub, crypto_own (∅, {[t := to_agree γ_pub]}, ∅) ∗ own γ_pub Ti.
+Definition publish_pred a (P : term → iProp) : iProp :=
+  ∃ γ, meta a (cryptoN.@"nonce") γ ∧ saved_pred_own γ P.
 
-Lemma own_publish_op t Ti1 Ti2 :
-  own_publish t (Ti1 ⋅ Ti2) ⊣⊢ own_publish t Ti1 ∗ own_publish t Ti2.
-Proof.
-apply (anti_symm _).
-- iDestruct 1 as (γ_pub) "[#own1 [H1 H2]]".
-  by iSplitL "H1"; iExists γ_pub; eauto.
-- iDestruct 1 as "[H1 H2]".
-  iDestruct "H1" as (γ_pub1) "[#own1 H1]".
-  iDestruct "H2" as (γ_pub2) "[#own2 H2]".
-  iDestruct (own_valid_2 with "own1 own2") as % valid.
-  move: valid.
-  rewrite -auth_frag_op auth_frag_valid -!pair_op !pair_valid.
-  rewrite singleton_op singleton_valid.
-  case=> [] [] _ valid _.
-  apply agree_op_invL' in valid; subst γ_pub2.
-  by iExists γ_pub1; iSplit => //; rewrite own_op; iFrame.
-Qed.
+Definition declared_nonce a : iProp :=
+  ∃ (P : term → iProp), publish_pred a P.
 
-Lemma own_publish_valid t Ti : own_publish t Ti -∗ ⌜✓ Ti⌝.
-Proof.
-iDestruct 1 as (γ_pub) "[H1 H2]".
-by iPoseProof (own_valid with "H2") as "%".
-Qed.
+Definition published a t : iProp :=
+  ∃ (P : term → iProp), publish_pred a P ∧ □ P t.
 
-Lemma own_publish_valid_2 t Ti1 Ti2 :
-  own_publish t Ti1 -∗ own_publish t Ti2 -∗ ⌜✓ (Ti1 ⋅ Ti2)⌝.
-Proof.
-iIntros "H1 H2".
-iCombine "H1 H2" as "H".
-rewrite -own_publish_op.
-by iApply own_publish_valid.
-Qed.
-
-Definition unpublished t Ts : iProp :=
-  own_publish t (coGset_pair_unset Ts).
-
-Definition published t Ts : iProp :=
-  own_publish t (coGset_pair_set Ts).
-
-Global Instance published_persistent t Ts : Persistent (published t Ts).
-Proof. apply _. Qed.
-
-Lemma published_op t Ts1 Ts2 :
-  published t (Ts1 ⋅ Ts2) ⊣⊢ published t Ts1 ∗ published t Ts2.
-Proof.
-by rewrite /published coGset_pair_set_op own_publish_op.
-Qed.
-
-(** [termT lvl t] holds when the term [t] can be declared public after
-encrypting it.  If [lvl = Pub], [t] is considered public and does not have to be
-encrypted.  All hashes are considered public for now. *)
-
-Fixpoint termT_def lvl t : iProp :=
-  let keyT lvl_enc lvl_dec k :=
-    (atomicT lvl_enc (TKey Enc k) ∗
-     atomicT lvl_dec (TKey Dec k) ∗
-     ([∗ set] t' ∈ atoms k, published t' {[TKey Enc k; TKey Dec k]}) ∗
-     termT_def Sec k ∗
-     □ (termT_def Pub k → False) ∨
-     termT_def Pub k ∗
-     ⌜lvl_enc = Pub⌝ ∗
-     ⌜lvl_dec = Pub⌝)%I in
-  match t with
-  | TInt _ => True
-  | TPair t1 t2 => termT_def lvl t1 ∗ termT_def lvl t2
-  | TNonce a =>
-    ∃ lvl', atomicT lvl' t ∗
-            meta a (cryptoN.@"nonce") () ∗
-            ⌜lvl' ⊑ lvl⌝
-  | TKey kt k =>
-    ∃ lvl_enc lvl_dec,
-      keyT lvl_enc lvl_dec k ∗
-      ⌜(if kt is Enc then lvl_enc else lvl_dec) ⊑ lvl⌝
-  | TEnc k t =>
-    ∃ lvl_enc lvl_dec,
-      keyT lvl_enc lvl_dec k ∗
-      (⌜lvl_enc = Pub⌝ ∗ termT_def Pub t ∨
-       enc_inv k t ∗ termT_def (lvl ⊔ lvl_dec) t)
-  | THash t => termT_def Sec t
-  | TExp' _ _ _ => False
+Fixpoint sterm_aux pt : iProp :=
+  match pt with
+  | PreTerm.PTInt _ => True
+  | PreTerm.PTPair pt1 pt2 => sterm_aux pt1 ∧ sterm_aux pt2
+  | PreTerm.PTNonce a => declared_nonce a
+  | PreTerm.PTKey kt pt => sterm_aux pt
+  | PreTerm.PTEnc pt1 pt2 => sterm_aux pt1 ∧ sterm_aux pt2
+  | PreTerm.PTHash pt => sterm_aux pt
+  | PreTerm.PTExp pt pts => sterm_aux pt ∧ [∗ list] P ∈ sterm_aux <$> pts, P
   end.
 
-Definition termT_aux : seal termT_def. by eexists. Qed.
-Definition termT := unseal termT_aux.
-Definition keyT lvl_enc lvl_dec k : iProp :=
-  atomicT lvl_enc (TKey Enc k) ∗
-  atomicT lvl_dec (TKey Dec k) ∗
-  ([∗ set] t' ∈ atoms k, published t' {[TKey Enc k; TKey Dec k]}) ∗
-  termT Sec k ∗
-  □ (termT Pub k → False) ∨
-  termT Pub k ∗
-  ⌜lvl_enc = Pub⌝ ∗
-  ⌜lvl_dec = Pub⌝.
+Definition sterm t := sterm_aux (unfold_term t).
 
-Lemma termT_eq lvl t :
-  termT lvl t =
+Lemma sterm_eq t :
+  sterm t =
   match t with
   | TInt _ => True
-  | TPair t1 t2 => termT lvl t1 ∗ termT lvl t2
-  | TNonce a =>
-    ∃ lvl', atomicT lvl' t ∗
-            meta a (cryptoN.@"nonce") () ∗
-            ⌜lvl' ⊑ lvl⌝
-  | TKey kt k =>
-    ∃ lvl_enc lvl_dec,
-      keyT lvl_enc lvl_dec k ∗
-      ⌜(if kt is Enc then lvl_enc else lvl_dec) ⊑ lvl⌝
-  | TEnc k t =>
-    ∃ lvl_enc lvl_dec,
-      keyT lvl_enc lvl_dec k ∗
-      (⌜lvl_enc = Pub⌝ ∗ termT Pub t ∨
-       enc_inv k t ∗ termT (lvl ⊔ lvl_dec) t)
-  | THash t => termT Sec t
-  | TExp' _ _ _ => False
+  | TPair t1 t2 => sterm t1 ∧ sterm t2
+  | TNonce a => declared_nonce a
+  | TKey kt t => sterm t
+  | TEnc k t => sterm k ∧ sterm t
+  | THash t => sterm t
+  | TExp' t pts _ => sterm t ∧ [∗ list] P ∈ sterm_aux <$> pts, P
   end%I.
-Proof. by rewrite /keyT /termT seal_eq; case: t. Qed.
+Proof. by case: t. Qed.
+
+Fixpoint pterm_aux n t : iProp :=
+  match n with
+  | 0 => False
+  | S n =>
+    let pterm_aux_key kt t : iProp := (
+       pterm_aux n t ∨
+       sterm t ∧
+       [∗ set] a ∈ nonces_of_term t,
+         published a (TKey kt t)
+    )%I in
+    match t with
+    | TInt _ => True
+    | TPair t1 t2 => pterm_aux n t1 ∧ pterm_aux n t2
+    | TNonce a => published a (TNonce a)
+    | TKey kt pt => pterm_aux_key kt pt
+    | TEnc k t =>
+      pterm_aux_key Enc k ∧ pterm_aux n t ∨
+      enc_inv k t ∧
+      □ (pterm_aux_key Dec k → pterm_aux n t)
+    | THash t =>
+      pterm_aux n t ∨
+      [∗ set] a ∈ nonces_of_term t, published a (THash t)
+    | TExp' _ _ _ as t =>
+      (∃ t1 t2, ⌜t = texp t1 t2⌝ ∧ pterm_aux n t1 ∧ pterm_aux n t2)
+      ∨ ([∗ set] a ∈ nonces_of_term t, published a t)
+    end
+  end.
+
+(** [pterm t] holds when the term [t] can be declared public. *)
+
+Definition pterm t := pterm_aux (tsize t) t.
+
+Lemma pterm_eq t :
+  pterm t ⊣⊢
+  match t with
+  | TInt _ => True
+  | TPair t1 t2 => pterm t1 ∧ pterm t2
+  | TNonce a => published a (TNonce a)
+  | TKey kt t =>
+    pterm t ∨ sterm t ∧ [∗ set] a ∈ nonces_of_term t,  published a (TKey kt t)
+  | TEnc k t =>
+    pterm (TKey Enc k) ∧ pterm t ∨
+    enc_inv k t ∧
+    □ (pterm (TKey Dec k) → pterm t)
+  | THash t =>
+    pterm t ∨
+    [∗ set] a ∈ nonces_of_term t, published a (THash t)
+  | TExp' _ _ _ as t =>
+    (∃ t1 t2, ⌜t = texp t1 t2⌝ ∧ pterm t1 ∧ pterm t2)
+    ∨ ([∗ set] a ∈ nonces_of_term t, published a t)
+  end%I.
+Proof.
+rewrite {1}/pterm.
+move: {-1}(tsize t) (Nat.le_refl (tsize t)) => m.
+elim: m / (lt_wf m) t => m _ IH; case=> //=.
+- move=> n; rewrite tsize_eq; case: m IH => //=; lia.
+- move=> t1 t2; rewrite tsize_eq -ssrnat.plusE.
+  case: m IH => /= [|m] IH le_m; first lia.
+  rewrite /pterm !IH //; lia.
+- move=> a; rewrite tsize_eq; case: m IH => //=; lia.
+- move=> kt t; rewrite tsize_eq; case: m IH => [|m] IH le_m /=; try lia.
+  rewrite /pterm !IH //; lia.
+- move=> k t; rewrite tsize_eq -ssrnat.plusE.
+  case: m IH => [|m] IH le_m /=; try lia.
+  rewrite /pterm /= -[PreTerm.size (unfold_term k)]/(tsize k).
+  rewrite !IH //=; lia.
+- move=> t; rewrite tsize_eq; case: m IH => [|m] IH le_m /=; try lia.
+  rewrite /pterm !IH //; lia.
+- move=> t pts wf.
+  case: m IH => //= [|m] IH le_m.
+    by move: le_m; rewrite TExp'E tsize_TExp; lia.
+  enough (H' : (∃ t1 t2, ⌜TExp' t pts wf = texp t1 t2⌝ ∧ pterm_aux m t1 ∧ pterm_aux m t2)
+         ⊣⊢ (∃ t1 t2, ⌜TExp' t pts wf = texp t1 t2⌝ ∧ pterm t1 ∧ pterm t2) ).
+    now rewrite H'.
+  apply: bi.exist_proper => t1.
+  apply: bi.exist_proper => t2.
+  assert (E : TExp' t pts wf = texp t1 t2 →
+              pterm_aux m t1 ∧ pterm_aux m t2 ⊣⊢ pterm t1 ∧ pterm t2).
+    move=> e.
+    move: (tsize_texp t1 t2); rewrite -e //= => /(_ eq_refl) [??].
+    rewrite /pterm !IH //; lia.
+  by apply: (anti_symm _); iIntros "[%e ?]"; rewrite -E //; iSplit; eauto.
+Qed.
 
 Global Instance persistent_termT lvl t :
   Persistent (termT lvl t).
