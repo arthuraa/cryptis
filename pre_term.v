@@ -233,7 +233,7 @@ Fixpoint size pt :=
   | PTPair pt1 pt2 => S (size pt1 + size pt2)
   | PTNonce _ => 1
   | PTKey _ t => S (size t)
-  | PTEnc k t => S (size k + size t)
+  | PTEnc k t => S (S (size k) + size t)
   | PTHash t => S (size t)
   | PTExp t ts => S (\sum_(n <- size t :: map size ts) n)
   end.
@@ -532,6 +532,16 @@ rewrite -map_comp map_id_in ?sort_le_id // => pt in_pts.
 by rewrite /= fold_termK // (allP wf_pts).
 Qed.
 
+Lemma TExp_inj t1 ts1 t2 ts2 :
+  TExp t1 ts1 = TExp t2 ts2 <->
+  t1 = t2 /\ Permutation.Permutation ts1 ts2.
+Proof.
+split; last first.
+  case=> -> /perm_Permutation; exact: TExp_perm.
+move=> /(congr1 unfold_term); rewrite !unfold_TExp.
+case=> /unfold_term_inj -> /perm_sort_leP/perm_map_inj/perm_Permutation perm.
+split => //; apply: perm unfold_term_inj.
+Qed.
 
 Lemma tsize_eq t :
   tsize t =
@@ -540,7 +550,7 @@ Lemma tsize_eq t :
   | TPair t1 t2 => S (tsize t1 + tsize t2)
   | TNonce _ => 1
   | TKey _ t => S (tsize t)
-  | TEnc k t => S (tsize k + tsize t)
+  | TEnc k t => S (S (tsize k) + tsize t)
   | THash t => S (tsize t)
   | TExp' t pts _ => S (tsize t + \sum_(n <- map PreTerm.size pts) n)
   end.

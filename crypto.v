@@ -102,70 +102,14 @@ Implicit Types γ : gname.
 
 Implicit Types P Q : iProp.
 
-Definition atomic t : bool :=
+Definition atomic t :=
   match t with
-  | TInt _ => false
-  | TPair _ _ => false
-  | TNonce _ => true
-  | TKey _ _ => true
-  | TEnc _ _ => false
-  | THash _ => false (* We do not treat hashes as atomic because they are always
-    considered public *)
-  | TExp' _ _ _ => false
+  | TNonce _
+  | TKey _ _
+  | THash _
+  | TExp' _ _ _ => true
+  | _ => false
   end.
-
-Fixpoint atoms_pre pt : gset term :=
-  match pt with
-  | PreTerm.PTInt _ => ∅
-  | PreTerm.PTPair pt1 pt2 => atoms_pre pt1 ∪ atoms_pre pt2
-  | PreTerm.PTNonce l => {[TNonce l]}
-  | PreTerm.PTKey kt t => {[TKey kt (fold_term t)]}
-  | PreTerm.PTEnc _ t => atoms_pre t
-  | PreTerm.PTHash _ => ∅
-  | PreTerm.PTExp pt pts => atoms_pre pt ∪ ⋃ map atoms_pre pts
-  end.
-
-Fixpoint atoms t : gset term :=
-  match t with
-  | TInt _ => ∅
-  | TPair t1 t2 => atoms t1 ∪ atoms t2
-  | TNonce _ => {[t]}
-  | TKey _ _ => {[t]}
-  | TEnc _ t => atoms t
-  | THash _ => ∅
-  | TExp' t pts _ => atoms t ∪ ⋃ map atoms_pre pts
-  end.
-
-Lemma atoms_pre_unfold t : atoms_pre (unfold_term t) = atoms t.
-Proof.
-elim/term_ind': t; do ?by move=> /= *; congruence.
-by move=> kt t _; rewrite /= unfold_termK.
-Qed.
-
-Lemma atoms_TExp t ts :
-  atoms (TExp t ts) = atoms t ∪ ⋃ map atoms ts.
-Proof.
-rewrite -[LHS]atoms_pre_unfold.
-case: unfold_TExpP => pts' e_pts' /=.
-rewrite [in LHS]e_pts' map_map.
-by rewrite atoms_pre_unfold (map_ext _ _ atoms_pre_unfold).
-Qed.
-
-Lemma atomic_atom t1 t2 : t1 ∈ atoms t2 → atomic t1.
-Proof.
-elim: t2 => //=.
-- by move=> t21 IH1 t22 IH2 /elem_of_union [] ?; eauto.
-- by move=> ? /elem_of_singleton ->; eauto.
-- by move=> ? t2 IH /elem_of_singleton ->; eauto.
-move=> t IHt ts IHts _.
-rewrite atoms_TExp elem_of_union elem_of_union_list.
-case; first by eauto.
-case=> _ [] /elem_of_list_fmap [] t1' [] ->.
-elim: ts IHts {t IHt} => //=.
-  by move=> _ /elem_of_nil.
-move=> t ts IH [] IHt /IH IHts.
-by case/elem_of_cons=> [-> //|in_ts]; eauto.
-Qed.
 
 Context `{!heapG Σ}.
 
@@ -205,29 +149,6 @@ Implicit Types td : term_data.
 
 Definition crypto_own (td : term_data'UR) :=
   auth_own crypto_name td.
-
-Definition atomicT lvl t :=
-  crypto_own ({[t := to_agree lvl]}, ∅, ∅).
-
-Global Instance atomicT_persistent lvl t : Persistent (atomicT lvl t).
-Proof.
-rewrite /atomicT /crypto_own; by apply _.
-Qed.
-
-Lemma atomicT_agree lvl1 lvl2 t :
-  atomicT lvl1 t -∗
-  atomicT lvl2 t -∗
-  ⌜lvl1 = lvl2⌝.
-Proof.
-iIntros "own1 own2".
-iPoseProof (own_valid_2 with "own1 own2") as "#valid".
-rewrite auth_validI /= -!pair_op !uPred.prod_validI /=.
-iDestruct "valid" as "[[#valid _] _]".
-rewrite singleton_op gmap_validI.
-iSpecialize ("valid" $! t); rewrite lookup_singleton.
-rewrite uPred.option_validI agree_validI agree_equivI.
-by iPoseProof "valid" as "->".
-Qed.
 
 Definition crypto_meta_name t γm : iProp :=
   crypto_own (∅, ∅, {[t := to_agree γm]}).
@@ -378,212 +299,401 @@ Global Instance Persistent_published a t :
   Persistent (published a t).
 Proof. apply _. Qed.
 
-Fixpoint sterm_aux pt : iProp :=
-  match pt with
-  | PreTerm.PTInt _ => True
-  | PreTerm.PTPair pt1 pt2 => sterm_aux pt1 ∧ sterm_aux pt2
-  | PreTerm.PTNonce a => declared_nonce a
-  | PreTerm.PTKey kt pt => sterm_aux pt
-  | PreTerm.PTEnc pt1 pt2 => sterm_aux pt1 ∧ sterm_aux pt2
-  | PreTerm.PTHash pt => sterm_aux pt
-  | PreTerm.PTExp pt pts => sterm_aux pt ∧ [∗ list] P ∈ sterm_aux <$> pts, P
-  end.
-
-Definition sterm t := sterm_aux (unfold_term t).
-
-Lemma sterm_eq t :
-  sterm t =
-  match t with
-  | TInt _ => True
-  | TPair t1 t2 => sterm t1 ∧ sterm t2
-  | TNonce a => declared_nonce a
-  | TKey kt t => sterm t
-  | TEnc k t => sterm k ∧ sterm t
-  | THash t => sterm t
-  | TExp' t pts _ => sterm t ∧ [∗ list] P ∈ sterm_aux <$> pts, P
-  end%I.
-Proof. by case: t. Qed.
-
-Lemma sterm_TExp t ts :
-  sterm (TExp t ts) ⊣⊢ sterm t ∧ [∗ list] t' ∈ ts, sterm t'.
-Proof.
-rewrite {1}/sterm unfold_TExp /=.
-apply bi.and_proper => //.
-rewrite big_sepL_fmap.
-have e : path.sort order.Order.le (map unfold_term ts) ≡ₚ map unfold_term ts.
-  apply: (ssrbool.elimT (perm_Permutation _ _ _)).
-  by rewrite path.perm_sort seq.perm_refl.
-by rewrite e big_sepL_fmap.
-Qed.
+Definition sterm t : iProp :=
+  [∗ set] a ∈ nonces_of_term t, declared_nonce a.
 
 Global Instance Persistent_sterm t : Persistent (sterm t).
+Proof. apply _. Qed.
+
+(*
+Inductive derive (T : gset term) (t : term) : Prop :=
+| DIn
+  of t ∈ T
+: derive T t
+
+| DInt n
+  of t = TInt n
+: derive T t
+
+| DPair t1 t2
+  of t = TPair t1 t2
+  &  derive T t1
+  &  derive T t2
+: derive T t
+
+| DKey kt t'
+  of t = TKey kt t'
+  &  derive T t'
+: derive T t
+
+| DEnc k t'
+  of t = TEnc k t'
+  &  derive T (TKey Enc k)
+  &  derive T t'
+: derive T t
+
+| DHash t'
+  of t = THash t'
+  &  derive T t'
+: derive T t
+
+| DExp0 t'
+  of t = TExp t' []
+  &  derive T t'
+
+| DExp1 t1 ts1 t2
+  of t = TExp t1 (t2 :: ts1)
+  &  derive T (TExp t1 ts1)
+  &  derive T t2
+: derive T t.
+*)
+
+Inductive decompose (T : gset term) (t : term) : Prop :=
+| DInt n of T = ∅ & t = TInt n
+
+| DPair t1 t2 of T = {[t1; t2]} & t = TPair t1 t2
+
+| DKey kt t' of T = {[t']} & t = TKey kt t'
+
+| DEnc k t' of T = {[TKey Enc k; t']} & t = TEnc k t'
+
+| DHash t' of T = {[t']} & t = THash t'
+
+| DExp0 t' of T = {[t']} & t = TExp t' [] & is_exp t
+
+| DExp1 t1 ts1 t2 of T = {[TExp t1 ts1; t2]} & t = TExp t1 (t2 :: ts1) & is_exp t.
+
+Lemma decompose_tsize T t t' : decompose T t → t' ∈ T → tsize t' < tsize t.
 Proof.
-elim: t=> [n|t1 IH1 t2 IH2|a|kt t IH|k IHk t IHt|t IH|t IHt ts IHts sorted_ts];
-try by rewrite sterm_eq; apply _.
-rewrite sterm_TExp.
-enough (Persistent ([∗ list] t' ∈ ts, sterm t')) by apply _.
-elim: ts IHts {t IHt sorted_ts} => /= [_|t ts IH [? /IH ?]]; apply _.
+case.
+- by move=> n -> -> //.
+- move=> t1 t2 -> ->.
+  case/elem_of_union => /elem_of_singleton ->;
+  rewrite [tsize (TPair _ _)]tsize_eq -ssrnat.plusE; lia.
+- move=> kt ? -> -> /elem_of_singleton ->.
+  rewrite [tsize (TKey _ _)]tsize_eq; lia.
+- move=> ?? -> -> /elem_of_union [] /elem_of_singleton ->;
+  rewrite ?[tsize (TKey _ _)]tsize_eq [tsize (TEnc _ _)]tsize_eq -ssrnat.plusE;
+  lia.
+- move=> ? -> -> /elem_of_singleton ->; rewrite [tsize (THash _)]tsize_eq; lia.
+- move=> ? -> -> _ /elem_of_singleton ->.
+  rewrite tsize_TExp /= -ssrnat.plusE; lia.
+- move=> t1 ts1 t2 -> -> _.
+  case: (tsize_texp (TExp t1 ts1) t2); rewrite texpA ?is_exp_TExp //.
+  by move=> ?? /elem_of_union [] /elem_of_singleton ->.
 Qed.
 
 Fixpoint pterm_aux n t : iProp :=
-  match n with
-  | 0 => False
-  | S n =>
-    let pterm_aux_key kt t : iProp := (
-       pterm_aux n t ∨
-       sterm t ∧
-       [∗ set] a ∈ nonces_of_term t,
-         published a (TKey kt t)
-    )%I in
-    match t with
-    | TInt _ => True
-    | TPair t1 t2 => pterm_aux n t1 ∧ pterm_aux n t2
-    | TNonce a => published a (TNonce a)
-    | TKey kt pt => pterm_aux_key kt pt
-    | TEnc k t =>
-      pterm_aux_key Enc k ∧ pterm_aux n t ∨
-      sterm k ∧
-      enc_inv k t ∧
-      □ (pterm_aux_key Dec k → pterm_aux n t)
-    | THash t =>
-      pterm_aux n t ∨
-      [∗ set] a ∈ nonces_of_term t, published a (THash t)
-    | TExp' _ _ _ as t =>
-      (∃ t1 t2, ⌜t = texp t1 t2⌝ ∧ pterm_aux n t1 ∧ pterm_aux n t2)
-      ∨ ([∗ set] a ∈ nonces_of_term t, published a t)
-    end
-  end.
+  if n is S n then
+    sterm t ∧ (
+     ⌜atomic t⌝ ∧ ([∗ set] a ∈ nonces_of_term t, published a t)
+     ∨ (∃ T, ⌜decompose T t⌝ ∧ [∗ set] t' ∈ T, pterm_aux n t')
+     ∨ ∃ k t', ⌜t = TEnc k t'⌝ ∧ enc_inv k t' ∧
+               □ (pterm_aux n (TKey Dec k) → pterm_aux n t')
+    )
+  else False.
+
+Global Instance Persistent_pterm_aux n t : Persistent (pterm_aux n t).
+Proof. elim: n t => [|n IH] /=; apply _. Qed.
 
 (** [pterm t] holds when the term [t] can be declared public. *)
 
 Definition pterm t := pterm_aux (tsize t) t.
 
+Global Instance Persistent_pterm t : Persistent (pterm t).
+Proof. apply _. Qed.
+
+Lemma and_proper_L (P : Prop) (φ ψ : iProp) :
+  (P → φ ⊣⊢ ψ) →
+  ⌜P⌝ ∧ φ ⊣⊢ ⌜P⌝ ∧ ψ.
+Proof.
+by move=> φ_ψ; apply: (anti_symm _); iIntros "[% ?]";
+rewrite φ_ψ; eauto.
+Qed.
+
+Lemma pterm_aux_eq n t : tsize t ≤ n → pterm_aux n t ⊣⊢ pterm t.
+Proof.
+rewrite /pterm.
+elim: n / (lt_wf n) t => - [|n] _ IH t t_n /=;
+move: (ssrbool.elimT ssrnat.ltP (tsize_gt0 t)) => ?;
+first lia.
+case e_st: (tsize t) => [|m] /=; first lia.
+apply: bi.and_proper => //.
+apply: bi.or_proper => //.
+apply: bi.or_proper.
+- apply: bi.exist_proper => T.
+  apply: and_proper_L => T_t.
+  apply: big_sepS_proper => t' T_t'.
+  move: (decompose_tsize T_t T_t') => ?.
+  rewrite (IH n) ?(IH m) //; lia.
+- apply: bi.exist_proper => k.
+  apply: bi.exist_proper => t'.
+  apply: and_proper_L => e_t.
+  apply: bi.and_proper => //.
+  rewrite e_t tsize_eq -ssrnat.plusE in t_n e_st.
+  rewrite !(IH n) ?(IH m) // ?[tsize (TKey _ _)]tsize_eq /=; lia.
+Qed.
+
+(* TODO: Merge with pterm_aux_eq *)
 Lemma pterm_eq t :
   pterm t ⊣⊢
-  match t with
-  | TInt _ => True
-  | TPair t1 t2 => pterm t1 ∧ pterm t2
-  | TNonce a => published a (TNonce a)
-  | TKey kt t =>
-    pterm t ∨ sterm t ∧ [∗ set] a ∈ nonces_of_term t,  published a (TKey kt t)
-  | TEnc k t =>
-    pterm (TKey Enc k) ∧ pterm t ∨
-    sterm k ∧
-    enc_inv k t ∧
-    □ (pterm (TKey Dec k) → pterm t)
-  | THash t =>
-    pterm t ∨
-    [∗ set] a ∈ nonces_of_term t, published a (THash t)
-  | TExp' _ _ _ as t =>
-    (∃ t1 t2, ⌜t = texp t1 t2⌝ ∧ pterm t1 ∧ pterm t2)
-    ∨ ([∗ set] a ∈ nonces_of_term t, published a t)
-  end%I.
+  sterm t ∧ (
+    ⌜atomic t⌝ ∧ ([∗ set] a ∈ nonces_of_term t, published a t)
+    ∨ (∃ T, ⌜decompose T t⌝ ∧ [∗ set] t' ∈ T, pterm t')
+    ∨ ∃ k t', ⌜t = TEnc k t'⌝ ∧ enc_inv k t' ∧ □ (pterm (TKey Dec k) → pterm t')
+  ).
 Proof.
 rewrite {1}/pterm.
-move: {-1}(tsize t) (Nat.le_refl (tsize t)) => m.
-elim: m / (lt_wf m) t => m _ IH; case=> //=.
-- move=> n; rewrite tsize_eq; case: m IH => //=; lia.
-- move=> t1 t2; rewrite tsize_eq -ssrnat.plusE.
-  case: m IH => /= [|m] IH le_m; first lia.
-  rewrite /pterm !IH //; lia.
-- move=> a; rewrite tsize_eq; case: m IH => //=; lia.
-- move=> kt t; rewrite tsize_eq; case: m IH => [|m] IH le_m /=; try lia.
-  rewrite /pterm !IH //; lia.
-- move=> k t; rewrite tsize_eq -ssrnat.plusE.
-  case: m IH => [|m] IH le_m /=; try lia.
-  rewrite /pterm /= -[PreTerm.size (unfold_term k)]/(tsize k).
-  rewrite !IH //=; lia.
-- move=> t; rewrite tsize_eq; case: m IH => [|m] IH le_m /=; try lia.
-  rewrite /pterm !IH //; lia.
-- move=> t pts wf.
-  case: m IH => //= [|m] IH le_m.
-    by move: le_m; rewrite TExp'E tsize_TExp; lia.
-  enough (H' : (∃ t1 t2, ⌜TExp' t pts wf = texp t1 t2⌝ ∧ pterm_aux m t1 ∧ pterm_aux m t2)
-         ⊣⊢ (∃ t1 t2, ⌜TExp' t pts wf = texp t1 t2⌝ ∧ pterm t1 ∧ pterm t2) ).
-    now rewrite H'.
-  apply: bi.exist_proper => t1.
-  apply: bi.exist_proper => t2.
-  assert (E : TExp' t pts wf = texp t1 t2 →
-              pterm_aux m t1 ∧ pterm_aux m t2 ⊣⊢ pterm t1 ∧ pterm t2).
-    move=> e.
-    move: (tsize_texp t1 t2); rewrite -e //= => /(_ eq_refl) [??].
-    rewrite /pterm !IH //; lia.
-  by apply: (anti_symm _); iIntros "[%e ?]"; rewrite -E //; iSplit; eauto.
+case e_st: (tsize t) => [|m] /=.
+  move: (ssrbool.elimT ssrnat.ltP (tsize_gt0 t)) => ?; lia.
+apply: bi.and_proper => //.
+apply: bi.or_proper => //.
+apply: bi.or_proper.
+- apply: bi.exist_proper => T.
+  apply: and_proper_L => T_t.
+  apply: big_sepS_proper => t' T_t'.
+  move: (decompose_tsize T_t T_t') => ?.
+  rewrite pterm_aux_eq //; lia.
+- apply: bi.exist_proper => k.
+  apply: bi.exist_proper => t'.
+  apply: and_proper_L => e_t.
+  apply: bi.and_proper => //.
+  rewrite e_t tsize_eq -ssrnat.plusE in e_st.
+  rewrite !pterm_aux_eq ?[tsize (TKey _ _)]tsize_eq //=; lia.
+Qed.
+
+Lemma pterm_sterm t : pterm t -∗ sterm t.
+Proof. rewrite pterm_eq; by iIntros "[??]". Qed.
+
+(* MOVE *)
+Lemma big_sepS_union_pers (PROP : bi) `{!BiAffine PROP, !EqDecision A, !Countable A}
+  (Φ : A → PROP) (X Y : gset A) :
+  (∀ x, Persistent (Φ x)) →
+  ([∗ set] x ∈ (X ∪ Y), Φ x) ⊣⊢ ([∗ set] x ∈ X, Φ x) ∧ ([∗ set] x ∈ Y, Φ x).
+Proof.
+move=> ?; rewrite !big_sepS_forall.
+apply: (anti_symm _).
+- iIntros "H"; iSplit; iIntros "%a %a_in"; iApply "H";
+  iPureIntro; set_solver.
+- iIntros "H %x %x_XY".
+  case/elem_of_union: x_XY => [x_X|x_Y].
+  + by iDestruct "H" as "[H _]"; iApply "H".
+  + by iDestruct "H" as "[_ H]"; iApply "H".
+Qed.
+
+Lemma big_sepS_union_list_pers
+  (PROP : bi) `{!BiAffine PROP, !EqDecision A, !Countable A}
+  (Φ : A → PROP) (X : list (gset A)) :
+  (∀ x, Persistent (Φ x)) →
+  ([∗ set] x ∈ ⋃ X, Φ x) ⊣⊢ ([∗ list] X ∈ X, [∗ set] x ∈ X, Φ x).
+Proof.
+move=> ?; rewrite big_sepS_forall big_sepL_forall.
+apply: (anti_symm _).
+- iIntros "H %k %Y %X_k"; rewrite big_sepS_forall; iIntros "%x %x_Y".
+  iApply "H"; iPureIntro.
+  apply/elem_of_union_list; exists Y; split => //.
+  by rewrite elem_of_list_lookup; eauto.
+- iIntros "H %x %x_X".
+  case/elem_of_union_list: x_X => Y [Y_X x_Y].
+  case/elem_of_list_lookup: Y_X => k X_k.
+  iSpecialize ("H" $! _ _ X_k).
+  by rewrite big_sepS_forall; iApply "H".
+Qed.
+(* /MOVE *)
+
+Lemma sterm_TInt n : sterm (TInt n) ⊣⊢ True.
+Proof. by rewrite /sterm nonces_of_term_eq /= big_sepS_empty. Qed.
+
+Lemma sterm_TPair t1 t2 : sterm (TPair t1 t2) ⊣⊢ sterm t1 ∧ sterm t2.
+Proof.
+by rewrite /sterm nonces_of_term_eq /= !big_sepS_union_pers.
+Qed.
+
+Lemma sterm_TNonce a : sterm (TNonce a) ⊣⊢ declared_nonce a.
+Proof.
+by rewrite /sterm nonces_of_term_eq /= big_sepS_singleton.
+Qed.
+
+Lemma sterm_TKey kt t : sterm (TKey kt t) ⊣⊢ sterm t.
+Proof. by rewrite /sterm nonces_of_term_eq /=. Qed.
+
+Lemma sterm_TEnc k t : sterm (TEnc k t) ⊣⊢ sterm k ∧ sterm t.
+Proof.
+by rewrite /sterm nonces_of_term_eq /= !big_sepS_union_pers.
+Qed.
+
+Lemma sterm_THash t : sterm (THash t) ⊣⊢ sterm t.
+Proof. by rewrite /sterm nonces_of_term_eq /=. Qed.
+
+Lemma sterm_TExp t ts : sterm (TExp t ts) ⊣⊢ sterm t ∧ [∗ list] t' ∈ ts, sterm t'.
+Proof.
+rewrite /sterm nonces_of_term_TExp big_sepS_union_pers.
+by rewrite big_sepS_union_list_pers big_sepL_fmap.
+Qed.
+
+Lemma pterm_TInt n : pterm (TInt n) ⊣⊢ True.
+Proof.
+apply: (anti_symm _); iIntros "_" => //.
+rewrite pterm_eq sterm_TInt; iSplit => //.
+iRight; iLeft; iExists ∅; rewrite big_sepS_empty; iSplit => //.
+by iPureIntro; econstructor.
+Qed.
+
+Lemma pterm_TPair t1 t2 : pterm (TPair t1 t2) ⊣⊢ pterm t1 ∧ pterm t2.
+Proof.
+apply: (anti_symm _); iIntros "#Ht" => //.
+- rewrite pterm_eq sterm_TPair.
+  iDestruct "Ht" as "([Ht1 Ht2] & publ)".
+  iDestruct "publ" as "[[% ?] | [publ | publ]]" => //=.
+  + iDestruct "publ" as (T) "[%dec publ]".
+    case: dec => //= {}t1 {}t2 -> [-> ->].
+    by rewrite big_sepS_union_pers !big_sepS_singleton.
+  + by iDestruct "publ" as (??) "[% ?]".
+- iDestruct "Ht" as "[Ht1 Ht2]".
+  rewrite [pterm (TPair t1 t2)]pterm_eq sterm_TPair -!pterm_sterm.
+  iSplit; eauto.
+  iRight; iLeft; iExists _; iSplit.
+    iPureIntro; by econstructor.
+  by rewrite big_sepS_union_pers !big_sepS_singleton; eauto.
+Qed.
+
+Lemma published_declared_nonce a t : published a t -∗ declared_nonce a.
+Proof.
+by iDestruct 1 as (P) "[H _]"; iExists P.
+Qed.
+
+Lemma pterm_TNonce a : pterm (TNonce a) ⊣⊢ published a (TNonce a).
+Proof.
+apply: (anti_symm _); iIntros "Ht".
+- rewrite pterm_eq; iDestruct "Ht" as "[_ Ht]".
+  iDestruct "Ht" as "[[_ publ] | [publ | publ]]".
+  + by rewrite nonces_of_term_eq /= big_sepS_singleton.
+  + iDestruct "publ" as (T) "[%dec _]".
+    by case: dec.
+  + by iDestruct "publ" as (k t') "[%dec _]".
+- rewrite pterm_eq; iSplit.
+    by rewrite sterm_TNonce published_declared_nonce.
+  iLeft; iSplit => //=.
+  by rewrite nonces_of_term_eq /= big_sepS_singleton.
+Qed.
+
+Lemma pterm_TKey kt t :
+  pterm (TKey kt t) ⊣⊢
+  pterm t ∨ [∗ set] a ∈ nonces_of_term t, published a (TKey kt t).
+Proof.
+apply: (anti_symm _).
+- rewrite pterm_eq sterm_TKey; iDestruct 1 as "[Ht publ]".
+  iDestruct "publ" as "[[_ publ] | [publ | publ]]".
+  + iRight; by rewrite nonces_of_term_eq.
+  + iDestruct "publ" as (T) "[%dec publ]".
+    case: dec => //= {}kt {}t -> [-> ->].
+    by rewrite big_sepS_singleton; eauto.
+  + by iDestruct "publ" as (??) "[% _]".
+- iDestruct 1 as "# [publ | publ]".
+    rewrite [pterm (TKey _ _)]pterm_eq sterm_TKey -pterm_sterm.
+    iSplit => //; iRight; iLeft.
+    iExists {[t]}; iSplit; first by iPureIntro; econstructor.
+    by rewrite big_sepS_singleton.
+  rewrite pterm_eq; iSplit.
+    rewrite /sterm nonces_of_term_eq /=.
+    iApply big_sepS_mono; last by eauto.
+    move=> ??; iApply published_declared_nonce.
+  iLeft; iSplit => //.
+  by rewrite nonces_of_term_eq.
+Qed.
+
+Lemma pterm_TEnc k t :
+  pterm (TEnc k t) ⊣⊢
+  pterm (TKey Enc k) ∧ pterm t ∨
+  sterm (TEnc k t) ∧ enc_inv k t ∧ □ (pterm (TKey Dec k) → pterm t).
+Proof.
+apply: (anti_symm _).
+- rewrite pterm_eq sterm_TEnc.
+  iDestruct 1 as "[[Hk Ht] publ]".
+  iDestruct "publ" as "[[% ?] | [publ | publ]]"; first by [].
+  + iDestruct "publ" as (T) "[%dec ?]".
+    case: dec => // {}k {}t -> [-> ->].
+    by rewrite big_sepS_union_pers !big_sepS_singleton; iLeft.
+  + by iDestruct "publ" as (k' t') "(%e_t & ? & ?)"; case: e_t => <- <-; eauto.
+- iDestruct 1 as "# [[Hk Ht] | (Ht & inv & #impl)]".
+  + rewrite [pterm (TEnc _ _)]pterm_eq sterm_TEnc.
+    rewrite -[sterm k](sterm_TKey Enc k) -!pterm_sterm.
+    iSplit; eauto; iRight; iLeft.
+    iExists {[TKey Enc k; t]}; rewrite big_sepS_union_pers !big_sepS_singleton.
+    iSplit; eauto; iPureIntro; by econstructor.
+  + rewrite [pterm (TEnc k t)]pterm_eq; iSplit => //=.
+    iRight; iRight; by iExists k, t; eauto.
+Qed.
+
+Lemma pterm_THash t :
+  pterm (THash t) ⊣⊢
+  pterm t ∨ [∗ set] a ∈ nonces_of_term t, published a (THash t).
+Proof.
+apply: (anti_symm _).
+- rewrite pterm_eq sterm_THash.
+  iDestruct 1 as "[Ht [[_ publ] | [publ | publ]]]".
+  + by rewrite nonces_of_term_eq /=; eauto.
+  + iDestruct "publ" as (T) "[%dec ?]".
+    case: dec => //= {}t -> [->].
+    by rewrite big_sepS_singleton; eauto.
+  + by iDestruct "publ" as (??) "[% ?]".
+- iDestruct 1 as "[Ht | publ]".
+    rewrite [pterm (THash _)]pterm_eq sterm_THash -pterm_sterm.
+    iSplit => //=; iRight; iLeft.
+    iExists {[t]}; rewrite big_sepS_singleton; iSplit => //.
+    iPureIntro; by econstructor.
+  rewrite pterm_eq /sterm; iSplit.
+    rewrite nonces_of_term_eq /=.
+    iApply (big_sepS_mono with "publ") => ??.
+    by iApply published_declared_nonce.
+  iLeft; iSplit => //.
+  by rewrite nonces_of_term_eq /=.
 Qed.
 
 Lemma pterm_TExp t ts :
   pterm (TExp t ts) ⊣⊢
-  (∃ t1 t2, ⌜TExp t ts = texp t1 t2⌝ ∧ pterm t1 ∧ pterm t2)
-  ∨ ([∗ set] a ∈ nonces_of_term (TExp t ts), published a (TExp t ts)).
-Proof. by rewrite unlock pterm_eq /=. Qed.
-
-Global Instance Persistent_pterm t : Persistent (pterm t).
+  ⌜ts = []⌝ ∧ pterm t ∨
+  (∃ t' ts', ⌜ts ≡ₚ t' :: ts'⌝ ∧ pterm (TExp t ts') ∧ pterm t') ∨
+  [∗ set] a ∈ nonces_of_term t ∪ ⋃ (nonces_of_term <$> ts),
+    published a (TExp t ts).
 Proof.
-elim/term_lt_ind: t; case=> [n|t1 t2|a|kt t|k t|t|t ts s_ts];
-try by rewrite pterm_eq; apply _.
-- rewrite pterm_eq. rewrite tsize_eq -ssrnat.plusE => IH.
-  assert (Persistent (pterm t1)). eapply IH; eauto; lia.
-  assert (Persistent (pterm t2)). eapply IH; eauto; lia.
-  by apply _.
-- rewrite pterm_eq. rewrite tsize_eq => IH.
-  assert (Persistent (pterm t)). eapply IH; eauto; lia.
-  by apply _.
-- rewrite pterm_eq. rewrite tsize_eq -ssrnat.plusE => IH.
-  assert (Persistent (pterm k)). eapply IH; eauto; lia.
-  assert (Persistent (pterm t)). eapply IH; eauto; lia.
-  by apply _.
-- rewrite pterm_eq tsize_eq => IH.
-  assert (Persistent (pterm t)). eapply IH; eauto; lia.
-  by apply _.
-- rewrite pterm_eq => IH.
-  enough (Persistent (∃ t1 t2 : term, ⌜TExp' t ts s_ts = texp t1 t2⌝ ∧ pterm t1 ∧ pterm t2)) by apply _.
-  apply: bi.exist_persistent => t1.
-  apply: bi.exist_persistent => t2.
-  rewrite /Persistent; iIntros "(%e & H)".
-  move: (tsize_texp t1 t2); rewrite -e //= => /(_ eq_refl) [??].
-  assert (Persistent (pterm t1)). eapply IH; eauto; lia.
-  assert (Persistent (pterm t2)). eapply IH; eauto; lia.
-  iDestruct "H" as "#[??]"; iModIntro.
-  iSplit; eauto.
-Qed.
-
-Lemma sub_termT t : pterm t -∗ sterm t.
-Proof.
-elim/term_lt_ind: t; case => //=.
-- move=> t1 t2; rewrite pterm_eq sterm_eq tsize_eq -ssrnat.plusE => IH.
-  rewrite !IH //; lia.
-- move=> a _; rewrite pterm_eq sterm_eq.
-  by iDestruct 1 as (P) "[H _]"; iExists P.
-- move=> kt t; rewrite pterm_eq [sterm (TKey _ _)]sterm_eq tsize_eq => IH.
-  iDestruct 1 as "[H|[H _]]" => //.
-  by iApply IH => //; lia.
-- move=> k t.
-  rewrite pterm_eq [pterm (TKey _ _)]pterm_eq [sterm (TEnc _ _)]sterm_eq => IH.
-  iIntros "[[H Ht]|[Hk Ht]]".
-
-
-
-elim/term_ind': t lvl lvl' =>
-  //= [n|t1 IH1 t2 IH2|l|kt k _|k _ t IH|t IH|???] lvl lvl' sub.
-- by rewrite !termT_eq.
-- rewrite ![termT _ (TPair t1 t2)]termT_eq /=.
-  by iIntros "[#Ht1 #Ht2]"; rewrite IH1 // IH2 //; iSplit.
-- rewrite !termT_eq /=.
-  iDestruct 1 as (lvl0) "(#Hnonce & #Hmeta & %sub0)".
-  iExists lvl0; repeat iSplit=> //; iPureIntro; by etransitivity.
-- rewrite ![termT _ (TKey _ k)]termT_eq.
-  iDestruct 1 as (lvl_enc lvl_dec) "(#Hkey & %sub0)".
-  iExists lvl_enc, lvl_dec; iSplit=> //; iPureIntro; by etransitivity.
-- rewrite ![termT _ (TEnc _ t)]termT_eq.
-  iDestruct 1 as (lvl_enc lvl_dec) "# (Hk & Ht)".
-  iExists lvl_enc, lvl_dec; iSplit => //.
-  iDestruct "Ht" as "[Ht|Ht]"; eauto.
-  iDestruct "Ht" as "(tP & Ht)".
-  iRight; iSplit => //.
-  iApply (IH with "Ht").
-  by case: lvl lvl' lvl_dec sub=> [] [] [].
-- by rewrite ![termT _ (THash _)]termT_eq.
-- by rewrite ![termT _ (TExp' _ _ _)]termT_eq.
+apply: (anti_symm _).
+- rewrite pterm_eq sterm_TExp.
+  iDestruct 1 as "# [[Ht Hts] [[_ publ] | [publ | publ]]]".
+  + by rewrite nonces_of_term_TExp; do 2!iRight.
+  + iDestruct "publ" as (T) "[%dec publ]".
+    case: dec; try by move=>>; rewrite unlock.
+    * move=> {}t -> /TExp_inj [-> e_ts] _.
+      rewrite big_sepS_singleton; iLeft; iSplit => //.
+      iPureIntro; exact: Permutation.Permutation_nil.
+    * move=> {}t ts1 t2 -> /TExp_inj [-> e_ts] _.
+      iRight; iLeft; rewrite big_sepS_union_pers !big_sepS_singleton.
+      by eauto.
+  + iDestruct "publ" as (??) "[%e ?]".
+    by rewrite unlock in e.
+- iDestruct 1 as "# [[-> Ht] | [publ | publ]]".
+  + rewrite [pterm (TExp _ _)]pterm_eq sterm_TExp -pterm_sterm /=.
+    iSplit; eauto.
+    iRight; iLeft.
+    iExists {[t]}; rewrite big_sepS_singleton.
+    iSplit => //; iPureIntro.
+    apply: DExp0; eauto; by rewrite is_exp_TExp.
+  + iDestruct "publ" as (t' ts') "[-> [Ht1 Ht2]]".
+    rewrite [pterm (TExp _ (_ :: _))]pterm_eq sterm_TExp /=.
+    iSplit.
+      rewrite !pterm_sterm sterm_TExp /=.
+      by iDestruct "Ht1" as "[??]"; eauto.
+    iRight; iLeft.
+    iExists {[TExp t ts'; t']}; rewrite big_sepS_union_pers !big_sepS_singleton.
+    do !iSplit => //.
+    iPureIntro.
+    by apply: DExp1; eauto; rewrite is_exp_TExp.
+  + rewrite pterm_eq /sterm; iSplit.
+      rewrite nonces_of_term_TExp.
+      iApply (big_sepS_mono with "publ") => ??.
+      by iApply published_declared_nonce.
+    iLeft; iSplit; first by rewrite unlock.
+    by rewrite nonces_of_term_TExp.
 Qed.
 
 Lemma termT_int lvl n : ⊢ termT lvl (TInt n).

@@ -45,6 +45,11 @@ Instance repr_key_type : Repr key_type := λ kt, #(int_of_key_type kt).
 
 Canonical termO := leibnizO term.
 
+Global Instance TExp_proper : Proper ((=) ==> (≡ₚ) ==> (=)) TExp.
+Proof.
+by move=> t _ <- ts1 ts2 e; apply/TExp_inj; eauto.
+Qed.
+
 Global Instance pre_term_inhabited : Inhabited PreTerm.pre_term.
 Proof. exact: (populate (PreTerm.PTInt 0)). Qed.
 
