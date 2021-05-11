@@ -360,11 +360,23 @@ Qed.
 Definition publish_pred a (P : term → iProp) : iProp :=
   ∃ γ, meta a (cryptoN.@"nonce") γ ∧ saved_pred_own γ P.
 
+Global Instance Persistent_publish_pred a (P : term → iProp) :
+  Persistent (publish_pred a P).
+Proof. apply _. Qed.
+
 Definition declared_nonce a : iProp :=
   ∃ (P : term → iProp), publish_pred a P.
 
+Global Instance Persistent_declared_nonce a :
+  Persistent (declared_nonce a).
+Proof. apply _. Qed.
+
 Definition published a t : iProp :=
   ∃ (P : term → iProp), publish_pred a P ∧ □ P t.
+
+Global Instance Persistent_published a t :
+  Persistent (published a t).
+Proof. apply _. Qed.
 
 Fixpoint sterm_aux pt : iProp :=
   match pt with
@@ -392,6 +404,27 @@ Lemma sterm_eq t :
   end%I.
 Proof. by case: t. Qed.
 
+Lemma sterm_TExp t ts :
+  sterm (TExp t ts) ⊣⊢ sterm t ∧ [∗ list] t' ∈ ts, sterm t'.
+Proof.
+rewrite {1}/sterm unfold_TExp /=.
+apply bi.and_proper => //.
+rewrite big_sepL_fmap.
+have e : path.sort order.Order.le (map unfold_term ts) ≡ₚ map unfold_term ts.
+  apply: (ssrbool.elimT (perm_Permutation _ _ _)).
+  by rewrite path.perm_sort seq.perm_refl.
+by rewrite e big_sepL_fmap.
+Qed.
+
+Global Instance Persistent_sterm t : Persistent (sterm t).
+Proof.
+elim: t=> [n|t1 IH1 t2 IH2|a|kt t IH|k IHk t IHt|t IH|t IHt ts IHts sorted_ts];
+try by rewrite sterm_eq; apply _.
+rewrite sterm_TExp.
+enough (Persistent ([∗ list] t' ∈ ts, sterm t')) by apply _.
+elim: ts IHts {t IHt sorted_ts} => /= [_|t ts IH [? /IH ?]]; apply _.
+Qed.
+
 Fixpoint pterm_aux n t : iProp :=
   match n with
   | 0 => False
@@ -409,6 +442,7 @@ Fixpoint pterm_aux n t : iProp :=
     | TKey kt pt => pterm_aux_key kt pt
     | TEnc k t =>
       pterm_aux_key Enc k ∧ pterm_aux n t ∨
+      sterm k ∧
       enc_inv k t ∧
       □ (pterm_aux_key Dec k → pterm_aux n t)
     | THash t =>
@@ -434,6 +468,7 @@ Lemma pterm_eq t :
     pterm t ∨ sterm t ∧ [∗ set] a ∈ nonces_of_term t,  published a (TKey kt t)
   | TEnc k t =>
     pterm (TKey Enc k) ∧ pterm t ∨
+    sterm k ∧
     enc_inv k t ∧
     □ (pterm (TKey Dec k) → pterm t)
   | THash t =>
@@ -476,122 +511,58 @@ elim: m / (lt_wf m) t => m _ IH; case=> //=.
   by apply: (anti_symm _); iIntros "[%e ?]"; rewrite -E //; iSplit; eauto.
 Qed.
 
-Global Instance persistent_termT lvl t :
-  Persistent (termT lvl t).
+Lemma pterm_TExp t ts :
+  pterm (TExp t ts) ⊣⊢
+  (∃ t1 t2, ⌜TExp t ts = texp t1 t2⌝ ∧ pterm t1 ∧ pterm t2)
+  ∨ ([∗ set] a ∈ nonces_of_term (TExp t ts), published a (TExp t ts)).
+Proof. by rewrite unlock pterm_eq /=. Qed.
+
+Global Instance Persistent_pterm t : Persistent (pterm t).
 Proof.
-elim/term_ind': t lvl => /= *; rewrite termT_eq /= /keyT; apply _.
+elim/term_lt_ind: t; case=> [n|t1 t2|a|kt t|k t|t|t ts s_ts];
+try by rewrite pterm_eq; apply _.
+- rewrite pterm_eq. rewrite tsize_eq -ssrnat.plusE => IH.
+  assert (Persistent (pterm t1)). eapply IH; eauto; lia.
+  assert (Persistent (pterm t2)). eapply IH; eauto; lia.
+  by apply _.
+- rewrite pterm_eq. rewrite tsize_eq => IH.
+  assert (Persistent (pterm t)). eapply IH; eauto; lia.
+  by apply _.
+- rewrite pterm_eq. rewrite tsize_eq -ssrnat.plusE => IH.
+  assert (Persistent (pterm k)). eapply IH; eauto; lia.
+  assert (Persistent (pterm t)). eapply IH; eauto; lia.
+  by apply _.
+- rewrite pterm_eq tsize_eq => IH.
+  assert (Persistent (pterm t)). eapply IH; eauto; lia.
+  by apply _.
+- rewrite pterm_eq => IH.
+  enough (Persistent (∃ t1 t2 : term, ⌜TExp' t ts s_ts = texp t1 t2⌝ ∧ pterm t1 ∧ pterm t2)) by apply _.
+  apply: bi.exist_persistent => t1.
+  apply: bi.exist_persistent => t2.
+  rewrite /Persistent; iIntros "(%e & H)".
+  move: (tsize_texp t1 t2); rewrite -e //= => /(_ eq_refl) [??].
+  assert (Persistent (pterm t1)). eapply IH; eauto; lia.
+  assert (Persistent (pterm t2)). eapply IH; eauto; lia.
+  iDestruct "H" as "#[??]"; iModIntro.
+  iSplit; eauto.
 Qed.
 
-Global Instance keyT_persistent lvl_enc lvl_dec k :
-  Persistent (keyT lvl_enc lvl_dec k).
-Proof. apply _. Qed.
-
-(** A stricter version of [termT] that does not allow subtyping *)
-Definition stermT lvl t : iProp :=
-  termT lvl t ∗ □ ∀ lvl', termT lvl' t -∗ ⌜lvl ⊑ lvl'⌝.
-
-Global Instance stermT_persistent lvl t : Persistent (stermT lvl t).
-Proof. apply _. Qed.
-
-Lemma stermT_eq lvl t :
-  stermT lvl t ⊣⊢
-  match lvl with
-  | Pub => termT Pub t
-  | Sec => termT Sec t ∧ □ (termT Pub t → False)
-  end.
+Lemma sub_termT t : pterm t -∗ sterm t.
 Proof.
-apply (anti_symm _).
-- case: lvl; first by iDestruct 1 as "[??]".
-  iDestruct 1 as "# [Ht #Hmin]"; iSplit => //.
-  by iIntros "!> Ht'"; iPoseProof ("Hmin" with "Ht'") as "?".
-- case: lvl.
-    iIntros "#Ht"; iSplit => //.
-    by iIntros "!>" (lvl) "_"; case: lvl.
-  iIntros "[#Ht #Hmin]"; iSplit => //.
-  iIntros "!>" (lvl) "Ht'"; case: lvl => //.
-  by iDestruct ("Hmin" with "Ht'") as "[]".
-Qed.
+elim/term_lt_ind: t; case => //=.
+- move=> t1 t2; rewrite pterm_eq sterm_eq tsize_eq -ssrnat.plusE => IH.
+  rewrite !IH //; lia.
+- move=> a _; rewrite pterm_eq sterm_eq.
+  by iDestruct 1 as (P) "[H _]"; iExists P.
+- move=> kt t; rewrite pterm_eq [sterm (TKey _ _)]sterm_eq tsize_eq => IH.
+  iDestruct 1 as "[H|[H _]]" => //.
+  by iApply IH => //; lia.
+- move=> k t.
+  rewrite pterm_eq [pterm (TKey _ _)]pterm_eq [sterm (TEnc _ _)]sterm_eq => IH.
+  iIntros "[[H Ht]|[Hk Ht]]".
 
-Lemma keyT_agree lvl_enc lvl_enc' lvl_dec lvl_dec' k :
-  keyT lvl_enc lvl_dec k -∗
-  keyT lvl_enc' lvl_dec' k -∗
-  ⌜lvl_enc = lvl_enc'⌝ ∗
-  ⌜lvl_dec = lvl_dec'⌝.
-Proof.
-iIntros "[Hk|Hk] [Hk'|Hk']".
-- iDestruct "Hk" as "(enc & dec & _ & _)".
-  iDestruct "Hk'" as "(enc' & dec' & _ & _ )".
-  iDestruct (atomicT_agree with "enc enc'") as "->".
-  by iDestruct (atomicT_agree with "dec dec'") as "->".
-- iDestruct "Hk" as "(enc & dec & _ & sec & #npub)".
-  iDestruct "Hk'" as "(pub & _)".
-  by iDestruct ("npub" with "pub") as "[]".
-- iDestruct "Hk" as "(pub & _)".
-  iDestruct "Hk'" as "(_ & _ & _ & _ & npub)".
-  by iDestruct ("npub" with "pub") as "[]".
-- iDestruct "Hk" as "(_ & -> & ->)".
-  by iDestruct "Hk'" as "(_ & -> & ->)".
-Qed.
 
-Lemma keyT_eq lvl_enc lvl_dec k :
-  keyT lvl_enc lvl_dec k ⊣⊢
-  stermT lvl_enc (TKey Enc k) ∗
-  stermT lvl_dec (TKey Dec k).
-Proof.
-apply (anti_symm _).
-- iIntros "#Hk"; do 2!iSplit.
-  + rewrite termT_eq; eauto.
-  + iIntros "!>" (lvl).
-    rewrite termT_eq.
-    iDestruct 1 as (lvl_enc' lvl_dec') "[Hk' %leq]".
-    by iDestruct (keyT_agree with "Hk' Hk") as "[-> ->]".
-  + rewrite termT_eq; eauto.
-  + iIntros "!>" (lvl).
-    rewrite termT_eq.
-    iDestruct 1 as (lvl_enc' lvl_dec') "[Hk' %leq]".
-    by iDestruct (keyT_agree with "Hk' Hk") as "[-> ->]".
-- iDestruct 1 as "# [[enc #min_enc] [dec #min_dec]]".
-  rewrite !termT_eq /=.
-  iDestruct "enc" as (lvl_enc' lvl_dec') "[enc %leq]".
-  iDestruct "dec" as (lvl_enc'' lvl_dec'') "[dec %leq']".
-  iDestruct (keyT_agree with "dec enc") as "[-> ->]".
-  iAssert (⌜lvl_enc ⊑ lvl_enc'⌝)%I as "%".
-    iApply "min_enc"; rewrite termT_eq; eauto.
-  iAssert (⌜lvl_dec ⊑ lvl_dec'⌝)%I as "%".
-    iApply "min_dec"; rewrite termT_eq; eauto.
-  by destruct lvl_enc, lvl_enc', lvl_dec, lvl_dec'.
-Qed.
 
-Lemma stermT_TKey_eq lvl kt k :
-  stermT lvl (TKey kt k) ⊣⊢
-  ∃ lvl_enc lvl_dec,
-    keyT lvl_enc lvl_dec k ∗
-    ⌜lvl = if kt is Enc then lvl_enc else lvl_dec⌝.
-Proof.
-apply (anti_symm _).
-- iIntros "# [Hk #min]"; rewrite termT_eq.
-  iDestruct "Hk" as (lvl_enc lvl_dec) "[Hk %lb]".
-  iExists lvl_enc, lvl_dec; iSplit => //.
-  case: kt lb => lb.
-  + iPoseProof ("min" $! lvl_enc with "[]") as "%lb'".
-      rewrite termT_eq; iExists lvl_enc, lvl_dec; eauto.
-    by case: lvl_enc lvl lb lb' => [] [].
-  + iPoseProof ("min" $! lvl_dec with "[]") as "%lb'".
-      rewrite termT_eq; iExists lvl_enc, lvl_dec; eauto.
-    by case: lvl_dec lvl lb lb' => [] [].
-- iDestruct 1 as (lvl_enc lvl_dec) "# [Hk ->]".
-  iSplit.
-  + by rewrite termT_eq; iExists lvl_enc, lvl_dec; eauto.
-  + iIntros "!>" (lvl); rewrite termT_eq.
-    iDestruct 1 as (lvl_enc' lvl_dec') "# [Hk' %lb]".
-    by iDestruct (keyT_agree with "Hk' Hk") as %[-> ->].
-Qed.
-
-Lemma sub_termT lvl lvl' t :
-  lvl ⊑ lvl' →
-  termT lvl t -∗
-  termT lvl' t.
-Proof.
 elim/term_ind': t lvl lvl' =>
   //= [n|t1 IH1 t2 IH2|l|kt k _|k _ t IH|t IH|???] lvl lvl' sub.
 - by rewrite !termT_eq.

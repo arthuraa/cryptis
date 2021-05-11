@@ -603,3 +603,14 @@ apply: H7.
 Qed.
 
 Definition term_ind (P : term -> Prop) := @term_rect P.
+
+Lemma term_lt_ind (T : term -> Prop) :
+  (forall t, (forall t', (tsize t' < tsize t)%coq_nat -> T t') -> T t) ->
+  forall t, T t.
+Proof.
+move=> H t.
+move: {-1}(tsize t) (Nat.le_refl (tsize t)) => n.
+elim: n / (lt_wf n) t => n _ IH t t_n.
+apply: H => t' t'_t.
+apply: (IH (tsize t')); lia.
+Qed.
