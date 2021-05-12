@@ -613,11 +613,11 @@ Qed.
 Lemma pterm_TEncE N Φ k t :
   pterm (TEnc k (Spec.tag N t)) -∗
   crypto_enc N Φ -∗
-  pterm t ∨
+  pterm (TKey Enc k) ∧ pterm t ∨
   □ ▷ Φ k t ∧ sterm t ∧ □ (pterm (TKey Dec k) → pterm t).
 Proof.
 iIntros "#Ht #HΦ"; rewrite pterm_TEnc pterm_tag.
-iDestruct "Ht" as "[[_ Ht] | Ht]"; first by eauto.
+iDestruct "Ht" as "[[? Ht] | Ht]"; first by eauto.
 rewrite sterm_TEnc sterm_tag.
 iDestruct "Ht" as "([??] & inv & ?)".
 iRight; iSplit; eauto; by iApply enc_inv_elim.
@@ -645,7 +645,37 @@ Lemma pterm_TEncIP k t :
   pterm (TEnc k t).
 Proof. by iIntros "? ?"; rewrite pterm_TEnc; eauto. Qed.
 
+Section Meta.
+
+Context `{!EqDecision L, !Countable L}.
+
+Definition crypto_meta_token t E : iProp :=
+  ⌜nonces_of_term t ≠ ∅⌝ ∧
+  [∗ set] a ∈ nonces_of_term t, meta_token a E.
+
+Definition crypto_meta t N (x : L) : iProp :=
+  ⌜nonces_of_term t ≠ ∅⌝ ∧
+  [∗ set] a ∈ nonces_of_term t, meta a N x.
+
+Global Instance persistent_crypto_meta t N x :
+  Persistent (crypto_meta t N x).
+Proof. apply _. Qed.
+
+Lemma crypto_meta_set t N E x :
+  ↑N ⊆ E → crypto_meta_token t E ==∗ crypto_meta t N x.
+Proof.
+iIntros (sub) "[#ne token]"; rewrite /crypto_meta.
+iAssert (|==> [∗ set] a ∈ nonces_of_term t, meta a N x)%I
+  with "[token]" as "> ?"; last by eauto.
+iApply big_sepS_bupd.
+iApply (big_sepS_mono with "token") => a in_t /=.
+by iApply meta_set.
+Qed.
+
+End Meta.
+
 End Resources.
 
 Arguments crypto_enc_name {Σ _}.
 Arguments crypto_enc {Σ _ _}.
+Arguments crypto_meta_set {Σ _ _ _ _} t N E x.

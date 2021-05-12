@@ -197,11 +197,12 @@ Qed.
 Definition session_map_inv SM : iProp :=
   ([∗ map] t ↦ p ∈ SM,
      ⌜t = s_key p.2⌝ ∗
-     crypto_meta t N () ∗
+     crypto_meta t (N.@t) () ∗
      (sinv_int p.2 ∨ session_frag (Some (), swap_view p.2)))%I.
 
+(* TODO Extract crypto_meta_meta_token from here *)
 Lemma session_map_inv_unregistered SM t :
-  crypto_meta_token t (↑N) -∗
+  crypto_meta_token t (↑N.@t) -∗
   session_map_inv SM -∗
   ⌜SM !! t = None⌝.
 Proof.
@@ -209,7 +210,12 @@ iIntros "token inv".
 destruct (SM !! t) as [[ac s]|] eqn:SM_t=> //.
 rewrite /session_map_inv big_sepM_delete // /=.
 iDestruct "inv" as "[(_ & meta & _) _]".
-by iDestruct (crypto_meta_meta_token with "token meta") as "[]".
+iDestruct "token" as "[%not_empty token]".
+iDestruct "meta" as "[_ meta]".
+destruct (set_choose_L _ not_empty) as [a a_t].
+rewrite big_sepS_delete //; iDestruct "token" as "[token _]".
+rewrite big_sepS_delete //; iDestruct "meta" as "[meta _]".
+by iDestruct (meta_meta_token with "token meta") as "[]".
 Qed.
 
 Definition session_inv : iProp :=
@@ -258,7 +264,7 @@ Lemma session_begin_aux s E :
   ↑N ⊆ E →
   session_ctx -∗
   sinv_int s -∗
-  crypto_meta_token (s_key s) (↑N) ={E}=∗
+  crypto_meta_token (s_key s) (↑N.@s_key s) ={E}=∗
   session_auth (None, s) ∗ session_frag (None, s).
 Proof.
 iIntros (?) "#ctx s_inv token".
@@ -269,7 +275,7 @@ iDestruct "inv" as (SM) "(_ & inv & close)".
 iAssert (▷ ⌜SM !! s_key s = None⌝)%I as "# > %s_fresh".
   iModIntro.
   by iApply (session_map_inv_unregistered with "[token] [inv]").
-iMod (crypto_meta_set _ () with "token") as "#meta"; eauto.
+iMod (crypto_meta_set with "token") as "#meta"; eauto.
 rewrite -auth_own_op singleton_op.
 iApply ("close" $! (<[s_key s := (None, s)]>SM)); iSplit.
   iPureIntro; rewrite /to_session_map fmap_insert.
@@ -398,36 +404,22 @@ by case: e.
 Qed.
 
 Lemma session_begin E rl kA kB tA tB :
+  let t := if rl is Init then tA else tB in
   ↑N ⊆ E →
   session_ctx -∗
   sinv rl kA kB tA tB -∗
-  crypto_meta_token (if rl is Init then tA else tB) (↑N) ={E}=∗
+  crypto_meta_token t (↑N.@t) ={E}=∗
   session rl kA kB tA tB ∗
   (session (swap_role rl) kA kB tA tB ={E}=∗ ▷ sinv (swap_role rl) kA kB tA tB).
 Proof.
-iIntros (?) "#ctx inv token".
+rewrite /=; iIntros (?) "#ctx inv token".
 iMod (@session_begin_aux (SessionView rl kA kB tA tB)
         with "ctx inv token") as "[auth frag]" => //.
 iModIntro; iSplitR "auth" => //.
 by iIntros "frag"; iApply (session_end_aux with "ctx auth frag").
 Qed.
 
-Lemma session_beginG `{Decision G} E rl kA kB tA tB :
-  ↑N ⊆ E →
-  session_ctx -∗
-  guarded G (sinv rl kA kB tA tB) -∗
-  guarded G (crypto_meta_token (if rl is Init then tA else tB) (↑N)) ={E}=∗
-  guarded G (session rl kA kB tA tB) ∗
-  (guarded G (session (swap_role rl) kA kB tA tB) ={E}=∗
-   ▷ guarded G (sinv (swap_role rl) kA kB tA tB)).
-Proof.
-iIntros (?) "#ctx inv token".
-rewrite /guarded; case: decide => //= _.
-by iApply (session_begin with "ctx inv token").
-Qed.
-
 End Session.
 
 Arguments sessionG : clear implicits.
-Arguments session_begin {Σ _ _ _} {γ N sinv} E rl kA kB tA tB.
-Arguments session_beginG {Σ _ _ _} {γ N sinv} G {_} E rl kA kB tA tB.
+Arguments session_begin {Σ _ _}  {γ N sinv} E rl kA kB tA tB.
