@@ -323,33 +323,32 @@ Proof.
 by iIntros "?"; iApply twp_wp; iApply twp_untag.
 Qed.
 
-Lemma twp_mknonce E lvl Ψ :
-  ↑cryptoN ⊆ E →
-  crypto_ctx -∗
-  (∀ t, stermT lvl t -∗ ⌜atomic t⌝ -∗
-        guarded (lvl = Sec) (unpublished t ⊤) -∗
-        crypto_meta_token t ⊤ -∗
-        Ψ t) -∗
+Lemma twp_mknonce E P Ψ :
+  (∀ a, sterm (TNonce a) -∗
+        nonce_pred a P -∗
+        meta_token a (⊤ ∖ ↑cryptoN.@"nonce") -∗
+        Ψ (TNonce a)) -∗
   WP mknonce #()%V @ E [{ Ψ }].
 Proof.
-rewrite /mknonce; iIntros (sub) "#ctx post".
+rewrite /mknonce; iIntros "post".
 wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
 iIntros (a) "[_ token]".
-iMod (declare_nonce with "ctx token") as "(Ha & own & token)" => //.
-iSpecialize ("post" $! (TNonce a)).
-rewrite val_of_term_eq.
-by wp_pures; iApply ("post" with "Ha [] own token").
+rewrite (meta_token_difference a (↑cryptoN.@"nonce")) //.
+iDestruct "token" as "[pred token]".
+iMod (nonce_pred_set _ P with "pred") as "#pred".
+iSpecialize ("post" $! a).
+rewrite val_of_term_eq /=.
+wp_pures; iApply ("post" with "[] pred token").
+by rewrite sterm_TNonce; iExists P.
 Qed.
 
-Lemma wp_mknonce E lvl Ψ :
-  ↑cryptoN ⊆ E →
-  crypto_ctx -∗
-  (∀ t, stermT lvl t -∗ ⌜atomic t⌝ -∗
-        guarded (lvl = Sec) (unpublished t ⊤) -∗
-        crypto_meta_token t ⊤ -∗
-        Ψ t) -∗
+Lemma wp_mknonce E P Ψ :
+  (∀ a, sterm (TNonce a) -∗
+        nonce_pred a P -∗
+        meta_token a (⊤ ∖ ↑cryptoN.@"nonce") -∗
+        Ψ (TNonce a)) -∗
   WP mknonce #()%V @ E {{ Ψ }}.
-Proof. by iIntros (?) "#??"; iApply twp_wp; iApply twp_mknonce. Qed.
+Proof. by iIntros "?"; iApply twp_wp; iApply twp_mknonce. Qed.
 
 Lemma twp_mkkey E (k : term) Ψ :
   Ψ (TKey Enc k, TKey Dec k)%V -∗
@@ -625,5 +624,9 @@ rewrite -repr_list_val -[ @List.map ]/@map -map_comp map_id_in //.
 by move=> {}pt /(allP wf_pts) wf_pt; rewrite /= fold_termK.
 Qed.
 
+Lemma wp_texp E t1 t2 Ψ :
+  Ψ (Spec.texp t1 t2) -∗
+  WP texp t1 t2 @ E {{ Ψ }}.
+Proof. by iIntros "post"; iApply twp_wp; iApply twp_texp. Qed.
 
 End Proofs.

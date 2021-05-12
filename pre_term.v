@@ -490,28 +490,6 @@ Definition is_exp t :=
 Lemma is_exp_TExp t ts : is_exp (TExp t ts).
 Proof. by rewrite unlock /fold_term /=. Qed.
 
-Definition texp t1 t2 :=
-  if t1 is TExp' base exp _ then
-    TExp base (t2 :: map fold_term exp)
-  else TInt 0.
-
-Lemma texpA t1 ts1 t2 : texp (TExp t1 ts1) t2 = TExp t1 (t2 :: ts1).
-Proof.
-rewrite /texp {1}unlock /= fold_wf_termE normalize_unfold1 normalize_unfoldn.
-rewrite unfold_termK.
-apply: TExp_perm.
-by rewrite perm_cons -{2}[ts1](mapK unfold_termK) perm_map // perm_sort.
-Qed.
-
-Lemma unfold_exp t1 t2 :
-  unfold_term (texp t1 t2) = PreTerm.exp (unfold_term t1) (unfold_term t2).
-case: t1 => //= t1 ts1 /andP [wf_ts1 sorted_ts1].
-rewrite unfold_TExp /=; congr PreTerm.PTExp.
-apply/perm_sort_leP; rewrite perm_cons.
-rewrite -[@List.map]/@map -map_comp map_id_in //= => {}t1 in_ts1.
-by rewrite fold_termK // (allP wf_ts1).
-Qed.
-
 Definition tsize t := PreTerm.size (unfold_term t).
 
 Lemma tsize_gt0 t : 0 < tsize t. Proof. exact: PreTerm.size_gt0. Qed.
@@ -561,15 +539,14 @@ case/andP: wf=> wf_pts _; congr (_ + bigop _ _ _).+1.
 by apply/eq_in_map => pt in_pts /=; rewrite /tsize fold_termK // (allP wf_pts).
 Qed.
 
-Lemma tsize_texp t1 t2 :
-  is_exp (texp t1 t2) ->
-  (tsize t1 < tsize (texp t1 t2))%coq_nat /\
-  (tsize t2 < tsize (texp t1 t2))%coq_nat.
+Lemma tsize_TExp_lt t1 ts1 t2 :
+  (tsize (TExp t1 ts1) < tsize (TExp t1 (t2 :: ts1)))%coq_nat /\
+  (tsize t2 < tsize (TExp t1 (t2 :: ts1)))%coq_nat.
 Proof.
-case: t1 => //= t1 ts1 /= wf _.
+rewrite !tsize_TExp /= -!plusE.
 move/ssrnat.ltP: (tsize_gt0 t1) => pos_t1.
 move/ssrnat.ltP: (tsize_gt0 t2) => pos_t2.
-rewrite TExp'E !tsize_TExp /= -!plusE; split; lia.
+split; lia.
 Qed.
 
 Lemma term_rect (T : term -> Type)
