@@ -702,6 +702,16 @@ iApply (big_sepS_mono with "token") => a in_t /=.
 by iApply meta_set.
 Qed.
 
+Lemma crypto_meta_meta_token t (x : L) N E :
+  ↑N ⊆ E → crypto_meta_token t E -∗ crypto_meta t N x -∗ False.
+Proof.
+iIntros (sub) "[%not_empty token] [_ #meta]".
+destruct (set_choose_L _ not_empty) as [a a_t].
+rewrite big_sepS_delete //; iDestruct "meta" as "[meta _]".
+rewrite big_sepS_delete //; iDestruct "token" as "[token _]".
+by iDestruct (meta_meta_token with "token meta") as "[]".
+Qed.
+
 End Meta.
 
 End Resources.

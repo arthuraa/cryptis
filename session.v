@@ -210,12 +210,7 @@ iIntros "token inv".
 destruct (SM !! t) as [[ac s]|] eqn:SM_t=> //.
 rewrite /session_map_inv big_sepM_delete // /=.
 iDestruct "inv" as "[(_ & meta & _) _]".
-iDestruct "token" as "[%not_empty token]".
-iDestruct "meta" as "[_ meta]".
-destruct (set_choose_L _ not_empty) as [a a_t].
-rewrite big_sepS_delete //; iDestruct "token" as "[token _]".
-rewrite big_sepS_delete //; iDestruct "meta" as "[meta _]".
-by iDestruct (meta_meta_token with "token meta") as "[]".
+by iDestruct (crypto_meta_meta_token with "token meta") as "[]".
 Qed.
 
 Definition session_inv : iProp :=
