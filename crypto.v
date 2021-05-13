@@ -95,12 +95,13 @@ Notation iPropO := (iPropO Σ).
 Notation iPropI := (iPropI Σ).
 Notation enc_pred := (term → term → iProp).
 Notation nonce := loc.
+Implicit Types P : term → iProp.
 Implicit Types Φ : enc_pred.
 Implicit Types a : loc.
 Implicit Types l : level.
 Implicit Types γ : gname.
 
-Implicit Types P Q : iProp.
+Implicit Types φ ψ : iProp.
 
 Definition atomic t :=
   match t with
@@ -173,14 +174,14 @@ iPoseProof (crypto_enc_agree k t with "HΦ HΦ'") as "e".
 by iIntros "!> !>"; iRewrite "e".
 Qed.
 
-Definition nonce_pred a (P : term → iProp) : iProp :=
+Definition nonce_pred a P : iProp :=
   ∃ γ, meta a (cryptoN.@"nonce") γ ∧ saved_pred_own γ P.
 
-Global Instance Persistent_nonce_pred a (P : term → iProp) :
+Global Instance Persistent_nonce_pred a P :
   Persistent (nonce_pred a P).
 Proof. apply _. Qed.
 
-Lemma nonce_pred_set a (P : term → iProp) :
+Lemma nonce_pred_set a P :
   meta_token a (↑cryptoN.@"nonce") ==∗
   nonce_pred a P.
 Proof.
@@ -188,6 +189,17 @@ iIntros "token".
 iMod (saved_pred_alloc P) as (γ) "#HP".
 iMod (meta_set _ a γ with "token") as "#meta"; eauto.
 by iModIntro; iExists γ; eauto.
+Qed.
+
+Lemma nonce_pred_agree a P Q t :
+  nonce_pred a P -∗
+  nonce_pred a Q -∗
+  ▷ (P t ≡ Q t).
+Proof.
+iDestruct 1 as (γP) "[#a_γP #γP_P]".
+iDestruct 1 as (γQ) "[#a_γQ #γQ_Q]".
+iPoseProof (meta_agree with "a_γP a_γQ") as "->".
+by iApply (saved_pred_agree with "γP_P γQ_Q").
 Qed.
 
 Definition declared_nonce a : iProp :=
@@ -198,11 +210,20 @@ Global Instance Persistent_declared_nonce a :
 Proof. apply _. Qed.
 
 Definition published a t : iProp :=
-  ∃ (P : term → iProp), nonce_pred a P ∧ □ P t.
+  ∃ (P : term → iProp), nonce_pred a P ∧ ▷ □ P t.
 
 Global Instance Persistent_published a t :
   Persistent (published a t).
 Proof. apply _. Qed.
+
+Lemma publishedE a P t : nonce_pred a P -∗ published a t ↔ ▷ □ P t.
+Proof.
+iIntros "#a_P"; iSplit.
+- iDestruct 1 as (Q) "[#a_Q #Q_t]".
+  iPoseProof (nonce_pred_agree _ _ _ t with "a_P a_Q") as "e".
+  by iModIntro; iRewrite "e".
+- by iIntros "#P_t"; iExists P; eauto.
+Qed.
 
 Fact sterm_key : unit. Proof. exact: tt. Qed.
 
