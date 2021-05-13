@@ -205,24 +205,6 @@ iDestruct "Hts" as "(?&?&?)".
 by eauto.
 Qed.
 
-(*
-Lemma pterm_msg3E kA kB nA nB :
-  crypto_enc (nroot.@"m3") msg3_pred -∗
-  pterm (TEnc kB (Spec.tag (nroot.@"m3") nB)) -∗
-  ▷ (pterm nB ∨ session nsl_sess_name Init kA kB nA nB)
-
-Lemma msg3_pred_elimG l kA kB nA nB :
-  guarded (l = Sec) (msg3_pred kB nB) -∗
-  guarded (l = Sec) (session nsl_sess_name Resp kA kB nA nB) -∗
-  guarded (l = Sec) (session nsl_sess_name Init kA kB nA nB ∗
-                     stermT Sec nA ∗
-                     stermT Sec (TKey Dec kA)).
-Proof.
-iIntros "#HnB #sess -> /=".
-by iApply "HnB"; iApply "sess".
-Qed.
-*)
-
 Lemma wp_initiator kA kB (nA : term) E Ψ :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗

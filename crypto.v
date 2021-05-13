@@ -204,11 +204,17 @@ Global Instance Persistent_published a t :
   Persistent (published a t).
 Proof. apply _. Qed.
 
-Definition sterm t : iProp :=
-  [∗ set] a ∈ nonces_of_term t, declared_nonce a.
+Fact sterm_key : unit. Proof. exact: tt. Qed.
+
+Definition sterm : term → iProp :=
+  locked_with sterm_key (
+    λ t, [∗ set] a ∈ nonces_of_term t, declared_nonce a
+  )%I.
+
+Canonical sterm_unlock := [unlockable of sterm].
 
 Global Instance Persistent_sterm t : Persistent (sterm t).
-Proof. apply _. Qed.
+Proof. rewrite unlock; apply _. Qed.
 
 Inductive decompose (T : gset term) (t : term) : Prop :=
 | DInt n of T = ∅ & t = TInt n
@@ -260,10 +266,13 @@ Proof. elim: n t => [|n IH] /=; apply _. Qed.
 
 (** [pterm t] holds when the term [t] can be declared public. *)
 
-Definition pterm t := pterm_aux (tsize t) t.
+Fact pterm_key : unit. Proof. exact: tt. Qed.
+Definition pterm : term → iProp :=
+  locked_with pterm_key (λ t, pterm_aux (tsize t) t).
+Canonical pterm_unlock := [unlockable of pterm].
 
 Global Instance Persistent_pterm t : Persistent (pterm t).
-Proof. apply _. Qed.
+Proof. rewrite unlock; apply _. Qed.
 
 Lemma and_proper_L (P : Prop) (φ ψ : iProp) :
   (P → φ ⊣⊢ ψ) →
@@ -275,7 +284,7 @@ Qed.
 
 Lemma pterm_aux_eq n t : tsize t ≤ n → pterm_aux n t ⊣⊢ pterm t.
 Proof.
-rewrite /pterm.
+rewrite unlock.
 elim: n / (lt_wf n) t => - [|n] _ IH t t_n /=;
 move: (ssrbool.elimT ssrnat.ltP (tsize_gt0 t)) => ?;
 first lia.
@@ -305,7 +314,7 @@ Lemma pterm_eq t :
     ∨ ∃ k t', ⌜t = TEnc k t'⌝ ∧ enc_inv k t' ∧ □ (pterm (TKey Dec k) → pterm t')
   ).
 Proof.
-rewrite {1}/pterm.
+rewrite {1}[pterm]unlock.
 case e_st: (tsize t) => [|m] /=.
   move: (ssrbool.elimT ssrnat.ltP (tsize_gt0 t)) => ?; lia.
 apply: bi.and_proper => //.
@@ -364,32 +373,32 @@ Qed.
 (* /MOVE *)
 
 Lemma sterm_TInt n : sterm (TInt n) ⊣⊢ True.
-Proof. by rewrite /sterm nonces_of_term_eq /= big_sepS_empty. Qed.
+Proof. by rewrite unlock nonces_of_term_eq /= big_sepS_empty. Qed.
 
 Lemma sterm_TPair t1 t2 : sterm (TPair t1 t2) ⊣⊢ sterm t1 ∧ sterm t2.
 Proof.
-by rewrite /sterm nonces_of_term_eq /= !big_sepS_union_pers.
+by rewrite unlock nonces_of_term_eq /= !big_sepS_union_pers.
 Qed.
 
 Lemma sterm_TNonce a : sterm (TNonce a) ⊣⊢ declared_nonce a.
 Proof.
-by rewrite /sterm nonces_of_term_eq /= big_sepS_singleton.
+by rewrite unlock nonces_of_term_eq /= big_sepS_singleton.
 Qed.
 
 Lemma sterm_TKey kt t : sterm (TKey kt t) ⊣⊢ sterm t.
-Proof. by rewrite /sterm nonces_of_term_eq /=. Qed.
+Proof. by rewrite unlock nonces_of_term_eq /=. Qed.
 
 Lemma sterm_TEnc k t : sterm (TEnc k t) ⊣⊢ sterm k ∧ sterm t.
 Proof.
-by rewrite /sterm nonces_of_term_eq /= !big_sepS_union_pers.
+by rewrite unlock nonces_of_term_eq /= !big_sepS_union_pers.
 Qed.
 
 Lemma sterm_THash t : sterm (THash t) ⊣⊢ sterm t.
-Proof. by rewrite /sterm nonces_of_term_eq /=. Qed.
+Proof. by rewrite unlock nonces_of_term_eq /=. Qed.
 
 Lemma sterm_TExp t ts : sterm (TExp t ts) ⊣⊢ sterm t ∧ [∗ list] t' ∈ ts, sterm t'.
 Proof.
-rewrite /sterm nonces_of_term_TExp big_sepS_union_pers.
+rewrite unlock nonces_of_term_TExp big_sepS_union_pers.
 by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
@@ -457,7 +466,7 @@ apply: (anti_symm _).
     iExists {[t]}; iSplit; first by iPureIntro; econstructor.
     by rewrite big_sepS_singleton.
   rewrite pterm_eq; iSplit.
-    rewrite /sterm nonces_of_term_eq /=.
+    rewrite unlock nonces_of_term_eq /=.
     iApply big_sepS_mono; last by eauto.
     move=> ??; iApply published_declared_nonce.
   iLeft; iSplit => //.
@@ -504,7 +513,7 @@ apply: (anti_symm _).
     iSplit => //=; iRight; iLeft.
     iExists {[t]}; rewrite big_sepS_singleton; iSplit => //.
     iPureIntro; by econstructor.
-  rewrite pterm_eq /sterm; iSplit.
+  rewrite pterm_eq unlock; iSplit.
     rewrite nonces_of_term_eq /=.
     iApply (big_sepS_mono with "publ") => ??.
     by iApply published_declared_nonce.
@@ -550,7 +559,7 @@ apply: (anti_symm _).
     do !iSplit => //.
     iPureIntro.
     by apply: DExp1; eauto; rewrite is_exp_TExp.
-  + rewrite pterm_eq /sterm; iSplit.
+  + rewrite pterm_eq [sterm]unlock; iSplit.
       rewrite nonces_of_term_TExp.
       iApply (big_sepS_mono with "publ") => ??.
       by iApply published_declared_nonce.
