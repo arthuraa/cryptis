@@ -27,28 +27,20 @@ Context `{!nslG}.
 
 Definition msg1_pred (kB : term) m1 : iProp :=
   ∃ nA kA, ⌜m1 = Spec.of_list [nA; TKey Enc kA]⌝ ∧
-           □ (pterm nA ↔ pterm (TKey Dec kA) ∨ pterm (TKey Dec kB)) ∧
+           (pterm nA ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))) ∧
            pterm (TKey Enc kA).
-
-Global Instance msg1_pred_persistent kB m1 : Persistent (msg1_pred kB m1).
-Proof. apply _. Qed.
 
 Definition msg2_pred kA m2 : iProp :=
   ∃ nA nB kB,
     ⌜m2 = Spec.of_list [nA; nB; TKey Enc kB]⌝ ∧
-    □ (pterm nB ↔ pterm (TKey Dec kA) ∨ pterm (TKey Dec kB)) ∧
+    (pterm nB ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))) ∧
     session nsl_sess_name Resp kA kB nA nB.
-
-Global Instance msg2_pred_persistent kA m2 : Persistent (msg2_pred kA m2).
-Proof.
-case: m2; try by move=> *; apply _.
-Qed.
 
 Definition msg3_pred kB nB : iProp :=
   ∀ nA kA,
     session nsl_sess_name Resp kA kB nA nB -∗
     session nsl_sess_name Init kA kB nA nB ∧
-    (pterm nA ↔ pterm (TKey Dec kA) ∨ pterm (TKey Dec kB)).
+    (pterm nA ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))).
 
 Variable nsl_sess_inv : role → term → term → term → term → iProp.
 
@@ -106,7 +98,7 @@ Hypothesis wp_gen : forall E kA kB nA Ψ,
   (∀ nB,
       crypto_meta_token nB (↑cryptoN.@"nsl".@nB) -∗
       sterm nB -∗
-      □ (pterm nB ↔ pterm (TKey Dec kA) ∨ pterm (TKey Dec kB)) -∗
+      □ (pterm nB ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))) -∗
       nsl_sess_inv Resp kA kB nA nB -∗
       Ψ nB) -∗
   WP gen #() @ E {{ Ψ }}.
@@ -115,7 +107,7 @@ Lemma pterm_msg1I kA kB (nA : term) :
   crypto_enc (nroot.@"m1") msg1_pred -∗
   pterm (TKey Enc kA) -∗
   sterm nA -∗
-  □ (pterm nA ↔ pterm (TKey Dec kA) ∨ pterm (TKey Dec kB)) -∗
+  □ (pterm nA ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))) -∗
   pterm (TKey Enc kB) -∗
   ▷ pterm (TEnc kB (Spec.tag (nroot.@"m1") (Spec.of_list [nA; TKey Enc kA]))).
 Proof.
@@ -139,7 +131,7 @@ Lemma pterm_msg2I kA kB nA nB :
   sterm nA -∗
   □ (pterm (TKey Dec kA) → pterm nA) -∗
   sterm nB -∗
-  □ (pterm nB ↔ pterm (TKey Dec kA) ∨ pterm (TKey Dec kB)) -∗
+  □ (pterm nB ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))) -∗
   session nsl_sess_name Resp kA kB nA nB -∗
   ▷ pterm (TEnc kA (Spec.tag (nroot.@"m2") (Spec.of_list [nA; nB; TKey Enc kB]))).
 Proof.
@@ -162,7 +154,7 @@ Lemma pterm_msg1E ts kA kB nA :
   pterm (TEnc kB (Spec.tag (nroot.@"m1") (Spec.of_list ts))) -∗
   ▷ (pterm (TKey Enc kA) ∧ sterm nA ∧
      (pterm nA ∨
-      □ (pterm nA ↔ pterm (TKey Dec kA) ∨ pterm (TKey Dec kB)))).
+      □ (pterm nA ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))))).
 Proof.
 iIntros (get_nA get_kA) "#m1P #Hts".
 iDestruct (pterm_TEncE with "Hts [//]") as "{Hts} [[HkB Hts]|Hts]".
@@ -186,7 +178,7 @@ Lemma pterm_msg2E (ts : list term) kA kB nA nB :
   pterm (TEnc kA (Spec.tag (nroot.@"m2") (Spec.of_list ts))) -∗
   ▷ (sterm nB ∧
      (pterm nA ∧ pterm nB ∨
-      □ (pterm nB ↔ pterm (TKey Dec kA) ∨ pterm (TKey Dec kB)) ∧
+      □ (pterm nB ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))) ∧
       session nsl_sess_name Resp kA kB nA nB)).
 Proof.
 iIntros (get_nA get_nB get_kB) "#? #Hts".
@@ -214,7 +206,7 @@ Lemma wp_initiator kA kB (nA : term) E Ψ :
   pterm (TKey Enc kA) -∗
   pterm (TKey Enc kB) -∗
   sterm nA -∗
-  □ (pterm nA ↔ pterm (TKey Dec kA) ∨ pterm (TKey Dec kB)) -∗
+  □ (pterm nA ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))) -∗
   (∀ nB, pterm nA ∨ nsl_sess_inv Init kA kB nA nB) -∗
   crypto_meta_token nA (↑cryptoN.@"nsl".@nA) -∗
   (∀ onB : option term,
@@ -278,7 +270,7 @@ Lemma wp_responder kB E Ψ :
            sterm nA ∧
            sterm nB ∧
            □ (pterm nA ↔ pterm nB) ∧
-           □ (pterm nB ↔ pterm (TKey Dec kA) ∨ pterm (TKey Dec kB)) ∧
+           □ (pterm nB ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))) ∧
            (pterm nA ∨ nsl_sess_inv Init kA kB nA nB)
        else True) -∗
        Ψ (repr ot)) -∗
@@ -301,7 +293,7 @@ wp_bind (gen _); iApply (wp_gen _ kA kB nA).
 iIntros (nB) "unreg #s_nB #p_nB inv".
 wp_pures.
 iDestruct "Hm1" as "(e_kA & s_nA & Hm1)".
-iAssert (□ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB) → pterm nA))%I as "#p_nA".
+iAssert (□ (▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB)) → pterm nA))%I as "#p_nA".
   iDestruct "Hm1" as "[?|#e]"; eauto.
   by iIntros "!> ?"; iApply "e"; eauto.
 wp_list (_ :: _ :: _ :: []); wp_term_of_list.
@@ -318,7 +310,8 @@ iPoseProof (pterm_TEncE with "Hm3 [//]") as "[[_ pub]|sec]".
   wp_pures. iApply ("Hpost" $! (Some (TKey Enc kA, nA, nB))).
   iExists kA; do 5!iSplit => //.
     iModIntro; iSplit; iIntros "#?" => //.
-    iApply "p_nA". by iApply "p_nB".
+    iDestruct "Hm1" as "[?|#Hm1]"; eauto.
+    iApply "Hm1". by iApply "p_nB".
   iSplit; eauto.
   iLeft. iApply "p_nA". by iApply "p_nB".
 iDestruct "sec" as "(#HnB & _ & _)".
