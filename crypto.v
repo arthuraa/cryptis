@@ -588,6 +588,58 @@ apply: (anti_symm _).
     by rewrite nonces_of_term_TExp.
 Qed.
 
+Lemma pterm_TExp0 t :
+  pterm (TExp t []) ⊣⊢
+  pterm t ∨ [∗ set] a ∈ nonces_of_term t, published a (TExp t []).
+Proof.
+rewrite pterm_TExp; apply (anti_symm _); iIntros "#pub".
+- iDestruct "pub" as "[[_ ?] | [pub | pub]]"; eauto.
+    iDestruct "pub" as (??) "[%contra _]".
+    by move/Permutation_length: contra.
+  by rewrite nonces_of_term_eq /= right_id_L; eauto.
+- iDestruct "pub" as "[? | pub]"; eauto.
+  do 2!iRight.
+  by rewrite nonces_of_term_eq /= right_id_L; eauto.
+Qed.
+
+Lemma pterm_TExp1 t1 t2 :
+  pterm (TExp t1 [t2]) ⊣⊢
+  pterm (TExp t1 []) ∧ pterm t2 ∨
+  [∗ set] a ∈ nonces_of_term t1 ∪ nonces_of_term t2,
+    published a (TExp t1 [t2]).
+Proof.
+rewrite pterm_TExp; apply: (anti_symm _); iIntros "#pub".
+- iDestruct "pub" as "[[% ?] | [pub | pub]]" => //.
+    iDestruct "pub" as (??) "(%e & p_t1 & p_t2)".
+    symmetry in e.
+    by case/Permutation_singleton: e => -> ->; eauto.
+  by rewrite /= nonces_of_term_eq right_id_L; eauto.
+- iDestruct "pub" as "[[? ?] | pub]"; eauto.
+    by iRight; iLeft; iExists t2, []; eauto.
+  do 2!iRight.
+  by rewrite /= right_id_L.
+Qed.
+
+Lemma pterm_TExp2 t1 t2 t3 :
+  pterm (TExp t1 [t2; t3]) ⊣⊢
+  pterm (TExp t1 [t2]) ∧ pterm t3 ∨
+  pterm (TExp t1 [t3]) ∧ pterm t2 ∨
+  [∗ set] a ∈ nonces_of_term t1 ∪ nonces_of_term t2 ∪ nonces_of_term t3,
+    published a (TExp t1 [t2; t3]).
+Proof.
+rewrite pterm_TExp; apply: (anti_symm _); iIntros "#pub".
+- iDestruct "pub" as "[[% ?] | [pub | pub]]" => //.
+    iDestruct "pub" as (??) "(%e & p_t1 & p_t2)".
+    by case: (Permutation_length_2_inv e) => [[-> ->] | [-> ->]]; eauto.
+  by rewrite /= nonces_of_term_eq right_id_L assoc_L; eauto.
+- iDestruct "pub" as "[[? ?] | [[? ?] | pub]]".
+  + iRight; iLeft; iExists t3, [t2]; do !iSplit => //.
+    iPureIntro; apply: perm_swap.
+  + by iRight; iLeft; iExists t2, [t3]; do !iSplit => //.
+  + do 2!iRight.
+    by rewrite /= right_id_L assoc_L.
+Qed.
+
 Lemma pterm_to_list t ts :
   Spec.to_list t = Some ts →
   pterm t -∗ [∗ list] t' ∈ ts, pterm t'.
