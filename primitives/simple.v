@@ -110,12 +110,12 @@ Implicit Types Φ : prodO locO termO -n> iPropO Σ.
 Implicit Types Ψ : val → iProp Σ.
 Implicit Types N : namespace.
 
-Lemma twp_tint E t Ψ n : Ψ (TInt n) -∗ WP tint #n @ E [{ Ψ }].
+Lemma twp_tint E Ψ n : Ψ (TInt n) -∗ WP tint #n @ E [{ Ψ }].
 Proof.
 by rewrite /tint val_of_term_eq; iIntros "Hpost"; wp_pures.
 Qed.
 
-Lemma wp_tint E t Ψ n : Ψ (TInt n) -∗ WP tint #n @ E {{ Ψ }}.
+Lemma wp_tint E Ψ n : Ψ (TInt n) -∗ WP tint #n @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_tint. Qed.
 
 Lemma twp_as_int E t Ψ :
@@ -399,5 +399,10 @@ rewrite /tgroup -val_of_pre_term_unfold; wp_pures.
 rewrite val_of_pre_term_eq /= unfold_TExp /=.
 by rewrite -val_of_pre_term_eq val_of_pre_term_unfold repr_list_eq.
 Qed.
+
+Lemma wp_tgroup E t Ψ :
+  Ψ (TExp t []) -∗
+  WP tgroup t @ E {{ Ψ }}.
+Proof. by iIntros "?"; iApply twp_wp; iApply twp_tgroup. Qed.
 
 End Proofs.
