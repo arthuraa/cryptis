@@ -423,6 +423,19 @@ rewrite unlock nonces_of_term_TExp big_sepS_union_pers.
 by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
+Lemma sterm_texp t1 t2 :
+  sterm t1 -∗
+  sterm t2 -∗
+  sterm (Spec.texp t1 t2).
+Proof.
+elim: t1;
+try by move=> *; rewrite /= !sterm_TInt; iIntros "*"; eauto.
+move=> t1 _ ts1 _ _ /=; rewrite Spec.texpA.
+iIntros "s_1 s_2".
+rewrite !sterm_TExp /=.
+by iDestruct "s_1" as "[??]"; eauto.
+Qed.
+
 Lemma pterm_TInt n : pterm (TInt n) ⊣⊢ True.
 Proof.
 apply: (anti_symm _); iIntros "_" => //.
