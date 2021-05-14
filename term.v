@@ -45,6 +45,11 @@ Instance repr_key_type : Repr key_type := λ kt, #(int_of_key_type kt).
 
 Canonical termO := leibnizO term.
 
+Global Instance TExp_proper : Proper ((=) ==> (≡ₚ) ==> (=)) TExp.
+Proof.
+by move=> t _ <- ts1 ts2 e; apply/TExp_inj; eauto.
+Qed.
+
 Global Instance pre_term_inhabited : Inhabited PreTerm.pre_term.
 Proof. exact: (populate (PreTerm.PTInt 0)). Qed.
 
@@ -351,19 +356,29 @@ Definition tdec c k t :=
   | None => None
   end.
 
+
 Definition texp t1 t2 :=
   if t1 is TExp' base exp _ then
     TExp base (t2 :: map fold_term exp)
   else TInt 0.
-
-Import ssrfun seq path.
 
 Lemma texpA t1 ts1 t2 : texp (TExp t1 ts1) t2 = TExp t1 (t2 :: ts1).
 Proof.
 rewrite /texp {1}unlock /= fold_wf_termE normalize_unfold1 normalize_unfoldn.
 rewrite unfold_termK.
 apply: TExp_perm.
-by rewrite perm_cons -{2}[ts1](mapK unfold_termK) perm_map // perm_sort.
+rewrite seq.perm_cons -{2}[ts1](seq.mapK unfold_termK).
+by rewrite seq.perm_map // path.perm_sort.
+Qed.
+
+Lemma unfold_exp t1 t2 :
+  unfold_term (texp t1 t2) = PreTerm.exp (unfold_term t1) (unfold_term t2).
+Proof.
+case: t1 => //= t1 ts1 /(ssrbool.elimT ssrbool.andP) [wf_ts1 ?].
+rewrite unfold_TExp /=; congr PreTerm.PTExp.
+apply: (ssrbool.elimT (perm_sort_leP _ _ _ _)); rewrite seq.perm_cons.
+rewrite -[@List.map]/@seq.map -seq.map_comp seq.map_id_in //= => {}t1 in_ts1.
+by rewrite fold_termK // (ssrbool.elimT seq.allP wf_ts1).
 Qed.
 
 End Spec.

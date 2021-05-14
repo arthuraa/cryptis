@@ -1,7 +1,7 @@
 From mathcomp Require Import all_ssreflect.
 From deriving Require Import deriving.
 From crypto Require Import mathcomp_compat lib.
-Require Import Coq.ZArith.ZArith.
+Require Import Coq.ZArith.ZArith Lia.
 From iris.heap_lang Require Import locations.
 
 Import Order.POrderTheory Order.TotalTheory.
@@ -227,6 +227,25 @@ Fixpoint height pt :=
   | PTExp t ts => S (\max_(x <- height t :: map height ts) x)
   end.
 
+Fixpoint size pt :=
+  match pt with
+  | PTInt _ => 1
+  | PTPair pt1 pt2 => S (size pt1 + size pt2)
+  | PTNonce _ => 1
+  | PTKey _ t => S (size t)
+  | PTEnc k t => S (S (size k) + size t)
+  | PTHash t => S (size t)
+  | PTExp t ts => S (\sum_(n <- size t :: map size ts) n)
+  end.
+
+Lemma size_gt0 pt : 0 < size pt. Proof. by case: pt. Qed.
+
+Definition exp pt1 pt2 :=
+  match pt1 with
+  | PTExp pt1 pts1 => PTExp pt1 (sort <=%O (pt2 :: pts1))
+  | _ => PTInt 0
+  end.
+
 Fixpoint normalize pt :=
   match pt with
   | PTInt n => PTInt n
@@ -284,6 +303,8 @@ Qed.
 
 Lemma normalize_idem pt : normalize (normalize pt) = normalize pt.
 Proof. apply: normalize_wf; exact: wf_normalize. Qed.
+
+
 
 End PreTerm.
 
@@ -469,6 +490,65 @@ Definition is_exp t :=
 Lemma is_exp_TExp t ts : is_exp (TExp t ts).
 Proof. by rewrite unlock /fold_term /=. Qed.
 
+Definition tsize t := PreTerm.size (unfold_term t).
+
+Lemma tsize_gt0 t : 0 < tsize t. Proof. exact: PreTerm.size_gt0. Qed.
+
+Lemma tsize_TExp t ts :
+  tsize (TExp t ts) = (sumn (tsize t :: map tsize ts)).+1.
+Proof.
+rewrite /tsize unfold_TExp /= -sumnE /=; congr (_ + _).+1.
+apply: perm_sumn; rewrite [X in perm_eq _ X]map_comp perm_map //.
+by rewrite perm_sort.
+Qed.
+
+Lemma TExp'E t pts wf : TExp' t pts wf = TExp t (map fold_term pts).
+Proof.
+apply: unfold_term_inj => /=; rewrite unfold_TExp -[@List.map]/@map.
+case/andP: wf => wf_pts sorted_pts.
+rewrite -map_comp map_id_in ?sort_le_id // => pt in_pts.
+by rewrite /= fold_termK // (allP wf_pts).
+Qed.
+
+Lemma TExp_inj t1 ts1 t2 ts2 :
+  TExp t1 ts1 = TExp t2 ts2 <->
+  t1 = t2 /\ Permutation.Permutation ts1 ts2.
+Proof.
+split; last first.
+  case=> -> /perm_Permutation; exact: TExp_perm.
+move=> /(congr1 unfold_term); rewrite !unfold_TExp.
+case=> /unfold_term_inj -> /perm_sort_leP/perm_map_inj/perm_Permutation perm.
+split => //; apply: perm unfold_term_inj.
+Qed.
+
+Lemma tsize_eq t :
+  tsize t =
+  match t with
+  | TInt _ => 1
+  | TPair t1 t2 => S (tsize t1 + tsize t2)
+  | TNonce _ => 1
+  | TKey _ t => S (tsize t)
+  | TEnc k t => S (S (tsize k) + tsize t)
+  | THash t => S (tsize t)
+  | TExp' t pts _ => S (tsize t + \sum_(n <- map PreTerm.size pts) n)
+  end.
+Proof.
+case: t => //= t pts wf.
+rewrite TExp'E tsize_TExp /= sumnE -map_comp.
+case/andP: wf=> wf_pts _; congr (_ + bigop _ _ _).+1.
+by apply/eq_in_map => pt in_pts /=; rewrite /tsize fold_termK // (allP wf_pts).
+Qed.
+
+Lemma tsize_TExp_lt t1 ts1 t2 :
+  (tsize (TExp t1 ts1) < tsize (TExp t1 (t2 :: ts1)))%coq_nat /\
+  (tsize t2 < tsize (TExp t1 (t2 :: ts1)))%coq_nat.
+Proof.
+rewrite !tsize_TExp /= -!plusE.
+move/ssrnat.ltP: (tsize_gt0 t1) => pos_t1.
+move/ssrnat.ltP: (tsize_gt0 t2) => pos_t2.
+split; lia.
+Qed.
+
 Lemma term_rect (T : term -> Type)
   (H1 : forall n, T (TInt n))
   (H2 : forall t1, T t1 ->
@@ -497,7 +577,6 @@ have [ts e_pts] : {ts | pts = map unfold_term ts}.
   rewrite -map_comp map_id_in // => pt' pt'_pts.
   by rewrite /= fold_termK // (allP wf_pts).
 rewrite {}e_pts {pts wf_pts} in IHpts wf sorted_pts *.
-
 rewrite (_ : TExp' _ _ _ = TExp t ts); last first.
   apply: unfold_term_inj.
   by rewrite fold_wf_termE unfold_termK unfold_TExp /= sort_le_id.
@@ -511,3 +590,14 @@ apply: H7.
 Qed.
 
 Definition term_ind (P : term -> Prop) := @term_rect P.
+
+Lemma term_lt_ind (T : term -> Prop) :
+  (forall t, (forall t', (tsize t' < tsize t)%coq_nat -> T t') -> T t) ->
+  forall t, T t.
+Proof.
+move=> H t.
+move: {-1}(tsize t) (Nat.le_refl (tsize t)) => n.
+elim: n / (lt_wf n) t => n _ IH t t_n.
+apply: H => t' t'_t.
+apply: (IH (tsize t')); lia.
+Qed.

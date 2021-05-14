@@ -1,4 +1,6 @@
--arg "-w -convert_concl_no_check -w -redundant-canonical-projection"
+-arg "-w -convert_concl_no_check"
+-arg "-w -redundant-canonical-projection"
+-arg "-w -notation-overridden"
 
 -R . crypto
 

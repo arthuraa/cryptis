@@ -35,26 +35,28 @@ Definition mkhashkey : val := λ: <>,
   let: "k" := mkkey "k" in
   Fst "k".
 
-Lemma wp_mkhashkey E lvl (Ψ : val → iProp) :
+Lemma wp_mkhashkey E P (Ψ : val → iProp) :
   ↑cryptoN ⊆ E →
-  crypto_ctx -∗
-  (∀ k, stermT lvl (TKey Enc k) -∗ Ψ (TKey Enc k)) -∗
+  (∀ k, sterm k -∗ pterm (TKey Enc k) ↔ ▷ □ P -∗ Ψ (TKey Enc k)) -∗
   WP mkhashkey #() @ E {{ Ψ }}.
 Proof.
-iIntros (?) "#ctx post".
+iIntros (?) "post".
 rewrite /mkhashkey; wp_pures.
-wp_bind (mknonce _); iApply (wp_mknonce lvl) => //.
-iIntros (k) "#Hk %atomic_k unpubl token".
-have lvlP : lvl ⊔ lvl ⊑ lvl by rewrite level_join_idemp.
-iMod (declare_key with "ctx Hk Hk [unpubl] []") as "(Hkey & _)" => //.
-- by rewrite atomic_atoms // elem_of_singleton.
-- iIntros "-> /=".
-  rewrite (@unpublished_difference _ _ _ {[TKey Enc k; TKey Dec k]}); last set_solver.
-  by iDestruct "unpubl" as "[??]".
-- rewrite atomic_atoms // difference_diag_L; iIntros "_".
-  by rewrite big_sepS_empty.
-wp_pures; wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
-by iApply "post".
+wp_bind (mknonce _); iApply (wp_mknonce _ (λ t, match t with
+                                                | TKey Enc _ => P
+                                                | _ => False
+                                                end))%I.
+iIntros (a) "#s_a #a_P token".
+wp_pures; wp_bind (mkkey _); iApply wp_mkkey.
+wp_pures; iApply "post" => //; iSplit.
+- rewrite pterm_TKey; iDestruct 1 as "#[publ|publ]".
+    rewrite pterm_TNonce.
+    by iPoseProof (publishedE with "a_P publ") as ">#[]".
+  rewrite nonces_of_term_eq big_sepS_singleton.
+  by iPoseProof (publishedE with "a_P publ") as "?".
+- iIntros "#publ".
+  rewrite pterm_TKey nonces_of_term_eq big_sepS_singleton; iRight.
+  by iApply (publishedE with "a_P").
 Qed.
 
 Definition khash : val := λ: "k" "t",
@@ -164,12 +166,12 @@ Definition server : val := λ: "pkS" "skS" "versionS",
   send (term_of_list ["pkS"; "verkC"; "hs"]).
 
 Hypothesis wp_send : forall E t Ψ,
-  ▷ termT Pub t -∗
+  ▷ pterm t -∗
   Ψ #() -∗
   WP send t @ E {{ Ψ }}.
 
 Hypothesis wp_recv : forall E Ψ,
-  (∀ t, termT Pub t -∗ Ψ t) -∗
+  (∀ t, pterm t -∗ Ψ t) -∗
   WP recv #() @ E {{ Ψ }}.
 
 End TLS.
