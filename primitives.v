@@ -10,6 +10,9 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Definition tint : val := λ: "n",
+  (#TInt_tag, "n").
+
 Definition as_int : val := λ: "t",
   if: Fst "t" = #TInt_tag then SOME (Snd "t")
   else NONE.
@@ -179,6 +182,14 @@ Implicit Types v : val.
 Implicit Types Φ : prodO locO termO -n> iPropO Σ.
 Implicit Types Ψ : val → iProp Σ.
 Implicit Types N : namespace.
+
+Lemma twp_tint E t Ψ n : Ψ (TInt n) -∗ WP tint #n @ E [{ Ψ }].
+Proof.
+by rewrite /tint val_of_term_eq; iIntros "Hpost"; wp_pures.
+Qed.
+
+Lemma wp_tint E t Ψ n : Ψ (TInt n) -∗ WP tint #n @ E {{ Ψ }}.
+Proof. by iIntros "?"; iApply twp_wp; iApply twp_tint. Qed.
 
 Lemma twp_as_int E t Ψ :
   Ψ (repr (Spec.as_int t)) -∗
