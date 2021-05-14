@@ -13,6 +13,9 @@ term.v
 basic.v
 symbols.v
 crypto.v
+primitives/notations.v
+primitives/comp.v
+primitives/simple.v
 primitives.v
 tactics.v
 session.v
