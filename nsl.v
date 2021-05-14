@@ -320,3 +320,5 @@ iSplit; eauto.
 Qed.
 
 End NSL.
+
+Arguments nslG Σ : clear implicits.
