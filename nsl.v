@@ -201,8 +201,9 @@ Lemma wp_initiator kA kB (nA : term) E Ψ :
   crypto_meta_token nA (↑cryptoN.@"nsl".@nA) -∗
   (∀ onB : option term,
       (if onB is Some nB then
-         (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB)) ∨
-         nsl_sess_inv Resp kA kB nA nB
+         sterm nB ∧
+         ((pterm (TKey Dec kA) ∨ pterm (TKey Dec kB)) ∨
+           nsl_sess_inv Resp kA kB nA nB)
        else True) -∗
       Ψ (repr onB)) -∗
   WP initiator (TKey Dec kA) (TKey Enc kA) (TKey Enc kB) nA @ E
