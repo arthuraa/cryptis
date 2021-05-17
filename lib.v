@@ -408,6 +408,17 @@ rewrite elem_of_cons; case/Decidable.not_or => var_var' var_nin.
 by rewrite /= substC // IH.
 Qed.
 
+Fact list_match_key : unit. Proof. exact: tt. Qed.
+
+Definition list_match :=
+  locked_with list_match_key (λ vars e k,
+    let l : string := fresh (free_vars k ∪ ⋃ (singleton <$> vars)) in
+    let: l := e in
+    list_match_aux vars l k
+  )%E.
+
+Canonical list_match_unlockable := [unlockable of list_match].
+
 Section ListLemmas.
 
 Context `{!Repr A, !heapG Σ}.
@@ -480,6 +491,20 @@ elim: vars vs k => [|var vars IH] [|v vs] k l_fresh /=.
     rewrite subst_list_match_aux_in // subst_nsubst //; by iApply IH.
   rewrite subst_list_match_aux // subst_nsubst_nin // substC //.
   by iApply IH.
+Qed.
+
+Lemma wp_list_match E vs vars k Ψ :
+  WP nsubst vars vs k @ E {{ Ψ }} -∗
+  WP list_match vars (repr_list vs) k @ E {{ Ψ }}.
+Proof.
+iIntros "wp_k".
+rewrite unlock; set X := (_ ∪ _); wp_pures; iApply wp_list_match_aux.
+  move=> freshP.
+  apply: (is_fresh X).
+  apply/elem_of_union; right; apply/elem_of_union_list.
+  by exists {[fresh X]}; split; try set_solver.
+rewrite subst_free_vars // => freshP.
+apply: (is_fresh X); rewrite /X in freshP; set_solver.
 Qed.
 
 Lemma twp_eq_list `{EqDecision A} (f : val) (l1 l2 : list A) Φ E :
