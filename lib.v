@@ -161,8 +161,6 @@ Proof.
 rewrite !repr_list_eq; by elim: xs => //= x xs ->.
 Qed.
 
-Existing Instance repr_list.
-
 Definition leq_loc_loop : val := rec: "loop" "l1" "l2" "n" :=
   if: "l1" +ₗ "n" = "l2" then #true
   else if: "l2" +ₗ "n" = "l1" then #false
@@ -215,7 +213,7 @@ Definition eq_list : val := rec: "loop" "eq" "l1" "l2" :=
      end
   end.
 
-Fixpoint list_match_aux (vars : list string) (l : string) (k : expr) : expr :=
+Fixpoint list_match (vars : list string) (l : string) (k : expr) : expr :=
   match vars with
   | [] =>
     match: l with SOME <> => NONEV | NONE => k end
@@ -224,10 +222,15 @@ Fixpoint list_match_aux (vars : list string) (l : string) (k : expr) : expr :=
       SOME l =>
       let: v := Fst l in
       let: l := Snd l in
-      list_match_aux vars l k
+      list_match vars l k
     | NONE => NONEV
     end
   end.
+
+Notation "'list_match:' vars := l 'in' e" :=
+  (list_match vars l e)%E
+  (at level 200, vars at level 1, l, e at level 200,
+  format "'[' 'list_match:'  vars  :=  '[' l ']'  'in'  '/' e ']'") : expr_scope.
 
 Definition insert_sorted : val := rec: "loop" "le" "x" "l" :=
   match: "l" with
@@ -266,9 +269,9 @@ Lemma substC x1 x2 v1 v2 e :
   subst x1 v1 (subst x2 v2 e) = subst x2 v2 (subst x1 v1 e).
 Proof. by move=> x12; elim: e => //= *; substC; congruence. Qed.
 
-Lemma subst_list_match_aux_in var v vars l k :
+Lemma subst_list_match_in var v vars l k :
   var ∈ vars → l ∉ vars →
-  subst var v (list_match_aux vars l k) = list_match_aux vars l k.
+  subst var v (list_match vars l k) = list_match vars l k.
 Proof.
 elim: vars => [|var' vars IH]; first by set_solver.
 case: (decide (var = var')) => [<- _|ne].
@@ -285,10 +288,10 @@ case: (decide (var = var')) => [<- _|ne].
   by rewrite IH.
 Qed.
 
-Lemma subst_list_match_aux var v vars l k :
+Lemma subst_list_match var v vars l k :
   var ∉ vars → l ≠ var → l ∉ vars →
-  subst var v (list_match_aux vars l k) =
-  list_match_aux vars l (subst var v k).
+  subst var v (list_match vars l k) =
+  list_match vars l (subst var v k).
 Proof.
 move=> var_in var_l.
 elim: vars var_in => [|var' vars IH] /=; rewrite decide_False //.
@@ -408,17 +411,6 @@ rewrite elem_of_cons; case/Decidable.not_or => var_var' var_nin.
 by rewrite /= substC // IH.
 Qed.
 
-Fact list_match_key : unit. Proof. exact: tt. Qed.
-
-Definition list_match :=
-  locked_with list_match_key (λ vars e k,
-    let l : string := fresh (free_vars k ∪ ⋃ (singleton <$> vars)) in
-    let: l := e in
-    list_match_aux vars l k
-  )%E.
-
-Canonical list_match_unlockable := [unlockable of list_match].
-
 Section ListLemmas.
 
 Context `{!Repr A, !heapG Σ}.
@@ -467,10 +459,10 @@ Proof. by iIntros "?"; iApply twp_wp; iApply twp_cons. Qed.
 Definition list_to_expr :=
   foldr (fun (x : A) e => CONS (repr x) e) NILV.
 
-Lemma wp_list_match_aux E vs vars (l : string) k Ψ :
+Lemma wp_list_match E vs vars (l : string) k Ψ :
   l ∉ vars →
   WP nsubst vars vs (subst l [] k) @ E {{ Ψ }} -∗
-  WP subst l (repr_list vs) (list_match_aux vars l k) @ E {{ Ψ }}.
+  WP subst l (repr_list vs) (list_match vars l k) @ E {{ Ψ }}.
 Proof.
 rewrite repr_list_eq.
 elim: vars vs k => [|var vars IH] [|v vs] k l_fresh /=.
@@ -488,23 +480,9 @@ elim: vars vs k => [|var vars IH] [|v vs] k l_fresh /=.
   wp_pures.
   rewrite decide_True; last by split=> ?; congruence.
   case: (decide (var ∈ vars)) => [var_in|var_out].
-    rewrite subst_list_match_aux_in // subst_nsubst //; by iApply IH.
-  rewrite subst_list_match_aux // subst_nsubst_nin // substC //.
+    rewrite subst_list_match_in // subst_nsubst //; by iApply IH.
+  rewrite subst_list_match // subst_nsubst_nin // substC //.
   by iApply IH.
-Qed.
-
-Lemma wp_list_match E vs vars k Ψ :
-  WP nsubst vars vs k @ E {{ Ψ }} -∗
-  WP list_match vars (repr_list vs) k @ E {{ Ψ }}.
-Proof.
-iIntros "wp_k".
-rewrite unlock; set X := (_ ∪ _); wp_pures; iApply wp_list_match_aux.
-  move=> freshP.
-  apply: (is_fresh X).
-  apply/elem_of_union; right; apply/elem_of_union_list.
-  by exists {[fresh X]}; split; try set_solver.
-rewrite subst_free_vars // => freshP.
-apply: (is_fresh X); rewrite /X in freshP; set_solver.
 Qed.
 
 Lemma twp_eq_list `{EqDecision A} (f : val) (l1 l2 : list A) Φ E :

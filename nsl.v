@@ -60,9 +60,7 @@ Definition initiator : val := λ: "skA" "pkA" "pkB" "nA",
   send "m1";;
   bind: "m2"   := tdec (nroot.@"m2") "skA" (recv #()) in
   bind: "m2"   := list_of_term "m2" in
-  bind: "nA'"  := "m2" !! #0 in
-  bind: "nB"   := "m2" !! #1 in
-  bind: "pkB'" := "m2" !! #2 in
+  list_match: ["nA'"; "nB"; "pkB'"] := "m2" in
   if: eq_term "nA'" "nA" && eq_term "pkB'" "pkB" then
     bind: "m3" := tenc (nroot.@"m3") "pkB" "nB" in
     send "m3";;
@@ -72,8 +70,7 @@ Definition initiator : val := λ: "skA" "pkA" "pkB" "nA",
 Definition responder : val := λ: "skB" "pkB" "nB",
   bind: "m1" := tdec (nroot.@"m1") "skB" (recv #()) in
   bind: "m1" := list_of_term "m1" in
-  bind: "nA" := "m1" !! #0 in
-  bind: "pkA" := "m1" !! #1 in
+  list_match: ["nA"; "pkA"] := "m1" in
   bind: "kt" := is_key "pkA" in
   if: "kt" = repr Enc then
     bind: "m2" := tenc (nroot.@"m2") "pkA" (term_of_list ["nA"; "nB"; "pkB"]) in
@@ -137,54 +134,44 @@ rewrite pterm_of_list /=; do !iSplit => //.
 by iApply "HnBlo"; eauto.
 Qed.
 
-Lemma pterm_msg1E ts kA kB nA :
-  ts !! 0 = Some nA →
-  ts !! 1 = Some (TKey Enc kA) →
+Lemma pterm_msg1E kA kB nA :
   crypto_enc (nroot.@"m1") msg1_pred -∗
-  pterm (TEnc kB (Spec.tag (nroot.@"m1") (Spec.of_list ts))) -∗
+  pterm (TEnc kB (Spec.tag (nroot.@"m1") (Spec.of_list [nA; TKey Enc kA]))) -∗
   ▷ (pterm (TKey Enc kA) ∧ sterm nA ∧
      (pterm nA ∨
       □ (pterm nA ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))))).
 Proof.
-iIntros (get_nA get_kA) "#m1P #Hts".
+iIntros "#m1P #Hts".
 iDestruct (pterm_TEncE with "Hts [//]") as "{Hts} [[HkB Hts]|Hts]".
-  rewrite pterm_of_list.
-  iPoseProof (big_sepL_lookup with "Hts") as "HnA"; first exact: get_nA.
-  iPoseProof (big_sepL_lookup with "Hts") as "HkA"; first exact: get_kA.
+  rewrite pterm_of_list /=.
+  iDestruct "Hts" as "(HnA & HkA & _)".
   iAssert (sterm nA) as "#?". by iApply pterm_sterm.
   by eauto.
 iDestruct "Hts" as "(#inv & Hts & _)"; iModIntro.
 iDestruct "inv" as (nA' kA') "(%e & HnA & #HkA)".
-move/Spec.of_list_inj: e get_nA get_kA => -> [] -> [] ->.
+move/Spec.of_list_inj: e => [] <- <-.
 rewrite sterm_of_list /=; iDestruct "Hts" as "(? & ? & ?)".
 by eauto.
 Qed.
 
-Lemma pterm_msg2E (ts : list term) kA kB nA nB :
-  ts !! 0 = Some nA →
-  ts !! 1 = Some nB →
-  ts !! 2 = Some (TKey Enc kB) →
+Lemma pterm_msg2E kA kB nA nB :
   crypto_enc (nroot.@"m2") msg2_pred -∗
-  pterm (TEnc kA (Spec.tag (nroot.@"m2") (Spec.of_list ts))) -∗
+  pterm (TEnc kA (Spec.tag (nroot.@"m2") (Spec.of_list [nA; nB; TKey Enc kB]))) -∗
   ▷ (sterm nB ∧
      (pterm nA ∧ pterm nB ∨
       □ (pterm nB ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))) ∧
       session nsl_sess_name Resp kA kB nA nB)).
 Proof.
-iIntros (get_nA get_nB get_kB) "#? #Hts".
+iIntros "#? #Hts".
 iDestruct (pterm_TEncE with "Hts [//]") as "{Hts} [[_ Hts] | Hts]".
-  rewrite pterm_of_list.
-  iPoseProof (big_sepL_lookup with "Hts") as "HnA"; first exact: get_nA.
-  iPoseProof (big_sepL_lookup with "Hts") as "HnB"; first exact: get_nB.
-  iPoseProof (big_sepL_lookup with "Hts") as "HkB"; first exact: get_kB.
+  rewrite pterm_of_list /=.
+  iDestruct "Hts" as "(? & ? & ? & ?)".
   iAssert (sterm nB) as "#?". by iApply pterm_sterm.
   by eauto.
 iDestruct "Hts" as "(#inv & Hts & _)"; iModIntro.
 iDestruct "inv" as (nA' nB' kB') "(%e_m & #nBP & frag)".
-move/Spec.of_list_inj: e_m get_nA get_nB get_kB => -> /= [] -> [] -> [] ->.
-rewrite sterm_of_list /=.
-iDestruct "Hts" as "(?&?&?)".
-by eauto.
+case/Spec.of_list_inj: e_m => <- <- <-; rewrite sterm_of_list /=.
+iDestruct "Hts" as "(?&?&?)"; by eauto.
 Qed.
 
 Lemma wp_initiator kA kB (nA : term) E Ψ :
@@ -219,9 +206,11 @@ wp_pures; wp_bind (send _); iApply wp_send; eauto.
 iClear "Hm1"; wp_pures; wp_bind (recv _); iApply wp_recv.
 iIntros (m2) "#Hm2"; wp_tdec m2; last protocol_failure.
 wp_list_of_term m2; last protocol_failure.
-wp_lookup nA' enA'; last protocol_failure.
-wp_lookup nB  enB; last protocol_failure.
-wp_lookup pkB' epkB'; last protocol_failure.
+rewrite repr_list_eq.
+case: m2 => [|nA'  m2] /=; wp_pures; first protocol_failure. 
+case: m2 => [|nB   m2] /=; wp_pures; first protocol_failure.  
+case: m2 => [|pkB' m2] /=; wp_pures; first protocol_failure.
+case: m2 => [|??] /=; wp_pures; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst nA'.
 wp_eq_term e; last protocol_failure; subst pkB'.
 wp_tenc.
@@ -279,12 +268,14 @@ rewrite /responder; wp_pures.
 wp_bind (recv _); iApply wp_recv; iIntros (m1) "#Hm1".
 wp_tdec m1; last protocol_failure.
 wp_list_of_term m1; last protocol_failure.
-wp_lookup nA enA; last protocol_failure.
-wp_lookup pkA epkA; last protocol_failure.
+rewrite repr_list_eq.
+case: m1 => [|nA m1] /=; first protocol_failure.
+case: m1 => [|pkA m1] /=; first protocol_failure.
+case: m1 => [|??] /=; last protocol_failure.
 wp_is_key_eq kt kA et; last protocol_failure; subst pkA.
 wp_pures.
 case: (bool_decide_reflect (_ = repr_key_type Enc)); last protocol_failure.
-case: kt epkA=> // epkA _.
+case: kt => // _.
 wp_pures.
 iDestruct (pterm_msg1E with "[] Hm1") as "{Hm1} Hm1"; eauto.
 wp_list (_ :: _ :: _ :: []); wp_term_of_list.
