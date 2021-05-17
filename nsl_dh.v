@@ -1,5 +1,6 @@
 From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
+From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl namespace_map frac.
 From iris.base_logic.lib Require Import auth.
 From iris.heap_lang Require Import notation proofmode.
@@ -153,7 +154,7 @@ iIntros (?) "#ctx #? #? #? #p_e_kA #p_e_kB Hpost".
 rewrite /dh_initiator; wp_pures; wp_bind (mknonce _).
 iApply (wp_mknonce _ (nsl_dh_pred kA)).
 iIntros (a) "#s_a #a_pred token".
-rewrite (meta_token_difference _ (↑cryptoN.@"dh")); last admit.
+rewrite (meta_token_difference _ (↑cryptoN.@"dh")); last solve_ndisj.
 iDestruct "token" as "[dh token]".
 iMod (meta_set _ _ kB with "dh") as "#dh"; eauto.
 wp_pures; wp_bind (tint _); iApply wp_tint.
@@ -173,7 +174,7 @@ iApply (wp_initiator with "ctx [] [] [] p_e_kA p_e_kB [] [] [] [token]") => //.
   rewrite big_sepS_singleton.
   rewrite (meta_token_difference _ (↑cryptoN.@"nsl".@TExp (TInt 0) [TNonce a])).
     by iDestruct "token" as "[??]".
-  admit. (* TODO: Reason about namespace disjointness *)
+  by solve_ndisj.
 iIntros (onB) "pub"; case: onB=> [nB|]; last by protocol_failure.
 iDestruct "pub" as "# [s_nB [fail | succ]]".
   wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
@@ -193,7 +194,7 @@ rewrite pterm_TNonce.
 iPoseProof (publishedE with "a_pred succ") as "{contra} contra".
 iModIntro.
 by iPoseProof (nsl_dh_predN with "contra") as "[]".
-Admitted.
+Qed.
 
 Lemma wp_dh_responder kB E Ψ :
   ↑cryptoN.@"nsl" ⊆ E →
@@ -218,7 +219,7 @@ iIntros (?) "#ctx #? #? #? #p_e_kB Hpost".
 rewrite /dh_responder; wp_pures; wp_bind (mknonce _).
 iApply (wp_mknonce _ (nsl_dh_pred kB)).
 iIntros (b) "#s_b #b_pred token".
-rewrite (meta_token_difference _ (↑cryptoN.@"dh")); last admit.
+rewrite (meta_token_difference _ (↑cryptoN.@"dh")); last solve_ndisj.
 iDestruct "token" as "[dh token]".
 wp_pures; wp_bind (tint _); iApply wp_tint.
 wp_pures; wp_bind (tgroup _); iApply wp_tgroup.
@@ -231,7 +232,7 @@ iApply (wp_responder with "ctx [] [] [] p_e_kB [token] [] [dh]") => //.
   rewrite big_sepS_singleton.
   rewrite (meta_token_difference _ (↑cryptoN.@"nsl".@TExp (TInt 0) [TNonce b])).
     by iDestruct "token" as "[??]".
-  admit.
+  by solve_ndisj.
 - rewrite sterm_TExp sterm_TInt /=; eauto.
 - iIntros (kA nA).
   iMod (meta_set _ b kA with "dh") as "#meta"; eauto.
@@ -258,6 +259,6 @@ rewrite pterm_TNonce.
 iPoseProof (publishedE with "b_pred inv") as "{inv} inv".
 iModIntro.
 by iDestruct (nsl_dh_predN with "inv") as "[]".
-Admitted.
+Qed.
 
 End NSLDH.
