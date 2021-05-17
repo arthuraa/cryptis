@@ -104,7 +104,7 @@ Hypothesis wp_recv : forall E Ψ,
 
 Hypothesis wp_gen : forall E kA kB nA Ψ,
   (∀ nB, cr_sess_inv Resp kA kB nA nB -∗
-         crypto_meta_token nB (↑cryptoN.@"cr".@nB) -∗
+         crypto_meta_token nB (↑cryptoN.@"cr") -∗
          pterm nB -∗
          Ψ nB) -∗
   WP gen #() @ E {{ Ψ }}.
@@ -164,7 +164,7 @@ Lemma wp_initiator kA kB nA E Ψ :
   crypto_enc (nroot.@"m3") msg3_pred -∗
   pterm nA -∗
   (∀ nB, cr_sess_inv Init kA kB nA nB) -∗
-  crypto_meta_token nA (↑cryptoN.@"cr".@nA) -∗
+  crypto_meta_token nA (↑cryptoN.@"cr") -∗
   pterm (TKey Dec kA) -∗
   pterm (TKey Dec kB) -∗
   (∀ onB : option term,

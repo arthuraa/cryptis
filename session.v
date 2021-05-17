@@ -197,12 +197,12 @@ Qed.
 Definition session_map_inv SM : iProp :=
   ([∗ map] t ↦ p ∈ SM,
      ⌜t = s_key p.2⌝ ∗
-     crypto_meta t (N.@t) () ∗
+     crypto_meta t N () ∗
      (sinv_int p.2 ∨ session_frag (Some (), swap_view p.2)))%I.
 
 (* TODO Extract crypto_meta_meta_token from here *)
 Lemma session_map_inv_unregistered SM t :
-  crypto_meta_token t (↑N.@t) -∗
+  crypto_meta_token t (↑N) -∗
   session_map_inv SM -∗
   ⌜SM !! t = None⌝.
 Proof.
@@ -259,7 +259,7 @@ Lemma session_begin_aux s E :
   ↑N ⊆ E →
   session_ctx -∗
   sinv_int s -∗
-  crypto_meta_token (s_key s) (↑N.@s_key s) ={E}=∗
+  crypto_meta_token (s_key s) (↑N) ={E}=∗
   session_auth (None, s) ∗ session_frag (None, s).
 Proof.
 iIntros (?) "#ctx s_inv token".
@@ -403,7 +403,7 @@ Lemma session_begin E rl kA kB tA tB :
   ↑N ⊆ E →
   session_ctx -∗
   sinv rl kA kB tA tB -∗
-  crypto_meta_token t (↑N.@t) ={E}=∗
+  crypto_meta_token t (↑N) ={E}=∗
   session rl kA kB tA tB ∗
   (session (swap_role rl) kA kB tA tB ={E}=∗ ▷ sinv (swap_role rl) kA kB tA tB).
 Proof.
