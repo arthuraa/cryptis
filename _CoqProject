@@ -13,9 +13,13 @@ term.v
 basic.v
 symbols.v
 crypto.v
+primitives/notations.v
+primitives/comp.v
+primitives/simple.v
 primitives.v
 tactics.v
 session.v
 nsl.v
 challenge_response.v
 tls.v
+nsl_dh.v

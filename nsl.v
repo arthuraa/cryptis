@@ -50,7 +50,7 @@ Definition nsl_inv : iProp :=
 Definition nsl_ctx : iProp :=
   session_ctx nsl_sess_name (cryptoN.@"nsl") nsl_sess_inv.
 
-Variable send recv gen : val.
+Variable send recv : val.
 
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None).
@@ -69,18 +69,17 @@ Definition initiator : val := λ: "skA" "pkA" "pkB" "nA",
     SOME "nB"
   else NONE.
 
-Definition responder : val := λ: "skB" "pkB",
+Definition responder : val := λ: "skB" "pkB" "nB",
   bind: "m1" := tdec (nroot.@"m1") "skB" (recv #()) in
   bind: "m1" := list_of_term "m1" in
   bind: "nA" := "m1" !! #0 in
   bind: "pkA" := "m1" !! #1 in
   bind: "kt" := is_key "pkA" in
   if: "kt" = repr Enc then
-    let: "nB" := gen #() in
     bind: "m2" := tenc (nroot.@"m2") "pkA" (term_of_list ["nA"; "nB"; "pkB"]) in
     send "m2";;
     bind: "m3" := tdec (nroot.@"m3") "skB" (recv #()) in
-    if: eq_term "m3" "nB" then SOME ("pkA", "nA", "nB") else NONE
+    if: eq_term "m3" "nB" then SOME ("pkA", "nA") else NONE
   else NONE.
 
 Implicit Types Ψ : val → iProp.
@@ -93,15 +92,6 @@ Hypothesis wp_send : forall E t Ψ,
 Hypothesis wp_recv : forall E Ψ,
   (∀ t, pterm t -∗ Ψ t) -∗
   WP recv #() @ E {{ Ψ }}.
-
-Hypothesis wp_gen : forall E kA kB nA Ψ,
-  (∀ nB,
-      crypto_meta_token nB (↑cryptoN.@"nsl".@nB) -∗
-      sterm nB -∗
-      □ (pterm nB ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))) -∗
-      nsl_sess_inv Resp kA kB nA nB -∗
-      Ψ nB) -∗
-  WP gen #() @ E {{ Ψ }}.
 
 Lemma pterm_msg1I kA kB (nA : term) :
   crypto_enc (nroot.@"m1") msg1_pred -∗
@@ -210,7 +200,10 @@ Lemma wp_initiator kA kB (nA : term) E Ψ :
   (∀ nB, pterm nA ∨ nsl_sess_inv Init kA kB nA nB) -∗
   crypto_meta_token nA (↑cryptoN.@"nsl".@nA) -∗
   (∀ onB : option term,
-      (if onB is Some nB then pterm nA ∨ nsl_sess_inv Resp kA kB nA nB
+      (if onB is Some nB then
+         sterm nB ∧
+         ((pterm (TKey Dec kA) ∨ pterm (TKey Dec kB)) ∨
+           nsl_sess_inv Resp kA kB nA nB)
        else True) -∗
       Ψ (repr onB)) -∗
   WP initiator (TKey Dec kA) (TKey Enc kA) (TKey Enc kB) nA @ E
@@ -233,16 +226,18 @@ wp_eq_term e; last protocol_failure; subst nA'.
 wp_eq_term e; last protocol_failure; subst pkB'.
 wp_tenc.
 iPoseProof (pterm_msg2E with "[//] Hm2") as "{Hm2} [HnB Hm2]"; eauto.
-wp_pures; iDestruct "Hm2" as "[[??]|[p_nB sessB]]".
+wp_pures; iDestruct "Hm2" as "[[p_nA' ?]|[p_nB sessB]]".
+  iSpecialize ("p_nA" with "p_nA'").
   wp_bind (send _); iApply wp_send.
     iModIntro; iApply pterm_TEncIP => //.
     by rewrite pterm_tag.
-  wp_pures; iApply ("Hpost" $! (Some nB)); eauto.
-iDestruct ("inv" $! nB) as "[#? | inv]".
+  by wp_pures; iApply ("Hpost" $! (Some nB)); eauto.
+iDestruct ("inv" $! nB) as "[#p_nA' | inv]".
+  iSpecialize ("p_nA" with "p_nA'").
   wp_bind (send _); iApply wp_send.
     iModIntro; iApply pterm_TEncIP => //.
     by rewrite pterm_tag; iApply "p_nB"; iApply "p_nA".
-  wp_pures; iApply ("Hpost" $! (Some nB)); eauto.
+  by wp_pures; iApply ("Hpost" $! (Some nB)); eauto.
 iMod (session_begin with "[] inv [unreg]") as "[#sessA close]" => //.
 iMod ("close" with "sessB") as "inv_resp" => //=.
 wp_bind (send _); iApply wp_send.
@@ -255,28 +250,31 @@ wp_bind (send _); iApply wp_send.
 wp_pures; iApply ("Hpost" $! (Some nB)); eauto.
 Qed.
 
-Lemma wp_responder kB E Ψ :
+Lemma wp_responder kB E Ψ nB :
   ↑cryptoN.@"nsl" ⊆ E →
   nsl_ctx -∗
   crypto_enc (nroot.@"m1") msg1_pred -∗
   crypto_enc (nroot.@"m2") msg2_pred -∗
   crypto_enc (nroot.@"m3") msg3_pred -∗
   pterm (TKey Enc kB) -∗
-  (∀ ot : option (term * term * term),
-      (if ot is Some (pkA, nA, nB) then
+  crypto_meta_token nB (↑cryptoN.@"nsl".@nB) -∗
+  sterm nB -∗
+  (∀ kA nA, |==> □ (pterm nB ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))) ∗
+                 nsl_sess_inv Resp kA kB nA nB) -∗
+  (∀ ot : option (term * term),
+      (if ot is Some (pkA, nA) then
          ∃ kA,
            ⌜pkA = TKey Enc kA⌝ ∧
            pterm pkA ∧
            sterm nA ∧
-           sterm nB ∧
            □ (pterm nA ↔ pterm nB) ∧
-           □ (pterm nB ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))) ∧
-           (pterm nA ∨ nsl_sess_inv Init kA kB nA nB)
+           ((pterm (TKey Dec kA) ∨ pterm (TKey Dec kB)) ∨
+             nsl_sess_inv Init kA kB nA nB)
        else True) -∗
        Ψ (repr ot)) -∗
-  WP responder (TKey Dec kB) (TKey Enc kB) @ E {{ Ψ }}.
+  WP responder (TKey Dec kB) (TKey Enc kB) nB @ E {{ Ψ }}.
 Proof.
-iIntros (?) "#ctx #? #? #? #e_kB Hpost".
+iIntros (?) "#ctx #? #? #? #e_kB unreg #s_nB set_nB Hpost".
 rewrite /responder; wp_pures.
 wp_bind (recv _); iApply wp_recv; iIntros (m1) "#Hm1".
 wp_tdec m1; last protocol_failure.
@@ -289,15 +287,13 @@ case: (bool_decide_reflect (_ = repr_key_type Enc)); last protocol_failure.
 case: kt epkA=> // epkA _.
 wp_pures.
 iDestruct (pterm_msg1E with "[] Hm1") as "{Hm1} Hm1"; eauto.
-wp_bind (gen _); iApply (wp_gen _ kA kB nA).
-iIntros (nB) "unreg #s_nB #p_nB inv".
-wp_pures.
+wp_list (_ :: _ :: _ :: []); wp_term_of_list.
+iMod ("set_nB" $! kA nA) as "[#p_nB inv]".
+wp_tenc; wp_pures.
 iDestruct "Hm1" as "(e_kA & s_nA & Hm1)".
 iAssert (□ (▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB)) → pterm nA))%I as "#p_nA".
   iDestruct "Hm1" as "[?|#e]"; eauto.
   by iIntros "!> ?"; iApply "e"; eauto.
-wp_list (_ :: _ :: _ :: []); wp_term_of_list.
-wp_tenc; wp_pures.
 iMod (session_begin with "[] inv [unreg]") as "[#sessB close]" => //.
 iPoseProof (pterm_msg2I with "[//] [//] e_kB s_nA [] s_nB [] sessB") as "Hm2".
 - by iIntros "!> ?"; iApply "p_nA"; eauto.
@@ -307,24 +303,26 @@ wp_pures; wp_bind (recv _); iApply wp_recv; iIntros (m3) "#Hm3".
 wp_tdec m3; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst m3.
 iPoseProof (pterm_TEncE with "Hm3 [//]") as "[[_ pub]|sec]".
-  wp_pures. iApply ("Hpost" $! (Some (TKey Enc kA, nA, nB))).
-  iExists kA; do 5!iSplit => //.
+  iSpecialize ("p_nB" with "pub").
+  wp_pures. iApply ("Hpost" $! (Some (TKey Enc kA, nA))).
+  iExists kA; do 4!iSplit => //.
     iModIntro; iSplit; iIntros "#?" => //.
     iDestruct "Hm1" as "[?|#Hm1]"; eauto.
     iApply "Hm1". by iApply "p_nB".
-  iSplit; eauto.
-  iLeft. iApply "p_nA". by iApply "p_nB".
+  iLeft. by iApply "p_nB".
 iDestruct "sec" as "(#HnB & _ & _)".
 wp_if.
 iDestruct ("HnB" with "sessB") as "{p_nA} [#sessA p_nA]".
 iMod ("close" with "sessA") as "inv".
 wp_pures.
-iApply ("Hpost" $! (Some (TKey Enc kA, nA, nB))).
-iExists kA; do 5!iSplit => //.
+iApply ("Hpost" $! (Some (TKey Enc kA, nA))).
+iExists kA; do 4!iSplit => //.
   iModIntro; iSplit; iIntros "#?" => //.
   + iApply "p_nB". by iApply "p_nA".
   + iApply "p_nA". by iApply "p_nB".
-iSplit; eauto.
+by eauto.
 Qed.
 
 End NSL.
+
+Arguments nslG Σ : clear implicits.
