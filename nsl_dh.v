@@ -67,7 +67,7 @@ Definition nsl_dh_inv rl kA kB ga gb : iProp :=
 
 Definition nsl_dh_pred k t : iProp :=
   ∃ a k',
-    meta a (N.@"key") k' ∧
+    meta a (N.@"peer") k' ∧
     corruption k k' ∧
     ⌜t = TExp (TInt 0) [TNonce a]⌝.
 
@@ -78,7 +78,7 @@ by move: nexp contra; rewrite unlock; case: t.
 Qed.
 
 Lemma nsl_dh_predX1 a k k' :
-  meta a (N.@"key") k' -∗
+  meta a (N.@"peer") k' -∗
   nsl_dh_pred k (TExp (TInt 0) [TNonce a]) -∗
   corruption k k'.
 Proof.
@@ -97,7 +97,7 @@ Qed.
 
 Lemma pterm_dh1 a k k' :
   nonce_pred a (nsl_dh_pred k) -∗
-  meta a (N.@"key") k' -∗
+  meta a (N.@"peer") k' -∗
   pterm (TExp (TInt 0) [TNonce a])  ↔
   ▷ corruption k k'.
 Proof.
@@ -152,7 +152,7 @@ iIntros (??) "#ctx #p_e_kA #p_e_kB Hpost".
 rewrite /nsl_dh_init; wp_pures; wp_bind (mknonce _).
 iApply (wp_mknonce _ (nsl_dh_pred kA)).
 iIntros (a) "#s_a #a_pred token".
-rewrite (meta_token_difference _ (↑N.@"key")); last solve_ndisj.
+rewrite (meta_token_difference _ (↑N.@"peer")); last solve_ndisj.
 iDestruct "token" as "[dh token]".
 iMod (meta_set _ _ kB with "dh") as "#dh"; eauto.
 wp_pures; wp_bind (tint _); iApply wp_tint.
@@ -214,7 +214,7 @@ iIntros (??) "#ctx #p_e_kB Hpost".
 rewrite /nsl_dh_resp; wp_pures; wp_bind (mknonce _).
 iApply (wp_mknonce _ (nsl_dh_pred kB)).
 iIntros (b) "#s_b #b_pred token".
-rewrite (meta_token_difference _ (↑N.@"key")); last solve_ndisj.
+rewrite (meta_token_difference _ (↑N.@"peer")); last solve_ndisj.
 iDestruct "token" as "[dh token]".
 wp_pures; wp_bind (tint _); iApply wp_tint.
 wp_pures; wp_bind (tgroup _); iApply wp_tgroup.
