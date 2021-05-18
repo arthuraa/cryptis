@@ -11,7 +11,7 @@ Unset Printing Implicit Defensive.
 
 Section NSL.
 
-Context `{!cryptoG Σ, !heapG Σ}.
+Context `{!heapG Σ, !cryptoG Σ, !network Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -27,6 +27,9 @@ Context `{!nslG}.
 
 Definition corruption kA kB : iProp :=
   pterm (TKey Dec kA) ∨ pterm (TKey Dec kB).
+
+Global Instance corruptionC : Comm (⊣⊢) corruption.
+Proof. by move=> k k'; rewrite /corruption [(_ ∨ _)%I]comm. Qed.
 
 Definition msg1_pred (kB : term) m1 : iProp :=
   ∃ nA kA, ⌜m1 = Spec.of_list [nA; TKey Enc kA]⌝ ∧
@@ -66,8 +69,6 @@ Lemma nsl_ctx_session_ctx :
   session_ctx nsl_sess_name N nsl_sess_inv.
 Proof. by iIntros "( ? & ? )". Qed.
 
-Variable send recv : val.
-
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None).
 
@@ -94,15 +95,6 @@ Definition nsl_resp : val := λ: "skB" "pkB" "nB",
   assert: eq_term "m3" "nB" in SOME ("pkA", "nA").
 
 Implicit Types Ψ : val → iProp.
-
-Hypothesis wp_send : forall E t Ψ,
-  ▷ pterm t -∗
-  Ψ #() -∗
-  WP send t @ E {{ Ψ }}.
-
-Hypothesis wp_recv : forall E Ψ,
-  (∀ t, pterm t -∗ Ψ t) -∗
-  WP recv #() @ E {{ Ψ }}.
 
 Lemma pterm_msg1I kA kB (nA : term) :
   nsl_ctx -∗

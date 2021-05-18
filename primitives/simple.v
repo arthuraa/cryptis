@@ -25,16 +25,6 @@ Definition untuple : val := λ: "t",
   if: Fst "t" = #TPair_tag then SOME (Snd "t")
   else NONE.
 
-Notation "'assert:' e1 'in' e2" :=
-  (if: e1 then e2 else NONE)%E
-  (at level 200, e1, e2 at level 200,
-  format "'[' 'assert:' '[' e1 ']'  'in'  '/' e2 ']'") : expr_scope.
-
-Notation "'bind:' x := e1 'in' e2" :=
-  (match: e1 with SOME x => e2  | NONE => NONE end)%E
-  (at level 200, x at level 1, e1, e2 at level 200,
-  format "'[' 'bind:'  x  :=  '[' e1 ']'  'in'  '/' e2 ']'") : expr_scope.
-
 Definition list_of_term : val := rec: "loop" "t" :=
   if: Fst "t" = #TInt_tag then
     if: Snd "t" = #0 then SOMEV NONEV else NONEV
@@ -109,6 +99,13 @@ Implicit Types v : val.
 Implicit Types Φ : prodO locO termO -n> iPropO Σ.
 Implicit Types Ψ : val → iProp Σ.
 Implicit Types N : namespace.
+
+Class network := Network {
+  send : val;
+  recv : val;
+  wp_send : forall E t Ψ, ▷ pterm t -∗ Ψ #() -∗ WP send t @ E {{ Ψ }};
+  wp_recv : forall E Ψ, (∀ t, pterm t -∗ Ψ t) -∗ WP recv #() @ E {{ Ψ }};
+}.
 
 Lemma twp_tint E Ψ n : Ψ (TInt n) -∗ WP tint #n @ E [{ Ψ }].
 Proof.
@@ -406,3 +403,5 @@ Lemma wp_tgroup E t Ψ :
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_tgroup. Qed.
 
 End Proofs.
+
+Arguments network Σ {_ _}.

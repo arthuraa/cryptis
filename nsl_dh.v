@@ -12,7 +12,7 @@ Unset Printing Implicit Defensive.
 
 Section NSLDH.
 
-Context `{!cryptoG Σ, !heapG Σ, !nslG Σ}.
+Context `{!cryptoG Σ, !heapG Σ, !network Σ, !nslG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -20,7 +20,6 @@ Implicit Types s : session_view.
 Implicit Types rl : role.
 
 Variable N : namespace.
-Variable send recv : val.
 
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None).
@@ -28,32 +27,19 @@ Ltac protocol_failure :=
 Definition nsl_dh_init : val := λ: "skA" "pkA" "pkB",
   let: "a" := mknonce #() in
   let: "ga" := texp (tgroup (tint #0)) "a" in
-  bind: "gb" := nsl_init (N.@"nsl") send recv "skA" "pkA" "pkB" "ga" in
+  bind: "gb" := nsl_init (N.@"nsl") "skA" "pkA" "pkB" "ga" in
   SOME (texp "gb" "a").
 
 Definition nsl_dh_resp : val := λ: "skB" "pkB",
   let: "b" := mknonce #() in
   let: "gb" := texp (tgroup (tint #0)) "b" in
-  bind: "res" := nsl_resp (N.@"nsl") send recv "skB" "pkB" "gb" in
+  bind: "res" := nsl_resp (N.@"nsl") "skB" "pkB" "gb" in
   let: "pkA" := Fst "res" in
   let: "ga" := Snd "res" in
   SOME ("pkA", texp "ga" "b").
 
 Implicit Types Ψ : val → iProp.
-
-Hypothesis wp_send : forall E t Ψ,
-  ▷ pterm t -∗
-  Ψ #() -∗
-  WP send t @ E {{ Ψ }}.
-
-Hypothesis wp_recv : forall E Ψ,
-  (∀ t, pterm t -∗ Ψ t) -∗
-  WP recv #() @ E {{ Ψ }}.
-
 Implicit Types kA kB : term.
-
-Global Instance corruptionC : Comm (⊣⊢) corruption.
-Proof. by move=> k k'; rewrite /corruption [(_ ∨ _)%I]comm. Qed.
 
 Definition nsl_dh_inv rl kA kB ga gb : iProp :=
   match rl with
@@ -158,7 +144,7 @@ iMod (meta_set _ _ kB with "dh") as "#dh"; eauto.
 wp_pures; wp_bind (tint _); iApply wp_tint.
 wp_pures; wp_bind (tgroup _); iApply wp_tgroup.
 wp_pures; wp_bind (texp _ _); iApply wp_texp.
-rewrite Spec.texpA; wp_pures; wp_bind (nsl_init _ _ _ _ _ _ _).
+rewrite Spec.texpA; wp_pures; wp_bind (nsl_init _ _ _ _ _).
 iApply (wp_nsl_init with "ctx p_e_kA p_e_kB [] [] [] [token]") => //.
 - solve_ndisj.
 - rewrite sterm_TExp sterm_TInt /=; eauto.
@@ -219,7 +205,7 @@ iDestruct "token" as "[dh token]".
 wp_pures; wp_bind (tint _); iApply wp_tint.
 wp_pures; wp_bind (tgroup _); iApply wp_tgroup.
 wp_pures; wp_bind (texp _ _); iApply wp_texp.
-rewrite Spec.texpA; wp_pures; wp_bind (nsl_resp _ _ _ _ _ _).
+rewrite Spec.texpA; wp_pures; wp_bind (nsl_resp _ _ _ _).
 iApply (wp_nsl_resp with "ctx p_e_kB [token] [] [dh]") => //.
 - solve_ndisj.
 - rewrite /crypto_meta_token nonces_of_term_TExp /=.

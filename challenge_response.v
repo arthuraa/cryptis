@@ -20,7 +20,7 @@ A --> B: {nA, nB, vk(B)}_sk(A)
 
 Section CR.
 
-Context `{!cryptoG Σ, !heapG Σ}.
+Context `{!heapG Σ, !cryptoG Σ, !network Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -46,13 +46,13 @@ Definition msg3_pred kA m3 : iProp :=
 
 Variable cr_sess_inv : role → term → term → term → term → iProp.
 
+Variable gen : val.
+
 Definition cr_inv : iProp :=
   session_inv cr_sess_name (cryptoN.@"cr") cr_sess_inv.
 
 Definition cr_ctx : iProp :=
   session_ctx cr_sess_name (cryptoN.@"cr") cr_sess_inv.
-
-Variable send recv gen : val.
 
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None).
@@ -92,15 +92,6 @@ Definition responder : val := λ: "skB" "pkB",
   else NONE.
 
 Implicit Types Ψ : val → iProp.
-
-Hypothesis wp_send : forall E t Ψ,
-  ▷ pterm t -∗
-  Ψ #() -∗
-  WP send t @ E {{ Ψ }}.
-
-Hypothesis wp_recv : forall E Ψ,
-  (∀ t, pterm t -∗ Ψ t) -∗
-  WP recv #() @ E {{ Ψ }}.
 
 Hypothesis wp_gen : forall E kA kB nA Ψ,
   (∀ nB, cr_sess_inv Resp kA kB nA nB -∗
