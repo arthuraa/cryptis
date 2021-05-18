@@ -56,10 +56,10 @@ Definition nsl_dh_inv rl kA kB ga gb : iProp :=
   match rl with
   | Init =>
     ∃ a, ⌜ga = TExp (TInt 0) [a]⌝ ∧
-    □ ∀ b, (pterm (TExp (TInt 0) [a; b]) → ▷ pterm b)
+    □ ∀ b, (pterm (TExp (TInt 0) [a; b]) → ◇ pterm b)
   | Resp =>
     ∃ b, ⌜gb = TExp (TInt 0) [b]⌝ ∧
-    □ ∀ a, (pterm (TExp (TInt 0) [a; b]) → ▷ pterm a)
+    □ ∀ a, (pterm (TExp (TInt 0) [a; b]) → ◇ pterm a)
   end%I.
 
 Definition nsl_dh_pred k t : iProp :=
@@ -118,20 +118,17 @@ Qed.
 
 Lemma pterm_dh2 a k t :
   nonce_pred a (nsl_dh_pred k) -∗
-  pterm (TExp (TInt 0) [TNonce a; t]) -∗
-  ▷ pterm t.
+  pterm (TExp (TInt 0) [TNonce a; t]) -∗ ◇ pterm t.
 Proof.
 iIntros "#a_pred"; rewrite pterm_TExp2.
 iDestruct 1 as "# [[_ ?] | [ [_ contra] | pub]]"; eauto.
 - rewrite pterm_TNonce.
   iPoseProof (publishedE with "a_pred contra") as "{contra} contra".
-  iModIntro.
-  by iDestruct (nsl_dh_predN with "contra") as "[]".
+  by iDestruct (nsl_dh_predN with "contra") as ">[]".
 - rewrite nonces_of_term_eq /= left_id_L big_sepS_union_pers.
   rewrite big_sepS_singleton; iDestruct "pub" as "[pub _]".
   iPoseProof (publishedE with "a_pred pub") as "{pub} pub".
-  iModIntro.
-  iDestruct (nsl_dh_predX2 with "pub") as "[]".
+  iDestruct (nsl_dh_predX2 with "pub") as ">[]".
 Qed.
 
 Lemma wp_nsl_dh_init kA kB E Ψ :
@@ -143,7 +140,7 @@ Lemma wp_nsl_dh_init kA kB E Ψ :
   (∀ ogab : option term,
       (if ogab is Some gab then
          sterm gab ∧
-         (corruption kA kB ∨ □ (pterm gab → ▷ ▷ False))
+         (corruption kA kB ∨ □ (pterm gab → ▷ False))
        else True) -∗
       Ψ (repr ogab)) -∗
   WP nsl_dh_init (TKey Dec kA) (TKey Enc kA) (TKey Enc kB) @ E {{ Ψ }}.
@@ -187,8 +184,7 @@ iSplit; first by iApply sterm_texp => //.
 iRight; iModIntro.
 rewrite Spec.texpA.
 iIntros "#contra".
-iSpecialize ("succ" with "contra").
-iModIntro.
+iDestruct ("succ" with "contra") as "{succ} >succ".
 rewrite pterm_TNonce.
 iPoseProof (publishedE with "a_pred succ") as "{contra} contra".
 iModIntro.
@@ -206,7 +202,7 @@ Lemma wp_dh_responder kB E Ψ :
            ⌜pkA = TKey Enc kA⌝ ∧
            pterm pkA ∧
            sterm gab ∧
-           (corruption kA kB ∨ □ (pterm gab → ▷ ▷ False))
+           (corruption kA kB ∨ □ (pterm gab → ▷ False))
        else True) -∗
       Ψ (repr oresp)) -∗
   WP nsl_dh_resp (TKey Dec kB) (TKey Enc kB) @ E {{ Ψ }}.
@@ -251,7 +247,7 @@ rewrite Spec.texpA.
 rewrite -[ [TNonce b; t]]/(seq.cat [TNonce b] [t]) TExpC /=.
 iRight; iIntros "!> #contra".
 iSpecialize ("inv" with "contra").
-iModIntro.
+iDestruct "inv" as ">inv".
 rewrite pterm_TNonce.
 iPoseProof (publishedE with "b_pred inv") as "{inv} inv".
 iModIntro.
