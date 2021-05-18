@@ -52,6 +52,9 @@ Hypothesis wp_recv : forall E Ψ,
 
 Implicit Types kA kB : term.
 
+Global Instance corruptionC : Comm (⊣⊢) corruption.
+Proof. by move=> k k'; rewrite /corruption [(_ ∨ _)%I]comm. Qed.
+
 Definition nsl_dh_inv rl kA kB ga gb : iProp :=
   match rl with
   | Init =>
@@ -65,7 +68,7 @@ Definition nsl_dh_inv rl kA kB ga gb : iProp :=
 Definition nsl_dh_pred k t : iProp :=
   ∃ a k',
     meta a (N.@"key") k' ∧
-    (pterm (TKey Dec k) ∨ pterm (TKey Dec k')) ∧
+    corruption k k' ∧
     ⌜t = TExp (TInt 0) [TNonce a]⌝.
 
 Lemma nsl_dh_predN k t : negb (is_exp t) → nsl_dh_pred k t -∗ False.
@@ -77,7 +80,7 @@ Qed.
 Lemma nsl_dh_predX1 a k k' :
   meta a (N.@"key") k' -∗
   nsl_dh_pred k (TExp (TInt 0) [TNonce a]) -∗
-  pterm (TKey Dec k) ∨ pterm (TKey Dec k').
+  corruption k k'.
 Proof.
 iIntros "#meta"; iDestruct 1 as (a' k'') "# (meta' & pub & %e)".
 case/TExp_inj: e => _ /Permutation_singleton [] <-.
@@ -96,7 +99,7 @@ Lemma pterm_dh1 a k k' :
   nonce_pred a (nsl_dh_pred k) -∗
   meta a (N.@"key") k' -∗
   pterm (TExp (TInt 0) [TNonce a])  ↔
-  ▷ (pterm (TKey Dec k) ∨ pterm (TKey Dec k')).
+  ▷ corruption k k'.
 Proof.
 iIntros "#a_pred #meta"; iSplit.
 - rewrite pterm_TExp1.
@@ -230,7 +233,7 @@ iApply (wp_nsl_resp with "ctx p_e_kB [token] [] [dh]") => //.
 - iIntros (kA nA).
   iMod (meta_set _ b kA with "dh") as "#meta"; eauto.
   iModIntro; iSplit.
-  + by iModIntro; rewrite /corruption [(_ ∨ _)%I]comm; by iApply pterm_dh1.
+  + by iModIntro; rewrite [corruption _ _]comm; by iApply pterm_dh1.
   + iExists (TNonce b); iSplit => //.
     iIntros "!> %".
     rewrite -[ [a; TNonce b]]/(seq.cat [a] [TNonce b]) TExpC /=.
