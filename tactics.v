@@ -20,6 +20,14 @@ Implicit Types v : val.
 Implicit Types Φ : prodO locO termO -n> iPropO Σ.
 Implicit Types Ψ : val → iProp Σ.
 
+Lemma tac_wp_hash Γ E K t Ψ :
+  envs_entails Γ (WP fill K (Val (THash t)) @ E {{ Ψ }}) →
+  envs_entails Γ (WP fill K (hash t) @ E {{ Ψ }}).
+Proof.
+rewrite envs_entails_eq => post.
+by rewrite -wp_bind -wp_hash.
+Qed.
+
 Lemma tac_twp_untag Γ E K n t Ψ :
   (∀ t', t = Spec.tag n t' →
          envs_entails Γ (WP fill K (Val (repr (Some t'))) @ E [{ Ψ }])) →
@@ -206,6 +214,16 @@ Tactic Notation "wp_enc" :=
 
 Tactic Notation "wp_tenc" :=
   wp_pures; wp_bind (tenc _ _ _); iApply wp_tenc.
+
+Tactic Notation "wp_hash" :=
+  wp_pures;
+  lazymatch goal with
+  | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
+    reshape_expr e ltac:(fun K e' =>
+      first
+        [eapply (tac_wp_hash _ _ K _ _); wp_finish
+        |fail 1 "wp_hash: Cannot decode"])
+  end.
 
 Tactic Notation "wp_dec_eq" ident(t) ident(H) :=
   wp_pures;
