@@ -114,6 +114,14 @@ case e: Spec.tdec => [t'|]; eauto.
 by apply: HSome; apply: tdecK.
 Qed.
 
+Lemma tac_wp_list Γ E K (ts : list term) Ψ :
+  envs_entails Γ (WP fill K (Val (repr ts)) @ E {{ Ψ }}) →
+  envs_entails Γ (WP fill K (list_to_expr ts) @ E {{ Ψ }}).
+Proof.
+rewrite envs_entails_eq => post.
+by rewrite -wp_bind -wp_list.
+Qed.
+
 Lemma tac_twp_list_of_term Γ E K t Ψ :
   (∀ ts, t = Spec.of_list ts →
          envs_entails Γ (WP fill K (Val (SOMEV (repr ts))) @ E [{ Ψ }])) →
@@ -201,7 +209,14 @@ Qed.
 End Proofs.
 
 Tactic Notation "wp_list" open_constr(t) :=
-  wp_pures; wp_bind (_ :: _)%E; iApply (wp_list t).
+  wp_pures;
+  lazymatch goal with
+  | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
+    reshape_expr e ltac:(fun K e' =>
+      first
+        [eapply (tac_wp_list _ _ K t _); wp_finish
+        |fail 1 "wp_list: Cannot decode"])
+  end.
 
 Tactic Notation "wp_term_of_list" :=
   wp_pures; wp_bind (term_of_list _); iApply wp_term_of_list.
