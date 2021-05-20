@@ -92,14 +92,16 @@ Lemma wp_dec E Φ k t :
 Proof.
 iIntros "#ctx #p_t post_some post_none".
 rewrite /dec; wp_list_of_term_eq ts e; last by failure.
-rewrite {t}e repr_list_eq.
+wp_pures; rewrite {t}e !subst_list_match /=.
+iApply wp_list_match.
 case: ts => [|ad [|m [|??]]] /=; wp_pures; try by failure.
 wp_hash.
 rewrite pterm_of_list /=; iDestruct "p_t" as "(p_ad & p_m & _)".
 wp_tdec m; last by failure.
 wp_list_of_term_eq m' e; last by failure.
-rewrite {m}e repr_list_eq.
-case: m' => [|h' [|payload [|??]]]; wp_pures; try by failure.
+wp_pures; rewrite {m}e !subst_list_match /=.
+iApply wp_list_match.
+case: m' => [|h' [|payload [|??]]] /=; wp_pures; try by failure.
 wp_eq_term e; last by failure.
 subst h'.
 iDestruct (pterm_TEncE with "p_m ctx") as "[[fail pub]|sec]".

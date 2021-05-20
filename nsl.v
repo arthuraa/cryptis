@@ -247,11 +247,9 @@ wp_pures; wp_bind (send _); iApply wp_send; eauto.
 iClear "Hm1"; wp_pures; wp_bind (recv _); iApply wp_recv.
 iIntros (m2) "#Hm2"; wp_tdec m2; last protocol_failure.
 wp_list_of_term m2; last protocol_failure.
-rewrite repr_list_eq.
-case: m2 => [|nA'  m2] /=; wp_pures; first protocol_failure. 
-case: m2 => [|nB   m2] /=; wp_pures; first protocol_failure.  
-case: m2 => [|pkB' m2] /=; wp_pures; first protocol_failure.
-case: m2 => [|??] /=; wp_pures; last protocol_failure.
+wp_pures; rewrite !subst_list_match /=.
+iApply wp_list_match.
+case: m2 => [|nA' [|nB [|pkB' [|??]]]] //=; try by iApply ("Hpost" $! None).
 wp_eq_term e; last protocol_failure; subst nA'.
 wp_eq_term e; last protocol_failure; subst pkB'.
 wp_tenc.
@@ -296,10 +294,9 @@ rewrite /nsl_resp; wp_pures.
 wp_bind (recv _); iApply wp_recv; iIntros (m1) "#Hm1".
 wp_tdec m1; last protocol_failure.
 wp_list_of_term m1; last protocol_failure.
-rewrite repr_list_eq.
-case: m1 => [|nA m1] /=; first protocol_failure.
-case: m1 => [|pkA m1] /=; first protocol_failure.
-case: m1 => [|??] /=; last protocol_failure.
+wp_pures; rewrite !subst_list_match /=.
+iApply wp_list_match.
+case: m1 => [|nA [|pkA [|??]]] //=; try by iApply ("Hpost" $! None).
 wp_is_key_eq kt kA et; last protocol_failure; subst pkA.
 wp_pures.
 case: (bool_decide_reflect (_ = repr_key_type Enc)); last protocol_failure.
