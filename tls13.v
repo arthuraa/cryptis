@@ -118,7 +118,72 @@ End Lemmas.
 
 End AEAD.
 
-Section TLS13.
+Module S.
+
+Definition zero : term := TInt 0.
+Definition tls12 := TInt 2.
+Definition tls13 := TInt 3.
+
+Definition hmac k t :=
+  THash (Spec.of_list [k; t]).
+
+Notation prf := hmac (only parsing).
+Notation hkdf_extract := prf (only parsing).
+
+Definition hkdf_expand_label k (l : string) t :=
+  prf k (Spec.tag (nroot.@l) t).
+
+Definition derive_secret k l t :=
+  hkdf_expand_label k l (THash t).
+
+Definition kdf_es psk :=
+  let es := hmac zero psk in
+  let kb := derive_secret es "tls13_resumption_psk_binder_key" zero in
+  (es, kb).
+
+Definition kdf_k0 es log :=
+  let atcs0 := derive_secret es "tls13_client_early_traffic_secret" log in
+  let kc0 := hkdf_expand_label atcs0 "tls13_key" zero in
+  let ems0 := derive_secret es "tls13_early_exporter_master_secret" log in
+  (kc0, ems0).
+
+Notation kdf_hs := hkdf_extract (only parsing).
+
+Definition kdf_ms hs log :=
+  let ms   := hkdf_extract hs zero in
+  let htsc := derive_secret hs "tls13_client_handshake_traffic_secret" log in
+  let htss := derive_secret hs "tls13_server_handshake_traffic_secret" log in
+  let kch  := hkdf_expand_label htsc "tls13_key" zero in
+  let kcm  := hkdf_expand_label htsc "tls13_finished" zero in
+  let ksh  := hkdf_expand_label htss "tls13_key" zero in
+  let ksm  := hkdf_expand_label htss "tls13_finished" zero in
+  [ms; kch; ksh; kcm; ksm].
+
+Definition kdf_k ms log :=
+  let atsc := derive_secret ms "tls13_client_application_traffic_secret" log in
+  let atss := derive_secret ms "tls13_server_application_traffic_secret" log in
+  let ems  := derive_secret ms "tls13_exporter_master_secret" log in
+  let kc   := hkdf_expand_label atsc "tls13_key" zero in
+  let ks   := hkdf_expand_label atss "tls13_key" zero in
+  [kc; ks; ems].
+
+Definition kdf_psk ms log :=
+  derive_secret ms "tls13_resumption_master_secret" log.
+
+Definition client13_offer psk g gx aaa hhh cr :=
+  let '(early_secret, kb) := kdf_es psk in
+  let zoffer := Spec.of_list [tls13; g; gx; aaa; hhh; zero] in
+  let pt := hmac kb (Spec.of_list [cr; zoffer]) in
+  let offer := Spec.of_list [tls13; g; gx; aaa; hhh; pt] in
+  let ch := Spec.of_list [cr; offer] in
+  let '(kc0, ems0) := kdf_k0 early_secret ch in
+  [ch; kc0; ems0].
+
+End S.
+
+Module I.
+
+Section I.
 
 Context `{!heapG Σ, !cryptoG Σ, !network Σ}.
 Notation iProp := (iProp Σ).
@@ -126,95 +191,170 @@ Notation iProp := (iProp Σ).
 Implicit Types t : term.
 Implicit Types s : session_view.
 Implicit Types rl : role.
-
-Variable N : namespace.
+Implicit Types Φ : val → iProp.
 
 Definition hmac : val := λ: "k" "x",
   hash (term_of_list ["k"; "x"]).
+
+Lemma wp_hmac E t1 t2 Φ :
+  Φ (S.hmac t1 t2) -∗
+  WP hmac t1 t2 @ E {{ Φ }}.
+Proof.
+rewrite /hmac.
+iIntros "post"; wp_pures.
+wp_list (_ :: _ :: []); wp_term_of_list.
+by iApply wp_hash.
+Qed.
 
 Notation prf := hmac (only parsing).
 
 Notation hkdf_extract := prf (only parsing).
 
-Definition client_finished : term := TInt 0.
-Definition server_finished : term := TInt 1.
-Definition master_secret : term := TInt 2.
-Definition client_key_expansion : term := TInt 3.
-Definition server_key_expansion : term := TInt 4.
-Definition tls13_client_handshake_traffic_secret : term := TInt 5.
-Definition tls13_server_handshake_traffic_secret : term := TInt 6.
-Definition tls13_client_early_traffic_secret : term := TInt 7.
-Definition tls13_client_application_traffic_secret : term := TInt 8.
-Definition tls13_server_application_traffic_secret : term := TInt 9.
-Definition tls13_key : term := TInt 10.
-Definition tls13_iv : term := TInt 11.
-Definition tls13_early_exporter_master_secret : term := TInt 12.
-Definition tls13_exporter_master_secret : term := TInt 13.
-Definition tls13_resumption_master_secret : term := TInt 14.
-Definition tls13_resumption_psk_binder_key : term := TInt 15.
-Definition tls13_finished : term := TInt 16.
+Definition hkdf_expand_label (l : string) : val := λ: "k" "h",
+  prf "k" (tag (nroot.@l) "h").
 
-Definition zero : term := TInt 0.
+Lemma wp_hkdf_expand_label E l t1 t2 Φ :
+  Φ (S.hkdf_expand_label t1 l t2) -∗
+  WP hkdf_expand_label l t1 t2 @ E {{ Φ }}.
+Proof.
+rewrite /hkdf_expand_label; iIntros "post"; wp_pures.
+wp_tag; by iApply wp_hmac.
+Qed.
 
-Definition tls12 := TInt 2.
-Definition tls13 := TInt 3.
+Definition derive_secret l : val := λ: "k" "m",
+  hkdf_expand_label l "k" (hash "m").
 
-Definition hkdf_expand_label : val := λ: "k" "l" "h",
-  prf "k" (term_of_list ["l"; "h"]).
-
-Definition derive_secret : val := λ: "k" "l" "m",
-  hkdf_expand_label "k" "l" (hash "m").
-
-Definition kdf_0 : val := λ: <>,
-  hkdf_extract zero zero.
+Lemma wp_derive_secret E l t1 t2 Φ :
+  Φ (S.derive_secret t1 l t2) -∗
+  WP derive_secret l t1 t2 @ E {{ Φ }}.
+Proof.
+rewrite /derive_secret; iIntros "post"; wp_pures.
+by wp_hash; iApply wp_hkdf_expand_label.
+Qed.
 
 Definition kdf_es : val := λ: "psk",
-  let: "es" := hkdf_extract zero "psk" in
-  let: "kb" := derive_secret "es" tls13_resumption_psk_binder_key zero in
-  term_of_list ["es"; "kb"].
+  let: "es" := hkdf_extract S.zero "psk" in
+  let: "kb" := derive_secret "tls13_resumption_psk_binder_key" "es" S.zero in
+  ("es", "kb").
+
+Lemma wp_kdf_es E psk Φ :
+  Φ (repr (S.kdf_es psk)) -∗
+  WP kdf_es psk @ E {{ Φ }}.
+Proof.
+rewrite /kdf_es; iIntros "post"; wp_pures.
+wp_bind (hmac _ _); iApply wp_hmac; wp_pures.
+by wp_bind (derive_secret _ _ _); iApply wp_derive_secret; wp_pures.
+Qed.
 
 Definition kdf_k0 : val := λ: "es" "log",
-  let: "atsc0" :=
-    derive_secret "es" tls13_client_early_traffic_secret "log" in
-  let: "kc0"   :=
-    hkdf_expand_label "atsc0" tls13_key zero in
-  let: "ems0"  :=
-    derive_secret "es" tls13_early_exporter_master_secret "log" in
-  term_of_list ["kc0"; "ems0"].
+  let: "atsc0" := derive_secret "tls13_client_early_traffic_secret" "es" "log" in
+  let: "kc0"   := hkdf_expand_label "tls13_key" "atsc0" S.zero in
+  let: "ems0"  := derive_secret "tls13_early_exporter_master_secret" "es" "log" in
+  ("kc0", "ems0").
+
+Lemma wp_kdf_k0 E es log Φ :
+  Φ (repr (S.kdf_k0 es log)) -∗
+  WP kdf_k0 es log @ E {{ Φ }}.
+Proof.
+rewrite /kdf_k0; iIntros "post"; wp_pures.
+wp_bind (derive_secret _ _ _); iApply wp_derive_secret; wp_pures.
+wp_bind (hkdf_expand_label _ _ _); iApply wp_hkdf_expand_label; wp_pures.
+by wp_bind (derive_secret _ _ _); iApply wp_derive_secret; wp_pures.
+Qed.
 
 Notation kdf_hs := hkdf_extract (only parsing).
 
 Definition kdf_ms :val := λ: "hs" "log",
-  let: "ms" := hkdf_extract "hs" zero in
+  let: "ms" := hkdf_extract "hs" S.zero in
   let: "htsc" :=
-    derive_secret "hs" tls13_client_handshake_traffic_secret "log" in
+    derive_secret "tls13_client_handshake_traffic_secret" "hs" "log" in
   let: "htss" :=
-    derive_secret "hs" tls13_server_handshake_traffic_secret "log" in
-  let: "kch" :=  hkdf_expand_label "htsc" tls13_key zero in
-  let: "kcm" :=  hkdf_expand_label "htsc" tls13_finished zero in
-  let: "ksh" :=  hkdf_expand_label "htss" tls13_key zero in
-  let: "ksm" :=  hkdf_expand_label "htss" tls13_finished zero in
-  term_of_list ["ms"; "kch"; "ksh"; "kcm"; "ksm"].
+    derive_secret "tls13_server_handshake_traffic_secret" "hs" "log" in
+  let: "kch" :=  hkdf_expand_label "tls13_key" "htsc" S.zero in
+  let: "kcm" :=  hkdf_expand_label "tls13_finished" "htsc" S.zero in
+  let: "ksh" :=  hkdf_expand_label "tls13_key" "htss" S.zero in
+  let: "ksm" :=  hkdf_expand_label "tls13_finished" "htss" S.zero in
+  ["ms"; "kch"; "ksh"; "kcm"; "ksm"].
+
+Lemma wp_kdf_ms E hs log Φ :
+  Φ (repr (S.kdf_ms hs log)) -∗
+  WP kdf_ms hs log @ E {{ Φ }}.
+Proof.
+rewrite /kdf_ms; iIntros "post"; wp_pures.
+wp_bind (hmac _ _); iApply wp_hmac; wp_pures.
+wp_bind (derive_secret _ _ _); iApply wp_derive_secret; wp_pures.
+wp_bind (derive_secret _ _ _); iApply wp_derive_secret; wp_pures.
+wp_bind (hkdf_expand_label _ _ _); iApply wp_hkdf_expand_label; wp_pures.
+wp_bind (hkdf_expand_label _ _ _); iApply wp_hkdf_expand_label; wp_pures.
+wp_bind (hkdf_expand_label _ _ _); iApply wp_hkdf_expand_label; wp_pures.
+wp_bind (hkdf_expand_label _ _ _); iApply wp_hkdf_expand_label; wp_pures.
+by wp_list (_ :: _ :: _ :: _ :: _ :: []).
+Qed.
 
 Definition kdf_k : val := λ: "ms" "log",
   let: "atsc" :=
-    derive_secret "ms" tls13_client_application_traffic_secret "log" in
+    derive_secret "tls13_client_application_traffic_secret" "ms" "log" in
   let: "atss" :=
-    derive_secret "ms" tls13_server_application_traffic_secret "log" in
+    derive_secret "tls13_server_application_traffic_secret" "ms" "log" in
   let: "ems"  :=
-    derive_secret "ms" tls13_exporter_master_secret "log" in
+    derive_secret "tls13_exporter_master_secret" "ms" "log" in
   let: "kc"   :=
-    hkdf_expand_label "atsc" tls13_key zero in
+    hkdf_expand_label "tls13_key" "atsc" S.zero in
   let: "ks"   :=
-    hkdf_expand_label "atss" tls13_key zero in
-  term_of_list ["kc"; "ks"; "ems"].
+    hkdf_expand_label "tls13_key" "atss" S.zero in
+  ["kc"; "ks"; "ems"].
+
+Lemma wp_kdf_k E ms log Φ :
+  Φ (repr (S.kdf_k ms log)) -∗
+  WP kdf_k ms log @ E {{ Φ }}.
+Proof.
+rewrite /kdf_k; iIntros "post"; wp_pures.
+wp_bind (derive_secret _ _ _); iApply wp_derive_secret; wp_pures.
+wp_bind (derive_secret _ _ _); iApply wp_derive_secret; wp_pures.
+wp_bind (derive_secret _ _ _); iApply wp_derive_secret; wp_pures.
+wp_bind (hkdf_expand_label _ _ _); iApply wp_hkdf_expand_label; wp_pures.
+wp_bind (hkdf_expand_label _ _ _); iApply wp_hkdf_expand_label; wp_pures.
+by wp_list (_ :: _ :: _ :: []).
+Qed.
 
 Definition kdf_psk : val := λ: "ms" "log",
-  derive_secret "ms" tls13_resumption_master_secret "log".
+  derive_secret "tls13_resumption_master_secret" "ms" "log".
 
-Definition dh_keygen : val := λ: "g",
-  let: "x" := mknonce #() in
-  ("x", texp "g" "x").
+Lemma wp_kdf_psk E ms log Φ :
+  Φ (S.kdf_psk ms log) -∗
+  WP kdf_psk ms log @ E {{ Φ }}.
+Proof.
+rewrite /kdf_psk; iIntros "post"; wp_pures.
+by iApply wp_derive_secret.
+Qed.
+
+Definition client13_offer : val := λ: "psk" "g" "gx" "aaa" "hhh" "cr",
+  let: "kdf_es_res" := kdf_es "psk" in
+  let: "early_secret" := Fst "kdf_es_res" in
+  let: "kb" := Snd "kdf_es_res" in
+  let: "zoffer" := term_of_list [S.tls13; "g"; "gx"; "aaa"; "hhh";  S.zero] in
+  let: "pt" := hmac "kb" (term_of_list ["cr"; "zoffer"]) in
+  let: "offer" := term_of_list [S.tls13; "g"; "gx"; "aaa"; "hhh"; "pt"] in
+  let: "ch" := term_of_list ["cr"; "offer"] in
+  let: "kdf_k0_res" := kdf_k0 "early_secret" "ch" in
+  let: "kc0" := Fst "kdf_k0_res" in
+  let: "ems0" := Snd "kdf_k0_res" in
+  ["ch"; "kc0"; "ems0"].
+
+Lemma wp_client13_offer E psk g gx aaa hhh cr Φ :
+  Φ (repr (S.client13_offer psk g gx aaa hhh cr)) -∗
+  WP client13_offer psk g gx aaa hhh cr @ E {{ Φ }}.
+Proof.
+rewrite /client13_offer; iIntros "?"; wp_pures.
+wp_bind (kdf_es _); iApply wp_kdf_es; wp_pures.
+wp_list (_ :: _ :: _ :: _ :: _ :: _ :: []); wp_term_of_list; wp_pures.
+wp_list (_ :: _ :: []); wp_term_of_list; wp_pures.
+wp_bind (hmac _ _); iApply wp_hmac; wp_pures.
+wp_list (_ :: _ :: _ :: _ :: _ :: _ :: []); wp_term_of_list; wp_pures.
+wp_list (_ :: _ :: []); wp_term_of_list; wp_pures.
+wp_bind (kdf_k0 _ _); iApply wp_kdf_k0; wp_pures.
+by wp_list (_ :: _ :: _ :: []).
+Qed.
 
 Definition tlsN := nroot.@"tls".
 
@@ -241,11 +381,16 @@ Parameters:
 - hhh: ???
 
 *)
+
 Definition client13 : val := λ: "a" "b" "psk" "g" "aaa" "hhh",
   let: "cr" := mknonce #() in
   let: "dh_res" := dh_keygen "g" in
   let: "x" := Fst "dh_res" in
   let: "gx" := Snd "dh_res" in
+
+
+
+
   let: "kdf_es_res" := kdf_es "psk" in
   let: "early_secret" := Fst "kdf_es_res" in
   let: "kb" := Snd "kdf_es_res" in
