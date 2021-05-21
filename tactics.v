@@ -36,6 +36,46 @@ rewrite (_ : NILV = repr (@nil A)) /=; first by apply: tac_wp_cons.
 by rewrite repr_list_eq /=.
 Qed.
 
+Fixpoint nforall_aux {A} (n : nat) (P : list A → Prop) :=
+  match n with
+  | 0 => P []
+  | S n => forall x : A, nforall_aux n (λ xs, P (x :: xs))
+  end.
+
+Lemma nforall_auxP {A} (n : nat) (P : list A -> Prop) :
+  nforall_aux n P ↔ ∀ vs, n = length vs → P vs.
+Proof.
+elim: n => [|n IH] /= in P *.
+  split; [by move=> ? [|//]|by apply].
+split.
+- move=> H [|x xs] //= [e]; by move/IH: (H x); apply.
+- by move=> H x; apply/IH => xs len_xs; apply: H; rewrite len_xs.
+Qed.
+
+Definition nforall {A} (n : nat) (vs : list A) (P : list A -> Prop) :=
+  nforall_aux n (λ vs', vs = vs' → P vs').
+
+Lemma nforallP {A} (n : nat) (xs : list A) (P : list A -> Prop) :
+  nforall n xs P ↔ (n = length xs → P xs).
+Proof.
+rewrite /nforall nforall_auxP; split.
+- by move=> H len_xs; apply: H.
+- by move=> H xs' len_xs' e_xs'; rewrite e_xs' in H; apply: H.
+Qed.
+
+Lemma tac_wp_list_match `{!Repr A} Γ E K vars vs k Ψ :
+  nforall (length vars) vs (
+    λ vs', envs_entails Γ (WP fill K (nsubst vars (map repr vs') k) @ E {{ Ψ }})) →
+  (length vars ≠ length vs →
+    envs_entails Γ (WP fill K NONEV @ E {{ Ψ }})) →
+  envs_entails Γ (WP fill K (list_match vars (repr vs) k) @ E {{ Ψ }}).
+Proof.
+rewrite envs_entails_eq => /nforallP hyes hno.
+rewrite -wp_bind -wp_list_match.
+case: decide => [e_len|ne_len]; last by iApply hno.
+by rewrite -wp_bind_inv; iApply hyes.
+Qed.
+
 Lemma tac_wp_hash Γ E K t Ψ :
   envs_entails Γ (WP fill K (Val (THash t)) @ E {{ Ψ }}) →
   envs_entails Γ (WP fill K (hash t) @ E {{ Ψ }}).
@@ -246,6 +286,25 @@ Tactic Notation "wp_cons" :=
   end.
 
 Tactic Notation "wp_list" := repeat wp_cons.
+
+Arguments nforall {A} /.
+
+Tactic Notation "wp_list_match" :=
+  wp_pures;
+  rewrite ?subst_list_match /=;
+  lazymatch goal with
+  | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
+    reshape_expr e ltac:(fun K e' =>
+      lazymatch e' with
+      | list_match ?vars (Val (?f ?xs)) ?k =>
+        lazymatch type of xs with
+        | list ?A =>
+          first
+            [eapply (@tac_wp_list_match _ _ A _ _ E K vars xs k); simpl
+            |fail 1 "wp_list_match: Cannot decode"]
+        end
+      end)
+  end.
 
 Tactic Notation "wp_term_of_list" :=
   wp_pures; try wp_bind (term_of_list _); iApply wp_term_of_list.

@@ -246,9 +246,7 @@ wp_pures; wp_bind (send _); iApply wp_send; eauto.
 iClear "Hm1"; wp_pures; wp_bind (recv _); iApply wp_recv.
 iIntros (m2) "#Hm2"; wp_tdec m2; last protocol_failure.
 wp_list_of_term m2; last protocol_failure.
-wp_pures; rewrite !subst_list_match /=.
-iApply wp_list_match.
-case: m2 => [|nA' [|nB [|pkB' [|??]]]] //=; try by iApply ("Hpost" $! None).
+wp_list_match => [nA' nB pkB' {m2} ->|_]; wp_finish; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst nA'.
 wp_eq_term e; last protocol_failure; subst pkB'.
 wp_tenc.
@@ -293,9 +291,7 @@ rewrite /nsl_resp; wp_pures.
 wp_bind (recv _); iApply wp_recv; iIntros (m1) "#Hm1".
 wp_tdec m1; last protocol_failure.
 wp_list_of_term m1; last protocol_failure.
-wp_pures; rewrite !subst_list_match /=.
-iApply wp_list_match.
-case: m1 => [|nA [|pkA [|??]]] //=; try by iApply ("Hpost" $! None).
+wp_list_match => [nA pkA {m1} ->|_]; wp_finish; last protocol_failure.
 wp_is_key_eq kt kA et; last protocol_failure; subst pkA.
 wp_pures.
 case: (bool_decide_reflect (_ = repr_key_type Enc)); last protocol_failure.

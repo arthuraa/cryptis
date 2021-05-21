@@ -62,9 +62,7 @@ Definition initiator : val := λ: "skA" "pkA" "pkB" "nA",
   send  "m1";;
   bind: "m2"   := tdec (nroot.@"m2") "pkB" (recv #()) in
   bind: "m2"   := list_of_term "m2" in
-  bind: "nA'"  := "m2" !! #0 in
-  bind: "nB"   := "m2" !! #1 in
-  bind: "pkA'" := "m2" !! #2 in
+  list_match: ["nA'"; "nB"; "pkA'"] := "m2" in
   if: eq_term "nA'" "nA" && eq_term "pkA'" "pkA" then
     let:  "m3" := term_of_list ["nA"; "nB"; "pkB"] in
     bind: "m3" := tenc (nroot.@"m3") "skA" "m3" in
@@ -74,8 +72,7 @@ Definition initiator : val := λ: "skA" "pkA" "pkB" "nA",
 
 Definition responder : val := λ: "skB" "pkB",
   bind: "m1"   := list_of_term (recv #()) in
-  bind: "nA"   := "m1" !! #0 in
-  bind: "pkA"  := "m1" !! #1 in
+  list_match: ["nA"; "pkA"] := "m1" in
   bind: "kt"   := is_key "pkA" in
   if: "kt" = repr Dec then
     let:  "nB"   := gen #() in
@@ -83,9 +80,7 @@ Definition responder : val := λ: "skB" "pkB",
     send  "m2";;
     bind: "m3"   := tdec (nroot.@"m3") "pkA" (recv #()) in
     bind: "m3"   := list_of_term "m3" in
-    bind: "nA'"  := "m3" !! #0 in
-    bind: "nB'"  := "m3" !! #1 in
-    bind: "pkB'" := "m3" !! #2 in
+    list_match: ["nA'"; "nB'"; "pkB'"] := "m3" in
     if: eq_term "nA'" "nA" && eq_term "nB'" "nB" && eq_term "pkB'" "pkB" then
       SOME ("pkA", "nA", "nB")
     else NONE
@@ -176,9 +171,7 @@ wp_pures; wp_bind (send _); iApply wp_send.
 wp_pures; wp_bind (recv _); iApply wp_recv.
 iIntros (m2) "#Hm2"; wp_tdec m2; last protocol_failure.
 wp_list_of_term m2; last protocol_failure.
-wp_lookup nA' enA'; last protocol_failure.
-wp_lookup nB  enB; last protocol_failure.
-wp_lookup pkB' epkB'; last protocol_failure.
+wp_list_match => [nA' nB pkB' {m2} ->|_]; wp_finish; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst nA'.
 wp_eq_term e; last protocol_failure; subst pkB'.
 iPoseProof (pterm_msg2E with "[//] d_kB Hm2")
@@ -226,16 +219,13 @@ iIntros (?) "#ctx #enc2 #enc3 #HkB Hpost".
 rewrite /responder; wp_pures.
 wp_bind (recv _); iApply wp_recv; iIntros (m1) "#Hm1".
 wp_list_of_term m1; last protocol_failure.
-wp_lookup nA enA; last protocol_failure.
-wp_lookup pkA epkA; last protocol_failure.
-rewrite pterm_of_list.
-iPoseProof (big_sepL_lookup with "Hm1") as "HnA"; first exact: enA.
-iPoseProof (big_sepL_lookup with "Hm1") as "HpkA"; first exact: epkA.
-iClear "Hm1".
+wp_list_match => [nA pkA {m1} ->|_]; wp_finish; last protocol_failure.
+rewrite pterm_of_list /=.
+iDestruct "Hm1" as "(HnA & HpkA & _)".
 wp_is_key_eq kt kA et; last protocol_failure; subst pkA.
 wp_pures.
 case: (bool_decide_reflect (_ = repr_key_type Dec)); last protocol_failure.
-case: kt epkA=> // epkA _.
+case: kt=> // _.
 wp_pures; wp_bind (gen _); iApply wp_gen; iIntros (nB) "inv token #HnB".
 iMod (session_begin with "[] inv [token]") as "[#sessB close]".
 - by eauto.
@@ -255,9 +245,7 @@ wp_tenc; wp_pures; wp_bind (send _); iApply wp_send.
 wp_pures; wp_bind (recv _); iApply wp_recv; iIntros (m3) "#Hm3".
 wp_tdec m3; last protocol_failure.
 wp_list_of_term m3; last protocol_failure.
-wp_lookup nA' enA'; last protocol_failure.
-wp_lookup nB' enB'; last protocol_failure.
-wp_lookup pkB' epkB'; last protocol_failure.
+wp_list_match => [nA' nB' pkB' {m3} ->|_]; wp_finish; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst nA'.
 wp_eq_term e; last protocol_failure; subst nB'.
 wp_eq_term e; last protocol_failure; subst pkB'.
