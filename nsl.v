@@ -239,8 +239,7 @@ Lemma wp_nsl_init kA kB (nA : term) E Ψ :
 Proof.
 rewrite /nsl_init.
 iIntros (?) "#ctx #enc_kA #enc_kB #s_nA #p_nA inv unreg Hpost".
-wp_list (_ :: _ :: []).
-wp_term_of_list.
+wp_list; wp_term_of_list.
 wp_tenc => /=.
 iPoseProof (pterm_msg1I with "[//] enc_kA s_nA p_nA enc_kB") as "#Hm1".
 wp_pures; wp_bind (send _); iApply wp_send; eauto.
@@ -303,7 +302,7 @@ case: (bool_decide_reflect (_ = repr_key_type Enc)); last protocol_failure.
 case: kt => // _.
 wp_pures.
 iDestruct (pterm_msg1E with "[] Hm1") as "{Hm1} Hm1"; eauto.
-wp_list (_ :: _ :: _ :: []); wp_term_of_list.
+wp_list; wp_term_of_list.
 iMod ("set_nB" $! kA nA) as "[#p_nB inv]".
 wp_tenc; wp_pures.
 iDestruct "Hm1" as "(e_kA & s_nA & Hm1)".

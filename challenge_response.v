@@ -169,8 +169,7 @@ Lemma wp_initiator kA kB nA E Ψ :
 Proof.
 rewrite /initiator.
 iIntros (?) "#ctx #inv2 #inv3 #p_nA inv unreg #d_kA #d_kB Hpost".
-wp_list (_ :: _ :: []).
-wp_term_of_list.
+wp_list; wp_term_of_list.
 wp_pures; wp_bind (send _); iApply wp_send.
   iModIntro.
   by iApply pterm_of_list => /=; eauto.
@@ -184,7 +183,7 @@ wp_eq_term e; last protocol_failure; subst nA'.
 wp_eq_term e; last protocol_failure; subst pkB'.
 iPoseProof (pterm_msg2E with "[//] d_kB Hm2")
   as "{Hm2} [p_nB sessB]" => //.
-wp_list (_ :: _ :: _ :: []); wp_term_of_list.
+wp_list; wp_term_of_list.
 wp_tenc; wp_pures.
 iSpecialize ("inv" $! nB).
 iMod (session_begin with "[] inv [unreg]") as "[#sessA close]"; eauto.
@@ -242,7 +241,7 @@ iMod (session_begin with "[] inv [token]") as "[#sessB close]".
 - by eauto.
 - by eauto.
 - by eauto.
-wp_list (_ :: _ :: _ :: []); wp_term_of_list.
+wp_list; wp_term_of_list.
 wp_tenc; wp_pures; wp_bind (send _); iApply wp_send.
   iModIntro.
   iApply pterm_TEncIS.

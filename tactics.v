@@ -20,6 +20,22 @@ Implicit Types v : val.
 Implicit Types Φ : prodO locO termO -n> iPropO Σ.
 Implicit Types Ψ : val → iProp Σ.
 
+Lemma tac_wp_cons `{!Repr A} Γ E K (x : A) (xs : list A) Ψ :
+  envs_entails Γ (WP fill K (Val (repr (x :: xs)%list)) @ E {{ Ψ }}) →
+  envs_entails Γ (WP fill K (repr x :: repr xs) @ E {{ Ψ }}).
+Proof.
+rewrite envs_entails_eq => post.
+by rewrite -wp_bind -wp_cons.
+Qed.
+
+Lemma tac_wp_cons1 `{!Repr A} Γ E K (x : A) Ψ :
+  envs_entails Γ (WP fill K (Val (repr [x]%list)) @ E {{ Ψ }}) →
+  envs_entails Γ (WP fill K (repr x :: []%V) @ E {{ Ψ }}).
+Proof.
+rewrite (_ : NILV = repr (@nil A)) /=; first by apply: tac_wp_cons.
+by rewrite repr_list_eq /=.
+Qed.
+
 Lemma tac_wp_hash Γ E K t Ψ :
   envs_entails Γ (WP fill K (Val (THash t)) @ E {{ Ψ }}) →
   envs_entails Γ (WP fill K (hash t) @ E {{ Ψ }}).
@@ -208,27 +224,40 @@ Qed.
 
 End Proofs.
 
-Tactic Notation "wp_list" open_constr(t) :=
+Tactic Notation "wp_cons" :=
   wp_pures;
   lazymatch goal with
   | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
     reshape_expr e ltac:(fun K e' =>
-      first
-        [eapply (tac_wp_list _ _ K t _); wp_finish
-        |fail 1 "wp_list: Cannot decode"])
+      lazymatch e' with
+      | App (App (Val CONS) (Val (?f ?x))) (Val ?e'') =>
+        lazymatch e'' with
+        | InjLV (LitV LitUnit) =>
+          let A := type of x in
+          first
+            [eapply (@tac_wp_cons1 _ _ A _ _ _ K x _); wp_finish
+            |fail 1 "wp_cons: Cannot decode"]
+        | _ =>
+          first
+            [eapply (tac_wp_cons _ _ K x _ _); wp_finish
+            |fail 1 "wp_cons: Cannot decode"]
+        end
+      end)
   end.
 
+Tactic Notation "wp_list" := repeat wp_cons.
+
 Tactic Notation "wp_term_of_list" :=
-  wp_pures; wp_bind (term_of_list _); iApply wp_term_of_list.
+  wp_pures; try wp_bind (term_of_list _); iApply wp_term_of_list.
 
 Tactic Notation "wp_tag" :=
-  wp_pures; wp_bind (tag _ _); iApply wp_tag.
+  wp_pures; try wp_bind (tag _ _); iApply wp_tag.
 
 Tactic Notation "wp_enc" :=
-  wp_pures; wp_bind (enc _ _); iApply wp_enc.
+  wp_pures; try wp_bind (enc _ _); iApply wp_enc.
 
 Tactic Notation "wp_tenc" :=
-  wp_pures; wp_bind (tenc _ _ _); iApply wp_tenc.
+  wp_pures; try wp_bind (tenc _ _ _); iApply wp_tenc.
 
 Tactic Notation "wp_hash" :=
   wp_pures;

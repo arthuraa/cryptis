@@ -62,8 +62,8 @@ Lemma wp_enc E Φ k ad payload :
 Proof.
 iIntros "#ctx #Pd #s_k #p_ad #s_payload #p_payload post".
 rewrite /enc; wp_hash.
-wp_list (_ :: _ :: []); wp_term_of_list.
-wp_tenc; wp_list (_ :: _ :: []); wp_term_of_list.
+wp_list; wp_term_of_list.
+wp_tenc; wp_list; wp_term_of_list.
 wp_pures; iApply "post".
 rewrite pterm_of_list /=; do !iSplit => //.
 iApply pterm_TEncIS => //.
@@ -120,11 +120,16 @@ End Lemmas.
 
 End AEAD.
 
+Definition tlsN := nroot.@"tls".
+
 Module S.
 
 Definition zero : term := TInt 0.
 Definition tls12 := TInt 2.
 Definition tls13 := TInt 3.
+
+Definition dhe_13 g gx :=
+  Spec.tag (tlsN.@"dhe_13") (Spec.of_list [g; gx]).
 
 Definition hmac k t :=
   THash (Spec.of_list [k; t]).
@@ -172,11 +177,11 @@ Definition kdf_k ms log :=
 Definition kdf_psk ms log :=
   derive_secret ms "tls13_resumption_master_secret" log.
 
-Definition client13_offer psk g gx aaa hhh cr :=
+Definition client13_offer psk g gx hash_alg ae_alg cr :=
   let '(early_secret, kb) := kdf_es psk in
-  let zoffer := Spec.of_list [tls13; g; gx; aaa; hhh; zero] in
+  let zoffer := Spec.of_list [tls13; dhe_13 g gx; hash_alg; ae_alg; zero] in
   let pt := hmac kb (Spec.of_list [cr; zoffer]) in
-  let offer := Spec.of_list [tls13; g; gx; aaa; hhh; pt] in
+  let offer := Spec.of_list [tls13; dhe_13 g gx; hash_alg; ae_alg; pt] in
   let ch := Spec.of_list [cr; offer] in
   let '(kc0, ems0) := kdf_k0 early_secret ch in
   [ch; kc0; ems0].
@@ -195,6 +200,17 @@ Implicit Types s : session_view.
 Implicit Types rl : role.
 Implicit Types Φ : val → iProp.
 
+Definition dhe_13 : val := λ: "g" "gx",
+  tag (tlsN.@"dhe_13") (term_of_list ["g"; "gx"]).
+
+Lemma wp_dhe_13 E g gx Φ :
+  Φ (S.dhe_13 g gx) -∗
+  WP dhe_13 g gx @ E {{ Φ }}.
+Proof.
+rewrite /dhe_13; iIntros "post".
+by wp_list; wp_term_of_list; wp_tag.
+Qed.
+
 Definition hmac : val := λ: "k" "x",
   hash (term_of_list ["k"; "x"]).
 
@@ -204,7 +220,7 @@ Lemma wp_hmac E t1 t2 Φ :
 Proof.
 rewrite /hmac.
 iIntros "post"; wp_pures.
-wp_list (_ :: _ :: []); wp_term_of_list.
+wp_list; wp_term_of_list.
 by iApply wp_hash.
 Qed.
 
@@ -290,7 +306,7 @@ wp_bind (hkdf_expand_label _ _ _); iApply wp_hkdf_expand_label; wp_pures.
 wp_bind (hkdf_expand_label _ _ _); iApply wp_hkdf_expand_label; wp_pures.
 wp_bind (hkdf_expand_label _ _ _); iApply wp_hkdf_expand_label; wp_pures.
 wp_bind (hkdf_expand_label _ _ _); iApply wp_hkdf_expand_label; wp_pures.
-by wp_list (_ :: _ :: _ :: _ :: _ :: []).
+by wp_list.
 Qed.
 
 Definition kdf_k : val := λ: "ms" "log",
@@ -316,7 +332,7 @@ wp_bind (derive_secret _ _ _); iApply wp_derive_secret; wp_pures.
 wp_bind (derive_secret _ _ _); iApply wp_derive_secret; wp_pures.
 wp_bind (hkdf_expand_label _ _ _); iApply wp_hkdf_expand_label; wp_pures.
 wp_bind (hkdf_expand_label _ _ _); iApply wp_hkdf_expand_label; wp_pures.
-by wp_list (_ :: _ :: _ :: []).
+by wp_list.
 Qed.
 
 Definition kdf_psk : val := λ: "ms" "log",
@@ -330,35 +346,39 @@ rewrite /kdf_psk; iIntros "post"; wp_pures.
 by iApply wp_derive_secret.
 Qed.
 
-Definition client13_offer : val := λ: "psk" "g" "gx" "aaa" "hhh" "cr",
+Definition client13_offer : val := λ: "psk" "g" "gx" "hash_alg" "ae_alg" "cr",
   let: "kdf_es_res" := kdf_es "psk" in
   let: "early_secret" := Fst "kdf_es_res" in
   let: "kb" := Snd "kdf_es_res" in
-  let: "zoffer" := term_of_list [S.tls13; "g"; "gx"; "aaa"; "hhh";  S.zero] in
+  let: "zoffer" :=
+    term_of_list [S.tls13; dhe_13 "g" "gx"; "hash_alg"; "ae_alg";  S.zero] in
   let: "pt" := hmac "kb" (term_of_list ["cr"; "zoffer"]) in
-  let: "offer" := term_of_list [S.tls13; "g"; "gx"; "aaa"; "hhh"; "pt"] in
+  let: "offer" :=
+    term_of_list [S.tls13; dhe_13 "g" "gx"; "hash_alg"; "ae_alg"; "pt"] in
   let: "ch" := term_of_list ["cr"; "offer"] in
   let: "kdf_k0_res" := kdf_k0 "early_secret" "ch" in
   let: "kc0" := Fst "kdf_k0_res" in
   let: "ems0" := Snd "kdf_k0_res" in
   ["ch"; "kc0"; "ems0"].
 
-Lemma wp_client13_offer E psk g gx aaa hhh cr Φ :
-  Φ (repr (S.client13_offer psk g gx aaa hhh cr)) -∗
-  WP client13_offer psk g gx aaa hhh cr @ E {{ Φ }}.
+Lemma wp_client13_offer E psk g gx hash_alg ae_alg cr Φ :
+  Φ (repr (S.client13_offer psk g gx hash_alg ae_alg cr)) -∗
+  WP client13_offer psk g gx hash_alg ae_alg cr @ E {{ Φ }}.
 Proof.
 rewrite /client13_offer; iIntros "?"; wp_pures.
 wp_bind (kdf_es _); iApply wp_kdf_es; wp_pures.
-wp_list (_ :: _ :: _ :: _ :: _ :: _ :: []); wp_term_of_list; wp_pures.
-wp_list (_ :: _ :: []); wp_term_of_list; wp_pures.
+wp_list.
+wp_bind (dhe_13 _ _); iApply wp_dhe_13.
+wp_list; wp_term_of_list; wp_pures.
+wp_list; wp_term_of_list; wp_pures.
 wp_bind (hmac _ _); iApply wp_hmac; wp_pures.
-wp_list (_ :: _ :: _ :: _ :: _ :: _ :: []); wp_term_of_list; wp_pures.
-wp_list (_ :: _ :: []); wp_term_of_list; wp_pures.
+wp_list.
+wp_bind (dhe_13 _ _); iApply wp_dhe_13.
+wp_list; wp_term_of_list.
+wp_list; wp_term_of_list; wp_pures.
 wp_bind (kdf_k0 _ _); iApply wp_kdf_k0; wp_pures.
-by wp_list (_ :: _ :: _ :: []).
+by wp_list.
 Qed.
-
-Definition tlsN := nroot.@"tls".
 
 Definition sign (mt : string) : val := λ: "k" "x",
   tenc (tlsN.@mt) "k" "x".
