@@ -291,7 +291,7 @@ Arguments nforall {A} /.
 
 Tactic Notation "wp_list_match" :=
   wp_pures;
-  rewrite ?subst_list_match /=;
+  do ?[rewrite subst_list_match /=];
   lazymatch goal with
   | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
     reshape_expr e ltac:(fun K e' =>

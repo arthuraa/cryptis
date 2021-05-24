@@ -118,6 +118,61 @@ End Lemmas.
 
 End AEAD.
 
+Fixpoint prod_of_list_aux_type A B n :=
+  match n with
+  | 0 => A
+  | S n => prod_of_list_aux_type (A * B)%type B n
+  end.
+
+Fixpoint prod_of_list_aux {A B} n :
+  A → list B → option (prod_of_list_aux_type A B n) :=
+  match n with
+  | 0 => fun x ys =>
+    match ys with
+    | [] => Some x
+    | _  => None
+    end
+  | S n => fun x ys =>
+    match ys with
+    | [] => None
+    | y :: ys => prod_of_list_aux n (x, y) ys
+    end
+  end.
+
+Definition prod_of_list_type A n : Type :=
+  match n with
+  | 0 => unit
+  | S n => prod_of_list_aux_type A A n
+  end.
+
+Fact prod_of_list_key : unit. Proof. exact: tt. Qed.
+
+Definition prod_of_list : ∀ {A} n, list A → option (prod_of_list_type A n) :=
+  locked_with prod_of_list_key (
+    λ A n, match n return list A → option (prod_of_list_type A n) with
+           | 0 => fun xs => match xs with
+                            | [] => Some tt
+                            | _  => None
+                            end
+           | S n => fun xs => match xs with
+                              | [] => None
+                              | x :: xs => prod_of_list_aux n x xs
+                              end
+           end).
+
+Canonical prod_of_list_unlockable :=
+  [unlockable of @prod_of_list].
+
+Lemma prod_of_list_neq {A} n (xs : list A) :
+  length xs ≠ n → prod_of_list n xs = None.
+Proof.
+rewrite unlock; case: n xs=> [|n] [|x xs] //= ne.
+have {}ne : length xs ≠ n by congruence.
+suffices : ∀ B (x : B), prod_of_list_aux n x xs = None by apply.
+elim: n xs {x} => [|n IH] [|y ys] //= in ne * => B x.
+rewrite IH //; congruence.
+Qed.
+
 Definition tlsN := nroot.@"tls".
 
 Module S.
@@ -128,6 +183,10 @@ Definition tls13 := TInt 3.
 
 Definition dhe_13 g gx :=
   Spec.tag (tlsN.@"dhe_13") (Spec.of_list [g; gx]).
+
+Definition is_dhe_13 t :=
+  if Spec.untag (tlsN.@"dhe_13") t isn't Some t then None
+  else Spec.to_list t.
 
 Definition hmac k t :=
   THash (Spec.of_list [k; t]).
@@ -182,7 +241,60 @@ Definition client13_offer psk g gx hash_alg ae_alg cr :=
   let offer := Spec.of_list [tls13; dhe_13 g gx; hash_alg; ae_alg; pt] in
   let ch := Spec.of_list [cr; offer] in
   let '(kc0, ems0) := kdf_k0 early_secret ch in
-  [ch; kc0; ems0].
+  [ch; early_secret; kc0; ems0].
+
+Definition client13_check_mode early_secret g x ch sh :=
+  if Spec.to_list sh isn't Some sh' then None else
+  if prod_of_list 2 sh' isn't Some (sr, mode) then None
+  else if Spec.to_list mode isn't Some mode then None
+  else if prod_of_list 5 mode isn't
+    Some (version, kex_alg', hash_alg', ae_alg', spt) then None
+  else if is_dhe_13 kex_alg' isn't Some kex_alg' then None
+  else if prod_of_list 2 kex_alg' isn't Some (g', gy) then None
+  else if negb (bool_decide (version = S.tls13 ∧ g' = g)) then None
+  else let log := Spec.of_list [ch; sh] in
+  let gxy := Spec.texp gy x in
+  let handshake_secret := kdf_hs early_secret gxy in
+  if kdf_ms handshake_secret log isn't [master_secret; chk; shk; cfin; sfin] then None
+  else Some [log; master_secret; chk; shk; cfin; sfin].
+
+Definition mkhash (hash_alg : term) x :=
+  THash (Spec.of_list [hash_alg; x]).
+
+Definition verify verif_key x sig :=
+  match Spec.tdec (tlsN.@"sign") verif_key sig with
+  | Some x' => bool_decide (x = x')
+  | None => false
+  end.
+
+Definition client13_check_sig
+  master_secret log hash_alg sfin cfin verif_key sig m1 :=
+  if Spec.is_key verif_key isn't Some Dec then None
+  else let log := Spec.of_list [log; verif_key] in
+  if negb (verify verif_key (mkhash hash_alg log) sig) then None
+  else let log := Spec.of_list [log; sig] in
+  if negb (bool_decide (m1 = hmac sfin log)) then None
+  else let log := Spec.of_list [log; m1] in
+  if prod_of_list 3 (kdf_k master_secret log) isn't Some (cak, sak, ems) then None
+  else let m2 := hmac cfin log in
+  let log := Spec.of_list [log; m2] in
+  let rms := kdf_psk master_secret log in
+  Some [m2; cak; sak; ems; rms].
+
+Definition server13_check_offer (ch psk : term) : option (term * term) :=
+  ch' ← Spec.to_list ch;
+  '(cr, offer) ← prod_of_list 2 ch';
+  offer ← Spec.to_list offer;
+  '(version, g, gx, hash_alg, ae_alg, m) ← prod_of_list 6 offer;
+  if negb (bool_decide (version = tls13)) then None
+  else let '(early_secret, kb) := kdf_es psk in
+  let zoffer := Spec.of_list [tls13; g; gx; hash_alg; ae_alg; zero] in
+  if negb (bool_decide (m = hmac kb (Spec.of_list [cr; zoffer]))) then None
+  else Some (kdf_k0 early_secret ch).
+
+Definition server13_mode sr g gy hash_alg ae_alg pt :=
+  let mode := Spec.of_list [tls13; dhe_13 g gy; hash_alg; ae_alg; pt] in
+  Spec.of_list [sr; mode].
 
 End S.
 
@@ -207,6 +319,20 @@ Lemma wp_dhe_13 E g gx Φ :
 Proof.
 rewrite /dhe_13; iIntros "post".
 by wp_list; wp_term_of_list; wp_tag.
+Qed.
+
+Definition is_dhe_13 : val := λ: "t",
+  bind: "t" := untag (tlsN.@"dhe_13") "t" in
+  list_of_term "t".
+
+Lemma wp_is_dhe_13 E t Φ :
+  Φ (repr (S.is_dhe_13 t)) -∗
+  WP is_dhe_13 t @ E {{ Φ }}.
+Proof.
+rewrite /S.is_dhe_13 /is_dhe_13; iIntros "post".
+wp_untag_eq t' e; last by rewrite e; wp_pures.
+rewrite {}e Spec.tagK; wp_list_of_term_eq ts e; last by rewrite e.
+by rewrite {}e Spec.of_listK.
 Qed.
 
 Definition hmac : val := λ: "k" "x",
@@ -344,6 +470,10 @@ rewrite /kdf_psk; iIntros "post"; wp_pures.
 by iApply wp_derive_secret.
 Qed.
 
+Definition dh_keygen : val := λ: "g",
+  let: "x" := mknonce #() in
+  ["x"; texp "g" "x"].
+
 Definition client13_offer : val := λ: "psk" "g" "gx" "hash_alg" "ae_alg" "cr",
   let: "kdf_es_res" := kdf_es "psk" in
   let: "early_secret" := Fst "kdf_es_res" in
@@ -357,7 +487,7 @@ Definition client13_offer : val := λ: "psk" "g" "gx" "hash_alg" "ae_alg" "cr",
   let: "kdf_k0_res" := kdf_k0 "early_secret" "ch" in
   let: "kc0" := Fst "kdf_k0_res" in
   let: "ems0" := Snd "kdf_k0_res" in
-  ["ch"; "kc0"; "ems0"].
+  ["ch"; "early_secret"; "kc0"; "ems0"].
 
 Lemma wp_client13_offer E psk g gx hash_alg ae_alg cr Φ :
   Φ (repr (S.client13_offer psk g gx hash_alg ae_alg cr)) -∗
@@ -378,14 +508,92 @@ wp_bind (kdf_k0 _ _); iApply wp_kdf_k0; wp_pures.
 by wp_list.
 Qed.
 
-Definition sign (mt : string) : val := λ: "k" "x",
-  tenc (tlsN.@mt) "k" "x".
+(** TODO
 
-Definition verify (mt : string) : val := λ: "k" "x" "s",
-  match: tdec (tlsN.@mt) with
-    SOME "x'" => "x'" = "x"
+Why do we need spt? This information does not seem to be checked or tracked
+anywhere, apart from being included in the log.
+
+*)
+Definition client13_check_mode : val := λ: "early_secret" "g" "x" "ch" "sh",
+  bind: "sh'" := list_of_term "sh" in
+  list_match: ["sr"; "mode"] := "sh'" in
+  bind: "mode" := list_of_term "mode" in
+  list_match: ["version"; "kex_alg"; "h"; "a"; "spt"] := "mode" in
+  bind: "kex_alg" := is_dhe_13 "kex_alg" in
+  list_match: ["g'"; "gy"] := "kex_alg" in
+  assert: eq_term "version" S.tls13 && eq_term "g'" "g" in
+  let: "log" := term_of_list ["ch"; "sh"] in
+  let: "gxy" := texp "gy" "x" in
+  let: "handshake_secret" := kdf_hs "early_secret" "gxy" in
+  let: "kdf_ms" := kdf_ms "handshake_secret" "log" in
+  list_match: ["master_secret"; "chk"; "shk"; "cfin"; "sfin"] := "kdf_ms" in
+  SOME ["log"; "master_secret"; "chk"; "shk"; "cfin"; "sfin"].
+
+Lemma wp_client13_check_mode E early_secret g x ch sh Φ :
+  Φ (repr (S.client13_check_mode early_secret g x ch sh)) -∗
+  WP client13_check_mode early_secret g x ch sh @ E {{ Φ }}.
+Proof.
+iIntros "post"; rewrite /client13_check_mode /S.client13_check_mode.
+wp_list_of_term_eq sh' e; last by rewrite e; wp_pures.
+rewrite {sh}e Spec.of_listK.
+wp_list_match => [sr mode {sh'} ->|ne]; last first.
+  by rewrite prod_of_list_neq //; wp_finish.
+rewrite {1}unlock /=.
+wp_list_of_term_eq mode' e; last by rewrite e; wp_pures.
+rewrite e Spec.of_listK {e mode}.
+wp_list_match => [version kex_alg h a spt {mode'} ->|ne]; last first.
+  by rewrite prod_of_list_neq //; wp_finish.
+rewrite {1}unlock /=.
+wp_bind (is_dhe_13 _); iApply wp_is_dhe_13.
+case: S.is_dhe_13 => [kex_alg'|]; last by wp_pures.
+wp_list_match => [g' gy {kex_alg'} ->|?]; wp_finish; 
+  last by rewrite prod_of_list_neq.
+rewrite {1}unlock /=.
+wp_eq_term e; last first.
+  rewrite bool_decide_decide decide_False //=; last intuition congruence.
+  by wp_pures.
+rewrite {version}e.
+wp_eq_term e; last first.
+  rewrite bool_decide_decide decide_False //=; last intuition congruence.
+  by wp_pures.
+rewrite {g'}e bool_decide_decide decide_True //=.
+wp_list; wp_term_of_list.
+wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
+wp_bind (hmac _ _); iApply wp_hmac; wp_pures.
+wp_bind (kdf_ms _ _); iApply wp_kdf_ms; wp_pures.
+wp_list_match => // ????? [] <- <- <- <- <-.
+wp_list; by wp_pures.
+Qed.
+
+Definition sign : val := λ: "k" "x",
+  tenc (tlsN.@"sign") "k" "x".
+
+Definition verify : val := λ: "k" "x" "sig",
+  match: tdec (tlsN.@"sign") "k" "sig" with
+    SOME "x'" => eq_term "x" "x'"
   | NONE => #false
   end.
+
+Lemma wp_verify k x sig E Φ :
+  Φ #(S.verify (TKey Dec k) x sig) -∗
+  WP verify (TKey Dec k) x sig @ E {{ Φ }}.
+Proof.
+rewrite /S.verify /verify; iIntros "p".
+wp_tdec_eq x' e; last by rewrite e; wp_pures.
+rewrite {}e /Spec.tdec /= decide_True // Spec.tagK; wp_pures.
+by wp_eq_term e; rewrite /bool_decide; [rewrite decide_True|rewrite decide_False].
+Qed.
+
+Definition mkhash : val := λ: "hash_alg" "m",
+  hash (term_of_list ["hash_alg"; "m"]).
+
+Lemma wp_mkhash hash_alg m E Φ :
+  Φ (S.mkhash hash_alg m) -∗
+  WP mkhash hash_alg m @ E {{ Φ }}.
+Proof.
+rewrite /mkhash /S.mkhash; iIntros "p".
+by wp_list; wp_term_of_list; wp_hash.
+Qed.
 
 (**
 
@@ -402,57 +610,80 @@ Parameters:
 
 *)
 
-Definition client13 : val := λ: "a" "b" "psk" "g" "aaa" "hhh",
-  let: "cr" := mknonce #() in
-  let: "dh_res" := dh_keygen "g" in
-  let: "x" := Fst "dh_res" in
-  let: "gx" := Snd "dh_res" in
-
-
-
-
-  let: "kdf_es_res" := kdf_es "psk" in
-  let: "early_secret" := Fst "kdf_es_res" in
-  let: "kb" := Snd "kdf_es_res" in
-  let: "zoffer" := term_of_list [tls13; "g"; "gx"; "aaa"; "hhh";  zero] in
-  let: "pt" := hmac "kb" (term_of_list ["cr"; "zoffer"]) in
-  let: "offer" := term_of_list [tls13; "g"; "gx"; "aaa"; "hhh"; "pt"] in
-  let: "ch" := term_of_list ["cr"; "offer"] in
-  send "ch";;
-  let: "kdf_k0_res" := kdf_k0 "early_secret" "ch" in
-  let: "kc0" := Fst "kdf_k0_res" in
-  let: "ems0" := Snd "kdf_k0_res" in
-  (* insert clientSession0(cr,psk,offer,kc0,ems0*)
-
-  let: "sh" := recv #() in
-  bind: "sh'" := list_of_term "sh" in
-  list_match: ["sr"; "mode"] := "sh'" in
-  bind: "mode" := list_of_term "mode" in
-  list_match: ["version"; "g'"; "gy"; "h"; "a"; "spt"] := "mode" in
-  assert: eq_term "version" tls13 && eq_term "g'" "g" in
-  let: "log" := term_of_list ["ch"; "sh"] in
-  let: "gxy" := texp "gy" "x" in
-  let: "handshake_secret" := kdf_hs "early_secret" "gxy" in
-  bind: "kdf_ms_res" := list_of_term (kdf_ms "handshake_secret" "log") in
-  list_match: ["master_secret"; "chk"; "shk"; "cfin"; "sfin"] := "kdf_ms_res" in
-  send (term_of_list ["chk"; "shk"]);;
-  let: "p" := recv #() in
-  let: "log" := term_of_list ["log"; "p"] in
-  (* get longTermKeys_tbl(sn,xxx,=p) *)
-  let: "s" := recv #() in
-  assert: verify "p" (hash (term_of_list ["h"; "log"])) "s" in
-  let: "log" := term_of_list ["log"; "s"] in
-  let: "m1" := recv #() in
+Definition client13_check_sig : val :=
+λ: "master_secret" "log" "hash_alg" "sfin" "cfin" "verif_key" "sig" "m1",
+  bind: "kt" := is_key "verif_key" in
+  assert: "kt" = repr Dec in
+  let: "log" := term_of_list ["log"; "verif_key"] in
+  assert: verify "verif_key" (mkhash "hash_alg" "log") "sig" in
+  let: "log" := term_of_list ["log"; "sig"] in
   assert: eq_term "m1" (hmac "sfin" "log") in
   let: "log" := term_of_list ["log"; "m1"] in
-  bind: "kdf_k_res" := list_of_term (kdf_k "master_secret" "log") in
+  let: "kdf_k_res" := kdf_k "master_secret" "log" in
   list_match: ["cak"; "sak"; "ems"] := "kdf_k_res" in
   let: "m2" := hmac "cfin" "log" in
   let: "log" := term_of_list ["log"; "m2"] in
   let: "rms" := kdf_psk "master_secret" "log" in
+  SOME ["m2"; "cak"; "sak"; "ems"; "rms"].
+
+Lemma wp_client13_check_sig
+  master_secret log hash_alg sfin cfin verif_key sig m1 E Φ :
+  Φ (repr (S.client13_check_sig master_secret log hash_alg
+                                sfin cfin verif_key sig m1)) -∗
+  WP client13_check_sig master_secret log hash_alg sfin cfin verif_key
+       sig m1 @ E {{ Φ }}.
+Proof.
+rewrite /client13_check_sig /S.client13_check_sig.
+iIntros "p".
+wp_pures; wp_bind (is_key _); iApply wp_is_key.
+case: verif_key; try by move=> * /=; wp_pures.
+case=> [] verif_key /=; wp_pures => //=.
+wp_list; wp_term_of_list.
+wp_pures; wp_bind (mkhash _ _); iApply wp_mkhash.
+wp_pures; wp_bind (verify _ _ _); iApply wp_verify.
+case: S.verify => /=; wp_pures => //.
+wp_list; wp_term_of_list.
+wp_pures; wp_bind (hmac _ _); iApply wp_hmac.
+wp_eq_term e; last first.
+  by rewrite /bool_decide decide_False //=; wp_pures.
+rewrite /bool_decide decide_True //= {}e; wp_pures.
+wp_list; wp_term_of_list; wp_pures.
+wp_bind (kdf_k _ _); iApply wp_kdf_k.
+wp_pures.
+wp_list_match => //= cak sak ems [<- <- <-].
+rewrite [@prod_of_list]unlock /=.
+wp_bind (hmac _ _); iApply wp_hmac.
+wp_list; wp_term_of_list.
+wp_pures; wp_bind (kdf_psk _ _); iApply wp_kdf_psk.
+by wp_list; wp_pures.
+Qed.
+
+Definition client13 : val := λ: "psk" "g" "hash_alg" "ae_alg",
+  let: "cr" := mknonce #() in
+  list_match: ["x"; "gx"] := dh_keygen "g" in
+  let: "offer" := client13_offer "psk" "g" "gx" "hash_alg" "ae_alg" "cr" in
+  list_match: ["ch"; "early_secret"; "kc0"; "ems0"] := "offer" in
+  send "ch";;
+  (* insert clientSession0(cr,psk,offer,kc0,ems0*)
+
+  let: "sh" := recv #() in
+  bind: "check_mode" :=
+    client13_check_mode "early_secret" "g" "x" "ch" "sh" in
+  list_match: ["log"; "master_secret"; "chk"; "shk"; "cfin"; "sfin"] :=
+    "check_mode" in
+
+  let: "verif_key" := recv #() in
+  (* get longTermKeys_tbl(sn,xxx,=verif_key)
+     ---> Check that the verification key belongs to a server.  *)
+  let: "sig" := recv #() in
+  let: "m1" := recv #() in
+  bind: "check_sig" :=
+    client13_check_sig "master_secret" "log" "hash_alg" "sfin" "cfin"
+      "verif_key" "sig" "m1" in
+  list_match: ["m2"; "cak"; "sak"; "ems"; "rms"] := "check_sig" in
   (* event ClientFinished(TLS13,cr,sr,psk,p,offer,mode,cak,sak,ems,rms) *)
   (* insert clientSession(cr,sr,psk,p,offer,mode,cak,sak,ems,rms) *)
-  send "m".
+  send "m2".
 
 (**
 
@@ -462,48 +693,86 @@ Parameters:
 - psk: Pre-shared key
 *)
 
-Definition server13 : val := λ: "a" "b" "psk" "xx" "ee" "hh" "aa" "pt" "p",
-  let: "ch" := recv #() in
-  bind: "ch'" := list_of_term (recv #()) in
+Definition server13_check_offer : val := λ: "ch" "psk",
+  bind: "ch'" := list_of_term "ch" in
   list_match: ["cr"; "offer"] := "ch'" in
   bind: "offer" := list_of_term "offer" in
-  list_match: ["version"; "g"; "gx"; "hhh"; "aaa"; "m"] := "offer" in
-  assert: eq_term "version" tls13 in
+  list_match: ["version"; "g"; "gx"; "hash_alg"; "ae_alg"; "m"] := "offer" in
+  assert: eq_term "version" S.tls13 in
   let: "kdf_es_res" := kdf_es "psk" in
   let: "early_secret" := Fst "kdf_es_res" in
   let: "kb" := Snd "kdf_es_res" in
-  let: "zoffer" := term_of_list [tls13; "g"; "gx"; "hhh"; "aaa"; zero] in
+  let: "zoffer" := term_of_list [S.tls13; "g"; "gx"; "hash_alg"; "ae_alg"; S.zero] in
   assert: eq_term "m" (hmac "kb" (term_of_list ["cr"; "zoffer"])) in
-  let: "kdf_k0_res" := kdf_k0 "early_secret" "ch" in
-  let: "kc0" := Fst "kdf_k0_res" in
-  let: "ems0" := Snd "kdf_k0_res" in
+  SOME (kdf_k0 "early_secret" "ch").
+
+Lemma wp_server13_check_offer ch psk E Ψ :
+  Ψ (repr (S.server13_check_offer ch psk)) -∗
+  WP server13_check_offer ch psk @ E {{ Ψ }}.
+Proof.
+rewrite /S.server13_check_offer /server13_check_offer; iIntros "p".
+wp_list_of_term_eq ch' e; last by rewrite e /=; wp_pures.
+rewrite {}e /= Spec.of_listK /=.
+wp_list_match => [cr offer {ch'} ->|ne]; wp_finish; last first.
+  by rewrite prod_of_list_neq //=; wp_pures.
+rewrite [in prod_of_list 2]unlock /=.
+wp_list_of_term_eq offer' e; last first.
+  by rewrite {}e /=; wp_pures.
+rewrite {}e Spec.of_listK /=.
+wp_list_match => [version g gx hash_alg ae_alg m {offer'} ->|ne]; wp_finish; last first.
+  by rewrite prod_of_list_neq //=.
+rewrite [in prod_of_list 6]unlock /=.
+wp_eq_term e; last first.
+  by rewrite /bool_decide decide_False //=; wp_pures.
+rewrite {}e /=.
+wp_pures; wp_bind (kdf_es _); iApply wp_kdf_es.
+wp_pures.
+wp_list; wp_term_of_list.
+wp_pures.
+wp_list; wp_term_of_list.
+wp_bind (hmac _ _); iApply wp_hmac.
+wp_eq_term e; last first.
+  by rewrite /bool_decide decide_False //=; wp_pures.
+rewrite /bool_decide decide_True //=; wp_pures.
+by wp_bind (kdf_k0 _ _); iApply wp_kdf_k0; wp_pures.
+Qed.
+
+Definition server13_mode : val := λ: "sr" "g" "gy" "hash_alg" "ae_alg" "pt",
+  let: "mode" := term_of_list [tls13; dhe_13 "g" "gy"; "hash_alg"; "ae_alg"; "pt"] in
+  term_of_list ["sr"; "mode"].
+
+Definition server13 : val :=
+λ: "psk" "xx" "ee" "hash_alg" "ae_alg" "pt" "sign_key" "verif_key",
+  let: "ch" := recv #() in
+  bind: "check" := server13_check_offer "ch" "psk" in
+  let: "kc0" := Fst "check" in
+  let: "ems0" := Snd "check" in
   (* insert serverSession0(cr,psk,offer,kc0,ems0); *)
 
   let: "sr" := mknonce #() in
   let: "dh_res" := dh_keygen "g" in
   let: "y" := Fst "dh_res" in
   let: "gy" := Snd "dh_res" in
-  let: "mode" := term_of_list [tls13; "g"; "gy"; "hh"; "aa"; "pt"] in
-  let: "sh" := term_of_list ["sr"; "mode"] in
+  let: "sh" := server13_mode "sr" "g" "gy" "hash_alg" "ae_alg" "pt" in
   send "sh";;
-  let: "log" := term_of_list ["ch"; "sh"] in
   (* get longTermKeys(sn,sk,p) *)
   (* event ServerChoosesVersion(cr,sr,p,TLS13); *)
   (* event ServerChoosesKEX(cr,sr,p,TLS13,DHE_13(g,gy)); *)
   (* event ServerChoosesAE(cr,sr,p,TLS13,a); *)
   (* event ServerChoosesHash(cr,sr,p,TLS13,h); *)
 
+  let: "log" := term_of_list ["ch"; "sh"] in
   let: "gxy" := texp "gx" "y" in
   let: "handshake_secret" := kdf_hs "early_secret" "gxy" in
-  bind: "kdf_ms_res" := list_of_term (kdf_ms "handshake_secret" "log") in
-  list_match: ["master_secret"; "chk"; "shk"; "cfin"; "sfin"] := "kdf_ms_res" in
+  bind: "kdf_ms" := kdf_ms "handshake_secret" "log" in
+  list_match: ["master_secret"; "chk"; "shk"; "cfin"; "sfin"] := "kdf_ms" in
   send (term_of_list ["chk"; "shk"]) ;;
-  send "p";;
-  let: "log" := term_of_list ["log"; "p"] in
-  let: "sg" := sign "sg" "sk" (hash "hh" "log") in
-  send "sg";;
+  send "verif_key";;
+  let: "log" := term_of_list ["log"; "verif_key"] in
+  let: "sig" := sign "sign_key" (mkhash "hash_alg" "log") in
+  send "sig";;
 
-  let: "log" := term_of_list ["log"; "sg"] in
+  let: "log" := term_of_list ["log"; "sig"] in
   let: "m1" := hmac "sfin" "log" in
   let: "log" := term_of_list ["log"; "m1"] in
 
