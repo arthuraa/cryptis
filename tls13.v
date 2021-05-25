@@ -197,13 +197,47 @@ Notation hkdf_extract := prf (only parsing).
 Definition hkdf_expand_label k (l : string) t :=
   prf k (Spec.tag (nroot.@l) t).
 
-Definition derive_secret k l t :=
-  hkdf_expand_label k l (THash t).
+Definition derive_secret k l log :=
+  hkdf_expand_label k l (THash (Spec.of_list log)).
 
-Definition kdf_es psk :=
+Definition early_secret psk := hmac zero psk.
+
+Definition binder_key psk :=
+  derive_secret (early_secret psk)
+                "tls13_resumption_psk_binder_key"
+                [zero].
+
+(*Definition kdf_es psk :=
   let es := hmac zero psk in
   let kb := derive_secret es "tls13_resumption_psk_binder_key" zero in
-  (es, kb).
+  (es, kb).*)
+
+Definition client_hello psk cr g gx hash_alg ae_alg :=
+  let offer t := Spec.of_list [tls13; dhe_13 g gx; hash_alg; ae_alg; t] in
+  let pt := hmac (binder_key psk) (Spec.of_list [cr; offer zero]) in
+  Spec.of_list [cr; offer pt].
+
+Definition client_early_traffic_secret psk cr g gx hash_alg ae_alg :=
+  let atcs0 :=
+      derive_secret (early_secret psk)
+                    "tls13_client_early_traffic_secret"
+                    [client_hello psk cr g gx hash_alg ae_alg] in
+  hkdf_expand_label atcs0 "tls13_key" zero.
+
+Definition early_exporter_master_secret psk cr g gx hash_alg ae_alg :=
+  derive_secret (early_secret psk)
+                "tls13_early_exporter_master_secret"
+                [client_hello psk cr g gx hash_alg ae_alg].
+
+(*
+Definition client13_offer psk g gx hash_alg ae_alg cr :=
+  let '(early_secret, kb) := kdf_es psk in
+  let zoffer := Spec.of_list [tls13; dhe_13 g gx; hash_alg; ae_alg; zero] in
+  let pt := hmac kb (Spec.of_list [cr; zoffer]) in
+  let offer := Spec.of_list [tls13; dhe_13 g gx; hash_alg; ae_alg; pt] in
+  let ch := Spec.of_list [cr; offer] in
+  let '(kc0, ems0) := kdf_k0 early_secret ch in
+  [ch; early_secret; kc0; ems0].
 
 Definition kdf_k0 es log :=
   let atcs0 := derive_secret es "tls13_client_early_traffic_secret" log in
@@ -212,6 +246,15 @@ Definition kdf_k0 es log :=
   (kc0, ems0).
 
 Notation kdf_hs := hkdf_extract (only parsing).
+*)
+
+Definition handshake_secret psk gxy :=
+  hkdf_extract (early_secret psk) gxy.
+
+Definition master_secret psk gxy :=
+  hkdf_extract (handshake_secret psk gxy) zero.
+
+Definition client_handshake_traffic_secret
 
 Definition kdf_ms hs log :=
   let ms   := hkdf_extract hs zero in
@@ -234,6 +277,34 @@ Definition kdf_k ms log :=
 Definition kdf_psk ms log :=
   derive_secret ms "tls13_resumption_master_secret" log.
 
+(*
+
+The offer of the client contains all the parameters that the client wants to use
+in TLS.  These include:
+
+0) The version of TLS to run (here, set to 1.3);
+
+1) The parameters of the Diffie-Hellman key exchange, g and g^x;
+
+2) The hashing algorithm to be used;
+
+3) The encryption algorithm to send application data (ae_alg).
+
+To prove the authenticity of these choices, the client can chose to sign the
+offer parameters using a preshared key psk, which is assumed to be known only to
+the client and to the server.  The preshared key can also be used to build a key
+kc0, which is used to send early data.  (The other generated value, ems0, does
+not seem to serve any particular purpose in the model, but serves to derive
+secrets for higher-level protocols on top of TLS; cf. below.)
+
+The header ch is public, but the other returned values are all secret.
+
+It is not clear why the cr value is needed. Even assuming that we need to make
+the offer message sufficiently fresh, it seems that this is already guaranteed
+by including gx in the header.
+
+
+*)
 Definition client13_offer psk g gx hash_alg ae_alg cr :=
   let '(early_secret, kb) := kdf_es psk in
   let zoffer := Spec.of_list [tls13; dhe_13 g gx; hash_alg; ae_alg; zero] in
@@ -243,20 +314,41 @@ Definition client13_offer psk g gx hash_alg ae_alg cr :=
   let '(kc0, ems0) := kdf_k0 early_secret ch in
   [ch; early_secret; kc0; ems0].
 
+(*
+
+After sending the offer, the client listens on the network for a reply from the
+server, which should contain a choice of the parameters for the protocol based
+on the client's offer.  I think that in the real protocol the client should
+check that the hash and encryption algorithms chosen by the server are
+compatible with those that it offered, but this check is not performed here --
+we just use the server's choice.
+
+At this point, the client and the server share the Diffie-Hellman secret
+g^xy. This secret is used to derive the handshake secret, which in turn is used
+to derive the master secret, along with a bunch of other keys.
+
+Q: Why do we need the log to derive the master secret?  It seems that the master
+secret should always secret, given that it is derived from g^xy.
+
+Q: On the same vein, why do we need the handshake secret at all? Couldn't we
+just use g^xy directly?
+
+*)
+
 Definition client13_check_mode early_secret g x ch sh :=
-  if Spec.to_list sh isn't Some sh' then None else
-  if prod_of_list 2 sh' isn't Some (sr, mode) then None
-  else if Spec.to_list mode isn't Some mode then None
-  else if prod_of_list 5 mode isn't
-    Some (version, kex_alg', hash_alg', ae_alg', spt) then None
-  else if is_dhe_13 kex_alg' isn't Some kex_alg' then None
-  else if prod_of_list 2 kex_alg' isn't Some (g', gy) then None
-  else if negb (bool_decide (version = S.tls13 ∧ g' = g)) then None
+  sh' ← Spec.to_list sh;
+  '(sr, mode) ← prod_of_list 2 sh';
+  mode ← Spec.to_list mode;
+  '(version, kex_alg', hash_alg', ae_alg', spt) ← prod_of_list 5 mode;
+  kex_alg' ← is_dhe_13 kex_alg';
+  '(g', gy) ← prod_of_list 2 kex_alg';
+  if negb (bool_decide (version = S.tls13 ∧ g' = g)) then None
   else let log := Spec.of_list [ch; sh] in
   let gxy := Spec.texp gy x in
   let handshake_secret := kdf_hs early_secret gxy in
-  if kdf_ms handshake_secret log isn't [master_secret; chk; shk; cfin; sfin] then None
-  else Some [log; master_secret; chk; shk; cfin; sfin].
+  let ms := kdf_ms handshake_secret log in
+  '(master_secret, chk, shk, cfin, sfin) ← prod_of_list 5 ms;
+  Some [log; hash_alg'; master_secret; chk; shk; cfin; sfin].
 
 Definition mkhash (hash_alg : term) x :=
   THash (Spec.of_list [hash_alg; x]).
@@ -267,6 +359,24 @@ Definition verify verif_key x sig :=
   | None => false
   end.
 
+(*
+
+Then, the client awaits for a signature of the log from the server, and also an
+authentication code based on sfin and the signature.  Once again, this seems
+overkill -- why not just take the signature of (g^x, g^y)?
+
+The EMS is the _exporter master secret_, which can be used by higher-level
+protocols that use TLS to agree on their own secrets.  I might consider removing
+this from the model.
+
+The RMS is the _resumption master secret_, which can be used as a pre-shared key
+in subsequent sessions. It should be kept secret.
+
+The cak and sak keys are used to encrypt application messages by the [c]lient
+and the [s]erver.  They should be kept secret.
+
+*)
+
 Definition client13_check_sig
   master_secret log hash_alg sfin cfin verif_key sig m1 :=
   if Spec.is_key verif_key isn't Some Dec then None
@@ -275,9 +385,10 @@ Definition client13_check_sig
   else let log := Spec.of_list [log; sig] in
   if negb (bool_decide (m1 = hmac sfin log)) then None
   else let log := Spec.of_list [log; m1] in
-  if prod_of_list 3 (kdf_k master_secret log) isn't Some (cak, sak, ems) then None
+  '(cak, sak, ems) ← prod_of_list 3 (kdf_k master_secret log);
   else let m2 := hmac cfin log in
   let log := Spec.of_list [log; m2] in
+  (* rms = Resumption Master Secret *)
   let rms := kdf_psk master_secret log in
   Some [m2; cak; sak; ems; rms].
 
@@ -513,12 +624,14 @@ Qed.
 Why do we need spt? This information does not seem to be checked or tracked
 anywhere, apart from being included in the log.
 
+Why do we need chk? This seems to be only generated, but not used.
+
 *)
 Definition client13_check_mode : val := λ: "early_secret" "g" "x" "ch" "sh",
   bind: "sh'" := list_of_term "sh" in
   list_match: ["sr"; "mode"] := "sh'" in
   bind: "mode" := list_of_term "mode" in
-  list_match: ["version"; "kex_alg"; "h"; "a"; "spt"] := "mode" in
+  list_match: ["version"; "kex_alg"; "hash_alg'"; "ae_alg'"; "spt"] := "mode" in
   bind: "kex_alg" := is_dhe_13 "kex_alg" in
   list_match: ["g'"; "gy"] := "kex_alg" in
   assert: eq_term "version" S.tls13 && eq_term "g'" "g" in
@@ -527,7 +640,7 @@ Definition client13_check_mode : val := λ: "early_secret" "g" "x" "ch" "sh",
   let: "handshake_secret" := kdf_hs "early_secret" "gxy" in
   let: "kdf_ms" := kdf_ms "handshake_secret" "log" in
   list_match: ["master_secret"; "chk"; "shk"; "cfin"; "sfin"] := "kdf_ms" in
-  SOME ["log"; "master_secret"; "chk"; "shk"; "cfin"; "sfin"].
+  SOME ["log"; "hash_alg'"; "master_secret"; "chk"; "shk"; "cfin"; "sfin"].
 
 Lemma wp_client13_check_mode E early_secret g x ch sh Φ :
   Φ (repr (S.client13_check_mode early_secret g x ch sh)) -∗
@@ -538,17 +651,17 @@ wp_list_of_term_eq sh' e; last by rewrite e; wp_pures.
 rewrite {sh}e Spec.of_listK.
 wp_list_match => [sr mode {sh'} ->|ne]; last first.
   by rewrite prod_of_list_neq //; wp_finish.
-rewrite {1}unlock /=.
+rewrite [in prod_of_list 2 [sr; mode]]unlock /=.
 wp_list_of_term_eq mode' e; last by rewrite e; wp_pures.
 rewrite e Spec.of_listK {e mode}.
 wp_list_match => [version kex_alg h a spt {mode'} ->|ne]; last first.
   by rewrite prod_of_list_neq //; wp_finish.
-rewrite {1}unlock /=.
+rewrite [in prod_of_list 5]unlock /=.
 wp_bind (is_dhe_13 _); iApply wp_is_dhe_13.
 case: S.is_dhe_13 => [kex_alg'|]; last by wp_pures.
-wp_list_match => [g' gy {kex_alg'} ->|?]; wp_finish; 
+wp_list_match => [g' gy {kex_alg'} ->|?]; wp_finish;
   last by rewrite prod_of_list_neq.
-rewrite {1}unlock /=.
+rewrite [in prod_of_list 2 [g'; gy]]unlock /=.
 wp_eq_term e; last first.
   rewrite bool_decide_decide decide_False //=; last intuition congruence.
   by wp_pures.
@@ -669,7 +782,7 @@ Definition client13 : val := λ: "psk" "g" "hash_alg" "ae_alg",
   let: "sh" := recv #() in
   bind: "check_mode" :=
     client13_check_mode "early_secret" "g" "x" "ch" "sh" in
-  list_match: ["log"; "master_secret"; "chk"; "shk"; "cfin"; "sfin"] :=
+  list_match: ["log"; "hash_alg"; "master_secret"; "chk"; "shk"; "cfin"; "sfin"] :=
     "check_mode" in
 
   let: "verif_key" := recv #() in
@@ -793,3 +906,105 @@ Definition server13 : val :=
   #().
 
 End TLS13.
+
+(*
+let Client12() =
+    (new cr:random;
+     in(io,offer:params);
+     out(io,CH(cr,offer));
+     in(io,SH(sr,mode));
+     let nego(=TLS12,k,h,a,pt) = mode in
+     let v = TLS12 in
+     let log = (CH(cr,offer),SH(sr,mode)) in
+     in(io,CRT(p));
+     let log = (log,CRT(p)) in
+     get longTermKeys(sn,xxx,=p) in
+     let DHE(g) = k in
+      (in(io,SKE(=g,e,s));
+       let log = (log,SKE(g,e,s)) in
+       if verify(p,hash(h,(cr,sr,g,e)),s) = true then
+          let (x:bitstring,gx:element) = dh_keygen(g) in
+	  let pms = e2b(dh_exp(g,e,x)) in
+	  let ms = tls12_prf(pms,master_secret,(cr,sr)) in
+	  out(io,CKE(e2b(gx)));
+	  let log = (log,CKE(e2b(gx))) in
+	  let m1 = tls12_prf(ms,client_finished,log) in
+          out(io,FIN(m1));
+	  let log = (log,FIN(m1)) in
+	  in(io,FIN(m2));
+	  if m2 = tls12_prf(ms,server_finished,log) then
+	     let ck = b2ae(tls12_prf(ms,client_key_expansion,(sr,cr))) in
+	     let sk = b2ae(tls12_prf(ms,server_key_expansion,(sr,cr))) in
+	     event ClientFinished(TLS12,cr,sr,NoPSK,p,offer,mode,ck,sk,m1,ms);
+	     insert clientSession(cr,sr,NoPSK,p,offer,mode,ck,sk,m1,ms))
+    else let RSA(r) = k in
+      (new pms: bitstring;
+       let ms = tls12_prf(pms,master_secret,(cr,sr)) in
+       out(io,CKE(rsa_enc(p,pms)));
+       let log = (log,CKE(rsa_enc(p,pms))) in
+       let m1 = tls12_prf(ms,client_finished,log) in
+       out(io,FIN(m1));
+       let log = (log,FIN(m1)) in
+       in(io,FIN(m2));
+       if m2 = tls12_prf(ms,server_finished,log) then
+          let ck = b2ae(tls12_prf(ms,client_key_expansion,(sr,cr))) in
+          let sk = b2ae(tls12_prf(ms,server_key_expansion,(sr,cr))) in
+	  event ClientFinished(TLS12,cr,sr,NoPSK,p,offer,mode,ck,sk,m1,ms);
+	  insert clientSession(cr,sr,NoPSK,p,offer,mode,ck,sk,m1,ms))).
+
+
+let Server12() =
+    (in(io,CH(cr,offer));
+     in(io,SH(xxx,mode));
+     let nego(=TLS12,k,h,a,pt) = mode in
+     let v = TLS12 in
+     new sr:random;
+     out(io,SH(sr,mode));
+     let log = (CH(cr,offer),SH(sr,mode)) in
+     get longTermKeys(sn,sk,p) in
+     event ServerChoosesVersion(cr,sr,p,v);
+     event ServerChoosesKEX(cr,sr,p,v,k);
+     event ServerChoosesAE(cr,sr,p,v,a);
+     event ServerChoosesHash(cr,sr,p,v,h);
+     out(io,CRT(p));
+     let log = (log,CRT(p)) in
+     let DHE(g) = k in
+      (let (y:bitstring, gy:element) = dh_keygen(g) in
+       let sg = sign(sk,hash(h,(cr,sr,g,gy))) in
+       out(io,SKE(g,gy,sg));
+       let log = (log,SKE(g,gy,sg)) in
+       in (io,CKE(e2b(gx)));
+       let log = (log,CKE(e2b(gx))) in
+       let pms = e2b(dh_exp(g,gx,y)) in
+       let ms = tls12_prf(pms,master_secret,(cr,sr)) in
+       in(io,FIN(m1));
+       if m1 = tls12_prf(ms,client_finished,log) then
+	  let log = (log,FIN(m1)) in
+	  let m2 = tls12_prf(ms,server_finished,log) in
+          let cak = b2ae(tls12_prf(ms,client_key_expansion,(sr,cr))) in
+          let sak = b2ae(tls12_prf(ms,server_key_expansion,(sr,cr))) in
+	  event ServerFinished(TLS12,cr,sr,NoPSK,p,offer,mode,cak,sak,m1,ms);
+	  out (io,FIN(m2));
+	  insert serverSession(cr,sr,NoPSK,p,offer,mode,cak,sak,m1,ms);
+ 	  phase 1;
+          event PostSessionCompromisedKey(pk(sk));
+	  out(io,sk))
+    else let RSA(r) = k in
+      (in(io,CKE(epms));
+       let log = (log,CKE(epms)) in
+       let success(pms,leak) = rsa_dec(r,sk,epms) in
+       out (io,leak);
+       let ms = tls12_prf(pms,master_secret,(cr,sr)) in
+       in(io,FIN(m1));
+       if m1 = tls12_prf(ms,client_finished,log) then
+	  let log = (log,FIN(m1)) in
+	  let m2 = tls12_prf(ms,server_finished,log) in
+          let cak = b2ae(tls12_prf(ms,client_key_expansion,(sr,cr))) in
+          let sak = b2ae(tls12_prf(ms,server_key_expansion,(sr,cr))) in
+	  event ServerFinished(TLS12,cr,sr,NoPSK,p,offer,mode,cak,sak,m1,ms);
+	  out (io,FIN(m2));
+	  insert serverSession(cr,sr,NoPSK,p,offer,mode,cak,sak,m1,ms);
+ 	  phase 1;
+          event PostSessionCompromisedKey(pk(sk));
+	  out (io,sk))).
+*)
