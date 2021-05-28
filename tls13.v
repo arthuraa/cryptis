@@ -284,6 +284,46 @@ Definition term_of_key_exch_prop ke :=
   | PskDhP psk g x => Spec.tag (nroot.@"pskdh") (Spec.of_list [psk; g; x])
   end.
 
+Definition key_exch_prop_of_term ke :=
+  if Spec.untag (nroot.@"psk") ke is Some args then
+    args ← Spec.to_list args;
+    '(psk, c_nonce) ← prod_of_list 2 args;
+    Some (PskP psk c_nonce)
+  else if Spec.untag (nroot.@"dh") ke is Some args then
+    args ← Spec.to_list args;
+    '(g, gx) ← prod_of_list 2 args;
+    Some (DhP g gx)
+  else if Spec.untag (nroot.@"pskdh") ke is Some args then
+    args ← Spec.to_list args;
+    '(psk, g, gx) ← prod_of_list 3 args;
+    Some (PskDhP psk g gx)
+  else None.
+
+(* MOVE *)
+Lemma untag_tag_ne N1 N2 t :
+  N1 ≠ N2 →
+  Spec.untag N1 (Spec.tag N2 t) = None.
+Proof.
+move=> neq; rewrite Spec.untag_eq Spec.tag_eq /=.
+rewrite decide_False //.
+move=> eq_enc; apply: neq.
+by apply: encode_inj eq_enc.
+Qed.
+(* /MOVE *)
+
+Lemma term_of_key_exch_propK ke :
+  key_exch_prop_of_term (term_of_key_exch_prop ke) = Some ke.
+Proof.
+rewrite /key_exch_prop_of_term.
+case: ke => [psk c_nonce|g gx|psk g gx] /=.
+- by rewrite Spec.tagK Spec.of_listK /= unlock /=.
+- rewrite untag_tag_ne //; try set_solver.
+  by rewrite Spec.tagK Spec.of_listK /= unlock /=.
+- rewrite untag_tag_ne //; try set_solver.
+- rewrite untag_tag_ne //; try set_solver.
+  by rewrite Spec.tagK Spec.of_listK /= unlock /=.
+Qed.
+
 Definition term_of_key_exch ke :=
   match ke with
   | Psk psk c_nonce s_nonce =>
@@ -334,6 +374,25 @@ Definition server_hello sp :=
     pub;
     TEnc session_key (Spec.tag (tlsN.@"server_hello") enc)
   ].
+
+Definition check_key_exch_prop psk ke :=
+  match ke with
+  | PskP psk' _ =>
+    if decide (psk' = THash psk) then Some psk else None
+  | DhP _ _ => Some zero
+  | PskDhP psk' _ _ =>
+    if decide (psk' = THash psk) then Some psk else None
+  end.
+
+Definition check_client_hello psk other ch :=
+  ch ← Spec.to_list ch;
+  '(ch, mac) ← prod_of_list 2 ch;
+  ch' ← Spec.to_list ch;
+  '(ke, other') ← prod_of_list 2 ch';
+  ke ← key_exch_prop_of_term ke;
+  psk ← check_key_exch_prop psk ke;
+  let mac' := thash "binder" [psk; ch] in
+  if decide (other' = other ∧ mac' = mac) then Some ke else None.
 
 Definition check_session_key c_kex s_kex :=
   match c_kex with
@@ -825,6 +884,116 @@ wp_list; wp_term_of_list; wp_pures.
 wp_bind (session_key_of_key_exch _); iApply wp_session_key_of_key_exch.
 wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
 by wp_tenc; wp_pures; wp_list; wp_term_of_list.
+Qed.
+
+Definition is_key_exch_prop : val := λ: "ke",
+  match: untag (nroot.@"psk") "ke" with SOME "args" =>
+    bind: "args" := list_of_term "args" in
+    list_match: ["psk"; "c_nonce"] := "args" in
+    SOME "ke"
+  | NONE =>
+  match: untag (nroot.@"dh") "ke" with SOME "args" =>
+    bind: "args" := list_of_term "args" in
+    list_match: ["g"; "gx"] := "args" in
+    SOME "ke"
+  | NONE =>
+  match: untag (nroot.@"pskdh") "ke" with SOME "args" =>
+    bind: "args" := list_of_term "args" in
+    list_match: ["psk"; "g"; "gx"] := "args" in
+    SOME "ke"
+  | NONE => NONE
+  end end end.
+
+Lemma wp_is_key_exch_prop ke E Φ :
+  Φ (repr (S.term_of_key_exch_prop <$> S.key_exch_prop_of_term ke)) -∗
+  WP is_key_exch_prop ke @ E {{ Φ }}.
+Proof.
+iIntros "?"; rewrite /S.term_of_key_exch_prop /S.key_exch_prop_of_term.
+rewrite /is_key_exch_prop /=; wp_pures.
+wp_untag_eq args e; wp_pures.
+  rewrite {}e Spec.tagK /=.
+  wp_list_of_term_eq args' e; wp_pures; last by rewrite e.
+  rewrite {}e Spec.of_listK /=.
+  wp_list_match => [?? -> {args'} | neq]; wp_finish; last first.
+    by rewrite prod_of_list_neq.
+  by rewrite unlock /=; wp_pures.
+rewrite {}e.
+wp_untag_eq args e; wp_pures.
+  rewrite {}e Spec.tagK /=.
+  wp_list_of_term_eq args' e; wp_pures; last by rewrite e.
+  rewrite {}e Spec.of_listK /=.
+  wp_list_match => [?? -> {args'} | neq]; wp_finish; last first.
+    by rewrite prod_of_list_neq.
+  by rewrite unlock /=; wp_pures.
+rewrite {}e.
+wp_untag_eq args e; wp_pures.
+  rewrite {}e Spec.tagK /=.
+  wp_list_of_term_eq args' e; wp_pures; last by rewrite e.
+  rewrite {}e Spec.of_listK /=.
+  wp_list_match => [??? -> {args'} | neq]; wp_finish; last first.
+    by rewrite prod_of_list_neq.
+  by rewrite unlock /=; wp_pures.
+by rewrite {}e.
+Qed.
+
+Definition check_key_exch_prop : val := λ: "psk" "ke",
+  key_exch_prop_match "ke"
+    (λ: "psk'" <>,
+        if: eq_term "psk'" (hash "psk") then SOME "psk" else NONE)
+    (λ: <> <>, SOME S.zero)
+    (λ: "psk'" <> <>,
+        if: eq_term "psk'" (hash "psk") then SOME "psk" else NONE).
+
+Lemma wp_check_key_exch_prop psk ke E Φ :
+  Φ (repr (S.check_key_exch_prop psk ke)) -∗
+  WP check_key_exch_prop psk (S.term_of_key_exch_prop ke) @ E {{ Φ }}.
+Proof.
+iIntros "?"; rewrite /check_key_exch_prop; wp_pures.
+iApply wp_key_exch_prop_match.
+case: ke => [psk' c_nonce|g gx|psk' g gx] //=; wp_pures => //.
+- wp_hash; wp_eq_term e; wp_pures; try by rewrite decide_False.
+  by rewrite decide_True //=.
+- wp_hash; wp_eq_term e; wp_pures; try by rewrite decide_False.
+  by rewrite decide_True //=.
+Qed.
+
+Definition check_client_hello : val := λ: "psk" "other" "ch",
+  bind: "ch" := list_of_term "ch" in
+  list_match: ["ch"; "mac"] := "ch" in
+  bind: "ch'" := list_of_term "ch" in
+  list_match: ["ke"; "other'"] := "ch'" in
+  bind: "ke" := is_key_exch_prop "ke" in
+  bind: "psk" := check_key_exch_prop "psk" "ke" in
+  let: "mac'" := thash "binder" ["psk"; "ch"] in
+  if: eq_term "other'" "other" && eq_term "mac'" "mac" then SOME "ke" else NONE.
+
+Lemma wp_check_client_hello psk other ch E Φ :
+  Φ (repr (S.term_of_key_exch_prop <$> S.check_client_hello psk other ch)) -∗
+  WP check_client_hello psk other ch @ E {{ Φ }}.
+Proof.
+iIntros "?"; rewrite /check_client_hello /S.check_client_hello.
+wp_pures.
+wp_list_of_term_eq l e; wp_pures; last by rewrite e.
+rewrite {}e Spec.of_listK /=.
+wp_list_match => [ch' mac -> {l}|ne]; wp_finish; last first.
+  by rewrite prod_of_list_neq.
+rewrite [in prod_of_list _ [ch'; mac]]unlock /=.
+wp_list_of_term_eq l e; wp_pures; last by rewrite e.
+rewrite {}e Spec.of_listK /=.
+wp_list_match => [ke other' -> {l}|neq]; wp_finish; last first.
+  by rewrite prod_of_list_neq.
+rewrite [in prod_of_list _ [ke; other']]unlock /=.
+wp_bind (is_key_exch_prop _); iApply wp_is_key_exch_prop.
+case e: S.key_exch_prop_of_term => [ke'|] //=; wp_pures => //.
+wp_bind (check_key_exch_prop _ _); iApply wp_check_key_exch_prop.
+case: S.check_key_exch_prop => [psk'|] /=; wp_pures => //.
+wp_list; wp_bind (thash _ _); iApply wp_thash; wp_pures.
+wp_eq_term e'; wp_pures; last first.
+  rewrite decide_False //; intuition congruence.
+rewrite {}e' {other'}.
+wp_eq_term e'; wp_pures; last first.
+  rewrite decide_False //; intuition congruence.
+by rewrite {}e' decide_True //.
 Qed.
 
 Definition check_session_key : val := λ: "c_kex" "s_kex",
