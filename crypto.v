@@ -653,6 +653,18 @@ rewrite pterm_TExp; apply: (anti_symm _); iIntros "#pub".
     by rewrite /= right_id_L assoc_L.
 Qed.
 
+Lemma pterm_texp t1 t2 :
+  pterm t1 -∗
+  pterm t2 -∗
+  pterm (Spec.texp t1 t2).
+Proof.
+elim: t1;
+try by move=> *; rewrite /= !pterm_TInt; iIntros "*"; eauto.
+move=> t1 _ ts1 _ _; iIntros "#p_t1 #p_t2".
+rewrite Spec.texpA [pterm (TExp t1 (t2 :: ts1))]pterm_TExp.
+by iRight; iLeft; iExists t2, ts1; eauto.
+Qed.
+
 Lemma pterm_to_list t ts :
   Spec.to_list t = Some ts →
   pterm t -∗ [∗ list] t' ∈ ts, pterm t'.
