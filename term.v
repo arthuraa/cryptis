@@ -391,6 +391,8 @@ rewrite -[@List.map]/@seq.map -seq.map_comp seq.map_id_in //= => {}t1 in_ts1.
 by rewrite fold_termK // (ssrbool.elimT seq.allP wf_ts1).
 Qed.
 
+Definition zero : term := TInt 0.
+
 End Spec.
 
 Arguments repr_term /.
