@@ -299,28 +299,16 @@ Definition key_exch_prop_of_term ke :=
     Some (PskDhP psk g gx)
   else None.
 
-(* MOVE *)
-Lemma untag_tag_ne N1 N2 t :
-  N1 ≠ N2 →
-  Spec.untag N1 (Spec.tag N2 t) = None.
-Proof.
-move=> neq; rewrite Spec.untag_eq Spec.tag_eq /=.
-rewrite decide_False //.
-move=> eq_enc; apply: neq.
-by apply: encode_inj eq_enc.
-Qed.
-(* /MOVE *)
-
 Lemma term_of_key_exch_propK ke :
   key_exch_prop_of_term (term_of_key_exch_prop ke) = Some ke.
 Proof.
 rewrite /key_exch_prop_of_term.
 case: ke => [psk c_nonce|g gx|psk g gx] /=.
 - by rewrite Spec.tagK Spec.of_listK /= unlock /=.
-- rewrite untag_tag_ne //; try set_solver.
+- rewrite Spec.untag_tag_ne //; try set_solver.
   by rewrite Spec.tagK Spec.of_listK /= unlock /=.
-- rewrite untag_tag_ne //; try set_solver.
-- rewrite untag_tag_ne //; try set_solver.
+- rewrite Spec.untag_tag_ne //; try set_solver.
+- rewrite Spec.untag_tag_ne //; try set_solver.
   by rewrite Spec.tagK Spec.of_listK /= unlock /=.
 Qed.
 
@@ -728,85 +716,6 @@ iIntros "post"; rewrite /psk_of_key_exch; wp_pures.
 iApply wp_key_exch_match.
 by case: ke => [psk ??|???|psk ???]; wp_pures.
 Qed.
-
-(*Definition master_secret : val := λ: "ke",
-  term_of_list [psk_of_key_exch "ke"; dh_of_key_exch "ke"].
-
-Lemma wp_master_secret ke E Φ :
-  Φ (S.master_secret ke) -∗
-  WP master_secret (S.term_of_key_exch ke) @ E {{ Φ }}.
-Proof.
-iIntros "post"; rewrite /master_secret; wp_pures.
-wp_bind (dh_of_key_exch _); iApply wp_dh_of_key_exch.
-wp_list; wp_bind (psk_of_key_exch _); iApply wp_psk_of_key_exch.
-by wp_list; wp_term_of_list.
-Qed.
-
-Definition client_key : val := λ: "ke",
-  thash "client_key" [master_secret "ke"].
-
-Lemma wp_client_key ke E Φ :
-  Φ (S.client_key ke) -∗
-  WP client_key (S.term_of_key_exch ke) @ E {{ Φ }}.
-Proof.
-iIntros "?"; rewrite /client_key; wp_pures.
-wp_bind (master_secret _); iApply wp_master_secret.
-wp_list; by iApply wp_thash.
-Qed.
-
-Definition server_key : val := λ: "ke",
-  thash "server_key" [master_secret "ke"].
-
-Lemma wp_server_key ke E Φ :
-  Φ (S.server_key ke) -∗
-  WP server_key (S.term_of_key_exch ke) @ E {{ Φ }}.
-Proof.
-iIntros "?"; rewrite /server_key; wp_pures.
-wp_bind (master_secret _); iApply wp_master_secret.
-wp_list; by iApply wp_thash.
-Qed.
-
-Definition client_share : val := λ: "ke",
-  key_exch_match "ke"
-    (λ: "psk", "ke")
-    (λ: "g" "x" "y", tag (nroot.@"dh") (term_of_list ["g"; "x"]))
-    (λ: "psk" "g" "x" "y", tag (nroot.@"pskdh") (term_of_list ["psk"; "g"; "x"])).
-
-Lemma wp_client_share ke E Φ :
-  Φ (S.term_of_key_exch_prop (S.client_share ke)) -∗
-  WP client_share (S.term_of_key_exch ke) @ E {{ Φ }}.
-Proof.
-iIntros "?"; rewrite /client_share; wp_pures.
-iApply wp_key_exch_match.
-case: ke => [?|???|????] //=; wp_pures => //.
-- by wp_list; wp_term_of_list; iApply wp_tag.
-- by wp_list; wp_term_of_list; iApply wp_tag.
-Qed.
-
-Definition client_params_of_sess : val := λ: "sp",
-  bind: "sp" := list_of_term "sp" in
-  list_match: ["version"; "c_nonce"; "s_nonce"; "kex";
-               "hash_alg"; "ae_alg"; "verif_key"] := "sp" in
-  term_of_list [
-    "version";
-    "c_nonce";
-    client_share "kex";
-    "hash_alg";
-    "ae_alg"
-  ].
-
-Lemma wp_client_params_of_sess sp E Φ :
-  Φ (S.term_of_client_params (S.client_params_of_sess sp)) -∗
-  WP client_params_of_sess (S.term_of_sess_params sp) @ E {{ Φ }}.
-Proof.
-iIntros "?"; rewrite /client_params_of_sess; wp_pures.
-wp_list_of_term_eq l e; last by rewrite Spec.of_listK in e.
-move/Spec.of_list_inj: e => <- {l}.
-wp_list_match => // ??????? [] *; subst.
-wp_list; wp_bind (client_share _); iApply wp_client_share.
-by wp_list; wp_term_of_list.
-Qed.
-*)
 
 Definition server_params_match : val := λ: "sp" "f",
   bind: "sp'" := list_of_term "sp" in

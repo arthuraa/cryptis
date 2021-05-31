@@ -267,6 +267,16 @@ case: t1=> [] // [] // [] //= m.
 by case: decide => // <- _ [->].
 Qed.
 
+Lemma untag_tag_ne N1 N2 t :
+  N1 ≠ N2 →
+  Spec.untag N1 (Spec.tag N2 t) = None.
+Proof.
+move=> neq; rewrite Spec.untag_eq Spec.tag_eq /=.
+rewrite decide_False //.
+move=> eq_enc; apply: neq.
+by apply: encode_inj eq_enc.
+Qed.
+
 Definition as_int t :=
   if t is TInt n then Some n else None.
 
