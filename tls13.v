@@ -118,61 +118,6 @@ End Lemmas.
 
 End AEAD.
 
-Fixpoint prod_of_list_aux_type A B n :=
-  match n with
-  | 0 => A
-  | S n => prod_of_list_aux_type (A * B)%type B n
-  end.
-
-Fixpoint prod_of_list_aux {A B} n :
-  A → list B → option (prod_of_list_aux_type A B n) :=
-  match n with
-  | 0 => fun x ys =>
-    match ys with
-    | [] => Some x
-    | _  => None
-    end
-  | S n => fun x ys =>
-    match ys with
-    | [] => None
-    | y :: ys => prod_of_list_aux n (x, y) ys
-    end
-  end.
-
-Definition prod_of_list_type A n : Type :=
-  match n with
-  | 0 => unit
-  | S n => prod_of_list_aux_type A A n
-  end.
-
-Fact prod_of_list_key : unit. Proof. exact: tt. Qed.
-
-Definition prod_of_list : ∀ {A} n, list A → option (prod_of_list_type A n) :=
-  locked_with prod_of_list_key (
-    λ A n, match n return list A → option (prod_of_list_type A n) with
-           | 0 => fun xs => match xs with
-                            | [] => Some tt
-                            | _  => None
-                            end
-           | S n => fun xs => match xs with
-                              | [] => None
-                              | x :: xs => prod_of_list_aux n x xs
-                              end
-           end).
-
-Canonical prod_of_list_unlockable :=
-  [unlockable of @prod_of_list].
-
-Lemma prod_of_list_neq {A} n (xs : list A) :
-  length xs ≠ n → prod_of_list n xs = None.
-Proof.
-rewrite unlock; case: n xs=> [|n] [|x xs] //= ne.
-have {}ne : length xs ≠ n by congruence.
-suffices : ∀ B (x : B), prod_of_list_aux n x xs = None by apply.
-elim: n xs {x} => [|n IH] [|y ys] //= in ne * => B x.
-rewrite IH //; congruence.
-Qed.
-
 Definition tlsN := nroot.@"tls".
 
 Module S.
