@@ -243,9 +243,9 @@ Variant key_exch :=
 
 Definition ser_key_exch ke :=
   match ke with
-  | Psk psk c_nonce s_nonce => Psk (THash psk) c_nonce s_nonce
+  | Psk psk c_nonce s_nonce => Psk psk c_nonce s_nonce
   | Dh g gx y => Dh g gx (Spec.texp g y)
-  | PskDh psk g gx y => PskDh (THash psk) g gx (Spec.texp g y)
+  | PskDh psk g gx y => PskDh psk g gx (Spec.texp g y)
   end.
 
 Definition psk_of_key_exch ke :=
@@ -255,7 +255,7 @@ Definition psk_of_key_exch ke :=
   | PskDh psk _ _ _ => psk
   end.
 
-Definition client_share ke :=
+Definition key_exch_of_prop ke :=
   match ke with
   | Psk psk c_nonce s_nonce => PskP psk c_nonce
   | Dh g x y => DhP g x
@@ -274,7 +274,7 @@ Definition ser_server_params sp :=
      sp_other := sp_other sp |}.
 
 Definition client_params_of_server sp :=
-  {| cp_key_exch := client_share (sp_key_exch sp);
+  {| cp_key_exch := key_exch_of_prop (sp_key_exch sp);
      cp_other := sp_other sp; |}.
 
 Definition term_of_key_exch_prop ke :=
@@ -345,19 +345,19 @@ Definition server_hello_pub sp :=
     sp_other sp
   ].
 
-Definition session_key_of_key_exch ke :=
+Definition session_key_of_key_exch psk ke :=
   match ke with
-  | Psk psk c_nonce s_nonce => Spec.of_list [psk; c_nonce; s_nonce]
+  | Psk _ c_nonce s_nonce => Spec.of_list [psk; c_nonce; s_nonce]
   | Dh _ gx y => Spec.texp gx y
   | PskDh _ _ gx y => Spec.texp gx y
   end.
 
-Definition server_hello sp :=
+Definition server_hello psk sp :=
   let pub := server_hello_pub sp in
   let enc := Spec.of_list [
     TKey Dec (sp_verif_key sp);
     TEnc (sp_verif_key sp) (Spec.tag (tlsN.@"server_hello_sig") (THash pub))
-  ] in let session_key := session_key_of_key_exch (sp_key_exch sp) in
+  ] in let session_key := session_key_of_key_exch psk (sp_key_exch sp) in
   Spec.of_list [
     pub;
     TEnc session_key (Spec.tag (tlsN.@"server_hello") enc)
@@ -629,13 +629,13 @@ Qed.
 Definition ser_key_exch : val := λ: "ke",
   key_exch_match "ke"
     (λ: "psk" "c_nonce" "s_nonce",
-      tag (nroot.@"psk") (term_of_list [hash "psk"; "c_nonce"; "s_nonce"]))
+      tag (nroot.@"psk") (term_of_list ["psk"; "c_nonce"; "s_nonce"]))
     (λ: "g" "gx" "y",
       let: "gy" := texp "g" "y" in
       tag (nroot.@"dh") (term_of_list ["g"; "gx"; "gy"]))
     (λ: "psk" "g" "gx" "y",
       let: "gy" := texp "g" "y" in
-      tag (nroot.@"pskdh") (term_of_list [hash "psk"; "g"; "gx"; "gy"])).
+      tag (nroot.@"pskdh") (term_of_list ["psk"; "g"; "gx"; "gy"])).
 
 Lemma wp_ser_key_exch ke E Φ :
   Φ (S.term_of_key_exch (S.ser_key_exch ke)) -∗
@@ -644,12 +644,12 @@ Proof.
 iIntros "post"; rewrite /ser_key_exch; wp_pures.
 iApply wp_key_exch_match.
 case: ke => [psk c_nonce s_nonce|g gx y|psk g gx y] /=; wp_pures.
-- by wp_list; wp_hash; wp_list; wp_term_of_list; wp_tag.
+- by wp_list; wp_term_of_list; wp_tag.
 - wp_bind (texp _ _); iApply wp_texp; wp_pures.
   wp_list; wp_term_of_list.
   by iApply wp_tag.
 - wp_bind (texp _ _); iApply wp_texp; wp_pures.
-  wp_list; wp_hash; wp_list; wp_term_of_list.
+  wp_list; wp_term_of_list.
   by iApply wp_tag.
 Qed.
 
@@ -749,16 +749,16 @@ wp_bind (ser_key_exch _); iApply wp_ser_key_exch.
 by wp_list; wp_term_of_list.
 Qed.
 
-Definition session_key_of_key_exch : val := λ: "ke",
+Definition session_key_of_key_exch : val := λ: "psk" "ke",
   key_exch_match "ke"
-    (λ: "psk" "c_nonce" "s_nonce",
+    (λ: <> "c_nonce" "s_nonce",
        term_of_list ["psk"; "c_nonce"; "s_nonce"])
     (λ: <> "gx" "y", texp "gx" "y")
     (λ: <> <> "gx" "y", texp "gx" "y").
 
-Lemma wp_session_key_of_key_exch ke E Φ :
-  Φ (S.session_key_of_key_exch ke) -∗
-  WP session_key_of_key_exch (S.term_of_key_exch ke) @ E {{ Φ }}.
+Lemma wp_session_key_of_key_exch psk ke E Φ :
+  Φ (S.session_key_of_key_exch psk ke) -∗
+  WP session_key_of_key_exch psk (S.term_of_key_exch ke) @ E {{ Φ }}.
 Proof.
 iIntros "?"; rewrite /session_key_of_key_exch; wp_pures.
 iApply wp_key_exch_match.
@@ -768,21 +768,21 @@ case: ke => [???|???|????]; wp_pures.
 - by iApply wp_texp.
 Qed.
 
-Definition server_hello : val := λ: "sp",
+Definition server_hello : val := λ: "psk" "sp",
   server_params_match "sp" (λ: "kex" "verif_key" "other",
     let: "pub" := server_hello_pub "sp" in
     let: "verif_key" := mkkey "verif_key" in
     bind: "enc" :=
       tenc (tlsN.@"server_hello_sig") (Fst "verif_key") (hash "pub") in
     let: "enc" := term_of_list [Snd "verif_key"; "enc"] in
-    let: "session_key" := mkkey (session_key_of_key_exch "kex") in
+    let: "session_key" := mkkey (session_key_of_key_exch "psk" "kex") in
     bind: "enc" := tenc (tlsN.@"server_hello") (Fst "session_key") "enc" in
     term_of_list ["pub"; "enc"]
   ).
 
-Lemma wp_server_hello sp E Φ :
-  Φ (S.server_hello sp) -∗
-  WP server_hello (S.term_of_server_params sp) @ E {{ Φ }}.
+Lemma wp_server_hello psk sp E Φ :
+  Φ (S.server_hello psk sp) -∗
+  WP server_hello psk (S.term_of_server_params sp) @ E {{ Φ }}.
 Proof.
 iIntros "?"; rewrite /server_hello; wp_pures.
 iApply wp_server_params_match; wp_pures.
@@ -790,7 +790,7 @@ wp_bind (server_hello_pub _); iApply wp_server_hello_pub; wp_pures.
 wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
 wp_hash; wp_tenc; wp_pures.
 wp_list; wp_term_of_list; wp_pures.
-wp_bind (session_key_of_key_exch _); iApply wp_session_key_of_key_exch.
+wp_bind (session_key_of_key_exch _ _); iApply wp_session_key_of_key_exch.
 wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
 by wp_tenc; wp_pures; wp_list; wp_term_of_list.
 Qed.
@@ -1141,6 +1141,95 @@ iIntros (sh) "p_sh"; wp_pures.
 iApply (wp_check_server_hello cp).
 by iApply "post" => //.
 Qed.
+
+Definition mk_key_exch : val := λ: "ke",
+  key_exch_prop_match "ke"
+    (λ: "psk" "c_nonce",
+        tag (nroot.@"psk") (term_of_list ["psk"; "c_nonce"; mknonce #()]))
+    (λ: "g" "gx",
+      tag (nroot.@"dh") (term_of_list ["g"; "gx"; mknonce #()]))
+    (λ: "psk" "g" "gx",
+      tag (nroot.@"pskdh") (term_of_list ["psk"; "g"; "gx"; mknonce #()])).
+
+(* TODO: strengthen *)
+Lemma wp_mk_key_exch ke E Φ :
+  pterm (S.term_of_key_exch_prop ke) -∗
+  (∀ ke',
+      ⌜ke = S.key_exch_of_prop ke'⌝ →
+      pterm (S.term_of_key_exch (S.ser_key_exch ke')) →
+      Φ (S.term_of_key_exch ke')) -∗
+  WP mk_key_exch (S.term_of_key_exch_prop ke) @ E {{ Φ }}.
+Proof.
+iIntros "#p_ke post"; rewrite /mk_key_exch; wp_pures.
+iApply wp_key_exch_prop_match.
+case: ke => [psk c_nonce|g gx|psk g gx]; wp_pures.
+- wp_bind (mknonce _); iApply (wp_mknonce _ (λ _, True)%I).
+  iIntros (a) "_ #pred_a _"; wp_list; wp_term_of_list.
+  wp_tag; wp_pures.
+  iApply ("post" $! (S.Psk psk c_nonce (TNonce a))) => //.
+  rewrite !pterm_tag !pterm_of_list /=.
+  iDestruct "p_ke" as "(? & ? & _)".
+  do !iSplit => //.
+  rewrite pterm_TNonce; by iExists _; iSplit; eauto.
+- wp_bind (mknonce _); iApply (wp_mknonce _ (λ _, True)%I).
+  iIntros (a) "_ #pred_a _"; wp_list; wp_term_of_list.
+  wp_tag; wp_pures.
+  iApply ("post" $! (S.Dh g gx (TNonce a))) => //=.
+  rewrite !pterm_tag !pterm_of_list /=.
+  iDestruct "p_ke" as "(? & ? & _)".
+  do !iSplit => //.
+  iApply pterm_texp => //.
+  rewrite pterm_TNonce; by iExists _; iSplit; eauto.
+- wp_bind (mknonce _); iApply (wp_mknonce _ (λ _, True)%I).
+  iIntros (a) "_ #pred_a _"; wp_list; wp_term_of_list.
+  wp_tag; wp_pures.
+  iApply ("post" $! (S.PskDh psk g gx (TNonce a))) => //.
+  rewrite !pterm_tag !pterm_of_list /=.
+  iDestruct "p_ke" as "(? & ? & ? & _)".
+  do !iSplit => //.
+  iApply pterm_texp => //.
+  rewrite pterm_TNonce; by iExists _; iSplit; eauto.
+Qed.
+
+Definition server : val := λ: "psk" "verif_key" "other",
+  let: "ch" := recv #() in
+  bind: "ke" := check_client_hello "psk" "other" "ch" in
+  let: "ke'" := mk_key_exch "ke" in
+  let: "sp"  := term_of_list ["ke'"; "verif_key"; "other"] in
+  let: "sh"  := server_hello "psk" "sp" in
+  send "sh" ;;
+  SOME (session_key_of_key_exch "psk" "ke'").
+
+Lemma wp_server psk verif_key other E Φ :
+  pterm psk -∗
+  pterm (TKey Enc verif_key) -∗
+  pterm (TKey Dec verif_key) -∗
+  pterm other -∗
+  (∀ sk, opterm sk → Φ (repr sk)) -∗
+  WP server psk verif_key other @ E {{ Φ }}.
+Proof.
+iIntros "#p_psk #p_sign #p_verif #p_other post".
+rewrite /server; wp_pures.
+wp_bind (recv _); iApply wp_recv.
+iIntros (ch) "#p_ch"; wp_pures.
+wp_bind (check_client_hello _ _ _).
+iApply wp_check_client_hello.
+case e: S.check_client_hello => [ke|] //=; wp_pures; last first.
+  by iApply ("post" $! None).
+wp_bind (mk_key_exch _); iApply wp_mk_key_exch.
+  admit.
+iIntros (ke') "%e' #p_ke'"; wp_pures.
+wp_list; wp_term_of_list.
+pose sp := S.ServerParams ke' verif_key other.
+wp_pures.
+wp_bind (server_hello _ _); iApply (wp_server_hello _ sp).
+wp_pures; wp_bind (send _); iApply wp_send.
+  admit.
+wp_pures.
+wp_bind (session_key_of_key_exch _ _); iApply wp_session_key_of_key_exch.
+wp_pures; iApply ("post" $! (Some (S.session_key_of_key_exch psk ke'))) => /=.
+admit. (* Shouldn't be provable: the session key is not public! *)
+Admitted.
 
 End I.
 
