@@ -148,7 +148,7 @@ flight of messages, and also to send encrypted data before the handshake is
 complete.  Diffie-Hellman key exchange is used to provide forward secrecy
 guarantees to the session keys.
 
-The [serialize] function is used to hash pre-shared keys so that the method can
+The [encode] function is used to hash pre-shared keys so that the method can
 be sent over the network.
 
 *)
@@ -160,7 +160,7 @@ Variant t :=
 | Dh of term
 | PskDh of term & term.
 
-Definition serialize ke :=
+Definition encode ke :=
   match ke with
   | Psk psk => Psk (THash psk)
   | Dh g => Dh g
@@ -256,7 +256,7 @@ Definition meth_of ke :=
   | PskDh psk g _ => Meth.PskDh psk g
   end.
 
-Definition serialize ke :=
+Definition encode ke :=
   match ke with
   | Psk psk nonce => Psk (THash psk) nonce
   | Dh g x => Dh g (Spec.texp g x)
@@ -341,7 +341,7 @@ Definition case : val := λ: "ke" "f_psk" "f_dh" "f_pskdh",
     "f_pskdh" "psk" "g" "x"
   | NONE => NONE end end end.
 
-Definition serialize : val := λ: "ke",
+Definition encode : val := λ: "ke",
   case "ke"
     (λ: "psk" "c_nonce",
       tag (nroot.@"psk") (term_of_list [hash "psk"; "c_nonce"]))
@@ -432,11 +432,11 @@ move/Spec.of_list_inj: e_l => {l} <-.
 by wp_list_match => // _ _ _ [<- <- <-].
 Qed.
 
-Lemma wp_serialize ke E Φ :
-  Φ (term_of (serialize ke)) -∗
-  WP I.serialize (term_of ke) @ E {{ Φ }}.
+Lemma wp_encode ke E Φ :
+  Φ (term_of (encode ke)) -∗
+  WP I.encode (term_of ke) @ E {{ Φ }}.
 Proof.
-iIntros "post"; rewrite /I.serialize; wp_pures.
+iIntros "post"; rewrite /I.encode; wp_pures.
 iApply wp_case.
 case: ke => [psk c_nonce|g x|psk g x] /=; wp_pures.
 - by wp_list; wp_hash; wp_list; wp_term_of_list; wp_tag.
@@ -504,9 +504,9 @@ Qed.
 
 (* TODO: strengthen *)
 Lemma wp_new ke E Φ :
-  pterm (Meth.serialize ke) -∗
+  pterm (Meth.encode ke) -∗
   (∀ ke', ⌜ke = meth_of ke'⌝ →
-          pterm (term_of (serialize ke')) →
+          pterm (term_of (encode ke')) →
           Φ (term_of ke')) -∗
   WP I.new ke @ E {{ Φ }}.
 Proof.
@@ -546,7 +546,7 @@ Coercion CShare.term_of : CShare.t >-> term.
 
 (**
 
-Finally, the server share contains the serialized client share together with
+Finally, the server share contains the encoded client share together with
 fresh keying material chosen by the server.  Note that the serialization
 functions do not affect the part that comes from the client.
 
@@ -559,7 +559,7 @@ Variant t :=
 | Dh of term & term & term
 | PskDh of term & term & term & term.
 
-Definition serialize ke :=
+Definition encode ke :=
   match ke with
   | Psk psk c_nonce s_nonce => Psk psk c_nonce s_nonce
   | Dh g gx y => Dh g gx (Spec.texp g y)
@@ -644,7 +644,7 @@ Definition case : val := λ: "ke" "f_psk" "f_dh" "f_pskdh",
     "f_pskdh" "psk" "g" "x" "y"
   | NONE => NONE end end end.
 
-Definition serialize : val := λ: "ke",
+Definition encode : val := λ: "ke",
   case "ke"
     (λ: "psk" "c_nonce" "s_nonce",
       tag (nroot.@"psk") (term_of_list ["psk"; "c_nonce"; "s_nonce"]))
@@ -737,11 +737,11 @@ move/Spec.of_list_inj: e_l => {l} <-.
 by wp_list_match => // _ _ _ _ [<- <- <- <-].
 Qed.
 
-Lemma wp_serialize ke E Φ :
-  Φ (term_of (serialize ke)) -∗
-  WP I.serialize (term_of ke) @ E {{ Φ }}.
+Lemma wp_encode ke E Φ :
+  Φ (term_of (encode ke)) -∗
+  WP I.encode (term_of ke) @ E {{ Φ }}.
 Proof.
-iIntros "post"; rewrite /I.serialize; wp_pures.
+iIntros "post"; rewrite /I.encode; wp_pures.
 iApply wp_case.
 case: ke => [psk c_nonce s_nonce|g gx y|psk g gx y] /=; wp_pures.
 - by wp_list; wp_term_of_list; wp_tag.
@@ -829,7 +829,7 @@ Lemma wp_new (ke : CShare.t) E Φ :
   pterm ke -∗
   (∀ ke',
       ⌜ke = cshare_of ke'⌝ →
-      pterm (term_of (serialize ke')) →
+      pterm (term_of (encode ke')) →
       Φ (term_of ke')) -∗
   WP I.new ke @ E {{ Φ }}.
 Proof.
@@ -881,7 +881,7 @@ Record client_params := ClientParams {
 }.
 
 Definition ser_client_params cp :=
-  {| cp_share := CShare.serialize (cp_share cp);
+  {| cp_share := CShare.encode (cp_share cp);
      cp_other := cp_other cp; |}.
 
 Record server_params := ServerParams {
@@ -891,7 +891,7 @@ Record server_params := ServerParams {
 }.
 
 Definition ser_server_params sp :=
-  {| sp_share := SShare.serialize (sp_share sp);
+  {| sp_share := SShare.encode (sp_share sp);
      sp_verif_key := sp_verif_key sp;
      sp_other := sp_other sp |}.
 
@@ -908,15 +908,23 @@ Definition term_of_server_params sp :=
     sp_other sp
   ].
 
-Definition client_hello cp :=
-  let ch := term_of_client_params (ser_client_params cp) in
+Definition client_hello_pub cp :=
+  term_of_client_params (ser_client_params cp).
+
+Definition client_hello_mac cp :=
+  let ch := client_hello_pub cp in
   let psk := CShare.psk (cp_share cp) in
-  let mac := thash "binder" [psk; ch] in
-  Spec.of_list [ch; mac].
+  thash "binder" [psk; ch].
+
+Definition client_hello cp :=
+  Spec.of_list [
+    client_hello_pub cp;
+    client_hello_mac cp
+  ].
 
 Definition server_hello_pub sp :=
   Spec.of_list [
-    SShare.term_of (SShare.serialize (sp_share sp));
+    SShare.term_of (SShare.encode (sp_share sp));
     sp_other sp
   ].
 
@@ -965,14 +973,26 @@ Definition check_server_hello cp sp :=
 Section Properties.
 
 Context `{!heapG Σ, cryptoG Σ}.
+Notation iProp := (iProp Σ).
+
+Implicit Types t : term.
+Implicit Types P : term → iProp.
+Implicit Types Φ : val → iProp.
 
 (* TODO Prove and strengthen *)
 Lemma pterm_client_hello cp :
-  pterm (CShare.serialize (cp_share cp)) -∗
+  pterm (CShare.encode (cp_share cp)) -∗
   pterm (cp_other cp) -∗
   pterm (client_hello cp).
 Proof.
 Admitted.
+
+Definition wf P psk : iProp :=
+  pterm (THash psk) ∧
+  □ (∀ ch, pterm ch → pterm (thash "binder" [psk; ch])) ∧
+  □ (∀ cn sn, pterm cn → pterm sn → P (Spec.of_list [psk; cn; sn])).
+
+
 
 End Properties.
 
@@ -1004,7 +1024,7 @@ Qed.
 Definition client_hello : val := λ: "cp",
   bind: "cp" := list_of_term "cp" in
   list_match: ["kex"; "other"] := "cp" in
-  let: "ts" := term_of_list [CShare.I.serialize "kex"; "other"] in
+  let: "ts" := term_of_list [CShare.I.encode "kex"; "other"] in
   let: "psk" := CShare.I.psk "kex" in
   let: "mac" := thash "binder" ["psk"; "ts"] in
   term_of_list ["ts"; "mac"].
@@ -1017,7 +1037,7 @@ iIntros "post"; rewrite /client_hello; wp_pures.
 wp_list_of_term_eq t e; last by rewrite Spec.of_listK in e.
 move/Spec.of_list_inj: e => <-.
 wp_list_match => // _ _ [] <- <-.
-wp_list; wp_bind (CShare.I.serialize _); iApply CShare.wp_serialize.
+wp_list; wp_bind (CShare.I.encode _); iApply CShare.wp_encode.
 wp_list; wp_term_of_list; wp_pures.
 wp_bind (CShare.I.psk _); iApply CShare.wp_psk.
 wp_pures; wp_list; wp_bind (thash _ _); iApply wp_thash.
@@ -1043,7 +1063,7 @@ Qed.
 
 Definition server_hello_pub : val := λ: "sp",
   server_params_match "sp" (λ: "kex" "verif_key" "other",
-    term_of_list [SShare.I.serialize "kex"; "other"]).
+    term_of_list [SShare.I.encode "kex"; "other"]).
 
 Lemma wp_server_hello_pub sp E Φ :
   Φ (S.server_hello_pub sp) -∗
@@ -1052,7 +1072,7 @@ Proof.
 iIntros "?"; rewrite /server_hello_pub; wp_pures.
 iApply wp_server_params_match; wp_pures.
 wp_list.
-wp_bind (SShare.I.serialize _); iApply SShare.wp_serialize.
+wp_bind (SShare.I.encode _); iApply SShare.wp_encode.
 by wp_list; wp_term_of_list.
 Qed.
 
@@ -1201,7 +1221,7 @@ Definition client : val := λ: "kex" "other",
   check_server_hello "cp" "sh".
 
 Lemma wp_client ke other E Φ :
-  pterm (Meth.serialize ke) -∗
+  pterm (Meth.encode ke) -∗
   pterm other -∗
   (∀ cp sh,
       ⌜ke = CShare.meth_of (S.cp_share cp)⌝ →
