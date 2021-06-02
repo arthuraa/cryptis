@@ -84,6 +84,14 @@ rewrite envs_entails_eq => post.
 by rewrite -wp_bind -wp_hash.
 Qed.
 
+Lemma tac_wp_tag Γ E K N t Ψ :
+  envs_entails Γ (WP fill K (Val (Spec.tag N t)) @ E {{ Ψ }}) →
+  envs_entails Γ (WP fill K (tag N t) @ E {{ Ψ }}).
+Proof.
+rewrite envs_entails_eq => ?.
+by rewrite -wp_bind -wp_tag.
+Qed.
+
 Lemma tac_twp_untag Γ E K n t Ψ :
   (∀ t', t = Spec.tag n t' →
          envs_entails Γ (WP fill K (Val (repr (Some t'))) @ E [{ Ψ }])) →
@@ -309,9 +317,6 @@ Tactic Notation "wp_list_match" :=
 Tactic Notation "wp_term_of_list" :=
   wp_pures; try wp_bind (term_of_list _); iApply wp_term_of_list.
 
-Tactic Notation "wp_tag" :=
-  wp_pures; try wp_bind (tag _ _); iApply wp_tag.
-
 Tactic Notation "wp_enc" :=
   wp_pures; try wp_bind (enc _ _); iApply wp_enc.
 
@@ -411,6 +416,16 @@ Tactic Notation "wp_eq_term" ident(H) :=
       first
         [eapply (tac_wp_eq_term _ _ K _ _); intros H; wp_finish
         |fail 1 "wp_eq_term: Cannot decode"])
+  end.
+
+Tactic Notation "wp_tag" :=
+  wp_pures;
+  lazymatch goal with
+  | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
+    reshape_expr e ltac:(fun K e' =>
+      first
+        [eapply (tac_wp_tag _ _ K _ _); wp_finish
+        |fail 1 "wp_tag: Cannot decode"])
   end.
 
 Tactic Notation "wp_untag_eq" ident(t) ident(H) :=
