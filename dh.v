@@ -21,10 +21,10 @@ Variable N : namespace.
 Implicit Types Ψ : val → iProp.
 Implicit Types kA kB : term.
 
-Variable P : loc → iProp.
+Variable P : term → iProp.
 
 Definition dh_pred t : iProp :=
-  ∃ g a, ⌜t = TExp g [TNonce a]⌝ ∧ □ P a.
+  ∃ g a, ⌜t = TExp g [TNonce a]⌝ ∧ □ P (TNonce a).
 
 Definition dh_nonce a : iProp := nonce_pred a dh_pred.
 
@@ -55,12 +55,22 @@ rewrite unlock => ->.
 by iIntros (ts); rewrite big_sepS_empty.
 Qed.
 
-Lemma dh_nonce_elim0 a :
-  dh_nonce a -∗
-  pterm (TNonce a) -∗
+Definition dh_seed t : iProp :=
+  match t with
+  | TNonce a => dh_nonce a
+  | _ => False
+  end.
+
+Global Instance Persistent_dh_seed t : Persistent (dh_seed t).
+Proof. case: t =>>; apply _. Qed.
+
+Lemma dh_seed_elim0 a :
+  dh_seed a -∗
+  pterm a -∗
   ▷ False.
 Proof.
 iIntros "#aP #p_t".
+case: a => //= a.
 rewrite pterm_TNonce.
 iPoseProof (publishedE with "aP p_t") as "{p_t} p_t".
 iIntros "!>".
@@ -68,15 +78,16 @@ iDestruct "p_t" as (g' a') "# [%e p_t]".
 by move/(f_equal is_exp): e; rewrite is_exp_TExp.
 Qed.
 
-Lemma dh_nonce_elim1 g a :
-  dh_nonce a -∗
-  pterm (TExp g [TNonce a]) -∗
+Lemma dh_seed_elim1 g a :
+  dh_seed a -∗
+  pterm (TExp g [a]) -∗
   ▷ P a.
 Proof.
 iIntros "#aP #p_t".
 rewrite pterm_TExp1 big_sepS_union_pers.
 iDestruct "p_t" as "[[? contra]|[_ p_t]]".
-  by iPoseProof (dh_nonce_elim0 with "aP contra") as ">[]".
+  by iPoseProof (@dh_seed_elim0 with "aP contra") as ">[]".
+case: a => //= a.
 rewrite nonces_of_term_eq /= big_sepS_singleton.
 iPoseProof (publishedE with "aP p_t") as "{p_t} p_t".
 iIntros "!>".
@@ -84,15 +95,16 @@ iDestruct "p_t" as (g' a') "# [%e p_t]".
 by case/TExp_inj: e => _ /Permutation_singleton [] ->; eauto.
 Qed.
 
-Lemma dh_nonce_elim2 g a t :
-  dh_nonce a -∗
-  pterm (TExp g [TNonce a; t]) -∗
-  ◇ (pterm (TExp g [TNonce a]) ∧ pterm t).
+Lemma dh_seed_elim2 g a t :
+  dh_seed a -∗
+  pterm (TExp g [a; t]) -∗
+  ◇ (pterm (TExp g [a]) ∧ pterm t).
 Proof.
 iIntros "#aP #p_t".
 rewrite pterm_TExp2 !big_sepS_union_pers.
 iDestruct "p_t" as "[[??] | [[? contra] | p_t]]"; eauto.
-  by iPoseProof (dh_nonce_elim0 with "aP contra") as ">[]".
+  by iPoseProof (dh_seed_elim0 with "aP contra") as ">[]".
+case: a => //= a.
 iDestruct "p_t" as "([_ p_t] & _)".
 rewrite nonces_of_term_eq /= big_sepS_singleton.
 iPoseProof (publishedE with "aP p_t") as "{p_t} p_t".
@@ -104,16 +116,32 @@ Qed.
 
 Lemma dh_pterm_TExp g a :
   dh_gen g -∗
-  dh_nonce a -∗
+  dh_seed a -∗
   ▷ □ P a -∗
-  pterm (TExp g [TNonce a]).
+  pterm (TExp g [a]).
 Proof.
 rewrite unlock; iIntros "#gP #aP #P_a".
 rewrite pterm_TExp1; iRight.
+case: a => //= a.
 rewrite big_sepS_union_pers; iSplit; first by iApply "gP".
 rewrite nonces_of_term_eq /= big_sepS_singleton.
 iExists _; iSplit; eauto.
 by iExists g, a; eauto.
+Qed.
+
+Definition mkdh : val := mknonce.
+
+Lemma wp_mkdh E (Ψ : val → iProp) :
+  (∀ a, sterm a -∗
+        dh_seed a -∗
+        crypto_meta_token a (⊤ ∖ ↑cryptoN.@"nonce") -∗ Ψ a) -∗
+  WP mkdh #() @ E {{ Ψ }}.
+Proof.
+iIntros "post"; iApply (wp_mknonce _ (dh_pred)).
+iIntros (a) "#s_a #aP token"; iApply "post" => //.
+rewrite /crypto_meta_token nonces_of_term_eq /=.
+iSplit; first by iPureIntro; set_solver.
+by rewrite big_sepS_singleton.
 Qed.
 
 End DH.

@@ -882,6 +882,40 @@ rewrite big_sepS_delete //; iDestruct "token" as "[token _]".
 by iDestruct (meta_meta_token with "token meta") as "[]".
 Qed.
 
+Lemma crypto_meta_agree t N (x1 x2 : L) :
+  crypto_meta t N x1 -∗
+  crypto_meta t N x2 -∗
+  ⌜x1 = x2⌝.
+Proof.
+iIntros "[%not_empty meta1] [_ meta2]".
+destruct (set_choose_L _ not_empty) as [a a_t].
+rewrite big_sepS_delete //; iDestruct "meta1" as "[meta1 _]".
+rewrite big_sepS_delete //; iDestruct "meta2" as "[meta2 _]".
+by iApply (meta_agree with "meta1 meta2").
+Qed.
+
+Lemma crypto_meta_token_difference t E1 E2 :
+  E1 ⊆ E2 →
+  crypto_meta_token t E2 ⊣⊢
+  crypto_meta_token t E1 ∗ crypto_meta_token t (E2 ∖ E1).
+Proof.
+iIntros (sub); iSplit.
+- iIntros "[%not_empty token]".
+  iAssert ([∗ set] a ∈ nonces_of_term t, meta_token a E1 ∗
+                                         meta_token a (E2 ∖ E1))%I
+      with "[token]" as "token".
+    iApply (big_sepS_mono with "token") => ?? /=.
+    by rewrite meta_token_difference.
+  rewrite big_sepS_sep; iDestruct "token" as "[t1 t2]".
+  by iSplitL "t1"; iSplit.
+- iIntros "[[%not_empty t1] [_ t2]]".
+  iSplit => //.
+  iCombine "t1 t2" as "t".
+  rewrite -big_sepS_sep.
+  iApply (big_sepS_mono with "t")=> ?? /=.
+  by rewrite -meta_token_difference.
+Qed.
+
 End Meta.
 
 End Resources.
@@ -893,3 +927,4 @@ Arguments hash_pred {Σ _ _}.
 Arguments crypto_key_name {Σ _}.
 Arguments key_pred {Σ _ _}.
 Arguments crypto_meta_set {Σ _ _ _ _} t N E x.
+Arguments crypto_meta_token_difference {Σ _} t E1 E2.
