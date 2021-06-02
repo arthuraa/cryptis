@@ -60,7 +60,7 @@ Implicit Types Φ : val → iProp Σ.
 Definition inv k t : iProp Σ :=
   ∃ ad payload, ⌜t = Spec.of_list [THash ad; payload]⌝ ∧ P ad payload.
 
-Definition ctx := crypto_enc N inv.
+Definition ctx := enc_pred N inv.
 
 Lemma wp_enc E Φ k ad payload :
   ctx -∗

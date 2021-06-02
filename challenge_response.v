@@ -99,7 +99,7 @@ Lemma pterm_msg2E m2 kA kB nA nB :
   m2 !! Z.to_nat 0 = Some nA →
   m2 !! Z.to_nat 1 = Some nB →
   m2 !! Z.to_nat 2 = Some (TKey Dec kA) →
-  crypto_enc (nroot.@"m2") msg2_pred -∗
+  enc_pred (nroot.@"m2") msg2_pred -∗
   pterm (TKey Dec kB) -∗
   pterm (TEnc kB (Spec.tag (nroot.@"m2") (Spec.of_list m2))) -∗
   ▷ (pterm nB ∧
@@ -116,7 +116,7 @@ iSpecialize ("pub" with "p_d_kB").
 rewrite pterm_tag pterm_of_list.
 iPoseProof (big_sepL_lookup with "pub") as "p_nB"; first exact: enB.
 iSplit => //.
-iPoseProof (enc_inv_elim with "inv enc_m2") as "{inv} #inv".
+iPoseProof (wf_enc_elim with "inv enc_m2") as "{inv} #inv".
 iModIntro.
 iDestruct "inv" as (nA' nB' kA') "(%e_m2 & #sess)".
 move/Spec.of_list_inj: e_m2 enA enB ekA => -> /= [] -> [] -> [] ->.
@@ -127,7 +127,7 @@ Lemma pterm_msg3E m3 kA kB nA nB :
   m3 !! Z.to_nat 0 = Some nA →
   m3 !! Z.to_nat 1 = Some nB →
   m3 !! Z.to_nat 2 = Some (TKey Dec kB) →
-  crypto_enc (nroot.@"m3") msg3_pred -∗
+  enc_pred (nroot.@"m3") msg3_pred -∗
   pterm (TKey Dec kA) -∗
   pterm (TEnc kA (Spec.tag (nroot.@"m3") (Spec.of_list m3))) -∗
   ▷ (pterm (TKey Enc kA) ∨ session cr_sess_name Init kA kB nA nB).
@@ -136,7 +136,7 @@ iIntros (enA enB ekB) "#enc_m3 #p_d_ka #p_m3".
 rewrite pterm_TEnc; iDestruct "p_m3" as "[[p_e_kA p_m3]|p_m3]".
   by eauto.
 iDestruct "p_m3" as "(_ & inv & _)".
-iPoseProof (enc_inv_elim with "inv enc_m3") as "{inv} #inv".
+iPoseProof (wf_enc_elim with "inv enc_m3") as "{inv} #inv".
 iModIntro.
 iDestruct "inv" as (nA' nB' kB') "[%e_m3 inv]".
 move/Spec.of_list_inj: e_m3 enA enB ekB => -> /= [] -> [] -> [] ->.
@@ -146,8 +146,8 @@ Qed.
 Lemma wp_initiator kA kB nA E Ψ :
   ↑cryptoN.@"cr" ⊆ E →
   cr_ctx -∗
-  crypto_enc (nroot.@"m2") msg2_pred -∗
-  crypto_enc (nroot.@"m3") msg3_pred -∗
+  enc_pred (nroot.@"m2") msg2_pred -∗
+  enc_pred (nroot.@"m3") msg3_pred -∗
   pterm nA -∗
   (∀ nB, cr_sess_inv Init kA kB nA nB) -∗
   crypto_meta_token nA (↑cryptoN.@"cr") -∗
@@ -200,8 +200,8 @@ Qed.
 Lemma wp_responder kB E Ψ :
   ↑cryptoN.@"cr" ⊆ E →
   cr_ctx -∗
-  crypto_enc (nroot.@"m2") msg2_pred -∗
-  crypto_enc (nroot.@"m3") msg3_pred -∗
+  enc_pred (nroot.@"m2") msg2_pred -∗
+  enc_pred (nroot.@"m3") msg3_pred -∗
   pterm (TKey Dec kB) -∗
   (∀ ot : option (term * term * term),
       (if ot is Some (pkA, nA, nB) then

@@ -57,9 +57,9 @@ Definition nsl_inv : iProp :=
 
 Definition nsl_ctx : iProp :=
   session_ctx nsl_sess_name N nsl_sess_inv ∧
-  crypto_enc (N.@"m1") msg1_pred ∧
-  crypto_enc (N.@"m2") msg2_pred ∧
-  crypto_enc (N.@"m3") msg3_pred.
+  enc_pred (N.@"m1") msg1_pred ∧
+  enc_pred (N.@"m2") msg2_pred ∧
+  enc_pred (N.@"m3") msg3_pred.
 
 Global Instance persistent_nsl_ctx : Persistent nsl_ctx.
 Proof. apply _. Qed.
