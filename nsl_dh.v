@@ -4,7 +4,8 @@ From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl namespace_map frac.
 From iris.base_logic.lib Require Import auth.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import lib guarded term crypto primitives tactics session nsl.
+From crypto Require Import lib guarded term crypto primitives tactics.
+From crypto Require Import session nsl dh.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -24,15 +25,15 @@ Variable N : namespace.
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None).
 
-Definition nsl_dh_init : val := λ: "skA" "pkA" "pkB",
+Definition nsl_dh_init : val := λ: "g" "skA" "pkA" "pkB",
   let: "a" := mknonce #() in
-  let: "ga" := texp (tgroup (tint #0)) "a" in
+  let: "ga" := texp (tgroup "g") "a" in
   bind: "gb" := nsl_init (N.@"nsl") "skA" "pkA" "pkB" "ga" in
   SOME (texp "gb" "a").
 
-Definition nsl_dh_resp : val := λ: "skB" "pkB",
+Definition nsl_dh_resp : val := λ: "g" "skB" "pkB",
   let: "b" := mknonce #() in
-  let: "gb" := texp (tgroup (tint #0)) "b" in
+  let: "gb" := texp (tgroup "g") "b" in
   bind: "res" := nsl_resp (N.@"nsl") "skB" "pkB" "gb" in
   let: "pkA" := Fst "res" in
   let: "ga" := Snd "res" in
@@ -41,89 +42,48 @@ Definition nsl_dh_resp : val := λ: "skB" "pkB",
 Implicit Types Ψ : val → iProp.
 Implicit Types kA kB : term.
 
-Definition nsl_dh_inv rl kA kB ga gb : iProp :=
+Definition nsl_dh_inv g rl kA kB ga gb : iProp :=
   match rl with
   | Init =>
-    ∃ a, ⌜ga = TExp (TInt 0) [a]⌝ ∧
-    □ ∀ b, (pterm (TExp (TInt 0) [a; b]) → ◇ pterm b)
+    ∃ a, ⌜ga = TExp g [a]⌝ ∧
+    □ ∀ b, (pterm (TExp g [a; b]) → ◇ pterm b)
   | Resp =>
-    ∃ b, ⌜gb = TExp (TInt 0) [b]⌝ ∧
-    □ ∀ a, (pterm (TExp (TInt 0) [a; b]) → ◇ pterm a)
+    ∃ b, ⌜gb = TExp g [b]⌝ ∧
+    □ ∀ a, (pterm (TExp g [a; b]) → ◇ pterm a)
   end%I.
 
-Definition nsl_dh_pred k t : iProp :=
-  ∃ a k',
-    meta a (N.@"peer") k' ∧
-    corruption k k' ∧
-    ⌜t = TExp (TInt 0) [TNonce a]⌝.
+Definition nsl_dh_fail (k : term) a : iProp :=
+  ∃ k', meta a (N.@"peer") k' ∧ corruption k k'.
 
-Lemma nsl_dh_predN k t : negb (is_exp t) → nsl_dh_pred k t -∗ False.
-Proof.
-iIntros (nexp); iDestruct 1 as (a k') "# (_ & _ & %contra)".
-by move: nexp contra; rewrite unlock; case: t.
-Qed.
-
-Lemma nsl_dh_predX1 a k k' :
+Lemma pterm_nsl_dh1 g a k k' :
+  dh_gen g -∗
+  dh_nonce (nsl_dh_fail k) a -∗
   meta a (N.@"peer") k' -∗
-  nsl_dh_pred k (TExp (TInt 0) [TNonce a]) -∗
-  corruption k k'.
+  pterm (TExp g [TNonce a])  ↔ ▷ corruption k k'.
 Proof.
-iIntros "#meta"; iDestruct 1 as (a' k'') "# (meta' & pub & %e)".
-case/TExp_inj: e => _ /Permutation_singleton [] <-.
-by iPoseProof (meta_agree with "meta meta'") as "<-".
+iIntros "#gP #a_pred #meta"; iSplit.
+- iIntros "#p_e".
+  iDestruct (dh_nonce_elim1 with "a_pred p_e") as (k'') "[meta' corr]".
+  iModIntro.
+  by iPoseProof (meta_agree with "meta meta'") as "<-".
+- iIntros "#corr".
+  iApply dh_pterm_TExp; eauto.
+  by iExists k'; iModIntro; iModIntro; iSplit; eauto.
 Qed.
 
-Lemma nsl_dh_predX2 a k t :
-  nsl_dh_pred k (TExp (TInt 0) [TNonce a; t]) -∗
-  False.
+Lemma pterm_nsl_dh2 g a k t :
+  dh_nonce (nsl_dh_fail k) a -∗
+  pterm (TExp g [TNonce a; t]) -∗ ◇ pterm t.
 Proof.
-iDestruct 1 as (??) "# (_ & _ & %contra)".
-by case/TExp_inj: contra => _ /Permutation_length.
+iIntros "#a_pred #p_e".
+by iPoseProof (dh_nonce_elim2 with "a_pred p_e") as ">[??]".
 Qed.
 
-Lemma pterm_dh1 a k k' :
-  nonce_pred a (nsl_dh_pred k) -∗
-  meta a (N.@"peer") k' -∗
-  pterm (TExp (TInt 0) [TNonce a])  ↔
-  ▷ corruption k k'.
-Proof.
-iIntros "#a_pred #meta"; iSplit.
-- rewrite pterm_TExp1.
-  iDestruct 1 as "[[_ #contra] | #pub]".
-    rewrite pterm_TNonce.
-    iPoseProof (publishedE with "a_pred contra") as "{contra} contra".
-    iModIntro.
-    by iDestruct (nsl_dh_predN with "contra") as "[]".
-  rewrite nonces_of_term_eq /= left_id_L big_sepS_singleton.
-  iPoseProof (publishedE with "a_pred pub") as "{pub} pub".
-  by iModIntro; iApply nsl_dh_predX1; eauto.
-- iIntros "#pub".
-  rewrite pterm_TExp1 nonces_of_term_eq /= left_id_L; iRight.
-  rewrite big_sepS_singleton.
-  iApply (publishedE with "a_pred").
-  do 2!iModIntro.
-  by iExists a, k'; do 2!iSplit => //.
-Qed.
-
-Lemma pterm_dh2 a k t :
-  nonce_pred a (nsl_dh_pred k) -∗
-  pterm (TExp (TInt 0) [TNonce a; t]) -∗ ◇ pterm t.
-Proof.
-iIntros "#a_pred"; rewrite pterm_TExp2.
-iDestruct 1 as "# [[_ ?] | [ [_ contra] | pub]]"; eauto.
-- rewrite pterm_TNonce.
-  iPoseProof (publishedE with "a_pred contra") as "{contra} contra".
-  by iDestruct (nsl_dh_predN with "contra") as ">[]".
-- rewrite nonces_of_term_eq /= left_id_L big_sepS_union_pers.
-  rewrite big_sepS_singleton; iDestruct "pub" as "[pub _]".
-  iPoseProof (publishedE with "a_pred pub") as "{pub} pub".
-  iDestruct (nsl_dh_predX2 with "pub") as ">[]".
-Qed.
-
-Lemma wp_nsl_dh_init kA kB E Ψ :
+Lemma wp_nsl_dh_init g kA kB E Ψ :
   ↑N ⊆ E →
   N ## cryptoN.@"nonce" →
-  nsl_ctx (N.@"nsl") nsl_dh_inv -∗
+  nonces_of_term g = ∅ →
+  nsl_ctx (N.@"nsl") (nsl_dh_inv g) -∗
   pterm (TKey Enc kA) -∗
   pterm (TKey Enc kB) -∗
   (∀ ogab : option term,
@@ -132,29 +92,30 @@ Lemma wp_nsl_dh_init kA kB E Ψ :
          (corruption kA kB ∨ □ (pterm gab → ▷ False))
        else True) -∗
       Ψ (repr ogab)) -∗
-  WP nsl_dh_init (TKey Dec kA) (TKey Enc kA) (TKey Enc kB) @ E {{ Ψ }}.
+  WP nsl_dh_init g (TKey Dec kA) (TKey Enc kA) (TKey Enc kB) @ E {{ Ψ }}.
 Proof.
-iIntros (??) "#ctx #p_e_kA #p_e_kB Hpost".
+iIntros (?? g0) "#ctx #p_e_kA #p_e_kB Hpost".
 rewrite /nsl_dh_init; wp_pures; wp_bind (mknonce _).
-iApply (wp_mknonce _ (nsl_dh_pred kA)).
+iApply (wp_mknonce _ (dh_pred (nsl_dh_fail kA))).
 iIntros (a) "#s_a #a_pred token".
 rewrite (meta_token_difference _ (↑N.@"peer")); last solve_ndisj.
 iDestruct "token" as "[dh token]".
 iMod (meta_set _ _ kB with "dh") as "#dh"; eauto.
-wp_pures; wp_bind (tint _); iApply wp_tint.
 wp_pures; wp_bind (tgroup _); iApply wp_tgroup.
 wp_pures; wp_bind (texp _ _); iApply wp_texp.
 rewrite Spec.texpA; wp_pures; wp_bind (nsl_init _ _ _ _ _).
 iApply (wp_nsl_init with "ctx p_e_kA p_e_kB [] [] [] [token]") => //.
 - solve_ndisj.
-- rewrite sterm_TExp sterm_TInt /=; eauto.
-- by iModIntro; iApply pterm_dh1; eauto.
+- rewrite sterm_TExp /=; iSplit.
+    by iApply dh_gen_sterm; iApply nonces_of_term_dh_gen.
+  by rewrite /=; iSplit.
+- by iModIntro; iApply pterm_nsl_dh1; eauto; iApply nonces_of_term_dh_gen.
 - iIntros (nB); rewrite /=.
   iExists (TNonce a); iSplit => //.
   iModIntro; iIntros (b) "p_b".
-  by iApply pterm_dh2.
+  by iApply pterm_nsl_dh2.
 - rewrite /crypto_meta_token nonces_of_term_TExp /=.
-  rewrite nonces_of_term_eq right_id_L left_id_L /=.
+  rewrite g0 nonces_of_term_eq right_id_L left_id_L /=.
   iSplit; first by iPureIntro; set_solver.
   rewrite big_sepS_singleton.
   rewrite (meta_token_difference _ (↑N.@"nsl")).
@@ -168,22 +129,20 @@ iDestruct "pub" as "# [s_nB [fail | succ]]".
   by eauto.
 iDestruct "succ" as (b) "[-> #succ]".
 wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
-iApply ("Hpost" $! (Some (Spec.texp (TExp (TInt 0) [b]) (TNonce a)))).
+iApply ("Hpost" $! (Some (Spec.texp (TExp g [b]) (TNonce a)))).
 iSplit; first by iApply sterm_texp => //.
 iRight; iModIntro.
 rewrite Spec.texpA.
 iIntros "#contra".
 iDestruct ("succ" with "contra") as "{succ} >succ".
-rewrite pterm_TNonce.
-iPoseProof (publishedE with "a_pred succ") as "{contra} contra".
-iModIntro.
-by iPoseProof (nsl_dh_predN with "contra") as "[]".
+by iApply dh_nonce_elim0.
 Qed.
 
-Lemma wp_dh_responder kB E Ψ :
+Lemma wp_dh_responder g kB E Ψ :
   ↑N ⊆ E →
   N ## cryptoN.@"nonce" →
-  nsl_ctx (N.@"nsl") nsl_dh_inv -∗
+  nonces_of_term g = ∅ →
+  nsl_ctx (N.@"nsl") (nsl_dh_inv g) -∗
   pterm (TKey Enc kB) -∗
   (∀ oresp : option (term * term),
       (if oresp is Some (pkA, gab) then
@@ -194,36 +153,37 @@ Lemma wp_dh_responder kB E Ψ :
            (corruption kA kB ∨ □ (pterm gab → ▷ False))
        else True) -∗
       Ψ (repr oresp)) -∗
-  WP nsl_dh_resp (TKey Dec kB) (TKey Enc kB) @ E {{ Ψ }}.
+  WP nsl_dh_resp g (TKey Dec kB) (TKey Enc kB) @ E {{ Ψ }}.
 Proof.
-iIntros (??) "#ctx #p_e_kB Hpost".
+iIntros (?? g0) "#ctx #p_e_kB Hpost".
 rewrite /nsl_dh_resp; wp_pures; wp_bind (mknonce _).
-iApply (wp_mknonce _ (nsl_dh_pred kB)).
+iApply (wp_mknonce _ (dh_pred (nsl_dh_fail kB))).
 iIntros (b) "#s_b #b_pred token".
 rewrite (meta_token_difference _ (↑N.@"peer")); last solve_ndisj.
 iDestruct "token" as "[dh token]".
-wp_pures; wp_bind (tint _); iApply wp_tint.
 wp_pures; wp_bind (tgroup _); iApply wp_tgroup.
 wp_pures; wp_bind (texp _ _); iApply wp_texp.
 rewrite Spec.texpA; wp_pures; wp_bind (nsl_resp _ _ _ _).
 iApply (wp_nsl_resp with "ctx p_e_kB [token] [] [dh]") => //.
 - solve_ndisj.
 - rewrite /crypto_meta_token nonces_of_term_TExp /=.
-  rewrite nonces_of_term_eq right_id_L left_id_L /=.
+  rewrite g0 nonces_of_term_eq right_id_L left_id_L /=.
   iSplit; first by iPureIntro; set_solver.
   rewrite big_sepS_singleton.
   rewrite (meta_token_difference _ (↑N.@"nsl")).
     by iDestruct "token" as "[??]".
   by solve_ndisj.
-- rewrite sterm_TExp sterm_TInt /=; eauto.
+- rewrite sterm_TExp /=; iSplit; eauto.
+  by iApply dh_gen_sterm; iApply nonces_of_term_dh_gen.
 - iIntros (kA nA).
   iMod (meta_set _ b kA with "dh") as "#meta"; eauto.
   iModIntro; iSplit.
-  + by iModIntro; rewrite [corruption _ _]comm; by iApply pterm_dh1.
+  + iModIntro; rewrite [corruption _ _]comm.
+    by iApply pterm_nsl_dh1 => //; iApply nonces_of_term_dh_gen.
   + iExists (TNonce b); iSplit => //.
     iIntros "!> %".
     rewrite -[ [a; TNonce b]]/(seq.cat [a] [TNonce b]) TExpC /=.
-    by iIntros "#?"; iApply pterm_dh2.
+    by iIntros "#?"; iApply pterm_nsl_dh2.
 iIntros ([[pkA nA]|]) "resp"; last by protocol_failure.
 iDestruct "resp" as (kA) "# (-> & p_e_kA & s_nA & p_nA & inv)".
 wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
@@ -237,10 +197,7 @@ rewrite -[ [TNonce b; t]]/(seq.cat [TNonce b] [t]) TExpC /=.
 iRight; iIntros "!> #contra".
 iSpecialize ("inv" with "contra").
 iDestruct "inv" as ">inv".
-rewrite pterm_TNonce.
-iPoseProof (publishedE with "b_pred inv") as "{inv} inv".
-iModIntro.
-by iDestruct (nsl_dh_predN with "inv") as "[]".
+by iApply dh_nonce_elim0.
 Qed.
 
 End NSLDH.
