@@ -996,73 +996,35 @@ End SShare.
 Coercion SShare.term_of : SShare.t >-> term.
 Existing Instance SShare.Persistent_wf.
 
-Module S.
+Module CParams.
 
-Record client_params := ClientParams {
-  cp_share : CShare.t;
-  cp_other : term;
+Record t := Params {
+  share : CShare.t;
+  other : term;
 }.
 
-Definition ser_client_params N cp :=
-  {| cp_share := CShare.encode N (cp_share cp);
-     cp_other := cp_other cp; |}.
+Definition encode N cp :=
+  {| share := CShare.encode N (share cp);
+     other := other cp |}.
 
-Record server_params := ServerParams {
-  sp_share : SShare.t;
-  sp_verif_key : term;
-  sp_other : term;
-}.
+Definition term_of cp :=
+  Spec.of_list [CShare.term_of (share cp); other cp].
 
-Definition ser_server_params sp :=
-  {| sp_share := SShare.encode (sp_share sp);
-     sp_verif_key := sp_verif_key sp;
-     sp_other := sp_other sp |}.
+Definition hello_pub N cp :=
+  term_of (encode N cp).
 
-Definition term_of_client_params cp :=
-  Spec.of_list [
-    CShare.term_of (cp_share cp);
-    cp_other cp
-  ].
-
-Definition term_of_server_params sp :=
-  Spec.of_list [
-    SShare.term_of (sp_share sp);
-    sp_verif_key sp;
-    sp_other sp
-  ].
-
-Definition client_hello_pub N cp :=
-  term_of_client_params (ser_client_params N cp).
-
-Definition client_hello_mac N cp :=
-  let ch := client_hello_pub N cp in
-  let psk := CShare.psk (cp_share cp) in
+Definition hello_mac N cp :=
+  let ch := hello_pub N cp in
+  let psk := CShare.psk (share cp) in
   THash (Spec.tag (N.@"binder") (Spec.of_list [psk; ch])).
 
-Definition client_hello N cp :=
+Definition hello N cp :=
   Spec.of_list [
-    client_hello_pub N cp;
-    client_hello_mac N cp
+    hello_pub N cp;
+    hello_mac N cp
   ].
 
-Definition server_hello_pub sp :=
-  Spec.of_list [
-    SShare.term_of (SShare.encode (sp_share sp));
-    sp_other sp
-  ].
-
-Definition server_hello N psk sp :=
-  let pub := server_hello_pub sp in
-  let enc := Spec.of_list [
-    TKey Dec (sp_verif_key sp);
-    TEnc (sp_verif_key sp) (Spec.tag (N.@"server_hello_sig") (THash pub))
-  ] in let session_key := SShare.session_key_of N psk (sp_share sp) in
-  Spec.of_list [
-    pub;
-    TEnc session_key (Spec.tag (N.@"server_hello") enc)
-  ].
-
-Definition check_client_hello N psk g other ch :=
+Definition check N psk g other ch :=
   ch ← Spec.to_list ch;
   '(ch, mac) ← prod_of_list 2 ch;
   ch' ← Spec.to_list ch;
@@ -1072,61 +1034,9 @@ Definition check_client_hello N psk g other ch :=
   let mac' := THash (Spec.tag (N.@"binder") (Spec.of_list [psk; ch])) in
   if decide (other' = other ∧ mac' = mac) then Some ke else None.
 
-Definition verify N k x sig :=
-  match Spec.tdec N k sig with
-  | Some y => bool_decide (y = THash x)
-  | None => false
-  end.
-
-Definition check_server_hello N cp sp :=
-  sp ← Spec.to_list sp;
-  '(pub, sig) ← prod_of_list 2 sp;
-  pub' ← Spec.to_list pub;
-  '(kex, other) ← prod_of_list 2 pub';
-  session_key ← SShare.check N (cp_share cp) kex;
-  dec_sig ← Spec.tdec (N.@"server_hello") (TKey Dec session_key) sig;
-  dec_sig ← Spec.to_list dec_sig;
-  '(verif_key, sig) ← prod_of_list 2 dec_sig;
-  if decide (other = cp_other cp) then
-    if verify (N.@"server_hello_sig") verif_key pub sig then
-      Some session_key
-    else None
-  else None.
-
-Section Properties.
-
-Context `{!heapG Σ, cryptoG Σ}.
-Notation iProp := (iProp Σ).
-
-Implicit Types t : term.
-Implicit Types P : term → iProp.
-Implicit Types Φ : val → iProp.
-
-(* TODO Prove and strengthen *)
-Lemma pterm_client_hello N cp :
-  pterm (CShare.encode N (cp_share cp)) -∗
-  pterm (cp_other cp) -∗
-  pterm (client_hello N cp).
-Proof.
-Admitted.
-
-End Properties.
-
-End S.
-
 Module I.
 
-Section I.
-
-Context `{!heapG Σ, !cryptoG Σ, !network Σ}.
-Notation iProp := (iProp Σ).
-
-Implicit Types t : term.
-Implicit Types s : session_view.
-Implicit Types rl : role.
-Implicit Types Φ : val → iProp.
-
-Definition client_hello N : val := λ: "cp",
+Definition hello N : val := λ: "cp",
   bind: "cp" := list_of_term "cp" in
   list_match: ["kex"; "other"] := "cp" in
   let: "ts" := term_of_list [CShare.I.encode N "kex"; "other"] in
@@ -1134,11 +1044,31 @@ Definition client_hello N : val := λ: "cp",
   let: "mac" := hash (tag (N.@"binder") (term_of_list ["psk"; "ts"])) in
   term_of_list ["ts"; "mac"].
 
-Lemma wp_client_hello N cp E Φ :
-  Φ (S.client_hello N cp) -∗
-  WP client_hello N (S.term_of_client_params cp) @ E {{ Φ }}.
+Definition check N : val := λ: "psk" "g" "other" "ch",
+  bind: "ch" := list_of_term "ch" in
+  list_match: ["ch"; "mac"] := "ch" in
+  bind: "ch'" := list_of_term "ch" in
+  list_match: ["ke"; "other'"] := "ch'" in
+  bind: "ke" := CShare.I.of_term "ke" in
+  bind: "psk" := CShare.I.check N "psk" "g" "ke" in
+  let: "mac'" := hash (tag (N.@"binder") (term_of_list ["psk"; "ch"])) in
+  if: eq_term "other'" "other" && eq_term "mac'" "mac" then SOME "ke" else NONE.
+
+End I.
+
+Section Proofs.
+
+Context `{!heapG Σ, cryptoG Σ}.
+Notation iProp := (iProp Σ).
+
+Implicit Types t : term.
+Implicit Types Φ : val → iProp.
+
+Lemma wp_hello N cp E Φ :
+  Φ (hello N cp) -∗
+  WP I.hello N (term_of cp) @ E {{ Φ }}.
 Proof.
-iIntros "post"; rewrite /client_hello; wp_pures.
+iIntros "post"; rewrite /I.hello; wp_pures.
 wp_list_of_term_eq t e; last by rewrite Spec.of_listK in e.
 move/Spec.of_list_inj: e => <-.
 wp_list_match => // _ _ [] <- <-.
@@ -1149,80 +1079,11 @@ wp_pures; wp_list; wp_term_of_list; wp_tag; wp_hash.
 by wp_pures; wp_list; iApply wp_term_of_list.
 Qed.
 
-Definition server_params_match : val := λ: "sp" "f",
-  bind: "sp'" := list_of_term "sp" in
-  list_match: ["kex"; "verif_key"; "other"] := "sp'" in
-  "f" "kex" "verif_key" "other".
-
-Lemma wp_server_params_match sp (f : val) E Φ :
-  WP f (S.sp_share sp)
-       (S.sp_verif_key sp)
-       (S.sp_other sp) @ E {{ Φ }} -∗
-  WP server_params_match (S.term_of_server_params sp) f @ E {{ Φ }}.
+Lemma wp_check N psk g other ch E Φ :
+  Φ (repr (CShare.term_of <$> check N psk g other ch)) -∗
+  WP I.check N psk g other ch @ E {{ Φ }}.
 Proof.
-iIntros "?"; rewrite /server_params_match; wp_pures.
-wp_list_of_term_eq l e; last by rewrite Spec.of_listK in e.
-move/Spec.of_list_inj: e => {l} <-.
-by wp_list_match => // _ _ _ [] <- <- <-.
-Qed.
-
-Definition server_hello_pub : val := λ: "sp",
-  server_params_match "sp" (λ: "kex" "verif_key" "other",
-    term_of_list [SShare.I.encode "kex"; "other"]).
-
-Lemma wp_server_hello_pub sp E Φ :
-  Φ (S.server_hello_pub sp) -∗
-  WP server_hello_pub (S.term_of_server_params sp) @ E {{ Φ }}.
-Proof.
-iIntros "?"; rewrite /server_hello_pub; wp_pures.
-iApply wp_server_params_match; wp_pures.
-wp_list.
-wp_bind (SShare.I.encode _); iApply SShare.wp_encode.
-by wp_list; wp_term_of_list.
-Qed.
-
-Definition server_hello N : val := λ: "psk" "sp",
-  server_params_match "sp" (λ: "kex" "verif_key" "other",
-    let: "pub" := server_hello_pub "sp" in
-    let: "verif_key" := mkkey "verif_key" in
-    bind: "enc" :=
-      tenc (N.@"server_hello_sig") (Fst "verif_key") (hash "pub") in
-    let: "enc" := term_of_list [Snd "verif_key"; "enc"] in
-    let: "session_key" := mkkey (SShare.I.session_key_of N "psk" "kex") in
-    bind: "enc" := tenc (N.@"server_hello") (Fst "session_key") "enc" in
-    term_of_list ["pub"; "enc"]
-  ).
-
-Lemma wp_server_hello N psk sp E Φ :
-  Φ (S.server_hello N psk sp) -∗
-  WP server_hello N psk (S.term_of_server_params sp) @ E {{ Φ }}.
-Proof.
-iIntros "?"; rewrite /server_hello; wp_pures.
-iApply wp_server_params_match; wp_pures.
-wp_bind (server_hello_pub _); iApply wp_server_hello_pub; wp_pures.
-wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
-wp_hash; wp_tenc; wp_pures.
-wp_list; wp_term_of_list; wp_pures.
-wp_bind (SShare.I.session_key_of _ _ _); iApply SShare.wp_session_key_of.
-wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
-by wp_tenc; wp_pures; wp_list; wp_term_of_list.
-Qed.
-
-Definition check_client_hello N : val := λ: "psk" "g" "other" "ch",
-  bind: "ch" := list_of_term "ch" in
-  list_match: ["ch"; "mac"] := "ch" in
-  bind: "ch'" := list_of_term "ch" in
-  list_match: ["ke"; "other'"] := "ch'" in
-  bind: "ke" := CShare.I.of_term "ke" in
-  bind: "psk" := CShare.I.check N "psk" "g" "ke" in
-  let: "mac'" := hash (tag (N.@"binder") (term_of_list ["psk"; "ch"])) in
-  if: eq_term "other'" "other" && eq_term "mac'" "mac" then SOME "ke" else NONE.
-
-Lemma wp_check_client_hello N psk g other ch E Φ :
-  Φ (repr (CShare.term_of <$> S.check_client_hello N psk g other ch)) -∗
-  WP check_client_hello N psk g other ch @ E {{ Φ }}.
-Proof.
-iIntros "?"; rewrite /check_client_hello /S.check_client_hello.
+iIntros "?"; rewrite /check /I.check.
 wp_pures.
 wp_list_of_term_eq l e; wp_pures; last by rewrite e.
 rewrite {}e Spec.of_listK /=.
@@ -1247,23 +1108,100 @@ wp_eq_term e'; wp_pures; last first.
 by rewrite {}e' decide_True //.
 Qed.
 
+End Proofs.
+
+End CParams.
+
+Coercion CParams.term_of : CParams.t >-> term.
+
+Module SParams.
+
+Record t := Params {
+  share : SShare.t;
+  verif_key : term;
+  other : term;
+}.
+
+Definition encode sp :=
+  {| share := SShare.encode (share sp);
+     verif_key := verif_key sp;
+     other := other sp |}.
+
+Definition term_of sp :=
+  Spec.of_list [
+    SShare.term_of (share sp);
+    verif_key sp;
+    other sp
+  ].
+
+Definition hello_pub sp :=
+  Spec.of_list [
+    SShare.term_of (SShare.encode (share sp));
+    other sp
+  ].
+
+Definition hello N psk sp :=
+  let pub := hello_pub sp in
+  let enc := Spec.of_list [
+    TKey Dec (verif_key sp);
+    TEnc (verif_key sp) (Spec.tag (N.@"server_hello_sig") (THash pub))
+  ] in let session_key := SShare.session_key_of N psk (share sp) in
+  Spec.of_list [
+    pub;
+    TEnc session_key (Spec.tag (N.@"server_hello") enc)
+  ].
+
+Definition verify N k x sig :=
+  match Spec.tdec N k sig with
+  | Some y => bool_decide (y = THash x)
+  | None => false
+  end.
+
+Definition check N cp sp :=
+  sp ← Spec.to_list sp;
+  '(pub, sig) ← prod_of_list 2 sp;
+  pub' ← Spec.to_list pub;
+  '(kex, other') ← prod_of_list 2 pub';
+  session_key ← SShare.check N (CParams.share cp) kex;
+  dec_sig ← Spec.tdec (N.@"server_hello") (TKey Dec session_key) sig;
+  dec_sig ← Spec.to_list dec_sig;
+  '(verif_key, sig) ← prod_of_list 2 dec_sig;
+  if decide (other' = CParams.other cp) then
+    if verify (N.@"server_hello_sig") verif_key pub sig then
+      Some session_key
+    else None
+  else None.
+
+Module I.
+
+Definition case : val := λ: "sp" "f",
+  bind: "sp'" := list_of_term "sp" in
+  list_match: ["kex"; "verif_key"; "other"] := "sp'" in
+  "f" "kex" "verif_key" "other".
+
+Definition hello_pub : val := λ: "sp",
+  case "sp" (λ: "kex" "verif_key" "other",
+    term_of_list [SShare.I.encode "kex"; "other"]).
+
+Definition hello N : val := λ: "psk" "sp",
+  case "sp" (λ: "kex" "verif_key" "other",
+    let: "pub" := hello_pub "sp" in
+    let: "verif_key" := mkkey "verif_key" in
+    bind: "enc" :=
+      tenc (N.@"server_hello_sig") (Fst "verif_key") (hash "pub") in
+    let: "enc" := term_of_list [Snd "verif_key"; "enc"] in
+    let: "session_key" := mkkey (SShare.I.session_key_of N "psk" "kex") in
+    bind: "enc" := tenc (N.@"server_hello") (Fst "session_key") "enc" in
+    term_of_list ["pub"; "enc"]
+  ).
+
 Definition verify N : val := λ: "k" "x" "sig",
   match: tdec N "k" "sig" with
     SOME "y" => eq_term "y" (hash "x")
   | NONE => #false
   end.
 
-Lemma wp_verify N k x sig E Φ :
-  Φ #(S.verify N k x sig) -∗
-  WP verify N k x sig @ E {{ Φ }}.
-Proof.
-iIntros "?"; rewrite /verify; wp_pures.
-wp_bind (tdec _ _ _); iApply wp_tdec.
-rewrite /S.verify; case e: Spec.tdec => [y|]; wp_pures => //.
-by wp_hash; iApply wp_eq_term.
-Qed.
-
-Definition check_server_hello N : val := λ: "cp" "sh",
+Definition check N : val := λ: "cp" "sh",
   bind: "cp" := list_of_term "cp" in
   list_match: ["c_kex"; "c_other"] := "cp" in
   bind: "sh" := list_of_term "sh" in
@@ -1281,11 +1219,69 @@ Definition check_server_hello N : val := λ: "cp" "sh",
     else NONE
   else NONE.
 
-Lemma wp_check_server_hello N cp sh E Φ :
-  Φ (repr (S.check_server_hello N cp sh)) -∗
-  WP check_server_hello N (S.term_of_client_params cp) sh @ E {{ Φ }}.
+End I.
+
+Section Proofs.
+
+Context `{!heapG Σ, cryptoG Σ}.
+Notation iProp := (iProp Σ).
+
+Implicit Types t : term.
+Implicit Types Φ : val → iProp.
+
+Lemma wp_case sp (f : val) E Φ :
+  WP f (share sp)
+       (verif_key sp)
+       (other sp) @ E {{ Φ }} -∗
+  WP I.case (term_of sp) f @ E {{ Φ }}.
 Proof.
-iIntros "?"; rewrite /check_server_hello /S.check_server_hello; wp_pures.
+iIntros "?"; rewrite /I.case; wp_pures.
+wp_list_of_term_eq l e; last by rewrite Spec.of_listK in e.
+move/Spec.of_list_inj: e => {l} <-.
+by wp_list_match => // _ _ _ [] <- <- <-.
+Qed.
+
+Lemma wp_hello_pub sp E Φ :
+  Φ (hello_pub sp) -∗
+  WP I.hello_pub (term_of sp) @ E {{ Φ }}.
+Proof.
+iIntros "?"; rewrite /I.hello_pub; wp_pures.
+iApply wp_case; wp_pures.
+wp_list.
+wp_bind (SShare.I.encode _); iApply SShare.wp_encode.
+by wp_list; wp_term_of_list.
+Qed.
+
+Lemma wp_hello N psk sp E Φ :
+  Φ (hello N psk sp) -∗
+  WP I.hello N psk (term_of sp) @ E {{ Φ }}.
+Proof.
+iIntros "?"; rewrite /I.hello; wp_pures.
+iApply wp_case; wp_pures.
+wp_bind (I.hello_pub _); iApply wp_hello_pub; wp_pures.
+wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
+wp_hash; wp_tenc; wp_pures.
+wp_list; wp_term_of_list; wp_pures.
+wp_bind (SShare.I.session_key_of _ _ _); iApply SShare.wp_session_key_of.
+wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
+by wp_tenc; wp_pures; wp_list; wp_term_of_list.
+Qed.
+
+Lemma wp_verify N k x sig E Φ :
+  Φ #(verify N k x sig) -∗
+  WP I.verify N k x sig @ E {{ Φ }}.
+Proof.
+iIntros "?"; rewrite /I.verify; wp_pures.
+wp_bind (tdec _ _ _); iApply wp_tdec.
+rewrite /verify; case e: Spec.tdec => [y|]; wp_pures => //.
+by wp_hash; iApply wp_eq_term.
+Qed.
+
+Lemma wp_check N cp sh E Φ :
+  Φ (repr (check N cp sh)) -∗
+  WP I.check N cp sh @ E {{ Φ }}.
+Proof.
+iIntros "?"; rewrite /I.check /check; wp_pures.
 wp_list_of_term_eq l e; last by rewrite Spec.of_listK in e.
 move/Spec.of_list_inj: e => <- {l}; wp_pures.
 wp_list_match => // _ _ [] <- <-; wp_finish.
@@ -1311,27 +1307,43 @@ wp_list_match=> [verif_key sig' -> {l}|ne]; wp_finish; last first.
 rewrite [in prod_of_list 2 [verif_key; sig']]unlock /=.
 wp_eq_term e; wp_pures; last by rewrite decide_False.
 rewrite {}e decide_True //= {s_other}.
-wp_bind (verify _ _ _ _); iApply wp_verify.
-by case: S.verify; wp_pures.
+wp_bind (I.verify _ _ _ _); iApply wp_verify.
+by case: verify; wp_pures.
 Qed.
+
+End Proofs.
+
+End SParams.
+
+Coercion SParams.term_of : SParams.t >-> term.
+
+Section Protocol.
+
+Context `{!heapG Σ, !cryptoG Σ, !network Σ}.
+Notation iProp := (iProp Σ).
+
+Implicit Types t : term.
+Implicit Types s : session_view.
+Implicit Types rl : role.
+Implicit Types Φ : val → iProp.
 
 Definition client N : val := λ: "kex" "other",
   let: "kex" := CShare.I.new "kex" in
   let: "cp"  := term_of_list ["kex"; "other"] in
-  let: "ch"  := client_hello N "cp" in
+  let: "ch"  := CParams.I.hello N "cp" in
   send "ch";;
   let: "sh" := recv #() in
-  check_server_hello N "cp" "sh".
+  SParams.I.check N "cp" "sh".
 
 Lemma wp_client N ke other E Φ :
   inv N -∗
   Meth.wf ke -∗
   pterm other -∗
   (∀ cp sh,
-      ⌜ke = CShare.meth_of (S.cp_share cp)⌝ →
-      ⌜other = S.cp_other cp⌝ →
+      ⌜ke = CShare.meth_of (CParams.share cp)⌝ →
+      ⌜other = CParams.other cp⌝ →
       pterm sh →
-      Φ (repr (S.check_server_hello N cp sh))) -∗
+      Φ (repr (SParams.check N cp sh))) -∗
   WP client N ke other @ E {{ Φ }}.
 Proof.
 iIntros "#inv #p_ke #p_other post".
@@ -1339,24 +1351,23 @@ rewrite /client; wp_pures.
 wp_bind (CShare.I.new _); iApply CShare.wp_new => //.
 iIntros (ke' e) "#p_ke'"; wp_pures.
 wp_list; wp_term_of_list.
-wp_pures; wp_bind (client_hello _ _).
-pose cp := {| S.cp_share := ke'; S.cp_other := other |}.
-iApply (wp_client_hello N cp).
+wp_pures; wp_bind (CParams.I.hello _ _).
+pose cp := {| CParams.share := ke'; CParams.other := other |}.
+iApply (CParams.wp_hello N cp).
 wp_pures; wp_bind (send _); iApply wp_send.
-  iModIntro; iApply S.pterm_client_hello => //.
-  by iApply CShare.wf_encode.
+  admit.
 wp_pures; wp_bind (recv _); iApply wp_recv.
 iIntros (sh) "p_sh"; wp_pures.
-iApply (wp_check_server_hello N cp).
+iApply (SParams.wp_check N cp).
 by iApply "post" => //.
-Qed.
+Admitted.
 
 Definition server N : val := λ: "psk" "g" "verif_key" "other",
   let: "ch" := recv #() in
-  bind: "ke" := check_client_hello N "psk" "g" "other" "ch" in
+  bind: "ke" := CParams.I.check N "psk" "g" "other" "ch" in
   let: "ke'" := SShare.I.new "ke" in
   let: "sp"  := term_of_list ["ke'"; "verif_key"; "other"] in
-  let: "sh"  := server_hello N "psk" "sp" in
+  let: "sh"  := SParams.I.hello N "psk" "sp" in
   send "sh" ;;
   SOME (SShare.I.session_key_of N "psk" "ke'").
 
@@ -1374,9 +1385,9 @@ iIntros (g0) "#p_psk #p_g #p_sign #p_verif #p_other post".
 rewrite /server; wp_pures.
 wp_bind (recv _); iApply wp_recv.
 iIntros (ch) "#p_ch"; wp_pures.
-wp_bind (check_client_hello _ _ _ _ _).
-iApply wp_check_client_hello.
-case e: S.check_client_hello => [ke|] //=; wp_pures; last first.
+wp_bind (CParams.I.check _ _ _ _ _).
+iApply CParams.wp_check.
+case e: CParams.check => [ke|] //=; wp_pures; last first.
   by iApply ("post" $! None).
 wp_bind (SShare.I.new _); iApply SShare.wp_new; eauto.
 - admit.
@@ -1384,9 +1395,9 @@ wp_bind (SShare.I.new _); iApply SShare.wp_new; eauto.
 - admit.
 iIntros (ke') "%e' #p_ke'"; wp_pures.
 wp_list; wp_term_of_list.
-pose sp := S.ServerParams ke' verif_key other.
+pose sp := SParams.Params ke' verif_key other.
 wp_pures.
-wp_bind (server_hello _ _ _); iApply (wp_server_hello _ _ sp).
+wp_bind (SParams.I.hello _ _ _); iApply (SParams.wp_hello _ _ sp).
 wp_pures; wp_bind (send _); iApply wp_send.
   admit.
 wp_pures.
@@ -1395,6 +1406,4 @@ wp_pures; iApply ("post" $! (Some (SShare.session_key_of N psk ke'))) => /=.
 admit. (* Shouldn't be provable: the session key is not public! *)
 Admitted.
 
-End I.
-
-End I.
+End Protocol.
