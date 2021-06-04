@@ -11,19 +11,13 @@ Unset Printing Implicit Defensive.
 
 Section NSL.
 
-Context `{!heapG Σ, !cryptoG Σ, !network Σ}.
+Context `{!heapG Σ, !cryptoG Σ, !network Σ, !sessionG Σ}.
+Context (γ : gname).
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
 Implicit Types s : session_view.
 Implicit Types rl : role.
-
-Class nslG := {
-  in_nsl_sessG :> sessionG Σ;
-  nsl_sess_name : gname;
-}.
-
-Context `{!nslG}.
 
 Definition corruption kA kB : iProp :=
   pterm (TKey Dec kA) ∨ pterm (TKey Dec kB).
@@ -40,12 +34,12 @@ Definition msg2_pred kA m2 : iProp :=
   ∃ nA nB kB,
     ⌜m2 = Spec.of_list [nA; nB; TKey Enc kB]⌝ ∧
     (pterm nB ↔ ▷ corruption kA kB) ∧
-    session nsl_sess_name Resp kA kB nA nB.
+    session γ Resp kA kB nA nB.
 
 Definition msg3_pred kB nB : iProp :=
   ∀ nA kA,
-    session nsl_sess_name Resp kA kB nA nB -∗
-    session nsl_sess_name Init kA kB nA nB ∧
+    session γ Resp kA kB nA nB -∗
+    session γ Init kA kB nA nB ∧
     (pterm nA ↔ ▷ corruption kA kB).
 
 Variable N : namespace.
@@ -53,10 +47,10 @@ Variable N : namespace.
 Variable nsl_sess_inv : role → term → term → term → term → iProp.
 
 Definition nsl_inv : iProp :=
-  session_inv nsl_sess_name N nsl_sess_inv.
+  session_inv γ nsl_sess_inv.
 
 Definition nsl_ctx : iProp :=
-  session_ctx nsl_sess_name N nsl_sess_inv ∧
+  session_ctx γ N nsl_sess_inv ∧
   enc_pred (N.@"m1") msg1_pred ∧
   enc_pred (N.@"m2") msg2_pred ∧
   enc_pred (N.@"m3") msg3_pred.
@@ -66,7 +60,7 @@ Proof. apply _. Qed.
 
 Lemma nsl_ctx_session_ctx :
   nsl_ctx -∗
-  session_ctx nsl_sess_name N nsl_sess_inv.
+  session_ctx γ N nsl_sess_inv.
 Proof. by iIntros "( ? & ? )". Qed.
 
 Ltac protocol_failure :=
@@ -125,7 +119,7 @@ Lemma pterm_msg2I kA kB nA nB :
   □ (pterm (TKey Dec kA) → pterm nA) -∗
   sterm nB -∗
   □ (pterm nB ↔ ▷ corruption kA kB) -∗
-  session nsl_sess_name Resp kA kB nA nB -∗
+  session γ Resp kA kB nA nB -∗
   ▷ pterm (TEnc kA (Spec.tag (N.@"m2") (Spec.of_list [nA; nB; TKey Enc kB]))).
 Proof.
 iIntros "# (_ & _ & Hm2 & _) #HAenc #HBenc #HnAhi #HnAlo #HnBhi #HnBlo #sess !>".
@@ -166,7 +160,7 @@ Lemma pterm_msg2E kA kB nA nB :
   ▷ (sterm nB ∧
      (pterm nB ↔ ▷ corruption kA kB) ∧
      ▷ (corruption kA kB ∨
-        session nsl_sess_name Resp kA kB nA nB)).
+        session γ Resp kA kB nA nB)).
 Proof.
 iIntros "# (_ & _ & ? & _) #p_nA #Hts".
 iDestruct (pterm_TEncE with "Hts [//]") as "{Hts} [[? Hts] | Hts]".
@@ -188,8 +182,8 @@ Lemma pterm_msg3I kA kB nA nB :
   □ (pterm nA ↔ ▷ corruption kA kB) -∗
   sterm nB -∗
   □ (pterm nB ↔ ▷ corruption kA kB) -∗
-  session nsl_sess_name Resp kA kB nA nB -∗
-  session nsl_sess_name Init kA kB nA nB -∗
+  session γ Resp kA kB nA nB -∗
+  session γ Init kA kB nA nB -∗
   pterm (TEnc kB (Spec.tag (N.@"m3") nB)).
 Proof.
 iIntros "(_ & _ & _ & #Hm3) #p_kA #p_kB #p_nA #s_nB #p_nB #sessA #sessB".
@@ -203,11 +197,11 @@ Qed.
 
 Lemma pterm_msg3E kA kB nA nB :
   nsl_ctx -∗
-  session nsl_sess_name Resp kA kB nA nB -∗
+  session γ Resp kA kB nA nB -∗
   □ (pterm nB ↔ ▷ corruption kA kB) -∗
   pterm (TEnc kB (Spec.tag (N.@"m3") nB)) -∗
   ▷ (corruption kA kB ∨
-     session nsl_sess_name Init kA kB nA nB ∧
+     session γ Init kA kB nA nB ∧
      (pterm nA ↔ ▷ corruption kA kB)).
 Proof.
 iIntros "(_ & _ & _ & #Hm3) #sessB #p_nB #p_m3".
@@ -226,7 +220,7 @@ Lemma wp_nsl_init kA kB (nA : term) E Ψ :
   sterm nA -∗
   □ (pterm nA ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))) -∗
   (∀ nB, nsl_sess_inv Init kA kB nA nB) -∗
-  crypto_meta_token nA (↑N) -∗
+  fresh_key nA -∗
   (∀ onB : option term,
       (if onB is Some nB then
          sterm nB ∧
@@ -270,7 +264,7 @@ Lemma wp_nsl_resp kB E Ψ nB :
   ↑N ⊆ E →
   nsl_ctx -∗
   pterm (TKey Enc kB) -∗
-  crypto_meta_token nB (↑N) -∗
+  fresh_key nB -∗
   sterm nB -∗
   (∀ kA nA, |==> □ (pterm nB ↔ ▷ corruption kA kB) ∗
                  nsl_sess_inv Resp kA kB nA nB) -∗
@@ -331,5 +325,3 @@ iExists kA; do 4!iSplit => //; by eauto.
 Qed.
 
 End NSL.
-
-Arguments nslG Σ : clear implicits.

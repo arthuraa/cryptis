@@ -13,13 +13,14 @@ Unset Printing Implicit Defensive.
 
 Section NSLDH.
 
-Context `{!cryptoG Σ, !heapG Σ, !network Σ, !nslG Σ}.
+Context `{!cryptoG Σ, !heapG Σ, !network Σ, !inG Σ sessionR}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
 Implicit Types s : session_view.
 Implicit Types rl : role.
 
+Variable γ : gname.
 Variable N : namespace.
 
 Ltac protocol_failure :=
@@ -42,6 +43,25 @@ Definition nsl_dh_resp : val := λ: "g" "skB" "pkB",
 Implicit Types Ψ : val → iProp.
 Implicit Types kA kB : term.
 
+Program Instance nsl_dh_session : sessionG Σ := {|
+  session_inG := _;
+  fresh_key t := (∃ g a, ⌜t = TExp g [a]⌝ ∧ term_meta_token a (↑N.@"fresh"))%I;
+  used_key  t := (∃ g a, ⌜t = TExp g [a]⌝ ∧ term_meta a (N.@"fresh") ())%I;
+|}.
+
+Next Obligation.
+iIntros (t); iDestruct 1 as (g a) "[-> token]".
+iDestruct 1 as (g' a') "[%e meta]".
+move/TExp_inj: e => [] _ /Permutation_singleton [] ->.
+by iApply (term_meta_meta_token with "token meta").
+Qed.
+
+Next Obligation.
+iIntros (t); iDestruct 1 as (g a) "[-> token]".
+iMod (term_meta_set _ (N.@"fresh") _ () with "token") as "meta"; try set_solver.
+by eauto.
+Qed.
+
 Definition nsl_dh_inv g rl kA kB ga gb : iProp :=
   match rl with
   | Init =>
@@ -53,19 +73,19 @@ Definition nsl_dh_inv g rl kA kB ga gb : iProp :=
   end%I.
 
 Definition nsl_dh_fail (k : term) a : iProp :=
-  ∃ k', crypto_meta a (N.@"peer") k' ∧ corruption k k'.
+  ∃ k', term_meta a (N.@"peer") k' ∧ corruption k k'.
 
 Lemma pterm_nsl_dh1 g a k k' :
-  dh_gen g -∗
+  sterm g -∗
   dh_seed (nsl_dh_fail k) a -∗
-  crypto_meta a (N.@"peer") k' -∗
+  term_meta a (N.@"peer") k' -∗
   pterm (TExp g [a])  ↔ ▷ corruption k k'.
 Proof.
 iIntros "#gP #a_pred #meta"; iSplit.
 - iIntros "#p_e".
   iDestruct (dh_seed_elim1 with "a_pred p_e") as (k'') "[meta' corr]".
   iModIntro.
-  by iPoseProof (crypto_meta_agree with "meta meta'") as "<-".
+  by iPoseProof (term_meta_agree with "meta meta'") as "<-".
 - iIntros "#corr".
   iApply dh_pterm_TExp; eauto.
   by iExists k'; iModIntro; iModIntro; iSplit; eauto.
@@ -81,9 +101,8 @@ Qed.
 
 Lemma wp_nsl_dh_init g kA kB E Ψ :
   ↑N ⊆ E →
-  N ## cryptoN.@"nonce" →
-  nonces_of_term g = ∅ →
-  nsl_ctx (N.@"nsl") (nsl_dh_inv g) -∗
+  nsl_ctx γ (N.@"nsl") (nsl_dh_inv g) -∗
+  sterm g -∗
   pterm (TKey Enc kA) -∗
   pterm (TKey Enc kB) -∗
   (∀ ogab : option term,
@@ -94,30 +113,28 @@ Lemma wp_nsl_dh_init g kA kB E Ψ :
       Ψ (repr ogab)) -∗
   WP nsl_dh_init g (TKey Dec kA) (TKey Enc kA) (TKey Enc kB) @ E {{ Ψ }}.
 Proof.
-iIntros (?? g0) "#ctx #p_e_kA #p_e_kB Hpost".
+iIntros (?) "#ctx #s_g #p_e_kA #p_e_kB Hpost".
 rewrite /nsl_dh_init; wp_pures; wp_bind (mknonce _).
 iApply (wp_mkdh (nsl_dh_fail kA)).
 iIntros (a) "#s_a #a_pred token".
-rewrite (crypto_meta_token_difference _ (↑N.@"peer")); last solve_ndisj.
+rewrite (term_meta_token_difference _ (↑N.@"peer")); last solve_ndisj.
 iDestruct "token" as "[dh token]".
-iMod (crypto_meta_set _ _ _ kB with "dh") as "#dh"; eauto.
+iMod (term_meta_set _ _ _ kB with "dh") as "#dh"; eauto.
 wp_pures; wp_bind (tgroup _); iApply wp_tgroup.
 wp_pures; wp_bind (texp _ _); iApply wp_texp.
 rewrite Spec.texpA; wp_pures; wp_bind (nsl_init _ _ _ _ _).
 iApply (wp_nsl_init with "ctx p_e_kA p_e_kB [] [] [] [token]") => //.
 - solve_ndisj.
-- rewrite sterm_TExp /=; iSplit.
-    by iApply dh_gen_sterm; iApply nonces_of_term_dh_gen.
+- rewrite sterm_TExp /=; iSplit => //.
   by rewrite /=; iSplit.
-- by iModIntro; iApply pterm_nsl_dh1; eauto; iApply nonces_of_term_dh_gen.
+- by iModIntro; iApply pterm_nsl_dh1.
 - iIntros (nB); rewrite /=.
   iExists a; iSplit => //.
   iModIntro; iIntros (b) "p_b".
   by iApply pterm_nsl_dh2.
-- rewrite (crypto_meta_token_difference _ (↑N.@"nsl")); last solve_ndisj.
+- rewrite (term_meta_token_difference _ (↑N.@"fresh")); last solve_ndisj.
   iDestruct "token" as "[token _]".
-  rewrite /crypto_meta_token nonces_of_term_TExp /=.
-  by rewrite g0 nonces_of_term_eq right_id_L left_id_L /=.
+  by iExists _, _; eauto.
 iIntros (onB) "pub"; case: onB=> [nB|]; last by protocol_failure.
 iDestruct "pub" as "# [s_nB [fail | succ]]".
   wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
@@ -137,9 +154,8 @@ Qed.
 
 Lemma wp_dh_responder g kB E Ψ :
   ↑N ⊆ E →
-  N ## cryptoN.@"nonce" →
-  nonces_of_term g = ∅ →
-  nsl_ctx (N.@"nsl") (nsl_dh_inv g) -∗
+  nsl_ctx γ (N.@"nsl") (nsl_dh_inv g) -∗
+  sterm g -∗
   pterm (TKey Enc kB) -∗
   (∀ oresp : option (term * term),
       (if oresp is Some (pkA, gab) then
@@ -152,28 +168,25 @@ Lemma wp_dh_responder g kB E Ψ :
       Ψ (repr oresp)) -∗
   WP nsl_dh_resp g (TKey Dec kB) (TKey Enc kB) @ E {{ Ψ }}.
 Proof.
-iIntros (?? g0) "#ctx #p_e_kB Hpost".
+iIntros (?) "#ctx #s_g #p_e_kB Hpost".
 rewrite /nsl_dh_resp; wp_pures; wp_bind (mkdh _).
 iApply (wp_mkdh (nsl_dh_fail kB)).
 iIntros (b) "#s_b #b_pred token".
-rewrite (crypto_meta_token_difference _ (↑N.@"peer")); last solve_ndisj.
+rewrite (term_meta_token_difference _ (↑N.@"peer")); last solve_ndisj.
 iDestruct "token" as "[dh token]".
 wp_pures; wp_bind (tgroup _); iApply wp_tgroup.
 wp_pures; wp_bind (texp _ _); iApply wp_texp.
 rewrite Spec.texpA; wp_pures; wp_bind (nsl_resp _ _ _ _).
 iApply (wp_nsl_resp with "ctx p_e_kB [token] [] [dh]") => //.
 - solve_ndisj.
-- rewrite (crypto_meta_token_difference _ (↑N.@"nsl")); last solve_ndisj.
+- rewrite (term_meta_token_difference _ (↑N.@"fresh")); last solve_ndisj.
   iDestruct "token" as "[token _]".
-  rewrite /crypto_meta_token nonces_of_term_TExp /=.
-  by rewrite g0 nonces_of_term_eq right_id_L left_id_L /=.
-- rewrite sterm_TExp /=; iSplit; eauto.
-  by iApply dh_gen_sterm; iApply nonces_of_term_dh_gen.
+  by iExists _, _; eauto.
+- by rewrite sterm_TExp /=; iSplit; eauto.
 - iIntros (kA nA).
-  iMod (crypto_meta_set _ _ _ kA with "dh") as "#meta"; eauto.
+  iMod (term_meta_set _ _ _ kA with "dh") as "#meta"; eauto.
   iModIntro; iSplit.
-  + iModIntro; rewrite [corruption _ _]comm.
-    by iApply pterm_nsl_dh1 => //; iApply nonces_of_term_dh_gen.
+  + iModIntro; rewrite [corruption _ _]comm; by iApply pterm_nsl_dh1.
   + iExists b; iSplit => //.
     iIntros "!> %".
     rewrite -[ [a; b]]/(seq.cat [a] [b]) TExpC /=.

@@ -565,10 +565,10 @@ Definition wf ke : iProp :=
   | Psk psk c_nonce =>
     sterm psk ∧ pterm c_nonce
   | Dh g x  =>
-    pterm g ∧ ⌜nonces_of_term g = ∅⌝ ∧ dh_seed (λ _, True)%I x
+    pterm g ∧ dh_seed (λ _, True)%I x
   | PskDh psk g x =>
     sterm psk ∧
-    pterm g ∧ ⌜nonces_of_term g = ∅⌝ ∧ dh_seed (λ _, True)%I x
+    pterm g ∧ dh_seed (λ _, True)%I x
   end.
 
 Instance Persistent_wf ke : Persistent (wf ke).
@@ -585,18 +585,17 @@ case: ke => [psk cn|g x|psk g x] //=.
   rewrite pterm_tag pterm_of_list /=; do !iSplit => //.
   rewrite pterm_THash sterm_tag; iRight; iSplit => //.
   by iExists _, _, _; eauto.
-- iDestruct "wf" as "(? & % & ?)".
+- iDestruct "wf" as "(? & ?)".
   rewrite pterm_tag pterm_of_list /=.
   do !iSplit => //.
   iApply dh_pterm_TExp; eauto.
-  by iApply nonces_of_term_dh_gen.
-- iDestruct "wf" as "(? & ? & % & ?)".
+  by iApply pterm_sterm.
+- iDestruct "wf" as "(? & ? & ?)".
   rewrite pterm_tag pterm_of_list /=.
   do !iSplit => //.
     rewrite pterm_THash sterm_tag; iRight; iSplit => //.
     by iExists _, _, _; eauto.
-  iApply dh_pterm_TExp; eauto.
-  by iApply nonces_of_term_dh_gen.
+  by iApply dh_pterm_TExp; eauto; iApply pterm_sterm.
 Qed.
 
 (* TODO: Add session information *)
@@ -609,12 +608,12 @@ Lemma wp_new ke E Φ :
 Proof.
 iIntros "#p_ke post"; rewrite /I.new; wp_pures.
 iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
-- wp_bind (mknonce _); iApply (wp_mknonce _ (λ _, True)%I).
-  iIntros (a) "_ #pred_a _"; wp_list; wp_term_of_list.
+- wp_bind (mknonce _); iApply (wp_mknonce _ True%I (λ _, True)%I).
+  iIntros (a) "_ #pred_a _ _"; wp_list; wp_term_of_list.
   wp_tag.
-  iApply ("post" $! (Psk psk (TNonce a))) => //=.
+  iApply ("post" $! (Psk psk a)) => //=.
   do !iSplit => //.
-  rewrite pterm_TNonce; by iExists _; iSplit; eauto.
+  by iApply "pred_a".
 - wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I).
   iIntros (a) "_ #pred_a _"; wp_list; wp_term_of_list.
   iDestruct "p_ke" as "[??]".
@@ -962,15 +961,15 @@ iIntros (e_check g0) "#s_psk #p_ke post"; rewrite /I.new; wp_pures.
 iApply CShare.wp_case.
 case: ke => [psk' c_nonce|g' gx|psk' g' gx] /= in e_check *; wp_pures.
 - case: decide => [->|//] in e_check *.
-  wp_bind (mknonce _); iApply (wp_mknonce _ (λ _, True)%I).
-  iIntros (a) "_ #pred_a _"; wp_list; wp_term_of_list.
+  wp_bind (mknonce _); iApply (wp_mknonce _ True%I (λ _, True)%I).
+  iIntros (a) "_ #pred_a _ _"; wp_list; wp_term_of_list.
   wp_tag; wp_pures.
-  iApply ("post" $! (Psk (THash _) c_nonce (TNonce a))) => //=.
+  iApply ("post" $! (Psk (THash _) c_nonce a)) => //=.
   iSplit => //.
   rewrite !pterm_tag !pterm_of_list /=.
   iDestruct "p_ke" as "(? & ? & _)".
   do !iSplit => //.
-  rewrite pterm_TNonce; by iExists _; iSplit; eauto.
+  by iApply "pred_a".
 - case: decide => [->|//] in e_check *.
   wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I).
   iIntros (a) "_ #pred_a _"; wp_list; wp_term_of_list.

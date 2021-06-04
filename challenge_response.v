@@ -49,7 +49,7 @@ Variable cr_sess_inv : role → term → term → term → term → iProp.
 Variable gen : val.
 
 Definition cr_inv : iProp :=
-  session_inv cr_sess_name (cryptoN.@"cr") cr_sess_inv.
+  session_inv cr_sess_name cr_sess_inv.
 
 Definition cr_ctx : iProp :=
   session_ctx cr_sess_name (cryptoN.@"cr") cr_sess_inv.
@@ -90,7 +90,7 @@ Implicit Types Ψ : val → iProp.
 
 Hypothesis wp_gen : forall E kA kB nA Ψ,
   (∀ nB, cr_sess_inv Resp kA kB nA nB -∗
-         crypto_meta_token nB (↑cryptoN.@"cr") -∗
+         fresh_key nB -∗
          pterm nB -∗
          Ψ nB) -∗
   WP gen #() @ E {{ Ψ }}.
@@ -150,7 +150,7 @@ Lemma wp_initiator kA kB nA E Ψ :
   enc_pred (nroot.@"m3") msg3_pred -∗
   pterm nA -∗
   (∀ nB, cr_sess_inv Init kA kB nA nB) -∗
-  crypto_meta_token nA (↑cryptoN.@"cr") -∗
+  fresh_key nA -∗
   pterm (TKey Dec kA) -∗
   pterm (TKey Dec kB) -∗
   (∀ onB : option term,

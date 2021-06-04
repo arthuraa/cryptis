@@ -129,8 +129,14 @@ Proof. by case: s => [] []. Qed.
 
 Definition to_session_map SM := session_status_both <$> SM.
 
+Definition sessionR := authR session_mapUR.
+
 Class sessionG := {
-  session_inG  :> inG Σ (authR session_mapUR);
+  session_inG    :> inG Σ sessionR;
+  fresh_key      :  term → iProp;
+  used_key       :  term → iProp;
+  fresh_not_used :  ∀ t, fresh_key t -∗ used_key t -∗ False;
+  used_set       :  ∀ t, fresh_key t ==∗ used_key t;
 }.
 
 Context `{!sessionG} (γ : gname) (N : namespace).
@@ -197,20 +203,20 @@ Qed.
 Definition session_map_inv SM : iProp :=
   ([∗ map] t ↦ p ∈ SM,
      ⌜t = s_key p.2⌝ ∗
-     crypto_meta t N () ∗
+     used_key t ∗
      (sinv_int p.2 ∨ session_frag (Some (), swap_view p.2)))%I.
 
 (* TODO Extract crypto_meta_meta_token from here *)
 Lemma session_map_inv_unregistered SM t :
-  crypto_meta_token t (↑N) -∗
+  fresh_key t -∗
   session_map_inv SM -∗
   ⌜SM !! t = None⌝.
 Proof.
-iIntros "token inv".
+iIntros "fresh inv".
 destruct (SM !! t) as [[ac s]|] eqn:SM_t=> //.
 rewrite /session_map_inv big_sepM_delete // /=.
-iDestruct "inv" as "[(_ & meta & _) _]".
-by iDestruct (crypto_meta_meta_token with "token meta") as "[]".
+iDestruct "inv" as "[(_ & not_fresh & _) _]".
+by iDestruct (fresh_not_used with "fresh not_fresh") as "[]".
 Qed.
 
 Definition session_inv : iProp :=
@@ -259,18 +265,18 @@ Lemma session_begin_aux s E :
   ↑N ⊆ E →
   session_ctx -∗
   sinv_int s -∗
-  crypto_meta_token (s_key s) (↑N) ={E}=∗
+  fresh_key (s_key s) ={E}=∗
   session_auth (None, s) ∗ session_frag (None, s).
 Proof.
-iIntros (?) "#ctx s_inv token".
+iIntros (?) "#ctx s_inv fresh".
 iMod (auth_empty γ) as "#init".
 iMod (auth_acc to_session_map session_map_inv
          with "[ctx init]") as "inv"; try by eauto.
 iDestruct "inv" as (SM) "(_ & inv & close)".
 iAssert (▷ ⌜SM !! s_key s = None⌝)%I as "# > %s_fresh".
   iModIntro.
-  by iApply (session_map_inv_unregistered with "[token] [inv]").
-iMod (crypto_meta_set with "token") as "#meta"; eauto.
+  by iApply (session_map_inv_unregistered with "[fresh] [inv]").
+iMod (used_set with "fresh") as "not_fresh"; eauto.
 rewrite -auth_own_op singleton_op.
 iApply ("close" $! (<[s_key s := (None, s)]>SM)); iSplit.
   iPureIntro; rewrite /to_session_map fmap_insert.
@@ -278,7 +284,7 @@ iApply ("close" $! (<[s_key s := (None, s)]>SM)); iSplit.
     by rewrite lookup_fmap s_fresh.
   rewrite pair_valid /= auth_both_valid agree_idemp; repeat split; eauto.
 iModIntro; rewrite /session_map_inv big_sepM_insert //=.
-by iFrame; iSplit.
+by iFrame.
 Qed.
 
 Lemma session_status_both_eq p :
@@ -329,7 +335,7 @@ have ne: s_key s ≠ s_key (swap_view s).
   move=> e; move: SM_sB; rewrite -e SM_sA; case => _ /(f_equal s_role) /=.
   by case: (s_role s).
 rewrite {1}/session_map_inv (big_sepM_delete _ SM (s_key (swap_view s))) //.
-iDestruct "inv" as "[(_ & #meta & inv_s) inv]".
+iDestruct "inv" as "[(_ & not_fresh & inv_s) inv]".
 iAssert (▷ (sinv_int (swap_view s) ∗ own γ (◯ f1)))%I
     with "[sessA inv_s]" as "(res & >sessA)".
   iModIntro.
@@ -357,7 +363,7 @@ iMod (own_update with "own") as "[own sess]".
 iDestruct "sess" as "[sessA #sessB]".
 rewrite insert_singleton -(session_status_both_eq (Some tt, s)).
 rewrite -singleton_op; iDestruct "sessA" as "[_ #sessA]".
-iModIntro; iSplitL "own inv".
+iModIntro; iSplitL "not_fresh own inv".
   iModIntro.
   iExists (<[s_key s := (Some (), s)]>SM).
   rewrite /to_session_map fmap_insert session_status_both_eq /=.
@@ -369,6 +375,7 @@ iModIntro; iSplitL "own inv".
   iSplitL "inv_s"; first by iFrame.
   rewrite (big_sepM_delete _ (delete (s_key s) SM)); last first.
     rewrite lookup_delete_ne; last eauto; eauto.
+  iFrame.
   iSplitR "inv".
     rewrite /= swap_viewK; do ![iSplit => //]; by iRight.
   by rewrite delete_commute.
@@ -403,7 +410,7 @@ Lemma session_begin E rl kA kB tA tB :
   ↑N ⊆ E →
   session_ctx -∗
   sinv rl kA kB tA tB -∗
-  crypto_meta_token t (↑N) ={E}=∗
+  fresh_key t ={E}=∗
   session rl kA kB tA tB ∗
   (session (swap_role rl) kA kB tA tB ={E}=∗ ▷ sinv (swap_role rl) kA kB tA tB).
 Proof.
