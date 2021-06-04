@@ -43,25 +43,6 @@ Definition nsl_dh_resp : val := λ: "g" "skB" "pkB",
 Implicit Types Ψ : val → iProp.
 Implicit Types kA kB : term.
 
-Program Instance nsl_dh_session : sessionG Σ := {|
-  session_inG := _;
-  fresh_key t := (∃ g a, ⌜t = TExp g [a]⌝ ∧ term_meta_token a (↑N.@"fresh"))%I;
-  used_key  t := (∃ g a, ⌜t = TExp g [a]⌝ ∧ term_meta a (N.@"fresh") ())%I;
-|}.
-
-Next Obligation.
-iIntros (t); iDestruct 1 as (g a) "[-> token]".
-iDestruct 1 as (g' a') "[%e meta]".
-move/TExp_inj: e => [] _ /Permutation_singleton [] ->.
-by iApply (term_meta_meta_token with "token meta").
-Qed.
-
-Next Obligation.
-iIntros (t); iDestruct 1 as (g a) "[-> token]".
-iMod (term_meta_set _ (N.@"fresh") _ () with "token") as "meta"; try set_solver.
-by eauto.
-Qed.
-
 Definition nsl_dh_inv g rl kA kB ga gb : iProp :=
   match rl with
   | Init =>
@@ -98,6 +79,8 @@ Proof.
 iIntros "#a_pred #p_e".
 by iPoseProof (dh_seed_elim2 with "a_pred p_e") as ">[??]".
 Qed.
+
+Instance nsl_dh_session : sessionG Σ := dh_fresh N _.
 
 Lemma wp_nsl_dh_init g kA kB E Ψ :
   ↑N ⊆ E →

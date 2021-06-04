@@ -4,7 +4,7 @@ From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl namespace_map frac.
 From iris.base_logic.lib Require Import auth.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import lib guarded term crypto primitives tactics.
+From crypto Require Import lib guarded term crypto primitives tactics session.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -98,6 +98,25 @@ do !iSplit => //.
 iModIntro; iSplit.
 - by iIntros "H"; iSpecialize ("aP1" with "H"); iModIntro.
 - by iIntros "#?"; iApply "aP2"; iModIntro.
+Qed.
+
+Program Definition dh_fresh (s : inG Σ sessionR) : sessionG Σ := {|
+  session_inG := s;
+  fresh_key t := (∃ g a, ⌜t = TExp g [a]⌝ ∧ term_meta_token a (↑N.@"fresh"))%I;
+  used_key  t := (∃ g a, ⌜t = TExp g [a]⌝ ∧ term_meta a (N.@"fresh") ())%I;
+|}.
+
+Next Obligation.
+iIntros (s t); iDestruct 1 as (g a) "[-> token]".
+iDestruct 1 as (g' a') "[%e meta]".
+move/TExp_inj: e => [] _ /Permutation_singleton [] ->.
+by iApply (term_meta_meta_token with "token meta").
+Qed.
+
+Next Obligation.
+iIntros (s t); iDestruct 1 as (g a) "[-> token]".
+iMod (term_meta_set _ (N.@"fresh") _ () with "token") as "meta"; try set_solver.
+by eauto.
 Qed.
 
 End DH.
