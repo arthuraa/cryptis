@@ -139,20 +139,22 @@ Notation iProp := (iProp Σ).
 Implicit Types t : term.
 Implicit Types Φ : val → iProp.
 
-Definition inv N : iProp :=
-  hash_pred (N.@"psk") (λ _, True)%I.
+Definition ctx N : iProp :=
+  hash_pred (N.@"psk") (λ _, True)%I ∧
+  key_pred (N.@"psk_key") (λ _ _, False)%I ∧
+  key_pred (N.@"dh_key") (λ _ _, False)%I.
 
-Global Instance Persistent_inv N : Persistent (inv N).
+Global Instance Persistent_ctx N : Persistent (ctx N).
 Proof. apply _. Qed.
 
-Program Definition session_info N (s : inG Σ sessionR) : sessionG Σ := {|
+Program Definition session_info (s : inG Σ sessionR) : sessionG Σ := {|
   session_inG := s;
-  fresh_key t := term_meta_token t (↑N.@"fresh");
-  used_key t := term_meta t (N.@"fresh") ();
+  fresh_key N t := term_meta_token t (↑N);
+  used_key N t := term_meta t N ();
 |}.
 
 Next Obligation.
-by iIntros (N s t); iApply term_meta_meta_token.
+by iIntros (s N t); iApply term_meta_meta_token.
 Qed.
 
 Next Obligation.
@@ -265,11 +267,11 @@ Instance Persistent_wf ke : Persistent (wf ke).
 Proof. by case: ke => *; apply _. Qed.
 
 Lemma pterm_encode N ke :
-  inv N -∗
+  ctx N -∗
   wf ke -∗
   pterm (term_of (encode N ke)).
 Proof.
-iIntros "#inv #p_ke"; case: ke => [psk|g|psk g] /=.
+iIntros "#(hash & _ & _) #p_ke"; case: ke => [psk|g|psk g] /=.
 - rewrite pterm_tag pterm_THash sterm_tag.
   iRight; iSplit => //.
   by iExists _; eauto.
@@ -597,11 +599,11 @@ Instance Persistent_wf ke : Persistent (wf ke).
 Proof. case: ke => *; apply _. Qed.
 
 Lemma wf_encode N ke :
-  inv N -∗
+  ctx N -∗
   wf ke -∗
   pterm (term_of (encode N ke)).
 Proof.
-iIntros "#inv #wf".
+iIntros "#(hash & _ & _) #wf".
 case: ke => [psk cn|g cn x|psk g cn x] //=.
 - iDestruct "wf" as "[??]".
   rewrite pterm_tag pterm_of_list /=; do !iSplit => //.
@@ -1400,7 +1402,7 @@ Coercion SParams.term_of : SParams.t >-> term.
 
 Section Protocol.
 
-Context `{!heapG Σ, !cryptoG Σ, !network Σ}.
+Context `{!heapG Σ, !cryptoG Σ, !network Σ, !inG Σ sessionR}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -1416,8 +1418,17 @@ Definition client N : val := λ: "kex" "other",
   let: "sh" := recv #() in
   SParams.I.check N "cp" "sh".
 
-Lemma wp_client N ke other E Φ :
-  inv N -∗
+Existing Instance session_info.
+
+Definition inv rl (kA kB nA nB : term) : iProp :=
+  match rl with
+  | Init => True%I
+  | Resp => True%I
+  end.
+
+Lemma wp_client γ N ke other E Φ :
+  ctx N -∗
+  session_ctx γ N inv -∗
   Meth.wf ke -∗
   pterm other -∗
   (∀ cp sh,
@@ -1427,7 +1438,7 @@ Lemma wp_client N ke other E Φ :
       Φ (repr (SParams.check N cp sh))) -∗
   WP client N ke other @ E {{ Φ }}.
 Proof.
-iIntros "#inv #p_ke #p_other post".
+iIntros "#ctx #sess #p_ke #p_other post".
 rewrite /client; wp_pures.
 wp_bind (CShare.I.new _); iApply (CShare.wp_new _ N) => //.
 iIntros (ke' e) "#p_ke' token"; wp_pures.

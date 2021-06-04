@@ -80,7 +80,7 @@ iIntros "#a_pred #p_e".
 by iPoseProof (dh_seed_elim2 with "a_pred p_e") as ">[??]".
 Qed.
 
-Instance nsl_dh_session : sessionG Σ := dh_fresh N _.
+Existing Instance dh_fresh.
 
 Lemma wp_nsl_dh_init g kA kB E Ψ :
   ↑N ⊆ E →
@@ -115,7 +115,7 @@ iApply (wp_nsl_init with "ctx p_e_kA p_e_kB [] [] [] [token]") => //.
   iExists a; iSplit => //.
   iModIntro; iIntros (b) "p_b".
   by iApply pterm_nsl_dh2.
-- rewrite (term_meta_token_difference _ (↑N.@"fresh")); last solve_ndisj.
+- rewrite (term_meta_token_difference _ (↑N.@"nsl")); last solve_ndisj.
   iDestruct "token" as "[token _]".
   by iExists _, _; eauto.
 iIntros (onB) "pub"; case: onB=> [nB|]; last by protocol_failure.
@@ -162,7 +162,7 @@ wp_pures; wp_bind (texp _ _); iApply wp_texp.
 rewrite Spec.texpA; wp_pures; wp_bind (nsl_resp _ _ _ _).
 iApply (wp_nsl_resp with "ctx p_e_kB [token] [] [dh]") => //.
 - solve_ndisj.
-- rewrite (term_meta_token_difference _ (↑N.@"fresh")); last solve_ndisj.
+- rewrite (term_meta_token_difference _ (↑N.@"nsl")); last solve_ndisj.
   iDestruct "token" as "[token _]".
   by iExists _, _; eauto.
 - by rewrite sterm_TExp /=; iSplit; eauto.

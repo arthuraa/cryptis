@@ -133,10 +133,10 @@ Definition sessionR := authR session_mapUR.
 
 Class sessionG := {
   session_inG    :> inG Σ sessionR;
-  fresh_key      :  term → iProp;
-  used_key       :  term → iProp;
-  fresh_not_used :  ∀ t, fresh_key t -∗ used_key t -∗ False;
-  used_set       :  ∀ t, fresh_key t ==∗ used_key t;
+  fresh_key      :  namespace → term → iProp;
+  used_key       :  namespace → term → iProp;
+  fresh_not_used :  ∀ N t, fresh_key N t -∗ used_key N t -∗ False;
+  used_set       :  ∀ N t, fresh_key N t ==∗ used_key N t;
 }.
 
 Context `{!sessionG} (γ : gname) (N : namespace).
@@ -203,12 +203,12 @@ Qed.
 Definition session_map_inv SM : iProp :=
   ([∗ map] t ↦ p ∈ SM,
      ⌜t = s_key p.2⌝ ∗
-     used_key t ∗
+     used_key N t ∗
      (sinv_int p.2 ∨ session_frag (Some (), swap_view p.2)))%I.
 
 (* TODO Extract crypto_meta_meta_token from here *)
 Lemma session_map_inv_unregistered SM t :
-  fresh_key t -∗
+  fresh_key N t -∗
   session_map_inv SM -∗
   ⌜SM !! t = None⌝.
 Proof.
@@ -265,7 +265,7 @@ Lemma session_begin_aux s E :
   ↑N ⊆ E →
   session_ctx -∗
   sinv_int s -∗
-  fresh_key (s_key s) ={E}=∗
+  fresh_key N (s_key s) ={E}=∗
   session_auth (None, s) ∗ session_frag (None, s).
 Proof.
 iIntros (?) "#ctx s_inv fresh".
@@ -410,7 +410,7 @@ Lemma session_begin E rl kA kB tA tB :
   ↑N ⊆ E →
   session_ctx -∗
   sinv rl kA kB tA tB -∗
-  fresh_key t ={E}=∗
+  fresh_key N t ={E}=∗
   session rl kA kB tA tB ∗
   (session (swap_role rl) kA kB tA tB ={E}=∗ ▷ sinv (swap_role rl) kA kB tA tB).
 Proof.

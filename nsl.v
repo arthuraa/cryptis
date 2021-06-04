@@ -47,7 +47,7 @@ Variable N : namespace.
 Variable nsl_sess_inv : role → term → term → term → term → iProp.
 
 Definition nsl_inv : iProp :=
-  session_inv γ nsl_sess_inv.
+  session_inv γ N nsl_sess_inv.
 
 Definition nsl_ctx : iProp :=
   session_ctx γ N nsl_sess_inv ∧
@@ -220,7 +220,7 @@ Lemma wp_nsl_init kA kB (nA : term) E Ψ :
   sterm nA -∗
   □ (pterm nA ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))) -∗
   (∀ nB, nsl_sess_inv Init kA kB nA nB) -∗
-  fresh_key nA -∗
+  fresh_key N nA -∗
   (∀ onB : option term,
       (if onB is Some nB then
          sterm nB ∧
@@ -264,7 +264,7 @@ Lemma wp_nsl_resp kB E Ψ nB :
   ↑N ⊆ E →
   nsl_ctx -∗
   pterm (TKey Enc kB) -∗
-  fresh_key nB -∗
+  fresh_key N nB -∗
   sterm nB -∗
   (∀ kA nA, |==> □ (pterm nB ↔ ▷ corruption kA kB) ∗
                  nsl_sess_inv Resp kA kB nA nB) -∗

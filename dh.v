@@ -16,7 +16,6 @@ Context `{!cryptoG Σ, !heapG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
-Variable N : namespace.
 
 Implicit Types Ψ : val → iProp.
 Implicit Types kA kB : term.
@@ -102,20 +101,20 @@ Qed.
 
 Program Definition dh_fresh (s : inG Σ sessionR) : sessionG Σ := {|
   session_inG := s;
-  fresh_key t := (∃ g a, ⌜t = TExp g [a]⌝ ∧ term_meta_token a (↑N.@"fresh"))%I;
-  used_key  t := (∃ g a, ⌜t = TExp g [a]⌝ ∧ term_meta a (N.@"fresh") ())%I;
+  fresh_key N t := (∃ g a, ⌜t = TExp g [a]⌝ ∧ term_meta_token a (↑N))%I;
+  used_key  N t := (∃ g a, ⌜t = TExp g [a]⌝ ∧ term_meta a N ())%I;
 |}.
 
 Next Obligation.
-iIntros (s t); iDestruct 1 as (g a) "[-> token]".
+iIntros (s N t); iDestruct 1 as (g a) "[-> token]".
 iDestruct 1 as (g' a') "[%e meta]".
 move/TExp_inj: e => [] _ /Permutation_singleton [] ->.
 by iApply (term_meta_meta_token with "token meta").
 Qed.
 
 Next Obligation.
-iIntros (s t); iDestruct 1 as (g a) "[-> token]".
-iMod (term_meta_set _ (N.@"fresh") _ () with "token") as "meta"; try set_solver.
+iIntros (s N t); iDestruct 1 as (g a) "[-> token]".
+iMod (term_meta_set _ N _ () with "token") as "meta"; try set_solver.
 by eauto.
 Qed.
 
