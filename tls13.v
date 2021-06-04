@@ -739,13 +739,14 @@ Definition check N c_kex ke :=
     s_kex ← Spec.to_list s_kex;
     '(psk', cn', sn) ← prod_of_list 3 s_kex;
     if decide (psk' = THash (Spec.tag (N.@"psk") psk) ∧ cn' = cn) then
-      Some (Spec.of_list [psk; cn; sn])
+      Some [cn; sn; Spec.of_list [psk; cn; sn]]
     else None
   | CShare.Dh g cn x =>
     s_kex ← Spec.untag (nroot.@"dh") ke;
     s_kex ← Spec.to_list s_kex;
     '(g', cn', sn, gx, gy) ← prod_of_list 5 s_kex;
-    if decide (g' = g ∧ cn' = cn ∧ gx = TExp g [x]) then Some (Spec.texp gy x)
+    if decide (g' = g ∧ cn' = cn ∧ gx = TExp g [x]) then
+      Some [cn; sn; Spec.texp gy x]
     else None
   | CShare.PskDh psk g cn x =>
     s_kex ← Spec.untag (nroot.@"pskdh") ke;
@@ -753,7 +754,7 @@ Definition check N c_kex ke :=
     '(psk', g', cn', sn, gx, gy) ← prod_of_list 6 s_kex;
     if decide (psk' = THash (Spec.tag (N.@"psk") psk)
                ∧ g' = g ∧ cn' = cn ∧ gx = TExp g [x]) then
-      Some (Spec.texp gy x)
+      Some [cn; sn; Spec.texp gy x]
     else None
   end.
 
@@ -806,7 +807,7 @@ Definition check N : val := λ: "c_kex" "s_kex",
       list_match: ["psk'"; "c_nonce'"; "s_nonce"] := "s_kex" in
       if: eq_term "psk'" (hash (tag (N.@"psk") "psk"))
           && eq_term "c_nonce'" "c_nonce" then
-        SOME (term_of_list ["psk"; "c_nonce"; "s_nonce"])
+        SOME ["c_nonce"; "s_nonce"; term_of_list ["psk"; "c_nonce"; "s_nonce"]]
       else NONE)
     (λ: "g" "cn" "x",
       bind: "s_kex" := untag (nroot.@"dh") "s_kex" in
@@ -814,7 +815,7 @@ Definition check N : val := λ: "c_kex" "s_kex",
       list_match: ["g'"; "cn'"; "sn"; "gx"; "gy"] := "s_kex" in
       if: eq_term "g'" "g" && eq_term "cn'" "cn" &&
           eq_term "gx" (texp (tgroup "g") "x") then
-        SOME (texp "gy" "x")
+        SOME ["cn"; "sn"; texp "gy" "x"]
       else NONE)
     (λ: "psk" "g" "cn" "x",
       bind: "s_kex" := untag (nroot.@"pskdh") "s_kex" in
@@ -823,7 +824,7 @@ Definition check N : val := λ: "c_kex" "s_kex",
       if: eq_term "psk'" (hash (tag (N.@"psk") "psk")) &&
           eq_term "g'" "g" && eq_term "cn'" "cn" &&
           eq_term "gx" (texp (tgroup "g") "x") then
-        SOME (texp "gy" "x")
+        SOME ["cn"; "sn"; texp "gy" "x"]
       else NONE).
 
 Definition new : val := λ: "ke",
@@ -930,7 +931,8 @@ case: c_kex => [psk c_nonce|g cn x|psk g cn x] /=; wp_pures.
     rewrite decide_False; try by intuition congruence.
     by wp_pures.
   rewrite e decide_True //; wp_pures.
-  by wp_list; wp_term_of_list; wp_pures.
+  wp_list; wp_term_of_list; wp_pures.
+  by wp_list; wp_pures.
 - wp_untag_eq s_kex' e; last by wp_pures; rewrite e.
   rewrite {}e Spec.tagK /=.
   wp_list_of_term_eq l e; last by wp_pures; rewrite e.
@@ -950,7 +952,8 @@ case: c_kex => [psk c_nonce|g cn x|psk g cn x] /=; wp_pures.
     rewrite decide_False; try by intuition congruence.
     by wp_pures.
   rewrite e decide_True //; wp_pures.
-  by wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
+  wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
+  by wp_list; wp_pures.
 - wp_untag_eq s_kex' e; last by wp_pures; rewrite e.
   rewrite {}e Spec.tagK /=.
   wp_list_of_term_eq l e; last by wp_pures; rewrite e.
@@ -973,7 +976,8 @@ case: c_kex => [psk c_nonce|g cn x|psk g cn x] /=; wp_pures.
     rewrite decide_False; try by intuition congruence.
     by wp_pures.
   rewrite e decide_True //; wp_pures.
-  by wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
+  wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
+  by wp_list; wp_pures.
 Qed.
 
 Definition wf psk N ke : iProp :=
@@ -1223,13 +1227,14 @@ Definition check N cp sp :=
   '(pub, sig) ← prod_of_list 2 sp;
   pub' ← Spec.to_list pub;
   '(kex, other') ← prod_of_list 2 pub';
-  session_key ← SShare.check N (CParams.share cp) kex;
+  res ← SShare.check N (CParams.share cp) kex;
+  '(_, _, session_key) ← prod_of_list 3 res;
   dec_sig ← Spec.tdec (N.@"server_hello") (TKey Dec session_key) sig;
   dec_sig ← Spec.to_list dec_sig;
   '(verif_key, sig) ← prod_of_list 2 dec_sig;
   if decide (other' = CParams.other cp) then
     if verify (N.@"server_hello_sig") verif_key pub sig then
-      Some session_key
+      Some res
     else None
   else None.
 
@@ -1269,14 +1274,15 @@ Definition check N : val := λ: "cp" "sh",
   list_match: ["pub"; "sig"] := "sh" in
   bind: "pub'" := list_of_term "pub" in
   list_match: ["s_kex"; "s_other"] := "pub'" in
-  bind: "session_key" := SShare.I.check N "c_kex" "s_kex" in
+  bind: "res" := SShare.I.check N "c_kex" "s_kex" in
+  list_match: ["cn"; "sn"; "session_key"] := "res" in
   let: "sk" := mkkey "session_key" in
   bind: "dec_sig" := tdec (N.@"server_hello") (Snd "sk") "sig" in
   bind: "dec_sig" := list_of_term "dec_sig" in
   list_match: ["verif_key"; "sig"] := "dec_sig" in
   if: eq_term "s_other" "c_other" then
     if: verify (N.@"server_hello_sig") "verif_key" "pub" "sig" then
-      SOME "session_key"
+      SOME "res"
     else NONE
   else NONE.
 
@@ -1357,7 +1363,10 @@ wp_list_match => [s_kex s_other -> {pub'}|ne]; last first.
   by rewrite prod_of_list_neq //=; wp_finish.
 rewrite [in prod_of_list 2 [s_kex; s_other]]unlock /=.
 wp_bind (SShare.I.check _ _ _); iApply SShare.wp_check.
-case: SShare.check => [session_key|]; wp_pures => //=.
+case: SShare.check => [res|]; wp_pures => //=.
+wp_list_match => [cn sn session_key -> {res}|ne]; wp_finish; last first.
+  by rewrite prod_of_list_neq.
+rewrite [in prod_of_list _ _]unlock /=.
 wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
 wp_tdec_eq dec_sig e; last by rewrite e; wp_pures.
 rewrite {}e /= /Spec.tdec /= decide_True // Spec.tagK /=.
