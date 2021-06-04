@@ -720,13 +720,15 @@ this code closer to its heap lang implementation, which should not be capable of
 inverting a hash. *)
 
 Definition session_key_of N psk ke :=
-  Spec.tag (N.@"session_key")
-           match ke with
-           | Psk _ cn sn =>
-             Spec.of_list [psk; cn; sn]
-           | Dh _ _ _ gx y => Spec.texp gx y
-           | PskDh _ _ _ _ gx y => Spec.texp gx y
-           end.
+  match ke with
+  | Psk _ cn sn =>
+    Spec.tag (N.@"psk_key")
+             (Spec.of_list [psk; cn; sn])
+  | Dh _ _ _ gx y =>
+    Spec.tag (N.@"dh_key") (Spec.texp gx y)
+  | PskDh _ _ _ _ gx y =>
+    Spec.tag (N.@"dh_key") (Spec.texp gx y)
+  end.
 
 (** Check a server share against a corresponding client share.  This function
 should be used by the client, so the server share is encoded as a term. If the
@@ -739,14 +741,16 @@ Definition check N c_kex ke :=
     s_kex ← Spec.to_list s_kex;
     '(psk', cn', sn) ← prod_of_list 3 s_kex;
     if decide (psk' = THash (Spec.tag (N.@"psk") psk) ∧ cn' = cn) then
-      Some [cn; sn; Spec.of_list [psk; cn; sn]]
+      let skey := Spec.tag (N.@"psk_key") (Spec.of_list [psk; cn; sn]) in
+      Some [cn; sn; skey]
     else None
   | CShare.Dh g cn x =>
     s_kex ← Spec.untag (nroot.@"dh") ke;
     s_kex ← Spec.to_list s_kex;
     '(g', cn', sn, gx, gy) ← prod_of_list 5 s_kex;
     if decide (g' = g ∧ cn' = cn ∧ gx = TExp g [x]) then
-      Some [cn; sn; Spec.texp gy x]
+      let skey := Spec.tag (N.@"dh_key") (Spec.texp gy x) in
+      Some [cn; sn; skey]
     else None
   | CShare.PskDh psk g cn x =>
     s_kex ← Spec.untag (nroot.@"pskdh") ke;
@@ -754,7 +758,8 @@ Definition check N c_kex ke :=
     '(psk', g', cn', sn, gx, gy) ← prod_of_list 6 s_kex;
     if decide (psk' = THash (Spec.tag (N.@"psk") psk)
                ∧ g' = g ∧ cn' = cn ∧ gx = TExp g [x]) then
-      Some [cn; sn; Spec.texp gy x]
+      let skey := Spec.tag (N.@"dh_key") (Spec.texp gy x) in
+      Some [cn; sn; skey]
     else None
   end.
 
@@ -792,12 +797,11 @@ Definition encode : val := λ: "ke",
       tag (nroot.@"pskdh") (term_of_list ["psk"; "g"; "cn"; "sn"; "gx"; "gy"])).
 
 Definition session_key_of N : val := λ: "psk" "ke",
-  tag (N.@"session_key")
-      (case "ke"
-        (λ: <> "c_nonce" "s_nonce",
-          term_of_list ["psk"; "c_nonce"; "s_nonce"])
-        (λ: <> <> <> "gx" "y", texp "gx" "y")
-        (λ: <> <> <> <> "gx" "y", texp "gx" "y")).
+  case "ke"
+    (λ: <> "c_nonce" "s_nonce",
+       tag (N.@"psk_key") (term_of_list ["psk"; "c_nonce"; "s_nonce"]))
+    (λ: <> <> <> "gx" "y", tag (N.@"dh_key") (texp "gx" "y"))
+    (λ: <> <> <> <> "gx" "y", tag (N.@"dh_key") (texp "gx" "y")).
 
 Definition check N : val := λ: "c_kex" "s_kex",
   CShare.I.case "c_kex"
@@ -807,7 +811,9 @@ Definition check N : val := λ: "c_kex" "s_kex",
       list_match: ["psk'"; "c_nonce'"; "s_nonce"] := "s_kex" in
       if: eq_term "psk'" (hash (tag (N.@"psk") "psk"))
           && eq_term "c_nonce'" "c_nonce" then
-        SOME ["c_nonce"; "s_nonce"; term_of_list ["psk"; "c_nonce"; "s_nonce"]]
+        let: "skey" :=
+           tag (N.@"psk_key") (term_of_list ["psk"; "c_nonce"; "s_nonce"]) in
+        SOME ["c_nonce"; "s_nonce"; "skey"]
       else NONE)
     (λ: "g" "cn" "x",
       bind: "s_kex" := untag (nroot.@"dh") "s_kex" in
@@ -815,7 +821,8 @@ Definition check N : val := λ: "c_kex" "s_kex",
       list_match: ["g'"; "cn'"; "sn"; "gx"; "gy"] := "s_kex" in
       if: eq_term "g'" "g" && eq_term "cn'" "cn" &&
           eq_term "gx" (texp (tgroup "g") "x") then
-        SOME ["cn"; "sn"; texp "gy" "x"]
+        let: "skey" := tag (N.@"dh_key") (texp "gy" "x") in
+        SOME ["cn"; "sn"; "skey"]
       else NONE)
     (λ: "psk" "g" "cn" "x",
       bind: "s_kex" := untag (nroot.@"pskdh") "s_kex" in
@@ -824,7 +831,8 @@ Definition check N : val := λ: "c_kex" "s_kex",
       if: eq_term "psk'" (hash (tag (N.@"psk") "psk")) &&
           eq_term "g'" "g" && eq_term "cn'" "cn" &&
           eq_term "gx" (texp (tgroup "g") "x") then
-        SOME ["cn"; "sn"; texp "gy" "x"]
+        let: "skey" := tag (N.@"dh_key") (texp "gy" "x") in
+        SOME ["cn"; "sn"; "skey"]
       else NONE).
 
 Definition new : val := λ: "ke",
@@ -903,11 +911,11 @@ Lemma wp_session_key_of N psk ke E Φ :
   WP I.session_key_of N psk (term_of ke) @ E {{ Φ }}.
 Proof.
 iIntros "?"; rewrite /I.session_key_of; wp_pures.
-wp_bind (I.case _ _ _ _); iApply wp_case.
+iApply wp_case.
 case: ke => [???|?????|??????]; wp_pures.
 - by wp_list; wp_term_of_list; wp_tag.
-- by iApply wp_texp; wp_tag.
-- by iApply wp_texp; wp_tag.
+- by wp_bind (texp _ _); iApply wp_texp; wp_tag.
+- by wp_bind (texp _ _); iApply wp_texp; wp_tag.
 Qed.
 
 Lemma wp_check N c_kex s_kex E Φ :
@@ -932,6 +940,7 @@ case: c_kex => [psk c_nonce|g cn x|psk g cn x] /=; wp_pures.
     by wp_pures.
   rewrite e decide_True //; wp_pures.
   wp_list; wp_term_of_list; wp_pures.
+  wp_tag.
   by wp_list; wp_pures.
 - wp_untag_eq s_kex' e; last by wp_pures; rewrite e.
   rewrite {}e Spec.tagK /=.
@@ -953,6 +962,7 @@ case: c_kex => [psk c_nonce|g cn x|psk g cn x] /=; wp_pures.
     by wp_pures.
   rewrite e decide_True //; wp_pures.
   wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
+  wp_tag; wp_pures.
   by wp_list; wp_pures.
 - wp_untag_eq s_kex' e; last by wp_pures; rewrite e.
   rewrite {}e Spec.tagK /=.
@@ -977,6 +987,7 @@ case: c_kex => [psk c_nonce|g cn x|psk g cn x] /=; wp_pures.
     by wp_pures.
   rewrite e decide_True //; wp_pures.
   wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
+  wp_tag; wp_pures.
   by wp_list; wp_pures.
 Qed.
 
