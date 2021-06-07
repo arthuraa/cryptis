@@ -107,7 +107,11 @@ Class sessionG := {
 }.
 
 Context `{!sessionG} (γ : gname) (N : namespace).
-Context (sinv : role → term → term → X → iProp).
+Context (P : role → term → term → X → iProp).
+
+Let sinv rl tA tB x :=
+  P rl (if rl is Init then tA else tB)
+       (if rl is Init then tB else tA) x.
 
 Global Instance sessionG_authG : authG _ _ :=
   AuthG Σ session_mapUR session_inG _.
@@ -321,44 +325,50 @@ iExists _, _, _; iSplit => //.
 by iRight; case: (rl); iSplit.
 Qed.
 
-Definition session rl tA tB x : iProp :=
-  session_frag rl tA tB x None.
+Definition session rl tI tR x : iProp :=
+  session_frag rl (if rl is Init then tI else tR)
+                  (if rl is Init then tR else tI) x None.
 
-Global Instance session_persistent rl tA tB x :
-  Persistent (session rl tA tB x).
+Global Instance session_persistent rl tI tR x :
+  Persistent (session rl tI tR x).
 Proof. apply _. Qed.
 
-Global Instance session_timeless rl tA tB x :
-  Timeless (session rl tA tB x).
+Global Instance session_timeless rl tI tR x :
+  Timeless (session rl tI tR x).
 Proof. apply _. Qed.
 
-Lemma session_agree rl1 rl2 tA tB1 tB2 x1 x2 :
-  session rl1 tA tB1 x1 -∗
-  session rl2 tA tB2 x2 -∗
-  ⌜rl1 = rl2 ∧ tB1 = tB2 ∧ x1 = x2⌝.
+Lemma session_agree rl tI1 tI2 tR1 tR2 x1 x2 :
+  (if rl is Init then tI1 = tI2 else tR1 = tR2) →
+  session rl tI1 tR1 x1 -∗
+  session rl tI2 tR2 x2 -∗
+  ⌜(if rl is Init then tR1 = tR2 else tI1 = tI2) ∧ x1 = x2⌝.
 Proof.
-iIntros "s1 s2".
-iDestruct (session_frag_agree with "s1 s2") as "%e" => //.
+case: rl => ->.
+all: iIntros "s1 s2".
+all: by iDestruct (session_frag_agree with "s1 s2") as "(% & % & %)".
 Qed.
 
-Lemma session_begin E rl tA tB x :
+Lemma session_begin E rl tI tR x :
   ↑N ⊆ E →
   session_ctx -∗
-  sinv rl tA tB x -∗
-  term_meta_token tA (↑N) ={E}=∗
-  session rl tA tB x ∗
-  (session (swap_role rl) tB tA x ={E}=∗ ▷ sinv (swap_role rl) tB tA x).
+  P rl tI tR x -∗
+  term_meta_token (if rl is Init then tI else tR) (↑N) ={E}=∗
+  session rl tI tR x ∗
+  (session (swap_role rl) tI tR x ={E}=∗ ▷ P (swap_role rl) tI tR x).
 Proof.
 rewrite /=; iIntros (?) "#ctx inv token".
-iMod (@session_begin_aux rl tA tB
-        with "ctx inv token") as "[auth frag]" => //.
+iMod (@session_begin_aux rl (if rl is Init then tI else tR)
+        (if rl is Init then tR else tI)
+        with "ctx [inv] token") as "[auth frag]" => //.
+  by rewrite /sinv; case: rl; eauto.
 iModIntro; iSplitR "auth" => //.
-by iIntros "frag"; iApply (session_end_aux with "ctx auth frag").
+rewrite /session; case: rl => /=.
+all: by iIntros "frag"; iApply (session_end_aux with "ctx auth frag").
 Qed.
 
 End Session.
 
 Arguments sessionG : clear implicits.
-Arguments session_begin {Σ _ _ _ _ _ _}  {γ N sinv} E rl tA tB.
+Arguments session_begin {Σ _ _ _ _ _ _}  {γ N P} E rl tI tR.
 Arguments session_ctx {Σ _ X} term_meta {_}.
 Arguments session {Σ X} term_meta {_} γ N _ _ _.
