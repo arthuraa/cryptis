@@ -263,7 +263,7 @@ Lemma twp_mknonce E P (Q : term → iProp Σ) Ψ :
   (∀ t, sterm t -∗
         □ (pterm t ↔ ▷ □ P) -∗
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
-        term_meta_token t ⊤ -∗
+        nonce_meta_token t ⊤ -∗
         Ψ t) -∗
   WP mknonce #()%V @ E [{ Ψ }].
 Proof.
@@ -304,7 +304,7 @@ Lemma wp_mknonce E P Q Ψ :
   (∀ t, sterm t -∗
         □ (pterm t ↔ ▷ □ P) -∗
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
-        term_meta_token t ⊤ -∗
+        nonce_meta_token t ⊤ -∗
         Ψ t) -∗
   WP mknonce #()%V @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_mknonce. Qed.

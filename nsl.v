@@ -11,7 +11,9 @@ Unset Printing Implicit Defensive.
 
 Section NSL.
 
-Context `{!heapG Σ, !cryptoG Σ, !network Σ, !sessionG Σ}.
+Context `{!heapG Σ, !cryptoG Σ, !network Σ}.
+Context `{TermMeta Σ term_meta term_meta_token}.
+Context `{!sessionG Σ}.
 Context (γ : gname).
 Notation iProp := (iProp Σ).
 
@@ -46,11 +48,8 @@ Variable N : namespace.
 
 Variable nsl_sess_inv : role → term → term → term → term → iProp.
 
-Definition nsl_inv : iProp :=
-  session_inv γ N nsl_sess_inv.
-
 Definition nsl_ctx : iProp :=
-  session_ctx γ N nsl_sess_inv ∧
+  session_ctx term_meta γ N nsl_sess_inv ∧
   enc_pred (N.@"m1") msg1_pred ∧
   enc_pred (N.@"m2") msg2_pred ∧
   enc_pred (N.@"m3") msg3_pred.
@@ -60,7 +59,7 @@ Proof. apply _. Qed.
 
 Lemma nsl_ctx_session_ctx :
   nsl_ctx -∗
-  session_ctx γ N nsl_sess_inv.
+  session_ctx term_meta γ N nsl_sess_inv.
 Proof. by iIntros "( ? & ? )". Qed.
 
 Ltac protocol_failure :=
@@ -220,7 +219,7 @@ Lemma wp_nsl_init kA kB (nA : term) E Ψ :
   sterm nA -∗
   □ (pterm nA ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))) -∗
   (∀ nB, nsl_sess_inv Init kA kB nA nB) -∗
-  fresh_key N nA -∗
+  term_meta_token nA (↑N) -∗
   (∀ onB : option term,
       (if onB is Some nB then
          sterm nB ∧
@@ -264,7 +263,7 @@ Lemma wp_nsl_resp kB E Ψ nB :
   ↑N ⊆ E →
   nsl_ctx -∗
   pterm (TKey Enc kB) -∗
-  fresh_key N nB -∗
+  term_meta_token nB (↑N) -∗
   sterm nB -∗
   (∀ kA nA, |==> □ (pterm nB ↔ ▷ corruption kA kB) ∗
                  nsl_sess_inv Resp kA kB nA nB) -∗
@@ -325,3 +324,5 @@ iExists kA; do 4!iSplit => //; by eauto.
 Qed.
 
 End NSL.
+
+Arguments nsl_ctx {Σ _ _} term_meta {_}.

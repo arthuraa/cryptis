@@ -40,6 +40,8 @@ Section Session.
 Context `{!cryptoG Σ, !heapG Σ}.
 Notation iProp  := (iProp Σ).
 Notation iPropI := (iPropI Σ).
+Context `{TermMeta Σ term_meta term_meta_token}.
+Arguments term_meta {_ _ _} _ _ _.
 
 Inductive role := Init | Resp.
 
@@ -133,10 +135,6 @@ Definition sessionR := authR session_mapUR.
 
 Class sessionG := {
   session_inG    :> inG Σ sessionR;
-  fresh_key      :  namespace → term → iProp;
-  used_key       :  namespace → term → iProp;
-  fresh_not_used :  ∀ N t, fresh_key N t -∗ used_key N t -∗ False;
-  used_set       :  ∀ N t, fresh_key N t ==∗ used_key N t;
 }.
 
 Context `{!sessionG} (γ : gname) (N : namespace).
@@ -203,12 +201,12 @@ Qed.
 Definition session_map_inv SM : iProp :=
   ([∗ map] t ↦ p ∈ SM,
      ⌜t = s_key p.2⌝ ∗
-     used_key N t ∗
+     term_meta t N () ∗
      (sinv_int p.2 ∨ session_frag (Some (), swap_view p.2)))%I.
 
 (* TODO Extract crypto_meta_meta_token from here *)
 Lemma session_map_inv_unregistered SM t :
-  fresh_key N t -∗
+  term_meta_token t (↑N) -∗
   session_map_inv SM -∗
   ⌜SM !! t = None⌝.
 Proof.
@@ -216,7 +214,7 @@ iIntros "fresh inv".
 destruct (SM !! t) as [[ac s]|] eqn:SM_t=> //.
 rewrite /session_map_inv big_sepM_delete // /=.
 iDestruct "inv" as "[(_ & not_fresh & _) _]".
-by iDestruct (fresh_not_used with "fresh not_fresh") as "[]".
+by iDestruct (term_meta_meta_token with "fresh not_fresh") as "[]".
 Qed.
 
 Definition session_inv : iProp :=
@@ -265,7 +263,7 @@ Lemma session_begin_aux s E :
   ↑N ⊆ E →
   session_ctx -∗
   sinv_int s -∗
-  fresh_key N (s_key s) ={E}=∗
+  term_meta_token (s_key s) (↑N) ={E}=∗
   session_auth (None, s) ∗ session_frag (None, s).
 Proof.
 iIntros (?) "#ctx s_inv fresh".
@@ -276,7 +274,7 @@ iDestruct "inv" as (SM) "(_ & inv & close)".
 iAssert (▷ ⌜SM !! s_key s = None⌝)%I as "# > %s_fresh".
   iModIntro.
   by iApply (session_map_inv_unregistered with "[fresh] [inv]").
-iMod (used_set with "fresh") as "not_fresh"; eauto.
+iMod (term_meta_set with "fresh") as "not_fresh"; eauto.
 rewrite -auth_own_op singleton_op.
 iApply ("close" $! (<[s_key s := (None, s)]>SM)); iSplit.
   iPureIntro; rewrite /to_session_map fmap_insert.
@@ -410,7 +408,7 @@ Lemma session_begin E rl kA kB tA tB :
   ↑N ⊆ E →
   session_ctx -∗
   sinv rl kA kB tA tB -∗
-  fresh_key N t ={E}=∗
+  term_meta_token t (↑N) ={E}=∗
   session rl kA kB tA tB ∗
   (session (swap_role rl) kA kB tA tB ={E}=∗ ▷ sinv (swap_role rl) kA kB tA tB).
 Proof.
@@ -424,4 +422,5 @@ Qed.
 End Session.
 
 Arguments sessionG : clear implicits.
-Arguments session_begin {Σ _ _}  {γ N sinv} E rl kA kB tA tB.
+Arguments session_begin {Σ _ _ _ _ _}  {γ N sinv} E rl kA kB tA tB.
+Arguments session_ctx {Σ _} term_meta {_}.

@@ -23,7 +23,7 @@ Implicit Types kA kB : term.
 Variable P : term → iProp.
 
 Definition dh_publ t : iProp :=
-  ∃ g a, ⌜t = TExp g [a]⌝ ∧ □ P a.
+  ∃ g a, ⌜t = TExp g [a]⌝ ∧ □ P t.
 
 Definition dh_seed t : iProp :=
   sterm t ∧
@@ -42,7 +42,7 @@ Qed.
 Lemma dh_seed_elim1 g a :
   dh_seed a -∗
   pterm (TExp g [a]) -∗
-  ▷ P a.
+  ▷ P (TExp g [a]).
 Proof.
 iIntros "#aP #p_t".
 rewrite pterm_TExp1.
@@ -75,7 +75,7 @@ Qed.
 Lemma dh_pterm_TExp g a :
   sterm g -∗
   dh_seed a -∗
-  ▷ □ P a -∗
+  ▷ □ P (TExp g [a]) -∗
   pterm (TExp g [a]).
 Proof.
 iIntros "#gP #(? & ? & aP) #P_a".
@@ -83,12 +83,59 @@ rewrite pterm_TExp1; do !iSplit => //.
 by iRight; iApply "aP"; iModIntro; iExists _, _; eauto.
 Qed.
 
+Definition dh_meta `{Countable L} t N (x : L) : iProp :=
+  (∃ g a, ⌜t = TExp g [a]⌝ ∧ nonce_meta a N x)%I.
+
+Definition dh_meta_token t E : iProp :=
+  (∃ g a, ⌜t = TExp g [a]⌝ ∧ nonce_meta_token a E)%I.
+
+Program Global Instance dh_term_meta : TermMeta (@dh_meta) dh_meta_token.
+
+Next Obligation.
+iIntros (L ?? E t x N sub).
+iDestruct 1 as (g a) "[-> token]".
+iMod (term_meta_set _ _ x with "token") as "meta"; eauto.
+by rewrite /dh_meta; eauto.
+Qed.
+
+Next Obligation.
+iIntros (L ?? t x N E sub).
+iDestruct 1 as (g a) "[-> token]".
+iDestruct 1 as (??)  "[%e  meta]".
+move/TExp_inj: e => [_ /Permutation_singleton [<-]].
+by iApply (term_meta_meta_token with "token meta").
+Qed.
+
+Next Obligation.
+iIntros (L ?? t N x1 x2).
+iDestruct 1 as (g a) "[-> meta1]".
+iDestruct 1 as (??)  "[%e meta2]".
+move/TExp_inj: e => [_ /Permutation_singleton [<-]].
+by iApply (term_meta_agree with "meta1 meta2").
+Qed.
+
+Next Obligation.
+rewrite /dh_meta /dh_meta_token.
+move=> t E1 E2 sub; iSplit.
+- iDestruct 1 as (g a) "[-> token]".
+  rewrite (term_meta_token_difference _ E1 E2) //.
+  by iDestruct "token" as "[token1 token2]"; iSplitL "token1"; eauto.
+- iDestruct 1 as "[token1 token2]".
+  iDestruct "token1" as (g a) "[-> token1]".
+  iDestruct "token2" as (??) "[%e token2]".
+  move/TExp_inj: e => [_ /Permutation_singleton [<-]].
+  iExists _, _; iSplit => //.
+  rewrite (term_meta_token_difference _ E1 E2) //.
+  by iSplitL "token1".
+Qed.
+
 Definition mkdh : val := mknonce.
 
-Lemma wp_mkdh E (Ψ : val → iProp) :
+Lemma wp_mkdh g E (Ψ : val → iProp) :
   (∀ a, sterm a -∗
         dh_seed a -∗
-        term_meta_token a ⊤ -∗ Ψ a) -∗
+        dh_meta_token (TExp g [a]) ⊤ -∗
+        Ψ a) -∗
   WP mkdh #() @ E {{ Ψ }}.
 Proof.
 iIntros "post"; iApply (wp_mknonce _ False%I dh_publ).
@@ -97,25 +144,7 @@ do !iSplit => //.
 iModIntro; iSplit.
 - by iIntros "H"; iSpecialize ("aP1" with "H"); iModIntro.
 - by iIntros "#?"; iApply "aP2"; iModIntro.
-Qed.
-
-Program Definition dh_fresh (s : inG Σ sessionR) : sessionG Σ := {|
-  session_inG := s;
-  fresh_key N t := (∃ g a, ⌜t = TExp g [a]⌝ ∧ term_meta_token a (↑N))%I;
-  used_key  N t := (∃ g a, ⌜t = TExp g [a]⌝ ∧ term_meta a N ())%I;
-|}.
-
-Next Obligation.
-iIntros (s N t); iDestruct 1 as (g a) "[-> token]".
-iDestruct 1 as (g' a') "[%e meta]".
-move/TExp_inj: e => [] _ /Permutation_singleton [] ->.
-by iApply (term_meta_meta_token with "token meta").
-Qed.
-
-Next Obligation.
-iIntros (s N t); iDestruct 1 as (g a) "[-> token]".
-iMod (term_meta_set _ N _ () with "token") as "meta"; try set_solver.
-by eauto.
+- by iExists g, a; eauto.
 Qed.
 
 End DH.

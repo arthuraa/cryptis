@@ -13,7 +13,8 @@ Unset Printing Implicit Defensive.
 
 Section NSLDH.
 
-Context `{!cryptoG Σ, !heapG Σ, !network Σ, !inG Σ sessionR}.
+Existing Instance dh_term_meta.
+Context `{!cryptoG Σ, !heapG Σ, !network Σ, !sessionG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -54,13 +55,13 @@ Definition nsl_dh_inv g rl kA kB ga gb : iProp :=
   end%I.
 
 Definition nsl_dh_fail (k : term) a : iProp :=
-  ∃ k', term_meta a (N.@"peer") k' ∧ corruption k k'.
+  ∃ k', dh_meta a (N.@"peer") k' ∧ corruption k k'.
 
 Lemma pterm_nsl_dh1 g a k k' :
   sterm g -∗
   dh_seed (nsl_dh_fail k) a -∗
-  term_meta a (N.@"peer") k' -∗
-  pterm (TExp g [a])  ↔ ▷ corruption k k'.
+  dh_meta (TExp g [a]) (N.@"peer") k' -∗
+  pterm (TExp g [a]) ↔ ▷ corruption k k'.
 Proof.
 iIntros "#gP #a_pred #meta"; iSplit.
 - iIntros "#p_e".
@@ -80,11 +81,9 @@ iIntros "#a_pred #p_e".
 by iPoseProof (dh_seed_elim2 with "a_pred p_e") as ">[??]".
 Qed.
 
-Existing Instance dh_fresh.
-
 Lemma wp_nsl_dh_init g kA kB E Ψ :
   ↑N ⊆ E →
-  nsl_ctx γ (N.@"nsl") (nsl_dh_inv g) -∗
+  nsl_ctx (@dh_meta _ _) γ (N.@"nsl") (nsl_dh_inv g) -∗
   sterm g -∗
   pterm (TKey Enc kA) -∗
   pterm (TKey Enc kB) -∗
@@ -98,11 +97,11 @@ Lemma wp_nsl_dh_init g kA kB E Ψ :
 Proof.
 iIntros (?) "#ctx #s_g #p_e_kA #p_e_kB Hpost".
 rewrite /nsl_dh_init; wp_pures; wp_bind (mknonce _).
-iApply (wp_mkdh (nsl_dh_fail kA)).
+iApply (wp_mkdh (nsl_dh_fail kA) g).
 iIntros (a) "#s_a #a_pred token".
 rewrite (term_meta_token_difference _ (↑N.@"peer")); last solve_ndisj.
 iDestruct "token" as "[dh token]".
-iMod (term_meta_set _ _ _ kB with "dh") as "#dh"; eauto.
+iMod (term_meta_set _ _ kB with "dh") as "#dh"; eauto.
 wp_pures; wp_bind (tgroup _); iApply wp_tgroup.
 wp_pures; wp_bind (texp _ _); iApply wp_texp.
 rewrite Spec.texpA; wp_pures; wp_bind (nsl_init _ _ _ _ _).
@@ -116,8 +115,7 @@ iApply (wp_nsl_init with "ctx p_e_kA p_e_kB [] [] [] [token]") => //.
   iModIntro; iIntros (b) "p_b".
   by iApply pterm_nsl_dh2.
 - rewrite (term_meta_token_difference _ (↑N.@"nsl")); last solve_ndisj.
-  iDestruct "token" as "[token _]".
-  by iExists _, _; eauto.
+  by iDestruct "token" as "[token _]".
 iIntros (onB) "pub"; case: onB=> [nB|]; last by protocol_failure.
 iDestruct "pub" as "# [s_nB [fail | succ]]".
   wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
@@ -137,7 +135,7 @@ Qed.
 
 Lemma wp_dh_responder g kB E Ψ :
   ↑N ⊆ E →
-  nsl_ctx γ (N.@"nsl") (nsl_dh_inv g) -∗
+  nsl_ctx (@dh_meta _ _) γ (N.@"nsl") (nsl_dh_inv g) -∗
   sterm g -∗
   pterm (TKey Enc kB) -∗
   (∀ oresp : option (term * term),
@@ -163,11 +161,10 @@ rewrite Spec.texpA; wp_pures; wp_bind (nsl_resp _ _ _ _).
 iApply (wp_nsl_resp with "ctx p_e_kB [token] [] [dh]") => //.
 - solve_ndisj.
 - rewrite (term_meta_token_difference _ (↑N.@"nsl")); last solve_ndisj.
-  iDestruct "token" as "[token _]".
-  by iExists _, _; eauto.
+  by iDestruct "token" as "[token _]".
 - by rewrite sterm_TExp /=; iSplit; eauto.
 - iIntros (kA nA).
-  iMod (term_meta_set _ _ _ kA with "dh") as "#meta"; eauto.
+  iMod (term_meta_set _ _ kA with "dh") as "#meta"; eauto.
   iModIntro; iSplit.
   + iModIntro; rewrite [corruption _ _]comm; by iApply pterm_nsl_dh1.
   + iExists b; iSplit => //.

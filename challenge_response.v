@@ -21,6 +21,8 @@ A --> B: {nA, nB, vk(B)}_sk(A)
 Section CR.
 
 Context `{!heapG Σ, !cryptoG Σ, !network Σ}.
+Context `{TermMeta Σ term_meta term_meta_token}.
+Arguments term_meta {_ _ _} _ _ _.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -48,11 +50,8 @@ Variable cr_sess_inv : role → term → term → term → term → iProp.
 
 Variable gen : val.
 
-Definition cr_inv : iProp :=
-  session_inv cr_sess_name (cryptoN.@"cr") cr_sess_inv.
-
 Definition cr_ctx : iProp :=
-  session_ctx cr_sess_name (cryptoN.@"cr") cr_sess_inv.
+  session_ctx (@term_meta) cr_sess_name (cryptoN.@"cr") cr_sess_inv.
 
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None).
@@ -90,7 +89,7 @@ Implicit Types Ψ : val → iProp.
 
 Hypothesis wp_gen : forall E kA kB nA Ψ,
   (∀ nB, cr_sess_inv Resp kA kB nA nB -∗
-         fresh_key (cryptoN.@"cr") nB -∗
+         term_meta_token nB (↑cryptoN.@"cr") -∗
          pterm nB -∗
          Ψ nB) -∗
   WP gen #() @ E {{ Ψ }}.
@@ -150,7 +149,7 @@ Lemma wp_initiator kA kB nA E Ψ :
   enc_pred (nroot.@"m3") msg3_pred -∗
   pterm nA -∗
   (∀ nB, cr_sess_inv Init kA kB nA nB) -∗
-  fresh_key (cryptoN.@"cr") nA -∗
+  term_meta_token nA (↑cryptoN.@"cr") -∗
   pterm (TKey Dec kA) -∗
   pterm (TKey Dec kB) -∗
   (∀ onB : option term,

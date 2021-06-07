@@ -147,20 +147,6 @@ Definition ctx N : iProp :=
 Global Instance Persistent_ctx N : Persistent (ctx N).
 Proof. apply _. Qed.
 
-Program Definition session_info (s : inG Σ sessionR) : sessionG Σ := {|
-  session_inG := s;
-  fresh_key N t := term_meta_token t (↑N);
-  used_key N t := term_meta t N ();
-|}.
-
-Next Obligation.
-by iIntros (s N t); iApply term_meta_meta_token.
-Qed.
-
-Next Obligation.
-by iIntros (???); iApply term_meta_set.
-Qed.
-
 End Invariants.
 
 (**
@@ -627,7 +613,7 @@ Lemma wp_new ke N E Φ :
   Meth.wf ke -∗
   (∀ ke', ⌜ke = meth_of ke'⌝ -∗
           wf ke' -∗
-          term_meta_token (cnonce ke') (↑N.@"fresh") -∗
+          nonce_meta_token (cnonce ke') (↑N.@"fresh") -∗
           Φ (term_of ke')) -∗
   WP I.new ke @ E {{ Φ }}.
 Proof.
@@ -641,7 +627,7 @@ iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
   iApply ("post" $! (Psk psk cn) with "[] [] token") => //=.
   do !iSplit => //.
   by iApply "p_cn".
-- wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I).
+- wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g).
   iIntros (a) "_ #p_a _"; wp_list.
   wp_bind (mknonce _); iApply (wp_mknonce _ True%I (λ _, True)%I).
   iIntros (cn) "_ #p_cn _ token"; wp_list; wp_term_of_list.
@@ -651,7 +637,7 @@ iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
   iApply ("post" $! (Dh g cn a)) => //=.
   do !iSplit => //.
   by iApply "p_cn".
-- wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I).
+- wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g).
   iIntros (a) "_ #p_a _"; wp_list.
   wp_bind (mknonce _); iApply (wp_mknonce _ True%I (λ _, True)%I).
   iIntros (cn) "_ #p_cn _ token"; wp_list; wp_term_of_list.
@@ -1020,7 +1006,7 @@ Lemma wp_new N psk g k (ke : CShare.t) E Φ :
   (∀ ke',
       ⌜ke = cshare_of ke'⌝ -∗
       wf psk N ke' -∗
-      term_meta_token (snonce ke') (↑N.@"fresh") -∗
+      nonce_meta_token (snonce ke') (↑N.@"fresh") -∗
       Φ (term_of ke')) -∗
   WP I.new ke @ E {{ Φ }}.
 Proof.
@@ -1040,7 +1026,7 @@ case: ke => [psk' c_nonce|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
   do !iSplit => //.
   by iApply "pred_a".
 - case: decide => [->|//] in e_check *.
-  wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I).
+  wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g).
   iIntros (a) "_ #pred_a _"; wp_list.
   wp_bind (mknonce _); iApply (wp_mknonce _ True%I (λ _, True)%I).
   iIntros (sn) "_ #p_sn _ token"; wp_list; wp_term_of_list.
@@ -1053,7 +1039,7 @@ case: ke => [psk' c_nonce|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
   do !iSplit => //.
   by iApply "p_sn".
 - case: decide => [[-> ->]|//] in e_check *.
-  wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I).
+  wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g).
   iIntros (a) "_ #pred_a _"; wp_list.
   wp_bind (mknonce _); iApply (wp_mknonce _ True%I (λ _, True)%I).
   iIntros (sn) "_ #p_sn _ token"; wp_list; wp_term_of_list.
@@ -1402,7 +1388,7 @@ Coercion SParams.term_of : SParams.t >-> term.
 
 Section Protocol.
 
-Context `{!heapG Σ, !cryptoG Σ, !network Σ, !inG Σ sessionR}.
+Context `{!heapG Σ, !cryptoG Σ, !network Σ, !sessionG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -1418,8 +1404,6 @@ Definition client N : val := λ: "kex" "other",
   let: "sh" := recv #() in
   SParams.I.check N "cp" "sh".
 
-Existing Instance session_info.
-
 Definition inv rl (kA kB nA nB : term) : iProp :=
   match rl with
   | Init => True%I
@@ -1428,7 +1412,7 @@ Definition inv rl (kA kB nA nB : term) : iProp :=
 
 Lemma wp_client γ N ke other E Φ :
   ctx N -∗
-  session_ctx γ N inv -∗
+  session_ctx (@nonce_meta _ _) γ N inv -∗
   Meth.wf ke -∗
   pterm other -∗
   (∀ cp sh,
