@@ -795,21 +795,24 @@ Proof. by iIntros "? ?"; rewrite pterm_TEnc; eauto. Qed.
 
 Section TermMeta.
 
-Context (term_meta : ∀ `{Countable L}, term → namespace → L → iProp).
-Context (term_meta_token : term → coPset → iProp).
+Context `{Countable L}.
 
-Class TermMeta := {
-  term_meta_persistent :> ∀ `{Countable L} t N (x : L),
-    Persistent (term_meta _ t N x);
-  term_meta_set : ∀ `{Countable L} E t (x : L) N,
+Class TermMeta
+  (term_meta : term → namespace → L → iProp)
+  (term_meta_token : term → coPset → iProp) := {
+  term_meta_timeless :> ∀ t N (x : L),
+    Timeless (term_meta t N x);
+  term_meta_persistent :> ∀ t N (x : L),
+    Persistent (term_meta t N x);
+  term_meta_set : ∀ E t (x : L) N,
     ↑N ⊆ E →
-    term_meta_token t E ==∗ term_meta _ t N x;
-  term_meta_meta_token : ∀ `{Countable L} t (x : L) N E,
+    term_meta_token t E ==∗ term_meta t N x;
+  term_meta_meta_token : ∀ t (x : L) N E,
     ↑N ⊆ E →
-    term_meta_token t E -∗ term_meta _ t N x -∗ False;
-  term_meta_agree : ∀ `{Countable L} t N (x1 x2 : L),
-    term_meta _ t N x1 -∗
-    term_meta _ t N x2 -∗
+    term_meta_token t E -∗ term_meta t N x -∗ False;
+  term_meta_agree : ∀ t N (x1 x2 : L),
+    term_meta t N x1 -∗
+    term_meta t N x2 -∗
     ⌜x1 = x2⌝;
   term_meta_token_difference : ∀ t (E1 E2 : coPset),
     E1 ⊆ E2 →
@@ -817,11 +820,9 @@ Class TermMeta := {
     term_meta_token t E1 ∗ term_meta_token t (E2 ∖ E1);
 }.
 
-End TermMeta.
-
 (* Using two locations is a bit ugly, but maybe more convenient *)
 
-Definition nonce_meta `{Countable L} t N (x : L) : iProp :=
+Definition nonce_meta t N (x : L) : iProp :=
   match t with
   | TNonce a => ∃ a', meta a (nroot.@"meta") a' ∧ meta a' N x
   | _ => False
@@ -834,19 +835,21 @@ Definition nonce_meta_token t E : iProp :=
   end.
 
 Program Global Instance nonce_term_meta :
-  TermMeta (@nonce_meta) nonce_meta_token.
+  TermMeta nonce_meta nonce_meta_token.
 
-Next Obligation. move=> ???; case=> *; apply _. Qed.
+Next Obligation. case=> *; apply _. Qed.
+
+Next Obligation. case=> *; apply _. Qed.
 
 Next Obligation.
-move=> ??? E t x N; case: t; try by move=> *; iStartProof.
+move=> E t x N; case: t; try by move=> *; iStartProof.
 move=> a; iIntros (sub) "token"; rewrite /=.
 iDestruct "token" as (a') "[meta_a' token]".
 by iMod (meta_set E _ x with "token") as "meta"; eauto.
 Qed.
 
 Next Obligation.
-move=> ???; case; try by move=> *; iStartProof.
+case; try by move=> *; iStartProof.
 move=> a x N E sub /=; iIntros "token meta".
 iDestruct "token" as (a1) "[meta_a1 token]".
 iDestruct "meta"  as (a2) "[meta_a2 meta]".
@@ -855,7 +858,7 @@ by iDestruct (meta_meta_token with "token meta") as "[]".
 Qed.
 
 Next Obligation.
-move=> ???; case; try by move=> *; iStartProof.
+case; try by move=> *; iStartProof.
 move=> a * /=; iIntros "meta1 meta2".
 iDestruct "meta1" as (a1) "[meta_a1 meta1]".
 iDestruct "meta2" as (a2) "[meta_a2 meta2]".
@@ -878,6 +881,8 @@ move=> a ?? sub; iSplit.
   by iApply meta_token_difference => //; iSplitL "token1".
 Qed.
 
+End TermMeta.
+
 End Resources.
 
 Arguments crypto_enc_name {Σ _}.
@@ -886,6 +891,7 @@ Arguments crypto_hash_name {Σ _}.
 Arguments hash_pred {Σ _ _}.
 Arguments crypto_key_name {Σ _}.
 Arguments key_pred {Σ _ _}.
-Arguments term_meta_set {Σ _ _ _ _ _ _} E t x N.
-Arguments term_meta_token_difference {Σ _ _ _} t E1 E2.
+Arguments term_meta_set {Σ _ _ _ _ } E t x N.
+Arguments term_meta_token_difference {Σ _ _ _ _} t E1 E2.
 Arguments nonce_term_meta Σ {_}.
+Arguments TermMeta : clear implicits.
