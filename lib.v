@@ -713,6 +713,46 @@ Instance repr_prod `{Repr A, Repr B} : Repr (A * B) :=
   λ p, (repr p.1, repr p.2)%V.
 Arguments repr_prod {_ _ _ _} !_.
 
+Fixpoint nforall {A} (n : nat) (P : list A → Prop) :=
+  match n with
+  | 0 => P []
+  | S n => forall x : A, nforall n (λ xs, P (x :: xs))
+  end.
+
+Lemma nforallP {A} (n : nat) (P : list A -> Prop) :
+  nforall n P ↔ ∀ vs, n = length vs → P vs.
+Proof.
+elim: n => [|n IH] /= in P *.
+  split; [by move=> ? [|//]|by apply].
+split.
+- move=> H [|x xs] //= [e]; by move/IH: (H x); apply.
+- by move=> H x; apply/IH => xs len_xs; apply: H; rewrite len_xs.
+Qed.
+
+Definition nforall_eq {A} (n : nat) (vs : list A) (P : list A -> Prop) :=
+  nforall n (λ vs', vs = vs' → P vs').
+
+Lemma nforall_eqP {A} (n : nat) (xs : list A) (P : list A -> Prop) :
+  nforall_eq n xs P ↔ (n = length xs → P xs).
+Proof.
+rewrite /nforall_eq nforallP; split.
+- by move=> H len_xs; apply: H.
+- by move=> H xs' len_xs' e_xs'; rewrite e_xs' in H; apply: H.
+Qed.
+
+Arguments nforall_eq {A} /.
+
+Lemma list_len_rect (n : nat) A (P : list A → Prop) :
+  (nforall n P) →
+  (∀ xs, length xs ≠ n → P xs) →
+  ∀ xs, P xs.
+Proof.
+move=> eq_n neq_n xs.
+case: (decide (n = length xs)) => [eq|neq].
+- by move: xs eq; apply/nforallP.
+- exact: neq_n.
+Qed.
+
 Fixpoint prod_of_list_aux_type A B n :=
   match n with
   | 0 => A

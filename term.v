@@ -277,6 +277,17 @@ move=> eq_enc; apply: neq.
 by apply: encode_inj eq_enc.
 Qed.
 
+Variant untag_spec N t : option term → Type :=
+| UntagSome t' of t = Spec.tag N t' : untag_spec N t (Some t')
+| UntagNone of (∀ t', t ≠ Spec.tag N t') : untag_spec N t None.
+
+Lemma untagP N t : untag_spec N t (Spec.untag N t).
+Proof.
+case e: (Spec.untag N t) => [t'|]; constructor.
+- by rewrite (Spec.untagK _ _ _ e).
+- move=> t' e'; by rewrite e' Spec.tagK in e.
+Qed.
+
 Definition as_int t :=
   if t is TInt n then Some n else None.
 

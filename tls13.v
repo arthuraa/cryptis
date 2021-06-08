@@ -584,6 +584,14 @@ Definition wf ke : iProp :=
 Instance Persistent_wf ke : Persistent (wf ke).
 Proof. case: ke => *; apply _. Qed.
 
+Lemma wf_psk ke : wf ke -∗ sterm (psk ke).
+Proof.
+case: ke => [psk ?|???|psk ???] /=.
+- by iIntros "(? & ?)".
+- by iIntros "_"; rewrite sterm_TInt.
+- by iIntros "(? & ? & ? & ?)".
+Qed.
+
 Lemma wf_encode N ke :
   ctx N -∗
   wf ke -∗
@@ -609,11 +617,11 @@ case: ke => [psk cn|g cn x|psk g cn x] //=.
 Qed.
 
 (* TODO: Add session information *)
-Lemma wp_new ke N E Φ :
+Lemma wp_new ke E Φ :
   Meth.wf ke -∗
   (∀ ke', ⌜ke = meth_of ke'⌝ -∗
           wf ke' -∗
-          nonce_meta_token (cnonce ke') (↑N.@"fresh") -∗
+          nonce_meta_token (cnonce ke') ⊤ -∗
           Φ (term_of ke')) -∗
   WP I.new ke @ E {{ Φ }}.
 Proof.
@@ -622,8 +630,6 @@ iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
 - wp_bind (mknonce _); iApply (wp_mknonce _ True%I (λ _, True)%I).
   iIntros (cn) "_ #p_cn _ token"; wp_list; wp_term_of_list.
   wp_tag.
-  rewrite (term_meta_token_difference _ (↑N.@"fresh")); try set_solver.
-  iDestruct "token" as "[token _]".
   iApply ("post" $! (Psk psk cn) with "[] [] token") => //=.
   do !iSplit => //.
   by iApply "p_cn".
@@ -632,7 +638,7 @@ iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
   wp_bind (mknonce _); iApply (wp_mknonce _ True%I (λ _, True)%I).
   iIntros (cn) "_ #p_cn _ token"; wp_list; wp_term_of_list.
   wp_tag.
-  rewrite (term_meta_token_difference _ (↑N.@"fresh")); try set_solver.
+  rewrite (term_meta_token_difference _ ⊤); try set_solver.
   iDestruct "token" as "[token _]".
   iApply ("post" $! (Dh g cn a)) => //=.
   do !iSplit => //.
@@ -642,8 +648,6 @@ iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
   wp_bind (mknonce _); iApply (wp_mknonce _ True%I (λ _, True)%I).
   iIntros (cn) "_ #p_cn _ token"; wp_list; wp_term_of_list.
   wp_tag.
-  rewrite (term_meta_token_difference _ (↑N.@"fresh")); try set_solver.
-  iDestruct "token" as "[token _]".
   iApply ("post" $! (PskDh psk g cn a)) => //=.
   iDestruct "p_ke" as "(? & ?)".
   do !iSplit => //.
@@ -1006,7 +1010,7 @@ Lemma wp_new N psk g k (ke : CShare.t) E Φ :
   (∀ ke',
       ⌜ke = cshare_of ke'⌝ -∗
       wf psk N ke' -∗
-      nonce_meta_token (snonce ke') (↑N.@"fresh") -∗
+      nonce_meta_token (snonce ke') ⊤ -∗
       Φ (term_of ke')) -∗
   WP I.new ke @ E {{ Φ }}.
 Proof.
@@ -1017,8 +1021,6 @@ case: ke => [psk' c_nonce|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
   wp_bind (mknonce _); iApply (wp_mknonce _ True%I (λ _, True)%I).
   iIntros (a) "_ #pred_a _ token"; wp_list; wp_term_of_list.
   wp_tag; wp_pures.
-  rewrite (term_meta_token_difference _ (↑N.@"fresh")); try set_solver.
-  iDestruct "token" as "[token _]".
   iApply ("post" $! (Psk (THash _) c_nonce a)) => //=.
   iSplit => //.
   rewrite !pterm_tag !pterm_of_list /=.
@@ -1030,8 +1032,6 @@ case: ke => [psk' c_nonce|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
   iIntros (a) "_ #pred_a _"; wp_list.
   wp_bind (mknonce _); iApply (wp_mknonce _ True%I (λ _, True)%I).
   iIntros (sn) "_ #p_sn _ token"; wp_list; wp_term_of_list.
-  rewrite (term_meta_token_difference _ (↑N.@"fresh")); try set_solver.
-  iDestruct "token" as "[token _]".
   wp_tag; wp_pures.
   iApply ("post" $! (Dh g cn sn gx a)) => //=.
   rewrite !pterm_tag !pterm_of_list /=.
@@ -1043,14 +1043,45 @@ case: ke => [psk' c_nonce|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
   iIntros (a) "_ #pred_a _"; wp_list.
   wp_bind (mknonce _); iApply (wp_mknonce _ True%I (λ _, True)%I).
   iIntros (sn) "_ #p_sn _ token"; wp_list; wp_term_of_list.
-  rewrite (term_meta_token_difference _ (↑N.@"fresh")); try set_solver.
-  iDestruct "token" as "[token _]".
   wp_tag; wp_pures.
   iApply ("post" $! (PskDh _ g cn sn gx a)) => //.
   rewrite !pterm_tag !pterm_of_list /=.
   iDestruct "p_ke" as "(? & ? & ? & ? & _)".
   do !iSplit => //.
   by iApply "p_sn".
+Qed.
+
+Lemma pterm_checkE N c_kex ke res :
+  check N c_kex ke = Some res →
+  pterm ke -∗
+  ∃ skey ke',
+    ⌜res = [CShare.cnonce c_kex; snonce ke'; skey]⌝ ∧
+    ⌜ke = term_of ke'⌝.
+Proof.
+case: c_kex => [psk cn|g cn x|psk g cn x] /=.
+- case: Spec.untagP => //= {}ke ->.
+  case: Spec.to_listP=> //= {}ke.
+  elim/(@list_len_rect 3): ke => [psk' cn' sn|ke neq]; last first.
+    by rewrite prod_of_list_neq.
+  rewrite unlock /=; case: decide => //= - [] {psk' cn'} -> -> [] {res} <-.
+  iIntros "#?".
+  by iExists _, (Psk (THash (Spec.tag (N.@"psk") psk)) cn sn).
+- case: Spec.untagP => //= {}ke ->.
+  case: Spec.to_listP => //= {}ke.
+  elim/(@list_len_rect 5): ke => [g' cn' sn gx gy|ke neq]; last first.
+    by rewrite prod_of_list_neq.
+  rewrite [prod_of_list _ _]unlock /=; case: decide => //= - [] -> [] -> ->.
+  case=> [] {res} <-.
+  iIntros "#?".
+  by iExists _, (Dh g cn sn (TExp g [x]) gy).
+- case: Spec.untagP => //= {}ke ->.
+  case: Spec.to_listP => //= {}ke.
+  elim/(@list_len_rect 6): ke => [psk' g' cn' sn gx gy|ke neq]; last first.
+    by rewrite prod_of_list_neq.
+  rewrite [prod_of_list _ _]unlock /=.
+  case: decide => //= - [] -> [] -> [] -> -> [] {res} <-.
+  iIntros "#?".
+  by iExists _, (PskDh _ g cn sn _ _); eauto.
 Qed.
 
 End Proofs.
@@ -1172,11 +1203,59 @@ wp_eq_term e'; wp_pures; last first.
 by rewrite {}e' decide_True //.
 Qed.
 
+Definition wf N cp : iProp :=
+  CShare.wf (share cp) ∧
+  nonce_meta (CShare.cnonce (share cp)) (N.@"binder") (other cp) ∧
+  pterm (other cp).
+
+Instance wf_persistent N cp : Persistent (wf N cp).
+Proof. apply _. Qed.
+
+Lemma wf_set N cp :
+  CShare.wf (share cp) -∗
+  nonce_meta_token (CShare.cnonce (share cp)) (↑N.@"binder") -∗
+  pterm (other cp) ==∗
+  wf N cp.
+Proof.
+iIntros "#? token #?".
+iMod (term_meta_set _ _ (other cp) with "token") as "meta"; eauto.
+by iModIntro; do !iSplit.
+Qed.
+
+Definition binder_inv N m : iProp :=
+  ∃ cp, ⌜m = Spec.of_list [CShare.psk (share cp);
+                           hello_pub N cp]⌝ ∧
+        wf N cp.
+
+Definition ctx N : iProp :=
+  ctx N ∧
+  hash_pred (N.@"binder") (binder_inv N).
+
+Instance ctx_persistent N : Persistent (ctx N).
+Proof. apply _. Qed.
+
+Lemma pterm_hello N cp : ctx N -∗ wf N cp -∗ pterm (hello N cp).
+Proof.
+iIntros "#[ctx binder] # (wf_cp & meta & p_cp)".
+iAssert (pterm (hello_pub N cp)) as "p_pub".
+  rewrite pterm_of_list /=; do !iSplit => //.
+  by iApply CShare.wf_encode.
+rewrite [pterm (hello _ _)]pterm_of_list /=; do ![iSplit => //].
+rewrite pterm_THash; iRight; rewrite sterm_tag sterm_of_list /=.
+do !iSplit => //.
+- by iApply CShare.wf_psk.
+- by iApply pterm_sterm.
+iExists _, _, _; do !iSplit => //; eauto.
+by iExists cp; iModIntro; do !iSplit => //.
+Qed.
+
 End Proofs.
 
 End CParams.
 
 Coercion CParams.term_of : CParams.t >-> term.
+Existing Instance CParams.wf_persistent.
+Existing Instance CParams.ctx_persistent.
 
 Module SParams.
 
@@ -1204,12 +1283,17 @@ Definition hello_pub sp :=
     other sp
   ].
 
-Definition hello N psk sp :=
+Definition hello_priv N sp :=
   let pub := hello_pub sp in
-  let enc := Spec.of_list [
+  Spec.of_list [
     TKey Dec (verif_key sp);
     TEnc (verif_key sp) (Spec.tag (N.@"server_hello_sig") (THash pub))
-  ] in let session_key := SShare.session_key_of N psk (share sp) in
+  ].
+
+Definition hello N psk sp :=
+  let pub := hello_pub sp in
+  let enc := hello_priv N sp in
+  let session_key := SShare.session_key_of N psk (share sp) in
   Spec.of_list [
     pub;
     TEnc session_key (Spec.tag (N.@"server_hello") enc)
@@ -1380,6 +1464,58 @@ wp_bind (I.verify _ _ _ _); iApply wp_verify.
 by case: verify; wp_pures.
 Qed.
 
+Context `{!sessionG Σ term (@nonce_meta _ _) nonce_meta_token}.
+
+Definition ctx γ N :=
+  enc_pred (N.@"server_hello") (λ k t,
+    ∃ sp, ⌜t = hello_priv N sp⌝ ∧
+          session γ N Resp (CShare.cnonce (CParams.share cp)) (snonce cp)
+  )%I.
+
+Lemma pterm_check_elim γ N cp sh res :
+  check N cp sh = Some res →
+  ctx N -∗
+  pterm sh -∗
+  ∃ psk sp sn skey,
+    ⌜res = [CShare.cnonce (CParams.share cp); sn; skey]⌝ ∧
+    ⌜sh = hello N psk sp⌝ ∧
+    pterm psk ∧
+    session γ N Resp (CShare.cnonce (CParams.share cp)) sn (other sp).
+Proof.
+rewrite /check; case: Spec.to_listP => //= {}sh.
+elim/(@list_len_rect 2): sh => [pub sig|sh ne]; last first.
+  by rewrite prod_of_list_neq.
+rewrite unlock /=; case: Spec.to_listP => //= {}pub.
+elim/(@list_len_rect 2): pub => [kex other'|pub ne]; last first.
+  by rewrite prod_of_list_neq.
+rewrite unlock /=.
+case e_check: SShare.check => [res'|] //=.
+elim/(@list_len_rect 3): res' => [cn sn session_key|res' ne] in e_check *; last first.
+  by rewrite prod_of_list_neq.
+rewrite [prod_of_list _ _]unlock /=.
+case e_dec: Spec.tdec => [res'|] //=.
+move/tdecK: e_dec=> -> {sig}.
+case: Spec.to_listP => //= {}res'.
+elim/(@list_len_rect 2): res' => [verif_key sig|res' neq]; last first.
+  by rewrite prod_of_list_neq.
+rewrite [prod_of_list _ _]unlock /=.
+case: decide => [-> {other'}|//] /=.
+rewrite /verify /Spec.tdec /Spec.dec.
+case: verif_key => //= - [] //= verif_key.
+case: sig => //= ? sig.
+case: decide => [<-|//] /=.
+case: Spec.untagP=> [ {}sig ->|//=].
+rewrite bool_decide_decide; case: decide => [->|//] [] {res} <-.
+do !rewrite pterm_of_list /=.
+iIntros "#ctx".
+iDestruct 1 as "# ((p_kex & p_cp & _) & p_sig & _)".
+iPoseProof (SShare.pterm_check e_check with "p_kex") as "Hsig".
+iDestruct "Hsig" as (skey ke') "(%e & ->)".
+case: e => -> -> -> {cn sn session_key} in e_check *.
+iPoseProof (pterm_TEncE with "p_sig ctx") as "hello".
+
+
+
 End Proofs.
 
 End SParams.
@@ -1411,7 +1547,7 @@ Definition inv rl (nA nB k : term) : iProp :=
   end.
 
 Lemma wp_client γ N ke other E Φ :
-  ctx N -∗
+  CParams.ctx N -∗
   session_ctx γ N inv -∗
   Meth.wf ke -∗
   pterm other -∗
@@ -1424,14 +1560,17 @@ Lemma wp_client γ N ke other E Φ :
 Proof.
 iIntros "#ctx #sess #p_ke #p_other post".
 rewrite /client; wp_pures.
-wp_bind (CShare.I.new _); iApply (CShare.wp_new _ N) => //.
+wp_bind (CShare.I.new _); iApply (CShare.wp_new _) => //.
 iIntros (ke' e) "#p_ke' token"; wp_pures.
+rewrite (term_meta_token_difference _ (↑N.@"binder")); try set_solver.
+iDestruct "token" as "[token _]".
+pose cp := {| CParams.share := ke'; CParams.other := other |}.
+iMod (CParams.wf_set _ cp with "p_ke' token p_other") as "#wf_cp".
 wp_list; wp_term_of_list.
 wp_pures; wp_bind (CParams.I.hello _ _).
-pose cp := {| CParams.share := ke'; CParams.other := other |}.
 iApply (CParams.wp_hello N cp).
 wp_pures; wp_bind (send _); iApply wp_send.
-  admit.
+  by iModIntro; iApply CParams.pterm_hello.
 wp_pures; wp_bind (recv _); iApply wp_recv.
 iIntros (sh) "p_sh"; wp_pures.
 iApply (SParams.wp_check N cp).

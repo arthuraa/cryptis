@@ -892,4 +892,5 @@ Arguments key_pred {Σ _ _}.
 Arguments term_meta_set {Σ _ _ _ _ _ _} E t x N.
 Arguments term_meta_token_difference {Σ _ _ _} t E1 E2.
 Arguments nonce_term_meta Σ {_}.
+Arguments nonce_meta_token {Σ _}.
 Arguments TermMeta Σ term_meta term_meta_token : assert.

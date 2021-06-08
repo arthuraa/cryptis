@@ -36,35 +36,8 @@ rewrite (_ : NILV = repr (@nil A)) /=; first by apply: tac_wp_cons.
 by rewrite repr_list_eq /=.
 Qed.
 
-Fixpoint nforall_aux {A} (n : nat) (P : list A → Prop) :=
-  match n with
-  | 0 => P []
-  | S n => forall x : A, nforall_aux n (λ xs, P (x :: xs))
-  end.
-
-Lemma nforall_auxP {A} (n : nat) (P : list A -> Prop) :
-  nforall_aux n P ↔ ∀ vs, n = length vs → P vs.
-Proof.
-elim: n => [|n IH] /= in P *.
-  split; [by move=> ? [|//]|by apply].
-split.
-- move=> H [|x xs] //= [e]; by move/IH: (H x); apply.
-- by move=> H x; apply/IH => xs len_xs; apply: H; rewrite len_xs.
-Qed.
-
-Definition nforall {A} (n : nat) (vs : list A) (P : list A -> Prop) :=
-  nforall_aux n (λ vs', vs = vs' → P vs').
-
-Lemma nforallP {A} (n : nat) (xs : list A) (P : list A -> Prop) :
-  nforall n xs P ↔ (n = length xs → P xs).
-Proof.
-rewrite /nforall nforall_auxP; split.
-- by move=> H len_xs; apply: H.
-- by move=> H xs' len_xs' e_xs'; rewrite e_xs' in H; apply: H.
-Qed.
-
 Lemma tac_wp_list_match `{!Repr A} Γ E K vars vs k Ψ :
-  nforall (length vars) vs (
+  nforall_eq (length vars) vs (
     λ vs', envs_entails Γ (WP fill K (nsubst vars (map repr vs') k) @ E {{ Ψ }})) →
   (length vars ≠ length vs →
     envs_entails Γ (WP fill K NONEV @ E {{ Ψ }})) →
@@ -294,8 +267,6 @@ Tactic Notation "wp_cons" :=
   end.
 
 Tactic Notation "wp_list" := repeat wp_cons.
-
-Arguments nforall {A} /.
 
 Tactic Notation "wp_list_match" :=
   wp_pures;
