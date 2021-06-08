@@ -13,12 +13,11 @@ Unset Printing Implicit Defensive.
 
 Section NSLDH.
 
-Existing Instance dh_term_meta.
-Context `{!cryptoG Σ, !heapG Σ, !network Σ, !sessionG Σ}.
+Context `{!cryptoG Σ, !heapG Σ, !network Σ}.
+Context `{!sessionG Σ (term * term) (@dh_meta _ _) dh_meta_token}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
-Implicit Types s : session_view.
 Implicit Types rl : role.
 
 Variable γ : gname.
@@ -44,7 +43,7 @@ Definition nsl_dh_resp : val := λ: "g" "skB" "pkB",
 Implicit Types Ψ : val → iProp.
 Implicit Types kA kB : term.
 
-Definition nsl_dh_inv g rl kA kB ga gb : iProp :=
+Definition nsl_dh_inv g rl ga gb kA kB : iProp :=
   match rl with
   | Init =>
     ∃ a, ⌜ga = TExp g [a]⌝ ∧
@@ -83,7 +82,7 @@ Qed.
 
 Lemma wp_nsl_dh_init g kA kB E Ψ :
   ↑N ⊆ E →
-  nsl_ctx (@dh_meta _ _) γ (N.@"nsl") (nsl_dh_inv g) -∗
+  nsl_ctx γ (N.@"nsl") (nsl_dh_inv g) -∗
   sterm g -∗
   pterm (TKey Enc kA) -∗
   pterm (TKey Enc kB) -∗
@@ -135,7 +134,7 @@ Qed.
 
 Lemma wp_dh_responder g kB E Ψ :
   ↑N ⊆ E →
-  nsl_ctx (@dh_meta _ _) γ (N.@"nsl") (nsl_dh_inv g) -∗
+  nsl_ctx γ (N.@"nsl") (nsl_dh_inv g) -∗
   sterm g -∗
   pterm (TKey Enc kB) -∗
   (∀ oresp : option (term * term),

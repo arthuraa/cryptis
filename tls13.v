@@ -1388,11 +1388,11 @@ Coercion SParams.term_of : SParams.t >-> term.
 
 Section Protocol.
 
-Context `{!heapG Σ, !cryptoG Σ, !network Σ, !sessionG Σ}.
+Context `{!heapG Σ, !cryptoG Σ, !network Σ}.
+Context `{sessionG Σ term (@nonce_meta _ _) nonce_term_token}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
-Implicit Types s : session_view.
 Implicit Types rl : role.
 Implicit Types Φ : val → iProp.
 
@@ -1404,7 +1404,7 @@ Definition client N : val := λ: "kex" "other",
   let: "sh" := recv #() in
   SParams.I.check N "cp" "sh".
 
-Definition inv rl (kA kB nA nB : term) : iProp :=
+Definition inv rl (nA nB k : term) : iProp :=
   match rl with
   | Init => True%I
   | Resp => True%I
@@ -1412,7 +1412,7 @@ Definition inv rl (kA kB nA nB : term) : iProp :=
 
 Lemma wp_client γ N ke other E Φ :
   ctx N -∗
-  session_ctx (@nonce_meta _ _) γ N inv -∗
+  session_ctx γ N inv -∗
   Meth.wf ke -∗
   pterm other -∗
   (∀ cp sh,

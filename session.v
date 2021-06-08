@@ -84,8 +84,6 @@ Proof. apply (inj_countable' _ _ bool_of_roleK). Qed.
 Definition swap_role rl :=
   if rl is Init then Resp else Init.
 
-Context `{TermMeta Σ (X * role * term) term_meta term_meta_token}.
-
 Definition session_statusR := authR (optionUR unitR).
 
 Definition session_mapUR := gmapUR term session_statusR.
@@ -102,12 +100,17 @@ Definition to_session_map SM := session_status_both <$> SM.
 
 Definition sessionR := authR session_mapUR.
 
-Class sessionG := {
+Class sessionG X term_meta term_meta_token
+  `{Countable X, TermMeta Σ term_meta term_meta_token} := {
   session_inG    :> inG Σ sessionR;
 }.
 
-Context `{!sessionG} (γ : gname) (N : namespace).
+Arguments sessionG X term_meta term_meta_token {_ _ _}.
+
+Context `{TermMeta Σ term_meta term_meta_token, Countable X}.
+Context `{!sessionG X term_meta term_meta_token} (γ : gname) (N : namespace).
 Context (P : role → term → term → X → iProp).
+Arguments term_meta {_ _ _} _ _ _.
 
 Let sinv rl tA tB x :=
   P rl (if rl is Init then tA else tB)
@@ -368,7 +371,7 @@ Qed.
 
 End Session.
 
-Arguments sessionG : clear implicits.
-Arguments session_begin {Σ _ _ _ _ _ _}  {γ N P} E rl tI tR.
-Arguments session_ctx {Σ _ X} term_meta {_}.
-Arguments session {Σ X} term_meta {_} γ N _ _ _.
+Arguments sessionG Σ X term_meta term_meta_token {_ _ _}.
+Arguments session_begin {Σ _ _ _ _ _ _ _ _}  {γ N P} E rl tI tR.
+Arguments session_ctx {Σ _ _ _ _ _ _ _ _} γ N.
+Arguments session {Σ _ _ _ _ _ _ _} γ N _ _ _.

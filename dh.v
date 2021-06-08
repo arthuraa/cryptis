@@ -89,7 +89,8 @@ Definition dh_meta `{Countable L} t N (x : L) : iProp :=
 Definition dh_meta_token t E : iProp :=
   (∃ g a, ⌜t = TExp g [a]⌝ ∧ nonce_meta_token a E)%I.
 
-Program Global Instance dh_term_meta : TermMeta (@dh_meta) dh_meta_token.
+Program Global Instance dh_term_meta :
+  TermMeta (@dh_meta) dh_meta_token.
 
 Next Obligation.
 iIntros (L ?? E t x N sub).
@@ -118,7 +119,7 @@ Next Obligation.
 rewrite /dh_meta /dh_meta_token.
 move=> t E1 E2 sub; iSplit.
 - iDestruct 1 as (g a) "[-> token]".
-  rewrite (term_meta_token_difference _ E1 E2) //.
+  rewrite [nonce_meta_token _ _](term_meta_token_difference a E1 E2) //.
   by iDestruct "token" as "[token1 token2]"; iSplitL "token1"; eauto.
 - iDestruct 1 as "[token1 token2]".
   iDestruct "token1" as (g a) "[-> token1]".
