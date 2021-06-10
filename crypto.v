@@ -167,7 +167,7 @@ by iModIntro; iExists γ; iSplit.
 Qed.
 
 Definition wf_enc k t : iProp :=
-  ∃ N t' Φ, ⌜t = Spec.tag N t'⌝ ∧ enc_pred N Φ ∧ □ Φ k t'.
+  ∃ N t' Φ, ⌜t = Spec.tag N t'⌝ ∧ enc_pred N Φ ∧ □ ▷ Φ k t'.
 
 Global Instance wf_enc_persistent k t : Persistent (wf_enc k t).
 Proof. by apply _. Qed.
@@ -219,7 +219,7 @@ by iModIntro; iExists γ; iSplit.
 Qed.
 
 Definition wf_key kt t : iProp :=
-  ∃ N t' P, ⌜t = Spec.tag N t'⌝ ∧ key_pred N P ∧ □ P kt t'.
+  ∃ N t' P, ⌜t = Spec.tag N t'⌝ ∧ key_pred N P ∧ □ ▷ P kt t'.
 
 Global Instance wf_key_persistent kt t : Persistent (wf_key kt t).
 Proof. by apply _. Qed.
@@ -271,7 +271,7 @@ by iModIntro; iExists γ; iSplit.
 Qed.
 
 Definition wf_hash t : iProp :=
-  ∃ N t' P, ⌜t = Spec.tag N t'⌝ ∧ hash_pred N P ∧ □ P t'.
+  ∃ N t' P, ⌜t = Spec.tag N t'⌝ ∧ hash_pred N P ∧ □ ▷ P t'.
 
 Global Instance wf_hash_persistent t : Persistent (wf_hash t).
 Proof. by apply _. Qed.
