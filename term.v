@@ -50,6 +50,12 @@ Proof.
 by move=> t _ <- ts1 ts2 e; apply/TExp_inj; eauto.
 Qed.
 
+Lemma TExpC2 g t1 t2 : TExp g [t1; t2] = TExp g [t2; t1].
+Proof.
+suff -> : [t1; t2] ≡ₚ [t2; t1] by [].
+exact/Permutation_swap.
+Qed.
+
 Global Instance pre_term_inhabited : Inhabited PreTerm.pre_term.
 Proof. exact: (populate (PreTerm.PTInt 0)). Qed.
 
