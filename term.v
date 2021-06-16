@@ -50,6 +50,12 @@ Proof.
 by move=> t _ <- ts1 ts2 e; apply/TExp_inj; eauto.
 Qed.
 
+Lemma TExpC2 g t1 t2 : TExp g [t1; t2] = TExp g [t2; t1].
+Proof.
+suff -> : [t1; t2] ≡ₚ [t2; t1] by [].
+exact/Permutation_swap.
+Qed.
+
 Global Instance pre_term_inhabited : Inhabited PreTerm.pre_term.
 Proof. exact: (populate (PreTerm.PTInt 0)). Qed.
 
@@ -267,6 +273,27 @@ case: t1=> [] // [] // [] //= m.
 by case: decide => // <- _ [->].
 Qed.
 
+Lemma untag_tag_ne N1 N2 t :
+  N1 ≠ N2 →
+  Spec.untag N1 (Spec.tag N2 t) = None.
+Proof.
+move=> neq; rewrite Spec.untag_eq Spec.tag_eq /=.
+rewrite decide_False //.
+move=> eq_enc; apply: neq.
+by apply: encode_inj eq_enc.
+Qed.
+
+Variant untag_spec N t : option term → Type :=
+| UntagSome t' of t = Spec.tag N t' : untag_spec N t (Some t')
+| UntagNone of (∀ t', t ≠ Spec.tag N t') : untag_spec N t None.
+
+Lemma untagP N t : untag_spec N t (Spec.untag N t).
+Proof.
+case e: (Spec.untag N t) => [t'|]; constructor.
+- by rewrite (Spec.untagK _ _ _ e).
+- move=> t' e'; by rewrite e' Spec.tagK in e.
+Qed.
+
 Definition as_int t :=
   if t is TInt n then Some n else None.
 
@@ -380,6 +407,8 @@ apply: (ssrbool.elimT (perm_sort_leP _ _ _ _)); rewrite seq.perm_cons.
 rewrite -[@List.map]/@seq.map -seq.map_comp seq.map_id_in //= => {}t1 in_ts1.
 by rewrite fold_termK // (ssrbool.elimT seq.allP wf_ts1).
 Qed.
+
+Definition zero : term := TInt 0.
 
 End Spec.
 

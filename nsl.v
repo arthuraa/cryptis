@@ -12,24 +12,24 @@ Unset Printing Implicit Defensive.
 Section NSL.
 
 Context `{!heapG Σ, !cryptoG Σ, !network Σ}.
+Context `{TermMeta Σ term_meta term_meta_token}.
+Context `{!sessionG Σ (term * term) term_meta term_meta_token}.
+Context (γ : gname).
 Notation iProp := (iProp Σ).
-
 Implicit Types t : term.
-Implicit Types s : session_view.
-Implicit Types rl : role.
-
-Class nslG := {
-  in_nsl_sessG :> sessionG Σ;
-  nsl_sess_name : gname;
-}.
-
-Context `{!nslG}.
 
 Definition corruption kA kB : iProp :=
   pterm (TKey Dec kA) ∨ pterm (TKey Dec kB).
 
 Global Instance corruptionC : Comm (⊣⊢) corruption.
 Proof. by move=> k k'; rewrite /corruption [(_ ∨ _)%I]comm. Qed.
+
+Variable N : namespace.
+
+Variable P : role → term → term → term → term → iProp.
+
+Definition nsl_sess_inv rl (tI tR : term) (m : term * term) : iProp :=
+  let '(kA, kB) := m in P rl tI tR kA kB.
 
 Definition msg1_pred (kB : term) m1 : iProp :=
   ∃ nA kA, ⌜m1 = Spec.of_list [nA; TKey Enc kA]⌝ ∧
@@ -40,33 +40,26 @@ Definition msg2_pred kA m2 : iProp :=
   ∃ nA nB kB,
     ⌜m2 = Spec.of_list [nA; nB; TKey Enc kB]⌝ ∧
     (pterm nB ↔ ▷ corruption kA kB) ∧
-    session nsl_sess_name Resp kA kB nA nB.
+    session γ N Resp nA nB (kA, kB).
 
 Definition msg3_pred kB nB : iProp :=
   ∀ nA kA,
-    session nsl_sess_name Resp kA kB nA nB -∗
-    session nsl_sess_name Init kA kB nA nB ∧
+    session γ N Resp nA nB (kA, kB) -∗
+    session γ N Init nA nB (kA, kB) ∧
     (pterm nA ↔ ▷ corruption kA kB).
 
-Variable N : namespace.
-
-Variable nsl_sess_inv : role → term → term → term → term → iProp.
-
-Definition nsl_inv : iProp :=
-  session_inv nsl_sess_name N nsl_sess_inv.
-
 Definition nsl_ctx : iProp :=
-  session_ctx nsl_sess_name N nsl_sess_inv ∧
-  crypto_enc (N.@"m1") msg1_pred ∧
-  crypto_enc (N.@"m2") msg2_pred ∧
-  crypto_enc (N.@"m3") msg3_pred.
+  session_ctx γ N nsl_sess_inv ∧
+  enc_pred (N.@"m1") msg1_pred ∧
+  enc_pred (N.@"m2") msg2_pred ∧
+  enc_pred (N.@"m3") msg3_pred.
 
 Global Instance persistent_nsl_ctx : Persistent nsl_ctx.
 Proof. apply _. Qed.
 
 Lemma nsl_ctx_session_ctx :
   nsl_ctx -∗
-  session_ctx nsl_sess_name N nsl_sess_inv.
+  session_ctx γ N nsl_sess_inv.
 Proof. by iIntros "( ? & ? )". Qed.
 
 Ltac protocol_failure :=
@@ -125,13 +118,13 @@ Lemma pterm_msg2I kA kB nA nB :
   □ (pterm (TKey Dec kA) → pterm nA) -∗
   sterm nB -∗
   □ (pterm nB ↔ ▷ corruption kA kB) -∗
-  session nsl_sess_name Resp kA kB nA nB -∗
+  session γ N Resp nA nB (kA, kB) -∗
   ▷ pterm (TEnc kA (Spec.tag (N.@"m2") (Spec.of_list [nA; nB; TKey Enc kB]))).
 Proof.
 iIntros "# (_ & _ & Hm2 & _) #HAenc #HBenc #HnAhi #HnAlo #HnBhi #HnBlo #sess !>".
 iApply pterm_TEncIS; eauto.
 - by iApply pterm_sterm.
-- iModIntro; iExists _, _, _; do !iSplit => //.
+- iModIntro; iExists _, _, _; do ![iSplit => //].
   rewrite sterm_of_list /=; do !iSplit => //.
   by iApply pterm_sterm.
 iIntros "!> #pub".
@@ -166,7 +159,7 @@ Lemma pterm_msg2E kA kB nA nB :
   ▷ (sterm nB ∧
      (pterm nB ↔ ▷ corruption kA kB) ∧
      ▷ (corruption kA kB ∨
-        session nsl_sess_name Resp kA kB nA nB)).
+        session γ N Resp nA nB (kA, kB))).
 Proof.
 iIntros "# (_ & _ & ? & _) #p_nA #Hts".
 iDestruct (pterm_TEncE with "Hts [//]") as "{Hts} [[? Hts] | Hts]".
@@ -188,26 +181,27 @@ Lemma pterm_msg3I kA kB nA nB :
   □ (pterm nA ↔ ▷ corruption kA kB) -∗
   sterm nB -∗
   □ (pterm nB ↔ ▷ corruption kA kB) -∗
-  session nsl_sess_name Resp kA kB nA nB -∗
-  session nsl_sess_name Init kA kB nA nB -∗
+  session γ N Resp nA nB (kA, kB) -∗
+  session γ N Init nA nB (kA, kB) -∗
   pterm (TEnc kB (Spec.tag (N.@"m3") nB)).
 Proof.
 iIntros "(_ & _ & _ & #Hm3) #p_kA #p_kB #p_nA #s_nB #p_nB #sessA #sessB".
 iApply pterm_TEncIS => //.
 - by iApply pterm_sterm.
 - iModIntro. iIntros (nA' kA') "#sessA'".
-  iDestruct (session_agree with "sessA sessA'") as "(-> & _ & -> & _)" => //.
+  iDestruct (session_agree with "sessA sessA'") as "(<- & %e)" => //.
+  case: e => <-.
   by iSplit.
 by iIntros "!> ?"; iApply "p_nB"; rewrite /corruption; eauto.
 Qed.
 
 Lemma pterm_msg3E kA kB nA nB :
   nsl_ctx -∗
-  session nsl_sess_name Resp kA kB nA nB -∗
+  session γ N Resp nA nB (kA, kB) -∗
   □ (pterm nB ↔ ▷ corruption kA kB) -∗
   pterm (TEnc kB (Spec.tag (N.@"m3") nB)) -∗
   ▷ (corruption kA kB ∨
-     session nsl_sess_name Init kA kB nA nB ∧
+     session γ N Init nA nB (kA, kB) ∧
      (pterm nA ↔ ▷ corruption kA kB)).
 Proof.
 iIntros "(_ & _ & _ & #Hm3) #sessB #p_nB #p_m3".
@@ -225,13 +219,13 @@ Lemma wp_nsl_init kA kB (nA : term) E Ψ :
   pterm (TKey Enc kB) -∗
   sterm nA -∗
   □ (pterm nA ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))) -∗
-  (∀ nB, nsl_sess_inv Init kA kB nA nB) -∗
-  crypto_meta_token nA (↑N) -∗
+  (∀ nB, P Init nA nB kA kB) -∗
+  term_meta_token nA (↑N) -∗
   (∀ onB : option term,
       (if onB is Some nB then
          sterm nB ∧
          ((pterm (TKey Dec kA) ∨ pterm (TKey Dec kB)) ∨
-           nsl_sess_inv Resp kA kB nA nB)
+           P Resp nA nB kA kB)
        else True) -∗
       Ψ (repr onB)) -∗
   WP nsl_init (TKey Dec kA) (TKey Enc kA) (TKey Enc kB) nA @ E
@@ -239,19 +233,14 @@ Lemma wp_nsl_init kA kB (nA : term) E Ψ :
 Proof.
 rewrite /nsl_init.
 iIntros (?) "#ctx #enc_kA #enc_kB #s_nA #p_nA inv unreg Hpost".
-wp_list (_ :: _ :: []).
-wp_term_of_list.
+wp_list; wp_term_of_list.
 wp_tenc => /=.
 iPoseProof (pterm_msg1I with "[//] enc_kA s_nA p_nA enc_kB") as "#Hm1".
 wp_pures; wp_bind (send _); iApply wp_send; eauto.
 iClear "Hm1"; wp_pures; wp_bind (recv _); iApply wp_recv.
 iIntros (m2) "#Hm2"; wp_tdec m2; last protocol_failure.
 wp_list_of_term m2; last protocol_failure.
-rewrite repr_list_eq.
-case: m2 => [|nA'  m2] /=; wp_pures; first protocol_failure. 
-case: m2 => [|nB   m2] /=; wp_pures; first protocol_failure.  
-case: m2 => [|pkB' m2] /=; wp_pures; first protocol_failure.
-case: m2 => [|??] /=; wp_pures; last protocol_failure.
+wp_list_match => [nA' nB pkB' {m2} ->|_]; wp_finish; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst nA'.
 wp_eq_term e; last protocol_failure; subst pkB'.
 wp_tenc.
@@ -263,8 +252,10 @@ wp_pures; iDestruct "Hm2" as "[fail|sessB]".
     by rewrite pterm_tag; iApply "p_nB".
   by wp_pures; iApply ("Hpost" $! (Some nB)); eauto.
 iSpecialize ("inv" $! nB).
-iMod (session_begin with "[] inv [unreg]") as "[#sessA close]" => //.
-  by iApply nsl_ctx_session_ctx.
+iMod (session_begin _ Init _ _ (kA, kB)
+        with "[] [inv] [unreg]") as "[#sessA close]" => //.
+- by iApply nsl_ctx_session_ctx.
+- by eauto.
 iMod ("close" with "sessB") as "inv_resp" => //=.
 wp_bind (send _); iApply wp_send.
   by iModIntro; iApply (pterm_msg3I with "[] [] [] [] [] [] sessB sessA"); eauto.
@@ -275,10 +266,10 @@ Lemma wp_nsl_resp kB E Ψ nB :
   ↑N ⊆ E →
   nsl_ctx -∗
   pterm (TKey Enc kB) -∗
-  crypto_meta_token nB (↑N) -∗
+  term_meta_token nB (↑N) -∗
   sterm nB -∗
   (∀ kA nA, |==> □ (pterm nB ↔ ▷ corruption kA kB) ∗
-                 nsl_sess_inv Resp kA kB nA nB) -∗
+                 P Resp nA nB kA kB) -∗
   (∀ ot : option (term * term),
       (if ot is Some (pkA, nA) then
          ∃ kA,
@@ -286,7 +277,7 @@ Lemma wp_nsl_resp kB E Ψ nB :
            pterm pkA ∧
            sterm nA ∧
            □ (pterm nA ↔ ▷ corruption kA kB) ∧
-           (corruption kA kB ∨ nsl_sess_inv Init kA kB nA nB)
+           (corruption kA kB ∨ P Init nA nB kA kB)
        else True) -∗
        Ψ (repr ot)) -∗
   WP nsl_resp (TKey Dec kB) (TKey Enc kB) nB @ E {{ Ψ }}.
@@ -296,25 +287,24 @@ rewrite /nsl_resp; wp_pures.
 wp_bind (recv _); iApply wp_recv; iIntros (m1) "#Hm1".
 wp_tdec m1; last protocol_failure.
 wp_list_of_term m1; last protocol_failure.
-rewrite repr_list_eq.
-case: m1 => [|nA m1] /=; first protocol_failure.
-case: m1 => [|pkA m1] /=; first protocol_failure.
-case: m1 => [|??] /=; last protocol_failure.
+wp_list_match => [nA pkA {m1} ->|_]; wp_finish; last protocol_failure.
 wp_is_key_eq kt kA et; last protocol_failure; subst pkA.
 wp_pures.
 case: (bool_decide_reflect (_ = repr_key_type Enc)); last protocol_failure.
 case: kt => // _.
 wp_pures.
 iDestruct (pterm_msg1E with "[] Hm1") as "{Hm1} Hm1"; eauto.
-wp_list (_ :: _ :: _ :: []); wp_term_of_list.
+wp_list; wp_term_of_list.
 iMod ("set_nB" $! kA nA) as "[#p_nB inv]".
 wp_tenc; wp_pures.
 iDestruct "Hm1" as "(e_kA & s_nA & Hm1)".
 iAssert (□ (▷ corruption kA kB → pterm nA))%I as "#p_nA".
   iDestruct "Hm1" as "[?|#e]"; eauto.
   by iIntros "!> ?"; iApply "e"; eauto.
-iMod (session_begin with "[] inv [unreg]") as "[#sessB close]" => //.
-  by iApply nsl_ctx_session_ctx.
+iMod (session_begin _ Resp _ _ (kA, kB)
+       with "[] [inv] [unreg]") as "[#sessB close]" => //.
+- by iApply nsl_ctx_session_ctx.
+- by [].
 iPoseProof (pterm_msg2I with "[//] [//] e_kB s_nA [] s_nB [] sessB") as "Hm2".
 - by iIntros "!> ?"; iApply "p_nA"; rewrite /corruption; eauto.
 - by eauto.
@@ -340,4 +330,4 @@ Qed.
 
 End NSL.
 
-Arguments nslG Σ : clear implicits.
+Arguments nsl_ctx {Σ _ _ _ _ _ _} γ.

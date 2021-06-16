@@ -549,6 +549,21 @@ move/ssrnat.ltP: (tsize_gt0 t2) => pos_t2.
 split; lia.
 Qed.
 
+Variant TExp_spec t ts : term -> Type :=
+| TExpSpec pts' H & Permutation.Permutation pts' (List.map unfold_term ts)
+: TExp_spec t ts (TExp' t pts' H).
+
+Lemma TExpP t ts : TExp_spec t ts (TExp t ts).
+Proof.
+rewrite [TExp]unlock /= /fold_term /= fold_wf_termE.
+rewrite fold_normalize unfold_termK.
+move: (proj2 _); rewrite normalize_unfoldn.
+set ts' := map unfold_term ts.
+have: Permutation.Permutation (sort <=%O ts') ts'.
+  by apply/perm_Permutation; rewrite perm_sort.
+move: (sort _ _) => pts'' ? ?; by split.
+Qed.
+
 Lemma term_rect (T : term -> Type)
   (H1 : forall n, T (TInt n))
   (H2 : forall t1, T t1 ->

@@ -20,6 +20,51 @@ Implicit Types v : val.
 Implicit Types Φ : prodO locO termO -n> iPropO Σ.
 Implicit Types Ψ : val → iProp Σ.
 
+Lemma tac_wp_cons `{!Repr A} Γ E K (x : A) (xs : list A) Ψ :
+  envs_entails Γ (WP fill K (Val (repr (x :: xs)%list)) @ E {{ Ψ }}) →
+  envs_entails Γ (WP fill K (repr x :: repr xs) @ E {{ Ψ }}).
+Proof.
+rewrite envs_entails_eq => post.
+by rewrite -wp_bind -wp_cons.
+Qed.
+
+Lemma tac_wp_cons1 `{!Repr A} Γ E K (x : A) Ψ :
+  envs_entails Γ (WP fill K (Val (repr [x]%list)) @ E {{ Ψ }}) →
+  envs_entails Γ (WP fill K (repr x :: []%V) @ E {{ Ψ }}).
+Proof.
+rewrite (_ : NILV = repr (@nil A)) /=; first by apply: tac_wp_cons.
+by rewrite repr_list_eq /=.
+Qed.
+
+Lemma tac_wp_list_match `{!Repr A} Γ E K vars vs k Ψ :
+  nforall_eq (length vars) vs (
+    λ vs', envs_entails Γ (WP fill K (nsubst vars (map repr vs') k) @ E {{ Ψ }})) →
+  (length vars ≠ length vs →
+    envs_entails Γ (WP fill K NONEV @ E {{ Ψ }})) →
+  envs_entails Γ (WP fill K (list_match vars (repr vs) k) @ E {{ Ψ }}).
+Proof.
+rewrite envs_entails_eq => /nforallP hyes hno.
+rewrite -wp_bind -wp_list_match.
+case: decide => [e_len|ne_len]; last by iApply hno.
+by rewrite -wp_bind_inv; iApply hyes.
+Qed.
+
+Lemma tac_wp_hash Γ E K t Ψ :
+  envs_entails Γ (WP fill K (Val (THash t)) @ E {{ Ψ }}) →
+  envs_entails Γ (WP fill K (hash t) @ E {{ Ψ }}).
+Proof.
+rewrite envs_entails_eq => post.
+by rewrite -wp_bind -wp_hash.
+Qed.
+
+Lemma tac_wp_tag Γ E K N t Ψ :
+  envs_entails Γ (WP fill K (Val (Spec.tag N t)) @ E {{ Ψ }}) →
+  envs_entails Γ (WP fill K (tag N t) @ E {{ Ψ }}).
+Proof.
+rewrite envs_entails_eq => ?.
+by rewrite -wp_bind -wp_tag.
+Qed.
+
 Lemma tac_twp_untag Γ E K n t Ψ :
   (∀ t', t = Spec.tag n t' →
          envs_entails Γ (WP fill K (Val (repr (Some t'))) @ E [{ Ψ }])) →
@@ -104,6 +149,14 @@ rewrite envs_entails_eq => HSome HNone.
 rewrite -wp_bind -wp_tdec.
 case e: Spec.tdec => [t'|]; eauto.
 by apply: HSome; apply: tdecK.
+Qed.
+
+Lemma tac_wp_list Γ E K (ts : list term) Ψ :
+  envs_entails Γ (WP fill K (Val (repr ts)) @ E {{ Ψ }}) →
+  envs_entails Γ (WP fill K (list_to_expr ts) @ E {{ Ψ }}).
+Proof.
+rewrite envs_entails_eq => post.
+by rewrite -wp_bind -wp_list.
 Qed.
 
 Lemma tac_twp_list_of_term Γ E K t Ψ :
@@ -192,20 +245,64 @@ Qed.
 
 End Proofs.
 
-Tactic Notation "wp_list" open_constr(t) :=
-  wp_pures; wp_bind (_ :: _)%E; iApply (wp_list t).
+Tactic Notation "wp_cons" :=
+  wp_pures;
+  lazymatch goal with
+  | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
+    reshape_expr e ltac:(fun K e' =>
+      lazymatch e' with
+      | App (App (Val CONS) (Val (?f ?x))) (Val ?e'') =>
+        lazymatch e'' with
+        | InjLV (LitV LitUnit) =>
+          let A := type of x in
+          first
+            [eapply (@tac_wp_cons1 _ _ A _ _ _ K x _); wp_finish
+            |fail 1 "wp_cons: Cannot decode"]
+        | _ =>
+          first
+            [eapply (tac_wp_cons _ _ K x _ _); wp_finish
+            |fail 1 "wp_cons: Cannot decode"]
+        end
+      end)
+  end.
+
+Tactic Notation "wp_list" := repeat wp_cons.
+
+Tactic Notation "wp_list_match" :=
+  wp_pures;
+  do ?[rewrite subst_list_match /=];
+  lazymatch goal with
+  | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
+    reshape_expr e ltac:(fun K e' =>
+      lazymatch e' with
+      | list_match ?vars (Val (?f ?xs)) ?k =>
+        lazymatch type of xs with
+        | list ?A =>
+          first
+            [eapply (@tac_wp_list_match _ _ A _ _ E K vars xs k); simpl
+            |fail 1 "wp_list_match: Cannot decode"]
+        end
+      end)
+  end.
 
 Tactic Notation "wp_term_of_list" :=
-  wp_pures; wp_bind (term_of_list _); iApply wp_term_of_list.
-
-Tactic Notation "wp_tag" :=
-  wp_pures; wp_bind (tag _ _); iApply wp_tag.
+  wp_pures; try wp_bind (term_of_list _); iApply wp_term_of_list.
 
 Tactic Notation "wp_enc" :=
-  wp_pures; wp_bind (enc _ _); iApply wp_enc.
+  wp_pures; try wp_bind (enc _ _); iApply wp_enc.
 
 Tactic Notation "wp_tenc" :=
-  wp_pures; wp_bind (tenc _ _ _); iApply wp_tenc.
+  wp_pures; try wp_bind (tenc _ _ _); iApply wp_tenc.
+
+Tactic Notation "wp_hash" :=
+  wp_pures;
+  lazymatch goal with
+  | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
+    reshape_expr e ltac:(fun K e' =>
+      first
+        [eapply (tac_wp_hash _ _ K _ _); wp_finish
+        |fail 1 "wp_hash: Cannot decode"])
+  end.
 
 Tactic Notation "wp_dec_eq" ident(t) ident(H) :=
   wp_pures;
@@ -290,6 +387,16 @@ Tactic Notation "wp_eq_term" ident(H) :=
       first
         [eapply (tac_wp_eq_term _ _ K _ _); intros H; wp_finish
         |fail 1 "wp_eq_term: Cannot decode"])
+  end.
+
+Tactic Notation "wp_tag" :=
+  wp_pures;
+  lazymatch goal with
+  | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
+    reshape_expr e ltac:(fun K e' =>
+      first
+        [eapply (tac_wp_tag _ _ K _ _); wp_finish
+        |fail 1 "wp_tag: Cannot decode"])
   end.
 
 Tactic Notation "wp_untag_eq" ident(t) ident(H) :=

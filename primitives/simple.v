@@ -2,7 +2,7 @@ From mathcomp Require Import ssreflect.
 From mathcomp Require order.
 From stdpp Require Import gmap coGset.
 From iris.algebra Require Import agree auth gset gmap namespace_map.
-From iris.base_logic.lib Require Import invariants auth.
+From iris.base_logic.lib Require Import invariants auth saved_prop.
 From iris.heap_lang Require Import notation proofmode.
 From crypto Require Import lib term crypto coGset_disj guarded.
 From crypto.primitives Require Import notations comp.
@@ -48,6 +48,7 @@ Definition untag (N : namespace) : val := λ: "t",
   if: "tag" = #(Zpos (encode N))then SOME (Snd "t") else NONE.
 
 Definition mknonce : val := λ: <>,
+  let: <>  := ref #() in
   let: "n" := ref #() in
   (#TNonce_tag, "n").
 
@@ -258,30 +259,53 @@ Proof.
 by iIntros "?"; iApply twp_wp; iApply twp_untag.
 Qed.
 
-Lemma twp_mknonce E P Ψ :
-  (∀ a, sterm (TNonce a) -∗
-        nonce_pred a P -∗
-        meta_token a (⊤ ∖ ↑cryptoN.@"nonce") -∗
-        Ψ (TNonce a)) -∗
+Lemma twp_mknonce E P (Q : term → iProp Σ) Ψ :
+  (∀ t, sterm t -∗
+        □ (pterm t ↔ ▷ □ P) -∗
+        □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
+        nonce_meta_token t ⊤ -∗
+        Ψ t) -∗
   WP mknonce #()%V @ E [{ Ψ }].
 Proof.
 rewrite /mknonce; iIntros "post".
 wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
-iIntros (a) "[_ token]".
-rewrite (meta_token_difference a (↑cryptoN.@"nonce")) //.
-iDestruct "token" as "[pred token]".
-iMod (nonce_pred_set _ P with "pred") as "#pred".
-iSpecialize ("post" $! a).
+iIntros (a') "[_ token]"; wp_pures.
+wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
+iIntros (a) "[_ token']".
+iMod (saved_prop_alloc P) as (γP) "#own_P".
+iMod (saved_pred_alloc Q) as (γQ) "#own_Q".
+rewrite (meta_token_difference a (↑nroot.@"nonce")) //.
+iDestruct "token'" as "[nonce token']".
+iMod (meta_set _ _ γP with "nonce") as "#nonce"; eauto.
+rewrite (meta_token_difference a (↑nroot.@"dh")); last solve_ndisj.
+iDestruct "token'" as "[dh token']".
+iMod (meta_set _ _ γQ with "dh") as "#dh"; eauto.
+iMod (meta_set _ _ a' (nroot.@"meta") with "token'") as "#meta"; eauto.
+  solve_ndisj.
+iSpecialize ("post" $! (TNonce a)).
 rewrite val_of_term_eq /=.
-wp_pures; iApply ("post" with "[] pred token").
-by rewrite sterm_TNonce; iExists P.
+wp_pures; iApply ("post" with "[] [] [] [token]"); eauto.
+- rewrite sterm_TNonce; iExists _; eauto.
+- rewrite pterm_TNonce; iModIntro; iSplit.
+  + iDestruct 1 as (γP' P') "(#meta_γP' & #own_P' & ?)".
+    iPoseProof (meta_agree with "nonce meta_γP'") as "->".
+    iPoseProof (saved_prop_agree with "own_P own_P'") as "e".
+    by iModIntro; iRewrite "e".
+  + iIntros "#?"; iExists γP, P; eauto.
+- iIntros (t'); iModIntro; iSplit.
+  + iDestruct 1 as (γQ' Q') "(#meta_γQ' & #own_Q' & ?)".
+    iPoseProof (meta_agree with "dh meta_γQ'") as "->".
+    iPoseProof (saved_pred_agree _ _ _ t' with "own_Q own_Q'") as "e".
+    by iModIntro; iRewrite "e".
+  + by iIntros "#?"; iExists _, _; eauto.
 Qed.
 
-Lemma wp_mknonce E P Ψ :
-  (∀ a, sterm (TNonce a) -∗
-        nonce_pred a P -∗
-        meta_token a (⊤ ∖ ↑cryptoN.@"nonce") -∗
-        Ψ (TNonce a)) -∗
+Lemma wp_mknonce E P Q Ψ :
+  (∀ t, sterm t -∗
+        □ (pterm t ↔ ▷ □ P) -∗
+        □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
+        nonce_meta_token t ⊤ -∗
+        Ψ t) -∗
   WP mknonce #()%V @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_mknonce. Qed.
 
