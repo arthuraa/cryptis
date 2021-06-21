@@ -4,7 +4,7 @@ From stdpp Require Import gmap coGset.
 From iris.algebra Require Import agree auth gset gmap namespace_map.
 From iris.base_logic.lib Require Import invariants auth saved_prop.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import lib term crypto coGset_disj guarded.
+From crypto Require Import lib term crypto coGset_disj.
 From crypto.primitives Require Import notations comp.
 
 Set Implicit Arguments.
@@ -94,7 +94,6 @@ Notation nonce := loc.
 
 Implicit Types E : coPset.
 Implicit Types a : nonce.
-Implicit Types l : level.
 Implicit Types t : term.
 Implicit Types v : val.
 Implicit Types Φ : prodO locO termO -n> iPropO Σ.

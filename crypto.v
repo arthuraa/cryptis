@@ -3,89 +3,13 @@ From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap list namespace_map.
 From iris.base_logic.lib Require Import auth saved_prop.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import lib term coGset guarded.
+From crypto Require Import lib term coGset.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
 Definition cryptoN := nroot.@"crypto".
-
-Section Levels.
-
-Inductive level := Pub | Sec.
-
-Canonical levelO := leibnizO level.
-
-Implicit Types lvl : level.
-
-Global Instance level_eq_dec : EqDecision level.
-Proof.
-refine (λ lvl1 lvl2,
-          match lvl1, lvl2 with
-          | Pub, Pub | Sec, Sec => left eq_refl
-          | _, _ => right _
-          end); abstract intuition congruence.
-Defined.
-
-Definition bool_of_level lvl :=
-  if lvl is Pub then false else true.
-
-Definition level_of_bool (b : bool) :=
-  if b then Sec else Pub.
-
-Lemma bool_of_levelK : Cancel (=) level_of_bool bool_of_level.
-Proof. by case. Qed.
-
-Global Instance level_countable : Countable level.
-Proof.
-eapply @inj_countable'; last by eapply bool_of_levelK.
-apply _.
-Qed.
-
-Global Instance level_sqsubseteq : SqSubsetEq level := λ lvl1 lvl2,
-  match lvl1, lvl2 with
-  | Sec, Pub => False
-  | _, _ => True
-  end.
-
-Global Instance level_sqsubseteq_refl : Reflexive level_sqsubseteq.
-Proof. by case. Qed.
-
-Global Instance level_sqsubseteq_tran : Transitive level_sqsubseteq.
-Proof. by case=> [] [] []. Qed.
-
-Global Instance level_join : Join level := λ lvl1 lvl2,
-  match lvl1, lvl2 with
-  | Pub, Pub => Pub
-  | _, _ => Sec
-  end.
-
-Lemma level_joinP lvl1 lvl2 lvl3 :
-  lvl1 ⊔ lvl2 ⊑ lvl3 ↔ (lvl1 ⊑ lvl3 ∧ lvl2 ⊑ lvl3).
-Proof.
-by case: lvl1 lvl2 lvl3=> [] [] []; intuition eauto.
-Qed.
-
-Lemma level_join_idemp (l : level) : l ⊔ l = l.
-Proof. by case: l. Qed.
-
-Global Instance level_meet : Meet level := λ lvl1 lvl2,
-  match lvl1, lvl2 with
-  | Sec, Sec => Sec
-  | _, _ => Pub
-  end.
-
-Lemma level_meetP lvl1 lvl2 lvl3 :
-  lvl3 ⊑ lvl1 ⊓ lvl2 ↔ (lvl3 ⊑ lvl1 ∧ lvl3 ⊑ lvl2).
-Proof.
-by case: lvl1 lvl2 lvl3=> [] [] []; intuition eauto.
-Qed.
-
-Global Instance level_inhabited : Inhabited level :=
-  populate Pub.
-
-End Levels.
 
 Section Resources.
 
@@ -95,7 +19,6 @@ Notation iPropO := (iPropO Σ).
 Notation iPropI := (iPropI Σ).
 Notation nonce := loc.
 Implicit Types a : loc.
-Implicit Types l : level.
 Implicit Types γ : gname.
 
 Context `{!heapG Σ}.

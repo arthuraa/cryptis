@@ -3,7 +3,7 @@ From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl namespace_map frac.
 From iris.base_logic.lib Require Import auth.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import lib guarded term crypto primitives tactics session.
+From crypto Require Import lib term crypto primitives tactics session.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
