@@ -91,19 +91,20 @@ iIntros "#a_pred #p_e".
 by iPoseProof (dh_seed_elim2 with "a_pred p_e") as ">[??]".
 Qed.
 
-Lemma wp_nsl_dh_init γ g kA kB E Ψ :
+Lemma wp_nsl_dh_init Q γ g kA kB E Ψ :
   ↑N ⊆ E →
   nsl_dh_ctx g γ -∗
   sterm g -∗
   pterm (TKey Enc kA) -∗
   pterm (TKey Enc kB) -∗
-  (∀ ga gb, |==> P Init ga gb kA kB) -∗
+  (∀ ga gb, |==> P Init ga gb kA kB ∗ Q Init ga gb kA kB) -∗
   (∀ ogab : option term,
       (if ogab is Some gab then
          sterm gab ∧
          (corruption kA kB ∨
           ∃ a b, ⌜gab = TExp g [a; b]⌝ ∗
                  P Resp (TExp g [a]) (TExp g [b]) kA kB ∗
+                 Q Init (TExp g [a]) (TExp g [b]) kA kB ∗
                  □ (pterm gab → ▷ False))
        else True) -∗
       Ψ (repr ogab)) -∗
@@ -119,21 +120,22 @@ iMod (term_meta_set _ _ kB with "dh") as "#dh"; eauto.
 wp_pures; wp_bind (tgroup _); iApply wp_tgroup.
 wp_pures; wp_bind (texp _ _); iApply wp_texp.
 rewrite Spec.texpA; wp_pures; wp_bind (nsl_init _ _ _ _ _).
-iApply (wp_nsl_init with "ctx p_e_kA p_e_kB [] [] [init] [token]") => //.
+iApply (wp_nsl_init (nsl_dh_inv g) Q
+          with "ctx p_e_kA p_e_kB [] [] [init] [token]") => //.
 - solve_ndisj.
 - rewrite sterm_TExp /=; iSplit => //.
   by rewrite /=; iSplit.
 - by iModIntro; iApply pterm_nsl_dh1.
 - iIntros (nB); rewrite /=.
-  iMod ("init" $! (TExp g [a]) nB) as "init"; iModIntro.
-  iSplit => //.
+  iMod ("init" $! (TExp g [a]) nB) as "[init resp]"; iModIntro.
+  iFrame.
   iExists a; iSplit => //.
   iModIntro; iIntros (b) "p_b".
   by iApply pterm_nsl_dh2.
 - rewrite (term_meta_token_difference _ (↑N.@"nsl")); last solve_ndisj.
   by iDestruct "token" as "[token _]".
 iIntros (onB) "pub"; case: onB=> [nB|]; last by protocol_failure.
-iDestruct "pub" as "[#s_nB [#fail | [resp #succ]]]".
+iDestruct "pub" as "[#s_nB [#fail | [[resp #succ] init]]]".
   wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
   iApply ("Hpost" $! (Some (Spec.texp nB a))).
   iSplit; first by iApply sterm_texp => //.
@@ -149,12 +151,12 @@ iDestruct ("succ" with "contra") as "{succ} >succ".
 by iApply dh_seed_elim0.
 Qed.
 
-Lemma wp_dh_responder γ g kB E Ψ :
+Lemma wp_nsl_dh_resp Q γ g kB E Ψ :
   ↑N ⊆ E →
   nsl_dh_ctx g γ -∗
   sterm g -∗
   pterm (TKey Enc kB) -∗
-  (∀ ga gb kA, |==> P Resp ga gb kA kB) -∗
+  (∀ ga gb kA, |==> P Resp ga gb kA kB ∗ Q Resp ga gb kA kB) -∗
   (∀ oresp : option (term * term),
       (if oresp is Some (pkA, gab) then
          ∃ kA,
@@ -164,6 +166,7 @@ Lemma wp_dh_responder γ g kB E Ψ :
            (corruption kA kB ∨
             ∃ a b, ⌜gab = TExp g [a; b]⌝ ∗
                    P Init (TExp g [a]) (TExp g [b]) kA kB ∗
+                   Q Resp (TExp g [a]) (TExp g [b]) kA kB ∗
                    □ (pterm gab → ▷ False))
        else True) -∗
       Ψ (repr oresp)) -∗
@@ -178,14 +181,15 @@ iDestruct "token" as "[dh token]".
 wp_pures; wp_bind (tgroup _); iApply wp_tgroup.
 wp_pures; wp_bind (texp _ _); iApply wp_texp.
 rewrite Spec.texpA; wp_pures; wp_bind (nsl_resp _ _ _ _).
-iApply (wp_nsl_resp with "ctx p_e_kB [token] [] [resp dh]") => //.
+iApply (wp_nsl_resp (nsl_dh_inv g) Q 
+          with "ctx p_e_kB [token] [] [resp dh]") => //.
 - solve_ndisj.
 - rewrite (term_meta_token_difference _ (↑N.@"nsl")); last solve_ndisj.
   by iDestruct "token" as "[token _]".
 - by rewrite sterm_TExp /=; iSplit; eauto.
 - iIntros (kA nA).
   iMod (term_meta_set _ _ kA with "dh") as "#meta"; eauto.
-  iMod ("resp" $! nA (TExp g [b]) kA) as "resp".
+  iMod ("resp" $! nA (TExp g [b]) kA) as "[resp init]".
   iModIntro; iSplit.
   + iModIntro; rewrite [corruption _ _]comm; by iApply pterm_nsl_dh1.
   + iFrame; iExists b; iSplit => //.
@@ -198,7 +202,7 @@ wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
 iApply ("Hpost" $! (Some (TKey Enc kA, Spec.texp nA b))).
 iExists _; do 3!iSplit => //; eauto.
   by iApply sterm_texp.
-iDestruct "inv" as "[#inv|[init #inv]]"; eauto.
+iDestruct "inv" as "[#inv|[[init #inv] resp]]"; eauto.
 iDestruct "inv" as (t) "[-> #inv]".
 rewrite Spec.texpA.
 rewrite -[ [b; t]]/(seq.cat [b] [t]) TExpC /=.
@@ -213,3 +217,5 @@ End NSLDH.
 
 Arguments nsl_dh_ctx {Σ _ _ _} N P g γ.
 Arguments nsl_dh_alloc {Σ _ _ _} N P g E E'.
+Arguments wp_nsl_dh_init {Σ _ _ _ _ N} P Q.
+Arguments wp_nsl_dh_resp {Σ _ _ _ _ N} P Q.
