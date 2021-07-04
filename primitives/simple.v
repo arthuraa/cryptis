@@ -11,6 +11,9 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Definition send : val := λ: "c", Fst "c".
+Definition recv : val := λ: "c", Snd "c" #().
+
 Definition tint : val := λ: "n",
   (#TInt_tag, "n").
 
@@ -100,12 +103,38 @@ Implicit Types Φ : prodO locO termO -n> iPropO Σ.
 Implicit Types Ψ : val → iProp Σ.
 Implicit Types N : namespace.
 
-Class network := Network {
-  send : val;
-  recv : val;
-  wp_send : forall E t Ψ, ▷ pterm t -∗ Ψ #() -∗ WP send t @ E {{ Ψ }};
-  wp_recv : forall E Ψ, (∀ t, pterm t -∗ Ψ t) -∗ WP recv #() @ E {{ Ψ }};
-}.
+Definition channel c : iProp Σ :=
+  ∃ (sf rf : val), ⌜c = (sf, rf)%V⌝ ∗
+    □ (∀ E t Ψ, ⌜↑cryptisN ⊆ E⌝ -∗ pterm t -∗ Ψ #() -∗
+                WP sf t @ E {{ Ψ }}) ∗
+    □ (∀ E Ψ, ⌜↑cryptisN ⊆ E⌝ -∗ (∀ t, pterm t -∗ Ψ t) -∗
+              WP rf #() @ E {{ Ψ }}).
+
+Global Instance channel_persistent v : Persistent (channel c).
+Proof. apply _. Qed.
+
+Lemma wp_send E c t Ψ :
+  ↑cryptisN ⊆ E →
+  channel c -∗
+  ▷ pterm t -∗
+  Ψ #() -∗
+  WP send c t @ E {{ Ψ }}.
+Proof.
+move=> sub; iDestruct 1 as (sf cf) "#(-> & H & _)".
+iIntros "#??"; rewrite /send; wp_pures.
+by iApply "H".
+Qed.
+
+Lemma wp_recv E c Ψ :
+  ↑cryptisN ⊆ E →
+  channel c -∗
+  (∀ t, pterm t -∗ Ψ t) -∗
+  WP recv c @ E {{ Ψ }}.
+Proof.
+move=> sub; iDestruct 1 as (sf cf) "#(-> & _ & H)".
+iIntros "?"; rewrite /recv; wp_pures.
+by iApply "H".
+Qed.
 
 Lemma twp_tint E Ψ n : Ψ (TInt n) -∗ WP tint #n @ E [{ Ψ }].
 Proof.
@@ -427,4 +456,4 @@ Proof. by iIntros "?"; iApply twp_wp; iApply twp_tgroup. Qed.
 
 End Proofs.
 
-Arguments network Σ {_ _}.
+Arguments channel {Σ _ _} c.

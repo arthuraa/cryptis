@@ -2011,7 +2011,7 @@ Coercion SParams.term_of : SParams.t >-> term.
 
 Section Protocol.
 
-Context `{!heapG Σ, !cryptoG Σ, !network Σ}.
+Context `{!heapG Σ, !cryptoG Σ}.
 Context `{S : !sessionG Σ}.
 Notation iProp := (iProp Σ).
 Variable N : namespace.
@@ -2022,19 +2022,19 @@ Implicit Types Φ : val → iProp.
 
 Definition P rl t1 t2 (x : term * term) : iProp := True.
 
-Definition client : val := λ: "kex" "other",
+Definition client : val := λ: "c" "kex" "other",
   let: "kex" := CShare.I.new "kex" in
   let: "cp"  := term_of_list ["kex"; "other"] in
   let: "ch"  := CParams.I.hello N "cp" in
-  send "ch";;
-  let: "sh" := recv #() in
+  send "c" "ch";;
+  let: "sh" := recv "c" in
   bind: "res" := SParams.I.check N "cp" "sh" in
   let: "vkey" := Fst "res" in
   let: "kex" := Snd "res" in
   let: "session_key" := SShare.I.session_key_of' N "kex" in
   let: "sk" := mkkey "session_key" in
   bind: "ack" := tenc (N.@"ack") (Fst "sk") "sh" in
-  send "ack" ;;
+  send "c" "ack" ;;
   SOME ("vkey", SShare.I.cnonce "kex", SShare.I.snonce "kex", "session_key").
 
 Definition ack_pred γ (k t : term) : iProp :=
@@ -2053,8 +2053,10 @@ Definition ctx γ : iProp :=
   enc_pred (N.@"ack") (ack_pred γ) ∧
   session_ctx (@nonce_meta _ _) (N.@"sess") P γ.
 
-Lemma wp_client γ ke other E Φ :
+Lemma wp_client c γ ke other E Φ :
+  ↑cryptisN ⊆ E →
   ↑N ⊆ E →
+  channel c -∗
   ctx γ -∗
   Meth.wf ke -∗
   pterm other -∗
@@ -2074,9 +2076,9 @@ Lemma wp_client γ ke other E Φ :
       | None => True
       end →
       Φ (repr res)) -∗
-  WP client ke other @ E {{ Φ }}.
+  WP client c ke other @ E {{ Φ }}.
 Proof.
-iIntros (sub) "#(k_ctx & c_ctx & s_ctx & ackP & sess_ctx) #p_ke #p_other post".
+iIntros (? sub) "#? #(k_ctx & c_ctx & s_ctx & ackP & sess_ctx) #p_ke #p_other post".
 rewrite /client; wp_pures.
 wp_bind (CShare.I.new _); iApply (CShare.wp_new _) => //.
 iIntros (ke' e) "#p_ke' token"; wp_pures.
@@ -2089,9 +2091,9 @@ iDestruct "token" as "[sess token]".
 wp_list; wp_term_of_list.
 wp_pures; wp_bind (CParams.I.hello _ _).
 iApply (CParams.wp_hello N cp).
-wp_pures; wp_bind (send _); iApply wp_send.
+wp_pures; wp_bind (send _ _); iApply wp_send => //.
   by iModIntro; iApply CParams.pterm_hello.
-wp_pures; wp_bind (recv _); iApply wp_recv.
+wp_pures; wp_bind (recv _); iApply wp_recv => //.
 iIntros (sh) "#p_sh"; wp_pures.
 wp_bind (SParams.I.check _ _ _); iApply (SParams.wp_check N cp).
 case e_check: SParams.check => [res|]; wp_pures; last by iApply ("post" $! None).
@@ -2110,7 +2112,7 @@ wp_bind (mkkey _); iApply wp_mkkey; wp_pures => /=.
 wp_tenc => /=; wp_pures.
 iDestruct "rest" as "[[fail_vsk fail_psk]|succ]".
   iPoseProof (SShare.pterm_session_key_of' with "k_ctx fail_psk") as ">fail".
-  wp_bind (send _); iApply wp_send.
+  wp_bind (send _ _); iApply wp_send => //.
   iModIntro.
   iApply pterm_TEncIS; eauto.
   - by rewrite sterm_TKey.
@@ -2123,7 +2125,7 @@ iDestruct "rest" as "[[fail_vsk fail_psk]|succ]".
   iApply ("post" $! (Some (_, _, _, _))).
   rewrite e CShare.psk_meth_of.
   by iExists _; do 5!iSplit => //; eauto.
-wp_bind (send _); iApply wp_send.
+wp_bind (send _ _); iApply wp_send => //.
   iModIntro.
   iApply pterm_TEncIS; eauto; first by rewrite sterm_TKey.
   - iIntros "!> %sp %e_sp".
@@ -2142,22 +2144,24 @@ iModIntro.
 iApply SShare.pterm_session_key_of => //.
 Qed.
 
-Definition server : val := λ: "psk" "g" "verif_key" "other",
-  let: "ch" := recv #() in
+Definition server : val := λ: "c" "psk" "g" "verif_key" "other",
+  let: "ch" := recv "c" in
   bind: "ke" := CParams.I.check N "psk" "g" "other" "ch" in
   let: "ke'" := SShare.I.new "ke" in
   let: "sp"  := term_of_list ["ke'"; "verif_key"; "other"] in
   let: "sh"  := SParams.I.hello N "sp" in
-  send "sh" ;;
+  send "c" "sh" ;;
   let: "session_key" := SShare.I.session_key_of N "ke'" in
   let: "sk" := mkkey "session_key" in
-  let: "ack" := recv #() in
+  let: "ack" := recv "c" in
   bind: "ack" := tdec (N.@"ack") (Snd "sk") "ack" in
   assert: eq_term "ack" "sh" in
   SOME "ke'".
 
-Lemma wp_server γ psk g verif_key other E Φ :
+Lemma wp_server c γ psk g verif_key other E Φ :
+  ↑cryptisN ⊆ E →
   ↑N ⊆ E →
+  channel c -∗
   ctx γ -∗
   sterm psk -∗
   pterm g -∗
@@ -2177,12 +2181,12 @@ Lemma wp_server γ psk g verif_key other E Φ :
            ◇ if SShare.has_dh ke then False else pterm (SShare.psk ke))
       | None => True
       end -∗ Φ (repr (SShare.term_of <$> ke))) -∗
-  WP server psk g verif_key other @ E {{ Φ }}.
+  WP server c psk g verif_key other @ E {{ Φ }}.
 Proof.
-iIntros (sub) "#(k_ctx & c_ctx & s_ctx & ? & sess_ctx)".
+iIntros (? sub) "#? #(k_ctx & c_ctx & s_ctx & ? & sess_ctx)".
 iIntros "#s_psk #p_g #s_sign #s_verif #p_other post".
 rewrite /server; wp_pures.
-wp_bind (recv _); iApply wp_recv.
+wp_bind (recv _); iApply wp_recv => //.
 iIntros (ch) "#p_ch"; wp_pures.
 wp_bind (CParams.I.check _ _ _ _ _).
 iApply CParams.wp_check.
@@ -2200,12 +2204,12 @@ wp_bind (SParams.I.hello _ _); iApply (SParams.wp_hello _ sp).
 rewrite (term_meta_token_difference _ (↑N.@"sess")); eauto.
 iDestruct "token" as "[token _]".
 iMod (SParams.pterm_hello with "s_ctx wf_sp token []") as "[#p_hello close]" => //.
-wp_pures; wp_bind (send _); iApply wp_send; eauto.
+wp_pures; wp_bind (send _ _); iApply wp_send; eauto.
 wp_pures.
 wp_bind (SShare.I.session_key_of _ _); iApply SShare.wp_session_key_of.
 wp_pures.
 wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
-wp_bind (recv _); iApply wp_recv; iIntros (ack) "#p_ack"; wp_pures.
+wp_bind (recv _); iApply wp_recv => //; iIntros (ack) "#p_ack"; wp_pures.
 wp_tdec_eq ack' e_ack; wp_pures; last by iApply ("post" $! None).
 rewrite {}e_ack; wp_eq_term e_ack; last by wp_pures; iApply ("post" $! None).
 rewrite {}e_ack; wp_pures; iApply ("post" $! (Some ke')).

@@ -13,8 +13,7 @@ Unset Printing Implicit Defensive.
 
 Section NSLDH.
 
-Context `{!cryptoG Σ, !heapG Σ, !network Σ}.
-Context `{!sessionG Σ}.
+Context `{!cryptoG Σ, !heapG Σ, !sessionG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -26,16 +25,16 @@ Variable P : role → term → term → term → term → iProp.
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None).
 
-Definition nsl_dh_init : val := λ: "g" "skA" "pkA" "pkB",
+Definition nsl_dh_init : val := λ: "c" "g" "skA" "pkA" "pkB",
   let: "a" := mkdh #() in
   let: "ga" := texp (tgroup "g") "a" in
-  bind: "gb" := nsl_init (N.@"nsl") "skA" "pkA" "pkB" "ga" in
+  bind: "gb" := nsl_init (N.@"nsl") "c" "skA" "pkA" "pkB" "ga" in
   SOME (texp "gb" "a").
 
-Definition nsl_dh_resp : val := λ: "g" "skB" "pkB",
+Definition nsl_dh_resp : val := λ: "c" "g" "skB" "pkB",
   let: "b" := mkdh #() in
   let: "gb" := texp (tgroup "g") "b" in
-  bind: "res" := nsl_resp (N.@"nsl") "skB" "pkB" "gb" in
+  bind: "res" := nsl_resp (N.@"nsl") "c" "skB" "pkB" "gb" in
   let: "pkA" := Fst "res" in
   let: "ga" := Snd "res" in
   SOME ("pkA", texp "ga" "b").
@@ -91,8 +90,10 @@ iIntros "#a_pred #p_e".
 by iPoseProof (dh_seed_elim2 with "a_pred p_e") as ">[??]".
 Qed.
 
-Lemma wp_nsl_dh_init Q γ g kA kB E Ψ :
+Lemma wp_nsl_dh_init Q c γ g kA kB E Ψ :
+  ↑cryptisN ⊆ E →
   ↑N ⊆ E →
+  channel c -∗
   nsl_dh_ctx g γ -∗
   sterm g -∗
   pterm (TKey Enc kA) -∗
@@ -109,9 +110,9 @@ Lemma wp_nsl_dh_init Q γ g kA kB E Ψ :
                □ (pterm gab → ▷ False))
        else True) -∗
       Ψ (repr ogab)) -∗
-  WP nsl_dh_init g (TKey Dec kA) (TKey Enc kA) (TKey Enc kB) @ E {{ Ψ }}.
+  WP nsl_dh_init c g (TKey Dec kA) (TKey Enc kA) (TKey Enc kB) @ E {{ Ψ }}.
 Proof.
-iIntros (?) "#ctx #s_g #p_e_kA #p_e_kB init Hpost".
+iIntros (??) "#cP #ctx #s_g #p_e_kA #p_e_kB init Hpost".
 rewrite /nsl_dh_init; wp_pures; wp_bind (mknonce _).
 iApply (wp_mkdh (nsl_dh_fail kA) g).
 iIntros (a) "#s_a #a_pred token".
@@ -120,9 +121,9 @@ iDestruct "token" as "[dh token]".
 iMod (term_meta_set _ _ kB with "dh") as "#dh"; eauto.
 wp_pures; wp_bind (tgroup _); iApply wp_tgroup.
 wp_pures; wp_bind (texp _ _); iApply wp_texp.
-rewrite Spec.texpA; wp_pures; wp_bind (nsl_init _ _ _ _ _).
+rewrite Spec.texpA; wp_pures; wp_bind (nsl_init _ _ _ _ _ _).
 iApply (wp_nsl_init (nsl_dh_inv g) Q
-          with "ctx p_e_kA p_e_kB [] [] [init] [token]") => //.
+          with "cP ctx p_e_kA p_e_kB [] [] [init] [token]") => //.
 - solve_ndisj.
 - rewrite sterm_TExp /=; iSplit => //.
   by rewrite /=; iSplit.
@@ -155,8 +156,10 @@ iDestruct ("succ" with "contra") as "{succ} >succ".
 by iApply dh_seed_elim0.
 Qed.
 
-Lemma wp_nsl_dh_resp Q γ g kB E Ψ :
+Lemma wp_nsl_dh_resp Q c γ g kB E Ψ :
+  ↑cryptisN ⊆ E →
   ↑N ⊆ E →
+  channel c -∗
   nsl_dh_ctx g γ -∗
   sterm g -∗
   pterm (TKey Enc kB) -∗
@@ -175,9 +178,9 @@ Lemma wp_nsl_dh_resp Q γ g kB E Ψ :
                   □ (pterm gab → ▷ False))
        else True) -∗
       Ψ (repr oresp)) -∗
-  WP nsl_dh_resp g (TKey Dec kB) (TKey Enc kB) @ E {{ Ψ }}.
+  WP nsl_dh_resp c g (TKey Dec kB) (TKey Enc kB) @ E {{ Ψ }}.
 Proof.
-iIntros (?) "#ctx #s_g #p_e_kB resp Hpost".
+iIntros (??) "#? #ctx #s_g #p_e_kB resp Hpost".
 rewrite /nsl_dh_resp; wp_pures; wp_bind (mkdh _).
 iApply (wp_mkdh (nsl_dh_fail kB)).
 iIntros (b) "#s_b #b_pred token".
@@ -185,9 +188,9 @@ rewrite (term_meta_token_difference _ (↑N.@"peer")); last solve_ndisj.
 iDestruct "token" as "[dh token]".
 wp_pures; wp_bind (tgroup _); iApply wp_tgroup.
 wp_pures; wp_bind (texp _ _); iApply wp_texp.
-rewrite Spec.texpA; wp_pures; wp_bind (nsl_resp _ _ _ _).
+rewrite Spec.texpA; wp_pures; wp_bind (nsl_resp _ _ _ _ _).
 iApply (wp_nsl_resp (nsl_dh_inv g) Q 
-          with "ctx p_e_kB [token] [] [resp dh]") => //.
+          with "[//] ctx p_e_kB [token] [] [resp dh]") => //.
 - solve_ndisj.
 - rewrite (term_meta_token_difference _ (↑N.@"nsl")); last solve_ndisj.
   by iDestruct "token" as "[token _]".
@@ -223,5 +226,5 @@ End NSLDH.
 
 Arguments nsl_dh_ctx {Σ _ _ _} N P g γ.
 Arguments nsl_dh_alloc {Σ _ _ _} N P g E E'.
-Arguments wp_nsl_dh_init {Σ _ _ _ _ N} P Q.
-Arguments wp_nsl_dh_resp {Σ _ _ _ _ N} P Q.
+Arguments wp_nsl_dh_init {Σ _ _ _ N} P Q.
+Arguments wp_nsl_dh_resp {Σ _ _ _ N} P Q.

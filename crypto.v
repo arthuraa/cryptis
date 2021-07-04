@@ -9,7 +9,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Definition cryptoN := nroot.@"crypto".
+Definition cryptisN := nroot.@"cryptis".
 
 Section Resources.
 
