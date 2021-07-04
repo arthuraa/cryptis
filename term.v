@@ -329,6 +329,16 @@ Definition is_key t :=
   | _ => None
   end.
 
+Variant is_key_spec t : option key_type → Type :=
+| IsKeySome kt k of t = TKey kt k : is_key_spec t (Some kt)
+| IsKeyNone of (∀ kt k, t ≠ TKey kt k) : is_key_spec t None.
+
+Lemma is_keyP t : is_key_spec t (is_key t).
+Proof.
+case: t; try by right.
+by move=> kt t; eleft.
+Qed.
+
 Definition of_list_aux : seal (foldr TPair (TInt 0)). by eexists. Qed.
 Definition of_list := unseal of_list_aux.
 Lemma of_list_eq : of_list = foldr TPair (TInt 0).
