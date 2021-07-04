@@ -27,7 +27,7 @@ Notation iProp := (iProp Σ).
 Implicit Types t : term.
 
 Class crG := {
-  in_cr_sessG :> sessionG Σ (term * term) term_meta term_meta_token;
+  in_cr_sessG :> sessionG Σ;
   cr_sess_name : gname;
 }.
 
@@ -37,12 +37,12 @@ Context (N : namespace).
 Definition msg2_pred (kB : term) t : iProp :=
   ∃ nA nB kA,
     ⌜t = Spec.of_list [nA; nB; TKey Dec kA]⌝ ∧
-    session cr_sess_name N Resp nA nB (kA, kB).
+    session term_meta N cr_sess_name Resp nA nB (kA, kB).
 
 Definition msg3_pred (kA : term) m3 : iProp :=
   ∃ nA nB kB,
     ⌜m3 = Spec.of_list [nA; nB; TKey Dec kB]⌝ ∧
-    session cr_sess_name N Init nA nB (kA, kB).
+    session term_meta N cr_sess_name Init nA nB (kA, kB).
 
 Variable P : role → term → term → term → term → iProp.
 
@@ -52,7 +52,7 @@ Definition cr_sess_inv rl nA nB ks :=
 Variable gen : val.
 
 Definition cr_ctx : iProp :=
-  session_ctx cr_sess_name N cr_sess_inv.
+  session_ctx term_meta N cr_sess_inv cr_sess_name.
 
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None).
@@ -103,7 +103,8 @@ Lemma pterm_msg2E m2 kA kB nA nB :
   pterm (TKey Dec kB) -∗
   pterm (TEnc kB (Spec.tag (nroot.@"m2") (Spec.of_list m2))) -∗
   ▷ (pterm nB ∧
-     (pterm (TKey Enc kB) ∨ session cr_sess_name N Resp nA nB (kA, kB))).
+     (pterm (TKey Enc kB) ∨
+      session term_meta N cr_sess_name Resp nA nB (kA, kB))).
 Proof.
 iIntros (enA enB ekA) "#enc_m2 #p_d_kB #p_m2".
 rewrite pterm_TEnc; iDestruct "p_m2" as "[[p_e_kB p_m2]|p_m2]".
@@ -130,7 +131,8 @@ Lemma pterm_msg3E m3 kA kB nA nB :
   enc_pred (nroot.@"m3") msg3_pred -∗
   pterm (TKey Dec kA) -∗
   pterm (TEnc kA (Spec.tag (nroot.@"m3") (Spec.of_list m3))) -∗
-  ▷ (pterm (TKey Enc kA) ∨ session cr_sess_name N Init nA nB (kA, kB)).
+  ▷ (pterm (TKey Enc kA) ∨
+     session term_meta N cr_sess_name Init nA nB (kA, kB)).
 Proof.
 iIntros (enA enB ekB) "#enc_m3 #p_d_ka #p_m3".
 rewrite pterm_TEnc; iDestruct "p_m3" as "[[p_e_kA p_m3]|p_m3]".
@@ -179,7 +181,7 @@ iPoseProof (pterm_msg2E with "[//] d_kB Hm2")
 wp_list; wp_term_of_list.
 wp_tenc; wp_pures.
 iSpecialize ("inv" $! nB).
-iMod (session_begin _ _ _ _ (kA, kB) with "[] [inv] [unreg]")
+iMod (session_begin _ _ _ _ _ (kA, kB) with "[] [inv] [unreg]")
   as "[#sessA close]"; eauto.
 iAssert (|={E}=> ▷ (pterm (TKey Enc kB) ∨ P Resp nA nB kA kB))%I
     with "[close]" as ">inv".
@@ -228,7 +230,7 @@ wp_pures.
 case: (bool_decide_reflect (_ = repr_key_type Dec)); last protocol_failure.
 case: kt=> // _.
 wp_pures; wp_bind (gen _); iApply wp_gen; iIntros (nB) "inv token #HnB".
-iMod (session_begin _ _ nA nB (kA, kB) with "[] [inv] [token]")
+iMod (session_begin _ _ _ nA nB (kA, kB) with "[] [inv] [token]")
   as "[#sessB close]"; eauto.
 wp_list; wp_term_of_list.
 wp_tenc; wp_pures; wp_bind (send _); iApply wp_send.

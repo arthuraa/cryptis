@@ -61,6 +61,14 @@ Definition enc_pred N Φ : iProp :=
 Definition enc_pred_token E :=
   own crypto_enc_name (namespace_map_token E).
 
+Lemma enc_pred_token_difference E1 E2 :
+  E1 ⊆ E2 →
+  enc_pred_token E2 ⊣⊢ enc_pred_token E1 ∗ enc_pred_token (E2 ∖ E1).
+Proof.
+move=> sub; rewrite /enc_pred_token.
+by rewrite (namespace_map_token_difference E1 E2) // own_op.
+Qed.
+
 Global Instance enc_pred_persistent N Φ : Persistent (enc_pred N Φ).
 Proof. apply _. Qed.
 
@@ -77,7 +85,7 @@ move=> /agree_op_invL' ->.
 by iApply (saved_pred_agree _ _ _ (k, t) with "own1 own2").
 Qed.
 
-Lemma enc_pred_set E Φ N :
+Lemma enc_pred_set E N Φ :
   ↑N ⊆ E →
   enc_pred_token E ==∗
   enc_pred N Φ.
@@ -113,6 +121,14 @@ Definition key_pred N (φ : key_type → term → iProp) : iProp :=
 Definition key_pred_token E :=
   own crypto_key_name (namespace_map_token E).
 
+Lemma key_pred_token_difference E1 E2 :
+  E1 ⊆ E2 →
+  key_pred_token E2 ⊣⊢ key_pred_token E1 ∗ key_pred_token (E2 ∖ E1).
+Proof.
+move=> sub; rewrite /key_pred_token.
+by rewrite (namespace_map_token_difference E1 E2) // own_op.
+Qed.
+
 Global Instance key_pred_persistent N φ : Persistent (key_pred N φ).
 Proof. apply _. Qed.
 
@@ -129,7 +145,7 @@ move=> /agree_op_invL' ->.
 by iApply (saved_pred_agree _ _ _ (kt, t) with "own1 own2").
 Qed.
 
-Lemma key_pred_set E P N :
+Lemma key_pred_set E N P :
   ↑N ⊆ E →
   key_pred_token E ==∗
   key_pred N P.
@@ -165,6 +181,14 @@ Definition hash_pred N (P : term → iProp) : iProp :=
 Definition hash_pred_token E :=
   own crypto_hash_name (namespace_map_token E).
 
+Lemma hash_pred_token_difference E1 E2 :
+  E1 ⊆ E2 →
+  hash_pred_token E2 ⊣⊢ hash_pred_token E1 ∗ hash_pred_token (E2 ∖ E1).
+Proof.
+move=> sub; rewrite /hash_pred_token.
+by rewrite (namespace_map_token_difference E1 E2) // own_op.
+Qed.
+
 Global Instance hash_pred_persistent N P : Persistent (hash_pred N P).
 Proof. apply _. Qed.
 
@@ -181,7 +205,7 @@ move=> /agree_op_invL' ->.
 by iApply (saved_pred_agree _ _ _ t with "own1 own2").
 Qed.
 
-Lemma hash_pred_set E P N :
+Lemma hash_pred_set E N P :
   ↑N ⊆ E →
   hash_pred_token E ==∗
   hash_pred N P.
@@ -808,10 +832,16 @@ End Resources.
 
 Arguments crypto_enc_name {Σ _}.
 Arguments enc_pred {Σ _ _}.
+Arguments enc_pred_set {Σ _ _ _} N Φ.
+Arguments enc_pred_token_difference {Σ _ _} E1 E2.
 Arguments crypto_hash_name {Σ _}.
 Arguments hash_pred {Σ _ _}.
+Arguments hash_pred_set {Σ _ _ _} N P.
+Arguments hash_pred_token_difference {Σ _ _} E1 E2.
 Arguments crypto_key_name {Σ _}.
 Arguments key_pred {Σ _ _}.
+Arguments key_pred_set {Σ _ _ _} N P.
+Arguments key_pred_token_difference {Σ _ _} E1 E2.
 Arguments term_meta_set {Σ _ _ _ _ _ _} E t x N.
 Arguments term_meta_token_difference {Σ _ _ _} t E1 E2.
 Arguments nonce_term_meta Σ {_}.

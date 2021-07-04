@@ -14,14 +14,14 @@ Unset Printing Implicit Defensive.
 Section NSLDH.
 
 Context `{!cryptoG Σ, !heapG Σ, !network Σ}.
-Context `{!sessionG Σ (term * term) (@dh_meta _ _) dh_meta_token}.
+Context `{!sessionG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
 Implicit Types rl : role.
 
-Variable γ : gname.
 Variable N : namespace.
+Variable P : role → term → term → term → term → iProp.
 
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None).
@@ -44,6 +44,7 @@ Implicit Types Ψ : val → iProp.
 Implicit Types kA kB : term.
 
 Definition nsl_dh_inv g rl ga gb kA kB : iProp :=
+  P rl ga gb kA kB ∗
   match rl with
   | Init =>
     ∃ a, ⌜ga = TExp g [a]⌝ ∧
@@ -52,6 +53,16 @@ Definition nsl_dh_inv g rl ga gb kA kB : iProp :=
     ∃ b, ⌜gb = TExp g [b]⌝ ∧
     □ ∀ a, (pterm (TExp g [a; b]) → ◇ pterm a)
   end%I.
+
+Definition nsl_dh_ctx g γ :=
+  nsl_ctx (@dh_meta _ _) (N.@"nsl") (nsl_dh_inv g) γ.
+
+Lemma nsl_dh_alloc g E E' :
+  ↑N ⊆ E →
+  enc_pred_token E ={E'}=∗ ∃ γ, nsl_dh_ctx g γ.
+Proof.
+move=> sub; apply: nsl_alloc; solve_ndisj.
+Qed.
 
 Definition nsl_dh_fail (k : term) a : iProp :=
   ∃ k', dh_meta a (N.@"peer") k' ∧ corruption k k'.
@@ -80,21 +91,25 @@ iIntros "#a_pred #p_e".
 by iPoseProof (dh_seed_elim2 with "a_pred p_e") as ">[??]".
 Qed.
 
-Lemma wp_nsl_dh_init g kA kB E Ψ :
+Lemma wp_nsl_dh_init γ g kA kB E Ψ :
   ↑N ⊆ E →
-  nsl_ctx γ (N.@"nsl") (nsl_dh_inv g) -∗
+  nsl_dh_ctx g γ -∗
   sterm g -∗
   pterm (TKey Enc kA) -∗
   pterm (TKey Enc kB) -∗
+  (∀ ga gb, |==> P Init ga gb kA kB) -∗
   (∀ ogab : option term,
       (if ogab is Some gab then
          sterm gab ∧
-         (corruption kA kB ∨ □ (pterm gab → ▷ False))
+         (corruption kA kB ∨
+          ∃ a b, ⌜gab = TExp g [a; b]⌝ ∗
+                 P Resp (TExp g [a]) (TExp g [b]) kA kB ∗
+                 □ (pterm gab → ▷ False))
        else True) -∗
       Ψ (repr ogab)) -∗
   WP nsl_dh_init g (TKey Dec kA) (TKey Enc kA) (TKey Enc kB) @ E {{ Ψ }}.
 Proof.
-iIntros (?) "#ctx #s_g #p_e_kA #p_e_kB Hpost".
+iIntros (?) "#ctx #s_g #p_e_kA #p_e_kB init Hpost".
 rewrite /nsl_dh_init; wp_pures; wp_bind (mknonce _).
 iApply (wp_mkdh (nsl_dh_fail kA) g).
 iIntros (a) "#s_a #a_pred token".
@@ -104,51 +119,57 @@ iMod (term_meta_set _ _ kB with "dh") as "#dh"; eauto.
 wp_pures; wp_bind (tgroup _); iApply wp_tgroup.
 wp_pures; wp_bind (texp _ _); iApply wp_texp.
 rewrite Spec.texpA; wp_pures; wp_bind (nsl_init _ _ _ _ _).
-iApply (wp_nsl_init with "ctx p_e_kA p_e_kB [] [] [] [token]") => //.
+iApply (wp_nsl_init with "ctx p_e_kA p_e_kB [] [] [init] [token]") => //.
 - solve_ndisj.
 - rewrite sterm_TExp /=; iSplit => //.
   by rewrite /=; iSplit.
 - by iModIntro; iApply pterm_nsl_dh1.
 - iIntros (nB); rewrite /=.
+  iMod ("init" $! (TExp g [a]) nB) as "init"; iModIntro.
+  iSplit => //.
   iExists a; iSplit => //.
   iModIntro; iIntros (b) "p_b".
   by iApply pterm_nsl_dh2.
 - rewrite (term_meta_token_difference _ (↑N.@"nsl")); last solve_ndisj.
   by iDestruct "token" as "[token _]".
 iIntros (onB) "pub"; case: onB=> [nB|]; last by protocol_failure.
-iDestruct "pub" as "# [s_nB [fail | succ]]".
+iDestruct "pub" as "[#s_nB [#fail | [resp #succ]]]".
   wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
   iApply ("Hpost" $! (Some (Spec.texp nB a))).
   iSplit; first by iApply sterm_texp => //.
   by eauto.
-iDestruct "succ" as (b) "[-> #succ]".
+iDestruct "succ" as (b) "(-> & #succ)".
 wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
 iApply ("Hpost" $! (Some (Spec.texp (TExp g [b]) a))).
 iSplit; first by iApply sterm_texp => //.
-iRight; iModIntro.
-rewrite Spec.texpA.
-iIntros "#contra".
+iRight; iExists a, b.
+rewrite Spec.texpA; iSplit => //; iFrame.
+iIntros "!> #contra".
 iDestruct ("succ" with "contra") as "{succ} >succ".
 by iApply dh_seed_elim0.
 Qed.
 
-Lemma wp_dh_responder g kB E Ψ :
+Lemma wp_dh_responder γ g kB E Ψ :
   ↑N ⊆ E →
-  nsl_ctx γ (N.@"nsl") (nsl_dh_inv g) -∗
+  nsl_dh_ctx g γ -∗
   sterm g -∗
   pterm (TKey Enc kB) -∗
+  (∀ ga gb kA, |==> P Resp ga gb kA kB) -∗
   (∀ oresp : option (term * term),
       (if oresp is Some (pkA, gab) then
          ∃ kA,
            ⌜pkA = TKey Enc kA⌝ ∧
            pterm pkA ∧
            sterm gab ∧
-           (corruption kA kB ∨ □ (pterm gab → ▷ False))
+           (corruption kA kB ∨
+            ∃ a b, ⌜gab = TExp g [a; b]⌝ ∗
+                   P Init (TExp g [a]) (TExp g [b]) kA kB ∗
+                   □ (pterm gab → ▷ False))
        else True) -∗
       Ψ (repr oresp)) -∗
   WP nsl_dh_resp g (TKey Dec kB) (TKey Enc kB) @ E {{ Ψ }}.
 Proof.
-iIntros (?) "#ctx #s_g #p_e_kB Hpost".
+iIntros (?) "#ctx #s_g #p_e_kB resp Hpost".
 rewrite /nsl_dh_resp; wp_pures; wp_bind (mkdh _).
 iApply (wp_mkdh (nsl_dh_fail kB)).
 iIntros (b) "#s_b #b_pred token".
@@ -157,33 +178,38 @@ iDestruct "token" as "[dh token]".
 wp_pures; wp_bind (tgroup _); iApply wp_tgroup.
 wp_pures; wp_bind (texp _ _); iApply wp_texp.
 rewrite Spec.texpA; wp_pures; wp_bind (nsl_resp _ _ _ _).
-iApply (wp_nsl_resp with "ctx p_e_kB [token] [] [dh]") => //.
+iApply (wp_nsl_resp with "ctx p_e_kB [token] [] [resp dh]") => //.
 - solve_ndisj.
 - rewrite (term_meta_token_difference _ (↑N.@"nsl")); last solve_ndisj.
   by iDestruct "token" as "[token _]".
 - by rewrite sterm_TExp /=; iSplit; eauto.
 - iIntros (kA nA).
   iMod (term_meta_set _ _ kA with "dh") as "#meta"; eauto.
+  iMod ("resp" $! nA (TExp g [b]) kA) as "resp".
   iModIntro; iSplit.
   + iModIntro; rewrite [corruption _ _]comm; by iApply pterm_nsl_dh1.
-  + iExists b; iSplit => //.
+  + iFrame; iExists b; iSplit => //.
     iIntros "!> %".
     rewrite -[ [a; b]]/(seq.cat [a] [b]) TExpC /=.
     by iIntros "#?"; iApply pterm_nsl_dh2.
 iIntros ([[pkA nA]|]) "resp"; last by protocol_failure.
-iDestruct "resp" as (kA) "# (-> & p_e_kA & s_nA & p_nA & inv)".
+iDestruct "resp" as (kA) "(-> & #p_e_kA & #s_nA & #p_nA & inv)".
 wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
 iApply ("Hpost" $! (Some (TKey Enc kA, Spec.texp nA b))).
 iExists _; do 3!iSplit => //; eauto.
   by iApply sterm_texp.
-iDestruct "inv" as "[inv|inv]"; eauto.
+iDestruct "inv" as "[#inv|[init #inv]]"; eauto.
 iDestruct "inv" as (t) "[-> #inv]".
 rewrite Spec.texpA.
 rewrite -[ [b; t]]/(seq.cat [b] [t]) TExpC /=.
-iRight; iIntros "!> #contra".
+iRight; iExists _, _; iSplit => //; iFrame.
+iIntros "!> #contra".
 iSpecialize ("inv" with "contra").
 iDestruct "inv" as ">inv".
 by iApply dh_seed_elim0.
 Qed.
 
 End NSLDH.
+
+Arguments nsl_dh_ctx {Σ _ _ _} N P g γ.
+Arguments nsl_dh_alloc {Σ _ _ _} N P g E E'.

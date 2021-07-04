@@ -1,10 +1,3 @@
-(*
-
-Transcribed from https://github.com/Inria-Prosecco/reftls
-
-*)
-
-
 From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl namespace_map frac.
@@ -15,18 +8,6 @@ From crypto Require Import lib term crypto primitives tactics session dh.
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
-
-(* MOVE *)
-Definition opterm `{!heapG Σ, !cryptoG Σ} (ot : option term) : iProp Σ :=
-  match ot with
-  | Some t => pterm t
-  | None => True
-  end.
-
-Global Instance persistent_opterm `{!heapG Σ, !cryptoG Σ} ot :
-  Persistent (opterm ot).
-Proof. apply _. Qed.
-(* /MOVE *)
 
 Module AEAD.
 
@@ -1848,26 +1829,29 @@ wp_bind (I.verify _ _ _ _); iApply wp_verify.
 by case: verify; wp_pures.
 Qed.
 
-Context `{!sessionG Σ (term * term) (@nonce_meta _ _) nonce_meta_token}.
+Context `{!sessionG Σ}.
+Variable (N : namespace) (P : role → term → term → term * term → iProp).
 
-Definition hello_pred γ N (k t : term) : iProp := ∃ sp,
+Definition hello_pred γ (k t : term) : iProp := ∃ sp,
   let ss := share sp in
   ⌜t = hello_priv N sp⌝ ∧
   SShare.wf ss ∧
-  session γ (N.@"sess") Resp (SShare.cnonce ss) (SShare.snonce ss)
+  session (@nonce_meta _ _)
+          (N.@"sess") γ Resp (SShare.cnonce ss) (SShare.snonce ss)
           (SShare.session_key_of N ss, other sp).
 
-Definition hello_sig_pred γ N (k t : term) : iProp := ∃ kex other,
+Definition hello_sig_pred γ (k t : term) : iProp := ∃ kex other,
   ⌜t = THash (Spec.of_list [SShare.term_of (SShare.encode N kex); other])⌝ ∧
   SShare.wf kex ∧
-  session γ (N.@"sess") Resp (SShare.cnonce kex) (SShare.snonce kex)
+  session (@nonce_meta _ _)
+          (N.@"sess") γ Resp (SShare.cnonce kex) (SShare.snonce kex)
           (SShare.session_key_of N kex, other).
 
-Definition ctx γ N P : iProp :=
+Definition ctx γ : iProp :=
   Keys.ctx N ∧
-  enc_pred (N.@"server_hello") (hello_pred γ N) ∧
-  enc_pred (N.@"server_hello_sig") (hello_sig_pred γ N) ∧
-  session_ctx γ (N.@"sess") P.
+  enc_pred (N.@"server_hello") (hello_pred γ) ∧
+  enc_pred (N.@"server_hello_sig") (hello_sig_pred γ) ∧
+  session_ctx (@nonce_meta _ _) (N.@"sess") P γ.
 
 Definition wf sp : iProp :=
   SShare.wf (share sp) ∧
@@ -1877,16 +1861,16 @@ Definition wf sp : iProp :=
 Instance wf_persistent sp : Persistent (wf sp).
 Proof. apply _. Qed.
 
-Lemma pterm_hello γ N P E sp :
+Lemma pterm_hello γ E sp :
   ↑N ⊆ E →
   let ss := share sp in
-  ctx γ N P -∗
+  ctx γ -∗
   wf sp -∗
   nonce_meta_token (SShare.snonce ss) (↑N.@"sess") -∗
   P Resp (SShare.cnonce ss) (SShare.snonce ss)
     (SShare.session_key_of N ss, other sp) ={E}=∗
   pterm (hello N sp) ∗
-  (session γ (N.@"sess") Init (SShare.cnonce ss) (SShare.snonce ss)
+  (session (@nonce_meta _ _) (N.@"sess") γ Init (SShare.cnonce ss) (SShare.snonce ss)
      (SShare.session_key_of N ss, other sp) ={E}=∗
    ▷ P Init (SShare.cnonce ss) (SShare.snonce ss)
        (SShare.session_key_of N ss, other sp)).
@@ -1924,9 +1908,9 @@ by iApply SShare.pterm_encode.
 Qed.
 
 (* TODO: Clean this statement *)
-Lemma pterm_checkE γ N P cp sh vkey s_ke :
+Lemma pterm_checkE γ cp sh vkey s_ke :
   check N cp sh = Some (vkey, s_ke) →
-  ctx γ N P -∗
+  ctx γ -∗
   pterm sh -∗
   ∃ k, ⌜vkey = TKey Dec k⌝ ∧
        ⌜CParams.share cp = SShare.cshare_of s_ke⌝ ∧
@@ -1945,7 +1929,7 @@ Lemma pterm_checkE γ N P cp sh vkey s_ke :
             pterm (TKey Enc (SShare.session_key_of' N s_ke)) ∨
           ∃ sp, ⌜sh = hello N sp⌝ ∧
                 SShare.wf (share sp) ∧
-                session γ (N.@"sess") Resp
+                session (@nonce_meta _ _) (N.@"sess") γ Resp
                         (SShare.cnonce s_ke)
                         (SShare.snonce s_ke)
                         (SShare.session_key_of' N s_ke, CParams.other cp)).
@@ -2028,14 +2012,17 @@ Coercion SParams.term_of : SParams.t >-> term.
 Section Protocol.
 
 Context `{!heapG Σ, !cryptoG Σ, !network Σ}.
-Context `{S : !sessionG Σ (term * term) (@nonce_meta _ _) nonce_meta_token}.
+Context `{S : !sessionG Σ}.
 Notation iProp := (iProp Σ).
+Variable N : namespace.
 
 Implicit Types t : term.
 Implicit Types rl : role.
 Implicit Types Φ : val → iProp.
 
-Definition client N : val := λ: "kex" "other",
+Definition P rl t1 t2 (x : term * term) : iProp := True.
+
+Definition client : val := λ: "kex" "other",
   let: "kex" := CShare.I.new "kex" in
   let: "cp"  := term_of_list ["kex"; "other"] in
   let: "ch"  := CParams.I.hello N "cp" in
@@ -2050,32 +2037,25 @@ Definition client N : val := λ: "kex" "other",
   send "ack" ;;
   SOME ("vkey", SShare.I.cnonce "kex", SShare.I.snonce "kex", "session_key").
 
-Definition inv rl (nA nB : term) (k : term * term) : iProp :=
-  match rl with
-  | Init => True%I
-  | Resp => True%I
-  end.
-
-Definition ack_pred γ N (k t : term) : iProp :=
+Definition ack_pred γ (k t : term) : iProp :=
   ∀ sp, ⌜t = SParams.hello N sp⌝ →
   let ss := SParams.share sp in
   let sk := SShare.session_key_of N ss in
-  session γ (N.@"sess") Init
+  session (@nonce_meta _ _) (N.@"sess") γ Init
           (SShare.cnonce ss) (SShare.snonce ss) (sk, SParams.other sp) ∧
   ∃ ke, ⌜SShare.encode' N ke = SShare.encode N ss⌝ ∧
         CShare.wf (SShare.cshare_of ke).
 
-
-Definition ctx γ N : iProp :=
+Definition ctx γ : iProp :=
   Keys.ctx N ∧
   CParams.ctx N ∧
-  SParams.ctx γ N inv ∧
-  enc_pred (N.@"ack") (ack_pred γ N) ∧
-  session_ctx γ (N.@"sess") inv.
+  SParams.ctx N P γ ∧
+  enc_pred (N.@"ack") (ack_pred γ) ∧
+  session_ctx (@nonce_meta _ _) (N.@"sess") P γ.
 
-Lemma wp_client γ N ke other E Φ :
+Lemma wp_client γ ke other E Φ :
   ↑N ⊆ E →
-  ctx γ N -∗
+  ctx γ -∗
   Meth.wf ke -∗
   pterm other -∗
   (∀ res,
@@ -2087,14 +2067,14 @@ Lemma wp_client γ N ke other E Φ :
              pterm sn ∧
              sterm sk ∧
              ▷ (pterm (TKey Enc k) ∧ pterm (Meth.psk ke) ∨
-                session γ (N.@"sess") Resp cn sn (sk, other) ∧
+                session (@nonce_meta _ _) (N.@"sess") γ Resp cn sn (sk, other) ∧
                 □ ∀ kt, pterm (TKey kt sk) -∗
                         ◇ if Meth.has_dh ke then False
                           else pterm (Meth.psk ke))
       | None => True
       end →
       Φ (repr res)) -∗
-  WP client N ke other @ E {{ Φ }}.
+  WP client ke other @ E {{ Φ }}.
 Proof.
 iIntros (sub) "#(k_ctx & c_ctx & s_ctx & ackP & sess_ctx) #p_ke #p_other post".
 rewrite /client; wp_pures.
@@ -2120,7 +2100,7 @@ iDestruct (SParams.pterm_checkE with "s_ctx p_sh") as (k) "Hk"; eauto.
 iDestruct "Hk" as "/= (%e_k & %e_share & #s_k & #p_cn & #p_sn &
                        #s_sk & %e_hello & rest)".
 subst ke' vkey; rewrite SShare.cnonce_cshare_of.
-iMod (session_begin _ Init (SShare.cnonce ke'') (SShare.snonce ke'')
+iMod (session_begin _ γ Init (SShare.cnonce ke'') (SShare.snonce ke'')
                     (SShare.session_key_of' N ke'', CParams.other cp)
         with "sess_ctx [] sess") as "[#sess close]".
 - solve_ndisj.
@@ -2162,7 +2142,7 @@ iModIntro.
 iApply SShare.pterm_session_key_of => //.
 Qed.
 
-Definition server N : val := λ: "psk" "g" "verif_key" "other",
+Definition server : val := λ: "psk" "g" "verif_key" "other",
   let: "ch" := recv #() in
   bind: "ke" := CParams.I.check N "psk" "g" "other" "ch" in
   let: "ke'" := SShare.I.new "ke" in
@@ -2176,9 +2156,9 @@ Definition server N : val := λ: "psk" "g" "verif_key" "other",
   assert: eq_term "ack" "sh" in
   SOME "ke'".
 
-Lemma wp_server γ N psk g verif_key other E Φ :
+Lemma wp_server γ psk g verif_key other E Φ :
   ↑N ⊆ E →
-  ctx γ N -∗
+  ctx γ -∗
   sterm psk -∗
   pterm g -∗
   sterm (TKey Enc verif_key) -∗
@@ -2190,14 +2170,14 @@ Lemma wp_server γ N psk g verif_key other E Φ :
         pterm (SShare.cnonce ke) ∧
         pterm (SShare.snonce ke) ∧
         ▷ (pterm (SShare.psk ke) ∨
-           session γ (N.@"sess")
+           session (@nonce_meta _ _) (N.@"sess") γ
                    Init (SShare.cnonce ke) (SShare.snonce ke)
                    (SShare.session_key_of N ke, other) ∧
            □ ∀ kt, pterm (TKey kt (SShare.session_key_of N ke)) -∗
            ◇ if SShare.has_dh ke then False else pterm (SShare.psk ke))
       | None => True
       end -∗ Φ (repr (SShare.term_of <$> ke))) -∗
-  WP server N psk g verif_key other @ E {{ Φ }}.
+  WP server psk g verif_key other @ E {{ Φ }}.
 Proof.
 iIntros (sub) "#(k_ctx & c_ctx & s_ctx & ? & sess_ctx)".
 iIntros "#s_psk #p_g #s_sign #s_verif #p_other post".

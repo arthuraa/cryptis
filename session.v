@@ -100,15 +100,12 @@ Definition to_session_map SM := session_status_both <$> SM.
 
 Definition sessionR := authR session_mapUR.
 
-Class sessionG X term_meta term_meta_token
-  `{Countable X, TermMeta Σ term_meta term_meta_token} := {
+Class sessionG := {
   session_inG    :> inG Σ sessionR;
 }.
 
-Arguments sessionG X term_meta term_meta_token {_ _ _}.
-
 Context `{TermMeta Σ term_meta term_meta_token, Countable X}.
-Context `{!sessionG X term_meta term_meta_token} (γ : gname) (N : namespace).
+Context `{!sessionG} (N : namespace).
 Context (P : role → term → term → X → iProp).
 Arguments term_meta {_ _ _} _ _ _.
 
@@ -125,21 +122,21 @@ Proof. by apply/auth_auth_valid; case: p. Qed.
 Lemma session_status_frag_valid p : ✓ session_status_frag p.
 Proof. by case: p. Qed.
 
-Definition session_auth rl t (k : term) (x : X) o : iProp :=
+Definition session_auth γ rl t (k : term) (x : X) o : iProp :=
   auth_own γ {[t := session_status_auth o]} ∧
   term_meta t N (x, rl, k).
 
-Definition session_frag rl t (k : term) (x : X) o : iProp :=
+Definition session_frag γ rl t (k : term) (x : X) o : iProp :=
   auth_own γ {[t := session_status_frag o]} ∧
   term_meta t N (x, rl, k).
 
-Global Instance session_frag_persistent rl t k x o :
-  Persistent (session_frag rl t k x o).
+Global Instance session_frag_persistent γ rl t k x o :
+  Persistent (session_frag γ rl t k x o).
 Proof. apply _. Qed.
 
-Lemma session_auth_frag_agree t rl1 rl2 k1 k2 x1 x2 o1 o2 :
-  session_auth rl1 t k1 x1 o1 -∗
-  session_frag rl2 t k2 x2 o2 -∗
+Lemma session_auth_frag_agree γ t rl1 rl2 k1 k2 x1 x2 o1 o2 :
+  session_auth γ rl1 t k1 x1 o1 -∗
+  session_frag γ rl2 t k2 x2 o2 -∗
   ⌜rl1 = rl2 ∧ k1 = k2 ∧ x1 = x2 ∧ o2 ≼ o1⌝.
 Proof.
 iIntros "[own1 meta1] [own2 meta2]".
@@ -151,9 +148,9 @@ move: s_valid; rewrite -auth_frag_op auth_frag_valid singleton_op.
 by rewrite singleton_valid => /auth_both_valid [? _]; eauto.
 Qed.
 
-Lemma session_frag_agree rl1 rl2 t k1 k2 x1 x2 o1 o2 :
-  session_frag rl1 t k1 x1 o1 -∗
-  session_frag rl2 t k2 x2 o2 -∗
+Lemma session_frag_agree γ rl1 rl2 t k1 k2 x1 x2 o1 o2 :
+  session_frag γ rl1 t k1 x1 o1 -∗
+  session_frag γ rl2 t k2 x2 o2 -∗
   ⌜rl1 = rl2 ∧ k1 = k2 ∧ x1 = x2⌝.
 Proof.
 iIntros "[_ meta1] [_ meta2]".
@@ -161,14 +158,14 @@ iPoseProof (term_meta_agree with "meta1 meta2") as "%e"; iPureIntro.
 repeat split; congruence.
 Qed.
 
-Definition session_map_inv SM : iProp :=
+Definition session_map_inv γ SM : iProp :=
   ([∗ map] t ↦ o ∈ SM, ∃ k rl (x : X),
      term_meta t N (x, rl, k) ∧
-     (sinv rl t k x ∨ session_frag (swap_role rl) k t x (Some ())))%I.
+     (sinv rl t k x ∨ session_frag γ (swap_role rl) k t x (Some ())))%I.
 
-Lemma session_map_inv_unregistered SM t :
+Lemma session_map_inv_unregistered γ SM t :
   term_meta_token t (↑N) -∗
-  session_map_inv SM -∗
+  session_map_inv γ SM -∗
   ⌜SM !! t = None⌝.
 Proof.
 iIntros "fresh inv".
@@ -179,11 +176,18 @@ iDestruct "inv" as (k rl x) "(not_fresh & _)".
 by iDestruct (term_meta_meta_token with "fresh not_fresh") as "[]".
 Qed.
 
-Definition session_inv : iProp :=
-  auth_inv γ to_session_map session_map_inv.
+Definition session_ctx γ : iProp :=
+  auth_ctx γ N to_session_map (session_map_inv γ).
 
-Definition session_ctx : iProp :=
-  auth_ctx γ N to_session_map session_map_inv.
+Lemma session_alloc E : ⊢ |={E}=> ∃ γ, session_ctx γ.
+Proof.
+iStartProof.
+iMod (own_alloc (● (to_session_map ∅))) as (γ) "own".
+  by rewrite auth_auth_valid.
+iExists γ; rewrite /session_ctx /auth_ctx; iApply inv_alloc.
+iModIntro; iExists ∅; iFrame.
+by rewrite /session_map_inv big_sepM_empty.
+Qed.
 
 Lemma session_status_auth_included p1 p2 :
   session_status_auth p1 ≼ session_status_both p2 →
@@ -194,14 +198,14 @@ case=> [] /Some_pair_included_total_2 [] _.
 by rewrite to_agree_included => e _; rewrite (leibniz_equiv _ _ e) {e}.
 Qed.
 
-Lemma session_auth_session_frag E rl t k x o :
+Lemma session_auth_session_frag E γ rl t k x o :
   ↑N ⊆ E →
-  session_ctx -∗
-  session_auth rl t k x o ={E}=∗
-  session_auth rl t k x o ∗ session_frag rl t k x o.
+  session_ctx γ -∗
+  session_auth γ rl t k x o ={E}=∗
+  session_auth γ rl t k x o ∗ session_frag γ rl t k x o.
 Proof.
 iIntros (?) "#ctx [auth #meta]".
-iMod (auth_acc to_session_map session_map_inv
+iMod (auth_acc to_session_map (session_map_inv γ)
         with "[ctx auth]") as (SM) "(%lb & inv & close)" => //; eauto.
 iMod ("close" $! SM {[t := session_status_both o]} with "[inv]")
     as "own"; last first.
@@ -220,16 +224,16 @@ rewrite lookup_fmap SM_t /session_status_both; split.
 apply: Some_included_2; exact: cmra_included_r.
 Qed.
 
-Lemma session_begin_aux rl t k x E :
+Lemma session_begin_aux γ rl t k x E :
   ↑N ⊆ E →
-  session_ctx -∗
+  session_ctx γ -∗
   sinv rl t k x -∗
   term_meta_token t (↑N) ={E}=∗
-  session_auth rl t k x None ∗ session_frag rl t k x None.
+  session_auth γ rl t k x None ∗ session_frag γ rl t k x None.
 Proof.
 iIntros (?) "#ctx s_inv fresh".
 iMod (auth_empty γ) as "#init".
-iMod (auth_acc to_session_map session_map_inv
+iMod (auth_acc to_session_map (session_map_inv γ)
          with "[ctx init]") as "inv"; try by eauto.
 iDestruct "inv" as (SM) "(_ & inv & close)".
 iAssert (▷ ⌜SM !! t = None⌝)%I as "# > %s_fresh".
@@ -249,11 +253,11 @@ iDestruct "own" as "[own1 own2]".
 by rewrite /session_auth /session_frag /auth_own; iFrame; eauto.
 Qed.
 
-Lemma session_end_aux rl t s x E :
+Lemma session_end_aux γ rl t s x E :
   ↑N ⊆ E →
-  session_ctx -∗
-  session_auth rl t s x None -∗
-  session_frag (swap_role rl) s t x None ={E}=∗
+  session_ctx γ -∗
+  session_auth γ rl t s x None -∗
+  session_frag γ (swap_role rl) s t x None ={E}=∗
   ▷ sinv (swap_role rl) s t x.
 Proof.
 iIntros (sub) "ctx [sessA #metaA] [#sessB #metaB]".
@@ -288,7 +292,7 @@ iAssert (▷ (sinv (swap_role rl) s t x ∗ own γ (◯ f1)))%I
   iPoseProof (term_meta_agree with "metaB not_fresh") as "%e".
   case: e => <- <- <-.
   iDestruct "inv_s" as "[H|sessA']"; first by iSplitL "H".
-  iAssert (session_auth rl t s x None) with "[sessA]" as "sessA".
+  iAssert (session_auth γ rl t s x None) with "[sessA]" as "sessA".
     by iSplit.
   iDestruct (session_auth_frag_agree with "sessA sessA'") as % (_ & _ & _ & contra).
   by case: contra => [[?|]]; rewrite option_equivE.
@@ -328,22 +332,23 @@ iExists _, _, _; iSplit => //.
 by iRight; case: (rl); iSplit.
 Qed.
 
-Definition session rl tI tR x : iProp :=
-  session_frag rl (if rl is Init then tI else tR)
-                  (if rl is Init then tR else tI) x None.
+Definition session γ rl tI tR x : iProp :=
+  session_frag γ rl
+               (if rl is Init then tI else tR)
+               (if rl is Init then tR else tI) x None.
 
-Global Instance session_persistent rl tI tR x :
-  Persistent (session rl tI tR x).
+Global Instance session_persistent γ rl tI tR x :
+  Persistent (session γ rl tI tR x).
 Proof. apply _. Qed.
 
-Global Instance session_timeless rl tI tR x :
-  Timeless (session rl tI tR x).
+Global Instance session_timeless γ rl tI tR x :
+  Timeless (session γ rl tI tR x).
 Proof. apply _. Qed.
 
-Lemma session_agree rl tI1 tI2 tR1 tR2 x1 x2 :
+Lemma session_agree γ rl tI1 tI2 tR1 tR2 x1 x2 :
   (if rl is Init then tI1 = tI2 else tR1 = tR2) →
-  session rl tI1 tR1 x1 -∗
-  session rl tI2 tR2 x2 -∗
+  session γ rl tI1 tR1 x1 -∗
+  session γ rl tI2 tR2 x2 -∗
   ⌜(if rl is Init then tR1 = tR2 else tI1 = tI2) ∧ x1 = x2⌝.
 Proof.
 case: rl => ->.
@@ -351,16 +356,16 @@ all: iIntros "s1 s2".
 all: by iDestruct (session_frag_agree with "s1 s2") as "(% & % & %)".
 Qed.
 
-Lemma session_begin E rl tI tR x :
+Lemma session_begin E γ rl tI tR x :
   ↑N ⊆ E →
-  session_ctx -∗
+  session_ctx γ -∗
   P rl tI tR x -∗
   term_meta_token (if rl is Init then tI else tR) (↑N) ={E}=∗
-  session rl tI tR x ∗
-  (session (swap_role rl) tI tR x ={E}=∗ ▷ P (swap_role rl) tI tR x).
+  session γ rl tI tR x ∗
+  (session γ (swap_role rl) tI tR x ={E}=∗ ▷ P (swap_role rl) tI tR x).
 Proof.
 rewrite /=; iIntros (?) "#ctx inv token".
-iMod (@session_begin_aux rl (if rl is Init then tI else tR)
+iMod (@session_begin_aux γ rl (if rl is Init then tI else tR)
         (if rl is Init then tR else tI)
         with "ctx [inv] token") as "[auth frag]" => //.
   by rewrite /sinv; case: rl; eauto.
@@ -371,7 +376,8 @@ Qed.
 
 End Session.
 
-Arguments sessionG Σ X term_meta term_meta_token {_ _ _}.
-Arguments session_begin {Σ _ _ _ _ _ _ _ _}  {γ N P} E rl tI tR.
-Arguments session_ctx {Σ _ _ _ _ _ _ _ _} γ N.
-Arguments session {Σ _ _ _ _ _ _ _} γ N _ _ _.
+Arguments sessionG Σ : clear implicits.
+Arguments session_alloc {Σ _} term_meta {X _ _ _} N P.
+Arguments session_begin {Σ _ _ _ _ _ _ _ _}  {N P} E γ rl tI tR.
+Arguments session_ctx {Σ _} term_meta {_ _ _ _} N P γ.
+Arguments session {Σ} term_meta {_ _ _ _} N γ _ _ _.
