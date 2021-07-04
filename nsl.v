@@ -243,8 +243,8 @@ Lemma wp_nsl_init kA kB (nA : term) E Ψ :
   (∀ onB : option term,
       (if onB is Some nB then
          sterm nB ∧
-         (corruption kA kB ∨
-           P Resp nA nB kA kB ∗ Q Init nA nB kA kB)
+         Q Init nA nB kA kB ∗
+         (corruption kA kB ∨ P Resp nA nB kA kB)
        else True) -∗
       Ψ (repr onB)) -∗
   WP nsl_init (TKey Dec kA) (TKey Enc kA) (TKey Enc kB) nA @ E
@@ -270,7 +270,8 @@ wp_pures; iDestruct "Hm2" as "[fail|sessB]".
   wp_bind (send _); iApply wp_send.
     iModIntro; iApply pterm_TEncIP => //.
     by rewrite pterm_tag; iApply "p_nB".
-  by wp_pures; iApply ("Hpost" $! (Some nB)); eauto.
+  wp_pures; iApply ("Hpost" $! (Some nB)); eauto.
+  by iSplit => //; iFrame; eauto.
 iMod (session_begin _ γ Init _ _ (kA, kB)
         with "[] [HP] [unreg]") as "[#sessA close]" => //.
 - by iApply nsl_ctx_session_ctx.
@@ -279,7 +280,7 @@ iMod ("close" with "sessB") as "inv_resp" => //=.
 wp_bind (send _); iApply wp_send.
   by iModIntro; iApply (pterm_msg3I with "[] [] [] [] [] [] sessB sessA"); eauto.
 wp_pures; iApply ("Hpost" $! (Some nB)); eauto.
-by iSplit => //; iRight; iFrame.
+by iSplit => //; iFrame; eauto.
 Qed.
 
 Lemma wp_nsl_resp kB E Ψ nB :
@@ -298,7 +299,8 @@ Lemma wp_nsl_resp kB E Ψ nB :
            pterm pkA ∧
            sterm nA ∧
            □ (pterm nA ↔ ▷ corruption kA kB) ∧
-           (corruption kA kB ∨ P Init nA nB kA kB ∗ Q Resp nA nB kA kB)
+           Q Resp nA nB kA kB ∗
+           (corruption kA kB ∨ P Init nA nB kA kB)
        else True) -∗
        Ψ (repr ot)) -∗
   WP nsl_resp (TKey Dec kB) (TKey Enc kB) nB @ E {{ Ψ }}.
@@ -340,14 +342,14 @@ iPoseProof (pterm_msg3E with "[] sessB p_nB []") as "[pub|sec]" => //.
     iModIntro; iSplit; iIntros "#?" => //.
     iDestruct "Hm1" as "[?|#Hm1]"; eauto.
     by iApply "Hm1".
-  by iLeft.
+  iFrame; by iLeft.
 iDestruct "sec" as "{p_nA} (sessA & p_nA)".
 wp_if.
 iMod ("close" with "sessA") as "inv".
 wp_pures.
 iApply ("Hpost" $! (Some (TKey Enc kA, nA))).
 iExists kA; do 4!iSplit => //; eauto.
-by iRight; iFrame.
+by iFrame; eauto.
 Qed.
 
 End NSL.

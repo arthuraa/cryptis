@@ -99,13 +99,14 @@ Lemma wp_nsl_dh_init Q γ g kA kB E Ψ :
   pterm (TKey Enc kB) -∗
   (∀ ga gb, |==> P Init ga gb kA kB ∗ Q Init ga gb kA kB) -∗
   (∀ ogab : option term,
-      (if ogab is Some gab then
+      (if ogab is Some gab then ∃ a gb,
+         ⌜gab = Spec.texp gb a⌝ ∧
          sterm gab ∧
+         Q Init (TExp g [a]) gb kA kB ∗
          (corruption kA kB ∨
-          ∃ a b, ⌜gab = TExp g [a; b]⌝ ∗
-                 P Resp (TExp g [a]) (TExp g [b]) kA kB ∗
-                 Q Init (TExp g [a]) (TExp g [b]) kA kB ∗
-                 □ (pterm gab → ▷ False))
+          ∃ b, ⌜gb = TExp g [b]⌝ ∗
+               P Resp (TExp g [a]) (TExp g [b]) kA kB ∗
+               □ (pterm gab → ▷ False))
        else True) -∗
       Ψ (repr ogab)) -∗
   WP nsl_dh_init g (TKey Dec kA) (TKey Enc kA) (TKey Enc kB) @ E {{ Ψ }}.
@@ -135,16 +136,19 @@ iApply (wp_nsl_init (nsl_dh_inv g) Q
 - rewrite (term_meta_token_difference _ (↑N.@"nsl")); last solve_ndisj.
   by iDestruct "token" as "[token _]".
 iIntros (onB) "pub"; case: onB=> [nB|]; last by protocol_failure.
-iDestruct "pub" as "[#s_nB [#fail | [[resp #succ] init]]]".
+iDestruct "pub" as "[#s_nB [init [#fail | [resp #succ]]]]".
   wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
   iApply ("Hpost" $! (Some (Spec.texp nB a))).
+  iExists _, _; iSplit; eauto.
   iSplit; first by iApply sterm_texp => //.
-  by eauto.
+  iFrame; by eauto.
 iDestruct "succ" as (b) "(-> & #succ)".
 wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
 iApply ("Hpost" $! (Some (Spec.texp (TExp g [b]) a))).
+iExists _, _; iSplit => //.
 iSplit; first by iApply sterm_texp => //.
-iRight; iExists a, b.
+iFrame.
+iRight; iExists b.
 rewrite Spec.texpA; iSplit => //; iFrame.
 iIntros "!> #contra".
 iDestruct ("succ" with "contra") as "{succ} >succ".
@@ -159,15 +163,16 @@ Lemma wp_nsl_dh_resp Q γ g kB E Ψ :
   (∀ ga gb kA, |==> P Resp ga gb kA kB ∗ Q Resp ga gb kA kB) -∗
   (∀ oresp : option (term * term),
       (if oresp is Some (pkA, gab) then
-         ∃ kA,
+         ∃ kA b ga,
            ⌜pkA = TKey Enc kA⌝ ∧
+           ⌜gab = Spec.texp ga b⌝ ∧
            pterm pkA ∧
            sterm gab ∧
+           Q Resp ga (TExp g [b]) kA kB ∗
            (corruption kA kB ∨
-            ∃ a b, ⌜gab = TExp g [a; b]⌝ ∗
-                   P Init (TExp g [a]) (TExp g [b]) kA kB ∗
-                   Q Resp (TExp g [a]) (TExp g [b]) kA kB ∗
-                   □ (pterm gab → ▷ False))
+            ∃ a, ⌜ga = TExp g [a]⌝ ∗
+                  P Init ga (TExp g [b]) kA kB ∗
+                  □ (pterm gab → ▷ False))
        else True) -∗
       Ψ (repr oresp)) -∗
   WP nsl_dh_resp g (TKey Dec kB) (TKey Enc kB) @ E {{ Ψ }}.
@@ -200,13 +205,14 @@ iIntros ([[pkA nA]|]) "resp"; last by protocol_failure.
 iDestruct "resp" as (kA) "(-> & #p_e_kA & #s_nA & #p_nA & inv)".
 wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
 iApply ("Hpost" $! (Some (TKey Enc kA, Spec.texp nA b))).
-iExists _; do 3!iSplit => //; eauto.
+iExists _, _, _; do 4!iSplit => //; eauto.
   by iApply sterm_texp.
-iDestruct "inv" as "[#inv|[[init #inv] resp]]"; eauto.
+iDestruct "inv" as "[? inv]"; iFrame.
+iDestruct "inv" as "[inv|[resp inv]]"; eauto.
 iDestruct "inv" as (t) "[-> #inv]".
 rewrite Spec.texpA.
 rewrite -[ [b; t]]/(seq.cat [b] [t]) TExpC /=.
-iRight; iExists _, _; iSplit => //; iFrame.
+iRight; iExists _; iSplit => //; iFrame.
 iIntros "!> #contra".
 iSpecialize ("inv" with "contra").
 iDestruct "inv" as ">inv".
