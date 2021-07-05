@@ -118,9 +118,9 @@ case: t HSome HNone; eauto => k' /=.
 by case: decide => [<-|]; eauto.
 Qed.
 
-Lemma tac_wp_tenc Γ E K c k t Ψ :
-  envs_entails Γ (WP fill K (Val (SOMEV (TEnc k (Spec.tag c t)))) @ E {{ Ψ }}) →
-  envs_entails Γ (WP fill K (tenc c (TKey Enc k) t) @ E {{ Ψ }}).
+Lemma tac_wp_tenc Γ E K c t1 t2 Ψ :
+  envs_entails Γ (WP fill K (Val (Spec.tenc c t1 t2)) @ E {{ Ψ }}) →
+  envs_entails Γ (WP fill K (tenc c t1 t2) @ E {{ Ψ }}).
 Proof.
 rewrite envs_entails_eq => H.
 by rewrite -wp_bind -wp_tenc.

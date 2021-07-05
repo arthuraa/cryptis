@@ -294,8 +294,15 @@ case e: (Spec.untag N t) => [t'|]; constructor.
 - move=> t' e'; by rewrite e' Spec.tagK in e.
 Qed.
 
-Definition as_int t :=
+Definition to_int t :=
   if t is TInt n then Some n else None.
+
+Variant to_int_spec t : option Z → Type :=
+| AsIntSome n of t = TInt n : to_int_spec t (Some n)
+| AsIntNone of (∀ n, t ≠ TInt n) : to_int_spec t None.
+
+Lemma to_intP t : to_int_spec t (Spec.to_int t).
+Proof. by case: t => *; constructor; congruence. Qed.
 
 Definition untuple t :=
   match t with
@@ -310,10 +317,10 @@ Fixpoint proj t n {struct t} :=
   | _, _ => None
   end.
 
-Definition enc k t : option term :=
+Definition enc k t : term :=
   match k with
-  | TKey Enc k => Some (TEnc k t)
-  | _ => None
+  | TKey Enc k => TEnc k t
+  | _ => t (* Arbitrarily *)
   end.
 
 Definition dec k t : option term :=
@@ -337,6 +344,34 @@ Lemma is_keyP t : is_key_spec t (is_key t).
 Proof.
 case: t; try by right.
 by move=> kt t; eleft.
+Qed.
+
+Definition to_ek t :=
+  if t is TKey Enc _ then Some t else None.
+
+Variant to_ek_spec t : option term → Type :=
+| ToEKSome k of t = TKey Enc k : to_ek_spec t (Some t)
+| ToEKNone of (∀ k, t ≠ TKey Enc k) : to_ek_spec t None.
+
+Lemma to_ekP t : to_ek_spec t (to_ek t).
+Proof.
+case: t; try by right.
+case; try by right.
+by move=> t; eleft.
+Qed.
+
+Definition to_dk t :=
+  if t is TKey Dec _ then Some t else None.
+
+Variant to_dk_spec t : option term → Type :=
+| ToDKSome k of t = TKey Dec k : to_dk_spec t (Some t)
+| ToDKNone of (∀ k, t ≠ TKey Dec k) : to_dk_spec t None.
+
+Lemma to_dkP t : to_dk_spec t (to_dk t).
+Proof.
+case: t; try by right.
+case; try by right.
+by move=> t; eleft.
 Qed.
 
 Definition of_list_aux : seal (foldr TPair (TInt 0)). by eexists. Qed.

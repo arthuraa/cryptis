@@ -83,13 +83,13 @@ Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None).
 
 Definition nsl_init : val := λ: "c" "skA" "pkA" "pkB" "nA",
-  bind: "m1"   := tenc (N.@"m1") "pkB" (term_of_list ["nA"; "pkA"]) in
+  let: "m1"   := tenc (N.@"m1") "pkB" (term_of_list ["nA"; "pkA"]) in
   send "c" "m1";;
   bind: "m2"   := tdec (N.@"m2") "skA" (recv "c") in
   bind: "m2"   := list_of_term "m2" in
   list_match: ["nA'"; "nB"; "pkB'"] := "m2" in
   assert: eq_term "nA'" "nA" && eq_term "pkB'" "pkB" in
-  bind: "m3" := tenc (N.@"m3") "pkB" "nB" in
+  let: "m3" := tenc (N.@"m3") "pkB" "nB" in
   send "c" "m3";;
   SOME "nB".
 
@@ -99,7 +99,7 @@ Definition nsl_resp : val := λ: "c" "skB" "pkB" "nB",
   list_match: ["nA"; "pkA"] := "m1" in
   bind: "kt" := is_key "pkA" in
   assert: "kt" = repr Enc in
-  bind: "m2" := tenc (N.@"m2") "pkA" (term_of_list ["nA"; "nB"; "pkB"]) in
+  let: "m2" := tenc (N.@"m2") "pkA" (term_of_list ["nA"; "nB"; "pkB"]) in
   send "c" "m2";;
   bind: "m3" := tdec (N.@"m3") "skB" (recv "c") in
   assert: eq_term "m3" "nB" in SOME ("pkA", "nA").

@@ -64,8 +64,8 @@ Definition initiator : val := λ: "c" "skA" "pkA" "pkB" "nA",
   bind: "m2"   := list_of_term "m2" in
   list_match: ["nA'"; "nB"; "pkA'"] := "m2" in
   if: eq_term "nA'" "nA" && eq_term "pkA'" "pkA" then
-    let:  "m3" := term_of_list ["nA"; "nB"; "pkB"] in
-    bind: "m3" := tenc (nroot.@"m3") "skA" "m3" in
+    let: "m3" := term_of_list ["nA"; "nB"; "pkB"] in
+    let: "m3" := tenc (nroot.@"m3") "skA" "m3" in
     send "c" "m3";;
     SOME "nB"
   else NONE.
@@ -76,7 +76,7 @@ Definition responder : val := λ: "c" "skB" "pkB",
   bind: "kt"   := is_key "pkA" in
   if: "kt" = repr Dec then
     let:  "nB"   := gen #() in
-    bind: "m2"   := tenc (nroot.@"m2") "skB" (term_of_list ["nA"; "nB"; "pkA"]) in
+    let: "m2"    := tenc (nroot.@"m2") "skB" (term_of_list ["nA"; "nB"; "pkA"]) in
     send  "c" "m2";;
     bind: "m3"   := tdec (nroot.@"m3") "pkA" (recv "c") in
     bind: "m3"   := list_of_term "m3" in

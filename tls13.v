@@ -14,7 +14,7 @@ Module AEAD.
 (* FIXME This does not work if we inline "h" *)
 Definition enc (N : namespace) : val := λ: "k" "ad" "payload",
   let: "h" := hash "ad" in
-  bind: "e" := tenc N (Snd "k") (term_of_list ["h"; "payload"]) in
+  let: "e" := tenc N (Snd "k") (term_of_list ["h"; "payload"]) in
   SOME (term_of_list ["ad"; "e"]).
 
 Definition dec (N : namespace) : val := λ: "k" "m",
@@ -1702,11 +1702,11 @@ Definition hello N : val := λ: "sp",
   case "sp" (λ: "kex" "verif_key" "other",
     let: "pub" := hello_pub N "sp" in
     let: "verif_key" := mkkey "verif_key" in
-    bind: "enc" :=
+    let: "enc" :=
       tenc (N.@"server_hello_sig") (Fst "verif_key") (hash "pub") in
     let: "enc" := term_of_list [Snd "verif_key"; "enc"] in
     let: "session_key" := mkkey (SShare.I.session_key_of N "kex") in
-    bind: "enc" := tenc (N.@"server_hello") (Fst "session_key") "enc" in
+    let: "enc" := tenc (N.@"server_hello") (Fst "session_key") "enc" in
     term_of_list ["pub"; "enc"]
   ).
 
@@ -2033,7 +2033,7 @@ Definition client : val := λ: "c" "kex" "other",
   let: "kex" := Snd "res" in
   let: "session_key" := SShare.I.session_key_of' N "kex" in
   let: "sk" := mkkey "session_key" in
-  bind: "ack" := tenc (N.@"ack") (Fst "sk") "sh" in
+  let: "ack" := tenc (N.@"ack") (Fst "sk") "sh" in
   send "c" "ack" ;;
   SOME ("vkey", SShare.I.cnonce "kex", SShare.I.snonce "kex", "session_key").
 

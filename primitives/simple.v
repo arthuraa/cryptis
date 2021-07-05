@@ -17,7 +17,7 @@ Definition recv : val := λ: "c", Snd "c" #().
 Definition tint : val := λ: "n",
   (#TInt_tag, "n").
 
-Definition as_int : val := λ: "t",
+Definition to_int : val := λ: "t",
   if: Fst "t" = #TInt_tag then SOME (Snd "t")
   else NONE.
 
@@ -47,7 +47,7 @@ Definition tag (N : namespace) : val := λ: "t",
 
 Definition untag (N : namespace) : val := λ: "t",
   bind: "t" := untuple "t" in
-  bind: "tag" := as_int (Fst "t") in
+  bind: "tag" := to_int (Fst "t") in
   if: "tag" = #(Zpos (encode N))then SOME (Snd "t") else NONE.
 
 Definition mknonce : val := λ: <>,
@@ -62,8 +62,8 @@ Definition is_key : val := λ: "t",
 Definition enc : val := λ: "k" "t",
   if: (Fst "k" = #TKey_tag) &&
       (Fst (Snd "k") = #(int_of_key_type Enc)) then
-    SOME (#TEnc_tag, (Snd (Snd "k"), "t"))
-  else NONE.
+    (#TEnc_tag, (Snd (Snd "k"), "t"))
+  else "t".
 
 Definition hash : val := λ: "t", (#THash_tag, "t").
 
@@ -89,6 +89,16 @@ Definition mkkey : val := λ: "k",
 
 Definition tgroup : val := λ: "t",
   (#TExp_tag, ("t", NONEV)).
+
+Definition to_ek : val := λ: "t",
+  bind: "kt" := is_key "t" in
+  assert: ("kt" = repr Enc) in
+  SOME "t".
+
+Definition to_dk : val := λ: "t",
+  bind: "kt" := is_key "t" in
+  assert: ("kt" = repr Dec) in
+  SOME "t".
 
 Section Proofs.
 
@@ -144,19 +154,19 @@ Qed.
 Lemma wp_tint E Ψ n : Ψ (TInt n) -∗ WP tint #n @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_tint. Qed.
 
-Lemma twp_as_int E t Ψ :
-  Ψ (repr (Spec.as_int t)) -∗
-  WP as_int t @ E [{ Ψ }].
+Lemma twp_to_int E t Ψ :
+  Ψ (repr (Spec.to_int t)) -∗
+  WP to_int t @ E [{ Ψ }].
 Proof.
-rewrite /as_int val_of_term_eq; iIntros "Hpost"; wp_pures.
+rewrite /to_int val_of_term_eq; iIntros "Hpost"; wp_pures.
 case: t; by move=> *; wp_pures; eauto.
 Qed.
 
-Lemma wp_as_int E t Ψ :
-  Ψ (repr (Spec.as_int t)) -∗
-  WP as_int t @ E {{ Ψ }}.
+Lemma wp_to_int E t Ψ :
+  Ψ (repr (Spec.to_int t)) -∗
+  WP to_int t @ E {{ Ψ }}.
 Proof.
-by iIntros "?"; iApply twp_wp; iApply twp_as_int.
+by iIntros "?"; iApply twp_wp; iApply twp_to_int.
 Qed.
 
 Lemma twp_tuple E t1 t2 Ψ :
@@ -270,7 +280,7 @@ rewrite Spec.untag_eq /untag /=; wp_pures.
 wp_bind (untuple _); iApply twp_untuple.
 case: t; try by [move=> *; wp_pures; iApply "post"].
 move=> t1 t2; wp_pures.
-wp_bind (as_int _); iApply twp_as_int.
+wp_bind (to_int _); iApply twp_to_int.
 case: t1; try by [move=> *; wp_pures; iApply "post"].
 move=> n'; wp_pures.
 case: bool_decide_reflect => [[->]|ne]; wp_pures.
@@ -453,6 +463,26 @@ Lemma wp_tgroup E t Ψ :
   Ψ (TExp t []) -∗
   WP tgroup t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_tgroup. Qed.
+
+Lemma wp_to_ek E t Ψ :
+  Ψ (repr (Spec.to_ek t)) -∗
+  WP to_ek t @ E {{ Ψ }}.
+Proof.
+rewrite /to_ek; iIntros "post".
+wp_pures; wp_bind (is_key _); iApply wp_is_key.
+case: t => /=; try by move=> *; wp_pures => //.
+case; try by move => *; wp_pures.
+Qed.
+
+Lemma wp_to_dk E t Ψ :
+  Ψ (repr (Spec.to_dk t)) -∗
+  WP to_dk t @ E {{ Ψ }}.
+Proof.
+rewrite /to_dk; iIntros "post".
+wp_pures; wp_bind (is_key _); iApply wp_is_key.
+case: t => /=; try by move=> *; wp_pures => //.
+case; try by move => *; wp_pures.
+Qed.
 
 End Proofs.
 
