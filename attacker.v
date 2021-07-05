@@ -344,6 +344,28 @@ rewrite -(binder_insert_delete2 vs) evs'.
 by iApply "eP".
 Qed.
 
+Lemma has_type_mknonce Γ e :
+  ⊢ has_type Γ (mknonce #()) Pub.
+Proof.
+iIntros "!> %γ #γP /=".
+iApply (wp_mknonce _ True%I (λ _, True)%I).
+iIntros (t) "_ #tP _ _".
+iExists t; iSplit => //.
+by iApply "tP".
+Qed.
+
+Lemma has_type_mkkey Γ e :
+  has_type Γ e Pub -∗
+  has_type Γ (mkkey e) (Prod EK DK).
+Proof.
+iIntros "#eP !> %γ #γP /=".
+wp_bind (subst_map _ _); iApply wp_wand; first by iApply "eP".
+iIntros "%"; iDestruct 1 as (t) "[-> #tP]".
+iApply wp_mkkey; iExists _, _; do 2!iSplit => //=.
+- iExists _; iSplit => //; rewrite pterm_TKey; eauto.
+- iExists _; iSplit => //; rewrite pterm_TKey; eauto.
+Qed.
+
 Lemma has_type_to_ek Γ e :
   has_type Γ e Pub -∗
   has_type Γ (to_ek e) (Option EK).
