@@ -11,19 +11,9 @@ Unset Printing Implicit Defensive.
 
 Definition cryptisN := nroot.@"cryptis".
 
-Section Resources.
+Section Crypto.
 
-Context (Σ : gFunctors).
-Notation iProp := (iProp Σ).
-Notation iPropO := (iPropO Σ).
-Notation iPropI := (iPropI Σ).
-Notation nonce := loc.
-Implicit Types a : loc.
-Implicit Types γ : gname.
-
-Context `{!heapG Σ}.
-
-Class cryptoG := CryptoG {
+Class cryptoG Σ := CryptoG {
   crypto_inG       :> savedPredG Σ term;
   crypto_nonce_inG :> savedPropG Σ;
   crypto_key_inG   :> savedPredG Σ (key_type * term);
@@ -33,7 +23,31 @@ Class cryptoG := CryptoG {
   crypto_enc_name : gname;
 }.
 
-Context `{!cryptoG}.
+Definition cryptoΣ : gFunctors :=
+  #[savedPredΣ term;
+    savedPropΣ;
+    savedPredΣ (key_type * term);
+    savedPredΣ (term * term)].
+
+Class cryptoPreG Σ := CryptoPreG {
+  crypto_preG :> savedPredG Σ term;
+  crypto_nonce_preG :> savedPropG Σ;
+  crypto_key_preG :> savedPredG Σ (key_type * term);
+  crypto_enc_preG :> savedPredG Σ (term * term);
+}.
+
+Global Instance subG_cryptoPreG : subG cryptoΣ Σ → cryptoPreG Σ.
+Proof. solve_inG. Qed.
+
+Context (Σ : gFunctors).
+Notation iProp := (iProp Σ).
+Notation iPropO := (iPropO Σ).
+Notation iPropI := (iPropI Σ).
+Notation nonce := loc.
+Implicit Types a : loc.
+Implicit Types γ : gname.
+
+Context `{!heapG Σ, !cryptoG Σ}.
 
 Definition pnonce a : iProp :=
   ∃ γ P, meta a (nroot.@"nonce") γ ∧ saved_prop_own γ P ∧ ▷ □ P.
@@ -828,7 +842,23 @@ Qed.
 
 End TermMeta.
 
-End Resources.
+End Crypto.
+
+Lemma cryptoG_alloc `{!heapG Σ} :
+  cryptoPreG Σ →
+  ⊢ |==> ∃ (H : cryptoG Σ),
+           enc_pred_token ⊤ ∗ key_pred_token ⊤ ∗ hash_pred_token ⊤.
+Proof.
+move=> ?; iStartProof.
+iMod (own_alloc (namespace_map_token ⊤)) as (γ_enc) "own_enc".
+  apply namespace_map_token_valid.
+iMod (own_alloc (namespace_map_token ⊤)) as (γ_key) "own_key".
+  apply namespace_map_token_valid.
+iMod (own_alloc (namespace_map_token ⊤)) as (γ_hash) "own_hash".
+  apply namespace_map_token_valid.
+iModIntro.
+by iExists (CryptoG _ _ _ _ γ_enc γ_key γ_hash); iFrame.
+Qed.
 
 Arguments crypto_enc_name {Σ _}.
 Arguments enc_pred {Σ _ _}.

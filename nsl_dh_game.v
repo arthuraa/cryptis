@@ -69,7 +69,7 @@ Lemma wp_game (mkchan : val) :
   {{{ True }}} mkchan #() {{{ v, RET v; channel v }}} -∗
   enc_pred_token ⊤ -∗
   key_pred_token ⊤ -∗
-  WP game mkchan {{ v, ⌜v = NONEV⌝ ∨ ⌜v = SOMEV #true⌝ }}.
+  WP game mkchan {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
 iIntros "wp_mkchan enc_tok key_tok"; rewrite /game; wp_pures.
 iMod (own_alloc (● (MaxNat 0))) as (γk) "own".
@@ -223,3 +223,27 @@ by case: e e_pkR => _ _ -> /(_ eq_refl) [].
 Qed.
 
 End Game.
+
+Definition F : gFunctors :=
+  #[heapΣ;
+    spawnΣ;
+    cryptoΣ;
+    sessionΣ;
+    GFunctor (authR max_natUR);
+    GFunctor (authR (optionUR (agreeR positiveO)))].
+
+Lemma nsl_dh_secure (mkchan : val) σ₁ σ₂ (v : val) ts :
+  (∀ `{!heapG Σ, !cryptoG Σ},
+     ⊢ {{{ True }}} mkchan #() {{{ c, RET c; channel c}}}) →
+  rtc erased_step ([game mkchan], σ₁) (Val v :: ts, σ₂) →
+  v = NONEV ∨ v = SOMEV #true.
+Proof.
+have ? : heapPreG F by apply _.
+move=> wp_mkchan.
+apply (adequate_result NotStuck _ _ (λ v _, v = NONEV ∨ v = SOMEV #true)).
+apply: heap_adequacy.
+iIntros (?) "?".
+iMod (cryptoG_alloc _) as (?) "(enc_tok & key_tok & _)".
+iApply (wp_game with "[] [enc_tok] [key_tok]") => //.
+iApply wp_mkchan.
+Qed.
