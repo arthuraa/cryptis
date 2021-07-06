@@ -164,57 +164,6 @@ Notation "⟦ Γ ⟧*" := (env_den Γ) (at level 0, format "⟦ Γ ⟧*").
 Global Instance env_den_persistent Γ vs : Persistent (⟦Γ⟧* vs).
 Proof. by apply _. Qed.
 
-(* MOVE *)
-Lemma fmap_binder_delete {A B} (f : A → B) (m : gmap string A) x :
-  f <$> binder_delete x m = binder_delete x (f <$> m).
-Proof. case: x => [|x] //=; by rewrite fmap_delete. Qed.
-
-Lemma fmap_binder_insert {A B} (f : A → B) (m : gmap string A) i x :
-  f <$> binder_insert i x m = binder_insert i (f x) (f <$> m).
-Proof. case: i => [|i] //=; by rewrite fmap_insert. Qed.
-
-Lemma insert_same {A} (m1 m2 : gmap string A) (i : string) (x : A) :
-  (∀ j, j ≠ i → m1 !! j = m2 !! j) →
-  <[i := x]>m1 = <[i := x]>m2.
-Proof.
-move=> e12; apply map_eq => j.
-destruct (decide (j = i)) as [->|ne].
-- by rewrite !lookup_insert.
-- by rewrite !lookup_insert_ne // e12.
-Qed.
-
-Lemma binder_insert_same {A} (m1 m2 : gmap string A) (i : binder) (x : A) :
-  (∀ j : string, BNamed j ≠ i → m1 !! j = m2 !! j) →
-  binder_insert i x m1 = binder_insert i x m2.
-Proof.
-case: i => [|i] /= e12.
-- by apply: map_eq => i; apply: e12.
-- apply: insert_same => ??; apply: e12; congruence.
-Qed.
-
-Lemma binder_insert_delete {A} (m : gmap string A) (i : binder) (x : A) :
-  binder_insert i x (binder_delete i m) = binder_insert i x m.
-Proof. case: i => //= i; exact: insert_delete. Qed.
-
-Lemma binder_insert_delete2 {A} (m : gmap string A) (i j : binder) (x y : A) :
-  binder_insert i x (binder_insert j y (binder_delete i (binder_delete j m))) =
-  binder_insert i x (binder_insert j y m).
-Proof.
-rewrite -(binder_insert_delete m j y).
-case: i j => [|i] [|j] //=.
-- by rewrite insert_delete.
-- rewrite delete_commute !insert_delete.
-  destruct (decide (i = j)) as [->|i_j].
-    by rewrite insert_delete.
-  by rewrite insert_commute // insert_delete insert_commute //.
-Qed.
-
-Lemma binder_delete_commute {A} (m : gmap string A) i j :
-  binder_delete i (binder_delete j m) =
-  binder_delete j (binder_delete i m).
-Proof. case: i j => [|i] [|j] //=; exact: delete_commute. Qed.
-(* /MOVE *)
-
 Lemma env_den_delete Γ vs x :
   ⟦Γ⟧* vs -∗
   ⟦binder_delete x Γ⟧* (binder_delete x vs).
