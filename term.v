@@ -4,8 +4,8 @@ From deriving Require Import deriving.
 From stdpp Require Import gmap.
 From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
-From crypto Require Import mathcomp_compat lib.
-From crypto Require Export pre_term.
+From cryptis Require Import mathcomp_compat lib.
+From cryptis Require Export pre_term.
 
 Definition int_of_key_type kt : Z :=
   match kt with

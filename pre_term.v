@@ -1,6 +1,6 @@
 From mathcomp Require Import all_ssreflect.
 From deriving Require Import deriving.
-From crypto Require Import mathcomp_compat lib.
+From cryptis Require Import mathcomp_compat lib.
 Require Import Coq.ZArith.ZArith Lia.
 From iris.heap_lang Require Import locations.
 

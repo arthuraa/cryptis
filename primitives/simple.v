@@ -4,8 +4,8 @@ From stdpp Require Import gmap coGset.
 From iris.algebra Require Import agree auth gset gmap namespace_map.
 From iris.base_logic.lib Require Import invariants auth saved_prop.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import lib term crypto coGset_disj.
-From crypto.primitives Require Import notations comp.
+From cryptis Require Import lib term cryptis coGset_disj.
+From cryptis.primitives Require Import notations comp.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -102,7 +102,7 @@ Definition to_dk : val := λ: "t",
 
 Section Proofs.
 
-Context `{!heapG Σ, !cryptoG Σ}.
+Context `{!heapG Σ, !cryptisG Σ}.
 Notation nonce := loc.
 
 Implicit Types E : coPset.

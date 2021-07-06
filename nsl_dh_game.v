@@ -6,8 +6,8 @@ From iris.algebra Require Import numbers.
 From iris.base_logic.lib Require Import auth.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par.
-From crypto Require Import lib term crypto primitives tactics.
-From crypto Require Import session nsl dh nsl_dh.
+From cryptis Require Import lib term cryptis primitives tactics.
+From cryptis Require Import session nsl dh nsl_dh.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -15,7 +15,7 @@ Unset Printing Implicit Defensive.
 
 Section Game.
 
-Context `{!cryptoG Σ, !heapG Σ, !spawnG Σ, !sessionG Σ}.
+Context `{!cryptisG Σ, !heapG Σ, !spawnG Σ, !sessionG Σ}.
 Context `{inG Σ (authR max_natUR)}.
 Context `{inG Σ (authR (optionUR (agreeR positiveO)))}.
 Notation iProp := (iProp Σ).
@@ -227,13 +227,13 @@ End Game.
 Definition F : gFunctors :=
   #[heapΣ;
     spawnΣ;
-    cryptoΣ;
+    cryptisΣ;
     sessionΣ;
     GFunctor (authR max_natUR);
     GFunctor (authR (optionUR (agreeR positiveO)))].
 
 Lemma nsl_dh_secure (mkchan : val) σ₁ σ₂ (v : val) ts :
-  (∀ `{!heapG Σ, !cryptoG Σ},
+  (∀ `{!heapG Σ, !cryptisG Σ},
      ⊢ {{{ True }}} mkchan #() {{{ c, RET c; channel c}}}) →
   rtc erased_step ([game mkchan], σ₁) (Val v :: ts, σ₂) →
   v = NONEV ∨ v = SOMEV #true.
@@ -243,7 +243,7 @@ move=> wp_mkchan.
 apply (adequate_result NotStuck _ _ (λ v _, v = NONEV ∨ v = SOMEV #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
-iMod (cryptoG_alloc _) as (?) "(enc_tok & key_tok & _)".
+iMod (cryptisG_alloc _) as (?) "(enc_tok & key_tok & _)".
 iApply (wp_game with "[] [enc_tok] [key_tok]") => //.
 iApply wp_mkchan.
 Qed.

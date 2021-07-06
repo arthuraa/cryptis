@@ -3,7 +3,7 @@ From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl namespace_map frac.
 From iris.base_logic.lib Require Import auth.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import lib term crypto primitives tactics session dh.
+From cryptis Require Import lib term cryptis primitives tactics session dh.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -29,7 +29,7 @@ Definition dec (N : namespace) : val := λ: "k" "m",
 
 Section Lemmas.
 
-Context `{!heapG Σ, !cryptoG Σ}.
+Context `{!heapG Σ, !cryptisG Σ}.
 
 Variable N : namespace.
 
@@ -115,7 +115,7 @@ Module Keys.
 
 Section Keys.
 
-Context `{!heapG Σ, cryptoG Σ}.
+Context `{!heapG Σ, cryptisG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -222,7 +222,7 @@ End I.
 
 Section Proofs.
 
-Context `{!heapG Σ, cryptoG Σ}.
+Context `{!heapG Σ, cryptisG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -506,7 +506,7 @@ End I.
 
 Section Proofs.
 
-Context `{!heapG Σ, cryptoG Σ}.
+Context `{!heapG Σ, cryptisG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -995,7 +995,7 @@ End I.
 
 Section Proofs.
 
-Context `{!heapG Σ, cryptoG Σ}.
+Context `{!heapG Σ, cryptisG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -1469,7 +1469,7 @@ End I.
 
 Section Proofs.
 
-Context `{!heapG Σ, cryptoG Σ}.
+Context `{!heapG Σ, cryptisG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -1739,7 +1739,7 @@ End I.
 
 Section Proofs.
 
-Context `{!heapG Σ, cryptoG Σ}.
+Context `{!heapG Σ, cryptisG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -2011,7 +2011,7 @@ Coercion SParams.term_of : SParams.t >-> term.
 
 Section Protocol.
 
-Context `{!heapG Σ, !cryptoG Σ}.
+Context `{!heapG Σ, !cryptisG Σ}.
 Context `{S : !sessionG Σ}.
 Notation iProp := (iProp Σ).
 Variable N : namespace.

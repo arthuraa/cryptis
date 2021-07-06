@@ -3,7 +3,7 @@ From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap list namespace_map.
 From iris.base_logic.lib Require Import auth saved_prop.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import lib term coGset.
+From cryptis Require Import lib term coGset.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -11,32 +11,32 @@ Unset Printing Implicit Defensive.
 
 Definition cryptisN := nroot.@"cryptis".
 
-Section Crypto.
+Section Cryptis.
 
-Class cryptoG Σ := CryptoG {
-  crypto_inG       :> savedPredG Σ term;
-  crypto_nonce_inG :> savedPropG Σ;
-  crypto_key_inG   :> savedPredG Σ (key_type * term);
-  crypto_enc_inG   :> savedPredG Σ (term * term);
-  crypto_key_name : gname;
-  crypto_hash_name : gname;
-  crypto_enc_name : gname;
+Class cryptisG Σ := CryptisG {
+  cryptis_inG       :> savedPredG Σ term;
+  cryptis_nonce_inG :> savedPropG Σ;
+  cryptis_key_inG   :> savedPredG Σ (key_type * term);
+  cryptis_enc_inG   :> savedPredG Σ (term * term);
+  cryptis_key_name : gname;
+  cryptis_hash_name : gname;
+  cryptis_enc_name : gname;
 }.
 
-Definition cryptoΣ : gFunctors :=
+Definition cryptisΣ : gFunctors :=
   #[savedPredΣ term;
     savedPropΣ;
     savedPredΣ (key_type * term);
     savedPredΣ (term * term)].
 
-Class cryptoPreG Σ := CryptoPreG {
-  crypto_preG :> savedPredG Σ term;
-  crypto_nonce_preG :> savedPropG Σ;
-  crypto_key_preG :> savedPredG Σ (key_type * term);
-  crypto_enc_preG :> savedPredG Σ (term * term);
+Class cryptisPreG Σ := CryptisPreG {
+  cryptis_preG :> savedPredG Σ term;
+  cryptis_nonce_preG :> savedPropG Σ;
+  cryptis_key_preG :> savedPredG Σ (key_type * term);
+  cryptis_enc_preG :> savedPredG Σ (term * term);
 }.
 
-Global Instance subG_cryptoPreG : subG cryptoΣ Σ → cryptoPreG Σ.
+Global Instance subG_cryptisPreG : subG cryptisΣ Σ → cryptisPreG Σ.
 Proof. solve_inG. Qed.
 
 Context (Σ : gFunctors).
@@ -47,7 +47,7 @@ Notation nonce := loc.
 Implicit Types a : loc.
 Implicit Types γ : gname.
 
-Context `{!heapG Σ, !cryptoG Σ}.
+Context `{!heapG Σ, !cryptisG Σ}.
 
 Definition pnonce a : iProp :=
   ∃ γ P, meta a (nroot.@"nonce") γ ∧ saved_prop_own γ P ∧ ▷ □ P.
@@ -69,11 +69,11 @@ Global Instance Persistent_dh_pred t t' : Persistent (dh_pred t t').
 Proof. case: t => *; apply _. Qed.
 
 Definition enc_pred N Φ : iProp :=
-  ∃ γ, own crypto_enc_name (namespace_map_data N (to_agree γ)) ∧
+  ∃ γ, own cryptis_enc_name (namespace_map_data N (to_agree γ)) ∧
        saved_pred_own γ (fun '(k, t) => Φ k t).
 
 Definition enc_pred_token E :=
-  own crypto_enc_name (namespace_map_token E).
+  own cryptis_enc_name (namespace_map_token E).
 
 Lemma enc_pred_token_difference E1 E2 :
   E1 ⊆ E2 →
@@ -129,11 +129,11 @@ by iIntros "!> !>"; iRewrite "e".
 Qed.
 
 Definition key_pred N (φ : key_type → term → iProp) : iProp :=
-  ∃ γ, own crypto_key_name (namespace_map_data N (to_agree γ)) ∧
+  ∃ γ, own cryptis_key_name (namespace_map_data N (to_agree γ)) ∧
        saved_pred_own γ (λ '(kt, t), φ kt t).
 
 Definition key_pred_token E :=
-  own crypto_key_name (namespace_map_token E).
+  own cryptis_key_name (namespace_map_token E).
 
 Lemma key_pred_token_difference E1 E2 :
   E1 ⊆ E2 →
@@ -189,11 +189,11 @@ by iIntros "!> !>"; iRewrite "e".
 Qed.
 
 Definition hash_pred N (P : term → iProp) : iProp :=
-  ∃ γ, own crypto_hash_name (namespace_map_data N (to_agree γ)) ∧
+  ∃ γ, own cryptis_hash_name (namespace_map_data N (to_agree γ)) ∧
        saved_pred_own γ P.
 
 Definition hash_pred_token E :=
-  own crypto_hash_name (namespace_map_token E).
+  own cryptis_hash_name (namespace_map_token E).
 
 Lemma hash_pred_token_difference E1 E2 :
   E1 ⊆ E2 →
@@ -842,11 +842,11 @@ Qed.
 
 End TermMeta.
 
-End Crypto.
+End Cryptis.
 
-Lemma cryptoG_alloc `{!heapG Σ} :
-  cryptoPreG Σ →
-  ⊢ |==> ∃ (H : cryptoG Σ),
+Lemma cryptisG_alloc `{!heapG Σ} :
+  cryptisPreG Σ →
+  ⊢ |==> ∃ (H : cryptisG Σ),
            enc_pred_token ⊤ ∗ key_pred_token ⊤ ∗ hash_pred_token ⊤.
 Proof.
 move=> ?; iStartProof.
@@ -857,18 +857,18 @@ iMod (own_alloc (namespace_map_token ⊤)) as (γ_key) "own_key".
 iMod (own_alloc (namespace_map_token ⊤)) as (γ_hash) "own_hash".
   apply namespace_map_token_valid.
 iModIntro.
-by iExists (CryptoG _ _ _ _ γ_enc γ_key γ_hash); iFrame.
+by iExists (CryptisG _ _ _ _ γ_enc γ_key γ_hash); iFrame.
 Qed.
 
-Arguments crypto_enc_name {Σ _}.
+Arguments cryptis_enc_name {Σ _}.
 Arguments enc_pred {Σ _ _}.
 Arguments enc_pred_set {Σ _ _ _} N Φ.
 Arguments enc_pred_token_difference {Σ _ _} E1 E2.
-Arguments crypto_hash_name {Σ _}.
+Arguments cryptis_hash_name {Σ _}.
 Arguments hash_pred {Σ _ _}.
 Arguments hash_pred_set {Σ _ _ _} N P.
 Arguments hash_pred_token_difference {Σ _ _} E1 E2.
-Arguments crypto_key_name {Σ _}.
+Arguments cryptis_key_name {Σ _}.
 Arguments key_pred {Σ _ _}.
 Arguments key_pred_set {Σ _ _ _} N P.
 Arguments key_pred_token_difference {Σ _ _} E1 E2.

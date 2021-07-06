@@ -4,13 +4,13 @@ From iris.algebra Require Import agree auth gset gmap.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From iris.proofmode Require Import base environments.
-From crypto Require Import lib term crypto primitives.
+From cryptis Require Import lib term cryptis primitives.
 Import bi.
 Import env_notations.
 
 Section Proofs.
 
-Context `{!heapG Σ, !cryptoG Σ}.
+Context `{!heapG Σ, !cryptisG Σ}.
 
 Implicit Types E : coPset.
 Implicit Types l : loc.

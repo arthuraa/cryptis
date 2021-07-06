@@ -2,14 +2,15 @@
 -arg "-w -redundant-canonical-projection"
 -arg "-w -notation-overridden"
 
--R . crypto
+-R . cryptis
 
 mathcomp_compat.v
 lib.v
 coGset.v
+coGset_disj.v
 pre_term.v
 term.v
-crypto.v
+cryptis.v
 primitives/notations.v
 primitives/comp.v
 primitives/simple.v

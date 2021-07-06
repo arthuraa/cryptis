@@ -6,7 +6,7 @@ From iris.base_logic.lib Require Import auth.
 From iris_string_ident Require Import ltac2_string_ident.
 From mathcomp Require ssrbool order path.
 From deriving Require deriving.
-From crypto Require Export mathcomp_compat.
+From cryptis Require Export mathcomp_compat.
 
 (* TODO: Move to Iris? *)
 Instance dom_ne {T : ofeT} :

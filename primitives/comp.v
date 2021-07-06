@@ -8,8 +8,8 @@ From stdpp Require Import gmap coGset.
 From iris.algebra Require Import agree auth gset gmap namespace_map.
 From iris.base_logic.lib Require Import invariants auth.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import lib term.
-From crypto.primitives Require Import notations.
+From cryptis Require Import lib term.
+From cryptis.primitives Require Import notations.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

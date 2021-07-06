@@ -4,8 +4,8 @@ From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl namespace_map frac.
 From iris.base_logic.lib Require Import auth.
 From iris.heap_lang Require Import notation proofmode.
-From crypto Require Import lib term crypto primitives tactics.
-From crypto Require Import session nsl dh.
+From cryptis Require Import lib term cryptis primitives tactics.
+From cryptis Require Import session nsl dh.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -13,7 +13,7 @@ Unset Printing Implicit Defensive.
 
 Section NSLDH.
 
-Context `{!cryptoG Σ, !heapG Σ, !sessionG Σ}.
+Context `{!cryptisG Σ, !heapG Σ, !sessionG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
