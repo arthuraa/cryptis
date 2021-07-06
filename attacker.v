@@ -93,68 +93,6 @@ Fixpoint type_den τ : val → iProp :=
 Global Instance type_den_persistent τ v : Persistent (⟦τ⟧ᵥ v).
 Proof. by elim: τ v =>> /=; apply _. Qed.
 
-(* MOVE *)
-Lemma closed_list `{!Repr A} (xs : list A) :
-  (∀ x : A, x ∈ xs → is_closed_val (repr x)) →
-  is_closed_val (repr xs).
-Proof.
-rewrite /= repr_list_eq.
-elim: xs => [|x xs IH] //= H.
-apply: andb_prop_intro; split => //.
-  apply: H; set_solver.
-apply: IH => ??; apply: H; set_solver.
-Qed.
-
-Lemma closed_term t : is_closed_val t.
-Proof.
-rewrite -val_of_pre_term_unfold val_of_pre_term_eq.
-elim: (unfold_term _) => {t} //=.
-- move=> pt1 IH1 pt2 IH2.
-  by apply: andb_prop_intro; split.
-- move=> pt1 IH1 pt2 IH2.
-  by apply: andb_prop_intro; split.
-- move=> t IHt ts IHts.
-  apply: andb_prop_intro; split => //.
-  rewrite repr_list_eq.
-  elim: ts IHts {t IHt} => //= t ts IHts1 [IHt IHts2].
-  apply: andb_prop_intro; split => //.
-  exact: IHts1.
-Qed.
-(* /MOVE *)
-
-(*
-Lemma type_den_is_closed_val τ v : ⟦τ⟧ᵥ v -∗ ⌜is_closed_val v⌝.
-Proof.
-elim: τ v => /=.
-- move=> ?.
-  iDestruct 1 as (t) "[-> _]"; iPureIntro; exact: closed_term.
-- move=> ?.
-  iDestruct 1 as (k) "[-> _]"; iPureIntro; exact: closed_term.
-- move=> ?.
-  iDestruct 1 as (k) "[-> _]"; iPureIntro; exact: closed_term.
-- move=> ?.
-  by iDestruct 1 as (?) "->".
-- move=> ?.
-  by iDestruct 1 as (?) "->".
-- move=> ?.
-  by iDestruct 1 as "->".
-- move=> τ _ v.
-  by iDestruct 1 as (?) "[-> _]".
-- move=> τ IH1 σ IH2.
-  iDestruct 1 as (??) "(-> & H1 & H2)"; rewrite /=.
-  iPoseProof (IH1 with "H1") as "%H1".
-  iPoseProof (IH2 with "H2") as "%H2".
-  by iPureIntro; apply: andb_prop_intro; split.
-- move=> τ IH1 σ IH2 v.
-  iDestruct 1 as "[H|H]"; iDestruct "H" as (?) "[-> H]".
-  + by rewrite /=; iApply IH1.
-  + by rewrite /=; iApply IH2.
-- move=> τ IH v.
-  iDestruct 1 as (vs) "[-> H]".
-  rewrite /= repr_list_eq.
-  elim: vs => [|v vs IHvs] //=.
-*)
-
 Definition env_den Γ vs : iProp :=
   ∃ Γvs, ⌜Γ = fst <$> Γvs⌝ ∧ ⌜vs = snd <$> Γvs⌝ ∧
   [∗ map] τv ∈ Γvs, ⟦τv.1⟧ᵥ τv.2.
