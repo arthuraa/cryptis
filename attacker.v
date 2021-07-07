@@ -672,4 +672,14 @@ iExists _, _; do 2!iSplit => //.
   by [].
 Qed.
 
+Lemma has_type_fork Γ e :
+  has_type Γ e Unit -∗
+  has_type Γ (Fork e) Unit.
+Proof.
+iIntros "#eP !> %γ #γP /=".
+iApply wp_fork => //.
+iModIntro; iApply wp_wand; first by iApply "eP".
+by [].
+Qed.
+
 End Attacker.
