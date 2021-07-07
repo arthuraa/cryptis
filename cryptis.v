@@ -15,7 +15,6 @@ Section Cryptis.
 
 Class cryptisG Σ := CryptisG {
   cryptis_inG       :> savedPredG Σ term;
-  cryptis_nonce_inG :> savedPropG Σ;
   cryptis_key_inG   :> savedPredG Σ (key_type * term);
   cryptis_enc_inG   :> savedPredG Σ (term * term);
   cryptis_key_name : gname;
@@ -25,13 +24,11 @@ Class cryptisG Σ := CryptisG {
 
 Definition cryptisΣ : gFunctors :=
   #[savedPredΣ term;
-    savedPropΣ;
     savedPredΣ (key_type * term);
     savedPredΣ (term * term)].
 
 Class cryptisPreG Σ := CryptisPreG {
   cryptis_preG :> savedPredG Σ term;
-  cryptis_nonce_preG :> savedPropG Σ;
   cryptis_key_preG :> savedPredG Σ (key_type * term);
   cryptis_enc_preG :> savedPredG Σ (term * term);
 }.
@@ -50,7 +47,7 @@ Implicit Types γ : gname.
 Context `{!heapG Σ, !cryptisG Σ}.
 
 Definition pnonce a : iProp :=
-  ∃ γ P, meta a (nroot.@"nonce") γ ∧ saved_prop_own γ P ∧ ▷ □ P.
+  ∃ γ P, meta a (nroot.@"nonce") γ ∧ saved_pred_own γ P ∧ ▷ □ P (TNonce a).
 
 Global Instance Persistent_pnonce a : Persistent (pnonce a).
 Proof. apply _. Qed.
@@ -857,7 +854,7 @@ iMod (own_alloc (namespace_map_token ⊤)) as (γ_key) "own_key".
 iMod (own_alloc (namespace_map_token ⊤)) as (γ_hash) "own_hash".
   apply namespace_map_token_valid.
 iModIntro.
-by iExists (CryptisG _ _ _ _ γ_enc γ_key γ_hash); iFrame.
+by iExists (CryptisG _ _ _ γ_enc γ_key γ_hash); iFrame.
 Qed.
 
 Arguments cryptis_enc_name {Σ _}.

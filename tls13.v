@@ -681,7 +681,7 @@ Lemma wp_new ke E Φ :
 Proof.
 iIntros "#p_ke post"; rewrite /I.new; wp_pures.
 iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
-- wp_bind (mknonce _); iApply (wp_mknonce _ True%I (λ _, True)%I).
+- wp_bind (mknonce _); iApply (wp_mknonce _ (λ _, True)%I (λ _, True)%I).
   iIntros (cn) "_ #p_cn _ token"; wp_list; wp_term_of_list.
   wp_tag.
   iApply ("post" $! (Psk psk cn) with "[] [] token") => //=.
@@ -689,7 +689,7 @@ iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
   by iApply "p_cn".
 - wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g).
   iIntros (a) "_ #p_a _"; wp_list.
-  wp_bind (mknonce _); iApply (wp_mknonce _ True%I (λ _, True)%I).
+  wp_bind (mknonce _); iApply (wp_mknonce _ (λ _, True)%I (λ _, True)%I).
   iIntros (cn) "_ #p_cn _ token"; wp_list; wp_term_of_list.
   wp_tag.
   rewrite (term_meta_token_difference _ ⊤); try set_solver.
@@ -699,7 +699,7 @@ iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
   by iApply "p_cn".
 - wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g).
   iIntros (a) "_ #p_a _"; wp_list.
-  wp_bind (mknonce _); iApply (wp_mknonce _ True%I (λ _, True)%I).
+  wp_bind (mknonce _); iApply (wp_mknonce _ (λ _, True)%I (λ _, True)%I).
   iIntros (cn) "_ #p_cn _ token"; wp_list; wp_term_of_list.
   wp_tag.
   iApply ("post" $! (PskDh psk g cn a)) => //=.
@@ -1201,7 +1201,7 @@ iIntros (e_check) "#s_psk #p_g #p_ke post"; rewrite /I.new; wp_pures.
 iApply CShare.wp_case.
 case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
 - subst psk.
-  wp_bind (mknonce _); iApply (wp_mknonce _ True%I (λ _, True)%I).
+  wp_bind (mknonce _); iApply (wp_mknonce _ (λ _, True)%I (λ _, True)%I).
   iIntros (a) "_ #pred_a _ token"; wp_list; wp_term_of_list.
   wp_tag; wp_pures.
   iApply ("post" $! (Psk _ _ a)) => //=.
@@ -1212,7 +1212,7 @@ case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
 - subst g'.
   wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g).
   iIntros (a) "_ #pred_a _"; wp_list.
-  wp_bind (mknonce _); iApply (wp_mknonce _ True%I (λ _, True)%I).
+  wp_bind (mknonce _); iApply (wp_mknonce _ (λ _, True)%I (λ _, True)%I).
   iIntros (sn) "_ #p_sn _ token"; wp_list; wp_term_of_list.
   wp_tag; wp_pures.
   iApply ("post" $! (Dh g cn sn gx a)) => //=.
@@ -1223,7 +1223,7 @@ case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
 - case: e_check=> -> ->.
   wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g).
   iIntros (a) "_ #pred_a _"; wp_list.
-  wp_bind (mknonce _); iApply (wp_mknonce _ True%I (λ _, True)%I).
+  wp_bind (mknonce _); iApply (wp_mknonce _ (λ _, True)%I (λ _, True)%I).
   iIntros (sn) "_ #p_sn _ token"; wp_list; wp_term_of_list.
   wp_tag; wp_pures.
   iApply ("post" $! (PskDh _ g cn sn gx a)) => //.

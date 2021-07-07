@@ -139,7 +139,7 @@ Lemma wp_mkdh g E (Ψ : val → iProp) :
         Ψ a) -∗
   WP mkdh #() @ E {{ Ψ }}.
 Proof.
-iIntros "post"; iApply (wp_mknonce _ False%I dh_publ).
+iIntros "post"; iApply (wp_mknonce _ (λ _, False%I) dh_publ).
 iIntros (a) "#s_a #(aP1 & aP2) #? token"; iApply "post" => //.
 do !iSplit => //.
 iModIntro; iSplit.

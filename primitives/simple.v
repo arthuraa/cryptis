@@ -297,9 +297,9 @@ Proof.
 by iIntros "?"; iApply twp_wp; iApply twp_untag.
 Qed.
 
-Lemma twp_mknonce E P (Q : term → iProp Σ) Ψ :
+Lemma twp_mknonce E (P Q : term → iProp Σ) Ψ :
   (∀ t, sterm t -∗
-        □ (pterm t ↔ ▷ □ P) -∗
+        □ (pterm t ↔ ▷ □ P t) -∗
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
         nonce_meta_token t ⊤ -∗
         Ψ t) -∗
@@ -310,7 +310,7 @@ wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
 iIntros (a') "[_ token]"; wp_pures.
 wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
 iIntros (a) "[_ token']".
-iMod (saved_prop_alloc P) as (γP) "#own_P".
+iMod (saved_pred_alloc P) as (γP) "#own_P".
 iMod (saved_pred_alloc Q) as (γQ) "#own_Q".
 rewrite (meta_token_difference a (↑nroot.@"nonce")) //.
 iDestruct "token'" as "[nonce token']".
@@ -327,7 +327,7 @@ wp_pures; iApply ("post" with "[] [] [] [token]"); eauto.
 - rewrite pterm_TNonce; iModIntro; iSplit.
   + iDestruct 1 as (γP' P') "(#meta_γP' & #own_P' & ?)".
     iPoseProof (meta_agree with "nonce meta_γP'") as "->".
-    iPoseProof (saved_prop_agree with "own_P own_P'") as "e".
+    iPoseProof (saved_pred_agree _ _ _ (TNonce a) with "own_P own_P'") as "e".
     by iModIntro; iRewrite "e".
   + iIntros "#?"; iExists γP, P; eauto.
 - iIntros (t'); iModIntro; iSplit.
@@ -340,7 +340,7 @@ Qed.
 
 Lemma wp_mknonce E P Q Ψ :
   (∀ t, sterm t -∗
-        □ (pterm t ↔ ▷ □ P) -∗
+        □ (pterm t ↔ ▷ □ P t) -∗
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
         nonce_meta_token t ⊤ -∗
         Ψ t) -∗
