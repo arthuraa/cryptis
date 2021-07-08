@@ -88,6 +88,41 @@ Definition term_of ke :=
   | PskDh psk g => Spec.tag (nroot.@"pskdh") (Spec.of_list [psk; g])
   end.
 
+Definition of_term ke :=
+  if Spec.untag (nroot.@"psk") ke is Some args then
+    Some (Psk args)
+  else if Spec.untag (nroot.@"dh") ke is Some args then
+    Some (Dh args)
+  else if Spec.untag (nroot.@"pskdh") ke is Some args then
+    args ← Spec.to_list args;
+    '(psk, g) ← prod_of_list 2 args;
+    Some (PskDh psk g)
+  else None.
+
+Lemma term_of_cancel ke : of_term (term_of ke) = Some ke.
+Proof.
+case: ke => [psk|g|psk g] /=; rewrite /of_term.
+- rewrite Spec.tagK //.
+- rewrite Spec.untag_tag_ne => [|c]; last by destruct (ndot_inj _ _ _ _ c).
+  rewrite Spec.tagK //.
+- rewrite Spec.untag_tag_ne => [|c]; last by destruct (ndot_inj _ _ _ _ c).
+  rewrite Spec.untag_tag_ne => [|c]; last by destruct (ndot_inj _ _ _ _ c).
+  rewrite Spec.tagK Spec.of_listK /=.
+  by rewrite unlock /=.
+Qed.
+
+Instance meth_eqdec : EqDecision t.
+Proof.
+apply: (inj_eq_dec term_of).
+by move=> ?? /(f_equal of_term); rewrite !term_of_cancel; case.
+Qed.
+
+Instance meth_countable : Countable t.
+Proof.
+apply (inj_countable term_of of_term).
+exact: term_of_cancel.
+Qed.
+
 Definition psk ke :=
   match ke with
   | Psk psk => psk
@@ -109,6 +144,18 @@ Definition compatible psk g ke :=
   end.
 
 Module I.
+
+Definition Psk : val := (λ: "psk",
+  tag (nroot.@"psk") "psk"
+).
+
+Definition Dh : val := (λ: "g",
+  tag (nroot.@"dh") "g"
+).
+
+Definition PskDh : val := (λ: "psk" "g",
+  tag (nroot.@"pskdh") (term_of_list ["psk"; "g"])
+).
 
 Definition case : val := λ: "ke" "f_psk" "f_dh" "f_pskdh",
   match: untag (nroot.@"psk") "ke" with
@@ -132,7 +179,28 @@ Context `{!heapG Σ, cryptisG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
-Implicit Types Φ : val → iProp.
+
+Lemma wp_Psk t E :
+  {{{ True }}} I.Psk t @ E {{{ (v : val), RET v; ⌜v = term_of (Psk t)⌝ }}}.
+Proof.
+iIntros "%Φ _ post"; rewrite /I.Psk.
+by wp_pures; wp_tag; iApply "post".
+Qed.
+
+Lemma wp_Dh t E :
+  {{{ True }}} I.Dh t @ E {{{ (v : val), RET v; ⌜v = term_of (Dh t)⌝ }}}.
+Proof.
+iIntros "%Φ _ post"; rewrite /I.Dh.
+by wp_pures; wp_tag; iApply "post".
+Qed.
+
+Lemma wp_PskDh t1 t2 E :
+  {{{ True }}} I.PskDh t1 t2 @ E
+  {{{ (v : val), RET v; ⌜v = term_of (PskDh t1 t2)⌝ }}}.
+Proof.
+iIntros "%Φ _ post"; rewrite /I.PskDh.
+by wp_pures; wp_list; wp_term_of_list; wp_tag; iApply "post".
+Qed.
 
 Lemma wp_case ke (f_psk f_dh f_pskdh : val) E Φ :
   match ke with
@@ -756,7 +824,8 @@ Lemma encode_eq N kex1 kex2 :
   snonce kex1 = snonce kex2 ∧
   session_key_of' N kex1 = session_key_of N kex2 ∧
   has_dh kex1 = has_dh kex2 ∧
-  psk kex1 = psk kex2.
+  psk kex1 = psk kex2 ∧
+  meth_of kex1 = meth_of kex2.
 Proof.
 rewrite /session_key_of.
 case: kex1 kex2 => [???|?????|??????] [???|?????|??????] //=.
@@ -1747,7 +1816,7 @@ by case: verify; wp_pures.
 Qed.
 
 Context `{!sessionG Σ}.
-Variable (N : namespace) (P : role → term → term → term * term → iProp).
+Variable (N : namespace) (P : role → term → term → Meth.t * term * term → iProp).
 
 Definition hello_pred γ (k t : term) : iProp := ∃ sp,
   let ss := share sp in
@@ -1755,14 +1824,14 @@ Definition hello_pred γ (k t : term) : iProp := ∃ sp,
   SShare.wf ss ∧
   session (@nonce_meta _ _)
           (N.@"sess") γ Resp (SShare.cnonce ss) (SShare.snonce ss)
-          (SShare.session_key_of N ss, other sp).
+          (SShare.meth_of ss, SShare.session_key_of N ss, other sp).
 
 Definition hello_sig_pred γ (k t : term) : iProp := ∃ kex other,
   ⌜t = THash (Spec.of_list [SShare.term_of (SShare.encode N kex); other])⌝ ∧
   SShare.wf kex ∧
   session (@nonce_meta _ _)
           (N.@"sess") γ Resp (SShare.cnonce kex) (SShare.snonce kex)
-          (SShare.session_key_of N kex, other).
+          (SShare.meth_of kex, SShare.session_key_of N kex, other).
 
 Definition ctx γ : iProp :=
   Keys.ctx N ∧
@@ -1799,12 +1868,12 @@ Lemma pterm_hello γ E sp :
   wf sp -∗
   nonce_meta_token (SShare.snonce ss) (↑N.@"sess") -∗
   P Resp (SShare.cnonce ss) (SShare.snonce ss)
-    (SShare.session_key_of N ss, other sp) ={E}=∗
+    (SShare.meth_of ss, SShare.session_key_of N ss, other sp) ={E}=∗
   pterm (hello N sp) ∗
   (session (@nonce_meta _ _) (N.@"sess") γ Init (SShare.cnonce ss) (SShare.snonce ss)
-     (SShare.session_key_of N ss, other sp) ={E}=∗
+     (SShare.meth_of ss, SShare.session_key_of N ss, other sp) ={E}=∗
    ▷ P Init (SShare.cnonce ss) (SShare.snonce ss)
-       (SShare.session_key_of N ss, other sp)).
+       (SShare.meth_of ss, SShare.session_key_of N ss, other sp)).
 Proof.
 iIntros (?) "#(keys & hello_ctx & sig_ctx & sess_ctx)".
 iIntros "#(wf_share & p_vkey & p_other) token r".
@@ -1855,6 +1924,7 @@ Lemma pterm_checkE γ cp sh vkey s_ke :
               SShare.session_key_of N (share sp) = SShare.session_key_of' N s_ke ∧
               verif_key sp = k ∧
               SShare.encode' N s_ke = SShare.encode N (share sp) ∧
+              SShare.meth_of s_ke = SShare.meth_of (share sp) ∧
               other sp = CParams.other cp⌝ ∧
        ▷ (pterm (TKey Enc k) ∧
             pterm (TKey Enc (SShare.session_key_of' N s_ke)) ∨
@@ -1863,7 +1933,8 @@ Lemma pterm_checkE γ cp sh vkey s_ke :
                 session (@nonce_meta _ _) (N.@"sess") γ Resp
                         (SShare.cnonce s_ke)
                         (SShare.snonce s_ke)
-                        (SShare.session_key_of' N s_ke, CParams.other cp)).
+                        (SShare.meth_of s_ke,
+                         SShare.session_key_of' N s_ke, CParams.other cp)).
 Proof.
 rewrite /check; case: Spec.to_listP => //= {}sh.
 elim/(@list_len_rect 2): sh => [pub sig|sh ne]; last first.
@@ -1905,7 +1976,7 @@ iSplit.
   iPureIntro.
   move=> sp /Spec.of_list_inj [].
   case/Spec.of_list_inj=> /SShare.term_of_inj.
-  case/SShare.encode_eq=> [] -> [] -> [] -> [] _ _ -> ?.
+  case/SShare.encode_eq=> [] -> [] -> [] -> [] _ [] _ ? -> ?.
   case/Spec.tag_inj=> _ /Spec.of_list_inj [-> _].
   case/Spec.tag_inj=> _ [] /Spec.of_list_inj [/SShare.term_of_inj ->].
   by eauto.
@@ -1921,7 +1992,8 @@ iPoseProof (pterm_TEncE with "p_sig ctx1") as "[[psk_fail pub]|hello]".
   iExists (Params kex' verif_key (CParams.other cp)); iSplit.
     iPureIntro.
     rewrite e_kex; by case/SShare.encode_eq: e_kex => [_ [] _ [] ->].
-  by case/SShare.encode_eq: e_kex => [-> [] -> [] ->]; eauto.
+  iSplit => //.
+  by case/SShare.encode_eq: e_kex => [-> [] -> [] -> [] _ [] _ ->]; eauto.
 - iDestruct "hello" as "(#hello & _ & _)".
   iModIntro.
   iDestruct "hello" as (sp) "(%e & wf & hello)".
@@ -1931,7 +2003,7 @@ iPoseProof (pterm_TEncE with "p_sig ctx1") as "[[psk_fail pub]|hello]".
   iExists sp; iSplit.
     iPureIntro.
     by rewrite e_ke; case/SShare.encode_eq: e_ke => [_ [] _ [] ->].
-  by case/SShare.encode_eq: e_ke => -> [] -> [] ->; eauto.
+  by case/SShare.encode_eq: e_ke => -> [] -> [] -> [] _ [] _ ->; eauto.
 Qed.
 
 End Proofs.
@@ -1951,7 +2023,7 @@ Implicit Types t : term.
 Implicit Types rl : role.
 Implicit Types Φ : val → iProp.
 
-Definition P rl t1 t2 (x : term * term) : iProp := True.
+Definition P rl t1 t2 (x : Meth.t * term * term) : iProp := True.
 
 Definition client : val := λ: "c" "kex" "other",
   let: "kex" := CShare.I.new "kex" in
@@ -1971,9 +2043,10 @@ Definition client : val := λ: "c" "kex" "other",
 Definition ack_pred γ (k t : term) : iProp :=
   ∀ sp, ⌜t = SParams.hello N sp⌝ →
   let ss := SParams.share sp in
+  let m  := SShare.meth_of ss in
   let sk := SShare.session_key_of N ss in
   session (@nonce_meta _ _) (N.@"sess") γ Init
-          (SShare.cnonce ss) (SShare.snonce ss) (sk, SParams.other sp) ∧
+          (SShare.cnonce ss) (SShare.snonce ss) (m, sk, SParams.other sp) ∧
   ∃ ke, ⌜SShare.encode' N ke = SShare.encode N ss⌝ ∧
         CShare.wf (SShare.cshare_of ke).
 
@@ -2021,7 +2094,7 @@ Lemma wp_client c γ ke other E Φ :
              pterm sn ∧
              sterm sk ∧
              ▷ (pterm (TKey Enc k) ∧ pterm (Meth.psk ke) ∨
-                session (@nonce_meta _ _) (N.@"sess") γ Resp cn sn (sk, other) ∧
+                session (@nonce_meta _ _) (N.@"sess") γ Resp cn sn (ke, sk, other) ∧
                 □ ∀ kt, pterm (TKey kt sk) -∗
                 ◇ if Meth.has_dh ke then False else pterm (Meth.psk ke))
       | None => True
@@ -2054,7 +2127,8 @@ iDestruct "Hk" as "/= (%e_k & %e_share & #s_k & #p_cn & #p_sn &
                        #s_sk & %e_hello & rest)".
 subst ke' vkey; rewrite SShare.cnonce_cshare_of.
 iMod (session_begin _ γ Init (SShare.cnonce ke'') (SShare.snonce ke'')
-                    (SShare.session_key_of' N ke'', CParams.other cp)
+                    (SShare.meth_of ke'', SShare.session_key_of' N ke'',
+                     CParams.other cp)
         with "sess_ctx [] sess") as "[#sess close]".
 - solve_ndisj.
 - by eauto.
@@ -2068,7 +2142,7 @@ iDestruct "rest" as "[[fail_vsk fail_psk]|succ]".
   iApply pterm_TEncIS; eauto.
   - by rewrite sterm_TKey.
   - iIntros "!> %sp %e_sh".
-    by case: (e_hello _ e_sh) => [] -> [] -> [] -> [] _ [] e_enc ->; eauto.
+    by case: (e_hello _ e_sh) => [] -> [] -> [] -> [] _ [] e_enc [] <- ->; eauto.
   - by iApply pterm_sterm.
   wp_pures; wp_bind (SShare.I.snonce _); iApply SShare.wp_snonce.
   wp_pures; wp_bind (SShare.I.cnonce _); iApply SShare.wp_cnonce.
@@ -2080,7 +2154,7 @@ wp_bind (send _ _); iApply wp_send => //.
   iModIntro.
   iApply pterm_TEncIS; eauto; first by rewrite sterm_TKey.
   - iIntros "!> %sp %e_sp".
-    by case: (e_hello _ e_sp) => -> [] -> [] -> [] _ [] e_enc ->; eauto.
+    by case: (e_hello _ e_sp) => -> [] -> [] -> [] _ [] e_enc [] <- ->; eauto.
   - by iApply pterm_sterm.
 iDestruct "succ" as (sp) "(-> & wf & succ)".
 wp_pures; wp_bind (SShare.I.snonce _); iApply SShare.wp_snonce.
@@ -2088,9 +2162,10 @@ wp_pures; wp_bind (SShare.I.cnonce _); iApply SShare.wp_cnonce.
 wp_pures.
 iApply ("post" $! (Some (_, _, _, _))) => //.
 iExists _; do 5!iSplit => //.
-case: (e_hello _ eq_refl) => ? [] ? [] e_sk [] ? [] ? ?.
+rewrite e.
+case: (e_hello _ eq_refl) => ? [] ? [] e_sk [] ? [] ? [] ? ?.
 iModIntro; iRight; iSplit => //.
-iIntros (kt); rewrite -e_sk e.
+iIntros (kt); rewrite -e_sk.
 iModIntro.
 iApply SShare.pterm_session_key_of => //.
 Qed.
@@ -2127,7 +2202,7 @@ Lemma wp_server c γ psk g verif_key other E Φ :
         ▷ (pterm (SShare.psk ke) ∨
            session (@nonce_meta _ _) (N.@"sess") γ
                    Init (SShare.cnonce ke) (SShare.snonce ke)
-                   (SShare.session_key_of N ke, other) ∧
+                   (SShare.meth_of ke, SShare.session_key_of N ke, other) ∧
            □ ∀ kt, pterm (TKey kt (SShare.session_key_of N ke)) -∗
            ◇ if SShare.has_dh ke then False else pterm (SShare.psk ke))
       | None => True
@@ -2185,7 +2260,7 @@ iIntros "!> %kt #p_sk".
 iDestruct "succ" as (ke) "[%e_enc wf]".
 iPoseProof (SShare.pterm_session_key_of kt e_enc with "k_ctx [] p_ke' p_sk")
   as "?" => //.
-by case/SShare.encode_eq: e_enc => _ [] _ [] _ [] -> ->.
+by case/SShare.encode_eq: e_enc => _ [] _ [] _ [] -> [] -> ?.
 Qed.
 
 End Protocol.
