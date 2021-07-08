@@ -26,6 +26,20 @@ Definition ctx N : iProp :=
 Global Instance ctx_persistent N : Persistent (ctx N).
 Proof. apply _. Qed.
 
+Lemma ctx_alloc N E1 E2 E' :
+  ↑N.@"psk" ⊆ E1 →
+  ↑N ⊆ E2 →
+  hash_pred_token E1 -∗
+  key_pred_token E2 ={E'}=∗
+  ctx N.
+Proof.
+iIntros (??) "tok1 tok2".
+iMod (hash_pred_set (N.@"psk") (λ _, True)%I with "tok1") as "?"; eauto.
+iMod (key_pred_set (N.@"sess_key") (λ _ _, False)%I with "tok2") as "?".
+  solve_ndisj.
+by iModIntro; iSplit; eauto.
+Qed.
+
 End Keys.
 
 End Keys.
@@ -1444,6 +1458,17 @@ Definition ctx N : iProp :=
 Instance ctx_persistent N : Persistent (ctx N).
 Proof. apply _. Qed.
 
+Lemma ctx_alloc N E E' :
+  ↑N.@"binder" ⊆ E →
+  Keys.ctx N -∗
+  hash_pred_token E ={E'}=∗
+  ctx N.
+Proof.
+iIntros (?) "#? token".
+iMod (hash_pred_set (N.@"binder") (binder_inv N) with "token") as "?"; eauto.
+by iModIntro; iSplit.
+Qed.
+
 Lemma pterm_hello N cp : ctx N -∗ wf N cp -∗ pterm (hello N cp).
 Proof.
 iIntros "#[ctx binder] # (wf_cp & meta & p_cp)".
@@ -1745,6 +1770,20 @@ Definition ctx γ : iProp :=
   enc_pred (N.@"server_hello_sig") (hello_sig_pred γ) ∧
   session_ctx (@nonce_meta _ _) (N.@"sess") P γ.
 
+Lemma ctx_alloc (E : coPset) γ :
+  Keys.ctx N -∗
+  session_ctx (@nonce_meta _ _) (N.@"sess") P γ -∗
+  enc_pred_token (↑N.@"server_hello") -∗
+  enc_pred_token (↑N.@"server_hello_sig") ={E}=∗ ctx γ.
+Proof.
+iIntros "#ctx #? tok1 tok2".
+iMod (enc_pred_set (N.@"server_hello") (hello_pred γ) with "tok1")
+  as "#?"; eauto.
+iMod (enc_pred_set (N.@"server_hello_sig") (hello_sig_pred γ) with "tok2")
+  as "#?"; eauto.
+iModIntro; do !iSplit => //.
+Qed.
+
 Definition wf sp : iProp :=
   SShare.wf (share sp) ∧
   pterm (TKey Dec (verif_key sp)) ∧
@@ -1945,6 +1984,27 @@ Definition ctx γ : iProp :=
   enc_pred (N.@"ack") (ack_pred γ) ∧
   session_ctx (@nonce_meta _ _) (N.@"sess") P γ.
 
+Lemma ctx_alloc E :
+  ↑N ⊆ E →
+  enc_pred_token E -∗
+  hash_pred_token E -∗
+  key_pred_token E ={E}=∗ ∃ γ, ctx γ.
+Proof.
+iIntros (sub) "enc_tok hash_tok key_tok".
+rewrite (hash_pred_token_difference (↑N.@"psk")); try solve_ndisj.
+iDestruct "hash_tok" as "[psk hash_tok]".
+iMod (Keys.ctx_alloc with "psk key_tok") as "#kctx"; eauto.
+iMod (session_alloc (@nonce_meta _ _) (N.@"sess") P) as (γ) "#sess".
+iMod (CParams.ctx_alloc with "kctx hash_tok") as "#cctx"; first solve_ndisj.
+rewrite (enc_pred_token_difference (↑N.@"server_hello")); try solve_ndisj.
+iDestruct "enc_tok" as "[tok1 enc_tok]".
+rewrite (enc_pred_token_difference (↑N.@"server_hello_sig") (_ ∖ _)); try solve_ndisj.
+iDestruct "enc_tok" as "[tok2 ack]".
+iMod (enc_pred_set (N.@"ack") (ack_pred γ) with "ack") as "ack"; first solve_ndisj.
+iMod (SParams.ctx_alloc with "kctx sess tok1 tok2") as "?".
+by iModIntro; iExists _; do !iSplit => //.
+Qed.
+
 Lemma wp_client c γ ke other E Φ :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
@@ -1963,8 +2023,7 @@ Lemma wp_client c γ ke other E Φ :
              ▷ (pterm (TKey Enc k) ∧ pterm (Meth.psk ke) ∨
                 session (@nonce_meta _ _) (N.@"sess") γ Resp cn sn (sk, other) ∧
                 □ ∀ kt, pterm (TKey kt sk) -∗
-                        ◇ if Meth.has_dh ke then False
-                          else pterm (Meth.psk ke))
+                ◇ if Meth.has_dh ke then False else pterm (Meth.psk ke))
       | None => True
       end →
       Φ (repr res)) -∗
