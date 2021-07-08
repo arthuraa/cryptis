@@ -2059,11 +2059,11 @@ Definition tls_ctx γ : iProp :=
   enc_pred (N.@"ack") (ack_pred γ) ∧
   session_ctx (@nonce_meta _ _) (N.@"sess") P γ.
 
-Lemma tls_ctx_alloc E :
+Lemma tls_ctx_alloc E E' :
   ↑N ⊆ E →
   enc_pred_token E -∗
   hash_pred_token E -∗
-  key_pred_token E ={E}=∗ ∃ γ, tls_ctx γ.
+  key_pred_token E ={E'}=∗ ∃ γ, tls_ctx γ.
 Proof.
 iIntros (sub) "enc_tok hash_tok key_tok".
 rewrite (hash_pred_token_difference (↑N.@"psk")); try solve_ndisj.
@@ -2272,4 +2272,4 @@ Qed.
 
 End Protocol.
 
-Arguments tls_ctx_alloc {Σ _ _ _} N E.
+Arguments tls_ctx_alloc {Σ _ _ _} N E E'.
