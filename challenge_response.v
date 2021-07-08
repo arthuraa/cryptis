@@ -47,6 +47,21 @@ Definition cr_ctx γ : iProp :=
   enc_pred (N.@"m2") (msg2_pred γ) ∧
   enc_pred (N.@"m3") (msg3_pred γ).
 
+Lemma cr_alloc E E' :
+  ↑N ⊆ E →
+  enc_pred_token E ={E'}=∗ ∃ γ, cr_ctx γ.
+Proof.
+iIntros (sub) "token".
+iMod (session_alloc (@nonce_meta _ _) N cr_sess_inv) as (γ) "#ctx".
+rewrite (enc_pred_token_difference (↑N.@"m2")); last solve_ndisj.
+iDestruct "token" as "[t2 token]".
+iMod (enc_pred_set (N.@"m2") (msg2_pred γ) with "t2") as "#H2" => //.
+rewrite (enc_pred_token_difference (↑N.@"m3")); last solve_ndisj.
+iDestruct "token" as "[t3 token]".
+iMod (enc_pred_set (N.@"m3") (msg3_pred γ) with "t3") as "#H3" => //.
+by iModIntro; iExists γ; do !iSplit => //.
+Qed.
+
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None).
 
