@@ -1870,6 +1870,8 @@ Lemma pterm_hello γ E sp :
   P Resp (SShare.cnonce ss) (SShare.snonce ss)
     (SShare.meth_of ss, SShare.session_key_of N ss, other sp) ={E}=∗
   pterm (hello N sp) ∗
+  session (@nonce_meta _ _) (N.@"sess") γ Resp (SShare.cnonce ss) (SShare.snonce ss)
+    (SShare.meth_of ss, SShare.session_key_of N ss, other sp) ∗
   (session (@nonce_meta _ _) (N.@"sess") γ Init (SShare.cnonce ss) (SShare.snonce ss)
      (SShare.meth_of ss, SShare.session_key_of N ss, other sp) ={E}=∗
    ▷ P Init (SShare.cnonce ss) (SShare.snonce ss)
@@ -2093,6 +2095,7 @@ Lemma wp_client c γ ke other E Φ :
              pterm cn ∧
              pterm sn ∧
              sterm sk ∧
+             session (@nonce_meta _ _) (N.@"sess") γ Init cn sn (ke, sk, other) ∧
              ▷ (pterm (TKey Enc k) ∧ pterm (Meth.psk ke) ∨
                 session (@nonce_meta _ _) (N.@"sess") γ Resp cn sn (ke, sk, other) ∧
                 □ ∀ kt, pterm (TKey kt sk) -∗
@@ -2149,7 +2152,7 @@ iDestruct "rest" as "[[fail_vsk fail_psk]|succ]".
   wp_pures.
   iApply ("post" $! (Some (_, _, _, _))).
   rewrite e CShare.psk_meth_of.
-  by iExists _; do 5!iSplit => //; eauto.
+  by iExists _; do 6!iSplit => //; eauto.
 wp_bind (send _ _); iApply wp_send => //.
   iModIntro.
   iApply pterm_TEncIS; eauto; first by rewrite sterm_TKey.
@@ -2161,8 +2164,8 @@ wp_pures; wp_bind (SShare.I.snonce _); iApply SShare.wp_snonce.
 wp_pures; wp_bind (SShare.I.cnonce _); iApply SShare.wp_cnonce.
 wp_pures.
 iApply ("post" $! (Some (_, _, _, _))) => //.
-iExists _; do 5!iSplit => //.
 rewrite e.
+iExists _; do 6!iSplit => //.
 case: (e_hello _ eq_refl) => ? [] ? [] e_sk [] ? [] ? [] ? ?.
 iModIntro; iRight; iSplit => //.
 iIntros (kt); rewrite -e_sk.
@@ -2199,6 +2202,9 @@ Lemma wp_server c γ psk g verif_key other E Φ :
       | Some ke =>
         pterm (SShare.cnonce ke) ∧
         pterm (SShare.snonce ke) ∧
+        session (@nonce_meta _ _) (N.@"sess") γ
+                Resp (SShare.cnonce ke) (SShare.snonce ke)
+                (SShare.meth_of ke, SShare.session_key_of N ke, other) ∧
         ▷ (pterm (SShare.psk ke) ∨
            session (@nonce_meta _ _) (N.@"sess") γ
                    Init (SShare.cnonce ke) (SShare.snonce ke)
@@ -2229,7 +2235,8 @@ wp_pures.
 wp_bind (SParams.I.hello _ _); iApply (SParams.wp_hello _ sp).
 rewrite (term_meta_token_difference _ (↑N.@"sess")); eauto.
 iDestruct "token" as "[token _]".
-iMod (SParams.pterm_hello with "s_ctx wf_sp token []") as "[#p_hello close]" => //.
+iMod (SParams.pterm_hello with "s_ctx wf_sp token []")
+  as "(#p_hello & #sess & close)" => //.
 wp_pures; wp_bind (send _ _); iApply wp_send; eauto.
 wp_pures.
 wp_bind (SShare.I.session_key_of _ _); iApply SShare.wp_session_key_of.
@@ -2242,19 +2249,19 @@ rewrite {}e_ack; wp_pures; iApply ("post" $! (Some ke')).
 iSplit.
   rewrite -(SShare.cnonce_encode N).
   iApply SShare.pterm_cnonce.
-  iApply SShare.pterm_encode => //.
+  by iApply SShare.pterm_encode => //.
 iSplit.
   rewrite -(SShare.snonce_encode N).
   iApply SShare.pterm_snonce.
-  iApply SShare.pterm_encode => //.
+  by iApply SShare.pterm_encode => //.
 iDestruct "p_ch" as "[p_ch|p_ch]"; first by eauto.
-rewrite pterm_TEnc.
+rewrite pterm_TEnc; iSplit => //.
 iDestruct "p_ack" as "[[fail _]|(_ & succ & decl)]".
   iMod (SShare.pterm_session_key_ofW with "k_ctx p_ke' fail") as "?".
   by eauto.
 iPoseProof (wf_enc_elim with "succ []") as "{succ} #succ"; eauto.
 iModIntro.
-iDestruct ("succ" $! sp with "[//]") as "{succ} [sess succ]".
+iDestruct ("succ" $! sp with "[//]") as "{succ} [sess' succ]".
 iRight; iSplitL => //.
 iIntros "!> %kt #p_sk".
 iDestruct "succ" as (ke) "[%e_enc wf]".
