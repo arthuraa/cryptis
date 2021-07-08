@@ -275,3 +275,5 @@ by iExists _; do ![iSplit=> //].
 Qed.
 
 End CR.
+
+Arguments cr_alloc {Σ _ _ _} N.
