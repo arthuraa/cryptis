@@ -54,35 +54,87 @@ iApply wp_fork; last by iApply "post".
 by iModIntro; wp_pures; iApply wp_loop.
 Qed.
 
-Definition environment : val := λ: "c" "ekI" "dkI" "ekR" "dkR",
+Definition tls_server_loop : val := λ: "c" "psk" "nR" "params",
+  (rec: "loop" "psk" :=
+     bind: "res" := tls_server tlsN "c" "psk" Spec.zero "nR" "params" in
+     let: "psk" := Fst (mkkey (SShare.I.session_key_of tlsN "res")) in
+     "loop" "psk") "psk".
+
+Lemma wp_tls_server_loop γtls c psk nR params :
+  channel c -∗
+  tls_ctx tlsN γtls -∗
+  sterm psk -∗
+  pterm nR  -∗
+  pterm params -∗
+  {{{ True }}} tls_server_loop c psk nR params {{{ v, RET v; True }}}.
+Proof.
+iIntros "#? #ctx #psk #nR #p_params !> %Φ _ post".
+rewrite /tls_server_loop; wp_lam; wp_let; wp_let; wp_let.
+wp_pure (Rec _ _ _).
+iLöb as "IH" forall (psk) "psk".
+wp_pures.
+wp_bind (tls_server _ _ _ _ _ _).
+iApply wp_tls_server => //.
+- by rewrite pterm_TInt.
+- by rewrite sterm_TKey; iApply pterm_sterm.
+- by rewrite pterm_TKey; eauto.
+iIntros (res) "res".
+case: res => [res|]; wp_pures; last by iApply "post".
+wp_bind (SShare.I.session_key_of _ _); iApply SShare.wp_session_key_of.
+wp_bind (mkkey _); iApply wp_mkkey; wp_pure (Fst _); wp_let.
+iDestruct "res" as "(_ & _ & #psk' & _)".
+iApply ("IH" with "post").
+by rewrite sterm_TKey.
+Qed.
+
+Definition environment : val := λ: "c" "nI" "nR" "psk",
+  let: "kI" := mkkey "nI" in
+  let: "kR" := mkkey "nR" in
+  let: "ekI" := Fst "kI" in
+  let: "dkI" := Snd "kI" in
+  let: "ekR" := Fst "kR" in
+  let: "dkR" := Snd "kR" in
+  send "c" "ekI";;
+  send "c" "ekR";;
+  send "c" "dkI";;
+  send "c" "dkR";;
   fork_loop (
     let: "pkR'" := recv "c" in
     bind: "pkR'" := to_ek "pkR'" in
     nsl_dh_init nslN "c" Spec.zero "dkI" "ekI" "pkR'");;
   fork_loop (nsl_dh_resp nslN "c" Spec.zero "dkR" "ekR");;
   fork_loop (cr_init crN "c" "ekI" "dkI" "dkR");;
-  fork_loop (cr_resp crN "c" "ekR" "dkR").
+  fork_loop (cr_resp crN "c" "ekR" "dkR");;
+  let: "server_params" := recv "c" in
+  Fork (tls_server_loop "c" "psk" "nR" "server_params").
 
-Lemma wp_environment c γnsl γcr kI kR :
+Lemma wp_environment c γnsl γcr γtls nI nR psk :
   channel c -∗
   nsl_dh_ctx nslN (λ _ _ _ _ _, True)%I Spec.zero γnsl -∗
   cr_ctx crN (λ _ _ _ _ _, True)%I γcr -∗
-  pterm kI -∗
-  pterm kR -∗
-  {{{ True }}}
-    environment c (TKey Enc kI) (TKey Dec kI) (TKey Enc kR) (TKey Dec kR)
-  {{{ RET #(); True }}}.
+  tls_ctx tlsN γtls -∗
+  pterm nI -∗
+  pterm nR -∗
+  sterm psk -∗
+  {{{ True }}} environment c nI nR psk {{{ RET #(); True }}}.
 Proof.
-iIntros "#? #? #? #? #? %Φ !> _ post".
-rewrite /environment; wp_pures; rewrite -!fork_loopE.
-iAssert (pterm (TKey Enc kI)) as "#?".
+iIntros "#? #? #? #? #? #? #? %Φ !> _ post".
+rewrite /environment; wp_pures.
+wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
+wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
+rewrite -!fork_loopE.
+iAssert (pterm (TKey Enc nI)) as "#?".
   by rewrite pterm_TKey; eauto.
-iAssert (pterm (TKey Dec kI)) as "#?".
+iAssert (pterm (TKey Dec nI)) as "#?".
   by rewrite [pterm (TKey Dec _)]pterm_TKey; eauto.
-iAssert (pterm (TKey Enc kR)) as "#?".
-  by rewrite [pterm (TKey Enc kR)]pterm_TKey; eauto.
-iAssert (pterm (TKey Dec kR)) as "#?".
-  by rewrite [pterm (TKey Dec kR)]pterm_TKey; eauto.
+iAssert (pterm (TKey Enc nR)) as "#?".
+  by rewrite [pterm (TKey Enc nR)]pterm_TKey; eauto.
+iAssert (pterm (TKey Dec nR)) as "#?".
+  by rewrite [pterm (TKey Dec nR)]pterm_TKey; eauto.
+wp_bind (send _ _); iApply wp_send => //; wp_pures.
+wp_bind (send _ _); iApply wp_send => //; wp_pures.
+wp_bind (send _ _); iApply wp_send => //; wp_pures.
+wp_bind (send _ _); iApply wp_send => //; wp_pures.
 wp_bind (fork_loop _); iApply wp_fork_loop; eauto.
   iModIntro.
   wp_bind (recv _); iApply wp_recv => //.
@@ -97,33 +149,27 @@ iIntros "!> _"; wp_pures; wp_bind (fork_loop _); iApply wp_fork_loop => //.
   by rewrite sterm_TInt.
 iIntros "!> _"; wp_pures; wp_bind (fork_loop _); iApply wp_fork_loop => //.
   by iModIntro; iApply (wp_cr_init); eauto.
-iIntros "!> _"; wp_pures; iApply wp_fork_loop => //.
-by iModIntro; iApply (wp_cr_resp); eauto.
+iIntros "!> _"; wp_pures; wp_bind (fork_loop _); iApply wp_fork_loop => //.
+  by iModIntro; iApply (wp_cr_resp); eauto.
+iIntros "!> _"; wp_pures.
+wp_bind (recv _); iApply wp_recv => //.
+iIntros "%params #p_params"; wp_pures.
+iApply wp_fork; last by iApply "post".
+by iModIntro; iApply wp_tls_server_loop => //.
 Qed.
 
 Definition game : val := λ: "mkchan",
-  let: "c"    := "mkchan" #() in
-  let: "nI"   := mknonce #() in
-  let: "nR"   := mknonce #() in
+  let: "c"   := "mkchan" #() in
+  let: "nI"  := tag (nroot.@"key") (mknonce #()) in
+  let: "nR"  := tag (nroot.@"key") (mknonce #()) in
   let: "psk" := mknonce #() in
-  let: "kI" := mkkey (tag (nroot.@"key") "nI") in
-  let: "kR" := mkkey (tag (nroot.@"key") "nR") in
+  let: "kI"  := mkkey "nI" in
   let: "ekI" := Fst "kI" in
   let: "dkI" := Snd "kI" in
-  let: "ekR" := Fst "kR" in
-  let: "dkR" := Snd "kR" in
-  send "c" "ekI";;
-  send "c" "ekR";;
-  send "c" "dkI";;
-  send "c" "dkR";;
-  environment "c" "ekI" "dkI" "ekR" "dkR";;
+  environment "c" "nR" "nI" "psk";;
   let: "param_client" := recv "c" in
-  let: "param_server" := recv "c" in
   let: "m" := Meth.I.PskDh "psk" Spec.zero in
-  let: "res" := tls_client tlsN "c" "m" "param_client" |||
-                tls_server tlsN "c" "psk" Spec.zero "nR" "param_server" in
-  bind: "resI" := Fst "res" in
-  bind: "resR" := Snd "res" in
+  bind: "resI" := tls_client tlsN "c" "m" "param_client" in
   let: "skI"   := Fst (mkkey (Snd "resI")) in
   let: "m" := recv "c" in
   SOME (~ eq_term "m" "skI").
@@ -158,55 +204,35 @@ wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP".
 wp_pures; wp_bind (mknonce _).
 iApply (wp_mknonce _ (λ _, True)%I (λ _, False%I)).
-iIntros (kI) "#t_kI #p_kI _ tok_kI".
-iAssert (pterm kI) as "{p_kI} p_kI"; first by iApply "p_kI".
+iIntros (nI) "#t_nI #p_nI _ tok_nI".
+wp_tag.
+iAssert (pterm (Spec.tag (nroot.@"key") nI)) as "{p_nI} p_nI".
+  by rewrite pterm_tag; iApply "p_nI".
+wp_pures.
 wp_pures; wp_bind (mknonce _).
 iApply (wp_mknonce _ (λ _, True)%I (λ _, False%I)).
-iIntros (kR) "#t_kR #p_kR _ tok_kR".
-iAssert (pterm kR) as "{p_kR} p_kR"; first by iApply "p_kR".
+iIntros (nR) "#t_nR #p_nR _ tok_nR".
+wp_tag.
+iAssert (pterm (Spec.tag (nroot.@"key") nR)) as "{p_nR} p_nR".
+  by iApply pterm_tag; iApply "p_nR".
+wp_pures.
 wp_pures; wp_bind (mknonce _).
 iApply (wp_mknonce _ (λ psk, nonce_meta psk (nroot.@"pub") ())%I (λ _, False%I)).
 iIntros (psk) "#t_psk #p_psk _ tok_psk".
-wp_pures; wp_tag; wp_bind (mkkey _); iApply wp_mkkey.
+wp_pures; wp_bind (mkkey _); iApply wp_mkkey.
 set ekI := TKey Enc _.
 set dkI := TKey Dec _.
-wp_pures; wp_tag; wp_bind (mkkey _); iApply wp_mkkey.
-set ekR := TKey Enc _.
-set dkR := TKey Dec _.
-wp_pures; wp_bind (send _ _); iApply wp_send => //.
-  by rewrite pterm_TKey pterm_tag; eauto.
-wp_pures; wp_bind (send _ _); iApply wp_send => //.
-  by rewrite pterm_TKey pterm_tag; eauto.
-wp_pures; wp_bind (send _ _); iApply wp_send => //.
-  by rewrite pterm_TKey pterm_tag; eauto.
-wp_pures; wp_bind (send _ _); iApply wp_send => //.
-  by rewrite pterm_TKey pterm_tag; eauto.
-wp_pures; wp_bind (environment _ _ _ _ _).
+wp_pures; wp_bind (environment _ _ _ _).
 iApply wp_environment; eauto.
-- by rewrite pterm_tag.
-- by rewrite pterm_tag.
 iIntros "!> _"; wp_pures.
 wp_bind (recv _); iApply wp_recv => //.
 iIntros "%param_client #p_pc"; wp_pures.
-wp_bind (recv _); iApply wp_recv => //.
-iIntros "%param_server #p_ps"; wp_pures.
 wp_pures; wp_bind (Meth.I.PskDh _ _).
 iApply Meth.wp_PskDh => //.
 iIntros "!> % ->"; wp_pures.
-wp_bind (par _ _).
-iApply (wp_par (λ v, ∃ a : option (term * term * term * term), ⌜v = repr a⌝ ∗ _)%I
-               (λ v, ∃ a : option SShare.t, ⌜v = repr (SShare.term_of <$> a)⌝ ∗ _)%I
-          with "[] []").
-- iApply (wp_tls_client c _ (Meth.PskDh psk Spec.zero)) => //.
-    rewrite /= pterm_TInt; iSplit => //.
-  iIntros (res) "H"; iExists res; iSplit; first done.
-  iApply "H".
-- iApply (wp_tls_server c) => //.
-  + by rewrite pterm_TInt.
-  + by rewrite sterm_TKey.
-  + by rewrite pterm_TKey; eauto.
-  + iIntros (res) "H"; iExists res; iSplit; first done.
-    iApply "H".
+wp_bind (tls_client _ _ _ _).
+iApply (wp_tls_client c _ (Meth.PskDh psk Spec.zero)) => //.
+  by rewrite /= pterm_TInt; iSplit => //.
 iAssert ((pterm psk → ▷ False) ∧ |==> pterm psk)%I
   with "[tok_psk]" as "{p_psk} p_psk"; first iSplit.
 - iIntros "#p_psk'".
@@ -216,15 +242,10 @@ iAssert ((pterm psk → ▷ False) ∧ |==> pterm psk)%I
   by iApply (term_meta_meta_token with "tok_psk p_psk").
 - iMod (term_meta_set _ _ () (nroot.@"pub") with "tok_psk") as "#?" => //.
   by iModIntro; iApply "p_psk"; eauto.
-iIntros (v1 v2) "[H1 H2]".
-iDestruct "H1" as (res1) "[-> H1]".
-iDestruct "H2" as (res2) "[-> H2]".
-iModIntro; wp_pures.
+iIntros (res1) "H1".
 case: res1 => [res1|]; wp_pures; last by eauto.
-case: res2 => [res2|]; wp_pures; last by eauto.
 case: res1 => [] [] [] vkey cn sn sk /=.
 iDestruct "H1" as (vk) "(-> & _ & _ & _ & _ & #sessII & H1)".
-iDestruct "H2" as "(_ & _ & #sessRR & H2)".
 wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
 wp_bind (recv _); iApply wp_recv => //.
 iIntros (m) "#p_m"; wp_let.

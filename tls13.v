@@ -2101,7 +2101,7 @@ Lemma wp_tls_client c γ ke other E Φ :
                 □ ∀ kt, pterm (TKey kt sk) -∗
                 ◇ if Meth.has_dh ke then False else pterm (Meth.psk ke))
       | None => True
-      end →
+      end -∗
       Φ (repr res)) -∗
   WP tls_client c ke other @ E {{ Φ }}.
 Proof.
@@ -2202,6 +2202,7 @@ Lemma wp_tls_server c γ psk g verif_key other E Φ :
       | Some ke =>
         pterm (SShare.cnonce ke) ∧
         pterm (SShare.snonce ke) ∧
+        sterm (SShare.session_key_of N ke) ∧
         session (@nonce_meta _ _) (N.@"sess") γ
                 Resp (SShare.cnonce ke) (SShare.snonce ke)
                 (SShare.meth_of ke, SShare.session_key_of N ke, other) ∧
@@ -2254,6 +2255,9 @@ iSplit.
   rewrite -(SShare.snonce_encode N).
   iApply SShare.pterm_snonce.
   by iApply SShare.pterm_encode => //.
+iSplit.
+  iPoseProof (pterm_sterm with "p_ack") as "{p_ack} ack".
+  by rewrite sterm_TEnc; iDestruct "ack" as "[sk _]".
 iDestruct "p_ch" as "[p_ch|p_ch]"; first by eauto.
 rewrite pterm_TEnc; iSplit => //.
 iDestruct "p_ack" as "[[fail _]|(_ & succ & decl)]".
