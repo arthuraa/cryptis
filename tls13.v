@@ -9,108 +9,6 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Module AEAD.
-
-(* FIXME This does not work if we inline "h" *)
-Definition enc (N : namespace) : val := λ: "k" "ad" "payload",
-  let: "h" := hash "ad" in
-  let: "e" := tenc N (Snd "k") (term_of_list ["h"; "payload"]) in
-  SOME (term_of_list ["ad"; "e"]).
-
-Definition dec (N : namespace) : val := λ: "k" "m",
-  bind: "m" := list_of_term "m" in
-  list_match: ["ad"; "e"] := "m" in
-  let: "h" := hash "ad" in
-  bind: "dec_e" := tdec N (Fst "k") "e" in
-  bind: "dec_e" := list_of_term "dec_e" in
-  list_match: ["h'"; "payload"] := "dec_e" in
-  assert: eq_term "h'" "h" in
-  SOME ("ad", "payload").
-
-Section Lemmas.
-
-Context `{!heapG Σ, !cryptisG Σ}.
-
-Variable N : namespace.
-
-Variable P : term → term → iProp Σ.
-
-Implicit Types k t ad payload : term.
-Implicit Types Φ : val → iProp Σ.
-
-Definition inv k t : iProp Σ :=
-  ∃ ad payload, ⌜t = Spec.of_list [THash ad; payload]⌝ ∧ P ad payload.
-
-Definition ctx := enc_pred N inv.
-
-Lemma wp_enc E Φ k ad payload :
-  ctx -∗
-  □ P ad payload -∗
-  sterm (TKey Enc k) -∗
-  pterm ad -∗
-  sterm payload -∗
-  □ (pterm (TKey Dec k) → pterm payload) -∗
-  (∀ t, pterm t -∗ Φ (SOMEV t)) -∗
-  WP enc N (TKey Dec k, TKey Enc k) ad payload @ E {{ Φ }}.
-Proof.
-iIntros "#ctx #Pd #s_k #p_ad #s_payload #p_payload post".
-rewrite /enc; wp_hash.
-wp_list; wp_term_of_list.
-wp_tenc; wp_list; wp_term_of_list.
-wp_pures; iApply "post".
-rewrite pterm_of_list /=; do !iSplit => //.
-iApply pterm_TEncIS => //.
-- by iModIntro; iExists _, _; eauto.
-- by rewrite sterm_of_list /= sterm_THash -[sterm ad]pterm_sterm; eauto.
-iIntros "!> #p_k"; rewrite pterm_of_list /= pterm_THash.
-by do !iSplit => //; eauto; iApply "p_payload".
-Qed.
-
-Ltac failure :=
-  wp_pures; iApply "post_none".
-
-Definition corruption k : iProp Σ :=
-  pterm (TKey Dec k) ∨ pterm (TKey Enc k).
-
-Lemma wp_dec E Φ k t :
-  ctx -∗
-  pterm t -∗
-  (∀ ad payload,
-    pterm ad -∗
-    sterm payload -∗
-    ▷ (corruption k ∨ □ P ad payload) -∗
-    Φ (SOMEV (ad, payload))) -∗
-  Φ NONEV -∗
-  WP dec N (TKey Dec k, TKey Enc k)%V t @ E {{ Φ }}.
-Proof.
-iIntros "#ctx #p_t post_some post_none".
-rewrite /dec; wp_list_of_term_eq ts e; last by failure.
-rewrite {t}e.
-wp_list_match => [ad m {ts} ->|_]; wp_finish; try by failure.
-wp_hash.
-rewrite pterm_of_list /=; iDestruct "p_t" as "(p_ad & p_m & _)".
-wp_tdec m; last by failure.
-wp_list_of_term_eq m' e; last by failure.
-wp_pures; rewrite {m}e.
-wp_list_match => [h' payload {m'} ->|_] /=; wp_finish; try by failure.
-wp_eq_term e; last by failure.
-subst h'.
-iDestruct (pterm_TEncE with "p_m ctx") as "[[fail pub]|sec]".
-  wp_pures; iApply "post_some"; rewrite /corruption; eauto.
-  iApply pterm_sterm.
-  by rewrite pterm_of_list /=; iDestruct "pub" as "(_ & ? & _)".
-iDestruct "sec" as "# (#inv & sec & _)".
-wp_if.
-iDestruct "inv" as (ad' payload') "(%e & ?)".
-case/Spec.of_list_inj: e => <- <-.
-rewrite sterm_of_list /=; iDestruct "sec" as "(_ & ? & _)".
-by wp_pures; iApply "post_some"; eauto.
-Qed.
-
-End Lemmas.
-
-End AEAD.
-
 Module Keys.
 
 Section Keys.
@@ -120,12 +18,6 @@ Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
 Implicit Types Φ : val → iProp.
-
-Definition dh_key_pred N (kt : key_type) (t : term) : iProp :=
-  ∃ g a b psk vsk : term,
-    ⌜t = TExp g [a; b]⌝ ∧
-    dh_meta (TExp g [a]) (N.@"owner") psk ∧ pterm psk ∧
-    dh_meta (TExp g [b]) (N.@"owner") vsk ∧ pterm vsk.
 
 Definition ctx N : iProp :=
   hash_pred (N.@"psk") (λ _, True)%I ∧
