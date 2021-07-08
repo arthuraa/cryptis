@@ -2027,7 +2027,7 @@ Implicit Types Φ : val → iProp.
 
 Definition P rl t1 t2 (x : Meth.t * term * term) : iProp := True.
 
-Definition client : val := λ: "c" "kex" "other",
+Definition tls_client : val := λ: "c" "kex" "other",
   let: "kex" := CShare.I.new "kex" in
   let: "cp"  := term_of_list ["kex"; "other"] in
   let: "ch"  := CParams.I.hello N "cp" in
@@ -2052,18 +2052,18 @@ Definition ack_pred γ (k t : term) : iProp :=
   ∃ ke, ⌜SShare.encode' N ke = SShare.encode N ss⌝ ∧
         CShare.wf (SShare.cshare_of ke).
 
-Definition ctx γ : iProp :=
+Definition tls_ctx γ : iProp :=
   Keys.ctx N ∧
   CParams.ctx N ∧
   SParams.ctx N P γ ∧
   enc_pred (N.@"ack") (ack_pred γ) ∧
   session_ctx (@nonce_meta _ _) (N.@"sess") P γ.
 
-Lemma ctx_alloc E :
+Lemma tls_ctx_alloc E :
   ↑N ⊆ E →
   enc_pred_token E -∗
   hash_pred_token E -∗
-  key_pred_token E ={E}=∗ ∃ γ, ctx γ.
+  key_pred_token E ={E}=∗ ∃ γ, tls_ctx γ.
 Proof.
 iIntros (sub) "enc_tok hash_tok key_tok".
 rewrite (hash_pred_token_difference (↑N.@"psk")); try solve_ndisj.
@@ -2080,11 +2080,11 @@ iMod (SParams.ctx_alloc with "kctx sess tok1 tok2") as "?".
 by iModIntro; iExists _; do !iSplit => //.
 Qed.
 
-Lemma wp_client c γ ke other E Φ :
+Lemma wp_tls_client c γ ke other E Φ :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
-  ctx γ -∗
+  tls_ctx γ -∗
   Meth.wf ke -∗
   pterm other -∗
   (∀ res,
@@ -2103,10 +2103,10 @@ Lemma wp_client c γ ke other E Φ :
       | None => True
       end →
       Φ (repr res)) -∗
-  WP client c ke other @ E {{ Φ }}.
+  WP tls_client c ke other @ E {{ Φ }}.
 Proof.
 iIntros (? sub) "#? #(k_ctx & c_ctx & s_ctx & ackP & sess_ctx) #p_ke #p_other post".
-rewrite /client; wp_pures.
+rewrite /tls_client; wp_pures.
 wp_bind (CShare.I.new _); iApply (CShare.wp_new _) => //.
 iIntros (ke' e) "#p_ke' token"; wp_pures.
 rewrite (term_meta_token_difference _ (↑N.@"binder")); try set_solver.
@@ -2173,7 +2173,7 @@ iModIntro.
 iApply SShare.pterm_session_key_of => //.
 Qed.
 
-Definition server : val := λ: "c" "psk" "g" "verif_key" "other",
+Definition tls_server : val := λ: "c" "psk" "g" "verif_key" "other",
   let: "ch" := recv "c" in
   bind: "ke" := CParams.I.check N "psk" "g" "other" "ch" in
   let: "ke'" := SShare.I.new "ke" in
@@ -2187,11 +2187,11 @@ Definition server : val := λ: "c" "psk" "g" "verif_key" "other",
   assert: eq_term "ack" "sh" in
   SOME "ke'".
 
-Lemma wp_server c γ psk g verif_key other E Φ :
+Lemma wp_tls_server c γ psk g verif_key other E Φ :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
-  ctx γ -∗
+  tls_ctx γ -∗
   sterm psk -∗
   pterm g -∗
   sterm (TKey Enc verif_key) -∗
@@ -2213,11 +2213,11 @@ Lemma wp_server c γ psk g verif_key other E Φ :
            ◇ if SShare.has_dh ke then False else pterm (SShare.psk ke))
       | None => True
       end -∗ Φ (repr (SShare.term_of <$> ke))) -∗
-  WP server c psk g verif_key other @ E {{ Φ }}.
+  WP tls_server c psk g verif_key other @ E {{ Φ }}.
 Proof.
 iIntros (? sub) "#? #(k_ctx & c_ctx & s_ctx & ? & sess_ctx)".
 iIntros "#s_psk #p_g #s_sign #s_verif #p_other post".
-rewrite /server; wp_pures.
+rewrite /tls_server; wp_pures.
 wp_bind (recv _); iApply wp_recv => //.
 iIntros (ch) "#p_ch"; wp_pures.
 wp_bind (CParams.I.check _ _ _ _ _).
@@ -2271,3 +2271,5 @@ by case/SShare.encode_eq: e_enc => _ [] _ [] _ [] -> [] -> ?.
 Qed.
 
 End Protocol.
+
+Arguments tls_ctx_alloc {Σ _ _ _} N E.
