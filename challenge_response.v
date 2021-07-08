@@ -65,7 +65,7 @@ Qed.
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None).
 
-Definition initiator : val := λ: "c" "skA" "pkA" "pkB",
+Definition cr_init : val := λ: "c" "skA" "pkA" "pkB",
   let:  "nA"   := mknonce #() in
   let:  "m1"   := term_of_list ["nA"; "pkA"] in
   send  "c" "m1";;
@@ -79,7 +79,7 @@ Definition initiator : val := λ: "c" "skA" "pkA" "pkB",
     SOME ("nA", "nB")
   else NONE.
 
-Definition responder : val := λ: "c" "skB" "pkB",
+Definition cr_resp : val := λ: "c" "skB" "pkB",
   bind: "m1"   := list_of_term (recv "c") in
   list_match: ["nA"; "pkA"] := "m1" in
   bind: "kt"   := is_key "pkA" in
@@ -149,7 +149,7 @@ move/Spec.of_list_inj: e_m3 enA enB ekB => -> /= [] -> [] -> [] ->.
 by eauto.
 Qed.
 
-Lemma wp_initiator γ c kA kB E Ψ :
+Lemma wp_cr_init γ c kA kB E Ψ :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
@@ -164,10 +164,10 @@ Lemma wp_initiator γ c kA kB E Ψ :
          (pterm (TKey Enc kB) ∨ P Resp nA nB kA kB)
        else True) -∗
       Ψ (repr onB)) -∗
-  WP initiator c (TKey Enc kA) (TKey Dec kA) (TKey Dec kB) @ E
+  WP cr_init c (TKey Enc kA) (TKey Dec kA) (TKey Dec kB) @ E
      {{ Ψ }}.
 Proof.
-rewrite /initiator.
+rewrite /cr_init.
 iIntros (??) "#? #ctx inv #d_kA #d_kB Hpost".
 iPoseProof "ctx" as "(? & ? & ?)".
 wp_pures; wp_bind (mknonce _).
@@ -208,7 +208,7 @@ wp_bind (send _ _); iApply wp_send => //.
 wp_pures; iApply ("Hpost" $! (Some (nA, nB))); eauto.
 Qed.
 
-Lemma wp_responder γ c kB E Ψ :
+Lemma wp_cr_resp γ c kB E Ψ :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
@@ -225,11 +225,11 @@ Lemma wp_responder γ c kB E Ψ :
            (pterm (TKey Enc kA) ∨ P Init nA nB kA kB)
        else True) -∗
        Ψ (repr ot)) -∗
-  WP responder c (TKey Enc kB) (TKey Dec kB) @ E {{ Ψ }}.
+  WP cr_resp c (TKey Enc kB) (TKey Dec kB) @ E {{ Ψ }}.
 Proof.
 iIntros (??) "#? #ctx #HkB inv Hpost".
 iPoseProof "ctx" as "(? & ? & ?)".
-rewrite /responder; wp_pures.
+rewrite /cr_resp; wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m1) "#Hm1".
 wp_list_of_term m1; last protocol_failure.
 wp_list_match => [nA pkA {m1} ->|_]; wp_finish; last protocol_failure.
