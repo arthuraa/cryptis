@@ -1,10 +1,10 @@
 From mathcomp Require Import ssreflect.
 From mathcomp Require order.
-From stdpp Require Import gmap coGset.
+From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap namespace_map.
 From iris.base_logic.lib Require Import invariants auth saved_prop.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term cryptis coGset_disj.
+From cryptis Require Import lib term cryptis.
 From cryptis.primitives Require Import notations comp.
 
 Set Implicit Arguments.

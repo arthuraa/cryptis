@@ -6,8 +6,6 @@
 
 mathcomp_compat.v
 lib.v
-coGset.v
-coGset_disj.v
 pre_term.v
 term.v
 cryptis.v

@@ -4,7 +4,7 @@ file to avoid slowing down the compilation process. *)
 
 From mathcomp Require Import ssreflect.
 From mathcomp Require order.
-From stdpp Require Import gmap coGset.
+From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap namespace_map.
 From iris.base_logic.lib Require Import invariants auth.
 From iris.heap_lang Require Import notation proofmode.
