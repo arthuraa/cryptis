@@ -15,11 +15,25 @@ primitives/simple.v
 primitives.v
 tactics.v
 session.v
-nsl.v
-challenge_response.v
 dh.v
-nsl_dh.v
-tls13.v
-nsl_dh_game.v
 attacker.v
+
+# Case studies
+
+## CR
+
+challenge_response.v
+
+## NSL+DH
+
+nsl.v
+nsl_dh.v
+nsl_dh_game.v
+
+## TLS 1.3
+
+tls13.v
+
+## Composite
+
 composite_game.v
