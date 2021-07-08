@@ -158,6 +158,61 @@ iApply wp_fork; last by iApply "post".
 by iModIntro; iApply wp_tls_server_loop => //.
 Qed.
 
+Definition tls_client_loop : val := λ: "c" "psk",
+  (rec: "loop" "psk" :=
+    let: "params" := recv "c" in
+    let: "m" := Meth.I.PskDh "psk" Spec.zero in
+    bind: "res" := tls_client tlsN "c" "m" "params" in
+    let: "psk'" := Fst (mkkey (Snd "res")) in
+    let: "continue" := recv "c" in
+    if: eq_term "continue" Spec.zero then
+      "loop" "psk'"
+    else SOME "psk'") "psk".
+
+Lemma wp_tls_client_loop γtls c psk :
+  channel c -∗
+  tls_ctx tlsN γtls -∗
+  sterm psk -∗
+  {{{ pterm psk → ▷ False }}}
+    tls_client_loop c psk
+  {{{ (res : option term), RET (repr res);
+      match res with
+      | Some psk' => pterm psk' → ▷ False
+      | None => True
+      end }}}.
+Proof.
+iIntros "#? #? #t_psk !> %Φ s_psk post".
+rewrite /tls_client_loop.
+wp_lam; wp_let; wp_pure (Rec _ _ _).
+iLöb as "IH" forall (psk) "t_psk".
+wp_pures; wp_bind (recv _); iApply wp_recv => //.
+iIntros "%params #p_params"; wp_pures.
+wp_bind (Meth.I.PskDh _ _); iApply Meth.wp_PskDh => //.
+iIntros "!> % ->"; rewrite [Meth.PskDh]lock; wp_pures.
+wp_bind (tls_client _ _ _ _).
+iApply wp_tls_client; rewrite -?lock; eauto.
+  by rewrite /= pterm_TInt; eauto.
+iIntros (res) "Hres"; case: res => [res|]; wp_pures; last first.
+  by iApply ("post" $! None).
+case: res => [] [] [] vkey cn sn sk /=.
+iDestruct "Hres" as (?) "(-> & _ & _ & _ & #t_sk & _ & Hres)".
+wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
+iDestruct "Hres" as "[[_ contra]|[_ #s_psk']]".
+  by iDestruct ("s_psk" with "contra") as ">[]".
+wp_bind (recv _); iApply wp_recv => //.
+iIntros "%continue _"; wp_pures.
+wp_eq_term e.
+  wp_if.
+  iApply ("IH" with "[] post []").
+  - iIntros "#contra". iSpecialize ("s_psk'" with "contra").
+    by iDestruct "s_psk'" as ">[]".
+  - by rewrite sterm_TKey.
+wp_pures.
+iApply ("post" $! (Some (TKey Enc sk))).
+iIntros "#contra". iSpecialize ("s_psk'" with "contra").
+by iDestruct "s_psk'" as ">[]".
+Qed.
+
 Definition game : val := λ: "mkchan",
   let: "c"   := "mkchan" #() in
   let: "nI"  := tag (nroot.@"key") (mknonce #()) in
@@ -167,12 +222,9 @@ Definition game : val := λ: "mkchan",
   let: "ekI" := Fst "kI" in
   let: "dkI" := Snd "kI" in
   environment "c" "nR" "nI" "psk";;
-  let: "param_client" := recv "c" in
-  let: "m" := Meth.I.PskDh "psk" Spec.zero in
-  bind: "resI" := tls_client tlsN "c" "m" "param_client" in
-  let: "skI"   := Fst (mkkey (Snd "resI")) in
+  bind: "sk" := tls_client_loop "c" "psk" in
   let: "m" := recv "c" in
-  SOME (~ eq_term "m" "skI").
+  SOME (~ eq_term "m" "sk").
 
 Lemma wp_game (mkchan : val) :
   {{{ True }}} mkchan #() {{{ v, RET v; channel v }}} -∗
@@ -225,33 +277,17 @@ set dkI := TKey Dec _.
 wp_pures; wp_bind (environment _ _ _ _).
 iApply wp_environment; eauto.
 iIntros "!> _"; wp_pures.
-wp_bind (recv _); iApply wp_recv => //.
-iIntros "%param_client #p_pc"; wp_pures.
-wp_pures; wp_bind (Meth.I.PskDh _ _).
-iApply Meth.wp_PskDh => //.
-iIntros "!> % ->"; wp_pures.
-wp_bind (tls_client _ _ _ _).
-iApply (wp_tls_client c _ (Meth.PskDh psk Spec.zero)) => //.
-  by rewrite /= pterm_TInt; iSplit => //.
-iAssert ((pterm psk → ▷ False) ∧ |==> pterm psk)%I
-  with "[tok_psk]" as "{p_psk} p_psk"; first iSplit.
-- iIntros "#p_psk'".
+wp_bind (tls_client_loop _ _).
+iApply (wp_tls_client_loop with "[] [] [] [tok_psk]")=> //.
+  iIntros "#p_psk'".
   iSpecialize ("p_psk" with "p_psk'").
   iModIntro.
   iDestruct "p_psk" as "#p_psk".
   by iApply (term_meta_meta_token with "tok_psk p_psk").
-- iMod (term_meta_set _ _ () (nroot.@"pub") with "tok_psk") as "#?" => //.
-  by iModIntro; iApply "p_psk"; eauto.
-iIntros (res1) "H1".
-case: res1 => [res1|]; wp_pures; last by eauto.
-case: res1 => [] [] [] vkey cn sn sk /=.
-iDestruct "H1" as (vk) "(-> & _ & _ & _ & _ & #sessII & H1)".
-wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
+iIntros "!> %res H1".
+case: res => [sk|]; wp_pures; last by eauto.
 wp_bind (recv _); iApply wp_recv => //.
 iIntros (m) "#p_m"; wp_let.
-iDestruct "H1" as "[[_ contra]|[_ #H1]]".
-  iDestruct "p_psk" as "[p_psk _]".
-  by iDestruct ("p_psk" with "contra") as ">[]".
 wp_bind (eq_term _ _); iApply wp_eq_term.
 case: bool_decide_reflect => [->|?]; last by wp_pures; eauto.
 by iDestruct ("H1" with "p_m") as ">[]".
