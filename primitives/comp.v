@@ -229,10 +229,12 @@ iIntros "post"; wp_rec; wp_pures; try by iApply "post".
   iApply twp_eq_pre_term; rewrite decide_eq_op.
   case: eqP=> [->|neq]; wp_pures; last by iApply IHt1.
   rewrite -!repr_list_val -val_of_pre_term_eq; iApply twp_leq_list => //.
-  + move=> pt1 pt2 Ψ'; iIntros "post".
-    by iApply twp_eq_pre_term; rewrite decide_eq_op.
+  + move=> pt1 pt2 Ψ'; iIntros "_ post".
+    by iApply twp_eq_pre_term; rewrite decide_eq_op; iApply "post".
   + move/foldr_in in IHts1.
-    by move=> ????; rewrite /= val_of_pre_term_eq; iApply IHts1.
+    move=> ????; iIntros "_ post".
+    by rewrite /= val_of_pre_term_eq; iApply IHts1 => //; iApply "post".
+  + by iIntros "_".
 Qed.
 
 Lemma twp_leq_term E t1 t2 Ψ :
@@ -255,8 +257,9 @@ case/andP: {-}(wf) => wf_pts sorted_pts.
 wp_bind (insert_sorted _ _ _).
 rewrite -val_of_term_eq -[val_of_term t2]val_of_pre_term_unfold.
 iApply (@twp_insert_sorted _ PreTerm.pre_term_orderType) => //.
-  by move=> * /=; iApply twp_leq_pre_term.
-wp_pures.
+  move=> * /=; iIntros "_ post".
+  by iApply twp_leq_pre_term; iApply "post".
+iIntros "_"; wp_pures.
 rewrite -val_of_pre_term_unfold /Spec.texp /= unfold_TExp /=.
 rewrite val_of_pre_term_eq /= -val_of_pre_term_eq val_of_pre_term_unfold.
 rewrite -repr_list_val -[ @List.map ]/@map -map_comp map_id_in //.

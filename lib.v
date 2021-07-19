@@ -660,21 +660,22 @@ Context `{!Repr A, !heapG Σ}.
 Import Order Order.POrderTheory Order.TotalTheory.
 Implicit Types (x y z : A) (s : seqlexi_with d A).
 
-Lemma twp_insert_sorted (f : val) (x : A) (l : list A) E (Φ : val → iProp Σ) :
+Lemma twp_insert_sorted (f : val) (x : A) (l : list A) E :
   is_true (sorted le l) →
-  (∀ (y z : A) Ψ,
-    Ψ #(le y z) -∗
-    WP f (repr y) (repr z) @ E [{ Ψ }]) →
-  Φ (repr (sort le (x :: l))) -∗
-  WP insert_sorted f (repr x) (repr l) @ E [{ Φ }].
+  (∀ (y z : A),
+      [[{ True }]] f (repr y) (repr z) @ E [[{ RET #(le y z); True }]]) →
+  [[{ True }]]
+    insert_sorted f (repr x) (repr l) @ E
+  [[{ RET (repr (sort le (x :: l))); True }]].
 Proof.
-rewrite repr_list_eq => sorted_l wp_f.
+rewrite repr_list_eq => sorted_l wp_f Φ; iIntros "_ post".
+iSpecialize ("post" with "[//]"); iStopProof.
 elim: l sorted_l Φ => //= [|y l IH] path_l Φ;
 iIntros "post"; wp_rec; wp_pures => //.
 move/(_ (path_sorted path_l)) in IH.
-wp_bind (f _ _); iApply wp_f.
+wp_bind (f _ _); iApply wp_f => //; iIntros "_".
 have [le_xy|le_yx] := boolP (x <= y)%O; wp_pures.
-  by rewrite sort_le_id //= le_xy.
+  by rewrite sort_le_id //= ?le_xy.
 move: le_yx; rewrite -ltNge => /ltW le_yx.
 wp_bind (insert_sorted _ _ _); iApply IH.
 suff -> : sort le [:: x, y & l] = y :: sort le (x :: l) by wp_pures.
@@ -686,25 +687,30 @@ rewrite path_min_sorted ?sort_le_sorted // all_sort /= le_yx /=.
 apply: order_path_min => //; apply: le_trans.
 Qed.
 
-Lemma twp_leq_list (feq : val) (fle : val) s1 s2 E (Φ : val → iProp Σ) :
-  (∀ x1 x2 Ψ,
-      Ψ #(eqtype.eq_op x1 x2) -∗
-      WP feq (repr x1) (repr x2) @ E [{ Ψ }]) →
-  (∀ x1 x2 Ψ,
+Lemma twp_leq_list (feq : val) (fle : val) s1 s2 E :
+  (∀ x1 x2,
+      [[{ True }]]
+        feq (repr x1) (repr x2) @ E
+      [[{ RET #(eqtype.eq_op x1 x2); True }]]) →
+  (∀ x1 x2,
       is_true (x1 \in s1) →
-      Ψ #(le x1 x2) -∗
-      WP fle (repr x1) (repr x2) @ E [{ Ψ }]) →
-  Φ #(le s1 s2) -∗
-  WP leq_list feq fle (repr s1) (repr s2) @ E [{ Φ }].
+      [[{ True }]]
+        fle (repr x1) (repr x2) @ E
+      [[{ RET #(le x1 x2); True }]]) →
+  [[{ True }]]
+    leq_list feq fle (repr s1) (repr s2) @ E
+  [[{ RET #(le s1 s2); True }]].
 Proof.
-move=> feqP.
-rewrite /= repr_list_eq.
+move=> feqP fleqP Φ; iIntros "_ post".
+iSpecialize ("post" with "[//]"); iStopProof.
+move: fleqP; rewrite /= repr_list_eq.
 elim: s1 s2 => [|x1 s1 IH] [|x2 s2] fleP; iIntros "HΦ"; wp_rec; wp_pures => //.
-rewrite lexi_cons; wp_bind (feq _ _); iApply feqP.
+rewrite lexi_cons; wp_bind (feq _ _); iApply feqP => //; iIntros "_".
 case: (ltgtP x1 x2) => [l_x1x2|l_x2x1|<-] /=; wp_pures.
-- by iApply fleP; rewrite ?inE ?eqtype.eqxx // ltW.
-- by iApply fleP; rewrite ?inE ?eqtype.eqxx // leNgt l_x2x1.
-- by iApply IH => // x1' ?? x1'_in; iApply fleP; rewrite inE x1'_in orbT.
+- by iApply fleP; rewrite ?inE ?eqtype.eqxx // ltW //; iIntros "_".
+- by iApply fleP; rewrite ?inE ?eqtype.eqxx // leNgt l_x2x1 //; iIntros "_".
+- iApply IH => // x1' ? x1'_in ?; iIntros "_ post".
+  by iApply fleP; rewrite // inE x1'_in orbT.
 Qed.
 
 End Ordered.
