@@ -4,12 +4,20 @@ From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap namespace_map.
 From iris.base_logic.lib Require Import invariants auth saved_prop.
 From iris.heap_lang Require Import notation proofmode.
+From iris.heap_lang.lib Require Import nondet_bool.
 From cryptis Require Import lib term cryptis.
 From cryptis.primitives Require Import notations comp.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
+
+Definition nondet_int_loop : val := rec: "loop" "n" :=
+  if: nondet_bool #() then "n" else "loop" ("n" + #1).
+
+Definition nondet_int : val := λ: <>,
+  let: "n" := nondet_int_loop #0 in
+  if: nondet_bool #() then "n" else - "n".
 
 Definition send : val := λ: "c", Fst "c".
 Definition recv : val := λ: "c", Snd "c" #().
@@ -112,6 +120,29 @@ Implicit Types v : val.
 Implicit Types Φ : prodO locO termO -n> iPropO Σ.
 Implicit Types Ψ : val → iProp Σ.
 Implicit Types N : namespace.
+
+Lemma wp_nondet_int_loop Ψ (m : Z) :
+  (∀ n : Z, Ψ #n) -∗
+  WP nondet_int_loop #m {{ Ψ }}.
+Proof.
+iIntros "post"; iLöb as "IH" forall (m); wp_rec.
+wp_bind (nondet_bool _).
+iApply nondet_bool_spec => //.
+iIntros "!> %b _"; case: b; wp_if; first by iApply "post".
+by wp_pures; iApply "IH".
+Qed.
+
+Lemma wp_nondet_int Ψ :
+  (∀ n : Z, Ψ #n) -∗
+  WP nondet_int #() {{ Ψ }}.
+Proof.
+iIntros "post"; rewrite /nondet_int; wp_pures.
+wp_bind (nondet_int_loop _); iApply wp_nondet_int_loop.
+iIntros "%n"; wp_pures; wp_bind (nondet_bool _).
+iApply nondet_bool_spec => //.
+iIntros "!> %b _"; case: b; wp_if; first by iApply "post".
+by wp_pures; iApply "post".
+Qed.
 
 Definition channel c : iProp Σ :=
   ∃ (sf rf : val), ⌜c = (sf, rf)%V⌝ ∗

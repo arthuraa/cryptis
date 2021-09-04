@@ -151,6 +151,14 @@ Proof. by iIntros "?"; iLeft; iExists _; eauto. Qed.
 Lemma sum_typeIR T S v : S v -∗ sum_type T S (InjRV v).
 Proof. by iIntros "?"; iRight; iExists _; eauto. Qed.
 
+Lemma has_type_nondet_int Γ : ⊢ has_type Γ (nondet_int #()) Int.
+Proof.
+iIntros "!> %vs".
+iDestruct 1 as (Γvs) "(-> & -> & #vsP)".
+rewrite /=; iApply wp_nondet_int.
+by iIntros "%n"; iExists _.
+Qed.
+
 Lemma has_type_var Γ (x : string) τ :
   Γ !! x = Some τ →
   ⊢ has_type Γ x τ.
