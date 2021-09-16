@@ -2,7 +2,6 @@ From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
 From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl namespace_map frac.
-From iris.base_logic.lib Require Import auth.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term cryptis primitives tactics.
 From cryptis Require Import session nsl dh.

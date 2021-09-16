@@ -3,7 +3,6 @@ From mathcomp Require Import ssreflect.
 From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl namespace_map frac.
 From iris.algebra Require Import numbers.
-From iris.base_logic.lib Require Import auth.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par.
 From cryptis Require Import lib term cryptis primitives tactics.

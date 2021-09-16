@@ -2,7 +2,6 @@ From stdpp Require Import base countable gmap.
 From iris.heap_lang Require Import lang notation proofmode.
 From iris.algebra Require Import namespace_map gmap gset auth.
 From iris.base_logic Require Import gen_heap.
-From iris.base_logic.lib Require Import auth.
 From iris_string_ident Require Import ltac2_string_ident.
 From mathcomp Require ssrbool order path.
 From deriving Require deriving.
@@ -12,18 +11,6 @@ From cryptis Require Export mathcomp_compat.
 Instance dom_ne {T : ofeT} :
   NonExpansive (dom (gset loc) : gmap loc T -> gset loc).
 Proof. by move=> ??? e ?; rewrite !elem_of_dom e. Qed.
-
-Lemma auth_own_prod_3 {Σ} {A B C : ucmraT} `{!authG Σ (prodUR (prodUR A B) C)}
-  γ (a : A) (b : B) (c : C) :
-  auth_own γ (a, b, c) ⊣⊢
-  auth_own γ (a, ε, ε) ∗
-  auth_own γ (ε, b, ε) ∗
-  auth_own γ (ε, ε, c).
-Proof.
-rewrite -auth_own_op -auth_own_op.
-rewrite -!pair_op /=.
-by rewrite !(ucmra_unit_left_id, ucmra_unit_right_id).
-Qed.
 
 Lemma meta_meta_token `{Countable L, !gen_heapG L V Σ, Countable A} l (x : A) N E :
   ↑N ⊆ E →
