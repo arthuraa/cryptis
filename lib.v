@@ -79,29 +79,6 @@ Lemma namespace_map_validI Σ (A : cmra) (x : namespace_map A) :
   end.
 Proof. by uPred.unseal; case: x=> [? [?|]]. Qed.
 
-(* FIXME *)
-(*
-Global Instance auth_auth_cancelable (T : ucmra) (x : T) : Cancelable (● x).
-Proof.
-intros n [yauth yfrag] [zauth zfrag].
-rewrite auth_validN_eq /=; destruct yauth as [[yfrac yauth]|]; rewrite /=.
-  destruct 1 as [contra _].
-  apply exclusiveN_l in contra; first by destruct contra.
-  exact frac_full_exclusive. (* ??? *)
-destruct 1 as [_ (x' & ex & dec & valid)].
-destruct 1 as [eauth efrag]; simpl in *.
-rewrite !ucmra_unit_left_id in efrag *; move=> efrag.
-split=> //.
-destruct zauth as [[zfrac zauth]|]; trivial.
-rewrite ucmra_unit_right_id -Some_op -pair_op in eauth * => eauth.
-move/Some_dist_inj: eauth=> [/= eauth _].
-enough (contra : ✓ (1%Qp ⋅ zfrac)).
-  apply exclusive_l in contra; first by case: contra.
-  apply frac_full_exclusive.
-by rewrite -eauth.
-Qed.
-*)
-
 (* Double-check this does not exist *)
 Lemma singleton_inj `{!EqDecision T, !Countable T} :
   Inj eq eq (singleton : T -> gset T).
