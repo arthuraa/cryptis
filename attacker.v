@@ -232,7 +232,8 @@ iAssert (∀ v1, ⟦Arrow τ σ⟧ᵥ v1 -∗ ∀ v2, ⟦τ⟧ᵥ v2 -∗
   iApply "eP" => //.
   by do 2!iApply env_den_insert => //.
 wp_pures.
-iLöb as "IH"; iIntros "!> %v1 #v1P"; wp_pures.
+iLöb as "IH"; iIntros "!> %v1 !> #v1P"; wp_pures.
+iMod "IH" as "#IH".
 rewrite /= -{4}evs' binder_delete_commute  -subst_map_binder_insert_2.
 rewrite -(binder_insert_delete2 vs) evs'.
 by iApply "eP".
@@ -480,7 +481,7 @@ wp_bind (subst_map _ e2); iApply wp_wand; first iApply "e2P" => //.
 iIntros "%v2"; iDestruct 1 as (vs') "[-> #t2P]".
 wp_bind (subst_map _ e1); iApply wp_wand; first iApply "e1P" => //.
 iIntros "%v1 #v1P"; rewrite /CONS; wp_pures.
-iExists (v1 :: vs'); iSplit; rewrite /= ?repr_list_eq //.
+iModIntro; iExists (v1 :: vs'); iSplit; rewrite /= ?repr_list_eq //.
 by iSplit => //.
 Qed.
 
@@ -580,7 +581,7 @@ Lemma has_type_case Γ e e1 e2 τ₁ τ₂ σ :
 Proof.
 iIntros "#eP #e1P #e2P !> %vs #vsP /=".
 wp_bind (subst_map _ e); iApply wp_wand; first iApply "eP" => //.
-iIntros "% #[vP|vP]"; iDestruct "vP" as (v) "[-> vP]"; wp_pures.
+iIntros "%v' #[vP|vP]"; iDestruct "vP" as (v) "[-> vP]"; wp_pures.
 - wp_bind (subst_map _ _); iApply wp_wand; first by iApply "e1P".
   by iIntros "%f #fP"; iApply "fP".
 - wp_bind (subst_map _ _); iApply wp_wand; first by iApply "e2P".
@@ -651,7 +652,7 @@ wp_pures; iApply (newlock_spec (chan_inv c) with "[cP]").
   iExists []; iSplit => //.
   by rewrite repr_list_eq.
 iIntros "!> %lk %γ #lkP"; rewrite /get_chan /put_chan; wp_pures.
-iExists _, _; do 2!iSplit => //.
+iModIntro; iExists _, _; do 2!iSplit => //.
 - iLöb as "IH".
   iIntros "!> % _"; wp_pures.
   wp_bind (acquire _); iApply acquire_spec => //.

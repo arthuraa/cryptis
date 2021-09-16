@@ -117,7 +117,7 @@ Lemma session_status_auth_valid p : ✓ session_status_auth p.
 Proof. by apply/auth_auth_valid; case: p. Qed.
 
 Lemma session_status_frag_valid p : ✓ session_status_frag p.
-Proof. by case: p. Qed.
+Proof. apply/auth_frag_valid; by case: p. Qed.
 
 Definition session_auth γ rl t (k : term) (x : X) o : iProp :=
   own γ (◯ {[t := session_status_auth o]}) ∧
@@ -142,7 +142,7 @@ case: e => <- <- <-.
 iPoseProof (own_valid_2 with "own1 own2") as "%s_valid"; iPureIntro.
 do 3!split => //.
 move: s_valid; rewrite -auth_frag_op auth_frag_valid singleton_op.
-by rewrite singleton_valid => /auth_both_valid [? _]; eauto.
+by rewrite singleton_valid => /auth_both_valid_discrete [? _]; eauto.
 Qed.
 
 Lemma session_frag_agree γ rl1 rl2 t k1 k2 x1 x2 o1 o2 :
@@ -188,7 +188,7 @@ iIntros "%sub [ctx own_f]".
 iMod (inv_acc with "ctx") as "[ctx close]" => //.
 iDestruct "ctx" as (SM) "[>own_a inv]".
 iPoseProof (own_valid_2 with "own_a own_f") as "%valid".
-move: valid; rewrite auth_both_valid; case=> a_incl _.
+move: valid; rewrite auth_both_valid_discrete; case=> a_incl _.
 iModIntro; iExists SM; iFrame; iSplit => //.
 iIntros (SM' b) "[%upd inv]".
 iCombine "own_a own_f" as "own".
@@ -213,9 +213,7 @@ Lemma session_status_auth_included p1 p2 :
   session_status_auth p1 ≼ session_status_both p2 →
   p1 = p2.
 Proof.
-rewrite auth_included /= right_id.
-case=> [] /Some_pair_included_total_2 [] _.
-by rewrite to_agree_included => e _; rewrite (leibniz_equiv _ _ e) {e}.
+rewrite auth_auth_included; exact: leibniz_equiv.
 Qed.
 
 Lemma session_auth_session_frag E γ rl t k x o :
@@ -288,7 +286,7 @@ iAssert (▷ ⌜f1 ⋅ f2 ≼ to_session_map SM⌝)%I
     with "[sessA sessB own]" as "# > %SM_s".
   iCombine "sessA sessB" as "{sessB} sess".
   iModIntro.
-  by iDestruct (own_valid_2 with "own sess") as % [? ?]%auth_both_valid.
+  by iDestruct (own_valid_2 with "own sess") as % [? ?]%auth_both_valid_discrete.
 pose proof (transitivity (cmra_included_l _ _) SM_s) as SM_sA.
 pose proof (transitivity (cmra_included_r _ _) SM_s) as SM_sB.
 case/singleton_included_l: SM_sA => [] _ [] <- /=.

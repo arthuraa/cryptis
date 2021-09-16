@@ -1114,7 +1114,7 @@ case: c_kex => [psk c_nonce|g cn x|psk g cn x] /=; wp_pures.
   rewrite e decide_True //; wp_pures.
   wp_list; wp_term_of_list.
   wp_tag; wp_pures.
-  by wp_list; wp_pures.
+  by iModIntro.
 - wp_untag_eq s_kex' e; last by wp_pures; rewrite e.
   rewrite {}e Spec.tagK /=.
   wp_list_of_term_eq l e; last by wp_pures; rewrite e.
@@ -1139,7 +1139,7 @@ case: c_kex => [psk c_nonce|g cn x|psk g cn x] /=; wp_pures.
   rewrite e decide_True //; wp_pures.
   wp_list; wp_term_of_list.
   wp_tag; wp_pures.
-  by wp_list; wp_pures.
+  by iModIntro.
 Qed.
 
 Definition wf ke : iProp :=
@@ -1177,7 +1177,7 @@ case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
 - subst psk.
   wp_bind (mknonce _); iApply (wp_mknonce _ (λ _, True)%I (λ _, True)%I).
   iIntros (a) "_ #pred_a _ token"; wp_list; wp_term_of_list.
-  wp_tag; wp_pures.
+  wp_tag; iModIntro.
   iApply ("post" $! (Psk _ _ a)) => //=.
   rewrite pterm_tag pterm_of_list /=.
   iDestruct "p_ke" as "(_ & p_cn & _)".
@@ -1188,7 +1188,7 @@ case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
   iIntros (a) "_ #pred_a _"; wp_list.
   wp_bind (mknonce _); iApply (wp_mknonce _ (λ _, True)%I (λ _, True)%I).
   iIntros (sn) "_ #p_sn _ token"; wp_list; wp_term_of_list.
-  wp_tag; wp_pures.
+  wp_tag; iModIntro.
   iApply ("post" $! (Dh g cn sn gx a)) => //=.
   rewrite !pterm_tag !pterm_of_list /=.
   iDestruct "p_ke" as "(? & ? & ? & _)".
@@ -1199,7 +1199,7 @@ case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
   iIntros (a) "_ #pred_a _"; wp_list.
   wp_bind (mknonce _); iApply (wp_mknonce _ (λ _, True)%I (λ _, True)%I).
   iIntros (sn) "_ #p_sn _ token"; wp_list; wp_term_of_list.
-  wp_tag; wp_pures.
+  wp_tag; iModIntro.
   iApply ("post" $! (PskDh _ g cn sn gx a)) => //.
   rewrite !pterm_tag !pterm_of_list /=.
   iDestruct "p_ke" as "(? & ? & ? & ? & _)".
@@ -2151,7 +2151,7 @@ iDestruct "rest" as "[[fail_vsk fail_psk]|succ]".
   wp_pures.
   iApply ("post" $! (Some (_, _, _, _))).
   rewrite e CShare.psk_meth_of.
-  by iExists _; do 6!iSplit => //; eauto.
+  by iModIntro; iExists _; do 6!iSplit => //; eauto.
 wp_bind (send _ _); iApply wp_send => //.
   iModIntro.
   iApply pterm_TEncIS; eauto; first by rewrite sterm_TKey.
@@ -2164,7 +2164,7 @@ wp_pures; wp_bind (SShare.I.cnonce _); iApply SShare.wp_cnonce.
 wp_pures.
 iApply ("post" $! (Some (_, _, _, _))) => //.
 rewrite e.
-iExists _; do 6!iSplit => //.
+iModIntro; iExists _; do 6!iSplit => //.
 case: (e_hello _ eq_refl) => ? [] ? [] e_sk [] ? [] ? [] ? ?.
 iModIntro; iRight; iSplit => //.
 iIntros (kt); rewrite -e_sk.
@@ -2246,7 +2246,7 @@ wp_bind (recv _); iApply wp_recv => //; iIntros (ack) "#p_ack"; wp_pures.
 wp_tdec_eq ack' e_ack; wp_pures; last by iApply ("post" $! None).
 rewrite {}e_ack; wp_eq_term e_ack; last by wp_pures; iApply ("post" $! None).
 rewrite {}e_ack; wp_pures; iApply ("post" $! (Some ke')).
-iSplit.
+iModIntro; iSplit.
   rewrite -(SShare.cnonce_encode N).
   iApply SShare.pterm_cnonce.
   by iApply SShare.pterm_encode => //.

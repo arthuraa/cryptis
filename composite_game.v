@@ -208,6 +208,7 @@ wp_eq_term e.
   - by rewrite sterm_TKey.
 wp_pures.
 iApply ("post" $! (Some (TKey Enc sk))).
+iModIntro.
 iIntros "#contra". iSpecialize ("s_psk'" with "contra").
 by iDestruct "s_psk'" as ">[]".
 Qed.

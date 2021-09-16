@@ -2,7 +2,7 @@ From mathcomp Require Import all_ssreflect.
 From deriving Require Import deriving.
 From cryptis Require Import mathcomp_compat lib.
 Require Import Coq.ZArith.ZArith Lia.
-From iris.heap_lang Require Import locations.
+From iris.heap_lang Require locations.
 
 Import Order.POrderTheory Order.TotalTheory.
 
@@ -43,7 +43,7 @@ Unset Elimination Schemes.
 Inductive pre_term :=
 | PTInt of Z
 | PTPair of pre_term & pre_term
-| PTNonce of loc
+| PTNonce of locations.loc
 | PTKey of key_type & pre_term
 | PTEnc of pre_term & pre_term
 | PTHash of pre_term
@@ -320,7 +320,7 @@ Unset Elimination Schemes.
 Inductive term :=
 | TInt of Z
 | TPair of term & term
-| TNonce of loc
+| TNonce of locations.loc
 | TKey of key_type & term
 | TEnc of term & term
 | THash of term

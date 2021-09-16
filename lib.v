@@ -8,7 +8,7 @@ From deriving Require deriving.
 From cryptis Require Export mathcomp_compat.
 
 (* TODO: Move to Iris? *)
-Instance dom_ne {T : ofeT} :
+Instance dom_ne {T : ofe} :
   NonExpansive (dom (gset loc) : gmap loc T -> gset loc).
 Proof. by move=> ??? e ?; rewrite !elem_of_dom e. Qed.
 
@@ -29,7 +29,7 @@ destruct (is_fresh X); by rewrite -e.
 Qed.
 
 (* I've made an MR for this. *)
-Lemma gmap_equivI `{!EqDecision K, !Countable K, A : ofeT, M : ucmraT}
+Lemma gmap_equivI `{!EqDecision K, !Countable K, A : ofe, M : ucmra}
   (m1 m2 : gmap K A) :
   m1 ≡ m2 ⊣⊢@{uPredI M} (∀ i : K, m1 !! i ≡ m2 !! i).
 Proof. by uPred.unseal. Qed.
@@ -69,7 +69,7 @@ Lemma option_equivE `{Equiv A} (ox oy : option A) :
   end.
 Proof. apply option_Forall2E. Qed.
 
-Lemma namespace_map_validI Σ (A : cmraT) (x : namespace_map A) :
+Lemma namespace_map_validI Σ (A : cmra) (x : namespace_map A) :
   ✓ x ⊣⊢@{iPropI Σ}
   match namespace_map_token_proj x with
   | CoPset E =>
@@ -79,8 +79,9 @@ Lemma namespace_map_validI Σ (A : cmraT) (x : namespace_map A) :
   end.
 Proof. by uPred.unseal; case: x=> [? [?|]]. Qed.
 
-
-Global Instance auth_auth_cancelable (T : ucmraT) (x : T) : Cancelable (● x).
+(* FIXME *)
+(*
+Global Instance auth_auth_cancelable (T : ucmra) (x : T) : Cancelable (● x).
 Proof.
 intros n [yauth yfrag] [zauth zfrag].
 rewrite auth_validN_eq /=; destruct yauth as [[yfrac yauth]|]; rewrite /=.
@@ -99,6 +100,7 @@ enough (contra : ✓ (1%Qp ⋅ zfrac)).
   apply frac_full_exclusive.
 by rewrite -eauth.
 Qed.
+*)
 
 (* Double-check this does not exist *)
 Lemma singleton_inj `{!EqDecision T, !Countable T} :
@@ -468,8 +470,7 @@ Lemma twp_nil E Ψ :
   Ψ (repr (@nil A)) -∗
   WP []%V @ E [{ Ψ }].
 Proof.
-rewrite /NILV /= repr_list_eq; iIntros "?"; wp_pures.
-by iApply twp_value. (* FIXME *)
+by rewrite /NILV /= repr_list_eq; iIntros "?"; wp_pures.
 Qed.
 
 Lemma wp_nil E Ψ :

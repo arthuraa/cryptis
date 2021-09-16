@@ -260,7 +260,7 @@ wp_pures; wp_bind (send _ _); iApply wp_send; eauto.
 iClear "Hm1"; wp_pures; wp_bind (recv _); iApply wp_recv => //.
 iIntros (m2) "#Hm2"; wp_tdec m2; last protocol_failure.
 wp_list_of_term m2; last protocol_failure.
-wp_list_match => [nA' nB pkB' {m2} ->|_]; wp_finish; last protocol_failure.
+wp_list_match => [nA' nB pkB' {m2} ->|_]; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst nA'.
 wp_eq_term e; last protocol_failure; subst pkB'.
 wp_tenc.
@@ -272,7 +272,7 @@ wp_pures; iDestruct "Hm2" as "[fail|sessB]".
     iApply pterm_TEncIP => //.
     by rewrite pterm_tag; iApply "p_nB".
   wp_pures; iApply ("Hpost" $! (Some nB)); eauto.
-  by iSplit => //; iFrame; eauto.
+  iModIntro; by iSplit => //; iFrame; eauto.
 iMod (session_begin _ γ Init _ _ (kA, kB)
         with "[] [HP] [unreg]") as "[#sessA close]" => //.
 - by iApply nsl_ctx_session_ctx.
@@ -281,7 +281,7 @@ iMod ("close" with "sessB") as "inv_resp" => //=.
 wp_bind (send _ _); iApply wp_send => //.
   by iApply (pterm_msg3I with "[] [] [] [] [] [] sessB sessA"); eauto.
 wp_pures; iApply ("Hpost" $! (Some nB)); eauto.
-by iSplit => //; iFrame; eauto.
+iModIntro; by iSplit => //; iFrame; eauto.
 Qed.
 
 Lemma wp_nsl_resp c kB E Ψ nB :
@@ -313,7 +313,7 @@ rewrite /nsl_resp; wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m1) "#Hm1".
 wp_tdec m1; last protocol_failure.
 wp_list_of_term m1; last protocol_failure.
-wp_list_match => [nA pkA {m1} ->|_]; wp_finish; last protocol_failure.
+wp_list_match => [nA pkA {m1} ->|_]; last protocol_failure.
 wp_is_key_eq kt kA et; last protocol_failure; subst pkA.
 wp_pures.
 case: (bool_decide_reflect (_ = repr_key_type Enc)); last protocol_failure.
@@ -341,7 +341,7 @@ wp_eq_term e; last protocol_failure; subst m3.
 iPoseProof (pterm_msg3E with "[] sessB p_nB []") as "[pub|sec]" => //.
   iSpecialize ("p_nB" with "pub").
   wp_pures. iApply ("Hpost" $! (Some (TKey Enc kA, nA))).
-  iExists kA; do 4!iSplit => //.
+  iModIntro; iExists kA; do 4!iSplit => //.
     iModIntro; iSplit; iIntros "#?" => //.
     iDestruct "Hm1" as "[?|#Hm1]"; eauto.
     by iApply "Hm1".
@@ -351,7 +351,7 @@ wp_if.
 iMod ("close" with "sessA") as "inv".
 wp_pures.
 iApply ("Hpost" $! (Some (TKey Enc kA, nA))).
-iExists kA; do 4!iSplit => //; eauto.
+iExists kA; iModIntro; do 4!iSplit => //; eauto.
 by iFrame; eauto.
 Qed.
 

@@ -33,7 +33,7 @@ Class cryptisPreG Σ := CryptisPreG {
   cryptis_enc_preG :> savedPredG Σ (term * term);
 }.
 
-Global Instance subG_cryptisPreG : subG cryptisΣ Σ → cryptisPreG Σ.
+Global Instance subG_cryptisPreG Σ : subG cryptisΣ Σ → cryptisPreG Σ.
 Proof. solve_inG. Qed.
 
 Context (Σ : gFunctors).
@@ -92,7 +92,7 @@ iDestruct 1 as (γm1) "[#meta1 #own1]".
 iDestruct 1 as (γm2) "[#meta2 #own2]".
 iPoseProof (own_valid_2 with "meta1 meta2") as "%valid".
 move: valid; rewrite -namespace_map_data_op namespace_map_data_valid.
-move=> /agree_op_invL' ->.
+move=> /to_agree_op_inv_L ->.
 by iApply (saved_pred_agree _ _ _ (k, t) with "own1 own2").
 Qed.
 
@@ -152,7 +152,7 @@ iDestruct 1 as (γm1) "[#meta1 #own1]".
 iDestruct 1 as (γm2) "[#meta2 #own2]".
 iPoseProof (own_valid_2 with "meta1 meta2") as "%valid".
 move: valid; rewrite -namespace_map_data_op namespace_map_data_valid.
-move=> /agree_op_invL' ->.
+move=> /to_agree_op_inv_L ->.
 by iApply (saved_pred_agree _ _ _ (kt, t) with "own1 own2").
 Qed.
 
@@ -212,7 +212,7 @@ iDestruct 1 as (γm1) "[#meta1 #own1]".
 iDestruct 1 as (γm2) "[#meta2 #own2]".
 iPoseProof (own_valid_2 with "meta1 meta2") as "%valid".
 move: valid; rewrite -namespace_map_data_op namespace_map_data_valid.
-move=> /agree_op_invL' ->.
+move=> /to_agree_op_inv_L ->.
 by iApply (saved_pred_agree _ _ _ t with "own1 own2").
 Qed.
 

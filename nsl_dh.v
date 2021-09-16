@@ -139,13 +139,13 @@ iIntros (onB) "pub"; case: onB=> [nB|]; last by protocol_failure.
 iDestruct "pub" as "[#s_nB [init [#fail | [resp #succ]]]]".
   wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
   iApply ("Hpost" $! (Some (Spec.texp nB a))).
-  iExists _, _; iSplit; eauto.
+  iModIntro; iExists _, _; iSplit; eauto.
   iSplit; first by iApply sterm_texp => //.
   iFrame; by eauto.
 iDestruct "succ" as (b) "(-> & #succ)".
 wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
 iApply ("Hpost" $! (Some (Spec.texp (TExp g [b]) a))).
-iExists _, _; iSplit => //.
+iModIntro; iExists _, _; iSplit => //.
 iSplit; first by iApply sterm_texp => //.
 iFrame.
 iRight; iExists b.
@@ -207,7 +207,7 @@ iIntros ([[pkA nA]|]) "resp"; last by protocol_failure.
 iDestruct "resp" as (kA) "(-> & #p_e_kA & #s_nA & #p_nA & inv)".
 wp_pures; wp_bind (texp _ _); iApply wp_texp; wp_pures.
 iApply ("Hpost" $! (Some (TKey Enc kA, Spec.texp nA b))).
-iExists _, _, _; do 4!iSplit => //; eauto.
+iModIntro; iExists _, _, _; do 4!iSplit => //; eauto.
   by iApply sterm_texp.
 iDestruct "inv" as "[? inv]"; iFrame.
 iDestruct "inv" as "[inv|[resp inv]]"; eauto.

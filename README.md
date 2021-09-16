@@ -3,8 +3,8 @@
 Cryptis is known to compile with the following dependencies in the OPAM Coq
 repository:
 
-- Coq 8.12
-- coq-iris v3.3
+- Coq 8.13
+- coq-iris v3.4
 - coq-mathcomp-ssreflect v1.12
 - coq-deriving v0.1.0
 

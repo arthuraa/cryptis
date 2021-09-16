@@ -133,7 +133,7 @@ wp_rec; wp_pures=> //.
   iIntros (?) "->"; case: bool_decide_reflect=> e1; wp_pures; last first.
     iPureIntro; rewrite bool_decide_false //; congruence.
   iApply twp_wand; first iApply IH2.
-  iIntros (?) "->"; case: bool_decide_reflect=> e2; wp_pures; last first.
+  iIntros (?) "->"; case: bool_decide_reflect=> e2; last first.
     rewrite bool_decide_false //; congruence.
   iPureIntro; congr (# (LitBool _)).
   by rewrite bool_decide_true //; congruence.

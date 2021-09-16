@@ -181,7 +181,7 @@ wp_pures; wp_bind (send _ _); iApply wp_send => //.
 wp_pures; wp_bind (recv _); iApply wp_recv => //.
 iIntros (m2) "#Hm2"; wp_tdec m2; last protocol_failure.
 wp_list_of_term m2; last protocol_failure.
-wp_list_match => [nA' nB pkB' {m2} ->|_]; wp_finish; last protocol_failure.
+wp_list_match => [nA' nB pkB' {m2} ->|_]; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst nA'.
 wp_eq_term e; last protocol_failure; subst pkB'.
 iPoseProof (pterm_msg2E with "[//] d_kB Hm2")
@@ -231,7 +231,7 @@ iPoseProof "ctx" as "(? & ? & ?)".
 rewrite /cr_resp; wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m1) "#Hm1".
 wp_list_of_term m1; last protocol_failure.
-wp_list_match => [nA pkA {m1} ->|_]; wp_finish; last protocol_failure.
+wp_list_match => [nA pkA {m1} ->|_]; last protocol_failure.
 rewrite pterm_of_list /=.
 iDestruct "Hm1" as "(HnA & HpkA & _)".
 wp_is_key_eq kt kA et; last protocol_failure; subst pkA.
@@ -259,7 +259,7 @@ wp_tenc; wp_pures; wp_bind (send _ _); iApply wp_send => //.
 wp_pures; wp_bind (recv _); iApply wp_recv => //; iIntros (m3) "#Hm3".
 wp_tdec m3; last protocol_failure.
 wp_list_of_term m3; last protocol_failure.
-wp_list_match => [nA' nB' pkB' {m3} ->|_]; wp_finish; last protocol_failure.
+wp_list_match => [nA' nB' pkB' {m3} ->|_]; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst nA'.
 wp_eq_term e; last protocol_failure; subst nB'.
 wp_eq_term e; last protocol_failure; subst pkB'.
@@ -270,7 +270,7 @@ iAssert (|={E}=> ▷ (pterm (TKey Enc kA) ∨ P Init nA nB kA kB))%I
   iDestruct "Hm3" as "[Hm3 | Hm3]"; eauto.
   iMod ("close" with "Hm3") as "close". by eauto.
 wp_pures; iApply ("Hpost" $! (Some (_, _, _))).
-by iExists _; do ![iSplit=> //].
+by iModIntro; iExists _; do ![iSplit=> //].
 Qed.
 
 End CR.

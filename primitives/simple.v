@@ -151,7 +151,7 @@ Definition channel c : iProp Σ :=
     □ (∀ E Ψ, ⌜↑cryptisN ⊆ E⌝ -∗ (∀ t, pterm t -∗ Ψ t) -∗
               WP rf #() @ E {{ Ψ }}).
 
-Global Instance channel_persistent v : Persistent (channel c).
+Global Instance channel_persistent c : Persistent (channel c).
 Proof. apply _. Qed.
 
 Lemma wp_send E c t Ψ :
@@ -238,7 +238,7 @@ rewrite /= [in repr_list ts]repr_list_eq Spec.of_list_eq.
 elim: ts Ψ => [|t ts IH] Ψ /=; iIntros "post"; wp_rec; wp_pures.
   by rewrite val_of_term_eq.
 wp_bind (term_of_list _); iApply IH; wp_pures.
-by iApply twp_tuple; wp_pures.
+by iApply twp_tuple.
 Qed.
 
 Lemma wp_term_of_list E ts Ψ :

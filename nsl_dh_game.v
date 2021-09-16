@@ -109,7 +109,7 @@ iApply (wp_par (λ v, ∃ a : option term, ⌜v = repr a⌝ ∗ _)%I
     iMod (term_meta_set _ _ (ga, gb, Spec.tag (nroot.@"key") kI, kR')
                         (nroot.@"nsl") with "init"); first by solve_ndisj.
     by iModIntro; iSplit; iExists _; iSplit; eauto.
-  + iIntros (?) "H"; iExists a; iSplit; first done.
+  + iIntros (a) "H"; iExists a; iSplit; first done.
     iApply "H".
 - iApply (wp_nsl_dh_resp P P with "[//] [//] [] [] [resp]") => //.
   + eauto.
@@ -121,7 +121,7 @@ iApply (wp_par (λ v, ∃ a : option term, ⌜v = repr a⌝ ∗ _)%I
     iMod (term_meta_set _ _ (ga, gb, kI', Spec.tag (nroot.@"key") kR)
                         (nroot.@"nsl") with "resp"); first by solve_ndisj.
     by iModIntro; iSplit; iExists _; iSplit; eauto.
-  + iIntros (?) "H"; iExists a; iSplit; first done.
+  + iIntros (a) "H"; iExists a; iSplit; first done.
     iApply "H".
 iIntros (v1 v2) "[H1 H2]".
 iDestruct "H1" as (a) "[-> H1]".
