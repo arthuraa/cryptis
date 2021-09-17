@@ -255,7 +255,7 @@ Lemma untag_eq : untag = untag_def. Proof. exact: seal_eq. Qed.
 Lemma tagK N t : untag N (tag N t) = Some t.
 Proof.
 rewrite untag_eq tag_eq /untag_def /tag_def /=.
-by rewrite decide_left.
+by rewrite decide_True_pi.
 Qed.
 
 Instance tag_inj : Inj2 (=) (=) (=) tag.

@@ -1,18 +1,32 @@
 From stdpp Require Import base countable gmap.
 From iris.heap_lang Require Import lang notation proofmode.
-From iris.algebra Require Import namespace_map gmap gset auth.
+From iris.algebra Require Import gmap gset auth reservation_map.
 From iris.base_logic Require Import gen_heap.
-From iris_string_ident Require Import ltac2_string_ident.
 From mathcomp Require ssrbool order path.
 From deriving Require deriving.
 From cryptis Require Export mathcomp_compat.
+
+Definition namespace_map_data {A : cmra} (N : namespace) (a : A) :=
+  reservation_map_data (positives_flatten N) a.
+
+Lemma namespace_map_alloc_update {A : cmra} E (N : namespace) (a : A) :
+  ↑N ⊆ E →
+  ✓ a →
+  reservation_map_token E ~~> namespace_map_data N a.
+Proof.
+move=> sub valid; apply: reservation_map_alloc => //.
+assert (H : positives_flatten N ∈ (↑N : coPset)).
+{ rewrite nclose_eq. apply elem_coPset_suffixes.
+  exists 1%positive. by rewrite left_id_L. }
+set_solver.
+Qed.
 
 (* TODO: Move to Iris? *)
 Instance dom_ne {T : ofe} :
   NonExpansive (dom (gset loc) : gmap loc T -> gset loc).
 Proof. by move=> ??? e ?; rewrite !elem_of_dom e. Qed.
 
-Lemma meta_meta_token `{Countable L, !gen_heapG L V Σ, Countable A} l (x : A) N E :
+Lemma meta_meta_token `{Countable L, !gen_heapGS L V Σ, Countable A} l (x : A) N E :
   ↑N ⊆ E →
   meta_token l E -∗
   meta l N x -∗
@@ -68,16 +82,6 @@ Lemma option_equivE `{Equiv A} (ox oy : option A) :
   | _, _ => False
   end.
 Proof. apply option_Forall2E. Qed.
-
-Lemma namespace_map_validI Σ (A : cmra) (x : namespace_map A) :
-  ✓ x ⊣⊢@{iPropI Σ}
-  match namespace_map_token_proj x with
-  | CoPset E =>
-    ✓ namespace_map_data_proj x
-    ∧ ⌜∀ i, namespace_map_data_proj x !! i = None ∨ i ∉ E⌝
-  | CoPsetBot => False
-  end.
-Proof. by uPred.unseal; case: x=> [? [?|]]. Qed.
 
 (* Double-check this does not exist *)
 Lemma singleton_inj `{!EqDecision T, !Countable T} :
@@ -326,6 +330,7 @@ Fixpoint free_vars e : gset string :=
   | Load e => free_vars e
   | Store e1 e2 => free_vars e1 ∪ free_vars e2
   | CmpXchg e1 e2 e3 => free_vars e1 ∪ free_vars e2 ∪ free_vars e3
+  | Xchg e1 e2 => free_vars e1 ∪ free_vars e2
   | FAA e1 e2 => free_vars e1 ∪ free_vars e2
   | NewProph => ∅
   | Resolve e1 e2 e3 => free_vars e1 ∪ free_vars e2 ∪ free_vars e3
@@ -425,7 +430,7 @@ Qed.
 
 Section ListLemmas.
 
-Context `{!Repr A, !heapG Σ}.
+Context `{!Repr A, !heapGS Σ}.
 
 Lemma twp_get_list E (l : list A) (n : nat) Ψ :
   Ψ (repr (l !! n)) -∗
@@ -445,14 +450,14 @@ Proof. by iIntros "?"; iApply twp_wp; iApply twp_get_list. Qed.
 
 Lemma twp_nil E Ψ :
   Ψ (repr (@nil A)) -∗
-  WP []%V @ E [{ Ψ }].
+  WP Val []%V @ E [{ Ψ }].
 Proof.
 by rewrite /NILV /= repr_list_eq; iIntros "?"; wp_pures.
 Qed.
 
 Lemma wp_nil E Ψ :
   Ψ (repr (@nil A)) -∗
-  WP []%V @ E {{ Ψ }}.
+  WP Val []%V @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_nil. Qed.
 
 Lemma twp_cons E x xs Ψ :
@@ -571,7 +576,7 @@ End ListLemmas.
 
 Section Loc.
 
-Context `{!heapG Σ}.
+Context `{!heapGS Σ}.
 Import ssreflect.order deriving.instances.
 
 Lemma twp_leq_loc_loop E (l1 l2 : loc) (n k : nat) Ψ :
@@ -621,7 +626,7 @@ Section Ordered.
 
 Import ssrbool seq ssreflect.order path deriving.instances.
 Variable (d : unit) (A : orderType d).
-Context `{!Repr A, !heapG Σ}.
+Context `{!Repr A, !heapGS Σ}.
 Import Order Order.POrderTheory Order.TotalTheory.
 Implicit Types (x y z : A) (s : seqlexi_with d A).
 
@@ -808,7 +813,7 @@ Qed.
 
 Lemma binder_insert_delete {A} (m : gmap string A) (i : binder) (x : A) :
   binder_insert i x (binder_delete i m) = binder_insert i x m.
-Proof. case: i => //= i; exact: insert_delete. Qed.
+Proof. case: i => //= i; exact: insert_delete_insert. Qed.
 
 Lemma binder_insert_delete2 {A} (m : gmap string A) (i j : binder) (x y : A) :
   binder_insert i x (binder_insert j y (binder_delete i (binder_delete j m))) =
@@ -816,11 +821,11 @@ Lemma binder_insert_delete2 {A} (m : gmap string A) (i j : binder) (x y : A) :
 Proof.
 rewrite -(binder_insert_delete m j y).
 case: i j => [|i] [|j] //=.
-- by rewrite insert_delete.
-- rewrite delete_commute !insert_delete.
+- by rewrite insert_delete_insert.
+- rewrite delete_commute !insert_delete_insert.
   destruct (decide (i = j)) as [->|i_j].
-    by rewrite insert_delete.
-  by rewrite insert_commute // insert_delete insert_commute //.
+    by rewrite insert_delete_insert.
+  by rewrite insert_commute // insert_delete_insert insert_commute //.
 Qed.
 
 Lemma binder_delete_commute {A} (m : gmap string A) i j :

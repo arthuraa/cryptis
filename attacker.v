@@ -1,7 +1,7 @@
 From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
 From stdpp Require Import namespaces.
-From iris.algebra Require Import agree auth csum gset gmap excl namespace_map frac.
+From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.heap_lang Require Import notation proofmode metatheory.
 From iris.heap_lang.lib Require Import lock ticket_lock.
 From cryptis Require Import lib term cryptis primitives tactics.
@@ -12,7 +12,7 @@ Unset Printing Implicit Defensive.
 
 Section Attacker.
 
-Context `{!cryptisG Σ, !heapG Σ, !tlockG Σ}.
+Context `{!cryptisG Σ, !heapGS Σ, !tlockG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (v : val) (t : term) (e : expr).
@@ -655,7 +655,7 @@ iIntros "!> %lk %γ #lkP"; rewrite /get_chan /put_chan; wp_pures.
 iModIntro; iExists _, _; do 2!iSplit => //.
 - iLöb as "IH".
   iIntros "!> % _"; wp_pures.
-  wp_bind (acquire _); iApply acquire_spec => //.
+  wp_bind (acquire _); iApply (acquire_spec with "lkP") => //.
   iIntros "!> [locked inv]".
   iDestruct "inv" as (ts) "[c_ts #tsP]".
   wp_pures; wp_load; case: ts => [|t ts].

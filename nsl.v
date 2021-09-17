@@ -1,6 +1,6 @@
 From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
-From iris.algebra Require Import agree auth csum gset gmap excl namespace_map frac.
+From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term cryptis primitives tactics session.
 
@@ -10,7 +10,7 @@ Unset Printing Implicit Defensive.
 
 Section NSL.
 
-Context `{!heapG Σ, !cryptisG Σ}.
+Context `{!heapGS Σ, !cryptisG Σ}.
 Context `{TermMeta Σ term_meta term_meta_token}.
 Context `{!sessionG Σ}.
 Notation iProp := (iProp Σ).

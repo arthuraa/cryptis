@@ -10,7 +10,7 @@ Import env_notations.
 
 Section Proofs.
 
-Context `{!heapG Σ, !cryptisG Σ}.
+Context `{!heapGS Σ, !cryptisG Σ}.
 
 Implicit Types E : coPset.
 Implicit Types l : loc.
@@ -21,7 +21,7 @@ Implicit Types Ψ : val → iProp Σ.
 
 Lemma tac_wp_cons `{!Repr A} Γ E K (x : A) (xs : list A) Ψ :
   envs_entails Γ (WP fill K (Val (repr (x :: xs)%list)) @ E {{ Ψ }}) →
-  envs_entails Γ (WP fill K (repr x :: repr xs) @ E {{ Ψ }}).
+  envs_entails Γ (WP fill K (repr x :: repr xs) : expr @ E {{ Ψ }}).
 Proof.
 rewrite envs_entails_eq => post.
 by rewrite -wp_bind -wp_cons.

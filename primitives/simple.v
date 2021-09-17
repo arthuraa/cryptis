@@ -1,7 +1,7 @@
 From mathcomp Require Import ssreflect.
 From mathcomp Require order.
 From stdpp Require Import gmap.
-From iris.algebra Require Import agree auth gset gmap namespace_map.
+From iris.algebra Require Import agree auth gset gmap.
 From iris.base_logic.lib Require Import invariants saved_prop.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import nondet_bool.
@@ -110,7 +110,7 @@ Definition to_dk : val := λ: "t",
 
 Section Proofs.
 
-Context `{!heapG Σ, !cryptisG Σ}.
+Context `{!heapGS Σ, !cryptisG Σ}.
 Notation nonce := loc.
 
 Implicit Types E : coPset.
@@ -276,6 +276,7 @@ Lemma twp_list `{!Repr A} (xs : list A) E Ψ :
   WP list_to_expr xs @ E [{ Ψ }].
 Proof.
 elim: xs Ψ => [|x xs IH] /= Ψ; iIntros "post".
+Set Printing All.
   by iApply (@twp_nil A _).
 wp_bind (list_to_expr _); iApply IH.
 by iApply (@twp_cons A).
@@ -315,7 +316,7 @@ wp_bind (to_int _); iApply twp_to_int.
 case: t1; try by [move=> *; wp_pures; iApply "post"].
 move=> n'; wp_pures.
 case: bool_decide_reflect => [[->]|ne]; wp_pures.
-  by rewrite decide_left.
+  by rewrite decide_True_pi.
 case: n' ne; try by move=> *; iApply "post".
 move=> n' ne; case: decide => e; try iApply "post".
 congruence.

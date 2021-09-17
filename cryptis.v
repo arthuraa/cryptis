@@ -1,6 +1,6 @@
 From mathcomp Require Import ssreflect.
 From stdpp Require Import gmap.
-From iris.algebra Require Import agree auth gset gmap list namespace_map.
+From iris.algebra Require Import agree auth gset gmap list reservation_map.
 From iris.base_logic.lib Require Import saved_prop.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term.
@@ -43,8 +43,9 @@ Notation iPropI := (iPropI Σ).
 Notation nonce := loc.
 Implicit Types a : loc.
 Implicit Types γ : gname.
+Implicit Types N : namespace.
 
-Context `{!heapG Σ, !cryptisG Σ}.
+Context `{!heapGS Σ, !cryptisG Σ}.
 
 Definition pnonce a : iProp :=
   ∃ γ P, meta a (nroot.@"nonce") γ ∧ saved_pred_own γ P ∧ ▷ □ P (TNonce a).
@@ -70,14 +71,14 @@ Definition enc_pred N Φ : iProp :=
        saved_pred_own γ (fun '(k, t) => Φ k t).
 
 Definition enc_pred_token E :=
-  own cryptis_enc_name (namespace_map_token E).
+  own cryptis_enc_name (reservation_map_token E).
 
 Lemma enc_pred_token_difference E1 E2 :
   E1 ⊆ E2 →
   enc_pred_token E2 ⊣⊢ enc_pred_token E1 ∗ enc_pred_token (E2 ∖ E1).
 Proof.
 move=> sub; rewrite /enc_pred_token.
-by rewrite (namespace_map_token_difference E1 E2) // own_op.
+by rewrite (reservation_map_token_difference E1 E2) // own_op.
 Qed.
 
 Global Instance enc_pred_persistent N Φ : Persistent (enc_pred N Φ).
@@ -91,12 +92,12 @@ Proof.
 iDestruct 1 as (γm1) "[#meta1 #own1]".
 iDestruct 1 as (γm2) "[#meta2 #own2]".
 iPoseProof (own_valid_2 with "meta1 meta2") as "%valid".
-move: valid; rewrite -namespace_map_data_op namespace_map_data_valid.
+move: valid; rewrite -reservation_map_data_op reservation_map_data_valid.
 move=> /to_agree_op_inv_L ->.
 by iApply (saved_pred_agree _ _ _ (k, t) with "own1 own2").
 Qed.
 
-Lemma enc_pred_set E N Φ :
+Lemma enc_pred_set E (N : namespace) Φ :
   ↑N ⊆ E →
   enc_pred_token E ==∗
   enc_pred N Φ.
@@ -104,7 +105,7 @@ Proof.
 iIntros (?) "token".
 iMod (saved_pred_alloc (λ '(k, t), Φ k t)) as (γ) "own".
 iMod (own_update with "token").
-  by eapply (namespace_map_alloc_update _ _ (to_agree γ)) => //.
+  eapply (namespace_map_alloc_update _ _ (to_agree γ)) => //.
 by iModIntro; iExists γ; iSplit.
 Qed.
 
@@ -130,14 +131,14 @@ Definition key_pred N (φ : key_type → term → iProp) : iProp :=
        saved_pred_own γ (λ '(kt, t), φ kt t).
 
 Definition key_pred_token E :=
-  own cryptis_key_name (namespace_map_token E).
+  own cryptis_key_name (reservation_map_token E).
 
 Lemma key_pred_token_difference E1 E2 :
   E1 ⊆ E2 →
   key_pred_token E2 ⊣⊢ key_pred_token E1 ∗ key_pred_token (E2 ∖ E1).
 Proof.
 move=> sub; rewrite /key_pred_token.
-by rewrite (namespace_map_token_difference E1 E2) // own_op.
+by rewrite (reservation_map_token_difference E1 E2) // own_op.
 Qed.
 
 Global Instance key_pred_persistent N φ : Persistent (key_pred N φ).
@@ -151,7 +152,7 @@ Proof.
 iDestruct 1 as (γm1) "[#meta1 #own1]".
 iDestruct 1 as (γm2) "[#meta2 #own2]".
 iPoseProof (own_valid_2 with "meta1 meta2") as "%valid".
-move: valid; rewrite -namespace_map_data_op namespace_map_data_valid.
+move: valid; rewrite -reservation_map_data_op reservation_map_data_valid.
 move=> /to_agree_op_inv_L ->.
 by iApply (saved_pred_agree _ _ _ (kt, t) with "own1 own2").
 Qed.
@@ -190,14 +191,14 @@ Definition hash_pred N (P : term → iProp) : iProp :=
        saved_pred_own γ P.
 
 Definition hash_pred_token E :=
-  own cryptis_hash_name (namespace_map_token E).
+  own cryptis_hash_name (reservation_map_token E).
 
 Lemma hash_pred_token_difference E1 E2 :
   E1 ⊆ E2 →
   hash_pred_token E2 ⊣⊢ hash_pred_token E1 ∗ hash_pred_token (E2 ∖ E1).
 Proof.
 move=> sub; rewrite /hash_pred_token.
-by rewrite (namespace_map_token_difference E1 E2) // own_op.
+by rewrite (reservation_map_token_difference E1 E2) // own_op.
 Qed.
 
 Global Instance hash_pred_persistent N P : Persistent (hash_pred N P).
@@ -211,7 +212,7 @@ Proof.
 iDestruct 1 as (γm1) "[#meta1 #own1]".
 iDestruct 1 as (γm2) "[#meta2 #own2]".
 iPoseProof (own_valid_2 with "meta1 meta2") as "%valid".
-move: valid; rewrite -namespace_map_data_op namespace_map_data_valid.
+move: valid; rewrite -reservation_map_data_op reservation_map_data_valid.
 move=> /to_agree_op_inv_L ->.
 by iApply (saved_pred_agree _ _ _ t with "own1 own2").
 Qed.
@@ -579,7 +580,7 @@ apply: (anti_symm _).
     * move=> {}t -> /TExp_inj [-> e_ts] _.
       rewrite big_sepS_singleton; iRight; iSplit => //.
         by iSplit.
-      by move/Permutation_nil: e_ts => ->.
+      by rewrite [ts]Permutation_nil //.
     * move=> {}t ts1 t2 -> /TExp_inj [-> e_ts] _.
       iLeft; rewrite big_sepS_union_pers !big_sepS_singleton.
       by eauto.
@@ -623,7 +624,7 @@ rewrite pterm_TExp; apply: (anti_symm _); iIntros "#pub".
 - iDestruct "pub" as "[pub | pub]" => //.
     iDestruct "pub" as (??) "(%e & p_t1 & p_t2)".
     symmetry in e.
-    case/Permutation_singleton: e => -> ->; eauto.
+    case/Permutation_singleton_r: e => -> ->; eauto.
     rewrite pterm_TExp0; iSplit => //.
     iSplit => //; eauto.
     by iApply pterm_sterm.
@@ -841,18 +842,18 @@ End TermMeta.
 
 End Cryptis.
 
-Lemma cryptisG_alloc `{!heapG Σ} :
+Lemma cryptisG_alloc `{!heapGS Σ} :
   cryptisPreG Σ →
   ⊢ |==> ∃ (H : cryptisG Σ),
            enc_pred_token ⊤ ∗ key_pred_token ⊤ ∗ hash_pred_token ⊤.
 Proof.
 move=> ?; iStartProof.
-iMod (own_alloc (namespace_map_token ⊤)) as (γ_enc) "own_enc".
-  apply namespace_map_token_valid.
-iMod (own_alloc (namespace_map_token ⊤)) as (γ_key) "own_key".
-  apply namespace_map_token_valid.
-iMod (own_alloc (namespace_map_token ⊤)) as (γ_hash) "own_hash".
-  apply namespace_map_token_valid.
+iMod (own_alloc (reservation_map_token ⊤)) as (γ_enc) "own_enc".
+  apply reservation_map_token_valid.
+iMod (own_alloc (reservation_map_token ⊤)) as (γ_key) "own_key".
+  apply reservation_map_token_valid.
+iMod (own_alloc (reservation_map_token ⊤)) as (γ_hash) "own_hash".
+  apply reservation_map_token_valid.
 iModIntro.
 by iExists (CryptisG _ _ _ γ_enc γ_key γ_hash); iFrame.
 Qed.

@@ -5,7 +5,7 @@ file to avoid slowing down the compilation process. *)
 From mathcomp Require Import ssreflect.
 From mathcomp Require order.
 From stdpp Require Import gmap.
-From iris.algebra Require Import agree auth gset gmap namespace_map.
+From iris.algebra Require Import agree auth gset gmap.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term.
@@ -91,7 +91,7 @@ Definition texp : val := λ: "t1" "t2",
 
 Section Proofs.
 
-Context `{!heapG Σ}.
+Context `{!heapGS Σ}.
 Notation nonce := loc.
 
 Implicit Types E : coPset.

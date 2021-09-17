@@ -1,7 +1,7 @@
 From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
 From stdpp Require Import namespaces.
-From iris.algebra Require Import agree auth csum gset gmap excl namespace_map frac.
+From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import numbers.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par.
@@ -14,7 +14,7 @@ Unset Printing Implicit Defensive.
 
 Section Game.
 
-Context `{!cryptisG Σ, !heapG Σ, !spawnG Σ, !sessionG Σ}.
+Context `{!cryptisG Σ, !heapGS Σ, !spawnG Σ, !sessionG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -299,12 +299,12 @@ Definition F : gFunctors :=
   #[heapΣ; spawnΣ; cryptisΣ; sessionΣ].
 
 Lemma nsl_dh_secure (mkchan : val) σ₁ σ₂ (v : val) ts :
-  (∀ `{!heapG Σ, !cryptisG Σ},
+  (∀ `{!heapGS Σ, !cryptisG Σ},
      ⊢ {{{ True }}} mkchan #() {{{ c, RET c; channel c}}}) →
   rtc erased_step ([game mkchan], σ₁) (Val v :: ts, σ₂) →
   v = NONEV ∨ v = SOMEV #true.
 Proof.
-have ? : heapPreG F by apply _.
+have ? : heapGpreS F by apply _.
 move=> wp_mkchan.
 apply (adequate_result NotStuck _ _ (λ v _, v = NONEV ∨ v = SOMEV #true)).
 apply: heap_adequacy.
