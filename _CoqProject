@@ -16,6 +16,7 @@ primitives.v
 tactics.v
 session.v
 dh.v
+rel_channel.v
 attacker.v
 
 # Case studies
