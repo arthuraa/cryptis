@@ -22,6 +22,7 @@ set_solver.
 Qed.
 
 (* TODO: Move to Iris? *)
+#[global]
 Instance dom_ne {T : ofe} :
   NonExpansive (dom (gset loc) : gmap loc T -> gset loc).
 Proof. by move=> ??? e ?; rewrite !elem_of_dom e. Qed.
@@ -101,12 +102,15 @@ Definition flipb {T S} (b : bool) (f : T → T → S) x y :=
 Class Repr A := repr : A -> val.
 Arguments repr / .
 
+#[global]
 Instance repr_val : Repr val := λ x, x.
 Arguments repr_val / .
 
+#[global]
 Instance repr_Z : Repr Z := λ x, #x.
 Arguments repr_Z / .
 
+#[global]
 Instance repr_option `{Repr A} : Repr (option A) := λ x,
   match x with
   | Some x => SOMEV (repr x)
@@ -118,6 +122,7 @@ Definition repr_list_aux `{Repr A} :
   seal (foldr (fun x v => SOMEV (repr x, v)%V) NONEV).
   by eexists.
 Qed.
+#[global]
 Instance repr_list `{Repr A} : Repr (list A) := unseal repr_list_aux.
 Arguments repr_list {A} {_} _ : simpl never.
 
@@ -685,6 +690,7 @@ Qed.
 
 End Ordered.
 
+#[global]
 Instance repr_prod `{Repr A, Repr B} : Repr (A * B) :=
   λ p, (repr p.1, repr p.2)%V.
 Arguments repr_prod {_ _ _ _} !_.

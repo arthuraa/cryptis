@@ -21,6 +21,7 @@ Definition key_type_of_int (n : Z) :=
 
 Canonical key_typeO := leibnizO key_type.
 
+#[global]
 Instance key_type_eq_dec : EqDecision key_type.
 Proof.
 refine (
@@ -32,15 +33,19 @@ refine (
     end); congruence.
 Defined.
 
+#[global]
 Instance int_of_key_typeK : Cancel (=) key_type_of_int int_of_key_type.
 Proof. by case. Qed.
 
+#[global]
 Instance int_of_key_type_inj : Inj (=) (=) int_of_key_type.
 Proof. by apply (@cancel_inj _ _ _ key_type_of_int); apply _. Qed.
 
+#[global]
 Instance int_of_key_type_countable : Countable key_type.
 Proof. apply (inj_countable' _ _ int_of_key_typeK). Qed.
 
+#[global]
 Instance repr_key_type : Repr key_type := λ kt, #(int_of_key_type kt).
 
 Canonical termO := leibnizO term.
@@ -258,6 +263,7 @@ rewrite untag_eq tag_eq /untag_def /tag_def /=.
 by rewrite decide_True_pi.
 Qed.
 
+#[global]
 Instance tag_inj : Inj2 (=) (=) (=) tag.
 Proof.
 rewrite tag_eq /tag_def => c1 t1 c2 t2 [] e ->.
@@ -461,4 +467,5 @@ Arguments repr_term /.
 Arguments Spec.tag_def /.
 Arguments Spec.untag_def /.
 
+#[global]
 Existing Instance Spec.of_list_inj.

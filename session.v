@@ -401,5 +401,6 @@ Arguments session_begin {Σ _ _ _ _ _ _ _ _}  {N P} E γ rl tI tR.
 Arguments session_ctx {Σ _} term_meta {_ _ _ _} N P γ.
 Arguments session {Σ} term_meta {_ _ _ _} N γ _ _ _.
 
+#[global]
 Instance subG_sessionΣ {Σ} : subG sessionΣ Σ → sessionG Σ.
 Proof. solve_inG. Qed.

@@ -43,6 +43,7 @@ End Keys.
 
 End Keys.
 
+#[global]
 Existing Instance Keys.ctx_persistent.
 
 (**
@@ -110,12 +111,14 @@ case: ke => [psk|g|psk g] /=; rewrite /of_term.
   by rewrite unlock /=.
 Qed.
 
+#[global]
 Instance meth_eqdec : EqDecision t.
 Proof.
 apply: (inj_eq_dec term_of).
 by move=> ?? /(f_equal of_term); rewrite !term_of_cancel; case.
 Qed.
 
+#[global]
 Instance meth_countable : Countable t.
 Proof.
 apply (inj_countable term_of of_term).
@@ -233,6 +236,7 @@ Definition wf ke : iProp :=
   | PskDh psk g => sterm psk ∧ pterm g
   end.
 
+#[global]
 Instance Persistent_wf ke : Persistent (wf ke).
 Proof. by case: ke => *; apply _. Qed.
 
@@ -258,6 +262,7 @@ End Proofs.
 End Meth.
 
 Coercion Meth.term_of : Meth.t >-> term.
+#[global]
 Existing Instance Meth.Persistent_wf.
 
 (**
@@ -609,6 +614,7 @@ Definition wf ke : iProp :=
     pterm g ∧ pterm cn ∧ dh_seed (λ _, True)%I x
   end.
 
+#[global]
 Instance Persistent_wf ke : Persistent (wf ke).
 Proof. case: ke => *; apply _. Qed.
 
@@ -697,6 +703,7 @@ End Proofs.
 End CShare.
 
 Coercion CShare.term_of : CShare.t >-> term.
+#[global]
 Existing Instance CShare.Persistent_wf.
 
 (**
@@ -1156,6 +1163,7 @@ Definition wf ke : iProp :=
     dh_seed (λ _, True)%I y
   end.
 
+#[global]
 Instance Persistent_wf ke : Persistent (wf ke).
 Proof. case: ke => *; apply _. Qed.
 
@@ -1377,6 +1385,7 @@ End Proofs.
 End SShare.
 
 Coercion SShare.term_of : SShare.t >-> term.
+#[global]
 Existing Instance SShare.Persistent_wf.
 
 Module CParams.
@@ -1499,6 +1508,7 @@ Definition wf N cp : iProp :=
   nonce_meta (CShare.cnonce (share cp)) (N.@"binder") (other cp) ∧
   pterm (other cp).
 
+#[global]
 Instance wf_persistent N cp : Persistent (wf N cp).
 Proof. apply _. Qed.
 
@@ -1523,6 +1533,7 @@ Definition ctx N : iProp :=
   Keys.ctx N ∧
   hash_pred (N.@"binder") (binder_inv N).
 
+#[global]
 Instance ctx_persistent N : Persistent (ctx N).
 Proof. apply _. Qed.
 
@@ -1605,7 +1616,9 @@ End Proofs.
 End CParams.
 
 Coercion CParams.term_of : CParams.t >-> term.
+#[global]
 Existing Instance CParams.wf_persistent.
+#[global]
 Existing Instance CParams.ctx_persistent.
 
 Module SParams.
@@ -1857,6 +1870,7 @@ Definition wf sp : iProp :=
   pterm (TKey Dec (verif_key sp)) ∧
   pterm (other sp).
 
+#[global]
 Instance wf_persistent sp : Persistent (wf sp).
 Proof. apply _. Qed.
 

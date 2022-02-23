@@ -238,7 +238,7 @@ Lemma wp_nsl_init c kA kB (nA : term) E Ψ :
   pterm (TKey Enc kA) -∗
   pterm (TKey Enc kB) -∗
   sterm nA -∗
-  □ (pterm nA ↔ ▷ (pterm (TKey Dec kA) ∨ pterm (TKey Dec kB))) -∗
+  □ (pterm nA ↔ ▷ corruption kA kB) -∗
   (∀ nB, |==> P Init nA nB kA kB ∗ Q Init nA nB kA kB) -∗
   term_meta_token nA (↑N) -∗
   (∀ onB : option term,
