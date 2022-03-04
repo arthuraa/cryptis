@@ -8,6 +8,7 @@ mathcomp_compat.v
 lib.v
 pre_term.v
 term.v
+role.v
 cryptis.v
 primitives/notations.v
 primitives/comp.v

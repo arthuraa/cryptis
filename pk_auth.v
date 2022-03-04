@@ -2,7 +2,7 @@ From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term cryptis primitives tactics session.
+From cryptis Require Import lib term cryptis primitives tactics role.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -12,6 +12,43 @@ Section PK.
 
 Context `{!heapGS Σ, !cryptisG Σ}.
 Notation iProp := (iProp Σ).
+
+Implicit Types (t kI kR nI nR sI sR kS : term).
+
+Variable N : namespace.
+
+Definition pk_auth_init : val :=
+  λ: "c" "gen_keys" "mk_sess_key" "skI" "pkI" "pkR",
+  let: "nIsI" := "gen_keys" #() in
+  let: "nI"   := Fst "nIsI" in
+  let: "sI"   := Snd "nIsI" in
+  let: "m1"   := tenc (N.@"m1") "pkR" (term_of_list ["sI"; "pkI"]) in
+  send "c" "m1";;
+  bind: "m2"   := tdec (N.@"m2") "skI" (recv "c") in
+  bind: "m2"   := list_of_term "m2" in
+  list_match: ["sI'"; "sR"; "pkR'"] := "m2" in
+  assert: eq_term "sI'" "sI" && eq_term "pkR'" "pkR" in
+  let: "k" := "mk_sess_key" "nI" "sR" in
+  let: "m3" := tenc (N.@"m3") "pkR" "sR" in
+  send "c" "m3";;
+  SOME "k".
+
+Definition pk_auth_resp : val :=
+  λ: "c" "gen_keys" "mk_sess_key" "skR" "pkR",
+  bind: "m1" := tdec (N.@"m1") "skR" (recv "c") in
+  bind: "m1" := list_of_term "m1" in
+  list_match: ["sI"; "pkI"] := "m1" in
+  bind: "kt" := is_key "pkI" in
+  assert: "kt" = repr Enc in
+  let: "nRsR" := "gen_keys" #() in
+  let: "nR" := Fst "nRsR" in
+  let: "sR" := Snd "nRsR" in
+  let: "m2" := tenc (N.@"m2") "pkI" (term_of_list ["sI"; "sR"; "pkR"]) in
+  send "c" "m2";;
+  bind: "m3" := tdec (N.@"m3") "skR" (recv "c") in
+  assert: eq_term "m3" "sR" in
+  let: "k" := "mk_sess_key" "sI" "nR" in
+  SOME ("pkI", "k").
 
 (** We are going to use the following naming conventions:
 
@@ -28,17 +65,11 @@ Notation iProp := (iProp Σ).
 - [kS]: A session key generated from the keying material exchanged by the
   parties. *)
 
-Implicit Types (t kI kR nI nR sI sR kS : term).
-
 Definition corruption kI kR : iProp :=
   pterm (TKey Dec kI) ∨ pterm (TKey Dec kR).
 
 Global Instance corruptionC : Comm (⊣⊢) corruption.
 Proof. by move=> k k'; rewrite /corruption [(_ ∨ _)%I]comm. Qed.
-
-Variable N : namespace.
-
-(** The following predicates describe various stages of the protocol. *)
 
 (** [readable_by t k] *)
 Definition readable_by t k : iProp :=
@@ -55,39 +86,79 @@ Definition secret_of t kI kR : iProp :=
 Instance secret_of_persistent t kI kR : Persistent (secret_of t kI kR).
 Proof. apply _. Qed.
 
-(** [init_waiting kI kR nI sI] *)
-Variable init_waiting : term → term → term → term → iProp.
+Class PK := {
 
-(** [resp_accepted kI kR sI sR] *)
-Variable resp_accepted : term → term → term → term → iProp.
-Hypothesis resp_accepted_persistent :
-  ∀ kI kR sI sR, Persistent (resp_accepted kI kR sI sR).
+  (** [init_waiting kI kR nI sI] *)
+  init_waiting : term → term → term → term → iProp;
 
-Definition maybe_resp_accepted kI kR sI sR : iProp :=
-  corruption kI kR ∨ resp_accepted kI kR sI sR.
+  (** [resp_accepted kI kR sI sR] *)
+  resp_accepted : term → term → term → term → iProp;
 
-(** [resp_waiting kI kR sI nR sR] *)
-Variable resp_waiting : term → term → term → term → term → iProp.
+  resp_accepted_persistent :>
+    ∀ kI kR sI sR, Persistent (resp_accepted kI kR sI sR);
 
-(** [init_finished sR] *)
-Variable init_finished : term → iProp.
-Hypothesis init_finished_persistent :
-  ∀ sR, Persistent (init_finished sR).
+  maybe_resp_accepted kI kR sI sR : iProp :=
+    corruption kI kR ∨ resp_accepted kI kR sI sR;
 
-Definition maybe_init_finished kI kR sR : iProp :=
-  corruption kI kR ∨ init_finished sR.
+  (** [resp_waiting kI kR sI nR sR] *)
+  resp_waiting : term → term → term → term → term → iProp;
 
-(** [init_session kI kR kS] *)
-Variable init_session : term → term → term → iProp.
+  (** [init_finished sR] *)
+  init_finished : term → iProp;
+  init_finished_persistent :> ∀ sR, Persistent (init_finished sR);
 
-Definition maybe_init_session kI kR kS : iProp :=
-  corruption kI kR ∨ init_session kI kR kS.
+  maybe_init_finished kI kR sR : iProp :=
+    corruption kI kR ∨ init_finished sR;
 
-(** [resp_session kI kR kS] *)
-Variable resp_session : term → term → term → iProp.
+  (** [session rl kI kR kS] *)
+  session : role → term → term → term → iProp;
+  maybe_session rl kI kR kS : iProp :=
+    corruption kI kR ∨ session rl kI kR kS;
 
-Definition maybe_resp_session kI kR kS : iProp :=
-  corruption kI kR ∨ resp_session kI kR kS.
+  init_gen_keys : val;
+  wp_init_gen_keys : ∀ E kI kR,
+    {{{ True }}}
+      init_gen_keys #() @ E
+    {{{ nI sI, RET (nI, sI);
+        sterm nI ∧ sterm sI ∧
+        secret_of sI kI kR ∧
+        init_waiting kI kR nI sI }}};
+
+  init_mk_sess_key : val;
+  wp_init_mk_sess_key : ∀ E kI kR nI sI sR,
+    maybe_resp_accepted kI kR sI sR -∗
+    {{{ init_waiting kI kR nI sI }}}
+      init_mk_sess_key nI sR @ E
+    {{{ kS, RET (kS : val);
+        sterm kS ∧
+        secret_of kS kI kR ∧
+        init_finished sR ∧
+        maybe_session Init kI kR kS }}};
+
+  resp_gen_keys : val;
+  wp_resp_gen_keys : ∀ E kI kR sI,
+    {{{ True }}}
+      resp_gen_keys #() @ E
+    {{{ nR sR, RET (nR, sR);
+        sterm nR ∧
+        sterm sR ∧
+        secret_of sR kI kR ∧
+        resp_accepted kI kR sI sR ∧
+        resp_waiting kI kR sI nR sR }}};
+
+  resp_mk_sess_key : val;
+  wp_resp_mk_sess_key : ∀ E kI kR sI nR sR,
+    maybe_init_finished kI kR sR -∗
+    {{{ resp_waiting kI kR sI nR sR }}}
+      resp_mk_sess_key sI nR @ E
+    {{{ kS, RET (repr kS);
+        sterm kS ∧
+        secret_of kS kI kR ∧
+        maybe_session Resp kI kR kS }}};
+
+}.
+
+Context `{!PK}.
 
 Definition msg1_pred kR m1 : iProp :=
   ∃ sI kI,
@@ -127,42 +198,6 @@ Qed.
 
 Global Instance persistent_pk_auth_ctx : Persistent pk_auth_ctx.
 Proof. apply _. Qed.
-
-Ltac protocol_failure :=
-  by intros; wp_pures; iApply ("Hpost" $! None).
-
-Definition pk_auth_init : val :=
-  λ: "c" "gen_keys" "mk_sess_key" "skI" "pkI" "pkR",
-  let: "nIsI" := "gen_keys" #() in
-  let: "nI"   := Fst "nIsI" in
-  let: "sI"   := Snd "nIsI" in
-  let: "m1"   := tenc (N.@"m1") "pkR" (term_of_list ["sI"; "pkI"]) in
-  send "c" "m1";;
-  bind: "m2"   := tdec (N.@"m2") "skI" (recv "c") in
-  bind: "m2"   := list_of_term "m2" in
-  list_match: ["sI'"; "sR"; "pkR'"] := "m2" in
-  assert: eq_term "sI'" "sI" && eq_term "pkR'" "pkR" in
-  let: "k" := "mk_sess_key" "nI" "sR" in
-  let: "m3" := tenc (N.@"m3") "pkR" "sR" in
-  send "c" "m3";;
-  SOME "k".
-
-Definition pk_auth_resp : val :=
-  λ: "c" "gen_keys" "mk_sess_key" "skR" "pkR",
-  bind: "m1" := tdec (N.@"m1") "skR" (recv "c") in
-  bind: "m1" := list_of_term "m1" in
-  list_match: ["sI"; "pkI"] := "m1" in
-  bind: "kt" := is_key "pkI" in
-  assert: "kt" = repr Enc in
-  let: "nRsR" := "gen_keys" #() in
-  let: "nR" := Fst "nRsR" in
-  let: "sR" := Snd "nRsR" in
-  let: "m2" := tenc (N.@"m2") "pkI" (term_of_list ["sI"; "sR"; "pkR"]) in
-  send "c" "m2";;
-  bind: "m3" := tdec (N.@"m3") "skR" (recv "c") in
-  assert: eq_term "m3" "sR" in
-  let: "k" := "mk_sess_key" "sI" "nR" in
-  SOME ("pkI", "k").
 
 Lemma pterm_msg1I kI kR sI :
   pk_auth_ctx -∗
@@ -275,27 +310,8 @@ iDestruct (pterm_TEncE with "p_m3 [//]") as "{p_m3} [p_m3|p_m3]".
 - iDestruct "p_m3" as "(#p_m3 & _)". by iRight.
 Qed.
 
-Implicit Types Ψ : val → iProp.
-
-Variable init_gen_keys : val.
-Hypothesis wp_init_gen_keys : ∀ E kI kR,
-  {{{ True }}}
-    init_gen_keys #() @ E
-  {{{ nI sI, RET (nI, sI);
-      sterm nI ∧ sterm sI ∧
-      secret_of sI kI kR ∧
-      init_waiting kI kR nI sI }}}.
-
-Variable init_mk_sess_key : val.
-Hypothesis wp_init_mk_sess_key : ∀ E kI kR nI sI sR,
-  maybe_resp_accepted kI kR sI sR -∗
-  {{{ init_waiting kI kR nI sI }}}
-    init_mk_sess_key nI sR @ E
-  {{{ kS, RET (kS : val);
-      sterm kS ∧
-      secret_of kS kI kR ∧
-      init_finished sR ∧
-      maybe_init_session kI kR kS }}}.
+Ltac protocol_failure :=
+  by intros; wp_pures; iApply ("Hpost" $! None).
 
 Lemma wp_pk_auth_init c kI kR E :
   ↑cryptisN ⊆ E →
@@ -309,7 +325,7 @@ Lemma wp_pk_auth_init c kI kR E :
     (TKey Dec kI) (TKey Enc kI) (TKey Enc kR) @ E
   {{{ okS, RET (repr okS);
       if okS is Some kS then
-        sterm kS ∧ secret_of kS kI kR ∧ maybe_init_session kI kR kS
+        sterm kS ∧ secret_of kS kI kR ∧ maybe_session Init kI kR kS
       else True }}}.
 Proof.
 rewrite /pk_auth_init.
@@ -337,29 +353,6 @@ wp_pures.
 by iApply ("Hpost" $! (Some kS)); eauto.
 Qed.
 
-Variable resp_gen_keys : val.
-Hypothesis wp_resp_gen_keys :
-  ∀ E kI kR sI,
-    {{{ True }}}
-      resp_gen_keys #() @ E
-    {{{ nR sR, RET (nR, sR);
-        sterm nR ∧
-        sterm sR ∧
-        secret_of sR kI kR ∧
-        resp_accepted kI kR sI sR ∧
-        resp_waiting kI kR sI nR sR }}}.
-
-Variable resp_mk_sess_key : val.
-Hypothesis wp_resp_mk_sess_key :
-  ∀ E kI kR sI nR sR,
-    maybe_init_finished kI kR sR -∗
-    {{{ resp_waiting kI kR sI nR sR }}}
-      resp_mk_sess_key sI nR @ E
-    {{{ kS, RET (repr kS);
-        sterm kS ∧
-        secret_of kS kI kR ∧
-        maybe_resp_session kI kR kS }}}.
-
 Lemma wp_pk_auth_resp c kR E :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
@@ -368,14 +361,14 @@ Lemma wp_pk_auth_resp c kR E :
   pterm (TKey Enc kR) -∗
   {{{ True }}}
     pk_auth_resp c resp_gen_keys resp_mk_sess_key
-    (TKey Dec kR) (TKey Enc kR) @ E
+      (TKey Dec kR) (TKey Enc kR) @ E
   {{{ res, RET (repr res);
       if res is Some (pkI, kS) then
          ∃ kI, ⌜pkI = TKey Enc kI⌝ ∧
                pterm pkI ∧
                sterm kS ∧
                secret_of kS kI kR ∧
-               maybe_resp_session kI kR kS
+               maybe_session Resp kI kR kS
        else True }}}.
 Proof.
 iIntros (??) "#? #ctx #e_kR %Ψ !> _ Hpost".
