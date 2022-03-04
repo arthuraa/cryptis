@@ -87,6 +87,8 @@ Instance secret_of_persistent t kI kR : Persistent (secret_of t kI kR).
 Proof. apply _. Qed.
 
 Class PK := {
+  inv : iProp;
+  inv_persistent :> Persistent inv;
 
   (** [init_waiting kI kR nI sI] *)
   init_waiting : term → term → term → term → iProp;
@@ -117,6 +119,8 @@ Class PK := {
 
   init_gen_keys : val;
   wp_init_gen_keys : ∀ E kI kR,
+    ↑N ⊆ E →
+    inv -∗
     {{{ True }}}
       init_gen_keys #() @ E
     {{{ nI sI, RET (nI, sI);
@@ -126,6 +130,8 @@ Class PK := {
 
   init_mk_sess_key : val;
   wp_init_mk_sess_key : ∀ E kI kR nI sI sR,
+    ↑N ⊆ E →
+    inv -∗
     maybe_resp_accepted kI kR sI sR -∗
     {{{ init_waiting kI kR nI sI }}}
       init_mk_sess_key nI sR @ E
@@ -137,6 +143,8 @@ Class PK := {
 
   resp_gen_keys : val;
   wp_resp_gen_keys : ∀ E kI kR sI,
+    ↑N ⊆ E →
+    inv -∗
     {{{ True }}}
       resp_gen_keys #() @ E
     {{{ nR sR, RET (nR, sR);
@@ -148,6 +156,8 @@ Class PK := {
 
   resp_mk_sess_key : val;
   wp_resp_mk_sess_key : ∀ E kI kR sI nR sR,
+    ↑N ⊆ E →
+    inv -∗
     maybe_init_finished kI kR sR -∗
     {{{ resp_waiting kI kR sI nR sR }}}
       resp_mk_sess_key sI nR @ E
@@ -174,16 +184,18 @@ Definition msg2_pred kI m2 : iProp :=
 
 Definition msg3_pred kR sR : iProp := init_finished sR.
 
-Definition pk_auth_ctx : iProp :=
+Definition ctx : iProp :=
+  inv ∧
   enc_pred (N.@"m1") msg1_pred ∧
   enc_pred (N.@"m2") msg2_pred ∧
   enc_pred (N.@"m3") msg3_pred.
 
-Lemma pk_auth_alloc E E' :
+Lemma pk_auth_alloc E :
   ↑N ⊆ E →
-  enc_pred_token E ={E'}=∗ pk_auth_ctx.
+  inv -∗
+  enc_pred_token E ==∗ ctx.
 Proof.
-iIntros (sub) "token".
+iIntros (sub) "#inv token".
 rewrite (enc_pred_token_difference (↑N.@"m1") E); last solve_ndisj.
 iDestruct "token" as "[t1 token]".
 iMod (enc_pred_set (N.@"m1") msg1_pred with "t1") as "#H1" => //.
@@ -196,18 +208,18 @@ iMod (enc_pred_set (N.@"m3") msg3_pred with "t3") as "#H3" => //.
 by iModIntro; do !iSplit => //.
 Qed.
 
-Global Instance persistent_pk_auth_ctx : Persistent pk_auth_ctx.
+Global Instance persistent_ctx : Persistent ctx.
 Proof. apply _. Qed.
 
 Lemma pterm_msg1I kI kR sI :
-  pk_auth_ctx -∗
+  ctx -∗
   sterm sI -∗
   pterm (TKey Enc kI) -∗
   pterm (TKey Enc kR) -∗
   secret_of sI kI kR -∗
   pterm (TEnc kR (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Enc kI]))).
 Proof.
-iIntros "(#m1P & _ & _) #s_sI #p_ekI #p_ekR #p_sI".
+iIntros "(_ & #m1P & _ & _) #s_sI #p_ekI #p_ekR #p_sI".
 iApply pterm_TEncIS; eauto.
 - by iApply pterm_sterm.
 - iModIntro. iExists sI, kI. do !iSplit => //.
@@ -218,11 +230,11 @@ iApply "p_sI". iModIntro. by iRight.
 Qed.
 
 Lemma pterm_msg1E kI kR sI :
-  pk_auth_ctx -∗
+  ctx -∗
   pterm (TEnc kR (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Enc kI]))) -∗
   ▷ (sterm sI ∧ pterm (TKey Enc kI) ∧ readable_by sI kI).
 Proof.
-iIntros "(#m1P & _ & _) #p_m1".
+iIntros "(_ & #m1P & _ & _) #p_m1".
 iPoseProof (pterm_TEncE with "p_m1 m1P") as "{p_m1} [p_m1 | p_m1]".
 - iModIntro. rewrite pterm_of_list /=.
   iDestruct "p_m1" as "(? & ? & ? & _)". iSplit => //.
@@ -238,7 +250,7 @@ iPoseProof (pterm_TEncE with "p_m1 m1P") as "{p_m1} [p_m1 | p_m1]".
 Qed.
 
 Lemma pterm_msg2I kI kR sI sR :
-  pk_auth_ctx -∗
+  ctx -∗
   pterm (TKey Enc kI) -∗
   pterm (TKey Enc kR) -∗
   sterm sI -∗
@@ -248,7 +260,7 @@ Lemma pterm_msg2I kI kR sI sR :
   resp_accepted kI kR sI sR -∗
   pterm (TEnc kI (Spec.tag (N.@"m2") (Spec.of_list [sI; sR; TKey Enc kR]))).
 Proof.
-iIntros "(_ & #? & _) #p_eI #p_eR #s_sI #p_sI #s_sR #p_sR #accepted".
+iIntros "(_ & _ & #? & _) #p_eI #p_eR #s_sI #p_sI #s_sR #p_sR #accepted".
 iApply pterm_TEncIS; eauto.
 - by iApply pterm_sterm.
 - iModIntro. iExists sI, sR, kR. by eauto.
@@ -260,12 +272,12 @@ iIntros "!> #p_dkI". rewrite pterm_of_list /=. do !iSplit => //.
 Qed.
 
 Lemma pterm_msg2E kI kR sI sR :
-  pk_auth_ctx -∗
+  ctx -∗
   secret_of sI kI kR -∗
   pterm (TEnc kI (Spec.tag (N.@"m2") (Spec.of_list [sI; sR; TKey Enc kR]))) -∗
   ▷ (sterm sR ∧ secret_of sR kI kR ∧ maybe_resp_accepted kI kR sI sR).
 Proof.
-iIntros "(_ & #m2P & _) #started #p_m2".
+iIntros "(_ & _ & #m2P & _) #started #p_m2".
 iPoseProof (pterm_TEncE with "p_m2 m2P") as "{p_m2} [p_m2 | p_m2]".
 - rewrite pterm_of_list /=.
   iDestruct "p_m2" as "(? & p_sI & p_sR & _ & _)".
@@ -285,26 +297,26 @@ iPoseProof (pterm_TEncE with "p_m2 m2P") as "{p_m2} [p_m2 | p_m2]".
 Qed.
 
 Lemma pterm_msg3I kI kR sI sR :
-  pk_auth_ctx -∗
+  ctx -∗
   pterm (TKey Enc kR) -∗
   sterm sR -∗
   secret_of sR kI kR -∗
   init_finished sR -∗
   pterm (TEnc kR (Spec.tag (N.@"m3") sR)).
 Proof.
-iIntros "(_ & _ & #p_m3) #p_eR #s_sR #p_sR #finished".
+iIntros "(_ & _ & _ & #p_m3) #p_eR #s_sR #p_sR #finished".
 iApply pterm_TEncIS => //.
   by iApply pterm_sterm.
 iIntros "!> #p_dkR". iApply "p_sR". by iRight.
 Qed.
 
 Lemma pterm_msg3E kI kR sR :
-  pk_auth_ctx -∗
+  ctx -∗
   secret_of sR kI kR -∗
   pterm (TEnc kR (Spec.tag (N.@"m3") sR)) -∗
   ▷ maybe_init_finished kI kR sR.
 Proof.
-iIntros "(_ & _ & #?) #p_sR #p_m3".
+iIntros "(_ & _ & _ & #?) #p_sR #p_m3".
 iDestruct (pterm_TEncE with "p_m3 [//]") as "{p_m3} [p_m3|p_m3]".
 - iDestruct "p_m3" as "[_ p_m3]". iLeft. by iApply "p_sR".
 - iDestruct "p_m3" as "(#p_m3 & _)". by iRight.
@@ -317,7 +329,7 @@ Lemma wp_pk_auth_init c kI kR E :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
-  pk_auth_ctx -∗
+  ctx -∗
   pterm (TKey Enc kI) -∗
   pterm (TKey Enc kR) -∗
   {{{ True }}}
@@ -330,8 +342,9 @@ Lemma wp_pk_auth_init c kI kR E :
 Proof.
 rewrite /pk_auth_init.
 iIntros (??) "#chan_c #ctx #p_kI #p_kR %Ψ !> _ Hpost".
+iPoseProof "ctx" as "(inv & _)".
 wp_pures.
-wp_bind (init_gen_keys _). iApply (wp_init_gen_keys _ kI kR); eauto.
+wp_bind (init_gen_keys _). iApply (wp_init_gen_keys kI kR); eauto.
 iIntros "!> %nI %sI (#s_nI & #s_sI & #p_sI & waiting)".
 wp_pures. wp_list. wp_term_of_list. wp_tenc => /=. wp_pures.
 wp_bind (send _ _). iApply wp_send; eauto.
@@ -345,7 +358,7 @@ wp_eq_term e; last protocol_failure; subst pkR'.
 iPoseProof (pterm_msg2E with "[//] [//] [//]")
   as "{p_m2} (s_sR & p_sR & accepted)".
 wp_pures. wp_bind (init_mk_sess_key _ _).
-iApply (wp_init_mk_sess_key with "[//] [waiting]") => //.
+iApply (wp_init_mk_sess_key with "[//] [//] [waiting]") => //.
 iIntros "!> %kS (#s_kS & #p_kS & #finished & session)".
 wp_pures. wp_tenc. wp_pures. wp_bind (send _ _). iApply wp_send; eauto.
   by iApply pterm_msg3I.
@@ -357,7 +370,7 @@ Lemma wp_pk_auth_resp c kR E :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
-  pk_auth_ctx -∗
+  ctx -∗
   pterm (TKey Enc kR) -∗
   {{{ True }}}
     pk_auth_resp c resp_gen_keys resp_mk_sess_key
@@ -372,6 +385,7 @@ Lemma wp_pk_auth_resp c kR E :
        else True }}}.
 Proof.
 iIntros (??) "#? #ctx #e_kR %Ψ !> _ Hpost".
+iPoseProof "ctx" as "(inv & _)".
 rewrite /pk_auth_resp; wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m1) "#Hm1".
 wp_tdec m1; last protocol_failure.
@@ -383,7 +397,7 @@ case: (bool_decide_reflect (_ = repr_key_type Enc)); last protocol_failure.
 case: kt => // _.
 wp_pures.
 iDestruct (pterm_msg1E with "[] Hm1") as "{Hm1} (s_sI & p_eI & p_sI)"; eauto.
-wp_bind (resp_gen_keys _). iApply (wp_resp_gen_keys _ kI kR sI) => //.
+wp_bind (resp_gen_keys _). iApply (wp_resp_gen_keys kI kR sI) => //.
 iIntros "!> %nR %sR (#s_nR & #s_sR & #p_sR & #accepted & waiting)".
 wp_pures. wp_list; wp_term_of_list. wp_tenc. wp_pures.
 wp_bind (send _ _). iApply wp_send => //.
@@ -393,7 +407,7 @@ iIntros "%m3 #p_m3". wp_tdec m3; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst m3.
 iPoseProof (pterm_msg3E with "[//] [//] [//]") as "finished".
 wp_pures. wp_bind (resp_mk_sess_key _ _).
-iApply (wp_resp_mk_sess_key with "[//] [waiting]"); eauto.
+iApply (wp_resp_mk_sess_key with "[//] [//] [waiting]"); eauto.
 iIntros "!> %kS (#s_kS & #p_kS & session)". wp_pures. iModIntro.
 iApply ("Hpost" $! (Some (TKey Enc kI, kS))). iExists kI. by eauto.
 Qed.

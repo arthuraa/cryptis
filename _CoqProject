@@ -6,6 +6,7 @@
 
 mathcomp_compat.v
 lib.v
+nown.v
 pre_term.v
 term.v
 role.v
@@ -15,6 +16,7 @@ primitives/comp.v
 primitives/simple.v
 primitives.v
 tactics.v
+pk_auth.v
 session.v
 dh.v
 rel_channel.v

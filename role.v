@@ -10,10 +10,6 @@ Unset Printing Implicit Defensive.
 
 Section Role.
 
-Context `{!cryptisG Σ, !heapGS Σ}.
-Notation iProp  := (iProp Σ).
-Notation iPropI := (iPropI Σ).
-
 Inductive role := Init | Resp.
 
 Canonical roleO := leibnizO role.
@@ -22,8 +18,8 @@ Implicit Types rl : role.
 
 Global Instance role_inhabited : Inhabited role := populate Init.
 
-Lemma role_equivI rl1 rl2 :
-  rl1 ≡ rl2 ⊣⊢@{iPropI}
+Lemma role_equivI {Σ} rl1 rl2 :
+  rl1 ≡ rl2 ⊣⊢@{iPropI Σ}
   match rl1, rl2 with
   | Init, Init | Resp, Resp => True
   | _, _ => False
