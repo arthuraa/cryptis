@@ -11,8 +11,6 @@ Unset Printing Implicit Defensive.
 Section PK.
 
 Context `{!heapGS Σ, !cryptisG Σ}.
-Context `{TermMeta Σ term_meta term_meta_token}.
-Context `{!sessionG Σ}.
 Notation iProp := (iProp Σ).
 
 (** We are going to use the following naming conventions:
@@ -42,54 +40,66 @@ Variable N : namespace.
 
 (** The following predicates describe various stages of the protocol. *)
 
-(** [init_started kI kR sI] *)
-Variable init_started : term → term → term → iProp.
-Hypothesis init_started_persistent :
-  ∀ kI kR sI, Persistent (init_started kI kR sI).
-Hypothesis init_started_sterm :
-  ∀ kI kR sI, init_started kI kR sI -∗ sterm sI.
-Hypothesis init_started_pterm :
-  ∀ kI kR sI, init_started kI kR sI -∗
-  (pterm sI ↔ corruption kI kR).
+(** [readable_by t k] *)
+Definition readable_by t k : iProp :=
+  □ (pterm (TKey Dec k) → pterm t).
 
-(** [init_waiting nI sI] *)
-Variable init_waiting : term → term → iProp.
+#[global]
+Instance readable_by_persistent t k : Persistent (readable_by t k).
+Proof. apply _. Qed.
 
-(** [resp_started kI kR sI sR] *)
-Variable resp_started : term → term → term → term → iProp.
-Hypothesis resp_started_persistent :
-  ∀ kI kR sI sR, Persistent (resp_started kI kR sI sR).
-Hypothesis resp_started_sterm :
-  ∀ kI kR sI sR, resp_started kI kR sI sR -∗ sterm sR.
-Hypothesis resp_started_pterm :
-  ∀ kI kR sI sR,
-    resp_started kI kR sI sR -∗
-    (pterm sR ↔ corruption kI kR).
+Definition secret_of t kI kR : iProp :=
+  □ (pterm t ↔ ▷ corruption kI kR).
 
-(** [resp_waiting nR sR] *)
-Variable resp_waiting : term → term → iProp.
+#[global]
+Instance secret_of_persistent t kI kR : Persistent (secret_of t kI kR).
+Proof. apply _. Qed.
+
+(** [init_waiting kI kR nI sI] *)
+Variable init_waiting : term → term → term → term → iProp.
+
+(** [resp_accepted kI kR sI sR] *)
+Variable resp_accepted : term → term → term → term → iProp.
+Hypothesis resp_accepted_persistent :
+  ∀ kI kR sI sR, Persistent (resp_accepted kI kR sI sR).
+
+Definition maybe_resp_accepted kI kR sI sR : iProp :=
+  corruption kI kR ∨ resp_accepted kI kR sI sR.
+
+(** [resp_waiting kI kR sI nR sR] *)
+Variable resp_waiting : term → term → term → term → term → iProp.
 
 (** [init_finished sR] *)
 Variable init_finished : term → iProp.
 Hypothesis init_finished_persistent :
   ∀ sR, Persistent (init_finished sR).
 
+Definition maybe_init_finished kI kR sR : iProp :=
+  corruption kI kR ∨ init_finished sR.
+
 (** [init_session kI kR kS] *)
 Variable init_session : term → term → term → iProp.
 
+Definition maybe_init_session kI kR kS : iProp :=
+  corruption kI kR ∨ init_session kI kR kS.
+
 (** [resp_session kI kR kS] *)
 Variable resp_session : term → term → term → iProp.
+
+Definition maybe_resp_session kI kR kS : iProp :=
+  corruption kI kR ∨ resp_session kI kR kS.
 
 Definition msg1_pred kR m1 : iProp :=
   ∃ sI kI,
     ⌜m1 = Spec.of_list [sI; TKey Enc kI]⌝ ∧
     pterm (TKey Enc kI) ∧
-    init_started kI kR sI.
+    readable_by sI kI.
 
 Definition msg2_pred kI m2 : iProp :=
   ∃ sI sR kR,
     ⌜m2 = Spec.of_list [sI; sR; TKey Enc kR]⌝ ∧
-    resp_started kI kR sI sR.
+    secret_of sR kI kR ∧
+    resp_accepted kI kR sI sR.
 
 Definition msg3_pred kR sR : iProp := init_finished sR.
 
@@ -154,242 +164,118 @@ Definition pk_auth_resp : val :=
   let: "k" := "mk_sess_key" "sI" "nR" in
   SOME ("pkI", "k").
 
-Definition maybe_init_started kI kR sI : iProp :=
-  pterm sI ∨ init_started kI kR sI.
-
-Definition maybe_resp_started kI kR sI sR : iProp :=
-  corruption kI kR ∧ pterm sR ∨ resp_started kI kR sI sR.
-
-Definition maybe_init_session kI kR kS : iProp :=
-  corruption kI kR ∧ pterm kS ∨ init_session kI kR kS.
-
-Definition maybe_resp_session kI kR kS : iProp :=
-  corruption kI kR ∧ pterm kS ∨ resp_session kI kR kS.
-
-Lemma maybe_init_started_sterm kI kR sI :
-  maybe_init_started kI kR sI -∗ sterm sI.
+Lemma pterm_msg1I kI kR sI :
+  pk_auth_ctx -∗
+  sterm sI -∗
+  pterm (TKey Enc kI) -∗
+  pterm (TKey Enc kR) -∗
+  secret_of sI kI kR -∗
+  pterm (TEnc kR (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Enc kI]))).
 Proof.
-iIntros "[p_sI | p_sI]".
+iIntros "(#m1P & _ & _) #s_sI #p_ekI #p_ekR #p_sI".
+iApply pterm_TEncIS; eauto.
 - by iApply pterm_sterm.
-- by iApply init_started_sterm.
-Qed.
-
-Lemma maybe_init_started_pterm kI kR sI :
-  maybe_init_started kI kR sI -∗
-  corruption kI kR -∗
-  pterm sI.
-Proof.
-iIntros "[#p_sI|#started] #corrupt"; eauto.
-by iApply init_started_pterm; eauto.
+- iModIntro. iExists sI, kI. do !iSplit => //.
+  iIntros "!> #?". iApply "p_sI". iModIntro. by iLeft.
+- rewrite sterm_of_list /=. do !iSplit => //. by iApply pterm_sterm.
+iIntros "!> #p_dkR". rewrite pterm_of_list /=. do !iSplit => //.
+iApply "p_sI". iModIntro. by iRight.
 Qed.
 
 Lemma pterm_msg1E kI kR sI :
   pk_auth_ctx -∗
   pterm (TEnc kR (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Enc kI]))) -∗
-  ▷ (pterm (TKey Enc kI) ∧ maybe_init_started kI kR sI).
+  ▷ (sterm sI ∧ pterm (TKey Enc kI) ∧ readable_by sI kI).
 Proof.
 iIntros "(#m1P & _ & _) #p_m1".
 iPoseProof (pterm_TEncE with "p_m1 m1P") as "{p_m1} [p_m1 | p_m1]".
 - iModIntro. rewrite pterm_of_list /=.
   iDestruct "p_m1" as "(? & ? & ? & _)". iSplit => //.
-  by iLeft.
-- iDestruct "p_m1" as "(#p_m1 & _ & _)".
+    by iApply pterm_sterm.
+  iSplit; eauto.
+  by iIntros "!> ?".
+- iDestruct "p_m1" as "(#p_m1 & #s_m1 & _)".
   iModIntro.
   iDestruct "p_m1" as "(%sI' & %kI' & %e_m1 & ? & ?)".
   case/Spec.of_list_inj: e_m1 => <- <-.
-  iSplit => //. by iRight.
+  rewrite sterm_of_list /=. iDestruct "s_m1" as "(#s_sI & _)".
+  do !iSplit => //.
 Qed.
 
 Lemma pterm_msg2I kI kR sI sR :
   pk_auth_ctx -∗
   pterm (TKey Enc kI) -∗
   pterm (TKey Enc kR) -∗
-  maybe_init_started kI kR sI -∗
-  resp_started kI kR sI sR -∗
+  sterm sI -∗
+  readable_by sI kI -∗
+  sterm sR -∗
+  secret_of sR kI kR -∗
+  resp_accepted kI kR sI sR -∗
   pterm (TEnc kI (Spec.tag (N.@"m2") (Spec.of_list [sI; sR; TKey Enc kR]))).
 Proof.
-iIntros "(_ & #? & _) #p_eI #p_eR #startedI #startedR".
+iIntros "(_ & #? & _) #p_eI #p_eR #s_sI #p_sI #s_sR #p_sR #accepted".
 iApply pterm_TEncIS; eauto.
 - by iApply pterm_sterm.
 - iModIntro. iExists sI, sR, kR. by eauto.
 - rewrite sterm_of_list /=. do ![iSplit => //].
-  + by iApply maybe_init_started_sterm.
-  + by iApply resp_started_sterm.
-  + by iApply pterm_sterm.
+  by iApply pterm_sterm.
 iIntros "!> #p_dkI". rewrite pterm_of_list /=. do !iSplit => //.
-- iApply maybe_init_started_pterm; eauto. by iLeft.
-- iApply resp_started_pterm; eauto. by iLeft.
+- by iApply "p_sI".
+- iApply "p_sR". iModIntro. by iLeft.
 Qed.
 
 Lemma pterm_msg2E kI kR sI sR :
   pk_auth_ctx -∗
-  init_started kI kR sI -∗
+  secret_of sI kI kR -∗
   pterm (TEnc kI (Spec.tag (N.@"m2") (Spec.of_list [sI; sR; TKey Enc kR]))) -∗
-  ▷ maybe_resp_started kI kR sI sR.
+  ▷ (sterm sR ∧ secret_of sR kI kR ∧ maybe_resp_accepted kI kR sI sR).
 Proof.
 iIntros "(_ & #m2P & _) #started #p_m2".
 iPoseProof (pterm_TEncE with "p_m2 m2P") as "{p_m2} [p_m2 | p_m2]".
-- iModIntro. iLeft. rewrite pterm_of_list /=.
+- rewrite pterm_of_list /=.
   iDestruct "p_m2" as "(? & p_sI & p_sR & _ & _)".
-  iPoseProof (init_started_pterm with "started") as "equiv".
-  iSplit => //. by iApply "equiv".
-- iDestruct "p_m2" as "(#p_m2 & ? & #?)".
+  iSpecialize ("started" with "p_sI").
   iModIntro.
-  iDestruct "p_m2" as "(%sI' & %sR' & %kR' & %e_m2 & ?)".
-  case/Spec.of_list_inj: e_m2 => <- <- <-. by iRight.
+  iSplit; first by iApply pterm_sterm.
+  iSplit.
+    iModIntro. by iSplit; eauto.
+  by iLeft.
+- iDestruct "p_m2" as "(#p_m2 & #s_m2 & #?)". rewrite sterm_of_list /=.
+  iModIntro.
+  iDestruct "p_m2" as "(%sI' & %sR' & %kR' & %e_m2 & sRP & ?)".
+  iDestruct "s_m2" as "(s_sI & s_sR & _)".
+  case/Spec.of_list_inj: e_m2 => <- <- <-.
+  do !iSplit => //.
+  by iRight.
 Qed.
 
 Lemma pterm_msg3I kI kR sI sR :
   pk_auth_ctx -∗
   pterm (TKey Enc kR) -∗
-  init_started kI kR sI -∗
+  sterm sR -∗
+  secret_of sR kI kR -∗
   init_finished sR -∗
-  maybe_resp_started kI kR sI sR -∗
   pterm (TEnc kR (Spec.tag (N.@"m3") sR)).
 Proof.
-iIntros "(_ & _ & #p_m3) #p_eR #startedI #finished [[#fail #p_sR]| #startedR]".
-  iApply pterm_TEncIP => //. by rewrite pterm_tag.
+iIntros "(_ & _ & #p_m3) #p_eR #s_sR #p_sR #finished".
 iApply pterm_TEncIS => //.
-- by iApply pterm_sterm.
-- by iApply resp_started_sterm.
-iIntros "!> #p_dkR". iApply resp_started_pterm => //.
-by iRight.
+  by iApply pterm_sterm.
+iIntros "!> #p_dkR". iApply "p_sR". by iRight.
 Qed.
 
-Lemma pterm_msg3E kI kR sI nR sR :
+Lemma pterm_msg3E kI kR sR :
   pk_auth_ctx -∗
-  pterm (TKey Enc kR) -∗
+  secret_of sR kI kR -∗
   pterm (TEnc kR (Spec.tag (N.@"m3") sR)) -∗
-  ▷ maybe_init_finished.
+  ▷ maybe_init_finished kI kR sR.
+Proof.
+iIntros "(_ & _ & #?) #p_sR #p_m3".
+iDestruct (pterm_TEncE with "p_m3 [//]") as "{p_m3} [p_m3|p_m3]".
+- iDestruct "p_m3" as "[_ p_m3]". iLeft. by iApply "p_sR".
+- iDestruct "p_m3" as "(#p_m3 & _)". by iRight.
+Qed.
 
 Implicit Types Ψ : val → iProp.
-
-(*
-Variable γ : gname.
-
-Lemma pterm_msg1I kI kR nI sA :
-  nsl_ctx γ -∗
-  pterm (TKey Enc kI) -∗
-  sterm nI -∗
-  □ (pterm nI ↔ ▷ corruption kI kR) -∗
-  pterm (TKey Enc kR) -∗
-  ▷ pterm (TEnc kR (Spec.tag (N.@"m1") (Spec.of_list [nI; TKey Enc kI]))).
-Proof.
-iIntros "(_ & #Hm1 & _ & _) #HkI #HnI #HnI_hi #HkR".
-iModIntro.
-iApply pterm_TEncIS; eauto.
-- by iApply pterm_sterm.
-- iModIntro.
-  iExists _, _; iSplit; eauto.
-  rewrite sterm_of_list /=; do !iSplit => //.
-  by iApply pterm_sterm.
-- iIntros "!> HkR_dec".
-  rewrite pterm_of_list /=; do !iSplit => //.
-  by iApply "HnI_hi"; rewrite /corruption; eauto.
-Qed.
-
-Lemma pterm_msg2I kI kR nI nR :
-  nsl_ctx γ -∗
-  ▷ pterm (TKey Enc kI) -∗
-  pterm (TKey Enc kR) -∗
-  sterm nI -∗
-  □ (pterm (TKey Dec kI) → pterm nI) -∗
-  sterm nR -∗
-  □ (pterm nR ↔ ▷ corruption kI kR) -∗
-  session term_meta N γ Resp nI nR (kI, kR) -∗
-  ▷ pterm (TEnc kI (Spec.tag (N.@"m2") (Spec.of_list [nI; nR; TKey Enc kR]))).
-Proof.
-iIntros "# (_ & _ & Hm2 & _) #HAenc #HBenc #HnIhi #HnIlo #HnRhi #HnRlo #sess !>".
-iApply pterm_TEncIS; eauto.
-- by iApply pterm_sterm.
-- iModIntro; iExists _, _, _; do ![iSplit => //].
-  rewrite sterm_of_list /=; do !iSplit => //.
-  by iApply pterm_sterm.
-iIntros "!> #pub".
-iSpecialize ("HnIlo" with "pub").
-rewrite pterm_of_list /=; do !iSplit => //.
-by iApply "HnRlo"; rewrite /corruption; eauto.
-Qed.
-
-Lemma pterm_msg1E kI kR nI :
-  nsl_ctx γ -∗
-  pterm (TEnc kR (Spec.tag (N.@"m1") (Spec.of_list [nI; TKey Enc kI]))) -∗
-  ▷ (pterm (TKey Enc kI) ∧ sterm nI ∧
-     (pterm nI ∨ (pterm nI ↔ ▷ corruption kI kR))).
-Proof.
-iIntros "# (_ & m1P & _ & _) #Hts".
-iDestruct (pterm_TEncE with "Hts [//]") as "{Hts} [[HkR Hts]|Hts]".
-  rewrite pterm_of_list /=.
-  iDestruct "Hts" as "(HnI & HkI & _)".
-  iAssert (sterm nI) as "#?". by iApply pterm_sterm.
-  by eauto.
-iDestruct "Hts" as "(#inv & Hts & _)"; iModIntro.
-iDestruct "inv" as (nI' kI') "(%e & HnI & #HkI)".
-move/Spec.of_list_inj: e => [] <- <-.
-rewrite sterm_of_list /=; iDestruct "Hts" as "(? & ? & ?)".
-by eauto.
-Qed.
-
-Lemma pterm_msg2E kI kR nI nR :
-  nsl_ctx γ -∗
-  □ (pterm nI ↔ ▷ corruption kI kR) -∗
-  pterm (TEnc kI (Spec.tag (N.@"m2") (Spec.of_list [nI; nR; TKey Enc kR]))) -∗
-  ▷ (sterm nR ∧
-     (pterm nR ↔ ▷ corruption kI kR) ∧
-     ▷ (corruption kI kR ∨
-        session term_meta N γ Resp nI nR (kI, kR))).
-Proof.
-iIntros "# (_ & _ & ? & _) #p_nI #Hts".
-iDestruct (pterm_TEncE with "Hts [//]") as "{Hts} [[? Hts] | Hts]".
-  rewrite pterm_of_list /=.
-  iDestruct "Hts" as "(p_nI' & ? & ? & ?)".
-  iAssert (sterm nR) as "#?". by iApply pterm_sterm.
-  iPoseProof ("p_nI" with "p_nI'") as "?".
-  by do 3![iSplit; eauto].
-iDestruct "Hts" as "(#inv & Hts & _)"; iModIntro.
-iDestruct "inv" as (nI' nR' kR') "(%e_m & #nRP & frag)".
-case/Spec.of_list_inj: e_m => <- <- <-; rewrite sterm_of_list /=.
-iDestruct "Hts" as "(?&?&?)"; by eauto.
-Qed.
-
-Lemma pterm_msg3I kI kR nI nR :
-  nsl_ctx γ -∗
-  pterm (TKey Enc kI) -∗
-  pterm (TKey Enc kR) -∗
-  □ (pterm nI ↔ ▷ corruption kI kR) -∗
-  sterm nR -∗
-  □ (pterm nR ↔ ▷ corruption kI kR) -∗
-  session term_meta N γ Resp nI nR (kI, kR) -∗
-  session term_meta N γ Init nI nR (kI, kR) -∗
-  pterm (TEnc kR (Spec.tag (N.@"m3") nR)).
-Proof.
-iIntros "(_ & _ & _ & #Hm3) #p_kI #p_kR #p_nI #s_nR #p_nR #sessA #sessR".
-iApply pterm_TEncIS => //.
-- by iApply pterm_sterm.
-- iModIntro. iIntros (nI' kI') "#sessA'".
-  iDestruct (session_agree with "sessA sessA'") as "(<- & %e)" => //.
-  case: e => <-.
-  by iSplit.
-by iIntros "!> ?"; iApply "p_nR"; rewrite /corruption; eauto.
-Qed.
-
-Lemma pterm_msg3E kI kR nI nR :
-  nsl_ctx γ -∗
-  session term_meta N γ Resp nI nR (kI, kR) -∗
-  □ (pterm nR ↔ ▷ corruption kI kR) -∗
-  pterm (TEnc kR (Spec.tag (N.@"m3") nR)) -∗
-  ▷ (corruption kI kR ∨
-     session term_meta N γ Init nI nR (kI, kR) ∧
-     (pterm nI ↔ ▷ corruption kI kR)).
-Proof.
-iIntros "(_ & _ & _ & #Hm3) #sessR #p_nR #p_m3".
-iDestruct (pterm_TEncE with "p_m3 [//]") as "[[_ fail]|inv]".
-  by iLeft; iApply "p_nR".
-iDestruct "inv" as "(#inv & _ & _)".
-iModIntro; iRight.
-by iApply "inv".
-Qed.
-*)
 
 Variable init_gen_keys : val.
 Hypothesis wp_init_gen_keys : ∀ E kI kR,
@@ -397,15 +283,19 @@ Hypothesis wp_init_gen_keys : ∀ E kI kR,
     init_gen_keys #() @ E
   {{{ nI sI, RET (nI, sI);
       sterm nI ∧ sterm sI ∧
-      init_waiting nI sI ∧ init_started kI kR sI }}}.
+      secret_of sI kI kR ∧
+      init_waiting kI kR nI sI }}}.
 
 Variable init_mk_sess_key : val.
 Hypothesis wp_init_mk_sess_key : ∀ E kI kR nI sI sR,
-  init_started kI kR sI -∗
-  maybe_resp_started kI kR sI sR -∗
-  {{{ init_waiting nI sI }}}
+  maybe_resp_accepted kI kR sI sR -∗
+  {{{ init_waiting kI kR nI sI }}}
     init_mk_sess_key nI sR @ E
-  {{{ kS, RET (kS : val); maybe_init_session kI kR kS ∧ init_finished sR }}}.
+  {{{ kS, RET (kS : val);
+      sterm kS ∧
+      secret_of kS kI kR ∧
+      init_finished sR ∧
+      maybe_init_session kI kR kS }}}.
 
 Lemma wp_pk_auth_init c kI kR E :
   ↑cryptisN ⊆ E →
@@ -418,40 +308,33 @@ Lemma wp_pk_auth_init c kI kR E :
     pk_auth_init c init_gen_keys init_mk_sess_key
     (TKey Dec kI) (TKey Enc kI) (TKey Enc kR) @ E
   {{{ okS, RET (repr okS);
-      if okS is Some kS then maybe_init_session kI kR kS
+      if okS is Some kS then
+        sterm kS ∧ secret_of kS kI kR ∧ maybe_init_session kI kR kS
       else True }}}.
 Proof.
 rewrite /pk_auth_init.
 iIntros (??) "#chan_c #ctx #p_kI #p_kR %Ψ !> _ Hpost".
 wp_pures.
 wp_bind (init_gen_keys _). iApply (wp_init_gen_keys _ kI kR); eauto.
-iIntros "!> %nI %sI (#s_nI & #s_sI & waiting & #started)".
+iIntros "!> %nI %sI (#s_nI & #s_sI & #p_sI & waiting)".
 wp_pures. wp_list. wp_term_of_list. wp_tenc => /=. wp_pures.
 wp_bind (send _ _). iApply wp_send; eauto.
-  iDestruct "ctx" as "(? & _)".
-  iModIntro. iApply pterm_TEncIS; eauto.
-  - by iApply pterm_sterm.
-  - iModIntro. iExists sI, kI. by eauto.
-  - rewrite sterm_of_list /=. do ![iSplit; eauto].
-    by iApply pterm_sterm.
-  - iIntros "!> #p_dR".
-    rewrite pterm_of_list /=. do ![iSplit; eauto].
-    iApply init_started_pterm; eauto.
-    by iRight.
+  by iApply pterm_msg1I.
 wp_pures. wp_bind (recv _). iApply wp_recv; eauto.
 iIntros "%m2 #p_m2". wp_tdec m2; last protocol_failure.
 wp_list_of_term m2; last protocol_failure.
 wp_list_match => [sI' sR pkR' {m2} ->|_]; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst sI'.
 wp_eq_term e; last protocol_failure; subst pkR'.
-iPoseProof (pterm_msg2E with "[//] [//] [//]") as "{p_m2} p_m2".
+iPoseProof (pterm_msg2E with "[//] [//] [//]")
+  as "{p_m2} (s_sR & p_sR & accepted)".
 wp_pures. wp_bind (init_mk_sess_key _ _).
-iApply (wp_init_mk_sess_key with "[//] [//] [waiting]") => //.
-iIntros "!> %kS [session #finished]".
+iApply (wp_init_mk_sess_key with "[//] [waiting]") => //.
+iIntros "!> %kS (#s_kS & #p_kS & #finished & session)".
 wp_pures. wp_tenc. wp_pures. wp_bind (send _ _). iApply wp_send; eauto.
-  iModIntro. by iApply pterm_msg3I.
+  by iApply pterm_msg3I.
 wp_pures.
-by iApply ("Hpost" $! (Some kS)).
+by iApply ("Hpost" $! (Some kS)); eauto.
 Qed.
 
 Variable resp_gen_keys : val.
@@ -460,9 +343,22 @@ Hypothesis wp_resp_gen_keys :
     {{{ True }}}
       resp_gen_keys #() @ E
     {{{ nR sR, RET (nR, sR);
-        resp_waiting nR sR ∧ resp_started kI kR sI sR }}}.
+        sterm nR ∧
+        sterm sR ∧
+        secret_of sR kI kR ∧
+        resp_accepted kI kR sI sR ∧
+        resp_waiting kI kR sI nR sR }}}.
 
 Variable resp_mk_sess_key : val.
+Hypothesis wp_resp_mk_sess_key :
+  ∀ E kI kR sI nR sR,
+    maybe_init_finished kI kR sR -∗
+    {{{ resp_waiting kI kR sI nR sR }}}
+      resp_mk_sess_key sI nR @ E
+    {{{ kS, RET (repr kS);
+        sterm kS ∧
+        secret_of kS kI kR ∧
+        maybe_resp_session kI kR kS }}}.
 
 Lemma wp_pk_auth_resp c kR E :
   ↑cryptisN ⊆ E →
@@ -475,7 +371,10 @@ Lemma wp_pk_auth_resp c kR E :
     (TKey Dec kR) (TKey Enc kR) @ E
   {{{ res, RET (repr res);
       if res is Some (pkI, kS) then
-         ∃ kI, ⌜pkI = TKey Enc kI⌝ ∧ pterm pkI ∧
+         ∃ kI, ⌜pkI = TKey Enc kI⌝ ∧
+               pterm pkI ∧
+               sterm kS ∧
+               secret_of kS kI kR ∧
                maybe_resp_session kI kR kS
        else True }}}.
 Proof.
@@ -490,53 +389,20 @@ wp_pures.
 case: (bool_decide_reflect (_ = repr_key_type Enc)); last protocol_failure.
 case: kt => // _.
 wp_pures.
-iDestruct (pterm_msg1E with "[] Hm1") as "{Hm1} [p_eI Hm1]"; eauto.
+iDestruct (pterm_msg1E with "[] Hm1") as "{Hm1} (s_sI & p_eI & p_sI)"; eauto.
 wp_bind (resp_gen_keys _). iApply (wp_resp_gen_keys _ kI kR sI) => //.
-iIntros "!> %nR %sR [waiting #started]".
+iIntros "!> %nR %sR (#s_nR & #s_sR & #p_sR & #accepted & waiting)".
 wp_pures. wp_list; wp_term_of_list. wp_tenc. wp_pures.
 wp_bind (send _ _). iApply wp_send => //.
-  iModIntro. by iApply pterm_msg2I.
+  iApply pterm_msg2I; eauto.
 wp_pures. wp_bind (recv _). iApply wp_recv => //.
 iIntros "%m3 #p_m3". wp_tdec m3; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst m3.
-
-
-iMod ("set_nR" $! kI nI) as "[#p_nR [HP HQ]]".
-wp_tenc; wp_pures.
-iDestruct "Hm1" as "(e_kI & s_nI & Hm1)".
-iAssert (□ (▷ corruption kI kR → pterm nI))%I as "#p_nI".
-  iDestruct "Hm1" as "[?|#e]"; eauto.
-  by iIntros "!> ?"; iApply "e"; eauto.
-iMod (session_begin _ γ Resp _ _ (kI, kR)
-       with "[] [HP] [unreg]") as "[#sessR close]" => //.
-- by iApply nsl_ctx_session_ctx.
-- by [].
-iPoseProof (pterm_msg2I with "[//] [//] e_kR s_nI [] s_nR [] sessR") as "Hm2".
-- by iIntros "!> ?"; iApply "p_nI"; rewrite /corruption; eauto.
-- by eauto.
-wp_bind (send _ _); iApply wp_send => //.
-wp_pures; wp_bind (recv _); iApply wp_recv => //; iIntros (m3) "#Hm3".
-wp_tdec m3; last protocol_failure.
-wp_eq_term e; last protocol_failure; subst m3.
-iPoseProof (pterm_msg3E with "[] sessR p_nR []") as "[pub|sec]" => //.
-  iSpecialize ("p_nR" with "pub").
-  wp_pures. iApply ("Hpost" $! (Some (TKey Enc kI, nI))).
-  iModIntro; iExists kI; do 4!iSplit => //.
-    iModIntro; iSplit; iIntros "#?" => //.
-    iDestruct "Hm1" as "[?|#Hm1]"; eauto.
-    by iApply "Hm1".
-  iFrame; by iLeft.
-iDestruct "sec" as "{p_nI} (sessA & p_nI)".
-wp_if.
-iMod ("close" with "sessA") as "inv".
-wp_pures.
-iApply ("Hpost" $! (Some (TKey Enc kI, nI))).
-iExists kI; iModIntro; do 4!iSplit => //; eauto.
-by iFrame; eauto.
+iPoseProof (pterm_msg3E with "[//] [//] [//]") as "finished".
+wp_pures. wp_bind (resp_mk_sess_key _ _).
+iApply (wp_resp_mk_sess_key with "[//] [waiting]"); eauto.
+iIntros "!> %kS (#s_kS & #p_kS & session)". wp_pures. iModIntro.
+iApply ("Hpost" $! (Some (TKey Enc kI, kS))). iExists kI. by eauto.
 Qed.
 
-End NSL.
-
-Arguments nsl_ctx {Σ _ _} term_meta {_} N P γ.
-Arguments wp_nsl_init {Σ _ _ _ _ _ _ N} P Q.
-Arguments wp_nsl_resp {Σ _ _ _ _ _ _ N} P Q.
+End PK.
