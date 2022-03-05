@@ -6,6 +6,13 @@ From mathcomp Require ssrbool order path.
 From deriving Require deriving.
 From cryptis Require Export mathcomp_compat.
 
+Lemma fupd_or' `{!invGS Σ} (A B C : iProp Σ) E :
+  (B ={E}=∗ C) -∗ A ∨ B ={E}=∗ A ∨ C.
+Proof.
+iIntros "BC [HA | HB]"; eauto.
+iMod ("BC" with "HB"); eauto.
+Qed.
+
 Definition namespace_map_data {A : cmra} (N : namespace) (a : A) :=
   reservation_map_data (positives_flatten N) a.
 

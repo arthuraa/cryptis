@@ -333,6 +333,10 @@ Definition session rl tI tR x : iProp :=
                (if rl is Init then tI else tR)
                (if rl is Init then tR else tI) x None.
 
+Definition waiting_for_peer rl tI tR x : iProp :=
+  ∀ E, ⌜↑N ⊆ E⌝ →
+  session (swap_role rl) tI tR x ={E}=∗ ▷ P (swap_role rl) tI tR x.
+
 Global Instance session_persistent rl tI tR x :
   Persistent (session rl tI tR x).
 Proof. apply _. Qed.
@@ -345,11 +349,12 @@ Lemma session_agree rl tI1 tI2 tR1 tR2 x1 x2 :
   (if rl is Init then tI1 = tI2 else tR1 = tR2) →
   session rl tI1 tR1 x1 -∗
   session rl tI2 tR2 x2 -∗
-  ⌜(if rl is Init then tR1 = tR2 else tI1 = tI2) ∧ x1 = x2⌝.
+  ⌜(if rl is Init then tR1 else tI1, x1) =
+   (if rl is Init then tR2 else tI2, x2)⌝.
 Proof.
 case: rl => ->.
 all: iIntros "s1 s2".
-all: by iDestruct (session_frag_agree with "s1 s2") as "(% & % & %)".
+all: by iDestruct (session_frag_agree with "s1 s2") as "(% & -> & ->)".
 Qed.
 
 Lemma session_begin E rl tI tR x :
@@ -357,8 +362,7 @@ Lemma session_begin E rl tI tR x :
   session_ctx -∗
   P rl tI tR x -∗
   term_meta_token (if rl is Init then tI else tR) (↑N) ={E}=∗
-  session rl tI tR x ∗
-  (session (swap_role rl) tI tR x ={E}=∗ ▷ P (swap_role rl) tI tR x).
+  session rl tI tR x ∗ waiting_for_peer rl tI tR x.
 Proof.
 rewrite /=; iIntros (?) "#ctx inv token".
 iMod (@session_begin_aux rl (if rl is Init then tI else tR)
@@ -366,6 +370,7 @@ iMod (@session_begin_aux rl (if rl is Init then tI else tR)
         with "ctx [inv] token") as "[auth frag]" => //.
   by rewrite /sinv; case: rl; eauto.
 iModIntro; iSplitR "auth" => //.
+iIntros "% %".
 rewrite /session; case: rl => /=.
 all: by iIntros "frag"; iApply (session_end_aux with "ctx auth frag").
 Qed.
@@ -380,6 +385,7 @@ Arguments session_alloc {Σ _ _} term_meta {X _ _ _} N P.
 Arguments session_begin {Σ _ _ _ _ _ _ _ _ _}  {N P} E rl tI tR.
 Arguments session_ctx {Σ _ _} term_meta {_ _ _ _} N P.
 Arguments session {Σ _ _} term_meta {_ _ _ _} N rl _ _.
+Arguments waiting_for_peer {Σ _ _} term_meta {_ _ _ _} N P rl tI tR x.
 
 #[global]
 Instance subG_sessionΣ {Σ} : subG sessionΣ Σ → sessionG Σ.
