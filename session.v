@@ -62,10 +62,8 @@ Class sessionG := {
   session_inG    :> inG Σ sessionR;
 }.
 
-Context `{TermMeta Σ term_meta term_meta_token, Countable X}.
-Context `{!sessionG} (N : namespace).
-Context (P : role → term → term → X → iProp).
-Arguments term_meta {_ _ _} _ _ _.
+Context `{!sessionG, Countable X}.
+Context (N : namespace) (P : role → term → term → X → iProp).
 
 Let sinv rl tA tB x :=
   P rl (if rl is Init then tA else tB)
@@ -79,11 +77,11 @@ Proof. apply/auth_frag_valid; by case: p. Qed.
 
 Definition session_auth rl t (k : term) (x : X) o : iProp :=
   nown N (◯ {[t := session_status_auth o]}) ∧
-  term_meta t N (x, rl, k).
+  nonce_meta t N (x, rl, k).
 
 Definition session_frag rl t (k : term) (x : X) o : iProp :=
   nown N (◯ {[t := session_status_frag o]}) ∧
-  term_meta t N (x, rl, k).
+  nonce_meta t N (x, rl, k).
 
 Global Instance session_frag_persistent rl t k x o :
   Persistent (session_frag rl t k x o).
@@ -115,11 +113,11 @@ Qed.
 
 Definition session_map_inv SM : iProp :=
   ([∗ map] t ↦ o ∈ SM, ∃ k rl (x : X),
-     term_meta t N (x, rl, k) ∧
+     nonce_meta t N (x, rl, k) ∧
      (sinv rl t k x ∨ session_frag (swap_role rl) k t x (Some ())))%I.
 
 Lemma session_map_inv_unregistered SM t :
-  term_meta_token t (↑N) -∗
+  nonce_meta_token t (↑N) -∗
   session_map_inv SM -∗
   ⌜SM !! t = None⌝.
 Proof.
@@ -225,7 +223,7 @@ Lemma session_begin_aux rl t k x E :
   ↑N ⊆ E →
   session_ctx -∗
   sinv rl t k x -∗
-  term_meta_token t (↑N) ={E}=∗
+  nonce_meta_token t (↑N) ={E}=∗
   session_auth rl t k x None ∗ session_frag rl t k x None.
 Proof.
 iIntros (?) "#ctx s_inv fresh".
@@ -361,7 +359,7 @@ Lemma session_begin E rl tI tR x :
   ↑N ⊆ E →
   session_ctx -∗
   P rl tI tR x -∗
-  term_meta_token (if rl is Init then tI else tR) (↑N) ={E}=∗
+  nonce_meta_token (if rl is Init then tI else tR) (↑N) ={E}=∗
   session rl tI tR x ∗ waiting_for_peer rl tI tR x.
 Proof.
 rewrite /=; iIntros (?) "#ctx inv token".
@@ -381,11 +379,11 @@ Definition sessionΣ : gFunctor :=
   GFunctor sessionR.
 
 Arguments sessionG Σ : clear implicits.
-Arguments session_alloc {Σ _ _} term_meta {X _ _ _} N P.
-Arguments session_begin {Σ _ _ _ _ _ _ _ _ _}  {N P} E rl tI tR.
-Arguments session_ctx {Σ _ _} term_meta {_ _ _ _} N P.
-Arguments session {Σ _ _} term_meta {_ _ _ _} N rl _ _.
-Arguments waiting_for_peer {Σ _ _} term_meta {_ _ _ _} N P rl tI tR x.
+Arguments session_alloc {Σ _ _ _} {X _ _} N P.
+Arguments session_begin {Σ _ _ _ _ _ _}  {N P} E rl tI tR.
+Arguments session_ctx {Σ _ _} {_ _ _ _} N P.
+Arguments session {Σ _ _} {_ _ _ _} N rl _ _.
+Arguments waiting_for_peer {Σ _ _} {_ _ _ _} N P rl tI tR x.
 
 #[global]
 Instance subG_sessionΣ {Σ} : subG sessionΣ Σ → sessionG Σ.

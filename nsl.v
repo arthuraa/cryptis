@@ -31,16 +31,15 @@ Definition nsl_resp : expr :=
   pk_auth_resp N nsl_gen_keys nsl_mk_sess_key.
 
 Definition nsl_ctx : iProp :=
-  session.session_ctx (@nonce_meta _ _) N
-    (λ rl nI nR (_ : term * term), True)%I.
+  session.session_ctx N (λ rl nI nR (_ : term * term), True)%I.
 
 Definition nsl_resp_accepted kI kR sI sR : iProp :=
-  session.session (@nonce_meta _ heap) N Resp sI sR (kI, kR).
+  session.session N Resp sI sR (kI, kR).
 
 Definition nsl_init_finished sR : iProp := □ ∀ kI kR sI,
-  session.session (@nonce_meta _ _) N Resp sI sR (kI, kR) →
+  session.session N Resp sI sR (kI, kR) →
   secret_of sI kI kR ∧
-  session.session (@nonce_meta _ _) N Init sI sR (kI, kR).
+  session.session N Init sI sR (kI, kR).
 
 Program Instance PK_NSL : PK N := {
   inv := nsl_ctx;
@@ -53,8 +52,7 @@ Program Instance PK_NSL : PK N := {
 
   resp_waiting kI kR sI nR sR := (
     ⌜sR = nR⌝ ∧
-    waiting_for_peer (@nonce_meta _ heap)
-                     N (λ _ _ _ _, True)%I Resp sI nR (kI, kR)
+    waiting_for_peer N (λ _ _ _ (_ : term * term), True)%I Resp sI nR (kI, kR)
   )%I;
 
   init_finished := nsl_init_finished;
