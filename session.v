@@ -58,11 +58,17 @@ Definition to_session_map SM := session_status_both <$> SM.
 
 Definition sessionR := authR session_mapUR.
 
-Class sessionG := {
-  session_inG    :> inG Σ sessionR;
+Class sessionG := SessionG {
+  session_name : gname;
+  session_inG :> inG Σ sessionR;
+}.
+
+Class sessionPreG := {
+  session_preG :> inG Σ sessionR;
 }.
 
 Context `{!sessionG, Countable X}.
+
 Context (N : namespace) (P : role → term → term → X → iProp).
 
 Let sinv rl tA tB x :=
@@ -76,11 +82,11 @@ Lemma session_status_frag_valid p : ✓ session_status_frag p.
 Proof. apply/auth_frag_valid; by case: p. Qed.
 
 Definition session_auth rl t (k : term) (x : X) o : iProp :=
-  nown N (◯ {[t := session_status_auth o]}) ∧
+  nown session_name N (◯ {[t := session_status_auth o]}) ∧
   nonce_meta t N (x, rl, k).
 
 Definition session_frag rl t (k : term) (x : X) o : iProp :=
-  nown N (◯ {[t := session_status_frag o]}) ∧
+  nown session_name N (◯ {[t := session_status_frag o]}) ∧
   nonce_meta t N (x, rl, k).
 
 Global Instance session_frag_persistent rl t k x o :
@@ -130,15 +136,15 @@ by iDestruct (term_meta_meta_token with "fresh not_fresh") as "[]".
 Qed.
 
 Definition session_ctx : iProp :=
-  inv N (∃ SM, nown N (● to_session_map SM) ∗ session_map_inv SM).
+  inv N (∃ SM, nown session_name N (● to_session_map SM) ∗ session_map_inv SM).
 
 Lemma session_ctx_acc E a :
   ↑N ⊆ E →
-  session_ctx ∗ nown N (◯ a) ={E,E ∖ ↑N}=∗ ∃ SM,
+  session_ctx ∗ nown session_name N (◯ a) ={E,E ∖ ↑N}=∗ ∃ SM,
     ⌜a ≼ to_session_map SM⌝ ∗ ▷ session_map_inv SM ∗ ∀ SM' b,
     ⌜(to_session_map SM, a) ~l~> (to_session_map SM', b)⌝ ∗
     ▷ session_map_inv SM' ={E∖↑N,E}=∗
-    nown N (◯ b).
+    nown session_name N (◯ b).
 Proof.
 iIntros "%sub [ctx own_f]".
 iMod (inv_acc with "ctx") as "[ctx close]" => //.
@@ -161,7 +167,7 @@ Lemma session_ctx_acc0 E :
     ▷ session_map_inv SM ∗ ∀ SM' b,
     ⌜(to_session_map SM, ∅) ~l~> (to_session_map SM', b)⌝ ∗
     ▷ session_map_inv SM' ={E∖↑N,E}=∗
-    nown N (◯ b).
+    nown session_name N (◯ b).
 Proof.
 iIntros "%sub ctx".
 iMod (inv_acc with "ctx") as "[ctx close]" => //.
@@ -175,10 +181,10 @@ iMod ("close" with "[own_a inv]") as "_"; eauto.
 by iModIntro; iExists SM'; iFrame.
 Qed.
 
-Lemma session_alloc E E' : ↑N ⊆ E → nown_token E ={E'}=∗ session_ctx.
+Lemma session_alloc E E' : ↑N ⊆ E → nown_token session_name E ={E'}=∗ session_ctx.
 Proof.
 iIntros (?) "token".
-iMod (nown_alloc _ (● (to_session_map ∅)) with "token") as "own"; eauto.
+iMod (nown_alloc session_name _ (● (to_session_map ∅)) with "token") as "own"; eauto.
   by rewrite auth_auth_valid.
 iApply inv_alloc.
 iModIntro; iExists ∅; iFrame.
@@ -278,7 +284,7 @@ rewrite {1}/session_map_inv (big_sepM_delete _ SM s) //.
 iDestruct "inv" as "[inv_s inv]".
 have ? : Inhabited X by exact: populate x.
 iDestruct "inv_s" as (k rl' x') "[#not_fresh inv_s]".
-iAssert (▷ (sinv (swap_role rl) s t x ∗ nown N (◯ f1)))%I
+iAssert (▷ (sinv (swap_role rl) s t x ∗ nown session_name N (◯ f1)))%I
     with "[sessA inv_s]" as "(res & >sessA)".
   iModIntro.
   iPoseProof (term_meta_agree with "metaB not_fresh") as "%e".
@@ -373,18 +379,38 @@ rewrite /session; case: rl => /=.
 all: by iIntros "frag"; iApply (session_end_aux with "ctx auth frag").
 Qed.
 
+Lemma session_not_ready E rl tI tR x :
+  ↑N ⊆ E →
+  session_ctx -∗
+  session rl tI tR x -∗
+  nonce_meta_token (if rl is Init then tI else tR) E -∗
+  False.
+Proof.
+iIntros "% #ctx [_ #meta] token".
+by iDestruct (term_meta_meta_token with "token meta") as "[]".
+Qed.
+
 End Session.
 
 Definition sessionΣ : gFunctor :=
   GFunctor sessionR.
 
 Arguments sessionG Σ : clear implicits.
-Arguments session_alloc {Σ _ _ _} {X _ _} N P.
-Arguments session_begin {Σ _ _ _ _ _ _}  {N P} E rl tI tR.
-Arguments session_ctx {Σ _ _} {_ _ _ _} N P.
-Arguments session {Σ _ _} {_ _ _ _} N rl _ _.
-Arguments waiting_for_peer {Σ _ _} {_ _ _ _} N P rl tI tR x.
+Arguments sessionPreG Σ : clear implicits.
+Arguments session_alloc {Σ _ _} {X _ _} N P.
+Arguments session_begin {Σ _ _ _ _ _}  {N P} E rl tI tR.
+Arguments session_ctx {Σ _ _} {_ _ _} N P.
+Arguments session {Σ _ _} {_ _ _} N rl _ _.
+Arguments waiting_for_peer {Σ _ _} {_ _ _} N P rl tI tR x.
 
 #[global]
-Instance subG_sessionΣ {Σ} : subG sessionΣ Σ → sessionG Σ.
+Instance subG_sessionΣ {Σ} : subG sessionΣ Σ → sessionPreG Σ.
 Proof. solve_inG. Qed.
+
+Lemma sessionG_alloc `{!heapGS Σ} :
+  sessionPreG Σ →
+  ⊢ |==> ∃ (H : sessionG Σ), nown_token session_name ⊤.
+Proof.
+iIntros (?). iMod nownGS_alloc as "(%γ & ?)".
+iExists (SessionG γ _). eauto.
+Qed.

@@ -17,7 +17,6 @@ Class cryptisG Σ := CryptisG {
   cryptis_inG       :> savedPredG Σ term;
   cryptis_key_inG   :> savedPredG Σ (key_type * term);
   cryptis_enc_inG   :> savedPredG Σ (term * term);
-  cryptis_nown      :> nownGS;
   cryptis_key_name  : gname;
   cryptis_hash_name : gname;
   cryptis_enc_name  : gname;
@@ -846,7 +845,7 @@ End Cryptis.
 Lemma cryptisG_alloc `{!heapGS Σ} :
   cryptisPreG Σ →
   ⊢ |==> ∃ (H : cryptisG Σ),
-           enc_pred_token ⊤ ∗ key_pred_token ⊤ ∗ hash_pred_token ⊤ ∗ nown_token ⊤.
+           enc_pred_token ⊤ ∗ key_pred_token ⊤ ∗ hash_pred_token ⊤.
 Proof.
 move=> ?; iStartProof.
 iMod (own_alloc (reservation_map_token ⊤)) as (γ_enc) "own_enc".
@@ -855,9 +854,8 @@ iMod (own_alloc (reservation_map_token ⊤)) as (γ_key) "own_key".
   apply reservation_map_token_valid.
 iMod (own_alloc (reservation_map_token ⊤)) as (γ_hash) "own_hash".
   apply reservation_map_token_valid.
-iMod (nownGS_alloc) as "(% & own_nown)".
 iModIntro.
-by iExists (CryptisG _ _ _ _ γ_enc γ_key γ_hash); iFrame.
+by iExists (CryptisG _ _ _ γ_enc γ_key γ_hash); iFrame.
 Qed.
 
 Arguments cryptis_enc_name {Σ _}.
