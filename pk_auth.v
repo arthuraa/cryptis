@@ -115,9 +115,6 @@ Class PK := {
   mk_session_key_sterm :
     ∀ rl t1 t2, sterm t1 -∗ sterm t2 -∗ sterm (mk_session_key rl t1 t2);
 
-  mk_session_key_pterm :
-    ∀ rl t1 t2, pterm t1 -∗ pterm t2 -∗ pterm (mk_session_key rl t1 t2);
-
   mk_session_key_is_session_key :
     ∀ kI kR nI nR,
     let sR := mk_key_share nR in

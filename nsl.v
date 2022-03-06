@@ -16,109 +16,49 @@ Context `{heap : !heapGS Σ, cryptis : !cryptisG Σ, sess : !session.sessionG Σ
 Notation iProp := (iProp Σ).
 Implicit Types t kI kR nI nR : term.
 
+Definition nsl_mk_session_key rl n1 n2 : term :=
+  if rl is Init then n1 else n2.
+
+Definition nsl_mk_session_key_impl rl : val :=
+  if rl is Init then λ: "nI" <>, "nI"
+  else λ: <> "nI", "nI".
+
 Variable N : namespace.
 
-Definition nsl_gen_keys : val := λ: <>,
-  let: "n" := mknonce #() in
-  ("n", "n").
+Program Instance PK_NSL : PK := {
+  is_priv_key := secret_of;
+  is_session_key := secret_of;
 
-Definition nsl_mk_sess_key : val := λ: "nI" <>, "nI".
+  mk_key_share n := n;
+  mk_key_share_impl := λ: <>,
+    let: "n" := mknonce #() in ("n", "n");
+  mk_session_key := nsl_mk_session_key;
+  mk_session_key_impl := nsl_mk_session_key_impl;
 
-Definition nsl_init : expr :=
-  pk_auth_init N nsl_gen_keys nsl_mk_sess_key.
-
-Definition nsl_resp : expr :=
-  pk_auth_resp N nsl_gen_keys nsl_mk_sess_key.
-
-Definition nsl_ctx : iProp :=
-  session.session_ctx N (λ rl nI nR (_ : term * term), True)%I.
-
-Definition nsl_resp_accepted kI kR sI sR : iProp :=
-  session.session N Resp sI sR (kI, kR).
-
-Definition nsl_init_finished sR : iProp := □ ∀ kI kR sI,
-  session.session N Resp sI sR (kI, kR) →
-  secret_of sI kI kR ∧
-  session.session N Init sI sR (kI, kR).
-
-Program Instance PK_NSL : PK N := {
-  inv := nsl_ctx;
-
-  init_waiting kI kR nI sI := (
-    ⌜sI = nI⌝ ∧ nonce_meta_token nI (↑N)
-  )%I;
-
-  resp_accepted := nsl_resp_accepted;
-
-  resp_waiting kI kR sI nR sR := (
-    ⌜sR = nR⌝ ∧
-    waiting_for_peer N (λ _ _ _ (_ : term * term), True)%I Resp sI nR (kI, kR)
-  )%I;
-
-  init_finished := nsl_init_finished;
-
-  session rl kI kR kS := True%I;
-
-  init_gen_keys := nsl_gen_keys;
-  init_mk_sess_key := nsl_mk_sess_key;
-  resp_gen_keys := nsl_gen_keys;
-  resp_mk_sess_key := nsl_mk_sess_key;
-  
 }.
 
+Next Obligation. by eauto. Qed.
+
+Next Obligation. by eauto. Qed.
+
+Next Obligation. by eauto. Qed.
+
+Next Obligation. by case; eauto. Qed.
+
+Next Obligation. by case; eauto. Qed.
+
 Next Obligation.
-iIntros "%E %kI %kR % #? !> %Ψ _ post". rewrite /nsl_gen_keys.
-wp_pures. wp_bind (mknonce _).
-iApply (wp_mknonce _ (λ _, corruption kI kR) (λ _, True)%I).
-iIntros "%nI #s_nI #p_nI _ token".
-rewrite (term_meta_token_difference _ (↑N)) //.
-iDestruct "token" as "[token _]".
-wp_pures. iModIntro. iApply "post". do !iSplit; eauto.
-by rewrite /secret_of bi.intuitionistic_intuitionistically.
+iIntros "%E %kI %kR %Φ _ post". wp_pures.
+wp_bind (mknonce _).
+iApply (wp_mknonce _ (λ _, corruption kI kR) (λ _, False)%I).
+iIntros "%n #s_n #p_n _ token". wp_pures. iModIntro.
+iApply "post". rewrite bi.intuitionistic_intuitionistically. by eauto.
 Qed.
 
 Next Obligation.
-iIntros "%E %kI %kR %nI %sI %sR % #ctx #s_nI _ #p_nI #s_sR #p_sR".
-iIntros "[#fail|#sessR] %Ψ !> (-> & token) post".
-  rewrite /nsl_mk_sess_key. wp_pures. iModIntro. iApply "post".
-  by do !iSplit; eauto.
-iMod (session_begin _ Init _ sR (kI, kR) with "ctx [//] token")
-  as "[#sessI end]" => //.
-(* This condition should be more interesting eventually *)
-iMod ("end" with "[//] sessR") as "end".
-rewrite /nsl_mk_sess_key. wp_pures. iModIntro. iApply "post".
-do !iSplit; eauto. iRight.
-iIntros "!> %kI' %kR' %nI' #sessR'".
-iPoseProof (session_agree with "sessR' sessR") as "%e" => //.
-case: e => -> -> ->. by eauto.
-Qed.
-
-Next Obligation.
-iIntros "%E %kI %kR %nI % #ctx #s_nI _ !> %Ψ _ post".
-rewrite /nsl_gen_keys. wp_pures. wp_bind (mknonce _).
-iApply (wp_mknonce _ (λ _, corruption kI kR) (λ _, True)%I).
-iIntros "%nR #s_nR #p_nR _ token".
-rewrite bi.intuitionistic_intuitionistically.
-rewrite (term_meta_token_difference _ (↑N)) //.
-iDestruct "token" as "[token _]". wp_pures.
-iApply "post".
-iMod (session_begin _ Resp nI nR (kI, kR) with "ctx [//] token")
-  as "[#sessR waiting]" => //.
-by iModIntro; do 5!iSplit => //.
-Qed.
-
-Next Obligation.
-iIntros "%E %kI %kR %sI %nR %sR % #ctx #s_sI #p_sI #s_nR #s_sR #p_sR".
-iIntros "#accepted #finishedI !> %Ψ [-> waiting] post".
-rewrite /nsl_mk_sess_key. wp_pures.
-iDestruct "finishedI" as "[fail|#finishedI]".
-  iModIntro. iApply "post". do!iSplit; eauto.
-  iModIntro. iSplit; eauto.
-  iIntros "_". by iApply "p_sI".
-iPoseProof ("finishedI" with "accepted") as "{p_sI} [p_sI finished]".
-(* This step should be more interesting eventually *)
-iMod ("waiting" with "[//] finished") as "finishedR".
-iModIntro. iApply "post". by eauto.
+iIntros "%E %rl %n1 %n2 %Φ _ post".
+case: rl; rewrite /nsl_mk_session_key_impl /=; wp_pures;
+iModIntro; by iApply "post".
 Qed.
 
 End NSL.
