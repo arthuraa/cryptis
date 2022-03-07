@@ -16,6 +16,9 @@ Context `{heap : !heapGS Σ, cryptis : !cryptisG Σ, sess : !session.sessionG Σ
 Notation iProp := (iProp Σ).
 Implicit Types t kI kR nI nR : term.
 
+Definition nsl_mk_key_share_impl : val := λ: <>,
+    let: "n" := mknonce #() in ("n", "n").
+
 Definition nsl_mk_session_key rl n1 n2 : term :=
   if rl is Init then n1 else n2.
 
@@ -25,12 +28,18 @@ Definition nsl_mk_session_key_impl rl : val :=
 
 Variable N : namespace.
 
+Definition nsl_init : val := λ: "c",
+  pk_auth_init N "c" nsl_mk_key_share_impl (nsl_mk_session_key_impl Init).
+
+Definition nsl_resp : val := λ: "c",
+  pk_auth_resp N "c" nsl_mk_key_share_impl (nsl_mk_session_key_impl Resp).
+
+#[local]
 Program Instance PK_NSL : PK := {
   is_priv_key := secret_of;
 
   mk_key_share n := n;
-  mk_key_share_impl := λ: <>,
-    let: "n" := mknonce #() in ("n", "n");
+  mk_key_share_impl := nsl_mk_key_share_impl;
   mk_session_key := nsl_mk_session_key;
   mk_session_key_impl := nsl_mk_session_key_impl;
 
@@ -45,8 +54,8 @@ Next Obligation. by eauto. Qed.
 Next Obligation. by case; eauto. Qed.
 
 Next Obligation.
-iIntros "%E %kI %kR %Φ _ post". wp_pures.
-wp_bind (mknonce _).
+iIntros "%E %kI %kR %Φ _ post". rewrite /nsl_mk_key_share_impl.
+wp_pures. wp_bind (mknonce _).
 iApply (wp_mknonce _ (λ _, corruption kI kR) (λ _, False)%I).
 iIntros "%n #s_n #p_n _ token". wp_pures. iModIntro.
 iApply "post". rewrite bi.intuitionistic_intuitionistically. by eauto.
@@ -56,6 +65,51 @@ Next Obligation.
 iIntros "%E %rl %n1 %n2 %Φ _ post".
 case: rl; rewrite /nsl_mk_session_key_impl /=; wp_pures;
 iModIntro; by iApply "post".
+Qed.
+
+Lemma wp_nsl_init c kI kR E :
+  ↑cryptisN ⊆ E →
+  ↑N ⊆ E →
+  channel c -∗
+  ctx N -∗
+  pterm (TKey Enc kI) -∗
+  pterm (TKey Enc kR) -∗
+  {{{ True }}}
+    nsl_init c (TKey Dec kI) (TKey Enc kI) (TKey Enc kR) @ E
+  {{{ (okS : option term), RET repr okS;
+      if okS is Some kS then
+        sterm kS ∗
+        (corruption kI kR ∨
+         session_key_token N Init kS ∗ session_key N kI kR kS)
+      else True
+  }}}.
+Proof.
+iIntros "% % #chan_c #ctx #p_ekI #p_ekR %Ψ !> _ post".
+rewrite /nsl_init; wp_pures.
+iApply (wp_pk_auth_init with "chan_c ctx"); eauto.
+Qed.
+
+Lemma wp_nsl_resp c kR E :
+  ↑cryptisN ⊆ E →
+  ↑N ⊆ E →
+  channel c -∗
+  ctx N -∗
+  pterm (TKey Enc kR) -∗
+  {{{ True }}}
+    nsl_resp c (TKey Dec kR) (TKey Enc kR) @ E
+  {{{ (res : option (term * term)), RET repr res;
+      if res is Some (pkI, kS) then ∃ kI,
+        ⌜pkI = TKey Enc kI⌝ ∧
+        pterm pkI ∧
+        sterm kS ∧
+        (corruption kI kR ∨
+         session_key_token N Resp kS ∗ session_key N kI kR kS)
+      else True
+  }}}.
+Proof.
+iIntros "% % #chan_c #ctx #p_ekR %Ψ !> _ post".
+rewrite /nsl_resp; wp_pures.
+iApply (wp_pk_auth_resp with "chan_c ctx"); eauto.
 Qed.
 
 End NSL.
