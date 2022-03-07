@@ -27,7 +27,6 @@ Variable N : namespace.
 
 Program Instance PK_NSL : PK := {
   is_priv_key := secret_of;
-  is_session_key := secret_of;
 
   mk_key_share n := n;
   mk_key_share_impl := λ: <>,
@@ -42,8 +41,6 @@ Next Obligation. by eauto. Qed.
 Next Obligation. by eauto. Qed.
 
 Next Obligation. by eauto. Qed.
-
-Next Obligation. by case; eauto. Qed.
 
 Next Obligation. by case; eauto. Qed.
 

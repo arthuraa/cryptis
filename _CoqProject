@@ -16,7 +16,6 @@ primitives/comp.v
 primitives/simple.v
 primitives.v
 tactics.v
-pk_auth.v
 session.v
 dh.v
 rel_channel.v
@@ -28,11 +27,15 @@ attacker.v
 
 challenge_response.v
 
-## NSL+DH
+## Public-key authentication
 
+pk_auth.v
 nsl.v
 nsl_dh.v
 nsl_dh_game.v
+pk_dh.v
+
+## NSL+DH
 
 ## TLS 1.3
 
