@@ -81,6 +81,16 @@ move=> sub; rewrite /enc_pred_token.
 by rewrite (reservation_map_token_difference E1 E2) // own_op.
 Qed.
 
+Lemma enc_pred_token_drop E1 E2 :
+  E1 ⊆ E2 →
+  enc_pred_token E2 -∗
+  enc_pred_token E1.
+Proof.
+iIntros (sub) "t".
+rewrite enc_pred_token_difference //.
+by iDestruct "t" as "[t _]".
+Qed.
+
 Global Instance enc_pred_persistent N Φ : Persistent (enc_pred N Φ).
 Proof. apply _. Qed.
 
@@ -100,13 +110,16 @@ Qed.
 Lemma enc_pred_set E (N : namespace) Φ :
   ↑N ⊆ E →
   enc_pred_token E ==∗
-  enc_pred N Φ.
+  enc_pred N Φ ∗
+  enc_pred_token (E ∖ ↑N).
 Proof.
 iIntros (?) "token".
 iMod (saved_pred_alloc (λ '(k, t), Φ k t)) as (γ) "own".
+rewrite (@enc_pred_token_difference (↑N)) //.
+iDestruct "token" as "[token ?]".
 iMod (own_update with "token").
   eapply (namespace_map_alloc_update _ _ (to_agree γ)) => //.
-by iModIntro; iExists γ; iSplit.
+by iModIntro; iFrame; iExists γ; iSplit.
 Qed.
 
 Definition wf_enc k t : iProp :=
@@ -141,6 +154,16 @@ move=> sub; rewrite /key_pred_token.
 by rewrite (reservation_map_token_difference E1 E2) // own_op.
 Qed.
 
+Lemma key_pred_token_drop E1 E2 :
+  E1 ⊆ E2 →
+  key_pred_token E2 -∗
+  key_pred_token E1.
+Proof.
+iIntros (sub) "t".
+rewrite key_pred_token_difference //.
+by iDestruct "t" as "[t _]".
+Qed.
+
 Global Instance key_pred_persistent N φ : Persistent (key_pred N φ).
 Proof. apply _. Qed.
 
@@ -160,13 +183,16 @@ Qed.
 Lemma key_pred_set E N P :
   ↑N ⊆ E →
   key_pred_token E ==∗
-  key_pred N P.
+  key_pred N P ∗
+  key_pred_token (E ∖ ↑N).
 Proof.
 iIntros (?) "token".
+rewrite (@key_pred_token_difference (↑N)) //.
+iDestruct "token" as "[token ?]".
 iMod (saved_pred_alloc (λ '(kt, t), P kt t)) as (γ) "own".
 iMod (own_update with "token").
   by eapply (namespace_map_alloc_update _ _ (to_agree γ)) => //.
-by iModIntro; iExists γ; iSplit.
+by iModIntro; iFrame; iExists γ; iSplit.
 Qed.
 
 Definition wf_key kt t : iProp :=
@@ -201,6 +227,16 @@ move=> sub; rewrite /hash_pred_token.
 by rewrite (reservation_map_token_difference E1 E2) // own_op.
 Qed.
 
+Lemma hash_pred_token_drop E1 E2 :
+  E1 ⊆ E2 →
+  hash_pred_token E2 -∗
+  hash_pred_token E1.
+Proof.
+iIntros (sub) "t".
+rewrite hash_pred_token_difference //.
+by iDestruct "t" as "[t _]".
+Qed.
+
 Global Instance hash_pred_persistent N P : Persistent (hash_pred N P).
 Proof. apply _. Qed.
 
@@ -220,13 +256,16 @@ Qed.
 Lemma hash_pred_set E N P :
   ↑N ⊆ E →
   hash_pred_token E ==∗
-  hash_pred N P.
+  hash_pred N P ∗
+  hash_pred_token (E ∖ ↑N).
 Proof.
 iIntros (?) "token".
+rewrite (@hash_pred_token_difference (↑N)) //.
+iDestruct "token" as "[token ?]".
 iMod (saved_pred_alloc P) as (γ) "own".
 iMod (own_update with "token").
   by eapply (namespace_map_alloc_update _ _ (to_agree γ)) => //.
-by iModIntro; iExists γ; iSplit.
+by iModIntro; iFrame; iExists γ; iSplit.
 Qed.
 
 Definition wf_hash t : iProp :=

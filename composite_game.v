@@ -6,7 +6,8 @@ From iris.algebra Require Import numbers.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par.
 From cryptis Require Import lib term cryptis primitives tactics.
-From cryptis Require Import session challenge_response nsl dh nsl_dh tls13.
+From cryptis Require Import nown role session challenge_response.
+From cryptis Require Import pk_auth dh pk_dh tls13.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -59,9 +60,9 @@ Definition tls_server_loop : val := λ: "c" "psk" "nR" "params",
      let: "psk" := Fst (mkkey (SShare.I.session_key_of tlsN "res")) in
      "loop" "psk") "psk".
 
-Lemma wp_tls_server_loop γtls c psk nR params :
+Lemma wp_tls_server_loop c psk nR params :
   channel c -∗
-  tls_ctx tlsN γtls -∗
+  tls_ctx tlsN -∗
   sterm psk -∗
   pterm nR  -∗
   pterm params -∗
@@ -100,18 +101,18 @@ Definition environment : val := λ: "c" "nI" "nR" "psk",
   fork_loop (
     let: "pkR'" := recv "c" in
     bind: "pkR'" := to_ek "pkR'" in
-    nsl_dh_init nslN "c" Spec.zero "dkI" "ekI" "pkR'");;
-  fork_loop (nsl_dh_resp nslN "c" Spec.zero "dkR" "ekR");;
+    pk_dh_init nslN "c" "dkI" "ekI" "pkR'");;
+  fork_loop (pk_dh_resp nslN "c" "dkR" "ekR");;
   fork_loop (cr_init crN "c" "ekI" "dkI" "dkR");;
   fork_loop (cr_resp crN "c" "ekR" "dkR");;
   let: "server_params" := recv "c" in
   Fork (tls_server_loop "c" "psk" "nR" "server_params").
 
-Lemma wp_environment c γnsl γcr γtls nI nR psk :
+Lemma wp_environment c nI nR psk :
   channel c -∗
-  nsl_dh_ctx nslN (λ _ _ _ _ _, True)%I Spec.zero γnsl -∗
-  cr_ctx crN (λ _ _ _ _ _, True)%I γcr -∗
-  tls_ctx tlsN γtls -∗
+  pk_dh_ctx nslN (λ _ _ _ _, True)%I -∗
+  cr_ctx crN (λ _ _ _ _ _, True)%I -∗
+  tls_ctx tlsN -∗
   pterm nI -∗
   pterm nR -∗
   sterm psk -∗
@@ -140,12 +141,10 @@ wp_bind (fork_loop _); iApply wp_fork_loop; eauto.
   iIntros "%pkR' #?"; wp_pures.
   wp_bind (to_ek _); iApply wp_to_ek.
   case: Spec.to_ekP => [? ->|_]; wp_pures => //.
-  iApply (wp_nsl_dh_init _ (λ _ _ _ _ _, True)%I); eauto.
-  by rewrite sterm_TInt.
+  by iApply (wp_pk_dh_init _ (λ _ _ _ _, True)%I); eauto.
 iIntros "!> _"; wp_pures; wp_bind (fork_loop _); iApply wp_fork_loop => //.
   iModIntro.
-  iApply (wp_nsl_dh_resp _ (λ _ _ _ _ _, True)%I); eauto.
-  by rewrite sterm_TInt.
+  by iApply (wp_pk_dh_resp _ (λ _ _ _ _, True)%I); eauto.
 iIntros "!> _"; wp_pures; wp_bind (fork_loop _); iApply wp_fork_loop => //.
   by iModIntro; iApply (wp_cr_init); eauto.
 iIntros "!> _"; wp_pures; wp_bind (fork_loop _); iApply wp_fork_loop => //.
@@ -168,9 +167,9 @@ Definition tls_client_loop : val := λ: "c" "psk",
       "loop" "psk'"
     else SOME "psk'") "psk".
 
-Lemma wp_tls_client_loop γtls c psk :
+Lemma wp_tls_client_loop c psk :
   channel c -∗
-  tls_ctx tlsN γtls -∗
+  tls_ctx tlsN -∗
   sterm psk -∗
   {{{ pterm psk → ▷ False }}}
     tls_client_loop c psk
@@ -228,30 +227,21 @@ Definition game : val := λ: "mkchan",
 
 Lemma wp_game (mkchan : val) :
   {{{ True }}} mkchan #() {{{ v, RET v; channel v }}} -∗
+  nown_token session_name ⊤ -∗
   enc_pred_token ⊤ -∗
   hash_pred_token ⊤ -∗
   key_pred_token ⊤ -∗
   WP game mkchan {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
-iIntros "wp_mkchan enc_tok hash_tok key_tok"; rewrite /game; wp_pures.
-rewrite (enc_pred_token_difference (↑nslN)) //.
-iDestruct "enc_tok" as "[nsl_tok enc_tok]".
-iMod (nsl_dh_alloc nslN (λ _ _ _ _ _, True)%I Spec.zero with "nsl_tok")
-  as (γnsl) "#nsl_ctx" => //.
-rewrite (enc_pred_token_difference (↑crN)); last solve_ndisj.
-iDestruct "enc_tok" as "[cr_tok enc_tok]".
-iMod (cr_alloc crN (λ _ _ _ _ _, True)%I with "cr_tok")
-  as (γcr) "#cr_ctx"; eauto.
-rewrite (enc_pred_token_difference (↑tlsN)); last solve_ndisj.
-iDestruct "enc_tok" as "[tls_enc_tok _]".
-rewrite (key_pred_token_difference (↑tlsN)); last solve_ndisj.
-iDestruct "key_tok" as "[tls_key_tok key_tok]".
-rewrite (hash_pred_token_difference (↑tlsN)); last solve_ndisj.
-iDestruct "hash_tok" as "[tls_hash_tok _]".
-iMod (tls_ctx_alloc tlsN with "tls_enc_tok tls_hash_tok tls_key_tok")
-  as (γtls) "#tls_ctx"; eauto.
+iIntros "wp_mkchan sess_tok enc_tok hash_tok key_tok"; rewrite /game; wp_pures.
+iMod (pk_dh_alloc nslN (λ _ _ _ _, True)%I with "sess_tok enc_tok")
+  as "(#pk_dh_ctx & sess_tok & enc_tok)" => //; try solve_ndisj.
+iMod (cr_alloc crN (λ _ _ _ _ _, True)%I with "sess_tok enc_tok")
+  as "(#cr_ctx & sess_tok & enc_tok)"; try solve_ndisj.
+iMod (tls_ctx_alloc tlsN with "sess_tok enc_tok hash_tok key_tok")
+  as "(#tls_ctx & sess_tok & enc_tok & hash_tok & key_tok)"; try solve_ndisj.
 iMod (key_pred_set (nroot.@"key") (λ kt _, ⌜kt = Enc⌝)%I with "key_tok")
-  as "#?"; try solve_ndisj.
+  as "[#? key_tok]"; try solve_ndisj.
 wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP".
 wp_pures; wp_bind (mknonce _).
@@ -310,6 +300,7 @@ apply (adequate_result NotStuck _ _ (λ v _, v = NONEV ∨ v = SOMEV #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
 iMod (cryptisG_alloc _) as (?) "(enc_tok & key_tok & hash_tok)".
-iApply (wp_game with "[] [enc_tok] [hash_tok] [key_tok]") => //.
+iMod (sessionG_alloc _) as (?) "sess_tok".
+iApply (wp_game with "[] [sess_tok] [enc_tok] [hash_tok] [key_tok]") => //.
 iApply wp_mkchan.
 Qed.

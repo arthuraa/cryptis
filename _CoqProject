@@ -31,8 +31,7 @@ challenge_response.v
 
 pk_auth.v
 nsl.v
-nsl_dh.v
-nsl_dh_game.v
+pk_dh_game.v
 pk_dh.v
 
 ## NSL+DH

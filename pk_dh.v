@@ -31,6 +31,10 @@ Definition pk_dh_mk_session_key_impl rl : val :=
 
 Variable N : namespace.
 
+Variable pk_dh_confirmation : role → term → term → term → iProp.
+Variable pk_dh_confirmation_persistent :
+  ∀ rl kI kR kS, Persistent (pk_dh_confirmation rl kI kR kS).
+
 Definition pk_dh_init : val := λ: "c",
   pk_auth_init N "c" pk_dh_mk_key_share_impl (pk_dh_mk_session_key_impl Init).
 
@@ -40,7 +44,7 @@ Definition pk_dh_resp : val := λ: "c",
 #[local]
 Program Instance PK_DH : PK := {
   is_priv_key n kI kR := dh_seed (λ _, corruption kI kR) n;
-
+  confirmation := pk_dh_confirmation;
   mk_key_share := pk_dh_mk_key_share;
   mk_key_share_impl := pk_dh_mk_key_share_impl;
   mk_session_key := pk_dh_mk_session_key;
@@ -95,6 +99,18 @@ rewrite /pk_dh_mk_session_key_impl.
 wp_pures. iApply wp_texp. by iApply "post".
 Qed.
 
+Definition pk_dh_ctx : iProp := ctx N.
+
+Lemma pk_dh_alloc E1 E2 E' :
+  ↑N ⊆ E1 →
+  ↑N ⊆ E2 →
+  nown_token session_name E1 -∗
+  enc_pred_token E2 ={E'}=∗
+  pk_dh_ctx ∗
+  nown_token session_name (E1 ∖ ↑N) ∗
+  enc_pred_token (E2 ∖ ↑N).
+Proof. exact: pk_auth_alloc. Qed.
+
 Lemma pk_dh_session_key_elim kI kR kS :
   session_key N kI kR kS -∗
   pterm kS →
@@ -114,11 +130,12 @@ Lemma wp_pk_dh_init c kI kR E :
   ctx N -∗
   pterm (TKey Enc kI) -∗
   pterm (TKey Enc kR) -∗
-  {{{ True }}}
+  {{{ init_confirm kI kR }}}
     pk_dh_init c (TKey Dec kI) (TKey Enc kI) (TKey Enc kR) @ E
   {{{ (okS : option term), RET repr okS;
       if okS is Some kS then
         sterm kS ∗
+        pk_dh_confirmation Init kI kR kS ∗
         (corruption kI kR ∨
          □ (pterm kS → ◇ False) ∗
          session_key_token N Init kS ∗
@@ -126,13 +143,13 @@ Lemma wp_pk_dh_init c kI kR E :
       else True
   }}}.
 Proof.
-iIntros "% % #chan_c #ctx #p_ekI #p_ekR %Ψ !> _ post".
+iIntros "% % #chan_c #ctx #p_ekI #p_ekR %Ψ !> confirm post".
 rewrite /pk_dh_init; wp_pures.
-iApply (wp_pk_auth_init with "chan_c ctx"); eauto.
+iApply (wp_pk_auth_init with "chan_c ctx [] [] [confirm]"); eauto.
 iIntros "!> %okS". case: okS => [kS|]; last first.
   by iApply ("post" $! None).
-iIntros "[#s_kS kSP]". iApply ("post" $! (Some kS)).
-iSplitR => //.
+iIntros "(#s_kS & #confirmed & kSP)". iApply ("post" $! (Some kS)).
+iSplitR => //. iSplit => //.
 iDestruct "kSP" as "[fail|[token #key]]"; eauto.
 iRight. iFrame. iSplit => //. iModIntro.
 by iApply pk_dh_session_key_elim.
@@ -144,13 +161,14 @@ Lemma wp_pk_dh_resp c kR E :
   channel c -∗
   ctx N -∗
   pterm (TKey Enc kR) -∗
-  {{{ True }}}
+  {{{ resp_confirm kR }}}
     pk_dh_resp c (TKey Dec kR) (TKey Enc kR) @ E
   {{{ (res : option (term * term)), RET repr res;
       if res is Some (pkI, kS) then ∃ kI,
-        ⌜pkI = TKey Enc kI⌝ ∧
-        pterm pkI ∧
-        sterm kS ∧
+        ⌜pkI = TKey Enc kI⌝ ∗
+        pterm pkI ∗
+        sterm kS ∗
+        confirmation Resp kI kR kS ∗
         (corruption kI kR ∨
          □ (pterm kS → ◇ False) ∗
          session_key_token N Resp kS ∗
@@ -158,17 +176,22 @@ Lemma wp_pk_dh_resp c kR E :
       else True
   }}}.
 Proof.
-iIntros "% % #chan_c #ctx #p_ekR %Ψ !> _ post".
+iIntros "% % #chan_c #ctx #p_ekR %Ψ !> confirm post".
 rewrite /pk_dh_resp; wp_pures.
-iApply (wp_pk_auth_resp with "chan_c ctx"); eauto.
+iApply (wp_pk_auth_resp with "chan_c ctx [] [confirm]"); eauto.
 iIntros "!> %res". case: res => [[pkI kS]|]; last first.
   by iApply ("post" $! None).
-iIntros "(%kI & -> & #p_pkI & #s_kS & kSP)".
+iIntros "(%kI & -> & #p_pkI & #s_kS & #confirmed & kSP)".
 iApply ("post" $! (Some (TKey Enc kI, kS))). iExists kI.
-do 3!iSplitR => //.
+do 4!iSplitR => //.
 iDestruct "kSP" as "[fail|[token #key]]"; eauto.
 iRight. iFrame. iSplit => //. iModIntro.
 by iApply pk_dh_session_key_elim.
 Qed.
 
 End PKDH.
+
+Arguments pk_dh_ctx {Σ _ _ _} N _ {_}.
+Arguments pk_dh_alloc {Σ _ _ _} N _ _ _.
+Arguments wp_pk_dh_init {Σ _ _ _} N.
+Arguments wp_pk_dh_resp {Σ _ _ _} N.

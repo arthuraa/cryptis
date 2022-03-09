@@ -4,7 +4,8 @@ From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term cryptis primitives tactics session dh.
+From cryptis Require Import lib term cryptis primitives tactics role.
+From cryptis Require Import session dh.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

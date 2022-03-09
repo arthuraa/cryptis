@@ -2,7 +2,8 @@ From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term cryptis primitives tactics session dh.
+From cryptis Require Import lib term cryptis primitives tactics nown.
+From cryptis Require Import role session dh.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -27,16 +28,19 @@ Proof. apply _. Qed.
 
 Lemma ctx_alloc N E1 E2 E' :
   ↑N.@"psk" ⊆ E1 →
-  ↑N ⊆ E2 →
+  ↑N.@"sess_key" ⊆ E2 →
   hash_pred_token E1 -∗
   key_pred_token E2 ={E'}=∗
-  ctx N.
+  ctx N ∗
+  hash_pred_token (E1 ∖ ↑N.@"psk") ∗
+  key_pred_token (E2 ∖ ↑N.@"sess_key").
 Proof.
 iIntros (??) "tok1 tok2".
-iMod (hash_pred_set (N.@"psk") (λ _, True)%I with "tok1") as "?"; eauto.
-iMod (key_pred_set (N.@"sess_key") (λ _ _, False)%I with "tok2") as "?".
-  solve_ndisj.
-by iModIntro; iSplit; eauto.
+iMod (hash_pred_set (N.@"psk") (λ _, True)%I with "tok1")
+  as "[? ?]"; eauto.
+iFrame.
+iMod (key_pred_set (N.@"sess_key") (λ _ _, False)%I with "tok2")
+  as "[? ?]"; eauto.
 Qed.
 
 End Keys.
@@ -1541,11 +1545,12 @@ Lemma ctx_alloc N E E' :
   ↑N.@"binder" ⊆ E →
   Keys.ctx N -∗
   hash_pred_token E ={E'}=∗
-  ctx N.
+  ctx N ∗
+  hash_pred_token (E ∖ ↑N.@"binder").
 Proof.
 iIntros (?) "#? token".
-iMod (hash_pred_set (N.@"binder") (binder_inv N) with "token") as "?"; eauto.
-by iModIntro; iSplit.
+iMod (hash_pred_set (N.@"binder") (binder_inv N) with "token") as "[??]"; eauto.
+iFrame. by iModIntro.
 Qed.
 
 Lemma pterm_hello N cp : ctx N -∗ wf N cp -∗ pterm (hello N cp).
@@ -1830,38 +1835,39 @@ Qed.
 Context `{!sessionG Σ}.
 Variable (N : namespace) (P : role → term → term → Meth.t * term * term → iProp).
 
-Definition hello_pred γ (k t : term) : iProp := ∃ sp,
+Definition hello_pred (k t : term) : iProp := ∃ sp,
   let ss := share sp in
   ⌜t = hello_priv N sp⌝ ∧
   SShare.wf ss ∧
-  session (@nonce_meta _ _)
-          (N.@"sess") γ Resp (SShare.cnonce ss) (SShare.snonce ss)
+  session (N.@"sess") Resp (SShare.cnonce ss) (SShare.snonce ss)
           (SShare.meth_of ss, SShare.session_key_of N ss, other sp).
 
-Definition hello_sig_pred γ (k t : term) : iProp := ∃ kex other,
+Definition hello_sig_pred (k t : term) : iProp := ∃ kex other,
   ⌜t = THash (Spec.of_list [SShare.term_of (SShare.encode N kex); other])⌝ ∧
   SShare.wf kex ∧
-  session (@nonce_meta _ _)
-          (N.@"sess") γ Resp (SShare.cnonce kex) (SShare.snonce kex)
+  session (N.@"sess") Resp (SShare.cnonce kex) (SShare.snonce kex)
           (SShare.meth_of kex, SShare.session_key_of N kex, other).
 
-Definition ctx γ : iProp :=
+Definition ctx : iProp :=
   Keys.ctx N ∧
-  enc_pred (N.@"server_hello") (hello_pred γ) ∧
-  enc_pred (N.@"server_hello_sig") (hello_sig_pred γ) ∧
-  session_ctx (@nonce_meta _ _) (N.@"sess") P γ.
+  enc_pred (N.@"server_hello") hello_pred ∧
+  enc_pred (N.@"server_hello_sig") hello_sig_pred ∧
+  session_ctx (N.@"sess") P.
 
-Lemma ctx_alloc (E : coPset) γ :
+Lemma ctx_alloc (E E' : coPset) :
+  ↑N.@"server_hello" ⊆ E →
+  ↑N.@"server_hello_sig" ⊆ E →
   Keys.ctx N -∗
-  session_ctx (@nonce_meta _ _) (N.@"sess") P γ -∗
-  enc_pred_token (↑N.@"server_hello") -∗
-  enc_pred_token (↑N.@"server_hello_sig") ={E}=∗ ctx γ.
+  session_ctx (N.@"sess") P -∗
+  enc_pred_token E ={E'}=∗
+  ctx ∗
+  enc_pred_token (E ∖ ↑N.@"server_hello" ∖ ↑N.@"server_hello_sig").
 Proof.
-iIntros "#ctx #? tok1 tok2".
-iMod (enc_pred_set (N.@"server_hello") (hello_pred γ) with "tok1")
-  as "#?"; eauto.
-iMod (enc_pred_set (N.@"server_hello_sig") (hello_sig_pred γ) with "tok2")
-  as "#?"; eauto.
+iIntros "% % #ctx #? tok".
+iMod (enc_pred_set (N.@"server_hello") hello_pred with "tok")
+  as "[#? tok]"; eauto.
+iMod (enc_pred_set (N.@"server_hello_sig") hello_sig_pred with "tok")
+  as "[#? tok]"; try solve_ndisj.
 iModIntro; do !iSplit => //.
 Qed.
 
@@ -1874,21 +1880,19 @@ Definition wf sp : iProp :=
 Instance wf_persistent sp : Persistent (wf sp).
 Proof. apply _. Qed.
 
-Lemma pterm_hello γ E sp :
+Lemma pterm_hello E sp :
   ↑N ⊆ E →
   let ss := share sp in
-  ctx γ -∗
+  ctx -∗
   wf sp -∗
   nonce_meta_token (SShare.snonce ss) (↑N.@"sess") -∗
   P Resp (SShare.cnonce ss) (SShare.snonce ss)
     (SShare.meth_of ss, SShare.session_key_of N ss, other sp) ={E}=∗
   pterm (hello N sp) ∗
-  session (@nonce_meta _ _) (N.@"sess") γ Resp (SShare.cnonce ss) (SShare.snonce ss)
+  session (N.@"sess") Resp (SShare.cnonce ss) (SShare.snonce ss)
     (SShare.meth_of ss, SShare.session_key_of N ss, other sp) ∗
-  (session (@nonce_meta _ _) (N.@"sess") γ Init (SShare.cnonce ss) (SShare.snonce ss)
-     (SShare.meth_of ss, SShare.session_key_of N ss, other sp) ={E}=∗
-   ▷ P Init (SShare.cnonce ss) (SShare.snonce ss)
-       (SShare.meth_of ss, SShare.session_key_of N ss, other sp)).
+  waiting_for_peer (N.@"sess") P Resp (SShare.cnonce ss) (SShare.snonce ss)
+    (SShare.meth_of ss, SShare.session_key_of N ss, other sp).
 Proof.
 iIntros (?) "#(keys & hello_ctx & sig_ctx & sess_ctx)".
 iIntros "#(wf_share & p_vkey & p_other) token r".
@@ -1923,9 +1927,9 @@ by iApply SShare.pterm_encode.
 Qed.
 
 (* TODO: Clean this statement *)
-Lemma pterm_checkE γ cp sh vkey s_ke :
+Lemma pterm_checkE cp sh vkey s_ke :
   check N cp sh = Some (vkey, s_ke) →
-  ctx γ -∗
+  ctx -∗
   pterm sh -∗
   ∃ k, ⌜vkey = TKey Dec k⌝ ∧
        ⌜CParams.share cp = SShare.cshare_of s_ke⌝ ∧
@@ -1945,7 +1949,7 @@ Lemma pterm_checkE γ cp sh vkey s_ke :
             pterm (TKey Enc (SShare.session_key_of' N s_ke)) ∨
           ∃ sp, ⌜sh = hello N sp⌝ ∧
                 SShare.wf (share sp) ∧
-                session (@nonce_meta _ _) (N.@"sess") γ Resp
+                session (N.@"sess") Resp
                         (SShare.cnonce s_ke)
                         (SShare.snonce s_ke)
                         (SShare.meth_of s_ke,
@@ -2055,49 +2059,66 @@ Definition tls_client : val := λ: "c" "kex" "other",
   send "c" "ack" ;;
   SOME ("vkey", SShare.I.cnonce "kex", SShare.I.snonce "kex", "session_key").
 
-Definition ack_pred γ (k t : term) : iProp :=
+Definition ack_pred (k t : term) : iProp :=
   ∀ sp, ⌜t = SParams.hello N sp⌝ →
   let ss := SParams.share sp in
   let m  := SShare.meth_of ss in
   let sk := SShare.session_key_of N ss in
-  session (@nonce_meta _ _) (N.@"sess") γ Init
+  session (N.@"sess") Init
           (SShare.cnonce ss) (SShare.snonce ss) (m, sk, SParams.other sp) ∧
   ∃ ke, ⌜SShare.encode' N ke = SShare.encode N ss⌝ ∧
         CShare.wf (SShare.cshare_of ke).
 
-Definition tls_ctx γ : iProp :=
+Definition tls_ctx : iProp :=
   Keys.ctx N ∧
   CParams.ctx N ∧
-  SParams.ctx N P γ ∧
-  enc_pred (N.@"ack") (ack_pred γ) ∧
-  session_ctx (@nonce_meta _ _) (N.@"sess") P γ.
+  SParams.ctx N P ∧
+  enc_pred (N.@"ack") ack_pred ∧
+  session_ctx (N.@"sess") P.
 
-Lemma tls_ctx_alloc E E' :
-  ↑N ⊆ E →
-  enc_pred_token E -∗
-  hash_pred_token E -∗
-  key_pred_token E ={E'}=∗ ∃ γ, tls_ctx γ.
+Lemma tls_ctx_alloc E1 E2 E3 E4 E' :
+  ↑N ⊆ E1 →
+  ↑N ⊆ E2 →
+  ↑N ⊆ E3 →
+  ↑N ⊆ E4 →
+  nown_token session_name E1 -∗
+  enc_pred_token E2 -∗
+  hash_pred_token E3 -∗
+  key_pred_token E4 ={E'}=∗
+  tls_ctx ∗
+  nown_token session_name (E1 ∖ ↑N) ∗
+  enc_pred_token (E2 ∖ ↑N) ∗
+  hash_pred_token (E3 ∖ ↑N) ∗
+  key_pred_token (E4 ∖ ↑N).
 Proof.
-iIntros (sub) "enc_tok hash_tok key_tok".
-rewrite (hash_pred_token_difference (↑N.@"psk")); try solve_ndisj.
-iDestruct "hash_tok" as "[psk hash_tok]".
-iMod (Keys.ctx_alloc with "psk key_tok") as "#kctx"; eauto.
-iMod (session_alloc (@nonce_meta _ _) (N.@"sess") P) as (γ) "#sess".
-iMod (CParams.ctx_alloc with "kctx hash_tok") as "#cctx"; first solve_ndisj.
-rewrite (enc_pred_token_difference (↑N.@"server_hello")); try solve_ndisj.
-iDestruct "enc_tok" as "[tok1 enc_tok]".
-rewrite (enc_pred_token_difference (↑N.@"server_hello_sig") (_ ∖ _)); try solve_ndisj.
-iDestruct "enc_tok" as "[tok2 ack]".
-iMod (enc_pred_set (N.@"ack") (ack_pred γ) with "ack") as "ack"; first solve_ndisj.
-iMod (SParams.ctx_alloc with "kctx sess tok1 tok2") as "?".
-by iModIntro; iExists _; do !iSplit => //.
+iIntros (????) "nown_tok enc_tok hash_tok key_tok".
+iMod (Keys.ctx_alloc with "hash_tok key_tok")
+  as "(#kctx & hash_tok & key_tok)"; try solve_ndisj.
+iMod (session_alloc (N.@"sess") P with "nown_tok")
+  as "[#sess nown_tok]"; try solve_ndisj.
+iMod (CParams.ctx_alloc with "kctx hash_tok")
+  as "[#cctx hash_tok]"; first solve_ndisj.
+iMod (SParams.ctx_alloc with "kctx sess enc_tok") as "[#? enc_tok]";
+  try solve_ndisj.
+iMod (enc_pred_set (N.@"ack") ack_pred with "enc_tok") as "[#? enc_tok]";
+  try solve_ndisj.
+iModIntro.
+iSplit.
+  do !iSplit => //.
+iSplitL "nown_tok".
+  iApply nown_token_drop; last eauto; solve_ndisj.
+iSplitL "enc_tok".
+  iApply enc_pred_token_drop; last eauto; solve_ndisj.
+iSplitL "hash_tok".
+  iApply hash_pred_token_drop; last eauto; solve_ndisj.
+iApply key_pred_token_drop; last eauto; solve_ndisj.
 Qed.
 
-Lemma wp_tls_client c γ ke other E Φ :
+Lemma wp_tls_client c ke other E Φ :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
-  tls_ctx γ -∗
+  tls_ctx -∗
   Meth.wf ke -∗
   pterm other -∗
   (∀ res,
@@ -2108,9 +2129,9 @@ Lemma wp_tls_client c γ ke other E Φ :
              pterm cn ∧
              pterm sn ∧
              sterm sk ∧
-             session (@nonce_meta _ _) (N.@"sess") γ Init cn sn (ke, sk, other) ∧
+             session (N.@"sess") Init cn sn (ke, sk, other) ∧
              ▷ (pterm (TKey Enc k) ∧ pterm (Meth.psk ke) ∨
-                session (@nonce_meta _ _) (N.@"sess") γ Resp cn sn (ke, sk, other) ∧
+                session (N.@"sess") Resp cn sn (ke, sk, other) ∧
                 □ ∀ kt, pterm (TKey kt sk) -∗
                 ◇ if Meth.has_dh ke then False else pterm (Meth.psk ke))
       | None => True
@@ -2142,7 +2163,7 @@ iDestruct (SParams.pterm_checkE with "s_ctx p_sh") as (k) "Hk"; eauto.
 iDestruct "Hk" as "/= (%e_k & %e_share & #s_k & #p_cn & #p_sn &
                        #s_sk & %e_hello & rest)".
 subst ke' vkey; rewrite SShare.cnonce_cshare_of.
-iMod (session_begin _ γ Init (SShare.cnonce ke'') (SShare.snonce ke'')
+iMod (session_begin _ Init (SShare.cnonce ke'') (SShare.snonce ke'')
                     (SShare.meth_of ke'', SShare.session_key_of' N ke'',
                      CParams.other cp)
         with "sess_ctx [] sess") as "[#sess close]".
@@ -2200,11 +2221,11 @@ Definition tls_server : val := λ: "c" "psk" "g" "verif_key" "other",
   assert: eq_term "ack" "sh" in
   SOME "ke'".
 
-Lemma wp_tls_server c γ psk g verif_key other E Φ :
+Lemma wp_tls_server c psk g verif_key other E Φ :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
-  tls_ctx γ -∗
+  tls_ctx -∗
   sterm psk -∗
   pterm g -∗
   sterm (TKey Enc verif_key) -∗
@@ -2216,12 +2237,10 @@ Lemma wp_tls_server c γ psk g verif_key other E Φ :
         pterm (SShare.cnonce ke) ∧
         pterm (SShare.snonce ke) ∧
         sterm (SShare.session_key_of N ke) ∧
-        session (@nonce_meta _ _) (N.@"sess") γ
-                Resp (SShare.cnonce ke) (SShare.snonce ke)
+        session (N.@"sess") Resp (SShare.cnonce ke) (SShare.snonce ke)
                 (SShare.meth_of ke, SShare.session_key_of N ke, other) ∧
         ▷ (pterm (SShare.psk ke) ∨
-           session (@nonce_meta _ _) (N.@"sess") γ
-                   Init (SShare.cnonce ke) (SShare.snonce ke)
+           session (N.@"sess") Init (SShare.cnonce ke) (SShare.snonce ke)
                    (SShare.meth_of ke, SShare.session_key_of N ke, other) ∧
            □ ∀ kt, pterm (TKey kt (SShare.session_key_of N ke)) -∗
            ◇ if SShare.has_dh ke then False else pterm (SShare.psk ke))
@@ -2289,4 +2308,4 @@ Qed.
 
 End Protocol.
 
-Arguments tls_ctx_alloc {Σ _ _ _} N E E'.
+Arguments tls_ctx_alloc {Σ _ _ _} N E1 E2 E3 E4 E'.

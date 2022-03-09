@@ -181,12 +181,17 @@ iMod ("close" with "[own_a inv]") as "_"; eauto.
 by iModIntro; iExists SM'; iFrame.
 Qed.
 
-Lemma session_alloc E E' : ↑N ⊆ E → nown_token session_name E ={E'}=∗ session_ctx.
+Lemma session_alloc E E' :
+  ↑N ⊆ E →
+  nown_token session_name E ={E'}=∗
+  session_ctx ∗
+  nown_token session_name (E ∖ ↑N).
 Proof.
 iIntros (?) "token".
-iMod (nown_alloc session_name _ (● (to_session_map ∅)) with "token") as "own"; eauto.
+iMod (nown_alloc session_name _ (● (to_session_map ∅)) with "token")
+  as "[own token]"; eauto.
   by rewrite auth_auth_valid.
-iApply inv_alloc.
+iFrame. iApply inv_alloc.
 iModIntro; iExists ∅; iFrame.
 by rewrite /session_map_inv big_sepM_empty.
 Qed.
@@ -411,6 +416,6 @@ Lemma sessionG_alloc `{!heapGS Σ} :
   sessionPreG Σ →
   ⊢ |==> ∃ (H : sessionG Σ), nown_token session_name ⊤.
 Proof.
-iIntros (?). iMod nownGS_alloc as "(%γ & ?)".
+iIntros (?). iMod nown_token_alloc as "(%γ & ?)".
 iExists (SessionG γ _). eauto.
 Qed.

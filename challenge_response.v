@@ -2,7 +2,8 @@ From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term cryptis primitives tactics session.
+From cryptis Require Import lib term cryptis primitives tactics nown.
+From cryptis Require Import role session.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -26,39 +27,45 @@ Implicit Types t : term.
 
 Context (N : namespace).
 
-Definition msg2_pred γ (kB : term) t : iProp :=
+Definition msg2_pred (kB : term) t : iProp :=
   ∃ nA nB kA,
     ⌜t = Spec.of_list [nA; nB; TKey Dec kA]⌝ ∧
-    session (@nonce_meta _ _) N γ Resp nA nB (kA, kB).
+    session N Resp nA nB (kA, kB).
 
-Definition msg3_pred γ (kA : term) m3 : iProp :=
+Definition msg3_pred (kA : term) m3 : iProp :=
   ∃ nA nB kB,
     ⌜m3 = Spec.of_list [nA; nB; TKey Dec kB]⌝ ∧
-    session (@nonce_meta _ _) N γ Init nA nB (kA, kB).
+    session N Init nA nB (kA, kB).
 
 Variable P : role → term → term → term → term → iProp.
 
 Definition cr_sess_inv rl nA nB ks :=
   let '(kA, kB) := ks in P rl nA nB kA kB.
 
-Definition cr_ctx γ : iProp :=
-  session_ctx (@nonce_meta _ _) N cr_sess_inv γ ∧
-  enc_pred (N.@"m2") (msg2_pred γ) ∧
-  enc_pred (N.@"m3") (msg3_pred γ).
+Definition cr_ctx : iProp :=
+  session_ctx N cr_sess_inv ∧
+  enc_pred (N.@"m2") msg2_pred ∧
+  enc_pred (N.@"m3") msg3_pred.
 
-Lemma cr_alloc E E' :
-  ↑N ⊆ E →
-  enc_pred_token E ={E'}=∗ ∃ γ, cr_ctx γ.
+Lemma cr_alloc E1 E2 E' :
+  ↑N ⊆ E1 →
+  ↑N ⊆ E2 →
+  nown_token session_name E1 -∗
+  enc_pred_token E2 ={E'}=∗
+  cr_ctx ∗
+  nown_token session_name (E1 ∖ ↑N) ∗
+  enc_pred_token (E2 ∖ ↑N).
 Proof.
-iIntros (sub) "token".
-iMod (session_alloc (@nonce_meta _ _) N cr_sess_inv) as (γ) "#ctx".
-rewrite (enc_pred_token_difference (↑N.@"m2")); last solve_ndisj.
-iDestruct "token" as "[t2 token]".
-iMod (enc_pred_set (N.@"m2") (msg2_pred γ) with "t2") as "#H2" => //.
-rewrite (enc_pred_token_difference (↑N.@"m3")); last solve_ndisj.
-iDestruct "token" as "[t3 token]".
-iMod (enc_pred_set (N.@"m3") (msg3_pred γ) with "t3") as "#H3" => //.
-by iModIntro; iExists γ; do !iSplit => //.
+iIntros (sub1 sub2) "nown_token token".
+iMod (session_alloc N cr_sess_inv with "nown_token") as "[#ctx ?]"; eauto.
+iFrame.
+rewrite (enc_pred_token_difference (↑N)) //.
+iDestruct "token" as "[t2 token]"; iFrame.
+iMod (enc_pred_set (N.@"m2") msg2_pred with "t2") as "[#H2 t2]";
+  try solve_ndisj.
+iMod (enc_pred_set (N.@"m3") msg3_pred with "t2") as "[#H3 _]";
+  try solve_ndisj.
+by iModIntro; do !iSplit => //.
 Qed.
 
 Ltac protocol_failure :=
@@ -96,16 +103,16 @@ Definition cr_resp : val := λ: "c" "skB" "pkB",
 
 Implicit Types Ψ : val → iProp.
 
-Lemma pterm_msg2E γ m2 kA kB nA nB :
+Lemma pterm_msg2E m2 kA kB nA nB :
   m2 !! Z.to_nat 0 = Some nA →
   m2 !! Z.to_nat 1 = Some nB →
   m2 !! Z.to_nat 2 = Some (TKey Dec kA) →
-  cr_ctx γ -∗
+  cr_ctx -∗
   pterm (TKey Dec kB) -∗
   pterm (TEnc kB (Spec.tag (N.@"m2") (Spec.of_list m2))) -∗
   ▷ (pterm nB ∧
      (pterm (TKey Enc kB) ∨
-      session (@nonce_meta _ _) N γ Resp nA nB (kA, kB))).
+      session N Resp nA nB (kA, kB))).
 Proof.
 iIntros (enA enB ekA) "#ctx #p_d_kB #p_m2".
 iDestruct "ctx" as "(_ & enc_m2 & _)".
@@ -126,15 +133,15 @@ move/Spec.of_list_inj: e_m2 enA enB ekA => -> /= [] -> [] -> [] ->.
 by eauto.
 Qed.
 
-Lemma pterm_msg3E γ m3 kA kB nA nB :
+Lemma pterm_msg3E m3 kA kB nA nB :
   m3 !! Z.to_nat 0 = Some nA →
   m3 !! Z.to_nat 1 = Some nB →
   m3 !! Z.to_nat 2 = Some (TKey Dec kB) →
-  cr_ctx γ -∗
+  cr_ctx -∗
   pterm (TKey Dec kA) -∗
   pterm (TEnc kA (Spec.tag (N.@"m3") (Spec.of_list m3))) -∗
   ▷ (pterm (TKey Enc kA) ∨
-     session (@nonce_meta _ _) N γ Init nA nB (kA, kB)).
+     session N Init nA nB (kA, kB)).
 Proof.
 iIntros (enA enB ekB) "#ctx #p_d_ka #p_m3".
 iDestruct "ctx" as "(_ & _ & enc_m3)".
@@ -148,11 +155,11 @@ move/Spec.of_list_inj: e_m3 enA enB ekB => -> /= [] -> [] -> [] ->.
 by eauto.
 Qed.
 
-Lemma wp_cr_init γ c kA kB E Ψ :
+Lemma wp_cr_init c kA kB E Ψ :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
-  cr_ctx γ -∗
+  cr_ctx -∗
   (∀ nA nB, cr_sess_inv Init nA nB (kA, kB)) -∗
   pterm (TKey Dec kA) -∗
   pterm (TKey Dec kB) -∗
@@ -189,12 +196,12 @@ iPoseProof (pterm_msg2E with "[//] d_kB Hm2")
 wp_list; wp_term_of_list.
 wp_tenc; wp_pures.
 iSpecialize ("inv" $! nA nB).
-iMod (session_begin _ _ _ _ _ (kA, kB) with "[] [inv] [unreg]")
+iMod (session_begin _ _ _ _ (kA, kB) with "[] [inv] [unreg]")
   as "[#sessA close]"; eauto.
 iAssert (|={E}=> ▷ (pterm (TKey Enc kB) ∨ P Resp nA nB kA kB))%I
     with "[close]" as ">inv".
   iDestruct "sessB" as "[?|sessB]"; eauto.
-  by iMod ("close" with "sessB") as "close"; eauto.
+  by iMod ("close" with "[] sessB") as "close"; eauto.
 wp_bind (send _ _); iApply wp_send => //.
   iApply pterm_TEncIS; eauto.
   - iPoseProof (pterm_sterm with "d_kA") as "?".
@@ -207,11 +214,11 @@ wp_bind (send _ _); iApply wp_send => //.
 wp_pures; iApply ("Hpost" $! (Some (nA, nB))); eauto.
 Qed.
 
-Lemma wp_cr_resp γ c kB E Ψ :
+Lemma wp_cr_resp c kB E Ψ :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
-  cr_ctx γ -∗
+  cr_ctx -∗
   pterm (TKey Dec kB) -∗
   (∀ kA nA nB, cr_sess_inv Resp nA nB (kA, kB)) -∗
   (∀ ot : option (term * term * term),
@@ -244,7 +251,7 @@ iIntros (nB) "_ #p_nB _ unreg".
 rewrite (term_meta_token_difference _ (↑N)) //.
 iDestruct "unreg" as "[token _]".
 iAssert (pterm nB) as "{p_nB} HnB"; first by iApply "p_nB".
-iMod (session_begin _ _ _ nA nB (kA, kB) with "[] [inv] [token]")
+iMod (session_begin _ _ nA nB (kA, kB) with "[] [inv] [token]")
   as "[#sessB close]"; eauto.
 wp_list; wp_term_of_list.
 wp_tenc; wp_pures; wp_bind (send _ _); iApply wp_send => //.
@@ -268,7 +275,7 @@ wp_if.
 iAssert (|={E}=> ▷ (pterm (TKey Enc kA) ∨ P Init nA nB kA kB))%I
     with "[close]" as ">inv".
   iDestruct "Hm3" as "[Hm3 | Hm3]"; eauto.
-  iMod ("close" with "Hm3") as "close". by eauto.
+  iMod ("close" with "[//] Hm3") as "close". by eauto.
 wp_pures; iApply ("Hpost" $! (Some (_, _, _))).
 by iModIntro; iExists _; do ![iSplit=> //].
 Qed.

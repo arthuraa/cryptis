@@ -58,16 +58,30 @@ move=> ?.
 by rewrite /nown_token -own_op -reservation_map_token_difference.
 Qed.
 
+Arguments nown_token_difference γ E1 E2 : clear implicits.
+
+Lemma nown_token_drop γ E1 E2 :
+  E1 ⊆ E2 →
+  nown_token γ E2 -∗
+  nown_token γ E1.
+Proof.
+iIntros (sub) "t".
+rewrite nown_token_difference //.
+by iDestruct "t" as "[t _]".
+Qed.
+
 Definition nown `{!inG Σ A} γ N (a : A) : iProp :=
   ∃ γ', nown_name γ N γ' ∧ own γ' a.
 
 Lemma nown_alloc `{!inG Σ A} γ N E (a : A) :
-  ↑N ⊆ E → ✓ a → nown_token γ E ==∗ nown γ N a.
+  ↑N ⊆ E → ✓ a → nown_token γ E ==∗ nown γ N a ∗ nown_token γ (E ∖ ↑N).
 Proof.
 intros sub valid_a. iIntros "token".
 iMod (own_alloc a) as "(%γ' & own)"; auto.
-iMod (nown_name_set _ γ' with "token") as "name"; eauto.
-iModIntro. iExists γ'. eauto.
+rewrite (nown_token_difference γ (↑N)) //.
+iDestruct "token" as "[tok1 tok2]".
+iMod (nown_name_set _ γ' with "tok1") as "name"; eauto.
+iModIntro. iFrame. iExists γ'. eauto.
 Qed.
 
 Lemma nown_valid `{!inG Σ A} γ N (a : A) : nown γ N a -∗ ✓ a.
@@ -114,10 +128,11 @@ Qed.
 
 End NOwn.
 
-Lemma nownGS_alloc `{!heapGS Σ} : ⊢ |==> ∃ γ , nown_token γ ⊤.
+Lemma nown_token_alloc `{!heapGS Σ} : ⊢ |==> ∃ γ , nown_token γ ⊤.
 Proof.
 iApply (own_alloc (reservation_map_token ⊤)).
 apply reservation_map_token_valid.
 Qed.
 
 Arguments nown_alloc {Σ _ A _} γ N {_} a.
+Arguments nown_token_difference {Σ _ γ} E1 E2.
