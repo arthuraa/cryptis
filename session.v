@@ -366,6 +366,16 @@ all: iIntros "s1 s2".
 all: by iDestruct (session_frag_agree with "s1 s2") as "(% & -> & ->)".
 Qed.
 
+Lemma session_role_agree t t1 t2 x1 x2 :
+  session Init t t1 x1 -∗
+  session Resp t2 t x2 -∗
+  False.
+Proof.
+iIntros "(_ & #meta1) (_ & #meta2)".
+iPoseProof (term_meta_agree with "meta1 meta2") as "%e".
+congruence.
+Qed.
+
 Lemma session_begin E rl tI tR x :
   ↑N ⊆ E →
   session_ctx -∗

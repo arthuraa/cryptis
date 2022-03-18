@@ -58,6 +58,8 @@ Next Obligation. by eauto. Qed.
 
 Next Obligation. by case; eauto. Qed.
 
+Next Obligation. by case; eauto. Qed.
+
 Next Obligation.
 iIntros "%E %kI %kR %Φ _ post". rewrite /nsl_mk_key_share_impl.
 wp_pures. wp_bind (mknonce _).
@@ -86,7 +88,8 @@ Lemma wp_nsl_init c kI kR E :
         sterm kS ∗
         nsl_confirmation Init kI kR kS ∗
         (corruption kI kR ∨
-         session_key_token N Init kS ∗ session_key N kI kR kS)
+         session_key_meta_token N Init kI kR kS ⊤ ∗
+         session_key N kI kR kS)
       else True
   }}}.
 Proof.
@@ -110,7 +113,8 @@ Lemma wp_nsl_resp c kR E :
         sterm kS ∗
         confirmation Resp kI kR kS ∗
         (corruption kI kR ∨
-         session_key_token N Resp kS ∗ session_key N kI kR kS)
+         session_key_meta_token N Resp kI kR kS ⊤ ∗
+         session_key N kI kR kS)
       else True
   }}}.
 Proof.

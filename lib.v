@@ -28,6 +28,26 @@ assert (H : positives_flatten N ∈ (↑N : coPset)).
 set_solver.
 Qed.
 
+Lemma reservation_map_disj {A : cmra} E x (a : A) :
+  ✓ (reservation_map_token E ⋅ reservation_map_data x a) →
+  x ∉ E.
+Proof.
+rewrite reservation_map_valid_eq /= right_id_L left_id_L.
+by case=> _ /(_ x); rewrite lookup_singleton; case.
+Qed.
+
+Lemma namespace_map_disj {A : cmra} E (N : namespace) (a : A) :
+  ↑N ⊆ E →
+  ✓ (reservation_map_token E ⋅ namespace_map_data N a) →
+  False.
+Proof.
+move=> sub /reservation_map_disj.
+assert (H : positives_flatten N ∈ (↑N : coPset)).
+{ rewrite nclose_eq. apply elem_coPset_suffixes.
+  exists 1%positive. by rewrite left_id_L. }
+set_solver.
+Qed.
+
 (* TODO: Move to Iris? *)
 #[global]
 Instance dom_ne {T : ofe} :

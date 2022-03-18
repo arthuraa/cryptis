@@ -1,6 +1,7 @@
 From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
+From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term cryptis primitives tactics nown.
 From cryptis Require Import role session.
@@ -109,6 +110,12 @@ Class PK := {
 
   mk_session_key : role → term → term → term;
 
+  mk_session_key_elem_of :
+    ∀ nI nI' nR nR',
+      mk_session_key Init nI  (mk_key_share nR) =
+      mk_session_key Init nI' (mk_key_share nR') →
+      nI = nI' ∨ nI = nR';
+
   mk_session_keyC :
     ∀ nI nR, mk_session_key Init nI (mk_key_share nR) =
              mk_session_key Resp nR (mk_key_share nI);
@@ -198,9 +205,80 @@ Definition init_finished kR sR : iProp :=
 
 Definition msg3_pred := init_finished.
 
-Definition session_key_token rl kS : iProp :=
-  ∃ nI nR, ⌜kS = mk_session_key Init nI (mk_key_share nR)⌝ ∗
-           nonce_meta_token nI (↑N.@"token".@rl).
+Definition session_key_meta_token rl kI kR kS E : iProp :=
+  ∃ nI nR γ,
+    ⌜kS = mk_session_key Init nI (mk_key_share nR)⌝ ∗
+    session (N.@"session") Init nI nR (kI, kR) ∗
+    session (N.@"session") Resp nI nR (kI, kR) ∗
+    nonce_meta nI (N.@"token".@rl) γ ∗
+    own γ (reservation_map_token E).
+
+Definition session_key_meta rl kI kR `{Countable L} kS N' (x : L) : iProp :=
+  ∃ nI nR γ,
+    ⌜kS = mk_session_key Init nI (mk_key_share nR)⌝ ∗
+    session (N.@"session") Init nI nR (kI, kR) ∗
+    session (N.@"session") Resp nI nR (kI, kR) ∗
+    nonce_meta nI (N.@"token".@rl) γ ∗
+    own γ (namespace_map_data N' (to_agree (encode x))).
+
+Lemma mk_session_key_inj nI nR nI' nR' kI kR :
+  mk_session_key Init nI  (mk_key_share nR) =
+  mk_session_key Init nI' (mk_key_share nR') →
+  session (N.@"session") Init nI nR (kI, kR) -∗
+  session (N.@"session") Resp nI' nR' (kI, kR) -∗
+  ⌜nI' = nI⌝.
+Proof.
+move=> /mk_session_key_elem_of [<-|<-]; first by auto.
+iIntros "sessI sessR".
+by iDestruct (session_role_agree with "sessI sessR") as "[]".
+Qed.
+
+Global Instance session_key_term_meta rl kI kR :
+  TermMeta (@session_key_meta rl kI kR) (session_key_meta_token rl kI kR).
+
+Proof.
+split.
+- move=> *. by apply _.
+- move=> *. by apply _.
+- move=> *. by apply _.
+- move=> L ? ? E t x N' ?.
+  iIntros "(%nI & %nR & %γ & -> & #sessI & #sessR & #meta & own)".
+  pose (a := namespace_map_data N' (to_agree (encode x))).
+  iMod (own_update _ _ a with "own") as "#own".
+  { exact: namespace_map_alloc_update. }
+  iModIntro. iExists nI, nR, γ. by do 4!iSplit => //.
+- move=> L ? ? kS x N' E ?.
+  iIntros "(%nI & %nR & %γ & -> & #sessI & #sessR & #meta & own)".
+  iIntros "(%nI' & %nR' & %γ' & %e & #sessI' & #sessR' & #meta' & own')".
+  iPoseProof (mk_session_key_inj with "sessI sessR'") as "->" => // {e}.
+  iPoseProof (term_meta_agree with "meta meta'") as "<-".
+  iPoseProof (own_valid_2 with "own own'") as "%valid".
+  by case: (namespace_map_disj _ _ _ _ valid).
+- move=> L ? ? kS N' x1 x2.
+  iIntros "(%nI & %nR & %γ & -> & #sessI & #sessR & #meta & own)".
+  iIntros "(%nI' & %nR' & %γ' & %e & #sessI' & #sessR' & #meta' & own')".
+  iPoseProof (mk_session_key_inj with "sessI sessR'") as "->" => // {e}.
+  iPoseProof (term_meta_agree with "meta meta'") as "<-".
+  iCombine "own own'" as "own".
+  iPoseProof (own_valid with "own") as "%valid".
+  rewrite reservation_map_data_valid /= to_agree_op_valid_L in valid.
+  iPureIntro. exact: inj valid.
+- move=> kS E1 E2 sub. apply: anti_symm.
+  + iIntros "(%nI & %nR & %γ & -> & #sessI & #sessR & #meta & own)".
+    rewrite (reservation_map_token_difference _ _ sub).
+    iDestruct "own" as "[own1 own2]".
+    iSplitL "own1".
+    * iExists nI, nR, γ; iFrame; eauto.
+    * iExists nI, nR, γ; iFrame; eauto.
+  + iIntros "[tok1 tok2]".
+    iDestruct "tok1" as "(%nI & %nR & %γ & -> & #sI & #? & #meta & own)".
+    iDestruct "tok2" as "(%nI' & %nR' & %γ' & %e & #? & #sR & #meta' & own')".
+    iPoseProof (mk_session_key_inj with "sI sR") as "->" => // {e}.
+    iPoseProof (term_meta_agree with "meta meta'") as "<-".
+    iCombine "own own'" as "own".
+    rewrite -(reservation_map_token_difference _ _ sub).
+    iExists nI, nR, γ; iFrame; eauto.
+Qed.
 
 Definition session_key kI kR kS : iProp :=
   ∃ nI nR,
@@ -390,7 +468,9 @@ Lemma init_finish E kI kR nI sR :
   init_confirm kI kR ={E}=∗
   ▷ (confirmation Init kI kR kS ∗
      init_finished kR sR ∗
-     (corruption kI kR ∨ session_key_token Init kS ∗ session_key kI kR kS)).
+     (corruption kI kR ∨
+      session_key_meta_token Init kI kR kS ⊤ ∗
+      session_key kI kR kS)).
 Proof.
 iIntros "%sI %kS % (#ctx & _) #s_nI #p_nI #p_sR #accepted token confirm".
 iMod ("confirm" $! nI sR) as "#confirm".
@@ -421,10 +501,13 @@ iMod (session_begin _ Init nI nR (kI, kR) with "ctx [token_resp] fresh")
   as "[#sessI _]".
 - solve_ndisj.
 - by iSplitR.
+iMod (own_alloc (reservation_map_token ⊤)) as "(%γ & map)".
+  by apply reservation_map_token_valid.
+iMod (term_meta_set _ _ γ (T.@Init) with "token_init") as "#meta" => //.
 iModIntro. iModIntro. iSplit; eauto. iSplitR.
   iRight. iExists nI, nR, kI. iSplit; by eauto.
 iRight. iSplitL.
-  iExists nI, nR; by eauto.
+  iExists nI, nR, γ; by eauto.
 iExists nI, nR; do !iSplit => //; eauto.
 Qed.
 
@@ -463,7 +546,9 @@ Lemma resp_finish E kI kR sI nR :
   is_priv_key nR kI kR -∗
   init_finished kR sR -∗
   resp_waiting kI kR sI nR ={E}=∗
-  ▷ (corruption kI kR ∨ session_key_token Resp kS ∗ session_key kI kR kS).
+  ▷ (corruption kI kR ∨
+     session_key_meta_token Resp kI kR kS ⊤ ∗
+     session_key kI kR kS).
 Proof.
 iIntros "%sR %kS % #(ctx & _) #s_nR #p_nR [#fail|#finished] waiting".
   iPoseProof (mk_key_share_secret_of with "s_nR p_nR") as "p_sR".
@@ -477,10 +562,15 @@ iDestruct "waiting" as "(%nI & -> & #sessR & #confirmedR & waiting)".
 move: @kS; rewrite -mk_session_keyC => kS.
 iPoseProof (session_agree with "sessR sessR'") as "{sessR'} %e" => //.
 case: e => <- <-.
-iMod ("waiting" with "[] sessI") as "[_ finished]".
+iMod ("waiting" with "[] sessI") as "[_ >finished]".
   solve_ndisj.
+iMod (own_alloc (reservation_map_token ⊤)) as "(%γ & map)".
+  by apply reservation_map_token_valid.
+rewrite /=.
+iMod (term_meta_set _ _ γ (N.@"token".@Resp) with "finished")
+  as "#meta" => //.
 iModIntro. iModIntro. iRight. iSplitL.
-  iExists nI, nR. by eauto.
+  iExists nI, nR, γ. by eauto.
 iExists nI, nR. by do !iSplit => //.
 Qed.
 
@@ -501,7 +591,9 @@ Lemma wp_pk_auth_init c kI kR E :
       if okS is Some kS then
         sterm kS ∗
         confirmation Init kI kR kS ∗
-        (corruption kI kR ∨ session_key_token Init kS ∗ session_key kI kR kS)
+        (corruption kI kR ∨
+         session_key_meta_token Init kI kR kS ⊤ ∗
+         session_key kI kR kS)
       else True }}}.
 Proof.
 rewrite /pk_auth_init.
@@ -548,7 +640,7 @@ Lemma wp_pk_auth_resp c kR E :
                sterm kS ∗
                confirmation Resp kI kR kS ∗
                (corruption kI kR ∨
-                session_key_token Resp kS ∗
+                session_key_meta_token Resp kI kR kS ⊤ ∗
                 session_key kI kR kS)
        else True }}}.
 Proof.

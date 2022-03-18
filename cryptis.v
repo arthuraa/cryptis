@@ -798,6 +798,8 @@ Class TermMeta
   (term_meta_token : term → coPset → iProp) := {
   term_meta_timeless :> ∀ `{Countable L} t N (x : L),
     Timeless (term_meta t N x);
+  term_meta_token_timeless :> ∀ t E,
+    Timeless (term_meta_token t E);
   term_meta_persistent :> ∀ `{Countable L} t N (x : L),
     Persistent (term_meta t N x);
   term_meta_set : ∀ `{Countable L} E t (x : L) N,
@@ -834,6 +836,8 @@ Program Global Instance nonce_term_meta :
   TermMeta (@nonce_meta) nonce_meta_token.
 
 Next Obligation. move=> ???; case=> *; apply _. Qed.
+
+Next Obligation. by case=> *; apply _. Qed.
 
 Next Obligation. move=> ???; case=> *; apply _. Qed.
 

@@ -71,6 +71,13 @@ rewrite /pk_dh_mk_key_share /secret_of. iModIntro. iSplit.
 Qed.
 
 Next Obligation.
+move=> nI nI' nR nR'. rewrite /pk_dh_mk_key_share /pk_dh_mk_session_key.
+rewrite !Spec.texpA. move=> /TExp_inj [_ en].
+have: nI ∈ [nI'; nR'] by rewrite -en; set_solver.
+by rewrite !elem_of_cons elem_of_nil; intuition eauto.
+Qed.
+
+Next Obligation.
 move=> nI nR; rewrite /pk_dh_mk_key_share /pk_dh_mk_session_key.
 by rewrite !Spec.texpA TExpC2.
 Qed.
@@ -138,7 +145,7 @@ Lemma wp_pk_dh_init c kI kR E :
         pk_dh_confirmation Init kI kR kS ∗
         (corruption kI kR ∨
          □ (pterm kS → ◇ False) ∗
-         session_key_token N Init kS ∗
+         session_key_meta_token N Init kI kR kS ⊤ ∗
          session_key N kI kR kS)
       else True
   }}}.
@@ -171,7 +178,7 @@ Lemma wp_pk_dh_resp c kR E :
         confirmation Resp kI kR kS ∗
         (corruption kI kR ∨
          □ (pterm kS → ◇ False) ∗
-         session_key_token N Resp kS ∗
+         session_key_meta_token N Resp kI kR kS ⊤ ∗
          session_key N kI kR kS)
       else True
   }}}.
@@ -191,6 +198,7 @@ Qed.
 
 End PKDH.
 
+Arguments PK_DH {Σ _ _} pk_dh_confirmation {_}.
 Arguments pk_dh_ctx {Σ _ _ _} N _ {_}.
 Arguments pk_dh_alloc {Σ _ _ _} N _ _ _.
 Arguments wp_pk_dh_init {Σ _ _ _} N.
