@@ -622,7 +622,7 @@ have leq_locE l1' l2' :
   exact/(ssrbool.sameP (Z.leb_spec0 _ _))/bool_decide_reflect.
 have eq_locE (l1' l2' : loc) :
     bool_decide (#l1' = #l2') = bool_decide (loc_car l1' = loc_car l2').
-  apply: bool_decide_iff; split => [[->] //|].
+  apply: bool_decide_ext; split => [[->] //|].
   by case: l1' l2' => [?] [?] /= ->.
 elim: k n => [|k IH] n e_l1l2; iIntros "post"; wp_pures; wp_rec; wp_pures.
 - rewrite eq_locE.

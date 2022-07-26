@@ -111,22 +111,22 @@ elim: pt1 pt2
 case=> [n2|t21 t22|l2|kt2 t2|t21 t22|t2|t2 ts2] /=;
 wp_rec; wp_pures=> //.
 - iPureIntro; congr (# (LitBool _)).
-  apply: bool_decide_iff; intuition congruence.
+  apply: bool_decide_ext; intuition congruence.
 - wp_bind (eq_term _ _).
   iPoseProof (IH1 t21) as "IH1"; iPoseProof (IH2 t22) as "IH2".
   iApply (twp_wand with "IH1"); iIntros (?) "->".
   case: bool_decide_reflect=> e1.
   + wp_pures; iApply (twp_wand with "IH2"); iIntros (?) "->".
     iPureIntro; congr (# (LitBool _)).
-    apply: bool_decide_iff; intuition congruence.
+    apply: bool_decide_ext; intuition congruence.
   + wp_pures; iPureIntro; congr (# (LitBool _)).
     rewrite bool_decide_false; congruence.
 - iPureIntro; congr (# (LitBool _)).
-  apply: bool_decide_iff; intuition congruence.
+  apply: bool_decide_ext; intuition congruence.
 - case: bool_decide_reflect=> [[/int_of_key_type_inj e1]|e1].
   + wp_pures; iApply twp_wand; first iApply IH1.
     iPureIntro => _ ->; congr (# (LitBool _)).
-    apply: bool_decide_iff; intuition congruence.
+    apply: bool_decide_ext; intuition congruence.
   + wp_pures; iPureIntro; congr (# (LitBool _)).
     rewrite bool_decide_false; congruence.
 - wp_pures; wp_bind (eq_term _ _); iApply twp_wand; first iApply IH1.
@@ -139,13 +139,13 @@ wp_rec; wp_pures=> //.
   by rewrite bool_decide_true //; congruence.
 - wp_pures; iApply twp_wand; first iApply IH.
   iIntros (?) "->"; iPureIntro; congr (# (LitBool _)).
-  apply: bool_decide_iff; intuition congruence.
+  apply: bool_decide_ext; intuition congruence.
 - wp_bind (eq_term _ _); iApply twp_wand; first iApply IHt1.
   iIntros (?) "->"; case: bool_decide_reflect=> e1; wp_pures; last first.
     rewrite bool_decide_false //; congruence.
   rewrite -val_of_pre_term_eq -!repr_list_val.
   iApply (@twp_eq_list PreTerm.pre_term); last first.
-    iPureIntro; congr (# (LitBool _)); apply: bool_decide_iff.
+    iPureIntro; congr (# (LitBool _)); apply: bool_decide_ext.
     rewrite e1; split; congruence.
   rewrite /=.
   elim: ts1 IHts1 {e1} => //= [|x1 ts1 IH].
@@ -176,7 +176,7 @@ iApply twp_wand; first iApply twp_eq_pre_term_aux.
 iIntros (?) "->".
 rewrite (_ : bool_decide (t1 = t2) =
              bool_decide (unfold_term t1 = unfold_term t2)) //.
-by apply: bool_decide_iff; split => [->|/unfold_term_inj] //.
+by apply: bool_decide_ext; split => [->|/unfold_term_inj] //.
 Qed.
 
 Lemma wp_eq_term E t1 t2 Ψ :
