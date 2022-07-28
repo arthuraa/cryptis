@@ -276,7 +276,6 @@ Lemma twp_list `{!Repr A} (xs : list A) E Ψ :
   WP list_to_expr xs @ E [{ Ψ }].
 Proof.
 elim: xs Ψ => [|x xs IH] /= Ψ; iIntros "post".
-Set Printing All.
   by iApply (@twp_nil A _).
 wp_bind (list_to_expr _); iApply IH.
 by iApply (@twp_cons A).
