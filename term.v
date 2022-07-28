@@ -385,6 +385,8 @@ Definition of_list := unseal of_list_aux.
 Lemma of_list_eq : of_list = foldr TPair (TInt 0).
 Proof. exact: seal_eq. Qed.
 
+Definition mkskey t := TPair (TKey Enc t) (TKey Dec t).
+
 Fixpoint to_list t : option (list term) :=
   match t with
   | TInt 0 => Some []
@@ -434,6 +436,26 @@ Definition tdec c k t :=
   | None => None
   end.
 
+Lemma tdecK c k t t' :
+  tdec c (TKey Dec k) t = Some t' →
+  t = TEnc k (tag c t').
+Proof.
+rewrite /Spec.tdec /=.
+case: t => [] //= k' t.
+by case: decide => //= <- /Spec.untagK ->.
+Qed.
+
+Definition tsenc c k t :=
+  match k with
+  | TPair k _ => tenc c k t
+  | _ => t
+  end.
+
+Definition tsdec c k t :=
+  match k with
+  | TPair _ k => tdec c k t
+  | _ => None
+  end.
 
 Definition texp t1 t2 :=
   if t1 is TExp' base exp _ then

@@ -95,6 +95,20 @@ Definition mkkey : val := λ: "k",
   ((#TKey_tag, (#(int_of_key_type Enc), "k")),
    (#TKey_tag, (#(int_of_key_type Dec), "k"))).
 
+Definition mkskey : val := λ: "k",
+  let: "k" := mkkey "k" in
+  tuple (Fst "k") (Snd "k").
+
+Definition tsenc c : val := λ: "k" "t",
+  match: untuple "k" with
+    SOME "k" => tenc c (Fst "k") "t"
+  | NONE => "t"
+  end.
+
+Definition tsdec c : val := λ: "k" "t",
+  bind: "k" := untuple "k" in
+  tdec c (Snd "k") "t".
+
 Definition tgroup : val := λ: "t",
   (#TExp_tag, ("t", NONEV)).
 
@@ -393,11 +407,27 @@ Proof.
 by iIntros "post"; iApply twp_wp; iApply twp_mkkey.
 Qed.
 
+Lemma twp_mkskey E (k : term) Ψ :
+  Ψ (Spec.mkskey k) -∗
+  WP mkskey k @ E [{ Ψ }].
+Proof.
+rewrite /mkskey. iIntros "post". wp_pures.
+wp_bind (mkkey _); iApply twp_mkkey; wp_pures.
+by iApply twp_tuple.
+Qed.
+
+Lemma wp_mkskey E (k : term) Ψ :
+  Ψ (Spec.mkskey k) -∗
+  WP mkskey k @ E {{ Ψ }}.
+Proof.
+by iIntros "post"; iApply twp_wp; iApply twp_mkskey.
+Qed.
+
 Lemma twp_enc E t1 t2 Ψ :
-  Ψ (repr (Spec.enc t1 t2)) -∗
+  Ψ (Spec.enc t1 t2) -∗
   WP enc t1 t2 @ E [{ Ψ }].
 Proof.
-rewrite /repr /repr_option /repr /repr_term !val_of_term_eq /enc.
+rewrite !val_of_term_eq /enc.
 iIntros "H".
 case: t1; try by move=> *; wp_pures; eauto.
 case; try by move=> *; wp_pures; eauto.
@@ -438,7 +468,7 @@ Lemma wp_dec E t1 t2 Ψ :
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_dec. Qed.
 
 Lemma twp_tenc E N k t Ψ :
-  Ψ (repr (Spec.tenc N k t)) -∗
+  Ψ (Spec.tenc N k t) -∗
   WP tenc N k t @ E [{ Ψ }].
 Proof.
 iIntros "post"; rewrite /tenc; wp_pures.
@@ -447,7 +477,7 @@ by iApply twp_enc.
 Qed.
 
 Lemma wp_tenc E N k t Ψ :
-  Ψ (repr (Spec.tenc N k t)) -∗
+  Ψ (Spec.tenc N k t) -∗
   WP tenc N k t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_tenc. Qed.
 
@@ -466,6 +496,36 @@ Lemma wp_tdec E N k t Ψ :
   Ψ (repr (Spec.tdec N k t)) -∗
   WP tdec N k t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_tdec. Qed.
+
+Lemma twp_tsenc E N k t Ψ :
+  Ψ (Spec.tsenc N k t) -∗
+  WP tsenc N k t @ E [{ Ψ }].
+Proof.
+iIntros "post"; rewrite /tsenc /Spec.tsenc; wp_pures.
+wp_bind (untuple _); iApply twp_untuple.
+case: k; try by move=> *; wp_pures; iApply "post".
+by move=> k1 k2 //=; wp_pures; iApply twp_tenc.
+Qed.
+
+Lemma wp_tsenc E N k t Ψ :
+  Ψ (Spec.tsenc N k t) -∗
+  WP tsenc N k t @ E {{ Ψ }}.
+Proof. by iIntros "?"; iApply twp_wp; iApply twp_tsenc. Qed.
+
+Lemma twp_tsdec E N k t Ψ :
+  Ψ (repr (Spec.tsdec N k t)) -∗
+  WP tsdec N k t @ E [{ Ψ }].
+Proof.
+iIntros "post"; rewrite /tsdec; wp_pures.
+wp_bind (untuple _); iApply twp_untuple.
+case: k; try by move=> *; wp_pures; iApply "post".
+by move=> k1 k2 /=; wp_pures; iApply twp_tdec.
+Qed.
+
+Lemma wp_tsdec E N k t Ψ :
+  Ψ (repr (Spec.tsdec N k t)) -∗
+  WP tsdec N k t @ E {{ Ψ }}.
+Proof. by iIntros "?"; iApply twp_wp; iApply twp_tsdec. Qed.
 
 Lemma twp_is_key E t Ψ :
   Ψ (repr (Spec.is_key t)) -∗

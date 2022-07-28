@@ -126,17 +126,6 @@ rewrite envs_entails_eq => H.
 by rewrite -wp_bind -wp_tenc.
 Qed.
 
-(* MOVE *)
-Lemma tdecK c k t t' :
-  Spec.tdec c (TKey Dec k) t = Some t' →
-  t = TEnc k (Spec.tag c t').
-Proof.
-rewrite /Spec.tdec /=.
-case: t => [] //= k' t.
-by case: decide => //= <- /Spec.untagK ->.
-Qed.
-(* /MOVE *)
-
 Lemma tac_wp_tdec Γ E K c k t Ψ :
   (∀ t', t = TEnc k (Spec.tag c t') →
          envs_entails Γ (WP fill K (Val (SOMEV t')) @ E {{ Ψ }})) →
@@ -147,7 +136,28 @@ Proof.
 rewrite envs_entails_eq => HSome HNone.
 rewrite -wp_bind -wp_tdec.
 case e: Spec.tdec => [t'|]; eauto.
-by apply: HSome; apply: tdecK.
+by apply: HSome; apply: Spec.tdecK.
+Qed.
+
+Lemma tac_wp_tsenc Γ E K c k t Ψ :
+  envs_entails Γ (WP fill K (Val (Spec.tsenc c k t)) @ E {{ Ψ }}) →
+  envs_entails Γ (WP fill K (tsenc c k t) @ E {{ Ψ }}).
+Proof.
+by rewrite envs_entails_eq => H; rewrite -wp_bind -wp_tsenc.
+Qed.
+
+Lemma tac_wp_tsdec Γ E K c k t Ψ :
+  (∀ t', t = TEnc k (Spec.tag c t') →
+         envs_entails Γ (WP fill K (Val (SOMEV t')) @ E {{ Ψ }})) →
+  (Spec.tsdec c (Spec.mkskey k) t = None →
+   envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →
+  envs_entails Γ (WP fill K (tsdec c (Spec.mkskey k) t) @ E {{ Ψ }}).
+Proof.
+rewrite envs_entails_eq => HSome HNone.
+rewrite -wp_bind -wp_tsdec.
+rewrite /= in HNone *.
+case e: Spec.tdec => [t'|]; eauto.
+by apply: HSome; apply: Spec.tdecK.
 Qed.
 
 Lemma tac_wp_list Γ E K (ts : list term) Ψ :
@@ -293,6 +303,9 @@ Tactic Notation "wp_enc" :=
 Tactic Notation "wp_tenc" :=
   wp_pures; try wp_bind (tenc _ _ _); iApply wp_tenc.
 
+Tactic Notation "wp_tsenc" :=
+  wp_pures; try wp_bind (tsenc _ _ _); iApply wp_tsenc.
+
 Tactic Notation "wp_hash" :=
   wp_pures;
   lazymatch goal with
@@ -340,6 +353,27 @@ Tactic Notation "wp_tdec" ident(t) :=
   let tf := fresh "tf" in
   let H := fresh "H" in
   wp_tdec_eq tf H; [
+    first [revert t tf H; intros _ t ->
+          |revert tf H; intros _ t ->
+          |revert tf H; intros t _]
+  | clear H].
+
+Tactic Notation "wp_tsdec_eq" ident(t) ident(H) :=
+  wp_pures;
+  lazymatch goal with
+  | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
+    reshape_expr e ltac:(fun K e' =>
+      first
+        [eapply (tac_wp_tsdec _ _ K _ _);
+         [intros t H|intros H];
+         wp_finish
+        |fail 1 "wp_tsdec: Cannot decode"])
+  end.
+
+Tactic Notation "wp_tsdec" ident(t) :=
+  let tf := fresh "tf" in
+  let H := fresh "H" in
+  wp_tsdec_eq tf H; [
     first [revert t tf H; intros _ t ->
           |revert tf H; intros _ t ->
           |revert tf H; intros t _]

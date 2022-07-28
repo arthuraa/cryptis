@@ -1965,7 +1965,7 @@ rewrite unlock /=.
 case e_check: SShare.check => [kex'|] //=.
 move/SShare.pterm_checkE: e_check; move: kex' => {}kex [e_cp ->].
 case e_dec: Spec.tdec => [res|] //=.
-move/tdecK: e_dec=> -> {sig}.
+move/Spec.tdecK: e_dec=> -> {sig}.
 case: Spec.to_listP => //= {}res.
 elim/(@list_len_rect 2): res => [verif_key sig|res neq]; last first.
   by rewrite prod_of_list_neq.
