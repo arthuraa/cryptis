@@ -108,6 +108,17 @@ Qed.
 
 Definition pk_dh_ctx : iProp := ctx N.
 
+Definition pk_dh_session_meta rl kI kR :=
+  @session_key_meta _ _ _ _ N _ rl kI kR.
+
+Definition pk_dh_session_meta_token rl kI kR :=
+  @session_key_meta_token _ _ _ _ N _ rl kI kR.
+
+Global Instance pk_dh_session_term_meta rl kI kR :
+  TermMeta (pk_dh_session_meta rl kI kR)
+           (pk_dh_session_meta_token rl kI kR).
+Proof. apply _. Qed.
+
 Lemma pk_dh_alloc E1 E2 E' :
   ↑N ⊆ E1 →
   ↑N ⊆ E2 →
@@ -145,7 +156,7 @@ Lemma wp_pk_dh_init c kI kR E :
         pk_dh_confirmation Init kI kR kS ∗
         (corruption kI kR ∨
          □ (pterm kS → ◇ False) ∗
-         session_key_meta_token N Init kI kR kS ⊤ ∗
+         pk_dh_session_meta_token Init kI kR kS ⊤ ∗
          session_key N kI kR kS)
       else True
   }}}.
@@ -178,7 +189,7 @@ Lemma wp_pk_dh_resp c kR E :
         confirmation Resp kI kR kS ∗
         (corruption kI kR ∨
          □ (pterm kS → ◇ False) ∗
-         session_key_meta_token N Resp kI kR kS ⊤ ∗
+         pk_dh_session_meta_token Resp kI kR kS ⊤ ∗
          session_key N kI kR kS)
       else True
   }}}.
@@ -200,6 +211,8 @@ End PKDH.
 
 Arguments PK_DH {Σ _ _} pk_dh_confirmation {_}.
 Arguments pk_dh_ctx {Σ _ _ _} N _ {_}.
+Arguments pk_dh_session_meta {Σ _ _ _} _ _ {_} _ _ _ {L _ _} _ _ _.
+Arguments pk_dh_session_meta_token {Σ _ _ _} _ _ {_} _ _ _ _ _.
 Arguments pk_dh_alloc {Σ _ _ _} N _ _ _.
 Arguments wp_pk_dh_init {Σ _ _ _} N.
 Arguments wp_pk_dh_resp {Σ _ _ _} N.
