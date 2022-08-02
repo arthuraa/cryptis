@@ -186,7 +186,7 @@ Lemma wp_pk_dh_resp c kR E :
         ⌜pkI = TKey Enc kI⌝ ∗
         pterm pkI ∗
         sterm kS ∗
-        confirmation Resp kI kR kS ∗
+        pk_dh_confirmation Resp kI kR kS ∗
         (corruption kI kR ∨
          □ (pterm kS → ◇ False) ∗
          pk_dh_session_meta_token Resp kI kR kS ⊤ ∗
