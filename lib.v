@@ -253,6 +253,13 @@ Definition leq_list : val := rec: "loop" "eq" "le" "l1" "l2" :=
     end
   end.
 
+(* Run a function until it successfully returns a value *)
+Definition do_until : val := rec: "loop" "f" :=
+  match: "f" #() with
+    NONE => "loop" "f"
+  | SOME "v" => "v"
+  end.
+
 Ltac substC :=
   repeat match goal with
   | |- context [decide ?P] => destruct (decide P) as [?|?]; simpl
@@ -605,6 +612,26 @@ case: (bool_decide_reflect (l1 = l2)) => [->|n_l1l2].
 Qed.
 
 End ListLemmas.
+
+Section DoUntil.
+
+Context `{!heapGS Σ}.
+
+Lemma wp_do_until E (f : val) φ (Ψ : val → iProp Σ) :
+  □ (φ -∗
+     WP f #() @ E {{ v, ⌜v = NONEV⌝ ∗ φ ∨
+                        ∃ v', ⌜v = SOMEV v'⌝ ∗ Ψ v' }}) -∗
+  φ -∗
+  WP do_until f @ E {{ Ψ }}.
+Proof.
+iIntros "#wp_f Hφ"; iLöb as "IH".
+wp_rec. wp_bind (f _).
+iApply (wp_wand with "[Hφ]"); first iApply "wp_f" => //.
+iIntros "%v [[-> Hφ] | (%v' & -> & Hv')]"; wp_pures; eauto.
+iApply ("IH" with "Hφ").
+Qed.
+
+End DoUntil.
 
 Section Loc.
 
