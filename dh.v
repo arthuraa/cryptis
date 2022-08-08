@@ -49,8 +49,7 @@ iDestruct "p_t" as "(_ & _ & [contra | p_t])".
   by iPoseProof (@dh_seed_elim0 with "aP contra") as ">[]".
 iDestruct "aP" as "(_ & _ & #aP)".
 iSpecialize ("aP" with "p_t"); iModIntro.
-iDestruct "aP" as (g' a') "# [%e aP]".
-by case/TExp_inj: e => _ /Permutation_singleton_r [] ->; eauto.
+by iDestruct "aP" as (g' a') "# [%e aP]"; case/TExp_inj1: e => _ ->.
 Qed.
 
 Lemma dh_seed_elim2 g a t :
@@ -102,7 +101,7 @@ Next Obligation.
 iIntros (L ?? t x N E sub).
 iDestruct 1 as (g a) "[-> token]".
 iDestruct 1 as (??)  "[%e  meta]".
-move/TExp_inj: e => [_ /Permutation_singleton_r [<-]].
+case/TExp_inj1: e => _ <-.
 by iApply (term_meta_meta_token with "token meta").
 Qed.
 
@@ -110,7 +109,7 @@ Next Obligation.
 iIntros (L ?? t N x1 x2).
 iDestruct 1 as (g a) "[-> meta1]".
 iDestruct 1 as (??)  "[%e meta2]".
-move/TExp_inj: e => [_ /Permutation_singleton_r [<-]].
+case/TExp_inj1: e => _ <-.
 by iApply (term_meta_agree with "meta1 meta2").
 Qed.
 
@@ -123,7 +122,7 @@ move=> t E1 E2 sub; iSplit.
 - iDestruct 1 as "[token1 token2]".
   iDestruct "token1" as (g a) "[-> token1]".
   iDestruct "token2" as (??) "[%e token2]".
-  move/TExp_inj: e => [_ /Permutation_singleton_r [<-]].
+  case/TExp_inj1: e => _ <-.
   iExists _, _; iSplit => //.
   rewrite (term_meta_token_difference _ E1 E2) //.
   by iSplitL "token1".

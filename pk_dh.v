@@ -53,7 +53,7 @@ Program Instance PK_DH : PK := {
 }.
 
 Next Obligation.
-by move=> t1 t2 /TExp_inj [_ /(Permutation_singleton_inj _ _) t1t2].
+by move=> t1 t2 /TExp_inj1 [_ ?].
 Qed.
 
 Next Obligation.

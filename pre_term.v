@@ -521,6 +521,14 @@ case=> /unfold_term_inj -> /perm_sort_leP/perm_map_inj/perm_Permutation perm.
 split => //; apply: perm unfold_term_inj.
 Qed.
 
+Lemma TExp_inj1 t1 t1' t2 t2' :
+  TExp t1 [:: t1'] = TExp t2 [:: t2'] <->
+  t1 = t2 /\ t1' = t2'.
+Proof.
+rewrite TExp_inj; split => [[-> e]|[-> ->]] //; split => //.
+by move: (Permutation.Permutation_length_1_inv e) => [->].
+Qed.
+
 Lemma tsize_eq t :
   tsize t =
   match t with
