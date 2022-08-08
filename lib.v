@@ -70,11 +70,40 @@ assert (contra : encode x ∈ X). { by apply/elem_of_singleton. }
 destruct (is_fresh X); by rewrite -e.
 Qed.
 
-(* I've made an MR for this. *)
-Lemma gmap_equivI `{!EqDecision K, !Countable K, A : ofe, M : ucmra}
-  (m1 m2 : gmap K A) :
-  m1 ≡ m2 ⊣⊢@{uPredI M} (∀ i : K, m1 !! i ≡ m2 !! i).
-Proof. by uPred.unseal. Qed.
+Lemma big_sepS_union_pers (PROP : bi) `{!BiAffine PROP, !EqDecision A, !Countable A}
+  (Φ : A → PROP) (X Y : gset A) :
+  (∀ x, Persistent (Φ x)) →
+  ([∗ set] x ∈ (X ∪ Y), Φ x) ⊣⊢ ([∗ set] x ∈ X, Φ x) ∧ ([∗ set] x ∈ Y, Φ x).
+Proof.
+move=> ?; rewrite !big_sepS_forall.
+apply: (anti_symm _).
+- iIntros "H"; iSplit; iIntros "%a %a_in"; iApply "H";
+  iPureIntro; set_solver.
+- iIntros "H %x %x_XY".
+  case/elem_of_union: x_XY => [x_X|x_Y].
+  + by iDestruct "H" as "[H _]"; iApply "H".
+  + by iDestruct "H" as "[_ H]"; iApply "H".
+Qed.
+
+Lemma big_sepS_union_list_pers
+  (PROP : bi) `{!BiAffine PROP, !EqDecision A, !Countable A}
+  (Φ : A → PROP) (X : list (gset A)) :
+  (∀ x, Persistent (Φ x)) →
+  ([∗ set] x ∈ ⋃ X, Φ x) ⊣⊢ ([∗ list] X ∈ X, [∗ set] x ∈ X, Φ x).
+Proof.
+move=> ?; rewrite big_sepS_forall big_sepL_forall.
+apply: (anti_symm _).
+- iIntros "H %k %Y %X_k"; rewrite big_sepS_forall; iIntros "%x %x_Y".
+  iApply "H"; iPureIntro.
+  apply/elem_of_union_list; exists Y; split => //.
+  by rewrite elem_of_list_lookup; eauto.
+- iIntros "H %x %x_X".
+  case/elem_of_union_list: x_X => Y [Y_X x_Y].
+  case/elem_of_list_lookup: Y_X => k X_k.
+  iSpecialize ("H" $! _ _ X_k).
+  by rewrite big_sepS_forall; iApply "H".
+Qed.
+(* /TODO *)
 
 Lemma dom_singleton_eq `{EqDecision K, Countable K} {T} (m : gmap K T) x :
   dom (gset K) m = {[x]} →
