@@ -299,7 +299,7 @@ move=> wp_mkchan.
 apply (adequate_result NotStuck _ _ (λ v _, v = NONEV ∨ v = SOMEV #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
-iMod (cryptisG_alloc _) as (?) "(enc_tok & key_tok & hash_tok)".
+iMod (cryptisG_alloc _) as (?) "(_ & enc_tok & key_tok & hash_tok & _)".
 iMod (sessionG_alloc _) as (?) "sess_tok".
 iApply (wp_game with "[] [sess_tok] [enc_tok] [hash_tok] [key_tok]") => //.
 iApply wp_mkchan.

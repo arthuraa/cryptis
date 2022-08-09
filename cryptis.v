@@ -1,7 +1,7 @@
 From mathcomp Require Import ssreflect.
 From stdpp Require Import gmap.
-From iris.algebra Require Import agree auth gset gmap list reservation_map.
-From iris.base_logic.lib Require Import saved_prop.
+From iris.algebra Require Import agree auth gset gmap list reservation_map excl.
+From iris.base_logic.lib Require Import saved_prop invariants.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term nown.
 
@@ -13,24 +13,30 @@ Definition cryptisN := nroot.@"cryptis".
 
 Section Cryptis.
 
+Definition honestUR := authUR (optionUR (exclR (gsetO term))).
+
 Class cryptisG Σ := CryptisG {
   cryptis_inG       :> savedPredG Σ term;
   cryptis_key_inG   :> savedPredG Σ (key_type * term);
   cryptis_enc_inG   :> savedPredG Σ (term * term);
+  cryptis_hon_inG   :> inG Σ honestUR;
   cryptis_key_name  : gname;
   cryptis_hash_name : gname;
   cryptis_enc_name  : gname;
+  cryptis_hon_name  : gname;
 }.
 
 Definition cryptisΣ : gFunctors :=
   #[savedPredΣ term;
     savedPredΣ (key_type * term);
-    savedPredΣ (term * term)].
+    savedPredΣ (term * term);
+    GFunctor (honestUR)].
 
 Class cryptisPreG Σ := CryptisPreG {
   cryptis_preG :> savedPredG Σ term;
   cryptis_key_preG :> savedPredG Σ (key_type * term);
   cryptis_enc_preG :> savedPredG Σ (term * term);
+  cryptis_hon_preG :> inG Σ honestUR;
 }.
 
 Global Instance subG_cryptisPreG Σ : subG cryptisΣ Σ → cryptisPreG Σ.
@@ -838,23 +844,135 @@ Qed.
 
 End TermMeta.
 
-End Cryptis.
+Definition secret t : iProp :=
+  (|==> pterm t) ∧ (pterm t -∗ ◇ False).
 
-Lemma cryptisG_alloc `{!heapGS Σ} :
-  cryptisPreG Σ →
-  ⊢ |==> ∃ (H : cryptisG Σ),
-           enc_pred_token ⊤ ∗ key_pred_token ⊤ ∗ hash_pred_token ⊤.
+Definition honest (q : Qp) (X : gset term) : iProp :=
+  own cryptis_hon_name (●{#q} Excl' X).
+
+Lemma honest_op q1 q2 X : honest (q1 ⋅ q2) X ⊣⊢ honest q1 X ∗ honest q2 X.
 Proof.
-move=> ?; iStartProof.
-iMod (own_alloc (reservation_map_token ⊤)) as (γ_enc) "own_enc".
-  apply reservation_map_token_valid.
-iMod (own_alloc (reservation_map_token ⊤)) as (γ_key) "own_key".
-  apply reservation_map_token_valid.
-iMod (own_alloc (reservation_map_token ⊤)) as (γ_hash) "own_hash".
-  apply reservation_map_token_valid.
-iModIntro.
-by iExists (CryptisG _ _ _ γ_enc γ_key γ_hash); iFrame.
+by rewrite /honest -dfrac_op_own auth_auth_dfrac_op own_op.
 Qed.
+
+#[global]
+Instance from_sep_honest q1 q2 X :
+  FromSep (honest (q1 ⋅ q2) X) (honest q1 X) (honest q2 X).
+Proof. by rewrite /FromSep honest_op. Qed.
+
+Definition honest_frag (X : gset term) : iProp :=
+  own cryptis_hon_name (◯ Excl' X).
+
+Lemma honest_honest_frag q X Y :
+  honest q X -∗ honest_frag Y -∗ ⌜Y = X⌝.
+Proof.
+iIntros "own1 own2".
+iPoseProof (own_valid_2 with "own1 own2") as "%valid".
+move: valid.
+rewrite auth_both_dfrac_valid_discrete Excl_included.
+by rewrite leibniz_equiv_iff; case=> _ [] -> _ {Y}.
+Qed.
+
+Lemma honest_update Z X Y :
+  honest 1 X -∗ honest_frag Y ==∗ honest 1 Z ∗ honest_frag Z.
+Proof.
+iIntros "own1 own2".
+iPoseProof (honest_honest_frag with "own1 own2") as "#->".
+rewrite /honest /honest_frag.
+set (X' := Excl' X). set (Z' := Excl' Z).
+iPoseProof (own_update_2 _ _ _ (● Z' ⋅ ◯ Z') with "own1 own2") as ">[??]".
+  apply auth_update. apply option_local_update.
+  by apply exclusive_local_update.
+by iFrame.
+Qed.
+
+Definition honest_inv : iProp := ∃ X : gset term,
+  honest_frag X ∗ [∗ set] t ∈ X, secret t.
+
+Definition cryptis_ctx : iProp :=
+  inv (cryptisN.@"honest") honest_inv.
+
+#[global]
+Instance cryptis_ctx_persistent : Persistent cryptis_ctx.
+Proof. apply _. Qed.
+
+Lemma honest_pterm E q t X :
+  ↑cryptisN.@"honest" ⊆ E →
+  t ∈ X →
+  cryptis_ctx -∗
+  honest q X -∗
+  pterm t ={E}=∗
+  ▷ ◇ False.
+Proof.
+iIntros "%sub %t_X #ctx hon #p_t".
+iInv "ctx" as "(%Y & >own & I)".
+iPoseProof (honest_honest_frag with "hon own") as "#->".
+iAssert (▷ ◇ False)%I with "[I]" as "#contra".
+{ rewrite big_sepS_delete //. iDestruct "I" as "([_ I] & _)".
+  iModIntro. by iApply "I". }
+iModIntro. iSplitL; eauto. iModIntro. iExists X. by iFrame.
+Qed.
+
+Lemma honest_unionE E X Y :
+  ↑cryptisN.@"honest" ⊆ E →
+  X ## Y →
+  cryptis_ctx -∗
+  honest 1 (X ∪ Y) ={E}=∗
+  honest 1 X ∗
+  ▷ [∗ set] t ∈ Y, secret t.
+Proof.
+iIntros "%sub %X_Y #ctx hon". iInv "ctx" as "(%Z & >own & I)".
+iPoseProof (honest_honest_frag with "hon own") as "#->".
+rewrite big_sepS_union //. iDestruct "I" as "[I IY]".
+iMod (honest_update X with "hon own") as "[hon own]". iModIntro.
+iFrame. iSplitL; eauto. iModIntro. by iExists X; iFrame.
+Qed.
+
+Lemma honest_delete E t X :
+  ↑cryptisN.@"honest" ⊆ E →
+  t ∈ X →
+  cryptis_ctx -∗
+  honest 1 X ={E}=∗
+  honest 1 (X ∖ {[t]}) ∗ ▷ secret t.
+Proof.
+iIntros "%sub %t_X #ctx hon".
+rewrite {1}[X](union_difference_singleton_L t) // [_ ∪ _]comm_L.
+iMod (honest_unionE with "ctx hon") as "hon" => //.
+  set_solver.
+by rewrite big_sepS_singleton.
+Qed.
+
+Lemma honest_unionI E X Y :
+  ↑cryptisN.@"honest" ⊆ E →
+  X ## Y →
+  cryptis_ctx -∗
+  honest 1 X -∗
+  ▷ ([∗ set] t ∈ Y, secret t) ={E}=∗
+  honest 1 (X ∪ Y).
+Proof.
+iIntros "%sub %t_X #ctx hon sec".
+iInv "ctx" as "(%Z & >own & I)".
+iPoseProof (honest_honest_frag with "hon own") as "#->".
+iMod (honest_update (X ∪ Y) with "hon own") as "[hon own]".
+iModIntro. iFrame. iSplitL; eauto.
+iModIntro. iExists (X ∪ Y). iFrame. rewrite big_sepS_union //; iFrame.
+Qed.
+
+Lemma honest_insert E t X :
+  ↑cryptisN.@"honest" ⊆ E →
+  t ∉ X →
+  cryptis_ctx -∗
+  honest 1 X -∗
+  ▷ secret t ={E}=∗
+  honest 1 (X ∪ {[t]}).
+Proof.
+iIntros "%sub %t_X #ctx hon sec".
+iApply (honest_unionI with "[//] [hon]") => //.
+- set_solver.
+- by rewrite big_sepS_singleton.
+Qed.
+
+End Cryptis.
 
 Arguments cryptis_enc_name {Σ _}.
 Arguments enc_pred {Σ _ _}.
@@ -872,4 +990,27 @@ Arguments term_meta_set {Σ _ _ _ _ _ _} E t x N.
 Arguments term_meta_token_difference {Σ _ _ _} t E1 E2.
 Arguments nonce_term_meta Σ {_}.
 Arguments nonce_meta_token {Σ _}.
+Arguments honest_inv {Σ _ _}.
+Arguments cryptis_ctx {Σ _ _}.
 Arguments TermMeta Σ term_meta term_meta_token : assert.
+
+Lemma cryptisG_alloc `{!heapGS Σ} E :
+  cryptisPreG Σ →
+  ⊢ |={E}=> ∃ (H : cryptisG Σ),
+             cryptis_ctx ∗
+             enc_pred_token ⊤ ∗ key_pred_token ⊤ ∗ hash_pred_token ⊤ ∗
+             honest 1 ∅.
+Proof.
+move=> ?; iStartProof.
+iMod (own_alloc (reservation_map_token ⊤)) as (γ_enc) "own_enc".
+  apply reservation_map_token_valid.
+iMod (own_alloc (reservation_map_token ⊤)) as (γ_key) "own_key".
+  apply reservation_map_token_valid.
+iMod (own_alloc (reservation_map_token ⊤)) as (γ_hash) "own_hash".
+  apply reservation_map_token_valid.
+iMod (own_alloc (● Excl' ∅ ⋅ ◯ Excl' ∅)) as (γ_hon) "[own_hon1 own_hon2]".
+  by apply auth_both_valid.
+iExists (CryptisG _ _ _ _ γ_enc γ_key γ_hash γ_hon); iFrame.
+iApply inv_alloc.
+iModIntro. iExists ∅. iFrame. by rewrite big_sepS_empty.
+Qed.
