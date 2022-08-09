@@ -103,6 +103,14 @@ apply: (anti_symm _).
   iSpecialize ("H" $! _ _ X_k).
   by rewrite big_sepS_forall; iApply "H".
 Qed.
+
+Lemma and_proper_L (PROP : bi) (P : Prop) (φ ψ : PROP) :
+  (P → φ ⊣⊢ ψ) →
+  ⌜P⌝ ∧ φ ⊣⊢ ⌜P⌝ ∧ ψ.
+Proof.
+by move=> φ_ψ; apply: (anti_symm _); iIntros "[% ?]";
+rewrite φ_ψ; eauto.
+Qed.
 (* /TODO *)
 
 Lemma dom_singleton_eq `{EqDecision K, Countable K} {T} (m : gmap K T) x :

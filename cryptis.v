@@ -363,16 +363,6 @@ Canonical pterm_unlock := [unlockable of pterm].
 Global Instance Persistent_pterm t : Persistent (pterm t).
 Proof. rewrite unlock; apply _. Qed.
 
-(* MOVE *)
-Lemma and_proper_L (P : Prop) (φ ψ : iProp) :
-  (P → φ ⊣⊢ ψ) →
-  ⌜P⌝ ∧ φ ⊣⊢ ⌜P⌝ ∧ ψ.
-Proof.
-by move=> φ_ψ; apply: (anti_symm _); iIntros "[% ?]";
-rewrite φ_ψ; eauto.
-Qed.
-(* /MOVE *)
-
 Lemma pterm_aux_eq n t : tsize t ≤ n → pterm_aux n t ⊣⊢ pterm t.
 Proof.
 rewrite unlock.
