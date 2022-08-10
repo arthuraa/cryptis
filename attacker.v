@@ -243,7 +243,7 @@ Lemma has_type_mknonce Γ e :
   ⊢ has_type Γ (mknonce #()) Pub.
 Proof.
 iIntros "!> %γ #γP /=".
-iApply (wp_mknonce _ (λ _, True)%I (λ _, True)%I).
+iApply (wp_mknonce (λ _, True)%I (λ _, True)%I).
 iIntros (t) "_ #tP _ _".
 iExists t; iSplit => //.
 by iApply "tP".

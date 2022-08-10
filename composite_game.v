@@ -230,7 +230,7 @@ Lemma wp_game (mkchan : val) :
   nown_token session_name ⊤ -∗
   enc_pred_token ⊤ -∗
   hash_pred_token ⊤ -∗
-  key_pred_token ⊤ -∗
+  key_pred_token (⊤ ∖ ↑nroot.@"keys") -∗
   WP game mkchan {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
 iIntros "wp_mkchan sess_tok enc_tok hash_tok key_tok"; rewrite /game; wp_pures.
@@ -245,21 +245,21 @@ iMod (key_pred_set (nroot.@"key") (λ kt _, ⌜kt = Enc⌝)%I with "key_tok")
 wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP".
 wp_pures; wp_bind (mknonce _).
-iApply (wp_mknonce _ (λ _, True)%I (λ _, False%I)).
+iApply (wp_mknonce (λ _, True)%I (λ _, False%I)).
 iIntros (nI) "#t_nI #p_nI _ tok_nI".
 wp_tag.
 iAssert (pterm (Spec.tag (nroot.@"key") nI)) as "{p_nI} p_nI".
   by rewrite pterm_tag; iApply "p_nI".
 wp_pures.
 wp_pures; wp_bind (mknonce _).
-iApply (wp_mknonce _ (λ _, True)%I (λ _, False%I)).
+iApply (wp_mknonce (λ _, True)%I (λ _, False%I)).
 iIntros (nR) "#t_nR #p_nR _ tok_nR".
 wp_tag.
 iAssert (pterm (Spec.tag (nroot.@"key") nR)) as "{p_nR} p_nR".
   by iApply pterm_tag; iApply "p_nR".
 wp_pures.
 wp_pures; wp_bind (mknonce _).
-iApply (wp_mknonce _ (λ psk, nonce_meta psk (nroot.@"pub") ())%I (λ _, False%I)).
+iApply (wp_mknonce (λ psk, nonce_meta psk (nroot.@"pub") ())%I (λ _, False%I)).
 iIntros (psk) "#t_psk #p_psk _ tok_psk".
 wp_pures; wp_bind (mkkey _); iApply wp_mkkey.
 set ekI := TKey Enc _.

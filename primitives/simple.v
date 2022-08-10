@@ -342,32 +342,42 @@ Proof.
 by iIntros "?"; iApply twp_wp; iApply twp_untag.
 Qed.
 
-Lemma twp_mknonce E (P Q : term → iProp Σ) Ψ :
-  (∀ t, sterm t -∗
+Lemma twp_mknonce_gen (T : gset term) (P Q : term → iProp Σ) E Ψ :
+  (∀ t, ⌜t ∈ T⌝ -∗ sterm t) -∗
+  (∀ t, ⌜∀ t', t' ∈ T → ¬ subterm t t'⌝ -∗
+        sterm t -∗
         □ (pterm t ↔ ▷ □ P t) -∗
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
         nonce_meta_token t ⊤ -∗
         Ψ t) -∗
   WP mknonce #()%V @ E [{ Ψ }].
 Proof.
-rewrite /mknonce; iIntros "post".
+rewrite /mknonce; iIntros "sterm_T post".
 wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
-iIntros (a') "[_ token]"; wp_pures.
+iIntros (a') "[_ token']"; wp_pures.
 wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
-iIntros (a) "[_ token']".
+iIntros (a) "[_ token]".
+iAssert (⌜∀ t, t ∈ T → ¬ subterm (TNonce a) t⌝)%I as "%fresh".
+{ iIntros "%t %t_T %a_t".
+  iPoseProof ("sterm_T" $! t with "[//]") as "#sterm_t".
+  iAssert (sterm (TNonce a)) as "#sterm_a".
+  { rewrite [sterm t]sterm_nonces_of_term big_sepS_forall.
+    iApply "sterm_t". by rewrite -nonces_of_termP. }
+  rewrite sterm_TNonce. iDestruct "sterm_a" as (γ) "#meta".
+  by iDestruct (meta_meta_token with "token meta") as "[]". }
 iMod (saved_pred_alloc P) as (γP) "#own_P".
 iMod (saved_pred_alloc Q) as (γQ) "#own_Q".
 rewrite (meta_token_difference a (↑nroot.@"nonce")) //.
-iDestruct "token'" as "[nonce token']".
+iDestruct "token" as "[nonce token]".
 iMod (meta_set _ _ γP with "nonce") as "#nonce"; eauto.
 rewrite (meta_token_difference a (↑nroot.@"dh")); last solve_ndisj.
-iDestruct "token'" as "[dh token']".
+iDestruct "token" as "[dh token]".
 iMod (meta_set _ _ γQ with "dh") as "#dh"; eauto.
-iMod (meta_set _ _ a' (nroot.@"meta") with "token'") as "#meta"; eauto.
+iMod (meta_set _ _ a' (nroot.@"meta") with "token") as "#meta"; eauto.
   solve_ndisj.
 iSpecialize ("post" $! (TNonce a)).
 rewrite val_of_term_eq /=.
-wp_pures; iApply ("post" with "[] [] [] [token]"); eauto.
+wp_pures; iApply ("post" with "[] [] [] [] [token']"); eauto.
 - rewrite sterm_TNonce; iExists _; eauto.
 - rewrite pterm_TNonce; iModIntro; iSplit.
   + iDestruct 1 as (γP' P') "(#meta_γP' & #own_P' & ?)".
@@ -383,14 +393,40 @@ wp_pures; iApply ("post" with "[] [] [] [token]"); eauto.
   + by iIntros "#?"; iExists _, _; eauto.
 Qed.
 
-Lemma wp_mknonce E P Q Ψ :
+Lemma wp_mknonce_gen (T : gset term) P Q E Ψ :
+  (∀ t, ⌜t ∈ T⌝ -∗ sterm t) -∗
+  (∀ t, ⌜∀ t', t' ∈ T → ¬ subterm t t'⌝ -∗
+        sterm t -∗
+        □ (pterm t ↔ ▷ □ P t) -∗
+        □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
+        nonce_meta_token t ⊤ -∗
+        Ψ t) -∗
+  WP mknonce #()%V @ E {{ Ψ }}.
+Proof.
+iIntros "H1 H2"; iApply twp_wp; iApply (twp_mknonce_gen with "H1 H2").
+Qed.
+
+Lemma twp_mknonce (P Q : term → iProp Σ) E Ψ :
+  (∀ t, sterm t -∗
+        □ (pterm t ↔ ▷ □ P t) -∗
+        □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
+        nonce_meta_token t ⊤ -∗
+        Ψ t) -∗
+  WP mknonce #()%V @ E [{ Ψ }].
+Proof.
+iIntros "post". iApply (twp_mknonce_gen ∅ P Q).
+- iIntros "%". rewrite elem_of_empty. iDestruct 1 as "[]".
+- iIntros "% _". iApply "post".
+Qed.
+
+Lemma wp_mknonce (P Q : term → iProp Σ) E Ψ :
   (∀ t, sterm t -∗
         □ (pterm t ↔ ▷ □ P t) -∗
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
         nonce_meta_token t ⊤ -∗
         Ψ t) -∗
   WP mknonce #()%V @ E {{ Ψ }}.
-Proof. by iIntros "?"; iApply twp_wp; iApply twp_mknonce. Qed.
+Proof. iIntros "H"; iApply twp_wp; iApply (twp_mknonce with "H"). Qed.
 
 Lemma twp_mkkey E (k : term) Ψ :
   Ψ (TKey Enc k, TKey Dec k)%V -∗

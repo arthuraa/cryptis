@@ -177,7 +177,7 @@ rewrite /cr_init.
 iIntros (??) "#? #ctx inv #d_kA #d_kB Hpost".
 iPoseProof "ctx" as "(? & ? & ?)".
 wp_pures; wp_bind (mknonce _).
-iApply (wp_mknonce _ (λ _, True)%I (λ _, True)%I).
+iApply (wp_mknonce (λ _, True)%I (λ _, True)%I).
 iIntros (nA) "_ #p_nA _ unreg".
 rewrite (term_meta_token_difference _ (↑N)) //.
 iDestruct "unreg" as "[unreg _]".
@@ -246,7 +246,7 @@ wp_pures.
 case: (bool_decide_reflect (_ = repr_key_type Dec)); last protocol_failure.
 case: kt=> // _.
 wp_pures; wp_bind (mknonce _).
-iApply (wp_mknonce _ (λ _, True)%I (λ _, True)%I).
+iApply (wp_mknonce (λ _, True)%I (λ _, True)%I).
 iIntros (nB) "_ #p_nB _ unreg".
 rewrite (term_meta_token_difference _ (↑N)) //.
 iDestruct "unreg" as "[token _]".

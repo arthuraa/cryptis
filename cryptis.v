@@ -468,6 +468,14 @@ rewrite !sterm_TExp /=.
 by iDestruct "s_1" as "[??]"; eauto.
 Qed.
 
+Lemma sterm_nonces_of_term t :
+  sterm t ⊣⊢ [∗ set] a ∈ nonces_of_term t, sterm (TNonce a).
+Proof.
+rewrite {1}unlock !big_sepS_forall; iSplit; iIntros "#H %a %a_t".
+- by rewrite sterm_TNonce; iApply "H".
+- by rewrite -sterm_TNonce; iApply "H".
+Qed.
+
 Lemma pterm_TInt n : pterm (TInt n) ⊣⊢ True.
 Proof.
 apply: (anti_symm _); iIntros "_" => //.
@@ -890,6 +898,9 @@ Definition honest_inv : iProp := ∃ X : gset term,
   honest_frag X ∗ [∗ set] t ∈ X, secret t.
 
 Definition cryptis_ctx : iProp :=
+  key_pred (nroot.@"keys".@"sym") (λ _  _, False%I) ∗
+  key_pred (nroot.@"keys".@"enc") (λ kt _, ⌜kt = Enc⌝)%I ∗
+  key_pred (nroot.@"keys".@"sig") (λ kt _, ⌜kt = Dec⌝)%I ∗
   inv (cryptisN.@"honest") honest_inv.
 
 #[global]
@@ -904,7 +915,7 @@ Lemma honest_pterm E q t X :
   pterm t ={E}=∗
   ▷ ◇ False.
 Proof.
-iIntros "%sub %t_X #ctx hon #p_t".
+iIntros "%sub %t_X (_ & _ & _ & #ctx) hon #p_t".
 iInv "ctx" as "(%Y & >own & I)".
 iPoseProof (honest_honest_frag with "hon own") as "#->".
 iAssert (▷ ◇ False)%I with "[I]" as "#contra".
@@ -921,7 +932,7 @@ Lemma honest_unionE E X Y :
   honest 1 X ∗
   ▷ [∗ set] t ∈ Y, secret t.
 Proof.
-iIntros "%sub %X_Y #ctx hon". iInv "ctx" as "(%Z & >own & I)".
+iIntros "%sub %X_Y (_ & _ & _ & #ctx) hon". iInv "ctx" as "(%Z & >own & I)".
 iPoseProof (honest_honest_frag with "hon own") as "#->".
 rewrite big_sepS_union //. iDestruct "I" as "[I IY]".
 iMod (honest_update X with "hon own") as "[hon own]". iModIntro.
@@ -950,7 +961,7 @@ Lemma honest_unionI E X Y :
   ▷ ([∗ set] t ∈ Y, secret t) ={E}=∗
   honest 1 (X ∪ Y).
 Proof.
-iIntros "%sub %t_X #ctx hon sec".
+iIntros "%sub %t_X (_ & _ & _ & #ctx) hon sec".
 iInv "ctx" as "(%Z & >own & I)".
 iPoseProof (honest_honest_frag with "hon own") as "#->".
 iMod (honest_update (X ∪ Y) with "hon own") as "[hon own]".
@@ -998,7 +1009,9 @@ Lemma cryptisG_alloc `{!heapGS Σ} E :
   cryptisPreG Σ →
   ⊢ |={E}=> ∃ (H : cryptisG Σ),
              cryptis_ctx ∗
-             enc_pred_token ⊤ ∗ key_pred_token ⊤ ∗ hash_pred_token ⊤ ∗
+             enc_pred_token ⊤ ∗
+             key_pred_token (⊤ ∖ ↑nroot.@"keys") ∗
+             hash_pred_token ⊤ ∗
              honest 1 ∅.
 Proof.
 move=> ?; iStartProof.
@@ -1010,7 +1023,19 @@ iMod (own_alloc (reservation_map_token ⊤)) as (γ_hash) "own_hash".
   apply reservation_map_token_valid.
 iMod (own_alloc (● Excl' ∅ ⋅ ◯ Excl' ∅)) as (γ_hon) "[own_hon1 own_hon2]".
   by apply auth_both_valid.
-iExists (CryptisG _ _ _ _ γ_enc γ_key γ_hash γ_hon); iFrame.
+pose (H := CryptisG _ _ _ _ γ_enc γ_key γ_hash γ_hon).
+iExists H; iFrame.
+iAssert (key_pred_token ⊤) with "[own_enc]" as "token".
+  by iFrame.
+rewrite (key_pred_token_difference (↑nroot.@"keys")) //.
+iDestruct "token" as "[token ?]"; iFrame.
+iMod (key_pred_set (nroot.@"keys".@"sym") (λ _ _, False%I) with "token")
+    as "[#? token]"; try solve_ndisj.
+iMod (key_pred_set (nroot.@"keys".@"enc") (λ kt _, ⌜kt = Enc⌝)%I with "token")
+    as "[#? token]"; try solve_ndisj.
+iMod (key_pred_set (nroot.@"keys".@"sig") (λ kt _, ⌜kt = Dec⌝)%I with "token")
+    as "[#? token]"; try solve_ndisj.
+do 3!iSplitR => //.
 iApply inv_alloc.
 iModIntro. iExists ∅. iFrame. by rewrite big_sepS_empty.
 Qed.

@@ -63,7 +63,7 @@ Next Obligation. by case; eauto. Qed.
 Next Obligation.
 iIntros "%E %kI %kR %Φ _ post". rewrite /nsl_mk_key_share_impl.
 wp_pures. wp_bind (mknonce _).
-iApply (wp_mknonce _ (λ _, corruption kI kR) (λ _, False)%I).
+iApply (wp_mknonce (λ _, corruption kI kR) (λ _, False)%I).
 iIntros "%n #s_n #p_n _ token". wp_pures. iModIntro.
 iApply "post". rewrite bi.intuitionistic_intuitionistically. by eauto.
 Qed.

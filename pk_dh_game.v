@@ -54,7 +54,7 @@ Definition game : val := λ: "mkchan",
 Lemma wp_game (mkchan : val) :
   {{{ True }}} mkchan #() {{{ v, RET v; channel v }}} -∗
   enc_pred_token ⊤ -∗
-  key_pred_token ⊤ -∗
+  key_pred_token (⊤ ∖ ↑nroot.@"keys") -∗
   nown_token session_name ⊤ -∗
   WP game mkchan {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
@@ -65,14 +65,14 @@ pose (P rl (kI kR kS : term) :=
         nonce_meta k (nroot.@"nsl") (kI, kR, kS))%I).
 iMod (pk_dh_alloc N P with "nown_tok enc_tok") as "[#ctx _]" => //.
 iMod (key_pred_set (nroot.@"key") (λ kt _, ⌜kt = Enc⌝)%I with "key_tok")
-  as "[#? _]" => //.
+  as "[#? _]" => //; try solve_ndisj.
 wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP".
 wp_pures; wp_bind (mknonce _).
-iApply (wp_mknonce _ (λ kI, nonce_meta kI (nroot.@"pub") ()) (λ _, False%I)).
+iApply (wp_mknonce (λ kI, nonce_meta kI (nroot.@"pub") ()) (λ _, False%I)).
 iIntros (kI) "#t_kI #p_kI _ tok_kI".
 wp_pures; wp_bind (mknonce _).
-iApply (wp_mknonce _ (λ _, nonce_meta kI (nroot.@"pub") ()) (λ _, False%I)).
+iApply (wp_mknonce (λ _, nonce_meta kI (nroot.@"pub") ()) (λ _, False%I)).
 iIntros (kR) "#t_kR #p_kR _ tok_kR".
 rewrite (term_meta_token_difference kI (↑nroot.@"pub") ⊤) //.
 iDestruct "tok_kI" as "[pub init]".

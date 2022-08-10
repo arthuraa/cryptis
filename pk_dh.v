@@ -90,7 +90,7 @@ Qed.
 Next Obligation.
 iIntros "%E %kI %kR %Φ _ post". rewrite /pk_dh_mk_key_share_impl.
 wp_pures. wp_bind (mknonce _).
-iApply (wp_mknonce _ (λ _, False)%I (dh_publ (λ _, corruption kI kR))).
+iApply (wp_mknonce (λ _, False)%I (dh_publ (λ _, corruption kI kR))).
 iIntros "%n #s_n #p_n #dh token". wp_pures.
 wp_bind (tint _). iApply wp_tint.
 wp_bind (tgroup _). iApply wp_tgroup.

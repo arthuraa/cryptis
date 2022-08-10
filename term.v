@@ -75,16 +75,16 @@ Definition term_eq_dec : EqDecision term :=
   Eval hnf in def_eq_decision _.
 Global Existing Instance term_eq_dec.
 
-Inductive subterm : term → term → Prop :=
-| STRefl t : subterm t t
-| STPair1 t t1 t2 of subterm t t1 : subterm t (TPair t1 t2)
-| STPair2 t t1 t2 of subterm t t2 : subterm t (TPair t1 t2)
-| STKey t kt t' of subterm t t' : subterm t (TKey kt t')
-| STEnc1 t k t' of subterm t k : subterm t (TEnc k t')
-| STEnc2 t k t' of subterm t t' : subterm t (TEnc k t')
-| STHash t t' of subterm t t' : subterm t (THash t')
-| STExp1 t t' ts of subterm t t' : subterm t (TExp t' ts)
-| STExp2 t t' t'' ts of subterm t t'' & t'' ∈ ts : subterm t (TExp t' ts).
+Inductive subterm (t : term) : term → Prop :=
+| STRefl : subterm t t
+| STPair1 t1 t2 of subterm t t1 : subterm t (TPair t1 t2)
+| STPair2 t1 t2 of subterm t t2 : subterm t (TPair t1 t2)
+| STKey kt t' of subterm t t' : subterm t (TKey kt t')
+| STEnc1 k t' of subterm t k : subterm t (TEnc k t')
+| STEnc2 k t' of subterm t t' : subterm t (TEnc k t')
+| STHash t' of subterm t t' : subterm t (THash t')
+| STExp1 t' ts of subterm t t' : subterm t (TExp t' ts)
+| STExp2 t' t'' ts of subterm t t'' & t'' ∈ ts : subterm t (TExp t' ts).
 
 Section ValOfTerm.
 
@@ -224,7 +224,7 @@ Definition nonces_of_term := unseal nonces_of_term_aux.
 Lemma nonces_of_term_eq : nonces_of_term = nonces_of_term_def.
 Proof. exact: seal_eq. Qed.
 
-Lemma nonces_of_termE t :
+Lemma nonces_of_termE' t :
   nonces_of_term t =
   match t with
   | TInt _ => ∅
@@ -247,6 +247,8 @@ rewrite nonces_of_term_eq /nonces_of_term_def.
 case: unfold_TExpP => pts' e_pts' /=.
 by rewrite [in LHS]e_pts' map_map.
 Qed.
+
+Definition nonces_of_termE := (nonces_of_term_TExp, nonces_of_termE').
 
 Fixpoint subterms_pre_def t : gset term :=
   {[fold_term t]} ∪
@@ -318,8 +320,8 @@ Ltac solve_subtermsP :=
 Lemma subtermsP t1 t2 : subterm t1 t2 ↔ t1 ∈ subterms t2.
 Proof.
 split.
-- elim: t1 t2 /; try by move=> *; rewrite subtermsE; set_solver.
-  move=> t t' t'' ts _ IH ?; rewrite subtermsE.
+- elim: t2 /; try by intros; rewrite subtermsE; set_solver.
+  move=> t' t'' ts _ IH ?; rewrite subtermsE.
   do 2![rewrite elem_of_union; right].
   rewrite elem_of_union_list; exists (subterms t''); split => //.
   by rewrite elem_of_list_fmap; eauto.
@@ -329,6 +331,44 @@ split.
   case=> [-> | [/IHt ?|sub]]; eauto using subterm.
   case: sub => _ [] /elem_of_list_fmap [] t' [] -> t'_ts sub.
   suffices: subterm t1 t' by eauto using subterm.
+  elim: {t IHt} ts IHts t'_ts sub => /= [_|t ts IH [IHt IHts]].
+    by rewrite elem_of_nil.
+  by rewrite elem_of_cons; case => [->|?] //; eauto.
+Qed.
+
+Ltac solve_nonces_of_termP :=
+  intros;
+  repeat match goal with
+  | H : context[nonces_of_term (?X ?Y)] |- _ =>
+      rewrite [nonces_of_term (X Y)]nonces_of_termE /= in H
+  | H : _ ∈ {[_]} |- _ =>
+      rewrite elem_of_singleton in H;
+      rewrite {}H
+  | H : _ ∈ _ ∪ _ |- _ =>
+      rewrite elem_of_union in H;
+      destruct H
+  | H : _ ∈ ∅ |- _ =>
+      rewrite elem_of_empty in H;
+      destruct H
+  | H1 : ?P, H2 : ?P -> ?Q |- _ =>
+      move/(_ H1) in H2
+  end;
+  eauto using subterm.
+
+Lemma nonces_of_termP a t : subterm (TNonce a) t ↔ a ∈ nonces_of_term t.
+Proof.
+split.
+- elim: t /; try by intros; rewrite nonces_of_termE; set_solver.
+  move=> t t' ts _ IH t'_ts.
+  rewrite nonces_of_termE elem_of_union; right.
+  rewrite elem_of_union_list; exists (nonces_of_term t'); split => //.
+  by rewrite elem_of_list_fmap; eauto.
+- elim: t; try by solve_nonces_of_termP.
+  move=> t IHt ts IHts _.
+  rewrite nonces_of_termE !elem_of_union elem_of_union_list.
+  case=> [/IHt ?|sub]; eauto using subterm.
+  case: sub => _ [] /elem_of_list_fmap [] t' [] -> t'_ts sub.
+  suffices: subterm (TNonce a) t' by eauto using subterm.
   elim: {t IHt} ts IHts t'_ts sub => /= [_|t ts IH [IHt IHts]].
     by rewrite elem_of_nil.
   by rewrite elem_of_cons; case => [->|?] //; eauto.
