@@ -75,6 +75,17 @@ Definition term_eq_dec : EqDecision term :=
   Eval hnf in def_eq_decision _.
 Global Existing Instance term_eq_dec.
 
+Inductive subterm : term → term → Prop :=
+| STRefl t : subterm t t
+| STPair1 t t1 t2 of subterm t t1 : subterm t (TPair t1 t2)
+| STPair2 t t1 t2 of subterm t t2 : subterm t (TPair t1 t2)
+| STKey t kt t' of subterm t t' : subterm t (TKey kt t')
+| STEnc1 t k t' of subterm t k : subterm t (TEnc k t')
+| STEnc2 t k t' of subterm t t' : subterm t (TEnc k t')
+| STHash t t' of subterm t t' : subterm t (THash t')
+| STExp1 t t' ts of subterm t t' : subterm t (TExp t' ts)
+| STExp2 t t' t'' ts of subterm t t'' & t'' ∈ ts : subterm t (TExp t' ts).
+
 Section ValOfTerm.
 
 Import PreTerm.
@@ -235,6 +246,92 @@ Proof.
 rewrite nonces_of_term_eq /nonces_of_term_def.
 case: unfold_TExpP => pts' e_pts' /=.
 by rewrite [in LHS]e_pts' map_map.
+Qed.
+
+Fixpoint subterms_pre_def t : gset term :=
+  {[fold_term t]} ∪
+  match t with
+  | PreTerm.PTInt _ => ∅
+  | PreTerm.PTPair t1 t2 => subterms_pre_def t1 ∪ subterms_pre_def t2
+  | PreTerm.PTNonce _ => ∅
+  | PreTerm.PTKey _ t => subterms_pre_def t
+  | PreTerm.PTEnc t1 t2 => subterms_pre_def t1 ∪ subterms_pre_def t2
+  | PreTerm.PTHash t => subterms_pre_def t
+  | PreTerm.PTExp t ts => subterms_pre_def t ∪ ⋃ map subterms_pre_def ts
+  end.
+
+Definition subterms_def t :=
+  subterms_pre_def (unfold_term t).
+Arguments subterms_def /.
+Definition subterms_aux : seal subterms_def. by eexists. Qed.
+Definition subterms := unseal subterms_aux.
+Lemma subterms_eq : subterms = subterms_def.
+Proof. exact: seal_eq. Qed.
+
+Lemma subtermsE' t :
+  subterms t =
+  {[t]} ∪
+  match t with
+  | TInt _ => ∅
+  | TPair t1 t2 => subterms t1 ∪ subterms t2
+  | TNonce _ => ∅
+  | TKey _ t => subterms t
+  | TEnc t1 t2 => subterms t1 ∪ subterms t2
+  | THash t => subterms t
+  | TExp' t pts _ => subterms t ∪ ⋃ map subterms_pre_def pts
+  end.
+Proof.
+rewrite subterms_eq /=.
+case: t =>> //=; try by rewrite fold_termE ?unfold_termK.
+by rewrite fold_termE unfold_termK TExp'E.
+Qed.
+
+Lemma subterms_TExp t ts :
+  subterms (TExp t ts) = {[TExp t ts]} ∪ (subterms t ∪ ⋃ (subterms <$> ts)).
+Proof.
+rewrite subtermsE'; congr (_ ∪ _).
+case: TExpP => pts ? e_pts.
+by rewrite [in LHS]e_pts map_map subterms_eq.
+Qed.
+
+Definition subtermsE := (subterms_TExp, subtermsE').
+
+Ltac solve_subtermsP :=
+  intros;
+  repeat match goal with
+  | H : context[subterms (?X ?Y)] |- _ =>
+      rewrite [subterms (X Y)]subtermsE /= in H
+  | H : _ ∈ {[_]} |- _ =>
+      rewrite elem_of_singleton in H;
+      rewrite {}H
+  | H : _ ∈ _ ∪ _ |- _ =>
+      rewrite elem_of_union in H;
+      destruct H
+  | H : _ ∈ ∅ |- _ =>
+      rewrite elem_of_empty in H;
+      destruct H
+  | H1 : ?P, H2 : ?P -> ?Q |- _ =>
+      move/(_ H1) in H2
+  end;
+  eauto using subterm.
+
+Lemma subtermsP t1 t2 : subterm t1 t2 ↔ t1 ∈ subterms t2.
+Proof.
+split.
+- elim: t1 t2 /; try by move=> *; rewrite subtermsE; set_solver.
+  move=> t t' t'' ts _ IH ?; rewrite subtermsE.
+  do 2![rewrite elem_of_union; right].
+  rewrite elem_of_union_list; exists (subterms t''); split => //.
+  by rewrite elem_of_list_fmap; eauto.
+- elim: t2; try by solve_subtermsP.
+  move=> t IHt ts IHts _.
+  rewrite subtermsE !elem_of_union elem_of_union_list elem_of_singleton.
+  case=> [-> | [/IHt ?|sub]]; eauto using subterm.
+  case: sub => _ [] /elem_of_list_fmap [] t' [] -> t'_ts sub.
+  suffices: subterm t1 t' by eauto using subterm.
+  elim: {t IHt} ts IHts t'_ts sub => /= [_|t ts IH [IHt IHts]].
+    by rewrite elem_of_nil.
+  by rewrite elem_of_cons; case => [->|?] //; eauto.
 Qed.
 
 Module Spec.
@@ -464,10 +561,9 @@ Definition texp t1 t2 :=
 
 Lemma texpA t1 ts1 t2 : texp (TExp t1 ts1) t2 = TExp t1 (t2 :: ts1).
 Proof.
-rewrite /texp {1}unlock /= fold_wf_termE normalize_unfold1 normalize_unfoldn.
-rewrite unfold_termK.
-apply: TExp_perm.
-rewrite seq.perm_cons -{2}[ts1](seq.mapK unfold_termK).
+rewrite /texp [in TExp t1 ts1]unlock /= {1}[fold_term]unlock /=.
+rewrite fold_wf_termE normalize_unfold1 normalize_unfoldn unfold_termK.
+apply: TExp_perm. rewrite seq.perm_cons -{2}[ts1](seq.mapK unfold_termK).
 by rewrite seq.perm_map // path.perm_sort.
 Qed.
 

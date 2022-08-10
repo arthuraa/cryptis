@@ -576,7 +576,7 @@ apply: (anti_symm _).
 - rewrite pterm_eq sterm_TExp.
   iDestruct 1 as "[# [Ht Hts] [#publ | publ]]".
   + iDestruct "publ" as (T) "[%dec publ]".
-    case: dec; try by move=>>; rewrite unlock.
+    case: dec; try by move=>>; rewrite !unlock.
     * move=> {}t -> /TExp_inj [-> e_ts] _.
       rewrite big_sepS_singleton; iRight; iSplit => //.
         by iSplit.
