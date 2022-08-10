@@ -1,7 +1,7 @@
 From mathcomp Require Import ssreflect.
 From mathcomp Require order.
 From stdpp Require Import gmap.
-From iris.algebra Require Import agree auth gset gmap.
+From iris.algebra Require Import agree auth gset gmap reservation_map.
 From iris.base_logic.lib Require Import invariants saved_prop.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import nondet_bool.
@@ -94,6 +94,10 @@ Definition tdec c : val := λ: "k" "t",
 Definition mkkey : val := λ: "k",
   ((#TKey_tag, (#(int_of_key_type Enc), "k")),
    (#TKey_tag, (#(int_of_key_type Dec), "k"))).
+
+Definition mkakey : val := λ: <>,
+  let: "n" := mknonce #() in
+  mkkey (tag (nroot.@"keys".@"enc") "n").
 
 Definition mkskey : val := λ: "k",
   let: "k" := mkkey "k" in
@@ -441,6 +445,66 @@ Lemma wp_mkkey E (k : term) Ψ :
   WP mkkey k @ E {{ Ψ }}.
 Proof.
 by iIntros "post"; iApply twp_wp; iApply twp_mkkey.
+Qed.
+
+Lemma twp_mkakey T E Ψ :
+  ↑cryptisN ⊆ E →
+  cryptis_ctx -∗
+  honest 1 T -∗
+  (∀ t, pterm (TKey Enc t) -∗
+        honest 1 (T ∪ {[TKey Dec t]}) -∗
+        Ψ (TKey Enc t, TKey Dec t)%V) -∗
+  WP mkakey #() @ E [{ Ψ }].
+Proof.
+iIntros "%sub #ctx hon post". rewrite /mkakey. wp_pures.
+iMod (own_alloc (reservation_map_token ⊤)) as (γ) "token".
+  by apply reservation_map_token_valid.
+iAssert (□ (∀ t, ⌜t ∈ T⌝ → sterm t))%I as "#s_T".
+  rewrite -big_sepS_forall. by iDestruct "hon" as "[_ #?]".
+wp_bind (mknonce _).
+iApply (twp_mknonce_gen T
+          (λ _, own γ (namespace_map_data nroot (to_agree (encode 1))))
+          (λ _, False%I)).
+  iIntros "%t #t_T". by iApply "s_T".
+iIntros "%t %fresh #s_t #p_t _ _".
+pose (t' := Spec.tag (nroot.@"keys".@"enc") t).
+have {}fresh : TKey Dec t' ∉ T.
+  move=> t'_T; apply: fresh => //.
+  apply: STKey. exact: subterm_tag.
+iAssert (secret (TKey Dec t')) with "[token]" as "tP"; first iSplit.
+- iMod (own_update with "token") as "#meta".
+    apply (namespace_map_alloc_update _ nroot (to_agree (encode 1))) => //.
+  iSpecialize ("p_t" with "meta").
+  iModIntro. rewrite pterm_TKey. iLeft. by rewrite pterm_tag.
+- rewrite pterm_TKey pterm_tag. iIntros "[#contra| [_ #p_t']]".
+  + iPoseProof ("p_t" with "contra") as ">#own".
+    iPoseProof (own_valid_2 with "token own") as "%valid".
+    case: (namespace_map_disj _ _ _ _ valid); eauto.
+  + iDestruct "ctx" as "(_ & ctx & _ & _)".
+    by iMod (wf_key_elim with "p_t' ctx") as "{p_t'} %p_t'".
+iAssert (sterm (TKey Dec t')) as "s_t'".
+  by rewrite sterm_TKey sterm_tag.
+iMod (honest_insert with "ctx hon s_t' tP") as "hon" => //.
+  solve_ndisj.
+wp_pures. wp_bind (tag _ _). iApply twp_tag.
+iApply twp_mkkey. iApply "post" => //.
+iApply pterm_TKey. iRight. rewrite sterm_tag. iSplit => //.
+iDestruct "ctx" as "(_ & ? & _)".
+iExists _, _, _; iSplit => //.
+by iSplit => //.
+Qed.
+
+Lemma wp_mkakey T E Ψ :
+  ↑cryptisN ⊆ E →
+  cryptis_ctx -∗
+  honest 1 T -∗
+  (∀ t, pterm (TKey Enc t) -∗
+        honest 1 (T ∪ {[TKey Dec t]}) -∗
+        Ψ (TKey Enc t, TKey Dec t)%V) -∗
+  WP mkakey #() @ E {{ Ψ }}.
+Proof.
+iIntros "%sub #ctx hon post". iApply twp_wp.
+by iApply (twp_mkakey with "[//] hon post").
 Qed.
 
 Lemma twp_mkskey E (k : term) Ψ :

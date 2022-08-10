@@ -627,3 +627,9 @@ Arguments Spec.untag_def /.
 
 #[global]
 Existing Instance Spec.of_list_inj.
+
+Lemma subterm_tag c t1 t2 : subterm t1 t2 → subterm t1 (Spec.tag c t2).
+Proof. by rewrite Spec.tag_eq; eauto using subterm. Qed.
+
+#[global]
+Hint Resolve STRefl : core.
