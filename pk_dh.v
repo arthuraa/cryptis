@@ -141,69 +141,77 @@ iDestruct (dh_seed_elim2 with "priv_nI p_kS") as "[>p_sI >contra]".
 by iDestruct (dh_seed_elim0 with "priv_nR contra") as ">[]".
 Qed.
 
-Lemma wp_pk_dh_init c kI kR E :
+Lemma wp_pk_dh_init c kI kR dq T E :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
+  cryptis_ctx -∗
   ctx N -∗
   pterm (TKey Enc kI) -∗
   pterm (TKey Enc kR) -∗
-  {{{ init_confirm kI kR }}}
+  {{{ init_confirm kI kR ∗ ●H{dq} T }}}
     pk_dh_init c (TKey Dec kI) (TKey Enc kI) (TKey Enc kR) @ E
   {{{ (okS : option term), RET repr okS;
+      ●H{dq} T ∗
       if okS is Some kS then
         sterm kS ∗
         pk_dh_confirmation Init kI kR kS ∗
-        (corruption kI kR ∨
-         □ (pterm kS → ◇ False) ∗
-         pk_dh_session_meta_token Init kI kR kS ⊤ ∗
-         session_key N kI kR kS)
+        if decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) then
+          □ (pterm kS → ◇ False) ∗
+          pk_dh_session_meta_token Init kI kR kS ⊤ ∗
+          session_key N kI kR kS
+        else True
       else True
   }}}.
 Proof.
-iIntros "% % #chan_c #ctx #p_ekI #p_ekR %Ψ !> confirm post".
+iIntros "% % #chan_c #ctx #ctx' #p_ekI #p_ekR %Ψ !> confirm post".
 rewrite /pk_dh_init; wp_pures.
-iApply (wp_pk_auth_init with "chan_c ctx [] [] [confirm]"); eauto.
+iApply (wp_pk_auth_init with "chan_c ctx ctx' [] [] [confirm]"); eauto.
 iIntros "!> %okS". case: okS => [kS|]; last first.
   by iApply ("post" $! None).
-iIntros "(#s_kS & #confirmed & kSP)". iApply ("post" $! (Some kS)).
-iSplitR => //. iSplit => //.
-iDestruct "kSP" as "[fail|[token #key]]"; eauto.
-iRight. iFrame. iSplit => //. iModIntro.
+iIntros "(hon & #s_kS & #confirmed & kSP)". iApply ("post" $! (Some kS)).
+iFrame. iSplitR => //. iSplit => //.
+case: decide => [[kIP kRP]|]; eauto.
+iDestruct "kSP" as "[token #key]"; eauto.
+iFrame. iSplit => //. iModIntro.
 by iApply pk_dh_session_key_elim.
 Qed.
 
-Lemma wp_pk_dh_resp c kR E :
+Lemma wp_pk_dh_resp c kR dq T E :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
+  cryptis_ctx -∗
   ctx N -∗
   pterm (TKey Enc kR) -∗
-  {{{ resp_confirm kR }}}
+  {{{ resp_confirm kR ∗ ●H{dq} T }}}
     pk_dh_resp c (TKey Dec kR) (TKey Enc kR) @ E
   {{{ (res : option (term * term)), RET repr res;
+      ●H{dq} T ∗
       if res is Some (pkI, kS) then ∃ kI,
         ⌜pkI = TKey Enc kI⌝ ∗
         pterm pkI ∗
         sterm kS ∗
         pk_dh_confirmation Resp kI kR kS ∗
-        (corruption kI kR ∨
-         □ (pterm kS → ◇ False) ∗
-         pk_dh_session_meta_token Resp kI kR kS ⊤ ∗
-         session_key N kI kR kS)
+        if decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) then
+          □ (pterm kS → ◇ False) ∗
+          pk_dh_session_meta_token Resp kI kR kS ⊤ ∗
+          session_key N kI kR kS
+        else True
       else True
   }}}.
 Proof.
-iIntros "% % #chan_c #ctx #p_ekR %Ψ !> confirm post".
+iIntros "% % #chan_c #ctx #ctx' #p_ekR %Ψ !> confirm post".
 rewrite /pk_dh_resp; wp_pures.
-iApply (wp_pk_auth_resp with "chan_c ctx [] [confirm]"); eauto.
+iApply (wp_pk_auth_resp with "chan_c ctx ctx' [] [confirm]"); eauto.
 iIntros "!> %res". case: res => [[pkI kS]|]; last first.
   by iApply ("post" $! None).
-iIntros "(%kI & -> & #p_pkI & #s_kS & #confirmed & kSP)".
-iApply ("post" $! (Some (TKey Enc kI, kS))). iExists kI.
+iIntros "(hon & %kI & -> & #p_pkI & #s_kS & #confirmed & kSP)".
+iApply ("post" $! (Some (TKey Enc kI, kS))). iFrame. iExists kI.
 do 4!iSplitR => //.
-iDestruct "kSP" as "[fail|[token #key]]"; eauto.
-iRight. iFrame. iSplit => //. iModIntro.
+case: decide => // - [kIP kRP].
+iDestruct "kSP" as "[token #key]"; eauto.
+iFrame. iSplit => //. iModIntro.
 by iApply pk_dh_session_key_elim.
 Qed.
 

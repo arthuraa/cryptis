@@ -575,29 +575,32 @@ iExists nI, nR. by do !iSplit => //.
 Qed.
 
 Ltac protocol_failure :=
-  by intros; wp_pures; iApply ("Hpost" $! None).
+  by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
 
-Lemma wp_pk_auth_init c kI kR E :
+Lemma wp_pk_auth_init c kI kR dq T E :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
+  cryptis_ctx -∗
   ctx -∗
   pterm (TKey Enc kI) -∗
   pterm (TKey Enc kR) -∗
-  {{{ init_confirm kI kR }}}
+  {{{ init_confirm kI kR ∗ ●H{dq} T }}}
     pk_auth_init c mk_key_share_impl (mk_session_key_impl Init)
     (TKey Dec kI) (TKey Enc kI) (TKey Enc kR) @ E
   {{{ okS, RET (repr okS);
+      ●H{dq} T ∗
       if okS is Some kS then
         sterm kS ∗
         confirmation Init kI kR kS ∗
-        (corruption kI kR ∨
-         session_key_meta_token Init kI kR kS ⊤ ∗
-         session_key kI kR kS)
+        if decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) then
+          session_key_meta_token Init kI kR kS ⊤ ∗
+          session_key kI kR kS
+        else True
       else True }}}.
 Proof.
 rewrite /pk_auth_init.
-iIntros (??) "#chan_c #ctx #p_kI #p_kR %Ψ !> confirm Hpost".
+iIntros (??) "#chan_c #ctx #ctx' #p_kI #p_kR %Ψ !> [confirm hon] Hpost".
 wp_pures. wp_bind (mk_key_share_impl _).
 iApply (wp_mk_key_share _ kI kR) => //.
 iIntros "!> %nI (#s_nI & #p_nI & token)". wp_pures.
@@ -614,38 +617,49 @@ wp_eq_term e; last protocol_failure; subst pkR'.
 iPoseProof (pterm_msg2E with "[//] [//] [//]")
   as "{p_m2} (s_sR & p_sR & accepted)".
 wp_pures.
-iMod (init_finish with "ctx s_nI p_nI p_sR accepted token confirm")
+iMod (init_finish with "ctx' s_nI p_nI p_sR accepted token confirm")
   as "(#confirmed & #finished & session)"; eauto.
 wp_bind (mk_session_key_impl _ _ _). iApply wp_mk_session_key => //.
 iIntros "!> _". wp_pures. wp_tenc. wp_pures. wp_bind (send _ _).
 iApply wp_send => //.
   by iApply pterm_msg3I.
+case: decide => [[kIP kRP]|_]; last first.
+  wp_pures. iApply ("Hpost" $! (Some (mk_session_key Init nI sR))).
+  iFrame. iModIntro. iSplit; eauto. by iApply mk_session_key_sterm.
+iDestruct "session" as "[[#fail|#fail]|session]".
+- iMod (honest_pterm with "ctx hon fail") as "#contra"; eauto; try solve_ndisj.
+  wp_pures. iDestruct "contra" as ">[]".
+- iMod (honest_pterm with "ctx hon fail") as "#contra"; eauto; try solve_ndisj.
+  wp_pures. iDestruct "contra" as ">[]".
 wp_pures. iApply ("Hpost" $! (Some (mk_session_key Init nI sR))).
 iFrame. iModIntro. iSplit; eauto. by iApply mk_session_key_sterm.
 Qed.
 
-Lemma wp_pk_auth_resp c kR E :
+Lemma wp_pk_auth_resp c kR dq T E :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
+  cryptis_ctx -∗
   ctx -∗
   pterm (TKey Enc kR) -∗
-  {{{ resp_confirm kR }}}
+  {{{ resp_confirm kR ∗ ●H{dq} T }}}
     pk_auth_resp c mk_key_share_impl (mk_session_key_impl Resp)
       (TKey Dec kR) (TKey Enc kR) @ E
   {{{ res, RET (repr res);
+      ●H{dq} T ∗
       if res is Some (pkI, kS) then
          ∃ kI, ⌜pkI = TKey Enc kI⌝ ∗
                pterm pkI ∗
                sterm kS ∗
                confirmation Resp kI kR kS ∗
-               (corruption kI kR ∨
+               if decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) then
                 session_key_meta_token Resp kI kR kS ⊤ ∗
-                session_key kI kR kS)
+                session_key kI kR kS
+               else True
        else True }}}.
 Proof.
-iIntros (??) "#? #ctx #e_kR %Ψ !> confirm Hpost".
-iPoseProof "ctx" as "(inv & _)".
+iIntros (??) "#? #ctx #ctx' #e_kR %Ψ !> [confirm hon] Hpost".
+iPoseProof "ctx'" as "(inv & _)".
 rewrite /pk_auth_resp; wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m1) "#Hm1".
 wp_tdec m1; last protocol_failure.
@@ -673,11 +687,28 @@ iIntros "%m3 #p_m3". wp_tdec m3; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst m3.
 iPoseProof (pterm_msg3E with "[//] [//] [//]") as "finished".
 wp_pures.
-iMod (resp_finish with "[] [] [] [] waiting") as "?" => //.
+iMod (resp_finish with "[] [] [] [] waiting") as "session" => //.
+case: (decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T)) => [[kIP kRP]|pub]; last first.
+  wp_bind (mk_session_key_impl _ _ _). iApply wp_mk_session_key => //.
+  iIntros "!> _". wp_pures.
+  iApply ("Hpost" $! (Some (TKey Enc kI, mk_session_key Resp nR sI))).
+  iModIntro. iFrame. iExists kI. rewrite decide_False //.
+  do 3!iSplit => //; eauto.
+  by iApply mk_session_key_sterm => //.
+iDestruct "session" as "[[#fail|#fail]|session]".
+- wp_bind (mk_session_key_impl _ _ _). iApply wp_mk_session_key => //.
+  iIntros "!> _".
+  iMod (honest_pterm with "ctx hon fail") as "contra"; eauto; try solve_ndisj.
+  wp_pures. by iDestruct "contra" as ">[]".
+- wp_bind (mk_session_key_impl _ _ _). iApply wp_mk_session_key => //.
+  iIntros "!> _".
+  iMod (honest_pterm with "ctx hon fail") as "contra"; eauto; try solve_ndisj.
+  wp_pures. by iDestruct "contra" as ">[]".
 wp_bind (mk_session_key_impl _ _ _). iApply wp_mk_session_key => //.
 iIntros "!> _". wp_pures.
 iApply ("Hpost" $! (Some (TKey Enc kI, mk_session_key Resp nR sI))).
-iModIntro. iExists kI. do 3!iSplit => //; eauto.
+iModIntro. iFrame. iExists kI. rewrite decide_True //.
+do 3!iSplit => //; eauto.
 by iApply mk_session_key_sterm => //.
 Qed.
 

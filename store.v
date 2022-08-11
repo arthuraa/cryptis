@@ -269,7 +269,7 @@ Definition client_state kI kR s n t : iProp :=
   sterm (cst_key s) ∗
   cur_term_auth (cst_name s) n t ∗
   if cst_ok s then store_key kI kR (cst_key s) (cst_name s)
-  else corruption kI kR.
+  else True%I.
 
 Lemma client_state_cur_term_frag kI kR s n t :
   client_state kI kR s n t -∗
@@ -283,13 +283,13 @@ Lemma client_state_cst_key kI kR s n t :
   client_state kI kR s n t -∗
   sterm (cst_key s) ∗
   if cst_ok s then store_key kI kR (cst_key s) (cst_name s)
-  else corruption kI kR.
+  else True.
 Proof. by iIntros "(_ & ? & _ & ?)"; eauto. Qed.
 
 Definition store_pred kS m : iProp := ∃ (n : nat) t kI kR γ,
   ⌜m = Spec.of_list [TInt n; t]⌝ ∗
   cur_term_frag γ n t ∗
-  (corruption kI kR ∨ store_key kI kR kS γ).
+  (True ∨ store_key kI kR kS γ). (* FIXME: This is trivial currently *)
 
 Definition ack_store_pred kS m : iProp := ∃ (n : nat),
   ⌜m = TInt n⌝. (* FIXME: Do we need anything else here? *)
@@ -414,34 +414,42 @@ iIntros "!> state". wp_pures.
 iApply (wp_client_ack_store with "[] [] [state] [post]") => //.
 Qed.
 
-Lemma wp_client_connect E c kI kR :
+Lemma wp_client_connect E c kI kR dq T :
   ↑N ⊆ E →
   ↑cryptisN ⊆ E →
   channel c -∗
+  cryptis_ctx -∗
   ctx -∗
   pterm (TKey Enc kI) -∗
   pterm (TKey Enc kR) -∗
-  {{{ True }}}
+  {{{ ●H{dq} T }}}
     Client.connect N c (TKey Dec kI) (TKey Enc kI) (TKey Enc kR) @ E
-  {{{ s, RET (repr s); client_state kI kR s 0 (TInt 0) }}}.
+  {{{ s, RET (repr s);
+      ●H{dq} T ∗
+      ⌜cst_ok s = bool_decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T)⌝ ∗
+      client_state kI kR s 0 (TInt 0) }}}.
 Proof.
-iIntros "% % #chan_c (_ & _ & _ & _ & #ctx & #key) #p_ekI #p_ekR".
-iIntros "!> %Φ _ post". rewrite /Client.connect. wp_pures.
-iRevert "post". iApply wp_do_until. iIntros "!> post". wp_pures.
+iIntros "% % #chan_c #ctx (_ & _ & _ & _ & #ctx' & #key) #p_ekI #p_ekR".
+iIntros "!> %Φ hon post". rewrite /Client.connect. wp_pures.
+iCombine "hon post" as "post". iRevert "post".
+iApply wp_do_until. iIntros "!> [hon post]". wp_pures.
 wp_bind (pk_dh_init _ _ _ _ _).
-iApply (wp_pk_dh_init with "[] [] [] [] []"); eauto.
-iIntros "!> %okS HokS". case: okS => [kS|]; wp_pures; last by iLeft; eauto.
+iApply (wp_pk_dh_init with "[] [] [] [] [] [hon]"); eauto.
+  by iFrame.
+iIntros "!> %okS [hon HokS]".
+case: okS => [kS|]; wp_pures; last by iLeft; iFrame; eauto.
 wp_alloc l as "Hl". wp_pures. wp_tag. wp_bind (mkskey _). iApply wp_mkskey.
 iMod cur_term_auth_alloc as "[%γ cur_term]".
 wp_pures. iRight. iExists _. iSplitR; eauto.
 iDestruct "HokS" as "(#s_kS & _ & status)".
-rewrite [(_ ∨ _)%I]comm bi.or_alt. iDestruct "status" as "(%ok & status)".
+set (P := TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T).
 iApply ("post" $! {| cst_ts := l; cst_key := Spec.tag (N.@"key") kS;
-                     cst_name := γ; cst_ok := ok |}).
-rewrite /client_state /=. iFrame. rewrite sterm_tag.
-iSplitR => //.
-case: ok; last by eauto.
-iDestruct "status" as "(#p_kS & token & #session)".
+                     cst_name := γ;
+                     cst_ok := bool_decide P |}).
+rewrite /client_state /=. iFrame. iSplitR; eauto.
+rewrite sterm_tag. iSplitR => //.
+rewrite bool_decide_decide; case: decide; last by eauto.
+iIntros "%_". iDestruct "status" as "(#p_kS & token & #session)".
 iMod (term_meta_set _ _ γ N with "token") as "#meta"; eauto.
 iModIntro. iExists kS. do 2!iSplit => //. iIntros "!> %kt #p_kS'".
 rewrite (pterm_TKey kt) pterm_tag sterm_tag.

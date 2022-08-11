@@ -852,50 +852,18 @@ Qed.
 
 End TermMeta.
 
+Implicit Types dq : dfrac.
+
 Definition secret t : iProp :=
   (|==> pterm t) ∧ (pterm t -∗ ◇ False).
-
-Definition pre_honest (q : Qp) (X : gset term) : iProp :=
-  own cryptis_hon_name (●{#q} Excl' X).
-
-Lemma pre_honest_op q1 q2 X : pre_honest (q1 ⋅ q2) X ⊣⊢ pre_honest q1 X ∗ pre_honest q2 X.
-Proof.
-by rewrite /pre_honest -dfrac_op_own auth_auth_dfrac_op own_op.
-Qed.
-
-#[global]
-Instance from_sep_pre_honest q1 q2 X :
-  FromSep (pre_honest (q1 ⋅ q2) X) (pre_honest q1 X) (pre_honest q2 X).
-Proof. by rewrite /FromSep pre_honest_op. Qed.
 
 Definition honest_frag (X : gset term) : iProp :=
   own cryptis_hon_name (◯ Excl' X).
 
-Lemma pre_honest_honest_frag q X Y :
-  pre_honest q X -∗ honest_frag Y -∗ ⌜Y = X⌝.
-Proof.
-iIntros "own1 own2".
-iPoseProof (own_valid_2 with "own1 own2") as "%valid".
-move: valid.
-rewrite auth_both_dfrac_valid_discrete Excl_included.
-by rewrite leibniz_equiv_iff; case=> _ [] -> _ {Y}.
-Qed.
+Notation "◯H a" := (honest_frag a) (at level 20).
 
-Lemma pre_honest_update Z X Y :
-  pre_honest 1 X -∗ honest_frag Y ==∗ pre_honest 1 Z ∗ honest_frag Z.
-Proof.
-iIntros "own1 own2".
-iPoseProof (pre_honest_honest_frag with "own1 own2") as "#->".
-rewrite /pre_honest /honest_frag.
-set (X' := Excl' X). set (Z' := Excl' Z).
-iPoseProof (own_update_2 _ _ _ (● Z' ⋅ ◯ Z') with "own1 own2") as ">[??]".
-  apply auth_update. apply option_local_update.
-  by apply exclusive_local_update.
-by iFrame.
-Qed.
-
-Definition honest_inv : iProp := ∃ X : gset term,
-  honest_frag X ∗ [∗ set] t ∈ X, secret t.
+Definition honest_inv : iProp :=
+  ∃ X : gset term, ◯H X ∗ [∗ set] t ∈ X, secret t.
 
 Definition cryptis_ctx : iProp :=
   key_pred (nroot.@"keys".@"sym") (λ _  _, False%I) ∗
@@ -907,62 +875,124 @@ Definition cryptis_ctx : iProp :=
 Instance cryptis_ctx_persistent : Persistent cryptis_ctx.
 Proof. apply _. Qed.
 
-Definition honest q X : iProp :=
-  pre_honest q X ∗ [∗ set] t ∈ X, sterm t.
+Definition honest dq (X : gset term) : iProp :=
+  own cryptis_hon_name (●{dq} Excl' X) ∗ [∗ set] t ∈ X, sterm t.
 
-Lemma honest_op q1 q2 X : honest (q1 ⋅ q2) X ⊣⊢ honest q1 X ∗ honest q2 X.
+Notation "●H{ dq } a" :=
+  (honest dq a) (at level 20, format "●H{ dq }  a").
+Notation "●H{# q } a" :=
+  (honest (DfracOwn q) a) (at level 20, format "●H{# q }  a").
+Notation "●H□ a" := (honest (DfracDiscarded) a) (at level 20).
+Notation "●H a" := (honest (DfracOwn 1) a) (at level 20).
+
+Lemma honest_op dq1 dq2 X : ●H{dq1 ⋅ dq2} X ⊣⊢ ●H{dq1} X ∗ ●H{dq2} X.
 Proof.
-rewrite /honest pre_honest_op; iSplit.
+rewrite /honest auth_auth_dfrac_op own_op; iSplit.
 - by iIntros "[[??] #?]"; iFrame; eauto.
 - by iIntros "[[? _] [?#?]]"; iFrame; eauto.
 Qed.
 
+Lemma honest_discard dq X : ●H{dq} X ==∗ ●H□ X.
+Proof.
+iIntros "[own #s_X]".
+iMod (own_update _ _ (●□ Excl' X) with "own") as "own".
+  exact: auth_update_auth_persist.
+by iFrame.
+Qed.
+
 #[global]
-Instance from_sep_honest q1 q2 X :
-  FromSep (honest (q1 ⋅ q2) X) (honest q1 X) (honest q2 X).
+Instance from_sep_honest dq1 dq2 X :
+  FromSep (●H{dq1 ⋅ dq2} X) (●H{dq1} X) (●H{dq2} X).
 Proof. by rewrite /FromSep honest_op. Qed.
 
-Lemma honest_pterm E q t X :
+#[global]
+Instance into_sep_honest dq1 dq2 X :
+  IntoSep (●H{dq1 ⋅ dq2} X) (●H{dq1} X) (●H{dq2} X).
+Proof. by rewrite /IntoSep honest_op. Qed.
+
+Lemma honest_acc Y E X :
+  ↑cryptisN.@"honest" ⊆ E →
+  cryptis_ctx -∗
+  ●H X ={E, E ∖ ↑cryptisN.@"honest"}=∗
+    ([∗ set] t ∈ X, sterm t) ∗
+  ▷ ([∗ set] t ∈ X, secret t) ∗
+  (([∗ set] t ∈ Y, sterm t) ∗ ▷ ([∗ set] t ∈ Y, secret t)
+    ={E ∖ ↑cryptisN.@"honest",E}=∗ ●H Y).
+Proof.
+iIntros "%sub (_ & _ & _ & #ctx) [hon #term_X]".
+iMod (inv_acc with "ctx") as "[inv close]" => //.
+iDestruct "inv" as "(%X' & >frag & sec_X)".
+iPoseProof (own_valid_2 with "hon frag") as "%valid". move: valid.
+rewrite auth_both_dfrac_valid_discrete Excl_included.
+rewrite leibniz_equiv_iff; case=> _ [] -> _ {X'}.
+iAssert (|==> own cryptis_hon_name (● Excl' Y ⋅ ◯ Excl' Y))%I
+  with "[hon frag]" as ">[hon frag]".
+{ iApply (own_update_2 with "hon frag").
+  apply auth_update. apply option_local_update.
+  by apply exclusive_local_update. }
+iFrame. iModIntro. iSplit => //. iIntros "[#term_Y sec_Y]".
+iMod ("close" with "[frag sec_Y]") as "_"; last eauto.
+iModIntro. iExists Y. by iFrame.
+Qed.
+
+Lemma honest_acc_same E dq X :
+  ↑cryptisN.@"honest" ⊆ E →
+  cryptis_ctx -∗
+  ●H{dq} X ={E,E ∖ ↑cryptisN.@"honest"}=∗
+    ([∗ set] t ∈ X, sterm t) ∗
+  ▷ ([∗ set] t ∈ X, secret t) ∗
+  (▷ ([∗ set] t ∈ X, secret t) ={E ∖ ↑cryptisN.@"honest",E}=∗ ●H{dq} X).
+Proof.
+iIntros "%sub (_ & _ & _ & #ctx) [hon #term_X]".
+iMod (inv_acc with "ctx") as "[inv close]" => //.
+iDestruct "inv" as "(%X' & >frag & sec_X)".
+iPoseProof (own_valid_2 with "hon frag") as "%valid". move: valid.
+rewrite auth_both_dfrac_valid_discrete Excl_included.
+rewrite leibniz_equiv_iff; case=> _ [] -> _ {X'}.
+iFrame. iModIntro. iSplit => //. iIntros "sec_X".
+iMod ("close" with "[frag sec_X]") as "_"; last eauto.
+iModIntro. iExists X. by iFrame.
+Qed.
+
+Lemma honest_pterm E dq t X :
   ↑cryptisN.@"honest" ⊆ E →
   t ∈ X →
   cryptis_ctx -∗
-  honest q X -∗
+  ●H{dq} X -∗
   pterm t ={E}=∗
   ▷ ◇ False.
 Proof.
-iIntros "%sub %t_X (_ & _ & _ & #ctx) (hon & _) #p_t".
-iInv "ctx" as "(%Y & >own & I)".
-iPoseProof (pre_honest_honest_frag with "hon own") as "#->".
-iAssert (▷ ◇ False)%I with "[I]" as "#contra".
-{ rewrite big_sepS_delete //. iDestruct "I" as "([_ I] & _)".
+iIntros "%sub %t_X #ctx hon #p_t".
+iMod (honest_acc_same with "ctx hon") as "(#term_X & sec_X & close)" => //.
+iAssert (▷ ◇ False)%I with "[sec_X]" as "#contra".
+{ iClear "term_X". rewrite big_sepS_delete //.
+  iDestruct "sec_X" as "([_ I] & _)".
   iModIntro. by iApply "I". }
-iModIntro. iSplitL; eauto. iModIntro. iExists X. by iFrame.
+iMod ("close" with "sec_X") as "hon". eauto.
 Qed.
 
 Lemma honest_unionE E X Y :
   ↑cryptisN.@"honest" ⊆ E →
   X ## Y →
   cryptis_ctx -∗
-  honest 1 (X ∪ Y) ={E}=∗
-  honest 1 X ∗
+  ●H (X ∪ Y) ={E}=∗
+  ●H X ∗
   ▷ [∗ set] t ∈ Y, secret t.
 Proof.
-iIntros "%sub %X_Y (_ & _ & _ & #ctx) [hon #s_XY]".
-iInv "ctx" as "(%Z & >own & I)".
-iPoseProof (pre_honest_honest_frag with "hon own") as "#->".
+iIntros "%sub %X_Y #ctx hon".
+iMod (honest_acc X with "ctx hon") as "(#s_XY & I & close)" => //.
 rewrite !big_sepS_union //.
 iDestruct "s_XY" as "[s_X _]".
 iDestruct "I" as "[I IY]".
-iMod (pre_honest_update X with "hon own") as "[hon own]". iModIntro.
-iFrame. iSplitL; eauto. iModIntro. by iExists X; iFrame.
+iMod ("close" with "[s_X I]") as "hon"; by iFrame.
 Qed.
 
 Lemma honest_delete E t X :
   ↑cryptisN.@"honest" ⊆ E →
   t ∈ X →
   cryptis_ctx -∗
-  honest 1 X ={E}=∗
-  honest 1 (X ∖ {[t]}) ∗ ▷ secret t.
+  ●H X ={E}=∗
+  ●H (X ∖ {[t]}) ∗ ▷ secret t.
 Proof.
 iIntros "%sub %t_X #ctx hon".
 rewrite {1}[X](union_difference_singleton_L t) // [_ ∪ _]comm_L.
@@ -971,32 +1001,42 @@ iMod (honest_unionE with "ctx hon") as "hon" => //.
 by rewrite big_sepS_singleton.
 Qed.
 
+Lemma compromise_honest E X :
+  ↑cryptisN.@"honest" ⊆ E →
+  cryptis_ctx -∗
+  ●H X ={E}=∗
+  ●H ∅ ∗ ▷ |==> [∗ set] t ∈ X, pterm t.
+Proof.
+iIntros "%sub #ctx hon".
+rewrite {1}(_ : X = ∅ ∪ X); last set_solver.
+iMod (honest_unionE with "ctx hon") as "[hon sec]" => //.
+iFrame. iModIntro. iModIntro. iApply big_sepS_bupd.
+iApply (big_sepS_mono with "sec").
+by iIntros "%t % [? _]".
+Qed.
+
 Lemma honest_unionI E X Y :
   ↑cryptisN.@"honest" ⊆ E →
   X ## Y →
   cryptis_ctx -∗
-  honest 1 X -∗
+  ●H X -∗
   ([∗ set] t ∈ Y, sterm t) -∗
   ▷ ([∗ set] t ∈ Y, secret t) ={E}=∗
-  honest 1 (X ∪ Y).
+  ●H (X ∪ Y).
 Proof.
-iIntros "%sub %t_X (_ & _ & _ & #ctx) [hon #s_X] #s_Y sec".
-iInv "ctx" as "(%Z & >own & I)".
-iPoseProof (pre_honest_honest_frag with "hon own") as "#->".
-iMod (pre_honest_update (X ∪ Y) with "hon own") as "[hon own]".
-iModIntro. iFrame. iSplitL; eauto.
-iModIntro. iExists (X ∪ Y). iFrame. rewrite big_sepS_union //; iFrame.
-by rewrite big_sepS_union //; eauto.
+iIntros "%sub %t_X #ctx hon #s_Y sec".
+iMod (honest_acc (X ∪ Y) with "ctx hon") as "(#s_X & I & close)" => //.
+iApply "close". rewrite !big_sepS_union //. by iFrame; iSplit.
 Qed.
 
 Lemma honest_insert E t X :
   ↑cryptisN.@"honest" ⊆ E →
   t ∉ X →
   cryptis_ctx -∗
-  honest 1 X -∗
+  ●H X -∗
   sterm t -∗
   ▷ secret t ={E}=∗
-  honest 1 (X ∪ {[t]}).
+  ●H (X ∪ {[t]}).
 Proof.
 iIntros "%sub %t_X #ctx hon #s_t sec".
 iApply (honest_unionI with "[//] [hon]") => //.
@@ -1005,9 +1045,9 @@ iApply (honest_unionI with "[//] [hon]") => //.
 - by rewrite big_sepS_singleton.
 Qed.
 
-Lemma honest_sterm t q X :
+Lemma honest_sterm t dq X :
   t ∈ X →
-  honest q X -∗
+  ●H{dq} X -∗
   sterm t.
 Proof.
 iIntros "%t_X [_ s_X]".
@@ -1037,6 +1077,13 @@ Arguments honest_inv {Σ _ _}.
 Arguments cryptis_ctx {Σ _ _}.
 Arguments TermMeta Σ term_meta term_meta_token : assert.
 
+Notation "●H{ dq } a" :=
+  (honest dq a) (at level 20, format "●H{ dq }  a").
+Notation "●H{# q } a" :=
+  (honest (DfracOwn q) a) (at level 20, format "●H{# q }  a").
+Notation "●H□ a" := (honest (DfracDiscarded) a) (at level 20).
+Notation "●H a" := (honest (DfracOwn 1) a) (at level 20).
+
 Lemma cryptisG_alloc `{!heapGS Σ} E :
   cryptisPreG Σ →
   ⊢ |={E}=> ∃ (H : cryptisG Σ),
@@ -1044,7 +1091,7 @@ Lemma cryptisG_alloc `{!heapGS Σ} E :
              enc_pred_token ⊤ ∗
              key_pred_token (⊤ ∖ ↑nroot.@"keys") ∗
              hash_pred_token ⊤ ∗
-             honest 1 ∅.
+             ●H ∅.
 Proof.
 move=> ?; iStartProof.
 iMod (own_alloc (reservation_map_token ⊤)) as (γ_enc) "own_enc".

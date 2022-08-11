@@ -450,9 +450,9 @@ Qed.
 Lemma twp_mkakey T E Ψ :
   ↑cryptisN ⊆ E →
   cryptis_ctx -∗
-  honest 1 T -∗
+  ●H T -∗
   (∀ t, pterm (TKey Enc t) -∗
-        honest 1 (T ∪ {[TKey Dec t]}) -∗
+        ●H (T ∪ {[TKey Dec t]}) -∗
         Ψ (TKey Enc t, TKey Dec t)%V) -∗
   WP mkakey #() @ E [{ Ψ }].
 Proof.
@@ -497,9 +497,9 @@ Qed.
 Lemma wp_mkakey T E Ψ :
   ↑cryptisN ⊆ E →
   cryptis_ctx -∗
-  honest 1 T -∗
+  ●H T -∗
   (∀ t, pterm (TKey Enc t) -∗
-        honest 1 (T ∪ {[TKey Dec t]}) -∗
+        ●H (T ∪ {[TKey Dec t]}) -∗
         Ψ (TKey Enc t, TKey Dec t)%V) -∗
   WP mkakey #() @ E {{ Ψ }}.
 Proof.

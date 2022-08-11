@@ -109,6 +109,7 @@ Definition environment : val := λ: "c" "nI" "nR" "psk",
   Fork (tls_server_loop "c" "psk" "nR" "server_params").
 
 Lemma wp_environment c nI nR psk :
+  cryptis_ctx -∗
   channel c -∗
   pk_dh_ctx nslN (λ _ _ _ _, True)%I -∗
   cr_ctx crN (λ _ _ _ _ _, True)%I -∗
@@ -116,9 +117,10 @@ Lemma wp_environment c nI nR psk :
   pterm nI -∗
   pterm nR -∗
   sterm psk -∗
+  ●H□ ∅ -∗
   {{{ True }}} environment c nI nR psk {{{ RET #(); True }}}.
 Proof.
-iIntros "#? #? #? #? #? #? #? %Φ !> _ post".
+iIntros "#? #? #? #? #? #? #? #? #hon %Φ !> _ post".
 rewrite /environment; wp_pures.
 wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
 wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
@@ -141,7 +143,7 @@ wp_bind (fork_loop _); iApply wp_fork_loop; eauto.
   iIntros "%pkR' #?"; wp_pures.
   wp_bind (to_ek _); iApply wp_to_ek.
   case: Spec.to_ekP => [? ->|_]; wp_pures => //.
-  by iApply (wp_pk_dh_init _ (λ _ _ _ _, True)%I); eauto.
+  iApply (wp_pk_dh_init _ (λ _ _ _ _, True)%I); eauto.
 iIntros "!> _"; wp_pures; wp_bind (fork_loop _); iApply wp_fork_loop => //.
   iModIntro.
   by iApply (wp_pk_dh_resp _ (λ _ _ _ _, True)%I); eauto.
@@ -227,13 +229,17 @@ Definition game : val := λ: "mkchan",
 
 Lemma wp_game (mkchan : val) :
   {{{ True }}} mkchan #() {{{ v, RET v; channel v }}} -∗
-  nown_token session_name ⊤ -∗
-  enc_pred_token ⊤ -∗
-  hash_pred_token ⊤ -∗
-  key_pred_token (⊤ ∖ ↑nroot.@"keys") -∗
+  cryptis_ctx ∗
+  nown_token session_name ⊤ ∗
+  enc_pred_token ⊤ ∗
+  hash_pred_token ⊤ ∗
+  key_pred_token (⊤ ∖ ↑nroot.@"keys") ∗
+  ●H ∅ -∗
   WP game mkchan {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
-iIntros "wp_mkchan sess_tok enc_tok hash_tok key_tok"; rewrite /game; wp_pures.
+iIntros "#wp_mkchan (#ctx & sess_tok & enc_tok & hash_tok & key_tok & hon)".
+iMod (honest_discard with "hon") as "#hon".
+rewrite /game; wp_pures.
 iMod (pk_dh_alloc nslN (λ _ _ _ _, True)%I with "sess_tok enc_tok")
   as "(#pk_dh_ctx & sess_tok & enc_tok)" => //; try solve_ndisj.
 iMod (cr_alloc crN (λ _ _ _ _ _, True)%I with "sess_tok enc_tok")
@@ -299,8 +305,8 @@ move=> wp_mkchan.
 apply (adequate_result NotStuck _ _ (λ v _, v = NONEV ∨ v = SOMEV #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
-iMod (cryptisG_alloc _) as (?) "(_ & enc_tok & key_tok & hash_tok & _)".
+iMod (cryptisG_alloc _) as (?) "(#ctx & enc_tok & key_tok & hash_tok & hon)".
 iMod (sessionG_alloc _) as (?) "sess_tok".
-iApply (wp_game with "[] [sess_tok] [enc_tok] [hash_tok] [key_tok]") => //.
+iApply (wp_game) => //; try by iFrame.
 iApply wp_mkchan.
 Qed.
