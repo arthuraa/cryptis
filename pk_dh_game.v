@@ -67,9 +67,6 @@ pose (P rl (kI kR kS : term) :=
   own (if rl is Init then γI else γR)
     (namespace_map_data nroot (to_agree (encode (kI, kR, kS))))).
 iMod (pk_dh_alloc N P with "nown_tok enc_tok") as "[#dh_ctx _]" => //.
-(* FIXME: This unshelve shouldn't be needed *)
-Unshelve. 2: apply _.
-(* /FIXME *)
 wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP".
 wp_pures; wp_bind (mkakey _).
@@ -98,7 +95,7 @@ iApply (wp_par (λ v, ∃ a : option term, ⌜v = repr a⌝ ∗ _)%I
 - iApply (wp_pk_dh_init with "[//] [//] [//] [] [] [tokenI hon1]") => //.
   + iFrame. iIntros "%nI %nR".
     set (kS := mk_session_key _ _ _).
-    iMod (own_update with "tokenI").
+    iMod (own_update with "tokenI") as "#?".
     * apply (namespace_map_alloc_update _ nroot
                (to_agree (encode (kI, kR', kS)))) => //;
       eauto.
@@ -108,7 +105,7 @@ iApply (wp_par (λ v, ∃ a : option term, ⌜v = repr a⌝ ∗ _)%I
 - iApply (wp_pk_dh_resp with "[//] [//] [//] [] [tokenR hon2]") => //.
   + iFrame. iIntros "%kI' %nI %nR".
     set (kS := mk_session_key _ _ _).
-    iMod (own_update with "tokenR").
+    iMod (own_update with "tokenR") as "#?".
     * apply (namespace_map_alloc_update _ nroot
                (to_agree (encode (kI', kR, kS)))) => //;
       eauto.

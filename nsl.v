@@ -29,8 +29,6 @@ Definition nsl_mk_session_key_impl rl : val :=
 Variable N : namespace.
 
 Variable nsl_confirmation : role → term → term → term → iProp.
-Variable nsl_confirmation_persistent :
-  ∀ rl kI kR kS, Persistent (nsl_confirmation rl kI kR kS).
 
 Definition nsl_init : val := λ: "c",
   pk_auth_init N "c" nsl_mk_key_share_impl (nsl_mk_session_key_impl Init).
@@ -88,7 +86,7 @@ Lemma wp_nsl_init c kI kR dq T E :
       ●H{dq} T ∗
       if okS is Some kS then
         sterm kS ∗
-        nsl_confirmation Init kI kR kS ∗
+        □ nsl_confirmation Init kI kR kS ∗
         if decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) then
           session_key_meta_token N Init kI kR kS ⊤ ∗
           session_key N kI kR kS
@@ -116,7 +114,7 @@ Lemma wp_nsl_resp c kR dq T E :
         ⌜pkI = TKey Enc kI⌝ ∗
         pterm pkI ∗
         sterm kS ∗
-        confirmation Resp kI kR kS ∗
+        □ confirmation Resp kI kR kS ∗
         if decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) then
           session_key_meta_token N Resp kI kR kS ⊤ ∗
           session_key N kI kR kS

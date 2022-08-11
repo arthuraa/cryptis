@@ -32,8 +32,6 @@ Definition pk_dh_mk_session_key_impl rl : val :=
 Variable N : namespace.
 
 Variable pk_dh_confirmation : role → term → term → term → iProp.
-Variable pk_dh_confirmation_persistent :
-  ∀ rl kI kR kS, Persistent (pk_dh_confirmation rl kI kR kS).
 
 Definition pk_dh_init : val := λ: "c",
   pk_auth_init N "c" pk_dh_mk_key_share_impl (pk_dh_mk_session_key_impl Init).
@@ -97,7 +95,7 @@ wp_bind (tgroup _). iApply wp_tgroup.
 wp_bind (texp _ _). iApply wp_texp. rewrite Spec.texpA.
 wp_pures. iModIntro. iApply "post".
 rewrite bi.intuitionistic_intuitionistically.
-iFrame. by do !iSplit => //.
+iFrame. do !iSplit => //. iModIntro. by do!iSplit => //.
 Qed.
 
 Next Obligation.
@@ -155,7 +153,7 @@ Lemma wp_pk_dh_init c kI kR dq T E :
       ●H{dq} T ∗
       if okS is Some kS then
         sterm kS ∗
-        pk_dh_confirmation Init kI kR kS ∗
+        □ pk_dh_confirmation Init kI kR kS ∗
         if decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) then
           □ (pterm kS → ◇ False) ∗
           pk_dh_session_meta_token Init kI kR kS ⊤ ∗
@@ -192,7 +190,7 @@ Lemma wp_pk_dh_resp c kR dq T E :
         ⌜pkI = TKey Enc kI⌝ ∗
         pterm pkI ∗
         sterm kS ∗
-        pk_dh_confirmation Resp kI kR kS ∗
+        □ pk_dh_confirmation Resp kI kR kS ∗
         if decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) then
           □ (pterm kS → ◇ False) ∗
           pk_dh_session_meta_token Resp kI kR kS ⊤ ∗
@@ -217,10 +215,10 @@ Qed.
 
 End PKDH.
 
-Arguments PK_DH {Σ _ _} pk_dh_confirmation {_}.
-Arguments pk_dh_ctx {Σ _ _ _} N _ {_}.
-Arguments pk_dh_session_meta {Σ _ _ _} _ _ {_} _ _ _ {L _ _} _ _ _.
-Arguments pk_dh_session_meta_token {Σ _ _ _} _ _ {_} _ _ _ _ _.
+Arguments PK_DH {Σ _ _} pk_dh_confirmation.
+Arguments pk_dh_ctx {Σ _ _ _} N _.
+Arguments pk_dh_session_meta {Σ _ _ _} _ _ _ _ _ {L _ _} _ _ _.
+Arguments pk_dh_session_meta_token {Σ _ _ _} _ _ _ _ _ _ _.
 Arguments pk_dh_alloc {Σ _ _ _} N _ _ _.
 Arguments wp_pk_dh_init {Σ _ _ _} N.
 Arguments wp_pk_dh_resp {Σ _ _ _} N.

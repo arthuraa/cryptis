@@ -94,8 +94,6 @@ Proof. apply _. Qed.
 
 Class PK := {
   is_priv_key : term → term → term → iProp;
-  is_priv_key_persistent :>
-    ∀ n kI kR, Persistent (is_priv_key n kI kR);
 
   mk_key_share : term → term;
 
@@ -124,15 +122,13 @@ Class PK := {
     ∀ rl t1 t2, sterm t1 -∗ sterm t2 -∗ sterm (mk_session_key rl t1 t2);
 
   confirmation : role → term → term → term → iProp;
-  confirmation_persistent :>
-    ∀ rl kI kR kS, Persistent (confirmation rl kI kR kS);
 
   mk_key_share_impl : val;
   wp_mk_key_share : ∀ E kI kR,
     {{{ True }}}
       mk_key_share_impl #() @ E
     {{{ (n : term), RET (n, mk_key_share n) : val;
-        sterm n ∗ is_priv_key n kI kR ∗
+        sterm n ∗ □ is_priv_key n kI kR ∗
         nonce_meta_token n ⊤
     }}};
 
@@ -148,20 +144,20 @@ Context `{!PK}.
 
 Definition init_confirm kI kR : iProp := ∀ nI sR,
   let kS := mk_session_key Init nI sR in
-  |==> confirmation Init kI kR kS.
+  |==> □ confirmation Init kI kR kS.
 
 Definition resp_confirm kR : iProp := ∀ kI sI nR,
   let kS := mk_session_key Resp nR sI in
-  |==> confirmation Resp kI kR kS.
+  |==> □ confirmation Resp kI kR kS.
 
 Definition session_ress rl nI nR ks : iProp :=
   let '(kI, kR) := ks in
-  confirmation rl kI kR (mk_session_key Init nI (mk_key_share nR)) ∧
+  □ confirmation rl kI kR (mk_session_key Init nI (mk_key_share nR)) ∧
   if rl is Init then nonce_meta_token nI (↑N.@"token".@Resp)
   else True.
 
 Definition init_started kI kR sI : iProp :=
-  pterm sI ∨ ∃ nI, ⌜sI = mk_key_share nI⌝ ∗ is_priv_key nI kI kR.
+  pterm sI ∨ ∃ nI, ⌜sI = mk_key_share nI⌝ ∗ □ is_priv_key nI kI kR.
 
 Definition msg1_pred kR m1 : iProp :=
   ∃ sI kI,
@@ -175,8 +171,8 @@ Definition resp_accepted kI kR sI sR : iProp :=
   ∃ nI nR,
     ⌜sI = mk_key_share nI⌝ ∧
     ⌜sR = mk_key_share nR⌝ ∧
-    is_priv_key nR kI kR ∧
-    confirmation Resp kI kR (mk_session_key Init nI (mk_key_share nR)) ∧
+    □ is_priv_key nR kI kR ∧
+    □ confirmation Resp kI kR (mk_session_key Init nI (mk_key_share nR)) ∧
     session (N.@"session") Resp nI nR (kI, kR).
 
 Definition resp_waiting kI kR sI nR : iProp :=
@@ -184,7 +180,7 @@ Definition resp_waiting kI kR sI nR : iProp :=
   ∃ nI,
     ⌜sI = mk_key_share nI⌝ ∧
     session (N.@"session") Resp nI nR (kI, kR) ∧
-    confirmation Resp kI kR (mk_session_key Init nI (mk_key_share nR)) ∧
+    □ confirmation Resp kI kR (mk_session_key Init nI (mk_key_share nR)) ∧
     waiting_for_peer (N.@"session") session_ress Resp nI nR (kI, kR).
 
 Definition msg2_pred kI m2 : iProp :=
@@ -197,9 +193,9 @@ Definition init_finished kR sR : iProp :=
   pterm sR ∨
   ∃ nI nR kI,
     ⌜sR = mk_key_share nR⌝ ∧
-    is_priv_key nI kI kR ∧
-    is_priv_key nR kI kR ∧
-    confirmation Init kI kR (mk_session_key Init nI (mk_key_share nR)) ∧
+    □ is_priv_key nI kI kR ∧
+    □ is_priv_key nR kI kR ∧
+    □ confirmation Init kI kR (mk_session_key Init nI (mk_key_share nR)) ∧
     session (N.@"session") Init nI nR (kI, kR) ∧
     session (N.@"session") Resp nI nR (kI, kR).
 
@@ -283,10 +279,10 @@ Qed.
 Definition session_key kI kR kS : iProp :=
   ∃ nI nR,
     ⌜kS = mk_session_key Init nI (mk_key_share nR)⌝ ∗
-    is_priv_key nI kI kR ∗
-    is_priv_key nR kI kR ∗
-    confirmation Init kI kR kS ∧
-    confirmation Resp kI kR kS ∧
+    □ is_priv_key nI kI kR ∗
+    □ is_priv_key nR kI kR ∗
+    □ confirmation Init kI kR kS ∧
+    □ confirmation Resp kI kR kS ∧
     session (N.@"session") Init nI nR (kI, kR) ∗
     session (N.@"session") Resp nI nR (kI, kR).
 
@@ -339,7 +335,7 @@ Lemma pterm_msg1I kI kR nI :
   let sI := mk_key_share nI in
   ctx -∗
   sterm nI -∗
-  is_priv_key nI kI kR -∗
+  □ is_priv_key nI kI kR -∗
   pterm (TKey Enc kI) -∗
   pterm (TKey Enc kR) -∗
   pterm (TEnc kR (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Enc kI]))).
@@ -386,9 +382,9 @@ Lemma resp_accept E kI kR sI nR :
   nonce_meta_token nR ⊤ -∗
   resp_confirm kR -∗
   ctx -∗
-  is_priv_key nR kI kR -∗
+  □ is_priv_key nR kI kR -∗
   init_started kI kR sI ={E}=∗
-  confirmation Resp kI kR kS ∗
+  □ confirmation Resp kI kR kS ∗
   resp_waiting kI kR sI nR ∗
   resp_accepted kI kR sI (mk_key_share nR).
 Proof.
@@ -461,12 +457,12 @@ Lemma init_finish E kI kR nI sR :
   ↑N ⊆ E →
   ctx -∗
   sterm nI -∗
-  is_priv_key nI kI kR -∗
+  □ is_priv_key nI kI kR -∗
   secret_of sR kI kR -∗
   resp_accepted kI kR sI sR -∗
   nonce_meta_token nI ⊤ -∗
   init_confirm kI kR ={E}=∗
-  ▷ (confirmation Init kI kR kS ∗
+  ▷ (□ confirmation Init kI kR kS ∗
      init_finished kR sR ∗
      (corruption kI kR ∨
       session_key_meta_token Init kI kR kS ⊤ ∗
@@ -543,7 +539,7 @@ Lemma resp_finish E kI kR sI nR :
   ↑N ⊆ E →
   ctx -∗
   sterm nR -∗
-  is_priv_key nR kI kR -∗
+  □ is_priv_key nR kI kR -∗
   init_finished kR sR -∗
   resp_waiting kI kR sI nR ={E}=∗
   ▷ (corruption kI kR ∨
@@ -592,7 +588,7 @@ Lemma wp_pk_auth_init c kI kR dq T E :
       ●H{dq} T ∗
       if okS is Some kS then
         sterm kS ∗
-        confirmation Init kI kR kS ∗
+        □ confirmation Init kI kR kS ∗
         if decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) then
           session_key_meta_token Init kI kR kS ⊤ ∗
           session_key kI kR kS
@@ -651,7 +647,7 @@ Lemma wp_pk_auth_resp c kR dq T E :
          ∃ kI, ⌜pkI = TKey Enc kI⌝ ∗
                pterm pkI ∗
                sterm kS ∗
-               confirmation Resp kI kR kS ∗
+               □ confirmation Resp kI kR kS ∗
                if decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) then
                 session_key_meta_token Resp kI kR kS ⊤ ∗
                 session_key kI kR kS
