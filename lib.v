@@ -48,6 +48,11 @@ assert (H : positives_flatten N ∈ (↑N : coPset)).
 set_solver.
 Qed.
 
+#[global]
+Instance namespace_map_data_core_id {A : cmra} N (a : A) :
+  CoreId a → CoreId (namespace_map_data N a).
+Proof. apply _. Qed.
+
 (* TODO: Move to Iris? *)
 #[global]
 Instance dom_ne {T : ofe} :
@@ -111,6 +116,13 @@ Proof.
 by move=> φ_ψ; apply: (anti_symm _); iIntros "[% ?]";
 rewrite φ_ψ; eauto.
 Qed.
+
+#[global]
+Instance if_persistent (Σ : gFunctors) (b : bool) (φ ψ : iProp Σ) :
+  Persistent φ →
+  Persistent ψ →
+  Persistent (if b then φ else ψ).
+Proof. by case: b. Qed.
 (* /TODO *)
 
 Lemma dom_singleton_eq `{EqDecision K, Countable K} {T} (m : gmap K T) x :

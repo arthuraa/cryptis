@@ -11,15 +11,6 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-(* MOVE *)
-#[global]
-Instance if_persistent (Σ : gFunctors) (b : bool) (φ ψ : iProp Σ) :
-  Persistent φ →
-  Persistent ψ →
-  Persistent (if b then φ else ψ).
-Proof. by case: b. Qed.
-(* /MOVE *)
-
 Record cst := {
   cst_ts   : loc;
   cst_key  : term;

@@ -49,13 +49,6 @@ Definition game : val := λ: "mkchan",
           eq_term "sesskI" "sesskR" && ~ eq_term "m" "sesskI")
   else SOME #true.
 
-(* MOVE *)
-#[global]
-Instance namespace_map_data_core_id {A : cmra} N (a : A) :
-  CoreId a → CoreId (namespace_map_data N a).
-Proof. apply _. Qed.
-(* /MOVE *)
-
 Lemma wp_game (mkchan : val) :
   {{{ True }}} mkchan #() {{{ v, RET v; channel v }}} -∗
   cryptis_ctx -∗
