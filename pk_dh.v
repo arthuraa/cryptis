@@ -69,10 +69,10 @@ rewrite /pk_dh_mk_key_share /secret_of. iModIntro. iSplit.
 Qed.
 
 Next Obligation.
-move=> nI nI' nR nR'. rewrite /pk_dh_mk_key_share /pk_dh_mk_session_key.
+move=> rl nI nI' nR nR'.
+rewrite /pk_dh_mk_key_share /pk_dh_mk_session_key {rl}.
 rewrite !Spec.texpA. move=> /TExp_inj [_ en].
-have: nI ∈ [nI'; nR'] by rewrite -en; set_solver.
-by rewrite !elem_of_cons elem_of_nil; intuition eauto.
+by apply Permutation_length_2.
 Qed.
 
 Next Obligation.
@@ -154,7 +154,9 @@ Lemma wp_pk_dh_init c kI kR dq T E :
       if okS is Some kS then
         sterm kS ∗
         □ pk_dh_confirmation Init kI kR kS ∗
-        if decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) then
+        let b := bool_decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) in
+        session_weak N Init kI kR kS b ∗
+        if b then
           □ (pterm kS → ◇ False) ∗
           pk_dh_session_meta_token Init kI kR kS ⊤ ∗
           session_key N kI kR kS
@@ -167,11 +169,12 @@ rewrite /pk_dh_init; wp_pures.
 iApply (wp_pk_auth_init with "chan_c ctx ctx' [] [] [confirm]"); eauto.
 iIntros "!> %okS". case: okS => [kS|]; last first.
   by iApply ("post" $! None).
-iIntros "(hon & #s_kS & #confirmed & kSP)". iApply ("post" $! (Some kS)).
+iIntros "(hon & #s_kS & #confirmed & #sess_weak & kSP)".
+iApply ("post" $! (Some kS)).
 iFrame. iSplitR => //. iSplit => //.
-case: decide => [[kIP kRP]|]; eauto.
+case: bool_decide_reflect => [[kIP kRP]|]; eauto.
 iDestruct "kSP" as "[token #key]"; eauto.
-iFrame. iSplit => //. iModIntro.
+iFrame. do 2!iSplit => //. iModIntro.
 by iApply pk_dh_session_key_elim.
 Qed.
 
@@ -191,7 +194,9 @@ Lemma wp_pk_dh_resp c kR dq T E :
         pterm pkI ∗
         sterm kS ∗
         □ pk_dh_confirmation Resp kI kR kS ∗
-        if decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) then
+        let b := bool_decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) in
+        session_weak N Resp kI kR kS b ∗
+        if b then
           □ (pterm kS → ◇ False) ∗
           pk_dh_session_meta_token Resp kI kR kS ⊤ ∗
           session_key N kI kR kS
@@ -204,10 +209,10 @@ rewrite /pk_dh_resp; wp_pures.
 iApply (wp_pk_auth_resp with "chan_c ctx ctx' [] [confirm]"); eauto.
 iIntros "!> %res". case: res => [[pkI kS]|]; last first.
   by iApply ("post" $! None).
-iIntros "(hon & %kI & -> & #p_pkI & #s_kS & #confirmed & kSP)".
+iIntros "(hon & %kI & -> & #p_pkI & #s_kS & #confirmed & #sess_weak & kSP)".
 iApply ("post" $! (Some (TKey Enc kI, kS))). iFrame. iExists kI.
-do 4!iSplitR => //.
-case: decide => // - [kIP kRP].
+do 5!iSplitR => //.
+case: bool_decide_reflect => // - [kIP kRP].
 iDestruct "kSP" as "[token #key]"; eauto.
 iFrame. iSplit => //. iModIntro.
 by iApply pk_dh_session_key_elim.

@@ -20,11 +20,11 @@ Definition nsl_mk_key_share_impl : val := λ: <>,
     let: "n" := mknonce #() in ("n", "n").
 
 Definition nsl_mk_session_key rl n1 n2 : term :=
-  if rl is Init then n1 else n2.
+  if rl is Init then TPair n1 n2 else TPair n2 n1.
 
 Definition nsl_mk_session_key_impl rl : val :=
-  if rl is Init then λ: "nI" <>, "nI"
-  else λ: <> "nI", "nI".
+  if rl is Init then λ: "nI" "nR", tuple "nI" "nR"
+  else λ: "nR" "nI", tuple "nI" "nR".
 
 Variable N : namespace.
 
@@ -52,11 +52,13 @@ Next Obligation. by eauto. Qed.
 
 Next Obligation. by eauto. Qed.
 
-Next Obligation. by eauto. Qed.
+Next Obligation. by case => nI nI' nR nR' [] -> ->; eauto. Qed.
 
 Next Obligation. by case; eauto. Qed.
 
-Next Obligation. by case; eauto. Qed.
+Next Obligation.
+by case=> t1 t2; iIntros "#s1 #s2"; rewrite sterm_TPair; iSplit.
+Qed.
 
 Next Obligation.
 iIntros "%E %kI %kR %Φ _ post". rewrite /nsl_mk_key_share_impl.
@@ -69,7 +71,7 @@ Qed.
 Next Obligation.
 iIntros "%E %rl %n1 %n2 %Φ _ post".
 case: rl; rewrite /nsl_mk_session_key_impl /=; wp_pures;
-iModIntro; by iApply "post".
+iApply wp_tuple; by iApply "post".
 Qed.
 
 Lemma wp_nsl_init c kI kR dq T E :
@@ -87,7 +89,9 @@ Lemma wp_nsl_init c kI kR dq T E :
       if okS is Some kS then
         sterm kS ∗
         □ nsl_confirmation Init kI kR kS ∗
-        if decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) then
+        let b := bool_decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) in
+        session_weak N Init kI kR kS b ∗
+        if b then
           session_key_meta_token N Init kI kR kS ⊤ ∗
           session_key N kI kR kS
         else True
@@ -115,7 +119,9 @@ Lemma wp_nsl_resp c kR dq T E :
         pterm pkI ∗
         sterm kS ∗
         □ confirmation Resp kI kR kS ∗
-        if decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) then
+        let b := bool_decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) in
+        session_weak N Resp kI kR kS b ∗
+        if b then
           session_key_meta_token N Resp kI kR kS ⊤ ∗
           session_key N kI kR kS
         else True

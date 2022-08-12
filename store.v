@@ -440,7 +440,7 @@ iApply ("post" $! {| cst_ts := l; cst_key := Spec.tag (N.@"key") kS;
 rewrite /client_state /=. iFrame. iSplitR; eauto.
 rewrite sterm_tag. iSplitR => //.
 rewrite bool_decide_decide; case: decide; last by eauto.
-iIntros "%_". iDestruct "status" as "(#p_kS & token & #session)".
+iIntros "%_". iDestruct "status" as "(_ & #p_kS & token & #session)".
 iMod (term_meta_set _ _ γ N with "token") as "#meta"; eauto.
 iModIntro. iExists kS. do 2!iSplit => //. iIntros "!> %kt #p_kS'".
 rewrite (pterm_TKey kt) pterm_tag sterm_tag.

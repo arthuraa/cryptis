@@ -122,8 +122,8 @@ wp_pures.
 iMod "comp" as "#comp".
 case: a => [gabI|]; wp_pures; last by eauto.
 case: b => [[pkI' gabR]|]; wp_pures; last by eauto.
-iDestruct "H1" as "(#s_gabI & #confI & H1)".
-iDestruct "H2" as (kI') "(-> & #p_pkI' & #gabR & #confR & H2)".
+iDestruct "H1" as "(#s_gabI & #confI & _ & H1)".
+iDestruct "H2" as (kI') "(-> & #p_pkI' & #gabR & #confR & _ & H2)".
 pose (b := bool_decide (pkR = TKey Enc kR' ∨ pkI = TKey Enc kI')).
 wp_bind (eq_term pkR _ || _)%E.
 iApply (wp_wand _ _ _ (λ v, ⌜v = #b⌝)%I with "[] [H1 H2]").
@@ -132,20 +132,20 @@ iApply (wp_wand _ _ _ (λ v, ⌜v = #b⌝)%I with "[] [H1 H2]").
   iApply wp_eq_term. iPureIntro. congr (# (LitBool _)).
   apply bool_decide_ext. intuition congruence. }
 iIntros "% ->". rewrite {}/b.
-case: bool_decide_reflect => [succ|_]; last by wp_pures; eauto.
+case: (bool_decide_reflect (pkR = _ ∨ _)) => [succ|_]; last by wp_pures; eauto.
 iAssert (⌜kR' = kR⌝ ∗
          ⌜kI' = kI⌝ ∗
          ⌜gabI = gabR⌝ ∗
          □ (pterm gabI → ◇ False))%I with "[H1 H2]" as "#finish".
 { case: succ => - [<-].
-  - iClear "H2". rewrite decide_True; try set_solver.
+  - iClear "H2". rewrite bool_decide_decide decide_True; try set_solver.
     iDestruct "H1" as "(#p_gabI & token & #sess)".
     iPoseProof (session_key_confirmation _ Resp with "sess") as "confR'".
     iPoseProof (own_valid_2 with "confR confR'") as "%valid".
     rewrite -reservation_map_data_op reservation_map_data_valid in valid.
     rewrite to_agree_op_valid_L in valid.
     case: (encode_inj _ _ valid) => -> -> {kI' gabR valid}. by eauto.
-  - iClear "H1". rewrite decide_True; try set_solver.
+  - iClear "H1". rewrite bool_decide_decide decide_True; try set_solver.
     iDestruct "H2" as "(#p_gabR & token & #sess)".
     iPoseProof (session_key_confirmation _ Init with "sess") as "confI'".
     iPoseProof (own_valid_2 with "confI confI'") as "%valid".
