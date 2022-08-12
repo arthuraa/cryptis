@@ -163,7 +163,7 @@ Definition init_started kI kR sI : iProp :=
 
 Definition session_weak rl kI kR kS (b : bool) : iProp :=
   ∃ n s, ⌜kS = mk_session_key rl n s⌝ ∗
-  nonce_meta n (N.@"success") (kS, b).
+  nonce_meta n (N.@"success") b.
 
 Definition msg1_pred kR m1 : iProp :=
   ∃ sI kI,
@@ -402,7 +402,7 @@ iDestruct "token" as "[token_sess token]".
 rewrite (term_meta_token_difference _ (↑N.@"success") (_ ∖ _)) //; last first.
   solve_ndisj.
 iDestruct "token" as "[token_succ _]".
-iMod (term_meta_set _ _ (kS, b) with "token_succ") as "#succ" => //.
+iMod (term_meta_set _ _ b with "token_succ") as "#succ" => //.
 iDestruct "started" as "[#fail|(%nI & -> & #p_nI)]".
   iModIntro. iSplit; eauto. iSplit.
     by iExists _, _; eauto.
@@ -505,7 +505,7 @@ iDestruct "token_token" as "[token_resp _]".
 rewrite (term_meta_token_difference _ (↑N.@"success") (_ ∖ _ ∖ _)); last first.
   solve_ndisj.
 iDestruct "token" as "[token_succ _]".
-iMod (term_meta_set _ _ (kS, b) (N.@"success") with "token_succ") as "#succ" => //.
+iMod (term_meta_set _ _ b (N.@"success") with "token_succ") as "#succ" => //.
 iDestruct "accepted" as "[fail|accepted]".
   iPoseProof ("p_sI" with "fail") as "fail'".
   iModIntro. iModIntro. iSplit; eauto. iSplit.
