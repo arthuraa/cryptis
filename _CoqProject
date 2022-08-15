@@ -7,6 +7,7 @@
 mathcomp_compat.v
 lib.v
 nown.v
+version.v
 pre_term.v
 term.v
 role.v

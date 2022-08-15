@@ -4,7 +4,7 @@ From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term cryptis primitives tactics.
+From cryptis Require Import lib version term cryptis primitives tactics.
 From cryptis Require Import role session pk_auth pk_dh.
 
 Set Implicit Arguments.
@@ -209,47 +209,6 @@ Qed.
 
 Variable N : namespace.
 
-Definition cur_term_auth γ n t : iProp := ∃ ts,
-  own γ (● to_max_prefix_list (ts ++ [t]) ⋅
-         ◯ to_max_prefix_list (ts ++ [t])) ∗
-  ⌜n = length ts⌝.
-
-Definition cur_term_frag γ n t : iProp := ∃ ts,
-  own γ (◯ to_max_prefix_list (ts ++ [t])) ∗
-  ⌜n = length ts⌝.
-
-Lemma cur_term_auth_alloc : ⊢ |==> ∃ γ, cur_term_auth γ 0 (TInt 0).
-Proof.
-iMod (own_alloc (● to_max_prefix_list [TInt 0] ⋅
-                 ◯ to_max_prefix_list [TInt 0])) as "[%γ own]".
-  rewrite auth_both_valid_discrete; split; eauto.
-  by apply to_max_prefix_list_valid.
-iModIntro. iExists γ, []. rewrite /=. iFrame. by eauto.
-Qed.
-
-#[global]
-Instance cur_term_frag_persistent γ n t : Persistent (cur_term_frag γ n t).
-Proof. apply _. Qed.
-
-Lemma cur_term_auth_frag γ n t : cur_term_auth γ n t -∗ cur_term_frag γ n t.
-Proof.
-iDestruct 1 as "(%ts & [own1 #own2] & %nE)".
-iExists ts; eauto.
-Qed.
-
-Lemma upd_cur_term γ n t t' :
-  cur_term_auth γ n t ==∗ cur_term_auth γ (n + 1) t'.
-Proof.
-iDestruct 1 as "(%ts & own & ->)".
-iMod (own_update with "own") as "own".
-  eapply auth_update.
-  apply (max_prefix_list_local_update _ ((ts ++ [t]) ++ [t'])).
-  by exists [t'].
-iModIntro. rewrite plus_comm /=.
-iExists (ts ++ [t]). rewrite own_op app_length. iFrame.
-iPureIntro. simpl. lia.
-Qed.
-
 Definition store_key kI kR kS γ : iProp := ∃ kS',
   ⌜kS = Spec.tag (N.@"key") kS'⌝ ∗
   pk_dh_session_meta N (λ _ _ _ _, True)%I Init kI kR kS' N γ ∗
@@ -258,16 +217,16 @@ Definition store_key kI kR kS γ : iProp := ∃ kS',
 Definition client_state kI kR s n t : iProp :=
   cst_ts s ↦ #n ∗
   sterm (cst_key s) ∗
-  cur_term_auth (cst_name s) n t ∗
+  version_auth (cst_name s) (DfracOwn 1) n t ∗
   if cst_ok s then store_key kI kR (cst_key s) (cst_name s)
   else True%I.
 
 Lemma client_state_cur_term_frag kI kR s n t :
   client_state kI kR s n t -∗
-  cur_term_frag (cst_name s) n t.
+  version_frag (cst_name s) n t.
 Proof.
 iIntros "(_ & _ & ? & _)".
-by iApply cur_term_auth_frag.
+by iApply version_auth_frag.
 Qed.
 
 Lemma client_state_cst_key kI kR s n t :
@@ -279,7 +238,7 @@ Proof. by iIntros "(_ & ? & _ & ?)"; eauto. Qed.
 
 Definition store_pred kS m : iProp := ∃ (n : nat) t kI kR γ,
   ⌜m = Spec.of_list [TInt n; t]⌝ ∗
-  cur_term_frag γ n t ∗
+  version_frag γ n t ∗
   (True ∨ store_key kI kR kS γ). (* FIXME: This is trivial currently *)
 
 Definition ack_store_pred kS m : iProp := ∃ (n : nat),
@@ -290,7 +249,7 @@ Definition load_pred (kS m : term) : iProp := True.
 Definition ack_load_pred kS m : iProp := ∃ (n : nat) t,
   ⌜m = Spec.of_list [TInt n; t]⌝ ∗
   ∀ kI kR γ t', store_key kI kR kS γ -∗
-  cur_term_frag γ n t' -∗
+  version_frag γ n t' -∗
   ⌜t = t'⌝.
 
 Definition ctx : iProp :=
@@ -317,7 +276,7 @@ Lemma wp_client_next_ts t' E kI kR s n t :
   {{{ RET #(); client_state kI kR s (n + 1) t' }}}.
 Proof.
 iIntros "%Ψ (n_stored & #s_key & n_t & auth) post".
-iMod (upd_cur_term _ _ _ t' with "n_t") as "n_t".
+iMod (version_update _ _ _ t' with "n_t") as "n_t".
 rewrite /Client.next_ts; wp_pures; wp_load; wp_store.
 iApply "post"; iFrame.
 rewrite (_ : (n + 1)%nat = (n + 1)%Z :> Z); last by lia.
@@ -430,7 +389,7 @@ iApply (wp_pk_dh_init with "[] [] [] [] [] [hon]"); eauto.
 iIntros "!> %okS [hon HokS]".
 case: okS => [kS|]; wp_pures; last by iLeft; iFrame; eauto.
 wp_alloc l as "Hl". wp_pures. wp_tag. wp_bind (mkskey _). iApply wp_mkskey.
-iMod cur_term_auth_alloc as "[%γ cur_term]".
+iMod version_alloc as "[%γ cur_term]".
 wp_pures. iRight. iExists _. iSplitR; eauto.
 iDestruct "HokS" as "(#s_kS & _ & status)".
 set (P := TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T).
@@ -494,7 +453,7 @@ case/Spec.of_list_inj: e => /Nat2Z.inj <- <- {n' t'}.
 iModIntro.
 iApply "tP".
 - by iApply "status".
-- by iApply cur_term_auth_frag.
+- by iApply version_auth_frag.
 Qed.
 
 End Verif.
