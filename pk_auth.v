@@ -161,12 +161,12 @@ Definition session_ress rl nI nR ks : iProp :=
   if rl is Init then nonce_meta_token nI (↑N.@"token".@Resp)
   else True.
 
-Definition session_weak' n kI kR (T : gset term) : iProp :=
-  nonce_meta n (N.@"success") (in_honest kI kR T).
+Definition session_weak' n (n' : nat) : iProp :=
+  nonce_meta n (N.@"success") n'.
 
 #[global]
-Instance session_weak'_persistent n kI kR T :
-  Persistent (session_weak' n kI kR T).
+Instance session_weak'_persistent n n' :
+  Persistent (session_weak' n n').
 Proof. apply _. Qed.
 
 Definition init_started kI kR sI : iProp :=
@@ -174,21 +174,21 @@ Definition init_started kI kR sI : iProp :=
   ∃ n T nI,
     ◯H{n} T ∗
     ⌜sI = mk_key_share nI⌝ ∗
-    session_weak' nI kI kR T ∗
+    session_weak' nI n ∗
     □ is_priv_key nI kI kR.
 
-Lemma session_weak'_set n kI kR T :
+Lemma session_weak'_set n n' :
   nonce_meta_token n (↑N.@"success") ==∗
-  session_weak' n kI kR T.
+  session_weak' n n'.
 Proof. by apply term_meta_set. Qed.
 
-Definition session_weak rl kI kR kS T : iProp :=
+Definition session_weak rl kS n' : iProp :=
   ∃ n s, ⌜kS = mk_session_key rl n s⌝ ∗
-  session_weak' n kI kR T.
+  session_weak' n n'.
 
 #[global]
-Instance session_weak_persistent rl kI kR kS T :
-  Persistent (session_weak rl kI kR kS T).
+Instance session_weak_persistent rl kS n' :
+  Persistent (session_weak rl kS n').
 Proof. apply _. Qed.
 
 Definition msg1_pred kR m1 : iProp :=
@@ -200,7 +200,10 @@ Definition msg1_pred kR m1 : iProp :=
 
 Definition resp_accepted kI kR sI sR : iProp :=
   pterm sI ∨
-  ∃ nI nR,
+  ∃ n T n' T' nI nR,
+    ◯H{n} T ∧ ◯H{n'} T' ∧ ⌜n' ≤ n⌝ ∧
+    session_weak' nI n' ∧
+    session_weak' nR n ∧
     ⌜sI = mk_key_share nI⌝ ∧
     ⌜sR = mk_key_share nR⌝ ∧
     □ is_priv_key nR kI kR ∧
@@ -367,7 +370,7 @@ Lemma pterm_msg1I dq n T kI kR nI :
   let sI := mk_key_share nI in
   ctx -∗
   ●H{dq|n} T -∗
-  session_weak' nI kI kR T -∗
+  session_weak' nI n -∗
   sterm nI -∗
   □ is_priv_key nI kI kR -∗
   pterm (TKey Enc kI) -∗
@@ -411,29 +414,31 @@ iPoseProof (pterm_TEncE with "p_m1 m1P") as "{p_m1} [p_m1 | p_m1]".
   do !iSplit => //.
 Qed.
 
-Lemma resp_accept T E kI kR sI nR :
+Lemma resp_accept dq n T E kI kR sI nR :
   ↑N ⊆ E →
   let kS := mk_session_key Resp nR sI in
   nonce_meta_token nR ⊤ -∗
   resp_confirm kR -∗
   ctx -∗
+  ●H{dq|n} T -∗
   □ is_priv_key nR kI kR -∗
   init_started kI kR sI ={E}=∗
+  ●H{dq|n} T ∗
   □ confirmation Resp kI kR kS ∗
-  session_weak Resp kI kR kS T ∗
+  session_weak Resp kS n ∗
   resp_waiting kI kR sI nR ∗
   resp_accepted kI kR sI (mk_key_share nR).
 Proof.
-iIntros (?) "%kS token conf (#ctx & _) #p_nR #started".
+iIntros (?) "%kS token conf (#ctx & _) hon #p_nR #started".
 iMod ("conf" $! kI sI nR) as "#conf".
 rewrite (term_meta_token_difference _ (↑N.@"session")) //.
 iDestruct "token" as "[token_sess token]".
 rewrite (term_meta_token_difference _ (↑N.@"success") (_ ∖ _)) //; last first.
   solve_ndisj.
 iDestruct "token" as "[token_succ _]".
-iMod (session_weak'_set nR kI kR T with "token_succ") as "#sess".
-iDestruct "started" as "[#fail|(%n' & %T' & %nI & #hon' & -> & #p_nI)]".
-  iModIntro. iSplit; eauto. iSplit.
+iMod (session_weak'_set nR n with "token_succ") as "#sess".
+iDestruct "started" as "[#fail|(%n' & %T' & %nI & #hon' & -> & #sess' & #p_nI)]".
+  iModIntro. iFrame. iSplit; eauto. iSplit.
     by iExists _, _; eauto.
   iSplitL; iLeft => //.
   by iFrame.
@@ -442,12 +447,15 @@ iMod (session_begin _ Resp nI nR (kI, kR)
        with "ctx [] token_sess") as "[#sessR waiting]".
 - solve_ndisj.
 - rewrite /=. by eauto.
-iModIntro. iSplit; eauto. iSplit.
+iPoseProof (honest_auth_frag_agree with "hon hon'") as "#[%n'n %nn']".
+iPoseProof (honest_auth_frag with "hon") as "#?".
+iFrame. iModIntro. iSplit; eauto. iSplit.
   rewrite mk_session_keyC in @kS *.
   by iExists _, _; eauto.
 iSplitL.
   iRight. iExists nI. by eauto.
-iRight. iExists nI, nR. by eauto.
+iRight. iExists n, T, n', T', nI, nR.
+by do !iSplit => //.
 Qed.
 
 Lemma pterm_msg2I kI kR sI sR :
@@ -496,26 +504,28 @@ iPoseProof (pterm_TEncE with "p_m2 m2P") as "{p_m2} [p_m2 | p_m2]".
   do !iSplit => //.
 Qed.
 
-Lemma init_finish T E kI kR nI sR :
+Lemma init_finish dq n T E kI kR nI sR :
   let sI := mk_key_share nI in
   let kS := mk_session_key Init nI sR in
   ↑N ⊆ E →
   ctx -∗
-  session_weak' nI kI kR T -∗
+  ●H{dq|n} T -∗
+  session_weak' nI n -∗
   sterm nI -∗
   □ is_priv_key nI kI kR -∗
   secret_of sR kI kR -∗
   resp_accepted kI kR sI sR -∗
   nonce_meta_token nI (⊤ ∖ ↑N.@"success") -∗
   init_confirm kI kR ={E}=∗
-  ▷ (□ confirmation Init kI kR kS ∗
-     session_weak Init kI kR kS T ∗
+  ▷ (●H{dq|n} T ∗
+     □ confirmation Init kI kR kS ∗
+     session_weak Init kS n ∗
      init_finished kR sR ∗
      (corruption kI kR ∨
       session_key_meta_token Init kI kR kS ⊤ ∗
       session_key kI kR kS)).
 Proof.
-iIntros "%sI %kS % (#ctx & _) #sess #s_nI #p_nI #p_sR #accepted token confirm".
+iIntros "%sI %kS % (#ctx & _) hon #sess #s_nI #p_nI #p_sR #accepted token confirm".
 iMod ("confirm" $! nI sR) as "#confirm".
 iAssert (secret_of sI kI kR) as "p_sI".
   by iApply mk_key_share_secret_of.
@@ -534,14 +544,20 @@ rewrite (term_meta_token_difference _ (↑TK.@Resp) (_ ∖ _)); last first.
 iDestruct "token_token" as "[token_resp _]".
 iDestruct "accepted" as "[fail|accepted]".
   iPoseProof ("p_sI" with "fail") as "fail'".
-  iModIntro. iModIntro. iSplit; eauto. iSplit.
+  iModIntro. iModIntro. iFrame. iSplit; eauto. iSplit.
     iExists _, _; eauto.
-  iSplit.
-    iLeft. iApply "p_sR". by iApply "p_sI".
-  by eauto.
+  iSplit; eauto.
+  iLeft. iApply "p_sR". by iApply "p_sI".
 iDestruct "accepted"
-  as "(%nI' & %nR & %e_sI & -> & #p_nR & #accepted & confirmed)".
+  as "(%n' & %T' & %n'' & %T'' & %nI' & %nR & #hon' & #hon'' & %n''n' &
+       #sess' & #sess'' &
+       %e_sI & -> & #p_nR & #accepted & confirmed)".
 move/mk_key_share_inj: e_sI => <-.
+iDestruct (term_meta_agree with "sess' sess") as "->".
+iPoseProof (honest_auth_frag_agree_eq with "hon hon''") as "#<-".
+iPoseProof (honest_auth_frag_agree with "hon hon'") as "#[%n'n %T'T]".
+have {T' T'T} -> : T' = T by rewrite T'T; congruence.
+have {n' n'n n''n'} -> : n' = n by lia. iClear "hon' hon''".
 iMod (session_begin _ Init nI nR (kI, kR) with "ctx [token_resp] token_sess")
   as "[#sessI _]".
 - solve_ndisj.
@@ -549,7 +565,7 @@ iMod (session_begin _ Init nI nR (kI, kR) with "ctx [token_resp] token_sess")
 iMod (own_alloc (reservation_map_token ⊤)) as "(%γ & map)".
   by apply reservation_map_token_valid.
 iMod (term_meta_set _ _ γ (TK.@Init) with "token_init") as "#meta" => //.
-iModIntro. iModIntro. iSplit; eauto. iSplitR.
+iModIntro. iModIntro. iFrame. iSplit; eauto. iSplitR.
   by iExists _, _; eauto.
 iSplitR.
   iRight. iExists nI, nR, kI. iSplit; by eauto.
@@ -641,7 +657,7 @@ Lemma wp_pk_auth_init c kI kR dq n T E :
       if okS is Some kS then
         sterm kS ∗
         □ confirmation Init kI kR kS ∗
-        session_weak Init kI kR kS T ∗
+        session_weak Init kS n ∗
         if in_honest kI kR T then
           session_key_meta_token Init kI kR kS ⊤ ∗
           session_key kI kR kS
@@ -655,7 +671,7 @@ iApply (wp_mk_key_share _ kI kR) => //.
 iIntros "!> %nI (#s_nI & #p_nI & token)".
 rewrite (term_meta_token_difference _ (↑N.@"success")); eauto.
 iDestruct "token" as "[token_succ token]".
-iMod (session_weak'_set _ kI kR T with "token_succ") as "#sess".
+iMod (session_weak'_set _ n with "token_succ") as "#sess".
 wp_pures.
 iPoseProof (mk_key_share_secret_of with "s_nI p_nI") as "p_sI".
 wp_list. wp_term_of_list. wp_tenc => /=. wp_pures.
@@ -670,8 +686,8 @@ wp_eq_term e; last protocol_failure; subst pkR'.
 iPoseProof (pterm_msg2E with "[//] [//] [//]")
   as "{p_m2} (s_sR & p_sR & accepted)".
 wp_pures.
-iMod (init_finish with "ctx' sess s_nI p_nI p_sR accepted token confirm")
-  as "(#confirmed & #sess_weak & #finished & session)"; eauto.
+iMod (init_finish with "ctx' hon sess s_nI p_nI p_sR accepted token confirm")
+  as "(hon & #confirmed & #sess_weak & #finished & session)"; eauto.
 wp_bind (mk_session_key_impl _ _ _). iApply wp_mk_session_key => //.
 iIntros "!> _". wp_pures. wp_tenc. wp_pures. wp_bind (send _ _).
 iApply wp_send => //.
@@ -705,7 +721,7 @@ Lemma wp_pk_auth_resp c kR dq n T E :
                pterm pkI ∗
                sterm kS ∗
                □ confirmation Resp kI kR kS ∗
-               session_weak Resp kI kR kS T ∗
+               session_weak Resp kS n ∗
                if in_honest kI kR T then
                 session_key_meta_token Resp kI kR kS ⊤ ∗
                 session_key kI kR kS
@@ -728,8 +744,8 @@ iDestruct (pterm_msg1E with "[] Hm1")
 wp_pures.
 wp_bind (mk_key_share_impl _). iApply (wp_mk_key_share _ kI kR) => //.
 iIntros "!> %nR (#s_nR & #p_nR & token)".
-iMod (resp_accept with "token confirm [//] [//] [//]")
-  as "(#confirmed & #sess_weak & waiting & #accepted)" => //.
+iMod (resp_accept with "token confirm [//] hon [//] [//]")
+  as "(hon & #confirmed & #sess_weak & waiting & #accepted)" => //.
 wp_pures. wp_list; wp_term_of_list. wp_tenc. wp_pures.
 iAssert (secret_of (mk_key_share nR) kI kR) as "p_sR".
   by iApply mk_key_share_secret_of.

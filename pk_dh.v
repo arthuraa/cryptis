@@ -154,7 +154,7 @@ Lemma wp_pk_dh_init c kI kR dq n T E :
       if okS is Some kS then
         sterm kS ∗
         □ pk_dh_confirmation Init kI kR kS ∗
-        session_weak N Init kI kR kS T ∗
+        session_weak N Init kS n ∗
         if in_honest kI kR T then
           □ (pterm kS → ◇ False) ∗
           pk_dh_session_meta_token Init kI kR kS ⊤ ∗
@@ -194,7 +194,7 @@ Lemma wp_pk_dh_resp c kR dq n T E :
         pterm pkI ∗
         sterm kS ∗
         □ pk_dh_confirmation Resp kI kR kS ∗
-        session_weak N Resp kI kR kS T ∗
+        session_weak N Resp kS n ∗
         if in_honest kI kR T then
           □ (pterm kS → ◇ False) ∗
           pk_dh_session_meta_token Resp kI kR kS ⊤ ∗

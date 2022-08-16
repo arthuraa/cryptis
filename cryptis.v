@@ -942,6 +942,35 @@ iIntros "(ver & #s_X)". iSplit => //.
 by iApply version_auth_frag.
 Qed.
 
+(* FIXME: use this formulation for version as well *)
+Lemma honest_auth_frag_agree dq n m X Y :
+  ●H{dq|n} X -∗ ◯H{m} Y -∗ ⌜m ≤ n ∧ (n ≤ m → X = Y)⌝.
+Proof.
+rewrite honest_auth_eq honest_frag_eq.
+iIntros "(auth & _) (frag & _)".
+iPoseProof (version_auth_frag_num with "auth frag") as "%mn".
+iSplit => //. iIntros "%nm". have -> : m = n by lia.
+iPoseProof (version_auth_frag_agree with "auth frag") as "%e".
+iPureIntro. by apply leibniz_equiv_iff in e.
+Qed.
+
+Lemma honest_auth_frag_agree_eq dq n X Y :
+  ●H{dq|n} X -∗ ◯H{n} Y -∗ ⌜X = Y⌝.
+Proof.
+iIntros "auth frag".
+iDestruct (honest_auth_frag_agree with "auth frag") as "[_ %e]".
+iPureIntro. eauto.
+Qed.
+
+Lemma honest_auth_agree dq1 dq2 n1 n2 X1 X2 :
+  ●H{dq1|n1} X1 -∗ ●H{dq2|n2} X2 -∗ ⌜n1 = n2 ∧ X1 = X2⌝.
+Proof.
+rewrite honest_auth_eq.
+iIntros "(auth1 & _) (auth2 & _)".
+iDestruct (version_auth_agree with "auth1 auth2") as "[%en %eX]".
+iSplit => //. iPureIntro. by apply leibniz_equiv_iff in eX.
+Qed.
+
 Lemma honest_acc E dq n X :
   ↑cryptisN.@"honest" ⊆ E →
   cryptis_ctx -∗
