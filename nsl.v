@@ -89,9 +89,8 @@ Lemma wp_nsl_init c kI kR dq n T E :
       if okS is Some kS then
         sterm kS ∗
         □ nsl_confirmation Init kI kR kS ∗
-        let b := bool_decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) in
-        session_weak N Init kI kR kS b ∗
-        if b then
+        session_weak N Init kI kR kS T ∗
+        if in_honest kI kR T then
           session_key_meta_token N Init kI kR kS ⊤ ∗
           session_key N kI kR kS
         else True
@@ -119,9 +118,8 @@ Lemma wp_nsl_resp c kR dq n T E :
         pterm pkI ∗
         sterm kS ∗
         □ confirmation Resp kI kR kS ∗
-        let b := bool_decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) in
-        session_weak N Resp kI kR kS b ∗
-        if b then
+        session_weak N Resp kI kR kS T ∗
+        if in_honest kI kR T then
           session_key_meta_token N Resp kI kR kS ⊤ ∗
           session_key N kI kR kS
         else True

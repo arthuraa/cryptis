@@ -928,6 +928,10 @@ Qed.
 Instance honest_auth_discarded_persistent n X : Persistent (●H□{n} X).
 Proof. rewrite honest_auth_eq. apply _. Qed.
 
+#[global]
+Instance honest_frag_persistent n X : Persistent (◯H{n} X).
+Proof. rewrite honest_frag_eq. apply _. Qed.
+
 Lemma honest_auth_sterm dq n X : ●H{dq|n} X -∗ [∗ set] t ∈ X, sterm t.
 Proof. rewrite honest_auth_eq. by iIntros "(_ & ?)". Qed.
 

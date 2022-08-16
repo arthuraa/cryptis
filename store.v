@@ -375,7 +375,7 @@ Lemma wp_client_connect E c kI kR dq T :
     Client.connect N c (TKey Dec kI) (TKey Enc kI) (TKey Enc kR) @ E
   {{{ s, RET (repr s);
       ●H{dq} T ∗
-      ⌜cst_ok s = bool_decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T)⌝ ∗
+      ⌜cst_ok s = in_honest kI kR T⌝ ∗
       client_state kI kR s 0 (TInt 0) }}}.
 Proof.
 iIntros "% % #chan_c #ctx (_ & _ & _ & _ & #ctx' & #key) #p_ekI #p_ekR".
@@ -391,13 +391,12 @@ wp_alloc l as "Hl". wp_pures. wp_tag. wp_bind (mkskey _). iApply wp_mkskey.
 iMod version_alloc as "[%γ cur_term]".
 wp_pures. iRight. iExists _. iSplitR; eauto.
 iDestruct "HokS" as "(#s_kS & _ & status)".
-set (P := TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T).
 iApply ("post" $! {| cst_ts := l; cst_key := Spec.tag (N.@"key") kS;
                      cst_name := γ;
-                     cst_ok := bool_decide P |}).
+                     cst_ok := in_honest kI kR T |}).
 rewrite /client_state /=. iFrame. iSplitR; eauto.
 rewrite sterm_tag. iSplitR => //.
-rewrite bool_decide_decide; case: decide; last by eauto.
+rewrite /in_honest bool_decide_decide; case: decide; last by eauto.
 iIntros "%_". iDestruct "status" as "(_ & #p_kS & token & #session)".
 iMod (term_meta_set _ _ γ N with "token") as "#meta"; eauto.
 iModIntro. iExists kS. do 2!iSplit => //. iIntros "!> %kt #p_kS'".

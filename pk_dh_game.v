@@ -138,14 +138,16 @@ iAssert (⌜kR' = kR⌝ ∗
          ⌜gabI = gabR⌝ ∗
          □ (pterm gabI → ◇ False))%I with "[H1 H2]" as "#finish".
 { case: succ => - [<-].
-  - iClear "H2". rewrite bool_decide_decide decide_True; try set_solver.
+  - iClear "H2".
+    rewrite /in_honest bool_decide_decide decide_True; try set_solver.
     iDestruct "H1" as "(#p_gabI & token & #sess)".
     iPoseProof (session_key_confirmation _ Resp with "sess") as "confR'".
     iPoseProof (own_valid_2 with "confR confR'") as "%valid".
     rewrite -reservation_map_data_op reservation_map_data_valid in valid.
     rewrite to_agree_op_valid_L in valid.
     case: (encode_inj _ _ valid) => -> -> {kI' gabR valid}. by eauto.
-  - iClear "H1". rewrite bool_decide_decide decide_True; try set_solver.
+  - iClear "H1".
+    rewrite /in_honest bool_decide_decide decide_True; try set_solver.
     iDestruct "H2" as "(#p_gabR & token & #sess)".
     iPoseProof (session_key_confirmation _ Init with "sess") as "confI'".
     iPoseProof (own_valid_2 with "confI confI'") as "%valid".

@@ -154,9 +154,8 @@ Lemma wp_pk_dh_init c kI kR dq n T E :
       if okS is Some kS then
         sterm kS ∗
         □ pk_dh_confirmation Init kI kR kS ∗
-        let b := bool_decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) in
-        session_weak N Init kI kR kS b ∗
-        if b then
+        session_weak N Init kI kR kS T ∗
+        if in_honest kI kR T then
           □ (pterm kS → ◇ False) ∗
           pk_dh_session_meta_token Init kI kR kS ⊤ ∗
           session_key N kI kR kS
@@ -172,6 +171,7 @@ iIntros "!> %okS". case: okS => [kS|]; last first.
 iIntros "(hon & #s_kS & #confirmed & #sess_weak & kSP)".
 iApply ("post" $! (Some kS)).
 iFrame. iSplitR => //. iSplit => //.
+rewrite /in_honest.
 case: bool_decide_reflect => [[kIP kRP]|]; eauto.
 iDestruct "kSP" as "[token #key]"; eauto.
 iFrame. do 2!iSplit => //. iModIntro.
@@ -194,9 +194,8 @@ Lemma wp_pk_dh_resp c kR dq n T E :
         pterm pkI ∗
         sterm kS ∗
         □ pk_dh_confirmation Resp kI kR kS ∗
-        let b := bool_decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T) in
-        session_weak N Resp kI kR kS b ∗
-        if b then
+        session_weak N Resp kI kR kS T ∗
+        if in_honest kI kR T then
           □ (pterm kS → ◇ False) ∗
           pk_dh_session_meta_token Resp kI kR kS ⊤ ∗
           session_key N kI kR kS
@@ -212,6 +211,7 @@ iIntros "!> %res". case: res => [[pkI kS]|]; last first.
 iIntros "(hon & %kI & -> & #p_pkI & #s_kS & #confirmed & #sess_weak & kSP)".
 iApply ("post" $! (Some (TKey Enc kI, kS))). iFrame. iExists kI.
 do 5!iSplitR => //.
+rewrite /in_honest.
 case: bool_decide_reflect => // - [kIP kRP].
 iDestruct "kSP" as "[token #key]"; eauto.
 iFrame. iSplit => //. iModIntro.
