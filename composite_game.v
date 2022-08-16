@@ -117,7 +117,7 @@ Lemma wp_environment c nI nR psk :
   pterm nI -∗
   pterm nR -∗
   sterm psk -∗
-  ●H□ ∅ -∗
+  ●H□{0} ∅ -∗
   {{{ True }}} environment c nI nR psk {{{ RET #(); True }}}.
 Proof.
 iIntros "#? #? #? #? #? #? #? #? #hon %Φ !> _ post".
@@ -234,11 +234,11 @@ Lemma wp_game (mkchan : val) :
   enc_pred_token ⊤ ∗
   hash_pred_token ⊤ ∗
   key_pred_token (⊤ ∖ ↑nroot.@"keys") ∗
-  ●H ∅ -∗
+  ●H{0} ∅ -∗
   WP game mkchan {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
 iIntros "#wp_mkchan (#ctx & sess_tok & enc_tok & hash_tok & key_tok & hon)".
-iMod (honest_discard with "hon") as "#hon".
+iMod (honest_auth_discard with "hon") as "#hon".
 rewrite /game; wp_pures.
 iMod (pk_dh_alloc nslN (λ _ _ _ _, True)%I with "sess_tok enc_tok")
   as "(#pk_dh_ctx & sess_tok & enc_tok)" => //; try solve_ndisj.

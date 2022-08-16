@@ -74,7 +74,7 @@ case: rl; rewrite /nsl_mk_session_key_impl /=; wp_pures;
 iApply wp_tuple; by iApply "post".
 Qed.
 
-Lemma wp_nsl_init c kI kR dq T E :
+Lemma wp_nsl_init c kI kR dq n T E :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
@@ -82,10 +82,10 @@ Lemma wp_nsl_init c kI kR dq T E :
   ctx N -∗
   pterm (TKey Enc kI) -∗
   pterm (TKey Enc kR) -∗
-  {{{ init_confirm kI kR ∗ ●H{dq} T }}}
+  {{{ init_confirm kI kR ∗ ●H{dq|n} T }}}
     nsl_init c (TKey Dec kI) (TKey Enc kI) (TKey Enc kR) @ E
   {{{ (okS : option term), RET repr okS;
-      ●H{dq} T ∗
+      ●H{dq|n} T ∗
       if okS is Some kS then
         sterm kS ∗
         □ nsl_confirmation Init kI kR kS ∗
@@ -103,17 +103,17 @@ rewrite /nsl_init; wp_pures.
 iApply (wp_pk_auth_init with "chan_c ctx ctx' [] [] [confirm]"); eauto.
 Qed.
 
-Lemma wp_nsl_resp c kR dq T E :
+Lemma wp_nsl_resp c kR dq n T E :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
   cryptis_ctx -∗
   ctx N -∗
   pterm (TKey Enc kR) -∗
-  {{{ resp_confirm kR ∗ ●H{dq} T }}}
+  {{{ resp_confirm kR ∗ ●H{dq|n} T }}}
     nsl_resp c (TKey Dec kR) (TKey Enc kR) @ E
   {{{ (res : option (term * term)), RET repr res;
-      ●H{dq} T ∗
+      ●H{dq|n} T ∗
       if res is Some (pkI, kS) then ∃ kI,
         ⌜pkI = TKey Enc kI⌝ ∗
         pterm pkI ∗

@@ -273,13 +273,13 @@ Qed.
 Lemma wp_client_next_ts t' E kI kR s n t :
   {{{ client_state kI kR s n t }}}
     Client.next_ts (repr s) @ E
-  {{{ RET #(); client_state kI kR s (n + 1) t' }}}.
+  {{{ RET #(); client_state kI kR s (S n) t' }}}.
 Proof.
 iIntros "%Ψ (n_stored & #s_key & n_t & auth) post".
-iMod (version_update _ _ _ t' with "n_t") as "n_t".
+iMod (version_update t' with "n_t") as "n_t".
 rewrite /Client.next_ts; wp_pures; wp_load; wp_store.
 iApply "post"; iFrame.
-rewrite (_ : (n + 1)%nat = (n + 1)%Z :> Z); last by lia.
+rewrite (_ : (n + 1)%Z = (S n)%nat :> Z); last by lia.
 by iFrame.
 Qed.
 
@@ -299,7 +299,7 @@ Lemma wp_client_send_store E kI kR c s n t t' :
   pterm t' -∗ (* FIXME: t' does not have to be public already *)
   {{{ client_state kI kR s n t }}}
     Client.send_store N c (repr s) t' @ E
-  {{{ RET #(); client_state kI kR s (n + 1) t' }}}.
+  {{{ RET #(); client_state kI kR s (S n) t' }}}.
 Proof.
 rewrite /Client.send_store.
 iIntros "% #chan_c (#? & _) #p_t' !> %Φ state post".
@@ -316,8 +316,7 @@ wp_term_of_list. wp_tsenc. wp_pures.
 iApply (wp_send with "[//]"); eauto; last by iApply "post".
 iModIntro. iApply pterm_TEncIS => //.
 - by rewrite sterm_TKey.
-- iModIntro. iExists (n + 1), t', kI, kR, (cst_name s).
-  rewrite Nat2Z.inj_add /=.
+- iModIntro. iExists (S n), t', kI, kR, (cst_name s).
   iSplit => //. iSplit => //. by case: (cst_ok s); eauto.
 - rewrite sterm_of_list /= sterm_TInt; do ![iSplit => //].
   by iApply pterm_sterm.
@@ -355,7 +354,7 @@ Lemma wp_client_store E kI kR c s n t t' :
   pterm t' -∗
   {{{ client_state kI kR s n t }}}
     Client.store N c (repr s) t' @ E
-  {{{ RET #(); client_state kI kR s (n + 1) t' }}}.
+  {{{ RET #(); client_state kI kR s (S n) t' }}}.
 Proof.
 iIntros "% #chan_c #ctx #p_t' !> %Φ state post". rewrite /Client.store.
 wp_pures. wp_bind (Client.send_store _ _ _ _).

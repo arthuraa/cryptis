@@ -447,12 +447,12 @@ Proof.
 by iIntros "post"; iApply twp_wp; iApply twp_mkkey.
 Qed.
 
-Lemma twp_mkakey T E Ψ :
+Lemma twp_mkakey n T E Ψ :
   ↑cryptisN ⊆ E →
   cryptis_ctx -∗
-  ●H T -∗
+  ●H{n} T -∗
   (∀ t, pterm (TKey Enc t) -∗
-        ●H (T ∪ {[TKey Dec t]}) -∗
+        ●H{S n} (T ∪ {[TKey Dec t]}) -∗
         Ψ (TKey Enc t, TKey Dec t)%V) -∗
   WP mkakey #() @ E [{ Ψ }].
 Proof.
@@ -460,7 +460,8 @@ iIntros "%sub #ctx hon post". rewrite /mkakey. wp_pures.
 iMod (own_alloc (reservation_map_token ⊤)) as (γ) "token".
   by apply reservation_map_token_valid.
 iAssert (□ (∀ t, ⌜t ∈ T⌝ → sterm t))%I as "#s_T".
-  rewrite -big_sepS_forall. by iDestruct "hon" as "[_ #?]".
+  rewrite -big_sepS_forall.
+  iPoseProof (honest_auth_sterm with "hon") as "#?"; eauto.
 wp_bind (mknonce _).
 iApply (twp_mknonce_gen T
           (λ _, own γ (namespace_map_data nroot (to_agree (encode 1))))
@@ -494,12 +495,12 @@ iExists _, _, _; iSplit => //.
 by iSplit => //.
 Qed.
 
-Lemma wp_mkakey T E Ψ :
+Lemma wp_mkakey n T E Ψ :
   ↑cryptisN ⊆ E →
   cryptis_ctx -∗
-  ●H T -∗
+  ●H{n} T -∗
   (∀ t, pterm (TKey Enc t) -∗
-        ●H (T ∪ {[TKey Dec t]}) -∗
+        ●H{S n} (T ∪ {[TKey Dec t]}) -∗
         Ψ (TKey Enc t, TKey Dec t)%V) -∗
   WP mkakey #() @ E {{ Ψ }}.
 Proof.

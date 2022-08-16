@@ -598,7 +598,7 @@ Qed.
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
 
-Lemma wp_pk_auth_init c kI kR dq T E :
+Lemma wp_pk_auth_init c kI kR dq n T E :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
@@ -606,11 +606,11 @@ Lemma wp_pk_auth_init c kI kR dq T E :
   ctx -∗
   pterm (TKey Enc kI) -∗
   pterm (TKey Enc kR) -∗
-  {{{ init_confirm kI kR ∗ ●H{dq} T }}}
+  {{{ init_confirm kI kR ∗ ●H{dq|n} T }}}
     pk_auth_init c mk_key_share_impl (mk_session_key_impl Init)
     (TKey Dec kI) (TKey Enc kI) (TKey Enc kR) @ E
   {{{ okS, RET (repr okS);
-      ●H{dq} T ∗
+      ●H{dq|n} T ∗
       if okS is Some kS then
         sterm kS ∗
         □ confirmation Init kI kR kS ∗
@@ -659,18 +659,18 @@ wp_pures. iApply ("Hpost" $! (Some (mk_session_key Init nI sR))).
 iFrame. iModIntro. iSplit; eauto. by iApply mk_session_key_sterm.
 Qed.
 
-Lemma wp_pk_auth_resp c kR dq T E :
+Lemma wp_pk_auth_resp c kR dq n T E :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
   cryptis_ctx -∗
   ctx -∗
   pterm (TKey Enc kR) -∗
-  {{{ resp_confirm kR ∗ ●H{dq} T }}}
+  {{{ resp_confirm kR ∗ ●H{dq|n} T }}}
     pk_auth_resp c mk_key_share_impl (mk_session_key_impl Resp)
       (TKey Dec kR) (TKey Enc kR) @ E
   {{{ res, RET (repr res);
-      ●H{dq} T ∗
+      ●H{dq|n} T ∗
       if res is Some (pkI, kS) then
          ∃ kI, ⌜pkI = TKey Enc kI⌝ ∗
                pterm pkI ∗
