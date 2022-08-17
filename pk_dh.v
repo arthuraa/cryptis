@@ -132,7 +132,7 @@ Lemma pk_dh_session_key_elim kI kR kS :
   pterm kS →
   ◇ False.
 Proof.
-iIntros "(%nI & %nR & -> & #priv_nI & #priv_nR & _)".
+iIntros "(%nI & %nR & %n & -> & _ & _ & #priv_nI & #priv_nR & _)".
 rewrite /= /pk_dh_mk_session_key /pk_dh_mk_key_share Spec.texpA.
 iIntros "#p_kS".
 iDestruct (dh_seed_elim2 with "priv_nI p_kS") as "[>p_sI >contra]".

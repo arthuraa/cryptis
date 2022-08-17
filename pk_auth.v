@@ -314,8 +314,10 @@ split.
 Qed.
 
 Definition session_key kI kR kS : iProp :=
-  ∃ nI nR,
+  ∃ nI nR n,
     ⌜kS = mk_session_key Init nI (mk_key_share nR)⌝ ∗
+    session_weak' nI n ∗
+    session_weak' nR n ∗
     □ is_priv_key nI kI kR ∗
     □ is_priv_key nR kI kR ∗
     □ confirmation Init kI kR kS ∧
@@ -331,7 +333,7 @@ Lemma session_key_confirmation rl kI kR kS :
   session_key kI kR kS -∗
   confirmation rl kI kR kS.
 Proof.
-iIntros "(% & % & % & _ & _ & #? & #? & _)".
+iIntros "(% & % & % & % & _ & _ & _ & _ & #? & #? & _)".
 by case: rl.
 Qed.
 
@@ -573,7 +575,7 @@ iSplitR.
   iRight. iExists nI, nR, kI, n. do !iSplit => //; by eauto.
 iRight. iSplitL.
   iExists nI, nR, γ; by eauto.
-iExists nI, nR; do !iSplit => //; eauto.
+iExists nI, nR, n; do !iSplit => //; eauto.
 Qed.
 
 Lemma pterm_msg3I kI kR sI sR :
@@ -637,7 +639,7 @@ iMod (term_meta_set _ _ γ (N.@"token".@Resp) with "finished")
   as "#meta" => //.
 iModIntro. iModIntro. iRight. iSplitL.
   iExists nI, nR, γ. by eauto.
-iExists nI, nR. by do !iSplit => //.
+iExists nI, nR, n. by do !iSplit => //.
 Qed.
 
 Ltac protocol_failure :=
