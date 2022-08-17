@@ -226,7 +226,9 @@ Definition msg2_pred kI m2 : iProp :=
 
 Definition init_finished kR sR : iProp :=
   pterm sR ∨
-  ∃ nI nR kI,
+  ∃ nI nR kI n,
+    session_weak' nI n ∧
+    session_weak' nR n ∧
     ⌜sR = mk_key_share nR⌝ ∧
     □ is_priv_key nI kI kR ∧
     □ is_priv_key nR kI kR ∧
@@ -529,7 +531,7 @@ iIntros "%sI %kS % (#ctx & _) hon #sess #s_nI #p_nI #p_sR #accepted token confir
 iMod ("confirm" $! nI sR) as "#confirm".
 iAssert (secret_of sI kI kR) as "p_sI".
   by iApply mk_key_share_secret_of.
-rewrite (term_meta_token_difference _ (↑N.@"token")) //.
+rewrite (term_meta_token_difference _ (↑N.@"token")) //; last solve_ndisj.
 set TK := N.@"token".
 iDestruct "token" as "[token_token token]".
 rewrite (term_meta_token_difference _ (↑N.@"session") (_ ∖ _)); last first.
@@ -568,11 +570,10 @@ iMod (term_meta_set _ _ γ (TK.@Init) with "token_init") as "#meta" => //.
 iModIntro. iModIntro. iFrame. iSplit; eauto. iSplitR.
   by iExists _, _; eauto.
 iSplitR.
-  iRight. iExists nI, nR, kI. iSplit; by eauto.
+  iRight. iExists nI, nR, kI, n. do !iSplit => //; by eauto.
 iRight. iSplitL.
   iExists nI, nR, γ; by eauto.
 iExists nI, nR; do !iSplit => //; eauto.
-solve_ndisj.
 Qed.
 
 Lemma pterm_msg3I kI kR sI sR :
@@ -618,7 +619,8 @@ iIntros "%sR %kS % #(ctx & _) #s_nR #p_nR [#fail|#finished] waiting".
   iPoseProof (mk_key_share_secret_of with "s_nR p_nR") as "p_sR".
   iModIntro. iLeft. by iApply "p_sR".
 iDestruct "finished"
-  as "(%nI' & %nR' & %kI' & %e_sR & p_nI & _ & confirmedI & sessI & sessR')".
+  as "(%nI' & %nR' & %kI' & %n &
+       #sessWI & #sessWR & %e_sR & p_nI & _ & confirmedI & sessI & sessR')".
 move/mk_key_share_inj: e_sR => <- {nR'}.
 iDestruct "waiting" as "[[#fail token]|waiting]".
   by iDestruct (session_not_ready with "ctx sessR' token") as "[]"; eauto.
