@@ -127,12 +127,12 @@ Lemma pk_dh_alloc E1 E2 E' :
   enc_pred_token (E2 ∖ ↑N).
 Proof. exact: pk_auth_alloc. Qed.
 
-Lemma pk_dh_session_key_elim kI kR kS :
-  session_key N kI kR kS -∗
+Lemma pk_dh_session_key_elim kI kR kS n T :
+  session_key N kI kR kS n T -∗
   pterm kS →
   ◇ False.
 Proof.
-iIntros "(%nI & %nR & %n & -> & _ & _ & #priv_nI & #priv_nR & _)".
+iIntros "(%nI & %nR & -> & _ & _ & #priv_nI & #priv_nR & _)".
 rewrite /= /pk_dh_mk_session_key /pk_dh_mk_key_share Spec.texpA.
 iIntros "#p_kS".
 iDestruct (dh_seed_elim2 with "priv_nI p_kS") as "[>p_sI >contra]".
@@ -154,11 +154,11 @@ Lemma wp_pk_dh_init c kI kR dq n T E :
       if okS is Some kS then
         sterm kS ∗
         □ pk_dh_confirmation Init kI kR kS ∗
-        session_weak N Init kS n ∗
+        session_weak N Init kI kR kS n T ∗
         if in_honest kI kR T then
           □ (pterm kS → ◇ False) ∗
           pk_dh_session_meta_token Init kI kR kS ⊤ ∗
-          session_key N kI kR kS
+          session_key N kI kR kS n T
         else True
       else True
   }}}.
@@ -194,11 +194,11 @@ Lemma wp_pk_dh_resp c kR dq n T E :
         pterm pkI ∗
         sterm kS ∗
         □ pk_dh_confirmation Resp kI kR kS ∗
-        session_weak N Resp kS n ∗
+        session_weak N Resp kI kR kS n T ∗
         if in_honest kI kR T then
           □ (pterm kS → ◇ False) ∗
           pk_dh_session_meta_token Resp kI kR kS ⊤ ∗
-          session_key N kI kR kS
+          session_key N kI kR kS n T
         else True
       else True
   }}}.

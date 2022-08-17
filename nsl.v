@@ -89,10 +89,10 @@ Lemma wp_nsl_init c kI kR dq n T E :
       if okS is Some kS then
         sterm kS ∗
         □ nsl_confirmation Init kI kR kS ∗
-        session_weak N Init kS n ∗
+        session_weak N Init kI kR kS n T ∗
         if in_honest kI kR T then
           session_key_meta_token N Init kI kR kS ⊤ ∗
-          session_key N kI kR kS
+          session_key N kI kR kS n T
         else True
       else True
   }}}.
@@ -118,10 +118,10 @@ Lemma wp_nsl_resp c kR dq n T E :
         pterm pkI ∗
         sterm kS ∗
         □ confirmation Resp kI kR kS ∗
-        session_weak N Resp kS n ∗
+        session_weak N Resp kI kR kS n T ∗
         if in_honest kI kR T then
           session_key_meta_token N Resp kI kR kS ⊤ ∗
-          session_key N kI kR kS
+          session_key N kI kR kS n T
         else True
       else True
   }}}.

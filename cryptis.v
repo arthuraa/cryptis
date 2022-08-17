@@ -971,6 +971,14 @@ iDestruct (version_auth_agree with "auth1 auth2") as "[%en %eX]".
 iSplit => //. iPureIntro. by apply leibniz_equiv_iff in eX.
 Qed.
 
+Lemma honest_frag_agree n X Y : ◯H{n} X -∗ ◯H{n} Y -∗ ⌜X = Y⌝.
+Proof.
+rewrite honest_frag_eq.
+iIntros "[ver1 _] [ver2 _]".
+iPoseProof (version_frag_agree with "ver1 ver2") as "%e".
+iPureIntro. by apply leibniz_equiv_iff in e.
+Qed.
+
 Lemma honest_acc E dq n X :
   ↑cryptisN.@"honest" ⊆ E →
   cryptis_ctx -∗

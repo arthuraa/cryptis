@@ -206,6 +206,32 @@ have : length (ys ++ [y]) ≤ length (xs ++ [x]).
 rewrite !app_length -e1 -e2 /=; lia.
 Qed.
 
+(* FIXME: What if A is not discrete? *)
+Lemma version_frag_agree `{OfeDiscrete A} γ n x y :
+  version_frag γ n x -∗
+  version_frag γ n y -∗
+  x ≡ y.
+Proof.
+rewrite version_frag_eq.
+iIntros "(%xs & #own_xs & %e1)".
+iIntros "(%ys & #own_ys & %e2)".
+iPoseProof (own_valid_2 with "own_xs own_ys") as "%valid".
+rewrite auth_frag_op_valid to_max_prefix_list_op_valid in valid.
+enough (e : xs ++ [x] ≡ ys ++ [y]).
+  assert (e' : last (xs ++ [x]) ≡ last (ys ++ [y])) by rewrite e //.
+  rewrite !last_snoc in e'.
+  by inversion e'.
+case: valid => [] [l e].
+- assert (e' : take (S n) ((xs ++ [x]) ++ l) ≡ take (S n) (ys ++ [y])).
+    by rewrite e.
+  rewrite take_app_alt ?app_length /= 1?Nat.add_comm -?e1 // in e' *.
+  rewrite take_ge ?app_length /= 1?Nat.add_comm -?e2 // in e'.
+- assert (e' : take (S n) ((ys ++ [y]) ++ l) ≡ take (S n) (xs ++ [x])).
+    by rewrite e.
+  rewrite take_app_alt ?app_length /= 1?Nat.add_comm -?e2 // in e' *.
+  by rewrite take_ge ?app_length /= 1?Nat.add_comm -?e1 // in e'.
+Qed.
+
 End Version.
 
 Arguments version_auth {Σ A _}.
