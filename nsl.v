@@ -52,7 +52,9 @@ Next Obligation. by eauto. Qed.
 
 Next Obligation. by eauto. Qed.
 
-Next Obligation. by case => nI nI' nR nR' [] -> ->; eauto. Qed.
+Next Obligation.
+case=> [] [] nI nI' nR nR' [] -> ->; eauto.
+Qed.
 
 Next Obligation. by case; eauto. Qed.
 

@@ -69,10 +69,18 @@ rewrite /pk_dh_mk_key_share /secret_of. iModIntro. iSplit.
 Qed.
 
 Next Obligation.
-move=> rl nI nI' nR nR'.
-rewrite /pk_dh_mk_key_share /pk_dh_mk_session_key {rl}.
-rewrite !Spec.texpA. move=> /TExp_inj [_ en].
-by apply Permutation_length_2.
+move=> rl1 rl2 nI nI' nR nR'.
+rewrite /pk_dh_mk_key_share /pk_dh_mk_session_key {rl1 rl2} Spec.texpA.
+case e: (is_exp nR'); last first.
+  rewrite Spec.is_expN_texp ?e; eauto.
+  by move=> /(f_equal is_exp); rewrite is_exp_TExp.
+rewrite -(reflect_iff _ _ (Spec.is_expP nR')) in e.
+case: e => [] t' [] ts ->. rewrite Spec.texpA.
+move=> /TExp_inj [-> en].
+have : length (nI' :: ts) = 2 by rewrite -en.
+case: ts => [|t'' []] // in en *.
+move=> _.
+have [[-> ->]|[-> ->]] := Permutation_length_2 en; eauto.
 Qed.
 
 Next Obligation.

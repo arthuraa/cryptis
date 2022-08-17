@@ -112,10 +112,11 @@ Class PK := {
   mk_session_key : role → term → term → term;
 
   mk_session_key_elem_of :
-    ∀ rl nI nI' nR nR',
-      mk_session_key rl nI  (mk_key_share nR) =
-      mk_session_key rl nI' (mk_key_share nR') →
-      nI = nI' ∧ nR = nR' ∨ nI = nR' ∧ nR = nI';
+    ∀ rl1 rl2 n1 n1' n2 s2',
+      mk_session_key rl1 n1  (mk_key_share n2) =
+      mk_session_key rl2 n1' s2' →
+      n1' = n1 ∧ s2' = mk_key_share n2 ∨
+      n1' = n2 ∧ s2' = mk_key_share n1;
 
   mk_session_keyC :
     ∀ nI nR, mk_session_key Init nI (mk_key_share nR) =
@@ -277,7 +278,7 @@ Lemma mk_session_key_inj nI nR nI' nR' kI kR :
   session (N.@"session") Resp nI' nR' (kI, kR) -∗
   ⌜nI' = nI⌝.
 Proof.
-move=> /mk_session_key_elem_of [[<- <-]|[<- <-]]; first by eauto.
+move=> /mk_session_key_elem_of [] [-> /mk_key_share_inj ->]; first by eauto.
 iIntros "sessI sessR".
 by iDestruct (session_role_agree with "sessI sessR") as "[]".
 Qed.
@@ -344,6 +345,19 @@ Definition session_key kI kR kS n T : iProp :=
 Global Instance session_key_persistent kI kR kS n T:
   Persistent (session_key kI kR kS n T).
 Proof. apply _. Qed.
+
+Lemma session_weak_session_key rl kI kR kS n1 n2 T1 T2 :
+  session_weak rl kI kR kS n1 T1 -∗
+  session_key kI kR kS n2 T2 -∗
+  ⌜n1 = n2 ∧ T1 = T2⌝.
+Proof.
+iIntros "(%t1 & %t2 & %e1 & #sess1)".
+iIntros "(%nI & %nR & %e2 & #sessI & #sessR & _)".
+rewrite e2 in e1.
+case/mk_session_key_elem_of: e1 => [] [-> e].
+- by iApply (session_weak'_agree with "sess1 sessI").
+- by iApply (session_weak'_agree with "sess1 sessR").
+Qed.
 
 Lemma session_key_confirmation rl kI kR kS n T :
   session_key kI kR kS n T -∗

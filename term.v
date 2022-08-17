@@ -607,6 +607,16 @@ apply: TExp_perm. rewrite seq.perm_cons -{2}[ts1](seq.mapK unfold_termK).
 by rewrite seq.perm_map // path.perm_sort.
 Qed.
 
+Lemma is_expP t : reflect (∃ t' ts, t = TExp t' ts) (is_exp t).
+Proof.
+apply/iff_reflect; split.
+- case=> [] t' [] ts ->; apply: is_exp_TExp.
+- elim: t => // t _ ts _ _ _; eauto.
+Qed.
+
+Lemma is_expN_texp t1 t2 : ~ is_exp t1 -> texp t1 t2 = TInt 0.
+Proof. by case: t1. Qed.
+
 Lemma unfold_exp t1 t2 :
   unfold_term (texp t1 t2) = PreTerm.exp (unfold_term t1) (unfold_term t2).
 Proof.
