@@ -170,7 +170,14 @@ iPoseProof (store_predE with "state ctx p_m") as "(state & #p_t' & #frag)".
 wp_bind (Server.upd_val _ _ _).
 iApply (wp_server_upd_val with "[$]").
 iIntros "!> state". wp_pures.
-wp_bind (Server.get_key _). iApply wp_server_get_key => //.
-Admitted.
+wp_bind (Server.get_key _).
+iApply (wp_server_get_key with "[$]") => //.
+iIntros "!> state". wp_tsenc. rewrite /=.
+iApply wp_send => //.
+  iModIntro. iApply ack_storeI => //.
+  iPoseProof (pterm_sterm with "p_m") as "s_m".
+  rewrite sterm_TEnc. by iDestruct "s_m" as "[??]".
+iApply "post". by eauto.
+Qed.
 
 End Verif.
