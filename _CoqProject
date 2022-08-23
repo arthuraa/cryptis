@@ -48,3 +48,7 @@ composite_game.v
 ## Storage
 
 store.v
+store/impl.v
+store/shared.v
+store/client_proofs.v
+store/server_proofs.v

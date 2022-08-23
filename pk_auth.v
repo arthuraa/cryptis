@@ -164,22 +164,21 @@ Definition session_ress rl nI nR ks : iProp :=
 
 Definition session_weak' kI kR t ts T : iProp :=
   ◯H{ts} T ∧
-  nonce_meta t (N.@"success") (ts, in_honest kI kR T).
+  nonce_meta t (N.@"success") (kI, kR, ts, T).
 
 #[global]
 Instance session_weak'_persistent kI kR t ts T :
   Persistent (session_weak' kI kR t ts T).
 Proof. apply _. Qed.
 
-Lemma session_weak'_agree kI kR t ts1 ts2 T1 T2 :
-  session_weak' kI kR t ts1 T1 -∗
-  session_weak' kI kR t ts2 T2 -∗
-  ⌜ts1 = ts2 ∧ T1 = T2⌝.
+Lemma session_weak'_agree kI1 kI2 kR1 kR2 t ts1 ts2 T1 T2 :
+  session_weak' kI1 kR1 t ts1 T1 -∗
+  session_weak' kI2 kR2 t ts2 T2 -∗
+  ⌜kI1 = kI2 ∧ kR1 = kR2 ∧ ts1 = ts2 ∧ T1 = T2⌝.
 Proof.
 iIntros "(#hon1 & #meta1) (#hon2 & #meta2)".
 iPoseProof (term_meta_agree with "meta1 meta2") as "%e".
-case: e => -> _. iSplit => //.
-by iApply (honest_frag_agree with "hon1 hon2").
+case: e => -> -> -> ->. iSplit => //.
 Qed.
 
 Definition init_started kI kR sI : iProp :=
@@ -346,10 +345,10 @@ Global Instance session_key_persistent kI kR kS n T:
   Persistent (session_key kI kR kS n T).
 Proof. apply _. Qed.
 
-Lemma session_weak_session_key rl kI kR kS n1 n2 T1 T2 :
-  session_weak rl kI kR kS n1 T1 -∗
-  session_key kI kR kS n2 T2 -∗
-  ⌜n1 = n2 ∧ T1 = T2⌝.
+Lemma session_weak_session_key rl kI1 kI2 kR1 kR2 kS n1 n2 T1 T2 :
+  session_weak rl kI1 kR1 kS n1 T1 -∗
+  session_key kI2 kR2 kS n2 T2 -∗
+  ⌜kI1 = kI2 ∧ kR1 = kR2 ∧ n1 = n2 ∧ T1 = T2⌝.
 Proof.
 iIntros "(%t1 & %t2 & %e1 & #sess1)".
 iIntros "(%nI & %nR & %e2 & #sessI & #sessR & _)".
@@ -589,7 +588,7 @@ iDestruct "accepted"
        #sess' & #sess'' &
        %e_sI & -> & #p_nR & #accepted & confirmed)".
 move/mk_key_share_inj: e_sI => <-.
-iDestruct (session_weak'_agree with "sess' sess") as "[-> ->]".
+iDestruct (session_weak'_agree with "sess' sess") as "(_ & _ & -> & ->)".
 iAssert (⌜n' = n ∧ T = T'⌝)%I as "#[-> <-]".
   iDestruct "sess''" as "[hon' _]".
   iPoseProof (honest_auth_frag_agree with "hon hon'") as "#[%n'n %T'T]".
@@ -664,7 +663,7 @@ iDestruct "waiting" as "(%nI & -> & #sessR & #confirmedR & waiting)".
 move: @kS; rewrite -mk_session_keyC => kS.
 iPoseProof (session_agree with "sessR sessR'") as "{sessR'} %e" => //.
 case: e => <- <-.
-iPoseProof (session_weak'_agree with "sessWR sess") as "[-> ->]".
+iPoseProof (session_weak'_agree with "sessWR sess") as "(_ & _ & -> & ->)".
 iMod ("waiting" with "[] sessI") as "[_ >finished]".
   solve_ndisj.
 iMod (own_alloc (reservation_map_token ⊤)) as "(%γ & map)".

@@ -125,6 +125,12 @@ Global Instance pk_dh_session_term_meta rl kI kR :
            (pk_dh_session_meta_token rl kI kR).
 Proof. apply _. Qed.
 
+Definition pk_dh_session_weak rl kI kR kS ph T :=
+  session_weak N rl kI kR kS ph T.
+
+Definition pk_dh_session_key kI kR kS ph T :=
+  session_key N kI kR kS ph T.
+
 Lemma pk_dh_alloc E1 E2 E' :
   ↑N ⊆ E1 →
   ↑N ⊆ E2 →
@@ -136,7 +142,7 @@ Lemma pk_dh_alloc E1 E2 E' :
 Proof. exact: pk_auth_alloc. Qed.
 
 Lemma pk_dh_session_key_elim kI kR kS n T :
-  session_key N kI kR kS n T -∗
+  pk_dh_session_key kI kR kS n T -∗
   pterm kS →
   ◇ False.
 Proof.
@@ -162,11 +168,11 @@ Lemma wp_pk_dh_init c kI kR dq n T E :
       if okS is Some kS then
         sterm kS ∗
         □ pk_dh_confirmation Init kI kR kS ∗
-        session_weak N Init kI kR kS n T ∗
+        pk_dh_session_weak Init kI kR kS n T ∗
         if in_honest kI kR T then
           □ (pterm kS → ◇ False) ∗
           pk_dh_session_meta_token Init kI kR kS ⊤ ∗
-          session_key N kI kR kS n T
+          pk_dh_session_key kI kR kS n T
         else True
       else True
   }}}.
@@ -202,11 +208,11 @@ Lemma wp_pk_dh_resp c kR dq n T E :
         pterm pkI ∗
         sterm kS ∗
         □ pk_dh_confirmation Resp kI kR kS ∗
-        session_weak N Resp kI kR kS n T ∗
+        pk_dh_session_weak Resp kI kR kS n T ∗
         if in_honest kI kR T then
           □ (pterm kS → ◇ False) ∗
           pk_dh_session_meta_token Resp kI kR kS ⊤ ∗
-          session_key N kI kR kS n T
+          pk_dh_session_key kI kR kS n T
         else True
       else True
   }}}.
