@@ -165,7 +165,7 @@ Lemma wp_client_connect E c kI kR dq ph T :
       ⌜cst_ok s = in_honest kI kR T⌝ ∗
       client_state s 0 (TInt 0) }}}.
 Proof.
-iIntros "% % #chan_c #ctx (#? & _ & _ & _ & _ & #ctx' & #?) #p_ekI #p_ekR".
+iIntros "% % #chan_c #ctx (#? & _ & _ & _ & _ & #ctx') #p_ekI #p_ekR".
 iIntros "!> %Φ hon post". rewrite /Client.connect. wp_pures.
 iCombine "hon post" as "post". iRevert "post".
 iApply wp_do_until. iIntros "!> [hon post]". wp_pures.
@@ -190,9 +190,8 @@ iAssert (|==> if ok then value_auth N kS' 0 (TInt 0) else True)%I
   iMod (term_meta_set _ _ γ N with "token") as "#meta"; eauto.
   iModIntro. iExists γ. iFrame. iSplit.
   - iIntros "!> %kt #p_kS'".
-    rewrite (pterm_TKey kt) pterm_tag sterm_tag.
-    iDestruct "p_kS'" as "[?|[_ p_kS']]"; first by iApply "p_kS".
-    by iMod (wf_key_elim with "p_kS' [//]") as "#[]".
+    iPoseProof (pterm_sym_keyE with "[//] p_kS'") as ">contra".
+    by iDestruct ("p_kS" with "contra") as ">[]".
   - iIntros "!> %kS'' %e".
     case/Spec.tag_inj: e => _ <- {kS''}.
     iExists kI, kR, ph, T. by eauto. }
@@ -208,7 +207,8 @@ iApply (wp_send with "[#] [#]") => //.
   - by rewrite sterm_TInt.
   - iIntros "!> _". by rewrite pterm_TInt.
 wp_pures. iRight. iExists _. iSplitR; eauto.
-iApply ("post" $! {| cst_ts := l; cst_key := Spec.tag (N.@"key") kS;
+iApply ("post" $! {| cst_ts := l;
+                     cst_key := Spec.tag (nroot.@"keys".@"sym") kS;
                      cst_ok := ok |}).
 rewrite /client_state /=. iFrame. rewrite sterm_tag.
 do 2!iSplitR => //.

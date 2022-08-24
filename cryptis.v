@@ -898,6 +898,36 @@ Definition cryptis_ctx : iProp :=
 Instance cryptis_ctx_persistent : Persistent cryptis_ctx.
 Proof. apply _. Qed.
 
+Lemma pterm_sym_keyE kt k :
+  cryptis_ctx -∗
+  pterm (TKey kt (Spec.tag (nroot.@"keys".@"sym") k)) -∗
+  ◇ pterm k.
+Proof.
+iIntros "(#symP & _) #p_k".
+rewrite pterm_TKey pterm_tag. iDestruct "p_k" as "[p_k|[_ p_k]]"; eauto.
+by iDestruct (wf_key_elim with "[//] [//]") as "#>[]".
+Qed.
+
+Lemma pterm_enc_keyE k :
+  cryptis_ctx -∗
+  pterm (TKey Dec (Spec.tag (nroot.@"keys".@"enc") k)) -∗
+  ◇ pterm k.
+Proof.
+iIntros "(_ & #encP & _) #p_k".
+rewrite pterm_TKey pterm_tag. iDestruct "p_k" as "[p_k|[_ p_k]]"; eauto.
+by iDestruct (wf_key_elim with "[//] [//]") as "#>%".
+Qed.
+
+Lemma pterm_sig_keyE k :
+  cryptis_ctx -∗
+  pterm (TKey Enc (Spec.tag (nroot.@"keys".@"sig") k)) -∗
+  ◇ pterm k.
+Proof.
+iIntros "(_ & _ & #sigP & _) #p_k".
+rewrite pterm_TKey pterm_tag. iDestruct "p_k" as "[p_k|[_ p_k]]"; eauto.
+by iDestruct (wf_key_elim with "[//] [//]") as "#>%".
+Qed.
+
 Lemma honest_auth_dfrac_op dq1 dq2 n X :
   ●H{dq1 ⋅ dq2|n} X ⊣⊢ ●H{dq1|n} X ∗ ●H{dq2|n} X.
 Proof.

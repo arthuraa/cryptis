@@ -38,7 +38,7 @@ Definition connect : val := λ: "c" "skA" "pkA" "pkB",
   do_until (λ: <>,
     bind: "kS" := pk_dh_init N "c" "skA" "pkA" "pkB" in
     let: "l"  := ref #0 in
-    let: "kS" := mkskey (tag (N.@"key") "kS") in
+    let: "kS" := mkskey (tag (nroot.@"keys".@"sym") "kS") in
     send "c" (tsenc (N.@"init") "kS" (TInt 0));;
     SOME ("l", "kS")
   ).
@@ -146,7 +146,7 @@ Definition conn_handler N : val := rec: "loop" "c" "ss" :=
 
 Definition wait_init N : val := λ: "c" "kS",
   sess_recv (N.@"init") "c" "kS" (λ: <>,
-    let: "ss" := (ref #0, ref #0, "kS") in
+    let: "ss" := (ref #0, ref (TInt 0), "kS") in
     conn_handler N "c" "ss"
   ).
 
@@ -156,7 +156,7 @@ Definition listen N : val := rec: "loop" "c" "skB" "pkB" :=
     "loop" "c" "skB" "pkB"
   | SOME "res" =>
     let: "pkA" := Fst "res" in (* Unused for now *)
-    let: "kS"  := mkskey (tag (N.@"key") (Snd "res")) in
+    let: "kS"  := mkskey (tag (nroot.@"keys".@"sym") (Snd "res")) in
     Fork (wait_init N "c" "kS");;
     "loop" "c" "skB" "pkB"
   end.

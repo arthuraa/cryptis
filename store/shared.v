@@ -55,7 +55,7 @@ Qed.
 Variable N : namespace.
 
 Definition handshake_done kS ok : iProp := ∃ kI kR kS' ph T,
-  ⌜kS = Spec.tag (N.@"key") kS'⌝ ∗
+  ⌜kS = Spec.tag (nroot.@"keys".@"sym") kS'⌝ ∗
   ⌜ok = in_honest kI kR T⌝ ∗
   pk_dh_session_weak N (λ _ _ _ _, True)%I Init kI kR kS' ph T.
 
@@ -66,13 +66,24 @@ Proof. apply _. Qed.
 
 Definition wf_key kS γ : iProp :=
   □ (∀ kt, pterm (TKey kt kS) -∗ ◇ False) ∗
-  □ ∀ kS', ⌜kS = Spec.tag (N.@"key") kS'⌝ -∗ ∃ kI kR ph T,
+  □ ∀ kS', ⌜kS = Spec.tag (nroot.@"keys".@"sym") kS'⌝ -∗ ∃ kI kR ph T,
     pk_dh_session_meta N (λ _ _ _ _, True)%I Init kI kR kS' N γ ∗
     pk_dh_session_key N (λ _ _ _ _, True)%I kI kR kS' ph T.
 
 #[global]
 Instance wf_key_persistent kS γ : Persistent (wf_key kS γ).
 Proof. apply _. Qed.
+
+Lemma handshake_done_session_key kS ok kI kR ph T :
+  handshake_done (Spec.tag (nroot.@"keys".@"sym") kS) ok -∗
+  pk_dh_session_key N (λ _ _ _ _, True)%I kI kR kS ph T -∗
+  ⌜ok = in_honest kI kR T⌝.
+Proof.
+iIntros "(%kI' & %kR' & %kS' & %ph' & %T' & %e_kS & %e_ok & #weak)".
+case/Spec.tag_inj: e_kS => _ <- {kS'}.
+iIntros "#key".
+by iDestruct (session_weak_session_key with "weak key") as "(<- & <- & <- & <-)".
+Qed.
 
 Lemma wf_key_agree kS ok γ γ' :
   handshake_done kS ok -∗
@@ -151,8 +162,7 @@ Definition store_ctx : iProp :=
   enc_pred (N.@"ack_store") ack_store_pred ∗
   enc_pred (N.@"load") load_pred ∗
   enc_pred (N.@"ack_load") ack_load_pred ∗
-  pk_dh_ctx N (λ _ _ _ _, True)%I ∗
-  key_pred (N.@"key") (λ _ _, False)%I.
+  pk_dh_ctx N (λ _ _ _ _, True)%I.
 
 Lemma version_predE kS n t :
   version_pred kS (Spec.of_list [TInt n; t]) -∗

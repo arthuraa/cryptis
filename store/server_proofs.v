@@ -211,7 +211,18 @@ iIntros "!> %n' %t' %v state". wp_pures.
 by iApply ("IH" with "[$]").
 Qed.
 
-(*
+Lemma initE kS t :
+  store_ctx N -∗
+  pterm (TEnc kS (Spec.tag (N.@"init") t)) -∗
+  pterm (TKey Enc kS) ∨
+  ▷ ∃ ok, handshake_done N kS ok ∗
+            (if ok then value_frag N kS 0 (TInt 0) else True)%I.
+Proof.
+iIntros "(#initP & _) #p_t".
+iDestruct (pterm_TEncE with "[//] [//]") as "[[??]|#tP]"; first by eauto.
+iRight. by iDestruct "tP" as "(#init & _ & _)".
+Qed.
+
 Lemma wp_server_listen E c kR dq ph T :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
@@ -224,7 +235,7 @@ iIntros "% %". iLöb as "IH".
 iIntros "%Φ (#? & #chan_c & #ctx & #p_ek & hon) post".
 wp_pures. wp_rec. wp_pures. wp_bind (pk_dh_resp _ _ _ _).
 iAssert (pk_dh_ctx N (λ _ _ _ _, True)%I) as "#?".
-  by iDestruct "ctx" as "(_ & _ & _ & _ & _ & ? & _)".
+  by iDestruct "ctx" as "(_ & _ & _ & _ & _ & ?)".
 iApply (wp_pk_dh_resp with "[# //] [# //] [# //] [# //] [hon]") => //.
   iFrame. by eauto.
 iIntros "!> %res (hon & resP)". case: res => [[pkI kS]|]; wp_pures; last first.
@@ -239,13 +250,28 @@ iRevert "key". iApply wp_sess_recv => //.
   by rewrite sterm_tag.
 iIntros "!> %t key #p_t".
 wp_pures. wp_alloc v as "Hv". wp_alloc ts as "Hts".
-pose (ss γ := {| sst_ts := ts; sst_val := v;
-                 sst_key := Spec.tag (N.@"key") kS;
-                 sst_name := γ;
-                 sst_ok := in_honest kI kR T |}).
-iAssert (|==> ▷ ∃ γ, server_state kI kR (ss γ) 0 (TInt 0))%I
-  with "[key Hts Hv]" as ">state".
-{
-*)
+pose (ss := {| sst_ts := ts; sst_val := v;
+               sst_key := Spec.tag (nroot.@"keys".@"sym") kS;
+               sst_ok := in_honest kI kR T |}).
+iAssert (handshake_done N (sst_key ss) (sst_ok ss)) as "#done".
+{ iExists kI, kR, kS, ph, T; eauto. }
+iAssert (▷ server_state ss 0 (TInt 0))%I with "[Hts Hv key]" as "state".
+{ iFrame.
+  rewrite /= sterm_tag pterm_TInt. do 3!iSplit => //.
+  case e_ok: in_honest => //.
+  iDestruct "key" as "(#sec & _ & #key)".
+  iAssert (∀ kt, pterm (TKey kt (sst_key ss)) -∗ ◇ False)%I as "{sec} sec".
+  { iIntros "%kt #p_kS'".
+    iPoseProof (pterm_sym_keyE with "[//] p_kS'") as ">sym".
+    by iApply "sec". }
+  iPoseProof (initE with "ctx p_t") as "{p_t} [contra|p_t]".
+    by iDestruct ("sec" with "contra") as ">[]".
+  iModIntro. iDestruct "p_t" as "(%ok & #done' & frag)".
+  iPoseProof (handshake_done_session_key with "done' key") as "->".
+  by rewrite e_ok. }
+wp_pures.
+iApply (wp_server_conn_handler _ ss with "[#] [#] [$]") => //.
+by iIntros "!> % []".
+Qed.
 
 End Verif.
