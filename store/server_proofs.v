@@ -29,68 +29,73 @@ Implicit Types v : val.
 
 Variable N : namespace.
 
-Definition server_state kI kR s n t : iProp :=
+Definition server_state s n t : iProp :=
   sst_ts s ↦ #n ∗
   sst_val s ↦ repr t ∗
   sterm (sst_key s) ∗
   pterm t ∗
-  (if sst_ok s then version_frag (sst_name s) n t else True%I) ∗
-  store_key N Resp kI kR (sst_key s) (sst_ok s) (sst_name s).
+  handshake_done N (sst_key s) (sst_ok s) ∗
+  if sst_ok s then value_frag N (sst_key s) n t else True%I.
 
-Lemma wp_server_get_ts E kI kR ss n t :
-  {{{ server_state kI kR ss n t }}}
+Lemma server_state_frag s n t :
+  server_state s n t -∗
+  sterm (sst_key s) ∗
+  pterm t ∗
+  handshake_done N (sst_key s) (sst_ok s) ∗
+  if sst_ok s then value_frag N (sst_key s) n t else True%I.
+Proof. by iIntros "(_ & _ & ?)". Qed.
+
+Lemma wp_server_get_ts E ss n t :
+  {{{ server_state ss n t }}}
     Server.get_ts (repr ss) @ E
-  {{{ RET #n; server_state kI kR ss n t }}}.
+  {{{ RET #n; server_state ss n t }}}.
 Proof.
 iIntros "%Φ (ts & val & ?) post".
 rewrite /Server.get_ts. wp_pures. wp_load. iApply "post".
 by iFrame.
 Qed.
 
-Lemma wp_server_upd_val E kI kR ss n t n' t' :
-  {{{ ▷ server_state kI kR ss n t ∗
+Lemma wp_server_upd_val E ss n t n' t' :
+  {{{ ▷ server_state ss n t ∗
       ▷ pterm t' ∗
-      ▷ if sst_ok ss then version_frag (sst_name ss) n' t' else True%I }}}
+      ▷ if sst_ok ss then value_frag N (sst_key ss) n' t' else True%I }}}
     Server.upd_val (repr ss) #n' t' @ E
-  {{{ RET #(); server_state kI kR ss n' t' }}}.
+  {{{ RET #(); server_state ss n' t' }}}.
 Proof.
 iIntros "%Φ ((ts & val & ? & ? & #frag & key) & p_t' & #frag') post".
 rewrite /Server.upd_val. wp_pures. wp_store. wp_pures. wp_store.
-iApply "post". iFrame.
-by case: sst_ok.
+iApply "post". iFrame. by eauto.
 Qed.
 
-Lemma wp_server_get_val E kI kR ss n t :
-  {{{ server_state kI kR ss n t }}}
+Lemma wp_server_get_val E ss n t :
+  {{{ server_state ss n t }}}
     Server.get_val (repr ss) @ E
   {{{ RET (repr t);
       pterm t ∗
-      (if sst_ok ss then version_frag (sst_name ss) n t else True%I) ∗
-      server_state kI kR ss n t }}}.
+      (if sst_ok ss then value_frag N (sst_key ss) n t else True%I) ∗
+      server_state ss n t }}}.
 Proof.
-iIntros "%Φ (ts & val & ? & #? & #frag & ?) post".
+iIntros "%Φ (ts & val & ? & #? & #done & #frag) post".
 rewrite /Server.get_val. wp_pures. wp_load. iApply "post".
-iFrame.
-by eauto.
+iFrame. iModIntro. by eauto.
 Qed.
 
-Lemma wp_server_get_key E kI kR ss n t :
-  {{{ server_state kI kR ss n t }}}
+Lemma wp_server_get_key E ss n t :
+  {{{ server_state ss n t }}}
     Server.get_key (repr ss) @ E
   {{{ RET (repr (Spec.mkskey (sst_key ss)));
-      server_state kI kR ss n t }}}.
+      server_state ss n t }}}.
 Proof.
 iIntros "%Φ ? post".
 rewrite /Server.get_key. wp_pures. by iApply "post".
 Qed.
 
-
 Lemma ack_storeI kS n :
-  ctx N -∗
+  store_ctx N -∗
   sterm kS -∗
   pterm (TEnc kS (Spec.tag (N.@"ack_store") (TInt n))).
 Proof.
-iIntros "(_ & #ctx & _) #s_kS".
+iIntros "(_ & _ & #ctx & _) #s_kS".
 iApply pterm_TEncIS => //.
 - by rewrite sterm_TKey.
 - iModIntro. by iExists n.
@@ -98,14 +103,14 @@ iApply pterm_TEncIS => //.
 - by rewrite pterm_TInt; eauto.
 Qed.
 
-Lemma wp_server_handle_store E c kI kR ss n t m :
+Lemma wp_server_handle_store E c ss n t m :
   ↑cryptisN ⊆ E →
   channel c -∗
-  ctx N -∗
+  store_ctx N -∗
   pterm (TEnc (sst_key ss) (Spec.tag (N.@"store") m)) -∗
-  {{{ server_state kI kR ss n t }}}
+  {{{ server_state ss n t }}}
     Server.handle_store N c (repr ss) m @ E
-  {{{ n' t' v, RET v; server_state kI kR ss n' t' }}}.
+  {{{ n' t' v, RET v; server_state ss n' t' }}}.
 Proof.
 iIntros "%sub #chan_c #ctx #p_m !> %Φ state post".
 rewrite /Server.handle_store. wp_pures.
@@ -118,8 +123,12 @@ iIntros "!> state". wp_pures.
 case: bool_decide_reflect => [nn'|_]; wp_pures; last by iApply "post".
 have {n' nn'} [n' ->] : ∃ n'' : nat, n' = n''.
   exists (Z.to_nat n'). by lia.
-iPoseProof (store_predE with "[#] ctx p_m") as "(#p_t' & #frag)".
-  by iDestruct "state" as "(_ & _ & _ & _ & _ & ?)".
+iPoseProof (server_state_frag with "state") as "#(_ & _ & done & frag)".
+iAssert (if sst_ok ss then ∃ γ, wf_key N (sst_key ss) γ else True)%I
+  as "{frag} #frag".
+{ case: sst_ok => //.
+  by iDestruct "frag" as "(% & _ & ?)"; eauto. }
+iPoseProof (store_predE with "done frag ctx p_m") as "(#p_t' & #frag')".
 wp_bind (Server.upd_val _ _ _).
 iApply (wp_server_upd_val with "[$]").
 iIntros "!> state". wp_pures.
@@ -133,14 +142,14 @@ iApply wp_send => //.
 iApply "post". by eauto.
 Qed.
 
-Lemma wp_server_handle_load E c kI kR ss n t m :
+Lemma wp_server_handle_load E c ss n t m :
   ↑cryptisN ⊆ E →
   channel c -∗
-  ctx N -∗
+  store_ctx N -∗
   pterm (TEnc (sst_key ss) (Spec.tag (N.@"load") m)) -∗
-  {{{ server_state kI kR ss n t }}}
+  {{{ server_state ss n t }}}
     Server.handle_load N c (repr ss) m @ E
-  {{{ v, RET v; server_state kI kR ss n t }}}.
+  {{{ v, RET v; server_state ss n t }}}.
 Proof.
 iIntros "%sub #chan_c #ctx #p_m !> %Φ state post".
 rewrite /Server.handle_load. wp_pures.
@@ -155,17 +164,88 @@ wp_list. wp_term_of_list. wp_bind (Server.get_key _).
 iApply (wp_server_get_key with "[$]").
 iIntros "!> state". wp_tsenc. rewrite /=.
 iApply (wp_send with "[//] [#]") => //; last by iApply "post".
-iDestruct "ctx" as "(_ & _ & _ & ? & _)".
+iDestruct "ctx" as "(_ & _ & _ & _ & ? & _)".
 iDestruct "state" as "(_ & _ & #? & _ & #frag' & #key)".
 iModIntro. iApply pterm_TEncIS => //.
 - rewrite sterm_TKey.
   iPoseProof (pterm_sterm with "p_m") as "{p_m} p_m".
   by rewrite sterm_TEnc; iDestruct "p_m" as "[??]".
 - iModIntro.
-  iExists n, t, kI, kR, (sst_ok ss), (sst_name ss).
+  iExists n, t, (sst_ok ss).
   by eauto.
 - rewrite sterm_of_list /= sterm_TInt -[sterm t]pterm_sterm; eauto.
 - iIntros "!> _". by rewrite pterm_of_list /= pterm_TInt; eauto.
 Qed.
+
+Lemma wp_server_conn_handler_body E c ss n t :
+  ↑cryptisN ⊆ E →
+  channel c -∗
+  store_ctx N -∗
+  {{{ server_state ss n t }}}
+    Server.conn_handler_body N c (repr ss) @ E
+  {{{ n' t' v, RET v; server_state ss n' t' }}}.
+Proof.
+iIntros "% #chan_c #ctx !> %Φ state post". rewrite /Server.conn_handler_body.
+wp_pures. wp_bind (Server.get_key _).
+iApply (wp_server_get_key with "[$]"). iIntros "!> state".
+wp_pures. wp_bind (recv _). iApply wp_recv => //.
+iIntros "%m #p_m". wp_pures.
+wp_tsdec m; wp_pures; last wp_tsdec m; wp_pures; last by iApply "post".
+- iApply (wp_server_handle_store with "[# //] [# //] [# //] [$] [$]") => //.
+- iApply (wp_server_handle_load with "[# //] [# //] [# //] [$]") => //.
+Qed.
+
+Lemma wp_server_conn_handler E c ss n t :
+  ↑cryptisN ⊆ E →
+  channel c -∗
+  store_ctx N -∗
+  {{{ server_state ss n t }}}
+    Server.conn_handler N c (repr ss) @ E
+  {{{ v, RET v; False }}}.
+Proof.
+iIntros "% #chan_c #ctx".
+iLöb as "IH" forall (n t). iIntros "!> %Φ state post". wp_rec.
+wp_pures. wp_bind (Server.conn_handler_body _ _ _).
+iApply (wp_server_conn_handler_body with "[# //] [# //] [$]") => //.
+iIntros "!> %n' %t' %v state". wp_pures.
+by iApply ("IH" with "[$]").
+Qed.
+
+(*
+Lemma wp_server_listen E c kR dq ph T :
+  ↑cryptisN ⊆ E →
+  ↑N ⊆ E →
+  {{{ cryptis_ctx ∗ channel c ∗ store_ctx N ∗
+      pterm (TKey Enc kR) ∗ ●H{dq|ph} T }}}
+    Server.listen N c (TKey Dec kR) (TKey Enc kR) @ E
+  {{{ RET #(); False }}}.
+Proof.
+iIntros "% %". iLöb as "IH".
+iIntros "%Φ (#? & #chan_c & #ctx & #p_ek & hon) post".
+wp_pures. wp_rec. wp_pures. wp_bind (pk_dh_resp _ _ _ _).
+iAssert (pk_dh_ctx N (λ _ _ _ _, True)%I) as "#?".
+  by iDestruct "ctx" as "(_ & _ & _ & _ & _ & ? & _)".
+iApply (wp_pk_dh_resp with "[# //] [# //] [# //] [# //] [hon]") => //.
+  iFrame. by eauto.
+iIntros "!> %res (hon & resP)". case: res => [[pkI kS]|]; wp_pures; last first.
+  iApply ("IH" with "[hon] [$]"). iFrame. by eauto.
+iDestruct "resP" as "(%kI & -> & #p_pkI & #s_kS & _ & #sessW & key)".
+wp_tag. wp_bind (mkskey _). iApply wp_mkskey. wp_pures.
+wp_bind (Fork _). iApply (wp_fork with "[key]"); last first.
+  iModIntro. wp_pures. iApply ("IH" with "[-post] post"). iFrame.
+  by eauto.
+iClear "IH". iModIntro. rewrite /Server.wait_init. wp_pures.
+iRevert "key". iApply wp_sess_recv => //.
+  by rewrite sterm_tag.
+iIntros "!> %t key #p_t".
+wp_pures. wp_alloc v as "Hv". wp_alloc ts as "Hts".
+pose (ss γ := {| sst_ts := ts; sst_val := v;
+                 sst_key := Spec.tag (N.@"key") kS;
+                 sst_name := γ;
+                 sst_ok := in_honest kI kR T |}).
+iAssert (|==> ▷ ∃ γ, server_state kI kR (ss γ) 0 (TInt 0))%I
+  with "[key Hts Hv]" as ">state".
+{
+*)
 
 End Verif.

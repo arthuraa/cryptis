@@ -54,37 +54,99 @@ Qed.
 
 Variable N : namespace.
 
-Definition store_key rl kI kR kS ok γ : iProp := ∃ kS' ph T,
+Definition handshake_done kS ok : iProp := ∃ kI kR kS' ph T,
   ⌜kS = Spec.tag (N.@"key") kS'⌝ ∗
   ⌜ok = in_honest kI kR T⌝ ∗
-  pk_dh_session_weak N (λ _ _ _ _, True)%I rl kI kR kS' ph T ∗
-  if ok then
-    pk_dh_session_meta N (λ _ _ _ _, True)%I Init kI kR kS' N γ ∗
-    pk_dh_session_key N (λ _ _ _ _, True)%I kI kR kS' ph T ∗
-    □ (∀ kt, pterm (TKey kt kS) -∗ ◇ False)
-  else True%I.
+  pk_dh_session_weak N (λ _ _ _ _, True)%I Init kI kR kS' ph T.
 
 #[global]
-Instance store_key_persistent rl kI kR kS ok γ :
-  Persistent (store_key rl kI kR kS ok γ).
+Instance handshake_done_persistent kS ok :
+  Persistent (handshake_done kS ok).
 Proof. apply _. Qed.
 
-Definition version_pred rl kS m : iProp := ∃ (n : nat) t kI kR ok γ,
+Definition wf_key kS γ : iProp :=
+  □ (∀ kt, pterm (TKey kt kS) -∗ ◇ False) ∗
+  □ ∀ kS', ⌜kS = Spec.tag (N.@"key") kS'⌝ -∗ ∃ kI kR ph T,
+    pk_dh_session_meta N (λ _ _ _ _, True)%I Init kI kR kS' N γ ∗
+    pk_dh_session_key N (λ _ _ _ _, True)%I kI kR kS' ph T.
+
+#[global]
+Instance wf_key_persistent kS γ : Persistent (wf_key kS γ).
+Proof. apply _. Qed.
+
+Lemma wf_key_agree kS ok γ γ' :
+  handshake_done kS ok -∗
+  wf_key kS γ -∗
+  wf_key kS γ' -∗
+  ⌜γ = γ'⌝.
+Proof.
+iIntros "(%kI & %kR & %kS' & %ph & %T & -> & %e_ok & #weak)".
+iIntros "(_ & #wf1) (_ & #wf2)".
+iDestruct ("wf1" with "[//]") as "(%kI1 & %kR1 & %ph1 & %T1 & meta1 & key1)".
+iDestruct ("wf2" with "[//]") as "(%kI2 & %kR2 & %ph2 & %T2 & meta2 & key2)".
+iDestruct (session_weak_session_key with "weak key1") as "(<- & <- & <- & <-)".
+iDestruct (session_weak_session_key with "weak key2") as "(<- & <- & <- & <-)".
+by iApply (term_meta_agree with "meta1 meta2").
+Qed.
+
+Definition value_auth kS ts t : iProp := ∃ γ,
+  version_auth γ (DfracOwn 1) ts t ∗
+  wf_key kS γ.
+
+Definition value_frag kS ts t : iProp := ∃ γ,
+  version_frag γ ts t ∗
+  wf_key kS γ.
+
+Lemma value_auth_frag kS ts t : value_auth kS ts t -∗ value_frag kS ts t.
+Proof.
+iIntros "(%γ & auth & #key)".
+iExists γ. iSplit => //.
+by iApply version_auth_frag.
+Qed.
+
+Lemma value_auth_update t' kS ts t :
+  value_auth kS ts t ==∗ value_auth kS (S ts) t'.
+Proof.
+iIntros "(%γ & auth & #key)".
+iExists γ. iSplitL => //.
+by iApply version_update.
+Qed.
+
+Lemma value_frag_agree kS ok ts t1 t2 :
+  handshake_done kS ok -∗
+  value_frag kS ts t1 -∗
+  value_frag kS ts t2 -∗
+  ⌜t1 = t2⌝.
+Proof.
+iIntros "#done (%γ1 & #frag1 & #wf1) (%γ2 & #frag2 & #wf2)".
+iDestruct (wf_key_agree with "done wf1 wf2") as "<-".
+iPoseProof (version_frag_agree with "frag1 frag2") as "%e".
+iPureIntro. by apply (leibniz_equiv _ _ e).
+Qed.
+
+Definition init_pred kS (m : term) : iProp := ∃ ok,
+  handshake_done kS ok ∗
+  if ok then value_frag kS 0 (TInt 0)
+  else True.
+
+Definition version_pred kS m : iProp := ∃ (n : nat) t ok,
   ⌜m = Spec.of_list [TInt n; t]⌝ ∗
   pterm t ∗
-  (if ok then version_frag γ n t else True) ∗
-  store_key rl kI kR kS ok γ.
+  handshake_done kS ok ∗
+  if ok then value_frag kS n t
+  else True.
 
-Definition store_pred kS m : iProp := version_pred Init kS m.
+Definition store_pred kS m : iProp := version_pred kS m.
 
 Definition ack_store_pred kS m : iProp := ∃ (n : nat),
   ⌜m = TInt n⌝. (* FIXME: Do we need anything else here? *)
 
 Definition load_pred (kS m : term) : iProp := True.
 
-Definition ack_load_pred kS m : iProp := version_pred Resp kS m.
+Definition ack_load_pred kS m : iProp := version_pred kS m.
 
-Definition ctx : iProp :=
+Definition store_ctx : iProp :=
+  enc_pred (N.@"init") init_pred ∗
   enc_pred (N.@"store") store_pred ∗
   enc_pred (N.@"ack_store") ack_store_pred ∗
   enc_pred (N.@"load") load_pred ∗
@@ -92,62 +154,81 @@ Definition ctx : iProp :=
   pk_dh_ctx N (λ _ _ _ _, True)%I ∗
   key_pred (N.@"key") (λ _ _, False)%I.
 
-Lemma store_predE_gen N' rl rl' kI kR kS ok γ n t :
-  store_key rl kI kR kS ok γ -∗
-  enc_pred N' (version_pred rl') -∗
+Lemma version_predE kS n t :
+  version_pred kS (Spec.of_list [TInt n; t]) -∗
+  ∃ ok,
+    pterm t ∗
+    handshake_done kS ok ∗
+    if ok then value_frag kS n t else True.
+Proof.
+iIntros "(%n' & %t' & %ok & %e_kS & #p_t' & #done & #frag)".
+case/Spec.of_list_inj: e_kS => /Nat2Z.inj <- <-.
+iExists _; eauto.
+Qed.
+
+Lemma handshake_done_agree kS γ ok1 ok2 :
+  wf_key kS γ -∗
+  handshake_done kS ok1 -∗
+  handshake_done kS ok2 -∗
+  ⌜ok1 = ok2⌝.
+Proof.
+iIntros "(_ & #impl)".
+iIntros "(%kI1 & %kR1 & %kS1 & %ph1 & %T1 & -> & -> & #sess1)".
+iIntros "(%kI2 & %kR2 & %kS2 & %ph2 & %T2 & %e_kS & -> & #sess2)".
+case/Spec.tag_inj: e_kS => _ <- {kS2}.
+iPoseProof ("impl" with "[//]") as "(%kI & %kR & %ph' & %T' & #meta & #key)" => //.
+iPoseProof (session_weak_session_key with "sess1 key") as "(<- & <- & <- & <-)".
+iPoseProof (session_weak_session_key with "sess2 key") as "(<- & <- & <- & <-)".
+by eauto.
+Qed.
+
+Lemma version_predE' N' kS ok n t :
+  handshake_done kS ok -∗
+  (if ok then ∃ γ, wf_key kS γ else True) -∗
+  enc_pred N' version_pred -∗
   pterm (TEnc kS (Spec.tag N' (Spec.of_list [TInt n; t]))) -∗
   ▷ (pterm t ∗
-     if ok then version_frag γ n t else True%I).
+     if ok then value_frag kS n t else True).
 Proof.
-iIntros "#key #? #p_m".
+iIntros "#done #key #? #p_m". iSplit.
+  iPoseProof (pterm_TEncE with "p_m [//]") as "{p_m} p_m".
+  rewrite pterm_of_list /=.
+  iDestruct "p_m" as "[(_ & _ & ? & _)|p_m]" => //.
+  iDestruct "p_m" as "(#p_m & _)". iModIntro.
+  by iDestruct (version_predE with "p_m") as "(%ok' & ? & _)".
+case: ok => //. iDestruct "key" as "(%γ & key)".
 iPoseProof (pterm_TEncE with "p_m [//]") as "{p_m} p_m".
-iDestruct "key" as "(%kS' & %ph & %T & %e_key & %e_ok & #sessW & #key)".
-rewrite pterm_of_list /=.
-iDestruct "p_m" as "[(p_key & _ & p_t' & _) | p_m]".
-{ case e: ok; last first.
-    by do 2?iSplit => //.
-  iDestruct "key" as "(#meta & #key & #contra)".
-  iDestruct ("contra" with "p_key") as ">[]". }
-iDestruct "p_m" as "(#p_m & s_t' & _)".
-iDestruct "p_m" as "(%n'' & %t'' & %kI'' & %kR'' & %ok'' & %γ'' & >%e & p_m)".
-case/Spec.of_list_inj: e => /Nat2Z.inj <- <- {n'' t''}.
-iDestruct "p_m" as "(p_t' & frag'' & p_m)".
-case e: ok; last by eauto.
-iDestruct "key" as "(#meta & #key & #s_key)".
-iModIntro.
-iDestruct "p_m" as "(%kS''' & %ph''' & %T''' & %e_key''' & p_m)".
-have {kS''' e_key'''} -> : kS''' = kS'.
-  rewrite e_key''' in e_key.
-  by have [??] := Spec.tag_inj _ _ _ _ e_key.
-iDestruct "p_m" as "(%e_ok''' & sessW''' & sess''')".
-iDestruct (session_weak_session_key with "sessW''' key")
-  as "(-> & -> & -> & ->)".
-rewrite e_ok''' -e_ok e.
-iDestruct "sess'''" as "(meta''' & _)".
-iPoseProof (term_meta_agree with "meta''' meta") as "->".
-iFrame. iSplit => //.
+iDestruct "p_m" as "[(contra & _)|p_m]" => //.
+  iDestruct "key" as "[#s_kS _]".
+  iDestruct ("s_kS" with "contra") as ">[]".
+iDestruct "p_m" as "(#p_m & _)". iModIntro.
+iDestruct (version_predE with "p_m")
+  as "(%ok & _ & #done' & #frag) {p_m}".
+by iPoseProof (handshake_done_agree with "key done done'") as "<-".
 Qed.
 
-Lemma store_predE rl kI kR kS ok γ n t :
-  store_key rl kI kR kS ok γ -∗
-  ctx -∗
+Lemma store_predE kS ok n t :
+  handshake_done kS ok -∗
+  (if ok then ∃ γ, wf_key kS γ else True) -∗
+  store_ctx -∗
   pterm (TEnc kS (Spec.tag (N.@"store") (Spec.of_list [TInt n; t]))) -∗
   ▷ (pterm t ∗
-     if ok then version_frag γ n t else True%I).
+     if ok then value_frag kS n t else True).
 Proof.
-iIntros "#key #(? & _)".
-iApply store_predE_gen; eauto.
+iIntros "#key #wf #(_ & #storeP & _) #p_m".
+iApply (version_predE' with "key wf storeP p_m").
 Qed.
 
-Lemma ack_loadE rl kI kR kS ok γ n t :
-  store_key rl kI kR kS ok γ -∗
-  ctx -∗
+Lemma ack_loadE kS ok n t :
+  handshake_done kS ok -∗
+  (if ok then ∃ γ, wf_key kS γ else True) -∗
+  store_ctx -∗
   pterm (TEnc kS (Spec.tag (N.@"ack_load") (Spec.of_list [TInt n; t]))) -∗
   ▷ (pterm t ∗
-     if ok then version_frag γ n t else True%I).
+     if ok then value_frag kS n t else True%I).
 Proof.
-iIntros "#key #(_ & _ & _ & ? & _)".
-iApply store_predE_gen; eauto.
+iIntros "#key #? #(_ & _ & _ & _ & ? & _)".
+iApply version_predE'; eauto.
 Qed.
 
 End Defs.

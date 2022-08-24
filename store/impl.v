@@ -14,7 +14,6 @@ Unset Printing Implicit Defensive.
 Record cst := {
   cst_ts   : loc;
   cst_key  : term;
-  cst_name : gname;
   cst_ok   : bool;
 }.
 
@@ -40,6 +39,7 @@ Definition connect : val := λ: "c" "skA" "pkA" "pkB",
     bind: "kS" := pk_dh_init N "c" "skA" "pkA" "pkB" in
     let: "l"  := ref #0 in
     let: "kS" := mkskey (tag (N.@"key") "kS") in
+    send "c" (tsenc (N.@"init") "kS" (TInt 0));;
     SOME ("l", "kS")
   ).
 
@@ -92,7 +92,6 @@ Record sst := {
   sst_ts   : loc;
   sst_val  : loc;
   sst_key  : term;
-  sst_name : gname;
   sst_ok   : bool;
 }.
 
@@ -145,15 +144,20 @@ Definition conn_handler N : val := rec: "loop" "c" "ss" :=
   conn_handler_body N "c" "ss";;
   "loop" "c" "ss".
 
+Definition wait_init N : val := λ: "c" "kS",
+  sess_recv (N.@"init") "c" "kS" (λ: <>,
+    let: "ss" := (ref #0, ref #0, "kS") in
+    conn_handler N "c" "ss"
+  ).
+
 Definition listen N : val := rec: "loop" "c" "skB" "pkB" :=
   match: pk_dh_resp N "c" "skB" "pkB" with
     NONE =>
     "loop" "c" "skB" "pkB"
   | SOME "res" =>
-    let: "pkA" := Fst "res" in
+    let: "pkA" := Fst "res" in (* Unused for now *)
     let: "kS"  := mkskey (tag (N.@"key") (Snd "res")) in
-    let: "ss"  := (ref #0, ref #0, "ks") in
-    Fork (conn_handler N "c" "ss");;
+    Fork (wait_init N "c" "kS");;
     "loop" "c" "skB" "pkB"
   end.
 
