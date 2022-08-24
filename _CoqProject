@@ -31,6 +31,10 @@ challenge_response.v
 ## Public-key authentication
 
 pk_auth.v
+pk_auth/impl.v
+pk_auth/shared.v
+pk_auth/client_proofs.v
+pk_auth/server_proofs.v
 nsl.v
 pk_dh_game.v
 pk_dh.v

@@ -81,7 +81,7 @@ Lemma wp_nsl_init c kI kR dq n T E :
   ↑N ⊆ E →
   channel c -∗
   cryptis_ctx -∗
-  ctx N -∗
+  pk_auth_ctx N -∗
   pterm (TKey Enc kI) -∗
   pterm (TKey Enc kR) -∗
   {{{ init_confirm kI kR ∗ ●H{dq|n} T }}}
@@ -109,7 +109,7 @@ Lemma wp_nsl_resp c kR dq n T E :
   ↑N ⊆ E →
   channel c -∗
   cryptis_ctx -∗
-  ctx N -∗
+  pk_auth_ctx N -∗
   pterm (TKey Enc kR) -∗
   {{{ resp_confirm kR ∗ ●H{dq|n} T }}}
     nsl_resp c (TKey Dec kR) (TKey Enc kR) @ E

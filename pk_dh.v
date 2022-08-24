@@ -112,7 +112,7 @@ rewrite /pk_dh_mk_session_key_impl.
 wp_pures. iApply wp_texp. by iApply "post".
 Qed.
 
-Definition pk_dh_ctx : iProp := ctx N.
+Definition pk_dh_ctx : iProp := pk_auth_ctx N.
 
 Definition pk_dh_session_meta rl kI kR :=
   @session_key_meta _ _ _ _ N _ rl kI kR.
@@ -158,7 +158,7 @@ Lemma wp_pk_dh_init c kI kR dq n T E :
   ↑N ⊆ E →
   channel c -∗
   cryptis_ctx -∗
-  ctx N -∗
+  pk_auth_ctx N -∗
   pterm (TKey Enc kI) -∗
   pterm (TKey Enc kR) -∗
   {{{ init_confirm kI kR ∗ ●H{dq|n} T }}}
@@ -197,7 +197,7 @@ Lemma wp_pk_dh_resp c kR dq n T E :
   ↑N ⊆ E →
   channel c -∗
   cryptis_ctx -∗
-  ctx N -∗
+  pk_auth_ctx N -∗
   pterm (TKey Enc kR) -∗
   {{{ resp_confirm kR ∗ ●H{dq|n} T }}}
     pk_dh_resp c (TKey Dec kR) (TKey Enc kR) @ E
