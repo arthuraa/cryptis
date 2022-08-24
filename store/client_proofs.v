@@ -106,7 +106,8 @@ iApply (wp_send with "[//]"); eauto; last by iApply "post".
 iModIntro. iApply pterm_TEncIS => //.
 - by rewrite sterm_TKey.
 - iModIntro. iExists (S n), t', kI, kR, (cst_ok s), (cst_name s).
-  by eauto.
+  do 3?iSplit => //.
+  by case: cst_ok; eauto.
 - rewrite sterm_of_list /= sterm_TInt; do ![iSplit => //].
   by iApply pterm_sterm.
 - iModIntro. iIntros "_". rewrite pterm_of_list /= pterm_TInt. iSplit => //.
@@ -209,7 +210,6 @@ Lemma wp_client_load E c kI kR s n t :
       ◇ ⌜cst_ok s → t' = t⌝ }}}.
 Proof.
 iIntros "% % #chan_c #ctx #p_ekI #p_ekR !> %Φ state post".
-iDestruct "ctx" as "(_ & _ & ? & ? & _)".
 rewrite /Client.load. wp_pures.
 wp_bind (Client.get_ts _). iApply (wp_client_get_ts with "state").
 iIntros "!> state". wp_pures. wp_bind (tint _). iApply wp_tint.
@@ -218,6 +218,7 @@ iApply (wp_client_get_sk with "state"). iIntros "!> state". wp_pures.
 wp_tsenc. wp_pures.
 iPoseProof (client_state_store_key with "state") as "#[s_k status]".
 wp_bind (send _ _). iApply wp_send; eauto.
+  iDestruct "ctx" as "(_ & _ & ? & _)".
   iModIntro. iApply pterm_TEncIS; eauto.
   - by rewrite sterm_TKey.
   - by rewrite sterm_TInt.
@@ -233,16 +234,11 @@ iApply ("post" $! v). iSplit => //.
 case e_ok: (cst_ok s) => //=. iIntros "_".
 iPoseProof "status"
   as "(%kS' & %ph & %T & %e_kS & #hon & #sess & #meta & #? & #p_kS)".
-iDestruct "p_t'" as "[[contra _] | succ]".
-  iMod ("p_kS" $! Enc with "contra") as "{contra} #[]".
-iDestruct "succ" as "(_ & #wf_t' & _)".
-iDestruct "wf_t'" as "(%n' & %t' & %e & tP)".
+iDestruct (ack_loadE with "status ctx p_t'") as "[_ >frag]".
 iDestruct "state" as "(_ & _ & auth & _)".
-case/Spec.of_list_inj: e => /Nat2Z.inj <- <- {n' t'}.
 iModIntro.
-iApply "tP".
-- by iApply "status".
-- by iApply version_auth_frag.
+iPoseProof (version_auth_frag_agree with "auth frag") as "%e".
+by eauto.
 Qed.
 
 End Verif.

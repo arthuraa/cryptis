@@ -84,54 +84,6 @@ iIntros "%Φ ? post".
 rewrite /Server.get_key. wp_pures. by iApply "post".
 Qed.
 
-Lemma store_predE kI kR ss n t (n' : nat) t' :
-  server_state kI kR ss n t -∗
-  ctx N -∗
-  pterm (TEnc (sst_key ss) (Spec.tag (N.@"store") (Spec.of_list [TInt n'; t']))) -∗
-  ▷ (server_state kI kR ss n t ∗
-     pterm t' ∗
-     if sst_ok ss then version_frag (sst_name ss) n' t' else True%I).
-Proof.
-iIntros "state #(? & ? & _ & _) #p_m".
-iPoseProof (pterm_TEncE with "p_m [//]") as "{p_m} p_m".
-iDestruct "state" as "(? & ? & #? & #p_t & #frag & key)".
-iDestruct "key" as "(%kS & %ph & %T & %e_key & %e_ok & #sessW & #key)".
-rewrite pterm_of_list /=.
-iDestruct "p_m" as "[(p_key & _ & p_t' & _) | p_m]".
-{ case e: sst_ok; last first.
-    do 2?iSplit => //.
-    iFrame. rewrite e. do 3!iSplit => //.
-    iExists kS, _, T; iSplit => //.
-    rewrite -e_ok e; iSplit => //.
-    by iSplit => //.
-  iDestruct "key" as "(#meta & #key & #contra)".
-  iDestruct ("contra" with "p_key") as ">[]". }
-iDestruct "p_m" as "(#p_m & s_t' & _)".
-iDestruct "p_m" as "(%n'' & %t'' & %kI'' & %kR'' & %ok'' & %γ'' & >%e & p_m)".
-case/Spec.of_list_inj: e => /Nat2Z.inj <- <- {n'' t''}.
-iDestruct "p_m" as "(p_t' & >frag'' & p_m)".
-case e: sst_ok; last first.
-  iModIntro. do 2?iSplit => //.
-  iFrame. iSplit => //. iSplit => //. rewrite e. iSplit => //.
-  iExists kS, ph, T; iSplit => //.
-  rewrite -e_ok e; iSplit => //.
-  by iSplit => //.
-iDestruct "key" as "(#meta & #key & #s_key)".
-iModIntro.
-iDestruct "p_m" as "(%kS''' & %ph''' & %T''' & %e_key''' & p_m)".
-have {kS''' e_key'''} -> : kS''' = kS.
-  rewrite e_key''' in e_key.
-  by have [??] := Spec.tag_inj _ _ _ _ e_key.
-iDestruct "p_m" as "(%e_ok''' & sessW''' & sess''')".
-iDestruct (session_weak_session_key with "sessW''' key")
-  as "(-> & -> & -> & ->)".
-rewrite e_ok''' -e_ok e.
-iDestruct "sess'''" as "(meta''' & _)".
-iPoseProof (term_meta_agree with "meta''' meta") as "->".
-iFrame. rewrite e.
-do 4?iSplit => //.
-iExists kS, ph, T. rewrite -e_ok e. do 5?iSplit => //.
-Qed.
 
 Lemma ack_storeI kS n :
   ctx N -∗
@@ -166,7 +118,8 @@ iIntros "!> state". wp_pures.
 case: bool_decide_reflect => [nn'|_]; wp_pures; last by iApply "post".
 have {n' nn'} [n' ->] : ∃ n'' : nat, n' = n''.
   exists (Z.to_nat n'). by lia.
-iPoseProof (store_predE with "state ctx p_m") as "(state & #p_t' & #frag)".
+iPoseProof (store_predE with "[#] ctx p_m") as "(#p_t' & #frag)".
+  by iDestruct "state" as "(_ & _ & _ & _ & _ & ?)".
 wp_bind (Server.upd_val _ _ _).
 iApply (wp_server_upd_val with "[$]").
 iIntros "!> state". wp_pures.
@@ -178,6 +131,41 @@ iApply wp_send => //.
   iPoseProof (pterm_sterm with "p_m") as "s_m".
   rewrite sterm_TEnc. by iDestruct "s_m" as "[??]".
 iApply "post". by eauto.
+Qed.
+
+Lemma wp_server_handle_load E c kI kR ss n t m :
+  ↑cryptisN ⊆ E →
+  channel c -∗
+  ctx N -∗
+  pterm (TEnc (sst_key ss) (Spec.tag (N.@"load") m)) -∗
+  {{{ server_state kI kR ss n t }}}
+    Server.handle_load N c (repr ss) m @ E
+  {{{ v, RET v; server_state kI kR ss n t }}}.
+Proof.
+iIntros "%sub #chan_c #ctx #p_m !> %Φ state post".
+rewrite /Server.handle_load. wp_pures.
+wp_bind (to_int _). iApply wp_to_int.
+case: Spec.to_intP => [ {m} n' -> | _]; wp_pures; last by iApply "post".
+wp_bind (Server.get_ts _). iApply (wp_server_get_ts with "[$]").
+iIntros "!> state". wp_pures.
+case: bool_decide_reflect => [[ {n'} <-]| _]; wp_pures; last by iApply "post".
+wp_bind (Server.get_val _). iApply (wp_server_get_val with "[$]").
+iIntros "!> (#p_t & #frag & state)". wp_pures.
+wp_list. wp_term_of_list. wp_bind (Server.get_key _).
+iApply (wp_server_get_key with "[$]").
+iIntros "!> state". wp_tsenc. rewrite /=.
+iApply (wp_send with "[//] [#]") => //; last by iApply "post".
+iDestruct "ctx" as "(_ & _ & _ & ? & _)".
+iDestruct "state" as "(_ & _ & #? & _ & #frag' & #key)".
+iModIntro. iApply pterm_TEncIS => //.
+- rewrite sterm_TKey.
+  iPoseProof (pterm_sterm with "p_m") as "{p_m} p_m".
+  by rewrite sterm_TEnc; iDestruct "p_m" as "[??]".
+- iModIntro.
+  iExists n, t, kI, kR, (sst_ok ss), (sst_name ss).
+  by eauto.
+- rewrite sterm_of_list /= sterm_TInt -[sterm t]pterm_sterm; eauto.
+- iIntros "!> _". by rewrite pterm_of_list /= pterm_TInt; eauto.
 Qed.
 
 End Verif.

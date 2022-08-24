@@ -30,33 +30,26 @@ Implicit Types kI kR kS t : term.
 Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
+Implicit Types ok : bool.
 
 (* FIXME: infer the invariant φ in a tactic, similarly to how iLöb works *)
-Lemma wp_sess_recv E N c sk (f : val) φ Φ Ψ :
+Lemma wp_sess_recv E N c sk (f : val) φ Ψ :
   ↑cryptisN ⊆ E →
   channel c -∗
-  enc_pred N Φ -∗
   sterm sk -∗
   □ (∀ t,
       φ -∗
-      ▷ (pterm (TKey Enc sk) ∗ pterm t ∨
-         sterm t ∗ □ Φ sk t ∗ □ (pterm (TKey Dec sk) → pterm t)) -∗
+      pterm (TEnc sk (Spec.tag N t)) -∗
       WP f t @ E {{ v, ⌜v = NONEV⌝ ∗ φ ∨ ∃ v', ⌜v = SOMEV v'⌝ ∗ Ψ v' }}) -∗
   φ -∗ WP sess_recv N c (Spec.mkskey sk) f @ E {{ Ψ }}.
 Proof.
-iIntros "% #chan_c #ΦP #s_sk #wp_f Hφ"; rewrite /sess_recv; wp_pures.
+iIntros "% #chan_c #s_sk #wp_f Hφ"; rewrite /sess_recv; wp_pures.
 iRevert "Hφ". iApply wp_do_until; iIntros "!> Hφ". wp_pures.
 wp_bind (recv _); iApply wp_recv => //.
 iIntros "%t #p_t"; wp_pures.
 wp_tsdec_eq t' e; wp_pures; eauto.
-rewrite {}e {t} pterm_TEnc.
-iApply ("wp_f" with "Hφ"). rewrite pterm_tag.
-iDestruct "p_t" as "[[??] | p_t]"; eauto.
-iRight. rewrite sterm_TEnc sterm_tag.
-iDestruct "p_t" as "[[??] [inv_t' p_t]]".
-do 2![iSplit => //].
-iPoseProof (wf_enc_elim with "inv_t' ΦP") as "{inv_t'} #inv_t'".
-eauto.
+rewrite {}e {t}.
+by iApply ("wp_f" with "Hφ").
 Qed.
 
 Variable N : namespace.
@@ -76,22 +69,20 @@ Instance store_key_persistent rl kI kR kS ok γ :
   Persistent (store_key rl kI kR kS ok γ).
 Proof. apply _. Qed.
 
-Definition store_pred kS m : iProp := ∃ (n : nat) t kI kR ok γ,
+Definition version_pred rl kS m : iProp := ∃ (n : nat) t kI kR ok γ,
   ⌜m = Spec.of_list [TInt n; t]⌝ ∗
   pterm t ∗
-  version_frag γ n t ∗
-  store_key Init kI kR kS ok γ.
+  (if ok then version_frag γ n t else True) ∗
+  store_key rl kI kR kS ok γ.
+
+Definition store_pred kS m : iProp := version_pred Init kS m.
 
 Definition ack_store_pred kS m : iProp := ∃ (n : nat),
   ⌜m = TInt n⌝. (* FIXME: Do we need anything else here? *)
 
 Definition load_pred (kS m : term) : iProp := True.
 
-Definition ack_load_pred kS m : iProp := ∃ (n : nat) t,
-  ⌜m = Spec.of_list [TInt n; t]⌝ ∗
-  ∀ kI kR γ t', store_key Init kI kR kS true γ -∗
-  version_frag γ n t' -∗
-  ⌜t = t'⌝.
+Definition ack_load_pred kS m : iProp := version_pred Resp kS m.
 
 Definition ctx : iProp :=
   enc_pred (N.@"store") store_pred ∗
@@ -100,6 +91,64 @@ Definition ctx : iProp :=
   enc_pred (N.@"ack_load") ack_load_pred ∗
   pk_dh_ctx N (λ _ _ _ _, True)%I ∗
   key_pred (N.@"key") (λ _ _, False)%I.
+
+Lemma store_predE_gen N' rl rl' kI kR kS ok γ n t :
+  store_key rl kI kR kS ok γ -∗
+  enc_pred N' (version_pred rl') -∗
+  pterm (TEnc kS (Spec.tag N' (Spec.of_list [TInt n; t]))) -∗
+  ▷ (pterm t ∗
+     if ok then version_frag γ n t else True%I).
+Proof.
+iIntros "#key #? #p_m".
+iPoseProof (pterm_TEncE with "p_m [//]") as "{p_m} p_m".
+iDestruct "key" as "(%kS' & %ph & %T & %e_key & %e_ok & #sessW & #key)".
+rewrite pterm_of_list /=.
+iDestruct "p_m" as "[(p_key & _ & p_t' & _) | p_m]".
+{ case e: ok; last first.
+    by do 2?iSplit => //.
+  iDestruct "key" as "(#meta & #key & #contra)".
+  iDestruct ("contra" with "p_key") as ">[]". }
+iDestruct "p_m" as "(#p_m & s_t' & _)".
+iDestruct "p_m" as "(%n'' & %t'' & %kI'' & %kR'' & %ok'' & %γ'' & >%e & p_m)".
+case/Spec.of_list_inj: e => /Nat2Z.inj <- <- {n'' t''}.
+iDestruct "p_m" as "(p_t' & frag'' & p_m)".
+case e: ok; last by eauto.
+iDestruct "key" as "(#meta & #key & #s_key)".
+iModIntro.
+iDestruct "p_m" as "(%kS''' & %ph''' & %T''' & %e_key''' & p_m)".
+have {kS''' e_key'''} -> : kS''' = kS'.
+  rewrite e_key''' in e_key.
+  by have [??] := Spec.tag_inj _ _ _ _ e_key.
+iDestruct "p_m" as "(%e_ok''' & sessW''' & sess''')".
+iDestruct (session_weak_session_key with "sessW''' key")
+  as "(-> & -> & -> & ->)".
+rewrite e_ok''' -e_ok e.
+iDestruct "sess'''" as "(meta''' & _)".
+iPoseProof (term_meta_agree with "meta''' meta") as "->".
+iFrame. iSplit => //.
+Qed.
+
+Lemma store_predE rl kI kR kS ok γ n t :
+  store_key rl kI kR kS ok γ -∗
+  ctx -∗
+  pterm (TEnc kS (Spec.tag (N.@"store") (Spec.of_list [TInt n; t]))) -∗
+  ▷ (pterm t ∗
+     if ok then version_frag γ n t else True%I).
+Proof.
+iIntros "#key #(? & _)".
+iApply store_predE_gen; eauto.
+Qed.
+
+Lemma ack_loadE rl kI kR kS ok γ n t :
+  store_key rl kI kR kS ok γ -∗
+  ctx -∗
+  pterm (TEnc kS (Spec.tag (N.@"ack_load") (Spec.of_list [TInt n; t]))) -∗
+  ▷ (pterm t ∗
+     if ok then version_frag γ n t else True%I).
+Proof.
+iIntros "#key #(_ & _ & _ & ? & _)".
+iApply store_predE_gen; eauto.
+Qed.
 
 End Defs.
 
