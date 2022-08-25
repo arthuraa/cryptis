@@ -223,7 +223,7 @@ Lemma wp_client_load E c s n t :
     Client.load N c (repr s) @ E
   {{{ t', RET (repr t');
       client_state s n t ∗
-      ◇ ⌜cst_ok s → t' = t⌝ }}}.
+      ⌜cst_ok s → t' = t⌝ }}}.
 Proof.
 iIntros "% % #chan_c #ctx !> %Φ state post".
 rewrite /Client.load. wp_pures.
@@ -244,16 +244,17 @@ iCombine "post state" as "I". iRevert "I". iApply wp_sess_recv => //.
 iIntros "!> %ts [post state] #p_t'". wp_pures.
 wp_list_of_term ts; wp_pures; last by iLeft; iFrame.
 wp_list_match => [n' v -> {ts}|_]; wp_pures; last by iLeft; iFrame.
-wp_eq_term e; wp_pures; last by iLeft; iFrame.
-subst n'. iModIntro. iRight. iExists _; iSplit; eauto.
-iApply ("post" $! v). iSplit => //.
-case e_ok: (cst_ok s) => //=. iIntros "_".
-iAssert (∃ γ, wf_key N (cst_key s) γ)%I as "#status".
+wp_eq_term e; last by wp_pures; iLeft; iFrame.
+subst n'.
+iAssert (◇ ⌜cst_ok s → v = t⌝)%I as "#>%e".
+{ case e_ok: (cst_ok s) => //=. iIntros "_".
+  iAssert (∃ γ, wf_key N (cst_key s) γ)%I as "#status".
   by iDestruct "frag" as "(% & _ & ?)"; eauto.
-iDestruct (ack_loadE with "done status ctx p_t'") as "[_ frag']".
-iDestruct "state" as "(_ & _ & auth & _)".
-iPoseProof (value_frag_agree with "done frag frag'") as ">->".
-by eauto.
+  iDestruct (ack_loadE with "done status ctx p_t'") as "[_ frag']".
+  iDestruct "state" as "(_ & _ & auth & _)".
+  by iPoseProof (value_frag_agree with "done frag frag'") as ">->". }
+wp_pures. iModIntro. iRight. iExists _; iSplit; eauto.
+iApply ("post" $! v). iSplit => //.
 Qed.
 
 End Verif.
