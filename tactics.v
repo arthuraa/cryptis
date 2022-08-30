@@ -23,7 +23,7 @@ Lemma tac_wp_cons `{!Repr A} Γ E K (x : A) (xs : list A) Ψ :
   envs_entails Γ (WP fill K (Val (repr (x :: xs)%list)) @ E {{ Ψ }}) →
   envs_entails Γ (WP fill K (repr x :: repr xs) : expr @ E {{ Ψ }}).
 Proof.
-rewrite envs_entails_eq => post.
+rewrite envs_entails_unseal => post.
 by rewrite -wp_bind -wp_cons.
 Qed.
 
@@ -32,7 +32,7 @@ Lemma tac_wp_cons1 `{!Repr A} Γ E K (x : A) Ψ :
   envs_entails Γ (WP fill K (repr x :: []%V) @ E {{ Ψ }}).
 Proof.
 rewrite (_ : NILV = repr (@nil A)) /=; first by apply: tac_wp_cons.
-by rewrite repr_list_eq /=.
+by rewrite repr_list_unseal /=.
 Qed.
 
 Lemma tac_wp_list_match `{!Repr A} Γ E K vars vs k Ψ :
@@ -42,7 +42,7 @@ Lemma tac_wp_list_match `{!Repr A} Γ E K vars vs k Ψ :
     envs_entails Γ (WP fill K NONEV @ E {{ Ψ }})) →
   envs_entails Γ (WP fill K (list_match vars (repr vs) k) @ E {{ Ψ }}).
 Proof.
-rewrite envs_entails_eq => /nforallP hyes hno.
+rewrite envs_entails_unseal => /nforallP hyes hno.
 rewrite -wp_bind -wp_list_match.
 case: decide => [e_len|ne_len]; last by iApply hno.
 by rewrite -wp_bind_inv; iApply hyes.
@@ -52,7 +52,7 @@ Lemma tac_wp_hash Γ E K t Ψ :
   envs_entails Γ (WP fill K (Val (THash t)) @ E {{ Ψ }}) →
   envs_entails Γ (WP fill K (hash t) @ E {{ Ψ }}).
 Proof.
-rewrite envs_entails_eq => post.
+rewrite envs_entails_unseal => post.
 by rewrite -wp_bind -wp_hash.
 Qed.
 
@@ -60,7 +60,7 @@ Lemma tac_wp_tag Γ E K N t Ψ :
   envs_entails Γ (WP fill K (Val (Spec.tag N t)) @ E {{ Ψ }}) →
   envs_entails Γ (WP fill K (tag N t) @ E {{ Ψ }}).
 Proof.
-rewrite envs_entails_eq => ?.
+rewrite envs_entails_unseal => ?.
 by rewrite -wp_bind -wp_tag.
 Qed.
 
@@ -71,7 +71,7 @@ Lemma tac_twp_untag Γ E K n t Ψ :
    envs_entails Γ (WP fill K (Val NONEV) @ E [{ Ψ }])) →
   envs_entails Γ (WP fill K (untag n t) @ E [{ Ψ }]).
 Proof.
-rewrite envs_entails_eq => HSome HNone.
+rewrite envs_entails_unseal => HSome HNone.
 rewrite -twp_bind -twp_untag.
 case e: Spec.untag => [t'|].
 - by move/Spec.untagK in e; apply: HSome.
@@ -85,7 +85,7 @@ Lemma tac_wp_untag Γ E K n t Ψ :
    envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →
   envs_entails Γ (WP fill K (untag n t) @ E {{ Ψ }}).
 Proof.
-rewrite envs_entails_eq => HSome HNone.
+rewrite envs_entails_unseal => HSome HNone.
 rewrite -wp_bind -wp_untag.
 case e: Spec.untag => [t'|].
 - by move/Spec.untagK in e; apply: HSome.
@@ -99,7 +99,7 @@ Lemma tac_twp_dec Γ E K k t Ψ :
    envs_entails Γ (WP fill K (Val NONEV) @ E [{ Ψ }])) →
   envs_entails Γ (WP fill K (dec (TKey Dec k) t) @ E [{ Ψ }]).
 Proof.
-rewrite envs_entails_eq => HSome HNone.
+rewrite envs_entails_unseal => HSome HNone.
 rewrite -twp_bind -twp_dec.
 case: t HSome HNone; eauto => k' /=.
 by case: decide => [<-|]; eauto.
@@ -112,7 +112,7 @@ Lemma tac_wp_dec Γ E K k t Ψ :
    envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →
   envs_entails Γ (WP fill K (dec (TKey Dec k) t) @ E {{ Ψ }}).
 Proof.
-rewrite envs_entails_eq => HSome HNone.
+rewrite envs_entails_unseal => HSome HNone.
 rewrite -wp_bind -wp_dec.
 case: t HSome HNone; eauto => k' /=.
 by case: decide => [<-|]; eauto.
@@ -122,7 +122,7 @@ Lemma tac_wp_tenc Γ E K c t1 t2 Ψ :
   envs_entails Γ (WP fill K (Val (Spec.tenc c t1 t2)) @ E {{ Ψ }}) →
   envs_entails Γ (WP fill K (tenc c t1 t2) @ E {{ Ψ }}).
 Proof.
-rewrite envs_entails_eq => H.
+rewrite envs_entails_unseal => H.
 by rewrite -wp_bind -wp_tenc.
 Qed.
 
@@ -133,7 +133,7 @@ Lemma tac_wp_tdec Γ E K c k t Ψ :
    envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →
   envs_entails Γ (WP fill K (tdec c (TKey Dec k) t) @ E {{ Ψ }}).
 Proof.
-rewrite envs_entails_eq => HSome HNone.
+rewrite envs_entails_unseal => HSome HNone.
 rewrite -wp_bind -wp_tdec.
 case e: Spec.tdec => [t'|]; eauto.
 by apply: HSome; apply: Spec.tdecK.
@@ -143,7 +143,7 @@ Lemma tac_wp_tsenc Γ E K c k t Ψ :
   envs_entails Γ (WP fill K (Val (Spec.tsenc c k t)) @ E {{ Ψ }}) →
   envs_entails Γ (WP fill K (tsenc c k t) @ E {{ Ψ }}).
 Proof.
-by rewrite envs_entails_eq => H; rewrite -wp_bind -wp_tsenc.
+by rewrite envs_entails_unseal => H; rewrite -wp_bind -wp_tsenc.
 Qed.
 
 Lemma tac_wp_tsdec Γ E K c k t Ψ :
@@ -153,7 +153,7 @@ Lemma tac_wp_tsdec Γ E K c k t Ψ :
    envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →
   envs_entails Γ (WP fill K (tsdec c (Spec.mkskey k) t) @ E {{ Ψ }}).
 Proof.
-rewrite envs_entails_eq => HSome HNone.
+rewrite envs_entails_unseal => HSome HNone.
 rewrite -wp_bind -wp_tsdec.
 rewrite /= in HNone *.
 case e: Spec.tdec => [t'|]; eauto.
@@ -164,7 +164,7 @@ Lemma tac_wp_list Γ E K (ts : list term) Ψ :
   envs_entails Γ (WP fill K (Val (repr ts)) @ E {{ Ψ }}) →
   envs_entails Γ (WP fill K (list_to_expr ts) @ E {{ Ψ }}).
 Proof.
-rewrite envs_entails_eq => post.
+rewrite envs_entails_unseal => post.
 by rewrite -wp_bind -wp_list.
 Qed.
 
@@ -175,7 +175,7 @@ Lemma tac_twp_list_of_term Γ E K t Ψ :
    envs_entails Γ (WP fill K NONEV @ E [{ Ψ }])) →
   envs_entails Γ (WP fill K (list_of_term t) @ E [{ Ψ }]).
 Proof.
-rewrite envs_entails_eq => HSome HNone.
+rewrite envs_entails_unseal => HSome HNone.
 rewrite -twp_bind -twp_list_of_term.
 case e: Spec.to_list => [ts|]; eauto.
 move/Spec.to_listK in e; subst t; eauto.
@@ -188,7 +188,7 @@ Lemma tac_wp_list_of_term Γ E K t Ψ :
    envs_entails Γ (WP fill K NONEV @ E {{ Ψ }})) →
   envs_entails Γ (WP fill K (list_of_term t) @ E {{ Ψ }}).
 Proof.
-rewrite envs_entails_eq => HSome HNone.
+rewrite envs_entails_unseal => HSome HNone.
 rewrite -wp_bind -wp_list_of_term.
 case e: Spec.to_list => [ts|]; eauto.
 move/Spec.to_listK in e; subst t; eauto.
@@ -207,7 +207,7 @@ Lemma tac_twp_lookup Γ E K ts (n : Z) Ψ :
 Proof.
 move=> npos; rewrite -[in #n](Z2Nat.id n) //.
 move: (Z.to_nat _)=> {npos} n.
-rewrite envs_entails_eq => HSome HNone.
+rewrite envs_entails_unseal => HSome HNone.
 rewrite -twp_bind -twp_get_list.
 by case e: (_ !! n)%stdpp => [t|]; eauto.
 Qed.
@@ -222,7 +222,7 @@ Lemma tac_wp_lookup Γ E K ts (n : Z) Ψ :
 Proof.
 move=> npos; rewrite -[in #n](Z2Nat.id n) //.
 move: (Z.to_nat _)=> {npos} n.
-rewrite envs_entails_eq => HSome HNone.
+rewrite envs_entails_unseal => HSome HNone.
 rewrite -wp_bind -wp_get_list.
 by case e: (_ !! n)%stdpp => [t|]; eauto.
 Qed.
@@ -234,7 +234,7 @@ Lemma tac_wp_eq_term Γ E K t1 t2 Ψ :
    envs_entails Γ (WP fill K (Val #false) @ E {{ Ψ }})) →
   envs_entails Γ (WP fill K (eq_term t1 t2) @ E {{ Ψ }}).
 Proof.
-rewrite envs_entails_eq => HSome HNone.
+rewrite envs_entails_unseal => HSome HNone.
 rewrite -wp_bind -wp_eq_term.
 by case: bool_decide_reflect; eauto.
 Qed.
@@ -246,7 +246,7 @@ Lemma tac_wp_is_key Γ E K t Ψ :
    envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →
   envs_entails Γ (WP fill K (is_key t) @ E {{ Ψ }}).
 Proof.
-rewrite envs_entails_eq => HSome HNone.
+rewrite envs_entails_unseal => HSome HNone.
 rewrite -wp_bind -wp_is_key.
 case: t HSome HNone; eauto.
 by move=> kt k HSome _ /=; eapply HSome.

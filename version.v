@@ -28,7 +28,7 @@ Definition version_auth_def γ dq n x : iProp := ∃ xs,
   ⌜n = length xs⌝.
 Definition version_auth_aux : seal version_auth_def. by eexists. Qed.
 Definition version_auth := unseal version_auth_aux.
-Lemma version_auth_eq : version_auth = version_auth_def.
+Lemma version_auth_unseal : version_auth = version_auth_def.
 Proof. exact: seal_eq. Qed.
 
 Definition version_frag_def γ n t : iProp := ∃ ts,
@@ -36,12 +36,12 @@ Definition version_frag_def γ n t : iProp := ∃ ts,
   ⌜n = length ts⌝.
 Definition version_frag_aux : seal version_frag_def. by eexists. Qed.
 Definition version_frag := unseal version_frag_aux.
-Lemma version_frag_eq : version_frag = version_frag_def.
+Lemma version_frag_unseal : version_frag = version_frag_def.
 Proof. exact: seal_eq. Qed.
 
 Lemma version_alloc x : ⊢ |==> ∃ γ, version_auth γ (DfracOwn 1) 0 x.
 Proof.
-rewrite version_auth_eq.
+rewrite version_auth_unseal.
 iMod (own_alloc (● to_max_prefix_list [x] ⋅
                  ◯ to_max_prefix_list [x])) as "[%γ own]".
   rewrite auth_both_valid; split; eauto.
@@ -54,7 +54,7 @@ Lemma version_auth_dfrac_op `{OfeDiscrete A} γ dq1 dq2 n x :
   version_auth γ (dq1 ⋅ dq2) n x ⊣⊢
   version_auth γ dq1 n x ∗ version_auth γ dq2 n x.
 Proof.
-rewrite version_auth_eq. iSplit.
+rewrite version_auth_unseal. iSplit.
 - iIntros "(%xs & [[own1 own2] #own'] & %en)".
   iSplitL "own1".
   + iExists xs. rewrite own_op. by iFrame; iSplit.
@@ -75,7 +75,7 @@ Lemma version_auth_discard γ dq n x :
   version_auth γ dq n x ==∗
   version_auth γ DfracDiscarded n x.
 Proof.
-rewrite version_auth_eq.
+rewrite version_auth_unseal.
 iIntros "(%xs & [own #own'] & %en)".
 iExists xs. rewrite own_op. do 2!iSplitL => //.
 iApply (own_update with "own").
@@ -99,29 +99,28 @@ Proof. by rewrite /IntoSep version_auth_dfrac_op. Qed.
 #[global]
 Instance version_auth_timeless γ dq n x `{OfeDiscrete A} :
   Timeless (version_auth γ dq n x).
-Proof. rewrite version_auth_eq. apply _. Qed.
+Proof. rewrite version_auth_unseal. apply _. Qed.
 
 #[global]
 Instance version_auth_discarded_persistent γ n x :
   Persistent (version_auth γ DfracDiscarded n x).
 Proof.
-rewrite version_auth_eq /version_auth_def.
+rewrite version_auth_unseal /version_auth_def.
 apply: bi.exist_persistent => xs.
-rewrite own_op; apply _.
 Qed.
 
 #[global]
 Instance version_frag_persistent γ n x : Persistent (version_frag γ n x).
-Proof. rewrite version_frag_eq. apply _. Qed.
+Proof. rewrite version_frag_unseal. apply _. Qed.
 
 #[global]
 Instance version_frag_timeless γ n x `{OfeDiscrete A} :
   Timeless (version_frag γ n x).
-Proof. rewrite version_frag_eq. apply _. Qed.
+Proof. rewrite version_frag_unseal. apply _. Qed.
 
 Lemma version_auth_frag γ dq n x : version_auth γ dq n x -∗ version_frag γ n x.
 Proof.
-rewrite version_auth_eq version_frag_eq.
+rewrite version_auth_unseal version_frag_unseal.
 iDestruct 1 as "(%xs & [own1 #own2] & %nE)".
 iExists xs; eauto.
 Qed.
@@ -129,7 +128,7 @@ Qed.
 Lemma version_update y γ n x :
   version_auth γ (DfracOwn 1) n x ==∗ version_auth γ (DfracOwn 1) (S n) y.
 Proof.
-rewrite version_auth_eq.
+rewrite version_auth_unseal.
 iDestruct 1 as "(%xs & own & ->)".
 iMod (own_update with "own") as "own".
   eapply auth_update.
@@ -146,7 +145,7 @@ Lemma version_auth_agree `{OfeDiscrete A} γ dq1 dq2 n m x y :
   version_auth γ dq2 m y -∗
   ⌜n = m ∧ x ≡ y⌝.
 Proof.
-rewrite version_auth_eq.
+rewrite version_auth_unseal.
 iIntros "(%xs & [own_x _] & %e1)".
 iIntros "(%ys & [own_y _] & %e2)".
 iPoseProof (own_valid_2 with "own_x own_y") as "%valid".
@@ -168,7 +167,7 @@ Lemma version_auth_frag_agree `{OfeDiscrete A} γ dq n x y :
   version_frag γ    n y -∗
   x ≡ y.
 Proof.
-rewrite version_auth_eq version_frag_eq.
+rewrite version_auth_unseal version_frag_unseal.
 iIntros "(%xs & [own_x _] & %e1)".
 iIntros "(%ys & own_y & %e2)".
 iPoseProof (own_valid_2 with "own_x own_y") as "%valid".
@@ -194,7 +193,7 @@ Lemma version_auth_frag_num `{OfeDiscrete A} γ dq n m x y :
   version_frag γ    m y -∗
   ⌜m ≤ n⌝.
 Proof.
-rewrite version_auth_eq version_frag_eq.
+rewrite version_auth_unseal version_frag_unseal.
 iIntros "(%xs & [own_x _] & %e1)".
 iIntros "(%ys & own_y & %e2)".
 iPoseProof (own_valid_2 with "own_x own_y") as "%valid".
@@ -212,7 +211,7 @@ Lemma version_frag_agree `{OfeDiscrete A} γ n x y :
   version_frag γ n y -∗
   x ≡ y.
 Proof.
-rewrite version_frag_eq.
+rewrite version_frag_unseal.
 iIntros "(%xs & #own_xs & %e1)".
 iIntros "(%ys & #own_ys & %e2)".
 iPoseProof (own_valid_2 with "own_xs own_ys") as "%valid".

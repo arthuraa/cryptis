@@ -12,7 +12,7 @@ Unset Printing Implicit Defensive.
 
 Section PKDH.
 
-Context `{heap : !heapGS Σ, cryptis : !cryptisG Σ, sess : !sessionG Σ}.
+Context `{heap : !heapGS Σ, cryptis : !cryptisGS Σ, sess : !sessionGS Σ}.
 Notation iProp := (iProp Σ).
 Implicit Types rl : role.
 Implicit Types t kI kR nI nR sI sR : term.
@@ -134,10 +134,10 @@ Definition pk_dh_session_key kI kR kS ph T :=
 Lemma pk_dh_alloc E1 E2 E' :
   ↑N ⊆ E1 →
   ↑N ⊆ E2 →
-  nown_token session_name E1 -∗
+  session_token E1 -∗
   enc_pred_token E2 ={E'}=∗
   pk_dh_ctx ∗
-  nown_token session_name (E1 ∖ ↑N) ∗
+  session_token (E1 ∖ ↑N) ∗
   enc_pred_token (E2 ∖ ↑N).
 Proof. exact: pk_auth_alloc. Qed.
 

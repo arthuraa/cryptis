@@ -111,7 +111,7 @@ Fixpoint val_of_pre_term_rec pt : val :=
 
 Definition val_of_pre_term_aux : seal val_of_pre_term_rec. by eexists. Qed.
 Definition val_of_pre_term : Repr pre_term := unseal val_of_pre_term_aux.
-Lemma val_of_pre_term_eq : val_of_pre_term = val_of_pre_term_rec.
+Lemma val_of_pre_term_unseal : val_of_pre_term = val_of_pre_term_rec.
 Proof. exact: seal_eq. Qed.
 Global Existing Instance val_of_pre_term.
 
@@ -135,7 +135,7 @@ Fixpoint val_of_term_rec t : val :=
 
 Definition val_of_term_aux : seal val_of_term_rec. by eexists. Qed.
 Definition val_of_term : term -> val := unseal val_of_term_aux.
-Lemma val_of_term_eq : val_of_term = val_of_term_rec.
+Lemma val_of_term_unseal : val_of_term = val_of_term_rec.
 Proof. exact: seal_eq. Qed.
 Coercion val_of_term : term >-> val.
 Global Instance repr_term : Repr term := val_of_term.
@@ -143,10 +143,10 @@ Global Instance repr_term : Repr term := val_of_term.
 Lemma val_of_pre_term_unfold t :
   val_of_pre_term (unfold_term t) = val_of_term t.
 Proof.
-rewrite val_of_term_eq val_of_pre_term_eq.
+rewrite val_of_term_unseal val_of_pre_term_unseal.
 elim/term_ind': t => //=; try by move=> *; congruence.
 move=> t -> pts _.
-by rewrite [repr_list pts]repr_list_val /repr val_of_pre_term_eq.
+by rewrite [repr_list pts]repr_list_val /repr val_of_pre_term_unseal.
 Qed.
 
 End ValOfTerm.
@@ -161,16 +161,16 @@ rewrite -[LHS]val_of_pre_term_unfold unfold_TExp.
 rewrite order.Order.POrderTheory.sort_le_id // ?path.sorted_map; last first.
   rewrite (_ : path.sorted _ _ = path.sorted order.Order.le ts) //.
   by case: (path.sorted _ _) sorted_ts.
-rewrite -[in RHS](val_of_pre_term_unfold t) val_of_pre_term_eq /=.
+rewrite -[in RHS](val_of_pre_term_unfold t) val_of_pre_term_unseal /=.
 rewrite [repr_list ts]repr_list_val map_map.
 do !congr PairV; congr repr_list.
 elim: ts {sorted_ts} => //= {nexp}t ts -> /=.
-by rewrite /repr_term -val_of_pre_term_unfold val_of_pre_term_eq.
+by rewrite /repr_term -val_of_pre_term_unfold val_of_pre_term_unseal.
 Qed.
 
 Global Instance val_of_pre_term_inj : Inj (=) (=) val_of_pre_term.
 Proof.
-rewrite val_of_pre_term_eq.
+rewrite val_of_pre_term_unseal.
 elim.
 - by move=> n1 [] //= n2 [] ->.
 - by move=> t11 IH1 t12 IH2 [] //= t21 t22 [] /IH1 -> /IH2 ->.
@@ -179,7 +179,7 @@ elim.
 - by move=> t11 IH1 t12 IH2 [] //= ?? [] /IH1 -> /IH2 ->.
 - by move=> ? IH [] //= ? [] /IH ->.
 - move=> t1 IHt ts1 IHts [] //= t2 ts2 [] /IHt -> e_ts; congr PreTerm.PTExp.
-  move: e_ts; rewrite repr_list_eq.
+  move: e_ts; rewrite repr_list_unseal.
   elim: ts1 IHts ts2 {t1 t2 IHt} => /= [_ [] //|t1 ts1 H [] IHt {}/H IHts].
   by case=> //= t2 ts2 [] /IHt -> /IHts ->.
 Qed.
@@ -221,7 +221,7 @@ Definition nonces_of_term_def (t : term) :=
 Arguments nonces_of_term_def /.
 Definition nonces_of_term_aux : seal nonces_of_term_def. by eexists. Qed.
 Definition nonces_of_term := unseal nonces_of_term_aux.
-Lemma nonces_of_term_eq : nonces_of_term = nonces_of_term_def.
+Lemma nonces_of_term_unseal : nonces_of_term = nonces_of_term_def.
 Proof. exact: seal_eq. Qed.
 
 Lemma nonces_of_termE' t :
@@ -236,14 +236,14 @@ Lemma nonces_of_termE' t :
   | TExp' t pts _ => nonces_of_term t ∪ ⋃ map nonces_of_pre_term pts
   end.
 Proof.
-by rewrite nonces_of_term_eq; case: t => //=.
+by rewrite nonces_of_term_unseal; case: t => //=.
 Qed.
 
 Lemma nonces_of_term_TExp t ts :
   nonces_of_term (TExp t ts)
   = nonces_of_term t ∪ ⋃ map nonces_of_term ts.
 Proof.
-rewrite nonces_of_term_eq /nonces_of_term_def.
+rewrite nonces_of_term_unseal /nonces_of_term_def.
 case: unfold_TExpP => pts' e_pts' /=.
 by rewrite [in LHS]e_pts' map_map.
 Qed.
@@ -267,7 +267,7 @@ Definition subterms_def t :=
 Arguments subterms_def /.
 Definition subterms_aux : seal subterms_def. by eexists. Qed.
 Definition subterms := unseal subterms_aux.
-Lemma subterms_eq : subterms = subterms_def.
+Lemma subterms_unseal : subterms = subterms_def.
 Proof. exact: seal_eq. Qed.
 
 Lemma subtermsE' t :
@@ -283,7 +283,7 @@ Lemma subtermsE' t :
   | TExp' t pts _ => subterms t ∪ ⋃ map subterms_pre_def pts
   end.
 Proof.
-rewrite subterms_eq /=.
+rewrite subterms_unseal /=.
 case: t =>> //=; try by rewrite fold_termE ?unfold_termK.
 by rewrite fold_termE unfold_termK TExp'E.
 Qed.
@@ -293,7 +293,7 @@ Lemma subterms_TExp t ts :
 Proof.
 rewrite subtermsE'; congr (_ ∪ _).
 case: TExpP => pts ? e_pts.
-by rewrite [in LHS]e_pts map_map subterms_eq.
+by rewrite [in LHS]e_pts map_map subterms_unseal.
 Qed.
 
 Definition subtermsE := (subterms_TExp, subtermsE').
@@ -382,7 +382,7 @@ Definition tag_def N (t : term) :=
   TPair (TInt (Zpos (encode N))) t.
 Definition tag_aux : seal tag_def. by eexists. Qed.
 Definition tag := unseal tag_aux.
-Lemma tag_eq : tag = tag_def. Proof. exact: seal_eq. Qed.
+Lemma tag_unseal : tag = tag_def. Proof. exact: seal_eq. Qed.
 
 Definition untag_def N (t : term) :=
   match t with
@@ -392,18 +392,18 @@ Definition untag_def N (t : term) :=
   end.
 Definition untag_aux : seal untag_def. by eexists. Qed.
 Definition untag := unseal untag_aux.
-Lemma untag_eq : untag = untag_def. Proof. exact: seal_eq. Qed.
+Lemma untag_unseal : untag = untag_def. Proof. exact: seal_eq. Qed.
 
 Lemma tagK N t : untag N (tag N t) = Some t.
 Proof.
-rewrite untag_eq tag_eq /untag_def /tag_def /=.
+rewrite untag_unseal tag_unseal /untag_def /tag_def /=.
 by rewrite decide_True_pi.
 Qed.
 
 #[global]
 Instance tag_inj : Inj2 (=) (=) (=) tag.
 Proof.
-rewrite tag_eq /tag_def => c1 t1 c2 t2 [] e ->.
+rewrite tag_unseal /tag_def => c1 t1 c2 t2 [] e ->.
 split=> //; by apply: inj e.
 Qed.
 
@@ -411,7 +411,7 @@ Lemma untagK N t1 t2 :
   untag N t1 = Some t2 ->
   t1 = tag N t2.
 Proof.
-rewrite untag_eq tag_eq /=.
+rewrite untag_unseal tag_unseal /=.
 case: t1=> [] // [] // [] //= m.
 by case: decide => // <- _ [->].
 Qed.
@@ -420,7 +420,7 @@ Lemma untag_tag_ne N1 N2 t :
   N1 ≠ N2 →
   Spec.untag N1 (Spec.tag N2 t) = None.
 Proof.
-move=> neq; rewrite Spec.untag_eq Spec.tag_eq /=.
+move=> neq; rewrite Spec.untag_unseal Spec.tag_unseal /=.
 rewrite decide_False //.
 move=> eq_enc; apply: neq.
 by apply: encode_inj eq_enc.
@@ -519,7 +519,7 @@ Qed.
 
 Definition of_list_aux : seal (foldr TPair (TInt 0)). by eexists. Qed.
 Definition of_list := unseal of_list_aux.
-Lemma of_list_eq : of_list = foldr TPair (TInt 0).
+Lemma of_list_unseal : of_list = foldr TPair (TInt 0).
 Proof. exact: seal_eq. Qed.
 
 Definition mkskey t := TPair (TKey Enc t) (TKey Dec t).
@@ -536,13 +536,13 @@ Fixpoint to_list t : option (list term) :=
   end.
 
 Lemma of_listK l : to_list (of_list l) = Some l.
-Proof. rewrite of_list_eq; by elim: l => //= t l ->. Qed.
+Proof. rewrite of_list_unseal; by elim: l => //= t l ->. Qed.
 
 Lemma to_listK t ts :
   to_list t = Some ts →
   t = of_list ts.
 Proof.
-rewrite of_list_eq /=; elim/term_ind': t ts => //.
+rewrite of_list_unseal /=; elim/term_ind': t ts => //.
   by case=> [] // _ [<-].
 move=> t _ ts' IH /= ts.
 case e: to_list => [ts''|] // [<-].
@@ -639,7 +639,7 @@ Arguments Spec.untag_def /.
 Existing Instance Spec.of_list_inj.
 
 Lemma subterm_tag c t1 t2 : subterm t1 t2 → subterm t1 (Spec.tag c t2).
-Proof. by rewrite Spec.tag_eq; eauto using subterm. Qed.
+Proof. by rewrite Spec.tag_unseal; eauto using subterm. Qed.
 
 #[global]
 Hint Resolve STRefl : core.

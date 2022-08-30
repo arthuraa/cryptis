@@ -14,7 +14,7 @@ Unset Printing Implicit Defensive.
 
 Section Game.
 
-Context `{!cryptisG Σ, !heapGS Σ, !spawnG Σ, !sessionG Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ, !sessionGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -49,12 +49,15 @@ Definition game : val := λ: "mkchan",
           eq_term "sesskI" "sesskR" && ~ eq_term "m" "sesskI")
   else SOME #true.
 
+(* TODO Avoid exposing these instances *)
+Local Existing Instances cryptisGpreS_maps cryptis_inG.
+
 Lemma wp_game (mkchan : val) :
   {{{ True }}} mkchan #() {{{ v, RET v; channel v }}} -∗
   cryptis_ctx -∗
   enc_pred_token ⊤ -∗
   key_pred_token (⊤ ∖ ↑nroot.@"keys") -∗
-  nown_token session_name ⊤ -∗
+  session_token ⊤ -∗
   ●H{0} ∅ -∗
   WP game mkchan {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
@@ -88,16 +91,17 @@ wp_pures.
 case: bool_decide_reflect => [ekt|_]; last by wp_pures; iLeft.
 wp_pures; wp_bind (par _ _).
 case: kt epkR' ekt => // -> _.
-rewrite -Qp_quarter_quarter -dfrac_op_own. iDestruct "hon" as "[hon1 hon2]".
+rewrite -Qp.quarter_quarter -dfrac_op_own. iDestruct "hon" as "[hon1 hon2]".
 iApply (wp_par (λ v, ∃ a : option term, ⌜v = repr a⌝ ∗ _)%I
                (λ v, ∃ a : option (term * term), ⌜v = repr a⌝ ∗ _)%I
           with "[tokenI hon1] [tokenR hon2]").
 - iApply (wp_pk_dh_init with "[//] [//] [//] [] [] [tokenI hon1]") => //.
   + iFrame. iIntros "%nI %nR".
     set (kS := mk_session_key _ _ _).
-    iMod (own_update with "tokenI") as "#?".
+    iMod (own_update with "tokenI") as "ownI".
     * apply (namespace_map_alloc_update _ nroot
-               (to_agree (encode (kI, kR', kS)))) => //;
+               (to_agree (encode (kI, kR', kS)))) => //.
+      iPoseProof "ownI" as "#ownI".
       eauto.
     * eauto.
   + iIntros "!> %a H". iExists a. iSplit; first done.
@@ -105,9 +109,10 @@ iApply (wp_par (λ v, ∃ a : option term, ⌜v = repr a⌝ ∗ _)%I
 - iApply (wp_pk_dh_resp with "[//] [//] [//] [] [tokenR hon2]") => //.
   + iFrame. iIntros "%kI' %nI %nR".
     set (kS := mk_session_key _ _ _).
-    iMod (own_update with "tokenR") as "#?".
+    iMod (own_update with "tokenR") as "ownR".
     * apply (namespace_map_alloc_update _ nroot
-               (to_agree (encode (kI', kR, kS)))) => //;
+               (to_agree (encode (kI', kR, kS)))) => //.
+      iPoseProof "ownR" as "#ownR".
       eauto.
     * eauto.
   + iIntros "!> %a H"; iExists a; iSplit; first done.
@@ -115,7 +120,7 @@ iApply (wp_par (λ v, ∃ a : option term, ⌜v = repr a⌝ ∗ _)%I
 iIntros (v1 v2) "[H1 H2]".
 iDestruct "H1" as (a) "[-> [hon1 H1]]".
 iDestruct "H2" as (b) "[-> [hon2 H2]]".
-iCombine "hon1 hon2" as "hon". rewrite dfrac_op_own Qp_quarter_quarter.
+iCombine "hon1 hon2" as "hon". rewrite dfrac_op_own Qp.quarter_quarter.
 iModIntro.
 iMod (compromise_honest with "ctx hon") as "[hon comp]" => //.
 wp_pures.
@@ -181,7 +186,7 @@ Definition F : gFunctors :=
   #[heapΣ; spawnΣ; cryptisΣ; sessionΣ].
 
 Lemma pk_dh_secure (mkchan : val) σ₁ σ₂ (v : val) ts :
-  (∀ `{!heapGS Σ, !cryptisG Σ},
+  (∀ `{!heapGS Σ, !cryptisGS Σ},
      ⊢ {{{ True }}} mkchan #() {{{ c, RET c; channel c}}}) →
   rtc erased_step ([game mkchan], σ₁) (Val v :: ts, σ₂) →
   v = NONEV ∨ v = SOMEV #true.
@@ -191,8 +196,8 @@ move=> wp_mkchan.
 apply (adequate_result NotStuck _ _ (λ v _, v = NONEV ∨ v = SOMEV #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
-iMod (cryptisG_alloc _) as (?) "(#ctx & enc_tok & key_tok & ? & hon)".
-iMod (sessionG_alloc _) as (?) "nown_tok".
+iMod (cryptisGS_alloc _) as (?) "(#ctx & enc_tok & key_tok & ? & hon)".
+iMod (sessionGS_alloc _) as (?) "nown_tok".
 iApply (wp_game with "[] ctx [enc_tok] [key_tok] [nown_tok] [hon]") => //.
 iApply wp_mkchan.
 Qed.

@@ -14,7 +14,7 @@ Unset Printing Implicit Defensive.
 
 Section PK.
 
-Context `{!heapGS Σ, !cryptisG Σ, !sessionG Σ}.
+Context `{!heapGS Σ, !cryptisGS Σ, !sessionGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (rl : role) (t kI kR nI nR sI sR kS : term).

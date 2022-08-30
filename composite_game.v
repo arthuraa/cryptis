@@ -15,7 +15,7 @@ Unset Printing Implicit Defensive.
 
 Section Game.
 
-Context `{!cryptisG Σ, !heapGS Σ, !spawnG Σ, !sessionG Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ, !sessionGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -230,7 +230,7 @@ Definition game : val := λ: "mkchan",
 Lemma wp_game (mkchan : val) :
   {{{ True }}} mkchan #() {{{ v, RET v; channel v }}} -∗
   cryptis_ctx ∗
-  nown_token session_name ⊤ ∗
+  session_token ⊤ ∗
   enc_pred_token ⊤ ∗
   hash_pred_token ⊤ ∗
   key_pred_token (⊤ ∖ ↑nroot.@"keys") ∗
@@ -295,7 +295,7 @@ Definition F : gFunctors :=
   #[heapΣ; spawnΣ; cryptisΣ; sessionΣ].
 
 Lemma nsl_dh_secure (mkchan : val) σ₁ σ₂ (v : val) ts :
-  (∀ `{!heapGS Σ, !cryptisG Σ},
+  (∀ `{!heapGS Σ, !cryptisGS Σ},
      ⊢ {{{ True }}} mkchan #() {{{ c, RET c; channel c}}}) →
   rtc erased_step ([game mkchan], σ₁) (Val v :: ts, σ₂) →
   v = NONEV ∨ v = SOMEV #true.
@@ -305,8 +305,8 @@ move=> wp_mkchan.
 apply (adequate_result NotStuck _ _ (λ v _, v = NONEV ∨ v = SOMEV #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
-iMod (cryptisG_alloc _) as (?) "(#ctx & enc_tok & key_tok & hash_tok & hon)".
-iMod (sessionG_alloc _) as (?) "sess_tok".
+iMod (cryptisGS_alloc _) as (?) "(#ctx & enc_tok & key_tok & hash_tok & hon)".
+iMod (sessionGS_alloc _) as (?) "sess_tok".
 iApply (wp_game) => //; try by iFrame.
 iApply wp_mkchan.
 Qed.

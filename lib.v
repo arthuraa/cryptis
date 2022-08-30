@@ -23,7 +23,7 @@ Lemma namespace_map_alloc_update {A : cmra} E (N : namespace) (a : A) :
 Proof.
 move=> sub valid; apply: reservation_map_alloc => //.
 assert (H : positives_flatten N ∈ (↑N : coPset)).
-{ rewrite nclose_eq. apply elem_coPset_suffixes.
+{ rewrite namespaces.nclose_unseal. apply elem_coPset_suffixes.
   exists 1%positive. by rewrite left_id_L. }
 set_solver.
 Qed.
@@ -43,7 +43,7 @@ Lemma namespace_map_disj {A : cmra} E (N : namespace) (a : A) :
 Proof.
 move=> sub /reservation_map_disj.
 assert (H : positives_flatten N ∈ (↑N : coPset)).
-{ rewrite nclose_eq. apply elem_coPset_suffixes.
+{ rewrite namespaces.nclose_unseal. apply elem_coPset_suffixes.
   exists 1%positive. by rewrite left_id_L. }
 set_solver.
 Qed.
@@ -56,7 +56,7 @@ Proof. apply _. Qed.
 (* TODO: Move to Iris? *)
 #[global]
 Instance dom_ne {T : ofe} :
-  NonExpansive (dom (gset loc) : gmap loc T -> gset loc).
+  NonExpansive (dom : gmap loc T -> gset loc).
 Proof. by move=> ??? e ?; rewrite !elem_of_dom e. Qed.
 
 Lemma meta_meta_token `{Countable L, !gen_heapGS L V Σ, Countable A} l (x : A) N E :
@@ -126,11 +126,11 @@ Proof. by case: b. Qed.
 (* /TODO *)
 
 Lemma dom_singleton_eq `{EqDecision K, Countable K} {T} (m : gmap K T) x :
-  dom (gset K) m = {[x]} →
+  dom m = {[x]} →
   ∃ y, m = {[x := y]}.
 Proof.
 move=> e.
-have {}e: ∀ x' : K, x' ∈ dom (gset K) m ↔ x' ∈ ({[x]} : gset K) by rewrite e.
+have {}e: ∀ x' : K, x' ∈ dom m ↔ x' ∈ ({[x]} : gset K) by rewrite e.
 have: x ∈ ({[x]} : gset K) by rewrite elem_of_singleton.
 rewrite -e elem_of_dom; case=> y m_x; exists y.
 apply: map_eq=> x'; case: (decide (x' = x))=> [ {x'}->|ne].
@@ -202,14 +202,14 @@ Qed.
 Instance repr_list `{Repr A} : Repr (list A) := unseal repr_list_aux.
 Arguments repr_list {A} {_} _ : simpl never.
 
-Lemma repr_list_eq `{Repr A} :
+Lemma repr_list_unseal `{Repr A} :
   repr_list = foldr (fun x v => SOMEV (repr x, v)%V) NONEV.
 Proof. exact: seal_eq. Qed.
 
 Lemma repr_list_val `{Repr A} (xs : list A) :
   repr_list xs = repr_list (map repr xs).
 Proof.
-rewrite !repr_list_eq; by elim: xs => //= x xs ->.
+rewrite !repr_list_unseal; by elim: xs => //= x xs ->.
 Qed.
 
 Definition leq_loc_loop : val := rec: "loop" "l1" "l2" "n" :=
@@ -524,7 +524,7 @@ Lemma twp_get_list E (l : list A) (n : nat) Ψ :
   Ψ (repr (l !! n)) -∗
   WP repr l !! #n @ E [{ Ψ }].
 Proof.
-rewrite /= repr_list_eq.
+rewrite /= repr_list_unseal.
 elim: n l Ψ => [|n IH] [|x l] /= Ψ; iIntros "post";
 wp_rec; wp_pures; eauto.
 rewrite (_ : (S n - 1)%Z = n); try lia.
@@ -540,7 +540,7 @@ Lemma twp_nil E Ψ :
   Ψ (repr (@nil A)) -∗
   WP Val []%V @ E [{ Ψ }].
 Proof.
-by rewrite /NILV /= repr_list_eq; iIntros "?"; wp_pures.
+by rewrite /NILV /= repr_list_unseal; iIntros "?"; wp_pures.
 Qed.
 
 Lemma wp_nil E Ψ :
@@ -552,7 +552,7 @@ Lemma twp_cons E x xs Ψ :
   Ψ (repr (x :: xs)) -∗
   WP repr x :: repr xs @ E [{ Ψ }].
 Proof.
-rewrite /= repr_list_eq; iIntros "post"; by rewrite /CONS; wp_pures.
+rewrite /= repr_list_unseal; iIntros "post"; by rewrite /CONS; wp_pures.
 Qed.
 
 Lemma wp_cons E x xs Ψ :
@@ -580,7 +580,7 @@ Lemma wp_list_match_aux E (vs : list A) evs vars k Ψ :
    else Ψ NONEV) -∗
   WP list_match_aux vars evs k @ E {{ Ψ }}.
 Proof.
-rewrite repr_list_eq.
+rewrite repr_list_unseal.
 elim: vars vs => [|var vars IH] [|v vs] /= in evs k *; iIntros (dis) "evs pS".
 - by wp_pures; wp_bind evs; iApply "evs"; wp_pures.
 - by wp_pures; wp_bind evs; iApply "evs"; wp_pures.
@@ -648,7 +648,7 @@ Lemma twp_eq_list `{EqDecision A} (f : val) (l1 l2 : list A) Φ E :
   Φ #(bool_decide (l1 = l2)) -∗
   WP eq_list f (repr l1) (repr l2) @ E [{ Φ }].
 Proof.
-rewrite repr_list_eq /=.
+rewrite repr_list_unseal /=.
 elim: l1 l2 Φ => [|x1 l1 IH] [|x2 l2] Φ wp_f /=;
 iIntros "post" ; wp_rec; wp_pures; do 1?by iApply "post".
 wp_bind (f _ _); iApply (wp_f x1 x2); first by set_solver.
@@ -746,7 +746,7 @@ Lemma twp_insert_sorted (f : val) (x : A) (l : list A) E :
     insert_sorted f (repr x) (repr l) @ E
   [[{ RET (repr (sort le (x :: l))); True }]].
 Proof.
-rewrite repr_list_eq => sorted_l wp_f Φ; iIntros "_ post".
+rewrite repr_list_unseal => sorted_l wp_f Φ; iIntros "_ post".
 iSpecialize ("post" with "[//]"); iStopProof.
 elim: l sorted_l Φ => //= [|y l IH] path_l Φ;
 iIntros "post"; wp_rec; wp_pures => //.
@@ -781,7 +781,7 @@ Lemma twp_leq_list (feq : val) (fle : val) s1 s2 E :
 Proof.
 move=> feqP fleqP Φ; iIntros "_ post".
 iSpecialize ("post" with "[//]"); iStopProof.
-move: fleqP; rewrite /= repr_list_eq.
+move: fleqP; rewrite /= repr_list_unseal.
 elim: s1 s2 => [|x1 s1 IH] [|x2 s2] fleP; iIntros "HΦ"; wp_rec; wp_pures => //.
 rewrite lexi_cons; wp_bind (feq _ _); iApply feqP => //; iIntros "_".
 case: (ltgtP x1 x2) => [l_x1x2|l_x2x1|<-] /=; wp_pures.

@@ -12,7 +12,7 @@ Unset Printing Implicit Defensive.
 
 Section Attacker.
 
-Context `{!cryptisG Σ, !heapGS Σ, !tlockG Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !tlockG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (v : val) (t : term) (e : expr).
@@ -427,7 +427,7 @@ Lemma list_pub_typeE v :
   ∃ ts : list term, ⌜v = repr ts⌝ ∗ [∗ list] t ∈ ts, pterm t.
 Proof.
 iDestruct 1 as (vs) "[-> #vsP]".
-rewrite /= !repr_list_eq.
+rewrite /= !repr_list_unseal.
 iInduction vs as [|v vs] "IH" => /=.
 - by iExists []; iSplit => //.
 - iDestruct "vsP" as "[vP vsP]".
@@ -468,7 +468,7 @@ Lemma has_type_nil Γ τ : ⊢ has_type Γ []%E (List τ).
 Proof.
 iIntros "!> %vs #vsP /=".
 wp_pures.
-by iExists []; rewrite repr_list_eq; eauto.
+by iExists []; rewrite repr_list_unseal; eauto.
 Qed.
 
 Lemma has_type_cons Γ e1 e2 τ :
@@ -481,7 +481,7 @@ wp_bind (subst_map _ e2); iApply wp_wand; first iApply "e2P" => //.
 iIntros "%v2"; iDestruct 1 as (vs') "[-> #t2P]".
 wp_bind (subst_map _ e1); iApply wp_wand; first iApply "e1P" => //.
 iIntros "%v1 #v1P"; rewrite /CONS; wp_pures.
-iModIntro; iExists (v1 :: vs'); iSplit; rewrite /= ?repr_list_eq //.
+iModIntro; iExists (v1 :: vs'); iSplit; rewrite /= ?repr_list_unseal //.
 by iSplit => //.
 Qed.
 
@@ -505,9 +505,9 @@ iIntros "%f #fP".
 wp_bind (subst_map _ e); iApply wp_wand; first iApply "eP" => //.
 iIntros "%v"; iDestruct 1 as (l) "[-> #lP]".
 case: l => [|x l] /=.
-- rewrite repr_list_eq /= /list_case; wp_pures.
+- rewrite repr_list_unseal /= /list_case; wp_pures.
   by iApply "fP" => //.
-- rewrite repr_list_eq /= /= -repr_list_eq /list_case; wp_pures.
+- rewrite repr_list_unseal /= /= -repr_list_unseal /list_case; wp_pures.
   iDestruct "lP" as "[xP lP]".
   wp_bind (g x); iApply wp_wand; first iApply "gP" => //.
   iIntros "%g' #gP'".
@@ -650,7 +650,7 @@ wp_alloc c as "cP"; wp_pures.
 wp_bind (newlock _).
 wp_pures; iApply (newlock_spec (chan_inv c) with "[cP]").
   iExists []; iSplit => //.
-  by rewrite repr_list_eq.
+  by rewrite repr_list_unseal.
 iIntros "!> %lk %γ #lkP"; rewrite /get_chan /put_chan; wp_pures.
 iModIntro; iExists _, _; do 2!iSplit => //.
 - iLöb as "IH".
@@ -659,12 +659,12 @@ iModIntro; iExists _, _; do 2!iSplit => //.
   iIntros "!> [locked inv]".
   iDestruct "inv" as (ts) "[c_ts #tsP]".
   wp_pures; wp_load; case: ts => [|t ts].
-  + rewrite repr_list_eq /=; wp_pures.
+  + rewrite repr_list_unseal /=; wp_pures.
     wp_bind (release _); iApply (release_spec with "[locked c_ts]").
-      by iSplit => //; iFrame; iExists []; rewrite /= repr_list_eq /=; iFrame.
+      by iSplit => //; iFrame; iExists []; rewrite /= repr_list_unseal /=; iFrame.
     iIntros "!> _"; wp_seq.
     by iApply "IH".
-  + rewrite repr_list_eq /= -repr_list_eq.
+  + rewrite repr_list_unseal /= -repr_list_unseal.
     iDestruct "tsP" as "[tP tsP]".
     wp_pures; wp_store; wp_bind (release _).
     iApply (release_spec with "[locked c_ts]").
@@ -676,7 +676,7 @@ iModIntro; iExists _, _; do 2!iSplit => //.
   wp_pures; wp_load; wp_store.
   iApply (release_spec with "[locked cP]").
     iSplit => //; iFrame; iExists (t :: ts).
-    by rewrite repr_list_eq; iFrame => //=; eauto.
+    by rewrite repr_list_unseal; iFrame => //=; eauto.
   by [].
 Qed.
 

@@ -105,7 +105,7 @@ Lemma twp_eq_pre_term_aux E (pt1 pt2 : PreTerm.pre_term) :
   ⊢ WP (eq_term (repr pt1) (repr pt2)) @ E
        [{ v, ⌜v = #(bool_decide (pt1 = pt2))⌝ }].
 Proof.
-rewrite /= val_of_pre_term_eq.
+rewrite /= val_of_pre_term_unseal.
 elim: pt1 pt2
   => [n1|t11 IH1 t12 IH2|l1|kt1 t1 IH1|t11 IH1 t12 IH2|t1 IH|t1 IHt1 ts1 IHts1];
 case=> [n2|t21 t22|l2|kt2 t2|t21 t22|t2|t2 ts2] /=;
@@ -143,7 +143,7 @@ wp_rec; wp_pures=> //.
 - wp_bind (eq_term _ _); iApply twp_wand; first iApply IHt1.
   iIntros (?) "->"; case: bool_decide_reflect=> e1; wp_pures; last first.
     rewrite bool_decide_false //; congruence.
-  rewrite -val_of_pre_term_eq -!repr_list_val.
+  rewrite -val_of_pre_term_unseal -!repr_list_val.
   iApply (@twp_eq_list PreTerm.pre_term); last first.
     iPureIntro; congr (# (LitBool _)); apply: bool_decide_ext.
     rewrite e1; split; congruence.
@@ -153,7 +153,7 @@ wp_rec; wp_pures=> //.
   case=> IHx1 /IH IHts1 x1' x2' Ψ.
   rewrite elem_of_cons; case=> [->|x1'_in]; iIntros "post"; last first.
     by iApply IHts1.
-  rewrite -/val_of_pre_term val_of_pre_term_eq.
+  rewrite -/val_of_pre_term val_of_pre_term_unseal.
   iApply twp_wand; first iApply IHx1; by iIntros (?) "->".
 Qed.
 
@@ -198,14 +198,14 @@ Lemma twp_leq_pre_term E (pt1 pt2 : PreTerm.pre_term) Ψ :
   Ψ #(pt1 <= pt2)%O -∗
   WP (leq_term (repr pt1) (repr pt2)) @ E [{ Ψ }].
 Proof.
-rewrite /= val_of_pre_term_eq.
+rewrite /= val_of_pre_term_unseal.
 elim: pt1 pt2 Ψ
   => [n1|t11 IH1 t12 IH2|l1|kt1 t1 IH1|t11 IH1 t12 IH2|t1 IH|t1 IHt1 ts1 IHts1];
 case=> [n2|t21 t22|l2|kt2 t2|t21 t22|t2|t2 ts2] /= Ψ;
 iIntros "post"; wp_rec; wp_pures; try by iApply "post".
 - rewrite PreTerm.leqE /= (_ : (_ <= _)%O = bool_decide (n1 ≤ n2)%Z) //.
   exact/(sameP (Z.leb_spec0 _ _))/bool_decide_reflect.
-- rewrite -{1 2}val_of_pre_term_eq; wp_bind (eq_term _ _).
+- rewrite -{1 2}val_of_pre_term_unseal; wp_bind (eq_term _ _).
   rewrite PreTerm.leqE /=; iApply twp_eq_pre_term.
   rewrite decide_eq_op; case: eqP => [->|_]; wp_pures.
     by iApply IH2.
@@ -219,21 +219,21 @@ iIntros "post"; wp_rec; wp_pures; try by iApply "post".
   wp_pures.
   by case: kt1 kt2 {neq} => [] [].
 - rewrite PreTerm.leqE /=; wp_bind (eq_term _ _).
-  rewrite -{1 2}val_of_pre_term_eq; iApply twp_eq_pre_term.
+  rewrite -{1 2}val_of_pre_term_unseal; iApply twp_eq_pre_term.
   rewrite decide_eq_op; case: eqP => [->|neq]; wp_pures.
     by iApply IH2.
   by iApply IH1.
 - rewrite PreTerm.leqE /=; by iApply IH.
 - rewrite PreTerm.leqE /=; wp_bind (eq_term _ _).
-  rewrite -{1 2}val_of_pre_term_eq.
+  rewrite -{1 2}val_of_pre_term_unseal.
   iApply twp_eq_pre_term; rewrite decide_eq_op.
   case: eqP=> [->|neq]; wp_pures; last by iApply IHt1.
-  rewrite -!repr_list_val -val_of_pre_term_eq; iApply twp_leq_list => //.
+  rewrite -!repr_list_val -val_of_pre_term_unseal; iApply twp_leq_list => //.
   + move=> pt1 pt2 Ψ'; iIntros "_ post".
     by iApply twp_eq_pre_term; rewrite decide_eq_op; iApply "post".
   + move/foldr_in in IHts1.
     move=> ????; iIntros "_ post".
-    by rewrite /= val_of_pre_term_eq; iApply IHts1 => //; iApply "post".
+    by rewrite /= val_of_pre_term_unseal; iApply IHts1 => //; iApply "post".
   + by iIntros "_".
 Qed.
 
@@ -249,19 +249,19 @@ Lemma twp_texp E t1 t2 Ψ :
   Ψ (Spec.texp t1 t2) -∗
   WP texp t1 t2 @ E [{ Ψ }].
 Proof.
-iIntros "post"; rewrite /texp /= val_of_term_eq.
+iIntros "post"; rewrite /texp /= val_of_term_unseal.
 wp_pures.
 case: t1; try by move=> *; wp_pures.
 move=> /= pt pts wf; wp_pures.
 case/andP: {-}(wf) => wf_pts sorted_pts.
 wp_bind (insert_sorted _ _ _).
-rewrite -val_of_term_eq -[val_of_term t2]val_of_pre_term_unfold.
+rewrite -val_of_term_unseal -[val_of_term t2]val_of_pre_term_unfold.
 iApply (@twp_insert_sorted _ PreTerm.pre_term_orderType) => //.
   move=> * /=; iIntros "_ post".
   by iApply twp_leq_pre_term; iApply "post".
 iIntros "_"; wp_pures.
 rewrite -val_of_pre_term_unfold /Spec.texp /= unfold_TExp /=.
-rewrite val_of_pre_term_eq /= -val_of_pre_term_eq val_of_pre_term_unfold.
+rewrite val_of_pre_term_unseal /= -val_of_pre_term_unseal val_of_pre_term_unfold.
 rewrite -repr_list_val -[ @List.map ]/@map -map_comp map_id_in //.
 by move=> {}pt /(allP wf_pts) wf_pt; rewrite /= fold_termK.
 Qed.

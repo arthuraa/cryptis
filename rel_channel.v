@@ -15,7 +15,7 @@ Section RelChannel.
 
 Notation rel_channelG Σ := (inG Σ (authR (max_prefix_listUR termO))).
 
-Context `{!cryptisG Σ, !heapGS Σ, !sessionG Σ, !rel_channelG Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !sessionGS Σ, !rel_channelG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -128,7 +128,7 @@ iDestruct "H" as "(#mP & s_m & #p_m)".
 wp_pures.
 iDestruct "mP" as "(%ts' & %m' & %γ' & %e & k_γ' & frag')".
 iPoseProof (term_meta_agree with "k_γ k_γ'") as "{k_γ'} <-".
-case/Spec.of_list_inj: e => {m'} /Z_of_nat_inj e <-.
+case/Spec.of_list_inj: e => {m'} /Nat2Z.inj e <-.
 iPoseProof (own_valid_2 with "frag frag'") as "%valid"; move: valid.
 rewrite -auth_frag_op auth_frag_valid to_max_prefix_list_op_valid_L.
 case => prefix; last first.

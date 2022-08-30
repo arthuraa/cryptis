@@ -20,7 +20,7 @@ A --> B: {nA, nB, vk(B)}_sk(A)
 
 Section CR.
 
-Context `{!heapGS Σ, !cryptisG Σ, !sessionG Σ}.
+Context `{!heapGS Σ, !cryptisGS Σ, !sessionGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -50,10 +50,10 @@ Definition cr_ctx : iProp :=
 Lemma cr_alloc E1 E2 E' :
   ↑N ⊆ E1 →
   ↑N ⊆ E2 →
-  nown_token session_name E1 -∗
+  session_token E1 -∗
   enc_pred_token E2 ={E'}=∗
   cr_ctx ∗
-  nown_token session_name (E1 ∖ ↑N) ∗
+  session_token (E1 ∖ ↑N) ∗
   enc_pred_token (E2 ∖ ↑N).
 Proof.
 iIntros (sub1 sub2) "nown_token token".

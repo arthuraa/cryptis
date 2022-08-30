@@ -14,7 +14,7 @@ Unset Printing Implicit Defensive.
 
 Section Defs.
 
-Context `{!cryptisG Σ, !heapGS Σ, !sessionG Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !sessionGS Σ}.
 Notation iProp := (iProp Σ).
 
 Class storeG := StoreG {

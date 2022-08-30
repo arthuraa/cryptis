@@ -14,7 +14,7 @@ Unset Printing Implicit Defensive.
 
 Section Verif.
 
-Context `{!cryptisG Σ, !heapGS Σ, !sessionG Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !sessionGS Σ}.
 Notation iProp := (iProp Σ).
 
 Context `{!storeG Σ}.

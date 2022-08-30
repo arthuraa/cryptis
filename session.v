@@ -58,18 +58,30 @@ Definition to_session_map SM := session_status_both <$> SM.
 
 Definition sessionR := authR session_mapUR.
 
-Class sessionG := SessionG {
-  session_name : gname;
-  session_inG :> inG Σ sessionR;
+Class sessionGpreS := {
+  sessionGpreS_sess : inG Σ sessionR;
+  sessionGpreS_nown : nownGpreS Σ;
 }.
 
-Class sessionPreG := {
-  session_preG :> inG Σ sessionR;
+Local Existing Instance sessionGpreS_sess.
+Local Existing Instance sessionGpreS_nown.
+
+Class sessionGS := SessionGS {
+  session_inG : inG Σ sessionR;
+  session_nownGS : nownGS Σ;
 }.
 
-Context `{!sessionG, Countable X}.
+Local Existing Instances session_inG session_nownGS.
+
+Context `{!sessionGS, Countable X}.
 
 Context (N : namespace) (P : role → term → term → X → iProp).
+
+Definition session_token_def E := nown_token E.
+Definition session_token_aux : seal session_token_def. by eexists. Qed.
+Definition session_token := unseal session_token_aux.
+Lemma session_token_unseal : session_token = session_token_def.
+Proof. exact: seal_eq. Qed.
 
 Let sinv rl tA tB x :=
   P rl (if rl is Init then tA else tB)
@@ -82,11 +94,11 @@ Lemma session_status_frag_valid p : ✓ session_status_frag p.
 Proof. apply/auth_frag_valid; by case: p. Qed.
 
 Definition session_auth rl t (k : term) (x : X) o : iProp :=
-  nown session_name N (◯ {[t := session_status_auth o]}) ∧
+  nown N (◯ {[t := session_status_auth o]}) ∧
   nonce_meta t N (x, rl, k).
 
 Definition session_frag rl t (k : term) (x : X) o : iProp :=
-  nown session_name N (◯ {[t := session_status_frag o]}) ∧
+  nown N (◯ {[t := session_status_frag o]}) ∧
   nonce_meta t N (x, rl, k).
 
 Global Instance session_frag_persistent rl t k x o :
@@ -136,15 +148,15 @@ by iDestruct (term_meta_meta_token with "fresh not_fresh") as "[]".
 Qed.
 
 Definition session_ctx : iProp :=
-  inv N (∃ SM, nown session_name N (● to_session_map SM) ∗ session_map_inv SM).
+  inv N (∃ SM, nown N (● to_session_map SM) ∗ session_map_inv SM).
 
 Lemma session_ctx_acc E a :
   ↑N ⊆ E →
-  session_ctx ∗ nown session_name N (◯ a) ={E,E ∖ ↑N}=∗ ∃ SM,
+  session_ctx ∗ nown N (◯ a) ={E,E ∖ ↑N}=∗ ∃ SM,
     ⌜a ≼ to_session_map SM⌝ ∗ ▷ session_map_inv SM ∗ ∀ SM' b,
     ⌜(to_session_map SM, a) ~l~> (to_session_map SM', b)⌝ ∗
     ▷ session_map_inv SM' ={E∖↑N,E}=∗
-    nown session_name N (◯ b).
+    nown N (◯ b).
 Proof.
 iIntros "%sub [ctx own_f]".
 iMod (inv_acc with "ctx") as "[ctx close]" => //.
@@ -167,7 +179,7 @@ Lemma session_ctx_acc0 E :
     ▷ session_map_inv SM ∗ ∀ SM' b,
     ⌜(to_session_map SM, ∅) ~l~> (to_session_map SM', b)⌝ ∗
     ▷ session_map_inv SM' ={E∖↑N,E}=∗
-    nown session_name N (◯ b).
+    nown N (◯ b).
 Proof.
 iIntros "%sub ctx".
 iMod (inv_acc with "ctx") as "[ctx close]" => //.
@@ -183,17 +195,29 @@ Qed.
 
 Lemma session_alloc E E' :
   ↑N ⊆ E →
-  nown_token session_name E ={E'}=∗
+  session_token E ={E'}=∗
   session_ctx ∗
-  nown_token session_name (E ∖ ↑N).
+  session_token (E ∖ ↑N).
 Proof.
-iIntros (?) "token".
-iMod (nown_alloc session_name _ (● (to_session_map ∅)) with "token")
+rewrite session_token_unseal. iIntros (?) "token".
+iMod (nown_alloc _ (● (to_session_map ∅)) with "token")
   as "[own token]"; eauto.
   by rewrite auth_auth_valid.
 iFrame. iApply inv_alloc.
 iModIntro; iExists ∅; iFrame.
 by rewrite /session_map_inv big_sepM_empty.
+Qed.
+
+Lemma session_token_drop E E' :
+  E ⊆ E' →
+  session_token E' -∗ session_token E.
+Proof. rewrite session_token_unseal. apply nown_token_drop. Qed.
+
+Lemma session_token_difference E E' :
+  E ⊆ E' →
+  session_token E' ⊣⊢ session_token E ∗ session_token (E' ∖ E).
+Proof.
+by move=> ?; rewrite session_token_unseal -nown_token_difference.
 Qed.
 
 Lemma session_status_auth_included p1 p2 :
@@ -289,7 +313,7 @@ rewrite {1}/session_map_inv (big_sepM_delete _ SM s) //.
 iDestruct "inv" as "[inv_s inv]".
 have ? : Inhabited X by exact: populate x.
 iDestruct "inv_s" as (k rl' x') "[#not_fresh inv_s]".
-iAssert (▷ (sinv (swap_role rl) s t x ∗ nown session_name N (◯ f1)))%I
+iAssert (▷ (sinv (swap_role rl) s t x ∗ nown N (◯ f1)))%I
     with "[sessA inv_s]" as "(res & >sessA)".
   iModIntro.
   iPoseProof (term_meta_agree with "metaB not_fresh") as "%e".
@@ -407,25 +431,29 @@ Qed.
 
 End Session.
 
-Definition sessionΣ : gFunctor :=
-  GFunctor sessionR.
+Definition sessionΣ : gFunctors :=
+  #[GFunctor sessionR; nownΣ].
 
-Arguments sessionG Σ : clear implicits.
-Arguments sessionPreG Σ : clear implicits.
+Arguments sessionGS Σ : clear implicits.
+Arguments sessionGpreS Σ : clear implicits.
 Arguments session_alloc {Σ _ _} {X _ _} N P.
+Arguments session_token_difference {Σ _} E E'.
 Arguments session_begin {Σ _ _ _ _ _}  {N P} E rl tI tR.
 Arguments session_ctx {Σ _ _} {_ _ _} N P.
 Arguments session {Σ _ _} {_ _ _} N rl _ _.
 Arguments waiting_for_peer {Σ _ _} {_ _ _} N P rl tI tR x.
 
 #[global]
-Instance subG_sessionΣ {Σ} : subG sessionΣ Σ → sessionPreG Σ.
+Instance subG_sessionΣ {Σ} : subG sessionΣ Σ → sessionGpreS Σ.
 Proof. solve_inG. Qed.
 
-Lemma sessionG_alloc `{!heapGS Σ} :
-  sessionPreG Σ →
-  ⊢ |==> ∃ (H : sessionG Σ), nown_token session_name ⊤.
+Local Existing Instance sessionGpreS_sess.
+Local Existing Instance sessionGpreS_nown.
+
+Lemma sessionGS_alloc `{!heapGS Σ} :
+  sessionGpreS Σ →
+  ⊢ |==> ∃ (H : sessionGS Σ), session_token ⊤.
 Proof.
 iIntros (?). iMod nown_token_alloc as "(%γ & ?)".
-iExists (SessionG γ _). eauto.
+iExists (SessionGS _ _). rewrite session_token_unseal. eauto.
 Qed.

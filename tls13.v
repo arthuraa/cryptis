@@ -13,7 +13,7 @@ Module Keys.
 
 Section Keys.
 
-Context `{!heapGS Σ, cryptisG Σ}.
+Context `{!heapGS Σ, cryptisGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -181,7 +181,7 @@ End I.
 
 Section Proofs.
 
-Context `{!heapGS Σ, cryptisG Σ}.
+Context `{!heapGS Σ, cryptisGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -488,7 +488,7 @@ End I.
 
 Section Proofs.
 
-Context `{!heapGS Σ, cryptisG Σ}.
+Context `{!heapGS Σ, cryptisGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -980,7 +980,7 @@ End I.
 
 Section Proofs.
 
-Context `{!heapGS Σ, cryptisG Σ}.
+Context `{!heapGS Σ, cryptisGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -1456,7 +1456,7 @@ End I.
 
 Section Proofs.
 
-Context `{!heapGS Σ, cryptisG Σ}.
+Context `{!heapGS Σ, cryptisGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -1742,7 +1742,7 @@ End I.
 
 Section Proofs.
 
-Context `{!heapGS Σ, cryptisG Σ}.
+Context `{!heapGS Σ, cryptisGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -1832,7 +1832,7 @@ wp_bind (I.verify _ _ _ _); iApply wp_verify.
 by case: verify; wp_pures.
 Qed.
 
-Context `{!sessionG Σ}.
+Context `{!sessionGS Σ}.
 Variable (N : namespace) (P : role → term → term → Meth.t * term * term → iProp).
 
 Definition hello_pred (k t : term) : iProp := ∃ sp,
@@ -2033,8 +2033,8 @@ Coercion SParams.term_of : SParams.t >-> term.
 
 Section Protocol.
 
-Context `{!heapGS Σ, !cryptisG Σ}.
-Context `{S : !sessionG Σ}.
+Context `{!heapGS Σ, !cryptisGS Σ}.
+Context `{S : !sessionGS Σ}.
 Notation iProp := (iProp Σ).
 Variable N : namespace.
 
@@ -2081,12 +2081,12 @@ Lemma tls_ctx_alloc E1 E2 E3 E4 E' :
   ↑N ⊆ E2 →
   ↑N ⊆ E3 →
   ↑N ⊆ E4 →
-  nown_token session_name E1 -∗
+  session_token E1 -∗
   enc_pred_token E2 -∗
   hash_pred_token E3 -∗
   key_pred_token E4 ={E'}=∗
   tls_ctx ∗
-  nown_token session_name (E1 ∖ ↑N) ∗
+  session_token (E1 ∖ ↑N) ∗
   enc_pred_token (E2 ∖ ↑N) ∗
   hash_pred_token (E3 ∖ ↑N) ∗
   key_pred_token (E4 ∖ ↑N).
@@ -2106,7 +2106,7 @@ iModIntro.
 iSplit.
   do !iSplit => //.
 iSplitL "nown_tok".
-  iApply nown_token_drop; last eauto; solve_ndisj.
+  iApply session_token_drop; last eauto; solve_ndisj.
 iSplitL "enc_tok".
   iApply enc_pred_token_drop; last eauto; solve_ndisj.
 iSplitL "hash_tok".

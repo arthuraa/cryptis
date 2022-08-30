@@ -12,7 +12,7 @@ Unset Printing Implicit Defensive.
 
 Section PK.
 
-Context `{!heapGS Σ, !cryptisG Σ, !sessionG Σ}.
+Context `{!heapGS Σ, !cryptisGS Σ, !sessionGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (rl : role) (t kI kR nI nR sI sR kS : term).
@@ -221,6 +221,9 @@ Definition init_finished kR sR : iProp :=
 
 Definition msg3_pred := init_finished.
 
+(* TODO: Avoid exposing these instances. *)
+Local Existing Instances cryptis_inG cryptisGpreS_maps.
+
 Definition session_key_meta_token rl kI kR kS E : iProp :=
   ∃ nI nR γ,
     ⌜kS = mk_session_key Init nI (mk_key_share nR)⌝ ∗
@@ -342,14 +345,14 @@ Definition pk_auth_ctx : iProp :=
 Lemma pk_auth_alloc E1 E2 E' :
   ↑N ⊆ E1 →
   ↑N ⊆ E2 →
-  nown_token session_name E1 -∗
+  session_token E1 -∗
   enc_pred_token E2 ={E'}=∗
   pk_auth_ctx ∗
-  nown_token session_name (E1 ∖ ↑N) ∗
+  session_token (E1 ∖ ↑N) ∗
   enc_pred_token (E2 ∖ ↑N).
 Proof.
 iIntros (sub1 sub2) "t1 t2".
-rewrite (nown_token_difference (↑N)) //. iDestruct "t1" as "[t1 t1']".
+rewrite (session_token_difference (↑N) E1) //. iDestruct "t1" as "[t1 t1']".
 iMod (session_alloc (N.@"session") session_ress with "t1")
   as "[#H0 t1]"; try solve_ndisj.
 rewrite (enc_pred_token_difference (↑N)) //.

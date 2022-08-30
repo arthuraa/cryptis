@@ -12,7 +12,7 @@ Unset Printing Implicit Defensive.
 
 Section NSL.
 
-Context `{heap : !heapGS Σ, cryptis : !cryptisG Σ, sess : !session.sessionG Σ}.
+Context `{heap : !heapGS Σ, cryptis : !cryptisGS Σ, sess : !sessionGS Σ}.
 Notation iProp := (iProp Σ).
 Implicit Types t kI kR nI nR : term.
 

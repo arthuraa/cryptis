@@ -3,7 +3,7 @@ From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap list reservation_map excl.
 From iris.base_logic.lib Require Import saved_prop invariants.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib version term nown.
+From cryptis Require Import lib version term.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -13,31 +13,38 @@ Definition cryptisN := nroot.@"cryptis".
 
 Section Cryptis.
 
-Class cryptisG Σ := CryptisG {
-  cryptis_inG       :> savedPredG Σ term;
-  cryptis_key_inG   :> savedPredG Σ (key_type * term);
-  cryptis_enc_inG   :> savedPredG Σ (term * term);
-  cryptis_hon_inG   :> versionG Σ (gsetO term);
+Class cryptisGpreS Σ := CryptisGPreS {
+  cryptisGpreS_nonce : savedPredG Σ term;
+  cryptisGpreS_key   : savedPredG Σ (key_type * term);
+  cryptisGpreS_enc   : savedPredG Σ (term * term);
+  cryptisGpreS_hon   : versionG Σ (gsetO term);
+  cryptisGpreS_maps  : inG Σ (reservation_mapR (agreeR positiveO));
+}.
+
+Local Existing Instance cryptisGpreS_nonce.
+Local Existing Instance cryptisGpreS_key.
+Local Existing Instance cryptisGpreS_enc.
+Local Existing Instance cryptisGpreS_hon.
+Local Existing Instance cryptisGpreS_maps.
+
+Class cryptisGS Σ := CryptisGS {
+  cryptis_inG : cryptisGpreS Σ;
   cryptis_key_name  : gname;
   cryptis_hash_name : gname;
   cryptis_enc_name  : gname;
   cryptis_hon_name  : gname;
 }.
 
+Local Existing Instance cryptis_inG.
+
 Definition cryptisΣ : gFunctors :=
   #[savedPredΣ term;
     savedPredΣ (key_type * term);
     savedPredΣ (term * term);
-    versionΣ (gsetO term)].
+    versionΣ (gsetO term);
+    GFunctor (reservation_mapR (agreeR positiveO))].
 
-Class cryptisPreG Σ := CryptisPreG {
-  cryptis_preG :> savedPredG Σ term;
-  cryptis_key_preG :> savedPredG Σ (key_type * term);
-  cryptis_enc_preG :> savedPredG Σ (term * term);
-  cryptis_hon_preG :> versionG Σ (gsetO term);
-}.
-
-Global Instance subG_cryptisPreG Σ : subG cryptisΣ Σ → cryptisPreG Σ.
+Global Instance subG_cryptisGpreS Σ : subG cryptisΣ Σ → cryptisGpreS Σ.
 Proof. solve_inG. Qed.
 
 Context (Σ : gFunctors).
@@ -49,10 +56,12 @@ Implicit Types a : loc.
 Implicit Types γ : gname.
 Implicit Types N : namespace.
 
-Context `{!heapGS Σ, !cryptisG Σ}.
+Context `{!heapGS Σ, !cryptisGS Σ}.
 
 Definition pnonce a : iProp :=
-  ∃ γ P, meta a (nroot.@"nonce") γ ∧ saved_pred_own γ P ∧ ▷ □ P (TNonce a).
+  ∃ γ P, meta a (nroot.@"nonce") γ ∧
+         saved_pred_own γ DfracDiscarded P ∧
+         ▷ □ P (TNonce a).
 
 Global Instance Persistent_pnonce a : Persistent (pnonce a).
 Proof. apply _. Qed.
@@ -63,7 +72,9 @@ Definition snonce a : iProp :=
 Definition dh_pred (t t' : term) : iProp :=
   match t with
   | TNonce a =>
-    ∃ γ φ, meta a (nroot.@"dh") γ ∧ saved_pred_own γ φ ∧ ▷ □ φ t'
+    ∃ γ φ, meta a (nroot.@"dh") γ ∧
+           saved_pred_own γ DfracDiscarded φ ∧
+           ▷ □ φ t'
   | _ => False
   end.
 
@@ -72,7 +83,7 @@ Proof. case: t => *; apply _. Qed.
 
 Definition enc_pred N Φ : iProp :=
   ∃ γ, own cryptis_enc_name (namespace_map_data N (to_agree γ)) ∧
-       saved_pred_own γ (fun '(k, t) => Φ k t).
+       saved_pred_own γ DfracDiscarded (fun '(k, t) => Φ k t).
 
 Definition enc_pred_token E :=
   own cryptis_enc_name (reservation_map_token E).
@@ -108,7 +119,7 @@ iDestruct 1 as (γm2) "[#meta2 #own2]".
 iPoseProof (own_valid_2 with "meta1 meta2") as "%valid".
 move: valid; rewrite -reservation_map_data_op reservation_map_data_valid.
 move=> /to_agree_op_inv_L ->.
-by iApply (saved_pred_agree _ _ _ (k, t) with "own1 own2").
+by iApply (saved_pred_agree _ _ _ _ _ (k, t) with "own1 own2").
 Qed.
 
 Lemma enc_pred_set E (N : namespace) Φ :
@@ -118,7 +129,7 @@ Lemma enc_pred_set E (N : namespace) Φ :
   enc_pred_token (E ∖ ↑N).
 Proof.
 iIntros (?) "token".
-iMod (saved_pred_alloc (λ '(k, t), Φ k t)) as (γ) "own".
+iMod (saved_pred_alloc (λ '(k, t), Φ k t) DfracDiscarded) as (γ) "own" => //.
 rewrite (@enc_pred_token_difference (↑N)) //.
 iDestruct "token" as "[token ?]".
 iMod (own_update with "token").
@@ -145,7 +156,7 @@ Qed.
 
 Definition key_pred N (φ : key_type → term → iProp) : iProp :=
   ∃ γ, own cryptis_key_name (namespace_map_data N (to_agree γ)) ∧
-       saved_pred_own γ (λ '(kt, t), φ kt t).
+       saved_pred_own γ DfracDiscarded (λ '(kt, t), φ kt t).
 
 Definition key_pred_token E :=
   own cryptis_key_name (reservation_map_token E).
@@ -181,7 +192,7 @@ iDestruct 1 as (γm2) "[#meta2 #own2]".
 iPoseProof (own_valid_2 with "meta1 meta2") as "%valid".
 move: valid; rewrite -reservation_map_data_op reservation_map_data_valid.
 move=> /to_agree_op_inv_L ->.
-by iApply (saved_pred_agree _ _ _ (kt, t) with "own1 own2").
+by iApply (saved_pred_agree _ _ _ _ _ (kt, t) with "own1 own2").
 Qed.
 
 Lemma key_pred_set E N P :
@@ -193,7 +204,7 @@ Proof.
 iIntros (?) "token".
 rewrite (@key_pred_token_difference (↑N)) //.
 iDestruct "token" as "[token ?]".
-iMod (saved_pred_alloc (λ '(kt, t), P kt t)) as (γ) "own".
+iMod (saved_pred_alloc (λ '(kt, t), P kt t) DfracDiscarded) as (γ) "own" => //.
 iMod (own_update with "token").
   by eapply (namespace_map_alloc_update _ _ (to_agree γ)) => //.
 by iModIntro; iFrame; iExists γ; iSplit.
@@ -218,7 +229,7 @@ Qed.
 
 Definition hash_pred N (P : term → iProp) : iProp :=
   ∃ γ, own cryptis_hash_name (namespace_map_data N (to_agree γ)) ∧
-       saved_pred_own γ P.
+       saved_pred_own γ DfracDiscarded P.
 
 Definition hash_pred_token E :=
   own cryptis_hash_name (reservation_map_token E).
@@ -254,7 +265,7 @@ iDestruct 1 as (γm2) "[#meta2 #own2]".
 iPoseProof (own_valid_2 with "meta1 meta2") as "%valid".
 move: valid; rewrite -reservation_map_data_op reservation_map_data_valid.
 move=> /to_agree_op_inv_L ->.
-by iApply (saved_pred_agree _ _ _ t with "own1 own2").
+by iApply (saved_pred_agree _ _ _ _ _ t with "own1 own2").
 Qed.
 
 Lemma hash_pred_set E N P :
@@ -266,7 +277,7 @@ Proof.
 iIntros (?) "token".
 rewrite (@hash_pred_token_difference (↑N)) //.
 iDestruct "token" as "[token ?]".
-iMod (saved_pred_alloc P) as (γ) "own".
+iMod (saved_pred_alloc P DfracDiscarded) as (γ) "own" => //.
 iMod (own_update with "token").
   by eapply (namespace_map_alloc_update _ _ (to_agree γ)) => //.
 by iModIntro; iFrame; iExists γ; iSplit.
@@ -422,30 +433,29 @@ Qed.
 Lemma pterm_sterm t : pterm t -∗ sterm t.
 Proof. rewrite pterm_eq; by iIntros "[??]". Qed.
 
-
 Lemma sterm_TInt n : sterm (TInt n) ⊣⊢ True.
-Proof. by rewrite unlock nonces_of_term_eq /= big_sepS_empty. Qed.
+Proof. by rewrite unlock nonces_of_term_unseal /= big_sepS_empty. Qed.
 
 Lemma sterm_TPair t1 t2 : sterm (TPair t1 t2) ⊣⊢ sterm t1 ∧ sterm t2.
 Proof.
-by rewrite unlock nonces_of_term_eq /= !big_sepS_union_pers.
+by rewrite unlock nonces_of_term_unseal /= !big_sepS_union_pers.
 Qed.
 
 Lemma sterm_TNonce a : sterm (TNonce a) ⊣⊢ snonce a.
 Proof.
-by rewrite unlock nonces_of_term_eq /= big_sepS_singleton.
+by rewrite unlock nonces_of_term_unseal /= big_sepS_singleton.
 Qed.
 
 Lemma sterm_TKey kt t : sterm (TKey kt t) ⊣⊢ sterm t.
-Proof. by rewrite unlock nonces_of_term_eq /=. Qed.
+Proof. by rewrite unlock nonces_of_term_unseal /=. Qed.
 
 Lemma sterm_TEnc k t : sterm (TEnc k t) ⊣⊢ sterm k ∧ sterm t.
 Proof.
-by rewrite unlock nonces_of_term_eq /= !big_sepS_union_pers.
+by rewrite unlock nonces_of_term_unseal /= !big_sepS_union_pers.
 Qed.
 
 Lemma sterm_THash t : sterm (THash t) ⊣⊢ sterm t.
-Proof. by rewrite unlock nonces_of_term_eq /=. Qed.
+Proof. by rewrite unlock nonces_of_term_unseal /=. Qed.
 
 Lemma sterm_TExp t ts : sterm (TExp t ts) ⊣⊢ sterm t ∧ [∗ list] t' ∈ ts, sterm t'.
 Proof.
@@ -528,7 +538,7 @@ apply: (anti_symm _).
     iExists {[t]}; iSplit; first by iPureIntro; econstructor.
     by rewrite big_sepS_singleton.
   rewrite pterm_eq; iSplit; eauto.
-  by rewrite unlock nonces_of_term_eq /=.
+  by rewrite unlock nonces_of_term_unseal /=.
 Qed.
 
 Lemma pterm_TEnc k t :
@@ -569,7 +579,7 @@ apply: (anti_symm _).
     iExists {[t]}; rewrite big_sepS_singleton; iSplit => //.
     iPureIntro; by econstructor.
   rewrite pterm_eq unlock; iSplit.
-    by rewrite nonces_of_term_eq //=.
+    by rewrite nonces_of_term_unseal //=.
   by eauto.
 Qed.
 
@@ -699,7 +709,7 @@ Lemma pterm_of_list ts :
   pterm (Spec.of_list ts) ⊣⊢
   [∗ list] t ∈ ts, pterm t.
 Proof.
-rewrite Spec.of_list_eq.
+rewrite Spec.of_list_unseal.
 elim: ts => [|t ts IH]; first by rewrite pterm_TInt.
 by rewrite pterm_TPair /= IH bi.persistent_and_sep.
 Qed.
@@ -708,19 +718,19 @@ Lemma sterm_of_list ts :
   sterm (Spec.of_list ts) ⊣⊢
   [∗ list] t ∈ ts, sterm t.
 Proof.
-rewrite Spec.of_list_eq.
+rewrite Spec.of_list_unseal.
 elim: ts => [|t ts IH]; first by rewrite sterm_TInt.
 by rewrite sterm_TPair /= IH bi.persistent_and_sep.
 Qed.
 
 Lemma pterm_tag N t : pterm (Spec.tag N t) ⊣⊢ pterm t.
 Proof.
-by rewrite Spec.tag_eq pterm_TPair pterm_TInt bi.emp_and.
+by rewrite Spec.tag_unseal pterm_TPair pterm_TInt bi.emp_and.
 Qed.
 
 Lemma sterm_tag N t : sterm (Spec.tag N t) ⊣⊢ sterm t.
 Proof.
-by rewrite Spec.tag_eq sterm_TPair sterm_TInt bi.emp_and.
+by rewrite Spec.tag_unseal sterm_TPair sterm_TInt bi.emp_and.
 Qed.
 
 Lemma pterm_TEncE N Φ k t :
@@ -850,6 +860,71 @@ Qed.
 
 End TermMeta.
 
+Lemma nonce_alloc P Q a a_meta :
+  meta_token a ⊤ -∗
+  meta_token a_meta ⊤ ==∗
+  sterm (TNonce a) ∗
+  □ (pterm (TNonce a) ↔ ▷ □ P (TNonce a)) ∗
+  □ (∀ t, dh_pred (TNonce a) t ↔ ▷ □ Q t) ∗
+  nonce_meta_token (TNonce a) ⊤.
+Proof.
+iIntros "token token'".
+iMod (saved_pred_alloc P DfracDiscarded) as (γP) "#own_P" => //.
+iMod (saved_pred_alloc Q DfracDiscarded) as (γQ) "#own_Q" => //.
+rewrite (meta_token_difference a (↑nroot.@"nonce")) //.
+iDestruct "token" as "[nonce token]".
+iMod (meta_set _ _ γP with "nonce") as "#nonce"; eauto.
+rewrite (meta_token_difference a (↑nroot.@"dh")); last solve_ndisj.
+iDestruct "token" as "[dh token]".
+iMod (meta_set _ _ γQ with "dh") as "#dh"; eauto.
+iMod (meta_set _ _ a_meta (nroot.@"meta") with "token") as "#meta"; eauto.
+  solve_ndisj.
+iSplitR.
+  rewrite sterm_TNonce; iExists _; eauto.
+iSplitR.
+  rewrite pterm_TNonce; do 2!iModIntro; iSplit.
+  + iDestruct 1 as (γP' P') "(#meta_γP' & #own_P' & ?)".
+    iPoseProof (meta_agree with "nonce meta_γP'") as "->".
+    iPoseProof (saved_pred_agree _ _ _ _ _ (TNonce a) with "own_P own_P'") as "e".
+    by iModIntro; iRewrite "e".
+  + iIntros "#?"; iExists γP, P; eauto.
+iSplitR.
+  iIntros "!> !> %t"; iSplit.
+  + iDestruct 1 as (γQ' Q') "(#meta_γQ' & #own_Q' & ?)".
+    iPoseProof (meta_agree with "dh meta_γQ'") as "->".
+    iPoseProof (saved_pred_agree _ _ _ _ _ t with "own_Q own_Q'") as "e".
+    by iModIntro; iRewrite "e".
+  + by iIntros "#?"; iExists _, _; eauto.
+iModIntro. iExists a_meta. by eauto.
+Qed.
+
+Definition unknown γ : iProp :=
+  own γ (reservation_map_token ⊤).
+
+Definition known γ : iProp :=
+  own γ (namespace_map_data nroot (to_agree 1%positive)).
+
+Global Instance persistent_known γ : Persistent (known γ).
+Proof. apply _. Qed.
+
+Global Instance timeless_known γ : Timeless (known γ).
+Proof. apply _. Qed.
+
+Lemma unknown_alloc : ⊢ |==> ∃ γ, unknown γ.
+Proof. iApply own_alloc. apply reservation_map_token_valid. Qed.
+
+Lemma known_alloc γ : unknown γ ==∗ known γ.
+Proof.
+iApply own_update. by apply namespace_map_alloc_update.
+Qed.
+
+Lemma unknown_known γ : unknown γ -∗ known γ -∗ False.
+Proof.
+iIntros "no yes".
+iPoseProof (own_valid_2 with "no yes") as "%valid".
+by case: (namespace_map_disj _ _ _ _ valid).
+Qed.
+
 Implicit Types dq : dfrac.
 
 Definition honest_auth_def dq n (X : gset term) : iProp :=
@@ -857,7 +932,7 @@ Definition honest_auth_def dq n (X : gset term) : iProp :=
   [∗ set] t ∈ X, sterm t.
 Definition honest_auth_aux : seal honest_auth_def. by eexists. Qed.
 Definition honest_auth := unseal honest_auth_aux.
-Lemma honest_auth_eq : honest_auth = honest_auth_def.
+Lemma honest_auth_unseal : honest_auth = honest_auth_def.
 Proof. exact: seal_eq. Qed.
 
 Definition honest_frag_def n (X : gset term) : iProp :=
@@ -865,7 +940,7 @@ Definition honest_frag_def n (X : gset term) : iProp :=
   [∗ set] t ∈ X, sterm t.
 Definition honest_frag_aux : seal honest_frag_def. by eexists. Qed.
 Definition honest_frag := unseal honest_frag_aux.
-Lemma honest_frag_eq : honest_frag = honest_frag_def.
+Lemma honest_frag_unseal : honest_frag = honest_frag_def.
 Proof. exact: seal_eq. Qed.
 
 (* FIXME: Right now, we consider 1/2 to be complete ownership of the honest_auth
@@ -931,7 +1006,7 @@ Qed.
 Lemma honest_auth_dfrac_op dq1 dq2 n X :
   ●H{dq1 ⋅ dq2|n} X ⊣⊢ ●H{dq1|n} X ∗ ●H{dq2|n} X.
 Proof.
-rewrite honest_auth_eq /honest_auth_def; iSplit.
+rewrite honest_auth_unseal /honest_auth_def; iSplit.
 - by iIntros "[[??] #?]"; iFrame; eauto.
 - iIntros "[[L _] [?#?]]"; iFrame; eauto.
   iSplit => //. by iSplitL "L".
@@ -949,25 +1024,25 @@ Proof. by rewrite /IntoSep honest_auth_dfrac_op. Qed.
 
 Lemma honest_auth_discard dq n X : ●H{dq|n} X ==∗ ●H□{n} X.
 Proof.
-rewrite honest_auth_eq. iIntros "[own #s_X]".
+rewrite honest_auth_unseal. iIntros "[own #s_X]".
 iMod (version_auth_discard with "own") as "own".
 by iFrame.
 Qed.
 
 #[global]
 Instance honest_auth_discarded_persistent n X : Persistent (●H□{n} X).
-Proof. rewrite honest_auth_eq. apply _. Qed.
+Proof. rewrite honest_auth_unseal. apply _. Qed.
 
 #[global]
 Instance honest_frag_persistent n X : Persistent (◯H{n} X).
-Proof. rewrite honest_frag_eq. apply _. Qed.
+Proof. rewrite honest_frag_unseal. apply _. Qed.
 
 Lemma honest_auth_sterm dq n X : ●H{dq|n} X -∗ [∗ set] t ∈ X, sterm t.
-Proof. rewrite honest_auth_eq. by iIntros "(_ & ?)". Qed.
+Proof. rewrite honest_auth_unseal. by iIntros "(_ & ?)". Qed.
 
 Lemma honest_auth_frag dq n X : ●H{dq|n} X -∗ ◯H{n} X.
 Proof.
-rewrite honest_auth_eq honest_frag_eq.
+rewrite honest_auth_unseal honest_frag_unseal.
 iIntros "(ver & #s_X)". iSplit => //.
 by iApply version_auth_frag.
 Qed.
@@ -976,7 +1051,7 @@ Qed.
 Lemma honest_auth_frag_agree dq n m X Y :
   ●H{dq|n} X -∗ ◯H{m} Y -∗ ⌜m ≤ n ∧ (n ≤ m → X = Y)⌝.
 Proof.
-rewrite honest_auth_eq honest_frag_eq.
+rewrite honest_auth_unseal honest_frag_unseal.
 iIntros "(auth & _) (frag & _)".
 iPoseProof (version_auth_frag_num with "auth frag") as "%mn".
 iSplit => //. iIntros "%nm". have -> : m = n by lia.
@@ -995,7 +1070,7 @@ Qed.
 Lemma honest_auth_agree dq1 dq2 n1 n2 X1 X2 :
   ●H{dq1|n1} X1 -∗ ●H{dq2|n2} X2 -∗ ⌜n1 = n2 ∧ X1 = X2⌝.
 Proof.
-rewrite honest_auth_eq.
+rewrite honest_auth_unseal.
 iIntros "(auth1 & _) (auth2 & _)".
 iDestruct (version_auth_agree with "auth1 auth2") as "[%en %eX]".
 iSplit => //. iPureIntro. by apply leibniz_equiv_iff in eX.
@@ -1003,7 +1078,7 @@ Qed.
 
 Lemma honest_frag_agree n X Y : ◯H{n} X -∗ ◯H{n} Y -∗ ⌜X = Y⌝.
 Proof.
-rewrite honest_frag_eq.
+rewrite honest_frag_unseal.
 iIntros "[ver1 _] [ver2 _]".
 iPoseProof (version_frag_agree with "ver1 ver2") as "%e".
 iPureIntro. by apply leibniz_equiv_iff in e.
@@ -1018,11 +1093,11 @@ Lemma honest_acc E dq n X :
     ▷ ([∗ set] t ∈ X, secret t) ∗
     (▷ honest_inv ={E ∖ ↑cryptisN.@"honest",E}=∗ True).
 Proof.
-rewrite honest_auth_eq.
+rewrite honest_auth_unseal.
 iIntros "%sub (_ & _ & _ & #ctx) [ver #term_X]".
 iMod (inv_acc with "ctx") as "[inv close]" => //.
 iDestruct "inv" as "(%n' & %X' & ver' & sec_X)".
-rewrite honest_auth_eq. iDestruct "ver'" as "[>ver' _]".
+rewrite honest_auth_unseal. iDestruct "ver'" as "[>ver' _]".
 iPoseProof (version_auth_agree with "ver' ver") as "#[-> %e]".
 rewrite leibniz_equiv_iff in e. rewrite {X'}e.
 iFrame. iModIntro. by eauto.
@@ -1040,14 +1115,14 @@ Proof.
 iIntros "%sub #ctx hon".
 iMod (honest_acc with "ctx hon") as "(hon & hon' & sec_X & close)" => //.
 iFrame.
-iCombine "hon hon'" as "hon". rewrite dfrac_op_own Qp_half_half.
-rewrite honest_auth_eq. iDestruct "hon" as "(ver & #s_X)".
+iCombine "hon hon'" as "hon". rewrite dfrac_op_own Qp.half_half.
+rewrite honest_auth_unseal. iDestruct "hon" as "(ver & #s_X)".
 iMod (version_update Y with "ver") as "ver".
 iModIntro. iSplit => //. iIntros "[#term_Y sec_Y]".
-rewrite -{1}Qp_half_half -dfrac_op_own. iDestruct "ver" as "[ver ver']".
+rewrite -{1}Qp.half_half -dfrac_op_own. iDestruct "ver" as "[ver ver']".
 iFrame.
 iMod ("close" with "[ver sec_Y]") as "_"; last eauto.
-iModIntro. iExists (S n), Y. rewrite honest_auth_eq. by iFrame.
+iModIntro. iExists (S n), Y. rewrite honest_auth_unseal. by iFrame.
 Qed.
 
 Lemma honest_acc_same E dq n X :
@@ -1158,17 +1233,17 @@ Qed.
 End Cryptis.
 
 Arguments cryptis_enc_name {Σ _}.
-Arguments enc_pred {Σ _ _}.
-Arguments enc_pred_set {Σ _ _ _} N Φ.
-Arguments enc_pred_token_difference {Σ _ _} E1 E2.
+Arguments enc_pred {Σ _} N Φ.
+Arguments enc_pred_set {Σ _ _} N Φ.
+Arguments enc_pred_token_difference {Σ _} E1 E2.
 Arguments cryptis_hash_name {Σ _}.
-Arguments hash_pred {Σ _ _}.
-Arguments hash_pred_set {Σ _ _ _} N P.
-Arguments hash_pred_token_difference {Σ _ _} E1 E2.
+Arguments hash_pred {Σ _} N P.
+Arguments hash_pred_set {Σ _ _} N P.
+Arguments hash_pred_token_difference {Σ _} E1 E2.
 Arguments cryptis_key_name {Σ _}.
-Arguments key_pred {Σ _ _}.
-Arguments key_pred_set {Σ _ _ _} N P.
-Arguments key_pred_token_difference {Σ _ _} E1 E2.
+Arguments key_pred {Σ _} N φ.
+Arguments key_pred_set {Σ _ _} N P.
+Arguments key_pred_token_difference {Σ _} E1 E2.
 Arguments term_meta_set {Σ _ _ _ _ _ _} E t x N.
 Arguments term_meta_token_difference {Σ _ _ _} t E1 E2.
 Arguments nonce_term_meta Σ {_}.
@@ -1176,6 +1251,7 @@ Arguments nonce_meta_token {Σ _}.
 Arguments honest_inv {Σ _ _}.
 Arguments cryptis_ctx {Σ _ _}.
 Arguments TermMeta Σ term_meta term_meta_token : assert.
+Arguments unknown_alloc {Σ _}.
 
 Notation "●H{ dq | n } a" :=
   (honest_auth dq n a) (at level 20, format "●H{ dq | n }  a").
@@ -1188,9 +1264,16 @@ Notation "●H{ n } a" := (honest_auth (DfracOwn (1 / 2)) n a)
 Notation "◯H{ n } a" := (honest_frag n a)
   (at level 20, format "◯H{ n }  a").
 
-Lemma cryptisG_alloc `{!heapGS Σ} E :
-  cryptisPreG Σ →
-  ⊢ |={E}=> ∃ (H : cryptisG Σ),
+Local Existing Instance cryptisGpreS_nonce.
+Local Existing Instance cryptisGpreS_key.
+Local Existing Instance cryptisGpreS_enc.
+Local Existing Instance cryptisGpreS_hon.
+Local Existing Instance cryptisGpreS_maps.
+Local Existing Instance cryptis_inG.
+
+Lemma cryptisGS_alloc `{!heapGS Σ} E :
+  cryptisGpreS Σ →
+  ⊢ |={E}=> ∃ (H : cryptisGS Σ),
              cryptis_ctx ∗
              enc_pred_token ⊤ ∗
              key_pred_token (⊤ ∖ ↑nroot.@"keys") ∗
@@ -1205,7 +1288,7 @@ iMod (own_alloc (reservation_map_token ⊤)) as (γ_key) "own_key".
 iMod (own_alloc (reservation_map_token ⊤)) as (γ_hash) "own_hash".
   apply reservation_map_token_valid.
 iMod (version_alloc ∅) as (γ_hon) "ver".
-pose (H := CryptisG _ _ _ _ γ_enc γ_key γ_hash γ_hon).
+pose (H := CryptisGS _ γ_enc γ_key γ_hash γ_hon).
 iExists H; iFrame.
 iAssert (key_pred_token ⊤) with "[own_enc]" as "token".
   by iFrame.
@@ -1217,11 +1300,11 @@ iMod (key_pred_set (nroot.@"keys".@"enc") (λ kt _, ⌜kt = Enc⌝)%I with "toke
     as "[#? token]"; try solve_ndisj.
 iMod (key_pred_set (nroot.@"keys".@"sig") (λ kt _, ⌜kt = Dec⌝)%I with "token")
     as "[#? token]"; try solve_ndisj.
-rewrite -{1}Qp_half_half -dfrac_op_own.
-iDestruct "ver" as "[ver ver']". rewrite honest_auth_eq. iFrame.
-rewrite big_sepS_empty. iSplitL => //.
+rewrite -{1}Qp.half_half -dfrac_op_own.
+iDestruct "ver" as "[ver ver']". rewrite honest_auth_unseal.
+rewrite /honest_auth_def big_sepS_empty. iFrame.
 do 3!iSplitR => //.
 iApply inv_alloc.
 iModIntro. iExists 0, ∅.
-rewrite honest_auth_eq. iFrame. by rewrite !big_sepS_empty.
+rewrite honest_auth_unseal /honest_auth_def. iFrame. by rewrite !big_sepS_empty.
 Qed.
