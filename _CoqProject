@@ -24,6 +24,10 @@ attacker.v
 
 # Case studies
 
+## Simple examples
+
+examples/permanent.v
+
 ## CR
 
 challenge_response.v
