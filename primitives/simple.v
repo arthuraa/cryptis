@@ -99,6 +99,10 @@ Definition mkakey : val := λ: <>,
   let: "n" := mknonce #() in
   mkkey (tag (nroot.@"keys".@"enc") "n").
 
+Definition mksigkey : val := λ: <>,
+  let: "n" := mknonce #() in
+  mkkey (tag (nroot.@"keys".@"sig") "n").
+
 Definition mkskey : val := λ: "k",
   let: "k" := mkkey "k" in
   tuple (Fst "k") (Snd "k").
@@ -477,6 +481,60 @@ Lemma wp_mkakey n T E Ψ :
 Proof.
 iIntros "%sub #ctx hon post". iApply twp_wp.
 by iApply (twp_mkakey with "[//] hon post").
+Qed.
+
+Lemma twp_mksigkey n T E Ψ :
+  ↑cryptisN ⊆ E →
+  cryptis_ctx -∗
+  ●H{n} T -∗
+  (∀ t, pterm (TKey Dec t) -∗
+        ●H{S n} (T ∪ {[TKey Enc t]}) -∗
+        Ψ (TKey Enc t, TKey Dec t)%V) -∗
+  WP mksigkey #() @ E [{ Ψ }].
+Proof.
+iIntros "%sub #ctx hon post". iMod unknown_alloc as (γ) "unknown".
+rewrite /mksigkey. wp_pures.
+iAssert (□ (∀ t, ⌜t ∈ T⌝ → sterm t))%I as "#s_T".
+  iPoseProof (honest_auth_sterm with "hon") as "#?".
+  iModIntro. by rewrite -big_sepS_forall.
+wp_bind (mknonce _).
+iApply (twp_mknonce_gen T (λ _, known γ) (λ _, False%I)).
+  iIntros "%t #t_T". by iApply "s_T".
+iIntros "%t %fresh #s_t #p_t _ token".
+pose (t' := Spec.tag (nroot.@"keys".@"sig") t).
+have {}fresh : TKey Enc t' ∉ T.
+  move=> t'_T; apply: fresh => //.
+  apply: STKey. exact: subterm_tag.
+iAssert (secret (TKey Enc t')) with "[unknown]" as "tP"; first iSplit.
+- iMod (known_alloc with "unknown") as "#known".
+  iSpecialize ("p_t" with "known").
+  iModIntro. rewrite pterm_TKey. iLeft. by rewrite pterm_tag.
+- iIntros "#p_t'". iMod (pterm_sig_keyE with "[//] p_t'") as "contra".
+  iPoseProof ("p_t" with "contra") as ">#known".
+  by iPoseProof (unknown_known with "[$] [//]") as "[]".
+iAssert (sterm (TKey Enc t')) as "s_t'".
+  by rewrite sterm_TKey sterm_tag.
+iMod (honest_insert with "ctx hon s_t' tP") as "hon" => //.
+  solve_ndisj.
+wp_pures. wp_bind (tag _ _). iApply twp_tag.
+iApply twp_mkkey. iApply ("post" with "[] hon") => //.
+iApply pterm_TKey. iRight. rewrite sterm_tag. iSplit => //.
+iDestruct "ctx" as "(_ & _ & ? & _)".
+iExists _, _, _; iSplit => //.
+by iSplit => //.
+Qed.
+
+Lemma wp_mksigkey n T E Ψ :
+  ↑cryptisN ⊆ E →
+  cryptis_ctx -∗
+  ●H{n} T -∗
+  (∀ t, pterm (TKey Dec t) -∗
+        ●H{S n} (T ∪ {[TKey Enc t]}) -∗
+        Ψ (TKey Enc t, TKey Dec t)%V) -∗
+  WP mksigkey #() @ E {{ Ψ }}.
+Proof.
+iIntros "%sub #ctx hon post". iApply twp_wp.
+by iApply (twp_mksigkey with "[//] hon post").
 Qed.
 
 Lemma twp_mkskey E (k : term) Ψ :
