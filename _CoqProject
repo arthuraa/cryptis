@@ -27,6 +27,7 @@ attacker.v
 ## Simple examples
 
 examples/permanent.v
+examples/counter.v
 
 ## CR
 
