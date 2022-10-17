@@ -47,16 +47,15 @@ Definition cryptisΣ : gFunctors :=
 Global Instance subG_cryptisGpreS Σ : subG cryptisΣ Σ → cryptisGpreS Σ.
 Proof. solve_inG. Qed.
 
-Context (Σ : gFunctors).
-Notation iProp := (iProp Σ).
-Notation iPropO := (iPropO Σ).
-Notation iPropI := (iPropI Σ).
 Notation nonce := loc.
 Implicit Types a : loc.
 Implicit Types γ : gname.
 Implicit Types N : namespace.
 
 Context `{!heapGS Σ, !cryptisGS Σ}.
+Notation iProp := (iProp Σ).
+Notation iPropO := (iPropO Σ).
+Notation iPropI := (iPropI Σ).
 
 Definition pnonce a : iProp :=
   ∃ γ P, meta a (nroot.@"nonce") γ ∧
