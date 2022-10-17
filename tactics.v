@@ -8,6 +8,11 @@ From cryptis Require Import lib term cryptis primitives.
 Import bi.
 Import env_notations.
 
+Global Hint Extern 1 (envs_entails _ (sterm _)) =>
+  iApply pterm_sterm : core.
+Global Hint Extern 0 (envs_entails _ (pterm (TInt ?n))) =>
+  rewrite (pterm_TInt n) : core.
+
 Section Proofs.
 
 Context `{!heapGS Σ, !cryptisG Σ}.

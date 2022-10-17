@@ -64,8 +64,7 @@ wp_bind (recv _). iApply wp_recv => //. iIntros "%request _". wp_pures.
 wp_load. wp_tenc. wp_pures.
 (* Send message. Prove that it is well formed. *)
 wp_bind (send _ _). iApply wp_send => //.
-{ iModIntro. iApply pterm_TEncIS => //; last by eauto.
-  by iApply pterm_sterm. }
+{ iModIntro. by iApply pterm_TEncIS; eauto. }
 (* Loop *)
 by wp_pures.
 Qed.

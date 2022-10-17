@@ -176,7 +176,7 @@ Proof.
 rewrite /cr_init.
 iIntros (??) "#? #ctx inv #d_kA #d_kB Hpost".
 iPoseProof "ctx" as "(? & ? & ?)".
-wp_pures; wp_bind (mknonce _).
+wp_pures. wp_bind (mknonce _).
 iApply (wp_mknonce (λ _, True)%I (λ _, True)%I).
 iIntros (nA) "_ #p_nA _ unreg".
 rewrite (term_meta_token_difference _ (↑N)) //.

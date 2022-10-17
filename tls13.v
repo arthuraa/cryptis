@@ -644,14 +644,13 @@ case: ke => [psk cn|g cn x|psk g cn x] //=.
 - iDestruct "wf" as "(? & ? & ?)".
   rewrite pterm_tag pterm_of_list /=.
   do !iSplit => //.
-  iApply dh_pterm_TExp; eauto.
-  by iApply pterm_sterm.
+  by iApply dh_pterm_TExp; eauto.
 - iDestruct "wf" as "(? & ? & ? & ?)".
   rewrite pterm_tag pterm_of_list /=.
   do !iSplit => //.
     rewrite pterm_THash sterm_tag; iRight; iSplit => //.
     by iExists _, _, _; eauto.
-  by iApply dh_pterm_TExp; eauto; iApply pterm_sterm.
+  by iApply dh_pterm_TExp; eauto.
 Qed.
 
 Lemma wp_new ke E Φ :
@@ -1278,32 +1277,28 @@ case: ke=>> /=.
 - iIntros "#(p_g & p_cn & p_sn & p_gx & seed_y)".
   rewrite pterm_tag pterm_of_list /=.
   do !iSplit => //.
-  iApply dh_pterm_TExp; eauto.
-  by iApply pterm_sterm.
+  by iApply dh_pterm_TExp; eauto.
 - iIntros "#(p_psk & p_g & p_cn & p_sn & p_gx & seed_y)".
   rewrite pterm_tag pterm_of_list /=.
   do !iSplit => //.
   + rewrite pterm_THash; iRight.
     rewrite sterm_tag; iSplit => //.
     by iExists _, _, _; eauto.
-  + iApply dh_pterm_TExp; eauto.
-    by iApply pterm_sterm.
+  + by iApply dh_pterm_TExp; eauto.
 Qed.
 
 Lemma sterm_session_key_of N ke : wf ke -∗ sterm (session_key_of N ke).
 Proof.
 case: ke=>> /=.
 - iIntros "#(?&?&?)".
-  by rewrite sterm_tag sterm_of_list /=; do !iSplit => //; iApply pterm_sterm.
+  by rewrite sterm_tag sterm_of_list /=; do !iSplit; eauto.
 - iIntros "#(?&?&?&?&seed)".
-  rewrite sterm_tag; iApply sterm_texp => //.
-  + by iApply pterm_sterm.
-  + by iDestruct "seed" as "(?&?)".
+  rewrite sterm_tag; iApply sterm_texp; eauto.
+  by iDestruct "seed" as "(?&?)".
 - iIntros "#(?&?&?&?&?&seed)".
   rewrite sterm_tag sterm_of_list /=; do !iSplit => //.
-  iApply sterm_texp => //.
-  + by iApply pterm_sterm.
-  + by iDestruct "seed" as "(?&?)".
+  iApply sterm_texp; eauto.
+  by iDestruct "seed" as "(?&?)".
 Qed.
 
 Lemma pterm_session_key_of' N kt ke :
@@ -1565,9 +1560,7 @@ case e: (CShare.has_psk (share cp)); last first.
   do ![iSplit => //].
   case: (share cp) e => //= > _; by rewrite pterm_TInt.
 rewrite pterm_THash; iRight; rewrite sterm_tag sterm_of_list /=.
-do !iSplit => //.
-- by iApply CShare.wf_psk.
-- by iApply pterm_sterm.
+do !iSplit; eauto; first by iApply CShare.wf_psk.
 iExists _, _, _; do !iSplit => //; eauto.
 iExists cp; iModIntro; do !iSplit => //.
 by rewrite e.
@@ -1902,25 +1895,22 @@ iMod (session_begin with "sess_ctx r [token]") as "[#sess close]".
 iFrame; iModIntro; rewrite pterm_of_list /=; do !iSplit=> //.
   rewrite pterm_of_list /=; do !iSplit => //.
   by iApply SShare.pterm_encode; eauto.
-iAssert (sterm (TKey Dec (verif_key sp))) as "s_vkey".
-  by iApply pterm_sterm.
+iAssert (sterm (TKey Dec (verif_key sp))) as "s_vkey"; first by eauto.
 rewrite sterm_TKey.
 iApply pterm_TEncIS; eauto.
 - by rewrite sterm_TKey; iApply SShare.sterm_session_key_of.
 - by iModIntro; iExists sp; eauto.
 - rewrite sterm_of_list /= sterm_TEnc sterm_tag sterm_THash sterm_of_list /=.
   rewrite sterm_TKey.
-  do !iSplit => //.
-  + iApply pterm_sterm. by iApply SShare.pterm_encode.
-  + by iApply pterm_sterm.
+  do !iSplit; eauto.
+  iApply pterm_sterm. by iApply SShare.pterm_encode.
 iIntros "!> #fail"; rewrite pterm_of_list /=.
 do !iSplit => //.
 iApply pterm_TEncIS; eauto.
 - by rewrite sterm_TKey.
 - iModIntro. iExists (share sp), (other sp); by do !iSplit => //.
-- rewrite sterm_THash sterm_of_list /=; do !iSplit => //.
-  + by iApply pterm_sterm; iApply SShare.pterm_encode.
-  + by iApply pterm_sterm.
+- rewrite sterm_THash sterm_of_list /=; do !iSplit; eauto.
+  by iApply pterm_sterm; iApply SShare.pterm_encode.
 iIntros "!> _"; rewrite pterm_THash; iLeft.
 rewrite pterm_of_list /=; do !iSplit => //.
 by iApply SShare.pterm_encode.
@@ -2177,10 +2167,8 @@ iDestruct "rest" as "[[fail_vsk fail_psk]|succ]".
   wp_bind (send _ _); iApply wp_send => //.
   iModIntro.
   iApply pterm_TEncIS; eauto.
-  - by rewrite sterm_TKey.
-  - iIntros "!> %sp %e_sh".
+    iIntros "!> %sp %e_sh".
     by case: (e_hello _ e_sh) => [] -> [] -> [] -> [] _ [] e_enc [] <- ->; eauto.
-  - by iApply pterm_sterm.
   wp_pures; wp_bind (SShare.I.snonce _); iApply SShare.wp_snonce.
   wp_pures; wp_bind (SShare.I.cnonce _); iApply SShare.wp_cnonce.
   wp_pures.
@@ -2190,9 +2178,8 @@ iDestruct "rest" as "[[fail_vsk fail_psk]|succ]".
 wp_bind (send _ _); iApply wp_send => //.
   iModIntro.
   iApply pterm_TEncIS; eauto; first by rewrite sterm_TKey.
-  - iIntros "!> %sp %e_sp".
-    by case: (e_hello _ e_sp) => -> [] -> [] -> [] _ [] e_enc [] <- ->; eauto.
-  - by iApply pterm_sterm.
+  iIntros "!> %sp %e_sp".
+  by case: (e_hello _ e_sp) => -> [] -> [] -> [] _ [] e_enc [] <- ->; eauto.
 iDestruct "succ" as (sp) "(-> & wf & succ)".
 wp_pures; wp_bind (SShare.I.snonce _); iApply SShare.wp_snonce.
 wp_pures; wp_bind (SShare.I.cnonce _); iApply SShare.wp_cnonce.
@@ -2287,7 +2274,7 @@ iSplit.
   rewrite -(SShare.snonce_encode N).
   iApply SShare.pterm_snonce.
   by iApply SShare.pterm_encode => //.
-iSplit.
+iSplit; eauto.
   iPoseProof (pterm_sterm with "p_ack") as "{p_ack} ack".
   by rewrite sterm_TEnc; iDestruct "ack" as "[sk _]".
 iDestruct "p_ch" as "[p_ch|p_ch]"; first by eauto.

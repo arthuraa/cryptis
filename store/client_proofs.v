@@ -236,9 +236,7 @@ iPoseProof (client_state_frag with "state") as "#(s_k & done & frag)".
 wp_bind (send _ _). iApply wp_send; eauto.
   iDestruct "ctx" as "(_ & _ & _ & ? & _)".
   iModIntro. iApply pterm_TEncIS; eauto.
-  - by rewrite sterm_TKey.
-  - by rewrite sterm_TInt.
-  - rewrite pterm_TInt. by eauto.
+  by rewrite sterm_TKey.
 wp_pures.
 iCombine "post state" as "I". iRevert "I". iApply wp_sess_recv => //.
 iIntros "!> %ts [post state] #p_t'". wp_pures.

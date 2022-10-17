@@ -182,8 +182,7 @@ rewrite /has_type /=.
 iIntros "#eP !> %vs #vsP".
 wp_bind (subst_map _ e); iApply wp_wand; first by iApply "eP".
 iIntros (?); iDestruct 1 as (n) "->".
-iApply wp_tint; iExists _; iSplit; eauto.
-by rewrite pterm_TInt.
+by iApply wp_tint; iExists _; eauto.
 Qed.
 
 Lemma has_type_as_int Γ e :

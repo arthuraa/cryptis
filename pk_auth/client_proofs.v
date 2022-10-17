@@ -35,12 +35,10 @@ Proof.
 iIntros "(_ & #m1P & _ & _) #meta #s_nI #p_nI #p_ekI #p_ekR".
 iPoseProof (mk_key_share_secret_of with "s_nI p_nI") as "p_sI".
 iApply pterm_TEncIS; eauto.
-- by iApply pterm_sterm.
 - iModIntro. iExists (mk_key_share nI), kI. do !iSplit => //.
   + iIntros "!> #?". iApply "p_sI". by eauto.
   + iRight. by iExists n, T, nI; eauto.
-- rewrite sterm_of_list /= mk_key_share_sterm.
-  do !iSplit => //. by iApply pterm_sterm.
+- rewrite sterm_of_list /= mk_key_share_sterm. by eauto.
 iIntros "!> #p_dkR". rewrite pterm_of_list /=. do !iSplit => //.
 iApply "p_sI". iModIntro. by iRight.
 Qed.
@@ -57,7 +55,7 @@ iPoseProof (pterm_TEncE with "p_m2 m2P") as "{p_m2} [p_m2 | p_m2]".
   iDestruct "p_m2" as "(? & p_sI & p_sR & _ & _)".
   iSpecialize ("started" with "p_sI").
   iModIntro.
-  iSplit; first by iApply pterm_sterm.
+  iSplit; eauto.
   iSplit.
     iModIntro. by iSplit; eauto.
   by iLeft.
@@ -149,8 +147,7 @@ Lemma pterm_msg3I kI kR sI sR :
   pterm (TEnc kR (Spec.tag (N.@"m3") sR)).
 Proof.
 iIntros "(_ & _ & _ & #p_m3) #p_eR #s_sR #p_sR #finished".
-iApply pterm_TEncIS => //.
-  by iApply pterm_sterm.
+iApply pterm_TEncIS; eauto.
 iIntros "!> #p_dkR". iApply "p_sR". by iRight.
 Qed.
 

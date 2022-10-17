@@ -65,7 +65,7 @@ iIntros "%nI %kI %kR #s_nI #dh".
 rewrite /pk_dh_mk_key_share /secret_of. iModIntro. iSplit.
 - iIntros "#p_sI".
   by iPoseProof (dh_seed_elim1 with "dh p_sI") as "H".
-- iIntros "#fail". iApply dh_pterm_TExp; eauto. by rewrite sterm_TInt.
+- iIntros "#fail". iApply dh_pterm_TExp; eauto.
 Qed.
 
 Next Obligation.

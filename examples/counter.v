@@ -80,7 +80,7 @@ iMod (own_alloc (● MaxNat 0 ⋅ ◯ MaxNat 0)) as "(%γ & own & #ownf)".
 iMod (enc_pred_set nroot (sig_pred γ) with "tok") as "[#pred _]" => //.
 iMod (inv_alloc nroot _
   (∃ n : nat, l ↦ #n ∗ own γ (● MaxNat n) ∗ own γ (◯ MaxNat n))
-  with "[Hl own]") as "inv".
+  with "[Hl own]") as "#inv".
 { iModIntro. iExists 0. by iFrame. }
 iModIntro. by iApply "post".
 Qed.

@@ -19,6 +19,22 @@ Implicit Types (rl : role) (t kI kR nI nR sI sR kS : term).
 
 Variable N : namespace.
 
+(*
+
+A --> B: {nA; pkA}@pkB
+B --> A: {nA; nB; pkB}@pkA
+A --> B: {nB}@pkB
+
+nA, nB
+
+A --> B: {g^nA; pkA}@pkB
+B --> A: {g^nA; g^nB; pkB}@pkA
+A --> B: {g^nB}@pkB
+
+g^{nAnB}
+
+*)
+
 Definition pk_auth_init : val :=
   λ: "c" "mk_key_share" "mk_sess_key" "skI" "pkI" "pkR",
   let: "nIsI" := "mk_key_share" #() in

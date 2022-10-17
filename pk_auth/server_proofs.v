@@ -32,10 +32,7 @@ Proof.
 iIntros "(_ & #m1P & _ & _) #p_m1".
 iPoseProof (pterm_TEncE with "p_m1 m1P") as "{p_m1} [p_m1 | p_m1]".
 - iModIntro. rewrite pterm_of_list /=.
-  iDestruct "p_m1" as "(? & ? & ? & _)". iSplit => //.
-    by iApply pterm_sterm.
-  iSplit; eauto.
-  iSplit.
+  iDestruct "p_m1" as "(? & ? & ? & _)". iSplit; eauto. iSplit; eauto. iSplit.
     by iIntros "!> ?".
   by iLeft.
 - iDestruct "p_m1" as "{m1P} (#m1P & #s_m1 & #p_m1)".
@@ -107,10 +104,8 @@ Lemma pterm_msg2I kI kR sI sR :
 Proof.
 iIntros "(_ & _ & #? & _) #p_eI #p_eR #s_sI #p_sI #s_sR #p_sR #accepted".
 iApply pterm_TEncIS; eauto.
-- by iApply pterm_sterm.
 - iModIntro. iExists sI, sR, kR. by eauto.
-- rewrite sterm_of_list /=. do ![iSplit => //].
-  by iApply pterm_sterm.
+- rewrite sterm_of_list /=; eauto.
 iIntros "!> #p_dkI". rewrite pterm_of_list /=. do !iSplit => //.
 - by iApply "p_sI"; iLeft.
 - iApply "p_sR". iModIntro. by iLeft.
