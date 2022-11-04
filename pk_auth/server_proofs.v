@@ -23,15 +23,15 @@ Variable N : namespace.
 
 Context `{!PK}.
 
-Lemma pterm_msg1E kI kR sI :
+Lemma public_msg1E kI kR sI :
   pk_auth_ctx N -∗
-  pterm (TEnc kR (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Enc kI]))) -∗
-  ▷ (sterm sI ∧ pterm (TKey Enc kI) ∧ readable_by sI kI kR ∧
+  public (TEnc kR (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Enc kI]))) -∗
+  ▷ (minted sI ∧ public (TKey Enc kI) ∧ readable_by sI kI kR ∧
      init_started N kI kR sI).
 Proof.
 iIntros "(_ & #m1P & _ & _) #p_m1".
-iPoseProof (pterm_TEncE with "p_m1 m1P") as "{p_m1} [p_m1 | p_m1]".
-- iModIntro. rewrite pterm_of_list /=.
+iPoseProof (public_TEncE with "p_m1 m1P") as "{p_m1} [p_m1 | p_m1]".
+- iModIntro. rewrite public_of_list /=.
   iDestruct "p_m1" as "(? & ? & ? & _)". iSplit; eauto. iSplit; eauto. iSplit.
     by iIntros "!> ?".
   by iLeft.
@@ -39,7 +39,7 @@ iPoseProof (pterm_TEncE with "p_m1 m1P") as "{p_m1} [p_m1 | p_m1]".
   iModIntro.
   iDestruct "m1P" as "(%sI' & %kI' & %e_m1 & p_pkI & p_sI & accepted)".
   case/Spec.of_list_inj: e_m1 => <- <-.
-  rewrite sterm_of_list /=. iDestruct "s_m1" as "(#s_sI & _)".
+  rewrite minted_of_list /=. iDestruct "s_m1" as "(#s_sI & _)".
   do !iSplit => //.
 Qed.
 
@@ -91,34 +91,34 @@ iRight. iExists n, T, n', T', nI, nR.
 by do !iSplit => //.
 Qed.
 
-Lemma pterm_msg2I kI kR sI sR :
+Lemma public_msg2I kI kR sI sR :
   pk_auth_ctx N -∗
-  pterm (TKey Enc kI) -∗
-  pterm (TKey Enc kR) -∗
-  sterm sI -∗
+  public (TKey Enc kI) -∗
+  public (TKey Enc kR) -∗
+  minted sI -∗
   readable_by sI kI kR -∗
-  sterm sR -∗
+  minted sR -∗
   secret_of sR kI kR -∗
   resp_accepted N kI kR sI sR -∗
-  pterm (TEnc kI (Spec.tag (N.@"m2") (Spec.of_list [sI; sR; TKey Enc kR]))).
+  public (TEnc kI (Spec.tag (N.@"m2") (Spec.of_list [sI; sR; TKey Enc kR]))).
 Proof.
 iIntros "(_ & _ & #? & _) #p_eI #p_eR #s_sI #p_sI #s_sR #p_sR #accepted".
-iApply pterm_TEncIS; eauto.
+iApply public_TEncIS; eauto.
 - iModIntro. iExists sI, sR, kR. by eauto.
-- rewrite sterm_of_list /=; eauto.
-iIntros "!> #p_dkI". rewrite pterm_of_list /=. do !iSplit => //.
+- rewrite minted_of_list /=; eauto.
+iIntros "!> #p_dkI". rewrite public_of_list /=. do !iSplit => //.
 - by iApply "p_sI"; iLeft.
 - iApply "p_sR". iModIntro. by iLeft.
 Qed.
 
-Lemma pterm_msg3E kI kR sR :
+Lemma public_msg3E kI kR sR :
   pk_auth_ctx N -∗
   secret_of sR kI kR -∗
-  pterm (TEnc kR (Spec.tag (N.@"m3") sR)) -∗
+  public (TEnc kR (Spec.tag (N.@"m3") sR)) -∗
   ▷ init_finished N kR sR.
 Proof.
 iIntros "(_ & _ & _ & #?) #p_sR #p_m3".
-iDestruct (pterm_TEncE with "p_m3 [//]") as "{p_m3} [p_m3|p_m3]".
+iDestruct (public_TEncE with "p_m3 [//]") as "{p_m3} [p_m3|p_m3]".
 - iDestruct "p_m3" as "[_ p_m3]". by iLeft.
 - by iDestruct "p_m3" as "(#p_m3 & _)".
 Qed.
@@ -129,7 +129,7 @@ Lemma resp_finish E kI kR sI nR n T :
   ↑N ⊆ E →
   pk_auth_ctx N -∗
   session_weak' N kI kR nR n T -∗
-  sterm nR -∗
+  minted nR -∗
   □ is_priv_key nR kI kR -∗
   init_finished N kR sR -∗
   resp_waiting N kI kR sI nR ={E}=∗
@@ -172,7 +172,7 @@ Lemma wp_pk_auth_resp c kR dq n T E :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
-  pterm (TKey Enc kR) -∗
+  public (TKey Enc kR) -∗
   {{{ resp_confirm kR ∗ ●H{dq|n} T }}}
     pk_auth_resp N c mk_key_share_impl (mk_session_key_impl Resp)
       (TKey Dec kR) (TKey Enc kR) @ E
@@ -180,8 +180,8 @@ Lemma wp_pk_auth_resp c kR dq n T E :
       ●H{dq|n} T ∗
       if res is Some (pkI, kS) then
          ∃ kI, ⌜pkI = TKey Enc kI⌝ ∗
-               pterm pkI ∗
-               sterm kS ∗
+               public pkI ∗
+               minted kS ∗
                □ confirmation Resp kI kR kS ∗
                session_weak N Resp kI kR kS n T ∗
                if in_honest kI kR T then
@@ -201,7 +201,7 @@ wp_is_key_eq kt kI et; last protocol_failure; subst pkI.
 wp_pures.
 case: (bool_decide_reflect (_ = repr_key_type Enc)); last protocol_failure.
 case: kt => // _.
-iDestruct (pterm_msg1E with "[] Hm1")
+iDestruct (public_msg1E with "[] Hm1")
   as "{Hm1} (s_sI & p_eI & p_sI & started)"; eauto.
 wp_pures.
 wp_bind (mk_key_share_impl _). iApply (wp_mk_key_share _ kI kR) => //.
@@ -212,12 +212,12 @@ wp_pures. wp_list; wp_term_of_list. wp_tenc. wp_pures.
 iAssert (secret_of (mk_key_share nR) kI kR) as "p_sR".
   by iApply mk_key_share_secret_of.
 wp_bind (send _ _). iApply wp_send => //.
-  iApply pterm_msg2I; eauto.
-  by iApply mk_key_share_sterm.
+  iApply public_msg2I; eauto.
+  by iApply mk_key_share_minted.
 wp_pures. wp_bind (recv _). iApply wp_recv => //.
 iIntros "%m3 #p_m3". wp_tdec m3; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst m3.
-iPoseProof (pterm_msg3E with "[//] [//] [//]") as "finished".
+iPoseProof (public_msg3E with "[//] [//] [//]") as "finished".
 wp_pures.
 iMod (resp_finish with "[] [] [] [] [] waiting") as "session" => //.
 case: (decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T)) => [[kIP kRP]|pub]; last first.
@@ -227,15 +227,15 @@ case: (decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T)) => [[kIP kRP]|pub]; las
   iModIntro. iFrame. iExists kI.
   rewrite /in_honest bool_decide_decide decide_False //.
   do 3!iSplit => //; eauto.
-  by iApply mk_session_key_sterm => //.
+  by iApply mk_session_key_minted => //.
 iDestruct "session" as "[[#fail|#fail]|session]".
 - wp_bind (mk_session_key_impl _ _ _). iApply wp_mk_session_key => //.
   iIntros "!> _".
-  iMod (honest_pterm with "ctx hon fail") as "contra"; eauto; try solve_ndisj.
+  iMod (honest_public with "ctx hon fail") as "contra"; eauto; try solve_ndisj.
   wp_pures. by iDestruct "contra" as ">[]".
 - wp_bind (mk_session_key_impl _ _ _). iApply wp_mk_session_key => //.
   iIntros "!> _".
-  iMod (honest_pterm with "ctx hon fail") as "contra"; eauto; try solve_ndisj.
+  iMod (honest_public with "ctx hon fail") as "contra"; eauto; try solve_ndisj.
   wp_pures. by iDestruct "contra" as ">[]".
 wp_bind (mk_session_key_impl _ _ _). iApply wp_mk_session_key => //.
 iIntros "!> _". wp_pures.
@@ -243,7 +243,7 @@ iApply ("Hpost" $! (Some (TKey Enc kI, mk_session_key Resp nR sI))).
 iModIntro. iFrame. iExists kI.
 rewrite /in_honest bool_decide_decide decide_True //.
 do 3!iSplit => //; eauto.
-by iApply mk_session_key_sterm => //.
+by iApply mk_session_key_minted => //.
 Qed.
 
 End PK.

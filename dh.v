@@ -25,13 +25,13 @@ Definition dh_publ t : iProp :=
   ∃ g a, ⌜t = TExp g [a]⌝ ∧ □ P t.
 
 Definition dh_seed t : iProp :=
-  sterm t ∧
-  □ (pterm t ↔ ▷ False) ∧
+  minted t ∧
+  □ (public t ↔ ▷ False) ∧
   □ (∀ t', dh_pred t t' ↔ ▷ □ dh_publ t').
 
 Lemma dh_seed_elim0 a :
   dh_seed a -∗
-  pterm a -∗
+  public a -∗
   ▷ False.
 Proof.
 iIntros "#(_ & aP & _) #p_t".
@@ -40,11 +40,11 @@ Qed.
 
 Lemma dh_seed_elim1 g a :
   dh_seed a -∗
-  pterm (TExp g [a]) -∗
+  public (TExp g [a]) -∗
   ▷ P (TExp g [a]).
 Proof.
 iIntros "#aP #p_t".
-rewrite pterm_TExp1.
+rewrite public_TExp1.
 iDestruct "p_t" as "(_ & _ & [contra | p_t])".
   by iPoseProof (@dh_seed_elim0 with "aP contra") as ">[]".
 iDestruct "aP" as "(_ & _ & #aP)".
@@ -54,11 +54,11 @@ Qed.
 
 Lemma dh_seed_elim2 g a t :
   dh_seed a -∗
-  pterm (TExp g [a; t]) -∗
-  ◇ (pterm (TExp g [a]) ∧ pterm t).
+  public (TExp g [a; t]) -∗
+  ◇ (public (TExp g [a]) ∧ public t).
 Proof.
 iIntros "#aP #p_t".
-rewrite pterm_TExp2.
+rewrite public_TExp2.
 iDestruct "p_t" as "[p_t|[[_ contra]|p_t]]"; eauto.
   by iPoseProof (@dh_seed_elim0 with "aP contra") as ">[]".
 iDestruct "p_t" as "(_ & p_t & _)".
@@ -70,14 +70,14 @@ iDestruct "p_t" as (g' a') "(%e & _)".
 by case/TExp_inj: e => _ /Permutation_length.
 Qed.
 
-Lemma dh_pterm_TExp g a :
-  sterm g -∗
+Lemma dh_public_TExp g a :
+  minted g -∗
   dh_seed a -∗
   ▷ □ P (TExp g [a]) -∗
-  pterm (TExp g [a]).
+  public (TExp g [a]).
 Proof.
 iIntros "#gP #(? & ? & aP) #P_a".
-rewrite pterm_TExp1; do !iSplit => //.
+rewrite public_TExp1; do !iSplit => //.
 by iRight; iApply "aP"; iModIntro; iExists _, _; eauto.
 Qed.
 
@@ -131,7 +131,7 @@ Qed.
 Definition mkdh : val := mknonce.
 
 Lemma wp_mkdh g E (Ψ : val → iProp) :
-  (∀ a, sterm a -∗
+  (∀ a, minted a -∗
         dh_seed a -∗
         dh_meta_token (TExp g [a]) ⊤ -∗
         Ψ a) -∗

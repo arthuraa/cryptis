@@ -37,13 +37,13 @@ Implicit Types (vs : gmap string val).
 Definition Option τ := Sum Unit τ.
 
 Definition pub_type v : iProp :=
-  ∃ t, ⌜v = t⌝ ∧ pterm t.
+  ∃ t, ⌜v = t⌝ ∧ public t.
 
 Definition ek_type v : iProp :=
-  ∃ k, ⌜v = TKey Enc k⌝ ∧ pterm (TKey Enc k).
+  ∃ k, ⌜v = TKey Enc k⌝ ∧ public (TKey Enc k).
 
 Definition dk_type v : iProp :=
-  ∃ k, ⌜v = TKey Dec k⌝ ∧ pterm (TKey Dec k).
+  ∃ k, ⌜v = TKey Dec k⌝ ∧ public (TKey Dec k).
 
 Definition int_type v : iProp :=
   ∃ n : Z, ⌜v = #n⌝.
@@ -132,7 +132,7 @@ Qed.
 Definition has_type Γ e τ : iProp :=
   □ ∀ γ, ⟦Γ⟧* γ → WP subst_map γ e {{ ⟦τ⟧ᵥ }}.
 
-Lemma pub_typeI t : pterm t -∗ pub_type t.
+Lemma pub_typeI t : public t -∗ pub_type t.
 Proof. iIntros "?"; iExists _; eauto. Qed.
 
 Lemma int_typeI (n : Z) : ⊢ int_type #n.
@@ -256,8 +256,8 @@ iIntros "#eP !> %γ #γP /=".
 wp_bind (subst_map _ _); iApply wp_wand; first by iApply "eP".
 iIntros "%"; iDestruct 1 as (t) "[-> #tP]".
 iApply wp_mkkey; iExists _, _; do 2!iSplit => //=.
-- iExists _; iSplit => //; rewrite pterm_TKey; eauto.
-- iExists _; iSplit => //; rewrite pterm_TKey; eauto.
+- iExists _; iSplit => //; rewrite public_TKey; eauto.
+- iExists _; iSplit => //; rewrite public_TKey; eauto.
 Qed.
 
 Lemma has_type_to_ek Γ e :
@@ -335,7 +335,7 @@ iIntros "#eP !> %vs #vsP /=".
 wp_bind (subst_map _ e); iApply wp_wand; first iApply "eP" => //.
 iIntros "%"; iDestruct 1 as (t) "[-> #tP]".
 iApply wp_tgroup; iExists _; iSplit => //.
-by rewrite pterm_TExp0 -pterm_sterm.
+by rewrite public_TExp0 -public_minted.
 Qed.
 
 Lemma has_type_texp Γ e1 e2 :
@@ -349,7 +349,7 @@ iIntros "%v2"; iDestruct 1 as (t2) "[-> #t2P]".
 wp_bind (subst_map _ e1); iApply wp_wand; first iApply "e1P" => //.
 iIntros "%v1"; iDestruct 1 as (t1) "[-> #t1P]".
 iApply wp_texp; iExists _; iSplit => //.
-by iApply pterm_texp.
+by iApply public_texp.
 Qed.
 
 Lemma has_type_hash Γ e :
@@ -360,7 +360,7 @@ iIntros "#eP !> %vs #vsP /=".
 wp_bind (subst_map _ e); iApply wp_wand; first iApply "eP" => //.
 iIntros "%"; iDestruct 1 as (t) "[-> #tP]".
 iApply wp_hash; iExists _; iSplit => //.
-by rewrite pterm_THash; iLeft.
+by rewrite public_THash; iLeft.
 Qed.
 
 Lemma has_type_enc Γ e1 e2 :
@@ -374,7 +374,7 @@ iIntros "%v2"; iDestruct 1 as (t2) "[-> #t2P]".
 wp_bind (subst_map _ e1); iApply wp_wand; first iApply "e1P" => //.
 iIntros "%v1"; iDestruct 1 as (t1) "[-> #t1P]".
 iApply wp_enc; iExists _; iSplit => //=.
-by rewrite pterm_TEnc; eauto.
+by rewrite public_TEnc; eauto.
 Qed.
 
 Lemma has_type_dec Γ e1 e2 :
@@ -392,7 +392,7 @@ case: t2; try by move => *; iApply sum_typeIL.
 move=> t1' t2'.
 case: decide => [->|?]; last by iApply sum_typeIL.
 iApply sum_typeIR; iApply pub_typeI.
-rewrite [pterm (TEnc _ _)]pterm_TEnc.
+rewrite [public (TEnc _ _)]public_TEnc.
 iDestruct "t2P" as "[[_ ?]|(_ & _ & #t2P)]" => //.
 by iApply "t2P".
 Qed.
@@ -405,7 +405,7 @@ iIntros "#eP !> %vs #vsP /=".
 wp_bind (subst_map _ e); iApply wp_wand; first iApply "eP" => //.
 iIntros "%"; iDestruct 1 as (t) "[-> #tP]".
 iApply wp_tag; iApply pub_typeI.
-by rewrite pterm_tag.
+by rewrite public_tag.
 Qed.
 
 Lemma has_type_untag Γ c e :
@@ -417,13 +417,13 @@ wp_bind (subst_map _ e); iApply wp_wand; first iApply "eP" => //.
 iIntros "%"; iDestruct 1 as (t) "[-> #tP]".
 iApply wp_untag.
 case: Spec.untagP => [t' ->|_] /=.
-- iApply sum_typeIR. iApply pub_typeI. by rewrite pterm_tag.
+- iApply sum_typeIR. iApply pub_typeI. by rewrite public_tag.
 - by iApply sum_typeIL.
 Qed.
 
 Lemma list_pub_typeE v :
   ⟦List Pub⟧ᵥ v -∗
-  ∃ ts : list term, ⌜v = repr ts⌝ ∗ [∗ list] t ∈ ts, pterm t.
+  ∃ ts : list term, ⌜v = repr ts⌝ ∗ [∗ list] t ∈ ts, public t.
 Proof.
 iDestruct 1 as (vs) "[-> #vsP]".
 rewrite /= !repr_list_unseal.
@@ -444,7 +444,7 @@ wp_bind (subst_map _ e); iApply wp_wand; first iApply "eP" => //.
 iIntros "%v #vP".
 iDestruct (list_pub_typeE with "vP") as (ts) "[-> #tsP]".
 iApply wp_term_of_list; iApply pub_typeI.
-by rewrite pterm_of_list.
+by rewrite public_of_list.
 Qed.
 
 Lemma has_type_list_of_term Γ e :
@@ -457,7 +457,7 @@ iIntros "%v #vP"; iDestruct "vP" as (t) "[-> tP]".
 iApply wp_list_of_term.
 case: Spec.to_listP => [ts|?] /=; last by iApply sum_typeIL.
 iApply sum_typeIR; iExists (map repr ts); rewrite /= -repr_list_val.
-iSplit => //; rewrite pterm_of_list.
+iSplit => //; rewrite public_of_list.
 iInduction ts as [|t' ts] "IH" => //=.
 iDestruct "tP" as "[tP tsP]"; iSplit; first by iApply pub_typeI.
 by iApply "IH".
@@ -633,7 +633,7 @@ Definition put_chan : val := λ: "c" "lock" "t",
   release "lock".
 
 Definition chan_inv (c : loc) : iProp :=
-  ∃ ts : list term, c ↦ repr ts ∗ [∗ list] t ∈ ts, pterm t.
+  ∃ ts : list term, c ↦ repr ts ∗ [∗ list] t ∈ ts, public t.
 
 Definition mkchan : val := λ: <>,
   let: "c" := ref NONEV in

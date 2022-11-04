@@ -31,13 +31,13 @@ Variable N : namespace.
 
 Definition client_state s n t : iProp :=
   cst_ts s ↦ #n ∗
-  sterm (cst_key s) ∗
+  minted (cst_key s) ∗
   handshake_done N (cst_key s) (cst_ok s) ∗
   (if cst_ok s then value_auth N (cst_key s) n t else True%I).
 
 Lemma client_state_frag s n t :
   client_state s n t -∗
-  sterm (cst_key s) ∗
+  minted (cst_key s) ∗
   handshake_done N (cst_key s) (cst_ok s) ∗
   if cst_ok s then value_frag N (cst_key s) n t else True%I.
 Proof.
@@ -84,7 +84,7 @@ Lemma wp_client_send_store E c s n t t' :
   ↑cryptisN ⊆ E →
   channel c -∗
   store_ctx N -∗
-  pterm t' -∗ (* FIXME: t' does not have to be public already *)
+  public t' -∗ (* FIXME: t' does not have to be public already *)
   {{{ client_state s n t }}}
     Client.send_store N c (repr s) t' @ E
   {{{ RET #(); client_state s (S n) t' }}}.
@@ -101,13 +101,13 @@ iPoseProof (client_state_frag with "state") as "# (s_k & p_k & frag)".
 wp_pures. wp_list. wp_bind (tint _). iApply wp_tint. wp_list.
 wp_term_of_list. wp_tsenc. wp_pures.
 iApply (wp_send with "[//] [#]"); eauto; last by iApply "post".
-iModIntro. iApply pterm_TEncIS => //.
-- by rewrite sterm_TKey.
+iModIntro. iApply public_TEncIS => //.
+- by rewrite minted_TKey.
 - iModIntro. iExists (S n), t', (cst_ok s).
   by do 3?iSplit => //.
-- rewrite sterm_of_list /= sterm_TInt; do ![iSplit => //].
-  by iApply pterm_sterm.
-- iModIntro. iIntros "_". rewrite pterm_of_list /= pterm_TInt. iSplit => //.
+- rewrite minted_of_list /= minted_TInt; do ![iSplit => //].
+  by iApply public_minted.
+- iModIntro. iIntros "_". rewrite public_of_list /= public_TInt. iSplit => //.
   by iSplit => //.
 Qed.
 
@@ -138,7 +138,7 @@ Lemma wp_client_store E c s n t t' :
   ↑cryptisN ⊆ E →
   channel c -∗
   store_ctx N -∗
-  pterm t' -∗
+  public t' -∗
   {{{ client_state s n t }}}
     Client.store N c (repr s) t' @ E
   {{{ RET #(); client_state s (S n) t' }}}.
@@ -156,8 +156,8 @@ Lemma wp_client_connect E c kI kR dq ph T :
   channel c -∗
   cryptis_ctx -∗
   store_ctx N -∗
-  pterm (TKey Enc kI) -∗
-  pterm (TKey Enc kR) -∗
+  public (TKey Enc kI) -∗
+  public (TKey Enc kR) -∗
   {{{ ●H{dq|ph} T }}}
     Client.connect N c (TKey Dec kI) (TKey Enc kI) (TKey Enc kR) @ E
   {{{ s, RET (repr s);
@@ -190,7 +190,7 @@ iAssert (|==> if ok then value_auth N kS' 0 (TInt 0) else True)%I
   iMod (term_meta_set _ _ γ N with "token") as "#meta"; eauto.
   iModIntro. iExists γ. iFrame. iSplit.
   - iIntros "!> %kt #p_kS'".
-    iPoseProof (pterm_sym_keyE with "[//] p_kS'") as ">contra".
+    iPoseProof (public_sym_keyE with "[//] p_kS'") as ">contra".
     by iDestruct ("p_kS" with "contra") as ">[]".
   - iIntros "!> %kS'' %e".
     case/Spec.tag_inj: e => _ <- {kS''}.
@@ -200,17 +200,17 @@ iAssert (if ok then value_frag N kS' 0 (TInt 0) else True)%I as "#frag".
   by iApply value_auth_frag.
 wp_tsenc. wp_bind (send _ _).
 iApply (wp_send with "[#] [#]") => //.
-  iModIntro. iApply pterm_TEncIS => //.
-  - by rewrite sterm_TKey sterm_tag.
+  iModIntro. iApply public_TEncIS => //.
+  - by rewrite minted_TKey minted_tag.
   - iModIntro. iExists ok.
     by iSplit => //.
-  - by rewrite sterm_TInt.
-  - iIntros "!> _". by rewrite pterm_TInt.
+  - by rewrite minted_TInt.
+  - iIntros "!> _". by rewrite public_TInt.
 wp_pures. iRight. iExists _. iSplitR; eauto.
 iApply ("post" $! {| cst_ts := l;
                      cst_key := Spec.tag (nroot.@"keys".@"sym") kS;
                      cst_ok := ok |}).
-rewrite /client_state /=. iFrame. rewrite sterm_tag.
+rewrite /client_state /=. iFrame. rewrite minted_tag.
 do 2!iSplitR => //.
 Qed.
 
@@ -235,8 +235,8 @@ wp_tsenc. wp_pures.
 iPoseProof (client_state_frag with "state") as "#(s_k & done & frag)".
 wp_bind (send _ _). iApply wp_send; eauto.
   iDestruct "ctx" as "(_ & _ & _ & ? & _)".
-  iModIntro. iApply pterm_TEncIS; eauto.
-  by rewrite sterm_TKey.
+  iModIntro. iApply public_TEncIS; eauto.
+  by rewrite minted_TKey.
 wp_pures.
 iCombine "post state" as "I". iRevert "I". iApply wp_sess_recv => //.
 iIntros "!> %ts [post state] #p_t'". wp_pures.

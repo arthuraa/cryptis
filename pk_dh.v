@@ -55,7 +55,7 @@ by move=> t1 t2 /TExp_inj1 [_ ?].
 Qed.
 
 Next Obligation.
-move=> n; rewrite sterm_TExp /= sterm_TInt. apply: anti_symm.
+move=> n; rewrite minted_TExp /= minted_TInt. apply: anti_symm.
 - by iIntros "(_ & ? & _)".
 - by eauto.
 Qed.
@@ -65,7 +65,7 @@ iIntros "%nI %kI %kR #s_nI #dh".
 rewrite /pk_dh_mk_key_share /secret_of. iModIntro. iSplit.
 - iIntros "#p_sI".
   by iPoseProof (dh_seed_elim1 with "dh p_sI") as "H".
-- iIntros "#fail". iApply dh_pterm_TExp; eauto.
+- iIntros "#fail". iApply dh_public_TExp; eauto.
 Qed.
 
 Next Obligation.
@@ -90,7 +90,7 @@ Qed.
 
 Next Obligation.
 iIntros "%rl %t1 %t2 #s_t1 #s_t2".
-by rewrite /pk_dh_mk_session_key; iApply sterm_texp.
+by rewrite /pk_dh_mk_session_key; iApply minted_texp.
 Qed.
 
 Next Obligation.
@@ -143,7 +143,7 @@ Proof. exact: pk_auth_alloc. Qed.
 
 Lemma pk_dh_session_key_elim kI kR kS n T :
   pk_dh_session_key kI kR kS n T -∗
-  pterm kS →
+  public kS →
   ◇ False.
 Proof.
 iIntros "(%nI & %nR & -> & _ & _ & #priv_nI & #priv_nR & _)".
@@ -159,18 +159,18 @@ Lemma wp_pk_dh_init c kI kR dq n T E :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
-  pterm (TKey Enc kI) -∗
-  pterm (TKey Enc kR) -∗
+  public (TKey Enc kI) -∗
+  public (TKey Enc kR) -∗
   {{{ init_confirm kI kR ∗ ●H{dq|n} T }}}
     pk_dh_init c (TKey Dec kI) (TKey Enc kI) (TKey Enc kR) @ E
   {{{ (okS : option term), RET repr okS;
       ●H{dq|n} T ∗
       if okS is Some kS then
-        sterm kS ∗
+        minted kS ∗
         □ pk_dh_confirmation Init kI kR kS ∗
         pk_dh_session_weak Init kI kR kS n T ∗
         if in_honest kI kR T then
-          □ (pterm kS → ◇ False) ∗
+          □ (public kS → ◇ False) ∗
           pk_dh_session_meta_token Init kI kR kS ⊤ ∗
           pk_dh_session_key kI kR kS n T
         else True
@@ -198,19 +198,19 @@ Lemma wp_pk_dh_resp c kR dq n T E :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
-  pterm (TKey Enc kR) -∗
+  public (TKey Enc kR) -∗
   {{{ resp_confirm kR ∗ ●H{dq|n} T }}}
     pk_dh_resp c (TKey Dec kR) (TKey Enc kR) @ E
   {{{ (res : option (term * term)), RET repr res;
       ●H{dq|n} T ∗
       if res is Some (pkI, kS) then ∃ kI,
         ⌜pkI = TKey Enc kI⌝ ∗
-        pterm pkI ∗
-        sterm kS ∗
+        public pkI ∗
+        minted kS ∗
         □ pk_dh_confirmation Resp kI kR kS ∗
         pk_dh_session_weak Resp kI kR kS n T ∗
         if in_honest kI kR T then
-          □ (pterm kS → ◇ False) ∗
+          □ (public kS → ◇ False) ∗
           pk_dh_session_meta_token Resp kI kR kS ⊤ ∗
           pk_dh_session_key kI kR kS n T
         else True

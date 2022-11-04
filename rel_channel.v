@@ -36,10 +36,10 @@ Definition channel_state_frag k ts : iProp :=
   ∃ γ, dh_meta k (N.@"channel") γ ∗ own γ (◯ to_max_prefix_list ts).
 
 Definition rel_channel_send k l ts : iProp :=
-  l ↦ #(length ts) ∗ sterm (TKey Enc k) ∗ channel_state_auth k ts.
+  l ↦ #(length ts) ∗ minted (TKey Enc k) ∗ channel_state_auth k ts.
 
 Definition rel_channel_recv k l ts : iProp :=
-  l ↦ #(length ts) ∗ sterm (TKey Dec k) ∗ channel_state_frag k ts.
+  l ↦ #(length ts) ∗ minted (TKey Dec k) ∗ channel_state_frag k ts.
 
 Definition rel_channel_pred k t : iProp :=
   ∃ ts m γ, ⌜t = Spec.of_list [TInt (length ts); m]⌝ ∧
@@ -69,8 +69,8 @@ Lemma wp_rel_send c k l m ts Ψ :
   channel c -∗
   enc_pred N rel_channel_pred -∗
   rel_channel_send k l ts -∗
-  sterm m -∗
-  □ (pterm (TKey Dec k) → pterm m) -∗
+  minted m -∗
+  □ (public (TKey Dec k) → public m) -∗
   (rel_channel_send k l (ts ++ [m]) -∗ Ψ #()) -∗
   WP rel_send c (TKey Enc k) #l m {{ Ψ }}.
 Proof.
@@ -85,11 +85,11 @@ rewrite /rel_send. wp_pures; wp_load; wp_pures; wp_store.
 wp_list. wp_bind (tint _). iApply wp_tint. wp_list.
 wp_term_of_list. wp_tenc. iApply wp_send => //.
   iModIntro => /=.
-  iApply pterm_TEncIS => //.
+  iApply public_TEncIS => //.
   - iModIntro. iExists ts, m, γ. do 2!iSplit => //.
-    by rewrite sterm_of_list /= sterm_TInt; eauto.
+    by rewrite minted_of_list /= minted_TInt; eauto.
   - iIntros "!> #p_k".
-    rewrite pterm_of_list /= pterm_TInt; do 2!iSplit => //.
+    rewrite public_of_list /= public_TInt; do 2!iSplit => //.
     by iApply "p_m".
 iApply "post". rewrite /rel_channel_send app_length /= Nat2Z.inj_add /=. iFrame.
 iSplit => //. by iExists γ; eauto.
@@ -102,9 +102,9 @@ Lemma wp_rel_recv c k l ts Ψ :
   channel c -∗
   enc_pred N rel_channel_pred -∗
   rel_channel_recv k l ts -∗
-  (∀ m, pterm m ∧ pterm (TKey Enc k) ∨
-        sterm m ∧
-        □ (pterm (TKey Dec k) -∗ pterm m) ∧
+  (∀ m, public m ∧ public (TKey Enc k) ∨
+        minted m ∧
+        □ (public (TKey Dec k) -∗ public m) ∧
         rel_channel_recv k l (ts ++ [m]) -∗ Ψ m) -∗
   WP rel_recv c (TKey Dec k) #l {{ Ψ }}.
 Proof.
@@ -119,8 +119,8 @@ wp_bind (to_int _). iApply wp_to_int.
 case: Spec.to_intP => [ {}n ->|_]; last by retry "IH" "Hl".
 wp_pures. wp_load. wp_pures.
 case: bool_decide_reflect => [[<- {n}]|_]; last by retry "IH" "Hl".
-iDestruct (pterm_TEncE with "p_m [//]") as "{p_m IH} [[p_k p_m] |H]".
-  rewrite pterm_of_list /=.
+iDestruct (public_TEncE with "p_m [//]") as "{p_m IH} [[p_k p_m] |H]".
+  rewrite public_of_list /=.
   iDestruct "p_m" as "(_ & p_m & _)".
   wp_pures. wp_load. wp_pures. wp_store. wp_pures. iModIntro.
   by iApply "post"; eauto.
@@ -140,13 +140,13 @@ have ? : ts' = ts; last subst ts'.
 have ? : [m] = m'; last subst m'.
   move: (f_equal (drop (length ts)) e_ts).
   by rewrite !drop_app.
-rewrite sterm_of_list /=. iDestruct "s_m" as "(_ & s_m & _)".
+rewrite minted_of_list /=. iDestruct "s_m" as "(_ & s_m & _)".
 wp_load. wp_pures. wp_store. wp_pures. iModIntro. iApply "post".
 iRight. iSplit => //. iSplit.
   iIntros "!> #p_k". iSpecialize ("p_m" with "p_k").
-  rewrite pterm_of_list /=. by iDestruct "p_m" as "(_ & ? & _)".
+  rewrite public_of_list /=. by iDestruct "p_m" as "(_ & ? & _)".
 rewrite /rel_channel_recv app_length /= Nat2Z.inj_add. iFrame.
-rewrite !sterm_TKey; iSplit => //.
+rewrite !minted_TKey; iSplit => //.
 by iExists γ; eauto.
 Qed.
 

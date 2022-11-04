@@ -103,27 +103,27 @@ Definition cr_resp : val := λ: "c" "skB" "pkB",
 
 Implicit Types Ψ : val → iProp.
 
-Lemma pterm_msg2E m2 kA kB nA nB :
+Lemma public_msg2E m2 kA kB nA nB :
   m2 !! Z.to_nat 0 = Some nA →
   m2 !! Z.to_nat 1 = Some nB →
   m2 !! Z.to_nat 2 = Some (TKey Dec kA) →
   cr_ctx -∗
-  pterm (TKey Dec kB) -∗
-  pterm (TEnc kB (Spec.tag (N.@"m2") (Spec.of_list m2))) -∗
-  ▷ (pterm nB ∧
-     (pterm (TKey Enc kB) ∨
+  public (TKey Dec kB) -∗
+  public (TEnc kB (Spec.tag (N.@"m2") (Spec.of_list m2))) -∗
+  ▷ (public nB ∧
+     (public (TKey Enc kB) ∨
       session N Resp nA nB (kA, kB))).
 Proof.
 iIntros (enA enB ekA) "#ctx #p_d_kB #p_m2".
 iDestruct "ctx" as "(_ & enc_m2 & _)".
-rewrite pterm_TEnc; iDestruct "p_m2" as "[[p_e_kB p_m2]|p_m2]".
-  rewrite pterm_tag pterm_of_list.
+rewrite public_TEnc; iDestruct "p_m2" as "[[p_e_kB p_m2]|p_m2]".
+  rewrite public_tag public_of_list.
   iPoseProof (big_sepL_lookup with "p_m2") as "p_nB"; first exact: enB.
   iSplit => //.
   by eauto.
 iDestruct "p_m2" as "(_ & inv & #pub)".
 iSpecialize ("pub" with "p_d_kB").
-rewrite pterm_tag pterm_of_list.
+rewrite public_tag public_of_list.
 iPoseProof (big_sepL_lookup with "pub") as "p_nB"; first exact: enB.
 iSplit => //.
 iPoseProof (wf_enc_elim with "inv enc_m2") as "{inv} #inv".
@@ -133,19 +133,19 @@ move/Spec.of_list_inj: e_m2 enA enB ekA => -> /= [] -> [] -> [] ->.
 by eauto.
 Qed.
 
-Lemma pterm_msg3E m3 kA kB nA nB :
+Lemma public_msg3E m3 kA kB nA nB :
   m3 !! Z.to_nat 0 = Some nA →
   m3 !! Z.to_nat 1 = Some nB →
   m3 !! Z.to_nat 2 = Some (TKey Dec kB) →
   cr_ctx -∗
-  pterm (TKey Dec kA) -∗
-  pterm (TEnc kA (Spec.tag (N.@"m3") (Spec.of_list m3))) -∗
-  ▷ (pterm (TKey Enc kA) ∨
+  public (TKey Dec kA) -∗
+  public (TEnc kA (Spec.tag (N.@"m3") (Spec.of_list m3))) -∗
+  ▷ (public (TKey Enc kA) ∨
      session N Init nA nB (kA, kB)).
 Proof.
 iIntros (enA enB ekB) "#ctx #p_d_ka #p_m3".
 iDestruct "ctx" as "(_ & _ & enc_m3)".
-rewrite pterm_TEnc; iDestruct "p_m3" as "[[p_e_kA p_m3]|p_m3]".
+rewrite public_TEnc; iDestruct "p_m3" as "[[p_e_kA p_m3]|p_m3]".
   by eauto.
 iDestruct "p_m3" as "(_ & inv & _)".
 iPoseProof (wf_enc_elim with "inv enc_m3") as "{inv} #inv".
@@ -161,13 +161,13 @@ Lemma wp_cr_init c kA kB E Ψ :
   channel c -∗
   cr_ctx -∗
   (∀ nA nB, cr_sess_inv Init nA nB (kA, kB)) -∗
-  pterm (TKey Dec kA) -∗
-  pterm (TKey Dec kB) -∗
+  public (TKey Dec kA) -∗
+  public (TKey Dec kB) -∗
   (∀ onB : option (term * term),
       (if onB is Some (nA, nB) then
-         pterm nA ∧
-         pterm nB ∧
-         (pterm (TKey Enc kB) ∨ P Resp nA nB kA kB)
+         public nA ∧
+         public nB ∧
+         (public (TKey Enc kB) ∨ P Resp nA nB kA kB)
        else True) -∗
       Ψ (repr onB)) -∗
   WP cr_init c (TKey Enc kA) (TKey Dec kA) (TKey Dec kB) @ E
@@ -181,36 +181,36 @@ iApply (wp_mknonce (λ _, True)%I (λ _, True)%I).
 iIntros (nA) "_ #p_nA _ unreg".
 rewrite (term_meta_token_difference _ (↑N)) //.
 iDestruct "unreg" as "[unreg _]".
-iAssert (pterm nA) as "{p_nA} p_nA"; first by iApply "p_nA".
+iAssert (public nA) as "{p_nA} p_nA"; first by iApply "p_nA".
 wp_list; wp_term_of_list.
 wp_pures; wp_bind (send _ _); iApply wp_send => //.
-  by iApply pterm_of_list => /=; eauto.
+  by iApply public_of_list => /=; eauto.
 wp_pures; wp_bind (recv _); iApply wp_recv => //.
 iIntros (m2) "#Hm2"; wp_tdec m2; last protocol_failure.
 wp_list_of_term m2; last protocol_failure.
 wp_list_match => [nA' nB pkB' {m2} ->|_]; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst nA'.
 wp_eq_term e; last protocol_failure; subst pkB'.
-iPoseProof (pterm_msg2E with "[//] d_kB Hm2")
+iPoseProof (public_msg2E with "[//] d_kB Hm2")
   as "{Hm2} [p_nB sessB]" => //.
 wp_list; wp_term_of_list.
 wp_tenc; wp_pures.
 iSpecialize ("inv" $! nA nB).
 iMod (session_begin _ _ _ _ (kA, kB) with "[] [inv] [unreg]")
   as "[#sessA close]"; eauto.
-iAssert (|={E}=> ▷ (pterm (TKey Enc kB) ∨ P Resp nA nB kA kB))%I
+iAssert (|={E}=> ▷ (public (TKey Enc kB) ∨ P Resp nA nB kA kB))%I
     with "[close]" as ">inv".
   iDestruct "sessB" as "[?|sessB]"; eauto.
   by iMod ("close" with "[] sessB") as "close"; eauto.
 wp_bind (send _ _); iApply wp_send => //.
-  iApply pterm_TEncIS; eauto.
-  - iPoseProof (pterm_sterm with "d_kA") as "?".
-    by rewrite !sterm_TKey.
+  iApply public_TEncIS; eauto.
+  - iPoseProof (public_minted with "d_kA") as "?".
+    by rewrite !minted_TKey.
   - iModIntro.
     iExists _, _, _; iSplit => //.
-    by rewrite sterm_of_list /= -!pterm_sterm; eauto.
+    by rewrite minted_of_list /= -!public_minted; eauto.
   - iIntros "!> !> _".
-    by rewrite pterm_of_list /=; eauto.
+    by rewrite public_of_list /=; eauto.
 wp_pures; iApply ("Hpost" $! (Some (nA, nB))); eauto.
 Qed.
 
@@ -219,16 +219,16 @@ Lemma wp_cr_resp c kB E Ψ :
   ↑N ⊆ E →
   channel c -∗
   cr_ctx -∗
-  pterm (TKey Dec kB) -∗
+  public (TKey Dec kB) -∗
   (∀ kA nA nB, cr_sess_inv Resp nA nB (kA, kB)) -∗
   (∀ ot : option (term * term * term),
       (if ot is Some (pkA, nA, nB) then
          ∃ kA,
            ⌜pkA = TKey Dec kA⌝ ∗
-           pterm pkA ∧
-           pterm nA ∧
-           pterm nB ∧
-           (pterm (TKey Enc kA) ∨ P Init nA nB kA kB)
+           public pkA ∧
+           public nA ∧
+           public nB ∧
+           (public (TKey Enc kA) ∨ P Init nA nB kA kB)
        else True) -∗
        Ψ (repr ot)) -∗
   WP cr_resp c (TKey Enc kB) (TKey Dec kB) @ E {{ Ψ }}.
@@ -239,7 +239,7 @@ rewrite /cr_resp; wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m1) "#Hm1".
 wp_list_of_term m1; last protocol_failure.
 wp_list_match => [nA pkA {m1} ->|_]; last protocol_failure.
-rewrite pterm_of_list /=.
+rewrite public_of_list /=.
 iDestruct "Hm1" as "(HnA & HpkA & _)".
 wp_is_key_eq kt kA et; last protocol_failure; subst pkA.
 wp_pures.
@@ -250,19 +250,19 @@ iApply (wp_mknonce (λ _, True)%I (λ _, True)%I).
 iIntros (nB) "_ #p_nB _ unreg".
 rewrite (term_meta_token_difference _ (↑N)) //.
 iDestruct "unreg" as "[token _]".
-iAssert (pterm nB) as "{p_nB} HnB"; first by iApply "p_nB".
+iAssert (public nB) as "{p_nB} HnB"; first by iApply "p_nB".
 iMod (session_begin _ _ nA nB (kA, kB) with "[] [inv] [token]")
   as "[#sessB close]"; eauto.
 wp_list; wp_term_of_list.
 wp_tenc; wp_pures; wp_bind (send _ _); iApply wp_send => //.
-  iApply pterm_TEncIS.
-  - iPoseProof (pterm_sterm with "HkB") as "?".
-    by rewrite !sterm_TKey.
+  iApply public_TEncIS.
+  - iPoseProof (public_minted with "HkB") as "?".
+    by rewrite !minted_TKey.
   - by eauto.
   - iIntros "!>". by iExists _, _, _; eauto.
-  - by rewrite sterm_of_list /= -!pterm_sterm; eauto.
+  - by rewrite minted_of_list /= -!public_minted; eauto.
   - iIntros "!> !> _".
-    by rewrite pterm_of_list /=; eauto.
+    by rewrite public_of_list /=; eauto.
 wp_pures; wp_bind (recv _); iApply wp_recv => //; iIntros (m3) "#Hm3".
 wp_tdec m3; last protocol_failure.
 wp_list_of_term m3; last protocol_failure.
@@ -270,9 +270,9 @@ wp_list_match => [nA' nB' pkB' {m3} ->|_]; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst nA'.
 wp_eq_term e; last protocol_failure; subst nB'.
 wp_eq_term e; last protocol_failure; subst pkB'.
-iPoseProof (pterm_msg3E with "[//] HpkA Hm3") as "{Hm3} Hm3"; eauto.
+iPoseProof (public_msg3E with "[//] HpkA Hm3") as "{Hm3} Hm3"; eauto.
 wp_if.
-iAssert (|={E}=> ▷ (pterm (TKey Enc kA) ∨ P Init nA nB kA kB))%I
+iAssert (|={E}=> ▷ (public (TKey Enc kA) ∨ P Init nA nB kA kB))%I
     with "[close]" as ">inv".
   iDestruct "Hm3" as "[Hm3 | Hm3]"; eauto.
   iMod ("close" with "[//] Hm3") as "close". by eauto.

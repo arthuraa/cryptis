@@ -35,7 +35,7 @@ Variable N : namespace.
   parties. *)
 
 Definition corruption kI kR : iProp :=
-  pterm (TKey Dec kI) ∨ pterm (TKey Dec kR).
+  public (TKey Dec kI) ∨ public (TKey Dec kR).
 
 Global Instance corruptionC : Comm (⊣⊢) corruption.
 Proof. by move=> k k'; rewrite /corruption [(_ ∨ _)%I]comm. Qed.
@@ -49,14 +49,14 @@ Definition in_honest kI kR (T : gset term) : bool :=
 
 (** [readable_by t kI kR] *)
 Definition readable_by t kI kR : iProp :=
-  □ (corruption kI kR → pterm t).
+  □ (corruption kI kR → public t).
 
 #[global]
 Instance readable_by_persistent t kI kR : Persistent (readable_by t kI kR).
 Proof. apply _. Qed.
 
 Definition secret_of t kI kR : iProp :=
-  □ (pterm t ↔ ▷ corruption kI kR).
+  □ (public t ↔ ▷ corruption kI kR).
 
 #[global]
 Instance secret_of_persistent t kI kR : Persistent (secret_of t kI kR).
@@ -69,11 +69,11 @@ Class PK := {
 
   mk_key_share_inj :> Inj (=) (=) mk_key_share;
 
-  mk_key_share_sterm :
-    ∀ n, sterm (mk_key_share n) ⊣⊢ sterm n;
+  mk_key_share_minted :
+    ∀ n, minted (mk_key_share n) ⊣⊢ minted n;
 
   mk_key_share_secret_of :
-    ∀ n kI kR, sterm n -∗ is_priv_key n kI kR -∗
+    ∀ n kI kR, minted n -∗ is_priv_key n kI kR -∗
     secret_of (mk_key_share n) kI kR;
 
   mk_session_key : role → term → term → term;
@@ -89,8 +89,8 @@ Class PK := {
     ∀ nI nR, mk_session_key Init nI (mk_key_share nR) =
              mk_session_key Resp nR (mk_key_share nI);
 
-  mk_session_key_sterm :
-    ∀ rl t1 t2, sterm t1 -∗ sterm t2 -∗ sterm (mk_session_key rl t1 t2);
+  mk_session_key_minted :
+    ∀ rl t1 t2, minted t1 -∗ minted t2 -∗ minted (mk_session_key rl t1 t2);
 
   confirmation : role → term → term → term → iProp;
 
@@ -99,7 +99,7 @@ Class PK := {
     {{{ True }}}
       mk_key_share_impl #() @ E
     {{{ (n : term), RET (n, mk_key_share n) : val;
-        sterm n ∗ □ is_priv_key n kI kR ∗
+        minted n ∗ □ is_priv_key n kI kR ∗
         nonce_meta_token n ⊤
     }}};
 
@@ -149,7 +149,7 @@ case: e => -> -> -> ->. iSplit => //.
 Qed.
 
 Definition init_started kI kR sI : iProp :=
-  pterm sI ∨
+  public sI ∨
   ∃ n T nI,
     ⌜sI = mk_key_share nI⌝ ∗
     session_weak' kI kR nI n T ∗
@@ -177,12 +177,12 @@ Proof. apply _. Qed.
 Definition msg1_pred kR m1 : iProp :=
   ∃ sI kI,
     ⌜m1 = Spec.of_list [sI; TKey Enc kI]⌝ ∧
-    pterm (TKey Enc kI) ∧
+    public (TKey Enc kI) ∧
     readable_by sI kI kR ∧
     init_started kI kR sI.
 
 Definition resp_accepted kI kR sI sR : iProp :=
-  pterm sI ∨
+  public sI ∨
   ∃ n T n' T' nI nR,
     ⌜n' ≤ n⌝ ∧
     session_weak' kI kR nI n' T' ∧
@@ -194,7 +194,7 @@ Definition resp_accepted kI kR sI sR : iProp :=
     session (N.@"session") Resp nI nR (kI, kR).
 
 Definition resp_waiting kI kR sI nR : iProp :=
-  pterm sI ∗ nonce_meta_token nR (↑N.@"session") ∨
+  public sI ∗ nonce_meta_token nR (↑N.@"session") ∨
   ∃ nI,
     ⌜sI = mk_key_share nI⌝ ∧
     session (N.@"session") Resp nI nR (kI, kR) ∧
@@ -208,7 +208,7 @@ Definition msg2_pred kI m2 : iProp :=
     resp_accepted kI kR sI sR.
 
 Definition init_finished kR sR : iProp :=
-  pterm sR ∨
+  public sR ∨
   ∃ nI nR kI n T,
     session_weak' kI kR nI n T ∧
     session_weak' kI kR nR n T ∧

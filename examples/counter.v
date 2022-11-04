@@ -111,9 +111,9 @@ Lemma wp_server c γ l k t :
   cryptis_ctx -∗
   channel c -∗
   enc_pred nroot (sig_pred γ) -∗
-  sterm (TKey Enc k) -∗
+  minted (TKey Enc k) -∗
   server_inv γ l -∗
-  pterm t -∗
+  public t -∗
   WP server c #l (TKey Enc k) {{ _, True }}.
 Proof.
 iIntros "#ctx #chan_c #sig_pred #s_sk #inv #p_t".
@@ -131,10 +131,10 @@ iInv "inv" as ">(%n & Hl & own & #ownf)". wp_load.
 iModIntro. iSplitL "Hl own"; first by iExists n; iFrame.
 wp_bind (tint _). iApply wp_tint. wp_tenc. wp_pures.
 wp_bind (send _ _). iApply wp_send => //.
-{ iApply pterm_TEncIS => //.
+{ iApply public_TEncIS => //.
   - iModIntro. iExists n. by eauto.
-  - by rewrite sterm_TInt.
-  - iIntros "!> !> _". by rewrite pterm_TInt. }
+  - by rewrite minted_TInt.
+  - iIntros "!> !> _". by rewrite public_TInt. }
 (* Loop *)
 wp_pures. iApply "IH".
 Qed.
@@ -145,7 +145,7 @@ Lemma wp_client E T n c γ l k φ :
   cryptis_ctx -∗
   channel c -∗
   enc_pred nroot (sig_pred γ) -∗
-  pterm (TKey Dec k) -∗
+  public (TKey Dec k) -∗
   ●H□{n} T -∗
   (∀ n : nat, own γ (◯ MaxNat n) -∗ φ #n) -∗
   WP client c (TKey Dec k) @ E {{ v, φ v }}.
@@ -158,17 +158,17 @@ iRevert "post". iApply wp_do_until. iIntros "!> post". wp_pures.
 wp_bind (tint _). iApply wp_tint.  wp_pures.
 (* Send message. Prove it is well formed. *)
 wp_bind (send _ _). iApply wp_send => //.
-{ by rewrite pterm_TInt. }
+{ by rewrite public_TInt. }
 (* Wait for response. *)
 wp_pures. wp_bind (recv _). iApply wp_recv => //.
 iIntros "%reply #p_reply". wp_pures.
 (* Verify the signature *)
 wp_tdec reply; last by wp_pures; eauto.
-iPoseProof (pterm_TEncE with "p_reply sig_pred")
+iPoseProof (public_TEncE with "p_reply sig_pred")
   as "[[#p_sk _]|(#replyP & #s_reply & _)]".
 { (* The signature could have been forged if the key was compromised, but we
      have ruled out this possibility.  *)
-  iMod (honest_pterm with "[//] hon p_sk") as "#contra" => //.
+  iMod (honest_public with "[//] hon p_sk") as "#contra" => //.
   { solve_ndisj. }
   wp_pures. by iDestruct "contra" as ">[]". }
 (* Therefore, the invariant must hold. *)
@@ -224,8 +224,8 @@ iIntros "%γ %l #? #inv".
 (* Run server in a loop in parallel. *)
 wp_pures. wp_bind (Fork _). iApply wp_fork.
 { iApply wp_server => //.
-  iPoseProof (pterm_sterm with "p_vk") as "s_vk".
-  by rewrite !sterm_TKey. }
+  iPoseProof (public_minted with "p_vk") as "s_vk".
+  by rewrite !minted_TKey. }
 iModIntro.
 (* Let client contact server *)
 wp_pures. wp_bind (client _ _). iApply wp_client => //.

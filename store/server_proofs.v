@@ -32,15 +32,15 @@ Variable N : namespace.
 Definition server_state s n t : iProp :=
   sst_ts s ↦ #n ∗
   sst_val s ↦ repr t ∗
-  sterm (sst_key s) ∗
-  pterm t ∗
+  minted (sst_key s) ∗
+  public t ∗
   handshake_done N (sst_key s) (sst_ok s) ∗
   if sst_ok s then value_frag N (sst_key s) n t else True%I.
 
 Lemma server_state_frag s n t :
   server_state s n t -∗
-  sterm (sst_key s) ∗
-  pterm t ∗
+  minted (sst_key s) ∗
+  public t ∗
   handshake_done N (sst_key s) (sst_ok s) ∗
   if sst_ok s then value_frag N (sst_key s) n t else True%I.
 Proof. by iIntros "(_ & _ & ?)". Qed.
@@ -57,7 +57,7 @@ Qed.
 
 Lemma wp_server_upd_val E ss n t n' t' :
   {{{ ▷ server_state ss n t ∗
-      ▷ pterm t' ∗
+      ▷ public t' ∗
       ▷ if sst_ok ss then value_frag N (sst_key ss) n' t' else True%I }}}
     Server.upd_val (repr ss) #n' t' @ E
   {{{ RET #(); server_state ss n' t' }}}.
@@ -71,7 +71,7 @@ Lemma wp_server_get_val E ss n t :
   {{{ server_state ss n t }}}
     Server.get_val (repr ss) @ E
   {{{ RET (repr t);
-      pterm t ∗
+      public t ∗
       (if sst_ok ss then value_frag N (sst_key ss) n t else True%I) ∗
       server_state ss n t }}}.
 Proof.
@@ -92,22 +92,22 @@ Qed.
 
 Lemma ack_storeI kS n :
   store_ctx N -∗
-  sterm kS -∗
-  pterm (TEnc kS (Spec.tag (N.@"ack_store") (TInt n))).
+  minted kS -∗
+  public (TEnc kS (Spec.tag (N.@"ack_store") (TInt n))).
 Proof.
 iIntros "(_ & _ & #ctx & _) #s_kS".
-iApply pterm_TEncIS => //.
-- by rewrite sterm_TKey.
+iApply public_TEncIS => //.
+- by rewrite minted_TKey.
 - iModIntro. by iExists n.
-- by rewrite sterm_TInt.
-- by rewrite pterm_TInt; eauto.
+- by rewrite minted_TInt.
+- by rewrite public_TInt; eauto.
 Qed.
 
 Lemma wp_server_handle_store E c ss n t m :
   ↑cryptisN ⊆ E →
   channel c -∗
   store_ctx N -∗
-  pterm (TEnc (sst_key ss) (Spec.tag (N.@"store") m)) -∗
+  public (TEnc (sst_key ss) (Spec.tag (N.@"store") m)) -∗
   {{{ server_state ss n t }}}
     Server.handle_store N c (repr ss) m @ E
   {{{ n' t' v, RET v; server_state ss n' t' }}}.
@@ -137,8 +137,8 @@ iApply (wp_server_get_key with "[$]") => //.
 iIntros "!> state". wp_tsenc. rewrite /=.
 iApply wp_send => //.
   iModIntro. iApply ack_storeI => //.
-  iPoseProof (pterm_sterm with "p_m") as "s_m".
-  rewrite sterm_TEnc. by iDestruct "s_m" as "[??]".
+  iPoseProof (public_minted with "p_m") as "s_m".
+  rewrite minted_TEnc. by iDestruct "s_m" as "[??]".
 iApply "post". by eauto.
 Qed.
 
@@ -146,7 +146,7 @@ Lemma wp_server_handle_load E c ss n t m :
   ↑cryptisN ⊆ E →
   channel c -∗
   store_ctx N -∗
-  pterm (TEnc (sst_key ss) (Spec.tag (N.@"load") m)) -∗
+  public (TEnc (sst_key ss) (Spec.tag (N.@"load") m)) -∗
   {{{ server_state ss n t }}}
     Server.handle_load N c (repr ss) m @ E
   {{{ v, RET v; server_state ss n t }}}.
@@ -166,15 +166,15 @@ iIntros "!> state". wp_tsenc. rewrite /=.
 iApply (wp_send with "[//] [#]") => //; last by iApply "post".
 iDestruct "ctx" as "(_ & _ & _ & _ & ? & _)".
 iDestruct "state" as "(_ & _ & #? & _ & #frag' & #key)".
-iModIntro. iApply pterm_TEncIS => //.
-- rewrite sterm_TKey.
-  iPoseProof (pterm_sterm with "p_m") as "{p_m} p_m".
-  by rewrite sterm_TEnc; iDestruct "p_m" as "[??]".
+iModIntro. iApply public_TEncIS => //.
+- rewrite minted_TKey.
+  iPoseProof (public_minted with "p_m") as "{p_m} p_m".
+  by rewrite minted_TEnc; iDestruct "p_m" as "[??]".
 - iModIntro.
   iExists n, t, (sst_ok ss).
   by eauto.
-- rewrite sterm_of_list /= sterm_TInt -[sterm t]pterm_sterm; eauto.
-- iIntros "!> _". by rewrite pterm_of_list /= pterm_TInt; eauto.
+- rewrite minted_of_list /= minted_TInt -[minted t]public_minted; eauto.
+- iIntros "!> _". by rewrite public_of_list /= public_TInt; eauto.
 Qed.
 
 Lemma wp_server_conn_handler_body E c ss n t :
@@ -213,13 +213,13 @@ Qed.
 
 Lemma initE kS t :
   store_ctx N -∗
-  pterm (TEnc kS (Spec.tag (N.@"init") t)) -∗
-  pterm (TKey Enc kS) ∨
+  public (TEnc kS (Spec.tag (N.@"init") t)) -∗
+  public (TKey Enc kS) ∨
   ▷ ∃ ok, handshake_done N kS ok ∗
             (if ok then value_frag N kS 0 (TInt 0) else True)%I.
 Proof.
 iIntros "(#initP & _) #p_t".
-iDestruct (pterm_TEncE with "[//] [//]") as "[[??]|#tP]"; first by eauto.
+iDestruct (public_TEncE with "[//] [//]") as "[[??]|#tP]"; first by eauto.
 iRight. by iDestruct "tP" as "(#init & _ & _)".
 Qed.
 
@@ -227,7 +227,7 @@ Lemma wp_server_listen E c kR dq ph T :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   {{{ cryptis_ctx ∗ channel c ∗ store_ctx N ∗
-      pterm (TKey Enc kR) ∗ ●H{dq|ph} T }}}
+      public (TKey Enc kR) ∗ ●H{dq|ph} T }}}
     Server.listen N c (TKey Dec kR) (TKey Enc kR) @ E
   {{{ RET #(); False }}}.
 Proof.
@@ -247,7 +247,7 @@ wp_bind (Fork _). iApply (wp_fork with "[key]"); last first.
   by eauto.
 iClear "IH". iModIntro. rewrite /Server.wait_init. wp_pures.
 iRevert "key". iApply wp_sess_recv => //.
-  by rewrite sterm_tag.
+  by rewrite minted_tag.
 iIntros "!> %t key #p_t".
 wp_pures. wp_alloc v as "Hv". wp_alloc ts as "Hts".
 pose (ss := {| sst_ts := ts; sst_val := v;
@@ -257,12 +257,12 @@ iAssert (handshake_done N (sst_key ss) (sst_ok ss)) as "#done".
 { iExists kI, kR, kS, ph, T; eauto. }
 iAssert (▷ server_state ss 0 (TInt 0))%I with "[Hts Hv key]" as "state".
 { iFrame.
-  rewrite /= sterm_tag pterm_TInt. do 3!iSplit => //.
+  rewrite /= minted_tag public_TInt. do 3!iSplit => //.
   case e_ok: in_honest => //.
   iDestruct "key" as "(#sec & _ & #key)".
-  iAssert (∀ kt, pterm (TKey kt (sst_key ss)) -∗ ◇ False)%I as "{sec} sec".
+  iAssert (∀ kt, public (TKey kt (sst_key ss)) -∗ ◇ False)%I as "{sec} sec".
   { iIntros "%kt #p_kS'".
-    iPoseProof (pterm_sym_keyE with "[//] p_kS'") as ">sym".
+    iPoseProof (public_sym_keyE with "[//] p_kS'") as ">sym".
     by iApply "sec". }
   iPoseProof (initE with "ctx p_t") as "{p_t} [contra|p_t]".
     by iDestruct ("sec" with "contra") as ">[]".

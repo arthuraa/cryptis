@@ -141,7 +141,7 @@ case: (bool_decide_reflect (pkR = _ ∨ _)) => [succ|_]; last by wp_pures; eauto
 iAssert (⌜kR' = kR⌝ ∗
          ⌜kI' = kI⌝ ∗
          ⌜gabI = gabR⌝ ∗
-         □ (pterm gabI → ◇ False))%I with "[H1 H2]" as "#finish".
+         □ (public gabI → ◇ False))%I with "[H1 H2]" as "#finish".
 { case: succ => - [<-].
   - iClear "H2".
     rewrite /in_honest bool_decide_decide decide_True; try set_solver.

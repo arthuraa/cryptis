@@ -59,7 +59,7 @@ Qed.
 Next Obligation. by case; eauto. Qed.
 
 Next Obligation.
-by case=> t1 t2; iIntros "#s1 #s2"; rewrite sterm_TPair; iSplit.
+by case=> t1 t2; iIntros "#s1 #s2"; rewrite minted_TPair; iSplit.
 Qed.
 
 Next Obligation.
@@ -82,14 +82,14 @@ Lemma wp_nsl_init c kI kR dq n T E :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
-  pterm (TKey Enc kI) -∗
-  pterm (TKey Enc kR) -∗
+  public (TKey Enc kI) -∗
+  public (TKey Enc kR) -∗
   {{{ init_confirm kI kR ∗ ●H{dq|n} T }}}
     nsl_init c (TKey Dec kI) (TKey Enc kI) (TKey Enc kR) @ E
   {{{ (okS : option term), RET repr okS;
       ●H{dq|n} T ∗
       if okS is Some kS then
-        sterm kS ∗
+        minted kS ∗
         □ nsl_confirmation Init kI kR kS ∗
         session_weak N Init kI kR kS n T ∗
         if in_honest kI kR T then
@@ -110,15 +110,15 @@ Lemma wp_nsl_resp c kR dq n T E :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
-  pterm (TKey Enc kR) -∗
+  public (TKey Enc kR) -∗
   {{{ resp_confirm kR ∗ ●H{dq|n} T }}}
     nsl_resp c (TKey Dec kR) (TKey Enc kR) @ E
   {{{ (res : option (term * term)), RET repr res;
       ●H{dq|n} T ∗
       if res is Some (pkI, kS) then ∃ kI,
         ⌜pkI = TKey Enc kI⌝ ∗
-        pterm pkI ∗
-        sterm kS ∗
+        public pkI ∗
+        minted kS ∗
         □ confirmation Resp kI kR kS ∗
         session_weak N Resp kI kR kS n T ∗
         if in_honest kI kR T then

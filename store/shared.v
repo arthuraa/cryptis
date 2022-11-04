@@ -36,10 +36,10 @@ Implicit Types ok : bool.
 Lemma wp_sess_recv E N c sk (f : val) φ Ψ :
   ↑cryptisN ⊆ E →
   channel c -∗
-  sterm sk -∗
+  minted sk -∗
   □ (∀ t,
       φ -∗
-      pterm (TEnc sk (Spec.tag N t)) -∗
+      public (TEnc sk (Spec.tag N t)) -∗
       WP f t @ E {{ v, ⌜v = NONEV⌝ ∗ φ ∨ ∃ v', ⌜v = SOMEV v'⌝ ∗ Ψ v' }}) -∗
   φ -∗ WP sess_recv N c (Spec.mkskey sk) f @ E {{ Ψ }}.
 Proof.
@@ -65,7 +65,7 @@ Instance handshake_done_persistent kS ok :
 Proof. apply _. Qed.
 
 Definition wf_key kS γ : iProp :=
-  □ (∀ kt, pterm (TKey kt kS) -∗ ◇ False) ∗
+  □ (∀ kt, public (TKey kt kS) -∗ ◇ False) ∗
   □ ∀ kS', ⌜kS = Spec.tag (nroot.@"keys".@"sym") kS'⌝ -∗ ∃ kI kR ph T,
     pk_dh_session_meta N (λ _ _ _ _, True)%I Init kI kR kS' N γ ∗
     pk_dh_session_key N (λ _ _ _ _, True)%I kI kR kS' ph T.
@@ -142,7 +142,7 @@ Definition init_pred kS (m : term) : iProp := ∃ ok,
 
 Definition version_pred kS m : iProp := ∃ (n : nat) t ok,
   ⌜m = Spec.of_list [TInt n; t]⌝ ∗
-  pterm t ∗
+  public t ∗
   handshake_done kS ok ∗
   if ok then value_frag kS n t
   else True.
@@ -167,7 +167,7 @@ Definition store_ctx : iProp :=
 Lemma version_predE kS n t :
   version_pred kS (Spec.of_list [TInt n; t]) -∗
   ∃ ok,
-    pterm t ∗
+    public t ∗
     handshake_done kS ok ∗
     if ok then value_frag kS n t else True.
 Proof.
@@ -196,18 +196,18 @@ Lemma version_predE' N' kS ok n t :
   handshake_done kS ok -∗
   (if ok then ∃ γ, wf_key kS γ else True) -∗
   enc_pred N' version_pred -∗
-  pterm (TEnc kS (Spec.tag N' (Spec.of_list [TInt n; t]))) -∗
-  ▷ (pterm t ∗
+  public (TEnc kS (Spec.tag N' (Spec.of_list [TInt n; t]))) -∗
+  ▷ (public t ∗
      if ok then value_frag kS n t else True).
 Proof.
 iIntros "#done #key #? #p_m". iSplit.
-  iPoseProof (pterm_TEncE with "p_m [//]") as "{p_m} p_m".
-  rewrite pterm_of_list /=.
+  iPoseProof (public_TEncE with "p_m [//]") as "{p_m} p_m".
+  rewrite public_of_list /=.
   iDestruct "p_m" as "[(_ & _ & ? & _)|p_m]" => //.
   iDestruct "p_m" as "(#p_m & _)". iModIntro.
   by iDestruct (version_predE with "p_m") as "(%ok' & ? & _)".
 case: ok => //. iDestruct "key" as "(%γ & key)".
-iPoseProof (pterm_TEncE with "p_m [//]") as "{p_m} p_m".
+iPoseProof (public_TEncE with "p_m [//]") as "{p_m} p_m".
 iDestruct "p_m" as "[(contra & _)|p_m]" => //.
   iDestruct "key" as "[#s_kS _]".
   iDestruct ("s_kS" with "contra") as ">[]".
@@ -221,8 +221,8 @@ Lemma store_predE kS ok n t :
   handshake_done kS ok -∗
   (if ok then ∃ γ, wf_key kS γ else True) -∗
   store_ctx -∗
-  pterm (TEnc kS (Spec.tag (N.@"store") (Spec.of_list [TInt n; t]))) -∗
-  ▷ (pterm t ∗
+  public (TEnc kS (Spec.tag (N.@"store") (Spec.of_list [TInt n; t]))) -∗
+  ▷ (public t ∗
      if ok then value_frag kS n t else True).
 Proof.
 iIntros "#key #wf #(_ & #storeP & _) #p_m".
@@ -233,8 +233,8 @@ Lemma ack_loadE kS ok n t :
   handshake_done kS ok -∗
   (if ok then ∃ γ, wf_key kS γ else True) -∗
   store_ctx -∗
-  pterm (TEnc kS (Spec.tag (N.@"ack_load") (Spec.of_list [TInt n; t]))) -∗
-  ▷ (pterm t ∗
+  public (TEnc kS (Spec.tag (N.@"ack_load") (Spec.of_list [TInt n; t]))) -∗
+  ▷ (public t ∗
      if ok then value_frag kS n t else True%I).
 Proof.
 iIntros "#key #? #(_ & _ & _ & _ & ? & _)".

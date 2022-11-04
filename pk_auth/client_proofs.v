@@ -22,36 +22,36 @@ Variable N : namespace.
 
 Context `{!PK}.
 
-Lemma pterm_msg1I n T kI kR nI :
+Lemma public_msg1I n T kI kR nI :
   let sI := mk_key_share nI in
   pk_auth_ctx N -∗
   session_weak' N kI kR nI n T -∗
-  sterm nI -∗
+  minted nI -∗
   □ is_priv_key nI kI kR -∗
-  pterm (TKey Enc kI) -∗
-  pterm (TKey Enc kR) -∗
-  pterm (TEnc kR (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Enc kI]))).
+  public (TKey Enc kI) -∗
+  public (TKey Enc kR) -∗
+  public (TEnc kR (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Enc kI]))).
 Proof.
 iIntros "(_ & #m1P & _ & _) #meta #s_nI #p_nI #p_ekI #p_ekR".
 iPoseProof (mk_key_share_secret_of with "s_nI p_nI") as "p_sI".
-iApply pterm_TEncIS; eauto.
+iApply public_TEncIS; eauto.
 - iModIntro. iExists (mk_key_share nI), kI. do !iSplit => //.
   + iIntros "!> #?". iApply "p_sI". by eauto.
   + iRight. by iExists n, T, nI; eauto.
-- rewrite sterm_of_list /= mk_key_share_sterm. by eauto.
-iIntros "!> #p_dkR". rewrite pterm_of_list /=. do !iSplit => //.
+- rewrite minted_of_list /= mk_key_share_minted. by eauto.
+iIntros "!> #p_dkR". rewrite public_of_list /=. do !iSplit => //.
 iApply "p_sI". iModIntro. by iRight.
 Qed.
 
-Lemma pterm_msg2E kI kR sI sR :
+Lemma public_msg2E kI kR sI sR :
   pk_auth_ctx N -∗
   secret_of sI kI kR -∗
-  pterm (TEnc kI (Spec.tag (N.@"m2") (Spec.of_list [sI; sR; TKey Enc kR]))) -∗
-  ▷ (sterm sR ∧ secret_of sR kI kR ∧ resp_accepted N kI kR sI sR).
+  public (TEnc kI (Spec.tag (N.@"m2") (Spec.of_list [sI; sR; TKey Enc kR]))) -∗
+  ▷ (minted sR ∧ secret_of sR kI kR ∧ resp_accepted N kI kR sI sR).
 Proof.
 iIntros "(_ & _ & #m2P & _) #started #p_m2".
-iPoseProof (pterm_TEncE with "p_m2 m2P") as "{p_m2} [p_m2 | p_m2]".
-- rewrite pterm_of_list /=.
+iPoseProof (public_TEncE with "p_m2 m2P") as "{p_m2} [p_m2 | p_m2]".
+- rewrite public_of_list /=.
   iDestruct "p_m2" as "(? & p_sI & p_sR & _ & _)".
   iSpecialize ("started" with "p_sI").
   iModIntro.
@@ -59,7 +59,7 @@ iPoseProof (pterm_TEncE with "p_m2 m2P") as "{p_m2} [p_m2 | p_m2]".
   iSplit.
     iModIntro. by iSplit; eauto.
   by iLeft.
-- iDestruct "p_m2" as "(#p_m2 & #s_m2 & #?)". rewrite sterm_of_list /=.
+- iDestruct "p_m2" as "(#p_m2 & #s_m2 & #?)". rewrite minted_of_list /=.
   iModIntro.
   iDestruct "p_m2" as "(%sI' & %sR' & %kR' & %e_m2 & sRP & ?)".
   iDestruct "s_m2" as "(s_sI & s_sR & _)".
@@ -74,7 +74,7 @@ Lemma init_finish dq n T E kI kR nI sR :
   pk_auth_ctx N -∗
   ●H{dq|n} T -∗
   session_weak' N kI kR nI n T -∗
-  sterm nI -∗
+  minted nI -∗
   □ is_priv_key nI kI kR -∗
   secret_of sR kI kR -∗
   resp_accepted N kI kR sI sR -∗
@@ -138,16 +138,16 @@ iRight. iSplitL.
 iExists nI, nR; do !iSplit => //; eauto.
 Qed.
 
-Lemma pterm_msg3I kI kR sI sR :
+Lemma public_msg3I kI kR sI sR :
   pk_auth_ctx N -∗
-  pterm (TKey Enc kR) -∗
-  sterm sR -∗
+  public (TKey Enc kR) -∗
+  minted sR -∗
   secret_of sR kI kR -∗
   init_finished N kR sR -∗
-  pterm (TEnc kR (Spec.tag (N.@"m3") sR)).
+  public (TEnc kR (Spec.tag (N.@"m3") sR)).
 Proof.
 iIntros "(_ & _ & _ & #p_m3) #p_eR #s_sR #p_sR #finished".
-iApply pterm_TEncIS; eauto.
+iApply public_TEncIS; eauto.
 iIntros "!> #p_dkR". iApply "p_sR". by iRight.
 Qed.
 
@@ -160,15 +160,15 @@ Lemma wp_pk_auth_init c kI kR dq n T E :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
-  pterm (TKey Enc kI) -∗
-  pterm (TKey Enc kR) -∗
+  public (TKey Enc kI) -∗
+  public (TKey Enc kR) -∗
   {{{ init_confirm kI kR ∗ ●H{dq|n} T }}}
     pk_auth_init N c mk_key_share_impl (mk_session_key_impl Init)
     (TKey Dec kI) (TKey Enc kI) (TKey Enc kR) @ E
   {{{ okS, RET (repr okS);
       ●H{dq|n} T ∗
       if okS is Some kS then
-        sterm kS ∗
+        minted kS ∗
         □ confirmation Init kI kR kS ∗
         session_weak N Init kI kR kS n T ∗
         if in_honest kI kR T then
@@ -190,14 +190,14 @@ wp_pures.
 iPoseProof (mk_key_share_secret_of with "s_nI p_nI") as "p_sI".
 wp_list. wp_term_of_list. wp_tenc => /=. wp_pures.
 wp_bind (send _ _). iApply (wp_send with "[] [#]"); eauto.
-  by iApply (pterm_msg1I with "[]"); eauto.
+  by iApply (public_msg1I with "[]"); eauto.
 wp_pures. wp_bind (recv _). iApply wp_recv; eauto.
 iIntros "%m2 #p_m2". wp_tdec m2; last protocol_failure.
 wp_list_of_term m2; last protocol_failure.
 wp_list_match => [sI' sR pkR' {m2} ->|_]; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst sI'.
 wp_eq_term e; last protocol_failure; subst pkR'.
-iPoseProof (pterm_msg2E with "[//] [//] [//]")
+iPoseProof (public_msg2E with "[//] [//] [//]")
   as "{p_m2} (s_sR & p_sR & accepted)".
 wp_pures.
 iMod (init_finish with "ctx' hon sess s_nI p_nI p_sR accepted token confirm")
@@ -205,17 +205,17 @@ iMod (init_finish with "ctx' hon sess s_nI p_nI p_sR accepted token confirm")
 wp_bind (mk_session_key_impl _ _ _). iApply wp_mk_session_key => //.
 iIntros "!> _". wp_pures. wp_tenc. wp_pures. wp_bind (send _ _).
 iApply wp_send => //.
-  by iApply pterm_msg3I.
+  by iApply public_msg3I.
 case: decide => [[kIP kRP]|_]; last first.
   wp_pures. iApply ("Hpost" $! (Some (mk_session_key Init nI sR))).
-  iFrame. iModIntro. iSplit; eauto. by iApply mk_session_key_sterm.
+  iFrame. iModIntro. iSplit; eauto. by iApply mk_session_key_minted.
 iDestruct "session" as "[[#fail|#fail]|session]".
-- iMod (honest_pterm with "ctx hon fail") as "#contra"; eauto; try solve_ndisj.
+- iMod (honest_public with "ctx hon fail") as "#contra"; eauto; try solve_ndisj.
   wp_pures. iDestruct "contra" as ">[]".
-- iMod (honest_pterm with "ctx hon fail") as "#contra"; eauto; try solve_ndisj.
+- iMod (honest_public with "ctx hon fail") as "#contra"; eauto; try solve_ndisj.
   wp_pures. iDestruct "contra" as ">[]".
 wp_pures. iApply ("Hpost" $! (Some (mk_session_key Init nI sR))).
-iFrame. iModIntro. iSplit; eauto. by iApply mk_session_key_sterm.
+iFrame. iModIntro. iSplit; eauto. by iApply mk_session_key_minted.
 Qed.
 
 End PK.
