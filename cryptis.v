@@ -900,28 +900,36 @@ Qed.
 Definition unknown γ : iProp :=
   own γ (reservation_map_token ⊤).
 
-Definition known γ : iProp :=
-  own γ (namespace_map_data nroot (to_agree 1%positive)).
+Definition known γ (x : positive) : iProp :=
+  own γ (namespace_map_data nroot (to_agree x)).
 
-Global Instance persistent_known γ : Persistent (known γ).
+Global Instance persistent_known γ x : Persistent (known γ x).
 Proof. apply _. Qed.
 
-Global Instance timeless_known γ : Timeless (known γ).
+Global Instance timeless_known γ x : Timeless (known γ x).
 Proof. apply _. Qed.
 
 Lemma unknown_alloc : ⊢ |==> ∃ γ, unknown γ.
 Proof. iApply own_alloc. apply reservation_map_token_valid. Qed.
 
-Lemma known_alloc γ : unknown γ ==∗ known γ.
+Lemma known_alloc γ x : unknown γ ==∗ known γ x.
 Proof.
 iApply own_update. by apply namespace_map_alloc_update.
 Qed.
 
-Lemma unknown_known γ : unknown γ -∗ known γ -∗ False.
+Lemma unknown_known γ x : unknown γ -∗ known γ x -∗ False.
 Proof.
 iIntros "no yes".
 iPoseProof (own_valid_2 with "no yes") as "%valid".
 by case: (namespace_map_disj _ _ _ _ valid).
+Qed.
+
+Lemma known_agree γ x y : known γ x -∗ known γ y -∗ ⌜x = y⌝.
+Proof.
+iIntros "own1 own2".
+iPoseProof (own_valid_2 with "own1 own2") as "%valid".
+rewrite -reservation_map_data_op reservation_map_data_valid in valid *.
+iPureIntro. exact: to_agree_op_inv_L.
 Qed.
 
 Implicit Types dq : dfrac.
@@ -957,7 +965,9 @@ Notation "◯H{ n } a" := (honest_frag n a)
   (at level 20, format "◯H{ n }  a").
 
 Definition secret t : iProp :=
-  (|==> public t) ∧ (public t -∗ ◇ False).
+  (|==> public t) ∧
+  (|==> □ (public t -∗ ◇ False)) ∧
+  (public t -∗ ◇ False).
 
 Definition honest_inv : iProp :=
   ∃ n X, (●H{n} X) ∗ [∗ set] t ∈ X, secret t.
@@ -1199,6 +1209,25 @@ iApply (big_sepS_mono with "sec").
 by iIntros "%t % [? _]".
 Qed.
 
+Lemma freeze_honest E n X :
+  ↑cryptisN.@"honest" ⊆ E →
+  cryptis_ctx -∗
+  ●H{n} X ={E}=∗
+  ●H{S n} ∅ ∗ ▷ |==> □ [∗ set] t ∈ X, public t -∗ ◇ False.
+Proof.
+iIntros "%sub #ctx hon".
+rewrite {1}(_ : X = ∅ ∪ X); last set_solver.
+iMod (honest_unionE with "ctx hon") as "[hon sec]" => //.
+iFrame. iModIntro. iModIntro.
+iAssert (|==> [∗ set] t ∈ X, □ (public t -∗ ◇ False))%I with "[sec]"
+  as ">#goal".
+{ iApply big_sepS_bupd.
+  iApply (big_sepS_mono with "sec").
+  by iIntros "%t % (_ & ? & _)". }
+iIntros "!> !>". iApply (big_sepS_mono with "goal").
+by iIntros "%x % #?".
+Qed.
+
 Lemma honest_unionI Y E n X :
   ↑cryptisN.@"honest" ⊆ E →
   X ## Y →
@@ -1251,6 +1280,7 @@ Arguments honest_inv {Σ _ _}.
 Arguments cryptis_ctx {Σ _ _}.
 Arguments TermMeta Σ term_meta term_meta_token : assert.
 Arguments unknown_alloc {Σ _}.
+Arguments known_alloc {Σ _ γ} x.
 
 Notation "●H{ dq | n } a" :=
   (honest_auth dq n a) (at level 20, format "●H{ dq | n }  a").

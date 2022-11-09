@@ -444,17 +444,21 @@ iAssert (□ (∀ t, ⌜t ∈ T⌝ → minted t))%I as "#s_T".
   iPoseProof (honest_auth_minted with "hon") as "#?".
   iModIntro. by rewrite -big_sepS_forall.
 wp_bind (mknonce _).
-iApply (twp_mknonce_gen T (λ _, known γ) (λ _, False%I)).
+iApply (twp_mknonce_gen T (λ _, known γ 1) (λ _, False%I)).
   iIntros "%t #t_T". by iApply "s_T".
 iIntros "%t %fresh #s_t #p_t _ _".
 pose (t' := Spec.tag (nroot.@"keys".@"enc") t).
 have {}fresh : TKey Dec t' ∉ T.
   move=> t'_T; apply: fresh => //.
   apply: STKey. exact: subterm_tag.
-iAssert (secret (TKey Dec t')) with "[unknown]" as "tP"; first iSplit.
+iAssert (secret (TKey Dec t')) with "[unknown]" as "tP"; first do 2?iSplit.
 - iMod (known_alloc with "unknown") as "#known".
   iSpecialize ("p_t" with "known").
   iModIntro. rewrite public_TKey. iLeft. by rewrite public_tag.
+- iMod (known_alloc 2 with "unknown") as "#known".
+  iIntros "!> !> #p_t'". iMod (public_enc_keyE with "[//] p_t'") as "contra".
+  iPoseProof ("p_t" with "contra") as ">#known'".
+  by iPoseProof (known_agree with "known known'") as "%".
 - iIntros "#p_t'". iMod (public_enc_keyE with "[//] p_t'") as "contra".
   iPoseProof ("p_t" with "contra") as ">#known".
   by iPoseProof (unknown_known with "[$] [//]") as "[]".
@@ -498,17 +502,21 @@ iAssert (□ (∀ t, ⌜t ∈ T⌝ → minted t))%I as "#s_T".
   iPoseProof (honest_auth_minted with "hon") as "#?".
   iModIntro. by rewrite -big_sepS_forall.
 wp_bind (mknonce _).
-iApply (twp_mknonce_gen T (λ _, known γ) (λ _, False%I)).
+iApply (twp_mknonce_gen T (λ _, known γ 1%positive) (λ _, False%I)).
   iIntros "%t #t_T". by iApply "s_T".
 iIntros "%t %fresh #s_t #p_t _ token".
 pose (t' := Spec.tag (nroot.@"keys".@"sig") t).
 have {}fresh : TKey Enc t' ∉ T.
   move=> t'_T; apply: fresh => //.
   apply: STKey. exact: subterm_tag.
-iAssert (secret (TKey Enc t')) with "[unknown]" as "tP"; first iSplit.
+iAssert (secret (TKey Enc t')) with "[unknown]" as "tP"; first do 2?iSplit.
 - iMod (known_alloc with "unknown") as "#known".
   iSpecialize ("p_t" with "known").
   iModIntro. rewrite public_TKey. iLeft. by rewrite public_tag.
+- iMod (known_alloc 2 with "unknown") as "#known".
+  iIntros "!> !> #p_t'". iMod (public_sig_keyE with "[//] p_t'") as "contra".
+  iPoseProof ("p_t" with "contra") as ">#known'".
+  by iPoseProof (known_agree with "known known'") as "%".
 - iIntros "#p_t'". iMod (public_sig_keyE with "[//] p_t'") as "contra".
   iPoseProof ("p_t" with "contra") as ">#known".
   by iPoseProof (unknown_known with "[$] [//]") as "[]".
