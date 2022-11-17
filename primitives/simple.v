@@ -456,9 +456,13 @@ iAssert (secret (TKey Dec t')) with "[unknown]" as "tP"; first do 2?iSplit.
   iSpecialize ("p_t" with "known").
   iModIntro. rewrite public_TKey. iLeft. by rewrite public_tag.
 - iMod (known_alloc 2 with "unknown") as "#known".
-  iIntros "!> !> #p_t'". iMod (public_enc_keyE with "[//] p_t'") as "contra".
-  iPoseProof ("p_t" with "contra") as ">#known'".
-  by iPoseProof (known_agree with "known known'") as "%".
+  iIntros "!> !>". iSplit.
+  + iIntros "#p_t'". iMod (public_enc_keyE with "[//] p_t'") as "contra".
+    iPoseProof ("p_t" with "contra") as ">#known'".
+    by iPoseProof (known_agree with "known known'") as "%".
+  + iIntros "#contra".
+    rewrite public_TKey. iLeft. rewrite public_tag.
+    iApply "p_t". by iDestruct "contra" as ">[]".
 - iIntros "#p_t'". iMod (public_enc_keyE with "[//] p_t'") as "contra".
   iPoseProof ("p_t" with "contra") as ">#known".
   by iPoseProof (unknown_known with "[$] [//]") as "[]".
@@ -514,9 +518,13 @@ iAssert (secret (TKey Enc t')) with "[unknown]" as "tP"; first do 2?iSplit.
   iSpecialize ("p_t" with "known").
   iModIntro. rewrite public_TKey. iLeft. by rewrite public_tag.
 - iMod (known_alloc 2 with "unknown") as "#known".
-  iIntros "!> !> #p_t'". iMod (public_sig_keyE with "[//] p_t'") as "contra".
-  iPoseProof ("p_t" with "contra") as ">#known'".
-  by iPoseProof (known_agree with "known known'") as "%".
+  iIntros "!> !>". iSplit.
+  + iIntros "#p_t'". iMod (public_sig_keyE with "[//] p_t'") as "contra".
+    iPoseProof ("p_t" with "contra") as ">#known'".
+    by iPoseProof (known_agree with "known known'") as "%".
+  + iIntros "#contra".
+    rewrite public_TKey. iLeft. rewrite public_tag.
+    iApply "p_t". by iDestruct "contra" as ">[]".
 - iIntros "#p_t'". iMod (public_sig_keyE with "[//] p_t'") as "contra".
   iPoseProof ("p_t" with "contra") as ">#known".
   by iPoseProof (unknown_known with "[$] [//]") as "[]".

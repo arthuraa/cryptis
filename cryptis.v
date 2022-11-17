@@ -966,7 +966,7 @@ Notation "◯H{ n } a" := (honest_frag n a)
 
 Definition secret t : iProp :=
   (|==> public t) ∧
-  (|==> □ (public t -∗ ◇ False)) ∧
+  (|==> □ (public t ↔ ◇ False)) ∧
   (public t -∗ ◇ False).
 
 Definition honest_inv : iProp :=
@@ -1213,13 +1213,13 @@ Lemma freeze_honest E n X :
   ↑cryptisN.@"honest" ⊆ E →
   cryptis_ctx -∗
   ●H{n} X ={E}=∗
-  ●H{S n} ∅ ∗ ▷ |==> □ [∗ set] t ∈ X, public t -∗ ◇ False.
+  ●H{S n} ∅ ∗ ▷ |==> □ [∗ set] t ∈ X, public t ↔ ◇ False.
 Proof.
 iIntros "%sub #ctx hon".
 rewrite {1}(_ : X = ∅ ∪ X); last set_solver.
 iMod (honest_unionE with "ctx hon") as "[hon sec]" => //.
 iFrame. iModIntro. iModIntro.
-iAssert (|==> [∗ set] t ∈ X, □ (public t -∗ ◇ False))%I with "[sec]"
+iAssert (|==> [∗ set] t ∈ X, □ (public t ↔ ◇ False))%I with "[sec]"
   as ">#goal".
 { iApply big_sepS_bupd.
   iApply (big_sepS_mono with "sec").
