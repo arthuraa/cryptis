@@ -28,6 +28,7 @@ attacker.v
 
 examples/permanent.v
 examples/counter.v
+examples/nsl.v
 
 ## CR
 
