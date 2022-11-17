@@ -1213,19 +1213,14 @@ Lemma freeze_honest E n X :
   ↑cryptisN.@"honest" ⊆ E →
   cryptis_ctx -∗
   ●H{n} X ={E}=∗
-  ●H{S n} ∅ ∗ ▷ |==> □ [∗ set] t ∈ X, public t ↔ ◇ False.
+  ●H{S n} ∅ ∗ ▷ |==> [∗ set] t ∈ X, □ (public t ↔ ◇ False).
 Proof.
 iIntros "%sub #ctx hon".
 rewrite {1}(_ : X = ∅ ∪ X); last set_solver.
 iMod (honest_unionE with "ctx hon") as "[hon sec]" => //.
 iFrame. iModIntro. iModIntro.
-iAssert (|==> [∗ set] t ∈ X, □ (public t ↔ ◇ False))%I with "[sec]"
-  as ">#goal".
-{ iApply big_sepS_bupd.
-  iApply (big_sepS_mono with "sec").
-  by iIntros "%t % (_ & ? & _)". }
-iIntros "!> !>". iApply (big_sepS_mono with "goal").
-by iIntros "%x % #?".
+iApply big_sepS_bupd. iApply (big_sepS_mono with "sec").
+by iIntros "%t % (_ & ? & _)".
 Qed.
 
 Lemma honest_unionI Y E n X :
