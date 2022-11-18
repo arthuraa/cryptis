@@ -62,14 +62,21 @@ Global Instance corrupt_persistent kI kR :
   Persistent (corrupt kI kR).
 Proof. apply _. Qed.
 
+Definition honest k : iProp :=
+  □ (public (TKey Dec k) ↔ ◇ False).
+
+Global Instance honest_persistent k : Persistent (honest k).
+Proof. apply _. Qed.
+
 Lemma corruptE kI kR :
   corrupt kI kR -∗
-  (public (TKey Dec kI) ↔ ◇ False) -∗
-  (public (TKey Dec kR) ↔ ◇ False) -∗
+  honest kI -∗
+  honest kR -∗
   ◇ False.
 Proof.
 by iIntros "[cor|cor] p_kI p_kR"; [iApply "p_kI"|iApply "p_kR"].
 Qed.
+
 
 Definition msg1_pred kR m1 : iProp :=
   ∃ nI kI,
@@ -131,12 +138,11 @@ Lemma public_msg1E kI kR nI :
   nsl_ctx -∗
   public (TEnc kR (Spec.tag (N.@"m1") (Spec.of_list [nI; TKey Enc kI]))) -∗
   public (TKey Enc kR) -∗
-  □ (public (TKey Dec kR) ↔ ◇ False) -∗
   ▷ (minted nI ∗
      public (TKey Enc kI) ∗
      (▷ corrupt kI kR → public nI)).
 Proof.
-iIntros "#? (#? & _ & _) #p_m #p_ekR #s_dkR".
+iIntros "#? (#? & _ & _) #p_m #p_ekR".
 iDestruct (public_TEncE with "p_m [//]") as "[fail|succ]".
 - rewrite public_of_list /=.
   iDestruct "fail" as "(p_kR & p_nI & p_kI' & _)". by iSplit; eauto.
@@ -175,11 +181,10 @@ Lemma public_msg2E kI kR nI nR :
   nsl_ctx -∗
   public (TEnc kI (Spec.tag (N.@"m2") (Spec.of_list [nI; nR; TKey Enc kR]))) -∗
   public (TKey Enc kI) -∗
-  □ (public (TKey Dec kI) ↔ ◇ False) -∗
   □ (public nI ↔ ▷ corrupt kI kR) -∗
   ▷ (minted nR ∗ □ (public nR ↔ ▷ corrupt kI kR)).
 Proof.
-iIntros "#? (_ & #? & _) #p_m #p_ekI #s_dkR #s_nI".
+iIntros "#? (_ & #? & _) #p_m #p_ekI #s_nI".
 iDestruct (public_TEncE with "p_m [//]") as "[fail|succ]".
 - rewrite public_of_list /=.
   iDestruct "fail" as "(_ & #p_nI & p_nR & _)".
@@ -207,60 +212,49 @@ iIntros "!> #p_dkR".
 iApply "s_nR". rewrite /corrupt. by eauto.
 Qed.
 
-Lemma public_msg3E kI kR nR kI' :
+Lemma public_msg3E kI kR nR :
   cryptis_ctx -∗
   nsl_ctx -∗
   public (TEnc kR (Spec.tag (N.@"m3") nR)) -∗
-  □ (public (TKey Dec kI) ↔ ◇ False) -∗
-  □ (public (TKey Dec kR) ↔ ◇ False) -∗
-  □ (public nR ↔ ▷ corrupt kI' kR) -∗
-  ⌜kI' = kI⌝ → □ (public nR → ▷^2 False).
+  □ (public nR ↔ ▷ corrupt kI kR) -∗
+  True.
 Proof.
-iIntros "#? #(_ & _ & ?) #m3P #p_kI #p_kR #p_nR".
-iDestruct (public_TEncE with "m3P [//]") as "[[_ contra]|succ]".
-- iSpecialize ("p_nR" with "contra"). iIntros "-> !> _ !>".
-  iDestruct (corruptE with "p_nR p_kI p_kR") as ">[]".
-- iIntros "-> !> #contra".
-  iSpecialize ("p_nR" with "contra"). iIntros "!>".
-  iDestruct (corruptE with "p_nR p_kI p_kR") as ">[]".
+iIntros "#? #(_ & _ & ?) #m3P #p_nR". eauto.
 Qed.
 
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
 
-Lemma wp_init c kI kR kR' :
+Lemma wp_init c kI kR :
   channel c -∗
   cryptis_ctx -∗
   nsl_ctx -∗
   public (TKey Enc kI) -∗
-  □ (public (TKey Dec kI) ↔ ◇ False) -∗
   public (TKey Enc kR) -∗
-  □ (public (TKey Dec kR) ↔ ◇ False) -∗
-  public (TKey Enc kR') -∗
   {{{ True }}}
-    init c (TKey Dec kI) (TKey Enc kI) (TKey Enc kR')
+    init c (TKey Dec kI) (TKey Enc kI) (TKey Enc kR)
   {{{ okS, RET (repr okS);
       if okS is Some kS then
         minted kS ∗
-        □ (⌜kR' = kR⌝ -∗ □ (public kS → ▷^2 False))
+        □ (honest kI -∗ honest kR -∗ □ (public kS → ▷^2 False))
       else True }}}.
 Proof.
-iIntros "#chan_c #ctx #ctx' #p_kI #s_kI #p_kR #s_kR #p_kR'".
+iIntros "#chan_c #ctx #ctx' #p_kI #p_kR".
 iIntros "%Ψ !> _ Hpost".
 rewrite /init. wp_pures. wp_bind (mknonce _).
-iApply (wp_mknonce (λ _, corrupt kI kR') (λ _, False)%I).
+iApply (wp_mknonce (λ _, corrupt kI kR) (λ _, False)%I).
 iIntros "%nI #m_nI #p_nI _ token".
 rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_list. wp_term_of_list. wp_tenc => /=. wp_pures.
 wp_bind (send _ _). iApply (wp_send with "[] [#]"); eauto.
-  iApply (public_msg1I kI kR'); eauto.
+  iApply (public_msg1I kI kR); eauto.
 wp_pures. wp_bind (recv _). iApply wp_recv; eauto.
 iIntros "%m2 #p_m2". wp_tdec m2; last protocol_failure.
 wp_list_of_term m2; last protocol_failure.
 wp_list_match => [nI' nR pkR'' {m2} ->|_]; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst nI'.
 wp_eq_term e; last protocol_failure; subst pkR''.
-iPoseProof (public_msg2E with "[//] [//] [//] [//] [//] [//]")
+iPoseProof (public_msg2E with "[//] [//] [//] [//] [//]")
   as "{p_m2} (m_nR & s_nR)".
 wp_pures. wp_tenc. wp_pures. wp_bind (send _ _).
 iApply wp_send => //.
@@ -268,44 +262,39 @@ iApply wp_send => //.
 wp_pures. wp_list. wp_term_of_list. wp_pures.
 iApply ("Hpost" $! (Some (Spec.of_list [nI; nR]))). iModIntro.
 rewrite minted_of_list /=. do 3?iSplit => //.
-iIntros "!> -> !>". rewrite public_of_list /=.
+iIntros "!> #honI #honR !>". rewrite public_of_list /=.
 iIntros "(#contra & _)". iSpecialize ("p_nI" with "contra").
 iModIntro. iDestruct (corruptE with "p_nI [//] [//]") as ">[]".
 Qed.
 
-Lemma wp_resp c kI kR :
+Lemma wp_resp c kR :
   channel c -∗
   cryptis_ctx -∗
   nsl_ctx -∗
-  public (TKey Enc kI) -∗
-  □ (public (TKey Dec kI) ↔ ◇ False) -∗
   public (TKey Enc kR) -∗
-  □ (public (TKey Dec kR) ↔ ◇ False) -∗
   {{{ True }}}
     resp c (TKey Dec kR) (TKey Enc kR)
   {{{ or, RET (repr or);
-      if or is Some (pkI', kS) then ∃ kI',
-        ⌜pkI' = TKey Enc kI'⌝ ∗
-        public pkI' ∗
-        minted kS ∗
-        □ (⌜kI' = kI⌝ → □ (public kS → ▷^2 False))
+      if or is Some (pkI, kS) then ∃ kI,
+        ⌜pkI = TKey Enc kI⌝ ∗
+        public pkI ∗ minted kS ∗
+        □ (honest kI -∗ honest kR -∗ □ (public kS → ▷^2 False))
       else True }}}.
 Proof.
-iIntros "#chan_c #ctx #ctx' #p_kI #s_kI #p_kR #s_kR".
-iIntros "%Ψ !> _ Hpost".
+iIntros "#chan_c #ctx #ctx' #p_kR %Ψ !> _ Hpost".
 rewrite /resp. wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m1) "#Hm1".
 wp_tdec m1; last protocol_failure.
 wp_list_of_term m1; last protocol_failure.
-wp_list_match => [nI pkI' {m1} ->|_]; last protocol_failure.
-wp_is_key_eq kt kI' et; last protocol_failure; subst pkI'.
+wp_list_match => [nI pkI {m1} ->|_]; last protocol_failure.
+wp_is_key_eq kt kI et; last protocol_failure; subst pkI.
 wp_pures.
 case: (bool_decide_reflect (_ = repr_key_type Enc)); last protocol_failure.
 case: kt => // _.
-iDestruct (public_msg1E with "[//] [//] Hm1 [//] [//]")
-  as "(#m_nI & #p_pkI' & #nIP)".
+iDestruct (public_msg1E with "[//] [//] Hm1 [//]")
+  as "(#m_nI & #p_pkI & #nIP)".
 wp_pures. wp_bind (mknonce _).
-iApply (wp_mknonce (λ _, corrupt kI' kR) (λ _, False)%I).
+iApply (wp_mknonce (λ _, corrupt kI kR) (λ _, False)%I).
 iIntros "%nR #m_nR #p_nR _ _". rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_list; wp_term_of_list. wp_tenc. wp_pures.
 wp_bind (send _ _). iApply wp_send => //.
@@ -313,12 +302,14 @@ wp_bind (send _ _). iApply wp_send => //.
 wp_pures. wp_bind (recv _). iApply wp_recv => //.
 iIntros "%m3 #p_m3". wp_tdec m3; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst m3.
-iPoseProof (public_msg3E with "[//] [//] p_m3 s_kI s_kR p_nR") as "finished".
+iPoseProof (public_msg3E with "[//] [//] p_m3 p_nR") as "m3P".
 wp_pures. wp_list. wp_term_of_list. wp_pures.
-iApply ("Hpost" $! (Some (TKey Enc kI', Spec.of_list [nI; nR]))).
-iModIntro. iExists kI'. rewrite minted_of_list /=. do 5?[iSplit => //].
+iApply ("Hpost" $! (Some (TKey Enc kI, Spec.of_list [nI; nR]))).
+iModIntro. iExists kI. rewrite minted_of_list /=. do 5?[iSplit => //].
 rewrite public_of_list /=.
-iIntros "!> -> !> (_ & #? & _)". by iApply "finished".
+iIntros "!> #honI #honR !> (_ & #contra & _)".
+iSpecialize ("p_nR" with "contra"). iModIntro.
+by iDestruct (corruptE with "p_nR honI honR") as ">[]".
 Qed.
 
 Definition game : val := λ: "mkchan",
@@ -384,9 +375,9 @@ case: kt epkR' ekt => // -> _.
 iApply (wp_par (λ v, ∃ a : option term, ⌜v = repr a⌝ ∗ _)%I
                (λ v, ∃ a : option (term * term), ⌜v = repr a⌝ ∗ _)%I
           with "[] []").
-- iApply (wp_init with "[//] [//] [//] p_pkI [] p_pkR") => //.
+- iApply (wp_init with "[//] [//] [//] p_pkI p_pkR'") => //.
   iIntros "!> %a H". iExists a. iSplit; first done. iApply "H".
-- iApply (wp_resp with "[//] [//] [//] p_pkI [] p_pkR") => //.
+- iApply (wp_resp with "[//] [//] [//] p_pkR") => //.
   iIntros "!> %a H"; iExists a; iSplit; first done. iApply "H".
 iIntros (v1 v2) "[H1 H2]".
 iDestruct "H1" as (a) "[-> H1]".
