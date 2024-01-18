@@ -264,6 +264,16 @@ Definition eq_list : val := rec: "loop" "eq" "l1" "l2" :=
      end
   end.
 
+Definition find_list : val := rec: "loop" "f" "l" :=
+  match: "l" with
+    SOME "p" =>
+      let: "head" := Fst "p" in
+      let: "tail" := Snd "p" in
+      if: "f" "head" then SOME "head"
+      else "loop" "f" "tail"
+  | NONE => NONE
+  end.
+
 Fixpoint list_match_aux (vars : list string) (l : expr) (k : expr) : expr :=
   match vars with
   | [] =>
@@ -658,6 +668,18 @@ iApply IH; first by move=> *; iApply wp_f; set_solver.
 case: (bool_decide_reflect (l1 = l2)) => [->|n_l1l2].
 - by rewrite bool_decide_decide decide_True.
 - by rewrite bool_decide_decide decide_False //; congruence.
+Qed.
+
+Lemma wp_find_list (f : A → bool) (fimpl : val) (l : list A) :
+  (∀ x : A, {{{ True }}} fimpl (repr x) {{{ RET #(f x); True }}}) →
+  {{{ True }}} find_list fimpl (repr l) {{{ RET (repr (find f l)); True }}}.
+Proof.
+rewrite repr_list_unseal /=.
+iIntros "%fP"; iLöb as "IH" forall (l); iIntros "%Φ _ Hpost"; wp_rec.
+case: l => [|h t] /=; wp_pures; first by iApply "Hpost".
+wp_bind (fimpl _); iApply fP => //; iIntros "!> _".
+case: (f h) => //; wp_pures; first by iApply "Hpost".
+by iApply "IH".
 Qed.
 
 End ListLemmas.
