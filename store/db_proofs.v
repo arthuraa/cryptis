@@ -91,6 +91,14 @@ apply: singleton_local_update_any => x _.
 by apply: exclusive_local_update.
 Qed.
 
+Lemma db_auth_db_frag_alloc db t1 t2 :
+  db !! t1 = None ->
+  db_auth db ~~> db_auth (<[t1 := t2]> db) ⋅ db_frag {[t1 := t2]}.
+Proof.
+move=> db_t1. apply/auth_update_alloc; rewrite fmap_insert map_fmap_singleton.
+by apply: alloc_singleton_local_update => //; rewrite lookup_fmap db_t1.
+Qed.
+
 Definition db_res γ l : iProp :=
   ∃ db, stores_db l db ∗ own γ (db_auth db).
 
@@ -232,6 +240,30 @@ iIntros "!> _". rewrite db_t1. wp_pures. iModIntro.
 iSplitL "Hpost t1_t2".
 - iApply "Hpost". iExists l, vlock, γkvs. eauto.
 - iExists _; iFrame. iExists _. iFrame. eauto.
+Qed.
+
+Lemma wp_create v t1 t2 :
+  {{{ is_db v }}}
+    DB.create v t1 t2
+  {{{ (b : bool), RET #b;
+      if b then db_mapsto v t1 t2 else True }}}.
+Proof.
+iIntros "%Φ #vP Hpost".
+wp_lam; wp_pures. iApply (wp_with_locked_db with "[Hpost] vP").
+iIntros "%γkvs %l %vlock -> #m_kvs lP".
+iDestruct "lP" as "(%db & (%kvs & l_kvs & %kvs_db) & dbP)".
+wp_pures. wp_load. wp_bind (DB.find _ _)%E. iApply wp_find; eauto.
+iIntros "!> _". case db_t1: (db !! t1) => [t2'|]; wp_pures.
+  iModIntro. iSplitL "Hpost"; first by iApply "Hpost".
+  iExists _; iFrame. iExists _. iFrame. eauto.
+wp_load. wp_pures. change (t1, t2)%V with (repr (t1, t2)).
+wp_bind (_ :: _)%E. iApply (wp_cons _ _ kvs). wp_store.
+iMod (own_update with "dbP") as "Hown".
+{ exact: (db_auth_db_frag_alloc t2). }
+iDestruct "Hown" as "[dbP t1_t2]".
+iModIntro. iSplitL "Hpost t1_t2".
+- iApply "Hpost". iExists l, vlock, γkvs; iFrame. by eauto.
+- iExists _. iFrame. iExists _. iFrame. iPureIntro. exact: is_alist_cons.
 Qed.
 
 End Verif.
