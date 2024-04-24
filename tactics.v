@@ -265,16 +265,16 @@ Tactic Notation "wp_cons" :=
   | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
     reshape_expr e ltac:(fun K e' =>
       lazymatch e' with
-      | App (App (Val CONS) (Val (?f ?x))) (Val ?e'') =>
+      | App (App (Val CONS) (Val (?ReprA ?x))) (Val ?e'') =>
         lazymatch e'' with
         | InjLV (LitV LitUnit) =>
           let A := type of x in
           first
             [eapply (@tac_wp_cons1 _ _ A _ _ _ K x _); wp_finish
             |fail 1 "wp_cons: Cannot decode"]
-        | _ =>
+        | ?ReprList ?xs =>
           first
-            [eapply (tac_wp_cons _ _ K x _ _); wp_finish
+            [eapply (tac_wp_cons _ _ K x xs _); wp_finish
             |fail 1 "wp_cons: Cannot decode"]
         end
       end)
