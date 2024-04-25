@@ -63,4 +63,4 @@ store/impl.v
 store/shared.v
 store/client_proofs.v
 store/server_proofs.v
-store/db_proofs.v
+store/db.v

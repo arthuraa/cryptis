@@ -89,51 +89,6 @@ End Client.
 
 End Client.
 
-Module DB.
-
-Definition new : val := λ: <>,
-  let: "kvs" := ref [] in
-  let: "lock" := newlock #() in
-  ("kvs", "lock").
-
-Definition find : val := λ: "kvs" "k",
-  let: "res" := find_list (λ: "kv", eq_term (Fst "kv") "k") "kvs" in
-  match: "res" with
-    SOME "res" => SOME (Snd "res")
-  | NONE => NONE
-  end.
-
-Definition with_locked_db : val := λ: "db" "f",
-  let: "kvs" := Fst "db" in
-  let: "lock" := Snd "db" in
-  acquire "lock";;
-  let: "res" := "f" "kvs" in
-  release "lock";;
-  "res".
-
-Definition set : val := λ: "db" "k" "v",
-  with_locked_db "db" (λ: "kvs",
-      "kvs" <- ("k", "v") :: !"kvs";;
-      #()
-  ).
-
-Definition get : val := λ: "db" "k",
-  with_locked_db "db" (λ: "kvs",
-      match: find !"kvs" "k" with
-        SOME "res" => "res"
-      | NONE => #() (* Error *)
-      end).
-
-Definition create : val := λ: "db" "k" "v",
-  with_locked_db "db" (λ: "kvs",
-    match: find !"kvs" "k" with
-      SOME <> => #false
-    | NONE => "kvs" <- ("k", "v") :: !"kvs";; #true
-    end
-  ).
-
-End DB.
-
 Record sst := {
   sst_ts   : loc;
   sst_val  : loc;
