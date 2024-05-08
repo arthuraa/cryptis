@@ -274,6 +274,17 @@ Definition find_list : val := rec: "loop" "f" "l" :=
   | NONE => NONE
   end.
 
+Definition filter_list : val := rec: "loop" "f" "l" :=
+  match: "l" with
+    SOME "p" =>
+      let: "head" := Fst "p" in
+      let: "tail" := Snd "p" in
+      let: "tail" := "loop" "f" "tail" in
+      if: "f" "head" then SOME ("head", "tail")
+      else "tail"
+  | NONE => NONE
+  end.
+
 Fixpoint list_match_aux (vars : list string) (l : expr) (k : expr) : expr :=
   match vars with
   | [] =>
@@ -680,6 +691,20 @@ case: l => [|h t] /=; wp_pures; first by iApply "Hpost".
 wp_bind (fimpl _); iApply fP => //; iIntros "!> _".
 case: (f h) => //; wp_pures; first by iApply "Hpost".
 by iApply "IH".
+Qed.
+
+Lemma wp_filter_list (f : A → bool) (fimpl : val) (l : list A) :
+  (∀ x : A, {{{ True }}} fimpl (repr x) {{{ RET #(f x); True }}}) →
+  {{{ True }}} filter_list fimpl (repr l) {{{ RET (repr (filter f l)); True }}}.
+Proof.
+rewrite repr_list_unseal /=.
+iIntros "%fP"; iLöb as "IH" forall (l); iIntros "%Φ _ Hpost"; wp_rec.
+case: l => [|x l] /=; wp_pures; first by iApply "Hpost".
+wp_bind (filter_list _ _). iApply "IH" => //. iIntros "!> _".
+wp_pures. wp_bind (fimpl _); iApply fP => //; iIntros "!> _".
+case f_x: (f x); wp_pures.
+- rewrite filter_cons_True ?f_x //=. by iApply "Hpost".
+- rewrite filter_cons_False ?f_x; eauto. by iApply "Hpost".
 Qed.
 
 End ListLemmas.
