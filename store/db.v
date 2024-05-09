@@ -73,6 +73,12 @@ Definition create : val := λ: "db" "k" "v",
     end
   ).
 
+Definition delete : val := λ: "db" "k",
+  while_locked "db" (λ: "kvs",
+    "kvs" <- filter_list (λ: "p", ~ (eq_term "k" (Fst "p"))) !"kvs";;
+    #()
+  ).
+
 Section Verif.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !dbGS Σ}.
@@ -138,6 +144,15 @@ Lemma auth_frag_alloc db t1 t2 :
 Proof.
 move=> db_t1. apply/auth_update_alloc; rewrite fmap_insert map_fmap_singleton.
 by apply: alloc_singleton_local_update => //; rewrite lookup_fmap db_t1.
+Qed.
+
+Lemma auth_frag_delete db t1 t2 :
+  db !! t1 = Some t2 ->
+  auth db ⋅ frag {[t1 := t2]} ~~> auth (base.delete t1 db).
+Proof.
+move=> db_t1. apply/auth_update_dealloc.
+rewrite map_fmap_singleton fmap_delete.
+exact/delete_singleton_local_update.
 Qed.
 
 Definition db_res γ l : iProp :=
@@ -238,6 +253,25 @@ move=> kvs_db k' /=; case: bool_decide_reflect => [<-|ne].
 - by rewrite lookup_insert_ne.
 Qed.
 
+Lemma is_alist_filter kvs db k :
+  is_alist kvs db ->
+  is_alist (List.filter (λ p, negb (bool_decide (k = p.1))) kvs)
+           (base.delete k db).
+Proof.
+move=> kvs_db k' /=; case: (decide (k = k')) => [<- {k'}|neq].
+- rewrite lookup_delete. case eq_find: List.find => [[t1 t2]|] //=.
+  case/(@find_some _ _ _ _): eq_find => /= in_filter.
+  case: bool_decide_reflect => // -> in in_filter *.
+  rewrite filter_In /= in in_filter; case: in_filter => _.
+  by rewrite bool_decide_eq_true_2.
+- rewrite lookup_delete_ne // {}kvs_db.
+  elim: kvs => //= - [/= t1 t2] kvs IH.
+  case: bool_decide_reflect => [-> {t1}|neq'] /=.
+  + by rewrite bool_decide_eq_false_2 //= bool_decide_eq_true_2.
+  + rewrite IH. case: bool_decide_reflect => //= neq''.
+    by rewrite bool_decide_eq_false_2.
+Qed.
+
 Lemma wp_set v t1 t2 t2' :
   {{{ is_db v ∗ mapsto v t1 t2 }}}
     DB.set v t1 t2'
@@ -305,6 +339,31 @@ iDestruct "Hown" as "[dbP t1_t2]".
 iModIntro. iSplitL "Hpost t1_t2".
 - iApply "Hpost". iExists l, vlock, γkvs; iFrame. by eauto.
 - iExists _. iFrame. iExists _. iFrame. iPureIntro. exact: is_alist_cons.
+Qed.
+
+Lemma wp_delete v t1 t2 :
+  {{{ is_db v ∗ mapsto v t1 t2 }}}
+    DB.delete v t1
+  {{{ RET #(); True }}}.
+Proof.
+iIntros "%Φ [#vP t1_t2] Hpost".
+wp_lam; wp_pures; iApply (wp_while_locked with "[t1_t2 Hpost] vP").
+iIntros "%γkvs %l %vlock -> #m_kvs lP".
+iPoseProof (mapsto_inv with "t1_t2 m_kvs") as "t1_t2".
+iDestruct "lP" as "(%db & (%kvs & l_kvs & %kvs_db) & dbP)".
+iPoseProof (own_valid_2 with "dbP t1_t2") as "%valid_12".
+have {valid_12} db_t1 := auth_frag1_valid valid_12.
+wp_pures. wp_load. wp_pures. wp_bind (filter_list _ _).
+iApply (wp_filter_list (λ p : term * term, negb (bool_decide (t1 = p.1))))
+       => //.
+{ iIntros "%p %Ψ _ Hpost". wp_pures. wp_bind (eq_term _ _).
+  iApply wp_eq_term. wp_pures. by iApply "Hpost". }
+iIntros "!> _". wp_store.
+iMod (own_update_2 with "dbP t1_t2") as "dbP".
+{ exact: auth_frag_delete. }
+iModIntro. iSplitL "Hpost"; first by iApply "Hpost".
+iExists _. iFrame. iExists _. iFrame. iPureIntro.
+exact: is_alist_filter.
 Qed.
 
 End Verif.

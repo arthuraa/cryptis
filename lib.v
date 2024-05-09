@@ -695,16 +695,16 @@ Qed.
 
 Lemma wp_filter_list (f : A → bool) (fimpl : val) (l : list A) :
   (∀ x : A, {{{ True }}} fimpl (repr x) {{{ RET #(f x); True }}}) →
-  {{{ True }}} filter_list fimpl (repr l) {{{ RET (repr (filter f l)); True }}}.
+  {{{ True }}}
+    filter_list fimpl (repr l)
+  {{{ RET (repr (List.filter f l)); True }}}.
 Proof.
 rewrite repr_list_unseal /=.
 iIntros "%fP"; iLöb as "IH" forall (l); iIntros "%Φ _ Hpost"; wp_rec.
 case: l => [|x l] /=; wp_pures; first by iApply "Hpost".
 wp_bind (filter_list _ _). iApply "IH" => //. iIntros "!> _".
 wp_pures. wp_bind (fimpl _); iApply fP => //; iIntros "!> _".
-case f_x: (f x); wp_pures.
-- rewrite filter_cons_True ?f_x //=. by iApply "Hpost".
-- rewrite filter_cons_False ?f_x; eauto. by iApply "Hpost".
+case f_x: (f x); wp_pures; by iApply "Hpost".
 Qed.
 
 End ListLemmas.
