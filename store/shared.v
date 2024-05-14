@@ -18,7 +18,7 @@ Context `{!cryptisGS Σ, !heapGS Σ, !sessionGS Σ}.
 Notation iProp := (iProp Σ).
 
 Class storeG := StoreG {
-  store_inG :> inG Σ (authR (max_prefix_listUR termO));
+  store_inG :> versionGS Σ termO;
 }.
 
 Context `{!storeG}.

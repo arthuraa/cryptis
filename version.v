@@ -9,8 +9,17 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
 Notation versionUR A := (authR (max_prefix_listUR A)).
-Notation versionG Σ A := (inG Σ (versionUR A)).
-Notation versionΣ A := (GFunctor (versionUR A)).
+
+Class versionGS Σ A := VersionGS {
+  versionGS_inG : inG Σ (versionUR A);
+}.
+
+Local Existing Instance versionGS_inG.
+
+Definition versionΣ A := #[GFunctor (versionUR A)].
+
+Global Instance subG_versionGS Σ A : subG (versionΣ A) Σ → versionGS Σ A.
+Proof. solve_inG. Qed.
 
 Section Version.
 
@@ -18,7 +27,7 @@ Variables (Σ : gFunctors) (A : ofe).
 
 Notation iProp := (iProp Σ).
 
-Context `{!versionG Σ A}.
+Context `{!versionGS Σ A}.
 
 Implicit Types (x y z : A) (xs ys zs : list A).
 

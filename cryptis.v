@@ -17,7 +17,7 @@ Class cryptisGpreS Σ := CryptisGPreS {
   cryptisGpreS_nonce : savedPredG Σ term;
   cryptisGpreS_key   : savedPredG Σ (key_type * term);
   cryptisGpreS_enc   : savedPredG Σ (term * term);
-  cryptisGpreS_hon   : versionG Σ (gsetO term);
+  cryptisGpreS_hon   : versionGS Σ (gsetO term);
   cryptisGpreS_maps  : inG Σ (reservation_mapR (agreeR positiveO));
 }.
 
