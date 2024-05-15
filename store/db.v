@@ -4,368 +4,344 @@ From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
-From iris.heap_lang.lib Require Import lock ticket_lock.
-From cryptis Require Import lib version term cryptis primitives tactics.
-From cryptis Require Import role session pk_auth pk_dh.
+From cryptis Require Import lib term cryptis primitives tactics.
+From cryptis Require Import role session pk_auth pk_dh alist.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Definition dbUR : ucmra :=
+Definition db_stateUR : ucmra :=
   authUR (gmapUR term (exclR termO)).
 
-Class dbGpreS Σ :=  DbGpreS {
-  dbGpreS_tlock : tlockG Σ;
-  dbGpreS_db : inG Σ dbUR;
-}.
+Variant operation :=
+| Update of term & term
+| Create of term & term.
 
-Local Existing Instance dbGpreS_tlock.
-Local Existing Instance dbGpreS_db.
+Canonical operationO := leibnizO operation.
+
+Definition db_historyUR : ucmra :=
+  authUR (max_prefix_listUR operationO).
 
 Class dbGS Σ := DbGS {
-  db_inG : dbGpreS Σ;
+  dbGS_state : inG Σ db_stateUR;
+  dbGS_history : inG Σ db_historyUR;
+  dbGS_names : inG Σ (agreeR (prodO gnameO gnameO));
 }.
 
-Local Existing Instance db_inG.
+Local Existing Instance dbGS_state.
+Local Existing Instance dbGS_history.
+Local Existing Instance dbGS_names.
+
+Definition dbΣ :=
+  #[GFunctor db_stateUR;
+    GFunctor db_historyUR;
+    GFunctor (agreeR (prodO gnameO gnameO))].
+
+Global Instance subG_dbGS Σ : subG dbΣ Σ → dbGS Σ.
+Proof. solve_inG. Qed.
 
 Module DB.
 
-Definition new : val := λ: <>,
-  let: "kvs" := ref [] in
-  let: "lock" := newlock #() in
-  ("kvs", "lock").
+Section DB.
 
-Definition find : val := λ: "kvs" "k",
-  let: "res" := find_list (λ: "kv", eq_term (Fst "kv") "k") "kvs" in
-  match: "res" with
-    SOME "res" => SOME (Snd "res")
-  | NONE => NONE
+Implicit Types o : operationO.
+Implicit Types os : list operationO.
+Implicit Types db : gmap term term.
+Implicit Types γ γhist γst : gname.
+Implicit Types n : nat.
+
+Definition op_app db o :=
+  match o with
+  | Update t1 t2 => <[t1 := t2]>db
+  | Create t1 t2 =>
+      match db !! t1 with
+      | Some _ => db
+      | None => <[t1 := t2]>db
+      end
   end.
 
-Definition while_locked : val := λ: "db" "f",
-  let: "kvs" := Fst "db" in
-  let: "lock" := Snd "db" in
-  acquire "lock";;
-  let: "res" := "f" "kvs" in
-  release "lock";;
-  "res".
+Definition to_db os : gmap term term :=
+  foldl op_app ∅ os.
 
-Definition set : val := λ: "db" "k" "v",
-  while_locked "db" (λ: "kvs",
-      "kvs" <- ("k", "v") :: !"kvs";;
-      #()
-  ).
+Context `{!dbGS Σ}.
 
-Definition get : val := λ: "db" "k",
-  while_locked "db" (λ: "kvs",
-      match: find !"kvs" "k" with
-        SOME "res" => "res"
-      | NONE => #() (* Error *)
-      end
-  ).
+Definition names γ γhist γst : iProp Σ :=
+  own γ (to_agree (γhist, γst)).
 
-Definition create : val := λ: "db" "k" "v",
-  while_locked "db" (λ: "kvs",
-    match: find !"kvs" "k" with
-      SOME <> => #false
-    | NONE => "kvs" <- ("k", "v") :: !"kvs";; #true
-    end
-  ).
-
-Definition delete : val := λ: "db" "k",
-  while_locked "db" (λ: "kvs",
-    "kvs" <- filter_list (λ: "p", ~ (eq_term "k" (Fst "p"))) !"kvs";;
-    #()
-  ).
-
-Section Verif.
-
-Context `{!cryptisGS Σ, !heapGS Σ, !dbGS Σ}.
-Notation iProp := (iProp Σ).
-
-Implicit Types (γ : gname) (l : loc) (t : term) (v : val).
-Implicit Types (kvs : list (term * term)) (db : gmap term term).
-
-Definition is_alist kvs db : Prop :=
-  ∀ k, db !! k = snd <$> List.find (λ p, bool_decide (p.1 = k)) kvs.
-
-Definition stores_db l db : iProp :=
-  ∃ kvs, l ↦ repr kvs ∗ ⌜is_alist kvs db⌝.
-
-Definition auth db : dbUR := ● (Excl <$> db).
-Definition frag db : dbUR := ◯ (Excl <$> db).
-
-Lemma valid_auth db : ✓ auth db.
-Proof.
-apply/auth_auth_valid => k; rewrite lookup_fmap; by case: (db !! k).
-Qed.
-
-Lemma valid_frag db : ✓ frag db.
-Proof.
-apply/auth_frag_valid => k; rewrite lookup_fmap; by case: (db !! k).
-Qed.
-
-Hint Resolve valid_auth : core.
-
-Lemma auth_frag_valid db1 db2 :
-  ✓ (auth db1 ⋅ frag db2) →
-  ∀ t1 t2, db2 !! t1 = Some t2 -> db1 !! t1 = Some t2.
-Proof.
-rewrite /auth /frag => /auth_both_valid_discrete [incl_12 valid_1] t1 t2.
-move: incl_12; rewrite lookup_included; move/(_ t1).
-rewrite !lookup_fmap => incl_12 db2_t1.
-rewrite db2_t1 /= in incl_12.
-case db1_t1: (db1 !! t1) => [t2'|] /= in incl_12 *.
-- by move/Excl_included/(leibniz_equiv _ _): incl_12 => ->.
-- by case/option_included: incl_12 => // - [] ? [] ? [] ? [] ?.
-Qed.
-
-Lemma auth_frag1_valid db t1 t2 :
-  ✓ (auth db ⋅ frag {[t1 := t2]}) →
-  db !! t1 = Some t2.
-Proof.
-move=> valid_12; apply: (auth_frag_valid valid_12).
-by rewrite lookup_singleton.
-Qed.
-
-Lemma auth_frag_update db t1 t2 t2' :
-  auth db ⋅ frag {[t1 := t2]} ~~>
-  auth (<[t1 := t2']> db) ⋅ frag {[t1 := t2']}.
-Proof.
-apply/auth_update; rewrite fmap_insert !map_fmap_singleton.
-apply: singleton_local_update_any => x _.
-by apply: exclusive_local_update.
-Qed.
-
-Lemma auth_frag_alloc db t1 t2 :
-  db !! t1 = None ->
-  auth db ~~> auth (<[t1 := t2]> db) ⋅ frag {[t1 := t2]}.
-Proof.
-move=> db_t1. apply/auth_update_alloc; rewrite fmap_insert map_fmap_singleton.
-by apply: alloc_singleton_local_update => //; rewrite lookup_fmap db_t1.
-Qed.
-
-Lemma auth_frag_delete db t1 t2 :
-  db !! t1 = Some t2 ->
-  auth db ⋅ frag {[t1 := t2]} ~~> auth (base.delete t1 db).
-Proof.
-move=> db_t1. apply/auth_update_dealloc.
-rewrite map_fmap_singleton fmap_delete.
-exact/delete_singleton_local_update.
-Qed.
-
-Definition db_res γ l : iProp :=
-  ∃ db, stores_db l db ∗ own γ (auth db).
-
-Definition is_db v : iProp :=
-  ∃ l vlock γkvs γlock,
-    ⌜v = (#l, vlock)%V⌝ ∗
-    meta l (nroot.@"kvs") γkvs ∗
-    meta l (nroot.@"lock") γlock ∗
-    is_lock γlock vlock (db_res γkvs l).
-
-Global Instance is_db_persistent v : Persistent (is_db v).
+Local Instance persistent_names γ γhist γst : Persistent (names γ γhist γst).
 Proof. apply _. Qed.
 
-Lemma wp_db_new :
-  {{{ True }}}
-    DB.new #()
-  {{{ v, RET v; is_db v }}}.
+Lemma names_alloc γhist γst : ⊢ |==> ∃ γ, names γ γhist γst.
 Proof.
-iIntros "%Φ _ Hpost"; wp_lam; wp_pures.
-wp_bind (ref _)%E; iApply wp_alloc => //.
-iIntros "!> %l [Hl meta]".
-rewrite (meta_token_difference _ (↑(nroot.@"kvs")) _) //.
-iDestruct "meta" as "[meta_kvs meta]".
-iMod (own_alloc (auth ∅)) as "[%γkvs own_γkvs]" => //.
-iMod (meta_set _ _ γkvs (nroot.@"kvs") with "meta_kvs") as "#meta_kvs" => //.
-wp_pures; wp_bind (newlock _).
-iApply (newlock_spec (db_res γkvs l) with "[Hl own_γkvs]").
-{ iExists ∅. iFrame. iExists [].
-  rewrite /=. rewrite repr_list_unseal /=. iFrame.
-  by iPureIntro => k; rewrite lookup_empty. }
-iIntros "!> %vlock %γlock #lock".
-iMod (meta_set _ _ γlock (nroot.@"lock") with "meta") as "#meta_lock".
-{ solve_ndisj. }
-wp_pures. iApply "Hpost". iExists l, vlock, γkvs, γlock. eauto.
+by iApply (own_alloc (to_agree (γhist, γst))).
 Qed.
 
-Lemma wp_find kvs db t :
-  is_alist kvs db →
-  {{{ True }}}
-    DB.find (repr kvs) t
-  {{{ RET (repr (db !! t)); True }}}.
+Definition names_agree γ γhist1 γhist2 γst1 γst2 :
+  names γ γhist1 γst1 -∗
+  names γ γhist2 γst2 -∗
+  ⌜γhist2 = γhist1⌝ ∗ ⌜γst2 = γst1⌝.
 Proof.
-iIntros "%kvs_db %Φ _ Hpost"; wp_lam; wp_pures.
-wp_bind (find_list _ _).
-iApply (wp_find_list (λ x, bool_decide (x.1 = t)) _ kvs) => //.
-{ move=> [k t']; iIntros "%Φ' _ Hpost".
-  wp_pures. iApply wp_eq_term. by iApply "Hpost". }
-iIntros "!> _"; rewrite kvs_db.
-by case: List.find => [[k' t']|] /=; wp_pures; iApply "Hpost".
+iIntros "#H1 #H2".
+iDestruct (own_valid_2 with "H1 H2") as "%valid".
+rewrite to_agree_op_valid_L in valid *.
+by case: valid => <- <-.
 Qed.
 
-Lemma wp_while_locked v Φ (f : val) :
-  (∀ γkvs l vlock,
-      ⌜v = (#l, vlock)%V⌝ -∗
-      meta l (nroot.@"kvs") γkvs -∗
-      db_res γkvs l -∗
-      WP f #l {{ res, Φ res ∗ db_res γkvs l }}) -∗
-  is_db v -∗
-  WP while_locked v f {{ res, Φ res }}.
+Definition hist_auth γ os : iProp Σ :=
+  ∃ γhist γst,
+    names γ γhist γst ∗
+    own γhist (● to_max_prefix_list os ⋅ ◯ to_max_prefix_list os).
+
+Definition hist_frag γ os : iProp Σ :=
+  ∃ γhist γst,
+    names γ γhist γst ∗
+    own γhist (◯ to_max_prefix_list os).
+
+Local Instance persistent_hist_frag γ os : Persistent (hist_frag γ os).
+Proof. apply _. Qed.
+
+Lemma hist_auth_frag γ os :
+  hist_auth γ os -∗
+  hist_frag γ os.
 Proof.
-iIntros "wp_f (%l & %vlock & %γkvs & %γloc & -> & #m_kvs & #m_lock & #lock)".
-wp_lam; wp_pures.
-wp_bind (acquire _); iApply (acquire_spec with "lock").
-iIntros "!> (locked & db_res)".
-wp_pures; wp_bind (f _).
-iPoseProof ("wp_f" with "[//] m_kvs db_res") as "wp_f".
-iApply (wp_wand with "wp_f").
-iIntros "%res [post db_res]".
-wp_pures; wp_bind (release _); iApply (release_spec with "[locked db_res]").
-{ iFrame. iSplitR; eauto. }
-iIntros "!> _"; wp_pures; eauto.
+iIntros "(%γhist & %γst & Hnames & [_ Hown])".
+iExists _, _. iFrame.
 Qed.
 
-Definition mapsto v t1 t2 : iProp :=
-  ∃ l vlock γkvs,
-    ⌜v = (#l, vlock)%V⌝ ∗
-    meta l (nroot.@"kvs") γkvs ∗
-    own γkvs (frag {[t1 := t2]}).
-
-Lemma mapsto_inv l v γkvs t1 t2 :
-  mapsto (#l, v)%V t1 t2 -∗
-  meta l (nroot.@"kvs") γkvs -∗
-  own γkvs (frag {[t1 := t2]}).
+Lemma hist_frag_agree γ os1 os2 :
+  length os1 = length os2 →
+  hist_frag γ os1 -∗
+  hist_frag γ os2 -∗
+  ⌜os2 = os1⌝.
 Proof.
-iIntros "(%l' & %v' & %γkvs' & %E & #meta' & own) #meta".
-case: E => <- _ {l' v'}.
-now iPoseProof (meta_agree with "meta meta'") as "<-".
+move=> lengthE.
+iIntros "(%γhist1 & % & names1 & hist_frag1)".
+iIntros "(%γhist2 & % & names2 & hist_frag2)".
+iPoseProof (names_agree with "names1 names2") as "[-> ->]".
+iPoseProof (own_valid_2 with "hist_frag1 hist_frag2") as "%valid".
+rewrite auth_frag_op_valid to_max_prefix_list_op_valid_L in valid.
+iPureIntro.
+case: valid => - [[|o os] osE].
+- by rewrite app_nil_r in osE.
+- rewrite osE app_length /= in lengthE; lia.
+- by rewrite app_nil_r in osE.
+- rewrite osE app_length /= in lengthE; lia.
 Qed.
 
-Lemma is_alist_cons kvs db k t :
-  is_alist kvs db ->
-  is_alist ((k, t) :: kvs) (<[k := t]>db).
+Lemma hist_frag_prefix_of os1 os2 γ :
+  os1 `prefix_of` os2 →
+  hist_frag γ os2 -∗
+  hist_frag γ os1.
 Proof.
-move=> kvs_db k' /=; case: bool_decide_reflect => [<-|ne].
-- by rewrite lookup_insert.
-- by rewrite lookup_insert_ne.
+iIntros "%os1_os2 (%γhist & %γst & #names & #hist_frag)".
+iExists _, _; iSplit; eauto.
+iApply own_mono; last by eauto.
+apply: auth_frag_mono. exact/to_max_prefix_list_included_L.
 Qed.
 
-Lemma is_alist_filter kvs db k :
-  is_alist kvs db ->
-  is_alist (List.filter (λ p, negb (bool_decide (k = p.1))) kvs)
-           (base.delete k db).
+Lemma hist_update γ os o :
+  hist_auth γ os ==∗
+  hist_auth γ (os ++ [o]) ∗
+  hist_frag γ (os ++ [o]).
 Proof.
-move=> kvs_db k' /=; case: (decide (k = k')) => [<- {k'}|neq].
-- rewrite lookup_delete. case eq_find: List.find => [[t1 t2]|] //=.
-  case/(@find_some _ _ _ _): eq_find => /= in_filter.
-  case: bool_decide_reflect => // -> in in_filter *.
-  rewrite filter_In /= in in_filter; case: in_filter => _.
-  by rewrite bool_decide_eq_true_2.
-- rewrite lookup_delete_ne // {}kvs_db.
-  elim: kvs => //= - [/= t1 t2] kvs IH.
-  case: bool_decide_reflect => [-> {t1}|neq'] /=.
-  + by rewrite bool_decide_eq_false_2 //= bool_decide_eq_true_2.
-  + rewrite IH. case: bool_decide_reflect => //= neq''.
-    by rewrite bool_decide_eq_false_2.
+iIntros "(%γhist & %γst & #Hnames & auth)".
+iMod (own_update with "auth") as "auth".
+{ apply: auth_update.
+  apply: (max_prefix_list_local_update os (os ++ [o])).
+  by exists [o]. }
+iDestruct "auth" as "[auth #frag]".
+iModIntro. iSplit.
+- iExists _, _. iSplit; first by []. by iSplitL.
+- iExists _, _. by iSplit.
 Qed.
 
-Lemma wp_set v t1 t2 t2' :
-  {{{ is_db v ∗ mapsto v t1 t2 }}}
-    DB.set v t1 t2'
-  {{{ RET #(); mapsto v t1 t2' }}}.
+Definition state_auth γ db : iProp Σ :=
+  ∃ γhist γst,
+    names γ γhist γst ∗
+    own γst (● (Excl <$> db) : db_stateUR).
+
+Definition mapsto γ t1 t2 : iProp Σ :=
+  ∃ γhist γst,
+    names γ γhist γst ∗
+    own γst (◯ {[t1 := Excl t2]}).
+
+Lemma state_auth_mapsto γ db t1 t2 :
+  state_auth γ db -∗
+  mapsto γ t1 t2 -∗
+  ⌜db !! t1 = Some t2⌝.
 Proof.
-iIntros "%Φ [#vP t1_t2] Hpost".
-wp_lam; wp_pures; iApply (wp_while_locked with "[t1_t2 Hpost] vP").
-iIntros "%γkvs %l %vlock -> #m_kvs lP".
-iPoseProof (mapsto_inv with "t1_t2 m_kvs") as "t1_t2".
-iDestruct "lP" as "(%db & (%kvs & l_kvs & %kvs_db) & dbP)".
-iPoseProof (own_valid_2 with "dbP t1_t2") as "%valid_12".
-have {valid_12} db_t1 := auth_frag1_valid valid_12.
-wp_pures. wp_load. wp_pures. change (t1, t2')%V with (repr (t1, t2')).
-(* FIXME: The wp_cons tactic cannot proceed here because it undoes the previous
-   change, which brings the goal to a shape where the tac_wp_cons lemma does not
-   apply. *)
-wp_bind (_ :: _)%E. iApply (wp_cons _ (t1, t2') kvs). wp_store.
-iMod (own_update_2 with "dbP t1_t2") as "Hown".
-  exact: (auth_frag_update t2').
-iDestruct "Hown" as "[dbP t1_t2]".
-iModIntro. iSplitL "Hpost t1_t2".
-- iApply "Hpost". iExists l, vlock, γkvs; eauto.
-- iExists _; iFrame. iExists _. iFrame. iPureIntro.
-  exact: is_alist_cons.
+iIntros "(%γhist1 & %γst1 & #Hnames1 & Hauth)".
+iIntros "(%γhist2 & %γst2 & #Hnames2 & Hfrag)".
+iDestruct (names_agree with "Hnames1 Hnames2") as "[-> ->]".
+iPoseProof (own_valid_2 with "Hauth Hfrag") as "%valid".
+rewrite auth_both_valid_discrete in valid.
+case: valid => incl valid.
+rewrite singleton_included_exclusive_l // lookup_fmap in incl.
+pose proof (leibniz_equiv _ _ incl) as incl'.
+case db_t1: (db !! t1) => [t2'|] //= in incl'.
+iPureIntro. by case: incl' => <-.
 Qed.
 
-Lemma wp_get v t1 t2 :
-  {{{ is_db v ∗ mapsto v t1 t2 }}}
-    DB.get v t1
-  {{{ RET (repr t2); mapsto v t1 t2 }}}.
+Lemma state_auth_update t2' γ db t1 t2 :
+  state_auth γ db -∗
+  mapsto γ t1 t2 ==∗
+  state_auth γ (<[t1 := t2']>db) ∗
+  mapsto γ t1 t2'.
 Proof.
-iIntros "%Φ [#vP t1_t2] Hpost".
-wp_lam; wp_pures; iApply (wp_while_locked with "[t1_t2 Hpost] vP").
-iIntros "%γkvs %l %vlock -> #m_kvs lP".
-iPoseProof (mapsto_inv with "t1_t2 m_kvs") as "t1_t2".
-iDestruct "lP" as "(%db & (%kvs & l_kvs & %kvs_db) & dbP)".
-iPoseProof (own_valid_2 with "dbP t1_t2") as "%valid_12".
-have {valid_12} db_t1 := auth_frag1_valid valid_12.
-wp_pures. wp_load. wp_bind (DB.find _ _)%E. iApply wp_find; eauto.
-iIntros "!> _". rewrite db_t1. wp_pures. iModIntro.
-iSplitL "Hpost t1_t2".
-- iApply "Hpost". iExists l, vlock, γkvs. eauto.
-- iExists _; iFrame. iExists _. iFrame. eauto.
+iIntros "(%γhist1 & %γst1 & #Hnames1 & Hauth)".
+iIntros "(%γhist2 & %γst2 & #Hnames2 & Hfrag)".
+iDestruct (names_agree with "Hnames1 Hnames2") as "[-> ->]".
+iMod (own_update_2 with "Hauth Hfrag") as "own".
+{ apply: auth_update.
+  apply: (singleton_local_update_any _ _ _ (Excl t2') (Excl t2')) => ? _.
+  exact: exclusive_local_update. }
+iDestruct "own" as "[Hauth Hfrag]".
+iModIntro. iSplitL "Hauth".
+- iExists _, _. rewrite fmap_insert. by eauto.
+- iExists _, _. by eauto.
 Qed.
 
-Lemma wp_create v t1 t2 :
-  {{{ is_db v }}}
-    DB.create v t1 t2
-  {{{ (b : bool), RET #b;
-      if b then mapsto v t1 t2 else True }}}.
+Lemma state_auth_create t2 γ db t1 :
+  state_auth γ db ==∗
+  state_auth γ (op_app db (Create t1 t2)) ∗
+  (if db !! t1 then True else mapsto γ t1 t2).
 Proof.
-iIntros "%Φ #vP Hpost".
-wp_lam; wp_pures. iApply (wp_while_locked with "[Hpost] vP").
-iIntros "%γkvs %l %vlock -> #m_kvs lP".
-iDestruct "lP" as "(%db & (%kvs & l_kvs & %kvs_db) & dbP)".
-wp_pures. wp_load. wp_bind (DB.find _ _)%E. iApply wp_find; eauto.
-iIntros "!> _". case db_t1: (db !! t1) => [t2'|]; wp_pures.
-  iModIntro. iSplitL "Hpost"; first by iApply "Hpost".
-  iExists _; iFrame. iExists _. iFrame. eauto.
-wp_load. wp_pures. change (t1, t2)%V with (repr (t1, t2)).
-wp_bind (_ :: _)%E. iApply (wp_cons _ _ kvs). wp_store.
-iMod (own_update with "dbP") as "Hown".
-{ exact: (auth_frag_alloc t2). }
-iDestruct "Hown" as "[dbP t1_t2]".
-iModIntro. iSplitL "Hpost t1_t2".
-- iApply "Hpost". iExists l, vlock, γkvs; iFrame. by eauto.
-- iExists _. iFrame. iExists _. iFrame. iPureIntro. exact: is_alist_cons.
+rewrite /=; case db_t1: (db !! t1) => [t2'|]; eauto.
+iIntros "(%γhist1 & %γst1 & #Hnames1 & Hauth)".
+iMod (own_update _ _ (_ ⋅ _) with "Hauth") as "[Hauth Hfrag]".
+{ apply: auth_update_alloc.
+  apply: (alloc_local_update _ _ t1 (Excl t2)) => //.
+  by rewrite lookup_fmap db_t1. }
+iModIntro. iSplitL "Hauth".
+- iExists _, _. rewrite fmap_insert. by iFrame.
+- iExists _, _. by iFrame.
 Qed.
 
-Lemma wp_delete v t1 t2 :
-  {{{ is_db v ∗ mapsto v t1 t2 }}}
-    DB.delete v t1
-  {{{ RET #(); True }}}.
+Definition client_view γ n : iProp Σ :=
+  ∃ os,
+    ⌜n = length os⌝ ∗
+    hist_auth γ os ∗
+    state_auth γ (to_db os).
+
+Definition update_at γ n t1 t2 : iProp Σ :=
+  ∃ os, ⌜n = length os⌝ ∗
+        hist_frag γ (os ++ [Update t1 t2]).
+
+Definition create_at γ n t1 t2 : iProp Σ :=
+  ∃ os, ⌜n = length os⌝ ∗
+        hist_frag γ (os ++ [Create t1 t2]).
+
+Definition server_view γ n db : iProp Σ :=
+  ∃ os, ⌜n = length os⌝ ∗
+        ⌜db = to_db os⌝ ∗
+        hist_frag γ os.
+
+Lemma alloc : ⊢ |==> ∃ γ, client_view γ 0 ∗ server_view γ 0 ∅.
 Proof.
-iIntros "%Φ [#vP t1_t2] Hpost".
-wp_lam; wp_pures; iApply (wp_while_locked with "[t1_t2 Hpost] vP").
-iIntros "%γkvs %l %vlock -> #m_kvs lP".
-iPoseProof (mapsto_inv with "t1_t2 m_kvs") as "t1_t2".
-iDestruct "lP" as "(%db & (%kvs & l_kvs & %kvs_db) & dbP)".
-iPoseProof (own_valid_2 with "dbP t1_t2") as "%valid_12".
-have {valid_12} db_t1 := auth_frag1_valid valid_12.
-wp_pures. wp_load. wp_pures. wp_bind (filter_list _ _).
-iApply (wp_filter_list (λ p : term * term, negb (bool_decide (t1 = p.1))))
-       => //.
-{ iIntros "%p %Ψ _ Hpost". wp_pures. wp_bind (eq_term _ _).
-  iApply wp_eq_term. wp_pures. by iApply "Hpost". }
-iIntros "!> _". wp_store.
-iMod (own_update_2 with "dbP t1_t2") as "dbP".
-{ exact: auth_frag_delete. }
-iModIntro. iSplitL "Hpost"; first by iApply "Hpost".
-iExists _. iFrame. iExists _. iFrame. iPureIntro.
-exact: is_alist_filter.
+iIntros "".
+iMod (own_alloc (● to_max_prefix_list [] ⋅ ◯ to_max_prefix_list []))
+  as "(%γhist & own_hist)".
+{ apply/auth_both_valid_discrete. split; eauto.
+  exact/to_max_prefix_list_valid. }
+iMod (own_alloc (● (Excl <$> to_db [] : gmap _ _))) as "(%γst & own_state)".
+{ apply/auth_auth_valid. by rewrite /to_db /= fmap_empty. }
+iMod (own_alloc (to_agree (γhist, γst))) as "(%γ & #own_names)" => //.
+iAssert (hist_frag γ []) as "#frag".
+{ iExists γhist, γst. iSplit => //.
+  by iDestruct "own_hist" as "[??]". }
+iModIntro. iExists γ. iSplitL; last by iExists []; eauto.
+iExists []. iSplit; eauto. iSplitL "own_hist".
+- iExists _, _. iFrame. iApply "own_names".
+- iExists _, _. iFrame. iApply "own_names".
 Qed.
 
-End Verif.
+Lemma update_client t2' γ n t1 t2 :
+  client_view γ n -∗
+  mapsto γ t1 t2 ==∗
+  client_view γ (S n) ∗
+  update_at γ n t1 t2' ∗
+  mapsto γ t1 t2'.
+Proof.
+iIntros "(%os & -> & own_os & own_db) own_frag".
+iMod (hist_update _ os (Update t1 t2') with "own_os") as "[auth_os #frag_os]".
+iMod (state_auth_update t2' with "own_db own_frag") as "[Hstate Hmapsto]".
+iModIntro. iSplitL "auth_os Hstate".
+{ iExists (os ++ [Update t1 t2']).
+  rewrite app_length Nat.add_comm /=. iSplit; first by [].
+  iFrame. by rewrite /to_db foldl_app. }
+iFrame.
+{ iExists _; eauto. }
+Qed.
+
+Lemma update_server γ n db t1 t2 :
+  server_view γ n db -∗
+  update_at γ n t1 t2 -∗
+  server_view γ (S n) (<[t1 := t2]>db).
+Proof.
+iIntros "(%os & -> & -> & #frag) (%os' & %lengthE & #frag')".
+iPoseProof (hist_frag_agree _ lengthE with "frag []") as "->".
+{ iApply (hist_frag_prefix_of with "frag'").
+  by exists [Update t1 t2]. }
+iExists (os ++ [Update t1 t2]). rewrite app_length Nat.add_comm /=.
+do 2!iSplit => //.
+by rewrite /to_db foldl_app.
+Qed.
+
+Definition free_at γ n t1 : iProp Σ :=
+  ∃ os, ⌜n = length os⌝ ∗
+        hist_frag γ os ∗
+        ⌜to_db os !! t1 = None⌝.
+
+Lemma create t2 γ n t1 :
+  client_view γ n ==∗
+  create_at γ n t1 t2 ∗
+  client_view γ (S n) ∗
+  (free_at γ n t1 -∗ mapsto γ t1 t2).
+Proof.
+iIntros "(%os & -> & hist & state)".
+iMod (hist_update _ _ (Create t1 t2) with "hist") as "[hist_auth #hist_frag]".
+iMod (state_auth_create t2 _ _ t1 with "state") as "[state mapsto]".
+have ->: op_app (to_db os) (Create t1 t2) = to_db (os ++ [Create t1 t2]).
+{ by rewrite /to_db foldl_app. }
+iModIntro. iSplitR; first by iExists os; eauto.
+iSplitL "hist_auth state".
+{ iExists _. iFrame. by rewrite app_length Nat.add_comm. }
+iIntros "(%os' & %lengthE & #hist_frag' & %db_t1)".
+iAssert (hist_frag γ os) as "#hist_frag''".
+{ iApply (hist_frag_prefix_of with "hist_frag").
+  by exists [Create t1 t2]. }
+iPoseProof (hist_frag_agree with "hist_frag'' hist_frag'") as "->" => //.
+by rewrite db_t1.
+Qed.
+
+Definition stored_at γ n t1 t2 : iProp Σ :=
+  ∃ os, ⌜n = length os⌝ ∗
+        hist_frag γ os ∗
+        ⌜to_db os !! t1 = Some t2⌝.
+
+Lemma load_client γ n t1 t2 t2' :
+  client_view γ n -∗
+  mapsto γ t1 t2 -∗
+  stored_at γ n t1 t2' -∗
+  ⌜t2' = t2⌝.
+Proof.
+iIntros "(%os & -> & hist & state) t1_t2 (%os' & %lengthE & #Hfrag & %os_t1)".
+iPoseProof (hist_auth_frag with "hist") as "#Hfrag'".
+iPoseProof (hist_frag_agree with "Hfrag Hfrag'") as "->" => //.
+iPoseProof (state_auth_mapsto with "state t1_t2") as "%os_t1'".
+iPureIntro. rewrite os_t1 in os_t1'. congruence.
+Qed.
+
+Lemma load_server γ n db t1 t2 :
+  db !! t1 = Some t2 →
+  server_view γ n db -∗
+  stored_at γ n t1 t2.
+Proof.
+iIntros "%db_t1 (%os & -> & -> & view)".
+iExists os; eauto.
+Qed.
+
+End DB.
 
 End DB.

@@ -6,27 +6,33 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib version term cryptis primitives tactics.
 From cryptis Require Import role session pk_auth pk_dh.
-From cryptis.store Require Import impl.
+From cryptis.store Require Import impl alist db.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Section Defs.
-
-Context `{!cryptisGS Σ, !heapGS Σ, !sessionGS Σ}.
-Notation iProp := (iProp Σ).
-
-Class storeG := StoreG {
-  store_inG :> versionGS Σ termO;
+Class storeGS Σ := StoreGS {
+  storeGS_db : dbGS Σ;
 }.
 
-Context `{!storeG}.
+Local Existing Instance storeGS_db.
+
+Definition storeΣ := dbΣ.
+
+Global Instance subG_storeGS Σ : subG storeΣ Σ → storeGS Σ.
+Proof. solve_inG. Qed.
+
+Section Defs.
+
+Context `{!cryptisGS Σ, !heapGS Σ, !sessionGS Σ, !storeGS Σ}.
+Notation iProp := (iProp Σ).
 
 Local Instance STORE : PK := PK_DH (λ _ _ _ _, True)%I.
 
-Implicit Types (cs : cst) (ss : sst).
+Implicit Types (cs : cst).
 Implicit Types kI kR kS t : term.
+Implicit Types db : gmap term term.
 Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
@@ -100,61 +106,52 @@ iDestruct (session_weak_session_key with "weak key2") as "(<- & <- & <- & <-)".
 by iApply (term_meta_agree with "meta1 meta2").
 Qed.
 
-Definition value_auth kS ts t : iProp := ∃ γ,
-  version_auth γ (DfracOwn 1) ts t ∗
-  wf_key kS γ.
+Definition client cs : iProp := ∃ (n : nat),
+  handshake_done (cst_key cs) (cst_ok cs) ∗
+  (if cst_ok cs then wf_key (cst_key cs) (cst_name cs) else True) ∗
+  minted (cst_key cs) ∗
+  cst_ts cs ↦ #n ∗
+  DB.client_view (cst_name cs) n.
 
-Definition value_frag kS ts t : iProp := ∃ γ,
-  version_frag γ ts t ∗
-  wf_key kS γ.
+Definition rem_mapsto cs t1 t2 : iProp :=
+  DB.mapsto (cst_name cs) t1 t2.
 
-Lemma value_auth_frag kS ts t : value_auth kS ts t -∗ value_frag kS ts t.
-Proof.
-iIntros "(%γ & auth & #key)".
-iExists γ. iSplit => //.
-by iApply version_auth_frag.
-Qed.
+Definition server ss : iProp := ∃ (n : nat) kvs db,
+  handshake_done (sst_key ss) (sst_ok ss) ∗
+  minted (sst_key ss) ∗
+  sst_ts ss ↦ #n ∗
+  sst_db ss ↦ kvs ∗
+  ⌜AList.is_alist kvs db⌝ ∗
+  ([∗ map] t1 ↦ t2 ∈ db, public t1 ∗ public t2) ∗
+  (if sst_ok ss then ∃ γ, wf_key (sst_key ss) γ ∗ DB.server_view γ n db
+   else True).
 
-Lemma value_auth_update t' kS ts t :
-  value_auth kS ts t ==∗ value_auth kS (S ts) t'.
-Proof.
-iIntros "(%γ & auth & #key)".
-iExists γ. iSplitL => //.
-by iApply version_update.
-Qed.
-
-Lemma value_frag_agree kS ok ts t1 t2 :
-  handshake_done kS ok -∗
-  value_frag kS ts t1 -∗
-  value_frag kS ts t2 -∗
-  ⌜t1 = t2⌝.
-Proof.
-iIntros "#done (%γ1 & #frag1 & #wf1) (%γ2 & #frag2 & #wf2)".
-iDestruct (wf_key_agree with "done wf1 wf2") as "<-".
-iPoseProof (version_frag_agree with "frag1 frag2") as "%e".
-iPureIntro. by apply (leibniz_equiv _ _ e).
-Qed.
-
-Definition init_pred kS (m : term) : iProp := ∃ ok,
+Definition init_pred kS (m : term) : iProp := ∃ ok γ,
   handshake_done kS ok ∗
-  if ok then value_frag kS 0 (TInt 0)
-  else True.
+  (if ok then wf_key kS γ else True) ∗
+  DB.server_view γ 0 ∅.
 
-Definition version_pred kS m : iProp := ∃ (n : nat) t ok,
-  ⌜m = Spec.of_list [TInt n; t]⌝ ∗
-  public t ∗
+
+Definition store_pred kS m : iProp := ∃ γ (n : nat) t1 t2 ok,
+  ⌜m = Spec.of_list [TInt n; t1; t2]⌝ ∗
   handshake_done kS ok ∗
-  if ok then value_frag kS n t
-  else True.
-
-Definition store_pred kS m : iProp := version_pred kS m.
+  (if ok then wf_key kS γ else True) ∗
+  public t1 ∗
+  public t2 ∗
+  DB.update_at γ n t1 t2.
 
 Definition ack_store_pred kS m : iProp := ∃ (n : nat),
   ⌜m = TInt n⌝. (* FIXME: Do we need anything else here? *)
 
 Definition load_pred (kS m : term) : iProp := True.
 
-Definition ack_load_pred kS m : iProp := version_pred kS m.
+Definition ack_load_pred (kS m : term) : iProp := ∃ (n : nat) ok t1 t2,
+  ⌜m = Spec.of_list [TInt n; t1; t2]⌝ ∗
+  public t2 ∗
+  handshake_done kS ok ∗
+  if ok then
+    ∃ γ, wf_key kS γ ∗ DB.stored_at γ n t1 t2
+  else True.
 
 Definition store_ctx : iProp :=
   enc_pred (N.@"init") init_pred ∗
@@ -163,18 +160,6 @@ Definition store_ctx : iProp :=
   enc_pred (N.@"load") load_pred ∗
   enc_pred (N.@"ack_load") ack_load_pred ∗
   pk_dh_ctx N (λ _ _ _ _, True)%I.
-
-Lemma version_predE kS n t :
-  version_pred kS (Spec.of_list [TInt n; t]) -∗
-  ∃ ok,
-    public t ∗
-    handshake_done kS ok ∗
-    if ok then value_frag kS n t else True.
-Proof.
-iIntros "(%n' & %t' & %ok & %e_kS & #p_t' & #done & #frag)".
-case/Spec.of_list_inj: e_kS => /Nat2Z.inj <- <-.
-iExists _; eauto.
-Qed.
 
 Lemma handshake_done_agree kS γ ok1 ok2 :
   wf_key kS γ -∗
@@ -192,6 +177,20 @@ iPoseProof (session_weak_session_key with "sess2 key") as "(<- & <- & <- & <-)".
 by eauto.
 Qed.
 
+Lemma initE kS t :
+  store_ctx -∗
+  public (TEnc kS (Spec.tag (N.@"init") t)) -∗
+  public (TKey Enc kS) ∨
+  ▷ ∃ ok γ, handshake_done kS ok ∗
+            (if ok then wf_key kS γ else True) ∗
+            DB.server_view γ 0 ∅.
+Proof.
+iIntros "(#initP & _) #p_t".
+iDestruct (public_TEncE with "[//] [//]") as "[[??]|#tP]"; first by eauto.
+iRight. by iDestruct "tP" as "(#init & _ & _)".
+Qed.
+
+(*
 Lemma version_predE' N' kS ok n t :
   handshake_done kS ok -∗
   (if ok then ∃ γ, wf_key kS γ else True) -∗
@@ -216,31 +215,67 @@ iDestruct (version_predE with "p_m")
   as "(%ok & _ & #done' & #frag) {p_m}".
 by iPoseProof (handshake_done_agree with "key done done'") as "<-".
 Qed.
+*)
 
-Lemma store_predE kS ok n t :
+Lemma store_predE kS ok n t1 t2 :
   handshake_done kS ok -∗
   (if ok then ∃ γ, wf_key kS γ else True) -∗
   store_ctx -∗
-  public (TEnc kS (Spec.tag (N.@"store") (Spec.of_list [TInt n; t]))) -∗
-  ▷ (public t ∗
-     if ok then value_frag kS n t else True).
+  public (TEnc kS (Spec.tag (N.@"store")
+                  (Spec.of_list [TInt n; t1; t2]))) -∗
+  ▷ (public t1 ∗ public t2 ∗
+     if ok then ∃ γ, wf_key kS γ ∗ DB.update_at γ n t1 t2 else True).
 Proof.
 iIntros "#key #wf #(_ & #storeP & _) #p_m".
-iApply (version_predE' with "key wf storeP p_m").
+iPoseProof (public_TEncE with "p_m [//]") as "{p_m} p_m".
+rewrite public_of_list /=. iDestruct "p_m" as "[p_m|p_m]".
+- iDestruct "p_m" as "(p_k & p_m & ? & ? & ?)".
+  do 2!iSplit => //. case: ok => //.
+  iDestruct "wf" as "(%γ & #contra & _)".
+  iDestruct ("contra" with "p_k") as ">[]".
+- iDestruct "p_m" as "(#(%γ & %n' & %t1' & %t2' & %ok' & mP) & _ & _)".
+  iModIntro. iDestruct "mP" as "(%e & done & wf' & p_t1 & p_t2 & update)".
+  case/Spec.of_list_inj: e => en <- <-.
+  have -> : n' = n by lia.
+  do 2!iSplitL => //.
+  case: ok => //.
+  iDestruct "wf" as "(%γ' & wf)".
+  iPoseProof (handshake_done_agree with "wf key done") as "<-".
+  iExists γ. eauto.
 Qed.
 
-Lemma ack_loadE kS ok n t :
+Lemma ack_loadE kS ok n γ t1 t2 t2' :
   handshake_done kS ok -∗
-  (if ok then ∃ γ, wf_key kS γ else True) -∗
+  (if ok then wf_key kS γ else True) -∗
+  DB.client_view γ n -∗
+  DB.mapsto γ t1 t2 -∗
   store_ctx -∗
-  public (TEnc kS (Spec.tag (N.@"ack_load") (Spec.of_list [TInt n; t]))) -∗
-  ▷ (public t ∗
-     if ok then value_frag kS n t else True%I).
+  public (TEnc kS (Spec.tag (N.@"ack_load")
+         (Spec.of_list [TInt n; t1; t2']))) -∗
+  ▷ (public t2' ∗
+     if ok then ⌜t2' = t2⌝ else True%I).
 Proof.
-iIntros "#key #? #(_ & _ & _ & _ & ? & _)".
-iApply version_predE'; eauto.
+iIntros "#key #wf client mapsto #(_ & _ & _ & _ & ? & _) #pub".
+iDestruct (public_TEncE with "pub [//]") as "{pub} [pub|pub]".
+- iDestruct "pub" as "[pub_k pub_t2]".
+  rewrite public_of_list /=.
+  iDestruct "pub_t2" as "(_ & _ & pub_t2 & _)".
+  iSplit => //.
+  case: ok => //.
+  iDestruct "wf" as "(#wf & _)".
+  iDestruct ("wf" with "pub_k") as ">[]".
+- iDestruct "pub" as "(#pub & _ & _)". iModIntro.
+  iDestruct "pub" as "(%n' & %ok' & %t1' & %t2'' & %E & ? & key' & stored)".
+  case/Spec.of_list_inj: E => en <- <-.
+  have <- : n = n' by lia.
+  iSplit => //.
+  case: ok => //.
+  iPoseProof (handshake_done_agree with "wf key key'") as "<-".
+  iDestruct "stored" as "(%γ' & wf' & stored)".
+  iPoseProof (wf_key_agree with "key wf wf'") as "->".
+  iApply (DB.load_client with "client mapsto stored").
 Qed.
 
 End Defs.
 
-Arguments storeG Σ : clear implicits.
+Arguments storeGS Σ : clear implicits.

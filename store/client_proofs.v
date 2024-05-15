@@ -6,7 +6,7 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib version term cryptis primitives tactics.
 From cryptis Require Import role session pk_auth pk_dh.
-From cryptis.store Require Import impl shared.
+From cryptis.store Require Import impl shared db.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -14,14 +14,14 @@ Unset Printing Implicit Defensive.
 
 Section Verif.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !sessionGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !sessionGS Σ, !storeGS Σ}.
 Notation iProp := (iProp Σ).
 
 Context `{!storeG Σ}.
 
 Local Instance STORE : PK := PK_DH (λ _ _ _ _, True)%I.
 
-Implicit Types (cs : cst) (ss : sst).
+Implicit Types (cs : cst).
 Implicit Types kI kR kS t : term.
 Implicit Types n : nat.
 Implicit Types γ : gname.
@@ -29,6 +29,7 @@ Implicit Types v : val.
 
 Variable N : namespace.
 
+(*
 Definition client_state s n t : iProp :=
   cst_ts s ↦ #n ∗
   minted (cst_key s) ∗
@@ -44,110 +45,117 @@ Proof.
 iIntros "(_ & ? & ? & ?)"; case: cst_ok => //; iFrame.
 by iApply value_auth_frag.
 Qed.
+*)
 
-Lemma wp_client_get_ts E s n t :
-  {{{ client_state s n t }}}
-    Client.get_ts (repr s) @ E
-  {{{ RET #n; client_state s n t }}}.
+Lemma wp_client_get_timestamp E cs (n : nat) :
+  {{{ cst_ts cs ↦ #n }}}
+    Client.get_timestamp (repr cs) @ E
+  {{{ RET #n; cst_ts cs ↦ #n }}}.
 Proof.
-rewrite /Client.get_ts.
-iIntros "%Φ (Hl & #s_kS & Hγ & state) post".
+rewrite /Client.get_timestamp.
+iIntros "%Φ Hn post".
 wp_pures. wp_load. iApply "post". iModIntro. by iFrame.
 Qed.
 
-Lemma wp_client_next_ts t' E s n t :
-  {{{ client_state s n t }}}
-    Client.next_ts (repr s) @ E
-  {{{ RET #(); client_state s (S n) t' }}}.
+Lemma wp_client_incr_timestamp E cs (n : nat) :
+  {{{ cst_ts cs ↦ #n }}}
+    Client.incr_timestamp (repr cs) @ E
+  {{{ RET #(); cst_ts cs ↦ #(S n) }}}.
 Proof.
-iIntros "%Ψ (n_stored & #s_key & n_t & auth) post".
-iAssert (|==> if cst_ok s then value_auth N (cst_key s) (S n) t' else True)%I
-  with "[auth]" as ">auth".
-{ case: cst_ok => //.
-  by iApply (value_auth_update N t'). }
-rewrite /Client.next_ts; wp_pures; wp_load; wp_store.
+iIntros "%Ψ Hn post".
+rewrite /Client.incr_timestamp; wp_pures; wp_load; wp_store.
 iApply "post"; iFrame.
 rewrite (_ : (n + 1)%Z = (S n)%nat :> Z); last by lia.
 by iFrame.
 Qed.
 
-Lemma wp_client_get_sk E s n t :
-  {{{ client_state s n t }}}
-    Client.get_sk (repr s) @ E
-  {{{ RET (repr (Spec.mkskey (cst_key s))); client_state s n t }}}.
+Lemma wp_client_get_session_key E cs :
+  {{{ True }}}
+    Client.get_session_key (repr cs) @ E
+  {{{ RET (repr (Spec.mkskey (cst_key cs))); True }}}.
 Proof.
-rewrite /Client.get_sk.
+rewrite /Client.get_session_key.
 iIntros "%Φ ? post". wp_pures. by iApply "post".
 Qed.
 
-Lemma wp_client_send_store E c s n t t' :
+Lemma wp_client_send_store E c cs t1 t2 t2' :
   ↑cryptisN ⊆ E →
   channel c -∗
   store_ctx N -∗
-  public t' -∗ (* FIXME: t' does not have to be public already *)
-  {{{ client_state s n t }}}
-    Client.send_store N c (repr s) t' @ E
-  {{{ RET #(); client_state s (S n) t' }}}.
+  public t1 -∗
+  public t2' -∗ (* FIXME: t1 and t2' do not have to be public already *)
+  {{{ client N cs ∗ rem_mapsto cs t1 t2 }}}
+    Client.send_store N c (repr cs) t1 t2' @ E
+  {{{ RET #(); client N cs ∗ rem_mapsto cs t1 t2' }}}.
 Proof.
-rewrite /Client.send_store.
-iIntros "% #chan_c (_ & #? & _) #p_t' !> %Φ state post".
-wp_pures. wp_bind (Client.next_ts _).
-iApply (wp_client_next_ts t' with "state"); iIntros "!> state".
-wp_pures. wp_bind (Client.get_ts _).
-iApply (wp_client_get_ts with "state"); iIntros "!> state".
-wp_pures. wp_bind (Client.get_sk _).
-iApply (wp_client_get_sk with "state"); iIntros "!> state".
-iPoseProof (client_state_frag with "state") as "# (s_k & p_k & frag)".
+rewrite /Client.send_store /rem_mapsto.
+iIntros "% #chan_c (_ & #? & _) #p_t1 #p_t2' !> %Φ [client mapsto] post".
+iDestruct "client" as "(%n & #handshake & #key & #minted & ts & client)".
+iMod (DB.update_client t2' with "client mapsto") as "(client & #update & mapsto)".
+wp_pures. wp_bind (Client.get_timestamp _).
+iApply (wp_client_get_timestamp with "ts"); iIntros "!> ts".
+wp_pures. wp_bind (Client.incr_timestamp _).
+iApply (wp_client_incr_timestamp with "ts"). iIntros "!> ts".
+wp_pures. wp_bind (Client.get_session_key _).
+iApply (wp_client_get_session_key with "[//]"); iIntros "!> _".
 wp_pures. wp_list. wp_bind (tint _). iApply wp_tint. wp_list.
 wp_term_of_list. wp_tsenc. wp_pures.
-iApply (wp_send with "[//] [#]"); eauto; last by iApply "post".
+iPoseProof ("post" with "[client ts mapsto]") as "post".
+{ iFrame. iExists (S n). iFrame. by eauto. }
+iApply (wp_send with "[//] [#]") => //. iClear "post".
 iModIntro. iApply public_TEncIS => //.
 - by rewrite minted_TKey.
-- iModIntro. iExists (S n), t', (cst_ok s).
-  by do 3?iSplit => //.
-- rewrite minted_of_list /= minted_TInt; do ![iSplit => //].
+- iModIntro. iExists (cst_name cs), n, t1, t2', (cst_ok cs).
+  do 5?iSplit => //.
+- rewrite minted_of_list /= minted_TInt; do ![iSplit => //];
   by iApply public_minted.
 - iModIntro. iIntros "_". rewrite public_of_list /= public_TInt. iSplit => //.
-  by iSplit => //.
+  by eauto.
 Qed.
 
-Lemma wp_client_ack_store E c s n t :
+Lemma wp_client_ack_store E c cs :
   ↑cryptisN ⊆ E →
   channel c -∗
   store_ctx N -∗
-  {{{ client_state s n t }}}
-    Client.ack_store N c (repr s) @ E
-  {{{ RET #(); client_state s n t }}}.
+  {{{ client N cs }}}
+    Client.ack_store N c (repr cs) @ E
+  {{{ RET #(); client N cs }}}.
 Proof.
-iIntros "% #chan_c (_ & _ & #? & _) !> %Φ state post".
+iIntros "% #chan_c (_ & _ & #? & _) !> %Φ client post".
 rewrite /Client.ack_store. wp_pures.
-wp_bind (Client.get_ts _). iApply (wp_client_get_ts with "state") => //.
-iIntros "!> state". wp_pures.
-wp_bind (Client.get_sk _). iApply (wp_client_get_sk with "state") => //.
-iIntros "!> state". wp_pures.
-iPoseProof (client_state_frag with "state") as "#(s_k & ?)".
-iCombine "post state" as "I". iRevert "I".
-iApply wp_sess_recv => //. iIntros "!> %m [post state] _".
+iDestruct "client" as "(%n & #handshake & #key & #minted & ts & client)".
+wp_bind (Client.get_timestamp _).
+iApply (wp_client_get_timestamp with "ts"). iIntros "!> ts". wp_pures.
+wp_bind (Client.get_session_key _).
+iApply (wp_client_get_session_key with "[//]") => //.
+iIntros "!> _". wp_pures.
+iCombine "client post ts" as "I". iRevert "I".
+iApply wp_sess_recv => //. iIntros "!> %m (client & post & ts) _".
 wp_pures. wp_bind (tint _). iApply wp_tint.
 wp_eq_term e; wp_pures; iModIntro; last first.
   iLeft. by iFrame.
-iRight. iExists _; iSplit => //. by iApply "post".
+iRight. iExists _; iSplit => //. iApply "post".
+iExists n. by iFrame; eauto.
 Qed.
 
-Lemma wp_client_store E c s n t t' :
+Lemma wp_client_store E c cs t1 t2 t2' :
   ↑cryptisN ⊆ E →
   channel c -∗
   store_ctx N -∗
-  public t' -∗
-  {{{ client_state s n t }}}
-    Client.store N c (repr s) t' @ E
-  {{{ RET #(); client_state s (S n) t' }}}.
+  public t1 -∗
+  public t2' -∗
+  {{{ client N cs ∗ rem_mapsto cs t1 t2 }}}
+    Client.store N c (repr cs) t1 t2' @ E
+  {{{ RET #(); client N cs ∗ rem_mapsto cs t1 t2' }}}.
 Proof.
-iIntros "% #chan_c #ctx #p_t' !> %Φ state post". rewrite /Client.store.
-wp_pures. wp_bind (Client.send_store _ _ _ _).
-iApply (wp_client_send_store with "[] [] [] [state] [post]") => //.
-iIntros "!> state". wp_pures.
-iApply (wp_client_ack_store with "[] [] [state] [post]") => //.
+iIntros "% #chan_c #ctx #p_t1 #p_t2 !> %Φ [client mapsto] post".
+rewrite /Client.store.
+wp_pures. wp_bind (Client.send_store _ _ _ _ _).
+iApply (wp_client_send_store with "[] [] [] [//] [$client $mapsto] [post]")
+  => //.
+iIntros "!> [client mapsto]". wp_pures.
+iApply (wp_client_ack_store with "[] [] [client] [post mapsto]") => //.
+iIntros "!> client". iApply "post". by iFrame.
 Qed.
 
 Lemma wp_client_connect E c kI kR dq ph T :
@@ -160,10 +168,10 @@ Lemma wp_client_connect E c kI kR dq ph T :
   public (TKey Enc kR) -∗
   {{{ ●H{dq|ph} T }}}
     Client.connect N c (TKey Dec kI) (TKey Enc kI) (TKey Enc kR) @ E
-  {{{ s, RET (repr s);
+  {{{ cs, RET (repr cs);
       ●H{dq|ph} T ∗
-      ⌜cst_ok s = in_honest kI kR T⌝ ∗
-      client_state s 0 (TInt 0) }}}.
+      ⌜cst_ok cs = in_honest kI kR T⌝ ∗
+      client N cs }}}.
 Proof.
 iIntros "% % #chan_c #ctx (#? & _ & _ & _ & _ & #ctx') #p_ekI #p_ekR".
 iIntros "!> %Φ hon post". rewrite /Client.connect. wp_pures.
@@ -174,85 +182,90 @@ iApply (wp_pk_dh_init with "[] [] [] [] [] [hon]"); eauto.
   by iFrame.
 iIntros "!> %okS [hon HokS]".
 case: okS => [kS|]; wp_pures; last by iLeft; iFrame; eauto.
-wp_alloc l as "Hl". wp_pures. wp_tag. wp_bind (mkskey _). iApply wp_mkskey.
-iMod (version_alloc (TInt 0)) as "[%γ cur_term]".
-wp_pures.
+wp_alloc timestamp as "ts". wp_pures. wp_tag.
+wp_bind (mkskey _). iApply wp_mkskey.
+iMod DB.alloc as "(%γ & auth & #frag)". wp_pures.
 iDestruct "HokS" as "(#s_kS & _ & #sessW & status)".
 set (ok := in_honest kI kR T).
 set (kS' := Spec.tag _ kS).
 iAssert (handshake_done N kS' ok) as "#done".
   iExists kI, kR, kS, ph, T.
   by do 2!iSplit => //.
-iAssert (|==> if ok then value_auth N kS' 0 (TInt 0) else True)%I
-  with "[status cur_term]" as ">key".
+iAssert (|==> if ok then wf_key N kS' γ else True)%I
+  with "[status]" as ">#key".
 { case e_ok: ok => //.
   iDestruct "status" as "(#p_kS & token & #session)".
   iMod (term_meta_set _ _ γ N with "token") as "#meta"; eauto.
-  iModIntro. iExists γ. iFrame. iSplit.
+  iModIntro. iSplit.
   - iIntros "!> %kt #p_kS'".
     iPoseProof (public_sym_keyE with "[//] p_kS'") as ">contra".
     by iDestruct ("p_kS" with "contra") as ">[]".
   - iIntros "!> %kS'' %e".
     case/Spec.tag_inj: e => _ <- {kS''}.
     iExists kI, kR, ph, T. by eauto. }
-iAssert (if ok then value_frag N kS' 0 (TInt 0) else True)%I as "#frag".
-  case: ok => //.
-  by iApply value_auth_frag.
 wp_tsenc. wp_bind (send _ _).
 iApply (wp_send with "[#] [#]") => //.
   iModIntro. iApply public_TEncIS => //.
   - by rewrite minted_TKey minted_tag.
-  - iModIntro. iExists ok.
-    by iSplit => //.
+  - iModIntro. iExists ok, γ. by eauto.
   - by rewrite minted_TInt.
   - iIntros "!> _". by rewrite public_TInt.
 wp_pures. iRight. iExists _. iSplitR; eauto.
-iApply ("post" $! {| cst_ts := l;
+iApply ("post" $! {| cst_ts := timestamp;
                      cst_key := Spec.tag (nroot.@"keys".@"sym") kS;
+                     cst_name := γ;
                      cst_ok := ok |}).
-rewrite /client_state /=. iFrame. rewrite minted_tag.
-do 2!iSplitR => //.
+rewrite /client /=. iFrame. iModIntro. iSplit => //.
+iExists 0. iFrame. iSplit => //. iSplit => //.
+by rewrite minted_tag.
 Qed.
 
-Lemma wp_client_load E c s n t :
+Lemma wp_client_load E c cs t1 t2 :
   ↑N ⊆ E →
   ↑cryptisN ⊆ E →
   channel c -∗
   store_ctx N -∗
-  {{{ client_state s n t }}}
-    Client.load N c (repr s) @ E
-  {{{ t', RET (repr t');
-      client_state s n t ∗
-      ⌜cst_ok s → t' = t⌝ }}}.
+  public t1 -∗
+  {{{ client N cs ∗ rem_mapsto cs t1 t2 }}}
+    Client.load N c (repr cs) t1 @ E
+  {{{ t2', RET (repr t2');
+      client N cs ∗
+      rem_mapsto cs t1 t2 ∗
+      ⌜cst_ok cs → t2' = t2⌝ }}}.
 Proof.
-iIntros "% % #chan_c #ctx !> %Φ state post".
+iIntros "% % #chan_c #ctx #p_t1 !> %Φ [client mapsto] post".
+iDestruct "client" as "(%n & #handshake & #key & #minted_key &
+                        ts & view)".
 rewrite /Client.load. wp_pures.
-wp_bind (Client.get_ts _). iApply (wp_client_get_ts with "state").
-iIntros "!> state". wp_pures. wp_bind (tint _). iApply wp_tint.
-wp_pures. wp_bind (Client.get_sk _).
-iApply (wp_client_get_sk with "state"). iIntros "!> state". wp_pures.
-wp_tsenc. wp_pures.
-iPoseProof (client_state_frag with "state") as "#(s_k & done & frag)".
+wp_bind (Client.get_timestamp _).
+iApply (wp_client_get_timestamp with "ts").
+iIntros "!> ts". wp_bind (tint _). iApply wp_tint.
+wp_pures. wp_bind (Client.get_session_key _).
+iApply (wp_client_get_session_key with "[//]"). iIntros "!> _". wp_pures.
+wp_list. wp_term_of_list. wp_tsenc. wp_pures.
 wp_bind (send _ _). iApply wp_send; eauto.
   iDestruct "ctx" as "(_ & _ & _ & ? & _)".
   iModIntro. iApply public_TEncIS; eauto.
-  by rewrite minted_TKey.
+  - by rewrite minted_TKey.
+  - rewrite minted_of_list /= minted_TInt.
+    iPoseProof (public_minted with "p_t1") as "?". by eauto.
+  - iIntros "!> _". rewrite public_of_list /= public_TInt; eauto.
 wp_pures.
-iCombine "post state" as "I". iRevert "I". iApply wp_sess_recv => //.
-iIntros "!> %ts [post state] #p_t'". wp_pures.
+iCombine "view mapsto post ts" as "I". iRevert "I". iApply wp_sess_recv => //.
+iIntros "!> %ts (view & mapsto & post & ts) #p_t2'". wp_pures.
 wp_list_of_term ts; wp_pures; last by iLeft; iFrame.
-wp_list_match => [n' v -> {ts}|_]; wp_pures; last by iLeft; iFrame.
+wp_list_match => [n' t1' t2' -> {ts}|_]; wp_pures; last by iLeft; iFrame.
 wp_eq_term e; last by wp_pures; iLeft; iFrame.
-subst n'.
-iAssert (◇ ⌜cst_ok s → v = t⌝)%I as "#>%e".
-{ case e_ok: (cst_ok s) => //=. iIntros "_".
-  iAssert (∃ γ, wf_key N (cst_key s) γ)%I as "#status".
-  by iDestruct "frag" as "(% & _ & ?)"; eauto.
-  iDestruct (ack_loadE with "done status ctx p_t'") as "[_ frag']".
-  iDestruct "state" as "(_ & _ & auth & _)".
-  by iPoseProof (value_frag_agree with "done frag frag'") as ">->". }
+subst n'. wp_pures.
+wp_eq_term e; last by wp_pures; iLeft; iFrame.
+subst t1'.
+iDestruct (ack_loadE with "handshake key view mapsto ctx p_t2'")
+  as "{p_t2'} (#p_t2' & #e_t2')".
 wp_pures. iModIntro. iRight. iExists _; iSplit; eauto.
-iApply ("post" $! v). iSplit => //.
+iApply ("post" $! t2'). iFrame. iSplitL.
+- iExists n. iFrame. by eauto.
+- case: (cst_ok cs) => //=.
+  iPoseProof "e_t2'" as "->". by eauto.
 Qed.
 
 End Verif.
