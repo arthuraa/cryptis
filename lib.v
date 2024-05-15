@@ -681,9 +681,9 @@ case: (bool_decide_reflect (l1 = l2)) => [->|n_l1l2].
 - by rewrite bool_decide_decide decide_False //; congruence.
 Qed.
 
-Lemma wp_find_list (f : A → bool) (fimpl : val) (l : list A) :
-  (∀ x : A, {{{ True }}} fimpl (repr x) {{{ RET #(f x); True }}}) →
-  {{{ True }}} find_list fimpl (repr l) {{{ RET (repr (find f l)); True }}}.
+Lemma wp_find_list (f : A → bool) (fimpl : val) (l : list A) E :
+  (∀ x : A, {{{ True }}} fimpl (repr x) @ E {{{ RET #(f x); True }}}) →
+  {{{ True }}} find_list fimpl (repr l) @ E {{{ RET (repr (find f l)); True }}}.
 Proof.
 rewrite repr_list_unseal /=.
 iIntros "%fP"; iLöb as "IH" forall (l); iIntros "%Φ _ Hpost"; wp_rec.
@@ -693,10 +693,10 @@ case: (f h) => //; wp_pures; first by iApply "Hpost".
 by iApply "IH".
 Qed.
 
-Lemma wp_filter_list (f : A → bool) (fimpl : val) (l : list A) :
-  (∀ x : A, {{{ True }}} fimpl (repr x) {{{ RET #(f x); True }}}) →
+Lemma wp_filter_list (f : A → bool) (fimpl : val) (l : list A) E :
+  (∀ x : A, {{{ True }}} fimpl (repr x) @ E {{{ RET #(f x); True }}}) →
   {{{ True }}}
-    filter_list fimpl (repr l)
+    filter_list fimpl (repr l) @ E
   {{{ RET (repr (List.filter f l)); True }}}.
 Proof.
 rewrite repr_list_unseal /=.

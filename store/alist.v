@@ -41,19 +41,19 @@ Definition is_alist v db : Prop :=
   ∃ kvs, v = repr kvs ∧
   ∀ k, db !! k = snd <$> List.find (λ p, bool_decide (p.1 = k)) kvs.
 
-Lemma wp_empty :
+Lemma wp_empty E :
   {{{ True }}}
-    empty #()
+    empty #() @ E
   {{{ v, RET v; ⌜is_alist v ∅⌝ }}}.
 Proof.
 iIntros "%Φ _ Hpost". wp_lam. iApply "Hpost". iIntros "!>".
 iPureIntro. exists []. rewrite /repr repr_list_unseal. split => //.
 Qed.
 
-Lemma wp_find v db t :
+Lemma wp_find E v db t :
   is_alist v db →
   {{{ True }}}
-    find v t
+    find v t @ E
   {{{ RET (repr (db !! t)); True }}}.
 Proof.
 case=> [kvs] [-> {v}] kvs_db.
@@ -66,10 +66,10 @@ iIntros "!> _"; rewrite kvs_db.
 by case: List.find => [[k' t']|] /=; wp_pures; iApply "Hpost".
 Qed.
 
-Lemma wp_insert v db k t :
+Lemma wp_insert v db k t E :
   is_alist v db ->
   {{{ True }}}
-    insert v k t
+    insert v k t @ E
   {{{ v', RET v'; ⌜is_alist v' (<[k := t]>db)⌝ }}}.
 Proof.
 case=> [kvs] [-> {v}] kvs_db. iIntros "%Φ _ Hpost".
@@ -79,10 +79,10 @@ case: bool_decide_reflect => [<-|ne] //=;
 by rewrite (lookup_insert, lookup_insert_ne).
 Qed.
 
-Lemma wp_delete v db k :
+Lemma wp_delete v db k E :
   is_alist v db →
   {{{ True }}}
-    delete v k
+    delete v k @ E
   {{{ v', RET v'; ⌜is_alist v' (base.delete k db)⌝ }}}.
 Proof.
 case=> [kvs] [-> {v}] kvs_db. iIntros "%Φ _ Hpost".
