@@ -6,3 +6,6 @@
 *CoqMakefile*
 .lia.cache
 *.glob
+.coqdeps.d
+.envrc
+.direnv
