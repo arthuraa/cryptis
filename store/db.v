@@ -293,7 +293,16 @@ Definition free_at γ n t1 : iProp Σ :=
         hist_frag γ os ∗
         ⌜to_db os !! t1 = None⌝.
 
-Lemma create t2 γ n t1 :
+Lemma free_atI γ n db t1 :
+  db !! t1 = None →
+  server_view γ n db -∗
+  free_at γ n t1.
+Proof.
+iIntros "%db_t1 (%os & -> & -> & #frag)".
+iExists os. by eauto.
+Qed.
+
+Lemma create_client t2 γ n t1 :
   client_view γ n ==∗
   create_at γ n t1 t2 ∗
   client_view γ (S n) ∗
@@ -313,6 +322,21 @@ iAssert (hist_frag γ os) as "#hist_frag''".
   by exists [Create t1 t2]. }
 iPoseProof (hist_frag_agree with "hist_frag'' hist_frag'") as "->" => //.
 by rewrite db_t1.
+Qed.
+
+Lemma create_server γ n db t1 t2 :
+  db !! t1 = None →
+  server_view γ n db -∗
+  create_at γ n t1 t2 -∗
+  server_view γ (S n) (<[t1 := t2]>db).
+Proof.
+iIntros "%db_t1 (%os & -> & -> & #frag) (%os' & %lengthE & #frag')".
+iAssert (hist_frag γ os') as "#frag''".
+{ iApply (hist_frag_prefix_of with "frag'").
+  by exists [Create t1 t2]. }
+iPoseProof (hist_frag_agree with "frag frag''") as "->" => //.
+iExists (os ++ [Create t1 t2]). rewrite app_length Nat.add_comm.
+do 2!iSplit => //. iPureIntro. by rewrite /to_db foldl_app /= db_t1.
 Qed.
 
 Definition stored_at γ n t1 t2 : iProp Σ :=

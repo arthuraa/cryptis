@@ -7,6 +7,8 @@ From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib version term cryptis primitives tactics.
 From cryptis Require Import role session pk_auth pk_dh.
 From cryptis.store Require Import impl shared alist db.
+From cryptis.store.server_proofs
+  Require Import load store create.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -29,111 +31,6 @@ Implicit Types v : val.
 
 Variable N : namespace.
 
-Lemma ack_storeI kS n :
-  store_ctx N -∗
-  minted kS -∗
-  public (TEnc kS (Spec.tag (N.@"ack_store") (TInt n))).
-Proof.
-iIntros "(_ & _ & #ctx & _) #s_kS".
-iApply public_TEncIS => //.
-- by rewrite minted_TKey.
-- iModIntro. by iExists n.
-- by rewrite minted_TInt.
-- by rewrite public_TInt; eauto.
-Qed.
-
-Lemma wp_server_handle_store E c ss m :
-  ↑cryptisN ⊆ E →
-  channel c -∗
-  store_ctx N -∗
-  public m -∗
-  {{{ server N ss }}}
-    Server.handle_store N c (repr ss) m @ E
-  {{{ (v : option val), RET (repr v); server N ss }}}.
-Proof.
-iIntros "%sub #chan_c #ctx #p_m !> %Φ state post".
-rewrite /Server.handle_store. wp_pures.
-wp_tsdec m; wp_pures; last by iApply ("post" $! None).
-wp_list_of_term m; wp_pures; last by iApply ("post" $! None).
-wp_list_match => [n' t1 t2 ->|_]; wp_pures; last by iApply ("post" $! None).
-wp_bind (to_int _). iApply wp_to_int.
-case: Spec.to_intP => [ {}n' -> | _]; wp_pures; last by iApply ("post" $! None).
-iDestruct "state" as "(%n & %kvs & %db & #handshake & #minted_key & ts & 
-                       db & %kvs_db & #pub_db & view)".
-wp_load. wp_pures.
-case: bool_decide_reflect => [[<-]|ne]; wp_pures; last first.
-{ iModIntro. iApply ("post" $! None).
-  iExists n, kvs, db. iFrame. by eauto. }
-wp_load. wp_pures.
-replace (n + 1)%Z with (S n : Z) by lia.
-wp_store. wp_load. wp_bind (AList.insert _ _ _).
-wp_pures. iApply AList.wp_insert; eauto. iIntros "!> %kvs' %kvs'_db'".
-iDestruct (store_predE with "handshake [#] [//] p_m") as "(p_t1 & p_t2 & wf')".
-{ case: sst_ok => //.
-  iDestruct "view" as "(%γ & ? & ?)". eauto. }
-wp_store. wp_bind (tint _). iApply wp_tint.
-wp_tsenc.
-iApply wp_fupd.
-wp_bind (send _ _). iApply wp_send => //.
-{ iModIntro. iApply ack_storeI => //. }
-wp_pures. iApply ("post" $! (Some #())).
-iExists (S n), kvs', (<[t1 := t2]>db). iFrame.
-do 4!iSplitR => //.
-{ iModIntro. iApply big_sepM_insert_2 => //. eauto. }
-case: sst_ok; eauto.
-iDestruct "wf'" as "(%γ1 & wf1 & update)".
-iDestruct "view" as "(%γ2 & #wf2 & #view)".
-iPoseProof (wf_key_agree with "handshake wf1 wf2") as "<-".
-iPoseProof (DB.update_server with "view update") as "view'".
-iModIntro. iExists γ1. iSplit => //.
-Qed.
-
-Lemma wp_server_handle_load E c ss m :
-  ↑cryptisN ⊆ E →
-  channel c -∗
-  store_ctx N -∗
-  public m -∗
-  {{{ server N ss }}}
-    Server.handle_load N c (repr ss) m @ E
-  {{{ (v : option val), RET (repr v); server N ss }}}.
-Proof.
-iIntros "%sub #chan_c #ctx #p_m !> %Φ state post".
-rewrite /Server.handle_load. wp_pures.
-iDestruct "state" as "(%n & %kvs & %db & #handshake & #minted_key & ts &
-                       db & %kvs_db & #pub_db & #view)".
-wp_load. wp_pures. wp_load. wp_pures.
-iAssert (server N ss) with "[ts db view]" as "state".
-{ iExists n, kvs, db. iFrame. eauto. }
-wp_tsdec m; wp_pures; last by iApply ("post" $! None).
-wp_list_of_term m; wp_pures; last by iApply ("post" $! None).
-wp_list_match => [timestamp t1 ->| _]; wp_pures; last by iApply ("post" $! None).
-wp_bind (to_int _). iApply wp_to_int.
-case: Spec.to_intP => [ {m} n' -> | _]; wp_pures; last by iApply ("post" $! None).
-case: bool_decide_reflect => [[<-]|?]; wp_pures; last by iApply ("post" $! None).
-wp_bind (AList.find _ _). iApply AList.wp_find => //.
-iIntros "!> _".
-case db_t1: (db !! t1) => [t2|]; wp_pures; last by iApply ("post" $! None).
-wp_list. wp_bind (tint _). iApply wp_tint. wp_list. wp_term_of_list.
-wp_pures. wp_tsenc. wp_bind (send _ _).
-iApply (wp_send with "[//] [#]") => //; last by wp_pures;
-  iApply ("post" $! (Some #())).
-iDestruct "ctx" as "(_ & _ & _ & _ & ? & _)".
-iModIntro.
-rewrite big_sepM_delete //. iDestruct "pub_db" as "[[? ?] _]".
-iApply public_TEncIS => //.
-- rewrite minted_TKey.
-  iPoseProof (public_minted with "p_m") as "{p_m} p_m".
-  by rewrite minted_TEnc; iDestruct "p_m" as "[??]".
-- iModIntro. iExists n, (sst_ok ss), t1, t2. iSplit => //.
-  do 2!iSplit => //.
-  case: sst_ok => //.
-  iDestruct "view" as "(%γ & key & view)".
-  iExists γ. iSplit => //. iApply DB.load_server; eauto.
-- rewrite minted_of_list /= minted_TInt -[minted t1]public_minted.
-  rewrite -[minted t2]public_minted; eauto.
-- iIntros "!> _". by rewrite public_of_list /= public_TInt; eauto.
-Qed.
-
 Lemma wp_server_conn_handler_body E c ss :
   ↑cryptisN ⊆ E →
   channel c -∗
@@ -151,6 +48,10 @@ iIntros "!> %res state".
 case: res => [?|] /=; wp_pures; first by iApply "post".
 wp_bind (Server.handle_load _ _ _ _).
 iApply (wp_server_handle_load with "chan_c ctx p_m state") => //.
+iIntros "!> %res state".
+case: res => [?|] /=; wp_pures; first by iApply "post".
+wp_bind (Server.handle_create _ _ _ _).
+iApply (wp_server_handle_create with "chan_c ctx p_m state") => //.
 iIntros "!> %res state".
 case: res => [?|] /=; wp_pures; first by iApply "post".
 by iApply "post".
@@ -184,7 +85,7 @@ iIntros "% %". iLöb as "IH".
 iIntros "%Φ (#? & #chan_c & #ctx & #p_ek & hon) post".
 wp_pures. wp_rec. wp_pures. wp_bind (pk_dh_resp _ _ _ _).
 iAssert (pk_dh_ctx N (λ _ _ _ _, True)%I) as "#?".
-  by iDestruct "ctx" as "(_ & _ & _ & _ & _ & ?)".
+  by iDestruct "ctx" as "(_ & _ & _ & _ & _ & _ & _ & ?)".
 iApply (wp_pk_dh_resp with "[# //] [# //] [# //] [# //] [hon]") => //.
   iFrame. by eauto.
 iIntros "!> %res (hon & resP)". case: res => [[pkI kS]|]; wp_pures; last first.

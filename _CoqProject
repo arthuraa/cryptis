@@ -63,5 +63,8 @@ store/impl.v
 store/shared.v
 store/client_proofs.v
 store/server_proofs.v
+store/server_proofs/load.v
+store/server_proofs/store.v
+store/server_proofs/create.v
 store/alist.v
 store/db.v

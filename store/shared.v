@@ -6,11 +6,32 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib version term cryptis primitives tactics.
 From cryptis Require Import role session pk_auth pk_dh.
-From cryptis.store Require Import impl alist db.
+From cryptis.store Require Import alist db.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
+
+Record cst := {
+  cst_ts   : loc;
+  cst_key  : term;
+  cst_name : gname;
+  cst_ok   : bool;
+}.
+
+#[global]
+Instance cst_repr : Repr cst := λ s, (#(cst_ts s), Spec.mkskey (cst_key s))%V.
+
+Record sst := {
+  sst_ts  : loc;
+  sst_key : term;
+  sst_db  : loc;
+  sst_ok  : bool;
+}.
+
+#[global]
+Instance sst_repr : Repr sst :=
+  λ s, (#(sst_ts s), Spec.mkskey (sst_key s), #(sst_db s))%V.
 
 Class storeGS Σ := StoreGS {
   storeGS_db : dbGS Σ;
@@ -37,26 +58,6 @@ Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 Implicit Types ok : bool.
-
-(* FIXME: infer the invariant φ in a tactic, similarly to how iLöb works *)
-Lemma wp_sess_recv E N c sk (f : val) φ Ψ :
-  ↑cryptisN ⊆ E →
-  channel c -∗
-  minted sk -∗
-  □ (∀ t,
-      φ -∗
-      public (TEnc sk (Spec.tag N t)) -∗
-      WP f t @ E {{ v, ⌜v = NONEV⌝ ∗ φ ∨ ∃ v', ⌜v = SOMEV v'⌝ ∗ Ψ v' }}) -∗
-  φ -∗ WP sess_recv N c (Spec.mkskey sk) f @ E {{ Ψ }}.
-Proof.
-iIntros "% #chan_c #s_sk #wp_f Hφ"; rewrite /sess_recv; wp_pures.
-iRevert "Hφ". iApply wp_do_until; iIntros "!> Hφ". wp_pures.
-wp_bind (recv _); iApply wp_recv => //.
-iIntros "%t #p_t"; wp_pures.
-wp_tsdec_eq t' e; wp_pures; eauto.
-rewrite {}e {t}.
-by iApply ("wp_f" with "Hφ").
-Qed.
 
 Variable N : namespace.
 
@@ -153,12 +154,29 @@ Definition ack_load_pred (kS m : term) : iProp := ∃ (n : nat) ok t1 t2,
     ∃ γ, wf_key kS γ ∗ DB.stored_at γ n t1 t2
   else True.
 
+Definition create_pred kS m : iProp := ∃ γ (n : nat) t1 t2 ok,
+  ⌜m = Spec.of_list [TInt n; t1; t2]⌝ ∗
+  handshake_done kS ok ∗
+  (if ok then wf_key kS γ else True) ∗
+  public t1 ∗
+  public t2 ∗
+  DB.create_at γ n t1 t2.
+
+Definition ack_create_pred kS m : iProp := ∃ (n : nat) t1 t2 (b : bool) ok,
+  ⌜m = Spec.of_list [TInt n; t1; t2; TInt (if b then 1 else 0)]⌝ ∗
+  handshake_done kS ok ∗
+  if ok then
+    ∃ γ, wf_key kS γ ∗ if b then DB.free_at γ n t1 else True
+  else True.
+
 Definition store_ctx : iProp :=
   enc_pred (N.@"init") init_pred ∗
   enc_pred (N.@"store") store_pred ∗
   enc_pred (N.@"ack_store") ack_store_pred ∗
   enc_pred (N.@"load") load_pred ∗
   enc_pred (N.@"ack_load") ack_load_pred ∗
+  enc_pred (N.@"create") create_pred ∗
+  enc_pred (N.@"ack_create") ack_create_pred ∗
   pk_dh_ctx N (λ _ _ _ _, True)%I.
 
 Lemma handshake_done_agree kS γ ok1 ok2 :
@@ -189,33 +207,6 @@ iIntros "(#initP & _) #p_t".
 iDestruct (public_TEncE with "[//] [//]") as "[[??]|#tP]"; first by eauto.
 iRight. by iDestruct "tP" as "(#init & _ & _)".
 Qed.
-
-(*
-Lemma version_predE' N' kS ok n t :
-  handshake_done kS ok -∗
-  (if ok then ∃ γ, wf_key kS γ else True) -∗
-  enc_pred N' version_pred -∗
-  public (TEnc kS (Spec.tag N' (Spec.of_list [TInt n; t]))) -∗
-  ▷ (public t ∗
-     if ok then value_frag kS n t else True).
-Proof.
-iIntros "#done #key #? #p_m". iSplit.
-  iPoseProof (public_TEncE with "p_m [//]") as "{p_m} p_m".
-  rewrite public_of_list /=.
-  iDestruct "p_m" as "[(_ & _ & ? & _)|p_m]" => //.
-  iDestruct "p_m" as "(#p_m & _)". iModIntro.
-  by iDestruct (version_predE with "p_m") as "(%ok' & ? & _)".
-case: ok => //. iDestruct "key" as "(%γ & key)".
-iPoseProof (public_TEncE with "p_m [//]") as "{p_m} p_m".
-iDestruct "p_m" as "[(contra & _)|p_m]" => //.
-  iDestruct "key" as "[#s_kS _]".
-  iDestruct ("s_kS" with "contra") as ">[]".
-iDestruct "p_m" as "(#p_m & _)". iModIntro.
-iDestruct (version_predE with "p_m")
-  as "(%ok & _ & #done' & #frag) {p_m}".
-by iPoseProof (handshake_done_agree with "key done done'") as "<-".
-Qed.
-*)
 
 Lemma store_predE kS ok n t1 t2 :
   handshake_done kS ok -∗

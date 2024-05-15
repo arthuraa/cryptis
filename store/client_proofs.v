@@ -173,7 +173,7 @@ Lemma wp_client_connect E c kI kR dq ph T :
       ⌜cst_ok cs = in_honest kI kR T⌝ ∗
       client N cs }}}.
 Proof.
-iIntros "% % #chan_c #ctx (#? & _ & _ & _ & _ & #ctx') #p_ekI #p_ekR".
+iIntros "% % #chan_c #ctx (#? & _ & _ & _ & _ & _ & _ & #ctx') #p_ekI #p_ekR".
 iIntros "!> %Φ hon post". rewrite /Client.connect. wp_pures.
 iCombine "hon post" as "post". iRevert "post".
 iApply wp_do_until. iIntros "!> [hon post]". wp_pures.

@@ -13,27 +13,6 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Record cst := {
-  cst_ts   : loc;
-  cst_key  : term;
-  cst_name : gname;
-  cst_ok   : bool;
-}.
-
-#[global]
-Instance cst_repr : Repr cst := λ s, (#(cst_ts s), Spec.mkskey (cst_key s))%V.
-
-Record sst := {
-  sst_ts  : loc;
-  sst_key : term;
-  sst_db  : loc;
-  sst_ok  : bool;
-}.
-
-#[global]
-Instance sst_repr : Repr sst :=
-  λ s, (#(sst_ts s), Spec.mkskey (sst_key s), #(sst_db s))%V.
-
 (* FIXME: Maybe generalize this *)
 Definition sess_recv N : val := λ: "c" "k" "f",
   do_until (λ: <>,
@@ -41,6 +20,39 @@ Definition sess_recv N : val := λ: "c" "k" "f",
     bind: "m" := tsdec N "k" "m" in
     "f" "m"
   ).
+
+Section SessRecv.
+
+Context `{!cryptisGS Σ, !heapGS Σ}.
+Notation iProp := (iProp Σ).
+
+Implicit Types kI kR kS t : term.
+Implicit Types n : nat.
+Implicit Types γ : gname.
+Implicit Types v : val.
+Implicit Types ok : bool.
+
+(* FIXME: infer the invariant φ in a tactic, similarly to how iLöb works *)
+Lemma wp_sess_recv E N c sk (f : val) φ Ψ :
+  ↑cryptisN ⊆ E →
+  channel c -∗
+  minted sk -∗
+  □ (∀ t,
+      φ -∗
+      public (TEnc sk (Spec.tag N t)) -∗
+      WP f t @ E {{ v, ⌜v = NONEV⌝ ∗ φ ∨ ∃ v', ⌜v = SOMEV v'⌝ ∗ Ψ v' }}) -∗
+  φ -∗ WP sess_recv N c (Spec.mkskey sk) f @ E {{ Ψ }}.
+Proof.
+iIntros "% #chan_c #s_sk #wp_f Hφ"; rewrite /sess_recv; wp_pures.
+iRevert "Hφ". iApply wp_do_until; iIntros "!> Hφ". wp_pures.
+wp_bind (recv _); iApply wp_recv => //.
+iIntros "%t #p_t"; wp_pures.
+wp_tsdec_eq t' e; wp_pures; eauto.
+rewrite {}e {t}.
+by iApply ("wp_f" with "Hφ").
+Qed.
+
+End SessRecv.
 
 Module Client.
 
@@ -99,6 +111,21 @@ Definition load : val := λ: "c" "cs" "k",
     SOME "t"
   ).
 
+Definition create : val := λ: "c" "cs" "k" "v",
+  let: "ts" := get_timestamp "cs" in
+  let: "sk" := get_session_key "cs" in
+  let: "m"  := term_of_list [tint "ts"; "k"; "v"] in
+  let: "m"  := tsenc (N.@"create") "sk" "m" in
+  send "c" "m";;
+  sess_recv (N.@"ack_create") "c" "sk" (λ: "resp",
+    bind: "resp" :=  list_of_term "resp" in
+    list_match: ["ts'"; "k'"; "v'"; "b"] := "resp" in
+    assert: eq_term (tint "ts") "ts'" in
+    assert: eq_term "k" "k'" in
+    assert: eq_term "v" "v'" in
+    SOME (eq_term "b" (tint #1))
+  ).
+
 End Client.
 
 End Client.
@@ -137,6 +164,30 @@ Definition handle_load N : val :=
   send "c" (tsenc (N.@"ack_load") "session_key" "m");;
   SOME #().
 
+Definition handle_create N : val :=
+λ: "c" "ss" "req",
+  let: "ltimestamp"  := Fst (Fst "ss") in
+  let: "timestamp"   := !"ltimestamp"  in
+  let: "session_key" := Snd (Fst "ss") in
+  let: "ldb" := Snd "ss" in
+  let: "db"  := !"ldb" in
+  bind: "req" := tsdec (N.@"create") "session_key" "req" in
+  bind: "req" := list_of_term "req" in
+  list_match: ["timestamp'"; "k"; "v"] := "req" in
+  bind: "timestamp'" := to_int "timestamp'" in
+  assert: "timestamp" = "timestamp'" in
+  let: "success" :=
+    match: AList.find "db" "k" with
+      SOME <> => #0
+    | NONE =>
+      "ldb" <- AList.insert "db" "k" "v";;
+      "ltimestamp" <- "timestamp" + #1;;
+      #1
+    end in
+  let: "m" := term_of_list [tint "timestamp"; "k"; "v"; tint "success"] in
+  send "c" (tsenc (N.@"ack_create") "session_key" "m");;
+  SOME #().
+
 Definition conn_handler_body N : val :=
 λ: "c" "ss",
   let: "m" := recv "c" in
@@ -144,8 +195,10 @@ Definition conn_handler_body N : val :=
     SOME <> => #()
   | NONE => match: handle_load N "c" "ss" "m" with
     SOME <> => #()
+  | NONE => match: handle_create N "c" "ss" "m" with
+    SOME <> => #()
   | NONE => #()
-  end end.
+  end end end.
 
 Definition conn_handler N : val :=
 rec: "loop" "c" "ss" :=
