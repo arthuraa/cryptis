@@ -40,7 +40,7 @@ Lemma wp_client_create E c cs t1 t2 :
     Client.create N c (repr cs) t1 t2 @ E
   {{{ (b : bool), RET #b;
       client N cs ∗
-      if cst_ok cs && b then rem_mapsto cs t1 t2 else True }}}.
+      if b then rem_mapsto cs t1 t2 else True }}}.
 Proof.
 iIntros "% #chan_c (_ & _ & _ & _ & _ & #? & #? & _)
          #p_t1 #p_t2' !> %Φ client post".
@@ -54,7 +54,7 @@ iApply wp_client_get_session_key => //.
 iIntros "!> _". wp_pures.
 wp_list. wp_bind (tint _). iApply wp_tint. wp_list. wp_term_of_list. wp_pures.
 wp_tsenc. wp_pures.
-iMod (DB.create_client t2 _ _ t1 with "client")
+iMod (DB.create_client t1 t2 with "client")
   as "(#create & client & up)".
 wp_bind (send _ _). iApply wp_send => //.
 { iApply public_TEncIS => //.
@@ -89,7 +89,10 @@ iDestruct (public_TEncE with "p_m [//]") as "{p_m} [[pub p_m]|p_m]".
     iDestruct ("contra" with "pub") as ">[]". }
   wp_bind (eq_term _ _). iApply wp_eq_term. wp_pures.
   iModIntro. iRight. iExists _. iSplit => //.
-  iApply "post". iSplit => //.
+  iApply "post".
+  iPoseProof (DB.create_client_fake t1 t2 with "client") as "#fake".
+  iSplitL => //; last first.
+  { rewrite /rem_mapsto is_ok. by case: bool_decide. }
   iExists (S n). rewrite is_ok. iFrame. by eauto.
 - iDestruct "p_m" as "(#p_m & _)".
   wp_pures. wp_bind (tint _). iApply wp_tint. wp_pures.
@@ -102,14 +105,15 @@ iDestruct (public_TEncE with "p_m [//]") as "{p_m} [[pub p_m]|p_m]".
   { iApply wp_eq_term. iPureIntro. by case: b'. }
   iIntros "% ->". wp_pures. iModIntro. iRight. iExists #b'.
   iSplit => //. iApply "post".
+  iPoseProof (DB.create_client_fake t1 t2 with "client") as "#fake".
   iSplitL "client ts".
   + iExists (S n). iFrame. by eauto.
-  + case is_ok: cst_ok => //=.
+  + rewrite /rem_mapsto. case: b' => //.
+    case is_ok: cst_ok => //=.
     iPoseProof (handshake_done_agree with "key handshake done'") as "<-".
-    case: b' => //.
     iDestruct "free" as "(%γ & key' & free)".
-    iPoseProof (wf_key_agree with "handshake key key'") as "<-".
-    by iApply "up".
+    iApply "up".
+    by iPoseProof (wf_key_agree with "handshake key key'") as "<-".
 Qed.
 
 End Verif.

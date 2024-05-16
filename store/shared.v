@@ -112,10 +112,10 @@ Definition client cs : iProp := ∃ (n : nat),
   (if cst_ok cs then wf_key (cst_key cs) (cst_name cs) else True) ∗
   minted (cst_key cs) ∗
   cst_ts cs ↦ #n ∗
-  DB.client_view (cst_name cs) n.
+  DB.client_view (cst_name cs) (cst_ok cs) n.
 
 Definition rem_mapsto cs t1 t2 : iProp :=
-  DB.mapsto (cst_name cs) t1 t2.
+  DB.mapsto (cst_name cs) (cst_ok cs) t1 t2.
 
 Definition server ss : iProp := ∃ (n : nat) kvs db,
   handshake_done (sst_key ss) (sst_ok ss) ∗
@@ -131,7 +131,6 @@ Definition init_pred kS (m : term) : iProp := ∃ ok γ,
   handshake_done kS ok ∗
   (if ok then wf_key kS γ else True) ∗
   DB.server_view γ 0 ∅.
-
 
 Definition store_pred kS m : iProp := ∃ γ (n : nat) t1 t2 ok,
   ⌜m = Spec.of_list [TInt n; t1; t2]⌝ ∗
@@ -238,13 +237,12 @@ Qed.
 Lemma ack_loadE kS ok n γ t1 t2 t2' :
   handshake_done kS ok -∗
   (if ok then wf_key kS γ else True) -∗
-  DB.client_view γ n -∗
-  DB.mapsto γ t1 t2 -∗
+  DB.client_view γ ok n -∗
+  DB.mapsto γ ok t1 t2 -∗
   store_ctx -∗
   public (TEnc kS (Spec.tag (N.@"ack_load")
          (Spec.of_list [TInt n; t1; t2']))) -∗
-  ▷ (public t2' ∗
-     if ok then ⌜t2' = t2⌝ else True%I).
+  ▷ (public t2' ∗ ⌜ok → t2' = t2⌝).
 Proof.
 iIntros "#key #wf client mapsto #(_ & _ & _ & _ & ? & _) #pub".
 iDestruct (public_TEncE with "pub [//]") as "{pub} [pub|pub]".

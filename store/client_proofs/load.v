@@ -72,10 +72,8 @@ subst t1'.
 iDestruct (ack_loadE with "handshake key view mapsto ctx p_t2'")
   as "{p_t2'} (#p_t2' & #e_t2')".
 wp_pures. iModIntro. iRight. iExists _; iSplit; eauto.
-iApply ("post" $! t2'). iFrame. iSplitL.
-- iExists n. iFrame. by eauto.
-- case: (cst_ok cs) => //=.
-  iPoseProof "e_t2'" as "->". by eauto.
+iApply ("post" $! t2'). iFrame. iSplitL => //.
+iExists n. iFrame. by eauto.
 Qed.
 
 End Verif.

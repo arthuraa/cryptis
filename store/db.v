@@ -50,6 +50,7 @@ Implicit Types os : list operationO.
 Implicit Types db : gmap term term.
 Implicit Types γ γhist γst : gname.
 Implicit Types n : nat.
+Implicit Types b : bool.
 
 Definition op_app db o :=
   match o with
@@ -156,23 +157,24 @@ iModIntro. iSplit.
 - iExists _, _. by iSplit.
 Qed.
 
-Definition state_auth γ db : iProp Σ :=
+Definition state_auth γ b db : iProp Σ :=
   ∃ γhist γst,
     names γ γhist γst ∗
-    own γst (● (Excl <$> db) : db_stateUR).
+    if b then own γst (● (Excl <$> db) : db_stateUR) else True.
 
-Definition mapsto γ t1 t2 : iProp Σ :=
+Definition mapsto γ b t1 t2 : iProp Σ :=
   ∃ γhist γst,
     names γ γhist γst ∗
-    own γst (◯ {[t1 := Excl t2]}).
+    if b then own γst (◯ {[t1 := Excl t2]}) else True.
 
-Lemma state_auth_mapsto γ db t1 t2 :
-  state_auth γ db -∗
-  mapsto γ t1 t2 -∗
-  ⌜db !! t1 = Some t2⌝.
+Lemma state_auth_mapsto γ b db t1 t2 :
+  state_auth γ b db -∗
+  mapsto γ b t1 t2 -∗
+  ⌜b → db !! t1 = Some t2⌝.
 Proof.
 iIntros "(%γhist1 & %γst1 & #Hnames1 & Hauth)".
 iIntros "(%γhist2 & %γst2 & #Hnames2 & Hfrag)".
+case: b=> //. iIntros "_".
 iDestruct (names_agree with "Hnames1 Hnames2") as "[-> ->]".
 iPoseProof (own_valid_2 with "Hauth Hfrag") as "%valid".
 rewrite auth_both_valid_discrete in valid.
@@ -183,12 +185,14 @@ case db_t1: (db !! t1) => [t2'|] //= in incl'.
 iPureIntro. by case: incl' => <-.
 Qed.
 
-Lemma state_auth_update t2' γ db t1 t2 :
-  state_auth γ db -∗
-  mapsto γ t1 t2 ==∗
-  state_auth γ (<[t1 := t2']>db) ∗
-  mapsto γ t1 t2'.
+Lemma state_auth_update t2' γ b db t1 t2 :
+  state_auth γ b db -∗
+  mapsto γ b t1 t2 ==∗
+  state_auth γ b (<[t1 := t2']>db) ∗
+  mapsto γ b t1 t2'.
 Proof.
+case: b; last first.
+{ iIntros "?? !>". iFrame. }
 iIntros "(%γhist1 & %γst1 & #Hnames1 & Hauth)".
 iIntros "(%γhist2 & %γst2 & #Hnames2 & Hfrag)".
 iDestruct (names_agree with "Hnames1 Hnames2") as "[-> ->]".
@@ -202,12 +206,14 @@ iModIntro. iSplitL "Hauth".
 - iExists _, _. by eauto.
 Qed.
 
-Lemma state_auth_create t2 γ db t1 :
-  state_auth γ db ==∗
-  state_auth γ (op_app db (Create t1 t2)) ∗
-  (if db !! t1 then True else mapsto γ t1 t2).
+Lemma state_auth_create t1 t2 γ b db :
+  state_auth γ b db ==∗
+  state_auth γ b (op_app db (Create t1 t2)) ∗
+  (if db !! t1 then True else mapsto γ b t1 t2).
 Proof.
 rewrite /=; case db_t1: (db !! t1) => [t2'|]; eauto.
+case: b; last first.
+{ iIntros "#?". iModIntro. iSplit; trivial. }
 iIntros "(%γhist1 & %γst1 & #Hnames1 & Hauth)".
 iMod (own_update _ _ (_ ⋅ _) with "Hauth") as "[Hauth Hfrag]".
 { apply: auth_update_alloc.
@@ -218,11 +224,11 @@ iModIntro. iSplitL "Hauth".
 - iExists _, _. by iFrame.
 Qed.
 
-Definition client_view γ n : iProp Σ :=
+Definition client_view γ b n : iProp Σ :=
   ∃ os,
     ⌜n = length os⌝ ∗
     hist_auth γ os ∗
-    state_auth γ (to_db os).
+    state_auth γ b (to_db os).
 
 Definition update_at γ n t1 t2 : iProp Σ :=
   ∃ os, ⌜n = length os⌝ ∗
@@ -237,7 +243,7 @@ Definition server_view γ n db : iProp Σ :=
         ⌜db = to_db os⌝ ∗
         hist_frag γ os.
 
-Lemma alloc : ⊢ |==> ∃ γ, client_view γ 0 ∗ server_view γ 0 ∅.
+Lemma alloc b : ⊢ |==> ∃ γ, client_view γ b 0 ∗ server_view γ 0 ∅.
 Proof.
 iIntros "".
 iMod (own_alloc (● to_max_prefix_list [] ⋅ ◯ to_max_prefix_list []))
@@ -253,15 +259,16 @@ iAssert (hist_frag γ []) as "#frag".
 iModIntro. iExists γ. iSplitL; last by iExists []; eauto.
 iExists []. iSplit; eauto. iSplitL "own_hist".
 - iExists _, _. iFrame. iApply "own_names".
-- iExists _, _. iFrame. iApply "own_names".
+- iExists _, _. iSplitR; first by iApply "own_names".
+  by case: b.
 Qed.
 
-Lemma update_client t2' γ n t1 t2 :
-  client_view γ n -∗
-  mapsto γ t1 t2 ==∗
-  client_view γ (S n) ∗
+Lemma update_client t2' γ b n t1 t2 :
+  client_view γ b n -∗
+  mapsto γ b t1 t2 ==∗
+  client_view γ b (S n) ∗
   update_at γ n t1 t2' ∗
-  mapsto γ t1 t2'.
+  mapsto γ b t1 t2'.
 Proof.
 iIntros "(%os & -> & own_os & own_db) own_frag".
 iMod (hist_update _ os (Update t1 t2') with "own_os") as "[auth_os #frag_os]".
@@ -302,15 +309,15 @@ iIntros "%db_t1 (%os & -> & -> & #frag)".
 iExists os. by eauto.
 Qed.
 
-Lemma create_client t2 γ n t1 :
-  client_view γ n ==∗
+Lemma create_client t1 t2 γ b n :
+  client_view γ b n ==∗
   create_at γ n t1 t2 ∗
-  client_view γ (S n) ∗
-  (free_at γ n t1 -∗ mapsto γ t1 t2).
+  client_view γ b (S n) ∗
+  (free_at γ n t1 -∗ mapsto γ b t1 t2).
 Proof.
 iIntros "(%os & -> & hist & state)".
 iMod (hist_update _ _ (Create t1 t2) with "hist") as "[hist_auth #hist_frag]".
-iMod (state_auth_create t2 _ _ t1 with "state") as "[state mapsto]".
+iMod (state_auth_create t1 t2 with "state") as "[state mapsto]".
 have ->: op_app (to_db os) (Create t1 t2) = to_db (os ++ [Create t1 t2]).
 { by rewrite /to_db foldl_app. }
 iModIntro. iSplitR; first by iExists os; eauto.
@@ -322,6 +329,14 @@ iAssert (hist_frag γ os) as "#hist_frag''".
   by exists [Create t1 t2]. }
 iPoseProof (hist_frag_agree with "hist_frag'' hist_frag'") as "->" => //.
 by rewrite db_t1.
+Qed.
+
+Lemma create_client_fake t1 t2 γ b n :
+  client_view γ b n -∗
+  mapsto γ false t1 t2.
+Proof.
+iIntros "(%os & -> & hist & (% & % & ? & _))".
+iExists _, _. iFrame.
 Qed.
 
 Lemma create_server γ n db t1 t2 :
@@ -344,17 +359,17 @@ Definition stored_at γ n t1 t2 : iProp Σ :=
         hist_frag γ os ∗
         ⌜to_db os !! t1 = Some t2⌝.
 
-Lemma load_client γ n t1 t2 t2' :
-  client_view γ n -∗
-  mapsto γ t1 t2 -∗
+Lemma load_client γ b n t1 t2 t2' :
+  client_view γ b n -∗
+  mapsto γ b t1 t2 -∗
   stored_at γ n t1 t2' -∗
-  ⌜t2' = t2⌝.
+  ⌜b → t2' = t2⌝.
 Proof.
 iIntros "(%os & -> & hist & state) t1_t2 (%os' & %lengthE & #Hfrag & %os_t1)".
 iPoseProof (hist_auth_frag with "hist") as "#Hfrag'".
 iPoseProof (hist_frag_agree with "Hfrag Hfrag'") as "->" => //.
 iPoseProof (state_auth_mapsto with "state t1_t2") as "%os_t1'".
-iPureIntro. rewrite os_t1 in os_t1'. congruence.
+iPureIntro. rewrite os_t1 in os_t1'. move=> /os_t1' ?. congruence.
 Qed.
 
 Lemma load_server γ n db t1 t2 :
