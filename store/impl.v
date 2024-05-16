@@ -123,6 +123,7 @@ Definition create : val := λ: "c" "cs" "k" "v",
     assert: eq_term (tint "ts") "ts'" in
     assert: eq_term "k" "k'" in
     assert: eq_term "v" "v'" in
+    incr_timestamp "cs";;
     SOME (eq_term "b" (tint #1))
   ).
 
