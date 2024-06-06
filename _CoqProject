@@ -24,6 +24,8 @@ attacker.v
 
 # Case studies
 
+dh_auth.v
+
 ## Simple examples
 
 examples/permanent.v
