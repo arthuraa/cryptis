@@ -91,7 +91,7 @@ wp_pures.
 case: bool_decide_reflect => [ekt|_]; last by wp_pures; iLeft.
 wp_pures; wp_bind (par _ _).
 case: kt epkR' ekt => // -> _.
-rewrite -Qp.quarter_quarter -dfrac_op_own. iDestruct "hon" as "[hon1 hon2]".
+rewrite -Qp.half_half -dfrac_op_own. iDestruct "hon" as "[hon1 hon2]".
 iApply (wp_par (λ v, ∃ a : option term, ⌜v = repr a⌝ ∗ _)%I
                (λ v, ∃ a : option (term * term), ⌜v = repr a⌝ ∗ _)%I
           with "[tokenI hon1] [tokenR hon2]").
@@ -120,7 +120,7 @@ iApply (wp_par (λ v, ∃ a : option term, ⌜v = repr a⌝ ∗ _)%I
 iIntros (v1 v2) "[H1 H2]".
 iDestruct "H1" as (a) "[-> [hon1 H1]]".
 iDestruct "H2" as (b) "[-> [hon2 H2]]".
-iCombine "hon1 hon2" as "hon". rewrite dfrac_op_own Qp.quarter_quarter.
+iCombine "hon1 hon2" as "hon". rewrite dfrac_op_own Qp.half_half.
 iModIntro.
 iMod (compromise_honest with "ctx hon") as "[hon comp]" => //.
 wp_pures.

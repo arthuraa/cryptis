@@ -33,6 +33,7 @@ Class cryptisGS Σ := CryptisGS {
   cryptis_hash_name : gname;
   cryptis_enc_name  : gname;
   cryptis_hon_name  : gname;
+  cryptis_honI_name : gname;
 }.
 
 Local Existing Instance cryptis_inG.
@@ -936,10 +937,20 @@ Implicit Types dq : dfrac.
 
 Definition honest_auth_def dq n (X : gset term) : iProp :=
   version_auth cryptis_hon_name dq n X ∗
+  version_frag cryptis_honI_name n X ∗
   [∗ set] t ∈ X, minted t.
 Definition honest_auth_aux : seal honest_auth_def. by eexists. Qed.
 Definition honest_auth := unseal honest_auth_aux.
 Lemma honest_auth_unseal : honest_auth = honest_auth_def.
+Proof. exact: seal_eq. Qed.
+
+Definition honest_authI_def n (X : gset term) : iProp :=
+  version_frag cryptis_hon_name n X ∗
+  version_auth cryptis_honI_name (DfracOwn 1) n X ∗
+  [∗ set] t ∈ X, minted t.
+Definition honest_authI_aux : seal honest_authI_def. by eexists. Qed.
+Definition honest_authI := unseal honest_authI_aux.
+Lemma honest_authI_unseal : honest_authI = honest_authI_def.
 Proof. exact: seal_eq. Qed.
 
 Definition honest_frag_def n (X : gset term) : iProp :=
@@ -950,17 +961,16 @@ Definition honest_frag := unseal honest_frag_aux.
 Lemma honest_frag_unseal : honest_frag = honest_frag_def.
 Proof. exact: seal_eq. Qed.
 
-(* FIXME: Right now, we consider 1/2 to be complete ownership of the honest_auth
-resource, because we want to store 1/2 of it in the invariant. It would be more
-convenient for users if 1 represented complete ownership instead. *)
 Notation "●H{ dq | n } a" :=
   (honest_auth dq n a) (at level 20, format "●H{ dq | n }  a").
 Notation "●H{# q | n } a" :=
   (honest_auth (DfracOwn q) n a) (at level 20, format "●H{# q | n }  a").
 Notation "●H□{ n } a" := (honest_auth (DfracDiscarded) n a)
   (at level 20, format "●H□{ n }  a").
-Notation "●H{ n } a" := (honest_auth (DfracOwn (1 / 2)) n a)
+Notation "●H{ n } a" := (honest_auth (DfracOwn 1) n a)
   (at level 20, format "●H{ n }  a").
+Notation "●HI{ n } a" := (honest_authI n a)
+  (at level 20, format "●HI{ n }  a").
 Notation "◯H{ n } a" := (honest_frag n a)
   (at level 20, format "◯H{ n }  a").
 
@@ -970,7 +980,7 @@ Definition secret t : iProp :=
   (public t -∗ ◇ False).
 
 Definition honest_inv : iProp :=
-  ∃ n X, (●H{n} X) ∗ [∗ set] t ∈ X, secret t.
+  ∃ n X, ●HI{n} X ∗ [∗ set] t ∈ X, secret t.
 
 Definition cryptis_ctx : iProp :=
   key_pred (nroot.@"keys".@"sym") (λ _  _, False%I) ∗
@@ -1047,12 +1057,15 @@ Instance honest_frag_persistent n X : Persistent (◯H{n} X).
 Proof. rewrite honest_frag_unseal. apply _. Qed.
 
 Lemma honest_auth_minted dq n X : ●H{dq|n} X -∗ [∗ set] t ∈ X, minted t.
-Proof. rewrite honest_auth_unseal. by iIntros "(_ & ?)". Qed.
+Proof. rewrite honest_auth_unseal. by iIntros "(_ & _ & ?)". Qed.
+
+Lemma honest_authI_minted n X : ●HI{n} X -∗ [∗ set] t ∈ X, minted t.
+Proof. rewrite honest_authI_unseal. by iIntros "(_ & _ & ?)". Qed.
 
 Lemma honest_auth_frag dq n X : ●H{dq|n} X -∗ ◯H{n} X.
 Proof.
 rewrite honest_auth_unseal honest_frag_unseal.
-iIntros "(ver & #s_X)". iSplit => //.
+iIntros "(ver & _ & #s_X)". iSplit => //.
 by iApply version_auth_frag.
 Qed.
 
@@ -1098,17 +1111,20 @@ Lemma honest_acc E dq n X :
   cryptis_ctx -∗
   ●H{dq|n} X ={E, E ∖ ↑cryptisN.@"honest"}=∗
     ●H{dq|n} X ∗
-    ●H{n} X ∗
+    ●HI{n} X ∗
     ▷ ([∗ set] t ∈ X, secret t) ∗
     (▷ honest_inv ={E ∖ ↑cryptisN.@"honest",E}=∗ True).
 Proof.
-rewrite honest_auth_unseal.
-iIntros "%sub (_ & _ & _ & #ctx) [ver #term_X]".
+rewrite honest_auth_unseal honest_authI_unseal.
+iIntros "%sub (_ & _ & _ & #ctx) (ver & #verI_frag & #term_X)".
 iMod (inv_acc with "ctx") as "[inv close]" => //.
-iDestruct "inv" as "(%n' & %X' & ver' & sec_X)".
-rewrite honest_auth_unseal. iDestruct "ver'" as "[>ver' _]".
-iPoseProof (version_auth_agree with "ver' ver") as "#[-> %e]".
-rewrite leibniz_equiv_iff in e. rewrite {X'}e.
+iDestruct "inv" as "(%n' & %X' & verI & sec_X)".
+rewrite honest_authI_unseal. iDestruct "verI" as "(>ver_frag & >verI & _)".
+iPoseProof (version_auth_frag_num with "ver ver_frag") as "%".
+iPoseProof (version_auth_frag_num with "verI verI_frag") as "%".
+have -> : n' = n by lia.
+iPoseProof (version_auth_frag_agree with "ver ver_frag") as "%e".
+rewrite leibniz_equiv_iff in e. rewrite -{X'}e.
 iFrame. iModIntro. by eauto.
 Qed.
 
@@ -1123,15 +1139,17 @@ Lemma honest_acc_update Y E n X :
 Proof.
 iIntros "%sub #ctx hon".
 iMod (honest_acc with "ctx hon") as "(hon & hon' & sec_X & close)" => //.
-iFrame.
-iCombine "hon hon'" as "hon". rewrite dfrac_op_own Qp.half_half.
-rewrite honest_auth_unseal. iDestruct "hon" as "(ver & #s_X)".
-iMod (version_update Y with "ver") as "ver".
-iModIntro. iSplit => //. iIntros "[#term_Y sec_Y]".
-rewrite -{1}Qp.half_half -dfrac_op_own. iDestruct "ver" as "[ver ver']".
-iFrame.
-iMod ("close" with "[ver sec_Y]") as "_"; last eauto.
-iModIntro. iExists (S n), Y. rewrite honest_auth_unseal. by iFrame.
+rewrite honest_auth_unseal honest_authI_unseal.
+iDestruct "hon" as "(hon & _ & #m_X)".
+iDestruct "hon'" as "(_ & honI & _)".
+iMod (version_update Y with "hon") as "hon".
+iMod (version_update Y with "honI") as "honI".
+iPoseProof (version_auth_frag with "hon") as "#?".
+iPoseProof (version_auth_frag with "honI") as "#?".
+iModIntro. iSplit => //. iFrame. iIntros "[#term_Y sec_Y]".
+iMod ("close" with "[honI sec_Y]") as "_"; last eauto.
+iModIntro. iExists (S n), Y. rewrite honest_authI_unseal /honest_authI_def.
+iFrame. by eauto.
 Qed.
 
 Lemma honest_acc_same E dq n X :
@@ -1144,7 +1162,7 @@ Lemma honest_acc_same E dq n X :
 Proof.
 iIntros "%sub #ctx hon".
 iMod (honest_acc with "ctx hon") as "(hon & hon' & sec_X & close)" => //.
-iFrame. iModIntro. iSplit => //; first by iApply honest_auth_minted.
+iFrame. iModIntro. iSplit => //; first by iApply honest_authI_minted.
 iIntros "sec_X". iMod ("close" with "[hon' sec_X]") as "_"; last eauto.
 iModIntro. iExists n, X. by iFrame.
 Qed.
@@ -1283,7 +1301,7 @@ Notation "●H{# q | n } a" :=
   (honest_auth (DfracOwn q) n a) (at level 20, format "●H{# q | n }  a").
 Notation "●H□{ n } a" := (honest_auth (DfracDiscarded) n a)
   (at level 20, format "●H□{ n }  a").
-Notation "●H{ n } a" := (honest_auth (DfracOwn (1 / 2)) n a)
+Notation "●H{ n } a" := (honest_auth (DfracOwn 1) n a)
   (at level 20, format "●H{ n }  a").
 Notation "◯H{ n } a" := (honest_frag n a)
   (at level 20, format "◯H{ n }  a").
@@ -1312,7 +1330,8 @@ iMod (own_alloc (reservation_map_token ⊤)) as (γ_key) "own_key".
 iMod (own_alloc (reservation_map_token ⊤)) as (γ_hash) "own_hash".
   apply reservation_map_token_valid.
 iMod (version_alloc ∅) as (γ_hon) "ver".
-pose (H := CryptisGS _ γ_enc γ_key γ_hash γ_hon).
+iMod (version_alloc ∅) as (γ_honI) "verI".
+pose (H := CryptisGS _ γ_enc γ_key γ_hash γ_hon γ_honI).
 iExists H; iFrame.
 iAssert (key_pred_token ⊤) with "[own_enc]" as "token".
   by iFrame.
@@ -1324,11 +1343,12 @@ iMod (key_pred_set (nroot.@"keys".@"enc") (λ kt _, ⌜kt = Enc⌝)%I with "toke
     as "[#? token]"; try solve_ndisj.
 iMod (key_pred_set (nroot.@"keys".@"sig") (λ kt _, ⌜kt = Dec⌝)%I with "token")
     as "[#? token]"; try solve_ndisj.
-rewrite -{1}Qp.half_half -dfrac_op_own.
-iDestruct "ver" as "[ver ver']". rewrite honest_auth_unseal.
-rewrite /honest_auth_def big_sepS_empty. iFrame.
-do 3!iSplitR => //.
+iPoseProof (version_auth_frag with "ver") as "#?".
+iPoseProof (version_auth_frag with "verI") as "#?".
+rewrite honest_auth_unseal /honest_auth_def big_sepS_empty. iFrame.
+iSplitL; last by eauto. do 3!iSplitR => //.
 iApply inv_alloc.
 iModIntro. iExists 0, ∅.
-rewrite honest_auth_unseal /honest_auth_def. iFrame. by rewrite !big_sepS_empty.
+rewrite honest_authI_unseal /honest_authI_def. iFrame.
+rewrite !big_sepS_empty. by eauto.
 Qed.
