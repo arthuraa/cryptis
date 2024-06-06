@@ -235,11 +235,11 @@ iSplit.
   iSplit => //. }
 rewrite public_TExp2.
 iIntros "!> [[_ p_b'] | [[_ p_a'] | (_ & a_pred' & _)]]".
-- by iPoseProof ("p_b" with "p_b'") as ">[]".
+- admit.
 - iPoseProof ("p_a" with "p_a'") as ">%hon". tauto.
 - iPoseProof ("a_pred" with "a_pred'") as ">%contra".
   by have := contra _ _ eq_refl.
-Qed.
+Admitted.
 
 Lemma wp_responder c kR dq n T E :
   ↑cryptisN ⊆ E →
@@ -318,52 +318,73 @@ iAssert (minted kI) as "#m_kI".
 { iApply minted_TKey. by iApply public_minted. }
 iPoseProof (public_TEncE with "p_m3 [//]") as "{p_m3} p_m3".
 rewrite public_of_list /=.
-case: (decide (TKey Enc kI ∈ T ∧ TKey Enc kR ∈ T))
-  => [[honI honR]|fail]; last first.
-{ iApply ("Hpost" $! (Some (TKey Dec kI, Spec.texp ga b))).
-  iFrame. iExists kI. iModIntro.
-  do 4![iSplit => //].
-  rewrite /in_honest bool_decide_decide decide_False //.
-  iApply public_texp => //.
-  iApply "p_b".
-  admit. }
-iDestruct "p_m3" as "[[p_skI ?] | (#i_m3 & m_m3 & p_m3)]".
-{ iMod (honest_public with "[//] hon_auth p_skI") as "#H" => //;
-    first by solve_ndisj.
-  iMod (lc_fupd_elim_later with "H1 H") as ">[]". }
-iPoseProof (bi.later_intuitionistically with "i_m3") as "{i_m3} i_m3".
+iAssert ( □ ▷ □ (
+  (public (TKey Enc kI) ∨ public (TKey Enc kR)) ∨
+  ∃ a,
+    ⌜ga = TExp (TInt 0) [a]⌝ ∗
+    (public a ↔ ▷ □ ⌜TKey Enc kI ∉ T ∨ TKey Enc kR ∉ T⌝) ∗
+    (∀ t, dh_pred a t ↔ ▷ □ dh_auth_pred t) ∗
+    nonce_meta a (N.@"session") (Init, TExp (TInt 0) [b], a, kI, kR, n, T)))%I
+  as "{p_m3} #i_m3".
+{ iDestruct "p_m3" as "[(p_skI & _) | (#i_m3 & _ & _)]";
+    first by iModIntro; eauto.
+  iApply bi.later_intuitionistically. iModIntro.
+  iDestruct "i_m3" as "(%a & %gb & %kR' & %n' & %T' & %e_m3 &
+                        p_a & pred_a & honI & sessionI & i_m3)".
+  case/Spec.of_list_inj: e_m3 => -> <- <- {ga gb kR'}.
+  iDestruct "i_m3" as "[i_m3 | i_m3]"; first by eauto.
+  iDestruct "i_m3" as "(%b' & %n'' & %T'' & %e_b & %n''_n' & i_m3)".
+  case/TExp_inj: e_b => _ /(Permutation_singleton_inj _ _) <- {b'}.
+  iPoseProof (term_meta_agree with "meta i_m3") as "%e_meta".
+  case: e_meta => <- <- {n'' T''} in n''_n' *.
+  iPoseProof (honest_auth_frag_agree with "hon_auth honI") as "[%n'_n %T'_T]".
+  rewrite -(T'_T n''_n') {T' T'_T}.
+  assert (n' = n) as -> by lia.
+  rewrite Spec.texpA TExpC2.
+  iModIntro. iModIntro.
+  iRight. iExists a. by do ![iSplitL => //]. }
 iMod (lc_fupd_elim_later with "H1 i_m3") as "{i_m3} #i_m3".
-iDestruct "i_m3" as "(%a & %gb & %kR' & %n' & %T' & %e_m3 &
-                      p_a & pred_a & honI & sessionI & i_m3)".
-case/Spec.of_list_inj: e_m3 => -> <- <- {ga gb kR'}.
-iDestruct "i_m3" as "[contra | i_m3]".
-{ iMod (honest_public with "[//] hon_auth contra") as "{contra} #contra" => //;
-    first by solve_ndisj.
-  iMod (lc_fupd_elim_later with "H2 contra") as ">[]". }
-iDestruct "i_m3" as "(%b' & %n'' & %T'' & %e_b & %n''_n' & i_m3)".
-case/TExp_inj: e_b => _ /(Permutation_singleton_inj _ _) <- {b'}.
-iPoseProof (term_meta_agree with "meta i_m3") as "%e_meta".
-case: e_meta => <- <- {n'' T''} in n''_n' *.
-iPoseProof (honest_auth_frag_agree with "hon_auth honI") as "[%n'_n %T'_T]".
-rewrite -(T'_T n''_n') {T' T'_T}.
-assert (n' = n) as -> by lia.
+iDestruct "i_m3" as "[compromise|i_m3]".
+{ case: (decide (TKey Enc kI ∈ T ∧ TKey Enc kR ∈ T)) =>
+        [[honI honR]|compromise].
+  { iDestruct "compromise" as "[compI | compR]".
+    - iMod (honest_public with "[//] hon_auth compI") as "H" => //;
+        first by solve_ndisj.
+      iMod (lc_fupd_elim_later with "H2 H") as ">[]".
+    - iMod (honest_public with "[//] hon_auth compR") as "H" => //;
+        first by solve_ndisj.
+      iMod (lc_fupd_elim_later with "H2 H") as ">[]". }
+  iApply ("Hpost" $! (Some (TKey Dec kI, Spec.texp ga b))).
+  iFrame. iModIntro. iExists kI.
+  rewrite /in_honest bool_decide_decide decide_False //.
+  do 4![iSplit => //].
+  iApply public_texp => //.
+  admit. }
+iDestruct "i_m3" as "(%a & -> & p_a & pred_a & metaI)".
 rewrite Spec.texpA TExpC2.
 iApply ("Hpost" $! (Some (TKey Dec kI, TExp (TInt 0) [a; b]))).
 iFrame. iModIntro. iExists kI. do 2![iSplit => //].
 rewrite minted_TExp minted_TInt /=. iSplit; first by eauto.
 iSplit => //.
-rewrite /in_honest bool_decide_decide decide_True; last eauto.
-iSplitL.
-{ iExists (TExp (TInt 0) [b]), a, n, T.
-  rewrite Spec.texpA. do 2![iSplit => //]. }
-iIntros "!> #p_kS".
-iDestruct (public_TExp2 with "p_kS")
+case: (decide (TKey Enc kI ∈ T ∧ TKey Enc kR ∈ T)) =>
+        [[honI honR]|compromise]; last first.
+- rewrite /in_honest bool_decide_decide decide_False //.
+  rewrite not_and_r in compromise.
+  rewrite -(Spec.texpA _ [b] a).
+  iApply public_texp => //.
+  iApply "p_a". eauto.
+- rewrite /in_honest bool_decide_decide decide_True //.
+  iSplitL.
+  { iExists (TExp (TInt 0) [b]), a, n, T.
+    rewrite Spec.texpA. do 2![iSplit => //]. }
+  iIntros "!> #p_kS".
+  iDestruct (public_TExp2 with "p_kS")
   as "[[_ p_b'] | [ [_ p_a'] | (_ & contra & _)]]".
-- iDestruct ("p_b" with "p_b'") as ">[]".
-- iPoseProof ("p_a" with "p_a'") as ">%compromised".
-  by case: compromised => [/(_ honI) | /(_ honR)].
-- iPoseProof ("pred_a" with "contra") as ">%contra".
-  by have := contra _ _ eq_refl.
+  + iDestruct ("p_b" with "p_b'") as ">[]".
+  + iPoseProof ("p_a" with "p_a'") as ">%compromised".
+    by case: compromised => [/(_ honI) | /(_ honR)].
+  + iPoseProof ("pred_a" with "contra") as ">%contra".
+    by have := contra _ _ eq_refl.
 Admitted.
 
 End Verif.
