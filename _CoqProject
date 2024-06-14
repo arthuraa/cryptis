@@ -10,6 +10,7 @@ nown.v
 version.v
 pre_term.v
 term.v
+comp_map.v
 role.v
 cryptis.v
 primitives/notations.v
