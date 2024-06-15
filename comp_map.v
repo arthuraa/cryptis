@@ -148,6 +148,8 @@ Definition comp_map_frag an HC : comp_map :=
       to_agree <$> HC.1,
       HC.2).
 
+Global Typeclasses Opaque comp_map_auth comp_map_frag.
+
 Notation "●CM{ n } a" :=
   (comp_map_auth n a)
   (at level 20, format "●CM{ n }  a").
@@ -175,11 +177,46 @@ rewrite !core_id_core !pair_core /= !core_id_core.
 by rewrite /core /= pair_pcore /=.
 Qed.
 
-Lemma comp_map_frag_split dq n HC :
+Lemma comp_map_frag_split_empty dq n HC :
   ◯CM{dq|n} HC ≡ ◯CM{dq|n} (∅, ∅) ⋅ ◯CM HC.
 Proof.
 rewrite /comp_map_frag /= -view_frag_op -!pair_op.
 by rewrite fmap_empty !ucmra_unit_left_id ucmra_unit_right_id.
+Qed.
+
+Lemma comp_map_frag_dfrac_op dq1 dq2 n HC :
+  ◯CM{dq1 ⋅ dq2|n} HC ≡ ◯CM{dq1|n} HC ⋅ ◯CM{dq2|n} HC.
+Proof.
+rewrite /comp_map_frag /= -view_frag_op -!pair_op -Some_op -pair_op.
+rewrite agree_idemp gset_op union_idemp.
+set H := to_agree <$> HC.1; assert (H ⋅ H ≡ H) as -> => //.
+move=> m; rewrite lookup_op; case: (H !! m) => [a|] //.
+by rewrite -Some_op agree_idemp.
+Qed.
+
+Global Instance comp_map_frag_dfrac_is_op dq dq1 dq2 n HC :
+  IsOp dq dq1 dq2 →
+  IsOp' (◯CM{dq|n} HC) (◯CM{dq1|n} HC) (◯CM{dq2|n} HC).
+Proof.
+by move=> ->; rewrite /IsOp' /IsOp comp_map_frag_dfrac_op.
+Qed.
+
+Global Instance comp_map_frag_core_id HC : CoreId (◯CM HC).
+Proof. rewrite /comp_map_frag. apply _. Qed.
+
+Global Instance comp_map_frag_disc_core_id n HC : CoreId (◯CM□{n} HC).
+Proof. rewrite /comp_map_frag. apply _. Qed.
+
+Lemma comp_map_frag_split dq n HC :
+  ◯CM{dq|n} HC ≡ ◯CM{dq|n} HC ⋅ ◯CM HC.
+Proof.
+case: dq=> [q| |q].
+- by rewrite cmra_pcore_r' // comp_map_frag_pcore.
+- rewrite [in X in _ ≡ X]comp_map_frag_split_empty.
+  by rewrite -(assoc op) -core_id_dup -comp_map_frag_split_empty.
+- change (DfracBoth q) with (DfracDiscarded ⋅ DfracOwn q).
+  rewrite comp_map_frag_dfrac_op -(assoc op).
+  by rewrite (cmra_pcore_r' (◯CM{#q|n} HC)) // comp_map_frag_pcore.
 Qed.
 
 Lemma comp_map_valid_bound an aH aC bdq bn bH bC :
@@ -266,7 +303,7 @@ do ![split => //].
   set_solver.
 Qed.
 
-Lemma comp_map_comp_discard dq n :
+Lemma comp_map_frag_discard dq n :
   ◯CM{dq|n} (∅, ∅) ~~> ◯CM□{n} (∅, ∅).
 Proof.
 apply/view_update_frag; case=> [[] an aH aC].
