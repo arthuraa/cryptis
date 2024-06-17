@@ -1057,6 +1057,13 @@ Proof. rewrite honest_auth_unseal. apply _. Qed.
 Instance honest_frag_persistent n X : Persistent (◯H{n} X).
 Proof. rewrite honest_frag_unseal. apply _. Qed.
 
+#[global]
+Instance compromised_at_persistent n t : Persistent (compromised_at n t).
+Proof. rewrite compromised_at_unseal. apply _. Qed.
+
+Lemma compromised_at_public n t : compromised_at n t -∗ public t.
+Proof. rewrite compromised_at_unseal. by iIntros "[? ?]". Qed.
+
 Lemma honest_auth_minted dq n X : ●H{dq|n} X -∗ [∗ set] t ∈ X, minted t.
 Proof. rewrite honest_auth_unseal. by iIntros "(_ & _ & ?)". Qed.
 
@@ -1150,6 +1157,7 @@ Lemma compromised_atI E dq t n X :
   £ 1 -∗
   ●H{dq|n} X -∗
   public t ={E}=∗
+  ●H{dq|n} X ∗
   compromised_at n t.
 Proof.
 iIntros "%sub #ctx cred hon #p_t".
@@ -1172,6 +1180,7 @@ iMod ("close" with "[honI honI_frag sec_X]") as "_".
 { iModIntro. iExists n, H, X, ({[(n, t)]} ∪ C). iFrame.
   rewrite big_sepS_union_pers big_sepS_singleton /=.
   by iSplit. }
+iFrame.
 by rewrite compromised_at_unseal; iModIntro; iSplit.
 Qed.
 

@@ -84,7 +84,8 @@ Definition dh_auth_pred t : iProp :=
 Definition msg2_pred kR m2 : iProp :=
   ∃ ga b kI n T,
     ⌜m2 = Spec.of_list [ga; TExp (TInt 0) [b]; TKey Dec kI]⌝ ∗
-    (public b ↔ ▷ □ False) ∗
+    (public b ↔ ▷ □ (compromised_at n (TKey Enc kR) ∨
+                     compromised_at n (TKey Enc kI))) ∗
     (∀ t, dh_pred b t ↔ ▷ □ dh_auth_pred t) ∗
     ◯H{n} T ∗
     nonce_meta b (N.@"session") (Resp, ga, b, kI, kR, n, T).
@@ -234,12 +235,17 @@ iSplit.
   rewrite Spec.texpA [TExp _ [a; b]]TExpC2. iSplit => //.
   iSplit => //. }
 rewrite public_TExp2.
-iIntros "!> [[_ p_b'] | [[_ p_a'] | (_ & a_pred' & _)]]".
-- admit.
+iIntros "!> [[_ #p_b'] | [[_ p_a'] | (_ & a_pred' & _)]]".
+- iPoseProof ("p_b" with "p_b'") as "{p_b} p_b".
+  iModIntro. iDestruct "p_b" as "[#compR | #compI]".
+  + iPoseProof (honest_frag_compromised_at _ _ n'n with "honI compR") as "%".
+    set_solver.
+  + iPoseProof (honest_frag_compromised_at _ _ n'n with "honI compI") as "%".
+    set_solver.
 - iPoseProof ("p_a" with "p_a'") as ">%hon". tauto.
 - iPoseProof ("a_pred" with "a_pred'") as ">%contra".
   by have := contra _ _ eq_refl.
-Admitted.
+Qed.
 
 Lemma wp_responder c kR dq n T E :
   ↑cryptisN ⊆ E →
@@ -275,7 +281,8 @@ wp_bind (is_key _). iApply wp_is_key.
 case: Spec.is_keyP => [kt kI -> {vkI}|]; last by protocol_failure.
 wp_pures. case: kt => //=; first by protocol_failure.
 wp_pures. wp_bind (mknonce _).
-iApply (wp_mknonce (λ _, False)%I dh_auth_pred).
+iApply (wp_mknonce (λ _, compromised_at n (TKey Enc kR) ∨
+                         compromised_at n (TKey Enc kI))%I dh_auth_pred).
 iIntros "%b #m_b #p_b #dh_gb token".
 iAssert (public (TExp (TInt 0) [b])) as "#p_gb".
 { iApply public_TExp1. rewrite minted_TInt.
@@ -344,22 +351,32 @@ iAssert ( □ ▷ □ (
   iModIntro. iModIntro.
   iRight. iExists a. by do ![iSplitL => //]. }
 iMod (lc_fupd_elim_later with "H1 i_m3") as "{i_m3} #i_m3".
+iAssert (|={E}=> ●H{dq|n} T ∗ □ (
+  (compromised_at n (TKey Enc kR) ∨ compromised_at n (TKey Enc kI)) ∨
+  ∃ a,
+    ⌜ga = TExp (TInt 0) [a]⌝ ∗
+    (public a ↔ ▷ □ ⌜TKey Enc kI ∉ T ∨ TKey Enc kR ∉ T⌝) ∗
+    (∀ t, dh_pred a t ↔ ▷ □ dh_auth_pred t) ∗
+    nonce_meta a (N.@"session") (Init, TExp (TInt 0) [b], a, kI, kR, n, T)))%I
+  with "[hon_auth H2]" as "{i_m3} >[hon_auth #i_m3]".
+{ iDestruct "i_m3" as "[compromise|i_m3]"; last by iFrame; eauto.
+  iDestruct "compromise" as "[compromise|compromise]".
+  - iMod (compromised_atI with "[//] H2 hon_auth compromise")
+      as "[? #?]"; try solve_ndisj.
+  - iMod (compromised_atI with "[//] H2 hon_auth compromise")
+      as "[? #?]"; try solve_ndisj. }
 iDestruct "i_m3" as "[compromise|i_m3]".
 { case: (decide (TKey Enc kI ∈ T ∧ TKey Enc kR ∈ T)) =>
         [[honI honR]|compromise].
   { iDestruct "compromise" as "[compI | compR]".
-    - iMod (honest_public with "[//] hon_auth compI") as "H" => //;
-        first by solve_ndisj.
-      iMod (lc_fupd_elim_later with "H2 H") as ">[]".
-    - iMod (honest_public with "[//] hon_auth compR") as "H" => //;
-        first by solve_ndisj.
-      iMod (lc_fupd_elim_later with "H2 H") as ">[]". }
+    - iPoseProof (honest_frag_compromised_at with "honR compI") as "%" => //.
+    - iPoseProof (honest_frag_compromised_at with "honR compR") as "%" => //. }
   iApply ("Hpost" $! (Some (TKey Dec kI, Spec.texp ga b))).
   iFrame. iModIntro. iExists kI.
   rewrite /in_honest bool_decide_decide decide_False //.
   do 4![iSplit => //].
   iApply public_texp => //.
-  admit. }
+  by iApply "p_b". }
 iDestruct "i_m3" as "(%a & -> & p_a & pred_a & metaI)".
 rewrite Spec.texpA TExpC2.
 iApply ("Hpost" $! (Some (TKey Dec kI, TExp (TInt 0) [a; b]))).
@@ -380,11 +397,13 @@ case: (decide (TKey Enc kI ∈ T ∧ TKey Enc kR ∈ T)) =>
   iIntros "!> #p_kS".
   iDestruct (public_TExp2 with "p_kS")
   as "[[_ p_b'] | [ [_ p_a'] | (_ & contra & _)]]".
-  + iDestruct ("p_b" with "p_b'") as ">[]".
+  + iPoseProof ("p_b" with "p_b'") as "[comp|comp]"; iModIntro.
+    * iDestruct (honest_frag_compromised_at with "honR comp") as "%" => //.
+    * iDestruct (honest_frag_compromised_at with "honR comp") as "%" => //.
   + iPoseProof ("p_a" with "p_a'") as ">%compromised".
     by case: compromised => [/(_ honI) | /(_ honR)].
   + iPoseProof ("pred_a" with "contra") as ">%contra".
     by have := contra _ _ eq_refl.
-Admitted.
+Qed.
 
 End Verif.
