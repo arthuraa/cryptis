@@ -219,7 +219,7 @@ case: dq=> [q| |q].
   by rewrite (cmra_pcore_r' (◯CM{#q|n} HC)) // comp_map_frag_pcore.
 Qed.
 
-Lemma comp_map_valid_bound an aH aC bdq bn bH bC :
+Lemma comp_map_auth_frag_bound_agree an aH aC bdq bn bH bC :
   ✓ (●CM{an} (aH, aC) ⋅ ◯CM{bdq|bn} (bH, bC)) →
   an = bn.
 Proof.
@@ -230,6 +230,99 @@ case: incl_a_b => [[] /= incl_a_b _ _]; move: incl_a_b.
 by rewrite Some_included_total to_agree_included leibniz_equiv_iff => ->.
 Qed.
 
+Lemma comp_map_frag_bound_agree dq1 dq2 n1 n2 :
+  ✓ (◯CM{dq1|n1} (∅, ∅) ⋅ ◯CM{dq2|n2} (∅, ∅)) →
+  n1 = n2.
+Proof.
+rewrite /comp_map_frag /= -view_frag_op -!pair_op -Some_op -pair_op.
+rewrite fmap_empty !ucmra_unit_right_id.
+case/view_frag_valid/(_ 0) => - [[] an aH aC] [wf_a [] val_dq incl_a_b].
+move: incl_a_b; rewrite !pair_included /= Some_included_total.
+case=> [[] incl_n _ _]; apply: to_agree_op_inv_L.
+exact: cmra_valid_included incl_n.
+Qed.
+
+Lemma comp_map_frag_valid_wf dq n H C :
+  ✓ (◯CM{dq|n} (∅, ∅) ⋅ ◯CM (H, C)) →
+  (∀ m, m ∈ dom H → m ≤ n) ∧
+  (∀ p, p ∈ C → p.1 ≤ n).
+Proof.
+rewrite -comp_map_frag_split_empty /comp_map_frag /=.
+case/view_frag_valid/(_ 0) => - [[] an aH aC] [wf_a [] val_dq incl_a_b].
+move: incl_a_b; rewrite !pair_included /= Some_included_total.
+rewrite to_agree_included leibniz_equiv_iff; case=> [[] -> incl_H incl_C].
+case: wf_a => [bound_H [] bound_C ?].
+split.
+- move/dom_included: incl_H; rewrite !dom_fmap => incl_H m /incl_H.
+  exact: bound_H.
+- move/gset_included: incl_C => incl_C p /incl_C.
+  exact: bound_C.
+Qed.
+
+Lemma comp_map_auth_valid_dis n H C :
+  ✓ (●CM{n} (H, C)) →
+  wf_comp_map (n, H, C).
+Proof. by case/view_auth_valid/(_ 0). Qed.
+
+Lemma comp_map_frag_valid_dis H C :
+  ✓ (◯CM (H, ∅) ⋅ ◯CM (∅, C)) →
+  ∀ m T n t,
+    H !! m = Some T →
+    (n, t) ∈ C →
+    n ≤ m →
+    t ∉ T.
+Proof.
+rewrite /comp_map_frag /= -view_frag_op -!pair_op.
+rewrite fmap_empty !ucmra_unit_right_id ucmra_unit_left_id.
+case/view_frag_valid/(_ 0) => - [[] an aH aC] [wf_a [] val_dq incl_a_b].
+move: incl_a_b; rewrite !pair_included /=; case=> [[] _ incl_H incl_C].
+case: wf_a => [bound_H [] bound_C dis].
+move=> m T n t H_T t_C.
+move/lookup_included/(_ m): incl_H; rewrite !lookup_fmap H_T /=.
+case aH_m: (aH !! m) => [T'|] /=; last first.
+  case/option_included_total => //.
+  by case=> [? [] ? [] ? [] ?].
+move/Some_included_total/to_agree_included/leibniz_equiv_iff=> e.
+by apply: dis; rewrite ?e //; move/gset_included: incl_C; apply.
+Qed.
+
+Lemma comp_map_frag_valid_sub H n T :
+  ✓ (◯CM (H, ∅) ⋅ ◯CM ({[n := T]}, ∅)) →
+  ∀ T', H !! n = Some T' → T' = T.
+Proof.
+rewrite /comp_map_frag /= -view_frag_op -!pair_op.
+rewrite map_fmap_singleton !ucmra_unit_right_id.
+case/view_frag_valid/(_ 0) => - [[] an aH aC] [wf_a [] val_dq incl_a_b].
+move: incl_a_b; rewrite !pair_included /=; case=> [[] _ incl_H incl_C].
+case: wf_a => [bound_H [] bound_C dis].
+move=> T' H_n; move/lookup_included/(_ n): incl_H.
+rewrite lookup_op lookup_fmap H_n lookup_singleton /= -Some_op lookup_fmap.
+case aH_n: (aH !! n) => [T''|] /=; last first.
+  by case/option_included=> // - [? [] ? [] ? []].
+move=> incl_H; apply/to_agree_op_inv_L/Some_valid.
+by apply: cmra_valid_included incl_H.
+Qed.
+
+Lemma comp_map_frag_valid_agree n T1 T2 :
+  ✓ (◯CM ({[n := T1]}, ∅) ⋅ ◯CM ({[n := T2]}, ∅)) →
+  T1 = T2.
+Proof.
+move/comp_map_frag_valid_sub/(_ T1).
+rewrite lookup_singleton; exact.
+Qed.
+
+Lemma comp_map_auth_frag_valid_agree n H C m T :
+  ✓ (●CM{n} (H, C) ⋅ ◯CM ({[m := T]}, ∅)) →
+  H !! m = Some T.
+Proof.
+rewrite /comp_map_auth /comp_map_frag /=.
+case/view_both_valid/(_ 0)=> [_ [] _].
+rewrite !pair_included; case=> [[] _ /lookup_included/(_ m) incl_H _].
+rewrite !lookup_fmap lookup_singleton /= in incl_H.
+case/option_included_total: incl_H=> //= - [_ [] ag [] [<-] []].
+by case: (H !! m) => [T'|] //= [<-] /to_agree_included/leibniz_equiv_iff <-.
+Qed.
+
 Lemma comp_map_honest_update an aH aC bn bH :
   (∀ m t, (m, t) ∈ aC → t ∉ bH) →
   ●CM{an} (aH, aC) ⋅ ◯CM{bn} (∅, ∅) ~~>
@@ -237,7 +330,7 @@ Lemma comp_map_honest_update an aH aC bn bH :
 Proof.
 move=> dis_a_b.
 apply: cmra_update_valid0.
-move=> /cmra_discrete_valid/comp_map_valid_bound <- {bn}.
+move=> /cmra_discrete_valid/comp_map_auth_frag_bound_agree <- {bn}.
 apply: view_update => /=.
 rewrite /comp_map_view_rel_raw /= => _ [[] bf_n bf_H bf_C].
 case=> [wf_a1 [] val_dq incl_a1_b1].
@@ -281,8 +374,8 @@ Lemma comp_map_comp_update an aH aC bdq bn n t :
   ●CM{an} (aH, aC) ⋅ ◯CM{bdq|bn} (∅, ∅) ~~>
   ●CM{an} (aH, {[(n, t)]} ∪ aC) ⋅ ◯CM{bdq|bn} (∅, {[(n, t)]}).
 Proof.
-move=> n_an dis_a_b.
-apply: cmra_update_valid0 => /cmra_discrete_valid/comp_map_valid_bound -> {an}.
+move=> n_an dis_a_b; apply: cmra_update_valid0.
+move => /cmra_discrete_valid/comp_map_auth_frag_bound_agree -> {an}.
 apply: view_update => /=.
 rewrite /comp_map_view_rel_raw /= => _ [[] bf_n bf_H bf_C].
 case=> [wf_a1 [] /= val_bdq incl_a1_b1].
@@ -301,6 +394,34 @@ do ![split => //].
   rewrite gset_included gset_op.
   rewrite ucmra_unit_left_id gset_included in incl_C.
   set_solver.
+Qed.
+
+Lemma comp_map_comp_update_last n H T C t :
+  H !! n = Some T →
+  t ∉ T →
+  ●CM{n} (H, C) ~~>
+  ●CM{n} (H, {[(n, t)]} ∪ C) ⋅ ◯CM (∅, {[(n, t)]}).
+Proof.
+move=> H_n t_T; apply: view_update_alloc.
+rewrite /= /comp_map_view_rel_raw => _ [[] bf_n bf_H bf_C].
+case=> [wf_a [] /= val_dq incl_a_b].
+case: wf_a => [bound_H [] bound_C H_C].
+do ![split => //].
+- move=> p; rewrite elem_of_union elem_of_singleton.
+  case=> [-> //|]; apply: bound_C.
+- move=> m1 T1 m2 t2 H_m1.
+  rewrite elem_of_union elem_of_singleton.
+  case=> [[-> ->]|m2_t2_C]; last by eauto.
+  move=> n_m1.
+  have ?: m1 ≤ n by apply: bound_H; rewrite elem_of_dom H_m1.
+  have ?: m1 = n by lia. subst m1.
+  by rewrite H_n in H_m1; case: H_m1 => <-.
+- by rewrite ucmra_unit_left_id.
+- move: incl_a_b; rewrite !pair_included /=.
+  case=> [[] incl_n incl_H incl_C].
+  rewrite ucmra_unit_left_id gset_op fmap_empty ucmra_unit_left_id.
+  split => //.
+  rewrite gset_included in incl_C. rewrite gset_included. set_solver.
 Qed.
 
 Lemma comp_map_frag_discard dq n :

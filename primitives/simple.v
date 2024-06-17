@@ -429,22 +429,26 @@ Proof.
 by iIntros "post"; iApply twp_wp; iApply twp_mkkey.
 Qed.
 
-Lemma twp_mkakey n T E Ψ :
+(* FIXME: It should be possible to prove a twp for this, but right now we cannot
+generate later credits when proving in a twp, which is required for manipulating
+honest_auth. *)
+
+Lemma wp_mkakey n T E Ψ :
   ↑cryptisN ⊆ E →
   cryptis_ctx -∗
   ●H{n} T -∗
   (∀ t, public (TKey Enc t) -∗
         ●H{S n} (T ∪ {[TKey Dec t]}) -∗
         Ψ (TKey Enc t, TKey Dec t)%V) -∗
-  WP mkakey #() @ E [{ Ψ }].
+  WP mkakey #() @ E {{ Ψ }}.
 Proof.
 iIntros "%sub #ctx hon post". iMod unknown_alloc as (γ) "unknown".
-rewrite /mkakey. wp_pures.
+rewrite /mkakey. wp_pure _ credit:"cred". wp_pures.
 iAssert (□ (∀ t, ⌜t ∈ T⌝ → minted t))%I as "#s_T".
   iPoseProof (honest_auth_minted with "hon") as "#?".
   iModIntro. by rewrite -big_sepS_forall.
 wp_bind (mknonce _).
-iApply (twp_mknonce_gen T (λ _, known γ 1) (λ _, False%I)).
+iApply (wp_mknonce_gen T (λ _, known γ 1) (λ _, False%I)).
   iIntros "%t #t_T". by iApply "s_T".
 iIntros "%t %fresh #s_t #p_t _ _".
 pose (t' := Spec.tag (nroot.@"keys".@"enc") t).
@@ -468,45 +472,32 @@ iAssert (secret (TKey Dec t')) with "[unknown]" as "tP"; first do 2?iSplit.
   by iPoseProof (unknown_known with "[$] [//]") as "[]".
 iAssert (minted (TKey Dec t')) as "s_t'".
   by rewrite minted_TKey minted_tag.
-iMod (honest_insert with "ctx hon s_t' tP") as "hon" => //.
+iMod (honest_insert with "ctx cred hon s_t' tP") as "hon" => //.
   solve_ndisj.
-wp_pures. wp_bind (tag _ _). iApply twp_tag.
-iApply twp_mkkey. iApply "post" => //.
+wp_pures. wp_bind (tag _ _). iApply wp_tag.
+iApply wp_mkkey. iApply "post" => //.
 iApply public_TKey. iRight. rewrite minted_tag. iSplit => //.
 iDestruct "ctx" as "(_ & ? & _)".
 iExists _, _, _; iSplit => //.
 by iSplit => //.
 Qed.
 
-Lemma wp_mkakey n T E Ψ :
-  ↑cryptisN ⊆ E →
-  cryptis_ctx -∗
-  ●H{n} T -∗
-  (∀ t, public (TKey Enc t) -∗
-        ●H{S n} (T ∪ {[TKey Dec t]}) -∗
-        Ψ (TKey Enc t, TKey Dec t)%V) -∗
-  WP mkakey #() @ E {{ Ψ }}.
-Proof.
-iIntros "%sub #ctx hon post". iApply twp_wp.
-by iApply (twp_mkakey with "[//] hon post").
-Qed.
-
-Lemma twp_mksigkey n T E Ψ :
+Lemma wp_mksigkey n T E Ψ :
   ↑cryptisN ⊆ E →
   cryptis_ctx -∗
   ●H{n} T -∗
   (∀ t, public (TKey Dec t) -∗
         ●H{S n} (T ∪ {[TKey Enc t]}) -∗
         Ψ (TKey Enc t, TKey Dec t)%V) -∗
-  WP mksigkey #() @ E [{ Ψ }].
+  WP mksigkey #() @ E {{ Ψ }}.
 Proof.
 iIntros "%sub #ctx hon post". iMod unknown_alloc as (γ) "unknown".
-rewrite /mksigkey. wp_pures.
+rewrite /mksigkey. wp_pure _ credit:"cred".
 iAssert (□ (∀ t, ⌜t ∈ T⌝ → minted t))%I as "#s_T".
   iPoseProof (honest_auth_minted with "hon") as "#?".
   iModIntro. by rewrite -big_sepS_forall.
 wp_bind (mknonce _).
-iApply (twp_mknonce_gen T (λ _, known γ 1%positive) (λ _, False%I)).
+iApply (wp_mknonce_gen T (λ _, known γ 1%positive) (λ _, False%I)).
   iIntros "%t #t_T". by iApply "s_T".
 iIntros "%t %fresh #s_t #p_t _ token".
 pose (t' := Spec.tag (nroot.@"keys".@"sig") t).
@@ -530,27 +521,14 @@ iAssert (secret (TKey Enc t')) with "[unknown]" as "tP"; first do 2?iSplit.
   by iPoseProof (unknown_known with "[$] [//]") as "[]".
 iAssert (minted (TKey Enc t')) as "s_t'".
   by rewrite minted_TKey minted_tag.
-iMod (honest_insert with "ctx hon s_t' tP") as "hon" => //.
+iMod (honest_insert with "ctx cred hon s_t' tP") as "hon" => //.
   solve_ndisj.
-wp_pures. wp_bind (tag _ _). iApply twp_tag.
-iApply twp_mkkey. iApply ("post" with "[] hon") => //.
+wp_pures. wp_bind (tag _ _). iApply wp_tag.
+iApply wp_mkkey. iApply ("post" with "[] hon") => //.
 iApply public_TKey. iRight. rewrite minted_tag. iSplit => //.
 iDestruct "ctx" as "(_ & _ & ? & _)".
 iExists _, _, _; iSplit => //.
 by iSplit => //.
-Qed.
-
-Lemma wp_mksigkey n T E Ψ :
-  ↑cryptisN ⊆ E →
-  cryptis_ctx -∗
-  ●H{n} T -∗
-  (∀ t, public (TKey Dec t) -∗
-        ●H{S n} (T ∪ {[TKey Enc t]}) -∗
-        Ψ (TKey Enc t, TKey Dec t)%V) -∗
-  WP mksigkey #() @ E {{ Ψ }}.
-Proof.
-iIntros "%sub #ctx hon post". iApply twp_wp.
-by iApply (twp_mksigkey with "[//] hon post").
 Qed.
 
 Lemma twp_mkskey E (k : term) Ψ :
