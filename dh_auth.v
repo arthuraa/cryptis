@@ -118,19 +118,44 @@ Definition dh_auth_ctx : iProp :=
   enc_pred (N.@"m2") msg2_pred ∗
   enc_pred (N.@"m3") msg3_pred.
 
-Definition session γ kI kR k rl ok : iProp :=
+Definition init_session γ kI kR k ok : iProp :=
   ∃ share x ts T,
     ⌜k = Spec.texp share x⌝ ∗
     ⌜ok = in_honest kI kR T⌝ ∗
     ◯H{ts} T ∗
-    nonce_meta x (nroot.@"session") (rl, share, kI, kR, ts, T, γ) ∗
+    nonce_meta x (nroot.@"session") (Init, share, kI, kR, ts, T, γ) ∗
     if ok then ∃ y ts' T' γ',
         ⌜share = TExp (TInt 0) [y]⌝ ∗
         ⌜ts' ≤ ts⌝ ∗
         nonce_meta y (nroot.@"session")
-          (swap_role rl, TExp (TInt 0) [x], kI, kR, ts', T', γ')
+          (Resp, TExp (TInt 0) [x], kI, kR, ts', T', γ')
     else
       True.
+
+Typeclasses Opaque init_session.
+
+Global Instance init_session_persistent γ kI kR kS ok :
+  Persistent (init_session γ kI kR kS ok).
+Proof. rewrite /init_session. apply _. Qed.
+
+Definition resp_session γ kI kR k ok : iProp :=
+  ∃ share x ts T,
+    ⌜k = Spec.texp share x⌝ ∗
+    ⌜ok = in_honest kI kR T⌝ ∗
+    ◯H{ts} T ∗
+    nonce_meta x (nroot.@"session") (Resp, share, kI, kR, ts, T, γ) ∗
+    if ok then ∃ y γ',
+        ⌜share = TExp (TInt 0) [y]⌝ ∗
+        nonce_meta y (nroot.@"session")
+          (Init, TExp (TInt 0) [x], kI, kR, ts, T, γ')
+    else
+      True.
+
+Typeclasses Opaque resp_session.
+
+Global Instance resp_session_persistent γ kI kR kS ok :
+  Persistent (resp_session γ kI kR kS ok).
+Proof. rewrite /resp_session. apply _. Qed.
 
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
@@ -149,7 +174,7 @@ Lemma wp_initiator c kI kR dq n T γ E :
       ●H{dq|n} T ∗
       if okS is Some kS then
         minted kS ∗
-        session γ kI kR kS Init (in_honest kI kR T) ∗
+        init_session γ kI kR kS (in_honest kI kR T) ∗
         □ (public kS ↔ ▷ ⌜negb (in_honest kI kR T)⌝)
       else True
  }}}.
@@ -235,7 +260,7 @@ wp_pures. wp_bind (send _ _). iApply wp_send => //.
   - iIntros "!> _".
     rewrite public_of_list /=.
     by do ![iSplit => //]. }
-iAssert (session γ kI kR (Spec.texp gb a) Init (in_honest kI kR T))
+iAssert (init_session γ kI kR (Spec.texp gb a) (in_honest kI kR T))
   as "#sessionI'".
 { iExists gb, a, n, T.
   do 4![iSplit => //].
@@ -305,7 +330,7 @@ Lemma wp_responder c kR dq n T γ E :
         ⌜vkI = TKey Dec kI⌝ ∗
         minted kI ∗
         minted kS ∗
-        session γ kI kR kS Resp (in_honest kI kR T) ∗
+        resp_session γ kI kR kS (in_honest kI kR T) ∗
         □ (public kS ↔ ▷ ⌜negb (in_honest kI kR T)⌝)
       else True
  }}}.
@@ -390,7 +415,7 @@ iAssert ( |={E}=> ●H{dq|n} T ∗
   assert (n' = n) as -> by lia.
   iModIntro. iFrame.
   iRight. iModIntro. iExists a, γ'. by do ![iSplitL => //]. }
-iAssert (session γ kI kR (Spec.texp ga b) Resp (in_honest kI kR T))
+iAssert (resp_session γ kI kR (Spec.texp ga b) (in_honest kI kR T))
   as "sessionR".
 { iExists _, _, n, T. iSplit => //.
   do ![iSplit => //].
@@ -401,7 +426,7 @@ iAssert (session γ kI kR (Spec.texp ga b) Resp (in_honest kI kR T))
     rewrite /in_honest bool_decide_eq_false_2 //; tauto.
   case: in_honest => //.
   iDestruct "i_m3" as "(%a & %γ' & -> & ? & ? & ?)".
-  iExists _, _, _, _; eauto. }
+  iExists _, _; eauto. }
 iAssert (minted (Spec.texp ga b)) as "#m_kS".
 { iApply minted_texp => //. by iApply public_minted. }
 iAssert (minted kI) as "#m_kI".
