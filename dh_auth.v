@@ -20,7 +20,7 @@ Qed.
 
 Section Verif.
 
-Context `{!heapGS Σ, !cryptisGS Σ, !sessionGS Σ}.
+Context `{!heapGS Σ, !cryptisGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (rl : role) (t kI kR nI nR sI sR kS : term).
@@ -98,7 +98,7 @@ Definition msg2_pred kR m2 : iProp :=
                      compromised_at n (TKey Enc kR))) ∗
     (∀ t, dh_pred b t ↔ ▷ □ dh_auth_pred t) ∗
     ◯H{n} T ∗
-    nonce_meta b (N.@"session") (Resp, ga, kI, kR, n, T, γb).
+    nonce_meta b (nroot.@"session") (Resp, ga, kI, kR, n, T, γb).
 
 Definition msg3_pred kI m3 : iProp :=
   ∃ a gb kR n T γa,
@@ -106,12 +106,12 @@ Definition msg3_pred kI m3 : iProp :=
     (public a ↔ ▷ □ ⌜negb (in_honest kI kR T)⌝) ∗
     (∀ t, dh_pred a t ↔ ▷ □ dh_auth_pred t) ∗
     ◯H{n} T ∗
-    nonce_meta a (N.@"session") (Init, gb, kI, kR, n, T, γa) ∗
+    nonce_meta a (nroot.@"session") (Init, gb, kI, kR, n, T, γa) ∗
     (public (TKey Enc kR) ∨
      ∃ b n' T' γb,
        ⌜gb = TExp (TInt 0) [b]⌝ ∗
        ⌜n' ≤ n⌝ ∗
-       nonce_meta b (N.@"session")
+       nonce_meta b (nroot.@"session")
          (Resp, TExp (TInt 0) [a], kI, kR, n', T', γb)).
 
 Definition dh_auth_ctx : iProp :=
@@ -123,11 +123,11 @@ Definition session γ kI kR k rl ok : iProp :=
     ⌜k = Spec.texp share x⌝ ∗
     ⌜ok = in_honest kI kR T⌝ ∗
     ◯H{ts} T ∗
-    nonce_meta x (N.@"session") (rl, share, kI, kR, ts, T, γ) ∗
+    nonce_meta x (nroot.@"session") (rl, share, kI, kR, ts, T, γ) ∗
     if ok then ∃ y ts' T' γ',
         ⌜share = TExp (TInt 0) [y]⌝ ∗
         ⌜ts' ≤ ts⌝ ∗
-        nonce_meta y (N.@"session")
+        nonce_meta y (nroot.@"session")
           (swap_role rl, TExp (TInt 0) [x], kI, kR, ts', T', γ')
     else
       True.
@@ -196,7 +196,7 @@ iDestruct "m_m2" as "(_ & _ & m_gb & _)".
 wp_pures. wp_bind (texp _ _). iApply wp_texp.
 wp_pures. wp_list. wp_term_of_list. wp_tenc.
 iMod (term_meta_set _ _ (Init, gb, kI, kR, n, T, γ)
-       (N.@"session") with "token") as "#sessionI" => //.
+       (nroot.@"session") with "token") as "#sessionI" => //.
 iAssert ( |={E}=>
     ●H{dq|n} T ∗
     (compromised_at n (TKey Enc kR) ∨
@@ -205,7 +205,7 @@ iAssert ( |={E}=>
      ⌜n' ≤ n⌝ ∗
      □ (public b ↔ ▷ □ (compromised_at n' (TKey Enc kI) ∨
                         compromised_at n' (TKey Enc kR))) ∗
-     nonce_meta b (N.@"session")
+     nonce_meta b (nroot.@"session")
        (Resp, TExp (TInt 0) [a], kI, kR, n', T', γ')))%I
   with "[hon H3]"
   as "{p_m2} > [hon #p_m2]".
@@ -335,7 +335,7 @@ wp_pure _ credit:"H2".
 wp_bind (mkkeyshare _). iApply wp_mkkeyshare => //.
 iIntros "!> _". wp_pures. wp_list. wp_term_of_list. wp_tenc.
 iMod (term_meta_set _ _ (Resp, ga, kI, kR, n, T, γ)
-       (N.@"session") with "token")
+       (nroot.@"session") with "token")
   as "#meta"; first solve_ndisj.
 iPoseProof (honest_auth_frag with "hon_auth") as "#honR".
 wp_pures. wp_bind (send _ _). iApply wp_send => //.
@@ -368,7 +368,7 @@ iAssert ( |={E}=> ●H{dq|n} T ∗
     ⌜ga = TExp (TInt 0) [a]⌝ ∗
     (public a ↔ ▷ □ ⌜negb (in_honest kI kR T)⌝) ∗
     (∀ t, dh_pred a t ↔ ▷ □ dh_auth_pred t) ∗
-    nonce_meta a (N.@"session") (Init, TExp (TInt 0) [b], kI, kR, n, T, γ')))%I
+    nonce_meta a (nroot.@"session") (Init, TExp (TInt 0) [b], kI, kR, n, T, γ')))%I
   with "[hon_auth H3 H4]"
   as "{p_m3} > [hon_auth #i_m3]".
 { iDestruct "p_m3" as "[(p_skI & _) | (#i_m3 & _ & _)]".
