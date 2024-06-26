@@ -66,7 +66,8 @@ Definition initiator : val := λ: "c" "vkI" "skI" "vkR",
   let: "gab" := texp "gb" "a" in
   let: "m3" := tenc (N.@"m3") "skI" (term_of_list ["ga"; "gb"; "vkR"]) in
   send "c" "m3";;
-  SOME "gab".
+  let: "session_key" := mkskey (tag (nroot.@"keys".@"sym") "gab") in
+  SOME "session_key".
 
 Definition responder : val := λ: "c" "vkR" "skR",
   let: "m1" := recv "c" in
@@ -83,7 +84,8 @@ Definition responder : val := λ: "c" "vkR" "skR",
   list_match: ["ga'"; "gb'"; "vkR'"] := "m3" in
   assert: eq_term "ga" "ga'" && eq_term "gb" "gb'" && eq_term "vkR" "vkR'" in
   let: "gab" := texp "ga" "b" in
-  SOME ("vkI", "gab").
+  let: "session_key" := mkskey (tag (nroot.@"keys".@"sym") "gab") in
+  SOME ("vkI", "session_key").
 
 Definition in_honest kI kR T : bool :=
   bool_decide (TKey Enc kI ∈ T ∧ TKey Enc kR ∈ T).
@@ -120,7 +122,7 @@ Definition dh_auth_ctx : iProp :=
 
 Definition init_session γ kI kR k ok : iProp :=
   ∃ share x ts T,
-    ⌜k = Spec.texp share x⌝ ∗
+    ⌜k = Spec.tag (nroot.@"keys".@"sym") (Spec.texp share x)⌝ ∗
     ⌜ok = in_honest kI kR T⌝ ∗
     ◯H{ts} T ∗
     nonce_meta x (nroot.@"session") (Init, share, kI, kR, ts, T, γ) ∗
@@ -132,7 +134,7 @@ Definition init_session γ kI kR k ok : iProp :=
     else
       True.
 
-Typeclasses Opaque init_session.
+Global Typeclasses Opaque init_session.
 
 Global Instance init_session_persistent γ kI kR kS ok :
   Persistent (init_session γ kI kR kS ok).
@@ -140,7 +142,7 @@ Proof. rewrite /init_session. apply _. Qed.
 
 Definition resp_session γ kI kR k ok : iProp :=
   ∃ share x ts T,
-    ⌜k = Spec.texp share x⌝ ∗
+    ⌜k = Spec.tag (nroot.@"keys".@"sym") (Spec.texp share x)⌝ ∗
     ⌜ok = in_honest kI kR T⌝ ∗
     ◯H{ts} T ∗
     nonce_meta x (nroot.@"session") (Resp, share, kI, kR, ts, T, γ) ∗
@@ -151,7 +153,7 @@ Definition resp_session γ kI kR k ok : iProp :=
     else
       True.
 
-Typeclasses Opaque resp_session.
+Global Typeclasses Opaque resp_session.
 
 Global Instance resp_session_persistent γ kI kR kS ok :
   Persistent (resp_session γ kI kR kS ok).
@@ -170,12 +172,12 @@ Lemma wp_initiator c kI kR dq n T γ E :
   public (TKey Dec kR) -∗
   {{{ ●H{dq|n} T }}}
     initiator c (TKey Dec kI) (TKey Enc kI) (TKey Dec kR) @ E
-  {{{ okS, RET (repr okS);
+  {{{ okS, RET (repr (Spec.mkskey <$> okS));
       ●H{dq|n} T ∗
       if okS is Some kS then
         minted kS ∗
         init_session γ kI kR kS (in_honest kI kR T) ∗
-        □ (public kS ↔ ▷ ⌜negb (in_honest kI kR T)⌝)
+        □ (∀ kt, public (TKey kt kS) ↔ ▷ ⌜negb (in_honest kI kR T)⌝)
       else True
  }}}.
 Proof.
@@ -260,8 +262,9 @@ wp_pures. wp_bind (send _ _). iApply wp_send => //.
   - iIntros "!> _".
     rewrite public_of_list /=.
     by do ![iSplit => //]. }
-iAssert (init_session γ kI kR (Spec.texp gb a) (in_honest kI kR T))
-  as "#sessionI'".
+wp_pures. wp_tag. wp_bind (mkskey _). iApply wp_mkskey.
+set sk := Spec.tag _ _.
+iAssert (init_session γ kI kR sk (in_honest kI kR T)) as "#sessionI'".
 { iExists gb, a, n, T.
   do 4![iSplit => //].
   iDestruct "p_m2" as "[comp|p_m2]".
@@ -277,12 +280,15 @@ iAssert (init_session γ kI kR (Spec.texp gb a) (in_honest kI kR T))
 case hon: (in_honest kI kR T); last first.
 { iAssert (public a) as "{p_a} p_a".
     by iApply "p_a".
-  wp_pures. iApply ("Hpost" $! (Some (Spec.texp gb a))).
-  iFrame. iModIntro. iSplit; first by iApply minted_texp.
+  wp_pures. iApply ("Hpost" $! (Some sk)).
+  iFrame. iModIntro. iSplit.
+    iApply minted_tag. by iApply minted_texp.
   iSplit => //=.
-  iModIntro.
+  iIntros "!> %kt".
   iSplit => //=; eauto.
-  iIntros "_". by iApply public_texp. }
+  iIntros "_".
+  rewrite (public_TKey kt) public_tag. iLeft.
+  by iApply public_texp. }
 iDestruct "p_m2" as "[comp|p_m2]".
 { rewrite /in_honest bool_decide_eq_true in hon.
   iPoseProof (honest_frag_compromised_at with "honI comp") as "%" => //.
@@ -291,19 +297,23 @@ rewrite /in_honest bool_decide_eq_true in hon.
 case: hon => honI honR.
 iDestruct "p_m2"
   as "(%b & %n' & %T' & %γ' & -> & %n'_n & p_b & p_m2)".
-rewrite Spec.texpA.
+rewrite Spec.texpA in sk *.
 wp_pures.
-iApply ("Hpost" $! (Some (TExp (TInt 0) [a; b]))). iFrame.
-rewrite !minted_TExp /= minted_TInt.
+iApply ("Hpost" $! (Some sk)). iFrame.
+rewrite minted_tag !minted_TExp /= minted_TInt.
 iDestruct "m_gb" as "(_ & m_b & _)". iModIntro.
 iSplit; first do ![iSplit => //].
 iSplit => //.
-iModIntro.
-rewrite public_TExp2.
+iIntros "!> %kt".
 iSplit; last first.
 { iIntros "#contra".
+  rewrite (public_TKey kt). iLeft.
+  rewrite public_tag public_TExp2.
   iRight. iLeft. iSplit => //. iApply "p_a". by eauto. }
-iIntros "[[_ #p_b'] | [[_ p_a'] | (_ & a_pred' & _)]]".
+iIntros "#p_sk".
+iPoseProof (public_sym_keyE with "[//] p_sk") as "{p_sk} >p_sk".
+rewrite public_TExp2.
+iDestruct "p_sk" as "[[_ #p_b'] | [[_ p_a'] | (_ & a_pred' & _)]]".
 - iPoseProof ("p_b" with "p_b'") as "{p_b} p_b".
   iModIntro. iDestruct "p_b" as "[#compR | #compI]".
   + iPoseProof (honest_frag_compromised_at _ _ n'_n with "honI compR") as "%".
@@ -324,14 +334,15 @@ Lemma wp_responder c kR dq n T γ E :
   public (TKey Dec kR) -∗
   {{{ ●H{dq|n} T }}}
     responder c (TKey Dec kR) (TKey Enc kR) @ E
-  {{{ okS, RET (repr okS);
+  {{{ okS,
+      RET (repr ((λ p, pair p.1 (Spec.mkskey p.2)) <$> okS));
       ●H{dq|n} T ∗
       if okS is Some (vkI, kS) then ∃ kI,
         ⌜vkI = TKey Dec kI⌝ ∗
         minted kI ∗
         minted kS ∗
         resp_session γ kI kR kS (in_honest kI kR T) ∗
-        □ (public kS ↔ ▷ ⌜negb (in_honest kI kR T)⌝)
+        □ (∀ kt, public (TKey kt kS) ↔ ▷ ⌜negb (in_honest kI kR T)⌝)
       else True
  }}}.
 Proof.
@@ -415,8 +426,8 @@ iAssert ( |={E}=> ●H{dq|n} T ∗
   assert (n' = n) as -> by lia.
   iModIntro. iFrame.
   iRight. iModIntro. iExists a, γ'. by do ![iSplitL => //]. }
-iAssert (resp_session γ kI kR (Spec.texp ga b) (in_honest kI kR T))
-  as "sessionR".
+wp_pures. wp_tag. set sk := Spec.tag _ _.
+iAssert (resp_session γ kI kR sk (in_honest kI kR T)) as "sessionR".
 { iExists _, _, n, T. iSplit => //.
   do ![iSplit => //].
   iDestruct "i_m3" as "[[comp | comp]|i_m3]".
@@ -427,10 +438,11 @@ iAssert (resp_session γ kI kR (Spec.texp ga b) (in_honest kI kR T))
   case: in_honest => //.
   iDestruct "i_m3" as "(%a & %γ' & -> & ? & ? & ?)".
   iExists _, _; eauto. }
-iAssert (minted (Spec.texp ga b)) as "#m_kS".
-{ iApply minted_texp => //. by iApply public_minted. }
+iAssert (minted sk) as "#m_kS".
+{ iApply minted_tag. iApply minted_texp => //. by iApply public_minted. }
 iAssert (minted kI) as "#m_kI".
 { iApply minted_TKey. by iApply public_minted. }
+wp_bind (mkskey _). iApply wp_mkskey. wp_pures.
 iDestruct "i_m3" as "[compromise|i_m3]".
 { iAssert (⌜in_honest kI kR T = false⌝)%I as "%hon".
   { iDestruct "compromise" as "[compI | compR]".
@@ -438,24 +450,27 @@ iDestruct "i_m3" as "[compromise|i_m3]".
       iPureIntro. apply/bool_decide_eq_false. tauto.
     - iPoseProof (honest_frag_compromised_at with "honR compR") as "%" => //.
       iPureIntro. apply/bool_decide_eq_false. tauto. }
-  wp_pures.
-  iApply ("Hpost" $! (Some (TKey Dec kI, Spec.texp ga b))).
+  iApply ("Hpost" $! (Some (TKey Dec kI, sk))).
   iFrame. iModIntro. iExists kI.
   rewrite hon.
   do 4![iSplit => //].
-  iModIntro.
+  iIntros "!> %kt".
   iSplit.
   - by eauto.
-  - iIntros "/= #contra". iApply public_texp => //.
+  - iIntros "/= #contra".
+    rewrite (public_TKey kt) public_tag. iLeft.
+    iApply public_texp => //.
     iApply "p_b". by eauto. }
 iDestruct "i_m3" as "(%a & %γ' & -> & p_a & pred_a & metaI)".
-rewrite Spec.texpA TExpC2. wp_pures.
-iApply ("Hpost" $! (Some (TKey Dec kI, TExp (TInt 0) [a; b]))).
+rewrite Spec.texpA TExpC2 in sk *.
+iApply ("Hpost" $! (Some (TKey Dec kI, sk))).
 iFrame. iModIntro. iExists kI. do 2![iSplit => //].
-rewrite minted_TExp minted_TInt /=. iSplit; first by eauto.
+rewrite minted_tag minted_TExp minted_TInt /=. iSplit; first by eauto.
 iSplit => //.
-rewrite public_TExp2. iModIntro. iSplit.
+iIntros "!> %kt". iSplit.
 - iIntros "#p_kS".
+  iPoseProof (public_sym_keyE with "[//] p_kS") as "{p_kS} >p_kS".
+  rewrite public_TExp2.
   iDestruct "p_kS" as "[[_ p_b'] | [ [_ p_a'] | (_ & contra & _)]]".
   + iPoseProof ("p_b" with "p_b'") as "#[#comp|#comp]"; iModIntro.
     * iDestruct (honest_frag_compromised_at with "honR comp") as "%" => //.
@@ -466,7 +481,8 @@ rewrite public_TExp2. iModIntro. iSplit.
     iModIntro. by eauto.
   + iPoseProof ("pred_a" with "contra") as ">%contra".
     by have := contra _ _ eq_refl.
-- iIntros "#comp". iRight. iLeft. iSplit => //.
+- iIntros "#comp". rewrite (public_TKey kt). iLeft.
+  rewrite public_tag public_TExp2. iRight. iLeft. iSplit => //.
   iApply "p_a". by eauto.
 Qed.
 
