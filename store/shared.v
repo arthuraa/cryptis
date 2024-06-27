@@ -129,6 +129,33 @@ Definition store_ctx : iProp :=
   enc_pred (N.@"ack_create") ack_create_pred ∗
   dh_auth_ctx (N.@"auth").
 
+Lemma store_ctx_alloc E :
+  ↑N ⊆ E →
+  enc_pred_token E ==∗
+  store_ctx ∗ enc_pred_token (E ∖ ↑N).
+Proof.
+iIntros "%sub token".
+rewrite (enc_pred_token_difference (↑N)) => //.
+iDestruct "token" as "[token ?]". iFrame.
+iMod (enc_pred_set (N.@"init") init_pred with "token")
+  as "[#init token]"; try solve_ndisj.
+iMod (enc_pred_set (N.@"store") store_pred with "token")
+  as "[#store token]"; try solve_ndisj.
+iMod (enc_pred_set (N.@"ack_store") ack_store_pred with "token")
+  as "[#ack_store token]"; try solve_ndisj.
+iMod (enc_pred_set (N.@"load") load_pred with "token")
+  as "[#load token]"; try solve_ndisj.
+iMod (enc_pred_set (N.@"ack_load") ack_load_pred with "token")
+  as "[#ack_load token]"; try solve_ndisj.
+iMod (enc_pred_set (N.@"create") create_pred with "token")
+  as "[#create token]"; try solve_ndisj.
+iMod (enc_pred_set (N.@"ack_create") ack_create_pred with "token")
+  as "[#ack_create token]"; try solve_ndisj.
+iMod (dh_auth_ctx_alloc (N.@"auth") with "token")
+  as "#dh_auth"; try solve_ndisj.
+iModIntro. do !iSplit => //.
+Qed.
+
 Lemma initE si γ t :
   store_ctx -∗
   session si Resp γ -∗

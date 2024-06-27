@@ -534,3 +534,5 @@ iFrame. iModIntro. iExists kI. by eauto.
 Qed.
 
 End Verif.
+
+Arguments dh_auth_ctx_alloc {Σ _ _} N E.
