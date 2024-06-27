@@ -1,5 +1,6 @@
 From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
+From mathcomp Require ssrbool.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode.
@@ -120,6 +121,19 @@ Definition dh_auth_ctx : iProp :=
   enc_pred (N.@"m2") msg2_pred ∗
   enc_pred (N.@"m3") msg3_pred.
 
+Lemma dh_auth_ctx_alloc E :
+  ↑N ⊆ E →
+  enc_pred_token E ==∗
+  dh_auth_ctx.
+Proof.
+iIntros "%sub token".
+iMod (enc_pred_set (N.@"m2") msg2_pred with "token")
+  as "[#? token]"; try solve_ndisj.
+iMod (enc_pred_set (N.@"m3") msg3_pred with "token")
+  as "[#? token]"; try solve_ndisj.
+iModIntro. by iSplit.
+Qed.
+
 Definition init_session γ kI kR k ok : iProp :=
   ∃ share x ts T,
     ⌜k = Spec.tag (nroot.@"keys".@"sym") (Spec.texp share x)⌝ ∗
@@ -155,9 +169,69 @@ Definition resp_session γ kI kR k ok : iProp :=
 
 Global Typeclasses Opaque resp_session.
 
+Section WithSSRBool.
+
+Import ssrbool.
+
+Lemma eq_texp2 g a1 a2 b1 b2 :
+  Spec.texp a1 b1 = Spec.texp (TExp g [a2]) b2 →
+  a1 = TExp g [a2] ∧ b1 = b2 ∨
+  a1 = TExp g [b2] ∧ b1 = a2.
+Proof.
+move=> e.
+have /Spec.is_expP [g' [] ks e_exp] : is_true (is_exp a1).
+  case exp: is_exp => //.
+  rewrite Spec.is_expN_texp // ?exp //= in e *; auto.
+  suff: is_true (is_exp (TInt 0)) by [].
+  by rewrite e Spec.texpA is_exp_TExp.
+rewrite {}e_exp !Spec.texpA {a1} in e *. symmetry in e.
+case/TExp_inj: e => <- {g'} /(@Permutation_length_2_inv _ _ _ _) [].
+- case=> <- -> {b2 ks}. by eauto.
+- case=> <- -> {a2 ks}. by eauto.
+Qed.
+
+End WithSSRBool.
+
 Global Instance resp_session_persistent γ kI kR kS ok :
   Persistent (resp_session γ kI kR kS ok).
 Proof. rewrite /resp_session. apply _. Qed.
+
+Lemma init_session_agree γ1 γ2 kI1 kI2 kR1 kR2 kS ok :
+  init_session γ1 kI1 kR1 kS ok -∗
+  init_session γ2 kI2 kR2 kS true -∗
+  ⌜γ1 = γ2 ∧ kI1 = kI2 ∧ kR1 = kR2 ∧ ok = true⌝.
+Proof.
+rewrite /init_session.
+iIntros "#(%share1 & %x1 & %ts1 & %T1 & -> & -> & hon1 & metaI & rest)".
+iIntros "#(%share2 & %x2 & %ts2 & %T2 & %e & %e_hon & hon2 & metaI' & rest')".
+iDestruct "rest'" as "(%y & %ts' & %T' & %γ' & -> & %le_ts' & metaI2')".
+case/Spec.tag_inj: e => _ /eq_texp2 [].
+- case=> -> <- {share1 x2}.
+  iPoseProof (term_meta_agree with "metaI metaI'") as "%e".
+  case: e => <- <- <- <- <- in e_hon *. by eauto.
+- case=> -> <- {share1 y}.
+  iPoseProof (term_meta_agree with "metaI metaI2'") as "%e".
+  congruence.
+Qed.
+
+Lemma init_session_resp_session γ1 γ2 kI1 kI2 kR1 kR2 kS ok :
+  init_session γ1 kI1 kR1 kS ok -∗
+  resp_session γ2 kI2 kR2 kS true -∗
+  ⌜kI1 = kI2 ∧ kR1 = kR2 ∧ ok = true⌝.
+Proof.
+rewrite /init_session /resp_session.
+iIntros "#(%share1 & %x1 & %ts1 & %T1 & -> & -> & hon_ts1 & metaI & _)".
+iIntros "#(%share2 & %x2 & %ts2 & %T2 & %e & %hon & hon_ts2 & metaR & sessI')".
+iDestruct "sessI'" as "(%x2' & %γ1' & -> & metaI')".
+case/Spec.tag_inj: e => _ /eq_texp2 [].
+- case=> -> <- {share1 x2}.
+  iPoseProof (term_meta_agree with "metaI metaR") as "%".
+  congruence.
+- case=> -> <- {share1 x2'}.
+  iPoseProof (term_meta_agree with "metaI metaI'") as "%e".
+  case: e => <- <- <- <- <- in hon *.
+  rewrite -hon. by eauto.
+Qed.
 
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
