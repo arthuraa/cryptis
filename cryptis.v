@@ -1,6 +1,7 @@
 From mathcomp Require Import ssreflect.
 From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap list reservation_map excl.
+From iris.algebra Require Import functions.
 From iris.base_logic.lib Require Import saved_prop invariants.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term comp_map.
@@ -13,11 +14,14 @@ Definition cryptisN := nroot.@"cryptis".
 
 Section Cryptis.
 
+Definition mint_mapUR := discrete_funUR (fun _ : nat => authUR (gsetUR term)).
+
 Class cryptisGpreS Σ := CryptisGPreS {
   cryptisGpreS_nonce : savedPredG Σ term;
   cryptisGpreS_key   : savedPredG Σ (key_type * term);
   cryptisGpreS_enc   : savedPredG Σ (term * term);
   cryptisGpreS_hon   : inG Σ comp_mapR;
+  cryptisGpreS_mint  : inG Σ mint_mapUR;
   cryptisGpreS_maps  : inG Σ (reservation_mapR (agreeR positiveO));
 }.
 
@@ -25,6 +29,7 @@ Local Existing Instance cryptisGpreS_nonce.
 Local Existing Instance cryptisGpreS_key.
 Local Existing Instance cryptisGpreS_enc.
 Local Existing Instance cryptisGpreS_hon.
+Local Existing Instance cryptisGpreS_mint.
 Local Existing Instance cryptisGpreS_maps.
 
 Class cryptisGS Σ := CryptisGS {
@@ -33,6 +38,7 @@ Class cryptisGS Σ := CryptisGS {
   cryptis_hash_name : gname;
   cryptis_enc_name  : gname;
   cryptis_hon_name  : gname;
+  cryptis_mint_name : gname;
 }.
 
 Local Existing Instance cryptis_inG.
@@ -42,6 +48,7 @@ Definition cryptisΣ : gFunctors :=
     savedPredΣ (key_type * term);
     savedPredΣ (term * term);
     GFunctor comp_mapR;
+    GFunctor mint_mapUR;
     GFunctor (reservation_mapR (agreeR positiveO))].
 
 Global Instance subG_cryptisGpreS Σ : subG cryptisΣ Σ → cryptisGpreS Σ.
@@ -959,6 +966,17 @@ Definition compromised_at := unseal compromised_at_aux.
 Lemma compromised_at_unseal : compromised_at = compromised_at_def.
 Proof. exact: seal_eq. Qed.
 
+Definition mint_map_singleton n t : mint_mapUR :=
+  discrete_fun_singleton n (◯ {[t]}).
+
+Definition minted_at_def n t : iProp :=
+  own cryptis_mint_name (mint_map_singleton n t) ∗
+  minted t.
+Definition minted_at_aux : seal minted_at_def. by eexists. Qed.
+Definition minted_at := unseal minted_at_aux.
+Lemma minted_at_unseal : minted_at = minted_at_def.
+Proof. exact: seal_eq. Qed.
+
 Notation "●H{ dq | n } a" :=
   (honest_auth dq n a) (at level 20, format "●H{ dq | n }  a").
 Notation "●H{# q | n } a" :=
@@ -975,12 +993,54 @@ Definition secret t : iProp :=
   (|==> □ (public t ↔ ◇ False)) ∧
   (public t -∗ ◇ False).
 
+Definition to_mint_map (M : nat → gset term) n : mint_mapUR :=
+  λ m, if decide (m < n) then ●□ M m
+       else ● M m.
+
 Definition honest_inv : iProp :=
-  ∃ n H X C,
+  ∃ n H X C M,
     own cryptis_hon_name (●CM{n} (H, C)) ∗
     own cryptis_hon_name (◯CM ({[n := X]}, ∅)) ∗
+    own cryptis_mint_name (to_mint_map M n) ∗
     ([∗ set] t ∈ X, secret t) ∗
-    ([∗ set] p ∈ C, public p.2).
+    ([∗ set] p ∈ C, public p.2) ∗
+    □ (∀ m, (⌜m > n → M m = ∅⌝) ∗ [∗ set] t ∈ M m, minted t).
+
+Lemma to_mint_map_alloc M n t :
+  to_mint_map M n ~~>
+  to_mint_map (discrete_fun_insert n ({[t]} ∪ M n) M) n ⋅
+  mint_map_singleton n t.
+Proof.
+apply/cmra_discrete_update => M' valid_M k /=; move/(_ k): valid_M.
+rewrite !discrete_fun_lookup_op /to_mint_map /mint_map_singleton.
+case: decide => [k_n|n_k].
+{ have ?: k ≠ n by lia.
+  rewrite discrete_fun_lookup_singleton_ne //.
+  by rewrite discrete_fun_lookup_insert_ne // ucmra_unit_right_id. }
+case: (decide (k = n)) => [->|ne].
+{ rewrite discrete_fun_lookup_insert discrete_fun_lookup_singleton.
+  move: (M' n); apply/cmra_discrete_update.
+  set T := {[t]} ∪ M n.
+  trans (● T ⋅ ◯ T).
+  - apply: auth_update_alloc.
+    apply: gset_local_update.
+    set_solver.
+  - rewrite {2}/T -gset_op auth_frag_op (assoc op).
+    exact: cmra_update_op_l. }
+rewrite discrete_fun_lookup_insert_ne // discrete_fun_lookup_singleton_ne //.
+by rewrite ucmra_unit_right_id.
+Qed.
+
+Lemma to_mint_map_bump M n : to_mint_map M n ~~> to_mint_map M (S n).
+Proof.
+apply/cmra_discrete_update => M' valid_M k /=; move/(_ k): valid_M.
+rewrite !discrete_fun_lookup_op /to_mint_map.
+case: (decide (k < n)) => [k_n|n_k].
+{ rewrite decide_True //; lia. }
+case: decide => [k_n|?] //.
+move: (M' k). apply/cmra_discrete_update.
+exact: auth_update_auth_persist.
+Qed.
 
 Definition cryptis_ctx : iProp :=
   key_pred (nroot.@"keys".@"sym") (λ _  _, False%I) ∗
@@ -1064,6 +1124,13 @@ Proof. rewrite compromised_at_unseal. apply _. Qed.
 Lemma compromised_at_public n t : compromised_at n t -∗ public t.
 Proof. rewrite compromised_at_unseal. by iIntros "[? ?]". Qed.
 
+#[global]
+Instance minted_at_persistent n t : Persistent (minted_at n t).
+Proof. rewrite minted_at_unseal. apply _. Qed.
+
+Lemma minted_at_public n t : minted_at n t -∗ minted t.
+Proof. rewrite minted_at_unseal. by iIntros "[? ?]". Qed.
+
 Lemma honest_auth_minted dq n X : ●H{dq|n} X -∗ [∗ set] t ∈ X, minted t.
 Proof. rewrite honest_auth_unseal. by iIntros "(_ & _ & ?)". Qed.
 
@@ -1131,24 +1198,27 @@ Qed.
 Lemma honest_acc E dq n X :
   ↑cryptisN.@"honest" ⊆ E →
   cryptis_ctx -∗
-  ●H{dq|n} X ={E, E ∖ ↑cryptisN.@"honest"}=∗ ∃ H C,
+  ●H{dq|n} X ={E, E ∖ ↑cryptisN.@"honest"}=∗ ∃ H C M,
     ●H{dq|n} X ∗
     own cryptis_hon_name (●CM{n} (H, C)) ∗
     own cryptis_hon_name (◯CM ({[n := X]}, ∅)) ∗
+    own cryptis_mint_name (to_mint_map M n) ∗
     ▷ ([∗ set] t ∈ X, secret t) ∗
     ▷ ([∗ set] p ∈ C, public p.2) ∗
+    ▷ □ (∀ m, (⌜m > n → M m = ∅⌝) ∗ [∗ set] t ∈ M m, minted t) ∗
     (▷ honest_inv ={E ∖ ↑cryptisN.@"honest",E}=∗ True).
 Proof.
 rewrite honest_auth_unseal.
 iIntros "%sub (_ & _ & _ & #ctx) (ver & #ver_frag & #term_X)".
 iMod (inv_acc with "ctx") as "[inv close]" => //.
 iDestruct "inv"
-  as "(%n' & %H & %X' & %C & >verI & >verI_frag & sec_X & #pub_C)".
+  as "(%n' & %H & %X' & %C & %M &
+       >verI & >verI_frag & >own_M & sec_X & #pub_C & mint_M)".
 iPoseProof (own_valid_2 with "verI ver") as "%val_bound".
 move/comp_map_auth_frag_bound_agree: val_bound => -> {n'}.
 iPoseProof (own_valid_2 with "verI_frag ver_frag") as "%val".
 move/comp_map_frag_valid_agree: val => -> {X'}.
-iFrame. iModIntro. iExists H, C. by eauto.
+iFrame. iModIntro. iExists H, C, M. iFrame. eauto.
 Qed.
 
 Lemma compromised_atI E dq t n X :
@@ -1162,26 +1232,114 @@ Lemma compromised_atI E dq t n X :
 Proof.
 iIntros "%sub #ctx cred hon #p_t".
 iMod (honest_acc with "ctx hon")
-  as "(%H & %C & hon & honI & honI_frag & sec_X & #pub_X & close)" => //.
+  as "(%H & %C & %M & hon & honI & honI_frag & own_M &
+       sec_X & #pub_X & #mint_M & close)" => //.
 iMod (lc_fupd_elim_later with "cred sec_X") as "sec_X".
 iPoseProof (own_valid_2 with "honI honI_frag") as "%val".
 move/comp_map_auth_frag_valid_agree: val => H_n.
 iAssert (◇ ⌜t ∉ X⌝)%I with "[sec_X]" as "#>%t_X".
 { case: (decide (t ∈ X)) => [t_X|//].
   iClear "pub_X".
-  rewrite (big_sepS_delete _ _ t) //.
+  rewrite (big_sepS_delete _ X t) //.
   iDestruct "sec_X" as "[sec_t sec_X]".
   iDestruct "sec_t" as "(_ & _ & sec_t)".
   iDestruct ("sec_t" with "p_t") as ">[]". }
 iMod (own_update with "honI") as "honI".
   exact: comp_map_comp_update_last H_n t_X.
 iDestruct "honI" as "[honI #comp]".
-iMod ("close" with "[honI honI_frag sec_X]") as "_".
-{ iModIntro. iExists n, H, X, ({[(n, t)]} ∪ C). iFrame.
+iMod ("close" with "[honI honI_frag own_M sec_X]") as "_".
+{ iModIntro. iExists n, H, X, ({[(n, t)]} ∪ C), M. iFrame.
   rewrite big_sepS_union_pers big_sepS_singleton /=.
-  by iSplit. }
+  by eauto. }
 iFrame.
 by rewrite compromised_at_unseal; iModIntro; iSplit.
+Qed.
+
+Lemma minted_atI E dq t n X :
+  ↑cryptisN.@"honest" ⊆ E →
+  cryptis_ctx -∗
+  ●H{dq|n} X -∗
+  minted t ={E}=∗
+  ●H{dq|n} X ∗
+  minted_at n t.
+Proof.
+iIntros "%sub #ctx hon #m_t".
+iMod (honest_acc with "ctx hon")
+  as "(%H & %C & %M & hon & honI & honI_frag & own_M &
+       sec_X & #pub_X & #mint_M & close)" => //.
+iMod (own_update with "own_M") as "own_M".
+{ apply: (to_mint_map_alloc t). }
+iDestruct "own_M" as "[own_M #minted]".
+iMod ("close" with "[honI honI_frag own_M sec_X]") as "_".
+{ iModIntro. iExists n, H, X, C, _. iFrame.
+  iSplit => //.
+  iIntros "!> %m".
+  iDestruct ("mint_M" $! m) as "[%finsupp #minted']". iSplit.
+  - iPureIntro. move=> m_n.
+    rewrite discrete_fun_lookup_insert_ne ?finsupp //.
+    lia.
+  - case: (decide (m = n)) => [->|ne].
+    + rewrite discrete_fun_lookup_insert.
+      rewrite big_sepS_union_pers big_sepS_singleton.
+      by iSplit.
+    + by rewrite discrete_fun_lookup_insert_ne. }
+iFrame.
+by rewrite minted_at_unseal; iModIntro; iSplit.
+Qed.
+
+Definition to_mint_map_share M n : mint_mapUR :=
+  λ m, if decide (m < n) then ●□ M m else ε.
+
+Lemma to_mint_map_split M n :
+  to_mint_map M n ≡ to_mint_map M n ⋅ to_mint_map_share M n.
+Proof.
+rewrite /to_mint_map /to_mint_map_share => m.
+rewrite discrete_fun_lookup_op.
+case: decide=> // _.
+apply core_id_dup.
+apply _.
+Qed.
+
+Local Instance to_mint_map_split_core_id M n :
+  CoreId (to_mint_map_share M n).
+Proof.
+apply/Some_proper => m.
+rewrite /to_mint_map_share; case: decide => _; apply: core_id_core.
+Qed.
+
+Lemma minted_at_list E dq n X :
+  ↑cryptisN.@"honest" ⊆ E →
+  cryptis_ctx -∗
+  ●H{dq|n} X ={E}=∗ ▷ ∃ Y : gset term,
+  ([∗ set] t ∈ Y, minted t) ∗
+  □ (∀ m t, ⌜m < n⌝ -∗ minted_at m t -∗ ⌜t ∈ Y⌝).
+Proof.
+iIntros "%sub #ctx hon".
+iMod (honest_acc with "ctx hon")
+  as "(%H & %C & %M & hon & honI & honI_frag & own_M &
+       sec_X & #pub_X & #mint_M & close)" => //.
+rewrite to_mint_map_split.
+iDestruct "own_M" as "[own_M #split_M]".
+iMod ("close" with "[honI honI_frag own_M sec_X]") as "_".
+{ iModIntro. iExists n, H, X, C, _. iFrame. eauto. }
+iIntros "!> !>".
+iExists (⋃ ((λ m, M m) <$> seq 0 n)). iSplit.
+- rewrite big_sepS_union_list_pers.
+  rewrite big_sepL_fmap big_sepL_forall.
+  iIntros "%k %x %kP".
+  by iDestruct ("mint_M" $! x) as "[#? #?]".
+- rewrite minted_at_unseal. iIntros "!> %m %t %m_n [#minted _]".
+  iPoseProof (own_valid_2 with "split_M minted") as "%valid".
+  iPureIntro.
+  move/(_ m): valid.
+  rewrite discrete_fun_lookup_op /to_mint_map_share /mint_map_singleton.
+  rewrite decide_True // discrete_fun_lookup_singleton.
+  case/auth_both_dfrac_valid_discrete => _.
+  rewrite gset_included singleton_subseteq_l; case=> ??.
+  rewrite elem_of_union_list. exists (M m).
+  rewrite elem_of_list_fmap. split => //. exists m.
+  split => //.
+  apply/elem_of_seq. lia.
 Qed.
 
 Lemma honest_public E dq t n X :
@@ -1194,15 +1352,16 @@ Lemma honest_public E dq t n X :
 Proof.
 iIntros "%sub %t_X #ctx hon #p_t".
 iMod (honest_acc with "ctx hon")
-  as "(%H & %C & hon & honI & honI_frag & sec_X & #pub_X & close)" => //.
+  as "(%H & %C & %M & hon & honI & honI_frag & own_M &
+       sec_X & #pub_X & #mint_M & close)" => //.
 iPoseProof (own_valid_2 with "honI honI_frag") as "%val".
 move/comp_map_auth_frag_valid_agree: val => H_n.
 iAssert (▷ ◇ False)%I with "[sec_X]" as "#contra".
-{ iClear "pub_X". rewrite big_sepS_delete //.
+{ iClear "pub_X". rewrite (big_sepS_delete _ X) //.
   iDestruct "sec_X" as "([_ I] & _)".
   iModIntro. by iApply "I". }
-iMod ("close" with "[honI honI_frag sec_X]") as "_".
-{ iModIntro. iExists n, H, X, C. by iFrame. }
+iMod ("close" with "[honI honI_frag own_M sec_X]") as "_".
+{ iModIntro. iExists n, H, X, C, M. iFrame. by eauto. }
 by eauto.
 Qed.
 
@@ -1215,7 +1374,8 @@ Lemma honest_unionE E n X Y :
 Proof.
 iIntros "%sub %X_Y #ctx hon".
 iMod (honest_acc with "ctx hon")
-  as "(%H & %C & hon & honI & honI_frag & sec_X & #pub_X & close)" => //.
+  as "(%H & %C & %M & hon & honI & honI_frag & own_M &
+       sec_X & #pub_X & #mint_M & close)" => //.
 iPoseProof (own_valid_2 with "honI honI_frag") as "%val".
 move/comp_map_auth_frag_valid_agree: val => H_n.
 rewrite honest_auth_unseal.
@@ -1233,8 +1393,15 @@ iDestruct "hon_auth" as "[hon_auth #hon']".
 rewrite !big_sepS_union //.
 iDestruct "min" as "[min_X min_Y]".
 iDestruct "sec_X" as "[sec_X sec_Y]".
-iMod ("close" with "[sec_X honI]") as "_".
-{ iModIntro. iExists _, _, _, _. iFrame. by iSplit. }
+iMod (own_update with "own_M") as "own_M".
+{ exact: to_mint_map_bump. }
+iMod ("close" with "[sec_X honI own_M]") as "_".
+{ iModIntro. iExists _, _, _, _, _. iFrame.
+  do !iSplit => //. iDestruct "mint_M" as "#mint_M".
+  iIntros "!> %m". iSpecialize ("mint_M" $! m).
+  iDestruct "mint_M" as "[%finsupp mint_M]".
+  iSplit => //.
+  iPureIntro. move=> ?; apply: finsupp. lia. }
 iModIntro. iFrame. by iSplit.
 Qed.
 
@@ -1292,7 +1459,8 @@ Lemma honest_unionI Y E n X :
 Proof.
 iIntros "%sub %dis #ctx cred hon #s_Y sec".
 iMod (honest_acc with "ctx hon")
-  as "(%H & %C & hon & honI & honI_frag & sec_X & #pub_X & close)" => //.
+  as "(%H & %C & %M & hon & honI & honI_frag & own_M & sec_X &
+       #pub_X & #mint_M & close)" => //.
 iPoseProof (own_valid_2 with "honI honI_frag") as "%val".
 move/comp_map_auth_frag_valid_agree: val => H_n.
 rewrite honest_auth_unseal.
@@ -1315,13 +1483,19 @@ iMod (own_update_2 with "honI hon_auth") as "honI".
   have := dis' _ _ _ _ H_n t_C m_n.
   have := dis'' _ _ t_C.
   set_solver.
+iMod (own_update with "own_M") as "own_M".
+{ exact: to_mint_map_bump. }
 iDestruct "honI" as "[honI hon_auth]".
 rewrite comp_map_frag_split_empty.
 iDestruct "hon_auth" as "[hon_auth #hon']".
-iMod ("close" with "[sec_X sec honI]") as "_".
-{ iModIntro. iExists _, _, (X ∪ Y), _.
+iMod ("close" with "[sec_X sec honI own_M]") as "_".
+{ iModIntro. iExists _, _, (X ∪ Y), _, _.
   rewrite big_sepS_union //. iFrame.
-  by iSplit. }
+  do !iSplit=> //.
+  iIntros "!> %m".
+  iDestruct ("mint_M" $! m) as "[%finsupp #minted]".
+  iSplit => //.
+  iPureIntro. move=> ?; apply: finsupp. lia. }
 iModIntro. iFrame. rewrite big_sepS_union //.
 by eauto.
 Qed.
@@ -1382,6 +1556,7 @@ Local Existing Instance cryptisGpreS_nonce.
 Local Existing Instance cryptisGpreS_key.
 Local Existing Instance cryptisGpreS_enc.
 Local Existing Instance cryptisGpreS_hon.
+Local Existing Instance cryptisGpreS_mint.
 Local Existing Instance cryptisGpreS_maps.
 Local Existing Instance cryptis_inG.
 
@@ -1409,9 +1584,12 @@ iMod (own_alloc (●CM{0} ({[0 := ∅]}, ∅) ⋅ ◯CM{0} ({[0 := ∅]}, ∅)))
   - move=> *; set_solver.
   - by [].
   - by [].
+iMod (own_alloc (to_mint_map (ε : discrete_fun _) 0)) as (γ_mint) "mint_auth".
+{ move=> m.
+  by rewrite /to_mint_map /= discrete_fun_lookup_empty auth_auth_valid. }
 rewrite comp_map_frag_split_empty.
 iDestruct "hon_auth" as "[hon_auth #hon]".
-pose (H := CryptisGS _ γ_enc γ_key γ_hash γ_hon).
+pose (H := CryptisGS _ γ_enc γ_key γ_hash γ_hon γ_mint).
 iExists H; iFrame.
 iAssert (key_pred_token ⊤) with "[own_enc]" as "token".
   by iFrame.
@@ -1426,6 +1604,7 @@ iMod (key_pred_set (nroot.@"keys".@"sig") (λ kt _, ⌜kt = Dec⌝)%I with "toke
 rewrite honest_auth_unseal /honest_auth_def big_sepS_empty. iFrame.
 iSplitL; last by eauto. do 3!iSplitR => //.
 iApply inv_alloc.
-iModIntro. iExists 0, {[0 := ∅]}, ∅, ∅. iFrame.
-rewrite !big_sepS_empty. by eauto.
+iModIntro. iExists 0, {[0 := ∅]}, ∅, ∅, ε. iFrame.
+rewrite !big_sepS_empty. do !iSplit => //.
+iIntros "!> %m". by rewrite discrete_fun_lookup_empty big_opS_empty.
 Qed.
