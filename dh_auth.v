@@ -176,6 +176,49 @@ Qed.
 
 End WithSSRBool.
 
+Lemma session_agree γ1 γ2 kI1 kI2 kR1 kR2 kS rl1 rl2 ok1 :
+  session γ1 kI1 kR1 kS rl1 ok1 -∗
+  session γ2 kI2 kR2 kS rl2 true -∗
+  ⌜kI1 = kI2 ∧ kR1 = kR2 ∧ ok1 = true⌝.
+Proof.
+rewrite /session.
+iIntros "(%share1 & %x1 & %ts1 & %T1 & -> & %e_hon1 &
+          #hon1 & #meta1 & #rest1)".
+iIntros "(%share2 & %x2 & %ts2 & %T2 & %e_kS & %e_hon2 &
+          #hon2 & #meta2 & #rest2)".
+iDestruct "rest2" as "(%y2 & %γ' & -> & meta')".
+case/Spec.tag_inj: e_kS => _ /eq_texp2 [].
+- case=> -> <- {share1 x2}.
+  iPoseProof (term_meta_agree with "meta1 meta2") as "%e".
+  case: e => <- <- <- <- <- <- in e_hon2 *.
+  by rewrite e_hon1 -e_hon2.
+- case=> -> <- {share1 y2}.
+  iPoseProof (term_meta_agree with "meta1 meta'") as "%e".
+  case: e => <- <- <- <- <- <- in e_hon2 *.
+  by rewrite e_hon1 -e_hon2.
+Qed.
+
+Lemma session_agree_name γ1 γ2 kI1 kI2 kR1 kR2 kS rl ok1 :
+  session γ1 kI1 kR1 kS rl ok1 -∗
+  session γ2 kI2 kR2 kS rl true -∗
+  ⌜γ1 = γ2 ∧ kI1 = kI2 ∧ kR1 = kR2 ∧ ok1 = true⌝.
+Proof.
+rewrite /session.
+iIntros "(%share1 & %x1 & %ts1 & %T1 & -> & %e_hon1 &
+          #hon1 & #meta1 & #rest1)".
+iIntros "(%share2 & %x2 & %ts2 & %T2 & %e_kS & %e_hon2 &
+          #hon2 & #meta2 & #rest2)".
+iDestruct "rest2" as "(%y2 & %γ' & -> & meta')".
+case/Spec.tag_inj: e_kS => _ /eq_texp2 [].
+- case=> -> <- {share1 x2}.
+  iPoseProof (term_meta_agree with "meta1 meta2") as "%e".
+  case: e => <- <- <- <- <- in e_hon2 *.
+  by rewrite e_hon1 -e_hon2.
+- case=> -> <- {share1 y2}.
+  iPoseProof (term_meta_agree with "meta1 meta'") as "%e".
+  case: e; by case: rl.
+Qed.
+
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
 
