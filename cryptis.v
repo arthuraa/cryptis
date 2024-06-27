@@ -1310,7 +1310,9 @@ Qed.
 Lemma minted_at_list E dq n X :
   ↑cryptisN.@"honest" ⊆ E →
   cryptis_ctx -∗
-  ●H{dq|n} X ={E}=∗ ▷ ∃ Y : gset term,
+  ●H{dq|n} X ={E}=∗
+  ●H{dq|n} X ∗
+  ▷ ∃ Y : gset term,
   ([∗ set] t ∈ Y, minted t) ∗
   □ (∀ m t, ⌜m < n⌝ -∗ minted_at m t -∗ ⌜t ∈ Y⌝).
 Proof.
@@ -1322,7 +1324,7 @@ rewrite to_mint_map_split.
 iDestruct "own_M" as "[own_M #split_M]".
 iMod ("close" with "[honI honI_frag own_M sec_X]") as "_".
 { iModIntro. iExists n, H, X, C, _. iFrame. eauto. }
-iIntros "!> !>".
+iFrame. iIntros "!> !>".
 iExists (⋃ ((λ m, M m) <$> seq 0 n)). iSplit.
 - rewrite big_sepS_union_list_pers.
   rewrite big_sepL_fmap big_sepL_forall.

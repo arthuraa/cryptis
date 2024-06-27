@@ -97,6 +97,7 @@ Definition dh_auth_pred t : iProp :=
 Definition msg2_pred kR m2 : iProp :=
   ∃ ga b kI n T γb,
     ⌜m2 = Spec.of_list [ga; TExp (TInt 0) [b]; TKey Dec kI]⌝ ∗
+    minted_at n ga ∗
     (public b ↔ ▷ □ (compromised_at n (TKey Enc kI) ∨
                      compromised_at n (TKey Enc kR))) ∗
     (∀ t, dh_pred b t ↔ ▷ □ dh_auth_pred t) ∗
@@ -111,11 +112,10 @@ Definition msg3_pred kI m3 : iProp :=
     ◯H{n} T ∗
     nonce_meta a (nroot.@"session") (Init, gb, kI, kR, n, T, γa) ∗
     (public (TKey Enc kR) ∨
-     ∃ b n' T' γb,
+     ∃ b γb,
        ⌜gb = TExp (TInt 0) [b]⌝ ∗
-       ⌜n' ≤ n⌝ ∗
        nonce_meta b (nroot.@"session")
-         (Resp, TExp (TInt 0) [a], kI, kR, n', T', γb)).
+         (Resp, TExp (TInt 0) [a], kI, kR, n, T, γb)).
 
 Definition dh_auth_ctx : iProp :=
   enc_pred (N.@"m2") msg2_pred ∗
@@ -134,40 +134,24 @@ iMod (enc_pred_set (N.@"m3") msg3_pred with "token")
 iModIntro. by iSplit.
 Qed.
 
-Definition init_session γ kI kR k ok : iProp :=
+Definition session γ kI kR k rl ok : iProp :=
   ∃ share x ts T,
     ⌜k = Spec.tag (nroot.@"keys".@"sym") (Spec.texp share x)⌝ ∗
     ⌜ok = in_honest kI kR T⌝ ∗
     ◯H{ts} T ∗
-    nonce_meta x (nroot.@"session") (Init, share, kI, kR, ts, T, γ) ∗
-    if ok then ∃ y ts' T' γ',
-        ⌜share = TExp (TInt 0) [y]⌝ ∗
-        ⌜ts' ≤ ts⌝ ∗
-        nonce_meta y (nroot.@"session")
-          (Resp, TExp (TInt 0) [x], kI, kR, ts', T', γ')
-    else
-      True.
-
-Global Typeclasses Opaque init_session.
-
-Global Instance init_session_persistent γ kI kR kS ok :
-  Persistent (init_session γ kI kR kS ok).
-Proof. rewrite /init_session. apply _. Qed.
-
-Definition resp_session γ kI kR k ok : iProp :=
-  ∃ share x ts T,
-    ⌜k = Spec.tag (nroot.@"keys".@"sym") (Spec.texp share x)⌝ ∗
-    ⌜ok = in_honest kI kR T⌝ ∗
-    ◯H{ts} T ∗
-    nonce_meta x (nroot.@"session") (Resp, share, kI, kR, ts, T, γ) ∗
+    nonce_meta x (nroot.@"session") (rl, share, kI, kR, ts, T, γ) ∗
     if ok then ∃ y γ',
         ⌜share = TExp (TInt 0) [y]⌝ ∗
         nonce_meta y (nroot.@"session")
-          (Init, TExp (TInt 0) [x], kI, kR, ts, T, γ')
+          (swap_role rl, TExp (TInt 0) [x], kI, kR, ts, T, γ')
     else
       True.
 
-Global Typeclasses Opaque resp_session.
+Global Typeclasses Opaque session.
+
+Global Instance session_persistent γ kI kR kS rl ok :
+  Persistent (session γ kI kR kS rl ok).
+Proof. rewrite /session. apply _. Qed.
 
 Section WithSSRBool.
 
@@ -192,47 +176,6 @@ Qed.
 
 End WithSSRBool.
 
-Global Instance resp_session_persistent γ kI kR kS ok :
-  Persistent (resp_session γ kI kR kS ok).
-Proof. rewrite /resp_session. apply _. Qed.
-
-Lemma init_session_agree γ1 γ2 kI1 kI2 kR1 kR2 kS ok :
-  init_session γ1 kI1 kR1 kS ok -∗
-  init_session γ2 kI2 kR2 kS true -∗
-  ⌜γ1 = γ2 ∧ kI1 = kI2 ∧ kR1 = kR2 ∧ ok = true⌝.
-Proof.
-rewrite /init_session.
-iIntros "#(%share1 & %x1 & %ts1 & %T1 & -> & -> & hon1 & metaI & rest)".
-iIntros "#(%share2 & %x2 & %ts2 & %T2 & %e & %e_hon & hon2 & metaI' & rest')".
-iDestruct "rest'" as "(%y & %ts' & %T' & %γ' & -> & %le_ts' & metaI2')".
-case/Spec.tag_inj: e => _ /eq_texp2 [].
-- case=> -> <- {share1 x2}.
-  iPoseProof (term_meta_agree with "metaI metaI'") as "%e".
-  case: e => <- <- <- <- <- in e_hon *. by eauto.
-- case=> -> <- {share1 y}.
-  iPoseProof (term_meta_agree with "metaI metaI2'") as "%e".
-  congruence.
-Qed.
-
-Lemma init_session_resp_session γ1 γ2 kI1 kI2 kR1 kR2 kS ok :
-  init_session γ1 kI1 kR1 kS ok -∗
-  resp_session γ2 kI2 kR2 kS true -∗
-  ⌜kI1 = kI2 ∧ kR1 = kR2 ∧ ok = true⌝.
-Proof.
-rewrite /init_session /resp_session.
-iIntros "#(%share1 & %x1 & %ts1 & %T1 & -> & -> & hon_ts1 & metaI & _)".
-iIntros "#(%share2 & %x2 & %ts2 & %T2 & %e & %hon & hon_ts2 & metaR & sessI')".
-iDestruct "sessI'" as "(%x2' & %γ1' & -> & metaI')".
-case/Spec.tag_inj: e => _ /eq_texp2 [].
-- case=> -> <- {share1 x2}.
-  iPoseProof (term_meta_agree with "metaI metaR") as "%".
-  congruence.
-- case=> -> <- {share1 x2'}.
-  iPoseProof (term_meta_agree with "metaI metaI'") as "%e".
-  case: e => <- <- <- <- <- in hon *.
-  rewrite -hon. by eauto.
-Qed.
-
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
 
@@ -250,17 +193,22 @@ Lemma wp_initiator c kI kR dq n T γ E :
       ●H{dq|n} T ∗
       if okS is Some kS then
         minted kS ∗
-        init_session γ kI kR kS (in_honest kI kR T) ∗
+        session γ kI kR kS Init (in_honest kI kR T) ∗
         □ (∀ kt, public (TKey kt kS) ↔ ▷ ⌜negb (in_honest kI kR T)⌝)
       else True
  }}}.
 Proof.
 rewrite /initiator.
 iIntros (??) "#chan_c #ctx #(? & ?) #p_kI #p_kR %Ψ !> hon Hpost".
-wp_pures. wp_bind (mknonce _).
-iApply (wp_mknonce (λ _, ⌜negb (in_honest kI kR T)⌝)%I
+iMod (minted_at_list with "[//] hon") as "[hon list]" => //;
+  try solve_ndisj.
+wp_pures.
+iDestruct "list" as "(%M & #m_M & #minted_at_M)".
+wp_bind (mknonce _).
+iApply (wp_mknonce_gen M (λ _, ⌜negb (in_honest kI kR T)⌝)%I
           dh_auth_pred).
-iIntros "%a #m_a #p_a #a_pred token".
+{ iIntros "% ?". rewrite big_sepS_forall. by iApply "m_M". }
+iIntros "%a %fresh #m_a #p_a #a_pred token".
 iPoseProof (honest_auth_frag with "hon") as "#honI".
 wp_pures. wp_bind (mkkeyshare _). iApply wp_mkkeyshare => //.
 iIntros "!> _". wp_pures. wp_list. wp_term_of_list.
@@ -301,13 +249,12 @@ iMod (term_meta_set _ _ (Init, gb, kI, kR, n, T, γ)
 iAssert ( |={E}=>
     ●H{dq|n} T ∗
     (compromised_at n (TKey Enc kR) ∨
-    ∃ b n' T' γ',
+    ∃ b γ',
      ⌜gb = TExp (TInt 0) [b]⌝ ∗
-     ⌜n' ≤ n⌝ ∗
-     □ (public b ↔ ▷ □ (compromised_at n' (TKey Enc kI) ∨
-                        compromised_at n' (TKey Enc kR))) ∗
+     □ (public b ↔ ▷ □ (compromised_at n (TKey Enc kI) ∨
+                        compromised_at n (TKey Enc kR))) ∗
      nonce_meta b (nroot.@"session")
-       (Resp, TExp (TInt 0) [a], kI, kR, n', T', γ')))%I
+       (Resp, TExp (TInt 0) [a], kI, kR, n, T, γ')))%I
   with "[hon H3]"
   as "{p_m2} > [hon #p_m2]".
 { iPoseProof (public_TEncE with "p_m2 [//]") as "{p_m2} p_m2".
@@ -316,12 +263,20 @@ iAssert ( |={E}=>
       as "[hon comp']" => //; try solve_ndisj. }
   iMod (lc_fupd_elim_later_pers with "H3 i_m2") as "{i_m2} #i_m2".
   iDestruct "i_m2"
-    as "(%ga & %b & %kI' & %n' & %T' & %γr & %e_m2 & ? & _ & honR & pred_b)".
+    as "(%ga & %b & %kI' & %n' & %T' & %γr & %e_m2 &
+         m_ga & ? & _ & honR & pred_b)".
   case/Spec.of_list_inj: e_m2 => <- -> <- {ga gb kI'}.
   iPoseProof (honest_auth_frag_agree with "hon honR") as "[% %]".
+  case: (decide (n' < n)) => [contra|?].
+  { iPoseProof ("minted_at_M" with "[//] m_ga") as "%ga_M".
+    move/(_ _ ga_M)/subtermsP: fresh.
+    rewrite subterms_TExp /= !elem_of_union => fresh.
+    case: fresh.
+    right. right. left. apply/subtermsP. apply/STRefl. }
+  have ? : n' = n by lia. subst n'.
+  iPoseProof (honest_frag_agree with "honR honI") as "->".
   iModIntro. iFrame. iRight.
-  iExists _, _, _, _. iSplit => //. iSplit => //. iSplit; last by [].
-  by []. }
+  iExists _, _. do !iSplit => //. }
 wp_pures. wp_bind (send _ _). iApply wp_send => //.
 { iModIntro.
   iApply public_TEncIS => //.
@@ -329,8 +284,8 @@ wp_pures. wp_bind (send _ _). iApply wp_send => //.
   - iModIntro. iExists a, gb, kR, n, T, γ. do ![iSplitL => //].
     iDestruct "p_m2" as "[?|p_m2]".
     { iLeft. by iApply compromised_at_public. }
-    iDestruct "p_m2" as "(%b & %n' & %T' & %γ' & % & % & ? & ?)".
-    iRight. iExists b, n', T', γ'. by eauto.
+    iDestruct "p_m2" as "(%b & %γ' & % & ? & ?)".
+    iRight. iExists b, γ'. by eauto.
   - rewrite minted_of_list /= minted_TExp /= minted_TInt minted_TKey.
     rewrite !public_minted !minted_TKey. by do ![iSplitL => //].
   - iIntros "!> _".
@@ -338,7 +293,7 @@ wp_pures. wp_bind (send _ _). iApply wp_send => //.
     by do ![iSplit => //]. }
 wp_pures. wp_tag. wp_bind (mkskey _). iApply wp_mkskey.
 set sk := Spec.tag _ _.
-iAssert (init_session γ kI kR sk (in_honest kI kR T)) as "#sessionI'".
+iAssert (session γ kI kR sk Init (in_honest kI kR T)) as "#sessionI'".
 { iExists gb, a, n, T.
   do 4![iSplit => //].
   iDestruct "p_m2" as "[comp|p_m2]".
@@ -346,10 +301,9 @@ iAssert (init_session γ kI kR sk (in_honest kI kR T)) as "#sessionI'".
       as "%comp" => //.
     rewrite /in_honest bool_decide_decide decide_False //.
     tauto.
-  - iDestruct "p_m2"
-      as "(%b & %n' & %T' & %γ' & % & % & ? & ?)".
+  - iDestruct "p_m2" as "(%b & %γ' & % & ? & ?)".
     case: in_honest => //.
-    iExists b, n', T', γ'.
+    iExists b, γ'.
     eauto. }
 case hon: (in_honest kI kR T); last first.
 { iAssert (public a) as "{p_a} p_a".
@@ -369,8 +323,7 @@ iDestruct "p_m2" as "[comp|p_m2]".
   tauto. }
 rewrite /in_honest bool_decide_eq_true in hon.
 case: hon => honI honR.
-iDestruct "p_m2"
-  as "(%b & %n' & %T' & %γ' & -> & %n'_n & p_b & p_m2)".
+iDestruct "p_m2" as "(%b & %γ' & -> & p_b & p_m2)".
 rewrite Spec.texpA in sk *.
 wp_pures.
 iApply ("Hpost" $! (Some sk)). iFrame.
@@ -390,10 +343,8 @@ rewrite public_TExp2.
 iDestruct "p_sk" as "[[_ #p_b'] | [[_ p_a'] | (_ & a_pred' & _)]]".
 - iPoseProof ("p_b" with "p_b'") as "{p_b} p_b".
   iModIntro. iDestruct "p_b" as "[#compR | #compI]".
-  + iPoseProof (honest_frag_compromised_at _ _ n'_n with "honI compR") as "%".
-    set_solver.
-  + iPoseProof (honest_frag_compromised_at _ _ n'_n with "honI compI") as "%".
-    set_solver.
+  + iPoseProof (honest_frag_compromised_at _ _ with "honI compR") as "%" => //.
+  + iPoseProof (honest_frag_compromised_at _ _ with "honI compI") as "%" => //.
 - iPoseProof ("p_a" with "p_a'") as ">%hon". tauto.
 - iPoseProof ("a_pred" with "a_pred'") as ">%contra".
   by have := contra _ _ eq_refl.
@@ -415,7 +366,7 @@ Lemma wp_responder c kR dq n T γ E :
         ⌜vkI = TKey Dec kI⌝ ∗
         minted kI ∗
         minted kS ∗
-        resp_session γ kI kR kS (in_honest kI kR T) ∗
+        session γ kI kR kS Resp (in_honest kI kR T) ∗
         □ (∀ kt, public (TKey kt kS) ↔ ▷ ⌜negb (in_honest kI kR T)⌝)
       else True
  }}}.
@@ -427,6 +378,9 @@ wp_list_of_term m1; last by protocol_failure.
 wp_pures. wp_list_match => [ga vkI -> {m1}|]; last by protocol_failure.
 rewrite public_of_list /=.
 iDestruct "p_m1" as "(p_ga & p_vkI & _)".
+iPoseProof (public_minted with "p_ga") as "m_ga".
+iMod (minted_atI with "[//] hon_auth m_ga")
+  as "{m_ga} [hon_auth #m_ga]"; first by solve_ndisj.
 wp_bind (is_key _). iApply wp_is_key.
 case: Spec.is_keyP => [kt kI -> {vkI}|]; last by protocol_failure.
 wp_pures. case: kt => //=; first by protocol_failure.
@@ -491,17 +445,14 @@ iAssert ( |={E}=> ●H{dq|n} T ∗
   iDestruct "i_m3" as "[i_m3 | i_m3]".
   { iMod (compromised_atI with "[//] H3 hon_auth i_m3")
       as "[hon_auth #comp]" => //; try by solve_ndisj. }
-  iDestruct "i_m3" as "(%b' & %n'' & %T'' & %γ'' & %e_b & %n''_n' & i_m3)".
+  iDestruct "i_m3" as "(%b' & %γ'' & %e_b & i_m3)".
   case/TExp_inj: e_b => _ /(Permutation_singleton_inj _ _) <- {b'}.
   iPoseProof (term_meta_agree with "meta i_m3") as "%e_meta".
-  case: e_meta => <- <- <- {n'' T'' γ''} in n''_n' *.
-  iPoseProof (honest_auth_frag_agree with "hon_auth honI") as "[%n'_n %T'_T]".
-  rewrite -(T'_T n''_n') {T' T'_T}.
-  assert (n' = n) as -> by lia.
+  case: e_meta => <- <- <-.
   iModIntro. iFrame.
   iRight. iModIntro. iExists a, γ'. by do ![iSplitL => //]. }
 wp_pures. wp_tag. set sk := Spec.tag _ _.
-iAssert (resp_session γ kI kR sk (in_honest kI kR T)) as "sessionR".
+iAssert (session γ kI kR sk Resp (in_honest kI kR T)) as "sessionR".
 { iExists _, _, n, T. iSplit => //.
   do ![iSplit => //].
   iDestruct "i_m3" as "[[comp | comp]|i_m3]".
