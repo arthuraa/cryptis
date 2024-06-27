@@ -5,7 +5,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib version term cryptis primitives tactics.
-From cryptis Require Import role session pk_auth pk_dh.
+From cryptis Require Import role dh_auth.
 From cryptis.store Require Import alist db.
 
 Set Implicit Arguments.
@@ -13,25 +13,24 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
 Record cst := {
-  cst_ts   : loc;
-  cst_key  : term;
-  cst_name : gname;
-  cst_ok   : bool;
+  cst_si   :> sess_info;
+  cst_ts   :  loc;
+  cst_name :  gname;
 }.
 
 #[global]
-Instance cst_repr : Repr cst := λ s, (#(cst_ts s), Spec.mkskey (cst_key s))%V.
+Instance cst_repr : Repr cst :=
+  λ s, (#(cst_ts s), Spec.mkskey (si_key s))%V.
 
 Record sst := {
+  sst_si  :> sess_info;
   sst_ts  : loc;
-  sst_key : term;
   sst_db  : loc;
-  sst_ok  : bool;
 }.
 
 #[global]
 Instance sst_repr : Repr sst :=
-  λ s, (#(sst_ts s), Spec.mkskey (sst_key s), #(sst_db s))%V.
+  λ s, (#(sst_ts s), Spec.mkskey (si_key s), #(sst_db s))%V.
 
 Class storeGS Σ := StoreGS {
   storeGS_db : dbGS Σ;
@@ -46,96 +45,50 @@ Proof. solve_inG. Qed.
 
 Section Defs.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !sessionGS Σ, !storeGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !storeGS Σ}.
 Notation iProp := (iProp Σ).
 
-Local Instance STORE : PK := PK_DH (λ _ _ _ _, True)%I.
-
-Implicit Types (cs : cst).
+Implicit Types (cs : cst) (ss : sst).
 Implicit Types kI kR kS t : term.
 Implicit Types db : gmap term term.
 Implicit Types n : nat.
+Implicit Types b : bool.
 Implicit Types γ : gname.
 Implicit Types v : val.
 Implicit Types ok : bool.
+Implicit Types si : sess_info.
 
 Variable N : namespace.
 
-Definition handshake_done kS ok : iProp := ∃ kI kR kS' ph T,
-  ⌜kS = Spec.tag (nroot.@"keys".@"sym") kS'⌝ ∗
-  ⌜ok = in_honest kI kR T⌝ ∗
-  pk_dh_session_weak N (λ _ _ _ _, True)%I Init kI kR kS' ph T.
-
-#[global]
-Instance handshake_done_persistent kS ok :
-  Persistent (handshake_done kS ok).
-Proof. apply _. Qed.
-
-Definition wf_key kS γ : iProp :=
-  □ (∀ kt, public (TKey kt kS) -∗ ◇ False) ∗
-  □ ∀ kS', ⌜kS = Spec.tag (nroot.@"keys".@"sym") kS'⌝ -∗ ∃ kI kR ph T,
-    pk_dh_session_meta N (λ _ _ _ _, True)%I Init kI kR kS' N γ ∗
-    pk_dh_session_key N (λ _ _ _ _, True)%I kI kR kS' ph T.
-
-#[global]
-Instance wf_key_persistent kS γ : Persistent (wf_key kS γ).
-Proof. apply _. Qed.
-
-Lemma handshake_done_session_key kS ok kI kR ph T :
-  handshake_done (Spec.tag (nroot.@"keys".@"sym") kS) ok -∗
-  pk_dh_session_key N (λ _ _ _ _, True)%I kI kR kS ph T -∗
-  ⌜ok = in_honest kI kR T⌝.
-Proof.
-iIntros "(%kI' & %kR' & %kS' & %ph' & %T' & %e_kS & %e_ok & #weak)".
-case/Spec.tag_inj: e_kS => _ <- {kS'}.
-iIntros "#key".
-by iDestruct (session_weak_session_key with "weak key") as "(<- & <- & <- & <-)".
-Qed.
-
-Lemma wf_key_agree kS ok γ γ' :
-  handshake_done kS ok -∗
-  wf_key kS γ -∗
-  wf_key kS γ' -∗
-  ⌜γ = γ'⌝.
-Proof.
-iIntros "(%kI & %kR & %kS' & %ph & %T & -> & %e_ok & #weak)".
-iIntros "(_ & #wf1) (_ & #wf2)".
-iDestruct ("wf1" with "[//]") as "(%kI1 & %kR1 & %ph1 & %T1 & meta1 & key1)".
-iDestruct ("wf2" with "[//]") as "(%kI2 & %kR2 & %ph2 & %T2 & meta2 & key2)".
-iDestruct (session_weak_session_key with "weak key1") as "(<- & <- & <- & <-)".
-iDestruct (session_weak_session_key with "weak key2") as "(<- & <- & <- & <-)".
-by iApply (term_meta_agree with "meta1 meta2").
-Qed.
-
 Definition client cs : iProp := ∃ (n : nat),
-  handshake_done (cst_key cs) (cst_ok cs) ∗
-  (if cst_ok cs then wf_key (cst_key cs) (cst_name cs) else True) ∗
-  minted (cst_key cs) ∗
+  session cs Init (cst_name cs) ∗
+  □ (∀ kt, public (TKey kt (si_key cs)) ↔ ▷ ⌜¬ session_ok cs⌝) ∗
+  minted (si_key cs) ∗
   cst_ts cs ↦ #n ∗
-  DB.client_view (cst_name cs) (cst_ok cs) n.
+  DB.client_view (cst_name cs) (bool_decide (session_ok cs)) n.
 
 Definition rem_mapsto cs t1 t2 : iProp :=
-  DB.mapsto (cst_name cs) (cst_ok cs) t1 t2.
+  DB.mapsto (cst_name cs) (bool_decide (session_ok cs)) t1 t2.
 
-Definition server ss : iProp := ∃ (n : nat) kvs db,
-  handshake_done (sst_key ss) (sst_ok ss) ∗
-  minted (sst_key ss) ∗
+Definition server ss : iProp := ∃ γ (n : nat) kvs db,
+  session ss Resp γ ∗
+  □ (∀ kt, public (TKey kt (si_key ss)) ↔ ▷ ⌜¬ session_ok ss⌝) ∗
+  minted (si_key ss) ∗
   sst_ts ss ↦ #n ∗
   sst_db ss ↦ kvs ∗
   ⌜AList.is_alist kvs db⌝ ∗
   ([∗ map] t1 ↦ t2 ∈ db, public t1 ∗ public t2) ∗
-  (if sst_ok ss then ∃ γ, wf_key (sst_key ss) γ ∗ DB.server_view γ n db
-   else True).
+  (⌜session_ok ss⌝ -∗ ∃ γ', session ss Init γ' ∗ DB.server_view γ' n db).
 
-Definition init_pred kS (m : term) : iProp := ∃ ok γ,
-  handshake_done kS ok ∗
-  (if ok then wf_key kS γ else True) ∗
+Definition init_pred kS (m : term) : iProp := ∃ si γ,
+  ⌜si_key si = kS⌝ ∗
+  session si Init γ ∗
   DB.server_view γ 0 ∅.
 
-Definition store_pred kS m : iProp := ∃ γ (n : nat) t1 t2 ok,
+Definition store_pred kS m : iProp := ∃ (n : nat) t1 t2 si γ,
   ⌜m = Spec.of_list [TInt n; t1; t2]⌝ ∗
-  handshake_done kS ok ∗
-  (if ok then wf_key kS γ else True) ∗
+  ⌜si_key si = kS⌝ ∗
+  session si Init γ ∗
   public t1 ∗
   public t2 ∗
   DB.update_at γ n t1 t2.
@@ -145,28 +98,26 @@ Definition ack_store_pred kS m : iProp := ∃ (n : nat),
 
 Definition load_pred (kS m : term) : iProp := True.
 
-Definition ack_load_pred (kS m : term) : iProp := ∃ (n : nat) ok t1 t2,
+Definition ack_load_pred (kS m : term) : iProp := ∃ n t1 t2 si γ,
   ⌜m = Spec.of_list [TInt n; t1; t2]⌝ ∗
+  ⌜si_key si = kS⌝ ∗
   public t2 ∗
-  handshake_done kS ok ∗
-  if ok then
-    ∃ γ, wf_key kS γ ∗ DB.stored_at γ n t1 t2
-  else True.
+  session si Resp γ ∗
+  (⌜session_ok si⌝ -∗ ∃ γ', session si Init γ' ∗ DB.stored_at γ' n t1 t2).
 
-Definition create_pred kS m : iProp := ∃ γ (n : nat) t1 t2 ok,
+Definition create_pred kS m : iProp := ∃ n t1 t2 si γ,
   ⌜m = Spec.of_list [TInt n; t1; t2]⌝ ∗
-  handshake_done kS ok ∗
-  (if ok then wf_key kS γ else True) ∗
+  ⌜si_key si = kS⌝ ∗
+  session si Init γ ∗
   public t1 ∗
   public t2 ∗
   DB.create_at γ n t1 t2.
 
-Definition ack_create_pred kS m : iProp := ∃ (n : nat) t1 t2 (b : bool) ok,
+Definition ack_create_pred kS m : iProp := ∃ n t1 t2 b si γ,
   ⌜m = Spec.of_list [TInt n; t1; t2; TInt (if b then 1 else 0)]⌝ ∗
-  handshake_done kS ok ∗
-  if ok then
-    ∃ γ, wf_key kS γ ∗ if b then DB.free_at γ n t1 else True
-  else True.
+  ⌜si_key si = kS⌝ ∗
+  session si Resp γ ∗
+  (⌜session_ok si⌝ -∗ ⌜b⌝ -∗ ∃ γ', session si Init γ' ∗ DB.free_at γ' n t1).
 
 Definition store_ctx : iProp :=
   enc_pred (N.@"init") init_pred ∗
@@ -176,93 +127,87 @@ Definition store_ctx : iProp :=
   enc_pred (N.@"ack_load") ack_load_pred ∗
   enc_pred (N.@"create") create_pred ∗
   enc_pred (N.@"ack_create") ack_create_pred ∗
-  pk_dh_ctx N (λ _ _ _ _, True)%I.
+  dh_auth_ctx (N.@"auth").
 
-Lemma handshake_done_agree kS γ ok1 ok2 :
-  wf_key kS γ -∗
-  handshake_done kS ok1 -∗
-  handshake_done kS ok2 -∗
-  ⌜ok1 = ok2⌝.
+Lemma initE si γ t :
+  store_ctx -∗
+  session si Resp γ -∗
+  □ (∀ kt, public (TKey kt (si_key si)) ↔ ▷ ⌜¬ session_ok si⌝) -∗
+  public (TEnc (si_key si) (Spec.tag (N.@"init") t)) -∗
+  ▷ (⌜session_ok si⌝ -∗ ∃ γ, session si Init γ ∗ DB.server_view γ 0 ∅).
 Proof.
-iIntros "(_ & #impl)".
-iIntros "(%kI1 & %kR1 & %kS1 & %ph1 & %T1 & -> & -> & #sess1)".
-iIntros "(%kI2 & %kR2 & %kS2 & %ph2 & %T2 & %e_kS & -> & #sess2)".
-case/Spec.tag_inj: e_kS => _ <- {kS2}.
-iPoseProof ("impl" with "[//]") as "(%kI & %kR & %ph' & %T' & #meta & #key)" => //.
-iPoseProof (session_weak_session_key with "sess1 key") as "(<- & <- & <- & <-)".
-iPoseProof (session_weak_session_key with "sess2 key") as "(<- & <- & <- & <-)".
+iIntros "(#initP & _) #sessR #kS #p_t".
+iDestruct (public_TEncE with "[//] [//]") as "[[p_kS ?]|#tP]".
+{ iPoseProof ("kS" with "p_kS") as ">%comp".
+  iIntros "!> %". tauto. }
+iDestruct "tP" as "(#init & _ & _)".
+iModIntro.
+iDestruct "init" as "(%si' & %γ' & %e_kS & sessI & #view)".
+iIntros "%ok".
+iPoseProof (session_agree with "sessI sessR") as "->" => //.
 by eauto.
 Qed.
 
-Lemma initE kS t :
+Lemma store_predE si γ n t1 t2 :
   store_ctx -∗
-  public (TEnc kS (Spec.tag (N.@"init") t)) -∗
-  public (TKey Enc kS) ∨
-  ▷ ∃ ok γ, handshake_done kS ok ∗
-            (if ok then wf_key kS γ else True) ∗
-            DB.server_view γ 0 ∅.
-Proof.
-iIntros "(#initP & _) #p_t".
-iDestruct (public_TEncE with "[//] [//]") as "[[??]|#tP]"; first by eauto.
-iRight. by iDestruct "tP" as "(#init & _ & _)".
-Qed.
-
-Lemma store_predE kS ok n t1 t2 :
-  handshake_done kS ok -∗
-  (if ok then ∃ γ, wf_key kS γ else True) -∗
-  store_ctx -∗
-  public (TEnc kS (Spec.tag (N.@"store")
-                  (Spec.of_list [TInt n; t1; t2]))) -∗
+  session si Resp γ -∗
+  □ (∀ kt, public (TKey kt (si_key si)) ↔ ▷ ⌜¬ session_ok si⌝) -∗
+  □ (⌜session_ok si⌝ -∗ ∃ γ, session si Init γ) -∗
+  public (TEnc (si_key si) (Spec.tag (N.@"store")
+                              (Spec.of_list [TInt n; t1; t2]))) -∗
   ▷ (public t1 ∗ public t2 ∗
-     if ok then ∃ γ, wf_key kS γ ∗ DB.update_at γ n t1 t2 else True).
+     (⌜session_ok si⌝ -∗ ∃ γ, session si Init γ ∗ DB.update_at γ n t1 t2)).
 Proof.
-iIntros "#key #wf #(_ & #storeP & _) #p_m".
+iIntros "#(_ & #storeP & _) #sessR #key #sessI #p_m".
 iPoseProof (public_TEncE with "p_m [//]") as "{p_m} p_m".
 rewrite public_of_list /=. iDestruct "p_m" as "[p_m|p_m]".
 - iDestruct "p_m" as "(p_k & p_m & ? & ? & ?)".
-  do 2!iSplit => //. case: ok => //.
-  iDestruct "wf" as "(%γ & #contra & _)".
-  iDestruct ("contra" with "p_k") as ">[]".
-- iDestruct "p_m" as "(#(%γ & %n' & %t1' & %t2' & %ok' & mP) & _ & _)".
-  iModIntro. iDestruct "mP" as "(%e & done & wf' & p_t1 & p_t2 & update)".
+  do 2!iSplit => //.
+  iPoseProof ("key" with "p_k") as ">%".
+  iIntros "!> %". tauto.
+- iModIntro.
+  iDestruct "p_m" as "(#(%n' & %t1' & %t2' & %si' & %γ' & mP) & _ & _)".
+  iDestruct "mP" as "(%e & %e_key & sessI' & p_t1 & p_t2 & update)".
   case/Spec.of_list_inj: e => en <- <-.
   have -> : n' = n by lia.
   do 2!iSplitL => //.
-  case: ok => //.
-  iDestruct "wf" as "(%γ' & wf)".
-  iPoseProof (handshake_done_agree with "wf key done") as "<-".
-  iExists γ. eauto.
+  iIntros "%ok".
+  iDestruct ("sessI" with "[//]") as "{sessI} [%γ'' sessI]" => //.
+  iPoseProof (session_agree_name with "sessI' sessI") as "(-> & <-)" => //.
+  iExists γ'.
+  by eauto.
 Qed.
 
-Lemma ack_loadE kS ok n γ t1 t2 t2' :
-  handshake_done kS ok -∗
-  (if ok then wf_key kS γ else True) -∗
-  DB.client_view γ ok n -∗
-  DB.mapsto γ ok t1 t2 -∗
+Lemma ack_loadE si γ n t1 t2 t2' :
   store_ctx -∗
-  public (TEnc kS (Spec.tag (N.@"ack_load")
+  session si Init γ -∗
+  □ (∀ kt, public (TKey kt (si_key si)) ↔ ▷ ⌜¬ session_ok si⌝) -∗
+  DB.client_view γ (bool_decide (session_ok si)) n -∗
+  DB.mapsto γ (bool_decide (session_ok si)) t1 t2 -∗
+  public (TEnc (si_key si) (Spec.tag (N.@"ack_load")
          (Spec.of_list [TInt n; t1; t2']))) -∗
-  ▷ (public t2' ∗ ⌜ok → t2' = t2⌝).
+  ▷ (public t2' ∗ ⌜session_ok si → t2' = t2⌝).
 Proof.
-iIntros "#key #wf client mapsto #(_ & _ & _ & _ & ? & _) #pub".
+iIntros "#(_ & _ & _ & _ & ? & _) #sessI #key client mapsto #pub".
 iDestruct (public_TEncE with "pub [//]") as "{pub} [pub|pub]".
 - iDestruct "pub" as "[pub_k pub_t2]".
   rewrite public_of_list /=.
   iDestruct "pub_t2" as "(_ & _ & pub_t2 & _)".
   iSplit => //.
-  case: ok => //.
-  iDestruct "wf" as "(#wf & _)".
-  iDestruct ("wf" with "pub_k") as ">[]".
+  iPoseProof ("key" with "pub_k") as ">%".
+  by iIntros "%".
 - iDestruct "pub" as "(#pub & _ & _)". iModIntro.
-  iDestruct "pub" as "(%n' & %ok' & %t1' & %t2'' & %E & ? & key' & stored)".
-  case/Spec.of_list_inj: E => en <- <-.
+  iDestruct "pub" as "(%n' & %t1' & %t2'' & %si' & %γ' &
+                       %e & %e_kS & ? & #sessR & stored)".
+  case/Spec.of_list_inj: e => en <- <-.
   have <- : n = n' by lia.
   iSplit => //.
-  case: ok => //.
-  iPoseProof (handshake_done_agree with "wf key key'") as "<-".
-  iDestruct "stored" as "(%γ' & wf' & stored)".
-  iPoseProof (wf_key_agree with "key wf wf'") as "->".
+  iIntros "%ok".
+  iPoseProof (session_agree with "sessR sessI") as "->" => //.
+  iDestruct ("stored" with "[//]") as "{stored} (%γ'' & sessI' & stored)".
+  iPoseProof (session_agree_name with "sessI' sessI") as "(_ & ->)" => //.
   iApply (DB.load_client with "client mapsto stored").
+  exact: bool_decide_pack.
 Qed.
 
 End Defs.

@@ -6,7 +6,7 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import lock ticket_lock.
 From cryptis Require Import lib version term cryptis primitives tactics.
-From cryptis Require Import role session pk_auth pk_dh.
+From cryptis Require Import role dh_auth.
 From cryptis.store Require Import alist db.
 
 Set Implicit Arguments.
@@ -60,11 +60,10 @@ Section Client.
 
 Variable N : namespace.
 
-Definition connect : val := λ: "c" "skA" "pkA" "pkB",
+Definition connect : val := λ: "c" "skA" "vkA" "vkB",
   do_until (λ: <>,
-    bind: "session_key" := pk_dh_init N "c" "skA" "pkA" "pkB" in
+    bind: "session_key" := initiator (N.@"auth") "c" "vkA" "skA" "vkB" in
     let: "timestamp"  := ref #0 in
-    let: "session_key" := mkskey (tag (nroot.@"keys".@"sym") "session_key") in
     send "c" (tsenc (N.@"init") "session_key" (TInt 0));;
     SOME ("timestamp", "session_key")
   ).
@@ -215,13 +214,13 @@ Definition wait_init N : val :=
 
 Definition listen N : val :=
 rec: "loop" "c" "secret_key" "public_key" :=
-  match: pk_dh_resp N "c" "secret_key" "public_key" with
+  match: responder (N.@"auth") "c" "public_key" "secret_key" with
     NONE =>
     "loop" "c" "secret_key" "public_key"
   | SOME "res" =>
     (* Unused for now *)
     let: "client_key" := Fst "res" in
-    let: "session_key"  := mkskey (tag (nroot.@"keys".@"sym") (Snd "res")) in
+    let: "session_key"  := Snd "res" in
     Fork (wait_init N "c" "session_key");;
     "loop" "c" "secret_key" "public_key"
   end.

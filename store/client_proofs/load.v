@@ -5,7 +5,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib version term cryptis primitives tactics.
-From cryptis Require Import role session pk_auth pk_dh.
+From cryptis Require Import role dh_auth.
 From cryptis.store Require Import impl shared db.
 From cryptis.store.client_proofs Require Import common.
 
@@ -19,8 +19,6 @@ Context `{!cryptisGS Σ, !heapGS Σ, !sessionGS Σ, !storeGS Σ}.
 Notation iProp := (iProp Σ).
 
 Context `{!storeG Σ}.
-
-Local Instance STORE : PK := PK_DH (λ _ _ _ _, True)%I.
 
 Implicit Types (cs : cst).
 Implicit Types kI kR kS t : term.
@@ -36,16 +34,15 @@ Lemma wp_client_load E c cs t1 t2 :
   channel c -∗
   store_ctx N -∗
   public t1 -∗
-  {{{ client N cs ∗ rem_mapsto cs t1 t2 }}}
+  {{{ client cs ∗ rem_mapsto cs t1 t2 }}}
     Client.load N c (repr cs) t1 @ E
   {{{ t2', RET (repr t2');
-      client N cs ∗
+      client cs ∗
       rem_mapsto cs t1 t2 ∗
-      ⌜cst_ok cs → t2' = t2⌝ }}}.
+      ⌜session_ok cs → t2' = t2⌝ }}}.
 Proof.
 iIntros "% % #chan_c #ctx #p_t1 !> %Φ [client mapsto] post".
-iDestruct "client" as "(%n & #handshake & #key & #minted_key &
-                        ts & view)".
+iDestruct "client" as "(%n & #sessI & #key & #minted_key & ts & view)".
 rewrite /Client.load. wp_pures.
 wp_bind (Client.get_timestamp _).
 iApply (wp_client_get_timestamp with "ts").
@@ -69,7 +66,7 @@ wp_eq_term e; last by wp_pures; iLeft; iFrame.
 subst n'. wp_pures.
 wp_eq_term e; last by wp_pures; iLeft; iFrame.
 subst t1'.
-iDestruct (ack_loadE with "handshake key view mapsto ctx p_t2'")
+iDestruct (ack_loadE with "ctx sessI key view mapsto p_t2'")
   as "{p_t2'} (#p_t2' & #e_t2')".
 wp_pures. iModIntro. iRight. iExists _; iSplit; eauto.
 iApply ("post" $! t2'). iFrame. iSplitL => //.

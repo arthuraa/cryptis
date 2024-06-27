@@ -360,16 +360,17 @@ Definition stored_at γ n t1 t2 : iProp Σ :=
         ⌜to_db os !! t1 = Some t2⌝.
 
 Lemma load_client γ b n t1 t2 t2' :
+  b →
   client_view γ b n -∗
   mapsto γ b t1 t2 -∗
   stored_at γ n t1 t2' -∗
-  ⌜b → t2' = t2⌝.
+  ⌜t2' = t2⌝.
 Proof.
-iIntros "(%os & -> & hist & state) t1_t2 (%os' & %lengthE & #Hfrag & %os_t1)".
+iIntros "%bP (%os & -> & hist & state) t1_t2 (%os' & %lengthE & #Hfrag & %os_t1)".
 iPoseProof (hist_auth_frag with "hist") as "#Hfrag'".
 iPoseProof (hist_frag_agree with "Hfrag Hfrag'") as "->" => //.
 iPoseProof (state_auth_mapsto with "state t1_t2") as "%os_t1'".
-iPureIntro. rewrite os_t1 in os_t1'. move=> /os_t1' ?. congruence.
+iPureIntro. rewrite os_t1 in os_t1'. by case/(_ bP): os_t1' => ->.
 Qed.
 
 Lemma load_server γ n db t1 t2 :

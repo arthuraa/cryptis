@@ -238,7 +238,7 @@ Qed.
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
 
-Lemma wp_initiator c kI kR dq n T γ E :
+Lemma wp_initiator γ c kI kR dq n T E :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
@@ -390,7 +390,7 @@ wp_pures. iApply ("Hpost" $! (Some sk)). rewrite -[SessInfo _ _ _ _ _]/si.
 iFrame. eauto.
 Qed.
 
-Lemma wp_responder c kR dq n T γ E :
+Lemma wp_responder γ c kR dq n T E :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗

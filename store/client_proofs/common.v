@@ -5,7 +5,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib version term cryptis primitives tactics.
-From cryptis Require Import role session pk_auth pk_dh.
+From cryptis Require Import role dh_auth.
 From cryptis.store Require Import impl shared db.
 
 Set Implicit Arguments.
@@ -18,8 +18,6 @@ Context `{!cryptisGS Σ, !heapGS Σ, !sessionGS Σ, !storeGS Σ}.
 Notation iProp := (iProp Σ).
 
 Context `{!storeG Σ}.
-
-Local Instance STORE : PK := PK_DH (λ _ _ _ _, True)%I.
 
 Implicit Types (cs : cst).
 Implicit Types kI kR kS t : term.
@@ -54,7 +52,7 @@ Qed.
 Lemma wp_client_get_session_key E cs :
   {{{ True }}}
     Client.get_session_key (repr cs) @ E
-  {{{ RET (repr (Spec.mkskey (cst_key cs))); True }}}.
+  {{{ RET (repr (Spec.mkskey (si_key cs))); True }}}.
 Proof.
 rewrite /Client.get_session_key.
 iIntros "%Φ ? post". wp_pures. by iApply "post".
