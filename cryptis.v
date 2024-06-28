@@ -4,7 +4,7 @@ From iris.algebra Require Import agree auth gset gmap list reservation_map excl.
 From iris.algebra Require Import functions.
 From iris.base_logic.lib Require Import saved_prop invariants.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term comp_map.
+From cryptis Require Import lib term gmeta comp_map.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -22,6 +22,7 @@ Class cryptisGpreS Σ := CryptisGPreS {
   cryptisGpreS_enc   : savedPredG Σ (term * term);
   cryptisGpreS_hon   : inG Σ comp_mapR;
   cryptisGpreS_mint  : inG Σ mint_mapUR;
+  cryptisGpreS_meta  : metaGS Σ;
   cryptisGpreS_maps  : inG Σ (reservation_mapR (agreeR positiveO));
 }.
 
@@ -30,6 +31,7 @@ Local Existing Instance cryptisGpreS_key.
 Local Existing Instance cryptisGpreS_enc.
 Local Existing Instance cryptisGpreS_hon.
 Local Existing Instance cryptisGpreS_mint.
+Global Existing Instance cryptisGpreS_meta.
 Local Existing Instance cryptisGpreS_maps.
 
 Class cryptisGS Σ := CryptisGS {
@@ -41,7 +43,7 @@ Class cryptisGS Σ := CryptisGS {
   cryptis_mint_name : gname;
 }.
 
-Local Existing Instance cryptis_inG.
+Global Existing Instance cryptis_inG.
 
 Definition cryptisΣ : gFunctors :=
   #[savedPredΣ term;
@@ -49,6 +51,7 @@ Definition cryptisΣ : gFunctors :=
     savedPredΣ (term * term);
     GFunctor comp_mapR;
     GFunctor mint_mapUR;
+    metaΣ;
     GFunctor (reservation_mapR (agreeR positiveO))].
 
 Global Instance subG_cryptisGpreS Σ : subG cryptisΣ Σ → cryptisGpreS Σ.

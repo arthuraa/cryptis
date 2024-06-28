@@ -4,7 +4,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par.
-From cryptis Require Import lib term cryptis primitives tactics nown.
+From cryptis Require Import lib term cryptis primitives tactics.
 From cryptis Require Import role session.
 
 Set Implicit Arguments.

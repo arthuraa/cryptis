@@ -2,7 +2,7 @@ From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term cryptis primitives tactics role nown.
+From cryptis Require Import lib term cryptis primitives tactics role.
 From cryptis Require Import pk_auth.
 From cryptis Require Import session.
 

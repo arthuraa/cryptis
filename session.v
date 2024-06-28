@@ -29,7 +29,7 @@ From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term cryptis role nown.
+From cryptis Require Import lib term gmeta cryptis role nown.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -37,7 +37,7 @@ Unset Printing Implicit Defensive.
 
 Section Session.
 
-Context `{!cryptisG Σ, !heapGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ}.
 Notation iProp  := (iProp Σ).
 Notation iPropI := (iPropI Σ).
 
@@ -60,24 +60,22 @@ Definition sessionR := authR session_mapUR.
 
 Class sessionGpreS := {
   sessionGpreS_sess : inG Σ sessionR;
-  sessionGpreS_nown : nownGpreS Σ;
 }.
 
 Local Existing Instance sessionGpreS_sess.
-Local Existing Instance sessionGpreS_nown.
 
 Class sessionGS := SessionGS {
-  session_inG : inG Σ sessionR;
-  session_nownGS : nownGS Σ;
+  session_inG  : inG Σ sessionR;
+  session_name : gname;
 }.
 
-Local Existing Instances session_inG session_nownGS.
+Local Existing Instances session_inG.
 
 Context `{!sessionGS, Countable X}.
 
 Context (N : namespace) (P : role → term → term → X → iProp).
 
-Definition session_token_def E := nown_token E.
+Definition session_token_def E : iProp := nown_token session_name E.
 Definition session_token_aux : seal session_token_def. by eexists. Qed.
 Definition session_token := unseal session_token_aux.
 Lemma session_token_unseal : session_token = session_token_def.
@@ -94,11 +92,11 @@ Lemma session_status_frag_valid p : ✓ session_status_frag p.
 Proof. apply/auth_frag_valid; by case: p. Qed.
 
 Definition session_auth rl t (k : term) (x : X) o : iProp :=
-  nown N (◯ {[t := session_status_auth o]}) ∧
+  nown session_name N (◯ {[t := session_status_auth o]}) ∧
   nonce_meta t N (x, rl, k).
 
 Definition session_frag rl t (k : term) (x : X) o : iProp :=
-  nown N (◯ {[t := session_status_frag o]}) ∧
+  nown session_name N (◯ {[t := session_status_frag o]}) ∧
   nonce_meta t N (x, rl, k).
 
 Global Instance session_frag_persistent rl t k x o :
@@ -148,15 +146,16 @@ by iDestruct (term_meta_meta_token with "fresh not_fresh") as "[]".
 Qed.
 
 Definition session_ctx : iProp :=
-  inv N (∃ SM, nown N (● to_session_map SM) ∗ session_map_inv SM).
+  inv N (∃ SM, nown session_name N (● to_session_map SM) ∗
+               session_map_inv SM).
 
 Lemma session_ctx_acc E a :
   ↑N ⊆ E →
-  session_ctx ∗ nown N (◯ a) ={E,E ∖ ↑N}=∗ ∃ SM,
+  session_ctx ∗ nown session_name N (◯ a) ={E,E ∖ ↑N}=∗ ∃ SM,
     ⌜a ≼ to_session_map SM⌝ ∗ ▷ session_map_inv SM ∗ ∀ SM' b,
     ⌜(to_session_map SM, a) ~l~> (to_session_map SM', b)⌝ ∗
     ▷ session_map_inv SM' ={E∖↑N,E}=∗
-    nown N (◯ b).
+    nown session_name N (◯ b).
 Proof.
 iIntros "%sub [ctx own_f]".
 iMod (inv_acc with "ctx") as "[ctx close]" => //.
@@ -179,7 +178,7 @@ Lemma session_ctx_acc0 E :
     ▷ session_map_inv SM ∗ ∀ SM' b,
     ⌜(to_session_map SM, ∅) ~l~> (to_session_map SM', b)⌝ ∗
     ▷ session_map_inv SM' ={E∖↑N,E}=∗
-    nown N (◯ b).
+    nown session_name N (◯ b).
 Proof.
 iIntros "%sub ctx".
 iMod (inv_acc with "ctx") as "[ctx close]" => //.
@@ -313,7 +312,7 @@ rewrite {1}/session_map_inv (big_sepM_delete _ SM s) //.
 iDestruct "inv" as "[inv_s inv]".
 have ? : Inhabited X by exact: populate x.
 iDestruct "inv_s" as (k rl' x') "[#not_fresh inv_s]".
-iAssert (▷ (sinv (swap_role rl) s t x ∗ nown N (◯ f1)))%I
+iAssert (▷ (sinv (swap_role rl) s t x ∗ nown session_name N (◯ f1)))%I
     with "[sessA inv_s]" as "(res & >sessA)".
   iModIntro.
   iPoseProof (term_meta_agree with "metaB not_fresh") as "%e".
@@ -432,25 +431,24 @@ Qed.
 End Session.
 
 Definition sessionΣ : gFunctors :=
-  #[GFunctor sessionR; nownΣ].
+  #[GFunctor sessionR].
 
 Arguments sessionGS Σ : clear implicits.
 Arguments sessionGpreS Σ : clear implicits.
-Arguments session_alloc {Σ _ _} {X _ _} N P.
-Arguments session_token_difference {Σ _} E E'.
-Arguments session_begin {Σ _ _ _ _ _}  {N P} E rl tI tR.
-Arguments session_ctx {Σ _ _} {_ _ _} N P.
-Arguments session {Σ _ _} {_ _ _} N rl _ _.
-Arguments waiting_for_peer {Σ _ _} {_ _ _} N P rl tI tR x.
+Arguments session_alloc {Σ _ _ _} {X _ _} N P.
+Arguments session_token_difference {Σ _ _} E E'.
+Arguments session_begin {Σ _ _ _ _ _ _}  {N P} E rl tI tR.
+Arguments session_ctx {Σ _ _ _ _ _ _} N P.
+Arguments session {Σ _ _ _ _ _ _} N rl _ _.
+Arguments waiting_for_peer {Σ _ _ _ _ _ _} N P rl tI tR x.
 
 #[global]
 Instance subG_sessionΣ {Σ} : subG sessionΣ Σ → sessionGpreS Σ.
 Proof. solve_inG. Qed.
 
 Local Existing Instance sessionGpreS_sess.
-Local Existing Instance sessionGpreS_nown.
 
-Lemma sessionGS_alloc `{!heapGS Σ} :
+Lemma sessionGS_alloc `{!cryptisGS Σ, !heapGS Σ} :
   sessionGpreS Σ →
   ⊢ |==> ∃ (H : sessionGS Σ), session_token ⊤.
 Proof.
