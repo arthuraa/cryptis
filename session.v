@@ -164,7 +164,7 @@ iPoseProof (nown_valid_2 with "own_a own_f") as "%valid".
 move: valid; rewrite auth_both_valid_discrete; case=> a_incl _.
 iModIntro; iExists SM; iFrame; iSplit => //.
 iIntros (SM' b) "[%upd inv]".
-iCombine "own_a own_f" as "own". rewrite -nown_op.
+iCombine "own_a own_f" as "own".
 iMod (nown_update with "own") as "own".
   by apply: auth_update; eauto.
 rewrite nown_op. iDestruct "own" as "[own_a own_f]".
@@ -294,7 +294,7 @@ set f1 := {[t := _]}.
 set f2 := {[s := _]}.
 iAssert (▷ ⌜f1 ⋅ f2 ≼ to_session_map SM⌝)%I
     with "[sessA sessB own]" as "# > %SM_s".
-  iCombine "sessA sessB" as "{sessB} sess". rewrite -nown_op.
+  iCombine "sessA sessB" as "{sessB} sess".
   iModIntro.
   by iDestruct (nown_valid_2 with "own sess") as % [? ?]%auth_both_valid_discrete.
 pose proof (transitivity (cmra_included_l _ _) SM_s) as SM_sA.
@@ -324,7 +324,6 @@ iAssert (▷ (sinv (swap_role rl) s t x ∗ nown session_name N (◯ f1)))%I
   by case: contra => [[?|]]; rewrite option_equivE.
 rewrite /session_auth.
 iCombine "own sessA sessB" as "{sessB} own".
-rewrite -!nown_op -auth_frag_op.
 iMod (nown_update with "own") as "own".
   apply: auth_update.
   apply: op_local_update_frame.

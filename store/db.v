@@ -4,7 +4,7 @@ From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term cryptis primitives tactics.
+From cryptis Require Import lib term gmeta nown cryptis primitives tactics.
 From cryptis Require Import role session pk_auth pk_dh alist.
 
 Set Implicit Arguments.
@@ -26,17 +26,14 @@ Definition db_historyUR : ucmra :=
 Class dbGS Σ := DbGS {
   dbGS_state : inG Σ db_stateUR;
   dbGS_history : inG Σ db_historyUR;
-  dbGS_names : inG Σ (agreeR (prodO gnameO gnameO));
 }.
 
 Local Existing Instance dbGS_state.
 Local Existing Instance dbGS_history.
-Local Existing Instance dbGS_names.
 
 Definition dbΣ :=
   #[GFunctor db_stateUR;
-    GFunctor db_historyUR;
-    GFunctor (agreeR (prodO gnameO gnameO))].
+    GFunctor db_historyUR].
 
 Global Instance subG_dbGS Σ : subG dbΣ Σ → dbGS Σ.
 Proof. solve_inG. Qed.
@@ -48,7 +45,7 @@ Section DB.
 Implicit Types o : operationO.
 Implicit Types os : list operationO.
 Implicit Types db : gmap term term.
-Implicit Types γ γhist γst : gname.
+Implicit Types γ : gname.
 Implicit Types n : nat.
 Implicit Types b : bool.
 
@@ -65,39 +62,15 @@ Definition op_app db o :=
 Definition to_db os : gmap term term :=
   foldl op_app ∅ os.
 
-Context `{!dbGS Σ}.
-
-Definition names γ γhist γst : iProp Σ :=
-  own γ (to_agree (γhist, γst)).
-
-Local Instance persistent_names γ γhist γst : Persistent (names γ γhist γst).
-Proof. apply _. Qed.
-
-Lemma names_alloc γhist γst : ⊢ |==> ∃ γ, names γ γhist γst.
-Proof.
-by iApply (own_alloc (to_agree (γhist, γst))).
-Qed.
-
-Definition names_agree γ γhist1 γhist2 γst1 γst2 :
-  names γ γhist1 γst1 -∗
-  names γ γhist2 γst2 -∗
-  ⌜γhist2 = γhist1⌝ ∗ ⌜γst2 = γst1⌝.
-Proof.
-iIntros "#H1 #H2".
-iDestruct (own_valid_2 with "H1 H2") as "%valid".
-rewrite to_agree_op_valid_L in valid *.
-by case: valid => <- <-.
-Qed.
+Context `{!metaGS Σ, !dbGS Σ}.
 
 Definition hist_auth γ os : iProp Σ :=
-  ∃ γhist γst,
-    names γ γhist γst ∗
-    own γhist (● to_max_prefix_list os ⋅ ◯ to_max_prefix_list os).
+  nown γ (nroot.@"hist")
+         (● to_max_prefix_list os ⋅ ◯ to_max_prefix_list os).
 
 Definition hist_frag γ os : iProp Σ :=
-  ∃ γhist γst,
-    names γ γhist γst ∗
-    own γhist (◯ to_max_prefix_list os).
+  nown γ (nroot.@"hist")
+         (◯ to_max_prefix_list os).
 
 Local Instance persistent_hist_frag γ os : Persistent (hist_frag γ os).
 Proof. apply _. Qed.
@@ -105,10 +78,7 @@ Proof. apply _. Qed.
 Lemma hist_auth_frag γ os :
   hist_auth γ os -∗
   hist_frag γ os.
-Proof.
-iIntros "(%γhist & %γst & Hnames & [_ Hown])".
-iExists _, _. iFrame.
-Qed.
+Proof. by iIntros "[_ Hown]". Qed.
 
 Lemma hist_frag_agree γ os1 os2 :
   length os1 = length os2 →
@@ -117,10 +87,8 @@ Lemma hist_frag_agree γ os1 os2 :
   ⌜os2 = os1⌝.
 Proof.
 move=> lengthE.
-iIntros "(%γhist1 & % & names1 & hist_frag1)".
-iIntros "(%γhist2 & % & names2 & hist_frag2)".
-iPoseProof (names_agree with "names1 names2") as "[-> ->]".
-iPoseProof (own_valid_2 with "hist_frag1 hist_frag2") as "%valid".
+iIntros "#hist1 #hist2".
+iPoseProof (nown_valid_2 with "hist1 hist2") as "%valid".
 rewrite auth_frag_op_valid to_max_prefix_list_op_valid_L in valid.
 iPureIntro.
 case: valid => - [[|o os] osE].
@@ -135,9 +103,8 @@ Lemma hist_frag_prefix_of os1 os2 γ :
   hist_frag γ os2 -∗
   hist_frag γ os1.
 Proof.
-iIntros "%os1_os2 (%γhist & %γst & #names & #hist_frag)".
-iExists _, _; iSplit; eauto.
-iApply own_mono; last by eauto.
+iIntros "%os1_os2 #hist_frag". rewrite /hist_frag.
+iApply nown_mono; last by eauto.
 apply: auth_frag_mono. exact/to_max_prefix_list_included_L.
 Qed.
 
@@ -146,37 +113,33 @@ Lemma hist_update γ os o :
   hist_auth γ (os ++ [o]) ∗
   hist_frag γ (os ++ [o]).
 Proof.
-iIntros "(%γhist & %γst & #Hnames & auth)".
-iMod (own_update with "auth") as "auth".
+iIntros "auth".
+iMod (nown_update with "auth") as "auth".
 { apply: auth_update.
   apply: (max_prefix_list_local_update os (os ++ [o])).
   by exists [o]. }
 iDestruct "auth" as "[auth #frag]".
-iModIntro. iSplit.
-- iExists _, _. iSplit; first by []. by iSplitL.
-- iExists _, _. by iSplit.
+iModIntro. iSplit => //. by iSplitL.
 Qed.
 
 Definition state_auth γ b db : iProp Σ :=
-  ∃ γhist γst,
-    names γ γhist γst ∗
-    if b then own γst (● (Excl <$> db) : db_stateUR) else True.
+  if b then
+    nown γ (nroot.@"state") (● (Excl <$> db) : db_stateUR)
+  else True%I.
 
 Definition mapsto γ b t1 t2 : iProp Σ :=
-  ∃ γhist γst,
-    names γ γhist γst ∗
-    if b then own γst (◯ {[t1 := Excl t2]}) else True.
+  if b then
+    nown γ (nroot.@"state") (◯ {[t1 := Excl t2]})
+  else True%I.
 
 Lemma state_auth_mapsto γ b db t1 t2 :
   state_auth γ b db -∗
   mapsto γ b t1 t2 -∗
   ⌜b → db !! t1 = Some t2⌝.
 Proof.
-iIntros "(%γhist1 & %γst1 & #Hnames1 & Hauth)".
-iIntros "(%γhist2 & %γst2 & #Hnames2 & Hfrag)".
+iIntros "Hauth Hfrag".
 case: b=> //. iIntros "_".
-iDestruct (names_agree with "Hnames1 Hnames2") as "[-> ->]".
-iPoseProof (own_valid_2 with "Hauth Hfrag") as "%valid".
+iPoseProof (nown_valid_2 with "Hauth Hfrag") as "%valid".
 rewrite auth_both_valid_discrete in valid.
 case: valid => incl valid.
 rewrite singleton_included_exclusive_l // lookup_fmap in incl.
@@ -193,17 +156,14 @@ Lemma state_auth_update t2' γ b db t1 t2 :
 Proof.
 case: b; last first.
 { iIntros "?? !>". iFrame. }
-iIntros "(%γhist1 & %γst1 & #Hnames1 & Hauth)".
-iIntros "(%γhist2 & %γst2 & #Hnames2 & Hfrag)".
-iDestruct (names_agree with "Hnames1 Hnames2") as "[-> ->]".
-iMod (own_update_2 with "Hauth Hfrag") as "own".
+iIntros "Hauth Hfrag".
+iMod (nown_update_2 with "Hauth Hfrag") as "own".
 { apply: auth_update.
   apply: (singleton_local_update_any _ _ _ (Excl t2') (Excl t2')) => ? _.
   exact: exclusive_local_update. }
 iDestruct "own" as "[Hauth Hfrag]".
-iModIntro. iSplitL "Hauth".
-- iExists _, _. rewrite fmap_insert. by eauto.
-- iExists _, _. by eauto.
+iModIntro. iSplitL "Hauth" => //.
+rewrite /state_auth fmap_insert. by eauto.
 Qed.
 
 Lemma state_auth_create t1 t2 γ b db :
@@ -214,14 +174,13 @@ Proof.
 rewrite /=; case db_t1: (db !! t1) => [t2'|]; eauto.
 case: b; last first.
 { iIntros "#?". iModIntro. iSplit; trivial. }
-iIntros "(%γhist1 & %γst1 & #Hnames1 & Hauth)".
-iMod (own_update _ _ (_ ⋅ _) with "Hauth") as "[Hauth Hfrag]".
+iIntros "Hauth".
+iMod (nown_update _ _ (a' := (_ ⋅ _)) with "Hauth") as "[Hauth Hfrag]".
 { apply: auth_update_alloc.
   apply: (alloc_local_update _ _ t1 (Excl t2)) => //.
   by rewrite lookup_fmap db_t1. }
-iModIntro. iSplitL "Hauth".
-- iExists _, _. rewrite fmap_insert. by iFrame.
-- iExists _, _. by iFrame.
+iModIntro. iSplitL "Hauth" => //.
+rewrite /state_auth fmap_insert. by iFrame.
 Qed.
 
 Definition client_view γ b n : iProp Σ :=
@@ -246,21 +205,22 @@ Definition server_view γ n db : iProp Σ :=
 Lemma alloc b : ⊢ |==> ∃ γ, client_view γ b 0 ∗ server_view γ 0 ∅.
 Proof.
 iIntros "".
-iMod (own_alloc (● to_max_prefix_list [] ⋅ ◯ to_max_prefix_list []))
-  as "(%γhist & own_hist)".
+iMod nown_token_alloc as "[%γ token]".
+iMod (nown_alloc (nroot.@"hist")
+        (● to_max_prefix_list [] ⋅ ◯ to_max_prefix_list []) with "token")
+  as "[hist token]"; try solve_ndisj.
 { apply/auth_both_valid_discrete. split; eauto.
   exact/to_max_prefix_list_valid. }
-iMod (own_alloc (● (Excl <$> to_db [] : gmap _ _))) as "(%γst & own_state)".
+iMod (nown_alloc (nroot.@"state")
+        (● (Excl <$> to_db [] : gmap _ _)) with "token")
+  as "[state token]"; try solve_ndisj.
 { apply/auth_auth_valid. by rewrite /to_db /= fmap_empty. }
-iMod (own_alloc (to_agree (γhist, γst))) as "(%γ & #own_names)" => //.
 iAssert (hist_frag γ []) as "#frag".
-{ iExists γhist, γst. iSplit => //.
-  by iDestruct "own_hist" as "[??]". }
+{ by iDestruct "hist" as "[??]". }
 iModIntro. iExists γ. iSplitL; last by iExists []; eauto.
-iExists []. iSplit; eauto. iSplitL "own_hist".
-- iExists _, _. iFrame. iApply "own_names".
-- iExists _, _. iSplitR; first by iApply "own_names".
-  by case: b.
+iExists []. iSplit; eauto. iSplitL "hist".
+- by iFrame.
+- by case: b.
 Qed.
 
 Lemma update_client t2' γ b n t1 t2 :
@@ -334,10 +294,7 @@ Qed.
 Lemma create_client_fake t1 t2 γ b n :
   client_view γ b n -∗
   mapsto γ false t1 t2.
-Proof.
-iIntros "(%os & -> & hist & (% & % & ? & _))".
-iExists _, _. iFrame.
-Qed.
+Proof. by iIntros "(%os & -> & hist & state)". Qed.
 
 Lemma create_server γ n db t1 t2 :
   db !! t1 = None →
