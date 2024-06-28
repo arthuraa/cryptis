@@ -1,6 +1,6 @@
 From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
-From stdpp Require Import namespaces.
+From stdpp Require Import namespaces coGset.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
@@ -65,10 +65,18 @@ Definition client cs : iProp := ∃ (n : nat),
   □ (∀ kt, public (TKey kt (si_key cs)) ↔ ▷ ⌜¬ session_ok cs⌝) ∗
   minted (si_key cs) ∗
   cst_ts cs ↦ #n ∗
-  DB.client_view (cst_name cs) (bool_decide (session_ok cs)) n.
+  DB.client_view (cst_name cs) n.
 
 Definition rem_mapsto cs t1 t2 : iProp :=
-  DB.mapsto (cst_name cs) (bool_decide (session_ok cs)) t1 t2.
+  DB.mapsto (cst_name cs) t1 t2.
+
+Definition rem_free_at cs T : iProp :=
+  DB.free_at (cst_name cs) T.
+
+Lemma rem_free_at_diff cs T1 T2 :
+  T1 ⊆ T2 →
+  rem_free_at cs T2 ⊣⊢ rem_free_at cs T1 ∗ rem_free_at cs (T2 ∖ T1).
+Proof. exact: DB.free_at_diff. Qed.
 
 Definition server ss : iProp := ∃ γ (n : nat) kvs db,
   session ss Resp γ ∗
@@ -113,11 +121,7 @@ Definition create_pred kS m : iProp := ∃ n t1 t2 si γ,
   public t2 ∗
   DB.create_at γ n t1 t2.
 
-Definition ack_create_pred kS m : iProp := ∃ n t1 t2 b si γ,
-  ⌜m = Spec.of_list [TInt n; t1; t2; TInt (if b then 1 else 0)]⌝ ∗
-  ⌜si_key si = kS⌝ ∗
-  session si Resp γ ∗
-  (⌜session_ok si⌝ -∗ ⌜b⌝ -∗ ∃ γ', session si Init γ' ∗ DB.free_at γ' n t1).
+Definition ack_create_pred kS (m : term) : iProp := True.
 
 Definition store_ctx : iProp :=
   enc_pred (N.@"init") init_pred ∗
@@ -209,8 +213,8 @@ Lemma ack_loadE si γ n t1 t2 t2' :
   store_ctx -∗
   session si Init γ -∗
   □ (∀ kt, public (TKey kt (si_key si)) ↔ ▷ ⌜¬ session_ok si⌝) -∗
-  DB.client_view γ (bool_decide (session_ok si)) n -∗
-  DB.mapsto γ (bool_decide (session_ok si)) t1 t2 -∗
+  DB.client_view γ n -∗
+  DB.mapsto γ t1 t2 -∗
   public (TEnc (si_key si) (Spec.tag (N.@"ack_load")
          (Spec.of_list [TInt n; t1; t2']))) -∗
   ▷ (public t2' ∗ ⌜session_ok si → t2' = t2⌝).
@@ -234,7 +238,6 @@ iDestruct (public_TEncE with "pub [//]") as "{pub} [pub|pub]".
   iDestruct ("stored" with "[//]") as "{stored} (%γ'' & sessI' & stored)".
   iPoseProof (session_agree_name with "sessI' sessI") as "(_ & ->)" => //.
   iApply (DB.load_client with "client mapsto stored").
-  exact: bool_decide_pack.
 Qed.
 
 End Defs.

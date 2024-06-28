@@ -56,10 +56,7 @@ iIntros "!> _".
 iDestruct "ctx" as "(_ & _ & _ & _ & _ & ? & ? & _)".
 wp_bind (match: _ with InjL <> => _ | InjR <> => _ end)%E.
 iApply (wp_wand _ _ _ (λ v, server ss ∗ ∃ b : bool,
-  ⌜v = #(((if b then 1 else 0) : Z))⌝ ∗
-  (⌜b = false⌝ ∨
-   ⌜b = true⌝ ∗
-   □ (⌜session_ok ss⌝ -∗ ∃ γ', session ss Init γ' ∗ DB.free_at γ' n t1)))%I
+  ⌜v = #(((if b then 1 else 0) : Z))⌝)%I
   with "[state]").
 { case db_t1: (db !! t1) => [t2'|]; wp_pures;
     first by iFrame; iExists false; eauto.
@@ -78,8 +75,7 @@ iApply (wp_wand _ _ _ (λ v, server ss ∗ ∃ b : bool,
         rewrite public_of_list /=.
         by iDestruct "p_m" as "(_ & ? & ? & _)"; eauto.
       + iIntros "%ok". tauto. }
-    iExists true. iSplit => //. iRight. iSplit => //.
-    iIntros "!> %"; tauto.
+    by iExists true.
   - iDestruct "p_m" as "(#p_m & _)". wp_store.
     have -> : (n + 1)%Z = S n :> Z by lia.
     iDestruct "p_m" as "(%n'' & %t1' & %t2' & %si & %γ' & %e & %e_kS &
@@ -95,13 +91,8 @@ iApply (wp_wand _ _ _ (λ v, server ss ∗ ∃ b : bool,
         iPoseProof (session_agree_name with "sessI sessI'") as "(_ & ->)" => //.
         iExists _. iSplit => //.
         by iApply DB.create_server. }
-    iModIntro. iExists true. iSplit => //. iRight. iSplit => //.
-    iIntros "!> %ok".
-    iDestruct ("view" with "[//]") as "{view} (%γ'' & sessI' & view)".
-    iPoseProof (session_agree with "sessI sessR") as "->" => //.
-    iPoseProof (session_agree_name with "sessI sessI'") as "(_ & ->)" => //.
-    iExists _. iSplit => //. by iApply DB.free_atI. }
-iIntros "%v (state & %b & -> & #vP)".
+    iModIntro. by iExists true. }
+iIntros "%v (state & %b & ->)".
 wp_pures. wp_bind (tint _). iApply wp_tint. wp_list.
 wp_bind (tint _). iApply wp_tint. wp_list. wp_term_of_list.
 iAssert (▷ (public t1 ∗ public t2))%I as "[p_t1 p_t2]".
@@ -119,10 +110,6 @@ iModIntro. iApply public_TEncIS => //.
 - rewrite minted_TKey.
   iPoseProof (public_minted with "p_m") as "{p_m} p_m".
   by rewrite minted_TEnc; iDestruct "p_m" as "[??]".
-- iModIntro. iExists n, t1, t2, b, ss, γ. do !iSplit => //.
-  iIntros "%ok %b_holds".
-  iDestruct "vP" as "[->|(_ & #vP)]" => //.
-  by iApply "vP".
 - iPoseProof (public_minted with "p_m") as "m_m".
   rewrite minted_TEnc minted_tag !minted_of_list /= !minted_TInt.
   iDestruct "m_m" as "(? & _ & ? & ? & _)". by eauto.

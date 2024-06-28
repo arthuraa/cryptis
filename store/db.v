@@ -1,8 +1,8 @@
 From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
-From stdpp Require Import namespaces.
-From iris.algebra Require Import agree auth csum gset gmap excl frac.
-From iris.algebra Require Import max_prefix_list.
+From stdpp Require Import namespaces coGset.
+From iris.algebra Require Import cmra agree auth csum gset gmap excl frac.
+From iris.algebra Require Import max_prefix_list functions.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta nown cryptis primitives tactics.
 From cryptis Require Import role session pk_auth pk_dh alist.
@@ -12,7 +12,7 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
 Definition db_stateUR : ucmra :=
-  authUR (gmapUR term (exclR termO)).
+  discrete_funUR (fun _ : term => authUR (optionUR (exclR (optionO termO)))).
 
 Variant operation :=
 | Update of term & term
@@ -40,6 +40,8 @@ Proof. solve_inG. Qed.
 
 Module DB.
 
+Definition N := nroot.@"db".
+
 Section DB.
 
 Implicit Types o : operationO.
@@ -48,6 +50,7 @@ Implicit Types db : gmap term term.
 Implicit Types γ : gname.
 Implicit Types n : nat.
 Implicit Types b : bool.
+Implicit Types T : coGset term.
 
 Definition op_app db o :=
   match o with
@@ -62,7 +65,7 @@ Definition op_app db o :=
 Definition to_db os : gmap term term :=
   foldl op_app ∅ os.
 
-Context `{!metaGS Σ, !dbGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !dbGS Σ}.
 
 Definition hist_auth γ os : iProp Σ :=
   nown γ (nroot.@"hist")
@@ -122,72 +125,130 @@ iDestruct "auth" as "[auth #frag]".
 iModIntro. iSplit => //. by iSplitL.
 Qed.
 
-Definition state_auth γ b db : iProp Σ :=
-  if b then
-    nown γ (nroot.@"state") (● (Excl <$> db) : db_stateUR)
-  else True%I.
+Definition db_state db : db_stateUR :=
+  λ t, ● (Excl' (db !! t)).
 
-Definition mapsto γ b t1 t2 : iProp Σ :=
-  if b then
-    nown γ (nroot.@"state") (◯ {[t1 := Excl t2]})
-  else True%I.
+Definition db_singleton t1 t2 : db_stateUR :=
+  discrete_fun_singleton t1 (◯ Excl' (Some t2)).
 
-Lemma state_auth_mapsto γ b db t1 t2 :
-  state_auth γ b db -∗
-  mapsto γ b t1 t2 -∗
-  ⌜b → db !! t1 = Some t2⌝.
+Definition db_free T : db_stateUR :=
+  λ t, if decide (t ∈ T) then ◯ Excl' None else ◯ None.
+
+Definition db_free_diff T1 T2 :
+  T1 ⊆ T2 →
+  db_free T2 ≡ db_free T1 ⋅ db_free (T2 ∖ T1).
 Proof.
-iIntros "Hauth Hfrag".
-case: b=> //. iIntros "_".
-iPoseProof (nown_valid_2 with "Hauth Hfrag") as "%valid".
-rewrite auth_both_valid_discrete in valid.
-case: valid => incl valid.
-rewrite singleton_included_exclusive_l // lookup_fmap in incl.
-pose proof (leibniz_equiv _ _ incl) as incl'.
-case db_t1: (db !! t1) => [t2'|] //= in incl'.
-iPureIntro. by case: incl' => <-.
+move=> sub x.
+rewrite /db_free discrete_fun_lookup_op.
+case: (decide (x ∈ T1)) => x_T1.
+{ rewrite decide_True; try set_solver.
+  rewrite decide_False //; set_solver. }
+case: (decide (x ∈ T2)) => x_T2.
+{ rewrite decide_True //; set_solver. }
+rewrite decide_False //; set_solver.
 Qed.
 
-Lemma state_auth_update t2' γ b db t1 t2 :
-  state_auth γ b db -∗
-  mapsto γ b t1 t2 ==∗
-  state_auth γ b (<[t1 := t2']>db) ∗
-  mapsto γ b t1 t2'.
+Lemma db_update db t1 t2 t2' :
+  db_state db ⋅ db_singleton t1 t2 ~~>
+  db_state (<[t1 := t2']> db) ⋅ db_singleton t1 t2'.
 Proof.
-case: b; last first.
-{ iIntros "?? !>". iFrame. }
+apply/cmra_discrete_update=> db' valid t.
+move/(_ t): valid.
+rewrite !discrete_fun_lookup_op /db_state /db_singleton.
+case: (decide (t = t1)) => [-> {t}|t_t1]; last first.
+{ rewrite lookup_insert_ne // !discrete_fun_lookup_singleton_ne //. }
+rewrite lookup_insert !discrete_fun_lookup_singleton //=.
+move: (db' t1); apply/cmra_discrete_update.
+apply: auth_update.
+apply (transitivity (y := (None, None))).
+- exact: delete_option_local_update.
+- exact: alloc_option_local_update.
+Qed.
+
+Lemma db_alloc db t1 t2 :
+  db_state db ⋅ db_free {[t1]} ~~>
+  db_state (<[t1 := t2]> db) ⋅ db_singleton t1 t2.
+Proof.
+apply/cmra_discrete_update=> db' valid t.
+move/(_ t): valid.
+rewrite !discrete_fun_lookup_op /db_state /db_free /db_singleton.
+case: (decide (t = t1)) => [-> {t}|t_t1]; last first.
+{ rewrite lookup_insert_ne // !discrete_fun_lookup_singleton_ne //.
+  rewrite decide_False //; set_solver. }
+rewrite decide_True // ?elem_of_singleton //.
+rewrite lookup_insert !discrete_fun_lookup_singleton //=.
+move: (db' t1); apply/cmra_discrete_update.
+apply: auth_update.
+apply: option_local_update.
+by apply: exclusive_local_update.
+Qed.
+
+Definition state_auth γ db : iProp Σ :=
+  nown γ (nroot.@"state") (db_state db).
+
+Definition mapsto γ t1 t2 : iProp Σ :=
+  nown γ (nroot.@"state") (db_singleton t1 t2).
+
+Definition free_at γ T : iProp Σ :=
+  nown γ (nroot.@"state") (db_free T).
+
+Lemma free_at_diff γ T1 T2 :
+  T1 ⊆ T2 →
+  free_at γ T2 ⊣⊢ free_at γ T1 ∗ free_at γ (T2 ∖ T1).
+Proof.
+move=> sub. by rewrite /free_at db_free_diff // nown_op.
+Qed.
+
+Lemma state_auth_mapsto γ db t1 t2 :
+  state_auth γ db -∗
+  mapsto γ t1 t2 -∗
+  ⌜db !! t1 = Some t2⌝.
+Proof.
+iIntros "Hauth Hfrag".
+iPoseProof (nown_valid_2 with "Hauth Hfrag") as "%valid".
+move/(_ t1): valid. rewrite /db_singleton.
+rewrite discrete_fun_lookup_op /db_state discrete_fun_lookup_singleton.
+rewrite auth_both_valid_discrete.
+case => incl _.
+by move/Excl_included/leibniz_equiv_iff: incl => <-.
+Qed.
+
+Lemma state_auth_update t2' γ db t1 t2 :
+  state_auth γ db -∗
+  mapsto γ t1 t2 ==∗
+  state_auth γ (<[t1 := t2']>db) ∗
+  mapsto γ t1 t2'.
+Proof.
 iIntros "Hauth Hfrag".
 iMod (nown_update_2 with "Hauth Hfrag") as "own".
-{ apply: auth_update.
-  apply: (singleton_local_update_any _ _ _ (Excl t2') (Excl t2')) => ? _.
-  exact: exclusive_local_update. }
+{ eapply (@db_update _ _ _ t2'). }
 iDestruct "own" as "[Hauth Hfrag]".
 iModIntro. iSplitL "Hauth" => //.
-rewrite /state_auth fmap_insert. by eauto.
 Qed.
 
-Lemma state_auth_create t1 t2 γ b db :
-  state_auth γ b db ==∗
-  state_auth γ b (op_app db (Create t1 t2)) ∗
-  (if db !! t1 then True else mapsto γ b t1 t2).
+Lemma state_auth_create t1 t2 γ db :
+  state_auth γ db -∗
+  free_at γ {[t1]} ==∗
+  state_auth γ (op_app db (Create t1 t2)) ∗
+  mapsto γ t1 t2.
 Proof.
-rewrite /=; case db_t1: (db !! t1) => [t2'|]; eauto.
-case: b; last first.
-{ iIntros "#?". iModIntro. iSplit; trivial. }
-iIntros "Hauth".
-iMod (nown_update _ _ (a' := (_ ⋅ _)) with "Hauth") as "[Hauth Hfrag]".
-{ apply: auth_update_alloc.
-  apply: (alloc_local_update _ _ t1 (Excl t2)) => //.
-  by rewrite lookup_fmap db_t1. }
+iIntros "Hauth Hfree". rewrite /=.
+iAssert (⌜db !! t1 = None⌝)%I as "#->".
+{ iPoseProof (nown_valid_2 with "Hauth Hfree") as "%valid".
+  move/(_ t1): valid. rewrite /db_state /db_free.
+  rewrite discrete_fun_lookup_op decide_True ?elem_of_singleton //.
+  rewrite auth_both_valid_discrete.
+  by case=> /Excl_included/leibniz_equiv_iff <-. }
+iMod (nown_update_2 _ _ (a' := (_ ⋅ _)) with "Hauth Hfree") as "[Hauth Hfrag]".
+{ by apply: (@db_alloc _ t1 t2). }
 iModIntro. iSplitL "Hauth" => //.
-rewrite /state_auth fmap_insert. by iFrame.
 Qed.
 
-Definition client_view γ b n : iProp Σ :=
+Definition client_view γ n : iProp Σ :=
   ∃ os,
     ⌜n = length os⌝ ∗
     hist_auth γ os ∗
-    state_auth γ b (to_db os).
+    state_auth γ (to_db os).
 
 Definition update_at γ n t1 t2 : iProp Σ :=
   ∃ os, ⌜n = length os⌝ ∗
@@ -202,7 +263,7 @@ Definition server_view γ n db : iProp Σ :=
         ⌜db = to_db os⌝ ∗
         hist_frag γ os.
 
-Lemma alloc b : ⊢ |==> ∃ γ, client_view γ b 0 ∗ server_view γ 0 ∅.
+Lemma alloc : ⊢ |==> ∃ γ, client_view γ 0 ∗ free_at γ ⊤ ∗ server_view γ 0 ∅.
 Proof.
 iIntros "".
 iMod nown_token_alloc as "[%γ token]".
@@ -211,24 +272,27 @@ iMod (nown_alloc (nroot.@"hist")
   as "[hist token]"; try solve_ndisj.
 { apply/auth_both_valid_discrete. split; eauto.
   exact/to_max_prefix_list_valid. }
-iMod (nown_alloc (nroot.@"state")
-        (● (Excl <$> to_db [] : gmap _ _)) with "token")
-  as "[state token]"; try solve_ndisj.
-{ apply/auth_auth_valid. by rewrite /to_db /= fmap_empty. }
+iMod (nown_alloc (nroot.@"state") (db_state ∅ ⋅ db_free ⊤) with "token")
+  as "[[state free] token]"; try solve_ndisj.
+{ rewrite /db_state /db_free => t /=.
+  rewrite discrete_fun_lookup_op lookup_empty /=.
+  rewrite -> decide_True; try set_solver.
+  rewrite auth_both_valid_discrete Excl_included leibniz_equiv_iff.
+  by split. }
 iAssert (hist_frag γ []) as "#frag".
 { by iDestruct "hist" as "[??]". }
-iModIntro. iExists γ. iSplitL; last by iExists []; eauto.
-iExists []. iSplit; eauto. iSplitL "hist".
-- by iFrame.
-- by case: b.
+iModIntro. iExists γ. iSplitR "free".
+- iExists []. iSplit; eauto. iSplitL "hist" => //.
+- iSplitL; try iApply "free".
+  iExists []. eauto.
 Qed.
 
-Lemma update_client t2' γ b n t1 t2 :
-  client_view γ b n -∗
-  mapsto γ b t1 t2 ==∗
-  client_view γ b (S n) ∗
+Lemma update_client t2' γ n t1 t2 :
+  client_view γ n -∗
+  mapsto γ t1 t2 ==∗
+  client_view γ (S n) ∗
   update_at γ n t1 t2' ∗
-  mapsto γ b t1 t2'.
+  mapsto γ t1 t2'.
 Proof.
 iIntros "(%os & -> & own_os & own_db) own_frag".
 iMod (hist_update _ os (Update t1 t2') with "own_os") as "[auth_os #frag_os]".
@@ -255,46 +319,21 @@ do 2!iSplit => //.
 by rewrite /to_db foldl_app.
 Qed.
 
-Definition free_at γ n t1 : iProp Σ :=
-  ∃ os, ⌜n = length os⌝ ∗
-        hist_frag γ os ∗
-        ⌜to_db os !! t1 = None⌝.
-
-Lemma free_atI γ n db t1 :
-  db !! t1 = None →
-  server_view γ n db -∗
-  free_at γ n t1.
-Proof.
-iIntros "%db_t1 (%os & -> & -> & #frag)".
-iExists os. by eauto.
-Qed.
-
-Lemma create_client t1 t2 γ b n :
-  client_view γ b n ==∗
+Lemma create_client t1 t2 γ n :
+  client_view γ n -∗
+  free_at γ {[t1]} ==∗
   create_at γ n t1 t2 ∗
-  client_view γ b (S n) ∗
-  (free_at γ n t1 -∗ mapsto γ b t1 t2).
+  client_view γ (S n) ∗
+  mapsto γ t1 t2.
 Proof.
-iIntros "(%os & -> & hist & state)".
+iIntros "(%os & -> & hist & state) Hfree".
 iMod (hist_update _ _ (Create t1 t2) with "hist") as "[hist_auth #hist_frag]".
-iMod (state_auth_create t1 t2 with "state") as "[state mapsto]".
+iMod (state_auth_create t1 t2 with "state Hfree") as "[state mapsto]".
 have ->: op_app (to_db os) (Create t1 t2) = to_db (os ++ [Create t1 t2]).
 { by rewrite /to_db foldl_app. }
-iModIntro. iSplitR; first by iExists os; eauto.
-iSplitL "hist_auth state".
-{ iExists _. iFrame. by rewrite app_length Nat.add_comm. }
-iIntros "(%os' & %lengthE & #hist_frag' & %db_t1)".
-iAssert (hist_frag γ os) as "#hist_frag''".
-{ iApply (hist_frag_prefix_of with "hist_frag").
-  by exists [Create t1 t2]. }
-iPoseProof (hist_frag_agree with "hist_frag'' hist_frag'") as "->" => //.
-by rewrite db_t1.
+iModIntro. iFrame. iSplitR; first by iExists os; eauto.
+iExists _. iFrame. by rewrite app_length Nat.add_comm.
 Qed.
-
-Lemma create_client_fake t1 t2 γ b n :
-  client_view γ b n -∗
-  mapsto γ false t1 t2.
-Proof. by iIntros "(%os & -> & hist & state)". Qed.
 
 Lemma create_server γ n db t1 t2 :
   db !! t1 = None →
@@ -316,18 +355,17 @@ Definition stored_at γ n t1 t2 : iProp Σ :=
         hist_frag γ os ∗
         ⌜to_db os !! t1 = Some t2⌝.
 
-Lemma load_client γ b n t1 t2 t2' :
-  b →
-  client_view γ b n -∗
-  mapsto γ b t1 t2 -∗
+Lemma load_client γ n t1 t2 t2' :
+  client_view γ n -∗
+  mapsto γ t1 t2 -∗
   stored_at γ n t1 t2' -∗
   ⌜t2' = t2⌝.
 Proof.
-iIntros "%bP (%os & -> & hist & state) t1_t2 (%os' & %lengthE & #Hfrag & %os_t1)".
+iIntros "(%os & -> & hist & state) t1_t2 (%os' & %lengthE & #Hfrag & %os_t1)".
 iPoseProof (hist_auth_frag with "hist") as "#Hfrag'".
 iPoseProof (hist_frag_agree with "Hfrag Hfrag'") as "->" => //.
 iPoseProof (state_auth_mapsto with "state t1_t2") as "%os_t1'".
-iPureIntro. rewrite os_t1 in os_t1'. by case/(_ bP): os_t1' => ->.
+iPureIntro. rewrite os_t1 in os_t1'. by case: os_t1' => ->.
 Qed.
 
 Lemma load_server γ n db t1 t2 :

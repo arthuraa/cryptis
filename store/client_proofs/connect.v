@@ -48,8 +48,7 @@ iIntros "!> %Φ hon post". rewrite /Client.connect. wp_pures.
 iCombine "hon post" as "post". iRevert "post".
 iApply wp_do_until. iIntros "!> [hon post]". wp_pures.
 wp_bind (initiator _ _ _ _ _).
-iMod (DB.alloc (bool_decide (TKey Enc kI ∈ T ∧ TKey Enc kR ∈ T)))
-  as "(%γ & auth & #frag)". wp_pures.
+iMod DB.alloc as "(%γ & auth & free & #frag)". wp_pures.
 iApply (wp_initiator γ with "[//] [//] [//] [] [] [hon]"); try solve_ndisj; eauto.
 iIntros "!> %okS (hon & HokS)".
 case: okS => [kS|]; wp_pures; last by iLeft; iFrame; eauto.
@@ -69,10 +68,6 @@ iApply ("post" $! {| cst_si := si;
                      cst_name := γ |}).
 rewrite /client /=. iFrame. iModIntro. iSplit => //.
 iExists 0. iFrame. iSplit => //. iSplit => //.
-rewrite /session_ok /=. iFrame. iSplit => //.
-set b1 := bool_decide _. set b2 := bool_decide _.
-suff -> : b1 = b2 by [].
-by apply: bool_decide_ext.
 Qed.
 
 End Verif.
