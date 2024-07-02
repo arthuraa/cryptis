@@ -88,4 +88,5 @@ Qed.
 
 End Laws.
 
+Arguments gmeta_token_difference {Σ _} γ E1 E2.
 Arguments gmeta_set {Σ _ _ _ _} E γ N x.
