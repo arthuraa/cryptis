@@ -961,12 +961,12 @@ Definition honest_frag := unseal honest_frag_aux.
 Lemma honest_frag_unseal : honest_frag = honest_frag_def.
 Proof. exact: seal_eq. Qed.
 
-Definition compromised_at_def n t : iProp :=
+Definition public_at_def n t : iProp :=
   own cryptis_hon_name (◯CM (∅, {[(n, t)]})) ∗
   public t.
-Definition compromised_at_aux : seal compromised_at_def. by eexists. Qed.
-Definition compromised_at := unseal compromised_at_aux.
-Lemma compromised_at_unseal : compromised_at = compromised_at_def.
+Definition public_at_aux : seal public_at_def. by eexists. Qed.
+Definition public_at := unseal public_at_aux.
+Lemma public_at_unseal : public_at = public_at_def.
 Proof. exact: seal_eq. Qed.
 
 Definition mint_map_singleton n t : mint_mapUR :=
@@ -1121,11 +1121,11 @@ Instance honest_frag_persistent n X : Persistent (◯H{n} X).
 Proof. rewrite honest_frag_unseal. apply _. Qed.
 
 #[global]
-Instance compromised_at_persistent n t : Persistent (compromised_at n t).
-Proof. rewrite compromised_at_unseal. apply _. Qed.
+Instance public_at_persistent n t : Persistent (public_at n t).
+Proof. rewrite public_at_unseal. apply _. Qed.
 
-Lemma compromised_at_public n t : compromised_at n t -∗ public t.
-Proof. rewrite compromised_at_unseal. by iIntros "[? ?]". Qed.
+Lemma public_at_public n t : public_at n t -∗ public t.
+Proof. rewrite public_at_unseal. by iIntros "[? ?]". Qed.
 
 #[global]
 Instance minted_at_persistent n t : Persistent (minted_at n t).
@@ -1186,11 +1186,11 @@ iPureIntro.
 by apply: (comp_map_frag_valid_agree val); rewrite lookup_singleton.
 Qed.
 
-Lemma honest_frag_compromised_at n X m t :
+Lemma honest_frag_public_at n X m t :
   m ≤ n →
-  ◯H{n} X -∗ compromised_at m t -∗ ⌜t ∉ X⌝.
+  ◯H{n} X -∗ public_at m t -∗ ⌜t ∉ X⌝.
 Proof.
-rewrite honest_frag_unseal compromised_at_unseal.
+rewrite honest_frag_unseal public_at_unseal.
 iIntros "%m_n (#frag1 & _) (#frag2 & _)".
 iPoseProof (own_valid_2 with "frag1 frag2") as "%val".
 move/comp_map_frag_valid_dis/(_ n X m t): val.
@@ -1224,14 +1224,14 @@ move/comp_map_frag_valid_agree: val => -> {X'}.
 iFrame. iModIntro. iExists H, C, M. iFrame. eauto.
 Qed.
 
-Lemma compromised_atI E dq t n X :
+Lemma public_atI E dq t n X :
   ↑cryptisN.@"honest" ⊆ E →
   cryptis_ctx -∗
   £ 1 -∗
   ●H{dq|n} X -∗
   public t ={E}=∗
   ●H{dq|n} X ∗
-  compromised_at n t.
+  public_at n t.
 Proof.
 iIntros "%sub #ctx cred hon #p_t".
 iMod (honest_acc with "ctx hon")
@@ -1255,7 +1255,7 @@ iMod ("close" with "[honI honI_frag own_M sec_X]") as "_".
   rewrite big_sepS_union_pers big_sepS_singleton /=.
   by eauto. }
 iFrame.
-by rewrite compromised_at_unseal; iModIntro; iSplit.
+by rewrite public_at_unseal; iModIntro; iSplit.
 Qed.
 
 Lemma minted_atI E dq t n X :

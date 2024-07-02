@@ -320,9 +320,9 @@ iAssert ( |={E}=>
   as "{p_m2} > [hon #p_m2]".
 { iPoseProof (public_TEncE with "p_m2 [//]") as "{p_m2} p_m2".
   iDestruct "p_m2" as "[[comp _]  | (#i_m2 & _ & _)]".
-  { iMod (compromised_atI with "[ctx] [H3] [hon] [comp]")
+  { iMod (public_atI with "[ctx] [H3] [hon] [comp]")
       as "[hon #comp']" => //; try solve_ndisj.
-    iPoseProof (honest_frag_compromised_at with "honI comp'") as "%" => //.
+    iPoseProof (honest_frag_public_at with "honI comp'") as "%" => //.
     iFrame. eauto. }
   iMod (lc_fupd_elim_later_pers with "H3 i_m2") as "{i_m2} #i_m2".
   iDestruct "i_m2"
@@ -482,18 +482,18 @@ iAssert ( |={E}=> ●H{dq|n} T ∗
   with "[hon_auth H3 H4]"
   as "{p_m3} > [hon_auth #i_m3]".
 { iDestruct "p_m3" as "[(p_skI & _) | (#i_m3 & _ & _)]".
-  { iMod (compromised_atI with "[//] H3 hon_auth p_skI")
+  { iMod (public_atI with "[//] H3 hon_auth p_skI")
       as "[hon_auth #comp]" => //; try by solve_ndisj.
-    iPoseProof (honest_frag_compromised_at with "honR comp") as "%" => //.
+    iPoseProof (honest_frag_public_at with "honR comp") as "%" => //.
     iFrame. iLeft. iIntros "!> !> %". tauto. }
   iMod (lc_fupd_elim_later_pers with "H4 i_m3") as "{i_m3} #i_m3".
   iDestruct "i_m3" as "(%a & %gb & %kR' & %n' & %T' & %γ' & %e_m3 &
                         p_a & pred_a & honI & sessionI & i_m3)".
   case/Spec.of_list_inj: e_m3 => -> <- <- {ga gb kR'}.
   iDestruct "i_m3" as "[i_m3 | i_m3]".
-  { iMod (compromised_atI with "[//] H3 hon_auth i_m3")
+  { iMod (public_atI with "[//] H3 hon_auth i_m3")
       as "[hon_auth #comp]" => //; try by solve_ndisj.
-    iPoseProof (honest_frag_compromised_at with "honR comp") as "%" => //.
+    iPoseProof (honest_frag_public_at with "honR comp") as "%" => //.
     iFrame. iLeft. iIntros "!> !> %". tauto. }
   iDestruct "i_m3" as "(%b' & %γ'' & %e_b & i_m3)".
   case/TExp_inj: e_b => _ /(Permutation_singleton_inj _ _) <- {b'}.
