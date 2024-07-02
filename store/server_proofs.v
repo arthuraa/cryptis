@@ -84,12 +84,12 @@ iIntros "%Φ (#? & #chan_c & #ctx & #p_ek & hon) post".
 wp_pures. wp_rec. wp_pures. wp_bind (responder _ _ _ _).
 iAssert (dh_auth_ctx (N.@"auth")) as "#?".
   by iDestruct "ctx" as "(_ & _ & _ & _ & _ & _ & _ & ?)".
-iApply (wp_responder inhabitant
+iApply (wp_responder
          with "[# //] [# //] [# //] [# //] [hon]") => //;
   try by solve_ndisj.
 iIntros "!> %res (hon & resP)". case: res => [[pkI kS]|]; wp_pures; last first.
   iApply ("IH" with "[hon] [$]"). iFrame. by eauto.
-iDestruct "resP" as "(%kI & -> & #m_kI & #m_kS & #sessR & #sec_key)".
+iDestruct "resP" as "(%kI & %γ & -> & #m_kI & #m_kS & #sessR & _ & #sec_key)".
 wp_bind (Fork _). iApply wp_fork; last first.
   iModIntro. wp_pures. iApply ("IH" with "[-post] post"). iFrame.
   by eauto.

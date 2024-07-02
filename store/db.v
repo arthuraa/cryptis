@@ -67,11 +67,11 @@ Definition to_db os : gmap term term :=
 Context `{!cryptisGS Σ, !heapGS Σ, !dbGS Σ}.
 
 Definition hist_auth γ os : iProp Σ :=
-  nown γ (nroot.@"hist")
+  nown γ (N.@"hist")
          (● to_max_prefix_list os ⋅ ◯ to_max_prefix_list os).
 
 Definition hist_frag γ os : iProp Σ :=
-  nown γ (nroot.@"hist")
+  nown γ (N.@"hist")
          (◯ to_max_prefix_list os).
 
 Local Instance persistent_hist_frag γ os : Persistent (hist_frag γ os).
@@ -183,13 +183,13 @@ by apply: exclusive_local_update.
 Qed.
 
 Definition state_auth γ db : iProp Σ :=
-  nown γ (nroot.@"state") (db_state db).
+  nown γ (N.@"state") (db_state db).
 
 Definition mapsto γ t1 t2 : iProp Σ :=
-  nown γ (nroot.@"state") (db_singleton t1 t2).
+  nown γ (N.@"state") (db_singleton t1 t2).
 
 Definition free_at γ T : iProp Σ :=
-  nown γ (nroot.@"state") (db_free T).
+  nown γ (N.@"state") (db_free T).
 
 Lemma free_at_diff γ T1 T2 :
   T1 ⊆ T2 →
@@ -262,16 +262,21 @@ Definition server_view γ n db : iProp Σ :=
         ⌜db = to_db os⌝ ∗
         hist_frag γ os.
 
-Lemma alloc : ⊢ |==> ∃ γ, client_view γ 0 ∗ free_at γ ⊤ ∗ server_view γ 0 ∅.
+Lemma alloc γ E :
+  ↑N ⊆ E →
+  nown_token γ E ==∗
+  client_view γ 0 ∗
+  free_at γ ⊤ ∗
+  server_view γ 0 ∅ ∗
+  nown_token γ (E ∖ ↑N).
 Proof.
-iIntros "".
-iMod nown_token_alloc as "[%γ token]".
-iMod (nown_alloc (nroot.@"hist")
+iIntros "%sub token".
+iMod (nown_alloc (N.@"hist")
         (● to_max_prefix_list [] ⋅ ◯ to_max_prefix_list []) with "token")
   as "[hist token]"; try solve_ndisj.
 { apply/auth_both_valid_discrete. split; eauto.
   exact/to_max_prefix_list_valid. }
-iMod (nown_alloc (nroot.@"state") (db_state ∅ ⋅ db_free ⊤) with "token")
+iMod (nown_alloc (N.@"state") (db_state ∅ ⋅ db_free ⊤) with "token")
   as "[[state free] token]"; try solve_ndisj.
 { rewrite /db_state /db_free => t /=.
   rewrite discrete_fun_lookup_op lookup_empty /=.
@@ -280,10 +285,12 @@ iMod (nown_alloc (nroot.@"state") (db_state ∅ ⋅ db_free ⊤) with "token")
   by split. }
 iAssert (hist_frag γ []) as "#frag".
 { by iDestruct "hist" as "[??]". }
-iModIntro. iExists γ. iSplitR "free".
-- iExists []. iSplit; eauto. iSplitL "hist" => //.
-- iSplitL; try iApply "free".
-  iExists []. eauto.
+iModIntro. iSplitR "free token".
+{ iExists []. iSplit; eauto. iSplitL "hist" => //. }
+iSplitL "free"; try iApply "free".
+iSplitR.
+{ iExists []. eauto. }
+iApply (nown_token_drop with "token"). solve_ndisj.
 Qed.
 
 Lemma update_client t2' γ n t1 t2 :

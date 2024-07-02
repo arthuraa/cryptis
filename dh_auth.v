@@ -4,7 +4,7 @@ From mathcomp Require ssrbool.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term cryptis primitives tactics.
+From cryptis Require Import lib term gmeta nown cryptis primitives tactics.
 From cryptis Require Import role.
 
 Set Implicit Arguments.
@@ -238,7 +238,7 @@ Qed.
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
 
-Lemma wp_initiator γ c kI kR dq n T E :
+Lemma wp_initiator c kI kR dq n T E :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
@@ -250,16 +250,18 @@ Lemma wp_initiator γ c kI kR dq n T E :
     initiator c (TKey Dec kI) (TKey Enc kI) (TKey Dec kR) @ E
   {{{ okS, RET (repr (Spec.mkskey <$> okS));
       ●H{dq|n} T ∗
-      if okS is Some kS then
+      if okS is Some kS then ∃ γ,
         let si := SessInfo kI kR kS n T in
         minted kS ∗
         session si Init γ ∗
+        nown_token γ ⊤ ∗
         □ (∀ kt, public (TKey kt kS) ↔ ▷ ⌜¬ session_ok si⌝)
       else True
  }}}.
 Proof.
 rewrite /initiator.
 iIntros (??) "#chan_c #ctx #(? & ?) #p_kI #p_kR %Ψ !> hon Hpost".
+iMod nown_token_alloc as (γ) "?".
 iMod (minted_at_list with "[//] hon") as "[hon list]" => //;
   try solve_ndisj.
 wp_pures.
@@ -386,11 +388,12 @@ iAssert (□ (∀ kt, public (TKey kt sk) ↔ ▷ ⌜¬ session_ok si⌝))%I as 
       tauto.
     + iPoseProof ("a_pred" with "a_pred'") as ">%contra".
       by have := contra _ _ eq_refl. }
-wp_pures. iApply ("Hpost" $! (Some sk)). rewrite -[SessInfo _ _ _ _ _]/si.
+wp_pures. iApply ("Hpost" $! (Some sk)). iFrame.
+rewrite -[SessInfo _ _ _ _ _]/si. iExists γ.
 iFrame. eauto.
 Qed.
 
-Lemma wp_responder γ c kR dq n T E :
+Lemma wp_responder c kR dq n T E :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
@@ -402,17 +405,19 @@ Lemma wp_responder γ c kR dq n T E :
   {{{ okS,
       RET (repr ((λ p, pair p.1 (Spec.mkskey p.2)) <$> okS));
       ●H{dq|n} T ∗
-      if okS is Some (vkI, kS) then ∃ kI,
+      if okS is Some (vkI, kS) then ∃ kI γ,
         let si := SessInfo kI kR kS n T in
         ⌜vkI = TKey Dec kI⌝ ∗
         minted kI ∗
         minted kS ∗
         session si Resp γ ∗
+        nown_token γ ⊤ ∗
         □ (∀ kt, public (TKey kt kS) ↔ ▷ ⌜¬ session_ok si⌝)
       else True
  }}}.
 Proof.
 iIntros "% % #chan_c #? (#? & #?) #p_vkR !> %Φ hon_auth Hpost".
+iMod nown_token_alloc as (γ) "?".
 wp_lam. wp_pures. wp_bind (recv _). iApply wp_recv => //.
 iIntros "%m1 #p_m1". wp_pures.
 wp_list_of_term m1; last by protocol_failure.
@@ -530,7 +535,7 @@ iAssert (□ (∀ kt, public (TKey kt sk) ↔ ▷ ⌜¬ session_ok si⌝))%I
   + iPoseProof ("pred_a" with "contra") as ">%contra".
     by have := contra _ _ eq_refl. }
 iApply ("Hpost" $! (Some (TKey Dec kI, sk))).
-iFrame. iModIntro. iExists kI. by eauto.
+iFrame. iModIntro. iExists kI, γ. iFrame. by eauto.
 Qed.
 
 End Verif.
