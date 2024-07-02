@@ -35,7 +35,7 @@ Context `{!cryptisGS Σ, !heapGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (γ : gname) (l : loc) (k t : term) (v : val).
-Implicit Types (kvs : list (term * term)) (db : gmap term term).
+Implicit Types (kvs : list (term * val)) (db : gmap term val).
 
 Definition is_alist v db : Prop :=
   ∃ kvs, v = repr kvs ∧
@@ -66,15 +66,15 @@ iIntros "!> _"; rewrite kvs_db.
 by case: List.find => [[k' t']|] /=; wp_pures; iApply "Hpost".
 Qed.
 
-Lemma wp_insert v db k t E :
+Lemma wp_insert v db k v' E :
   is_alist v db ->
   {{{ True }}}
-    insert v k t @ E
-  {{{ v', RET v'; ⌜is_alist v' (<[k := t]>db)⌝ }}}.
+    insert v k v' @ E
+  {{{ r, RET r; ⌜is_alist r (<[k := v']>db)⌝ }}}.
 Proof.
 case=> [kvs] [-> {v}] kvs_db. iIntros "%Φ _ Hpost".
-wp_lam. wp_pures. iApply (wp_cons _ (k, t)). iApply "Hpost".
-iPureIntro. exists ((k, t) :: kvs); split => //= k'.
+wp_lam. wp_pures. iApply (wp_cons _ (k, v')). iApply "Hpost".
+iPureIntro. exists ((k, v') :: kvs); split => //= k'.
 case: bool_decide_reflect => [<-|ne] //=;
 by rewrite (lookup_insert, lookup_insert_ne).
 Qed.
@@ -87,7 +87,7 @@ Lemma wp_delete v db k E :
 Proof.
 case=> [kvs] [-> {v}] kvs_db. iIntros "%Φ _ Hpost".
 wp_lam; wp_pures.
-iApply (wp_filter_list (λ p : term * term, negb (bool_decide (k = p.1))))
+iApply (wp_filter_list (λ p : term * val, negb (bool_decide (k = p.1))))
        => //.
 { iIntros "%p %Ψ _ Hpost". wp_pures. wp_bind (eq_term _ _).
   iApply wp_eq_term. wp_pures. by iApply "Hpost". }

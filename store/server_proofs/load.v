@@ -51,6 +51,7 @@ case: Spec.to_intP => [ {m} n' -> | _]; wp_pures; last by iApply ("post" $! None
 case: bool_decide_reflect => [[<-]|?]; wp_pures; last by iApply ("post" $! None).
 wp_bind (AList.find _ _). iApply AList.wp_find => //.
 iIntros "!> _".
+rewrite lookup_fmap.
 case db_t1: (db !! t1) => [t2|]; wp_pures; last by iApply ("post" $! None).
 wp_list. wp_bind (tint _). iApply wp_tint. wp_list. wp_term_of_list.
 wp_pures. wp_tsenc. wp_bind (send _ _).

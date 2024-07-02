@@ -77,6 +77,7 @@ wp_bind (send _ _). iApply wp_send => //.
 { iModIntro. iApply ack_storeI => //. }
 wp_pures. iApply ("post" $! (Some #())).
 iExists γ, (S n), kvs', (<[t1 := t2]>db). iFrame.
+rewrite -fmap_insert in kvs'_db'.
 do 4!iSplitR => //.
 iSplitR.
 { iModIntro. iApply big_sepM_insert_2 => //. eauto. }

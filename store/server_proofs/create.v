@@ -52,7 +52,7 @@ case: Spec.to_intP => [ {m} n' ->| _]; wp_pures;
 case: bool_decide_reflect => [[<-] {n'}|?]; wp_pures;
   last by iApply ("post" $! None).
 wp_bind (AList.find _ _). iApply AList.wp_find => //.
-iIntros "!> _".
+iIntros "!> _". rewrite lookup_fmap.
 iDestruct "ctx" as "(_ & _ & _ & _ & _ & ? & ? & _)".
 wp_bind (match: _ with InjL <> => _ | InjR <> => _ end)%E.
 iApply (wp_wand _ _ _ (λ v, server ss ∗ ∃ b : bool,
@@ -70,6 +70,7 @@ iApply (wp_wand _ _ _ (λ v, server ss ∗ ∃ b : bool,
     have -> : (n + 1)%Z = S n :> Z by lia.
     iModIntro. iSplitL.
     { iExists _, (S n), kvs'', (<[t1 := t2]>db). iFrame.
+      rewrite fmap_insert.
       do 5!iSplit => //.
       + iApply big_sepM_insert_2 => //.
         rewrite public_of_list /=.
@@ -83,7 +84,8 @@ iApply (wp_wand _ _ _ (λ v, server ss ∗ ∃ b : bool,
     case/Spec.of_list_inj: e => e <- <- {t1' t2'}.
     have {n'' e} <- : n = n'' by lia.
     iSplitL.
-    { iExists γ, (S n), _, _. iFrame. iModIntro. do !iSplit => //.
+    { iExists γ, (S n), _, _. iFrame. iModIntro.
+      rewrite -fmap_insert in kvs''_db'. do !iSplit => //.
       - iApply big_sepM_insert_2; eauto.
       - iIntros "%ok".
         iDestruct ("view" with "[//]") as "{view} (%γ'' & sessI' & view)".

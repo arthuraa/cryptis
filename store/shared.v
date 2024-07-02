@@ -84,7 +84,7 @@ Definition server ss : iProp := ∃ γ (n : nat) kvs db,
   minted (si_key ss) ∗
   sst_ts ss ↦ #n ∗
   sst_db ss ↦ kvs ∗
-  ⌜AList.is_alist kvs db⌝ ∗
+  ⌜AList.is_alist kvs (repr <$> db)⌝ ∗
   ([∗ map] t1 ↦ t2 ∈ db, public t1 ∗ public t2) ∗
   (⌜session_ok ss⌝ -∗ ∃ γ', session ss Init γ' ∗ DB.server_view γ' n db).
 
