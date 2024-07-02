@@ -61,7 +61,7 @@ Implicit Types si : sess_info.
 Variable N : namespace.
 
 Definition client cs : iProp := ∃ (n : nat),
-  session cs Init (cst_name cs) ∗
+  session (cst_name cs) cs Init ∗
   □ (∀ kt, public (TKey kt (si_key cs)) ↔ ▷ ⌜¬ session_ok cs⌝) ∗
   minted (si_key cs) ∗
   cst_ts cs ↦ #n ∗
@@ -79,24 +79,24 @@ Lemma rem_free_at_diff cs T1 T2 :
 Proof. exact: DB.free_at_diff. Qed.
 
 Definition server ss : iProp := ∃ γ (n : nat) kvs db,
-  session ss Resp γ ∗
+  session γ ss Resp ∗
   □ (∀ kt, public (TKey kt (si_key ss)) ↔ ▷ ⌜¬ session_ok ss⌝) ∗
   minted (si_key ss) ∗
   sst_ts ss ↦ #n ∗
   sst_db ss ↦ kvs ∗
   ⌜AList.is_alist kvs (repr <$> db)⌝ ∗
   ([∗ map] t1 ↦ t2 ∈ db, public t1 ∗ public t2) ∗
-  (⌜session_ok ss⌝ -∗ ∃ γ', session ss Init γ' ∗ DB.server_view γ' n db).
+  (⌜session_ok ss⌝ -∗ ∃ γ', session γ' ss Init ∗ DB.server_view γ' n db).
 
 Definition init_pred kS (m : term) : iProp := ∃ si γ,
   ⌜si_key si = kS⌝ ∗
-  session si Init γ ∗
+  session γ si Init ∗
   DB.server_view γ 0 ∅.
 
 Definition store_pred kS m : iProp := ∃ (n : nat) t1 t2 si γ,
   ⌜m = Spec.of_list [TInt n; t1; t2]⌝ ∗
   ⌜si_key si = kS⌝ ∗
-  session si Init γ ∗
+  session γ si Init ∗
   public t1 ∗
   public t2 ∗
   DB.update_at γ n t1 t2.
@@ -110,13 +110,13 @@ Definition ack_load_pred (kS m : term) : iProp := ∃ n t1 t2 si γ,
   ⌜m = Spec.of_list [TInt n; t1; t2]⌝ ∗
   ⌜si_key si = kS⌝ ∗
   public t2 ∗
-  session si Resp γ ∗
-  (⌜session_ok si⌝ -∗ ∃ γ', session si Init γ' ∗ DB.stored_at γ' n t1 t2).
+  session γ si Resp ∗
+  (⌜session_ok si⌝ -∗ ∃ γ', session γ' si Init ∗ DB.stored_at γ' n t1 t2).
 
 Definition create_pred kS m : iProp := ∃ n t1 t2 si γ,
   ⌜m = Spec.of_list [TInt n; t1; t2]⌝ ∗
   ⌜si_key si = kS⌝ ∗
-  session si Init γ ∗
+  session γ si Init ∗
   public t1 ∗
   public t2 ∗
   DB.create_at γ n t1 t2.
@@ -162,10 +162,10 @@ Qed.
 
 Lemma initE si γ t :
   store_ctx -∗
-  session si Resp γ -∗
+  session γ si Resp -∗
   □ (∀ kt, public (TKey kt (si_key si)) ↔ ▷ ⌜¬ session_ok si⌝) -∗
   public (TEnc (si_key si) (Spec.tag (N.@"init") t)) -∗
-  ▷ (⌜session_ok si⌝ -∗ ∃ γ, session si Init γ ∗ DB.server_view γ 0 ∅).
+  ▷ (⌜session_ok si⌝ -∗ ∃ γ, session γ si Init ∗ DB.server_view γ 0 ∅).
 Proof.
 iIntros "(#initP & _) #sessR #kS #p_t".
 iDestruct (public_TEncE with "[//] [//]") as "[[p_kS ?]|#tP]".
@@ -181,13 +181,13 @@ Qed.
 
 Lemma store_predE si γ n t1 t2 :
   store_ctx -∗
-  session si Resp γ -∗
+  session γ si Resp -∗
   □ (∀ kt, public (TKey kt (si_key si)) ↔ ▷ ⌜¬ session_ok si⌝) -∗
-  □ (⌜session_ok si⌝ -∗ ∃ γ, session si Init γ) -∗
+  □ (⌜session_ok si⌝ -∗ ∃ γ, session γ si Init) -∗
   public (TEnc (si_key si) (Spec.tag (N.@"store")
                               (Spec.of_list [TInt n; t1; t2]))) -∗
   ▷ (public t1 ∗ public t2 ∗
-     (⌜session_ok si⌝ -∗ ∃ γ, session si Init γ ∗ DB.update_at γ n t1 t2)).
+     (⌜session_ok si⌝ -∗ ∃ γ, session γ si Init ∗ DB.update_at γ n t1 t2)).
 Proof.
 iIntros "#(_ & #storeP & _) #sessR #key #sessI #p_m".
 iPoseProof (public_TEncE with "p_m [//]") as "{p_m} p_m".
@@ -211,7 +211,7 @@ Qed.
 
 Lemma ack_loadE si γ n t1 t2 t2' :
   store_ctx -∗
-  session si Init γ -∗
+  session γ si Init -∗
   □ (∀ kt, public (TKey kt (si_key si)) ↔ ▷ ⌜¬ session_ok si⌝) -∗
   DB.client_view γ n -∗
   DB.mapsto γ t1 t2 -∗

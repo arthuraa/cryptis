@@ -9,13 +9,20 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Definition metaR := agreeR positiveO.
+
 Class metaGS Σ := {
-  metaG_inG : inG Σ (reservation_mapR (agreeR positiveO));
+  metaG_map  : inG Σ (reservation_mapR (agreeR positiveO));
+  metaG_meta : inG Σ metaR;
 }.
 
-Local Existing Instance metaG_inG.
+Local Existing Instance metaG_map.
+Global Existing Instance metaG_meta.
 
-Definition metaΣ := GFunctor (reservation_mapR (agreeR positiveO)).
+Definition metaΣ := #[
+  GFunctor (reservation_mapR (agreeR positiveO));
+  GFunctor metaR
+].
 
 Global Instance subG_metaGS Σ : subG metaΣ Σ → metaGS Σ.
 Proof. solve_inG. Qed.
@@ -25,6 +32,27 @@ Section Laws.
 Implicit Types (N : namespace) (γ : gname) (E : coPset).
 
 Context `{!metaGS Σ}.
+
+Definition metadata `{Countable L} (x : L) : metaR :=
+  to_agree (encode x).
+
+Lemma metadata_valid `{Countable L} (x : L) : ✓ metadata x.
+Proof. rewrite /metadata. by []. Qed.
+Hint Resolve metadata_valid : core.
+
+#[global]
+Instance metadata_discrete : CmraDiscrete metaR.
+Proof. apply _. Qed.
+
+#[global]
+Instance metadata_core_id `{Countable L} (x : L) : CoreId (metadata x).
+Proof. apply _. Qed.
+
+Lemma metadata_op_inv `{Countable L} (x y : L) :
+  ✓ (metadata x ⋅ metadata y) → x = y.
+Proof.
+by move/to_agree_op_inv/leibniz_equiv_iff/(@encode_inj _ _ _ _ _).
+Qed.
 
 Definition gmeta `{Countable L} γ N (x : L) :=
   own γ (namespace_map_data N (to_agree (encode x))).
@@ -90,3 +118,4 @@ End Laws.
 
 Arguments gmeta_token_difference {Σ _} γ E1 E2.
 Arguments gmeta_set {Σ _ _ _ _} E γ N x.
+Global Typeclasses Opaque metadata metaR.

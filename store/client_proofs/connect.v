@@ -53,7 +53,8 @@ iApply (wp_initiator with "[//] [//] [//] [] [] [hon]"); try solve_ndisj; eauto.
 iIntros "!> %okS (hon & HokS)".
 case: okS => [kS|]; wp_pures; last by iLeft; iFrame; eauto.
 iDestruct "HokS" as "(%γ & #s_kS & #sessI & token & #key)".
-iMod (DB.alloc with "token") as "(auth & free & #frag & token)" => //.
+iMod (DB.alloc with "token") as "(auth & free & #frag & token)" => //;
+  try solve_ndisj.
 wp_alloc timestamp as "ts". wp_pures.
 wp_tsenc. wp_bind (send _ _).
 iApply (wp_send with "[#] [#]") => //.
