@@ -66,10 +66,11 @@ wp_load. wp_pures.
 replace (n + 1)%Z with (S n : Z) by lia.
 wp_store. wp_load. wp_bind (AList.insert _ _ _).
 wp_pures. iApply AList.wp_insert; eauto. iIntros "!> %kvs' %kvs'_db'".
-iDestruct (store_predE with "[//] sessR sec_key [#] p_m") as "(p_t1 & p_t2 & wf')".
-{ case: (decide (session_ok ss)) => [ok|not_ok].
-  - iDestruct ("view" with "[//]") as "(% & #? & ?)". eauto.
-  - iIntros "!> %". tauto. }
+iDestruct (store_predE with "[//] sessR sec_key [#] p_m")
+  as "(p_t1 & p_t2 & wf')".
+{ iDestruct "view" as "[#fail|(% & #? & ?)]".
+  - by iLeft.
+  - by iRight; eauto. }
 wp_store. wp_bind (tint _). iApply wp_tint.
 wp_tsenc.
 iApply wp_fupd.
@@ -81,13 +82,12 @@ rewrite -fmap_insert in kvs'_db'.
 do 4!iSplitR => //.
 iSplitR.
 { iModIntro. iApply big_sepM_insert_2 => //. eauto. }
-case: (decide (session_ok ss)) => [ok|not_ok]; last first.
-{ iIntros "!> %". tauto. }
-iDestruct ("wf'" with "[//]") as "(%γ1 & sessI1 & update)".
-iDestruct ("view" with "[//]") as "(%γ2 & #sessI2 & #view)".
-iPoseProof (session_agree_name with "sessI1 sessI2") as "(_ & ->)" => //.
+iDestruct "wf'" as "[?|(%γ1 & sessI1 & update)]"; first by iLeft.
+iDestruct "view" as "[?|(%γ2 & #sessI2 & #view)]"; first by iLeft.
+iPoseProof (session_agree_name with "sessI1 sessI2") as "[?|(_ & ->)]" => //;
+  first by iLeft.
 iPoseProof (DB.update_server with "view update") as "view'".
-iIntros "!> _". iExists _. iSplit => //.
+iIntros "!>". iRight. iExists _. iSplit => //.
 Qed.
 
 End Verif.

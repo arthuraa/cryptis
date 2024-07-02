@@ -65,7 +65,7 @@ iApply (wp_wand _ _ _ (λ v, server ss ∗ ∃ b : bool,
   iIntros "!> %kvs'' %kvs''_db'". wp_store. wp_pures.
   iDestruct (public_TEncE with "p_m [//]") as "{p_m} [p_m|p_m]".
   - iDestruct "p_m" as "[p_k p_m]".
-    iDestruct ("key_sec" with "p_k") as ">%".
+    iDestruct ("key_sec" with "p_k") as "?".
     wp_store.
     have -> : (n + 1)%Z = S n :> Z by lia.
     iModIntro. iSplitL.
@@ -75,7 +75,7 @@ iApply (wp_wand _ _ _ (λ v, server ss ∗ ∃ b : bool,
       + iApply big_sepM_insert_2 => //.
         rewrite public_of_list /=.
         by iDestruct "p_m" as "(_ & ? & ? & _)"; eauto.
-      + iIntros "%ok". tauto. }
+      + by iLeft. }
     by iExists true.
   - iDestruct "p_m" as "(#p_m & _)". wp_store.
     have -> : (n + 1)%Z = S n :> Z by lia.
@@ -87,11 +87,12 @@ iApply (wp_wand _ _ _ (λ v, server ss ∗ ∃ b : bool,
     { iExists γ, (S n), _, _. iFrame. iModIntro.
       rewrite -fmap_insert in kvs''_db'. do !iSplit => //.
       - iApply big_sepM_insert_2; eauto.
-      - iIntros "%ok".
-        iDestruct ("view" with "[//]") as "{view} (%γ'' & sessI' & view)".
-        iPoseProof (session_agree with "sessI sessR") as "->" => //.
-        iPoseProof (session_agree_name with "sessI sessI'") as "(_ & ->)" => //.
-        iExists _. iSplit => //.
+      - iDestruct "view" as "[?|(%γ'' & sessI' & view)]"; first by iLeft.
+        iPoseProof (session_agree with "sessI sessR") as "[?|->]" => //;
+          first by iLeft.
+        iPoseProof (session_agree_name with "sessI sessI'") as "[?|(_ & ->)]"
+           => //; first by iLeft.
+        iRight. iExists _. iSplit => //.
         by iApply DB.create_server. }
     iModIntro. by iExists true. }
 iIntros "%v (state & %b & ->)".

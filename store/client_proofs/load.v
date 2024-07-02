@@ -39,7 +39,7 @@ Lemma wp_client_load E c cs t1 t2 :
   {{{ t2', RET (repr t2');
       client cs ∗
       rem_mapsto cs t1 t2 ∗
-      ⌜session_ok cs → t2' = t2⌝ }}}.
+      (session_fail cs ∨ ⌜t2' = t2⌝) }}}.
 Proof.
 iIntros "% % #chan_c #ctx #p_t1 !> %Φ [client mapsto] post".
 iDestruct "client" as "(%n & #sessI & #key & #minted_key & ts & view)".

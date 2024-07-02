@@ -66,9 +66,8 @@ iApply public_TEncIS => //.
   by rewrite minted_TEnc; iDestruct "p_m" as "[??]".
 - iModIntro. iExists n, t1, t2, ss, γ. iSplit => //.
   do 3!iSplit => //.
-  iIntros "%ok".
-  iDestruct ("view" with "[//]") as "{view} (%γ' & sessI & view)".
-  iExists γ'. iSplit => //. iApply DB.load_server; eauto.
+  iDestruct "view" as "[?|(%γ' & sessI & view)]"; first by iLeft.
+  iRight. iExists γ'. iSplit => //. iApply DB.load_server; eauto.
 - rewrite minted_of_list /= minted_TInt -[minted t1]public_minted.
   rewrite -[minted t2]public_minted; eauto.
 - iIntros "!> _". by rewrite public_of_list /= public_TInt; eauto.
