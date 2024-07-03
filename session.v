@@ -75,7 +75,7 @@ Context `{!sessionGS, Countable X}.
 
 Context (N : namespace) (P : role → term → term → X → iProp).
 
-Definition session_token_def E : iProp := nown_token session_name E.
+Definition session_token_def E : iProp := gmeta_token session_name E.
 Definition session_token_aux : seal session_token_def. by eexists. Qed.
 Definition session_token := unseal session_token_aux.
 Lemma session_token_unseal : session_token = session_token_def.
@@ -210,13 +210,13 @@ Qed.
 Lemma session_token_drop E E' :
   E ⊆ E' →
   session_token E' -∗ session_token E.
-Proof. rewrite session_token_unseal. apply nown_token_drop. Qed.
+Proof. rewrite session_token_unseal. apply gmeta_token_drop. Qed.
 
 Lemma session_token_difference E E' :
   E ⊆ E' →
   session_token E' ⊣⊢ session_token E ∗ session_token (E' ∖ E).
 Proof.
-by move=> ?; rewrite session_token_unseal -nown_token_difference.
+by move=> ?; rewrite session_token_unseal -gmeta_token_difference.
 Qed.
 
 Lemma session_status_auth_included p1 p2 :
@@ -451,6 +451,6 @@ Lemma sessionGS_alloc `{!cryptisGS Σ, !heapGS Σ} :
   sessionGpreS Σ →
   ⊢ |==> ∃ (H : sessionGS Σ), session_token ⊤.
 Proof.
-iIntros (?). iMod nown_token_alloc as "(%γ & ?)".
+iIntros (?). iMod gmeta_token_alloc as "(%γ & ?)".
 iExists (SessionGS _ _). rewrite session_token_unseal. eauto.
 Qed.

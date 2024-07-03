@@ -146,8 +146,8 @@ Qed.
 
 Definition session γ si rl : iProp := ∃ x gy,
   ⌜si_key si = Spec.tag (nroot.@"keys".@"sym") (Spec.texp gy x)⌝ ∗
-  nown γ (nroot.@"dh_auth")
-    (metadata (rl, gy, si_init si, si_resp si, si_time si, x)) ∗
+  gmeta γ (nroot.@"dh_auth")
+    (rl, gy, si_init si, si_resp si, si_time si, x) ∗
   nonce_meta x nroot (rl, gy, si_init si, si_resp si, si_time si, γ) ∗
   ◯H{si_time si} si_hon si ∗
   (session_fail si ∨ ∃ y γ',
@@ -252,14 +252,14 @@ Lemma wp_initiator c kI kR dq n T E :
         let si := SessInfo kI kR kS n T in
         minted kS ∗
         session γ si Init ∗
-        nown_token γ (⊤ ∖ ↑nroot.@"dh_auth") ∗
+        gmeta_token γ (⊤ ∖ ↑nroot.@"dh_auth") ∗
         □ (∀ kt, public (TKey kt kS) ↔ ▷ session_fail si)
       else True
  }}}.
 Proof.
 rewrite /initiator.
 iIntros (??) "#chan_c #ctx #(? & ?) #p_kI #p_kR %Ψ !> hon Hpost".
-iMod nown_token_alloc as (γ) "γ_token".
+iMod gmeta_token_alloc as (γ) "γ_token".
 iMod (minted_at_list with "[//] hon") as "[hon list]" => //;
   try solve_ndisj.
 wp_pures.
@@ -305,8 +305,7 @@ rewrite minted_TEnc minted_tag minted_of_list /=.
 iDestruct "m_m2" as "(_ & _ & m_gb & _)".
 wp_pures. wp_bind (texp _ _). iApply wp_texp.
 wp_pures. wp_list. wp_term_of_list. wp_tenc.
-iMod (nown_alloc (nroot.@"dh_auth")
-        (metadata (Init, gb, kI, kR, n, a))
+iMod (gmeta_set' _ _ (nroot.@"dh_auth") (Init, gb, kI, kR, n, a)
         with "γ_token") as "[#γ_own γ_token]" => //.
 iMod (term_meta_set _ _ (Init, gb, kI, kR, n, γ)
        nroot with "token") as "#sessionI" => //.
@@ -410,13 +409,13 @@ Lemma wp_responder c kR dq n T E :
         minted kI ∗
         minted kS ∗
         session γ si Resp ∗
-        nown_token γ (⊤ ∖ ↑nroot.@"dh_auth") ∗
+        gmeta_token γ (⊤ ∖ ↑nroot.@"dh_auth") ∗
         □ (∀ kt, public (TKey kt kS) ↔ ▷ session_fail si)
       else True
  }}}.
 Proof.
 iIntros "% % #chan_c #? (#? & #?) #p_vkR !> %Φ hon_auth Hpost".
-iMod nown_token_alloc as (γ) "γ_token".
+iMod gmeta_token_alloc as (γ) "γ_token".
 wp_lam. wp_pures. wp_bind (recv _). iApply wp_recv => //.
 iIntros "%m1 #p_m1". wp_pures.
 wp_list_of_term m1; last by protocol_failure.
@@ -507,8 +506,7 @@ iAssert ( |={E}=> ●H{dq|n} T ∗
   iPoseProof (honest_frag_agree with "honR honI") as "->".
   iModIntro. iFrame.
   iRight. iModIntro. iExists a, γ'. by do ![iSplitL => //]. }
-iMod (nown_alloc (nroot.@"dh_auth")
-        (metadata (Resp, ga, kI, kR, n, b))
+iMod (gmeta_set' _ _ (nroot.@"dh_auth") (Resp, ga, kI, kR, n, b)
         with "γ_token") as "[#γ_own γ_token]" => //.
 iAssert (session γ si Resp) as "sessionR".
 { iExists _, _. iSplit => //.

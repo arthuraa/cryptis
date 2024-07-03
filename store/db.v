@@ -264,11 +264,11 @@ Definition server_view γ n db : iProp Σ :=
 
 Lemma alloc γ E :
   ↑N ⊆ E →
-  nown_token γ E ==∗
+  gmeta_token γ E ==∗
   client_view γ 0 ∗
   free_at γ ⊤ ∗
   server_view γ 0 ∅ ∗
-  nown_token γ (E ∖ ↑N).
+  gmeta_token γ (E ∖ ↑N).
 Proof.
 iIntros "%sub token".
 iMod (nown_alloc (N.@"hist")
@@ -290,7 +290,7 @@ iModIntro. iSplitR "free token".
 iSplitL "free"; try iApply "free".
 iSplitR.
 { iExists []. eauto. }
-iApply (nown_token_drop with "token"). solve_ndisj.
+iApply (gmeta_token_drop with "token"). solve_ndisj.
 Qed.
 
 Lemma update_client t2' γ n t1 t2 :
