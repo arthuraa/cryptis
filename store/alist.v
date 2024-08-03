@@ -108,3 +108,82 @@ Qed.
 End Verif.
 
 End AList.
+
+Module SAList.
+
+Definition new : val := λ: <>,
+  ref (AList.empty #()).
+
+Definition find : val := λ: "l" "k",
+  AList.find !"l" "k".
+
+Definition insert : val := λ: "l" "k" "v",
+  "l" <- AList.insert !"l" "k" "v".
+
+Definition delete : val := λ: "l" "k",
+  "l" <- AList.delete !"l" "k".
+
+Section Verif.
+
+Context `{!cryptisGS Σ, !heapGS Σ}.
+Notation iProp := (iProp Σ).
+
+Implicit Types (γ : gname) (l : loc) (k t : term) (v kvs : val).
+Implicit Types (db : gmap term val).
+
+Definition is_alist v db : iProp := ∃ l kvs,
+  ⌜v = #l⌝ ∗
+  l ↦ kvs ∗
+  ⌜AList.is_alist kvs db⌝.
+
+Lemma wp_empty E :
+  {{{ True }}}
+    new #() @ E
+  {{{ v, RET v; is_alist v ∅ }}}.
+Proof.
+iIntros "%Φ _ Hpost". wp_lam.
+wp_bind (AList.empty _). iApply AList.wp_empty => //.
+iIntros "!> %kvs %".
+wp_alloc l as "Hl".
+iModIntro. iApply "Hpost". iExists _. by eauto.
+Qed.
+
+Lemma wp_find E v db t :
+  {{{ is_alist v db }}}
+    find v t @ E
+  {{{ RET (repr (db !! t)); is_alist v db }}}.
+Proof.
+iIntros "%Φ (%l & %kvs & -> & Hl & %) post".
+wp_lam; wp_pures. wp_load.
+iApply AList.wp_find => //.
+iIntros "!> _". iApply "post".
+iExists _. by eauto.
+Qed.
+
+Lemma wp_insert v db k v' E :
+  {{{ is_alist v db }}}
+    insert v k v' @ E
+  {{{ RET #(); is_alist v (<[k := v']>db) }}}.
+Proof.
+iIntros "%Φ (%l & %kvs & -> & Hl & %) post".
+wp_lam; wp_pures. wp_load.
+wp_bind (AList.insert _ _ _). iApply AList.wp_insert => //.
+iIntros "!> %r %". wp_store. iApply "post".
+iExists _. by eauto.
+Qed.
+
+Lemma wp_delete v db k E :
+  {{{ is_alist v db }}}
+    delete v k @ E
+  {{{ RET #(); is_alist v (base.delete k db) }}}.
+Proof.
+iIntros "%Φ (%l & %kvs & -> & Hl & %) post".
+wp_lam; wp_pures. wp_load.
+wp_bind (AList.delete _ _). iApply AList.wp_delete => //.
+iIntros "!> %r %". wp_store. iApply "post".
+iExists _. by eauto.
+Qed.
+
+End Verif.
+
+End SAList.

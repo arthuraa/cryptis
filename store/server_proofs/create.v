@@ -6,7 +6,7 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib version term cryptis primitives tactics.
 From cryptis Require Import role dh_auth.
-From cryptis.store Require Import impl shared alist db.
+From cryptis.store Require Import impl shared alist db connection_proofs.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -19,7 +19,7 @@ Notation iProp := (iProp Σ).
 
 Context `{!storeGS Σ}.
 
-Implicit Types (cs : cst) (ss : sst).
+Implicit Types (cs : conn_state).
 Implicit Types kI kR kS t : term.
 Implicit Types n : nat.
 Implicit Types γ : gname.
@@ -27,96 +27,71 @@ Implicit Types v : val.
 
 Variable N : namespace.
 
-Lemma wp_server_handle_create E c ss m :
+Ltac failure := iLeft; iFrame.
+
+Lemma wp_server_handle_create E c cs n ldb db :
   ↑cryptisN ⊆ E →
   channel c -∗
   store_ctx N -∗
-  public m -∗
-  {{{ server ss }}}
-    Server.handle_create N c (repr ss) m @ E
-  {{{ (v : option val), RET (repr v); server ss }}}.
+  handler_correct
+    (server_handler_inv cs n ldb db)
+    (server_handler_post cs ldb)
+    cs
+    (N.@"create", Server.handle_create N c (repr cs) ldb)
+    n E.
 Proof.
-iIntros "%sub #chan_c #ctx #p_m !> %Φ state post".
-rewrite /Server.handle_create. wp_pures.
-iDestruct "state" as "(%γ & %n & %kvs & %db & #sessR & #key_sec & #minted_key
-                       & ts & kvs & %kvs_db & #pub_db & #view)".
-wp_load. wp_pures. wp_load. wp_pures.
-iAssert (server ss) with "[ts kvs view]" as "state".
-{ iExists _, n, kvs, db. iFrame. eauto 8. }
-wp_tsdec m; wp_pures; last by iApply ("post" $! None).
-wp_list_of_term m; wp_pures; last by iApply ("post" $! None).
-wp_list_match => [timestamp t1 t2 ->| _]; wp_pures; last by iApply ("post" $! None).
+iIntros "%sub #chan_c #ctx".
+iPoseProof (store_ctx_create with "ctx") as "?".
+iPoseProof (store_ctx_ack_create with "ctx") as "?".
+rewrite /handler_correct. wp_lam; wp_pures.
+iModIntro. iExists _. iSplit => //.
+iIntros "!> %m _ #p_m conn (server & db)".
+wp_pures.
+wp_bind (Connection.timestamp _).
+iApply (wp_connection_timestamp with "conn").
+iIntros "!> conn". wp_pures.
+wp_list_of_term m; wp_pures; last by failure.
+wp_list_match => [timestamp t1 t2 ->| _]; wp_pures; last by failure.
 wp_bind (to_int _). iApply wp_to_int.
-case: Spec.to_intP => [ {m} n' ->| _]; wp_pures;
-  last by iApply ("post" $! None).
-case: bool_decide_reflect => [[<-] {n'}|?]; wp_pures;
-  last by iApply ("post" $! None).
-wp_bind (AList.find _ _). iApply AList.wp_find => //.
-iIntros "!> _". rewrite lookup_fmap.
-iDestruct "ctx" as "(_ & _ & _ & _ & _ & ? & ? & _)".
+case: Spec.to_intP => [ {m} n' ->| _]; wp_pures; last by failure.
+case: bool_decide_reflect => [[<-] {n'}|?]; wp_pures; last by failure.
+wp_bind (SAList.find _ _). iApply (SAList.wp_find with "db") => //.
+iIntros "!> db". rewrite lookup_fmap.
+iPoseProof (public_create_pred with "p_m") as "[p_t1 p_t2]".
 wp_bind (match: _ with InjL <> => _ | InjR <> => _ end)%E.
-iApply (wp_wand _ _ _ (λ v, server ss ∗ ∃ b : bool,
-  ⌜v = #(((if b then 1 else 0) : Z))⌝)%I
-  with "[state]").
-{ case db_t1: (db !! t1) => [t2'|]; wp_pures;
-    first by iFrame; iExists false; eauto.
-  iDestruct "state" as "(% & %n' & %kvs' & %db' & _ & _ & _ & ts & kvs & _ & _)".
-  wp_bind (AList.insert _ _ _). iApply AList.wp_insert => //.
-  iIntros "!> %kvs'' %kvs''_db'". wp_store. wp_pures.
-  iDestruct (public_TEncE with "p_m [//]") as "{p_m} [p_m|p_m]".
-  - iDestruct "p_m" as "[p_k p_m]".
-    iDestruct ("key_sec" with "p_k") as "?".
-    wp_store.
-    have -> : (n + 1)%Z = S n :> Z by lia.
-    iModIntro. iSplitL.
-    { iExists _, (S n), kvs'', (<[t1 := t2]>db). iFrame.
-      rewrite fmap_insert.
-      do 5!iSplit => //.
-      + iApply big_sepM_insert_2 => //.
-        rewrite public_of_list /=.
-        by iDestruct "p_m" as "(_ & ? & ? & _)"; eauto.
-      + by iLeft. }
-    by iExists true.
-  - iDestruct "p_m" as "(#p_m & _)". wp_store.
-    have -> : (n + 1)%Z = S n :> Z by lia.
-    iDestruct "p_m" as "(%n'' & %t1' & %t2' & %si & %γ' & %e & %e_kS &
-                         sessI & p_t1 & p_t2 & t1_t2)".
-    case/Spec.of_list_inj: e => e <- <- {t1' t2'}.
-    have {n'' e} <- : n = n'' by lia.
-    iSplitL.
-    { iExists γ, (S n), _, _. iFrame. iModIntro.
-      rewrite -fmap_insert in kvs''_db'. do !iSplit => //.
-      - iApply big_sepM_insert_2; eauto.
-      - iDestruct "view" as "[?|(%γ'' & sessI' & view)]"; first by iLeft.
-        iPoseProof (session_agree with "sessI sessR") as "[?|->]" => //;
-          first by iLeft.
-        iPoseProof (session_agree_name with "sessI sessI'") as "[?|(_ & ->)]"
-           => //; first by iLeft.
-        iRight. iExists _. iSplit => //.
-        by iApply DB.create_server. }
-    iModIntro. by iExists true. }
-iIntros "%v (state & %b & ->)".
-wp_pures. wp_bind (tint _). iApply wp_tint. wp_list.
-wp_bind (tint _). iApply wp_tint. wp_list. wp_term_of_list.
-iAssert (▷ (public t1 ∗ public t2))%I as "[p_t1 p_t2]".
-  { iDestruct (public_TEncE with "p_m [//]") as "{p_m} [[_ p_m]|p_m]".
-    - rewrite public_of_list /=. iDestruct "p_m" as "(_ & ? & ? & _)".
-      by eauto.
-    - iDestruct "p_m" as "(#p_m & _)". iModIntro.
-      iDestruct "p_m" as "(%n'' & %t1' & %t2' & %si & %γ' & %e &
-                           _ & ? & ? & ? & _)".
-      by case/Spec.of_list_inj: e => _ <- <-; eauto. }
-wp_pures. wp_tsenc. wp_bind (send _ _).
-iApply (wp_send with "[//] [#]") => //; last by wp_pures;
-  iApply ("post" $! (Some #())).
-iModIntro. iApply public_TEncIS => //.
-- rewrite minted_TKey.
-  iPoseProof (public_minted with "p_m") as "{p_m} p_m".
-  by rewrite minted_TEnc; iDestruct "p_m" as "[??]".
-- iPoseProof (public_minted with "p_m") as "m_m".
-  rewrite minted_TEnc minted_tag !minted_of_list /= !minted_TInt.
-  iDestruct "m_m" as "(? & _ & ? & ? & _)". by eauto.
-- iIntros "!> _". by rewrite public_of_list /= !public_TInt; eauto.
+iApply (wp_wand _ _ _ (λ v, ∃ (b : bool) n' db',
+  ⌜v = #((if b then 1 else 0) : Z)⌝ ∗
+  is_conn_state cs n' ∗
+  server_connected cs n' db' ∗
+  SAList.is_alist ldb (repr <$> db')) with "[conn db server]")%I.
+{ case db_t1: (db !! t1) => [t2'|]; wp_pures.
+  { by iExists false, _, _; iFrame. }
+  wp_bind (SAList.insert _ _ _).
+  iApply (SAList.wp_insert with "db").
+  iIntros "!> db".
+  rewrite -fmap_insert.
+  iPoseProof (create_predE with "conn server p_m") as "(conn & server)" => //.
+  wp_pures.
+  wp_bind (Connection.tick _).
+  iApply (wp_connection_tick with "conn").
+  iIntros "!> conn".
+  wp_pures.
+  iExists true, _, _. by iFrame. }
+iIntros "% (%b & %n' & %db' & -> & conn & server & db)".
+wp_pures.
+wp_bind (tint _). iApply wp_tint.
+wp_list.
+wp_bind (tint _). iApply wp_tint.
+wp_list.
+wp_term_of_list.
+wp_pures.
+wp_bind (Connection.send _ _ _ _).
+iApply (wp_connection_send with "[//] [//] [] [] conn") => //.
+- iClear "p_m". rewrite public_of_list /= !public_TInt. eauto.
+iIntros "!> conn".
+wp_pures.
+iModIntro. iRight. iExists _. iSplit => //. iExists _, _. iLeft.
+by iFrame.
 Qed.
 
 End Verif.

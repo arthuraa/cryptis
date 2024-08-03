@@ -19,6 +19,9 @@ Record sess_info := SessInfo {
   si_hon  : gset term;
 }.
 
+Global Instance sess_info_inhabited : Inhabited sess_info :=
+  populate (SessInfo inhabitant inhabitant inhabitant inhabitant inhabitant).
+
 (* MOVE *)
 Lemma lc_fupd_elim_later_pers `{invGS Σ} E (P : iProp Σ) :
   £ 1 -∗ □ ▷ P ={E}=∗ □ P.
@@ -238,7 +241,6 @@ Ltac protocol_failure :=
 
 Lemma wp_initiator c kI kR dq n T E :
   ↑cryptisN ⊆ E →
-  ↑N ⊆ E →
   channel c -∗
   cryptis_ctx -∗
   dh_auth_ctx -∗
@@ -258,7 +260,7 @@ Lemma wp_initiator c kI kR dq n T E :
  }}}.
 Proof.
 rewrite /initiator.
-iIntros (??) "#chan_c #ctx #(? & ?) #p_kI #p_kR %Ψ !> hon Hpost".
+iIntros (?) "#chan_c #ctx #(? & ?) #p_kI #p_kR %Ψ !> hon Hpost".
 iMod gmeta_token_alloc as (γ) "γ_token".
 iMod (minted_at_list with "[//] hon") as "[hon list]" => //;
   try solve_ndisj.
@@ -393,7 +395,6 @@ Qed.
 
 Lemma wp_responder c kR dq n T E :
   ↑cryptisN ⊆ E →
-  ↑N ⊆ E →
   channel c -∗
   cryptis_ctx -∗
   dh_auth_ctx -∗
@@ -406,7 +407,7 @@ Lemma wp_responder c kR dq n T E :
       if okS is Some (vkI, kS) then ∃ kI γ,
         let si := SessInfo kI kR kS n T in
         ⌜vkI = TKey Dec kI⌝ ∗
-        minted kI ∗
+        public vkI ∗
         minted kS ∗
         session γ si Resp ∗
         gmeta_token γ (⊤ ∖ ↑nroot.@"dh_auth") ∗
@@ -414,7 +415,7 @@ Lemma wp_responder c kR dq n T E :
       else True
  }}}.
 Proof.
-iIntros "% % #chan_c #? (#? & #?) #p_vkR !> %Φ hon_auth Hpost".
+iIntros "% #chan_c #? (#? & #?) #p_vkR !> %Φ hon_auth Hpost".
 iMod gmeta_token_alloc as (γ) "γ_token".
 wp_lam. wp_pures. wp_bind (recv _). iApply wp_recv => //.
 iIntros "%m1 #p_m1". wp_pures.

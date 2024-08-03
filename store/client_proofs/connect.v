@@ -3,12 +3,13 @@ From mathcomp Require Import ssreflect.
 From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
+From iris.algebra Require Import dfrac_agree.
+From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib version term gmeta nown.
 From cryptis Require Import cryptis primitives tactics.
 From cryptis Require Import role dh_auth.
-From cryptis.store Require Import impl shared db.
-From cryptis.store.client_proofs Require Import common.
+From cryptis.store Require Import impl shared db connection_proofs.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -21,7 +22,7 @@ Notation iProp := (iProp Σ).
 
 Context `{!storeG Σ}.
 
-Implicit Types (cs : cst).
+Implicit Types (cs : conn_state).
 Implicit Types kI kR kS t : term.
 Implicit Types n : nat.
 Implicit Types γ : gname.
@@ -30,46 +31,52 @@ Implicit Types v : val.
 Variable N : namespace.
 
 Lemma wp_client_connect E c kI kR dq ph T :
-  ↑N ⊆ E →
   ↑cryptisN ⊆ E →
+  ↑nroot.@"db" ⊆ E →
   channel c -∗
   cryptis_ctx -∗
   store_ctx N -∗
   public (TKey Dec kI) -∗
   public (TKey Dec kR) -∗
-  {{{ ●H{dq|ph} T }}}
-    Client.connect N c (TKey Enc kI) (TKey Dec kI) (TKey Dec kR) @ E
+  {{{ ●H{dq|ph} T ∗
+      client_disconnected kI kR }}}
+    Client.connect N c
+      (TKey Enc kI)
+      (TKey Dec kI)
+      (TKey Dec kR) @ E
   {{{ cs, RET (repr cs);
+      ⌜si_time cs = ph⌝ ∗
+      ⌜si_hon cs = T⌝ ∗
       ●H{dq|ph} T ∗
-      ⌜si_init cs = kI ∧ si_resp cs = kR ∧ si_time cs = ph ∧ si_hon cs = T⌝ ∗
-      client cs }}}.
+      client_connected kI kR cs }}}.
 Proof.
-iIntros "% % #chan_c #ctx (#? & _ & _ & _ & _ & _ & _ & #ctx') #p_ekI #p_ekR".
-iIntros "!> %Φ hon post". rewrite /Client.connect. wp_pures.
-iCombine "hon post" as "post". iRevert "post".
-iApply wp_do_until. iIntros "!> [hon post]". wp_pures.
-wp_bind (initiator _ _ _ _ _).
-iApply (wp_initiator with "[//] [//] [//] [] [] [hon]"); try solve_ndisj; eauto.
-iIntros "!> %okS (hon & HokS)".
-case: okS => [kS|]; wp_pures; last by iLeft; iFrame; eauto.
-iDestruct "HokS" as "(%γ & #s_kS & #sessI & token & #key)".
-iMod (DB.alloc with "token") as "(auth & free & #frag & token)" => //;
-  try solve_ndisj.
-wp_alloc timestamp as "ts". wp_pures.
-wp_tsenc. wp_bind (send _ _).
-iApply (wp_send with "[#] [#]") => //.
-  iModIntro. iApply public_TEncIS => //.
-  - by rewrite minted_TKey.
-  - iModIntro. iExists _, γ. do !iSplit => //. by [].
-  - by rewrite minted_TInt.
-  - iIntros "!> _". by rewrite public_TInt.
-wp_pures. iRight. iExists _. iSplitR; eauto.
-set si := SessInfo _ _ _ _ _.
-iApply ("post" $! {| cst_si := si;
-                     cst_ts := timestamp;
-                     cst_name := γ |}).
-rewrite /client /=. iFrame. iModIntro. iSplit => //.
-iExists 0. iFrame. iSplit => //. iSplit => //.
+iIntros "% % #chan_c #ctx (#? & #? & _ & _ & _ & _ & _ & _ & _ & _ & #ctx')".
+iIntros "#p_ekI #p_ekR".
+iIntros "!> %Φ [hon client] post".
+rewrite /Client.connect.
+wp_pure _ credit:"c1". wp_pure _ credit:"c2". wp_pures.
+wp_bind (Connection.connect _ _ _ _ _).
+iApply (wp_connection_connect with "[//] [//] [//] [] [] [hon]") => //.
+iIntros "!> %cs (hon & conn & % & % & % & % & % & token)".
+iDestruct "client" as "(%γI & %beginning & client)".
+iMod (client_connectingI with "[//] [$] hon conn token client")
+  as "(hon & conn & client & #beginning & #ready)" => //; try solve_ndisj.
+subst kI kR.
+iPoseProof (init_predI _ _ _ (TInt 0) with "conn client ready")
+  as "(conn & client & #?)".
+wp_pures. wp_bind (Connection.send _ _ _ _).
+iApply (wp_connection_send with "[//] [] [] [] conn") => //.
+{ by rewrite public_TInt. }
+iIntros "!> conn".
+wp_pures.
+iCombine "hon client post" as "I". iRevert "conn I".
+iApply (wp_connection_recv with "[//] []") => //.
+iIntros "!> %m conn (hon & client & post) _ #mP".
+iMod (ack_init_predE with "conn client mP") as "(conn & client)" => //.
+wp_pures.
+iRight. iExists _. iSplitR => //.
+iApply "post". iFrame. iModIntro. do 2!iSplit => //.
+by iExists _, _, _; iFrame.
 Qed.
 
 End Verif.

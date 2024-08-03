@@ -49,6 +49,16 @@ Proof. apply _. Qed.
 Lemma gmeta_token_alloc : ⊢ |==> ∃ γ, gmeta_token γ ⊤.
 Proof. apply: own_alloc. exact: reservation_map_token_valid. Qed.
 
+Lemma gmeta_token_disj γ E1 E2 :
+  gmeta_token γ E1 -∗
+  gmeta_token γ E2 -∗
+  ⌜E1 ## E2⌝.
+Proof.
+iIntros "own1 own2".
+iPoseProof (own_valid_2 with "own1 own2") as "%contra".
+by move/reservation_map_token_valid_op: contra.
+Qed.
+
 Lemma gmeta_set `{Countable L} E γ N (x : L) :
   ↑N ⊆ E →
   gmeta_token γ E ==∗ gmeta γ N x.

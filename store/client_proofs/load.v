@@ -2,12 +2,13 @@ From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
 From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
-From iris.algebra Require Import max_prefix_list.
+From iris.algebra Require Import max_prefix_list dfrac_agree.
+From iris.base_logic Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib version term cryptis primitives tactics.
+From cryptis Require Import lib version term gmeta nown cryptis.
+From cryptis Require Import primitives tactics.
 From cryptis Require Import role dh_auth.
-From cryptis.store Require Import impl shared db.
-From cryptis.store.client_proofs Require Import common.
+From cryptis.store Require Import impl shared db connection_proofs.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -20,7 +21,6 @@ Notation iProp := (iProp Σ).
 
 Context `{!storeG Σ}.
 
-Implicit Types (cs : cst).
 Implicit Types kI kR kS t : term.
 Implicit Types n : nat.
 Implicit Types γ : gname.
@@ -28,49 +28,48 @@ Implicit Types v : val.
 
 Variable N : namespace.
 
-Lemma wp_client_load E c cs t1 t2 :
+Lemma wp_client_load E c kI kR cs t1 t2 :
   ↑N ⊆ E →
   ↑cryptisN ⊆ E →
   channel c -∗
   store_ctx N -∗
   public t1 -∗
-  {{{ client cs ∗ rem_mapsto cs t1 t2 }}}
+  {{{ client_connected kI kR cs ∗
+      rem_mapsto kI kR t1 t2 }}}
     Client.load N c (repr cs) t1 @ E
   {{{ t2', RET (repr t2');
-      client cs ∗
-      rem_mapsto cs t1 t2 ∗
+      client_connected kI kR cs ∗
+      rem_mapsto kI kR t1 t2 ∗
+      public t2' ∗
       (session_fail cs ∨ ⌜t2' = t2⌝) }}}.
 Proof.
 iIntros "% % #chan_c #ctx #p_t1 !> %Φ [client mapsto] post".
-iDestruct "client" as "(%n & #sessI & #key & #minted_key & ts & view)".
-rewrite /Client.load. wp_pures.
-wp_bind (Client.get_timestamp _).
-iApply (wp_client_get_timestamp with "ts").
-iIntros "!> ts". wp_bind (tint _). iApply wp_tint.
-wp_pures. wp_bind (Client.get_session_key _).
-iApply (wp_client_get_session_key with "[//]"). iIntros "!> _". wp_pures.
-wp_list. wp_term_of_list. wp_tsenc. wp_pures.
-wp_bind (send _ _). iApply wp_send; eauto.
-  iDestruct "ctx" as "(_ & _ & _ & ? & _)".
-  iModIntro. iApply public_TEncIS; eauto.
-  - by rewrite minted_TKey.
-  - rewrite minted_of_list /= minted_TInt.
-    iPoseProof (public_minted with "p_t1") as "?". by eauto.
-  - iIntros "!> _". rewrite public_of_list /= public_TInt; eauto.
-wp_pures.
-iCombine "view mapsto post ts" as "I". iRevert "I". iApply wp_sess_recv => //.
-iIntros "!> %ts (view & mapsto & post & ts) #p_t2'". wp_pures.
+iDestruct "ctx" as "(_ & _ & _ & _ & load & ack_load & _)".
+iDestruct "client" as "(%γI & %n & %beginning & <- & <- & conn & client)".
+rewrite /Client.load. wp_pures. wp_bind (Connection.timestamp _).
+iApply (wp_connection_timestamp with "conn"). iIntros "!> conn".
+wp_bind (tint _). iApply wp_tint.
+wp_pures. wp_list. wp_term_of_list.
+wp_bind (Connection.send _ _ _ _).
+iApply (wp_connection_send with "[//] load [] [] conn") => //.
+- rewrite public_of_list /= public_TInt. by eauto.
+iIntros "!> conn". wp_pures.
+iCombine "client mapsto post" as "I". iRevert "conn I".
+iApply wp_connection_recv => //.
+iIntros "!> %ts conn (client & mapsto & post) #m_m #p_m". wp_pures.
 wp_list_of_term ts; wp_pures; last by iLeft; iFrame.
 wp_list_match => [n' t1' t2' -> {ts}|_]; wp_pures; last by iLeft; iFrame.
 wp_eq_term e; last by wp_pures; iLeft; iFrame.
 subst n'. wp_pures.
 wp_eq_term e; last by wp_pures; iLeft; iFrame.
 subst t1'.
-iDestruct (ack_loadE with "ctx sessI key view mapsto p_t2'")
-  as "{p_t2'} (#p_t2' & #e_t2')".
-wp_pures. iModIntro. iRight. iExists _; iSplit; eauto.
-iApply ("post" $! t2'). iFrame. iSplitL => //.
-iExists n. iFrame. by eauto.
+iPoseProof (ack_loadE with "conn client mapsto p_m")
+  as "(conn & client & mapsto & #p_t2')".
+wp_pures. iRight. iModIntro. iExists _. iSplit => //.
+iApply "post".
+iFrame.
+iSplit => //.
+iExists _, _, _. by iFrame.
 Qed.
 
 End Verif.
