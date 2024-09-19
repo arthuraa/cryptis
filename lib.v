@@ -1,10 +1,67 @@
 From stdpp Require Import base countable gmap.
 From iris.heap_lang Require Import lang notation proofmode.
 From iris.algebra Require Import gmap gset auth reservation_map.
-From iris.base_logic Require Import gen_heap.
+From iris.base_logic Require Import gen_heap invariants.
 From mathcomp Require ssrbool order path.
 From deriving Require deriving.
 From cryptis Require Export mathcomp_compat.
+
+Section Escrow.
+
+Context `{invGS Σ}.
+
+Definition escrow (N' : namespace) (P Q : iProp Σ) : iProp Σ :=
+  □ (∀ E, ⌜↑N' ⊆ E⌝ -∗ P ={E}=∗ ▷ Q).
+
+Global Typeclasses Opaque escrow.
+
+Global Instance escrow_persistent N' P Q :
+  Persistent (escrow N' P Q).
+Proof. rewrite /escrow. apply _. Qed.
+
+Definition switch (P Q : iProp Σ) : iProp Σ := ∃ R,
+  □ (P ∗ □ R -∗ Q) ∗
+  □ (P ==∗ □ R).
+
+Lemma escrowI (N' : namespace) E (P Q : iProp Σ) :
+  ▷ Q -∗
+  switch P Q ={E}=∗
+  escrow N' P Q.
+Proof.
+rewrite /escrow.
+iIntros "HQ (%R & #contra & #mint)".
+iMod (inv_alloc N' _ (Q ∨ □ R) with "[HQ]") as "#inv".
+{ by eauto. }
+iIntros "!> %E' !> %sub HP".
+iInv "inv" as "[H|#H]".
+- iMod ("mint" with "HP") as "#HR".
+  iModIntro.
+  iSplitL "HR"; first by eauto.
+  by iFrame.
+- iModIntro.
+  iSplitR; first by eauto.
+  iModIntro. iModIntro.
+  by iApply "contra"; eauto.
+Qed.
+
+Lemma escrowE N' P Q E :
+  ↑N' ⊆ E →
+  escrow N' P Q -∗
+  P ={E}=∗
+  ▷ Q.
+Proof.
+rewrite /escrow. iIntros "%sub #e HP".
+iApply "e" => //.
+Qed.
+
+End Escrow.
+
+Lemma lc_fupd_elim_later_pers `{invGS Σ} E (P : iProp Σ) :
+  £ 1 -∗ □ ▷ P ={E}=∗ □ P.
+Proof.
+rewrite bi.later_intuitionistically_2.
+exact: lc_fupd_elim_later.
+Qed.
 
 Lemma fupd_or' `{!invGS Σ} (A B C : iProp Σ) E :
   (B ={E}=∗ C) -∗ A ∨ B ={E}=∗ A ∨ C.

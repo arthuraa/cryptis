@@ -327,52 +327,6 @@ Proof. apply _. Qed.
 Global Typeclasses Opaque key_name.
 (* /MOVE *)
 
-(* MOVE *)
-Definition escrow (N' : namespace) (P Q : iProp) : iProp :=
-  □ (∀ E, ⌜↑N' ⊆ E⌝ -∗ P ={E}=∗ ▷ Q).
-
-Global Typeclasses Opaque escrow.
-
-Global Instance escrow_persistent N' P Q :
-  Persistent (escrow N' P Q).
-Proof. rewrite /escrow. apply _. Qed.
-
-Definition switch (P Q : iProp) : iProp := ∃ R,
-  □ (P ∗ □ R -∗ Q) ∗
-  □ (P ==∗ □ R).
-
-Lemma escrowI (N' : namespace) E (P Q : iProp) :
-  ▷ Q -∗
-  switch P Q ={E}=∗
-  escrow N' P Q.
-Proof.
-rewrite /escrow.
-iIntros "HQ (%R & #contra & #mint)".
-iMod (inv_alloc N' _ (Q ∨ □ R) with "[HQ]") as "#inv".
-{ by eauto. }
-iIntros "!> %E' !> %sub HP".
-iInv "inv" as "[H|#H]".
-- iMod ("mint" with "HP") as "#HR".
-  iModIntro.
-  iSplitL "HR"; first by eauto.
-  by iFrame.
-- iModIntro.
-  iSplitR; first by eauto.
-  iModIntro. iModIntro.
-  by iApply "contra"; eauto.
-Qed.
-
-Lemma escrowE N' P Q E :
-  ↑N' ⊆ E →
-  escrow N' P Q -∗
-  P ={E}=∗
-  ▷ Q.
-Proof.
-rewrite /escrow. iIntros "%sub #e HP".
-iApply "e" => //.
-Qed.
-(* /MOVE *)
-
 Definition db_signed_up kI kR : iProp := ∃ γR,
   key_name kR γR ∗
   gmeta γR (dbSN kI) ().

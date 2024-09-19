@@ -22,14 +22,6 @@ Record sess_info := SessInfo {
 Global Instance sess_info_inhabited : Inhabited sess_info :=
   populate (SessInfo inhabitant inhabitant inhabitant inhabitant inhabitant).
 
-(* MOVE *)
-Lemma lc_fupd_elim_later_pers `{invGS Σ} E (P : iProp Σ) :
-  £ 1 -∗ □ ▷ P ={E}=∗ □ P.
-Proof.
-rewrite bi.later_intuitionistically_2.
-exact: lc_fupd_elim_later.
-Qed.
-
 Section Verif.
 
 Context `{!heapGS Σ, !cryptisGS Σ}.
