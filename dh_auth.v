@@ -267,8 +267,8 @@ iMod (minted_at_list with "[//] hon") as "[hon list]" => //;
 wp_pures.
 iDestruct "list" as "(%M & #m_M & #minted_at_M)".
 wp_bind (mknonce _).
-iApply (wp_mknonce_gen M (λ _, public_at n (TKey Enc kI) ∨
-                               public_at n (TKey Enc kR))%I
+iApply (wp_mknonce_fresh M (λ _, public_at n (TKey Enc kI) ∨
+                                 public_at n (TKey Enc kR))%I
           dh_auth_pred).
 { iIntros "% ?". rewrite big_sepS_forall. by iApply "m_M". }
 iIntros "%a %fresh #m_a #p_a #a_pred token".

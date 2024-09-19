@@ -374,6 +374,38 @@ split.
   by rewrite elem_of_cons; case => [->|?] //; eauto.
 Qed.
 
+Lemma subterm_nonces_of_term t1 t2 :
+  subterm t1 t2 → nonces_of_term t1 ⊆ nonces_of_term t2.
+Proof.
+elim: t2 / => //.
+- move=> ???.
+  rewrite [nonces_of_term (TPair _ _)]nonces_of_termE.
+  set_solver.
+- move=> ???.
+  rewrite [nonces_of_term (TPair _ _)]nonces_of_termE.
+  set_solver.
+- move=> ???.
+  rewrite [nonces_of_term (TKey _ _)]nonces_of_termE.
+  set_solver.
+- move=> ???.
+  rewrite [nonces_of_term (TEnc _ _)]nonces_of_termE.
+  set_solver.
+- move=> ???.
+  rewrite [nonces_of_term (TEnc _ _)]nonces_of_termE.
+  set_solver.
+- move=> ???.
+  rewrite [nonces_of_term (THash _)]nonces_of_termE.
+  set_solver.
+- move=> ???. rewrite nonces_of_term_TExp. set_solver.
+- move=> t2 t2' ts sub sub' t2'_ts.
+  rewrite nonces_of_term_TExp.
+  have ?: nonces_of_term t2' ⊆ ⋃ map nonces_of_term ts.
+    move=> t t_t2'. rewrite elem_of_union_list.
+    exists (nonces_of_term t2'). split => //.
+    rewrite elem_of_list_fmap. by eauto.
+  set_solver.
+Qed.
+
 Module Spec.
 
 Implicit Types N : namespace.

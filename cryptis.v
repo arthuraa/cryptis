@@ -75,8 +75,8 @@ Definition pnonce a : iProp :=
 Global Instance Persistent_pnonce a : Persistent (pnonce a).
 Proof. apply _. Qed.
 
-Definition snonce a : iProp :=
-  ∃ γ, meta a (nroot.@"nonce") γ.
+Definition mnonce a : iProp :=
+  meta a (nroot.@"minted") ().
 
 Definition dh_pred (t t' : term) : iProp :=
   match t with
@@ -313,13 +313,21 @@ Fact minted_key : unit. Proof. exact: tt. Qed.
 
 Definition minted : term → iProp :=
   locked_with minted_key (
-    λ t, [∗ set] a ∈ nonces_of_term t, snonce a
+    λ t, [∗ set] a ∈ nonces_of_term t, mnonce a
   )%I.
 
 Canonical minted_unlock := [unlockable of minted].
 
 Global Instance Persistent_minted t : Persistent (minted t).
 Proof. rewrite unlock; apply _. Qed.
+
+Lemma subterm_minted t1 t2 :
+  subterm t1 t2 → minted t2 -∗ minted t1.
+Proof.
+rewrite unlock !big_sepS_forall; iIntros "%sub m_t2 %t %t_t1".
+move/subterm_nonces_of_term in sub.
+iApply "m_t2". iPureIntro. set_solver.
+Qed.
 
 Inductive decompose (T : gset term) (t : term) : Prop :=
 | DInt n of T = ∅ & t = TInt n
@@ -450,7 +458,7 @@ Proof.
 by rewrite unlock nonces_of_term_unseal /= !big_sepS_union_pers.
 Qed.
 
-Lemma minted_TNonce a : minted (TNonce a) ⊣⊢ snonce a.
+Lemma minted_TNonce a : minted (TNonce a) ⊣⊢ mnonce a.
 Proof.
 by rewrite unlock nonces_of_term_unseal /= big_sepS_singleton.
 Qed.
@@ -518,17 +526,16 @@ apply: (anti_symm _); iIntros "#Ht" => //.
   by rewrite big_sepS_union_pers !big_sepS_singleton; eauto.
 Qed.
 
-Lemma public_TNonce a : public (TNonce a) ⊣⊢ pnonce a.
+Lemma public_TNonce a : public (TNonce a) ⊣⊢ pnonce a ∗ mnonce a.
 Proof.
 apply: (anti_symm _); iIntros "Ht".
-- rewrite public_eq; iDestruct "Ht" as "[_ Ht]".
+- rewrite public_eq; iDestruct "Ht" as "[? Ht]".
+  rewrite minted_TNonce. iFrame.
   iDestruct "Ht" as "[publ | ?]" => //.
   iDestruct "publ" as (T) "[%dec _]".
   by case: dec.
-- rewrite public_eq; iSplit; eauto.
-  rewrite minted_TNonce /pnonce /snonce.
-  iDestruct "Ht" as (γ P) "# (? & ? )".
-  by iExists _; eauto.
+- rewrite public_eq minted_TNonce /pnonce /mnonce.
+  iDestruct "Ht" as "[Ht ?]". iFrame.
 Qed.
 
 Lemma public_TKey kt t :
@@ -871,13 +878,17 @@ End TermMeta.
 
 Lemma nonce_alloc P Q a a_meta :
   meta_token a ⊤ -∗
-  meta_token a_meta ⊤ ==∗
-  minted (TNonce a) ∗
-  □ (public (TNonce a) ↔ ▷ □ P (TNonce a)) ∗
-  □ (∀ t, dh_pred (TNonce a) t ↔ ▷ □ Q t) ∗
-  nonce_meta_token (TNonce a) ⊤.
+  meta_token a_meta ⊤ -∗
+  (minted (TNonce a) -∗ False) ∧
+  |==> minted (TNonce a) ∗
+    □ (public (TNonce a) ↔ ▷ □ P (TNonce a)) ∗
+    □ (∀ t, dh_pred (TNonce a) t ↔ ▷ □ Q t) ∗
+    nonce_meta_token (TNonce a) ⊤.
 Proof.
 iIntros "token token'".
+iSplit.
+{ rewrite minted_TNonce. iIntros "contra".
+  by iDestruct (meta_meta_token with "token contra") as "[]". }
 iMod (saved_pred_alloc P DfracDiscarded) as (γP) "#own_P" => //.
 iMod (saved_pred_alloc Q DfracDiscarded) as (γQ) "#own_Q" => //.
 rewrite (meta_token_difference a (↑nroot.@"nonce")) //.
@@ -886,17 +897,21 @@ iMod (meta_set _ _ γP with "nonce") as "#nonce"; eauto.
 rewrite (meta_token_difference a (↑nroot.@"dh")); last solve_ndisj.
 iDestruct "token" as "[dh token]".
 iMod (meta_set _ _ γQ with "dh") as "#dh"; eauto.
+rewrite (meta_token_difference a (↑nroot.@"minted")); last solve_ndisj.
+iDestruct "token" as "[minted token]".
+iMod (meta_set _ _ () (nroot.@"minted") with "minted") as "#minted" => //.
 iMod (meta_set _ _ a_meta (nroot.@"meta") with "token") as "#meta"; eauto.
   solve_ndisj.
 iSplitR.
-  rewrite minted_TNonce; iExists _; eauto.
+  by rewrite minted_TNonce.
 iSplitR.
   rewrite public_TNonce; do 2!iModIntro; iSplit.
-  + iDestruct 1 as (γP' P') "(#meta_γP' & #own_P' & ?)".
+  + iIntros "[#public _]".
+    iDestruct "public" as (γP' P') "(#meta_γP' & #own_P' & ?)".
     iPoseProof (meta_agree with "nonce meta_γP'") as "->".
     iPoseProof (saved_pred_agree _ _ _ _ _ (TNonce a) with "own_P own_P'") as "e".
     by iModIntro; iRewrite "e".
-  + iIntros "#?"; iExists γP, P; eauto.
+  + iIntros "#?". iSplit => //. iExists γP, P; eauto.
 iSplitR.
   iIntros "!> !> %t"; iSplit.
   + iDestruct 1 as (γQ' Q') "(#meta_γQ' & #own_Q' & ?)".
