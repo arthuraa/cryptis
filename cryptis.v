@@ -4,7 +4,7 @@ From iris.algebra Require Import agree auth gset gmap list reservation_map excl.
 From iris.algebra Require Import functions.
 From iris.base_logic.lib Require Import saved_prop invariants.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term gmeta comp_map.
+From cryptis Require Import lib term gmeta nown comp_map.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -24,6 +24,7 @@ Class cryptisGpreS Σ := CryptisGPreS {
   cryptisGpreS_mint  : inG Σ mint_mapUR;
   cryptisGpreS_meta  : metaGS Σ;
   cryptisGpreS_maps  : inG Σ (reservation_mapR (agreeR positiveO));
+  cryptisGpreS_names : inG Σ (authR (gmapUR term (agreeR gnameO)));
 }.
 
 Local Existing Instance cryptisGpreS_nonce.
@@ -33,14 +34,16 @@ Local Existing Instance cryptisGpreS_hon.
 Local Existing Instance cryptisGpreS_mint.
 Global Existing Instance cryptisGpreS_meta.
 Local Existing Instance cryptisGpreS_maps.
+Local Existing Instance cryptisGpreS_names.
 
 Class cryptisGS Σ := CryptisGS {
   cryptis_inG : cryptisGpreS Σ;
-  cryptis_key_name  : gname;
-  cryptis_hash_name : gname;
-  cryptis_enc_name  : gname;
-  cryptis_hon_name  : gname;
-  cryptis_mint_name : gname;
+  cryptis_key_name   : gname;
+  cryptis_hash_name  : gname;
+  cryptis_enc_name   : gname;
+  cryptis_hon_name   : gname;
+  cryptis_mint_name  : gname;
+  cryptis_names_name : gname;
 }.
 
 Global Existing Instance cryptis_inG.
@@ -52,7 +55,8 @@ Definition cryptisΣ : gFunctors :=
     GFunctor comp_mapR;
     GFunctor mint_mapUR;
     metaΣ;
-    GFunctor (reservation_mapR (agreeR positiveO))].
+    GFunctor (reservation_mapR (agreeR positiveO));
+    GFunctor (authR (gmapUR term (agreeR gnameO)))].
 
 Global Instance subG_cryptisGpreS Σ : subG cryptisΣ Σ → cryptisGpreS Σ.
 Proof. solve_inG. Qed.
@@ -319,6 +323,9 @@ Definition minted : term → iProp :=
 Canonical minted_unlock := [unlockable of minted].
 
 Global Instance Persistent_minted t : Persistent (minted t).
+Proof. rewrite unlock; apply _. Qed.
+
+Global Instance Timeless_minted t : Timeless (minted t).
 Proof. rewrite unlock; apply _. Qed.
 
 Lemma subterm_minted t1 t2 :
@@ -784,108 +791,274 @@ Lemma public_TEncIP k t :
   public (TEnc k t).
 Proof. by iIntros "? ?"; rewrite public_TEnc; eauto. Qed.
 
-Section TermMeta.
+Definition term_name_inv : iProp :=
+  ∃ names : gmap term gname,
+    own cryptis_names_name (● ((to_agree <$> names) : gmap _ _)) ∗
+    [∗ set] t ∈ dom names, minted t.
 
-Class TermMeta
-  (term_meta : ∀ `{Countable L}, term → namespace → L → iProp)
-  (term_meta_token : term → coPset → iProp) := {
-  term_meta_timeless :> ∀ `{Countable L} t N (x : L),
-    Timeless (term_meta t N x);
-  term_meta_token_timeless :> ∀ t E,
-    Timeless (term_meta_token t E);
-  term_meta_persistent :> ∀ `{Countable L} t N (x : L),
-    Persistent (term_meta t N x);
-  term_meta_set : ∀ `{Countable L} E t (x : L) N,
-    ↑N ⊆ E →
-    term_meta_token t E ==∗ term_meta t N x;
-  term_meta_meta_token : ∀ `{Countable L} t (x : L) N E,
-    ↑N ⊆ E →
-    term_meta_token t E -∗ term_meta t N x -∗ False;
-  term_meta_agree : ∀ `{Countable L} t N (x1 x2 : L),
-    term_meta t N x1 -∗
-    term_meta t N x2 -∗
-    ⌜x1 = x2⌝;
-  term_meta_token_difference : ∀ t (E1 E2 : coPset),
-    E1 ⊆ E2 →
-    term_meta_token t E2 ⊣⊢
-    term_meta_token t E1 ∗ term_meta_token t (E2 ∖ E1);
-}.
+Global Instance term_name_inv_timeless : Timeless term_name_inv.
+Proof. rewrite /term_name_inv. apply _. Qed.
 
-(* Using two locations is a bit ugly, but maybe more convenient *)
+Definition term_name t γ : iProp :=
+  own cryptis_names_name (◯ {[t := to_agree γ]}).
 
-Definition nonce_meta `{Countable L} t N (x : L) : iProp :=
-  match t with
-  | TNonce a => ∃ a', meta a (nroot.@"meta") a' ∧ meta a' N x
-  | _ => False
-  end.
+Global Instance term_name_persistent t γ : Persistent (term_name t γ).
+Proof. apply _. Qed.
 
-Definition nonce_meta_token t E : iProp :=
-  match t with
-  | TNonce a => ∃ a', meta a (nroot.@"meta") a' ∧ meta_token a' E
-  | _ => False
-  end.
+Global Instance term_name_timeless t γ : Timeless (term_name t γ).
+Proof. apply _. Qed.
 
-Program Global Instance nonce_term_meta :
-  TermMeta (@nonce_meta) nonce_meta_token.
-
-Next Obligation. move=> ???; case=> *; apply _. Qed.
-
-Next Obligation. by case=> *; apply _. Qed.
-
-Next Obligation. move=> ???; case=> *; apply _. Qed.
-
-Next Obligation.
-move=> ??? E t x N; case: t; try by move=> *; iStartProof.
-move=> a; iIntros (sub) "token"; rewrite /=.
-iDestruct "token" as (a') "[meta_a' token]".
-by iMod (meta_set E _ x with "token") as "meta"; eauto.
+Lemma term_name_agree t γ1 γ2 :
+  term_name t γ1 -∗
+  term_name t γ2 -∗
+  ⌜γ1 = γ2⌝.
+Proof.
+iIntros "name1 name2".
+iPoseProof (own_valid_2 with "name1 name2") as "%valid".
+rewrite -auth_frag_op auth_frag_valid in valid.
+move/(_ t): valid.
+rewrite lookup_op !lookup_singleton -Some_op Some_valid.
+by move=> /to_agree_op_inv_L ->.
 Qed.
 
-Next Obligation.
-move=> ???; case; try by move=> *; iStartProof.
-move=> a x N E sub /=; iIntros "token meta".
-iDestruct "token" as (a1) "[meta_a1 token]".
-iDestruct "meta"  as (a2) "[meta_a2 meta]".
-iPoseProof (meta_agree with "meta_a1 meta_a2") as "->".
-by iDestruct (meta_meta_token with "token meta") as "[]".
+Definition term_token t E : iProp :=
+  ∃ γ, term_name t γ ∗ gmeta_token γ E.
+
+Definition term_meta `{Countable L} t N (x : L) : iProp :=
+  ∃ γ, term_name t γ ∗ gmeta γ N x.
+
+Global Instance term_token_timeless t E : Timeless (term_token t E).
+Proof. apply _. Qed.
+
+Global Instance term_meta_timeless `{Countable L} t N (x : L) :
+  Timeless (term_meta t N x).
+Proof. apply _. Qed.
+
+Global Instance term_meta_persistent `{Countable L} t N (x : L) :
+  Persistent (term_meta t N x).
+Proof. apply _. Qed.
+
+Lemma term_token_drop E1 E2 t :
+  E1 ⊆ E2 → term_token t E2 -∗ term_token t E1.
+Proof.
+iIntros "% (%γ & #name & token)".
+iExists γ. iSplit => //. by iApply gmeta_token_drop.
 Qed.
 
-Next Obligation.
-move=> ???; case; try by move=> *; iStartProof.
-move=> a * /=; iIntros "meta1 meta2".
-iDestruct "meta1" as (a1) "[meta_a1 meta1]".
-iDestruct "meta2" as (a2) "[meta_a2 meta2]".
-iPoseProof (meta_agree with "meta_a1 meta_a2") as "->".
-by iApply (meta_agree with "meta1 meta2").
+Lemma term_token_disj E1 E2 t :
+  term_token t E1 -∗ term_token t E2 -∗ ⌜E1 ## E2⌝.
+Proof.
+iIntros "(% & #name1 & token1) (% & #name2 & token2)".
+iPoseProof (term_name_agree with "name1 name2") as "<-".
+iApply (gmeta_token_disj with "token1 token2").
 Qed.
 
-Next Obligation.
-case; try by move=> *; iSplit; [iIntros "[]"|iIntros "[[] ?]"].
-move=> a ?? sub; iSplit.
-- iDestruct 1 as (a') "[#meta_a' token]".
-  rewrite meta_token_difference /=; eauto.
+Lemma term_token_difference t E1 E2 :
+  E1 ⊆ E2 → term_token t E2 ⊣⊢ term_token t E1 ∗ term_token t (E2 ∖ E1).
+Proof.
+move=> sub. iSplit.
+- iIntros "(% & #name & token)".
+  rewrite (gmeta_token_difference _ _ _ sub).
   iDestruct "token" as "[token1 token2]".
-  by iSplitL "token1"; iExists a'; eauto.
-- iDestruct 1 as "[token1 token2]".
-  iDestruct "token1" as (a1) "[#meta_a1 token1]".
-  iDestruct "token2" as (a2) "[#meta_a2 token2]".
-  iPoseProof (meta_agree with "meta_a1 meta_a2") as "->".
-  iExists a2; iSplit => //.
-  by iApply meta_token_difference => //; iSplitL "token1".
+  by iSplitL "token1"; iExists _; iFrame.
+- iIntros "[(% & #name1 & token1) (% & #name2 & token2)]".
+  iPoseProof (term_name_agree with "name1 name2") as "<-".
+  iExists _; iSplit => //.
+  rewrite (gmeta_token_difference _ _ _ sub). by iFrame.
 Qed.
 
-End TermMeta.
+Lemma term_meta_token `{Countable L} t (x : L) N E :
+  ↑N ⊆ E → term_token t E -∗ term_meta t N x -∗ False.
+Proof.
+move=> sub.
+iIntros "(% & #name1 & token) (% & #name2 & #meta)".
+iPoseProof (term_name_agree with "name1 name2") as "<-".
+by iApply (gmeta_gmeta_token with "token meta").
+Qed.
 
-Lemma nonce_alloc P Q a a_meta :
+Lemma term_meta_set' `{Countable L} N (x : L) E t :
+  ↑N ⊆ E → term_token t E ==∗ term_meta t N x ∗ term_token t (E ∖ ↑N).
+Proof.
+iIntros "%sub (%γ & #name & token)".
+iMod (gmeta_set' _ _ _ x sub with "token") as "[#meta token]".
+iModIntro.
+by iSplit; iExists _; iSplit => //.
+Qed.
+
+Lemma term_meta_set `{Countable L} N (x : L) E t :
+  ↑N ⊆ E → term_token t E ==∗ term_meta t N x.
+Proof.
+iIntros "%sub token".
+iMod (term_meta_set' x _ sub with "token") as "[#meta token]".
+by iModIntro.
+Qed.
+
+Lemma term_meta_agree `{Countable L} t N (x1 x2 : L) :
+  term_meta t N x1 -∗ term_meta t N x2 -∗ ⌜x1 = x2⌝.
+Proof.
+iIntros "(% & #name1 & #meta1) (% & #name2 & #meta2)".
+iPoseProof (term_name_agree with "name1 name2") as "<-".
+iApply (gmeta_agree with "meta1 meta2").
+Qed.
+
+Section TermOwn.
+
+Context `{inG Σ A}.
+
+Definition term_own t N (x : A) : iProp :=
+  ∃ γ, term_name t γ ∗ nown γ N x.
+
+Lemma term_own_alloc t N {E} (a : A) :
+  ↑N ⊆ E → ✓ a → term_token t E ==∗ term_own t N a ∗ term_token t (E ∖ ↑N).
+Proof.
+iIntros "%sub %val (% & #name & token)".
+iMod (nown_alloc _ _ sub val with "token") as "[own token]".
+iModIntro.
+by iSplitL "own"; iExists _; iFrame.
+Qed.
+
+Lemma term_own_valid t N (a : A) : term_own t N a -∗ ✓ a.
+Proof.
+iIntros "(%γ' & #own_γ & own)". iApply (nown_valid with "own").
+Qed.
+
+Lemma term_own_valid_2 t N (a1 a2 : A) :
+  term_own t N a1 -∗ term_own t N a2 -∗ ✓ (a1 ⋅ a2).
+Proof.
+iIntros "(%γ1 & #own_γ1 & own1) (%γ2 & #own_γ2 & own2)".
+iPoseProof (term_name_agree with "own_γ1 own_γ2") as "<-".
+by iApply (nown_valid_2 with "own1 own2").
+Qed.
+
+Lemma term_own_update t N (a a' : A) :
+  a ~~> a' → term_own t N a ==∗ term_own t N a'.
+Proof.
+iIntros (?) "(%γ' & #? & own)".
+iMod (nown_update with "own") as "own"; eauto.
+iModIntro. iExists γ'. eauto.
+Qed.
+
+#[global]
+Instance term_own_core_persistent t N (a : A) :
+  CoreId a → Persistent (term_own t N a).
+Proof. apply _. Qed.
+
+#[global]
+Instance term_own_timeless t N (a : A) :
+  Discrete a → Timeless (term_own t N a).
+Proof. apply _. Qed.
+
+#[global]
+Instance term_own_ne t N : NonExpansive (term_own t N).
+Proof. solve_proper. Qed.
+
+#[global]
+Instance term_own_proper t N : Proper ((≡) ==> (≡)) (term_own t N).
+Proof. solve_proper. Qed.
+
+Lemma term_own_op t N (a1 a2 : A) :
+  term_own t N (a1 ⋅ a2) ⊣⊢ term_own t N a1 ∗ term_own t N a2.
+Proof.
+iSplit.
+- iIntros "(%γ' & #? & [own1 own2])".
+  by iSplitL "own1"; iExists γ'; iSplit.
+- iIntros "[(%γ1 & #own_γ1 & own1) (%γ2 & #own_γ2 & own2)]".
+  iPoseProof (term_name_agree with "own_γ1 own_γ2") as "<-".
+  iExists γ1. iSplit => //. by iSplitL "own1".
+Qed.
+
+#[global]
+Instance from_sep_term_own t N (a b1 b2 : A) :
+  IsOp a b1 b2 → FromSep (term_own t N a) (term_own t N b1) (term_own t N b2).
+Proof.
+by rewrite /IsOp /FromSep => ->; rewrite term_own_op.
+Qed.
+
+#[global]
+Instance into_sep_term_own t N (a b1 b2 : A) :
+  IsOp a b1 b2 → IntoSep (term_own t N a) (term_own t N b1) (term_own t N b2).
+Proof.
+by rewrite /IsOp /IntoSep => ->; rewrite term_own_op.
+Qed.
+
+Lemma term_own_mono t N (a1 a2 : A) : a1 ≼ a2 → term_own t N a2 -∗ term_own t N a1.
+Proof.
+case => ? ->.
+rewrite term_own_op.
+by iIntros "[??]".
+Qed.
+
+Lemma term_own_update_2 t N (a1 a2 a' : A) :
+  a1 ⋅ a2 ~~> a' →
+  term_own t N a1 -∗
+  term_own t N a2 ==∗
+  term_own t N a'.
+Proof.
+iIntros "% H1 H2".
+iMod (term_own_update with "[H1 H2]") as "H" => //.
+by iSplitL "H1".
+Qed.
+
+End TermOwn.
+
+#[global] Typeclasses Opaque term_own.
+
+Lemma term_token_alloc (T : gset term) (P Q : iProp) E :
+  (∀ t, ⌜t ∈ T⌝ -∗ P -∗ minted t -∗ False) -∗
+  (∀ t, ⌜t ∈ T⌝ -∗ Q -∗ minted t) -∗
+  (P ∧ |={E}=> Q) -∗
+  term_name_inv ={E}=∗
+  term_name_inv ∗ Q ∗ [∗ set] t ∈ T, term_token t ⊤.
+Proof.
+assert (∀ names : gmap term gname,
+  dom names ## T →
+  own cryptis_names_name (● ((to_agree <$> names) : gmap term _)) ==∗
+  ∃ names' : gmap term gname,
+  ⌜dom names' = dom names ∪ T⌝ ∗
+  own cryptis_names_name (● ((to_agree <$> names') : gmap term _)) ∗
+  [∗ set] t ∈ T, term_token t ⊤) as names_alloc.
+{ induction T as [|t T fresh IH] using set_ind_L.
+  - iIntros "%names _ own !>". iExists names.
+    by rewrite right_id_L big_sepS_empty; iFrame.
+  - iIntros "%names %dis own".
+    have t_names : t ∉ dom names by set_solver.
+    have {}dis : dom names ## T by set_solver.
+    iMod gmeta_token_alloc as "(%γ & token)".
+    iMod (own_update with "own") as "[own frag]".
+    { eapply auth_update_alloc.
+      apply (alloc_singleton_local_update _ t (to_agree γ)) => //.
+      by rewrite lookup_fmap (_ : names !! t = None) // -not_elem_of_dom. }
+    rewrite -fmap_insert.
+    have {}dis: dom (<[t := γ]>names) ## T.
+      rewrite dom_insert; set_solver.
+    iMod (IH _ dis with "own") as "(%names' & %dom_names' & own & tokens)".
+    iModIntro. iExists names'. iFrame.
+    rewrite dom_names' dom_insert_L. iSplit; first by iPureIntro; set_solver.
+    rewrite big_sepS_union; last by set_solver.
+    iFrame. rewrite big_sepS_singleton. iExists γ. iFrame. }
+iIntros "PE QE PQ (%names & own & #minted_names)".
+iAssert (⌜dom names ## T⌝)%I as "%dis".
+{ rewrite elem_of_disjoint. iIntros "%t %t_names %t_T".
+  rewrite big_sepS_delete //. iDestruct "minted_names" as "[minted_t _]".
+  iDestruct "PQ" as "[P _]".
+  iApply ("PE" with "[//] P minted_t"). }
+iMod (names_alloc _ dis with "own") as "(%names' & %dom_names & own & tokens)".
+iDestruct "PQ" as "[_ >Q]".
+iAssert ([∗ set] t ∈ T, minted t)%I as "#minted_T".
+{ rewrite (big_sepS_forall _ T). iIntros "%t %t_T".
+  by iApply ("QE" with "[//] Q"). }
+iModIntro. iFrame. iExists names'. iFrame.
+rewrite dom_names big_sepS_union //. by iSplit.
+Qed.
+
+Lemma nonce_alloc P Q a :
   meta_token a ⊤ -∗
-  meta_token a_meta ⊤ -∗
   (minted (TNonce a) -∗ False) ∧
   |==> minted (TNonce a) ∗
     □ (public (TNonce a) ↔ ▷ □ P (TNonce a)) ∗
-    □ (∀ t, dh_pred (TNonce a) t ↔ ▷ □ Q t) ∗
-    nonce_meta_token (TNonce a) ⊤.
+    □ (∀ t, dh_pred (TNonce a) t ↔ ▷ □ Q t).
 Proof.
-iIntros "token token'".
+iIntros "token".
 iSplit.
 { rewrite minted_TNonce. iIntros "contra".
   by iDestruct (meta_meta_token with "token contra") as "[]". }
@@ -900,8 +1073,6 @@ iMod (meta_set _ _ γQ with "dh") as "#dh"; eauto.
 rewrite (meta_token_difference a (↑nroot.@"minted")); last solve_ndisj.
 iDestruct "token" as "[minted token]".
 iMod (meta_set _ _ () (nroot.@"minted") with "minted") as "#minted" => //.
-iMod (meta_set _ _ a_meta (nroot.@"meta") with "token") as "#meta"; eauto.
-  solve_ndisj.
 iSplitR.
   by rewrite minted_TNonce.
 iSplitR.
@@ -912,14 +1083,12 @@ iSplitR.
     iPoseProof (saved_pred_agree _ _ _ _ _ (TNonce a) with "own_P own_P'") as "e".
     by iModIntro; iRewrite "e".
   + iIntros "#?". iSplit => //. iExists γP, P; eauto.
-iSplitR.
-  iIntros "!> !> %t"; iSplit.
-  + iDestruct 1 as (γQ' Q') "(#meta_γQ' & #own_Q' & ?)".
-    iPoseProof (meta_agree with "dh meta_γQ'") as "->".
-    iPoseProof (saved_pred_agree _ _ _ _ _ t with "own_Q own_Q'") as "e".
-    by iModIntro; iRewrite "e".
-  + by iIntros "#?"; iExists _, _; eauto.
-iModIntro. iExists a_meta. by eauto.
+iIntros "!> !> %t"; iSplit.
+- iDestruct 1 as (γQ' Q') "(#meta_γQ' & #own_Q' & ?)".
+  iPoseProof (meta_agree with "dh meta_γQ'") as "->".
+  iPoseProof (saved_pred_agree _ _ _ _ _ t with "own_Q own_Q'") as "e".
+  by iModIntro; iRewrite "e".
+- by iIntros "#?"; iExists _, _; eauto.
 Qed.
 
 Definition unknown γ : iProp :=
@@ -1064,11 +1233,16 @@ Definition cryptis_ctx : iProp :=
   key_pred (nroot.@"keys".@"sym") (λ _  _, False%I) ∗
   key_pred (nroot.@"keys".@"enc") (λ kt _, ⌜kt = Enc⌝)%I ∗
   key_pred (nroot.@"keys".@"sig") (λ kt _, ⌜kt = Dec⌝)%I ∗
-  inv (cryptisN.@"honest") honest_inv.
+  inv (cryptisN.@"honest") honest_inv ∗
+  inv (cryptisN.@"names") term_name_inv.
 
 #[global]
 Instance cryptis_ctx_persistent : Persistent cryptis_ctx.
 Proof. apply _. Qed.
+
+Lemma cryptis_term_name_inv :
+  cryptis_ctx -∗ inv (cryptisN.@"names") term_name_inv.
+Proof. by iIntros "(_ & _ & _ & _ & #ctx)". Qed.
 
 Lemma public_sym_keyE kt k :
   cryptis_ctx -∗
@@ -1227,7 +1401,7 @@ Lemma honest_acc E dq n X :
     (▷ honest_inv ={E ∖ ↑cryptisN.@"honest",E}=∗ True).
 Proof.
 rewrite honest_auth_unseal.
-iIntros "%sub (_ & _ & _ & #ctx) (ver & #ver_frag & #term_X)".
+iIntros "%sub (_ & _ & _ & #ctx & _) (ver & #ver_frag & #term_X)".
 iMod (inv_acc with "ctx") as "[inv close]" => //.
 iDestruct "inv"
   as "(%n' & %H & %X' & %C & %M &
@@ -1551,13 +1725,12 @@ Arguments cryptis_key_name {Σ _}.
 Arguments key_pred {Σ _} N φ.
 Arguments key_pred_set {Σ _ _} N P.
 Arguments key_pred_token_difference {Σ _} E1 E2.
-Arguments term_meta_set {Σ _ _ _ _ _ _} E t x N.
-Arguments term_meta_token_difference {Σ _ _ _} t E1 E2.
-Arguments nonce_term_meta Σ {_}.
-Arguments nonce_meta_token {Σ _}.
+Arguments term_meta_set {Σ _ _ _ _} N x E t.
+Arguments term_token_difference {Σ _} t E1 E2.
+Arguments term_name {Σ _} t γ.
+Arguments term_own_alloc {Σ _ A _ t} N {_} a.
 Arguments honest_inv {Σ _ _}.
 Arguments cryptis_ctx {Σ _ _}.
-Arguments TermMeta Σ term_meta term_meta_token : assert.
 Arguments unknown_alloc {Σ _}.
 Arguments known_alloc {Σ _ γ} x.
 
@@ -1609,7 +1782,9 @@ iMod (own_alloc (to_mint_map (ε : discrete_fun _) 0)) as (γ_mint) "mint_auth".
   by rewrite /to_mint_map /= discrete_fun_lookup_empty auth_auth_valid. }
 rewrite comp_map_frag_split_empty.
 iDestruct "hon_auth" as "[hon_auth #hon]".
-pose (H := CryptisGS _ γ_enc γ_key γ_hash γ_hon γ_mint).
+iMod (own_alloc (● (∅ : gmap term (agree gname)))) as (γ_names) "names_auth".
+  by apply auth_auth_valid.
+pose (H := CryptisGS _ γ_enc γ_key γ_hash γ_hon γ_mint γ_names).
 iExists H; iFrame.
 iAssert (key_pred_token ⊤) with "[own_enc]" as "token".
   by iFrame.
@@ -1623,8 +1798,11 @@ iMod (key_pred_set (nroot.@"keys".@"sig") (λ kt _, ⌜kt = Dec⌝)%I with "toke
     as "[#? token]"; try solve_ndisj.
 rewrite honest_auth_unseal /honest_auth_def big_sepS_empty. iFrame.
 iSplitL; last by eauto. do 3!iSplitR => //.
-iApply inv_alloc.
-iModIntro. iExists 0, {[0 := ∅]}, ∅, ∅, ε. iFrame.
-rewrite !big_sepS_empty. do !iSplit => //.
-iIntros "!> %m". by rewrite discrete_fun_lookup_empty big_opS_empty.
+iSplitR "names_auth".
+  iApply inv_alloc.
+  iModIntro. iExists 0, {[0 := ∅]}, ∅, ∅, ε. iFrame.
+  rewrite !big_sepS_empty. do !iSplit => //.
+  iIntros "!> %m". by rewrite discrete_fun_lookup_empty big_opS_empty.
+iApply inv_alloc. iExists ∅. rewrite fmap_empty /=. iFrame.
+by rewrite dom_empty_L big_sepS_empty.
 Qed.

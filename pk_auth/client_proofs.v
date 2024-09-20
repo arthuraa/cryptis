@@ -22,6 +22,9 @@ Variable N : namespace.
 
 Context `{!PK}.
 
+(* TODO: Avoid exposing these instances. *)
+Local Existing Instances cryptis_inG cryptisGpreS_maps.
+
 Lemma public_msg1I n T kI kR nI :
   let sI := mk_key_share nI in
   pk_auth_ctx N -∗
@@ -78,7 +81,7 @@ Lemma init_finish dq n T E kI kR nI sR :
   □ is_priv_key nI kI kR -∗
   secret_of sR kI kR -∗
   resp_accepted N kI kR sI sR -∗
-  nonce_meta_token nI (⊤ ∖ ↑N.@"success") -∗
+  term_token nI (⊤ ∖ ↑N.@"success") -∗
   init_confirm kI kR ={E}=∗
   ▷ (●H{dq|n} T ∗
      □ confirmation Init kI kR kS ∗
@@ -92,17 +95,17 @@ iIntros "%sI %kS % (#ctx & _) hon #sess #s_nI #p_nI #p_sR #accepted token confir
 iMod ("confirm" $! nI sR) as "#confirm".
 iAssert (secret_of sI kI kR) as "p_sI".
   by iApply mk_key_share_secret_of.
-rewrite (term_meta_token_difference _ (↑N.@"token")) //; last solve_ndisj.
+rewrite (term_token_difference _ (↑N.@"token")) //; last solve_ndisj.
 set TK := N.@"token".
 iDestruct "token" as "[token_token token]".
-rewrite (term_meta_token_difference _ (↑N.@"session") (_ ∖ _)); last first.
+rewrite (term_token_difference _ (↑N.@"session") (_ ∖ _)); last first.
   solve_ndisj.
 set S := N.@"session".
 iDestruct "token" as "[token_sess token]".
-rewrite (term_meta_token_difference _ (↑TK.@Init) (↑TK)); last first.
+rewrite (term_token_difference _ (↑TK.@Init) (↑TK)); last first.
   solve_ndisj.
 iDestruct "token_token" as "[token_init token_token]".
-rewrite (term_meta_token_difference _ (↑TK.@Resp) (_ ∖ _)); last first.
+rewrite (term_token_difference _ (↑TK.@Resp) (_ ∖ _)); last first.
   solve_ndisj.
 iDestruct "token_token" as "[token_resp _]".
 iDestruct "accepted" as "[fail|accepted]".
@@ -128,7 +131,8 @@ iMod (session_begin _ Init nI nR (kI, kR) with "ctx [token_resp] token_sess")
 - by iSplitR.
 iMod (own_alloc (reservation_map_token ⊤)) as "(%γ & map)".
   by apply reservation_map_token_valid.
-iMod (term_meta_set _ _ γ (TK.@Init) with "token_init") as "#meta" => //.
+Unshelve.
+iMod (term_meta_set (TK.@Init) γ with "token_init") as "#meta" => //.
 iModIntro. iModIntro. iFrame. iSplit; eauto. iSplitR.
   by iExists _, _; eauto.
 iSplitR.
@@ -180,9 +184,9 @@ Proof.
 rewrite /pk_auth_init /in_honest bool_decide_decide.
 iIntros (??) "#chan_c #ctx #ctx' #p_kI #p_kR %Ψ !> [confirm hon] Hpost".
 wp_pures. wp_bind (mk_key_share_impl _).
-iApply (wp_mk_key_share _ kI kR) => //.
+iApply (wp_mk_key_share kI kR) => //.
 iIntros "!> %nI (#s_nI & #p_nI & token)".
-rewrite (term_meta_token_difference _ (↑N.@"success")); eauto.
+rewrite (term_token_difference _ (↑N.@"success")); eauto.
 iDestruct "token" as "[token_succ token]".
 iMod (session_weak'_set N kI kR _ _ _ with "[#] token_succ") as "#sess".
   by iApply honest_auth_frag.

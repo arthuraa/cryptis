@@ -94,9 +94,9 @@ by rewrite /pk_dh_mk_session_key; iApply minted_texp.
 Qed.
 
 Next Obligation.
-iIntros "%E %kI %kR %Φ _ post". rewrite /pk_dh_mk_key_share_impl.
+iIntros "%E %kI %kR %sub %Φ #? post". rewrite /pk_dh_mk_key_share_impl.
 wp_pures. wp_bind (mknonce _).
-iApply (wp_mknonce (λ _, False)%I (dh_publ (λ _, corruption kI kR))).
+iApply (wp_mknonce (λ _, False)%I (dh_publ (λ _, corruption kI kR))) => //.
 iIntros "%n #s_n #p_n #dh token". wp_pures.
 wp_bind (tint _). iApply wp_tint.
 wp_bind (tgroup _). iApply wp_tgroup.
@@ -119,11 +119,6 @@ Definition pk_dh_session_meta rl kI kR :=
 
 Definition pk_dh_session_meta_token rl kI kR :=
   @session_key_meta_token _ _ _ _ N _ rl kI kR.
-
-Global Instance pk_dh_session_term_meta rl kI kR :
-  TermMeta (pk_dh_session_meta rl kI kR)
-           (pk_dh_session_meta_token rl kI kR).
-Proof. apply _. Qed.
 
 Definition pk_dh_session_weak rl kI kR kS ph T :=
   session_weak N rl kI kR kS ph T.

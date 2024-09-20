@@ -130,7 +130,7 @@ destruct (Γvs !! i) as [τv|] eqn:Γvs_i.
 Qed.
 
 Definition has_type Γ e τ : iProp :=
-  □ ∀ γ, ⟦Γ⟧* γ → WP subst_map γ e {{ ⟦τ⟧ᵥ }}.
+  □ ∀ γ, cryptis_ctx → ⟦Γ⟧* γ → WP subst_map γ e {{ ⟦τ⟧ᵥ }}.
 
 Lemma pub_typeI t : public t -∗ pub_type t.
 Proof. iIntros "?"; iExists _; eauto. Qed.
@@ -152,7 +152,7 @@ Proof. by iIntros "?"; iRight; iExists _; eauto. Qed.
 
 Lemma has_type_nondet_int Γ : ⊢ has_type Γ (nondet_int #()) Int.
 Proof.
-iIntros "!> %vs".
+iIntros "!> %vs ?".
 iDestruct 1 as (Γvs) "(-> & -> & #vsP)".
 rewrite /=; iApply wp_nondet_int.
 by iIntros "%n"; iExists _.
@@ -162,7 +162,7 @@ Lemma has_type_var Γ (x : string) τ :
   Γ !! x = Some τ →
   ⊢ has_type Γ x τ.
 Proof.
-iIntros "%Γ_x !> %vs".
+iIntros "%Γ_x !> %vs ?".
 iDestruct 1 as (Γvs) "(-> & -> & #vsP)".
 rewrite lookup_fmap in Γ_x.
 case Γvs_x: (Γvs !! _) Γ_x => [τv|] //= [<-].
@@ -172,14 +172,14 @@ by wp_finish.
 Qed.
 
 Lemma has_type_val Γ v τ : ⟦τ⟧ᵥ v -∗ has_type Γ v τ.
-Proof. by iIntros "#vP !> %vs #vsP"; wp_finish. Qed.
+Proof. by iIntros "#vP !> %vs ? #vsP"; wp_finish. Qed.
 
 Lemma has_type_tint Γ e :
   has_type Γ e Int -∗
   has_type Γ (tint e) Pub.
 Proof.
 rewrite /has_type /=.
-iIntros "#eP !> %vs #vsP".
+iIntros "#eP !> %vs #? #vsP".
 wp_bind (subst_map _ e); iApply wp_wand; first by iApply "eP".
 iIntros (?); iDestruct 1 as (n) "->".
 by iApply wp_tint; iExists _; eauto.
@@ -190,7 +190,7 @@ Lemma has_type_as_int Γ e :
   has_type Γ (to_int e) (Option Int).
 Proof.
 rewrite /has_type /=.
-iIntros "#eP !> %vs #vsP".
+iIntros "#eP !> %vs #? #vsP".
 wp_bind (subst_map _ _); iApply wp_wand; first by iApply "eP".
 iIntros (?); iDestruct 1 as (t) "[-> #tP]".
 iApply wp_to_int; case: Spec.to_intP => [n ->|?] //=.
@@ -204,9 +204,9 @@ Lemma has_type_app Γ e1 e2 τ σ :
   has_type Γ (e1 e2) σ.
 Proof.
 rewrite /has_type /=.
-iIntros "#e2P #e1P !> %vs #vsP".
-iSpecialize ("e1P" with "vsP").
-iSpecialize ("e2P" with "vsP").
+iIntros "#e2P #e1P !> %vs #? #vsP".
+iSpecialize ("e1P" with "[//] vsP").
+iSpecialize ("e2P" with "[//] vsP").
 wp_bind (subst_map _ e2); iApply wp_wand; first by iApply "e2P".
 iIntros "%v2 #v2P".
 wp_bind (subst_map _ e1); iApply wp_wand; first by iApply "e1P".
@@ -219,7 +219,7 @@ Lemma has_type_rec Γ f x τ e σ :
   has_type Γ (Rec f x e) (Arrow τ σ).
 Proof.
 rewrite /has_type /=.
-iIntros "#eP !> %vs #vsP".
+iIntros "#eP !> %vs #? #vsP".
 rewrite binder_delete_commute -(binder_insert_delete2 Γ).
 rewrite (env_den_delete _ _ x) (env_den_delete _ _ f).
 move eΓ': (binder_delete f _) => Γ'.
@@ -241,8 +241,8 @@ Qed.
 Lemma has_type_mknonce Γ e :
   ⊢ has_type Γ (mknonce #()) Pub.
 Proof.
-iIntros "!> %γ #γP /=".
-iApply (wp_mknonce (λ _, True)%I (λ _, True)%I).
+iIntros "!> %γ #? #γP /=".
+iApply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
 iIntros (t) "_ #tP _ _".
 iExists t; iSplit => //.
 by iApply "tP".
@@ -252,7 +252,7 @@ Lemma has_type_mkkey Γ e :
   has_type Γ e Pub -∗
   has_type Γ (mkkey e) (Prod EK DK).
 Proof.
-iIntros "#eP !> %γ #γP /=".
+iIntros "#eP !> %γ #? #γP /=".
 wp_bind (subst_map _ _); iApply wp_wand; first by iApply "eP".
 iIntros "%"; iDestruct 1 as (t) "[-> #tP]".
 iApply wp_mkkey; iExists _, _; do 2!iSplit => //=.
@@ -295,7 +295,7 @@ Lemma has_type_mono Γ e τ σ :
   has_type Γ e τ -∗
   has_type Γ e σ.
 Proof.
-iIntros "%sub #eP %vs !> #vsP".
+iIntros "%sub #eP %vs !> #? #vsP".
 iApply wp_wand; first iApply "eP" => //.
 by iIntros (v) "#vP"; iApply sub.
 Qed.
@@ -319,7 +319,7 @@ Lemma has_type_eq_term Γ e1 e2 :
   has_type Γ e2 Pub -∗
   has_type Γ (eq_term e1 e2) Bool.
 Proof.
-iIntros "#e1P #e2P !> %vs #vsP /=".
+iIntros "#e1P #e2P !> %vs #? #vsP /=".
 wp_bind (subst_map _ e2); iApply wp_wand; first iApply "e2P" => //.
 iIntros "%v2"; iDestruct 1 as (t2) "[-> _]".
 wp_bind (subst_map _ e1); iApply wp_wand; first iApply "e1P" => //.
@@ -331,7 +331,7 @@ Lemma has_type_tgroup Γ e :
   has_type Γ e Pub -∗
   has_type Γ (tgroup e) Pub.
 Proof.
-iIntros "#eP !> %vs #vsP /=".
+iIntros "#eP !> %vs #? #vsP /=".
 wp_bind (subst_map _ e); iApply wp_wand; first iApply "eP" => //.
 iIntros "%"; iDestruct 1 as (t) "[-> #tP]".
 iApply wp_tgroup; iExists _; iSplit => //.
@@ -343,7 +343,7 @@ Lemma has_type_texp Γ e1 e2 :
   has_type Γ e2 Pub -∗
   has_type Γ (texp e1 e2) Pub.
 Proof.
-iIntros "#e1P #e2P !> %vs #vsP /=".
+iIntros "#e1P #e2P !> %vs #? #vsP /=".
 wp_bind (subst_map _ e2); iApply wp_wand; first iApply "e2P" => //.
 iIntros "%v2"; iDestruct 1 as (t2) "[-> #t2P]".
 wp_bind (subst_map _ e1); iApply wp_wand; first iApply "e1P" => //.
@@ -356,7 +356,7 @@ Lemma has_type_hash Γ e :
   has_type Γ e Pub -∗
   has_type Γ (hash e) Pub.
 Proof.
-iIntros "#eP !> %vs #vsP /=".
+iIntros "#eP !> %vs #? #vsP /=".
 wp_bind (subst_map _ e); iApply wp_wand; first iApply "eP" => //.
 iIntros "%"; iDestruct 1 as (t) "[-> #tP]".
 iApply wp_hash; iExists _; iSplit => //.
@@ -368,7 +368,7 @@ Lemma has_type_enc Γ e1 e2 :
   has_type Γ e2 Pub -∗
   has_type Γ (enc e1 e2) Pub.
 Proof.
-iIntros "#e1P #e2P !> %vs #vsP /=".
+iIntros "#e1P #e2P !> %vs #? #vsP /=".
 wp_bind (subst_map _ e2); iApply wp_wand; first iApply "e2P" => //.
 iIntros "%v2"; iDestruct 1 as (t2) "[-> #t2P]".
 wp_bind (subst_map _ e1); iApply wp_wand; first iApply "e1P" => //.
@@ -382,7 +382,7 @@ Lemma has_type_dec Γ e1 e2 :
   has_type Γ e2 Pub -∗
   has_type Γ (dec e1 e2) (Option Pub).
 Proof.
-iIntros "#e1P #e2P !> %vs #vsP /=".
+iIntros "#e1P #e2P !> %vs #? #vsP /=".
 wp_bind (subst_map _ e2); iApply wp_wand; first iApply "e2P" => //.
 iIntros "%v2"; iDestruct 1 as (t2) "[-> #t2P]".
 wp_bind (subst_map _ e1); iApply wp_wand; first iApply "e1P" => //.
@@ -401,7 +401,7 @@ Lemma has_type_tag Γ c e :
   has_type Γ e Pub -∗
   has_type Γ (tag c e) Pub.
 Proof.
-iIntros "#eP !> %vs #vsP /=".
+iIntros "#eP !> %vs #? #vsP /=".
 wp_bind (subst_map _ e); iApply wp_wand; first iApply "eP" => //.
 iIntros "%"; iDestruct 1 as (t) "[-> #tP]".
 iApply wp_tag; iApply pub_typeI.
@@ -412,7 +412,7 @@ Lemma has_type_untag Γ c e :
   has_type Γ e Pub -∗
   has_type Γ (untag c e) (Option Pub).
 Proof.
-iIntros "#eP !> %vs #vsP /=".
+iIntros "#eP !> %vs #? #vsP /=".
 wp_bind (subst_map _ e); iApply wp_wand; first iApply "eP" => //.
 iIntros "%"; iDestruct 1 as (t) "[-> #tP]".
 iApply wp_untag.
@@ -439,7 +439,7 @@ Lemma has_type_term_of_list Γ e :
   has_type Γ e (List Pub) -∗
   has_type Γ (term_of_list e) Pub.
 Proof.
-iIntros "#eP !> %vs #vsP /=".
+iIntros "#eP !> %vs #? #vsP /=".
 wp_bind (subst_map _ e); iApply wp_wand; first iApply "eP" => //.
 iIntros "%v #vP".
 iDestruct (list_pub_typeE with "vP") as (ts) "[-> #tsP]".
@@ -451,7 +451,7 @@ Lemma has_type_list_of_term Γ e :
   has_type Γ e Pub -∗
   has_type Γ (list_of_term e) (Option (List Pub)).
 Proof.
-iIntros "#eP !> %vs #vsP /=".
+iIntros "#eP !> %vs #? #vsP /=".
 wp_bind (subst_map _ e); iApply wp_wand; first iApply "eP" => //.
 iIntros "%v #vP"; iDestruct "vP" as (t) "[-> tP]".
 iApply wp_list_of_term.
@@ -465,7 +465,7 @@ Qed.
 
 Lemma has_type_nil Γ τ : ⊢ has_type Γ []%E (List τ).
 Proof.
-iIntros "!> %vs #vsP /=".
+iIntros "!> %vs #? #vsP /=".
 wp_pures.
 by iExists []; rewrite repr_list_unseal; eauto.
 Qed.
@@ -475,7 +475,7 @@ Lemma has_type_cons Γ e1 e2 τ :
   has_type Γ e2 (List τ) -∗
   has_type Γ (e1 :: e2) (List τ).
 Proof.
-iIntros "#e1P #e2P !> %vs #vsP /=".
+iIntros "#e1P #e2P !> %vs #? #vsP /=".
 wp_bind (subst_map _ e2); iApply wp_wand; first iApply "e2P" => //.
 iIntros "%v2"; iDestruct 1 as (vs') "[-> #t2P]".
 wp_bind (subst_map _ e1); iApply wp_wand; first iApply "e1P" => //.
@@ -496,7 +496,7 @@ Lemma has_type_list_case Γ e e1 e2 τ σ :
   has_type Γ e2 (Arrow τ (Arrow (List τ) σ)) -∗
   has_type Γ (list_case e e1 e2) σ.
 Proof.
-iIntros "#eP #e1P #e2P !> %vs #vsP /=".
+iIntros "#eP #e1P #e2P !> %vs #? #vsP /=".
 wp_bind (subst_map _ e2); iApply wp_wand; first iApply "e2P" => //.
 iIntros "%g #gP".
 wp_bind (subst_map _ e1); iApply wp_wand; first iApply "e1P" => //.
@@ -518,7 +518,7 @@ Lemma has_type_ref Γ e τ :
   has_type Γ e τ -∗
   has_type Γ (ref e) (Ref τ).
 Proof.
-iIntros "#eP !> %γ #γP /=".
+iIntros "#eP !> %γ #? #γP /=".
 wp_bind (subst_map _ _); iApply wp_wand; first by iApply "eP".
 iIntros "%v #vP".
 iApply wp_fupd.
@@ -531,7 +531,7 @@ Lemma has_type_get Γ e τ :
   has_type Γ e (Ref τ) -∗
   has_type Γ (!e) τ.
 Proof.
-iIntros "#eP !> %γ #γP /=".
+iIntros "#eP !> %γ #? #γP /=".
 wp_bind (subst_map _ _); iApply wp_wand; first by iApply "eP".
 iIntros "%v"; iDestruct 1 as (l) "[-> #lP]".
 iInv "lP" as (v') "[lP' #inv]"; wp_load.
@@ -543,7 +543,7 @@ Lemma has_type_set Γ e1 e2 τ :
   has_type Γ e2 τ -∗
   has_type Γ (e1 <- e2) Unit.
 Proof.
-iIntros "#e1P #e2P !> %γ #γP /=".
+iIntros "#e1P #e2P !> %γ #? #γP /=".
 wp_bind (subst_map _ _); iApply wp_wand; first by iApply "e2P".
 iIntros "%v #vP".
 wp_bind (subst_map _ _); iApply wp_wand; first by iApply "e1P".
@@ -556,7 +556,7 @@ Lemma has_type_inl Γ e τ σ :
   has_type Γ e τ -∗
   has_type Γ (InjL e) (Sum τ σ).
 Proof.
-iIntros "#eP !> %γ #γP /=".
+iIntros "#eP !> %γ #? #γP /=".
 wp_bind (subst_map _ _); iApply wp_wand; first by iApply "eP".
 iIntros "%v #vP".
 by wp_pures; iApply sum_typeIL.
@@ -566,7 +566,7 @@ Lemma has_type_inr Γ e τ σ :
   has_type Γ e σ -∗
   has_type Γ (InjR e) (Sum τ σ).
 Proof.
-iIntros "#eP !> %γ #γP /=".
+iIntros "#eP !> %γ #? #γP /=".
 wp_bind (subst_map _ _); iApply wp_wand; first by iApply "eP".
 iIntros "%v #vP".
 by wp_pures; iApply sum_typeIR.
@@ -578,7 +578,7 @@ Lemma has_type_case Γ e e1 e2 τ₁ τ₂ σ :
   has_type Γ e2 (Arrow τ₂ σ) -∗
   has_type Γ (Case e e1 e2) σ.
 Proof.
-iIntros "#eP #e1P #e2P !> %vs #vsP /=".
+iIntros "#eP #e1P #e2P !> %vs #? #vsP /=".
 wp_bind (subst_map _ e); iApply wp_wand; first iApply "eP" => //.
 iIntros "%v' #[vP|vP]"; iDestruct "vP" as (v) "[-> vP]"; wp_pures.
 - wp_bind (subst_map _ _); iApply wp_wand; first by iApply "e1P".
@@ -592,7 +592,7 @@ Lemma has_type_pair Γ e1 e2 τ₁ τ₂ :
   has_type Γ e2 τ₂ -∗
   has_type Γ (e1, e2) (Prod τ₁ τ₂).
 Proof.
-iIntros "#e1P #e2P !> %γ #γP /=".
+iIntros "#e1P #e2P !> %γ #? #γP /=".
 wp_bind (subst_map _ _); iApply wp_wand; first by iApply "e2P".
 iIntros "%v2 #v2P".
 wp_bind (subst_map _ _); iApply wp_wand; first by iApply "e1P".
@@ -604,7 +604,7 @@ Lemma has_type_fst Γ e τ σ :
   has_type Γ e (Prod τ σ) -∗
   has_type Γ (Fst e) τ.
 Proof.
-iIntros "#eP !> %γ #γP /=".
+iIntros "#eP !> %γ #? #γP /=".
 wp_bind (subst_map _ _); iApply wp_wand; first by iApply "eP".
 iIntros "%"; iDestruct 1 as (v1 v2) "(-> & #? & #?)".
 by wp_pures.
@@ -614,7 +614,7 @@ Lemma has_type_snd Γ e τ σ :
   has_type Γ e (Prod τ σ) -∗
   has_type Γ (Snd e) σ.
 Proof.
-iIntros "#eP !> %γ #γP /=".
+iIntros "#eP !> %γ #? #γP /=".
 wp_bind (subst_map _ _); iApply wp_wand; first by iApply "eP".
 iIntros "%"; iDestruct 1 as (v1 v2) "(-> & #? & #?)".
 by wp_pures.
@@ -683,7 +683,7 @@ Lemma has_type_fork Γ e :
   has_type Γ e Unit -∗
   has_type Γ (Fork e) Unit.
 Proof.
-iIntros "#eP !> %γ #γP /=".
+iIntros "#eP !> %γ #? #γP /=".
 iApply wp_fork => //.
 iModIntro; iApply wp_wand; first by iApply "eP".
 by [].

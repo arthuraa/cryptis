@@ -93,11 +93,11 @@ Proof. apply/auth_frag_valid; by case: p. Qed.
 
 Definition session_auth rl t (k : term) (x : X) o : iProp :=
   nown session_name N (◯ {[t := session_status_auth o]}) ∧
-  nonce_meta t N (x, rl, k).
+  term_meta t N (x, rl, k).
 
 Definition session_frag rl t (k : term) (x : X) o : iProp :=
   nown session_name N (◯ {[t := session_status_frag o]}) ∧
-  nonce_meta t N (x, rl, k).
+  term_meta t N (x, rl, k).
 
 Global Instance session_frag_persistent rl t k x o :
   Persistent (session_frag rl t k x o).
@@ -129,11 +129,11 @@ Qed.
 
 Definition session_map_inv SM : iProp :=
   ([∗ map] t ↦ o ∈ SM, ∃ k rl (x : X),
-     nonce_meta t N (x, rl, k) ∧
+     term_meta t N (x, rl, k) ∧
      (sinv rl t k x ∨ session_frag (swap_role rl) k t x (Some ())))%I.
 
 Lemma session_map_inv_unregistered SM t :
-  nonce_meta_token t (↑N) -∗
+  term_token t (↑N) -∗
   session_map_inv SM -∗
   ⌜SM !! t = None⌝.
 Proof.
@@ -142,7 +142,7 @@ destruct (SM !! t) as [o|] eqn:SM_t=> //.
 rewrite /session_map_inv big_sepM_delete // /=.
 iDestruct "inv" as "[inv _]".
 iDestruct "inv" as (k rl x) "(not_fresh & _)".
-by iDestruct (term_meta_meta_token with "fresh not_fresh") as "[]".
+by iDestruct (term_meta_token with "fresh not_fresh") as "[]".
 Qed.
 
 Definition session_ctx : iProp :=
@@ -257,7 +257,7 @@ Lemma session_begin_aux rl t k x E :
   ↑N ⊆ E →
   session_ctx -∗
   sinv rl t k x -∗
-  nonce_meta_token t (↑N) ={E}=∗
+  term_token t (↑N) ={E}=∗
   session_auth rl t k x None ∗ session_frag rl t k x None.
 Proof.
 iIntros (?) "#ctx s_inv fresh".
@@ -266,7 +266,7 @@ iDestruct "inv" as (SM) "(inv & close)".
 iAssert (▷ ⌜SM !! t = None⌝)%I as "# > %s_fresh".
   iModIntro.
   by iApply (session_map_inv_unregistered with "[fresh] [inv]").
-iMod (term_meta_set _ _ (x, rl, k) with "fresh") as "#not_fresh"; eauto.
+iMod (term_meta_set _ (x, rl, k) with "fresh") as "#not_fresh"; eauto.
 iMod ("close" $! (<[t := None]>SM) {[t := session_status_both None]}
         with "[s_inv inv]") as "own"; first iSplit.
 - iPureIntro; rewrite /to_session_map fmap_insert.
@@ -402,7 +402,7 @@ Lemma session_begin E rl tI tR x :
   ↑N ⊆ E →
   session_ctx -∗
   P rl tI tR x -∗
-  nonce_meta_token (if rl is Init then tI else tR) (↑N) ={E}=∗
+  term_token (if rl is Init then tI else tR) (↑N) ={E}=∗
   session rl tI tR x ∗ waiting_for_peer rl tI tR x.
 Proof.
 rewrite /=; iIntros (?) "#ctx inv token".
@@ -420,11 +420,11 @@ Lemma session_not_ready E rl tI tR x :
   ↑N ⊆ E →
   session_ctx -∗
   session rl tI tR x -∗
-  nonce_meta_token (if rl is Init then tI else tR) E -∗
+  term_token (if rl is Init then tI else tR) E -∗
   False.
 Proof.
 iIntros "% #ctx [_ #meta] token".
-by iDestruct (term_meta_meta_token with "token meta") as "[]".
+by iDestruct (term_meta_token with "token meta") as "[]".
 Qed.
 
 End Session.
@@ -438,7 +438,7 @@ Arguments session_alloc {Σ _ _ _} {X _ _} N P.
 Arguments session_token_difference {Σ _ _} E E'.
 Arguments session_begin {Σ _ _ _ _ _ _}  {N P} E rl tI tR.
 Arguments session_ctx {Σ _ _ _ _ _ _} N P.
-Arguments session {Σ _ _ _ _ _ _} N rl _ _.
+Arguments session {Σ _ _ _ _ _} N rl _ _.
 Arguments waiting_for_peer {Σ _ _ _ _ _ _} N P rl tI tR x.
 
 #[global]

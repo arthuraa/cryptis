@@ -96,11 +96,12 @@ Class PK := {
 
   mk_key_share_impl : val;
   wp_mk_key_share : ∀ E kI kR,
-    {{{ True }}}
+    ↑cryptisN ⊆ E →
+    {{{ cryptis_ctx }}}
       mk_key_share_impl #() @ E
     {{{ (n : term), RET (n, mk_key_share n) : val;
         minted n ∗ □ is_priv_key n kI kR ∗
-        nonce_meta_token n ⊤
+        term_token n ⊤
     }}};
 
   mk_session_key_impl : role → val;
@@ -126,12 +127,12 @@ Implicit Types ks : term * term.
 Definition session_ress rl nI nR ks : iProp :=
   let '(kI, kR) := ks in
   □ confirmation rl kI kR (mk_session_key Init nI (mk_key_share nR)) ∧
-  if rl is Init then nonce_meta_token nI (↑N.@"token".@Resp)
+  if rl is Init then term_token nI (↑N.@"token".@Resp)
   else True.
 
 Definition session_weak' kI kR t ts T : iProp :=
   ◯H{ts} T ∧
-  nonce_meta t (N.@"success") (kI, kR, ts, T).
+  term_meta t (N.@"success") (kI, kR, ts, T).
 
 #[global]
 Instance session_weak'_persistent kI kR t ts T :
@@ -157,7 +158,7 @@ Definition init_started kI kR sI : iProp :=
 
 Lemma session_weak'_set kI kR t ts T :
   ◯H{ts} T -∗
-  nonce_meta_token t (↑N.@"success") ==∗
+  term_token t (↑N.@"success") ==∗
   session_weak' kI kR t ts T.
 Proof.
 iIntros "#hon token".
@@ -194,7 +195,7 @@ Definition resp_accepted kI kR sI sR : iProp :=
     session (N.@"session") Resp nI nR (kI, kR).
 
 Definition resp_waiting kI kR sI nR : iProp :=
-  public sI ∗ nonce_meta_token nR (↑N.@"session") ∨
+  public sI ∗ term_token nR (↑N.@"session") ∨
   ∃ nI,
     ⌜sI = mk_key_share nI⌝ ∧
     session (N.@"session") Resp nI nR (kI, kR) ∧
@@ -229,7 +230,7 @@ Definition session_key_meta_token rl kI kR kS E : iProp :=
     ⌜kS = mk_session_key Init nI (mk_key_share nR)⌝ ∗
     session (N.@"session") Init nI nR (kI, kR) ∗
     session (N.@"session") Resp nI nR (kI, kR) ∗
-    nonce_meta nI (N.@"token".@rl) γ ∗
+    term_meta nI (N.@"token".@rl) γ ∗
     own γ (reservation_map_token E).
 
 Definition session_key_meta rl kI kR `{Countable L} kS N' (x : L) : iProp :=
@@ -237,7 +238,7 @@ Definition session_key_meta rl kI kR `{Countable L} kS N' (x : L) : iProp :=
     ⌜kS = mk_session_key Init nI (mk_key_share nR)⌝ ∗
     session (N.@"session") Init nI nR (kI, kR) ∗
     session (N.@"session") Resp nI nR (kI, kR) ∗
-    nonce_meta nI (N.@"token".@rl) γ ∗
+    term_meta nI (N.@"token".@rl) γ ∗
     own γ (namespace_map_data N' (to_agree (encode x))).
 
 Lemma mk_session_key_inj nI nR nI' nR' kI kR :
@@ -250,53 +251,6 @@ Proof.
 move=> /mk_session_key_elem_of [] [-> /mk_key_share_inj ->]; first by eauto.
 iIntros "sessI sessR".
 by iDestruct (session_role_agree with "sessI sessR") as "[]".
-Qed.
-
-Global Instance session_key_term_meta rl kI kR :
-  TermMeta (@session_key_meta rl kI kR) (session_key_meta_token rl kI kR).
-
-Proof.
-split.
-- move=> *. by apply _.
-- move=> *. by apply _.
-- move=> *. by apply _.
-- move=> L ? ? E t x N' ?.
-  iIntros "(%nI & %nR & %γ & -> & #sessI & #sessR & #meta & own)".
-  pose (a := namespace_map_data N' (to_agree (encode x))).
-  iMod (own_update _ _ a with "own") as "#own".
-  { exact: namespace_map_alloc_update. }
-  iModIntro. iExists nI, nR, γ. by do 4!iSplit => //.
-- move=> L ? ? kS x N' E ?.
-  iIntros "(%nI & %nR & %γ & -> & #sessI & #sessR & #meta & own)".
-  iIntros "(%nI' & %nR' & %γ' & %e & #sessI' & #sessR' & #meta' & own')".
-  iPoseProof (mk_session_key_inj with "sessI sessR'") as "->" => // {e}.
-  iPoseProof (term_meta_agree with "meta meta'") as "<-".
-  iPoseProof (own_valid_2 with "own own'") as "%valid".
-  by case: (namespace_map_disj _ _ _ _ valid).
-- move=> L ? ? kS N' x1 x2.
-  iIntros "(%nI & %nR & %γ & -> & #sessI & #sessR & #meta & own)".
-  iIntros "(%nI' & %nR' & %γ' & %e & #sessI' & #sessR' & #meta' & own')".
-  iPoseProof (mk_session_key_inj with "sessI sessR'") as "->" => // {e}.
-  iPoseProof (term_meta_agree with "meta meta'") as "<-".
-  iCombine "own own'" as "own".
-  iPoseProof (own_valid with "own") as "%valid".
-  rewrite reservation_map_data_valid /= to_agree_op_valid_L in valid.
-  iPureIntro. exact: inj valid.
-- move=> kS E1 E2 sub. apply: anti_symm.
-  + iIntros "(%nI & %nR & %γ & -> & #sessI & #sessR & #meta & own)".
-    rewrite (reservation_map_token_difference _ _ sub).
-    iDestruct "own" as "[own1 own2]".
-    iSplitL "own1".
-    * iExists nI, nR, γ; iFrame; eauto.
-    * iExists nI, nR, γ; iFrame; eauto.
-  + iIntros "[tok1 tok2]".
-    iDestruct "tok1" as "(%nI & %nR & %γ & -> & #sI & #? & #meta & own)".
-    iDestruct "tok2" as "(%nI' & %nR' & %γ' & %e & #? & #sR & #meta' & own')".
-    iPoseProof (mk_session_key_inj with "sI sR") as "->" => // {e}.
-    iPoseProof (term_meta_agree with "meta meta'") as "<-".
-    iCombine "own own'" as "own".
-    rewrite -(reservation_map_token_difference _ _ sub).
-    iExists nI, nR, γ; iFrame; eauto.
 Qed.
 
 Definition session_key kI kR kS n T : iProp :=

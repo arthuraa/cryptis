@@ -58,11 +58,11 @@ wp_pure _ credit:"c1". wp_pure _ credit:"c2". wp_pures.
 wp_bind (Connection.connect _ _ _ _ _).
 iApply (wp_connection_connect with "[//] [//] [//] [] [] [hon]") => //.
 iIntros "!> %cs (hon & conn & % & % & % & % & % & token)".
-iDestruct "client" as "(%γI & %beginning & client)".
+iDestruct "client" as "(%beginning & client)".
 iMod (client_connectingI with "[//] [$] hon conn token client")
   as "(hon & conn & client & #beginning & #ready)" => //; try solve_ndisj.
 subst kI kR.
-iPoseProof (init_predI _ _ _ (TInt 0) with "conn client ready")
+iPoseProof (init_predI _ _ (TInt 0) with "conn client ready")
   as "(conn & client & #?)".
 wp_pures. wp_bind (Connection.send _ _ _ _).
 iApply (wp_connection_send with "[//] [] [] [] conn") => //.
@@ -76,7 +76,7 @@ iMod (ack_init_predE with "conn client mP") as "(conn & client)" => //.
 wp_pures.
 iRight. iExists _. iSplitR => //.
 iApply "post". iFrame. iModIntro. do 2!iSplit => //.
-by iExists _, _, _; iFrame.
+by iExists _, _; iFrame.
 Qed.
 
 End Verif.

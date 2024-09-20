@@ -63,9 +63,9 @@ by case=> t1 t2; iIntros "#s1 #s2"; rewrite minted_TPair; iSplit.
 Qed.
 
 Next Obligation.
-iIntros "%E %kI %kR %Φ _ post". rewrite /nsl_mk_key_share_impl.
+iIntros "%E %kI %kR %sub %Φ #? post". rewrite /nsl_mk_key_share_impl.
 wp_pures. wp_bind (mknonce _).
-iApply (wp_mknonce (λ _, corruption kI kR) (λ _, False)%I).
+iApply (wp_mknonce (λ _, corruption kI kR) (λ _, False)%I) => //.
 iIntros "%n #s_n #p_n _ token". wp_pures. iModIntro.
 iApply "post". rewrite bi.intuitionistic_intuitionistically. by eauto.
 Qed.

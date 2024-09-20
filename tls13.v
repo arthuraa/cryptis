@@ -654,34 +654,38 @@ case: ke => [psk cn|g cn x|psk g cn x] //=.
 Qed.
 
 Lemma wp_new ke E Φ :
+  ↑cryptisN ⊆ E →
+  cryptis_ctx -∗
   Meth.wf ke -∗
   (∀ ke', ⌜ke = meth_of ke'⌝ -∗
           wf ke' -∗
-          nonce_meta_token (cnonce ke') ⊤ -∗
+          term_token (cnonce ke') ⊤ -∗
           Φ (term_of ke')) -∗
   WP I.new ke @ E {{ Φ }}.
 Proof.
-iIntros "#p_ke post"; rewrite /I.new; wp_pures.
+iIntros "% #? #p_ke post"; rewrite /I.new; wp_pures.
 iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
-- wp_bind (mknonce _); iApply (wp_mknonce (λ _, True)%I (λ _, True)%I).
+- wp_bind (mknonce _); iApply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
   iIntros (cn) "_ #p_cn _ token"; wp_list; wp_term_of_list.
   wp_tag.
   iApply ("post" $! (Psk psk cn) with "[] [] token") => //=.
   do !iSplit => //.
   by iApply "p_cn".
-- wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g).
+- wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g) => //.
+  { by iApply public_minted. }
   iIntros (a) "_ #p_a _"; wp_list.
-  wp_bind (mknonce _); iApply (wp_mknonce (λ _, True)%I (λ _, True)%I).
+  wp_bind (mknonce _); iApply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
   iIntros (cn) "_ #p_cn _ token"; wp_list; wp_term_of_list.
   wp_tag.
-  rewrite (term_meta_token_difference _ ⊤); try set_solver.
+  rewrite (term_token_difference _ ⊤); try set_solver.
   iDestruct "token" as "[token _]".
   iApply ("post" $! (Dh g cn a)) => //=.
   do !iSplit => //.
   by iApply "p_cn".
-- wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g).
+- wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g) => //.
+  { iApply public_minted. by iDestruct "p_ke" as "[_ ?]". }
   iIntros (a) "_ #p_a _"; wp_list.
-  wp_bind (mknonce _); iApply (wp_mknonce (λ _, True)%I (λ _, True)%I).
+  wp_bind (mknonce _); iApply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
   iIntros (cn) "_ #p_cn _ token"; wp_list; wp_term_of_list.
   wp_tag.
   iApply ("post" $! (PskDh psk g cn a)) => //=.
@@ -1171,22 +1175,24 @@ Instance Persistent_wf ke : Persistent (wf ke).
 Proof. case: ke => *; apply _. Qed.
 
 Lemma wp_new N psk g (ke : CShare.t) E Φ :
+  ↑cryptisN ⊆ E →
   Meth.compatible psk g (CShare.meth_of ke) →
+  cryptis_ctx -∗
   minted psk -∗
   public g -∗
   public (CShare.encode' N ke) -∗
   (∀ ke',
       ⌜ke = cshare_of ke'⌝ -∗
       wf ke' -∗
-      nonce_meta_token (snonce ke') ⊤ -∗
+      term_token (snonce ke') ⊤ -∗
       Φ (term_of ke')) -∗
   WP I.new ke @ E {{ Φ }}.
 Proof.
-iIntros (e_check) "#s_psk #p_g #p_ke post"; rewrite /I.new; wp_pures.
+iIntros (sub e_check) "#? #s_psk #p_g #p_ke post"; rewrite /I.new; wp_pures.
 iApply CShare.wp_case.
 case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
 - subst psk.
-  wp_bind (mknonce _); iApply (wp_mknonce (λ _, True)%I (λ _, True)%I).
+  wp_bind (mknonce _); iApply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
   iIntros (a) "_ #pred_a _ token"; wp_list; wp_term_of_list.
   wp_tag; iModIntro.
   iApply ("post" $! (Psk _ _ a)) => //=.
@@ -1195,9 +1201,10 @@ case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
   do !iSplit => //.
   by iApply "pred_a".
 - subst g'.
-  wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g).
+  wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g) => //.
+  { by iApply public_minted. }
   iIntros (a) "_ #pred_a _"; wp_list.
-  wp_bind (mknonce _); iApply (wp_mknonce (λ _, True)%I (λ _, True)%I).
+  wp_bind (mknonce _); iApply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
   iIntros (sn) "_ #p_sn _ token"; wp_list; wp_term_of_list.
   wp_tag; iModIntro.
   iApply ("post" $! (Dh g cn sn gx a)) => //=.
@@ -1206,9 +1213,10 @@ case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
   do !iSplit => //.
   by iApply "p_sn".
 - case: e_check=> -> ->.
-  wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g).
+  wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g) => //.
+  { by iApply public_minted. }
   iIntros (a) "_ #pred_a _"; wp_list.
-  wp_bind (mknonce _); iApply (wp_mknonce (λ _, True)%I (λ _, True)%I).
+  wp_bind (mknonce _); iApply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
   iIntros (sn) "_ #p_sn _ token"; wp_list; wp_term_of_list.
   wp_tag; iModIntro.
   iApply ("post" $! (PskDh _ g cn sn gx a)) => //.
@@ -1504,7 +1512,7 @@ Qed.
 
 Definition wf N cp : iProp :=
   CShare.wf (share cp) ∧
-  nonce_meta (CShare.cnonce (share cp)) (N.@"binder") (other cp) ∧
+  term_meta (CShare.cnonce (share cp)) (N.@"binder") (other cp) ∧
   public (other cp).
 
 #[global]
@@ -1513,12 +1521,12 @@ Proof. apply _. Qed.
 
 Lemma wf_set N cp :
   CShare.wf (share cp) -∗
-  nonce_meta_token (CShare.cnonce (share cp)) (↑N.@"binder") -∗
+  term_token (CShare.cnonce (share cp)) (↑N.@"binder") -∗
   public (other cp) ==∗
   wf N cp.
 Proof.
 iIntros "#? token #?".
-iMod (term_meta_set _ _ (other cp) with "token") as "meta"; eauto.
+iMod (term_meta_set _ (other cp) with "token") as "meta"; eauto.
 by iModIntro; do !iSplit.
 Qed.
 
@@ -1576,7 +1584,7 @@ Lemma public_checkE N psk g other ch ke :
      ⌜CShare.has_psk ke⌝ ∧
      ∃ ke', ⌜CShare.encode' N ke = CShare.encode N ke'⌝ ∧
             CShare.wf ke' ∧
-            nonce_meta (CShare.cnonce ke') (N.@"binder") other).
+            term_meta (CShare.cnonce ke') (N.@"binder") other).
 Proof.
 rewrite /check.
 case: Spec.to_listP=> //= {}ch.
@@ -1878,7 +1886,7 @@ Lemma public_hello E sp :
   let ss := share sp in
   ctx -∗
   wf sp -∗
-  nonce_meta_token (SShare.snonce ss) (↑N.@"sess") -∗
+  term_token (SShare.snonce ss) (↑N.@"sess") -∗
   P Resp (SShare.cnonce ss) (SShare.snonce ss)
     (SShare.meth_of ss, SShare.session_key_of N ss, other sp) ={E}=∗
   public (hello N sp) ∗
@@ -2108,6 +2116,7 @@ Lemma wp_tls_client c ke other E Φ :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
+  cryptis_ctx -∗
   tls_ctx -∗
   Meth.wf ke -∗
   public other -∗
@@ -2129,15 +2138,15 @@ Lemma wp_tls_client c ke other E Φ :
       Φ (repr res)) -∗
   WP tls_client c ke other @ E {{ Φ }}.
 Proof.
-iIntros (? sub) "#? #(k_ctx & c_ctx & s_ctx & ackP & sess_ctx) #p_ke #p_other post".
+iIntros (? sub) "#? #? #(k_ctx & c_ctx & s_ctx & ackP & sess_ctx) #p_ke #p_other post".
 rewrite /tls_client; wp_pures.
 wp_bind (CShare.I.new _); iApply (CShare.wp_new _) => //.
 iIntros (ke' e) "#p_ke' token"; wp_pures.
-rewrite (term_meta_token_difference _ (↑N.@"binder")); try set_solver.
+rewrite (term_token_difference _ (↑N.@"binder")); try set_solver.
 iDestruct "token" as "[binder token]".
 pose cp := {| CParams.share := ke'; CParams.other := other |}.
 iMod (CParams.wf_set _ cp with "p_ke' binder p_other") as "#wf_cp".
-rewrite (term_meta_token_difference _ (↑N.@"sess")); try solve_ndisj.
+rewrite (term_token_difference _ (↑N.@"sess")); try solve_ndisj.
 iDestruct "token" as "[sess token]".
 wp_list; wp_term_of_list.
 wp_pures; wp_bind (CParams.I.hello _ _).
@@ -2212,6 +2221,7 @@ Lemma wp_tls_server c psk g verif_key other E Φ :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
+  cryptis_ctx -∗
   tls_ctx -∗
   minted psk -∗
   public g -∗
@@ -2235,7 +2245,7 @@ Lemma wp_tls_server c psk g verif_key other E Φ :
       end -∗ Φ (repr (SShare.term_of <$> ke))) -∗
   WP tls_server c psk g verif_key other @ E {{ Φ }}.
 Proof.
-iIntros (? sub) "#? #(k_ctx & c_ctx & s_ctx & ? & sess_ctx)".
+iIntros (? sub) "#? #? #(k_ctx & c_ctx & s_ctx & ? & sess_ctx)".
 iIntros "#s_psk #p_g #s_sign #s_verif #p_other post".
 rewrite /tls_server; wp_pures.
 wp_bind (recv _); iApply wp_recv => //.
@@ -2253,7 +2263,7 @@ pose sp := SParams.Params ke' verif_key other.
 iAssert (SParams.wf sp) as "wf_sp"; first by do !iSplit => //.
 wp_pures.
 wp_bind (SParams.I.hello _ _); iApply (SParams.wp_hello _ sp).
-rewrite (term_meta_token_difference _ (↑N.@"sess")); eauto.
+rewrite (term_token_difference _ (↑N.@"sess")); eauto.
 iDestruct "token" as "[token _]".
 iMod (SParams.public_hello with "s_ctx wf_sp token []")
   as "(#p_hello & #sess & close)" => //.

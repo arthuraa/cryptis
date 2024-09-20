@@ -159,6 +159,7 @@ Lemma wp_cr_init c kA kB E Ψ :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
+  cryptis_ctx -∗
   cr_ctx -∗
   (∀ nA nB, cr_sess_inv Init nA nB (kA, kB)) -∗
   public (TKey Dec kA) -∗
@@ -174,12 +175,12 @@ Lemma wp_cr_init c kA kB E Ψ :
      {{ Ψ }}.
 Proof.
 rewrite /cr_init.
-iIntros (??) "#? #ctx inv #d_kA #d_kB Hpost".
+iIntros (??) "#? #? #ctx inv #d_kA #d_kB Hpost".
 iPoseProof "ctx" as "(? & ? & ?)".
 wp_pures. wp_bind (mknonce _).
-iApply (wp_mknonce (λ _, True)%I (λ _, True)%I).
+iApply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
 iIntros (nA) "_ #p_nA _ unreg".
-rewrite (term_meta_token_difference _ (↑N)) //.
+rewrite (term_token_difference _ (↑N)) //.
 iDestruct "unreg" as "[unreg _]".
 iAssert (public nA) as "{p_nA} p_nA"; first by iApply "p_nA".
 wp_list; wp_term_of_list.
@@ -218,6 +219,7 @@ Lemma wp_cr_resp c kB E Ψ :
   ↑cryptisN ⊆ E →
   ↑N ⊆ E →
   channel c -∗
+  cryptis_ctx -∗
   cr_ctx -∗
   public (TKey Dec kB) -∗
   (∀ kA nA nB, cr_sess_inv Resp nA nB (kA, kB)) -∗
@@ -233,7 +235,7 @@ Lemma wp_cr_resp c kB E Ψ :
        Ψ (repr ot)) -∗
   WP cr_resp c (TKey Enc kB) (TKey Dec kB) @ E {{ Ψ }}.
 Proof.
-iIntros (??) "#? #ctx #HkB inv Hpost".
+iIntros (??) "#? #? #ctx #HkB inv Hpost".
 iPoseProof "ctx" as "(? & ? & ?)".
 rewrite /cr_resp; wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m1) "#Hm1".
@@ -246,9 +248,9 @@ wp_pures.
 case: (bool_decide_reflect (_ = repr_key_type Dec)); last protocol_failure.
 case: kt=> // _.
 wp_pures; wp_bind (mknonce _).
-iApply (wp_mknonce (λ _, True)%I (λ _, True)%I).
+iApply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
 iIntros (nB) "_ #p_nB _ unreg".
-rewrite (term_meta_token_difference _ (↑N)) //.
+rewrite (term_token_difference _ (↑N)) //.
 iDestruct "unreg" as "[token _]".
 iAssert (public nB) as "{p_nB} HnB"; first by iApply "p_nB".
 iMod (session_begin _ _ nA nB (kA, kB) with "[] [inv] [token]")

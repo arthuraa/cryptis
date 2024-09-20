@@ -91,8 +91,7 @@ Lemma wp_server_find_client ss kI :
 Proof.
 iIntros "%Φ [#ctx server] post".
 iDestruct "server"
-  as "(%γR & %accounts & %E & #p_vkR & accounts & #name & token &
-       %EP & #locks)".
+  as "(%accounts & %E & #p_vkR & accounts & token & %EP & #locks)".
 wp_lam; wp_pures.
 wp_bind (SAList.find _ _).
 iApply (SAList.wp_find with "accounts").
@@ -105,15 +104,15 @@ case accounts_kI: (accounts !! TKey Dec kI) => [scs|]; wp_pures.
   iModIntro.
   iApply ("post" $! (scs_db scs) (scs_name scs) (scs_lock scs)).
   iSplit => //.
-  iExists γR, accounts, E. iFrame.
+  iExists accounts, E. iFrame.
   rewrite big_sepM_forall. by eauto.
 - have ?: ↑dbSN kI ⊆ E.
   { by apply: EP; rewrite elem_of_dom accounts_kI. }
-  rewrite (gmeta_token_difference _ (↑dbSN kI)) //.
+  rewrite (term_token_difference _ (↑dbSN kI)) //.
   iDestruct "token" as "[token_kI token]".
   iAssert (db_not_signed_up kI (ss_key ss))
     with "[token_kI]" as "not_signed_up".
-  { iExists γR. by iFrame. }
+  { by iFrame. }
   wp_bind (SAList.new #()).
   iApply SAList.wp_empty => //.
   iIntros "!> %vdb db". wp_pures.
@@ -133,7 +132,7 @@ case accounts_kI: (accounts !! TKey Dec kI) => [scs|]; wp_pures.
   iModIntro.
   iApply ("post" $! vdb γlock vlock).
   iSplit => //.
-  iExists γR, _, (E ∖ ↑dbSN kI).
+  iExists _, (E ∖ ↑dbSN kI).
   iFrame.
   do !iSplit => //.
   + iPureIntro.
@@ -202,7 +201,7 @@ wp_bind (Connection.listen _ _ _ _).
 iApply (wp_connection_listen
          with "[# //] [# //] [# //] [#] [hon]") => //;
   try by solve_ndisj.
-{ by iDestruct "server" as "(% & % & % & ? & _)". }
+{ by iDestruct "server" as "(% & % & ? & _)". }
 iIntros "!> %cs (hon & resP)". wp_pures.
 iDestruct "resP" as "(conn & %e_kR & <- & <- & %e_rl & token)".
 wp_bind (Server.find_client _ _).

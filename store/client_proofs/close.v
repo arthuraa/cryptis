@@ -39,7 +39,7 @@ Lemma wp_client_close E c kI kR cs :
 Proof.
 iIntros "% % #chan_c (_ & _ & _ & _ & _ & _ & _ & _ & #close & #ack & _)".
 iIntros "!> %Φ client post".
-iDestruct "client" as "(%γI & %n & %beginning & <- & <- & conn & client)".
+iDestruct "client" as "(%n & %beginning & <- & <- & conn & client)".
 wp_lam; wp_pures.
 wp_bind (Connection.timestamp _).
 iApply (wp_connection_timestamp with "conn").
@@ -59,7 +59,7 @@ iApply (wp_connection_close with "conn"). iIntros "!> _".
 wp_pures.
 iRight. iModIntro. iExists _. iSplit; eauto.
 iApply "post".
-iExists _, _. by eauto.
+iExists _. by eauto.
 Qed.
 
 End Verif.

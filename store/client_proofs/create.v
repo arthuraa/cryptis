@@ -42,9 +42,9 @@ Lemma wp_client_create E c kI kR cs t1 t2 :
 Proof.
 iIntros "% #chan_c (_ & _ & _ & _ & _ & _ & #create & #ack & _) #p_t1 #p_t2".
 iIntros "!> %Φ [client free] post".
-iDestruct "client" as "(%γI & %n & %beginning & <- & <- & conn & client)".
+iDestruct "client" as "(%n & %beginning & <- & <- & conn & client)".
 rewrite /Client.create. wp_pures.
-iMod (@rem_mapsto_alloc _ _ _ _ _ _ t1 t2 with "conn client free")
+iMod (@rem_mapsto_alloc _ _ _ _ _ t1 t2 with "conn client free")
   as "(conn & client & mapsto & _ & #created)".
 { by rewrite elem_of_singleton. }
 wp_bind (Connection.timestamp _).
@@ -74,7 +74,7 @@ subst v'.
 wp_bind (tint _). iApply wp_tint.
 wp_bind (eq_term _ _). iApply wp_eq_term. wp_pures.
 iRight. iModIntro. iExists _. iSplit => //. iApply "post".
-iFrame. iExists _, _, _. iFrame. do !iSplit => //.
+iFrame. iExists _, _. iFrame. do !iSplit => //.
 Qed.
 
 End Verif.

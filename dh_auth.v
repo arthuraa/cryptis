@@ -107,7 +107,7 @@ Definition msg2_pred kR m2 : iProp :=
                      public_at n (TKey Enc kR))) ∗
     (∀ t, dh_pred b t ↔ ▷ □ dh_auth_pred t) ∗
     ◯H{n} T ∗
-    nonce_meta b nroot (Resp, ga, kI, kR, n, γb).
+    term_meta b nroot (Resp, ga, kI, kR, n, γb).
 
 Definition msg3_pred kI m3 : iProp :=
   ∃ a gb kR n T γa,
@@ -116,11 +116,11 @@ Definition msg3_pred kI m3 : iProp :=
                      public_at n (TKey Enc kR))) ∗
     (∀ t, dh_pred a t ↔ ▷ □ dh_auth_pred t) ∗
     ◯H{n} T ∗
-    nonce_meta a nroot (Init, gb, kI, kR, n, γa) ∗
+    term_meta a nroot (Init, gb, kI, kR, n, γa) ∗
     (public_at n (TKey Enc kR) ∨
      ∃ b γb,
        ⌜gb = TExp (TInt 0) [b]⌝ ∗
-       nonce_meta b nroot (Resp, TExp (TInt 0) [a], kI, kR, n, γb)).
+       term_meta b nroot (Resp, TExp (TInt 0) [a], kI, kR, n, γb)).
 
 Definition dh_auth_ctx : iProp :=
   enc_pred (N.@"m2") msg2_pred ∗
@@ -143,11 +143,11 @@ Definition session γ si rl : iProp := ∃ x gy,
   ⌜si_key si = Spec.tag (nroot.@"keys".@"sym") (Spec.texp gy x)⌝ ∗
   gmeta γ (nroot.@"dh_auth")
     (rl, gy, si_init si, si_resp si, si_time si, x) ∗
-  nonce_meta x nroot (rl, gy, si_init si, si_resp si, si_time si, γ) ∗
+  term_meta x nroot (rl, gy, si_init si, si_resp si, si_time si, γ) ∗
   ◯H{si_time si} si_hon si ∗
   (session_fail si ∨ ∃ y γ',
      ⌜gy = TExp (TInt 0) [y]⌝ ∗
-     nonce_meta y nroot (swap_role rl, TExp (TInt 0) [x],
+     term_meta y nroot (swap_role rl, TExp (TInt 0) [x],
        si_init si, si_resp si, si_time si, γ')).
 
 Global Typeclasses Opaque session.
@@ -261,7 +261,7 @@ iDestruct "list" as "(%M & #m_M & #minted_at_M)".
 wp_bind (mknonce _).
 iApply (wp_mknonce_fresh M (λ _, public_at n (TKey Enc kI) ∨
                                  public_at n (TKey Enc kR))%I
-          dh_auth_pred).
+          dh_auth_pred) => //.
 { iIntros "% ?". rewrite big_sepS_forall. by iApply "m_M". }
 iIntros "%a %fresh #m_a #p_a #a_pred token".
 iPoseProof (honest_auth_frag with "hon") as "#honI".
@@ -301,8 +301,7 @@ wp_pures. wp_bind (texp _ _). iApply wp_texp.
 wp_pures. wp_list. wp_term_of_list. wp_tenc.
 iMod (gmeta_set' _ _ (nroot.@"dh_auth") (Init, gb, kI, kR, n, a)
         with "γ_token") as "[#γ_own γ_token]" => //.
-iMod (term_meta_set _ _ (Init, gb, kI, kR, n, γ)
-       nroot with "token") as "#sessionI" => //.
+iMod (term_meta_set _ (Init, gb, kI, kR, n, γ) with "token") as "#sessionI" => //.
 iAssert ( |={E}=>
     ●H{dq|n} T ∗
     (public_at n (TKey Enc kR) ∧ ⌜TKey Enc kR ∉ T⌝ ∨
@@ -310,7 +309,7 @@ iAssert ( |={E}=>
      ⌜gb = TExp (TInt 0) [b]⌝ ∗
      □ (public b ↔ ▷ □ (public_at n (TKey Enc kI) ∨
                         public_at n (TKey Enc kR))) ∗
-     nonce_meta b nroot
+     term_meta b nroot
        (Resp, TExp (TInt 0) [a], kI, kR, n, γ')))%I
   with "[hon H3]"
   as "{p_m2} > [hon #p_m2]".
@@ -424,7 +423,7 @@ wp_pures. case: kt => //=; first by protocol_failure.
 wp_pures. wp_bind (mknonce _).
 iApply (wp_mknonce (λ _, public_at n (TKey Enc kI) ∨ 
                          public_at n (TKey Enc kR))%I
-          dh_auth_pred).
+          dh_auth_pred) => //.
 iIntros "%b #m_b #p_b #dh_gb token".
 iAssert (public (TExp (TInt 0) [b])) as "#p_gb".
 { iApply public_TExp1. rewrite minted_TInt.
@@ -436,7 +435,7 @@ wp_pure _ credit:"H1".
 wp_pure _ credit:"H2".
 wp_bind (mkkeyshare _). iApply wp_mkkeyshare => //.
 iIntros "!> _". wp_pures. wp_list. wp_term_of_list. wp_tenc.
-iMod (term_meta_set _ _ (Resp, ga, kI, kR, n, γ) nroot with "token")
+iMod (term_meta_set nroot (Resp, ga, kI, kR, n, γ) with "token")
   as "#meta"; first solve_ndisj.
 iPoseProof (honest_auth_frag with "hon_auth") as "#honR".
 wp_pures. wp_bind (send _ _). iApply wp_send => //.
@@ -470,7 +469,7 @@ iAssert ( |={E}=> ●H{dq|n} T ∗
     ⌜ga = TExp (TInt 0) [a]⌝ ∗
     (public a ↔ ▷ □ session_fail si) ∗
     (∀ t, dh_pred a t ↔ ▷ □ dh_auth_pred t) ∗
-    nonce_meta a nroot (Init, TExp (TInt 0) [b], kI, kR, n, γ')))%I
+    term_meta a nroot (Init, TExp (TInt 0) [b], kI, kR, n, γ')))%I
   with "[hon_auth H3 H4]"
   as "{p_m3} > [hon_auth #i_m3]".
 { iDestruct "p_m3" as "[(p_skI & _) | (#i_m3 & _ & _)]".

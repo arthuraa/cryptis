@@ -29,11 +29,11 @@ Implicit Types kA kB : term.
 Implicit Types ts : list term.
 
 Definition channel_state_auth k ts : iProp :=
-  ∃ γ, dh_meta k (N.@"channel") γ ∗
+  ∃ γ, term_meta k (N.@"channel") γ ∗
   own γ (● to_max_prefix_list ts ⋅ ◯ to_max_prefix_list ts).
 
 Definition channel_state_frag k ts : iProp :=
-  ∃ γ, dh_meta k (N.@"channel") γ ∗ own γ (◯ to_max_prefix_list ts).
+  ∃ γ, term_meta k (N.@"channel") γ ∗ own γ (◯ to_max_prefix_list ts).
 
 Definition rel_channel_send k l ts : iProp :=
   l ↦ #(length ts) ∗ minted (TKey Enc k) ∗ channel_state_auth k ts.
@@ -43,7 +43,7 @@ Definition rel_channel_recv k l ts : iProp :=
 
 Definition rel_channel_pred k t : iProp :=
   ∃ ts m γ, ⌜t = Spec.of_list [TInt (length ts); m]⌝ ∧
-  dh_meta k (N.@"channel") γ ∧
+  term_meta k (N.@"channel") γ ∧
   own γ (◯ to_max_prefix_list (ts ++ [m])).
 
 Definition rel_send : val := λ: "c" "k" "l" "m",

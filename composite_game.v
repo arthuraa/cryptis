@@ -66,9 +66,9 @@ Lemma wp_tls_server_loop c psk nR params :
   minted psk -∗
   public nR  -∗
   public params -∗
-  {{{ True }}} tls_server_loop c psk nR params {{{ v, RET v; True }}}.
+  {{{ cryptis_ctx }}} tls_server_loop c psk nR params {{{ v, RET v; True }}}.
 Proof.
-iIntros "#? #ctx #psk #nR #p_params !> %Φ _ post".
+iIntros "#? #ctx #psk #nR #p_params !> %Φ #? post".
 rewrite /tls_server_loop; wp_lam; wp_let; wp_let; wp_let.
 wp_pure (Rec _ _ _).
 iLöb as "IH" forall (psk) "psk".
@@ -171,6 +171,7 @@ Definition tls_client_loop : val := λ: "c" "psk",
 
 Lemma wp_tls_client_loop c psk :
   channel c -∗
+  cryptis_ctx -∗
   tls_ctx tlsN -∗
   minted psk -∗
   {{{ public psk → ▷ False }}}
@@ -181,7 +182,7 @@ Lemma wp_tls_client_loop c psk :
       | None => True
       end }}}.
 Proof.
-iIntros "#? #? #t_psk !> %Φ s_psk post".
+iIntros "#? #? #? #t_psk !> %Φ s_psk post".
 rewrite /tls_client_loop.
 wp_lam; wp_let; wp_pure (Rec _ _ _).
 iLöb as "IH" forall (psk) "t_psk".
@@ -251,21 +252,21 @@ iMod (key_pred_set (nroot.@"key") (λ kt _, ⌜kt = Enc⌝)%I with "key_tok")
 wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP".
 wp_pures; wp_bind (mknonce _).
-iApply (wp_mknonce (λ _, True)%I (λ _, False%I)).
+iApply (wp_mknonce (λ _, True)%I (λ _, False%I)) => //.
 iIntros (nI) "#t_nI #p_nI _ tok_nI".
 wp_tag.
 iAssert (public (Spec.tag (nroot.@"key") nI)) as "{p_nI} p_nI".
   by rewrite public_tag; iApply "p_nI".
 wp_pures.
 wp_pures; wp_bind (mknonce _).
-iApply (wp_mknonce (λ _, True)%I (λ _, False%I)).
+iApply (wp_mknonce (λ _, True)%I (λ _, False%I)) => //.
 iIntros (nR) "#t_nR #p_nR _ tok_nR".
 wp_tag.
 iAssert (public (Spec.tag (nroot.@"key") nR)) as "{p_nR} p_nR".
   by iApply public_tag; iApply "p_nR".
 wp_pures.
 wp_pures; wp_bind (mknonce _).
-iApply (wp_mknonce (λ psk, nonce_meta psk (nroot.@"pub") ())%I (λ _, False%I)).
+iApply (wp_mknonce (λ psk, term_meta psk (nroot.@"pub") ())%I (λ _, False%I)) => //.
 iIntros (psk) "#t_psk #p_psk _ tok_psk".
 wp_pures; wp_bind (mkkey _); iApply wp_mkkey.
 set ekI := TKey Enc _.
@@ -274,12 +275,12 @@ wp_pures; wp_bind (environment _ _ _ _).
 iApply wp_environment; eauto.
 iIntros "!> _"; wp_pures.
 wp_bind (tls_client_loop _ _).
-iApply (wp_tls_client_loop with "[] [] [] [tok_psk]")=> //.
+iApply (wp_tls_client_loop with "[] [] [] [] [tok_psk]")=> //.
   iIntros "#p_psk'".
   iSpecialize ("p_psk" with "p_psk'").
   iModIntro.
   iDestruct "p_psk" as "#p_psk".
-  by iApply (term_meta_meta_token with "tok_psk p_psk").
+  by iApply (term_meta_token with "tok_psk p_psk").
 iIntros "!> %res H1".
 case: res => [sk|]; wp_pures; last by eauto.
 wp_bind (recv _); iApply wp_recv => //.

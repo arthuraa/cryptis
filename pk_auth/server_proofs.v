@@ -23,6 +23,9 @@ Variable N : namespace.
 
 Context `{!PK}.
 
+(* TODO: Avoid exposing these instances. *)
+Local Existing Instances cryptis_inG cryptisGpreS_maps.
+
 Lemma public_msg1E kI kR sI :
   pk_auth_ctx N -∗
   public (TEnc kR (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Enc kI]))) -∗
@@ -46,7 +49,7 @@ Qed.
 Lemma resp_accept dq n T E kI kR sI nR :
   ↑N ⊆ E →
   let kS := mk_session_key Resp nR sI in
-  nonce_meta_token nR ⊤ -∗
+  term_token nR ⊤ -∗
   resp_confirm kR -∗
   pk_auth_ctx N -∗
   ●H{dq|n} T -∗
@@ -61,9 +64,9 @@ Lemma resp_accept dq n T E kI kR sI nR :
 Proof.
 iIntros (?) "%kS token conf (#ctx & _) hon #p_nR #started".
 iMod ("conf" $! kI sI nR) as "#conf".
-rewrite (term_meta_token_difference _ (↑N.@"session")) //.
+rewrite (term_token_difference _ (↑N.@"session")) //.
 iDestruct "token" as "[token_sess token]".
-rewrite (term_meta_token_difference _ (↑N.@"success") (_ ∖ _)) //; last first.
+rewrite (term_token_difference _ (↑N.@"success") (_ ∖ _)) //; last first.
   solve_ndisj.
 iDestruct "token" as "[token_succ _]".
 iMod (session_weak'_set N kI kR nR n T with "[#] token_succ") as "#sess".
@@ -156,7 +159,7 @@ iMod ("waiting" with "[] sessI") as "[_ >finished]".
 iMod (own_alloc (reservation_map_token ⊤)) as "(%γ & map)".
   by apply reservation_map_token_valid.
 rewrite /=.
-iMod (term_meta_set _ _ γ (N.@"token".@Resp) with "finished")
+iMod (term_meta_set (N.@"token".@Resp) γ with "finished")
   as "#meta" => //.
 iModIntro. iModIntro. iRight. iSplitL.
   iExists nI, nR, γ. by eauto.
@@ -204,7 +207,7 @@ case: kt => // _.
 iDestruct (public_msg1E with "[] Hm1")
   as "{Hm1} (s_sI & p_eI & p_sI & started)"; eauto.
 wp_pures.
-wp_bind (mk_key_share_impl _). iApply (wp_mk_key_share _ kI kR) => //.
+wp_bind (mk_key_share_impl _). iApply (wp_mk_key_share kI kR) => //.
 iIntros "!> %nR (#s_nR & #p_nR & token)".
 iMod (resp_accept with "token confirm [//] hon [//] [//]")
   as "(hon & #confirmed & #? & #sess_weak & waiting & #accepted)" => //.

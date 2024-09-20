@@ -242,7 +242,7 @@ Proof.
 iIntros "#chan_c #ctx #ctx' #p_kI #honI #p_kR".
 iIntros "%Ψ !> _ Hpost".
 rewrite /init. wp_pures. wp_bind (mknonce _).
-iApply (wp_mknonce (λ _, corrupt kI kR) (λ _, False)%I).
+iApply (wp_mknonce (λ _, corrupt kI kR) (λ _, False)%I) => //.
 iIntros "%nI #m_nI #p_nI _ token".
 rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_list. wp_term_of_list. wp_tenc => /=. wp_pures.
@@ -295,7 +295,7 @@ case: kt => // _.
 iDestruct (public_msg1E with "[//] [//] Hm1 [//]")
   as "(#m_nI & #p_pkI & #nIP)".
 wp_pures. wp_bind (mknonce _).
-iApply (wp_mknonce (λ _, corrupt kI kR) (λ _, False)%I).
+iApply (wp_mknonce (λ _, corrupt kI kR) (λ _, False)%I) => //.
 iIntros "%nR #m_nR #p_nR _ _". rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_list; wp_term_of_list. wp_tenc. wp_pures.
 wp_bind (send _ _). iApply wp_send => //.
@@ -350,9 +350,9 @@ wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP".
 wp_pures; wp_bind (mkakey _).
 iApply (wp_mkakey with "[] [hon]"); eauto.
-iIntros "%kI #p_pkI hon". wp_pures.
+iIntros "%kI #p_pkI hon tokenI". wp_pures.
 wp_bind (mkakey _). iApply (wp_mkakey with "[] [hon]"); eauto.
-iIntros "%kR #p_pkR hon". wp_pures.
+iIntros "%kR #p_pkR hon tokenR". wp_pures.
 set pkI := TKey Enc kI.
 set skI := TKey Dec kI.
 set pkR := TKey Enc kR.

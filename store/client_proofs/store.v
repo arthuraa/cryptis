@@ -38,7 +38,7 @@ Lemma wp_client_send_store E c kI kR cs t1 t2 t2' :
   {{{ RET #(); client_connected kI kR cs ∗ rem_mapsto kI kR t1 t2' }}}.
 Proof.
 iIntros "% #chan_c (_ & _ & #? & _) #p_t1 #p_t2' !> %Φ [client mapsto] post".
-iDestruct "client" as "(%γI & %n & %beginning & <- & <- & conn & client)".
+iDestruct "client" as "(%n & %beginning & <- & <- & conn & client)".
 iMod (rem_mapsto_update t2' with "conn client mapsto")
   as "(client & conn & mapsto & #update)".
 wp_lam. wp_pures. wp_bind (Connection.timestamp _).
@@ -53,7 +53,7 @@ iApply (wp_connection_send with "[//] [//] [] [#] conn") => //.
 - rewrite public_of_list /= public_TInt. by eauto.
 iIntros "!> conn".
 iApply ("post" with "[conn client mapsto]").
-iFrame. iExists _, _, _. by iFrame.
+iFrame. iExists _, _. by iFrame.
 Qed.
 
 Lemma wp_client_ack_store E c kI kR cs :
@@ -65,7 +65,7 @@ Lemma wp_client_ack_store E c kI kR cs :
   {{{ RET #(); client_connected kI kR cs }}}.
 Proof.
 iIntros "% #chan_c (_ & _ & _ & #? & _) !> %Φ client post".
-iDestruct "client" as "(%γI & %n & %beginning & <- & <- & conn & client)".
+iDestruct "client" as "(%n & %beginning & <- & <- & conn & client)".
 rewrite /Client.ack_store. wp_pures.
 wp_bind (Connection.timestamp _).
 iApply (wp_connection_timestamp with "conn"). iIntros "!> conn".
@@ -76,7 +76,7 @@ iIntros "!> %m conn (client & post) #m_m _".
 wp_pures. wp_bind (tint _). iApply wp_tint.
 wp_eq_term e; wp_pures; last by iLeft; iFrame.
 iRight. iModIntro. iExists _. iSplit => //.
-iApply "post". by iExists _, _, _; iFrame.
+iApply "post". by iExists _, _; iFrame.
 Qed.
 
 Lemma wp_client_store E c kI kR cs t1 t2 t2' :

@@ -74,9 +74,9 @@ wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP".
 wp_pures; wp_bind (mkakey _).
 iApply (wp_mkakey with "[] [hon]"); eauto.
-iIntros "%kI #p_kI hon". wp_pures.
+iIntros "%kI #p_kI hon _". wp_pures.
 wp_bind (mkakey _). iApply (wp_mkakey with "[] [hon]"); eauto.
-iIntros "%kR #p_kR hon". wp_pures.
+iIntros "%kR #p_kR hon _". wp_pures.
 set pkI := TKey Enc kI.
 set skI := TKey Dec kI.
 set pkR := TKey Enc kR.

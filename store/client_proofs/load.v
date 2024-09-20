@@ -45,7 +45,7 @@ Lemma wp_client_load E c kI kR cs t1 t2 :
 Proof.
 iIntros "% % #chan_c #ctx #p_t1 !> %Φ [client mapsto] post".
 iDestruct "ctx" as "(_ & _ & _ & _ & load & ack_load & _)".
-iDestruct "client" as "(%γI & %n & %beginning & <- & <- & conn & client)".
+iDestruct "client" as "(%n & %beginning & <- & <- & conn & client)".
 rewrite /Client.load. wp_pures. wp_bind (Connection.timestamp _).
 iApply (wp_connection_timestamp with "conn"). iIntros "!> conn".
 wp_bind (tint _). iApply wp_tint.
@@ -69,7 +69,7 @@ wp_pures. iRight. iModIntro. iExists _. iSplit => //.
 iApply "post".
 iFrame.
 iSplit => //.
-iExists _, _, _. by iFrame.
+iExists _, _. by iFrame.
 Qed.
 
 End Verif.
