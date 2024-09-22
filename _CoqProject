@@ -26,6 +26,9 @@ attacker.v
 
 # Case studies
 
+dh_auth/shared.v
+dh_auth/initiator.v
+dh_auth/responder.v
 dh_auth.v
 
 ## Simple examples

@@ -45,7 +45,7 @@ iPoseProof (store_ctx_create with "ctx") as "?".
 iPoseProof (store_ctx_ack_create with "ctx") as "?".
 rewrite /handler_correct. wp_lam; wp_pures.
 iModIntro. iExists _. iSplit => //.
-iIntros "!> %m _ #p_m conn (server & db)".
+iIntros "!> %m #p_m #inv_m conn (server & db)".
 wp_pures.
 wp_bind (Connection.timestamp _).
 iApply (wp_connection_timestamp with "conn").
@@ -57,7 +57,6 @@ case: Spec.to_intP => [ {m} n' ->| _]; wp_pures; last by failure.
 case: bool_decide_reflect => [[<-] {n'}|?]; wp_pures; last by failure.
 wp_bind (SAList.find _ _). iApply (SAList.wp_find with "db") => //.
 iIntros "!> db". rewrite lookup_fmap.
-iPoseProof (public_create_pred with "p_m") as "[p_t1 p_t2]".
 wp_bind (match: _ with InjL <> => _ | InjR <> => _ end)%E.
 iApply (wp_wand _ _ _ (λ v, ∃ (b : bool) n' db',
   ⌜v = #((if b then 1 else 0) : Z)⌝ ∗
@@ -70,7 +69,7 @@ iApply (wp_wand _ _ _ (λ v, ∃ (b : bool) n' db',
   iApply (SAList.wp_insert with "db").
   iIntros "!> db".
   rewrite -fmap_insert.
-  iPoseProof (create_predE with "conn server p_m") as "(conn & server)" => //.
+  iPoseProof (create_predE with "server p_m inv_m") as "server" => //.
   wp_pures.
   wp_bind (Connection.tick _).
   iApply (wp_connection_tick with "conn").
@@ -87,7 +86,9 @@ wp_term_of_list.
 wp_pures.
 wp_bind (Connection.send _ _ _ _).
 iApply (wp_connection_send with "[//] [//] [] [] conn") => //.
-- iClear "p_m". rewrite public_of_list /= !public_TInt. eauto.
+- rewrite !public_of_list /= !public_TInt. eauto.
+  iDestruct "p_m" as "(_ & ? & ? & _)". by eauto.
+- iRight. by iModIntro.
 iIntros "!> conn".
 wp_pures.
 iModIntro. iRight. iExists _. iSplit => //. iExists _, _. iLeft.

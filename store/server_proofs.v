@@ -152,8 +152,8 @@ Lemma wp_server_wait_init c cs vdb db γlock vlock :
   {{{ cryptis_ctx ∗ channel c ∗ store_ctx N ∗
       is_conn_state cs 0 ∗
       server_connecting cs db ∗
-      conn_not_started cs Resp ∗
-      conn_not_ended cs Resp ∗
+      term_token (si_key cs) (↑nroot.@"server".@"begin") ∗
+      term_token (si_key cs) (↑nroot.@"server".@"end") ∗
       SAList.is_alist vdb (repr <$> db) ∗
       is_lock γlock vlock (
         account_inv (si_init cs) (si_resp cs) vdb) ∗
@@ -171,10 +171,10 @@ iRevert "conn I".
 iApply wp_connection_recv => //.
 iIntros "!> %m conn
   (server & not_started & not_ended & db & locked & post) #m_m #p_m".
-iMod (ack_init_predI with "server conn not_started not_ended p_m")
+iMod (ack_init_predI with "server not_started not_ended p_m")
   as "H" => //.
 wp_pures.
-iMod "H" as "(conn & server & #p_m')".
+iMod "H" as "(server & #p_m')".
 wp_bind (tint _). iApply wp_tint.
 wp_bind (Connection.send _ _ _ _).
 iPoseProof (store_ctx_ack_init with "ctx'") as "?".
@@ -214,18 +214,12 @@ iApply acquire_spec => //.
 iIntros "!> (locked & %db & account & db)". rewrite -e_kR.
 iMod (server_connectingI with "[//] hon c account") as "[hon account]".
 wp_pures.
-iPoseProof (conn_state_session with "conn") as "#?".
-iAssert (|={⊤}=> conn_not_started cs Resp ∗ conn_not_ended cs Resp)%I
-  with "[token]" as ">[not_started not_ended]".
-{ rewrite (gmeta_token_difference _ (↑nroot.@"db".@"begin")); last by solve_ndisj.
-  iDestruct "token" as "[not_started token]".
-  iSplitR "token".
-  { iModIntro. iExists _. iFrame. by rewrite e_rl. }
-  rewrite (gmeta_token_difference _ (↑nroot.@"db".@"end")); last by solve_ndisj.
-  iDestruct "token" as "[not_ended token]".
-  iModIntro. iExists _. iFrame. by rewrite e_rl. }
-iApply (wp_fork with "[conn locked db account not_started not_ended]").
+iApply (wp_fork with "[conn locked db account token]").
 { iModIntro.
+  rewrite (term_token_difference _ (↑nroot.@"server".@"begin")); last by solve_ndisj.
+  iDestruct "token" as "[not_started token]".
+  iPoseProof (@term_token_drop _ _ (↑nroot.@"server".@"end")
+               with "token") as "not_ended"; first by solve_ndisj.
   iApply (wp_server_wait_init
            with "[conn locked db account not_started not_ended] []") => //.
   iFrame. eauto. }

@@ -45,15 +45,15 @@ iIntros "%sub %sub' #chan_c #ctx".
 iPoseProof (store_ctx_close with "ctx") as "?".
 iPoseProof (store_ctx_ack_close with "ctx") as "?".
 rewrite /handler_correct. wp_lam; wp_pures. iModIntro.
-iExists _. iSplit => //. iIntros "!> %m _ #p_m conn (server & db)".
+iExists _. iSplit => //. iIntros "!> %m #p_m #inv_m conn (server & db)".
 wp_pures. wp_bind (Connection.timestamp _).
 iApply (wp_connection_timestamp with "conn").
 iIntros "!> conn". wp_pures.
 wp_bind (to_int _). iApply wp_to_int.
 case: Spec.to_intP => [ {m} n' ->| _]; wp_pures; last by failure.
 case: bool_decide_reflect => [[<-] {n'}|?]; last by wp_pures; failure.
-iPoseProof (ack_close_predI with "conn server p_m") as "{p_m} >H" => //.
-wp_pures. iMod "H" as "(conn & server & #p_m)".
+iPoseProof (ack_close_predI with "server inv_m") as "{p_m} >H" => //.
+wp_pures. iMod "H" as "(server & #p_m)".
 wp_bind (tint _). iApply wp_tint.
 wp_bind (Connection.send _ _ _ _).
 iApply (wp_connection_send with "[//] [//] [] p_m conn") => //.

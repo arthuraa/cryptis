@@ -45,7 +45,7 @@ wp_bind (Connection.timestamp _).
 iApply (wp_connection_timestamp with "conn").
 iIntros "!> conn". wp_pures.
 wp_bind (tint _). iApply wp_tint. wp_pures.
-iMod (close_predI with "conn client") as "(conn & client & #p_m1)" => //.
+iMod (close_predI with "client") as "(client & #p_m1)" => //.
 wp_bind (Connection.send _ _ _ _).
 iApply (wp_connection_send with "[//] close [] [//] conn") => //.
 { by rewrite public_TInt. }
@@ -53,7 +53,7 @@ iIntros "!> conn". wp_pures.
 iCombine "client post" as "I". iRevert "conn I".
 iApply wp_connection_recv => //.
 iIntros "!> %m conn (client & post) #m_m #inv'".
-iMod (ack_close_predE with "conn client inv'") as "(conn & client)" => //.
+iMod (ack_close_predE with "client inv'") as "client" => //.
 wp_pures. wp_bind (Connection.close _ _).
 iApply (wp_connection_close with "conn"). iIntros "!> _".
 wp_pures.

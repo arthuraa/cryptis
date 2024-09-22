@@ -39,14 +39,13 @@ Lemma wp_client_send_store E c kI kR cs t1 t2 t2' :
 Proof.
 iIntros "% #chan_c (_ & _ & #? & _) #p_t1 #p_t2' !> %Φ [client mapsto] post".
 iDestruct "client" as "(%n & %beginning & <- & <- & conn & client)".
-iMod (rem_mapsto_update t2' with "conn client mapsto")
-  as "(client & conn & mapsto & #update)".
+iMod (rem_mapsto_update t2' with "client mapsto")
+  as "(client & mapsto & #update)".
 wp_lam. wp_pures. wp_bind (Connection.timestamp _).
 iApply (wp_connection_timestamp with "conn"); iIntros "!> conn".
 wp_pures. wp_bind (Connection.tick _).
 iApply (wp_connection_tick with "conn"). iIntros "!> conn".
-iPoseProof (store_predI with "conn client p_t1 p_t2' update")
-  as "(conn & client & #?)".
+iPoseProof (store_predI with "client update") as "#?".
 wp_pures. wp_list. wp_bind (tint _). iApply wp_tint. wp_list.
 wp_term_of_list. wp_pures.
 iApply (wp_connection_send with "[//] [//] [] [#] conn") => //.

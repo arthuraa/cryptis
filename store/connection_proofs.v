@@ -41,7 +41,8 @@ Lemma wp_connection_connect N E c kI kR dq n T :
     ⌜si_time cs = n⌝ ∗
     ⌜si_hon cs = T⌝ ∗
     ⌜cs_role cs = Init⌝ ∗
-    gmeta_token (cs_name cs) (⊤ ∖ ↑nroot.@"dh_auth") }}}.
+    (session_fail cs ∨
+       term_token (si_key cs) (↑nroot.@"client")) }}}.
 Proof.
 iIntros "% #? #? #? #? #? % !> hon post".
 wp_lam. wp_pures.
@@ -52,10 +53,10 @@ iApply (wp_initiator with "[//] [//] [//] [] [] [hon]") => //.
 iIntros "!> %res (hon & resP)".
 case: res=> [kS|] /=; wp_pures; last by iLeft; iFrame; eauto.
 wp_alloc ts as "ts". set  si := SessInfo _ _ _ _ _. wp_pures.
-iDestruct "resP" as "(%γ & #m_kS & #sess & token & #p_kS)".
+iDestruct "resP" as "(#m_kS & #p_kS & sess)".
 iRight. iModIntro. iExists _.  iSplit => //.
-iApply ("post" $! (ConnState si ts γ Init)). iFrame => /=.
-eauto.
+iApply ("post" $! (ConnState si ts Init)). iFrame => /=.
+do !iSplit => //; iDestruct "sess" as "[fail|[sess token]]"; eauto.
 Qed.
 
 Lemma wp_connection_listen N E c kR dq n T :
@@ -74,7 +75,7 @@ Lemma wp_connection_listen N E c kR dq n T :
     ⌜si_time cs = n⌝ ∗
     ⌜si_hon cs = T⌝ ∗
     ⌜cs_role cs = Resp⌝ ∗
-    gmeta_token (cs_name cs) (⊤ ∖ ↑nroot.@"dh_auth") }}}.
+    term_token (si_key cs) (↑nroot.@"server") }}}.
 Proof.
 iIntros "% #? #? #? #? % !> hon post".
 wp_lam. wp_pures.
@@ -85,11 +86,11 @@ iApply (wp_responder with "[//] [//] [] [] [hon]") => //.
 iIntros "!> %res (hon & resP)".
 case: res=> [[vkI kS]|] /=; wp_pures; last by iLeft; iFrame; eauto.
 wp_alloc ts as "ts".
-iDestruct "resP" as "(%kI & %γ & -> & #p_vkI & #m_kS & #sess & token & #p_kS)".
+iDestruct "resP" as "(%kI & -> & #p_vkI & #m_kS & #p_kS & #sess & token)".
 set  si := SessInfo _ _ _ _ _. wp_pures.
 iRight. iModIntro. iExists _.  iSplit => //.
-iApply ("post" $! (ConnState si ts γ Resp)). iFrame => /=.
-eauto.
+iApply ("post" $! (ConnState si ts Resp)). iFrame => /=.
+eauto 10.
 Qed.
 
 Lemma wp_connection_timestamp E cs (n : nat) :
@@ -98,7 +99,7 @@ Lemma wp_connection_timestamp E cs (n : nat) :
   {{{ RET #n; is_conn_state cs n }}}.
 Proof.
 rewrite /Connection.timestamp.
-iIntros "%Φ (Hn & #sess & #? & #key) post".
+iIntros "%Φ (Hn & #? & #key) post".
 wp_pures. wp_load. iApply "post". iModIntro. iFrame. by eauto.
 Qed.
 
@@ -107,7 +108,7 @@ Lemma wp_connection_tick E cs (n : nat) :
     Connection.tick (repr cs) @ E
   {{{ RET #(); is_conn_state cs (S n) }}}.
 Proof.
-iIntros "%Ψ (Hn & #seas & #? & #key) post".
+iIntros "%Ψ (Hn & #? & #key) post".
 rewrite /Connection.tick; wp_pures; wp_load; wp_store.
 iApply "post".
 rewrite (_ : (n + 1)%Z = (S n)%nat :> Z); last by lia.
@@ -119,7 +120,7 @@ Lemma wp_connection_session_key E cs n :
     Connection.session_key (repr cs) @ E
   {{{ RET (repr (Spec.mkskey (si_key cs)));
       is_conn_state cs n ∗
-      session (cs_name cs) cs (cs_role cs) ∗
+      (session_fail cs ∨ session cs) ∗
       minted (si_key cs) ∗
       □ (∀ kt, public (TKey kt (si_key cs)) ↔ ▷ session_fail cs) }}}.
 Proof.
@@ -131,9 +132,9 @@ Qed.
 Lemma wp_connection_send N E c cs n m φ :
   ↑cryptisN ⊆ E →
   channel c -∗
-  enc_pred N φ -∗
+  enc_pred N (session_msg_pred φ) -∗
   public m -∗
-  □ φ (si_key cs) m -∗
+  session_fail cs ∨ □ φ cs m -∗
   {{{ is_conn_state cs n }}}
     Connection.send N c (repr cs) m @ E
   {{{ RET #(); is_conn_state cs n }}}.
@@ -145,8 +146,17 @@ iApply (wp_connection_session_key with "conn").
 iIntros "!> (conn & #sess & #minted_k & #sec)". wp_pures.
 wp_bind (tsenc _ _ _). iApply wp_tsenc. wp_pures.
 iApply wp_send => //.
-{ iApply public_TEncIS => //.
+{ iDestruct "inv" as "[fail|#inv]".
+  { iModIntro. iApply public_TEncIP.
+    - iApply "sec". by eauto.
+    - by rewrite public_tag. }
+  iDestruct "sess" as "[fail|sess]".
+  { iModIntro. iApply public_TEncIP.
+    - iApply "sec". by eauto.
+    - by rewrite public_tag. }
+  iApply public_TEncIS => //.
   - by rewrite minted_TKey.
+  - iModIntro. iExists cs. by do !iSplit => //.
   - by iApply public_minted.
   - by iIntros "!> !> _". }
 by iApply "post".
@@ -256,9 +266,9 @@ Qed.
 
 Definition handler_correct φ Φ cs handler n E : iProp :=
   WP handler.2 @ E {{ f,
-    ∃ Ψ, enc_pred handler.1 Ψ ∗
-    □ ∀ m, minted m -∗
-           □ ▷ (session_fail cs ∗ public m ∨ Ψ (si_key cs) m) -∗
+    ∃ Ψ, enc_pred handler.1 (session_msg_pred Ψ) ∗
+    □ ∀ m, ▷ public m -∗
+           □ ▷ (session_fail cs ∨ Ψ cs m) -∗
            is_conn_state cs n -∗
            φ -∗
            WP (f : val) m @ E {{ v,
@@ -289,18 +299,26 @@ iApply (wp_wand with "[wps]").
   iAssert (minted m) as "#m_m".
   { rewrite public_minted minted_TEnc minted_tag.
     by iDestruct "p_m" as "[??]". }
-  iPoseProof (public_TEncE with "p_m enc") as "{p_m} p_m".
-  iAssert (□ ∀ kt, public (TKey kt (si_key cs)) ↔ ▷ session_fail cs)%I as "#p_kS".
-  { by iDestruct "conn" as "(_ & _ & _ & #?)". }
-  iApply ("wp" with "m_m [] conn inv").
-  iDestruct "p_m" as "[[fail p_m]|(#inv & ?)]".
-  - iSpecialize ("p_kS" with "fail"). by eauto.
-  - by eauto. }
+  iAssert (□ ▷ (public m ∗ (session_fail cs ∨ Ψ cs m)))%I
+    as "{p_m} #[p_m inv_m]".
+  { iDestruct "conn" as "(? & #sess & #? & #p_kS)".
+    iDestruct (public_TEncE with "[//] [//]") as "{p_m} [[fail p_m]|p_m]".
+    - iSplitR => //.
+      iPoseProof ("p_kS" with "fail") as "{fail} fail".
+      iModIntro. by eauto.
+    - iDestruct "p_m" as "[#p_m _]".
+      iModIntro. iModIntro.
+      iDestruct "p_m" as "(%si & %e_kS & #sess' & p_m & inv_m)".
+      iSplit => //.
+      iDestruct "sess" as "[fail|sess]"; first by eauto.
+      iPoseProof (session_agree with "sess' sess") as "->" => //.
+      by eauto. }
+  iApply ("wp" with "p_m [//] conn inv"). }
 iIntros "% (%handlers' & -> & #Hhandlers')".
 wp_pures.
 wp_bind (Connection.session_key _).
 iApply (wp_connection_session_key with "conn").
-iIntros "!> (conn & #sess & #m_kS & #p_kS)".
+iIntros "!> (conn & #m_kS & #p_kS)".
 wp_bind (untuple _).
 iApply wp_untuple => /=.
 wp_pures. iCombine "conn inv" as "I". iRevert "I". iApply wp_do_until.
@@ -318,12 +336,12 @@ Qed.
 Lemma wp_connection_recv N E c cs n (f : val) φ Φ Ψ :
   ↑cryptisN ⊆ E →
   channel c -∗
-  enc_pred N Φ -∗
+  enc_pred N (session_msg_pred Φ) -∗
   □ (∀ m,
       is_conn_state cs n -∗
       φ -∗
-      minted m -∗
-      □ (session_fail cs ∗ public m ∨ Φ (si_key cs) m) -∗
+      public m -∗
+      □ (session_fail cs ∨ Φ cs m) -∗
       WP f m @ E {{ v, ⌜v = NONEV⌝ ∗ is_conn_state cs n ∗ φ ∨
                        ∃ v', ⌜v = SOMEV v'⌝ ∗ Ψ v' }}) -∗
   is_conn_state cs n -∗ φ -∗ WP Connection.recv N c (repr cs) f @ E {{ Ψ }}.
@@ -339,18 +357,21 @@ iIntros "!> (conn & inv)".
 wp_pure _ credit:"c".
 wp_pures. wp_bind (recv _). iApply wp_recv => //.
 iIntros "%m #p_m". wp_pures. wp_tsdec m; wp_pures; last by iLeft; iFrame.
-iAssert (▷ □ (session_fail cs ∗ public m ∨ Φ (si_key cs) m))%I
-  as "p_m'".
+iAssert (▷ □ (public m ∗ (session_fail cs ∨ Φ cs m)))%I
+  as "{p_m} p_m".
 { iDestruct (public_TEncE with "[//] [//]") as "{p_m} [[fail p_m]|p_m]".
-  - iPoseProof ("p_kS" with "fail") as "{fail} fail".
+  - iSplitR => //.
+    iPoseProof ("p_kS" with "fail") as "{fail} fail".
     iModIntro. by eauto.
-  - iDestruct "p_m" as "[p_m ?]".
-    iModIntro. iModIntro. eauto. }
-iMod (lc_fupd_elim_later with "c p_m'") as "{p_m'} #p_m'".
-iApply ("post" with "conn inv").
-{ rewrite public_minted minted_TEnc minted_tag.
-  by iDestruct "p_m" as "[??]". }
-by eauto.
+  - iDestruct "p_m" as "[#p_m _]".
+    iModIntro. iModIntro.
+    iDestruct "p_m" as "(%si & %e_kS & #sess' & p_m & inv_m)".
+    iSplit => //.
+    iDestruct "sess" as "[fail|sess]"; first by eauto.
+    iPoseProof (session_agree with "sess' sess") as "->" => //.
+    by eauto. }
+iMod (lc_fupd_elim_later with "c p_m") as "{p_m} [#p_m #inv_m]".
+by iApply ("post" with "conn inv").
 Qed.
 
 Lemma wp_connection_close E (c : val) cs n :

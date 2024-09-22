@@ -27,19 +27,6 @@ Implicit Types v : val.
 
 Variable N : namespace.
 
-Lemma ack_storeI kS n :
-  store_ctx N -∗
-  minted kS -∗
-  public (TEnc kS (Spec.tag (N.@"ack_store") (TInt n))).
-Proof.
-iIntros "(_ & _ & _ & #ctx & _) #s_kS".
-iApply public_TEncIS => //.
-- by rewrite minted_TKey.
-- iModIntro. by iExists n.
-- by rewrite minted_TInt.
-- by rewrite public_TInt; eauto.
-Qed.
-
 Ltac failure := iLeft; iFrame.
 
 Lemma wp_server_handle_store E c cs ldb db n :
@@ -58,7 +45,7 @@ iPoseProof (store_ctx_store with "ctx") as "?".
 iPoseProof (store_ctx_ack_store with "ctx") as "?".
 rewrite /handler_correct /=. wp_lam; wp_pures.
 iModIntro. iExists _. iSplit => //.
-iIntros "!> %m _ #p_m conn (server & db)". wp_pures.
+iIntros "!> %m #p_m #inv_m conn (server & db)". wp_pures.
 wp_bind (Connection.timestamp _).
 iApply (wp_connection_timestamp with "conn") => //.
 iIntros "!> conn". wp_pures.
@@ -67,7 +54,7 @@ wp_list_match => [n' t1 t2 ->|_]; wp_pures; last by failure.
 wp_bind (to_int _). iApply wp_to_int.
 case: Spec.to_intP => [ {}n' -> | _]; wp_pures; last by failure.
 case: bool_decide_reflect => [[ {n'} <-]|ne]; wp_pures; last by failure.
-iPoseProof (store_predE with "conn server p_m") as "(conn & server)".
+iPoseProof (store_predE with "server p_m inv_m") as "server".
 wp_bind (Connection.tick _). iApply (wp_connection_tick with "conn").
 iIntros "!> conn". wp_pures.
 wp_bind (SAList.insert _ _ _).
@@ -79,7 +66,7 @@ wp_bind (Connection.send _ _ _ _).
 iApply (wp_connection_send _ c cs (S n)
    with "[//] [//] [] [] conn [server db]") => //.
 - by rewrite public_TInt.
-- by iExists _.
+- iRight. by iExists _.
 iIntros "!> conn". wp_pures.
 iModIntro. iRight. iExists _. iSplit => //.
 iExists _, _. iLeft. by iFrame.

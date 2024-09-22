@@ -59,11 +59,11 @@ wp_bind (Connection.connect _ _ _ _ _).
 iApply (wp_connection_connect with "[//] [//] [//] [] [] [hon]") => //.
 iIntros "!> %cs (hon & conn & % & % & % & % & % & token)".
 iDestruct "client" as "(%beginning & client)".
-iMod (client_connectingI with "[//] [$] hon conn token client")
-  as "(hon & conn & client & #beginning & #ready)" => //; try solve_ndisj.
+iMod (client_connectingI with "[//] [$] hon token client")
+  as "(hon & client & #ready)" => //; try solve_ndisj.
 subst kI kR.
-iPoseProof (init_predI _ _ (TInt 0) with "conn client ready")
-  as "(conn & client & #?)".
+iPoseProof (init_predI _ _ (TInt 0) with "client []") as "#?".
+{ iDestruct "ready" as "[fail|[_ ready]]"; eauto. }
 wp_pures. wp_bind (Connection.send _ _ _ _).
 iApply (wp_connection_send with "[//] [] [] [] conn") => //.
 { by rewrite public_TInt. }
@@ -72,7 +72,7 @@ wp_pures.
 iCombine "hon client post" as "I". iRevert "conn I".
 iApply (wp_connection_recv with "[//] []") => //.
 iIntros "!> %m conn (hon & client & post) _ #mP".
-iMod (ack_init_predE with "conn client mP") as "(conn & client)" => //.
+iMod (ack_init_predE with "client mP") as "client" => //.
 wp_pures.
 iRight. iExists _. iSplitR => //.
 iApply "post". iFrame. iModIntro. do 2!iSplit => //.

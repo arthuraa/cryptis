@@ -53,18 +53,18 @@ wp_pures. wp_list. wp_term_of_list.
 wp_bind (Connection.send _ _ _ _).
 iApply (wp_connection_send with "[//] load [] [] conn") => //.
 - rewrite public_of_list /= public_TInt. by eauto.
+- iRight. by eauto.
 iIntros "!> conn". wp_pures.
 iCombine "client mapsto post" as "I". iRevert "conn I".
 iApply wp_connection_recv => //.
-iIntros "!> %ts conn (client & mapsto & post) #m_m #p_m". wp_pures.
+iIntros "!> %ts conn (client & mapsto & post) #p_m #inv_m". wp_pures.
 wp_list_of_term ts; wp_pures; last by iLeft; iFrame.
 wp_list_match => [n' t1' t2' -> {ts}|_]; wp_pures; last by iLeft; iFrame.
 wp_eq_term e; last by wp_pures; iLeft; iFrame.
 subst n'. wp_pures.
 wp_eq_term e; last by wp_pures; iLeft; iFrame.
 subst t1'.
-iPoseProof (ack_loadE with "conn client mapsto p_m")
-  as "(conn & client & mapsto & #p_t2')".
+iPoseProof (ack_loadE with "client mapsto p_m inv_m") as "#p_t2'".
 wp_pures. iRight. iModIntro. iExists _. iSplit => //.
 iApply "post".
 iFrame.

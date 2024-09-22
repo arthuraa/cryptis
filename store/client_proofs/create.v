@@ -44,16 +44,16 @@ iIntros "% #chan_c (_ & _ & _ & _ & _ & _ & #create & #ack & _) #p_t1 #p_t2".
 iIntros "!> %Φ [client free] post".
 iDestruct "client" as "(%n & %beginning & <- & <- & conn & client)".
 rewrite /Client.create. wp_pures.
-iMod (@rem_mapsto_alloc _ _ _ _ _ t1 t2 with "conn client free")
-  as "(conn & client & mapsto & _ & #created)".
+iMod (@rem_mapsto_alloc _ _ _ _ _ t1 t2 with "client free")
+  as "(client & mapsto & _ & #created)".
 { by rewrite elem_of_singleton. }
 wp_bind (Connection.timestamp _).
 iApply (wp_connection_timestamp with "conn").
 iIntros "!> conn". wp_pures.
 wp_bind (Connection.tick _).
 iApply (wp_connection_tick with "conn"). iIntros "!> conn".
-iDestruct (create_predI with "conn client p_t1 p_t2 created")
-  as "(conn & client & #p_m1)".
+iDestruct (create_predI with "client p_t1 p_t2 created")
+  as "#p_m1".
 wp_list. wp_bind (tint _). iApply wp_tint. wp_list. wp_term_of_list. wp_pures.
 wp_bind (Connection.send _ _ _ _).
 iApply (wp_connection_send with "[//] create [] [//] conn") => //.
