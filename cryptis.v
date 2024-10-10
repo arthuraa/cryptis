@@ -901,6 +901,15 @@ iPoseProof (term_name_agree with "name1 name2") as "<-".
 iApply (gmeta_agree with "meta1 meta2").
 Qed.
 
+Lemma term_token_switch t N' Q : ⊢ switch (term_token t (↑N')) Q.
+Proof.
+iExists (term_meta t N' ()). iSplit; iModIntro.
+- iIntros "[token #meta]".
+  by iDestruct (term_meta_token with "token meta") as "[]".
+- iIntros "token".
+  by iMod (term_meta_set () with "token") as "#meta".
+Qed.
+
 Section TermOwn.
 
 Context `{inG Σ A}.

@@ -296,17 +296,6 @@ Definition is_conn_state cs n : iProp :=
   minted (si_key cs) ∗
   □ (∀ kt, public (TKey kt (si_key cs)) ↔ ▷ session_fail cs).
 
-(* MOVE *)
-Lemma term_token_switch t N' Q : ⊢ switch (term_token t (↑N')) Q.
-Proof.
-iExists (term_meta t N' ()). iSplit; iModIntro.
-- iIntros "[token #meta]".
-  by iDestruct (term_meta_token with "token meta") as "[]".
-- iIntros "token".
-  by iMod (term_meta_set N' () with "token") as "#meta".
-Qed.
-(* /MOVE *)
-
 Definition db_not_signed_up kI kR : iProp :=
   term_token kR (↑dbSN kI).
 
