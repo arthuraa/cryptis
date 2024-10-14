@@ -83,17 +83,16 @@ Qed.
 
 Definition mkdh : val := mknonce.
 
-Lemma wp_mkdh g E (Ψ : val → iProp) :
-  ↑cryptisN ⊆ E →
+Lemma wp_mkdh g (Ψ : val → iProp) :
   cryptis_ctx -∗
   minted g -∗
   (∀ a, minted a -∗
         dh_seed a -∗
         term_token (TExp g [a]) ⊤ -∗
         Ψ a) -∗
-  WP mkdh #() @ E {{ Ψ }}.
+  WP mkdh #() {{ Ψ }}.
 Proof.
-iIntros "% #ctx #minted_g post".
+iIntros "#ctx #minted_g post".
 iApply (wp_mknonce_freshN ∅ (λ _, False%I) dh_publ (λ t, {[TExp g [t]]})
   with "[//]" ) => //.
 - iIntros "%". rewrite elem_of_empty. by iIntros "[]".

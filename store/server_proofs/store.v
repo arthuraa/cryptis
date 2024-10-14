@@ -29,18 +29,17 @@ Variable N : namespace.
 
 Ltac failure := iLeft; iFrame.
 
-Lemma wp_server_handle_store E c cs ldb db n :
-  ↑cryptisN ⊆ E →
-  channel c -∗
+Lemma wp_server_handle_store c cs ldb db n :
+   channel c -∗
   store_ctx N -∗
   handler_correct
     (server_handler_inv cs n ldb db)
     (server_handler_post cs ldb)
     cs
     (N.@"store", Server.handle_store N c (repr cs) ldb)
-    n E.
+    n.
 Proof.
-iIntros "%sub #chan_c #ctx".
+iIntros "#chan_c #ctx".
 iPoseProof (store_ctx_store with "ctx") as "?".
 iPoseProof (store_ctx_ack_store with "ctx") as "?".
 rewrite /handler_correct /=. wp_lam; wp_pures.

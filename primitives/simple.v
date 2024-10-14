@@ -168,33 +168,29 @@ Qed.
 
 Definition channel c : iProp Σ :=
   ∃ (sf rf : val), ⌜c = (sf, rf)%V⌝ ∗
-    □ (∀ E t Ψ, ⌜↑cryptisN ⊆ E⌝ -∗ public t -∗ Ψ #() -∗
-                WP sf t @ E {{ Ψ }}) ∗
-    □ (∀ E Ψ, ⌜↑cryptisN ⊆ E⌝ -∗ (∀ t, public t -∗ Ψ t) -∗
-              WP rf #() @ E {{ Ψ }}).
+    □ (∀ t Ψ, public t -∗ Ψ #() -∗ WP sf t {{ Ψ }}) ∗
+    □ (∀ Ψ, (∀ t, public t -∗ Ψ t) -∗ WP rf #() {{ Ψ }}).
 
 Global Instance channel_persistent c : Persistent (channel c).
 Proof. apply _. Qed.
 
-Lemma wp_send E c t Ψ :
-  ↑cryptisN ⊆ E →
+Lemma wp_send c t Ψ :
   channel c -∗
   ▷ public t -∗
   Ψ #() -∗
-  WP send c t @ E {{ Ψ }}.
+  WP send c t {{ Ψ }}.
 Proof.
-move=> sub; iDestruct 1 as (sf cf) "#(-> & H & _)".
+iDestruct 1 as (sf cf) "#(-> & H & _)".
 iIntros "#??"; rewrite /send; wp_pures.
 by iApply "H".
 Qed.
 
-Lemma wp_recv E c Ψ :
-  ↑cryptisN ⊆ E →
+Lemma wp_recv c Ψ :
   channel c -∗
   (∀ t, public t -∗ Ψ t) -∗
-  WP recv c @ E {{ Ψ }}.
+  WP recv c {{ Ψ }}.
 Proof.
-move=> sub; iDestruct 1 as (sf cf) "#(-> & _ & H)".
+iDestruct 1 as (sf cf) "#(-> & _ & H)".
 iIntros "?"; rewrite /recv; wp_pures.
 by iApply "H".
 Qed.
@@ -396,8 +392,7 @@ iIntros "H1 H2". iApply twp_wp.
 iApply (twp_mknonce_gen with "H1 H2").
 Qed.
 
-Lemma twp_mknonce_freshN (T : gset term) (P Q : term → iProp Σ) (T' : term → gset term) E Ψ :
-  ↑cryptisN ⊆ E →
+Lemma twp_mknonce_freshN (T : gset term) (P Q : term → iProp Σ) (T' : term → gset term) Ψ :
   cryptis_ctx -∗
   (∀ t, ⌜t ∈ T⌝ -∗ minted t) -∗
   (∀ t, [∗ set] t' ∈ T' t, □ (minted t ↔ minted t')) -∗
@@ -407,10 +402,10 @@ Lemma twp_mknonce_freshN (T : gset term) (P Q : term → iProp Σ) (T' : term �
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
         ([∗ set] t' ∈ T' t, term_token t' ⊤) -∗
         Ψ t) -∗
-  WP mknonce #()%V @ E [{ Ψ }].
+  WP mknonce #()%V [{ Ψ }].
 Proof.
-iIntros "%sub #ctx minted_T #minted_T' post".
-iApply (twp_mknonce_gen P Q E _
+iIntros "#ctx minted_T #minted_T' post".
+iApply (twp_mknonce_gen P Q ⊤ _
           (λ t, ⌜∀ t', t' ∈ T → ¬ subterm t t'⌝ ∗
           [∗ set] t' ∈ T' t, term_token t' ⊤)%I
          with "[minted_T] [post]").
@@ -444,8 +439,7 @@ iApply (twp_mknonce_gen P Q E _
 iIntros "% ? ? ? [? ?]". by iApply ("post" with "[$] [$] [$] [$] [$]").
 Qed.
 
-Lemma wp_mknonce_freshN (T : gset term) P Q (T' : term → gset term) E Ψ :
-  ↑cryptisN ⊆ E →
+Lemma wp_mknonce_freshN (T : gset term) P Q (T' : term → gset term) Ψ :
   cryptis_ctx -∗
   (∀ t, ⌜t ∈ T⌝ -∗ minted t) -∗
   (∀ t, [∗ set] t' ∈ T' t, □ (minted t ↔ minted t')) -∗
@@ -455,14 +449,13 @@ Lemma wp_mknonce_freshN (T : gset term) P Q (T' : term → gset term) E Ψ :
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
         ([∗ set] t' ∈ T' t, term_token t' ⊤) -∗
         Ψ t) -∗
-  WP mknonce #()%V @ E {{ Ψ }}.
+  WP mknonce #()%V {{ Ψ }}.
 Proof.
-iIntros "% #ctx H1 H2 H3".
+iIntros "#ctx H1 H2 H3".
 by iApply twp_wp; iApply (twp_mknonce_freshN with "[//] H1 H2 H3").
 Qed.
 
-Lemma twp_mknonce_fresh (T : gset term) (P Q : term → iProp Σ) E Ψ :
-  ↑cryptisN ⊆ E →
+Lemma twp_mknonce_fresh (T : gset term) (P Q : term → iProp Σ) Ψ :
   cryptis_ctx -∗
   (∀ t, ⌜t ∈ T⌝ -∗ minted t) -∗
   (∀ t, ⌜∀ t', t' ∈ T → ¬ subterm t t'⌝ -∗
@@ -471,9 +464,9 @@ Lemma twp_mknonce_fresh (T : gset term) (P Q : term → iProp Σ) E Ψ :
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
         term_token t ⊤ -∗
         Ψ t) -∗
-  WP mknonce #()%V @ E [{ Ψ }].
+  WP mknonce #()%V [{ Ψ }].
 Proof.
-iIntros "%sub #ctx minted_T post".
+iIntros "#ctx minted_T post".
 iApply (twp_mknonce_freshN T P Q (λ t : term, {[t]}) _
          with "[//] minted_T [] [post]") => //.
 { iIntros "%t". rewrite big_sepS_singleton. iModIntro.
@@ -483,8 +476,7 @@ rewrite big_sepS_singleton.
 by iApply ("post" with "[$] [$] [$] [$] [$]").
 Qed.
 
-Lemma wp_mknonce_fresh (T : gset term) P Q E Ψ :
-  ↑cryptisN ⊆ E →
+Lemma wp_mknonce_fresh (T : gset term) P Q Ψ :
   cryptis_ctx -∗
   (∀ t, ⌜t ∈ T⌝ -∗ minted t) -∗
   (∀ t, ⌜∀ t', t' ∈ T → ¬ subterm t t'⌝ -∗
@@ -493,38 +485,36 @@ Lemma wp_mknonce_fresh (T : gset term) P Q E Ψ :
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
         term_token t ⊤ -∗
         Ψ t) -∗
-  WP mknonce #()%V @ E {{ Ψ }}.
+  WP mknonce #()%V {{ Ψ }}.
 Proof.
-iIntros "% #ctx H1 H2".
+iIntros "#ctx H1 H2".
 by iApply twp_wp; iApply (twp_mknonce_fresh with "[//] H1 H2").
 Qed.
 
-Lemma twp_mknonce (P Q : term → iProp Σ) E Ψ :
-  ↑cryptisN ⊆ E →
+Lemma twp_mknonce (P Q : term → iProp Σ) Ψ :
   cryptis_ctx -∗
   (∀ t, minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
         term_token t ⊤ -∗
         Ψ t) -∗
-  WP mknonce #()%V @ E [{ Ψ }].
+  WP mknonce #()%V [{ Ψ }].
 Proof.
-iIntros "% #ctx post". iApply (twp_mknonce_fresh ∅ P Q) => //.
+iIntros "#ctx post". iApply (twp_mknonce_fresh ∅ P Q) => //.
 - iIntros "%". rewrite elem_of_empty. iDestruct 1 as "[]".
 - iIntros "% _". iApply "post".
 Qed.
 
-Lemma wp_mknonce (P Q : term → iProp Σ) E Ψ :
-  ↑cryptisN ⊆ E →
+Lemma wp_mknonce (P Q : term → iProp Σ) Ψ :
   cryptis_ctx -∗
   (∀ t, minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
         term_token t ⊤ -∗
         Ψ t) -∗
-  WP mknonce #()%V @ E {{ Ψ }}.
+  WP mknonce #()%V {{ Ψ }}.
 Proof.
-iIntros "% #ctx H".
+iIntros "#ctx H".
 by iApply twp_wp; iApply (twp_mknonce with "[//] H").
 Qed.
 
@@ -547,17 +537,16 @@ Qed.
 generate later credits when proving in a twp, which is required for manipulating
 honest_auth. *)
 
-Lemma wp_mkakey n T E Ψ :
-  ↑cryptisN ⊆ E →
+Lemma wp_mkakey n T Ψ :
   cryptis_ctx -∗
   ●H{n} T -∗
   (∀ t, public (TKey Enc t) -∗
         ●H{S n} (T ∪ {[TKey Dec t]}) -∗
         term_token t ⊤ -∗
         Ψ (TKey Enc t, TKey Dec t)%V) -∗
-  WP mkakey #() @ E {{ Ψ }}.
+  WP mkakey #() {{ Ψ }}.
 Proof.
-iIntros "%sub #ctx hon post". iMod unknown_alloc as (γ) "unknown".
+iIntros "#ctx hon post". iMod unknown_alloc as (γ) "unknown".
 rewrite /mkakey. wp_pure _ credit:"cred". wp_pures.
 iAssert (□ (∀ t, ⌜t ∈ T⌝ → minted t))%I as "#s_T".
   iPoseProof (honest_auth_minted with "hon") as "#?".
@@ -592,7 +581,6 @@ iAssert (secret (TKey Dec t')) with "[unknown]" as "tP"; first do 2?iSplit.
 iAssert (minted (TKey Dec t')) as "s_t'".
   by rewrite minted_TKey minted_tag.
 iMod (honest_insert with "ctx cred hon s_t' tP") as "hon" => //.
-  solve_ndisj.
 wp_pures. wp_bind (tag _ _). iApply wp_tag.
 iApply wp_mkkey. iApply ("post" with "[] [$] [$]") => //.
 iApply public_TKey. iRight. rewrite minted_tag. iSplit => //.
@@ -601,16 +589,15 @@ iExists _, _, _; iSplit => //.
 by iSplit => //.
 Qed.
 
-Lemma wp_mksigkey n T E Ψ :
-  ↑cryptisN ⊆ E →
+Lemma wp_mksigkey n T Ψ :
   cryptis_ctx -∗
   ●H{n} T -∗
   (∀ t, public (TKey Dec t) -∗
         ●H{S n} (T ∪ {[TKey Enc t]}) -∗
         Ψ (TKey Enc t, TKey Dec t)%V) -∗
-  WP mksigkey #() @ E {{ Ψ }}.
+  WP mksigkey #() {{ Ψ }}.
 Proof.
-iIntros "%sub #ctx hon post". iMod unknown_alloc as (γ) "unknown".
+iIntros "#ctx hon post". iMod unknown_alloc as (γ) "unknown".
 rewrite /mksigkey. wp_pure _ credit:"cred".
 iAssert (□ (∀ t, ⌜t ∈ T⌝ → minted t))%I as "#s_T".
   iPoseProof (honest_auth_minted with "hon") as "#?".
@@ -645,7 +632,6 @@ iAssert (secret (TKey Enc t')) with "[unknown]" as "tP"; first do 2?iSplit.
 iAssert (minted (TKey Enc t')) as "s_t'".
   by rewrite minted_TKey minted_tag.
 iMod (honest_insert with "ctx cred hon s_t' tP") as "hon" => //.
-  solve_ndisj.
 wp_pures. wp_bind (tag _ _). iApply wp_tag.
 iApply wp_mkkey. iApply ("post" with "[] hon") => //.
 iApply public_TKey. iRight. rewrite minted_tag. iSplit => //.

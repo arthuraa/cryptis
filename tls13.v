@@ -653,17 +653,16 @@ case: ke => [psk cn|g cn x|psk g cn x] //=.
   by iApply dh_public_TExp; eauto.
 Qed.
 
-Lemma wp_new ke E Φ :
-  ↑cryptisN ⊆ E →
+Lemma wp_new ke Φ :
   cryptis_ctx -∗
   Meth.wf ke -∗
   (∀ ke', ⌜ke = meth_of ke'⌝ -∗
           wf ke' -∗
           term_token (cnonce ke') ⊤ -∗
           Φ (term_of ke')) -∗
-  WP I.new ke @ E {{ Φ }}.
+  WP I.new ke {{ Φ }}.
 Proof.
-iIntros "% #? #p_ke post"; rewrite /I.new; wp_pures.
+iIntros "#? #p_ke post"; rewrite /I.new; wp_pures.
 iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
 - wp_bind (mknonce _); iApply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
   iIntros (cn) "_ #p_cn _ token"; wp_list; wp_term_of_list.
@@ -1174,8 +1173,7 @@ Definition wf ke : iProp :=
 Instance Persistent_wf ke : Persistent (wf ke).
 Proof. case: ke => *; apply _. Qed.
 
-Lemma wp_new N psk g (ke : CShare.t) E Φ :
-  ↑cryptisN ⊆ E →
+Lemma wp_new N psk g (ke : CShare.t) Φ :
   Meth.compatible psk g (CShare.meth_of ke) →
   cryptis_ctx -∗
   minted psk -∗
@@ -1186,9 +1184,9 @@ Lemma wp_new N psk g (ke : CShare.t) E Φ :
       wf ke' -∗
       term_token (snonce ke') ⊤ -∗
       Φ (term_of ke')) -∗
-  WP I.new ke @ E {{ Φ }}.
+  WP I.new ke {{ Φ }}.
 Proof.
-iIntros (sub e_check) "#? #s_psk #p_g #p_ke post"; rewrite /I.new; wp_pures.
+iIntros (e_check) "#? #s_psk #p_g #p_ke post"; rewrite /I.new; wp_pures.
 iApply CShare.wp_case.
 case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
 - subst psk.
@@ -2112,9 +2110,7 @@ iSplitL "hash_tok".
 iApply key_pred_token_drop; last eauto; solve_ndisj.
 Qed.
 
-Lemma wp_tls_client c ke other E Φ :
-  ↑cryptisN ⊆ E →
-  ↑N ⊆ E →
+Lemma wp_tls_client c ke other Φ :
   channel c -∗
   cryptis_ctx -∗
   tls_ctx -∗
@@ -2136,9 +2132,9 @@ Lemma wp_tls_client c ke other E Φ :
       | None => True
       end -∗
       Φ (repr res)) -∗
-  WP tls_client c ke other @ E {{ Φ }}.
+  WP tls_client c ke other {{ Φ }}.
 Proof.
-iIntros (? sub) "#? #? #(k_ctx & c_ctx & s_ctx & ackP & sess_ctx) #p_ke #p_other post".
+iIntros "#? #? #(k_ctx & c_ctx & s_ctx & ackP & sess_ctx) #p_ke #p_other post".
 rewrite /tls_client; wp_pures.
 wp_bind (CShare.I.new _); iApply (CShare.wp_new _) => //.
 iIntros (ke' e) "#p_ke' token"; wp_pures.
@@ -2217,9 +2213,7 @@ Definition tls_server : val := λ: "c" "psk" "g" "verif_key" "other",
   assert: eq_term "ack" "sh" in
   SOME "ke'".
 
-Lemma wp_tls_server c psk g verif_key other E Φ :
-  ↑cryptisN ⊆ E →
-  ↑N ⊆ E →
+Lemma wp_tls_server c psk g verif_key other Φ :
   channel c -∗
   cryptis_ctx -∗
   tls_ctx -∗
@@ -2243,9 +2237,9 @@ Lemma wp_tls_server c psk g verif_key other E Φ :
            ◇ if SShare.has_dh ke then False else public (SShare.psk ke))
       | None => True
       end -∗ Φ (repr (SShare.term_of <$> ke))) -∗
-  WP tls_server c psk g verif_key other @ E {{ Φ }}.
+  WP tls_server c psk g verif_key other {{ Φ }}.
 Proof.
-iIntros (? sub) "#? #? #(k_ctx & c_ctx & s_ctx & ? & sess_ctx)".
+iIntros "#? #? #(k_ctx & c_ctx & s_ctx & ? & sess_ctx)".
 iIntros "#s_psk #p_g #s_sign #s_verif #p_other post".
 rewrite /tls_server; wp_pures.
 wp_bind (recv _); iApply wp_recv => //.

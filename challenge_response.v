@@ -155,9 +155,7 @@ move/Spec.of_list_inj: e_m3 enA enB ekB => -> /= [] -> [] -> [] ->.
 by eauto.
 Qed.
 
-Lemma wp_cr_init c kA kB E Ψ :
-  ↑cryptisN ⊆ E →
-  ↑N ⊆ E →
+Lemma wp_cr_init c kA kB Ψ :
   channel c -∗
   cryptis_ctx -∗
   cr_ctx -∗
@@ -171,11 +169,10 @@ Lemma wp_cr_init c kA kB E Ψ :
          (public (TKey Enc kB) ∨ P Resp nA nB kA kB)
        else True) -∗
       Ψ (repr onB)) -∗
-  WP cr_init c (TKey Enc kA) (TKey Dec kA) (TKey Dec kB) @ E
-     {{ Ψ }}.
+  WP cr_init c (TKey Enc kA) (TKey Dec kA) (TKey Dec kB) {{ Ψ }}.
 Proof.
 rewrite /cr_init.
-iIntros (??) "#? #? #ctx inv #d_kA #d_kB Hpost".
+iIntros "#? #? #ctx inv #d_kA #d_kB Hpost".
 iPoseProof "ctx" as "(? & ? & ?)".
 wp_pures. wp_bind (mknonce _).
 iApply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
@@ -199,7 +196,7 @@ wp_tenc; wp_pures.
 iSpecialize ("inv" $! nA nB).
 iMod (session_begin _ _ _ _ (kA, kB) with "[] [inv] [unreg]")
   as "[#sessA close]"; eauto.
-iAssert (|={E}=> ▷ (public (TKey Enc kB) ∨ P Resp nA nB kA kB))%I
+iAssert (|={⊤}=> ▷ (public (TKey Enc kB) ∨ P Resp nA nB kA kB))%I
     with "[close]" as ">inv".
   iDestruct "sessB" as "[?|sessB]"; eauto.
   by iMod ("close" with "[] sessB") as "close"; eauto.
@@ -215,9 +212,7 @@ wp_bind (send _ _); iApply wp_send => //.
 wp_pures; iApply ("Hpost" $! (Some (nA, nB))); eauto.
 Qed.
 
-Lemma wp_cr_resp c kB E Ψ :
-  ↑cryptisN ⊆ E →
-  ↑N ⊆ E →
+Lemma wp_cr_resp c kB Ψ :
   channel c -∗
   cryptis_ctx -∗
   cr_ctx -∗
@@ -233,9 +228,9 @@ Lemma wp_cr_resp c kB E Ψ :
            (public (TKey Enc kA) ∨ P Init nA nB kA kB)
        else True) -∗
        Ψ (repr ot)) -∗
-  WP cr_resp c (TKey Enc kB) (TKey Dec kB) @ E {{ Ψ }}.
+  WP cr_resp c (TKey Enc kB) (TKey Dec kB) {{ Ψ }}.
 Proof.
-iIntros (??) "#? #? #ctx #HkB inv Hpost".
+iIntros "#? #? #ctx #HkB inv Hpost".
 iPoseProof "ctx" as "(? & ? & ?)".
 rewrite /cr_resp; wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m1) "#Hm1".
@@ -274,10 +269,10 @@ wp_eq_term e; last protocol_failure; subst nB'.
 wp_eq_term e; last protocol_failure; subst pkB'.
 iPoseProof (public_msg3E with "[//] HpkA Hm3") as "{Hm3} Hm3"; eauto.
 wp_if.
-iAssert (|={E}=> ▷ (public (TKey Enc kA) ∨ P Init nA nB kA kB))%I
+iAssert (|={⊤}=> ▷ (public (TKey Enc kA) ∨ P Init nA nB kA kB))%I
     with "[close]" as ">inv".
   iDestruct "Hm3" as "[Hm3 | Hm3]"; eauto.
-  iMod ("close" with "[//] Hm3") as "close". by eauto.
+  iMod ("close" with "[] Hm3") as "close"; by eauto.
 wp_pures; iApply ("Hpost" $! (Some (_, _, _))).
 by iModIntro; iExists _; do ![iSplit=> //].
 Qed.

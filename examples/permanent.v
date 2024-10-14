@@ -45,17 +45,16 @@ Definition client : val := λ: "c" "vk",
 Definition sig_pred l k t : iProp :=
   l ↦□ (t : val).
 
-Lemma wp_server E c l k t :
-  ↑cryptisN ⊆ E →
+Lemma wp_server c l k t :
   cryptis_ctx -∗
   channel c -∗
   enc_pred nroot (sig_pred l) -∗
   minted (TKey Enc k) -∗
   l ↦□ (t : val) -∗
   public t -∗
-  WP server c #l (TKey Enc k) @ E {{ _, True }}.
+  WP server c #l (TKey Enc k) {{ _, True }}.
 Proof.
-iIntros "% #ctx #chan_c #sig_pred #s_sk #Hl #p_t".
+iIntros "#ctx #chan_c #sig_pred #s_sk #Hl #p_t".
 (* Unfold the definition of the server *)
 iLöb as "IH". wp_rec. wp_pures.
 (* Receive request from the network *)
@@ -69,8 +68,7 @@ wp_bind (send _ _). iApply wp_send => //.
 by wp_pures.
 Qed.
 
-Lemma wp_client E T n c l k φ :
-  ↑cryptisN ⊆ E →
+Lemma wp_client T n c l k φ :
   TKey Enc k ∈ T →
   cryptis_ctx -∗
   channel c -∗
@@ -78,9 +76,9 @@ Lemma wp_client E T n c l k φ :
   public (TKey Dec k) -∗
   ●H□{n} T -∗
   (∀ t : term, l ↦□ (t : val) -∗ φ (t : val)) -∗
-  WP client c (TKey Dec k) @ E {{ v, φ v }}.
+  WP client c (TKey Dec k) {{ v, φ v }}.
 Proof.
-iIntros "% %hon_sk #ctx #chan_c #sig_pred #p_vk #hon post".
+iIntros "%hon_sk #ctx #chan_c #sig_pred #p_vk #hon post".
 (* Unfold definition of client *)
 rewrite /client. wp_pures.
 iRevert "post". iApply wp_do_until. iIntros "!> post". wp_pures.
@@ -99,7 +97,6 @@ iPoseProof (public_TEncE with "p_reply sig_pred")
 { (* The signature could have been forged if the key was compromised, but we
      have ruled out this possibility.  *)
   iMod (honest_public with "[//] hon p_sk") as "#contra" => //.
-  { solve_ndisj. }
   wp_pures. by iDestruct "contra" as ">[]". }
 (* Therefore, the invariant must hold. *)
 wp_pures. iModIntro. iRight. iExists reply. iSplit => //.

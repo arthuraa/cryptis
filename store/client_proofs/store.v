@@ -27,17 +27,16 @@ Implicit Types v : val.
 
 Variable N : namespace.
 
-Lemma wp_client_send_store E c kI kR cs t1 t2 t2' :
-  ↑cryptisN ⊆ E →
+Lemma wp_client_send_store c kI kR cs t1 t2 t2' :
   channel c -∗
   store_ctx N -∗
   public t1 -∗
   public t2' -∗ (* FIXME: t1 and t2' shouldn't have to be public already *)
   {{{ client_connected kI kR cs ∗ rem_mapsto kI kR t1 t2 }}}
-    Client.send_store N c (repr cs) t1 t2' @ E
+    Client.send_store N c (repr cs) t1 t2'
   {{{ RET #(); client_connected kI kR cs ∗ rem_mapsto kI kR t1 t2' }}}.
 Proof.
-iIntros "% #chan_c (_ & _ & #? & _) #p_t1 #p_t2' !> %Φ [client mapsto] post".
+iIntros "#chan_c (_ & _ & #? & _) #p_t1 #p_t2' !> %Φ [client mapsto] post".
 iDestruct "client" as "(%n & %beginning & <- & <- & conn & client)".
 iMod (rem_mapsto_update t2' with "client mapsto")
   as "(client & mapsto & #update)".
@@ -55,15 +54,14 @@ iApply ("post" with "[conn client mapsto]").
 iFrame. iExists _, _. by iFrame.
 Qed.
 
-Lemma wp_client_ack_store E c kI kR cs :
-  ↑cryptisN ⊆ E →
+Lemma wp_client_ack_store c kI kR cs :
   channel c -∗
   store_ctx N -∗
   {{{ client_connected kI kR cs }}}
-    Client.ack_store N c (repr cs) @ E
+    Client.ack_store N c (repr cs)
   {{{ RET #(); client_connected kI kR cs }}}.
 Proof.
-iIntros "% #chan_c (_ & _ & _ & #? & _) !> %Φ client post".
+iIntros "#chan_c (_ & _ & _ & #? & _) !> %Φ client post".
 iDestruct "client" as "(%n & %beginning & <- & <- & conn & client)".
 rewrite /Client.ack_store. wp_pures.
 wp_bind (Connection.timestamp _).
@@ -78,17 +76,16 @@ iRight. iModIntro. iExists _. iSplit => //.
 iApply "post". by iExists _, _; iFrame.
 Qed.
 
-Lemma wp_client_store E c kI kR cs t1 t2 t2' :
-  ↑cryptisN ⊆ E →
+Lemma wp_client_store c kI kR cs t1 t2 t2' :
   channel c -∗
   store_ctx N -∗
   public t1 -∗
   public t2' -∗
   {{{ client_connected kI kR cs ∗ rem_mapsto kI kR t1 t2 }}}
-    Client.store N c (repr cs) t1 t2' @ E
+    Client.store N c (repr cs) t1 t2'
   {{{ RET #(); client_connected kI kR cs ∗ rem_mapsto kI kR t1 t2' }}}.
 Proof.
-iIntros "% #chan_c #ctx #p_t1 #p_t2 !> %Φ [client mapsto] post".
+iIntros "#chan_c #ctx #p_t1 #p_t2 !> %Φ [client mapsto] post".
 rewrite /Client.store.
 wp_pures. wp_bind (Client.send_store _ _ _ _ _).
 iApply (wp_client_send_store with "[] [] [] [//] [$client $mapsto] [post]")

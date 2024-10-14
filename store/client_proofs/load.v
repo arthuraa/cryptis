@@ -28,22 +28,20 @@ Implicit Types v : val.
 
 Variable N : namespace.
 
-Lemma wp_client_load E c kI kR cs t1 t2 :
-  ↑N ⊆ E →
-  ↑cryptisN ⊆ E →
+Lemma wp_client_load c kI kR cs t1 t2 :
   channel c -∗
   store_ctx N -∗
   public t1 -∗
   {{{ client_connected kI kR cs ∗
       rem_mapsto kI kR t1 t2 }}}
-    Client.load N c (repr cs) t1 @ E
+    Client.load N c (repr cs) t1
   {{{ t2', RET (repr t2');
       client_connected kI kR cs ∗
       rem_mapsto kI kR t1 t2 ∗
       public t2' ∗
       (session_fail cs ∨ ⌜t2' = t2⌝) }}}.
 Proof.
-iIntros "% % #chan_c #ctx #p_t1 !> %Φ [client mapsto] post".
+iIntros "#chan_c #ctx #p_t1 !> %Φ [client mapsto] post".
 iDestruct "ctx" as "(_ & _ & _ & _ & load & ack_load & _)".
 iDestruct "client" as "(%n & %beginning & <- & <- & conn & client)".
 rewrite /Client.load. wp_pures. wp_bind (Connection.timestamp _).

@@ -27,17 +27,14 @@ Implicit Types v : val.
 
 Variable N : namespace.
 
-Lemma wp_client_close E c kI kR cs :
-  ↑cryptisN ⊆ E →
-  ↑nroot.@"db" ⊆ E →
+Lemma wp_client_close c kI kR cs :
   channel c -∗
   store_ctx N -∗
   {{{ client_connected kI kR cs }}}
-    Client.close N c (repr cs) @ E
-  {{{ RET #();
-      client_disconnected kI kR }}}.
+    Client.close N c (repr cs)
+  {{{ RET #(); client_disconnected kI kR }}}.
 Proof.
-iIntros "% % #chan_c (_ & _ & _ & _ & _ & _ & _ & _ & #close & #ack & _)".
+iIntros "#chan_c (_ & _ & _ & _ & _ & _ & _ & _ & #close & #ack & _)".
 iIntros "!> %Φ client post".
 iDestruct "client" as "(%n & %beginning & <- & <- & conn & client)".
 wp_lam; wp_pures.

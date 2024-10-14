@@ -46,14 +46,13 @@ Definition responder : val := λ: "c" "vkR" "skR",
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
 
-Lemma wp_responder c kR dq n T E :
-  ↑cryptisN ⊆ E →
+Lemma wp_responder c kR dq n T :
   channel c -∗
   cryptis_ctx -∗
   dh_auth_ctx N -∗
   public (TKey Dec kR) -∗
   {{{ ●H{dq|n} T }}}
-    responder c (TKey Dec kR) (TKey Enc kR) @ E
+    responder c (TKey Dec kR) (TKey Enc kR)
   {{{ okS,
       RET (repr ((λ p, pair p.1 (Spec.mkskey p.2)) <$> okS));
       ●H{dq|n} T ∗
@@ -68,7 +67,7 @@ Lemma wp_responder c kR dq n T E :
       else True
  }}}.
 Proof.
-iIntros "% #chan_c #? (#? & #?) #p_vkR !> %Φ hon_auth Hpost".
+iIntros "#chan_c #? (#? & #?) #p_vkR !> %Φ hon_auth Hpost".
 wp_lam. wp_pures. wp_bind (recv _). iApply wp_recv => //.
 iIntros "%m1 #p_m1". wp_pures.
 wp_list_of_term m1; last by protocol_failure.
@@ -151,7 +150,7 @@ iPoseProof (public_TEncE with "p_m3 [//]") as "{p_m3} p_m3".
 rewrite public_of_list /=.
 wp_pures. wp_list. wp_term_of_list.
 wp_pures. wp_tag. rewrite -/kS. pose si := SessInfo kI kR kS n T.
-iAssert ( |={E}=> ●H{dq|n} T ∗
+iAssert ( |={⊤}=> ●H{dq|n} T ∗
   □ (session_fail si ∧
   ⌜¬ (TKey Enc kI ∈ T ∧ TKey Enc kR ∈ T)⌝ ∨
   ∃ a,

@@ -169,16 +169,14 @@ Qed.
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
 
-Lemma wp_pk_auth_resp c kR dq n T E :
-  ↑cryptisN ⊆ E →
-  ↑N ⊆ E →
+Lemma wp_pk_auth_resp c kR dq n T :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
   public (TKey Enc kR) -∗
   {{{ resp_confirm kR ∗ ●H{dq|n} T }}}
     pk_auth_resp N c mk_key_share_impl (mk_session_key_impl Resp)
-      (TKey Dec kR) (TKey Enc kR) @ E
+      (TKey Dec kR) (TKey Enc kR)
   {{{ res, RET (repr res);
       ●H{dq|n} T ∗
       if res is Some (pkI, kS) then
@@ -193,7 +191,7 @@ Lemma wp_pk_auth_resp c kR dq n T E :
                else True
        else True }}}.
 Proof.
-iIntros (??) "#? #ctx #ctx' #e_kR %Ψ !> [confirm hon] Hpost".
+iIntros "#? #ctx #ctx' #e_kR %Ψ !> [confirm hon] Hpost".
 iPoseProof "ctx'" as "(inv & _)".
 rewrite /pk_auth_resp; wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m1) "#Hm1".

@@ -43,15 +43,14 @@ Definition initiator : val := λ: "c" "vkI" "skI" "vkR",
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
 
-Lemma wp_initiator c kI kR dq n T E :
-  ↑cryptisN ⊆ E →
+Lemma wp_initiator c kI kR dq n T :
   channel c -∗
   cryptis_ctx -∗
   dh_auth_ctx N -∗
   public (TKey Dec kI) -∗
   public (TKey Dec kR) -∗
   {{{ ●H{dq|n} T }}}
-    initiator c (TKey Dec kI) (TKey Enc kI) (TKey Dec kR) @ E
+    initiator c (TKey Dec kI) (TKey Enc kI) (TKey Dec kR)
   {{{ okS, RET (repr (Spec.mkskey <$> okS));
       ●H{dq|n} T ∗
       if okS is Some kS then
@@ -63,9 +62,8 @@ Lemma wp_initiator c kI kR dq n T E :
  }}}.
 Proof.
 rewrite /initiator.
-iIntros (?) "#chan_c #ctx #(? & ?) #p_kI #p_kR %Ψ !> hon Hpost".
-iMod (minted_at_list with "[//] hon") as "[hon list]" => //;
-  try solve_ndisj.
+iIntros "#chan_c #ctx #(? & ?) #p_kI #p_kR %Ψ !> hon Hpost".
+iMod (minted_at_list with "[//] hon") as "[hon list]" => //.
 wp_pures.
 iDestruct "list" as "(%M & #m_M & #minted_at_M)".
 wp_bind (mknonce _).
@@ -119,7 +117,7 @@ set secret := Spec.of_list [TExp (TInt 0) [a]; gb; Spec.texp gb a].
 wp_tag.
 set kS := Spec.tag (nroot.@"keys".@"sym") _. wp_pures.
 wp_pures. wp_list. wp_term_of_list. wp_tenc.
-iAssert ( |={E}=>
+iAssert ( |={⊤}=>
     ●H{dq|n} T ∗
     (public_at n (TKey Enc kR) ∧ ⌜TKey Enc kR ∉ T⌝ ∨
     ∃ b,

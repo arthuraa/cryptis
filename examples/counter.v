@@ -68,10 +68,10 @@ Definition sig_pred γ k t : iProp :=
 Definition server_inv γ l : iProp :=
   inv nroot (∃ n : nat, l ↦ #n ∗ own γ (● MaxNat n) ∗ own γ (◯ MaxNat n)).
 
-Lemma wp_newcounter E φ :
+Lemma wp_newcounter φ :
   enc_pred_token ⊤ -∗
   (∀ γ l, enc_pred nroot (sig_pred γ) -∗ server_inv γ l -∗ φ #l) -∗
-  WP newcounter #() @ E {{ v, φ v }}.
+  WP newcounter #() {{ v, φ v }}.
 Proof.
 iIntros "tok post". rewrite /newcounter. wp_pures.
 wp_alloc l as "Hl".
@@ -139,8 +139,7 @@ wp_bind (send _ _). iApply wp_send => //.
 wp_pures. iApply "IH".
 Qed.
 
-Lemma wp_client E T n c γ l k φ :
-  ↑cryptisN ⊆ E →
+Lemma wp_client T n c γ l k φ :
   TKey Enc k ∈ T →
   cryptis_ctx -∗
   channel c -∗
@@ -148,9 +147,9 @@ Lemma wp_client E T n c γ l k φ :
   public (TKey Dec k) -∗
   ●H□{n} T -∗
   (∀ n : nat, own γ (◯ MaxNat n) -∗ φ #n) -∗
-  WP client c (TKey Dec k) @ E {{ v, φ v }}.
+  WP client c (TKey Dec k) {{ v, φ v }}.
 Proof.
-iIntros "% %hon_sk #ctx #chan_c #sig_pred #p_vk #hon post".
+iIntros "%hon_sk #ctx #chan_c #sig_pred #p_vk #hon post".
 (* Unfold definition of client *)
 rewrite /client. wp_pures.
 iRevert "post". iApply wp_do_until. iIntros "!> post". wp_pures.
@@ -169,7 +168,6 @@ iPoseProof (public_TEncE with "p_reply sig_pred")
 { (* The signature could have been forged if the key was compromised, but we
      have ruled out this possibility.  *)
   iMod (honest_public with "[//] hon p_sk") as "#contra" => //.
-  { solve_ndisj. }
   wp_pures. by iDestruct "contra" as ">[]". }
 (* Therefore, the invariant must hold. *)
 iDestruct "replyP" as (n') ">[-> #ownf]".

@@ -70,10 +70,9 @@ iPoseProof (public_TEncE with "p_m2 m2P") as "{p_m2} [p_m2 | p_m2]".
   do !iSplit => //.
 Qed.
 
-Lemma init_finish dq n T E kI kR nI sR :
+Lemma init_finish dq n T kI kR nI sR :
   let sI := mk_key_share nI in
   let kS := mk_session_key Init nI sR in
-  ↑N ⊆ E →
   pk_auth_ctx N -∗
   ●H{dq|n} T -∗
   session_weak' N kI kR nI n T -∗
@@ -82,7 +81,7 @@ Lemma init_finish dq n T E kI kR nI sR :
   secret_of sR kI kR -∗
   resp_accepted N kI kR sI sR -∗
   term_token nI (⊤ ∖ ↑N.@"success") -∗
-  init_confirm kI kR ={E}=∗
+  init_confirm kI kR ={⊤}=∗
   ▷ (●H{dq|n} T ∗
      □ confirmation Init kI kR kS ∗
      session_weak N Init kI kR kS n T ∗
@@ -91,7 +90,7 @@ Lemma init_finish dq n T E kI kR nI sR :
       session_key_meta_token N Init kI kR kS ⊤ ∗
       session_key N kI kR kS n T)).
 Proof.
-iIntros "%sI %kS % (#ctx & _) hon #sess #s_nI #p_nI #p_sR #accepted token confirm".
+iIntros "%sI %kS (#ctx & _) hon #sess #s_nI #p_nI #p_sR #accepted token confirm".
 iMod ("confirm" $! nI sR) as "#confirm".
 iAssert (secret_of sI kI kR) as "p_sI".
   by iApply mk_key_share_secret_of.
@@ -158,9 +157,7 @@ Qed.
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
 
-Lemma wp_pk_auth_init c kI kR dq n T E :
-  ↑cryptisN ⊆ E →
-  ↑N ⊆ E →
+Lemma wp_pk_auth_init c kI kR dq n T :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
@@ -168,7 +165,7 @@ Lemma wp_pk_auth_init c kI kR dq n T E :
   public (TKey Enc kR) -∗
   {{{ init_confirm kI kR ∗ ●H{dq|n} T }}}
     pk_auth_init N c mk_key_share_impl (mk_session_key_impl Init)
-    (TKey Dec kI) (TKey Enc kI) (TKey Enc kR) @ E
+    (TKey Dec kI) (TKey Enc kI) (TKey Enc kR)
   {{{ okS, RET (repr okS);
       ●H{dq|n} T ∗
       if okS is Some kS then
@@ -182,7 +179,7 @@ Lemma wp_pk_auth_init c kI kR dq n T E :
       else True }}}.
 Proof.
 rewrite /pk_auth_init /in_honest bool_decide_decide.
-iIntros (??) "#chan_c #ctx #ctx' #p_kI #p_kR %Ψ !> [confirm hon] Hpost".
+iIntros "#chan_c #ctx #ctx' #p_kI #p_kR %Ψ !> [confirm hon] Hpost".
 wp_pures. wp_bind (mk_key_share_impl _).
 iApply (wp_mk_key_share kI kR) => //.
 iIntros "!> %nI (#s_nI & #p_nI & token)".

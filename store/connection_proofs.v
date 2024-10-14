@@ -23,8 +23,7 @@ Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Lemma wp_connection_connect N E c kI kR dq n T :
-  ↑cryptisN ⊆ E →
+Lemma wp_connection_connect N c kI kR dq n T :
   channel c -∗
   cryptis_ctx -∗
   dh_auth_ctx (N.@"auth") -∗
@@ -32,7 +31,6 @@ Lemma wp_connection_connect N E c kI kR dq n T :
   public (TKey Dec kR) -∗
   {{{ ●H{dq|n} T }}}
     Connection.connect N c (TKey Enc kI) (TKey Dec kI) (TKey Dec kR)
-    @ E
   {{{ cs, RET (repr cs);
     ●H{dq|n} T ∗
     is_conn_state cs 0 ∗
@@ -44,7 +42,7 @@ Lemma wp_connection_connect N E c kI kR dq n T :
     (session_fail cs ∨
        term_token (si_key cs) (↑nroot.@"client")) }}}.
 Proof.
-iIntros "% #? #? #? #? #? % !> hon post".
+iIntros "#? #? #? #? #? % !> hon post".
 wp_lam. wp_pures.
 iCombine "hon post" as "I". iRevert "I".
 iApply wp_do_until. iIntros "!> [hon post]".
@@ -59,15 +57,13 @@ iApply ("post" $! (ConnState si ts Init)). iFrame => /=.
 do !iSplit => //; iDestruct "sess" as "[fail|[sess token]]"; eauto.
 Qed.
 
-Lemma wp_connection_listen N E c kR dq n T :
-  ↑cryptisN ⊆ E →
+Lemma wp_connection_listen N c kR dq n T :
   channel c -∗
   cryptis_ctx -∗
   dh_auth_ctx (N.@"auth") -∗
   public (TKey Dec kR) -∗
   {{{ ●H{dq|n} T }}}
     Connection.listen N c (TKey Enc kR) (TKey Dec kR)
-    @ E
   {{{ cs, RET (TKey Dec (si_init cs), repr cs)%V;
     ●H{dq|n} T ∗
     is_conn_state cs 0 ∗
@@ -77,7 +73,7 @@ Lemma wp_connection_listen N E c kR dq n T :
     ⌜cs_role cs = Resp⌝ ∗
     term_token (si_key cs) (↑nroot.@"server") }}}.
 Proof.
-iIntros "% #? #? #? #? % !> hon post".
+iIntros "#? #? #? #? % !> hon post".
 wp_lam. wp_pures.
 iCombine "hon post" as "I". iRevert "I".
 iApply wp_do_until. iIntros "!> [hon post]".
@@ -93,9 +89,9 @@ iApply ("post" $! (ConnState si ts Resp)). iFrame => /=.
 eauto 10.
 Qed.
 
-Lemma wp_connection_timestamp E cs (n : nat) :
+Lemma wp_connection_timestamp cs (n : nat) :
   {{{ is_conn_state cs n }}}
-    Connection.timestamp (repr cs) @ E
+    Connection.timestamp (repr cs)
   {{{ RET #n; is_conn_state cs n }}}.
 Proof.
 rewrite /Connection.timestamp.
@@ -103,9 +99,9 @@ iIntros "%Φ (Hn & #? & #key) post".
 wp_pures. wp_load. iApply "post". iModIntro. iFrame. by eauto.
 Qed.
 
-Lemma wp_connection_tick E cs (n : nat) :
+Lemma wp_connection_tick cs (n : nat) :
   {{{ is_conn_state cs n }}}
-    Connection.tick (repr cs) @ E
+    Connection.tick (repr cs)
   {{{ RET #(); is_conn_state cs (S n) }}}.
 Proof.
 iIntros "%Ψ (Hn & #? & #key) post".
@@ -115,9 +111,9 @@ rewrite (_ : (n + 1)%Z = (S n)%nat :> Z); last by lia.
 iFrame; eauto.
 Qed.
 
-Lemma wp_connection_session_key E cs n :
+Lemma wp_connection_session_key cs n :
   {{{ is_conn_state cs n }}}
-    Connection.session_key (repr cs) @ E
+    Connection.session_key (repr cs)
   {{{ RET (repr (Spec.mkskey (si_key cs)));
       is_conn_state cs n ∗
       (session_fail cs ∨ session cs) ∗
@@ -129,17 +125,16 @@ iIntros "%Φ (? & #? & #? & #?) post". wp_pures. iApply "post".
 iModIntro. iFrame. iSplit => //; eauto.
 Qed.
 
-Lemma wp_connection_send N E c cs n m φ :
-  ↑cryptisN ⊆ E →
+Lemma wp_connection_send N c cs n m φ :
   channel c -∗
   enc_pred N (session_msg_pred φ) -∗
   public m -∗
   session_fail cs ∨ □ φ cs m -∗
   {{{ is_conn_state cs n }}}
-    Connection.send N c (repr cs) m @ E
+    Connection.send N c (repr cs) m
   {{{ RET #(); is_conn_state cs n }}}.
 Proof.
-iIntros "%sub #chan #pred #public_m #inv !> %Φ conn post".
+iIntros "#chan #pred #public_m #inv !> %Φ conn post".
 wp_lam. wp_pures.
 wp_bind (Connection.session_key _).
 iApply (wp_connection_session_key with "conn").
@@ -162,12 +157,12 @@ iApply wp_send => //.
 by iApply "post".
 Qed.
 
-Lemma wp_connection_select_body φ v (handlers : list val) (Φ : val → iProp) E :
+Lemma wp_connection_select_body φ v (handlers : list val) (Φ : val → iProp) :
   ([∗ list] handler ∈ handlers,
-    (φ -∗ WP (handler : val) v @ E {{ v',
+    (φ -∗ WP (handler : val) v {{ v',
            ⌜v' = NONEV⌝ ∗ φ ∨
            ∃ r, ⌜v' = SOMEV r⌝ ∗ Φ r }}))%I -∗
-  φ -∗ WP Connection.select_body v (repr handlers) @ E {{ v',
+  φ -∗ WP Connection.select_body v (repr handlers) {{ v',
       ⌜v' = NONEV⌝ ∗ φ ∨
       ∃ r, ⌜v' = SOMEV r⌝ ∗ Φ r }}.
 Proof.
@@ -184,15 +179,15 @@ iIntros "%v' [[-> inv] | (%r & -> & post)]"; wp_pures.
 - iRight. iExists r. by iFrame.
 Qed.
 
-Lemma wp_connection_select_body' Φ φ v (handlers : list val) Ψ E :
+Lemma wp_connection_select_body' Φ φ v (handlers : list val) Ψ :
   ([∗ list] handler ∈ handlers,
-     (φ -∗ WP (handler : val) v @ E {{ v,
+     (φ -∗ WP (handler : val) v {{ v,
        ⌜v = NONEV⌝ ∗ φ ∨
        ∃ r, ⌜v = SOMEV r⌝ ∗ Φ r }}))%I -∗
   (φ -∗ Ψ NONEV) -∗
   (∀ r, Φ r -∗ Ψ (SOMEV r)) -∗
   φ -∗
-  WP Connection.select_body v (repr handlers) @ E {{ Ψ }}.
+  WP Connection.select_body v (repr handlers) {{ Ψ }}.
 Proof.
 iIntros "wp post1 post2 inv".
 iApply (wp_wand with "[wp inv] [post1 post2]").
@@ -202,20 +197,20 @@ iApply (wp_wand with "[wp inv] [post1 post2]").
   + by iApply "post2".
 Qed.
 
-Lemma wp_connection_make_handler φ Φ k (handler : namespace * expr) E :
-  WP handler.2 @ E {{ f,
+Lemma wp_connection_make_handler φ Φ k (handler : namespace * expr) :
+  WP handler.2 {{ f,
     □ ∀ m : term,
         public (TEnc k (Spec.tag handler.1 m)) -∗
         φ -∗
-        WP (f : val) m @ E {{ v',
+        WP (f : val) m {{ v',
             ⌜v' = NONEV⌝ ∗ φ ∨
             ∃ r, ⌜v' = SOMEV r⌝ ∗ Φ r }}
   }} -∗
-  WP Connection.make_handler handler @ E {{ f,
+  WP Connection.make_handler handler {{ f,
     □ ∀ m : term,
         public (TEnc k m) -∗
         φ -∗
-        WP (f : val) m @ E {{ v',
+        WP (f : val) m {{ v',
           ⌜v' = NONEV⌝ ∗ φ ∨
           ∃ r, ⌜v' = SOMEV r⌝ ∗ Φ r }}
   }}.
@@ -230,20 +225,20 @@ wp_untag m; wp_pures.
 - by iLeft; iFrame.
 Qed.
 
-Lemma wp_connection_make_handlers φ Φ k (handlers : list (namespace * expr)) E :
+Lemma wp_connection_make_handlers φ Φ k (handlers : list (namespace * expr)) :
   ([∗ list] handler ∈ handlers,
-      WP (handler.2 : expr) @ E {{ f, □ ∀ m : term,
+      WP (handler.2 : expr) {{ f, □ ∀ m : term,
         public (TEnc k (Spec.tag handler.1 m)) -∗
         φ -∗
-        WP (f : val) m @ E {{ v,
+        WP (f : val) m {{ v,
             ⌜v = NONEV⌝ ∗ φ ∨
             ∃ r, ⌜v = SOMEV r⌝ ∗ Φ r }} }})%I -∗
-  WP Connection.make_handlers handlers @ E {{ v',
+  WP Connection.make_handlers handlers {{ v',
     ∃ handlers' : list val, ⌜v' = repr handlers'⌝ ∗
       [∗ list] handler' ∈ handlers', □ ∀ m : term,
         public (TEnc k m) -∗
         φ -∗
-        WP (handler' : val) m @ E {{ v,
+        WP (handler' : val) m {{ v,
           ⌜v = NONEV⌝ ∗ φ ∨
           ∃ r, ⌜v = SOMEV r⌝ ∗ Φ r }}
   }}.
@@ -264,28 +259,27 @@ iExists (f :: handlers'). iSplitR => //=.
 iModIntro. iSplit => //.
 Qed.
 
-Definition handler_correct φ Φ cs handler n E : iProp :=
-  WP handler.2 @ E {{ f,
+Definition handler_correct φ Φ cs handler n : iProp :=
+  WP handler.2 {{ f,
     ∃ Ψ, enc_pred handler.1 (session_msg_pred Ψ) ∗
     □ ∀ m, ▷ public m -∗
            □ ▷ (session_fail cs ∨ Ψ cs m) -∗
            is_conn_state cs n -∗
            φ -∗
-           WP (f : val) m @ E {{ v,
+           WP (f : val) m {{ v,
              ⌜v = NONEV⌝ ∗ is_conn_state cs n ∗ φ ∨
              ∃ r, ⌜v = SOMEV r⌝ ∗ Φ r }}
   }}%I.
 
-Lemma wp_connection_select φ Φ (c : val) cs n (handlers : list (namespace * expr)) E :
-  ↑cryptisN ⊆ E →
+Lemma wp_connection_select φ Φ (c : val) cs n (handlers : list (namespace * expr)) :
   channel c -∗
-  ([∗ list] handler ∈ handlers, handler_correct φ Φ cs handler n E) -∗
+  ([∗ list] handler ∈ handlers, handler_correct φ Φ cs handler n) -∗
   is_conn_state cs n -∗
   φ -∗
-  WP Connection.select c (repr cs) handlers @ E {{ Φ }}.
+  WP Connection.select c (repr cs) handlers {{ Φ }}.
 Proof.
 rewrite Connection.select_eq /Connection.select_def.
-iIntros "%sub #chan_c wps conn inv".
+iIntros "#chan_c wps conn inv".
 wp_bind (Connection.make_handlers _).
 iApply (wp_wand with "[wps]").
 { iApply (wp_connection_make_handlers
@@ -333,8 +327,7 @@ iApply (wp_connection_select_body' Φ with "[] [] [] I").
 - iIntros "%r Hr". iRight. iExists r. by eauto.
 Qed.
 
-Lemma wp_connection_recv N E c cs n (f : val) φ Φ Ψ :
-  ↑cryptisN ⊆ E →
+Lemma wp_connection_recv N c cs n (f : val) φ Φ Ψ :
   channel c -∗
   enc_pred N (session_msg_pred Φ) -∗
   □ (∀ m,
@@ -342,11 +335,11 @@ Lemma wp_connection_recv N E c cs n (f : val) φ Φ Ψ :
       φ -∗
       public m -∗
       □ (session_fail cs ∨ Φ cs m) -∗
-      WP f m @ E {{ v, ⌜v = NONEV⌝ ∗ is_conn_state cs n ∗ φ ∨
-                       ∃ v', ⌜v = SOMEV v'⌝ ∗ Ψ v' }}) -∗
-  is_conn_state cs n -∗ φ -∗ WP Connection.recv N c (repr cs) f @ E {{ Ψ }}.
+      WP f m {{ v, ⌜v = NONEV⌝ ∗ is_conn_state cs n ∗ φ ∨
+                   ∃ v', ⌜v = SOMEV v'⌝ ∗ Ψ v' }}) -∗
+  is_conn_state cs n -∗ φ -∗ WP Connection.recv N c (repr cs) f {{ Ψ }}.
 Proof.
-iIntros "%sub #chan #pred #post conn inv".
+iIntros "#chan #pred #post conn inv".
 wp_lam; wp_pures.
 wp_bind (Connection.session_key _).
 iApply (wp_connection_session_key with "conn").
@@ -374,9 +367,9 @@ iMod (lc_fupd_elim_later with "c p_m") as "{p_m} [#p_m #inv_m]".
 by iApply ("post" with "conn inv").
 Qed.
 
-Lemma wp_connection_close E (c : val) cs n :
+Lemma wp_connection_close (c : val) cs n :
   {{{ is_conn_state cs n }}}
-    Connection.close c (repr cs) @ E
+    Connection.close c (repr cs)
   {{{ RET #(); True }}}.
 Proof.
 iIntros "%Φ (conn & _) post".

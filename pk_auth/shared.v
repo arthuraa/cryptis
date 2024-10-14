@@ -95,19 +95,18 @@ Class PK := {
   confirmation : role → term → term → term → iProp;
 
   mk_key_share_impl : val;
-  wp_mk_key_share : ∀ E kI kR,
-    ↑cryptisN ⊆ E →
+  wp_mk_key_share : ∀ kI kR,
     {{{ cryptis_ctx }}}
-      mk_key_share_impl #() @ E
+      mk_key_share_impl #()
     {{{ (n : term), RET (n, mk_key_share n) : val;
         minted n ∗ □ is_priv_key n kI kR ∗
         term_token n ⊤
     }}};
 
   mk_session_key_impl : role → val;
-  wp_mk_session_key : ∀ E rl (n s : term),
+  wp_mk_session_key : ∀ rl (n s : term),
     {{{ True }}}
-      mk_session_key_impl rl n s @ E
+      mk_session_key_impl rl n s
     {{{ RET mk_session_key rl n s : val; True}}};
 
 }.

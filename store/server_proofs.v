@@ -30,18 +30,16 @@ Implicit Types v : val.
 
 Variable N : namespace.
 
-Lemma wp_server_conn_handler_body E c cs n ldb db :
-  ↑cryptisN ⊆ E →
-  ↑nroot.@"db" ⊆ E →
+Lemma wp_server_conn_handler_body c cs n ldb db :
   channel c -∗
   store_ctx N -∗
   {{{ is_conn_state cs n ∗
       server_connected cs n db ∗
       SAList.is_alist ldb (repr <$> db) }}}
-    Server.conn_handler_body N c (repr cs) ldb @ E
+    Server.conn_handler_body N c (repr cs) ldb
   {{{ v, RET v; server_handler_post cs ldb v }}}.
 Proof.
-iIntros "% % #chan_c #ctx !> %Φ (conn & server & db) post".
+iIntros "#chan_c #ctx !> %Φ (conn & server & db) post".
 wp_lam. wp_pures.
 rewrite !Connection.subst_select /=.
 iApply (wp_wand with "[conn server db] post").

@@ -94,7 +94,7 @@ by rewrite /pk_dh_mk_session_key; iApply minted_texp.
 Qed.
 
 Next Obligation.
-iIntros "%E %kI %kR %sub %Φ #? post". rewrite /pk_dh_mk_key_share_impl.
+iIntros "%kI %kR %Φ #? post". rewrite /pk_dh_mk_key_share_impl.
 wp_pures. wp_bind (mknonce _).
 iApply (wp_mknonce (λ _, False)%I (dh_publ (λ _, corruption kI kR))) => //.
 iIntros "%n #s_n #p_n #dh token". wp_pures.
@@ -107,7 +107,7 @@ iFrame. do !iSplit => //. iModIntro. by do!iSplit => //.
 Qed.
 
 Next Obligation.
-iIntros "%E %rl %n %s %Φ _ post".
+iIntros "%rl %n %s %Φ _ post".
 rewrite /pk_dh_mk_session_key_impl.
 wp_pures. iApply wp_texp. by iApply "post".
 Qed.
@@ -148,16 +148,14 @@ iDestruct (dh_seed_elim2 with "priv_nI p_kS") as "[>p_sI >contra]".
 by iDestruct (dh_seed_elim0 with "priv_nR contra") as ">[]".
 Qed.
 
-Lemma wp_pk_dh_init c kI kR dq n T E :
-  ↑cryptisN ⊆ E →
-  ↑N ⊆ E →
+Lemma wp_pk_dh_init c kI kR dq n T :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
   public (TKey Enc kI) -∗
   public (TKey Enc kR) -∗
   {{{ init_confirm kI kR ∗ ●H{dq|n} T }}}
-    pk_dh_init c (TKey Dec kI) (TKey Enc kI) (TKey Enc kR) @ E
+    pk_dh_init c (TKey Dec kI) (TKey Enc kI) (TKey Enc kR)
   {{{ (okS : option term), RET repr okS;
       ●H{dq|n} T ∗
       if okS is Some kS then
@@ -172,7 +170,7 @@ Lemma wp_pk_dh_init c kI kR dq n T E :
       else True
   }}}.
 Proof.
-iIntros "% % #chan_c #ctx #ctx' #p_ekI #p_ekR %Ψ !> confirm post".
+iIntros "#chan_c #ctx #ctx' #p_ekI #p_ekR %Ψ !> confirm post".
 rewrite /pk_dh_init; wp_pures.
 iApply (wp_pk_auth_init with "chan_c ctx ctx' [] [] [confirm]"); eauto.
 iIntros "!> %okS". case: okS => [kS|]; last first.
@@ -187,15 +185,13 @@ iFrame. do 2!iSplit => //. iModIntro.
 by iApply pk_dh_session_key_elim.
 Qed.
 
-Lemma wp_pk_dh_resp c kR dq n T E :
-  ↑cryptisN ⊆ E →
-  ↑N ⊆ E →
+Lemma wp_pk_dh_resp c kR dq n T :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
   public (TKey Enc kR) -∗
   {{{ resp_confirm kR ∗ ●H{dq|n} T }}}
-    pk_dh_resp c (TKey Dec kR) (TKey Enc kR) @ E
+    pk_dh_resp c (TKey Dec kR) (TKey Enc kR)
   {{{ (res : option (term * term)), RET repr res;
       ●H{dq|n} T ∗
       if res is Some (pkI, kS) then ∃ kI,
@@ -212,7 +208,7 @@ Lemma wp_pk_dh_resp c kR dq n T E :
       else True
   }}}.
 Proof.
-iIntros "% % #chan_c #ctx #ctx' #p_ekR %Ψ !> confirm post".
+iIntros "#chan_c #ctx #ctx' #p_ekR %Ψ !> confirm post".
 rewrite /pk_dh_resp; wp_pures.
 iApply (wp_pk_auth_resp with "chan_c ctx ctx' [] [confirm]"); eauto.
 iIntros "!> %res". case: res => [[pkI kS]|]; last first.

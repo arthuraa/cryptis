@@ -30,9 +30,7 @@ Implicit Types v : val.
 
 Variable N : namespace.
 
-Lemma wp_client_connect E c kI kR dq ph T :
-  ↑cryptisN ⊆ E →
-  ↑nroot.@"db" ⊆ E →
+Lemma wp_client_connect c kI kR dq ph T :
   channel c -∗
   cryptis_ctx -∗
   store_ctx N -∗
@@ -43,14 +41,14 @@ Lemma wp_client_connect E c kI kR dq ph T :
     Client.connect N c
       (TKey Enc kI)
       (TKey Dec kI)
-      (TKey Dec kR) @ E
+      (TKey Dec kR)
   {{{ cs, RET (repr cs);
       ⌜si_time cs = ph⌝ ∗
       ⌜si_hon cs = T⌝ ∗
       ●H{dq|ph} T ∗
       client_connected kI kR cs }}}.
 Proof.
-iIntros "% % #chan_c #ctx (#? & #? & _ & _ & _ & _ & _ & _ & _ & _ & #ctx')".
+iIntros "#chan_c #ctx (#? & #? & _ & _ & _ & _ & _ & _ & _ & _ & #ctx')".
 iIntros "#p_ekI #p_ekR".
 iIntros "!> %Φ [hon client] post".
 rewrite /Client.connect.

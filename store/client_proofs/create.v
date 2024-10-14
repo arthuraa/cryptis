@@ -27,20 +27,19 @@ Implicit Types v : val.
 
 Variable N : namespace.
 
-Lemma wp_client_create E c kI kR cs t1 t2 :
-  ↑cryptisN ⊆ E →
+Lemma wp_client_create c kI kR cs t1 t2 :
   channel c -∗
   store_ctx N -∗
   public t1 -∗
   public t2 -∗
   {{{ client_connected kI kR cs ∗
       rem_free_at kI kR {[t1]} }}}
-    Client.create N c (repr cs) t1 t2 @ E
+    Client.create N c (repr cs) t1 t2
   {{{ (b : bool), RET #b;
       client_connected kI kR cs ∗
       rem_mapsto kI kR t1 t2 }}}.
 Proof.
-iIntros "% #chan_c (_ & _ & _ & _ & _ & _ & #create & #ack & _) #p_t1 #p_t2".
+iIntros "#chan_c (_ & _ & _ & _ & _ & _ & #create & #ack & _) #p_t1 #p_t2".
 iIntros "!> %Φ [client free] post".
 iDestruct "client" as "(%n & %beginning & <- & <- & conn & client)".
 rewrite /Client.create. wp_pures.
