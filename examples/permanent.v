@@ -74,11 +74,12 @@ Lemma wp_client T n c l k φ :
   channel c -∗
   enc_pred nroot (sig_pred l) -∗
   public (TKey Dec k) -∗
-  ●H□{n} T -∗
+  honest n T -∗
+  ●Ph□ n -∗
   (∀ t : term, l ↦□ (t : val) -∗ φ (t : val)) -∗
   WP client c (TKey Dec k) {{ v, φ v }}.
 Proof.
-iIntros "%hon_sk #ctx #chan_c #sig_pred #p_vk #hon post".
+iIntros "%hon_sk #ctx #chan_c #sig_pred #p_vk #hon #phase post".
 (* Unfold definition of client *)
 rewrite /client. wp_pures.
 iRevert "post". iApply wp_do_until. iIntros "!> post". wp_pures.
@@ -96,7 +97,8 @@ iPoseProof (public_TEncE with "p_reply sig_pred")
   as "[[#p_sk _]|(#replyP & #s_reply & _)]".
 { (* The signature could have been forged if the key was compromised, but we
      have ruled out this possibility.  *)
-  iMod (honest_public with "[//] hon p_sk") as "#contra" => //.
+  iPoseProof (secret_atI _ hon_sk with "hon") as "#sec".
+  iMod (honest_public with "[//] sec phase p_sk") as "#contra" => //.
   wp_pures. by iDestruct "contra" as ">[]". }
 (* Therefore, the invariant must hold. *)
 wp_pures. iModIntro. iRight. iExists reply. iSplit => //.
@@ -133,17 +135,19 @@ Lemma wp_game (mkchan : val) :
   {{{ True }}} mkchan #() {{{ v, RET v; channel v }}} -∗
   cryptis_ctx ∗
   enc_pred_token ⊤ ∗
-  ●H{0} ∅ -∗
+  honest 0 ∅ ∗
+  ●Ph 0 -∗
   WP game mkchan {{ v, ⌜v = #true⌝ }}.
 Proof.
-iIntros "#wp_mkchan (#ctx & enc_tok & hon)".
+iIntros "#wp_mkchan (#ctx & enc_tok & #hon & phase)".
 rewrite /game. wp_pures.
 (* Setup attacker *)
 wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP". wp_pures.
 (* Generate server key. Keep the signing key secret. *)
-wp_bind (mksigkey _). iApply (wp_mksigkey with "[//] hon") => //.
-iIntros (k) "#p_vk hon". iMod (honest_auth_discard with "hon") as "#hon".
+wp_bind (mksigkey _). iApply (wp_mksigkey with "[//] hon phase") => //.
+iIntros (k) "#p_vk #hon' phase".
+iMod (phase_auth_discard with "phase") as "#phase".
 (* Publicize verification key. *)
 wp_pures. wp_bind (send _ _). iApply wp_send => //. wp_pures.
 (* Attacker chooses value stored by the server. *)

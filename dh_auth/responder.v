@@ -46,18 +46,18 @@ Definition responder : val := λ: "c" "vkR" "skR",
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
 
-Lemma wp_responder c kR dq n T :
+Lemma wp_responder c kR dq n :
   channel c -∗
   cryptis_ctx -∗
   dh_auth_ctx N -∗
   public (TKey Dec kR) -∗
-  {{{ ●H{dq|n} T }}}
+  {{{ ●Ph{dq} n }}}
     responder c (TKey Dec kR) (TKey Enc kR)
   {{{ okS,
       RET (repr ((λ p, pair p.1 (Spec.mkskey p.2)) <$> okS));
-      ●H{dq|n} T ∗
+      ●Ph{dq} n ∗
       if okS is Some (vkI, kS) then ∃ kI,
-        let si := SessInfo kI kR kS n T in
+        let si := SessInfo kI kR kS n in
         ⌜vkI = TKey Dec kI⌝ ∗
         public vkI ∗
         minted kS ∗
@@ -67,7 +67,7 @@ Lemma wp_responder c kR dq n T :
       else True
  }}}.
 Proof.
-iIntros "#chan_c #? (#? & #?) #p_vkR !> %Φ hon_auth Hpost".
+iIntros "#chan_c #? (#? & #?) #p_vkR !> %Φ phase_auth Hpost".
 wp_lam. wp_pures. wp_bind (recv _). iApply wp_recv => //.
 iIntros "%m1 #p_m1". wp_pures.
 wp_list_of_term m1; last by protocol_failure.
@@ -75,8 +75,8 @@ wp_pures. wp_list_match => [ga vkI -> {m1}|]; last by protocol_failure.
 rewrite public_of_list /=.
 iDestruct "p_m1" as "(p_ga & p_vkI & _)".
 iPoseProof (public_minted with "p_ga") as "m_ga".
-iMod (minted_atI with "[//] hon_auth m_ga")
-  as "[hon_auth #ma_ga]"; first by solve_ndisj.
+iMod (minted_atI with "[//] phase_auth m_ga")
+  as "[phase_auth #ma_ga]"; first by solve_ndisj.
 wp_bind (is_key _). iApply wp_is_key.
 case: Spec.is_keyP => [kt kI -> {vkI}|]; last by protocol_failure.
 wp_pures. case: kt => //=; first by protocol_failure.
@@ -124,13 +124,13 @@ wp_pure _ credit:"H1".
 wp_pure _ credit:"H2".
 wp_bind (mkkeyshare _). iApply wp_mkkeyshare => //.
 iIntros "!> _". wp_pures. wp_list. wp_term_of_list. wp_tenc.
-iPoseProof (honest_auth_frag with "hon_auth") as "#honR".
+iPoseProof (phase_auth_frag with "phase_auth") as "#phaseR".
 wp_pures. wp_bind (send _ _). iApply wp_send => //.
 { iModIntro.
   iApply public_TEncIS => //.
   - by rewrite public_minted !minted_TKey.
   - iModIntro.
-    iExists ga, b, kI, n, T.  by do ![iSplitL => //].
+    iExists ga, b, kI, n.  by do ![iSplitL => //].
   - rewrite minted_of_list /= minted_TExp minted_TInt /=.
     rewrite !public_minted !minted_TKey. by do ![iSplitL => //].
   - iIntros "!> _". rewrite public_of_list /=.
@@ -149,41 +149,33 @@ wp_pure _ credit:"H4".
 iPoseProof (public_TEncE with "p_m3 [//]") as "{p_m3} p_m3".
 rewrite public_of_list /=.
 wp_pures. wp_list. wp_term_of_list.
-wp_pures. wp_tag. rewrite -/kS. pose si := SessInfo kI kR kS n T.
-iAssert ( |={⊤}=> ●H{dq|n} T ∗
-  □ (session_fail si ∧
-  ⌜¬ (TKey Enc kI ∈ T ∧ TKey Enc kR ∈ T)⌝ ∨
+wp_pures. wp_tag. rewrite -/kS. pose si := SessInfo kI kR kS n.
+iAssert ( |={⊤}=> ●Ph{dq} n ∗
+  □ (session_fail si ∨
   ∃ a,
     ⌜ga = TExp (TInt 0) [a]⌝ ∗
     (public a ↔ ▷ □ session_fail si) ∗
     (∀ t, dh_pred a t ↔ ▷ □ dh_auth_pred t)))%I
-  with "[hon_auth H3 H4]"
-  as "{p_m3} > [hon_auth #i_m3]".
+  with "[phase_auth H3 H4]"
+  as "{p_m3} > [phase_auth #i_m3]".
 { iDestruct "p_m3" as "[(p_skI & _) | (#i_m3 & _ & _)]".
-  { iMod (public_atI with "[//] H3 hon_auth p_skI")
-      as "[hon_auth #comp]" => //; try by solve_ndisj.
-    iPoseProof (honest_frag_public_at with "honR comp") as "%" => //.
-    iFrame. iLeft. iIntros "!> !>". iSplit.
-    - by iLeft.
-    - by iIntros "%"; tauto. }
+  { iMod (public_atI with "[//] H3 phase_auth p_skI")
+      as "[phase_auth #comp]" => //; try by solve_ndisj.
+    iFrame. iLeft. iIntros "!> !>". by iLeft. }
   iMod (lc_fupd_elim_later_pers with "H4 i_m3") as "{i_m3} #i_m3".
-  iDestruct "i_m3" as "(%a & %gb' & %kR' & %n' & %T' & %e_m3 &
-                        p_a & pred_a & honI & i_m3)".
+  iDestruct "i_m3" as "(%a & %gb' & %kR' & %n' & %e_m3 &
+                        p_a & pred_a & i_m3)".
   case/Spec.of_list_inj: e_m3 => -> <- <- {ga gb' kR'} in gb gab kS si *.
   iDestruct "i_m3" as "[i_m3 | i_m3]".
   { iPoseProof (public_at_public with "i_m3") as "i_m3'".
-    iMod (public_atI with "[//] H3 hon_auth i_m3'")
-      as "[hon_auth #comp]" => //; try by solve_ndisj.
-    iPoseProof (honest_frag_public_at with "honR comp") as "%" => //.
-    iFrame. iLeft. iIntros "!> !>". iSplit.
-    - by iRight.
-    - by iIntros "%"; tauto. }
+    iMod (public_atI with "[//] H3 phase_auth i_m3'")
+      as "[phase_auth #comp]" => //; try by solve_ndisj.
+    iFrame. iIntros "!> !>". iLeft. by iRight. }
   rewrite Spec.texpA TExpC2 -(Spec.texpA _ [a] b) -/gab -/kS.
   iPoseProof (term_meta_agree with "info i_m3") as "{i_m3} %e".
   case: e => <- {n'}.
-  iPoseProof (honest_frag_agree with "honR honI") as "->".
-  iModIntro. iFrame.
-  iRight. iModIntro. iExists a. by do ![iSplitL => //]. }
+  iFrame. iIntros "!> !>".
+  iRight. iExists a. by do ![iSplitL => //]. }
 iAssert (minted kS) as "#m_kS".
 { iApply minted_tag.
   rewrite minted_of_list /=. do !iSplit => //.
@@ -203,7 +195,7 @@ iAssert (□ (∀ kt, public (TKey kt kS) ↔ ▷ session_fail si))%I
     iApply "p_b". eauto. }
   iIntros "#p_sk".
   iPoseProof (public_sym_keyE with "[//] p_sk") as ">p_kS".
-  iDestruct "i_m3" as "[[? compromise]|i_m3]" => //.
+  iDestruct "i_m3" as "[compromise|i_m3]" => //.
   iDestruct "i_m3" as "(%a & -> & p_a & pred_a)".
   rewrite Spec.texpA TExpC2 in gab kS si *.
   rewrite public_of_list /=.

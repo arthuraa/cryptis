@@ -43,18 +43,18 @@ Definition initiator : val := λ: "c" "vkI" "skI" "vkR",
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
 
-Lemma wp_initiator c kI kR dq n T :
+Lemma wp_initiator c kI kR dq n :
   channel c -∗
   cryptis_ctx -∗
   dh_auth_ctx N -∗
   public (TKey Dec kI) -∗
   public (TKey Dec kR) -∗
-  {{{ ●H{dq|n} T }}}
+  {{{ ●Ph{dq} n }}}
     initiator c (TKey Dec kI) (TKey Enc kI) (TKey Dec kR)
   {{{ okS, RET (repr (Spec.mkskey <$> okS));
-      ●H{dq|n} T ∗
+      ●Ph{dq} n ∗
       if okS is Some kS then
-        let si := SessInfo kI kR kS n T in
+        let si := SessInfo kI kR kS n in
         minted kS ∗
         □ (∀ kt, public (TKey kt kS) ↔ ▷ session_fail si) ∗
         (session_fail si ∨ session si ∗ term_token kS (↑nroot.@"client"))
@@ -62,8 +62,8 @@ Lemma wp_initiator c kI kR dq n T :
  }}}.
 Proof.
 rewrite /initiator.
-iIntros "#chan_c #ctx #(? & ?) #p_kI #p_kR %Ψ !> hon Hpost".
-iMod (minted_at_list with "[//] hon") as "[hon list]" => //.
+iIntros "#chan_c #ctx #(? & ?) #p_kI #p_kR %Ψ !> phase Hpost".
+iMod (minted_at_list with "[//] phase") as "[phase list]" => //.
 wp_pures.
 iDestruct "list" as "(%M & #m_M & #minted_at_M)".
 wp_bind (mknonce _).
@@ -78,7 +78,7 @@ iApply (wp_mknonce_freshN M
   by iIntros "(_ & ? & _)".
 iIntros "%a %fresh #m_a #p_a #a_pred token".
 rewrite big_sepS_singleton.
-iPoseProof (honest_auth_frag with "hon") as "#honI".
+iPoseProof (phase_auth_frag with "phase") as "#phaseI".
 wp_pures. wp_bind (mkkeyshare _). iApply wp_mkkeyshare => //.
 iIntros "!> _". wp_pures. wp_list. wp_term_of_list.
 wp_pure _ credit:"H1".
@@ -118,36 +118,34 @@ wp_tag.
 set kS := Spec.tag (nroot.@"keys".@"sym") _. wp_pures.
 wp_pures. wp_list. wp_term_of_list. wp_tenc.
 iAssert ( |={⊤}=>
-    ●H{dq|n} T ∗
-    (public_at n (TKey Enc kR) ∧ ⌜TKey Enc kR ∉ T⌝ ∨
+    ●Ph{dq} n ∗
+    (public_at n (TKey Enc kR) ∨
     ∃ b,
      ⌜gb = TExp (TInt 0) [b]⌝ ∗
      □ (public b ↔ ▷ □ (public_at n (TKey Enc kI) ∨
                         public_at n (TKey Enc kR))) ∗
      term_meta kS (nroot.@"info") (kI, kR, n) ∗
      term_token kS (↑nroot.@"client")))%I
-  with "[hon token H3]"
-  as "{p_m2} > (hon & p_m2)".
+  with "[phase token H3]"
+  as "{p_m2} > (phase & p_m2)".
 { iPoseProof (public_TEncE with "p_m2 [//]") as "{p_m2} p_m2".
   iDestruct "p_m2" as "[[comp _]  | (#i_m2 & _ & _)]".
-  { iMod (public_atI with "[ctx] [H3] [hon] [comp]")
-      as "[hon #comp']" => //; try solve_ndisj.
-    iPoseProof (honest_frag_public_at with "honI comp'") as "%" => //.
+  { iMod (public_atI with "[ctx] [H3] [phase] [comp]")
+      as "[phase #comp']" => //; try solve_ndisj.
     iFrame. eauto. }
   iMod (lc_fupd_elim_later_pers with "H3 i_m2") as "{i_m2} #i_m2".
   iDestruct "i_m2"
-    as "(%ga & %b & %kI' & %n' & %T' & %e_m2 &
-         m_ga & ? & _ & honR & escrow & pred_b)".
+    as "(%ga & %b & %kI' & %n' & %e_m2 &
+         m_ga & ? & _ & phaseR & escrow & pred_b)".
   case/Spec.of_list_inj: e_m2 => <- -> <- {ga gb kI'} in secret kS *.
-  iPoseProof (honest_auth_frag_agree with "hon honR") as "[% %]".
   case: (decide (n' < n)) => [contra|?].
   { iPoseProof ("minted_at_M" with "[//] m_ga") as "%ga_M".
     move/(_ _ ga_M)/subtermsP: fresh.
     rewrite subterms_TExp /= !elem_of_union => fresh.
     case: fresh.
     right. right. left. apply/subtermsP. apply/STRefl. }
+  iPoseProof (phase_auth_frag_agree with "phase phaseR") as "%".
   have ? : n' = n by lia. subst n'.
-  iPoseProof (honest_frag_agree with "honR honI") as "->".
   iMod (escrowE with "escrow token") as ">token" => //.
   rewrite /kS /secret !Spec.texpA TExpC2. iFrame.
   iModIntro. iRight. iExists b. by do !iSplit => //.
@@ -156,8 +154,8 @@ set m3 := Spec.tenc _ _ _.
 iAssert (public m3) as "#p_m3".
 { iApply (public_TEncIS with "[] [//] [#]") => //.
   - by rewrite !public_minted !minted_TKey.
-  - iExists a, gb, kR, n, T. do 4![iSplitR => //].
-    iDestruct "p_m2" as "[[#? _]|p_m2]"; eauto.
+  - iExists a, gb, kR, n. do 3![iSplitR => //].
+    iDestruct "p_m2" as "[#?|p_m2]"; eauto.
     iDestruct "p_m2" as "(%b & % & #? & #? & _)".
     iRight. by eauto.
   - rewrite minted_of_list /= minted_TExp /= minted_TInt minted_TKey.
@@ -167,7 +165,7 @@ iAssert (public m3) as "#p_m3".
     by do ![iSplit => //]. }
 wp_pures. wp_bind (send _ _). iApply wp_send => //.
 wp_pures. wp_bind (mkskey _). iApply wp_mkskey.
-pose si := SessInfo kI kR kS n T.
+pose si := SessInfo kI kR kS n.
 iAssert (minted kS) as "#?".
 { rewrite minted_tag minted_of_list /= minted_TExp /= minted_TInt.
   do !iSplit => //.
@@ -179,7 +177,7 @@ iAssert (□ (∀ kt, public (TKey kt kS) ↔ ▷ session_fail si))%I as "#sec_s
     rewrite public_of_list /=. do !iSplit => //.
     iApply public_texp => //.
     iApply "p_a". eauto. }
-  iDestruct "p_m2" as "[[#? %comp]|p_m2]".
+  iDestruct "p_m2" as "[#?|p_m2]".
   { iIntros "!> _ !>". by iRight. }
   iDestruct "p_m2" as "(%b & -> & #p_b & #p_m2 & _)".
   iIntros "!> #p_sk".
@@ -193,10 +191,10 @@ iAssert (□ (∀ kt, public (TKey kt kS) ↔ ▷ session_fail si))%I as "#sec_s
   + iPoseProof ("a_pred" with "a_pred'") as ">%contra".
     by have := contra _ _ eq_refl. }
 wp_pures. iApply ("Hpost" $! (Some kS)). iFrame.
-rewrite -[SessInfo _ _ _ _ _]/si.
+rewrite -[SessInfo _ _ _ _]/si.
 iSplitR => //.
 iSplitR => //.
-iDestruct "p_m2" as "[[#fail _]|p_m2]".
+iDestruct "p_m2" as "[#fail|p_m2]".
 { iLeft. by iRight. }
 iDestruct "p_m2" as "(%b & -> & #p_b & #p_m2 & token)".
 iRight. iFrame. iModIntro. by iSplit.

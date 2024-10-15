@@ -362,7 +362,7 @@ Definition conn_ready si n :=
          (term_own (si_init si) (dbCN (si_resp si).@"status")
             (client_view (ClientConnecting (si_key si) n))).
 
-Lemma client_connectingI E kI kR cs dq n T beginning :
+Lemma client_connectingI E kI kR cs dq n beginning :
   ↑cryptisN ⊆ E →
   ↑nroot.@"db" ⊆ E →
   si_init cs = kI →
@@ -371,11 +371,11 @@ Lemma client_connectingI E kI kR cs dq n T beginning :
   cs_role cs = Init →
   cryptis_ctx -∗
   £ 1 ∗ £ 1 -∗
-  ●H{dq|n} T -∗
+  ●Ph{dq} n -∗
   session_fail cs ∨
     term_token (si_key cs) (↑nroot.@"client") -∗
   client_disconnected_int kI kR beginning ={E}=∗
-  ●H{dq|n} T ∗
+  ●Ph{dq} n ∗
   client_connecting_int cs beginning ∗
   (session_fail cs ∨
      term_meta (si_key cs) (nroot.@"client".@"beginning") beginning ∗
@@ -387,7 +387,7 @@ iDestruct "client" as "(client_view & #server & status)".
 iPoseProof (DB.client_view_server_view with "client_view")
   as "(%db & #server_view)".
 iDestruct "status" as "[#fail|status]".
-{ iAssert (|={E}=> ●H{dq|si_time cs} T ∗ session_fail cs)%I
+{ iAssert (|={E}=> ●Ph{dq} si_time cs ∗ session_fail cs)%I
     with "[c1 hon]" as ">[hon #fail']".
   { iDestruct "fail" as "[fail|fail]".
     - iMod (public_atI with "[//] c1 hon fail") as "{fail} [hon fail]".
@@ -557,17 +557,17 @@ Definition server_connecting cs db : iProp :=
    DB.server_view (si_init cs) (dbCN (si_resp cs).@"state") n db ∗
    term_own (si_init cs) (dbCN (si_resp cs).@"status") (server_view (Disconnected n))).
 
-Lemma server_connectingI cs db dq T :
+Lemma server_connectingI cs db dq :
   cryptis_ctx -∗
-  ●H{dq|si_time cs} T -∗
+  ●Ph{dq} si_time cs -∗
   £ 1 -∗
   server_disconnected (si_init cs) (si_resp cs) db ={⊤}=∗
-  ●H{dq|si_time cs} T ∗
+  ●Ph{dq} si_time cs ∗
   server_connecting cs db.
 Proof.
 iIntros "#ctx hon c (#p_db & [#fail | status])"; last first.
 { iModIntro. iFrame. by eauto. }
-iAssert (|={⊤}=> ●H{dq|si_time cs} T ∗ session_fail cs)%I
+iAssert (|={⊤}=> ●Ph{dq} si_time cs ∗ session_fail cs)%I
   with "[hon c]" as "{fail} >[hon fail]".
 { iDestruct "fail" as "[fail|fail]".
   - iMod (public_atI with "[//] c hon fail") as "[hon ?]" => //.

@@ -23,67 +23,65 @@ Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Lemma wp_connection_connect N c kI kR dq n T :
+Lemma wp_connection_connect N c kI kR dq n :
   channel c -∗
   cryptis_ctx -∗
   dh_auth_ctx (N.@"auth") -∗
   public (TKey Dec kI) -∗
   public (TKey Dec kR) -∗
-  {{{ ●H{dq|n} T }}}
+  {{{ ●Ph{dq} n }}}
     Connection.connect N c (TKey Enc kI) (TKey Dec kI) (TKey Dec kR)
   {{{ cs, RET (repr cs);
-    ●H{dq|n} T ∗
+    ●Ph{dq} n ∗
     is_conn_state cs 0 ∗
     ⌜si_init cs = kI⌝ ∗
     ⌜si_resp cs = kR⌝ ∗
     ⌜si_time cs = n⌝ ∗
-    ⌜si_hon cs = T⌝ ∗
     ⌜cs_role cs = Init⌝ ∗
     (session_fail cs ∨
        term_token (si_key cs) (↑nroot.@"client")) }}}.
 Proof.
-iIntros "#? #? #? #? #? % !> hon post".
+iIntros "#? #? #? #? #? % !> phase post".
 wp_lam. wp_pures.
-iCombine "hon post" as "I". iRevert "I".
-iApply wp_do_until. iIntros "!> [hon post]".
+iCombine "phase post" as "I". iRevert "I".
+iApply wp_do_until. iIntros "!> [phase post]".
 wp_pures. wp_bind (initiator _ _ _ _ _).
-iApply (wp_initiator with "[//] [//] [//] [] [] [hon]") => //.
-iIntros "!> %res (hon & resP)".
+iApply (wp_initiator with "[//] [//] [//] [] [] [phase]") => //.
+iIntros "!> %res (phase & resP)".
 case: res=> [kS|] /=; wp_pures; last by iLeft; iFrame; eauto.
-wp_alloc ts as "ts". set  si := SessInfo _ _ _ _ _. wp_pures.
+wp_alloc ts as "ts". set  si := SessInfo _ _ _ _. wp_pures.
 iDestruct "resP" as "(#m_kS & #p_kS & sess)".
 iRight. iModIntro. iExists _.  iSplit => //.
 iApply ("post" $! (ConnState si ts Init)). iFrame => /=.
 do !iSplit => //; iDestruct "sess" as "[fail|[sess token]]"; eauto.
 Qed.
 
-Lemma wp_connection_listen N c kR dq n T :
+Lemma wp_connection_listen N c kR dq n :
   channel c -∗
   cryptis_ctx -∗
   dh_auth_ctx (N.@"auth") -∗
   public (TKey Dec kR) -∗
-  {{{ ●H{dq|n} T }}}
+  {{{ ●Ph{dq} n }}}
     Connection.listen N c (TKey Enc kR) (TKey Dec kR)
   {{{ cs, RET (TKey Dec (si_init cs), repr cs)%V;
-    ●H{dq|n} T ∗
+    ●Ph{dq} n ∗
     is_conn_state cs 0 ∗
     ⌜si_resp cs = kR⌝ ∗
     ⌜si_time cs = n⌝ ∗
-    ⌜si_hon cs = T⌝ ∗
     ⌜cs_role cs = Resp⌝ ∗
     term_token (si_key cs) (↑nroot.@"server") }}}.
 Proof.
-iIntros "#? #? #? #? % !> hon post".
+iIntros "#? #? #? #? % !> phase post".
 wp_lam. wp_pures.
-iCombine "hon post" as "I". iRevert "I".
-iApply wp_do_until. iIntros "!> [hon post]".
+iCombine "phase post" as "I". iRevert "I".
+iApply wp_do_until. iIntros "!> [phase post]".
 wp_pures. wp_bind (responder _ _ _ _).
-iApply (wp_responder with "[//] [//] [] [] [hon]") => //.
-iIntros "!> %res (hon & resP)".
+iApply (wp_responder with "[//] [//] [] [] [phase]") => //.
+iIntros "!> %res (phase & resP)".
 case: res=> [[vkI kS]|] /=; wp_pures; last by iLeft; iFrame; eauto.
 wp_alloc ts as "ts".
 iDestruct "resP" as "(%kI & -> & #p_vkI & #m_kS & #p_kS & #sess & token)".
-set  si := SessInfo _ _ _ _ _. wp_pures.
+set  si := SessInfo _ _ _ _. wp_pures.
 iRight. iModIntro. iExists _.  iSplit => //.
 iApply ("post" $! (ConnState si ts Resp)). iFrame => /=.
 eauto 10.

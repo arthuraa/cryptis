@@ -186,22 +186,22 @@ iModIntro. iRight. iExists _. iSplit => //.
 by iApply "post".
 Qed.
 
-Lemma wp_server_listen c ss dq ph T :
+Lemma wp_server_listen c ss dq ph :
   {{{ cryptis_ctx ∗ channel c ∗ store_ctx N ∗
-      server ss ∗ ●H{dq|ph} T }}}
+      server ss ∗ ●Ph{dq} ph }}}
     Server.listen N c (repr ss)
-  {{{ RET #(); server ss ∗ ●H{dq|ph} T }}}.
+  {{{ RET #(); server ss ∗ ●Ph{dq} ph }}}.
 Proof.
-iIntros "%Φ (#? & #chan_c & #ctx & server & hon) post".
+iIntros "%Φ (#? & #chan_c & #ctx & server & phase) post".
 wp_lam; wp_pures.
 iPoseProof (store_ctx_dh_auth_ctx with "ctx") as "dh".
 wp_bind (Connection.listen _ _ _ _).
 iApply (wp_connection_listen
-         with "[# //] [# //] [# //] [#] [hon]") => //;
+         with "[# //] [# //] [# //] [#] [phase]") => //;
   try by solve_ndisj.
 { by iDestruct "server" as "(% & % & ? & _)". }
 iIntros "!> %cs (hon & resP)". wp_pures.
-iDestruct "resP" as "(conn & %e_kR & <- & <- & %e_rl & token)".
+iDestruct "resP" as "(conn & %e_kR & <- & %e_rl & token)".
 wp_bind (Server.find_client _ _).
 iApply (wp_server_find_client with "[$]").
 iIntros "!> %vdb %γlock %vlock [server #lock]".

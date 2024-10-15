@@ -21,7 +21,7 @@ Definition comp_map_authT : Type :=
 
 Definition comp_map_fragT : Type :=
   option (dfrac * agree nat)
-  * gmap nat (agree (gset term))
+  * gmap nat (gset term)
   * gset (nat * term).
 
 Implicit Types (a : comp_map_authT) (b : comp_map_fragT).
@@ -38,7 +38,7 @@ Definition wf_comp_map a :=
 
 Definition to_comp_map_auth a :=
   let '(n, H, C) := a in
-  (Some (to_agree n), to_agree <$> H, C).
+  (Some (to_agree n), H, C).
 
 Definition to_comp_map_frag b :=
   let '(n, H, C) := b in
@@ -56,7 +56,7 @@ Definition comp_map_view_rel_raw n a b : Prop :=
 Lemma to_comp_map_auth_valid a : ✓ to_comp_map_auth a.
 Proof.
 case: a => [[] ???] /=; split=> //; split=> //=.
-by move=> n; rewrite lookup_fmap; case: lookup=> [?|].
+by move=> n; case: (_ !! n) => //.
 Qed.
 Hint Resolve to_comp_map_auth_valid : core.
 
@@ -145,7 +145,7 @@ Definition comp_map_auth n HC : comp_map :=
 
 Definition comp_map_frag an HC : comp_map :=
   ◯V ((λ '(dq, n), (dq, to_agree n)) <$> an,
-      to_agree <$> HC.1,
+      HC.1,
       HC.2).
 
 Global Typeclasses Opaque comp_map_auth comp_map_frag.
@@ -177,11 +177,31 @@ rewrite !core_id_core !pair_core /= !core_id_core.
 by rewrite /core /= pair_pcore /=.
 Qed.
 
+Lemma comp_map_frag_op an HC1 HC2 :
+  comp_map_frag an (HC1 ⋅ HC2) ≡
+  comp_map_frag an HC1 ⋅ comp_map_frag None HC2.
+Proof.
+rewrite /comp_map_frag /= -view_frag_op -!pair_op.
+by rewrite !ucmra_unit_right_id.
+Qed.
+
+Lemma comp_map_frag_split an HC :
+  comp_map_frag an HC ≡
+  comp_map_frag an HC ⋅ comp_map_frag None HC.
+Proof.
+rewrite {1}(_ : HC = HC ⋅ HC) ?comp_map_frag_op //.
+case: HC => H C.
+rewrite -pair_op gset_op union_idemp_L -(_ : H = H ⋅ H) //.
+rewrite -leibniz_equiv_iff => n.
+rewrite lookup_op; case: (H !! n) => // ?.
+by rewrite -Some_op gset_op union_idemp_L.
+Qed.
+
 Lemma comp_map_frag_split_empty dq n HC :
   ◯CM{dq|n} HC ≡ ◯CM{dq|n} (∅, ∅) ⋅ ◯CM HC.
 Proof.
 rewrite /comp_map_frag /= -view_frag_op -!pair_op.
-by rewrite fmap_empty !ucmra_unit_left_id ucmra_unit_right_id.
+by rewrite !ucmra_unit_left_id ucmra_unit_right_id.
 Qed.
 
 Lemma comp_map_frag_dfrac_op dq1 dq2 n HC :
@@ -189,9 +209,9 @@ Lemma comp_map_frag_dfrac_op dq1 dq2 n HC :
 Proof.
 rewrite /comp_map_frag /= -view_frag_op -!pair_op -Some_op -pair_op.
 rewrite agree_idemp gset_op union_idemp.
-set H := to_agree <$> HC.1; assert (H ⋅ H ≡ H) as -> => //.
+set H := HC.1; assert (H ⋅ H ≡ H) as -> => //.
 move=> m; rewrite lookup_op; case: (H !! m) => [a|] //.
-by rewrite -Some_op agree_idemp.
+by rewrite -Some_op gset_op union_idemp.
 Qed.
 
 Global Instance comp_map_frag_dfrac_is_op dq dq1 dq2 n HC :
@@ -207,18 +227,6 @@ Proof. rewrite /comp_map_frag. apply _. Qed.
 Global Instance comp_map_frag_disc_core_id n HC : CoreId (◯CM□{n} HC).
 Proof. rewrite /comp_map_frag. apply _. Qed.
 
-Lemma comp_map_frag_split dq n HC :
-  ◯CM{dq|n} HC ≡ ◯CM{dq|n} HC ⋅ ◯CM HC.
-Proof.
-case: dq=> [q| |q].
-- by rewrite cmra_pcore_r' // comp_map_frag_pcore.
-- rewrite [in X in _ ≡ X]comp_map_frag_split_empty.
-  by rewrite -(assoc op) -core_id_dup -comp_map_frag_split_empty.
-- change (DfracBoth q) with (DfracDiscarded ⋅ DfracOwn q).
-  rewrite comp_map_frag_dfrac_op -(assoc op).
-  by rewrite (cmra_pcore_r' (◯CM{#q|n} HC)) // comp_map_frag_pcore.
-Qed.
-
 Lemma comp_map_auth_frag_bound_agree an aH aC bdq bn bH bC :
   ✓ (●CM{an} (aH, aC) ⋅ ◯CM{bdq|bn} (bH, bC)) →
   an = bn.
@@ -230,30 +238,33 @@ case: incl_a_b => [[] /= incl_a_b _ _]; move: incl_a_b.
 by rewrite Some_included_total to_agree_included leibniz_equiv_iff => ->.
 Qed.
 
-Lemma comp_map_frag_bound_agree dq1 dq2 n1 n2 :
-  ✓ (◯CM{dq1|n1} (∅, ∅) ⋅ ◯CM{dq2|n2} (∅, ∅)) →
+Lemma comp_map_frag_bound_agree dq1 dq2 n1 n2 HC1 HC2:
+  ✓ (◯CM{dq1|n1} HC1 ⋅ ◯CM{dq2|n2} HC2) →
   n1 = n2.
 Proof.
 rewrite /comp_map_frag /= -view_frag_op -!pair_op -Some_op -pair_op.
-rewrite fmap_empty !ucmra_unit_right_id.
 case/view_frag_valid/(_ 0) => - [[] an aH aC] [wf_a [] val_dq incl_a_b].
 move: incl_a_b; rewrite !pair_included /= Some_included_total.
 case=> [[] incl_n _ _]; apply: to_agree_op_inv_L.
 exact: cmra_valid_included incl_n.
 Qed.
 
-Lemma comp_map_frag_valid_wf dq n H C :
-  ✓ (◯CM{dq|n} (∅, ∅) ⋅ ◯CM (H, C)) →
+Lemma comp_map_frag_valid_wf dq n HC H C :
+  ✓ (◯CM{dq|n} HC ⋅ ◯CM (H, C)) →
   (∀ m, m ∈ dom H → m ≤ n) ∧
   (∀ p, p ∈ C → p.1 ≤ n).
 Proof.
-rewrite -comp_map_frag_split_empty /comp_map_frag /=.
+rewrite -comp_map_frag_op /comp_map_frag /=.
 case/view_frag_valid/(_ 0) => - [[] an aH aC] [wf_a [] val_dq incl_a_b].
 move: incl_a_b; rewrite !pair_included /= Some_included_total.
 rewrite to_agree_included leibniz_equiv_iff; case=> [[] -> incl_H incl_C].
+have {}incl_H: H ≼ aH.
+  trans (HC.1 ⋅ H) => //. exact: cmra_included_r.
+have {}incl_C: C ≼ aC.
+  trans (HC.2 ⋅ C) => //. exact: cmra_included_r.
 case: wf_a => [bound_H [] bound_C ?].
 split.
-- move/dom_included: incl_H; rewrite !dom_fmap => incl_H m /incl_H.
+- move/dom_included: incl_H => incl_H m /incl_H.
   exact: bound_H.
 - move/gset_included: incl_C => incl_C p /incl_C.
   exact: bound_C.
@@ -273,59 +284,34 @@ Lemma comp_map_frag_valid_dis H C :
     t ∉ T.
 Proof.
 rewrite /comp_map_frag /= -view_frag_op -!pair_op.
-rewrite fmap_empty !ucmra_unit_right_id ucmra_unit_left_id.
+rewrite !ucmra_unit_right_id ucmra_unit_left_id.
 case/view_frag_valid/(_ 0) => - [[] an aH aC] [wf_a [] val_dq incl_a_b].
 move: incl_a_b; rewrite !pair_included /=; case=> [[] _ incl_H incl_C].
 case: wf_a => [bound_H [] bound_C dis].
 move=> m T n t H_T t_C.
-move/lookup_included/(_ m): incl_H; rewrite !lookup_fmap H_T /=.
+move/lookup_included/(_ m): incl_H; rewrite H_T /=.
 case aH_m: (aH !! m) => [T'|] /=; last first.
   case/option_included_total => //.
   by case=> [? [] ? [] ? [] ?].
-move/Some_included_total/to_agree_included/leibniz_equiv_iff=> e.
-by apply: dis; rewrite ?e //; move/gset_included: incl_C; apply.
-Qed.
-
-Lemma comp_map_frag_valid_sub H n T :
-  ✓ (◯CM (H, ∅) ⋅ ◯CM ({[n := T]}, ∅)) →
-  ∀ T', H !! n = Some T' → T' = T.
-Proof.
-rewrite /comp_map_frag /= -view_frag_op -!pair_op.
-rewrite map_fmap_singleton !ucmra_unit_right_id.
-case/view_frag_valid/(_ 0) => - [[] an aH aC] [wf_a [] val_dq incl_a_b].
-move: incl_a_b; rewrite !pair_included /=; case=> [[] _ incl_H incl_C].
-case: wf_a => [bound_H [] bound_C dis].
-move=> T' H_n; move/lookup_included/(_ n): incl_H.
-rewrite lookup_op lookup_fmap H_n lookup_singleton /= -Some_op lookup_fmap.
-case aH_n: (aH !! n) => [T''|] /=; last first.
-  by case/option_included=> // - [? [] ? [] ? []].
-move=> incl_H; apply/to_agree_op_inv_L/Some_valid.
-by apply: cmra_valid_included incl_H.
-Qed.
-
-Lemma comp_map_frag_valid_agree n T1 T2 :
-  ✓ (◯CM ({[n := T1]}, ∅) ⋅ ◯CM ({[n := T2]}, ∅)) →
-  T1 = T2.
-Proof.
-move/comp_map_frag_valid_sub/(_ T1).
-rewrite lookup_singleton; exact.
+move/Some_included_total/gset_included => T_T' n_m /T_T' t_T'.
+by apply: dis n_m t_T' => //; move/gset_included: incl_C; apply.
 Qed.
 
 Lemma comp_map_auth_frag_valid_agree n H C m T :
   ✓ (●CM{n} (H, C) ⋅ ◯CM ({[m := T]}, ∅)) →
-  H !! m = Some T.
+  ∃ T', H !! m = Some T' ∧ T ⊆ T'.
 Proof.
 rewrite /comp_map_auth /comp_map_frag /=.
 case/view_both_valid/(_ 0)=> [_ [] _].
 rewrite !pair_included; case=> [[] _ /lookup_included/(_ m) incl_H _].
-rewrite !lookup_fmap lookup_singleton /= in incl_H.
-case/option_included_total: incl_H=> //= - [_ [] ag [] [<-] []].
-by case: (H !! m) => [T'|] //= [<-] /to_agree_included/leibniz_equiv_iff <-.
+rewrite lookup_singleton /= in incl_H.
+case/option_included_total: incl_H=> //= - [_ [] T' [] [<-] [] H_m T_T'].
+by exists T'; split => //; apply/gset_included.
 Qed.
 
-Lemma comp_map_honest_update an aH aC bn bH :
+Lemma comp_map_honest_update an aH aC bn bH HC :
   (∀ m t, (m, t) ∈ aC → t ∉ bH) →
-  ●CM{an} (aH, aC) ⋅ ◯CM{bn} (∅, ∅) ~~>
+  ●CM{an} (aH, aC) ⋅ ◯CM{bn} HC  ~~>
   ●CM{S an} (<[S an := bH]> aH, aC) ⋅ ◯CM{S bn} ({[S bn := bH]}, ∅).
 Proof.
 move=> dis_a_b.
@@ -352,18 +338,20 @@ do ![split => //].
     case: (bf_n) => [[dq n]|] //= in val_dq *.
     by case/exclusive_l: val_dq.
   subst bf_n; rewrite !ucmra_unit_right_id in incl_n *.
-  do ![split => //].
-  rewrite fmap_empty ucmra_unit_left_id lookup_included in incl_H.
-  rewrite map_fmap_singleton fmap_insert lookup_included => n.
+  have {}incl_C : bf_C ≼ aC.
+    trans (HC.2 ⋅ bf_C) => //. exact: cmra_included_r.
+  rewrite ucmra_unit_left_id. do ![split => //].
+  have {}incl_H : bf_H ≼ aH.
+    trans (HC.1 ⋅ bf_H) => //. exact: cmra_included_r.
+  rewrite lookup_included in incl_H.
+  rewrite lookup_included => n.
   rewrite lookup_op.
   case: (decide (n = S an)) => [-> {n}|neq].
-  + rewrite -> lookup_singleton, lookup_insert.
+  + rewrite lookup_singleton lookup_insert.
     move/(_ (S an)): incl_H; case bf_H__an: (bf_H !! S an) => [p|//].
     case/option_included => // - [? [] q [] [->] [] contra ?].
     suff: S an ≤ an by lia.
-    apply: bound_aH.
-    have: S an ∈ dom (to_agree <$> aH) by rewrite elem_of_dom contra.
-    by rewrite dom_fmap.
+    apply: bound_aH. by rewrite elem_of_dom contra.
   + rewrite lookup_singleton_ne // lookup_insert_ne // ucmra_unit_left_id.
     exact: incl_H.
 Qed.
@@ -419,13 +407,13 @@ do ![split => //].
 - by rewrite ucmra_unit_left_id.
 - move: incl_a_b; rewrite !pair_included /=.
   case=> [[] incl_n incl_H incl_C].
-  rewrite ucmra_unit_left_id gset_op fmap_empty ucmra_unit_left_id.
+  rewrite ucmra_unit_left_id gset_op ucmra_unit_left_id.
   split => //.
   rewrite gset_included in incl_C. rewrite gset_included. set_solver.
 Qed.
 
-Lemma comp_map_frag_discard dq n :
-  ◯CM{dq|n} (∅, ∅) ~~> ◯CM□{n} (∅, ∅).
+Lemma comp_map_frag_discard dq n HC :
+  ◯CM{dq|n} HC ~~> ◯CM□{n} HC.
 Proof.
 apply/view_update_frag; case=> [[] an aH aC].
 rewrite /= /comp_map_view_rel_raw => _.

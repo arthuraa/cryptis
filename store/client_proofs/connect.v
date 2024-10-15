@@ -30,13 +30,13 @@ Implicit Types v : val.
 
 Variable N : namespace.
 
-Lemma wp_client_connect c kI kR dq ph T :
+Lemma wp_client_connect c kI kR dq ph :
   channel c -∗
   cryptis_ctx -∗
   store_ctx N -∗
   public (TKey Dec kI) -∗
   public (TKey Dec kR) -∗
-  {{{ ●H{dq|ph} T ∗
+  {{{ ●Ph{dq} ph ∗
       client_disconnected kI kR }}}
     Client.connect N c
       (TKey Enc kI)
@@ -44,21 +44,20 @@ Lemma wp_client_connect c kI kR dq ph T :
       (TKey Dec kR)
   {{{ cs, RET (repr cs);
       ⌜si_time cs = ph⌝ ∗
-      ⌜si_hon cs = T⌝ ∗
-      ●H{dq|ph} T ∗
+      ●Ph{dq} ph ∗
       client_connected kI kR cs }}}.
 Proof.
 iIntros "#chan_c #ctx (#? & #? & _ & _ & _ & _ & _ & _ & _ & _ & #ctx')".
 iIntros "#p_ekI #p_ekR".
-iIntros "!> %Φ [hon client] post".
+iIntros "!> %Φ [phase client] post".
 rewrite /Client.connect.
 wp_pure _ credit:"c1". wp_pure _ credit:"c2". wp_pures.
 wp_bind (Connection.connect _ _ _ _ _).
-iApply (wp_connection_connect with "[//] [//] [//] [] [] [hon]") => //.
-iIntros "!> %cs (hon & conn & % & % & % & % & % & token)".
+iApply (wp_connection_connect with "[//] [//] [//] [] [] [phase]") => //.
+iIntros "!> %cs (phase & conn & % & % & % & % & token)".
 iDestruct "client" as "(%beginning & client)".
-iMod (client_connectingI with "[//] [$] hon token client")
-  as "(hon & client & #ready)" => //; try solve_ndisj.
+iMod (client_connectingI with "[//] [$] phase token client")
+  as "(phase & client & #ready)" => //; try solve_ndisj.
 subst kI kR.
 iPoseProof (init_predI _ _ (TInt 0) with "client []") as "#?".
 { iDestruct "ready" as "[fail|[_ ready]]"; eauto. }
@@ -67,13 +66,13 @@ iApply (wp_connection_send with "[//] [] [] [] conn") => //.
 { by rewrite public_TInt. }
 iIntros "!> conn".
 wp_pures.
-iCombine "hon client post" as "I". iRevert "conn I".
+iCombine "phase client post" as "I". iRevert "conn I".
 iApply (wp_connection_recv with "[//] []") => //.
-iIntros "!> %m conn (hon & client & post) _ #mP".
+iIntros "!> %m conn (phase & client & post) _ #mP".
 iMod (ack_init_predE with "client mP") as "client" => //.
 wp_pures.
 iRight. iExists _. iSplitR => //.
-iApply "post". iFrame. iModIntro. do 2!iSplit => //.
+iApply "post". iFrame. iModIntro. do !iSplit => //.
 by iExists _, _; iFrame.
 Qed.
 

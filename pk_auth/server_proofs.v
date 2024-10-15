@@ -46,19 +46,19 @@ iPoseProof (public_TEncE with "p_m1 m1P") as "{p_m1} [p_m1 | p_m1]".
   do !iSplit => //.
 Qed.
 
-Lemma resp_accept dq n T E kI kR sI nR :
+Lemma resp_accept dq n E kI kR sI nR :
   ↑N ⊆ E →
   let kS := mk_session_key Resp nR sI in
   term_token nR ⊤ -∗
   resp_confirm kR -∗
   pk_auth_ctx N -∗
-  ●H{dq|n} T -∗
+  ●Ph{dq} n -∗
   □ is_priv_key nR kI kR -∗
   init_started N kI kR sI ={E}=∗
-  ●H{dq|n} T ∗
+  ●Ph{dq} n ∗
   □ confirmation Resp kI kR kS ∗
-  session_weak' N kI kR nR n T ∗
-  session_weak N Resp kI kR kS n T ∗
+  session_weak' N kI kR nR n ∗
+  session_weak N Resp kI kR kS n ∗
   resp_waiting N kI kR sI nR ∗
   resp_accepted N kI kR sI (mk_key_share nR).
 Proof.
@@ -69,9 +69,9 @@ iDestruct "token" as "[token_sess token]".
 rewrite (term_token_difference _ (↑N.@"success") (_ ∖ _)) //; last first.
   solve_ndisj.
 iDestruct "token" as "[token_succ _]".
-iMod (session_weak'_set N kI kR nR n T with "[#] token_succ") as "#sess".
-  by iApply honest_auth_frag.
-iDestruct "started" as "[#fail|(%n' & %T' & %nI & -> & #sess' & #p_nI)]".
+iMod (session_weak'_set N kI kR nR n with "[#] token_succ") as "#sess".
+  by iApply phase_auth_frag.
+iDestruct "started" as "[#fail|(%n' & %nI & -> & #sess' & #p_nI)]".
   iModIntro. iFrame. iSplit; eauto. iSplit => //. iSplit.
     by iExists _, _; eauto.
   iSplitL; iLeft => //.
@@ -81,16 +81,16 @@ iMod (session_begin _ Resp nI nR (kI, kR)
        with "ctx [] token_sess") as "[#sessR waiting]".
 - solve_ndisj.
 - rewrite /=. by eauto.
-iAssert (⌜n' ≤ n ∧ (n ≤ n' → T = T')⌝)%I as "#[%n'n %nn']".
+iAssert (⌜n' ≤ n⌝)%I as "%n'n".
   iDestruct "sess'" as "[hon' _]".
-  by iApply (honest_auth_frag_agree with "[hon]").
-iPoseProof (honest_auth_frag with "hon") as "#?".
+  by iApply (phase_auth_frag_agree with "[hon]").
+iPoseProof (phase_auth_frag with "hon") as "#?".
 iFrame. iModIntro. iSplit; eauto. iSplit => //. iSplit.
   rewrite mk_session_keyC in @kS *.
   by iExists _, _; eauto.
 iSplitL.
   iRight. iExists nI. by eauto.
-iRight. iExists n, T, n', T', nI, nR.
+iRight. iExists n, n', nI, nR.
 by do !iSplit => //.
 Qed.
 
@@ -126,25 +126,25 @@ iDestruct (public_TEncE with "p_m3 [//]") as "{p_m3} [p_m3|p_m3]".
 - by iDestruct "p_m3" as "(#p_m3 & _)".
 Qed.
 
-Lemma resp_finish E kI kR sI nR n T :
+Lemma resp_finish E kI kR sI nR n :
   let sR := mk_key_share nR in
   let kS := mk_session_key Resp nR sI in
   ↑N ⊆ E →
   pk_auth_ctx N -∗
-  session_weak' N kI kR nR n T -∗
+  session_weak' N kI kR nR n -∗
   minted nR -∗
   □ is_priv_key nR kI kR -∗
   init_finished N kR sR -∗
   resp_waiting N kI kR sI nR ={E}=∗
   ▷ (corruption kI kR ∨
      session_key_meta_token N Resp kI kR kS ⊤ ∗
-     session_key N kI kR kS n T).
+     session_key N kI kR kS n).
 Proof.
 iIntros "%sR %kS % #(ctx & _) #sess #s_nR #p_nR [#fail|#finished] waiting".
   iPoseProof (mk_key_share_secret_of with "s_nR p_nR") as "p_sR".
   iModIntro. iLeft. by iApply "p_sR".
 iDestruct "finished"
-  as "(%nI' & %nR' & %kI' & %n' & %T' &
+  as "(%nI' & %nR' & %kI' & %n' &
        #sessWI & #sessWR & %e_sR & p_nI & _ & confirmedI & sessI & sessR')".
 move/mk_key_share_inj: e_sR => <- {nR'}.
 iDestruct "waiting" as "[[#fail token]|waiting]".
@@ -153,7 +153,7 @@ iDestruct "waiting" as "(%nI & -> & #sessR & #confirmedR & waiting)".
 move: @kS; rewrite -mk_session_keyC => kS.
 iPoseProof (session_agree with "sessR sessR'") as "{sessR'} %e" => //.
 case: e => <- <-.
-iPoseProof (session_weak'_agree with "sessWR sess") as "(_ & _ & -> & ->)".
+iPoseProof (session_weak'_agree with "sessWR sess") as "(_ & _ & ->)".
 iMod ("waiting" with "[] sessI") as "[_ >finished]".
   solve_ndisj.
 iMod (own_alloc (reservation_map_token ⊤)) as "(%γ & map)".
@@ -174,24 +174,25 @@ Lemma wp_pk_auth_resp c kR dq n T :
   cryptis_ctx -∗
   pk_auth_ctx N -∗
   public (TKey Enc kR) -∗
-  {{{ resp_confirm kR ∗ ●H{dq|n} T }}}
+  honest n T -∗
+  {{{ resp_confirm kR ∗ ●Ph{dq} n }}}
     pk_auth_resp N c mk_key_share_impl (mk_session_key_impl Resp)
       (TKey Dec kR) (TKey Enc kR)
   {{{ res, RET (repr res);
-      ●H{dq|n} T ∗
+      ●Ph{dq} n ∗
       if res is Some (pkI, kS) then
          ∃ kI, ⌜pkI = TKey Enc kI⌝ ∗
                public pkI ∗
                minted kS ∗
                □ confirmation Resp kI kR kS ∗
-               session_weak N Resp kI kR kS n T ∗
+               session_weak N Resp kI kR kS n ∗
                if in_honest kI kR T then
                 session_key_meta_token N Resp kI kR kS ⊤ ∗
-                session_key N kI kR kS n T
+                session_key N kI kR kS n
                else True
        else True }}}.
 Proof.
-iIntros "#? #ctx #ctx' #e_kR %Ψ !> [confirm hon] Hpost".
+iIntros "#? #ctx #ctx' #e_kR #hon %Ψ !> [confirm phase] Hpost".
 iPoseProof "ctx'" as "(inv & _)".
 rewrite /pk_auth_resp; wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m1) "#Hm1".
@@ -207,8 +208,8 @@ iDestruct (public_msg1E with "[] Hm1")
 wp_pures.
 wp_bind (mk_key_share_impl _). iApply (wp_mk_key_share kI kR) => //.
 iIntros "!> %nR (#s_nR & #p_nR & token)".
-iMod (resp_accept with "token confirm [//] hon [//] [//]")
-  as "(hon & #confirmed & #? & #sess_weak & waiting & #accepted)" => //.
+iMod (resp_accept with "token confirm [//] phase [//] [//]")
+  as "(phase & #confirmed & #? & #sess_weak & waiting & #accepted)" => //.
 wp_pures. wp_list; wp_term_of_list. wp_tenc. wp_pures.
 iAssert (secret_of (mk_key_share nR) kI kR) as "p_sR".
   by iApply mk_key_share_secret_of.
@@ -232,11 +233,13 @@ case: (decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T)) => [[kIP kRP]|pub]; las
 iDestruct "session" as "[[#fail|#fail]|session]".
 - wp_bind (mk_session_key_impl _ _ _). iApply wp_mk_session_key => //.
   iIntros "!> _".
-  iMod (honest_public with "ctx hon fail") as "contra"; eauto; try solve_ndisj.
+  iPoseProof (secret_atI _ kIP with "hon") as "sec".
+  iMod (honest_public with "ctx sec phase fail") as "contra"; eauto.
   wp_pures. by iDestruct "contra" as ">[]".
 - wp_bind (mk_session_key_impl _ _ _). iApply wp_mk_session_key => //.
   iIntros "!> _".
-  iMod (honest_public with "ctx hon fail") as "contra"; eauto; try solve_ndisj.
+  iPoseProof (secret_atI _ kRP with "hon") as "sec".
+  iMod (honest_public with "ctx sec phase fail") as "contra"; eauto.
   wp_pures. by iDestruct "contra" as ">[]".
 wp_bind (mk_session_key_impl _ _ _). iApply wp_mk_session_key => //.
 iIntros "!> _". wp_pures.

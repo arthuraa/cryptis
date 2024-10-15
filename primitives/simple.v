@@ -539,17 +539,19 @@ honest_auth. *)
 
 Lemma wp_mkakey n T Ψ :
   cryptis_ctx -∗
-  ●H{n} T -∗
+  honest n T -∗
+  ●Ph n -∗
   (∀ t, public (TKey Enc t) -∗
-        ●H{S n} (T ∪ {[TKey Dec t]}) -∗
+        honest (S n) (T ∪ {[TKey Dec t]}) -∗
+        ●Ph (S n) -∗
         term_token t ⊤ -∗
         Ψ (TKey Enc t, TKey Dec t)%V) -∗
   WP mkakey #() {{ Ψ }}.
 Proof.
-iIntros "#ctx hon post". iMod unknown_alloc as (γ) "unknown".
+iIntros "#ctx #hon phase post". iMod unknown_alloc as (γ) "unknown".
 rewrite /mkakey. wp_pure _ credit:"cred". wp_pures.
 iAssert (□ (∀ t, ⌜t ∈ T⌝ → minted t))%I as "#s_T".
-  iPoseProof (honest_auth_minted with "hon") as "#?".
+  iPoseProof (honest_minted with "hon") as "#?".
   iModIntro. by rewrite -big_sepS_forall.
 wp_bind (mknonce _).
 iApply (wp_mknonce_freshN T (λ _, known γ 1) (λ _, False%I)
@@ -580,7 +582,7 @@ iAssert (secret (TKey Dec t')) with "[unknown]" as "tP"; first do 2?iSplit.
   by iPoseProof (unknown_known with "[$] [//]") as "[]".
 iAssert (minted (TKey Dec t')) as "s_t'".
   by rewrite minted_TKey minted_tag.
-iMod (honest_insert with "ctx cred hon s_t' tP") as "hon" => //.
+iMod (honest_insert with "ctx cred hon phase s_t' tP") as "[#hon' phase]" => //.
 wp_pures. wp_bind (tag _ _). iApply wp_tag.
 iApply wp_mkkey. iApply ("post" with "[] [$] [$]") => //.
 iApply public_TKey. iRight. rewrite minted_tag. iSplit => //.
@@ -591,16 +593,18 @@ Qed.
 
 Lemma wp_mksigkey n T Ψ :
   cryptis_ctx -∗
-  ●H{n} T -∗
+  honest n T -∗
+  ●Ph n -∗
   (∀ t, public (TKey Dec t) -∗
-        ●H{S n} (T ∪ {[TKey Enc t]}) -∗
+        honest (S n) (T ∪ {[TKey Enc t]}) -∗
+        ●Ph (S n) -∗
         Ψ (TKey Enc t, TKey Dec t)%V) -∗
   WP mksigkey #() {{ Ψ }}.
 Proof.
-iIntros "#ctx hon post". iMod unknown_alloc as (γ) "unknown".
+iIntros "#ctx #hon phase post". iMod unknown_alloc as (γ) "unknown".
 rewrite /mksigkey. wp_pure _ credit:"cred".
 iAssert (□ (∀ t, ⌜t ∈ T⌝ → minted t))%I as "#s_T".
-  iPoseProof (honest_auth_minted with "hon") as "#?".
+  iPoseProof (honest_minted with "hon") as "#?".
   iModIntro. by rewrite -big_sepS_forall.
 wp_bind (mknonce _).
 iApply (wp_mknonce_freshN T (λ _, known γ 1) (λ _, False%I)
@@ -631,9 +635,9 @@ iAssert (secret (TKey Enc t')) with "[unknown]" as "tP"; first do 2?iSplit.
   by iPoseProof (unknown_known with "[$] [//]") as "[]".
 iAssert (minted (TKey Enc t')) as "s_t'".
   by rewrite minted_TKey minted_tag.
-iMod (honest_insert with "ctx cred hon s_t' tP") as "hon" => //.
+iMod (honest_insert with "ctx cred hon phase s_t' tP") as "[hon' phase]" => //.
 wp_pures. wp_bind (tag _ _). iApply wp_tag.
-iApply wp_mkkey. iApply ("post" with "[] hon") => //.
+iApply wp_mkkey. iApply ("post" with "[] hon'") => //.
 iApply public_TKey. iRight. rewrite minted_tag. iSplit => //.
 iDestruct "ctx" as "(_ & _ & ? & _)".
 iExists _, _, _; iSplit => //.

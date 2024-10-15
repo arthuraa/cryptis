@@ -16,11 +16,10 @@ Record sess_info := SessInfo {
   si_resp : term;
   si_key  : term;
   si_time : nat;
-  si_hon  : gset term;
 }.
 
 Global Instance sess_info_inhabited : Inhabited sess_info :=
-  populate (SessInfo inhabitant inhabitant inhabitant inhabitant inhabitant).
+  populate (SessInfo inhabitant inhabitant inhabitant inhabitant).
 
 Section Verif.
 
@@ -67,7 +66,7 @@ Definition session_fail si : iProp :=
   public_at (si_time si) (TKey Enc (si_resp si)).
 
 Definition session si : iProp :=
-  ◯H{si_time si} si_hon si ∗
+  ◯Ph (si_time si) ∗
   term_meta (si_key si) (nroot.@"info")
     (si_init si, si_resp si, si_time si).
 
@@ -75,15 +74,14 @@ Lemma session_agree si1 si2 :
   si_key si1 = si_key si2 →
   session si1 -∗ session si2 -∗ ⌜si1 = si2⌝.
 Proof.
-case: si1 si2 => [kI1 kR1 kS n1 T1] [kI2 kR2 _ n2 T2] /= <-.
+case: si1 si2 => [kI1 kR1 kS n1] [kI2 kR2 _ n2] /= <-.
 iIntros "[#hon1 #meta1] [#hon2 #meta2] /=".
 iPoseProof (term_meta_agree with "meta1 meta2") as "%e".
-case: e => <- <- <-.
-by iPoseProof (honest_frag_agree with "hon1 hon2") as "->".
+by case: e => <- <- <-.
 Qed.
 
 Definition msg2_pred kR m2 : iProp :=
-  ∃ ga b kI n T,
+  ∃ ga b kI n,
     let gb := TExp (TInt 0) [b] in
     let gab := Spec.texp ga b in
     let secret := Spec.of_list [ga; gb; gab] in
@@ -93,14 +91,14 @@ Definition msg2_pred kR m2 : iProp :=
     (public b ↔ ▷ □ (public_at n (TKey Enc kI) ∨
                      public_at n (TKey Enc kR))) ∗
     (∀ t, dh_pred b t ↔ ▷ □ dh_auth_pred t) ∗
-    ◯H{n} T ∗
+    ◯Ph n ∗
     escrow cryptisN
       (term_token ga ⊤)
       (term_token kS (↑nroot.@"client")) ∗
     term_meta kS (nroot.@"info") (kI, kR, n).
 
 Definition msg3_pred kI m3 : iProp :=
-  ∃ a gb kR n T,
+  ∃ a gb kR n,
     let ga := TExp (TInt 0) [a] in
     let gab := Spec.texp gb a in
     let secret := Spec.of_list [ga; gb; gab] in
@@ -109,7 +107,6 @@ Definition msg3_pred kI m3 : iProp :=
     (public a ↔ ▷ □ (public_at n (TKey Enc kI) ∨
                      public_at n (TKey Enc kR))) ∗
     (∀ t, dh_pred a t ↔ ▷ □ dh_auth_pred t) ∗
-    ◯H{n} T ∗
     (public_at n (TKey Enc kR) ∨ term_meta kS (nroot.@"info") (kI, kR, n)).
 
 Definition dh_auth_ctx : iProp :=

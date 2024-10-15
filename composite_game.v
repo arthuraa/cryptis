@@ -117,10 +117,11 @@ Lemma wp_environment c nI nR psk :
   public nI -∗
   public nR -∗
   minted psk -∗
-  ●H□{0} ∅ -∗
+  honest 0 ∅ -∗
+  ●Ph□ 0 -∗
   {{{ True }}} environment c nI nR psk {{{ RET #(); True }}}.
 Proof.
-iIntros "#? #? #? #? #? #? #? #? #hon %Φ !> _ post".
+iIntros "#? #? #? #? #? #? #? #? #hon #phase %Φ !> _ post".
 rewrite /environment; wp_pures.
 wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
 wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
@@ -235,11 +236,12 @@ Lemma wp_game (mkchan : val) :
   enc_pred_token ⊤ ∗
   hash_pred_token ⊤ ∗
   key_pred_token (⊤ ∖ ↑nroot.@"keys") ∗
-  ●H{0} ∅ -∗
+  honest 0 ∅ ∗
+  ●Ph 0 -∗
   WP game mkchan {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
-iIntros "#wp_mkchan (#ctx & sess_tok & enc_tok & hash_tok & key_tok & hon)".
-iMod (honest_auth_discard with "hon") as "#hon".
+iIntros "#wp_mkchan (#ctx & sess_tok & enc_tok & hash_tok & key_tok & #hon & phase)".
+iMod (phase_auth_discard with "phase") as "#phase".
 rewrite /game; wp_pures.
 iMod (pk_dh_alloc nslN (λ _ _ _ _, True)%I with "sess_tok enc_tok")
   as "(#pk_dh_ctx & sess_tok & enc_tok)" => //; try solve_ndisj.

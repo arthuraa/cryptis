@@ -62,16 +62,16 @@ Global Instance corrupt_persistent kI kR :
   Persistent (corrupt kI kR).
 Proof. apply _. Qed.
 
-Definition honest k : iProp :=
+Definition secret k : iProp :=
   □ (public (TKey Dec k) ↔ ◇ False).
 
-Global Instance honest_persistent k : Persistent (honest k).
+Global Instance secret_persistent k : Persistent (secret k).
 Proof. apply _. Qed.
 
 Lemma corruptE kI kR :
   corrupt kI kR -∗
-  honest kI -∗
-  honest kR -∗
+  secret kI -∗
+  secret kR -∗
   ◇ False.
 Proof.
 by iIntros "[cor|cor] p_kI p_kR"; [iApply "p_kI"|iApply "p_kR"].
@@ -99,7 +99,7 @@ Definition msg2_pred lR kI m2 : iProp :=
 Definition msg3_pred lI lR kR nR : iProp :=
   ∃ nI kI,
     session lI kI kR (Spec.of_list [nI; nR]) ∧
-    (honest kR -∗ ▷ session lR kI kR (Spec.of_list [nI; nR])).
+    (secret kR -∗ ▷ session lR kI kR (Spec.of_list [nI; nR])).
 
 Definition nsl_ctx lI lR : iProp :=
   enc_pred (N.@"m1") msg1_pred ∧
@@ -193,11 +193,11 @@ Lemma public_msg2E lI lR kI kR nI nR :
   nsl_ctx lI lR -∗
   public (TEnc kI (Spec.tag (N.@"m2") (Spec.of_list [nI; nR; TKey Enc kR]))) -∗
   public (TKey Enc kI) -∗
-  honest kI -∗
+  secret kI -∗
   □ (public nI ↔ ▷ corrupt kI kR) -∗
   ▷ (minted nR ∗
      □ (public nR ↔ ▷ corrupt kI kR) ∗
-     □ (honest kR -∗ ▷ session lR kI kR (Spec.of_list [nI; nR]))).
+     □ (secret kR -∗ ▷ session lR kI kR (Spec.of_list [nI; nR]))).
 Proof.
 iIntros "#? (_ & #? & _) #p_m #p_ekI #honI #s_nI".
 iDestruct (public_TEncE with "p_m [//]") as "[fail|succ]".
@@ -223,7 +223,7 @@ Lemma public_msg3I lI lR kI kR nI nR :
   minted nR -∗
   □ (public nR ↔ ▷ corrupt kI kR) -∗
   session lI kI kR (Spec.of_list [nI; nR]) -∗
-  □ (honest kR -∗ ▷ session lR kI kR (Spec.of_list [nI; nR])) -∗
+  □ (secret kR -∗ ▷ session lR kI kR (Spec.of_list [nI; nR])) -∗
   public (TEnc kR (Spec.tag (N.@"m3") nR)).
 Proof.
 iIntros "#? (_ & _ & #?) #p_ekR #m_nR #s_nR #authI #authR".
@@ -236,10 +236,10 @@ Lemma public_msg3E lI lR kI kR nI nR :
   cryptis_ctx -∗
   nsl_ctx lI lR -∗
   public (TEnc kR (Spec.tag (N.@"m3") nR)) -∗
-  honest kR -∗
+  secret kR -∗
   □ (public nR ↔ ▷ corrupt kI kR) -∗
   session lR kI kR (Spec.of_list [nI; nR]) -∗
-  □ (honest kI -∗ ▷^2 session lI kI kR (Spec.of_list [nI; nR])).
+  □ (secret kI -∗ ▷^2 session lI kI kR (Spec.of_list [nI; nR])).
 Proof.
 iIntros "#? #(_ & _ & ?) #p_m3 #honR #p_nR #sessR".
 iDestruct (public_TEncE with "p_m3 [//]") as "{p_m3} [[_ contra]|succ]".
@@ -261,14 +261,14 @@ Lemma wp_init c lI v0 lR kI kR :
   cryptis_ctx -∗
   nsl_ctx lI lR -∗
   public (TKey Enc kI) -∗
-  honest kI -∗
+  secret kI -∗
   public (TKey Enc kR) -∗
   {{{ lI ↦ v0 }}}
     init c #lI (TKey Dec kI) (TKey Enc kI) (TKey Enc kR)
   {{{ ts, RET (repr ts);
       if ts is Some sk then
         session lI kI kR sk ∗
-        □ (honest kR -∗ ▷ session lR kI kR sk)
+        □ (secret kR -∗ ▷ session lR kI kR sk)
       else True }}}.
 Proof.
 iIntros "#chan_c #ctx #ctx' #p_kI #s_kI #p_kR %Ψ !> Hl Hpost".
@@ -303,7 +303,7 @@ Lemma wp_resp c lI lR v0 kR :
   cryptis_ctx -∗
   nsl_ctx lI lR -∗
   public (TKey Enc kR) -∗
-  honest kR -∗
+  secret kR -∗
   {{{ lR ↦ v0 }}}
     resp c #lR (TKey Dec kR) (TKey Enc kR)
   {{{ ts, RET (repr ts);
@@ -311,7 +311,7 @@ Lemma wp_resp c lI lR v0 kR :
         ⌜pkI = TKey Enc kI⌝ ∗
         public (TKey Enc kI) ∗
         session lR kI kR sk ∗
-        □ (honest kI -∗ ▷^2 session lI kI kR sk)
+        □ (secret kI -∗ ▷^2 session lI kI kR sk)
       else True }}}.
 Proof.
 iIntros "#chan_c #ctx #ctx' #p_kR #honR %Ψ !> Hl Hpost".
@@ -372,22 +372,23 @@ Lemma wp_game (mkchan : val) :
   cryptis_ctx -∗
   enc_pred_token ⊤ -∗
   key_pred_token (⊤ ∖ ↑nroot.@"keys") -∗
-  ●H{0} ∅ -∗
+  honest 0 ∅ -∗
+  ●Ph 0 -∗
   WP game mkchan {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
-iIntros "wp_mkchan #ctx enc_tok key_tok hon"; rewrite /game; wp_pures.
+iIntros "wp_mkchan #ctx enc_tok key_tok hon phase"; rewrite /game; wp_pures.
 wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP".
 wp_pures; wp_bind (mkakey _).
-iApply (wp_mkakey with "[] [hon]"); eauto.
-iIntros "%kI #p_ekI hon tokenI". wp_pures.
-wp_bind (mkakey _). iApply (wp_mkakey with "[] [hon]"); eauto.
-iIntros "%kR #p_ekR hon tokenR". wp_pures.
+iApply (wp_mkakey with "[] [hon] phase"); eauto.
+iIntros "%kI #p_ekI hon phase tokenI". wp_pures.
+wp_bind (mkakey _). iApply (wp_mkakey with "[] [hon] phase"); eauto.
+iIntros "%kR #p_ekR hon phase tokenR". wp_pures.
 set ekI := TKey Enc kI.
 set dkI := TKey Dec kI.
 set ekR := TKey Enc kR.
 set dkR := TKey Dec kR.
-iMod (freeze_honest with "[//] hon") as "[hon sec]" => //.
+iMod (freeze_honest with "[//] hon phase") as "(hon & phase & sec)" => //.
 wp_pures; wp_bind (send _ _); iApply wp_send => //.
 wp_pures; wp_bind (send _ _); iApply wp_send => //.
 wp_pures; wp_bind (recv _); iApply wp_recv => //.
@@ -470,7 +471,7 @@ move=> wp_mkchan.
 apply (adequate_result NotStuck _ _ (λ v _, v = NONEV ∨ v = SOMEV #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
-iMod (cryptisGS_alloc _) as (?) "(#ctx & enc_tok & key_tok & ? & hon)".
+iMod (cryptisGS_alloc _) as (?) "(#ctx & enc_tok & key_tok & ? & hon & phase)".
 iApply (wp_game with "[] ctx [enc_tok] [key_tok] [hon]") => //.
 iApply wp_mkchan.
 Qed.

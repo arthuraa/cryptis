@@ -58,10 +58,11 @@ Lemma wp_game (mkchan : val) :
   enc_pred_token ⊤ -∗
   key_pred_token (⊤ ∖ ↑nroot.@"keys") -∗
   session_token ⊤ -∗
-  ●H{0} ∅ -∗
+  honest 0 ∅ -∗
+  ●Ph 0 -∗
   WP game mkchan {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
-iIntros "wp_mkchan #ctx enc_tok key_tok nown_tok hon"; rewrite /game; wp_pures.
+iIntros "wp_mkchan #ctx enc_tok key_tok nown_tok #hon phase"; rewrite /game; wp_pures.
 iMod (own_alloc (reservation_map_token ⊤)) as (γI) "tokenI".
   apply reservation_map_token_valid.
 iMod (own_alloc (reservation_map_token ⊤)) as (γR) "tokenR".
@@ -73,10 +74,10 @@ iMod (pk_dh_alloc N P with "nown_tok enc_tok") as "[#dh_ctx _]" => //.
 wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP".
 wp_pures; wp_bind (mkakey _).
-iApply (wp_mkakey with "[] [hon]"); eauto.
-iIntros "%kI #p_kI hon _". wp_pures.
-wp_bind (mkakey _). iApply (wp_mkakey with "[] [hon]"); eauto.
-iIntros "%kR #p_kR hon _". wp_pures.
+iApply (wp_mkakey with "[] hon phase"); eauto.
+iIntros "%kI #p_kI #hon' phase _". wp_pures.
+wp_bind (mkakey _). iApply (wp_mkakey with "[] hon' phase"); eauto.
+iIntros "%kR #p_kR #hon'' phase _". wp_pures.
 set pkI := TKey Enc kI.
 set skI := TKey Dec kI.
 set pkR := TKey Enc kR.
@@ -91,38 +92,38 @@ wp_pures.
 case: bool_decide_reflect => [ekt|_]; last by wp_pures; iLeft.
 wp_pures; wp_bind (par _ _).
 case: kt epkR' ekt => // -> _.
-rewrite -Qp.half_half -dfrac_op_own. iDestruct "hon" as "[hon1 hon2]".
+rewrite -Qp.half_half -dfrac_op_own. iDestruct "phase" as "[phase1 phase2]".
 iApply (wp_par (λ v, ∃ a : option term, ⌜v = repr a⌝ ∗ _)%I
                (λ v, ∃ a : option (term * term), ⌜v = repr a⌝ ∗ _)%I
-          with "[tokenI hon1] [tokenR hon2]").
-- iApply (wp_pk_dh_init with "[//] [//] [//] [] [] [tokenI hon1]") => //.
+          with "[tokenI phase1] [tokenR phase2]").
+- iApply (wp_pk_dh_init with "[//] [//] [//] [] [] [] [tokenI phase1]") => //.
   + iFrame. iIntros "%nI %nR".
     set (kS := mk_session_key _ _ _).
     iMod (own_update with "tokenI") as "ownI".
-    * apply (namespace_map_alloc_update _ nroot
-               (to_agree (encode (kI, kR', kS)))) => //.
-      iPoseProof "ownI" as "#ownI".
-      eauto.
-    * eauto.
+    apply (namespace_map_alloc_update _ nroot
+             (to_agree (encode (kI, kR', kS)))) => //.
+    iPoseProof "ownI" as "#ownI".
+    by eauto.
   + iIntros "!> %a H". iExists a. iSplit; first done.
     iApply "H".
-- iApply (wp_pk_dh_resp with "[//] [//] [//] [] [tokenR hon2]") => //.
+- iApply (wp_pk_dh_resp with "[//] [//] [//] [] [] [tokenR phase2]") => //.
   + iFrame. iIntros "%kI' %nI %nR".
     set (kS := mk_session_key _ _ _).
     iMod (own_update with "tokenR") as "ownR".
-    * apply (namespace_map_alloc_update _ nroot
-               (to_agree (encode (kI', kR, kS)))) => //.
-      iPoseProof "ownR" as "#ownR".
-      eauto.
-    * eauto.
+    apply (namespace_map_alloc_update _ nroot
+             (to_agree (encode (kI', kR, kS)))) => //.
+    iPoseProof "ownR" as "#ownR".
+    eauto.
   + iIntros "!> %a H"; iExists a; iSplit; first done.
     iApply "H".
 iIntros (v1 v2) "[H1 H2]".
-iDestruct "H1" as (a) "[-> [hon1 H1]]".
-iDestruct "H2" as (b) "[-> [hon2 H2]]".
-iCombine "hon1 hon2" as "hon". rewrite dfrac_op_own Qp.half_half.
+iDestruct "H1" as (a) "[-> [phase1 H1]]".
+iDestruct "H2" as (b) "[-> [phase2 H2]]".
+iCombine "phase1 phase2" as "phase".
+rewrite dfrac_op_own Qp.half_half.
 iModIntro.
-iMod (compromise_honest with "ctx hon") as "[hon comp]" => //.
+iMod (compromise_honest with "ctx hon'' phase")
+  as "(#hon''' & phase & comp)" => //.
 wp_pures.
 iMod "comp" as "#comp".
 case: a => [gabI|]; wp_pures; last by eauto.
@@ -196,7 +197,7 @@ move=> wp_mkchan.
 apply (adequate_result NotStuck _ _ (λ v _, v = NONEV ∨ v = SOMEV #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
-iMod (cryptisGS_alloc _) as (?) "(#ctx & enc_tok & key_tok & ? & hon)".
+iMod (cryptisGS_alloc _) as (?) "(#ctx & enc_tok & key_tok & ? & hon & phase)".
 iMod (sessionGS_alloc _) as (?) "nown_tok".
 iApply (wp_game with "[] ctx [enc_tok] [key_tok] [nown_tok] [hon]") => //.
 iApply wp_mkchan.

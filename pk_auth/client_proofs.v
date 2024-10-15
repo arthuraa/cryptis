@@ -25,10 +25,10 @@ Context `{!PK}.
 (* TODO: Avoid exposing these instances. *)
 Local Existing Instances cryptis_inG cryptisGpreS_maps.
 
-Lemma public_msg1I n T kI kR nI :
+Lemma public_msg1I n kI kR nI :
   let sI := mk_key_share nI in
   pk_auth_ctx N -∗
-  session_weak' N kI kR nI n T -∗
+  session_weak' N kI kR nI n -∗
   minted nI -∗
   □ is_priv_key nI kI kR -∗
   public (TKey Enc kI) -∗
@@ -40,7 +40,7 @@ iPoseProof (mk_key_share_secret_of with "s_nI p_nI") as "p_sI".
 iApply public_TEncIS; eauto.
 - iModIntro. iExists (mk_key_share nI), kI. do !iSplit => //.
   + iIntros "!> #?". iApply "p_sI". by eauto.
-  + iRight. by iExists n, T, nI; eauto.
+  + iRight. by iExists n, nI; eauto.
 - rewrite minted_of_list /= mk_key_share_minted. by eauto.
 iIntros "!> #p_dkR". rewrite public_of_list /=. do !iSplit => //.
 iApply "p_sI". iModIntro. by iRight.
@@ -70,25 +70,25 @@ iPoseProof (public_TEncE with "p_m2 m2P") as "{p_m2} [p_m2 | p_m2]".
   do !iSplit => //.
 Qed.
 
-Lemma init_finish dq n T kI kR nI sR :
+Lemma init_finish dq n kI kR nI sR :
   let sI := mk_key_share nI in
   let kS := mk_session_key Init nI sR in
   pk_auth_ctx N -∗
-  ●H{dq|n} T -∗
-  session_weak' N kI kR nI n T -∗
+  ●Ph{dq} n -∗
+  session_weak' N kI kR nI n -∗
   minted nI -∗
   □ is_priv_key nI kI kR -∗
   secret_of sR kI kR -∗
   resp_accepted N kI kR sI sR -∗
   term_token nI (⊤ ∖ ↑N.@"success") -∗
   init_confirm kI kR ={⊤}=∗
-  ▷ (●H{dq|n} T ∗
+  ▷ (●Ph{dq} n ∗
      □ confirmation Init kI kR kS ∗
-     session_weak N Init kI kR kS n T ∗
+     session_weak N Init kI kR kS n ∗
      init_finished N kR sR ∗
      (corruption kI kR ∨
       session_key_meta_token N Init kI kR kS ⊤ ∗
-      session_key N kI kR kS n T)).
+      session_key N kI kR kS n)).
 Proof.
 iIntros "%sI %kS (#ctx & _) hon #sess #s_nI #p_nI #p_sR #accepted token confirm".
 iMod ("confirm" $! nI sR) as "#confirm".
@@ -114,15 +114,14 @@ iDestruct "accepted" as "[fail|accepted]".
   iSplit; eauto.
   iLeft. iApply "p_sR". by iApply "p_sI".
 iDestruct "accepted"
-  as "(%n' & %T' & %n'' & %T'' & %nI' & %nR & %n''n' &
+  as "(%n' & %n'' & %nI' & %nR & %n''n' &
        #sess' & #sess'' &
        %e_sI & -> & #p_nR & #accepted & confirmed)".
 move/mk_key_share_inj: e_sI => <-.
-iDestruct (session_weak'_agree with "sess' sess") as "(_ & _ & -> & ->)".
-iAssert (⌜n' = n ∧ T = T'⌝)%I as "#[-> <-]".
+iDestruct (session_weak'_agree with "sess' sess") as "(_ & _ & ->)".
+iAssert (⌜n' = n⌝)%I as "#->".
   iDestruct "sess''" as "[hon' _]".
-  iPoseProof (honest_auth_frag_agree with "hon hon'") as "#[%n'n %T'T]".
-  iSplit; last by eauto.
+  iPoseProof (phase_auth_frag_agree with "hon hon'") as "%n'n".
   iPureIntro; lia.
 iMod (session_begin _ Init nI nR (kI, kR) with "ctx [token_resp] token_sess")
   as "[#sessI _]".
@@ -135,7 +134,7 @@ iMod (term_meta_set (TK.@Init) γ with "token_init") as "#meta" => //.
 iModIntro. iModIntro. iFrame. iSplit; eauto. iSplitR.
   by iExists _, _; eauto.
 iSplitR.
-  iRight. iExists nI, nR, kI, n, T. do !iSplit => //; by eauto.
+  iRight. iExists nI, nR, kI, n. do !iSplit => //; by eauto.
 iRight. iSplitL.
   iExists nI, nR, γ; by eauto.
 iExists nI, nR; do !iSplit => //; eauto.
@@ -163,30 +162,31 @@ Lemma wp_pk_auth_init c kI kR dq n T :
   pk_auth_ctx N -∗
   public (TKey Enc kI) -∗
   public (TKey Enc kR) -∗
-  {{{ init_confirm kI kR ∗ ●H{dq|n} T }}}
+  honest n T -∗
+  {{{ init_confirm kI kR ∗ ●Ph{dq} n }}}
     pk_auth_init N c mk_key_share_impl (mk_session_key_impl Init)
     (TKey Dec kI) (TKey Enc kI) (TKey Enc kR)
   {{{ okS, RET (repr okS);
-      ●H{dq|n} T ∗
+      ●Ph{dq} n ∗
       if okS is Some kS then
         minted kS ∗
         □ confirmation Init kI kR kS ∗
-        session_weak N Init kI kR kS n T ∗
+        session_weak N Init kI kR kS n ∗
         if in_honest kI kR T then
           session_key_meta_token N Init kI kR kS ⊤ ∗
-          session_key N kI kR kS n T
+          session_key N kI kR kS n
         else True
       else True }}}.
 Proof.
 rewrite /pk_auth_init /in_honest bool_decide_decide.
-iIntros "#chan_c #ctx #ctx' #p_kI #p_kR %Ψ !> [confirm hon] Hpost".
+iIntros "#chan_c #ctx #ctx' #p_kI #p_kR #hon %Ψ !> [confirm phase] Hpost".
 wp_pures. wp_bind (mk_key_share_impl _).
 iApply (wp_mk_key_share kI kR) => //.
 iIntros "!> %nI (#s_nI & #p_nI & token)".
 rewrite (term_token_difference _ (↑N.@"success")); eauto.
 iDestruct "token" as "[token_succ token]".
-iMod (session_weak'_set N kI kR _ _ _ with "[#] token_succ") as "#sess".
-  by iApply honest_auth_frag.
+iMod (session_weak'_set N kI kR _ _ with "[#] token_succ") as "#sess".
+  by iApply phase_auth_frag.
 wp_pures.
 iPoseProof (mk_key_share_secret_of with "s_nI p_nI") as "p_sI".
 wp_list. wp_term_of_list. wp_tenc => /=. wp_pures.
@@ -201,8 +201,8 @@ wp_eq_term e; last protocol_failure; subst pkR'.
 iPoseProof (public_msg2E with "[//] [//] [//]")
   as "{p_m2} (s_sR & p_sR & accepted)".
 wp_pures.
-iMod (init_finish with "ctx' hon sess s_nI p_nI p_sR accepted token confirm")
-  as "(hon & #confirmed & #sess_weak & #finished & session)"; eauto.
+iMod (init_finish with "ctx' phase sess s_nI p_nI p_sR accepted token confirm")
+  as "(phase & #confirmed & #sess_weak & #finished & session)"; eauto.
 wp_bind (mk_session_key_impl _ _ _). iApply wp_mk_session_key => //.
 iIntros "!> _". wp_pures. wp_tenc. wp_pures. wp_bind (send _ _).
 iApply wp_send => //.
@@ -211,9 +211,11 @@ case: decide => [[kIP kRP]|_]; last first.
   wp_pures. iApply ("Hpost" $! (Some (mk_session_key Init nI sR))).
   iFrame. iModIntro. iSplit; eauto. by iApply mk_session_key_minted.
 iDestruct "session" as "[[#fail|#fail]|session]".
-- iMod (honest_public with "ctx hon fail") as "#contra"; eauto; try solve_ndisj.
+- iPoseProof (secret_atI _ kIP with "hon") as "sec".
+  iMod (honest_public with "ctx sec phase fail") as "#contra" => //.
   wp_pures. iDestruct "contra" as ">[]".
-- iMod (honest_public with "ctx hon fail") as "#contra"; eauto; try solve_ndisj.
+- iPoseProof (secret_atI _ kRP with "hon") as "sec".
+  iMod (honest_public with "ctx sec phase fail") as "#contra" => //.
   wp_pures. iDestruct "contra" as ">[]".
 wp_pures. iApply ("Hpost" $! (Some (mk_session_key Init nI sR))).
 iFrame. iModIntro. iSplit; eauto. by iApply mk_session_key_minted.

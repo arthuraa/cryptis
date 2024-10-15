@@ -129,49 +129,49 @@ Definition session_ress rl nI nR ks : iProp :=
   if rl is Init then term_token nI (↑N.@"token".@Resp)
   else True.
 
-Definition session_weak' kI kR t ts T : iProp :=
-  ◯H{ts} T ∧
-  term_meta t (N.@"success") (kI, kR, ts, T).
+Definition session_weak' kI kR t ts : iProp :=
+  ◯Ph ts ∧
+  term_meta t (N.@"success") (kI, kR, ts).
 
 #[global]
-Instance session_weak'_persistent kI kR t ts T :
-  Persistent (session_weak' kI kR t ts T).
+Instance session_weak'_persistent kI kR t ts :
+  Persistent (session_weak' kI kR t ts).
 Proof. apply _. Qed.
 
-Lemma session_weak'_agree kI1 kI2 kR1 kR2 t ts1 ts2 T1 T2 :
-  session_weak' kI1 kR1 t ts1 T1 -∗
-  session_weak' kI2 kR2 t ts2 T2 -∗
-  ⌜kI1 = kI2 ∧ kR1 = kR2 ∧ ts1 = ts2 ∧ T1 = T2⌝.
+Lemma session_weak'_agree kI1 kI2 kR1 kR2 t ts1 ts2 :
+  session_weak' kI1 kR1 t ts1 -∗
+  session_weak' kI2 kR2 t ts2 -∗
+  ⌜kI1 = kI2 ∧ kR1 = kR2 ∧ ts1 = ts2⌝.
 Proof.
 iIntros "(#hon1 & #meta1) (#hon2 & #meta2)".
 iPoseProof (term_meta_agree with "meta1 meta2") as "%e".
-case: e => -> -> -> ->. iSplit => //.
+case: e => -> -> ->. iSplit => //.
 Qed.
 
 Definition init_started kI kR sI : iProp :=
   public sI ∨
-  ∃ n T nI,
+  ∃ n nI,
     ⌜sI = mk_key_share nI⌝ ∗
-    session_weak' kI kR nI n T ∗
+    session_weak' kI kR nI n ∗
     □ is_priv_key nI kI kR.
 
-Lemma session_weak'_set kI kR t ts T :
-  ◯H{ts} T -∗
+Lemma session_weak'_set kI kR t ts :
+  ◯Ph ts -∗
   term_token t (↑N.@"success") ==∗
-  session_weak' kI kR t ts T.
+  session_weak' kI kR t ts.
 Proof.
 iIntros "#hon token".
 iSplitR => //.
 by iApply term_meta_set.
 Qed.
 
-Definition session_weak rl kI kR kS ts T : iProp :=
+Definition session_weak rl kI kR kS ts : iProp :=
   ∃ n s, ⌜kS = mk_session_key rl n s⌝ ∗
-  session_weak' kI kR n ts T.
+  session_weak' kI kR n ts.
 
 #[global]
-Instance session_weak_persistent rl kI kR kS ts T :
-  Persistent (session_weak rl kI kR kS ts T).
+Instance session_weak_persistent rl kI kR kS ts :
+  Persistent (session_weak rl kI kR kS ts).
 Proof. apply _. Qed.
 
 Definition msg1_pred kR m1 : iProp :=
@@ -183,10 +183,10 @@ Definition msg1_pred kR m1 : iProp :=
 
 Definition resp_accepted kI kR sI sR : iProp :=
   public sI ∨
-  ∃ n T n' T' nI nR,
+  ∃ n n' nI nR,
     ⌜n' ≤ n⌝ ∧
-    session_weak' kI kR nI n' T' ∧
-    session_weak' kI kR nR n  T  ∧
+    session_weak' kI kR nI n' ∧
+    session_weak' kI kR nR n  ∧
     ⌜sI = mk_key_share nI⌝ ∧
     ⌜sR = mk_key_share nR⌝ ∧
     □ is_priv_key nR kI kR ∧
@@ -209,9 +209,9 @@ Definition msg2_pred kI m2 : iProp :=
 
 Definition init_finished kR sR : iProp :=
   public sR ∨
-  ∃ nI nR kI n T,
-    session_weak' kI kR nI n T ∧
-    session_weak' kI kR nR n T ∧
+  ∃ nI nR kI n,
+    session_weak' kI kR nI n ∧
+    session_weak' kI kR nR n ∧
     ⌜sR = mk_key_share nR⌝ ∧
     □ is_priv_key nI kI kR ∧
     □ is_priv_key nR kI kR ∧
@@ -252,11 +252,11 @@ iIntros "sessI sessR".
 by iDestruct (session_role_agree with "sessI sessR") as "[]".
 Qed.
 
-Definition session_key kI kR kS n T : iProp :=
+Definition session_key kI kR kS n : iProp :=
   ∃ nI nR,
     ⌜kS = mk_session_key Init nI (mk_key_share nR)⌝ ∗
-    session_weak' kI kR nI n T ∗
-    session_weak' kI kR nR n T ∗
+    session_weak' kI kR nI n ∗
+    session_weak' kI kR nR n ∗
     □ is_priv_key nI kI kR ∗
     □ is_priv_key nR kI kR ∗
     □ confirmation Init kI kR kS ∧
@@ -264,14 +264,14 @@ Definition session_key kI kR kS n T : iProp :=
     session (N.@"session") Init nI nR (kI, kR) ∗
     session (N.@"session") Resp nI nR (kI, kR).
 
-Global Instance session_key_persistent kI kR kS n T:
-  Persistent (session_key kI kR kS n T).
+Global Instance session_key_persistent kI kR kS n :
+  Persistent (session_key kI kR kS n).
 Proof. apply _. Qed.
 
-Lemma session_weak_session_key rl kI1 kI2 kR1 kR2 kS n1 n2 T1 T2 :
-  session_weak rl kI1 kR1 kS n1 T1 -∗
-  session_key kI2 kR2 kS n2 T2 -∗
-  ⌜kI1 = kI2 ∧ kR1 = kR2 ∧ n1 = n2 ∧ T1 = T2⌝.
+Lemma session_weak_session_key rl kI1 kI2 kR1 kR2 kS n1 n2 :
+  session_weak rl kI1 kR1 kS n1 -∗
+  session_key kI2 kR2 kS n2 -∗
+  ⌜kI1 = kI2 ∧ kR1 = kR2 ∧ n1 = n2⌝.
 Proof.
 iIntros "(%t1 & %t2 & %e1 & #sess1)".
 iIntros "(%nI & %nR & %e2 & #sessI & #sessR & _)".
@@ -281,8 +281,8 @@ case/mk_session_key_elem_of: e1 => [] [-> e].
 - by iApply (session_weak'_agree with "sess1 sessR").
 Qed.
 
-Lemma session_key_confirmation rl kI kR kS n T :
-  session_key kI kR kS n T -∗
+Lemma session_key_confirmation rl kI kR kS n :
+  session_key kI kR kS n -∗
   confirmation rl kI kR kS.
 Proof.
 iIntros "(% & % & % & _ & _ & _ & _ & #? & #? & _)".

@@ -1137,21 +1137,33 @@ Qed.
 
 Implicit Types dq : dfrac.
 
-Definition honest_auth_def dq n (X : gset term) : iProp :=
-  own cryptis_hon_name (◯CM{dq|n} (∅, ∅)) ∗
-  own cryptis_hon_name (◯CM ({[n := X]}, ∅)) ∗
-  [∗ set] t ∈ X, minted t.
-Definition honest_auth_aux : seal honest_auth_def. by eexists. Qed.
-Definition honest_auth := unseal honest_auth_aux.
-Lemma honest_auth_unseal : honest_auth = honest_auth_def.
+Definition phase_auth_def dq n : iProp :=
+  own cryptis_hon_name (◯CM{dq|n} ({[n := ∅]}, ∅)).
+Definition phase_auth_aux : seal phase_auth_def. by eexists. Qed.
+Definition phase_auth := unseal phase_auth_aux.
+Lemma phase_auth_unseal : phase_auth = phase_auth_def.
 Proof. exact: seal_eq. Qed.
 
-Definition honest_frag_def n (X : gset term) : iProp :=
+Definition honest_def n (X : gset term) : iProp :=
   own cryptis_hon_name (◯CM ({[n := X]}, ∅)) ∗
   [∗ set] t ∈ X, minted t.
-Definition honest_frag_aux : seal honest_frag_def. by eexists. Qed.
-Definition honest_frag := unseal honest_frag_aux.
-Lemma honest_frag_unseal : honest_frag = honest_frag_def.
+Definition honest_aux : seal honest_def. by eexists. Qed.
+Definition honest := unseal honest_aux.
+Lemma honest_unseal : honest = honest_def.
+Proof. exact: seal_eq. Qed.
+
+Definition phase_frag_def n : iProp :=
+  own cryptis_hon_name (◯CM ({[n := ∅]}, ∅)).
+Definition phase_frag_aux : seal phase_frag_def. by eexists. Qed.
+Definition phase_frag := unseal phase_frag_aux.
+Lemma phase_frag_unseal : phase_frag = phase_frag_def.
+Proof. exact: seal_eq. Qed.
+
+Definition secret_at_def n t : iProp :=
+  honest n {[t]}.
+Definition secret_at_aux : seal secret_at_def. by eexists. Qed.
+Definition secret_at := unseal secret_at_aux.
+Lemma secret_at_unseal : secret_at = secret_at_def.
 Proof. exact: seal_eq. Qed.
 
 Definition public_at_def n t : iProp :=
@@ -1165,24 +1177,25 @@ Proof. exact: seal_eq. Qed.
 Definition mint_map_singleton n t : mint_mapUR :=
   discrete_fun_singleton n (◯ {[t]}).
 
+Notation "●Ph{ dq } n" :=
+  (phase_auth dq n) (at level 20, format "●Ph{ dq }  n").
+Notation "●Ph{# q } n" :=
+  (phase_auth (DfracOwn q) n) (at level 20, format "●Ph{# q }  n").
+Notation "●Ph□ n" := (phase_auth (DfracDiscarded) n)
+  (at level 20, format "●Ph□  n").
+Notation "●Ph n" := (phase_auth (DfracOwn 1) n)
+  (at level 20, format "●Ph  n").
+Notation "◯Ph n" :=
+  (phase_frag n) (at level 20, format "◯Ph  n").
+
 Definition minted_at_def n t : iProp :=
+  ◯Ph n ∗
   own cryptis_mint_name (mint_map_singleton n t) ∗
   minted t.
 Definition minted_at_aux : seal minted_at_def. by eexists. Qed.
 Definition minted_at := unseal minted_at_aux.
 Lemma minted_at_unseal : minted_at = minted_at_def.
 Proof. exact: seal_eq. Qed.
-
-Notation "●H{ dq | n } a" :=
-  (honest_auth dq n a) (at level 20, format "●H{ dq | n }  a").
-Notation "●H{# q | n } a" :=
-  (honest_auth (DfracOwn q) n a) (at level 20, format "●H{# q | n }  a").
-Notation "●H□{ n } a" := (honest_auth (DfracDiscarded) n a)
-  (at level 20, format "●H□{ n }  a").
-Notation "●H{ n } a" := (honest_auth (DfracOwn 1) n a)
-  (at level 20, format "●H{ n }  a").
-Notation "◯H{ n } a" := (honest_frag n a)
-  (at level 20, format "◯H{ n }  a").
 
 Definition secret t : iProp :=
   (|==> public t) ∧
@@ -1193,10 +1206,10 @@ Definition to_mint_map (M : nat → gset term) n : mint_mapUR :=
   λ m, if decide (m < n) then ●□ M m
        else ● M m.
 
-Definition honest_inv : iProp :=
+Definition phase_inv : iProp :=
   ∃ n H X C M,
     own cryptis_hon_name (●CM{n} (H, C)) ∗
-    own cryptis_hon_name (◯CM ({[n := X]}, ∅)) ∗
+    ⌜H !! n = Some X⌝ ∗
     own cryptis_mint_name (to_mint_map M n) ∗
     ([∗ set] t ∈ X, secret t) ∗
     ([∗ set] p ∈ C, public p.2) ∗
@@ -1242,7 +1255,7 @@ Definition cryptis_ctx : iProp :=
   key_pred (nroot.@"keys".@"sym") (λ _  _, False%I) ∗
   key_pred (nroot.@"keys".@"enc") (λ kt _, ⌜kt = Enc⌝)%I ∗
   key_pred (nroot.@"keys".@"sig") (λ kt _, ⌜kt = Dec⌝)%I ∗
-  inv (cryptisN.@"honest") honest_inv ∗
+  inv (cryptisN.@"phase") phase_inv ∗
   inv (cryptisN.@"names") term_name_inv.
 
 #[global]
@@ -1283,40 +1296,43 @@ rewrite public_TKey public_tag. iDestruct "p_k" as "[p_k|[_ p_k]]"; eauto.
 by iDestruct (wf_key_elim with "[//] [//]") as "#>%".
 Qed.
 
-Lemma honest_auth_dfrac_op dq1 dq2 n X :
-  ●H{dq1 ⋅ dq2|n} X ⊣⊢ ●H{dq1|n} X ∗ ●H{dq2|n} X.
+Lemma phase_auth_dfrac_op dq1 dq2 n :
+  ●Ph{dq1 ⋅ dq2} n ⊣⊢ ●Ph{dq1} n ∗ ●Ph{dq2} n.
 Proof.
-rewrite honest_auth_unseal /honest_auth_def; iSplit.
-- by iIntros "[[??] #?]"; iFrame; eauto.
-- iIntros "[[L _] [?#?]]"; iFrame; eauto.
-  iSplit => //. by iSplitL "L".
+rewrite phase_auth_unseal /phase_auth_def; iSplit.
+- iIntros "[??]"; iFrame; eauto.
+- iIntros "[L ?]"; iFrame; eauto. by iSplitL "L".
 Qed.
 
 #[global]
-Instance from_sep_honest_auth dq1 dq2 n X :
-  FromSep (●H{dq1 ⋅ dq2|n} X) (●H{dq1|n} X) (●H{dq2|n} X).
-Proof. by rewrite /FromSep honest_auth_dfrac_op. Qed.
+Instance from_sep_phase_auth dq1 dq2 n :
+  FromSep (●Ph{dq1 ⋅ dq2} n) (●Ph{dq1} n) (●Ph{dq2} n).
+Proof. by rewrite /FromSep phase_auth_dfrac_op. Qed.
 
 #[global]
-Instance into_sep_honest_auth dq1 dq2 n X :
-  IntoSep (●H{dq1 ⋅ dq2|n} X) (●H{dq1|n} X) (●H{dq2|n} X).
-Proof. by rewrite /IntoSep honest_auth_dfrac_op. Qed.
+Instance into_sep_phase_auth dq1 dq2 n :
+  IntoSep (●Ph{dq1 ⋅ dq2} n) (●Ph{dq1} n) (●Ph{dq2} n).
+Proof. by rewrite /IntoSep phase_auth_dfrac_op. Qed.
 
-Lemma honest_auth_discard dq n X : ●H{dq|n} X ==∗ ●H□{n} X.
+Lemma phase_auth_discard dq n : ●Ph{dq} n ==∗ ●Ph□ n.
 Proof.
-rewrite honest_auth_unseal. iIntros "[own #s_X]".
-iMod (own_update _ _ (◯CM□{n} (∅, ∅)) with "own") as "#own".
+rewrite phase_auth_unseal. iIntros "own".
+iMod (own_update _ _ (◯CM□{n} ({[n := ∅]}, ∅)) with "own") as "#own".
   exact: comp_map_frag_discard.
-iModIntro. by do ![iSplit => //].
+by iModIntro.
 Qed.
 
 #[global]
-Instance honest_auth_discarded_persistent n X : Persistent (●H□{n} X).
-Proof. rewrite honest_auth_unseal. apply _. Qed.
+Instance phase_auth_discarded_persistent n : Persistent (●Ph□ n).
+Proof. rewrite phase_auth_unseal. apply _. Qed.
 
 #[global]
-Instance honest_frag_persistent n X : Persistent (◯H{n} X).
-Proof. rewrite honest_frag_unseal. apply _. Qed.
+Instance honest_persistent n X : Persistent (honest n X).
+Proof. rewrite honest_unseal. apply _. Qed.
+
+#[global]
+Instance secret_at_persistent n t : Persistent (secret_at n t).
+Proof. rewrite secret_at_unseal. apply _. Qed.
 
 #[global]
 Instance public_at_persistent n t : Persistent (public_at n t).
@@ -1326,69 +1342,60 @@ Lemma public_at_public n t : public_at n t -∗ public t.
 Proof. rewrite public_at_unseal. by iIntros "[? ?]". Qed.
 
 #[global]
+Instance phase_frag_persistent n : Persistent (◯Ph n).
+Proof. rewrite phase_frag_unseal. apply _. Qed.
+
+#[global]
 Instance minted_at_persistent n t : Persistent (minted_at n t).
 Proof. rewrite minted_at_unseal. apply _. Qed.
 
-Lemma minted_at_public n t : minted_at n t -∗ minted t.
-Proof. rewrite minted_at_unseal. by iIntros "[? ?]". Qed.
+Lemma minted_at_minted n t : minted_at n t -∗ minted t.
+Proof. rewrite minted_at_unseal. by iIntros "(? & ? & ?)". Qed.
 
-Lemma honest_auth_minted dq n X : ●H{dq|n} X -∗ [∗ set] t ∈ X, minted t.
-Proof. rewrite honest_auth_unseal. by iIntros "(_ & _ & ?)". Qed.
+Lemma honest_minted n X : honest n X -∗ [∗ set] t ∈ X, minted t.
+Proof. rewrite honest_unseal. by iIntros "(_ & ?)". Qed.
 
-Lemma honest_auth_frag dq n X : ●H{dq|n} X -∗ ◯H{n} X.
+Lemma minted_at_phase_frag n t : minted_at n t -∗ ◯Ph n.
+Proof. rewrite minted_at_unseal. by iIntros "(? & _ & _)". Qed.
+
+Lemma phase_auth_frag_agree dq n m : ●Ph{dq} n -∗ ◯Ph m -∗ ⌜m ≤ n⌝.
 Proof.
-rewrite honest_auth_unseal honest_frag_unseal.
-iIntros "(ver & #? & #s_X)". iSplit => //.
-Qed.
-
-Lemma honest_auth_frag_agree dq n m X Y :
-  ●H{dq|n} X -∗ ◯H{m} Y -∗ ⌜m ≤ n ∧ (n ≤ m → X = Y)⌝.
-Proof.
-rewrite honest_auth_unseal honest_frag_unseal.
-iIntros "(auth & #frag1 & _) (#frag2 & _)".
-iPoseProof (own_valid_2 with "auth frag2") as "%val2".
-case/comp_map_frag_valid_wf: val2 => /(_ m) val_H _.
-rewrite dom_singleton elem_of_singleton in val_H.
-move/(_ eq_refl) in val_H; iSplit; first by eauto.
-iIntros "%n_m"; have ->: n = m by lia.
-iPoseProof (own_valid_2 with "frag1 frag2") as "%val1".
-by move/comp_map_frag_valid_agree: val1 => ->.
-Qed.
-
-Lemma honest_auth_frag_agree_eq dq n X Y :
-  ●H{dq|n} X -∗ ◯H{n} Y -∗ ⌜X = Y⌝.
-Proof.
+rewrite phase_auth_unseal phase_frag_unseal.
 iIntros "auth frag".
-iDestruct (honest_auth_frag_agree with "auth frag") as "[_ %e]".
-iPureIntro. eauto.
+iPoseProof (own_valid_2 with "auth frag") as "%val".
+case/comp_map_frag_valid_wf: val => /(_ m) val_H _.
+rewrite dom_singleton elem_of_singleton in val_H.
+by move/(_ eq_refl) in val_H.
 Qed.
 
-Lemma honest_auth_agree dq1 dq2 n1 n2 X1 X2 :
-  ●H{dq1|n1} X1 -∗ ●H{dq2|n2} X2 -∗ ⌜n1 = n2 ∧ X1 = X2⌝.
+Lemma phase_frag_honest n : ◯Ph n -∗ honest n ∅.
 Proof.
-rewrite honest_auth_unseal.
-iIntros "(auth1 & #frag1 & _) (auth2 & #frag2 & _)".
-iPoseProof (own_valid_2 with "auth1 auth2") as "%val".
-have <- := comp_map_frag_bound_agree val.
-iPoseProof (own_valid_2 with "frag1 frag2") as "%val'".
-iPureIntro. split => //.
-by apply: (comp_map_frag_valid_agree val'); rewrite lookup_singleton.
+rewrite phase_frag_unseal honest_unseal.
+iIntros "phase". by iSplit => //.
 Qed.
 
-Lemma honest_frag_agree n X Y : ◯H{n} X -∗ ◯H{n} Y -∗ ⌜X = Y⌝.
+Lemma phase_auth_frag dq n : ●Ph{dq} n -∗ ◯Ph n.
 Proof.
-rewrite honest_frag_unseal.
-iIntros "[ver1 _] [ver2 _]".
-iPoseProof (own_valid_2 with "ver1 ver2") as "%val".
-iPureIntro.
-by apply: (comp_map_frag_valid_agree val); rewrite lookup_singleton.
+rewrite phase_auth_unseal phase_frag_unseal /phase_auth_def.
+set X := ({[n := ∅]}, ∅); rewrite (_ : X = X ⋅ X); last first.
+  by rewrite -pair_op singleton_op !gset_op !union_idemp_L.
+by rewrite comp_map_frag_op; iIntros "(_ & ?)".
 Qed.
 
-Lemma honest_frag_public_at n X m t :
+Lemma phase_auth_agree dq1 dq2 n1 n2 :
+  ●Ph{dq1} n1 -∗ ●Ph{dq2} n2 -∗ ⌜n1 = n2⌝.
+Proof.
+rewrite phase_auth_unseal.
+iIntros "own1 own2".
+iPoseProof (own_valid_2 with "own1 own2") as "%val".
+by have <- := comp_map_frag_bound_agree val.
+Qed.
+
+Lemma honest_public_at n X m t :
   m ≤ n →
-  ◯H{n} X -∗ public_at m t -∗ ⌜t ∉ X⌝.
+  honest n X -∗ public_at m t -∗ ⌜t ∉ X⌝.
 Proof.
-rewrite honest_frag_unseal public_at_unseal.
+rewrite honest_unseal public_at_unseal.
 iIntros "%m_n (#frag1 & _) (#frag2 & _)".
 iPoseProof (own_valid_2 with "frag1 frag2") as "%val".
 move/comp_map_frag_valid_dis/(_ n X m t): val.
@@ -1396,48 +1403,68 @@ rewrite lookup_singleton elem_of_singleton => dis.
 iPureIntro; exact: dis.
 Qed.
 
-Lemma honest_acc E dq n X :
-  ↑cryptisN.@"honest" ⊆ E →
+Lemma phase_acc E dq n X :
+  ↑cryptisN.@"phase" ⊆ E →
   cryptis_ctx -∗
-  ●H{dq|n} X ={E, E ∖ ↑cryptisN.@"honest"}=∗ ∃ H C M,
-    ●H{dq|n} X ∗
+  honest n X -∗
+  ●Ph{dq} n ={E, E ∖ ↑cryptisN.@"phase"}=∗ ∃ H C M Y,
+    ●Ph{dq} n ∗
     own cryptis_hon_name (●CM{n} (H, C)) ∗
-    own cryptis_hon_name (◯CM ({[n := X]}, ∅)) ∗
+    ⌜H !! n = Some Y⌝ ∗
+    ⌜X ⊆ Y⌝ ∗
     own cryptis_mint_name (to_mint_map M n) ∗
-    ▷ ([∗ set] t ∈ X, secret t) ∗
+    ▷ ([∗ set] t ∈ Y, secret t) ∗
     ▷ ([∗ set] p ∈ C, public p.2) ∗
     ▷ □ (∀ m, (⌜m > n → M m = ∅⌝) ∗ [∗ set] t ∈ M m, minted t) ∗
-    (▷ honest_inv ={E ∖ ↑cryptisN.@"honest",E}=∗ True).
+    (▷ phase_inv ={E ∖ ↑cryptisN.@"phase",E}=∗ True).
 Proof.
-rewrite honest_auth_unseal.
-iIntros "%sub (_ & _ & _ & #ctx & _) (ver & #ver_frag & #term_X)".
+rewrite honest_unseal phase_auth_unseal.
+iIntros "%sub (_ & _ & _ & #ctx & _) [#hon _] phase".
 iMod (inv_acc with "ctx") as "[inv close]" => //.
 iDestruct "inv"
-  as "(%n' & %H & %X' & %C & %M &
-       >verI & >verI_frag & >own_M & sec_X & #pub_C & mint_M)".
-iPoseProof (own_valid_2 with "verI ver") as "%val_bound".
-move/comp_map_auth_frag_bound_agree: val_bound => -> {n'}.
-iPoseProof (own_valid_2 with "verI_frag ver_frag") as "%val".
-move/comp_map_frag_valid_agree: val => -> {X'}.
-iFrame. iModIntro. iExists H, C, M. iFrame. eauto.
+  as "(%n' & %H & %Y & %C & %M &
+       >verI & >%H_n & >own_M & sec_X & #pub_C & mint_M)".
+iPoseProof (own_valid_2 with "verI phase") as "%val_bound".
+move/comp_map_auth_frag_bound_agree: val_bound => -> {n'} in H_n *.
+iPoseProof (own_valid_2 with "verI hon") as "%val".
+case/comp_map_auth_frag_valid_agree: val.
+rewrite H_n => _ [] [<-] X_Y.
+iFrame. iModIntro. iExists H, C, M, Y. iFrame. eauto.
 Qed.
 
-Lemma public_atI E dq t n X :
-  ↑cryptisN.@"honest" ⊆ E →
+Lemma honest_union n T1 T2 : honest n (T1 ∪ T2) ⊣⊢ honest n T1 ∗ honest n T2.
+Proof.
+rewrite honest_unseal /honest_def -gset_op -{1}[∅]ucmra_unit_right_id_L.
+rewrite -singleton_op pair_op comp_map_frag_op own_op big_sepS_union_pers.
+iSplit.
+- iIntros "[[??][??]]". by eauto.
+- iIntros "[[??][??]]". by eauto.
+Qed.
+
+Lemma secret_atI n t T : t ∈ T → honest n T -∗ secret_at n t.
+Proof.
+move=> ?; have -> : T = {[t]} ∪ T ∖ {[t]}.
+  apply: union_difference_L; set_solver.
+rewrite honest_union. iIntros "[? _]".
+by rewrite secret_at_unseal.
+Qed.
+
+Lemma public_atI E dq t n :
+  ↑cryptisN.@"phase" ⊆ E →
   cryptis_ctx -∗
   £ 1 -∗
-  ●H{dq|n} X -∗
+  ●Ph{dq} n -∗
   public t ={E}=∗
-  ●H{dq|n} X ∗
+  ●Ph{dq} n ∗
   public_at n t.
 Proof.
-iIntros "%sub #ctx cred hon #p_t".
-iMod (honest_acc with "ctx hon")
-  as "(%H & %C & %M & hon & honI & honI_frag & own_M &
+iIntros "%sub #ctx cred phase_auth #p_t".
+iPoseProof (phase_auth_frag with "phase_auth") as "#phase_frag".
+iPoseProof (phase_frag_honest with "phase_frag") as "#hon".
+iMod (phase_acc with "ctx hon phase_auth")
+  as "(%H & %C & %M & %X & phase_auth & phaseI & %H_n & _ & own_M &
        sec_X & #pub_X & #mint_M & close)" => //.
 iMod (lc_fupd_elim_later with "cred sec_X") as "sec_X".
-iPoseProof (own_valid_2 with "honI honI_frag") as "%val".
-move/comp_map_auth_frag_valid_agree: val => H_n.
 iAssert (◇ ⌜t ∉ X⌝)%I with "[sec_X]" as "#>%t_X".
 { case: (decide (t ∈ X)) => [t_X|//].
   iClear "pub_X".
@@ -1445,10 +1472,10 @@ iAssert (◇ ⌜t ∉ X⌝)%I with "[sec_X]" as "#>%t_X".
   iDestruct "sec_X" as "[sec_t sec_X]".
   iDestruct "sec_t" as "(_ & _ & sec_t)".
   iDestruct ("sec_t" with "p_t") as ">[]". }
-iMod (own_update with "honI") as "honI".
+iMod (own_update with "phaseI") as "phaseI".
   exact: comp_map_comp_update_last H_n t_X.
-iDestruct "honI" as "[honI #comp]".
-iMod ("close" with "[honI honI_frag own_M sec_X]") as "_".
+iDestruct "phaseI" as "[phaseI #comp]".
+iMod ("close" with "[phaseI own_M sec_X]") as "_".
 { iModIntro. iExists n, H, X, ({[(n, t)]} ∪ C), M. iFrame.
   rewrite big_sepS_union_pers big_sepS_singleton /=.
   by eauto. }
@@ -1456,23 +1483,26 @@ iFrame.
 by rewrite public_at_unseal; iModIntro; iSplit.
 Qed.
 
-Lemma minted_atI E dq t n X :
-  ↑cryptisN.@"honest" ⊆ E →
+Lemma minted_atI E dq t n :
+  ↑cryptisN.@"phase" ⊆ E →
   cryptis_ctx -∗
-  ●H{dq|n} X -∗
+  ●Ph{dq} n -∗
   minted t ={E}=∗
-  ●H{dq|n} X ∗
+  ●Ph{dq} n ∗
   minted_at n t.
 Proof.
-iIntros "%sub #ctx hon #m_t".
-iMod (honest_acc with "ctx hon")
-  as "(%H & %C & %M & hon & honI & honI_frag & own_M &
+iIntros "%sub #ctx phase_auth #m_t".
+iPoseProof (phase_auth_frag with "phase_auth") as "#phase_frag".
+iPoseProof (phase_frag_honest with "phase_frag") as "#hon".
+iMod (phase_acc with "ctx hon phase_auth")
+  as "(%H & %C & %M & %X & phase_auth & phaseI & %H_n & _ & own_M &
        sec_X & #pub_X & #mint_M & close)" => //.
 iMod (own_update with "own_M") as "own_M".
 { apply: (to_mint_map_alloc t). }
 iDestruct "own_M" as "[own_M #minted]".
-iMod ("close" with "[honI honI_frag own_M sec_X]") as "_".
+iMod ("close" with "[phaseI own_M sec_X]") as "_".
 { iModIntro. iExists n, H, X, C, _. iFrame.
+  iSplit => //.
   iSplit => //.
   iIntros "!> %m".
   iDestruct ("mint_M" $! m) as "[%finsupp #minted']". iSplit.
@@ -1485,7 +1515,7 @@ iMod ("close" with "[honI honI_frag own_M sec_X]") as "_".
       by iSplit.
     + by rewrite discrete_fun_lookup_insert_ne. }
 iFrame.
-by rewrite minted_at_unseal; iModIntro; iSplit.
+by rewrite minted_at_unseal; iModIntro; do !iSplit.
 Qed.
 
 Definition to_mint_map_share M n : mint_mapUR :=
@@ -1508,22 +1538,24 @@ apply/Some_proper => m.
 rewrite /to_mint_map_share; case: decide => _; apply: core_id_core.
 Qed.
 
-Lemma minted_at_list E dq n X :
-  ↑cryptisN.@"honest" ⊆ E →
+Lemma minted_at_list E dq n :
+  ↑cryptisN.@"phase" ⊆ E →
   cryptis_ctx -∗
-  ●H{dq|n} X ={E}=∗
-  ●H{dq|n} X ∗
+  ●Ph{dq} n ={E}=∗
+  ●Ph{dq} n ∗
   ▷ ∃ Y : gset term,
   ([∗ set] t ∈ Y, minted t) ∗
   □ (∀ m t, ⌜m < n⌝ -∗ minted_at m t -∗ ⌜t ∈ Y⌝).
 Proof.
-iIntros "%sub #ctx hon".
-iMod (honest_acc with "ctx hon")
-  as "(%H & %C & %M & hon & honI & honI_frag & own_M &
+iIntros "%sub #ctx phase_auth".
+iPoseProof (phase_auth_frag with "phase_auth") as "#phase_frag".
+iPoseProof (phase_frag_honest with "phase_frag") as "#hon".
+iMod (phase_acc with "ctx hon phase_auth")
+  as "(%H & %C & %M & %X & phase_auth & phaseI & %H_n & _ & own_M &
        sec_X & #pub_X & #mint_M & close)" => //.
 rewrite to_mint_map_split.
 iDestruct "own_M" as "[own_M #split_M]".
-iMod ("close" with "[honI honI_frag own_M sec_X]") as "_".
+iMod ("close" with "[phaseI own_M sec_X]") as "_".
 { iModIntro. iExists n, H, X, C, _. iFrame. eauto. }
 iFrame. iIntros "!> !>".
 iExists (⋃ ((λ m, M m) <$> seq 0 n)). iSplit.
@@ -1531,7 +1563,7 @@ iExists (⋃ ((λ m, M m) <$> seq 0 n)). iSplit.
   rewrite big_sepL_fmap big_sepL_forall.
   iIntros "%k %x %kP".
   by iDestruct ("mint_M" $! x) as "[#? #?]".
-- rewrite minted_at_unseal. iIntros "!> %m %t %m_n [#minted _]".
+- rewrite minted_at_unseal. iIntros "!> %m %t %m_n (_ & #minted & _)".
   iPoseProof (own_valid_2 with "split_M minted") as "%valid".
   iPureIntro.
   move/(_ m): valid.
@@ -1545,133 +1577,141 @@ iExists (⋃ ((λ m, M m) <$> seq 0 n)). iSplit.
   apply/elem_of_seq. lia.
 Qed.
 
-Lemma honest_public E dq t n X :
-  ↑cryptisN.@"honest" ⊆ E →
-  t ∈ X →
+Lemma honest_public E dq t n :
+  ↑cryptisN.@"phase" ⊆ E →
   cryptis_ctx -∗
-  ●H{dq|n} X -∗
+  secret_at n t -∗
+  ●Ph{dq} n -∗
   public t ={E}=∗
   ▷ ◇ False.
 Proof.
-iIntros "%sub %t_X #ctx hon #p_t".
-iMod (honest_acc with "ctx hon")
-  as "(%H & %C & %M & hon & honI & honI_frag & own_M &
+iIntros "%sub #ctx #sec phase_auth #p_t".
+rewrite secret_at_unseal.
+iMod (phase_acc with "ctx sec phase_auth")
+  as "(%H & %C & %M & %X & phase_auth & phaseI & %H_n & %t_X & own_M &
        sec_X & #pub_X & #mint_M & close)" => //.
-iPoseProof (own_valid_2 with "honI honI_frag") as "%val".
-move/comp_map_auth_frag_valid_agree: val => H_n.
+have ? : t ∈ X by set_solver.
 iAssert (▷ ◇ False)%I with "[sec_X]" as "#contra".
 { iClear "pub_X". rewrite (big_sepS_delete _ X) //.
   iDestruct "sec_X" as "([_ I] & _)".
   iModIntro. by iApply "I". }
-iMod ("close" with "[honI honI_frag own_M sec_X]") as "_".
+iMod ("close" with "[phaseI own_M sec_X]") as "_".
 { iModIntro. iExists n, H, X, C, M. iFrame. by eauto. }
 by eauto.
 Qed.
 
 Lemma honest_unionE E n X Y :
-  ↑cryptisN.@"honest" ⊆ E →
+  ↑cryptisN.@"phase" ⊆ E →
   X ## Y →
   cryptis_ctx -∗
-  ●H{n} (X ∪ Y) ={E}=∗
-  ●H{S n} X ∗ ▷ [∗ set] t ∈ Y, secret t.
+  honest n (X ∪ Y) -∗
+  ●Ph n ={E}=∗
+  honest (S n) X ∗ ●Ph (S n) ∗ ▷ [∗ set] t ∈ Y, secret t.
 Proof.
-iIntros "%sub %X_Y #ctx hon".
-iMod (honest_acc with "ctx hon")
-  as "(%H & %C & %M & hon & honI & honI_frag & own_M &
+iIntros "%sub %X_Y #ctx #hon phase_auth".
+iMod (phase_acc with "ctx hon phase_auth")
+  as "(%H & %C & %M & %Z & phase_auth & phaseI & %H_n & %X_Z & own_M &
        sec_X & #pub_X & #mint_M & close)" => //.
-iPoseProof (own_valid_2 with "honI honI_frag") as "%val".
-move/comp_map_auth_frag_valid_agree: val => H_n.
-rewrite honest_auth_unseal.
-iDestruct "hon" as "(hon_auth & #hon & #min)".
-iPoseProof (own_valid with "honI") as "%val".
+rewrite phase_auth_unseal.
+iPoseProof (own_valid with "phaseI") as "%val".
 case/comp_map_auth_valid_dis: val => [bounds_H [] bounds_C dis].
-iMod (own_update_2 with "honI hon_auth") as "honI".
+iMod (own_update_2 with "phaseI phase_auth") as "phaseI".
   apply: (@comp_map_honest_update _ _ _ _ X).
   move=> m t t_C. have m_n: m ≤ n by apply: (bounds_C (m, t)).
   have := dis _ _ _ _ H_n t_C m_n.
   set_solver.
-iDestruct "honI" as "[honI hon_auth]".
-rewrite comp_map_frag_split_empty.
-iDestruct "hon_auth" as "[hon_auth #hon']".
-rewrite !big_sepS_union //.
-iDestruct "min" as "[min_X min_Y]".
-iDestruct "sec_X" as "[sec_X sec_Y]".
+iDestruct "phaseI" as "[phaseI phase_auth]".
+have eZ: Z = (X ∪ Y) ∪ (Z ∖ (X ∪ Y)) by apply: union_difference_L; set_solver.
+rewrite eZ !big_sepS_union //; last set_solver.
+iDestruct "sec_X" as "((sec_X & sec_Y) & _)".
 iMod (own_update with "own_M") as "own_M".
 { exact: to_mint_map_bump. }
-iMod ("close" with "[sec_X honI own_M]") as "_".
+iMod ("close" with "[sec_X phaseI own_M]") as "_".
 { iModIntro. iExists _, _, _, _, _. iFrame.
+  rewrite lookup_insert.
   do !iSplit => //. iDestruct "mint_M" as "#mint_M".
   iIntros "!> %m". iSpecialize ("mint_M" $! m).
   iDestruct "mint_M" as "[%finsupp mint_M]".
   iSplit => //.
   iPureIntro. move=> ?; apply: finsupp. lia. }
-iModIntro. iFrame. by iSplit.
+iModIntro. iFrame.
+set P := ({[S n := _]}, _).
+rewrite (_ : P = ({[S n := ∅]}, ∅) ⋅ P); last first.
+  by rewrite -pair_op singleton_op !ucmra_unit_left_id_L.
+rewrite comp_map_frag_op.
+iDestruct "phase_auth" as "[phase_auth #honest]". iFrame.
+rewrite honest_unseal. iSplit => //.
+iDestruct "hon" as "[_ mint_XY]".
+rewrite big_sepS_union //. by iDestruct "mint_XY" as "[? _]".
 Qed.
 
 Lemma honest_delete E t n X :
-  ↑cryptisN.@"honest" ⊆ E →
+  ↑cryptisN.@"phase" ⊆ E →
   t ∈ X →
   cryptis_ctx -∗
-  ●H{n} X ={E}=∗
-  ●H{S n} (X ∖ {[t]}) ∗ ▷ secret t.
+  honest n X -∗
+  ●Ph n ={E}=∗
+  honest (S n) (X ∖ {[t]}) ∗ ●Ph (S n) ∗ ▷ secret t.
 Proof.
-iIntros "%sub %t_X #ctx hon".
+iIntros "%sub %t_X #ctx #hon phase".
 rewrite {1}[X](union_difference_singleton_L t) // [_ ∪ _]comm_L.
-iMod (honest_unionE with "ctx hon") as "hon" => //.
+iMod (honest_unionE with "ctx hon phase") as "(hon' & phase & ?)" => //.
   set_solver.
-by rewrite big_sepS_singleton.
+rewrite big_sepS_singleton.
+by iFrame.
 Qed.
 
 Lemma compromise_honest E n X :
-  ↑cryptisN.@"honest" ⊆ E →
+  ↑cryptisN.@"phase" ⊆ E →
   cryptis_ctx -∗
-  ●H{n} X ={E}=∗
-  ●H{S n} ∅ ∗ ▷ |==> [∗ set] t ∈ X, public t.
+  honest n X -∗
+  ●Ph n ={E}=∗
+  honest (S n) ∅ ∗ ●Ph (S n) ∗ ▷ |==> [∗ set] t ∈ X, public t.
 Proof.
-iIntros "%sub #ctx hon".
+iIntros "%sub #ctx hon phase".
 rewrite {1}(_ : X = ∅ ∪ X); last set_solver.
-iMod (honest_unionE with "ctx hon") as "[hon sec]" => //.
+iMod (honest_unionE with "ctx hon phase") as "(hon & phase & sec)" => //.
 iFrame. iModIntro. iModIntro. iApply big_sepS_bupd.
 iApply (big_sepS_mono with "sec").
 by iIntros "%t % [? _]".
 Qed.
 
 Lemma freeze_honest E n X :
-  ↑cryptisN.@"honest" ⊆ E →
+  ↑cryptisN.@"phase" ⊆ E →
   cryptis_ctx -∗
-  ●H{n} X ={E}=∗
-  ●H{S n} ∅ ∗ ▷ |==> [∗ set] t ∈ X, □ (public t ↔ ◇ False).
+  honest n X -∗
+  ●Ph n ={E}=∗
+  honest (S n) ∅ ∗ ●Ph (S n) ∗ ▷ |==> [∗ set] t ∈ X, □ (public t ↔ ◇ False).
 Proof.
-iIntros "%sub #ctx hon".
+iIntros "%sub #ctx hon phase".
 rewrite {1}(_ : X = ∅ ∪ X); last set_solver.
-iMod (honest_unionE with "ctx hon") as "[hon sec]" => //.
+iMod (honest_unionE with "ctx hon phase") as "(hon & phase & sec)" => //.
 iFrame. iModIntro. iModIntro.
 iApply big_sepS_bupd. iApply (big_sepS_mono with "sec").
 by iIntros "%t % (_ & ? & _)".
 Qed.
 
 Lemma honest_unionI Y E n X :
-  ↑cryptisN.@"honest" ⊆ E →
+  ↑cryptisN.@"phase" ⊆ E →
   X ## Y →
   cryptis_ctx -∗
   £ 1 -∗
-  ●H{n} X -∗
+  honest n X -∗
+  ●Ph n -∗
   ([∗ set] t ∈ Y, minted t) -∗
   ▷ ([∗ set] t ∈ Y, secret t) ={E}=∗
-  ●H{S n} (X ∪ Y).
+  honest (S n) (X ∪ Y) ∗ ●Ph (S n).
 Proof.
-iIntros "%sub %dis #ctx cred hon #s_Y sec".
-iMod (honest_acc with "ctx hon")
-  as "(%H & %C & %M & hon & honI & honI_frag & own_M & sec_X &
-       #pub_X & #mint_M & close)" => //.
-iPoseProof (own_valid_2 with "honI honI_frag") as "%val".
-move/comp_map_auth_frag_valid_agree: val => H_n.
-rewrite honest_auth_unseal.
+iIntros "%sub %dis #ctx cred #hon phase #s_Y sec".
+iMod (phase_acc with "ctx hon phase")
+  as "(%H & %C & %M & %Z & phase & phaseI & %H_n & %X_Z & own_M &
+       sec_X & #pub_X & #mint_M & close)" => //.
+rewrite honest_unseal.
 iCombine "pub_X sec sec_X" as "I".
 iMod (lc_fupd_elim_later with "cred I") as "I".
 iDestruct "I" as "{pub_X} (#pub_X & sec & sec_X)".
-iDestruct "hon" as "(hon_auth & #hon & #min)".
-iPoseProof (own_valid with "honI") as "%val".
+iDestruct "hon" as "(#hon & #min)".
+iPoseProof (own_valid with "phaseI") as "%val".
 case/comp_map_auth_valid_dis: val => [bounds_H [] bounds_C dis'].
 iAssert (◇ ⌜∀ m t, (m, t) ∈ C → t ∉ Y⌝)%I as "#>%dis''".
 { iIntros "%m %t %t_C %t_Y".
@@ -1680,7 +1720,8 @@ iAssert (◇ ⌜∀ m t, (m, t) ∈ C → t ∉ Y⌝)%I as "#>%dis''".
   iDestruct "sec" as "[sec_t _]".
   iDestruct "sec_t" as "(_ & _ & sec_t)".
   by iApply "sec_t". }
-iMod (own_update_2 with "honI hon_auth") as "honI".
+rewrite phase_auth_unseal.
+iMod (own_update_2 with "phaseI phase") as "phaseI".
   apply: (@comp_map_honest_update _ _ _ _ (X ∪ Y)).
   move=> m t t_C. have m_n: m ≤ n by apply: (bounds_C (m, t)).
   have := dis' _ _ _ _ H_n t_C m_n.
@@ -1688,33 +1729,38 @@ iMod (own_update_2 with "honI hon_auth") as "honI".
   set_solver.
 iMod (own_update with "own_M") as "own_M".
 { exact: to_mint_map_bump. }
-iDestruct "honI" as "[honI hon_auth]".
-rewrite comp_map_frag_split_empty.
-iDestruct "hon_auth" as "[hon_auth #hon']".
-iMod ("close" with "[sec_X sec honI own_M]") as "_".
+iDestruct "phaseI" as "[phaseI phase]".
+iMod ("close" with "[sec_X sec phaseI own_M]") as "_".
 { iModIntro. iExists _, _, (X ∪ Y), _, _.
-  rewrite big_sepS_union //. iFrame.
+  rewrite big_sepS_union //. iFrame. rewrite lookup_insert.
   do !iSplit=> //.
-  iIntros "!> %m".
-  iDestruct ("mint_M" $! m) as "[%finsupp #minted]".
-  iSplit => //.
-  iPureIntro. move=> ?; apply: finsupp. lia. }
-iModIntro. iFrame. rewrite big_sepS_union //.
+  - by iApply (big_sepS_subseteq with "sec_X").
+  - iIntros "!> %m".
+    iDestruct ("mint_M" $! m) as "[%finsupp #minted]".
+    iSplit => //.
+    iPureIntro. move=> ?; apply: finsupp. lia. }
+set P := ({[S n := _]}, _).
+rewrite (_ : P = ({[S n := ∅]}, ∅) ⋅ P); last first.
+  by rewrite -pair_op singleton_op !ucmra_unit_left_id_L.
+rewrite comp_map_frag_op.
+iDestruct "phase" as "[? #?]". iFrame.
+iModIntro. iSplit => //. rewrite big_sepS_union //.
 by eauto.
 Qed.
 
 Lemma honest_insert t E n X :
-  ↑cryptisN.@"honest" ⊆ E →
+  ↑cryptisN.@"phase" ⊆ E →
   t ∉ X →
   cryptis_ctx -∗
   £ 1 -∗
-  ●H{n} X -∗
+  honest n X -∗
+  ●Ph n -∗
   minted t -∗
   ▷ secret t ={E}=∗
-  ●H{S n} (X ∪ {[t]}).
+  honest (S n) (X ∪ {[t]}) ∗ ●Ph (S n).
 Proof.
-iIntros "%sub %t_X #ctx cred hon #s_t sec".
-iApply (honest_unionI with "[//] [cred] [hon]") => //.
+iIntros "%sub %t_X #ctx cred #hon phase #s_t sec".
+iApply (honest_unionI with "[//] [cred] [hon] [phase]") => //.
 - set_solver.
 - by rewrite big_sepS_singleton.
 - by rewrite big_sepS_singleton.
@@ -1738,21 +1784,22 @@ Arguments term_meta_set {Σ _ _ _ _} N x E t.
 Arguments term_token_difference {Σ _} t E1 E2.
 Arguments term_name {Σ _} t γ.
 Arguments term_own_alloc {Σ _ A _ t} N {_} a.
-Arguments honest_inv {Σ _ _}.
+Arguments phase_inv {Σ _ _}.
 Arguments cryptis_ctx {Σ _ _}.
 Arguments unknown_alloc {Σ _}.
 Arguments known_alloc {Σ _ γ} x.
 
-Notation "●H{ dq | n } a" :=
-  (honest_auth dq n a) (at level 20, format "●H{ dq | n }  a").
-Notation "●H{# q | n } a" :=
-  (honest_auth (DfracOwn q) n a) (at level 20, format "●H{# q | n }  a").
-Notation "●H□{ n } a" := (honest_auth (DfracDiscarded) n a)
-  (at level 20, format "●H□{ n }  a").
-Notation "●H{ n } a" := (honest_auth (DfracOwn 1) n a)
-  (at level 20, format "●H{ n }  a").
-Notation "◯H{ n } a" := (honest_frag n a)
-  (at level 20, format "◯H{ n }  a").
+
+Notation "●Ph{ dq } n" :=
+  (phase_auth dq n) (at level 20, format "●Ph{ dq }  n").
+Notation "●Ph{# q } n" :=
+  (phase_auth (DfracOwn q) n) (at level 20, format "●Ph{# q }  n").
+Notation "●Ph□ n" := (phase_auth (DfracDiscarded) n)
+  (at level 20, format "●Ph□  n").
+Notation "●Ph n" := (phase_auth (DfracOwn 1) n)
+  (at level 20, format "●Ph  n").
+Notation "◯Ph n" :=
+  (phase_frag n) (at level 20, format "◯Ph  n").
 
 Local Existing Instance cryptisGpreS_nonce.
 Local Existing Instance cryptisGpreS_key.
@@ -1769,7 +1816,8 @@ Lemma cryptisGS_alloc `{!heapGS Σ} E :
              enc_pred_token ⊤ ∗
              key_pred_token (⊤ ∖ ↑nroot.@"keys") ∗
              hash_pred_token ⊤ ∗
-             ●H{0} ∅.
+             honest 0 ∅ ∗
+             ●Ph 0.
 Proof.
 move=> ?; iStartProof.
 iMod (own_alloc (reservation_map_token ⊤)) as (γ_enc) "own_enc".
@@ -1779,7 +1827,7 @@ iMod (own_alloc (reservation_map_token ⊤)) as (γ_key) "own_key".
 iMod (own_alloc (reservation_map_token ⊤)) as (γ_hash) "own_hash".
   apply reservation_map_token_valid.
 iMod (own_alloc (●CM{0} ({[0 := ∅]}, ∅) ⋅ ◯CM{0} ({[0 := ∅]}, ∅)))
-    as (γ_hon) "[honI hon_auth]".
+    as (γ_hon) "[phaseI phase]".
   apply/view_both_valid => ? /=; do !split.
   - by move=> ?; rewrite dom_singleton elem_of_singleton => ->.
   - move=> ?; set_solver.
@@ -1789,8 +1837,8 @@ iMod (own_alloc (●CM{0} ({[0 := ∅]}, ∅) ⋅ ◯CM{0} ({[0 := ∅]}, ∅)))
 iMod (own_alloc (to_mint_map (ε : discrete_fun _) 0)) as (γ_mint) "mint_auth".
 { move=> m.
   by rewrite /to_mint_map /= discrete_fun_lookup_empty auth_auth_valid. }
-rewrite comp_map_frag_split_empty.
-iDestruct "hon_auth" as "[hon_auth #hon]".
+rewrite comp_map_frag_split.
+iDestruct "phase" as "[phase_auth #phase]".
 iMod (own_alloc (● (∅ : gmap term (agree gname)))) as (γ_names) "names_auth".
   by apply auth_auth_valid.
 pose (H := CryptisGS _ γ_enc γ_key γ_hash γ_hon γ_mint γ_names).
@@ -1805,8 +1853,9 @@ iMod (key_pred_set (nroot.@"keys".@"enc") (λ kt _, ⌜kt = Enc⌝)%I with "toke
     as "[#? token]"; try solve_ndisj.
 iMod (key_pred_set (nroot.@"keys".@"sig") (λ kt _, ⌜kt = Dec⌝)%I with "token")
     as "[#? token]"; try solve_ndisj.
-rewrite honest_auth_unseal /honest_auth_def big_sepS_empty. iFrame.
-iSplitL; last by eauto. do 3!iSplitR => //.
+rewrite honest_unseal /honest_def big_sepS_empty. iFrame.
+rewrite phase_auth_unseal /phase_auth_def. iFrame.
+iSplitL; last by iFrame; eauto. do 3!iSplitR => //.
 iSplitR "names_auth".
   iApply inv_alloc.
   iModIntro. iExists 0, {[0 := ∅]}, ∅, ∅, ε. iFrame.

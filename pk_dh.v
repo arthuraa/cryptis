@@ -120,11 +120,11 @@ Definition pk_dh_session_meta rl kI kR :=
 Definition pk_dh_session_meta_token rl kI kR :=
   @session_key_meta_token _ _ _ _ N _ rl kI kR.
 
-Definition pk_dh_session_weak rl kI kR kS ph T :=
-  session_weak N rl kI kR kS ph T.
+Definition pk_dh_session_weak rl kI kR kS ph :=
+  session_weak N rl kI kR kS ph.
 
-Definition pk_dh_session_key kI kR kS ph T :=
-  session_key N kI kR kS ph T.
+Definition pk_dh_session_key kI kR kS ph:=
+  session_key N kI kR kS ph.
 
 Lemma pk_dh_alloc E1 E2 E' :
   ↑N ⊆ E1 →
@@ -136,8 +136,8 @@ Lemma pk_dh_alloc E1 E2 E' :
   enc_pred_token (E2 ∖ ↑N).
 Proof. exact: pk_auth_alloc. Qed.
 
-Lemma pk_dh_session_key_elim kI kR kS n T :
-  pk_dh_session_key kI kR kS n T -∗
+Lemma pk_dh_session_key_elim kI kR kS n :
+  pk_dh_session_key kI kR kS n -∗
   public kS →
   ◇ False.
 Proof.
@@ -154,28 +154,29 @@ Lemma wp_pk_dh_init c kI kR dq n T :
   pk_auth_ctx N -∗
   public (TKey Enc kI) -∗
   public (TKey Enc kR) -∗
-  {{{ init_confirm kI kR ∗ ●H{dq|n} T }}}
+  honest n T -∗
+  {{{ init_confirm kI kR ∗ ●Ph{dq} n }}}
     pk_dh_init c (TKey Dec kI) (TKey Enc kI) (TKey Enc kR)
   {{{ (okS : option term), RET repr okS;
-      ●H{dq|n} T ∗
+      ●Ph{dq} n ∗
       if okS is Some kS then
         minted kS ∗
         □ pk_dh_confirmation Init kI kR kS ∗
-        pk_dh_session_weak Init kI kR kS n T ∗
+        pk_dh_session_weak Init kI kR kS n ∗
         if in_honest kI kR T then
           □ (public kS → ◇ False) ∗
           pk_dh_session_meta_token Init kI kR kS ⊤ ∗
-          pk_dh_session_key kI kR kS n T
+          pk_dh_session_key kI kR kS n
         else True
       else True
   }}}.
 Proof.
-iIntros "#chan_c #ctx #ctx' #p_ekI #p_ekR %Ψ !> confirm post".
+iIntros "#chan_c #ctx #ctx' #p_ekI #p_ekR #hon %Ψ !> confirm post".
 rewrite /pk_dh_init; wp_pures.
-iApply (wp_pk_auth_init with "chan_c ctx ctx' [] [] [confirm]"); eauto.
+iApply (wp_pk_auth_init with "chan_c ctx ctx' [] [] [] [confirm]"); eauto.
 iIntros "!> %okS". case: okS => [kS|]; last first.
   by iApply ("post" $! None).
-iIntros "(hon & #s_kS & #confirmed & #sess_weak & kSP)".
+iIntros "(phase & #s_kS & #confirmed & #sess_weak & kSP)".
 iApply ("post" $! (Some kS)).
 iFrame. iSplitR => //. iSplit => //.
 rewrite /in_honest.
@@ -190,30 +191,31 @@ Lemma wp_pk_dh_resp c kR dq n T :
   cryptis_ctx -∗
   pk_auth_ctx N -∗
   public (TKey Enc kR) -∗
-  {{{ resp_confirm kR ∗ ●H{dq|n} T }}}
+  honest n T -∗
+  {{{ resp_confirm kR ∗ ●Ph{dq} n }}}
     pk_dh_resp c (TKey Dec kR) (TKey Enc kR)
   {{{ (res : option (term * term)), RET repr res;
-      ●H{dq|n} T ∗
+      ●Ph{dq} n ∗
       if res is Some (pkI, kS) then ∃ kI,
         ⌜pkI = TKey Enc kI⌝ ∗
         public pkI ∗
         minted kS ∗
         □ pk_dh_confirmation Resp kI kR kS ∗
-        pk_dh_session_weak Resp kI kR kS n T ∗
+        pk_dh_session_weak Resp kI kR kS n ∗
         if in_honest kI kR T then
           □ (public kS → ◇ False) ∗
           pk_dh_session_meta_token Resp kI kR kS ⊤ ∗
-          pk_dh_session_key kI kR kS n T
+          pk_dh_session_key kI kR kS n
         else True
       else True
   }}}.
 Proof.
-iIntros "#chan_c #ctx #ctx' #p_ekR %Ψ !> confirm post".
+iIntros "#chan_c #ctx #ctx' #p_ekR #hon %Ψ !> confirm post".
 rewrite /pk_dh_resp; wp_pures.
-iApply (wp_pk_auth_resp with "chan_c ctx ctx' [] [confirm]"); eauto.
+iApply (wp_pk_auth_resp with "chan_c ctx ctx' [] [] [confirm]"); eauto.
 iIntros "!> %res". case: res => [[pkI kS]|]; last first.
   by iApply ("post" $! None).
-iIntros "(hon & %kI & -> & #p_pkI & #s_kS & #confirmed & #sess_weak & kSP)".
+iIntros "(phase & %kI & -> & #p_pkI & #s_kS & #confirmed & #sess_weak & kSP)".
 iApply ("post" $! (Some (TKey Enc kI, kS))). iFrame. iExists kI.
 do 5!iSplitR => //.
 rewrite /in_honest.
