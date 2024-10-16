@@ -492,15 +492,9 @@ Fixpoint proj t n {struct t} :=
   | _, _ => None
   end.
 
-Definition enc k t : term :=
-  match k with
-  | TKey Enc k => TEnc k t
-  | _ => t (* Arbitrarily *)
-  end.
-
 Definition dec k t : option term :=
   match k, t with
-  | TKey Dec k1, TEnc k2 t =>
+  | TKey Dec k1, TEnc (TKey Enc k2) t =>
     if decide (k1 = k2) then Some t else None
   | _, _ => None
   end.
@@ -597,7 +591,7 @@ move=> ts1 ts2 e; apply: Some_inj.
 by rewrite -of_listK e of_listK.
 Qed.
 
-Definition tenc c k t := enc k (tag c t).
+Definition tenc c k t := TEnc k (tag c t).
 
 Definition tdec c k t :=
   match dec k t with
@@ -607,10 +601,11 @@ Definition tdec c k t :=
 
 Lemma tdecK c k t t' :
   tdec c (TKey Dec k) t = Some t' →
-  t = TEnc k (tag c t').
+  t = TEnc (TKey Enc k) (tag c t').
 Proof.
 rewrite /Spec.tdec /=.
 case: t => [] //= k' t.
+case: k' => // - [] // k'.
 by case: decide => //= <- /Spec.untagK ->.
 Qed.
 

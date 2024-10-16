@@ -28,7 +28,7 @@ Local Existing Instances cryptis_inG cryptisGpreS_maps.
 
 Lemma public_msg1E kI kR sI :
   pk_auth_ctx N -∗
-  public (TEnc kR (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Enc kI]))) -∗
+  public (TEnc (TKey Enc kR) (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Enc kI]))) -∗
   ▷ (minted sI ∧ public (TKey Enc kI) ∧ readable_by sI kI kR ∧
      init_started N kI kR sI).
 Proof.
@@ -103,7 +103,7 @@ Lemma public_msg2I kI kR sI sR :
   minted sR -∗
   secret_of sR kI kR -∗
   resp_accepted N kI kR sI sR -∗
-  public (TEnc kI (Spec.tag (N.@"m2") (Spec.of_list [sI; sR; TKey Enc kR]))).
+  public (TEnc (TKey Enc kI) (Spec.tag (N.@"m2") (Spec.of_list [sI; sR; TKey Enc kR]))).
 Proof.
 iIntros "(_ & _ & #? & _) #p_eI #p_eR #s_sI #p_sI #s_sR #p_sR #accepted".
 iApply public_TEncIS; eauto.
@@ -117,7 +117,7 @@ Qed.
 Lemma public_msg3E kI kR sR :
   pk_auth_ctx N -∗
   secret_of sR kI kR -∗
-  public (TEnc kR (Spec.tag (N.@"m3") sR)) -∗
+  public (TEnc (TKey Enc kR) (Spec.tag (N.@"m3") sR)) -∗
   ▷ init_finished N kR sR.
 Proof.
 iIntros "(_ & _ & _ & #?) #p_sR #p_m3".

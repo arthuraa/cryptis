@@ -343,7 +343,7 @@ Inductive decompose (T : gset term) (t : term) : Prop :=
 
 | DKey kt t' of T = {[t']} & t = TKey kt t'
 
-| DEnc k t' of T = {[TKey Enc k; t']} & t = TEnc k t'
+| DEnc k t' of T = {[k; t']} & t = TEnc k t'
 
 | DHash t' of T = {[t']} & t = THash t'
 
@@ -379,7 +379,7 @@ Fixpoint public_aux n t : iProp :=
        | TNonce a => pnonce a
        | TKey kt t => wf_key kt t
        | THash t => wf_hash t
-       | TEnc k t => wf_enc k t ∧ □ (public_aux n (TKey Dec k) → public_aux n t)
+       | TEnc (TKey Enc k) t => wf_enc k t ∧ □ (public_aux n (TKey Dec k) → public_aux n t)
        | TExp' _ pts _ => [∗ list] pt ∈ pts, dh_pred (fold_term pt) t
        | _ => False
        end%I
@@ -389,7 +389,9 @@ Fixpoint public_aux n t : iProp :=
 Global Instance Persistent_public_aux n t : Persistent (public_aux n t).
 Proof.
 elim: n t => [|n IH] /=; first by apply _.
-by case=>>; apply _.
+case; try by move=> *; apply _.
+case; try by move=> *; apply _.
+case; try by move=> *; apply _.
 Qed.
 
 (** [public t] holds when the term [t] can be declared public. *)
@@ -416,10 +418,11 @@ apply: bi.or_proper.
   apply: big_sepS_proper => t' T_t'.
   move: (decompose_tsize T_t T_t') => ?.
   rewrite (IH n) ?(IH m) //; lia.
-- case: (t) t_n e_st =>> //= t_n e_st.
-  rewrite tsize_eq -ssrnat.plusE in t_n e_st.
+- case: (t) t_n e_st => //= k.
+  case: k => //= - [] //= k t'.
+  rewrite tsize_eq (tsize_eq (TKey Enc k)) -ssrnat.plusE => t_n e_st.
   apply: bi.and_proper => //.
-  rewrite !(IH n) ?(IH m) // ?[tsize (TKey _ _)]tsize_eq /=; lia.
+  rewrite !(IH n) ?(IH m) // ?[tsize (TKey _ _)]tsize_eq /=; try lia.
 Qed.
 
 (* TODO: Merge with public_aux_eq *)
@@ -431,7 +434,7 @@ Lemma public_eq t :
        | TNonce a => pnonce a
        | TKey kt t => wf_key kt t
        | THash t => wf_hash t
-       | TEnc k t => wf_enc k t ∧ □ (public (TKey Dec k) → public t)
+       | TEnc (TKey Enc k) t => wf_enc k t ∧ □ (public (TKey Dec k) → public t)
        | TExp' _ pts _ =>
          [∗ list] pt ∈ pts, dh_pred (fold_term pt) t
        | _ => False
@@ -448,8 +451,11 @@ apply: bi.or_proper.
   apply: big_sepS_proper => t' T_t'.
   move: (decompose_tsize T_t T_t') => ?.
   rewrite public_aux_eq //; lia.
-- case: (t) e_st =>> //= e_st.
+- case: (t) e_st => //= k t' e_st.
   rewrite tsize_eq -ssrnat.plusE in e_st.
+  case: k => // kt k in e_st *.
+  rewrite (tsize_eq (TKey _ _)) in e_st.
+  case: kt => //.
   apply: bi.and_proper => //.
   rewrite !public_aux_eq  ?[tsize (TKey _ _)]tsize_eq //=; lia.
 Qed.
@@ -566,8 +572,9 @@ Qed.
 
 Lemma public_TEnc k t :
   public (TEnc k t) ⊣⊢
-  public (TKey Enc k) ∧ public t ∨
-  minted (TEnc k t) ∧ wf_enc k t ∧ □ (public (TKey Dec k) → public t).
+  public k ∧ public t ∨
+  minted (TEnc k t) ∧
+  ∃ k', ⌜k = TKey Enc k'⌝ ∧ wf_enc k' t ∧ □ (public (TKey Dec k') → public t).
 Proof.
 apply: (anti_symm _).
 - rewrite public_eq minted_TEnc.
@@ -576,14 +583,15 @@ apply: (anti_symm _).
   + iDestruct "publ" as (T) "[%dec ?]".
     case: dec => // {}k {}t -> [-> ->].
     by rewrite big_sepS_union_pers !big_sepS_singleton; iLeft.
-  + by eauto.
-- iDestruct 1 as "# [[Hk Ht] | (Ht & inv & #impl)]".
+  + iRight. iSplit; first by eauto.
+    case: k => // - [] k; eauto.
+- iDestruct 1 as "# [[Hk Ht] | (Ht & %k' & -> & inv & #impl)]".
   + rewrite [public (TEnc _ _)]public_eq minted_TEnc.
-    rewrite -[minted k](minted_TKey Enc k) -!public_minted.
+    rewrite -!public_minted.
     iSplit; eauto; iLeft.
-    iExists {[TKey Enc k; t]}; rewrite big_sepS_union_pers !big_sepS_singleton.
+    iExists {[k; t]}; rewrite big_sepS_union_pers !big_sepS_singleton.
     iSplit; eauto; iPureIntro; by econstructor.
-  + rewrite [public (TEnc k t)]public_eq; iSplit => //=.
+  + rewrite [public (TEnc (TKey Enc k') t)]public_eq; iSplit => //=.
     by eauto.
 Qed.
 
@@ -757,15 +765,16 @@ by rewrite Spec.tag_unseal minted_TPair minted_TInt bi.emp_and.
 Qed.
 
 Lemma public_TEncE N Φ k t :
-  public (TEnc k (Spec.tag N t)) -∗
+  public (TEnc (TKey Enc k) (Spec.tag N t)) -∗
   enc_pred N Φ -∗
   public (TKey Enc k) ∧ public t ∨
   □ ▷ Φ k t ∧ minted t ∧ □ (public (TKey Dec k) → public t).
 Proof.
-iIntros "#Ht #HΦ"; rewrite public_TEnc public_tag.
+iIntros "#Ht #HΦ"; rewrite public_TEnc -(public_tag N t).
 iDestruct "Ht" as "[[? Ht] | Ht]"; first by eauto.
 rewrite minted_TEnc minted_tag.
-iDestruct "Ht" as "([??] & inv & ?)".
+iDestruct "Ht" as "([??] & %k' & %e & inv & ?)".
+case: e => <-.
 iRight; iSplit; eauto; by iApply wf_enc_elim.
 Qed.
 
@@ -775,18 +784,18 @@ Lemma public_TEncIS N Φ k t :
   □ Φ k t -∗
   minted t -∗
   □ (public (TKey Dec k) → public t) -∗
-  public (TEnc k (Spec.tag N t)).
+  public (TEnc (TKey Enc k) (Spec.tag N t)).
 Proof.
 iIntros "#Henc #HΦ #HΦt #Ht #Hdecl".
 rewrite public_TEnc; iRight.
-rewrite minted_TEnc minted_tag public_tag.
+rewrite minted_TEnc minted_tag.
 iSplit; first by rewrite minted_TKey; eauto.
-iSplit; eauto.
+iExists k. rewrite public_tag. iSplit; eauto. iSplit; eauto.
 iExists N, t, Φ; eauto.
 Qed.
 
 Lemma public_TEncIP k t :
-  public (TKey Enc k) -∗
+  public k -∗
   public t -∗
   public (TEnc k t).
 Proof. by iIntros "? ?"; rewrite public_TEnc; eauto. Qed.

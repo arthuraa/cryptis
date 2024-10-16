@@ -33,7 +33,7 @@ Lemma public_msg1I n kI kR nI :
   □ is_priv_key nI kI kR -∗
   public (TKey Enc kI) -∗
   public (TKey Enc kR) -∗
-  public (TEnc kR (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Enc kI]))).
+  public (TEnc (TKey Enc kR) (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Enc kI]))).
 Proof.
 iIntros "(_ & #m1P & _ & _) #meta #s_nI #p_nI #p_ekI #p_ekR".
 iPoseProof (mk_key_share_secret_of with "s_nI p_nI") as "p_sI".
@@ -49,7 +49,7 @@ Qed.
 Lemma public_msg2E kI kR sI sR :
   pk_auth_ctx N -∗
   secret_of sI kI kR -∗
-  public (TEnc kI (Spec.tag (N.@"m2") (Spec.of_list [sI; sR; TKey Enc kR]))) -∗
+  public (TEnc (TKey Enc kI) (Spec.tag (N.@"m2") (Spec.of_list [sI; sR; TKey Enc kR]))) -∗
   ▷ (minted sR ∧ secret_of sR kI kR ∧ resp_accepted N kI kR sI sR).
 Proof.
 iIntros "(_ & _ & #m2P & _) #started #p_m2".
@@ -146,7 +146,7 @@ Lemma public_msg3I kI kR sI sR :
   minted sR -∗
   secret_of sR kI kR -∗
   init_finished N kR sR -∗
-  public (TEnc kR (Spec.tag (N.@"m3") sR)).
+  public (TEnc (TKey Enc kR) (Spec.tag (N.@"m3") sR)).
 Proof.
 iIntros "(_ & _ & _ & #p_m3) #p_eR #s_sR #p_sR #finished".
 iApply public_TEncIS; eauto.

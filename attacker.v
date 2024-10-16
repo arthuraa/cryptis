@@ -248,14 +248,14 @@ iExists t; iSplit => //.
 by iApply "tP".
 Qed.
 
-Lemma has_type_mkkey Γ e :
+Lemma has_type_mkkeys Γ e :
   has_type Γ e Pub -∗
-  has_type Γ (mkkey e) (Prod EK DK).
+  has_type Γ (mkkeys e) (Prod EK DK).
 Proof.
 iIntros "#eP !> %γ #? #γP /=".
 wp_bind (subst_map _ _); iApply wp_wand; first by iApply "eP".
 iIntros "%"; iDestruct 1 as (t) "[-> #tP]".
-iApply wp_mkkey; iExists _, _; do 2!iSplit => //=.
+iApply wp_mkkeys; iExists _, _; do 2!iSplit => //=.
 - iExists _; iSplit => //; rewrite public_TKey; eauto.
 - iExists _; iSplit => //; rewrite public_TKey; eauto.
 Qed.
@@ -390,11 +390,13 @@ iIntros "%v1"; iDestruct 1 as (t1) "[-> #t1P]".
 iApply wp_dec => /=.
 case: t2; try by move => *; iApply sum_typeIL.
 move=> t1' t2'.
+case: t1'; try by move=> *; iApply sum_typeIL.
+case=> t1'; last by iApply sum_typeIL.
 case: decide => [->|?]; last by iApply sum_typeIL.
 iApply sum_typeIR; iApply pub_typeI.
 rewrite [public (TEnc _ _)]public_TEnc.
-iDestruct "t2P" as "[[_ ?]|(_ & _ & #t2P)]" => //.
-by iApply "t2P".
+iDestruct "t2P" as "[[_ ?]|(_ & %k' & %e & _ & #t2P)]" => //.
+case: e => <-. by iApply "t2P".
 Qed.
 
 Lemma has_type_tag Γ c e :

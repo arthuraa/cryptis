@@ -198,7 +198,7 @@ Qed.
 Lemma wp_connection_make_handler φ Φ k (handler : namespace * expr) :
   WP handler.2 {{ f,
     □ ∀ m : term,
-        public (TEnc k (Spec.tag handler.1 m)) -∗
+        public (TEnc (TKey Enc k) (Spec.tag handler.1 m)) -∗
         φ -∗
         WP (f : val) m {{ v',
             ⌜v' = NONEV⌝ ∗ φ ∨
@@ -206,7 +206,7 @@ Lemma wp_connection_make_handler φ Φ k (handler : namespace * expr) :
   }} -∗
   WP Connection.make_handler handler {{ f,
     □ ∀ m : term,
-        public (TEnc k m) -∗
+        public (TEnc (TKey Enc k) m) -∗
         φ -∗
         WP (f : val) m {{ v',
           ⌜v' = NONEV⌝ ∗ φ ∨
@@ -226,7 +226,7 @@ Qed.
 Lemma wp_connection_make_handlers φ Φ k (handlers : list (namespace * expr)) :
   ([∗ list] handler ∈ handlers,
       WP (handler.2 : expr) {{ f, □ ∀ m : term,
-        public (TEnc k (Spec.tag handler.1 m)) -∗
+        public (TEnc (TKey Enc k) (Spec.tag handler.1 m)) -∗
         φ -∗
         WP (f : val) m {{ v,
             ⌜v = NONEV⌝ ∗ φ ∨
@@ -234,7 +234,7 @@ Lemma wp_connection_make_handlers φ Φ k (handlers : list (namespace * expr)) :
   WP Connection.make_handlers handlers {{ v',
     ∃ handlers' : list val, ⌜v' = repr handlers'⌝ ∗
       [∗ list] handler' ∈ handlers', □ ∀ m : term,
-        public (TEnc k m) -∗
+        public (TEnc (TKey Enc k) m) -∗
         φ -∗
         WP (handler' : val) m {{ v,
           ⌜v = NONEV⌝ ∗ φ ∨

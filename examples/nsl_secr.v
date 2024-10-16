@@ -123,7 +123,7 @@ Lemma public_msg1I kI kR nI :
   public (TKey Enc kR) -∗
   minted nI -∗
   □ (public nI ↔ ▷ corrupt kI kR) -∗
-  public (TEnc kR (Spec.tag (N.@"m1") (Spec.of_list [nI; TKey Enc kI]))).
+  public (TEnc (TKey Enc kR) (Spec.tag (N.@"m1") (Spec.of_list [nI; TKey Enc kI]))).
 Proof.
 iIntros "#? (#? & _ & _) #p_ekI #p_ekR #m_nI #p_nI".
 iApply public_TEncIS; eauto.
@@ -136,7 +136,7 @@ Qed.
 Lemma public_msg1E kI kR nI :
   cryptis_ctx -∗
   nsl_ctx -∗
-  public (TEnc kR (Spec.tag (N.@"m1") (Spec.of_list [nI; TKey Enc kI]))) -∗
+  public (TEnc (TKey Enc kR) (Spec.tag (N.@"m1") (Spec.of_list [nI; TKey Enc kI]))) -∗
   public (TKey Enc kR) -∗
   ▷ (minted nI ∗
      public (TKey Enc kI) ∗
@@ -164,7 +164,7 @@ Lemma public_msg2I kI kR nI nR :
   public (TKey Enc kR) -∗
   minted nR -∗
   □ (public nR ↔ ▷ corrupt kI kR) -∗
-  public (TEnc kI (Spec.tag (N.@"m2") (Spec.of_list [nI; nR; TKey Enc kR]))).
+  public (TEnc (TKey Enc kI) (Spec.tag (N.@"m2") (Spec.of_list [nI; nR; TKey Enc kR]))).
 Proof.
 iIntros "#? (_ & #? & _) #p_ekI #m_nI #p_nI #p_ekR #m_nR #p_nR".
 iApply public_TEncIS; eauto.
@@ -179,7 +179,7 @@ Qed.
 Lemma public_msg2E kI kR nI nR :
   cryptis_ctx -∗
   nsl_ctx -∗
-  public (TEnc kI (Spec.tag (N.@"m2") (Spec.of_list [nI; nR; TKey Enc kR]))) -∗
+  public (TEnc (TKey Enc kI) (Spec.tag (N.@"m2") (Spec.of_list [nI; nR; TKey Enc kR]))) -∗
   public (TKey Enc kI) -∗
   □ (public nI ↔ ▷ corrupt kI kR) -∗
   ▷ (minted nR ∗ □ (public nR ↔ ▷ corrupt kI kR)).
@@ -204,7 +204,7 @@ Lemma public_msg3I kI kR nR :
   public (TKey Enc kR) -∗
   minted nR -∗
   □ (public nR ↔ ▷ corrupt kI kR) -∗
-  public (TEnc kR (Spec.tag (N.@"m3") nR)).
+  public (TEnc (TKey Enc kR) (Spec.tag (N.@"m3") nR)).
 Proof.
 iIntros "#? (_ & _ & #?) #p_ekR #m_nR #s_nR".
 iApply public_TEncIS; eauto.
@@ -215,7 +215,7 @@ Qed.
 Lemma public_msg3E kI kR nR :
   cryptis_ctx -∗
   nsl_ctx -∗
-  public (TEnc kR (Spec.tag (N.@"m3") nR)) -∗
+  public (TEnc (TKey Enc kR) (Spec.tag (N.@"m3") nR)) -∗
   □ (public nR ↔ ▷ corrupt kI kR) -∗
   True.
 Proof.

@@ -57,7 +57,7 @@ Qed.
 Definition tls_server_loop : val := λ: "c" "psk" "nR" "params",
   (rec: "loop" "psk" :=
      bind: "res" := tls_server tlsN "c" "psk" Spec.zero "nR" "params" in
-     let: "psk" := Fst (mkkey (SShare.I.session_key_of tlsN "res")) in
+     let: "psk" := Fst (mkkeys (SShare.I.session_key_of tlsN "res")) in
      "loop" "psk") "psk".
 
 Lemma wp_tls_server_loop c psk nR params :
@@ -81,15 +81,15 @@ iApply wp_tls_server => //.
 iIntros (res) "res".
 case: res => [res|]; wp_pures; last by iApply "post".
 wp_bind (SShare.I.session_key_of _ _); iApply SShare.wp_session_key_of.
-wp_bind (mkkey _); iApply wp_mkkey; wp_pure (Fst _); wp_let.
+wp_bind (mkkeys _); iApply wp_mkkeys; wp_pure (Fst _); wp_let.
 iDestruct "res" as "(_ & _ & #psk' & _)".
 iApply ("IH" with "post").
 by rewrite minted_TKey.
 Qed.
 
 Definition environment : val := λ: "c" "nI" "nR" "psk",
-  let: "kI" := mkkey "nI" in
-  let: "kR" := mkkey "nR" in
+  let: "kI" := mkkeys "nI" in
+  let: "kR" := mkkeys "nR" in
   let: "ekI" := Fst "kI" in
   let: "dkI" := Snd "kI" in
   let: "ekR" := Fst "kR" in
@@ -123,8 +123,8 @@ Lemma wp_environment c nI nR psk :
 Proof.
 iIntros "#? #? #? #? #? #? #? #? #hon #phase %Φ !> _ post".
 rewrite /environment; wp_pures.
-wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
-wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
+wp_bind (mkkeys _); iApply wp_mkkeys; wp_pures.
+wp_bind (mkkeys _); iApply wp_mkkeys; wp_pures.
 rewrite -!fork_loopE.
 iAssert (public (TKey Enc nI)) as "#?".
   by rewrite public_TKey; eauto.
@@ -164,7 +164,7 @@ Definition tls_client_loop : val := λ: "c" "psk",
     let: "params" := recv "c" in
     let: "m" := Meth.I.PskDh "psk" Spec.zero in
     bind: "res" := tls_client tlsN "c" "m" "params" in
-    let: "psk'" := Fst (mkkey (Snd "res")) in
+    let: "psk'" := Fst (mkkeys (Snd "res")) in
     let: "continue" := recv "c" in
     if: eq_term "continue" Spec.zero then
       "loop" "psk'"
@@ -198,7 +198,7 @@ iIntros (res) "Hres"; case: res => [res|]; wp_pures; last first.
   by iApply ("post" $! None).
 case: res => [] [] [] vkey cn sn sk /=.
 iDestruct "Hres" as (?) "(-> & _ & _ & _ & #t_sk & _ & Hres)".
-wp_bind (mkkey _); iApply wp_mkkey; wp_pures.
+wp_bind (mkkeys _); iApply wp_mkkeys; wp_pures.
 iDestruct "Hres" as "[[_ contra]|[_ #s_psk']]".
   by iDestruct ("s_psk" with "contra") as ">[]".
 wp_bind (recv _); iApply wp_recv => //.
@@ -221,7 +221,7 @@ Definition game : val := λ: "mkchan",
   let: "nI"  := tag (nroot.@"key") (mknonce #()) in
   let: "nR"  := tag (nroot.@"key") (mknonce #()) in
   let: "psk" := mknonce #() in
-  let: "kI"  := mkkey "nI" in
+  let: "kI"  := mkkeys "nI" in
   let: "ekI" := Fst "kI" in
   let: "dkI" := Snd "kI" in
   environment "c" "nR" "nI" "psk";;
@@ -270,7 +270,7 @@ wp_pures.
 wp_pures; wp_bind (mknonce _).
 iApply (wp_mknonce (λ psk, term_meta psk (nroot.@"pub") ())%I (λ _, False%I)) => //.
 iIntros (psk) "#t_psk #p_psk _ tok_psk".
-wp_pures; wp_bind (mkkey _); iApply wp_mkkey.
+wp_pures; wp_bind (mkkeys _); iApply wp_mkkeys.
 set ekI := TKey Enc _.
 set dkI := TKey Dec _.
 wp_pures; wp_bind (environment _ _ _ _).

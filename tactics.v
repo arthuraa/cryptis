@@ -98,7 +98,7 @@ case e: Spec.untag => [t'|].
 Qed.
 
 Lemma tac_twp_dec Γ E K k t Ψ :
-  (∀ t', t = TEnc k t' →
+  (∀ t', t = TEnc (TKey Enc k) t' →
          envs_entails Γ (WP fill K (Val (SOMEV t')) @ E [{ Ψ }])) →
   (Spec.dec (TKey Dec k) t = None →
    envs_entails Γ (WP fill K (Val NONEV) @ E [{ Ψ }])) →
@@ -107,11 +107,13 @@ Proof.
 rewrite envs_entails_unseal => HSome HNone.
 rewrite -twp_bind -twp_dec.
 case: t HSome HNone; eauto => k' /=.
-by case: decide => [<-|]; eauto.
+case: k' => //=; eauto.
+case; eauto => k'.
+case: decide => [<-|]; eauto.
 Qed.
 
 Lemma tac_wp_dec Γ E K k t Ψ :
-  (∀ t', t = TEnc k t' →
+  (∀ t', t = TEnc (TKey Enc k) t' →
          envs_entails Γ (WP fill K (Val (SOMEV t')) @ E {{ Ψ }})) →
   (Spec.dec (TKey Dec k) t = None →
    envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →
@@ -120,7 +122,9 @@ Proof.
 rewrite envs_entails_unseal => HSome HNone.
 rewrite -wp_bind -wp_dec.
 case: t HSome HNone; eauto => k' /=.
-by case: decide => [<-|]; eauto.
+case: k' => //=; eauto.
+case; eauto => k'.
+case: decide => [<-|]; eauto.
 Qed.
 
 Lemma tac_wp_tenc Γ E K c t1 t2 Ψ :
@@ -132,7 +136,7 @@ by rewrite -wp_bind -wp_tenc.
 Qed.
 
 Lemma tac_wp_tdec Γ E K c k t Ψ :
-  (∀ t', t = TEnc k (Spec.tag c t') →
+  (∀ t', t = TEnc (TKey Enc k) (Spec.tag c t') →
          envs_entails Γ (WP fill K (Val (SOMEV t')) @ E {{ Ψ }})) →
   (Spec.tdec c (TKey Dec k) t = None →
    envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →
@@ -152,7 +156,7 @@ by rewrite envs_entails_unseal => H; rewrite -wp_bind -wp_tsenc.
 Qed.
 
 Lemma tac_wp_tsdec Γ E K c k t Ψ :
-  (∀ t', t = TEnc k (Spec.tag c t') →
+  (∀ t', t = TEnc (TKey Enc k) (Spec.tag c t') →
          envs_entails Γ (WP fill K (Val (SOMEV t')) @ E {{ Ψ }})) →
   (Spec.tsdec c (Spec.mkskey k) t = None →
    envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →

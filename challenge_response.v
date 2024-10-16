@@ -109,24 +109,24 @@ Lemma public_msg2E m2 kA kB nA nB :
   m2 !! Z.to_nat 2 = Some (TKey Dec kA) →
   cr_ctx -∗
   public (TKey Dec kB) -∗
-  public (TEnc kB (Spec.tag (N.@"m2") (Spec.of_list m2))) -∗
+  public (TEnc (TKey Enc kB) (Spec.tag (N.@"m2") (Spec.of_list m2))) -∗
   ▷ (public nB ∧
      (public (TKey Enc kB) ∨
       session N Resp nA nB (kA, kB))).
 Proof.
 iIntros (enA enB ekA) "#ctx #p_d_kB #p_m2".
 iDestruct "ctx" as "(_ & enc_m2 & _)".
-rewrite public_TEnc; iDestruct "p_m2" as "[[p_e_kB p_m2]|p_m2]".
-  rewrite public_tag public_of_list.
+iPoseProof (public_TEncE with "p_m2 [//]") as "{p_m2} p_m2".
+iDestruct "p_m2" as "[[p_e_kB p_m2]|p_m2]".
+  rewrite public_of_list.
   iPoseProof (big_sepL_lookup with "p_m2") as "p_nB"; first exact: enB.
   iSplit => //.
   by eauto.
-iDestruct "p_m2" as "(_ & inv & #pub)".
+iDestruct "p_m2" as "(#inv & m_m2 & #pub)".
 iSpecialize ("pub" with "p_d_kB").
-rewrite public_tag public_of_list.
+rewrite public_of_list.
 iPoseProof (big_sepL_lookup with "pub") as "p_nB"; first exact: enB.
 iSplit => //.
-iPoseProof (wf_enc_elim with "inv enc_m2") as "{inv} #inv".
 iModIntro.
 iDestruct "inv" as (nA' nB' kA') "(%e_m2 & #sess)".
 move/Spec.of_list_inj: e_m2 enA enB ekA => -> /= [] -> [] -> [] ->.
@@ -139,16 +139,15 @@ Lemma public_msg3E m3 kA kB nA nB :
   m3 !! Z.to_nat 2 = Some (TKey Dec kB) →
   cr_ctx -∗
   public (TKey Dec kA) -∗
-  public (TEnc kA (Spec.tag (N.@"m3") (Spec.of_list m3))) -∗
+  public (TEnc (TKey Enc kA) (Spec.tag (N.@"m3") (Spec.of_list m3))) -∗
   ▷ (public (TKey Enc kA) ∨
      session N Init nA nB (kA, kB)).
 Proof.
 iIntros (enA enB ekB) "#ctx #p_d_ka #p_m3".
 iDestruct "ctx" as "(_ & _ & enc_m3)".
-rewrite public_TEnc; iDestruct "p_m3" as "[[p_e_kA p_m3]|p_m3]".
+iDestruct (public_TEncE with "p_m3 [//]") as "{p_m3} [[p_e_kA p_m3]|p_m3]".
   by eauto.
-iDestruct "p_m3" as "(_ & inv & _)".
-iPoseProof (wf_enc_elim with "inv enc_m3") as "{inv} #inv".
+iDestruct "p_m3" as "(#inv & _)".
 iModIntro.
 iDestruct "inv" as (nA' nB' kB') "[%e_m3 inv]".
 move/Spec.of_list_inj: e_m3 enA enB ekB => -> /= [] -> [] -> [] ->.

@@ -67,19 +67,18 @@ Definition is_key : val := λ: "t",
   if: Fst "t" = #TKey_tag then SOME (Fst (Snd "t"))
   else NONE.
 
-Definition enc : val := λ: "k" "t",
-  if: (Fst "k" = #TKey_tag) &&
-      (Fst (Snd "k") = #(int_of_key_type Enc)) then
-    (#TEnc_tag, (Snd (Snd "k"), "t"))
-  else "t".
+Definition enc : val := λ: "k" "t", (#TEnc_tag, ("k", "t")).
 
 Definition hash : val := λ: "t", (#THash_tag, "t").
+
+Definition mkkey kt : val := λ: "k",
+  (#TKey_tag, (#(int_of_key_type kt), "k")).
 
 Definition dec : val := λ: "k" "t",
   if: (Fst "k" = #TKey_tag)
       && (Fst (Snd "k") = #(int_of_key_type Dec))
       && (Fst "t" = #TEnc_tag)
-      && (eq_term (Snd (Snd "k")) (Fst (Snd "t"))) then
+      && (eq_term (mkkey Enc (Snd (Snd "k"))) (Fst (Snd "t"))) then
     SOME (Snd (Snd "t"))
   else
     NONE.
@@ -91,20 +90,19 @@ Definition tdec c : val := λ: "k" "t",
   bind: "t" := dec "k" "t" in
   untag c "t".
 
-Definition mkkey : val := λ: "k",
-  ((#TKey_tag, (#(int_of_key_type Enc), "k")),
-   (#TKey_tag, (#(int_of_key_type Dec), "k"))).
+Definition mkkeys : val := λ: "k",
+  (mkkey Enc "k", mkkey Dec "k").
 
 Definition mkakey : val := λ: <>,
   let: "n" := mknonce #() in
-  mkkey (tag (nroot.@"keys".@"enc") "n").
+  mkkeys (tag (nroot.@"keys".@"enc") "n").
 
 Definition mksigkey : val := λ: <>,
   let: "n" := mknonce #() in
-  mkkey (tag (nroot.@"keys".@"sig") "n").
+  mkkeys (tag (nroot.@"keys".@"sig") "n").
 
 Definition mkskey : val := λ: "k",
-  let: "k" := mkkey "k" in
+  let: "k" := mkkeys "k" in
   tuple (Fst "k") (Snd "k").
 
 Definition tsenc c : val := λ: "k" "t",
@@ -518,19 +516,38 @@ iIntros "#ctx H".
 by iApply twp_wp; iApply (twp_mknonce with "[//] H").
 Qed.
 
-Lemma twp_mkkey E (k : term) Ψ :
-  Ψ (TKey Enc k, TKey Dec k)%V -∗
-  WP mkkey k @ E [{ Ψ }].
+Lemma twp_mkkey kt E (k : term) ψ :
+  ψ (TKey kt k : val) -∗
+  WP mkkey kt k @ E [{ ψ }].
 Proof.
-rewrite val_of_term_unseal /= /mkkey.
-by iIntros "post"; wp_pures.
+rewrite val_of_term_unseal /=.
+by iIntros "post"; wp_lam; wp_pures.
 Qed.
 
-Lemma wp_mkkey E (k : term) Ψ :
-  Ψ (TKey Enc k, TKey Dec k)%V -∗
-  WP mkkey k @ E {{ Ψ }}.
+Lemma wp_mkkey kt E (k : term) ψ :
+  ψ (TKey kt k : val) -∗
+  WP mkkey kt k @ E {{ ψ }}.
 Proof.
-by iIntros "post"; iApply twp_wp; iApply twp_mkkey.
+rewrite val_of_term_unseal /=.
+by iIntros "post"; wp_lam; wp_pures.
+Qed.
+
+Lemma twp_mkkeys E (k : term) Ψ :
+  Ψ (TKey Enc k, TKey Dec k)%V -∗
+  WP mkkeys k @ E [{ Ψ }].
+Proof.
+rewrite /mkkeys.
+iIntros "post"; wp_pures.
+wp_apply twp_mkkey.
+wp_apply twp_mkkey.
+by wp_pures.
+Qed.
+
+Lemma wp_mkkeys E (k : term) Ψ :
+  Ψ (TKey Enc k, TKey Dec k)%V -∗
+  WP mkkeys k @ E {{ Ψ }}.
+Proof.
+by iIntros "post"; iApply twp_wp; iApply twp_mkkeys.
 Qed.
 
 (* FIXME: It should be possible to prove a twp for this, but right now we cannot
@@ -584,7 +601,7 @@ iAssert (minted (TKey Dec t')) as "s_t'".
   by rewrite minted_TKey minted_tag.
 iMod (honest_insert with "ctx cred hon phase s_t' tP") as "[#hon' phase]" => //.
 wp_pures. wp_bind (tag _ _). iApply wp_tag.
-iApply wp_mkkey. iApply ("post" with "[] [$] [$]") => //.
+iApply wp_mkkeys. iApply ("post" with "[] [$] [$]") => //.
 iApply public_TKey. iRight. rewrite minted_tag. iSplit => //.
 iDestruct "ctx" as "(_ & ? & _)".
 iExists _, _, _; iSplit => //.
@@ -637,7 +654,7 @@ iAssert (minted (TKey Enc t')) as "s_t'".
   by rewrite minted_TKey minted_tag.
 iMod (honest_insert with "ctx cred hon phase s_t' tP") as "[hon' phase]" => //.
 wp_pures. wp_bind (tag _ _). iApply wp_tag.
-iApply wp_mkkey. iApply ("post" with "[] hon'") => //.
+iApply wp_mkkeys. iApply ("post" with "[] hon'") => //.
 iApply public_TKey. iRight. rewrite minted_tag. iSplit => //.
 iDestruct "ctx" as "(_ & _ & ? & _)".
 iExists _, _, _; iSplit => //.
@@ -649,7 +666,7 @@ Lemma twp_mkskey E (k : term) Ψ :
   WP mkskey k @ E [{ Ψ }].
 Proof.
 rewrite /mkskey. iIntros "post". wp_pures.
-wp_bind (mkkey _); iApply twp_mkkey; wp_pures.
+wp_apply twp_mkkeys; wp_pures.
 by iApply twp_tuple.
 Qed.
 
@@ -661,17 +678,16 @@ by iIntros "post"; iApply twp_wp; iApply twp_mkskey.
 Qed.
 
 Lemma twp_enc E t1 t2 Ψ :
-  Ψ (Spec.enc t1 t2) -∗
+  Ψ (TEnc t1 t2) -∗
   WP enc t1 t2 @ E [{ Ψ }].
 Proof.
 rewrite !val_of_term_unseal /enc.
 iIntros "H".
 case: t1; try by move=> *; wp_pures; eauto.
-case; try by move=> *; wp_pures; eauto.
 Qed.
 
 Lemma wp_enc E t1 t2 Ψ :
-  Ψ (repr (Spec.enc t1 t2)) -∗
+  Ψ (TEnc t1 t2) -∗
   WP enc t1 t2 @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_enc. Qed.
 
@@ -694,9 +710,15 @@ case: t1; try by move=> /= *; wp_pures.
 case; try by move=> /= *; wp_pures.
 move=> tk; wp_pures.
 case: t2; try by move=> /= *; wp_pures.
-move=> tk' t; wp_pures; rewrite -val_of_term_unseal.
-wp_bind (eq_term _ _); iApply twp_eq_term.
-by rewrite bool_decide_decide /=; case: decide => [<-|e]; wp_pures.
+move=> tk' t /=; wp_pures.
+rewrite -val_of_term_unseal.
+wp_pures.
+wp_apply twp_mkkey. wp_apply twp_eq_term.
+case: tk' => //=; try by move=> *; wp_pures.
+case=> [] tk' //= *; wp_pures => //.
+rewrite bool_decide_decide; case: decide => [<-|ne].
+- by rewrite decide_True //; wp_pures.
+- by rewrite decide_False; last congruence; wp_pures.
 Qed.
 
 Lemma wp_dec E t1 t2 Ψ :
