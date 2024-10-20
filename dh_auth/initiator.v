@@ -71,11 +71,11 @@ iApply (wp_mknonce_freshN M
           (λ _, public_at n (TKey Enc kI) ∨
                 public_at n (TKey Enc kR))%I
           dh_auth_pred
-          (λ a, {[TExp (TInt 0) [a]]})) => //.
+          (λ a, {[TExp (TInt 0) a]})) => //.
 - iIntros "% ?". rewrite big_sepS_forall. by iApply "m_M".
 - iIntros "%a". rewrite big_sepS_singleton minted_TExp minted_TInt /=.
   iIntros "!>"; iSplit; eauto.
-  by iIntros "(_ & ? & _)".
+  by iIntros "(_ & ?)".
 iIntros "%a %fresh #m_a #p_a #a_pred token".
 rewrite big_sepS_singleton.
 iPoseProof (phase_auth_frag with "phase") as "#phaseI".
@@ -83,13 +83,12 @@ wp_pures. wp_bind (mkkeyshare _). iApply wp_mkkeyshare => //.
 iIntros "!> _". wp_pures. wp_list. wp_term_of_list.
 wp_pure _ credit:"H1".
 wp_pure _ credit:"H2".
-iAssert (public (TExp (TInt 0) [a])) as "p_ga".
-{ iApply public_TExp1.
-  rewrite minted_TInt. do 2![iSplit => //].
-  iRight. iApply "a_pred". iModIntro. iModIntro.
-  iIntros "%g %ks %e".
-  case/TExp_inj: e => _ perm.
-  by rewrite -(Permutation_length perm). }
+iAssert (public (TExp (TInt 0) a)) as "p_ga".
+{ iApply public_TExp_iff; eauto.
+  rewrite minted_TInt.
+  iRight. do 2![iSplit => //].
+  iApply "a_pred". iModIntro. iModIntro.
+  by rewrite /dh_auth_pred exps_TExpN. }
 wp_bind (send _ _). iApply wp_send => //.
 { rewrite public_of_list /=. iModIntro.
   do 2?[iSplit => //]. }
@@ -113,7 +112,7 @@ rewrite minted_TEnc minted_tag minted_of_list /=.
 iDestruct "m_m2" as "(_ & _ & m_gb & _)".
 wp_pures. wp_bind (texp _ _). iApply wp_texp.
 wp_pures. wp_list. wp_term_of_list. wp_pures.
-set secret := Spec.of_list [TExp (TInt 0) [a]; gb; Spec.texp gb a].
+set secret := Spec.of_list [TExp (TInt 0) a; gb; TExp gb a].
 wp_tag.
 set kS := Spec.tag (nroot.@"keys".@"sym") _. wp_pures.
 wp_pures. wp_list. wp_term_of_list. wp_tenc.
@@ -121,7 +120,7 @@ iAssert ( |={⊤}=>
     ●Ph{dq} n ∗
     (public_at n (TKey Enc kR) ∨
     ∃ b,
-     ⌜gb = TExp (TInt 0) [b]⌝ ∗
+     ⌜gb = TExp (TInt 0) b⌝ ∗
      □ (public b ↔ ▷ □ (public_at n (TKey Enc kI) ∨
                         public_at n (TKey Enc kR))) ∗
      term_meta kS (nroot.@"info") (kI, kR, n) ∗
@@ -141,13 +140,13 @@ iAssert ( |={⊤}=>
   case: (decide (n' < n)) => [contra|?].
   { iPoseProof ("minted_at_M" with "[//] m_ga") as "%ga_M".
     move/(_ _ ga_M)/subtermsP: fresh.
-    rewrite subterms_TExp /= !elem_of_union => fresh.
+    rewrite subterms_TExpN // !elem_of_union => fresh.
     case: fresh.
     right. right. left. apply/subtermsP. apply/STRefl. }
   iPoseProof (phase_auth_frag_agree with "phase phaseR") as "%".
   have ? : n' = n by lia. subst n'.
   iMod (escrowE with "escrow token") as ">token" => //.
-  rewrite /kS /secret !Spec.texpA TExpC2. iFrame.
+  rewrite /kS /secret !TExp_TExpN TExpC2. iFrame.
   iModIntro. iRight. iExists b. by do !iSplit => //.
 }
 set m3 := Spec.tenc _ _ _.
@@ -169,27 +168,27 @@ pose si := SessInfo kI kR kS n.
 iAssert (minted kS) as "#?".
 { rewrite minted_tag minted_of_list /= minted_TExp /= minted_TInt.
   do !iSplit => //.
-  iApply minted_texp => //. }
+  by iApply minted_TExp => //; iSplit. }
 iAssert (□ (∀ kt, public (TKey kt kS) ↔ ▷ session_fail si))%I as "#sec_sk".
 { iIntros "%kt". iSplitL; last first.
   { iIntros "!> #comp".
     rewrite (public_TKey kt) public_tag. iLeft.
     rewrite public_of_list /=. do !iSplit => //.
-    iApply public_texp => //.
+    iApply public_TExp => //.
     iApply "p_a". eauto. }
   iDestruct "p_m2" as "[#?|p_m2]".
   { iIntros "!> _ !>". by iRight. }
   iDestruct "p_m2" as "(%b & -> & #p_b & #p_m2 & _)".
   iIntros "!> #p_sk".
   iPoseProof (public_sym_keyE with "[//] p_sk") as "{p_sk} >p_sk".
-  rewrite Spec.texpA in secret kS si *.
-  rewrite /secret public_of_list /= public_TExp2.
+  rewrite TExp_TExpN in secret kS si *.
+  rewrite /secret public_of_list /= public_TExp2_iff; eauto.
   iDestruct "p_sk" as "(_ & _ & p_sk & _)".
   iDestruct "p_sk" as "[[_ #p_b'] | [[_ p_a'] | (_ & a_pred' & _)]]".
   + iPoseProof ("p_b" with "p_b'") as "{p_b} p_b". by eauto.
   + iPoseProof ("p_a" with "p_a'") as "hon'". by eauto.
   + iPoseProof ("a_pred" with "a_pred'") as ">%contra".
-    by have := contra _ _ eq_refl. }
+    by rewrite exps_TExpN in contra. }
 wp_pures. iApply ("Hpost" $! (Some kS)). iFrame.
 rewrite -[SessInfo _ _ _ _]/si.
 iSplitR => //.

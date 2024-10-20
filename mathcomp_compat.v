@@ -82,7 +82,7 @@ apply:
 exact: pickleK.
 Qed.
 
-Lemma perm_Permutation (T : eqType) (s1 s2 : seq T) :
+Lemma perm_Perm {T : eqType} {s1 s2 : seq T} :
   reflect (Permutation s1 s2) (perm_eq s1 s2).
 Proof.
 apply/(iffP idP).
@@ -109,6 +109,9 @@ apply/perm_sortP.
 - exact: Order.POrderTheory.le_trans.
 - exact: Order.POrderTheory.le_anti.
 Qed.
+
+Lemma is_trueP (b : bool) : is_true b <-> Coq.Bool.Bool.Is_true b.
+Proof. by case: b => /=; split. Qed.
 
 Lemma foldr_in (T : eqType) (S : T -> Type) xs :
   foldr (fun x R => S x * R)%type unit xs -> forall x, x \in xs -> S x.

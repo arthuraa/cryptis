@@ -87,7 +87,7 @@ Definition texp : val := λ: "t1" "t2",
     let: "base" := Fst (Snd "t1") in
     let: "exp"  := Snd (Snd "t1") in
     (#TExp_tag, ("base", insert_sorted leq_term "t2" "exp"))
-  else (#TInt_tag, #0).
+  else (#TExp_tag, ("t1", ["t2"])).
 
 Section Proofs.
 
@@ -246,28 +246,42 @@ by iApply twp_leq_pre_term.
 Qed.
 
 Lemma twp_texp E t1 t2 Ψ :
-  Ψ (Spec.texp t1 t2) -∗
+  Ψ (TExp t1 t2) -∗
   WP texp t1 t2 @ E [{ Ψ }].
 Proof.
-iIntros "post"; rewrite /texp /= val_of_term_unseal.
-wp_pures.
-case: t1; try by move=> *; wp_pures.
-move=> /= pt pts wf; wp_pures.
-case/andP: {-}(wf) => wf_pts sorted_pts.
-wp_bind (insert_sorted _ _ _).
-rewrite -val_of_term_unseal -[val_of_term t2]val_of_pre_term_unfold.
-iApply (@twp_insert_sorted _ PreTerm.pre_term_orderType) => //.
-  move=> * /=; iIntros "_ post".
-  by iApply twp_leq_pre_term; iApply "post".
-iIntros "_"; wp_pures.
-rewrite -val_of_pre_term_unfold /Spec.texp /= unfold_TExp /=.
-rewrite val_of_pre_term_unseal /= -val_of_pre_term_unseal val_of_pre_term_unfold.
-rewrite -repr_list_val -[ @List.map ]/@map -map_comp map_id_in //.
-by move=> {}pt /(allP wf_pts) wf_pt; rewrite /= fold_termK.
+iIntros "post"; rewrite /texp /=; wp_pures; wp_bind (Fst _ = _)%E.
+iApply (twp_wand _ _ _ (λ v, ⌜v = #(is_exp t1)⌝)%I).
+  rewrite -val_of_pre_term_unfold.
+  rewrite is_exp_unfold val_of_pre_term_unseal.
+  by case: (unfold_term t1) =>> //=; wp_pures.
+iIntros "% ->"; case: (boolP (is_exp t1)) => [t1X|t1NX].
+- rewrite -!val_of_pre_term_unfold unfold_TExpN /=.
+  rewrite /PreTerm.exp /=.
+  wp_pures. rewrite is_exp_unfold in t1X.
+  rewrite val_of_pre_term_unseal /=.
+  case: (unfold_term t1) (wf_unfold_term t1) t1X => //= pt pts.
+  case/and5P=> ???? sorted_pts _. wp_pures.
+  wp_bind (insert_sorted _ _ _).
+  rewrite -val_of_pre_term_unseal -!repr_list_val.
+  iApply (@twp_insert_sorted _ PreTerm.pre_term_orderType) => //.
+    move=> * /=; iIntros "_ post".
+    by iApply twp_leq_pre_term; iApply "post".
+  iIntros "_"; wp_pures.
+  have -> : sort Order.le (pts ++ [:: unfold_term t2])
+            = sort Order.le (unfold_term t2 :: pts).
+    by apply/perm_sort_leP; rewrite perm_catC.
+  by [].
+- wp_pures.
+  rewrite -!val_of_pre_term_unfold unfold_TExpN /PreTerm.exp /=.
+  rewrite is_exp_unfold in t1NX.
+  rewrite PreTerm.base_expN // PreTerm.exps_expN //= sortE /=.
+  rewrite val_of_pre_term_unseal /=.
+  rewrite /CONS. wp_pures.
+  by rewrite repr_list_unseal /=.
 Qed.
 
 Lemma wp_texp E t1 t2 Ψ :
-  Ψ (Spec.texp t1 t2) -∗
+  Ψ (TExp t1 t2) -∗
   WP texp t1 t2 @ E {{ Ψ }}.
 Proof. by iIntros "post"; iApply twp_wp; iApply twp_texp. Qed.
 

@@ -74,7 +74,7 @@ wp_pure (Rec _ _ _).
 iLöb as "IH" forall (psk) "psk".
 wp_pures.
 wp_bind (tls_server _ _ _ _ _ _).
-iApply wp_tls_server => //.
+iApply wp_tls_server => //; eauto.
 - by rewrite public_TInt.
 - by rewrite minted_TKey; iApply public_minted.
 - by rewrite public_TKey; eauto.

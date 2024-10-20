@@ -50,12 +50,13 @@ Instance repr_key_type : Repr key_type := λ kt, #(int_of_key_type kt).
 
 Canonical termO := leibnizO term.
 
-Global Instance TExp_proper : Proper ((=) ==> (≡ₚ) ==> (=)) TExp.
+Global Instance TExpN_proper : Proper ((=) ==> (≡ₚ) ==> (=)) TExpN.
 Proof.
-by move=> t _ <- ts1 ts2 e; apply/TExp_inj; eauto.
+move=> t _ <- ts1 ts2 ts12.
+by apply/TExpN_perm/(ssrbool.introT perm_Perm).
 Qed.
 
-Lemma TExpC2 g t1 t2 : TExp g [t1; t2] = TExp g [t2; t1].
+Lemma TExpC2 g t1 t2 : TExpN g [t1; t2] = TExpN g [t2; t1].
 Proof.
 suff -> : [t1; t2] ≡ₚ [t2; t1] by [].
 exact/Permutation_swap.
@@ -83,8 +84,8 @@ Inductive subterm (t : term) : term → Prop :=
 | STEnc1 k t' of subterm t k : subterm t (TEnc k t')
 | STEnc2 k t' of subterm t t' : subterm t (TEnc k t')
 | STHash t' of subterm t t' : subterm t (THash t')
-| STExp1 t' ts of subterm t t' : subterm t (TExp t' ts)
-| STExp2 t' t'' ts of subterm t t'' & t'' ∈ ts : subterm t (TExp t' ts).
+| STExp1 t' ts of negb (is_exp t') & subterm t t' : subterm t (TExpN t' ts)
+| STExp2 t' t'' ts of negb (is_exp t') & subterm t t'' & t'' ∈ ts : subterm t (TExpN t' ts).
 
 Section ValOfTerm.
 
@@ -129,8 +130,9 @@ Fixpoint val_of_term_rec t : val :=
     (#TEnc_tag, (val_of_term_rec t1, val_of_term_rec t2))%V
   | THash t =>
     (#THash_tag, val_of_term_rec t)
-  | TExp' t ts _ =>
-    (#TExp_tag, (val_of_term_rec t, repr ts))
+  | TExpN' pt pts _ =>
+    (#TExp_tag, (val_of_pre_term pt,
+                 repr_list (map val_of_pre_term pts)))%V
   end.
 
 Definition val_of_term_aux : seal val_of_term_rec. by eexists. Qed.
@@ -145,28 +147,11 @@ Lemma val_of_pre_term_unfold t :
 Proof.
 rewrite val_of_term_unseal val_of_pre_term_unseal.
 elim/term_ind': t => //=; try by move=> *; congruence.
-move=> t -> pts _.
-by rewrite [repr_list pts]repr_list_val /repr val_of_pre_term_unseal.
+rewrite /val_of_pre_term_unseal.
+by case => //= *; rewrite val_of_pre_term_unseal.
 Qed.
 
 End ValOfTerm.
-
-Lemma val_of_term_TExp t ts :
-  ~ is_exp t ->
-  path.sorted order.Order.le ts ->
-  val_of_term (TExp t ts) = (#TExp_tag, (val_of_term t, repr ts))%V.
-Proof.
-move=> nexp sorted_ts.
-rewrite -[LHS]val_of_pre_term_unfold unfold_TExp.
-rewrite order.Order.POrderTheory.sort_le_id // ?path.sorted_map; last first.
-  rewrite (_ : path.sorted _ _ = path.sorted order.Order.le ts) //.
-  by case: (path.sorted _ _) sorted_ts.
-rewrite -[in RHS](val_of_pre_term_unfold t) val_of_pre_term_unseal /=.
-rewrite [repr_list ts]repr_list_val map_map.
-do !congr PairV; congr repr_list.
-elim: ts {sorted_ts} => //= {nexp}t ts -> /=.
-by rewrite /repr_term -val_of_pre_term_unfold val_of_pre_term_unseal.
-Qed.
 
 Global Instance val_of_pre_term_inj : Inj (=) (=) val_of_pre_term.
 Proof.
@@ -233,25 +218,34 @@ Lemma nonces_of_termE' t :
   | TKey _ t => nonces_of_term t
   | TEnc t1 t2 => nonces_of_term t1 ∪ nonces_of_term t2
   | THash t => nonces_of_term t
-  | TExp' t pts _ => nonces_of_term t ∪ ⋃ map nonces_of_pre_term pts
+  | TExpN' pt pts _ => nonces_of_pre_term (PreTerm.PTExp pt pts)
   end.
 Proof.
 by rewrite nonces_of_term_unseal; case: t => //=.
 Qed.
 
-Lemma nonces_of_term_TExp t ts :
-  nonces_of_term (TExp t ts)
+Lemma nonces_of_term_TExpN t ts :
+  nonces_of_term (TExpN t ts)
   = nonces_of_term t ∪ ⋃ map nonces_of_term ts.
 Proof.
-rewrite nonces_of_term_unseal /nonces_of_term_def.
-case: unfold_TExpP => pts' e_pts' /=.
-by rewrite [in LHS]e_pts' map_map.
+rewrite nonces_of_term_unseal /nonces_of_term_def unfold_TExpN.
+rewrite /PreTerm.exp seq.size_map seq.size_eq0.
+case: eqtype.eqP => [->|tsN0] //=; first set_solver.
+rewrite -[@seq.cat]/@app -[@seq.map]/@map; set ts' := _ ++ _.
+set ts'' := path.sort _ _; have -> : ts'' ≡ₚ ts'.
+  by apply/(ssrbool.elimT perm_Perm); rewrite path.perm_sort.
+rewrite /ts' map_app union_list_app_L map_map [LHS]assoc_L; congr (_ ∪ _).
+rewrite -unfold_base -unfold_exps -[@seq.map]/@map.
+case: (ssrbool.boolP (is_exp t)) => [tX|tNX].
+- rewrite unfold_base /= -[ @map ]/@seq.map unfold_exps /=.
+  by case: (t) tX => //= pt pts ? _.
+- rewrite base_expN // exps_expN //=; set_solver.
 Qed.
 
-Definition nonces_of_termE := (nonces_of_term_TExp, nonces_of_termE').
+Definition nonces_of_termE := (nonces_of_term_TExpN, nonces_of_termE').
 
-Fixpoint subterms_pre_def t : gset term :=
-  {[fold_term t]} ∪
+Fixpoint ssubterms_pre_def t : gset term :=
+  let subterms_pre_def t := {[fold_term t]} ∪ ssubterms_pre_def t in
   match t with
   | PreTerm.PTInt _ => ∅
   | PreTerm.PTPair t1 t2 => subterms_pre_def t1 ∪ subterms_pre_def t2
@@ -262,8 +256,7 @@ Fixpoint subterms_pre_def t : gset term :=
   | PreTerm.PTExp t ts => subterms_pre_def t ∪ ⋃ map subterms_pre_def ts
   end.
 
-Definition subterms_def t :=
-  subterms_pre_def (unfold_term t).
+Definition subterms_def t := {[t]} ∪ ssubterms_pre_def (unfold_term t).
 Arguments subterms_def /.
 Definition subterms_aux : seal subterms_def. by eexists. Qed.
 Definition subterms := unseal subterms_aux.
@@ -280,23 +273,29 @@ Lemma subtermsE' t :
   | TKey _ t => subterms t
   | TEnc t1 t2 => subterms t1 ∪ subterms t2
   | THash t => subterms t
-  | TExp' t pts _ => subterms t ∪ ⋃ map subterms_pre_def pts
+  | TExpN' pt pts _ => ssubterms_pre_def (PreTerm.PTExp pt pts)
   end.
 Proof.
 rewrite subterms_unseal /=.
-case: t =>> //=; try by rewrite fold_termE ?unfold_termK.
-by rewrite fold_termE unfold_termK TExp'E.
+case: t =>> //=; try by rewrite ?unfold_termK.
 Qed.
 
-Lemma subterms_TExp t ts :
-  subterms (TExp t ts) = {[TExp t ts]} ∪ (subterms t ∪ ⋃ (subterms <$> ts)).
+Lemma subterms_TExpN t ts :
+  negb (is_exp t) →
+  subterms (TExpN t ts) = {[TExpN t ts]} ∪ (subterms t ∪ ⋃ (subterms <$> ts)).
 Proof.
-rewrite subtermsE'; congr (_ ∪ _).
-case: TExpP => pts ? e_pts.
-by rewrite [in LHS]e_pts map_map subterms_unseal.
+rewrite subterms_unseal /subterms_def => /is_trueP tNX.
+rewrite unfold_TExpN /PreTerm.exp seq.size_map seq.size_eq0.
+case: (ssrbool.altP eqtype.eqP) => [->|tsN0] /=.
+  rewrite TExpN0; set_solver.
+rewrite -unfold_base unfold_termK base_expN //; congr (_ ∪ (_ ∪ _)).
+rewrite -unfold_exps exps_expN //=.
+rewrite (_ : path.sort _ _ ≡ₚ seq.map unfold_term ts); last first.
+  by apply/(ssrbool.elimT perm_Perm); rewrite path.perm_sort.
+by rewrite map_map; congr (⋃ _); apply: map_ext => ?; rewrite unfold_termK.
 Qed.
 
-Definition subtermsE := (subterms_TExp, subtermsE').
+Definition subtermsE := (subterms_TExpN, subtermsE').
 
 Ltac solve_subtermsP :=
   intros;
@@ -321,17 +320,17 @@ Lemma subtermsP t1 t2 : subterm t1 t2 ↔ t1 ∈ subterms t2.
 Proof.
 split.
 - elim: t2 /; try by intros; rewrite subtermsE; set_solver.
-  move=> t' t'' ts _ IH ?; rewrite subtermsE.
+  move=> t' t'' ts t'NX _ IH ?; rewrite subtermsE //.
   do 2![rewrite elem_of_union; right].
   rewrite elem_of_union_list; exists (subterms t''); split => //.
   by rewrite elem_of_list_fmap; eauto.
 - elim: t2; try by solve_subtermsP.
-  move=> t IHt ts IHts _.
-  rewrite subtermsE !elem_of_union elem_of_union_list elem_of_singleton.
+  move=> t IHt /is_trueP tNX ts IHts /is_trueP tsN0 _.
+  rewrite subtermsE // !elem_of_union elem_of_union_list elem_of_singleton.
   case=> [-> | [/IHt ?|sub]]; eauto using subterm.
   case: sub => _ [] /elem_of_list_fmap [] t' [] -> t'_ts sub.
   suffices: subterm t1 t' by eauto using subterm.
-  elim: {t IHt} ts IHts t'_ts sub => /= [_|t ts IH [IHt IHts]].
+  elim: {t IHt tNX tsN0} ts IHts t'_ts sub => /= [_|t ts IH [IHt IHts]].
     by rewrite elem_of_nil.
   by rewrite elem_of_cons; case => [->|?] //; eauto.
 Qed.
@@ -364,12 +363,12 @@ split.
   rewrite elem_of_union_list; exists (nonces_of_term t'); split => //.
   by rewrite elem_of_list_fmap; eauto.
 - elim: t; try by solve_nonces_of_termP.
-  move=> t IHt ts IHts _.
+  move=> t IHt /is_trueP tNX ts IHts _ _.
   rewrite nonces_of_termE !elem_of_union elem_of_union_list.
   case=> [/IHt ?|sub]; eauto using subterm.
   case: sub => _ [] /elem_of_list_fmap [] t' [] -> t'_ts sub.
   suffices: subterm (TNonce a) t' by eauto using subterm.
-  elim: {t IHt} ts IHts t'_ts sub => /= [_|t ts IH [IHt IHts]].
+  elim: {t tNX IHt} ts IHts t'_ts sub => /= [_|t ts IH [IHt IHts]].
     by rewrite elem_of_nil.
   by rewrite elem_of_cons; case => [->|?] //; eauto.
 Qed.
@@ -396,9 +395,9 @@ elim: t2 / => //.
 - move=> ???.
   rewrite [nonces_of_term (THash _)]nonces_of_termE.
   set_solver.
-- move=> ???. rewrite nonces_of_term_TExp. set_solver.
-- move=> t2 t2' ts sub sub' t2'_ts.
-  rewrite nonces_of_term_TExp.
+- move=> ???. rewrite nonces_of_term_TExpN. set_solver.
+- move=> t2 t2' ts ? sub sub' t2'_ts.
+  rewrite nonces_of_term_TExpN.
   have ?: nonces_of_term t2' ⊆ ⋃ map nonces_of_term ts.
     move=> t t_t2'. rewrite elem_of_union_list.
     exists (nonces_of_term t2'). split => //.
@@ -620,39 +619,6 @@ Definition tsdec c k t :=
   | TPair _ k => tdec c k t
   | _ => None
   end.
-
-Definition texp t1 t2 :=
-  if t1 is TExp' base exp _ then
-    TExp base (t2 :: map fold_term exp)
-  else TInt 0.
-
-Lemma texpA t1 ts1 t2 : texp (TExp t1 ts1) t2 = TExp t1 (t2 :: ts1).
-Proof.
-rewrite /texp [in TExp t1 ts1]unlock /= {1}[fold_term]unlock /=.
-rewrite fold_wf_termE normalize_unfold1 normalize_unfoldn unfold_termK.
-apply: TExp_perm. rewrite seq.perm_cons -{2}[ts1](seq.mapK unfold_termK).
-by rewrite seq.perm_map // path.perm_sort.
-Qed.
-
-Lemma is_expP t : reflect (∃ t' ts, t = TExp t' ts) (is_exp t).
-Proof.
-apply/iff_reflect; split.
-- case=> [] t' [] ts ->; apply: is_exp_TExp.
-- elim: t => // t _ ts _ _ _; eauto.
-Qed.
-
-Lemma is_expN_texp t1 t2 : ~ is_exp t1 -> texp t1 t2 = TInt 0.
-Proof. by case: t1. Qed.
-
-Lemma unfold_exp t1 t2 :
-  unfold_term (texp t1 t2) = PreTerm.exp (unfold_term t1) (unfold_term t2).
-Proof.
-case: t1 => //= t1 ts1 /(ssrbool.elimT ssrbool.andP) [wf_ts1 ?].
-rewrite unfold_TExp /=; congr PreTerm.PTExp.
-apply: (ssrbool.elimT (perm_sort_leP _ _ _ _)); rewrite seq.perm_cons.
-rewrite -[@List.map]/@seq.map -seq.map_comp seq.map_id_in //= => {}t1 in_ts1.
-by rewrite fold_termK // (ssrbool.elimT seq.allP wf_ts1).
-Qed.
 
 Definition zero : term := TInt 0.
 

@@ -327,17 +327,6 @@ iIntros "%v1"; iDestruct 1 as (t1) "[-> _]".
 iApply wp_eq_term; iApply bool_typeI.
 Qed.
 
-Lemma has_type_tgroup Γ e :
-  has_type Γ e Pub -∗
-  has_type Γ (tgroup e) Pub.
-Proof.
-iIntros "#eP !> %vs #? #vsP /=".
-wp_bind (subst_map _ e); iApply wp_wand; first iApply "eP" => //.
-iIntros "%"; iDestruct 1 as (t) "[-> #tP]".
-iApply wp_tgroup; iExists _; iSplit => //.
-by rewrite public_TExp0 -public_minted.
-Qed.
-
 Lemma has_type_texp Γ e1 e2 :
   has_type Γ e1 Pub -∗
   has_type Γ e2 Pub -∗
@@ -349,7 +338,7 @@ iIntros "%v2"; iDestruct 1 as (t2) "[-> #t2P]".
 wp_bind (subst_map _ e1); iApply wp_wand; first iApply "e1P" => //.
 iIntros "%v1"; iDestruct 1 as (t1) "[-> #t1P]".
 iApply wp_texp; iExists _; iSplit => //.
-by iApply public_texp.
+by iApply public_TExp.
 Qed.
 
 Lemma has_type_hash Γ e :

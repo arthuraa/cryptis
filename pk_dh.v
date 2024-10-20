@@ -17,14 +17,14 @@ Notation iProp := (iProp Σ).
 Implicit Types rl : role.
 Implicit Types t kI kR nI nR sI sR : term.
 
-Definition pk_dh_mk_key_share n := TExp (TInt 0) [n].
+Definition pk_dh_mk_key_share n := TExp (TInt 0) n.
 
 Definition pk_dh_mk_key_share_impl : val := λ: <>,
   let: "n" := mknonce #() in
-  ("n", texp (tgroup (tint #0)) "n").
+  ("n", texp (tint #0) "n").
 
 Definition pk_dh_mk_session_key rl n s : term :=
-  Spec.texp s n.
+  TExp s n.
 
 Definition pk_dh_mk_session_key_impl rl : val :=
   λ: "n" "s", texp "s" "n".
@@ -51,12 +51,12 @@ Program Instance PK_DH : PK := {
 }.
 
 Next Obligation.
-by move=> t1 t2 /TExp_inj1 [_ ?].
+by move=> t1 t2 /TExp_injr.
 Qed.
 
 Next Obligation.
 move=> n; rewrite minted_TExp /= minted_TInt. apply: anti_symm.
-- by iIntros "(_ & ? & _)".
+- by iIntros "(_ & ?)".
 - by eauto.
 Qed.
 
@@ -64,33 +64,37 @@ Next Obligation.
 iIntros "%nI %kI %kR #s_nI #dh".
 rewrite /pk_dh_mk_key_share /secret_of. iModIntro. iSplit.
 - iIntros "#p_sI".
-  by iPoseProof (dh_seed_elim1 with "dh p_sI") as "H".
+  by iPoseProof (dh_seed_elim1 with "dh p_sI") as "H"; eauto.
 - iIntros "#fail". iApply dh_public_TExp; eauto.
 Qed.
 
 Next Obligation.
 move=> rl1 rl2 nI nI' nR nR'.
-rewrite /pk_dh_mk_key_share /pk_dh_mk_session_key {rl1 rl2} Spec.texpA.
-case e: (is_exp nR'); last first.
-  rewrite Spec.is_expN_texp ?e; eauto.
-  by move=> /(f_equal is_exp); rewrite is_exp_TExp.
-rewrite -(reflect_iff _ _ (Spec.is_expP nR')) in e.
-case: e => [] t' [] ts ->. rewrite Spec.texpA.
-move=> /TExp_inj [-> en].
-have : length (nI' :: ts) = 2 by rewrite -en.
-case: ts => [|t'' []] // in en *.
-move=> _.
-have [[-> ->]|[-> ->]] := Permutation_length_2 en; eauto.
+rewrite /pk_dh_mk_key_share /pk_dh_mk_session_key {rl1 rl2} TExp_TExpN.
+move=> eX.
+move/(f_equal base): (eX); rewrite !base_TExpN /= => base_nR'.
+have en: [nI; nR] ≡ₚ exps nR' ++ [nI'].
+  by rewrite -exps_TExpN -eX exps_TExpN.
+have := Permutation_length en; rewrite app_length /= => ?.
+have lenR' : length (exps nR') = 1 by lia.
+case eenR': (exps nR') => [|x [|??]] //= in lenR' en *.
+have [[-> ->]|[-> ->]] := Permutation_length_2 en.
+- right. split => //. apply: base_exps_inj.
+  + by rewrite base_TExpN.
+  + by rewrite exps_TExpN eenR'.
+- left. split => //. apply: base_exps_inj.
+  + by rewrite base_TExpN.
+  + by rewrite exps_TExpN eenR'.
 Qed.
 
 Next Obligation.
 move=> nI nR; rewrite /pk_dh_mk_key_share /pk_dh_mk_session_key.
-by rewrite !Spec.texpA TExpC2.
+by rewrite !TExp_TExpN TExpC2.
 Qed.
 
 Next Obligation.
 iIntros "%rl %t1 %t2 #s_t1 #s_t2".
-by rewrite /pk_dh_mk_session_key; iApply minted_texp.
+by rewrite /pk_dh_mk_session_key; iApply minted_TExp; iSplit.
 Qed.
 
 Next Obligation.
@@ -99,8 +103,7 @@ wp_pures. wp_bind (mknonce _).
 iApply (wp_mknonce (λ _, False)%I (dh_publ (λ _, corruption kI kR))) => //.
 iIntros "%n #s_n #p_n #dh token". wp_pures.
 wp_bind (tint _). iApply wp_tint.
-wp_bind (tgroup _). iApply wp_tgroup.
-wp_bind (texp _ _). iApply wp_texp. rewrite Spec.texpA.
+wp_bind (texp _ _). iApply wp_texp.
 wp_pures. iModIntro. iApply "post".
 rewrite bi.intuitionistic_intuitionistically.
 iFrame. do !iSplit => //. iModIntro. by do!iSplit => //.
@@ -142,9 +145,9 @@ Lemma pk_dh_session_key_elim kI kR kS n :
   ◇ False.
 Proof.
 iIntros "(%nI & %nR & -> & _ & _ & #priv_nI & #priv_nR & _)".
-rewrite /= /pk_dh_mk_session_key /pk_dh_mk_key_share Spec.texpA.
+rewrite /= /pk_dh_mk_session_key /pk_dh_mk_key_share TExp_TExpN.
 iIntros "#p_kS".
-iDestruct (dh_seed_elim2 with "priv_nI p_kS") as "[>p_sI >contra]".
+iDestruct (dh_seed_elim2 with "priv_nI p_kS") as "[>p_sI >contra]"; eauto.
 by iDestruct (dh_seed_elim0 with "priv_nR contra") as ">[]".
 Qed.
 

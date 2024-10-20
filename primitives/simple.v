@@ -115,9 +115,6 @@ Definition tsdec c : val := λ: "k" "t",
   bind: "k" := untuple "k" in
   tdec c (Snd "k") "t".
 
-Definition tgroup : val := λ: "t",
-  (#TExp_tag, ("t", NONEV)).
-
 Definition to_ek : val := λ: "t",
   bind: "kt" := is_key "t" in
   assert: ("kt" = repr Enc) in
@@ -798,21 +795,6 @@ Lemma wp_is_key E t Ψ :
   Ψ (repr (Spec.is_key t)) -∗
   WP is_key t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_is_key. Qed.
-
-Lemma twp_tgroup E t Ψ :
-  Ψ (TExp t []) -∗
-  WP tgroup t @ E [{ Ψ }].
-Proof.
-iIntros "post".
-rewrite /tgroup -val_of_pre_term_unfold; wp_pures.
-rewrite val_of_pre_term_unseal /= unfold_TExp /=.
-by rewrite -val_of_pre_term_unseal val_of_pre_term_unfold repr_list_unseal.
-Qed.
-
-Lemma wp_tgroup E t Ψ :
-  Ψ (TExp t []) -∗
-  WP tgroup t @ E {{ Ψ }}.
-Proof. by iIntros "?"; iApply twp_wp; iApply twp_tgroup. Qed.
 
 Lemma wp_to_ek E t Ψ :
   Ψ (repr (Spec.to_ek t)) -∗

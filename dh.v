@@ -22,7 +22,7 @@ Implicit Types kA kB : term.
 Variable P : term → iProp.
 
 Definition dh_publ t : iProp :=
-  ∃ g a, ⌜t = TExp g [a]⌝ ∧ □ P t.
+  ⌜length (exps t) = 1⌝ ∧ □ P t.
 
 Definition dh_seed t : iProp :=
   minted t ∧
@@ -39,26 +39,28 @@ by iApply "aP".
 Qed.
 
 Lemma dh_seed_elim1 g a :
+  ¬ is_exp g →
   dh_seed a -∗
-  public (TExp g [a]) -∗
-  ▷ P (TExp g [a]).
+  public (TExp g a) -∗
+  ▷ P (TExp g a).
 Proof.
-iIntros "#aP #p_t".
-rewrite public_TExp1.
-iDestruct "p_t" as "(_ & _ & [contra | p_t])".
+iIntros "%gNX #aP #p_t".
+rewrite public_TExp_iff //.
+iDestruct "p_t" as "[[_ contra] | (_ & _ & p_t)]".
   by iPoseProof (@dh_seed_elim0 with "aP contra") as ">[]".
 iDestruct "aP" as "(_ & _ & #aP)".
 iSpecialize ("aP" with "p_t"); iModIntro.
-by iDestruct "aP" as (g' a') "# [%e aP]"; case/TExp_inj1: e => _ ->.
+by iDestruct "aP" as "# [%e #aP]".
 Qed.
 
 Lemma dh_seed_elim2 g a t :
+  ¬ is_exp g →
   dh_seed a -∗
-  public (TExp g [a; t]) -∗
-  ◇ (public (TExp g [a]) ∧ public t).
+  public (TExpN g [a; t]) -∗
+  ◇ (public (TExp g a) ∧ public t).
 Proof.
-iIntros "#aP #p_t".
-rewrite public_TExp2.
+iIntros "%gXN #aP #p_t".
+rewrite public_TExp2_iff //.
 iDestruct "p_t" as "[p_t|[[_ contra]|p_t]]"; eauto.
   by iPoseProof (@dh_seed_elim0 with "aP contra") as ">[]".
 iDestruct "p_t" as "(_ & p_t & _)".
@@ -66,19 +68,21 @@ iDestruct "aP" as "(_ & _ & #aP)".
 iPoseProof ("aP" with "p_t") as "{p_t} p_t".
 iAssert (▷ False)%I as ">[]".
 iModIntro.
-iDestruct "p_t" as (g' a') "(%e & _)".
-by case/TExp_inj: e => _ /Permutation_length.
+iDestruct "p_t" as "(%e & _)".
+rewrite exps_TExpN app_length /= in e; lia.
 Qed.
 
 Lemma dh_public_TExp g a :
+  ¬ is_exp g →
   minted g -∗
   dh_seed a -∗
-  ▷ □ P (TExp g [a]) -∗
-  public (TExp g [a]).
+  ▷ □ P (TExp g a) -∗
+  public (TExp g a).
 Proof.
-iIntros "#gP #(? & ? & aP) #P_a".
-rewrite public_TExp1; do !iSplit => //.
-by iRight; iApply "aP"; iModIntro; iExists _, _; eauto.
+iIntros "%gXN #gP #(? & ? & aP) #P_a".
+rewrite public_TExp_iff //; iRight; do !iSplit => //.
+iApply "aP"; do 2!iModIntro; iSplit => //.
+by rewrite exps_TExpN exps_expN.
 Qed.
 
 Definition mkdh : val := mknonce.
@@ -88,19 +92,19 @@ Lemma wp_mkdh g (Ψ : val → iProp) :
   minted g -∗
   (∀ a, minted a -∗
         dh_seed a -∗
-        term_token (TExp g [a]) ⊤ -∗
+        term_token (TExp g a) ⊤ -∗
         Ψ a) -∗
   WP mkdh #() {{ Ψ }}.
 Proof.
 iIntros "#ctx #minted_g post".
-iApply (wp_mknonce_freshN ∅ (λ _, False%I) dh_publ (λ t, {[TExp g [t]]})
+iApply (wp_mknonce_freshN ∅ (λ _, False%I) dh_publ (λ t, {[TExp g t]})
   with "[//]" ) => //.
 - iIntros "%". rewrite elem_of_empty. by iIntros "[]".
 - iIntros "%". rewrite big_sepS_singleton. iIntros "!>".
   rewrite minted_TExp /=.
   iSplit.
   + by iIntros "?"; do !iSplit.
-  + by iIntros "(? & ? & ?)".
+  + by iIntros "(? & ?)".
 iIntros (a) "_ #m_a #(aP1 & aP2) #? token". rewrite big_sepS_singleton.
 iApply "post" => //.
 rewrite /dh_seed. do !iSplit => //.

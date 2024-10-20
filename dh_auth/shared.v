@@ -44,22 +44,21 @@ g^{nAnB}
 *)
 
 Definition mkkeyshare : val := λ: "k",
-  texp (tgroup (tint #0)) "k".
+  texp (tint #0) "k".
 
 Lemma wp_mkkeyshare (t : term) E :
   {{{ True }}}
     mkkeyshare t @ E
-  {{{ RET (repr (TExp (TInt 0) [t])); True : iProp}}}.
+  {{{ RET (repr (TExp (TInt 0) t)); True : iProp}}}.
 Proof.
 iIntros "%Φ _ Hpost". wp_lam.
 wp_bind (tint _). iApply wp_tint.
-wp_bind (tgroup _). iApply wp_tgroup.
-wp_bind (texp _ _). iApply wp_texp. rewrite Spec.texpA.
+wp_bind (texp _ _). iApply wp_texp.
 by iApply "Hpost".
 Qed.
 
 Definition dh_auth_pred t : iProp :=
-  ⌜∀ g ks, t = TExp g ks → length ks = 1⌝.
+  ⌜length (exps t) = 1⌝.
 
 Definition session_fail si : iProp :=
   public_at (si_time si) (TKey Enc (si_init si)) ∨
@@ -82,8 +81,8 @@ Qed.
 
 Definition msg2_pred kR m2 : iProp :=
   ∃ ga b kI n,
-    let gb := TExp (TInt 0) [b] in
-    let gab := Spec.texp ga b in
+    let gb := TExp (TInt 0) b in
+    let gab := TExp ga b in
     let secret := Spec.of_list [ga; gb; gab] in
     let kS := Spec.tag (nroot.@"keys".@"sym") secret in
     ⌜m2 = Spec.of_list [ga; gb; TKey Dec kI]⌝ ∗
@@ -99,8 +98,8 @@ Definition msg2_pred kR m2 : iProp :=
 
 Definition msg3_pred kI m3 : iProp :=
   ∃ a gb kR n,
-    let ga := TExp (TInt 0) [a] in
-    let gab := Spec.texp gb a in
+    let ga := TExp (TInt 0) a in
+    let gab := TExp gb a in
     let secret := Spec.of_list [ga; gb; gab] in
     let kS := Spec.tag (nroot.@"keys".@"sym") secret in
     ⌜m3 = Spec.of_list [ga; gb; TKey Dec kR]⌝ ∗
@@ -125,29 +124,6 @@ iMod (enc_pred_set (N.@"m3") msg3_pred with "token")
   as "[#? token]"; try solve_ndisj.
 iModIntro. by iSplit.
 Qed.
-
-Section WithSSRBool.
-
-Import ssrbool.
-
-Lemma eq_texp2 g a1 a2 b1 b2 :
-  Spec.texp a1 b1 = Spec.texp (TExp g [a2]) b2 →
-  a1 = TExp g [a2] ∧ b1 = b2 ∨
-  a1 = TExp g [b2] ∧ b1 = a2.
-Proof.
-move=> e.
-have /Spec.is_expP [g' [] ks e_exp] : is_true (is_exp a1).
-  case exp: is_exp => //.
-  rewrite Spec.is_expN_texp // ?exp //= in e *; auto.
-  suff: is_true (is_exp (TInt 0)) by [].
-  by rewrite e Spec.texpA is_exp_TExp.
-rewrite {}e_exp !Spec.texpA {a1} in e *. symmetry in e.
-case/TExp_inj: e => <- {g'} /(@Permutation_length_2_inv _ _ _ _) [].
-- case=> <- -> {b2 ks}. by eauto.
-- case=> <- -> {a2 ks}. by eauto.
-Qed.
-
-End WithSSRBool.
 
 End Verif.
 
