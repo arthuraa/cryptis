@@ -2281,7 +2281,7 @@ iSplit; eauto.
   by rewrite minted_TEnc !minted_TKey; iDestruct "ack" as "[sk _]".
 iDestruct "p_ch" as "[p_ch|p_ch]"; first by eauto.
 rewrite public_TEnc; iSplit => //.
-iDestruct "p_ack" as "[[fail _]|(_ & %k & %e_k & succ & decl)]".
+iDestruct "p_ack" as "[[fail _]|(_ & succ & decl)]".
   iMod (SShare.public_session_key_ofW with "k_ctx p_ke' fail") as "?".
   by eauto.
 iPoseProof (wf_enc_elim with "succ []") as "{succ} #succ"; eauto.

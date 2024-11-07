@@ -379,6 +379,7 @@ Fixpoint public_aux n t : iProp :=
        | THash t => wf_hash t
        | TEnc (TKey Enc k) t =>
          wf_enc k t ∧ □ (public_aux n (TKey Dec k) → public_aux n t)
+       | TEnc _ t => True
        | TExpN' _ _ _ => [∗ list] t' ∈ exps t, dh_pred t' t
        | _ => False
        end%I
@@ -434,6 +435,7 @@ Lemma public_eq t :
        | TKey kt t => wf_key kt t
        | THash t => wf_hash t
        | TEnc (TKey Enc k) t => wf_enc k t ∧ □ (public (TKey Dec k) → public t)
+       | TEnc _ t => True
        | TExpN' _ _ _ => [∗ list] t' ∈ exps t, dh_pred t' t
        | _ => False
        end%I
@@ -567,7 +569,10 @@ Lemma public_TEnc k t :
   public (TEnc k t) ⊣⊢
   public k ∧ public t ∨
   minted (TEnc k t) ∧
-  ∃ k', ⌜k = TKey Enc k'⌝ ∧ wf_enc k' t ∧ □ (public (TKey Dec k') → public t).
+  match k with
+  | TKey Enc k' => wf_enc k' t ∧ □ (public (TKey Dec k') → public t)
+  | _ => True
+  end.
 Proof.
 apply: (anti_symm _).
 - rewrite public_eq minted_TEnc.
@@ -578,14 +583,13 @@ apply: (anti_symm _).
     by rewrite big_sepS_union_pers !big_sepS_singleton; iLeft.
   + iRight. iSplit; first by eauto.
     case: k => // - [] k; eauto.
-- iDestruct 1 as "# [[Hk Ht] | (Ht & %k' & -> & inv & #impl)]".
-  + rewrite [public (TEnc _ _)]public_eq minted_TEnc.
+- iDestruct 1 as "[#[Hk Ht] | (#Ht & inv)]".
+  { rewrite [public (TEnc _ _)]public_eq minted_TEnc.
     rewrite -!public_minted.
     iSplit; eauto; iLeft.
     iExists {[k; t]}; rewrite big_sepS_union_pers !big_sepS_singleton.
-    iSplit; eauto; iPureIntro; by econstructor.
-  + rewrite [public (TEnc (TKey Enc k') t)]public_eq; iSplit => //=.
-    by eauto.
+    iSplit; eauto; iPureIntro; by econstructor. }
+  rewrite [public (TEnc _ _)]public_eq; iSplit => //. by eauto.
 Qed.
 
 Lemma public_THash t :
@@ -837,8 +841,7 @@ Proof.
 iIntros "#Ht #HΦ"; rewrite public_TEnc -(public_tag N t).
 iDestruct "Ht" as "[[? Ht] | Ht]"; first by eauto.
 rewrite minted_TEnc minted_tag.
-iDestruct "Ht" as "([??] & %k' & %e & inv & ?)".
-case: e => <-.
+iDestruct "Ht" as "([??] & inv & ?)".
 iRight; iSplit; eauto; by iApply wf_enc_elim.
 Qed.
 
@@ -854,7 +857,7 @@ iIntros "#Henc #HΦ #HΦt #Ht #Hdecl".
 rewrite public_TEnc; iRight.
 rewrite minted_TEnc minted_tag.
 iSplit; first by rewrite minted_TKey; eauto.
-iExists k. rewrite public_tag. iSplit; eauto. iSplit; eauto.
+rewrite public_tag. iSplit; eauto.
 iExists N, t, Φ; eauto.
 Qed.
 

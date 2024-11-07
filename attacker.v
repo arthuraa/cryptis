@@ -384,8 +384,8 @@ case=> t1'; last by iApply sum_typeIL.
 case: decide => [->|?]; last by iApply sum_typeIL.
 iApply sum_typeIR; iApply pub_typeI.
 rewrite [public (TEnc _ _)]public_TEnc.
-iDestruct "t2P" as "[[_ ?]|(_ & %k' & %e & _ & #t2P)]" => //.
-case: e => <-. by iApply "t2P".
+iDestruct "t2P" as "[[_ ?]|(_ & _ & #t2P)]" => //.
+by iApply "t2P".
 Qed.
 
 Lemma has_type_tag Γ c e :
