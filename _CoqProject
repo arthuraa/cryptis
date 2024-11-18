@@ -37,6 +37,7 @@ examples/permanent.v
 examples/counter.v
 examples/nsl_secr.v
 examples/nsl_auth.v
+examples/nsl.v
 
 ## CR
 
