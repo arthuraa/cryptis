@@ -357,6 +357,74 @@ iApply ("Hpost" $! (Some (TKey Enc kI, nR))).
 iModIntro. by iExists kI; eauto.
 Qed.
 
+Definition init_loop : val := rec: "loop" "c" "ekI" "dkI" :=
+  Fork ("loop" "c" "ekI" "dkI");;
+  let: "ekR" := recv "c" in
+  bind: "kt" := is_key "ekR" in
+  assert: ("kt" = repr Enc) in
+  bind: "sk" := init "c" "ekI" "dkI" "ekR" in
+  SOME ("ekR", "sk").
+
+Definition resp_loop : val := rec: "loop" "c" "ekR" "dkR" :=
+  Fork ("loop" "c" "ekR" "dkR");;
+  resp "c" "ekR" "dkR".
+
+Lemma wp_init_loop c kI :
+  channel c -∗
+  cryptis_ctx -∗
+  nsl_ctx -∗
+  public (TKey Enc kI) -∗
+  □ (public (TKey Dec kI) → ▷ False) -∗
+  {{{ True }}}
+    init_loop c (TKey Dec kI) (TKey Enc kI)
+  {{{ ts, RET (repr ts);
+      if ts is Some (pkR, sk) then ∃ kR,
+          ⌜pkR = TKey Enc kR⌝ ∗
+          minted sk ∗
+          (public (TKey Dec kR) ∗ public sk ∨
+           nsl_session kI kR sk ∗
+           term_token sk (↑nroot.@"init"))
+      else True }}}.
+Proof.
+iIntros "#chan #? #? #p_ekI #s_dkI".
+iLöb as "IH". iIntros "!> %Φ _ Hpost".
+wp_rec; wp_pures; wp_apply wp_fork.
+{ iApply "IH" => //. by iIntros "!> %?". }
+wp_pures. wp_apply wp_recv => //.
+iIntros (ekR) "#p_ekR".
+wp_pures; wp_bind (is_key _); iApply wp_is_key. wp_pures.
+case: Spec.is_keyP => [kt kR eekR|_]; last by protocol_failure.
+wp_pures.
+case: bool_decide_reflect => [ekt|_]; last by protocol_failure.
+case: kt eekR ekt => // -> _.
+wp_pures. wp_apply wp_init => //. iIntros "%ts tsP".
+case: ts=> [sk|] => /=; last by protocol_failure.
+wp_pures. iApply ("Hpost" $! (Some (TKey Enc kR, sk))).
+iExists kR. by iFrame.
+Qed.
+
+Lemma wp_resp_loop c kR :
+  channel c -∗
+  cryptis_ctx -∗
+  nsl_ctx -∗
+  public (TKey Enc kR) -∗
+  □ (public (TKey Dec kR) → ▷ False) -∗
+  {{{ True }}}
+    resp_loop c (TKey Dec kR) (TKey Enc kR)
+  {{{ ts, RET (repr ts);
+      if ts is Some (pkI, sk) then ∃ kI,
+        ⌜pkI = TKey Enc kI⌝ ∗
+        term_token sk (↑nroot.@"resp") ∗
+        (public (TKey Dec kI) ∗ public sk ∨ nsl_session kI kR sk)
+      else True }}}.
+Proof.
+iIntros "#chan #? #? #p_ekR #s_dkR".
+iLöb as "IH". iIntros "!> %Φ _ Hpost".
+wp_rec; wp_pures; wp_apply wp_fork.
+{ iApply "IH" => //. by iIntros "!> %?". }
+wp_pures. by wp_apply wp_resp => //.
+Qed.
+
 Definition game : val := λ: "mkchan",
   let: "c"  := "mkchan" #() in
   let: "kI" := mkakey #() in
@@ -367,12 +435,11 @@ Definition game : val := λ: "mkchan",
   let: "dkR" := Snd "kR" in
   send "c" "ekI";;
   send "c" "ekR";;
-  let: "ekR'" := recv "c" in
-  bind: "kt" := is_key "ekR'" in
-  assert: ("kt" = repr Enc) in
-  let: "res" := init "c" "dkI" "ekI" "ekR'" ||| resp "c" "dkR" "ekR" in
-  bind: "skI"  := Fst "res" in
+  let: "res" := init_loop "c" "dkI" "ekI" ||| resp_loop "c" "dkR" "ekR" in
+  bind: "resI"  := Fst "res" in
   bind: "resR" := Snd "res" in
+  let: "ekR'"  := Fst "resI" in
+  let: "skI"   := Snd "resI" in
   let: "ekI'"  := Fst "resR" in
   let: "skR"   := Snd "resR" in
   if: (eq_term "ekR" "ekR'" || eq_term "ekI" "ekI'")
@@ -407,29 +474,22 @@ set dkR := TKey Dec kR.
 iMod (freeze_honest with "[//] hon phase") as "(hon & phase & sec)" => //.
 wp_pures; wp_bind (send _ _); iApply wp_send => //.
 wp_pures; wp_bind (send _ _); iApply wp_send => //.
-wp_pures; wp_bind (recv _); iApply wp_recv => //.
-iIntros (ekR') "#p_ekR'". iMod "sec" as "#sec".
-rewrite big_sepS_forall.
+iMod "sec" as "sec".
+rewrite big_sepS_forall. wp_pures.
 iAssert (□ (public dkI ↔ ◇ False))%I as "#s_dkI".
   by iApply "sec"; iPureIntro; set_solver.
 iAssert (□ (public dkR ↔ ◇ False))%I as "#s_dkR".
   by iApply "sec"; iPureIntro; set_solver.
-wp_pures; wp_bind (is_key _); iApply wp_is_key.
-case: Spec.is_keyP => [kt kR' eekR'|_]; last by wp_pures; iLeft.
-wp_pures.
-case: bool_decide_reflect => [ekt|_]; last by wp_pures; iLeft.
-wp_pures.
 iMod (nsl_alloc with "enc_tok") as "[#nsl_ctx _]" => //.
 wp_pures; wp_bind (par _ _).
-case: kt eekR' ekt => // -> _.
-iApply (wp_par (λ v, ∃ a : option term, ⌜v = repr a⌝ ∗ _)%I
+iApply (wp_par (λ v, ∃ a : option (term * term), ⌜v = repr a⌝ ∗ _)%I
                (λ v, ∃ a : option (term * term), ⌜v = repr a⌝ ∗ _)%I
          with "[] []").
-- iApply (wp_init with "[//] [//] [//] p_ekI [] p_ekR' [$]") => //.
+- iApply (wp_init_loop with "[//] [//] [//] p_ekI [] [$]") => //.
   { iIntros "!> #p_dkI".
     iDestruct ("s_dkI" with "p_dkI") as ">[]". }
   iIntros "!> %a H". iExists a. iSplit; first done. iApply "H".
-- iApply (wp_resp with "[//] [//] [//] p_ekR [] [//]") => //.
+- iApply (wp_resp_loop with "[//] [//] [//] p_ekR [] [//]") => //.
   { iIntros "!> #p_dkR".
     iDestruct ("s_dkR" with "p_dkR") as ">[]". }
   iIntros "!> %a H"; iExists a; iSplit; first done. iApply "H".
@@ -438,9 +498,9 @@ iDestruct "H1" as (a) "[-> H1]".
 iDestruct "H2" as (b) "[-> H2]".
 iModIntro.
 wp_pure credit:"c1".
-case: a => [skI|]; wp_pure credit:"c2"; wp_pures; last by eauto.
+case: a => [[ekR' skI]|]; wp_pure credit:"c2"; wp_pures; last by eauto.
 case: b => [[ekI' skR]|]; wp_pures; last by eauto.
-iDestruct "H1" as "(#m_skI & sessI)".
+iDestruct "H1" as (kR') "(-> & #m_skI & sessI)".
 iDestruct "H2" as (kI') "(-> & skR_token & sessR)".
 pose (b := bool_decide ((ekR = TKey Enc kR' ∨ ekI = TKey Enc kI') ∧ skI = skR)).
 wp_bind ((eq_term ekR _ || _) && _)%E.
