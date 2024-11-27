@@ -29,7 +29,7 @@ Definition responder : val := λ: "c" "vkR" "skR",
   bind: "m1" := list_of_term "m1" in
   list_match: ["ga"; "vkI"] := "m1" in
   bind: "kt" := is_key "vkI" in
-  assert: "kt" = repr Dec in
+  guard: "kt" = repr Dec in
   let: "b" := mknonce #() in
   let: "gb" := mkkeyshare "b" in
   let: "m2" := tenc (N.@"m2") "skR" (term_of_list ["ga"; "gb"; "vkI"]) in
@@ -37,7 +37,7 @@ Definition responder : val := λ: "c" "vkR" "skR",
   bind: "m3" := tdec (N.@"m3") "vkI" (recv "c") in
   bind: "m3" := list_of_term "m3" in
   list_match: ["ga'"; "gb'"; "vkR'"] := "m3" in
-  assert: eq_term "ga" "ga'" && eq_term "gb" "gb'" && eq_term "vkR" "vkR'" in
+  guard: eq_term "ga" "ga'" && eq_term "gb" "gb'" && eq_term "vkR" "vkR'" in
   let: "gab" := texp "ga" "b" in
   let: "secret" := term_of_list ["ga"; "gb"; "gab"] in
   let: "kS" := tag (nroot.@"keys".@"sym") "secret" in

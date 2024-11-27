@@ -117,12 +117,12 @@ Definition tsdec c : val := λ: "k" "t",
 
 Definition to_ek : val := λ: "t",
   bind: "kt" := is_key "t" in
-  assert: ("kt" = repr Enc) in
+  guard: ("kt" = repr Enc) in
   SOME "t".
 
 Definition to_dk : val := λ: "t",
   bind: "kt" := is_key "t" in
-  assert: ("kt" = repr Dec) in
+  guard: ("kt" = repr Dec) in
   SOME "t".
 
 Section Proofs.

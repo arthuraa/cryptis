@@ -153,7 +153,7 @@ Definition send_store : val := λ: "c" "cs" "k" "v",
 Definition ack_store : val := λ: "c" "cs",
   let: "ts" := Connection.timestamp "cs" in
   Connection.recv (N.@"ack_store") "c" "cs" (λ: "m",
-    assert: eq_term "m" (tint "ts") in
+    guard: eq_term "m" (tint "ts") in
     SOME #()
   ).
 
@@ -167,8 +167,8 @@ Definition load : val := λ: "c" "cs" "k",
   Connection.recv (N.@"ack_load") "c" "cs" (λ: "resp",
     bind: "resp" := list_of_term "resp" in
     list_match: ["ts'"; "k'"; "t"] := "resp" in
-    assert: eq_term "ts'" "ts" in
-    assert: eq_term "k'" "k" in
+    guard: eq_term "ts'" "ts" in
+    guard: eq_term "k'" "k" in
     SOME "t"
   ).
 
@@ -180,9 +180,9 @@ Definition create : val := λ: "c" "cs" "k" "v",
   Connection.recv (N.@"ack_create") "c" "cs" (λ: "resp",
     bind: "resp" :=  list_of_term "resp" in
     list_match: ["ts'"; "k'"; "v'"; "b"] := "resp" in
-    assert: eq_term (tint "ts") "ts'" in
-    assert: eq_term "k" "k'" in
-    assert: eq_term "v" "v'" in
+    guard: eq_term (tint "ts") "ts'" in
+    guard: eq_term "k" "k'" in
+    guard: eq_term "v" "v'" in
     SOME (eq_term "b" (tint #1))
   ).
 
@@ -213,7 +213,7 @@ Definition handle_store N : val :=
   bind: "req" := list_of_term "req" in
   list_match: ["timestamp'"; "k"; "v"] := "req" in
   bind: "timestamp'" := to_int "timestamp'" in
-  assert: "timestamp" = "timestamp'" in
+  guard: "timestamp" = "timestamp'" in
   Connection.tick "cs";;
   SAList.insert "db" "k" "v";;
   Connection.send (N.@"ack_store") "c" "cs" (tint "timestamp'");;
@@ -226,7 +226,7 @@ Definition handle_load N : val :=
   bind: "req" := list_of_term "req" in
   list_match: ["timestamp'"; "k"] := "req" in
   bind: "timestamp'" := to_int "timestamp'" in
-  assert: "timestamp" = "timestamp'" in
+  guard: "timestamp" = "timestamp'" in
   bind: "data" := SAList.find "db" "k" in
   let: "m" := term_of_list [ tint "timestamp"; "k"; "data"] in
   Connection.send (N.@"ack_load") "c" "cs" "m";;
@@ -238,7 +238,7 @@ Definition handle_create N : val :=
   bind: "req" := list_of_term "req" in
   list_match: ["timestamp'"; "k"; "v"] := "req" in
   bind: "timestamp'" := to_int "timestamp'" in
-  assert: "timestamp" = "timestamp'" in
+  guard: "timestamp" = "timestamp'" in
   let: "success" :=
     match: SAList.find "db" "k" with
       SOME <> => #0
@@ -255,7 +255,7 @@ Definition handle_close N : val :=
 λ: "c" "cs" "db" "req",
   let: "timestamp"   := Connection.timestamp "cs" in
   bind: "timestamp'" := to_int "req" in
-  assert: "timestamp" = "timestamp'" in
+  guard: "timestamp" = "timestamp'" in
   Connection.send (N.@"ack_close") "c" "cs" (tint #0);;
   SOME #false.
 

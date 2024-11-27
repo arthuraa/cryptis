@@ -35,7 +35,7 @@ Definition init : val := λ: "c" "l" "skI" "pkI" "pkR",
   bind: "m2"   := tdec (N.@"m2") "skI" (recv "c") in
   bind: "m2"   := list_of_term "m2" in
   list_match: ["nI'"; "nR"; "pkR'"] := "m2" in
-  assert: eq_term "nI'" "nI" && eq_term "pkR'" "pkR" in
+  guard: eq_term "nI'" "nI" && eq_term "pkR'" "pkR" in
   "l" <- term_of_list ["pkI"; "pkR"; term_of_list ["nI"; "nR"]];;
   let: "m3" := tenc (N.@"m3") "pkR" "nR" in
   send "c" "m3";;
@@ -46,13 +46,13 @@ Definition resp : val := λ: "c" "lR" "skR" "pkR",
   bind: "m1" := list_of_term "m1" in
   list_match: ["nI"; "pkI"] := "m1" in
   bind: "kt" := is_key "pkI" in
-  assert: "kt" = repr Enc in
+  guard: "kt" = repr Enc in
   let: "nR" := mknonce #() in
   "lR" <- term_of_list ["pkI"; "pkR"; term_of_list ["nI"; "nR"]] ;;
   let: "m2" := tenc (N.@"m2") "pkI" (term_of_list ["nI"; "nR"; "pkR"]) in
   send "c" "m2";;
   bind: "m3" := tdec (N.@"m3") "skR" (recv "c") in
-  assert: eq_term "m3" "nR" in
+  guard: eq_term "m3" "nR" in
   SOME ("pkI", term_of_list ["nI"; "nR"]).
 
 Definition corrupt kI kR : iProp :=
@@ -357,7 +357,7 @@ Definition game : val := λ: "mkchan",
   send "c" "ekR";;
   let: "ekR'" := recv "c" in
   bind: "kt" := is_key "ekR'" in
-  assert: ("kt" = repr Enc) in
+  guard: ("kt" = repr Enc) in
   let: "lI" := ref (recv "c") in
   let: "lR" := ref (recv "c") in
   let: "res" := init "c" "lI" "dkI" "ekI" "ekR'" ||| resp "c" "lR" "dkR" "ekR" in

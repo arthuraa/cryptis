@@ -32,7 +32,7 @@ Definition initiator : val := λ: "c" "vkI" "skI" "vkR",
   bind: "m2"   := tdec (N.@"m2") "vkR" (recv "c") in
   bind: "m2"   := list_of_term "m2" in
   list_match: ["ga'"; "gb"; "vkI'"] := "m2" in
-  assert: eq_term "ga" "ga'" && eq_term "vkI" "vkI'" in
+  guard: eq_term "ga" "ga'" && eq_term "vkI" "vkI'" in
   let: "gab" := texp "gb" "a" in
   let: "secret" := term_of_list ["ga"; "gb"; "gab"] in
   let: "kS" := tag (nroot.@"keys".@"sym") "secret" in

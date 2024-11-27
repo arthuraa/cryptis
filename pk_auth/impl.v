@@ -45,7 +45,7 @@ Definition pk_auth_init : val :=
   bind: "m2"   := tdec (N.@"m2") "skI" (recv "c") in
   bind: "m2"   := list_of_term "m2" in
   list_match: ["sI'"; "sR"; "pkR'"] := "m2" in
-  assert: eq_term "sI'" "sI" && eq_term "pkR'" "pkR" in
+  guard: eq_term "sI'" "sI" && eq_term "pkR'" "pkR" in
   let: "k" := "mk_sess_key" "nI" "sR" in
   let: "m3" := tenc (N.@"m3") "pkR" "sR" in
   send "c" "m3";;
@@ -57,14 +57,14 @@ Definition pk_auth_resp : val :=
   bind: "m1" := list_of_term "m1" in
   list_match: ["sI"; "pkI"] := "m1" in
   bind: "kt" := is_key "pkI" in
-  assert: "kt" = repr Enc in
+  guard: "kt" = repr Enc in
   let: "nRsR" := "mk_key_share" #() in
   let: "nR" := Fst "nRsR" in
   let: "sR" := Snd "nRsR" in
   let: "m2" := tenc (N.@"m2") "pkI" (term_of_list ["sI"; "sR"; "pkR"]) in
   send "c" "m2";;
   bind: "m3" := tdec (N.@"m3") "skR" (recv "c") in
-  assert: eq_term "m3" "sR" in
+  guard: eq_term "m3" "sR" in
   let: "k" := "mk_sess_key" "nR" "sI" in
   SOME ("pkI", "k").
 

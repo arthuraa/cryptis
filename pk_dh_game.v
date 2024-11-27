@@ -34,7 +34,7 @@ Definition game : val := λ: "mkchan",
   send "c" "pkR";;
   let: "pkR'" := recv "c" in
   bind: "kt" := is_key "pkR'" in
-  assert: ("kt" = repr Enc) in
+  guard: ("kt" = repr Enc) in
   let: "res" := pk_dh_init N "c" "skI" "pkI" "pkR'" |||
                 pk_dh_resp N "c" "skR" "pkR" in
   bind: "sesskI" := Fst "res" in

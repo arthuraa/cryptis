@@ -76,7 +76,7 @@ Definition init : val := λ: "c" "skI" "pkI" "pkR",
   bind: "m2"   := tdec (nslN.@"m2") "skI" (recv "c") in
   bind: "m2"   := list_of_term "m2" in
   list_match: ["nI'"; "nR"; "pkR'"] := "m2" in
-  assert: eq_term "nI'" "nI" && eq_term "pkR'" "pkR" in
+  guard: eq_term "nI'" "nI" && eq_term "pkR'" "pkR" in
   let: "m3" := tenc (nslN.@"m3") "pkR" "nR" in
   send "c" "m3";;
   SOME "nR".
@@ -86,12 +86,12 @@ Definition resp : val := λ: "c" "skR" "pkR",
   bind: "m1" := list_of_term "m1" in
   list_match: ["nI"; "pkI"] := "m1" in
   bind: "kt" := is_key "pkI" in
-  assert: "kt" = repr Enc in
+  guard: "kt" = repr Enc in
   let: "nR" := mknonce #() in
   let: "m2" := tenc (nslN.@"m2") "pkI" (term_of_list ["nI"; "nR"; "pkR"]) in
   send "c" "m2";;
   bind: "m3" := tdec (nslN.@"m3") "skR" (recv "c") in
-  assert: eq_term "m3" "nR" in
+  guard: eq_term "m3" "nR" in
   SOME ("pkI", "nR").
 
 Definition msg1_pred kR m1 : iProp := ∃ nI kI,
@@ -361,7 +361,7 @@ Definition init_loop : val := rec: "loop" "c" "ekI" "dkI" :=
   Fork ("loop" "c" "ekI" "dkI");;
   let: "ekR" := recv "c" in
   bind: "kt" := is_key "ekR" in
-  assert: ("kt" = repr Enc) in
+  guard: ("kt" = repr Enc) in
   bind: "sk" := init "c" "ekI" "dkI" "ekR" in
   SOME ("ekR", "sk").
 

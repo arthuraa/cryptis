@@ -35,7 +35,7 @@ Definition init : val := λ: "c" "skI" "pkI" "pkR",
   bind: "m2"   := tdec (N.@"m2") "skI" (recv "c") in
   bind: "m2"   := list_of_term "m2" in
   list_match: ["nI'"; "nR"; "pkR'"] := "m2" in
-  assert: eq_term "nI'" "nI" && eq_term "pkR'" "pkR" in
+  guard: eq_term "nI'" "nI" && eq_term "pkR'" "pkR" in
   let: "m3" := tenc (N.@"m3") "pkR" "nR" in
   send "c" "m3";;
   let: "k" := term_of_list ["nI"; "nR"] in
@@ -46,12 +46,12 @@ Definition resp : val := λ: "c" "skR" "pkR",
   bind: "m1" := list_of_term "m1" in
   list_match: ["nI"; "pkI"] := "m1" in
   bind: "kt" := is_key "pkI" in
-  assert: "kt" = repr Enc in
+  guard: "kt" = repr Enc in
   let: "nR" := mknonce #() in
   let: "m2" := tenc (N.@"m2") "pkI" (term_of_list ["nI"; "nR"; "pkR"]) in
   send "c" "m2";;
   bind: "m3" := tdec (N.@"m3") "skR" (recv "c") in
-  assert: eq_term "m3" "nR" in
+  guard: eq_term "m3" "nR" in
   let: "k" := term_of_list ["nI"; "nR"] in
   SOME ("pkI", "k").
 
@@ -325,7 +325,7 @@ Definition game : val := λ: "mkchan",
   send "c" "pkR";;
   let: "pkR'" := recv "c" in
   bind: "kt" := is_key "pkR'" in
-  assert: ("kt" = repr Enc) in
+  guard: ("kt" = repr Enc) in
   let: "res" := init "c" "skI" "pkI" "pkR'" ||| resp "c" "skR" "pkR" in
   bind: "sesskI" := Fst "res" in
   bind: "resR" := Snd "res" in

@@ -2207,7 +2207,7 @@ Definition tls_server : val := λ: "c" "psk" "g" "verif_key" "other",
   let: "sk" := mkkeys "session_key" in
   let: "ack" := recv "c" in
   bind: "ack" := tdec (N.@"ack") (Snd "sk") "ack" in
-  assert: eq_term "ack" "sh" in
+  guard: eq_term "ack" "sh" in
   SOME "ke'".
 
 Lemma wp_tls_server c psk g verif_key other Φ :
