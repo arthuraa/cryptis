@@ -3,7 +3,7 @@ From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode adequacy.
-From iris.heap_lang.lib Require Import par.
+From iris.heap_lang.lib Require Import par ticket_lock assert.
 From cryptis Require Import lib term cryptis primitives tactics.
 From cryptis Require Import role.
 
@@ -13,7 +13,7 @@ Unset Printing Implicit Defensive.
 
 Section NSL.
 
-Context `{!heapGS Σ, !spawnG Σ, !cryptisGS Σ}.
+Context `{!heapGS Σ, !spawnG Σ, !cryptisGS Σ, !tlockG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (rl : role) (t kI kR nI nR sI sR kS : term).
@@ -357,72 +357,272 @@ iApply ("Hpost" $! (Some (TKey Enc kI, nR))).
 iModIntro. by iExists kI; eauto.
 Qed.
 
-Definition init_loop : val := rec: "loop" "c" "ekI" "dkI" :=
-  Fork ("loop" "c" "ekI" "dkI");;
-  let: "ekR" := recv "c" in
-  bind: "kt" := is_key "ekR" in
-  guard: ("kt" = repr Enc) in
-  bind: "sk" := init "c" "ekI" "dkI" "ekR" in
-  SOME ("ekR", "sk").
+Definition is_set N v (xs : list term) : iProp := ∃ (lset : loc),
+  ⌜v = #lset⌝ ∗
+  lset ↦ (repr xs) ∗
+  [∗ list] x ∈ xs, term_meta x N ().
 
-Definition resp_loop : val := rec: "loop" "c" "ekR" "dkR" :=
-  Fork ("loop" "c" "ekR" "dkR");;
-  resp "c" "ekR" "dkR".
+Definition new_set : val := λ: <>, ref []%V.
 
-Lemma wp_init_loop c kI :
+Lemma wp_new_set N :
+  {{{ True }}}
+    new_set #()
+  {{{v, RET v; is_set N v [] }}}.
+Proof.
+iIntros "%Φ _ post".
+wp_lam. wp_apply (@wp_nil term).
+wp_alloc set as "set".
+iApply "post". iModIntro. iExists set.
+iFrame. by eauto.
+Qed.
+
+Definition add_set : val := λ: "x" "set",
+  "set" <- "x" :: !"set".
+
+Lemma wp_add_set N v x xs :
+  {{{ term_token x (↑N) ∗ is_set N v xs }}}
+    add_set x v
+  {{{ RET #(); is_set N v (x :: xs) }}}.
+Proof.
+iIntros "%Φ [token (%l & -> & l & #meta)] post".
+iMod (term_meta_set N () with "token") as "#?" => //.
+wp_lam. wp_load. wp_cons. wp_store.
+iApply "post". iExists l. iFrame. rewrite /=. by eauto.
+Qed.
+
+Definition mem_set : val := λ: "x" "set",
+  match: find_list (λ: "y", eq_term "x" "y") (!"set") with
+    SOME <> => #true
+  | NONE => #false
+  end.
+
+Lemma wp_mem_set N (x : term) (xs : list term) v :
+  {{{ is_set N v xs }}}
+    mem_set x v
+  {{{ RET #(bool_decide (x ∈ xs)); is_set N v xs }}}.
+Proof.
+iIntros "%Φ (%l & -> & l & #meta) post".
+wp_lam. wp_pures. wp_load. wp_pures.
+wp_apply (wp_find_list (λ y, bool_decide (x = y))) => //.
+{ iIntros "%y %Ψ _ post". wp_pures.
+  iApply wp_eq_term. by iApply "post". }
+iIntros "_".
+assert (find (λ y, bool_decide (x = y)) xs =
+          if bool_decide (x ∈ xs) then Some x else None) as ->.
+{ elim: xs => //= y xs ->.
+  case: (bool_decide_reflect (x = y)) => [->|xy].
+  - by rewrite bool_decide_eq_true_2 // elem_of_cons; eauto.
+  - rewrite (bool_decide_ext (x ∈ xs) (x ∈ y :: xs)) //.
+    rewrite elem_of_cons; intuition congruence. }
+iAssert (is_set N #l xs) with "[l]" as "set".
+{ iExists l. iFrame. by eauto. }
+iSpecialize ("post" with "set").
+by case: bool_decide; wp_pures; iApply "post".
+Qed.
+
+Lemma is_set_fresh N v x xs :
+  is_set N v xs -∗
+  term_token x (↑N) -∗
+  ⌜x ∉ xs⌝.
+Proof.
+iIntros "(%l & -> & l & #meta) token %x_xs".
+rewrite big_sepL_elem_of //.
+by iDestruct (term_meta_token with "token meta") as "[]".
+Qed.
+
+Definition is_lock_set N v : iProp := ∃ vset vlock γ,
+  ⌜v = (vset, vlock)%V⌝ ∗
+  is_lock γ vlock (∃ xs, is_set N vset xs).
+
+Instance is_lock_set_persistent N v : Persistent (is_lock_set N v).
+Proof. apply _. Qed.
+
+Definition new_lock_set : val := λ: <>,
+  let: "set"  := new_set #() in
+  let: "lock" := newlock #() in
+  ("set", "lock").
+
+Lemma wp_new_lock_set N :
+  {{{ True }}}
+    new_lock_set #()
+  {{{ v, RET v; is_lock_set N v }}}.
+Proof.
+iIntros "%Φ _ post".
+wp_lam. wp_apply (wp_new_set N) => //.
+iIntros "%vset set". wp_pures.
+wp_apply (newlock_spec (∃ xs, is_set N vset xs) with "[set]");
+  first by eauto.
+iIntros "%vlock %γ #lock". wp_pures.
+iApply "post". iModIntro. iExists vset, vlock, γ. eauto.
+Qed.
+
+Definition add_fresh_lock_set : val := λ: "x" "set",
+  acquire (Snd "set");;
+  let: "xs" := Fst "set" in
+  assert: (~ mem_set "x" "xs");;
+  add_set "x" "xs";;
+  release (Snd "set").
+
+Lemma wp_add_fresh_lock_set N x v :
+  {{{ is_lock_set N v ∗ term_token x (↑N) }}}
+    add_fresh_lock_set x v
+  {{{ RET #(); True }}}.
+Proof.
+iIntros "%Φ [(%vset & %vlock & %γ & -> & #lock) token] post".
+wp_lam. wp_pures. wp_apply acquire_spec => //.
+iIntros "[locked (%xs & set)]". wp_pures.
+wp_apply wp_assert. wp_apply (wp_mem_set with "set"). iIntros "set".
+wp_pures.
+iPoseProof (is_set_fresh with "set token") as "%fresh".
+rewrite bool_decide_eq_false_2 => //.
+iModIntro. iSplit => //. iIntros "!>".
+wp_pures.
+wp_apply (wp_add_set with "[$]"). iIntros "set". wp_pures.
+wp_apply (release_spec with "[locked set] post").
+iSplit => //. iFrame. by eauto.
+Qed.
+
+Definition do_init_loop : val := rec: "loop" "c" "set" "ekI" "dkI" "ekR" :=
+  Fork ("loop" "c" "set" "ekI" "dkI" "ekR");;
+  let: "ekR'" := recv "c" in
+  (bind: "kt" := is_key "ekR'" in
+   guard: ("kt" = repr Enc) in
+   bind: "sk" := init "c" "ekI" "dkI" "ekR'" in
+   if: eq_term "ekR" "ekR'" then
+     add_fresh_lock_set "sk" "set";;
+     let: "guess" := recv "c" in
+     assert: (~ eq_term "sk" "guess")
+   else #());;
+   #().
+
+Definition do_init : val := λ: "c" "ekI" "dkI" "ekR",
+  let: "set" := new_lock_set #() in
+  do_init_loop "c" "set" "ekI" "dkI" "ekR".
+
+Lemma wp_do_init_loop c vset kI kR :
   channel c -∗
   cryptis_ctx -∗
   nsl_ctx -∗
   public (TKey Enc kI) -∗
   □ (public (TKey Dec kI) → ▷ False) -∗
+  □ (public (TKey Dec kR) → ▷ False) -∗
+  is_lock_set (nroot.@"init") vset -∗
   {{{ True }}}
-    init_loop c (TKey Dec kI) (TKey Enc kI)
-  {{{ ts, RET (repr ts);
-      if ts is Some (pkR, sk) then ∃ kR,
-          ⌜pkR = TKey Enc kR⌝ ∗
-          minted sk ∗
-          (public (TKey Dec kR) ∗ public sk ∨
-           nsl_session kI kR sk ∗
-           term_token sk (↑nroot.@"init"))
-      else True }}}.
+    do_init_loop c vset (TKey Dec kI) (TKey Enc kI) (TKey Enc kR)
+  {{{ RET #(); True }}}.
 Proof.
-iIntros "#chan #? #? #p_ekI #s_dkI".
+iIntros "#chan #? #? #p_ekI #s_dkI #s_dkR #set".
 iLöb as "IH". iIntros "!> %Φ _ Hpost".
 wp_rec; wp_pures; wp_apply wp_fork.
-{ iApply "IH" => //. by iIntros "!> %?". }
+{ by iApply "IH" => //. }
 wp_pures. wp_apply wp_recv => //.
-iIntros (ekR) "#p_ekR".
+iIntros (ekR') "#p_ekR'".
 wp_pures; wp_bind (is_key _); iApply wp_is_key. wp_pures.
-case: Spec.is_keyP => [kt kR eekR|_]; last by protocol_failure.
+case: Spec.is_keyP => [kt kR' eekR|_]; wp_pures; last by iApply "Hpost".
 wp_pures.
-case: bool_decide_reflect => [ekt|_]; last by protocol_failure.
+case: bool_decide_reflect => [ekt|_]; wp_pures ; last by iApply "Hpost".
 case: kt eekR ekt => // -> _.
 wp_pures. wp_apply wp_init => //. iIntros "%ts tsP".
-case: ts=> [sk|] => /=; last by protocol_failure.
-wp_pures. iApply ("Hpost" $! (Some (TKey Enc kR, sk))).
-iExists kR. by iFrame.
+case: ts=> [sk|] => /=; wp_pures; last by iApply "Hpost".
+wp_eq_term e; wp_pures; last by iApply "Hpost".
+case: e => <- {kR'}.
+iDestruct "tsP" as "(_ & [[#p_dkR _]|[#sess token]])".
+  iDestruct ("s_dkR" with "p_dkR") as ">[]".
+wp_apply (wp_add_fresh_lock_set with "[$]"). iIntros "_".
+wp_pures. wp_apply wp_recv => //. iIntros "%guess #p_guess".
+wp_pures. wp_apply wp_assert.
+wp_eq_term e.
+  rewrite e.
+  iPoseProof (nsl_session_public_key with "sess p_guess") as "contra".
+  wp_pures.
+  by iDestruct "contra" as ">[]".
+wp_pures. iModIntro. iSplit => //. iNext. wp_pures. by iApply "Hpost".
 Qed.
 
-Lemma wp_resp_loop c kR :
+Lemma wp_do_init c kI kR :
+  channel c -∗
+  cryptis_ctx -∗
+  nsl_ctx -∗
+  public (TKey Enc kI) -∗
+  □ (public (TKey Dec kI) → ▷ False) -∗
+  □ (public (TKey Dec kR) → ▷ False) -∗
+  {{{ True }}}
+    do_init c (TKey Dec kI) (TKey Enc kI) (TKey Enc kR)
+  {{{ RET #(); True }}}.
+Proof.
+iIntros "#chan #? #? #p_ekI #s_dkI #s_dkR %Φ _ !> post".
+wp_lam. wp_pures. wp_apply (wp_new_lock_set (nroot.@"init")) => //.
+iIntros "%set #set". wp_pures.
+wp_apply wp_do_init_loop => //.
+Qed.
+
+Definition do_resp_loop : val := rec: "loop" "c" "set" "ekR" "dkR" "ekI" :=
+  Fork ("loop" "c" "set" "ekR" "dkR" "ekI");;
+  (bind: "res" := resp "c" "ekR" "dkR" in
+   let: "ekI'" := Fst "res" in
+   let: "sk" := Snd "res" in
+   add_fresh_lock_set "sk" "set";;
+   if: eq_term "ekI" "ekI'" then
+     let: "guess" := recv "c" in
+     assert: (~ eq_term "sk" "guess")
+   else #());;
+  #().
+
+Definition do_resp : val := λ: "c" "ekR" "dkR" "ekI",
+  let: "set" := new_lock_set #() in
+  do_resp_loop "c" "set" "ekR" "dkR" "ekI".
+
+Lemma wp_do_resp_loop c set kI kR :
   channel c -∗
   cryptis_ctx -∗
   nsl_ctx -∗
   public (TKey Enc kR) -∗
   □ (public (TKey Dec kR) → ▷ False) -∗
+  □ (public (TKey Dec kI) → ▷ False) -∗
+  is_lock_set (nroot.@"resp") set -∗
   {{{ True }}}
-    resp_loop c (TKey Dec kR) (TKey Enc kR)
-  {{{ ts, RET (repr ts);
-      if ts is Some (pkI, sk) then ∃ kI,
-        ⌜pkI = TKey Enc kI⌝ ∗
-        term_token sk (↑nroot.@"resp") ∗
-        (public (TKey Dec kI) ∗ public sk ∨ nsl_session kI kR sk)
-      else True }}}.
+    do_resp_loop c set (TKey Dec kR) (TKey Enc kR) (TKey Enc kI)
+  {{{ RET #(); True }}}.
 Proof.
-iIntros "#chan #? #? #p_ekR #s_dkR".
+iIntros "#chan #? #? #p_ekR #s_dkR #s_dkI #set".
 iLöb as "IH". iIntros "!> %Φ _ Hpost".
 wp_rec; wp_pures; wp_apply wp_fork.
-{ iApply "IH" => //. by iIntros "!> %?". }
-wp_pures. by wp_apply wp_resp => //.
+{ iApply "IH" => //. }
+wp_pures. wp_apply wp_resp => //.
+iIntros "%res res".
+case: res => [[ekI' sk]|]; wp_pures; last by iApply "Hpost".
+iDestruct "res" as "(%kI' & -> & token & res)".
+wp_apply (wp_add_fresh_lock_set with "[$]"). iIntros "_".
+wp_eq_term e; wp_pures; last by iApply "Hpost".
+case: e => <- {kI'}.
+iDestruct "res" as "[[#p_dkI _]|sess]".
+  iDestruct ("s_dkI" with "p_dkI") as ">[]".
+wp_pures. wp_apply wp_recv => //. iIntros "%guess #p_guess".
+wp_pures. wp_apply wp_assert.
+wp_eq_term e.
+  rewrite e.
+  iPoseProof (nsl_session_public_key with "sess p_guess") as "contra".
+  wp_pures.
+  by iDestruct "contra" as ">[]".
+wp_pures. iModIntro. iSplit => //. iNext. wp_pures. by iApply "Hpost".
+Qed.
+
+Lemma wp_do_resp c kI kR :
+  channel c -∗
+  cryptis_ctx -∗
+  nsl_ctx -∗
+  public (TKey Enc kR) -∗
+  □ (public (TKey Dec kR) → ▷ False) -∗
+  □ (public (TKey Dec kI) → ▷ False) -∗
+  {{{ True }}}
+    do_resp c (TKey Dec kR) (TKey Enc kR) (TKey Enc kI)
+  {{{ RET #(); True }}}.
+Proof.
+iIntros "#? #? #? #? #? #? %Φ _ !> post".
+wp_lam. wp_pures.
+wp_apply (wp_new_lock_set (nroot.@"resp")) => //.
+iIntros "%set #set". wp_pures.
+by wp_apply wp_do_resp_loop => //.
 Qed.
 
 Definition game : val := λ: "mkchan",
@@ -435,20 +635,8 @@ Definition game : val := λ: "mkchan",
   let: "dkR" := Snd "kR" in
   send "c" "ekI";;
   send "c" "ekR";;
-  let: "res" := init_loop "c" "dkI" "ekI" ||| resp_loop "c" "dkR" "ekR" in
-  bind: "resI"  := Fst "res" in
-  bind: "resR" := Snd "res" in
-  let: "ekR'"  := Fst "resI" in
-  let: "skI"   := Snd "resI" in
-  let: "ekI'"  := Fst "resR" in
-  let: "skR"   := Snd "resR" in
-  if: (eq_term "ekR" "ekR'" || eq_term "ekI" "ekI'")
-      && eq_term "skI" "skR" then
-    let: "guess" := recv "c" in
-    SOME (eq_term "ekR" "ekR'" &&
-          eq_term "ekI" "ekI'" &&
-          ~ eq_term "skI" "guess")
-  else SOME #true.
+  (do_init "c" "dkI" "ekI" "ekR" |||
+   do_resp "c" "dkR" "ekR" "ekI").
 
 Lemma wp_game (mkchan : val) :
   {{{ True }}} mkchan #() {{{ v, RET v; channel v }}} -∗
@@ -457,7 +645,7 @@ Lemma wp_game (mkchan : val) :
   key_pred_token (⊤ ∖ ↑nroot.@"keys") -∗
   honest 0 ∅ -∗
   ●Ph 0 -∗
-  WP game mkchan {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
+  WP game mkchan {{ _, True }}.
 Proof.
 iIntros "wp_mkchan #ctx enc_tok key_tok hon phase"; rewrite /game; wp_pures.
 wp_bind (mkchan _); iApply "wp_mkchan" => //.
@@ -482,85 +670,35 @@ iAssert (□ (public dkR ↔ ◇ False))%I as "#s_dkR".
   by iApply "sec"; iPureIntro; set_solver.
 iMod (nsl_alloc with "enc_tok") as "[#nsl_ctx _]" => //.
 wp_pures; wp_bind (par _ _).
-iApply (wp_par (λ v, ∃ a : option (term * term), ⌜v = repr a⌝ ∗ _)%I
-               (λ v, ∃ a : option (term * term), ⌜v = repr a⌝ ∗ _)%I
-         with "[] []").
-- iApply (wp_init_loop with "[//] [//] [//] p_ekI [] [$]") => //.
+iApply (wp_par (λ v, True)%I (λ v, True)%I with "[] []").
+- wp_apply wp_do_init => //.
   { iIntros "!> #p_dkI".
     iDestruct ("s_dkI" with "p_dkI") as ">[]". }
-  iIntros "!> %a H". iExists a. iSplit; first done. iApply "H".
-- iApply (wp_resp_loop with "[//] [//] [//] p_ekR [] [//]") => //.
   { iIntros "!> #p_dkR".
     iDestruct ("s_dkR" with "p_dkR") as ">[]". }
-  iIntros "!> %a H"; iExists a; iSplit; first done. iApply "H".
-iIntros (v1 v2) "[H1 H2]".
-iDestruct "H1" as (a) "[-> H1]".
-iDestruct "H2" as (b) "[-> H2]".
-iModIntro.
-wp_pure credit:"c1".
-case: a => [[ekR' skI]|]; wp_pure credit:"c2"; wp_pures; last by eauto.
-case: b => [[ekI' skR]|]; wp_pures; last by eauto.
-iDestruct "H1" as (kR') "(-> & #m_skI & sessI)".
-iDestruct "H2" as (kI') "(-> & skR_token & sessR)".
-pose (b := bool_decide ((ekR = TKey Enc kR' ∨ ekI = TKey Enc kI') ∧ skI = skR)).
-wp_bind ((eq_term ekR _ || _) && _)%E.
-iApply (wp_wand _ _ _ (λ v, ⌜v = #b⌝)%I with "").
-{ wp_eq_term e_ekR; wp_pures.
-    iApply wp_eq_term. rewrite /b bool_decide_and bool_decide_or.
-    by rewrite (bool_decide_eq_true_2 _ e_ekR) /=.
-  wp_eq_term e_ekI; wp_pures.
-    iApply wp_eq_term. rewrite /b bool_decide_and bool_decide_or.
-    by rewrite (bool_decide_eq_true_2 _ e_ekI) /= Bool.orb_comm /=.
-  rewrite /b bool_decide_and bool_decide_or.
-  by rewrite (bool_decide_eq_false_2 _ e_ekR) (bool_decide_eq_false_2 _ e_ekI). }
-iIntros "% ->".
-rewrite /b; case: bool_decide_reflect => [[e_ek e_sk]|_]; wp_pures; eauto.
-subst skR.
-wp_apply wp_recv => //; iIntros "%guess #p_guess".
-iAssert (|={⊤}=> ⌜ekR = TKey Enc kR' ∧ ekI = TKey Enc kI' ∧ skI ≠ guess⌝)%I
-  with "[c1 c2 sessI sessR]" as ">%e".
-{ case: e_ek => [[<-]|[<-]].
-  - iDestruct "sessI" as "[(#fail & _)|(#sessI & _)]".
-    { iDestruct ("s_dkR" with "fail") as ">[]". }
-    iDestruct "sessR" as "[(_ & #fail) | #sessR]".
-    { iPoseProof (nsl_session_public_key with "sessI [//]") as "#contra".
-      iMod (lc_fupd_elim_later with "c1 contra") as "{contra} #>[]". }
-    iDestruct (nsl_session_agree with "sessI sessR") as "[<- _]".
-    case: (decide (skI = guess)) => [->|?].
-    { iPoseProof (nsl_session_public_key with "sessI [//]") as "#contra".
-      iMod (lc_fupd_elim_later with "c1 contra") as "{contra} #>[]". }
-    iModIntro. iPureIntro. by eauto.
-  - iDestruct "sessR" as "[(#fail & _)|#sessR]".
-    { iDestruct ("s_dkI" with "fail") as ">[]". }
-    iDestruct "sessI" as "[(_ & #fail) | (#sessI & _)]".
-    { iPoseProof (nsl_session_public_key with "sessR [//]") as "#contra".
-      iMod (lc_fupd_elim_later with "c1 contra") as "{contra} #>[]". }
-    iDestruct (nsl_session_agree with "sessI sessR") as "[_ <-]".
-    case: (decide (skI = guess)) => [->|?].
-    { iPoseProof (nsl_session_public_key with "sessI [//]") as "#contra".
-      iMod (lc_fupd_elim_later with "c1 contra") as "{contra} #>[]". }
-    iModIntro. iPureIntro. by eauto. }
-case: e => [[<-] [] [<-] wrong_guess].
-wp_pures. wp_apply wp_eq_term. rewrite bool_decide_eq_true_2 //.
-wp_pures. wp_apply wp_eq_term. rewrite bool_decide_eq_true_2 //.
-wp_pures. wp_apply wp_eq_term. rewrite bool_decide_eq_false_2 //.
-wp_pures; eauto.
+- wp_apply wp_do_resp => //.
+  { iIntros "!> #p_dkR".
+    iDestruct ("s_dkR" with "p_dkR") as ">[]". }
+  { iIntros "!> #p_dkI".
+    iDestruct ("s_dkI" with "p_dkI") as ">[]". }
+by eauto.
 Qed.
 
 End NSL.
 
 Definition F : gFunctors :=
-  #[heapΣ; spawnΣ; cryptisΣ].
+  #[heapΣ; spawnΣ; cryptisΣ; tlockΣ].
 
-Lemma nsl_secure (mkchan : val) σ₁ σ₂ (v : val) ts :
+Lemma nsl_secure (mkchan : val) σ₁ σ₂ (v : val) t₂ e₂ :
   (∀ `{!heapGS Σ, !cryptisGS Σ},
      ⊢ {{{ True }}} mkchan #() {{{ c, RET c; channel c}}}) →
-  rtc erased_step ([game mkchan], σ₁) (Val v :: ts, σ₂) →
-  v = NONEV ∨ v = SOMEV #true.
+  rtc erased_step ([game mkchan], σ₁) (t₂, σ₂) →
+  e₂ ∈ t₂ →
+  not_stuck e₂ σ₂.
 Proof.
 have ? : heapGpreS F by apply _.
 move=> wp_mkchan.
-apply (adequate_result NotStuck _ _ (λ v _, v = NONEV ∨ v = SOMEV #true)).
+apply (adequate_not_stuck NotStuck _ _ (λ v _, True)) => //.
 apply: heap_adequacy.
 iIntros (?) "?".
 iMod (cryptisGS_alloc _) as (?) "(#ctx & enc_tok & key_tok & ? & hon & phase)".
