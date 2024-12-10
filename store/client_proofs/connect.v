@@ -8,7 +8,7 @@ From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib version term gmeta nown.
 From cryptis Require Import cryptis primitives tactics.
-From cryptis Require Import role dh_auth.
+From cryptis Require Import role iso_dh.
 From cryptis.store Require Import impl shared db connection_proofs.
 
 Set Implicit Arguments.

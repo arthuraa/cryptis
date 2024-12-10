@@ -6,7 +6,7 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import lock ticket_lock.
 From cryptis Require Import lib version term cryptis primitives tactics.
-From cryptis Require Import role dh_auth.
+From cryptis Require Import role iso_dh.
 From cryptis.store Require Import alist db.
 
 Set Implicit Arguments.

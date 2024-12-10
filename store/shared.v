@@ -9,7 +9,7 @@ From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
 From cryptis Require Import lib version term gmeta nown.
 From cryptis Require Import cryptis primitives tactics.
-From cryptis Require Import role dh_auth.
+From cryptis Require Import role iso_dh.
 From cryptis.store Require Import alist db.
 
 Set Implicit Arguments.
@@ -994,7 +994,7 @@ Definition store_ctx : iProp :=
   enc_pred (N.@"ack_create") (session_msg_pred ack_create_pred) ∗
   enc_pred (N.@"close")      (session_msg_pred close_pred) ∗
   enc_pred (N.@"ack_close")  (session_msg_pred ack_close_pred) ∗
-  dh_auth_ctx (N.@"auth").
+  iso_dh_ctx (N.@"auth").
 
 Lemma store_ctx_alloc E :
   ↑N ⊆ E →
@@ -1034,8 +1034,8 @@ iFrame.
 iMod (enc_pred_set (N.@"ack_close") with "token")
   as "[ack_close token]"; try solve_ndisj.
 iFrame.
-iMod (dh_auth_ctx_alloc (N.@"auth") with "token")
-  as "#dh_auth"; try solve_ndisj.
+iMod (iso_dh_ctx_alloc (N.@"auth") with "token")
+  as "#iso_dh"; try solve_ndisj.
 Qed.
 
 Ltac solve_ctx :=
@@ -1085,7 +1085,7 @@ Lemma store_ctx_ack_close :
   store_ctx -∗ enc_pred (N.@"ack_close") (session_msg_pred ack_close_pred).
 Proof. solve_ctx. Qed.
 
-Lemma store_ctx_dh_auth_ctx : store_ctx -∗ dh_auth_ctx (N.@"auth").
+Lemma store_ctx_dh_auth_ctx : store_ctx -∗ iso_dh_ctx (N.@"auth").
 Proof. solve_ctx. Qed.
 
 End Defs.

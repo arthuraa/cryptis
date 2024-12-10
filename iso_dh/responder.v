@@ -6,7 +6,7 @@ From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta nown cryptis primitives tactics.
 From cryptis Require Import role.
-From cryptis.dh_auth Require Import shared.
+From cryptis.iso_dh Require Import shared.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -49,7 +49,7 @@ Ltac protocol_failure :=
 Lemma wp_responder c kR dq n :
   channel c -∗
   cryptis_ctx -∗
-  dh_auth_ctx N -∗
+  iso_dh_ctx N -∗
   public (TKey Dec kR) -∗
   {{{ ●Ph{dq} n }}}
     responder c (TKey Dec kR) (TKey Enc kR)
@@ -84,7 +84,7 @@ wp_pures. wp_bind (mknonce _).
 iApply (wp_mknonce_freshN ∅
           (λ _, public_at n (TKey Enc kI) ∨
                 public_at n (TKey Enc kR))%I
-          dh_auth_pred
+          iso_dh_pred
           (λ b, {[Spec.tag (nroot.@"keys".@"sym")
                     (Spec.of_list [ga; TExp (TInt 0) b; TExp ga b])]}))
        => //.
@@ -153,7 +153,7 @@ iAssert ( |={⊤}=> ●Ph{dq} n ∗
   ∃ a,
     ⌜ga = TExp (TInt 0) a⌝ ∗
     (public a ↔ ▷ □ session_fail si) ∗
-    (∀ t, dh_pred a t ↔ ▷ □ dh_auth_pred t)))%I
+    (∀ t, dh_pred a t ↔ ▷ □ iso_dh_pred t)))%I
   with "[phase_auth H3 H4]"
   as "{p_m3} > [phase_auth #i_m3]".
 { iDestruct "p_m3" as "[(p_skI & _) | (#i_m3 & _ & _)]".

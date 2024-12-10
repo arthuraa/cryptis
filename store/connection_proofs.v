@@ -5,7 +5,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib version term gmeta cryptis primitives tactics.
-From cryptis Require Import role dh_auth.
+From cryptis Require Import role iso_dh.
 From cryptis.store Require Import impl shared.
 
 Set Implicit Arguments.
@@ -26,7 +26,7 @@ Implicit Types v : val.
 Lemma wp_connection_connect N c kI kR dq n :
   channel c -∗
   cryptis_ctx -∗
-  dh_auth_ctx (N.@"auth") -∗
+  iso_dh_ctx (N.@"auth") -∗
   public (TKey Dec kI) -∗
   public (TKey Dec kR) -∗
   {{{ ●Ph{dq} n }}}
@@ -59,7 +59,7 @@ Qed.
 Lemma wp_connection_listen N c kR dq n :
   channel c -∗
   cryptis_ctx -∗
-  dh_auth_ctx (N.@"auth") -∗
+  iso_dh_ctx (N.@"auth") -∗
   public (TKey Dec kR) -∗
   {{{ ●Ph{dq} n }}}
     Connection.listen N c (TKey Enc kR) (TKey Dec kR)

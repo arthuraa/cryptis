@@ -6,7 +6,7 @@ From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta nown cryptis primitives tactics.
 From cryptis Require Import role.
-From cryptis.dh_auth Require Export shared initiator responder.
+From cryptis.iso_dh Require Export shared initiator responder.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

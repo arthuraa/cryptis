@@ -57,7 +57,7 @@ wp_bind (texp _ _). iApply wp_texp.
 by iApply "Hpost".
 Qed.
 
-Definition dh_auth_pred t : iProp :=
+Definition iso_dh_pred t : iProp :=
   ⌜length (exps t) = 1⌝.
 
 Definition session_fail si : iProp :=
@@ -89,7 +89,7 @@ Definition msg2_pred kR m2 : iProp :=
     minted_at n ga ∗
     (public b ↔ ▷ □ (public_at n (TKey Enc kI) ∨
                      public_at n (TKey Enc kR))) ∗
-    (∀ t, dh_pred b t ↔ ▷ □ dh_auth_pred t) ∗
+    (∀ t, dh_pred b t ↔ ▷ □ iso_dh_pred t) ∗
     escrow cryptisN
       (term_token ga ⊤)
       (term_token kS (↑nroot.@"client")) ∗
@@ -104,17 +104,17 @@ Definition msg3_pred kI m3 : iProp :=
     ⌜m3 = Spec.of_list [ga; gb; TKey Dec kR]⌝ ∗
     (public a ↔ ▷ □ (public_at n (TKey Enc kI) ∨
                      public_at n (TKey Enc kR))) ∗
-    (∀ t, dh_pred a t ↔ ▷ □ dh_auth_pred t) ∗
+    (∀ t, dh_pred a t ↔ ▷ □ iso_dh_pred t) ∗
     (public_at n (TKey Enc kR) ∨ term_meta kS (nroot.@"info") (kI, kR, n)).
 
-Definition dh_auth_ctx : iProp :=
+Definition iso_dh_ctx : iProp :=
   enc_pred (N.@"m2") msg2_pred ∗
   enc_pred (N.@"m3") msg3_pred.
 
-Lemma dh_auth_ctx_alloc E :
+Lemma iso_dh_ctx_alloc E :
   ↑N ⊆ E →
   enc_pred_token E ==∗
-  dh_auth_ctx.
+  iso_dh_ctx.
 Proof.
 iIntros "%sub token".
 iMod (enc_pred_set (N.@"m2") msg2_pred with "token")
@@ -126,4 +126,4 @@ Qed.
 
 End Verif.
 
-Arguments dh_auth_ctx_alloc {Σ _ _} N E.
+Arguments iso_dh_ctx_alloc {Σ _ _} N E.

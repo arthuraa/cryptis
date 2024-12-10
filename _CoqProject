@@ -26,10 +26,10 @@ attacker.v
 
 # Case studies
 
-dh_auth/shared.v
-dh_auth/initiator.v
-dh_auth/responder.v
-dh_auth.v
+iso_dh/shared.v
+iso_dh/initiator.v
+iso_dh/responder.v
+iso_dh.v
 
 ## Simple examples
 

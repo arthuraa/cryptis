@@ -6,7 +6,7 @@ From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta nown cryptis primitives tactics.
 From cryptis Require Import role.
-From cryptis.dh_auth Require Import shared.
+From cryptis.iso_dh Require Import shared.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -46,7 +46,7 @@ Ltac protocol_failure :=
 Lemma wp_initiator c kI kR dq n :
   channel c -∗
   cryptis_ctx -∗
-  dh_auth_ctx N -∗
+  iso_dh_ctx N -∗
   public (TKey Dec kI) -∗
   public (TKey Dec kR) -∗
   {{{ ●Ph{dq} n }}}
@@ -70,7 +70,7 @@ wp_bind (mknonce _).
 iApply (wp_mknonce_freshN M
           (λ _, public_at n (TKey Enc kI) ∨
                 public_at n (TKey Enc kR))%I
-          dh_auth_pred
+          iso_dh_pred
           (λ a, {[TExp (TInt 0) a]})) => //.
 - iIntros "% ?". rewrite big_sepS_forall. by iApply "m_M".
 - iIntros "%a". rewrite big_sepS_singleton minted_TExp minted_TInt /=.
@@ -88,7 +88,7 @@ iAssert (public (TExp (TInt 0) a)) as "p_ga".
   rewrite minted_TInt.
   iRight. do 2![iSplit => //].
   iApply "a_pred". iModIntro. iModIntro.
-  by rewrite /dh_auth_pred exps_TExpN. }
+  by rewrite /iso_dh_pred exps_TExpN. }
 wp_bind (send _ _). iApply wp_send => //.
 { rewrite public_of_list /=. iModIntro.
   do 2?[iSplit => //]. }
