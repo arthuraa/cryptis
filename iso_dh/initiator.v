@@ -94,7 +94,9 @@ wp_bind (send _ _). iApply wp_send => //.
   do 2?[iSplit => //]. }
 wp_pure _ credit:"H3".
 wp_pures. wp_bind (recv _). iApply wp_recv => //.
-iIntros "%m2 #p_m2". wp_tdec m2; last by protocol_failure.
+iIntros "%m2 #p_m2".
+wp_apply wp_tdec; case: Spec.tdecP; last by protocol_failure.
+move=> _ {}m2 [<-] ->.
 wp_pures. wp_list_of_term m2; last by protocol_failure.
 wp_pures. wp_list_match => [ga' gb vkI' -> {m2}|]; last by protocol_failure.
 wp_eq_term e; last by protocol_failure. subst ga'.
@@ -123,7 +125,7 @@ iAssert ( |={⊤}=>
      ⌜gb = TExp (TInt 0) b⌝ ∗
      □ (public b ↔ ▷ □ (public_at n (TKey Enc kI) ∨
                         public_at n (TKey Enc kR))) ∗
-     term_meta kS (nroot.@"info") (kI, kR, n) ∗
+     term_meta kS (nroot.@"info") (TKey Dec kI, TKey Dec kR, n) ∗
      term_token kS (↑nroot.@"client")))%I
   with "[phase token H3]"
   as "{p_m2} > (phase & p_m2)".
@@ -134,7 +136,7 @@ iAssert ( |={⊤}=>
     iFrame. eauto. }
   iMod (lc_fupd_elim_later_pers with "H3 i_m2") as "{i_m2} #i_m2".
   iDestruct "i_m2"
-    as "(%ga & %b & %kI' & %n' & %e_m2 & m_ga & ? & _ & escrow & pred_b)".
+    as "(%ga & %b & %kI' & %n' & %e_m2 & m_ga & s_b & _ & escrow & pred_b)".
   case/Spec.of_list_inj: e_m2 => <- -> <- {ga gb kI'} in secret kS *.
   case: (decide (n' < n)) => [contra|?].
   { iPoseProof ("minted_at_M" with "[//] m_ga") as "%ga_M".
@@ -147,8 +149,19 @@ iAssert ( |={⊤}=>
   have ? : n' = n by lia. subst n'.
   iMod (escrowE with "escrow token") as ">token" => //.
   rewrite /kS /secret !TExp_TExpN TExpC2. iFrame.
-  iModIntro. iRight. iExists b. by do !iSplit => //.
-}
+  iModIntro. iRight. iExists b.
+  iSplit => //.
+  iSplit.
+  { iModIntro. iSplit.
+    - iIntros "#p_b".
+      iSpecialize ("s_b" with "p_b").
+      do 2!iModIntro.
+      iDestruct "s_b" as "#[(% & %e & ?)|?]"; last by eauto.
+      case: e => <-; by eauto.
+    - iIntros "#fail"; iApply "s_b".
+      iModIntro.
+      iDestruct "fail" as "[fail|fail]"; eauto. }
+  by iSplit => //. }
 set m3 := Spec.tenc _ _ _.
 iAssert (public m3) as "#p_m3".
 { iApply (public_TEncIS with "[] [//] [#]") => //.

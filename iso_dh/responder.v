@@ -28,8 +28,6 @@ Definition responder : val := λ: "c" "vkR" "skR",
   let: "m1" := recv "c" in
   bind: "m1" := list_of_term "m1" in
   list_match: ["ga"; "vkI"] := "m1" in
-  bind: "kt" := is_key "vkI" in
-  guard: "kt" = repr Dec in
   let: "b" := mknonce #() in
   let: "gb" := mkkeyshare "b" in
   let: "m2" := tenc (N.@"m2") "skR" (term_of_list ["ga"; "gb"; "vkI"]) in
@@ -77,12 +75,9 @@ iDestruct "p_m1" as "(p_ga & p_vkI & _)".
 iPoseProof (public_minted with "p_ga") as "m_ga".
 iMod (minted_atI with "[//] phase_auth m_ga")
   as "[phase_auth #ma_ga]"; first by solve_ndisj.
-wp_bind (is_key _). iApply wp_is_key.
-case: Spec.is_keyP => [kt kI -> {vkI}|]; last by protocol_failure.
-wp_pures. case: kt => //=; first by protocol_failure.
 wp_pures. wp_bind (mknonce _).
 iApply (wp_mknonce_freshN ∅
-          (λ _, public_at n (TKey Enc kI) ∨
+          (λ _, (∃ kI, ⌜vkI = TKey Dec kI⌝ ∗ public_at n (TKey Enc kI)) ∨
                 public_at n (TKey Enc kR))%I
           iso_dh_pred
           (λ b, {[Spec.tag (nroot.@"keys".@"sym")
@@ -112,7 +107,8 @@ iMod (escrowI cryptisN _ (term_token ga ⊤) (term_token kS (↑nroot.@"client")
     by iMod (term_meta_set nroot () with "token") as "#meta". }
 rewrite (term_token_difference _ (↑nroot.@"server") (_ ∖ _)); last solve_ndisj.
 iDestruct "token" as "[server token]".
-iMod (term_meta_set (nroot.@"info") (kI, kR, n) with "token") as "#info".
+iMod (term_meta_set (nroot.@"info") (vkI, TKey Dec kR, n)
+       with "token") as "#info".
   solve_ndisj.
 iAssert (public gb) as "#p_gb".
 { iApply public_TExp_iff; eauto.
@@ -128,14 +124,16 @@ wp_pures. wp_bind (send _ _). iApply wp_send => //.
   iApply public_TEncIS => //.
   - by rewrite public_minted !minted_TKey.
   - iModIntro.
-    iExists ga, b, kI, n.  by do ![iSplitL => //].
+    iExists ga, b, vkI, n.  by do ![iSplitL => //].
   - rewrite minted_of_list /= minted_TExp minted_TInt /=.
     rewrite !public_minted !minted_TKey. by do ![iSplitL => //].
   - iIntros "!> _". rewrite public_of_list /=.
     by eauto. }
 wp_pures. wp_bind (recv _). iApply wp_recv => //.
 iIntros "%m3 #p_m3".
-wp_tdec m3; last by protocol_failure.
+wp_apply wp_tdec.
+case: Spec.tdecP; last by protocol_failure.
+move=> kI {}m3 -> -> {vkI}.
 wp_pures. wp_list_of_term m3; last by protocol_failure.
 wp_list_match => [ga' gb' vkR' -> {m3}|]; last by protocol_failure.
 wp_eq_term e; last by protocol_failure. subst ga'.
@@ -190,7 +188,9 @@ iAssert (□ (∀ kt, public (TKey kt kS) ↔ ▷ session_fail si))%I
     rewrite public_of_list /=.
     do !iSplit => //.
     iApply public_TExp => //.
-    iApply "p_b". eauto. }
+    iApply "p_b".
+    iModIntro. iModIntro.
+    iDestruct "comp" as "[fail|fail]"; eauto. }
   iIntros "#p_sk".
   iPoseProof (public_sym_keyE with "[//] p_sk") as ">p_kS".
   iDestruct "i_m3" as "[compromise|i_m3]" => //.
@@ -200,9 +200,13 @@ iAssert (□ (∀ kt, public (TKey kt kS) ↔ ▷ session_fail si))%I
   iDestruct "p_kS" as "(_ & _ & p_kS & _)".
   rewrite /gab public_TExp2_iff; eauto.
   iDestruct "p_kS" as "[[_ p_b'] | [ [_ p_a'] | (_ & contra & _)]]".
-  - iPoseProof ("p_b" with "p_b'") as "?". by eauto.
+  - iPoseProof ("p_b" with "p_b'") as "fail".
+    iModIntro.
+    iDestruct "fail" as "#[(% & %e & fail)|fail]"; eauto.
+    + case: e => <-. by iLeft.
+    + by iRight.
   - iPoseProof ("p_a" with "p_a'") as "{p_a} p_a". by eauto.
-  + iPoseProof ("pred_a" with "contra") as ">%contra".
+  - iPoseProof ("pred_a" with "contra") as ">%contra".
     by rewrite exps_TExpN in contra. }
 iApply ("Hpost" $! (Some (TKey Dec kI, kS))).
 iFrame. iModIntro. iExists kI. by do !iSplit => //.

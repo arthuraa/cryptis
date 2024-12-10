@@ -498,6 +498,23 @@ Definition dec k t : option term :=
   | _, _ => None
   end.
 
+Variant dec_spec k t : option term → Type :=
+| DecSome k' t'
+  of k = TKey Dec k' & t = TEnc (TKey Enc k') t'
+  : dec_spec k t (Some t')
+| DecNone : dec_spec k t None.
+
+Lemma decP k t : dec_spec k t (dec k t).
+Proof.
+case: k; try eauto using dec_spec.
+case; try eauto using dec_spec.
+move=> k; case: t; try eauto using dec_spec.
+case; try eauto using dec_spec.
+case; try eauto using dec_spec.
+move=> k' t /=.
+case: decide => [<-|?]; try eauto using dec_spec.
+Qed.
+
 Definition is_key t :=
   match t with
   | TKey kt _ => Some kt
@@ -597,6 +614,22 @@ Definition tdec c k t :=
   | Some t => untag c t
   | None => None
   end.
+
+Variant tdec_spec c k t : option term → Type :=
+| TDecSome k' t'
+  of k = TKey Dec k'
+  &  t = TEnc (TKey Enc k') (tag c t')
+  : tdec_spec c k t (Some t')
+| TDecNone : tdec_spec c k t None.
+
+Lemma tdecP c k t : tdec_spec c k t (tdec c k t).
+Proof.
+rewrite /tdec.
+case: decP; eauto using tdec_spec.
+move=> {}k {}t -> ->.
+case: untagP; eauto using tdec_spec.
+move=> {}t ->; eauto using tdec_spec.
+Qed.
 
 Lemma tdecK c k t t' :
   tdec c (TKey Dec k) t = Some t' →

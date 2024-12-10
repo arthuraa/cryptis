@@ -67,7 +67,7 @@ Definition session_fail si : iProp :=
 Definition session si : iProp :=
   ◯Ph (si_time si) ∗
   term_meta (si_key si) (nroot.@"info")
-    (si_init si, si_resp si, si_time si).
+    (TKey Dec (si_init si), TKey Dec (si_resp si), si_time si).
 
 Lemma session_agree si1 si2 :
   si_key si1 = si_key si2 →
@@ -80,20 +80,20 @@ by case: e => <- <- <-.
 Qed.
 
 Definition msg2_pred kR m2 : iProp :=
-  ∃ ga b kI n,
+  ∃ ga b vkI n,
     let gb := TExp (TInt 0) b in
     let gab := TExp ga b in
     let secret := Spec.of_list [ga; gb; gab] in
     let kS := Spec.tag (nroot.@"keys".@"sym") secret in
-    ⌜m2 = Spec.of_list [ga; gb; TKey Dec kI]⌝ ∗
+    ⌜m2 = Spec.of_list [ga; gb; vkI]⌝ ∗
     minted_at n ga ∗
-    (public b ↔ ▷ □ (public_at n (TKey Enc kI) ∨
+    (public b ↔ ▷ □ ((∃ kI, ⌜vkI = TKey Dec kI⌝ ∗ public_at n (TKey Enc kI)) ∨
                      public_at n (TKey Enc kR))) ∗
     (∀ t, dh_pred b t ↔ ▷ □ iso_dh_pred t) ∗
     escrow cryptisN
       (term_token ga ⊤)
       (term_token kS (↑nroot.@"client")) ∗
-    term_meta kS (nroot.@"info") (kI, kR, n).
+    term_meta kS (nroot.@"info") (vkI, TKey Dec kR, n).
 
 Definition msg3_pred kI m3 : iProp :=
   ∃ a gb kR n,
@@ -105,7 +105,8 @@ Definition msg3_pred kI m3 : iProp :=
     (public a ↔ ▷ □ (public_at n (TKey Enc kI) ∨
                      public_at n (TKey Enc kR))) ∗
     (∀ t, dh_pred a t ↔ ▷ □ iso_dh_pred t) ∗
-    (public_at n (TKey Enc kR) ∨ term_meta kS (nroot.@"info") (kI, kR, n)).
+    (public_at n (TKey Enc kR) ∨
+     term_meta kS (nroot.@"info") (TKey Dec kI, TKey Dec kR, n)).
 
 Definition iso_dh_ctx : iProp :=
   enc_pred (N.@"m2") msg2_pred ∗
