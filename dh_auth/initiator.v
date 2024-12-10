@@ -134,8 +134,7 @@ iAssert ( |={⊤}=>
     iFrame. eauto. }
   iMod (lc_fupd_elim_later_pers with "H3 i_m2") as "{i_m2} #i_m2".
   iDestruct "i_m2"
-    as "(%ga & %b & %kI' & %n' & %e_m2 &
-         m_ga & ? & _ & phaseR & escrow & pred_b)".
+    as "(%ga & %b & %kI' & %n' & %e_m2 & m_ga & ? & _ & escrow & pred_b)".
   case/Spec.of_list_inj: e_m2 => <- -> <- {ga gb kI'} in secret kS *.
   case: (decide (n' < n)) => [contra|?].
   { iPoseProof ("minted_at_M" with "[//] m_ga") as "%ga_M".
@@ -143,6 +142,7 @@ iAssert ( |={⊤}=>
     rewrite subterms_TExpN // !elem_of_union => fresh.
     case: fresh.
     right. right. left. apply/subtermsP. apply/STRefl. }
+  iPoseProof (minted_at_phase_frag with "m_ga") as "#phaseR".
   iPoseProof (phase_auth_frag_agree with "phase phaseR") as "%".
   have ? : n' = n by lia. subst n'.
   iMod (escrowE with "escrow token") as ">token" => //.

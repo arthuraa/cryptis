@@ -90,7 +90,6 @@ Definition msg2_pred kR m2 : iProp :=
     (public b ↔ ▷ □ (public_at n (TKey Enc kI) ∨
                      public_at n (TKey Enc kR))) ∗
     (∀ t, dh_pred b t ↔ ▷ □ dh_auth_pred t) ∗
-    ◯Ph n ∗
     escrow cryptisN
       (term_token ga ⊤)
       (term_token kS (↑nroot.@"client")) ∗
