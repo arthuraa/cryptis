@@ -102,7 +102,7 @@ Definition mksigkey : val := λ: <>,
   mkkeys (tag (nroot.@"keys".@"sig") "n").
 
 Definition mkskey : val := λ: "k",
-  let: "k" := mkkeys "k" in
+  let: "k" := mkkeys (tag (nroot.@"keys".@"sym") "k") in
   tuple (Fst "k") (Snd "k").
 
 Definition tsenc c : val := λ: "k" "t",
@@ -663,6 +663,7 @@ Lemma twp_mkskey E (k : term) Ψ :
   WP mkskey k @ E [{ Ψ }].
 Proof.
 rewrite /mkskey. iIntros "post". wp_pures.
+wp_pures. wp_apply twp_tag.
 wp_apply twp_mkkeys; wp_pures.
 by iApply twp_tuple.
 Qed.

@@ -294,7 +294,8 @@ Definition is_conn_state cs n : iProp :=
   cs_ts cs ↦ #n ∗
   (session_fail cs ∨ session cs) ∗
   minted (si_key cs) ∗
-  □ (∀ kt, public (TKey kt (si_key cs)) ↔ ▷ session_fail cs).
+  □ (∀ kt, public (TKey kt (Spec.tag (nroot.@"keys".@"sym") (si_key cs)))
+             ↔ ▷ session_fail cs).
 
 Definition db_not_signed_up kI kR : iProp :=
   term_token kR (↑dbSN kI).
@@ -618,7 +619,8 @@ iPureIntro. move=> *. solve_ndisj.
 Qed.
 
 Definition session_msg_pred (Q : sess_info → term → iProp) kS m : iProp :=
-  ∃ si : sess_info, ⌜si_key si = kS⌝ ∗ session si ∗ public m ∗ Q si m.
+  ∃ si : sess_info, ⌜kS = Spec.tag (nroot.@"keys".@"sym") (si_key si)⌝
+         ∗ session si ∗ public m ∗ Q si m.
 
 Definition init_pred si t : iProp := ∃ (beginning : nat),
   server_status_ready (si_init si) (si_resp si) ∗

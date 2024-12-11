@@ -845,6 +845,25 @@ iDestruct "Ht" as "([??] & inv & ?)".
 iRight; iSplit; eauto; by iApply wf_enc_elim.
 Qed.
 
+Lemma public_TEncI N Φ k t :
+  enc_pred N Φ -∗
+  minted k -∗
+  minted t -∗
+  (∀ k',
+    ⌜k = TKey Enc k'⌝ -∗
+    □ Φ k' t ∗
+    □ (public (TKey Dec k') → public t)) -∗
+  public (TEnc k (Spec.tag N t)).
+Proof.
+iIntros "#HΦ #m_k #m_t Henc".
+rewrite public_TEnc minted_TEnc minted_tag.
+iRight. do !iSplit => //.
+case: k => //; case=> // k.
+iDestruct ("Henc" $! k with "[//]") as "[#H1 #H2]".
+rewrite public_tag; iSplit => //.
+iExists N, t, Φ; eauto.
+Qed.
+
 Lemma public_TEncIS N Φ k t :
   minted (TKey Enc k) -∗
   enc_pred N Φ -∗
@@ -1375,6 +1394,39 @@ Proof.
 iIntros "(#symP & _) #p_k".
 rewrite public_TKey public_tag. iDestruct "p_k" as "[p_k|[_ p_k]]"; eauto.
 by iDestruct (wf_key_elim with "[//] [//]") as "#>[]".
+Qed.
+
+Lemma public_sym_key kt k :
+  cryptis_ctx -∗
+  public (TKey kt (Spec.tag (nroot.@"keys".@"sym") k)) ↔
+  minted k ∧ ◇ public k.
+Proof.
+iIntros "(#symP & _)".
+rewrite public_TKey !public_tag minted_tag.
+iSplit.
+- iIntros "[#p_k|[#m_k #wf]]"; eauto.
+  + iSplit => //. by iApply public_minted.
+  + iSplit => //. by iDestruct (wf_key_elim with "[//] [//]") as "#>%".
+- rewrite /bi_except_0. iIntros "[#m_k [#fail|#p_k]]".
+  + iRight; iSplit => //.
+    by iExists _, _, _; iSplit => //; iSplit => //.
+  + by iLeft.
+Qed.
+
+Lemma minted_mkskey k : minted (Spec.mkskey k) ⊣⊢ minted k.
+Proof.
+rewrite minted_TPair !minted_TKey !minted_tag.
+iSplit; [iIntros "[_ ?]"|]; eauto.
+Qed.
+
+Lemma public_mkskey k :
+  cryptis_ctx -∗
+  public (Spec.mkskey k) ↔ minted k ∧ ◇ public k.
+Proof.
+iIntros "#ctx". rewrite public_TPair. iSplit.
+- iIntros "[#p_k _]".
+  by iApply (public_sym_key with "[//] p_k").
+- by iIntros "#?"; iSplit; iApply (public_sym_key with "[//]").
 Qed.
 
 Lemma public_enc_keyE k :

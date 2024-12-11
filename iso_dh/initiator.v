@@ -35,10 +35,9 @@ Definition initiator : val := λ: "c" "vkI" "skI" "vkR",
   guard: eq_term "ga" "ga'" && eq_term "vkI" "vkI'" in
   let: "gab" := texp "gb" "a" in
   let: "secret" := term_of_list ["ga"; "gb"; "gab"] in
-  let: "kS" := tag (nroot.@"keys".@"sym") "secret" in
   let: "m3" := tenc (N.@"m3") "skI" (term_of_list ["ga"; "gb"; "vkR"]) in
   send "c" "m3";;
-  SOME (mkskey "kS").
+  SOME (mkskey "secret").
 
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
@@ -56,7 +55,7 @@ Lemma wp_initiator c kI kR dq n :
       if okS is Some kS then
         let si := SessInfo kI kR kS n in
         minted kS ∗
-        □ (∀ kt, public (TKey kt kS) ↔ ▷ session_fail si) ∗
+        □ (public kS ↔ ▷ session_fail si) ∗
         (session_fail si ∨ session si ∗ term_token kS (↑nroot.@"client"))
       else True
  }}}.
@@ -115,8 +114,6 @@ iDestruct "m_m2" as "(_ & _ & m_gb & _)".
 wp_pures. wp_bind (texp _ _). iApply wp_texp.
 wp_pures. wp_list. wp_term_of_list. wp_pures.
 set secret := Spec.of_list [TExp (TInt 0) a; gb; TExp gb a].
-wp_tag.
-set kS := Spec.tag (nroot.@"keys".@"sym") _. wp_pures.
 wp_pures. wp_list. wp_term_of_list. wp_tenc.
 iAssert ( |={⊤}=>
     ●Ph{dq} n ∗
@@ -125,8 +122,8 @@ iAssert ( |={⊤}=>
      ⌜gb = TExp (TInt 0) b⌝ ∗
      □ (public b ↔ ▷ □ (public_at n (TKey Enc kI) ∨
                         public_at n (TKey Enc kR))) ∗
-     term_meta kS (nroot.@"info") (TKey Dec kI, TKey Dec kR, n) ∗
-     term_token kS (↑nroot.@"client")))%I
+     term_meta secret (nroot.@"info") (TKey Dec kI, TKey Dec kR, n) ∗
+     term_token secret (↑nroot.@"client")))%I
   with "[phase token H3]"
   as "{p_m2} > (phase & p_m2)".
 { iPoseProof (public_TEncE with "p_m2 [//]") as "{p_m2} p_m2".
@@ -137,7 +134,7 @@ iAssert ( |={⊤}=>
   iMod (lc_fupd_elim_later_pers with "H3 i_m2") as "{i_m2} #i_m2".
   iDestruct "i_m2"
     as "(%ga & %b & %kI' & %n' & %e_m2 & m_ga & s_b & _ & escrow & pred_b)".
-  case/Spec.of_list_inj: e_m2 => <- -> <- {ga gb kI'} in secret kS *.
+  case/Spec.of_list_inj: e_m2 => <- -> <- {ga gb kI'} in secret *.
   case: (decide (n' < n)) => [contra|?].
   { iPoseProof ("minted_at_M" with "[//] m_ga") as "%ga_M".
     move/(_ _ ga_M)/subtermsP: fresh.
@@ -148,20 +145,19 @@ iAssert ( |={⊤}=>
   iPoseProof (phase_auth_frag_agree with "phase phaseR") as "%".
   have ? : n' = n by lia. subst n'.
   iMod (escrowE with "escrow token") as ">token" => //.
-  rewrite /kS /secret !TExp_TExpN TExpC2. iFrame.
-  iModIntro. iRight. iExists b.
+  rewrite /secret !TExp_TExpN TExpC2. iFrame.
+  iModIntro. iRight. iExists b. iFrame.
   iSplit => //.
-  iSplit.
-  { iModIntro. iSplit.
-    - iIntros "#p_b".
-      iSpecialize ("s_b" with "p_b").
-      do 2!iModIntro.
-      iDestruct "s_b" as "#[(% & %e & ?)|?]"; last by eauto.
-      case: e => <-; by eauto.
-    - iIntros "#fail"; iApply "s_b".
-      iModIntro.
-      iDestruct "fail" as "[fail|fail]"; eauto. }
-  by iSplit => //. }
+  iSplit => //.
+  iModIntro. iSplit.
+  - iIntros "#p_b".
+    iSpecialize ("s_b" with "p_b").
+    do 2!iModIntro.
+    iDestruct "s_b" as "#[(% & %e & ?)|?]"; last by eauto.
+    case: e => <-; by eauto.
+  - iIntros "#fail"; iApply "s_b".
+    iModIntro.
+    iDestruct "fail" as "[fail|fail]"; eauto. }
 set m3 := Spec.tenc _ _ _.
 iAssert (public m3) as "#p_m3".
 { iApply (public_TEncIS with "[] [//] [#]") => //.
@@ -177,15 +173,14 @@ iAssert (public m3) as "#p_m3".
     by do ![iSplit => //]. }
 wp_pures. wp_bind (send _ _). iApply wp_send => //.
 wp_pures. wp_bind (mkskey _). iApply wp_mkskey.
-pose si := SessInfo kI kR kS n.
-iAssert (minted kS) as "#?".
-{ rewrite minted_tag minted_of_list /= minted_TExp /= minted_TInt.
+pose si := SessInfo kI kR secret n.
+iAssert (minted secret) as "#?".
+{ rewrite minted_of_list /= minted_TExp /= minted_TInt.
   do !iSplit => //.
   by iApply minted_TExp => //; iSplit. }
-iAssert (□ (∀ kt, public (TKey kt kS) ↔ ▷ session_fail si))%I as "#sec_sk".
-{ iIntros "%kt". iSplitL; last first.
+iAssert (□ (public secret ↔ ▷ session_fail si))%I as "#sec_sk".
+{ iSplitL; last first.
   { iIntros "!> #comp".
-    rewrite (public_TKey kt) public_tag. iLeft.
     rewrite public_of_list /=. do !iSplit => //.
     iApply public_TExp => //.
     iApply "p_a". eauto. }
@@ -193,8 +188,7 @@ iAssert (□ (∀ kt, public (TKey kt kS) ↔ ▷ session_fail si))%I as "#sec_s
   { iIntros "!> _ !>". by iRight. }
   iDestruct "p_m2" as "(%b & -> & #p_b & #p_m2 & _)".
   iIntros "!> #p_sk".
-  iPoseProof (public_sym_keyE with "[//] p_sk") as "{p_sk} >p_sk".
-  rewrite TExp_TExpN in secret kS si *.
+  rewrite TExp_TExpN in secret si *.
   rewrite /secret public_of_list /= public_TExp2_iff; eauto.
   iDestruct "p_sk" as "(_ & _ & p_sk & _)".
   iDestruct "p_sk" as "[[_ #p_b'] | [[_ p_a'] | (_ & a_pred' & _)]]".
@@ -202,7 +196,7 @@ iAssert (□ (∀ kt, public (TKey kt kS) ↔ ▷ session_fail si))%I as "#sec_s
   + iPoseProof ("p_a" with "p_a'") as "hon'". by eauto.
   + iPoseProof ("a_pred" with "a_pred'") as ">%contra".
     by rewrite exps_TExpN in contra. }
-wp_pures. iApply ("Hpost" $! (Some kS)). iFrame.
+wp_pures. iApply ("Hpost" $! (Some secret)). iFrame.
 rewrite -[SessInfo _ _ _ _]/si.
 iSplitR => //.
 iSplitR => //.

@@ -564,7 +564,12 @@ Definition of_list := unseal of_list_aux.
 Lemma of_list_unseal : of_list = foldr TPair (TInt 0).
 Proof. exact: seal_eq. Qed.
 
-Definition mkskey t := TPair (TKey Enc t) (TKey Dec t).
+Definition mkskey t :=
+  let t := tag (nroot.@"keys".@"sym") t in
+  TPair (TKey Enc t) (TKey Dec t).
+
+Lemma mkskey_inj : Inj eq eq mkskey.
+Proof. by move=> t1 t2; case; case/tag_inj. Qed.
 
 Fixpoint to_list t : option (list term) :=
   match t with
