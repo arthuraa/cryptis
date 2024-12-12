@@ -11,8 +11,12 @@
       let pkgs = nixpkgs.legacyPackages.${system};
           lib = pkgs.lib; in rec {
             packages = rec {
-              coq = pkgs.coq_8_15;
-              coqPackages = pkgs.coqPackages_8_15;
+              coq = pkgs.coq_8_18;
+              coqPackages = pkgs.coqPackages_8_18.overrideScope (self: super:
+                { mathcomp = super.mathcomp.override {
+                    version = "1.17.0";
+                  };
+                });
             };
 
             devShell = pkgs.mkShell {

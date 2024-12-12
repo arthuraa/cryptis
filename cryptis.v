@@ -460,7 +460,7 @@ apply: bi.or_proper.
   rewrite !public_aux_eq  ?[tsize (TKey _ _)]tsize_eq //=; lia.
 Qed.
 
-Lemma public_minted t : public t -∗ minted t.
+Lemma public_minted t : public t ⊢ minted t.
 Proof. rewrite public_eq; by iIntros "[??]". Qed.
 
 Lemma minted_TInt n : minted (TInt n) ⊣⊢ True.
@@ -1103,6 +1103,11 @@ by rewrite /IsOp /FromSep => ->; rewrite term_own_op.
 Qed.
 
 #[global]
+Instance combine_sep_as_term_own t N (a b1 b2 : A) :
+  IsOp a b1 b2 → CombineSepAs (term_own t N b1) (term_own t N b2) (term_own t N a).
+Proof. exact: from_sep_term_own. Qed.
+
+#[global]
 Instance into_sep_term_own t N (a b1 b2 : A) :
   IsOp a b1 b2 → IntoSep (term_own t N a) (term_own t N b1) (term_own t N b2).
 Proof.
@@ -1176,8 +1181,7 @@ iDestruct "PQ" as "[_ >Q]".
 iAssert ([∗ set] t ∈ T, minted t)%I as "#minted_T".
 { rewrite (big_sepS_forall _ T). iIntros "%t %t_T".
   by iApply ("QE" with "[//] Q"). }
-iModIntro. iFrame. iExists names'. iFrame.
-rewrite dom_names big_sepS_union //. by iSplit.
+iModIntro. iFrame. rewrite dom_names big_sepS_union //. by iSplit.
 Qed.
 
 Lemma nonce_alloc P Q a :
@@ -1340,7 +1344,7 @@ Lemma to_mint_map_alloc M n t :
   to_mint_map (discrete_fun_insert n ({[t]} ∪ M n) M) n ⋅
   mint_map_singleton n t.
 Proof.
-apply/cmra_discrete_update => M' valid_M k /=; move/(_ k): valid_M.
+apply/cmra_discrete_total_update => M' valid_M k /=; move/(_ k): valid_M.
 rewrite !discrete_fun_lookup_op /to_mint_map /mint_map_singleton.
 case: decide => [k_n|n_k].
 { have ?: k ≠ n by lia.
@@ -1348,7 +1352,7 @@ case: decide => [k_n|n_k].
   by rewrite discrete_fun_lookup_insert_ne // ucmra_unit_right_id. }
 case: (decide (k = n)) => [->|ne].
 { rewrite discrete_fun_lookup_insert discrete_fun_lookup_singleton.
-  move: (M' n); apply/cmra_discrete_update.
+  move: (M' n); apply/cmra_discrete_total_update.
   set T := {[t]} ∪ M n.
   trans (● T ⋅ ◯ T).
   - apply: auth_update_alloc.
@@ -1356,18 +1360,17 @@ case: (decide (k = n)) => [->|ne].
     set_solver.
   - rewrite {2}/T -gset_op auth_frag_op (assoc op).
     exact: cmra_update_op_l. }
-rewrite discrete_fun_lookup_insert_ne // discrete_fun_lookup_singleton_ne //.
-by rewrite ucmra_unit_right_id.
+by rewrite discrete_fun_lookup_insert_ne // discrete_fun_lookup_singleton_ne.
 Qed.
 
 Lemma to_mint_map_bump M n : to_mint_map M n ~~> to_mint_map M (S n).
 Proof.
-apply/cmra_discrete_update => M' valid_M k /=; move/(_ k): valid_M.
+apply/cmra_discrete_total_update => M' valid_M k /=; move/(_ k): valid_M.
 rewrite !discrete_fun_lookup_op /to_mint_map.
 case: (decide (k < n)) => [k_n|n_k].
 { rewrite decide_True //; lia. }
 case: decide => [k_n|?] //.
-move: (M' k). apply/cmra_discrete_update.
+move: (M' k). apply/cmra_discrete_total_update.
 exact: auth_update_auth_persist.
 Qed.
 
@@ -1461,6 +1464,11 @@ Qed.
 Instance from_sep_phase_auth dq1 dq2 n :
   FromSep (●Ph{dq1 ⋅ dq2} n) (●Ph{dq1} n) (●Ph{dq2} n).
 Proof. by rewrite /FromSep phase_auth_dfrac_op. Qed.
+
+#[global]
+Instance combine_sep_as_phase_auth dq1 dq2 n :
+  CombineSepAs (●Ph{dq1} n) (●Ph{dq2} n) (●Ph{dq1 ⋅ dq2} n).
+Proof. exact: from_sep_phase_auth. Qed.
 
 #[global]
 Instance into_sep_phase_auth dq1 dq2 n :
@@ -1582,7 +1590,7 @@ move/comp_map_auth_frag_bound_agree: val_bound => -> {n'} in H_n *.
 iPoseProof (own_valid_2 with "verI hon") as "%val".
 case/comp_map_auth_frag_valid_agree: val.
 rewrite H_n => _ [] [<-] X_Y.
-iFrame. iModIntro. iExists H, C, M, Y. iFrame. eauto.
+iFrame. iModIntro. eauto.
 Qed.
 
 Lemma honest_union n T1 T2 : honest n (T1 ∪ T2) ⊣⊢ honest n T1 ∗ honest n T2.

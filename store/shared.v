@@ -16,6 +16,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Local Existing Instance ticket_lock.
+
 Record conn_state := ConnState {
   cs_si   :> sess_info;
   cs_ts   :  loc;
@@ -794,7 +796,7 @@ Lemma ack_loadE cs n beginning t1 t2 t2' :
   □ (session_fail cs ∨ ack_load_pred cs m) -∗
   public t2' ∗ (session_fail cs ∨ ⌜t2' = t2⌝).
 Proof.
-iIntros "(%e_rl & client & #server & conn) mapsto #p_m #inv_m".
+iIntros "%m (%e_rl & client & #server & conn) mapsto #p_m #inv_m".
 rewrite public_of_list /=.
 iDestruct "p_m" as "(_ & _ & p_t2' & _)".
 iSplit => //.

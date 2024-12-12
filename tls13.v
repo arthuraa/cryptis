@@ -1889,7 +1889,7 @@ Lemma public_hello E sp :
   waiting_for_peer (N.@"sess") P Resp (SShare.cnonce ss) (SShare.snonce ss)
     (SShare.meth_of ss, SShare.session_key_of N ss, other sp).
 Proof.
-iIntros (?) "#(keys & hello_ctx & sig_ctx & sess_ctx)".
+iIntros (?) "%ss #(keys & hello_ctx & sig_ctx & sess_ctx)".
 iIntros "#(wf_share & p_vkey & p_other) token r".
 iMod (session_begin with "sess_ctx r [token]") as "[#sess close]".
 - solve_ndisj.

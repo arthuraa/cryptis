@@ -158,7 +158,7 @@ wp_rec; wp_pures=> //.
 Qed.
 
 Lemma twp_eq_pre_term E (pt1 pt2 : PreTerm.pre_term) Ψ :
-  Ψ #(bool_decide (pt1 = pt2)) -∗
+  Ψ #(bool_decide (pt1 = pt2)) ⊢
   WP (eq_term (repr pt1) (repr pt2)) @ E [{ Ψ }].
 Proof.
 iIntros "H".
@@ -167,7 +167,7 @@ by iIntros (?) "->".
 Qed.
 
 Lemma twp_eq_term E t1 t2 Ψ :
-  Ψ #(bool_decide (t1 = t2)) -∗
+  Ψ #(bool_decide (t1 = t2)) ⊢
   WP (eq_term t1 t2) @ E [{ Ψ }].
 Proof.
 iIntros "H".
@@ -180,7 +180,7 @@ by apply: bool_decide_ext; split => [->|/unfold_term_inj] //.
 Qed.
 
 Lemma wp_eq_term E t1 t2 Ψ :
-  Ψ #(bool_decide (t1 = t2)) -∗
+  Ψ #(bool_decide (t1 = t2)) ⊢
   WP (eq_term t1 t2) @ E {{ Ψ }}.
 Proof.
 by iIntros "H"; iApply twp_wp; iApply twp_eq_term.
@@ -195,7 +195,7 @@ Lemma decide_eq_op {T : eqType} `{EqDecision T} (t1 t2 : T) :
 Proof. by apply/(sameP (bool_decide_reflect _))/eqP. Qed.
 
 Lemma twp_leq_pre_term E (pt1 pt2 : PreTerm.pre_term) Ψ :
-  Ψ #(pt1 <= pt2)%O -∗
+  Ψ #(pt1 <= pt2)%O ⊢
   WP (leq_term (repr pt1) (repr pt2)) @ E [{ Ψ }].
 Proof.
 rewrite /= val_of_pre_term_unseal.
@@ -238,7 +238,7 @@ iIntros "post"; wp_rec; wp_pures; try by iApply "post".
 Qed.
 
 Lemma twp_leq_term E t1 t2 Ψ :
-  Ψ #(t1 <= t2)%O -∗
+  Ψ #(t1 <= t2)%O ⊢
   WP leq_term t1 t2 @ E [{ Ψ }].
 Proof.
 rewrite -2!val_of_pre_term_unfold.
@@ -246,7 +246,7 @@ by iApply twp_leq_pre_term.
 Qed.
 
 Lemma twp_texp E t1 t2 Ψ :
-  Ψ (TExp t1 t2) -∗
+  Ψ (TExp t1 t2) ⊢
   WP texp t1 t2 @ E [{ Ψ }].
 Proof.
 iIntros "post"; rewrite /texp /=; wp_pures; wp_bind (Fst _ = _)%E.
@@ -281,7 +281,7 @@ iIntros "% ->"; case: (boolP (is_exp t1)) => [t1X|t1NX].
 Qed.
 
 Lemma wp_texp E t1 t2 Ψ :
-  Ψ (TExp t1 t2) -∗
+  Ψ (TExp t1 t2) ⊢
   WP texp t1 t2 @ E {{ Ψ }}.
 Proof. by iIntros "post"; iApply twp_wp; iApply twp_texp. Qed.
 

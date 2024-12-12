@@ -77,7 +77,7 @@ rewrite /comp_map_frac !pair_included; case=> [[] incl_n _ _].
 case/option_included: incl_n => [->|[[dq1 m1] [] [dq2 m2] [] -> [] ->]] //=.
   exact: ucmra_unit_least.
 rewrite pair_included; case => [[/= -> _]|[incl_dq _]] //.
-exact: Some_included_2.
+exact: Some_included_mono.
 Qed.
 
 Lemma to_comp_map_frag_included b1 b2 :
@@ -258,10 +258,8 @@ rewrite -comp_map_frag_op /comp_map_frag /=.
 case/view_frag_valid/(_ 0) => - [[] an aH aC] [wf_a [] val_dq incl_a_b].
 move: incl_a_b; rewrite !pair_included /= Some_included_total.
 rewrite to_agree_included leibniz_equiv_iff; case=> [[] -> incl_H incl_C].
-have {}incl_H: H ≼ aH.
-  trans (HC.1 ⋅ H) => //. exact: cmra_included_r.
-have {}incl_C: C ≼ aC.
-  trans (HC.2 ⋅ C) => //. exact: cmra_included_r.
+have {}incl_H: H ≼ aH by trans (HC.1 ⋅ H).
+have {}incl_C: C ≼ aC by trans (HC.2 ⋅ C).
 case: wf_a => [bound_H [] bound_C ?].
 split.
 - move/dom_included: incl_H => incl_H m /incl_H.
@@ -338,11 +336,9 @@ do ![split => //].
     case: (bf_n) => [[dq n]|] //= in val_dq *.
     by case/exclusive_l: val_dq.
   subst bf_n; rewrite !ucmra_unit_right_id in incl_n *.
-  have {}incl_C : bf_C ≼ aC.
-    trans (HC.2 ⋅ bf_C) => //. exact: cmra_included_r.
+  have {}incl_C : bf_C ≼ aC by trans (HC.2 ⋅ bf_C).
   rewrite ucmra_unit_left_id. do ![split => //].
-  have {}incl_H : bf_H ≼ aH.
-    trans (HC.1 ⋅ bf_H) => //. exact: cmra_included_r.
+  have {}incl_H : bf_H ≼ aH by trans (HC.1 ⋅ bf_H).
   rewrite lookup_included in incl_H.
   rewrite lookup_included => n.
   rewrite lookup_op.

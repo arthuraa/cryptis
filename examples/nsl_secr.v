@@ -189,7 +189,7 @@ iDestruct (public_TEncE with "p_m [//]") as "[fail|succ]".
 - rewrite public_of_list /=.
   iDestruct "fail" as "(_ & #p_nI & p_nR & _)".
   iPoseProof ("s_nI" with "p_nI") as "fail". iModIntro.
-  iSplit; eauto. iModIntro. by iSplit; eauto.
+  by iSplit; eauto.
 - iDestruct "succ" as "(#m2P & m_m & _)".
   rewrite minted_of_list /=. iDestruct "m_m" as "(? & ? & ? & _)".
   iSplit => //. iModIntro.

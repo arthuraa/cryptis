@@ -92,7 +92,7 @@ wp_term_of_list. wp_tenc. iApply wp_send => //.
     rewrite public_of_list /= public_TInt; do 2!iSplit => //.
     by iApply "p_m".
 iApply "post". rewrite /rel_channel_send app_length /= Nat2Z.inj_add /=. iFrame.
-iSplit => //. by iExists γ; eauto.
+by eauto.
 Qed.
 
 Tactic Notation "retry" constr(IH) constr(Hl) :=
@@ -136,10 +136,10 @@ case => prefix; last first.
 case: prefix => m' e_ts.
 have ? : ts' = ts; last subst ts'.
   move: (f_equal (take (length ts)) e_ts).
-  by rewrite take_app e take_app.
+  by rewrite {1}e !take_app_length.
 have ? : [m] = m'; last subst m'.
   move: (f_equal (drop (length ts)) e_ts).
-  by rewrite !drop_app.
+  by rewrite !drop_app_length.
 rewrite minted_of_list /=. iDestruct "s_m" as "(_ & s_m & _)".
 wp_load. wp_pures. wp_store. wp_pures. iModIntro. iApply "post".
 iRight. iSplit => //. iSplit.

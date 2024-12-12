@@ -150,13 +150,13 @@ Lemma db_update db t1 t2 t2' :
   db_state db ⋅ db_singleton t1 t2 ~~>
   db_state (<[t1 := t2']> db) ⋅ db_singleton t1 t2'.
 Proof.
-apply/cmra_discrete_update=> db' valid t.
+apply/cmra_discrete_total_update=> db' valid t.
 move/(_ t): valid.
 rewrite !discrete_fun_lookup_op /db_state /db_singleton.
 case: (decide (t = t1)) => [-> {t}|t_t1]; last first.
 { rewrite lookup_insert_ne // !discrete_fun_lookup_singleton_ne //. }
 rewrite lookup_insert !discrete_fun_lookup_singleton //=.
-move: (db' t1); apply/cmra_discrete_update.
+move: (db' t1); apply/cmra_discrete_total_update.
 apply: auth_update.
 apply (transitivity (y := (None, None))).
 - exact: delete_option_local_update.
@@ -167,7 +167,7 @@ Lemma db_alloc db t1 t2 :
   db_state db ⋅ db_free {[t1]} ~~>
   db_state (<[t1 := t2]> db) ⋅ db_singleton t1 t2.
 Proof.
-apply/cmra_discrete_update=> db' valid t.
+apply/cmra_discrete_total_update=> db' valid t.
 move/(_ t): valid.
 rewrite !discrete_fun_lookup_op /db_state /db_free /db_singleton.
 case: (decide (t = t1)) => [-> {t}|t_t1]; last first.
@@ -175,7 +175,7 @@ case: (decide (t = t1)) => [-> {t}|t_t1]; last first.
   rewrite decide_False //; set_solver. }
 rewrite decide_True // ?elem_of_singleton //.
 rewrite lookup_insert !discrete_fun_lookup_singleton //=.
-move: (db' t1); apply/cmra_discrete_update.
+move: (db' t1); apply/cmra_discrete_total_update.
 apply: auth_update.
 apply: option_local_update.
 by apply: exclusive_local_update.
@@ -337,7 +337,7 @@ iMod (state_auth_create t1 t2 with "state Hfree") as "[state mapsto]".
 have ->: op_app (to_db os) (Create t1 t2) = to_db (os ++ [Create t1 t2]).
 { by rewrite /to_db foldl_app. }
 iModIntro. iFrame. iSplitR; first by iExists os; eauto.
-iExists _. iFrame. by rewrite app_length Nat.add_comm.
+by rewrite app_length Nat.add_comm.
 Qed.
 
 Lemma create_server k N n db t1 t2 :

@@ -73,7 +73,7 @@ subst v'.
 wp_bind (tint _). iApply wp_tint.
 wp_bind (eq_term _ _). iApply wp_eq_term. wp_pures.
 iRight. iModIntro. iExists _. iSplit => //. iApply "post".
-iFrame. iExists _, _. iFrame. do !iSplit => //.
+by iFrame.
 Qed.
 
 End Verif.

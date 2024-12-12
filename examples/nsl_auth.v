@@ -250,7 +250,7 @@ iDestruct (public_TEncE with "p_m3 [//]") as "{p_m3} [[_ contra]|succ]".
   iIntros "!> #honI !>".
   iDestruct "m3P" as "(%nI' & %kI' & sessI & sessR')".
   iSpecialize ("sessR'" with "honR"). iModIntro.
-  iPoseProof (mapsto_agree with "sessR sessR'") as "%e".
+  iPoseProof (pointsto_agree with "sessR sessR'") as "%e".
   by case/val_of_term_inj/Spec.of_list_inj: e => <- <-.
 Qed.
 
@@ -290,7 +290,7 @@ iPoseProof (public_msg2E with "[//] [//] [//] [//] [//] [//]")
   as "{p_m2} (m_nR & s_nR & sessI)".
 wp_pures. wp_list. wp_bind (term_of_list (repr_list _)).  wp_term_of_list.
 wp_list. wp_term_of_list.
-wp_store. iMod (mapsto_persist with "Hl") as "#Hl".
+wp_store. iMod (pointsto_persist with "Hl") as "#Hl".
 wp_tenc. wp_pures. wp_bind (send _ _).
 iApply wp_send => //.
   by iApply public_msg3I; eauto.
@@ -332,7 +332,7 @@ iApply (wp_mknonce (λ _, corrupt kI kR) (λ _, False)%I) => //.
 iIntros "%nR #m_nR #p_nR _ _". rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_bind (term_of_list (nI :: _)%E).
 wp_list. wp_term_of_list. wp_list. wp_term_of_list.
-wp_store. iMod (mapsto_persist with "Hl") as "#Hl".
+wp_store. iMod (pointsto_persist with "Hl") as "#Hl".
 wp_list; wp_term_of_list. wp_tenc. wp_pures.
 wp_bind (send _ _). iApply wp_send => //.
   by iApply public_msg2I; eauto.
@@ -440,13 +440,13 @@ iAssert (|={⊤}=> ⌜ekR = TKey Enc kR' ∧ ekI = TKey Enc kI' ∧ skI = skR⌝
 { case: succ => [[<-]|[<-]].
   - iSpecialize ("sessR" with "s_dkR").
     iMod (lc_fupd_elim_later with "c1 sessR") as "{sessR} sessR".
-    iPoseProof (mapsto_agree with "sessR sessR'") as "%e".
+    iPoseProof (pointsto_agree with "sessR sessR'") as "%e".
     case/val_of_term_inj/Spec.of_list_inj: e => <- <-.
     by eauto.
   - iSpecialize ("sessI'" with "s_dkI").
     iMod (lc_fupd_elim_later with "c1 sessI'") as "{sessI'} #sessI'".
     iMod (lc_fupd_elim_later with "c2 sessI'") as "{sessI'} #sessI'".
-    iPoseProof (mapsto_agree with "sessI sessI'") as "%e".
+    iPoseProof (pointsto_agree with "sessI sessI'") as "%e".
     case/val_of_term_inj/Spec.of_list_inj: e => -> <-.
     by eauto. }
 case: e => - [<-] [] [<-] <- {succ}.

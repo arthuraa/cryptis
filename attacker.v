@@ -10,6 +10,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Local Existing Instance ticket_lock.
+
 Section Attacker.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !tlockG Σ}.
@@ -102,8 +104,7 @@ Global Instance env_den_persistent Γ vs : Persistent (⟦Γ⟧* vs).
 Proof. by apply _. Qed.
 
 Lemma env_den_delete Γ vs x :
-  ⟦Γ⟧* vs -∗
-  ⟦binder_delete x Γ⟧* (binder_delete x vs).
+  ⟦Γ⟧* vs ⊢ ⟦binder_delete x Γ⟧* (binder_delete x vs).
 Proof.
 iDestruct 1 as (Γvs) "(-> & -> & #H)".
 iExists (binder_delete x Γvs).
@@ -658,7 +659,7 @@ iModIntro; iExists _, _; do 2!iSplit => //.
     iDestruct "tsP" as "[tP tsP]".
     wp_pures; wp_store; wp_bind (release _).
     iApply (release_spec with "[locked c_ts]").
-      by iSplit => //; iFrame; iExists ts; iFrame.
+      by iSplit => //; iFrame.
     by iIntros "!> _"; wp_pures; iApply pub_typeI.
 - iIntros "!> %"; iDestruct 1 as (t) "[-> #tP]"; wp_pures.
   wp_bind (acquire _); iApply acquire_spec; eauto.

@@ -250,7 +250,7 @@ apply: core_id_local_update.
 apply/singleton_included_l; exists (session_status_both o).
 rewrite lookup_fmap SM_t /session_status_both; split.
   by rewrite option_equivE /=; split => //.
-apply: Some_included_2; exact: cmra_included_r.
+apply: Some_included_mono; exact: cmra_included_r.
 Qed.
 
 Lemma session_begin_aux rl t k x E :
@@ -274,7 +274,7 @@ iMod ("close" $! (<[t := None]>SM) {[t := session_status_both None]}
     by rewrite lookup_fmap s_fresh.
   by rewrite auth_both_valid; repeat split; eauto.
 - iModIntro; rewrite /session_map_inv big_sepM_insert //=.
-  by iFrame; iExists _, _; eauto.
+  by iFrame.
 rewrite -singleton_op auth_frag_op.
 rewrite nown_op. iDestruct "own" as "[own1 own2]".
 rewrite /session_auth /session_frag; iFrame; eauto.
@@ -340,7 +340,7 @@ rewrite auth_frag_op !nown_op.
 iDestruct "own" as "(own & sessA & sessB)".
 rewrite insert_singleton -singleton_op.
 rewrite auth_frag_op nown_op. iDestruct "sessA" as "[_ #sessA]".
-iFrame; iModIntro; iSplitL; eauto; iModIntro.
+iFrame "res"; iModIntro; iSplitL; eauto; iModIntro.
 iClear "not_fresh".
 iExists (<[t := Some ()]>SM).
 rewrite /to_session_map fmap_insert /=; iFrame.

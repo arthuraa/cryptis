@@ -154,7 +154,7 @@ wp_pures. wp_bind (send _ _). iApply wp_send => //. wp_pures.
 wp_bind (recv _). iApply wp_recv => //. iIntros "%t #p_t". wp_pures.
 wp_alloc l as "Hl".
 (* Promise that the stored value will not change. *)
-iMod (mapsto_persist with "Hl") as "#Hl".
+iMod (pointsto_persist with "Hl") as "#Hl".
 (* Initialize signature invariant *)
 iMod (enc_pred_set nroot (sig_pred l) with "enc_tok") as "[#? _]" => //.
 (* Run server in a loop in parallel. *)
@@ -168,7 +168,7 @@ wp_pures. wp_bind (client _ _). iApply wp_client => //.
 { set_solver. }
 iIntros (t') "#Hl'".
 (* Now the client knows which value is stored in the server. *)
-iPoseProof (mapsto_agree with "Hl' Hl") as "->". wp_pures. wp_load.
+iPoseProof (pointsto_agree with "Hl' Hl") as "->". wp_pures. wp_load.
 iApply wp_eq_term. by rewrite bool_decide_true.
 Qed.
 

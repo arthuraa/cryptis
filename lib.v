@@ -599,7 +599,7 @@ Section ListLemmas.
 Context `{!Repr A, !heapGS Σ}.
 
 Lemma twp_get_list E (l : list A) (n : nat) Ψ :
-  Ψ (repr (l !! n)) -∗
+  Ψ (repr (l !! n)) ⊢
   WP repr l !! #n @ E [{ Ψ }].
 Proof.
 rewrite /= repr_list_unseal.
@@ -610,31 +610,31 @@ by iApply IH.
 Qed.
 
 Lemma wp_get_list E (l : list A) (n : nat) Ψ :
-  Ψ (repr (l !! n)) -∗
+  Ψ (repr (l !! n)) ⊢
   WP repr l !! #n @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_get_list. Qed.
 
 Lemma twp_nil E Ψ :
-  Ψ (repr (@nil A)) -∗
+  Ψ (repr (@nil A)) ⊢
   WP Val []%V @ E [{ Ψ }].
 Proof.
 by rewrite /NILV /= repr_list_unseal; iIntros "?"; wp_pures.
 Qed.
 
 Lemma wp_nil E Ψ :
-  Ψ (repr (@nil A)) -∗
+  Ψ (repr (@nil A)) ⊢
   WP Val []%V @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_nil. Qed.
 
 Lemma twp_cons E x xs Ψ :
-  Ψ (repr (x :: xs)) -∗
+  Ψ (repr (x :: xs)) ⊢
   WP repr x :: repr xs @ E [{ Ψ }].
 Proof.
 rewrite /= repr_list_unseal; iIntros "post"; by rewrite /CONS; wp_pures.
 Qed.
 
 Lemma wp_cons E x xs Ψ :
-  Ψ (repr (x :: xs)) -∗
+  Ψ (repr (x :: xs)) ⊢
   WP repr x :: repr xs @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_cons. Qed.
 
@@ -705,7 +705,7 @@ Qed.
 Lemma wp_list_match E vars (vs : list A) k Ψ :
   (if decide (length vars = length vs) then
      WP nsubst vars (map repr vs) k @ E {{ Ψ }}
-   else Ψ NONEV) -∗
+   else Ψ NONEV) ⊢
   WP list_match vars (repr vs) k @ E {{ Ψ }}.
 Proof.
 rewrite unlock; iIntros "post".
@@ -723,7 +723,7 @@ Lemma twp_eq_list `{EqDecision A} (f : val) (l1 l2 : list A) Φ E :
       x1 ∈ l1 →
       Ψ #(bool_decide (x1 = x2)) -∗
       WP f (repr x1) (repr x2) @ E [{ Ψ }]) →
-  Φ #(bool_decide (l1 = l2)) -∗
+  Φ #(bool_decide (l1 = l2)) ⊢
   WP eq_list f (repr l1) (repr l2) @ E [{ Φ }].
 Proof.
 rewrite repr_list_unseal /=.
@@ -794,7 +794,7 @@ Import ssreflect.order deriving.instances.
 Lemma twp_leq_loc_loop E (l1 l2 : loc) (n k : nat) Ψ :
   loc_car l2 = (loc_car l1 + (n + k)%nat)%Z ∨
   loc_car l1 = (loc_car l2 + (n + k)%nat)%Z ∧ n + k ≠ 0%nat →
-  Ψ #(l1 <= l2)%O -∗
+  Ψ #(l1 <= l2)%O ⊢
   WP leq_loc_loop #l1 #l2 #n @ E [{ Ψ }].
 Proof.
 have leq_locE l1' l2' :
@@ -811,7 +811,7 @@ elim: k n => [|k IH] n e_l1l2; iIntros "post"; wp_pures; wp_rec; wp_pures.
     lia.
   rewrite eq_locE bool_decide_decide decide_True /=; try lia.
   wp_pures; rewrite leq_locE bool_decide_decide decide_False //.
-  move=> H; apply: neq; rewrite /loc_add /= in H; lia.
+  move=> H; apply: neq; rewrite /Loc.add /= in H; lia.
 - rewrite eq_locE bool_decide_decide decide_False; last by move=> /= ?; lia.
   wp_pures.
   rewrite eq_locE bool_decide_decide decide_False; last by move=> /= ?; lia.
@@ -821,7 +821,7 @@ elim: k n => [|k IH] n e_l1l2; iIntros "post"; wp_pures; wp_rec; wp_pures.
 Qed.
 
 Lemma twp_leq_loc E (l1 l2 : loc) Ψ :
-  Ψ #(l1 <= l2)%O -∗
+  Ψ #(l1 <= l2)%O ⊢
   WP leq_loc #l1 #l2 @ E [{ Ψ }].
 Proof.
 have [off offP] :

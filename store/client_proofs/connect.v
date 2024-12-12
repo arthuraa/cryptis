@@ -72,8 +72,7 @@ iIntros "!> %m conn (phase & client & post) _ #mP".
 iMod (ack_init_predE with "client mP") as "client" => //.
 wp_pures.
 iRight. iExists _. iSplitR => //.
-iApply "post". iFrame. iModIntro. do !iSplit => //.
-by iExists _, _; iFrame.
+iApply "post". iFrame. iModIntro. by do !iSplit => //.
 Qed.
 
 End Verif.

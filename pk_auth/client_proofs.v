@@ -35,6 +35,7 @@ Lemma public_msg1I n kI kR nI :
   public (TKey Enc kR) -∗
   public (TEnc (TKey Enc kR) (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Enc kI]))).
 Proof.
+rewrite /=.
 iIntros "(_ & #m1P & _ & _) #meta #s_nI #p_nI #p_ekI #p_ekR".
 iPoseProof (mk_key_share_secret_of with "s_nI p_nI") as "p_sI".
 iApply public_TEncIS; eauto.

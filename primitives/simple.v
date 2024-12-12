@@ -139,7 +139,7 @@ Implicit Types Ψ : val → iProp Σ.
 Implicit Types N : namespace.
 
 Lemma wp_nondet_int_loop Ψ (m : Z) :
-  (∀ n : Z, Ψ #n) -∗
+  (∀ n : Z, Ψ #n) ⊢
   WP nondet_int_loop #m {{ Ψ }}.
 Proof.
 iIntros "post"; iLöb as "IH" forall (m); wp_rec.
@@ -150,7 +150,7 @@ by wp_pures; iApply "IH".
 Qed.
 
 Lemma wp_nondet_int Ψ :
-  (∀ n : Z, Ψ #n) -∗
+  (∀ n : Z, Ψ #n) ⊢
   WP nondet_int #() {{ Ψ }}.
 Proof.
 iIntros "post"; rewrite /nondet_int; wp_pures.
@@ -190,16 +190,16 @@ iIntros "?"; rewrite /recv; wp_pures.
 by iApply "H".
 Qed.
 
-Lemma twp_tint E Ψ n : Ψ (TInt n) -∗ WP tint #n @ E [{ Ψ }].
+Lemma twp_tint E Ψ n : Ψ (TInt n) ⊢ WP tint #n @ E [{ Ψ }].
 Proof.
 by rewrite /tint val_of_term_unseal; iIntros "Hpost"; wp_pures.
 Qed.
 
-Lemma wp_tint E Ψ n : Ψ (TInt n) -∗ WP tint #n @ E {{ Ψ }}.
+Lemma wp_tint E Ψ n : Ψ (TInt n) ⊢ WP tint #n @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_tint. Qed.
 
 Lemma twp_to_int E t Ψ :
-  Ψ (repr (Spec.to_int t)) -∗
+  Ψ (repr (Spec.to_int t)) ⊢
   WP to_int t @ E [{ Ψ }].
 Proof.
 rewrite /to_int val_of_term_unseal; iIntros "Hpost"; wp_pures.
@@ -207,28 +207,28 @@ case: t; by move=> *; wp_pures; eauto.
 Qed.
 
 Lemma wp_to_int E t Ψ :
-  Ψ (repr (Spec.to_int t)) -∗
+  Ψ (repr (Spec.to_int t)) ⊢
   WP to_int t @ E {{ Ψ }}.
 Proof.
 by iIntros "?"; iApply twp_wp; iApply twp_to_int.
 Qed.
 
 Lemma twp_tuple E t1 t2 Ψ :
-  Ψ (TPair t1 t2) -∗
+  Ψ (TPair t1 t2) ⊢
   WP tuple t1 t2 @ E [{ Ψ }].
 Proof.
 rewrite val_of_term_unseal /tuple; by iIntros "?"; wp_pures.
 Qed.
 
 Lemma wp_tuple E t1 t2 Ψ :
-  Ψ (TPair t1 t2) -∗
+  Ψ (TPair t1 t2) ⊢
   WP tuple t1 t2 @ E {{ Ψ }}.
 Proof.
 by iIntros "?"; iApply twp_wp; iApply twp_tuple.
 Qed.
 
 Lemma twp_untuple E t Ψ :
-  Ψ (repr (Spec.untuple t)) -∗
+  Ψ (repr (Spec.untuple t)) ⊢
   WP untuple t @ E [{ Ψ }].
 Proof.
 iIntros "post".
@@ -237,14 +237,14 @@ case: t; by move=> *; wp_pures; iApply "post".
 Qed.
 
 Lemma wp_untuple E t Ψ :
-  Ψ (repr (Spec.untuple t)) -∗
+  Ψ (repr (Spec.untuple t)) ⊢
   WP untuple t @ E {{ Ψ }}.
 Proof.
 by iIntros "?"; iApply twp_wp; iApply twp_untuple.
 Qed.
 
 Lemma twp_term_of_list E ts Ψ :
-  Ψ (repr (Spec.of_list ts)) -∗
+  Ψ (repr (Spec.of_list ts)) ⊢
   WP term_of_list (repr ts) @ E [{ Ψ }].
 Proof.
 rewrite /= [in repr_list ts]repr_list_unseal Spec.of_list_unseal.
@@ -255,14 +255,14 @@ by iApply twp_tuple.
 Qed.
 
 Lemma wp_term_of_list E ts Ψ :
-  Ψ (repr (Spec.of_list ts)) -∗
+  Ψ (repr (Spec.of_list ts)) ⊢
   WP term_of_list (repr ts) @ E {{ Ψ }}.
 Proof.
 by iIntros "?"; iApply twp_wp; iApply twp_term_of_list.
 Qed.
 
 Lemma twp_list_of_term E t Ψ :
-  Ψ (repr (Spec.to_list t)) -∗
+  Ψ (repr (Spec.to_list t)) ⊢
   WP list_of_term t @ E [{ Ψ }].
 Proof.
 rewrite val_of_term_unseal /= repr_list_unseal.
@@ -278,14 +278,14 @@ by rewrite -val_of_term_unseal.
 Qed.
 
 Lemma wp_list_of_term E t Ψ :
-  Ψ (repr (Spec.to_list t)) -∗
+  Ψ (repr (Spec.to_list t)) ⊢
   WP list_of_term t @ E {{ Ψ }}.
 Proof.
 by iIntros "?"; iApply twp_wp; iApply twp_list_of_term.
 Qed.
 
 Lemma twp_list `{!Repr A} (xs : list A) E Ψ :
-  Ψ (repr xs) -∗
+  Ψ (repr xs) ⊢
   WP list_to_expr xs @ E [{ Ψ }].
 Proof.
 elim: xs Ψ => [|x xs IH] /= Ψ; iIntros "post".
@@ -295,12 +295,12 @@ by iApply (@twp_cons A).
 Qed.
 
 Lemma wp_list `{!Repr A} (xs : list A) E Ψ :
-  Ψ (repr xs) -∗
+  Ψ (repr xs) ⊢
   WP list_to_expr xs @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_list. Qed.
 
 Lemma twp_tag E N t Ψ :
-  Ψ (repr (Spec.tag N t)) -∗
+  Ψ (repr (Spec.tag N t)) ⊢
   WP tag N t @ E [{ Ψ }].
 Proof.
 iIntros "post".
@@ -308,7 +308,7 @@ by rewrite Spec.tag_unseal /tag; wp_pures; iApply twp_tuple.
 Qed.
 
 Lemma wp_tag E N t Ψ :
-  Ψ (repr (Spec.tag N t)) -∗
+  Ψ (repr (Spec.tag N t)) ⊢
   WP tag N t @ E {{ Ψ }}.
 Proof.
 iIntros "post".
@@ -316,7 +316,7 @@ by rewrite Spec.tag_unseal /tag; wp_pures; iApply wp_tuple.
 Qed.
 
 Lemma twp_untag E N t Ψ :
-  Ψ (repr (Spec.untag N t)) -∗
+  Ψ (repr (Spec.untag N t)) ⊢
   WP untag N t @ E [{ Ψ }].
 Proof.
 iIntros "post".
@@ -335,7 +335,7 @@ congruence.
 Qed.
 
 Lemma wp_untag E N t Ψ :
-  Ψ (repr (Spec.untag N t)) -∗
+  Ψ (repr (Spec.untag N t)) ⊢
   WP untag N t @ E {{ Ψ }}.
 Proof.
 by iIntros "?"; iApply twp_wp; iApply twp_untag.
@@ -514,7 +514,7 @@ by iApply twp_wp; iApply (twp_mknonce with "[//] H").
 Qed.
 
 Lemma twp_mkkey kt E (k : term) ψ :
-  ψ (TKey kt k : val) -∗
+  ψ (TKey kt k : val) ⊢
   WP mkkey kt k @ E [{ ψ }].
 Proof.
 rewrite val_of_term_unseal /=.
@@ -522,7 +522,7 @@ by iIntros "post"; wp_lam; wp_pures.
 Qed.
 
 Lemma wp_mkkey kt E (k : term) ψ :
-  ψ (TKey kt k : val) -∗
+  ψ (TKey kt k : val) ⊢
   WP mkkey kt k @ E {{ ψ }}.
 Proof.
 rewrite val_of_term_unseal /=.
@@ -530,7 +530,7 @@ by iIntros "post"; wp_lam; wp_pures.
 Qed.
 
 Lemma twp_mkkeys E (k : term) Ψ :
-  Ψ (TKey Enc k, TKey Dec k)%V -∗
+  Ψ (TKey Enc k, TKey Dec k)%V ⊢
   WP mkkeys k @ E [{ Ψ }].
 Proof.
 rewrite /mkkeys.
@@ -541,7 +541,7 @@ by wp_pures.
 Qed.
 
 Lemma wp_mkkeys E (k : term) Ψ :
-  Ψ (TKey Enc k, TKey Dec k)%V -∗
+  Ψ (TKey Enc k, TKey Dec k)%V ⊢
   WP mkkeys k @ E {{ Ψ }}.
 Proof.
 by iIntros "post"; iApply twp_wp; iApply twp_mkkeys.
@@ -659,7 +659,7 @@ by iSplit => //.
 Qed.
 
 Lemma twp_mkskey E (k : term) Ψ :
-  Ψ (Spec.mkskey k) -∗
+  Ψ (Spec.mkskey k) ⊢
   WP mkskey k @ E [{ Ψ }].
 Proof.
 rewrite /mkskey. iIntros "post". wp_pures.
@@ -669,14 +669,14 @@ by iApply twp_tuple.
 Qed.
 
 Lemma wp_mkskey E (k : term) Ψ :
-  Ψ (Spec.mkskey k) -∗
+  Ψ (Spec.mkskey k) ⊢
   WP mkskey k @ E {{ Ψ }}.
 Proof.
 by iIntros "post"; iApply twp_wp; iApply twp_mkskey.
 Qed.
 
 Lemma twp_enc E t1 t2 Ψ :
-  Ψ (TEnc t1 t2) -∗
+  Ψ (TEnc t1 t2) ⊢
   WP enc t1 t2 @ E [{ Ψ }].
 Proof.
 rewrite !val_of_term_unseal /enc.
@@ -685,20 +685,20 @@ case: t1; try by move=> *; wp_pures; eauto.
 Qed.
 
 Lemma wp_enc E t1 t2 Ψ :
-  Ψ (TEnc t1 t2) -∗
+  Ψ (TEnc t1 t2) ⊢
   WP enc t1 t2 @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_enc. Qed.
 
-Lemma twp_hash E t Ψ : Ψ (THash t) -∗ WP hash t @ E [{ Ψ }].
+Lemma twp_hash E t Ψ : Ψ (THash t) ⊢ WP hash t @ E [{ Ψ }].
 Proof.
 by rewrite /hash val_of_term_unseal; iIntros "?"; wp_pures.
 Qed.
 
-Lemma wp_hash E t Ψ : Ψ (THash t) -∗ WP hash t @ E {{ Ψ }}.
+Lemma wp_hash E t Ψ : Ψ (THash t) ⊢ WP hash t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_hash. Qed.
 
 Lemma twp_dec E t1 t2 Ψ :
-  Ψ (repr (Spec.dec t1 t2)) -∗
+  Ψ (repr (Spec.dec t1 t2)) ⊢
   WP dec t1 t2 @ E [{ Ψ }].
 Proof.
 rewrite /repr /repr_option /repr /repr_term !val_of_term_unseal /dec.
@@ -720,12 +720,12 @@ rewrite bool_decide_decide; case: decide => [<-|ne].
 Qed.
 
 Lemma wp_dec E t1 t2 Ψ :
-  Ψ (repr (Spec.dec t1 t2)) -∗
+  Ψ (repr (Spec.dec t1 t2)) ⊢
   WP dec t1 t2 @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_dec. Qed.
 
 Lemma twp_tenc E N k t Ψ :
-  Ψ (Spec.tenc N k t) -∗
+  Ψ (Spec.tenc N k t) ⊢
   WP tenc N k t @ E [{ Ψ }].
 Proof.
 iIntros "post"; rewrite /tenc; wp_pures.
@@ -734,12 +734,12 @@ by iApply twp_enc.
 Qed.
 
 Lemma wp_tenc E N k t Ψ :
-  Ψ (Spec.tenc N k t) -∗
+  Ψ (Spec.tenc N k t) ⊢
   WP tenc N k t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_tenc. Qed.
 
 Lemma twp_tdec E N k t Ψ :
-  Ψ (repr (Spec.tdec N k t)) -∗
+  Ψ (repr (Spec.tdec N k t)) ⊢
   WP tdec N k t @ E [{ Ψ }].
 Proof.
 iIntros "post"; rewrite /tdec; wp_pures.
@@ -750,12 +750,12 @@ by iApply twp_untag.
 Qed.
 
 Lemma wp_tdec E N k t Ψ :
-  Ψ (repr (Spec.tdec N k t)) -∗
+  Ψ (repr (Spec.tdec N k t)) ⊢
   WP tdec N k t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_tdec. Qed.
 
 Lemma twp_tsenc E N k t Ψ :
-  Ψ (Spec.tsenc N k t) -∗
+  Ψ (Spec.tsenc N k t) ⊢
   WP tsenc N k t @ E [{ Ψ }].
 Proof.
 iIntros "post"; rewrite /tsenc /Spec.tsenc; wp_pures.
@@ -765,12 +765,12 @@ by move=> k1 k2 //=; wp_pures; iApply twp_tenc.
 Qed.
 
 Lemma wp_tsenc E N k t Ψ :
-  Ψ (Spec.tsenc N k t) -∗
+  Ψ (Spec.tsenc N k t) ⊢
   WP tsenc N k t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_tsenc. Qed.
 
 Lemma twp_tsdec E N k t Ψ :
-  Ψ (repr (Spec.tsdec N k t)) -∗
+  Ψ (repr (Spec.tsdec N k t)) ⊢
   WP tsdec N k t @ E [{ Ψ }].
 Proof.
 iIntros "post"; rewrite /tsdec; wp_pures.
@@ -780,12 +780,12 @@ by move=> k1 k2 /=; wp_pures; iApply twp_tdec.
 Qed.
 
 Lemma wp_tsdec E N k t Ψ :
-  Ψ (repr (Spec.tsdec N k t)) -∗
+  Ψ (repr (Spec.tsdec N k t)) ⊢
   WP tsdec N k t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_tsdec. Qed.
 
 Lemma twp_is_key E t Ψ :
-  Ψ (repr (Spec.is_key t)) -∗
+  Ψ (repr (Spec.is_key t)) ⊢
   WP is_key t @ E [{ Ψ }].
 Proof.
 rewrite /repr /repr_option val_of_term_unseal /is_key.
@@ -793,12 +793,12 @@ iIntros "?"; by case: t=> *; wp_pures.
 Qed.
 
 Lemma wp_is_key E t Ψ :
-  Ψ (repr (Spec.is_key t)) -∗
+  Ψ (repr (Spec.is_key t)) ⊢
   WP is_key t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_is_key. Qed.
 
 Lemma wp_to_ek E t Ψ :
-  Ψ (repr (Spec.to_ek t)) -∗
+  Ψ (repr (Spec.to_ek t)) ⊢
   WP to_ek t @ E {{ Ψ }}.
 Proof.
 rewrite /to_ek; iIntros "post".
@@ -808,7 +808,7 @@ case; try by move => *; wp_pures.
 Qed.
 
 Lemma wp_to_dk E t Ψ :
-  Ψ (repr (Spec.to_dk t)) -∗
+  Ψ (repr (Spec.to_dk t)) ⊢
   WP to_dk t @ E {{ Ψ }}.
 Proof.
 rewrite /to_dk; iIntros "post".

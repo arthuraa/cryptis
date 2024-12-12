@@ -51,7 +51,7 @@ iApply (wp_connection_send with "[//] [//] [] [#] conn") => //.
 - rewrite public_of_list /= public_TInt. by eauto.
 iIntros "!> conn".
 iApply ("post" with "[conn client mapsto]").
-iFrame. iExists _, _. by iFrame.
+by iFrame.
 Qed.
 
 Lemma wp_client_ack_store c kI kR cs :

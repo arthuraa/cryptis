@@ -11,6 +11,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Local Existing Instance ticket_lock.
+
 Section NSL.
 
 Context `{!heapGS Σ, !spawnG Σ, !cryptisGS Σ, !tlockG Σ}.
@@ -249,7 +251,7 @@ Lemma init_recv_2_send_3 kI kR nI nR :
    nsl_session kI kR sess_key ∗
    term_token sess_key (↑nroot.@"init")).
 Proof.
-iIntros "#p_m2 nI_token".
+iIntros "%sess_key #p_m2 nI_token".
 iIntros "(#? & (_ & #? & #?) & #p_ekI & #p_ekR & #s_dkI & #s_nI)".
 iDestruct (public_TEncE with "p_m2 [//]") as "[fail|succ]".
 - rewrite !public_of_list /=.
@@ -295,7 +297,8 @@ Lemma resp_recv_3 pkI kR nI nR :
   (public (TKey Dec kI) ∗ public sess_key
    ∨ nsl_session kI kR sess_key).
 Proof.
-iIntros "#p_m3 (#? & (_ & _ & #?) & #meta & #p_pkI & #p_pkR & #s_dkR & #p_nI & #s_nR)".
+iIntros "%sess_key #p_m3".
+iIntros "(#? & (_ & _ & #?) & #meta & #p_pkI & #p_pkR & #s_dkR & #p_nI & #s_nR)".
 iDestruct (public_TEncE with "p_m3 [//]") as "{p_m3} [[_ p_nR]|p_m3]".
 - iSpecialize ("s_nR" with "p_nR"). iIntros "!> !>".
   iDestruct "s_nR" as "[(%kI & -> & #p_dkI)|#p_dkR]".
@@ -304,7 +307,7 @@ iDestruct (public_TEncE with "p_m3 [//]") as "{p_m3} [[_ p_nR]|p_m3]".
     iApply "p_nI". by eauto.
   + by iDestruct ("s_dkR" with "p_dkR") as ">[]".
 - iDestruct "p_m3" as "(#inv_m3 & _)". iIntros "!> !>".
-  iDestruct "inv_m3" as "(%kI & %sess_key & meta' & session)".
+  iDestruct "inv_m3" as "(%kI & %sess_key' & meta' & session)".
   iPoseProof (term_meta_agree with "meta meta'") as "<-".
   iModIntro. iExists kI. iSplit; eauto.
   iDestruct "session" as "(% & % & %e & _)".
@@ -537,7 +540,7 @@ iModIntro. iSplit => //. iIntros "!>".
 wp_pures.
 wp_apply (wp_add_set with "[$]"). iIntros "set". wp_pures.
 wp_apply (release_spec with "[locked set] post").
-iSplit => //. iFrame. by eauto.
+iSplit => //. by iFrame.
 Qed.
 
 Definition do_init_loop : val := rec: "loop" "c" "set" "ekI" "dkI" "ekR" :=

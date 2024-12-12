@@ -66,8 +66,7 @@ iPoseProof (ack_loadE with "client mapsto p_m inv_m") as "#p_t2'".
 wp_pures. iRight. iModIntro. iExists _. iSplit => //.
 iApply "post".
 iFrame.
-iSplit => //.
-iExists _, _. by iFrame.
+by iSplit => //.
 Qed.
 
 End Verif.

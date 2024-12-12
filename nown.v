@@ -29,8 +29,8 @@ Lemma nown_alloc γ N E (a : A) :
 Proof.
 intros sub valid_a. iIntros "token".
 iMod (own_alloc a) as "(%γ' & own)"; auto.
-rewrite (gmeta_token_difference (↑N)) //.
-iDestruct "token" as "[tok1 tok2]". iFrame. iExists γ'. iFrame.
+rewrite (gmeta_token_difference _ (↑N)) //.
+iDestruct "token" as "[tok1 tok2]". iFrame.
 by iApply (gmeta_set with "tok1").
 Qed.
 
@@ -90,6 +90,11 @@ Instance from_sep_nown γ N (a b1 b2 : A) :
 Proof.
 by rewrite /IsOp /FromSep => ->; rewrite nown_op.
 Qed.
+
+#[global]
+Instance combine_sep_as_nown γ N (a b1 b2 : A) :
+  IsOp a b1 b2 → CombineSepAs (nown γ N b1) (nown γ N b2) (nown γ N a).
+Proof. exact: from_sep_nown. Qed.
 
 #[global]
 Instance into_sep_nown γ N (a b1 b2 : A) :

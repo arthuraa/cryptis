@@ -15,6 +15,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Local Existing Instance ticket_lock.
+
 Section Verif.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !storeGS Σ, !tlockG Σ}.

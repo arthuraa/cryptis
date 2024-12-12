@@ -75,7 +75,7 @@ rewrite version_auth_unseal. iSplit.
   have {}valid := auth_auth_dfrac_op_inv _ _ _ _ valid.
   have e := to_max_prefix_list_inj _ _ valid.
   have : take n (xs1 ++ [x]) ≡ take n (xs2 ++ [x]) by rewrite e.
-  rewrite !take_app_alt // => <- {xs2 en2 valid e}.
+  rewrite !take_app_length' // => <- {xs2 en2 valid e}.
   iExists xs1. rewrite own_op auth_auth_dfrac_op own_op. iFrame.
   by iSplit.
 Qed.
@@ -187,7 +187,7 @@ case: incl => zs e.
 have e' : drop (length (xs ++ [x])) (xs ++ [x]) ≡
           drop (length (xs ++ [x])) ((ys ++ [y]) ++ zs).
   by rewrite -e.
-rewrite drop_all drop_app_alt ?app_length -?e1 -?e2 // in e'.
+rewrite drop_all drop_app_length' ?app_length -?e1 -?e2 // in e'.
 rewrite -e' app_nil_r in e.
 have ex : last (xs ++ [x]) = Some x by rewrite last_snoc.
 have ey : last (ys ++ [y]) = Some y by rewrite last_snoc.
@@ -232,11 +232,11 @@ enough (e : xs ++ [x] ≡ ys ++ [y]).
 case: valid => [] [l e].
 - assert (e' : take (S n) ((xs ++ [x]) ++ l) ≡ take (S n) (ys ++ [y])).
     by rewrite e.
-  rewrite take_app_alt ?app_length /= 1?Nat.add_comm -?e1 // in e' *.
+  rewrite take_app_length' ?app_length /= 1?Nat.add_comm -?e1 // in e' *.
   rewrite take_ge ?app_length /= 1?Nat.add_comm -?e2 // in e'.
 - assert (e' : take (S n) ((ys ++ [y]) ++ l) ≡ take (S n) (xs ++ [x])).
     by rewrite e.
-  rewrite take_app_alt ?app_length /= 1?Nat.add_comm -?e2 // in e' *.
+  rewrite take_app_length' ?app_length /= 1?Nat.add_comm -?e2 // in e' *.
   by rewrite take_ge ?app_length /= 1?Nat.add_comm -?e1 // in e'.
 Qed.
 
