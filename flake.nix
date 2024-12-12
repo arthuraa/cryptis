@@ -3,19 +3,26 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs";
+    flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, nixpkgs, flake-utils }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let pkgs = nixpkgs.legacyPackages.${system};
+          lib = pkgs.lib; in rec {
+            packages = rec {
+              coq = pkgs.coq_8_15;
+              coqPackages = pkgs.coqPackages_8_15;
+            };
 
-    let pkgs = nixpkgs.legacyPackages.x86_64-linux; in {
-          devShell.x86_64-linux =
-            pkgs.mkShell {
-              buildInputs = with pkgs; [
+            devShell = pkgs.mkShell {
+              packages = with packages; [
                 coq
                 coqPackages.mathcomp.ssreflect
-                coqPackages.iris
                 coqPackages.deriving
+                coqPackages.iris
               ];
             };
-        };
+          }
+    );
 }
