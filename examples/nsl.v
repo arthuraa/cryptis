@@ -395,7 +395,9 @@ iApply (wp_mknonce_freshN
   by iApply public_minted.
 iIntros "%nR _ #m_nR #s_nR _ tokens".
 set sess_key := Spec.of_list [_; _; _; _].
-have ? : nR ≠ sess_key. admit.
+have ? : nR ≠ sess_key.
+  move=> e; suff: tsize nR < tsize sess_key by rewrite e; lia.
+  apply: Spec.of_list_tsize. set_solver.
 rewrite big_sepS_union; last set_solver.
 rewrite !big_sepS_singleton. iDestruct "tokens" as "[nR_token sk_token]".
 iMod (resp_recv_1_send_2 with "p_m1 nR_token [$] []" ) as "H"; first eauto 10.
@@ -411,7 +413,7 @@ wp_pures. iMod "finished" as "(%kI & -> & finished)".
 wp_list. wp_term_of_list. wp_pures.
 iApply ("Hpost" $! (Some (TKey Enc kI, sess_key))).
 iModIntro. by iExists kI; eauto.
-Admitted.
+Qed.
 
 Definition is_set N v (xs : list term) : iProp := ∃ (lset : loc),
   ⌜v = #lset⌝ ∗
