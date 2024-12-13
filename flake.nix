@@ -25,6 +25,7 @@
                 coqPackages.mathcomp.ssreflect
                 coqPackages.deriving
                 coqPackages.iris
+                coqPackages.vscoq-language-server
               ];
             };
           }
