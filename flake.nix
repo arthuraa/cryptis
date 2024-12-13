@@ -4,9 +4,11 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs";
     flake-utils.url = "github:numtide/flake-utils";
+    vscoq.url = "github:coq/vscoq";
+    vscoq.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, flake-utils, vscoq }:
     flake-utils.lib.eachDefaultSystem (system:
       let pkgs = nixpkgs.legacyPackages.${system};
           lib = pkgs.lib; in rec {
@@ -25,7 +27,7 @@
                 coqPackages.mathcomp.ssreflect
                 coqPackages.deriving
                 coqPackages.iris
-                coqPackages.vscoq-language-server
+                # vscoq.packages.${system}.vscoq-language-server-coq-8-18
               ];
             };
           }
