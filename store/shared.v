@@ -393,10 +393,12 @@ iDestruct "status" as "[#fail|status]".
 { iAssert (|={E}=> ●Ph{dq} si_time cs ∗ session_fail cs)%I
     with "[c1 hon]" as ">[hon #fail']".
   { iDestruct "fail" as "[fail|fail]".
-    - iMod (public_atI with "[//] c1 hon fail") as "{fail} [hon fail]".
+    - iMod (public_atI with "[] c1 hon fail") as "{fail} [hon fail]";
+        eauto.
       { solve_ndisj. }
       by iFrame.
-    - iMod (public_atI with "[//] c1 hon fail") as "{fail} [hon fail]".
+    - iMod (public_atI with "[] c1 hon fail") as "{fail} [hon fail]";
+        eauto.
       { solve_ndisj. }
       by iFrame. }
   iFrame. iModIntro. iSplit => //; last by iLeft. iSplit => //.
@@ -573,9 +575,9 @@ iIntros "#ctx hon c (#p_db & [#fail | status])"; last first.
 iAssert (|={⊤}=> ●Ph{dq} si_time cs ∗ session_fail cs)%I
   with "[hon c]" as "{fail} >[hon fail]".
 { iDestruct "fail" as "[fail|fail]".
-  - iMod (public_atI with "[//] c hon fail") as "[hon ?]" => //.
+  - iMod (public_atI with "[] c hon fail") as "[hon ?]" => //; eauto.
     iModIntro. by iFrame.
-  - iMod (public_atI with "[//] c hon fail") as "[hon ?]" => //.
+  - iMod (public_atI with "[] c hon fail") as "[hon ?]" => //; eauto.
     iModIntro. by iFrame. }
 iModIntro. iFrame. by eauto.
 Qed.

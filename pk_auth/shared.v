@@ -126,7 +126,7 @@ Implicit Types ks : term * term.
 Definition session_ress rl nI nR ks : iProp :=
   let '(kI, kR) := ks in
   □ confirmation rl kI kR (mk_session_key Init nI (mk_key_share nR)) ∧
-  if rl is Init then term_token nI (↑N.@"token".@Resp)
+  if rl is Init then term_token nI (↑N.@"resp")
   else True.
 
 Definition session_weak' kI kR t ts : iProp :=
@@ -221,24 +221,19 @@ Definition init_finished kR sR : iProp :=
 
 Definition msg3_pred := init_finished.
 
-(* TODO: Avoid exposing these instances. *)
-Local Existing Instances cryptis_inG cryptisGpreS_maps.
+Definition session_key_meta_token kI kR kS E : iProp :=
+  ∃ nI nR,
+    ⌜kS = mk_session_key Init nI (mk_key_share nR)⌝ ∗
+    session (N.@"session") Init nI nR (kI, kR) ∗
+    session (N.@"session") Resp nI nR (kI, kR) ∗
+    term_token nI E.
 
-Definition session_key_meta_token rl kI kR kS E : iProp :=
+Definition session_key_meta kI kR `{Countable L} kS N' (x : L) : iProp :=
   ∃ nI nR γ,
     ⌜kS = mk_session_key Init nI (mk_key_share nR)⌝ ∗
     session (N.@"session") Init nI nR (kI, kR) ∗
     session (N.@"session") Resp nI nR (kI, kR) ∗
-    term_meta nI (N.@"token".@rl) γ ∗
-    own γ (reservation_map_token E).
-
-Definition session_key_meta rl kI kR `{Countable L} kS N' (x : L) : iProp :=
-  ∃ nI nR γ,
-    ⌜kS = mk_session_key Init nI (mk_key_share nR)⌝ ∗
-    session (N.@"session") Init nI nR (kI, kR) ∗
-    session (N.@"session") Resp nI nR (kI, kR) ∗
-    term_meta nI (N.@"token".@rl) γ ∗
-    own γ (namespace_map_data N' (to_agree (encode x))).
+    term_meta nI N' x.
 
 Lemma mk_session_key_inj nI nR nI' nR' kI kR :
   mk_session_key Init nI  (mk_key_share nR) =

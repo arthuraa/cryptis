@@ -4,8 +4,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par ticket_lock assert.
-From cryptis Require Import lib term cryptis primitives tactics.
-From cryptis Require Import role.
+From cryptis Require Import lib cryptis primitives tactics role.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -720,7 +719,7 @@ set ekI := TKey Enc kI.
 set dkI := TKey Dec kI.
 set ekR := TKey Enc kR.
 set dkR := TKey Dec kR.
-iMod (freeze_honest with "[//] hon phase") as "(hon & phase & sec)" => //.
+iMod (freeze_honest with "[] hon phase") as "(hon & phase & sec)" => //; eauto.
 wp_pures; wp_bind (send _ _); iApply wp_send => //.
 wp_pures; wp_bind (send _ _); iApply wp_send => //.
 iMod "sec" as "sec".

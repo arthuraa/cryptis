@@ -92,7 +92,7 @@ Lemma wp_nsl_init c kI kR dq n T :
         □ nsl_confirmation Init kI kR kS ∗
         session_weak N Init kI kR kS n ∗
         if in_honest kI kR T then
-          session_key_meta_token N Init kI kR kS ⊤ ∗
+          session_key_meta_token N kI kR kS (↑N.@"init") ∗
           session_key N kI kR kS n
         else True
       else True
@@ -120,7 +120,7 @@ Lemma wp_nsl_resp c kR dq n T :
         □ confirmation Resp kI kR kS ∗
         session_weak N Resp kI kR kS n ∗
         if in_honest kI kR T then
-          session_key_meta_token N Resp kI kR kS ⊤ ∗
+          session_key_meta_token N kI kR kS (↑N.@"resp") ∗
           session_key N kI kR kS n
         else True
       else True

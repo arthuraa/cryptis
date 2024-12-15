@@ -57,7 +57,7 @@ do !iSplit => //.
 - iDestruct "sess" as "[fail|[sess token]]"; eauto.
 - iIntros "!> %kt". iSplit.
   + iIntros "#p_k".
-    iPoseProof (public_sym_keyE with "[//] p_k") as ">?".
+    iPoseProof (public_sym_keyE with "[] p_k") as ">?"; eauto.
     by iApply "p_kS".
   + iIntros "#fail". iApply public_sym_key => //.
     iSplit => //. iModIntro. by iApply "p_kS".
@@ -95,7 +95,7 @@ iApply ("post" $! (ConnState si ts Resp)). iFrame => /=.
 do !iSplit => //; eauto.
 iIntros "!> %kt". iSplit.
 - iIntros "#p_k".
-  iPoseProof (public_sym_keyE with "[//] p_k") as ">?".
+  iPoseProof (public_sym_keyE with "[] p_k") as ">?"; eauto.
   by iApply "p_kS".
 - iIntros "#fail". iApply public_sym_key => //.
   iSplit => //. iModIntro. by iApply "p_kS".

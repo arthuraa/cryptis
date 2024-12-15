@@ -72,8 +72,8 @@ wp_pures. wp_list_match => [ga vkI -> {m1}|]; last by protocol_failure.
 rewrite public_of_list /=.
 iDestruct "p_m1" as "(p_ga & p_vkI & _)".
 iPoseProof (public_minted with "p_ga") as "m_ga".
-iMod (minted_atI with "[//] phase_auth m_ga")
-  as "[phase_auth #ma_ga]"; first by solve_ndisj.
+iMod (minted_atI with "[] phase_auth m_ga")
+  as "[phase_auth #ma_ga]"; eauto.
 wp_pures. wp_bind (mknonce _).
 iApply (wp_mknonce_freshN ∅
           (λ _, (∃ kI, ⌜vkI = TKey Dec kI⌝ ∗ public_at n (TKey Enc kI)) ∨
@@ -153,8 +153,8 @@ iAssert ( |={⊤}=> ●Ph{dq} n ∗
   with "[phase_auth H3 H4]"
   as "{p_m3} > [phase_auth #i_m3]".
 { iDestruct "p_m3" as "[(p_skI & _) | (#i_m3 & _ & _)]".
-  { iMod (public_atI with "[//] H3 phase_auth p_skI")
-      as "[phase_auth #comp]" => //; try by solve_ndisj.
+  { iMod (public_atI with "[] H3 phase_auth p_skI")
+      as "[phase_auth #comp]"; eauto => //; try by solve_ndisj.
     iFrame. iLeft. iIntros "!> !>". by iLeft. }
   iMod (lc_fupd_elim_later_pers with "H4 i_m3") as "{i_m3} #i_m3".
   iDestruct "i_m3" as "(%a & %gb' & %kR' & %n' & %e_m3 &
@@ -162,8 +162,8 @@ iAssert ( |={⊤}=> ●Ph{dq} n ∗
   case/Spec.of_list_inj: e_m3 => -> <- <- {ga gb' kR'} in gb gab kS si *.
   iDestruct "i_m3" as "[i_m3 | i_m3]".
   { iPoseProof (public_at_public with "i_m3") as "i_m3'".
-    iMod (public_atI with "[//] H3 phase_auth i_m3'")
-      as "[phase_auth #comp]" => //; try by solve_ndisj.
+    iMod (public_atI with "[] H3 phase_auth i_m3'")
+      as "[phase_auth #comp]"; eauto => //; try by solve_ndisj.
     iFrame. iIntros "!> !>". iLeft. by iRight. }
   rewrite TExp_TExpN TExpC2 -(TExp_TExpN _ [a] b) -/gab -/kS.
   iPoseProof (term_meta_agree with "info i_m3") as "{i_m3} %e".

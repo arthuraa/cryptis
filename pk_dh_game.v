@@ -5,7 +5,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import numbers reservation_map.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par.
-From cryptis Require Import lib term cryptis primitives tactics.
+From cryptis Require Import lib cryptis primitives tactics gmeta.
 From cryptis Require Import role session pk_auth dh pk_dh.
 
 Set Implicit Arguments.
@@ -14,7 +14,7 @@ Unset Printing Implicit Defensive.
 
 Section Game.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ, !sessionGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ, !sessionGS Σ, !metaGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -49,9 +49,6 @@ Definition game : val := λ: "mkchan",
           eq_term "sesskI" "sesskR" && ~ eq_term "m" "sesskI")
   else SOME #true.
 
-(* TODO Avoid exposing these instances *)
-Local Existing Instances cryptisGpreS_maps cryptis_inG.
-
 Lemma wp_game (mkchan : val) :
   {{{ True }}} mkchan #() {{{ v, RET v; channel v }}} -∗
   cryptis_ctx -∗
@@ -63,13 +60,10 @@ Lemma wp_game (mkchan : val) :
   WP game mkchan {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
 iIntros "wp_mkchan #ctx enc_tok key_tok nown_tok #hon phase"; rewrite /game; wp_pures.
-iMod (own_alloc (reservation_map_token ⊤)) as (γI) "tokenI".
-  apply reservation_map_token_valid.
-iMod (own_alloc (reservation_map_token ⊤)) as (γR) "tokenR".
-  apply reservation_map_token_valid.
+iMod gmeta_token_alloc as (γI) "tokenI".
+iMod gmeta_token_alloc as (γR) "tokenR".
 pose (P rl (kI kR kS : term) :=
-  own (if rl is Init then γI else γR)
-    (namespace_map_data nroot (to_agree (encode (kI, kR, kS))))).
+  gmeta (if rl is Init then γI else γR) nroot (kI, kR, kS)).
 iMod (pk_dh_alloc N P with "nown_tok enc_tok") as "[#dh_ctx _]" => //.
 wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP".

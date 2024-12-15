@@ -23,9 +23,6 @@ Variable N : namespace.
 
 Context `{!PK}.
 
-(* TODO: Avoid exposing these instances. *)
-Local Existing Instances cryptis_inG cryptisGpreS_maps.
-
 Lemma public_msg1E kI kR sI :
   pk_auth_ctx N -∗
   public (TEnc (TKey Enc kR) (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Enc kI]))) -∗
@@ -137,7 +134,7 @@ Lemma resp_finish E kI kR sI nR n :
   init_finished N kR sR -∗
   resp_waiting N kI kR sI nR ={E}=∗
   ▷ (corruption kI kR ∨
-     session_key_meta_token N Resp kI kR kS ⊤ ∗
+     session_key_meta_token N kI kR kS (↑N.@"resp") ∗
      session_key N kI kR kS n).
 Proof.
 iIntros "%sR %kS % #(ctx & _) #sess #s_nR #p_nR [#fail|#finished] waiting".
@@ -156,13 +153,9 @@ case: e => <- <-.
 iPoseProof (session_weak'_agree with "sessWR sess") as "(_ & _ & ->)".
 iMod ("waiting" with "[] sessI") as "[_ >finished]".
   solve_ndisj.
-iMod (own_alloc (reservation_map_token ⊤)) as "(%γ & map)".
-  by apply reservation_map_token_valid.
 rewrite /=.
-iMod (term_meta_set (N.@"token".@Resp) γ with "finished")
-  as "#meta" => //.
 iModIntro. iModIntro. iRight. iSplitL.
-  iExists nI, nR, γ. by eauto.
+  iExists nI, nR. by eauto.
 iExists nI, nR. by do !iSplit => //.
 Qed.
 
@@ -187,7 +180,7 @@ Lemma wp_pk_auth_resp c kR dq n T :
                □ confirmation Resp kI kR kS ∗
                session_weak N Resp kI kR kS n ∗
                if in_honest kI kR T then
-                session_key_meta_token N Resp kI kR kS ⊤ ∗
+                session_key_meta_token N kI kR kS (↑N.@"resp") ∗
                 session_key N kI kR kS n
                else True
        else True }}}.

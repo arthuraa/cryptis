@@ -22,9 +22,6 @@ Variable N : namespace.
 
 Context `{!PK}.
 
-(* TODO: Avoid exposing these instances. *)
-Local Existing Instances cryptis_inG cryptisGpreS_maps.
-
 Lemma public_msg1I n kI kR nI :
   let sI := mk_key_share nI in
   pk_auth_ctx N -∗
@@ -88,26 +85,20 @@ Lemma init_finish dq n kI kR nI sR :
      session_weak N Init kI kR kS n ∗
      init_finished N kR sR ∗
      (corruption kI kR ∨
-      session_key_meta_token N Init kI kR kS ⊤ ∗
+      session_key_meta_token N kI kR kS (↑N.@"init") ∗
       session_key N kI kR kS n)).
 Proof.
 iIntros "%sI %kS (#ctx & _) hon #sess #s_nI #p_nI #p_sR #accepted token confirm".
 iMod ("confirm" $! nI sR) as "#confirm".
 iAssert (secret_of sI kI kR) as "p_sI".
   by iApply mk_key_share_secret_of.
-rewrite (term_token_difference _ (↑N.@"token")) //; last solve_ndisj.
-set TK := N.@"token".
-iDestruct "token" as "[token_token token]".
-rewrite (term_token_difference _ (↑N.@"session") (_ ∖ _)); last first.
-  solve_ndisj.
+rewrite (term_token_difference _ (↑N.@"init")) //; last solve_ndisj.
+iDestruct "token" as "[init_token token]".
+rewrite (term_token_difference _ (↑N.@"resp") (_ ∖ _)) //; last solve_ndisj.
+iDestruct "token" as "[resp_token token]".
+rewrite (term_token_difference _ (↑N.@"session") (_ ∖ _)); last solve_ndisj.
 set S := N.@"session".
 iDestruct "token" as "[token_sess token]".
-rewrite (term_token_difference _ (↑TK.@Init) (↑TK)); last first.
-  solve_ndisj.
-iDestruct "token_token" as "[token_init token_token]".
-rewrite (term_token_difference _ (↑TK.@Resp) (_ ∖ _)); last first.
-  solve_ndisj.
-iDestruct "token_token" as "[token_resp _]".
 iDestruct "accepted" as "[fail|accepted]".
   iPoseProof ("p_sI" with "fail") as "fail'".
   iModIntro. iModIntro. iFrame. iSplit; eauto. iSplit.
@@ -124,20 +115,16 @@ iAssert (⌜n' = n⌝)%I as "#->".
   iDestruct "sess''" as "[hon' _]".
   iPoseProof (phase_auth_frag_agree with "hon hon'") as "%n'n".
   iPureIntro; lia.
-iMod (session_begin _ Init nI nR (kI, kR) with "ctx [token_resp] token_sess")
+iMod (session_begin _ Init nI nR (kI, kR) with "ctx [resp_token] token_sess")
   as "[#sessI _]".
 - solve_ndisj.
 - by iSplitR.
-iMod (own_alloc (reservation_map_token ⊤)) as "(%γ & map)".
-  by apply reservation_map_token_valid.
-Unshelve.
-iMod (term_meta_set (TK.@Init) γ with "token_init") as "#meta" => //.
 iModIntro. iModIntro. iFrame. iSplit; eauto. iSplitR.
   by iExists _, _; eauto.
 iSplitR.
   iRight. iExists nI, nR, kI, n. do !iSplit => //; by eauto.
 iRight. iSplitL.
-  iExists nI, nR, γ; by eauto.
+  iExists nI, nR; by eauto.
 iExists nI, nR; do !iSplit => //; eauto.
 Qed.
 
@@ -174,7 +161,7 @@ Lemma wp_pk_auth_init c kI kR dq n T :
         □ confirmation Init kI kR kS ∗
         session_weak N Init kI kR kS n ∗
         if in_honest kI kR T then
-          session_key_meta_token N Init kI kR kS ⊤ ∗
+          session_key_meta_token N kI kR kS (↑N.@"init") ∗
           session_key N kI kR kS n
         else True
       else True }}}.

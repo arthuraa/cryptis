@@ -60,12 +60,14 @@ Definition sessionR := authR session_mapUR.
 
 Class sessionGpreS := {
   sessionGpreS_sess : inG Σ sessionR;
+  sessionGpreS_meta : metaGS Σ;
 }.
 
 Local Existing Instance sessionGpreS_sess.
+Local Existing Instance sessionGpreS_meta.
 
 Class sessionGS := SessionGS {
-  session_inG  : inG Σ sessionR;
+  session_inG  : sessionGpreS;
   session_name : gname;
 }.
 
@@ -430,12 +432,12 @@ Qed.
 End Session.
 
 Definition sessionΣ : gFunctors :=
-  #[GFunctor sessionR].
+  #[GFunctor sessionR; metaΣ].
 
 Arguments sessionGS Σ : clear implicits.
 Arguments sessionGpreS Σ : clear implicits.
 Arguments session_alloc {Σ _ _ _} {X _ _} N P.
-Arguments session_token_difference {Σ _ _} E E'.
+Arguments session_token_difference {Σ _} E E'.
 Arguments session_begin {Σ _ _ _ _ _ _}  {N P} E rl tI tR.
 Arguments session_ctx {Σ _ _ _ _ _ _} N P.
 Arguments session {Σ _ _ _ _ _} N rl _ _.
@@ -446,11 +448,12 @@ Instance subG_sessionΣ {Σ} : subG sessionΣ Σ → sessionGpreS Σ.
 Proof. solve_inG. Qed.
 
 Local Existing Instance sessionGpreS_sess.
+Local Existing Instance sessionGpreS_meta.
 
 Lemma sessionGS_alloc `{!cryptisGS Σ, !heapGS Σ} :
   sessionGpreS Σ →
   ⊢ |==> ∃ (H : sessionGS Σ), session_token ⊤.
 Proof.
 iIntros (?). iMod gmeta_token_alloc as "(%γ & ?)".
-iExists (SessionGS _ _). rewrite session_token_unseal. eauto.
+iExists (SessionGS _ _). rewrite session_token_unseal. by eauto.
 Qed.

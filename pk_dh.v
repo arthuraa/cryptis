@@ -117,11 +117,11 @@ Qed.
 
 Definition pk_dh_ctx : iProp := pk_auth_ctx N.
 
-Definition pk_dh_session_meta rl kI kR :=
-  @session_key_meta _ _ _ _ N _ rl kI kR.
+Definition pk_dh_session_meta kI kR :=
+  @session_key_meta _ _ _ _ N _ kI kR.
 
-Definition pk_dh_session_meta_token rl kI kR :=
-  @session_key_meta_token _ _ _ _ N _ rl kI kR.
+Definition pk_dh_session_meta_token kI kR :=
+  @session_key_meta_token _ _ _ _ N _ kI kR.
 
 Definition pk_dh_session_weak rl kI kR kS ph :=
   session_weak N rl kI kR kS ph.
@@ -168,7 +168,7 @@ Lemma wp_pk_dh_init c kI kR dq n T :
         pk_dh_session_weak Init kI kR kS n ∗
         if in_honest kI kR T then
           □ (public kS → ◇ False) ∗
-          pk_dh_session_meta_token Init kI kR kS ⊤ ∗
+          pk_dh_session_meta_token kI kR kS (↑N.@"init") ∗
           pk_dh_session_key kI kR kS n
         else True
       else True
@@ -207,7 +207,7 @@ Lemma wp_pk_dh_resp c kR dq n T :
         pk_dh_session_weak Resp kI kR kS n ∗
         if in_honest kI kR T then
           □ (public kS → ◇ False) ∗
-          pk_dh_session_meta_token Resp kI kR kS ⊤ ∗
+          pk_dh_session_meta_token kI kR kS (↑N.@"resp") ∗
           pk_dh_session_key kI kR kS n
         else True
       else True
@@ -232,8 +232,8 @@ End PKDH.
 
 Arguments PK_DH {Σ _ _} pk_dh_confirmation.
 Arguments pk_dh_ctx {Σ _ _ _} N _.
-Arguments pk_dh_session_meta {Σ _ _ _} _ _ _ _ _ {L _ _} _ _ _.
-Arguments pk_dh_session_meta_token {Σ _ _ _} _ _ _ _ _ _ _.
+Arguments pk_dh_session_meta {Σ _ _ _} _ _ _ _ {L _ _} _ _ _.
+Arguments pk_dh_session_meta_token {Σ _ _ _} _ _ _ _ _ _.
 Arguments pk_dh_alloc {Σ _ _ _} N _ _ _.
 Arguments wp_pk_dh_init {Σ _ _ _} N.
 Arguments wp_pk_dh_resp {Σ _ _ _} N.

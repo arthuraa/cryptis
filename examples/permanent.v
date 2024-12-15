@@ -98,7 +98,7 @@ iPoseProof (public_TEncE with "p_reply sig_pred")
 { (* The signature could have been forged if the key was compromised, but we
      have ruled out this possibility.  *)
   iPoseProof (secret_atI _ hon_sk with "hon") as "#sec".
-  iMod (honest_public with "[//] sec phase p_sk") as "#contra" => //.
+  iMod (honest_public with "[] sec phase p_sk") as "#contra" => //; eauto.
   wp_pures. by iDestruct "contra" as ">[]". }
 (* Therefore, the invariant must hold. *)
 wp_pures. iModIntro. iRight. iExists reply. iSplit => //.

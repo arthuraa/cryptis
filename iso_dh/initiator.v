@@ -62,7 +62,7 @@ Lemma wp_initiator c kI kR dq n :
 Proof.
 rewrite /initiator.
 iIntros "#chan_c #ctx #(? & ?) #p_kI #p_kR %Ψ !> phase Hpost".
-iMod (minted_at_list with "[//] phase") as "[phase list]" => //.
+iMod (minted_at_list with "[] phase") as "[phase list]" => //; eauto.
 wp_pures.
 iDestruct "list" as "(%M & #m_M & #minted_at_M)".
 wp_bind (mknonce _).
