@@ -569,6 +569,9 @@ rewrite cats0 sort_le_id //.
 by case: (unfold_term t) (wf_unfold_term t) => //= ?? /and5P [].
 Qed.
 
+Definition is_nonce t :=
+  if t is TNonce _ then true else false.
+
 Definition is_exp t :=
   if t is TExpN' _ _ _ then true else false.
 

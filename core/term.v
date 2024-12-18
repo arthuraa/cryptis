@@ -23,6 +23,18 @@ Lemma tsize_TPair t1 t2 :
   tsize (TPair t1 t2) = S (tsize t1 + tsize t2).
 Proof. by rewrite tsize_eq. Qed.
 
+Lemma tsize_TExpN_exp t ts t' : t' ∈ ts → tsize t' < tsize (TExpN t ts).
+Proof.
+elim: ts => [|t'' ts IH].
+- by rewrite elem_of_nil.
+- rewrite elem_of_cons; case => [->|/IH t'_ts].
+  + by case: (tsize_TExpN_lt t ts t'').
+  + case: (tsize_TExpN_lt t ts t'') => ??; lia.
+Qed.
+
+Lemma tsize_TExp_exp t1 t2 : tsize t2 < tsize (TExp t1 t2).
+Proof. apply: tsize_TExpN_exp. rewrite elem_of_cons. by auto. Qed.
+
 Canonical key_typeO := leibnizO key_type.
 
 #[global]

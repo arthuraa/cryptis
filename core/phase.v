@@ -5,7 +5,7 @@ From iris.algebra Require Import functions.
 From iris.base_logic.lib Require Import saved_prop invariants.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib.
-From cryptis.core Require Import term minted public comp_map.
+From cryptis.core Require Import term minted term_meta public comp_map.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -45,7 +45,7 @@ Section Phase.
 Implicit Types γ : gname.
 Implicit Types N : namespace.
 
-Context `{!heapGS Σ, !publicGS Σ, !phaseGS Σ}.
+Context `{!heapGS Σ, !term_metaGS Σ, !publicGS Σ, !phaseGS Σ}.
 Notation iProp := (iProp Σ).
 Notation iPropO := (iPropO Σ).
 Notation iPropI := (iPropI Σ).
@@ -711,7 +711,7 @@ Notation "●Ph n" := (phase_auth (DfracOwn 1) n)
 Notation "◯Ph n" :=
   (phase_frag n) (at level 20, format "◯Ph  n").
 
-Lemma phaseGS_alloc `{!heapGS Σ, !publicGS Σ} E :
+Lemma phaseGS_alloc `{!heapGS Σ, !term_metaGS Σ, !publicGS Σ} E :
   phaseGpreS Σ →
   ⊢ |={E}=> ∃ (H : phaseGS Σ),
              phase_ctx ∗

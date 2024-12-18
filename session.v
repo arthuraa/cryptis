@@ -440,7 +440,7 @@ Arguments session_alloc {Σ _ _ _} {X _ _} N P.
 Arguments session_token_difference {Σ _} E E'.
 Arguments session_begin {Σ _ _ _ _ _ _}  {N P} E rl tI tR.
 Arguments session_ctx {Σ _ _ _ _ _ _} N P.
-Arguments session {Σ _ _ _ _ _} N rl _ _.
+Arguments session {Σ _ _ _ _ _ _} N rl _ _.
 Arguments waiting_for_peer {Σ _ _ _ _ _ _} N P rl tI tR x.
 
 #[global]

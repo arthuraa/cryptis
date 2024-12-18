@@ -34,6 +34,13 @@ iDestruct "token" as "[tok1 tok2]". iFrame.
 by iApply (gmeta_set with "tok1").
 Qed.
 
+Lemma nown_token γ N E (a : A) :
+  ↑N ⊆ E → gmeta_token γ E -∗ nown γ N a -∗ False.
+Proof.
+iIntros "%sub token (%γ' & #meta & _)".
+by iApply (gmeta_gmeta_token with "token meta").
+Qed.
+
 Lemma nown_valid γ N (a : A) : nown γ N a -∗ ✓ a.
 Proof.
 iIntros "(%γ' & #own_γ & own)". iApply (own_valid with "own").

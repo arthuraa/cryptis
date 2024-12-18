@@ -218,7 +218,7 @@ iApply (wp_fork with "[conn locked db account token]").
 { iModIntro.
   rewrite (term_token_difference _ (↑nroot.@"server".@"begin")); last by solve_ndisj.
   iDestruct "token" as "[not_started token]".
-  iPoseProof (@term_token_drop _ _ (↑nroot.@"server".@"end")
+  iPoseProof (@term_token_drop _ _ _ (↑nroot.@"server".@"end")
                with "token") as "not_ended"; first by solve_ndisj.
   iApply (wp_server_wait_init
            with "[conn locked db account not_started not_ended] []") => //.

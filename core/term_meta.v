@@ -2,10 +2,10 @@ From mathcomp Require Import ssreflect.
 From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap list reservation_map excl.
 From iris.algebra Require Import functions.
-From iris.base_logic.lib Require Import saved_prop invariants.
+From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib gmeta nown.
-From cryptis.core Require Import term comp_map minted.
+From cryptis.core Require Import term comp_map minted saved_prop.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -79,9 +79,8 @@ Class HasTermMetaCtx (ctx : iProp) := {
 
 Local Existing Instance has_term_meta_ctx_persistent.
 
-Context `{!HasTermMetaCtx ctx}.
-
 Definition term_name t γ : iProp :=
+  minted t ∗
   own term_meta_name (◯ {[t := to_agree γ]}).
 
 Global Instance term_name_persistent t γ : Persistent (term_name t γ).
@@ -95,13 +94,16 @@ Lemma term_name_agree t γ1 γ2 :
   term_name t γ2 -∗
   ⌜γ1 = γ2⌝.
 Proof.
-iIntros "name1 name2".
+iIntros "[_ name1] [_ name2]".
 iPoseProof (own_valid_2 with "name1 name2") as "%valid".
 rewrite -auth_frag_op auth_frag_valid in valid.
 move/(_ t): valid.
 rewrite lookup_op !lookup_singleton -Some_op Some_valid.
 by move=> /to_agree_op_inv_L ->.
 Qed.
+
+Lemma term_name_minted t γ : term_name t γ -∗ minted t.
+Proof. by iIntros "[? _]". Qed.
 
 Definition term_token_def t E : iProp :=
   ∃ γ, term_name t γ ∗ gmeta_token γ E.
@@ -117,6 +119,19 @@ Definition term_meta := unseal term_meta_aux.
 Lemma term_meta_unseal : @term_meta = @term_meta_def.
 Proof. exact: seal_eq. Qed.
 Arguments term_meta {L _ _} t N x.
+
+Lemma term_token_minted t E : term_token t E -∗ minted t.
+Proof.
+rewrite term_token_unseal. iIntros "(%γ & #name & _)".
+by iApply term_name_minted.
+Qed.
+
+Lemma term_meta_minted `{Countable L} t N (x : L) :
+  term_meta t N x -∗ minted t.
+Proof.
+rewrite term_meta_unseal. iIntros "(%γ & #name & _)".
+by iApply term_name_minted.
+Qed.
 
 Global Instance term_token_timeless t E : Timeless (term_token t E).
 Proof. rewrite term_token_unseal. apply _. Qed.
@@ -228,6 +243,15 @@ iModIntro.
 by iSplitL "own"; iExists _; iFrame.
 Qed.
 
+Lemma term_token_own t N E (a : A) :
+  ↑N ⊆ E → term_token t E -∗ term_own t N a -∗ False.
+Proof.
+rewrite term_own_unseal term_token_unseal.
+iIntros "%sub (%γ & #name & token) (%γ' & #name' & own)" .
+iPoseProof (term_name_agree with "name name'") as "->".
+by iApply (nown_token with "token own").
+Qed.
+
 Lemma term_own_valid t N (a : A) : term_own t N a -∗ ✓ a.
 Proof.
 rewrite term_own_unseal.
@@ -336,7 +360,7 @@ assert (∀ names : gmap term gname,
   ∃ names' : gmap term gname,
   ⌜dom names' = dom names ∪ T⌝ ∗
   own term_meta_name (● ((to_agree <$> names') : gmap term _)) ∗
-  [∗ set] t ∈ T, term_token t ⊤) as names_alloc.
+  [∗ set] t ∈ T, minted t -∗ term_token t ⊤) as names_alloc.
 { induction T as [|t T fresh IH] using set_ind_L.
   - iIntros "%names _ own !>". iExists names.
     by rewrite right_id_L big_sepS_empty; iFrame.
@@ -356,7 +380,7 @@ assert (∀ names : gmap term gname,
     rewrite dom_names' dom_insert_L. iSplit; first by iPureIntro; set_solver.
     rewrite big_sepS_union; last by set_solver.
     iFrame. rewrite big_sepS_singleton.
-    rewrite term_token_unseal. iExists γ. iFrame. }
+    iIntros "#m_t". rewrite term_token_unseal. iExists γ. by iFrame. }
 iIntros "PE QE PQ (%names & own & #minted_names)".
 iAssert (⌜dom names ## T⌝)%I as "%dis".
 { rewrite elem_of_disjoint. iIntros "%t %t_names %t_T".
@@ -368,7 +392,11 @@ iDestruct "PQ" as "[_ >Q]".
 iAssert ([∗ set] t ∈ T, minted t)%I as "#minted_T".
 { rewrite (big_sepS_forall _ T). iIntros "%t %t_T".
   by iApply ("QE" with "[//] Q"). }
-iModIntro. iFrame. rewrite dom_names big_sepS_union //. by iSplit.
+iCombine "minted_T tokens" as "tokens". rewrite -big_sepS_sep.
+iModIntro. iFrame. iSplit.
+- rewrite dom_names big_sepS_union //. by iSplit.
+- iApply (big_sepS_impl with "tokens").
+  iIntros "!> %t _ [#m_t token]". by iApply "token".
 Qed.
 
 Context `{!HasTermMetaCtx ctx}.
@@ -390,11 +418,81 @@ Qed.
 
 End TermMeta.
 
-Arguments term_token {Σ _} t E.
-Arguments term_meta {Σ _ L _ _} t N x.
-Arguments term_meta_set {Σ _ _ _ _} N x E t.
-Arguments term_token_difference {Σ _} t E1 E2.
-Arguments term_name {Σ _} t γ.
-Arguments term_own {Σ _ A _} t N x.
-Arguments term_own_alloc {Σ _ A _ t} N {_} a.
-Arguments term_own_update {Σ _ A _ t N a} a'.
+Arguments term_token {Σ _ _} t E.
+Arguments term_meta {Σ _ _ L _ _} t N x.
+Arguments term_meta_set {Σ _ _ _ _ _} N x E t.
+Arguments term_token_difference {Σ _ _} t E1 E2.
+Arguments term_name {Σ _ _} t γ.
+Arguments term_own {Σ _ _ A _} t N x.
+Arguments term_own_alloc {Σ _ _ A _ t} N {_} a.
+Arguments term_own_update {Σ _ _ A _ t N a} a'.
+
+Section TermProp.
+
+Context `{!heapGS Σ, !term_metaGS Σ, !savedPropG Σ}.
+
+Definition term_prop t N : iProp Σ :=
+  ∃ P : iProp Σ, term_own t N (saved_prop DfracDiscarded P) ∧ ▷ P.
+
+Lemma term_prop_alloc t N P E :
+  ↑N ⊆ E →
+  term_token t E ==∗
+  □ (term_prop t N ↔ ▷ P) ∗
+  term_token t (E ∖ ↑N).
+Proof.
+iIntros "%sub token".
+iMod (term_own_alloc N (saved_prop DfracDiscarded P) with "token")
+  as "[#own alloc]" => //.
+iFrame. iIntros "!> !>". iSplit.
+- iIntros "(%Q & #own' & HQ)".
+  iPoseProof (term_own_valid_2 with "own own'") as "#valid".
+  rewrite saved_prop_op_validI.
+  iDestruct "valid" as "[_ valid]". iNext.
+  by iRewrite "valid".
+- iIntros "HP". iExists P. by eauto.
+Qed.
+
+Lemma term_token_prop t N E :
+  ↑N ⊆ E → term_token t E -∗ term_prop t N -∗ False.
+Proof.
+iIntros "%sub token (%P & #own & HP)".
+by iApply (term_token_own with "token own").
+Qed.
+
+End TermProp.
+
+Section TermPred.
+
+Context {A : Type} `{!heapGS Σ, !term_metaGS Σ, !savedPredG Σ A}.
+
+Implicit Types (φ : A → iProp Σ) (x : A).
+
+Definition term_pred t N x : iProp Σ :=
+  ∃ φ, term_own t N (saved_pred DfracDiscarded φ) ∧ ▷ φ x.
+
+Lemma term_pred_alloc t N E φ :
+  ↑N ⊆ E →
+  term_token t E ==∗
+  □ (∀ x, term_pred t N x ↔ ▷ φ x) ∗
+  term_token t (E ∖ ↑N).
+Proof.
+iIntros "%sub token".
+iMod (term_own_alloc N (saved_pred DfracDiscarded φ) with "token")
+  as "[#own alloc]" => //.
+iFrame. iIntros "!> !> %x". iSplit.
+- iIntros "(%Ψ & #own' & HΨ)".
+  iPoseProof (term_own_valid_2 with "own own'") as "#valid".
+  rewrite saved_pred_op_validI.
+  iDestruct "valid" as "[_ #valid]". iSpecialize ("valid" $! x). iNext.
+  by iRewrite "valid".
+- iIntros "Hφ". iExists φ. by eauto.
+Qed.
+
+Lemma term_token_pred t N E x :
+  ↑N ⊆ E → term_token t E -∗ term_pred t N x -∗ False.
+Proof.
+iIntros "%sub token (%φ & #own & Hφ)".
+by iApply (term_token_own with "token own").
+Qed.
+
+End TermPred.
