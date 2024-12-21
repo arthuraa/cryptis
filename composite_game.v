@@ -255,21 +255,21 @@ wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP".
 wp_pures; wp_bind (mknonce _).
 iApply (wp_mknonce (λ _, True)%I (λ _, False%I)) => //.
-iIntros (nI) "#t_nI #p_nI _ tok_nI".
+iIntros (nI) "_ #t_nI #p_nI _ tok_nI".
 wp_tag.
 iAssert (public (Spec.tag (nroot.@"key") nI)) as "{p_nI} p_nI".
   by rewrite public_tag; iApply "p_nI".
 wp_pures.
 wp_pures; wp_bind (mknonce _).
 iApply (wp_mknonce (λ _, True)%I (λ _, False%I)) => //.
-iIntros (nR) "#t_nR #p_nR _ tok_nR".
+iIntros (nR) "_ #t_nR #p_nR _ tok_nR".
 wp_tag.
 iAssert (public (Spec.tag (nroot.@"key") nR)) as "{p_nR} p_nR".
   by iApply public_tag; iApply "p_nR".
 wp_pures.
 wp_pures; wp_bind (mknonce _).
 iApply (wp_mknonce (λ psk, term_meta psk (nroot.@"pub") ())%I (λ _, False%I)) => //.
-iIntros (psk) "#t_psk #p_psk _ tok_psk".
+iIntros (psk) "_ #t_psk #p_psk _ tok_psk".
 wp_pures; wp_bind (mkkeys _); iApply wp_mkkeys.
 set ekI := TKey Enc _.
 set dkI := TKey Dec _.

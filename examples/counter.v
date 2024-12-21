@@ -186,8 +186,8 @@ Definition game : val := λ: "mkchan",
 
   (* Generate signature keys and publicize verification key *)
   let: "k"   := mksigkey #() in
-  let: "sk"  := Fst "k" in
-  let: "vk"  := Snd "k" in
+  let: "sk"  := key Enc "k" in
+  let: "vk"  := key Dec "k" in
   send "c" "vk" ;;
 
   (* Initialize server state *)
@@ -217,7 +217,9 @@ wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP". wp_pures.
 (* Generate server key. Keep the signing key secret. *)
 wp_bind (mksigkey _). iApply (wp_mksigkey with "[//] hon phase") => //.
-iIntros (k) "#p_vk #hon' phase".
+iIntros (k) "#p_vk #hon' phase". wp_pures.
+wp_apply wp_key. wp_pures.
+wp_apply wp_key. wp_pures.
 iMod (phase_auth_discard with "phase") as "#phase".
 (* Publicize verification key. *)
 wp_pures. wp_bind (send _ _). iApply wp_send => //. wp_pures.

@@ -243,7 +243,7 @@ iIntros "#chan_c #ctx #ctx' #p_kI #honI #p_kR".
 iIntros "%Ψ !> _ Hpost".
 rewrite /init. wp_pures. wp_bind (mknonce _).
 iApply (wp_mknonce (λ _, corrupt kI kR) (λ _, False)%I) => //.
-iIntros "%nI #m_nI #p_nI _ token".
+iIntros "%nI _ #m_nI #p_nI _ token".
 rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_list. wp_term_of_list. wp_tenc => /=. wp_pures.
 wp_bind (send _ _). iApply (wp_send with "[] [#]"); eauto.
@@ -296,7 +296,7 @@ iDestruct (public_msg1E with "[//] [//] Hm1 [//]")
   as "(#m_nI & #p_pkI & #nIP)".
 wp_pures. wp_bind (mknonce _).
 iApply (wp_mknonce (λ _, corrupt kI kR) (λ _, False)%I) => //.
-iIntros "%nR #m_nR #p_nR _ _". rewrite bi.intuitionistic_intuitionistically.
+iIntros "%nR _ #m_nR #p_nR _ _". rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_list; wp_term_of_list. wp_tenc. wp_pures.
 wp_bind (send _ _). iApply wp_send => //.
   by iApply public_msg2I; eauto.
@@ -317,10 +317,10 @@ Definition game : val := λ: "mkchan",
   let: "c"  := "mkchan" #() in
   let: "kI" := mkakey #() in
   let: "kR" := mkakey #() in
-  let: "pkI" := Fst "kI" in
-  let: "skI" := Snd "kI" in
-  let: "pkR" := Fst "kR" in
-  let: "skR" := Snd "kR" in
+  let: "pkI" := key Enc "kI" in
+  let: "skI" := key Dec "kI" in
+  let: "pkR" := key Enc "kR" in
+  let: "skR" := key Dec "kR" in
   send "c" "pkI";;
   send "c" "pkR";;
   let: "pkR'" := recv "c" in
@@ -354,10 +354,10 @@ iApply (wp_mkakey with "[] hon phase"); eauto.
 iIntros "%kI #p_pkI hon phase tokenI". wp_pures.
 wp_bind (mkakey _). iApply (wp_mkakey with "[] hon phase"); eauto.
 iIntros "%kR #p_pkR hon phase tokenR". wp_pures.
-set pkI := TKey Enc kI.
-set skI := TKey Dec kI.
-set pkR := TKey Enc kR.
-set skR := TKey Dec kR.
+wp_apply wp_key. wp_pures. set pkI := TKey Enc kI.
+wp_apply wp_key. wp_pures. set skI := TKey Dec kI.
+wp_apply wp_key. wp_pures. set pkR := TKey Enc kR.
+wp_apply wp_key. wp_pures. set skR := TKey Dec kR.
 iMod (freeze_honest with "[] hon phase") as "(hon & phase & sec)" => //; eauto.
 wp_pures; wp_bind (send _ _); iApply wp_send => //.
 wp_pures; wp_bind (send _ _); iApply wp_send => //.

@@ -22,7 +22,8 @@ Implicit Types (rl : role) (t kI kR nI nR sI sR kS : term).
 Definition nslN := nroot.@"nsl".
 
 Definition nsl_session kI kR sess_key : iProp := ∃ nI nR,
-  ⌜sess_key = Spec.of_list [TKey Enc kI; TKey Enc kR; nI; nR]⌝ ∗
+  ⌜sess_key =
+    Spec.derive_key (Spec.of_list [TKey Enc kI; TKey Enc kR; nI; nR])⌝ ∗
   □ (public (TKey Dec kI) → ▷ False) ∗
   □ (public (TKey Dec kR) → ▷ False) ∗
   □ (public sess_key → ▷^2 False).
@@ -33,6 +34,7 @@ Lemma nsl_session_agree t kI1 kR1 kI2 kR2 :
   ⌜kI1 = kI2 ∧ kR1 = kR2⌝.
 Proof.
 iIntros "(% & % & -> & _) (% & % & %e & _)".
+case/Spec.tag_inj: e => _ e.
 by case/Spec.of_list_inj: e.
 Qed.
 
@@ -54,7 +56,7 @@ iSplit.
 Qed.
 
 Lemma nsl_session_alloc kI kR nI nR :
-  let sess_key := Spec.of_list [TKey Enc kI; TKey Enc kR; nI; nR] in
+  let sess_key := Spec.derive_key (Spec.of_list [TKey Enc kI; TKey Enc kR; nI; nR]) in
   term_token sess_key (⊤ ∖ ↑nroot.@"resp") -∗
   □ (public (TKey Dec kI) → ▷ False) -∗
   □ (public (TKey Dec kR) → ▷ False) -∗
@@ -66,7 +68,7 @@ Proof.
 iIntros "%sess_key token #s_dkI #s_dkR #s_nI #s_nR".
 iAssert (□ (public sess_key → ▷^2 False))%I as "#s_sk".
 { iIntros "!> #p_sk".
-  rewrite public_of_list /=.
+  rewrite public_derive_key public_of_list /=.
   iDestruct "p_sk" as "(_ & _ & p_nI & _)".
   by iDestruct ("s_nI" with "p_nI") as "[contra|contra]"; iNext;
   [iApply "s_dkI"|iApply "s_dkR"]. }
@@ -93,7 +95,7 @@ Definition init : val := λ: "c" "skI" "pkI" "pkR",
   guard: eq_term "nI'" "nI" && eq_term "pkR'" "pkR" in
   let: "m3" := tenc (nslN.@"m3") "pkR" "nR" in
   send "c" "m3";;
-  let: "sess_key" := term_of_list ["pkI"; "pkR"; "nI"; "nR"] in
+  let: "sess_key" := derive_key (term_of_list ["pkI"; "pkR"; "nI"; "nR"]) in
   SOME "sess_key".
 
 Definition resp : val := λ: "c" "skR" "pkR",
@@ -105,7 +107,7 @@ Definition resp : val := λ: "c" "skR" "pkR",
   send "c" "m2";;
   bind: "m3" := tdec (nslN.@"m3") "skR" (recv "c") in
   guard: eq_term "m3" "nR" in
-  let: "sess_key" := term_of_list ["pkI"; "pkR"; "nI"; "nR"] in
+  let: "sess_key" := derive_key (term_of_list ["pkI"; "pkR"; "nI"; "nR"]) in
   SOME ("pkI", "sess_key").
 
 Definition msg1_pred kR m1 : iProp := ∃ nI kI,
@@ -114,7 +116,8 @@ Definition msg1_pred kR m1 : iProp := ∃ nI kI,
   (public nI ↔ ▷ □ (public (TKey Dec kI) ∨ public (TKey Dec kR))).
 
 Definition msg2_pred kI m2 : iProp := ∃ nI nR kR,
-  let sess_key := Spec.of_list [TKey Enc kI; TKey Enc kR; nI; nR] in
+  let sess_key :=
+    Spec.derive_key (Spec.of_list [TKey Enc kI; TKey Enc kR; nI; nR]) in
   ⌜m2 = Spec.of_list [nI; nR; TKey Enc kR]⌝ ∧
   (public (TKey Dec kR) → ▷ False) ∧
   (public nR ↔ ▷ □ (public (TKey Dec kI) ∨ public (TKey Dec kR))) ∧
@@ -170,7 +173,7 @@ iApply public_TEncIS; eauto.
 Qed.
 
 Lemma resp_recv_1_send_2 pkI kR nI nR :
-  let sess_key := Spec.of_list [pkI; TKey Enc kR; nI; nR] in
+  let sess_key := Spec.derive_key (Spec.of_list [pkI; TKey Enc kR; nI; nR]) in
   public (TEnc (TKey Enc kR)
             (Spec.tag (nslN.@"m1")
                (Spec.of_list [nI; pkI]))) -∗
@@ -233,7 +236,8 @@ iDestruct (public_TEncE with "p_m1 [//]") as "[[_ fail]|succ]".
 Qed.
 
 Lemma init_recv_2_send_3 kI kR nI nR :
-  let sess_key := Spec.of_list [TKey Enc kI; TKey Enc kR; nI; nR] in
+  let sess_key :=
+    Spec.derive_key (Spec.of_list [TKey Enc kI; TKey Enc kR; nI; nR]) in
   public (TEnc (TKey Enc kI)
             (Spec.tag (nslN.@"m2")
                (Spec.of_list [nI; nR; TKey Enc kR]))) -∗
@@ -261,7 +265,8 @@ iDestruct (public_TEncE with "p_m2 [//]") as "[fail|succ]".
   iFrame. iIntros "!>". iSplit; first by iApply public_minted.
   iSplit.
   + iApply public_TEncIP => //. by rewrite public_tag.
-  + iLeft. by do !iSplit => //.
+  + iLeft. do !iSplit => //.
+    rewrite public_derive_key public_of_list /=. by eauto.
 - iDestruct "succ" as "(#inv_m2 & m_m2 & _)".
   rewrite minted_of_list /=. iDestruct "m_m2" as "(_ & m_nR & _)".
   iIntros "!> !>".
@@ -282,7 +287,8 @@ iDestruct (public_TEncE with "p_m2 [//]") as "[fail|succ]".
 Qed.
 
 Lemma resp_recv_3 pkI kR nI nR :
-  let sess_key := Spec.of_list [pkI; TKey Enc kR; nI; nR] in
+  let sess_key :=
+    Spec.derive_key (Spec.of_list [pkI; TKey Enc kR; nI; nR]) in
   public (TEnc (TKey Enc kR) (Spec.tag (nslN.@"m3") nR)) -∗
   cryptis_ctx ∗
   nsl_ctx ∗
@@ -301,7 +307,7 @@ iIntros "(#? & (_ & _ & #?) & #meta & #p_pkI & #p_pkR & #s_dkR & #p_nI & #s_nR)"
 iDestruct (public_TEncE with "p_m3 [//]") as "{p_m3} [[_ p_nR]|p_m3]".
 - iSpecialize ("s_nR" with "p_nR"). iIntros "!> !>".
   iDestruct "s_nR" as "[(%kI & -> & #p_dkI)|#p_dkR]".
-  + iExists kI. rewrite public_of_list /= compromise_TKey.
+  + iExists kI. rewrite public_derive_key public_of_list /= compromise_TKey.
     iModIntro. iSplit => //. iLeft. do !iSplit => //.
     iApply "p_nI". by eauto.
   + by iDestruct ("s_dkR" with "p_dkR") as ">[]".
@@ -310,6 +316,7 @@ iDestruct (public_TEncE with "p_m3 [//]") as "{p_m3} [[_ p_nR]|p_m3]".
   iPoseProof (term_meta_agree with "meta meta'") as "<-".
   iModIntro. iExists kI. iSplit; eauto.
   iDestruct "session" as "(% & % & %e & _)".
+  case/Spec.tag_inj: e => _ e.
   by case/Spec.of_list_inj: e.
 Qed.
 
@@ -337,7 +344,7 @@ iIntros "#chan_c #ctx #ctx' #p_kI #s_kI #p_kR %Ψ !> _ Hpost".
 rewrite /init. wp_pures. wp_bind (mknonce _).
 iApply (wp_mknonce (λ _, public (TKey Dec kI) ∨ public (TKey Dec kR))%I
           (λ _, False)%I) => //.
-iIntros "%nI #m_nI #p_nI _ token".
+iIntros "%nI _ #m_nI #p_nI _ token".
 wp_pures. wp_list. wp_term_of_list. wp_tenc => /=. wp_pures.
 wp_bind (send _ _). iApply (wp_send with "[] [#]"); eauto.
   iApply init_send_1; eauto.
@@ -351,10 +358,11 @@ iDestruct (init_recv_2_send_3 with "p_m2 [$] []") as ">H"; first by eauto 10.
 wp_pure.
 iMod "H" as "(#m_nR & #p_m3 & inv)".
 wp_tenc. wp_pures. wp_bind (send _ _). iApply wp_send => //.
-wp_list. wp_term_of_list.
-set sess_key := Spec.of_list [TKey Enc kI; _; _; _]. wp_pures.
+wp_list. wp_term_of_list. wp_apply wp_derive_key.
+set sess_key := Spec.derive_key (Spec.of_list [TKey Enc kI; _; _; _]).
+wp_pures.
 iApply ("Hpost" $! (Some sess_key)). iModIntro. iFrame.
-rewrite minted_of_list /=.
+rewrite minted_tag minted_of_list /=.
 by do !iSplit => //; iApply public_minted.
 Qed.
 
@@ -387,19 +395,18 @@ iApply (wp_mknonce_freshN
           ∅
           (λ _, compromise pkI ∨ public (TKey Dec kR))%I
           (λ _, False)%I
-          (λ nR, {[nR; Spec.of_list [pkI; TKey Enc kR; nI; nR]]})) => //.
+          (λ nR, {[nR; Spec.derive_key (Spec.of_list [pkI; TKey Enc kR; nI; nR])]})) => //.
 - by iIntros "% %".
 - iIntros "%nR".
-  rewrite big_sepS_union_pers !big_sepS_singleton minted_of_list /=.
+  rewrite big_sepS_union_pers !big_sepS_singleton minted_tag minted_of_list /=.
   iSplit => //; iModIntro; first by iSplit; iIntros "?".
   iSplit; last by iIntros "(_ & _ & _ & ? & _)".
   iIntros "#m_nR"; do !iSplit => //.
   by iApply public_minted.
-iIntros "%nR _ #m_nR #s_nR _ tokens".
-set sess_key := Spec.of_list [_; _; _; _].
+iIntros "%nR _ %nonce #m_nR #s_nR _ tokens".
+set sess_key := Spec.derive_key (Spec.of_list [_; _; _; _]).
 have ? : nR ≠ sess_key.
-  move=> e; suff: tsize nR < tsize sess_key by rewrite e; lia.
-  apply: Spec.of_list_tsize. set_solver.
+  by move=> e; rewrite e Spec.is_nonce_tag in nonce.
 rewrite big_sepS_union; last set_solver.
 rewrite !big_sepS_singleton. iDestruct "tokens" as "[nR_token sk_token]".
 iMod (resp_recv_1_send_2 with "p_m1 nR_token [$] []" ) as "H"; first eauto 10.
@@ -412,7 +419,7 @@ iIntros "%m3 #p_m3". wp_tdec m3; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst m3.
 iPoseProof (resp_recv_3 with "p_m3 []") as ">finished"; first eauto 10.
 wp_pures. iMod "finished" as "(%kI & -> & finished)".
-wp_list. wp_term_of_list. wp_pures.
+wp_list. wp_term_of_list. wp_apply wp_derive_key. wp_pures.
 iApply ("Hpost" $! (Some (TKey Enc kI, sess_key))).
 iModIntro. by iExists kI; eauto.
 Qed.
@@ -689,10 +696,10 @@ Definition game : val := λ: "mkchan",
   let: "c"  := "mkchan" #() in
   let: "kI" := mkakey #() in
   let: "kR" := mkakey #() in
-  let: "ekI" := Fst "kI" in
-  let: "dkI" := Snd "kI" in
-  let: "ekR" := Fst "kR" in
-  let: "dkR" := Snd "kR" in
+  let: "ekI" := key Enc "kI" in
+  let: "dkI" := key Dec "kI" in
+  let: "ekR" := key Enc "kR" in
+  let: "dkR" := key Dec "kR" in
   send "c" "ekI";;
   send "c" "ekR";;
   (do_init "c" "dkI" "ekI" "ekR" |||
@@ -720,6 +727,7 @@ set dkI := TKey Dec kI.
 set ekR := TKey Enc kR.
 set dkR := TKey Dec kR.
 iMod (freeze_honest with "[] hon phase") as "(hon & phase & sec)" => //; eauto.
+do 4![wp_apply wp_key; wp_pures].
 wp_pures; wp_bind (send _ _); iApply wp_send => //.
 wp_pures; wp_bind (send _ _); iApply wp_send => //.
 iMod "sec" as "sec".

@@ -54,13 +54,7 @@ iDestruct "resP" as "(#m_kS & #p_kS & sess)".
 iRight. iModIntro. iExists _.  iSplit => //.
 iApply ("post" $! (ConnState si ts Init)). iFrame => /=.
 do !iSplit => //.
-- iDestruct "sess" as "[fail|[sess token]]"; eauto.
-- iIntros "!> %kt". iSplit.
-  + iIntros "#p_k".
-    iPoseProof (public_sym_keyE with "[] p_k") as ">?"; eauto.
-    by iApply "p_kS".
-  + iIntros "#fail". iApply public_sym_key => //.
-    iSplit => //. iModIntro. by iApply "p_kS".
+- by iDestruct "sess" as "[fail|[sess token]]"; eauto.
 - iDestruct "sess" as "[fail|[sess token]]"; eauto.
 Qed.
 
@@ -93,12 +87,6 @@ set  si := SessInfo _ _ _ _. wp_pures.
 iRight. iModIntro. iExists _.  iSplit => //.
 iApply ("post" $! (ConnState si ts Resp)). iFrame => /=.
 do !iSplit => //; eauto.
-iIntros "!> %kt". iSplit.
-- iIntros "#p_k".
-  iPoseProof (public_sym_keyE with "[] p_k") as ">?"; eauto.
-  by iApply "p_kS".
-- iIntros "#fail". iApply public_sym_key => //.
-  iSplit => //. iModIntro. by iApply "p_kS".
 Qed.
 
 Lemma wp_connection_timestamp cs (n : nat) :
@@ -126,12 +114,11 @@ Qed.
 Lemma wp_connection_session_key cs n :
   {{{ is_conn_state cs n }}}
     Connection.session_key (repr cs)
-  {{{ RET (repr (Spec.mkskey (si_key cs)));
+  {{{ RET (repr (si_key cs));
       is_conn_state cs n ∗
       (session_fail cs ∨ session cs) ∗
       minted (si_key cs) ∗
-      □ (∀ kt, public (TKey kt (Spec.tag (nroot.@"keys".@"sym") (si_key cs)))
-                 ↔ ▷ session_fail cs) }}}.
+      □ (∀ kt, public (TKey kt (si_key cs)) ↔ ▷ session_fail cs) }}}.
 Proof.
 rewrite /Connection.session_key.
 iIntros "%Φ (? & #? & #? & #?) post". wp_pures. iApply "post".
@@ -163,7 +150,7 @@ iApply wp_send => //.
     - iApply "sec". by eauto.
     - by rewrite public_tag. }
   iApply public_TEncIS => //.
-  - by rewrite minted_TKey minted_tag.
+  - by rewrite minted_TKey.
   - iModIntro. iExists cs. by do !iSplit => //.
   - by iApply public_minted.
   - by iIntros "!> !> _". }
@@ -241,8 +228,7 @@ Qed.
 Lemma wp_connection_make_handlers φ Φ k (handlers : list (namespace * expr)) :
   ([∗ list] handler ∈ handlers,
       WP (handler.2 : expr) {{ f, □ ∀ m : term,
-        public (TEnc (TKey Enc (Spec.tag (nroot.@"keys".@"sym") k))
-                  (Spec.tag handler.1 m)) -∗
+        public (TEnc (TKey Enc k) (Spec.tag handler.1 m)) -∗
         φ -∗
         WP (f : val) m {{ v,
             ⌜v = NONEV⌝ ∗ φ ∨
@@ -250,7 +236,7 @@ Lemma wp_connection_make_handlers φ Φ k (handlers : list (namespace * expr)) :
   WP Connection.make_handlers handlers {{ v',
     ∃ handlers' : list val, ⌜v' = repr handlers'⌝ ∗
       [∗ list] handler' ∈ handlers', □ ∀ m : term,
-        public (TEnc (TKey Enc (Spec.tag (nroot.@"keys".@"sym") k)) m) -∗
+        public (TEnc (TKey Enc k) m) -∗
         φ -∗
         WP (handler' : val) m {{ v,
           ⌜v = NONEV⌝ ∗ φ ∨
@@ -319,7 +305,6 @@ iApply (wp_wand with "[wps]").
       iDestruct "p_m" as "(%si & %e_kS & #sess' & p_m & inv_m)".
       iSplit => //.
       iDestruct "sess" as "[fail|sess]"; first by eauto.
-      case/Spec.tag_inj: e_kS => _ e_kS.
       iPoseProof (session_agree with "sess' sess") as "->" => //.
       by eauto. }
   iApply ("wp" with "p_m [//] conn inv"). }
@@ -328,11 +313,10 @@ wp_pures.
 wp_bind (Connection.session_key _).
 iApply (wp_connection_session_key with "conn").
 iIntros "!> (conn & #m_kS & #p_kS)".
-wp_bind (untuple _).
-iApply wp_untuple => /=.
 wp_pures. iCombine "conn inv" as "I". iRevert "I". iApply wp_do_until.
 iIntros "!> I". wp_pures. wp_bind (recv _). iApply wp_recv => //.
 iIntros "%m #p_m". wp_pures.
+wp_apply wp_key.
 wp_dec m; wp_pures; last by iLeft; iFrame.
 iApply (wp_connection_select_body' Φ with "[] [] [] I").
 - iApply (big_sepL_impl with "Hhandlers'").
@@ -376,7 +360,6 @@ iAssert (▷ □ (public m ∗ (session_fail cs ∨ Φ cs m)))%I
     iDestruct "p_m" as "(%si & %e_kS & #sess' & p_m & inv_m)".
     iSplit => //.
     iDestruct "sess" as "[fail|sess]"; first by eauto.
-    case/Spec.tag_inj: e_kS => _ e_kS.
     iPoseProof (session_agree with "sess' sess") as "->" => //.
     by eauto. }
 iMod (lc_fupd_elim_later with "c p_m") as "{p_m} [#p_m #inv_m]".

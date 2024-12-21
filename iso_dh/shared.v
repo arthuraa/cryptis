@@ -83,7 +83,7 @@ Definition msg2_pred kR m2 : iProp :=
   ∃ ga b vkI n,
     let gb := TExp (TInt 0) b in
     let gab := TExp ga b in
-    let secret := Spec.of_list [ga; gb; gab] in
+    let secret := Spec.derive_key (Spec.of_list [ga; gb; gab]) in
     ⌜m2 = Spec.of_list [ga; gb; vkI]⌝ ∗
     minted_at n ga ∗
     (public b ↔ ▷ □ ((∃ kI, ⌜vkI = TKey Dec kI⌝ ∗ public_at n (TKey Enc kI)) ∨
@@ -98,7 +98,7 @@ Definition msg3_pred kI m3 : iProp :=
   ∃ a gb kR n,
     let ga := TExp (TInt 0) a in
     let gab := TExp gb a in
-    let secret := Spec.of_list [ga; gb; gab] in
+    let secret := Spec.derive_key (Spec.of_list [ga; gb; gab]) in
     ⌜m3 = Spec.of_list [ga; gb; TKey Dec kR]⌝ ∗
     (public a ↔ ▷ □ (public_at n (TKey Enc kI) ∨
                      public_at n (TKey Enc kR))) ∗

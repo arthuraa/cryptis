@@ -71,14 +71,14 @@ Definition enc : val := λ: "k" "t", (#TEnc_tag, ("k", "t")).
 
 Definition hash : val := λ: "t", (#THash_tag, "t").
 
-Definition mkkey kt : val := λ: "k",
+Definition key kt : val := λ: "k",
   (#TKey_tag, (#(int_of_key_type kt), "k")).
 
 Definition dec : val := λ: "k" "t",
   if: (Fst "k" = #TKey_tag)
       && (Fst (Snd "k") = #(int_of_key_type Dec))
       && (Fst "t" = #TEnc_tag)
-      && (eq_term (mkkey Enc (Snd (Snd "k"))) (Fst (Snd "t"))) then
+      && (eq_term (key Enc (Snd (Snd "k"))) (Fst (Snd "t"))) then
     SOME (Snd (Snd "t"))
   else
     NONE.
@@ -91,29 +91,24 @@ Definition tdec c : val := λ: "k" "t",
   untag c "t".
 
 Definition mkkeys : val := λ: "k",
-  (mkkey Enc "k", mkkey Dec "k").
+  (key Enc "k", key Dec "k").
 
 Definition mkakey : val := λ: <>,
   let: "n" := mknonce #() in
-  mkkeys (tag (nroot.@"keys".@"enc") "n").
+  tag (nroot.@"keys".@"enc") "n".
 
 Definition mksigkey : val := λ: <>,
   let: "n" := mknonce #() in
-  mkkeys (tag (nroot.@"keys".@"sig") "n").
+  tag (nroot.@"keys".@"sig") "n".
 
-Definition mkskey : val := λ: "k",
-  let: "k" := mkkeys (tag (nroot.@"keys".@"sym") "k") in
-  tuple (Fst "k") (Snd "k").
+Definition derive_key : val := λ: "k",
+  tag (nroot.@"keys".@"sym") "k".
 
 Definition tsenc c : val := λ: "k" "t",
-  match: untuple "k" with
-    SOME "k" => tenc c (Fst "k") "t"
-  | NONE => "t"
-  end.
+  tenc c (key Enc "k") "t".
 
 Definition tsdec c : val := λ: "k" "t",
-  bind: "k" := untuple "k" in
-  tdec c (Snd "k") "t".
+  tdec c (key Dec "k") "t".
 
 Definition to_ek : val := λ: "t",
   bind: "kt" := is_key "t" in
@@ -350,7 +345,8 @@ Lemma twp_mknonce_gen (P Q : term → iProp Σ) E Ψ (Φ : term → iProp Σ) :
         □ (public t ↔ ▷ □ P t) ∗
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') ∗
         Φ t) -∗
-  (∀ t, minted t -∗
+  (∀ t, ⌜is_nonce t⌝ -∗
+        minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
         Φ t -∗
@@ -376,7 +372,8 @@ Lemma wp_mknonce_gen (P Q : term → iProp Σ) E Ψ (Φ : term → iProp Σ) :
         □ (public t ↔ ▷ □ P t) ∗
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') ∗
         Φ t) -∗
-  (∀ t, minted t -∗
+  (∀ t, ⌜is_nonce t⌝ -∗
+        minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
         Φ t -∗
@@ -392,6 +389,7 @@ Lemma twp_mknonce_freshN (T : gset term) (P Q : term → iProp Σ) (T' : term �
   (∀ t, ⌜t ∈ T⌝ -∗ minted t) -∗
   (∀ t, [∗ set] t' ∈ T' t, □ (minted t ↔ minted t')) -∗
   (∀ t, ⌜∀ t', t' ∈ T → ¬ subterm t t'⌝ -∗
+        ⌜is_nonce t⌝ -∗
         minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
@@ -429,7 +427,8 @@ iApply (twp_mknonce_gen P Q ⊤ _
     + by iDestruct "fresh" as "[_ >fresh]".
   iFrame. do !iModIntro.
   iDestruct "post" as "(? & ? & ?)". eauto. }
-iIntros "% ? ? ? [? ?]". by iApply ("post" with "[$] [$] [$] [$] [$]").
+iIntros "% ? ? ? ? [? ?]".
+iApply ("post" with "[$] [$] [$] [$] [$] [$]").
 Qed.
 
 Lemma wp_mknonce_freshN (T : gset term) P Q (T' : term → gset term) Ψ :
@@ -437,6 +436,7 @@ Lemma wp_mknonce_freshN (T : gset term) P Q (T' : term → gset term) Ψ :
   (∀ t, ⌜t ∈ T⌝ -∗ minted t) -∗
   (∀ t, [∗ set] t' ∈ T' t, □ (minted t ↔ minted t')) -∗
   (∀ t, ⌜∀ t', t' ∈ T → ¬ subterm t t'⌝ -∗
+        ⌜is_nonce t⌝ -∗
         minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
@@ -452,6 +452,7 @@ Lemma twp_mknonce_fresh (T : gset term) (P Q : term → iProp Σ) Ψ :
   cryptis_ctx -∗
   (∀ t, ⌜t ∈ T⌝ -∗ minted t) -∗
   (∀ t, ⌜∀ t', t' ∈ T → ¬ subterm t t'⌝ -∗
+        ⌜is_nonce t⌝ -∗
         minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
@@ -473,6 +474,7 @@ Lemma wp_mknonce_fresh (T : gset term) P Q Ψ :
   cryptis_ctx -∗
   (∀ t, ⌜t ∈ T⌝ -∗ minted t) -∗
   (∀ t, ⌜∀ t', t' ∈ T → ¬ subterm t t'⌝ -∗
+        ⌜is_nonce t⌝ -∗
         minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
@@ -486,7 +488,8 @@ Qed.
 
 Lemma twp_mknonce (P Q : term → iProp Σ) Ψ :
   cryptis_ctx -∗
-  (∀ t, minted t -∗
+  (∀ t, ⌜is_nonce t⌝ -∗
+        minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
         term_token t ⊤ -∗
@@ -500,7 +503,8 @@ Qed.
 
 Lemma wp_mknonce (P Q : term → iProp Σ) Ψ :
   cryptis_ctx -∗
-  (∀ t, minted t -∗
+  (∀ t, ⌜is_nonce t⌝ -∗
+        minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
         □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
         term_token t ⊤ -∗
@@ -511,17 +515,17 @@ iIntros "#ctx H".
 by iApply twp_wp; iApply (twp_mknonce with "[//] H").
 Qed.
 
-Lemma twp_mkkey kt E (k : term) ψ :
+Lemma twp_key kt E (k : term) ψ :
   ψ (TKey kt k : val) ⊢
-  WP mkkey kt k @ E [{ ψ }].
+  WP key kt k @ E [{ ψ }].
 Proof.
 rewrite val_of_term_unseal /=.
 by iIntros "post"; wp_lam; wp_pures.
 Qed.
 
-Lemma wp_mkkey kt E (k : term) ψ :
+Lemma wp_key kt E (k : term) ψ :
   ψ (TKey kt k : val) ⊢
-  WP mkkey kt k @ E {{ ψ }}.
+  WP key kt k @ E {{ ψ }}.
 Proof.
 rewrite val_of_term_unseal /=.
 by iIntros "post"; wp_lam; wp_pures.
@@ -533,8 +537,8 @@ Lemma twp_mkkeys E (k : term) Ψ :
 Proof.
 rewrite /mkkeys.
 iIntros "post"; wp_pures.
-wp_apply twp_mkkey.
-wp_apply twp_mkkey.
+wp_apply twp_key.
+wp_apply twp_key.
 by wp_pures.
 Qed.
 
@@ -557,7 +561,7 @@ Lemma wp_mkakey n T Ψ :
         honest (S n) (T ∪ {[TKey Dec t]}) -∗
         ●Ph (S n) -∗
         term_token t ⊤ -∗
-        Ψ (TKey Enc t, TKey Dec t)%V) -∗
+        Ψ t) -∗
   WP mkakey #() {{ Ψ }}.
 Proof.
 iIntros "#ctx #hon phase post". iMod unknown_alloc as (γ) "unknown".
@@ -571,7 +575,7 @@ iApply (wp_mknonce_freshN T (λ _, known γ 1) (λ _, False%I)
 - iIntros "%t #t_T". by iApply "s_T".
 - iIntros "%t". rewrite big_sepS_singleton minted_tag.
   iModIntro. by iSplit; iIntros "?".
-iIntros "%t %fresh #s_t #p_t _ token".
+iIntros "%t %fresh % #s_t #p_t _ token".
 rewrite big_sepS_singleton.
 pose (t' := Spec.tag (nroot.@"keys".@"enc") t).
 have {}fresh : TKey Dec t' ∉ T.
@@ -598,7 +602,7 @@ iAssert (minted (TKey Dec t')) as "s_t'".
   by rewrite minted_TKey minted_tag.
 iMod (honest_insert with "ctx cred hon phase s_t' tP") as "[#hon' phase]" => //.
 wp_pures. wp_bind (tag _ _). iApply wp_tag.
-iApply wp_mkkeys. iApply ("post" with "[] [$] [$]") => //.
+iApply ("post" with "[] [$] [$]") => //.
 iApply (public_enc_key with "ctx"). by eauto.
 Qed.
 
@@ -609,7 +613,7 @@ Lemma wp_mksigkey n T Ψ :
   (∀ t, public (TKey Dec t) -∗
         honest (S n) (T ∪ {[TKey Enc t]}) -∗
         ●Ph (S n) -∗
-        Ψ (TKey Enc t, TKey Dec t)%V) -∗
+        Ψ t) -∗
   WP mksigkey #() {{ Ψ }}.
 Proof.
 iIntros "#ctx #hon phase post". iMod unknown_alloc as (γ) "unknown".
@@ -623,7 +627,7 @@ iApply (wp_mknonce_freshN T (λ _, known γ 1) (λ _, False%I)
 - iIntros "%t #t_T". by iApply "s_T".
 - iIntros "%t". rewrite big_sepS_singleton minted_tag.
   iModIntro. by iSplit; iIntros "?".
-iIntros "%t %fresh #s_t #p_t _ token".
+iIntros "%t %fresh % #s_t #p_t _ token".
 rewrite big_sepS_singleton.
 pose (t' := Spec.tag (nroot.@"keys".@"sig") t).
 have {}fresh : TKey Enc t' ∉ T.
@@ -648,25 +652,23 @@ iAssert (minted (TKey Enc t')) as "s_t'".
   by rewrite minted_TKey minted_tag.
 iMod (honest_insert with "ctx cred hon phase s_t' tP") as "[hon' phase]" => //.
 wp_pures. wp_bind (tag _ _). iApply wp_tag.
-iApply wp_mkkeys. iApply ("post" with "[] hon'") => //.
+iApply ("post" with "[] hon'") => //.
 iApply (public_sig_key with "ctx"). eauto.
 Qed.
 
-Lemma twp_mkskey E (k : term) Ψ :
-  Ψ (Spec.mkskey k) ⊢
-  WP mkskey k @ E [{ Ψ }].
+Lemma twp_derive_key E (k : term) Ψ :
+  Ψ (Spec.derive_key k) ⊢
+  WP derive_key k @ E [{ Ψ }].
 Proof.
-rewrite /mkskey. iIntros "post". wp_pures.
-wp_pures. wp_apply twp_tag.
-wp_apply twp_mkkeys; wp_pures.
-by iApply twp_tuple.
+rewrite /derive_key. iIntros "post". wp_pures.
+wp_pures. by wp_apply twp_tag.
 Qed.
 
-Lemma wp_mkskey E (k : term) Ψ :
-  Ψ (Spec.mkskey k) ⊢
-  WP mkskey k @ E {{ Ψ }}.
+Lemma wp_derive_key E (k : term) Ψ :
+  Ψ (Spec.derive_key k) ⊢
+  WP derive_key k @ E {{ Ψ }}.
 Proof.
-by iIntros "post"; iApply twp_wp; iApply twp_mkskey.
+by iIntros "post"; iApply twp_wp; iApply twp_derive_key.
 Qed.
 
 Lemma twp_enc E t1 t2 Ψ :
@@ -705,7 +707,7 @@ case: t2; try by move=> /= *; wp_pures.
 move=> tk' t /=; wp_pures.
 rewrite -val_of_term_unseal.
 wp_pures.
-wp_apply twp_mkkey. wp_apply twp_eq_term.
+wp_apply twp_key. wp_apply twp_eq_term.
 case: tk' => //=; try by move=> *; wp_pures.
 case=> [] tk' //= *; wp_pures => //.
 rewrite bool_decide_decide; case: decide => [<-|ne].
@@ -753,9 +755,7 @@ Lemma twp_tsenc E N k t Ψ :
   WP tsenc N k t @ E [{ Ψ }].
 Proof.
 iIntros "post"; rewrite /tsenc /Spec.tsenc; wp_pures.
-wp_bind (untuple _); iApply twp_untuple.
-case: k; try by move=> *; wp_pures; iApply "post".
-by move=> k1 k2 //=; wp_pures; iApply twp_tenc.
+wp_apply twp_key. by wp_apply twp_tenc.
 Qed.
 
 Lemma wp_tsenc E N k t Ψ :
@@ -768,9 +768,7 @@ Lemma twp_tsdec E N k t Ψ :
   WP tsdec N k t @ E [{ Ψ }].
 Proof.
 iIntros "post"; rewrite /tsdec; wp_pures.
-wp_bind (untuple _); iApply twp_untuple.
-case: k; try by move=> *; wp_pures; iApply "post".
-by move=> k1 k2 /=; wp_pures; iApply twp_tdec.
+wp_apply twp_key. by wp_apply twp_tdec.
 Qed.
 
 Lemma wp_tsdec E N k t Ψ :

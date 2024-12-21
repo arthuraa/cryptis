@@ -113,6 +113,9 @@ Proof.
 by rewrite Spec.tag_unseal minted_TPair minted_TInt bi.emp_and.
 Qed.
 
+Lemma minted_derive_key t : minted (Spec.derive_key t) ⊣⊢ minted t.
+Proof. exact: minted_tag. Qed.
+
 Lemma minted_mkskey k : minted (Spec.mkskey k) ⊣⊢ minted k.
 Proof.
 rewrite minted_TPair !minted_TKey !minted_tag.

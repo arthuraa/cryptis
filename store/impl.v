@@ -98,11 +98,10 @@ Definition select_body : val := rec: "loop" "m" "handlers" :=
 
 Definition select_def (c cs : expr) handlers : expr :=
   (λ: "c" "cs" "handlers",
-    bind: "sk" := untuple (session_key "cs") in
-    let: "sk" := Snd "sk" in
+    let: "sk" := session_key "cs" in
     do_until (λ: <>,
       let: "m" := recv "c" in
-      bind: "m" := dec "sk" "m" in
+      bind: "m" := dec (key Dec "sk") "m" in
       select_body "m" "handlers"
     ))%V c cs (make_handlers handlers).
 

@@ -38,7 +38,7 @@ Definition responder : val := λ: "c" "vkR" "skR",
   guard: eq_term "ga" "ga'" && eq_term "gb" "gb'" && eq_term "vkR" "vkR'" in
   let: "gab" := texp "ga" "b" in
   let: "secret" := term_of_list ["ga"; "gb"; "gab"] in
-  SOME ("vkI", mkskey "secret").
+  SOME ("vkI", derive_key "secret").
 
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
@@ -51,14 +51,14 @@ Lemma wp_responder c kR dq n :
   {{{ ●Ph{dq} n }}}
     responder c (TKey Dec kR) (TKey Enc kR)
   {{{ okS,
-      RET (repr ((λ p, pair p.1 (Spec.mkskey p.2)) <$> okS));
+      RET (repr okS);
       ●Ph{dq} n ∗
       if okS is Some (vkI, kS) then ∃ kI,
         let si := SessInfo kI kR kS n in
         ⌜vkI = TKey Dec kI⌝ ∗
         public vkI ∗
         minted kS ∗
-        □ (public kS ↔ ▷ session_fail si) ∗
+        □ (∀ kt, public (TKey kt kS) ↔ ▷ session_fail si) ∗
         session si ∗
         term_token kS (↑nroot.@"server")
       else True
@@ -79,21 +79,22 @@ iApply (wp_mknonce_freshN ∅
           (λ _, (∃ kI, ⌜vkI = TKey Dec kI⌝ ∗ public_at n (TKey Enc kI)) ∨
                 public_at n (TKey Enc kR))%I
           iso_dh_pred
-          (λ b, {[Spec.of_list [ga; TExp (TInt 0) b; TExp ga b]]}))
+          (λ b, {[Spec.derive_key (Spec.of_list [ga; TExp (TInt 0) b; TExp ga b])]}))
        => //.
 - iIntros "%". rewrite elem_of_empty. iIntros "[]".
 - iIntros "%b".
-  rewrite big_sepS_singleton minted_of_list /=.
+  rewrite big_sepS_singleton minted_derive_key minted_of_list /=.
   rewrite minted_TExp minted_TInt /=.
   iModIntro. iSplit.
   + iIntros "#?". do !iSplit => //.
     by iApply minted_TExp => //; iSplit.
   + by iIntros "(_ & (_ & ?) & _)".
-iIntros "%b _ #m_b #p_b #dh_gb token".
+iIntros "%b _ _ #m_b #p_b #dh_gb token".
 rewrite big_sepS_singleton.
 set gb := TExp (TInt 0) b.
 set gab := TExp ga b.
-set kS := Spec.of_list [_; _; _].
+set seed := Spec.of_list [_; _; _].
+set kS := Spec.derive_key seed.
 rewrite (term_token_difference _ (↑nroot.@"client")) //.
 iDestruct "token" as "[client token]".
 iMod (escrowI cryptisN _ (term_token ga ⊤) (term_token kS (↑nroot.@"client"))
@@ -143,7 +144,7 @@ wp_pure _ credit:"H4".
 iPoseProof (public_TEncE with "p_m3 [//]") as "{p_m3} p_m3".
 rewrite public_of_list /=.
 wp_pures. wp_list. wp_term_of_list.
-wp_pures. rewrite -/kS. pose si := SessInfo kI kR kS n.
+wp_pures. rewrite -/seed -/kS. pose si := SessInfo kI kR kS n.
 iAssert ( |={⊤}=> ●Ph{dq} n ∗
   □ (session_fail si ∨
   ∃ a,
@@ -159,7 +160,8 @@ iAssert ( |={⊤}=> ●Ph{dq} n ∗
   iMod (lc_fupd_elim_later_pers with "H4 i_m3") as "{i_m3} #i_m3".
   iDestruct "i_m3" as "(%a & %gb' & %kR' & %n' & %e_m3 &
                         p_a & pred_a & i_m3)".
-  case/Spec.of_list_inj: e_m3 => -> <- <- {ga gb' kR'} in gb gab kS si *.
+  case/Spec.of_list_inj: e_m3 => -> <- <- {ga gb' kR'}
+    in gb gab seed kS si *.
   iDestruct "i_m3" as "[i_m3 | i_m3]".
   { iPoseProof (public_at_public with "i_m3") as "i_m3'".
     iMod (public_atI with "[] H3 phase_auth i_m3'")
@@ -171,26 +173,25 @@ iAssert ( |={⊤}=> ●Ph{dq} n ∗
   iFrame. iIntros "!> !>".
   iRight. iExists a. by do ![iSplitL => //]. }
 iAssert (minted kS) as "#m_kS".
-{ rewrite minted_of_list /=. do !iSplit => //.
+{ rewrite minted_derive_key minted_of_list /=. do !iSplit => //.
   - by iApply public_minted.
   - iApply minted_TExp; eauto. }
 iAssert (minted kI) as "#m_kI".
 { iApply minted_TKey. by iApply public_minted. }
-wp_pures. wp_bind (mkskey _). iApply wp_mkskey. wp_pures.
-iAssert (□ (public kS ↔ ▷ session_fail si))%I
-  as "#sec_sk".
+wp_pures.
+iAssert (□ (◇ public seed ↔ ▷ session_fail si))%I as "#sec_sk".
 { iIntros "!>". iSplit; last first.
   { iIntros "#comp".
     rewrite public_of_list /=.
     do !iSplit => //.
-    iApply public_TExp => //.
+    iModIntro. iApply public_TExp => //.
     iApply "p_b".
     iModIntro. iModIntro.
     iDestruct "comp" as "[fail|fail]"; eauto. }
-  iIntros "#p_sk".
+  iIntros "#>p_sk".
   iDestruct "i_m3" as "[compromise|i_m3]" => //.
   iDestruct "i_m3" as "(%a & -> & p_a & pred_a)".
-  rewrite TExp_TExpN TExpC2 in gab kS si *.
+  rewrite TExp_TExpN TExpC2 in gab seed kS si *.
   rewrite public_of_list /=.
   iDestruct "p_sk" as "(_ & _ & p_sk & _)".
   rewrite /gab public_TExp2_iff; eauto.
@@ -203,8 +204,13 @@ iAssert (□ (public kS ↔ ▷ session_fail si))%I
   - iPoseProof ("p_a" with "p_a'") as "{p_a} p_a". by eauto.
   - iPoseProof ("pred_a" with "contra") as ">%contra".
     by rewrite exps_TExpN in contra. }
+wp_apply wp_derive_key. wp_pures.
 iApply ("Hpost" $! (Some (TKey Dec kI, kS))).
-iFrame. iModIntro. iExists kI. by do !iSplit => //.
+iFrame. iModIntro. iExists kI. do !iSplit => //.
+iIntros "!> %kt".
+iApply (bi.iff_trans _ (◇ public seed)); iSplit => //.
+iApply public_key_derive_key => //.
+by rewrite minted_derive_key.
 Qed.
 
 End Verif.

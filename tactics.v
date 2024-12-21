@@ -156,15 +156,15 @@ by rewrite envs_entails_unseal => H; rewrite -wp_bind -wp_tsenc.
 Qed.
 
 Lemma tac_wp_tsdec Γ E K c k t Ψ :
-  (∀ t', t = TEnc (TKey Enc (Spec.tag (nroot.@"keys".@"sym") k)) (Spec.tag c t') →
+  (∀ t', t = TEnc (TKey Enc k) (Spec.tag c t') →
          envs_entails Γ (WP fill K (Val (SOMEV t')) @ E {{ Ψ }})) →
-  (Spec.tsdec c (Spec.mkskey k) t = None →
+  (Spec.tsdec c k t = None →
    envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →
-  envs_entails Γ (WP fill K (tsdec c (Spec.mkskey k) t) @ E {{ Ψ }}).
+  envs_entails Γ (WP fill K (tsdec c k t) @ E {{ Ψ }}).
 Proof.
 rewrite envs_entails_unseal => HSome HNone.
 rewrite -wp_bind -wp_tsdec.
-rewrite /= in HNone *.
+rewrite /Spec.tsdec in HNone *.
 case e: Spec.tdec => [t'|]; eauto.
 by apply: HSome; apply: Spec.tdecK.
 Qed.

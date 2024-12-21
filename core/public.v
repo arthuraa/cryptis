@@ -713,6 +713,9 @@ Proof.
 by rewrite Spec.tag_unseal public_TPair public_TInt bi.emp_and.
 Qed.
 
+Lemma public_derive_key t : public (Spec.derive_key t) ⊣⊢ public t.
+Proof. exact: public_tag. Qed.
+
 Lemma public_TEncE N Φ k t :
   public (TEnc (TKey Enc k) (Spec.tag N t)) -∗
   enc_pred N Φ -∗
@@ -852,6 +855,17 @@ iSplit.
   + iRight; iSplit => //.
     by iExists _, _, _; iSplit => //; iSplit => //.
   + by iLeft.
+Qed.
+
+Lemma public_key_derive_key kt k :
+  ctx -∗
+  minted k -∗
+  public (TKey kt (Spec.derive_key k)) ↔ ◇ public k.
+Proof.
+iIntros "#ctx #m_k".
+iApply (bi.iff_trans _ (minted k ∧ ◇ public k)).
+iSplit; first by iApply public_sym_key.
+by iSplit; [iIntros "[??]"|iIntros "#?"; iSplit].
 Qed.
 
 Lemma public_enc_key kt k :

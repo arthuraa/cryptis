@@ -454,6 +454,9 @@ rewrite tag_unseal /tag_def => c1 t1 c2 t2 [] e ->.
 split=> //; by apply: inj e.
 Qed.
 
+Lemma is_nonce_tag N t : is_nonce (tag N t) = false.
+Proof. by rewrite tag_unseal. Qed.
+
 Lemma untagK N t1 t2 :
   untag N t1 = Some t2 ->
   t1 = tag N t2.
@@ -587,6 +590,9 @@ rewrite of_list_unseal; elim: ts => [|t' ts IH] //=.
 - rewrite tsize_TPair elem_of_cons; case=> [<-|/IH t_ts]; lia.
 Qed.
 
+Definition derive_key t :=
+  tag (nroot.@"keys".@"sym") t.
+
 Definition mkskey t :=
   let t := tag (nroot.@"keys".@"sym") t in
   TPair (TKey Enc t) (TKey Dec t).
@@ -670,16 +676,10 @@ by case: decide => //= <- /Spec.untagK ->.
 Qed.
 
 Definition tsenc c k t :=
-  match k with
-  | TPair k _ => tenc c k t
-  | _ => t
-  end.
+  tenc c (TKey Enc k) t.
 
 Definition tsdec c k t :=
-  match k with
-  | TPair _ k => tdec c k t
-  | _ => None
-  end.
+  tdec c (TKey Dec k) t.
 
 Definition zero : term := TInt 0.
 

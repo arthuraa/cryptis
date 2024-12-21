@@ -105,7 +105,7 @@ iApply (wp_mknonce_freshN ∅ (λ _, False%I) dh_publ (λ t, {[TExp g t]})
   iSplit.
   + by iIntros "?"; do !iSplit.
   + by iIntros "(? & ?)".
-iIntros (a) "_ #m_a #(aP1 & aP2) #? token". rewrite big_sepS_singleton.
+iIntros (a) "_ _ #m_a #(aP1 & aP2) #? token". rewrite big_sepS_singleton.
 iApply "post" => //.
 rewrite /dh_seed. do !iSplit => //.
 iModIntro; iSplit.

@@ -26,10 +26,10 @@ Definition game : val := λ: "mkchan",
   let: "c"  := "mkchan" #() in
   let: "kI" := mkakey #() in
   let: "kR" := mkakey #() in
-  let: "pkI" := Fst "kI" in
-  let: "skI" := Snd "kI" in
-  let: "pkR" := Fst "kR" in
-  let: "skR" := Snd "kR" in
+  let: "pkI" := key Enc "kI" in
+  let: "skI" := key Dec "kI" in
+  let: "pkR" := key Enc "kR" in
+  let: "skR" := key Dec "kR" in
   send "c" "pkI";;
   send "c" "pkR";;
   let: "pkR'" := recv "c" in
@@ -72,10 +72,10 @@ iApply (wp_mkakey with "[] hon phase"); eauto.
 iIntros "%kI #p_kI #hon' phase _". wp_pures.
 wp_bind (mkakey _). iApply (wp_mkakey with "[] hon' phase"); eauto.
 iIntros "%kR #p_kR #hon'' phase _". wp_pures.
-set pkI := TKey Enc kI.
-set skI := TKey Dec kI.
-set pkR := TKey Enc kR.
-set skR := TKey Dec kR.
+wp_apply wp_key. wp_pures. set pkI := TKey Enc kI.
+wp_apply wp_key. wp_pures. set skI := TKey Dec kI.
+wp_apply wp_key. wp_pures. set pkR := TKey Enc kR.
+wp_apply wp_key. wp_pures. set skR := TKey Dec kR.
 wp_pures; wp_bind (send _ _); iApply wp_send => //.
 wp_pures; wp_bind (send _ _); iApply wp_send => //.
 wp_pures; wp_bind (recv _); iApply wp_recv => //.

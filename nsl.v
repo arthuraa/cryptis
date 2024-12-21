@@ -66,7 +66,7 @@ Next Obligation.
 iIntros "%kI %kR %Φ #? post". rewrite /nsl_mk_key_share_impl.
 wp_pures. wp_bind (mknonce _).
 iApply (wp_mknonce (λ _, corruption kI kR) (λ _, False)%I) => //.
-iIntros "%n #s_n #p_n _ token". wp_pures. iModIntro.
+iIntros "%n % #s_n #p_n _ token". wp_pures. iModIntro.
 iApply "post". rewrite bi.intuitionistic_intuitionistically. by eauto.
 Qed.
 

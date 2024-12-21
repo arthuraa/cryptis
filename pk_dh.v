@@ -101,7 +101,7 @@ Next Obligation.
 iIntros "%kI %kR %Φ #? post". rewrite /pk_dh_mk_key_share_impl.
 wp_pures. wp_bind (mknonce _).
 iApply (wp_mknonce (λ _, False)%I (dh_publ (λ _, corruption kI kR))) => //.
-iIntros "%n #s_n #p_n #dh token". wp_pures.
+iIntros "%n _ #s_n #p_n #dh token". wp_pures.
 wp_bind (tint _). iApply wp_tint.
 wp_bind (texp _ _). iApply wp_texp.
 wp_pures. iModIntro. iApply "post".
