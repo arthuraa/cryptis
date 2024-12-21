@@ -9,14 +9,14 @@ From cryptis.core Require Export pre_term.
 
 Definition int_of_key_type kt : Z :=
   match kt with
-  | Enc => 0
-  | Dec => 1
+  | Seal => 0
+  | Open => 1
   end.
 
 Definition key_type_of_int (n : Z) :=
   match n with
-  | 0%Z => Enc
-  | _   => Dec
+  | 0%Z => Seal
+  | _   => Open
   end.
 
 Lemma tsize_TPair t1 t2 :
@@ -43,8 +43,8 @@ Proof.
 refine (
   fun kt1 kt2 =>
     match kt1, kt2 with
-    | Enc, Enc => left _
-    | Dec, Dec => left _
+    | Seal, Seal => left _
+    | Open, Open => left _
     | _, _ => right _
     end); congruence.
 Defined.
@@ -97,8 +97,8 @@ Inductive subterm (t : term) : term → Prop :=
 | STPair1 t1 t2 of subterm t t1 : subterm t (TPair t1 t2)
 | STPair2 t1 t2 of subterm t t2 : subterm t (TPair t1 t2)
 | STKey kt t' of subterm t t' : subterm t (TKey kt t')
-| STEnc1 k t' of subterm t k : subterm t (TEnc k t')
-| STEnc2 k t' of subterm t t' : subterm t (TEnc k t')
+| STSeal1 k t' of subterm t k : subterm t (TSeal k t')
+| STSeal2 k t' of subterm t t' : subterm t (TSeal k t')
 | STHash t' of subterm t t' : subterm t (THash t')
 | STExp1 t' ts of negb (is_exp t') & subterm t t' : subterm t (TExpN t' ts)
 | STExp2 t' t'' ts of negb (is_exp t') & subterm t t'' & t'' ∈ ts : subterm t (TExpN t' ts).
@@ -117,8 +117,8 @@ Fixpoint val_of_pre_term_rec pt : val :=
     (#TNonce_tag, #l)%V
   | PTKey kt t =>
     (#TKey_tag, (#(int_of_key_type kt), val_of_pre_term_rec t))%V
-  | PTEnc t1 t2 =>
-    (#TEnc_tag, (val_of_pre_term_rec t1, val_of_pre_term_rec t2))%V
+  | PTSeal t1 t2 =>
+    (#TSeal_tag, (val_of_pre_term_rec t1, val_of_pre_term_rec t2))%V
   | PTHash t =>
     (#THash_tag, val_of_pre_term_rec t)
   | PTExp t ts =>
@@ -142,8 +142,8 @@ Fixpoint val_of_term_rec t : val :=
     (#TNonce_tag, #l)%V
   | TKey kt t =>
     (#TKey_tag, (#(int_of_key_type kt), val_of_term_rec t))%V
-  | TEnc t1 t2 =>
-    (#TEnc_tag, (val_of_term_rec t1, val_of_term_rec t2))%V
+  | TSeal t1 t2 =>
+    (#TSeal_tag, (val_of_term_rec t1, val_of_term_rec t2))%V
   | THash t =>
     (#THash_tag, val_of_term_rec t)
   | TExpN' pt pts _ =>
@@ -212,7 +212,7 @@ Fixpoint nonces_of_pre_term pt : gset loc :=
   | PreTerm.PTPair t1 t2 => nonces_of_pre_term t1 ∪ nonces_of_pre_term t2
   | PreTerm.PTNonce l => {[l]}
   | PreTerm.PTKey _ t => nonces_of_pre_term t
-  | PreTerm.PTEnc t1 t2 => nonces_of_pre_term t1 ∪ nonces_of_pre_term t2
+  | PreTerm.PTSeal t1 t2 => nonces_of_pre_term t1 ∪ nonces_of_pre_term t2
   | PreTerm.PTHash t => nonces_of_pre_term t
   | PreTerm.PTExp t ts => nonces_of_pre_term t ∪ ⋃ map nonces_of_pre_term ts
   end.
@@ -232,7 +232,7 @@ Lemma nonces_of_termE' t :
   | TPair t1 t2 => nonces_of_term t1 ∪ nonces_of_term t2
   | TNonce l => {[l]}
   | TKey _ t => nonces_of_term t
-  | TEnc t1 t2 => nonces_of_term t1 ∪ nonces_of_term t2
+  | TSeal t1 t2 => nonces_of_term t1 ∪ nonces_of_term t2
   | THash t => nonces_of_term t
   | TExpN' pt pts _ => nonces_of_pre_term (PreTerm.PTExp pt pts)
   end.
@@ -267,7 +267,7 @@ Fixpoint ssubterms_pre_def t : gset term :=
   | PreTerm.PTPair t1 t2 => subterms_pre_def t1 ∪ subterms_pre_def t2
   | PreTerm.PTNonce _ => ∅
   | PreTerm.PTKey _ t => subterms_pre_def t
-  | PreTerm.PTEnc t1 t2 => subterms_pre_def t1 ∪ subterms_pre_def t2
+  | PreTerm.PTSeal t1 t2 => subterms_pre_def t1 ∪ subterms_pre_def t2
   | PreTerm.PTHash t => subterms_pre_def t
   | PreTerm.PTExp t ts => subterms_pre_def t ∪ ⋃ map subterms_pre_def ts
   end.
@@ -287,7 +287,7 @@ Lemma subtermsE' t :
   | TPair t1 t2 => subterms t1 ∪ subterms t2
   | TNonce _ => ∅
   | TKey _ t => subterms t
-  | TEnc t1 t2 => subterms t1 ∪ subterms t2
+  | TSeal t1 t2 => subterms t1 ∪ subterms t2
   | THash t => subterms t
   | TExpN' pt pts _ => ssubterms_pre_def (PreTerm.PTExp pt pts)
   end.
@@ -403,10 +403,10 @@ elim: t2 / => //.
   rewrite [nonces_of_term (TKey _ _)]nonces_of_termE.
   set_solver.
 - move=> ???.
-  rewrite [nonces_of_term (TEnc _ _)]nonces_of_termE.
+  rewrite [nonces_of_term (TSeal _ _)]nonces_of_termE.
   set_solver.
 - move=> ???.
-  rewrite [nonces_of_term (TEnc _ _)]nonces_of_termE.
+  rewrite [nonces_of_term (TSeal _ _)]nonces_of_termE.
   set_solver.
 - move=> ???.
   rewrite [nonces_of_term (THash _)]nonces_of_termE.
@@ -510,28 +510,28 @@ Fixpoint proj t n {struct t} :=
   | _, _ => None
   end.
 
-Definition dec k t : option term :=
+Definition open k t : option term :=
   match k, t with
-  | TKey Dec k1, TEnc (TKey Enc k2) t =>
+  | TKey Open k1, TSeal (TKey Seal k2) t =>
     if decide (k1 = k2) then Some t else None
   | _, _ => None
   end.
 
-Variant dec_spec k t : option term → Type :=
-| DecSome k' t'
-  of k = TKey Dec k' & t = TEnc (TKey Enc k') t'
-  : dec_spec k t (Some t')
-| DecNone : dec_spec k t None.
+Variant open_spec k t : option term → Type :=
+| OpenSome k' t'
+  of k = TKey Open k' & t = TSeal (TKey Seal k') t'
+  : open_spec k t (Some t')
+| OpenNone : open_spec k t None.
 
-Lemma decP k t : dec_spec k t (dec k t).
+Lemma openP k t : open_spec k t (open k t).
 Proof.
-case: k; try eauto using dec_spec.
-case; try eauto using dec_spec.
-move=> k; case: t; try eauto using dec_spec.
-case; try eauto using dec_spec.
-case; try eauto using dec_spec.
+case: k; try eauto using open_spec.
+case; try eauto using open_spec.
+move=> k; case: t; try eauto using open_spec.
+case; try eauto using open_spec.
+case; try eauto using open_spec.
 move=> k' t /=.
-case: decide => [<-|?]; try eauto using dec_spec.
+case: decide => [<-|?]; try eauto using open_spec.
 Qed.
 
 Definition is_key t :=
@@ -550,28 +550,28 @@ case: t; try by right.
 by move=> kt t; eleft.
 Qed.
 
-Definition to_ek t :=
-  if t is TKey Enc _ then Some t else None.
+Definition to_seal_key t :=
+  if t is TKey Seal _ then Some t else None.
 
-Variant to_ek_spec t : option term → Type :=
-| ToEKSome k of t = TKey Enc k : to_ek_spec t (Some t)
-| ToEKNone of (∀ k, t ≠ TKey Enc k) : to_ek_spec t None.
+Variant to_seal_key_spec t : option term → Type :=
+| ToSealKeySome k of t = TKey Seal k : to_seal_key_spec t (Some t)
+| ToSealKeyNone of (∀ k, t ≠ TKey Seal k) : to_seal_key_spec t None.
 
-Lemma to_ekP t : to_ek_spec t (to_ek t).
+Lemma to_seal_keyP t : to_seal_key_spec t (to_seal_key t).
 Proof.
 case: t; try by right.
 case; try by right.
 by move=> t; eleft.
 Qed.
 
-Definition to_dk t :=
-  if t is TKey Dec _ then Some t else None.
+Definition to_open_key t :=
+  if t is TKey Open _ then Some t else None.
 
-Variant to_dk_spec t : option term → Type :=
-| ToDKSome k of t = TKey Dec k : to_dk_spec t (Some t)
-| ToDKNone of (∀ k, t ≠ TKey Dec k) : to_dk_spec t None.
+Variant to_open_key_spec t : option term → Type :=
+| ToOpenKeySome k of t = TKey Open k : to_open_key_spec t (Some t)
+| ToOpenKeyNone of (∀ k, t ≠ TKey Open k) : to_open_key_spec t None.
 
-Lemma to_dkP t : to_dk_spec t (to_dk t).
+Lemma to_open_keyP t : to_open_key_spec t (to_open_key t).
 Proof.
 case: t; try by right.
 case; try by right.
@@ -592,13 +592,6 @@ Qed.
 
 Definition derive_key t :=
   tag (nroot.@"keys".@"sym") t.
-
-Definition mkskey t :=
-  let t := tag (nroot.@"keys".@"sym") t in
-  TPair (TKey Enc t) (TKey Dec t).
-
-Lemma mkskey_inj : Inj eq eq mkskey.
-Proof. by move=> t1 t2; case; case/tag_inj. Qed.
 
 Fixpoint to_list t : option (list term) :=
   match t with
@@ -641,45 +634,39 @@ move=> ts1 ts2 e; apply: Some_inj.
 by rewrite -of_listK e of_listK.
 Qed.
 
-Definition tenc c k t := TEnc k (tag c t).
+Definition enc c k t := TSeal k (tag c t).
 
-Definition tdec c k t :=
-  match dec k t with
+Definition dec c k t :=
+  match open k t with
   | Some t => untag c t
   | None => None
   end.
 
-Variant tdec_spec c k t : option term → Type :=
-| TDecSome k' t'
-  of k = TKey Dec k'
-  &  t = TEnc (TKey Enc k') (tag c t')
-  : tdec_spec c k t (Some t')
-| TDecNone : tdec_spec c k t None.
+Variant dec_spec c k t : option term → Type :=
+| DecSome k' t'
+  of k = TKey Open k'
+  &  t = TSeal (TKey Seal  k') (tag c t')
+  : dec_spec c k t (Some t')
+| DecNone : dec_spec c k t None.
 
-Lemma tdecP c k t : tdec_spec c k t (tdec c k t).
+Lemma decP c k t : dec_spec c k t (dec c k t).
 Proof.
-rewrite /tdec.
-case: decP; eauto using tdec_spec.
+rewrite /dec.
+case: openP; eauto using dec_spec.
 move=> {}k {}t -> ->.
-case: untagP; eauto using tdec_spec.
-move=> {}t ->; eauto using tdec_spec.
+case: untagP; eauto using dec_spec.
+move=> {}t ->; eauto using dec_spec.
 Qed.
 
-Lemma tdecK c k t t' :
-  tdec c (TKey Dec k) t = Some t' →
-  t = TEnc (TKey Enc k) (tag c t').
+Lemma decK c k t t' :
+  dec c (TKey Open k) t = Some t' →
+  t = TSeal (TKey Seal k) (tag c t').
 Proof.
-rewrite /Spec.tdec /=.
+rewrite /Spec.dec /=.
 case: t => [] //= k' t.
 case: k' => // - [] // k'.
 by case: decide => //= <- /Spec.untagK ->.
 Qed.
-
-Definition tsenc c k t :=
-  tenc c (TKey Enc k) t.
-
-Definition tsdec c k t :=
-  tdec c (TKey Dec k) t.
 
 Definition zero : term := TInt 0.
 

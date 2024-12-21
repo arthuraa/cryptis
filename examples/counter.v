@@ -45,7 +45,7 @@ Definition server : val := rec: "loop" "c" "l" "sk" :=
     incr "l"
   else (
     (* Retrieve value *)
-    let: "reply" := tenc nroot "sk" (tint (! "l")) in
+    let: "reply" := sign nroot "sk" (tint (! "l")) in
     send "c" "reply"
   ) ;;
   "loop" "c" "l" "sk".
@@ -58,7 +58,7 @@ Definition client : val := λ: "c" "vk",
     (* Wait for response *)
     let: "reply" := recv "c" in
     (* Check signature *)
-    bind: "value" := tdec nroot "vk" "reply" in
+    bind: "value" := verify nroot "vk" "reply" in
     to_int "value"
   ).
 
@@ -69,15 +69,15 @@ Definition server_inv γ l : iProp :=
   inv nroot (∃ n : nat, l ↦ #n ∗ own γ (● MaxNat n) ∗ own γ (◯ MaxNat n)).
 
 Lemma wp_newcounter φ :
-  enc_pred_token ⊤ -∗
-  (∀ γ l, enc_pred nroot (sig_pred γ) -∗ server_inv γ l -∗ φ #l) -∗
+  seal_pred_token ⊤ -∗
+  (∀ γ l, seal_pred nroot (sig_pred γ) -∗ server_inv γ l -∗ φ #l) -∗
   WP newcounter #() {{ v, φ v }}.
 Proof.
 iIntros "tok post". rewrite /newcounter. wp_pures.
 wp_alloc l as "Hl".
 iMod (own_alloc (● MaxNat 0 ⋅ ◯ MaxNat 0)) as "(%γ & own & #ownf)".
 { by apply auth_both_valid. }
-iMod (enc_pred_set nroot (sig_pred γ) with "tok") as "[#pred _]" => //.
+iMod (seal_pred_set nroot (sig_pred γ) with "tok") as "[#pred _]" => //.
 iMod (inv_alloc nroot _
   (∃ n : nat, l ↦ #n ∗ own γ (● MaxNat n) ∗ own γ (◯ MaxNat n))
   with "[Hl own]") as "#inv".
@@ -110,11 +110,11 @@ Qed.
 Lemma wp_server c γ l k t :
   cryptis_ctx -∗
   channel c -∗
-  enc_pred nroot (sig_pred γ) -∗
-  minted (TKey Enc k) -∗
+  seal_pred nroot (sig_pred γ) -∗
+  minted (TKey Seal k) -∗
   server_inv γ l -∗
   public t -∗
-  WP server c #l (TKey Enc k) {{ _, True }}.
+  WP server c #l k {{ _, True }}.
 Proof.
 iIntros "#ctx #chan_c #sig_pred #s_sk #inv #p_t".
 (* Unfold the definition of the server *)
@@ -129,9 +129,9 @@ wp_bind (tint _). iApply wp_tint. wp_eq_term e.
 wp_pures. wp_bind (! _)%E.
 iInv "inv" as ">(%n & Hl & own & #ownf)". wp_load.
 iModIntro. iSplitL "Hl own"; first by iExists n; iFrame.
-wp_bind (tint _). iApply wp_tint. wp_tenc. wp_pures.
+wp_bind (tint _). iApply wp_tint. wp_apply wp_sign. wp_pures.
 wp_bind (send _ _). iApply wp_send => //.
-{ iApply public_TEncIS => //.
+{ iApply public_TSealIS => //.
   - iModIntro. iExists n. by eauto.
   - by rewrite minted_TInt.
   - iIntros "!> !> _". by rewrite public_TInt. }
@@ -140,15 +140,15 @@ wp_pures. iApply "IH".
 Qed.
 
 Lemma wp_client T n c γ l k φ :
-  TKey Enc k ∈ T →
+  TKey Seal k ∈ T →
   cryptis_ctx -∗
   channel c -∗
-  enc_pred nroot (sig_pred γ) -∗
-  public (TKey Dec k) -∗
+  seal_pred nroot (sig_pred γ) -∗
+  public (TKey Open k) -∗
   honest n T -∗
   ●Ph□ n -∗
   (∀ n : nat, own γ (◯ MaxNat n) -∗ φ #n) -∗
-  WP client c (TKey Dec k) {{ v, φ v }}.
+  WP client c (TKey Open k) {{ v, φ v }}.
 Proof.
 iIntros "%hon_sk #ctx #chan_c #sig_pred #p_vk #hon #phase post".
 (* Unfold definition of client *)
@@ -163,8 +163,8 @@ wp_bind (send _ _). iApply wp_send => //.
 wp_pures. wp_bind (recv _). iApply wp_recv => //.
 iIntros "%reply #p_reply". wp_pures.
 (* Verify the signature *)
-wp_tdec reply; last by wp_pures; eauto.
-iPoseProof (public_TEncE with "p_reply sig_pred")
+wp_verify reply; last by wp_pures; eauto.
+iPoseProof (public_TSealE with "p_reply sig_pred")
   as "[[#p_sk _]|(#replyP & #s_reply & _)]".
 { (* The signature could have been forged if the key was compromised, but we
      have ruled out this possibility.  *)
@@ -186,15 +186,14 @@ Definition game : val := λ: "mkchan",
 
   (* Generate signature keys and publicize verification key *)
   let: "k"   := mksigkey #() in
-  let: "sk"  := key Enc "k" in
-  let: "vk"  := key Dec "k" in
+  let: "vk"  := vkey "k" in
   send "c" "vk" ;;
 
   (* Initialize server state *)
   let: "l" := newcounter #() in
 
   (* Run server *)
-  Fork (server "c" "l" "sk");;
+  Fork (server "c" "l" "k");;
 
   (* Run client *)
   let: "n'" := client "c" "vk" in
@@ -205,12 +204,12 @@ Definition game : val := λ: "mkchan",
 Lemma wp_game (mkchan : val) :
   {{{ True }}} mkchan #() {{{ v, RET v; channel v }}} -∗
   cryptis_ctx ∗
-  enc_pred_token ⊤ ∗
+  seal_pred_token ⊤ ∗
   honest 0 ∅ ∗
   ●Ph 0 -∗
   WP game mkchan {{ v, ⌜v = #true⌝ }}.
 Proof.
-iIntros "#wp_mkchan (#ctx & enc_tok & #hon & phase)".
+iIntros "#wp_mkchan (#ctx & seal_tok & #hon & phase)".
 rewrite /game. wp_pures.
 (* Setup attacker *)
 wp_bind (mkchan _); iApply "wp_mkchan" => //.
@@ -218,12 +217,11 @@ iIntros "!> %c #cP". wp_pures.
 (* Generate server key. Keep the signing key secret. *)
 wp_bind (mksigkey _). iApply (wp_mksigkey with "[//] hon phase") => //.
 iIntros (k) "#p_vk #hon' phase". wp_pures.
-wp_apply wp_key. wp_pures.
-wp_apply wp_key. wp_pures.
+wp_apply wp_vkey. wp_pures.
 iMod (phase_auth_discard with "phase") as "#phase".
 (* Publicize verification key. *)
 wp_pures. wp_bind (send _ _). iApply wp_send => //. wp_pures.
-wp_bind (newcounter _). iApply (wp_newcounter with "enc_tok").
+wp_bind (newcounter _). iApply (wp_newcounter with "seal_tok").
 iIntros "%γ %l #? #inv".
 (* Run server in a loop in parallel. *)
 wp_pures. wp_bind (Fork _). iApply wp_fork.
@@ -263,7 +261,7 @@ move=> wp_mkchan.
 apply (adequate_result NotStuck _ _ (λ v _, v = #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
-iMod (cryptisGS_alloc _) as (?) "(#ctx & enc_tok & key_tok & hash_tok & hon)".
+iMod (cryptisGS_alloc _) as (?) "(#ctx & seal_tok & key_tok & hash_tok & hon)".
 iApply (wp_game) => //; try by iFrame.
 by iApply wp_mkchan.
 Qed.

@@ -61,13 +61,13 @@ Definition iso_dh_pred t : iProp :=
   ⌜length (exps t) = 1⌝.
 
 Definition session_fail si : iProp :=
-  public_at (si_time si) (TKey Enc (si_init si)) ∨
-  public_at (si_time si) (TKey Enc (si_resp si)).
+  public_at (si_time si) (TKey Seal (si_init si)) ∨
+  public_at (si_time si) (TKey Seal (si_resp si)).
 
 Definition session si : iProp :=
   ◯Ph (si_time si) ∗
   term_meta (si_key si) (nroot.@"info")
-    (TKey Dec (si_init si), TKey Dec (si_resp si), si_time si).
+    (TKey Open (si_init si), TKey Open (si_resp si), si_time si).
 
 Lemma session_agree si1 si2 :
   si_key si1 = si_key si2 →
@@ -86,39 +86,39 @@ Definition msg2_pred kR m2 : iProp :=
     let secret := Spec.derive_key (Spec.of_list [ga; gb; gab]) in
     ⌜m2 = Spec.of_list [ga; gb; vkI]⌝ ∗
     minted_at n ga ∗
-    (public b ↔ ▷ □ ((∃ kI, ⌜vkI = TKey Dec kI⌝ ∗ public_at n (TKey Enc kI)) ∨
-                     public_at n (TKey Enc kR))) ∗
+    (public b ↔ ▷ □ ((∃ kI, ⌜vkI = TKey Open kI⌝ ∗ public_at n (TKey Seal kI)) ∨
+                     public_at n (TKey Seal kR))) ∗
     (∀ t, dh_pred b t ↔ ▷ □ iso_dh_pred t) ∗
     escrow cryptisN
       (term_token ga ⊤)
       (term_token secret (↑nroot.@"client")) ∗
-    term_meta secret (nroot.@"info") (vkI, TKey Dec kR, n).
+    term_meta secret (nroot.@"info") (vkI, TKey Open kR, n).
 
 Definition msg3_pred kI m3 : iProp :=
   ∃ a gb kR n,
     let ga := TExp (TInt 0) a in
     let gab := TExp gb a in
     let secret := Spec.derive_key (Spec.of_list [ga; gb; gab]) in
-    ⌜m3 = Spec.of_list [ga; gb; TKey Dec kR]⌝ ∗
-    (public a ↔ ▷ □ (public_at n (TKey Enc kI) ∨
-                     public_at n (TKey Enc kR))) ∗
+    ⌜m3 = Spec.of_list [ga; gb; TKey Open kR]⌝ ∗
+    (public a ↔ ▷ □ (public_at n (TKey Seal kI) ∨
+                     public_at n (TKey Seal kR))) ∗
     (∀ t, dh_pred a t ↔ ▷ □ iso_dh_pred t) ∗
-    (public_at n (TKey Enc kR) ∨
-     term_meta secret (nroot.@"info") (TKey Dec kI, TKey Dec kR, n)).
+    (public_at n (TKey Seal kR) ∨
+     term_meta secret (nroot.@"info") (TKey Open kI, TKey Open kR, n)).
 
 Definition iso_dh_ctx : iProp :=
-  enc_pred (N.@"m2") msg2_pred ∗
-  enc_pred (N.@"m3") msg3_pred.
+  seal_pred (N.@"m2") msg2_pred ∗
+  seal_pred (N.@"m3") msg3_pred.
 
 Lemma iso_dh_ctx_alloc E :
   ↑N ⊆ E →
-  enc_pred_token E ==∗
+  seal_pred_token E ==∗
   iso_dh_ctx.
 Proof.
 iIntros "%sub token".
-iMod (enc_pred_set (N.@"m2") msg2_pred with "token")
+iMod (seal_pred_set (N.@"m2") msg2_pred with "token")
   as "[#? token]"; try solve_ndisj.
-iMod (enc_pred_set (N.@"m3") msg3_pred with "token")
+iMod (seal_pred_set (N.@"m3") msg3_pred with "token")
   as "[#? token]"; try solve_ndisj.
 iModIntro. by iSplit.
 Qed.

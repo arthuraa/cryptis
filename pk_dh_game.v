@@ -24,26 +24,24 @@ Definition N := nroot.@"nsldh".
 
 Definition game : val := λ: "mkchan",
   let: "c"  := "mkchan" #() in
-  let: "kI" := mkakey #() in
-  let: "kR" := mkakey #() in
-  let: "pkI" := key Enc "kI" in
-  let: "skI" := key Dec "kI" in
-  let: "pkR" := key Enc "kR" in
-  let: "skR" := key Dec "kR" in
+  let: "skI" := mkakey #() in
+  let: "skR" := mkakey #() in
+  let: "pkI" := pkey "skI" in
+  let: "pkR" := pkey "skR" in
   send "c" "pkI";;
   send "c" "pkR";;
   let: "pkR'" := recv "c" in
   bind: "kt" := is_key "pkR'" in
-  guard: ("kt" = repr Enc) in
-  let: "res" := pk_dh_init N "c" "skI" "pkI" "pkR'" |||
-                pk_dh_resp N "c" "skR" "pkR" in
+  guard: ("kt" = repr Seal) in
+  let: "res" := pk_dh_init N "c" "skI" "pkR'" |||
+                pk_dh_resp N "c" "skR" in
   bind: "sesskI" := Fst "res" in
   bind: "resR" := Snd "res" in
   let: "pkI'" := Fst "resR" in
   let: "sesskR" := Snd "resR" in
   if: eq_term "pkR" "pkR'" || eq_term "pkI" "pkI'" then
-    send "c" "skI";;
-    send "c" "skR";;
+    send "c" (key Open "skI");;
+    send "c" (key Open "skR");;
     let: "m" := recv "c" in
     SOME (eq_term "pkR" "pkR'" && eq_term "pkI" "pkI'" &&
           eq_term "sesskI" "sesskR" && ~ eq_term "m" "sesskI")
@@ -52,19 +50,19 @@ Definition game : val := λ: "mkchan",
 Lemma wp_game (mkchan : val) :
   {{{ True }}} mkchan #() {{{ v, RET v; channel v }}} -∗
   cryptis_ctx -∗
-  enc_pred_token ⊤ -∗
+  seal_pred_token ⊤ -∗
   key_pred_token (⊤ ∖ ↑nroot.@"keys") -∗
   session_token ⊤ -∗
   honest 0 ∅ -∗
   ●Ph 0 -∗
   WP game mkchan {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
-iIntros "wp_mkchan #ctx enc_tok key_tok nown_tok #hon phase"; rewrite /game; wp_pures.
+iIntros "wp_mkchan #ctx seal_tok key_tok nown_tok #hon phase"; rewrite /game; wp_pures.
 iMod gmeta_token_alloc as (γI) "tokenI".
 iMod gmeta_token_alloc as (γR) "tokenR".
 pose (P rl (kI kR kS : term) :=
   gmeta (if rl is Init then γI else γR) nroot (kI, kR, kS)).
-iMod (pk_dh_alloc N P with "nown_tok enc_tok") as "[#dh_ctx _]" => //.
+iMod (pk_dh_alloc N P with "nown_tok seal_tok") as "[#dh_ctx _]" => //.
 wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP".
 wp_pures; wp_bind (mkakey _).
@@ -72,10 +70,10 @@ iApply (wp_mkakey with "[] hon phase"); eauto.
 iIntros "%kI #p_kI #hon' phase _". wp_pures.
 wp_bind (mkakey _). iApply (wp_mkakey with "[] hon' phase"); eauto.
 iIntros "%kR #p_kR #hon'' phase _". wp_pures.
-wp_apply wp_key. wp_pures. set pkI := TKey Enc kI.
-wp_apply wp_key. wp_pures. set skI := TKey Dec kI.
-wp_apply wp_key. wp_pures. set pkR := TKey Enc kR.
-wp_apply wp_key. wp_pures. set skR := TKey Dec kR.
+wp_apply wp_pkey. wp_pures. set pkI := TKey Seal kI.
+set skI := TKey Open kI.
+wp_apply wp_pkey. wp_pures. set pkR := TKey Seal kR.
+set skR := TKey Open kR.
 wp_pures; wp_bind (send _ _); iApply wp_send => //.
 wp_pures; wp_bind (send _ _); iApply wp_send => //.
 wp_pures; wp_bind (recv _); iApply wp_recv => //.
@@ -124,7 +122,7 @@ case: a => [gabI|]; wp_pures; last by eauto.
 case: b => [[pkI' gabR]|]; wp_pures; last by eauto.
 iDestruct "H1" as "(#s_gabI & #confI & _ & H1)".
 iDestruct "H2" as (kI') "(-> & #p_pkI' & #gabR & #confR & _ & H2)".
-pose (b := bool_decide (pkR = TKey Enc kR' ∨ pkI = TKey Enc kI')).
+pose (b := bool_decide (pkR = TKey Seal kR' ∨ pkI = TKey Seal kI')).
 wp_bind (eq_term pkR _ || _)%E.
 iApply (wp_wand _ _ _ (λ v, ⌜v = #b⌝)%I with "[] [H1 H2]").
 { wp_eq_term e_pkR; wp_pures.
@@ -155,9 +153,11 @@ iAssert (⌜kR' = kR⌝ ∗
     rewrite to_agree_op_valid_L in valid.
     case: (encode_inj _ _ valid) => -> -> {kR' gabI valid}. by eauto. }
 iDestruct "finish" as "(-> & -> & <- & #p_gabI) {H1 H2}".
+wp_pures. wp_apply wp_key.
 wp_pures. wp_bind (send _ _). iApply wp_send => //.
   iModIntro. rewrite big_sepS_forall. iApply "comp".
   iPureIntro; set_solver.
+wp_pures. wp_apply wp_key.
 wp_pures. wp_bind (send _ _). iApply wp_send => //.
   iModIntro. rewrite big_sepS_forall. iApply "comp".
   iPureIntro; set_solver.
@@ -191,8 +191,8 @@ move=> wp_mkchan.
 apply (adequate_result NotStuck _ _ (λ v _, v = NONEV ∨ v = SOMEV #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
-iMod (cryptisGS_alloc _) as (?) "(#ctx & enc_tok & key_tok & ? & hon & phase)".
+iMod (cryptisGS_alloc _) as (?) "(#ctx & seal_tok & key_tok & ? & hon & phase)".
 iMod (sessionGS_alloc _) as (?) "nown_tok".
-iApply (wp_game with "[] ctx [enc_tok] [key_tok] [nown_tok] [hon]") => //.
+iApply (wp_game with "[] ctx [seal_tok] [key_tok] [nown_tok] [hon]") => //.
 iApply wp_mkchan.
 Qed.

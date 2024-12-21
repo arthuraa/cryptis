@@ -35,7 +35,7 @@ Record server_state := {
 
 #[global]
 Instance ss_repr : Repr server_state :=
-  λ s, (TKey Dec (ss_key s), TKey Enc (ss_key s), ss_clients s)%V.
+  λ s, (ss_key s, ss_clients s)%V.
 
 Record server_client_state := {
   scs_db   : val;
@@ -312,7 +312,7 @@ Definition server_status_ready kI kR :=
 Implicit Types (ls : lstatus) (gs : gstatus).
 
 Definition key_corruption kI kR : iProp :=
-  public (TKey Enc kI) ∨ public (TKey Enc kR).
+  public (TKey Seal kI) ∨ public (TKey Seal kR).
 
 Definition client_disconnected_int kI kR n : iProp :=
   DB.client_view kI (dbCN kR.@"state") n ∗
@@ -601,17 +601,17 @@ iRight. iLeft. iSplit => //.
 Qed.
 
 Definition server ss : iProp := ∃ accounts E,
-  public (TKey Dec (ss_key ss)) ∗
+  public (TKey Open (ss_key ss)) ∗
   SAList.is_alist (ss_clients ss) (repr <$> accounts) ∗
   term_token (ss_key ss) E ∗
-  ⌜∀ kI, TKey Dec kI ∉ dom accounts → ↑dbSN kI ⊆ E⌝ ∗
-  [∗ map] vkI ↦ scs ∈ accounts, ∃ kI, ⌜vkI = TKey Dec kI⌝ ∗
+  ⌜∀ kI, TKey Open kI ∉ dom accounts → ↑dbSN kI ⊆ E⌝ ∗
+  [∗ map] vkI ↦ scs ∈ accounts, ∃ kI, ⌜vkI = TKey Open kI⌝ ∗
      is_lock (scs_name scs) (scs_lock scs)
        (account_inv kI (ss_key ss) (scs_db scs)).
 
 Lemma serverI kR vclients :
   term_token kR (↑nroot.@"db".@"server") -∗
-  public (TKey Dec kR) -∗
+  public (TKey Open kR) -∗
   SAList.is_alist vclients ∅ -∗
   server {| ss_key := kR; ss_clients := vclients |}.
 Proof.
@@ -988,54 +988,54 @@ Definition server_handler_post cs ldb v : iProp := ∃ n db,
   SAList.is_alist ldb (repr <$> db).
 
 Definition store_ctx : iProp :=
-  enc_pred (N.@"init")       (session_msg_pred init_pred) ∗
-  enc_pred (N.@"ack_init")   (session_msg_pred ack_init_pred) ∗
-  enc_pred (N.@"store")      (session_msg_pred store_pred) ∗
-  enc_pred (N.@"ack_store")  (session_msg_pred ack_store_pred) ∗
-  enc_pred (N.@"load")       (session_msg_pred load_pred) ∗
-  enc_pred (N.@"ack_load")   (session_msg_pred ack_load_pred) ∗
-  enc_pred (N.@"create")     (session_msg_pred create_pred) ∗
-  enc_pred (N.@"ack_create") (session_msg_pred ack_create_pred) ∗
-  enc_pred (N.@"close")      (session_msg_pred close_pred) ∗
-  enc_pred (N.@"ack_close")  (session_msg_pred ack_close_pred) ∗
+  seal_pred (N.@"init")       (session_msg_pred init_pred) ∗
+  seal_pred (N.@"ack_init")   (session_msg_pred ack_init_pred) ∗
+  seal_pred (N.@"store")      (session_msg_pred store_pred) ∗
+  seal_pred (N.@"ack_store")  (session_msg_pred ack_store_pred) ∗
+  seal_pred (N.@"load")       (session_msg_pred load_pred) ∗
+  seal_pred (N.@"ack_load")   (session_msg_pred ack_load_pred) ∗
+  seal_pred (N.@"create")     (session_msg_pred create_pred) ∗
+  seal_pred (N.@"ack_create") (session_msg_pred ack_create_pred) ∗
+  seal_pred (N.@"close")      (session_msg_pred close_pred) ∗
+  seal_pred (N.@"ack_close")  (session_msg_pred ack_close_pred) ∗
   iso_dh_ctx (N.@"auth").
 
 Lemma store_ctx_alloc E :
   ↑N ⊆ E →
-  enc_pred_token E ==∗
-  store_ctx ∗ enc_pred_token (E ∖ ↑N).
+  seal_pred_token E ==∗
+  store_ctx ∗ seal_pred_token (E ∖ ↑N).
 Proof.
 iIntros "%sub token".
-rewrite (enc_pred_token_difference (↑N)) => //.
+rewrite (seal_pred_token_difference (↑N)) => //.
 iDestruct "token" as "[token ?]". iFrame.
-iMod (enc_pred_set (N.@"init") with "token")
+iMod (seal_pred_set (N.@"init") with "token")
   as "[init token]"; try solve_ndisj.
 iFrame.
-iMod (enc_pred_set (N.@"ack_init") with "token")
+iMod (seal_pred_set (N.@"ack_init") with "token")
   as "[ack_init token]"; try solve_ndisj.
 iFrame.
-iMod (enc_pred_set (N.@"store") with "token")
+iMod (seal_pred_set (N.@"store") with "token")
   as "[store token]"; try solve_ndisj.
 iFrame.
-iMod (enc_pred_set (N.@"ack_store") with "token")
+iMod (seal_pred_set (N.@"ack_store") with "token")
   as "[ack_store token]"; try solve_ndisj.
 iFrame.
-iMod (enc_pred_set (N.@"load") with "token")
+iMod (seal_pred_set (N.@"load") with "token")
   as "[load token]"; try solve_ndisj.
 iFrame.
-iMod (enc_pred_set (N.@"ack_load") with "token")
+iMod (seal_pred_set (N.@"ack_load") with "token")
   as "[ack_load token]"; try solve_ndisj.
 iFrame.
-iMod (enc_pred_set (N.@"create") with "token")
+iMod (seal_pred_set (N.@"create") with "token")
   as "[create token]"; try solve_ndisj.
 iFrame.
-iMod (enc_pred_set (N.@"ack_create") with "token")
+iMod (seal_pred_set (N.@"ack_create") with "token")
   as "[ack_create token]"; try solve_ndisj.
 iFrame.
-iMod (enc_pred_set (N.@"close") with "token")
+iMod (seal_pred_set (N.@"close") with "token")
   as "[close token]"; try solve_ndisj.
 iFrame.
-iMod (enc_pred_set (N.@"ack_close") with "token")
+iMod (seal_pred_set (N.@"ack_close") with "token")
   as "[ack_close token]"; try solve_ndisj.
 iFrame.
 iMod (iso_dh_ctx_alloc (N.@"auth") with "token")
@@ -1050,43 +1050,43 @@ Ltac solve_ctx :=
   ).
 
 Lemma store_ctx_init :
-  store_ctx -∗ enc_pred (N.@"init") (session_msg_pred init_pred).
+  store_ctx -∗ seal_pred (N.@"init") (session_msg_pred init_pred).
 Proof. solve_ctx. Qed.
 
 Lemma store_ctx_ack_init :
-  store_ctx -∗ enc_pred (N.@"ack_init") (session_msg_pred ack_init_pred).
+  store_ctx -∗ seal_pred (N.@"ack_init") (session_msg_pred ack_init_pred).
 Proof. solve_ctx. Qed.
 
 Lemma store_ctx_store :
-  store_ctx -∗ enc_pred (N.@"store") (session_msg_pred store_pred).
+  store_ctx -∗ seal_pred (N.@"store") (session_msg_pred store_pred).
 Proof. solve_ctx. Qed.
 
 Lemma store_ctx_ack_store :
-  store_ctx -∗ enc_pred (N.@"ack_store") (session_msg_pred ack_store_pred).
+  store_ctx -∗ seal_pred (N.@"ack_store") (session_msg_pred ack_store_pred).
 Proof. solve_ctx. Qed.
 
 Lemma store_ctx_load :
-  store_ctx -∗ enc_pred (N.@"load") (session_msg_pred load_pred).
+  store_ctx -∗ seal_pred (N.@"load") (session_msg_pred load_pred).
 Proof. solve_ctx. Qed.
 
 Lemma store_ctx_ack_load :
-  store_ctx -∗ enc_pred (N.@"ack_load") (session_msg_pred ack_load_pred).
+  store_ctx -∗ seal_pred (N.@"ack_load") (session_msg_pred ack_load_pred).
 Proof. solve_ctx. Qed.
 
 Lemma store_ctx_create :
-  store_ctx -∗ enc_pred (N.@"create") (session_msg_pred create_pred).
+  store_ctx -∗ seal_pred (N.@"create") (session_msg_pred create_pred).
 Proof. solve_ctx. Qed.
 
 Lemma store_ctx_ack_create :
-  store_ctx -∗ enc_pred (N.@"ack_create") (session_msg_pred ack_create_pred).
+  store_ctx -∗ seal_pred (N.@"ack_create") (session_msg_pred ack_create_pred).
 Proof. solve_ctx. Qed.
 
 Lemma store_ctx_close :
-  store_ctx -∗ enc_pred (N.@"close") (session_msg_pred close_pred).
+  store_ctx -∗ seal_pred (N.@"close") (session_msg_pred close_pred).
 Proof. solve_ctx. Qed.
 
 Lemma store_ctx_ack_close :
-  store_ctx -∗ enc_pred (N.@"ack_close") (session_msg_pred ack_close_pred).
+  store_ctx -∗ seal_pred (N.@"ack_close") (session_msg_pred ack_close_pred).
 Proof. solve_ctx. Qed.
 
 Lemma store_ctx_dh_auth_ctx : store_ctx -∗ iso_dh_ctx (N.@"auth").

@@ -97,76 +97,101 @@ case e: Spec.untag => [t'|].
 - exact: HNone.
 Qed.
 
-Lemma tac_twp_dec Γ E K k t Ψ :
-  (∀ t', t = TEnc (TKey Enc k) t' →
+Lemma tac_twp_open Γ E K k t Ψ :
+  (∀ t', t = TSeal (TKey Seal k) t' →
          envs_entails Γ (WP fill K (Val (SOMEV t')) @ E [{ Ψ }])) →
-  (Spec.dec (TKey Dec k) t = None →
+  (Spec.open (TKey Open k) t = None →
    envs_entails Γ (WP fill K (Val NONEV) @ E [{ Ψ }])) →
-  envs_entails Γ (WP fill K (dec (TKey Dec k) t) @ E [{ Ψ }]).
+  envs_entails Γ (WP fill K (open (TKey Open k) t) @ E [{ Ψ }]).
 Proof.
 rewrite envs_entails_unseal => HSome HNone.
-rewrite -twp_bind -twp_dec.
+rewrite -twp_bind -twp_open.
 case: t HSome HNone; eauto => k' /=.
 case: k' => //=; eauto.
 case; eauto => k'.
 case: decide => [<-|]; eauto.
 Qed.
 
-Lemma tac_wp_dec Γ E K k t Ψ :
-  (∀ t', t = TEnc (TKey Enc k) t' →
+Lemma tac_wp_open Γ E K k t Ψ :
+  (∀ t', t = TSeal (TKey Seal k) t' →
          envs_entails Γ (WP fill K (Val (SOMEV t')) @ E {{ Ψ }})) →
-  (Spec.dec (TKey Dec k) t = None →
+  (Spec.open (TKey Open k) t = None →
    envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →
-  envs_entails Γ (WP fill K (dec (TKey Dec k) t) @ E {{ Ψ }}).
+  envs_entails Γ (WP fill K (open (TKey Open k) t) @ E {{ Ψ }}).
+Proof.
+rewrite envs_entails_unseal => HSome HNone.
+rewrite -wp_bind -wp_open.
+case: t HSome HNone; eauto => k' /=.
+case: k' => //=; eauto.
+case; eauto => k'.
+case: decide => [<-|]; eauto.
+Qed.
+
+Lemma tac_wp_enc Γ E K c t1 t2 Ψ :
+  envs_entails Γ (WP fill K (Val (Spec.enc c t1 t2)) @ E {{ Ψ }}) →
+  envs_entails Γ (WP fill K (enc c t1 t2) @ E {{ Ψ }}).
+Proof.
+rewrite envs_entails_unseal => H.
+by rewrite -wp_bind -wp_enc.
+Qed.
+
+Lemma tac_wp_dec Γ E K c k t Ψ :
+  (∀ t', t = TSeal (TKey Seal k) (Spec.tag c t') →
+         envs_entails Γ (WP fill K (Val (SOMEV t')) @ E {{ Ψ }})) →
+  (Spec.dec c (TKey Open k) t = None →
+   envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →
+  envs_entails Γ (WP fill K (dec c (TKey Open k) t) @ E {{ Ψ }}).
 Proof.
 rewrite envs_entails_unseal => HSome HNone.
 rewrite -wp_bind -wp_dec.
-case: t HSome HNone; eauto => k' /=.
-case: k' => //=; eauto.
-case; eauto => k'.
-case: decide => [<-|]; eauto.
+case e: Spec.dec => [t'|]; eauto.
+by apply: HSome; apply: Spec.decK.
 Qed.
 
-Lemma tac_wp_tenc Γ E K c t1 t2 Ψ :
-  envs_entails Γ (WP fill K (Val (Spec.tenc c t1 t2)) @ E {{ Ψ }}) →
-  envs_entails Γ (WP fill K (tenc c t1 t2) @ E {{ Ψ }}).
-Proof.
-rewrite envs_entails_unseal => H.
-by rewrite -wp_bind -wp_tenc.
-Qed.
-
-Lemma tac_wp_tdec Γ E K c k t Ψ :
-  (∀ t', t = TEnc (TKey Enc k) (Spec.tag c t') →
-         envs_entails Γ (WP fill K (Val (SOMEV t')) @ E {{ Ψ }})) →
-  (Spec.tdec c (TKey Dec k) t = None →
-   envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →
-  envs_entails Γ (WP fill K (tdec c (TKey Dec k) t) @ E {{ Ψ }}).
+Lemma tac_wp_adec Γ K c k t Ψ :
+  (∀ t', t = TSeal (TKey Seal k) (Spec.tag c t') →
+         envs_entails Γ (WP fill K (Val (SOMEV t')) {{ Ψ }})) →
+  (Spec.dec c (TKey Open k) t = None →
+   envs_entails Γ (WP fill K (Val NONEV) {{ Ψ }})) →
+  envs_entails Γ (WP fill K (adec c k t) {{ Ψ }}).
 Proof.
 rewrite envs_entails_unseal => HSome HNone.
-rewrite -wp_bind -wp_tdec.
-case e: Spec.tdec => [t'|]; eauto.
-by apply: HSome; apply: Spec.tdecK.
+rewrite -wp_bind -wp_adec.
+case e: Spec.dec => [t'|] in HNone *; eauto.
+by apply: HSome; apply: Spec.decK.
 Qed.
 
-Lemma tac_wp_tsenc Γ E K c k t Ψ :
-  envs_entails Γ (WP fill K (Val (Spec.tsenc c k t)) @ E {{ Ψ }}) →
-  envs_entails Γ (WP fill K (tsenc c k t) @ E {{ Ψ }}).
+Lemma tac_wp_senc Γ E K c k t Ψ :
+  envs_entails Γ (WP fill K (Val (Spec.enc c (TKey Seal k) t)) @ E {{ Ψ }}) →
+  envs_entails Γ (WP fill K (senc c k t) @ E {{ Ψ }}).
 Proof.
-by rewrite envs_entails_unseal => H; rewrite -wp_bind -wp_tsenc.
+by rewrite envs_entails_unseal => H; rewrite -wp_bind -wp_senc.
 Qed.
 
-Lemma tac_wp_tsdec Γ E K c k t Ψ :
-  (∀ t', t = TEnc (TKey Enc k) (Spec.tag c t') →
+Lemma tac_wp_sdec Γ E K c k t Ψ :
+  (∀ t', t = TSeal (TKey Seal k) (Spec.tag c t') →
          envs_entails Γ (WP fill K (Val (SOMEV t')) @ E {{ Ψ }})) →
-  (Spec.tsdec c k t = None →
+  (Spec.dec c (TKey Open k) t = None →
    envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →
-  envs_entails Γ (WP fill K (tsdec c k t) @ E {{ Ψ }}).
+  envs_entails Γ (WP fill K (sdec c k t) @ E {{ Ψ }}).
 Proof.
 rewrite envs_entails_unseal => HSome HNone.
-rewrite -wp_bind -wp_tsdec.
-rewrite /Spec.tsdec in HNone *.
-case e: Spec.tdec => [t'|]; eauto.
-by apply: HSome; apply: Spec.tdecK.
+rewrite -wp_bind -wp_sdec.
+case e: Spec.dec => [t'|] in HNone *; eauto.
+by apply: HSome; apply: Spec.decK.
+Qed.
+
+Lemma tac_wp_verify Γ K c k t Ψ :
+  (∀ t', t = TSeal (TKey Seal k) (Spec.tag c t') →
+         envs_entails Γ (WP fill K (Val (SOMEV t')) {{ Ψ }})) →
+  (Spec.dec c (TKey Open k) t = None →
+   envs_entails Γ (WP fill K (Val NONEV) {{ Ψ }})) →
+  envs_entails Γ (WP fill K (verify c (TKey Open k) t) {{ Ψ }}).
+Proof.
+rewrite envs_entails_unseal => HSome HNone.
+rewrite -wp_bind -wp_verify.
+case e: Spec.dec => [t'|] in HNone *; eauto.
+by apply: HSome; apply: Spec.decK.
 Qed.
 
 Lemma tac_wp_list Γ E K (ts : list term) Ψ :
@@ -306,15 +331,6 @@ Tactic Notation "wp_list_match" :=
 Tactic Notation "wp_term_of_list" :=
   wp_pures; try wp_bind (term_of_list _); iApply wp_term_of_list.
 
-Tactic Notation "wp_enc" :=
-  wp_pures; try wp_bind (enc _ _); iApply wp_enc.
-
-Tactic Notation "wp_tenc" :=
-  wp_pures; try wp_bind (tenc _ _ _); iApply wp_tenc.
-
-Tactic Notation "wp_tsenc" :=
-  wp_pures; try wp_bind (tsenc _ _ _); iApply wp_tsenc.
-
 Tactic Notation "wp_hash" :=
   wp_pures;
   lazymatch goal with
@@ -331,7 +347,7 @@ Tactic Notation "wp_dec_eq" ident(t) ident(H) :=
   | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
     reshape_expr e ltac:(fun K e' =>
       first
-        [eapply (tac_wp_dec _ _ K _ _);
+        [eapply (tac_wp_dec _ _ K _ _ _);
          [intros t H|intros H];
          wp_finish
         |fail 1 "wp_dec: Cannot decode"])
@@ -346,43 +362,64 @@ Tactic Notation "wp_dec" ident(t) :=
           |revert tf H; intros t _]
   | clear H].
 
-Tactic Notation "wp_tdec_eq" ident(t) ident(H) :=
+Tactic Notation "wp_adec_eq" ident(t) ident(H) :=
   wp_pures;
   lazymatch goal with
   | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
     reshape_expr e ltac:(fun K e' =>
       first
-        [eapply (tac_wp_tdec _ _ K _ _);
+        [eapply (tac_wp_adec _ K _ _ _);
          [intros t H|intros H];
          wp_finish
-        |fail 1 "wp_tdec: Cannot decode"])
+        |fail 1 "wp_adec: Cannot decode"])
   end.
 
-Tactic Notation "wp_tdec" ident(t) :=
+Tactic Notation "wp_adec" ident(t) :=
   let tf := fresh "tf" in
   let H := fresh "H" in
-  wp_tdec_eq tf H; [
+  wp_adec_eq tf H; [
     first [revert t tf H; intros _ t ->
           |revert tf H; intros _ t ->
           |revert tf H; intros t _]
   | clear H].
 
-Tactic Notation "wp_tsdec_eq" ident(t) ident(H) :=
+Tactic Notation "wp_sdec_eq" ident(t) ident(H) :=
   wp_pures;
   lazymatch goal with
   | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
     reshape_expr e ltac:(fun K e' =>
       first
-        [eapply (tac_wp_tsdec _ _ K _ _);
+        [eapply (tac_wp_sdec _ _ K _ _ _);
          [intros t H|intros H];
          wp_finish
-        |fail 1 "wp_tsdec: Cannot decode"])
+        |fail 1 "wp_sdec: Cannot decode"])
   end.
 
-Tactic Notation "wp_tsdec" ident(t) :=
+Tactic Notation "wp_sdec" ident(t) :=
   let tf := fresh "tf" in
   let H := fresh "H" in
-  wp_tsdec_eq tf H; [
+  wp_sdec_eq tf H; [
+    first [revert t tf H; intros _ t ->
+          |revert tf H; intros _ t ->
+          |revert tf H; intros t _]
+  | clear H].
+
+Tactic Notation "wp_verify_eq" ident(t) ident(H) :=
+  wp_pures;
+  lazymatch goal with
+  | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
+    reshape_expr e ltac:(fun K e' =>
+      first
+        [eapply (tac_wp_verify _ K _ _ _);
+         [intros t H|intros H];
+         wp_finish
+        |fail 1 "wp_verify: Cannot decode"])
+  end.
+
+Tactic Notation "wp_verify" ident(t) :=
+  let tf := fresh "tf" in
+  let H := fresh "H" in
+  wp_verify_eq tf H; [
     first [revert t tf H; intros _ t ->
           |revert tf H; intros _ t ->
           |revert tf H; intros t _]

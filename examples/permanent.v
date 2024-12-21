@@ -26,7 +26,7 @@ Definition server : val := rec: "loop" "c" "l" "sk" :=
   (* Receive request from the network *)
   let: <> := recv "c" in
   (* Sign message *)
-  let: "reply" := tenc nroot "sk" (! "l") in
+  let: "reply" := sign nroot "sk" (! "l") in
   send "c" "reply";;
   "loop" "c" "l" "sk".
 
@@ -38,7 +38,7 @@ Definition client : val := λ: "c" "vk",
     (* Wait for response *)
     let: "reply" := recv "c" in
     (* Check signature *)
-    bind: "value" := tdec nroot "vk" "reply" in
+    bind: "value" := verify nroot "vk" "reply" in
     SOME "value"
   ).
 
@@ -48,11 +48,11 @@ Definition sig_pred l k t : iProp :=
 Lemma wp_server c l k t :
   cryptis_ctx -∗
   channel c -∗
-  enc_pred nroot (sig_pred l) -∗
-  minted (TKey Enc k) -∗
+  seal_pred nroot (sig_pred l) -∗
+  minted (TKey Seal k) -∗
   l ↦□ (t : val) -∗
   public t -∗
-  WP server c #l (TKey Enc k) {{ _, True }}.
+  WP server c #l k {{ _, True }}.
 Proof.
 iIntros "#ctx #chan_c #sig_pred #s_sk #Hl #p_t".
 (* Unfold the definition of the server *)
@@ -60,24 +60,24 @@ iLöb as "IH". wp_rec. wp_pures.
 (* Receive request from the network *)
 wp_bind (recv _). iApply wp_recv => //. iIntros "%request _". wp_pures.
 (* Load contents and sign message *)
-wp_load. wp_tenc. wp_pures.
+wp_load. wp_apply wp_sign. wp_pures.
 (* Send message. Prove that it is well formed. *)
 wp_bind (send _ _). iApply wp_send => //.
-{ iModIntro. by iApply public_TEncIS; eauto. }
+{ iModIntro. by iApply public_TSealIS; eauto. }
 (* Loop *)
 by wp_pures.
 Qed.
 
 Lemma wp_client T n c l k φ :
-  TKey Enc k ∈ T →
+  TKey Seal k ∈ T →
   cryptis_ctx -∗
   channel c -∗
-  enc_pred nroot (sig_pred l) -∗
-  public (TKey Dec k) -∗
+  seal_pred nroot (sig_pred l) -∗
+  public (TKey Open k) -∗
   honest n T -∗
   ●Ph□ n -∗
   (∀ t : term, l ↦□ (t : val) -∗ φ (t : val)) -∗
-  WP client c (TKey Dec k) {{ v, φ v }}.
+  WP client c (TKey Open k) {{ v, φ v }}.
 Proof.
 iIntros "%hon_sk #ctx #chan_c #sig_pred #p_vk #hon #phase post".
 (* Unfold definition of client *)
@@ -92,8 +92,8 @@ wp_bind (send _ _). iApply wp_send => //.
 wp_pures. wp_bind (recv _). iApply wp_recv => //.
 iIntros "%reply #p_reply". wp_pures.
 (* Verify the signature *)
-wp_tdec reply; last by wp_pures; eauto.
-iPoseProof (public_TEncE with "p_reply sig_pred")
+wp_verify reply; last by wp_pures; eauto.
+iPoseProof (public_TSealE with "p_reply sig_pred")
   as "[[#p_sk _]|(#replyP & #s_reply & _)]".
 { (* The signature could have been forged if the key was compromised, but we
      have ruled out this possibility.  *)
@@ -114,8 +114,7 @@ Definition game : val := λ: "mkchan",
 
   (* Generate signature keys and publicize verification key *)
   let: "k"   := mksigkey #() in
-  let: "sk"  := key Enc "k" in
-  let: "vk"  := key Dec "k" in
+  let: "vk"  := vkey "k" in
   send "c" "vk" ;;
 
   (* Initialize server state *)
@@ -123,7 +122,7 @@ Definition game : val := λ: "mkchan",
   let: "l" := ref "t" in
 
   (* Run server *)
-  Fork (server "c" "l" "sk");;
+  Fork (server "c" "l" "k");;
 
   (* Run client *)
   let: "t'" := client "c" "vk" in
@@ -134,7 +133,7 @@ Definition game : val := λ: "mkchan",
 Lemma wp_game (mkchan : val) :
   {{{ True }}} mkchan #() {{{ v, RET v; channel v }}} -∗
   cryptis_ctx ∗
-  enc_pred_token ⊤ ∗
+  seal_pred_token ⊤ ∗
   honest 0 ∅ ∗
   ●Ph 0 -∗
   WP game mkchan {{ v, ⌜v = #true⌝ }}.
@@ -148,8 +147,7 @@ iIntros "!> %c #cP". wp_pures.
 wp_bind (mksigkey _). iApply (wp_mksigkey with "[//] hon phase") => //.
 iIntros (k) "#p_vk #hon' phase".
 wp_pures.
-wp_apply wp_key. wp_pures.
-wp_apply wp_key. wp_pures.
+wp_apply wp_vkey. wp_pures.
 iMod (phase_auth_discard with "phase") as "#phase".
 (* Publicize verification key. *)
 wp_pures. wp_bind (send _ _). iApply wp_send => //. wp_pures.
@@ -159,7 +157,7 @@ wp_alloc l as "Hl".
 (* Promise that the stored value will not change. *)
 iMod (pointsto_persist with "Hl") as "#Hl".
 (* Initialize signature invariant *)
-iMod (enc_pred_set nroot (sig_pred l) with "enc_tok") as "[#? _]" => //.
+iMod (seal_pred_set nroot (sig_pred l) with "enc_tok") as "[#? _]" => //.
 (* Run server in a loop in parallel. *)
 wp_pures. wp_bind (Fork _). iApply wp_fork.
 { iApply wp_server => //.

@@ -1650,8 +1650,8 @@ Definition hello_pub N sp :=
 Definition hello_priv N sp :=
   let pub := hello_pub N sp in
   Spec.of_list [
-    TKey Dec (verif_key sp);
-    TEnc (TKey Enc (verif_key sp)) (Spec.tag (N.@"server_hello_sig") (THash pub))
+    TKey Open (verif_key sp);
+    TSeal (TKey Seal (verif_key sp)) (Spec.tag (N.@"server_hello_sig") (THash pub))
   ].
 
 Definition hello N sp :=
@@ -1660,11 +1660,11 @@ Definition hello N sp :=
   let session_key := SShare.session_key_of N (share sp) in
   Spec.of_list [
     pub;
-    TEnc (TKey Enc session_key) (Spec.tag (N.@"server_hello") enc)
+    TSeal (TKey Seal session_key) (Spec.tag (N.@"server_hello") enc)
   ].
 
 Definition verify N k x sig :=
-  match Spec.tdec N k sig with
+  match Spec.dec N k sig with
   | Some y => bool_decide (y = THash x)
   | None => false
   end.
@@ -1676,7 +1676,7 @@ Definition check N cp sp :=
   '(kex, other') ← prod_of_list 2 pub';
   res ← SShare.check N (CParams.share cp) kex;
   let session_key := SShare.session_key_of' N res in
-  dec_sig ← Spec.tdec (N.@"server_hello") (TKey Dec session_key) sig;
+  dec_sig ← Spec.dec (N.@"server_hello") (TKey Open session_key) sig;
   dec_sig ← Spec.to_list dec_sig;
   '(verif_key, sig) ← prod_of_list 2 dec_sig;
   if decide (other' = CParams.other cp) then
@@ -1699,17 +1699,15 @@ Definition hello_pub N : val := λ: "sp",
 Definition hello N : val := λ: "sp",
   case "sp" (λ: "kex" "verif_key" "other",
     let: "pub" := hello_pub N "sp" in
-    let: "verif_key" := mkkeys "verif_key" in
-    let: "enc" :=
-      tenc (N.@"server_hello_sig") (Fst "verif_key") (hash "pub") in
-    let: "enc" := term_of_list [Snd "verif_key"; "enc"] in
-    let: "session_key" := mkkeys (SShare.I.session_key_of N "kex") in
-    let: "enc" := tenc (N.@"server_hello") (Fst "session_key") "enc" in
+    let: "enc" := sign (N.@"server_hello_sig") "verif_key" (hash "pub") in
+    let: "enc" := term_of_list [vkey "verif_key"; "enc"] in
+    let: "session_key" := SShare.I.session_key_of N "kex" in
+    let: "enc" := senc (N.@"server_hello") "session_key" "enc" in
     term_of_list ["pub"; "enc"]
   ).
 
 Definition verify N : val := λ: "k" "x" "sig",
-  match: tdec N "k" "sig" with
+  match: simple.verify N "k" "sig" with
     SOME "y" => eq_term "y" (hash "x")
   | NONE => #false
   end.
@@ -1723,8 +1721,7 @@ Definition check N : val := λ: "cp" "sh",
   list_match: ["s_kex"; "s_other"] := "pub'" in
   bind: "res" := SShare.I.check N "c_kex" "s_kex" in
   let: "session_key" := SShare.I.session_key_of' N "res" in
-  let: "sk" := mkkeys "session_key" in
-  bind: "dec_sig" := tdec (N.@"server_hello") (Snd "sk") "sig" in
+  bind: "dec_sig" := sdec (N.@"server_hello") "session_key" "sig" in
   bind: "dec_sig" := list_of_term "dec_sig" in
   list_match: ["verif_key"; "sig"] := "dec_sig" in
   if: eq_term "s_other" "c_other" then
@@ -1766,34 +1763,33 @@ wp_bind (SShare.I.encode _ _); iApply SShare.wp_encode.
 by wp_list; wp_term_of_list.
 Qed.
 
-Lemma wp_hello N sp E Φ :
+Lemma wp_hello N sp Φ :
   Φ (hello N sp) -∗
-  WP I.hello N (term_of sp) @ E {{ Φ }}.
+  WP I.hello N (term_of sp) {{ Φ }}.
 Proof.
 iIntros "?"; rewrite /I.hello; wp_pures.
 iApply wp_case; wp_pures.
 wp_bind (I.hello_pub _ _); iApply wp_hello_pub; wp_pures.
-wp_bind (mkkeys _); iApply wp_mkkeys; wp_pures.
-wp_hash; wp_tenc; wp_pures.
+wp_hash. wp_pures. wp_apply wp_sign. wp_pures.
+wp_list. wp_apply wp_vkey.
 wp_list; wp_term_of_list; wp_pures.
 wp_bind (SShare.I.session_key_of _ _); iApply SShare.wp_session_key_of.
-wp_bind (mkkeys _); iApply wp_mkkeys; wp_pures.
-by wp_tenc; wp_pures; wp_list; wp_term_of_list.
+wp_pures. wp_apply wp_senc. wp_pures. wp_list. by wp_term_of_list.
 Qed.
 
-Lemma wp_verify N k x sig E Φ :
+Lemma wp_verify N k x sig Φ :
   Φ #(verify N k x sig) -∗
-  WP I.verify N k x sig @ E {{ Φ }}.
+  WP I.verify N k x sig {{ Φ }}.
 Proof.
 iIntros "?"; rewrite /I.verify; wp_pures.
-wp_bind (tdec _ _ _); iApply wp_tdec.
-rewrite /verify; case e: Spec.tdec => [y|]; wp_pures => //.
+wp_apply wp_verify.
+rewrite /verify; case e: Spec.dec => [y|]; wp_pures => //.
 by wp_hash; iApply wp_eq_term.
 Qed.
 
-Lemma wp_check N cp sh E Φ :
+Lemma wp_check N cp sh Φ :
   Φ (repr ((λ '(t, kex), (t, SShare.term_of kex)) <$> check N cp sh)) -∗
-  WP I.check N cp sh @ E {{ Φ }}.
+  WP I.check N cp sh {{ Φ }}.
 Proof.
 iIntros "?"; rewrite /I.check /check; wp_pures.
 wp_list_of_term_eq l e; last by rewrite Spec.of_listK in e.
@@ -1812,10 +1808,8 @@ rewrite [in prod_of_list 2 [s_kex; s_other]]unlock /=.
 wp_bind (SShare.I.check _ _ _); iApply SShare.wp_check.
 case: SShare.check => [res|]; wp_pures => //=.
 wp_bind (SShare.I.session_key_of' _ _); iApply SShare.wp_session_key_of'.
-wp_pures.
-wp_bind (mkkeys _); iApply wp_mkkeys; wp_pures.
-wp_tdec_eq dec_sig e; last by rewrite e; wp_pures.
-rewrite {}e /= /Spec.tdec /= decide_True // Spec.tagK /=.
+wp_pures. wp_apply wp_sdec.
+case e: Spec.dec => [dec_sig|]; wp_pures => //= {e}.
 wp_list_of_term_eq l e; wp_pures; last by rewrite e.
 rewrite {}e Spec.of_listK {dec_sig} /=.
 wp_list_match=> [verif_key sig' -> {l}|ne]; wp_finish; last first.
@@ -1824,7 +1818,7 @@ rewrite [in prod_of_list 2 [verif_key; sig']]unlock /=.
 wp_eq_term e; wp_pures; last by rewrite decide_False.
 rewrite {}e decide_True //= {s_other}.
 wp_bind (I.verify _ _ _ _); iApply wp_verify.
-by case: verify; wp_pures.
+by case: verify; wp_pures => //=.
 Qed.
 
 Context `{!sessionGS Σ}.
@@ -1845,8 +1839,8 @@ Definition hello_sig_pred (k t : term) : iProp := ∃ kex other,
 
 Definition ctx : iProp :=
   Keys.ctx N ∧
-  enc_pred (N.@"server_hello") hello_pred ∧
-  enc_pred (N.@"server_hello_sig") hello_sig_pred ∧
+  seal_pred (N.@"server_hello") hello_pred ∧
+  seal_pred (N.@"server_hello_sig") hello_sig_pred ∧
   session_ctx (N.@"sess") P.
 
 Lemma ctx_alloc (E E' : coPset) :
@@ -1854,21 +1848,21 @@ Lemma ctx_alloc (E E' : coPset) :
   ↑N.@"server_hello_sig" ⊆ E →
   Keys.ctx N -∗
   session_ctx (N.@"sess") P -∗
-  enc_pred_token E ={E'}=∗
+  seal_pred_token E ={E'}=∗
   ctx ∗
-  enc_pred_token (E ∖ ↑N.@"server_hello" ∖ ↑N.@"server_hello_sig").
+  seal_pred_token (E ∖ ↑N.@"server_hello" ∖ ↑N.@"server_hello_sig").
 Proof.
 iIntros "% % #ctx #? tok".
-iMod (enc_pred_set (N.@"server_hello") hello_pred with "tok")
+iMod (seal_pred_set (N.@"server_hello") hello_pred with "tok")
   as "[#? tok]"; eauto.
-iMod (enc_pred_set (N.@"server_hello_sig") hello_sig_pred with "tok")
+iMod (seal_pred_set (N.@"server_hello_sig") hello_sig_pred with "tok")
   as "[#? tok]"; try solve_ndisj.
 iModIntro; do !iSplit => //.
 Qed.
 
 Definition wf sp : iProp :=
   SShare.wf (share sp) ∧
-  public (TKey Dec (verif_key sp)) ∧
+  public (TKey Open (verif_key sp)) ∧
   public (other sp).
 
 #[global]
@@ -1897,18 +1891,18 @@ iMod (session_begin with "sess_ctx r [token]") as "[#sess close]".
 iFrame; iModIntro; rewrite public_of_list /=; do !iSplit=> //.
   rewrite public_of_list /=; do !iSplit => //.
   by iApply SShare.public_encode; eauto.
-iAssert (minted (TKey Dec (verif_key sp))) as "s_vkey"; first by eauto.
+iAssert (minted (TKey Open (verif_key sp))) as "s_vkey"; first by eauto.
 rewrite minted_TKey.
-iApply public_TEncIS; eauto.
+iApply public_TSealIS; eauto.
 - by rewrite minted_TKey; iApply SShare.minted_session_key_of.
 - by iModIntro; iExists sp; eauto.
-- rewrite minted_of_list /= minted_TEnc minted_tag minted_THash minted_of_list /=.
+- rewrite minted_of_list /= minted_TSeal minted_tag minted_THash minted_of_list /=.
   rewrite !minted_TKey.
   do !iSplit; eauto.
   iApply public_minted. by iApply SShare.public_encode.
 iIntros "!> #fail"; rewrite public_of_list /=.
 do !iSplit => //.
-iApply public_TEncIS; eauto.
+iApply public_TSealIS; eauto.
 - by rewrite minted_TKey.
 - iModIntro. iExists (share sp), (other sp); by do !iSplit => //.
 - rewrite minted_THash minted_of_list /=; do !iSplit; eauto.
@@ -1923,7 +1917,7 @@ Lemma public_checkE cp sh vkey s_ke :
   check N cp sh = Some (vkey, s_ke) →
   ctx -∗
   public sh -∗
-  ∃ k, ⌜vkey = TKey Dec k⌝ ∧
+  ∃ k, ⌜vkey = TKey Open k⌝ ∧
        ⌜CParams.share cp = SShare.cshare_of s_ke⌝ ∧
        minted k ∧
        public (SShare.cnonce s_ke) ∧
@@ -1937,8 +1931,8 @@ Lemma public_checkE cp sh vkey s_ke :
               SShare.encode' N s_ke = SShare.encode N (share sp) ∧
               SShare.meth_of s_ke = SShare.meth_of (share sp) ∧
               other sp = CParams.other cp⌝ ∧
-       ▷ (public (TKey Enc k) ∧
-            public (TKey Enc (SShare.session_key_of' N s_ke)) ∨
+       ▷ (public (TKey Seal k) ∧
+            public (TKey Seal (SShare.session_key_of' N s_ke)) ∨
           ∃ sp, ⌜sh = hello N sp⌝ ∧
                 SShare.wf (share sp) ∧
                 session (N.@"sess") Resp
@@ -1956,14 +1950,14 @@ elim/(@list_len_rect 2): pub => [kex other'|pub ne]; last first.
 rewrite unlock /=.
 case e_check: SShare.check => [kex'|] //=.
 move/SShare.public_checkE: e_check; move: kex' => {}kex [e_cp ->].
-case e_dec: Spec.tdec => [res|] //=.
-move/Spec.tdecK: e_dec=> -> {sig}.
+case e_dec: Spec.dec => [res|] //=.
+move/Spec.decK: e_dec=> -> {sig}.
 case: Spec.to_listP => //= {}res.
 elim/(@list_len_rect 2): res => [verif_key sig|res neq]; last first.
   by rewrite prod_of_list_neq.
 rewrite [prod_of_list _ _]unlock /=.
 case: decide => [-> {other'}|//] /=.
-rewrite /verify /Spec.tdec /Spec.dec.
+rewrite /verify /Spec.dec /Spec.open.
 case: verif_key => //= - [] //= verif_key.
 case: sig => //= k sig.
 case: k => //= - [] // k.
@@ -1975,14 +1969,14 @@ iIntros "#(? & ctx1 & ctx2 & _)".
 iDestruct 1 as "# ((p_kex & p_cp & _) & p_sig & _)".
 iPoseProof (public_minted with "p_sig") as "s_sig".
 iExists verif_key; do 3!iSplit => //.
-  rewrite minted_TEnc minted_tag minted_of_list /= !minted_TKey.
+  rewrite minted_TSeal minted_tag minted_of_list /= !minted_TKey.
   by iDestruct "s_sig" as "[_ [??]]".
 iSplit.
   by rewrite -(SShare.cnonce_encode' N); iApply SShare.public_cnonce.
 iSplit.
   by rewrite -(SShare.snonce_encode' N); iApply SShare.public_snonce.
 iSplit.
-  rewrite minted_TEnc minted_TKey minted_tag.
+  rewrite minted_TSeal minted_TKey minted_tag.
   by iDestruct "s_sig" as "[??] {p_sig}".
 iSplit.
   iPureIntro.
@@ -1993,10 +1987,10 @@ iSplit.
   case/Spec.tag_inj=> _ [] /Spec.of_list_inj [/SShare.term_of_inj ->].
   by eauto.
 iClear "s_sig".
-iPoseProof (public_TEncE with "p_sig ctx1") as "[[psk_fail pub]|hello]".
+iPoseProof (public_TSealE with "p_sig ctx1") as "[[psk_fail pub]|hello]".
 - rewrite public_of_list /=.
   iDestruct "pub" as "{p_sig} (p_vkey & p_sig & _)".
-  iPoseProof (public_TEncE with "p_sig ctx2") as "[[??]|hello]"; eauto.
+  iPoseProof (public_TSealE with "p_sig ctx2") as "[[??]|hello]"; eauto.
   iDestruct "hello" as "(#hello & s_sig & _)"; iModIntro.
   iDestruct "hello" as (kex' other') "(%e_hash & wf & hello)".
   case: e_hash => /Spec.of_list_inj [/SShare.term_of_inj e_kex <- {other'}].
@@ -2047,8 +2041,7 @@ Definition tls_client : val := λ: "c" "kex" "other",
   let: "vkey" := Fst "res" in
   let: "kex" := Snd "res" in
   let: "session_key" := SShare.I.session_key_of' N "kex" in
-  let: "sk" := mkkeys "session_key" in
-  let: "ack" := tenc (N.@"ack") (Fst "sk") "sh" in
+  let: "ack" := senc (N.@"ack") "session_key" "sh" in
   send "c" "ack" ;;
   SOME ("vkey", SShare.I.cnonce "kex", SShare.I.snonce "kex", "session_key").
 
@@ -2066,7 +2059,7 @@ Definition tls_ctx : iProp :=
   Keys.ctx N ∧
   CParams.ctx N ∧
   SParams.ctx N P ∧
-  enc_pred (N.@"ack") ack_pred ∧
+  seal_pred (N.@"ack") ack_pred ∧
   session_ctx (N.@"sess") P.
 
 Lemma tls_ctx_alloc E1 E2 E3 E4 E' :
@@ -2075,33 +2068,33 @@ Lemma tls_ctx_alloc E1 E2 E3 E4 E' :
   ↑N ⊆ E3 →
   ↑N ⊆ E4 →
   session_token E1 -∗
-  enc_pred_token E2 -∗
+  seal_pred_token E2 -∗
   hash_pred_token E3 -∗
   key_pred_token E4 ={E'}=∗
   tls_ctx ∗
   session_token (E1 ∖ ↑N) ∗
-  enc_pred_token (E2 ∖ ↑N) ∗
+  seal_pred_token (E2 ∖ ↑N) ∗
   hash_pred_token (E3 ∖ ↑N) ∗
   key_pred_token (E4 ∖ ↑N).
 Proof.
-iIntros (????) "nown_tok enc_tok hash_tok key_tok".
+iIntros (????) "nown_tok seal_tok hash_tok key_tok".
 iMod (Keys.ctx_alloc with "hash_tok key_tok")
   as "(#kctx & hash_tok & key_tok)"; try solve_ndisj.
 iMod (session_alloc (N.@"sess") P with "nown_tok")
   as "[#sess nown_tok]"; try solve_ndisj.
 iMod (CParams.ctx_alloc with "kctx hash_tok")
   as "[#cctx hash_tok]"; first solve_ndisj.
-iMod (SParams.ctx_alloc with "kctx sess enc_tok") as "[#? enc_tok]";
+iMod (SParams.ctx_alloc with "kctx sess seal_tok") as "[#? seal_tok]";
   try solve_ndisj.
-iMod (enc_pred_set (N.@"ack") ack_pred with "enc_tok") as "[#? enc_tok]";
+iMod (seal_pred_set (N.@"ack") ack_pred with "seal_tok") as "[#? seal_tok]";
   try solve_ndisj.
 iModIntro.
 iSplit.
   do !iSplit => //.
 iSplitL "nown_tok".
   iApply session_token_drop; last eauto; solve_ndisj.
-iSplitL "enc_tok".
-  iApply enc_pred_token_drop; last eauto; solve_ndisj.
+iSplitL "seal_tok".
+  iApply seal_pred_token_drop; last eauto; solve_ndisj.
 iSplitL "hash_tok".
   iApply hash_pred_token_drop; last eauto; solve_ndisj.
 iApply key_pred_token_drop; last eauto; solve_ndisj.
@@ -2116,13 +2109,13 @@ Lemma wp_tls_client c ke other Φ :
   (∀ res,
       match res with
       | Some (vkey, cn, sn, sk) =>
-        ∃ k, ⌜vkey = TKey Dec k⌝ ∧
+        ∃ k, ⌜vkey = TKey Open k⌝ ∧
              minted k ∧
              public cn ∧
              public sn ∧
              minted sk ∧
              session (N.@"sess") Init cn sn (ke, sk, other) ∧
-             ▷ (public (TKey Enc k) ∧ public (Meth.psk ke) ∨
+             ▷ (public (TKey Seal k) ∧ public (Meth.psk ke) ∨
                 session (N.@"sess") Resp cn sn (ke, sk, other) ∧
                 □ ∀ kt, public (TKey kt sk) -∗
                 ◇ if Meth.has_dh ke then False else public (Meth.psk ke))
@@ -2162,13 +2155,12 @@ iMod (session_begin _ Init (SShare.cnonce ke'') (SShare.snonce ke'')
 - solve_ndisj.
 - by eauto.
 wp_bind (SShare.I.session_key_of' _ _); iApply SShare.wp_session_key_of'; wp_pures.
-wp_bind (mkkeys _); iApply wp_mkkeys; wp_pures => /=.
-wp_tenc => /=; wp_pures.
+wp_apply wp_senc. wp_pures.
 iDestruct "rest" as "[[fail_vsk fail_psk]|succ]".
   iPoseProof (SShare.public_session_key_of' with "k_ctx fail_psk") as ">fail".
   wp_bind (send _ _); iApply wp_send => //.
   iModIntro.
-  iApply public_TEncIS; eauto.
+  iApply public_TSealIS; eauto.
     iIntros "!> %sp %e_sh".
     by case: (e_hello _ e_sh) => [] -> [] -> [] -> [] _ [] e_enc [] <- ->; eauto.
   wp_pures; wp_bind (SShare.I.snonce _); iApply SShare.wp_snonce.
@@ -2179,7 +2171,7 @@ iDestruct "rest" as "[[fail_vsk fail_psk]|succ]".
   by iModIntro; iExists _; do 6!iSplit => //; eauto.
 wp_bind (send _ _); iApply wp_send => //.
   iModIntro.
-  iApply public_TEncIS; eauto; first by rewrite minted_TKey.
+  iApply public_TSealIS; eauto; first by rewrite minted_TKey.
   iIntros "!> %sp %e_sp".
   by case: (e_hello _ e_sp) => -> [] -> [] -> [] _ [] e_enc [] <- ->; eauto.
 iDestruct "succ" as (sp) "(-> & wf & succ)".
@@ -2204,9 +2196,8 @@ Definition tls_server : val := λ: "c" "psk" "g" "verif_key" "other",
   let: "sh"  := SParams.I.hello N "sp" in
   send "c" "sh" ;;
   let: "session_key" := SShare.I.session_key_of N "ke'" in
-  let: "sk" := mkkeys "session_key" in
   let: "ack" := recv "c" in
-  bind: "ack" := tdec (N.@"ack") (Snd "sk") "ack" in
+  bind: "ack" := sdec (N.@"ack") "session_key" "ack" in
   guard: eq_term "ack" "sh" in
   SOME "ke'".
 
@@ -2217,8 +2208,8 @@ Lemma wp_tls_server c psk g verif_key other Φ :
   tls_ctx -∗
   minted psk -∗
   public g -∗
-  minted (TKey Enc verif_key) -∗
-  public (TKey Dec verif_key) -∗
+  minted (TKey Seal verif_key) -∗
+  public (TKey Open verif_key) -∗
   public other -∗
   (∀ ke : option SShare.t,
       match ke with
@@ -2263,10 +2254,9 @@ wp_pures; wp_bind (send _ _); iApply wp_send; eauto.
 wp_pures.
 wp_bind (SShare.I.session_key_of _ _); iApply SShare.wp_session_key_of.
 wp_pures.
-wp_bind (mkkeys _); iApply wp_mkkeys; wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (ack) "#p_ack"; wp_pures.
-wp_tdec_eq ack' e_ack; wp_pures; last by iApply ("post" $! None).
-rewrite {}e_ack; wp_eq_term e_ack; last by wp_pures; iApply ("post" $! None).
+wp_sdec ack; wp_pures; last by iApply ("post" $! None).
+wp_eq_term e_ack; last by wp_pures; iApply ("post" $! None).
 rewrite {}e_ack; wp_pures; iApply ("post" $! (Some ke')).
 iModIntro; iSplit.
   rewrite -(SShare.cnonce_encode N).
@@ -2278,13 +2268,13 @@ iSplit.
   by iApply SShare.public_encode => //.
 iSplit; eauto.
   iPoseProof (public_minted with "p_ack") as "{p_ack} ack".
-  by rewrite minted_TEnc !minted_TKey; iDestruct "ack" as "[sk _]".
+  by rewrite minted_TSeal !minted_TKey; iDestruct "ack" as "[sk _]".
 iDestruct "p_ch" as "[p_ch|p_ch]"; first by eauto.
-rewrite public_TEnc; iSplit => //.
+rewrite public_TSeal; iSplit => //.
 iDestruct "p_ack" as "[[fail _]|(_ & succ & decl)]".
   iMod (SShare.public_session_key_ofW with "k_ctx p_ke' fail") as "?".
   by eauto.
-iPoseProof (wf_enc_elim with "succ []") as "{succ} #succ"; eauto.
+iPoseProof (wf_seal_elim with "succ []") as "{succ} #succ"; eauto.
 iModIntro.
 iDestruct ("succ" $! sp with "[//]") as "{succ} [sess' succ]".
 iRight; iSplitL => //.

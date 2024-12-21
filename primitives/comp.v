@@ -28,7 +28,7 @@ Definition eq_term : val := (rec: "eq" "x" "y" :=
     else if: "tag" = #TKey_tag then
       (Fst (Snd "x") = Fst (Snd "y")) &&
       "eq" (Snd (Snd "x")) (Snd (Snd "y"))
-    else if: "tag" = #TEnc_tag then
+    else if: "tag" = #TSeal_tag then
       "eq" (Fst (Snd "x")) (Fst (Snd "y")) &&
       "eq" (Snd (Snd "x")) (Snd (Snd "y"))
     else if: "tag" = #THash_tag then
@@ -62,7 +62,7 @@ Definition leq_term : val := rec: "loop" "t1" "t2" :=
       let: "t2"  := Snd "a2" in
       if: "kt1" = "kt2" then "loop" "t1" "t2"
       else "kt1" ≤ "kt2"
-    else if: "tag" = #TEnc_tag then
+    else if: "tag" = #TSeal_tag then
       let: "t11" := Fst "a1" in
       let: "t12" := Snd "a1" in
       let: "t21" := Fst "a2" in

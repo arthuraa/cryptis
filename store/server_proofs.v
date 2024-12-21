@@ -83,7 +83,7 @@ Qed.
 
 Lemma wp_server_find_client ss kI :
   {{{ cryptis_ctx ∗ server ss }}}
-    Server.find_client (repr ss) (TKey Dec kI)
+    Server.find_client (repr ss) (TKey Open kI)
   {{{ vdb γlock vlock, RET (vdb, vlock)%V;
       server ss ∗
       is_lock γlock vlock
@@ -96,9 +96,9 @@ wp_lam; wp_pures.
 wp_bind (SAList.find _ _).
 iApply (SAList.wp_find with "accounts").
 iIntros "!> accounts"; rewrite lookup_fmap.
-case accounts_kI: (accounts !! TKey Dec kI) => [scs|]; wp_pures.
+case accounts_kI: (accounts !! TKey Open kI) => [scs|]; wp_pures.
 - rewrite big_sepM_forall.
-  iPoseProof ("locks" $! (TKey Dec kI) scs with "[//]")
+  iPoseProof ("locks" $! (TKey Open kI) scs with "[//]")
     as "(%kI' & %e & #lock)".
   case: e => <- {kI'}.
   iModIntro.
@@ -197,12 +197,11 @@ Proof.
 iIntros "%Φ (#? & #chan_c & #ctx & server & phase) post".
 wp_lam; wp_pures.
 iPoseProof (store_ctx_dh_auth_ctx with "ctx") as "dh".
-wp_bind (Connection.listen _ _ _ _).
-iApply (wp_connection_listen
+wp_apply (wp_connection_listen
          with "[# //] [# //] [# //] [#] [phase]") => //;
   try by solve_ndisj.
 { by iDestruct "server" as "(% & % & ? & _)". }
-iIntros "!> %cs (hon & resP)". wp_pures.
+iIntros "%cs (hon & resP)". wp_pures.
 iDestruct "resP" as "(conn & %e_kR & <- & %e_rl & token)".
 wp_bind (Server.find_client _ _).
 iApply (wp_server_find_client with "[$]").

@@ -100,11 +100,11 @@ Definition environment : val := λ: "c" "nI" "nR" "psk",
   send "c" "dkR";;
   fork_loop (
     let: "pkR'" := recv "c" in
-    bind: "pkR'" := to_ek "pkR'" in
-    pk_dh_init nslN "c" "dkI" "ekI" "pkR'");;
-  fork_loop (pk_dh_resp nslN "c" "dkR" "ekR");;
-  fork_loop (cr_init crN "c" "ekI" "dkI" "dkR");;
-  fork_loop (cr_resp crN "c" "ekR" "dkR");;
+    bind: "pkR'" := to_seal_key "pkR'" in
+    pk_dh_init nslN "c" "nI" "pkR'");;
+  fork_loop (pk_dh_resp nslN "c" "nR");;
+  fork_loop (cr_init crN "c" "nI" "dkR");;
+  fork_loop (cr_resp crN "c" "nR");;
   let: "server_params" := recv "c" in
   Fork (tls_server_loop "c" "psk" "nR" "server_params").
 
@@ -126,14 +126,14 @@ rewrite /environment; wp_pures.
 wp_bind (mkkeys _); iApply wp_mkkeys; wp_pures.
 wp_bind (mkkeys _); iApply wp_mkkeys; wp_pures.
 rewrite -!fork_loopE.
-iAssert (public (TKey Enc nI)) as "#?".
+iAssert (public (TKey Seal nI)) as "#?".
   by rewrite public_TKey; eauto.
-iAssert (public (TKey Dec nI)) as "#?".
-  by rewrite [public (TKey Dec _)]public_TKey; eauto.
-iAssert (public (TKey Enc nR)) as "#?".
-  by rewrite [public (TKey Enc nR)]public_TKey; eauto.
-iAssert (public (TKey Dec nR)) as "#?".
-  by rewrite [public (TKey Dec nR)]public_TKey; eauto.
+iAssert (public (TKey Open nI)) as "#?".
+  by rewrite [public (TKey Open _)]public_TKey; eauto.
+iAssert (public (TKey Seal nR)) as "#?".
+  by rewrite [public (TKey Seal nR)]public_TKey; eauto.
+iAssert (public (TKey Open nR)) as "#?".
+  by rewrite [public (TKey Open nR)]public_TKey; eauto.
 wp_bind (send _ _); iApply wp_send => //; wp_pures.
 wp_bind (send _ _); iApply wp_send => //; wp_pures.
 wp_bind (send _ _); iApply wp_send => //; wp_pures.
@@ -142,8 +142,8 @@ wp_bind (fork_loop _); iApply wp_fork_loop; eauto.
   iModIntro.
   wp_bind (recv _); iApply wp_recv => //.
   iIntros "%pkR' #?"; wp_pures.
-  wp_bind (to_ek _); iApply wp_to_ek.
-  case: Spec.to_ekP => [? ->|_]; wp_pures => //.
+  wp_bind (to_seal_key _); iApply wp_to_seal_key.
+  case: Spec.to_seal_keyP => [? ->|_]; wp_pures => //.
   iApply (wp_pk_dh_init _ (λ _ _ _ _, True)%I); eauto.
 iIntros "!> _"; wp_pures; wp_bind (fork_loop _); iApply wp_fork_loop => //.
   iModIntro.
@@ -210,7 +210,7 @@ wp_eq_term e.
     by iDestruct "s_psk'" as ">[]".
   - by rewrite minted_TKey.
 wp_pures.
-iApply ("post" $! (Some (TKey Enc sk))).
+iApply ("post" $! (Some (TKey Seal sk))).
 iModIntro.
 iIntros "#contra". iSpecialize ("s_psk'" with "contra").
 by iDestruct "s_psk'" as ">[]".
@@ -233,23 +233,23 @@ Lemma wp_game (mkchan : val) :
   {{{ True }}} mkchan #() {{{ v, RET v; channel v }}} -∗
   cryptis_ctx ∗
   session_token ⊤ ∗
-  enc_pred_token ⊤ ∗
+  seal_pred_token ⊤ ∗
   hash_pred_token ⊤ ∗
   key_pred_token (⊤ ∖ ↑nroot.@"keys") ∗
   honest 0 ∅ ∗
   ●Ph 0 -∗
   WP game mkchan {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
-iIntros "#wp_mkchan (#ctx & sess_tok & enc_tok & hash_tok & key_tok & #hon & phase)".
+iIntros "#wp_mkchan (#ctx & sess_tok & seal_tok & hash_tok & key_tok & #hon & phase)".
 iMod (phase_auth_discard with "phase") as "#phase".
 rewrite /game; wp_pures.
-iMod (pk_dh_alloc nslN (λ _ _ _ _, True)%I with "sess_tok enc_tok")
-  as "(#pk_dh_ctx & sess_tok & enc_tok)" => //; try solve_ndisj.
-iMod (cr_alloc crN (λ _ _ _ _ _, True)%I with "sess_tok enc_tok")
-  as "(#cr_ctx & sess_tok & enc_tok)"; try solve_ndisj.
-iMod (tls_ctx_alloc tlsN with "sess_tok enc_tok hash_tok key_tok")
-  as "(#tls_ctx & sess_tok & enc_tok & hash_tok & key_tok)"; try solve_ndisj.
-iMod (key_pred_set (nroot.@"key") (λ kt _, ⌜kt = Enc⌝)%I with "key_tok")
+iMod (pk_dh_alloc nslN (λ _ _ _ _, True)%I with "sess_tok seal_tok")
+  as "(#pk_dh_ctx & sess_tok & seal_tok)" => //; try solve_ndisj.
+iMod (cr_alloc crN (λ _ _ _ _ _, True)%I with "sess_tok seal_tok")
+  as "(#cr_ctx & sess_tok & seal_tok)"; try solve_ndisj.
+iMod (tls_ctx_alloc tlsN with "sess_tok seal_tok hash_tok key_tok")
+  as "(#tls_ctx & sess_tok & seal_tok & hash_tok & key_tok)"; try solve_ndisj.
+iMod (key_pred_set (nroot.@"key") (λ kt _, ⌜kt = Seal⌝)%I with "key_tok")
   as "[#? key_tok]"; try solve_ndisj.
 wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP".
@@ -271,8 +271,8 @@ wp_pures; wp_bind (mknonce _).
 iApply (wp_mknonce (λ psk, term_meta psk (nroot.@"pub") ())%I (λ _, False%I)) => //.
 iIntros (psk) "_ #t_psk #p_psk _ tok_psk".
 wp_pures; wp_bind (mkkeys _); iApply wp_mkkeys.
-set ekI := TKey Enc _.
-set dkI := TKey Dec _.
+set ekI := TKey Seal _.
+set dkI := TKey Open _.
 wp_pures; wp_bind (environment _ _ _ _).
 iApply wp_environment; eauto.
 iIntros "!> _"; wp_pures.
@@ -308,7 +308,7 @@ move=> wp_mkchan.
 apply (adequate_result NotStuck _ _ (λ v _, v = NONEV ∨ v = SOMEV #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
-iMod (cryptisGS_alloc _) as (?) "(#ctx & enc_tok & key_tok & hash_tok & hon)".
+iMod (cryptisGS_alloc _) as (?) "(#ctx & seal_tok & key_tok & hash_tok & hon)".
 iMod (sessionGS_alloc _) as (?) "sess_tok".
 iApply (wp_game) => //; try by iFrame.
 iApply wp_mkchan.

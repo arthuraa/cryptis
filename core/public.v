@@ -14,21 +14,21 @@ Unset Printing Implicit Defensive.
 Class publicGpreS Σ := PublicGPreS {
   publicGpreS_nonce : savedPredG Σ term;
   publicGpreS_key   : savedPredG Σ (key_type * term);
-  publicGpreS_enc   : savedPredG Σ (term * term);
+  publicGpreS_seal  : savedPredG Σ (term * term);
   (* TODO: Replace this with metaGS *)
   publicGpreS_maps  : inG Σ (reservation_mapR (agreeR positiveO));
 }.
 
 Local Existing Instance publicGpreS_nonce.
 Local Existing Instance publicGpreS_key.
-Local Existing Instance publicGpreS_enc.
+Local Existing Instance publicGpreS_seal.
 Local Existing Instance publicGpreS_maps.
 
 Class publicGS Σ := PublicGS {
   public_inG : publicGpreS Σ;
   public_key_name   : gname;
   public_hash_name  : gname;
-  public_enc_name   : gname;
+  public_seal_name  : gname;
 }.
 
 Global Existing Instance public_inG.
@@ -69,37 +69,37 @@ Definition dh_pred (t t' : term) : iProp :=
 Global Instance Persistent_dh_pred t t' : Persistent (dh_pred t t').
 Proof. case: t => *; apply _. Qed.
 
-Definition enc_pred N Φ : iProp :=
-  ∃ γ, own public_enc_name (namespace_map_data N (to_agree γ)) ∧
+Definition seal_pred N Φ : iProp :=
+  ∃ γ, own public_seal_name (namespace_map_data N (to_agree γ)) ∧
        saved_pred_own γ DfracDiscarded (fun '(k, t) => Φ k t).
 
-Definition enc_pred_token E :=
-  own public_enc_name (reservation_map_token E).
+Definition seal_pred_token E :=
+  own public_seal_name (reservation_map_token E).
 
-Lemma enc_pred_token_difference E1 E2 :
+Lemma seal_pred_token_difference E1 E2 :
   E1 ⊆ E2 →
-  enc_pred_token E2 ⊣⊢ enc_pred_token E1 ∗ enc_pred_token (E2 ∖ E1).
+  seal_pred_token E2 ⊣⊢ seal_pred_token E1 ∗ seal_pred_token (E2 ∖ E1).
 Proof.
-move=> sub; rewrite /enc_pred_token.
+move=> sub; rewrite /seal_pred_token.
 by rewrite (reservation_map_token_difference E1 E2) // own_op.
 Qed.
 
-Lemma enc_pred_token_drop E1 E2 :
+Lemma seal_pred_token_drop E1 E2 :
   E1 ⊆ E2 →
-  enc_pred_token E2 -∗
-  enc_pred_token E1.
+  seal_pred_token E2 -∗
+  seal_pred_token E1.
 Proof.
 iIntros (sub) "t".
-rewrite enc_pred_token_difference //.
+rewrite seal_pred_token_difference //.
 by iDestruct "t" as "[t _]".
 Qed.
 
-Global Instance enc_pred_persistent N Φ : Persistent (enc_pred N Φ).
+Global Instance seal_pred_persistent N Φ : Persistent (seal_pred N Φ).
 Proof. apply _. Qed.
 
-Lemma enc_pred_agree k t N Φ1 Φ2 :
-  enc_pred N Φ1 -∗
-  enc_pred N Φ2 -∗
+Lemma seal_pred_agree k t N Φ1 Φ2 :
+  seal_pred N Φ1 -∗
+  seal_pred N Φ2 -∗
   ▷ (Φ1 k t ≡ Φ2 k t).
 Proof.
 iDestruct 1 as (γm1) "[#meta1 #own1]".
@@ -110,35 +110,35 @@ move=> /to_agree_op_inv_L ->.
 by iApply (saved_pred_agree _ _ _ _ _ (k, t) with "own1 own2").
 Qed.
 
-Lemma enc_pred_set E (N : namespace) Φ :
+Lemma seal_pred_set E (N : namespace) Φ :
   ↑N ⊆ E →
-  enc_pred_token E ==∗
-  enc_pred N Φ ∗
-  enc_pred_token (E ∖ ↑N).
+  seal_pred_token E ==∗
+  seal_pred N Φ ∗
+  seal_pred_token (E ∖ ↑N).
 Proof.
 iIntros (?) "token".
 iMod (saved_pred_alloc (λ '(k, t), Φ k t) DfracDiscarded) as (γ) "own" => //.
-rewrite (@enc_pred_token_difference (↑N)) //.
+rewrite (@seal_pred_token_difference (↑N)) //.
 iDestruct "token" as "[token ?]".
 iMod (own_update with "token").
   eapply (namespace_map_alloc_update _ _ (to_agree γ)) => //.
 by iModIntro; iFrame; iExists γ; iSplit.
 Qed.
 
-Definition wf_enc k t : iProp :=
-  ∃ N t' Φ, ⌜t = Spec.tag N t'⌝ ∧ enc_pred N Φ ∧ □ ▷ Φ k t'.
+Definition wf_seal k t : iProp :=
+  ∃ N t' Φ, ⌜t = Spec.tag N t'⌝ ∧ seal_pred N Φ ∧ □ ▷ Φ k t'.
 
-Global Instance wf_enc_persistent k t : Persistent (wf_enc k t).
+Global Instance wf_seal_persistent k t : Persistent (wf_seal k t).
 Proof. by apply _. Qed.
 
-Lemma wf_enc_elim k N t Φ :
-  wf_enc k (Spec.tag N t) -∗
-  enc_pred N Φ -∗
+Lemma wf_seal_elim k N t Φ :
+  wf_seal k (Spec.tag N t) -∗
+  seal_pred N Φ -∗
   □ ▷ Φ k t.
 Proof.
 iDestruct 1 as (N' t' Φ') "(%t_t' & #HΦ' & #inv)"; iIntros "#HΦ".
 case/Spec.tag_inj: t_t' => <- <-.
-iPoseProof (enc_pred_agree k t with "HΦ HΦ'") as "e".
+iPoseProof (seal_pred_agree k t with "HΦ HΦ'") as "e".
 by iIntros "!> !>"; iRewrite "e".
 Qed.
 
@@ -295,7 +295,7 @@ Inductive decompose (T : gset term) (t : term) : Prop :=
 
 | DKey kt t' of T = {[t']} & t = TKey kt t'
 
-| DEnc k t' of T = {[k; t']} & t = TEnc k t'
+| DSeal k t' of T = {[k; t']} & t = TSeal k t'
 
 | DHash t' of T = {[t']} & t = THash t'
 
@@ -311,8 +311,8 @@ case.
 - move=> kt ? -> -> /elem_of_singleton ->.
   rewrite [tsize (TKey _ _)]tsize_eq; lia.
 - move=> ?? -> -> /elem_of_union [] /elem_of_singleton ->;
-  rewrite ?[tsize (TKey _ _)]tsize_eq [tsize (TEnc _ _)]tsize_eq -ssrnat.plusE;
-  lia.
+  rewrite ?[tsize (TKey _ _)]tsize_eq [tsize (TSeal _ _)]tsize_eq
+    -ssrnat.plusE; lia.
 - move=> ? -> -> /elem_of_singleton ->; rewrite [tsize (THash _)]tsize_eq; lia.
 - move=> t1 t2 -> _ ->.
   rewrite tsize_TExpN /= -ssrnat.plusE /=.
@@ -329,9 +329,9 @@ Fixpoint public_aux n t : iProp :=
        | TNonce a => pnonce a
        | TKey kt t => wf_key kt t
        | THash t => wf_hash t
-       | TEnc (TKey Enc k) t =>
-         wf_enc k t ∧ □ (public_aux n (TKey Dec k) → public_aux n t)
-       | TEnc _ t => True
+       | TSeal (TKey Seal k) t =>
+         wf_seal k t ∧ □ (public_aux n (TKey Open k) → public_aux n t)
+       | TSeal _ t => True
        | TExpN' _ _ _ => [∗ list] t' ∈ exps t, dh_pred t' t
        | _ => False
        end%I
@@ -372,7 +372,7 @@ apply: bi.or_proper.
   rewrite (IH n) ?(IH m) //; lia.
 - case: (t) t_n e_st => //= k.
   case: k => //= - [] //= k t'.
-  rewrite tsize_eq (tsize_eq (TKey Enc k)) -ssrnat.plusE => t_n e_st.
+  rewrite tsize_eq (tsize_eq (TKey Seal k)) -ssrnat.plusE => t_n e_st.
   apply: bi.and_proper => //.
   rewrite !(IH n) ?(IH m) // ?[tsize (TKey _ _)]tsize_eq /=; try lia.
 Qed.
@@ -386,8 +386,8 @@ Lemma public_eq t :
        | TNonce a => pnonce a
        | TKey kt t => wf_key kt t
        | THash t => wf_hash t
-       | TEnc (TKey Enc k) t => wf_enc k t ∧ □ (public (TKey Dec k) → public t)
-       | TEnc _ t => True
+       | TSeal (TKey Seal k) t => wf_seal k t ∧ □ (public (TKey Open k) → public t)
+       | TSeal _ t => True
        | TExpN' _ _ _ => [∗ list] t' ∈ exps t, dh_pred t' t
        | _ => False
        end%I
@@ -472,17 +472,17 @@ apply: (anti_symm _).
   by rewrite minted_TKey.
 Qed.
 
-Lemma public_TEnc k t :
-  public (TEnc k t) ⊣⊢
+Lemma public_TSeal k t :
+  public (TSeal k t) ⊣⊢
   public k ∧ public t ∨
-  minted (TEnc k t) ∧
+  minted (TSeal k t) ∧
   match k with
-  | TKey Enc k' => wf_enc k' t ∧ □ (public (TKey Dec k') → public t)
+  | TKey Seal k' => wf_seal k' t ∧ □ (public (TKey Open k') → public t)
   | _ => True
   end.
 Proof.
 apply: (anti_symm _).
-- rewrite public_eq minted_TEnc.
+- rewrite public_eq minted_TSeal.
   iDestruct 1 as "[[Hk Ht] publ]".
   iDestruct "publ" as "[publ | publ]".
   + iDestruct "publ" as (T) "[%dec ?]".
@@ -491,12 +491,12 @@ apply: (anti_symm _).
   + iRight. iSplit; first by eauto.
     case: k => // - [] k; eauto.
 - iDestruct 1 as "[#[Hk Ht] | (#Ht & inv)]".
-  { rewrite [public (TEnc _ _)]public_eq minted_TEnc.
+  { rewrite [public (TSeal _ _)]public_eq minted_TSeal.
     rewrite -!public_minted.
     iSplit; eauto; iLeft.
     iExists {[k; t]}; rewrite big_sepS_union_pers !big_sepS_singleton.
     iSplit; eauto; iPureIntro; by econstructor. }
-  rewrite [public (TEnc _ _)]public_eq; iSplit => //. by eauto.
+  rewrite [public (TSeal _ _)]public_eq; iSplit => //. by eauto.
 Qed.
 
 Lemma public_THash t :
@@ -716,59 +716,59 @@ Qed.
 Lemma public_derive_key t : public (Spec.derive_key t) ⊣⊢ public t.
 Proof. exact: public_tag. Qed.
 
-Lemma public_TEncE N Φ k t :
-  public (TEnc (TKey Enc k) (Spec.tag N t)) -∗
-  enc_pred N Φ -∗
-  public (TKey Enc k) ∧ public t ∨
-  □ ▷ Φ k t ∧ minted t ∧ □ (public (TKey Dec k) → public t).
+Lemma public_TSealE N Φ k t :
+  public (TSeal (TKey Seal k) (Spec.tag N t)) -∗
+  seal_pred N Φ -∗
+  public (TKey Seal k) ∧ public t ∨
+  □ ▷ Φ k t ∧ minted t ∧ □ (public (TKey Open k) → public t).
 Proof.
-iIntros "#Ht #HΦ"; rewrite public_TEnc -(public_tag N t).
+iIntros "#Ht #HΦ"; rewrite public_TSeal -(public_tag N t).
 iDestruct "Ht" as "[[? Ht] | Ht]"; first by eauto.
-rewrite minted_TEnc minted_tag.
+rewrite minted_TSeal minted_tag.
 iDestruct "Ht" as "([??] & inv & ?)".
-iRight; iSplit; eauto; by iApply wf_enc_elim.
+iRight; iSplit; eauto; by iApply wf_seal_elim.
 Qed.
 
-Lemma public_TEncI N Φ k t :
-  enc_pred N Φ -∗
+Lemma public_TSealI N Φ k t :
+  seal_pred N Φ -∗
   minted k -∗
   minted t -∗
   (∀ k',
-    ⌜k = TKey Enc k'⌝ -∗
+    ⌜k = TKey Seal k'⌝ -∗
     □ Φ k' t ∗
-    □ (public (TKey Dec k') → public t)) -∗
-  public (TEnc k (Spec.tag N t)).
+    □ (public (TKey Open k') → public t)) -∗
+  public (TSeal k (Spec.tag N t)).
 Proof.
-iIntros "#HΦ #m_k #m_t Henc".
-rewrite public_TEnc minted_TEnc minted_tag.
+iIntros "#HΦ #m_k #m_t Hseal".
+rewrite public_TSeal minted_TSeal minted_tag.
 iRight. do !iSplit => //.
 case: k => //; case=> // k.
-iDestruct ("Henc" $! k with "[//]") as "[#H1 #H2]".
+iDestruct ("Hseal" $! k with "[//]") as "[#H1 #H2]".
 rewrite public_tag; iSplit => //.
 iExists N, t, Φ; eauto.
 Qed.
 
-Lemma public_TEncIS N Φ k t :
-  minted (TKey Enc k) -∗
-  enc_pred N Φ -∗
+Lemma public_TSealIS N Φ k t :
+  minted (TKey Seal k) -∗
+  seal_pred N Φ -∗
   □ Φ k t -∗
   minted t -∗
-  □ (public (TKey Dec k) → public t) -∗
-  public (TEnc (TKey Enc k) (Spec.tag N t)).
+  □ (public (TKey Open k) → public t) -∗
+  public (TSeal (TKey Seal k) (Spec.tag N t)).
 Proof.
-iIntros "#Henc #HΦ #HΦt #Ht #Hdecl".
-rewrite public_TEnc; iRight.
-rewrite minted_TEnc minted_tag.
+iIntros "#Hseal #HΦ #HΦt #Ht #Hopenl".
+rewrite public_TSeal; iRight.
+rewrite minted_TSeal minted_tag.
 iSplit; first by rewrite minted_TKey; eauto.
 rewrite public_tag. iSplit; eauto.
 iExists N, t, Φ; eauto.
 Qed.
 
-Lemma public_TEncIP k t :
+Lemma public_TSealIP k t :
   public k -∗
   public t -∗
-  public (TEnc k t).
-Proof. by iIntros "? ?"; rewrite public_TEnc; eauto. Qed.
+  public (TSeal k t).
+Proof. by iIntros "? ?"; rewrite public_TSeal; eauto. Qed.
 
 Lemma nonce_alloc P Q a :
   meta_token a ⊤ -∗
@@ -812,8 +812,8 @@ Qed.
 
 Definition public_ctx : iProp :=
   key_pred (nroot.@"keys".@"sym") (λ _  _, False%I) ∗
-  key_pred (nroot.@"keys".@"enc") (λ kt _, ⌜kt = Enc⌝)%I ∗
-  key_pred (nroot.@"keys".@"sig") (λ kt _, ⌜kt = Dec⌝)%I.
+  key_pred (nroot.@"keys".@"enc") (λ kt _, ⌜kt = Seal⌝)%I ∗
+  key_pred (nroot.@"keys".@"sig") (λ kt _, ⌜kt = Open⌝)%I.
 
 #[global]
 Instance public_ctx_persistent : Persistent public_ctx.
@@ -871,7 +871,7 @@ Qed.
 Lemma public_enc_key kt k :
   ctx -∗
   public (TKey kt (Spec.tag (nroot.@"keys".@"enc") k)) ↔
-  minted k ∧ ◇ (⌜kt = Enc⌝ ∨ public k).
+  minted k ∧ ◇ (⌜kt = Seal⌝ ∨ public k).
 Proof.
 iIntros "ctx".
 iDestruct (has_public_ctx with "ctx") as "(_ & #enc & _)".
@@ -894,7 +894,7 @@ Qed.
 Lemma public_sig_key kt k :
   ctx -∗
   public (TKey kt (Spec.tag (nroot.@"keys".@"sig") k)) ↔
-  minted k ∧ ◇ (⌜kt = Dec⌝ ∨ public k).
+  minted k ∧ ◇ (⌜kt = Open⌝ ∨ public k).
 Proof.
 iIntros "ctx".
 iDestruct (has_public_ctx with "ctx") as "(_ & _ & #sig)".
@@ -914,21 +914,9 @@ iSplit.
   + by iLeft.
 Qed.
 
-Lemma public_mkskey k :
-  ctx -∗
-  public (Spec.mkskey k) ↔ minted k ∧ ◇ public k.
-Proof.
-iIntros "#ctx".
-iDestruct (has_public_ctx with "ctx") as "#(sym & _)".
-rewrite public_TPair. iSplit.
-- iIntros "[#p_k _]".
-  by iApply (public_sym_key with "[//] p_k").
-- by iIntros "#?"; iSplit; iApply (public_sym_key with "[//]").
-Qed.
-
 Lemma public_enc_keyE k :
   ctx -∗
-  public (TKey Dec (Spec.tag (nroot.@"keys".@"enc") k)) -∗
+  public (TKey Open (Spec.tag (nroot.@"keys".@"enc") k)) -∗
   ◇ public k.
 Proof.
 iIntros "#ctx #p_k".
@@ -939,7 +927,7 @@ Qed.
 
 Lemma public_sig_keyE k :
   ctx -∗
-  public (TKey Enc (Spec.tag (nroot.@"keys".@"sig") k)) -∗
+  public (TKey Seal (Spec.tag (nroot.@"keys".@"sig") k)) -∗
   ◇ public k.
 Proof.
 iIntros "#ctx #p_k".
@@ -950,10 +938,10 @@ Qed.
 
 End Public.
 
-Arguments public_enc_name {Σ _}.
-Arguments enc_pred {Σ _} N Φ.
-Arguments enc_pred_set {Σ _ _} N Φ.
-Arguments enc_pred_token_difference {Σ _} E1 E2.
+Arguments public_seal_name {Σ _}.
+Arguments seal_pred {Σ _} N Φ.
+Arguments seal_pred_set {Σ _ _} N Φ.
+Arguments seal_pred_token_difference {Σ _} E1 E2.
 Arguments public_hash_name {Σ _}.
 Arguments hash_pred {Σ _} N P.
 Arguments hash_pred_set {Σ _ _} N P.
@@ -967,28 +955,28 @@ Lemma publicGS_alloc `{!heapGS Σ} E :
   publicGpreS Σ →
   ⊢ |={E}=> ∃ (H : publicGS Σ),
              public_ctx ∗
-             enc_pred_token ⊤ ∗
+             seal_pred_token ⊤ ∗
              key_pred_token (⊤ ∖ ↑nroot.@"keys") ∗
              hash_pred_token ⊤.
 Proof.
 move=> ?; iStartProof.
-iMod (own_alloc (reservation_map_token ⊤)) as (γ_enc) "own_enc".
+iMod (own_alloc (reservation_map_token ⊤)) as (γ_seal) "own_seal".
   apply reservation_map_token_valid.
 iMod (own_alloc (reservation_map_token ⊤)) as (γ_key) "own_key".
   apply reservation_map_token_valid.
 iMod (own_alloc (reservation_map_token ⊤)) as (γ_hash) "own_hash".
   apply reservation_map_token_valid.
-pose (H := PublicGS _ γ_enc γ_key γ_hash).
+pose (H := PublicGS _ γ_seal γ_key γ_hash).
 iExists H. iFrame.
-iAssert (key_pred_token ⊤) with "[own_enc]" as "token".
+iAssert (key_pred_token ⊤) with "[own_seal]" as "token".
   by iFrame.
 rewrite (key_pred_token_difference (↑nroot.@"keys")) //.
 iDestruct "token" as "[token ?]"; iFrame.
 iMod (key_pred_set (nroot.@"keys".@"sym") (λ _ _, False%I) with "token")
     as "[#? token]"; try solve_ndisj.
-iMod (key_pred_set (nroot.@"keys".@"enc") (λ kt _, ⌜kt = Enc⌝)%I with "token")
+iMod (key_pred_set (nroot.@"keys".@"enc") (λ kt _, ⌜kt = Seal⌝)%I with "token")
     as "[#? token]"; try solve_ndisj.
-iMod (key_pred_set (nroot.@"keys".@"sig") (λ kt _, ⌜kt = Dec⌝)%I with "token")
+iMod (key_pred_set (nroot.@"keys".@"sig") (λ kt _, ⌜kt = Open⌝)%I with "token")
     as "[#? token]"; try solve_ndisj.
 iModIntro. rewrite /public_ctx. eauto.
 Qed.

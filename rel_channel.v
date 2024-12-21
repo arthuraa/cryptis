@@ -36,10 +36,10 @@ Definition channel_state_frag k ts : iProp :=
   ∃ γ, term_meta k (N.@"channel") γ ∗ own γ (◯ to_max_prefix_list ts).
 
 Definition rel_channel_send k l ts : iProp :=
-  l ↦ #(length ts) ∗ minted (TKey Enc k) ∗ channel_state_auth k ts.
+  l ↦ #(length ts) ∗ minted (TKey Seal k) ∗ channel_state_auth k ts.
 
 Definition rel_channel_recv k l ts : iProp :=
-  l ↦ #(length ts) ∗ minted (TKey Dec k) ∗ channel_state_frag k ts.
+  l ↦ #(length ts) ∗ minted (TKey Open k) ∗ channel_state_frag k ts.
 
 Definition rel_channel_pred k t : iProp :=
   ∃ ts m γ, ⌜t = Spec.of_list [TInt (length ts); m]⌝ ∧
@@ -49,12 +49,12 @@ Definition rel_channel_pred k t : iProp :=
 Definition rel_send : val := λ: "c" "k" "l" "m",
   let: "n" := !"l" in
   "l" <- "n" + #1;;
-  send "c" (tenc N "k" (term_of_list [tint "n"; "m"])).
+  send "c" (senc N "k" (term_of_list [tint "n"; "m"])).
 
 Definition rel_recv : val := rec: "loop" "c" "k" "l" :=
   let: "m" :=
     let: "m" := recv "c" in
-    bind: "m" := tdec N "k" "m" in
+    bind: "m" := sdec N "k" "m" in
     bind: "m" := list_of_term "m" in
     list_match: ["n"; "m"] := "m" in
     bind: "n" := to_int "n" in
@@ -67,14 +67,14 @@ Definition rel_recv : val := rec: "loop" "c" "k" "l" :=
 
 Lemma wp_rel_send c k l m ts Ψ :
   channel c -∗
-  enc_pred N rel_channel_pred -∗
+  seal_pred N rel_channel_pred -∗
   rel_channel_send k l ts -∗
   minted m -∗
-  □ (public (TKey Dec k) → public m) -∗
+  □ (public (TKey Open k) → public m) -∗
   (rel_channel_send k l (ts ++ [m]) -∗ Ψ #()) -∗
-  WP rel_send c (TKey Enc k) #l m {{ Ψ }}.
+  WP rel_send c k #l m {{ Ψ }}.
 Proof.
-iIntros "#chan_c #enc (Hl & #s_k & %γ & #k_γ & auth) #s_m #p_m post".
+iIntros "#chan_c #seal (Hl & #s_k & %γ & #k_γ & auth) #s_m #p_m post".
 iMod (own_update with "auth") as "auth".
 { apply auth_update.
   apply (max_prefix_list_local_update _ (ts ++ [m])).
@@ -83,9 +83,9 @@ iAssert (own γ (◯ to_max_prefix_list (ts ++ [m]))) with "[auth]" as "#frag".
 { by iDestruct "auth" as "[??]". }
 rewrite /rel_send. wp_pures; wp_load; wp_pures; wp_store.
 wp_list. wp_bind (tint _). iApply wp_tint. wp_list.
-wp_term_of_list. wp_tenc. iApply wp_send => //.
+wp_term_of_list. wp_apply wp_senc. iApply wp_send => //.
   iModIntro => /=.
-  iApply public_TEncIS => //.
+  iApply public_TSealIS => //.
   - iModIntro. iExists ts, m, γ. do 2!iSplit => //.
     by rewrite minted_of_list /= minted_TInt; eauto.
   - iIntros "!> #p_k".
@@ -100,18 +100,18 @@ Tactic Notation "retry" constr(IH) constr(Hl) :=
 
 Lemma wp_rel_recv c k l ts Ψ :
   channel c -∗
-  enc_pred N rel_channel_pred -∗
+  seal_pred N rel_channel_pred -∗
   rel_channel_recv k l ts -∗
-  (∀ m, public m ∧ public (TKey Enc k) ∨
+  (∀ m, public m ∧ public (TKey Seal k) ∨
         minted m ∧
-        □ (public (TKey Dec k) -∗ public m) ∧
+        □ (public (TKey Open k) -∗ public m) ∧
         rel_channel_recv k l (ts ++ [m]) -∗ Ψ m) -∗
-  WP rel_recv c (TKey Dec k) #l {{ Ψ }}.
+  WP rel_recv c k #l {{ Ψ }}.
 Proof.
-iIntros "#chan_c #enc (Hl & #s_k & %γ & #k_γ & #frag) post".
+iIntros "#chan_c #seal (Hl & #s_k & %γ & #k_γ & #frag) post".
 iLöb as "IH". wp_rec. wp_pures.
 wp_bind (recv _). iApply wp_recv => //. iIntros "%m #p_m".
-wp_pures. wp_tdec m; last by retry "IH" "Hl".
+wp_pures. wp_sdec m; last by retry "IH" "Hl".
 wp_pures. wp_list_of_term m; last by retry "IH" "Hl".
 wp_pures. rewrite !subst_list_match /=.
 wp_list_match => [ n {}m ->|_]; last by retry "IH" "Hl".
@@ -119,7 +119,7 @@ wp_bind (to_int _). iApply wp_to_int.
 case: Spec.to_intP => [ {}n ->|_]; last by retry "IH" "Hl".
 wp_pures. wp_load. wp_pures.
 case: bool_decide_reflect => [[<- {n}]|_]; last by retry "IH" "Hl".
-iDestruct (public_TEncE with "p_m [//]") as "{p_m IH} [[p_k p_m] |H]".
+iDestruct (public_TSealE with "p_m [//]") as "{p_m IH} [[p_k p_m] |H]".
   rewrite public_of_list /=.
   iDestruct "p_m" as "(_ & p_m & _)".
   wp_pures. wp_load. wp_pures. wp_store. wp_pures. iModIntro.

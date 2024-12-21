@@ -28,14 +28,14 @@ Lemma public_msg1I n kI kR nI :
   session_weak' N kI kR nI n -∗
   minted nI -∗
   □ is_priv_key nI kI kR -∗
-  public (TKey Enc kI) -∗
-  public (TKey Enc kR) -∗
-  public (TEnc (TKey Enc kR) (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Enc kI]))).
+  public (TKey Seal kI) -∗
+  public (TKey Seal kR) -∗
+  public (TSeal (TKey Seal kR) (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Seal kI]))).
 Proof.
 rewrite /=.
 iIntros "(_ & #m1P & _ & _) #meta #s_nI #p_nI #p_ekI #p_ekR".
 iPoseProof (mk_key_share_secret_of with "s_nI p_nI") as "p_sI".
-iApply public_TEncIS; eauto.
+iApply public_TSealIS; eauto.
 - iModIntro. iExists (mk_key_share nI), kI. do !iSplit => //.
   + iIntros "!> #?". iApply "p_sI". by eauto.
   + iRight. by iExists n, nI; eauto.
@@ -47,11 +47,11 @@ Qed.
 Lemma public_msg2E kI kR sI sR :
   pk_auth_ctx N -∗
   secret_of sI kI kR -∗
-  public (TEnc (TKey Enc kI) (Spec.tag (N.@"m2") (Spec.of_list [sI; sR; TKey Enc kR]))) -∗
+  public (TSeal (TKey Seal kI) (Spec.tag (N.@"m2") (Spec.of_list [sI; sR; TKey Seal kR]))) -∗
   ▷ (minted sR ∧ secret_of sR kI kR ∧ resp_accepted N kI kR sI sR).
 Proof.
 iIntros "(_ & _ & #m2P & _) #started #p_m2".
-iPoseProof (public_TEncE with "p_m2 m2P") as "{p_m2} [p_m2 | p_m2]".
+iPoseProof (public_TSealE with "p_m2 m2P") as "{p_m2} [p_m2 | p_m2]".
 - rewrite public_of_list /=.
   iDestruct "p_m2" as "(? & p_sI & p_sR & _ & _)".
   iSpecialize ("started" with "p_sI").
@@ -130,14 +130,14 @@ Qed.
 
 Lemma public_msg3I kI kR sI sR :
   pk_auth_ctx N -∗
-  public (TKey Enc kR) -∗
+  public (TKey Seal kR) -∗
   minted sR -∗
   secret_of sR kI kR -∗
   init_finished N kR sR -∗
-  public (TEnc (TKey Enc kR) (Spec.tag (N.@"m3") sR)).
+  public (TSeal (TKey Seal kR) (Spec.tag (N.@"m3") sR)).
 Proof.
 iIntros "(_ & _ & _ & #p_m3) #p_eR #s_sR #p_sR #finished".
-iApply public_TEncIS; eauto.
+iApply public_TSealIS; eauto.
 iIntros "!> #p_dkR". iApply "p_sR". by iRight.
 Qed.
 
@@ -148,12 +148,12 @@ Lemma wp_pk_auth_init c kI kR dq n T :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
-  public (TKey Enc kI) -∗
-  public (TKey Enc kR) -∗
+  public (TKey Seal kI) -∗
+  public (TKey Seal kR) -∗
   honest n T -∗
   {{{ init_confirm kI kR ∗ ●Ph{dq} n }}}
     pk_auth_init N c mk_key_share_impl (mk_session_key_impl Init)
-    (TKey Dec kI) (TKey Enc kI) (TKey Enc kR)
+    kI (TKey Seal kR)
   {{{ okS, RET (repr okS);
       ●Ph{dq} n ∗
       if okS is Some kS then
@@ -168,7 +168,8 @@ Lemma wp_pk_auth_init c kI kR dq n T :
 Proof.
 rewrite /pk_auth_init /in_honest bool_decide_decide.
 iIntros "#chan_c #ctx #ctx' #p_kI #p_kR #hon %Ψ !> [confirm phase] Hpost".
-wp_pures. wp_bind (mk_key_share_impl _).
+wp_pures. wp_apply wp_pkey. wp_pures.
+wp_bind (mk_key_share_impl _).
 iApply (wp_mk_key_share kI kR) => //.
 iIntros "!> %nI (#s_nI & #p_nI & token)".
 rewrite (term_token_difference _ (↑N.@"success")); eauto.
@@ -177,11 +178,11 @@ iMod (session_weak'_set N kI kR _ _ with "[#] token_succ") as "#sess".
   by iApply phase_auth_frag.
 wp_pures.
 iPoseProof (mk_key_share_secret_of with "s_nI p_nI") as "p_sI".
-wp_list. wp_term_of_list. wp_tenc => /=. wp_pures.
+wp_list. wp_term_of_list. wp_apply wp_aenc. wp_pures.
 wp_bind (send _ _). iApply (wp_send with "[] [#]"); eauto.
   by iApply (public_msg1I with "[]"); eauto.
 wp_pures. wp_bind (recv _). iApply wp_recv; eauto.
-iIntros "%m2 #p_m2". wp_tdec m2; last protocol_failure.
+iIntros "%m2 #p_m2". wp_adec m2; last protocol_failure.
 wp_list_of_term m2; last protocol_failure.
 wp_list_match => [sI' sR pkR' {m2} ->|_]; last protocol_failure.
 wp_eq_term e; last protocol_failure; subst sI'.
@@ -192,7 +193,7 @@ wp_pures.
 iMod (init_finish with "ctx' phase sess s_nI p_nI p_sR accepted token confirm")
   as "(phase & #confirmed & #sess_weak & #finished & session)"; eauto.
 wp_bind (mk_session_key_impl _ _ _). iApply wp_mk_session_key => //.
-iIntros "!> _". wp_pures. wp_tenc. wp_pures. wp_bind (send _ _).
+iIntros "!> _". wp_pures. wp_apply wp_aenc. wp_pures. wp_bind (send _ _).
 iApply wp_send => //.
   by iApply public_msg3I.
 case: decide => [[kIP kRP]|_]; last first.

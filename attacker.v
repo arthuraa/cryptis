@@ -22,6 +22,7 @@ Implicit Types (T S : val → iProp).
 
 Inductive type :=
 | Pub
+(* TODO: Use all key types *)
 | EK
 | DK
 | Int
@@ -41,11 +42,11 @@ Definition Option τ := Sum Unit τ.
 Definition pub_type v : iProp :=
   ∃ t, ⌜v = t⌝ ∧ public t.
 
-Definition ek_type v : iProp :=
-  ∃ k, ⌜v = TKey Enc k⌝ ∧ public (TKey Enc k).
+Definition seal_key_type v : iProp :=
+  ∃ k, ⌜v = TKey Seal k⌝ ∧ public (TKey Seal k).
 
-Definition dk_type v : iProp :=
-  ∃ k, ⌜v = TKey Dec k⌝ ∧ public (TKey Dec k).
+Definition open_key_type v : iProp :=
+  ∃ k, ⌜v = TKey Open k⌝ ∧ public (TKey Open k).
 
 Definition int_type v : iProp :=
   ∃ n : Z, ⌜v = #n⌝.
@@ -78,8 +79,8 @@ Reserved Notation "⟦ x ⟧ᵥ" (at level 0, format "⟦ x ⟧ᵥ").
 Fixpoint type_den τ : val → iProp :=
   match τ with
   | Pub => pub_type
-  | EK => ek_type
-  | DK => dk_type
+  | EK => seal_key_type
+  | DK => open_key_type
   | Int => int_type
   | Bool => bool_type
   | Unit => unit_type
@@ -261,13 +262,13 @@ iApply wp_mkkeys; iExists _, _; do 2!iSplit => //=.
 - iExists _; iSplit => //; rewrite public_TKey; eauto.
 Qed.
 
-Lemma has_type_to_ek Γ e :
+Lemma has_type_to_seal_key Γ e :
   has_type Γ e Pub -∗
-  has_type Γ (to_ek e) (Option EK).
+  has_type Γ (to_seal_key e) (Option EK).
 Proof.
 iIntros "eP"; iApply (has_type_app with "eP").
 iApply has_type_val.
-rewrite /to_ek /=.
+rewrite /to_seal_key /=.
 iIntros "!>"; iDestruct 1 as (t) "[-> #tP]".
 wp_pures; wp_bind (is_key _); iApply wp_is_key.
 case: Spec.is_keyP => [[|] k ->|_]; wp_pures.
@@ -276,13 +277,13 @@ case: Spec.is_keyP => [[|] k ->|_]; wp_pures.
 - iApply sum_typeIL; iApply unit_typeI.
 Qed.
 
-Lemma has_type_to_dk Γ e :
+Lemma has_type_to_open_key Γ e :
   has_type Γ e Pub -∗
-  has_type Γ (to_dk e) (Option DK).
+  has_type Γ (to_open_key e) (Option DK).
 Proof.
 iIntros "eP"; iApply (has_type_app with "eP").
 iApply has_type_val.
-rewrite /to_dk /=.
+rewrite /to_open_key /=.
 iIntros "!>"; iDestruct 1 as (t) "[-> #tP]".
 wp_pures; wp_bind (is_key _); iApply wp_is_key.
 case: Spec.is_keyP => [[|] k ->|_]; wp_pures.
@@ -353,38 +354,38 @@ iApply wp_hash; iExists _; iSplit => //.
 by rewrite public_THash; iLeft.
 Qed.
 
-Lemma has_type_enc Γ e1 e2 :
+Lemma has_type_seal Γ e1 e2 :
   has_type Γ e1 EK -∗
   has_type Γ e2 Pub -∗
-  has_type Γ (enc e1 e2) Pub.
+  has_type Γ (seal e1 e2) Pub.
 Proof.
 iIntros "#e1P #e2P !> %vs #? #vsP /=".
 wp_bind (subst_map _ e2); iApply wp_wand; first iApply "e2P" => //.
 iIntros "%v2"; iDestruct 1 as (t2) "[-> #t2P]".
 wp_bind (subst_map _ e1); iApply wp_wand; first iApply "e1P" => //.
 iIntros "%v1"; iDestruct 1 as (t1) "[-> #t1P]".
-iApply wp_enc; iExists _; iSplit => //=.
-by rewrite public_TEnc; eauto.
+iApply wp_seal; iExists _; iSplit => //=.
+by rewrite public_TSeal; eauto.
 Qed.
 
-Lemma has_type_dec Γ e1 e2 :
+Lemma has_type_open Γ e1 e2 :
   has_type Γ e1 DK -∗
   has_type Γ e2 Pub -∗
-  has_type Γ (dec e1 e2) (Option Pub).
+  has_type Γ (open e1 e2) (Option Pub).
 Proof.
 iIntros "#e1P #e2P !> %vs #? #vsP /=".
 wp_bind (subst_map _ e2); iApply wp_wand; first iApply "e2P" => //.
 iIntros "%v2"; iDestruct 1 as (t2) "[-> #t2P]".
 wp_bind (subst_map _ e1); iApply wp_wand; first iApply "e1P" => //.
 iIntros "%v1"; iDestruct 1 as (t1) "[-> #t1P]".
-iApply wp_dec => /=.
+iApply wp_open => /=.
 case: t2; try by move => *; iApply sum_typeIL.
 move=> t1' t2'.
 case: t1'; try by move=> *; iApply sum_typeIL.
 case=> t1'; last by iApply sum_typeIL.
 case: decide => [->|?]; last by iApply sum_typeIL.
 iApply sum_typeIR; iApply pub_typeI.
-rewrite [public (TEnc _ _)]public_TEnc.
+rewrite [public (TSeal _ _)]public_TSeal.
 iDestruct "t2P" as "[[_ ?]|(_ & _ & #t2P)]" => //.
 by iApply "t2P".
 Qed.

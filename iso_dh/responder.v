@@ -24,15 +24,16 @@ Implicit Types (si : sess_info).
 
 Variable N : namespace.
 
-Definition responder : val := λ: "c" "vkR" "skR",
+Definition responder : val := λ: "c" "skR",
+  let: "vkR" := vkey "skR" in
   let: "m1" := recv "c" in
   bind: "m1" := list_of_term "m1" in
   list_match: ["ga"; "vkI"] := "m1" in
   let: "b" := mknonce #() in
   let: "gb" := mkkeyshare "b" in
-  let: "m2" := tenc (N.@"m2") "skR" (term_of_list ["ga"; "gb"; "vkI"]) in
+  let: "m2" := sign (N.@"m2") "skR" (term_of_list ["ga"; "gb"; "vkI"]) in
   send "c" "m2";;
-  bind: "m3" := tdec (N.@"m3") "vkI" (recv "c") in
+  bind: "m3" := verify (N.@"m3") "vkI" (recv "c") in
   bind: "m3" := list_of_term "m3" in
   list_match: ["ga'"; "gb'"; "vkR'"] := "m3" in
   guard: eq_term "ga" "ga'" && eq_term "gb" "gb'" && eq_term "vkR" "vkR'" in
@@ -47,15 +48,15 @@ Lemma wp_responder c kR dq n :
   channel c -∗
   cryptis_ctx -∗
   iso_dh_ctx N -∗
-  public (TKey Dec kR) -∗
+  public (TKey Open kR) -∗
   {{{ ●Ph{dq} n }}}
-    responder c (TKey Dec kR) (TKey Enc kR)
+    responder c kR
   {{{ okS,
       RET (repr okS);
       ●Ph{dq} n ∗
       if okS is Some (vkI, kS) then ∃ kI,
         let si := SessInfo kI kR kS n in
-        ⌜vkI = TKey Dec kI⌝ ∗
+        ⌜vkI = TKey Open kI⌝ ∗
         public vkI ∗
         minted kS ∗
         □ (∀ kt, public (TKey kt kS) ↔ ▷ session_fail si) ∗
@@ -65,7 +66,8 @@ Lemma wp_responder c kR dq n :
  }}}.
 Proof.
 iIntros "#chan_c #? (#? & #?) #p_vkR !> %Φ phase_auth Hpost".
-wp_lam. wp_pures. wp_bind (recv _). iApply wp_recv => //.
+wp_lam. wp_pures. wp_apply wp_vkey. wp_pures.
+wp_bind (recv _). iApply wp_recv => //.
 iIntros "%m1 #p_m1". wp_pures.
 wp_list_of_term m1; last by protocol_failure.
 wp_pures. wp_list_match => [ga vkI -> {m1}|]; last by protocol_failure.
@@ -76,8 +78,8 @@ iMod (minted_atI with "[] phase_auth m_ga")
   as "[phase_auth #ma_ga]"; eauto.
 wp_pures. wp_bind (mknonce _).
 iApply (wp_mknonce_freshN ∅
-          (λ _, (∃ kI, ⌜vkI = TKey Dec kI⌝ ∗ public_at n (TKey Enc kI)) ∨
-                public_at n (TKey Enc kR))%I
+          (λ _, (∃ kI, ⌜vkI = TKey Open kI⌝ ∗ public_at n (TKey Seal kI)) ∨
+                public_at n (TKey Seal kR))%I
           iso_dh_pred
           (λ b, {[Spec.derive_key (Spec.of_list [ga; TExp (TInt 0) b; TExp ga b])]}))
        => //.
@@ -106,7 +108,7 @@ iMod (escrowI cryptisN _ (term_token ga ⊤) (term_token kS (↑nroot.@"client")
     by iMod (term_meta_set nroot () with "token") as "#meta". }
 rewrite (term_token_difference _ (↑nroot.@"server") (_ ∖ _)); last solve_ndisj.
 iDestruct "token" as "[server token]".
-iMod (term_meta_set (nroot.@"info") (vkI, TKey Dec kR, n)
+iMod (term_meta_set (nroot.@"info") (vkI, TKey Open kR, n)
        with "token") as "#info".
   solve_ndisj.
 iAssert (public gb) as "#p_gb".
@@ -116,11 +118,12 @@ iAssert (public gb) as "#p_gb".
 wp_pure _ credit:"H1".
 wp_pure _ credit:"H2".
 wp_bind (mkkeyshare _). iApply wp_mkkeyshare => //.
-iIntros "!> _". wp_pures. wp_list. wp_term_of_list. wp_tenc.
+iIntros "!> _". wp_pures. wp_list. wp_term_of_list.
+wp_apply wp_sign. wp_pures.
 iPoseProof (phase_auth_frag with "phase_auth") as "#phaseR".
 wp_pures. wp_bind (send _ _). iApply wp_send => //.
 { iModIntro.
-  iApply public_TEncIS => //.
+  iApply public_TSealIS => //.
   - by rewrite public_minted !minted_TKey.
   - iModIntro.
     iExists ga, b, vkI, n.  by do ![iSplitL => //].
@@ -130,8 +133,8 @@ wp_pures. wp_bind (send _ _). iApply wp_send => //.
     by eauto. }
 wp_pures. wp_bind (recv _). iApply wp_recv => //.
 iIntros "%m3 #p_m3".
-wp_apply wp_tdec.
-case: Spec.tdecP; last by protocol_failure.
+wp_apply wp_verify.
+case: Spec.decP; last by protocol_failure.
 move=> kI {}m3 -> -> {vkI}.
 wp_pures. wp_list_of_term m3; last by protocol_failure.
 wp_list_match => [ga' gb' vkR' -> {m3}|]; last by protocol_failure.
@@ -141,7 +144,7 @@ wp_eq_term e; last by protocol_failure. subst vkR'.
 wp_pure _ credit:"H3".
 wp_bind (texp _ _). iApply wp_texp.
 wp_pure _ credit:"H4".
-iPoseProof (public_TEncE with "p_m3 [//]") as "{p_m3} p_m3".
+iPoseProof (public_TSealE with "p_m3 [//]") as "{p_m3} p_m3".
 rewrite public_of_list /=.
 wp_pures. wp_list. wp_term_of_list.
 wp_pures. rewrite -/seed -/kS. pose si := SessInfo kI kR kS n.
@@ -205,7 +208,7 @@ iAssert (□ (◇ public seed ↔ ▷ session_fail si))%I as "#sec_sk".
   - iPoseProof ("pred_a" with "contra") as ">%contra".
     by rewrite exps_TExpN in contra. }
 wp_apply wp_derive_key. wp_pures.
-iApply ("Hpost" $! (Some (TKey Dec kI, kS))).
+iApply ("Hpost" $! (Some (TKey Open kI, kS))).
 iFrame. iModIntro. iExists kI. do !iSplit => //.
 iIntros "!> %kt".
 iApply (bi.iff_trans _ (◇ public seed)); iSplit => //.

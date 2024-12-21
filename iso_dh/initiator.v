@@ -24,18 +24,19 @@ Implicit Types (si : sess_info).
 
 Variable N : namespace.
 
-Definition initiator : val := λ: "c" "vkI" "skI" "vkR",
+Definition initiator : val := λ: "c" "skI" "vkR",
+  let: "vkI"  := vkey "skI" in
   let: "a"    := mknonce #() in
   let: "ga"   := mkkeyshare "a" in
   let: "m1"   := term_of_list ["ga"; "vkI"] in
   send "c" "m1";;
-  bind: "m2"   := tdec (N.@"m2") "vkR" (recv "c") in
+  bind: "m2"   := verify (N.@"m2") "vkR" (recv "c") in
   bind: "m2"   := list_of_term "m2" in
   list_match: ["ga'"; "gb"; "vkI'"] := "m2" in
   guard: eq_term "ga" "ga'" && eq_term "vkI" "vkI'" in
   let: "gab" := texp "gb" "a" in
   let: "secret" := term_of_list ["ga"; "gb"; "gab"] in
-  let: "m3" := tenc (N.@"m3") "skI" (term_of_list ["ga"; "gb"; "vkR"]) in
+  let: "m3" := sign (N.@"m3") "skI" (term_of_list ["ga"; "gb"; "vkR"]) in
   send "c" "m3";;
   SOME (derive_key "secret").
 
@@ -46,10 +47,10 @@ Lemma wp_initiator c kI kR dq n :
   channel c -∗
   cryptis_ctx -∗
   iso_dh_ctx N -∗
-  public (TKey Dec kI) -∗
-  public (TKey Dec kR) -∗
+  public (TKey Open kI) -∗
+  public (TKey Open kR) -∗
   {{{ ●Ph{dq} n }}}
-    initiator c (TKey Dec kI) (TKey Enc kI) (TKey Dec kR)
+    initiator c kI (TKey Open kR)
   {{{ okS, RET (repr okS);
       ●Ph{dq} n ∗
       if okS is Some kS then
@@ -65,10 +66,11 @@ iIntros "#chan_c #ctx #(? & ?) #p_kI #p_kR %Ψ !> phase Hpost".
 iMod (minted_at_list with "[] phase") as "[phase list]" => //; eauto.
 wp_pures.
 iDestruct "list" as "(%M & #m_M & #minted_at_M)".
+wp_apply wp_vkey. wp_pures.
 wp_bind (mknonce _).
 iApply (wp_mknonce_freshN M
-          (λ _, public_at n (TKey Enc kI) ∨
-                public_at n (TKey Enc kR))%I
+          (λ _, public_at n (TKey Seal kI) ∨
+                public_at n (TKey Seal kR))%I
           iso_dh_pred
           (λ a, {[TExp (TInt 0) a]})) => //.
 - iIntros "% ?". rewrite big_sepS_forall. by iApply "m_M".
@@ -94,14 +96,13 @@ wp_bind (send _ _). iApply wp_send => //.
 wp_pure _ credit:"H3".
 wp_pures. wp_bind (recv _). iApply wp_recv => //.
 iIntros "%m2 #p_m2".
-wp_apply wp_tdec; case: Spec.tdecP; last by protocol_failure.
-move=> _ {}m2 [<-] ->.
+wp_verify m2; last by protocol_failure.
 wp_pures. wp_list_of_term m2; last by protocol_failure.
 wp_pures. wp_list_match => [ga' gb vkI' -> {m2}|]; last by protocol_failure.
 wp_eq_term e; last by protocol_failure. subst ga'.
 wp_pures. wp_eq_term e; last by protocol_failure. subst vkI'.
 iAssert (public gb)%I as "#p_gb".
-{ iPoseProof (public_TEncE with "p_m2 [//]") as "[p|p]".
+{ iPoseProof (public_TSealE with "p_m2 [//]") as "[p|p]".
   - rewrite public_of_list /=.
     by iDestruct "p" as "(_ & _ & ? & _)".
   - iDestruct "p" as "(_ & _ & #p)".
@@ -109,25 +110,25 @@ iAssert (public gb)%I as "#p_gb".
     rewrite public_of_list /=.
     by iDestruct "p" as "(_ & ? & ? & _)". }
 iPoseProof (public_minted with "p_m2") as "m_m2".
-rewrite minted_TEnc minted_tag minted_of_list /=.
+rewrite minted_TSeal minted_tag minted_of_list /=.
 iDestruct "m_m2" as "(_ & _ & m_gb & _)".
 wp_pures. wp_bind (texp _ _). iApply wp_texp.
 wp_pures. wp_list. wp_term_of_list. wp_pures.
 set seed := Spec.of_list [TExp (TInt 0) a; gb; TExp gb a].
 set secret := Spec.derive_key seed.
-wp_pures. wp_list. wp_term_of_list. wp_tenc.
+wp_pures. wp_list. wp_term_of_list. wp_apply wp_sign. wp_pures.
 iAssert ( |={⊤}=>
     ●Ph{dq} n ∗
-    (public_at n (TKey Enc kR) ∨
+    (public_at n (TKey Seal kR) ∨
     ∃ b,
      ⌜gb = TExp (TInt 0) b⌝ ∗
-     □ (public b ↔ ▷ □ (public_at n (TKey Enc kI) ∨
-                        public_at n (TKey Enc kR))) ∗
-     term_meta secret (nroot.@"info") (TKey Dec kI, TKey Dec kR, n) ∗
+     □ (public b ↔ ▷ □ (public_at n (TKey Seal kI) ∨
+                        public_at n (TKey Seal kR))) ∗
+     term_meta secret (nroot.@"info") (TKey Open kI, TKey Open kR, n) ∗
      term_token secret (↑nroot.@"client")))%I
   with "[phase token H3]"
   as "{p_m2} > (phase & p_m2)".
-{ iPoseProof (public_TEncE with "p_m2 [//]") as "{p_m2} p_m2".
+{ iPoseProof (public_TSealE with "p_m2 [//]") as "{p_m2} p_m2".
   iDestruct "p_m2" as "[[comp _]  | (#i_m2 & _ & _)]".
   { iMod (public_atI with "[ctx] [H3] [phase] [comp]")
       as "[phase #comp']" => //; try solve_ndisj.
@@ -159,9 +160,9 @@ iAssert ( |={⊤}=>
   - iIntros "#fail"; iApply "s_b".
     iModIntro.
     iDestruct "fail" as "[fail|fail]"; eauto. }
-set m3 := Spec.tenc _ _ _.
+set m3 := Spec.enc _ _ _.
 iAssert (public m3) as "#p_m3".
-{ iApply (public_TEncIS with "[] [//] [#]") => //.
+{ iApply (public_TSealIS with "[] [//] [#]") => //.
   - by rewrite !public_minted !minted_TKey.
   - iExists a, gb, kR, n. do 3![iSplitR => //].
     iDestruct "p_m2" as "[#?|p_m2]"; eauto.

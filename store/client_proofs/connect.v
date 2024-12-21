@@ -34,14 +34,11 @@ Lemma wp_client_connect c kI kR dq ph :
   channel c -∗
   cryptis_ctx -∗
   store_ctx N -∗
-  public (TKey Dec kI) -∗
-  public (TKey Dec kR) -∗
+  public (TKey Open kI) -∗
+  public (TKey Open kR) -∗
   {{{ ●Ph{dq} ph ∗
       client_disconnected kI kR }}}
-    Client.connect N c
-      (TKey Enc kI)
-      (TKey Dec kI)
-      (TKey Dec kR)
+    Client.connect N c kI (TKey Open kR)
   {{{ cs, RET (repr cs);
       ⌜si_time cs = ph⌝ ∗
       ●Ph{dq} ph ∗
@@ -52,9 +49,8 @@ iIntros "#p_ekI #p_ekR".
 iIntros "!> %Φ [phase client] post".
 rewrite /Client.connect.
 wp_pure _ credit:"c1". wp_pure _ credit:"c2". wp_pures.
-wp_bind (Connection.connect _ _ _ _ _).
-iApply (wp_connection_connect with "[//] [//] [//] [] [] [phase]") => //.
-iIntros "!> %cs (phase & conn & % & % & % & % & token)".
+wp_apply (wp_connection_connect with "[//] [//] [//] [] [] [phase]") => //.
+iIntros "%cs (phase & conn & % & % & % & % & token)".
 iDestruct "client" as "(%beginning & client)".
 iMod (client_connectingI with "[//] [$] phase token client")
   as "(phase & client & #ready)" => //; try solve_ndisj.

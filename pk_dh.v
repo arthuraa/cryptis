@@ -133,10 +133,10 @@ Lemma pk_dh_alloc E1 E2 E' :
   ↑N ⊆ E1 →
   ↑N ⊆ E2 →
   session_token E1 -∗
-  enc_pred_token E2 ={E'}=∗
+  seal_pred_token E2 ={E'}=∗
   pk_dh_ctx ∗
   session_token (E1 ∖ ↑N) ∗
-  enc_pred_token (E2 ∖ ↑N).
+  seal_pred_token (E2 ∖ ↑N).
 Proof. exact: pk_auth_alloc. Qed.
 
 Lemma pk_dh_session_key_elim kI kR kS n :
@@ -155,11 +155,11 @@ Lemma wp_pk_dh_init c kI kR dq n T :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
-  public (TKey Enc kI) -∗
-  public (TKey Enc kR) -∗
+  public (TKey Seal kI) -∗
+  public (TKey Seal kR) -∗
   honest n T -∗
   {{{ init_confirm kI kR ∗ ●Ph{dq} n }}}
-    pk_dh_init c (TKey Dec kI) (TKey Enc kI) (TKey Enc kR)
+    pk_dh_init c kI (TKey Seal kR)
   {{{ (okS : option term), RET repr okS;
       ●Ph{dq} n ∗
       if okS is Some kS then
@@ -193,14 +193,14 @@ Lemma wp_pk_dh_resp c kR dq n T :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
-  public (TKey Enc kR) -∗
+  public (TKey Seal kR) -∗
   honest n T -∗
   {{{ resp_confirm kR ∗ ●Ph{dq} n }}}
-    pk_dh_resp c (TKey Dec kR) (TKey Enc kR)
+    pk_dh_resp c kR
   {{{ (res : option (term * term)), RET repr res;
       ●Ph{dq} n ∗
       if res is Some (pkI, kS) then ∃ kI,
-        ⌜pkI = TKey Enc kI⌝ ∗
+        ⌜pkI = TKey Seal kI⌝ ∗
         public pkI ∗
         minted kS ∗
         □ pk_dh_confirmation Resp kI kR kS ∗
@@ -219,7 +219,7 @@ iApply (wp_pk_auth_resp with "chan_c ctx ctx' [] [] [confirm]"); eauto.
 iIntros "!> %res". case: res => [[pkI kS]|]; last first.
   by iApply ("post" $! None).
 iIntros "(phase & %kI & -> & #p_pkI & #s_kS & #confirmed & #sess_weak & kSP)".
-iApply ("post" $! (Some (TKey Enc kI, kS))). iFrame. iExists kI.
+iApply ("post" $! (Some (TKey Seal kI, kS))). iFrame. iExists kI.
 do 5!iSplitR => //.
 rewrite /in_honest.
 case: bool_decide_reflect => // - [kIP kRP].

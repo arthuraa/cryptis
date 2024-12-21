@@ -79,7 +79,7 @@ Lemma cryptisGS_alloc `{!heapGS Σ} E :
   cryptisGpreS Σ →
   ⊢ |={E}=> ∃ (H : cryptisGS Σ),
              cryptis_ctx ∗
-             enc_pred_token ⊤ ∗
+             seal_pred_token ⊤ ∗
              key_pred_token (⊤ ∖ ↑nroot.@"keys") ∗
              hash_pred_token ⊤ ∗
              honest 0 ∅ ∗

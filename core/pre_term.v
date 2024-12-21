@@ -6,7 +6,7 @@ From iris.heap_lang Require locations.
 
 Import Order.POrderTheory Order.TotalTheory.
 
-Inductive key_type := Enc | Dec.
+Inductive key_type := Seal | Open.
 
 Canonical key_type_indDef := [indDef for key_type_rect].
 Canonical key_type_indType := IndType key_type key_type_indDef.
@@ -33,7 +33,7 @@ Notation TInt_tag := 0%Z.
 Notation TPair_tag := 1%Z.
 Notation TNonce_tag := 2%Z.
 Notation TKey_tag := 3%Z.
-Notation TEnc_tag := 4%Z.
+Notation TSeal_tag := 4%Z.
 Notation THash_tag := 5%Z.
 Notation TExp_tag := 6%Z.
 
@@ -45,7 +45,7 @@ Inductive pre_term :=
 | PTPair of pre_term & pre_term
 | PTNonce of locations.loc
 | PTKey of key_type & pre_term
-| PTEnc of pre_term & pre_term
+| PTSeal of pre_term & pre_term
 | PTHash of pre_term
 | PTExp of pre_term & list pre_term.
 Set Elimination Schemes.
@@ -57,7 +57,7 @@ Definition pre_term_rect'
   (H2 : forall t1, T1 t1 -> forall t2, T1 t2 -> T1 (PTPair t1 t2))
   (H3 : forall l, T1 (PTNonce l))
   (H4 : forall kt t, T1 t -> T1 (PTKey kt t))
-  (H5 : forall t1, T1 t1 -> forall t2, T1 t2 -> T1 (PTEnc t1 t2))
+  (H5 : forall t1, T1 t1 -> forall t2, T1 t2 -> T1 (PTSeal t1 t2))
   (H6 : forall t, T1 t -> T1 (PTHash t))
   (H7 : forall t, T1 t -> forall ts, T2 ts -> T1 (PTExp t ts))
   (H8 : T2 [::])
@@ -68,7 +68,7 @@ Definition pre_term_rect'
     | PTPair t1 t2 => H2 t1 (loop1 t1) t2 (loop1 t2)
     | PTNonce l => H3 l
     | PTKey kt t => H4 kt t (loop1 t)
-    | PTEnc t1 t2 => H5 t1 (loop1 t1) t2 (loop1 t2)
+    | PTSeal t1 t2 => H5 t1 (loop1 t1) t2 (loop1 t2)
     | PTHash t => H6 t (loop1 t)
     | PTExp t ts =>
       let fix loop2 ts {struct ts} : T2 ts :=
@@ -86,7 +86,7 @@ Definition list_pre_term_rect'
   (H2 : forall t1, T1 t1 -> forall t2, T1 t2 -> T1 (PTPair t1 t2))
   (H3 : forall l, T1 (PTNonce l))
   (H4 : forall kt t, T1 t -> T1 (PTKey kt t))
-  (H5 : forall t1, T1 t1 -> forall t2, T1 t2 -> T1 (PTEnc t1 t2))
+  (H5 : forall t1, T1 t1 -> forall t2, T1 t2 -> T1 (PTSeal t1 t2))
   (H6 : forall t, T1 t -> T1 (PTHash t))
   (H7 : forall t, T1 t -> forall ts, T2 ts -> T1 (PTExp t ts))
   (H8 : T2 [::])
@@ -132,7 +132,7 @@ Definition pre_term_rect (T : pre_term -> Type)
   (H2 : forall t1, T t1 -> forall t2, T t2 -> T (PTPair t1 t2))
   (H3 : forall l, T (PTNonce l))
   (H4 : forall kt t, T t -> T (PTKey kt t))
-  (H5 : forall t1, T t1 -> forall t2, T t2 -> T (PTEnc t1 t2))
+  (H5 : forall t1, T t1 -> forall t2, T t2 -> T (PTSeal t1 t2))
   (H6 : forall t, T t -> T (PTHash t))
   (H7 : forall t, T t ->
         forall ts, foldr (fun t R => T t * R)%type unit ts ->
@@ -162,7 +162,7 @@ Definition cons_num pt : Z :=
   | PTPair _ _ => TPair_tag
   | PTNonce _ => TNonce_tag
   | PTKey _ _ => TKey_tag
-  | PTEnc _ _ => TEnc_tag
+  | PTSeal _ _ => TSeal_tag
   | PTHash _ => THash_tag
   | PTExp _ _ => TExp_tag
   end.
@@ -181,7 +181,7 @@ Lemma leqE pt1 pt2 :
     | PTKey kt1 pt1, PTKey kt2 pt2 =>
       if kt1 == kt2 then (pt1 <= pt2)%O
       else (kt1 <= kt2)%O
-    | PTEnc k1 pt1, PTEnc k2 pt2 =>
+    | PTSeal k1 pt1, PTSeal k2 pt2 =>
       if k1 == k2 then (pt1 <= pt2)%O
       else (k1 <= k2)%O
     | PTHash pt1, PTHash pt2 => (pt1 <= pt2)%O
@@ -222,7 +222,7 @@ Fixpoint height pt :=
   | PTPair t1 t2 => S (maxn (height t1) (height t2))
   | PTNonce _ => 1
   | PTKey _ t => S (height t)
-  | PTEnc k t => S (maxn (height k) (height t))
+  | PTSeal k t => S (maxn (height k) (height t))
   | PTHash t => S (height t)
   | PTExp t ts => S (\max_(x <- height t :: map height ts) x)
   end.
@@ -233,7 +233,7 @@ Fixpoint tsize pt :=
   | PTPair pt1 pt2 => S (tsize pt1 + tsize pt2)
   | PTNonce _ => 1
   | PTKey _ t => S (tsize t)
-  | PTEnc k t => S (S (tsize k) + tsize t)
+  | PTSeal k t => S (S (tsize k) + tsize t)
   | PTHash t => S (tsize t)
   | PTExp t ts => S (\sum_(n <- tsize t :: map tsize ts) n)
   end.
@@ -285,7 +285,7 @@ Fixpoint normalize pt :=
   | PTPair t1 t2 => PTPair (normalize t1) (normalize t2)
   | PTNonce a => PTNonce a
   | PTKey kt t => PTKey kt (normalize t)
-  | PTEnc k t => PTEnc (normalize k) (normalize t)
+  | PTSeal k t => PTSeal (normalize k) (normalize t)
   | PTHash t => PTHash (normalize t)
   | PTExp t ts => exp (normalize t) (map normalize ts)
   end.
@@ -296,7 +296,7 @@ Fixpoint wf_term pt :=
   | PTPair pt1 pt2 => wf_term pt1 && wf_term pt2
   | PTNonce _ => true
   | PTKey _ pt => wf_term pt
-  | PTEnc k pt => wf_term k && wf_term pt
+  | PTSeal k pt => wf_term k && wf_term pt
   | PTHash pt => wf_term pt
   | PTExp pt pts => [&& wf_term pt, ~~ is_exp pt,
                         all wf_term pts, pts != [::] & sorted <=%O pts]
@@ -371,7 +371,7 @@ Inductive term :=
 | TPair of term & term
 | TNonce of locations.loc
 | TKey of key_type & term
-| TEnc of term & term
+| TSeal of term & term
 | THash of term
 | TExpN' pt pts of PreTerm.wf_term (PreTerm.PTExp pt pts).
 Set Elimination Schemes.
@@ -387,7 +387,7 @@ Fixpoint unfold_term t :=
   | TPair t1 t2 => PreTerm.PTPair (unfold_term t1) (unfold_term t2)
   | TNonce l => PreTerm.PTNonce l
   | TKey kt t => PreTerm.PTKey kt (unfold_term t)
-  | TEnc k t => PreTerm.PTEnc (unfold_term k) (unfold_term t)
+  | TSeal k t => PreTerm.PTSeal (unfold_term k) (unfold_term t)
   | THash t => PreTerm.PTHash (unfold_term t)
   | TExpN' pt pts _ => PreTerm.PTExp pt pts
   end.
@@ -398,7 +398,7 @@ Fixpoint fold_term_def pt :=
   | PreTerm.PTPair pt1 pt2 => TPair (fold_term_def pt1) (fold_term_def pt2)
   | PreTerm.PTNonce l => TNonce l
   | PreTerm.PTKey kt pt => TKey kt (fold_term_def pt)
-  | PreTerm.PTEnc k pt => TEnc (fold_term_def k) (fold_term_def pt)
+  | PreTerm.PTSeal k pt => TSeal (fold_term_def k) (fold_term_def pt)
   | PreTerm.PTHash pt => THash (fold_term_def pt)
   | PreTerm.PTExp pt' pts' =>
     if pts' =P [::] is ReflectF pts'N0 then
@@ -512,7 +512,7 @@ Lemma fold_termE pt :
   | PreTerm.PTPair pt1 pt2 => TPair (fold_term pt1) (fold_term pt2)
   | PreTerm.PTNonce l => TNonce l
   | PreTerm.PTKey kt pt => TKey kt (fold_term pt)
-  | PreTerm.PTEnc pt1 pt2 => TEnc (fold_term pt1) (fold_term pt2)
+  | PreTerm.PTSeal pt1 pt2 => TSeal (fold_term pt1) (fold_term pt2)
   | PreTerm.PTHash pt => THash (fold_term pt)
   | PreTerm.PTExp pt pts => TExpN (fold_term pt) (map fold_term pts)
   end.
@@ -687,7 +687,7 @@ Lemma tsize_eq t :
   | TPair t1 t2 => S (tsize t1 + tsize t2)
   | TNonce _ => 1
   | TKey _ t => S (tsize t)
-  | TEnc k t => S (S (tsize k) + tsize t)
+  | TSeal k t => S (S (tsize k) + tsize t)
   | THash t => S (tsize t)
   | TExpN' pt pts _ => PreTerm.tsize (PreTerm.PTExp pt pts)
   end.
@@ -726,7 +726,7 @@ Lemma term_rect (T : term -> Type)
         T (TPair t1 t2))
   (H3 : forall a, T (TNonce a))
   (H4 : forall kt t, T t -> T (TKey kt t))
-  (H5 : forall k, T k -> forall t, T t -> T (TEnc k t))
+  (H5 : forall k, T k -> forall t, T t -> T (TSeal k t))
   (H6 : forall t, T t -> T (THash t))
   (H7 : forall t, T t -> ~~ is_exp t ->
         forall ts, foldr (fun t R => T t * R)%type unit ts ->

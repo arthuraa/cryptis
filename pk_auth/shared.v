@@ -35,7 +35,7 @@ Variable N : namespace.
   parties. *)
 
 Definition corruption kI kR : iProp :=
-  public (TKey Dec kI) ∨ public (TKey Dec kR).
+  public (TKey Open kI) ∨ public (TKey Open kR).
 
 Global Instance corruptionC : Comm (⊣⊢) corruption.
 Proof. by move=> k k'; rewrite /corruption [(_ ∨ _)%I]comm. Qed.
@@ -45,7 +45,7 @@ Global Instance corruption_persistent kI kR :
 Proof. apply _. Qed.
 
 Definition in_honest kI kR (T : gset term) : bool :=
-  bool_decide (TKey Dec kI ∈ T ∧ TKey Dec kR ∈ T).
+  bool_decide (TKey Open kI ∈ T ∧ TKey Open kR ∈ T).
 
 (** [readable_by t kI kR] *)
 Definition readable_by t kI kR : iProp :=
@@ -176,8 +176,8 @@ Proof. apply _. Qed.
 
 Definition msg1_pred kR m1 : iProp :=
   ∃ sI kI,
-    ⌜m1 = Spec.of_list [sI; TKey Enc kI]⌝ ∧
-    public (TKey Enc kI) ∧
+    ⌜m1 = Spec.of_list [sI; TKey Seal kI]⌝ ∧
+    public (TKey Seal kI) ∧
     readable_by sI kI kR ∧
     init_started kI kR sI.
 
@@ -203,7 +203,7 @@ Definition resp_waiting kI kR sI nR : iProp :=
 
 Definition msg2_pred kI m2 : iProp :=
   ∃ sI sR kR,
-    ⌜m2 = Spec.of_list [sI; sR; TKey Enc kR]⌝ ∧
+    ⌜m2 = Spec.of_list [sI; sR; TKey Seal kR]⌝ ∧
     secret_of sR kI kR ∧
     resp_accepted kI kR sI sR.
 
@@ -286,30 +286,30 @@ Qed.
 
 Definition pk_auth_ctx : iProp :=
   session_ctx (N.@"session") session_ress ∧
-  enc_pred (N.@"m1") msg1_pred ∧
-  enc_pred (N.@"m2") msg2_pred ∧
-  enc_pred (N.@"m3") msg3_pred.
+  seal_pred (N.@"m1") msg1_pred ∧
+  seal_pred (N.@"m2") msg2_pred ∧
+  seal_pred (N.@"m3") msg3_pred.
 
 Lemma pk_auth_alloc E1 E2 E' :
   ↑N ⊆ E1 →
   ↑N ⊆ E2 →
   session_token E1 -∗
-  enc_pred_token E2 ={E'}=∗
+  seal_pred_token E2 ={E'}=∗
   pk_auth_ctx ∗
   session_token (E1 ∖ ↑N) ∗
-  enc_pred_token (E2 ∖ ↑N).
+  seal_pred_token (E2 ∖ ↑N).
 Proof.
 iIntros (sub1 sub2) "t1 t2".
 rewrite (session_token_difference (↑N) E1) //. iDestruct "t1" as "[t1 t1']".
 iMod (session_alloc (N.@"session") session_ress with "t1")
   as "[#H0 t1]"; try solve_ndisj.
-rewrite (enc_pred_token_difference (↑N)) //.
+rewrite (seal_pred_token_difference (↑N)) //.
 iDestruct "t2" as "[t2 t2']".
-iMod (enc_pred_set (N.@"m1") msg1_pred with "t2")
+iMod (seal_pred_set (N.@"m1") msg1_pred with "t2")
   as "[#H1 t2]"; try solve_ndisj.
-iMod (enc_pred_set (N.@"m2") msg2_pred with "t2")
+iMod (seal_pred_set (N.@"m2") msg2_pred with "t2")
   as "[#H2 t2]"; try solve_ndisj.
-iMod (enc_pred_set (N.@"m3") msg3_pred with "t2")
+iMod (seal_pred_set (N.@"m3") msg3_pred with "t2")
   as "[#H3 t2]"; try solve_ndisj.
 iModIntro; iFrame; do !iSplit => //.
 Qed.

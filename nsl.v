@@ -80,11 +80,11 @@ Lemma wp_nsl_init c kI kR dq n T :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
-  public (TKey Enc kI) -∗
-  public (TKey Enc kR) -∗
+  public (TKey Seal kI) -∗
+  public (TKey Seal kR) -∗
   honest n T -∗
   {{{ init_confirm kI kR ∗ ●Ph{dq} n }}}
-    nsl_init c (TKey Dec kI) (TKey Enc kI) (TKey Enc kR)
+    nsl_init c kI (TKey Seal kR)
   {{{ (okS : option term), RET repr okS;
       ●Ph{dq} n ∗
       if okS is Some kS then
@@ -107,14 +107,14 @@ Lemma wp_nsl_resp c kR dq n T :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
-  public (TKey Enc kR) -∗
+  public (TKey Seal kR) -∗
   honest n T -∗
   {{{ resp_confirm kR ∗ ●Ph{dq} n }}}
-    nsl_resp c (TKey Dec kR) (TKey Enc kR)
+    nsl_resp c kR
   {{{ (res : option (term * term)), RET repr res;
       ●Ph{dq} n ∗
       if res is Some (pkI, kS) then ∃ kI,
-        ⌜pkI = TKey Enc kI⌝ ∗
+        ⌜pkI = TKey Seal kI⌝ ∗
         public pkI ∗
         minted kS ∗
         □ confirmation Resp kI kR kS ∗

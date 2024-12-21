@@ -21,16 +21,16 @@ Section Connection.
 
 Variable N : namespace.
 
-Definition connect : val := λ: "c" "skA" "vkA" "vkB",
+Definition connect : val := λ: "c" "skA" "vkB",
   do_until (λ: <>,
-    bind: "session_key" := initiator (N.@"auth") "c" "vkA" "skA" "vkB" in
+    bind: "session_key" := initiator (N.@"auth") "c" "skA" "vkB" in
     let: "timestamp"  := ref #0 in
     SOME ("timestamp", "session_key")
   ).
 
-Definition listen : val := λ: "c" "skA" "vkA",
+Definition listen : val := λ: "c" "skA",
   do_until (λ: <>,
-    bind: "result" := responder (N.@"auth") "c" "vkA" "skA" in
+    bind: "result" := responder (N.@"auth") "c" "skA" in
     let: "timestamp" := ref #0 in
     let: "vkB" := Fst "result" in
     let: "session_key" := Snd "result" in
@@ -50,7 +50,7 @@ Definition session_key : val := λ: "cs",
 
 Definition send N : val := λ: "c" "cs" "t",
   let: "sk" := session_key "cs" in
-  let: "m"  := tsenc N "sk" "t" in
+  let: "m"  := senc N "sk" "t" in
   send "c" "m".
 
 Definition make_handler (p : namespace * expr) : expr :=
@@ -101,11 +101,11 @@ Definition select_def (c cs : expr) handlers : expr :=
     let: "sk" := session_key "cs" in
     do_until (λ: <>,
       let: "m" := recv "c" in
-      bind: "m" := dec (key Dec "sk") "m" in
+      bind: "m" := open (key Open "sk") "m" in
       select_body "m" "handlers"
     ))%V c cs (make_handlers handlers).
 
-Definition select_aux : seal select_def. by eexists _. Qed.
+Definition select_aux : base.seal select_def. by eexists _. Qed.
 Definition select := unseal select_aux.
 Lemma select_eq : select = select_def. Proof. exact: seal_eq. Qed.
 
@@ -121,7 +121,7 @@ Definition recv N : val := λ: "c" "cs" "f",
   let: "sk" := session_key "cs" in
   do_until (λ: <>,
     let: "m" := recv "c" in
-    bind: "m" := tsdec N "sk" "m" in
+    bind: "m" := sdec N "sk" "m" in
     "f" "m"
   ).
 
@@ -139,8 +139,8 @@ Section Client.
 
 Variable N : namespace.
 
-Definition connect : val := λ: "c" "skA" "vkA" "vkB",
-  let: "cs" := Connection.connect N "c" "skA" "vkA" "vkB" in
+Definition connect : val := λ: "c" "skA" "vkB",
+  let: "cs" := Connection.connect N "c" "skA" "vkB" in
   Connection.send (N.@"init") "c" "cs" (TInt 0);;
   Connection.recv (N.@"ack_init") "c" "cs" (λ: <>,
     SOME "cs").
@@ -293,11 +293,9 @@ Definition find_client : val := λ: "ss" "client_key",
   end.
 
 Definition listen N : val := λ: "c" "ss",
-  let: "public_key" := Fst (Fst "ss") in
-  let: "secret_key" := Snd (Fst "ss") in
+  let: "secret_key" := Fst "ss" in
   let: "clients" := Snd "ss" in
-  let: "res" :=
-    Connection.listen N "c" "secret_key" "public_key" in
+  let: "res" := Connection.listen N "c" "secret_key" in
   let: "client_key" := Fst "res" in
   let: "cs" := Snd "res" in
   let: "account" := find_client "ss" "client_key" in

@@ -57,7 +57,7 @@ Qed.
 Lemma minted_TKey kt t : minted (TKey kt t) ⊣⊢ minted t.
 Proof. by rewrite unlock nonces_of_term_unseal /=. Qed.
 
-Lemma minted_TEnc k t : minted (TEnc k t) ⊣⊢ minted k ∧ minted t.
+Lemma minted_TSeal k t : minted (TSeal k t) ⊣⊢ minted k ∧ minted t.
 Proof.
 by rewrite unlock nonces_of_term_unseal /= !big_sepS_union_pers.
 Qed.
@@ -116,11 +116,4 @@ Qed.
 Lemma minted_derive_key t : minted (Spec.derive_key t) ⊣⊢ minted t.
 Proof. exact: minted_tag. Qed.
 
-Lemma minted_mkskey k : minted (Spec.mkskey k) ⊣⊢ minted k.
-Proof.
-rewrite minted_TPair !minted_TKey !minted_tag.
-iSplit; [iIntros "[_ ?]"|]; eauto.
-Qed.
-
 End Minted.
-
