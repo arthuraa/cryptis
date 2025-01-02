@@ -257,6 +257,9 @@ have: perm_eq (sort <=%O (exps t ++ ts)) (exps t ++ ts) by rewrite perm_sort.
 by move=> e; rewrite !big_cons !big_map (perm_big _ e).
 Qed.
 
+Definition is_nonce pt :=
+  if pt is PTNonce _ then true else false.
+
 Definition is_exp pt :=
   if pt is PTExp _ _ then true else false.
 
@@ -574,6 +577,15 @@ Definition is_nonce t :=
 
 Definition is_exp t :=
   if t is TExpN' _ _ _ then true else false.
+
+Lemma is_nonce_unfold t : is_nonce t = PreTerm.is_nonce (unfold_term t).
+Proof. by case: t => //=. Qed.
+
+Lemma is_nonce_TExpN t ts : is_nonce (TExpN t ts) = nilp ts && is_nonce t.
+Proof. by rewrite !is_nonce_unfold unfold_TExpN; case: ts. Qed.
+
+Lemma is_nonce_TExp t1 t2 : is_nonce (TExp t1 t2) = false.
+Proof. by rewrite is_nonce_TExpN. Qed.
 
 Lemma is_exp_unfold t : is_exp t = PreTerm.is_exp (unfold_term t).
 Proof. by case: t => //= - []. Qed.
