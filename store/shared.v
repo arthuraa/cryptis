@@ -330,9 +330,9 @@ Definition client_connected_int cs n beginning : iProp :=
   DB.client_view kI (dbCN kR.@"state") (n + beginning) ∗
   server_status_ready kI kR ∗
   (session_fail cs ∨
-     term_meta (si_key cs) (nroot.@"client".@"beginning") beginning ∗
-     term_token (si_key cs) (↑nroot.@"client".@"end") ∗
-     term_token (si_key cs) (↑nroot.@"client".@"ending") ∗
+     term_meta  (si_init_share cs) (nroot.@"beginning") beginning ∗
+     term_token (si_init_share cs) (↑nroot.@"end") ∗
+     term_token (si_init_share cs) (↑nroot.@"ending") ∗
      term_own kI (dbCN kR.@"status")
        (client_view (BothConnected (si_key cs) beginning))).
 
@@ -343,10 +343,10 @@ Definition client_connecting_int cs beginning : iProp :=
   DB.client_view kI (dbCN kR.@"state") beginning ∗
   server_status_ready kI kR ∗
   (session_fail cs ∨
-     term_token (si_key cs) (↑nroot.@"client".@"begin") ∗
-     term_token (si_key cs) (↑nroot.@"client".@"end") ∗
-     term_meta  (si_key cs) (nroot.@"client".@"beginning") beginning ∗
-     term_token (si_key cs) (↑nroot.@"client".@"ending")).
+     term_token (si_init_share cs) (↑nroot.@"begin") ∗
+     term_token (si_init_share cs) (↑nroot.@"end") ∗
+     term_meta  (si_init_share cs) (nroot.@"beginning") beginning ∗
+     term_token (si_init_share cs) (↑nroot.@"ending")).
 
 Definition client_disconnecting_int cs n beginning : iProp :=
   let kI := si_init cs in
@@ -355,12 +355,12 @@ Definition client_disconnecting_int cs n beginning : iProp :=
   DB.client_view kI (dbCN kR.@"state") (n + beginning) ∗
   server_status_ready kI kR ∗
   (session_fail cs ∨
-     term_token (si_key cs) (↑nroot.@"client".@"end") ∗
-     term_meta  (si_key cs) (nroot.@"client".@"ending") (n + beginning)).
+     term_token (si_init_share cs) (↑nroot.@"end") ∗
+     term_meta  (si_init_share cs) (nroot.@"ending") (n + beginning)).
 
 Definition conn_ready si n :=
   escrow (nroot.@"db")
-         (term_token (si_key si) (↑nroot.@"server".@"begin"))
+         (term_token (si_resp_share si) (↑nroot.@"begin"))
          (term_own (si_init si) (dbCN (si_resp si).@"status")
             (client_view (ClientConnecting (si_key si) n))).
 
@@ -375,12 +375,12 @@ Lemma client_connectingI E kI kR cs dq n beginning :
   £ 1 ∗ £ 1 -∗
   ●Ph{dq} n -∗
   session_fail cs ∨
-    term_token (si_key cs) (↑nroot.@"client") -∗
+    term_token (si_init_share cs) ⊤ -∗
   client_disconnected_int kI kR beginning ={E}=∗
   ●Ph{dq} n ∗
   client_connecting_int cs beginning ∗
   (session_fail cs ∨
-     term_meta (si_key cs) (nroot.@"client".@"beginning") beginning ∗
+     term_meta (si_init_share cs) (nroot.@"beginning") beginning ∗
      conn_ready cs beginning).
 Proof.
 move=> ? ? <- <- <- e_rl {kI kR n}.
@@ -411,14 +411,14 @@ iMod (term_own_update with "status") as "status".
 iAssert (|={E}=> conn_ready cs beginning)%I with "[status]" as ">#ready".
 { iApply (escrowI with "status").
   iApply term_token_switch. }
-iMod (term_meta_set' (N:=nroot.@"client".@"beginning") beginning with "token")
+iMod (term_meta_set' (N:=nroot.@"beginning") beginning with "token")
   as "[#beginning token]"; try solve_ndisj.
 iSplitL; last by iRight; eauto.
 iSplitR => //. iSplitR => //. iRight.
-rewrite (term_token_difference _ (↑nroot.@"client".@"begin"));
+rewrite (term_token_difference _ (↑nroot.@"begin"));
   try solve_ndisj.
 iDestruct "token" as "[token' token]". iFrame "token'".
-rewrite (term_token_difference _ (↑nroot.@"client".@"end")); try solve_ndisj.
+rewrite (term_token_difference _ (↑nroot.@"end")); try solve_ndisj.
 iDestruct "token" as "[token' token]". iFrame "token'".
 iSplitR => //. iModIntro.
 iApply (term_token_drop with "token"). solve_ndisj.
@@ -426,7 +426,7 @@ Qed.
 
 Definition conn_accepted si beginning :=
   escrow (nroot.@"db")
-    (term_token (si_key si) (↑nroot.@"client".@"begin"))
+    (term_token (si_init_share si) (↑nroot.@"begin"))
     (term_own (si_init si) (dbCN (si_resp si).@"status")
        (client_view (BothConnected (si_key si) beginning))).
 
@@ -542,8 +542,8 @@ Definition server_connected cs n db : iProp :=
   public_db db ∗
   (session_fail cs ∨ ∃ beginning,
    DB.server_view (si_init cs) (dbCN (si_resp cs).@"state") (n + beginning) db ∗
-   term_meta (si_key cs) (nroot.@"client".@"beginning") beginning ∗
-   term_token (si_key cs) (↑nroot.@"server".@"end") ∗
+   term_meta (si_init_share cs) (nroot.@"beginning") beginning ∗
+   term_token (si_resp_share cs) (↑nroot.@"end") ∗
    term_own (si_init cs) (dbCN (si_resp cs).@"status")
      (server_view (Connected (si_key cs) beginning))).
 
@@ -627,7 +627,7 @@ Definition session_msg_pred (Q : sess_info → term → iProp) kS m : iProp :=
 Definition init_pred si t : iProp := ∃ (beginning : nat),
   server_status_ready (si_init si) (si_resp si) ∗
   DB.server_view (si_init si) (dbCN (si_resp si).@"state") 0 ∅ ∗
-  term_meta (si_key si) (nroot.@"client".@"beginning") beginning ∗
+  term_meta (si_init_share si) (nroot.@"beginning") beginning ∗
   conn_ready si beginning.
 
 Lemma init_predI cs beginning m :
@@ -646,14 +646,14 @@ iRight. iModIntro. iExists _. by eauto 10.
 Qed.
 
 Definition ack_init_pred si t : iProp := ∃ (beginning : nat),
-  term_meta (si_key si) (nroot.@"client".@"beginning") beginning ∗
+  term_meta (si_init_share si) (nroot.@"beginning") beginning ∗
   conn_accepted si beginning.
 
 Lemma ack_init_predI cs db m :
   cs_role cs = Resp →
   server_connecting cs db -∗
-  term_token (si_key cs) (↑nroot.@"server".@"begin") -∗
-  term_token (si_key cs) (↑nroot.@"server".@"end") -∗
+  term_token (si_resp_share cs) (↑nroot.@"begin") -∗
+  term_token (si_resp_share cs) (↑nroot.@"end") -∗
   (session_fail cs ∨ init_pred cs m) ={⊤}▷=∗
   server_connected cs 0 db ∗
   (session_fail cs ∨ □ ack_init_pred cs (TInt 0)).
@@ -715,7 +715,7 @@ Qed.
 
 Definition store_pred si m : iProp := ∃ (n : nat) t1 t2 beginning,
   ⌜m = Spec.of_list [TInt n; t1; t2]⌝ ∗
-  term_meta (si_key si) (nroot.@"client".@"beginning") beginning ∗
+  term_meta (si_init_share si) (nroot.@"beginning") beginning ∗
   DB.update_at (si_init si) (dbCN (si_resp si).@"state") (n + beginning) t1 t2.
 
 Lemma store_predI cs n beginning t1 t2 :
@@ -767,7 +767,7 @@ Definition load_pred (si : sess_info) (m : term) : iProp := True.
 
 Definition ack_load_pred si m : iProp := ∃ n t1 t2 beginning,
   ⌜m = Spec.of_list [TInt n; t1; t2]⌝ ∗
-  term_meta (si_key si) (nroot.@"client".@"beginning") beginning ∗
+  term_meta (si_init_share si) (nroot.@"beginning") beginning ∗
   DB.stored_at (si_init si) (dbCN (si_resp si).@"state") (n + beginning) t1 t2.
 
 Lemma ack_load_predI {cs n db t1 t2} :
@@ -814,7 +814,7 @@ Qed.
 
 Definition create_pred si m : iProp := ∃ n t1 t2 beginning,
   ⌜m = Spec.of_list [TInt n; t1; t2]⌝ ∗
-  term_meta (si_key si) (nroot.@"client".@"beginning") beginning ∗
+  term_meta (si_init_share si) (nroot.@"beginning") beginning ∗
   DB.create_at (si_init si) (dbCN (si_resp si).@"state") (n + beginning) t1 t2.
 
 Lemma create_predI cs n t1 t2 beginning :
@@ -866,14 +866,14 @@ Definition ack_create_pred (si : sess_info) (m : term) : iProp := True.
 
 Definition conn_done si beginning ending :=
   escrow (nroot.@"db")
-         (term_token (si_key si) (↑nroot.@"server".@"end"))
+         (term_token (si_resp_share si) (↑nroot.@"end"))
          (term_own (si_init si) (dbCN (si_resp si).@"status")
             (client_view (ClientDisconnecting (si_key si) beginning ending))).
 
 Definition close_pred si m : iProp := ∃ n beginning,
   ⌜m = TInt n⌝ ∗
-  term_meta (si_key si) (nroot.@"client".@"beginning") beginning ∗
-  term_meta (si_key si) (nroot.@"client".@"ending") (n + beginning) ∗
+  term_meta (si_init_share si) (nroot.@"beginning") beginning ∗
+  term_meta (si_init_share si) (nroot.@"ending") (n + beginning) ∗
   conn_done si beginning (n + beginning).
 
 Lemma close_predI cs beginning n E :
@@ -893,7 +893,7 @@ iAssert (|={E}=> conn_done cs beginning (n + beginning))%I
   with "[status]" as ">#done".
 { iApply (escrowI with "status").
   iApply term_token_switch. }
-iMod (term_meta_set (nroot.@"client".@"ending") (n + beginning) with "ending")
+iMod (term_meta_set (nroot.@"ending") (n + beginning) with "ending")
   as "#ending" => //.
 iSplitL.
 { iFrame. iModIntro. by eauto. }
@@ -903,12 +903,12 @@ Qed.
 
 Definition conn_closed si ending :=
   escrow (nroot.@"db")
-         (term_token (si_key si) (↑nroot.@"client".@"end"))
+         (term_token (si_init_share si) (↑nroot.@"end"))
          (term_own (si_init si) (dbCN (si_resp si).@"status")
                   (client_view (BothDisconnected ending))).
 
 Definition ack_close_pred si (m : term) : iProp := ∃ ending,
-  term_meta (si_key si) (nroot.@"client".@"ending") ending ∗
+  term_meta (si_init_share si) (nroot.@"ending") ending ∗
   conn_closed si ending.
 
 Lemma ack_close_predI cs n db E :

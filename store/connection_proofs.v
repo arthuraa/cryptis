@@ -39,7 +39,7 @@ Lemma wp_connection_connect N c kI kR dq n :
     ⌜si_time cs = n⌝ ∗
     ⌜cs_role cs = Init⌝ ∗
     (session_fail cs ∨
-       term_token (si_key cs) (↑nroot.@"client")) }}}.
+       term_token (si_init_share cs) ⊤) }}}.
 Proof.
 iIntros "#? #? #? #? #? % !> phase post".
 wp_lam. wp_pures.
@@ -49,13 +49,11 @@ wp_pures.
 wp_apply (wp_initiator with "[//] [//] [//] [] [] [phase]") => //.
 iIntros "%res (phase & resP)".
 case: res=> [kS|] /=; wp_pures; last by iLeft; iFrame; eauto.
-wp_alloc ts as "ts". set  si := SessInfo _ _ _ _. wp_pures.
-iDestruct "resP" as "(#m_kS & #p_kS & sess)".
+iDestruct "resP" as "(%si & % & % & <- & % & #m_kS & #s_kS & token & #sess)".
+wp_alloc ts as "ts". wp_pures.
 iRight. iModIntro. iExists _.  iSplit => //.
 iApply ("post" $! (ConnState si ts Init)). iFrame => /=.
 do !iSplit => //.
-- by iDestruct "sess" as "[fail|[sess token]]"; eauto.
-- iDestruct "sess" as "[fail|[sess token]]"; eauto.
 Qed.
 
 Lemma wp_connection_listen N c kR dq n :
@@ -71,7 +69,7 @@ Lemma wp_connection_listen N c kR dq n :
     ⌜si_resp cs = kR⌝ ∗
     ⌜si_time cs = n⌝ ∗
     ⌜cs_role cs = Resp⌝ ∗
-    term_token (si_key cs) (↑nroot.@"server") }}}.
+    term_token (si_resp_share cs) ⊤ }}}.
 Proof.
 iIntros "#? #? #? #? % !> phase post".
 wp_lam. wp_pures.
@@ -82,8 +80,9 @@ wp_apply (wp_responder with "[//] [//] [] [] [phase]") => //.
 iIntros "%res (phase & resP)".
 case: res=> [[vkI kS]|] /=; wp_pures; last by iLeft; iFrame; eauto.
 wp_alloc ts as "ts".
-iDestruct "resP" as "(%kI & -> & #p_vkI & #m_kS & #p_kS & #sess & token)".
-set  si := SessInfo _ _ _ _. wp_pures.
+iDestruct "resP"
+  as "(%si & -> & % & <- & % & #p_vkI & #m_kS & #p_kS & #sess & token)".
+wp_pures.
 iRight. iModIntro. iExists _.  iSplit => //.
 iApply ("post" $! (ConnState si ts Resp)). iFrame => /=.
 do !iSplit => //; eauto.

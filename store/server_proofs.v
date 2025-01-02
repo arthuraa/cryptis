@@ -152,8 +152,8 @@ Lemma wp_server_wait_init c cs vdb db γlock vlock :
   {{{ cryptis_ctx ∗ channel c ∗ store_ctx N ∗
       is_conn_state cs 0 ∗
       server_connecting cs db ∗
-      term_token (si_key cs) (↑nroot.@"server".@"begin") ∗
-      term_token (si_key cs) (↑nroot.@"server".@"end") ∗
+      term_token (si_resp_share cs) (↑nroot.@"begin") ∗
+      term_token (si_resp_share cs) (↑nroot.@"end") ∗
       SAList.is_alist vdb (repr <$> db) ∗
       is_lock γlock vlock (
         account_inv (si_init cs) (si_resp cs) vdb) ∗
@@ -215,9 +215,9 @@ iMod (server_connectingI with "[//] hon c account") as "[hon account]".
 wp_pures.
 iApply (wp_fork with "[conn locked db account token]").
 { iModIntro.
-  rewrite (term_token_difference _ (↑nroot.@"server".@"begin")); last by solve_ndisj.
+  rewrite (term_token_difference _ (↑nroot.@"begin")); last by solve_ndisj.
   iDestruct "token" as "[not_started token]".
-  iPoseProof (@term_token_drop _ _ _ (↑nroot.@"server".@"end")
+  iPoseProof (@term_token_drop _ _ _ (↑nroot.@"end")
                with "token") as "not_ended"; first by solve_ndisj.
   iApply (wp_server_wait_init
            with "[conn locked db account not_started not_ended] []") => //.

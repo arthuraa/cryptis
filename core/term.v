@@ -431,6 +431,12 @@ Definition tag_aux : seal tag_def. by eexists. Qed.
 Definition tag := unseal tag_aux.
 Lemma tag_unseal : tag = tag_def. Proof. exact: seal_eq. Qed.
 
+Lemma is_nonce_tag N t : is_nonce (tag N t) = false.
+Proof. by rewrite tag_unseal. Qed.
+
+Lemma is_exp_tag N t : is_exp (tag N t) = false.
+Proof. by rewrite tag_unseal. Qed.
+
 Definition untag_def N (t : term) :=
   match t with
   | TPair (TInt (Zpos m)) t =>
@@ -453,9 +459,6 @@ Proof.
 rewrite tag_unseal /tag_def => c1 t1 c2 t2 [] e ->.
 split=> //; by apply: inj e.
 Qed.
-
-Lemma is_nonce_tag N t : is_nonce (tag N t) = false.
-Proof. by rewrite tag_unseal. Qed.
 
 Lemma untagK N t1 t2 :
   untag N t1 = Some t2 ->
@@ -589,6 +592,12 @@ rewrite of_list_unseal; elim: ts => [|t' ts IH] //=.
 - by rewrite elem_of_nil.
 - rewrite tsize_TPair elem_of_cons; case=> [<-|/IH t_ts]; lia.
 Qed.
+
+Lemma is_nonce_of_list ts : is_nonce (of_list ts) = false.
+Proof. by rewrite of_list_unseal; case: ts. Qed.
+
+Lemma is_exp_of_list ts : is_exp (of_list ts) = false.
+Proof. by rewrite of_list_unseal; case: ts. Qed.
 
 Definition derive_key t :=
   tag (nroot.@"keys".@"sym") t.

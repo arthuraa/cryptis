@@ -38,7 +38,7 @@ Definition responder : val := λ: "c" "skR",
   list_match: ["ga'"; "gb'"; "vkR'"] := "m3" in
   guard: eq_term "ga" "ga'" && eq_term "gb" "gb'" && eq_term "vkR" "vkR'" in
   let: "gab" := texp "ga" "b" in
-  let: "secret" := term_of_list ["ga"; "gb"; "gab"] in
+  let: "secret" := term_of_list ["vkI"; "vkR"; "ga"; "gb"; "gab"] in
   SOME ("vkI", derive_key "secret").
 
 Ltac protocol_failure :=
@@ -54,20 +54,23 @@ Lemma wp_responder c kR dq n :
   {{{ okS,
       RET (repr okS);
       ●Ph{dq} n ∗
-      if okS is Some (vkI, kS) then ∃ kI,
-        let si := SessInfo kI kR kS n in
-        ⌜vkI = TKey Open kI⌝ ∗
+      if okS is Some (vkI, kS) then ∃ si,
+        ⌜vkI = TKey Open (si_init si)⌝ ∗
+        ⌜si_resp si = kR⌝ ∗
+        ⌜si_key si = kS⌝ ∗
+        ⌜si_time si = n⌝ ∗
         public vkI ∗
         minted kS ∗
         □ (∀ kt, public (TKey kt kS) ↔ ▷ session_fail si) ∗
         session si ∗
-        term_token kS (↑nroot.@"server")
+        term_token (si_resp_share si) ⊤
       else True
  }}}.
 Proof.
+set vkR := TKey Open kR.
 iIntros "#chan_c #? (#? & #?) #p_vkR !> %Φ phase_auth Hpost".
 wp_lam. wp_pures. wp_apply wp_vkey. wp_pures.
-wp_bind (recv _). iApply wp_recv => //.
+wp_apply wp_recv => //.
 iIntros "%m1 #p_m1". wp_pures.
 wp_list_of_term m1; last by protocol_failure.
 wp_pures. wp_list_match => [ga vkI -> {m1}|]; last by protocol_failure.
@@ -81,49 +84,44 @@ iApply (wp_mknonce_freshN ∅
           (λ _, (∃ kI, ⌜vkI = TKey Open kI⌝ ∗ public_at n (TKey Seal kI)) ∨
                 public_at n (TKey Seal kR))%I
           iso_dh_pred
-          (λ b, {[Spec.derive_key (Spec.of_list [ga; TExp (TInt 0) b; TExp ga b])]}))
+          (λ b, {[TExp (TInt 0) b;
+                  Spec.derive_key (Spec.of_list [vkI; vkR; ga; TExp (TInt 0) b; TExp ga b])]}))
        => //.
 - iIntros "%". rewrite elem_of_empty. iIntros "[]".
 - iIntros "%b".
-  rewrite big_sepS_singleton minted_derive_key minted_of_list /=.
-  rewrite minted_TExp minted_TInt /=.
+  rewrite big_sepS_union_pers.
+  rewrite !big_sepS_singleton minted_derive_key minted_of_list /=.
+  rewrite !minted_TExp minted_TInt /= bi.True_and.
+  iSplit; first by iIntros "!>"; iSplit; iIntros "?".
   iModIntro. iSplit.
-  + iIntros "#?". do !iSplit => //.
-    by iApply minted_TExp => //; iSplit.
-  + by iIntros "(_ & (_ & ?) & _)".
+  + iIntros "#?".
+    iSplit; first by iApply public_minted.
+    iSplit; first by iApply public_minted.
+    by do !iSplit => //.
+  + by iIntros "(_ & _ & _ & _ & (_ & ?) & _)".
 iIntros "%b _ _ #m_b #p_b #dh_gb token".
-rewrite big_sepS_singleton.
 set gb := TExp (TInt 0) b.
 set gab := TExp ga b.
-set seed := Spec.of_list [_; _; _].
+set seed := Spec.of_list [_; _; _; _; _].
 set kS := Spec.derive_key seed.
-rewrite (term_token_difference _ (↑nroot.@"client")) //.
-iDestruct "token" as "[client token]".
-iMod (escrowI cryptisN _ (term_token ga ⊤) (term_token kS (↑nroot.@"client"))
-       with "client []") as "#client".
-{ iExists (term_meta ga nroot ()). iSplit.
-  - iIntros "!> [token #meta]".
-    by iDestruct (term_meta_token with "token meta") as "[]".
-  - iIntros "!> token".
-    by iMod (term_meta_set nroot () with "token") as "#meta". }
-rewrite (term_token_difference _ (↑nroot.@"server") (_ ∖ _)); last solve_ndisj.
-iDestruct "token" as "[server token]".
-iMod (term_meta_set (nroot.@"info") (vkI, TKey Open kR, n)
-       with "token") as "#info".
-  solve_ndisj.
+have neq: gb ≠ kS
+  by move/(f_equal is_exp); rewrite is_exp_TExp Spec.is_exp_tag.
+rewrite big_sepS_union; last set_solver.
+rewrite {neq} !big_sepS_singleton.
+iDestruct "token" as "[token_gb token_kS]".
+iMod (term_meta_set (nroot.@"info") n with "token_kS") as "#info" => //.
 iAssert (public gb) as "#p_gb".
 { iApply public_TExp_iff; eauto.
   rewrite minted_TInt. iRight. do ![iSplit => //].
   iApply "dh_gb". iPureIntro. by rewrite exps_TExpN. }
 wp_pure _ credit:"H1".
 wp_pure _ credit:"H2".
-wp_bind (mkkeyshare _). iApply wp_mkkeyshare => //.
-iIntros "!> _". wp_pures. wp_list. wp_term_of_list.
+wp_apply wp_mkkeyshare => //.
+iIntros "_". wp_pures. wp_list. wp_term_of_list.
 wp_apply wp_sign. wp_pures.
 iPoseProof (phase_auth_frag with "phase_auth") as "#phaseR".
-wp_pures. wp_bind (send _ _). iApply wp_send => //.
-{ iModIntro.
-  iApply public_TSealIS => //.
+wp_pures. wp_apply wp_send => //.
+{ iApply public_TSealIS => //.
   - by rewrite public_minted !minted_TKey.
   - iModIntro.
     iExists ga, b, vkI, n.  by do ![iSplitL => //].
@@ -135,7 +133,8 @@ wp_pures. wp_bind (recv _). iApply wp_recv => //.
 iIntros "%m3 #p_m3".
 wp_apply wp_verify.
 case: Spec.decP; last by protocol_failure.
-move=> kI {}m3 -> -> {vkI}.
+move=> kI {}m3 e_vkI ->.
+rewrite {}e_vkI {vkI} in seed kS *. set vkI := TKey Open kI.
 wp_pures. wp_list_of_term m3; last by protocol_failure.
 wp_list_match => [ga' gb' vkR' -> {m3}|]; last by protocol_failure.
 wp_eq_term e; last by protocol_failure. subst ga'.
@@ -147,7 +146,7 @@ wp_pure _ credit:"H4".
 iPoseProof (public_TSealE with "p_m3 [//]") as "{p_m3} p_m3".
 rewrite public_of_list /=.
 wp_pures. wp_list. wp_term_of_list.
-wp_pures. rewrite -/seed -/kS. pose si := SessInfo kI kR kS n.
+wp_pures. rewrite -/seed -/kS. pose si := SessInfo kI kR ga gb gab n.
 iAssert ( |={⊤}=> ●Ph{dq} n ∗
   □ (session_fail si ∨
   ∃ a,
@@ -171,12 +170,13 @@ iAssert ( |={⊤}=> ●Ph{dq} n ∗
       as "[phase_auth #comp]"; eauto => //; try by solve_ndisj.
     iFrame. iIntros "!> !>". iLeft. by iRight. }
   rewrite TExp_TExpN TExpC2 -(TExp_TExpN _ [a] b) -/gab -/kS.
-  iPoseProof (term_meta_agree with "info i_m3") as "{i_m3} %e".
-  case: e => <- {n'}.
+  iPoseProof (term_meta_agree with "info i_m3") as "{i_m3} <-".
   iFrame. iIntros "!> !>".
   iRight. iExists a. by do ![iSplitL => //]. }
 iAssert (minted kS) as "#m_kS".
 { rewrite minted_derive_key minted_of_list /=. do !iSplit => //.
+  - by iApply public_minted.
+  - by iApply public_minted.
   - by iApply public_minted.
   - iApply minted_TExp; eauto. }
 iAssert (minted kI) as "#m_kI".
@@ -196,7 +196,7 @@ iAssert (□ (◇ public seed ↔ ▷ session_fail si))%I as "#sec_sk".
   iDestruct "i_m3" as "(%a & -> & p_a & pred_a)".
   rewrite TExp_TExpN TExpC2 in gab seed kS si *.
   rewrite public_of_list /=.
-  iDestruct "p_sk" as "(_ & _ & p_sk & _)".
+  iDestruct "p_sk" as "(_ & _ & _ & _ & p_sk & _)".
   rewrite /gab public_TExp2_iff; eauto.
   iDestruct "p_sk" as "[[_ p_b'] | [ [_ p_a'] | (_ & contra & _)]]".
   - iPoseProof ("p_b" with "p_b'") as "fail".
@@ -209,7 +209,7 @@ iAssert (□ (◇ public seed ↔ ▷ session_fail si))%I as "#sec_sk".
     by rewrite exps_TExpN in contra. }
 wp_apply wp_derive_key. wp_pures.
 iApply ("Hpost" $! (Some (TKey Open kI, kS))).
-iFrame. iModIntro. iExists kI. do !iSplit => //.
+iFrame. iModIntro. iExists si. do !iSplit => //.
 iIntros "!> %kt".
 iApply (bi.iff_trans _ (◇ public seed)); iSplit => //.
 iApply public_key_derive_key => //.
