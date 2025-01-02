@@ -185,6 +185,31 @@ rewrite /comp_map_frag /= -view_frag_op -!pair_op.
 by rewrite !ucmra_unit_right_id.
 Qed.
 
+Lemma comp_map_auth_split n HC :
+  comp_map_auth n HC ~~>
+  comp_map_auth n HC ⋅ comp_map_frag None HC.
+Proof.
+apply: view_update_alloc.
+rewrite /= /comp_map_view_rel_raw => _ [[] bf_n bf_H bf_C].
+case=> [wf_a [] /= val_dq incl_a_b].
+case: wf_a => [bound_H [] bound_C H_C].
+do ![split => //].
+- by rewrite ucmra_unit_left_id.
+- move: incl_a_b; rewrite !pair_included /=.
+  case=> [[] incl_n incl_H incl_C].
+  rewrite ucmra_unit_left_id gset_op.
+  do !split => //; last first.
+    rewrite gset_included in incl_C. rewrite gset_included. set_solver.
+  apply/lookup_included => m.
+  move/lookup_included/(_ m): incl_H.
+  rewrite lookup_op.
+  case/option_included_total => [->|]; first by rewrite ucmra_unit_right_id.
+  case=> X [] Y [] -> [] ->.
+  rewrite -Some_op gset_op gset_included => X_Y.
+  apply: Some_included_mono; rewrite gset_included.
+  set_solver.
+Qed.
+
 Lemma comp_map_frag_split an HC :
   comp_map_frag an HC ≡
   comp_map_frag an HC ⋅ comp_map_frag None HC.

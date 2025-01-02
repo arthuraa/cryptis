@@ -117,6 +117,7 @@ Lemma secret_at_unseal : secret_at = secret_at_def.
 Proof. exact: seal_eq. Qed.
 
 Definition public_at_def n t : iProp :=
+  phase_frag n ∗
   own phase_hon_name (◯CM (∅, {[(n, t)]})) ∗
   public t.
 Definition public_at_aux : seal public_at_def. by eexists. Qed.
@@ -200,7 +201,6 @@ move: (M' k). apply/cmra_discrete_total_update.
 exact: auth_update_auth_persist.
 Qed.
 
-
 Lemma phase_auth_dfrac_op dq1 dq2 n :
   ●Ph{dq1 ⋅ dq2} n ⊣⊢ ●Ph{dq1} n ∗ ●Ph{dq2} n.
 Proof.
@@ -245,15 +245,18 @@ Instance secret_at_persistent n t : Persistent (secret_at n t).
 Proof. rewrite secret_at_unseal. apply _. Qed.
 
 #[global]
+Instance phase_frag_persistent n : Persistent (◯Ph n).
+Proof. rewrite phase_frag_unseal. apply _. Qed.
+
+#[global]
 Instance public_at_persistent n t : Persistent (public_at n t).
 Proof. rewrite public_at_unseal. apply _. Qed.
 
 Lemma public_at_public n t : public_at n t -∗ public t.
-Proof. rewrite public_at_unseal. by iIntros "[? ?]". Qed.
+Proof. rewrite public_at_unseal. by iIntros "(? & ? & ?)". Qed.
 
-#[global]
-Instance phase_frag_persistent n : Persistent (◯Ph n).
-Proof. rewrite phase_frag_unseal. apply _. Qed.
+Lemma public_at_phase_frag n t : public_at n t -∗ ◯Ph n.
+Proof. rewrite public_at_unseal. by iIntros "(? & ? & ?)". Qed.
 
 #[global]
 Instance minted_at_persistent n t : Persistent (minted_at n t).
@@ -306,7 +309,7 @@ Lemma honest_public_at n X m t :
   honest n X -∗ public_at m t -∗ ⌜t ∉ X⌝.
 Proof.
 rewrite honest_unseal public_at_unseal.
-iIntros "%m_n (#frag1 & _) (#frag2 & _)".
+iIntros "%m_n (#frag1 & _) (_ & #frag2 & _)".
 iPoseProof (own_valid_2 with "frag1 frag2") as "%val".
 move/comp_map_frag_valid_dis/(_ n X m t): val.
 rewrite lookup_singleton elem_of_singleton => dis.
@@ -366,6 +369,34 @@ Local Existing Instance has_phase_ctx_persistent.
 
 Context `{!HasPhaseCtx ctx}.
 
+Lemma phase_acc_gen E n :
+  ↑nroot.@"cryptis".@"phase" ⊆ E →
+  ctx -∗
+  ◯Ph n ={E, E ∖ ↑nroot.@"cryptis".@"phase"}=∗ ∃ H C M Y m,
+    ⌜n ≤ m⌝ ∗
+    own phase_hon_name (●CM{m} (H, C)) ∗
+    ⌜H !! m = Some Y⌝ ∗
+    own phase_mint_name (to_mint_map M m) ∗
+    ▷ ([∗ set] t ∈ Y, secret t) ∗
+    ▷ ([∗ set] p ∈ C, public p.2) ∗
+    ▷ □ (∀ m', (⌜m' > m → M m' = ∅⌝) ∗ [∗ set] t ∈ M m', minted t) ∗
+    (▷ phase_inv ={E ∖ ↑nroot.@"cryptis".@"phase",E}=∗ True).
+Proof.
+rewrite phase_frag_unseal.
+iIntros "%sub #ctx phase".
+iPoseProof (has_phase_ctx with "ctx") as "{ctx} ctx".
+iMod (inv_acc with "ctx") as "[inv close]" => //.
+iDestruct "inv"
+  as "(%m & %H & %Y & %C & %M &
+       >verI & >%H_m & >own_M & sec_X & #pub_C & mint_M)".
+iPoseProof (own_valid_2 with "verI phase") as "%val_bound".
+case/comp_map_auth_frag_valid_agree: (val_bound) => X [H_n _].
+have val_bound_l := cmra_valid_op_l _ _ val_bound.
+case/comp_map_auth_valid_dis: val_bound_l => m_upper_bound _.
+iExists H, C, M, Y, m. iFrame. iModIntro. do !iSplit => //.
+iPureIntro. apply: m_upper_bound. by rewrite elem_of_dom H_n.
+Qed.
+
 Lemma phase_acc E dq n X :
   ↑nroot.@"cryptis".@"phase" ⊆ E →
   ctx -∗
@@ -381,22 +412,65 @@ Lemma phase_acc E dq n X :
     ▷ □ (∀ m, (⌜m > n → M m = ∅⌝) ∗ [∗ set] t ∈ M m, minted t) ∗
     (▷ phase_inv ={E ∖ ↑nroot.@"cryptis".@"phase",E}=∗ True).
 Proof.
+iIntros "%sub #ctx #hon phase".
+iPoseProof (phase_auth_frag with "phase") as "#phase_lb".
+iMod (phase_acc_gen with "ctx phase_lb")
+  as "(%H & %C & %M & %Y & %m &
+       %n_m & verI & %H_m & own_M & sec_X & #pub_C & mint_M)" => //.
 rewrite honest_unseal phase_auth_unseal.
-iIntros "%sub #ctx [#hon _] phase".
-iPoseProof (has_phase_ctx with "ctx") as "{ctx} ctx".
-iMod (inv_acc with "ctx") as "[inv close]" => //.
-iDestruct "inv"
-  as "(%n' & %H & %Y & %C & %M &
-       >verI & >%H_n & >own_M & sec_X & #pub_C & mint_M)".
 iPoseProof (own_valid_2 with "verI phase") as "%val_bound".
-move/comp_map_auth_frag_bound_agree: val_bound => -> {n'} in H_n *.
+move/comp_map_auth_frag_bound_agree: val_bound => -> {m n_m} in H_m *.
+iDestruct "hon" as "[hon _]".
 iPoseProof (own_valid_2 with "verI hon") as "%val".
 case/comp_map_auth_frag_valid_agree: val.
-rewrite H_n => _ [] [<-] X_Y.
+rewrite H_m => _ [] [<-] X_Y.
 iFrame. iModIntro. eauto.
 Qed.
 
-Lemma public_atI E dq t n :
+Lemma public_atI_gen E t n :
+  ↑nroot.@"cryptis".@"phase" ⊆ E →
+  ctx -∗
+  £ 1 -∗
+  ◯Ph n -∗
+  public t ={E}=∗
+  ∃ m, ⌜n ≤ m⌝ ∗ public_at m t.
+Proof.
+iIntros "%sub #ctx cred #phase_frag #p_t".
+iMod (phase_acc_gen with "ctx phase_frag")
+  as "(%H & %C & %M & %X & %m & %n_m & phaseI & %H_m & own_M &
+       sec_X & #pub_X & #mint_M & close)" => //.
+iMod (lc_fupd_elim_later with "cred sec_X") as "sec_X".
+iAssert (◇ ⌜t ∉ X⌝)%I with "[sec_X]" as "#>%t_X".
+{ case: (decide (t ∈ X)) => [t_X|//].
+  iClear "pub_X".
+  rewrite (big_sepS_delete _ X t) //.
+  iDestruct "sec_X" as "[sec_t sec_X]".
+  iDestruct "sec_t" as "(_ & _ & sec_t)".
+  iDestruct ("sec_t" with "p_t") as ">[]". }
+iMod (own_update with "phaseI") as "[phaseI phaseI']".
+{ apply: comp_map_auth_split. }
+have e: (H, C) = (H, C) ⋅ ({[m := ∅]}, ∅).
+  rewrite -pair_op ucmra_unit_right_id_L (_ : H ⋅ {[m := ∅]} = H) //.
+  rewrite -leibniz_equiv_iff => k.
+  rewrite lookup_op.
+  case: (decide (k = m)) => [->|k_m].
+  - by rewrite lookup_singleton H_m -Some_op ucmra_unit_right_id_L.
+  - by rewrite lookup_singleton_ne // ucmra_unit_right_id_L.
+rewrite [in ◯CM (H, C)]e comp_map_frag_op.
+iDestruct "phaseI'" as "[_ #?]".
+iMod (own_update with "phaseI") as "phaseI".
+  exact: comp_map_comp_update_last H_m t_X.
+iDestruct "phaseI" as "[phaseI #comp]".
+iMod ("close" with "[phaseI own_M sec_X]") as "_".
+{ iModIntro. iExists m, H, X, ({[(m, t)]} ∪ C), M. iFrame.
+  rewrite big_sepS_union_pers big_sepS_singleton /=.
+  by eauto. }
+iModIntro. iExists m. iSplit => //.
+rewrite public_at_unseal; do !iSplit => //.
+by rewrite phase_frag_unseal.
+Qed.
+
+Lemma public_atI E t dq n :
   ↑nroot.@"cryptis".@"phase" ⊆ E →
   ctx -∗
   £ 1 -∗
@@ -407,30 +481,58 @@ Lemma public_atI E dq t n :
 Proof.
 iIntros "%sub #ctx cred phase_auth #p_t".
 iPoseProof (phase_auth_frag with "phase_auth") as "#phase_frag".
-iPoseProof (phase_frag_honest with "phase_frag") as "#hon".
-iMod (phase_acc with "ctx hon phase_auth")
-  as "(%H & %C & %M & %X & phase_auth & phaseI & %H_n & _ & own_M &
-       sec_X & #pub_X & #mint_M & close)" => //.
-iMod (lc_fupd_elim_later with "cred sec_X") as "sec_X".
-iAssert (◇ ⌜t ∉ X⌝)%I with "[sec_X]" as "#>%t_X".
-{ case: (decide (t ∈ X)) => [t_X|//].
-  iClear "pub_X".
-  rewrite (big_sepS_delete _ X t) //.
-  iDestruct "sec_X" as "[sec_t sec_X]".
-  iDestruct "sec_t" as "(_ & _ & sec_t)".
-  iDestruct ("sec_t" with "p_t") as ">[]". }
-iMod (own_update with "phaseI") as "phaseI".
-  exact: comp_map_comp_update_last H_n t_X.
-iDestruct "phaseI" as "[phaseI #comp]".
-iMod ("close" with "[phaseI own_M sec_X]") as "_".
-{ iModIntro. iExists n, H, X, ({[(n, t)]} ∪ C), M. iFrame.
-  rewrite big_sepS_union_pers big_sepS_singleton /=.
-  by eauto. }
-iFrame.
-by rewrite public_at_unseal; iModIntro; iSplit.
+iMod (public_atI_gen with "ctx cred phase_frag p_t")
+  as "(%m & %n_m & #p_m_t)" => //.
+iPoseProof (public_at_phase_frag with "p_m_t") as "phase_frag'".
+iPoseProof (phase_auth_frag_agree with "phase_auth phase_frag'") as "%".
+iFrame. by have ->: m = n by lia.
 Qed.
 
-Lemma minted_atI E dq t n :
+Lemma minted_atI_gen E t n :
+  ↑nroot.@"cryptis".@"phase" ⊆ E →
+  ctx -∗
+  ◯Ph n -∗
+  minted t ={E}=∗
+  ∃ m, ⌜n ≤ m⌝ ∗ minted_at m t.
+Proof.
+iIntros "%sub #ctx #phase_frag #m_t".
+iMod (phase_acc_gen with "ctx phase_frag")
+  as "(%H & %C & %M & %X & %m & %n_m & phaseI & %H_m & own_M &
+       sec_X & #pub_X & #mint_M & close)" => //.
+iMod (own_update with "own_M") as "own_M".
+{ apply: (to_mint_map_alloc t). }
+iDestruct "own_M" as "[own_M #minted]".
+iMod (own_update with "phaseI") as "[phaseI phaseI']".
+{ apply: comp_map_auth_split. }
+have e: (H, C) = (H, C) ⋅ ({[m := ∅]}, ∅).
+  rewrite -pair_op ucmra_unit_right_id_L (_ : H ⋅ {[m := ∅]} = H) //.
+  rewrite -leibniz_equiv_iff => k.
+  rewrite lookup_op.
+  case: (decide (k = m)) => [->|k_m].
+  - by rewrite lookup_singleton H_m -Some_op ucmra_unit_right_id_L.
+  - by rewrite lookup_singleton_ne // ucmra_unit_right_id_L.
+rewrite [in ◯CM (H, C)]e comp_map_frag_op.
+iDestruct "phaseI'" as "[_ #?]".
+iMod ("close" with "[phaseI own_M sec_X]") as "_".
+{ iModIntro. iExists m, H, X, C, _. iFrame.
+  iSplit => //.
+  iSplit => //.
+  iIntros "!> %m'".
+  iDestruct ("mint_M" $! m') as "[%finsupp #minted']". iSplit.
+  - iPureIntro. move=> m_n.
+    rewrite discrete_fun_lookup_insert_ne ?finsupp //.
+    lia.
+  - case: (decide (m' = m)) => [->|ne].
+    + rewrite discrete_fun_lookup_insert.
+      rewrite big_sepS_union_pers big_sepS_singleton.
+      by iSplit.
+    + by rewrite discrete_fun_lookup_insert_ne. }
+iFrame. iExists m.
+iModIntro. rewrite minted_at_unseal. do !iSplit => //.
+by rewrite phase_frag_unseal.
+Qed.
+
+Lemma minted_atI E t dq n :
   ↑nroot.@"cryptis".@"phase" ⊆ E →
   ctx -∗
   ●Ph{dq} n -∗
@@ -438,31 +540,13 @@ Lemma minted_atI E dq t n :
   ●Ph{dq} n ∗
   minted_at n t.
 Proof.
-iIntros "%sub #ctx phase_auth #m_t".
+iIntros "%sub #ctx phase_auth #p_t".
 iPoseProof (phase_auth_frag with "phase_auth") as "#phase_frag".
-iPoseProof (phase_frag_honest with "phase_frag") as "#hon".
-iMod (phase_acc with "ctx hon phase_auth")
-  as "(%H & %C & %M & %X & phase_auth & phaseI & %H_n & _ & own_M &
-       sec_X & #pub_X & #mint_M & close)" => //.
-iMod (own_update with "own_M") as "own_M".
-{ apply: (to_mint_map_alloc t). }
-iDestruct "own_M" as "[own_M #minted]".
-iMod ("close" with "[phaseI own_M sec_X]") as "_".
-{ iModIntro. iExists n, H, X, C, _. iFrame.
-  iSplit => //.
-  iSplit => //.
-  iIntros "!> %m".
-  iDestruct ("mint_M" $! m) as "[%finsupp #minted']". iSplit.
-  - iPureIntro. move=> m_n.
-    rewrite discrete_fun_lookup_insert_ne ?finsupp //.
-    lia.
-  - case: (decide (m = n)) => [->|ne].
-    + rewrite discrete_fun_lookup_insert.
-      rewrite big_sepS_union_pers big_sepS_singleton.
-      by iSplit.
-    + by rewrite discrete_fun_lookup_insert_ne. }
-iFrame.
-by rewrite minted_at_unseal; iModIntro; do !iSplit.
+iMod (minted_atI_gen with "ctx phase_frag p_t")
+  as "(%m & %n_m & #p_m_t)" => //.
+iPoseProof (minted_at_phase_frag with "p_m_t") as "phase_frag'".
+iPoseProof (phase_auth_frag_agree with "phase_auth phase_frag'") as "%".
+iFrame. by have ->: m = n by lia.
 Qed.
 
 Lemma minted_at_list E dq n :
