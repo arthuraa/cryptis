@@ -188,21 +188,20 @@ iModIntro. iRight. iExists _. iSplit => //.
 by iApply "post".
 Qed.
 
-Lemma wp_server_listen c ss dq ph :
-  {{{ cryptis_ctx ∗ channel c ∗ store_ctx N ∗
-      server ss ∗ ●Ph{dq} ph }}}
+Lemma wp_server_listen c ss :
+  {{{ cryptis_ctx ∗ channel c ∗ store_ctx N ∗ server ss }}}
     Server.listen N c (repr ss)
-  {{{ RET #(); server ss ∗ ●Ph{dq} ph }}}.
+  {{{ RET #(); server ss }}}.
 Proof.
-iIntros "%Φ (#? & #chan_c & #ctx & server & phase) post".
+iIntros "%Φ (#? & #chan_c & #ctx & server) post".
 wp_lam; wp_pures.
 iPoseProof (store_ctx_dh_auth_ctx with "ctx") as "dh".
 wp_apply (wp_connection_listen
-         with "[# //] [# //] [# //] [#] [phase]") => //;
+         with "[# //] [# //] [# //] [#] []") => //;
   try by solve_ndisj.
 { by iDestruct "server" as "(% & % & ? & _)". }
-iIntros "%cs (hon & resP)". wp_pures.
-iDestruct "resP" as "(conn & %e_kR & <- & %e_rl & token)".
+iIntros "%cs resP". wp_pures.
+iDestruct "resP" as "(conn & %e_kR & %e_rl & token)".
 wp_bind (Server.find_client _ _).
 iApply (wp_server_find_client with "[$]").
 iIntros "!> %vdb %γlock %vlock [server #lock]".
@@ -211,7 +210,7 @@ wp_pures.
 wp_bind (acquire _).
 iApply acquire_spec => //.
 iIntros "!> (locked & %db & account & db)". rewrite -e_kR.
-iMod (server_connectingI with "[//] hon c account") as "[hon account]".
+iMod (server_connectingI with "[//] c account") as "account".
 wp_pures.
 iApply (wp_fork with "[conn locked db account token]").
 { iModIntro.

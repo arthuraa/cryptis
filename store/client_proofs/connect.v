@@ -30,30 +30,27 @@ Implicit Types v : val.
 
 Variable N : namespace.
 
-Lemma wp_client_connect c kI kR dq ph :
+Lemma wp_client_connect c kI kR :
   channel c -∗
   cryptis_ctx -∗
   store_ctx N -∗
   public (TKey Open kI) -∗
   public (TKey Open kR) -∗
-  {{{ ●Ph{dq} ph ∗
-      client_disconnected kI kR }}}
+  {{{ client_disconnected kI kR }}}
     Client.connect N c kI (TKey Open kR)
   {{{ cs, RET (repr cs);
-      ⌜si_time cs = ph⌝ ∗
-      ●Ph{dq} ph ∗
       client_connected kI kR cs }}}.
 Proof.
 iIntros "#chan_c #ctx (#? & #? & _ & _ & _ & _ & _ & _ & _ & _ & #ctx')".
 iIntros "#p_ekI #p_ekR".
-iIntros "!> %Φ [phase client] post".
+iIntros "!> %Φ client post".
 rewrite /Client.connect.
 wp_pure _ credit:"c1". wp_pure _ credit:"c2". wp_pures.
-wp_apply (wp_connection_connect with "[//] [//] [//] [] [] [phase]") => //.
-iIntros "%cs (phase & conn & % & % & % & % & token)".
+wp_apply (wp_connection_connect with "[//] [//] [//] [] []") => //.
+iIntros "%cs (conn & % & % & % & token)".
 iDestruct "client" as "(%beginning & client)".
-iMod (client_connectingI with "[//] [$] phase token client")
-  as "(phase & client & #ready)" => //; try solve_ndisj.
+iMod (client_connectingI with "[//] [$] token client")
+  as "(client & #ready)" => //; try solve_ndisj.
 subst kI kR.
 iPoseProof (init_predI _ _ (TInt 0) with "client []") as "#?".
 { iDestruct "ready" as "[fail|[_ ready]]"; eauto. }
@@ -62,9 +59,9 @@ iApply (wp_connection_send with "[//] [] [] [] conn") => //.
 { by rewrite public_TInt. }
 iIntros "!> conn".
 wp_pures.
-iCombine "phase client post" as "I". iRevert "conn I".
+iCombine "client post" as "I". iRevert "conn I".
 iApply (wp_connection_recv with "[//] []") => //.
-iIntros "!> %m conn (phase & client & post) _ #mP".
+iIntros "!> %m conn (client & post) _ #mP".
 iMod (ack_init_predE with "client mP") as "client" => //.
 wp_pures.
 iRight. iExists _. iSplitR => //.

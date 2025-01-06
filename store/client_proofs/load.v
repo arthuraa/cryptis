@@ -39,7 +39,7 @@ Lemma wp_client_load c kI kR cs t1 t2 :
       client_connected kI kR cs ∗
       rem_mapsto kI kR t1 t2 ∗
       public t2' ∗
-      (session_fail cs ∨ ⌜t2' = t2⌝) }}}.
+      (failure kI kR ∨ ⌜t2' = t2⌝) }}}.
 Proof.
 iIntros "#chan_c #ctx #p_t1 !> %Φ [client mapsto] post".
 iDestruct "ctx" as "(_ & _ & _ & _ & load & ack_load & _)".
