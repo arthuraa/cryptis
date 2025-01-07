@@ -79,6 +79,25 @@ case/Spec.tag_inj => _.
 by case/Spec.of_list_inj => <- <- <- <- <-.
 Qed.
 
+Definition compromised si : iProp :=
+  public (TKey Seal (si_init si)) ∨
+  public (TKey Seal (si_resp si)).
+
+Definition session_status si (failed : bool) : iProp := ∃ a,
+  ⌜si_init_share si = TExp (TInt 0) a⌝ ∗
+  term_meta a (nroot.@"failed") failed.
+
+Lemma session_status_agree si failed1 failed2 :
+  session_status si failed1 -∗
+  session_status si failed2 -∗
+  ⌜failed1 = failed2⌝.
+Proof.
+rewrite /session_status.
+iIntros "(%a1 & -> & #meta1) (%a2 & %e & #meta2)".
+move/TExp_injr: e => <-.
+by iApply (term_meta_agree with "meta1 meta2").
+Qed.
+
 Definition msg2_pred kR m2 : iProp :=
   ∃ ga b vkI,
     let vkR := TKey Open kR in
@@ -91,15 +110,16 @@ Definition msg2_pred kR m2 : iProp :=
     (∀ t, dh_pred b t ↔ ▷ □ iso_dh_pred t).
 
 Definition msg3_pred kI m3 : iProp :=
-  ∃ a gb kR,
+  ∃ a gb kR failed,
     let vkI := TKey Open kI in
     let vkR := TKey Open kR in
     let ga := TExp (TInt 0) a in
     let gab := TExp gb a in
     let si := SessInfo kI kR ga gb gab in
     ⌜m3 = Spec.of_list [ga; gb; vkR]⌝ ∗
-    (public a ↔ ▷ □ False) ∗
-    (∀ t, dh_pred a t ↔ ▷ □ iso_dh_pred t).
+    session_status si failed ∗
+    (◇ public (si_key si) ↔ ▷ ⌜failed⌝) ∗
+    (compromised si ∨ ⌜failed = false⌝).
 
 Definition iso_dh_ctx : iProp :=
   seal_pred (N.@"m2") msg2_pred ∗

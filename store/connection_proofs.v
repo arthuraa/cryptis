@@ -45,12 +45,14 @@ wp_pures.
 wp_apply (wp_initiator with "[//] [//] [//] [] []") => //.
 iIntros "%res resP".
 case: res=> [kS|] /=; wp_pures; last by iLeft; iFrame; eauto.
-iDestruct "resP" as "(%si & % & % & <- & #m_kS & #s_kS & #sess & token)".
+iDestruct "resP"
+  as "(%si & %failed & % & % & <- &
+       #m_kS & #status & #s_kS & #s_kS' & #comp & token)".
 wp_alloc ts as "ts". wp_pures.
 iRight. iModIntro. iExists _.  iSplit => //.
 iApply ("post" $! (ConnState si ts Init)). iFrame => /=.
 do !iSplit => //.
-iDestruct "sess" as "[fail|sess]"; last by iRight.
+iDestruct "comp" as "[fail|->]"; last by iRight.
 rewrite /failure. subst kR. by eauto.
 Qed.
 
@@ -76,12 +78,12 @@ iIntros "%res resP".
 case: res=> [[vkI kS]|] /=; wp_pures; last by iLeft; iFrame; eauto.
 wp_alloc ts as "ts".
 iDestruct "resP"
-  as "(%si & -> & % & <- & #p_vkI & #m_kS & #p_kS & #sess & token)".
+  as "(%si & -> & % & <- & #p_vkI & #m_kS & #p_kS & #comp & token)".
 wp_pures.
 iRight. iModIntro. iExists _.  iSplit => //.
 iApply ("post" $! (ConnState si ts Resp)). iFrame => /=.
 do !iSplit => //; eauto.
-iDestruct "sess" as "[fail|sess]"; last by iRight.
+iDestruct "comp" as "[fail|[_ sess]]"; last by iRight.
 rewrite /failure. by eauto.
 Qed.
 

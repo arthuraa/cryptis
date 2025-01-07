@@ -60,7 +60,8 @@ Lemma wp_responder c kR :
         public vkI ∗
         minted kS ∗
         □ (∀ kt, public (TKey kt kS) ↔ ◇ public kS) ∗
-        (public (TKey Seal (si_init si)) ∨ □ (◇ public kS ↔ ▷ False)) ∗
+        (compromised si ∨
+         session_status si false ∗ □ (◇ public kS ↔ ▷ False)) ∗
         term_token (si_resp_share si) ⊤
       else True
  }}}.
@@ -122,19 +123,19 @@ rewrite public_of_list /=.
 wp_pures. wp_list. wp_term_of_list.
 wp_pures. pose si := SessInfo kI kR ga gb gab.
 wp_apply wp_derive_key. rewrite -[Spec.derive_key _]/(si_key si).
-iAssert (|={⊤}=> public (TKey Seal kI) ∨ □ (◇ public (si_key si) ↔ ▷ False))%I
+iAssert (|={⊤}=> compromised si ∨
+                 session_status si false ∗
+                 □ (◇ public (si_key si) ↔ ▷ False))%I
   with "[H4]" as "> #i_m3".
-{ iDestruct "p_m3" as "[(p_skI & _) | (#i_m3 & _ & _)]"; first by eauto.
+{ iDestruct "p_m3" as "[(p_skI & _) | (#i_m3 & _ & _)]".
+  { rewrite /compromised. by eauto. }
   iMod (lc_fupd_elim_later_pers with "H4 i_m3") as "{i_m3} #i_m3".
-  iDestruct "i_m3" as "(%a & %gb' & %kR' & %e_m3 & p_a & pred_a)".
-  case/Spec.of_list_inj: e_m3 => -> _ _ {ga gb' kR'} in gb gab si *.
-  rewrite TExp_TExpN TExpC2 in gab si *.
-  iIntros "!>". iRight. iIntros "!>".
-  iApply (bi.iff_trans _ (◇ public gab)).
-  iSplit; last by iApply public_dh_secret.
-  rewrite public_derive_key public_of_list /=.
-  iSplit; first by iIntros "(_ & _ & _ & _ & p_sk & _)".
-  iIntros "#>p_gab !>". by do !iSplit. }
+  iDestruct "i_m3"
+    as "(%a & %gb' & %kR' & %failed & %e_m3 & status & p_a & comp)".
+  case/Spec.of_list_inj: e_m3 => -> <- <- {ga gb' kR'} in gb gab si *.
+  rewrite !TExp_TExpN TExpC2 in gab si *.
+  iIntros "!>". iDestruct "comp" as "[comp|->]"; first by eauto.
+  iRight. by iSplit => //. }
 iAssert (minted (si_key si)) as "#m_kS".
 { rewrite minted_derive_key !minted_of_list /= !minted_TExp minted_TInt.
   by do !iSplit => //; iApply public_minted. }
