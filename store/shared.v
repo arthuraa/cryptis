@@ -295,11 +295,14 @@ Definition dbSN kI := nroot.@"db".@"server".@kI.
 Definition failure kI kR : iProp :=
   public (TKey Seal kI) ∨ public (TKey Seal kR).
 
-Definition is_conn_state cs n : iProp :=
-  cs_ts cs ↦ #n ∗
+Definition wf_conn_state cs : iProp :=
   minted (si_key cs) ∗
   □ (∀ kt, public (TKey kt (si_key cs)) ↔ ◇ public (si_key cs)) ∗
   (failure (si_init cs) (si_resp cs) ∨ □ (◇ public (si_key cs) ↔ ▷ False)).
+
+#[global]
+Instance wf_conn_state_persistent cs : Persistent (wf_conn_state cs).
+Proof. apply _. Qed.
 
 Definition db_not_signed_up kI kR : iProp :=
   term_token kR (↑dbSN kI).
@@ -435,7 +438,8 @@ Qed.
 Definition client_connected kI kR cs : iProp := ∃ n beginning,
   ⌜si_init cs = kI⌝ ∗
   ⌜si_resp cs = kR⌝ ∗
-  is_conn_state cs n ∗
+  wf_conn_state cs ∗
+  cs_ts cs ↦ #n ∗
   client_connected_int cs n beginning.
 
 Definition rem_mapsto kI kR t1 t2 : iProp :=
@@ -949,11 +953,11 @@ Definition server_handler_inv cs n ldb db : iProp :=
 
 Definition server_handler_post cs ldb v : iProp := ∃ n db,
   ⌜v = #true⌝ ∗
-  is_conn_state cs n ∗
+  cs_ts cs ↦ #n ∗
   server_connected cs n db ∗
   SAList.is_alist ldb (repr <$> db) ∨
   ⌜v = #false⌝ ∗
-  is_conn_state cs n ∗
+  cs_ts cs ↦ #n ∗
   server_disconnected (si_init cs) (si_resp cs) db ∗
   SAList.is_alist ldb (repr <$> db).
 

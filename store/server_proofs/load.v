@@ -44,10 +44,10 @@ iIntros "#chan_c #ctx".
 iPoseProof (store_ctx_load with "ctx") as "?".
 iPoseProof (store_ctx_ack_load with "ctx") as "?".
 rewrite /handler_correct. wp_lam; wp_pures.
-iModIntro. iExists _. iSplit => //. iIntros "!> %m _ #p_m conn (server & db)".
+iModIntro. iExists _. iSplit => //. iIntros "!> %m _ #p_m #conn ts (server & db)".
 wp_pures.
 wp_bind (Connection.timestamp _).
-iApply (wp_connection_timestamp with "conn"). iIntros "!> conn".
+iApply (wp_connection_timestamp with "ts"). iIntros "!> ts".
 wp_pures.
 wp_list_of_term m; wp_pures; last by failure.
 wp_list_match => [timestamp t1 ->| _]; wp_pures; last by failure.
@@ -62,7 +62,7 @@ wp_pures.
 iPoseProof (ack_load_predI db_t1 with "server") as "#[??]".
 wp_bind (Connection.send _ _ _ _).
 iApply (wp_connection_send with "[//] [//] [] [] conn") => //.
-iIntros "!> conn". wp_pures. iModIntro.
+iIntros "!> _". wp_pures. iModIntro.
 iRight. iExists _. iSplit => //. iExists _, _. iLeft. by iFrame.
 Qed.
 

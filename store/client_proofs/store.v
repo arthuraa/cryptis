@@ -37,21 +37,20 @@ Lemma wp_client_send_store c kI kR cs t1 t2 t2' :
   {{{ RET #(); client_connected kI kR cs ∗ rem_mapsto kI kR t1 t2' }}}.
 Proof.
 iIntros "#chan_c (_ & _ & #? & _) #p_t1 #p_t2' !> %Φ [client mapsto] post".
-iDestruct "client" as "(%n & %beginning & <- & <- & conn & client)".
+iDestruct "client" as "(%n & %beginning & <- & <- & #conn & ts & client)".
 iMod (rem_mapsto_update t2' with "client mapsto")
   as "(client & mapsto & #update)".
-wp_lam. wp_pures. wp_bind (Connection.timestamp _).
-iApply (wp_connection_timestamp with "conn"); iIntros "!> conn".
-wp_pures. wp_bind (Connection.tick _).
-iApply (wp_connection_tick with "conn"). iIntros "!> conn".
+wp_lam. wp_pures.
+wp_apply (wp_connection_timestamp with "ts"); iIntros "ts".
+wp_pures. wp_apply (wp_connection_tick with "ts"). iIntros "ts".
 iPoseProof (store_predI with "client update") as "#?".
 wp_pures. wp_list. wp_bind (tint _). iApply wp_tint. wp_list.
 wp_term_of_list. wp_pures.
 iApply (wp_connection_send with "[//] [//] [] [#] conn") => //.
 - rewrite public_of_list /= public_TInt. by eauto.
-iIntros "!> conn".
-iApply ("post" with "[conn client mapsto]").
-by iFrame.
+iIntros "!> _".
+iApply ("post" with "[ts client mapsto]").
+by iFrame; eauto.
 Qed.
 
 Lemma wp_client_ack_store c kI kR cs :
@@ -62,18 +61,17 @@ Lemma wp_client_ack_store c kI kR cs :
   {{{ RET #(); client_connected kI kR cs }}}.
 Proof.
 iIntros "#chan_c (_ & _ & _ & #? & _) !> %Φ client post".
-iDestruct "client" as "(%n & %beginning & <- & <- & conn & client)".
+iDestruct "client" as "(%n & %beginning & <- & <- & #conn & ts & client)".
 rewrite /Client.ack_store. wp_pures.
-wp_bind (Connection.timestamp _).
-iApply (wp_connection_timestamp with "conn"). iIntros "!> conn".
+wp_apply (wp_connection_timestamp with "ts"). iIntros "ts".
 wp_pures.
-iCombine "client post" as "I". iRevert "conn I".
+iCombine "client post" as "I". iRevert "ts I".
 iApply wp_connection_recv => //.
-iIntros "!> %m conn (client & post) #m_m _".
-wp_pures. wp_bind (tint _). iApply wp_tint.
+iIntros "!> %m ts (client & post) #m_m _".
+wp_pures. wp_apply wp_tint.
 wp_eq_term e; wp_pures; last by iLeft; iFrame.
 iRight. iModIntro. iExists _. iSplit => //.
-iApply "post". by iExists _, _; iFrame.
+iApply "post". by iExists _, _; iFrame; eauto.
 Qed.
 
 Lemma wp_client_store c kI kR cs t1 t2 t2' :

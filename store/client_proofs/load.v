@@ -43,19 +43,19 @@ Lemma wp_client_load c kI kR cs t1 t2 :
 Proof.
 iIntros "#chan_c #ctx #p_t1 !> %Φ [client mapsto] post".
 iDestruct "ctx" as "(_ & _ & _ & _ & load & ack_load & _)".
-iDestruct "client" as "(%n & %beginning & <- & <- & conn & client)".
+iDestruct "client" as "(%n & %beginning & <- & <- & #conn & ts & client)".
 rewrite /Client.load. wp_pures. wp_bind (Connection.timestamp _).
-iApply (wp_connection_timestamp with "conn"). iIntros "!> conn".
+iApply (wp_connection_timestamp with "ts"). iIntros "!> ts".
 wp_bind (tint _). iApply wp_tint.
 wp_pures. wp_list. wp_term_of_list.
 wp_bind (Connection.send _ _ _ _).
-iApply (wp_connection_send with "[//] load [] [] conn") => //.
+iApply (wp_connection_send with "[//] load [] []") => //.
 - rewrite public_of_list /= public_TInt. by eauto.
 - iRight. by eauto.
-iIntros "!> conn". wp_pures.
-iCombine "client mapsto post" as "I". iRevert "conn I".
+iIntros "!> _". wp_pures.
+iCombine "client mapsto post" as "I". iRevert "ts I".
 iApply wp_connection_recv => //.
-iIntros "!> %ts conn (client & mapsto & post) #p_m #inv_m". wp_pures.
+iIntros "!> %ts ts (client & mapsto & post) #p_m #inv_m". wp_pures.
 wp_list_of_term ts; wp_pures; last by iLeft; iFrame.
 wp_list_match => [n' t1' t2' -> {ts}|_]; wp_pures; last by iLeft; iFrame.
 wp_eq_term e; last by wp_pures; iLeft; iFrame.
@@ -66,7 +66,7 @@ iPoseProof (ack_loadE with "client mapsto p_m inv_m") as "#p_t2'".
 wp_pures. iRight. iModIntro. iExists _. iSplit => //.
 iApply "post".
 iFrame.
-by iSplit => //.
+by iSplit => //; eauto.
 Qed.
 
 End Verif.

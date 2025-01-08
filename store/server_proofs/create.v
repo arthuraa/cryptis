@@ -44,11 +44,11 @@ iPoseProof (store_ctx_create with "ctx") as "?".
 iPoseProof (store_ctx_ack_create with "ctx") as "?".
 rewrite /handler_correct. wp_lam; wp_pures.
 iModIntro. iExists _. iSplit => //.
-iIntros "!> %m #p_m #inv_m conn (server & db)".
+iIntros "!> %m #p_m #inv_m #conn ts (server & db)".
 wp_pures.
 wp_bind (Connection.timestamp _).
-iApply (wp_connection_timestamp with "conn").
-iIntros "!> conn". wp_pures.
+iApply (wp_connection_timestamp with "ts").
+iIntros "!> ts". wp_pures.
 wp_list_of_term m; wp_pures; last by failure.
 wp_list_match => [timestamp t1 t2 ->| _]; wp_pures; last by failure.
 wp_bind (to_int _). iApply wp_to_int.
@@ -59,9 +59,9 @@ iIntros "!> db". rewrite lookup_fmap.
 wp_bind (match: _ with InjL <> => _ | InjR <> => _ end)%E.
 iApply (wp_wand _ _ _ (λ v, ∃ (b : bool) n' db',
   ⌜v = #((if b then 1 else 0) : Z)⌝ ∗
-  is_conn_state cs n' ∗
+  cs_ts cs ↦ #n' ∗
   server_connected cs n' db' ∗
-  SAList.is_alist ldb (repr <$> db')) with "[conn db server]")%I.
+  SAList.is_alist ldb (repr <$> db')) with "[ts db server]")%I.
 { case db_t1: (db !! t1) => [t2'|]; wp_pures.
   { by iExists false, _, _; iFrame. }
   wp_bind (SAList.insert _ _ _).
@@ -71,11 +71,11 @@ iApply (wp_wand _ _ _ (λ v, ∃ (b : bool) n' db',
   iPoseProof (create_predE with "server p_m inv_m") as "server" => //.
   wp_pures.
   wp_bind (Connection.tick _).
-  iApply (wp_connection_tick with "conn").
-  iIntros "!> conn".
+  iApply (wp_connection_tick with "ts").
+  iIntros "!> ts".
   wp_pures.
   iExists true, _, _. by iFrame. }
-iIntros "% (%b & %n' & %db' & -> & conn & server & db)".
+iIntros "% (%b & %n' & %db' & -> & ts & server & db)".
 wp_pures.
 wp_bind (tint _). iApply wp_tint.
 wp_list.
@@ -88,7 +88,7 @@ iApply (wp_connection_send with "[//] [//] [] [] conn") => //.
 - rewrite !public_of_list /= !public_TInt. eauto.
   iDestruct "p_m" as "(_ & ? & ? & _)". by eauto.
 - iRight. by iModIntro.
-iIntros "!> conn".
+iIntros "!> _".
 wp_pures.
 iModIntro. iRight. iExists _. iSplit => //. iExists _, _. iLeft.
 by iFrame.

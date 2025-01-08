@@ -44,29 +44,29 @@ iPoseProof (store_ctx_store with "ctx") as "?".
 iPoseProof (store_ctx_ack_store with "ctx") as "?".
 rewrite /handler_correct /=. wp_lam; wp_pures.
 iModIntro. iExists _. iSplit => //.
-iIntros "!> %m #p_m #inv_m conn (server & db)". wp_pures.
+iIntros "!> %m #p_m #inv_m #conn ts (server & db)". wp_pures.
 wp_bind (Connection.timestamp _).
-iApply (wp_connection_timestamp with "conn") => //.
-iIntros "!> conn". wp_pures.
+iApply (wp_connection_timestamp with "ts") => //.
+iIntros "!> ts". wp_pures.
 wp_list_of_term m; wp_pures; last by failure.
 wp_list_match => [n' t1 t2 ->|_]; wp_pures; last by failure.
 wp_bind (to_int _). iApply wp_to_int.
 case: Spec.to_intP => [ {}n' -> | _]; wp_pures; last by failure.
 case: bool_decide_reflect => [[ {n'} <-]|ne]; wp_pures; last by failure.
 iPoseProof (store_predE with "server p_m inv_m") as "server".
-wp_bind (Connection.tick _). iApply (wp_connection_tick with "conn").
-iIntros "!> conn". wp_pures.
+wp_bind (Connection.tick _). iApply (wp_connection_tick with "ts").
+iIntros "!> ts". wp_pures.
 wp_bind (SAList.insert _ _ _).
 iApply (SAList.wp_insert with "db").
 iIntros "!> db". rewrite -fmap_insert.
 wp_pures.
 wp_bind (tint _). iApply wp_tint.
 wp_bind (Connection.send _ _ _ _).
-iApply (wp_connection_send _ c cs (S n)
-   with "[//] [//] [] [] conn [server db]") => //.
+iApply (wp_connection_send _ c cs
+   with "[//] [//] [] [] [] []") => //.
 - by rewrite public_TInt.
 - iRight. by iExists _.
-iIntros "!> conn". wp_pures.
+iIntros "!> _". wp_pures.
 iModIntro. iRight. iExists _. iSplit => //.
 iExists _, _. iLeft. by iFrame.
 Qed.

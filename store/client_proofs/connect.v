@@ -47,7 +47,7 @@ iIntros "!> %Φ client post".
 rewrite /Client.connect.
 wp_pure _ credit:"c1". wp_pure _ credit:"c2". wp_pures.
 wp_apply (wp_connection_connect with "[//] [//] [//] [] []") => //.
-iIntros "%cs (conn & % & % & % & token)".
+iIntros "%cs (#conn & ts & % & % & % & token)".
 iDestruct "client" as "(%beginning & client)".
 iMod (client_connectingI with "[//] [$] token client")
   as "(client & #ready)" => //; try solve_ndisj.
@@ -57,11 +57,11 @@ iPoseProof (init_predI _ _ (TInt 0) with "client []") as "#?".
 wp_pures. wp_bind (Connection.send _ _ _ _).
 iApply (wp_connection_send with "[//] [] [] [] conn") => //.
 { by rewrite public_TInt. }
-iIntros "!> conn".
+iIntros "!> _".
 wp_pures.
-iCombine "client post" as "I". iRevert "conn I".
-iApply (wp_connection_recv with "[//] []") => //.
-iIntros "!> %m conn (client & post) _ #mP".
+iCombine "client post" as "I". iRevert "ts I".
+iApply (wp_connection_recv _ _ _ 0 with "[//] []") => //.
+iIntros "!> %m ts (client & post) _ #mP".
 iMod (ack_init_predE with "client mP") as "client" => //.
 wp_pures.
 iRight. iExists _. iSplitR => //.
