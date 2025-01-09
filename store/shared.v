@@ -24,6 +24,8 @@ Record conn_state := ConnState {
   cs_role :  role;
 }.
 
+Definition cs_share cs := si_share_of (cs_role cs) cs.
+
 #[global]
 Instance cs_repr : Repr conn_state :=
   λ s, (#(cs_ts s), si_key s)%V.
@@ -294,14 +296,6 @@ Definition dbSN kI := nroot.@"db".@"server".@kI.
 
 Definition failure kI kR : iProp :=
   public (TKey Seal kI) ∨ public (TKey Seal kR).
-
-(* MOVE *)
-Definition si_share_of rl :=
-  if rl is Init then si_init_share
-  else si_resp_share.
-
-Definition cs_share cs := si_share_of (cs_role cs) cs.
-(* /MOVE *)
 
 Definition wf_sess_info si : iProp :=
   minted (si_key si) ∗

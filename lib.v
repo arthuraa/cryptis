@@ -6,6 +6,17 @@ From mathcomp Require ssrbool order path.
 From deriving Require deriving.
 From cryptis Require Export mathcomp_compat.
 
+Lemma eq_op_bool_decide
+  {T : eqtype.Equality.type}
+  {_ : EqDecision (eqtype.Equality.sort T)}
+  (x y : eqtype.Equality.sort T) :
+  bool_decide (x = y) = (eqtype.eq_op x y).
+Proof.
+apply/(ssrbool.sameP).
+- exact: bool_decide_reflect.
+- exact: eqtype.eqP.
+Qed.
+
 Section Escrow.
 
 Context `{invGS Σ}.

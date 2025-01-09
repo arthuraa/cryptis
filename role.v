@@ -53,4 +53,7 @@ Proof. apply (inj_countable' _ _ bool_of_roleK). Qed.
 Definition swap_role rl :=
   if rl is Init then Resp else Init.
 
+Lemma swap_roleK rl : swap_role (swap_role rl) = rl.
+Proof. by case: rl. Qed.
+
 End Role.

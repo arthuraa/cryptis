@@ -190,10 +190,6 @@ Import ssrbool seq path.
 
 Import ssreflect.eqtype ssreflect.order.
 
-Lemma decide_eq_op {T : eqType} `{EqDecision T} (t1 t2 : T) :
-  bool_decide (t1 = t2) = (t1 == t2).
-Proof. by apply/(sameP (bool_decide_reflect _))/eqP. Qed.
-
 Lemma twp_leq_pre_term E (pt1 pt2 : PreTerm.pre_term) Ψ :
   Ψ #(pt1 <= pt2)%O ⊢
   WP (leq_term (repr pt1) (repr pt2)) @ E [{ Ψ }].
@@ -207,7 +203,7 @@ iIntros "post"; wp_rec; wp_pures; try by iApply "post".
   exact/(sameP (Z.leb_spec0 _ _))/bool_decide_reflect.
 - rewrite -{1 2}val_of_pre_term_unseal; wp_bind (eq_term _ _).
   rewrite PreTerm.leqE /=; iApply twp_eq_pre_term.
-  rewrite decide_eq_op; case: eqP => [->|_]; wp_pures.
+  rewrite eq_op_bool_decide; case: eqP => [->|_]; wp_pures.
     by iApply IH2.
   by iApply IH1.
 - by rewrite PreTerm.leqE /=; iApply twp_leq_loc.
@@ -220,17 +216,17 @@ iIntros "post"; wp_rec; wp_pures; try by iApply "post".
   by case: kt1 kt2 {neq} => [] [].
 - rewrite PreTerm.leqE /=; wp_bind (eq_term _ _).
   rewrite -{1 2}val_of_pre_term_unseal; iApply twp_eq_pre_term.
-  rewrite decide_eq_op; case: eqP => [->|neq]; wp_pures.
+  rewrite eq_op_bool_decide; case: eqP => [->|neq]; wp_pures.
     by iApply IH2.
   by iApply IH1.
 - rewrite PreTerm.leqE /=; by iApply IH.
 - rewrite PreTerm.leqE /=; wp_bind (eq_term _ _).
   rewrite -{1 2}val_of_pre_term_unseal.
-  iApply twp_eq_pre_term; rewrite decide_eq_op.
+  iApply twp_eq_pre_term; rewrite eq_op_bool_decide.
   case: eqP=> [->|neq]; wp_pures; last by iApply IHt1.
   rewrite -!repr_list_val -val_of_pre_term_unseal; iApply twp_leq_list => //.
   + move=> pt1 pt2 Ψ'; iIntros "_ post".
-    by iApply twp_eq_pre_term; rewrite decide_eq_op; iApply "post".
+    by iApply twp_eq_pre_term; rewrite eq_op_bool_decide; iApply "post".
   + move/foldr_in in IHts1.
     move=> ????; iIntros "_ post".
     by rewrite /= val_of_pre_term_unseal; iApply IHts1 => //; iApply "post".

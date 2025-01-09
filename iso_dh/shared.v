@@ -19,6 +19,10 @@ Record sess_info := SessInfo {
   si_secret : term;
 }.
 
+Definition si_share_of rl :=
+  if rl is Init then si_init_share
+  else si_resp_share.
+
 Global Instance sess_info_inhabited : Inhabited sess_info :=
   populate (SessInfo inhabitant inhabitant
               inhabitant inhabitant inhabitant).

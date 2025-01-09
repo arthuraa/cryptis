@@ -526,17 +526,6 @@ rewrite exps_TExpN.
 by rewrite path.perm_sort seq.perm_cat2l.
 Qed.
 
-Lemma eq_op_bool_decide
-  {T : eqtype.Equality.type}
-  {_ : EqDecision (eqtype.Equality.sort T)}
-  (x y : eqtype.Equality.sort T) :
-  bool_decide (x = y) = (eqtype.eq_op x y).
-Proof.
-apply/(ssrbool.sameP).
-- exact: bool_decide_reflect.
-- exact: eqtype.eqP.
-Qed.
-
 Lemma is_exp_TExpN t ts :
   is_exp (TExpN t ts) = implb (bool_decide (ts = [])) (is_exp t).
 Proof.

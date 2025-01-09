@@ -262,11 +262,6 @@ Definition handler_correct φ Φ cs handler n : iProp :=
              ∃ r, ⌜v = SOMEV r⌝ ∗ Φ r }}
   }}%I.
 
-(* MOVE *)
-Lemma swap_roleK rl : swap_role (swap_role rl) = rl.
-Proof. by case: rl. Qed.
-(* /MOVE *)
-
 Lemma wp_connection_select φ Φ (c : val) cs n (handlers : list (namespace * expr)) :
   channel c -∗
   ([∗ list] handler ∈ handlers, handler_correct φ Φ cs handler n) -∗
