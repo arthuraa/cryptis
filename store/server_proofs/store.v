@@ -30,7 +30,8 @@ Variable N : namespace.
 Ltac failure := iLeft; iFrame.
 
 Lemma wp_server_handle_store c cs ldb db n :
-   channel c -∗
+  cs_role cs = Resp →
+  channel c -∗
   store_ctx N -∗
   handler_correct
     (server_handler_inv cs n ldb db)
@@ -39,10 +40,10 @@ Lemma wp_server_handle_store c cs ldb db n :
     (N.@"store", Server.handle_store N c (repr cs) ldb)
     n.
 Proof.
-iIntros "#chan_c #ctx".
+iIntros "%e_rl #chan_c #ctx".
 iPoseProof (store_ctx_store with "ctx") as "?".
 iPoseProof (store_ctx_ack_store with "ctx") as "?".
-rewrite /handler_correct /=. wp_lam; wp_pures.
+rewrite /handler_correct e_rl /=. wp_lam; wp_pures.
 iModIntro. iExists _. iSplit => //.
 iIntros "!> %m #p_m #inv_m #conn ts (server & db)". wp_pures.
 wp_bind (Connection.timestamp _).
@@ -64,8 +65,8 @@ wp_bind (tint _). iApply wp_tint.
 wp_bind (Connection.send _ _ _ _).
 iApply (wp_connection_send _ c cs
    with "[//] [//] [] [] [] []") => //.
-- by rewrite public_TInt.
-- iRight. by iExists _.
+{ by rewrite public_TInt. }
+{ iIntros "!> _". iApply (session_failed_orE with "inv_m"). by eauto. }
 iIntros "!> _". wp_pures.
 iModIntro. iRight. iExists _. iSplit => //.
 iExists _, _. iLeft. by iFrame.

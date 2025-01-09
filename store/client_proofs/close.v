@@ -36,14 +36,16 @@ Lemma wp_client_close c kI kR cs :
 Proof.
 iIntros "#chan_c (_ & _ & _ & _ & _ & _ & _ & _ & #close & #ack & _)".
 iIntros "!> %Φ client post".
-iDestruct "client" as "(%n & %beginning & <- & <- & #conn & ts & client)".
+iDestruct "client"
+  as "(%n & %beginning & <- & <- & %e_rl & #conn & ts & client)".
 wp_lam; wp_pures.
 wp_apply (wp_connection_timestamp with "ts"). iIntros "ts".
 wp_pures. wp_apply wp_tint. wp_pures.
 iMod (close_predI with "client") as "(client & #p_m1)" => //.
 wp_bind (Connection.send _ _ _ _).
-wp_apply (wp_connection_send with "[//] close [] [//] conn") => //.
+wp_apply (wp_connection_send with "[//] close [] [] conn") => //.
 { by rewrite public_TInt. }
+{ by iIntros "!> _". }
 iIntros "_". wp_pures.
 iCombine "client post" as "I". iRevert "ts I".
 iApply wp_connection_recv => //.

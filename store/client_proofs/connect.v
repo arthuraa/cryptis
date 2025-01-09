@@ -47,13 +47,14 @@ iIntros "!> %Φ client post".
 rewrite /Client.connect.
 wp_pure _ credit:"c1". wp_pure _ credit:"c2". wp_pures.
 wp_apply (wp_connection_connect with "[//] [//] [//] [] []") => //.
-iIntros "%cs (#conn & ts & % & % & % & token)".
+iIntros "%cs (#sess & ts & % & % & %e_rl & token)".
 iDestruct "client" as "(%beginning & client)".
-iMod (client_connectingI with "[//] [$] token client")
-  as "(client & #ready)" => //; try solve_ndisj.
+iMod (client_connectingI with "[//] [$] sess token client")
+  as "{sess} (client & #conn & #ready)" => //; try solve_ndisj.
 subst kI kR.
 iPoseProof (init_predI _ _ (TInt 0) with "client []") as "#?".
-{ iDestruct "ready" as "[fail|[_ ready]]"; eauto. }
+{ iApply (session_failed_for_orE with "ready").
+  iIntros "[??]". by eauto. }
 wp_pures. wp_bind (Connection.send _ _ _ _).
 iApply (wp_connection_send with "[//] [] [] [] conn") => //.
 { by rewrite public_TInt. }

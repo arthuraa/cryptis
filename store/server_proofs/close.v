@@ -30,6 +30,7 @@ Variable N : namespace.
 Ltac failure := iLeft; iFrame.
 
 Lemma wp_server_handle_close c cs n ldb db :
+  cs_role cs = Resp →
   channel c -∗
   store_ctx N -∗
   handler_correct
@@ -39,10 +40,10 @@ Lemma wp_server_handle_close c cs n ldb db :
     (N.@"close", Server.handle_close N c (repr cs) ldb)
     n.
 Proof.
-iIntros "#chan_c #ctx".
+iIntros "%e_rl #chan_c #ctx".
 iPoseProof (store_ctx_close with "ctx") as "?".
 iPoseProof (store_ctx_ack_close with "ctx") as "?".
-rewrite /handler_correct. wp_lam; wp_pures. iModIntro.
+rewrite /handler_correct e_rl /=. wp_lam; wp_pures. iModIntro.
 iExists _. iSplit => //. iIntros "!> %m #p_m #inv_m #conn ts (server & db)".
 wp_pures. wp_bind (Connection.timestamp _).
 iApply (wp_connection_timestamp with "ts").
@@ -54,8 +55,9 @@ iPoseProof (ack_close_predI with "server inv_m") as "{p_m} >H" => //.
 wp_pures. iMod "H" as "(server & #p_m)".
 wp_bind (tint _). iApply wp_tint.
 wp_bind (Connection.send _ _ _ _).
-iApply (wp_connection_send with "[//] [//] [] p_m conn") => //.
-- by rewrite public_TInt.
+iApply (wp_connection_send with "[//] [//] []") => //.
+{ by rewrite public_TInt. }
+{ by iIntros "!> _". }
 iIntros "!> _". wp_pures.
 iRight. iModIntro. iExists _. iSplit => //.
 iExists _, _. iRight. by iFrame.

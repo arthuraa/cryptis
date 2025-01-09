@@ -39,19 +39,21 @@ Lemma wp_client_load c kI kR cs t1 t2 :
       client_connected kI kR cs ∗
       rem_mapsto kI kR t1 t2 ∗
       public t2' ∗
-      (failure kI kR ∨ ⌜t2' = t2⌝) }}}.
+      session_failed_or cs ⌜t2' = t2⌝ }}}.
 Proof.
 iIntros "#chan_c #ctx #p_t1 !> %Φ [client mapsto] post".
 iDestruct "ctx" as "(_ & _ & _ & _ & load & ack_load & _)".
-iDestruct "client" as "(%n & %beginning & <- & <- & #conn & ts & client)".
+iDestruct "client"
+  as "(%n & %beginning & <- & <- & %e_rl & #conn & ts & client)".
 rewrite /Client.load. wp_pures. wp_bind (Connection.timestamp _).
 iApply (wp_connection_timestamp with "ts"). iIntros "!> ts".
 wp_bind (tint _). iApply wp_tint.
 wp_pures. wp_list. wp_term_of_list.
 wp_bind (Connection.send _ _ _ _).
-iApply (wp_connection_send with "[//] load [] []") => //.
-- rewrite public_of_list /= public_TInt. by eauto.
-- iRight. by eauto.
+iApply (wp_connection_send with "[//] load [] [#]") => //.
+{ rewrite public_of_list /= public_TInt. by eauto. }
+{ iPoseProof (load_predI with "client") as "#?".
+  by iIntros "!> _". }
 iIntros "!> _". wp_pures.
 iCombine "client mapsto post" as "I". iRevert "ts I".
 iApply wp_connection_recv => //.

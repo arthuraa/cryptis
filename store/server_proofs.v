@@ -33,6 +33,7 @@ Implicit Types v : val.
 Variable N : namespace.
 
 Lemma wp_server_conn_handler_body c cs n ldb db :
+  cs_role cs = Resp →
   channel c -∗
   store_ctx N -∗
   {{{ wf_conn_state cs ∗
@@ -42,7 +43,7 @@ Lemma wp_server_conn_handler_body c cs n ldb db :
     Server.conn_handler_body N c (repr cs) ldb
   {{{ v, RET v; server_handler_post cs ldb v }}}.
 Proof.
-iIntros "#chan_c #ctx !> %Φ (#conn & ts & server & db) post".
+iIntros "% #chan_c #ctx !> %Φ (#conn & ts & server & db) post".
 wp_lam. wp_pures.
 rewrite !Connection.subst_select /=.
 iApply (wp_wand with "[ts server db] post").
@@ -55,6 +56,7 @@ iApply wp_connection_select => //=; do !iSplitR => //.
 Qed.
 
 Lemma wp_server_conn_handler c cs n vdb db vlock γlock :
+  cs_role cs = Resp →
   channel c -∗
   is_lock γlock vlock (account_inv (si_init cs) (si_resp cs) vdb) -∗
   store_ctx N -∗
@@ -66,7 +68,7 @@ Lemma wp_server_conn_handler c cs n vdb db vlock γlock :
     Server.conn_handler N c (repr cs) vdb vlock
   {{{ RET #(); True }}}.
 Proof.
-iIntros "#chan_c #lock #ctx".
+iIntros "% #chan_c #lock #ctx".
 iLöb as "IH" forall (n db).
 iIntros "!> %Φ (#conn & ts & server & db & locked) post".
 wp_rec. wp_pures. wp_bind (Server.conn_handler_body _ _ _ _).
@@ -181,11 +183,12 @@ iMod "H" as "(server & #p_m')".
 wp_bind (tint _). iApply wp_tint.
 wp_bind (Connection.send _ _ _ _).
 iPoseProof (store_ctx_ack_init with "ctx'") as "?".
-iApply (wp_connection_send with "[//] [//] [] [//] conn") => //.
+iApply (wp_connection_send with "[//] [//] [] []") => //.
 { by rewrite public_TInt. }
+{ by iIntros "!> _". }
 iIntros "!> _". wp_pures.
 wp_bind (Server.conn_handler _ _ _ _ _).
-iApply (wp_server_conn_handler with "[//] [//] [//] [$]").
+iApply (wp_server_conn_handler with "[//] [//] [//] [$]") => //.
 iIntros "!> _". wp_pures.
 iModIntro. iRight. iExists _. iSplit => //.
 by iApply "post".
@@ -212,8 +215,12 @@ wp_pure _ credit:"c".
 wp_pures.
 wp_bind (acquire _).
 iApply acquire_spec => //.
+have e_sh : si_resp_share cs = cs_share cs.
+  by rewrite /cs_share e_rl.
+rewrite e_sh.
 iIntros "!> (locked & %db & account & db)". rewrite -e_kR.
-iMod (server_connectingI with "[//] c account") as "account".
+iMod (server_connectingI with "[//] c [//] token account")
+  as "{conn} (#conn & account & token)" => //.
 wp_pures.
 iApply (wp_fork with "[ts locked db account token]").
 { iModIntro.
@@ -223,7 +230,7 @@ iApply (wp_fork with "[ts locked db account token]").
                with "token") as "not_ended"; first by solve_ndisj.
   iApply (wp_server_wait_init
            with "[ts locked db account not_started not_ended] []") => //.
-  iFrame. eauto. }
+  rewrite e_sh. iFrame. eauto. }
 iApply "post".
 by iFrame.
 Qed.

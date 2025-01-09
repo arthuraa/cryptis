@@ -30,7 +30,8 @@ Variable N : namespace.
 Ltac failure := iLeft; iFrame.
 
 Lemma wp_server_handle_create c cs n ldb db :
-   channel c -∗
+  cs_role cs = Resp →
+  channel c -∗
   store_ctx N -∗
   handler_correct
     (server_handler_inv cs n ldb db)
@@ -39,10 +40,10 @@ Lemma wp_server_handle_create c cs n ldb db :
     (N.@"create", Server.handle_create N c (repr cs) ldb)
     n.
 Proof.
-iIntros "#chan_c #ctx".
+iIntros "%e_rl #chan_c #ctx".
 iPoseProof (store_ctx_create with "ctx") as "?".
 iPoseProof (store_ctx_ack_create with "ctx") as "?".
-rewrite /handler_correct. wp_lam; wp_pures.
+rewrite /handler_correct e_rl /=. wp_lam; wp_pures.
 iModIntro. iExists _. iSplit => //.
 iIntros "!> %m #p_m #inv_m #conn ts (server & db)".
 wp_pures.
@@ -84,10 +85,10 @@ wp_list.
 wp_term_of_list.
 wp_pures.
 wp_bind (Connection.send _ _ _ _).
-iApply (wp_connection_send with "[//] [//] [] [] conn") => //.
+iApply (wp_connection_send with "[//] [//] [] []") => //.
 - rewrite !public_of_list /= !public_TInt. eauto.
   iDestruct "p_m" as "(_ & ? & ? & _)". by eauto.
-- iRight. by iModIntro.
+- iIntros "!> _". iApply (session_failed_orE with "inv_m"). by eauto.
 iIntros "!> _".
 wp_pures.
 iModIntro. iRight. iExists _. iSplit => //. iExists _, _. iLeft.

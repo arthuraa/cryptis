@@ -41,7 +41,8 @@ Lemma wp_client_create c kI kR cs t1 t2 :
 Proof.
 iIntros "#chan_c (_ & _ & _ & _ & _ & _ & #create & #ack & _) #p_t1 #p_t2".
 iIntros "!> %Φ [client free] post".
-iDestruct "client" as "(%n & %beginning & <- & <- & #conn & ts & client)".
+iDestruct "client"
+  as "(%n & %beginning & <- & <- & %e_rl & #conn & ts & client)".
 rewrite /Client.create. wp_pures.
 iMod (@rem_mapsto_alloc _ _ _ _ _ t1 t2 with "client free")
   as "(client & mapsto & _ & #created)".
@@ -55,8 +56,9 @@ iDestruct (create_predI with "client p_t1 p_t2 created")
   as "#p_m1".
 wp_list. wp_bind (tint _). iApply wp_tint. wp_list. wp_term_of_list. wp_pures.
 wp_bind (Connection.send _ _ _ _).
-iApply (wp_connection_send with "[//] create [] [//]") => //.
+iApply (wp_connection_send with "[//] create [] []") => //.
 { by rewrite public_of_list /= public_TInt; eauto. }
+{ by iIntros "!> _". }
 iIntros "!> _". wp_pures.
 iCombine "client mapsto post" as "I". iRevert "ts I".
 iApply wp_connection_recv => //.
