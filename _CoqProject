@@ -6,6 +6,7 @@
 
 mathcomp_compat.v
 lib.v
+lib/term_set.v
 gmeta.v
 nown.v
 version.v

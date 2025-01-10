@@ -5,6 +5,7 @@ From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par ticket_lock assert.
 From cryptis Require Import lib cryptis primitives tactics role.
+From cryptis.lib Require Import term_set.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -426,131 +427,6 @@ iApply ("Hpost" $! (Some (TKey Seal kI, sess_key))).
 iModIntro. by iExists kI; eauto.
 Qed.
 
-Definition is_set N v (xs : list term) : iProp := ∃ (lset : loc),
-  ⌜v = #lset⌝ ∗
-  lset ↦ (repr xs) ∗
-  [∗ list] x ∈ xs, term_meta x N ().
-
-Definition new_set : val := λ: <>, ref []%V.
-
-Lemma wp_new_set N :
-  {{{ True }}}
-    new_set #()
-  {{{v, RET v; is_set N v [] }}}.
-Proof.
-iIntros "%Φ _ post".
-wp_lam. wp_apply (@wp_nil term).
-wp_alloc set as "set".
-iApply "post". iModIntro. iExists set.
-iFrame. by eauto.
-Qed.
-
-Definition add_set : val := λ: "x" "set",
-  "set" <- "x" :: !"set".
-
-Lemma wp_add_set N v x xs :
-  {{{ term_token x (↑N) ∗ is_set N v xs }}}
-    add_set x v
-  {{{ RET #(); is_set N v (x :: xs) }}}.
-Proof.
-iIntros "%Φ [token (%l & -> & l & #meta)] post".
-iMod (term_meta_set N () with "token") as "#?" => //.
-wp_lam. wp_load. wp_cons. wp_store.
-iApply "post". iExists l. iFrame. rewrite /=. by eauto.
-Qed.
-
-Definition mem_set : val := λ: "x" "set",
-  match: find_list (λ: "y", eq_term "x" "y") (!"set") with
-    SOME <> => #true
-  | NONE => #false
-  end.
-
-Lemma wp_mem_set N (x : term) (xs : list term) v :
-  {{{ is_set N v xs }}}
-    mem_set x v
-  {{{ RET #(bool_decide (x ∈ xs)); is_set N v xs }}}.
-Proof.
-iIntros "%Φ (%l & -> & l & #meta) post".
-wp_lam. wp_pures. wp_load. wp_pures.
-wp_apply (wp_find_list (λ y, bool_decide (x = y))) => //.
-{ iIntros "%y %Ψ _ post". wp_pures.
-  iApply wp_eq_term. by iApply "post". }
-iIntros "_".
-assert (find (λ y, bool_decide (x = y)) xs =
-          if bool_decide (x ∈ xs) then Some x else None) as ->.
-{ elim: xs => //= y xs ->.
-  case: (bool_decide_reflect (x = y)) => [->|xy].
-  - by rewrite bool_decide_eq_true_2 // elem_of_cons; eauto.
-  - rewrite (bool_decide_ext (x ∈ xs) (x ∈ y :: xs)) //.
-    rewrite elem_of_cons; intuition congruence. }
-iAssert (is_set N #l xs) with "[l]" as "set".
-{ iExists l. iFrame. by eauto. }
-iSpecialize ("post" with "set").
-by case: bool_decide; wp_pures; iApply "post".
-Qed.
-
-Lemma is_set_fresh N v x xs :
-  is_set N v xs -∗
-  term_token x (↑N) -∗
-  ⌜x ∉ xs⌝.
-Proof.
-iIntros "(%l & -> & l & #meta) token %x_xs".
-rewrite big_sepL_elem_of //.
-by iDestruct (term_meta_token with "token meta") as "[]".
-Qed.
-
-Definition is_lock_set N v : iProp := ∃ vset vlock γ,
-  ⌜v = (vset, vlock)%V⌝ ∗
-  is_lock γ vlock (∃ xs, is_set N vset xs).
-
-Instance is_lock_set_persistent N v : Persistent (is_lock_set N v).
-Proof. apply _. Qed.
-
-Definition new_lock_set : val := λ: <>,
-  let: "set"  := new_set #() in
-  let: "lock" := newlock #() in
-  ("set", "lock").
-
-Lemma wp_new_lock_set N :
-  {{{ True }}}
-    new_lock_set #()
-  {{{ v, RET v; is_lock_set N v }}}.
-Proof.
-iIntros "%Φ _ post".
-wp_lam. wp_apply (wp_new_set N) => //.
-iIntros "%vset set". wp_pures.
-wp_apply (newlock_spec (∃ xs, is_set N vset xs) with "[set]");
-  first by eauto.
-iIntros "%vlock %γ #lock". wp_pures.
-iApply "post". iModIntro. iExists vset, vlock, γ. eauto.
-Qed.
-
-Definition add_fresh_lock_set : val := λ: "x" "set",
-  acquire (Snd "set");;
-  let: "xs" := Fst "set" in
-  assert: (~ mem_set "x" "xs");;
-  add_set "x" "xs";;
-  release (Snd "set").
-
-Lemma wp_add_fresh_lock_set N x v :
-  {{{ is_lock_set N v ∗ term_token x (↑N) }}}
-    add_fresh_lock_set x v
-  {{{ RET #(); True }}}.
-Proof.
-iIntros "%Φ [(%vset & %vlock & %γ & -> & #lock) token] post".
-wp_lam. wp_pures. wp_apply acquire_spec => //.
-iIntros "[locked (%xs & set)]". wp_pures.
-wp_apply wp_assert. wp_apply (wp_mem_set with "set"). iIntros "set".
-wp_pures.
-iPoseProof (is_set_fresh with "set token") as "%fresh".
-rewrite bool_decide_eq_false_2 => //.
-iModIntro. iSplit => //. iIntros "!>".
-wp_pures.
-wp_apply (wp_add_set with "[$]"). iIntros "set". wp_pures.
-wp_apply (release_spec with "[locked set] post").
-iSplit => //. by iFrame.
-Qed.
-
 Definition do_init_loop : val := rec: "loop" "c" "set" "skI" "pkR" :=
   Fork ("loop" "c" "set" "skI" "pkR");;
   let: "pkR'" := recv "c" in
@@ -558,14 +434,14 @@ Definition do_init_loop : val := rec: "loop" "c" "set" "skI" "pkR" :=
    guard: ("kt" = repr Seal) in
    bind: "sk" := init "c" "skI" "pkR'" in
    if: eq_term "pkR" "pkR'" then
-     add_fresh_lock_set "sk" "set";;
+     add_fresh_lock_term_set "sk" "set";;
      let: "guess" := recv "c" in
      assert: (~ eq_term "sk" "guess")
    else #());;
    #().
 
 Definition do_init : val := λ: "c" "kI" "pkR",
-  let: "set" := new_lock_set #() in
+  let: "set" := new_lock_term_set #() in
   do_init_loop "c" "set" "kI" "pkR".
 
 Lemma wp_do_init_loop c vset kI kR :
@@ -575,7 +451,7 @@ Lemma wp_do_init_loop c vset kI kR :
   public (TKey Seal kI) -∗
   □ (public (TKey Open kI) → ▷ False) -∗
   □ (public (TKey Open kR) → ▷ False) -∗
-  is_lock_set (nroot.@"init") vset -∗
+  is_lock_term_set (nroot.@"init") vset -∗
   {{{ True }}}
     do_init_loop c vset kI (TKey Seal kR)
   {{{ RET #(); True }}}.
@@ -597,7 +473,7 @@ wp_eq_term e; wp_pures; last by iApply "Hpost".
 case: e => <- {kR'}.
 iDestruct "tsP" as "(_ & [[#p_skR _]|[#sess token]])".
   iDestruct ("s_skR" with "p_skR") as ">[]".
-wp_apply (wp_add_fresh_lock_set with "[$]"). iIntros "_".
+wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
 wp_pures. wp_apply wp_recv => //. iIntros "%guess #p_guess".
 wp_pures. wp_apply wp_assert.
 wp_eq_term e.
@@ -620,7 +496,7 @@ Lemma wp_do_init c kI kR :
   {{{ RET #(); True }}}.
 Proof.
 iIntros "#chan #? #? #p_pkI #s_skI #s_skR %Φ _ !> post".
-wp_lam. wp_pures. wp_apply (wp_new_lock_set (nroot.@"init")) => //.
+wp_lam. wp_pures. wp_apply (wp_new_lock_term_set (nroot.@"init")) => //.
 iIntros "%set #set". wp_pures.
 wp_apply wp_do_init_loop => //.
 Qed.
@@ -630,7 +506,7 @@ Definition do_resp_loop : val := rec: "loop" "c" "set" "skR" "pkI" :=
   (bind: "res" := resp "c" "skR" in
    let: "pkI'" := Fst "res" in
    let: "sk" := Snd "res" in
-   add_fresh_lock_set "sk" "set";;
+   add_fresh_lock_term_set "sk" "set";;
    if: eq_term "pkI" "pkI'" then
      let: "guess" := recv "c" in
      assert: (~ eq_term "sk" "guess")
@@ -638,7 +514,7 @@ Definition do_resp_loop : val := rec: "loop" "c" "set" "skR" "pkI" :=
   #().
 
 Definition do_resp : val := λ: "c" "skR" "pkI",
-  let: "set" := new_lock_set #() in
+  let: "set" := new_lock_term_set #() in
   do_resp_loop "c" "set" "skR" "pkI".
 
 Lemma wp_do_resp_loop c set kI kR :
@@ -648,7 +524,7 @@ Lemma wp_do_resp_loop c set kI kR :
   public (TKey Seal kR) -∗
   □ (public (TKey Open kR) → ▷ False) -∗
   □ (public (TKey Open kI) → ▷ False) -∗
-  is_lock_set (nroot.@"resp") set -∗
+  is_lock_term_set (nroot.@"resp") set -∗
   {{{ True }}}
     do_resp_loop c set kR (TKey Seal kI)
   {{{ RET #(); True }}}.
@@ -661,7 +537,7 @@ wp_pures. wp_apply wp_resp => //.
 iIntros "%res res".
 case: res => [[ekI' sk]|]; wp_pures; last by iApply "Hpost".
 iDestruct "res" as "(%kI' & -> & token & res)".
-wp_apply (wp_add_fresh_lock_set with "[$]"). iIntros "_".
+wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
 wp_eq_term e; wp_pures; last by iApply "Hpost".
 case: e => <- {kI'}.
 iDestruct "res" as "[[#p_dkI _]|sess]".
@@ -689,7 +565,7 @@ Lemma wp_do_resp c kI kR :
 Proof.
 iIntros "#? #? #? #? #? #? %Φ _ !> post".
 wp_lam. wp_pures.
-wp_apply (wp_new_lock_set (nroot.@"resp")) => //.
+wp_apply (wp_new_lock_term_set (nroot.@"resp")) => //.
 iIntros "%set #set". wp_pures.
 by wp_apply wp_do_resp_loop => //.
 Qed.
