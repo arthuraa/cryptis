@@ -215,7 +215,7 @@ rewrite /game. wp_pures.
 wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP". wp_pures.
 (* Generate server key. Keep the signing key secret. *)
-wp_bind (mksigkey _). iApply (wp_mksigkey with "[//] hon phase") => //.
+wp_bind (mksigkey _). iApply (wp_mksigkey_phase with "[//] hon phase") => //.
 iIntros (k) "#p_vk #hon' phase". wp_pures.
 wp_apply wp_vkey. wp_pures.
 iMod (phase_auth_discard with "phase") as "#phase".

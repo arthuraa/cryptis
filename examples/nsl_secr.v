@@ -355,9 +355,9 @@ iMod (nsl_alloc with "seal_tok") as "[#nsl_ctx _]" => //.
 wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP".
 wp_pures; wp_bind (mkakey _).
-iApply (wp_mkakey with "[] hon phase"); eauto.
+iApply (wp_mkakey_phase with "[] hon phase"); eauto.
 iIntros "%kI #p_pkI hon phase tokenI". wp_pures.
-wp_bind (mkakey _). iApply (wp_mkakey with "[] hon phase"); eauto.
+wp_bind (mkakey _). iApply (wp_mkakey_phase with "[] hon phase"); eauto.
 iIntros "%kR #p_pkR hon phase tokenR". wp_pures.
 wp_apply wp_pkey. wp_pures. set pkI := TKey Seal kI.
 pose skI := TKey Open kI.

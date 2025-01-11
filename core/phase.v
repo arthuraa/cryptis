@@ -153,6 +153,15 @@ Definition secret t : iProp :=
   (|==> □ (public t ↔ ◇ False)) ∧
   (public t -∗ ◇ False).
 
+Lemma secret_not_public t : secret t -∗ public t -∗ ◇ False.
+Proof. by iIntros "(_ & _ & contra)". Qed.
+
+Lemma compromise_secret t : secret t ==∗ public t.
+Proof. by iIntros "(? & _)". Qed.
+
+Lemma freeze_secret t : secret t ==∗ □ (public t ↔ ◇ False).
+Proof. by iIntros "(_ & ? & _)". Qed.
+
 Definition to_mint_map (M : nat → gset term) n : mint_mapUR :=
   λ m, if decide (m < n) then ●□ M m
        else ● M m.

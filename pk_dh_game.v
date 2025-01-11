@@ -66,9 +66,9 @@ iMod (pk_dh_alloc N P with "nown_tok seal_tok") as "[#dh_ctx _]" => //.
 wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP".
 wp_pures; wp_bind (mkakey _).
-iApply (wp_mkakey with "[] hon phase"); eauto.
+iApply (wp_mkakey_phase with "[] hon phase"); eauto.
 iIntros "%kI #p_kI #hon' phase _". wp_pures.
-wp_bind (mkakey _). iApply (wp_mkakey with "[] hon' phase"); eauto.
+wp_bind (mkakey _). iApply (wp_mkakey_phase with "[] hon' phase"); eauto.
 iIntros "%kR #p_kR #hon'' phase _". wp_pures.
 wp_apply wp_pkey. wp_pures. set pkI := TKey Seal kI.
 set skI := TKey Open kI.

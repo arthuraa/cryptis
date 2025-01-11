@@ -612,9 +612,9 @@ iIntros "wp_mkchan #ctx enc_tok key_tok hon phase"; rewrite /game; wp_pures.
 wp_bind (mkchan _); iApply "wp_mkchan" => //.
 iIntros "!> %c #cP".
 wp_pures; wp_bind (mkakey _).
-iApply (wp_mkakey with "[] [hon] phase"); eauto.
+iApply (wp_mkakey_phase with "[] [hon] phase"); eauto.
 iIntros "%kI #p_ekI hon phase tokenI". wp_pures.
-wp_bind (mkakey _). iApply (wp_mkakey with "[] [hon] phase"); eauto.
+wp_bind (mkakey _). iApply (wp_mkakey_phase with "[] [hon] phase"); eauto.
 iIntros "%kR #p_ekR hon phase tokenR". wp_pures.
 wp_apply wp_pkey. wp_pures. set pkI := TKey Seal kI.
 set skI := TKey Open kI.
