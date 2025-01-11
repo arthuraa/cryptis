@@ -444,6 +444,19 @@ Definition do_init : val := λ: "c" "kI" "pkR",
   let: "set" := new_lock_term_set #() in
   do_init_loop "c" "set" "kI" "pkR".
 
+Definition nsl_game_inv N x :=
+  term_meta x N ().
+
+Lemma nsl_game_inv_fresh N x E :
+  ↑N ⊆ E →
+  term_token x E -∗
+  fresh_term (nsl_game_inv N) x.
+Proof.
+iIntros "%sub token". iSplit.
+- iIntros "#meta". by iApply (term_meta_token with "token meta").
+- by iMod (term_meta_set N () with "token") as "#?".
+Qed.
+
 Lemma wp_do_init_loop c vset kI kR :
   channel c -∗
   cryptis_ctx -∗
@@ -451,7 +464,7 @@ Lemma wp_do_init_loop c vset kI kR :
   public (TKey Seal kI) -∗
   □ (public (TKey Open kI) → ▷ False) -∗
   □ (public (TKey Open kR) → ▷ False) -∗
-  is_lock_term_set (nroot.@"init") vset -∗
+  is_lock_term_set (nsl_game_inv (nroot.@"init")) vset -∗
   {{{ True }}}
     do_init_loop c vset kI (TKey Seal kR)
   {{{ RET #(); True }}}.
@@ -473,6 +486,8 @@ wp_eq_term e; wp_pures; last by iApply "Hpost".
 case: e => <- {kR'}.
 iDestruct "tsP" as "(_ & [[#p_skR _]|[#sess token]])".
   iDestruct ("s_skR" with "p_skR") as ">[]".
+iPoseProof (@nsl_game_inv_fresh (nroot.@"init") with "token")
+  as "fresh" => //.
 wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
 wp_pures. wp_apply wp_recv => //. iIntros "%guess #p_guess".
 wp_pures. wp_apply wp_assert.
@@ -496,7 +511,8 @@ Lemma wp_do_init c kI kR :
   {{{ RET #(); True }}}.
 Proof.
 iIntros "#chan #? #? #p_pkI #s_skI #s_skR %Φ _ !> post".
-wp_lam. wp_pures. wp_apply (wp_new_lock_term_set (nroot.@"init")) => //.
+wp_lam. wp_pures.
+wp_apply (wp_new_lock_term_set (nsl_game_inv (nroot.@"init"))) => //.
 iIntros "%set #set". wp_pures.
 wp_apply wp_do_init_loop => //.
 Qed.
@@ -524,7 +540,7 @@ Lemma wp_do_resp_loop c set kI kR :
   public (TKey Seal kR) -∗
   □ (public (TKey Open kR) → ▷ False) -∗
   □ (public (TKey Open kI) → ▷ False) -∗
-  is_lock_term_set (nroot.@"resp") set -∗
+  is_lock_term_set (nsl_game_inv (nroot.@"resp")) set -∗
   {{{ True }}}
     do_resp_loop c set kR (TKey Seal kI)
   {{{ RET #(); True }}}.
@@ -537,6 +553,8 @@ wp_pures. wp_apply wp_resp => //.
 iIntros "%res res".
 case: res => [[ekI' sk]|]; wp_pures; last by iApply "Hpost".
 iDestruct "res" as "(%kI' & -> & token & res)".
+iPoseProof (@nsl_game_inv_fresh (nroot.@"resp") with "token")
+  as "fresh" => //.
 wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
 wp_eq_term e; wp_pures; last by iApply "Hpost".
 case: e => <- {kI'}.
@@ -565,7 +583,7 @@ Lemma wp_do_resp c kI kR :
 Proof.
 iIntros "#? #? #? #? #? #? %Φ _ !> post".
 wp_lam. wp_pures.
-wp_apply (wp_new_lock_term_set (nroot.@"resp")) => //.
+wp_apply (wp_new_lock_term_set (nsl_game_inv (nroot.@"resp"))) => //.
 iIntros "%set #set". wp_pures.
 by wp_apply wp_do_resp_loop => //.
 Qed.

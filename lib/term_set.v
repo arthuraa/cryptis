@@ -19,17 +19,17 @@ Notation iProp := (iProp Σ).
 
 Implicit Types (rl : role) (t kI kR nI nR sI sR kS : term).
 
-Definition is_term_set N v (xs : list term) : iProp := ∃ (lset : loc),
+Definition is_term_set φ v (xs : list term) : iProp := ∃ (lset : loc),
   ⌜v = #lset⌝ ∗
   lset ↦ (repr xs) ∗
-  [∗ list] x ∈ xs, term_meta x N ().
+  [∗ list] x ∈ xs, □ φ x.
 
 Definition new_term_set : val := λ: <>, ref []%V.
 
-Lemma wp_new_term_set N :
+Lemma wp_new_term_set φ :
   {{{ True }}}
     new_term_set #()
-  {{{v, RET v; is_term_set N v [] }}}.
+  {{{v, RET v; is_term_set φ v [] }}}.
 Proof.
 iIntros "%Φ _ post".
 wp_lam. wp_apply (@wp_nil term).
@@ -41,13 +41,15 @@ Qed.
 Definition add_term_set : val := λ: "x" "set",
   "set" <- "x" :: !"set".
 
-Lemma wp_add_term_set N v x xs :
-  {{{ term_token x (↑N) ∗ is_term_set N v xs }}}
+Definition fresh_term φ (x : term) : iProp :=
+  (□ φ x → False) ∧ |==> □ φ x.
+
+Lemma wp_add_term_set φ v x xs :
+  {{{ is_term_set φ v xs ∗ fresh_term φ x }}}
     add_term_set x v
-  {{{ RET #(); is_term_set N v (x :: xs) }}}.
+  {{{ RET #(); is_term_set φ v (x :: xs) }}}.
 Proof.
-iIntros "%Φ [token (%l & -> & l & #meta)] post".
-iMod (term_meta_set N () with "token") as "#?" => //.
+iIntros "%Φ [(%l & -> & l & #meta) [_ >fresh]] post".
 wp_lam. wp_load. wp_cons. wp_store.
 iApply "post". iExists l. iFrame. rewrite /=. by eauto.
 Qed.
@@ -58,10 +60,10 @@ Definition mem_term_set : val := λ: "x" "set",
   | NONE => #false
   end.
 
-Lemma wp_mem_term_set N (x : term) (xs : list term) v :
-  {{{ is_term_set N v xs }}}
+Lemma wp_mem_term_set φ (x : term) (xs : list term) v :
+  {{{ is_term_set φ v xs }}}
     mem_term_set x v
-  {{{ RET #(bool_decide (x ∈ xs)); is_term_set N v xs }}}.
+  {{{ RET #(bool_decide (x ∈ xs)); is_term_set φ v xs }}}.
 Proof.
 iIntros "%Φ (%l & -> & l & #meta) post".
 wp_lam. wp_pures. wp_load. wp_pures.
@@ -76,28 +78,28 @@ assert (find (λ y, bool_decide (x = y)) xs =
   - by rewrite bool_decide_eq_true_2 // elem_of_cons; eauto.
   - rewrite (bool_decide_ext (x ∈ xs) (x ∈ y :: xs)) //.
     rewrite elem_of_cons; intuition congruence. }
-iAssert (is_term_set N #l xs) with "[l]" as "set".
+iAssert (is_term_set φ #l xs) with "[l]" as "set".
 { iExists l. iFrame. by eauto. }
 iSpecialize ("post" with "set").
 by case: bool_decide; wp_pures; iApply "post".
 Qed.
 
-Lemma is_term_set_fresh N v x xs :
-  is_term_set N v xs -∗
-  term_token x (↑N) -∗
+Lemma is_term_set_fresh φ v x xs :
+  is_term_set φ v xs -∗
+  fresh_term φ x -∗
   ⌜x ∉ xs⌝.
 Proof.
-iIntros "(%l & -> & l & #meta) token %x_xs".
+iIntros "(%l & -> & l & #inv) (fresh & _) %x_xs".
 rewrite big_sepL_elem_of //.
-by iDestruct (term_meta_token with "token meta") as "[]".
+by iDestruct ("fresh" with "inv") as "[]".
 Qed.
 
-Definition is_lock_term_set N v : iProp := ∃ vset vlock γ,
+Definition is_lock_term_set φ v : iProp := ∃ vset vlock γ,
   ⌜v = (vset, vlock)%V⌝ ∗
-  is_lock γ vlock (∃ xs, is_term_set N vset xs).
+  is_lock γ vlock (∃ xs, is_term_set φ vset xs).
 
-Instance is_lock_term_set_persistent N v :
-  Persistent (is_lock_term_set N v).
+Instance is_lock_term_set_persistent φ v :
+  Persistent (is_lock_term_set φ v).
 Proof. apply _. Qed.
 
 Definition new_lock_term_set : val := λ: <>,
@@ -105,15 +107,15 @@ Definition new_lock_term_set : val := λ: <>,
   let: "lock" := newlock #() in
   ("set", "lock").
 
-Lemma wp_new_lock_term_set N :
+Lemma wp_new_lock_term_set φ :
   {{{ True }}}
     new_lock_term_set #()
-  {{{ v, RET v; is_lock_term_set N v }}}.
+  {{{ v, RET v; is_lock_term_set φ v }}}.
 Proof.
 iIntros "%Φ _ post".
-wp_lam. wp_apply (wp_new_term_set N) => //.
+wp_lam. wp_apply (wp_new_term_set φ) => //.
 iIntros "%vset set". wp_pures.
-wp_apply (newlock_spec (∃ xs, is_term_set N vset xs) with "[set]");
+wp_apply (newlock_spec (∃ xs, is_term_set φ vset xs) with "[set]");
   first by eauto.
 iIntros "%vlock %γ #lock". wp_pures.
 iApply "post". iModIntro. iExists vset, vlock, γ. eauto.
@@ -126,8 +128,8 @@ Definition add_fresh_lock_term_set : val := λ: "x" "set",
   add_term_set "x" "xs";;
   release (Snd "set").
 
-Lemma wp_add_fresh_lock_term_set N x v :
-  {{{ is_lock_term_set N v ∗ term_token x (↑N) }}}
+Lemma wp_add_fresh_lock_term_set φ x v :
+  {{{ is_lock_term_set φ v ∗ fresh_term φ x }}}
     add_fresh_lock_term_set x v
   {{{ RET #(); True }}}.
 Proof.
