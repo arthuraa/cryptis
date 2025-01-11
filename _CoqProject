@@ -30,7 +30,7 @@ tactics.v
 session.v
 dh.v
 rel_channel.v
-attacker.v
+attacker_types.v
 
 # Case studies
 
