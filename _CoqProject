@@ -37,6 +37,7 @@ attacker.v
 iso_dh/shared.v
 iso_dh/initiator.v
 iso_dh/responder.v
+iso_dh/game.v
 iso_dh.v
 
 ## Simple examples
