@@ -93,3 +93,4 @@ store/server_proofs/create.v
 store/server_proofs/close.v
 store/alist.v
 store/db.v
+store/game.v

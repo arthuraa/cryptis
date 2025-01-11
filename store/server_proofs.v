@@ -32,6 +32,26 @@ Implicit Types v : val.
 
 Variable N : namespace.
 
+Lemma wp_server_start c skR E :
+  ↑nroot.@"db".@"server" ⊆ E →
+  {{{ channel c ∗ public (TKey Open skR) ∗ term_token skR E }}}
+    Server.start skR
+  {{{ ss, RET (repr ss); server ss }}}.
+Proof.
+iIntros "%sub %Ψ (#? & #? & token) post".
+wp_lam. wp_pures. wp_apply SAList.wp_empty => //.
+iIntros "%accounts accounts". wp_pures.
+iApply ("post" $! {| ss_key := skR; ss_clients := accounts |}) .
+iExists ∅, E.
+iSplitR => //.
+rewrite fmap_empty.
+iFrame.
+iModIntro.
+rewrite big_sepM_empty. iSplit => //.
+iPureIntro.
+move=> kI _. rewrite /dbSN. solve_ndisj.
+Qed.
+
 Lemma wp_server_conn_handler_body c cs n ldb db :
   cs_role cs = Resp →
   channel c -∗
