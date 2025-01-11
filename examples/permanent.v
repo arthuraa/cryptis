@@ -6,6 +6,7 @@ From iris.algebra Require Import numbers.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par.
 From cryptis Require Import lib term cryptis primitives tactics.
+From cryptis.primitives Require Import attacker.
 
 (* This example demonstrates a simple use of digital signatures to guarantee
 integrity properties: a server uses a signature to inform the client that some
@@ -108,9 +109,9 @@ Qed.
 (* Security game: ensure that the response that the client gets matches the
 state of the server. *)
 
-Definition game : val := λ: "mkchan",
+Definition game : val := λ: <>,
   (* Initialize attacker (network) *)
-  let: "c"   := "mkchan" #() in
+  let: "c"   := init_network #() in
 
   (* Generate signature keys and publicize verification key *)
   let: "k"   := mksigkey #() in
@@ -130,19 +131,17 @@ Definition game : val := λ: "mkchan",
   (* Check if client's value agrees with the server state *)
   eq_term (!"l") "t'".
 
-Lemma wp_game (mkchan : val) :
-  {{{ True }}} mkchan #() {{{ v, RET v; channel v }}} -∗
+Lemma wp_game :
   cryptis_ctx ∗
   seal_pred_token ⊤ ∗
   honest 0 ∅ ∗
   ●Ph 0 -∗
-  WP game mkchan {{ v, ⌜v = #true⌝ }}.
+  WP game #() {{ v, ⌜v = #true⌝ }}.
 Proof.
-iIntros "#wp_mkchan (#ctx & enc_tok & #hon & phase)".
+iIntros "(#ctx & enc_tok & #hon & phase)".
 rewrite /game. wp_pures.
 (* Setup attacker *)
-wp_bind (mkchan _); iApply "wp_mkchan" => //.
-iIntros "!> %c #cP". wp_pures.
+wp_apply wp_init_network => //. iIntros "%c #cP". wp_pures.
 (* Generate server key. Keep the signing key secret. *)
 wp_bind (mksigkey _). iApply (wp_mksigkey_phase with "[//] hon phase") => //.
 iIntros (k) "#p_vk #hon' phase".
@@ -179,18 +178,14 @@ Definition F : gFunctors :=
   #[heapΣ; spawnΣ; cryptisΣ].
 
 (* The same result, but without using the Cryptis logic. *)
-Lemma game_secure (mkchan : val) σ₁ σ₂ (v : val) ts :
-  (∀ `{!heapGS Σ, !cryptisGS Σ},
-     ⊢ {{{ True }}} mkchan #() {{{ c, RET c; channel c}}}) →
-  rtc erased_step ([game mkchan], σ₁) (Val v :: ts, σ₂) →
+Lemma game_secure σ₁ σ₂ (v : val) ts :
+  rtc erased_step ([game #()], σ₁) (Val v :: ts, σ₂) →
   v = #true.
 Proof.
 have ? : heapGpreS F by apply _.
-move=> wp_mkchan.
 apply (adequate_result NotStuck _ _ (λ v _, v = #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
 iMod (cryptisGS_alloc _) as (?) "(#ctx & enc_tok & key_tok & hash_tok & hon)".
-iApply (wp_game) => //; try by iFrame.
-iApply wp_mkchan.
+by iApply (wp_game) => //; try by iFrame.
 Qed.

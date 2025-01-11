@@ -25,6 +25,7 @@ cryptis.v
 primitives/notations.v
 primitives/comp.v
 primitives/simple.v
+primitives/attacker.v
 primitives.v
 tactics.v
 session.v

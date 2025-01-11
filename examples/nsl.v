@@ -5,6 +5,7 @@ From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par ticket_lock assert.
 From cryptis Require Import lib cryptis primitives tactics role.
+From cryptis.primitives Require Import attacker.
 From cryptis.lib Require Import term_set.
 
 Set Implicit Arguments.
@@ -588,8 +589,8 @@ iIntros "%set #set". wp_pures.
 by wp_apply wp_do_resp_loop => //.
 Qed.
 
-Definition game : val := λ: "mkchan",
-  let: "c"  := "mkchan" #() in
+Definition game : val := λ: <>,
+  let: "c"  := init_network #() in
   let: "kI" := mkakey #() in
   let: "kR" := mkakey #() in
   let: "pkI" := pkey "kI" in
@@ -599,18 +600,16 @@ Definition game : val := λ: "mkchan",
   (do_init "c" "kI" "pkR" |||
    do_resp "c" "kR" "pkI").
 
-Lemma wp_game (mkchan : val) :
-  {{{ True }}} mkchan #() {{{ v, RET v; channel v }}} -∗
+Lemma wp_game :
   cryptis_ctx -∗
   seal_pred_token ⊤ -∗
   key_pred_token (⊤ ∖ ↑nroot.@"keys") -∗
   honest 0 ∅ -∗
   ●Ph 0 -∗
-  WP game mkchan {{ _, True }}.
+  WP game #() {{ _, True }}.
 Proof.
-iIntros "wp_mkchan #ctx enc_tok key_tok hon phase"; rewrite /game; wp_pures.
-wp_bind (mkchan _); iApply "wp_mkchan" => //.
-iIntros "!> %c #cP".
+iIntros "#ctx enc_tok key_tok hon phase"; rewrite /game; wp_pures.
+wp_apply wp_init_network => //. iIntros "%c #cP".
 wp_pures; wp_bind (mkakey _).
 iApply (wp_mkakey_phase with "[] [hon] phase"); eauto.
 iIntros "%kI #p_ekI hon phase tokenI". wp_pures.
@@ -650,19 +649,15 @@ End NSL.
 Definition F : gFunctors :=
   #[heapΣ; spawnΣ; cryptisΣ; tlockΣ].
 
-Lemma nsl_secure (mkchan : val) σ₁ σ₂ (v : val) t₂ e₂ :
-  (∀ `{!heapGS Σ, !cryptisGS Σ},
-     ⊢ {{{ True }}} mkchan #() {{{ c, RET c; channel c}}}) →
-  rtc erased_step ([game mkchan], σ₁) (t₂, σ₂) →
+Lemma nsl_secure σ₁ σ₂ (v : val) t₂ e₂ :
+  rtc erased_step ([game #()], σ₁) (t₂, σ₂) →
   e₂ ∈ t₂ →
   not_stuck e₂ σ₂.
 Proof.
 have ? : heapGpreS F by apply _.
-move=> wp_mkchan.
 apply (adequate_not_stuck NotStuck _ _ (λ v _, True)) => //.
 apply: heap_adequacy.
 iIntros (?) "?".
 iMod (cryptisGS_alloc _) as (?) "(#ctx & enc_tok & key_tok & ? & hon & phase)".
-iApply (wp_game with "[] ctx [enc_tok] [key_tok] [hon]") => //.
-iApply wp_mkchan.
+by iApply (wp_game with "ctx [enc_tok] [key_tok] [hon]").
 Qed.

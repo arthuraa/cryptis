@@ -8,6 +8,7 @@ From iris.heap_lang.lib Require Import par.
 From cryptis Require Import lib term cryptis primitives tactics.
 From cryptis Require Import role session challenge_response.
 From cryptis Require Import pk_auth dh pk_dh tls13.
+From cryptis.primitives Require Import attacker.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -216,8 +217,8 @@ iIntros "#contra". iSpecialize ("s_psk'" with "contra").
 by iDestruct "s_psk'" as ">[]".
 Qed.
 
-Definition game : val := λ: "mkchan",
-  let: "c"   := "mkchan" #() in
+Definition game : val := λ: <>,
+  let: "c"   := init_network #() in
   let: "nI"  := tag (nroot.@"key") (mknonce #()) in
   let: "nR"  := tag (nroot.@"key") (mknonce #()) in
   let: "psk" := mknonce #() in
@@ -229,8 +230,7 @@ Definition game : val := λ: "mkchan",
   let: "m" := recv "c" in
   SOME (~ eq_term "m" "sk").
 
-Lemma wp_game (mkchan : val) :
-  {{{ True }}} mkchan #() {{{ v, RET v; channel v }}} -∗
+Lemma wp_game :
   cryptis_ctx ∗
   session_token ⊤ ∗
   seal_pred_token ⊤ ∗
@@ -238,9 +238,9 @@ Lemma wp_game (mkchan : val) :
   key_pred_token (⊤ ∖ ↑nroot.@"keys") ∗
   honest 0 ∅ ∗
   ●Ph 0 -∗
-  WP game mkchan {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
+  WP game #() {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
-iIntros "#wp_mkchan (#ctx & sess_tok & seal_tok & hash_tok & key_tok & #hon & phase)".
+iIntros "(#ctx & sess_tok & seal_tok & hash_tok & key_tok & #hon & phase)".
 iMod (phase_auth_discard with "phase") as "#phase".
 rewrite /game; wp_pures.
 iMod (pk_dh_alloc nslN (λ _ _ _ _, True)%I with "sess_tok seal_tok")
@@ -251,8 +251,7 @@ iMod (tls_ctx_alloc tlsN with "sess_tok seal_tok hash_tok key_tok")
   as "(#tls_ctx & sess_tok & seal_tok & hash_tok & key_tok)"; try solve_ndisj.
 iMod (key_pred_set (nroot.@"key") (λ kt _, ⌜kt = Seal⌝)%I with "key_tok")
   as "[#? key_tok]"; try solve_ndisj.
-wp_bind (mkchan _); iApply "wp_mkchan" => //.
-iIntros "!> %c #cP".
+wp_apply wp_init_network => //. iIntros "%c #cP". wp_pures.
 wp_pures; wp_bind (mknonce _).
 iApply (wp_mknonce (λ _, True)%I (λ _, False%I)) => //.
 iIntros (nI) "_ #t_nI #p_nI _ tok_nI".
@@ -297,19 +296,15 @@ End Game.
 Definition F : gFunctors :=
   #[heapΣ; spawnΣ; cryptisΣ; sessionΣ].
 
-Lemma nsl_dh_secure (mkchan : val) σ₁ σ₂ (v : val) ts :
-  (∀ `{!heapGS Σ, !cryptisGS Σ},
-     ⊢ {{{ True }}} mkchan #() {{{ c, RET c; channel c}}}) →
-  rtc erased_step ([game mkchan], σ₁) (Val v :: ts, σ₂) →
+Lemma composite_secure σ₁ σ₂ (v : val) ts :
+  rtc erased_step ([game #()], σ₁) (Val v :: ts, σ₂) →
   v = NONEV ∨ v = SOMEV #true.
 Proof.
 have ? : heapGpreS F by apply _.
-move=> wp_mkchan.
 apply (adequate_result NotStuck _ _ (λ v _, v = NONEV ∨ v = SOMEV #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
 iMod (cryptisGS_alloc _) as (?) "(#ctx & seal_tok & key_tok & hash_tok & hon)".
 iMod (sessionGS_alloc _) as (?) "sess_tok".
-iApply (wp_game) => //; try by iFrame.
-iApply wp_mkchan.
+by iApply (wp_game) => //; try by iFrame.
 Qed.

@@ -13,7 +13,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Existing Instance ticket_lock.
+Local Existing Instance cryptisGS_tlock.
+Local Existing Instance ticket_lock.
 
 Definition nondet_nat_loop : val := rec: "loop" "n" :=
   if: nondet_bool #() then "n" else "loop" ("n" + #1).
@@ -213,7 +214,7 @@ Proof. apply _. Qed.
 Definition chan_inv (c : loc) : iProp Σ :=
   ∃ ts : list term, c ↦ repr ts ∗ [∗ list] t ∈ ts, public t.
 
-Lemma wp_mkchannel `{!tlockG Σ} Ψ :
+Lemma wp_mkchannel Ψ :
   (∀ c, channel c -∗ Ψ c) ⊢
   WP mkchannel #() {{ Ψ }}.
 Proof.
