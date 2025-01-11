@@ -24,42 +24,6 @@ Implicit Types rl : role.
 Definition N := nroot.@"iso_dh".
 Definition gameN := nroot.@"game".
 
-Definition compromise_long_term_keys : val :=
-  λ: "c" "compromised" "skI" "skR",
-    "compromised" <- #true;;
-    send "c" (key Seal "skI");;
-    send "c" (key Seal "skR").
-
-Definition game_inv lcomp skI skR : iProp :=
-  ∃ compromised : bool,
-    lcomp ↦ #compromised ∗
-    if compromised then
-      public (TKey Seal skI) ∗ public (TKey Seal skR)
-    else secret (TKey Seal skI) ∗ secret (TKey Seal skR).
-
-Lemma wp_compromise_long_term_keys c lcomp skI skR :
-  {{{ cryptis_ctx ∗
-      channel c ∗
-      inv gameN (game_inv lcomp skI skR) }}}
-    compromise_long_term_keys c #lcomp skI skR
-  {{{ RET #(); True }}}.
-Proof.
-iIntros "%Φ (#? & #? & #?) post".
-wp_lam. wp_pure _ credit:"c1". wp_pures.
-wp_bind (_ <- _)%E. iInv gameN as "(%bcomp & >lcomp & inv)". wp_store.
-iAssert (|==> (public (TKey Seal skI) ∗ public (TKey Seal skR)))%I
-  with "[inv]" as ">#[p_skI p_skR]".
-{ case: bcomp => //.
-  iDestruct "inv" as "[s_skI s_skR]".
-  iMod (compromise_secret with "s_skI") as "#?".
-  iMod (compromise_secret with "s_skR") as "#?".
-  by eauto. }
-iModIntro. iSplitL "lcomp"; first by iFrame; eauto.
-wp_pures. wp_apply wp_key. wp_apply wp_send => //.
-wp_pures. wp_apply wp_key. wp_apply wp_send => //.
-by iApply "post".
-Qed.
-
 Definition kvsN := nroot.@"kvs".
 
 Definition server_loop : val := rec: "loop" "c" "server" :=
@@ -72,20 +36,31 @@ Definition start_server : val := λ: "c" "skR",
 
 Definition game : val := λ: <>,
   let: "c" := init_network #() in
+
+  (* Create key pairs and give verification keys to attacker *)
   let: "skI" := mksigkey #() in
   let: "skR" := mksigkey #() in
   let: "vkI" := vkey "skI" in
   let: "vkR" := vkey "skR" in
+  send "c" "vkI";; send "c" "vkR";;
+
+  (* Run storage server in parallel *)
   Fork (start_server "c" "skR");;
+
+  (* Connect client to server and leak long-term secret keys after
+     connection is done *)
   let: "conn" := Client.connect kvsN "c" "skI" "vkR" in
   send "c" (key Seal "skI");;
   send "c" (key Seal "skR");;
+
+  (* Store value in server *)
   let: "k" := recv "c" in
   let: "v" := recv "c" in
   Client.create kvsN "c" "conn" "k" "v";;
+
+  (* Retrive value and check that it matches the one that was stored *)
   let: "v'" := Client.load kvsN "c" "conn" "k" in
-  assert: eq_term "v" "v'";;
-  #().
+  assert: eq_term "v" "v'".
 
 Lemma wp_server_loop c ss :
   {{{ cryptis_ctx ∗ channel c ∗ store_ctx kvsN ∗
@@ -128,6 +103,8 @@ wp_pures. wp_apply (wp_mksigkey with "[]"); eauto.
 iIntros "%skR #p_vkR s_skR tokenR". wp_pures.
 wp_apply wp_vkey. wp_pures.
 wp_apply wp_vkey. wp_pures.
+wp_apply wp_send => //. wp_pures.
+wp_apply wp_send => //. wp_pures.
 wp_apply (wp_fork with "[tokenR]").
 { iModIntro. wp_apply (wp_start_server with "[$tokenR]"); eauto. }
 wp_pures.
@@ -155,8 +132,7 @@ wp_apply (wp_client_load with "[] [] [] [$client $k_v]") => //.
 iIntros "%v' (client & k_v & _ & res)".
 iPoseProof (session_failed_or_ok with "ok res") as "->".
 wp_pures. wp_apply wp_assert. wp_apply wp_eq_term.
-rewrite bool_decide_eq_true_2 //. iSplit => //.
-iIntros "!>". by wp_pures.
+by rewrite bool_decide_eq_true_2.
 Qed.
 
 End Game.
