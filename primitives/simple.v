@@ -5,7 +5,7 @@ From iris.algebra Require Import agree auth gset gmap reservation_map.
 From iris.base_logic.lib Require Import invariants saved_prop.
 From iris.program_logic Require Import atomic.
 From iris.heap_lang Require Import notation proofmode.
-From iris.heap_lang.lib Require Import nondet_bool.
+From iris.heap_lang.lib Require Import nondet_bool ticket_lock.
 From cryptis Require Import lib term cryptis.
 From cryptis.primitives Require Import notations comp.
 
@@ -13,12 +13,36 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Definition nondet_int_loop : val := rec: "loop" "n" :=
+Existing Instance ticket_lock.
+
+Definition nondet_nat_loop : val := rec: "loop" "n" :=
   if: nondet_bool #() then "n" else "loop" ("n" + #1).
 
+Definition nondet_nat : val := λ: <>, nondet_nat_loop #0.
+
 Definition nondet_int : val := λ: <>,
-  let: "n" := nondet_int_loop #0 in
+  let: "n" := nondet_nat #() in
   if: nondet_bool #() then "n" else - "n".
+
+Definition get_chan : val := λ: "c" "lock", rec: "loop" <> :=
+  let: "n" := nondet_nat #() in
+  acquire "lock";;
+  let: "ts" := !"c" in
+  release "lock";;
+  match: get_list "ts" "n" with
+    NONE => "loop" #()
+  | SOME "t" => "t"
+  end.
+
+Definition put_chan : val := λ: "c" "lock" "t",
+  acquire "lock";;
+  "c" <- "t" :: !"c";;
+  release "lock".
+
+Definition mkchannel : val := λ: <>,
+  let: "c" := ref []%V in
+  let: "lock" := newlock #() in
+  (put_chan "c" "lock", get_chan "c" "lock").
 
 Definition send : val := λ: "c", Fst "c".
 Definition recv : val := λ: "c", Snd "c" #().
@@ -149,15 +173,22 @@ Implicit Types Φ : prodO locO termO -n> iPropO Σ.
 Implicit Types Ψ : val → iProp Σ.
 Implicit Types N : namespace.
 
-Lemma wp_nondet_int_loop Ψ (m : Z) :
-  (∀ n : Z, Ψ #n) ⊢
-  WP nondet_int_loop #m {{ Ψ }}.
+Lemma wp_nondet_nat_loop Ψ (m : nat) :
+  (∀ n : nat, Ψ #n) ⊢
+  WP nondet_nat_loop #m {{ Ψ }}.
 Proof.
 iIntros "post"; iLöb as "IH" forall (m); wp_rec.
-wp_bind (nondet_bool _).
-iApply nondet_bool_spec => //.
-iIntros "!> %b _"; case: b; wp_if; first by iApply "post".
-by wp_pures; iApply "IH".
+wp_apply nondet_bool_spec => //.
+iIntros "%b _"; case: b; wp_if; first by iApply "post".
+wp_pures. have -> : (m + 1)%Z = (m + 1)%nat by lia.
+by iApply "IH".
+Qed.
+
+Lemma wp_nondet_nat Ψ :
+  (∀ n : nat, Ψ #n) ⊢
+  WP nondet_nat #() {{ Ψ }}.
+Proof.
+iIntros "post". wp_lam. by wp_apply (wp_nondet_nat_loop _ 0).
 Qed.
 
 Lemma wp_nondet_int Ψ :
@@ -165,10 +196,9 @@ Lemma wp_nondet_int Ψ :
   WP nondet_int #() {{ Ψ }}.
 Proof.
 iIntros "post"; rewrite /nondet_int; wp_pures.
-wp_bind (nondet_int_loop _); iApply wp_nondet_int_loop.
-iIntros "%n"; wp_pures; wp_bind (nondet_bool _).
-iApply nondet_bool_spec => //.
-iIntros "!> %b _"; case: b; wp_if; first by iApply "post".
+wp_apply wp_nondet_nat. iIntros "%n"; wp_pures.
+wp_apply nondet_bool_spec => //. iIntros "%b _".
+case: b; wp_if; first by iApply "post".
 by wp_pures; iApply "post".
 Qed.
 
@@ -179,6 +209,45 @@ Definition channel c : iProp Σ :=
 
 Global Instance channel_persistent c : Persistent (channel c).
 Proof. apply _. Qed.
+
+Definition chan_inv (c : loc) : iProp Σ :=
+  ∃ ts : list term, c ↦ repr ts ∗ [∗ list] t ∈ ts, public t.
+
+Lemma wp_mkchannel `{!tlockG Σ} Ψ :
+  (∀ c, channel c -∗ Ψ c) ⊢
+  WP mkchannel #() {{ Ψ }}.
+Proof.
+iIntros "post".
+wp_lam; wp_apply (wp_nil (A := term)).
+wp_alloc c as "cP"; wp_pures.
+wp_apply (newlock_spec (chan_inv c) with "[cP]").
+  by iExists []; iSplit => //.
+iIntros "%lk %γ #lkP"; rewrite /get_chan /put_chan; wp_pures.
+iModIntro; iApply "post". clear Ψ. iExists _, _; do 2!iSplit => //.
+- iIntros "!> %t %Ψ #p_t post".
+  wp_pures. wp_apply acquire_spec => //. iIntros "[locked inv]".
+  iDestruct "inv" as (ts) "[c_ts #tsP]".
+  wp_pures; wp_load.
+  wp_apply wp_cons. wp_store.
+  wp_apply (release_spec with "[$locked c_ts]").
+  { iSplit => //. iExists (t :: ts). iFrame.
+    rewrite big_sepL_cons. eauto. }
+  by iIntros "_".
+- iLöb as "IH".
+  iIntros "!> %Ψ post".
+  wp_rec. wp_apply wp_nondet_nat. iIntros "%n". wp_pures.
+  wp_apply (acquire_spec with "lkP") => //.
+  iIntros "[locked inv]".
+  iDestruct "inv" as (ts) "[c_ts #tsP]".
+  wp_pures; wp_load.
+  wp_pures; wp_apply (release_spec with "[$locked c_ts]").
+  { iSplit => //. iExists ts; eauto. }
+  iIntros "_". wp_pures. wp_apply wp_get_list.
+  case ts_n: (ts !! n) => [t'|].
+  { wp_pures. iApply "post". rewrite big_sepL_forall. by iApply "tsP". }
+  wp_pure _. wp_pure _. wp_pure _.
+  iApply ("IH" with "post").
+Qed.
 
 Lemma wp_send c t Ψ :
   channel c -∗

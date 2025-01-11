@@ -22,6 +22,7 @@ Implicit Types (T S : val → iProp).
 
 Inductive type :=
 | Pub
+| Channel
 (* TODO: Use all key types *)
 | EK
 | DK
@@ -79,6 +80,7 @@ Reserved Notation "⟦ x ⟧ᵥ" (at level 0, format "⟦ x ⟧ᵥ").
 Fixpoint type_den τ : val → iProp :=
   match τ with
   | Pub => pub_type
+  | Channel => channel
   | EK => seal_key_type
   | DK => open_key_type
   | Int => int_type
@@ -613,63 +615,12 @@ iIntros "%"; iDestruct 1 as (v1 v2) "(-> & #? & #?)".
 by wp_pures.
 Qed.
 
-Definition get_chan : val := λ: "c" "lock", rec: "loop" <> :=
-  acquire "lock";;
-  match: !"c" with
-    NONE => release "lock";; "loop" #()
-  | SOME "ts" => "c" <- Snd "ts";; release "lock";; Fst "ts"
-  end.
-
-Definition put_chan : val := λ: "c" "lock" "t",
-  acquire "lock";;
-  "c" <- SOME ("t", !"c");;
-  release "lock".
-
-Definition chan_inv (c : loc) : iProp :=
-  ∃ ts : list term, c ↦ repr ts ∗ [∗ list] t ∈ ts, public t.
-
-Definition mkchan : val := λ: <>,
-  let: "c" := ref NONEV in
-  let: "lock" := newlock #() in
-  (get_chan "c" "lock", put_chan "c" "lock").
-
-Lemma has_type_mkchan Γ :
-  ⊢ has_type Γ mkchan (Arrow Unit (Prod (Arrow Unit Pub) (Arrow Pub Unit))).
+Lemma has_type_mkchannel Γ :
+  ⊢ has_type Γ mkchannel (Arrow Unit Channel).
 Proof.
-rewrite /mkchan; iApply has_type_val.
-iIntros "!> %v _ "; wp_pures.
-wp_alloc c as "cP"; wp_pures.
-wp_bind (newlock _).
-wp_pures; iApply (newlock_spec (chan_inv c) with "[cP]").
-  iExists []; iSplit => //.
-  by rewrite repr_list_unseal.
-iIntros "!> %lk %γ #lkP"; rewrite /get_chan /put_chan; wp_pures.
-iModIntro; iExists _, _; do 2!iSplit => //.
-- iLöb as "IH".
-  iIntros "!> % _"; wp_pures.
-  wp_bind (acquire _); iApply (acquire_spec with "lkP") => //.
-  iIntros "!> [locked inv]".
-  iDestruct "inv" as (ts) "[c_ts #tsP]".
-  wp_pures; wp_load; case: ts => [|t ts].
-  + rewrite repr_list_unseal /=; wp_pures.
-    wp_bind (release _); iApply (release_spec with "[locked c_ts]").
-      by iSplit => //; iFrame; iExists []; rewrite /= repr_list_unseal /=; iFrame.
-    iIntros "!> _"; wp_seq.
-    by iApply "IH".
-  + rewrite repr_list_unseal /= -repr_list_unseal.
-    iDestruct "tsP" as "[tP tsP]".
-    wp_pures; wp_store; wp_bind (release _).
-    iApply (release_spec with "[locked c_ts]").
-      by iSplit => //; iFrame.
-    by iIntros "!> _"; wp_pures; iApply pub_typeI.
-- iIntros "!> %"; iDestruct 1 as (t) "[-> #tP]"; wp_pures.
-  wp_bind (acquire _); iApply acquire_spec; eauto.
-  iIntros "!> [locked cP]"; iDestruct "cP" as (ts) "[cP #tsP]".
-  wp_pures; wp_load; wp_store.
-  iApply (release_spec with "[locked cP]").
-    iSplit => //; iFrame; iExists (t :: ts).
-    by rewrite repr_list_unseal; iFrame => //=; eauto.
-  by [].
+iApply has_type_val.
+iIntros "!> %v ->"; wp_pures.
+wp_apply wp_mkchannel. by iIntros "%c ?".
 Qed.
 
 Lemma has_type_fork Γ e :
