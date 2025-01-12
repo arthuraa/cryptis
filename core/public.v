@@ -925,6 +925,102 @@ rewrite public_TKey public_tag. iDestruct "p_k" as "[p_k|[_ p_k]]"; eauto.
 by iDestruct (wf_key_elim with "[//] [//]") as "#>%".
 Qed.
 
+Definition compromised_key k : iProp :=
+  public (TKey Seal k) ∧
+  public (TKey Open k).
+
+Definition aenc_key k : iProp :=
+  public (TKey Seal k) ∧
+  □ (public (TKey Open k) ↔ ◇ public k).
+
+Lemma aenc_key_public k : aenc_key k -∗ public (TKey Seal k).
+Proof. by iIntros "(? & _)". Qed.
+
+Lemma aenc_key_compromised_keyI k :
+  aenc_key k -∗ public (TKey Open k) -∗ compromised_key k.
+Proof. iIntros "(#? & _) #?". by iSplit. Qed.
+
+Lemma aenc_key_compromised_keyE k :
+  aenc_key k -∗ compromised_key k -∗ ◇ public k.
+Proof. iIntros "(_ & #s_k) [_ #p_k]". by iApply "s_k". Qed.
+
+Definition sign_key k : iProp :=
+  public (TKey Open k) ∧
+  □ (public (TKey Seal k) ↔ ◇ public k).
+
+Lemma sign_key_public k : sign_key k -∗ public (TKey Open k).
+Proof. by iIntros "(? & _)". Qed.
+
+Lemma sign_key_compromised_keyI k :
+  sign_key k -∗ public (TKey Seal k) -∗ compromised_key k.
+Proof. iIntros "(#? & _) #?". by iSplit. Qed.
+
+Lemma sign_key_compromised_keyE k :
+  sign_key k -∗ compromised_key k -∗ ◇ public k.
+Proof. iIntros "(_ & #s_k) [#p_k _]". by iApply "s_k". Qed.
+
+Definition senc_key k : iProp :=
+  □ (∀ kt, public (TKey kt k) ↔ ◇ public k).
+
+Lemma senc_key_compromised_keyI k kt :
+  senc_key k -∗ public (TKey kt k) -∗ compromised_key k.
+Proof.
+iIntros "#senc #p".
+iPoseProof ("senc" with "p") as "p_k".
+iPoseProof ("senc" $! Seal with "p_k") as "?".
+iPoseProof ("senc" $! Open with "p_k") as "?".
+by iSplit.
+Qed.
+
+Lemma senc_key_compromised_keyE k :
+  senc_key k -∗ compromised_key k -∗ ◇ public k.
+Proof. iIntros "#s_k [#p_k _]". by iApply "s_k". Qed.
+
+Definition secret t : iProp :=
+  (|==> public t) ∧
+  (|==> □ (public t ↔ ◇ False)) ∧
+  (public t -∗ ◇ False).
+
+Lemma secret_not_public t : secret t -∗ public t -∗ ◇ False.
+Proof. by iIntros "(_ & _ & contra)". Qed.
+
+Lemma secret_public t : secret t ==∗ public t.
+Proof. by iIntros "(? & _)". Qed.
+
+Lemma freeze_secret t : secret t ==∗ □ (public t ↔ ◇ False).
+Proof. by iIntros "(_ & ? & _)". Qed.
+
+Lemma public_compromised_key k : public k -∗ compromised_key k.
+Proof.
+iIntros "#p_k". iSplit; iApply public_TKey; eauto.
+Qed.
+
+Lemma public_signIS sk N Φ t :
+  sign_key sk -∗
+  seal_pred N Φ -∗
+  □ Φ sk t -∗
+  public t -∗
+  public (TSeal (TKey Seal sk) (Spec.tag N t)).
+Proof.
+iIntros "#[??] #? #? #?".
+iApply public_TSealIS => //=.
+- by rewrite public_minted !minted_TKey.
+- by iApply public_minted.
+- by iIntros "!> _".
+Qed.
+
+Lemma public_signE sk N Φ t :
+  public (TSeal (TKey Seal sk) (Spec.tag N t)) -∗
+  seal_pred N Φ -∗
+  public (TKey Open sk) -∗
+  public t ∧ (compromised_key sk ∨ □ ▷ Φ sk t).
+Proof.
+iIntros "#p_m #? #p_vk".
+iDestruct (public_TSealE with "[//] [//]") as "#[[? ?]|(#? & _ & #p_t)]".
+- iSplit => //. iLeft. by iSplit.
+- iSplit => //; eauto; by iApply "p_t".
+Qed.
+
 End Public.
 
 Arguments public_seal_name {Σ _}.

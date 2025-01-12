@@ -34,7 +34,7 @@ Variable N : namespace.
 
 Lemma wp_server_start c skR E :
   ↑nroot.@"db".@"server" ⊆ E →
-  {{{ channel c ∗ public (TKey Open skR) ∗ term_token skR E }}}
+  {{{ channel c ∗ sign_key skR ∗ term_token skR E }}}
     Server.start skR
   {{{ ss, RET (repr ss); server ss }}}.
 Proof.

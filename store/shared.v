@@ -295,12 +295,12 @@ Definition dbCN kR := nroot.@"db".@"client".@kR.
 Definition dbSN kI := nroot.@"db".@"server".@kI.
 
 Definition failure kI kR : iProp :=
-  public (TKey Seal kI) ∨ public (TKey Seal kR).
+  compromised_key kI ∨ compromised_key kR.
 
 Definition wf_sess_info si : iProp :=
   minted (si_key si) ∗
-  □ (∀ kt, public (TKey kt (si_key si)) ↔ ◇ public (si_key si)) ∗
-  (failure (si_init si) (si_resp si) ∨ □ (◇ public (si_key si) ↔ ▷ False)).
+  senc_key (si_key si) ∗
+  (compromised_session si ∨ □ (◇ public (si_key si) ↔ ▷ False)).
 
 #[global]
 Instance wf_sess_info_persistent cs : Persistent (wf_sess_info cs).
@@ -308,8 +308,7 @@ Proof. apply _. Qed.
 
 Definition session_failed_for si rl (failed : bool) : iProp :=
   term_meta (si_share_of rl si) (nroot.@"failed") failed ∗
-  (if failed then
-     failure (si_init si) (si_resp si)
+  (if failed then compromised_session si
    else □ (◇ public (si_key si) ↔ ▷ False))%I.
 
 #[global]
@@ -839,7 +838,7 @@ iRight. iLeft. iSplit => //.
 Qed.
 
 Definition server ss : iProp := ∃ accounts E,
-  public (TKey Open (ss_key ss)) ∗
+  sign_key (ss_key ss) ∗
   SAList.is_alist (ss_clients ss) (repr <$> accounts) ∗
   term_token (ss_key ss) E ∗
   ⌜∀ kI, TKey Open kI ∉ dom accounts → ↑dbSN kI ⊆ E⌝ ∗
@@ -849,7 +848,7 @@ Definition server ss : iProp := ∃ accounts E,
 
 Lemma serverI kR vclients :
   term_token kR (↑nroot.@"db".@"server") -∗
-  public (TKey Open kR) -∗
+  sign_key kR -∗
   SAList.is_alist vclients ∅ -∗
   server {| ss_key := kR; ss_clients := vclients |}.
 Proof.

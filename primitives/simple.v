@@ -638,7 +638,8 @@ Qed.
 Lemma twp_mkakey Ψ :
   cryptis_ctx -∗
   (∀ t, public (TKey Seal t) -∗
-        secret (TKey Open t) -∗
+        aenc_key t -∗
+        secret t -∗
         term_token t ⊤ -∗
         Ψ t) -∗
   WP mkakey #() [{ Ψ }].
@@ -654,34 +655,40 @@ iApply (twp_mknonce_freshN ∅ (λ _, known γ 1) (λ _, False%I)
 iIntros "%t %fresh % #s_t #p_t _ token".
 rewrite big_sepS_singleton.
 pose (t' := Spec.tag (nroot.@"keys".@"enc") t).
-iAssert (secret (TKey Open t')) with "[unknown]" as "tP"; first do 2?iSplit.
+iAssert (secret t') with "[unknown]" as "tP"; first do 2?iSplit.
 - iMod (known_alloc with "unknown") as "#known".
   iSpecialize ("p_t" with "known").
-  iModIntro. rewrite public_TKey. iLeft. by rewrite public_tag.
+  iModIntro. by rewrite public_tag.
 - iMod (known_alloc 2 with "unknown") as "#known".
+  rewrite public_tag.
   iIntros "!> !>". iSplit.
-  + iIntros "#p_t'".
-    iMod (public_enc_keyE with "ctx p_t'") as "contra".
+  + iIntros "#contra".
     iPoseProof ("p_t" with "contra") as ">#known'".
     by iPoseProof (known_agree with "known known'") as "%".
   + iIntros "#contra".
-    rewrite public_TKey. iLeft. rewrite public_tag.
     iApply "p_t". by iDestruct "contra" as ">[]".
-- iIntros "#p_t'".
-  iMod (public_enc_keyE with "ctx p_t'") as "contra".
+- iIntros "#contra".
+  rewrite public_tag.
   iPoseProof ("p_t" with "contra") as ">#known".
   by iPoseProof (unknown_known with "[$] [//]") as "[]".
 iAssert (minted (TKey Open t')) as "s_t'".
   by rewrite minted_TKey minted_tag.
 wp_pures. wp_bind (tag _ _). iApply twp_tag.
-iApply ("post" with "[] [$] [$]") => //.
-iApply (public_enc_key with "ctx"). by eauto.
+iAssert (public (TKey Seal t')) as "#?".
+  iApply (public_enc_key with "ctx"). by eauto.
+iApply ("post" with "[] [] [$] [$]") => //.
+iSplit => //. iModIntro. rewrite public_tag.
+iApply (bi.iff_trans _ (minted t ∧ ◇ (⌜Open = Seal⌝ ∨ public t))).
+iSplit; first by iApply public_enc_key. iSplit.
+- by iIntros "(_ & > [%|?])".
+- iIntros "#?". iSplit => //. by iRight.
 Qed.
 
 Lemma wp_mkakey Ψ :
   cryptis_ctx -∗
   (∀ t, public (TKey Seal t) -∗
-        secret (TKey Open t) -∗
+        aenc_key t -∗
+        secret t -∗
         term_token t ⊤ -∗
         Ψ t) -∗
   WP mkakey #() {{ Ψ }}.
@@ -749,7 +756,8 @@ Qed.
 Lemma twp_mksigkey Ψ :
   cryptis_ctx -∗
   (∀ t, public (TKey Open t) -∗
-        secret (TKey Seal t) -∗
+        sign_key t -∗
+        secret t -∗
         term_token t ⊤ -∗
         Ψ t) -∗
   WP mksigkey #() [{ Ψ }].
@@ -765,34 +773,40 @@ iApply (twp_mknonce_freshN ∅ (λ _, known γ 1) (λ _, False%I)
 iIntros "%t %fresh % #s_t #p_t _ token".
 rewrite big_sepS_singleton.
 pose (t' := Spec.tag (nroot.@"keys".@"sig") t).
-iAssert (secret (TKey Seal t')) with "[unknown]" as "tP"; first do 2?iSplit.
+iAssert (secret t') with "[unknown]" as "tP"; first do 2?iSplit.
 - iMod (known_alloc with "unknown") as "#known".
   iSpecialize ("p_t" with "known").
-  iModIntro. rewrite public_TKey. iLeft. by rewrite public_tag.
+  iModIntro. by rewrite public_tag.
 - iMod (known_alloc 2 with "unknown") as "#known".
+  rewrite public_tag.
   iIntros "!> !>". iSplit.
-  + iIntros "#p_t'".
-    iMod (public_sig_keyE with "ctx p_t'") as "contra".
+  + iIntros "#contra".
     iPoseProof ("p_t" with "contra") as ">#known'".
     by iPoseProof (known_agree with "known known'") as "%".
   + iIntros "#contra".
-    rewrite public_TKey. iLeft. rewrite public_tag.
     iApply "p_t". by iDestruct "contra" as ">[]".
-- iIntros "#p_t'".
-  iMod (public_sig_keyE with "ctx p_t'") as "contra".
+- iIntros "#contra".
+  rewrite public_tag.
   iPoseProof ("p_t" with "contra") as ">#known".
   by iPoseProof (unknown_known with "[$] [//]") as "[]".
-iAssert (minted (TKey Seal t')) as "s_t'".
-  by rewrite minted_TKey minted_tag.
+iAssert (minted t') as "s_t'"; first by rewrite minted_tag.
 wp_pures. wp_bind (tag _ _). iApply twp_tag.
-iApply ("post" with "[] [$] [$]") => //.
-iApply (public_sig_key with "ctx"). by eauto.
+iAssert (public (TKey Open t')) as "#?".
+  iApply (public_sig_key with "ctx"). by eauto.
+iApply ("post" with "[] [] [$] [$]") => //.
+iSplit => //. iModIntro. rewrite public_tag.
+iApply (bi.iff_trans _ (minted t ∧ ◇ (⌜Seal = Open⌝ ∨ public t))).
+iSplit; first by iApply public_sig_key.
+iSplit.
+- by iIntros "(_ & > [%|?])".
+- iIntros "#?". iSplit => //. by iRight.
 Qed.
 
 Lemma wp_mksigkey Ψ :
   cryptis_ctx -∗
   (∀ t, public (TKey Open t) -∗
-        secret (TKey Seal t) -∗
+        sign_key t -∗
+        secret t -∗
         term_token t ⊤ -∗
         Ψ t) -∗
   WP mksigkey #() {{ Ψ }}.

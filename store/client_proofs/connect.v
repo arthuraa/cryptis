@@ -34,7 +34,7 @@ Lemma wp_client_connect c kI kR :
   channel c -∗
   cryptis_ctx -∗
   store_ctx N -∗
-  public (TKey Open kI) -∗
+  sign_key kI -∗
   public (TKey Open kR) -∗
   {{{ client_disconnected kI kR }}}
     Client.connect N c kI (TKey Open kR)

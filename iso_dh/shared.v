@@ -83,9 +83,9 @@ case/Spec.tag_inj => _.
 by case/Spec.of_list_inj => <- <- <- <- <-.
 Qed.
 
-Definition compromised si : iProp :=
-  public (TKey Seal (si_init si)) ∨
-  public (TKey Seal (si_resp si)).
+Definition compromised_session si : iProp :=
+  compromised_key (si_init si) ∨
+  compromised_key (si_resp si).
 
 Definition session_status si (failed : bool) : iProp := ∃ a,
   ⌜si_init_share si = TExp (TInt 0) a⌝ ∗
@@ -123,7 +123,7 @@ Definition msg3_pred kI m3 : iProp :=
     ⌜m3 = Spec.of_list [ga; gb; vkR]⌝ ∗
     session_status si failed ∗
     (◇ public (si_key si) ↔ ▷ ⌜failed⌝) ∗
-    (compromised si ∨ ⌜failed = false⌝).
+    (compromised_session si ∨ ⌜failed = false⌝).
 
 Definition iso_dh_ctx : iProp :=
   seal_pred (N.@"m2") msg2_pred ∗

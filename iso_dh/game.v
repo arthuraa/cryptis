@@ -30,8 +30,8 @@ Definition gameN := nroot.@"game".
 Definition compromise_long_term_keys : val :=
   λ: "c" "compromised" "skI" "skR",
     "compromised" <- #true;;
-    send "c" (key Seal "skI");;
-    send "c" (key Seal "skR").
+    send "c" "skI";;
+    send "c" "skR".
 
 Definition wait_for_compromise : val :=
   rec: "loop" "compromised" :=
@@ -49,9 +49,8 @@ Definition check_session_key_secrecy : val :=
 Definition game_inv lcomp skI skR : iProp :=
   ∃ compromised : bool,
     lcomp ↦ #compromised ∗
-    if compromised then
-      public (TKey Seal skI) ∗ public (TKey Seal skR)
-    else secret (TKey Seal skI) ∗ secret (TKey Seal skR).
+    if compromised then public skI ∗ public skR
+    else secret skI ∗ secret skR.
 
 Lemma wp_compromise_long_term_keys c lcomp skI skR :
   {{{ cryptis_ctx ∗
@@ -63,16 +62,16 @@ Proof.
 iIntros "%Φ (#? & #? & #?) post".
 wp_lam. wp_pure _ credit:"c1". wp_pures.
 wp_bind (_ <- _)%E. iInv gameN as "(%bcomp & >lcomp & inv)". wp_store.
-iAssert (|==> (public (TKey Seal skI) ∗ public (TKey Seal skR)))%I
+iAssert (|==> (public skI ∗ public skR))%I
   with "[inv]" as ">#[p_skI p_skR]".
 { case: bcomp => //.
   iDestruct "inv" as "[s_skI s_skR]".
-  iMod (compromise_secret with "s_skI") as "#?".
-  iMod (compromise_secret with "s_skR") as "#?".
+  iMod (secret_public with "s_skI") as "#?".
+  iMod (secret_public with "s_skR") as "#?".
   by eauto. }
 iModIntro. iSplitL "lcomp"; first by iFrame; eauto.
-wp_pures. wp_apply wp_key. wp_apply wp_send => //.
-wp_pures. wp_apply wp_key. wp_apply wp_send => //.
+wp_pures. wp_apply wp_send => //.
+wp_pures. wp_apply wp_send => //.
 by iApply "post".
 Qed.
 
@@ -80,12 +79,12 @@ Lemma wp_wait_for_compromise lcomp skI skR :
   {{{ cryptis_ctx ∗
       inv gameN (game_inv lcomp skI skR) }}}
     wait_for_compromise #lcomp
-  {{{ RET #(); public (TKey Seal skI) ∗ public (TKey Seal skR) }}}.
+  {{{ RET #(); public skI ∗ public skR }}}.
 Proof.
 iLöb as "IH". iIntros "%Φ (#? & #?) post".
 wp_rec. wp_bind (!_)%E. iInv gameN as "(%bcomp & lcomp & inv)".
 wp_load. iModIntro.
-iAssert (□ if bcomp then public (TKey Seal skI) ∗ public (TKey Seal skR)
+iAssert (□ if bcomp then public skI ∗ public skR
            else True)%I as "#?".
 { case: bcomp => //. iPoseProof "inv" as "#inv". by eauto. }
  iSplitL "lcomp inv"; first by iFrame.
@@ -97,12 +96,13 @@ Lemma wp_check_session_key_secrecy c lcomp sk si :
   {{{ cryptis_ctx ∗
       channel c ∗
       inv gameN (game_inv lcomp (si_init si) (si_resp si)) ∗
-      (compromised si ∨ □ (◇ public sk ↔ ▷ False)) }}}
+      sign_key (si_init si) ∗ sign_key (si_resp si) ∗
+      (compromised_session si ∨ □ (◇ public sk ↔ ▷ False)) }}}
     check_session_key_secrecy c #lcomp sk
   {{{ RET #(); True }}}.
 Proof.
 set skI := si_init si. set skR := si_resp si.
-iIntros "%Φ (#? & #? & #? & #s_sk) post".
+iIntros "%Φ (#? & #? & #? & #? & #? & #s_sk) post".
 rewrite /check_session_key_secrecy.
 wp_pure _ credit:"c1".
 wp_pure _ credit:"c2".
@@ -113,13 +113,16 @@ wp_load. case: bcomp.
 { iModIntro. iSplitR "post"; first by iExists true; eauto.
   wp_pures. by iApply "post". }
 iDestruct "inv" as "[s_skI s_skR]".
-iAssert (|={⊤ ∖ ↑gameN}=> secret (TKey Seal skI) ∗
-                          secret (TKey Seal skR) ∗
+iAssert (|={⊤ ∖ ↑gameN}=> secret skI ∗ secret skR ∗
                           □ (◇ public sk ↔ ▷ False))%I
   with "[c1 s_skI s_skR]" as "{s_sk} >(s_skI & s_skR & #s_sk)".
 { iDestruct "s_sk" as "[[comp|comp]|?]"; eauto.
-  - by iDestruct (secret_not_public with "s_skI comp") as ">[]".
-  - by iDestruct (secret_not_public with "s_skR comp") as ">[]".
+  - iMod (sign_key_compromised_keyE with "[] comp")
+      as "contra" => //.
+    by iDestruct (secret_not_public with "s_skI []") as ">[]".
+  - iMod (sign_key_compromised_keyE with "[] comp")
+      as "contra" => //.
+    by iDestruct (secret_not_public with "s_skR contra") as ">[]".
   - iModIntro. by iFrame. }
 iModIntro. iSplitR "post".
 { iExists false; iFrame. }
@@ -168,14 +171,15 @@ Lemma wp_do_init_loop c lcomp vset kI kR :
   channel c -∗
   cryptis_ctx -∗
   iso_dh_ctx N -∗
-  public (TKey Open kI) -∗
+  sign_key kI -∗
+  sign_key kR -∗
   inv gameN (game_inv lcomp kI kR) -∗
   is_lock_term_set (iso_dh_game_inv Init) vset -∗
   {{{ True }}}
     do_init_loop c #lcomp vset kI (TKey Open kR)
   {{{ RET #(); True }}}.
 Proof.
-iIntros "#chan #? #? #? #p_vkI #set".
+iIntros "#chan #? #? #p_vkI #p_vkR #inv #set".
 iLöb as "IH". iIntros "!> %Φ _ Hpost".
 wp_rec; wp_pures; wp_apply wp_fork.
 { by iApply "IH" => //. }
@@ -195,7 +199,8 @@ iPoseProof (iso_dh_game_fresh Init with "token") as "fresh".
 wp_eq_term e; wp_pures; last by iApply "Hpost".
 case: e => -> {kR}.
 wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
-iAssert (compromised si ∨ □ (◇ public (si_key si) ↔ ▷ False))%I as "#?".
+iAssert (compromised_session si ∨
+           □ (◇ public (si_key si) ↔ ▷ False))%I as "#?".
 { iDestruct "comp" as "[comp|->]"; eauto. }
 wp_pures. wp_apply wp_check_session_key_secrecy => //.
 { by eauto 10. }
@@ -207,13 +212,14 @@ Lemma wp_do_init c lcomp kI kR :
   channel c -∗
   cryptis_ctx -∗
   iso_dh_ctx N -∗
-  public (TKey Open kI) -∗
+  sign_key kI -∗
+  sign_key kR -∗
   inv gameN (game_inv lcomp kI kR) -∗
   {{{ True }}}
     do_init c #lcomp kI (TKey Open kR)
   {{{ RET #(); True }}}.
 Proof.
-iIntros "#chan #? #? #p_pkI #? %Φ _ !> post".
+iIntros "#chan #? #? #p_pkI #p_pkR #? %Φ _ !> post".
 wp_lam. wp_pures.
 wp_apply (wp_new_lock_term_set (iso_dh_game_inv Init)) => //.
 iIntros "%set #set". wp_pures.
@@ -240,14 +246,15 @@ Lemma wp_do_resp_loop c lcomp set skI skR :
   channel c -∗
   cryptis_ctx -∗
   iso_dh_ctx N -∗
-  public (TKey Open skR) -∗
+  sign_key skI -∗
+  sign_key skR -∗
   inv gameN (game_inv lcomp skI skR) -∗
   is_lock_term_set (iso_dh_game_inv Resp) set -∗
   {{{ True }}}
     do_resp_loop c #lcomp set skR (TKey Open skI)
   {{{ RET #(); True }}}.
 Proof.
-iIntros "#chan #? #? #p_vkR #? #set".
+iIntros "#chan #? #? #p_vkI #p_vkR #? #set".
 iLöb as "IH". iIntros "!> %Φ _ Hpost".
 wp_rec; wp_pures; wp_apply wp_fork.
 { iApply "IH" => //. }
@@ -260,9 +267,9 @@ iPoseProof (iso_dh_game_fresh Resp with "token") as "fresh".
 wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
 wp_eq_term e; wp_pures; last by iApply "Hpost".
 case: e => -> {skI}.
-iAssert (compromised si ∨ □ (◇ public (si_key si) ↔ ▷ False))%I as "#?".
+iAssert (compromised_session si ∨ □ (◇ public (si_key si) ↔ ▷ False))%I as "#?".
 { by iDestruct "comp" as "[?|[??]]"; eauto. }
-wp_apply (wp_check_session_key_secrecy _ lcomp _ si) => //; eauto.
+wp_apply (wp_check_session_key_secrecy _ lcomp _ si) => //; eauto 10.
 iIntros "_". wp_pures. by iApply "Hpost".
 Qed.
 
@@ -270,13 +277,14 @@ Lemma wp_do_resp c lcomp skI skR :
   channel c -∗
   cryptis_ctx -∗
   iso_dh_ctx N -∗
-  public (TKey Open skR) -∗
+  sign_key skI -∗
+  sign_key skR -∗
   inv gameN (game_inv lcomp skI skR) -∗
   {{{ True }}}
     do_resp c #lcomp skR (TKey Open skI)
   {{{ RET #(); True }}}.
 Proof.
-iIntros "#? #? #? #? #? %Φ _ !> post".
+iIntros "#? #? #? #? #? #? %Φ _ !> post".
 wp_lam. wp_pures.
 wp_apply (wp_new_lock_term_set (iso_dh_game_inv Resp)) => //.
 iIntros "%set #set". wp_pures.
@@ -308,9 +316,9 @@ iIntros "#ctx enc_tok key_tok _ _"; rewrite /game; wp_pures.
 iMod (iso_dh_ctx_alloc N with "enc_tok") as "#?" => //.
 wp_apply wp_init_network => //. iIntros "%c #cP". wp_pures.
 wp_apply (wp_mksigkey with "[]"); eauto.
-iIntros "%skI #p_vkI s_skI tokenI". wp_pures.
+iIntros "%skI #p_vkI #sign_skI s_skI tokenI". wp_pures.
 wp_pures. wp_apply (wp_mksigkey with "[]"); eauto.
-iIntros "%skR #p_vkR s_skR tokenR". wp_pures.
+iIntros "%skR #p_vkR #sign_skR s_skR tokenR". wp_pures.
 wp_apply wp_vkey. wp_pures.
 wp_apply wp_vkey. wp_pures.
 wp_alloc lcomp as "lcomp".

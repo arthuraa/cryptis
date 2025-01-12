@@ -27,7 +27,7 @@ Lemma wp_connection_connect N c kI kR :
   channel c -∗
   cryptis_ctx -∗
   iso_dh_ctx (N.@"auth") -∗
-  public (TKey Open kI) -∗
+  sign_key kI -∗
   public (TKey Open kR) -∗
   {{{ True }}}
     Connection.connect N c kI (TKey Open kR)
@@ -47,8 +47,9 @@ wp_apply (wp_initiator with "[//] [//] [//] [] []") => //.
 iIntros "%res resP".
 case: res=> [kS|] /=; wp_pures; last by iLeft; iFrame; eauto.
 iDestruct "resP"
-  as "(%si & %failed & % & % & <- &
+  as "(%si & %failed & % & %e_kR & <- &
        #m_kS & #status & #s_kS & #s_kS' & #comp & token)".
+case: e_kR => <-.
 wp_alloc ts as "ts". wp_pures.
 iRight. iModIntro. iExists _.  iSplit => //.
 iApply ("post" $! (ConnState si ts Init)). iFrame => /=.
@@ -61,7 +62,7 @@ Lemma wp_connection_listen N c kR :
   channel c -∗
   cryptis_ctx -∗
   iso_dh_ctx (N.@"auth") -∗
-  public (TKey Open kR) -∗
+  sign_key kR -∗
   {{{ True }}}
     Connection.listen N c kR
   {{{ cs, RET (TKey Open (si_init cs), repr cs)%V;
@@ -85,8 +86,7 @@ wp_pures.
 iRight. iModIntro. iExists _.  iSplit => //.
 iApply ("post" $! (ConnState si ts Resp)). iFrame => /=.
 do !iSplit => //; eauto.
-iDestruct "comp" as "[fail|[_ sess]]"; last by iRight.
-rewrite /failure. by eauto.
+iDestruct "comp" as "[fail|[_ sess]]"; eauto.
 Qed.
 
 Lemma wp_connection_timestamp cs (n : nat) :

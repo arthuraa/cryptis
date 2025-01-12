@@ -44,30 +44,30 @@ Definition responder : val := λ: "c" "skR",
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
 
-Lemma wp_responder c kR :
+Lemma wp_responder c skR :
   channel c -∗
   cryptis_ctx -∗
   iso_dh_ctx N -∗
-  public (TKey Open kR) -∗
+  sign_key skR -∗
   {{{ True }}}
-    responder c kR
+    responder c skR
   {{{ okS,
       RET (repr okS);
       if okS is Some (vkI, kS) then ∃ si,
         ⌜vkI = TKey Open (si_init si)⌝ ∗
-        ⌜si_resp si = kR⌝ ∗
+        ⌜si_resp si = skR⌝ ∗
         ⌜si_key si = kS⌝ ∗
         public vkI ∗
         minted kS ∗
-        □ (∀ kt, public (TKey kt kS) ↔ ◇ public kS) ∗
-        (compromised si ∨
+        senc_key kS ∗
+        (compromised_session si ∨
          session_status si false ∗ □ (◇ public kS ↔ ▷ False)) ∗
         term_token (si_resp_share si) ⊤
       else True
  }}}.
 Proof.
-set vkR := TKey Open kR.
-iIntros "#chan_c #? (#? & #?) #p_vkR !> %Φ _ Hpost".
+set vkR := TKey Open skR.
+iIntros "#chan_c #? (#? & #?) #sign_kR !> %Φ _ Hpost".
 wp_lam. wp_pures. wp_apply wp_vkey. wp_pures.
 wp_apply wp_recv => //. iIntros "%m1 #p_m1". wp_pures.
 wp_list_of_term m1; last by protocol_failure.
@@ -98,18 +98,14 @@ wp_apply wp_mkkeyshare => //.
 iIntros "_". wp_pures. wp_list. wp_term_of_list.
 wp_apply wp_sign. wp_pures.
 wp_apply wp_send => //.
-{ iApply public_TSealIS => //.
-  - by rewrite public_minted !minted_TKey.
+{ iApply public_signIS => //.
   - iModIntro.
     iExists ga, b, vkI.  by do ![iSplitL => //].
-  - rewrite minted_of_list /= minted_TExp minted_TInt /=.
-    rewrite !public_minted !minted_TKey. by do ![iSplitL => //].
-  - iIntros "!> _". rewrite public_of_list /=.
-    by eauto. }
+  - rewrite public_of_list /=. by do !iSplit => //. }
 wp_pures. wp_apply wp_recv => //. iIntros "%m3 #p_m3".
 wp_apply wp_verify. case: Spec.decP; last by protocol_failure.
-move=> kI {}m3 e_vkI ->.
-rewrite {}e_vkI {vkI}. set vkI := TKey Open kI.
+move=> skI {}m3 e_vkI ->.
+rewrite {}e_vkI {vkI}. set vkI := TKey Open skI.
 wp_pures. wp_list_of_term m3; last by protocol_failure.
 wp_list_match => [ga' gb' vkR' -> {m3}|]; last by protocol_failure.
 wp_eq_term e; last by protocol_failure. subst ga'.
@@ -118,31 +114,30 @@ wp_eq_term e; last by protocol_failure. subst vkR'.
 wp_pure _ credit:"H3".
 wp_apply wp_texp.
 wp_pure _ credit:"H4".
-iPoseProof (public_TSealE with "p_m3 [//]") as "{p_m3} p_m3".
-rewrite public_of_list /=.
+iPoseProof (public_signE with "p_m3 [//] [//]") as "{p_m3} [_ inv]".
 wp_pures. wp_list. wp_term_of_list.
-wp_pures. pose si := SessInfo kI kR ga gb gab.
+wp_pures. pose si := SessInfo skI skR ga gb gab.
 wp_apply wp_derive_key. rewrite -[Spec.derive_key _]/(si_key si).
-iAssert (|={⊤}=> compromised si ∨
+iAssert (|={⊤}=> compromised_session si ∨
                  session_status si false ∗
                  □ (◇ public (si_key si) ↔ ▷ False))%I
   with "[H4]" as "> #i_m3".
-{ iDestruct "p_m3" as "[(p_skI & _) | (#i_m3 & _ & _)]".
-  { rewrite /compromised. by eauto. }
-  iMod (lc_fupd_elim_later_pers with "H4 i_m3") as "{i_m3} #i_m3".
-  iDestruct "i_m3"
-    as "(%a & %gb' & %kR' & %failed & %e_m3 & status & p_a & comp)".
-  case/Spec.of_list_inj: e_m3 => -> <- <- {ga gb' kR'} in gb gab si *.
+{ iDestruct "inv" as "[comp|#inv]".
+  { rewrite /compromised_session. by eauto. }
+  iDestruct "inv"
+    as "(%a & %gb' & %skR' & %failed & %e_m3 & status & p_a & comp)".
+  case/Spec.of_list_inj: e_m3 => -> <- <- {ga gb' skR'} in gb gab si *.
   rewrite !TExp_TExpN TExpC2 in gab si *.
   iIntros "!>". iDestruct "comp" as "[comp|->]"; first by eauto.
   iRight. by iSplit => //. }
 iAssert (minted (si_key si)) as "#m_kS".
 { rewrite minted_derive_key !minted_of_list /= !minted_TExp minted_TInt.
-  by do !iSplit => //; iApply public_minted. }
-iAssert (minted kI) as "#m_kI".
+  do !iSplit => //; iApply public_minted => //.
+  by iApply sign_key_public. }
+iAssert (minted skI) as "#m_skI".
 { iApply minted_TKey. by iApply public_minted. }
 wp_pures.
-iApply ("Hpost" $! (Some (TKey Open kI, si_key si))).
+iApply ("Hpost" $! (Some (TKey Open skI, si_key si))).
 iModIntro. iExists si. do !iSplit => //.
 iIntros "!> %kt".
 rewrite public_derive_key.
