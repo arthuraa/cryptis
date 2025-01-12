@@ -960,12 +960,13 @@ Lemma sign_key_compromised_keyE k :
 Proof. iIntros "(_ & #s_k) [#p_k _]". by iApply "s_k". Qed.
 
 Definition senc_key k : iProp :=
+  minted k ∧
   □ (∀ kt, public (TKey kt k) ↔ ◇ public k).
 
 Lemma senc_key_compromised_keyI k kt :
   senc_key k -∗ public (TKey kt k) -∗ compromised_key k.
 Proof.
-iIntros "#senc #p".
+iIntros "[_ #senc] #p".
 iPoseProof ("senc" with "p") as "p_k".
 iPoseProof ("senc" $! Seal with "p_k") as "?".
 iPoseProof ("senc" $! Open with "p_k") as "?".
@@ -993,6 +994,54 @@ Proof. by iIntros "(_ & ? & _)". Qed.
 Lemma public_compromised_key k : public k -∗ compromised_key k.
 Proof.
 iIntros "#p_k". iSplit; iApply public_TKey; eauto.
+Qed.
+
+Lemma public_aencIS pk N Φ t :
+  seal_pred N Φ -∗
+  public pk -∗
+  minted t -∗
+  (∀ sk, ⌜pk = TKey Seal sk⌝ -∗
+         □ Φ sk t ∗
+         □ (compromised_key sk → public t)) -∗
+  public (TSeal pk (Spec.tag N t)).
+Proof.
+iIntros "#? #p_pk #m_t inv".
+iApply public_TSealI => //.
+- by iApply public_minted.
+- iIntros "%sk #e".
+  iPoseProof ("inv" with "e") as "[#inv #p_t]".
+  iSplit => //.
+  iIntros "!> #p_dk". iPoseProof "e" as "->".
+  iApply "p_t". iSplit => //.
+Qed.
+
+Lemma public_sencIS sk N Φ t :
+  seal_pred N Φ -∗
+  senc_key sk -∗
+  minted t -∗
+  □ Φ sk t -∗
+  □ (compromised_key sk → public t) -∗
+  public (TSeal (TKey Seal sk) (Spec.tag N t)).
+Proof.
+iIntros "#? #p_sk #m_t #inv #p_t".
+iApply public_TSealIS => //.
+- rewrite minted_TKey. by iDestruct "p_sk" as "[??]".
+- iIntros "!> #p_sk'".
+  iApply "p_t".
+  by iApply senc_key_compromised_keyI.
+Qed.
+
+Lemma public_encE sk N Φ t :
+  public (TSeal (TKey Seal sk) (Spec.tag N t)) -∗
+  seal_pred N Φ -∗
+  minted t ∧ (public t ∨ □ ▷ Φ sk t ∧ □ (compromised_key sk → public t)).
+Proof.
+iIntros "#p_t #?". iSplit => //.
+{ iPoseProof (public_minted with "p_t") as "#m_t".
+  rewrite minted_TSeal minted_tag. by iDestruct "m_t" as "[_ ?]". }
+iPoseProof (public_TSealE with "p_t [//]") as "[[_ comp]|inv]"; eauto.
+iDestruct "inv" as "{p_t} (#? & _ & #p_t)".
+iRight. iSplit => //. iIntros "!> #[??]". by iApply "p_t".
 Qed.
 
 Lemma public_signIS sk N Φ t :

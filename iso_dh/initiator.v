@@ -171,7 +171,8 @@ iAssert (minted seed) as "#m_seed".
   by iApply sign_key_public. }
 wp_pures. iApply ("Hpost" $! (Some secret)).
 iExists si, failed. iFrame. do !iSplitR => //.
-  by rewrite minted_derive_key.
+- by rewrite minted_derive_key.
+- by rewrite minted_derive_key.
 iIntros "!> !> %kt".
 rewrite public_derive_key.
 by iApply public_key_derive_key.
