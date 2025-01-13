@@ -589,7 +589,7 @@ Lemma honest_public E dq t n :
   secret_at n t -∗
   ●Ph{dq} n -∗
   public t ={E}=∗
-  ▷ ◇ False.
+  ▷ ▷ False.
 Proof.
 iIntros "%sub #ctx #sec phase_auth #p_t".
 rewrite secret_at_unseal.
@@ -597,10 +597,10 @@ iMod (phase_acc with "ctx sec phase_auth")
   as "(%H & %C & %M & %X & phase_auth & phaseI & %H_n & %t_X & own_M &
        sec_X & #pub_X & #mint_M & close)" => //.
 have ? : t ∈ X by set_solver.
-iAssert (▷ ◇ False)%I with "[sec_X]" as "#contra".
+iAssert (▷ ▷ False)%I with "[sec_X]" as "#contra".
 { iClear "pub_X". rewrite (big_sepS_delete _ X) //.
-  iDestruct "sec_X" as "([_ I] & _)".
-  iModIntro. by iApply "I". }
+  iDestruct "sec_X" as "[sec_X _]".
+  iModIntro. by iApply (secret_not_public with "sec_X"). }
 iMod ("close" with "[phaseI own_M sec_X]") as "_".
 { iModIntro. iExists n, H, X, C, M. iFrame. by eauto. }
 by eauto.
@@ -687,7 +687,7 @@ Lemma freeze_honest E n X :
   ctx -∗
   honest n X -∗
   ●Ph n ={E}=∗
-  honest (S n) ∅ ∗ ●Ph (S n) ∗ ▷ |==> [∗ set] t ∈ X, □ (public t ↔ ◇ False).
+  honest (S n) ∅ ∗ ●Ph (S n) ∗ ▷ |==> [∗ set] t ∈ X, □ (public t ↔ ▷ False).
 Proof.
 iIntros "%sub #ctx hon phase".
 rewrite {1}(_ : X = ∅ ∪ X); last set_solver.
@@ -719,13 +719,12 @@ iDestruct "I" as "{pub_X} (#pub_X & sec & sec_X)".
 iDestruct "hon" as "(#hon & #min)".
 iPoseProof (own_valid with "phaseI") as "%val".
 case/comp_map_auth_valid_dis: val => [bounds_H [] bounds_C dis'].
-iAssert (◇ ⌜∀ m t, (m, t) ∈ C → t ∉ Y⌝)%I as "#>%dis''".
+iAssert (▷ ⌜∀ m t, (m, t) ∈ C → t ∉ Y⌝)%I as "#>%dis''".
 { iIntros "%m %t %t_C %t_Y".
   rewrite (big_sepS_delete _ C) // !(big_sepS_delete _ Y) //.
   iDestruct "pub_X" as "[pub_X _]".
   iDestruct "sec" as "[sec_t _]".
-  iDestruct "sec_t" as "(_ & _ & sec_t)".
-  by iApply "sec_t". }
+  by iApply (secret_not_public with "sec_t"). }
 rewrite phase_auth_unseal.
 iMod (own_update_2 with "phaseI phase") as "phaseI".
   apply: (@comp_map_honest_update _ _ _ _ (X ∪ Y)).

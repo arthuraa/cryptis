@@ -202,10 +202,10 @@ case: decide => [[kIP kRP]|_]; last first.
 iDestruct "session" as "[[#fail|#fail]|session]".
 - iPoseProof (secret_atI _ kIP with "hon") as "sec".
   iMod (honest_public with "ctx sec phase fail") as "#contra" => //.
-  wp_pures. iDestruct "contra" as ">[]".
+  wp_pures. iDestruct "contra" as "[]".
 - iPoseProof (secret_atI _ kRP with "hon") as "sec".
   iMod (honest_public with "ctx sec phase fail") as "#contra" => //.
-  wp_pures. iDestruct "contra" as ">[]".
+  wp_pures. iDestruct "contra" as "[]".
 wp_pures. iApply ("Hpost" $! (Some (mk_session_key Init nI sR))).
 iFrame. iModIntro. iSplit; eauto. by iApply mk_session_key_minted.
 Qed.

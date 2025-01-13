@@ -171,7 +171,7 @@ iPoseProof (public_TSealE with "p_reply sig_pred")
      have ruled out this possibility.  *)
   iPoseProof (secret_atI _ hon_sk with "hon") as "#sec".
   iMod (honest_public with "[] sec phase p_sk") as "#contra" => //; eauto.
-  wp_pures. by iDestruct "contra" as ">[]". }
+  wp_pures. by iDestruct "contra" as "[]". }
 (* Therefore, the invariant must hold. *)
 iDestruct "replyP" as (n') ">[-> #ownf]".
 wp_pures. iApply wp_to_int.

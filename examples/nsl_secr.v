@@ -66,7 +66,7 @@ Global Instance corrupt_persistent kI kR :
 Proof. apply _. Qed.
 
 Definition secret k : iProp :=
-  □ (public (TKey Open k) ↔ ◇ False).
+  □ (public (TKey Open k) ↔ ▷ False).
 
 Global Instance secret_persistent k : Persistent (secret k).
 Proof. apply _. Qed.
@@ -75,7 +75,7 @@ Lemma corruptE kI kR :
   corrupt kI kR -∗
   secret kI -∗
   secret kR -∗
-  ◇ False.
+  ▷ False.
 Proof.
 by iIntros "[cor|cor] p_kI p_kR"; [iApply "p_kI"|iApply "p_kR"].
 Qed.
@@ -368,9 +368,9 @@ wp_pures; wp_bind (send _ _); iApply wp_send => //.
 wp_pures; wp_bind (recv _); iApply wp_recv => //.
 iIntros (pkR') "#p_pkR'". iMod "sec" as "#sec".
 rewrite big_sepS_forall.
-iAssert (□ (public skI ↔ ◇ False))%I as "#s_skI".
+iAssert (□ (public skI ↔ ▷ False))%I as "#s_skI".
   by iApply "sec"; iPureIntro; set_solver.
-iAssert (□ (public skR ↔ ◇ False))%I as "#s_skR".
+iAssert (□ (public skR ↔ ▷ False))%I as "#s_skR".
   by iApply "sec"; iPureIntro; set_solver.
 wp_pures; wp_bind (is_key _); iApply wp_is_key.
 case: Spec.is_keyP => [kt kR' epkR'|_]; last by wp_pures; iLeft.

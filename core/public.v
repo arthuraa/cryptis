@@ -979,16 +979,16 @@ Proof. iIntros "#s_k [#p_k _]". by iApply "s_k". Qed.
 
 Definition secret t : iProp :=
   (|==> public t) ∧
-  (|==> □ (public t ↔ ◇ False)) ∧
-  (public t -∗ ◇ False).
+  (|==> □ (public t ↔ ▷ False)) ∧
+  (public t -∗ ▷ False).
 
-Lemma secret_not_public t : secret t -∗ public t -∗ ◇ False.
+Lemma secret_not_public t : secret t -∗ public t -∗ ▷ False.
 Proof. by iIntros "(_ & _ & contra)". Qed.
 
 Lemma secret_public t : secret t ==∗ public t.
 Proof. by iIntros "(? & _)". Qed.
 
-Lemma freeze_secret t : secret t ==∗ □ (public t ↔ ◇ False).
+Lemma freeze_secret t : secret t ==∗ □ (public t ↔ ▷ False).
 Proof. by iIntros "(_ & ? & _)". Qed.
 
 Lemma public_compromised_key k : public k -∗ compromised_key k.

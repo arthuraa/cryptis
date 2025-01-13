@@ -228,12 +228,12 @@ iDestruct "session" as "[[#fail|#fail]|session]".
   iIntros "!> _".
   iPoseProof (secret_atI _ kIP with "hon") as "sec".
   iMod (honest_public with "ctx sec phase fail") as "contra"; eauto.
-  wp_pures. by iDestruct "contra" as ">[]".
+  wp_pures. by iDestruct "contra" as "[]".
 - wp_bind (mk_session_key_impl _ _ _). iApply wp_mk_session_key => //.
   iIntros "!> _".
   iPoseProof (secret_atI _ kRP with "hon") as "sec".
   iMod (honest_public with "ctx sec phase fail") as "contra"; eauto.
-  wp_pures. by iDestruct "contra" as ">[]".
+  wp_pures. by iDestruct "contra" as "[]".
 wp_bind (mk_session_key_impl _ _ _). iApply wp_mk_session_key => //.
 iIntros "!> _". wp_pures.
 iApply ("Hpost" $! (Some (TKey Seal kI, mk_session_key Resp nR sI))).
