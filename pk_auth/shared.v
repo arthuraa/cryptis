@@ -67,7 +67,7 @@ Class PK := {
 
   mk_key_share : term → term;
 
-  mk_key_share_inj :> Inj (=) (=) mk_key_share;
+  mk_key_share_inj : Inj (=) (=) mk_key_share;
 
   mk_key_share_minted :
     ∀ n, minted (mk_key_share n) ⊣⊢ minted n;
@@ -110,6 +110,8 @@ Class PK := {
     {{{ RET mk_session_key rl n s : val; True}}};
 
 }.
+
+#[global] Existing Instance mk_key_share_inj.
 
 Context `{!PK}.
 
