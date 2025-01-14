@@ -49,7 +49,11 @@ Definition nonce_secrecy skA pkB : iProp :=
 Lemma nonce_secrecyE skA skB :
   nonce_secrecy skA (TKey Seal skB) ⊣⊢
   compromised_key skA ∨ compromised_key skB.
-Proof. Admitted.
+Proof.
+iSplit.
+- iIntros "(%skB' & %e & #comp)". by case: e => <-.
+- iIntros "#?". by iExists skB; eauto.
+Qed.
 
 (*
 
@@ -95,7 +99,6 @@ Definition msg2_pred skI m2 : iProp := ∃ nI nR skR,
   let sess_key :=
     Spec.derive_key (Spec.of_list [TKey Seal skI; TKey Seal skR; nI; nR]) in
   ⌜m2 = Spec.of_list [nI; nR; TKey Seal skR]⌝ ∧
-  (compromised_key skR → ▷ False) ∧
   (public nR ↔ ▷ □ nonce_secrecy skR (TKey Seal skI)) ∧
   term_meta nR (nroot.@"data") (TKey Seal skI).
 
@@ -131,13 +134,12 @@ Lemma init_send_1 skI skR nI :
   cryptis_ctx -∗
   nsl_ctx -∗
   public (TKey Seal skI) -∗
-  □ (compromised_key skI → ▷ False) -∗
   public (TKey Seal skR) -∗
   minted nI -∗
   □ (public nI ↔ ▷ □ nonce_secrecy skI (TKey Seal skR)) -∗
   public (TSeal (TKey Seal skR) (Spec.tag (nslN.@"m1") (Spec.of_list [nI; TKey Seal skI]))).
 Proof.
-iIntros "#? (#? & _ & _) #p_ekI #s_dkI #p_ekR #m_nI #p_nI".
+iIntros "#? (#? & _ & _) #p_ekI #p_ekR #m_nI #p_nI".
 iApply public_TSealIS; eauto.
 - iModIntro. by iExists _, _; iSplit; eauto.
 - by rewrite minted_of_list /=; eauto.
@@ -155,7 +157,6 @@ Lemma resp_recv_1_send_2 pkI skR nI nR :
   cryptis_ctx ∗
   nsl_ctx ∗
   public (TKey Seal skR) ∗
-  □ (compromised_key skR → ▷ False) ∗
   minted nR ∗
   □ (public nR ↔ ▷ □ nonce_secrecy skR pkI) ={⊤}▷=∗
   term_meta nR (nroot.@"data") pkI ∗
@@ -167,7 +168,7 @@ Lemma resp_recv_1_send_2 pkI skR nI nR :
                (Spec.of_list [nI; nR; TKey Seal skR]))).
 Proof.
 iIntros "%sess_key #p_m1 nR_token".
-iIntros "(#? & (#? & #? & _) & #p_ekR & #s_dkR & #m_nR & #p_nR)".
+iIntros "(#? & (#? & #? & _) & #p_ekR & #m_nR & #p_nR)".
 rewrite (term_token_difference nR (↑nroot.@"data")) //.
 iDestruct "nR_token" as "[data nR_token]"; iFrame "nR_token".
 iMod (term_meta_set' (N := nroot.@"data") pkI with "data")
@@ -215,7 +216,6 @@ Lemma init_recv_2_send_3 skI skR nI nR :
   nsl_ctx ∗
   public (TKey Seal skI) ∗
   public (TKey Seal skR) ∗
-  □ (compromised_key skI → ▷ False) ∗
   □ (public nI ↔ ▷ □ nonce_secrecy skI (TKey Seal skR)) ={⊤}▷=∗
   minted nR ∗
   public (TSeal (TKey Seal skR) (Spec.tag (nslN.@"m3") nR)) ∗
@@ -223,7 +223,7 @@ Lemma init_recv_2_send_3 skI skR nI nR :
   □ (public (si_key skI skR si) ↔ ▷ □ nonce_secrecy skI (TKey Seal skR)).
 Proof.
 iIntros "%si #p_m2 nI_token". rewrite nonce_secrecyE.
-iIntros "(#? & (_ & #? & #?) & #p_ekI & #p_ekR & #s_dkI & #s_nI)".
+iIntros "(#? & (_ & #? & #?) & #p_ekI & #p_ekR & #s_nI)".
 rewrite (term_token_difference _ (↑nroot.@"data")) //.
 iDestruct "nI_token" as "[_ nI_token]". iFrame "nI_token".
 iDestruct (public_TSealE with "p_m2 [//]") as "[fail|succ]".
@@ -238,8 +238,7 @@ iDestruct (public_TSealE with "p_m2 [//]") as "[fail|succ]".
 - iDestruct "succ" as "(#inv_m2 & m_m2 & _)".
   rewrite minted_of_list /=. iDestruct "m_m2" as "(_ & m_nR & _)".
   iIntros "!> !>".
-  iDestruct "inv_m2"
-    as "(%nI' & %nR' & %skR' & %e & s_dkR & s_nR & meta)".
+  iDestruct "inv_m2" as "(%nI' & %nR' & %skR' & %e & s_nR & meta)".
   case/Spec.of_list_inj: e => {nI' nR' skR'} _ <- <-.
   iModIntro. iSplit => //. iSplit.
   { iApply public_TSealIS => //.
@@ -265,7 +264,6 @@ Lemma resp_recv_3 pkI skR nI nR :
   term_meta nR (nroot.@"data") pkI ∗
   public pkI ∗
   public (TKey Seal skR) ∗
-  □ (compromised_key skR → ▷ False) ∗
   □ (▷ □ nonce_secrecy skR pkI → public nI) ∗
   □ (public nR ↔ ▷ □ nonce_secrecy skR pkI) ={⊤}▷=∗ ∃ skI,
   ⌜pkI = TKey Seal skI⌝ ∗
@@ -273,7 +271,7 @@ Lemma resp_recv_3 pkI skR nI nR :
      ▷ □ nonce_secrecy skR pkI).
 Proof.
 iIntros "%sess_key #p_m3".
-iIntros "(#? & (_ & _ & #?) & #meta & #p_pkI & #p_pkR & #s_dkR & #s_nI & #s_nR)".
+iIntros "(#? & (_ & _ & #?) & #meta & #p_pkI & #p_pkR & #s_nI & #s_nR)".
 iDestruct (public_TSealE with "p_m3 [//]") as "{p_m3} [[_ p_nR]|p_m3]".
 - iSpecialize ("s_nR" with "p_nR"). iIntros "!> !> !>".
   iDestruct "s_nR" as "(%skI & -> & fail)". iExists skI.
@@ -300,7 +298,6 @@ Lemma wp_init c skI skR :
   cryptis_ctx -∗
   nsl_ctx -∗
   public (TKey Seal skI) -∗
-  □ (compromised_key skI → ▷ False) -∗
   public (TKey Seal skR) -∗
   {{{ True }}}
     init c skI (TKey Seal skR)
@@ -312,7 +309,7 @@ Lemma wp_init c skI skR :
         □ (public sk ↔ ▷ (compromised_key skI ∨ compromised_key skR))
       else True }}}.
 Proof.
-iIntros "#chan_c #ctx #ctx' #p_skI #s_skI #p_skR %Ψ !> _ Hpost".
+iIntros "#chan_c #ctx #ctx' #p_skI #p_skR %Ψ !> _ Hpost".
 rewrite /init. wp_pures. wp_apply wp_pkey. wp_pures.
 wp_apply (wp_mknonce (λ _, nonce_secrecy skI (TKey Seal skR))%I
             (λ _, False)%I) => //.
@@ -345,7 +342,6 @@ Lemma wp_resp c skR :
   cryptis_ctx -∗
   nsl_ctx -∗
   public (TKey Seal skR) -∗
-  □ (compromised_key skR → ▷ False) -∗
   {{{ True }}}
     resp c skR
   {{{ ts, RET (repr ts);
@@ -356,7 +352,7 @@ Lemma wp_resp c skR :
         □ (public sk ↔ ▷ (compromised_key skI ∨ compromised_key skR))
       else True }}}.
 Proof.
-iIntros "#chan_c #ctx #ctx' #p_skR #honR %Ψ !> _ Hpost".
+iIntros "#chan_c #ctx #ctx' #p_skR %Ψ !> _ Hpost".
 rewrite /resp. wp_pures. wp_apply wp_pkey. wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m1) "#p_m1".
 wp_adec m1; last protocol_failure.
@@ -571,7 +567,7 @@ by wp_apply wp_do_resp_loop => //.
 Qed.
 
 Definition game : val := λ: <>,
-  let: "c"  := init_network #() in
+  let: "c"   := init_network #() in
   let: "skI" := mkakey #() in
   let: "skR" := mkakey #() in
   let: "pkI" := pkey "skI" in
