@@ -991,6 +991,60 @@ Proof. by iIntros "(? & _)". Qed.
 Lemma freeze_secret t : secret t ==∗ □ (public t ↔ ▷ False).
 Proof. by iIntros "(_ & ? & _)". Qed.
 
+Lemma aenc_freeze_secret t :
+  secret t -∗ aenc_key t ==∗ □ (compromised_key t → ▷ False).
+Proof.
+iIntros "sec_t (#p_seal & #p_open)".
+iMod (freeze_secret with "sec_t") as "#p_t".
+iIntros "!> !> [_ #contra]".
+iPoseProof ("p_open" with "contra") as ">?".
+by iApply "p_t".
+Qed.
+
+Lemma aenc_secret_not_compromised_key t :
+  secret t -∗ aenc_key t -∗ compromised_key t -∗ ▷ False.
+Proof.
+iIntros "sec_t (#p_seal & #p_open) [_ #comp]".
+iMod ("p_open" with "comp") as "?".
+by iApply (secret_not_public with "sec_t").
+Qed.
+
+Lemma senc_freeze_secret t :
+  secret t -∗ senc_key t ==∗ □ (compromised_key t → ▷ False).
+Proof.
+iIntros "sec_t (_ & #p_keys)".
+iMod (freeze_secret with "sec_t") as "#p_t".
+iIntros "!> !> [_ #contra]".
+iPoseProof ("p_keys" with "contra") as ">?".
+by iApply "p_t".
+Qed.
+
+Lemma senc_secret_not_compromised_key t :
+  secret t -∗ senc_key t -∗ compromised_key t -∗ ▷ False.
+Proof.
+iIntros "sec_t (#p_seal & #p_open) [_ #comp]".
+iMod ("p_open" with "comp") as "?".
+by iApply (secret_not_public with "sec_t").
+Qed.
+
+Lemma sign_freeze_secret t :
+  secret t -∗ sign_key t ==∗ □ (compromised_key t → ▷ False).
+Proof.
+iIntros "sec_t (#p_open & #p_seal)".
+iMod (freeze_secret with "sec_t") as "#p_t".
+iIntros "!> !> [#contra _]".
+iPoseProof ("p_seal" with "contra") as ">?".
+by iApply "p_t".
+Qed.
+
+Lemma sign_secret_not_compromised_key t :
+  secret t -∗ sign_key t -∗ compromised_key t -∗ ▷ False.
+Proof.
+iIntros "sec_t (#p_open & #p_seal) [#comp _]".
+iMod ("p_seal" with "comp") as "?".
+by iApply (secret_not_public with "sec_t").
+Qed.
+
 Lemma public_compromised_key k : public k -∗ compromised_key k.
 Proof.
 iIntros "#p_k". iSplit; iApply public_TKey; eauto.
