@@ -272,7 +272,7 @@ Definition conn_handler_body N : val :=
 Definition conn_handler N : val := rec: "loop" "c" "cs" "db" "lock" :=
   if: conn_handler_body N "c" "cs" "db" then
     "loop" "c" "cs" "db" "lock"
-  else (release "lock";; Connection.close "c" "cs").
+  else (lock.release "lock";; Connection.close "c" "cs").
 
 Definition wait_init N : val := λ: "c" "cs" "db" "lock",
   Connection.recv (N.@"init") "c" "cs" (λ: <>,

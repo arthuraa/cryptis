@@ -42,7 +42,7 @@ Proof.
 iIntros "#chan_c (_ & _ & _ & _ & _ & _ & #create & #ack & _) #p_t1 #p_t2".
 iIntros "!> %Φ [client free] post".
 iDestruct "client"
-  as "(%n & %beginning & <- & <- & %e_rl & #conn & ts & client)".
+  as "(%n & %beginning & <- & <- & %e_rl & #conn & rel & ts & client)".
 rewrite /Client.create. wp_pures.
 iMod (@rem_mapsto_alloc _ _ _ _ _ t1 t2 with "client free")
   as "(client & mapsto & _ & #created)".
@@ -60,9 +60,9 @@ iApply (wp_connection_send with "[//] create [] []") => //.
 { by rewrite public_of_list /= public_TInt; eauto. }
 { by iIntros "!> _". }
 iIntros "!> _". wp_pures.
-iCombine "client mapsto post" as "I". iRevert "ts I".
+iCombine "client mapsto post" as "I". iRevert "ts rel I".
 iApply wp_connection_recv => //.
-iIntros "!> %m ts (client & mapsto & post) #m_m #inv'".
+iIntros "!> %m ts rel (client & mapsto & post) #m_m #inv'".
 wp_pures. wp_list_of_term m; wp_pures; last by iLeft; iFrame.
 wp_list_match => [ts' k' v' b -> {m}|_] /=; wp_pures; last by iLeft; iFrame.
 wp_bind (tint _). iApply wp_tint.

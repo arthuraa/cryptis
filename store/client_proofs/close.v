@@ -37,7 +37,7 @@ Proof.
 iIntros "#chan_c (_ & _ & _ & _ & _ & _ & _ & _ & #close & #ack & _)".
 iIntros "!> %Φ client post".
 iDestruct "client"
-  as "(%n & %beginning & <- & <- & %e_rl & #conn & ts & client)".
+  as "(%n & %beginning & <- & <- & %e_rl & #conn & rel & ts & client)".
 wp_lam; wp_pures.
 wp_apply (wp_connection_timestamp with "ts"). iIntros "ts".
 wp_pures. wp_apply wp_tint. wp_pures.
@@ -47,9 +47,9 @@ wp_apply (wp_connection_send with "[//] close [] [] conn") => //.
 { by rewrite public_TInt. }
 { by iIntros "!> _". }
 iIntros "_". wp_pures.
-iCombine "client post" as "I". iRevert "ts I".
+iCombine "client post" as "I". iRevert "ts rel I".
 iApply wp_connection_recv => //.
-iIntros "!> %m ts (client & post) #m_m #inv'".
+iIntros "!> %m ts rel (client & post) #m_m #inv'".
 iMod (ack_close_predE with "client inv'") as "client" => //.
 wp_pures. wp_apply (wp_connection_close with "ts").
 iIntros "_". wp_pures.

@@ -92,17 +92,17 @@ case: bcomp; wp_pures; first by iApply "post".
 by wp_apply "IH"; eauto.
 Qed.
 
-Lemma wp_check_session_key_secrecy c lcomp sk si :
+Lemma wp_check_session_key_secrecy c lcomp si :
   {{{ cryptis_ctx ∗
       channel c ∗
       inv gameN (game_inv lcomp (si_init si) (si_resp si)) ∗
       sign_key (si_init si) ∗ sign_key (si_resp si) ∗
-      (compromised_session si ∨ □ (◇ public sk ↔ ▷ False)) }}}
-    check_session_key_secrecy c #lcomp sk
+      key_secrecy si ∗ □ (released_session si → False) }}}
+    check_session_key_secrecy c #lcomp (si_key si)
   {{{ RET #(); True }}}.
 Proof.
 set skI := si_init si. set skR := si_resp si.
-iIntros "%Φ (#? & #? & #? & #? & #? & #s_sk) post".
+iIntros "%Φ (#? & #? & #? & #? & #? & #s_sk & #un) post".
 rewrite /check_session_key_secrecy.
 wp_pure _ credit:"c1".
 wp_pure _ credit:"c2".
@@ -114,16 +114,11 @@ wp_load. case: bcomp.
   wp_pures. by iApply "post". }
 iDestruct "inv" as "[s_skI s_skR]".
 iAssert (|={⊤ ∖ ↑gameN}=> secret skI ∗ secret skR ∗
-                          □ (◇ public sk ↔ ▷ False))%I
+                          □ (public (si_key si) → ▷ False))%I
   with "[c1 s_skI s_skR]" as "{s_sk} >(s_skI & s_skR & #s_sk)".
-{ iDestruct "s_sk" as "[[comp|comp]|?]"; eauto.
-  - iMod (sign_key_compromised_keyE with "[] comp")
-      as "contra" => //.
-    by iDestruct (secret_not_public with "s_skI []") as ">[]".
-  - iMod (sign_key_compromised_keyE with "[] comp")
-      as "contra" => //.
-    by iDestruct (secret_not_public with "s_skR contra") as ">[]".
-  - iModIntro. by iFrame. }
+{ iPoseProof (secret_key_secrecy with "s_skI s_skR [//] [//] [//]")
+    as "{s_sk} #>#s_sk".
+  iFrame. iIntros "!> !> #p_k". iApply "un". by iApply "s_sk". }
 iModIntro. iSplitR "post".
 { iExists false; iFrame. }
 wp_pures. wp_apply wp_wait_for_compromise; eauto.
@@ -153,17 +148,20 @@ Definition do_init : val := λ: "c" "compromised" "skI" "vkR",
 
 Definition iso_dh_game_inv rl x : iProp := ∃ si,
   ⌜si_key si = x⌝ ∧
-  term_meta (si_share_of rl si) nroot ().
+  term_meta (si_share_of rl si) (nroot.@"fresh") ().
 
 Lemma iso_dh_game_fresh rl si :
   term_token (si_share_of rl si) ⊤ -∗
-  fresh_term (iso_dh_game_inv rl) (si_key si).
+  fresh_term (iso_dh_game_inv rl) (si_key si) ∗
+  term_token (si_share_of rl si) (⊤ ∖ ↑nroot.@"fresh").
 Proof.
-iIntros "token". iSplit.
+iIntros "token".
+iPoseProof (term_token_difference _ (↑nroot.@"fresh") with "token")
+  as "[token ?]" => //. iFrame. iSplit.
 - iIntros "# (%si' & %e & #meta)".
   rewrite (session_agree e).
   by iDestruct (term_meta_token with "token meta") as "[]".
-- iMod (term_meta_set nroot () with "token") as "#meta" => //.
+- iMod (term_meta_set (nroot.@"fresh") () with "token") as "#meta" => //.
   iIntros "!> !>". iExists si. by eauto.
 Qed.
 
@@ -193,15 +191,15 @@ case: kt eekR ekt => // -> _.
 wp_pures. wp_apply wp_initiator => //. iIntros "%ts tsP".
 case: ts=> [sk|] => /=; wp_pures; last by iApply "Hpost".
 iDestruct "tsP"
-  as "(%si & %failed & <- & <- & <- & #m_sk & #status & #s1 & #s2 &
-       #comp & token)".
-iPoseProof (iso_dh_game_fresh Init with "token") as "fresh".
+  as "(%si & <- & <- & <- & #m_sk & #senc & #s_k & token)".
+iPoseProof (iso_dh_game_fresh Init with "token") as "[fresh token]".
+iPoseProof (release_tokenI with "token") as "[token _]"; first solve_ndisj.
+iMod (unrelease with "token") as "#un".
+iAssert (□ ¬ released_session si)%I as "#?".
+{ iIntros "!> #?". by iApply unreleased_released_session. }
 wp_eq_term e; wp_pures; last by iApply "Hpost".
 case: e => -> {kR}.
 wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
-iAssert (compromised_session si ∨
-           □ (◇ public (si_key si) ↔ ▷ False))%I as "#?".
-{ iDestruct "comp" as "[comp|->]"; eauto. }
 wp_pures. wp_apply wp_check_session_key_secrecy => //.
 { by eauto 10. }
 iIntros "_". wp_pures.
@@ -262,14 +260,16 @@ wp_pures. wp_apply wp_responder => //.
 iIntros "%res res".
 case: res => [[vkI' sk]|]; wp_pures; last by iApply "Hpost".
 iDestruct "res"
-  as "(%si & -> & <- & <- & #p_vkI' & #m_sk & #? & #comp & token)".
-iPoseProof (iso_dh_game_fresh Resp with "token") as "fresh".
+  as "(%si & -> & <- & <- & #p_vkI' & #m_sk & #senc & #s_k & token)".
+iPoseProof (iso_dh_game_fresh Resp with "token") as "[fresh token]".
+iPoseProof (release_tokenI with "token") as "[token _]"; first solve_ndisj.
+iMod (unrelease with "token") as "#un".
+iAssert (¬ released_session si)%I as "?".
+{ iIntros "#?". by iApply unreleased_released_session. }
 wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
 wp_eq_term e; wp_pures; last by iApply "Hpost".
 case: e => -> {skI}.
-iAssert (compromised_session si ∨ □ (◇ public (si_key si) ↔ ▷ False))%I as "#?".
-{ by iDestruct "comp" as "[?|[??]]"; eauto. }
-wp_apply (wp_check_session_key_secrecy _ lcomp _ si) => //; eauto 10.
+wp_apply (wp_check_session_key_secrecy _ lcomp) => //; eauto 10.
 iIntros "_". wp_pures. by iApply "Hpost".
 Qed.
 
@@ -308,11 +308,9 @@ Lemma wp_game :
   cryptis_ctx -∗
   seal_pred_token ⊤ -∗
   key_pred_token (⊤ ∖ ↑nroot.@"keys") -∗
-  honest 0 ∅ -∗
-  ●Ph 0 -∗
   WP game #() {{ _, True }}.
 Proof.
-iIntros "#ctx enc_tok key_tok _ _"; rewrite /game; wp_pures.
+iIntros "#ctx enc_tok key_tok"; rewrite /game; wp_pures.
 iMod (iso_dh_ctx_alloc N with "enc_tok") as "#?" => //.
 wp_apply wp_init_network => //. iIntros "%c #cP". wp_pures.
 wp_apply (wp_mksigkey with "[]"); eauto.
@@ -347,6 +345,6 @@ have ? : heapGpreS F by apply _.
 apply (adequate_not_stuck NotStuck _ _ (λ v _, True)) => //.
 apply: heap_adequacy.
 iIntros (?) "?".
-iMod (cryptisGS_alloc _) as (?) "(#ctx & enc_tok & key_tok & ? & hon & phase)".
-by iApply (wp_game with "ctx [enc_tok] [key_tok] [hon]") => //.
+iMod (cryptisGS_alloc _) as (?) "(#ctx & enc_tok & key_tok & ? & _ & _)".
+by iApply (wp_game with "ctx [enc_tok] [key_tok]") => //.
 Qed.

@@ -300,7 +300,7 @@ Definition failure kI kR : iProp :=
 Definition wf_sess_info si : iProp :=
   minted (si_key si) ∗
   senc_key (si_key si) ∗
-  (compromised_session si ∨ □ (◇ public (si_key si) ↔ ▷ False)).
+  key_secrecy si.
 
 #[global]
 Instance wf_sess_info_persistent cs : Persistent (wf_sess_info cs).
@@ -309,7 +309,7 @@ Proof. apply _. Qed.
 Definition session_failed_for si rl (failed : bool) : iProp :=
   term_meta (si_share_of rl si) (nroot.@"failed") failed ∗
   (if failed then compromised_session si
-   else □ (◇ public (si_key si) ↔ ▷ False))%I.
+   else □ (public (si_key si) ↔ ▷ released_session si))%I.
 
 #[global]
 Instance session_failed_for_persistent si rl failed :
@@ -498,13 +498,16 @@ Lemma wf_conn_stateI cs (P : iProp) :
   failure (si_init cs) (si_resp cs) ∨ P -∗
   term_token (cs_share cs) ⊤ ==∗
   wf_conn_state cs ∗
+  release_token (cs_share cs) ∗
   session_failed_for_or cs (cs_role cs) P ∗
-  term_token (cs_share cs) (⊤ ∖ ↑nroot.@"failed").
+  term_token (cs_share cs) (⊤ ∖ ↑nroot.@"released" ∖ ↑nroot.@"failed").
 Proof.
 iIntros "#wf HP token".
-iPoseProof "wf" as "(_ & _ & [fail|#succ])".
+iPoseProof (release_tokenI with "token") as "[rel token]"; first solve_ndisj.
+iFrame "rel".
+iPoseProof "wf" as "(_ & _ & #? & [fail|#succ])".
 { iMod (term_meta_set' true (N := nroot.@"failed") with "token")
-    as "[#failed token]" => //.
+    as "[#failed token]" => //; try solve_ndisj.
   iAssert (session_failed_for_or cs (cs_role cs) P) as "H".
   { iExists true. iSplit => //; eauto. by iSplit => //. }
   iModIntro. iFrame. do !iSplit => //.
@@ -512,16 +515,16 @@ iPoseProof "wf" as "(_ & _ & [fail|#succ])".
   by iIntros "_"; eauto. }
 iDestruct "HP" as "[#fail|HP]".
 { iMod (term_meta_set' true (N := nroot.@"failed") with "token")
-    as "[#failed token]" => //.
+    as "[#failed token]" => //; try solve_ndisj.
   iAssert (session_failed_for cs (cs_role cs) true) as "#?".
   { by iSplit => //. }
   rewrite /session_failed_for_or.
   iModIntro. iFrame. do !iSplit => //; eauto.
   iExists true. eauto. }
 iMod (term_meta_set' false (N := nroot.@"failed") with "token")
-  as "[#failed token]" => //.
+  as "[#failed token]" => //; try solve_ndisj.
 iAssert (session_failed_for cs (cs_role cs) false) as "#?".
-{ by iSplit => //. }
+{ iSplit => //. iModIntro. by iSplit => //. }
 rewrite /wf_conn_state /session_failed_for_or.
 iFrame. by eauto 10.
 Qed.
@@ -599,6 +602,7 @@ Lemma client_connectingI E kI kR cs beginning :
   client_disconnected_int kI kR beginning ={E}=∗
   client_connecting_int cs beginning ∗
   wf_conn_state cs ∗
+  release_token (cs_share cs) ∗
   session_failed_for_or cs Init (
     term_meta (si_init_share cs) (nroot.@"beginning") beginning ∗
     conn_ready cs beginning).
@@ -611,7 +615,7 @@ iPoseProof (DB.client_view_server_view with "client_view")
 have e_sh : si_init_share cs = cs_share cs by rewrite /cs_share e_rl.
 rewrite e_sh.
 iMod (wf_conn_stateI with "sess status token")
-  as "(#conn & status & token)".
+  as "(#conn & rel & status & token)". iFrame "rel".
 rewrite e_rl.
 iMod (term_meta_set' (N:=nroot.@"beginning") beginning with "token")
   as "[#beginning token]"; try solve_ndisj.
@@ -666,6 +670,7 @@ Definition client_connected kI kR cs : iProp := ∃ n beginning,
   ⌜si_resp cs = kR⌝ ∗
   ⌜cs_role cs = Init ⌝ ∗
   wf_conn_state cs ∗
+  release_token (cs_share cs) ∗
   cs_ts cs ↦ #n ∗
   client_connected_int cs n beginning.
 
@@ -675,7 +680,7 @@ Lemma client_connected_ok kI kR cs Q :
   (Q ∗ failure kI kR ={⊤}=∗ False) ={⊤}=∗
   Q ∗ client_connected kI kR cs ∗ session_ok cs.
 Proof.
-iIntros "(%n & %beginning & <- & <- & % & #conn & ts & client) HQ post".
+iIntros "(%n & %beginning & <- & <- & % & #conn & rel & ts & client) HQ post".
 iDestruct "client" as "(client & #ready & status)".
 iMod (session_okI with "status HQ post") as "(HQ & status & #ok)".
 iFrame. iModIntro. by do !iSplit => //.
@@ -808,12 +813,13 @@ Lemma server_connectingI cs db :
   term_token (cs_share cs) ⊤ -∗
   server_disconnected (si_init cs) (si_resp cs) db ={⊤}=∗
   wf_conn_state cs ∗
+  release_token (cs_share cs) ∗
   server_connecting cs db ∗
-  term_token (cs_share cs) (⊤ ∖ ↑nroot.@"failed").
+  term_token (cs_share cs) (⊤ ∖ ↑nroot.@"released" ∖ ↑nroot.@"failed").
 Proof.
 iIntros "%e_rl #ctx c #sess token (#p_db & status)".
 iMod (wf_conn_stateI with "sess status token")
-  as "(#conn & ? & token)".
+  as "(#conn & ? & ? & token)".
 iFrame. rewrite e_rl. iModIntro. iSplit; eauto.
 iSplit; eauto.
 Qed.
@@ -1230,10 +1236,12 @@ Definition server_handler_inv cs n ldb db : iProp :=
 Definition server_handler_post cs ldb v : iProp := ∃ n db,
   ⌜v = #true⌝ ∗
   cs_ts cs ↦ #n ∗
+  release_token (cs_share cs) ∗
   server_connected cs n db ∗
   SAList.is_alist ldb (repr <$> db) ∨
   ⌜v = #false⌝ ∗
   cs_ts cs ↦ #n ∗
+  release_token (cs_share cs) ∗
   server_disconnected (si_init cs) (si_resp cs) db ∗
   SAList.is_alist ldb (repr <$> db).
 

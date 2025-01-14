@@ -44,7 +44,7 @@ Proof.
 iIntros "#chan_c #ctx #p_t1 !> %Φ [client mapsto] post".
 iDestruct "ctx" as "(_ & _ & _ & _ & load & ack_load & _)".
 iDestruct "client"
-  as "(%n & %beginning & <- & <- & %e_rl & #conn & ts & client)".
+  as "(%n & %beginning & <- & <- & %e_rl & #conn & rel & ts & client)".
 rewrite /Client.load. wp_pures. wp_bind (Connection.timestamp _).
 iApply (wp_connection_timestamp with "ts"). iIntros "!> ts".
 wp_bind (tint _). iApply wp_tint.
@@ -55,9 +55,9 @@ iApply (wp_connection_send with "[//] load [] [#]") => //.
 { iPoseProof (load_predI with "client") as "#?".
   by iIntros "!> _". }
 iIntros "!> _". wp_pures.
-iCombine "client mapsto post" as "I". iRevert "ts I".
+iCombine "client mapsto post" as "I". iRevert "ts rel I".
 iApply wp_connection_recv => //.
-iIntros "!> %ts ts (client & mapsto & post) #p_m #inv_m". wp_pures.
+iIntros "!> %ts ts rel (client & mapsto & post) #p_m #inv_m". wp_pures.
 wp_list_of_term ts; wp_pures; last by iLeft; iFrame.
 wp_list_match => [n' t1' t2' -> {ts}|_]; wp_pures; last by iLeft; iFrame.
 wp_eq_term e; last by wp_pures; iLeft; iFrame.

@@ -45,7 +45,8 @@ iIntros "%e_rl #chan_c #ctx".
 iPoseProof (store_ctx_load with "ctx") as "?".
 iPoseProof (store_ctx_ack_load with "ctx") as "?".
 rewrite /handler_correct e_rl /=. wp_lam; wp_pures.
-iModIntro. iExists _. iSplit => //. iIntros "!> %m _ #p_m #conn ts (server & db)".
+iModIntro. iExists _. iSplit => //.
+iIntros "!> %m _ #p_m #conn rel ts (server & db)".
 wp_pures.
 wp_bind (Connection.timestamp _).
 iApply (wp_connection_timestamp with "ts"). iIntros "!> ts".

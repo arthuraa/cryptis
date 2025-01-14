@@ -60,8 +60,7 @@ Lemma wp_responder c skR :
         public vkI ∗
         minted kS ∗
         senc_key kS ∗
-        (compromised_session si ∨
-         session_status si false ∗ □ (◇ public kS ↔ ▷ False)) ∗
+        key_secrecy si ∗
         term_token (si_resp_share si) ⊤
       else True
  }}}.
@@ -76,7 +75,7 @@ rewrite public_of_list /=.
 iDestruct "p_m1" as "(p_ga & p_vkI & _)".
 wp_pures.
 wp_apply (wp_mknonce_freshN ∅
-          (λ _, False%I)
+          (λ b, released ga ∧ released (TExp (TInt 0) b))%I
           iso_dh_pred
           (λ b, {[TExp (TInt 0) b]}))
        => //.
@@ -84,7 +83,8 @@ wp_apply (wp_mknonce_freshN ∅
 - iIntros "%b".
   rewrite big_sepS_singleton minted_TExp minted_TInt /= bi.True_and.
   iModIntro. by iApply bi.equiv_iff.
-iIntros "%b _ _ #m_b #p_b #dh_gb token".
+iIntros "%b _ _ #m_b #s_b #dh_gb token".
+rewrite bi.intuitionistic_intuitionistically.
 set gb := TExp (TInt 0) b.
 set gab := TExp ga b.
 rewrite big_sepS_singleton.
@@ -118,18 +118,20 @@ iPoseProof (public_signE with "p_m3 [//] [//]") as "{p_m3} [_ inv]".
 wp_pures. wp_list. wp_term_of_list.
 wp_pures. pose si := SessInfo skI skR ga gb gab.
 wp_apply wp_derive_key. rewrite -[Spec.derive_key _]/(si_key si).
+rewrite -/(released_session si).
+iAssert (▷ released_session si → public (si_key si))%I as "s_k1".
+{ iIntros "#released".
+  rewrite public_derive_key public_of_list /=.
+  do !iSplit => //; try by iApply sign_key_public.
+  iApply public_TExp => //. by iApply "s_b". }
 iAssert (|={⊤}=> compromised_session si ∨
-                 session_status si false ∗
-                 □ (◇ public (si_key si) ↔ ▷ False))%I
+                   □ (public (si_key si) → ▷ released_session si))%I
   with "[H4]" as "> #i_m3".
 { iDestruct "inv" as "[comp|#inv]".
   { rewrite /compromised_session. by eauto. }
-  iDestruct "inv"
-    as "(%a & %gb' & %skR' & %failed & %e_m3 & status & p_a & comp)".
+  iDestruct "inv" as "(%a & %gb' & %skR' & %e_m3 & comp)".
   case/Spec.of_list_inj: e_m3 => -> <- <- {ga gb' skR'} in gb gab si *.
-  rewrite !TExp_TExpN TExpC2 in gab si *.
-  iIntros "!>". iDestruct "comp" as "[comp|->]"; first by eauto.
-  iRight. by iSplit => //. }
+  rewrite !TExp_TExpN TExpC2 in gab si *. by eauto. }
 iAssert (minted (si_key si)) as "#m_kS".
 { rewrite minted_derive_key !minted_of_list /= !minted_TExp minted_TInt.
   do !iSplit => //; iApply public_minted => //.

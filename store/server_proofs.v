@@ -57,17 +57,18 @@ Lemma wp_server_conn_handler_body c cs n ldb db :
   channel c -∗
   store_ctx N -∗
   {{{ wf_conn_state cs ∗
+      release_token (cs_share cs) ∗
       cs_ts cs ↦ #n ∗
       server_connected cs n db ∗
       SAList.is_alist ldb (repr <$> db) }}}
     Server.conn_handler_body N c (repr cs) ldb
   {{{ v, RET v; server_handler_post cs ldb v }}}.
 Proof.
-iIntros "% #chan_c #ctx !> %Φ (#conn & ts & server & db) post".
+iIntros "% #chan_c #ctx !> %Φ (#conn & rel & ts & server & db) post".
 wp_lam. wp_pures.
 rewrite !Connection.subst_select /=.
-iApply (wp_wand with "[ts server db] post").
-iCombine "server db" as "I". iRevert "ts I".
+iApply (wp_wand with "[ts rel server db] post").
+iCombine "server db" as "I". iRevert "rel ts I".
 iApply wp_connection_select => //=; do !iSplitR => //.
 - by iApply wp_server_handle_store.
 - by iApply wp_server_handle_load.
@@ -81,6 +82,7 @@ Lemma wp_server_conn_handler c cs n vdb db vlock γlock :
   is_lock γlock vlock (account_inv (si_init cs) (si_resp cs) vdb) -∗
   store_ctx N -∗
   {{{ wf_conn_state cs ∗
+      release_token (cs_share cs) ∗
       cs_ts cs ↦ #n ∗
       server_connected cs n db ∗
       SAList.is_alist vdb (repr <$> db) ∗
@@ -90,18 +92,18 @@ Lemma wp_server_conn_handler c cs n vdb db vlock γlock :
 Proof.
 iIntros "% #chan_c #lock #ctx".
 iLöb as "IH" forall (n db).
-iIntros "!> %Φ (#conn & ts & server & db & locked) post".
+iIntros "!> %Φ (#conn & rel & ts & server & db & locked) post".
 wp_rec. wp_pures. wp_bind (Server.conn_handler_body _ _ _ _).
 iApply (wp_server_conn_handler_body with "[# //] [# //] [$]") => //.
 iIntros "!> %v (%n' & %db' & [state|state])".
-- iDestruct "state" as "(-> & ts & server & db)".
+- iDestruct "state" as "(-> & ts & rel & server & db)".
   wp_pures. by iApply ("IH" with "[$]").
-- iDestruct "state" as "(-> & ts & server & db)".
-  wp_pures. wp_bind (release _).
-  iApply (release_spec with "[lock locked server db]").
+- iDestruct "state" as "(-> & ts & rel & server & db)".
+  wp_pures.
+  wp_apply (release_spec with "[lock locked server db]").
   { iFrame "locked". iSplit => //.
     iExists db'. by iFrame. }
-  iIntros "!> _". wp_pures.
+  iIntros "_". wp_pures.
   by iApply (wp_connection_close with "ts").
 Qed.
 
@@ -175,6 +177,7 @@ Lemma wp_server_wait_init c cs vdb db γlock vlock :
   cs_role cs = Resp →
   {{{ cryptis_ctx ∗ channel c ∗ store_ctx N ∗
       wf_conn_state cs ∗
+      release_token (cs_share cs) ∗
       cs_ts cs ↦ #0%nat ∗
       server_connecting cs db ∗
       term_token (si_resp_share cs) (↑nroot.@"begin") ∗
@@ -187,14 +190,15 @@ Lemma wp_server_wait_init c cs vdb db γlock vlock :
   {{{ RET #(); True }}} .
 Proof.
 iIntros "%e_rl %Φ
-  (#ctx & #chan_c & #ctx' & #conn & ts & server & not_started & not_ended &
+  (#ctx & #chan_c & #ctx' & #conn & rel &
+   ts & server & not_started & not_ended &
    db & #lock & locked) post".
 wp_lam; wp_pures.
 iPoseProof (store_ctx_init with "ctx'") as "?".
 iCombine "server not_started not_ended db locked post" as "I".
-iRevert "ts I".
+iRevert "ts rel I".
 iApply wp_connection_recv => //.
-iIntros "!> %m ts
+iIntros "!> %m ts rel
   (server & not_started & not_ended & db & locked & post) #m_m #p_m".
 iMod (ack_init_predI with "server not_started not_ended p_m")
   as "H" => //.
@@ -240,16 +244,16 @@ have e_sh : si_resp_share cs = cs_share cs.
 rewrite e_sh.
 iIntros "!> (locked & %db & account & db)". rewrite -e_kR.
 iMod (server_connectingI with "[//] c [//] token account")
-  as "{conn} (#conn & account & token)" => //.
+  as "{conn} (#conn & rel & account & token)" => //.
 wp_pures.
-iApply (wp_fork with "[ts locked db account token]").
+iApply (wp_fork with "[ts rel locked db account token]").
 { iModIntro.
   rewrite (term_token_difference _ (↑nroot.@"begin")); last by solve_ndisj.
   iDestruct "token" as "[not_started token]".
   iPoseProof (@term_token_drop _ _ _ (↑nroot.@"end")
                with "token") as "not_ended"; first by solve_ndisj.
   iApply (wp_server_wait_init
-           with "[ts locked db account not_started not_ended] []") => //.
+           with "[ts rel locked db account not_started not_ended] []") => //.
   rewrite e_sh. iFrame. eauto. }
 iApply "post".
 by iFrame.
