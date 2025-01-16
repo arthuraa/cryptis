@@ -59,7 +59,6 @@ Lemma wp_responder c skR :
         ⌜si_key si = kS⌝ ∗
         public vkI ∗
         minted kS ∗
-        senc_key kS ∗
         key_secrecy si ∗
         term_token (si_resp_share si) ⊤
       else True
@@ -140,11 +139,7 @@ iAssert (minted skI) as "#m_skI".
 { iApply minted_TKey. by iApply public_minted. }
 wp_pures.
 iApply ("Hpost" $! (Some (TKey Open skI, si_key si))).
-iModIntro. iExists si. do !iSplit => //.
-iIntros "!> %kt".
-rewrite public_derive_key.
-iApply public_key_derive_key => //.
-by rewrite minted_derive_key.
+iModIntro. iExists si. by do !iSplit => //.
 Qed.
 
 End Verif.

@@ -73,7 +73,6 @@ Lemma wp_initiator c skI vkR :
         ⌜TKey Open (si_resp si) = vkR⌝ ∗
         ⌜si_key si = kS⌝ ∗
         minted kS ∗
-        senc_key kS ∗
         key_secrecy si ∗
         term_token (si_init_share si) ⊤
       else True
@@ -170,11 +169,7 @@ iAssert (minted seed) as "#m_seed".
   by iApply sign_key_public. }
 wp_pures. iApply ("Hpost" $! (Some secret)).
 iExists si. iFrame. do !iSplitR => //.
-- by rewrite minted_derive_key.
-- by rewrite minted_derive_key.
-iIntros "!> !> %kt".
-rewrite public_derive_key.
-by iApply public_key_derive_key.
+by rewrite minted_derive_key.
 Qed.
 
 End Verif.

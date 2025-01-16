@@ -74,6 +74,16 @@ Definition si_key si :=
                    si_resp_share si;
                    si_secret si]).
 
+Lemma senc_key_si_key si :
+  cryptis_ctx -∗
+  minted (si_key si) -∗
+  senc_key (si_key si).
+Proof.
+iIntros "#ctx #m_k". iSplit => //. iIntros "!> %kt".
+rewrite public_derive_key minted_derive_key.
+by iApply public_key_derive_key => //.
+Qed.
+
 Lemma session_agree si1 si2 :
   si_key si1 = si_key si2 →
   si1 = si2.

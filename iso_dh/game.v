@@ -191,7 +191,7 @@ case: kt eekR ekt => // -> _.
 wp_pures. wp_apply wp_initiator => //. iIntros "%ts tsP".
 case: ts=> [sk|] => /=; wp_pures; last by iApply "Hpost".
 iDestruct "tsP"
-  as "(%si & <- & <- & <- & #m_sk & #senc & #s_k & token)".
+  as "(%si & <- & <- & <- & #m_sk & #s_k & token)".
 iPoseProof (iso_dh_game_fresh Init with "token") as "[fresh token]".
 iPoseProof (release_tokenI with "token") as "[token _]"; first solve_ndisj.
 iMod (unrelease with "token") as "#un".
@@ -260,7 +260,7 @@ wp_pures. wp_apply wp_responder => //.
 iIntros "%res res".
 case: res => [[vkI' sk]|]; wp_pures; last by iApply "Hpost".
 iDestruct "res"
-  as "(%si & -> & <- & <- & #p_vkI' & #m_sk & #senc & #s_k & token)".
+  as "(%si & -> & <- & <- & #p_vkI' & #m_sk & #s_k & token)".
 iPoseProof (iso_dh_game_fresh Resp with "token") as "[fresh token]".
 iPoseProof (release_tokenI with "token") as "[token _]"; first solve_ndisj.
 iMod (unrelease with "token") as "#un".

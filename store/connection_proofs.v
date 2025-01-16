@@ -47,11 +47,12 @@ wp_apply (wp_initiator with "[//] [//] [//] [] []") => //.
 iIntros "%res resP".
 case: res=> [kS|] /=; wp_pures; last by iLeft; iFrame; eauto.
 iDestruct "resP"
-  as "(%si & % & %e_kR & <- & #m_kS & #s_kS & #comp & token)".
+  as "(%si & % & %e_kR & <- & #m_kS & #comp & token)".
 case: e_kR => <-.
 wp_alloc ts as "ts". wp_pures.
 iRight. iModIntro. iExists _.  iSplit => //.
 iApply ("post" $! (ConnState si ts Init)). iFrame => /=.
+iPoseProof (senc_key_si_key with "[//] m_kS") as "#?".
 do !iSplit => //.
 Qed.
 
@@ -78,7 +79,8 @@ iIntros "%res resP".
 case: res=> [[vkI kS]|] /=; wp_pures; last by iLeft; iFrame; eauto.
 wp_alloc ts as "ts".
 iDestruct "resP"
-  as "(%si & -> & % & <- & #p_vkI & #m_kS & #p_kS & #comp & token)".
+  as "(%si & -> & % & <- & #p_vkI & #m_kS & #comp & token)".
+iPoseProof (senc_key_si_key with "[//] m_kS") as "?".
 wp_pures.
 iRight. iModIntro. iExists _.  iSplit => //.
 iApply ("post" $! (ConnState si ts Resp)). iFrame => /=.
