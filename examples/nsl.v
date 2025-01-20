@@ -410,14 +410,16 @@ iModIntro. iExists skI, (SessInfo nI nR). iFrame.
 do !iSplit => //. by rewrite nonce_secrecyE bi.or_comm.
 Qed.
 
+Definition check_key_secrecy : val := λ: "c" "sk",
+  let: "guess" := recv "c" in
+  assert: (~ eq_term "sk" "guess").
+
 Definition do_init_loop : val := rec: "loop" "c" "set" "skI" "pkR" :=
   Fork ("loop" "c" "set" "skI" "pkR");;
   let: "pkR'" := recv "c" in
   (bind: "sk" := init "c" "skI" "pkR'" in
    add_fresh_lock_term_set "sk" "set";;
-   if: eq_term "pkR" "pkR'" then
-     let: "guess" := recv "c" in
-     assert: (~ eq_term "sk" "guess")
+   if: eq_term "pkR" "pkR'" then check_key_secrecy "c" "sk"
    else #());;
    #().
 
@@ -443,6 +445,23 @@ iIntros "%sub token". iSplit.
   by iApply (term_meta_token with "token meta").
 - iMod (term_meta_set (nroot.@"fresh") () with "token") as "#?" => //.
   iIntros "!> !>". iExists skI, skR, si. by eauto.
+Qed.
+
+Lemma wp_check_key_secrecy c k :
+  channel c -∗
+  cryptis_ctx -∗
+  □ (public k → ▷^2 False) -∗
+  {{{ True }}}
+    check_key_secrecy c k
+  {{{ RET #(); True }}}.
+Proof.
+iIntros "#? #? #s_k %Φ !> _ post".
+wp_lam. wp_pures. wp_apply wp_recv => //. iIntros "%guess #p_guess".
+wp_pures. wp_apply wp_assert.
+wp_eq_term e.
+- rewrite -e. iPoseProof ("s_k" with "p_guess") as "contra".
+  wp_pures. by iDestruct "contra" as ">[]".
+- wp_pures. iModIntro. iSplit => //. by iApply "post".
 Qed.
 
 Lemma wp_do_init_loop c vset skI skR :
@@ -471,16 +490,12 @@ iPoseProof (@nsl_game_inv_fresh skI skR' Init with "token")
 wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
 wp_eq_term e; wp_pures; last by iApply "Hpost".
 case: e => <- {skR'}.
-wp_pures. wp_apply wp_recv => //. iIntros "%guess #p_guess".
-wp_pures. wp_apply wp_assert.
-wp_eq_term e.
-  rewrite -e.
-  iPoseProof ("s_sk" with "p_guess") as "contra".
-  wp_pure _.
-  by iDestruct "contra" as "[contra|contra]";
-  [iDestruct ("s_skI" with "contra") as ">[]"|
-   iDestruct ("s_skR" with "contra") as ">[]"].
-wp_pures. iModIntro. iSplit => //. iNext. wp_pures. by iApply "Hpost".
+wp_apply wp_check_key_secrecy => //.
+{ iIntros "!> #fail".
+  iPoseProof ("s_sk" with "fail") as "{fail} fail".
+  iModIntro. by iDestruct "fail" as "[fail|fail]";
+  [iApply "s_skI"|iApply "s_skR"]. }
+iIntros "_". wp_pures. by iApply "Hpost".
 Qed.
 
 Lemma wp_do_init c skI skR :
@@ -507,9 +522,7 @@ Definition do_resp_loop : val := rec: "loop" "c" "set" "skR" "pkI" :=
    let: "pkI'" := Fst "res" in
    let: "sk" := Snd "res" in
    add_fresh_lock_term_set "sk" "set";;
-   if: eq_term "pkI" "pkI'" then
-     let: "guess" := recv "c" in
-     assert: (~ eq_term "sk" "guess")
+   if: eq_term "pkI" "pkI'" then check_key_secrecy "c" "sk"
    else #());;
   #().
 
@@ -542,16 +555,12 @@ iPoseProof (@nsl_game_inv_fresh skI' skR Resp with "token")
 wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
 wp_eq_term e; wp_pures; last by iApply "Hpost".
 case: e => <- {skI'}.
-wp_pures. wp_apply wp_recv => //. iIntros "%guess #p_guess".
-wp_pures. wp_apply wp_assert.
-wp_eq_term e.
-  rewrite -e.
-  iPoseProof ("res" with "p_guess") as "contra".
-  wp_pure _.
-  by iDestruct "contra" as "[contra|contra]";
-  [iDestruct ("s_skI" with "contra") as ">[]"|
-   iDestruct ("s_skR" with "contra") as ">[]"].
-wp_pures. iModIntro. iSplit => //. iNext. wp_pures. by iApply "Hpost".
+wp_apply wp_check_key_secrecy => //.
+{ iIntros "!> #fail".
+  iPoseProof ("res" with "fail") as "{fail} fail".
+  iModIntro. by iDestruct "fail" as "[fail|fail]";
+  [iApply "s_skI"|iApply "s_skR"]. }
+iIntros "_". wp_pures. by iApply "Hpost".
 Qed.
 
 Lemma wp_do_resp c skI skR :

@@ -159,7 +159,7 @@ iAssert (|={⊤}=>
   iIntros "!>". iRight. iIntros "!> {s_k1} #p_k".
   rewrite public_derive_key public_of_list /=.
   iDestruct "p_k" as "(_ & _ & _ & _ & p_gab & _)".
-  by iApply (public_dh_secret b a). }
+  by iPoseProof (public_dh_secret' b a with "[//] [//] [//] [//] [//]") as ">?". }
 set m3 := Spec.enc _ _ _.
 iAssert (public m3) as "#p_m3".
 { iApply (public_signIS with "[] [//] [#]") => //.

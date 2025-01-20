@@ -229,21 +229,56 @@ iMod (seal_pred_set (N.@"m3") msg3_pred with "token")
 iModIntro. by iSplit.
 Qed.
 
-Lemma public_dh_secret a b (P : iProp ) :
-  □ (public a ↔ ▷ P) -∗
+Lemma public_dh_share a :
+  minted a -∗
   □ (∀ t, dh_pred a t ↔ ▷ □ iso_dh_pred t) -∗
-  □ (public b ↔ ▷ P) -∗
+  public (TExp (TInt 0) a).
+Proof.
+iIntros "#m_a #pred_a". rewrite public_TExpN //=; eauto.
+iRight. rewrite minted_TExp minted_TInt.
+do !iSplit => //.
+iApply "pred_a". do !iModIntro. iPureIntro. by rewrite exps_TExpN.
+Qed.
+
+Lemma public_dh_secret a b :
+  minted a -∗
+  minted b -∗
+  □ (∀ t, dh_pred a t ↔ ▷ □ iso_dh_pred t) -∗
   □ (∀ t, dh_pred b t ↔ ▷ □ iso_dh_pred t) -∗
-  (public (TExpN (TInt 0) [a; b]) → ▷ P).
+  (public (TExpN (TInt 0) [a; b]) ↔ ◇ (public a ∨ public b)).
+Proof.
+iIntros "#m_a #m_b #pred_a #pred_b".
+rewrite public_TExp2_iff //; last by eauto.
+rewrite minted_TExpN /= minted_TInt.
+iSplit; last first.
+{ rewrite /bi_except_0.
+  iIntros "#[H|[H|H]]".
+  - iRight. iRight. iSplit; eauto.
+    by iSplit; [iApply "pred_a"|iApply "pred_b"];
+    iDestruct "H" as ">[]".
+  - iRight. iLeft. iSplit => //. by iApply public_dh_share.
+  - iLeft. iSplit => //. by iApply public_dh_share. }
+iIntros "[[_ #p_b] | [[_ #p_a] | (_ & contra & _)]]"; eauto.
+iPoseProof ("pred_a" with "contra") as ">%contra".
+by rewrite /iso_dh_pred exps_TExpN /= in contra.
+Qed.
+
+Lemma public_dh_secret' a b (P : iProp) :
+  □ (public a ↔ P) -∗
+  □ (∀ t, dh_pred a t ↔ ▷ □ iso_dh_pred t) -∗
+  □ (public b ↔ P) -∗
+  □ (∀ t, dh_pred b t ↔ ▷ □ iso_dh_pred t) -∗
+  (public (TExpN (TInt 0) [a; b]) → ◇ P).
 Proof.
 iIntros "#s_a #pred_a #s_b #pred_b".
 rewrite public_TExp2_iff //; last by eauto.
 iIntros "[[_ #p_b] | [[_ #p_a] | (_ & contra & _)]]".
-- by iApply "s_b".
-- by iApply "s_a".
+- by iModIntro; iApply "s_b".
+- by iModIntro; iApply "s_a".
 iPoseProof ("pred_a" with "contra") as ">%contra".
 by rewrite /iso_dh_pred exps_TExpN /= in contra.
 Qed.
+
 
 End Verif.
 

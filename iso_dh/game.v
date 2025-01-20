@@ -37,7 +37,7 @@ Definition wait_for_compromise : val :=
     if: !"compromised" then #()
     else "loop" "compromised".
 
-Definition check_session_key_secrecy : val :=
+Definition check_key_secrecy : val :=
   λ: "c" "compromised" "sk",
     if: ~ !"compromised" then
       wait_for_compromise "compromised";;
@@ -91,18 +91,18 @@ case: bcomp; wp_pures; first by iApply "post".
 by wp_apply "IH"; eauto.
 Qed.
 
-Lemma wp_check_session_key_secrecy c lcomp si :
+Lemma wp_check_key_secrecy c lcomp si :
   {{{ cryptis_ctx ∗
       channel c ∗
       inv gameN (game_inv lcomp (si_init si) (si_resp si)) ∗
       sign_key (si_init si) ∗ sign_key (si_resp si) ∗
       key_secrecy si ∗ □ (released_session si → False) }}}
-    check_session_key_secrecy c #lcomp (si_key si)
+    check_key_secrecy c #lcomp (si_key si)
   {{{ RET #(); True }}}.
 Proof.
 set skI := si_init si. set skR := si_resp si.
 iIntros "%Φ (#? & #? & #? & #? & #? & #s_sk & #un) post".
-rewrite /check_session_key_secrecy.
+rewrite /check_key_secrecy.
 wp_pure _ credit:"c1".
 wp_pure _ credit:"c2".
 wp_pures.
@@ -135,9 +135,8 @@ Definition do_init_loop : val :=
     (bind: "kt" := is_key "vkR'" in
      guard: ("kt" = repr Open) in
      bind: "sk" := initiator isoN "c" "skI" "vkR'" in
-     if: eq_term "vkR" "vkR'" then
-       add_fresh_lock_term_set "sk" "set";;
-       check_session_key_secrecy "c" "compromised" "sk"
+     add_fresh_lock_term_set "sk" "set";;
+     if: eq_term "vkR" "vkR'" then check_key_secrecy "c" "compromised" "sk"
      else #());;
      #().
 
@@ -195,10 +194,10 @@ iPoseProof (iso_dh_game_fresh Init with "token") as "[fresh token]".
 iMod (unrelease with "rel") as "#un".
 iAssert (□ ¬ released_session si)%I as "#?".
 { iIntros "!> #?". by iApply (unreleased_released_session _ Init). }
-wp_eq_term e; wp_pures; last by iApply "Hpost".
-case: e => -> {kR}.
 wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
-wp_pures. wp_apply wp_check_session_key_secrecy => //.
+wp_pures. wp_eq_term e; wp_pures; last by iApply "Hpost".
+case: e => -> {kR}.
+wp_pures. wp_apply wp_check_key_secrecy => //.
 { by eauto 10. }
 iIntros "_". wp_pures.
 by iApply "Hpost".
@@ -230,7 +229,7 @@ Definition do_resp_loop : val :=
      let: "sk" := Snd "res" in
      add_fresh_lock_term_set "sk" "set";;
      if: eq_term "vkI" "vkI'" then
-       check_session_key_secrecy "c" "compromised" "sk"
+       check_key_secrecy "c" "compromised" "sk"
      else #());;
     #().
 
@@ -266,7 +265,7 @@ iAssert (¬ released_session si)%I as "?".
 wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
 wp_eq_term e; wp_pures; last by iApply "Hpost".
 case: e => -> {skI}.
-wp_apply (wp_check_session_key_secrecy _ lcomp) => //; eauto 10.
+wp_apply (wp_check_key_secrecy _ lcomp) => //; eauto 10.
 iIntros "_". wp_pures. by iApply "Hpost".
 Qed.
 
