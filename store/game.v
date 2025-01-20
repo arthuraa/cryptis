@@ -88,6 +88,9 @@ iIntros "%ss server". wp_pures.
 wp_apply (wp_server_loop with "[$server]"); eauto.
 Qed.
 
+Global Instance session_ok_persistent si : Persistent (session_ok si).
+Proof. apply _. Qed.
+
 Lemma wp_game :
   cryptis_ctx -∗
   seal_pred_token ⊤ -∗
@@ -111,16 +114,14 @@ iMod (@client_alloc _ _ _ _ _ skR with "tokenI")
   as "(client & free & token)"; eauto.
 wp_apply (wp_client_connect with "[] [] [] [] [] client"); eauto.
 iIntros "%cs client". wp_pure _ credit:"c". wp_pures.
-iCombine "s_skI s_skR" as "s_sk".
-iMod (client_connected_ok with "client s_sk []") as "(s_sk & client & #ok)".
-{ iIntros "[(s_skI & s_skR) #[fail|fail]]".
+iPoseProof (client_connected_ok with "client [s_skI s_skR]") as "#>ok".
+{ iIntros "#[fail|fail]".
   - iPoseProof (sign_key_compromised_keyE with "sign_skI [//]")
       as ">contra".
     by iDestruct (secret_not_public with "s_skI contra") as ">[]".
   - iPoseProof (sign_key_compromised_keyE with "sign_skR [//]")
       as ">contra".
-  - by iDestruct (secret_not_public with "s_skR contra") as ">[]". }
-iDestruct "s_sk" as "[s_skI s_skR]".
+    by iDestruct (secret_not_public with "s_skR contra") as ">[]". }
 iMod (secret_public with "s_skI") as "#p_skI".
 iMod (secret_public with "s_skR") as "#p_skR".
 wp_apply wp_send => //. wp_pures.

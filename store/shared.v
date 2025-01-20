@@ -407,16 +407,14 @@ iDestruct ("PQ" with "HP") as "[Q|Q]" => //.
 by iRight; eauto.
 Qed.
 
-Lemma session_okI si (P Q : iProp) :
+Lemma session_okI si (P : iProp) :
   session_failed_or si P -∗
-  Q -∗
-  (Q ∗ failure (si_init si) (si_resp si) ={⊤}=∗ False) ={⊤}=∗
-  Q ∗ session_failed_or si P ∗ session_ok si.
+  (failure (si_init si) (si_resp si) -∗ ▷ False) -∗
+  ◇ session_ok si.
 Proof.
-iIntros "[#fail|[#ok HP]] HQ contra".
-{ iPoseProof (session_failed_failure with "fail") as "{fail} fail".
-  iMod ("contra" with "[$]") as "[]". }
-iModIntro. iFrame. iSplit => //. iRight. by iFrame.
+iIntros "[#fail|[#ok HP]] contra"; eauto.
+iPoseProof (session_failed_failure with "fail") as "{fail} fail".
+iDestruct ("contra" with "[$]") as ">[]".
 Qed.
 
 Lemma session_failed_orI si P Q :
@@ -670,16 +668,14 @@ Definition client_connected kI kR cs : iProp := ∃ n beginning,
   cs_ts cs ↦ #n ∗
   client_connected_int cs n beginning.
 
-Lemma client_connected_ok kI kR cs Q :
+Lemma client_connected_ok kI kR cs :
   client_connected kI kR cs -∗
-  Q -∗
-  (Q ∗ failure kI kR ={⊤}=∗ False) ={⊤}=∗
-  Q ∗ client_connected kI kR cs ∗ session_ok cs.
+  (failure kI kR -∗ ▷ False) -∗
+  ◇ session_ok cs.
 Proof.
-iIntros "(%n & %beginning & <- & <- & % & #conn & rel & ts & client) HQ post".
+iIntros "(%n & %beginning & <- & <- & % & #conn & rel & ts & client) post".
 iDestruct "client" as "(client & #ready & status)".
-iMod (session_okI with "status HQ post") as "(HQ & status & #ok)".
-iFrame. iModIntro. by do !iSplit => //.
+by iMod (session_okI with "status post") as "#ok".
 Qed.
 
 Definition rem_mapsto kI kR t1 t2 : iProp :=
@@ -776,15 +772,13 @@ Definition server_connected cs n db : iProp :=
     term_own (si_init cs) (dbCN (si_resp cs).@"status")
       (server_view (Connected (si_key cs) beginning))).
 
-Lemma server_connected_ok cs n db Q :
+Lemma server_connected_ok cs n db :
   server_connected cs n db -∗
-  Q -∗
-  (Q ∗ failure (si_init cs) (si_resp cs) ={⊤}=∗ False) ={⊤}=∗
-  Q ∗ server_connected cs n db ∗ session_ok cs.
+  (failure (si_init cs) (si_resp cs) -∗ ▷ False) -∗
+  ◇ session_ok cs.
 Proof.
-iIntros "(#p_db & server) HQ post".
-iMod (session_okI with "server HQ post") as "(HQ & server & #ok)".
-iFrame. by eauto.
+iIntros "(#p_db & server) post".
+by iMod (session_okI with "server post") as "#?".
 Qed.
 
 Definition server_disconnected kI kR db : iProp :=
