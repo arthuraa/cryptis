@@ -37,7 +37,8 @@ Lemma wp_connection_connect N c kI kR :
     ⌜si_init cs = kI⌝ ∗
     ⌜si_resp cs = kR⌝ ∗
     ⌜cs_role cs = Init⌝ ∗
-    term_token (si_init_share cs) ⊤ }}}.
+    release_token (cs_share cs) ∗
+    term_token (si_init_share cs) (↑isoN) }}}.
 Proof.
 iIntros "#? #? #? #? #? % !> _ post".
 wp_lam. wp_pures. iRevert "post".
@@ -47,7 +48,7 @@ wp_apply (wp_initiator with "[//] [//] [//] [] []") => //.
 iIntros "%res resP".
 case: res=> [kS|] /=; wp_pures; last by iLeft; iFrame; eauto.
 iDestruct "resP"
-  as "(%si & % & %e_kR & <- & #m_kS & #comp & token)".
+  as "(%si & % & %e_kR & <- & #m_kS & #comp & rel & token)".
 case: e_kR => <-.
 wp_alloc ts as "ts". wp_pures.
 iRight. iModIntro. iExists _.  iSplit => //.
@@ -68,7 +69,8 @@ Lemma wp_connection_listen N c kR :
     cs_ts cs ↦ #0 ∗
     ⌜si_resp cs = kR⌝ ∗
     ⌜cs_role cs = Resp⌝ ∗
-    term_token (si_resp_share cs) ⊤ }}}.
+    release_token (cs_share cs) ∗
+    term_token (si_resp_share cs) (↑isoN) }}}.
 Proof.
 iIntros "#? #? #? #? % !> _ post".
 wp_lam. wp_pures. iRevert "post".

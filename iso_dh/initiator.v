@@ -74,7 +74,8 @@ Lemma wp_initiator c skI vkR :
         ⌜si_key si = kS⌝ ∗
         minted kS ∗
         key_secrecy si ∗
-        term_token (si_init_share si) ⊤
+        release_token (si_init_share si) ∗
+        term_token (si_init_share si) (↑isoN)
       else True
  }}}.
 Proof.
@@ -98,6 +99,9 @@ have ?: a ≠ ga.
 rewrite big_sepS_union; last by set_solver.
 rewrite !big_sepS_singleton.
 iDestruct "token" as "[token_a token_ga]".
+iPoseProof (release_tokenI with "token_ga") as "[token_rel token_ga]" => //.
+iPoseProof (term_token_drop (↑isoN) with "token_ga")
+  as "token_ga"; first solve_ndisj.
 wp_pures. wp_apply wp_mkkeyshare => //. rewrite -/ga.
 iIntros "_". wp_pures. wp_list. wp_term_of_list.
 wp_pure _ credit:"H1".
@@ -170,6 +174,37 @@ iAssert (minted seed) as "#m_seed".
 wp_pures. iApply ("Hpost" $! (Some secret)).
 iExists si. iFrame. do !iSplitR => //.
 by rewrite minted_derive_key.
+Qed.
+
+Lemma wp_initiator_weak c skI vkR :
+  channel c -∗
+  cryptis_ctx -∗
+  iso_dh_ctx N -∗
+  sign_key skI -∗
+  public vkR -∗
+  {{{ True }}}
+    initiator c skI vkR
+  {{{ okS, RET (repr okS);
+      if okS is Some kS then ∃ si,
+        ⌜si_init si = skI⌝ ∗
+        ⌜TKey Open (si_resp si) = vkR⌝ ∗
+        ⌜si_key si = kS⌝ ∗
+        minted kS ∗
+        (compromised_session si ∨ □ (public kS ↔ ▷ False)) ∗
+        term_token (si_init_share si) (↑isoN)
+      else True
+ }}}.
+Proof.
+iIntros "#chan_c #ctx #? #skI #p_vkR %Ψ !> _ Hpost".
+iApply wp_fupd. wp_apply wp_initiator => //.
+iIntros "%okS HkS". case: okS => [kS|]; last by iApply ("Hpost" $! None).
+iDestruct "HkS" as "(%si & <- & <- & <- & #? & #sec & rel & tok)".
+iMod (unrelease with "rel") as "#un". iModIntro.
+iApply ("Hpost" $! (Some (si_key si))).
+iExists si. iFrame. do !iSplit => //.
+iDestruct "sec" as "(sec1 & [?|sec2])"; eauto.
+iRight. iApply (unreleased_key_secrecy Init) => //.
+iModIntro. by iSplit.
 Qed.
 
 End Verif.

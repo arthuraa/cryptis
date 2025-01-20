@@ -21,7 +21,6 @@ Notation iProp := (iProp Σ).
 Implicit Types t : term.
 Implicit Types rl : role.
 
-Definition N := nroot.@"iso_dh".
 Definition gameN := nroot.@"game".
 
 Definition kvsN := nroot.@"kvs".

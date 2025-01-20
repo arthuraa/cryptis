@@ -11,6 +11,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Definition isoN := nroot.@"iso".
+
 Record sess_info := SessInfo {
   si_init : term;
   si_resp : term;

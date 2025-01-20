@@ -422,6 +422,7 @@ Arguments term_token {Σ _ _} t E.
 Arguments term_meta {Σ _ _ L _ _} t N x.
 Arguments term_meta_set {Σ _ _ _ _ _} N x E t.
 Arguments term_token_difference {Σ _ _} t E1 E2.
+Arguments term_token_drop {Σ _ _} E1 E2 t.
 Arguments term_name {Σ _ _} t γ.
 Arguments term_own {Σ _ _ A _} t N x.
 Arguments term_own_alloc {Σ _ _ A _ t} N {_} a.

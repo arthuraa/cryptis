@@ -180,8 +180,8 @@ Lemma wp_server_wait_init c cs vdb db γlock vlock :
       release_token (cs_share cs) ∗
       cs_ts cs ↦ #0%nat ∗
       server_connecting cs db ∗
-      term_token (si_resp_share cs) (↑nroot.@"begin") ∗
-      term_token (si_resp_share cs) (↑nroot.@"end") ∗
+      term_token (si_resp_share cs) (↑isoN.@"begin") ∗
+      term_token (si_resp_share cs) (↑isoN.@"end") ∗
       SAList.is_alist vdb (repr <$> db) ∗
       is_lock γlock vlock (
         account_inv (si_init cs) (si_resp cs) vdb) ∗
@@ -231,7 +231,7 @@ wp_apply (wp_connection_listen
   try by solve_ndisj.
 { by iDestruct "server" as "(% & % & ? & _)". }
 iIntros "%cs resP". wp_pures.
-iDestruct "resP" as "(#conn & ts & %e_kR & %e_rl & token)".
+iDestruct "resP" as "(#conn & ts & %e_kR & %e_rl & rel & token)".
 wp_bind (Server.find_client _ _).
 iApply (wp_server_find_client with "[$server]") => //.
 iIntros "!> %vdb %γlock %vlock [server #lock]".
@@ -244,13 +244,13 @@ have e_sh : si_resp_share cs = cs_share cs.
 rewrite e_sh.
 iIntros "!> (locked & %db & account & db)". rewrite -e_kR.
 iMod (server_connectingI with "[//] c [//] token account")
-  as "{conn} (#conn & rel & account & token)" => //.
+  as "{conn} (#conn & account & token)" => //.
 wp_pures.
 iApply (wp_fork with "[ts rel locked db account token]").
 { iModIntro.
-  rewrite (term_token_difference _ (↑nroot.@"begin")); last by solve_ndisj.
+  rewrite (term_token_difference _ (↑isoN.@"begin")); last by solve_ndisj.
   iDestruct "token" as "[not_started token]".
-  iPoseProof (@term_token_drop _ _ _ (↑nroot.@"end")
+  iPoseProof (@term_token_drop _ _ _ (↑isoN.@"end")
                with "token") as "not_ended"; first by solve_ndisj.
   iApply (wp_server_wait_init
            with "[ts rel locked db account not_started not_ended] []") => //.

@@ -60,7 +60,8 @@ Lemma wp_responder c skR :
         public vkI ∗
         minted kS ∗
         key_secrecy si ∗
-        term_token (si_resp_share si) ⊤
+        release_token (si_resp_share si) ∗
+        term_token (si_resp_share si) (↑isoN)
       else True
  }}}.
 Proof.
@@ -87,6 +88,9 @@ rewrite bi.intuitionistic_intuitionistically.
 set gb := TExp (TInt 0) b.
 set gab := TExp ga b.
 rewrite big_sepS_singleton.
+iDestruct (release_tokenI with "token") as "[token_rel token]" => //.
+iPoseProof (term_token_drop (↑isoN) with "token")
+  as "token"; first solve_ndisj.
 iAssert (public gb) as "#p_gb".
 { iApply public_TExp_iff; eauto.
   rewrite minted_TInt. iRight. do ![iSplit => //].
@@ -139,7 +143,40 @@ iAssert (minted skI) as "#m_skI".
 { iApply minted_TKey. by iApply public_minted. }
 wp_pures.
 iApply ("Hpost" $! (Some (TKey Open skI, si_key si))).
-iModIntro. iExists si. by do !iSplit => //.
+iModIntro. iExists si. iFrame. by do !iSplit => //.
+Qed.
+
+Lemma wp_responder_weak c skR :
+  channel c -∗
+  cryptis_ctx -∗
+  iso_dh_ctx N -∗
+  sign_key skR -∗
+  {{{ True }}}
+    responder c skR
+  {{{ okS,
+      RET (repr okS);
+      if okS is Some (vkI, kS) then ∃ si,
+        ⌜vkI = TKey Open (si_init si)⌝ ∗
+        ⌜si_resp si = skR⌝ ∗
+        ⌜si_key si = kS⌝ ∗
+        public vkI ∗
+        minted kS ∗
+        (compromised_session si ∨ □ (public kS ↔ ▷ False)) ∗
+        term_token (si_resp_share si) (↑isoN)
+      else True
+ }}}.
+Proof.
+iIntros "#chan_c #ctx #? #skR %Ψ !> _ Hpost".
+iApply wp_fupd. wp_apply wp_responder => //.
+iIntros "%okS HkS".
+case: okS => [[vkI kS]|]; last by iApply ("Hpost" $! None).
+iDestruct "HkS" as "(%si & -> & <- & <- & #? & #m_kS & #sec & rel & tok)".
+iMod (unrelease with "rel") as "#un". iModIntro.
+iApply ("Hpost" $! (Some (TKey Open (si_init si), si_key si))).
+iExists si. iFrame. do !iSplit => //.
+iDestruct "sec" as "(sec1 & [?|sec2])"; eauto.
+iRight. iApply (unreleased_key_secrecy Resp) => //.
+iModIntro. by iSplit.
 Qed.
 
 End Verif.
