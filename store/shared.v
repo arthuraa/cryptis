@@ -49,225 +49,19 @@ Record server_client_state := {
 Instance scs_repr : Repr server_client_state :=
   λ s, (scs_db s, scs_lock s)%V.
 
-Section Status.
-
-(**
-
-Each party of the protocol can be in one of two states:
-
-- [Disconnected n] means that the [n] database operations have been performed so
-  far and processed by the server.
-
-- [Connected kS n] means that the participant is connected using the session key
-  [kS] and that, at the beginning of the connection, [n] database operations had
-  been performed.
-
-*)
-
-Variant lstatus :=
-| Disconnected of nat
-| Connected of term & nat.
-
-Canonical lstatusO := leibnizO lstatus.
-
-Global Instance lstatus_inhabited : Inhabited lstatus :=
-  populate (Disconnected inhabitant).
-
-(**
-
-Combining client and server, the system can be in one of four states:
-
-- [BothDisconnected n] means that both parties are disconnected.  If [n = None],
-  then they have never connected to each other; otherwise, [n] indicates how
-  many database operations had been performed previously.
-
-- [ClientConnecting kS n] means that the client is attempting to connected with
-  the server using the session key [kS]. If [n = None], this is the first
-  connection between them; otherwise, [n] is the number of performed database
-  operations.
-
-- [BothConnected kS n] means that the server has accepted the connection of the
-  client.  At this point, we don't need to distinguish between the first and
-  subsequent connection attempts, which is why the number of operations [n] is
-  not optional.
-
-- [ClientDisconnecting kS n] means that the client wants to disconnect the
-  session identified by the key [kS], and that [n] operations have been
-  performed.
-
-*)
-
-Variant gstatus :=
-| BothDisconnected of nat
-| ClientConnecting of term & nat
-| BothConnected of term & nat
-| ClientDisconnecting of term & nat & nat.
-
-Canonical gstatusO := leibnizO gstatus.
-
-Global Instance gstatus_inhabited : Inhabited gstatus :=
-  populate (BothDisconnected inhabitant).
-
-Definition status_view : Type := excl' lstatus.
-
-Implicit Types gs : gstatus.
-Implicit Types ls : lstatus.
-Implicit Types v : status_view.
-Implicit Types n : nat.
-
-Definition to_client_status gs :=
-  match gs with
-  | BothDisconnected n => Disconnected n
-  | ClientConnecting kS n => Connected kS n
-  | BothConnected kS n => Connected kS n
-  | ClientDisconnecting kS beginning ending => Disconnected ending
-  end.
-
-Definition to_server_status gs :=
-  match gs with
-  | BothDisconnected n => Disconnected n
-  | ClientConnecting kS n => Disconnected n
-  | BothConnected kS n => Connected kS n
-  | ClientDisconnecting kS beginning _ => Connected kS beginning
-  end.
-
-Definition to_status gs := Excl' (to_server_status gs).
-
-Definition status_view_rel_raw n gs v :=
-  v ≼ to_status gs.
-
-Lemma status_view_rel_raw_mono n1 n2 gs1 gs2 v1 v2 :
-  status_view_rel_raw n1 gs1 v1 →
-  gs1 ≡{n2}≡ gs2 →
-  v2 ≼{n2} v1 →
-  n2 ≤ n1 →
-  status_view_rel_raw n2 gs2 v2.
-Proof.
-rewrite /status_view_rel_raw.
-move=> v1_gs1 /leibniz_equiv_iff <- {gs2}.
-move=> /cmra_discrete_included_iff v2_v1 n2_n1.
-by trans v1.
-Qed.
-Lemma status_view_rel_raw_valid n gs v :
-  status_view_rel_raw n gs v → ✓{n} v.
-Proof.
-rewrite /status_view_rel_raw => v_gs.
-move: n; apply/cmra_valid_validN.
-apply: cmra_valid_included v_gs.
-by [].
-Qed.
-Lemma status_view_rel_raw_unit n :
-  ∃ gs, status_view_rel_raw n gs ε.
-Proof.
-exists (BothDisconnected 0).
-exact: ucmra_unit_least.
-Qed.
-Canonical Structure status_view_rel : view_rel gstatusO _ :=
-  ViewRel status_view_rel_raw
-    status_view_rel_raw_mono
-    status_view_rel_raw_valid
-    status_view_rel_raw_unit.
-
-Global Instance status_view_rel_discrete : ViewRelDiscrete status_view_rel.
-Proof. by move. Qed.
-
-Notation status := (view status_view_rel).
-
-Definition client_view gs : status :=
-  ●V gs.
-
-Definition server_view ls : status :=
-  ◯V Excl' ls.
-
-Lemma status_valid gs ls :
-  ✓ (client_view gs ⋅ server_view ls) ↔
-  ls = to_server_status gs.
-Proof.
-rewrite view_both_valid /= /status_view_rel_raw /to_status.
-split.
-- move=> /(_ 0). by rewrite Excl_included.
-- by move=> -> _.
-Qed.
-
-Lemma client_connect_update kS n :
-  client_view (BothDisconnected n) ~~> client_view (ClientConnecting kS n).
-Proof.
-apply: (view_update_auth _ _ _ None); rewrite /= /status_view_rel_raw /=.
-move=> _ [ls|_]; last exact: ucmra_unit_least.
-move=> lsE; have ->: ls = Excl (to_server_status (BothDisconnected n)).
-{ rewrite -leibniz_equiv_iff.
-  exact: Some_included_exclusive. }
-exact/Excl_included.
-Qed.
-
-Lemma server_connect_update kS n ls :
-  client_view (ClientConnecting kS n) ⋅ server_view ls ~~>
-  client_view (BothConnected kS n) ⋅ server_view (Connected kS n).
-Proof.
-apply/view_update; rewrite /= /status_view_rel_raw /= => _.
-move=> f incl; have /exclusive_Some_l: ✓ (Excl' ls ⋅ f).
-{ exact: cmra_valid_included incl. }
-by move=> ->; rewrite ucmra_unit_right_id.
-Qed.
-
-Lemma client_disconnect_update kS n ending :
-  client_view (BothConnected kS n) ~~>
-  client_view (ClientDisconnecting kS n ending).
-Proof.
-apply: (view_update_auth _ _ _ None); rewrite /= /status_view_rel_raw /=.
-move=> _ [ls|_]; last exact: ucmra_unit_least.
-move=> lsE; have ->: ls = Excl (to_server_status (BothConnected kS n)).
-{ rewrite -leibniz_equiv_iff.
-  exact: Some_included_exclusive. }
-exact/Excl_included.
-Qed.
-
-Lemma server_disconnect_update kS n ending ls :
-  client_view (ClientDisconnecting kS n ending) ⋅ server_view ls ~~>
-  client_view (BothDisconnected ending) ⋅ server_view (Disconnected ending).
-Proof.
-apply/view_update; rewrite /= /status_view_rel_raw /= => _.
-move=> f incl; have /exclusive_Some_l: ✓ (Excl' ls ⋅ f).
-{ exact: cmra_valid_included incl. }
-by move=> ->; rewrite ucmra_unit_right_id.
-Qed.
-
-End Status.
-
-Notation status := (view status_view_rel_raw).
-Notation statusUR := (viewUR status_view_rel).
-
-Definition oneshotUR : ucmra :=
-  authUR (optionUR (agreeR natO)).
-
-Definition Free dq : oneshotUR :=
-  ●{dq} None.
-
-Definition Shot n : oneshotUR :=
-  ◯ Some (to_agree n).
-
-Lemma shoot n : Free (DfracOwn 1) ~~> Shot n.
-Proof.
-trans (● (Some (to_agree n)) ⋅ Shot n); last first.
-  exact: cmra_update_op_r.
-apply: auth_update_alloc.
-by apply: alloc_option_local_update.
-Qed.
+Definition statusR := dfrac_agreeR natO.
 
 Class storeGS Σ := StoreGS {
   storeGS_db      : dbGS Σ;
-  storeGS_status  : inG Σ statusUR;
-  storeGS_oneshot : inG Σ oneshotUR
+  storeGS_status  : inG Σ statusR;
 }.
 
 Local Existing Instance storeGS_db.
 Local Existing Instance storeGS_status.
-Local Existing Instance storeGS_oneshot.
 
 Definition storeΣ := #[
   dbΣ;
-  GFunctor statusUR;
-  GFunctor oneshotUR
+  GFunctor statusR
 ].
 
 Global Instance subG_storeGS Σ : subG storeΣ Σ → storeGS Σ.
@@ -530,18 +324,57 @@ Definition db_not_signed_up kI kR : iProp :=
 Lemma db_signed_up_switch kI kR Q : ⊢ switch (db_not_signed_up kI kR) Q.
 Proof. apply term_token_switch. Qed.
 
-Definition server_status_ready kI kR :=
-  escrow (nroot.@"db") (db_not_signed_up kI kR) (
-    term_own kI (dbCN kR.@"status") (server_view (Disconnected 0))
-  ).
+Definition db_clock kI kR n :=
+  term_own kI (dbCN kR.@"status") (to_frac_agree (1 / 2) n).
 
-Implicit Types (ls : lstatus) (gs : gstatus) (failed : bool).
+Lemma db_clock_alloc kI kR E :
+  ↑dbCN kR.@"status" ⊆ E →
+  term_token kI E ==∗
+  db_clock kI kR 0 ∗
+  db_clock kI kR 0 ∗
+  term_token kI (E ∖ ↑dbCN kR.@"status").
+Proof.
+iIntros "%sub token".
+iMod (term_own_alloc (dbCN kR.@"status") (to_frac_agree 1 0)
+       with "token") as "[own token]" => //.
+iFrame. rewrite -Qp.half_half frac_agree_op.
+iDestruct "own" as "[??]". by iFrame.
+Qed.
+
+Lemma db_clock_agree kI kR n m :
+  db_clock kI kR n -∗
+  db_clock kI kR m -∗
+  ⌜n = m⌝.
+Proof.
+iIntros "own1 own2".
+iPoseProof (term_own_valid_2 with "own1 own2") as "%valid".
+rewrite frac_agree_op_valid_L in valid.
+by case: valid.
+Qed.
+
+Lemma db_clock_update p kI kR n m :
+  db_clock kI kR n -∗
+  db_clock kI kR m ==∗
+  db_clock kI kR p ∗ db_clock kI kR p.
+Proof.
+iIntros "own1 own2".
+rewrite /db_clock.
+iMod (term_own_update_2 with "own1 own2") as "[own1 own2]".
+{ apply: (frac_agree_update_2 _ _ _ _ p).
+  by rewrite Qp.half_half. }
+by iFrame.
+Qed.
+
+Definition server_status_ready kI kR :=
+  escrow (nroot.@"db") (db_not_signed_up kI kR)
+    (db_clock kI kR 0).
+
+Implicit Types (failed : bool).
 
 Definition client_disconnected_int kI kR n : iProp :=
   DB.client_view kI (dbCN kR.@"state") n ∗
   server_status_ready kI kR ∗
-  (failure kI kR ∨
-   term_own kI (dbCN kR.@"status") (client_view (BothDisconnected n))).
+  (failure kI kR ∨ db_clock kI kR n).
 
 Definition client_disconnected kI kR : iProp := ∃ n,
   client_disconnected_int kI kR n.
@@ -554,9 +387,7 @@ Definition client_connected_int cs n beginning : iProp :=
   session_failed_or cs (
     term_meta  (si_init_share cs) (isoN.@"beginning") beginning ∗
     term_token (si_init_share cs) (↑isoN.@"end") ∗
-    term_token (si_init_share cs) (↑isoN.@"ending") ∗
-    term_own kI (dbCN kR.@"status")
-      (client_view (BothConnected (si_key cs) beginning))).
+    term_token (si_init_share cs) (↑isoN.@"ending")).
 
 Definition client_connecting_int cs beginning : iProp :=
   let kI := si_init cs in
@@ -581,8 +412,7 @@ Definition client_disconnecting_int cs n beginning : iProp :=
 Definition conn_ready si n :=
   escrow (nroot.@"db")
          (term_token (si_resp_share si) (↑isoN.@"begin"))
-         (term_own (si_init si) (dbCN (si_resp si).@"status")
-           (client_view (ClientConnecting (si_key si) n))).
+         (db_clock (si_init si) (si_resp si) n).
 
 Lemma client_connectingI E kI kR cs beginning :
   ↑cryptisN ⊆ E →
@@ -629,22 +459,14 @@ iSplitR => //.
 iApply session_failed_for_or_fupd.
 iApply (session_failed_for_orE with "status").
 iIntros "status". iLeft. iSplitR => //.
-iMod (term_own_update with "status") as "status".
-{ apply: (client_connect_update (si_key cs)). }
 iApply (escrowI with "status").
 iApply term_token_switch.
 Qed.
 
-Definition conn_accepted si beginning :=
-  escrow (nroot.@"db")
-    (term_token (si_init_share si) (↑isoN.@"begin"))
-    (term_own (si_init si) (dbCN (si_resp si).@"status")
-       (client_view (BothConnected (si_key si) beginning))).
-
 Lemma client_connected_intI cs beginning E :
   ↑nroot.@"db" ⊆ E →
   client_connecting_int cs beginning -∗
-  session_failed_for_or cs Resp (conn_accepted cs beginning) ={E}=∗
+  session_failed_for_or cs Resp True ={E}=∗
   ▷ client_connected_int cs 0 beginning.
 Proof.
 move=> sub.
@@ -655,7 +477,6 @@ iPoseProof (session_failed_orI with "conn status") as "{status} status".
 iApply (session_failed_orE with "status").
 iIntros "[conn #accepted]". iLeft.
 iDestruct "conn" as "(not_started & ? & #? & ?)".
-iMod (escrowE with "accepted not_started") as "status" => //.
 iIntros "!> !>". by iFrame.
 Qed.
 
@@ -733,11 +554,11 @@ iDestruct "kI_token" as "[kI_token ?]". iFrame.
 iMod (DB.alloc _ (N := dbCN kR.@"state") with "kI_token")
   as "(client_view & free & #server_view & kI_token)".
 { solve_ndisj. }
-iMod (term_own_alloc (dbCN kR.@"status")
-        (client_view (BothDisconnected 0) ⋅ server_view (Disconnected 0))
-  with "kI_token") as "[[client server] kI_token]" => //.
-- solve_ndisj.
-- exact/status_valid.
+iMod (term_own_alloc (dbCN kR.@"status") (to_frac_agree 1 0)
+  with "kI_token") as "[status kI_token]" => //.
+{ solve_ndisj. }
+rewrite -Qp.half_half frac_agree_op.
+iDestruct "status" as "[client server]".
 iAssert (|={E'}=> server_status_ready kI kR)%I
   with "[server]" as ">#server".
 { iApply (escrowI with "server").
@@ -769,8 +590,8 @@ Definition server_connected cs n db : iProp :=
     DB.server_view (si_init cs) (dbCN (si_resp cs).@"state") (n + beginning) db ∗
     term_meta (si_init_share cs) (isoN.@"beginning") beginning ∗
     term_token (si_resp_share cs) (↑isoN.@"end") ∗
-    term_own (si_init cs) (dbCN (si_resp cs).@"status")
-      (server_view (Connected (si_key cs) beginning))).
+    db_clock (si_init cs) (si_resp cs) beginning ∗
+    db_clock (si_init cs) (si_resp cs) beginning).
 
 Lemma server_connected_ok cs n db :
   server_connected cs n db -∗
@@ -786,14 +607,14 @@ Definition server_disconnected kI kR db : iProp :=
   (failure kI kR ∨
    ⌜db = ∅⌝ ∗ db_not_signed_up kI kR ∨ ∃ n,
    DB.server_view kI (dbCN kR.@"state") n db ∗
-   term_own kI (dbCN kR.@"status") (server_view (Disconnected n))).
+   db_clock kI kR n).
 
 Definition server_connecting cs db : iProp :=
   public_db db ∗
   session_failed_for_or cs Resp (
     ⌜db = ∅⌝ ∗ db_not_signed_up (si_init cs) (si_resp cs) ∨ ∃ n,
     DB.server_view (si_init cs) (dbCN (si_resp cs).@"state") n db ∗
-    term_own (si_init cs) (dbCN (si_resp cs).@"status") (server_view (Disconnected n))).
+    db_clock (si_init cs) (si_resp cs) n).
 
 Lemma server_connectingI cs db :
   cs_role cs = Resp →
@@ -885,9 +706,7 @@ iPoseProof (session_failed_orI with "p_m failed") as "#res".
 iApply (session_failed_orE with "res"). iIntros "[? _]". by eauto.
 Qed.
 
-Definition ack_init_pred si t : iProp := ∃ (beginning : nat),
-  term_meta (si_init_share si) (isoN.@"beginning") beginning ∗
-  conn_accepted si beginning.
+Definition ack_init_pred si t : iProp := True.
 
 Lemma ack_init_predI cs db m :
   cs_role cs = Resp →
@@ -909,30 +728,23 @@ iRight.
 iApply (session_failed_orE with "status"). iIntros "status".
 iLeft.
 iDestruct "p_m"
-  as "(%beginning & #server & #server_view & #beginning & #conn_ready)".
-iMod (escrowE with "conn_ready not_started") as "statusI" => //.
-iAssert (|={⊤}▷=> ∃ n, DB.server_view (si_init cs) (dbCN (si_resp cs).@"state") n db ∗
-                         term_own (si_init cs) (dbCN (si_resp cs).@"status")
-                         (server_view (Disconnected n)))%I
-  with "[status]" as ">status".
+  as "(%n & #server & #server_view & #beginning & #conn_ready)".
+iMod (escrowE with "conn_ready not_started") as ">statusI" => //.
+iAssert (|={⊤}▷=> DB.server_view (si_init cs) (dbCN (si_resp cs).@"state") n db ∗
+                    db_clock (si_init cs) (si_resp cs) n ∗
+                    db_clock (si_init cs) (si_resp cs) n)%I
+  with "[status statusI]" as ">status".
 { iDestruct "status" as "[[-> fresh]|status]"; last first.
-  { iDestruct "status" as "(%n & #server_view' & status)".
-    iIntros "!> !> !>". iExists n. by iFrame. }
-  iMod (escrowE with "server fresh") as "status" => //.
-  iIntros "!> !> !>". iExists 0.  by iFrame. }
-iIntros "!> !>".
-iMod "status" as "(%n & #? & status)".
-iPoseProof (term_own_valid_2 with "statusI status") as "%valid".
-case/status_valid: valid => -> {n}.
-iMod (term_own_update_2 with "statusI status") as "[statusI status]".
-{ apply: server_connect_update. }
-iAssert (|={⊤}=> conn_accepted cs beginning)%I
-  with "[statusI]" as ">#accepted".
-{ iApply (escrowI with "[statusI]"); first by iFrame.
-  iApply term_token_switch. }
+  { iDestruct "status" as "(%n' & #server_view' & status)".
+    iPoseProof (db_clock_agree with "status statusI") as "->".
+    iIntros "!> !> !>". by iFrame. }
+  iMod (escrowE with "server fresh") as ">status" => //.
+  iPoseProof (db_clock_agree with "status statusI") as "->".
+  iIntros "!> !> !>".  by iFrame. }
+iIntros "!> !>". iMod "status" as "(#? & status)".
 iModIntro. iSplit.
 { iFrame. do 2!iSplit => //. }
-iIntros "!>". iExists _. do !iSplit => //.
+by iIntros "!>".
 Qed.
 
 Lemma ack_init_predE cs m beginning E :
@@ -949,10 +761,7 @@ rewrite -session_failed_or_later -session_failed_or_fupd.
 iApply (session_failed_orE with "conn"). iIntros "conn". iRight.
 iApply (session_failed_orE with "m"). iIntros "m". iLeft.
 iDestruct "conn" as "(begin & end & #beginning & ending)".
-iDestruct "m" as "(%beginning' & #beginning' & #accepted)".
-iPoseProof (term_meta_agree with "beginning' beginning") as "->".
-iMod (escrowE with "accepted begin") as "status" => //.
-do !iModIntro. iFrame. eauto.
+iFrame. by eauto.
 Qed.
 
 Definition store_pred si m : iProp := ∃ (n : nat) t1 t2 beginning,
@@ -1073,7 +882,7 @@ Proof.
 iIntros "(client & #server & conn) #p_t1 #p_t2 #create".
 iApply session_failed_or_box.
 iApply (session_failed_orE with "conn"). iIntros "conn". iLeft.
-iDestruct "conn" as "(#? & ? & ? & ?)".
+iDestruct "conn" as "(#? & ? & ?)".
 iModIntro.
 iExists n, t1, t2, beginning.
 by eauto 10.
@@ -1108,17 +917,10 @@ Qed.
 
 Definition ack_create_pred (si : sess_info) (m : term) : iProp := True.
 
-Definition conn_done si beginning ending :=
-  escrow (nroot.@"db")
-         (term_token (si_resp_share si) (↑isoN.@"end"))
-         (term_own (si_init si) (dbCN (si_resp si).@"status")
-            (client_view (ClientDisconnecting (si_key si) beginning ending))).
-
 Definition close_pred si m : iProp := ∃ n beginning,
   ⌜m = TInt n⌝ ∗
   term_meta (si_init_share si) (isoN.@"beginning") beginning ∗
-  term_meta (si_init_share si) (isoN.@"ending") (n + beginning) ∗
-  conn_done si beginning (n + beginning).
+  term_meta (si_init_share si) (isoN.@"ending") (n + beginning).
 
 Lemma close_predI cs beginning n E :
   ↑nroot.@"db" ⊆ E →
@@ -1131,13 +933,7 @@ rewrite session_failed_or_box /client_disconnecting_int.
 iFrame. rewrite -!bi.sep_assoc. iSplitR => //.
 rewrite session_failed_or_sep -session_failed_or_fupd.
 iApply (session_failed_orE with "conn"). iIntros "conn". iLeft.
-iDestruct "conn" as "(#beginning & end & ending & status)".
-iMod (term_own_update with "status") as "status".
-{ exact: (@client_disconnect_update _ _ (n + beginning)). }
-iAssert (|={E}=> conn_done cs beginning (n + beginning))%I
-  with "[status]" as ">#done".
-{ iApply (escrowI with "status").
-  iApply term_token_switch. }
+iDestruct "conn" as "(#beginning & end & ending)".
 iMod (term_meta_set (isoN.@"ending") (n + beginning) with "ending")
   as "#ending" => //.
 iSplitL.
@@ -1149,8 +945,7 @@ Qed.
 Definition conn_closed si ending :=
   escrow (nroot.@"db")
          (term_token (si_init_share si) (↑isoN.@"end"))
-         (term_own (si_init si) (dbCN (si_resp si).@"status")
-                  (client_view (BothDisconnected ending))).
+         (db_clock (si_init si) (si_resp si) ending).
 
 Definition ack_close_pred si (m : term) : iProp := ∃ ending,
   term_meta (si_init_share si) (isoN.@"ending") ending ∗
@@ -1180,22 +975,19 @@ rewrite -!(session_failed_or_fupd, session_failed_or_later).
 iApply (session_failed_orE with "status"). iIntros "status". iRight.
 iApply (session_failed_orE with "p_m"). iIntros "p_m". iLeft.
 iDestruct "status" as
-  "(%beginning & #server & #beginning & end & status)".
+  "(%beginning & #server & #beginning & end & status1 & status2)".
 iDestruct "p_m" as
-  "(%n' & %beginning' & %e_m & #beginning' & #ending & #done)".
-iPoseProof (term_meta_agree with "beginning beginning'") as "{beginning'} <-".
-case: e_m => e_n. have {e_n} <- : n = n' by lia.
-iMod (escrowE with "done end") as "statusI" => //.
-iIntros "!> !>".
-iMod (term_own_update_2 with "statusI status") as "status".
-{ apply: server_disconnect_update. }
-iDestruct "status" as "[statusI status]".
+  "(%n' & %beginning' & %e_m & #beginning' & #ending)".
+case: e_m => e_m. have {e_m} <-: n = n' by lia.
+iPoseProof (term_meta_agree with "beginning' beginning") as "->".
+iMod (db_clock_update (n + beginning) with "status1 status2")
+  as "[status1 status2]".
 iAssert (|={E}=> conn_closed cs (n + beginning))%I
-  with "[statusI]" as ">#closed".
-{ iApply (escrowI with "[statusI]").
+  with "[status2]" as ">#closed".
+{ iApply (escrowI with "[status2]").
   - by eauto.
   - iApply term_token_switch. }
-iModIntro. iSplit.
+iModIntro. iModIntro. iModIntro. iSplit.
 - iRight. iExists _. iFrame. by eauto.
 - iModIntro. iExists _. by eauto.
 Qed.
