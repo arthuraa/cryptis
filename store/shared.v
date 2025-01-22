@@ -395,9 +395,8 @@ Definition client_connecting_int cs beginning : iProp :=
   DB.client_view kI (dbCN kR.@"state") beginning ∗
   server_status_ready kI kR ∗
   session_failed_for_or cs Init (
-    term_token (si_init_share cs) (↑isoN.@"begin") ∗
-    term_token (si_init_share cs) (↑isoN.@"end") ∗
     term_meta  (si_init_share cs) (isoN.@"beginning") beginning ∗
+    term_token (si_init_share cs) (↑isoN.@"end") ∗
     term_token (si_init_share cs) (↑isoN.@"ending")).
 
 Definition client_disconnecting_int cs n beginning : iProp :=
@@ -449,8 +448,6 @@ iSplitL "client_view token".
   iModIntro. do !iSplit => //.
   iApply (session_failed_for_orE with "failed").
   iIntros "_". iLeft. rewrite e_sh.
-  rewrite (term_token_difference _ (↑isoN.@"begin")); try solve_ndisj.
-  iDestruct "token" as "[token' token]". iFrame "token'".
   rewrite (term_token_difference _ (↑isoN.@"end")); try solve_ndisj.
   iDestruct "token" as "[token' token]". iFrame "token'".
   iSplit => //.
@@ -475,9 +472,7 @@ iFrame. do !iSplitR => //.
 rewrite -session_failed_or_later -session_failed_or_fupd.
 iPoseProof (session_failed_orI with "conn status") as "{status} status".
 iApply (session_failed_orE with "status").
-iIntros "[conn #accepted]". iLeft.
-iDestruct "conn" as "(not_started & ? & #? & ?)".
-iIntros "!> !>". by iFrame.
+iIntros "[conn #accepted]". iLeft. by eauto.
 Qed.
 
 Definition client_connected kI kR cs : iProp := ∃ n beginning,
@@ -696,7 +691,7 @@ iAssert (□ session_failed_for_or cs Init (init_pred cs m))%I as "#p_m".
   iApply (session_failed_for_orE with "ready").
   iIntros "#ready". iRight.
   iApply (session_failed_for_orE with "status").
-  iIntros "(? & ? & #? & ?)".
+  iIntros "(#? & ? & ?)".
   iPoseProof (DB.client_view_server_view with "client")
     as "(%db & #server_view)".
   iPoseProof (DB.server_view_to_0 with "server_view") as "#server_view0".
@@ -756,11 +751,6 @@ Proof.
 iIntros "%sub".
 iIntros "(client & #server & conn) m".
 iPoseProof (session_failed_orI' with "conn m") as "[conn m]".
-iFrame. iSplitR => //.
-rewrite -session_failed_or_later -session_failed_or_fupd.
-iApply (session_failed_orE with "conn"). iIntros "conn". iRight.
-iApply (session_failed_orE with "m"). iIntros "m". iLeft.
-iDestruct "conn" as "(begin & end & #beginning & ending)".
 iFrame. by eauto.
 Qed.
 
