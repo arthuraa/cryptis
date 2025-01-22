@@ -181,7 +181,6 @@ Lemma wp_server_wait_init c cs vdb db γlock vlock :
       cs_ts cs ↦ #0%nat ∗
       server_connecting cs db ∗
       term_token (si_resp_share cs) (↑isoN.@"begin") ∗
-      term_token (si_resp_share cs) (↑isoN.@"end") ∗
       SAList.is_alist vdb (repr <$> db) ∗
       is_lock γlock vlock (
         account_inv (si_init cs) (si_resp cs) vdb) ∗
@@ -191,17 +190,15 @@ Lemma wp_server_wait_init c cs vdb db γlock vlock :
 Proof.
 iIntros "%e_rl %Φ
   (#ctx & #chan_c & #ctx' & #conn & rel &
-   ts & server & not_started & not_ended &
-   db & #lock & locked) post".
+   ts & server & not_started & db & #lock & locked) post".
 wp_lam; wp_pures.
 iPoseProof (store_ctx_init with "ctx'") as "?".
-iCombine "server not_started not_ended db locked post" as "I".
+iCombine "server not_started db locked post" as "I".
 iRevert "ts rel I".
 iApply wp_connection_recv => //.
 iIntros "!> %m ts rel
-  (server & not_started & not_ended & db & locked & post) #m_m #p_m".
-iMod (ack_init_predI with "server not_started not_ended p_m")
-  as "H" => //.
+  (server & not_started & db & locked & post) #m_m #p_m".
+iMod (ack_init_predI with "server not_started p_m") as "H" => //.
 wp_pures.
 iMod "H" as "(server & #p_m')".
 wp_bind (tint _). iApply wp_tint.
@@ -250,10 +247,8 @@ iApply (wp_fork with "[ts rel locked db account token]").
 { iModIntro.
   rewrite (term_token_difference _ (↑isoN.@"begin")); last by solve_ndisj.
   iDestruct "token" as "[not_started token]".
-  iPoseProof (@term_token_drop _ _ _ (↑isoN.@"end")
-               with "token") as "not_ended"; first by solve_ndisj.
   iApply (wp_server_wait_init
-           with "[ts rel locked db account not_started not_ended] []") => //.
+           with "[ts rel locked db account not_started] []") => //.
   rewrite e_sh. iFrame. eauto. }
 iApply "post".
 by iFrame.

@@ -584,7 +584,6 @@ Definition server_connected cs n db : iProp :=
   session_failed_or cs (∃ beginning,
     DB.server_view (si_init cs) (dbCN (si_resp cs).@"state") (n + beginning) db ∗
     term_meta (si_init_share cs) (isoN.@"beginning") beginning ∗
-    term_token (si_resp_share cs) (↑isoN.@"end") ∗
     db_clock (si_init cs) (si_resp cs) beginning ∗
     db_clock (si_init cs) (si_resp cs) beginning).
 
@@ -707,12 +706,11 @@ Lemma ack_init_predI cs db m :
   cs_role cs = Resp →
   server_connecting cs db -∗
   term_token (si_resp_share cs) (↑isoN.@"begin") -∗
-  term_token (si_resp_share cs) (↑isoN.@"end") -∗
   session_failed_or cs (init_pred cs m) ={⊤}▷=∗
   server_connected cs 0 db ∗
   □ session_failed_or cs (ack_init_pred cs (TInt 0)).
 Proof.
-iIntros "%e_rl (#p_db & status) not_started not_ended #p_m".
+iIntros "%e_rl (#p_db & status) not_started #p_m".
 iPoseProof (session_failed_orI' with "status p_m") as "[status _]".
 rewrite session_failed_or_box.
 rewrite /server_connected -!bi.sep_assoc session_failed_or_sep.
@@ -965,7 +963,7 @@ rewrite -!(session_failed_or_fupd, session_failed_or_later).
 iApply (session_failed_orE with "status"). iIntros "status". iRight.
 iApply (session_failed_orE with "p_m"). iIntros "p_m". iLeft.
 iDestruct "status" as
-  "(%beginning & #server & #beginning & end & status1 & status2)".
+  "(%beginning & #server & #beginning & status1 & status2)".
 iDestruct "p_m" as
   "(%n' & %beginning' & %e_m & #beginning' & #ending)".
 case: e_m => e_m. have {e_m} <-: n = n' by lia.
