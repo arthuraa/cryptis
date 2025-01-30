@@ -164,12 +164,12 @@ Definition store : val := λ: "c" "cs" "k" "v",
 
 Definition load : val := λ: "c" "cs" "k",
   let: "ts" := tint (Connection.timestamp "cs") in
+  Connection.tick "cs";;
   Connection.send (N.@"load") "c" "cs" (term_of_list ["ts"; "k"]);;
   Connection.recv (N.@"ack_load") "c" "cs" (λ: "resp",
     bind: "resp" := list_of_term "resp" in
-    list_match: ["ts'"; "k'"; "t"] := "resp" in
+    list_match: ["ts'"; "t"] := "resp" in
     guard: eq_term "ts'" "ts" in
-    guard: eq_term "k'" "k" in
     SOME "t"
   ).
 
@@ -229,7 +229,7 @@ Definition handle_load N : val :=
   bind: "timestamp'" := to_int "timestamp'" in
   guard: "timestamp" = "timestamp'" in
   bind: "data" := SAList.find "db" "k" in
-  let: "m" := term_of_list [ tint "timestamp"; "k"; "data"] in
+  let: "m" := term_of_list [ tint "timestamp"; "data"] in
   Connection.send (N.@"ack_load") "c" "cs" "m";;
   SOME #true.
 

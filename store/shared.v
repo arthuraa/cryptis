@@ -505,15 +505,15 @@ Lemma rem_free_at_diff kI kR T1 T2 :
   rem_free_at kI kR T2 ⊣⊢ rem_free_at kI kR T1 ∗ rem_free_at kI kR (T2 ∖ T1).
 Proof. iIntros "%sub". by iApply DB.free_at_diff. Qed.
 
-Lemma rem_mapsto_update t2' cs t1 t2 n beginning :
+Lemma rem_mapsto_store t2' cs t1 t2 n beginning :
   client_connected_int cs n beginning -∗
   rem_mapsto (si_init cs) (si_resp cs) t1 t2 ==∗
   client_connected_int cs (S n) beginning ∗
   rem_mapsto (si_init cs) (si_resp cs) t1 t2' ∗
-  DB.update_at (si_init cs) (dbCN (si_resp cs).@"state") (n + beginning) t1 t2'.
+  DB.store_at (si_init cs) (dbCN (si_resp cs).@"state") (n + beginning) t1 t2'.
 Proof.
 iIntros "(client & #server & conn) mapsto".
-iMod (DB.update_client t2' with "client mapsto")
+iMod (DB.store_client t2' with "client mapsto")
   as "(client & #update & mapsto)".
 iFrame. iSplitR => //.
 Qed.
@@ -755,11 +755,11 @@ Qed.
 Definition store_pred si m : iProp := ∃ (n : nat) t1 t2 beginning,
   ⌜m = Spec.of_list [TInt n; t1; t2]⌝ ∗
   term_meta (si_init_share si) (isoN.@"beginning") beginning ∗
-  DB.update_at (si_init si) (dbCN (si_resp si).@"state") (n + beginning) t1 t2.
+  DB.store_at (si_init si) (dbCN (si_resp si).@"state") (n + beginning) t1 t2.
 
 Lemma store_predI cs n beginning t1 t2 :
   client_connected_int cs (S n) beginning -∗
-  DB.update_at (si_init cs) (dbCN (si_resp cs).@"state") (n + beginning) t1 t2 -∗
+  DB.store_at (si_init cs) (dbCN (si_resp cs).@"state") (n + beginning) t1 t2 -∗
   □ session_failed_or cs (store_pred cs (Spec.of_list [TInt n; t1; t2])).
 Proof.
 iIntros "(client & #server & conn) #update".
@@ -789,70 +789,94 @@ have {e_n} <- : n = n' by lia.
 iDestruct "status"
   as "(%beginning' & #server & #beginning' & end & status)".
 iPoseProof (term_meta_agree with "beginning' beginning") as "{beginning'} ->".
-iPoseProof (DB.update_server with "server update") as "{server} server".
+iPoseProof (DB.store_server with "server update") as "{server} server".
 iExists beginning. iFrame. by eauto.
 Qed.
 
 Definition ack_store_pred (si : sess_info) m : iProp := ∃ (n : nat),
   ⌜m = TInt n⌝. (* FIXME: Do we need anything else here? *)
 
-Definition load_pred (si : sess_info) (m : term) : iProp := True.
+Definition load_pred (si : sess_info) (m : term) : iProp :=
+  ∃ (n : nat) (t1 : term) beginning,
+    ⌜m = Spec.of_list [TInt n; t1]⌝ ∗
+    term_meta (si_init_share si) (isoN.@"beginning") beginning ∗
+    DB.load_at (si_init si) (dbCN (si_resp si).@"state") (n + beginning) t1.
 
-Lemma load_predI cs n beginning m :
-  client_connected_int cs n beginning -∗
-  □ session_failed_or cs (load_pred cs m).
+Lemma load_predI cs n beginning t1 :
+  client_connected_int cs n beginning ==∗
+  client_connected_int cs (S n) beginning ∗
+  DB.load_at (si_init cs) (dbCN (si_resp cs).@"state") (n + beginning) t1 ∗
+  □ session_failed_or cs (load_pred cs (Spec.of_list [TInt n; t1])).
 Proof.
-iIntros "(? & ? & H)".
+iIntros "(view & ? & H)".
 rewrite session_failed_or_box.
-iApply (session_failed_orE with "H"). iIntros "_". iLeft.
-by [].
+iMod (DB.load_client t1 with "view") as "[#load view]".
+set P := term_meta _ _ beginning.
+iAssert (session_failed_or cs P) as "#beginning".
+{ rewrite -session_failed_or_sep. by iDestruct "H" as "[??]". }
+iFrame. iModIntro. iSplit => //.
+iApply (session_failed_orE with "beginning").
+iIntros "#?". iLeft. iModIntro. iExists n, t1, beginning.
+by eauto.
 Qed.
 
 Definition ack_load_pred si m : iProp := ∃ n t1 t2 beginning,
-  ⌜m = Spec.of_list [TInt n; t1; t2]⌝ ∗
+  ⌜m = Spec.of_list [TInt n; t2]⌝ ∗
   term_meta (si_init_share si) (isoN.@"beginning") beginning ∗
-  DB.stored_at (si_init si) (dbCN (si_resp si).@"state") (n + beginning) t1 t2.
+  DB.load_at (si_init si) (dbCN (si_resp si).@"state") (n + beginning) t1 ∗
+  DB.stored_at (si_init si) (dbCN (si_resp si).@"state") (S (n + beginning)) t1 t2.
 
 Lemma ack_load_predI {cs n db t1 t2} :
+  let m := Spec.of_list [TInt n; t1] in
   db !! t1 = Some t2 →
   server_connected cs n db -∗
-  public (Spec.of_list [TInt n; t1; t2]) ∗
-  □ session_failed_or cs (ack_load_pred cs (Spec.of_list [TInt n; t1; t2])).
+  session_failed_or cs (load_pred cs m) -∗
+  public (Spec.of_list [TInt n; t2]) ∗
+  □ session_failed_or cs (ack_load_pred cs (Spec.of_list [TInt n; t2])).
 Proof.
-iIntros "%t1_t2 server".
+iIntros "%m %t1_t2 server load".
 iDestruct "server" as "(#public & status)".
 rewrite /public_db big_sepM_forall.
 iDestruct ("public" with "[//]") as "[p_t1 p_t2]".
 iSplit.
 { rewrite public_of_list /= public_TInt. by eauto. }
 iApply session_failed_or_box.
+iApply (session_failed_orE with "load"). iIntros "#load". iRight.
 iApply (session_failed_orE with "status"). iIntros "status". iLeft.
-iDestruct "status" as "(%beginning & #server & #beginning & _)".
+iDestruct "load" as "(%n' & %t1' & %beginning & %e_m & beginning & load)".
+iDestruct "status" as "(%beginning' & #server & #beginning' & _)".
+iPoseProof (term_meta_agree with "beginning beginning'") as "<-".
+case/Spec.of_list_inj: e_m => e_n <- {t1'}.
+have <- : n = n' by lia.
 iModIntro. iExists n, t1, t2, beginning. do !iSplit => //.
-by iPoseProof (DB.load_server _ _ _ t1_t2 with "server") as "#load".
+iPoseProof (DB.server_view_stored_at _ _ _ t1_t2 with "server") as "#stored_at".
+by iPoseProof (DB.load_at_stored_at with "stored_at load") as "#?".
 Qed.
 
 Lemma ack_loadE cs n beginning t1 t2 t2' :
-  let m := Spec.of_list [TInt n; t1; t2'] in
-  client_connected_int cs n beginning -∗
+  let m := Spec.of_list [TInt n; t2'] in
+  client_connected_int cs (S n) beginning -∗
+  DB.load_at (si_init cs) (dbCN (si_resp cs).@"state") (n + beginning) t1 -∗
   rem_mapsto (si_init cs) (si_resp cs) t1 t2 -∗
   public m -∗
   session_failed_or cs (ack_load_pred cs m) -∗
   public t2' ∗ (session_failed_or cs ⌜t2' = t2⌝).
 Proof.
-iIntros "%m (client & #server & conn) mapsto #p_m inv_m".
+iIntros "%m (client & #server & conn) #load_at mapsto #p_m inv_m".
 rewrite public_of_list /=.
-iDestruct "p_m" as "(_ & _ & p_t2' & _)".
+iDestruct "p_m" as "(_ & p_t2' & _)".
 iSplit => //.
 iApply (session_failed_orE with "inv_m"). iIntros "#inv_m". iRight.
 iDestruct "inv_m"
-  as "#(%n' & %t1' & %t2'' & %beginning' & %e & #beginning' & #stored)".
-case/Spec.of_list_inj: e => e_n <- <- {t1' t2''}.
-have {n' e_n} <-: n = n' by lia.
+  as "#(%n' & %t1' & %t2'' & %beginning' & %e & beginning' & load_at' & stored)".
 iApply (session_failed_orE with "conn"). iIntros "conn". iLeft.
 iDestruct "conn" as "(#beginning & ?)".
 iPoseProof (term_meta_agree with "beginning' beginning") as "{beginning'} ->".
-by iApply (DB.load_client with "client mapsto stored").
+case/Spec.of_list_inj: e => e_n <- {t2''}.
+have {n' e_n} <-: n = n' by lia.
+iPoseProof (DB.op_at_agree with "load_at load_at'") as "%e_t1".
+case: e_t1 => <-.
+by iApply (DB.client_view_stored_at with "client mapsto stored").
 Qed.
 
 Definition create_pred si m : iProp := ∃ n t1 t2 beginning,

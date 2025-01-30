@@ -61,7 +61,7 @@ iIntros "!> db". rewrite lookup_fmap.
 case db_t1: (db !! t1) => [t2|]; wp_pures; last by failure.
 wp_list. wp_bind (tint _). iApply wp_tint. wp_list. wp_term_of_list.
 wp_pures.
-iPoseProof (ack_load_predI db_t1 with "server") as "#[??]".
+iPoseProof (ack_load_predI db_t1 with "server p_m") as "#(? & #?)".
 wp_bind (Connection.send _ _ _ _).
 iApply (wp_connection_send with "[//] [//] [] [] conn") => //.
 { by iIntros "!> _". }

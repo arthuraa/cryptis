@@ -48,24 +48,23 @@ iDestruct "client"
 rewrite /Client.load. wp_pures. wp_bind (Connection.timestamp _).
 iApply (wp_connection_timestamp with "ts"). iIntros "!> ts".
 wp_bind (tint _). iApply wp_tint.
+wp_pures. wp_apply (wp_connection_tick with "ts"). iIntros "ts".
 wp_pures. wp_list. wp_term_of_list.
+iMod (load_predI _ _ _ t1 with "client") as "(client & #load_at & #?)".
 wp_bind (Connection.send _ _ _ _).
 iApply (wp_connection_send with "[//] load [] [#]") => //.
 { rewrite public_of_list /= public_TInt. by eauto. }
-{ iPoseProof (load_predI with "client") as "#?".
-  by iIntros "!> _". }
+{ by iIntros "!> _". }
 iIntros "!> _". wp_pures.
 iCombine "client mapsto post" as "I". iRevert "ts rel I".
 iApply wp_connection_recv => //.
 iIntros "!> %ts ts rel (client & mapsto & post) #p_m #inv_m". wp_pures.
 wp_list_of_term ts; wp_pures; last by iLeft; iFrame.
-wp_list_match => [n' t1' t2' -> {ts}|_]; wp_pures; last by iLeft; iFrame.
+wp_list_match => [n' t2' -> {ts}|_]; wp_pures; last by iLeft; iFrame.
 wp_eq_term e; last by wp_pures; iLeft; iFrame.
 subst n'. wp_pures.
-wp_eq_term e; last by wp_pures; iLeft; iFrame.
-subst t1'.
-iPoseProof (ack_loadE with "client mapsto p_m inv_m") as "#p_t2'".
-wp_pures. iRight. iModIntro. iExists _. iSplit => //.
+iPoseProof (ack_loadE with "client load_at mapsto p_m inv_m") as "#p_t2'".
+iRight. iModIntro. iExists _. iSplit => //.
 iApply "post".
 iFrame.
 by iSplit => //; eauto.

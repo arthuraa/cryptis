@@ -39,7 +39,7 @@ Proof.
 iIntros "#chan_c (_ & _ & #? & _) #p_t1 #p_t2' !> %Φ [client mapsto] post".
 iDestruct "client"
   as "(%n & %beginning & <- & <- & %e_rl & #conn & rel & ts & client)".
-iMod (rem_mapsto_update t2' with "client mapsto")
+iMod (rem_mapsto_store t2' with "client mapsto")
   as "(client & mapsto & #update)".
 wp_lam. wp_pures.
 wp_apply (wp_connection_timestamp with "ts"); iIntros "ts".
