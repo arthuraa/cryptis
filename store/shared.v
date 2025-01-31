@@ -433,8 +433,7 @@ Proof.
 move=> ? ? <- <- e_rl {kI kR}.
 iIntros "#? [c1 c2] #sess token client".
 iDestruct "client" as "(client_view & #server & status)".
-iPoseProof (DB.client_view_server_view with "client_view")
-  as "(%db & #server_view)".
+iPoseProof (DB.client_view_db_at with "client_view") as "(%db & #db_at)".
 have e_sh : si_init_share cs = cs_share cs by rewrite /cs_share e_rl.
 rewrite e_sh.
 iMod (wf_conn_stateI with "sess status token")
@@ -582,7 +581,7 @@ Qed.
 Definition server_connected cs n db : iProp :=
   public_db db ∗
   session_failed_or cs (∃ beginning,
-    DB.server_view (si_init cs) (dbCN (si_resp cs).@"state") (n + beginning) db ∗
+    DB.db_at (si_init cs) (dbCN (si_resp cs).@"state") (n + beginning) db ∗
     term_meta (si_init_share cs) (isoN.@"beginning") beginning ∗
     db_clock (si_init cs) (si_resp cs) beginning ∗
     db_clock (si_init cs) (si_resp cs) beginning).
@@ -600,14 +599,14 @@ Definition server_disconnected kI kR db : iProp :=
   public_db db ∗
   (failure kI kR ∨
    ⌜db = ∅⌝ ∗ db_not_signed_up kI kR ∨ ∃ n,
-   DB.server_view kI (dbCN kR.@"state") n db ∗
+   DB.db_at kI (dbCN kR.@"state") n db ∗
    db_clock kI kR n).
 
 Definition server_connecting cs db : iProp :=
   public_db db ∗
   session_failed_for_or cs Resp (
     ⌜db = ∅⌝ ∗ db_not_signed_up (si_init cs) (si_resp cs) ∨ ∃ n,
-    DB.server_view (si_init cs) (dbCN (si_resp cs).@"state") n db ∗
+    DB.db_at (si_init cs) (dbCN (si_resp cs).@"state") n db ∗
     db_clock (si_init cs) (si_resp cs) n).
 
 Lemma server_connectingI cs db :
@@ -675,7 +674,7 @@ Definition session_msg_pred (Q : sess_info → term → iProp) rl kS m : iProp :
 
 Definition init_pred si t : iProp := ∃ (beginning : nat),
   server_status_ready (si_init si) (si_resp si) ∗
-  DB.server_view (si_init si) (dbCN (si_resp si).@"state") 0 ∅ ∗
+  DB.db_at (si_init si) (dbCN (si_resp si).@"state") 0 ∅ ∗
   term_meta (si_init_share si) (isoN.@"beginning") beginning ∗
   conn_ready si beginning.
 
@@ -691,9 +690,8 @@ iAssert (□ session_failed_for_or cs Init (init_pred cs m))%I as "#p_m".
   iIntros "#ready". iRight.
   iApply (session_failed_for_orE with "status").
   iIntros "(#? & ? & ?)".
-  iPoseProof (DB.client_view_server_view with "client")
-    as "(%db & #server_view)".
-  iPoseProof (DB.server_view_to_0 with "server_view") as "#server_view0".
+  iPoseProof (DB.client_view_db_at with "client") as "(%db & #db_at)".
+  iPoseProof (DB.db_at_to_0 with "db_at") as "#db_at0".
   iLeft. iModIntro. iExists _. by eauto 10. }
 iIntros "!> #failed".
 iPoseProof (session_failed_orI with "p_m failed") as "#res".
@@ -723,7 +721,7 @@ iLeft.
 iDestruct "p_m"
   as "(%n & #server & #server_view & #beginning & #conn_ready)".
 iMod (escrowE with "conn_ready not_started") as ">statusI" => //.
-iAssert (|={⊤}▷=> DB.server_view (si_init cs) (dbCN (si_resp cs).@"state") n db ∗
+iAssert (|={⊤}▷=> DB.db_at (si_init cs) (dbCN (si_resp cs).@"state") n db ∗
                     db_clock (si_init cs) (si_resp cs) n ∗
                     db_clock (si_init cs) (si_resp cs) n)%I
   with "[status statusI]" as ">status".
@@ -789,7 +787,7 @@ have {e_n} <- : n = n' by lia.
 iDestruct "status"
   as "(%beginning' & #server & #beginning' & end & status)".
 iPoseProof (term_meta_agree with "beginning' beginning") as "{beginning'} ->".
-iPoseProof (DB.store_server with "server update") as "{server} server".
+iPoseProof (DB.db_at_store_at with "server update") as "{server} server".
 iExists beginning. iFrame. by eauto.
 Qed.
 
@@ -849,7 +847,7 @@ iPoseProof (term_meta_agree with "beginning beginning'") as "<-".
 case/Spec.of_list_inj: e_m => e_n <- {t1'}.
 have <- : n = n' by lia.
 iModIntro. iExists n, t1, t2, beginning. do !iSplit => //.
-iPoseProof (DB.server_view_stored_at _ _ _ t1_t2 with "server") as "#stored_at".
+iPoseProof (DB.stored_atI _ _ _ t1_t2 with "server") as "#stored_at".
 by iPoseProof (DB.load_at_stored_at with "stored_at load") as "#?".
 Qed.
 
@@ -923,7 +921,7 @@ have {n' e_n} <- : n = n' by lia.
 iDestruct "status"
   as "(%beginning' & #server & #beginning' & status)".
 iPoseProof (term_meta_agree with "beginning' beginning") as "{beginning'} ->".
-iPoseProof (DB.create_server with "server created") as "{server} server" => //.
+iPoseProof (DB.db_at_create_at with "server created") as "{server} server" => //.
 iExists _. iFrame. by eauto.
 Qed.
 

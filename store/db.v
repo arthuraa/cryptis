@@ -71,6 +71,9 @@ Definition hist_auth k N os : iProp Σ :=
   term_own k (N.@"hist")
     (● to_max_prefix_list os ⋅ ◯ to_max_prefix_list os).
 
+Definition db_version k N n : iProp Σ :=
+  ∃ os, ⌜n = length os⌝ ∗ hist_auth k N os.
+
 Definition hist_frag k N os : iProp Σ :=
   term_own k (N.@"hist")
     (◯ to_max_prefix_list os).
@@ -124,6 +127,21 @@ iMod (term_own_update with "auth") as "auth".
 iDestruct "auth" as "[auth #frag]".
 iModIntro. iSplit => //. by iSplitL.
 Qed.
+
+Definition hist_at k N n os : iProp Σ :=
+  ⌜n = length os⌝ ∗ hist_frag k N os.
+
+Lemma hist_at_agree k N n os1 os2 :
+  hist_at k N n os1 -∗
+  hist_at k N n os2 -∗
+  ⌜os1 = os2⌝.
+Proof.
+iIntros "(-> & #frag1) (%e & #frag2)".
+by iPoseProof (hist_frag_agree with "frag1 frag2") as "->".
+Qed.
+
+Definition db_at k N n db : iProp Σ :=
+  ∃ os, ⌜db = to_db os⌝ ∗ hist_at k N n os.
 
 Definition db_state db : db_stateUR :=
   λ t, ● (Excl' (db !! t)).
@@ -250,26 +268,52 @@ Lemma state_auth_load t1 k N db :
 Proof. by eauto. Qed.
 
 Definition client_view k N n : iProp Σ :=
-  ∃ os,
-    ⌜n = length os⌝ ∗
-    hist_auth k N os ∗
-    state_auth k N (to_db os).
+  db_version k N n ∗
+  ∃ db, db_at k N n db ∗ state_auth k N db.
 
 Definition op_at k N n (o : operation) : iProp Σ :=
-  ∃ os, ⌜n = length os⌝ ∗
-        hist_frag k N (os ++ [o]).
+  ∃ os, hist_at k N (S n) (os ++ [o]).
 
 Lemma op_at_agree k N n o1 o2 :
   op_at k N n o1 -∗
   op_at k N n o2 -∗
   ⌜o1 = o2⌝.
 Proof.
-iIntros "(%os1 & -> & #hist1) (%os2 & %e & #hist2)".
-iPoseProof (hist_frag_agree with "hist1 hist2") as "%e'".
-{ by rewrite !app_length e. }
+iIntros "(%os1 & #hist1) (%os2 & #hist2)".
+iPoseProof (hist_at_agree with "hist1 hist2") as "%e".
 iPureIntro. suff ? : [o1] = [o2] by congruence.
-move/(f_equal (drop (length os1))): e'.
-by rewrite drop_app_length e drop_app_length.
+have e': length os1 = length os2.
+{ move/(f_equal length): e. rewrite !app_length /=. lia. }
+move/(f_equal (drop (length os1))): e.
+by rewrite drop_app_length e' drop_app_length.
+Qed.
+
+Lemma op_at_intro k N n o :
+  db_version k N n ==∗
+  db_version k N (S n) ∗ op_at k N n o.
+Proof.
+iIntros "(%os & -> & auth)".
+iMod (hist_update _ _ _ o with "auth") as "[auth #frag]".
+iModIntro. iSplit.
+- iExists (os ++ [o]). rewrite app_length Nat.add_comm. by iFrame.
+- iExists os. iSplit => //. by rewrite app_length /= Nat.add_comm.
+Qed.
+
+Lemma db_at_op_at k N n db o :
+  db_at k N n db -∗
+  op_at k N n o -∗
+  db_at k N (S n) (op_app db o).
+Proof.
+iIntros "(%os & -> & #hist) (%os' & #hist')".
+iAssert (hist_at k N n os') as "hist''".
+{ iDestruct "hist'" as "(%e_n & hist')".
+  rewrite app_length /= in e_n.
+  iSplit; first by iPureIntro; lia.
+  iApply (hist_frag_prefix_of with "hist'").
+  by exists [o]. }
+iPoseProof (hist_at_agree with "hist hist''") as "{hist''} ->".
+iExists (os' ++ [o]). iSplit => //.
+by rewrite /to_db foldl_app.
 Qed.
 
 Definition store_at k N n t1 t2 : iProp Σ :=
@@ -281,17 +325,12 @@ Definition create_at k N n t1 t2 : iProp Σ :=
 Definition load_at k N n t1 :=
   op_at k N n (Load t1).
 
-Definition server_view k N n db : iProp Σ :=
-  ∃ os, ⌜n = length os⌝ ∗
-        ⌜db = to_db os⌝ ∗
-        hist_frag k N os.
-
 Lemma alloc k N E :
   ↑N ⊆ E →
   term_token k E ==∗
   client_view k N 0 ∗
   free_at k N ⊤ ∗
-  server_view k N 0 ∅ ∗
+  db_at k N 0 ∅ ∗
   term_token k (E ∖ ↑N).
 Proof.
 iIntros "%sub token".
@@ -307,13 +346,13 @@ iMod (term_own_alloc (N.@"state") (db_state ∅ ⋅ db_free ⊤) with "token")
   rewrite -> decide_True; try set_solver.
   rewrite auth_both_valid_discrete Excl_included leibniz_equiv_iff.
   by split. }
-iAssert (hist_frag k N []) as "#frag".
-{ by iDestruct "hist" as "[??]". }
-iModIntro. iSplitR "free token".
-{ iExists []. iSplit; eauto. iSplitL "hist" => //. }
-iSplitL "free"; try iApply "free".
-iSplitR.
-{ iExists []. eauto. }
+iAssert (hist_at k N 0 []) as "#hist_at".
+{ by iDestruct "hist" as "[??]"; do !iSplit => //. }
+iAssert (db_at k N 0 ∅) as "#db_at".
+{ by iExists []; eauto. }
+iAssert (db_version k N 0) with "[hist]" as "auth".
+{ iExists []. by iFrame. }
+iFrame. iModIntro. do !iSplit => //.
 iApply (term_token_drop with "token"). solve_ndisj.
 Qed.
 
@@ -324,30 +363,19 @@ Lemma store_client t2' k N n t1 t2 :
   store_at k N n t1 t2' ∗
   mapsto k N t1 t2'.
 Proof.
-iIntros "(%os & -> & own_os & own_db) own_frag".
-iMod (hist_update _ _ os (Store t1 t2') with "own_os") as "[auth_os #frag_os]".
+iIntros "(own_version & %db & #db & own_db) own_frag".
+iMod (op_at_intro _ _ _ (Store t1 t2') with "own_version")
+  as "[own_version #op_at]".
+iPoseProof (db_at_op_at with "db op_at") as "db'".
 iMod (state_auth_update t2' with "own_db own_frag") as "[Hstate Hmapsto]".
-iModIntro. iSplitL "auth_os Hstate".
-{ iExists (os ++ [Store t1 t2']).
-  rewrite app_length Nat.add_comm /=. iSplit; first by [].
-  iFrame. by rewrite /to_db foldl_app. }
-iFrame.
-{ iExists _; eauto. }
+iModIntro. iFrame. by iSplit => //.
 Qed.
 
-Lemma store_server k N n db t1 t2 :
-  server_view k N n db -∗
+Lemma db_at_store_at k N n db t1 t2 :
+  db_at k N n db -∗
   store_at k N n t1 t2 -∗
-  server_view k N (S n) (<[t1 := t2]>db).
-Proof.
-iIntros "(%os & -> & -> & #frag) (%os' & %lengthE & #frag')".
-iPoseProof (hist_frag_agree _ _ lengthE with "frag []") as "->".
-{ iApply (hist_frag_prefix_of with "frag'").
-  by exists [Store t1 t2]. }
-iExists (os ++ [Store t1 t2]). rewrite app_length Nat.add_comm /=.
-do 2!iSplit => //.
-by rewrite /to_db foldl_app.
-Qed.
+  db_at k N (S n) (<[t1 := t2]>db).
+Proof. iApply db_at_op_at. Qed.
 
 Lemma create_client t1 t2 k N n :
   client_view k N n -∗
@@ -356,28 +384,22 @@ Lemma create_client t1 t2 k N n :
   client_view k N (S n) ∗
   mapsto k N t1 t2.
 Proof.
-iIntros "(%os & -> & hist & state) Hfree".
-iMod (hist_update _ _ _ (Create t1 t2) with "hist") as "[hist_auth #hist_frag]".
+iIntros "(version & %db & #db_at & state) Hfree".
+iMod (op_at_intro _ _ _ (Create t1 t2) with "version") as "[version #op_at]".
 iMod (state_auth_create t1 t2 with "state Hfree") as "[state mapsto]".
-have ->: op_app (to_db os) (Create t1 t2) = to_db (os ++ [Create t1 t2]).
-{ by rewrite /to_db foldl_app. }
-iModIntro. iFrame. iSplitR; first by iExists os; eauto.
-by rewrite app_length Nat.add_comm.
+iModIntro. iFrame. iSplit => //.
+by iApply db_at_op_at.
 Qed.
 
-Lemma create_server k N n db t1 t2 :
+Lemma db_at_create_at k N n db t1 t2 :
   db !! t1 = None →
-  server_view k N n db -∗
+  db_at k N n db -∗
   create_at k N n t1 t2 -∗
-  server_view k N (S n) (<[t1 := t2]>db).
+  db_at k N (S n) (<[t1 := t2]>db).
 Proof.
-iIntros "%db_t1 (%os & -> & -> & #frag) (%os' & %lengthE & #frag')".
-iAssert (hist_frag k N os') as "#frag''".
-{ iApply (hist_frag_prefix_of with "frag'").
-  by exists [Create t1 t2]. }
-iPoseProof (hist_frag_agree with "frag frag''") as "->" => //.
-iExists (os ++ [Create t1 t2]). rewrite app_length Nat.add_comm.
-do 2!iSplit => //. iPureIntro. by rewrite /to_db foldl_app /= db_t1.
+iIntros "%db_t1 #db #op".
+iPoseProof (db_at_op_at with "db op") as "db'".
+by rewrite /= db_t1.
 Qed.
 
 Lemma load_client t1 k N n :
@@ -385,33 +407,39 @@ Lemma load_client t1 k N n :
   load_at k N n t1 ∗
   client_view k N (S n).
 Proof.
-iIntros "(%os & -> & hist & state)".
-iMod (hist_update _ _ _ (Load t1) with "hist") as "[hist_auth #hist_frag]".
-iMod (state_auth_load t1 with "state") as "state".
-have ->: op_app (to_db os) (Load t1) = to_db (os ++ [Load t1]).
-{ by rewrite /to_db foldl_app. }
-iModIntro. iFrame. iSplitR; first by iExists os; eauto.
-by rewrite app_length Nat.add_comm.
+iIntros "(version & %db & #db & state)".
+iMod (op_at_intro _ _ _ (Load t1) with "version") as "[version #op]".
+iFrame. iModIntro. iSplit=> //. iApply (db_at_op_at with "db op").
 Qed.
 
 Definition stored_at k N n t1 t2 : iProp Σ :=
-  ∃ os, ⌜n = length os⌝ ∗
-        hist_frag k N os ∗
-        ⌜to_db os !! t1 = Some t2⌝.
+  ∃ db, db_at k N n db ∗ ⌜db !! t1 = Some t2⌝.
 
 Lemma load_at_stored_at k N n t1 t2 t1' :
   stored_at k N n t1 t2 -∗
   load_at k N n t1' -∗
   stored_at k N (S n) t1 t2.
 Proof.
-iIntros "(%os & -> & #hist & %t1_t2) (%os' & %e & #hist')".
-iAssert (⌜os' = os⌝)%I as "->".
-{ iApply (hist_frag_agree with "hist") => //.
-  iApply (hist_frag_prefix_of with "hist'").
-  by exists [Load t1']. }
-iExists (os ++ [Load t1']).
-rewrite app_length /= Nat.add_comm. do !iSplit => //.
-iPureIntro. by rewrite /to_db foldl_app /=.
+iIntros "(%db & #db & %db_t1) #load".
+iExists db. iSplit => //. iApply (db_at_op_at with "db load").
+Qed.
+
+Lemma db_at_agree k N n db1 db2 :
+  db_at k N n db1 -∗
+  db_at k N n db2 -∗
+  ⌜db1 = db2⌝.
+Proof.
+iIntros "(%os1 & -> & #hist1) (%os2 & -> & #hist2)".
+by iPoseProof (hist_at_agree with "hist1 hist2") as "->".
+Qed.
+
+Lemma db_at_stored_at k N n db t1 t2 :
+  db_at k N n db -∗
+  stored_at k N n t1 t2 -∗
+  ⌜db !! t1 = Some t2⌝.
+Proof.
+iIntros "#db1 (%db' & #db2 & %db_t1)".
+by iPoseProof (db_at_agree with "db1 db2") as "->".
 Qed.
 
 Lemma client_view_stored_at k N n t1 t2 t2' :
@@ -420,34 +448,25 @@ Lemma client_view_stored_at k N n t1 t2 t2' :
   stored_at k N n t1 t2' -∗
   ⌜t2' = t2⌝.
 Proof.
-iIntros "(%os & -> & hist & state) t1_t2 (%os' & %lengthE & #Hfrag & %os_t1)".
-iPoseProof (hist_auth_frag with "hist") as "#Hfrag'".
-iPoseProof (hist_frag_agree with "Hfrag Hfrag'") as "->" => //.
-iPoseProof (state_auth_mapsto with "state t1_t2") as "%os_t1'".
-iPureIntro. rewrite os_t1 in os_t1'. by case: os_t1' => ->.
+iIntros "(version & %db & #db & state) t1_t2 #stored".
+iPoseProof (state_auth_mapsto with "state t1_t2") as "%db_t1".
+iPoseProof (db_at_stored_at with "db stored") as "%db_t1'".
+iPureIntro. rewrite db_t1 in db_t1'. by case: db_t1' => ->.
 Qed.
 
-Lemma server_view_stored_at k N n db t1 t2 :
+Lemma stored_atI k N n db t1 t2 :
   db !! t1 = Some t2 →
-  server_view k N n db -∗
+  db_at k N n db -∗
   stored_at k N n t1 t2.
-Proof.
-iIntros "%db_t1 (%os & -> & -> & view)".
-iExists os; eauto.
-Qed.
+Proof. iIntros "%db_t1 #db_at". iExists db; eauto. Qed.
 
-Lemma client_view_server_view k N n :
-  client_view k N n -∗ ∃ db,
-  server_view k N n db.
-Proof.
-iIntros "(%os & %e_n & hist_auth & _)".
-iPoseProof (DB.hist_auth_frag with "hist_auth") as "#hist_frag".
-iExists _, os. do !iSplit => //.
-Qed.
+Lemma client_view_db_at k N n :
+  client_view k N n -∗ ∃ db, db_at k N n db.
+Proof. iIntros "(_ & %db & #db & _)". eauto. Qed.
 
-Lemma server_view_to_0 k N n db :
-  server_view k N n db -∗
-  server_view k N 0 ∅.
+Lemma db_at_to_0 k N n db :
+  db_at k N n db -∗
+  db_at k N 0 ∅.
 Proof.
 iIntros "(%os & %e_n & %e_db & hist_frag)".
 iExists [].
@@ -456,12 +475,10 @@ iApply (DB.hist_frag_prefix_of with "hist_frag").
 by exists os.
 Qed.
 
-Lemma server_view_0 k N db :
-  server_view k N 0 db -∗
-  ⌜db = ∅⌝.
+Lemma db_at_0 k N db : db_at k N 0 db -∗ ⌜db = ∅⌝.
 Proof.
-iIntros "(%os & %e_os & -> & #hist_frag)".
-case: os => // in e_os *.
+iIntros "#db". iPoseProof (db_at_to_0 with "db") as "db'".
+by iApply db_at_agree.
 Qed.
 
 End DB.
