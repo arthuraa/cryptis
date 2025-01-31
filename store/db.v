@@ -143,7 +143,7 @@ Qed.
 Definition db_at k N n db : iProp Σ :=
   ∃ os, ⌜db = to_db os⌝ ∗ hist_at k N n os.
 
-Definition db_state db : db_stateUR :=
+Definition to_db_state db : db_stateUR :=
   λ t, ● (Excl' (db !! t)).
 
 Definition db_singleton t1 t2 : db_stateUR :=
@@ -167,12 +167,12 @@ rewrite decide_False //; set_solver.
 Qed.
 
 Lemma db_update db t1 t2 t2' :
-  db_state db ⋅ db_singleton t1 t2 ~~>
-  db_state (<[t1 := t2']> db) ⋅ db_singleton t1 t2'.
+  to_db_state db ⋅ db_singleton t1 t2 ~~>
+  to_db_state (<[t1 := t2']> db) ⋅ db_singleton t1 t2'.
 Proof.
 apply/cmra_discrete_total_update=> db' valid t.
 move/(_ t): valid.
-rewrite !discrete_fun_lookup_op /db_state /db_singleton.
+rewrite !discrete_fun_lookup_op /to_db_state /db_singleton.
 case: (decide (t = t1)) => [-> {t}|t_t1]; last first.
 { rewrite lookup_insert_ne // !discrete_fun_lookup_singleton_ne //. }
 rewrite lookup_insert !discrete_fun_lookup_singleton //=.
@@ -184,12 +184,12 @@ apply (transitivity (y := (None, None))).
 Qed.
 
 Lemma db_alloc db t1 t2 :
-  db_state db ⋅ db_free {[t1]} ~~>
-  db_state (<[t1 := t2]> db) ⋅ db_singleton t1 t2.
+  to_db_state db ⋅ db_free {[t1]} ~~>
+  to_db_state (<[t1 := t2]> db) ⋅ db_singleton t1 t2.
 Proof.
 apply/cmra_discrete_total_update=> db' valid t.
 move/(_ t): valid.
-rewrite !discrete_fun_lookup_op /db_state /db_free /db_singleton.
+rewrite !discrete_fun_lookup_op /to_db_state /db_free /db_singleton.
 case: (decide (t = t1)) => [-> {t}|t_t1]; last first.
 { rewrite lookup_insert_ne // !discrete_fun_lookup_singleton_ne //.
   rewrite decide_False //; set_solver. }
@@ -201,8 +201,8 @@ apply: option_local_update.
 by apply: exclusive_local_update.
 Qed.
 
-Definition state_auth k N db : iProp Σ :=
-  term_own k (N.@"state") (db_state db).
+Definition db_state k N db : iProp Σ :=
+  term_own k (N.@"state") (to_db_state db).
 
 Definition mapsto k N t1 t2 : iProp Σ :=
   term_own k (N.@"state") (db_singleton t1 t2).
@@ -217,8 +217,8 @@ Proof.
 move=> sub. by rewrite /free_at db_free_diff // term_own_op.
 Qed.
 
-Lemma state_auth_mapsto k N db t1 t2 :
-  state_auth k N db -∗
+Lemma db_state_mapsto k N db t1 t2 :
+  db_state k N db -∗
   mapsto k N t1 t2 -∗
   ⌜db !! t1 = Some t2⌝.
 Proof.
@@ -231,10 +231,10 @@ case => incl _.
 by move/Excl_included/leibniz_equiv_iff: incl => <-.
 Qed.
 
-Lemma state_auth_update t2' k N db t1 t2 :
-  state_auth k N db -∗
+Lemma db_state_update t2' k N db t1 t2 :
+  db_state k N db -∗
   mapsto k N t1 t2 ==∗
-  state_auth k N (<[t1 := t2']>db) ∗
+  db_state k N (<[t1 := t2']>db) ∗
   mapsto k N t1 t2'.
 Proof.
 iIntros "Hauth Hfrag".
@@ -244,10 +244,10 @@ iDestruct "own" as "[Hauth Hfrag]".
 iModIntro. iSplitL "Hauth" => //.
 Qed.
 
-Lemma state_auth_create t1 t2 k N db :
-  state_auth k N db -∗
+Lemma db_state_create t1 t2 k N db :
+  db_state k N db -∗
   free_at k N {[t1]} ==∗
-  state_auth k N (op_app db (Create t1 t2)) ∗
+  db_state k N (op_app db (Create t1 t2)) ∗
   mapsto k N t1 t2.
 Proof.
 iIntros "Hauth Hfree". rewrite /=.
@@ -262,14 +262,14 @@ iMod (term_own_update_2 _ _ (a' := (_ ⋅ _)) with "Hauth Hfree") as "[Hauth Hfr
 iModIntro. iSplitL "Hauth" => //.
 Qed.
 
-Lemma state_auth_load t1 k N db :
-  state_auth k N db ==∗
-  state_auth k N (op_app db (Load t1)).
+Lemma db_state_load t1 k N db :
+  db_state k N db ==∗
+  db_state k N (op_app db (Load t1)).
 Proof. by eauto. Qed.
 
 Definition client_view k N n : iProp Σ :=
   db_version k N n ∗
-  ∃ db, db_at k N n db ∗ state_auth k N db.
+  ∃ db, db_at k N n db ∗ db_state k N db.
 
 Definition op_at k N n (o : operation) : iProp Σ :=
   ∃ os, hist_at k N (S n) (os ++ [o]).
@@ -339,9 +339,9 @@ iMod (term_own_alloc (N.@"hist")
   as "[hist token]"; try solve_ndisj.
 { apply/auth_both_valid_discrete. split; eauto.
   exact/to_max_prefix_list_valid. }
-iMod (term_own_alloc (N.@"state") (db_state ∅ ⋅ db_free ⊤) with "token")
+iMod (term_own_alloc (N.@"state") (to_db_state ∅ ⋅ db_free ⊤) with "token")
   as "[[state free] token]"; try solve_ndisj.
-{ rewrite /db_state /db_free => t /=.
+{ rewrite /to_db_state /db_free => t /=.
   rewrite discrete_fun_lookup_op lookup_empty /=.
   rewrite -> decide_True; try set_solver.
   rewrite auth_both_valid_discrete Excl_included leibniz_equiv_iff.
@@ -367,7 +367,7 @@ iIntros "(own_version & %db & #db & own_db) own_frag".
 iMod (op_at_intro _ _ _ (Store t1 t2') with "own_version")
   as "[own_version #op_at]".
 iPoseProof (db_at_op_at with "db op_at") as "db'".
-iMod (state_auth_update t2' with "own_db own_frag") as "[Hstate Hmapsto]".
+iMod (db_state_update t2' with "own_db own_frag") as "[Hstate Hmapsto]".
 iModIntro. iFrame. by iSplit => //.
 Qed.
 
@@ -386,7 +386,7 @@ Lemma create_client t1 t2 k N n :
 Proof.
 iIntros "(version & %db & #db_at & state) Hfree".
 iMod (op_at_intro _ _ _ (Create t1 t2) with "version") as "[version #op_at]".
-iMod (state_auth_create t1 t2 with "state Hfree") as "[state mapsto]".
+iMod (db_state_create t1 t2 with "state Hfree") as "[state mapsto]".
 iModIntro. iFrame. iSplit => //.
 by iApply db_at_op_at.
 Qed.
@@ -449,7 +449,7 @@ Lemma client_view_stored_at k N n t1 t2 t2' :
   ⌜t2' = t2⌝.
 Proof.
 iIntros "(version & %db & #db & state) t1_t2 #stored".
-iPoseProof (state_auth_mapsto with "state t1_t2") as "%db_t1".
+iPoseProof (db_state_mapsto with "state t1_t2") as "%db_t1".
 iPoseProof (db_at_stored_at with "db stored") as "%db_t1'".
 iPureIntro. rewrite db_t1 in db_t1'. by case: db_t1' => ->.
 Qed.
