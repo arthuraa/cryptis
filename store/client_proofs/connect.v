@@ -50,11 +50,9 @@ wp_apply (wp_connection_connect with "[//] [//] [//] [] []") => //.
 iIntros "%cs (#sess & ts & % & % & %e_rl & rel & token)".
 iDestruct "client" as "(%beginning & client)".
 iMod (client_connectingI with "[//] [$] sess token client")
-  as "{sess} (client & #conn & #ready)" => //; try solve_ndisj.
+  as "{sess} (client & #conn & #beginning & #ready)" => //; try solve_ndisj.
 subst kI kR.
-iPoseProof (init_predI _ _ (TInt 0) with "client []") as "#?".
-{ iApply (session_failed_for_orE with "ready").
-  iIntros "[??]". by eauto. }
+iPoseProof (init_predI _ _ (TInt 0) with "client []") as "#?" => //.
 wp_pures. wp_bind (Connection.send _ _ _ _).
 iApply (wp_connection_send with "[//] [] [] [] conn") => //.
 { by rewrite public_TInt. }

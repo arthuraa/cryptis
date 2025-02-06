@@ -384,29 +384,29 @@ Definition client_connected_int cs n beginning : iProp :=
   let kR := si_resp cs in
   DB.client_view kI (dbCN kR.@"state") (n + beginning) ∗
   server_status_ready kI kR ∗
-  session_failed_or cs (
-    term_meta  (si_init_share cs) (isoN.@"beginning") beginning ∗
-    term_token (si_init_share cs) (↑isoN.@"end") ∗
-    term_token (si_init_share cs) (↑isoN.@"ending")).
+  term_meta  (si_init_share cs) (isoN.@"beginning") beginning ∗
+  term_token (si_init_share cs) (↑isoN.@"end") ∗
+  term_token (si_init_share cs) (↑isoN.@"ending") ∗
+  session_failed_or cs True.
 
 Definition client_connecting_int cs beginning : iProp :=
   let kI := si_init cs in
   let kR := si_resp cs in
   DB.client_view kI (dbCN kR.@"state") beginning ∗
   server_status_ready kI kR ∗
-  session_failed_for_or cs Init (
-    term_meta  (si_init_share cs) (isoN.@"beginning") beginning ∗
-    term_token (si_init_share cs) (↑isoN.@"end") ∗
-    term_token (si_init_share cs) (↑isoN.@"ending")).
+  term_meta  (si_init_share cs) (isoN.@"beginning") beginning ∗
+  term_token (si_init_share cs) (↑isoN.@"end") ∗
+  term_token (si_init_share cs) (↑isoN.@"ending") ∗
+  session_failed_for_or cs Init True.
 
 Definition client_disconnecting_int cs n beginning : iProp :=
   let kI := si_init cs in
   let kR := si_resp cs in
   DB.client_view kI (dbCN kR.@"state") (n + beginning) ∗
   server_status_ready kI kR ∗
-  session_failed_or cs (
-    term_token (si_init_share cs) (↑isoN.@"end") ∗
-    term_meta  (si_init_share cs) (isoN.@"ending") (n + beginning)).
+  term_token (si_init_share cs) (↑isoN.@"end") ∗
+  term_meta  (si_init_share cs) (isoN.@"ending") (n + beginning) ∗
+  session_failed_or cs True.
 
 Definition conn_ready si n :=
   escrow (nroot.@"db")
@@ -426,9 +426,8 @@ Lemma client_connectingI E kI kR cs beginning :
   client_disconnected_int kI kR beginning ={E}=∗
   client_connecting_int cs beginning ∗
   wf_conn_state cs ∗
-  session_failed_for_or cs Init (
-    term_meta (si_init_share cs) (isoN.@"beginning") beginning ∗
-    conn_ready cs beginning).
+  term_meta (si_init_share cs) (isoN.@"beginning") beginning ∗
+  session_failed_for_or cs Init (conn_ready cs beginning).
 Proof.
 move=> ? ? <- <- e_rl {kI kR}.
 iIntros "#? [c1 c2] #sess token client".
@@ -444,17 +443,15 @@ iMod (term_meta_set' (N:=isoN.@"beginning") beginning with "token")
 iPoseProof (session_failed_for_or_True with "status") as "#failed".
 iSplitL "client_view token".
 { rewrite /client_connecting_int. iFrame.
-  iModIntro. do !iSplit => //.
-  iApply (session_failed_for_orE with "failed").
-  iIntros "_". iLeft. rewrite e_sh.
+  rewrite e_sh. iModIntro. do !iSplit => //.
   rewrite (term_token_difference _ (↑isoN.@"end")); try solve_ndisj.
   iDestruct "token" as "[token' token]". iFrame "token'".
   iSplit => //.
   iApply (term_token_drop with "token"). solve_ndisj. }
-iSplitR => //.
+iSplitR => //. iSplitR => //.
 iApply session_failed_for_or_fupd.
 iApply (session_failed_for_orE with "status").
-iIntros "status". iLeft. iSplitR => //.
+iIntros "status". iLeft.
 iApply (escrowI with "status").
 iApply term_token_switch.
 Qed.
@@ -466,12 +463,11 @@ Lemma client_connected_intI cs beginning E :
   ▷ client_connected_int cs 0 beginning.
 Proof.
 move=> sub.
-iIntros "(client & #server & conn) #status".
+iIntros "(client & #server & #? & ? & ? & #conn) #status".
 iFrame. do !iSplitR => //.
 rewrite -session_failed_or_later -session_failed_or_fupd.
 iPoseProof (session_failed_orI with "conn status") as "{status} status".
-iApply (session_failed_orE with "status").
-iIntros "[conn #accepted]". iLeft. by eauto.
+iApply (session_failed_orE with "status"). by eauto.
 Qed.
 
 Definition client_connected kI kR cs : iProp := ∃ n beginning,
@@ -489,7 +485,7 @@ Lemma client_connected_ok kI kR cs :
   ◇ session_ok cs.
 Proof.
 iIntros "(%n & %beginning & <- & <- & % & #conn & rel & ts & client) post".
-iDestruct "client" as "(client & #ready & status)".
+iDestruct "client" as "(client & #ready & #? & ? & ? & #status)".
 by iMod (session_okI with "status post") as "#ok".
 Qed.
 
@@ -683,13 +679,13 @@ Lemma init_predI cs beginning m :
   session_failed_for_or cs Init (conn_ready cs beginning) -∗
   □ (session_failed_for_or cs Resp True → session_failed_or cs (init_pred cs m)).
 Proof.
-iIntros "(client & #server & status) ready".
+iIntros "(client & #server & #? & ? & ? & #status) ready".
 iAssert (□ session_failed_for_or cs Init (init_pred cs m))%I as "#p_m".
 { rewrite -session_failed_for_or_box.
   iApply (session_failed_for_orE with "ready").
   iIntros "#ready". iRight.
   iApply (session_failed_for_orE with "status").
-  iIntros "(#? & ? & ?)".
+  iIntros "_".
   iPoseProof (DB.client_view_db_at with "client") as "(%db & #db_at)".
   iPoseProof (DB.db_at_to_0 with "db_at") as "#db_at0".
   iLeft. iModIntro. iExists _. by eauto 10. }
@@ -745,8 +741,8 @@ Lemma ack_init_predE cs m beginning E :
   ▷ client_connected_int cs 0 beginning.
 Proof.
 iIntros "%sub".
-iIntros "(client & #server & conn) m".
-iPoseProof (session_failed_orI' with "conn m") as "[conn m]".
+iIntros "(client & #server & #? & ? & ? & #conn) m".
+iPoseProof (session_failed_orI' with "conn m") as "{conn} [conn m]".
 iFrame. by eauto.
 Qed.
 
@@ -760,10 +756,10 @@ Lemma store_predI cs n beginning t1 t2 :
   DB.store_at (si_init cs) (dbCN (si_resp cs).@"state") (n + beginning) t1 t2 -∗
   □ session_failed_or cs (store_pred cs (Spec.of_list [TInt n; t1; t2])).
 Proof.
-iIntros "(client & #server & conn) #update".
+iIntros "(client & #server & #? & _ & _ & #conn) #update".
 iApply session_failed_or_box.
 iApply (session_failed_orE with "conn").
-iIntros "(#? & _)". iLeft. iModIntro. iExists _. by eauto 10.
+iIntros "_". iLeft. iModIntro. iExists _. by eauto 10.
 Qed.
 
 Lemma store_predE cs n db t1 t2 :
@@ -806,15 +802,12 @@ Lemma load_predI cs n beginning t1 :
   DB.load_at (si_init cs) (dbCN (si_resp cs).@"state") (n + beginning) t1 ∗
   □ session_failed_or cs (load_pred cs (Spec.of_list [TInt n; t1])).
 Proof.
-iIntros "(view & ? & H)".
+iIntros "(view & ? & #? & ? & ? & #H)".
 rewrite session_failed_or_box.
 iMod (DB.load_client t1 with "view") as "[#load view]".
-set P := term_meta _ _ beginning.
-iAssert (session_failed_or cs P) as "#beginning".
-{ rewrite -session_failed_or_sep. by iDestruct "H" as "[??]". }
-iFrame. iModIntro. iSplit => //.
-iApply (session_failed_orE with "beginning").
-iIntros "#?". iLeft. iModIntro. iExists n, t1, beginning.
+iFrame. iModIntro. do !iSplit => //.
+iApply (session_failed_orE with "H").
+iIntros "_". iLeft. iModIntro. iExists n, t1, beginning.
 by eauto.
 Qed.
 
@@ -860,15 +853,15 @@ Lemma ack_loadE cs n beginning t1 t2 t2' :
   session_failed_or cs (ack_load_pred cs m) -∗
   public t2' ∗ (session_failed_or cs ⌜t2' = t2⌝).
 Proof.
-iIntros "%m (client & #server & conn) #load_at mapsto #p_m inv_m".
+iIntros "%m (client & #server & #beginning & ? & ? & #conn)".
+iIntros "#load_at mapsto #p_m inv_m".
 rewrite public_of_list /=.
 iDestruct "p_m" as "(_ & p_t2' & _)".
 iSplit => //.
 iApply (session_failed_orE with "inv_m"). iIntros "#inv_m". iRight.
 iDestruct "inv_m"
   as "#(%n' & %t1' & %t2'' & %beginning' & %e & beginning' & load_at' & stored)".
-iApply (session_failed_orE with "conn"). iIntros "conn". iLeft.
-iDestruct "conn" as "(#beginning & ?)".
+iApply (session_failed_orE with "conn"). iIntros "_". iLeft.
 iPoseProof (term_meta_agree with "beginning' beginning") as "{beginning'} ->".
 case/Spec.of_list_inj: e => e_n <- {t2''}.
 have {n' e_n} <-: n = n' by lia.
@@ -889,10 +882,9 @@ Lemma create_predI cs n t1 t2 beginning :
   DB.create_at (si_init cs) (dbCN (si_resp cs).@"state") (n + beginning) t1 t2 -∗
   □ session_failed_or cs (create_pred cs (Spec.of_list [TInt n; t1; t2])).
 Proof.
-iIntros "(client & #server & conn) #p_t1 #p_t2 #create".
+iIntros "(client & #server & #? & ? & ? & #conn) #p_t1 #p_t2 #create".
 iApply session_failed_or_box.
-iApply (session_failed_orE with "conn"). iIntros "conn". iLeft.
-iDestruct "conn" as "(#? & ? & ?)".
+iApply (session_failed_orE with "conn"). iIntros "_". iLeft.
 iModIntro.
 iExists n, t1, t2, beginning.
 by eauto 10.
@@ -938,17 +930,15 @@ Lemma close_predI cs beginning n E :
   client_disconnecting_int cs n beginning ∗
   □ session_failed_or cs (close_pred cs (TInt n)).
 Proof.
-iIntros "%sub (client & #server & conn)".
+iIntros "%sub (client & #server & #? & end & ending & #conn)".
 rewrite session_failed_or_box /client_disconnecting_int.
 iFrame. rewrite -!bi.sep_assoc. iSplitR => //.
-rewrite session_failed_or_sep -session_failed_or_fupd.
-iApply (session_failed_orE with "conn"). iIntros "conn". iLeft.
-iDestruct "conn" as "(#beginning & end & ending)".
 iMod (term_meta_set (isoN.@"ending") (n + beginning) with "ending")
   as "#ending" => //.
-iSplitL.
-{ iFrame. iModIntro. by eauto. }
-iIntros "!>". iExists n, beginning.
+iSplitR => //.
+rewrite session_failed_or_sep -session_failed_or_fupd.
+iApply (session_failed_orE with "conn"). iIntros "_". iLeft.
+iIntros "!>". iSplit => //. iExists n, beginning.
 by eauto 10.
 Qed.
 
@@ -1008,12 +998,12 @@ Lemma ack_close_predE cs m n beginning E :
   session_failed_or cs (ack_close_pred cs m) ={E}=∗
   ▷ client_disconnected_int (si_init cs) (si_resp cs) (n + beginning).
 Proof.
-iIntros "%sub (client & #server & conn) p_m".
+iIntros "%sub (client & #server & end & #ending & #conn) p_m".
 rewrite /client_disconnected_int. iFrame.
 iSplitR => //.
 rewrite -(session_failed_or_failure cs) -session_failed_or_later.
 rewrite -session_failed_or_fupd.
-iApply (session_failed_orE with "conn"). iIntros "[end ending]". iRight.
+iApply (session_failed_orE with "conn"). iIntros "_". iRight.
 iApply (session_failed_orE with "p_m"). iIntros "p_m". iLeft.
 iDestruct "p_m" as "(%ending & #ending' & #closed)".
 iPoseProof (term_meta_agree with "ending' ending") as "{ending'} ->".
