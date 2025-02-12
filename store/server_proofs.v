@@ -136,7 +136,7 @@ case accounts_kI: (accounts !! TKey Open kI) => [scs|]; wp_pures.
   { by apply: EP; rewrite elem_of_dom accounts_kI. }
   rewrite (term_token_difference _ (↑dbSN kI)) //.
   iDestruct "token" as "[token_kI token]".
-  iAssert (db_not_signed_up kI (ss_key ss))
+  iAssert (never_connected kI (ss_key ss))
     with "[token_kI]" as "not_signed_up".
   { by iFrame. }
   wp_bind (SAList.new #()).
