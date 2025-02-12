@@ -140,7 +140,16 @@ iIntros "(-> & #frag1) (%e & #frag2)".
 by iPoseProof (hist_frag_agree with "frag1 frag2") as "->".
 Qed.
 
+Lemma hist_at0 k N os :
+  hist_at k N 0 os -∗
+  ⌜os = []⌝.
+Proof.
+iIntros "(%e_len & #frag)".
+by case: os => [|??] in e_len *.
+Qed.
+
 Definition db_at k N n db : iProp Σ :=
+  ⌜n = 0⌝ ∗ ⌜db = ∅⌝ ∨
   ∃ os, ⌜db = to_db os⌝ ∗ hist_at k N n os.
 
 Definition to_db_state db : db_stateUR :=
@@ -304,15 +313,18 @@ Lemma db_at_op_at k N n db o :
   op_at k N n o -∗
   db_at k N (S n) (op_app db o).
 Proof.
-iIntros "(%os & -> & #hist) (%os' & #hist')".
+iIntros "#db_at (%os' & #hist')".
 iAssert (hist_at k N n os') as "hist''".
 { iDestruct "hist'" as "(%e_n & hist')".
   rewrite app_length /= in e_n.
   iSplit; first by iPureIntro; lia.
   iApply (hist_frag_prefix_of with "hist'").
   by exists [o]. }
+iDestruct "db_at" as "[[-> ->]|(%os & -> & #hist)]".
+{ iPoseProof (hist_at0 with "hist''") as "->".
+  iRight. iExists [o]. rewrite /to_db /=. by eauto. }
 iPoseProof (hist_at_agree with "hist hist''") as "{hist''} ->".
-iExists (os' ++ [o]). iSplit => //.
+iRight. iExists (os' ++ [o]). iSplit => //.
 by rewrite /to_db foldl_app.
 Qed.
 
@@ -349,7 +361,7 @@ iMod (term_own_alloc (N.@"state") (to_db_state ∅ ⋅ db_free ⊤) with "token"
 iAssert (hist_at k N 0 []) as "#hist_at".
 { by iDestruct "hist" as "[??]"; do !iSplit => //. }
 iAssert (db_at k N 0 ∅) as "#db_at".
-{ by iExists []; eauto. }
+{ by iLeft. }
 iAssert (db_version k N 0) with "[hist]" as "auth".
 { iExists []. by iFrame. }
 iFrame. iModIntro. do !iSplit => //.
@@ -424,12 +436,26 @@ iIntros "(%db & #db & %db_t1) #load".
 iExists db. iSplit => //. iApply (db_at_op_at with "db load").
 Qed.
 
+Lemma db_at0 k N db :
+  db_at k N 0 db -∗
+  ⌜db = ∅⌝.
+Proof.
+iIntros "[[_ ->]|(%os & -> & #hist)]" => //.
+by iPoseProof (hist_at0 with "hist") as "->".
+Qed.
+
 Lemma db_at_agree k N n db1 db2 :
   db_at k N n db1 -∗
   db_at k N n db2 -∗
   ⌜db1 = db2⌝.
 Proof.
-iIntros "(%os1 & -> & #hist1) (%os2 & -> & #hist2)".
+iIntros "#db_at1 #db_at2".
+iPoseProof "db_at1" as "[[-> ->]|db_at1']".
+{ by iPoseProof (db_at0 with "db_at2") as "->". }
+iPoseProof "db_at2" as "[[-> ->]|db_at2']".
+{ by iPoseProof (db_at0 with "db_at1") as "->". }
+iDestruct "db_at1'" as "(%os1 & -> & #hist1)".
+iDestruct "db_at2'" as "(%os2 & -> & #hist2)".
 by iPoseProof (hist_at_agree with "hist1 hist2") as "->".
 Qed.
 
@@ -468,17 +494,7 @@ Lemma db_at_to_0 k N n db :
   db_at k N n db -∗
   db_at k N 0 ∅.
 Proof.
-iIntros "(%os & %e_n & %e_db & hist_frag)".
-iExists [].
-do !iSplit => //.
-iApply (DB.hist_frag_prefix_of with "hist_frag").
-by exists os.
-Qed.
-
-Lemma db_at_0 k N db : db_at k N 0 db -∗ ⌜db = ∅⌝.
-Proof.
-iIntros "#db". iPoseProof (db_at_to_0 with "db") as "db'".
-by iApply db_at_agree.
+iIntros "_". by iLeft.
 Qed.
 
 End DB.

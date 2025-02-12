@@ -670,7 +670,6 @@ Definition session_msg_pred (Q : sess_info → term → iProp) rl kS m : iProp :
 
 Definition init_pred si t : iProp := ∃ (beginning : nat),
   server_status_ready (si_init si) (si_resp si) ∗
-  DB.db_at (si_init si) (dbCN (si_resp si).@"state") 0 ∅ ∗
   term_meta (si_init_share si) (isoN.@"beginning") beginning ∗
   conn_ready si beginning.
 
@@ -685,10 +684,7 @@ iAssert (□ session_failed_for_or cs Init (init_pred cs m))%I as "#p_m".
   iApply (session_failed_for_orE with "ready").
   iIntros "#ready". iRight.
   iApply (session_failed_for_orE with "status").
-  iIntros "_".
-  iPoseProof (DB.client_view_db_at with "client") as "(%db & #db_at)".
-  iPoseProof (DB.db_at_to_0 with "db_at") as "#db_at0".
-  iLeft. iModIntro. iExists _. by eauto 10. }
+  iIntros "_". iLeft. iModIntro. iExists _. by eauto 10. }
 iIntros "!> #failed".
 iPoseProof (session_failed_orI with "p_m failed") as "#res".
 iApply (session_failed_orE with "res"). iIntros "[? _]". by eauto.
@@ -715,19 +711,20 @@ iRight.
 iApply (session_failed_orE with "status"). iIntros "status".
 iLeft.
 iDestruct "p_m"
-  as "(%n & #server & #server_view & #beginning & #conn_ready)".
+  as "(%n & #server & #beginning & #conn_ready)".
 iMod (escrowE with "conn_ready not_started") as ">statusI" => //.
-iAssert (|={⊤}▷=> DB.db_at (si_init cs) (dbCN (si_resp cs).@"state") n db ∗
-                    db_clock (si_init cs) (si_resp cs) n ∗
-                    db_clock (si_init cs) (si_resp cs) n)%I
+iAssert (|={⊤}▷=>
+           DB.db_at (si_init cs) (dbCN (si_resp cs).@"state") n db ∗
+           db_clock (si_init cs) (si_resp cs) n ∗
+           db_clock (si_init cs) (si_resp cs) n)%I
   with "[status statusI]" as ">status".
 { iDestruct "status" as "[[-> fresh]|status]"; last first.
   { iDestruct "status" as "(%n' & #server_view' & status)".
     iPoseProof (db_clock_agree with "status statusI") as "->".
     iIntros "!> !> !>". by iFrame. }
   iMod (escrowE with "server fresh") as ">status" => //.
-  iPoseProof (db_clock_agree with "status statusI") as "->".
-  iIntros "!> !> !>".  by iFrame. }
+  iPoseProof (db_clock_agree with "status statusI") as "<-".
+  iIntros "!> !> !>".  iFrame. by iLeft. }
 iIntros "!> !>". iMod "status" as "(#? & status)".
 iModIntro. iSplit.
 { iFrame. do 2!iSplit => //. }
