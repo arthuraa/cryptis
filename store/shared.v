@@ -399,14 +399,17 @@ Definition client_connecting_int cs beginning : iProp :=
   term_token (si_init_share cs) (↑isoN.@"ending") ∗
   session_failed_for_or cs Init True.
 
-Definition client_disconnecting_int cs n beginning : iProp :=
+Definition client_disconnecting cs n : iProp :=
   let kI := si_init cs in
   let kR := si_resp cs in
-  DB.client_view kI (dbCN kR.@"state") (n + beginning) ∗
   server_clock_ready kI kR ∗
   term_token (si_init_share cs) (↑isoN.@"end") ∗
-  term_meta  (si_init_share cs) (isoN.@"ending") (n + beginning) ∗
+  term_meta  (si_init_share cs) (isoN.@"ending") n ∗
   session_failed_or cs True.
+
+Definition db_disconnecting cs n : iProp :=
+  DB.client_view (si_init cs) (dbCN (si_resp cs).@"state") n ∗
+  client_disconnecting cs n.
 
 Definition conn_ready si n :=
   escrow (nroot.@"db")
@@ -922,11 +925,11 @@ Definition close_pred si m : iProp := ∃ n beginning,
 
 Lemma close_predI cs beginning n :
   client_connected_int cs n beginning ={⊤}=∗
-  client_disconnecting_int cs n beginning ∗
+  db_disconnecting cs (n + beginning) ∗
   □ session_failed_or cs (close_pred cs (TInt n)).
 Proof.
 iIntros "(client & #server & #? & end & ending & #conn)".
-rewrite session_failed_or_box /client_disconnecting_int.
+rewrite session_failed_or_box /db_disconnecting.
 iFrame. rewrite -!bi.sep_assoc. iSplitR => //.
 iMod (term_meta_set (isoN.@"ending") (n + beginning) with "ending")
   as "#ending" => //.
@@ -986,8 +989,8 @@ iModIntro. iModIntro. iModIntro. iSplit.
 - iModIntro. iExists _. by eauto.
 Qed.
 
-Lemma ack_close_predE cs m n beginning :
-  client_disconnecting_int cs n beginning -∗
+Lemma ack_close_predE cs m n :
+  db_disconnecting cs n -∗
   session_failed_or cs (ack_close_pred cs m) ={⊤}=∗
   ▷ db_disconnected (si_init cs) (si_resp cs).
 Proof.
