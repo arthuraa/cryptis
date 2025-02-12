@@ -371,13 +371,13 @@ Definition server_clock_ready kI kR :=
 
 Implicit Types (failed : bool).
 
-Definition client_disconnected_int kI kR n : iProp :=
-  DB.client_view kI (dbCN kR.@"state") n ∗
+Definition client_disconnected kI kR n : iProp :=
   server_clock_ready kI kR ∗
   (failure kI kR ∨ clock kI kR n).
 
-Definition client_disconnected kI kR : iProp := ∃ n,
-  client_disconnected_int kI kR n.
+Definition db_disconnected kI kR : iProp := ∃ n,
+  DB.client_view kI (dbCN kR.@"state") n ∗
+  client_disconnected kI kR n.
 
 Definition client_connected_int cs n beginning : iProp :=
   let kI := si_init cs in
@@ -423,15 +423,16 @@ Lemma client_connectingI E kI kR cs beginning :
   £ 1 ∗ £ 1 -∗
   wf_sess_info cs -∗
   term_token (si_init_share cs) (↑isoN) -∗
-  client_disconnected_int kI kR beginning ={E}=∗
+  client_disconnected kI kR beginning -∗
+  DB.client_view kI (dbCN kR.@"state") beginning ={E}=∗
   client_connecting_int cs beginning ∗
   wf_conn_state cs ∗
   term_meta (si_init_share cs) (isoN.@"beginning") beginning ∗
   session_failed_for_or cs Init (conn_ready cs beginning).
 Proof.
 move=> ? ? <- <- e_rl {kI kR}.
-iIntros "#? [c1 c2] #sess token client".
-iDestruct "client" as "(client_view & #server & status)".
+iIntros "#? [c1 c2] #sess token dis client_view".
+iDestruct "dis" as "(#server & status)".
 iPoseProof (DB.client_view_db_at with "client_view") as "(%db & #db_at)".
 have e_sh : si_init_share cs = cs_share cs by rewrite /cs_share e_rl.
 rewrite e_sh.
@@ -534,7 +535,7 @@ Lemma client_alloc kI kR E E' :
   ↑dbCN kR ⊆ E →
   ↑nroot.@"db" ⊆ E' →
   term_token kI E ={E'}=∗
-  client_disconnected kI kR ∗
+  db_disconnected kI kR ∗
   rem_free_at kI kR ⊤ ∗
   term_token kI (E ∖ ↑dbCN kR).
 Proof.
@@ -988,10 +989,10 @@ Qed.
 Lemma ack_close_predE cs m n beginning :
   client_disconnecting_int cs n beginning -∗
   session_failed_or cs (ack_close_pred cs m) ={⊤}=∗
-  ▷ client_disconnected_int (si_init cs) (si_resp cs) (n + beginning).
+  ▷ db_disconnected (si_init cs) (si_resp cs).
 Proof.
 iIntros "(client & #server & end & #ending & #conn) p_m".
-rewrite /client_disconnected_int. iFrame.
+rewrite /db_disconnected. iFrame.
 iSplitR => //.
 rewrite -(session_failed_or_failure cs) -session_failed_or_later.
 rewrite -session_failed_or_fupd.

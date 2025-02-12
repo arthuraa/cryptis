@@ -32,7 +32,7 @@ Lemma wp_client_close c kI kR cs :
   store_ctx N -∗
   {{{ client_connected kI kR cs }}}
     Client.close N c (repr cs)
-  {{{ RET #(); client_disconnected kI kR }}}.
+  {{{ RET #(); db_disconnected kI kR }}}.
 Proof.
 iIntros "#chan_c (_ & _ & _ & _ & _ & _ & _ & _ & #close & #ack & _)".
 iIntros "!> %Φ client post".
@@ -54,8 +54,7 @@ iMod (ack_close_predE with "client inv'") as "client" => //.
 wp_pures. wp_apply (wp_connection_close with "ts").
 iIntros "_". wp_pures.
 iRight. iModIntro. iExists _. iSplit; eauto.
-iApply "post".
-iExists _. by eauto.
+by iApply "post".
 Qed.
 
 End Verif.

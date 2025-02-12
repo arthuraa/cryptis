@@ -36,7 +36,7 @@ Lemma wp_client_connect c kI kR :
   store_ctx N -∗
   sign_key kI -∗
   public (TKey Open kR) -∗
-  {{{ client_disconnected kI kR }}}
+  {{{ db_disconnected kI kR }}}
     Client.connect N c kI (TKey Open kR)
   {{{ cs, RET (repr cs);
       client_connected kI kR cs }}}.
@@ -48,8 +48,8 @@ rewrite /Client.connect.
 wp_pure _ credit:"c1". wp_pure _ credit:"c2". wp_pures.
 wp_apply (wp_connection_connect with "[//] [//] [//] [] []") => //.
 iIntros "%cs (#sess & ts & % & % & %e_rl & rel & token)".
-iDestruct "client" as "(%beginning & client)".
-iMod (client_connectingI with "[//] [$] sess token client")
+iDestruct "client" as "(%beginning & client & disconnected)".
+iMod (client_connectingI with "[//] [$] sess token disconnected client")
   as "{sess} (client & #conn & #beginning & #ready)" => //; try solve_ndisj.
 subst kI kR.
 iPoseProof (init_predI _ _ (TInt 0) with "client []") as "#?" => //.
