@@ -114,7 +114,7 @@ iMod (@client_alloc _ _ _ _ _ skR with "tokenI")
   as "(client & free & token)"; eauto.
 wp_apply (wp_client_connect with "[] [] [] [] [] client"); eauto.
 iIntros "%cs client". wp_pure _ credit:"c". wp_pures.
-iPoseProof (client_connected_ok with "client [s_skI s_skR]") as "#>ok".
+iPoseProof (db_connected_ok with "client [s_skI s_skR]") as "#>ok".
 { iIntros "#[fail|fail]".
   - iPoseProof (sign_key_compromised_keyE with "sign_skI [//]")
       as ">contra".

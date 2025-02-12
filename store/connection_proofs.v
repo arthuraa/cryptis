@@ -14,7 +14,7 @@ Unset Printing Implicit Defensive.
 
 Section Verif.
 
-Context `{!cryptisGS Σ, !heapGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !storeGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (cs : conn_state).
@@ -109,6 +109,34 @@ rewrite /Connection.tick; wp_pures; wp_load; wp_store.
 iApply "post".
 rewrite (_ : (n + 1)%Z = (S n)%nat :> Z); last by lia.
 iFrame; eauto.
+Qed.
+
+Lemma wp_connection_timestamp_client kI kR cs n beginning :
+  {{{ client_connected kI kR cs n beginning }}}
+    Connection.timestamp (repr cs)
+  {{{ RET #n; client_connected kI kR cs n beginning }}}.
+Proof.
+iIntros "%Φ".
+iIntros "(<- & <- & %e_rl & #? & ? & ? & #? & #beginning & ? & ? & #conn)".
+iIntros "post".
+wp_apply (wp_connection_timestamp with "[$]").
+iIntros "ts".
+iApply "post".
+iFrame. by eauto 10.
+Qed.
+
+Lemma wp_connection_tick_client kI kR cs n beginning :
+  {{{ client_connected kI kR cs n beginning }}}
+    Connection.tick (repr cs)
+  {{{ RET #(); client_connected kI kR cs (S n) beginning }}}.
+Proof.
+iIntros "%Φ".
+iIntros "(<- & <- & %e_rl & #? & ? & ? & #? & #beginning & ? & ? & #conn)".
+iIntros "post".
+wp_apply (wp_connection_tick with "[$]").
+iIntros "ts".
+iApply "post".
+iFrame. by eauto 10.
 Qed.
 
 Lemma wp_connection_session_key cs :
@@ -375,6 +403,37 @@ iAssert (▷ □ (public m ∗ session_failed_or cs (Φ cs m)))%I
     rewrite swap_roleK (session_agree e_kS). by iApply "inv_m". }
 iMod (lc_fupd_elim_later with "c p_m") as "{p_m} [#p_m #inv_m]".
 by iApply ("post" with "ts rel inv").
+Qed.
+
+Lemma wp_connection_recv_client N c kI kR cs n n0 (f : val) φ Φ Ψ :
+  channel c -∗
+  seal_pred N (session_msg_pred Φ Resp) -∗
+  □ (∀ m,
+      client_connected kI kR cs n n0 -∗
+      φ -∗
+      public m -∗
+      □ session_failed_or cs (Φ cs m) -∗
+      WP f m {{ v, ⌜v = NONEV⌝ ∗
+                   client_connected kI kR cs n n0 ∗ φ ∨
+                   ∃ v', ⌜v = SOMEV v'⌝ ∗ Ψ v' }}) -∗
+  client_connected kI kR cs n n0 -∗ φ -∗
+  WP Connection.recv N c (repr cs) f {{ Ψ }}.
+Proof.
+iIntros "#chan_c #NΦ #wp_f".
+iIntros "(<- & <- & %e_rl & #? & rel & ts & #? &
+          #beginning & end & ending & #conn) I".
+iCombine "end ending I" as "I".
+iRevert "ts rel I".
+iApply wp_connection_recv => //.
+iIntros "!> %m ts rel (end & ending & I) #p_m #i_m".
+iApply (wp_wand with "[ts rel end ending I]").
+{ iApply ("wp_f" with "[ts rel end ending] I") => //.
+  { iFrame. by eauto 10. } }
+iIntros "%v [(-> & client & I)|(%v' & -> & post)]".
+- iDestruct "client" as "(_ & _ & _ & #? & rel & ts & _ &
+                          _ & end & ending & _)".
+  iLeft. by iFrame.
+- iRight. by eauto.
 Qed.
 
 Lemma wp_connection_close (c : val) cs n :

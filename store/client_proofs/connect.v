@@ -39,7 +39,7 @@ Lemma wp_client_connect c kI kR :
   {{{ db_disconnected kI kR }}}
     Client.connect N c kI (TKey Open kR)
   {{{ cs, RET (repr cs);
-      client_connected kI kR cs }}}.
+      db_connected kI kR cs }}}.
 Proof.
 iIntros "#chan_c #ctx (#? & #? & _ & _ & _ & _ & _ & _ & _ & _ & #ctx')".
 iIntros "#p_ekI #p_ekR".
@@ -61,10 +61,11 @@ wp_pures.
 iCombine "client post" as "I". iRevert "ts rel I".
 iApply (wp_connection_recv _ _ _ 0 with "[//] []") => //.
 iIntros "!> %m ts rel (client & post) _ #mP".
-iMod (ack_init_predE with "client mP") as "client" => //.
+rewrite /cs_share e_rl /=.
+iMod (ack_init_predE with "client ts [//] rel mP") as "client" => //.
 wp_pures.
 iRight. iExists _. iSplitR => //.
-iApply "post". iFrame. iModIntro. by do !iSplit => //.
+by iApply "post".
 Qed.
 
 End Verif.
