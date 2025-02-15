@@ -28,45 +28,40 @@ Implicit Types v : val.
 
 Variable N : namespace.
 
-Ltac failure := iLeft; iFrame.
+Ltac failure := iLeft; iFrame; eauto.
 
-Lemma wp_server_handle_load c cs ldb db n :
+Lemma wp_server_handle_load c skI skR cs n n0 vdb :
   cs_role cs = Resp →
   channel c -∗
   store_ctx N -∗
   handler_correct
-    (server_handler_inv cs n ldb db)
-    (server_handler_post cs ldb)
-    cs
-    (N.@"load", Server.handle_load N c (repr cs) ldb)
-    n.
+    (server_db_connected' skI skR cs n n0 vdb)
+    (server_handler_post skI skR cs n0 vdb)
+    skI skR cs n n0
+    (N.@"load", Server.handle_load N c (repr cs) vdb).
 Proof.
 iIntros "%e_rl #chan_c #ctx".
 iPoseProof (store_ctx_load with "ctx") as "?".
 iPoseProof (store_ctx_ack_load with "ctx") as "?".
-rewrite /handler_correct e_rl /=. wp_lam; wp_pures.
+rewrite /handler_correct /=. wp_lam; wp_pures.
 iModIntro. iExists _. iSplit => //.
-iIntros "!> %m _ #p_m #conn rel ts (server & db)".
+iIntros "!> %ts conn #p_ts #inv_ts (%db & #p_db & db & #db_at & token)".
 wp_pures.
-wp_bind (Connection.timestamp _).
-iApply (wp_connection_timestamp with "ts"). iIntros "!> ts".
-wp_pures.
-wp_list_of_term m; wp_pures; last by failure.
-wp_list_match => [timestamp t1 ->| _]; wp_pures; last by failure.
-wp_bind (to_int _). iApply wp_to_int.
-case: Spec.to_intP => [ {m} n' -> | _]; wp_pures; last by failure.
-case: bool_decide_reflect => [[<-]|?]; wp_pures; last by failure.
+wp_list_match => [t1 ->| _]; wp_pures; last by failure.
 wp_bind (SAList.find _ _). iApply (SAList.wp_find with "db") => //.
 iIntros "!> db". rewrite lookup_fmap.
 case db_t1: (db !! t1) => [t2|]; wp_pures; last by failure.
-wp_list. wp_bind (tint _). iApply wp_tint. wp_list. wp_term_of_list.
-wp_pures.
-iPoseProof (ack_load_predI db_t1 with "server p_m") as "#(? & #?)".
-wp_bind (Connection.send _ _ _ _).
-iApply (wp_connection_send with "[//] [//] [] [] conn") => //.
-{ by iIntros "!> _". }
-iIntros "!> _". wp_pures. iModIntro.
-iRight. iExists _. iSplit => //. iExists _, _. iLeft. by iFrame.
+wp_list.
+iPoseProof (ack_load_predI with "inv_ts db_at") as "[? #?]" => //.
+wp_apply (wp_connection_write with "[//] [] [] [] [$]") => //.
+- rewrite /public_db big_sepM_forall.
+  iDestruct ("p_db" $! t1 t2 with "[//]") as "[??]".
+  by rewrite /=; eauto.
+iIntros "conn". wp_pures.
+wp_apply (wp_connection_tick with "conn"). iIntros "conn". wp_pures.
+iModIntro. iRight. iExists _. iSplit => //.
+iLeft. iSplit => //. iExists (S n). iFrame.
+by iSplit => //.
 Qed.
 
 End Verif.

@@ -52,23 +52,19 @@ iPureIntro.
 move=> kI _. rewrite /dbSN. solve_ndisj.
 Qed.
 
-Lemma wp_server_conn_handler_body c cs n ldb db :
+Lemma wp_server_conn_handler_body c skI skR cs n n0 vdb :
   cs_role cs = Resp →
   channel c -∗
   store_ctx N -∗
-  {{{ wf_conn_state cs ∗
-      release_token (cs_share cs) ∗
-      cs_ts cs ↦ #n ∗
-      server_connected cs n db ∗
-      SAList.is_alist ldb (repr <$> db) }}}
-    Server.conn_handler_body N c (repr cs) ldb
-  {{{ v, RET v; server_handler_post cs ldb v }}}.
+  {{{ server_db_connected skI skR cs n n0 vdb }}}
+    Server.conn_handler_body N c (repr cs) vdb
+  {{{ v, RET v; server_handler_post skI skR cs n0 vdb v }}}.
 Proof.
-iIntros "% #chan_c #ctx !> %Φ (#conn & rel & ts & server & db) post".
+iIntros "% #chan_c #ctx !> %Φ (conn & db) post".
 wp_lam. wp_pures.
 rewrite !Connection.subst_select /=.
-iApply (wp_wand with "[ts rel server db] post").
-iCombine "server db" as "I". iRevert "rel ts I".
+iApply (wp_wand with "[conn db] post").
+iRevert "db".
 iApply wp_connection_select => //=; do !iSplitR => //.
 - by iApply wp_server_handle_store.
 - by iApply wp_server_handle_load.
@@ -76,35 +72,29 @@ iApply wp_connection_select => //=; do !iSplitR => //.
 - by iApply wp_server_handle_close.
 Qed.
 
-Lemma wp_server_conn_handler c cs n vdb db vlock γlock :
+Lemma wp_server_conn_handler c cs n n0 vdb vlock γlock :
   cs_role cs = Resp →
   channel c -∗
-  is_lock γlock vlock (account_inv (si_init cs) (si_resp cs) vdb) -∗
+  is_lock γlock vlock (server_db_disconnected (si_init cs) (si_resp cs) vdb) -∗
   store_ctx N -∗
-  {{{ wf_conn_state cs ∗
-      release_token (cs_share cs) ∗
-      cs_ts cs ↦ #n ∗
-      server_connected cs n db ∗
-      SAList.is_alist vdb (repr <$> db) ∗
+  {{{ server_db_connected (si_init cs) (si_resp cs) cs n n0 vdb ∗
       locked γlock }}}
     Server.conn_handler N c (repr cs) vdb vlock
   {{{ RET #(); True }}}.
 Proof.
 iIntros "% #chan_c #lock #ctx".
-iLöb as "IH" forall (n db).
-iIntros "!> %Φ (#conn & rel & ts & server & db & locked) post".
+iLöb as "IH" forall (n).
+iIntros "!> %Φ (conn & locked) post".
 wp_rec. wp_pures. wp_bind (Server.conn_handler_body _ _ _ _).
 iApply (wp_server_conn_handler_body with "[# //] [# //] [$]") => //.
-iIntros "!> %v (%n' & %db' & [state|state])".
-- iDestruct "state" as "(-> & ts & rel & server & db)".
+iIntros "!> %v [state|state]".
+- iDestruct "state" as "(-> & %n' & conn)".
   wp_pures. by iApply ("IH" with "[$]").
-- iDestruct "state" as "(-> & ts & rel & server & db)".
+- iDestruct "state" as "(-> & dis)".
   wp_pures.
-  wp_apply (release_spec with "[lock locked server db]").
-  { iFrame "locked". iSplit => //.
-    iExists db'. by iFrame. }
-  iIntros "_". wp_pures.
-  by iApply (wp_connection_close with "ts").
+  wp_apply (release_spec with "[locked dis]").
+  { iFrame "locked". iSplit => //. }
+  by eauto.
 Qed.
 
 Lemma wp_server_find_client ss kI :
@@ -113,7 +103,7 @@ Lemma wp_server_find_client ss kI :
   {{{ vdb γlock vlock, RET (vdb, vlock)%V;
       server ss ∗
       is_lock γlock vlock
-        (account_inv kI (ss_key ss) vdb) }}}.
+        (server_db_disconnected kI (ss_key ss) vdb) }}}.
 Proof.
 iIntros "%Φ [#ctx server] post".
 iDestruct "server"
@@ -136,18 +126,14 @@ case accounts_kI: (accounts !! TKey Open kI) => [scs|]; wp_pures.
   { by apply: EP; rewrite elem_of_dom accounts_kI. }
   rewrite (term_token_difference _ (↑dbSN kI)) //.
   iDestruct "token" as "[token_kI token]".
-  iAssert (never_connected kI (ss_key ss))
-    with "[token_kI]" as "not_signed_up".
-  { by iFrame. }
   wp_bind (SAList.new #()).
   iApply SAList.wp_empty => //.
   iIntros "!> %vdb db". wp_pures.
   wp_bind (newlock #()).
-  iApply (newlock_spec (account_inv kI (ss_key ss) vdb)
-           with "[not_signed_up db]").
-  { iExists ∅. iFrame.
-    iSplit; first by rewrite /public_db big_sepM_empty.
-    iRight. iLeft. by iFrame. }
+  iDestruct (server_db_alloc with "token_kI db") as "[_ db]"; eauto.
+  iApply (newlock_spec (server_db_disconnected kI (ss_key ss) vdb)
+           with "[db]").
+  { iFrame. }
   iIntros "!> %vlock %γlock #lock".
   wp_pures.
   wp_bind (SAList.insert _ _ _).
@@ -173,48 +159,6 @@ case accounts_kI: (accounts !! TKey Open kI) => [scs|]; wp_pures.
     iExists _. iSplit => //.
 Qed.
 
-Lemma wp_server_wait_init c cs vdb db γlock vlock :
-  cs_role cs = Resp →
-  {{{ cryptis_ctx ∗ channel c ∗ store_ctx N ∗
-      wf_conn_state cs ∗
-      release_token (cs_share cs) ∗
-      cs_ts cs ↦ #0%nat ∗
-      server_connecting cs db ∗
-      term_token (si_resp_share cs) (↑isoN.@"begin") ∗
-      SAList.is_alist vdb (repr <$> db) ∗
-      is_lock γlock vlock (
-        account_inv (si_init cs) (si_resp cs) vdb) ∗
-      locked γlock }}}
-    Server.wait_init N c (repr cs) vdb vlock
-  {{{ RET #(); True }}} .
-Proof.
-iIntros "%e_rl %Φ
-  (#ctx & #chan_c & #ctx' & #conn & rel &
-   ts & server & not_started & db & #lock & locked) post".
-wp_lam; wp_pures.
-iPoseProof (store_ctx_init with "ctx'") as "?".
-iCombine "server not_started db locked post" as "I".
-iRevert "ts rel I".
-iApply wp_connection_recv => //.
-iIntros "!> %m ts rel
-  (server & not_started & db & locked & post) #m_m #p_m".
-iMod (ack_init_predI with "server not_started p_m") as "H" => //.
-wp_pures.
-iMod "H" as "(server & #p_m')".
-wp_bind (tint _). iApply wp_tint.
-wp_bind (Connection.send _ _ _ _).
-iPoseProof (store_ctx_ack_init with "ctx'") as "?".
-iApply (wp_connection_send with "[//] [//] [] []") => //.
-{ by rewrite public_TInt. }
-{ by iIntros "!> _". }
-iIntros "!> _". wp_pures.
-wp_bind (Server.conn_handler _ _ _ _ _).
-iApply (wp_server_conn_handler with "[//] [//] [//] [$]") => //.
-iIntros "!> _". wp_pures.
-iModIntro. iRight. iExists _. iSplit => //.
-by iApply "post".
-Qed.
-
 Lemma wp_server_listen c ss :
   {{{ cryptis_ctx ∗ channel c ∗ store_ctx N ∗ server ss }}}
     Server.listen N c (repr ss)
@@ -222,13 +166,12 @@ Lemma wp_server_listen c ss :
 Proof.
 iIntros "%Φ (#? & #chan_c & #ctx & server) post".
 wp_lam; wp_pures.
-iPoseProof (store_ctx_dh_auth_ctx with "ctx") as "dh".
+iPoseProof (store_ctx_iso_dh_ctx with "ctx") as "dh".
 wp_apply (wp_connection_listen
          with "[# //] [# //] [# //] [#] []") => //;
   try by solve_ndisj.
 { by iDestruct "server" as "(% & % & ? & _)". }
-iIntros "%cs resP". wp_pures.
-iDestruct "resP" as "(#conn & ts & %e_kR & %e_rl & rel & token)".
+iIntros "%cs inc". wp_pures.
 wp_bind (Server.find_client _ _).
 iApply (wp_server_find_client with "[$server]") => //.
 iIntros "!> %vdb %γlock %vlock [server #lock]".
@@ -236,20 +179,21 @@ wp_pure _ credit:"c".
 wp_pures.
 wp_bind (acquire _).
 iApply acquire_spec => //.
-have e_sh : si_resp_share cs = cs_share cs.
-  by rewrite /cs_share e_rl.
-rewrite e_sh.
-iIntros "!> (locked & %db & account & db)". rewrite -e_kR.
-iMod (server_connectingI with "[//] c [//] token account")
-  as "{conn} (#conn & account & token)" => //.
+iIntros "!> (locked & dis)".
+iDestruct "dis" as "(%n & %failed & dis & db_dis)".
 wp_pures.
-iApply (wp_fork with "[ts rel locked db account token]").
+wp_apply (wp_connection_confirm with "[] [] [] [$]") => //.
+iIntros "(%e_rl & #fail & conn & token)".
+wp_pures.
+iApply (wp_fork with "[db_dis conn token locked]").
 { iModIntro.
-  rewrite (term_token_difference _ (↑isoN.@"begin")); last by solve_ndisj.
-  iDestruct "token" as "[not_started token]".
-  iApply (wp_server_wait_init
-           with "[ts rel locked db account not_started] []") => //.
-  rewrite e_sh. iFrame. eauto. }
+  iDestruct (connected_keyE with "conn") as "#[_ ->]".
+  wp_apply (wp_server_conn_handler
+             with "[] [] [] [db_dis $conn $token $locked]") => //.
+  iDestruct "db_dis" as "(%db & #p_db & db & #db_at)".
+  iExists db. iFrame. iSplit => //.
+  iDestruct "db_at" as "[fail'|db_at]"; eauto.
+  iLeft. by iApply "fail". }
 iApply "post".
 by iFrame.
 Qed.

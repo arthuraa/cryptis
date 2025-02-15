@@ -29,47 +29,43 @@ Variable N : namespace.
 
 Ltac failure := iLeft; iFrame.
 
-Lemma wp_server_handle_store c cs ldb db n :
+Lemma wp_server_handle_store c kI kR cs n n0 vdb :
   cs_role cs = Resp →
   channel c -∗
   store_ctx N -∗
   handler_correct
-    (server_handler_inv cs n ldb db)
-    (server_handler_post cs ldb)
-    cs
-    (N.@"store", Server.handle_store N c (repr cs) ldb)
-    n.
+    (server_db_connected' kI kR cs n n0 vdb)
+    (server_handler_post kI kR cs n0 vdb)
+    kI kR cs n n0
+    (N.@"store", Server.handle_store N c (repr cs) vdb).
 Proof.
 iIntros "%e_rl #chan_c #ctx".
 iPoseProof (store_ctx_store with "ctx") as "?".
 iPoseProof (store_ctx_ack_store with "ctx") as "?".
-rewrite /handler_correct e_rl /=. wp_lam; wp_pures.
+rewrite /handler_correct /=. wp_lam; wp_pures.
 iModIntro. iExists _. iSplit => //.
-iIntros "!> %m #p_m #inv_m #conn rel ts (server & db)". wp_pures.
-wp_bind (Connection.timestamp _).
-iApply (wp_connection_timestamp with "ts") => //.
-iIntros "!> ts". wp_pures.
-wp_list_of_term m; wp_pures; last by failure.
-wp_list_match => [n' t1 t2 ->|_]; wp_pures; last by failure.
-wp_bind (to_int _). iApply wp_to_int.
-case: Spec.to_intP => [ {}n' -> | _]; wp_pures; last by failure.
-case: bool_decide_reflect => [[ {n'} <-]|ne]; wp_pures; last by failure.
-iPoseProof (store_predE with "server p_m inv_m") as "server".
-wp_bind (Connection.tick _). iApply (wp_connection_tick with "ts").
-iIntros "!> ts". wp_pures.
+iIntros "!> %ts conn #p_ts #inv_m db". wp_pures.
+wp_list_match => [t1 t2 ->|_]; wp_pures; last by failure.
+iDestruct "db" as "(%db & #p_db & db & #db_at & token)".
 wp_bind (SAList.insert _ _ _).
 iApply (SAList.wp_insert with "db").
 iIntros "!> db". rewrite -fmap_insert.
 wp_pures.
-wp_bind (tint _). iApply wp_tint.
-wp_bind (Connection.send _ _ _ _).
-iApply (wp_connection_send _ c cs
-   with "[//] [//] [] [] [] []") => //.
-{ by rewrite public_TInt. }
-{ iIntros "!> _". iApply (session_failed_orE with "inv_m"). by eauto. }
-iIntros "!> _". wp_pures.
+wp_apply (@wp_nil term).
+wp_apply (wp_connection_write with "[] [] [] [] [$]") => //.
+{ iRight. by eauto. }
+iIntros "conn". wp_pures. 
+wp_apply (wp_connection_tick with "[$]"). iIntros "conn". wp_pures.
 iModIntro. iRight. iExists _. iSplit => //.
-iExists _, _. iLeft. by iFrame.
+iLeft. iSplit => //. iExists (S n). iFrame.
+rewrite /=.
+iDestruct "p_ts" as "(p_t1 & p_t2 & _)".
+iSplit; first by iApply public_db_insert.
+iDestruct "inv_m" as "[fail|inv_m]"; eauto.
+iDestruct "inv_m" as "(%t1' & %t2' & %e & store_at)".
+case: e => <- <-.
+iDestruct "db_at" as "[fail|db_at]"; eauto.
+iRight. iApply (DB.db_at_store_at with "db_at store_at").
 Qed.
 
 End Verif.

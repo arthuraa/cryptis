@@ -41,31 +41,15 @@ Lemma wp_client_connect c kI kR :
   {{{ cs, RET (repr cs);
       db_connected kI kR cs }}}.
 Proof.
-iIntros "#chan_c #ctx (#? & #? & _ & _ & _ & _ & _ & _ & _ & _ & #ctx')".
+iIntros "#chan_c #ctx #ctx'".
 iIntros "#p_ekI #p_ekR".
 iIntros "!> %Φ client post".
-rewrite /Client.connect.
-wp_pure _ credit:"c1". wp_pure _ credit:"c2". wp_pures.
-wp_apply (wp_connection_connect with "[//] [//] [//] [] []") => //.
-iIntros "%cs (#sess & ts & % & % & %e_rl & rel & token)".
-iDestruct "client" as "(%beginning & client & disconnected)".
-iMod (client_connectingI with "[//] [$] sess token disconnected client")
-  as "{sess} (client & #conn & #beginning & #ready)" => //; try solve_ndisj.
-subst kI kR.
-iPoseProof (init_predI _ _ (TInt 0) with "client []") as "#?" => //.
-wp_pures. wp_bind (Connection.send _ _ _ _).
-iApply (wp_connection_send with "[//] [] [] [] conn") => //.
-{ by rewrite public_TInt. }
-iIntros "!> _".
-wp_pures.
-iCombine "client post" as "I". iRevert "ts rel I".
-iApply (wp_connection_recv _ _ _ 0 with "[//] []") => //.
-iIntros "!> %m ts rel (client & post) _ #mP".
-rewrite /cs_share e_rl /=.
-iMod (ack_init_predE with "client ts [//] rel mP") as "client" => //.
-wp_pures.
-iRight. iExists _. iSplitR => //.
-by iApply "post".
+iDestruct "client" as "(%n & %failed & db & dis)".
+wp_lam. wp_pures.
+iApply (wp_connection_connect with "[//] [//] [//] [//] [//] [$]") => //.
+iIntros "!> %cs (conn & token)".
+iApply "post".
+by iFrame.
 Qed.
 
 End Verif.

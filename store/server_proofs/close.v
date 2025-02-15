@@ -29,39 +29,52 @@ Variable N : namespace.
 
 Ltac failure := iLeft; iFrame.
 
-Lemma wp_server_handle_close c cs n ldb db :
+Lemma wp_server_handle_close c skI skR cs n n0 vdb :
   cs_role cs = Resp →
   channel c -∗
   store_ctx N -∗
   handler_correct
-    (server_handler_inv cs n ldb db)
-    (server_handler_post cs ldb)
-    cs
-    (N.@"close", Server.handle_close N c (repr cs) ldb)
-    n.
+    (server_db_connected' skI skR cs n n0 vdb)
+    (server_handler_post skI skR cs n0 vdb)
+    skI skR cs n n0
+    (N.@"close", Server.handle_close N c (repr cs) vdb).
 Proof.
 iIntros "%e_rl #chan_c #ctx".
 iPoseProof (store_ctx_close with "ctx") as "?".
 iPoseProof (store_ctx_ack_close with "ctx") as "?".
-rewrite /handler_correct e_rl /=. wp_lam; wp_pures. iModIntro.
+rewrite /handler_correct /=. wp_lam; wp_pures. iModIntro.
 iExists _. iSplit => //.
-iIntros "!> %m #p_m #inv_m #conn rel ts (server & db)".
-wp_pures. wp_bind (Connection.timestamp _).
-iApply (wp_connection_timestamp with "ts").
-iIntros "!> ts". wp_pures.
-wp_bind (to_int _). iApply wp_to_int.
-case: Spec.to_intP => [ {m} n' ->| _]; wp_pures; last by failure.
-case: bool_decide_reflect => [[<-] {n'}|?]; last by wp_pures; failure.
-iPoseProof (ack_close_predI with "server inv_m") as "{p_m} >H" => //.
-wp_pures. iMod "H" as "(server & #p_m)".
-wp_bind (tint _). iApply wp_tint.
-wp_bind (Connection.send _ _ _ _).
-iApply (wp_connection_send with "[//] [//] []") => //.
-{ by rewrite public_TInt. }
-{ by iIntros "!> _". }
-iIntros "!> _". wp_pures.
-iRight. iModIntro. iExists _. iSplit => //.
-iExists _, _. iRight. by iFrame.
+iIntros "!> %ts conn _ _ db". wp_pures.
+iDestruct "db" as "(%db & #p_db & vdb & #db_at & token)".
+iPoseProof (connected_keyE with "conn") as "%e".
+iAssert (|={⊤}=>
+  (session_failed cs true ∨
+     □ ack_close_pred skI skR cs (n + n0) [TInt 0]) ∗
+  server_db_disconnected skI skR vdb)%I
+  with "[vdb token]" as ">(#? & server)".
+{ case: e => -> ->. iFrame.
+  iDestruct "db_at" as "[fail|db_at]".
+  { iModIntro. do !iSplit => //=; eauto.
+    iExists (n + n0), true. do !iSplit => //=; eauto.
+    iApply (session_failed_failure cs true with "fail [//]"). }
+  iDestruct "token" as "[fail|(%n' & c1 & c2)]".
+  { iModIntro. do !iSplit => //=; eauto.
+    iExists (n + n0), true. do !iSplit => //=; eauto.
+    iApply (session_failed_failure cs true with "fail [//]"). }
+  iMod (clock_update (n + n0) with "c1 c2") as "[c1 c2]".
+  iAssert (|={⊤}=> conn_closed cs (n + n0))%I with "[c2]" as ">#?".
+  { iApply (escrowI with "c2"). iApply term_token_switch. }
+  iModIntro. iSplit; eauto.
+  iExists (n + n0), false. do !iSplit => //; eauto.
+  by iRight. }
+wp_list.
+wp_apply (wp_connection_write with "[//] [] [] [] [$]") => //.
+{ by rewrite /= public_TInt; eauto. }
+iIntros "conn". wp_pures.
+iDestruct "conn" as "(? & ? & ? & ? & rel & ts & _)".
+wp_apply (wp_connection_close with "ts"). iIntros "_".
+wp_pures. iModIntro. iRight. iExists _. iSplit => //.
+iRight. by iFrame.
 Qed.
 
 End Verif.

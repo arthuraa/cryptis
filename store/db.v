@@ -404,15 +404,10 @@ by iApply db_at_op_at.
 Qed.
 
 Lemma db_at_create_at k N n db t1 t2 :
-  db !! t1 = None →
   db_at k N n db -∗
   create_at k N n t1 t2 -∗
-  db_at k N (S n) (<[t1 := t2]>db).
-Proof.
-iIntros "%db_t1 #db #op".
-iPoseProof (db_at_op_at with "db op") as "db'".
-by rewrite /= db_t1.
-Qed.
+  db_at k N (S n) (op_app db (Create t1 t2)).
+Proof. iApply db_at_op_at. Qed.
 
 Lemma load_client t1 k N n :
   client_view k N n ==∗

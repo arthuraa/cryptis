@@ -27,72 +27,69 @@ Implicit Types v : val.
 
 Variable N : namespace.
 
-Ltac failure := iLeft; iFrame.
+Ltac failure := iLeft; iFrame; eauto.
 
-Lemma wp_server_handle_create c cs n ldb db :
+Lemma wp_server_handle_create c kI kR cs n n0 vdb :
   cs_role cs = Resp →
   channel c -∗
   store_ctx N -∗
   handler_correct
-    (server_handler_inv cs n ldb db)
-    (server_handler_post cs ldb)
-    cs
-    (N.@"create", Server.handle_create N c (repr cs) ldb)
-    n.
+    (server_db_connected' kI kR cs n n0 vdb)
+    (server_handler_post kI kR cs n0 vdb)
+    kI kR cs n n0
+    (N.@"create", Server.handle_create N c (repr cs) vdb).
 Proof.
 iIntros "%e_rl #chan_c #ctx".
 iPoseProof (store_ctx_create with "ctx") as "?".
 iPoseProof (store_ctx_ack_create with "ctx") as "?".
-rewrite /handler_correct e_rl /=. wp_lam; wp_pures.
+rewrite /handler_correct /=. wp_lam; wp_pures.
 iModIntro. iExists _. iSplit => //.
-iIntros "!> %m #p_m #inv_m #conn rel ts (server & db)".
+iIntros "!> %ts conn #p_ts #inv_ts db".
+iDestruct "db" as "(%db & #p_db & db & #db_at & token)".
 wp_pures.
-wp_bind (Connection.timestamp _).
-iApply (wp_connection_timestamp with "ts").
-iIntros "!> ts". wp_pures.
-wp_list_of_term m; wp_pures; last by failure.
-wp_list_match => [timestamp t1 t2 ->| _]; wp_pures; last by failure.
-wp_bind (to_int _). iApply wp_to_int.
-case: Spec.to_intP => [ {m} n' ->| _]; wp_pures; last by failure.
-case: bool_decide_reflect => [[<-] {n'}|?]; wp_pures; last by failure.
+wp_list_match => [t1 t2 ->| _]; wp_pures; last by failure.
 wp_bind (SAList.find _ _). iApply (SAList.wp_find with "db") => //.
 iIntros "!> db". rewrite lookup_fmap.
 wp_bind (match: _ with InjL <> => _ | InjR <> => _ end)%E.
-iApply (wp_wand _ _ _ (λ v, ∃ (b : bool) n' db',
-  ⌜v = #((if b then 1 else 0) : Z)⌝ ∗
-  cs_ts cs ↦ #n' ∗
-  server_connected cs n' db' ∗
-  SAList.is_alist ldb (repr <$> db')) with "[ts db server]")%I.
+iApply (wp_frame_wand with "conn").
+iAssert (session_failed cs true ∨
+           DB.db_at kI (dbCN kR.@"state")
+             (S n + n0) (DB.op_app db (Create t1 t2)))%I
+  as "#db_at'".
+{ iDestruct "inv_ts" as "[?|inv_ts]"; eauto.
+  iDestruct "inv_ts" as "(%t1' & %t2' & %e & create_at)".
+  case: e => <- <-.
+  iDestruct "db_at" as "[?|db_at]"; eauto.
+  iRight. by iApply (DB.db_at_create_at with "db_at"). }
+iApply (wp_wand _ _ _ (λ v,
+  ∃ (b : bool), ⌜v = #((if b then 1 else 0) : Z)⌝ ∗
+                server_db_connected' kI kR cs (S n) n0 vdb
+  ) with "[db token]")%I.
 { case db_t1: (db !! t1) => [t2'|]; wp_pures.
-  { by iExists false, _, _; iFrame. }
+  { iExists false; iModIntro; iFrame.
+    by rewrite /= db_t1; eauto. }
   wp_bind (SAList.insert _ _ _).
   iApply (SAList.wp_insert with "db").
-  iIntros "!> db".
-  rewrite -fmap_insert.
-  iPoseProof (create_predE with "server p_m inv_m") as "server" => //.
+  iIntros "!> db". rewrite -fmap_insert.
   wp_pures.
-  wp_bind (Connection.tick _).
-  iApply (wp_connection_tick with "ts").
-  iIntros "!> ts".
-  wp_pures.
-  iExists true, _, _. by iFrame. }
-iIntros "% (%b & %n' & %db' & -> & ts & server & db)".
+  iFrame. iExists true. rewrite /= db_t1.
+  iModIntro. do !iSplit => //.
+  iDestruct "p_ts" as "(? & ? & _)".
+  by iApply public_db_insert. }
+iIntros "% (%b & -> & db) conn".
 wp_pures.
 wp_bind (tint _). iApply wp_tint.
 wp_list.
-wp_bind (tint _). iApply wp_tint.
-wp_list.
-wp_term_of_list.
 wp_pures.
-wp_bind (Connection.send _ _ _ _).
-iApply (wp_connection_send with "[//] [//] [] []") => //.
-- rewrite !public_of_list /= !public_TInt. eauto.
-  iDestruct "p_m" as "(_ & ? & ? & _)". by eauto.
-- iIntros "!> _". iApply (session_failed_orE with "inv_m"). by eauto.
-iIntros "!> _".
+wp_apply (wp_connection_write with "[//] [] [] [] [$]") => //.
+- rewrite /= public_TInt. iDestruct "p_ts" as "(? & ? & _)".
+  by eauto.
+- by iRight.
+iIntros "conn". wp_pures.
+wp_apply (wp_connection_tick with "[$]"). iIntros "conn".
 wp_pures.
-iModIntro. iRight. iExists _. iSplit => //. iExists _, _. iLeft.
-by iFrame.
+iModIntro. iRight. iExists _. iSplit => //.
+iLeft. iSplit => //. iExists (S n). by iFrame.
 Qed.
 
 End Verif.

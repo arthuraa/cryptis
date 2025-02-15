@@ -36,33 +36,28 @@ Lemma wp_client_close c kI kR cs :
 Proof.
 iIntros "#chan_c (_ & _ & _ & _ & _ & _ & _ & _ & #close & #ack & _)".
 iIntros "!> %Φ client post".
-iDestruct "client" as "(%n & %beginning & client & conn)".
-iPoseProof (client_connected_wf_conn_state with "conn") as "#?".
-wp_lam; wp_pures.
-wp_apply (wp_connection_timestamp_client with "conn"). iIntros "conn".
-iAssert (⌜cs_role cs = Init⌝)%I as "%e_rl".
-{ by iDestruct "conn" as "(? & ? & ? & ?)". }
-wp_pures. wp_apply wp_tint. wp_pures.
-iMod (close_predI with "client conn") as "(client & #p_m1)" => //.
-wp_bind (Connection.send _ _ _ _).
-wp_apply (wp_connection_send with "[//] close [] [] [//]") => //.
-{ by rewrite public_TInt. }
-{ by iIntros "!> _". }
-iIntros "_". wp_pures.
-iDestruct "client" as "(client & conn)".
-iDestruct "conn" as "(% & % & #? & ts & rel & end & #ending & #conn)".
-iCombine "client end post" as "I". iRevert "ts rel I".
-have ->: si_init_share cs = cs_share cs.
-{ by rewrite /cs_share e_rl. }
-iApply wp_connection_recv => //.
-iIntros "!> %m ts rel (client & end & post) #m_m #inv'".
-iMod (ack_close_predE with "[ts rel end client] inv'")
-  as "[ts client]" => //.
-{ iFrame. rewrite /cs_share e_rl /=. iFrame. eauto. }
-wp_pures. wp_apply (wp_connection_close with "ts").
-iIntros "_". wp_pures.
-iRight. iModIntro. iExists _. iSplit; eauto.
-by iApply "post".
+iDestruct "client" as "(%n & %n0 & client & conn & token)".
+iPoseProof (connected_keyE with "conn") as "[-> ->]".
+wp_lam. wp_pures.
+wp_apply (@wp_nil term).
+wp_apply (wp_connection_write with "[//] [] [] [] [$]") => //.
+- iRight. iModIntro. by eauto.
+iIntros "conn". wp_pures.
+wp_apply (wp_connection_read with "[//] [] [$]") => //.
+iIntros "%ts (conn & _ & #inv)".
+wp_pures.
+iAssert (|={⊤}=>
+  ∃ failed, client_disconnected (si_init cs) (si_resp cs) (n + n0) failed)%I
+  with "[token]" as ">(%failed & dis)".
+{ iDestruct "token" as "(%e_rl & #server & end)".
+  iDestruct "inv" as "[fail|inv]".
+  - iExists true. iModIntro. iSplit => //.
+    by iApply (session_failed_failure with "fail").
+  - iMod (escrowE with "inv end") as ">c1" => //.
+    iExists false. iModIntro. iSplit => //. }
+iDestruct "conn" as "(_ & _ & _ & _ & rel & ts & _)".
+wp_apply (wp_connection_close with "[$]"). iIntros "_".
+iApply "post". by iFrame.
 Qed.
 
 End Verif.

@@ -15,27 +15,63 @@ Unset Printing Implicit Defensive.
 
 Local Existing Instance ticket_lock.
 
+(* MOVE *)
+Definition list_hd : val := λ: "l",
+  match: "l" with
+    NONE => NONE
+  | SOME "l" => Fst "l"
+  end.
+
+Definition list_tl : val := λ: "l",
+  match: "l" with
+    NONE => NONE
+  | SOME "l" => Snd "l"
+  end.
+
+Lemma repr_listE `{Repr A} (l : list A) :
+  repr l =
+  match l with
+  | [] => NONEV
+  | x :: xs => SOMEV (repr x, repr xs)
+  end.
+Proof.
+rewrite /= repr_list_unseal. by case: l.
+Qed.
+(* /MOVE *)
+
 Module Connection.
 
 Section Connection.
 
 Variable N : namespace.
 
+Definition session_key : val := λ: "cs",
+  Snd "cs".
 Definition connect : val := λ: "c" "skA" "vkB",
+  let: "session_key" :=
+    do_until (λ: <>, initiator (N.@"auth") "c" "skA" "vkB") in
+  let: "timestamp" := ref #0%nat in
+  let: "m" := senc (N.@"init") "session_key" (TInt 0) in
+  send "c" "m";;
   do_until (λ: <>,
-    bind: "session_key" := initiator (N.@"auth") "c" "skA" "vkB" in
-    let: "timestamp"  := ref #0 in
-    SOME ("timestamp", "session_key")
-  ).
+    let: "m" := recv "c" in
+    sdec (N.@"ack_init") "session_key" "m");;
+  ("timestamp", "session_key").
 
 Definition listen : val := λ: "c" "skA",
+  let: "result" := do_until (λ: <>, responder (N.@"auth") "c" "skA") in
+  let: "timestamp" := ref #0 in
+  let: "vkB" := Fst "result" in
+  let: "session_key" := Snd "result" in
   do_until (λ: <>,
-    bind: "result" := responder (N.@"auth") "c" "skA" in
-    let: "timestamp" := ref #0 in
-    let: "vkB" := Fst "result" in
-    let: "session_key" := Snd "result" in
-    SOME ("vkB", ("timestamp", "session_key"))
-  ).
+    let: "m" := recv "c" in
+    sdec (N.@"init") "session_key" "m");;
+  ("vkB", ("timestamp", "session_key")).
+
+Definition confirm : val := λ: "c" "cs",
+  let: "sk" := Snd "cs" in
+  let: "m"  := senc (N.@"ack_init") "sk" (TInt 0) in
+  send "c" "m".
 
 Definition timestamp : val := λ: "cs",
   let: "timestamp" := Fst "cs" in
@@ -45,19 +81,26 @@ Definition tick : val := λ: "cs",
   let: "timestamp" := Fst "cs" in
   "timestamp" <- (!"timestamp" + #1).
 
-Definition session_key : val := λ: "cs",
-  Snd "cs".
-
-Definition send N : val := λ: "c" "cs" "t",
+Definition write N : val := λ: "c" "cs" "ts",
+  let: "n"  := timestamp "cs" in
   let: "sk" := session_key "cs" in
-  let: "m"  := senc N "sk" "t" in
+  let: "m"  := term_of_list (tint "n" :: "ts") in
+  let: "m"  := senc N "sk" "m" in
   send "c" "m".
 
 Definition make_handler (p : namespace * expr) : expr :=
   let N := p.1 in
   let: "handler" := p.2 in
-  λ: "m", bind: "m" := untag N "m" in
-          "handler" "m".
+  λ: "n" "m",
+    bind: "m" := untag N "m" in
+    bind: "ts" := list_of_term "m" in
+    match: "ts" with
+      NONE => NONE
+    | SOME "ts" =>
+      bind: "n'" := to_int (Fst "ts") in
+      guard: "n" = "n'" in
+      "handler" (Snd "ts")
+    end.
 
 Lemma subst_make_handler var v p :
   subst var v (make_handler p) =
@@ -65,7 +108,13 @@ Lemma subst_make_handler var v p :
 Proof.
 case: p => [N' handler] /=.
 case: decide => [[_ not_shadow_handler]|shadow_handler //].
+case: decide => [[_ not_shadow_n]|shadow_n //].
 case: decide => [[_ not_shadow_m]|shadow_m //].
+rewrite decide_False; last congruence.
+case: decide => [[_ not_shadow_ts]|shadow_ts //].
+rewrite decide_False; last congruence.
+case: decide => [[_ not_shadow_n']|shadow_n' //].
+rewrite decide_False; last congruence.
 rewrite decide_False; last congruence.
 by rewrite decide_False; last congruence.
 Qed.
@@ -84,30 +133,35 @@ elim: handlers=> [|p handlers IH] //=.
 by rewrite -IH -subst_make_handler.
 Qed.
 
-Definition select_body : val := rec: "loop" "m" "handlers" :=
+Definition select_body : val := rec: "loop" "ts" "m" "handlers" :=
   match: "handlers" with
     NONE => NONE
   | SOME "handlers" =>
     let: "handler" := Fst "handlers" in
     let: "handlers" := Snd "handlers" in
-    match: "handler" "m" with
-      NONE => "loop" "m" "handlers"
+    match: "handler" "ts" "m" with
+      NONE => "loop" "ts" "m" "handlers"
     | SOME "res" => SOME "res"
     end
   end.
 
 Definition select_def (c cs : expr) handlers : expr :=
   (λ: "c" "cs" "handlers",
+    let: "ts" := timestamp "cs" in
     let: "sk" := session_key "cs" in
     do_until (λ: <>,
       let: "m" := recv "c" in
       bind: "m" := open (key Open "sk") "m" in
-      select_body "m" "handlers"
+      select_body "ts" "m" "handlers"
     ))%V c cs (make_handlers handlers).
 
 Definition select_aux : base.seal select_def. by eexists _. Qed.
 Definition select := unseal select_aux.
 Lemma select_eq : select = select_def. Proof. exact: seal_eq. Qed.
+
+Definition read N : val :=
+  let handlers := [(N, (λ: "ts", SOME "ts")%E)] in
+  λ: "c" "cs", select "c" "cs" handlers.
 
 Lemma subst_select var v c cs handlers :
   subst var v (select c cs handlers) =
@@ -116,14 +170,6 @@ Lemma subst_select var v c cs handlers :
 Proof.
 by rewrite select_eq /select /= subst_make_handlers.
 Qed.
-
-Definition recv N : val := λ: "c" "cs" "f",
-  let: "sk" := session_key "cs" in
-  do_until (λ: <>,
-    let: "m" := recv "c" in
-    bind: "m" := sdec N "sk" "m" in
-    "f" "m"
-  ).
 
 Definition close : val := λ: "c" "cs",
   let: "timestamp" := Fst "cs" in
@@ -140,61 +186,31 @@ Section Client.
 Variable N : namespace.
 
 Definition connect : val := λ: "c" "skA" "vkB",
-  let: "cs" := Connection.connect N "c" "skA" "vkB" in
-  Connection.send (N.@"init") "c" "cs" (TInt 0);;
-  Connection.recv (N.@"ack_init") "c" "cs" (λ: <>,
-    SOME "cs").
-
-Definition send_store : val := λ: "c" "cs" "k" "v",
-  let: "ts" := Connection.timestamp "cs" in
-  Connection.tick "cs";;
-  let: "m" := term_of_list [tint "ts"; "k"; "v"] in
-  Connection.send (N.@"store") "c" "cs" "m".
-
-Definition ack_store : val := λ: "c" "cs",
-  let: "ts" := Connection.timestamp "cs" in
-  Connection.recv (N.@"ack_store") "c" "cs" (λ: "m",
-    guard: eq_term "m" (tint "ts") in
-    SOME #()
-  ).
+  Connection.connect N "c" "skA" "vkB".
 
 Definition store : val := λ: "c" "cs" "k" "v",
-  send_store "c" "cs" "k" "v";;
-  ack_store "c" "cs".
+  Connection.write (N.@"store") "c" "cs" ["k"; "v"];;
+  Connection.read (N.@"ack_store") "c" "cs";;
+  Connection.tick "cs".
 
 Definition load : val := λ: "c" "cs" "k",
-  let: "ts" := tint (Connection.timestamp "cs") in
+  Connection.write (N.@"load") "c" "cs" ["k"];;
+  let: "ts" := Connection.read (N.@"ack_load") "c" "cs" in
   Connection.tick "cs";;
-  Connection.send (N.@"load") "c" "cs" (term_of_list ["ts"; "k"]);;
-  Connection.recv (N.@"ack_load") "c" "cs" (λ: "resp",
-    bind: "resp" := list_of_term "resp" in
-    list_match: ["ts'"; "t"] := "resp" in
-    guard: eq_term "ts'" "ts" in
-    SOME "t"
-  ).
+  match: "ts" with
+    NONE => TInt 0
+  | SOME "ts" => Fst "ts"
+  end.
 
 Definition create : val := λ: "c" "cs" "k" "v",
-  let: "ts" := Connection.timestamp "cs" in
-  Connection.tick "cs";;
-  let: "m"  := term_of_list [tint "ts"; "k"; "v"] in
-  Connection.send (N.@"create") "c" "cs" "m";;
-  Connection.recv (N.@"ack_create") "c" "cs" (λ: "resp",
-    bind: "resp" :=  list_of_term "resp" in
-    list_match: ["ts'"; "k'"; "v'"; "b"] := "resp" in
-    guard: eq_term (tint "ts") "ts'" in
-    guard: eq_term "k" "k'" in
-    guard: eq_term "v" "v'" in
-    SOME (eq_term "b" (tint #1))
-  ).
+  Connection.write (N.@"create") "c" "cs" ["k"; "v"];;
+  Connection.read (N.@"ack_create") "c" "cs";;
+  Connection.tick "cs".
 
 Definition close : val := λ: "c" "cs",
-  let: "ts" := Connection.timestamp "cs" in
-  let: "m"  := tint "ts" in
-  Connection.send (N.@"close") "c" "cs" "m";;
-  Connection.recv (N.@"ack_close") "c" "cs" (λ: "resp",
-    Connection.close "c" "cs";;
-    SOME #()
-  ).
+  Connection.write (N.@"close") "c" "cs" [];;
+  Connection.read (N.@"ack_close") "c" "cs";;
+  Connection.close "c" "cs".
 
 End Client.
 
@@ -210,54 +226,40 @@ Definition start : val := λ: "k",
 
 Definition handle_store N : val :=
 λ: "c" "cs" "db" "req",
-  let: "timestamp" := Connection.timestamp "cs" in
-  bind: "req" := list_of_term "req" in
-  list_match: ["timestamp'"; "k"; "v"] := "req" in
-  bind: "timestamp'" := to_int "timestamp'" in
-  guard: "timestamp" = "timestamp'" in
-  Connection.tick "cs";;
+  list_match: ["k"; "v"] := "req" in
   SAList.insert "db" "k" "v";;
-  Connection.send (N.@"ack_store") "c" "cs" (tint "timestamp'");;
+  Connection.write (N.@"ack_store") "c" "cs" [];;
+  Connection.tick "cs";;
   SOME #true.
 
 (* FIXME: Should return an error when the key is not present *)
 Definition handle_load N : val :=
 λ: "c" "cs" "db" "req",
-  let: "timestamp" := Connection.timestamp "cs" in
-  bind: "req" := list_of_term "req" in
-  list_match: ["timestamp'"; "k"] := "req" in
-  bind: "timestamp'" := to_int "timestamp'" in
-  guard: "timestamp" = "timestamp'" in
+  list_match: ["k"] := "req" in
   bind: "data" := SAList.find "db" "k" in
-  let: "m" := term_of_list [ tint "timestamp"; "data"] in
-  Connection.send (N.@"ack_load") "c" "cs" "m";;
+  Connection.write (N.@"ack_load") "c" "cs" ["data"];;
+  Connection.tick "cs";;
   SOME #true.
 
 Definition handle_create N : val :=
 λ: "c" "cs" "db" "req",
-  let: "timestamp"   := Connection.timestamp "cs" in
-  bind: "req" := list_of_term "req" in
-  list_match: ["timestamp'"; "k"; "v"] := "req" in
-  bind: "timestamp'" := to_int "timestamp'" in
-  guard: "timestamp" = "timestamp'" in
+  list_match: ["k"; "v"] := "req" in
   let: "success" :=
     match: SAList.find "db" "k" with
       SOME <> => #0
     | NONE =>
       SAList.insert "db" "k" "v";;
-      Connection.tick "cs";;
       #1
     end in
-  let: "m" := term_of_list [tint "timestamp"; "k"; "v"; tint "success"] in
-  Connection.send (N.@"ack_create") "c" "cs" "m";;
+  let: "m" := ["k"; "v"; tint "success"] in
+  Connection.write (N.@"ack_create") "c" "cs" "m";;
+  Connection.tick "cs";;
   SOME #true.
 
 Definition handle_close N : val :=
 λ: "c" "cs" "db" "req",
-  let: "timestamp"   := Connection.timestamp "cs" in
-  bind: "timestamp'" := to_int "req" in
-  guard: "timestamp" = "timestamp'" in
-  Connection.send (N.@"ack_close") "c" "cs" (tint #0);;
+  Connection.write (N.@"ack_close") "c" "cs" [TInt 0];;
+  Connection.close "c" "cs";;
   SOME #false.
 
 Definition conn_handler_body N : val :=
@@ -272,14 +274,7 @@ Definition conn_handler_body N : val :=
 Definition conn_handler N : val := rec: "loop" "c" "cs" "db" "lock" :=
   if: conn_handler_body N "c" "cs" "db" then
     "loop" "c" "cs" "db" "lock"
-  else (lock.release "lock";; Connection.close "c" "cs").
-
-Definition wait_init N : val := λ: "c" "cs" "db" "lock",
-  Connection.recv (N.@"init") "c" "cs" (λ: <>,
-    Connection.send (N.@"ack_init") "c" "cs" (tint #0);;
-    conn_handler N "c" "cs" "db" "lock";;
-    SOME #()
-  ).
+  else lock.release "lock".
 
 Definition find_client : val := λ: "ss" "client_key",
   let: "clients" := Snd "ss" in
@@ -302,6 +297,7 @@ Definition listen N : val := λ: "c" "ss",
   let: "db" := Fst "account" in
   let: "lock" := Snd "account" in
   acquire "lock";;
-  Fork (wait_init N "c" "cs" "db" "lock").
+  Connection.confirm N "c" "cs";;
+  Fork (conn_handler N "c" "cs" "db" "lock").
 
 End Server.

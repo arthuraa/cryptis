@@ -88,9 +88,6 @@ iIntros "%ss server". wp_pures.
 wp_apply (wp_server_loop with "[$server]"); eauto.
 Qed.
 
-Global Instance session_ok_persistent si : Persistent (session_ok si).
-Proof. apply _. Qed.
-
 Lemma wp_game :
   cryptis_ctx -∗
   seal_pred_token ⊤ -∗
@@ -131,10 +128,10 @@ wp_apply wp_recv => //. iIntros "%v #p_v". wp_pures.
 rewrite (@rem_free_at_diff _ _ _ _ _ _ {[k]}) //.
 iDestruct "free" as "[free_k free]".
 wp_apply (wp_client_create with "[] [] [] [] [$client $free_k]") => //.
-iIntros "%b [client k_v]". wp_pures.
+iIntros "[client k_v]". wp_pures.
 wp_apply (wp_client_load with "[] [] [] [$client $k_v]") => //.
-iIntros "%v' (client & k_v & _ & res)".
-iPoseProof (session_failed_or_ok with "ok res") as "->".
+iIntros "%v' (client & k_v & _ & [fail|->])".
+{ by iPoseProof (session_failed_agree with "ok fail") as "%". }
 wp_pures. wp_apply wp_assert. wp_apply wp_eq_term.
 by rewrite bool_decide_eq_true_2.
 Qed.
@@ -144,7 +141,7 @@ End Game.
 Definition F : gFunctors :=
   #[heapΣ; spawnΣ; cryptisΣ; tlockΣ; storeΣ].
 
-Lemma iso_dh_secure σ₁ σ₂ (v : val) t₂ e₂ :
+Lemma store_secure σ₁ σ₂ (v : val) t₂ e₂ :
   rtc erased_step ([game #()], σ₁) (t₂, σ₂) →
   e₂ ∈ t₂ →
   not_stuck e₂ σ₂.

@@ -39,36 +39,32 @@ Lemma wp_client_load c kI kR cs t1 t2 :
       db_connected kI kR cs ∗
       rem_mapsto kI kR t1 t2 ∗
       public t2' ∗
-      session_failed_or cs ⌜t2' = t2⌝ }}}.
+      (session_failed cs true ∨ ⌜t2' = t2⌝) }}}.
 Proof.
 iIntros "#chan_c #ctx #p_t1 !> %Φ [client mapsto] post".
-iDestruct "client" as "(%n & %beginning & client & conn)".
-iPoseProof (client_connected_wf_conn_state with "conn") as "#?".
+iDestruct "client" as "(%n & %n0 & db & conn & token)".
+wp_lam; wp_pures. wp_list.
+iMod (DB.load_client t1 with "db") as "[#load_at db]".
 iDestruct "ctx" as "(_ & _ & _ & _ & load & ack_load & _)".
-rewrite /Client.load. wp_pures.
-wp_apply (wp_connection_timestamp_client with "conn"). iIntros "conn".
-wp_bind (tint _). iApply wp_tint.
-iMod (load_predI _ _ _ _ _ t1 with "client conn")
-  as "(client & conn & #load_at & #?)".
-wp_pures. wp_apply (wp_connection_tick_client with "conn"). iIntros "conn".
-wp_pures. wp_list. wp_term_of_list.
-wp_bind (Connection.send _ _ _ _).
-iApply (wp_connection_send with "[//] load [] [#]") => //.
-{ rewrite public_of_list /= public_TInt. by eauto. }
-{ by iIntros "!> _". }
-iIntros "!> _". wp_pures.
-iCombine "client mapsto post" as "I". iRevert "conn I".
-iApply wp_connection_recv_client => //.
-iIntros "!> %ts conn (client & mapsto & post) #p_m #inv_m". wp_pures.
-wp_list_of_term ts; wp_pures; last by iLeft; iFrame.
-wp_list_match => [n' t2' -> {ts}|_]; wp_pures; last by iLeft; iFrame.
-wp_eq_term e; last by wp_pures; iLeft; iFrame.
-subst n'. wp_pures.
-iPoseProof (ack_loadE with "client conn load_at mapsto p_m inv_m") as "#p_t2'".
-iRight. iModIntro. iExists _. iSplit => //.
-iApply "post".
-iFrame.
-by iSplit => //; eauto.
+wp_apply (wp_connection_write with "chan_c load [] [] [$]").
+- by rewrite /=; eauto.
+- iRight. iIntros "!>". iExists _. by eauto.
+iIntros "conn". wp_pures.
+wp_apply (wp_connection_read with "chan_c [//] [$]").
+iIntros "%ts (conn & #p_ts & #inv_ts)". wp_pures.
+wp_apply (wp_connection_tick with "conn"). iIntros "conn".
+rewrite [repr_list ts]repr_listE.
+iDestruct "inv_ts" as "[fail|inv_ts]".
+- wp_pures. case: ts => [|t ts]; wp_pures.
+  + iApply "post". iFrame. rewrite public_TInt. by eauto.
+  + rewrite /=. iDestruct "p_ts" as "[p_t _]".
+    iApply "post". iFrame. by eauto.
+iDestruct "inv_ts" as "(%t1' & %t2' & -> & load_at' & stored_at)".
+iPoseProof (DB.op_at_agree with "load_at load_at'") as "%e".
+case: e => <-.
+iPoseProof (DB.client_view_stored_at with "db mapsto stored_at") as "->".
+rewrite /=. iDestruct "p_ts" as "[? _]".
+wp_pures. iApply "post". iFrame. by eauto.
 Qed.
 
 End Verif.
