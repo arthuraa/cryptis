@@ -6,7 +6,7 @@ From iris.algebra Require Import numbers reservation_map.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par assert ticket_lock.
 From cryptis Require Import lib cryptis primitives tactics gmeta.
-From cryptis Require Import role session iso_dh store.
+From cryptis Require Import role session iso_dh conn store.
 From cryptis.primitives Require Import attacker.
 
 Set Implicit Arguments.
@@ -63,7 +63,7 @@ Definition game : val := λ: <>,
 
 Lemma wp_server_loop c ss :
   {{{ cryptis_ctx ∗ channel c ∗ store_ctx kvsN ∗
-      server ss }}}
+      server kvsN ss }}}
     server_loop c (repr ss)
   {{{ RET #(); True }}}.
 Proof.
@@ -107,7 +107,7 @@ wp_apply wp_send => //. wp_pures.
 wp_apply (wp_fork with "[tokenR]").
 { iModIntro. wp_apply (wp_start_server with "[$tokenR]"); eauto. }
 wp_pures.
-iMod (@client_alloc _ _ _ _ _ skR with "tokenI")
+iMod (@client_alloc _ _ _ _ _ _ skR with "tokenI")
   as "(client & free & token)"; eauto.
 wp_apply (wp_client_connect with "[] [] [] [] [] client"); eauto.
 iIntros "%cs client". wp_pure _ credit:"c". wp_pures.
@@ -125,13 +125,13 @@ wp_apply wp_send => //. wp_pures.
 wp_apply wp_send => //. wp_pures.
 wp_apply wp_recv => //. iIntros "%k #p_k". wp_pures.
 wp_apply wp_recv => //. iIntros "%v #p_v". wp_pures.
-rewrite (@rem_free_at_diff _ _ _ _ _ _ {[k]}) //.
+rewrite (@rem_free_at_diff _ _ _ _ _ _ _ {[k]}) //.
 iDestruct "free" as "[free_k free]".
 wp_apply (wp_client_create with "[] [] [] [] [$client $free_k]") => //.
 iIntros "[client k_v]". wp_pures.
 wp_apply (wp_client_load with "[] [] [] [$client $k_v]") => //.
 iIntros "%v' (client & k_v & _ & [fail|->])".
-{ by iPoseProof (session_failed_agree with "ok fail") as "%". }
+{ by iPoseProof (Conn.session_failed_agree with "ok fail") as "%". }
 wp_pures. wp_apply wp_assert. wp_apply wp_eq_term.
 by rewrite bool_decide_eq_true_2.
 Qed.

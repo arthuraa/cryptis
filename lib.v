@@ -280,6 +280,16 @@ Proof.
 rewrite !repr_list_unseal; by elim: xs => //= x xs ->.
 Qed.
 
+Lemma repr_listE `{Repr A} (l : list A) :
+  repr l =
+  match l with
+  | [] => NONEV
+  | x :: xs => SOMEV (repr x, repr xs)
+  end.
+Proof.
+rewrite /= repr_list_unseal. by case: l.
+Qed.
+
 Definition leq_loc_loop : val := rec: "loop" "l1" "l2" "n" :=
   if: "l1" +ₗ "n" = "l2" then #true
   else if: "l2" +ₗ "n" = "l1" then #false
@@ -389,6 +399,18 @@ Definition leq_list : val := rec: "loop" "eq" "le" "l1" "l2" :=
       if: "eq" "x1" "x2" then "loop" "eq" "le" "l1" "l2"
       else "le" "x1" "x2"
     end
+  end.
+
+Definition list_hd : val := λ: "l",
+  match: "l" with
+    NONE => NONE
+  | SOME "l" => Fst "l"
+  end.
+
+Definition list_tl : val := λ: "l",
+  match: "l" with
+    NONE => NONE
+  | SOME "l" => Snd "l"
   end.
 
 (* Run a function until it successfully returns a value *)

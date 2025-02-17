@@ -4,7 +4,6 @@ From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
-From iris.heap_lang.lib Require Import lock ticket_lock.
 From cryptis Require Import lib version term cryptis primitives tactics.
 From cryptis Require Import role iso_dh.
 From cryptis.store Require Import alist db.
@@ -12,32 +11,6 @@ From cryptis.store Require Import alist db.
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
-
-Local Existing Instance ticket_lock.
-
-(* MOVE *)
-Definition list_hd : val := λ: "l",
-  match: "l" with
-    NONE => NONE
-  | SOME "l" => Fst "l"
-  end.
-
-Definition list_tl : val := λ: "l",
-  match: "l" with
-    NONE => NONE
-  | SOME "l" => Snd "l"
-  end.
-
-Lemma repr_listE `{Repr A} (l : list A) :
-  repr l =
-  match l with
-  | [] => NONEV
-  | x :: xs => SOMEV (repr x, repr xs)
-  end.
-Proof.
-rewrite /= repr_list_unseal. by case: l.
-Qed.
-(* /MOVE *)
 
 Module Impl.
 
@@ -50,28 +23,28 @@ Definition session_key : val := λ: "cs",
 
 Definition connect : val := λ: "c" "skA" "vkB",
   let: "session_key" :=
-    do_until (λ: <>, initiator (N.@"auth") "c" "skA" "vkB") in
+    do_until (λ: <>, initiator (N.@"conn".@"auth") "c" "skA" "vkB") in
   let: "timestamp" := ref #0%nat in
-  let: "m" := senc (N.@"init") "session_key" (TInt 0) in
+  let: "m" := senc (N.@"conn".@"init") "session_key" (TInt 0) in
   send "c" "m";;
   do_until (λ: <>,
     let: "m" := recv "c" in
-    sdec (N.@"ack_init") "session_key" "m");;
+    sdec (N.@"conn".@"ack_init") "session_key" "m");;
   ("timestamp", "session_key").
 
 Definition listen : val := λ: "c" "skA",
-  let: "result" := do_until (λ: <>, responder (N.@"auth") "c" "skA") in
+  let: "result" := do_until (λ: <>, responder (N.@"conn".@"auth") "c" "skA") in
   let: "timestamp" := ref #0 in
   let: "vkB" := Fst "result" in
   let: "session_key" := Snd "result" in
   do_until (λ: <>,
     let: "m" := recv "c" in
-    sdec (N.@"init") "session_key" "m");;
+    sdec (N.@"conn".@"init") "session_key" "m");;
   ("vkB", ("timestamp", "session_key")).
 
 Definition confirm : val := λ: "c" "cs",
   let: "sk" := Snd "cs" in
-  let: "m"  := senc (N.@"ack_init") "sk" (TInt 0) in
+  let: "m"  := senc (N.@"conn".@"ack_init") "sk" (TInt 0) in
   send "c" "m".
 
 Definition timestamp : val := λ: "cs",

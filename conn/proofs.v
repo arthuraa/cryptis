@@ -245,7 +245,8 @@ iAssert (⌜cs_role cs = Resp⌝)%I as "%e_rl".
 wp_lam. wp_pures.
 wp_apply wp_senc. wp_pures.
 iMod (server_connect with "dis inc") as "(#? & con & ?)".
-iAssert (public (TSeal (TKey Seal (si_key cs)) (Spec.tag (N.@"ack_init") (TInt 0))))
+iAssert (public (TSeal (TKey Seal (si_key cs))
+                   (Spec.tag (N.@"conn".@"ack_init") (TInt 0))))
   as "#?".
 { iPoseProof (ctx_ack_init with "[//]") as "?".
   iDestruct "con"

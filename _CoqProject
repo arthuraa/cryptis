@@ -84,7 +84,6 @@ composite_game.v
 store.v
 store/impl.v
 store/shared.v
-store/connection_proofs.v
 store/client_proofs.v
 store/client_proofs/store.v
 store/client_proofs/load.v

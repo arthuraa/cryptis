@@ -5,8 +5,8 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib version term gmeta nown cryptis.
-From cryptis Require Import primitives tactics role iso_dh.
-From cryptis.store Require Import impl shared db connection_proofs.
+From cryptis Require Import primitives tactics role conn.
+From cryptis.store Require Import impl shared db.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -19,7 +19,7 @@ Notation iProp := (iProp Σ).
 
 Context `{!storeG Σ}.
 
-Implicit Types (cs : conn_state).
+Implicit Types (cs : Conn.state).
 Implicit Types kI kR kS t : term.
 Implicit Types n : nat.
 Implicit Types γ : gname.
@@ -32,27 +32,27 @@ Lemma wp_client_create c kI kR cs t1 t2 :
   store_ctx N -∗
   public t1 -∗
   public t2 -∗
-  {{{ db_connected kI kR cs ∗
-      rem_free_at kI kR {[t1]} }}}
+  {{{ db_connected N kI kR cs ∗
+      rem_free_at N kI kR {[t1]} }}}
     Client.create N c (repr cs) t1 t2
   {{{ RET #();
-      db_connected kI kR cs ∗
-      rem_mapsto kI kR t1 t2 }}}.
+      db_connected N kI kR cs ∗
+      rem_mapsto N kI kR t1 t2 }}}.
 Proof.
-iIntros "#chan_c (_ & _ & _ & _ & _ & _ & #create & #ack & _) #p_t1 #p_t2".
+iIntros "#chan_c (_ & _ & _ & _ & #create & #ack & _) #p_t1 #p_t2".
 iIntros "!> %Φ [client free] post".
 iDestruct "client" as "(%n & %beginning & client & conn & token)".
-iMod (@rem_mapsto_alloc _ _ _ _ _ _ t1 t2 with "client free")
+iMod (@rem_mapsto_alloc _ _ _ _ _ _ _ t1 t2 with "client free")
   as "(client & mapsto & _ & #created)".
 { by rewrite elem_of_singleton. }
 wp_lam. wp_pures. wp_list.
-wp_apply (wp_connection_write with "[//] [] [] [] [$]") => //.
+wp_apply (Conn.wp_write with "[//] [] [] [] [$]") => //.
 - by rewrite /=; eauto.
 - iRight. iExists _, _. by eauto.
 iIntros "conn". wp_pures.
-wp_apply (wp_connection_read with "[//] [] [$]") => //.
+wp_apply (Conn.wp_read with "[//] [] [$]") => //.
 - iIntros "%ts (conn & _ & _)". wp_pures.
-wp_apply (wp_connection_tick with "[$]").
+wp_apply (Conn.wp_tick with "[$]").
 iIntros "conn". iApply "post".
 by iFrame.
 Qed.

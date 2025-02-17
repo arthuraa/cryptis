@@ -187,17 +187,17 @@ Lemma never_connected_switch kI kR Q : ⊢ switch (never_connected kI kR) Q.
 Proof. apply term_token_switch. Qed.
 
 Definition clock kI kR n :=
-  term_own kI (N.@"client".@kR) (to_frac_agree (1 / 2) n).
+  term_own kI (N.@"client".@kR.@"clock") (to_frac_agree (1 / 2) n).
 
 Lemma clock_alloc kI kR E :
-  ↑N.@"client".@kR ⊆ E →
+  ↑N.@"client".@kR.@"clock" ⊆ E →
   term_token kI E ==∗
   clock kI kR 0 ∗
   clock kI kR 0 ∗
-  term_token kI (E ∖ ↑N.@"client".@kR).
+  term_token kI (E ∖ ↑N.@"client".@kR.@"clock").
 Proof.
 iIntros "%sub token".
-iMod (term_own_alloc (N.@"client".@kR) (to_frac_agree 1 0)
+iMod (term_own_alloc (N.@"client".@kR.@"clock") (to_frac_agree 1 0)
        with "token") as "[own token]" => //.
 iFrame. rewrite -Qp.half_half frac_agree_op.
 iDestruct "own" as "[??]". by iFrame.
@@ -228,7 +228,7 @@ by iFrame.
 Qed.
 
 Definition server_clock_ready kI kR :=
-  escrow (nroot.@"db") (never_connected kI kR)
+  escrow nroot (never_connected kI kR)
     (clock kI kR 0).
 
 Definition client_disconnected kI kR n failed : iProp :=
@@ -340,21 +340,18 @@ by iDestruct (session_okI with "status post") as ">?".
 Qed.
 
 Lemma client_alloc kI kR E :
-  ↑N.@"client".@kR ⊆ E →
+  ↑N.@"client".@kR.@"clock" ⊆ E →
   term_token kI E ={⊤}=∗
   client_disconnected kI kR 0 false ∗
-  term_token kI (E ∖ ↑N.@"client".@kR).
+  term_token kI (E ∖ ↑N.@"client".@kR.@"clock").
 Proof.
 iIntros "%sub kI_token".
 rewrite (term_token_difference _ _ _ sub).
 iDestruct "kI_token" as "[kI_token ?]". iFrame.
-iMod (term_own_alloc (N.@"client".@kR) (to_frac_agree 1 0)
-  with "kI_token") as "[status kI_token]" => //.
-rewrite -Qp.half_half frac_agree_op.
-iDestruct "status" as "[client server]".
+iMod (@clock_alloc kI kR with "kI_token") as "(c1 & c2 & token)" => //.
 iAssert (|={⊤}=> server_clock_ready kI kR)%I
-  with "[server]" as ">#server".
-{ iApply (escrowI with "server").
+  with "[c1]" as ">#server".
+{ iApply (escrowI with "c1").
   iApply never_connected_switch. }
 iModIntro. by iFrame.
 Qed.
@@ -516,33 +513,34 @@ by iDestruct "failed" as "[[_ fail]|[_ fail]]".
 Qed.
 
 Definition ctx : iProp :=
-  seal_pred  (N.@"init")       (session_msg_pred init_pred Init) ∗
-  seal_pred  (N.@"ack_init")   (session_msg_pred ack_init_pred Resp) ∗
-  seal_pred  (N.@"close")      (conn_pred close_pred) ∗
-  seal_pred  (N.@"ack_close")  (conn_pred ack_close_pred) ∗
-  iso_dh_ctx (N.@"auth").
+  seal_pred  (N.@"conn".@"init")      (session_msg_pred init_pred Init) ∗
+  seal_pred  (N.@"conn".@"ack_init")  (session_msg_pred ack_init_pred Resp) ∗
+  seal_pred  (N.@"conn".@"close")     (conn_pred close_pred) ∗
+  seal_pred  (N.@"conn".@"ack_close") (conn_pred ack_close_pred) ∗
+  iso_dh_ctx (N.@"conn".@"auth").
 
 Lemma ctx_alloc E :
-  ↑N ⊆ E →
+  ↑N.@"conn" ⊆ E →
   seal_pred_token E ==∗
-  ctx ∗ seal_pred_token (E ∖ ↑N).
+  ctx ∗ seal_pred_token (E ∖ ↑N.@"conn").
 Proof.
 iIntros "%sub token".
-rewrite (seal_pred_token_difference (↑N)) => //.
+rewrite (seal_pred_token_difference (↑N.@"conn"));
+  try solve_ndisj.
 iDestruct "token" as "[token ?]". iFrame.
-iMod (seal_pred_set (N.@"init") with "token")
+iMod (seal_pred_set (N.@"conn".@"init") with "token")
   as "[init token]"; try solve_ndisj.
 iFrame.
-iMod (seal_pred_set (N.@"ack_init") with "token")
+iMod (seal_pred_set (N.@"conn".@"ack_init") with "token")
   as "[ack_init token]"; try solve_ndisj.
 iFrame.
-iMod (seal_pred_set (N.@"close") with "token")
+iMod (seal_pred_set (N.@"conn".@"close") with "token")
   as "[close token]"; try solve_ndisj.
 iFrame.
-iMod (seal_pred_set (N.@"ack_close") with "token")
+iMod (seal_pred_set (N.@"conn".@"ack_close") with "token")
   as "[ack_close token]"; try solve_ndisj.
 iFrame.
-iMod (iso_dh_ctx_alloc (N.@"auth") with "token")
+iMod (iso_dh_ctx_alloc (N.@"conn".@"auth") with "token")
   as "#iso_dh"; try solve_ndisj.
 Qed.
 
@@ -554,22 +552,22 @@ Ltac solve_ctx :=
   ).
 
 Lemma ctx_init :
-  ctx -∗ seal_pred (N.@"init") (session_msg_pred init_pred Init).
+  ctx -∗ seal_pred (N.@"conn".@"init") (session_msg_pred init_pred Init).
 Proof. solve_ctx. Qed.
 
 Lemma ctx_ack_init :
-  ctx -∗ seal_pred (N.@"ack_init") (session_msg_pred ack_init_pred Resp).
+  ctx -∗ seal_pred (N.@"conn".@"ack_init") (session_msg_pred ack_init_pred Resp).
 Proof. solve_ctx. Qed.
 
 Lemma ctx_close :
-  ctx -∗ seal_pred (N.@"close") (conn_pred close_pred).
+  ctx -∗ seal_pred (N.@"conn".@"close") (conn_pred close_pred).
 Proof. solve_ctx. Qed.
 
 Lemma ctx_ack_close :
-  ctx -∗ seal_pred (N.@"ack_close") (conn_pred ack_close_pred).
+  ctx -∗ seal_pred (N.@"conn".@"ack_close") (conn_pred ack_close_pred).
 Proof. solve_ctx. Qed.
 
-Lemma ctx_iso_dh_ctx : ctx -∗ iso_dh_ctx (N.@"auth").
+Lemma ctx_iso_dh_ctx : ctx -∗ iso_dh_ctx (N.@"conn".@"auth").
 Proof. solve_ctx. Qed.
 
 End Defs.
