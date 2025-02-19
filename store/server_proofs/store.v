@@ -29,14 +29,14 @@ Variable N : namespace.
 
 Ltac failure := iLeft; iFrame.
 
-Lemma wp_server_handle_store c kI kR cs n n0 vdb :
+Lemma wp_server_handle_store c kI kR cs n vdb :
   Conn.cs_role cs = Resp →
   channel c -∗
   store_ctx N -∗
   Conn.handler_correct
-    (server_db_connected' N kI kR cs n n0 vdb)
-    (server_handler_post N kI kR cs n0 vdb)
-    kI kR cs n n0
+    (server_db_connected' N kI kR cs n vdb)
+    (server_handler_post N kI kR cs vdb)
+    kI kR cs n
     (N.@"store", Server.handle_store N c (repr cs) vdb).
 Proof.
 iIntros "%e_rl #chan_c #ctx".
@@ -44,7 +44,8 @@ iPoseProof (store_ctx_store with "ctx") as "?".
 iPoseProof (store_ctx_ack_store with "ctx") as "?".
 rewrite /Conn.handler_correct /=. wp_lam; wp_pures.
 iModIntro. iExists _. iSplit => //.
-iIntros "!> %ts conn #p_ts #inv_m db". wp_pures.
+iIntros "!> %ts !> %Φ (conn & db & #p_ts & #inv_m) post".
+wp_pures. iApply (wp_wand with "[conn db] post").
 wp_list_match => [t1 t2 ->|_]; wp_pures; last by failure.
 iDestruct "db" as "(%db & #p_db & db & #db_at & token)".
 wp_bind (SAList.insert _ _ _).

@@ -73,9 +73,9 @@ Definition db_disconnected kI kR : iProp := ∃ n failed,
   DB.client_view kI (N.@"client".@kR.@"db") n ∗
   Conn.client_disconnected N kI kR n failed.
 
-Definition db_connected kI kR cs : iProp := ∃ n n0,
-  DB.client_view kI (N.@"client".@kR.@"db") (n + n0) ∗
-  Conn.connected kI kR cs n n0 ∗
+Definition db_connected kI kR cs : iProp := ∃ n,
+  DB.client_view kI (N.@"client".@kR.@"db") n ∗
+  Conn.connected kI kR cs n ∗
   Conn.client_token N kI kR cs.
 
 Lemma db_connected_ok kI kR cs :
@@ -83,7 +83,7 @@ Lemma db_connected_ok kI kR cs :
   (Conn.failure kI kR -∗ ▷ False) -∗
   ◇ Conn.session_failed cs false.
 Proof.
-iIntros "(% & % & ? & conn & _) fail".
+iIntros "(% & ? & conn & _) fail".
 iApply (Conn.connected_ok with "conn fail").
 Qed.
 
@@ -170,16 +170,16 @@ Definition server_token cs : iProp :=
     Conn.clock N (si_init cs) (si_resp cs) n0 ∗
     Conn.clock N (si_init cs) (si_resp cs) n0.
 
-Definition server_db_connected' kI kR cs n n0 vdb : iProp :=
+Definition server_db_connected' kI kR cs n vdb : iProp :=
   ∃ db, public_db db ∗
         SAList.is_alist vdb (repr <$> db) ∗
         (Conn.session_failed cs true ∨
-           DB.db_at kI (N.@"client".@kR.@"db") (n + n0) db) ∗
+           DB.db_at kI (N.@"client".@kR.@"db") n db) ∗
         server_token cs.
 
-Definition server_db_connected kI kR cs n n0 vdb : iProp :=
-  Conn.connected kI kR cs n n0 ∗
-  server_db_connected' kI kR cs n n0 vdb.
+Definition server_db_connected kI kR cs n vdb : iProp :=
+  Conn.connected kI kR cs n ∗
+  server_db_connected' kI kR cs n vdb.
 
 Definition server_disconnected kI kR n failed : iProp :=
   if failed then Conn.failure kI kR
@@ -253,9 +253,9 @@ Definition create_pred kI kR si n ts : iProp := ∃ t1 t2,
 
 Definition ack_create_pred kI kR si n ts : iProp := True.
 
-Definition server_handler_post kI kR cs n0 vdb v : iProp :=
+Definition server_handler_post kI kR cs vdb v : iProp :=
   ⌜v = #true⌝ ∗
-  (∃ n, server_db_connected kI kR cs n n0 vdb) ∨
+  (∃ n, server_db_connected kI kR cs n vdb) ∨
   ⌜v = #false⌝ ∗ server_db_disconnected kI kR vdb.
 
 Lemma ack_load_predI skI skR cs n t1 t2 db :

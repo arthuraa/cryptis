@@ -29,14 +29,14 @@ Variable N : namespace.
 
 Ltac failure := iLeft; iFrame; eauto.
 
-Lemma wp_server_handle_create c kI kR cs n n0 vdb :
+Lemma wp_server_handle_create c kI kR cs n vdb :
   Conn.cs_role cs = Resp →
   channel c -∗
   store_ctx N -∗
   Conn.handler_correct
-    (server_db_connected' N kI kR cs n n0 vdb)
-    (server_handler_post N kI kR cs n0 vdb)
-    kI kR cs n n0
+    (server_db_connected' N kI kR cs n vdb)
+    (server_handler_post N kI kR cs vdb)
+    kI kR cs n
     (N.@"create", Server.handle_create N c (repr cs) vdb).
 Proof.
 iIntros "%e_rl #chan_c #ctx".
@@ -44,9 +44,9 @@ iPoseProof (store_ctx_create with "ctx") as "?".
 iPoseProof (store_ctx_ack_create with "ctx") as "?".
 rewrite /Conn.handler_correct /=. wp_lam; wp_pures.
 iModIntro. iExists _. iSplit => //.
-iIntros "!> %ts conn #p_ts #inv_ts db".
+iIntros "!> %ts !> %Φ (conn & db & #p_ts & #inv_ts) post".
+wp_pures. iApply (wp_wand with "[conn db] post").
 iDestruct "db" as "(%db & #p_db & db & #db_at & token)".
-wp_pures.
 wp_list_match => [t1 t2 ->| _]; wp_pures; last by failure.
 wp_bind (SAList.find _ _). iApply (SAList.wp_find with "db") => //.
 iIntros "!> db". rewrite lookup_fmap.
@@ -54,7 +54,7 @@ wp_bind (match: _ with InjL <> => _ | InjR <> => _ end)%E.
 iApply (wp_frame_wand with "conn").
 iAssert (Conn.session_failed cs true ∨
            DB.db_at kI (N.@"client".@kR.@"db")
-             (S n + n0) (DB.op_app db (Create t1 t2)))%I
+             (S n) (DB.op_app db (Create t1 t2)))%I
   as "#db_at'".
 { iDestruct "inv_ts" as "[?|inv_ts]"; eauto.
   iDestruct "inv_ts" as "(%t1' & %t2' & %e & create_at)".
@@ -63,7 +63,7 @@ iAssert (Conn.session_failed cs true ∨
   iRight. by iApply (DB.db_at_create_at with "db_at"). }
 iApply (wp_wand _ _ _ (λ v,
   ∃ (b : bool), ⌜v = #((if b then 1 else 0) : Z)⌝ ∗
-                server_db_connected' N kI kR cs (S n) n0 vdb
+                server_db_connected' N kI kR cs (S n) vdb
   ) with "[db token]")%I.
 { case db_t1: (db !! t1) => [t2'|]; wp_pures.
   { iExists false; iModIntro; iFrame.

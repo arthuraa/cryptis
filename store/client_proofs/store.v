@@ -37,7 +37,7 @@ Lemma wp_client_store c kI kR cs t1 t2 t2' :
   {{{ RET #(); db_connected N kI kR cs ∗ rem_mapsto N kI kR t1 t2' }}}.
 Proof.
 iIntros "#chan_c #ctx #p_t1 #p_t2 !> %Φ [client mapsto] post".
-iDestruct "client" as "(%n & %n0 & db & conn & token)".
+iDestruct "client" as "(%n & db & conn & token)".
 wp_lam. wp_pures. wp_list.
 iMod (rem_mapsto_store N t2' with "db mapsto") as "(db & mapsto & #store)".
 wp_apply (Conn.wp_write with "[//] [] [] [] [$]").

@@ -240,7 +240,7 @@ Definition client_disconnecting kI kR cs : iProp :=
   server_clock_ready kI kR ∗
   term_token (si_init_share cs) (↑isoN.@"end").
 
-Definition connected kI kR cs n n0 : iProp :=
+Definition connected' kI kR cs n n0 : iProp :=
   ⌜si_init cs = kI⌝ ∗
   ⌜si_resp cs = kR⌝ ∗
   wf_sess_info cs ∗
@@ -251,10 +251,15 @@ Definition connected kI kR cs n n0 : iProp :=
   (session_failed cs true ∨
      term_meta (si_init_share cs) (isoN.@"beginning") n0).
 
-Lemma connected_keyE kI kR cs n n0 :
-  connected kI kR cs n n0 -∗
+Definition connected kI kR cs n : iProp :=
+  ∃ n' n0, ⌜n = (n' + n0)%nat⌝ ∗
+           term_meta (cs_share cs) (isoN.@"beginning") n0 ∗
+           connected' kI kR cs n' n0.
+
+Lemma connected_keyE kI kR cs n :
+  connected kI kR cs n -∗
   ⌜kI = si_init cs⌝ ∗ ⌜kR = si_resp cs⌝.
-Proof. by iIntros "(-> & -> & _)". Qed.
+Proof. by iIntros "(% & % & % & _ & -> & -> & _)". Qed.
 
 Definition client_token kI kR cs : iProp :=
   ⌜cs_role cs = Init⌝ ∗
@@ -318,24 +323,27 @@ Lemma client_connectedI cs n0 failedI failedR :
   cs_ts cs ↦ #0%nat -∗
   release_token (si_init_share cs) -∗
   session_failed_for cs Resp failedR ={⊤}=∗
-  ▷ (connected (si_init cs) (si_resp cs) cs 0 n0 ∗
+  ▷ (connected (si_init cs) (si_resp cs) cs n0 ∗
      client_token (si_init cs) (si_resp cs) cs).
 Proof.
-iIntros "%e_rl (#server & #? & ? & ? & #conn) ts rel #status".
-rewrite /connected /client_token /cs_share e_rl /=.
-iFrame. do 2!iModIntro. do 4!iSplit => //.
+iIntros "%e_rl (#server & #? & #? & ? & #conn) ts rel #status".
+rewrite /connected /connected' /client_token /cs_share e_rl /=.
+iFrame. do 2!iModIntro. iSplit; last by do 4!iSplit => //.
+iExists n0. do 6!iSplit => //; eauto.
 iSplit; eauto.
 iExists (failedI || failedR).
 case: failedI => /=; eauto.
 case: failedR => /=; eauto.
 Qed.
 
-Lemma connected_ok kI kR cs n n0 :
-  connected kI kR cs n n0 -∗
+Lemma connected_ok kI kR cs n :
+  connected kI kR cs n -∗
   (failure kI kR -∗ ▷ False) -∗
   ◇ session_failed cs false.
 Proof.
-iIntros "(<- & <- & #conn & #? & rel & ts & #(%failed & status) & _) post".
+iIntros "(% & % & % & _ & conn) post".
+iDestruct "conn"
+  as "(<- & <- & #conn & #? & rel & ts & #(%failed & status) & _)".
 by iDestruct (session_okI with "status post") as ">?".
 Qed.
 
@@ -415,7 +423,7 @@ Lemma server_connect kR cs n0 failed :
   server_disconnected (si_init cs) kR n0 failed -∗
   incoming_connection kR cs ={⊤}=∗
   □ (⌜failed⌝ -∗ session_failed cs true) ∗
-  connected (si_init cs) kR cs 0 n0 ∗
+  connected (si_init cs) kR cs n0 ∗
   server_token cs.
 Proof.
 iIntros "dis (#sess & ts & <- & %e_rl & rel & token & close)".
@@ -425,17 +433,23 @@ iMod (session_failed_forI with "sess dis token")
   as "(%failed' & %le_failed & #failed & dis & token)".
 iMod ("close" with "rel failed")
   as "(%failed'' & %le_failed' & rel & #failed' & #init)".
-rewrite /connected /cs_share e_rl /=.
+rewrite /connected /connected' /cs_share e_rl /=.
+iMod (term_meta_set' (N := isoN.@"beginning") n0
+       with "token") as "[#beginning token]"; try solve_ndisj.
 rewrite (term_token_difference _ (↑isoN.@"begin")); try solve_ndisj.
 iDestruct "token" as "[token _]".
 iDestruct "dis" as "[%fail|dis]".
 { iAssert (session_failed cs true) as "#?".
   { by case: failed'' => //= in le_failed' *. }
-  iFrame. do !iSplitR => //; eauto. by iLeft. }
+  iFrame. do !iSplitR => //; eauto.
+  iExists n0. do !iSplitR => //; eauto.
+  by iLeft. }
 iDestruct "init" as "[%fail|(%m & init)]".
 { case: failed'' {le_failed'} => // in fail *.
-  iFrame. do !iSplitR => //; eauto. by iLeft. }
-iDestruct "init" as "(%n0' & clock & beginning & ready)".
+  iFrame. do !iSplitR => //; eauto.
+  iExists n0. do !iSplitR => //; eauto.
+  by iLeft. }
+iDestruct "init" as "(%n0' & clock & beginningI & ready)".
 iMod (escrowE with "ready token") as ">c1" => //.
 iAssert (|={⊤}=> clock (si_init cs) (si_resp cs) n0)%I
   with "[dis]" as "> c2".
@@ -443,10 +457,11 @@ iAssert (|={⊤}=> clock (si_init cs) (si_resp cs) n0)%I
   iMod (escrowE with "clock never") as ">?" => //. }
 iPoseProof (clock_agree with "c1 c2") as "->".
 iModIntro. iFrame. do !iSplit => //; eauto.
-{ iIntros "!> %fail".
+- iIntros "!> %fail".
   have: failed'' by tauto.
-  by case: (failed''). }
-iRight. iFrame.
+  by case: (failed'').
+- iExists n0. do !iSplit => //; eauto.
+- iRight. iFrame.
 Qed.
 
 Definition ack_init_pred si t : iProp := True.
@@ -462,7 +477,7 @@ Definition conn_pred φ kS m : iProp :=
       φ (si_init si) (si_resp si) si (n + n0) ts).
 
 Lemma conn_predI kI kR cs m n0 φ n ts :
-  connected kI kR cs m n0 -∗
+  connected' kI kR cs m n0 -∗
   ([∗ list] t ∈ ts, public t) -∗
   □ (session_failed cs true ∨ φ kI kR (cs_si cs) (n + n0) ts) -∗
   □ conn_pred φ (si_key cs) (Spec.of_list (TInt n :: ts)).
@@ -476,7 +491,7 @@ iDestruct "inv" as "[?|inv]"; eauto.
 Qed.
 
 Lemma conn_predE kI kR cs m n n0 φ ts :
-  connected kI kR cs m n0 -∗
+  connected' kI kR cs m n0 -∗
   □ conn_pred φ (si_key cs) (Spec.of_list (TInt n :: ts)) -∗
   ([∗ list] t ∈ ts, public t) ∗
   □ (session_failed cs true ∨ φ kI kR (cs_si cs) (n + n0) ts).

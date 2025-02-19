@@ -52,13 +52,13 @@ iPureIntro.
 move=> kI _. solve_ndisj.
 Qed.
 
-Lemma wp_server_conn_handler_body c skI skR cs n n0 vdb :
+Lemma wp_server_conn_handler_body c skI skR cs n vdb :
   Conn.cs_role cs = Resp →
   channel c -∗
   store_ctx N -∗
-  {{{ server_db_connected N skI skR cs n n0 vdb }}}
+  {{{ server_db_connected N skI skR cs n vdb }}}
     Server.conn_handler_body N c (repr cs) vdb
-  {{{ v, RET v; server_handler_post N skI skR cs n0 vdb v }}}.
+  {{{ v, RET v; server_handler_post N skI skR cs vdb v }}}.
 Proof.
 iIntros "% #chan_c #ctx !> %Φ (conn & db) post".
 wp_lam. wp_pures.
@@ -72,12 +72,12 @@ iApply Conn.wp_select => //=; do !iSplitR => //.
 - by iApply wp_server_handle_close.
 Qed.
 
-Lemma wp_server_conn_handler c cs n n0 vdb vlock γlock :
+Lemma wp_server_conn_handler c cs n vdb vlock γlock :
   Conn.cs_role cs = Resp →
   channel c -∗
   is_lock γlock vlock (server_db_disconnected N (si_init cs) (si_resp cs) vdb) -∗
   store_ctx N -∗
-  {{{ server_db_connected N (si_init cs) (si_resp cs) cs n n0 vdb ∗
+  {{{ server_db_connected N (si_init cs) (si_resp cs) cs n vdb ∗
       locked γlock }}}
     Server.conn_handler N c (repr cs) vdb vlock
   {{{ RET #(); True }}}.

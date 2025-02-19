@@ -42,7 +42,7 @@ Lemma wp_client_load c kI kR cs t1 t2 :
       (Conn.session_failed cs true ∨ ⌜t2' = t2⌝) }}}.
 Proof.
 iIntros "#chan_c #ctx #p_t1 !> %Φ [client mapsto] post".
-iDestruct "client" as "(%n & %n0 & db & conn & token)".
+iDestruct "client" as "(%n & db & conn & token)".
 wp_lam; wp_pures. wp_list.
 iMod (DB.load_client t1 with "db") as "[#load_at db]".
 iDestruct "ctx" as "(_ & _ & load & ack_load & _)".
