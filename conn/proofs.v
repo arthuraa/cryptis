@@ -540,15 +540,54 @@ iApply "post". iRight. iExists _. iSplit => //.
 iIntros "post". iApply "post". iFrame. by eauto.
 Qed.
 
-Lemma wp_close (c : val) cs n :
+Lemma wp_free (c : val) cs n :
   {{{ cs_ts cs ↦ #n }}}
-    close c (repr cs)
+    free c (repr cs)
   {{{ RET #(); True }}}.
 Proof.
 iIntros "%Φ ts post".
 wp_lam; wp_pures.
 wp_free.
 by iApply "post".
+Qed.
+
+Lemma wp_close N c kI kR cs n :
+  channel c -∗
+  ctx N -∗
+  {{{ connected kI kR cs n ∗ client_token N kI kR cs }}}
+    close N c (repr cs)
+  {{{ failed, RET #();
+      session_failed cs failed ∗
+      client_disconnected N kI kR n failed }}}.
+Proof.
+iIntros "#chan_c (_ & _ & #close & #ack & _)".
+iIntros "!> %Φ [conn token] post".
+iPoseProof (connected_keyE with "conn") as "[-> ->]".
+wp_lam. wp_pures.
+wp_apply (@wp_nil term).
+wp_apply (wp_write with "[//] [] [] [] [$]") => //.
+- iRight. iModIntro. by eauto.
+iIntros "conn". wp_pures.
+wp_apply (wp_read with "[//] [] [$]") => //.
+iIntros "%ts (conn & _ & #inv)". wp_pures.
+iDestruct "conn"
+  as "(% & % & _ & _ & _ & _ & _ & _ &
+       rel & ts & (%failed & #failed) & _)".
+iAssert (|={⊤}=>
+          client_disconnected N (si_init cs) (si_resp cs) n failed)%I
+  with "[token]" as ">dis".
+{ iDestruct "token" as "(%e_rl & #server & end)".
+  iDestruct "inv" as "[fail|inv]".
+  - iPoseProof (session_failed_agree with "fail failed") as "<-".
+    iModIntro. do !iSplit => //.
+    by iApply (session_failed_failure with "fail").
+  - iMod (escrowE with "inv end") as ">c1" => //.
+    case: failed.
+    + iModIntro. do !iSplit => //.
+      by iApply (session_failed_failure with "failed").
+    + iModIntro. iSplit => //. }
+wp_apply (wp_free with "[$]"). iIntros "_".
+iApply "post". by iFrame.
 Qed.
 
 End Proofs.

@@ -34,30 +34,13 @@ Lemma wp_client_close c kI kR cs :
     Client.close N c (repr cs)
   {{{ RET #(); db_disconnected N kI kR }}}.
 Proof.
-iIntros "#chan_c (_ & _ & _ & _ & _ & _ & _ & _ & #close & #ack & _)".
+iIntros "#chan_c (_ & _ & _ & _ & _ & _ & #?)".
 iIntros "!> %Φ client post".
 iDestruct "client" as "(%n & client & conn & token)".
-iPoseProof (Conn.connected_keyE with "conn") as "[-> ->]".
 wp_lam. wp_pures.
-wp_apply (@wp_nil term).
-wp_apply (Conn.wp_write with "[//] [] [] [] [$]") => //.
-- iRight. iModIntro. by eauto.
-iIntros "conn". wp_pures.
-wp_apply (Conn.wp_read with "[//] [] [$]") => //.
-iIntros "%ts (conn & _ & #inv)".
-wp_pures.
-iAssert (|={⊤}=>
-  ∃ failed, Conn.client_disconnected N (si_init cs) (si_resp cs) n failed)%I
-  with "[token]" as ">(%failed & dis)".
-{ iDestruct "token" as "(%e_rl & #server & end)".
-  iDestruct "inv" as "[fail|inv]".
-  - iExists true. iModIntro. iSplit => //.
-    by iApply (Conn.session_failed_failure with "fail").
-  - iMod (escrowE with "inv end") as ">c1" => //.
-    iExists false. iModIntro. iSplit => //. }
-iDestruct "conn" as "(% & % & _ & _ & _ & _ & _ & _ & rel & ts & _)".
-wp_apply (Conn.wp_close with "[$]"). iIntros "_".
-iApply "post". by iFrame.
+wp_apply (Conn.wp_close with "[//] [//] [$]").
+iIntros "%failed [#failed dis]". iApply "post".
+by iFrame.
 Qed.
 
 End Verif.

@@ -145,9 +145,14 @@ Proof.
 by rewrite select_eq /select /= subst_make_handlers.
 Qed.
 
-Definition close : val := λ: "c" "cs",
+Definition free : val := λ: "c" "cs",
   let: "timestamp" := Fst "cs" in
   Free "timestamp".
+
+Definition close : val := λ: "c" "cs",
+  write (N.@"conn".@"close") "c" "cs" [];;
+  read (N.@"conn".@"ack_close") "c" "cs";;
+  free "c" "cs".
 
 End Impl.
 

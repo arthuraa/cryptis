@@ -74,7 +74,7 @@ wp_apply (Conn.wp_write with "[//] [] [] [] [$]") => //.
 { by rewrite /= public_TInt; eauto. }
 iIntros "conn". wp_pures.
 iDestruct "conn" as "(% & % & _ & _ & ? & ? & ? & ? & rel & ts & _)".
-wp_apply (Conn.wp_close with "ts"). iIntros "_".
+wp_apply (Conn.wp_free with "ts"). iIntros "_".
 wp_pures. iModIntro. iRight. iExists _. iSplit => //.
 iRight. by iFrame.
 Qed.

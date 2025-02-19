@@ -43,9 +43,7 @@ Definition create : val := λ: "c" "cs" "k" "v",
   Conn.tick "cs".
 
 Definition close : val := λ: "c" "cs",
-  Conn.write (N.@"conn".@"close") "c" "cs" [];;
-  Conn.read (N.@"conn".@"ack_close") "c" "cs";;
-  Conn.close "c" "cs".
+  Conn.close N "c" "cs".
 
 End Client.
 
@@ -94,7 +92,7 @@ Definition handle_create N : val :=
 Definition handle_close N : val :=
 λ: "c" "cs" "db" "req",
   Conn.write (N.@"conn".@"ack_close") "c" "cs" [TInt 0];;
-  Conn.close "c" "cs";;
+  Conn.free "c" "cs";;
   SOME #false.
 
 Definition conn_handler_body N : val :=
