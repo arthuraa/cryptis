@@ -29,25 +29,24 @@ Variable N : namespace.
 
 Ltac failure := iLeft; iFrame.
 
-Lemma wp_server_handle_store c kI kR cs n vdb :
+Lemma wp_server_handle_store c kI kR cs vdb :
   Conn.cs_role cs = Resp →
   channel c -∗
   store_ctx N -∗
   Conn.handler_correct
-    (server_db_connected' N kI kR cs n vdb)
-    (server_handler_post N kI kR cs vdb)
-    kI kR cs n
+    (server_db_connected' N kI kR cs vdb)
+    kI kR cs
     (N.@"store", Server.handle_store N c (repr cs) vdb).
 Proof.
 iIntros "%e_rl #chan_c #ctx".
 iPoseProof (store_ctx_store with "ctx") as "?".
 iPoseProof (store_ctx_ack_store with "ctx") as "?".
-rewrite /Conn.handler_correct /=. wp_lam; wp_pures.
-iModIntro. iExists _. iSplit => //.
-iIntros "!> %ts !> %Φ (conn & db & #p_ts & #inv_m) post".
+rewrite /Conn.handler_correct /= /Conn.handler_correct_gen. 
+wp_lam; wp_pures. iModIntro. iExists _. iSplit => //.
+iIntros "!> %n %ts !> %Φ (conn & db & #p_ts & #inv_m) post".
 wp_pures. iApply (wp_wand with "[conn db] post").
 wp_list_match => [t1 t2 ->|_]; wp_pures; last by failure.
-iDestruct "db" as "(%db & #p_db & db & #db_at & token)".
+iDestruct "db" as "(%db & #p_db & db & #db_at)".
 wp_bind (SAList.insert _ _ _).
 iApply (SAList.wp_insert with "db").
 iIntros "!> db". rewrite -fmap_insert.
@@ -58,7 +57,7 @@ wp_apply (Conn.wp_write with "[] [] [] [] [$]") => //.
 iIntros "conn". wp_pures. 
 wp_apply (Conn.wp_tick with "[$]"). iIntros "conn". wp_pures.
 iModIntro. iRight. iExists _. iSplit => //.
-iLeft. iSplit => //. iExists (S n). iFrame.
+iSplit => //. iExists (S n). iFrame.
 rewrite /=.
 iDestruct "p_ts" as "(p_t1 & p_t2 & _)".
 iSplit; first by iApply public_db_insert.

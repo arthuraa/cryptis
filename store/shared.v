@@ -170,22 +170,18 @@ Definition server_token cs : iProp :=
     Conn.clock N (si_init cs) (si_resp cs) n0 ∗
     Conn.clock N (si_init cs) (si_resp cs) n0.
 
-Definition server_db_connected' kI kR cs n vdb : iProp :=
+Definition server_db_connected' kI kR cs vdb n : iProp :=
   ∃ db, public_db db ∗
         SAList.is_alist vdb (repr <$> db) ∗
         (Conn.session_failed cs true ∨
-           DB.db_at kI (N.@"client".@kR.@"db") n db) ∗
-        server_token cs.
+           DB.db_at kI (N.@"client".@kR.@"db") n db).
 
-Definition server_db_connected kI kR cs n vdb : iProp :=
+Definition server_db_connected kI kR cs vdb n : iProp :=
   Conn.connected kI kR cs n ∗
-  server_db_connected' kI kR cs n vdb.
+  Conn.server_token N cs ∗
+  server_db_connected' kI kR cs vdb n.
 
-Definition server_disconnected kI kR n failed : iProp :=
-  if failed then Conn.failure kI kR
-  else (⌜n = 0⌝ ∗ Conn.never_connected N kI kR ∨ Conn.clock N kI kR n)%I.
-
-Definition server_db_disconnected' kI kR n vdb failed : iProp :=
+Definition server_db_disconnected' kI kR vdb n failed : iProp :=
   ∃ db,
     public_db db ∗
     SAList.is_alist vdb (repr <$> db) ∗
@@ -193,8 +189,8 @@ Definition server_db_disconnected' kI kR n vdb failed : iProp :=
 
 Definition server_db_disconnected kI kR vdb : iProp :=
   ∃ n failed,
-    server_disconnected kI kR n failed ∗
-    server_db_disconnected' kI kR n vdb failed.
+    Conn.server_disconnected N kI kR n failed ∗
+    server_db_disconnected' kI kR vdb n failed.
 
 Lemma server_db_alloc kI kR vdb E :
   ↑N.@"server".@kI ⊆ E →
@@ -252,11 +248,6 @@ Definition create_pred kI kR si n ts : iProp := ∃ t1 t2,
   DB.create_at kI (N.@"client".@kR.@"db") n t1 t2.
 
 Definition ack_create_pred kI kR si n ts : iProp := True.
-
-Definition server_handler_post kI kR cs vdb v : iProp :=
-  ⌜v = #true⌝ ∗
-  (∃ n, server_db_connected kI kR cs n vdb) ∨
-  ⌜v = #false⌝ ∗ server_db_disconnected kI kR vdb.
 
 Lemma ack_load_predI skI skR cs n t1 t2 db :
   db !! t1 = Some t2 →

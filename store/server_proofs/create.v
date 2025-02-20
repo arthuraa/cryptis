@@ -29,24 +29,23 @@ Variable N : namespace.
 
 Ltac failure := iLeft; iFrame; eauto.
 
-Lemma wp_server_handle_create c kI kR cs n vdb :
+Lemma wp_server_handle_create c kI kR cs vdb :
   Conn.cs_role cs = Resp →
   channel c -∗
   store_ctx N -∗
   Conn.handler_correct
-    (server_db_connected' N kI kR cs n vdb)
-    (server_handler_post N kI kR cs vdb)
-    kI kR cs n
+    (server_db_connected' N kI kR cs vdb)
+    kI kR cs
     (N.@"create", Server.handle_create N c (repr cs) vdb).
 Proof.
 iIntros "%e_rl #chan_c #ctx".
 iPoseProof (store_ctx_create with "ctx") as "?".
 iPoseProof (store_ctx_ack_create with "ctx") as "?".
-rewrite /Conn.handler_correct /=. wp_lam; wp_pures.
-iModIntro. iExists _. iSplit => //.
-iIntros "!> %ts !> %Φ (conn & db & #p_ts & #inv_ts) post".
+rewrite /Conn.handler_correct /Conn.handler_correct_gen.
+wp_lam. wp_pures. iModIntro. iExists _. iSplit => //.
+iIntros "!> %n %ts !> %Φ (conn & db & #p_ts & #inv_ts) post".
 wp_pures. iApply (wp_wand with "[conn db] post").
-iDestruct "db" as "(%db & #p_db & db & #db_at & token)".
+iDestruct "db" as "(%db & #p_db & db & #db_at)".
 wp_list_match => [t1 t2 ->| _]; wp_pures; last by failure.
 wp_bind (SAList.find _ _). iApply (SAList.wp_find with "db") => //.
 iIntros "!> db". rewrite lookup_fmap.
@@ -63,8 +62,8 @@ iAssert (Conn.session_failed cs true ∨
   iRight. by iApply (DB.db_at_create_at with "db_at"). }
 iApply (wp_wand _ _ _ (λ v,
   ∃ (b : bool), ⌜v = #((if b then 1 else 0) : Z)⌝ ∗
-                server_db_connected' N kI kR cs (S n) vdb
-  ) with "[db token]")%I.
+                server_db_connected' N kI kR cs vdb (S n)
+  ) with "[db]")%I.
 { case db_t1: (db !! t1) => [t2'|]; wp_pures.
   { iExists false; iModIntro; iFrame.
     by rewrite /= db_t1; eauto. }
@@ -89,7 +88,7 @@ iIntros "conn". wp_pures.
 wp_apply (Conn.wp_tick with "[$]"). iIntros "conn".
 wp_pures.
 iModIntro. iRight. iExists _. iSplit => //.
-iLeft. iSplit => //. iExists (S n). by iFrame.
+iSplit => //. iExists (S n). by iFrame.
 Qed.
 
 End Verif.

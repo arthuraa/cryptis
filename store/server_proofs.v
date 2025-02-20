@@ -8,8 +8,7 @@ From iris.heap_lang.lib Require Import ticket_lock.
 From cryptis Require Import lib version term cryptis primitives tactics.
 From cryptis Require Import gmeta nown role iso_dh conn.
 From cryptis.store Require Import impl shared alist db.
-From cryptis.store.server_proofs
-  Require Import load store create close.
+From cryptis.store.server_proofs Require Import load store create.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -52,49 +51,52 @@ iPureIntro.
 move=> kI _. solve_ndisj.
 Qed.
 
-Lemma wp_server_conn_handler_body c skI skR cs n vdb :
-  Conn.cs_role cs = Resp →
-  channel c -∗
-  store_ctx N -∗
-  {{{ server_db_connected N skI skR cs n vdb }}}
-    Server.conn_handler_body N c (repr cs) vdb
-  {{{ v, RET v; server_handler_post N skI skR cs vdb v }}}.
-Proof.
-iIntros "% #chan_c #ctx !> %Φ (conn & db) post".
-wp_lam. wp_pures.
-rewrite !Conn.subst_select /=.
-iApply (wp_wand with "[conn db] post").
-iRevert "db".
-iApply Conn.wp_select => //=; do !iSplitR => //.
-- by iApply wp_server_handle_store.
-- by iApply wp_server_handle_load.
-- by iApply wp_server_handle_create.
-- by iApply wp_server_handle_close.
-Qed.
+(* Lemma wp_server_conn_handler_body c skI skR cs n vdb : *)
+(*   Conn.cs_role cs = Resp → *)
+(*   channel c -∗ *)
+(*   store_ctx N -∗ *)
+(*   {{{ server_db_connected N skI skR cs n vdb }}} *)
+(*     Server.conn_handler_body N c (repr cs) vdb *)
+(*   {{{ v, RET v; server_handler_post N skI skR cs vdb v }}}. *)
+(* Proof. *)
+(* iIntros "% #chan_c #ctx !> %Φ (conn & db) post". *)
+(* wp_lam. wp_pures. *)
+(* rewrite !Conn.subst_select /=. *)
+(* iApply (wp_wand with "[conn db] post"). *)
+(* iRevert "db". *)
+(* iApply Conn.wp_select => //=; do !iSplitR => //. *)
+(* - by iApply wp_server_handle_store. *)
+(* - by iApply wp_server_handle_load. *)
+(* - by iApply wp_server_handle_create. *)
+(* - by iApply wp_server_handle_close. *)
+(* Qed. *)
 
 Lemma wp_server_conn_handler c cs n vdb vlock γlock :
   Conn.cs_role cs = Resp →
   channel c -∗
   is_lock γlock vlock (server_db_disconnected N (si_init cs) (si_resp cs) vdb) -∗
   store_ctx N -∗
-  {{{ server_db_connected N (si_init cs) (si_resp cs) cs n vdb ∗
+  {{{ server_db_connected N (si_init cs) (si_resp cs) cs vdb n ∗
       locked γlock }}}
     Server.conn_handler N c (repr cs) vdb vlock
   {{{ RET #(); True }}}.
 Proof.
 iIntros "% #chan_c #lock #ctx".
-iLöb as "IH" forall (n).
-iIntros "!> %Φ (conn & locked) post".
-wp_rec. wp_pures. wp_bind (Server.conn_handler_body _ _ _ _).
-iApply (wp_server_conn_handler_body with "[# //] [# //] [$]") => //.
-iIntros "!> %v [state|state]".
-- iDestruct "state" as "(-> & %n' & conn)".
-  wp_pures. by iApply ("IH" with "[$]").
-- iDestruct "state" as "(-> & dis)".
-  wp_pures.
-  wp_apply (release_spec with "[locked dis]").
-  { iFrame "locked". iSplit => //. }
-  by eauto.
+iIntros "!> %Φ ((conn & token & db) & locked) post".
+wp_lam. wp_pures. rewrite !Conn.subst_handle /=.
+iPoseProof (store_ctx_conn_ctx with "ctx") as "?".
+wp_apply (Conn.wp_handle with "[//] [//] [] conn token db");
+  first (rewrite /=; do !iSplitR => //).
+- iApply wp_server_handle_store => //.
+- iApply wp_server_handle_load => //.
+- iApply wp_server_handle_create => //.
+iIntros "%n' %failed (#failed & dis & %db & #p_db & vdb & #db_at)".
+wp_pures.
+wp_apply (release_spec with "[$locked dis vdb]") => //.
+iSplit => //. iExists n', failed. iFrame.
+iSplit => //. iDestruct "db_at" as "[fail|db_at]"; eauto.
+iPoseProof (Conn.session_failed_agree with "failed fail") as "->".
+by eauto.
 Qed.
 
 Lemma wp_server_find_client ss skI :

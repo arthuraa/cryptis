@@ -89,25 +89,14 @@ Definition handle_create N : val :=
   Conn.tick "cs";;
   SOME #true.
 
-Definition handle_close N : val :=
-λ: "c" "cs" "db" "req",
-  Conn.write (N.@"conn".@"ack_close") "c" "cs" [TInt 0];;
-  Conn.free "c" "cs";;
-  SOME #false.
-
-Definition conn_handler_body N : val :=
+Definition conn_handler N : val :=
   let handlers := [
     (N.@"store", handle_store N "c" "cs" "db");
     (N.@"load", handle_load N "c" "cs" "db");
-    (N.@"create", handle_create N "c" "cs" "db");
-    (N.@"conn".@"close", handle_close N "c" "cs" "db")
-  ] in λ: "c" "cs" "db",
-     Conn.select "c" "cs" handlers.
-
-Definition conn_handler N : val := rec: "loop" "c" "cs" "db" "lock" :=
-  if: conn_handler_body N "c" "cs" "db" then
-    "loop" "c" "cs" "db" "lock"
-  else lock.release "lock".
+    (N.@"create", handle_create N "c" "cs" "db")
+  ] in λ: "c" "cs" "db" "lock",
+     Conn.handle N "c" "cs" handlers;;
+     lock.release "lock".
 
 Definition find_client : val := λ: "ss" "client_key",
   let: "clients" := Snd "ss" in
