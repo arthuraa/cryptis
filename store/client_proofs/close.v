@@ -38,7 +38,8 @@ Lemma wp_client_close c kI kR cs :
 Proof.
 iIntros "#chan_c (_ & _ & _ & _ & _ & _ & #?)".
 iIntros "!> %Φ client post".
-iDestruct "client" as "(%n & client & conn & token)".
+iDestruct "client"
+  as "(%n & %db & conn & version & #db_at & state & token)".
 wp_lam. wp_pures.
 wp_apply (Conn.wp_close with "[//] [//] [$]").
 iIntros "%failed (#failed & dis & pub)". iApply "post".

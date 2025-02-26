@@ -69,13 +69,17 @@ Implicit Types (failed : bool).
 
 Variable N : namespace.
 
-Definition db_disconnected kI kR : iProp := ∃ n failed,
-  DB.client_view kI (N.@"client".@kR.@"db") n ∗
-  Conn.client_disconnected N kI kR n failed.
+Definition db_disconnected kI kR : iProp := ∃ n failed db,
+  Conn.client_disconnected N kI kR n failed ∗
+  DB.db_version kI (N.@"client".@kR.@"db") n ∗
+  DB.db_at kI (N.@"client".@kR.@"db") n db ∗
+  DB.db_state kI (N.@"client".@kR.@"db") db.
 
-Definition db_connected kI kR cs : iProp := ∃ n,
-  DB.client_view kI (N.@"client".@kR.@"db") n ∗
+Definition db_connected kI kR cs : iProp := ∃ n db,
   Conn.connected kI kR cs n ∗
+  DB.db_version kI (N.@"client".@kR.@"db") n ∗
+  DB.db_at kI (N.@"client".@kR.@"db") n db ∗
+  DB.db_state kI (N.@"client".@kR.@"db") db ∗
   Conn.client_token N kI kR cs.
 
 Lemma db_connected_ok kI kR cs :
@@ -83,7 +87,7 @@ Lemma db_connected_ok kI kR cs :
   (Conn.failure kI kR -∗ ▷ False) -∗
   ◇ Conn.session_failed cs false.
 Proof.
-iIntros "(% & ? & conn & _) fail".
+iIntros "(% & % & conn & _) fail".
 iApply (Conn.connected_ok with "conn fail").
 Qed.
 
@@ -97,36 +101,6 @@ Lemma rem_free_at_diff kI kR T1 T2 :
   T1 ⊆ T2 →
   rem_free_at kI kR T2 ⊣⊢ rem_free_at kI kR T1 ∗ rem_free_at kI kR (T2 ∖ T1).
 Proof. iIntros "%sub". by iApply DB.free_at_diff. Qed.
-
-Lemma rem_mapsto_store t2' kI kR t1 t2 n :
-  DB.client_view kI (N.@"client".@kR.@"db") n -∗
-  rem_mapsto kI kR t1 t2 ==∗
-  DB.client_view kI (N.@"client".@kR.@"db") (S n) ∗
-  rem_mapsto kI kR t1 t2' ∗
-  DB.store_at kI (N.@"client".@kR.@"db") n t1 t2'.
-Proof.
-iIntros "client mapsto".
-iMod (DB.store_client t2' with "client mapsto")
-  as "(client & #update & mapsto)".
-by iFrame.
-Qed.
-
-Lemma rem_mapsto_alloc kI kR t1 t2 n T :
-  t1 ∈ T →
-  DB.client_view kI (N.@"client".@kR.@"db") n -∗
-  rem_free_at kI kR T ==∗
-  DB.client_view kI (N.@"client".@kR.@"db") (S n) ∗
-  rem_mapsto kI kR t1 t2 ∗
-  rem_free_at kI kR (T ∖ {[t1]}) ∗
-  DB.create_at kI (N.@"client".@kR.@"db") n t1 t2.
-Proof.
-iIntros "%t1_T client".
-have {}t1_T : {[t1]} ⊆ T by set_solver.
-rewrite (rem_free_at_diff _ _ t1_T).
-iIntros "[free free']". iFrame "free'".
-iMod (DB.create_client _ t2 with "client free") as "(create & client & mapsto)".
-iFrame. by eauto.
-Qed.
 
 Lemma client_alloc kI kR E :
   ↑N.@"client".@kR ⊆ E →
@@ -142,10 +116,11 @@ iMod (Conn.client_alloc kI (kR := kR) with "kI_token")
   as "[dis kI_token]" => //.
 { solve_ndisj. }
 iMod (DB.alloc _ (N := N.@"client".@kR.@"db") with "kI_token")
-  as "(client_view & free & #server_view & kI_token)".
+  as "(version & state & free & #server_view & kI_token)".
 { solve_ndisj. }
 iModIntro. iSplitR "free".
 - iExists 0, false. iFrame.
+- by iFrame.
 - by iFrame.
 Qed.
 

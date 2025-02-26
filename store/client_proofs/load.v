@@ -42,9 +42,11 @@ Lemma wp_client_load c kI kR cs t1 t2 :
       (Conn.session_failed cs true ∨ ⌜t2' = t2⌝) }}}.
 Proof.
 iIntros "#chan_c #ctx #p_t1 !> %Φ [client mapsto] post".
-iDestruct "client" as "(%n & db & conn & token)".
+iDestruct "client"
+  as "(%n & %db & conn & version & #db_at & state & token)".
 wp_lam; wp_pures. wp_list.
-iMod (DB.load_client t1 with "db") as "[#load_at db]".
+iMod (DB.load_client t1 with "version db_at")
+  as "(#load_at & version & db)".
 iDestruct "ctx" as "(_ & _ & load & ack_load & _)".
 wp_apply (Conn.wp_write with "chan_c load [] [] [$]").
 - by rewrite /=; eauto.
@@ -62,7 +64,7 @@ iDestruct "inv_ts" as "[fail|inv_ts]".
 iDestruct "inv_ts" as "(%t1' & %t2' & -> & load_at' & stored_at)".
 iPoseProof (DB.op_at_agree with "load_at load_at'") as "%e".
 case: e => <-.
-iPoseProof (DB.client_view_stored_at with "db mapsto stored_at") as "->".
+iPoseProof (DB.client_view_stored_at with "db state mapsto stored_at") as "->".
 rewrite /=. iDestruct "p_ts" as "[? _]".
 wp_pures. iApply "post". iFrame. by eauto.
 Qed.

@@ -41,10 +41,10 @@ Lemma wp_client_create c kI kR cs t1 t2 :
 Proof.
 iIntros "#chan_c (_ & _ & _ & _ & #create & #ack & _) #p_t1 #p_t2".
 iIntros "!> %Φ [client free] post".
-iDestruct "client" as "(%n & client & conn & token)".
-iMod (@rem_mapsto_alloc _ _ _ _ _ _ _ t1 t2 with "client free")
-  as "(client & mapsto & _ & #created)".
-{ by rewrite elem_of_singleton. }
+iDestruct "client"
+  as "(%n & %db & conn & version & #db_at & state & token)".
+iMod (DB.create_client t1 t2 with "version db_at state free")
+  as "(#create_at & version & #db_at' & state & mapsto)".
 wp_lam. wp_pures. wp_list.
 wp_apply (Conn.wp_write with "[//] [] [] [] [$]") => //.
 - by rewrite /=; eauto.

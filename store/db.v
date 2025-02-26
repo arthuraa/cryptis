@@ -276,10 +276,6 @@ Lemma db_state_load t1 k N db :
   db_state k N (op_app db (Load t1)).
 Proof. by eauto. Qed.
 
-Definition client_view k N n : iProp Σ :=
-  db_version k N n ∗
-  ∃ db, db_at k N n db ∗ db_state k N db.
-
 Definition op_at k N n (o : operation) : iProp Σ :=
   ∃ os, hist_at k N (S n) (os ++ [o]).
 
@@ -340,7 +336,8 @@ Definition load_at k N n t1 :=
 Lemma alloc k N E :
   ↑N ⊆ E →
   term_token k E ==∗
-  client_view k N 0 ∗
+  db_version k N 0 ∗
+  db_state k N ∅ ∗
   free_at k N ⊤ ∗
   db_at k N 0 ∅ ∗
   term_token k (E ∖ ↑N).
@@ -368,14 +365,18 @@ iFrame. iModIntro. do !iSplit => //.
 iApply (term_token_drop with "token"). solve_ndisj.
 Qed.
 
-Lemma store_client t2' k N n t1 t2 :
-  client_view k N n -∗
+Lemma store_client t2' k N db n t1 t2 :
+  db_version k N n -∗
+  db_at k N n db -∗
+  db_state k N db -∗
   mapsto k N t1 t2 ==∗
-  client_view k N (S n) ∗
+  db_version k N (S n) ∗
+  db_at k N (S n) (<[t1 := t2']> db) ∗
   store_at k N n t1 t2' ∗
+  db_state k N (<[t1 := t2']>db) ∗
   mapsto k N t1 t2'.
 Proof.
-iIntros "(own_version & %db & #db & own_db) own_frag".
+iIntros "own_version #db own_db own_frag".
 iMod (op_at_intro _ _ _ (Store t1 t2') with "own_version")
   as "[own_version #op_at]".
 iPoseProof (db_at_op_at with "db op_at") as "db'".
@@ -389,14 +390,18 @@ Lemma db_at_store_at k N n db t1 t2 :
   db_at k N (S n) (<[t1 := t2]>db).
 Proof. iApply db_at_op_at. Qed.
 
-Lemma create_client t1 t2 k N n :
-  client_view k N n -∗
+Lemma create_client t1 t2 k N n db :
+  db_version k N n -∗
+  db_at k N n db -∗
+  db_state k N db -∗
   free_at k N {[t1]} ==∗
   create_at k N n t1 t2 ∗
-  client_view k N (S n) ∗
+  db_version k N (S n) ∗
+  db_at k N (S n) (op_app db (Create t1 t2)) ∗
+  db_state k N (op_app db (Create t1 t2)) ∗
   mapsto k N t1 t2.
 Proof.
-iIntros "(version & %db & #db_at & state) Hfree".
+iIntros "version #db_at state Hfree".
 iMod (op_at_intro _ _ _ (Create t1 t2) with "version") as "[version #op_at]".
 iMod (db_state_create t1 t2 with "state Hfree") as "[state mapsto]".
 iModIntro. iFrame. iSplit => //.
@@ -409,12 +414,14 @@ Lemma db_at_create_at k N n db t1 t2 :
   db_at k N (S n) (op_app db (Create t1 t2)).
 Proof. iApply db_at_op_at. Qed.
 
-Lemma load_client t1 k N n :
-  client_view k N n ==∗
+Lemma load_client t1 k N n db :
+  db_version k N n -∗
+  db_at k N n db ==∗
   load_at k N n t1 ∗
-  client_view k N (S n).
+  db_version k N (S n) ∗
+  db_at k N (S n) db.
 Proof.
-iIntros "(version & %db & #db & state)".
+iIntros "version #db".
 iMod (op_at_intro _ _ _ (Load t1) with "version") as "[version #op]".
 iFrame. iModIntro. iSplit=> //. iApply (db_at_op_at with "db op").
 Qed.
@@ -463,13 +470,14 @@ iIntros "#db1 (%db' & #db2 & %db_t1)".
 by iPoseProof (db_at_agree with "db1 db2") as "->".
 Qed.
 
-Lemma client_view_stored_at k N n t1 t2 t2' :
-  client_view k N n -∗
+Lemma client_view_stored_at k N n db t1 t2 t2' :
+  db_at k N n db -∗
+  db_state k N db -∗
   mapsto k N t1 t2 -∗
   stored_at k N n t1 t2' -∗
   ⌜t2' = t2⌝.
 Proof.
-iIntros "(version & %db & #db & state) t1_t2 #stored".
+iIntros "#db state t1_t2 #stored".
 iPoseProof (db_state_mapsto with "state t1_t2") as "%db_t1".
 iPoseProof (db_at_stored_at with "db stored") as "%db_t1'".
 iPureIntro. rewrite db_t1 in db_t1'. by case: db_t1' => ->.
@@ -480,10 +488,6 @@ Lemma stored_atI k N n db t1 t2 :
   db_at k N n db -∗
   stored_at k N n t1 t2.
 Proof. iIntros "%db_t1 #db_at". iExists db; eauto. Qed.
-
-Lemma client_view_db_at k N n :
-  client_view k N n -∗ ∃ db, db_at k N n db.
-Proof. iIntros "(_ & %db & #db & _)". eauto. Qed.
 
 Lemma db_at_to_0 k N n db :
   db_at k N n db -∗
