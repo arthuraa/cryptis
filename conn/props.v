@@ -240,12 +240,12 @@ Definition client_disconnecting kI kR cs : iProp :=
   server_clock_ready kI kR ∗
   term_token (si_init_share cs) (↑isoN.@"end").
 
-Definition connected' kI kR cs n n0 : iProp :=
+Definition connected' kI kR cs b n n0 : iProp :=
   ⌜si_init cs = kI⌝ ∗
   ⌜si_resp cs = kR⌝ ∗
   wf_sess_info cs ∗
   (∃ failed, session_failed_for cs (cs_role cs) failed) ∗
-  release_token (cs_share cs) ∗
+  (if b then released (cs_share cs) else release_token (cs_share cs)) ∗
   cs_ts cs ↦ #n ∗
   (∃ failed, session_failed cs failed) ∗
   (session_failed cs true ∨
@@ -254,7 +254,7 @@ Definition connected' kI kR cs n n0 : iProp :=
 Definition connected kI kR cs n : iProp :=
   ∃ n' n0, ⌜n = (n' + n0)%nat⌝ ∗
            term_meta (cs_share cs) (isoN.@"beginning") n0 ∗
-           connected' kI kR cs n' n0.
+           connected' kI kR cs false n' n0.
 
 Lemma connected_keyE kI kR cs n :
   connected kI kR cs n -∗
@@ -365,9 +365,10 @@ iModIntro. by iFrame.
 Qed.
 
 Definition server_token cs : iProp :=
-  session_failed cs true ∨ ∃ n0,
-    clock (si_init cs) (si_resp cs) n0 ∗
-    clock (si_init cs) (si_resp cs) n0.
+  ⌜cs_role cs = Resp⌝ ∗
+  (session_failed cs true ∨ ∃ n0,
+     clock (si_init cs) (si_resp cs) n0 ∗
+     clock (si_init cs) (si_resp cs) n0).
 
 Definition server_disconnected kI kR n failed : iProp :=
   if failed then failure kI kR
@@ -442,13 +443,11 @@ iDestruct "dis" as "[%fail|dis]".
 { iAssert (session_failed cs true) as "#?".
   { by case: failed'' => //= in le_failed' *. }
   iFrame. do !iSplitR => //; eauto.
-  iExists n0. do !iSplitR => //; eauto.
-  by iLeft. }
+  iExists n0. do !iSplitR => //; eauto. }
 iDestruct "init" as "[%fail|(%m & init)]".
 { case: failed'' {le_failed'} => // in fail *.
   iFrame. do !iSplitR => //; eauto.
-  iExists n0. do !iSplitR => //; eauto.
-  by iLeft. }
+  iExists n0. do !iSplitR => //; eauto. }
 iDestruct "init" as "(%n0' & clock & beginningI & ready)".
 iMod (escrowE with "ready token") as ">c1" => //.
 iAssert (|={⊤}=> clock (si_init cs) (si_resp cs) n0)%I
@@ -476,8 +475,8 @@ Definition conn_pred φ kS m : iProp :=
       term_meta (si_init_share si) (isoN.@"beginning") n0 ∗
       φ (si_init si) (si_resp si) si (n + n0) ts).
 
-Lemma conn_predI kI kR cs m n0 φ n ts :
-  connected' kI kR cs m n0 -∗
+Lemma conn_predI kI kR cs b m n0 φ n ts :
+  connected' kI kR cs b m n0 -∗
   ([∗ list] t ∈ ts, public t) -∗
   □ (session_failed cs true ∨ φ kI kR (cs_si cs) (n + n0) ts) -∗
   □ conn_pred φ (si_key cs) (Spec.of_list (TInt n :: ts)).
@@ -490,8 +489,8 @@ iDestruct "beginning" as "[?|beginning]"; eauto.
 iDestruct "inv" as "[?|inv]"; eauto.
 Qed.
 
-Lemma conn_predE kI kR cs m n n0 φ ts :
-  connected' kI kR cs m n0 -∗
+Lemma conn_predE kI kR cs b m n n0 φ ts :
+  connected' kI kR cs b m n0 -∗
   □ conn_pred φ (si_key cs) (Spec.of_list (TInt n :: ts)) -∗
   ([∗ list] t ∈ ts, public t) ∗
   □ (session_failed cs true ∨ φ kI kR (cs_si cs) (n + n0) ts).
@@ -517,7 +516,8 @@ Definition conn_closed si ending :=
          (clock (si_init si) (si_resp si) ending).
 
 Definition ack_close_pred kI kR si n ts : iProp :=
-  conn_closed si n.
+  conn_closed si n ∗
+  released (si_resp_share si).
 
 Lemma session_failed_failure si failed :
   session_failed si failed ⊢ ⌜failed⌝ → compromised_session si.

@@ -46,16 +46,21 @@ Definition game : val := λ: <>,
   (* Run storage server in parallel *)
   Fork (start_server "c" "skR");;
 
-  (* Connect client to server and leak long-term secret keys after
-     connection is done *)
+  (* Connect client to server *)
   let: "conn" := Client.connect kvsN "c" "skI" "vkR" in
-  send "c" "skI";;
-  send "c" "skR";;
 
   (* Store value in server *)
   let: "k" := recv "c" in
   let: "v" := recv "c" in
   Client.create kvsN "c" "conn" "k" "v";;
+  Client.close kvsN "c" "conn";;
+  (* Leak session key *)
+  send "c" (Conn.session_key "conn");;
+
+  let: "conn" := Client.connect kvsN "c" "skI" "vkR" in
+  (* Leak long-term keys *)
+  send "c" "skI";;
+  send "c" "skR";;
 
   (* Retrive value and check that it matches the one that was stored *)
   let: "v'" := Client.load kvsN "c" "conn" "k" in
@@ -119,19 +124,35 @@ iPoseProof (db_connected_ok with "client [s_skI s_skR]") as "#>ok".
   - iPoseProof (sign_key_compromised_keyE with "sign_skR [//]")
       as ">contra".
     by iDestruct (secret_not_public with "s_skR contra") as ">[]". }
-iMod (secret_public with "s_skI") as "#p_skI".
-iMod (secret_public with "s_skR") as "#p_skR".
-wp_apply wp_send => //. wp_pures.
-wp_apply wp_send => //. wp_pures.
 wp_apply wp_recv => //. iIntros "%k #p_k". wp_pures.
 wp_apply wp_recv => //. iIntros "%v #p_v". wp_pures.
 rewrite (@rem_free_at_diff _ _ _ _ _ _ _ {[k]}) //.
 iDestruct "free" as "[free_k free]".
 wp_apply (wp_client_create with "[] [] [] [] [$client $free_k]") => //.
 iIntros "[client k_v]". wp_pures.
+wp_apply (wp_client_close with "[] [] [$client]") => //.
+iIntros "[client [fail|#p_sk]]".
+{ by iPoseProof (Conn.session_failed_agree with "fail ok") as "%". }
+wp_pures.
+wp_apply Conn.wp_session_key => //. iIntros "_".
+wp_apply (wp_send with "[//]") => //. wp_pures.
+wp_apply (wp_client_connect with "[] [] [] [] [] client"); eauto.
+iIntros "%cs' client". wp_pure _ credit:"c'". wp_pures.
+iPoseProof (db_connected_ok with "client [s_skI s_skR]") as "#>ok'".
+{ iIntros "#[fail|fail]".
+  - iPoseProof (sign_key_compromised_keyE with "sign_skI [//]")
+      as ">contra".
+    by iDestruct (secret_not_public with "s_skI contra") as ">[]".
+  - iPoseProof (sign_key_compromised_keyE with "sign_skR [//]")
+      as ">contra".
+    by iDestruct (secret_not_public with "s_skR contra") as ">[]". }
+iMod (secret_public with "s_skI") as "#p_skI".
+iMod (secret_public with "s_skR") as "#p_skR".
+wp_apply wp_send => //. wp_pures.
+wp_apply wp_send => //. wp_pures.
 wp_apply (wp_client_load with "[] [] [] [$client $k_v]") => //.
 iIntros "%v' (client & k_v & _ & [fail|->])".
-{ by iPoseProof (Conn.session_failed_agree with "ok fail") as "%". }
+{ by iPoseProof (Conn.session_failed_agree with "ok' fail") as "%". }
 wp_pures. wp_apply wp_assert. wp_apply wp_eq_term.
 by rewrite bool_decide_eq_true_2.
 Qed.

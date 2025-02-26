@@ -32,14 +32,16 @@ Lemma wp_client_close c kI kR cs :
   store_ctx N -∗
   {{{ db_connected N kI kR cs }}}
     Client.close N c (repr cs)
-  {{{ RET #(); db_disconnected N kI kR }}}.
+  {{{ RET #(); db_disconnected N kI kR ∗
+      (Conn.session_failed cs true ∨ public (si_key cs))
+  }}}.
 Proof.
 iIntros "#chan_c (_ & _ & _ & _ & _ & _ & #?)".
 iIntros "!> %Φ client post".
 iDestruct "client" as "(%n & client & conn & token)".
 wp_lam. wp_pures.
 wp_apply (Conn.wp_close with "[//] [//] [$]").
-iIntros "%failed [#failed dis]". iApply "post".
+iIntros "%failed (#failed & dis & pub)". iApply "post".
 by iFrame.
 Qed.
 
