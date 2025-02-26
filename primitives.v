@@ -1,1 +1,1 @@
-From cryptis.primitives Require Export notations comp simple.
+From cryptis.primitives Require Export notations comp simple attacker.

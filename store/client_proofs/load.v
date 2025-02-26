@@ -5,7 +5,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list dfrac_agree.
 From iris.base_logic Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib version term gmeta nown cryptis.
+From cryptis Require Import lib term gmeta nown cryptis.
 From cryptis Require Import primitives tactics.
 From cryptis Require Import role conn.
 From cryptis.store Require Import impl shared db.
@@ -16,7 +16,7 @@ Unset Printing Implicit Defensive.
 
 Section Verif.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !sessionGS Σ, !storeGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !storeGS Σ}.
 Notation iProp := (iProp Σ).
 
 Context `{!storeG Σ}.

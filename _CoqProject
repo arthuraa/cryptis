@@ -9,7 +9,6 @@ lib.v
 lib/term_set.v
 gmeta.v
 nown.v
-version.v
 role.v
 
 core/pre_term.v
@@ -30,7 +29,6 @@ primitives.v
 tactics.v
 session.v
 dh.v
-rel_channel.v
 attacker_types.v
 
 # Case studies

@@ -4,7 +4,7 @@ From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib version term cryptis primitives tactics.
+From cryptis Require Import lib term cryptis primitives tactics.
 From cryptis Require Import role conn.
 From cryptis.store Require Import impl shared alist db.
 
@@ -14,10 +14,8 @@ Unset Printing Implicit Defensive.
 
 Section Verif.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !sessionGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !storeGS Σ}.
 Notation iProp := (iProp Σ).
-
-Context `{!storeGS Σ}.
 
 Implicit Types (cs : Conn.state).
 Implicit Types kI kR kS t : term.

@@ -4,7 +4,7 @@ From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib version term gmeta cryptis primitives tactics.
+From cryptis Require Import lib term gmeta cryptis primitives tactics.
 From cryptis Require Import role iso_dh.
 From cryptis.conn Require Import impl props.
 
@@ -57,23 +57,6 @@ iDestruct "failed" as "[[_ #s_k] _]".
 iPoseProof ("s_k" with "p_k") as "{p_k} >p_k".
 by iDestruct (release_token_released_session with "rel p_k") as "[]".
 Qed.
-
-(* Lemma connected_public_key kI kR cs n kt : *)
-(*   connected kI kR cs n -∗ *)
-(*   public (TKey kt (si_key cs)) -∗ *)
-(*   ▷ session_failed cs true. *)
-(* Proof. *)
-(* iIntros "(%n' & %n0 & -> & _ & conn) #p_k". *)
-(* iPoseProof "conn" as "(_ & _ & #sess & _ & rel & _ & #failed & _)". *)
-(* iDestruct "sess" as "(#? & #s_key & #sess)". *)
-(* iPoseProof (senc_key_compromised_keyI with "s_key p_k") as "{p_k} p_k". *)
-(* iPoseProof (senc_key_compromised_keyE with "s_key p_k") as "{p_k} >p_k". *)
-(* iDestruct "failed" as "(%failed & failed)". *)
-(* case: failed => //. *)
-(* iDestruct "failed" as "[[_ #s_k] _]". *)
-(* iPoseProof ("s_k" with "p_k") as "{p_k} >p_k". *)
-(* by iDestruct (release_token_released_session with "rel p_k") as "[]". *)
-(* Qed. *)
 (* /MOVE *)
 
 Lemma public_sencE N cs m φ rl failed :
