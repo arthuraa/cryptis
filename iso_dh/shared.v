@@ -35,7 +35,7 @@ Context `{!heapGS Σ, !cryptisGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (rl : role) (t skI skR nI nR sI sR kS : term).
-Implicit Types (γ γa γb : gname) (ok : bool).
+Implicit Types (γ γa γb : gname) (ok failed : bool).
 Implicit Types (ts : nat) (T : gset term).
 Implicit Types (si : sess_info).
 
@@ -146,21 +146,25 @@ iAssert (released (si_share_of rl si)) as "r"; first by case: rl.
 by iPoseProof (term_meta_agree with "r un") as "%".
 Qed.
 
-Definition key_secrecy si : iProp :=
-  □ (▷ released_session si → public (si_key si)) ∗
+Definition key_secrecy failed si : iProp :=
+  □ (▷ (⌜failed⌝ ∨ released_session si) → public (si_key si)) ∗
   (compromised_session si ∨
+     ⌜failed = false⌝ ∗
      □ (public (si_key si) → ▷ released_session si)).
 
-Lemma secret_key_secrecy si :
+Lemma secret_key_secrecy failed si :
   secret (si_init si) -∗
   secret (si_resp si) -∗
   sign_key (si_init si) -∗
   sign_key (si_resp si) -∗
-  key_secrecy si -∗
+  key_secrecy failed si -∗
   ◇ □ (public (si_key si) ↔ ▷ released_session si).
 Proof.
-iIntros "sI sR #signI #signR [#? [#comp|#?]]"; eauto.
-iDestruct "comp" as "[comp|comp]".
+iIntros "sI sR #signI #signR (#comp1 & #comp2)".
+iAssert (▷ released_session si → public (si_key si))%I as "?".
+{ iIntros "#?". iApply "comp1". by eauto. }
+iDestruct "comp2" as "[#comp2|(_ & #?)]"; eauto.
+iDestruct "comp2" as "[comp2|comp2]".
 - by iDestruct (sign_secret_not_compromised_key with "sI [//] [//]")
     as ">[]".
 - by iDestruct (sign_secret_not_compromised_key with "sR [//] [//]")

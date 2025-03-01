@@ -18,7 +18,7 @@ Context `{!heapGS Σ, !cryptisGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (rl : role) (t skI skR vkI vkR ga kS : term).
-Implicit Types (γ γa γb : gname) (ok : bool).
+Implicit Types (γ γa γb : gname) (failed : bool).
 Implicit Types (ts : nat) (T : gset term).
 Implicit Types (si : sess_info).
 
@@ -72,10 +72,14 @@ iModIntro. iRight. iExists _; iSplit => //.
 iIntros "post". iApply "post". by eauto.
 Qed.
 
-Lemma wp_responder_accept c skR ga vkI :
+Lemma wp_responder_accept failed c skR ga vkI :
   {{{ channel c ∗ cryptis_ctx ∗
       iso_dh_ctx N ∗ sign_key skR ∗
-      public ga ∗ public vkI }}}
+      public ga ∗ public vkI ∗
+      if failed then
+        ∃ skI, ⌜vkI = TKey Open skI⌝ ∗
+          (compromised_key skI ∨ compromised_key skR)
+      else True }}}
     responder_accept c skR ga vkI
   {{{ osi,
       RET (repr (si_key <$> osi));
@@ -83,16 +87,17 @@ Lemma wp_responder_accept c skR ga vkI :
         ⌜vkI = TKey Open (si_init si)⌝ ∗
         ⌜si_resp si = skR⌝ ∗
         minted (si_key si) ∗
-        key_secrecy si ∗
+        key_secrecy failed si ∗
         release_token (si_resp_share si) ∗
         term_token (si_resp_share si) (↑isoN)
       else True }}}.
 Proof.
 set vkR := TKey Open skR.
-iIntros "%Φ (#chan_c & #? & (#? & #?) & #sign_kR & #p_ga & #p_vkI) Hpost".
+iIntros "%Φ (#chan_c & #? & (#? & #?) & #sign_kR & #p_ga & #p_vkI & #failed)
+  Hpost".
 wp_lam. wp_pures. wp_apply wp_vkey. wp_pures.
 wp_apply (wp_mknonce_freshN ∅
-          (λ b, released ga ∧ released (TExp (TInt 0) b))%I
+          (λ b, ⌜failed⌝ ∨ released ga ∧ released (TExp (TInt 0) b))%I
           iso_dh_pred
           (λ b, {[TExp (TInt 0) b]}))
        => //.
@@ -120,7 +125,9 @@ wp_apply wp_sign. wp_pures.
 wp_apply wp_send => //.
 { iApply public_signIS => //.
   - iModIntro.
-    iExists ga, b, vkI.  do ![iSplitL => //]. by eauto.
+    iExists ga, b, vkI.  do ![iSplitL => //].
+    case: failed; eauto.
+    rewrite bi.False_or. by eauto.
   - rewrite public_of_list /=. by do !iSplit => //. }
 wp_pures. wp_apply wp_recv => //. iIntros "%m3 #p_m3".
 wp_apply wp_verify. case: Spec.decP; last by protocol_failure.
@@ -139,19 +146,24 @@ wp_pures. wp_list. wp_term_of_list.
 wp_pures. pose si := SessInfo skI skR ga gb gab.
 wp_apply wp_derive_key. rewrite -[Spec.derive_key _]/(si_key si).
 rewrite -/(released_session si).
-iAssert (▷ released_session si → public (si_key si))%I as "s_k1".
+iAssert (▷ (⌜failed⌝ ∨ released_session si) → public (si_key si))%I as "s_k1".
 { iIntros "#released".
   rewrite public_derive_key public_of_list /=.
   do !iSplit => //; try by iApply sign_key_public.
   iApply public_TExp => //. by iApply "s_b". }
 iAssert (|={⊤}=> compromised_session si ∨
+                   ⌜failed = false⌝ ∗
                    □ (public (si_key si) → ▷ released_session si))%I
   with "[H4]" as "> #i_m3".
-{ iDestruct "inv" as "[comp|#inv]".
+{ case: failed.
+  { iDestruct "failed" as "(%skI' & %e & failed)".
+    case: e => <-. by eauto. }
+  iDestruct "inv" as "[comp|#inv]".
   { rewrite /compromised_session. by eauto. }
   iDestruct "inv" as "(%a & %gb' & %skR' & %e_m3 & comp)".
   case/Spec.of_list_inj: e_m3 => -> <- <- {ga gb' skR'} in gb gab si *.
-  rewrite !TExp_TExpN TExpC2 in gab si *. by eauto. }
+  rewrite !TExp_TExpN TExpC2 in gab si *.
+  by iDestruct "comp" as "[comp|comp]"; eauto. }
 iAssert (minted (si_key si)) as "#m_kS".
 { rewrite minted_derive_key !minted_of_list /= !minted_TExp minted_TInt.
   do !iSplit => //; iApply public_minted => //.
@@ -180,15 +192,15 @@ Lemma wp_responder_accept_weak c skR ga vkI :
  }}}.
 Proof.
 iIntros "%Φ (#chan_c & #ctx & #? & #skR & #p_ga & #p_vkI) Hpost".
-iApply wp_fupd. wp_apply wp_responder_accept; first by eauto 10.
+iApply wp_fupd. wp_apply (wp_responder_accept false); first by eauto 10.
 iIntros "%osi Hsi".
 case: osi => [si|]; last by iApply ("Hpost" $! None).
 iDestruct "Hsi" as "(-> & <- & #m_kS & #sec & rel & tok)".
 iMod (unrelease with "rel") as "#un". iModIntro.
 iApply ("Hpost" $! (Some si)). iFrame. do !iSplit => //.
-iDestruct "sec" as "(sec1 & [?|sec2])"; eauto.
+iDestruct "sec" as "(sec1 & [?|(_ & sec2)])"; eauto.
 iRight. iApply (unreleased_key_secrecy Resp) => //.
-iModIntro. by iSplit.
+iModIntro. rewrite bi.False_or. by iSplit.
 Qed.
 
 Lemma wp_responder c skR :
@@ -202,7 +214,7 @@ Lemma wp_responder c skR :
         ⌜si_key si = kS⌝ ∗
         public vkI ∗
         minted kS ∗
-        key_secrecy si ∗
+        key_secrecy false si ∗
         release_token (si_resp_share si) ∗
         term_token (si_resp_share si) (↑isoN)
       else True
@@ -213,7 +225,7 @@ wp_lam; wp_pures.
 wp_apply wp_responder_wait; first by eauto.
 iIntros "%ga %vkI (#p_ga & #p_vkI)".
 wp_pures.
-wp_apply wp_responder_accept; first by eauto 10.
+wp_apply (wp_responder_accept false); first by eauto 10.
 iIntros "%osi Hosi".
 case: osi => [si|]; wp_pures; last by iApply ("post" $! None).
 iDestruct "Hosi" as "(% & % & #? & #? & rel & token)".

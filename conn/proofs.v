@@ -100,7 +100,7 @@ wp_pures. wp_bind (do_until _).
 iCombine "dis post c1 c2" as "post". iApply (wp_frame_wand with "post").
 wp_apply wp_do_until'. iModIntro.
 wp_pures.
-wp_apply (wp_initiator with "[//] [//] [] [] []") => //.
+wp_apply (wp_initiator _ false with "[//] [//] [] [] []") => //.
 { by iApply ctx_iso_dh_ctx. }
 iIntros "%res resP".
 case: res=> [kS|] /=; last by eauto.
@@ -611,7 +611,7 @@ rewrite /cs_share e_rl /=.
 wp_apply (wp_free with "[$]"). iIntros "_".
 iApply "post". iFrame. iSplit => //.
 iDestruct "relR" as "[?|relR]"; eauto.
-iRight. iApply "sec". iSplit => //.
+iRight. iApply "sec". iRight. iSplit => //.
 Qed.
 
 Definition handler_loop_post φ skI skR cs n res : iProp :=

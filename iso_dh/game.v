@@ -96,7 +96,7 @@ Lemma wp_check_key_secrecy c lcomp si :
       channel c ∗
       inv gameN (game_inv lcomp (si_init si) (si_resp si)) ∗
       sign_key (si_init si) ∗ sign_key (si_resp si) ∗
-      key_secrecy si ∗ □ (released_session si → False) }}}
+      key_secrecy false si ∗ □ (released_session si → False) }}}
     check_key_secrecy c #lcomp (si_key si)
   {{{ RET #(); True }}}.
 Proof.
@@ -186,7 +186,7 @@ case: Spec.is_keyP => [kt kR' eekR|_]; wp_pures; last by iApply "Hpost".
 wp_pures.
 case: bool_decide_reflect => [ekt|_]; wp_pures ; last by iApply "Hpost".
 case: kt eekR ekt => // -> _.
-wp_pures. wp_apply wp_initiator => //. iIntros "%ts tsP".
+wp_pures. wp_apply (wp_initiator _ false) => //. iIntros "%ts tsP".
 case: ts=> [sk|] => /=; wp_pures; last by iApply "Hpost".
 iDestruct "tsP"
   as "(%si & <- & <- & <- & #m_sk & #s_k & rel & token)".

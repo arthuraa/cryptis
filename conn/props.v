@@ -65,7 +65,7 @@ Definition failure kI kR : iProp :=
 Definition wf_sess_info si : iProp :=
   minted (si_key si) ∗
   senc_key (si_key si) ∗
-  key_secrecy si.
+  key_secrecy false si.
 
 #[global]
 Instance wf_sess_info_persistent cs : Persistent (wf_sess_info cs).
@@ -160,7 +160,7 @@ Lemma session_failed_forI cs (P : iProp) (failed : bool) :
   term_token (cs_share cs) (↑isoN ∖ ↑isoN.@"failed").
 Proof.
 iIntros "#wf HP token".
-iPoseProof "wf" as "(_ & _ & #? & [fail|#succ])".
+iPoseProof "wf" as "(_ & _ & #? & [fail|(_ & #succ)])".
 { iMod (term_meta_set' true (N := isoN.@"failed") with "token")
     as "[#failed token]" => //; try solve_ndisj.
   iAssert (session_failed_for cs (cs_role cs) true) as "#?".
@@ -175,7 +175,7 @@ case: failed.
 iMod (term_meta_set' false (N := isoN.@"failed") with "token")
   as "[#failed token]" => //; try solve_ndisj.
 iAssert (session_failed_for cs (cs_role cs) false) as "#?".
-{ iSplit => //. iModIntro. by iSplit => //. }
+{ iSplit => //. iModIntro. rewrite bi.False_or. by iSplit => //. }
 iFrame "token". iModIntro. iExists false.
 do !iSplit => //; eauto.
 Qed.
