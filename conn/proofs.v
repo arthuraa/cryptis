@@ -168,8 +168,8 @@ iIntros "#? #? #? #? % !> _ post".
 wp_lam. wp_pures. iApply (wp_frame_wand with "post").
 wp_apply wp_do_until'. iIntros "!>".
 wp_pures.
-wp_apply (wp_responder with "[//] [//] [] []") => //.
-{ by iApply ctx_iso_dh_ctx. }
+wp_apply wp_responder.
+{ iPoseProof (ctx_iso_dh_ctx with "[//]") as "?". by eauto. }
 iIntros "%res resP".
 case: res=> [[vkI kS]|] /=; last by iLeft; iFrame; eauto.
 iRight. iExists _. iSplit => //. wp_pures.

@@ -17,18 +17,22 @@ Section Verif.
 Context `{!heapGS Σ, !cryptisGS Σ}.
 Notation iProp := (iProp Σ).
 
-Implicit Types (rl : role) (t kI kR nI nR sI sR kS : term).
+Implicit Types (rl : role) (t skI skR vkI vkR ga kS : term).
 Implicit Types (γ γa γb : gname) (ok : bool).
 Implicit Types (ts : nat) (T : gset term).
 Implicit Types (si : sess_info).
 
 Variable N : namespace.
 
-Definition responder : val := λ: "c" "skR",
+Definition responder_wait : val := λ: "c",
+  do_until (λ: <>,
+    let: "m1" := recv "c" in
+    bind: "m1" := list_of_term "m1" in
+    list_match: ["ga"; "vkI"] := "m1" in
+    SOME ("ga", "vkI")).
+
+Definition responder_accept : val := λ: "c" "skR" "ga" "vkI",
   let: "vkR" := vkey "skR" in
-  let: "m1" := recv "c" in
-  bind: "m1" := list_of_term "m1" in
-  list_match: ["ga"; "vkI"] := "m1" in
   let: "b" := mknonce #() in
   let: "gb" := mkkeyshare "b" in
   let: "m2" := sign (N.@"m2") "skR" (term_of_list ["ga"; "gb"; "vkI"]) in
@@ -39,41 +43,54 @@ Definition responder : val := λ: "c" "skR",
   guard: eq_term "ga" "ga'" && eq_term "gb" "gb'" && eq_term "vkR" "vkR'" in
   let: "gab" := texp "ga" "b" in
   let: "secret" := term_of_list ["vkI"; "vkR"; "ga"; "gb"; "gab"] in
-  SOME ("vkI", derive_key "secret").
+  SOME (derive_key "secret").
+
+Definition responder : val := λ: "c" "skR",
+  let: "res" := responder_wait "c" in
+  let: "ga"  := Fst "res" in
+  let: "vkI" := Snd "res" in
+  bind: "kS" := responder_accept "c" "skR" "ga" "vkI" in
+  SOME ("vkI", "kS").
 
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
 
-Lemma wp_responder c skR :
-  channel c -∗
-  cryptis_ctx -∗
-  iso_dh_ctx N -∗
-  sign_key skR -∗
-  {{{ True }}}
-    responder c skR
-  {{{ okS,
-      RET (repr okS);
-      if okS is Some (vkI, kS) then ∃ si,
+Lemma wp_responder_wait c :
+  {{{ channel c ∗ cryptis_ctx  }}}
+    responder_wait c
+  {{{ ga vkI, RET (ga, vkI); public ga ∗ public vkI }}}.
+Proof.
+iIntros "%Φ [#chan_c #ctx] post". wp_lam. wp_pures.
+iApply (wp_frame_wand with "post").
+wp_apply wp_do_until'. iIntros "!>".
+wp_pures. wp_apply wp_recv => //.
+iIntros "%m1 #p_m1". wp_pures.
+wp_list_of_term m1; wp_pures; last by eauto.
+wp_list_match => [ga vkI ->|_]; wp_pures; last by eauto.
+rewrite public_of_list /=. iDestruct "p_m1" as "(? & ? & _)".
+iModIntro. iRight. iExists _; iSplit => //.
+iIntros "post". iApply "post". by eauto.
+Qed.
+
+Lemma wp_responder_accept c skR ga vkI :
+  {{{ channel c ∗ cryptis_ctx ∗
+      iso_dh_ctx N ∗ sign_key skR ∗
+      public ga ∗ public vkI }}}
+    responder_accept c skR ga vkI
+  {{{ osi,
+      RET (repr (si_key <$> osi));
+      if osi is Some si then
         ⌜vkI = TKey Open (si_init si)⌝ ∗
         ⌜si_resp si = skR⌝ ∗
-        ⌜si_key si = kS⌝ ∗
-        public vkI ∗
-        minted kS ∗
+        minted (si_key si) ∗
         key_secrecy si ∗
         release_token (si_resp_share si) ∗
         term_token (si_resp_share si) (↑isoN)
-      else True
- }}}.
+      else True }}}.
 Proof.
 set vkR := TKey Open skR.
-iIntros "#chan_c #? (#? & #?) #sign_kR !> %Φ _ Hpost".
+iIntros "%Φ (#chan_c & #? & (#? & #?) & #sign_kR & #p_ga & #p_vkI) Hpost".
 wp_lam. wp_pures. wp_apply wp_vkey. wp_pures.
-wp_apply wp_recv => //. iIntros "%m1 #p_m1". wp_pures.
-wp_list_of_term m1; last by protocol_failure.
-wp_pures. wp_list_match => [ga vkI -> {m1}|]; last by protocol_failure.
-rewrite public_of_list /=.
-iDestruct "p_m1" as "(p_ga & p_vkI & _)".
-wp_pures.
 wp_apply (wp_mknonce_freshN ∅
           (λ b, released ga ∧ released (TExp (TInt 0) b))%I
           iso_dh_pred
@@ -142,41 +159,66 @@ iAssert (minted (si_key si)) as "#m_kS".
 iAssert (minted skI) as "#m_skI".
 { iApply minted_TKey. by iApply public_minted. }
 wp_pures.
-iApply ("Hpost" $! (Some (TKey Open skI, si_key si))).
-iModIntro. iExists si. iFrame. by do !iSplit => //.
+iApply ("Hpost" $! (Some si)).
+iModIntro. iFrame. by do !iSplit => //.
 Qed.
 
-Lemma wp_responder_weak c skR :
-  channel c -∗
-  cryptis_ctx -∗
-  iso_dh_ctx N -∗
-  sign_key skR -∗
-  {{{ True }}}
+Lemma wp_responder_accept_weak c skR ga vkI :
+  {{{ channel c ∗ cryptis_ctx ∗
+      iso_dh_ctx N ∗ sign_key skR ∗
+      public ga ∗ public vkI }}}
+    responder_accept c skR ga vkI
+  {{{ osi,
+      RET (repr (si_key <$> osi));
+      if osi is Some si then
+        ⌜vkI = TKey Open (si_init si)⌝ ∗
+        ⌜si_resp si = skR⌝ ∗
+        minted (si_key si) ∗
+        (compromised_session si ∨ □ (public (si_key si) ↔ ▷ False)) ∗
+        term_token (si_resp_share si) (↑isoN)
+      else True
+ }}}.
+Proof.
+iIntros "%Φ (#chan_c & #ctx & #? & #skR & #p_ga & #p_vkI) Hpost".
+iApply wp_fupd. wp_apply wp_responder_accept; first by eauto 10.
+iIntros "%osi Hsi".
+case: osi => [si|]; last by iApply ("Hpost" $! None).
+iDestruct "Hsi" as "(-> & <- & #m_kS & #sec & rel & tok)".
+iMod (unrelease with "rel") as "#un". iModIntro.
+iApply ("Hpost" $! (Some si)). iFrame. do !iSplit => //.
+iDestruct "sec" as "(sec1 & [?|sec2])"; eauto.
+iRight. iApply (unreleased_key_secrecy Resp) => //.
+iModIntro. by iSplit.
+Qed.
+
+Lemma wp_responder c skR :
+  {{{ channel c ∗ cryptis_ctx ∗
+      iso_dh_ctx N ∗ sign_key skR }}}
     responder c skR
-  {{{ okS,
-      RET (repr okS);
+  {{{ okS, RET (repr okS);
       if okS is Some (vkI, kS) then ∃ si,
         ⌜vkI = TKey Open (si_init si)⌝ ∗
         ⌜si_resp si = skR⌝ ∗
         ⌜si_key si = kS⌝ ∗
         public vkI ∗
         minted kS ∗
-        (compromised_session si ∨ □ (public kS ↔ ▷ False)) ∗
+        key_secrecy si ∗
+        release_token (si_resp_share si) ∗
         term_token (si_resp_share si) (↑isoN)
       else True
  }}}.
 Proof.
-iIntros "#chan_c #ctx #? #skR %Ψ !> _ Hpost".
-iApply wp_fupd. wp_apply wp_responder => //.
-iIntros "%okS HkS".
-case: okS => [[vkI kS]|]; last by iApply ("Hpost" $! None).
-iDestruct "HkS" as "(%si & -> & <- & <- & #? & #m_kS & #sec & rel & tok)".
-iMod (unrelease with "rel") as "#un". iModIntro.
-iApply ("Hpost" $! (Some (TKey Open (si_init si), si_key si))).
-iExists si. iFrame. do !iSplit => //.
-iDestruct "sec" as "(sec1 & [?|sec2])"; eauto.
-iRight. iApply (unreleased_key_secrecy Resp) => //.
-iModIntro. by iSplit.
+iIntros "%Φ (#? & #? & #? & #?) post".
+wp_lam; wp_pures.
+wp_apply wp_responder_wait; first by eauto.
+iIntros "%ga %vkI (#p_ga & #p_vkI)".
+wp_pures.
+wp_apply wp_responder_accept; first by eauto 10.
+iIntros "%osi Hosi".
+case: osi => [si|]; wp_pures; last by iApply ("post" $! None).
+iDestruct "Hosi" as "(% & % & #? & #? & rel & token)".
+iModIntro. iApply ("post" $! (Some (vkI, si_key si))).
+iExists si. by iFrame; eauto 10.
 Qed.
 
 End Verif.

@@ -253,7 +253,7 @@ iIntros "#chan #? #? #p_vkI #p_vkR #? #set".
 iLöb as "IH". iIntros "!> %Φ _ Hpost".
 wp_rec; wp_pures; wp_apply wp_fork.
 { iApply "IH" => //. }
-wp_pures. wp_apply wp_responder => //.
+wp_pures. wp_apply wp_responder; first by eauto.
 iIntros "%res res".
 case: res => [[vkI' sk]|]; wp_pures; last by iApply "Hpost".
 iDestruct "res"
