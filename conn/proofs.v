@@ -28,19 +28,6 @@ Implicit Types γ : gname.
 Implicit Types v : val.
 
 (* MOVE *)
-Lemma wp_do_until' E (f : val) (φ : val → iProp) :
-  □ WP f #() @ E {{ v, ⌜v = NONEV⌝ ∨ (∃ v', ⌜v = SOMEV v'⌝ ∗ φ v') }} -∗
-  WP do_until f @ E {{ φ }}.
-Proof.
-iIntros "#wp_f".
-iAssert True%I as "I" => //.
-iRevert "I".
-iApply wp_do_until.
-iIntros "!> _".
-iApply wp_wand; eauto.
-iIntros "%v [->|post]"; eauto.
-Qed.
-
 Lemma connected_public_key' kI kR cs n n0 kt :
   connected' kI kR cs false n n0 -∗
   public (TKey kt (si_key cs)) -∗

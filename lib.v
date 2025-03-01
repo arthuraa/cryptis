@@ -817,6 +817,19 @@ iIntros "%v [[-> Hφ] | (%v' & -> & Hv')]"; wp_pures; eauto.
 iApply ("IH" with "Hφ").
 Qed.
 
+Lemma wp_do_until' E (f : val) (φ : val → iProp Σ) :
+  □ WP f #() @ E {{ v, ⌜v = NONEV⌝ ∨ (∃ v', ⌜v = SOMEV v'⌝ ∗ φ v') }} -∗
+  WP do_until f @ E {{ φ }}.
+Proof.
+iIntros "#wp_f".
+iAssert True%I as "I" => //.
+iRevert "I".
+iApply wp_do_until.
+iIntros "!> _".
+iApply wp_wand; eauto.
+iIntros "%v [->|post]"; eauto.
+Qed.
+
 End DoUntil.
 
 Section Loc.
