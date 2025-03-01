@@ -198,7 +198,9 @@ Definition msg2_pred skR m2 : iProp :=
     let secret := Spec.of_list [vkI; vkR; ga; gb; gab] in
     let key := Spec.derive_key secret in
     ⌜m2 = Spec.of_list [ga; gb; vkI]⌝ ∗
-    (public b ↔ ▷ (released ga ∧ released gb)) ∗
+    ((∃ skI, ⌜vkI = TKey Open skI⌝ ∗
+             (compromised_key skI ∨ compromised_key skR)) ∨
+     (public b ↔ ▷ (released ga ∧ released gb))) ∗
     (∀ t, dh_pred b t ↔ ▷ □ iso_dh_pred t).
 
 Definition msg3_pred kI m3 : iProp :=
@@ -278,7 +280,6 @@ iIntros "[[_ #p_b] | [[_ #p_a] | (_ & contra & _)]]".
 iPoseProof ("pred_a" with "contra") as ">%contra".
 by rewrite /iso_dh_pred exps_TExpN /= in contra.
 Qed.
-
 
 End Verif.
 

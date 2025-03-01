@@ -120,7 +120,7 @@ wp_apply wp_sign. wp_pures.
 wp_apply wp_send => //.
 { iApply public_signIS => //.
   - iModIntro.
-    iExists ga, b, vkI.  by do ![iSplitL => //].
+    iExists ga, b, vkI.  do ![iSplitL => //]. by eauto.
   - rewrite public_of_list /=. by do !iSplit => //. }
 wp_pures. wp_apply wp_recv => //. iIntros "%m3 #p_m3".
 wp_apply wp_verify. case: Spec.decP; last by protocol_failure.

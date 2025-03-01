@@ -153,8 +153,11 @@ iAssert (|={⊤}=>
 { iDestruct "inv" as "[comp|#inv]".
   { rewrite /compromised_session. by eauto. }
   iMod (lc_fupd_elim_later_pers with "H3 inv") as "{inv} #inv".
-  iDestruct "inv" as "(%ga' & %b & %kI' & %e_m2 & s_b & pred_b)".
-  case/Spec.of_list_inj: e_m2 => <- -> _ {ga' gb kI'} in gab seed secret si *.
+  iDestruct "inv" as "(%ga' & %b & %vkI' & %e_m2 & s_b & pred_b)".
+  case/Spec.of_list_inj: e_m2 => <- -> <- {ga' gb vkI'}
+    in gab seed secret si *.
+  iDestruct "s_b" as "[(%skI' & %e & ?)|s_b]".
+  { case: e => <- {skI'}. iModIntro. by iLeft. }
   rewrite !TExp_TExpN TExpC2 in gab seed secret si *.
   iIntros "!>". iRight. iIntros "!> {s_k1} #p_k".
   rewrite public_derive_key public_of_list /=.
