@@ -62,18 +62,18 @@ Variable N : namespace.
 Definition failure kI kR : iProp :=
   compromised_key kI ∨ compromised_key kR.
 
-Definition wf_sess_info si : iProp :=
+Definition wf_sess_info rl si : iProp :=
   minted (si_key si) ∗
   senc_key (si_key si) ∗
-  key_secrecy false si.
+  session rl si.
 
 #[global]
-Instance wf_sess_info_persistent cs : Persistent (wf_sess_info cs).
+Instance wf_sess_info_persistent rl si : Persistent (wf_sess_info rl si).
 Proof. apply _. Qed.
 
 Definition session_failed_for si rl (failed : bool) : iProp :=
   term_meta (si_share_of rl si) (isoN.@"failed") failed ∗
-  (if failed then compromised_session si
+  (if failed then failure (si_init si) (si_resp si)
    else □ (public (si_key si) ↔ ▷ released_session si))%I.
 
 #[global]
@@ -120,7 +120,7 @@ Qed.
 
 Lemma session_okI si failed :
   session_failed si failed -∗
-  (compromised_session si -∗ ▷ False) -∗
+  (failure (si_init si) (si_resp si) -∗ ▷ False) -∗
   ◇ session_failed si false.
 Proof.
 case: failed => //; eauto.
@@ -150,9 +150,9 @@ case: failed1 failed2 => [] [] //.
 - by iDestruct ("P" with "failed2 failed1") as "[]".
 Qed.
 
-Lemma session_failed_forI cs (P : iProp) (failed : bool) :
-  wf_sess_info cs -∗
-  (if failed then compromised_session cs else P) -∗
+Lemma session_failed_forI rl cs (P : iProp) (failed : bool) :
+  wf_sess_info rl cs -∗
+  (if failed then failure (si_init cs) (si_resp cs) else P) -∗
   term_token (cs_share cs) (↑isoN) ==∗ ∃ failed',
   ⌜failed → failed'⌝ ∗
   session_failed_for cs (cs_role cs) failed' ∗
@@ -160,7 +160,8 @@ Lemma session_failed_forI cs (P : iProp) (failed : bool) :
   term_token (cs_share cs) (↑isoN ∖ ↑isoN.@"failed").
 Proof.
 iIntros "#wf HP token".
-iPoseProof "wf" as "(_ & _ & #? & [fail|(_ & #succ)])".
+iPoseProof "wf" as "(_ & _ & #? & %failed' & #failed' & ?)".
+case: failed'.
 { iMod (term_meta_set' true (N := isoN.@"failed") with "token")
     as "[#failed token]" => //; try solve_ndisj.
   iAssert (session_failed_for cs (cs_role cs) true) as "#?".
@@ -175,7 +176,7 @@ case: failed.
 iMod (term_meta_set' false (N := isoN.@"failed") with "token")
   as "[#failed token]" => //; try solve_ndisj.
 iAssert (session_failed_for cs (cs_role cs) false) as "#?".
-{ iSplit => //. iModIntro. rewrite bi.False_or. by iSplit => //. }
+{ iSplit => //. iModIntro. by iSplit => //. }
 iFrame "token". iModIntro. iExists false.
 do !iSplit => //; eauto.
 Qed.
@@ -243,7 +244,7 @@ Definition client_disconnecting kI kR cs : iProp :=
 Definition connected' kI kR cs b n n0 : iProp :=
   ⌜si_init cs = kI⌝ ∗
   ⌜si_resp cs = kR⌝ ∗
-  wf_sess_info cs ∗
+  wf_sess_info (cs_role cs) cs ∗
   (∃ failed, session_failed_for cs (cs_role cs) failed) ∗
   (if b then released (cs_share cs) else release_token (cs_share cs)) ∗
   cs_ts cs ↦ #n ∗
@@ -270,7 +271,7 @@ Definition client_connecting cs n0 failed : iProp :=
   let kI := si_init cs in
   let kR := si_resp cs in
   server_clock_ready kI kR ∗
-  wf_sess_info cs ∗
+  wf_sess_info Init cs ∗
   term_meta  (si_init_share cs) (isoN.@"beginning") n0 ∗
   term_token (si_init_share cs) (↑isoN.@"end") ∗
   session_failed_for cs Init failed.
@@ -291,7 +292,7 @@ Lemma client_connectingI kI kR cs beginning failed :
   cs_role cs = Init →
   cryptis_ctx -∗
   £ 1 ∗ £ 1 -∗
-  wf_sess_info cs -∗
+  wf_sess_info Init cs -∗
   term_token (si_init_share cs) (↑isoN) -∗
   client_disconnected kI kR beginning failed ={⊤}=∗ ∃ failed',
   ⌜failed → failed'⌝ ∗
@@ -406,7 +407,7 @@ iModIntro. iRight. iExists _. eauto 10.
 Qed.
 
 Definition incoming_connection kR cs : iProp :=
-  wf_sess_info cs ∗
+  wf_sess_info Resp cs ∗
   cs_ts cs ↦ #0%nat ∗
   ⌜si_resp cs = kR⌝ ∗
   ⌜cs_role cs = Resp⌝ ∗
@@ -520,7 +521,7 @@ Definition ack_close_pred kI kR si n ts : iProp :=
   released (si_resp_share si).
 
 Lemma session_failed_failure si failed :
-  session_failed si failed ⊢ ⌜failed⌝ → compromised_session si.
+  session_failed si failed ⊢ ⌜failed⌝ → failure (si_init si) (si_resp si).
 Proof.
 iIntros "#failed %fail".
 case: failed in fail * => //=.

@@ -50,7 +50,7 @@ Lemma public_sencE N cs m φ rl failed :
   public (TSeal (TKey Seal (si_key cs)) (Spec.tag N m)) -∗
   seal_pred N (session_msg_pred φ rl) -∗
   ⌜cs_role cs = swap_role rl⌝ -∗
-  wf_sess_info cs -∗
+  wf_sess_info (cs_role cs) cs -∗
   session_failed_for cs (cs_role cs) failed -∗
   release_token (cs_share cs) -∗ ▷ □ ∃ failed' : bool,
   ⌜failed → failed'⌝ ∗
@@ -105,7 +105,7 @@ wp_apply (wp_initiator _ false with "[//] [//] [] [] []") => //.
 iIntros "%res resP".
 case: res=> [kS|] /=; last by eauto.
 iDestruct "resP"
-  as "(%si & <- & %e_kR & <- & #m_kS & #comp & rel & token)".
+  as "(%si & <- & %e_kR & <- & #m_kS & #comp & #? & rel & token)".
 case: e_kR => <- {kR}.
 iRight. iExists _. iSplit => //.
 iIntros "(dis & post & c1 & c2)".
@@ -118,7 +118,7 @@ iMod (client_connectingI N (cs := cs) with "[//] [$] [] [$] [$]")
   by iApply senc_key_si_key. }
 iAssert (server_clock_ready N (si_init si) (si_resp si)) as "#?".
 { by iDestruct "connecting" as "(? & ?)". }
-iAssert (wf_sess_info cs) as "#?".
+iAssert (wf_sess_info Init cs) as "#?".
 { by iDestruct "connecting" as "(? & ? & ?)". }
 iPoseProof (client_connecting_failed with "connecting")
   as "#failedI".
@@ -190,7 +190,7 @@ wp_pure _ credit:"c".
 wp_pures.
 iModIntro.
 iIntros "post". iApply ("post" $! cs).
-iAssert (wf_sess_info cs) as "#sess".
+iAssert (wf_sess_info Resp cs) as "#sess".
 { by do !iSplit => //. }
 iFrame. do !iSplit => //.
 iIntros "%failed rel #failed".
@@ -611,7 +611,7 @@ rewrite /cs_share e_rl /=.
 wp_apply (wp_free with "[$]"). iIntros "_".
 iApply "post". iFrame. iSplit => //.
 iDestruct "relR" as "[?|relR]"; eauto.
-iRight. iApply "sec". iRight. iSplit => //.
+iRight. iApply "sec". iSplit => //.
 Qed.
 
 Definition handler_loop_post φ skI skR cs n res : iProp :=

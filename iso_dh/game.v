@@ -91,12 +91,12 @@ case: bcomp; wp_pures; first by iApply "post".
 by wp_apply "IH"; eauto.
 Qed.
 
-Lemma wp_check_key_secrecy c lcomp si :
+Lemma wp_check_key_secrecy c lcomp rl si :
   {{{ cryptis_ctx ∗
       channel c ∗
       inv gameN (game_inv lcomp (si_init si) (si_resp si)) ∗
       sign_key (si_init si) ∗ sign_key (si_resp si) ∗
-      key_secrecy false si ∗ □ (released_session si → False) }}}
+      session rl si ∗ □ (released_session si → False) }}}
     check_key_secrecy c #lcomp (si_key si)
   {{{ RET #(); True }}}.
 Proof.
@@ -115,7 +115,7 @@ iDestruct "inv" as "[s_skI s_skR]".
 iAssert (|={⊤ ∖ ↑gameN}=> secret skI ∗ secret skR ∗
                           □ (public (si_key si) → ▷ False))%I
   with "[c1 s_skI s_skR]" as "{s_sk} >(s_skI & s_skR & #s_sk)".
-{ iPoseProof (secret_key_secrecy with "s_skI s_skR [//] [//] [//]")
+{ iPoseProof (secret_session with "s_skI s_skR [//] [//] [//]")
     as "{s_sk} #>#s_sk".
   iFrame. iIntros "!> !> #p_k". iApply "un". by iApply "s_sk". }
 iModIntro. iSplitR "post".
@@ -189,7 +189,7 @@ case: kt eekR ekt => // -> _.
 wp_pures. wp_apply (wp_initiator _ false) => //. iIntros "%ts tsP".
 case: ts=> [sk|] => /=; wp_pures; last by iApply "Hpost".
 iDestruct "tsP"
-  as "(%si & <- & <- & <- & #m_sk & #s_k & rel & token)".
+  as "(%si & <- & <- & <- & #m_sk & #s_k & #? & rel & token)".
 iPoseProof (iso_dh_game_fresh Init with "token") as "[fresh token]".
 iMod (unrelease with "rel") as "#un".
 iAssert (□ ¬ released_session si)%I as "#?".

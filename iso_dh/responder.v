@@ -87,7 +87,8 @@ Lemma wp_responder_accept failed c skR ga vkI :
         ⌜vkI = TKey Open (si_init si)⌝ ∗
         ⌜si_resp si = skR⌝ ∗
         minted (si_key si) ∗
-        key_secrecy failed si ∗
+        session Resp si ∗
+        □ (⌜failed⌝ → compromised_session Resp si) ∗
         release_token (si_resp_share si) ∗
         term_token (si_resp_share si) (↑isoN)
       else True }}}.
@@ -111,8 +112,8 @@ set gb := TExp (TInt 0) b.
 set gab := TExp ga b.
 rewrite big_sepS_singleton.
 iDestruct (release_tokenI with "token") as "[token_rel token]" => //.
-iPoseProof (term_token_drop (↑isoN) with "token")
-  as "token"; first solve_ndisj.
+rewrite (term_token_difference gb (↑isoN)); last by solve_ndisj.
+iDestruct "token" as "[token token_failed]".
 iAssert (public gb) as "#p_gb".
 { iApply public_TExp_iff; eauto.
   rewrite minted_TInt. iRight. do ![iSplit => //].
@@ -151,19 +152,38 @@ iAssert (▷ (⌜failed⌝ ∨ released_session si) → public (si_key si))%I as
   rewrite public_derive_key public_of_list /=.
   do !iSplit => //; try by iApply sign_key_public.
   iApply public_TExp => //. by iApply "s_b". }
-iAssert (|={⊤}=> compromised_session si ∨
-                   ⌜failed = false⌝ ∗
-                   □ (public (si_key si) → ▷ released_session si))%I
-  with "[H4]" as "> #i_m3".
+iAssert (|={⊤}=>
+           □ (⌜failed⌝ → compromised_session Resp si) ∗
+           ∃ failed,
+             term_meta gb (nroot.@"failed") failed ∗
+             if failed then
+               compromised_key (si_init si) ∨ compromised_key (si_resp si)
+             else □ (public (si_key si) → ▷ released_session si))%I
+  with "[token_failed H4]" as "> #[comp i_m3]".
 { case: failed.
-  { iDestruct "failed" as "(%skI' & %e & failed)".
-    case: e => <-. by eauto. }
+  { iMod (term_meta_set (nroot.@"failed") true with "token_failed")
+      as "#?"; first by solve_ndisj.
+    iDestruct "failed" as "(%skI' & %e & failed)".
+    case: e => <-. iModIntro. iSplit.
+    { iIntros "!> _". do !iSplit => //. iApply "s_k1". by eauto. }
+    iExists true. by eauto. }
   iDestruct "inv" as "[comp|#inv]".
-  { rewrite /compromised_session. by eauto. }
+  { iMod (term_meta_set (nroot.@"failed") true with "token_failed")
+      as "#?"; first by solve_ndisj.
+    iModIntro. iSplit; first by iIntros "!> []".
+    iExists true. iSplit => //. by eauto. }
   iDestruct "inv" as "(%a & %gb' & %skR' & %e_m3 & comp)".
   case/Spec.of_list_inj: e_m3 => -> <- <- {ga gb' skR'} in gb gab si *.
   rewrite !TExp_TExpN TExpC2 in gab si *.
-  by iDestruct "comp" as "[comp|comp]"; eauto. }
+  iDestruct "comp" as "[comp|comp]".
+  - iMod (term_meta_set (nroot.@"failed") true with "token_failed")
+      as "#?"; first by solve_ndisj.
+    iModIntro. iSplit; first by iIntros "!> []".
+    by eauto.
+  - iMod (term_meta_set (nroot.@"failed") false with "token_failed")
+      as "#?"; first by solve_ndisj.
+    iModIntro. iSplit; first by iIntros "!> []".
+    by eauto. }
 iAssert (minted (si_key si)) as "#m_kS".
 { rewrite minted_derive_key !minted_of_list /= !minted_TExp minted_TInt.
   do !iSplit => //; iApply public_minted => //.
@@ -172,7 +192,8 @@ iAssert (minted skI) as "#m_skI".
 { iApply minted_TKey. by iApply public_minted. }
 wp_pures.
 iApply ("Hpost" $! (Some si)).
-iModIntro. iFrame. by do !iSplit => //.
+iModIntro. iFrame. do !iSplit => //.
+iIntros "!> #?". iApply "s_k1". by eauto.
 Qed.
 
 Lemma wp_responder_accept_weak c skR ga vkI :
@@ -186,7 +207,8 @@ Lemma wp_responder_accept_weak c skR ga vkI :
         ⌜vkI = TKey Open (si_init si)⌝ ∗
         ⌜si_resp si = skR⌝ ∗
         minted (si_key si) ∗
-        (compromised_session si ∨ □ (public (si_key si) ↔ ▷ False)) ∗
+        ((compromised_key (si_init si) ∨ compromised_key (si_resp si))
+           ∨ □ (public (si_key si) ↔ ▷ False)) ∗
         term_token (si_resp_share si) (↑isoN)
       else True
  }}}.
@@ -195,12 +217,13 @@ iIntros "%Φ (#chan_c & #ctx & #? & #skR & #p_ga & #p_vkI) Hpost".
 iApply wp_fupd. wp_apply (wp_responder_accept false); first by eauto 10.
 iIntros "%osi Hsi".
 case: osi => [si|]; last by iApply ("Hpost" $! None).
-iDestruct "Hsi" as "(-> & <- & #m_kS & #sec & rel & tok)".
+iDestruct "Hsi" as "(-> & <- & #m_kS & #sec & #? & rel & tok)".
 iMod (unrelease with "rel") as "#un". iModIntro.
 iApply ("Hpost" $! (Some si)). iFrame. do !iSplit => //.
-iDestruct "sec" as "(sec1 & [?|(_ & sec2)])"; eauto.
+iDestruct "sec" as "(? & %failed & ? & ?)".
+case: failed; eauto.
 iRight. iApply (unreleased_key_secrecy Resp) => //.
-iModIntro. rewrite bi.False_or. by iSplit.
+iModIntro. by iSplit.
 Qed.
 
 Lemma wp_responder c skR :
@@ -214,7 +237,7 @@ Lemma wp_responder c skR :
         ⌜si_key si = kS⌝ ∗
         public vkI ∗
         minted kS ∗
-        key_secrecy false si ∗
+        session Resp si ∗
         release_token (si_resp_share si) ∗
         term_token (si_resp_share si) (↑isoN)
       else True
@@ -228,7 +251,7 @@ wp_pures.
 wp_apply (wp_responder_accept false); first by eauto 10.
 iIntros "%osi Hosi".
 case: osi => [si|]; wp_pures; last by iApply ("post" $! None).
-iDestruct "Hosi" as "(% & % & #? & #? & rel & token)".
+iDestruct "Hosi" as "(% & % & #? & #? & #? & rel & token)".
 iModIntro. iApply ("post" $! (Some (vkI, si_key si))).
 iExists si. by iFrame; eauto 10.
 Qed.

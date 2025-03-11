@@ -96,9 +96,10 @@ case/Spec.tag_inj => _.
 by case/Spec.of_list_inj => <- <- <- <- <-.
 Qed.
 
-Definition compromised_session si : iProp :=
-  compromised_key (si_init si) ∨
-  compromised_key (si_resp si).
+Definition compromised_session rl si : iProp :=
+  (compromised_key (si_init si) ∨ compromised_key (si_resp si)) ∗
+  public (si_key si) ∗
+  term_meta (si_share_of rl si) (nroot.@"failed") true.
 
 Definition release_token share : iProp :=
   term_token share (↑nroot.@"released").
@@ -146,25 +147,28 @@ iAssert (released (si_share_of rl si)) as "r"; first by case: rl.
 by iPoseProof (term_meta_agree with "r un") as "%".
 Qed.
 
-Definition key_secrecy failed si : iProp :=
-  □ (▷ (⌜failed⌝ ∨ released_session si) → public (si_key si)) ∗
-  (compromised_session si ∨
-     ⌜failed = false⌝ ∗
-     □ (public (si_key si) → ▷ released_session si)).
+Definition session rl si : iProp :=
+  □ (▷ released_session si → public (si_key si)) ∗
+  ∃ failed,
+    term_meta (si_share_of rl si) (nroot.@"failed") failed ∗
+    if failed then
+      compromised_key (si_init si) ∨ compromised_key (si_resp si)
+    else □ (public (si_key si) → ▷ released_session si).
 
-Lemma secret_key_secrecy failed si :
+Global Instance session_persistent rl si :
+  Persistent (session rl si).
+Proof. apply _. Qed.
+
+Lemma secret_session rl si :
   secret (si_init si) -∗
   secret (si_resp si) -∗
   sign_key (si_init si) -∗
   sign_key (si_resp si) -∗
-  key_secrecy failed si -∗
+  session rl si -∗
   ◇ □ (public (si_key si) ↔ ▷ released_session si).
 Proof.
-iIntros "sI sR #signI #signR (#comp1 & #comp2)".
-iAssert (▷ released_session si → public (si_key si))%I as "?".
-{ iIntros "#?". iApply "comp1". by eauto. }
-iDestruct "comp2" as "[#comp2|(_ & #?)]"; eauto.
-iDestruct "comp2" as "[comp2|comp2]".
+iIntros "sI sR #signI #signR (#comp1 & %failed & #failed & #comp2)".
+case: failed; eauto. iDestruct "comp2" as "[comp2|comp2]".
 - by iDestruct (sign_secret_not_compromised_key with "sI [//] [//]")
     as ">[]".
 - by iDestruct (sign_secret_not_compromised_key with "sR [//] [//]")
@@ -194,6 +198,35 @@ iPoseProof ("s_k" with "p_k") as "contra".
 iModIntro. by iApply (release_token_released_session with "token").
 Qed.
 
+Lemma session_compromised rl si :
+  session rl si -∗
+  public (si_key si) -∗
+  release_token (si_share_of rl si) -∗
+  ◇ compromised_session rl si.
+Proof.
+iIntros "(#comp1 & %failed & #failed & #comp2) #p_k rel".
+case: failed; first by do !iSplit => //.
+iDestruct (release_token_key_secrecy with "rel [] p_k") as ">[]".
+iModIntro. by iSplit.
+Qed.
+
+Lemma session_not_compromised rl si :
+  session rl si -∗
+  secret (si_init si) -∗
+  secret (si_resp si) -∗
+  sign_key (si_init si) -∗
+  sign_key (si_resp si) -∗
+  ◇ □ ¬ compromised_session rl si.
+Proof.
+iIntros "(#comp1 & %failed & #failed & #comp2) s_kI s_kR #signI #signR".
+case: failed; last first.
+{ iIntros "!> !> (_ & _ & #contra)".
+  by iPoseProof (term_meta_agree with "failed contra") as "%". }
+iDestruct "comp2" as "[comp2|comp2]".
+- iDestruct (sign_secret_not_compromised_key with "s_kI [//] [//]") as ">[]".
+- iDestruct (sign_secret_not_compromised_key with "s_kR [//] [//]") as ">[]".
+Qed.
+
 Definition msg2_pred skR m2 : iProp :=
   ∃ ga b vkI,
     let vkR := TKey Open skR in
@@ -215,7 +248,7 @@ Definition msg3_pred kI m3 : iProp :=
     let gab := TExp gb a in
     let si := SessInfo kI kR ga gb gab in
     ⌜m3 = Spec.of_list [ga; gb; vkR]⌝ ∗
-    (compromised_session si ∨
+    ((compromised_key kI ∨ compromised_key kR) ∨
      □ (public (si_key si) → ▷ released_session si)).
 
 Definition iso_dh_ctx : iProp :=
