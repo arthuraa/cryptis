@@ -26,25 +26,26 @@ Definition connect : val := λ: "c" "skA" "vkB",
   let: "timestamp" := ref #0%nat in
   let: "m" := senc (N.@"conn".@"init") "session_key" (TInt 0) in
   send "c" "m";;
-  do_until (λ: <>,
-    let: "m" := recv "c" in
-    sdec (N.@"conn".@"ack_init") "session_key" "m");;
   ("timestamp", "session_key").
 
-Definition listen : val := λ: "c" "skA",
-  let: "result" := do_until (λ: <>, responder (N.@"conn".@"auth") "c" "skA") in
-  let: "timestamp" := ref #0 in
-  let: "vkB" := Fst "result" in
-  let: "session_key" := Snd "result" in
+Definition listen : val := λ: "c",
+  do_until (λ: <>,
+    let: "req" := responder_wait "c" in
+    let: "vkA" := Snd "req" in
+    bind: "kt" := is_key "vkA" in
+    guard: "kt" = repr Open in
+    SOME "req").
+
+Definition confirm : val := λ: "c" "skB" "req",
+  let: "ga" := Fst "req" in
+  let: "vkA" := Snd "req" in
+  let: "sk" := do_until
+    (λ: <>, responder_accept (N.@"conn".@"auth") "c" "skB" "ga" "vkA") in
   do_until (λ: <>,
     let: "m" := recv "c" in
-    sdec (N.@"conn".@"init") "session_key" "m");;
-  ("vkB", ("timestamp", "session_key")).
-
-Definition confirm : val := λ: "c" "cs",
-  let: "sk" := Snd "cs" in
-  let: "m"  := senc (N.@"conn".@"ack_init") "sk" (TInt 0) in
-  send "c" "m".
+    sdec (N.@"conn".@"init") "sk" "m");;
+  let: "timestamp" := ref #0%nat in
+  ("timestamp", "sk").
 
 Definition timestamp : val := λ: "cs",
   let: "timestamp" := Fst "cs" in

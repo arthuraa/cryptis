@@ -112,14 +112,13 @@ Definition find_client : val := λ: "ss" "client_key",
 Definition listen N : val := λ: "c" "ss",
   let: "secret_key" := Fst "ss" in
   let: "clients" := Snd "ss" in
-  let: "res" := Conn.listen N "c" "secret_key" in
-  let: "client_key" := Fst "res" in
-  let: "cs" := Snd "res" in
+  let: "res" := Conn.listen "c" in
+  let: "client_key" := Snd "res" in
   let: "account" := find_client "ss" "client_key" in
   let: "db" := Fst "account" in
   let: "lock" := Snd "account" in
   acquire "lock";;
-  Conn.confirm N "c" "cs";;
+  let: "cs" := Conn.confirm N "c" "secret_key" "res" in
   Fork (conn_handler N "c" "cs" "db" "lock").
 
 End Server.

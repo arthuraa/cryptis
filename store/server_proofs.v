@@ -90,13 +90,12 @@ wp_apply (Conn.wp_handle with "[//] [//] [] conn token db");
 - iApply wp_server_handle_store => //.
 - iApply wp_server_handle_load => //.
 - iApply wp_server_handle_create => //.
-iIntros "%n' %failed (#failed & dis & %db & #p_db & vdb & #db_at)".
+iIntros "%n' (dis & %db & #p_db & vdb & #db_at)".
 wp_pures.
 wp_apply (release_spec with "[$locked dis vdb]") => //.
-iSplit => //. iExists n', failed. iFrame.
+iSplit => //. iExists n'. iFrame.
 iSplit => //. iDestruct "db_at" as "[fail|db_at]"; eauto.
-iPoseProof (Conn.session_failed_agree with "failed fail") as "->".
-by eauto.
+iLeft. by iApply Conn.session_failed_failure.
 Qed.
 
 Lemma wp_server_find_client ss skI :
@@ -170,10 +169,9 @@ iIntros "%Φ (#? & #chan_c & #ctx & server) post".
 wp_lam; wp_pures.
 iPoseProof (store_ctx_conn_ctx with "ctx") as "?".
 wp_apply (Conn.wp_listen
-         with "[# //] [# //] [# //] [#] []") => //;
+         with "[# //] [# //] [# //] [#]") => //;
   try by solve_ndisj.
-{ by iDestruct "server" as "(% & % & ? & _)". }
-iIntros "%cs inc". wp_pures.
+iIntros "%ga %skA #[p_ga p_skA]". wp_pures.
 wp_bind (Server.find_client _ _).
 iApply (wp_server_find_client with "[$server]") => //.
 iIntros "!> %vdb %γlock %vlock [server #lock]".
@@ -182,20 +180,19 @@ wp_pures.
 wp_bind (acquire _).
 iApply acquire_spec => //.
 iIntros "!> (locked & dis)".
-iDestruct "dis" as "(%n & %failed & dis & db_dis)".
+iDestruct "dis" as "(%n & dis & %db & #p_db & vdb & #db_at)".
+iAssert (sign_key (ss_key ss)) as "#?".
+{ by iDestruct "server" as "(% & % & ? & _)". }
 wp_pures.
-wp_apply (Conn.wp_confirm with "[] [] [] [$]") => //.
-iIntros "(%e_rl & #fail & conn & token)".
+wp_apply (Conn.wp_confirm with "[] [] [] [$dis]") => //.
+{ do 3!iSplit => //. }
+iIntros "%cs {db_at} (%e_rl & <- & <- & conn & #db_at & token)".
 wp_pures.
-iApply (wp_fork with "[db_dis conn token locked]").
+iApply (wp_fork with "[conn token vdb locked]").
 { iModIntro.
-  iDestruct (Conn.connected_keyE with "conn") as "#[_ ->]".
   wp_apply (wp_server_conn_handler
-             with "[] [] [] [db_dis $conn $token $locked]") => //.
-  iDestruct "db_dis" as "(%db & #p_db & db & #db_at)".
-  iExists db. iFrame. iSplit => //.
-  iDestruct "db_at" as "[fail'|db_at]"; eauto.
-  iLeft. by iApply "fail". }
+             with "[] [] [] [$conn $token $locked $vdb]") => //.
+  by iSplit => //. }
 iApply "post".
 by iFrame.
 Qed.

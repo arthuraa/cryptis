@@ -46,10 +46,10 @@ iPoseProof (store_ctx_conn_ctx with "ctx'") as "?".
 iIntros "#p_ekI #p_ekR".
 iIntros "!> %Φ client post".
 iDestruct "client"
-  as "(%n & %failed & %db & dis & version & #db_at & state)".
+  as "(%n & %db & dis & version & #db_at & state)".
 wp_lam. wp_pures.
-iApply (Conn.wp_connect with "[//] [//] [//] [//] [//] [$]") => //.
-iIntros "!> %cs (conn & token)".
+iApply (Conn.wp_connect True%I with "[//] [//] [//] [//] [//] [$]") => //.
+iIntros "!> %cs (conn & _ & token)".
 iApply "post".
 by iFrame.
 Qed.

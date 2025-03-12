@@ -54,6 +54,7 @@ wp_bind (SAList.find _ _). iApply (SAList.wp_find with "db") => //.
 iIntros "!> db". rewrite lookup_fmap.
 case db_t1: (db !! t1) => [t2|]; wp_pures; last by failure.
 wp_list.
+rewrite -e_rl.
 iPoseProof (ack_load_predI with "inv_ts db_at") as "[? #?]" => //.
 wp_apply (Conn.wp_write with "[//] [] [] [] [$]") => //.
 - rewrite /public_db big_sepM_forall.
@@ -63,7 +64,7 @@ iIntros "conn". wp_pures.
 wp_apply (Conn.wp_tick with "conn"). iIntros "conn". wp_pures.
 iModIntro. iRight. iExists _. iSplit => //.
 iSplit => //. iExists (S n). iFrame.
-by iSplit => //.
+rewrite e_rl. by iSplit => //.
 Qed.
 
 End Verif.

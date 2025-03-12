@@ -61,6 +61,7 @@ iSplit => //. iExists (S n). iFrame.
 rewrite /=.
 iDestruct "p_ts" as "(p_t1 & p_t2 & _)".
 iSplit; first by iApply public_db_insert.
+rewrite e_rl.
 iDestruct "inv_m" as "[fail|inv_m]"; eauto.
 iDestruct "inv_m" as "(%t1' & %t2' & %e & store_at)".
 case: e => <- <-.

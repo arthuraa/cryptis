@@ -5,7 +5,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term cryptis primitives tactics.
-From cryptis Require Import role conn.
+From cryptis Require Import role iso_dh conn.
 From cryptis.store Require Import impl shared alist db.
 
 Set Implicit Arguments.
@@ -49,11 +49,11 @@ wp_bind (SAList.find _ _). iApply (SAList.wp_find with "db") => //.
 iIntros "!> db". rewrite lookup_fmap.
 wp_bind (match: _ with InjL <> => _ | InjR <> => _ end)%E.
 iApply (wp_frame_wand with "conn").
-iAssert (Conn.session_failed cs true ∨
+iAssert (compromised_session Resp cs ∨
            DB.db_at kI (N.@"client".@kR.@"db")
              (S n) (DB.op_app db (Create t1 t2)))%I
   as "#db_at'".
-{ iDestruct "inv_ts" as "[?|inv_ts]"; eauto.
+{ rewrite e_rl. iDestruct "inv_ts" as "[?|inv_ts]"; eauto.
   iDestruct "inv_ts" as "(%t1' & %t2' & %e & create_at)".
   case: e => <- <-.
   iDestruct "db_at" as "[?|db_at]"; eauto.

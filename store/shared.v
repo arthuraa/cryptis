@@ -69,8 +69,8 @@ Implicit Types (failed : bool).
 
 Variable N : namespace.
 
-Definition db_disconnected kI kR : iProp := ∃ n failed db,
-  Conn.client_disconnected N kI kR n failed ∗
+Definition db_disconnected kI kR : iProp := ∃ n db,
+  Conn.client_disconnected N kI kR n ∗
   DB.db_version kI (N.@"client".@kR.@"db") n ∗
   DB.db_at kI (N.@"client".@kR.@"db") n db ∗
   DB.db_state kI (N.@"client".@kR.@"db") db.
@@ -84,11 +84,15 @@ Definition db_connected kI kR cs : iProp := ∃ n db,
 
 Lemma db_connected_ok kI kR cs :
   db_connected kI kR cs -∗
-  (Conn.failure kI kR -∗ ▷ False) -∗
-  ◇ Conn.session_failed cs false.
+  secret kI -∗
+  secret kR -∗
+  sign_key kI -∗
+  sign_key kR -∗
+  ◇ □ ¬ compromised_session Init cs.
 Proof.
-iIntros "(% & % & conn & _) fail".
-iApply (Conn.connected_ok with "conn fail").
+iIntros "(% & % & conn & _ & _ & _ & token)".
+iDestruct "token" as "(<- & ?)".
+iApply (Conn.connected_ok with "conn").
 Qed.
 
 Definition rem_mapsto kI kR t1 t2 : iProp :=
@@ -119,7 +123,7 @@ iMod (DB.alloc _ (N := N.@"client".@kR.@"db") with "kI_token")
   as "(version & state & free & #server_view & kI_token)".
 { solve_ndisj. }
 iModIntro. iSplitR "free".
-- iExists 0, false. iFrame.
+- iExists 0. iFrame.
 - by iFrame.
 - by iFrame.
 Qed.
@@ -140,15 +144,10 @@ case: (decide (t1' = t1)) => [-> {t1'} | ne].
 - by rewrite lookup_insert_ne //.
 Qed.
 
-Definition server_token cs : iProp :=
-  Conn.session_failed cs true ∨ ∃ n0,
-    Conn.clock N (si_init cs) (si_resp cs) n0 ∗
-    Conn.clock N (si_init cs) (si_resp cs) n0.
-
 Definition server_db_connected' kI kR cs vdb n : iProp :=
   ∃ db, public_db db ∗
         SAList.is_alist vdb (repr <$> db) ∗
-        (Conn.session_failed cs true ∨
+        (compromised_session Resp cs ∨
            DB.db_at kI (N.@"client".@kR.@"db") n db).
 
 Definition server_db_connected kI kR cs vdb n : iProp :=
@@ -156,16 +155,16 @@ Definition server_db_connected kI kR cs vdb n : iProp :=
   Conn.server_token N cs ∗
   server_db_connected' kI kR cs vdb n.
 
-Definition server_db_disconnected' kI kR vdb n failed : iProp :=
+Definition server_db_disconnected' kI kR vdb n : iProp :=
   ∃ db,
     public_db db ∗
     SAList.is_alist vdb (repr <$> db) ∗
-    (⌜failed⌝ ∨ DB.db_at kI (N.@"client".@kR.@"db") n db).
+    (Conn.failure kI kR ∨ DB.db_at kI (N.@"client".@kR.@"db") n db).
 
 Definition server_db_disconnected kI kR vdb : iProp :=
-  ∃ n failed,
-    Conn.server_disconnected N kI kR n failed ∗
-    server_db_disconnected' kI kR vdb n failed.
+  ∃ n,
+    Conn.server_disconnected N kI kR n ∗
+    server_db_disconnected' kI kR vdb n.
 
 Lemma server_db_alloc kI kR vdb E :
   ↑N.@"server".@kI ⊆ E →
@@ -176,7 +175,7 @@ Lemma server_db_alloc kI kR vdb E :
 Proof.
 iIntros "%sub token vdb".
 iMod (Conn.server_alloc with "token") as "(dis & token)"; eauto.
-iModIntro. iFrame "token". iExists 0, false.
+iModIntro. iFrame "token". iExists 0.
 iFrame. iExists ∅.
 iSplit; first by rewrite /public_db big_sepM_empty.
 iFrame. iRight. iLeft. do !iSplit => //.
@@ -226,11 +225,11 @@ Definition ack_create_pred kI kR si n ts : iProp := True.
 
 Lemma ack_load_predI skI skR cs n t1 t2 db :
   db !! t1 = Some t2 →
-  □ (Conn.session_failed cs true ∨ load_pred skI skR cs n [t1]) -∗
-  □ (Conn.session_failed cs true ∨
+  □ (compromised_session (Conn.cs_role cs) cs ∨ load_pred skI skR cs n [t1]) -∗
+  □ (compromised_session (Conn.cs_role cs) cs ∨
        DB.db_at skI (N.@"client".@skR.@"db") n db) -∗
-  (Conn.session_failed cs true ∨ □ ack_load_pred skI skR cs n [t2]) ∗
-  □ (Conn.session_failed cs true ∨
+  (compromised_session (Conn.cs_role cs) cs ∨ □ ack_load_pred skI skR cs n [t2]) ∗
+  □ (compromised_session (Conn.cs_role cs) cs ∨
        DB.db_at skI (N.@"client".@skR.@"db") (S n) db).
 Proof.
 iIntros "%db_t1 #[?|load] #[?|db_at]"; eauto.
