@@ -5,7 +5,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term cryptis primitives tactics.
-From cryptis Require Import role conn.
+From cryptis Require Import role rpc.
 From cryptis.store Require Import impl shared db.
 
 Set Implicit Arguments.
@@ -19,7 +19,7 @@ Notation iProp := (iProp Σ).
 
 Context `{!storeG Σ}.
 
-Implicit Types (cs : Conn.state).
+Implicit Types (cs : RPC.state).
 Implicit Types kI kR kS t : term.
 Implicit Types n : nat.
 Implicit Types γ : gname.
@@ -42,15 +42,15 @@ iDestruct "client"
 wp_lam. wp_pures. wp_list.
 iMod (DB.store_client t2' with "version db_at state mapsto")
   as "(version & #db_at' & #store_at & state & mapsto)".
-wp_apply (Conn.wp_write with "[//] [] [] [] [$]").
+wp_apply (RPC.wp_write with "[//] [] [] [] [$]").
 - by iApply store_ctx_store.
 - rewrite /=; eauto.
 - iRight. by iExists t1, t2'; eauto.
 iIntros "conn". wp_pures.
-wp_apply (Conn.wp_read with "[//] [] [$]").
+wp_apply (RPC.wp_read with "[//] [] [$]").
 - by iApply store_ctx_ack_store.
 iIntros "%ts [conn _]". wp_pures.
-wp_apply (Conn.wp_tick with "[$]"). iIntros "conn".
+wp_apply (RPC.wp_tick with "[$]"). iIntros "conn".
 iApply "post". by iFrame.
 Qed.
 

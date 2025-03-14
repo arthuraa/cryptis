@@ -5,7 +5,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term cryptis primitives tactics.
-From cryptis Require Import role iso_dh conn.
+From cryptis Require Import role iso_dh rpc.
 From cryptis.store Require Import impl shared alist db.
 
 Set Implicit Arguments.
@@ -17,7 +17,7 @@ Section Verif.
 Context `{!cryptisGS Σ, !heapGS Σ, !storeGS Σ}.
 Notation iProp := (iProp Σ).
 
-Implicit Types (cs : Conn.state).
+Implicit Types (cs : RPC.state).
 Implicit Types kI kR kS t : term.
 Implicit Types n : nat.
 Implicit Types γ : gname.
@@ -28,10 +28,10 @@ Variable N : namespace.
 Ltac failure := iLeft; iFrame; eauto.
 
 Lemma wp_server_handle_create c kI kR cs vdb :
-  Conn.cs_role cs = Resp →
+  RPC.cs_role cs = Resp →
   channel c -∗
   store_ctx N -∗
-  Conn.handler_correct
+  RPC.handler_correct
     (server_db_connected' N kI kR cs vdb)
     kI kR cs
     (N.@"create", Server.handle_create N c (repr cs) vdb).
@@ -39,7 +39,7 @@ Proof.
 iIntros "%e_rl #chan_c #ctx".
 iPoseProof (store_ctx_create with "ctx") as "?".
 iPoseProof (store_ctx_ack_create with "ctx") as "?".
-rewrite /Conn.handler_correct /Conn.handler_correct_gen.
+rewrite /RPC.handler_correct /RPC.handler_correct_gen.
 wp_lam. wp_pures. iModIntro. iExists _. iSplit => //.
 iIntros "!> %n %ts !> %Φ (conn & db & #p_ts & #inv_ts) post".
 wp_pures. iApply (wp_wand with "[conn db] post").
@@ -78,12 +78,12 @@ wp_pures.
 wp_bind (tint _). iApply wp_tint.
 wp_list.
 wp_pures.
-wp_apply (Conn.wp_write with "[//] [] [] [] [$]") => //.
+wp_apply (RPC.wp_write with "[//] [] [] [] [$]") => //.
 - rewrite /= public_TInt. iDestruct "p_ts" as "(? & ? & _)".
   by eauto.
 - by iRight.
 iIntros "conn". wp_pures.
-wp_apply (Conn.wp_tick with "[$]"). iIntros "conn".
+wp_apply (RPC.wp_tick with "[$]"). iIntros "conn".
 wp_pures.
 iModIntro. iRight. iExists _. iSplit => //.
 iSplit => //. iExists (S n). by iFrame.

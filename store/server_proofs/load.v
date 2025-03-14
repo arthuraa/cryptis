@@ -6,7 +6,7 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta nown.
 From cryptis Require Import cryptis primitives tactics.
-From cryptis Require Import role conn.
+From cryptis Require Import role rpc.
 From cryptis.store Require Import impl shared alist db.
 
 Set Implicit Arguments.
@@ -20,7 +20,7 @@ Notation iProp := (iProp Σ).
 
 Context `{!storeGS Σ}.
 
-Implicit Types (cs : Conn.state).
+Implicit Types (cs : RPC.state).
 Implicit Types skI skR kS t : term.
 Implicit Types n : nat.
 Implicit Types γ : gname.
@@ -31,10 +31,10 @@ Variable N : namespace.
 Ltac failure := iLeft; iFrame; eauto.
 
 Lemma wp_server_handle_load c skI skR cs vdb :
-  Conn.cs_role cs = Resp →
+  RPC.cs_role cs = Resp →
   channel c -∗
   store_ctx N -∗
-  Conn.handler_correct
+  RPC.handler_correct
     (server_db_connected' N skI skR cs vdb)
     skI skR cs
     (N.@"load", Server.handle_load N c (repr cs) vdb).
@@ -42,7 +42,7 @@ Proof.
 iIntros "%e_rl #chan_c #ctx".
 iPoseProof (store_ctx_load with "ctx") as "?".
 iPoseProof (store_ctx_ack_load with "ctx") as "?".
-rewrite /Conn.handler_correct /= /Conn.handler_correct_gen. 
+rewrite /RPC.handler_correct /= /RPC.handler_correct_gen.
 wp_lam; wp_pures. iModIntro. iExists _. iSplit => //.
 iIntros "!> %n %ts !> %Φ (conn & db & #p_ts & #inv_ts) post".
 wp_pures.
@@ -56,12 +56,12 @@ case db_t1: (db !! t1) => [t2|]; wp_pures; last by failure.
 wp_list.
 rewrite -e_rl.
 iPoseProof (ack_load_predI with "inv_ts db_at") as "[? #?]" => //.
-wp_apply (Conn.wp_write with "[//] [] [] [] [$]") => //.
+wp_apply (RPC.wp_write with "[//] [] [] [] [$]") => //.
 - rewrite /public_db big_sepM_forall.
   iDestruct ("p_db" $! t1 t2 with "[//]") as "[??]".
   by rewrite /=; eauto.
 iIntros "conn". wp_pures.
-wp_apply (Conn.wp_tick with "conn"). iIntros "conn". wp_pures.
+wp_apply (RPC.wp_tick with "conn"). iIntros "conn". wp_pures.
 iModIntro. iRight. iExists _. iSplit => //.
 iSplit => //. iExists (S n). iFrame.
 rewrite e_rl. by iSplit => //.

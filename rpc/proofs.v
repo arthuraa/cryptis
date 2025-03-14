@@ -6,7 +6,7 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta cryptis primitives tactics.
 From cryptis Require Import role iso_dh.
-From cryptis.conn Require Import impl props.
+From cryptis.rpc Require Import impl props.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

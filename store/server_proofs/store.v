@@ -5,7 +5,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term cryptis primitives tactics.
-From cryptis Require Import role conn.
+From cryptis Require Import role rpc.
 From cryptis.store Require Import impl shared alist db.
 
 Set Implicit Arguments.
@@ -19,7 +19,7 @@ Notation iProp := (iProp Σ).
 
 Context `{!storeGS Σ}.
 
-Implicit Types (cs : Conn.state).
+Implicit Types (cs : RPC.state).
 Implicit Types kI kR kS t : term.
 Implicit Types n : nat.
 Implicit Types γ : gname.
@@ -30,10 +30,10 @@ Variable N : namespace.
 Ltac failure := iLeft; iFrame.
 
 Lemma wp_server_handle_store c kI kR cs vdb :
-  Conn.cs_role cs = Resp →
+  RPC.cs_role cs = Resp →
   channel c -∗
   store_ctx N -∗
-  Conn.handler_correct
+  RPC.handler_correct
     (server_db_connected' N kI kR cs vdb)
     kI kR cs
     (N.@"store", Server.handle_store N c (repr cs) vdb).
@@ -41,7 +41,7 @@ Proof.
 iIntros "%e_rl #chan_c #ctx".
 iPoseProof (store_ctx_store with "ctx") as "?".
 iPoseProof (store_ctx_ack_store with "ctx") as "?".
-rewrite /Conn.handler_correct /= /Conn.handler_correct_gen. 
+rewrite /RPC.handler_correct /= /RPC.handler_correct_gen.
 wp_lam; wp_pures. iModIntro. iExists _. iSplit => //.
 iIntros "!> %n %ts !> %Φ (conn & db & #p_ts & #inv_m) post".
 wp_pures. iApply (wp_wand with "[conn db] post").
@@ -52,10 +52,10 @@ iApply (SAList.wp_insert with "db").
 iIntros "!> db". rewrite -fmap_insert.
 wp_pures.
 wp_apply (@wp_nil term).
-wp_apply (Conn.wp_write with "[] [] [] [] [$]") => //.
+wp_apply (RPC.wp_write with "[] [] [] [] [$]") => //.
 { iRight. by eauto. }
 iIntros "conn". wp_pures. 
-wp_apply (Conn.wp_tick with "[$]"). iIntros "conn". wp_pures.
+wp_apply (RPC.wp_tick with "[$]"). iIntros "conn". wp_pures.
 iModIntro. iRight. iExists _. iSplit => //.
 iSplit => //. iExists (S n). iFrame.
 rewrite /=.

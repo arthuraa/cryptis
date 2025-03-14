@@ -8,7 +8,7 @@ From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta nown.
 From cryptis Require Import cryptis primitives tactics.
-From cryptis Require Import role conn.
+From cryptis Require Import role rpc.
 From cryptis.store Require Import impl shared db.
 
 Set Implicit Arguments.
@@ -22,7 +22,7 @@ Notation iProp := (iProp Σ).
 
 Context `{!storeG Σ}.
 
-Implicit Types (cs : Conn.state).
+Implicit Types (cs : RPC.state).
 Implicit Types kI kR kS t : term.
 Implicit Types n : nat.
 Implicit Types γ : gname.
@@ -48,7 +48,7 @@ iIntros "!> %Φ client post".
 iDestruct "client"
   as "(%n & %db & dis & version & #db_at & state)".
 wp_lam. wp_pures.
-iApply (Conn.wp_connect True%I with "[//] [//] [//] [//] [//] [$]") => //.
+iApply (RPC.wp_connect True%I with "[//] [//] [//] [//] [//] [$]") => //.
 iIntros "!> %cs (conn & _ & token)".
 iApply "post".
 by iFrame.

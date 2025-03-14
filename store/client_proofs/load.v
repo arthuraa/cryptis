@@ -7,7 +7,7 @@ From iris.base_logic Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta nown cryptis.
 From cryptis Require Import primitives tactics.
-From cryptis Require Import role iso_dh conn.
+From cryptis Require Import role iso_dh rpc.
 From cryptis.store Require Import impl shared db.
 
 Set Implicit Arguments.
@@ -44,19 +44,19 @@ Proof.
 iIntros "#chan_c #ctx #p_t1 !> %Φ [client mapsto] post".
 iDestruct "client"
   as "(%n & %db & conn & version & #db_at & state & token)".
-iAssert (⌜Conn.cs_role cs = Init⌝)%I as "%e_rl".
+iAssert (⌜RPC.cs_role cs = Init⌝)%I as "%e_rl".
 { by iDestruct "token" as "(? & ?)". }
 wp_lam; wp_pures. wp_list.
 iMod (DB.load_client t1 with "version db_at")
   as "(#load_at & version & db)".
 iDestruct "ctx" as "(_ & _ & load & ack_load & _)".
-wp_apply (Conn.wp_write with "chan_c load [] [] [$]").
+wp_apply (RPC.wp_write with "chan_c load [] [] [$]").
 - by rewrite /=; eauto.
 - iRight. iIntros "!>". iExists _. by eauto.
 iIntros "conn". wp_pures.
-wp_apply (Conn.wp_read with "chan_c [//] [$]").
+wp_apply (RPC.wp_read with "chan_c [//] [$]").
 iIntros "%ts (conn & #p_ts & #inv_ts)". wp_pures.
-wp_apply (Conn.wp_tick with "conn"). iIntros "conn".
+wp_apply (RPC.wp_tick with "conn"). iIntros "conn".
 rewrite [repr_list ts]repr_listE.
 iDestruct "inv_ts" as "[fail|inv_ts]".
 - wp_pures. case: ts => [|t ts]; wp_pures.

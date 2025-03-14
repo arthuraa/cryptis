@@ -39,10 +39,10 @@ iso_dh/responder.v
 iso_dh/game.v
 iso_dh.v
 
-conn/props.v
-conn/impl.v
-conn/proofs.v
-conn.v
+rpc/props.v
+rpc/impl.v
+rpc/proofs.v
+rpc.v
 
 ## Simple examples
 

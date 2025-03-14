@@ -6,7 +6,7 @@ From iris.algebra Require Import numbers reservation_map.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par assert ticket_lock.
 From cryptis Require Import lib cryptis primitives tactics gmeta.
-From cryptis Require Import role iso_dh conn store.
+From cryptis Require Import role iso_dh rpc store.
 From cryptis.primitives Require Import attacker.
 
 Set Implicit Arguments.
@@ -55,7 +55,7 @@ Definition game : val := λ: <>,
   Client.create kvsN "c" "conn" "k" "v";;
   Client.close kvsN "c" "conn";;
   (* Leak session key *)
-  send "c" (Conn.session_key "conn");;
+  send "c" (RPC.session_key "conn");;
 
   let: "conn" := Client.connect kvsN "c" "skI" "vkR" in
   (* Leak long-term keys *)
@@ -126,7 +126,7 @@ iIntros "[client k_v]". wp_pures.
 wp_apply (wp_client_close with "[] [] [$client]") => //.
 iIntros "[client #p_sk]".
 wp_pures.
-wp_apply Conn.wp_session_key => //. iIntros "_".
+wp_apply RPC.wp_session_key => //. iIntros "_".
 wp_apply (wp_send with "[//]") => //. wp_pures.
 wp_apply (wp_client_connect with "[] [] [] [] [] client"); eauto.
 iIntros "%cs' client". wp_pure _ credit:"c'". wp_pures.

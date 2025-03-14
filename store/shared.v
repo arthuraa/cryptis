@@ -7,7 +7,7 @@ From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
 From cryptis Require Import lib term gmeta nown.
-From cryptis Require Import cryptis primitives tactics role iso_dh conn.
+From cryptis Require Import cryptis primitives tactics role iso_dh rpc.
 From cryptis.store Require Import alist db.
 
 Set Implicit Arguments.
@@ -37,7 +37,7 @@ Instance scs_repr : Repr server_client_state :=
 
 Class storeGS Σ := StoreGS {
   storeGS_db   : dbGS Σ;
-  storeGS_conn : Conn.connGS Σ;
+  storeGS_conn : RPC.connGS Σ;
 }.
 
 Local Existing Instance storeGS_db.
@@ -45,7 +45,7 @@ Local Existing Instance storeGS_conn.
 
 Definition storeΣ := #[
   dbΣ;
-  Conn.connΣ
+  RPC.connΣ
 ].
 
 Global Instance subG_storeGS Σ : subG storeΣ Σ → storeGS Σ.
@@ -57,7 +57,7 @@ Context `{!cryptisGS Σ, !heapGS Σ, !storeGS Σ, !tlockG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (si : sess_info).
-Implicit Types (cs : Conn.state).
+Implicit Types (cs : RPC.state).
 Implicit Types (kI kR kS t : term) (ts : list term).
 Implicit Types db : gmap term term.
 Implicit Types accounts : gmap term server_client_state.
@@ -69,17 +69,17 @@ Implicit Types (failed : bool).
 Variable N : namespace.
 
 Definition db_disconnected kI kR : iProp := ∃ n db,
-  Conn.client_disconnected N kI kR n ∗
+  RPC.client_disconnected N kI kR n ∗
   DB.db_version kI (N.@"client".@kR.@"db") n ∗
   DB.db_at kI (N.@"client".@kR.@"db") n db ∗
   DB.db_state kI (N.@"client".@kR.@"db") db.
 
 Definition db_connected kI kR cs : iProp := ∃ n db,
-  Conn.connected kI kR cs n ∗
+  RPC.connected kI kR cs n ∗
   DB.db_version kI (N.@"client".@kR.@"db") n ∗
   DB.db_at kI (N.@"client".@kR.@"db") n db ∗
   DB.db_state kI (N.@"client".@kR.@"db") db ∗
-  Conn.client_token N kI kR cs.
+  RPC.client_token N kI kR cs.
 
 Lemma db_connected_ok kI kR cs :
   db_connected kI kR cs -∗
@@ -91,7 +91,7 @@ Lemma db_connected_ok kI kR cs :
 Proof.
 iIntros "(% & % & conn & _ & _ & _ & token)".
 iDestruct "token" as "(<- & ?)".
-iApply (Conn.connected_ok with "conn").
+iApply (RPC.connected_ok with "conn").
 Qed.
 
 Definition rem_mapsto kI kR t1 t2 : iProp :=
@@ -115,7 +115,7 @@ Proof.
 iIntros "%sub kI_token".
 rewrite (term_token_difference _ _ _ sub).
 iDestruct "kI_token" as "[kI_token ?]". iFrame.
-iMod (Conn.client_alloc kI (kR := kR) with "kI_token")
+iMod (RPC.client_alloc kI (kR := kR) with "kI_token")
   as "[dis kI_token]" => //.
 { solve_ndisj. }
 iMod (DB.alloc _ (N := N.@"client".@kR.@"db") with "kI_token")
@@ -150,19 +150,19 @@ Definition server_db_connected' kI kR cs vdb n : iProp :=
            DB.db_at kI (N.@"client".@kR.@"db") n db).
 
 Definition server_db_connected kI kR cs vdb n : iProp :=
-  Conn.connected kI kR cs n ∗
-  Conn.server_token N cs ∗
+  RPC.connected kI kR cs n ∗
+  RPC.server_token N cs ∗
   server_db_connected' kI kR cs vdb n.
 
 Definition server_db_disconnected' kI kR vdb n : iProp :=
   ∃ db,
     public_db db ∗
     SAList.is_alist vdb (repr <$> db) ∗
-    (Conn.failure kI kR ∨ DB.db_at kI (N.@"client".@kR.@"db") n db).
+    (RPC.failure kI kR ∨ DB.db_at kI (N.@"client".@kR.@"db") n db).
 
 Definition server_db_disconnected kI kR vdb : iProp :=
   ∃ n,
-    Conn.server_disconnected N kI kR n ∗
+    RPC.server_disconnected N kI kR n ∗
     server_db_disconnected' kI kR vdb n.
 
 Lemma server_db_alloc kI kR vdb E :
@@ -173,7 +173,7 @@ Lemma server_db_alloc kI kR vdb E :
   server_db_disconnected kI kR vdb.
 Proof.
 iIntros "%sub token vdb".
-iMod (Conn.server_alloc with "token") as "(dis & token)"; eauto.
+iMod (RPC.server_alloc with "token") as "(dis & token)"; eauto.
 iModIntro. iFrame "token". iExists 0.
 iFrame. iExists ∅.
 iSplit; first by rewrite /public_db big_sepM_empty.
@@ -224,11 +224,11 @@ Definition ack_create_pred kI kR si n ts : iProp := True.
 
 Lemma ack_load_predI skI skR cs n t1 t2 db :
   db !! t1 = Some t2 →
-  □ (compromised_session (Conn.cs_role cs) cs ∨ load_pred skI skR cs n [t1]) -∗
-  □ (compromised_session (Conn.cs_role cs) cs ∨
+  □ (compromised_session (RPC.cs_role cs) cs ∨ load_pred skI skR cs n [t1]) -∗
+  □ (compromised_session (RPC.cs_role cs) cs ∨
        DB.db_at skI (N.@"client".@skR.@"db") n db) -∗
-  (compromised_session (Conn.cs_role cs) cs ∨ □ ack_load_pred skI skR cs n [t2]) ∗
-  □ (compromised_session (Conn.cs_role cs) cs ∨
+  (compromised_session (RPC.cs_role cs) cs ∨ □ ack_load_pred skI skR cs n [t2]) ∗
+  □ (compromised_session (RPC.cs_role cs) cs ∨
        DB.db_at skI (N.@"client".@skR.@"db") (S n) db).
 Proof.
 iIntros "%db_t1 #[?|load] #[?|db_at]"; eauto.
@@ -242,13 +242,13 @@ iSplit; iRight.
 Qed.
 
 Definition store_ctx : iProp :=
-  seal_pred (N.@"store")      (Conn.conn_pred store_pred) ∗
-  seal_pred (N.@"ack_store")  (Conn.conn_pred ack_store_pred) ∗
-  seal_pred (N.@"load")       (Conn.conn_pred load_pred) ∗
-  seal_pred (N.@"ack_load")   (Conn.conn_pred ack_load_pred) ∗
-  seal_pred (N.@"create")     (Conn.conn_pred create_pred) ∗
-  seal_pred (N.@"ack_create") (Conn.conn_pred ack_create_pred) ∗
-  Conn.ctx N.
+  seal_pred (N.@"store")      (RPC.conn_pred store_pred) ∗
+  seal_pred (N.@"ack_store")  (RPC.conn_pred ack_store_pred) ∗
+  seal_pred (N.@"load")       (RPC.conn_pred load_pred) ∗
+  seal_pred (N.@"ack_load")   (RPC.conn_pred ack_load_pred) ∗
+  seal_pred (N.@"create")     (RPC.conn_pred create_pred) ∗
+  seal_pred (N.@"ack_create") (RPC.conn_pred ack_create_pred) ∗
+  RPC.ctx N.
 
 Lemma store_ctx_alloc E :
   ↑N ⊆ E →
@@ -276,7 +276,7 @@ iFrame.
 iMod (seal_pred_set (N.@"ack_create") with "token")
   as "[ack_create token]"; try solve_ndisj.
 iFrame.
-iMod (Conn.ctx_alloc (N := N) with "token")
+iMod (RPC.ctx_alloc (N := N) with "token")
   as "(#iso_dh & ?)"; try solve_ndisj.
 Qed.
 
@@ -288,30 +288,30 @@ Ltac solve_ctx :=
   ).
 
 Lemma store_ctx_store :
-  store_ctx -∗ seal_pred (N.@"store") (Conn.conn_pred store_pred).
+  store_ctx -∗ seal_pred (N.@"store") (RPC.conn_pred store_pred).
 Proof. solve_ctx. Qed.
 
 Lemma store_ctx_ack_store :
-  store_ctx -∗ seal_pred (N.@"ack_store") (Conn.conn_pred ack_store_pred).
+  store_ctx -∗ seal_pred (N.@"ack_store") (RPC.conn_pred ack_store_pred).
 Proof. solve_ctx. Qed.
 
 Lemma store_ctx_load :
-  store_ctx -∗ seal_pred (N.@"load") (Conn.conn_pred load_pred).
+  store_ctx -∗ seal_pred (N.@"load") (RPC.conn_pred load_pred).
 Proof. solve_ctx. Qed.
 
 Lemma store_ctx_ack_load :
-  store_ctx -∗ seal_pred (N.@"ack_load") (Conn.conn_pred ack_load_pred).
+  store_ctx -∗ seal_pred (N.@"ack_load") (RPC.conn_pred ack_load_pred).
 Proof. solve_ctx. Qed.
 
 Lemma store_ctx_create :
-  store_ctx -∗ seal_pred (N.@"create") (Conn.conn_pred create_pred).
+  store_ctx -∗ seal_pred (N.@"create") (RPC.conn_pred create_pred).
 Proof. solve_ctx. Qed.
 
 Lemma store_ctx_ack_create :
-  store_ctx -∗ seal_pred (N.@"ack_create") (Conn.conn_pred ack_create_pred).
+  store_ctx -∗ seal_pred (N.@"ack_create") (RPC.conn_pred ack_create_pred).
 Proof. solve_ctx. Qed.
 
-Lemma store_ctx_conn_ctx : store_ctx -∗ Conn.ctx N.
+Lemma store_ctx_conn_ctx : store_ctx -∗ RPC.ctx N.
 Proof. solve_ctx. Qed.
 
 End Defs.
