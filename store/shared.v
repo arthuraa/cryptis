@@ -2,7 +2,6 @@ From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
 From stdpp Require Import namespaces coGset.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
-From iris.algebra Require Import max_prefix_list.
 From iris.algebra.lib Require Import dfrac_agree.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
