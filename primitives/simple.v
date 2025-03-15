@@ -108,12 +108,12 @@ Definition open : val := λ: "k" "t",
   else
     NONE.
 
-Definition enc c : val := λ: "k" "t",
-  seal "k" (tag c "t").
+Definition enc : val := λ: "N" "k" "t",
+  seal "k" (tag "N" "t").
 
-Definition dec c : val := λ: "k" "t",
+Definition dec : val := λ: "N" "k" "t",
   bind: "t" := open "k" "t" in
-  untag c "t".
+  untag "N" "t".
 
 Definition mkkeys : val := λ: "k",
   (key Seal "k", key Open "k").
@@ -131,25 +131,25 @@ Definition derive_key : val := λ: "k",
 
 Definition pkey : val := λ: "sk", key Seal "sk".
 
-Definition aenc c : val := λ: "pk" "t",
-  enc c "pk" "t".
+Definition aenc : val := λ: "N" "pk" "t",
+  enc "N" "pk" "t".
 
-Definition adec c : val := λ: "sk" "t",
-  dec c (key Open "sk") "t".
+Definition adec : val := λ: "N" "sk" "t",
+  dec "N" (key Open "sk") "t".
 
-Definition senc c : val := λ: "sk" "t",
-  enc c (key Seal "sk") "t".
+Definition senc : val := λ: "N" "sk" "t",
+  enc "N" (key Seal "sk") "t".
 
-Definition sdec c : val := λ: "sk" "t",
-  dec c (key Open "sk") "t".
+Definition sdec : val := λ: "N" "sk" "t",
+  dec "N" (key Open "sk") "t".
 
 Definition vkey : val := λ: "sk", key Open "sk".
 
-Definition sign c : val := λ: "sk" "t",
-  enc c (key Seal "sk") "t".
+Definition sign : val := λ: "N" "sk" "t",
+  enc "N" (key Seal "sk") "t".
 
-Definition verify c : val := λ: "vk" "t",
-  dec c "vk" "t".
+Definition verify : val := λ: "N" "vk" "t",
+  dec "N" "vk" "t".
 
 Definition to_seal_key : val := λ: "t",
   bind: "kt" := is_key "t" in
