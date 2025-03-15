@@ -45,11 +45,11 @@ Definition confirm : val := λ: "c" "skB" "req",
 Definition sent     : val := λ: "cs", Fst "cs" +ₗ #0%nat.
 Definition received : val := λ: "cs", Fst "cs" +ₗ #1%nat.
 
-Definition write N : val := λ: "c" "cs" "ts",
+Definition write : val := λ: "N" "c" "cs" "ts",
   let: "n"  := sent "cs" in
   let: "sk" := session_key "cs" in
   let: "m"  := term_of_list (tint !"n" :: "ts") in
-  let: "m"  := senc N "sk" "m" in
+  let: "m"  := senc "N" "sk" "m" in
   send "c" "m";;
   "n" <- !"n" + #1%nat.
 
@@ -66,47 +66,20 @@ Definition try_open : val := λ: "N" "cs" "t",
     SOME (Snd "ts")
   end.
 
-Definition make_handler_def (p : namespace * expr) : expr :=
-  let N := p.1 in
-  let: "handler" := p.2 in
-  λ: "cs" "t",
-    bind: "ts" := try_open (Tag N) "cs" "t" in
-    SOME ("handler" "ts").
+Definition make_handler : val := λ: "p" "cs" "t",
+  let: "N" := Fst "p" in
+  let: "handler" := Snd "p" in
+  bind: "ts" := try_open "N" "cs" "t" in
+  SOME ("handler" "ts").
 
-Definition make_handler_aux : base.seal make_handler_def. by eexists _. Qed.
-Definition make_handler := unseal make_handler_aux.
-Lemma make_handler_eq : make_handler = make_handler_def.
-Proof. exact: seal_eq. Qed.
-
-Lemma subst_make_handler var v p :
-  subst var v (make_handler p) =
-  make_handler (p.1, subst var v p.2).
-Proof.
-rewrite make_handler_eq /make_handler_def.
-case: p => [N' handler] /=.
-case: decide => [[_ not_shadow_handler]|shadow_handler //].
-case: decide => [[_ not_shadow_n]|shadow_n //].
-case: decide => [[_ not_shadow_m]|shadow_m //].
-rewrite decide_False; last congruence.
-rewrite decide_False; last congruence.
-case: decide => [[_ not_shadow_ts]|shadow_ts //].
-rewrite decide_False; last congruence.
-by rewrite decide_False; last congruence.
-Qed.
-
-Fixpoint make_handlers (handlers : list (namespace * expr)) : expr :=
-  match handlers with
-  | [] => []%E
-  | handler :: handlers => (make_handler handler :: make_handlers handlers)%E
+Definition make_handlers : val := rec: "loop" "handlers" :=
+  match: "handlers" with
+    NONE => []%E
+  | SOME "handlers" =>
+    let: "handler" := Fst "handlers" in
+    let: "handlers" := Snd "handlers" in
+    make_handler "handler" :: "loop" "handlers"
   end.
-
-Lemma subst_make_handlers var v handlers :
-  subst var v (make_handlers handlers) =
-  make_handlers (map (λ p, (p.1, subst var v p.2)) handlers).
-Proof.
-elim: handlers=> [|p handlers IH] //=.
-by rewrite -IH -subst_make_handler.
-Qed.
 
 Definition select_inner_body : val := rec: "loop" "cs" "m" "handlers" :=
   match: "handlers" with
@@ -128,25 +101,11 @@ Definition select_outer_body : val := λ: "c" "cs" "handlers",
     select_inner_body "cs" "t" "handlers"
   ).
 
-Definition select_def (c cs : expr) handlers : expr :=
-  select_outer_body c cs (make_handlers handlers).
+Definition select : val := λ: "c" "cs" "handlers",
+  select_outer_body "c" "cs" (make_handlers "handlers").
 
-Definition select_aux : base.seal select_def. by eexists _. Qed.
-Definition select := unseal select_aux.
-Lemma select_eq : select = select_def. Proof. exact: seal_eq. Qed.
-
-Definition read N : val :=
-  let handlers := [(N, (λ: "ts", "ts")%E)] in
-  λ: "c" "cs", select "c" "cs" handlers.
-
-Lemma subst_select var v c cs handlers :
-  subst var v (select c cs handlers) =
-  select
-    (subst var v c) (subst var v cs)
-    (map (λ p, (p.1, subst var v p.2)) handlers).
-Proof.
-by rewrite select_eq /select /= subst_make_handlers.
-Qed.
+Definition read : val :=
+  λ: "N" "c" "cs", select "c" "cs" [("N", (λ: "ts", "ts"))%E].
 
 Definition free : val := λ: "c" "cs",
   let: "counters" := Fst "cs" in

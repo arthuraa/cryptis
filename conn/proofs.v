@@ -381,26 +381,23 @@ Definition make_handler_post φ ψ kI kR rl cs (handler : val) : iProp :=
       ∃ r, ⌜v = SOMEV r⌝ ∗ ψ n m r }}.
 
 Definition handler_correct_gen φ ψ kI kR rl cs handler : iProp :=
-  WP handler.2 {{ f,
-    ∃ Ψ, seal_pred handler.1 (conn_pred (swap_role rl) Ψ) ∗
-    □ ∀ n m ts,
-      {{{ connected kI kR rl cs n (S m) ∗
-          release_token (si_share_of rl cs) ∗
-          φ n m ∗
-          ▷ ([∗ list] t ∈ ts, public t) ∗
-          ▷ (compromised_session rl cs ∨ Ψ kI kR cs m ts) }}}
-        (f : val) (repr ts)
-      {{{ v, RET v; ψ n m v }}}
-  }}%I.
+  ∃ N f, ⌜handler = (Tag N, f)%V⌝ ∗
+  ∃ Ψ, seal_pred N (conn_pred (swap_role rl) Ψ) ∗
+  □ ∀ n m ts,
+    {{{ connected kI kR rl cs n (S m) ∗
+        release_token (si_share_of rl cs) ∗
+        φ n m ∗
+        ▷ ([∗ list] t ∈ ts, public t) ∗
+        ▷ (compromised_session rl cs ∨ Ψ kI kR cs m ts) }}}
+      (f : val) (repr ts)
+    {{{ v, RET v; ψ n m v }}}.
 
-Lemma wp_make_handler φ ψ kI kR rl cs (handler : namespace * expr) :
+Lemma wp_make_handler φ ψ kI kR rl cs handler :
   handler_correct_gen φ ψ kI kR rl cs handler -∗
   WP make_handler handler {{ make_handler_post φ ψ kI kR rl cs }}.
 Proof.
-case: handler => N handler /=; iIntros "wp".
-rewrite make_handler_eq /make_handler_def. wp_pures.
-wp_bind handler. iApply (wp_wand with "wp").
-iIntros "%v_handler #(%φ' & #? & #wp)". wp_pures.
+iIntros "(%N & %f & -> & %φ' & #? & #wp)".
+wp_lam. wp_pures.
 iIntros "!> !> %n %m %t #p_t conn recv inv". wp_pures.
 wp_apply (wp_try_open with "[$conn $recv]"); eauto.
 iIntros "%res (rel & [(-> & conn)|(%ts & -> & #p_ts & conn & inv_ts)])"; wp_pures.
@@ -409,27 +406,28 @@ wp_apply ("wp" with "[$inv $conn $rel $inv_ts]") => //.
 iIntros "%res ?". wp_pures. iModIntro. iRight. by eauto.
 Qed.
 
-Lemma wp_make_handlers φ ψ kI kR rl cs handlers :
+Lemma wp_make_handlers φ ψ kI kR rl cs (handlers : list val) :
   ([∗ list] handler ∈ handlers,
     handler_correct_gen φ ψ kI kR rl cs handler) -∗
-  WP make_handlers handlers {{ v',
+  WP make_handlers (repr handlers) {{ v',
     ∃ handlers : list val, ⌜v' = repr handlers⌝ ∗
       [∗ list] handler ∈ handlers,
         make_handler_post φ ψ kI kR rl cs handler }}.
 Proof.
 rewrite /= !repr_list_unseal.
-elim: handlers=> [|[N handler] handlers IH] //=.
-  iIntros "_". wp_pures. iModIntro. iExists []. by rewrite /=.
-iIntros "[wp_handler wp_handlers]".
+elim: handlers=> [|handler handlers IH] //=.
+  iIntros "_". wp_rec. wp_pures. iModIntro. iExists []. by rewrite /=.
+iIntros "[wp_handler wp_handlers]". wp_rec; wp_pures.
 wp_bind (make_handlers _).
 iPoseProof (IH with "wp_handlers") as "wp_handlers". clear IH.
 iApply (wp_wand with "wp_handlers [wp_handler]").
 iIntros "%v' (%handlers' & -> & #Hhandlers')".
 wp_bind (make_handler _).
 iApply (wp_wand with "[wp_handler] [Hhandlers']").
-{ iApply (wp_make_handler _ _ _ _ _ _ (N, handler) with "wp_handler"). }
-iIntros "%f #wp_f". wp_lam; wp_pures.
-iExists (f :: handlers'). iSplitR => //=.
+{ iApply (wp_make_handler _ _ _ _ _ _ handler with "wp_handler"). }
+clear handler.
+iIntros "%handler #wp_handler". wp_lam; wp_pures.
+iExists (handler :: handlers'). iSplitR => //=.
 iModIntro. iSplit => //.
 Qed.
 
@@ -459,18 +457,17 @@ iApply (wp_select_inner_body (ψ n m) with "[] [] [] I").
 - iIntros "%r Hr". iRight. iExists r. by eauto.
 Qed.
 
-Lemma wp_select
-  φ ψ (c : val) kI kR rl cs (handlers : list (namespace * expr)) :
+Lemma wp_select φ ψ (c : val) kI kR rl cs (handlers : list val) :
   channel c -∗
   ([∗ list] handler ∈ handlers,
     handler_correct_gen φ ψ kI kR rl cs handler) -∗
   ∀ n m, connected kI kR rl cs n m -∗
   release_token (si_share_of rl cs) -∗
   φ n m -∗
-  WP select c (repr cs) handlers {{ ψ n m }}.
+  WP select c (repr cs) (repr handlers) {{ ψ n m }}.
 Proof.
-rewrite select_eq /select_def.
 iIntros "#chan_c wps %n %m conn rel inv".
+wp_lam; wp_pures.
 wp_bind (make_handlers _). iApply (wp_wand with "[wps]").
 { wp_apply (wp_make_handlers with "wps"). }
 iIntros "%res (%v_handlers & -> & #wps)".
@@ -482,7 +479,7 @@ Lemma wp_read N c kI kR rl cs n m φ :
   seal_pred N (conn_pred (swap_role rl) φ) -∗
   {{{ connected kI kR rl cs n m ∗
       release_token (si_share_of rl cs) }}}
-    read N c (repr cs)
+    read (Tag N) c (repr cs)
   {{{ ts, RET (repr (ts : list term));
       connected kI kR rl cs n (S m) ∗
       release_token (si_share_of rl cs) ∗
@@ -490,7 +487,8 @@ Lemma wp_read N c kI kR rl cs n m φ :
       (compromised_session rl cs ∨ φ kI kR cs m ts) }}}.
 Proof.
 iIntros "#? #NΦ !> %Ψ [conn rel] post".
-wp_lam. wp_pures. rewrite !subst_select /=.
+wp_lam. wp_pures.
+wp_apply (@wp_nil val). wp_apply (wp_cons _ (Tag N, λ: "ts", "ts")%V).
 wp_apply (
   wp_select
   (λ n m, (∀ ts, connected kI kR rl cs n (S m) ∗
@@ -500,8 +498,9 @@ wp_apply (
             Ψ (repr ts)))%I
   (λ _ _, Ψ)%I
   with "[//] [] conn rel post") => //.
-rewrite /= /handler_correct_gen /=. iSplit => //. wp_pures.
-iModIntro. iExists _; iSplit; eauto.
+rewrite /= /handler_correct_gen /=. iSplit => //.
+iExists _, _; iSplit => //.
+iExists _; iSplit; eauto.
 iModIntro. clear n m.
 iIntros "%n %m %ts !> %Φ (conn & rel & post1 & #p_ts & inv_ts) post2".
 wp_pures. iModIntro.
