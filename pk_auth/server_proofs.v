@@ -25,7 +25,7 @@ Context `{!PK}.
 
 Lemma public_msg1E kI kR sI :
   pk_auth_ctx N -∗
-  public (TSeal (TKey Seal kR) (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Seal kI]))) -∗
+  public (TSeal (TKey Seal kR) (Spec.tag (Tag $ N.@"m1") (Spec.of_list [sI; TKey Seal kI]))) -∗
   ▷ (minted sI ∧ public (TKey Seal kI) ∧ readable_by sI kI kR ∧
      init_started N kI kR sI).
 Proof.
@@ -100,7 +100,7 @@ Lemma public_msg2I kI kR sI sR :
   minted sR -∗
   secret_of sR kI kR -∗
   resp_accepted N kI kR sI sR -∗
-  public (TSeal (TKey Seal kI) (Spec.tag (N.@"m2") (Spec.of_list [sI; sR; TKey Seal kR]))).
+  public (TSeal (TKey Seal kI) (Spec.tag (Tag $ N.@"m2") (Spec.of_list [sI; sR; TKey Seal kR]))).
 Proof.
 iIntros "(_ & _ & #? & _) #p_eI #p_eR #s_sI #p_sI #s_sR #p_sR #accepted".
 iApply public_TSealIS; eauto.
@@ -114,7 +114,7 @@ Qed.
 Lemma public_msg3E kI kR sR :
   pk_auth_ctx N -∗
   secret_of sR kI kR -∗
-  public (TSeal (TKey Seal kR) (Spec.tag (N.@"m3") sR)) -∗
+  public (TSeal (TKey Seal kR) (Spec.tag (Tag $ N.@"m3") sR)) -∗
   ▷ init_finished N kR sR.
 Proof.
 iIntros "(_ & _ & _ & #?) #p_sR #p_m3".

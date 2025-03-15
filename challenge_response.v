@@ -76,12 +76,12 @@ Definition cr_init : val := λ: "c" "skA" "pkB",
   let:  "nA"   := mknonce #() in
   let:  "m1"   := term_of_list ["nA"; "pkA"] in
   send  "c" "m1";;
-  bind: "m2"   := verify (N.@"m2") "pkB" (recv "c") in
+  bind: "m2"   := verify (Tag $ N.@"m2") "pkB" (recv "c") in
   bind: "m2"   := list_of_term "m2" in
   list_match: ["nA'"; "nB"; "pkA'"] := "m2" in
   if: eq_term "nA'" "nA" && eq_term "pkA'" "pkA" then
     let: "m3" := term_of_list ["nA"; "nB"; "pkB"] in
-    let: "m3" := sign (N.@"m3") "skA" "m3" in
+    let: "m3" := sign (Tag $ N.@"m3") "skA" "m3" in
     send "c" "m3";;
     SOME ("nA", "nB")
   else NONE.
@@ -93,9 +93,9 @@ Definition cr_resp : val := λ: "c" "skB",
   bind: "kt"   := is_key "pkA" in
   if: "kt" = repr Open then
     let:  "nB"   := mknonce #() in
-    let: "m2"    := sign (N.@"m2") "skB" (term_of_list ["nA"; "nB"; "pkA"]) in
+    let: "m2"    := sign (Tag $ N.@"m2") "skB" (term_of_list ["nA"; "nB"; "pkA"]) in
     send  "c" "m2";;
-    bind: "m3"   := verify (N.@"m3") "pkA" (recv "c") in
+    bind: "m3"   := verify (Tag $ N.@"m3") "pkA" (recv "c") in
     bind: "m3"   := list_of_term "m3" in
     list_match: ["nA'"; "nB'"; "pkB'"] := "m3" in
     if: eq_term "nA'" "nA" && eq_term "nB'" "nB" && eq_term "pkB'" "pkB" then
@@ -111,7 +111,7 @@ Lemma public_msg2E m2 kA kB nA nB :
   m2 !! Z.to_nat 2 = Some (TKey Open kA) →
   cr_ctx -∗
   public (TKey Open kB) -∗
-  public (TSeal (TKey Seal kB) (Spec.tag (N.@"m2") (Spec.of_list m2))) -∗
+  public (TSeal (TKey Seal kB) (Spec.tag (Tag $ N.@"m2") (Spec.of_list m2))) -∗
   ▷ (public nB ∧
      (public (TKey Seal kB) ∨
       session N Resp nA nB (kA, kB))).
@@ -141,7 +141,7 @@ Lemma public_msg3E m3 kA kB nA nB :
   m3 !! Z.to_nat 2 = Some (TKey Open kB) →
   cr_ctx -∗
   public (TKey Open kA) -∗
-  public (TSeal (TKey Seal kA) (Spec.tag (N.@"m3") (Spec.of_list m3))) -∗
+  public (TSeal (TKey Seal kA) (Spec.tag (Tag $ N.@"m3") (Spec.of_list m3))) -∗
   ▷ (public (TKey Seal kA) ∨
      session N Init nA nB (kA, kB)).
 Proof.

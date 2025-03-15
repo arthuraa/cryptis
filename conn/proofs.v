@@ -45,7 +45,7 @@ Qed.
 (* /MOVE *)
 
 Lemma public_sencE N rl si t φ :
-  public (TSeal (TKey Seal (si_key si)) (Spec.tag N t)) -∗
+  public (TSeal (TKey Seal (si_key si)) (Spec.tag (Tag N) t)) -∗
   seal_pred N φ -∗
   wf_sess_info rl si -∗
   release_token (si_share_of rl si) -∗
@@ -226,7 +226,7 @@ Lemma wp_write kI kR rl cs n m N c ts φ :
   ([∗ list] t ∈ ts, public t) -∗
   {{{ connected kI kR rl cs n m ∗
       (compromised_session rl cs ∨ φ kI kR cs n ts) }}}
-    write N c (repr cs) (repr ts)
+    write (Tag N) c (repr cs) (repr ts)
   {{{ RET #(); connected kI kR rl cs (S n) m }}}.
 Proof.
 iIntros "#chan #pred #p_ts !> %Φ (conn & inv) post".
@@ -309,7 +309,7 @@ Lemma wp_try_open N φ kI kR rl cs n m t :
       connected kI kR rl cs n m ∗
       release_token (si_share_of rl cs) ∗
       public (TSeal (TKey Seal (si_key cs)) t) }}}
-    try_open N (repr cs) t
+    try_open (Tag N) (repr cs) t
   {{{ res, RET res;
       release_token (si_share_of rl cs) ∗
       (⌜res = NONEV⌝ ∗

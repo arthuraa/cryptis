@@ -24,12 +24,12 @@ Definition connect : val := λ: "c" "skA" "vkB",
   RPC.connect N "c" "skA" "vkB".
 
 Definition store : val := λ: "c" "cs" "k" "v",
-  RPC.write (N.@"store") "c" "cs" ["k"; "v"];;
+  RPC.write (Tag $ N.@"store") "c" "cs" ["k"; "v"];;
   RPC.read (N.@"ack_store") "c" "cs";;
   RPC.tick "cs".
 
 Definition load : val := λ: "c" "cs" "k",
-  RPC.write (N.@"load") "c" "cs" ["k"];;
+  RPC.write (Tag $ N.@"load") "c" "cs" ["k"];;
   let: "ts" := RPC.read (N.@"ack_load") "c" "cs" in
   RPC.tick "cs";;
   match: "ts" with
@@ -38,7 +38,7 @@ Definition load : val := λ: "c" "cs" "k",
   end.
 
 Definition create : val := λ: "c" "cs" "k" "v",
-  RPC.write (N.@"create") "c" "cs" ["k"; "v"];;
+  RPC.write (Tag $ N.@"create") "c" "cs" ["k"; "v"];;
   RPC.read (N.@"ack_create") "c" "cs";;
   RPC.tick "cs".
 
@@ -61,7 +61,7 @@ Definition handle_store N : val :=
 λ: "c" "cs" "db" "req",
   list_match: ["k"; "v"] := "req" in
   SAList.insert "db" "k" "v";;
-  RPC.write (N.@"ack_store") "c" "cs" [];;
+  RPC.write (Tag $ N.@"ack_store") "c" "cs" [];;
   RPC.tick "cs";;
   SOME #true.
 
@@ -70,7 +70,7 @@ Definition handle_load N : val :=
 λ: "c" "cs" "db" "req",
   list_match: ["k"] := "req" in
   bind: "data" := SAList.find "db" "k" in
-  RPC.write (N.@"ack_load") "c" "cs" ["data"];;
+  RPC.write (Tag $ N.@"ack_load") "c" "cs" ["data"];;
   RPC.tick "cs";;
   SOME #true.
 
@@ -85,7 +85,7 @@ Definition handle_create N : val :=
       #1
     end in
   let: "m" := ["k"; "v"; tint "success"] in
-  RPC.write (N.@"ack_create") "c" "cs" "m";;
+  RPC.write (Tag $ N.@"ack_create") "c" "cs" "m";;
   RPC.tick "cs";;
   SOME #true.
 

@@ -53,8 +53,8 @@ Definition write N : val := λ: "c" "cs" "ts",
   send "c" "m";;
   "n" <- !"n" + #1%nat.
 
-Definition try_open N : val := λ: "cs" "t",
-  bind: "t" := untag N "t" in
+Definition try_open : val := λ: "N" "cs" "t",
+  bind: "t" := untag "N" "t" in
   bind: "ts" := list_of_term "t" in
   let: "m" := !(received "cs") in
   match: "ts" with
@@ -70,7 +70,7 @@ Definition make_handler_def (p : namespace * expr) : expr :=
   let N := p.1 in
   let: "handler" := p.2 in
   λ: "cs" "t",
-    bind: "ts" := try_open N "cs" "t" in
+    bind: "ts" := try_open (Tag N) "cs" "t" in
     SOME ("handler" "ts").
 
 Definition make_handler_aux : base.seal make_handler_def. by eexists _. Qed.

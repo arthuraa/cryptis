@@ -126,18 +126,18 @@ by iModIntro; iFrame; iExists γ; iSplit.
 Qed.
 
 Definition wf_seal k t : iProp :=
-  ∃ N t' Φ, ⌜t = Spec.tag N t'⌝ ∧ seal_pred N Φ ∧ □ ▷ Φ k t'.
+  ∃ N t' Φ, ⌜t = Spec.tag (Tag N) t'⌝ ∧ seal_pred N Φ ∧ □ ▷ Φ k t'.
 
 Global Instance wf_seal_persistent k t : Persistent (wf_seal k t).
 Proof. by apply _. Qed.
 
 Lemma wf_seal_elim k N t Φ :
-  wf_seal k (Spec.tag N t) -∗
+  wf_seal k (Spec.tag (Tag N) t) -∗
   seal_pred N Φ -∗
   □ ▷ Φ k t.
 Proof.
 iDestruct 1 as (N' t' Φ') "(%t_t' & #HΦ' & #inv)"; iIntros "#HΦ".
-case/Spec.tag_inj: t_t' => <- <-.
+case/Spec.tag_inj: t_t' => /Tag_inj <- <-.
 iPoseProof (seal_pred_agree k t with "HΦ HΦ'") as "e".
 by iIntros "!> !>"; iRewrite "e".
 Qed.
@@ -199,18 +199,18 @@ by iModIntro; iFrame; iExists γ; iSplit.
 Qed.
 
 Definition wf_key kt t : iProp :=
-  ∃ N t' P, ⌜t = Spec.tag N t'⌝ ∧ key_pred N P ∧ □ ▷ P kt t'.
+  ∃ N t' P, ⌜t = Spec.tag (Tag N) t'⌝ ∧ key_pred N P ∧ □ ▷ P kt t'.
 
 Global Instance wf_key_persistent kt t : Persistent (wf_key kt t).
 Proof. by apply _. Qed.
 
 Lemma wf_key_elim N kt t P :
-  wf_key kt (Spec.tag N t) -∗
+  wf_key kt (Spec.tag (Tag N) t) -∗
   key_pred N P -∗
   □ ▷ P kt t.
 Proof.
 iDestruct 1 as (N' t' P') "(%t_t' & #HP' & #inv)"; iIntros "#HP".
-case/Spec.tag_inj: t_t' => <- <-.
+case/Spec.tag_inj: t_t' => /Tag_inj <- <-.
 iPoseProof (key_pred_agree kt t with "HP HP'") as "e".
 by iIntros "!> !>"; iRewrite "e".
 Qed.
@@ -272,18 +272,18 @@ by iModIntro; iFrame; iExists γ; iSplit.
 Qed.
 
 Definition wf_hash t : iProp :=
-  ∃ N t' P, ⌜t = Spec.tag N t'⌝ ∧ hash_pred N P ∧ □ ▷ P t'.
+  ∃ N t' P, ⌜t = Spec.tag (Tag N) t'⌝ ∧ hash_pred N P ∧ □ ▷ P t'.
 
 Global Instance wf_hash_persistent t : Persistent (wf_hash t).
 Proof. by apply _. Qed.
 
 Lemma wf_hash_elim N t P :
-  wf_hash (Spec.tag N t) -∗
+  wf_hash (Spec.tag (Tag N) t) -∗
   hash_pred N P -∗
   □ ▷ P t.
 Proof.
 iDestruct 1 as (N' t' P') "(%t_t' & #HP' & #inv)"; iIntros "#HP".
-case/Spec.tag_inj: t_t' => <- <-.
+case/Spec.tag_inj: t_t' => /Tag_inj <- <-.
 iPoseProof (hash_pred_agree t with "HP HP'") as "e".
 by iIntros "!> !>"; iRewrite "e".
 Qed.
@@ -697,16 +697,19 @@ elim: ts => [|t ts IH]; first by rewrite public_TInt.
 by rewrite public_TPair /= IH bi.persistent_and_sep.
 Qed.
 
-Lemma public_tag N t : public (Spec.tag N t) ⊣⊢ public t.
+Lemma public_Tag N : public (Tag N) ⊣⊢ True.
+Proof. by rewrite Tag_unseal public_TInt. Qed.
+
+Lemma public_tag N t : public (Spec.tag (Tag N) t) ⊣⊢ public t.
 Proof.
-by rewrite Spec.tag_unseal public_TPair public_TInt bi.emp_and.
+by rewrite Spec.tag_unseal public_TPair public_Tag bi.emp_and.
 Qed.
 
 Lemma public_derive_key t : public (Spec.derive_key t) ⊣⊢ public t.
 Proof. exact: public_tag. Qed.
 
 Lemma public_TSealE N Φ k t :
-  public (TSeal (TKey Seal k) (Spec.tag N t)) -∗
+  public (TSeal (TKey Seal k) (Spec.tag (Tag N) t)) -∗
   seal_pred N Φ -∗
   public (TKey Seal k) ∧ public t ∨
   □ ▷ Φ k t ∧ minted t ∧ □ (public (TKey Open k) → public t).
@@ -726,7 +729,7 @@ Lemma public_TSealI N Φ k t :
     ⌜k = TKey Seal k'⌝ -∗
     □ Φ k' t ∗
     □ (public (TKey Open k') → public t)) -∗
-  public (TSeal k (Spec.tag N t)).
+  public (TSeal k (Spec.tag (Tag N) t)).
 Proof.
 iIntros "#HΦ #m_k #m_t Hseal".
 rewrite public_TSeal minted_TSeal minted_tag.
@@ -743,7 +746,7 @@ Lemma public_TSealIS N Φ k t :
   □ Φ k t -∗
   minted t -∗
   □ (public (TKey Open k) → public t) -∗
-  public (TSeal (TKey Seal k) (Spec.tag N t)).
+  public (TSeal (TKey Seal k) (Spec.tag (Tag N) t)).
 Proof.
 iIntros "#Hseal #HΦ #HΦt #Ht #Hopenl".
 rewrite public_TSeal; iRight.
@@ -819,7 +822,7 @@ Context `{!HasPublicCtx ctx}.
 
 Lemma public_sym_keyE kt k :
   ctx -∗
-  public (TKey kt (Spec.tag (nroot.@"keys".@"sym") k)) -∗
+  public (TKey kt (Spec.tag (Tag $ nroot.@"keys".@"sym") k)) -∗
   ◇ public k.
 Proof.
 iIntros "ctx #p_k".
@@ -830,7 +833,7 @@ Qed.
 
 Lemma public_sym_key kt k :
   ctx -∗
-  public (TKey kt (Spec.tag (nroot.@"keys".@"sym") k)) ↔
+  public (TKey kt (Spec.tag (Tag $ nroot.@"keys".@"sym") k)) ↔
   minted k ∧ ◇ public k.
 Proof.
 iIntros "ctx".
@@ -859,7 +862,7 @@ Qed.
 
 Lemma public_enc_key kt k :
   ctx -∗
-  public (TKey kt (Spec.tag (nroot.@"keys".@"enc") k)) ↔
+  public (TKey kt (Spec.tag (Tag $ nroot.@"keys".@"enc") k)) ↔
   minted k ∧ ◇ (⌜kt = Seal⌝ ∨ public k).
 Proof.
 iIntros "ctx".
@@ -882,7 +885,7 @@ Qed.
 
 Lemma public_sig_key kt k :
   ctx -∗
-  public (TKey kt (Spec.tag (nroot.@"keys".@"sig") k)) ↔
+  public (TKey kt (Spec.tag (Tag $ nroot.@"keys".@"sig") k)) ↔
   minted k ∧ ◇ (⌜kt = Open⌝ ∨ public k).
 Proof.
 iIntros "ctx".
@@ -905,7 +908,7 @@ Qed.
 
 Lemma public_enc_keyE k :
   ctx -∗
-  public (TKey Open (Spec.tag (nroot.@"keys".@"enc") k)) -∗
+  public (TKey Open (Spec.tag (Tag $ nroot.@"keys".@"enc") k)) -∗
   ◇ public k.
 Proof.
 iIntros "#ctx #p_k".
@@ -916,7 +919,7 @@ Qed.
 
 Lemma public_sig_keyE k :
   ctx -∗
-  public (TKey Seal (Spec.tag (nroot.@"keys".@"sig") k)) -∗
+  public (TKey Seal (Spec.tag (Tag $ nroot.@"keys".@"sig") k)) -∗
   ◇ public k.
 Proof.
 iIntros "#ctx #p_k".
@@ -1057,7 +1060,7 @@ Lemma public_aencIS pk N Φ t :
   (∀ sk, ⌜pk = TKey Seal sk⌝ -∗
          □ Φ sk t ∗
          □ (compromised_key sk → public t)) -∗
-  public (TSeal pk (Spec.tag N t)).
+  public (TSeal pk (Spec.tag (Tag N) t)).
 Proof.
 iIntros "#? #p_pk #m_t inv".
 iApply public_TSealI => //.
@@ -1075,7 +1078,7 @@ Lemma public_sencIS sk N Φ t :
   minted t -∗
   □ Φ sk t -∗
   □ (compromised_key sk → public t) -∗
-  public (TSeal (TKey Seal sk) (Spec.tag N t)).
+  public (TSeal (TKey Seal sk) (Spec.tag (Tag N) t)).
 Proof.
 iIntros "#? #p_sk #m_t #inv #p_t".
 iApply public_TSealIS => //.
@@ -1086,7 +1089,7 @@ iApply public_TSealIS => //.
 Qed.
 
 Lemma public_encE sk N Φ t :
-  public (TSeal (TKey Seal sk) (Spec.tag N t)) -∗
+  public (TSeal (TKey Seal sk) (Spec.tag (Tag N) t)) -∗
   seal_pred N Φ -∗
   minted t ∧ (public t ∨ □ ▷ Φ sk t ∧ □ (compromised_key sk → public t)).
 Proof.
@@ -1103,7 +1106,7 @@ Lemma public_signIS sk N Φ t :
   seal_pred N Φ -∗
   □ Φ sk t -∗
   public t -∗
-  public (TSeal (TKey Seal sk) (Spec.tag N t)).
+  public (TSeal (TKey Seal sk) (Spec.tag (Tag N) t)).
 Proof.
 iIntros "#[??] #? #? #?".
 iApply public_TSealIS => //=.
@@ -1113,7 +1116,7 @@ iApply public_TSealIS => //=.
 Qed.
 
 Lemma public_signE sk N Φ t :
-  public (TSeal (TKey Seal sk) (Spec.tag N t)) -∗
+  public (TSeal (TKey Seal sk) (Spec.tag (Tag N) t)) -∗
   seal_pred N Φ -∗
   public (TKey Open sk) -∗
   public t ∧ (compromised_key sk ∨ □ ▷ Φ sk t).

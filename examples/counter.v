@@ -46,7 +46,7 @@ Definition server : val := rec: "loop" "c" "l" "sk" :=
     incr "l"
   else (
     (* Retrieve value *)
-    let: "reply" := sign nroot "sk" (tint (! "l")) in
+    let: "reply" := sign (Tag nroot) "sk" (tint (! "l")) in
     send "c" "reply"
   ) ;;
   "loop" "c" "l" "sk".
@@ -59,7 +59,7 @@ Definition client : val := λ: "c" "vk",
     (* Wait for response *)
     let: "reply" := recv "c" in
     (* Check signature *)
-    bind: "value" := verify nroot "vk" "reply" in
+    bind: "value" := verify (Tag nroot) "vk" "reply" in
     to_int "value"
   ).
 

@@ -421,12 +421,21 @@ elim: t2 / => //.
   set_solver.
 Qed.
 
+Definition Tag_def (N : namespace) :=
+  TInt (Zpos (encode N)).
+Definition Tag_aux : seal Tag_def. by eexists. Qed.
+Definition Tag := unseal Tag_aux.
+Lemma Tag_unseal : Tag = Tag_def. Proof. exact: seal_eq. Qed.
+
+Global Instance Tag_inj : Inj (=) (=) Tag.
+Proof. by rewrite Tag_unseal => ?? [] /(inj _ _ _). Qed.
+
 Module Spec.
 
-Implicit Types N : namespace.
+Implicit Types N : term.
 
 Definition tag_def N (t : term) :=
-  TPair (TInt (Zpos (encode N))) t.
+  TPair N t.
 Definition tag_aux : seal tag_def. by eexists. Qed.
 Definition tag := unseal tag_aux.
 Lemma tag_unseal : tag = tag_def. Proof. exact: seal_eq. Qed.
@@ -439,8 +448,8 @@ Proof. by rewrite tag_unseal. Qed.
 
 Definition untag_def N (t : term) :=
   match t with
-  | TPair (TInt (Zpos m)) t =>
-    if decide (encode N = m) then Some t else None
+  | TPair N' t =>
+    if decide (N = N') then Some t else None
   | _ => None
   end.
 Definition untag_aux : seal untag_def. by eexists. Qed.
@@ -465,8 +474,8 @@ Lemma untagK N t1 t2 :
   t1 = tag N t2.
 Proof.
 rewrite untag_unseal tag_unseal /=.
-case: t1=> [] // [] // [] //= m.
-by case: decide => // <- _ [->].
+case: t1=> [] // N' t1 /=.
+by case: decide => // <- [<-].
 Qed.
 
 Lemma untag_tag_ne N1 N2 t :
@@ -475,8 +484,6 @@ Lemma untag_tag_ne N1 N2 t :
 Proof.
 move=> neq; rewrite Spec.untag_unseal Spec.tag_unseal /=.
 rewrite decide_False //.
-move=> eq_enc; apply: neq.
-by apply: encode_inj eq_enc.
 Qed.
 
 Variant untag_spec N t : option term → Type :=
@@ -600,7 +607,7 @@ Lemma is_exp_of_list ts : is_exp (of_list ts) = false.
 Proof. by rewrite of_list_unseal; case: ts. Qed.
 
 Definition derive_key t :=
-  tag (nroot.@"keys".@"sym") t.
+  tag (Tag $ nroot.@"keys".@"sym") t.
 
 Fixpoint to_list t : option (list term) :=
   match t with

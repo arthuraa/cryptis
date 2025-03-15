@@ -394,7 +394,7 @@ Qed.
 
 Lemma has_type_tag Γ c e :
   has_type Γ e Pub -∗
-  has_type Γ (tag c e) Pub.
+  has_type Γ (tag (Tag c) e) Pub.
 Proof.
 iIntros "#eP !> %vs #? #vsP /=".
 wp_bind (subst_map _ e); iApply wp_wand; first iApply "eP" => //.
@@ -405,7 +405,7 @@ Qed.
 
 Lemma has_type_untag Γ c e :
   has_type Γ e Pub -∗
-  has_type Γ (untag c e) (Option Pub).
+  has_type Γ (untag (Tag c) e) (Option Pub).
 Proof.
 iIntros "#eP !> %vs #? #vsP /=".
 wp_bind (subst_map _ e); iApply wp_wand; first iApply "eP" => //.

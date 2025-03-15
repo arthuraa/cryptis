@@ -35,9 +35,9 @@ Definition responder_accept : val := λ: "c" "skR" "ga" "vkI",
   let: "vkR" := vkey "skR" in
   let: "b" := mknonce #() in
   let: "gb" := mkkeyshare "b" in
-  let: "m2" := sign (N.@"m2") "skR" (term_of_list ["ga"; "gb"; "vkI"]) in
+  let: "m2" := sign (Tag $ N.@"m2") "skR" (term_of_list ["ga"; "gb"; "vkI"]) in
   send "c" "m2";;
-  bind: "m3" := verify (N.@"m3") "vkI" (recv "c") in
+  bind: "m3" := verify (Tag $ N.@"m3") "vkI" (recv "c") in
   bind: "m3" := list_of_term "m3" in
   list_match: ["ga'"; "gb'"; "vkR'"] := "m3" in
   guard: eq_term "ga" "ga'" && eq_term "gb" "gb'" && eq_term "vkR" "vkR'" in

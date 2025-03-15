@@ -24,7 +24,7 @@ Definition connect : val := λ: "c" "skA" "vkB",
   let: "session_key" :=
     do_until (λ: <>, initiator (N.@"conn".@"auth") "c" "skA" "vkB") in
   let: "timestamp" := ref #0%nat in
-  let: "m" := senc (N.@"conn".@"init") "session_key" (TInt 0) in
+  let: "m" := senc (Tag $ N.@"conn".@"init") "session_key" (TInt 0) in
   send "c" "m";;
   ("timestamp", "session_key").
 
@@ -43,7 +43,7 @@ Definition confirm : val := λ: "c" "skB" "req",
     (λ: <>, responder_accept (N.@"conn".@"auth") "c" "skB" "ga" "vkA") in
   do_until (λ: <>,
     let: "m" := recv "c" in
-    sdec (N.@"conn".@"init") "sk" "m");;
+    sdec (Tag $ N.@"conn".@"init") "sk" "m");;
   let: "timestamp" := ref #0%nat in
   ("timestamp", "sk").
 
@@ -62,8 +62,8 @@ Definition write N : val := λ: "c" "cs" "ts",
   let: "m"  := senc N "sk" "m" in
   send "c" "m".
 
-Definition open' N : val := λ: "n" "m",
-  bind: "m" := untag N "m" in
+Definition open' : val := λ: "N" "n" "m",
+  bind: "m" := untag "N" "m" in
   bind: "ts" := list_of_term "m" in
   match: "ts" with
     NONE => NONE
@@ -77,7 +77,7 @@ Definition make_handler_def (p : namespace * expr) : expr :=
   let N := p.1 in
   let: "handler" := p.2 in
   λ: "n" "m",
-    bind: "ts" := open' N "n" "m" in
+    bind: "ts" := open' (Tag N) "n" "m" in
     "handler" "ts".
 
 Definition make_handler_aux : base.seal make_handler_def. by eexists _. Qed.
@@ -161,12 +161,12 @@ Definition free : val := λ: "c" "cs",
   Free "timestamp".
 
 Definition close : val := λ: "c" "cs",
-  write (N.@"conn".@"close") "c" "cs" [];;
+  write (Tag $ N.@"conn".@"close") "c" "cs" [];;
   read (N.@"conn".@"ack_close") "c" "cs";;
   free "c" "cs".
 
 Definition handle_close N : val := λ: "c" "cs" "req",
-  write (N.@"conn".@"ack_close") "c" "cs" [TInt 0];;
+  write (Tag $ N.@"conn".@"ack_close") "c" "cs" [TInt 0];;
   free "c" "cs";;
   SOME #false.
 

@@ -76,13 +76,13 @@ Definition term_of_list : val := rec: "loop" "l" :=
   | SOME "p" => tuple (Fst "p") ("loop" (Snd "p"))
   end.
 
-Definition tag (N : namespace) : val := λ: "t",
-  tuple (TInt (Zpos (encode N))) "t".
+Definition tag : val := λ: "N" "t",
+  tuple "N" "t".
 
-Definition untag (N : namespace) : val := λ: "t",
+Definition untag : val := λ: "N" "t",
   bind: "t" := untuple "t" in
-  bind: "tag" := to_int (Fst "t") in
-  if: "tag" = #(Zpos (encode N))then SOME (Snd "t") else NONE.
+  let: "N'" := (Fst "t") in
+  if: eq_term "N" "N'" then SOME (Snd "t") else NONE.
 
 Definition mknonce : val := λ: <>,
   let: "n" := ref #() in
@@ -120,14 +120,14 @@ Definition mkkeys : val := λ: "k",
 
 Definition mkakey : val := λ: <>,
   let: "n" := mknonce #() in
-  tag (nroot.@"keys".@"enc") "n".
+  tag (Tag $ nroot.@"keys".@"enc") "n".
 
 Definition mksigkey : val := λ: <>,
   let: "n" := mknonce #() in
-  tag (nroot.@"keys".@"sig") "n".
+  tag (Tag $ nroot.@"keys".@"sig") "n".
 
 Definition derive_key : val := λ: "k",
-  tag (nroot.@"keys".@"sym") "k".
+  tag (Tag $ nroot.@"keys".@"sym") "k".
 
 Definition pkey : val := λ: "sk", key Seal "sk".
 
@@ -172,7 +172,6 @@ Implicit Types t : term.
 Implicit Types v : val.
 Implicit Types Φ : prodO locO termO -n> iPropO Σ.
 Implicit Types Ψ : val → iProp Σ.
-Implicit Types N : namespace.
 
 Lemma wp_nondet_nat_loop Ψ (m : nat) :
   (∀ n : nat, Ψ #n) ⊢
@@ -405,14 +404,9 @@ rewrite Spec.untag_unseal /untag /=; wp_pures.
 wp_bind (untuple _); iApply twp_untuple.
 case: t; try by [move=> *; wp_pures; iApply "post"].
 move=> t1 t2; wp_pures.
-wp_bind (to_int _); iApply twp_to_int.
-case: t1; try by [move=> *; wp_pures; iApply "post"].
-move=> n'; wp_pures.
-case: bool_decide_reflect => [[->]|ne]; wp_pures.
-  by rewrite decide_True_pi.
-case: n' ne; try by move=> *; iApply "post".
-move=> n' ne; case: decide => e; try iApply "post".
-congruence.
+wp_apply twp_eq_term.
+rewrite bool_decide_decide.
+by case: decide => [<-|ne]; wp_pures => //.
 Qed.
 
 Lemma wp_untag E N t Ψ :
@@ -648,13 +642,13 @@ iIntros "#ctx post". iMod unknown_alloc as (γ) "unknown".
 rewrite /mkakey. wp_pures.
 wp_bind (mknonce _).
 iApply (twp_mknonce_freshN ∅ (λ _, known γ 1) (λ _, False%I)
-  (λ t, {[Spec.tag (nroot.@"keys".@"enc") t]})) => //.
+  (λ t, {[Spec.tag (Tag $ nroot.@"keys".@"enc") t]})) => //.
 - iIntros "% ?". by rewrite elem_of_empty.
 - iIntros "%t". rewrite big_sepS_singleton minted_tag.
   iModIntro. by iSplit; iIntros "?".
 iIntros "%t %fresh % #s_t #p_t _ token".
 rewrite big_sepS_singleton.
-pose (t' := Spec.tag (nroot.@"keys".@"enc") t).
+pose (t' := Spec.tag (Tag $ nroot.@"keys".@"enc") t).
 iAssert (secret t') with "[unknown]" as "tP"; first do 2?iSplit.
 - iMod (known_alloc with "unknown") as "#known".
   iSpecialize ("p_t" with "known").
@@ -718,13 +712,13 @@ iAssert (□ (∀ t, ⌜t ∈ T⌝ → minted t))%I as "#s_T".
   iModIntro. by rewrite -big_sepS_forall.
 wp_bind (mknonce _).
 iApply (wp_mknonce_freshN T (λ _, known γ 1) (λ _, False%I)
-  (λ t, {[Spec.tag (nroot.@"keys".@"enc") t]})) => //.
+  (λ t, {[Spec.tag (Tag $ nroot.@"keys".@"enc") t]})) => //.
 - iIntros "%t #t_T". by iApply "s_T".
 - iIntros "%t". rewrite big_sepS_singleton minted_tag.
   iModIntro. by iSplit; iIntros "?".
 iIntros "%t %fresh % #s_t #p_t _ token".
 rewrite big_sepS_singleton.
-pose (t' := Spec.tag (nroot.@"keys".@"enc") t).
+pose (t' := Spec.tag (Tag $ nroot.@"keys".@"enc") t).
 have {}fresh : TKey Open t' ∉ T.
   move=> t'_T; apply: fresh => //.
   apply: STKey. exact: subterm_tag.
@@ -766,13 +760,13 @@ iIntros "#ctx post". iMod unknown_alloc as (γ) "unknown".
 rewrite /mksigkey. wp_pures.
 wp_bind (mknonce _).
 iApply (twp_mknonce_freshN ∅ (λ _, known γ 1) (λ _, False%I)
-  (λ t, {[Spec.tag (nroot.@"keys".@"sig") t]})) => //.
+  (λ t, {[Spec.tag (Tag $ nroot.@"keys".@"sig") t]})) => //.
 - iIntros "% ?". by rewrite elem_of_empty.
 - iIntros "%t". rewrite big_sepS_singleton minted_tag.
   iModIntro. by iSplit; iIntros "?".
 iIntros "%t %fresh % #s_t #p_t _ token".
 rewrite big_sepS_singleton.
-pose (t' := Spec.tag (nroot.@"keys".@"sig") t).
+pose (t' := Spec.tag (Tag $ nroot.@"keys".@"sig") t).
 iAssert (secret t') with "[unknown]" as "tP"; first do 2?iSplit.
 - iMod (known_alloc with "unknown") as "#known".
   iSpecialize ("p_t" with "known").
@@ -831,13 +825,13 @@ iAssert (□ (∀ t, ⌜t ∈ T⌝ → minted t))%I as "#s_T".
   iModIntro. by rewrite -big_sepS_forall.
 wp_bind (mknonce _).
 iApply (wp_mknonce_freshN T (λ _, known γ 1) (λ _, False%I)
-  (λ t, {[Spec.tag (nroot.@"keys".@"sig") t]})) => //.
+  (λ t, {[Spec.tag (Tag $ nroot.@"keys".@"sig") t]})) => //.
 - iIntros "%t #t_T". by iApply "s_T".
 - iIntros "%t". rewrite big_sepS_singleton minted_tag.
   iModIntro. by iSplit; iIntros "?".
 iIntros "%t %fresh % #s_t #p_t _ token".
 rewrite big_sepS_singleton.
-pose (t' := Spec.tag (nroot.@"keys".@"sig") t).
+pose (t' := Spec.tag (Tag $ nroot.@"keys".@"sig") t).
 have {}fresh : TKey Seal t' ∉ T.
   move=> t'_T; apply: fresh => //.
   apply: STKey. exact: subterm_tag.

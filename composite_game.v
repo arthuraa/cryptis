@@ -219,8 +219,8 @@ Qed.
 
 Definition game : val := λ: <>,
   let: "c"   := init_network #() in
-  let: "nI"  := tag (nroot.@"key") (mknonce #()) in
-  let: "nR"  := tag (nroot.@"key") (mknonce #()) in
+  let: "nI"  := tag (Tag $ nroot.@"key") (mknonce #()) in
+  let: "nR"  := tag (Tag $ nroot.@"key") (mknonce #()) in
   let: "psk" := mknonce #() in
   let: "kI"  := mkkeys "nI" in
   let: "ekI" := Fst "kI" in
@@ -256,14 +256,14 @@ wp_pures; wp_bind (mknonce _).
 iApply (wp_mknonce (λ _, True)%I (λ _, False%I)) => //.
 iIntros (nI) "_ #t_nI #p_nI _ tok_nI".
 wp_tag.
-iAssert (public (Spec.tag (nroot.@"key") nI)) as "{p_nI} p_nI".
+iAssert (public (Spec.tag (Tag $ nroot.@"key") nI)) as "{p_nI} p_nI".
   by rewrite public_tag; iApply "p_nI".
 wp_pures.
 wp_pures; wp_bind (mknonce _).
 iApply (wp_mknonce (λ _, True)%I (λ _, False%I)) => //.
 iIntros (nR) "_ #t_nR #p_nR _ tok_nR".
 wp_tag.
-iAssert (public (Spec.tag (nroot.@"key") nR)) as "{p_nR} p_nR".
+iAssert (public (Spec.tag (Tag $ nroot.@"key") nR)) as "{p_nR} p_nR".
   by iApply public_tag; iApply "p_nR".
 wp_pures.
 wp_pures; wp_bind (mknonce _).

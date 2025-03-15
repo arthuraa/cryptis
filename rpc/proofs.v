@@ -43,7 +43,7 @@ Qed.
 (* /MOVE *)
 
 Lemma public_sencE N rl si m φ :
-  public (TSeal (TKey Seal (si_key si)) (Spec.tag N m)) -∗
+  public (TSeal (TKey Seal (si_key si)) (Spec.tag (Tag N) m)) -∗
   seal_pred N φ -∗
   wf_sess_info rl si -∗
   release_token (si_share_of rl si) -∗
@@ -286,7 +286,7 @@ Lemma wp_write' kI kR cs b n1 n0 N c ts φ :
   ([∗ list] t ∈ ts, public t) -∗
   compromised_session (cs_role cs) cs ∨ □ φ kI kR cs (n1 + n0) ts -∗
   {{{ connected' kI kR cs b n1 n0 }}}
-    write N c (repr cs) (repr ts)
+    write (Tag N) c (repr cs) (repr ts)
   {{{ RET #(); connected' kI kR cs b n1 n0 }}}.
 Proof.
 iIntros "#chan #pred #p_ts #inv !> %Φ conn post".
@@ -327,7 +327,7 @@ Lemma wp_write kI kR cs n N c ts φ :
   ([∗ list] t ∈ ts, public t) -∗
   compromised_session (cs_role cs) cs ∨ □ φ kI kR cs n ts -∗
   {{{ connected kI kR cs n }}}
-    write N c (repr cs) (repr ts)
+    write (Tag N) c (repr cs) (repr ts)
   {{{ RET #(); connected kI kR cs n }}}.
 Proof.
 iIntros "#chan #pred #p_ts #inv !> %Φ conn post".
@@ -380,7 +380,7 @@ Lemma wp_open' N φ kI kR cs n n0 m :
   {{{ seal_pred N (conn_pred φ) ∗
       connected' kI kR cs false n n0 ∗
       public (TSeal (TKey Seal (si_key cs)) m) }}}
-    open' N #n m
+    open' (Tag N) #n m
   {{{ res, RET res;
       connected' kI kR cs false n n0 ∗
       (⌜res = NONEV⌝ ∨

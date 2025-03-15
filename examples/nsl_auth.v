@@ -32,29 +32,29 @@ A --> B: {nB}@pkB
 Definition init : val := λ: "c" "l" "skI" "pkR",
   let: "nI" := mknonce #() in
   let: "pkI" := pkey "skI" in
-  let: "m1" := aenc (N.@"m1") "pkR" (term_of_list ["nI"; "pkI"]) in
+  let: "m1" := aenc (Tag $ N.@"m1") "pkR" (term_of_list ["nI"; "pkI"]) in
   send "c" "m1";;
-  bind: "m2"   := adec (N.@"m2") "skI" (recv "c") in
+  bind: "m2"   := adec (Tag $ N.@"m2") "skI" (recv "c") in
   bind: "m2"   := list_of_term "m2" in
   list_match: ["nI'"; "nR"; "pkR'"] := "m2" in
   guard: eq_term "nI'" "nI" && eq_term "pkR'" "pkR" in
   "l" <- term_of_list ["pkI"; "pkR"; term_of_list ["nI"; "nR"]];;
-  let: "m3" := aenc (N.@"m3") "pkR" "nR" in
+  let: "m3" := aenc (Tag $ N.@"m3") "pkR" "nR" in
   send "c" "m3";;
   SOME (term_of_list ["nI"; "nR"]).
 
 Definition resp : val := λ: "c" "lR" "skR",
   let: "pkR" := pkey "skR" in
-  bind: "m1" := adec (N.@"m1") "skR" (recv "c") in
+  bind: "m1" := adec (Tag $ N.@"m1") "skR" (recv "c") in
   bind: "m1" := list_of_term "m1" in
   list_match: ["nI"; "pkI"] := "m1" in
   bind: "kt" := is_key "pkI" in
   guard: "kt" = repr Seal in
   let: "nR" := mknonce #() in
   "lR" <- term_of_list ["pkI"; "pkR"; term_of_list ["nI"; "nR"]] ;;
-  let: "m2" := aenc (N.@"m2") "pkI" (term_of_list ["nI"; "nR"; "pkR"]) in
+  let: "m2" := aenc (Tag $ N.@"m2") "pkI" (term_of_list ["nI"; "nR"; "pkR"]) in
   send "c" "m2";;
-  bind: "m3" := adec (N.@"m3") "skR" (recv "c") in
+  bind: "m3" := adec (Tag $ N.@"m3") "skR" (recv "c") in
   guard: eq_term "m3" "nR" in
   SOME ("pkI", term_of_list ["nI"; "nR"]).
 
@@ -137,7 +137,7 @@ Lemma public_msg1I lI lR kI kR nI :
   public (TKey Seal kR) -∗
   minted nI -∗
   □ (public nI ↔ ▷ corrupt kI kR) -∗
-  public (TSeal (TKey Seal kR) (Spec.tag (N.@"m1") (Spec.of_list [nI; TKey Seal kI]))).
+  public (TSeal (TKey Seal kR) (Spec.tag (Tag $ N.@"m1") (Spec.of_list [nI; TKey Seal kI]))).
 Proof.
 iIntros "#? (#? & _ & _) #p_pkI #p_pkR #m_nI #p_nI".
 iApply public_TSealIS; eauto.
@@ -150,7 +150,7 @@ Qed.
 Lemma public_msg1E lI lR kI kR nI :
   cryptis_ctx -∗
   nsl_ctx lI lR -∗
-  public (TSeal (TKey Seal kR) (Spec.tag (N.@"m1") (Spec.of_list [nI; TKey Seal kI]))) -∗
+  public (TSeal (TKey Seal kR) (Spec.tag (Tag $ N.@"m1") (Spec.of_list [nI; TKey Seal kI]))) -∗
   public (TKey Seal kR) -∗
   ▷ (minted nI ∗
      public (TKey Seal kI) ∗
@@ -179,7 +179,7 @@ Lemma public_msg2I lI lR kI kR nI nR :
   minted nR -∗
   □ (public nR ↔ ▷ corrupt kI kR) -∗
   session lR kI kR (Spec.of_list [nI; nR]) -∗
-  public (TSeal (TKey Seal kI) (Spec.tag (N.@"m2") (Spec.of_list [nI; nR; TKey Seal kR]))).
+  public (TSeal (TKey Seal kI) (Spec.tag (Tag $ N.@"m2") (Spec.of_list [nI; nR; TKey Seal kR]))).
 Proof.
 iIntros "#? (_ & #? & _) #p_pkI #m_nI #p_nI #p_pkR #m_nR #p_nR #?".
 iApply public_TSealIS; eauto.
@@ -195,7 +195,7 @@ Lemma public_msg2E lI lR kI kR nI nR :
   cryptis_ctx -∗
   nsl_ctx lI lR -∗
   public (TSeal (TKey Seal kI)
-            (Spec.tag (N.@"m2") (Spec.of_list [nI; nR; TKey Seal kR]))) -∗
+            (Spec.tag (Tag $ N.@"m2") (Spec.of_list [nI; nR; TKey Seal kR]))) -∗
   public (TKey Seal kI) -∗
   secret kI -∗
   □ (public nI ↔ ▷ corrupt kI kR) -∗
@@ -228,7 +228,7 @@ Lemma public_msg3I lI lR kI kR nI nR :
   □ (public nR ↔ ▷ corrupt kI kR) -∗
   session lI kI kR (Spec.of_list [nI; nR]) -∗
   □ (secret kR -∗ ▷ session lR kI kR (Spec.of_list [nI; nR])) -∗
-  public (TSeal (TKey Seal kR) (Spec.tag (N.@"m3") nR)).
+  public (TSeal (TKey Seal kR) (Spec.tag (Tag $ N.@"m3") nR)).
 Proof.
 iIntros "#? (_ & _ & #?) #p_pkR #m_nR #s_nR #authI #authR".
 iApply public_TSealIS; eauto.
@@ -239,7 +239,7 @@ Qed.
 Lemma public_msg3E lI lR kI kR nI nR :
   cryptis_ctx -∗
   nsl_ctx lI lR -∗
-  public (TSeal (TKey Seal kR) (Spec.tag (N.@"m3") nR)) -∗
+  public (TSeal (TKey Seal kR) (Spec.tag (Tag $ N.@"m3") nR)) -∗
   secret kR -∗
   □ (public nR ↔ ▷ corrupt kI kR) -∗
   session lR kI kR (Spec.of_list [nI; nR]) -∗

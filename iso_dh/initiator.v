@@ -30,13 +30,13 @@ Definition initiator : val := λ: "c" "skI" "vkR",
   let: "ga"   := mkkeyshare "a" in
   let: "m1"   := term_of_list ["ga"; "vkI"] in
   send "c" "m1";;
-  bind: "m2"   := verify (N.@"m2") "vkR" (recv "c") in
+  bind: "m2"   := verify (Tag $ N.@"m2") "vkR" (recv "c") in
   bind: "m2"   := list_of_term "m2" in
   list_match: ["ga'"; "gb"; "vkI'"] := "m2" in
   guard: eq_term "ga" "ga'" && eq_term "vkI" "vkI'" in
   let: "gab" := texp "gb" "a" in
   let: "secret" := term_of_list ["vkI"; "vkR"; "ga"; "gb"; "gab"] in
-  let: "m3" := sign (N.@"m3") "skI" (term_of_list ["ga"; "gb"; "vkR"]) in
+  let: "m3" := sign (Tag $ N.@"m3") "skI" (term_of_list ["ga"; "gb"; "vkR"]) in
   send "c" "m3";;
   SOME (derive_key "secret").
 

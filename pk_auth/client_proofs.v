@@ -30,7 +30,7 @@ Lemma public_msg1I n kI kR nI :
   □ is_priv_key nI kI kR -∗
   public (TKey Seal kI) -∗
   public (TKey Seal kR) -∗
-  public (TSeal (TKey Seal kR) (Spec.tag (N.@"m1") (Spec.of_list [sI; TKey Seal kI]))).
+  public (TSeal (TKey Seal kR) (Spec.tag (Tag $ N.@"m1") (Spec.of_list [sI; TKey Seal kI]))).
 Proof.
 rewrite /=.
 iIntros "(_ & #m1P & _ & _) #meta #s_nI #p_nI #p_ekI #p_ekR".
@@ -47,7 +47,7 @@ Qed.
 Lemma public_msg2E kI kR sI sR :
   pk_auth_ctx N -∗
   secret_of sI kI kR -∗
-  public (TSeal (TKey Seal kI) (Spec.tag (N.@"m2") (Spec.of_list [sI; sR; TKey Seal kR]))) -∗
+  public (TSeal (TKey Seal kI) (Spec.tag (Tag $ N.@"m2") (Spec.of_list [sI; sR; TKey Seal kR]))) -∗
   ▷ (minted sR ∧ secret_of sR kI kR ∧ resp_accepted N kI kR sI sR).
 Proof.
 iIntros "(_ & _ & #m2P & _) #started #p_m2".
@@ -134,7 +134,7 @@ Lemma public_msg3I kI kR sI sR :
   minted sR -∗
   secret_of sR kI kR -∗
   init_finished N kR sR -∗
-  public (TSeal (TKey Seal kR) (Spec.tag (N.@"m3") sR)).
+  public (TSeal (TKey Seal kR) (Spec.tag (Tag $ N.@"m3") sR)).
 Proof.
 iIntros "(_ & _ & _ & #p_m3) #p_eR #s_sR #p_sR #finished".
 iApply public_TSealIS; eauto.

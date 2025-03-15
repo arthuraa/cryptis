@@ -108,9 +108,15 @@ elim: ts => [|t ts IH]; first by rewrite minted_TInt.
 by rewrite minted_TPair /= IH bi.persistent_and_sep.
 Qed.
 
-Lemma minted_tag N t : minted (Spec.tag N t) ⊣⊢ minted t.
+Lemma minted_Tag N : ⊢ minted (Tag N).
+Proof. by rewrite Tag_unseal minted_TInt. Qed.
+
+
+Lemma minted_tag N t : minted (Spec.tag (Tag N) t) ⊣⊢ minted t.
 Proof.
-by rewrite Spec.tag_unseal minted_TPair minted_TInt bi.emp_and.
+rewrite Spec.tag_unseal minted_TPair; iSplit.
+- by iIntros "[_ ?]".
+- iIntros "?"; iSplit => //. iApply minted_Tag.
 Qed.
 
 Lemma minted_derive_key t : minted (Spec.derive_key t) ⊣⊢ minted t.

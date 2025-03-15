@@ -80,24 +80,24 @@ Variant t :=
 
 Definition encode N ke :=
   match ke with
-  | Psk psk => Psk (THash (Spec.tag (N.@"psk") psk))
+  | Psk psk => Psk (THash (Spec.tag (Tag $ N.@"psk") psk))
   | Dh g => Dh g
-  | PskDh psk g => PskDh (THash (Spec.tag (N.@"psk") psk)) g
+  | PskDh psk g => PskDh (THash (Spec.tag (Tag $ N.@"psk") psk)) g
   end.
 
 Definition term_of ke :=
   match ke with
-  | Psk psk => Spec.tag (nroot.@"psk") psk
-  | Dh g => Spec.tag (nroot.@"dh") g
-  | PskDh psk g => Spec.tag (nroot.@"pskdh") (Spec.of_list [psk; g])
+  | Psk psk => Spec.tag (Tag $ nroot.@"psk") psk
+  | Dh g => Spec.tag (Tag $ nroot.@"dh") g
+  | PskDh psk g => Spec.tag (Tag $ nroot.@"pskdh") (Spec.of_list [psk; g])
   end.
 
 Definition of_term ke :=
-  if Spec.untag (nroot.@"psk") ke is Some args then
+  if Spec.untag (Tag $ nroot.@"psk") ke is Some args then
     Some (Psk args)
-  else if Spec.untag (nroot.@"dh") ke is Some args then
+  else if Spec.untag (Tag $ nroot.@"dh") ke is Some args then
     Some (Dh args)
-  else if Spec.untag (nroot.@"pskdh") ke is Some args then
+  else if Spec.untag (Tag $ nroot.@"pskdh") ke is Some args then
     args ← Spec.to_list args;
     '(psk, g) ← prod_of_list 2 args;
     Some (PskDh psk g)
@@ -107,10 +107,10 @@ Lemma term_of_cancel ke : of_term (term_of ke) = Some ke.
 Proof.
 case: ke => [psk|g|psk g] /=; rewrite /of_term.
 - rewrite Spec.tagK //.
-- rewrite Spec.untag_tag_ne => [|c]; last by destruct (ndot_inj _ _ _ _ c).
+- rewrite Spec.untag_tag_ne => [|/Tag_inj c]; last by destruct (ndot_inj _ _ _ _ c).
   rewrite Spec.tagK //.
-- rewrite Spec.untag_tag_ne => [|c]; last by destruct (ndot_inj _ _ _ _ c).
-  rewrite Spec.untag_tag_ne => [|c]; last by destruct (ndot_inj _ _ _ _ c).
+- rewrite Spec.untag_tag_ne => [|/Tag_inj c]; last by destruct (ndot_inj _ _ _ _ c).
+  rewrite Spec.untag_tag_ne => [|/Tag_inj c]; last by destruct (ndot_inj _ _ _ _ c).
   rewrite Spec.tagK Spec.of_listK /=.
   by rewrite unlock /=.
 Qed.
@@ -152,25 +152,25 @@ Definition compatible psk g ke :=
 Module I.
 
 Definition Psk : val := (λ: "psk",
-  tag (nroot.@"psk") "psk"
+  tag (Tag $ nroot.@"psk") "psk"
 ).
 
 Definition Dh : val := (λ: "g",
-  tag (nroot.@"dh") "g"
+  tag (Tag $ nroot.@"dh") "g"
 ).
 
 Definition PskDh : val := (λ: "psk" "g",
-  tag (nroot.@"pskdh") (term_of_list ["psk"; "g"])
+  tag (Tag $ nroot.@"pskdh") (term_of_list ["psk"; "g"])
 ).
 
 Definition case : val := λ: "ke" "f_psk" "f_dh" "f_pskdh",
-  match: untag (nroot.@"psk") "ke" with
+  match: untag (Tag $ nroot.@"psk") "ke" with
     SOME "psk" => "f_psk" "psk"
   | NONE =>
-  match: untag (nroot.@"dh") "ke" with
+  match: untag (Tag $ nroot.@"dh") "ke" with
     SOME "g" => "f_dh" "g"
   | NONE =>
-  match: untag (nroot.@"pskdh") "ke" with
+  match: untag (Tag $ nroot.@"pskdh") "ke" with
     SOME "args" =>
     bind: "l" := list_of_term "args" in
     list_match: ["psk"; "g"] := "l" in
@@ -300,35 +300,35 @@ Definition has_psk ke := Meth.has_psk (meth_of ke).
 
 Definition encode N ke :=
   match ke with
-  | Psk psk cn => Psk (THash (Spec.tag (N.@"psk") psk)) cn
+  | Psk psk cn => Psk (THash (Spec.tag (Tag $ N.@"psk") psk)) cn
   | Dh g cn x => Dh g cn (TExp g x)
-  | PskDh psk g cn x => PskDh (THash (Spec.tag (N.@"psk") psk)) g cn (TExp g x)
+  | PskDh psk g cn x => PskDh (THash (Spec.tag (Tag $ N.@"psk") psk)) g cn (TExp g x)
   end.
 
 Definition encode' N ke :=
   match ke with
-  | Psk psk cn => Psk (THash (Spec.tag (N.@"psk") psk)) cn
+  | Psk psk cn => Psk (THash (Spec.tag (Tag $ N.@"psk") psk)) cn
   | Dh g cn gx => Dh g cn gx
-  | PskDh psk g cn gx => PskDh (THash (Spec.tag (N.@"psk") psk)) g cn gx
+  | PskDh psk g cn gx => PskDh (THash (Spec.tag (Tag $ N.@"psk") psk)) g cn gx
   end.
 
 Definition term_of ke :=
   match ke with
-  | Psk psk cn => Spec.tag (nroot.@"psk") (Spec.of_list [psk; cn])
-  | Dh g cn x => Spec.tag (nroot.@"dh") (Spec.of_list [g; cn; x])
-  | PskDh psk g cn x => Spec.tag (nroot.@"pskdh") (Spec.of_list [psk; g; cn; x])
+  | Psk psk cn => Spec.tag (Tag $ nroot.@"psk") (Spec.of_list [psk; cn])
+  | Dh g cn x => Spec.tag (Tag $ nroot.@"dh") (Spec.of_list [g; cn; x])
+  | PskDh psk g cn x => Spec.tag (Tag $ nroot.@"pskdh") (Spec.of_list [psk; g; cn; x])
   end.
 
 Definition of_term ke :=
-  if Spec.untag (nroot.@"psk") ke is Some args then
+  if Spec.untag (Tag $ nroot.@"psk") ke is Some args then
     args ← Spec.to_list args;
     '(psk, cn) ← prod_of_list 2 args;
     Some (Psk psk cn)
-  else if Spec.untag (nroot.@"dh") ke is Some args then
+  else if Spec.untag (Tag $ nroot.@"dh") ke is Some args then
     args ← Spec.to_list args;
     '(g, cn, gx) ← prod_of_list 3 args;
     Some (Dh g cn gx)
-  else if Spec.untag (nroot.@"pskdh") ke is Some args then
+  else if Spec.untag (Tag $ nroot.@"pskdh") ke is Some args then
     args ← Spec.to_list args;
     '(psk, g, cn, gx) ← prod_of_list 4 args;
     Some (PskDh psk g cn gx)
@@ -391,13 +391,13 @@ If so, return the value of [psk] on that share. *)
 Definition check N psk g ke :=
   match ke with
   | Psk psk' cn =>
-    if decide (psk' = THash (Spec.tag (N.@"psk") psk)) then
+    if decide (psk' = THash (Spec.tag (Tag $ N.@"psk") psk)) then
       Some (Psk psk cn)
     else None
   | Dh g' cn gx =>
     if decide (g' = g) then Some (Dh g cn gx) else None
   | PskDh psk' g' cn gx =>
-    if decide (psk' = THash (Spec.tag (N.@"psk") psk) ∧ g' = g) then
+    if decide (psk' = THash (Spec.tag (Tag $ N.@"psk") psk) ∧ g' = g) then
       Some (PskDh psk g cn gx)
     else None
   end.
@@ -405,19 +405,19 @@ Definition check N psk g ke :=
 Module I.
 
 Definition case : val := λ: "ke" "f_psk" "f_dh" "f_pskdh",
-  match: untag (nroot.@"psk") "ke" with
+  match: untag (Tag $ nroot.@"psk") "ke" with
     SOME "args" =>
     bind: "l" := list_of_term "args" in
     list_match: ["psk"; "cn"] := "l" in
     "f_psk" "psk" "cn"
   | NONE =>
-  match: untag (nroot.@"dh") "ke" with
+  match: untag (Tag $ nroot.@"dh") "ke" with
     SOME "args" =>
     bind: "l" := list_of_term "args" in
     list_match: ["g"; "cn"; "x"] := "l" in
     "f_dh" "g" "cn" "x"
   | NONE =>
-  match: untag (nroot.@"pskdh") "ke" with
+  match: untag (Tag $ nroot.@"pskdh") "ke" with
     SOME "args" =>
     bind: "l" := list_of_term "args" in
     list_match: ["psk"; "g"; "cn"; "x"] := "l" in
@@ -427,13 +427,13 @@ Definition case : val := λ: "ke" "f_psk" "f_dh" "f_pskdh",
 Definition encode N : val := λ: "ke",
   case "ke"
     (λ: "psk" "cn",
-      tag (nroot.@"psk") (term_of_list [hash (tag (N.@"psk") "psk"); "cn"]))
+      tag (Tag $ nroot.@"psk") (term_of_list [hash (tag (Tag $ N.@"psk") "psk"); "cn"]))
     (λ: "g" "cn" "x",
       let: "gx" := texp "g" "x" in
-      tag (nroot.@"dh") (term_of_list ["g"; "cn"; "gx"]))
+      tag (Tag $ nroot.@"dh") (term_of_list ["g"; "cn"; "gx"]))
     (λ: "psk" "g" "cn" "x",
       let: "gx" := texp "g" "x" in
-      tag (nroot.@"pskdh") (term_of_list [hash (tag (N.@"psk") "psk"); "g"; "cn"; "gx"])).
+      tag (Tag $ nroot.@"pskdh") (term_of_list [hash (tag (Tag $ N.@"psk") "psk"); "g"; "cn"; "gx"])).
 
 Definition psk : val := λ: "ke",
   case "ke"
@@ -442,17 +442,17 @@ Definition psk : val := λ: "ke",
     (λ: "psk" <> <> <>, "psk").
 
 Definition of_term : val := λ: "ke",
-  match: untag (nroot.@"psk") "ke" with SOME "args" =>
+  match: untag (Tag $ nroot.@"psk") "ke" with SOME "args" =>
     bind: "args" := list_of_term "args" in
     list_match: ["psk"; "cn"] := "args" in
     SOME "ke"
   | NONE =>
-  match: untag (nroot.@"dh") "ke" with SOME "args" =>
+  match: untag (Tag $ nroot.@"dh") "ke" with SOME "args" =>
     bind: "args" := list_of_term "args" in
     list_match: ["g"; "cn"; "gx"] := "args" in
     SOME "ke"
   | NONE =>
-  match: untag (nroot.@"pskdh") "ke" with SOME "args" =>
+  match: untag (Tag $ nroot.@"pskdh") "ke" with SOME "args" =>
     bind: "args" := list_of_term "args" in
     list_match: ["psk"; "g"; "cn"; "gx"] := "args" in
     SOME "ke"
@@ -462,27 +462,27 @@ Definition of_term : val := λ: "ke",
 Definition check N : val := λ: "psk" "g" "ke",
   case "ke"
     (λ: "psk'" "cn",
-        if: eq_term "psk'" (hash (tag (N.@"psk") "psk")) then
-          SOME (tag (nroot.@"psk") (term_of_list ["psk"; "cn"]))
+        if: eq_term "psk'" (hash (tag (Tag $ N.@"psk") "psk")) then
+          SOME (tag (Tag $ nroot.@"psk") (term_of_list ["psk"; "cn"]))
         else NONE)
     (λ: "g'" "cn" "gx",
         if: eq_term "g'" "g" then
-          SOME (tag (nroot.@"dh") (term_of_list ["g"; "cn"; "gx"]))
+          SOME (tag (Tag $ nroot.@"dh") (term_of_list ["g"; "cn"; "gx"]))
         else NONE)
     (λ: "psk'" "g'" "cn" "gx",
-        if: eq_term "psk'" (hash (tag (N.@"psk") "psk")) &&
+        if: eq_term "psk'" (hash (tag (Tag $ N.@"psk") "psk")) &&
             eq_term "g'" "g" then
-          SOME (tag (nroot.@"pskdh") (term_of_list ["psk"; "g"; "cn"; "gx"]))
+          SOME (tag (Tag $ nroot.@"pskdh") (term_of_list ["psk"; "g"; "cn"; "gx"]))
         else NONE).
 
 Definition new : val := λ: "ke",
   Meth.I.case "ke"
     (λ: "psk",
-      tag (nroot.@"psk") (term_of_list ["psk"; mknonce #()]))
+      tag (Tag $ nroot.@"psk") (term_of_list ["psk"; mknonce #()]))
     (λ: "g",
-      tag (nroot.@"dh") (term_of_list ["g"; mknonce #(); mkdh #()]))
+      tag (Tag $ nroot.@"dh") (term_of_list ["g"; mknonce #(); mkdh #()]))
     (λ: "psk" "g",
-      tag (nroot.@"pskdh") (term_of_list ["psk"; "g"; mknonce #(); mkdh #()])).
+      tag (Tag $ nroot.@"pskdh") (term_of_list ["psk"; "g"; mknonce #(); mkdh #()])).
 
 End I.
 
@@ -727,36 +727,36 @@ Variant t :=
 Definition encode N ke :=
   match ke with
   | Psk psk cn sn =>
-    Psk (THash (Spec.tag (N.@"psk") psk)) cn sn
+    Psk (THash (Spec.tag (Tag $ N.@"psk") psk)) cn sn
   | Dh g cn sn gx y =>
     Dh g cn sn gx (TExp g y)
   | PskDh psk g cn sn gx y =>
-    PskDh (THash (Spec.tag (N.@"psk") psk)) g cn sn gx (TExp g y)
+    PskDh (THash (Spec.tag (Tag $ N.@"psk") psk)) g cn sn gx (TExp g y)
   end.
 
 Definition encode' N ke :=
   match ke with
   | Psk psk cn sn =>
-    Psk (THash (Spec.tag (N.@"psk") psk)) cn sn
+    Psk (THash (Spec.tag (Tag $ N.@"psk") psk)) cn sn
   | Dh g cn sn x gy =>
     Dh g cn sn (TExp g x) gy
   | PskDh psk g cn sn x gy =>
-    PskDh (THash (Spec.tag (N.@"psk") psk)) g cn sn (TExp g x) gy
+    PskDh (THash (Spec.tag (Tag $ N.@"psk") psk)) g cn sn (TExp g x) gy
   end.
 
 Definition term_of ke :=
   match ke with
   | Psk psk cn sn =>
-    Spec.tag (nroot.@"psk") (Spec.of_list [psk; cn; sn])
+    Spec.tag (Tag $ nroot.@"psk") (Spec.of_list [psk; cn; sn])
   | Dh g cn sn x y =>
-    Spec.tag (nroot.@"dh") (Spec.of_list [g; cn; sn; x; y])
+    Spec.tag (Tag $ nroot.@"dh") (Spec.of_list [g; cn; sn; x; y])
   | PskDh psk g cn sn x y =>
-    Spec.tag (nroot.@"pskdh") (Spec.of_list [psk; g; cn; sn; x; y])
+    Spec.tag (Tag $ nroot.@"pskdh") (Spec.of_list [psk; g; cn; sn; x; y])
   end.
 
 Lemma term_of_inj : Inj (=) (=) term_of.
 Proof.
-move=> ke1 ke2; case: ke1 =>>; case: ke2 =>> /= /Spec.tag_inj [e];
+move=> ke1 ke2; case: ke1 =>>; case: ke2 =>> /= /Spec.tag_inj [/Tag_inj e];
 case: (ndot_inj _ _ _ _ e) => // _ _.
 - by case/Spec.of_list_inj => -> -> ->.
 - by case/Spec.of_list_inj => -> -> -> -> ->.
@@ -808,7 +808,7 @@ Definition psk ke := CShare.psk (cshare_of ke).
 key share. *)
 
 Definition session_key_of N ke :=
-  Spec.tag (N.@"sess_key") match ke with
+  Spec.tag (Tag $ N.@"sess_key") match ke with
   | Psk psk cn sn => Spec.of_list [psk; cn; sn]
   | Dh _ _ _ gx y => TExp gx y
   | PskDh psk _ _ _ gx y => Spec.of_list [psk; TExp gx y]
@@ -819,12 +819,12 @@ Definition session_key_of N ke :=
 Definition session_key_of' N ke :=
   match ke with
   | Psk psk cn sn =>
-    Spec.tag (N.@"sess_key")
+    Spec.tag (Tag $ N.@"sess_key")
              (Spec.of_list [psk; cn; sn])
   | Dh _ _ _ x gy =>
-    Spec.tag (N.@"sess_key") (TExp gy x)
+    Spec.tag (Tag $ N.@"sess_key") (TExp gy x)
   | PskDh psk _ _ _ x gy =>
-    Spec.tag (N.@"sess_key") (Spec.of_list [psk; TExp gy x])
+    Spec.tag (Tag $ N.@"sess_key") (Spec.of_list [psk; TExp gy x])
   end.
 
 Lemma encode_eq N kex1 kex2 :
@@ -850,27 +850,27 @@ check succeeds, return the corresponding session key; otherwise, return None. *)
 Definition check N c_kex ke :=
   match c_kex with
   | CShare.Psk psk cn =>
-    s_kex ← Spec.untag (nroot.@"psk") ke;
+    s_kex ← Spec.untag (Tag $ nroot.@"psk") ke;
     s_kex ← Spec.to_list s_kex;
     '(psk', cn', sn) ← prod_of_list 3 s_kex;
-    if decide (psk' = THash (Spec.tag (N.@"psk") psk) ∧ cn' = cn) then
+    if decide (psk' = THash (Spec.tag (Tag $ N.@"psk") psk) ∧ cn' = cn) then
       Some (Psk psk cn sn)
     else None
   | CShare.Dh g cn x =>
-    s_kex ← Spec.untag (nroot.@"dh") ke;
+    s_kex ← Spec.untag (Tag $ nroot.@"dh") ke;
     s_kex ← Spec.to_list s_kex;
     '(g', cn', sn, gx, gy) ← prod_of_list 5 s_kex;
     if decide (g' = g ∧ cn' = cn ∧ gx = TExp g x) then
-      let skey := Spec.tag (N.@"sess_key") (TExp gy x) in
+      let skey := Spec.tag (Tag $ N.@"sess_key") (TExp gy x) in
       Some (Dh g cn sn x gy)
     else None
   | CShare.PskDh psk g cn x =>
-    s_kex ← Spec.untag (nroot.@"pskdh") ke;
+    s_kex ← Spec.untag (Tag $ nroot.@"pskdh") ke;
     s_kex ← Spec.to_list s_kex;
     '(psk', g', cn', sn, gx, gy) ← prod_of_list 6 s_kex;
-    if decide (psk' = THash (Spec.tag (N.@"psk") psk)
+    if decide (psk' = THash (Spec.tag (Tag $ N.@"psk") psk)
                ∧ g' = g ∧ cn' = cn ∧ gx = TExp g x) then
-      let skey := Spec.tag (N.@"sess_key") (TExp gy x) in
+      let skey := Spec.tag (Tag $ N.@"sess_key") (TExp gy x) in
       Some (PskDh psk g cn sn x gy)
     else None
   end.
@@ -878,19 +878,19 @@ Definition check N c_kex ke :=
 Module I.
 
 Definition case : val := λ: "ke" "f_psk" "f_dh" "f_pskdh",
-  match: untag (nroot.@"psk") "ke" with
+  match: untag (Tag $ nroot.@"psk") "ke" with
     SOME "args" =>
     bind: "l" := list_of_term "args" in
     list_match: ["psk"; "cn"; "sn"] := "l" in
     "f_psk" "psk" "cn" "sn"
   | NONE =>
-  match: untag (nroot.@"dh") "ke" with
+  match: untag (Tag $ nroot.@"dh") "ke" with
     SOME "args" =>
     bind: "l" := list_of_term "args" in
     list_match: ["g"; "cn"; "sn"; "x"; "y"] := "l" in
     "f_dh" "g" "cn" "sn" "x" "y"
   | NONE =>
-  match: untag (nroot.@"pskdh") "ke" with
+  match: untag (Tag $ nroot.@"pskdh") "ke" with
     SOME "args" =>
     bind: "l" := list_of_term "args" in
     list_match: ["psk"; "g"; "cn"; "sn"; "x"; "y"] := "l" in
@@ -912,68 +912,68 @@ Definition snonce : val := λ: "ke",
 Definition encode N : val := λ: "ke",
   case "ke"
     (λ: "psk" "cn" "sn",
-      let: "psk" := hash (tag (N.@"psk") "psk") in
-      tag (nroot.@"psk") (term_of_list ["psk"; "cn"; "sn"]))
+      let: "psk" := hash (tag (Tag $ N.@"psk") "psk") in
+      tag (Tag $ nroot.@"psk") (term_of_list ["psk"; "cn"; "sn"]))
     (λ: "g" "cn" "sn" "gx" "y",
       let: "gy" := texp "g" "y" in
-      tag (nroot.@"dh") (term_of_list ["g"; "cn"; "sn"; "gx"; "gy"]))
+      tag (Tag $ nroot.@"dh") (term_of_list ["g"; "cn"; "sn"; "gx"; "gy"]))
     (λ: "psk" "g" "cn" "sn" "gx" "y",
-      let: "psk" := hash (tag (N.@"psk") "psk") in
+      let: "psk" := hash (tag (Tag $ N.@"psk") "psk") in
       let: "gy" := texp "g" "y" in
-      tag (nroot.@"pskdh") (term_of_list ["psk"; "g"; "cn"; "sn"; "gx"; "gy"])).
+      tag (Tag $ nroot.@"pskdh") (term_of_list ["psk"; "g"; "cn"; "sn"; "gx"; "gy"])).
 
 Definition session_key_of N : val := λ: "ke",
   case "ke"
     (λ: "psk" "c_nonce" "s_nonce",
-       tag (N.@"sess_key") (term_of_list ["psk"; "c_nonce"; "s_nonce"]))
-    (λ: <> <> <> "gx" "y", tag (N.@"sess_key") (texp "gx" "y"))
+       tag (Tag $ N.@"sess_key") (term_of_list ["psk"; "c_nonce"; "s_nonce"]))
+    (λ: <> <> <> "gx" "y", tag (Tag $ N.@"sess_key") (texp "gx" "y"))
     (λ: "psk" <> <> <> "gx" "y",
-       tag (N.@"sess_key") (term_of_list ["psk"; texp "gx" "y"])).
+       tag (Tag $ N.@"sess_key") (term_of_list ["psk"; texp "gx" "y"])).
 
 Definition session_key_of' N : val := λ: "ke",
   case "ke"
     (λ: "psk" "c_nonce" "s_nonce",
-       tag (N.@"sess_key") (term_of_list ["psk"; "c_nonce"; "s_nonce"]))
-    (λ: <> <> <> "x" "gy", tag (N.@"sess_key") (texp "gy" "x"))
+       tag (Tag $ N.@"sess_key") (term_of_list ["psk"; "c_nonce"; "s_nonce"]))
+    (λ: <> <> <> "x" "gy", tag (Tag $ N.@"sess_key") (texp "gy" "x"))
     (λ: "psk" <> <> <> "x" "gy",
-       tag (N.@"sess_key") (term_of_list ["psk"; texp "gy" "x"])).
+       tag (Tag $ N.@"sess_key") (term_of_list ["psk"; texp "gy" "x"])).
 
 Definition check N : val := λ: "c_kex" "s_kex",
   CShare.I.case "c_kex"
     (λ: "psk" "cn",
-      bind: "s_kex" := untag (nroot.@"psk") "s_kex" in
+      bind: "s_kex" := untag (Tag $ nroot.@"psk") "s_kex" in
       bind: "s_kex" := list_of_term "s_kex" in
       list_match: ["psk'"; "cn'"; "sn"] := "s_kex" in
-      if: eq_term "psk'" (hash (tag (N.@"psk") "psk"))
+      if: eq_term "psk'" (hash (tag (Tag $ N.@"psk") "psk"))
           && eq_term "cn'" "cn" then
-        SOME (tag (nroot.@"psk") (term_of_list ["psk"; "cn"; "sn"]))
+        SOME (tag (Tag $ nroot.@"psk") (term_of_list ["psk"; "cn"; "sn"]))
       else NONE)
     (λ: "g" "cn" "x",
-      bind: "s_kex" := untag (nroot.@"dh") "s_kex" in
+      bind: "s_kex" := untag (Tag $ nroot.@"dh") "s_kex" in
       bind: "s_kex" := list_of_term "s_kex" in
       list_match: ["g'"; "cn'"; "sn"; "gx"; "gy"] := "s_kex" in
       if: eq_term "g'" "g" && eq_term "cn'" "cn" &&
           eq_term "gx" (texp "g" "x") then
-        SOME (tag (nroot.@"dh") (term_of_list ["g"; "cn"; "sn"; "x"; "gy"]))
+        SOME (tag (Tag $ nroot.@"dh") (term_of_list ["g"; "cn"; "sn"; "x"; "gy"]))
       else NONE)
     (λ: "psk" "g" "cn" "x",
-      bind: "s_kex" := untag (nroot.@"pskdh") "s_kex" in
+      bind: "s_kex" := untag (Tag $ nroot.@"pskdh") "s_kex" in
       bind: "s_kex" := list_of_term "s_kex" in
       list_match: ["psk'"; "g'"; "cn'"; "sn"; "gx"; "gy"] := "s_kex" in
-      if: eq_term "psk'" (hash (tag (N.@"psk") "psk")) &&
+      if: eq_term "psk'" (hash (tag (Tag $ N.@"psk") "psk")) &&
           eq_term "g'" "g" && eq_term "cn'" "cn" &&
           eq_term "gx" (texp "g" "x") then
-        SOME (tag (nroot.@"pskdh") (term_of_list ["psk"; "g"; "cn"; "sn"; "x"; "gy"]))
+        SOME (tag (Tag $ nroot.@"pskdh") (term_of_list ["psk"; "g"; "cn"; "sn"; "x"; "gy"]))
       else NONE).
 
 Definition new : val := λ: "ke",
   CShare.I.case "ke"
     (λ: "psk" "c_nonce",
-        tag (nroot.@"psk") (term_of_list ["psk"; "c_nonce"; mknonce #()]))
+        tag (Tag $ nroot.@"psk") (term_of_list ["psk"; "c_nonce"; mknonce #()]))
     (λ: "g" "cn" "gx",
-      tag (nroot.@"dh") (term_of_list ["g"; "cn"; mknonce #(); "gx"; mkdh #()]))
+      tag (Tag $ nroot.@"dh") (term_of_list ["g"; "cn"; mknonce #(); "gx"; mkdh #()]))
     (λ: "psk" "g" "cn" "gx",
-      tag (nroot.@"pskdh") (term_of_list ["psk"; "g"; "cn"; mknonce #(); "gx"; mkdh #()])).
+      tag (Tag $ nroot.@"pskdh") (term_of_list ["psk"; "g"; "cn"; mknonce #(); "gx"; mkdh #()])).
 
 End I.
 
@@ -1409,7 +1409,7 @@ Definition hello_pub N cp :=
 Definition hello_mac N cp :=
   let ch := hello_pub N cp in
   let psk := CShare.psk (share cp) in
-  THash (Spec.tag (N.@"binder") (Spec.of_list [psk; ch])).
+  THash (Spec.tag (Tag $ N.@"binder") (Spec.of_list [psk; ch])).
 
 Definition hello N cp :=
   Spec.of_list [
@@ -1425,7 +1425,7 @@ Definition check N psk g (other : term) ch :=
   ke ← CShare.of_term ke;
   ke ← CShare.check N psk g ke;
   let psk := CShare.psk ke in
-  let mac' := THash (Spec.tag (N.@"binder") (Spec.of_list [psk; ch])) in
+  let mac' := THash (Spec.tag (Tag $ N.@"binder") (Spec.of_list [psk; ch])) in
   if decide (other' = other ∧ mac' = mac) then Some ke else None.
 
 Module I.
@@ -1435,7 +1435,7 @@ Definition hello N : val := λ: "cp",
   list_match: ["kex"; "other"] := "cp" in
   let: "ts" := term_of_list [CShare.I.encode N "kex"; "other"] in
   let: "psk" := CShare.I.psk "kex" in
-  let: "mac" := hash (tag (N.@"binder") (term_of_list ["psk"; "ts"])) in
+  let: "mac" := hash (tag (Tag $ N.@"binder") (term_of_list ["psk"; "ts"])) in
   term_of_list ["ts"; "mac"].
 
 Definition check N : val := λ: "psk" "g" "other" "ch",
@@ -1446,7 +1446,7 @@ Definition check N : val := λ: "psk" "g" "other" "ch",
   bind: "ke" := CShare.I.of_term "ke" in
   bind: "ke" := CShare.I.check N "psk" "g" "ke" in
   let: "psk" := CShare.I.psk "ke" in
-  let: "mac'" := hash (tag (N.@"binder") (term_of_list ["psk"; "ch"])) in
+  let: "mac'" := hash (tag (Tag $ N.@"binder") (term_of_list ["psk"; "ch"])) in
   if: eq_term "other'" "other" && eq_term "mac'" "mac" then SOME "ke" else NONE.
 
 End I.
@@ -1651,7 +1651,7 @@ Definition hello_priv N sp :=
   let pub := hello_pub N sp in
   Spec.of_list [
     TKey Open (verif_key sp);
-    TSeal (TKey Seal (verif_key sp)) (Spec.tag (N.@"server_hello_sig") (THash pub))
+    TSeal (TKey Seal (verif_key sp)) (Spec.tag (Tag $ N.@"server_hello_sig") (THash pub))
   ].
 
 Definition hello N sp :=
@@ -1660,7 +1660,7 @@ Definition hello N sp :=
   let session_key := SShare.session_key_of N (share sp) in
   Spec.of_list [
     pub;
-    TSeal (TKey Seal session_key) (Spec.tag (N.@"server_hello") enc)
+    TSeal (TKey Seal session_key) (Spec.tag (Tag $ N.@"server_hello") enc)
   ].
 
 Definition verify N k x sig :=
@@ -1676,11 +1676,11 @@ Definition check N cp sp :=
   '(kex, other') ← prod_of_list 2 pub';
   res ← SShare.check N (CParams.share cp) kex;
   let session_key := SShare.session_key_of' N res in
-  dec_sig ← Spec.dec (N.@"server_hello") (TKey Open session_key) sig;
+  dec_sig ← Spec.dec (Tag $ N.@"server_hello") (TKey Open session_key) sig;
   dec_sig ← Spec.to_list dec_sig;
   '(verif_key, sig) ← prod_of_list 2 dec_sig;
   if decide (other' = CParams.other cp) then
-    if verify (N.@"server_hello_sig") verif_key pub sig then
+    if verify (Tag $ N.@"server_hello_sig") verif_key pub sig then
       Some (verif_key, res)
     else None
   else None.
@@ -1699,10 +1699,10 @@ Definition hello_pub N : val := λ: "sp",
 Definition hello N : val := λ: "sp",
   case "sp" (λ: "kex" "verif_key" "other",
     let: "pub" := hello_pub N "sp" in
-    let: "enc" := sign (N.@"server_hello_sig") "verif_key" (hash "pub") in
+    let: "enc" := sign (Tag $ N.@"server_hello_sig") "verif_key" (hash "pub") in
     let: "enc" := term_of_list [vkey "verif_key"; "enc"] in
     let: "session_key" := SShare.I.session_key_of N "kex" in
-    let: "enc" := senc (N.@"server_hello") "session_key" "enc" in
+    let: "enc" := senc (Tag $ N.@"server_hello") "session_key" "enc" in
     term_of_list ["pub"; "enc"]
   ).
 
@@ -1721,11 +1721,11 @@ Definition check N : val := λ: "cp" "sh",
   list_match: ["s_kex"; "s_other"] := "pub'" in
   bind: "res" := SShare.I.check N "c_kex" "s_kex" in
   let: "session_key" := SShare.I.session_key_of' N "res" in
-  bind: "dec_sig" := sdec (N.@"server_hello") "session_key" "sig" in
+  bind: "dec_sig" := sdec (Tag $ N.@"server_hello") "session_key" "sig" in
   bind: "dec_sig" := list_of_term "dec_sig" in
   list_match: ["verif_key"; "sig"] := "dec_sig" in
   if: eq_term "s_other" "c_other" then
-    if: verify (N.@"server_hello_sig") "verif_key" "pub" "sig" then
+    if: verify (Tag $ N.@"server_hello_sig") "verif_key" "pub" "sig" then
       SOME ("verif_key", "res")
     else NONE
   else NONE.
@@ -2041,7 +2041,7 @@ Definition tls_client : val := λ: "c" "kex" "other",
   let: "vkey" := Fst "res" in
   let: "kex" := Snd "res" in
   let: "session_key" := SShare.I.session_key_of' N "kex" in
-  let: "ack" := senc (N.@"ack") "session_key" "sh" in
+  let: "ack" := senc (Tag $ N.@"ack") "session_key" "sh" in
   send "c" "ack" ;;
   SOME ("vkey", SShare.I.cnonce "kex", SShare.I.snonce "kex", "session_key").
 
@@ -2197,7 +2197,7 @@ Definition tls_server : val := λ: "c" "psk" "g" "verif_key" "other",
   send "c" "sh" ;;
   let: "session_key" := SShare.I.session_key_of N "ke'" in
   let: "ack" := recv "c" in
-  bind: "ack" := sdec (N.@"ack") "session_key" "ack" in
+  bind: "ack" := sdec (Tag $ N.@"ack") "session_key" "ack" in
   guard: eq_term "ack" "sh" in
   SOME "ke'".
 

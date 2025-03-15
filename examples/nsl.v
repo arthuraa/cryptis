@@ -66,26 +66,26 @@ A --> B: {m3; nB}@pkB
 Definition init : val := λ: "c" "skI" "pkR",
   let: "pkI" := pkey "skI" in
   let: "nI" := mknonce #() in
-  let: "m1" := aenc (nslN.@"m1") "pkR" (term_of_list ["nI"; "pkI"]) in
+  let: "m1" := aenc (Tag $ nslN.@"m1") "pkR" (term_of_list ["nI"; "pkI"]) in
   send "c" "m1";;
-  bind: "m2"   := adec (nslN.@"m2") "skI" (recv "c") in
+  bind: "m2"   := adec (Tag $ nslN.@"m2") "skI" (recv "c") in
   bind: "m2"   := list_of_term "m2" in
   list_match: ["nI'"; "nR"; "pkR'"] := "m2" in
   guard: eq_term "nI'" "nI" && eq_term "pkR'" "pkR" in
-  let: "m3" := aenc (nslN.@"m3") "pkR" "nR" in
+  let: "m3" := aenc (Tag $ nslN.@"m3") "pkR" "nR" in
   send "c" "m3";;
   let: "sess_key" := derive_key (term_of_list ["pkI"; "pkR"; "nI"; "nR"]) in
   SOME "sess_key".
 
 Definition resp : val := λ: "c" "skR",
   let: "pkR" := pkey "skR" in
-  bind: "m1" := adec (nslN.@"m1") "skR" (recv "c") in
+  bind: "m1" := adec (Tag $ nslN.@"m1") "skR" (recv "c") in
   bind: "m1" := list_of_term "m1" in
   list_match: ["nI"; "pkI"] := "m1" in
   let: "nR" := mknonce #() in
-  let: "m2" := aenc (nslN.@"m2") "pkI" (term_of_list ["nI"; "nR"; "pkR"]) in
+  let: "m2" := aenc (Tag $ nslN.@"m2") "pkI" (term_of_list ["nI"; "nR"; "pkR"]) in
   send "c" "m2";;
-  bind: "m3" := adec (nslN.@"m3") "skR" (recv "c") in
+  bind: "m3" := adec (Tag $ nslN.@"m3") "skR" (recv "c") in
   guard: eq_term "m3" "nR" in
   let: "sess_key" := derive_key (term_of_list ["pkI"; "pkR"; "nI"; "nR"]) in
   SOME ("pkI", "sess_key").
@@ -137,7 +137,7 @@ Lemma init_send_1 skI pkR nI :
   public pkR -∗
   minted nI -∗
   □ (public nI ↔ ▷ nonce_secrecy skI pkR) -∗
-  public (TSeal pkR (Spec.tag (nslN.@"m1") (Spec.of_list [nI; TKey Seal skI]))).
+  public (TSeal pkR (Spec.tag (Tag $ nslN.@"m1") (Spec.of_list [nI; TKey Seal skI]))).
 Proof.
 iIntros "#? (#? & _ & _) #aencI #p_pkR #m_nI #p_nI".
 iPoseProof (aenc_key_public with "aencI") as "?".
@@ -154,7 +154,7 @@ Qed.
 Lemma resp_recv_1_send_2 pkI skR nI nR :
   let sess_key := Spec.derive_key (Spec.of_list [pkI; TKey Seal skR; nI; nR]) in
   public (TSeal (TKey Seal skR)
-            (Spec.tag (nslN.@"m1")
+            (Spec.tag (Tag $ nslN.@"m1")
                (Spec.of_list [nI; pkI]))) -∗
   term_token nR ⊤ -∗
   cryptis_ctx ∗
@@ -167,7 +167,7 @@ Lemma resp_recv_1_send_2 pkI skR nI nR :
   public pkI ∗
   □ (▷ nonce_secrecy skR pkI → public nI) ∗
   public (TSeal pkI
-            (Spec.tag (nslN.@"m2")
+            (Spec.tag (Tag $ nslN.@"m2")
                (Spec.of_list [nI; nR; TKey Seal skR]))).
 Proof.
 iIntros "%sess_key #p_m1 nR_token".
@@ -214,7 +214,7 @@ Qed.
 Lemma init_recv_2_send_3 skI pkR nI nR :
   let si := SessInfo nI nR in
   public (TSeal (TKey Seal skI)
-            (Spec.tag (nslN.@"m2")
+            (Spec.tag (Tag $ nslN.@"m2")
                (Spec.of_list [nI; nR; pkR]))) -∗
   term_token nI ⊤ -∗
   cryptis_ctx ∗
@@ -224,7 +224,7 @@ Lemma init_recv_2_send_3 skI pkR nI nR :
   □ (public nI ↔ ▷ nonce_secrecy skI pkR) ={⊤}▷=∗ ∃ skR,
   ⌜pkR = TKey Seal skR⌝ ∗
   minted nR ∗
-  public (TSeal pkR (Spec.tag (nslN.@"m3") nR)) ∗
+  public (TSeal pkR (Spec.tag (Tag $ nslN.@"m3") nR)) ∗
   term_token nI (⊤ ∖ ↑nroot.@"data") ∗
   □ (public (si_key skI skR si) ↔
      ▷ (compromised_key skI ∨ compromised_key skR)).
@@ -267,7 +267,7 @@ Qed.
 Lemma resp_recv_3 pkI skR nI nR :
   let sess_key :=
     Spec.derive_key (Spec.of_list [pkI; TKey Seal skR; nI; nR]) in
-  public (TSeal (TKey Seal skR) (Spec.tag (nslN.@"m3") nR)) -∗
+  public (TSeal (TKey Seal skR) (Spec.tag (Tag $ nslN.@"m3") nR)) -∗
   cryptis_ctx ∗
   nsl_ctx ∗
   term_meta nR (nroot.@"data") pkI ∗

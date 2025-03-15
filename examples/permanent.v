@@ -27,19 +27,19 @@ Definition server : val := rec: "loop" "c" "l" "sk" :=
   (* Receive request from the network *)
   let: <> := recv "c" in
   (* Sign message *)
-  let: "reply" := sign nroot "sk" (! "l") in
+  let: "reply" := sign (Tag nroot) "sk" (! "l") in
   send "c" "reply";;
   "loop" "c" "l" "sk".
 
 Definition client : val := λ: "c" "vk",
   do_until (λ: <>,
     (* Send out request *)
-    let: "request" := tag (nroot.@"get") (tint #0) in
+    let: "request" := tag (Tag $ nroot.@"get") (tint #0) in
     send "c" "request" ;;
     (* Wait for response *)
     let: "reply" := recv "c" in
     (* Check signature *)
-    bind: "value" := verify nroot "vk" "reply" in
+    bind: "value" := verify (Tag nroot) "vk" "reply" in
     SOME "value"
   ).
 
