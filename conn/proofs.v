@@ -83,7 +83,8 @@ Lemma wp_connect P N c kI kR :
   {{{ cs, RET (repr cs);
       connected kI kR Init cs 0 0 ∗
       (compromised_session Init cs ∨ P) ∗
-      release_token (si_init_share cs) }}}.
+      release_token (si_init_share cs) ∗
+      term_token (si_init_share cs) (↑isoN.@"conn") }}}.
 Proof.
 iIntros "#? #? #? #? #? % !> HP post".
 rewrite bi.or_alt. iDestruct "HP" as "(%failed & HP)".
@@ -106,13 +107,15 @@ iIntros "(dis & post & c1 & c2)".
 wp_pures.
 wp_alloc ts as "ts"; try lia. wp_pures. rewrite /=.
 pose cs := State si ts Init.
-iMod (received_alloc si Init with "token") as "received";
+iMod (received_alloc si Init with "token") as "[received token]";
   first solve_ndisj.
 iApply ("post" $! cs).
 iModIntro. iFrame.
 iSplit.
-- do 5!iSplit => //. by iApply senc_key_si_key.
-- case: failed; eauto. iLeft. by iApply "comp".
+{ do 5!iSplit => //. by iApply senc_key_si_key. }
+iSplitR "token".
+{ case: failed; eauto. iLeft. by iApply "comp". }
+iApply (term_token_drop with "token"). solve_ndisj.
 Qed.
 
 Lemma wp_listen N c :
@@ -148,7 +151,8 @@ Lemma wp_confirm P N c skA skB ga n :
   {{{ cs, RET (repr cs);
       connected skA skB Resp cs 0 0 ∗
       (compromised_session Resp cs ∨ P) ∗
-      release_token (si_resp_share cs) }}}.
+      release_token (si_resp_share cs) ∗
+      term_token (si_resp_share cs) (↑isoN.@"conn") }}}.
 Proof.
 iIntros "#? #ctx #? !> %Φ (#p_ga & #p_vkA & #sign_skB & P) post".
 rewrite bi.or_alt. iDestruct "P" as "(%failed & P)".
@@ -172,12 +176,14 @@ iIntros "P post".
 wp_pures.
 wp_alloc ts as "ts"; first lia.
 wp_pures.
-iMod (received_alloc si Resp with "token") as "received";
+iMod (received_alloc si Resp with "token") as "[received token]";
   first solve_ndisj.
 iApply ("post" $! (State si ts Resp)).
 iModIntro. iFrame. do 6?iSplit => //.
-- by iApply senc_key_si_key.
-- case: failed; eauto. iLeft. by iApply "comp".
+{ by iApply senc_key_si_key. }
+iSplitR "token".
+{ case: failed; eauto. iLeft. by iApply "comp". }
+iApply (term_token_drop with "token"). solve_ndisj.
 Qed.
 
 Lemma wp_session_key cs :

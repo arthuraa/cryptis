@@ -140,12 +140,14 @@ Qed.
 Lemma received_alloc si rl E :
   ↑isoN.@"received" ⊆ E →
   term_token (si_share_of rl si) E ==∗
-  received_auth si rl 0.
+  received_auth si rl 0 ∗
+  term_token (si_share_of rl si) (E ∖ ↑isoN.@"received").
 Proof.
 iIntros "% token".
 iMod (term_own_alloc (isoN.@"received") (● MaxNat 0)
        with "token") as "[own token]" => //.
-by rewrite auth_auth_valid.
+- by rewrite auth_auth_valid.
+- by iFrame.
 Qed.
 
 Lemma escrow_received n P si rl :
