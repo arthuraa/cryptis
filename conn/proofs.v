@@ -141,7 +141,7 @@ iModIntro. iRight. iExists _. iSplit => //.
 iIntros "post". iApply "post". by eauto.
 Qed.
 
-Lemma wp_confirm P N c skA skB ga n :
+Lemma wp_confirm P N c skA skB ga :
   channel c -∗
   cryptis_ctx -∗
   ctx N -∗
