@@ -204,18 +204,18 @@ Lemma session_failed_failure rl si :
 Proof. by iIntros "(#failed & _)". Qed.
 
 Definition ctx : iProp :=
-  iso_dh_ctx (N.@"conn").
+  iso_dh_ctx N.
 
 Lemma ctx_alloc E :
-  ↑N.@"conn" ⊆ E →
+  ↑N ⊆ E →
   seal_pred_token E ==∗
-  ctx ∗ seal_pred_token (E ∖ ↑N.@"conn").
+  ctx ∗ seal_pred_token (E ∖ ↑N).
 Proof.
 iIntros "%sub token".
-rewrite (seal_pred_token_difference (↑N.@"conn"));
+rewrite (seal_pred_token_difference (↑N));
   try solve_ndisj.
 iDestruct "token" as "[token ?]". iFrame.
-iMod (iso_dh_ctx_alloc (N.@"conn") with "token")
+iMod (iso_dh_ctx_alloc N with "token")
   as "#iso_dh"; try solve_ndisj.
 Qed.
 
@@ -226,7 +226,7 @@ Ltac solve_ctx :=
     first [iApply "H" | iClear "H"]
   ).
 
-Lemma ctx_iso_dh_ctx : ctx -∗ iso_dh_ctx (N.@"conn").
+Lemma ctx_iso_dh_ctx : ctx -∗ iso_dh_ctx N.
 Proof. solve_ctx. Qed.
 
 End Defs.
