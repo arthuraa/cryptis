@@ -342,6 +342,18 @@ Definition eq_list : val := rec: "loop" "eq" "l1" "l2" :=
      end
   end.
 
+Definition scan_list : val := rec: "loop" "f" "l" :=
+  match: "l" with
+    SOME "p" =>
+      let: "head" := Fst "p" in
+      let: "tail" := Snd "p" in
+      match: "f" "head" with
+        SOME "res" => SOME "res"
+      | NONE =>  "loop" "f" "tail"
+      end
+  | NONE => NONE
+  end.
+
 Definition find_list : val := rec: "loop" "f" "l" :=
   match: "l" with
     SOME "p" =>
@@ -769,6 +781,23 @@ iApply IH; first by move=> *; iApply wp_f; set_solver.
 case: (bool_decide_reflect (l1 = l2)) => [->|n_l1l2].
 - by rewrite bool_decide_decide decide_True.
 - by rewrite bool_decide_decide decide_False //; congruence.
+Qed.
+
+Lemma wp_scan_list φ ψ (f : val) (l : list val) :
+  □ (∀ x : val,
+    {{{ ψ NONEV ∗ φ x }}}
+      f x
+    {{{ (r : option val), RET (repr r); ψ (repr r) }}}) -∗
+  ψ NONEV ∗ ([∗ list] x ∈ l, φ x) -∗
+  WP scan_list f (repr l) {{ ψ }}.
+Proof.
+rewrite repr_list_unseal /=.
+iIntros "#wp_f"; iLöb as "IH" forall (l); iIntros "[ψ φ_l]".
+wp_rec; case: l => [|h t] /=; wp_pures; first done.
+iDestruct "φ_l" as "[φ_h φ_t]".
+wp_apply ("wp_f" with "[$ψ $φ_h]").
+iIntros "%r ψ_r"; case: r => [r|]; wp_pures; first done.
+by wp_apply ("IH" with "[$]").
 Qed.
 
 Lemma wp_find_list (f : A → bool) (fimpl : val) (l : list A) E :

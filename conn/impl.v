@@ -66,46 +66,19 @@ Definition try_open : val := λ: "N" "cs" "t",
     SOME (Snd "ts")
   end.
 
-Definition make_handler : val := λ: "p" "cs" "t",
-  let: "N" := Fst "p" in
-  let: "handler" := Snd "p" in
+Definition handle : val := λ: "N" "handler" "cs" "t",
   bind: "ts" := try_open "N" "cs" "t" in
   SOME ("handler" "ts").
 
-Definition make_handlers : val := rec: "loop" "handlers" :=
-  match: "handlers" with
-    NONE => []%E
-  | SOME "handlers" =>
-    let: "handler" := Fst "handlers" in
-    let: "handlers" := Snd "handlers" in
-    make_handler "handler" :: "loop" "handlers"
-  end.
-
-Definition select_inner_body : val := rec: "loop" "cs" "m" "handlers" :=
-  match: "handlers" with
-    NONE => NONE
-  | SOME "handlers" =>
-    let: "handler" := Fst "handlers" in
-    let: "handlers" := Snd "handlers" in
-    match: "handler" "cs" "m" with
-      NONE => "loop" "cs" "m" "handlers"
-    | SOME "res" => SOME "res"
-    end
-  end.
-
-Definition select_outer_body : val := λ: "c" "cs" "handlers",
+Definition select : val := λ: "c" "cs" "handlers",
   let: "sk" := session_key "cs" in
   do_until (λ: <>,
     let: "t" := recv "c" in
     bind: "t" := open (key Open "sk") "t" in
-    select_inner_body "cs" "t" "handlers"
-  ).
-
-Definition select : val := λ: "c" "cs" "handlers",
-  select_outer_body "c" "cs" (make_handlers "handlers").
+    scan_list (λ: "handler", "handler" "cs" "t") "handlers").
 
 Definition read : val :=
-  λ: "N" "c" "cs", select "c" "cs" [("N", (λ: "ts", "ts"))%E].
+  λ: "N" "c" "cs", select "c" "cs" [handle "N" (λ: "ts", "ts")%E].
 
 Definition free : val := λ: "c" "cs",
   let: "counters" := Fst "cs" in
