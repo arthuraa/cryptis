@@ -68,7 +68,7 @@ Definition try_open : val := λ: "N" "cs" "t",
 
 Definition handle : val := λ: "N" "handler" "cs" "t",
   bind: "ts" := try_open "N" "cs" "t" in
-  SOME ("handler" "ts").
+  SOME ("handler" "cs" "ts").
 
 Definition select : val := λ: "c" "cs" "handlers",
   let: "sk" := session_key "cs" in
@@ -78,7 +78,7 @@ Definition select : val := λ: "c" "cs" "handlers",
     scan_list (λ: "handler", "handler" "cs" "t") "handlers").
 
 Definition read : val :=
-  λ: "N" "c" "cs", select "c" "cs" [handle "N" (λ: "ts", "ts")%E].
+  λ: "N" "c" "cs", select "c" "cs" [handle "N" (λ: <> "ts", "ts")%E].
 
 Definition free : val := λ: "c" "cs",
   let: "counters" := Fst "cs" in

@@ -8,7 +8,7 @@ From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta nown.
 From cryptis Require Import cryptis primitives tactics.
-From cryptis Require Import role rpc.
+From cryptis Require Import role conn rpc.
 From cryptis.store Require Import impl shared db.
 
 Set Implicit Arguments.
@@ -17,12 +17,12 @@ Unset Printing Implicit Defensive.
 
 Section Verif.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !storeGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !storeGS Σ}.
 Notation iProp := (iProp Σ).
 
 Context `{!storeG Σ}.
 
-Implicit Types (cs : RPC.state).
+Implicit Types (cs : Conn.state).
 Implicit Types kI kR kS t : term.
 Implicit Types n : nat.
 Implicit Types γ : gname.
@@ -42,14 +42,13 @@ Lemma wp_client_connect c kI kR :
       db_connected N kI kR cs }}}.
 Proof.
 iIntros "#chan_c #ctx #ctx'".
-iPoseProof (store_ctx_conn_ctx with "ctx'") as "?".
+iPoseProof (store_ctx_rpc_ctx with "ctx'") as "?".
 iIntros "#p_ekI #p_ekR".
 iIntros "!> %Φ client post".
-iDestruct "client"
-  as "(%n & %db & dis & version & #db_at & state)".
+iDestruct "client" as "(%n & %db & dis & version & #db_at & state)".
 wp_lam. wp_pures.
 iApply (RPC.wp_connect True%I with "[//] [//] [//] [//] [//] [$]") => //.
-iIntros "!> %cs (conn & _ & token)".
+iIntros "!> %cs (conn & _)".
 iApply "post".
 by iFrame.
 Qed.

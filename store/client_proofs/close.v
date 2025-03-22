@@ -5,7 +5,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta nown cryptis.
-From cryptis Require Import primitives tactics role iso_dh rpc.
+From cryptis Require Import primitives tactics role iso_dh conn rpc.
 From cryptis.store Require Import impl shared db.
 
 Set Implicit Arguments.
@@ -14,12 +14,10 @@ Unset Printing Implicit Defensive.
 
 Section Verif.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !storeGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !storeGS Σ}.
 Notation iProp := (iProp Σ).
 
-Context `{!storeG Σ}.
-
-Implicit Types (cs : RPC.state).
+Implicit Types (cs : Conn.state).
 Implicit Types kI kR kS t : term.
 Implicit Types n : nat.
 Implicit Types γ : gname.
@@ -34,12 +32,11 @@ Lemma wp_client_close c kI kR cs :
     Client.close N c (repr cs)
   {{{ RET #(); db_disconnected N kI kR ∗ public (si_key cs) }}}.
 Proof.
-iIntros "#chan_c (_ & _ & _ & _ & _ & _ & #?)".
+iIntros "#chan_c (_ & _ & _ & #?)".
 iIntros "!> %Φ client post".
-iDestruct "client"
-  as "(%n & %db & conn & version & #db_at & state & token)".
+iDestruct "client" as "(%n & %db & conn & version & #db_at & state)".
 wp_lam. wp_pures.
-wp_apply (RPC.wp_close with "[//] [//] [$]").
+wp_apply (RPC.wp_close with "[$conn]"); eauto.
 iIntros "(dis & pub)". iApply "post".
 by iFrame.
 Qed.

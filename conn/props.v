@@ -174,6 +174,14 @@ Definition connected kI kR rl cs n m : iProp :=
   cs_ts cs ↦∗ [ #n; #m ] ∗
   received_auth cs (cs_role cs) m.
 
+Lemma connected_released_session kI kR rl cs n m :
+  connected kI kR rl cs n m -∗
+  □ (▷ released_session cs → public (si_key cs)).
+Proof.
+iIntros "(_ & _ & _ & #sess & _)".
+by iDestruct "sess" as "(_ & _ & ? & sess)".
+Qed.
+
 Lemma connected_keyE kI kR rl cs n m :
   connected kI kR rl cs n m -∗
   ⌜kI = si_init cs⌝ ∗ ⌜kR = si_resp cs⌝ ∗ ⌜rl = cs_role cs⌝.

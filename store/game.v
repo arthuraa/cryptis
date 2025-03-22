@@ -6,7 +6,7 @@ From iris.algebra Require Import numbers reservation_map.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par assert ticket_lock.
 From cryptis Require Import lib cryptis primitives tactics gmeta.
-From cryptis Require Import role iso_dh rpc store.
+From cryptis Require Import role iso_dh rpc conn store.
 From cryptis.primitives Require Import attacker.
 
 Set Implicit Arguments.
@@ -15,7 +15,7 @@ Unset Printing Implicit Defensive.
 
 Section Game.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !storeGS Σ, !tlockG Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !storeGS Σ, !tlockG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -55,7 +55,7 @@ Definition game : val := λ: <>,
   Client.create kvsN "c" "conn" "k" "v";;
   Client.close kvsN "c" "conn";;
   (* Leak session key *)
-  send "c" (RPC.session_key "conn");;
+  send "c" (Conn.session_key "conn");;
 
   let: "conn" := Client.connect kvsN "c" "skI" "vkR" in
   (* Leak long-term keys *)
@@ -112,7 +112,7 @@ wp_apply wp_send => //. wp_pures.
 wp_apply (wp_fork with "[tokenR]").
 { iModIntro. wp_apply (wp_start_server with "[$tokenR]"); eauto. }
 wp_pures.
-iMod (@client_alloc _ _ _ _ _ _ skR with "tokenI")
+iMod (@client_alloc _ _ _ _ _ _ _ skR with "tokenI")
   as "(client & free & token)"; eauto.
 wp_apply (wp_client_connect with "[] [] [] [] [] client"); eauto.
 iIntros "%cs client". wp_pure _ credit:"c". wp_pures.
@@ -121,12 +121,12 @@ wp_apply wp_recv => //. iIntros "%k #p_k". wp_pures.
 wp_apply wp_recv => //. iIntros "%v #p_v". wp_pures.
 rewrite (@rem_free_at_diff _ _ _ _ _ _ _ {[k]}) //.
 iDestruct "free" as "[free_k free]".
-wp_apply (wp_client_create with "[] [] [] [] [$client $free_k]") => //.
+wp_apply (wp_client_create with "[] [] [] [] [] [$client $free_k]") => //.
 iIntros "[client k_v]". wp_pures.
 wp_apply (wp_client_close with "[] [] [$client]") => //.
 iIntros "[client #p_sk]".
 wp_pures.
-wp_apply RPC.wp_session_key => //. iIntros "_".
+wp_apply Conn.wp_session_key => //. iIntros "_".
 wp_apply (wp_send with "[//]") => //. wp_pures.
 wp_apply (wp_client_connect with "[] [] [] [] [] client"); eauto.
 iIntros "%cs' client". wp_pure _ credit:"c'". wp_pures.
@@ -135,7 +135,7 @@ iMod (secret_public with "s_skI") as "#p_skI".
 iMod (secret_public with "s_skR") as "#p_skR".
 wp_apply wp_send => //. wp_pures.
 wp_apply wp_send => //. wp_pures.
-wp_apply (wp_client_load with "[] [] [] [$client $k_v]") => //.
+wp_apply (wp_client_load with "[] [] [] [] [$client $k_v]") => //.
 iIntros "%v' (client & k_v & _ & [fail|->])".
 { by iPoseProof ("ok'" with "fail") as "[]". }
 wp_pures. wp_apply wp_assert. wp_apply wp_eq_term.
@@ -145,7 +145,7 @@ Qed.
 End Game.
 
 Definition F : gFunctors :=
-  #[heapΣ; spawnΣ; cryptisΣ; tlockΣ; storeΣ].
+  #[heapΣ; spawnΣ; cryptisΣ; tlockΣ; Conn.connΣ; storeΣ].
 
 Lemma store_secure σ₁ σ₂ (v : val) t₂ e₂ :
   rtc erased_step ([game #()], σ₁) (t₂, σ₂) →

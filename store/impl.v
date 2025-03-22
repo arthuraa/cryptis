@@ -24,23 +24,17 @@ Definition connect : val := λ: "c" "skA" "vkB",
   RPC.connect N "c" "skA" "vkB".
 
 Definition store : val := λ: "c" "cs" "k" "v",
-  RPC.write (Tag $ N.@"store") "c" "cs" ["k"; "v"];;
-  RPC.read (N.@"ack_store") "c" "cs";;
-  RPC.tick "cs".
+  RPC.call N "store" "c" "cs" ["k"; "v"];; #().
 
 Definition load : val := λ: "c" "cs" "k",
-  RPC.write (Tag $ N.@"load") "c" "cs" ["k"];;
-  let: "ts" := RPC.read (N.@"ack_load") "c" "cs" in
-  RPC.tick "cs";;
+  let: "ts" := RPC.call N "load" "c" "cs" ["k"] in
   match: "ts" with
     NONE => TInt 0
   | SOME "ts" => Fst "ts"
   end.
 
 Definition create : val := λ: "c" "cs" "k" "v",
-  RPC.write (Tag $ N.@"create") "c" "cs" ["k"; "v"];;
-  RPC.read (N.@"ack_create") "c" "cs";;
-  RPC.tick "cs".
+  RPC.call N "create" "c" "cs" ["k"; "v"];; #().
 
 Definition close : val := λ: "c" "cs",
   RPC.close N "c" "cs".
@@ -57,24 +51,20 @@ Definition start : val := λ: "k",
   let: "accounts" := SAList.new #() in
   ("k", "accounts").
 
-Definition handle_store N : val :=
+Definition handle_store : val :=
 λ: "c" "cs" "db" "req",
   list_match: ["k"; "v"] := "req" in
   SAList.insert "db" "k" "v";;
-  RPC.write (Tag $ N.@"ack_store") "c" "cs" [];;
-  RPC.tick "cs";;
-  SOME #true.
+  SOME [TInt 0].
 
 (* FIXME: Should return an error when the key is not present *)
-Definition handle_load N : val :=
+Definition handle_load : val :=
 λ: "c" "cs" "db" "req",
   list_match: ["k"] := "req" in
   bind: "data" := SAList.find "db" "k" in
-  RPC.write (Tag $ N.@"ack_load") "c" "cs" ["data"];;
-  RPC.tick "cs";;
-  SOME #true.
+  SOME ["data"].
 
-Definition handle_create N : val :=
+Definition handle_create : val :=
 λ: "c" "cs" "db" "req",
   list_match: ["k"; "v"] := "req" in
   let: "success" :=
@@ -84,19 +74,15 @@ Definition handle_create N : val :=
       SAList.insert "db" "k" "v";;
       #1
     end in
-  let: "m" := ["k"; "v"; tint "success"] in
-  RPC.write (Tag $ N.@"ack_create") "c" "cs" "m";;
-  RPC.tick "cs";;
-  SOME #true.
+  SOME ["k"; "v"; tint "success"].
 
-Definition conn_handler N : val :=
-  let handlers := [
-    (N.@"store", handle_store N "c" "cs" "db");
-    (N.@"load", handle_load N "c" "cs" "db");
-    (N.@"create", handle_create N "c" "cs" "db")
-  ] in λ: "c" "cs" "db" "lock",
-     RPC.handle N "c" "cs" handlers;;
-     lock.release "lock".
+Definition conn_handler N : val := λ: "c" "cs" "db" "lock",
+  RPC.server N "c" "cs" [
+    RPC.handle N "store" "c" (handle_store "c" "cs" "db");
+    RPC.handle N "load" "c" (handle_load "c" "cs" "db");
+    RPC.handle N "create" "c" (handle_create "c" "cs" "db")
+  ];;
+  lock.release "lock".
 
 Definition find_client : val := λ: "ss" "client_key",
   let: "clients" := Snd "ss" in

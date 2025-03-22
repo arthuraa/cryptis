@@ -9,25 +9,13 @@ From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
 From cryptis Require Import lib term gmeta nown.
 From cryptis Require Import cryptis primitives tactics.
-From cryptis Require Import role iso_dh.
+From cryptis Require Import role iso_dh conn.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
 Module Props.
-
-Record state := State {
-  cs_si   :> sess_info;
-  cs_ts   :  loc;
-  cs_role :  role;
-}.
-
-Definition cs_share cs := si_share_of (cs_role cs) cs.
-
-#[global]
-Instance cs_repr : Repr state :=
-  λ s, (#(cs_ts s), si_key s)%V.
 
 Definition clockR := dfrac_agreeR natO.
 
@@ -46,10 +34,9 @@ Proof. solve_inG. Qed.
 
 Section Defs.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !connGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ}.
 Notation iProp := (iProp Σ).
 
-Implicit Types (cs : state).
 Implicit Types (kI kR kS t : term) (ts : list term).
 Implicit Types n : nat.
 Implicit Types b : bool.
@@ -59,141 +46,118 @@ Implicit Types si : sess_info.
 
 Variable N : namespace.
 
-Definition failure kI kR : iProp :=
-  compromised_key kI ∨ compromised_key kR.
-
-Definition wf_sess_info rl si : iProp :=
-  minted (si_key si) ∗
-  senc_key (si_key si) ∗
-  session rl si.
-
-#[global]
-Instance wf_sess_info_persistent rl si : Persistent (wf_sess_info rl si).
-Proof. apply _. Qed.
-
 Definition never_connected kI kR : iProp :=
   term_token kR (↑N.@"server".@kI).
 
-Lemma never_connected_switch kI kR Q : ⊢ switch (never_connected kI kR) Q.
-Proof. apply term_token_switch. Qed.
-
-Definition clock kI kR n :=
-  term_own kI (N.@"client".@kR.@"clock") (to_frac_agree (1 / 2) n).
-
-Lemma clock_alloc kI kR E :
-  ↑N.@"client".@kR.@"clock" ⊆ E →
-  term_token kI E ==∗
-  clock kI kR 0 ∗
-  clock kI kR 0 ∗
-  term_token kI (E ∖ ↑N.@"client".@kR.@"clock").
+Lemma first_connection kI kR :
+  never_connected kI kR ==∗ □ ¬ never_connected kI kR.
 Proof.
-iIntros "%sub token".
-iMod (term_own_alloc (N.@"client".@kR.@"clock") (to_frac_agree 1 0)
-       with "token") as "[own token]" => //.
-iFrame. rewrite -Qp.half_half frac_agree_op.
-iDestruct "own" as "[??]". by iFrame.
+iIntros "token".
+iMod (term_meta_set _ () with "token") as "#meta"; eauto.
+iIntros "!> !> contra".
+by iDestruct (term_meta_token with "contra meta") as "[]".
 Qed.
+
+Definition client_clock kI kR n : iProp :=
+  Conn.clock N kI kR n ∗
+  ((□ ¬ never_connected kI kR) ∨ Conn.clock N kI kR 0).
+
+Definition server_clock kI kR n : iProp :=
+  ⌜n = 0⌝ ∗ never_connected kI kR ∨
+  ⌜n ≠ 0⌝ ∗ Conn.clock N kI kR n.
 
 Lemma clock_agree kI kR n m :
-  clock kI kR n -∗
-  clock kI kR m -∗
+  client_clock kI kR n -∗
+  server_clock kI kR m -∗
   ⌜n = m⌝.
 Proof.
-iIntros "own1 own2".
-iPoseProof (term_own_valid_2 with "own1 own2") as "%valid".
-rewrite frac_agree_op_valid_L in valid.
-by case: valid.
+iIntros "[cI [#cS1|cS1]] [[-> cS2]|[% cS2]]".
+- by iDestruct ("cS1" with "cS2") as "[]".
+- by iPoseProof (Conn.clock_agree with "cI cS2") as "%".
+- by iPoseProof (Conn.clock_agree with "cI cS1") as "->".
+- by iPoseProof (Conn.clock_agree with "cS1 cS2") as "<-".
 Qed.
 
-Lemma clock_update p kI kR n m :
-  clock kI kR n -∗
-  clock kI kR m ==∗
-  clock kI kR p ∗ clock kI kR p.
+Lemma clock_update kI kR n m :
+  client_clock kI kR n -∗
+  server_clock kI kR m ==∗
+  ⌜n = m⌝ ∗
+  client_clock kI kR (S n) ∗
+  server_clock kI kR (S n).
 Proof.
-iIntros "own1 own2".
-rewrite /clock.
-iMod (term_own_update_2 with "own1 own2") as "[own1 own2]".
-{ apply: (frac_agree_update_2 _ _ _ _ p).
-  by rewrite Qp.half_half. }
-by iFrame.
+iIntros "[cI [#cS1|cS1]] [[-> cS2]|[% cS2]]".
+- by iDestruct ("cS1" with "cS2") as "[]".
+- iPoseProof (Conn.clock_agree with "cI cS2") as "%".
+  iMod (Conn.clock_update _ (S n) with "cI cS2") as "[cI cS2]".
+  iModIntro. iSplit => //. iFrame.
+  iSplitR; first by eauto.
+  iRight. iFrame. by eauto.
+- iPoseProof (Conn.clock_agree with "cI cS1") as "->".
+  iMod (first_connection with "cS2") as "#?".
+  iMod (Conn.clock_update _ 1 with "cI cS1") as "[cI cS1]".
+  iModIntro. iSplit => //. iFrame.
+  iSplitR; first by eauto. by iRight; iFrame.
+- by iPoseProof (Conn.clock_agree with "cS1 cS2") as "<-".
 Qed.
-
-Definition server_clock_ready kI kR :=
-  escrow nroot (never_connected kI kR)
-    (clock kI kR 0).
 
 Definition client_disconnected kI kR n : iProp :=
-  server_clock_ready kI kR ∗
-  (failure kI kR ∨ clock kI kR n).
+  Conn.failure kI kR ∨ client_clock kI kR n.
 
-Definition client_disconnecting kI kR cs : iProp :=
-  ⌜cs_role cs = Init⌝ ∗
-  server_clock_ready kI kR ∗
-  term_token (si_init_share cs) (↑isoN.@"end").
+Definition client_connected kI kR cs n : iProp := ∃ n1 n0,
+  ⌜n = (n0 + n1)%nat⌝ ∗
+  Conn.connected kI kR Init cs n1 n1 ∗
+  term_meta (si_init_share cs) (isoN.@"conn".@"beg") n0 ∗
+  release_token (si_init_share cs) ∗
+  (compromised_session Init cs ∨ client_clock kI kR n).
 
-Definition connected' kI kR cs b n n0 : iProp :=
-  ⌜si_init cs = kI⌝ ∗
-  ⌜si_resp cs = kR⌝ ∗
-  wf_sess_info (cs_role cs) cs ∗
-  (if b then released (cs_share cs) else release_token (cs_share cs)) ∗
-  cs_ts cs ↦ #n ∗
-  (compromised_session (cs_role cs) cs ∨
-     term_meta (si_init_share cs) (isoN.@"beginning") n0).
-
-Definition connected kI kR cs n : iProp :=
-  ∃ n' n0, ⌜n = (n' + n0)%nat⌝ ∗
-           term_meta (cs_share cs) (isoN.@"beginning") n0 ∗
-           connected' kI kR cs false n' n0.
-
-Lemma connected_keyE kI kR cs n :
-  connected kI kR cs n -∗
-  ⌜kI = si_init cs⌝ ∗ ⌜kR = si_resp cs⌝.
-Proof. by iIntros "(% & % & % & _ & -> & -> & _)". Qed.
-
-Definition client_token kI kR cs : iProp :=
-  ⌜cs_role cs = Init⌝ ∗
-  server_clock_ready kI kR ∗
-  term_token (si_init_share cs) (↑isoN.@"end").
-
-Definition client_connecting cs n0 : iProp :=
-  let kI := si_init cs in
-  let kR := si_resp cs in
-  server_clock_ready kI kR ∗
-  wf_sess_info Init cs ∗
-  term_meta  (si_init_share cs) (isoN.@"beginning") n0 ∗
-  term_token (si_init_share cs) (↑isoN.@"end").
-
-Definition conn_ready si n :=
-  escrow nroot
-         (term_token (si_resp_share si) (↑isoN.@"begin"))
-         (clock (si_init si) (si_resp si) n).
-
-Lemma client_connectedI cs n0 :
-  cs_role cs = Init →
-  client_connecting cs n0 -∗
-  cs_ts cs ↦ #0%nat -∗
-  release_token (si_init_share cs) ={⊤}=∗
-  ▷ (connected (si_init cs) (si_resp cs) cs n0 ∗
-     client_token (si_init cs) (si_resp cs) cs).
-Proof.
-iIntros "%e_rl (#server & #? & #? & ?) ts rel".
-rewrite /connected /connected' /client_token /cs_share e_rl /=.
-iFrame. do 2!iModIntro. iSplit; last by do 4!iSplit => //.
-iExists n0. do 4!iSplit => //; eauto.
-Qed.
-
-Lemma connected_ok kI kR cs n :
-  connected kI kR cs n -∗
+Lemma client_connected_ok kI kR cs n :
+  client_connected kI kR cs n -∗
   secret kI -∗
   secret kR -∗
   sign_key kI -∗
   sign_key kR -∗
-  ◇ □ ¬ compromised_session (cs_role cs) cs.
+  ◇ □ ¬ compromised_session Init cs.
 Proof.
-iIntros "(% & % & % & _ & conn) s_kI s_kR #signI #signR".
-iDestruct "conn" as "(<- & <- & #conn & rel & _)".
-iDestruct "conn" as "(m_k & s_k & sess)".
-by iApply (session_not_compromised with "[//] s_kI s_kR").
+iIntros "(% & % & % & conn & _)".
+by iApply (Conn.connected_ok with "conn").
+Qed.
+
+Lemma client_connected_keys kI kR cs n :
+  client_connected kI kR cs n -∗
+  ⌜kI = si_init cs⌝ ∗ ⌜kR = si_resp cs⌝.
+Proof.
+iIntros "(% & % & % & conn & _)".
+by iPoseProof (Conn.connected_keyE with "conn") as "(-> & -> & _)".
+Qed.
+
+Definition server_disconnected kI kR n : iProp :=
+  Conn.failure kI kR ∨ server_clock kI kR n.
+
+Definition server_connected kI kR cs n : iProp := ∃ n1 n0,
+  ⌜n = (n0 + n1)%nat⌝ ∗
+  Conn.connected kI kR Resp cs n1 n1 ∗
+  term_meta (si_resp_share cs) (isoN.@"conn".@"beg") n0 ∗
+  release_token (si_resp_share cs) ∗
+  (compromised_session Resp cs ∨ server_clock kI kR n).
+
+Lemma server_connected_ok kI kR cs n :
+  server_connected kI kR cs n -∗
+  secret kI -∗
+  secret kR -∗
+  sign_key kI -∗
+  sign_key kR -∗
+  ◇ □ ¬ compromised_session Resp cs.
+Proof.
+iIntros "(% & % & % & conn & _)".
+by iApply (Conn.connected_ok with "conn").
+Qed.
+
+Lemma server_connected_keys kI kR cs n :
+  server_connected kI kR cs n -∗
+  ⌜kI = si_init cs⌝ ∗ ⌜kR = si_resp cs⌝.
+Proof.
+iIntros "(% & % & % & conn & _)".
+by iPoseProof (Conn.connected_keyE with "conn") as "(-> & -> & _)".
 Qed.
 
 Lemma client_alloc kI kR E :
@@ -205,23 +169,10 @@ Proof.
 iIntros "%sub kI_token".
 rewrite (term_token_difference _ _ _ sub).
 iDestruct "kI_token" as "[kI_token ?]". iFrame.
-iMod (@clock_alloc kI kR with "kI_token") as "(c1 & c2 & token)" => //.
-iAssert (|={⊤}=> server_clock_ready kI kR)%I
-  with "[c1]" as ">#server".
-{ iApply (escrowI with "c1").
-  iApply never_connected_switch. }
-iModIntro. by iFrame.
+iMod (Conn.clock_alloc (N := N) kI (kR := kR)
+       with "kI_token") as "(c1 & c2 & token)" => //.
+iModIntro. iRight. iFrame.
 Qed.
-
-Definition server_token cs : iProp :=
-  ⌜cs_role cs = Resp⌝ ∗
-  (compromised_session Resp cs ∨ ∃ n0,
-     clock (si_init cs) (si_resp cs) n0 ∗
-     clock (si_init cs) (si_resp cs) n0).
-
-Definition server_disconnected kI kR n : iProp :=
-  failure kI kR ∨
-  (⌜n = 0⌝ ∗ never_connected kI kR ∨ clock kI kR n).
 
 Lemma server_alloc kI kR E :
   ↑N.@"server".@kI ⊆ E →
@@ -235,78 +186,73 @@ iDestruct "token" as "[token ?]". iFrame.
 iModIntro. iRight. iLeft. by eauto.
 Qed.
 
-Definition session_msg_pred (Q : sess_info → term → iProp) kS m : iProp :=
-  ∃ si, ⌜kS = (si_key si)⌝ ∗ public m ∗ Q si m.
+Definition call_pred φ kI kR si n1 ts : iProp :=
+  ∃ n0,
+    term_meta (si_init_share si) (isoN.@"conn".@"beg") n0 ∗
+    client_clock kI kR (n0 + n1) ∗
+    φ kI kR si (n0 + n1) ts.
 
-Definition init_pred si t : iProp := ∃ (beginning : nat),
-  server_clock_ready (si_init si) (si_resp si) ∗
-  term_meta (si_init_share si) (isoN.@"beginning") beginning ∗
-  conn_ready si beginning.
+Definition resp_pred φ kI kR si n1 ts : iProp :=
+  ∃ n0,
+    term_meta (si_init_share si) (isoN.@"conn".@"beg") n0 ∗
+    client_clock kI kR (n0 + S n1) ∗
+    φ kI kR si (n0 + n1) ts.
 
-Lemma init_predI cs beginning m :
-  client_connecting cs beginning -∗
-  compromised_session Init cs ∨ conn_ready cs beginning -∗
-  □ (compromised_session Init cs ∨ init_pred cs m).
-Proof.
-iIntros "(#server & #? & #? & ?) #[fail|ready]"; eauto.
-iModIntro. iRight. iExists _. eauto 10.
-Qed.
+Definition rpc_pred (s : string) φ ψ : iProp :=
+  seal_pred (N.@s.@"call") (Conn.conn_pred Init (call_pred φ)) ∗
+  seal_pred (N.@s.@"resp") (Conn.conn_pred Resp (resp_pred ψ)).
 
-Definition ack_init_pred si t : iProp := True.
-
-Definition conn_pred φ kS m : iProp :=
-  ∃ si n ts n0,
-    ⌜kS = si_key si⌝ ∗
-    ⌜m = Spec.of_list (TInt n :: ts)⌝ ∗
-    ([∗ list] t ∈ ts, public t) ∗
-    term_meta (si_init_share si) (isoN.@"beginning") n0 ∗
-    φ (si_init si) (si_resp si) si (n + n0) ts.
-
-Definition close_pred kI kR si n ts : iProp :=
-  True.
-
-Definition conn_closed si ending :=
-  escrow nroot
-         (term_token (si_init_share si) (↑isoN.@"end"))
-         (clock (si_init si) (si_resp si) ending).
-
-Definition ack_close_pred kI kR si n ts : iProp :=
-  conn_closed si n ∗
-  released (si_resp_share si).
-
-Lemma session_failed_failure rl si :
-  compromised_session rl si  ⊢ failure (si_init si) (si_resp si).
-Proof. by iIntros "(#failed & _)". Qed.
-
-Definition ctx : iProp :=
-  seal_pred  (N.@"conn".@"init")      (session_msg_pred init_pred) ∗
-  seal_pred  (N.@"conn".@"ack_init")  (session_msg_pred ack_init_pred) ∗
-  seal_pred  (N.@"conn".@"close")     (conn_pred close_pred) ∗
-  seal_pred  (N.@"conn".@"ack_close") (conn_pred ack_close_pred) ∗
-  iso_dh_ctx (N.@"conn".@"auth").
-
-Lemma ctx_alloc E :
-  ↑N.@"conn" ⊆ E →
+Lemma rpc_pred_set (s : string) φ ψ E :
+  ↑N.@s ⊆ E →
   seal_pred_token E ==∗
-  ctx ∗ seal_pred_token (E ∖ ↑N.@"conn").
+  rpc_pred s φ ψ ∗ seal_pred_token (E ∖ ↑N.@s).
 Proof.
 iIntros "%sub token".
-rewrite (seal_pred_token_difference (↑N.@"conn"));
-  try solve_ndisj.
+iMod (seal_pred_set (N.@s.@"call") with "token") as "[? token]";
+  first by solve_ndisj. iFrame.
+iMod (seal_pred_set (N.@s.@"resp") with "token") as "[? token]";
+  first by solve_ndisj. iFrame.
+iModIntro. iApply (seal_pred_token_drop with "token").
+solve_ndisj.
+Qed.
+
+Definition error_pred kI kR si n1 ts : iProp := True.
+
+Definition close_pred kI kR si n1 ts : iProp :=
+  ∃ n0,
+    term_meta (si_init_share si) (isoN.@"conn".@"beg") n0 ∗
+    client_clock kI kR (n0 + n1).
+
+Definition ack_close_pred kI kR si n1 ts : iProp :=
+  ∃ n0,
+    term_meta (si_init_share si) (isoN.@"conn".@"beg") n0 ∗
+    client_clock kI kR (n0 + n1) ∗
+    released (si_resp_share si).
+
+Definition ctx : iProp :=
+  seal_pred (N.@"rpc".@"error") (Conn.conn_pred Resp error_pred) ∗
+  seal_pred (N.@"rpc".@"close".@"call") (Conn.conn_pred Init close_pred) ∗
+  seal_pred (N.@"rpc".@"close".@"resp") (Conn.conn_pred Resp ack_close_pred) ∗
+  Conn.ctx  (N.@"rpc".@"auth").
+
+Lemma ctx_alloc E :
+  ↑N.@"rpc" ⊆ E →
+  seal_pred_token E ==∗
+  ctx ∗ seal_pred_token (E ∖ ↑N.@"rpc").
+Proof.
+iIntros "%sub token".
+rewrite (seal_pred_token_difference (↑N.@"rpc")); try solve_ndisj.
 iDestruct "token" as "[token ?]". iFrame.
-iMod (seal_pred_set (N.@"conn".@"init") with "token")
+iMod (seal_pred_set (N.@"rpc".@"error") with "token")
+  as "[error token]"; try solve_ndisj.
+iFrame.
+iMod (seal_pred_set (N.@"rpc".@"close".@"call") with "token")
   as "[init token]"; try solve_ndisj.
 iFrame.
-iMod (seal_pred_set (N.@"conn".@"ack_init") with "token")
+iMod (seal_pred_set (N.@"rpc".@"close".@"resp") with "token")
   as "[ack_init token]"; try solve_ndisj.
 iFrame.
-iMod (seal_pred_set (N.@"conn".@"close") with "token")
-  as "[close token]"; try solve_ndisj.
-iFrame.
-iMod (seal_pred_set (N.@"conn".@"ack_close") with "token")
-  as "[ack_close token]"; try solve_ndisj.
-iFrame.
-iMod (iso_dh_ctx_alloc (N.@"conn".@"auth") with "token")
+iMod (iso_dh_ctx_alloc (N.@"rpc".@"auth") with "token")
   as "#iso_dh"; try solve_ndisj.
 Qed.
 
@@ -317,23 +263,22 @@ Ltac solve_ctx :=
     first [iApply "H" | iClear "H"]
   ).
 
-Lemma ctx_init :
-  ctx -∗ seal_pred (N.@"conn".@"init") (session_msg_pred init_pred).
-Proof. solve_ctx. Qed.
-
-Lemma ctx_ack_init :
-  ctx -∗ seal_pred (N.@"conn".@"ack_init") (session_msg_pred ack_init_pred).
+Lemma ctx_error :
+  ctx -∗
+  seal_pred (N.@"rpc".@"error") (Conn.conn_pred Resp error_pred).
 Proof. solve_ctx. Qed.
 
 Lemma ctx_close :
-  ctx -∗ seal_pred (N.@"conn".@"close") (conn_pred close_pred).
+  ctx -∗
+  seal_pred (N.@"rpc".@"close".@"call") (Conn.conn_pred Init close_pred).
 Proof. solve_ctx. Qed.
 
 Lemma ctx_ack_close :
-  ctx -∗ seal_pred (N.@"conn".@"ack_close") (conn_pred ack_close_pred).
+  ctx -∗
+  seal_pred (N.@"rpc".@"close".@"resp") (Conn.conn_pred Resp ack_close_pred).
 Proof. solve_ctx. Qed.
 
-Lemma ctx_iso_dh_ctx : ctx -∗ iso_dh_ctx (N.@"conn".@"auth").
+Lemma ctx_conn_ctx : ctx -∗ Conn.ctx (N.@"rpc".@"auth").
 Proof. solve_ctx. Qed.
 
 End Defs.

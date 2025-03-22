@@ -8,5 +8,3 @@ Include Impl.
 Include Proofs.
 
 End RPC.
-
-Coercion RPC.cs_si : RPC.state >-> sess_info.
