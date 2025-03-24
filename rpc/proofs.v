@@ -18,7 +18,7 @@ Import Props Impl.
 
 Section Proofs.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !rpcGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (cs : Conn.state).
@@ -40,7 +40,7 @@ Lemma wp_connect P N c kI kR n :
       (compromised_session Init cs ∨ P) }}}.
 Proof.
 iIntros "#? #? #? #? #? % !> (clock & P) post".
-iPoseProof (Conn.or_sep1 with "clock P") as "P".
+iPoseProof (or_sep1 with "clock P") as "P".
 wp_lam; wp_pures.
 iPoseProof (Props.ctx_conn_ctx with "[//]") as "?".
 iApply wp_fupd.
@@ -48,7 +48,7 @@ wp_apply (Conn.wp_connect with "[//] [//] [//] [//] [//] P").
 iIntros "%cs (connected & P & rel & token)".
 iMod (term_meta_set (isoN.@"conn".@"beg") n with "token")
   as "#meta"; first solve_ndisj.
-iDestruct (Conn.or_sep2 with "P") as "[clock P]".
+iDestruct (or_sep2 with "P") as "[clock P]".
 iApply "post". iFrame.
 iModIntro. iExists n. iSplit => //. by iPureIntro; lia.
 Qed.
@@ -80,7 +80,7 @@ Lemma wp_confirm P N c skA skB ga n :
       (compromised_session Resp cs ∨ P) }}}.
 Proof.
 iIntros "#? #ctx #? !> %Φ (#p_ga & #p_vkA & #sign_skB & dis & P) post".
-iPoseProof (Conn.or_sep1 with "dis P") as "dis".
+iPoseProof (or_sep1 with "dis P") as "dis".
 wp_lam; wp_pures.
 iPoseProof (Props.ctx_conn_ctx with "[//]") as "?".
 iApply wp_fupd.
@@ -90,7 +90,7 @@ wp_apply (Conn.wp_confirm (server_clock N skA skB n ∗ P)
 iIntros "%cs (conn & dis & rel & token)".
 iMod (term_meta_set (isoN.@"conn".@"beg") n with "token")
   as "#meta"; first solve_ndisj.
-iDestruct (Conn.or_sep2 with "dis") as "[dis P]".
+iDestruct (or_sep2 with "dis") as "[dis P]".
 iApply "post". iFrame. iExists n. iModIntro. iSplit; eauto. iPureIntro. lia.
 Qed.
 
@@ -187,11 +187,11 @@ iAssert (|==>
 { iDestruct "clock" as "[?|clockS]"; first by eauto.
   iDestruct "inv_ts" as "[?|inv_ts]"; first by eauto.
   iDestruct "inv_ts" as "(%n0' & #begC & clockC & inv)".
-  iMod (clock_update with "clockC clockS") as "(%e_n' & clockS & clockC)".
+  iMod (clocks_update with "clockC clockS") as "(%e_n' & clockS & clockC)".
   have <- : n0 = n0' by lia.
   iModIntro. iRight. by iFrame. }
-iPoseProof (Conn.or_sep2 with "H") as "[clockS H]".
-iPoseProof (Conn.or_sep2 with "H") as "[inv clockC]".
+iPoseProof (or_sep2 with "H") as "[clockS H]".
+iPoseProof (or_sep2 with "H") as "[inv clockC]".
 wp_apply ("wp_f" with "[$]"). iIntros "%ts' (inv_ts' & inv)".
 case: ts' => [ts'|]; wp_pures; last first.
 { wp_list.
@@ -233,11 +233,11 @@ iAssert (|==>
 { iDestruct "clockS" as "[?|clockS]"; first by eauto.
   iDestruct "inv_ts" as "[?|inv_ts]"; first by eauto.
   iDestruct "inv_ts" as "(%n0' & #begC & clockC)".
-  iPoseProof (clock_agree with "clockC clockS") as "%e_n'".
+  iPoseProof (clocks_agree with "clockC clockS") as "%e_n'".
   have <- : n0 = n0' by lia.
   iModIntro. iRight. by iFrame. }
 wp_pures.
-iPoseProof (Conn.or_sep2 with "H") as "[clockS clockC]".
+iPoseProof (or_sep2 with "H") as "[clockS clockC]".
 iMod (release with "rel") as "#rel".
 wp_list.
 wp_apply (Conn.wp_write with "[//] [] [] [clockC $conn]") => //.

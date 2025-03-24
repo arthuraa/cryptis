@@ -28,50 +28,6 @@ Implicit Types n m : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-(* MOVE *)
-Lemma connected_public_key kI kR rl cs n m kt :
-  connected kI kR rl cs n m -∗
-  release_token (si_share_of rl cs) -∗
-  public (TKey kt (si_key cs)) -∗
-  ◇ compromised_session rl cs.
-Proof.
-iIntros "conn rel #p_k".
-iPoseProof "conn" as "(_ & _ & <- & #sess & _)".
-iDestruct "sess" as "(#? & #s_key & #sess)".
-iPoseProof (senc_key_compromised_keyI with "s_key p_k") as "{p_k} p_k".
-iPoseProof (senc_key_compromised_keyE with "s_key p_k") as "{p_k} >p_k".
-by iApply session_compromised.
-Qed.
-(* /MOVE *)
-
-Lemma public_sencE N rl si t φ :
-  public (TSeal (TKey Seal (si_key si)) (Spec.tag (Tag N) t)) -∗
-  seal_pred N φ -∗
-  wf_sess_info rl si -∗
-  release_token (si_share_of rl si) -∗
-  ▷ □ (compromised_session rl si ∗ public t ∨ φ (si_key si) t).
-Proof.
-iIntros "#p_m #Nφ #(_ & s_key & sess) rel".
-iDestruct (public_TSealE with "[//] [//]") as "{p_m} [[p_key p_m]|p_m]".
-- iPoseProof ("s_key" with "p_key") as "{p_key} >p_key".
-  iPoseProof (session_compromised with "[//] p_key rel") as "#>?".
-  iModIntro. iLeft. iModIntro. by do 2!iSplit => //.
-- iDestruct "p_m" as "[#p_m _]". by eauto.
-Qed.
-
-Lemma or_sep1 (P Q R : iProp) : P ∨ Q -∗ P ∨ R -∗ P ∨ Q ∗ R.
-Proof.
-iIntros "[?|?] [?|?]"; eauto. iRight. by iFrame.
-Qed.
-
-Lemma or_sep2 (P Q R : iProp) :
-  Persistent P →
-  P ∨ Q ∗ R ⊢ (P ∨ Q) ∗ (P ∨ R).
-Proof.
-iIntros "% [#?|[Q R]]"; first by iSplitR; eauto.
-by iSplitL "Q"; eauto.
-Qed.
-
 Lemma wp_connect P N c kI kR :
   channel c -∗
   cryptis_ctx -∗

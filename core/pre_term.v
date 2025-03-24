@@ -663,16 +663,6 @@ case: (boolP (PreTerm.is_exp (unfold_term t))) => [|tNexp] /=.
 - by rewrite PreTerm.base_expN // PreTerm.exps_expN //= big_nil add0n.
 Qed.
 
-(*
-Lemma TExp'E t pts wf : TExp' t pts wf = TExp t (map fold_term pts).
-Proof.
-apply: unfold_term_inj => /=; rewrite unfold_TExp -[@List.map]/@map.
-case/andP: wf => wf_pts sorted_pts.
-rewrite -map_comp map_id_in ?sort_le_id // => pt in_pts.
-by rewrite /= fold_termK // (allP wf_pts).
-Qed.
-*)
-
 Lemma TExpN_injl : left_injective TExpN.
 Proof.
 move=> ts t1 t2 e; apply: base_exps_inj.
@@ -713,23 +703,6 @@ move/ssrnat.ltP: (tsize_gt0 t1) => pos_t1.
 move/ssrnat.ltP: (tsize_gt0 t2) => pos_t2.
 rewrite !tsize_TExpN /= -!plusE; case: (altP eqP) => [->|ts1N0] //=; lia.
 Qed.
-
-(*
-Variant TExp_spec t ts : term -> Type :=
-| TExpSpec pts' H & Permutation.Permutation pts' (List.map unfold_term ts)
-: TExp_spec t ts (TExp' t pts' H).
-
-Lemma TExpP t ts : TExp_spec t ts (TExp t ts).
-Proof.
-rewrite [TExp]unlock /= [fold_term]unlock /= fold_wf_termE.
-rewrite fold_normalize unfold_termK.
-move: (proj2 _); rewrite normalize_unfoldn.
-set ts' := map unfold_term ts.
-have: Permutation.Permutation (sort <=%O ts') ts'.
-  by apply/perm_Permutation; rewrite perm_sort.
-move: (sort _ _) => pts'' ? ?; by split.
-Qed.
-*)
 
 Lemma term_rect (T : term -> Type)
   (H1 : forall n, T (TInt n))

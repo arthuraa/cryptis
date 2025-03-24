@@ -67,6 +67,19 @@ Qed.
 
 End Escrow.
 
+Lemma or_sep1 {Σ} (P Q R : iProp Σ) : P ∨ Q -∗ P ∨ R -∗ P ∨ Q ∗ R.
+Proof.
+iIntros "[?|?] [?|?]"; eauto. iRight. by iFrame.
+Qed.
+
+Lemma or_sep2 {Σ} (P Q R : iProp Σ) :
+  Persistent P →
+  P ∨ Q ∗ R ⊢ (P ∨ Q) ∗ (P ∨ R).
+Proof.
+iIntros "% [#?|[Q R]]"; first by iSplitR; eauto.
+by iSplitL "Q"; eauto.
+Qed.
+
 Lemma lc_fupd_elim_later_pers `{invGS Σ} E (P : iProp Σ) :
   £ 1 -∗ □ ▷ P ={E}=∗ □ P.
 Proof.

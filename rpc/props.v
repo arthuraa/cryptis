@@ -19,22 +19,22 @@ Module Props.
 
 Definition clockR := dfrac_agreeR natO.
 
-Class connGS Σ := ConnGS {
-  connGS_clock  : inG Σ clockR;
+Class rpcGS Σ := RpcGS {
+  rpcGS_clock  : inG Σ clockR;
 }.
 
-Local Existing Instance connGS_clock.
+Local Existing Instance rpcGS_clock.
 
-Definition connΣ := #[
+Definition rpcΣ := #[
   GFunctor clockR
 ].
 
-Global Instance subG_connGS Σ : subG connΣ Σ → connGS Σ.
+Global Instance subG_rpcGS Σ : subG rpcΣ Σ → rpcGS Σ.
 Proof. solve_inG. Qed.
 
 Section Defs.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !rpcGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (kI kR kS t : term) (ts : list term).
@@ -58,27 +58,68 @@ iIntros "!> !> contra".
 by iDestruct (term_meta_token with "contra meta") as "[]".
 Qed.
 
+Definition clock kI kR n :=
+  term_own kI (N.@"client".@kR.@"clock") (to_frac_agree (1 / 2) n).
+
+Lemma clock_alloc kI kR E :
+  ↑N.@"client".@kR.@"clock" ⊆ E →
+  term_token kI E ==∗
+  clock kI kR 0 ∗
+  clock kI kR 0 ∗
+  term_token kI (E ∖ ↑N.@"client".@kR.@"clock").
+Proof.
+iIntros "%sub token".
+iMod (term_own_alloc (N.@"client".@kR.@"clock") (to_frac_agree 1 0)
+       with "token") as "[own token]" => //.
+iFrame. rewrite -Qp.half_half frac_agree_op.
+iDestruct "own" as "[??]". by iFrame.
+Qed.
+
+Lemma clock_agree kI kR n m :
+  clock kI kR n -∗
+  clock kI kR m -∗
+  ⌜n = m⌝.
+Proof.
+iIntros "own1 own2".
+iPoseProof (term_own_valid_2 with "own1 own2") as "%valid".
+rewrite frac_agree_op_valid_L in valid.
+by case: valid.
+Qed.
+
+Lemma clock_update p kI kR n m :
+  clock kI kR n -∗
+  clock kI kR m ==∗
+  clock kI kR p ∗ clock kI kR p.
+Proof.
+iIntros "own1 own2".
+rewrite /clock.
+iMod (term_own_update_2 with "own1 own2") as "[own1 own2]".
+{ apply: (frac_agree_update_2 _ _ _ _ p).
+  by rewrite Qp.half_half. }
+by iFrame.
+Qed.
+
 Definition client_clock kI kR n : iProp :=
-  Conn.clock N kI kR n ∗
-  ((□ ¬ never_connected kI kR) ∨ Conn.clock N kI kR 0).
+  clock kI kR n ∗
+  ((□ ¬ never_connected kI kR) ∨ clock kI kR 0).
 
 Definition server_clock kI kR n : iProp :=
   ⌜n = 0⌝ ∗ never_connected kI kR ∨
-  ⌜n ≠ 0⌝ ∗ Conn.clock N kI kR n.
+  ⌜n ≠ 0⌝ ∗ clock kI kR n.
 
-Lemma clock_agree kI kR n m :
+Lemma clocks_agree kI kR n m :
   client_clock kI kR n -∗
   server_clock kI kR m -∗
   ⌜n = m⌝.
 Proof.
 iIntros "[cI [#cS1|cS1]] [[-> cS2]|[% cS2]]".
 - by iDestruct ("cS1" with "cS2") as "[]".
-- by iPoseProof (Conn.clock_agree with "cI cS2") as "%".
-- by iPoseProof (Conn.clock_agree with "cI cS1") as "->".
-- by iPoseProof (Conn.clock_agree with "cS1 cS2") as "<-".
+- by iPoseProof (clock_agree with "cI cS2") as "%".
+- by iPoseProof (clock_agree with "cI cS1") as "->".
+- by iPoseProof (clock_agree with "cS1 cS2") as "<-".
 Qed.
 
-Lemma clock_update kI kR n m :
+Lemma clocks_update kI kR n m :
   client_clock kI kR n -∗
   server_clock kI kR m ==∗
   ⌜n = m⌝ ∗
@@ -87,17 +128,17 @@ Lemma clock_update kI kR n m :
 Proof.
 iIntros "[cI [#cS1|cS1]] [[-> cS2]|[% cS2]]".
 - by iDestruct ("cS1" with "cS2") as "[]".
-- iPoseProof (Conn.clock_agree with "cI cS2") as "%".
-  iMod (Conn.clock_update _ (S n) with "cI cS2") as "[cI cS2]".
+- iPoseProof (clock_agree with "cI cS2") as "%".
+  iMod (clock_update (S n) with "cI cS2") as "[cI cS2]".
   iModIntro. iSplit => //. iFrame.
   iSplitR; first by eauto.
   iRight. iFrame. by eauto.
-- iPoseProof (Conn.clock_agree with "cI cS1") as "->".
+- iPoseProof (clock_agree with "cI cS1") as "->".
   iMod (first_connection with "cS2") as "#?".
-  iMod (Conn.clock_update _ 1 with "cI cS1") as "[cI cS1]".
+  iMod (clock_update 1 with "cI cS1") as "[cI cS1]".
   iModIntro. iSplit => //. iFrame.
   iSplitR; first by eauto. by iRight; iFrame.
-- by iPoseProof (Conn.clock_agree with "cS1 cS2") as "<-".
+- by iPoseProof (clock_agree with "cS1 cS2") as "<-".
 Qed.
 
 Definition client_disconnected kI kR n : iProp :=
@@ -169,7 +210,7 @@ Proof.
 iIntros "%sub kI_token".
 rewrite (term_token_difference _ _ _ sub).
 iDestruct "kI_token" as "[kI_token ?]". iFrame.
-iMod (Conn.clock_alloc (N := N) kI (kR := kR)
+iMod (clock_alloc kI (kR := kR)
        with "kI_token") as "(c1 & c2 & token)" => //.
 iModIntro. iRight. iFrame.
 Qed.
@@ -285,4 +326,4 @@ End Defs.
 
 End Props.
 
-Arguments Props.connGS Σ : clear implicits.
+Arguments Props.rpcGS Σ : clear implicits.

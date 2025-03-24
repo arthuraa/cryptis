@@ -112,7 +112,7 @@ wp_apply wp_send => //. wp_pures.
 wp_apply (wp_fork with "[tokenR]").
 { iModIntro. wp_apply (wp_start_server with "[$tokenR]"); eauto. }
 wp_pures.
-iMod (@client_alloc _ _ _ _ _ _ _ skR with "tokenI")
+iMod (@client_alloc _ _ _ _ _ _ skR with "tokenI")
   as "(client & free & token)"; eauto.
 wp_apply (wp_client_connect with "[] [] [] [] [] client"); eauto.
 iIntros "%cs client". wp_pure _ credit:"c". wp_pures.

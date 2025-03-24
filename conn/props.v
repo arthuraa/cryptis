@@ -2,7 +2,6 @@ From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
 From stdpp Require Import namespaces coGset.
 From iris.algebra Require Import agree auth csum gset gmap excl frac numbers.
-From iris.algebra.lib Require Import dfrac_agree.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
@@ -28,19 +27,15 @@ Definition cs_share cs := si_share_of (cs_role cs) cs.
 Instance cs_repr : Repr state :=
   λ s, (#(cs_ts s), si_key s)%V.
 
-Definition clockR := dfrac_agreeR natO.
 Definition countR := authR max_natUR.
 
 Class connGS Σ := ConnGS {
-  connGS_clock  : inG Σ clockR;
   connGS_count  : inG Σ countR;
 }.
 
-Local Existing Instance connGS_clock.
 Local Existing Instance connGS_count.
 
 Definition connΣ := #[
-  GFunctor clockR;
   GFunctor countR
 ].
 
@@ -80,45 +75,19 @@ Definition never_connected kI kR : iProp :=
 Lemma never_connected_switch kI kR Q : ⊢ switch (never_connected kI kR) Q.
 Proof. apply term_token_switch. Qed.
 
-Definition clock kI kR n :=
-  term_own kI (N.@"client".@kR.@"clock") (to_frac_agree (1 / 2) n).
-
-Lemma clock_alloc kI kR E :
-  ↑N.@"client".@kR.@"clock" ⊆ E →
-  term_token kI E ==∗
-  clock kI kR 0 ∗
-  clock kI kR 0 ∗
-  term_token kI (E ∖ ↑N.@"client".@kR.@"clock").
+Lemma public_sencE N' rl si t φ :
+  public (TSeal (TKey Seal (si_key si)) (Spec.tag (Tag N') t)) -∗
+  seal_pred N' φ -∗
+  wf_sess_info rl si -∗
+  release_token (si_share_of rl si) -∗
+  ▷ □ (compromised_session rl si ∗ public t ∨ φ (si_key si) t).
 Proof.
-iIntros "%sub token".
-iMod (term_own_alloc (N.@"client".@kR.@"clock") (to_frac_agree 1 0)
-       with "token") as "[own token]" => //.
-iFrame. rewrite -Qp.half_half frac_agree_op.
-iDestruct "own" as "[??]". by iFrame.
-Qed.
-
-Lemma clock_agree kI kR n m :
-  clock kI kR n -∗
-  clock kI kR m -∗
-  ⌜n = m⌝.
-Proof.
-iIntros "own1 own2".
-iPoseProof (term_own_valid_2 with "own1 own2") as "%valid".
-rewrite frac_agree_op_valid_L in valid.
-by case: valid.
-Qed.
-
-Lemma clock_update p kI kR n m :
-  clock kI kR n -∗
-  clock kI kR m ==∗
-  clock kI kR p ∗ clock kI kR p.
-Proof.
-iIntros "own1 own2".
-rewrite /clock.
-iMod (term_own_update_2 with "own1 own2") as "[own1 own2]".
-{ apply: (frac_agree_update_2 _ _ _ _ p).
-  by rewrite Qp.half_half. }
-by iFrame.
+iIntros "#p_m #Nφ #(_ & s_key & sess) rel".
+iDestruct (public_TSealE with "[//] [//]") as "{p_m} [[p_key p_m]|p_m]".
+- iPoseProof ("s_key" with "p_key") as "{p_key} >p_key".
+  iPoseProof (session_compromised with "[//] p_key rel") as "#>?".
+  iModIntro. iLeft. iModIntro. by do 2!iSplit => //.
+- iDestruct "p_m" as "[#p_m _]". by eauto.
 Qed.
 
 Definition received_auth si rl n : iProp :=
@@ -173,6 +142,20 @@ Definition connected kI kR rl cs n m : iProp :=
   wf_sess_info (cs_role cs) cs ∗
   cs_ts cs ↦∗ [ #n; #m ] ∗
   received_auth cs (cs_role cs) m.
+
+Lemma connected_public_key kI kR rl cs n m kt :
+  connected kI kR rl cs n m -∗
+  release_token (si_share_of rl cs) -∗
+  public (TKey kt (si_key cs)) -∗
+  ◇ compromised_session rl cs.
+Proof.
+iIntros "conn rel #p_k".
+iPoseProof "conn" as "(_ & _ & <- & #sess & _)".
+iDestruct "sess" as "(#? & #s_key & #sess)".
+iPoseProof (senc_key_compromised_keyI with "s_key p_k") as "{p_k} p_k".
+iPoseProof (senc_key_compromised_keyE with "s_key p_k") as "{p_k} >p_k".
+by iApply session_compromised.
+Qed.
 
 Lemma connected_released_session kI kR rl cs n m :
   connected kI kR rl cs n m -∗

@@ -700,3 +700,57 @@ Proof. by rewrite Spec.tag_unseal; eauto using subterm. Qed.
 
 #[global]
 Hint Resolve STRefl : core.
+
+Lemma exps_TExpN t ts : exps (TExpN t ts) ≡ₚ exps t ++ ts.
+Proof.
+apply/(ssrbool.elimT perm_Perm).
+rewrite exps_TExpN.
+by rewrite path.perm_sort seq.perm_cat2l.
+Qed.
+
+Lemma is_exp_TExpN t ts :
+  is_exp (TExpN t ts) = implb (bool_decide (ts = [])) (is_exp t).
+Proof.
+rewrite is_exp_TExpN -eq_op_bool_decide implb_orb.
+by case: ts.
+Qed.
+
+Lemma base_exps_inj t1 t2 :
+  base t1 = base t2 →
+  exps t1 ≡ₚ exps t2 →
+  t1 = t2.
+Proof.
+move=> eb /(ssrbool.introT perm_Perm) ?.
+by apply: base_exps_inj.
+Qed.
+
+Lemma TExp_TExpN t1 ts1 t2 : TExp (TExpN t1 ts1) t2 = TExpN t1 (t2 :: ts1).
+Proof.
+by rewrite TExpNA -[@seq.cat]/@app [_ ++ _]comm.
+Qed.
+
+Lemma base_expN t : ¬ is_exp t → base t = t.
+Proof.
+move=> tNX; apply: base_expN.
+apply/(ssrbool.introN ssrbool.idP).
+by rewrite is_trueP.
+Qed.
+
+Lemma exps_expN t : ¬ is_exp t → exps t = [].
+Proof.
+move=> tNX; apply: exps_expN.
+apply/(ssrbool.introN ssrbool.idP).
+by rewrite is_trueP.
+Qed.
+
+Lemma TExp0 t : TExpN t [] = t.
+Proof.
+apply: base_exps_inj; first by rewrite base_TExpN.
+by rewrite exps_TExpN app_nil_r.
+Qed.
+
+Lemma is_exp_base t : ¬ is_exp (base t).
+Proof.
+rewrite (ssrbool.negbTE (is_exp_base t)) /=. by auto.
+Qed.
+Hint Resolve is_exp_base : core.

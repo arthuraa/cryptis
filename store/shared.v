@@ -36,16 +36,16 @@ Instance scs_repr : Repr server_client_state :=
   λ s, (scs_db s, scs_lock s)%V.
 
 Class storeGS Σ := StoreGS {
-  storeGS_db   : dbGS Σ;
-  storeGS_conn : RPC.connGS Σ;
+  storeGS_db  : dbGS Σ;
+  storeGS_rpc : RPC.rpcGS Σ;
 }.
 
 Local Existing Instance storeGS_db.
-Local Existing Instance storeGS_conn.
+Local Existing Instance storeGS_rpc.
 
 Definition storeΣ := #[
   dbΣ;
-  RPC.connΣ
+  RPC.rpcΣ
 ].
 
 Global Instance subG_storeGS Σ : subG storeΣ Σ → storeGS Σ.
