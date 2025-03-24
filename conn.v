@@ -10,3 +10,6 @@ Include Proofs.
 End Conn.
 
 Coercion Conn.cs_si : Conn.state >-> sess_info.
+Existing Instance Conn.repr_handler.
+Existing Instance Conn.persistent_wf_handler.
+#[global] Typeclasses Opaque Conn.wf_handler.

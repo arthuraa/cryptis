@@ -796,10 +796,10 @@ case: (bool_decide_reflect (l1 = l2)) => [->|n_l1l2].
 - by rewrite bool_decide_decide decide_False //; congruence.
 Qed.
 
-Lemma wp_scan_list φ ψ (f : val) (l : list val) :
-  □ (∀ x : val,
+Lemma wp_scan_list `{Repr A} φ ψ (f : val) (l : list A) :
+  □ (∀ x : A,
     {{{ ψ NONEV ∗ φ x }}}
-      f x
+      f (repr x)
     {{{ (r : option val), RET (repr r); ψ (repr r) }}}) -∗
   ψ NONEV ∗ ([∗ list] x ∈ l, φ x) -∗
   WP scan_list f (repr l) {{ ψ }}.

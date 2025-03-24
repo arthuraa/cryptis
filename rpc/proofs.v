@@ -126,8 +126,8 @@ have -> : S (n0 + n1) = (n0 + S n1)%nat by lia.
 iFrame. by eauto.
 Qed.
 
-Definition handler Φ kI kR cs N (handler : val) : iProp :=
-  Conn.handler
+Definition wf_handler Φ kI kR cs N h : iProp :=
+  Conn.wf_handler
     (λ n1 m, ∃ n0,
       ⌜m = n1⌝ ∗
       term_meta (si_resp_share cs) (isoN.@"conn".@"beg") n0 ∗
@@ -145,7 +145,7 @@ Definition handler Φ kI kR cs N (handler : val) : iProp :=
        Φ (n0 + n1) ∗
        (compromised_session Resp cs ∨ server_clock N kI kR (n0 + n1)) ∗
        released (si_resp_share cs)))%I
-    kI kR Resp cs handler.
+    kI kR Resp cs h.
 
 Lemma wp_handle Φ N s φ₁ φ₂ kI kR c cs (f : val) :
   {{{
@@ -166,15 +166,13 @@ Lemma wp_handle Φ N s φ₁ φ₂ kI kR c cs (f : val) :
           Φ (S n) }}})
   }}}
     handle N s c f
-  {{{ h, RET h; handler Φ kI kR cs N h }}}.
+  {{{ h, RET (repr h); wf_handler Φ kI kR cs N h }}}.
 Proof.
 iIntros "%Ψ (#chan_c & (#? & #?) & #ctx & #wp_f) post".
 iPoseProof (ctx_error with "[//]") as "#?".
 wp_lam; wp_pures.
-iApply (wp_wand with "[] post"). clear Ψ.
-iApply Conn.wp_handle; last first.
-{ iIntros "!> %h wp". iApply "wp". }
-iSplit => //.
+iApply Conn.wp_handle; last by eauto.
+iSplit => //. clear Ψ.
 iIntros "!> %n1 %m %ts !> %Ψ (conn & rel & I & #p_ts & inv_ts) post".
 iDestruct "I" as "(%n0 & -> & #begS & I & clock)". wp_pures.
 iAssert (|==>
@@ -213,12 +211,10 @@ Qed.
 Lemma wp_handle_close Φ N c kI kR cs :
   {{{ channel c ∗ ctx N }}}
     handle_close N c
-  {{{ h, RET h; handler Φ kI kR cs N h }}}.
+  {{{ h, RET (repr h); wf_handler Φ kI kR cs N h }}}.
 Proof.
 iIntros "%Ψ (#chan_c & #ctx) post". wp_lam; wp_pures.
-iApply (wp_wand with "[] post"). clear Ψ.
-wp_apply Conn.wp_handle; last first.
-{ iIntros "% wp". iApply "wp". }
+wp_apply Conn.wp_handle; last by eauto. clear Ψ.
 iPoseProof (ctx_close with "ctx") as "#?".
 iPoseProof (ctx_ack_close with "ctx") as "#?".
 iSplit => //.
@@ -253,7 +249,7 @@ Qed.
 Lemma wp_server Φ N kI kR c cs n handlers :
   {{{ channel c ∗ ctx N ∗
       server_connected N kI kR cs n ∗ Φ n ∗
-      [∗ list] h ∈ handlers, handler Φ kI kR cs N h }}}
+      [∗ list] h ∈ handlers, wf_handler Φ kI kR cs N h }}}
     server N c (repr cs) (repr handlers)
   {{{ RET #(); ∃ n', server_disconnected N kI kR n' ∗ Φ n' }}}.
 Proof.
@@ -262,8 +258,8 @@ iIntros "%Ψ (#chan_c & #ctx & conn & inv & #handlers) post".
 iDestruct "conn" as "(%n1 & %n0 & -> & conn & #beg & rel & clockS)".
 iPoseProof (Conn.connected_keyE with "conn") as "#(-> & -> & _)".
 wp_rec. wp_pures. wp_apply (wp_handle_close Φ N _ _ _ cs); eauto.
-iIntros "%hc #wp_hc". wp_apply (@wp_cons val _ _ _ _ hc).
-iAssert ([∗ list] h ∈ (hc :: handlers), handler Φ _ _ cs N h)%I
+iIntros "%hc #wp_hc". wp_list.
+iAssert ([∗ list] h ∈ (hc :: handlers), wf_handler Φ _ _ cs N h)%I
   as "#wp".
 { rewrite /=; iSplit => //. eauto. }
 iClear "wp_hc". wp_bind (Conn.select _ _ _).

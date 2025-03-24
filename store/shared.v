@@ -151,7 +151,7 @@ Definition server_db_connected kI kR cs vdb : iProp := ∃ n,
   server_db_connected' kI kR cs vdb n.
 
 Definition server_handler kI kR cs vdb h : iProp :=
-  RPC.handler (λ n, server_db_connected' kI kR cs vdb n) kI kR cs N h.
+  RPC.wf_handler (λ n, server_db_connected' kI kR cs vdb n) kI kR cs N h.
 
 Definition server_db_disconnected kI kR vdb : iProp := ∃ n db,
   RPC.server_disconnected N kI kR n ∗

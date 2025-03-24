@@ -30,7 +30,7 @@ Ltac failure := iLeft; iFrame; eauto.
 Lemma wp_server_handle_create c kI kR cs (vdb : val) :
   {{{ channel c ∗ cryptis_ctx ∗ store_ctx N }}}
     RPC.handle N "create" c (Server.handle_create c (repr cs) vdb)
-  {{{ h, RET h; server_handler N kI kR cs vdb h }}}.
+  {{{ h, RET (repr h); server_handler N kI kR cs vdb h }}}.
 Proof.
 iIntros "%Φ (#chan_c & #ctx & #ctx') post".
 iPoseProof (store_ctx_create with "[//]") as "?".

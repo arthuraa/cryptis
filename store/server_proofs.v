@@ -63,13 +63,10 @@ iIntros "#chan_c #lock #? #ctx".
 iIntros "!> %Φ ((%n & conn & db) & locked) post".
 iPoseProof (RPC.server_connected_keys with "conn") as "#[-> ->]".
 iPoseProof (store_ctx_rpc_ctx with "[//]") as "?".
-wp_lam. wp_pures. wp_apply (@wp_nil val).
-wp_apply wp_server_handle_create; eauto. iIntros "%hcreate #H1".
-wp_apply (@wp_cons val _ _ _ _ hcreate).
-wp_apply wp_server_handle_load; eauto. iIntros "%hload #H2".
-wp_apply (@wp_cons val _ _ _ _ hload).
-wp_apply wp_server_handle_store; eauto. iIntros "%hstore #H3".
-wp_apply (@wp_cons val _ _ _ _ hstore).
+wp_lam. wp_pures.
+wp_apply wp_server_handle_create; eauto. iIntros "% #?". wp_list.
+wp_apply wp_server_handle_load; eauto. iIntros "% #?". wp_list.
+wp_apply wp_server_handle_store; eauto. iIntros "% #?". wp_list.
 wp_apply (RPC.wp_server with "[$conn db]").
 { iSplit => //. iSplit => //. iSplit; last first.
   { rewrite /=. do !iSplit => //. }

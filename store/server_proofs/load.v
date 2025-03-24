@@ -31,7 +31,7 @@ Ltac failure := iLeft; iFrame; eauto.
 Lemma wp_server_handle_load c skI skR cs (vdb : val) :
   {{{ channel c ∗ cryptis_ctx ∗ store_ctx N  }}}
     RPC.handle N "load" c (Server.handle_load c (repr cs) vdb)
-  {{{ h, RET h; server_handler N skI skR cs vdb h }}}.
+  {{{ h, RET (repr h); server_handler N skI skR cs vdb h }}}.
 Proof.
 iIntros "%Φ (#chan_c & #? & #ctx) post".
 iPoseProof (store_ctx_load with "ctx") as "?".
