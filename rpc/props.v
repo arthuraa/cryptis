@@ -260,15 +260,10 @@ Qed.
 Definition error_pred kI kR si n1 ts : iProp := True.
 
 Definition close_pred kI kR si n1 ts : iProp :=
-  ∃ n0,
-    term_meta (si_init_share si) (isoN.@"conn".@"beg") n0 ∗
-    client_clock kI kR (n0 + n1).
+  released (si_init_share si).
 
 Definition ack_close_pred kI kR si n1 ts : iProp :=
-  ∃ n0,
-    term_meta (si_init_share si) (isoN.@"conn".@"beg") n0 ∗
-    client_clock kI kR (n0 + n1) ∗
-    released (si_resp_share si).
+  False.
 
 Definition ctx : iProp :=
   seal_pred (N.@"rpc".@"error") (Conn.conn_pred Resp error_pred) ∗

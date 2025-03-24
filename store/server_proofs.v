@@ -71,7 +71,7 @@ wp_apply (RPC.wp_server with "[$conn db]").
 { iSplit => //. iSplit => //. iSplit; last first.
   { rewrite /=. do !iSplit => //. }
   by []. }
-iIntros "(%n' & dis & %db & #p_db & vdb & #db_at)".
+iIntros "(%n' & dis & #? & %db & #p_db & vdb & #db_at)".
 wp_pures.
 wp_apply (release_spec with "[$locked dis vdb]") => //.
 iSplit => //. iExists n'. iFrame.

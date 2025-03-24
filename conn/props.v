@@ -79,14 +79,11 @@ Lemma public_sencE N' rl si t φ :
   public (TSeal (TKey Seal (si_key si)) (Spec.tag (Tag N') t)) -∗
   seal_pred N' φ -∗
   wf_sess_info rl si -∗
-  release_token (si_share_of rl si) -∗
-  ▷ □ (compromised_session rl si ∗ public t ∨ φ (si_key si) t).
+  ▷ □ (public (si_key si) ∗ public t ∨ φ (si_key si) t).
 Proof.
-iIntros "#p_m #Nφ #(_ & s_key & sess) rel".
+iIntros "#p_m #Nφ #(_ & s_key & sess)".
 iDestruct (public_TSealE with "[//] [//]") as "{p_m} [[p_key p_m]|p_m]".
-- iPoseProof ("s_key" with "p_key") as "{p_key} >p_key".
-  iPoseProof (session_compromised with "[//] p_key rel") as "#>?".
-  iModIntro. iLeft. iModIntro. by do 2!iSplit => //.
+- iPoseProof ("s_key" with "p_key") as "{p_key} >p_key". by eauto.
 - iDestruct "p_m" as "[#p_m _]". by eauto.
 Qed.
 

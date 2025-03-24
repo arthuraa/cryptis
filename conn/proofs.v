@@ -193,7 +193,7 @@ Lemma wp_write kI kR rl cs n m N c ts φ :
   seal_pred N (conn_pred rl φ) -∗
   ([∗ list] t ∈ ts, public t) -∗
   {{{ connected kI kR rl cs n m ∗
-      (compromised_session rl cs ∨ φ kI kR cs n ts) }}}
+      (public (si_key cs) ∨ φ kI kR cs n ts) }}}
     write (Tag N) c (repr cs) (repr ts)
   {{{ RET #(); connected kI kR rl cs (S n) m }}}.
 Proof.
@@ -211,7 +211,7 @@ iAssert (|={⊤}=> public (si_key cs) ∨
                    conn_pred (cs_role cs) φ
                      (si_key cs) (Spec.of_list (TInt n :: ts)))%I
   with "[inv]" as ">#p_t".
-{ iDestruct "inv" as "[#(_ & ? & _)|inv]"; first by eauto.
+{ iDestruct "inv" as "[#?|inv]"; first by eauto.
   iRight. iExists cs, n, ts. do 3!iSplitR => //.
   by iApply escrow_received. }
 wp_apply (wp_send with "[//] [#]").
@@ -235,19 +235,17 @@ Qed.
 Lemma wp_try_open N φ kI kR rl cs n m t :
   {{{ seal_pred N (conn_pred (swap_role rl) φ) ∗
       connected kI kR rl cs n m ∗
-      release_token (si_share_of rl cs) ∗
       public (TSeal (TKey Seal (si_key cs)) t) }}}
     try_open (Tag N) (repr cs) t
   {{{ res, RET res;
-      release_token (si_share_of rl cs) ∗
       (⌜res = NONEV⌝ ∗
        connected kI kR rl cs n m ∨
        ∃ ts, ⌜res = SOMEV (repr ts)⌝ ∗
              ([∗ list] t ∈ ts, public t) ∗
              connected kI kR rl cs n (S m) ∗
-             (compromised_session rl cs ∨ φ kI kR cs m ts)) }}}.
+             (public (si_key cs) ∨ φ kI kR cs m ts)) }}}.
 Proof.
-iIntros "%Φ (#Φ & conn & rel & #p_t) post".
+iIntros "%Φ (#Φ & conn & #p_t) post".
 rewrite /try_open.
 wp_pure _ credit:"c1".
 wp_pure _ credit:"c2".
@@ -266,22 +264,20 @@ case: Spec.to_intP => [n' ->|_]; wp_pures; last first.
 { by iApply "post"; iFrame; iLeft; iFrame. }
 case: bool_decide_reflect => [[<-]|ne]; wp_pures; last first.
 { by iApply "post"; iFrame; iLeft; iFrame. }
-iPoseProof (public_sencE with "p_t [//] [#] [$]") as "{p_t} #p_t".
+iPoseProof (public_sencE with "p_t [//] [#]") as "{p_t} #p_t".
 - by iDestruct "conn" as "(? & ? & <- & ? & ?)".
 rewrite (_ : (m + 1)%Z = S m); last by lia.
 wp_lam. wp_pures.
 iDestruct "conn" as "(<- & <- & <- & #sess & ts & received)".
 iAssert (|={⊤}=> ▷ (([∗ list] t ∈ ts, public t) ∗
            received_auth cs (cs_role cs) (S m) ∗
-           (compromised_session (cs_role cs) cs ∨
-              φ (si_init cs) (si_resp cs) cs m ts)))%I
+           (public (si_key cs) ∨ φ (si_init cs) (si_resp cs) cs m ts)))%I
   with "[received]" as ">H".
 { rewrite public_of_list /=.
   iDestruct "p_t" as "#[(? & _ & ?)|inv]".
   { iMod (received_update with "received") as "[received _]".
     iIntros "!> !>". iFrame. iSplit => //. eauto. }
-  iDestruct "inv"
-      as "(%si & %m' & %ts' & %e_k & %e_t & p_ts & inv)".
+  iDestruct "inv" as "(%si & %m' & %ts' & %e_k & %e_t & p_ts & inv)".
   move/session_agree: e_k => <- {si}.
   case/Spec.of_list_inj: e_t => e_m <-.
   have <-: m = m' by lia.
@@ -299,15 +295,12 @@ Qed.
 Definition wf_handler Φ Ψ kI kR rl cs (h : handler) : iProp :=
   □ ∀ n m t,
     {{{ public (TSeal (TKey Seal (si_key cs)) t) ∗
-        connected kI kR rl cs n m ∗
-        release_token (si_share_of rl cs) ∗ Φ n m }}}
+        connected kI kR rl cs n m ∗ Φ n m }}}
       repr h (repr cs) t
     {{{ ov, RET (repr ov);
         match ov : option val with
         | Some v => Ψ n m v
-        | None =>
-            connected kI kR rl cs n m ∗
-            release_token (si_share_of rl cs) ∗ Φ n m
+        | None => connected kI kR rl cs n m ∗ Φ n m
         end
     }}}.
 
@@ -318,8 +311,7 @@ Proof. apply _. Qed.
 Lemma wp_select n m Φ Ψ kI kR rl cs c hs :
   channel c -∗
   ([∗ list] h ∈ hs, wf_handler Φ Ψ kI kR rl cs h) -∗
-  (connected kI kR rl cs n m ∗
-   release_token (si_share_of rl cs) ∗ Φ n m) -∗
+  (connected kI kR rl cs n m ∗ Φ n m) -∗
   WP select c (repr cs) (repr hs) {{ Ψ n m }}.
 Proof.
 iIntros "#chan_c #wp_handlers inv".
@@ -341,10 +333,9 @@ Lemma wp_handle Φ Ψ kI kR rl cs φ (N : namespace) (f : val) :
   {{{
     seal_pred N (conn_pred (swap_role rl) φ) ∗
     □ (∀ n m (ts : list term),
-      {{{ connected kI kR rl cs n (S m) ∗
-          release_token (si_share_of rl cs) ∗ Φ n m ∗
+      {{{ connected kI kR rl cs n (S m) ∗ Φ n m ∗
           ▷ ([∗ list] t ∈ ts, public t) ∗
-          ▷ (compromised_session rl cs ∨ φ kI kR cs m ts) }}}
+          ▷ (public (si_key cs) ∨ φ kI kR cs m ts) }}}
         f (repr cs) (repr ts)
       {{{ v, RET v; Ψ n m v }}})
   }}}
@@ -353,43 +344,40 @@ Lemma wp_handle Φ Ψ kI kR rl cs φ (N : namespace) (f : val) :
 Proof.
 iIntros "%Ξ [#? #wp] post". wp_lam. wp_pures.
 iIntros "!>". iApply ("post" $! (Handler _)). clear Ξ.
-iIntros "!> %n %m %t !> %Ξ (#p_t & conn & recv & inv) post". wp_pures.
-wp_apply (wp_try_open with "[$conn $recv]"); eauto.
-iIntros "%res (rel & [(-> & conn)|(%ts & -> & #p_ts & conn & inv_ts)])"; wp_pures.
+iIntros "!> %n %m %t !> %Ξ (#p_t & conn & inv) post". wp_pures.
+wp_apply (wp_try_open with "[$conn]"); eauto.
+iIntros "%res [(-> & conn)|(%ts & -> & #p_ts & conn & inv_ts)]"; wp_pures.
 { iApply ("post" $! None). by iFrame. }
-wp_apply ("wp" with "[$inv $conn $rel $inv_ts]") => //.
+wp_apply ("wp" with "[$inv $conn $inv_ts]") => //.
 iIntros "%res ?". wp_pures. iModIntro. by iApply ("post" $! (Some res)). 
 Qed.
 
 Lemma wp_read N c kI kR rl cs n m φ :
   channel c -∗
   seal_pred N (conn_pred (swap_role rl) φ) -∗
-  {{{ connected kI kR rl cs n m ∗
-      release_token (si_share_of rl cs) }}}
+  {{{ connected kI kR rl cs n m }}}
     read (Tag N) c (repr cs)
   {{{ ts, RET (repr (ts : list term));
       connected kI kR rl cs n (S m) ∗
-      release_token (si_share_of rl cs) ∗
       ([∗ list] t ∈ ts, public t) ∗
-      (compromised_session rl cs ∨ φ kI kR cs m ts) }}}.
+      (public (si_key cs) ∨ φ kI kR cs m ts) }}}.
 Proof.
-iIntros "#? #Nφ !> %Φ [conn rel] post".
+iIntros "#? #Nφ !> %Φ conn post".
 wp_lam. wp_pures.
 pose (Ψ := λ n m v,
   (∃ ts : list term,
     ⌜v = repr ts⌝ ∗
     connected kI kR rl cs n (S m) ∗
-    release_token (si_share_of rl cs) ∗
     ([∗ list] t ∈ ts, public t) ∗
-    (compromised_session rl cs ∨ φ kI kR cs m ts))%I).
-iApply (wp_wand _ _ _ (Ψ n m) with "[conn rel]"); last first.
+    (public (si_key cs) ∨ φ kI kR cs m ts))%I).
+iApply (wp_wand _ _ _ (Ψ n m) with "[conn]"); last first.
 { iIntros "% (%ts & -> & ?)". by iApply "post". }
 clear Φ. wp_apply (wp_handle (λ _ _, True)%I Ψ kI kR rl cs).
 { iSplit => //.
-  iIntros "!> %n' %m' %ts !> %Ξ (conn & rel & _ & #p_ts & inv_ts) post".
+  iIntros "!> %n' %m' %ts !> %Ξ (conn & _ & #p_ts & inv_ts) post".
   wp_pures. iModIntro. iApply "post". iFrame. by eauto. }
 iIntros "%h #h_p". wp_list.
-wp_apply (wp_select _ _ (λ _ _, True)%I Ψ with "[//] [] [$conn $rel]") => //=.
+wp_apply (wp_select _ _ (λ _ _, True)%I Ψ with "[//] [] [$conn]") => //=.
 by eauto.
 Qed.
 

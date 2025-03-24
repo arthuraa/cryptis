@@ -108,16 +108,20 @@ Lemma wp_call N s φ ψ kI kR c cs n (ts : list term) :
 Proof.
 iIntros "%Φ (#? & #? & #? & #p_ts & #(? & ?) & conn & inv) post".
 iDestruct "conn" as "(%n1 & %n0 & -> & conn & #beg & rel & clock)".
-wp_lam; wp_pures.
+wp_lam. wp_pure _ credit:"c". wp_pures.
 wp_apply (Conn.wp_write with "[//] [] [] [$conn clock inv]"); eauto.
-{ iDestruct "inv" as "[?|inv]"; first by eauto.
-  iDestruct "clock" as "[?|clock]"; first by eauto.
+{ iDestruct "inv" as "[(_ & ? & _)|inv]"; first by eauto.
+  iDestruct "clock" as "[(_ & ? & _)|clock]"; first by eauto.
   iRight. iExists n0. by iFrame. }
-iIntros "conn". wp_pures.
-wp_apply (Conn.wp_read with "[//] [] [$conn $rel]"); eauto.
-iIntros "%ts' (conn & rel & p_ts' & inv)".
-iApply "post". iFrame. iDestruct "inv" as "[#inv|inv]".
-{ iSplitR; eauto. iExists n0. iSplit; first by iPureIntro; lia.
+iIntros "conn". wp_pures. iApply wp_fupd.
+wp_apply (Conn.wp_read with "[//] [] [$conn]"); eauto.
+iIntros "%ts' (conn & p_ts' & inv)".
+iApply "post". iDestruct "inv" as "[#inv|inv]".
+{ iAssert (public (TKey Open (si_key cs))) as "?".
+  { iApply public_TKey. by eauto. }
+  iPoseProof (Conn.connected_public_key with "conn rel [//]") as "#>?".
+  iFrame. iModIntro. iSplitR; eauto. iExists n0.
+  iSplit; first by iPureIntro; lia.
   iSplit => //. by eauto. }
 iDestruct "inv" as "(%n0' & #beg' & clock & inv)".
 iPoseProof (term_meta_agree with "beg beg'") as "<-".
@@ -131,6 +135,7 @@ Definition wf_handler Φ kI kR cs N h : iProp :=
     (λ n1 m, ∃ n0,
       ⌜m = n1⌝ ∗
       term_meta (si_resp_share cs) (isoN.@"conn".@"beg") n0 ∗
+      release_token (si_resp_share cs) ∗
       Φ (n0 + n1) ∗
       (compromised_session Resp cs ∨ server_clock N kI kR (n0 + n1)))%I
     (λ n1 m r, ∃ n0,
@@ -144,7 +149,7 @@ Definition wf_handler Φ kI kR cs N h : iProp :=
        ⌜r = #false⌝ ∗
        Φ (n0 + n1) ∗
        (compromised_session Resp cs ∨ server_clock N kI kR (n0 + n1)) ∗
-       released (si_resp_share cs)))%I
+       public (si_key cs)))%I
     kI kR Resp cs h.
 
 Lemma wp_handle Φ N s φ₁ φ₂ kI kR c cs (f : val) :
@@ -173,8 +178,17 @@ iPoseProof (ctx_error with "[//]") as "#?".
 wp_lam; wp_pures.
 iApply Conn.wp_handle; last by eauto.
 iSplit => //. clear Ψ.
-iIntros "!> %n1 %m %ts !> %Ψ (conn & rel & I & #p_ts & inv_ts) post".
-iDestruct "I" as "(%n0 & -> & #begS & I & clock)". wp_pures.
+iIntros "!> %n1 %m %ts !> %Ψ (conn & I & #p_ts & inv_ts) post".
+iDestruct "I" as "(%n0 & -> & #begS & rel & I & clock)". wp_pures.
+iAssert (Conn.connected kI kR Resp cs n1 (S n1) ∗
+         release_token (si_resp_share cs) ∗
+         ◇ (compromised_session Resp cs ∨ call_pred N φ₁ kI kR cs n1 ts))%I
+  with "[conn rel inv_ts]" as "(conn & rel & >inv_ts)".
+{ iDestruct "inv_ts" as "[#fail|inv_ts]"; last by iFrame.
+  iAssert (public (TKey Open (si_key cs))) as "?".
+  { iApply public_TKey. by eauto. }
+  iPoseProof (Conn.connected_public_key with "conn rel [//]") as "#H".
+  iFrame. iMod "H" as "?". by eauto. }
 iAssert (|==>
            compromised_session Resp cs ∨
            server_clock N kI kR (S (n0 + n1)) ∗
@@ -200,8 +214,8 @@ case: ts' => [ts'|]; wp_pures; last first.
   iApply "post". iModIntro. iExists n0. do !iSplit => //. iLeft. by iFrame. }
 iDestruct "inv_ts'" as "(#p_ts' & inv_ts')".
 wp_apply (Conn.wp_write with "[//] [] [] [inv_ts' clockC $conn]") => //.
-{ iDestruct "inv_ts'" as "[?|inv_ts']"; first by eauto.
-  iDestruct "clockC" as "[?|[#begC clockC]]"; first by eauto.
+{ iDestruct "inv_ts'" as "[(_ & ? & _)|inv_ts']"; first by eauto.
+  iDestruct "clockC" as "[(_ & ? & _)|[#begC clockC]]"; first by eauto.
   iRight. iExists n0. iFrame.
   have -> : n0 + S n1 = S (n0 + n1) by lia. by iFrame. }
 iIntros "conn". wp_pures. iApply "post". iModIntro.
@@ -218,28 +232,17 @@ wp_apply Conn.wp_handle; last by eauto. clear Ψ.
 iPoseProof (ctx_close with "ctx") as "#?".
 iPoseProof (ctx_ack_close with "ctx") as "#?".
 iSplit => //.
-iIntros "!> %n1 %m %ts !> %Ψ (conn & rel & inv & #p_ts & inv_ts) post".
-iDestruct "inv" as "(%n0 & -> & #begS & inv & clockS)". wp_pures.
-iAssert (|==>
-           compromised_session Resp cs ∨
-           server_clock N kI kR (n0 + n1) ∗
-           term_meta (si_init_share cs) (isoN.@"conn".@"beg") n0 ∗
-           client_clock N kI kR (n0 + n1))%I
-    with "[clockS inv_ts]" as ">H".
-{ iDestruct "clockS" as "[?|clockS]"; first by eauto.
-  iDestruct "inv_ts" as "[?|inv_ts]"; first by eauto.
-  iDestruct "inv_ts" as "(%n0' & #begC & clockC)".
-  iPoseProof (clocks_agree with "clockC clockS") as "%e_n'".
-  have <- : n0 = n0' by lia.
-  iModIntro. iRight. by iFrame. }
-wp_pures.
-iPoseProof (or_sep2 with "H") as "[clockS clockC]".
-iMod (release with "rel") as "#rel".
-wp_list.
-wp_apply (Conn.wp_write with "[//] [] [] [clockC $conn]") => //.
+iIntros "!> %n1 %m %ts !> %Ψ (conn & inv & #p_ts & #inv_ts) post".
+iDestruct "inv" as "(%n0 & -> & #begS & rel & inv & clockS)". wp_pures.
+iMod (release with "rel") as "#relS".
+iPoseProof (Conn.connected_released_session with "conn") as "#s_k".
+iAssert (|==> public (si_key cs))%I as ">#p_k".
+{ iDestruct "inv_ts" as "[?|relC]"; first by eauto.
+  iIntros "!>". iApply "s_k". by iSplit. }
+wp_pures. wp_list.
+wp_apply (Conn.wp_write with "[//] [] [] [$conn]") => //.
 - by rewrite /= public_TInt.
-- iDestruct "clockC" as "[?|[#begC clockC]]"; first by eauto.
-  iRight. iExists n0. iFrame. by eauto.
+- by iLeft.
 iIntros "conn". wp_pures. wp_apply (Conn.wp_free with "[$conn]").
 iIntros "_". wp_pures. iApply "post".
 iExists n0. iModIntro. do !iSplit => //.
@@ -251,7 +254,8 @@ Lemma wp_server Φ N kI kR c cs n handlers :
       server_connected N kI kR cs n ∗ Φ n ∗
       [∗ list] h ∈ handlers, wf_handler Φ kI kR cs N h }}}
     server N c (repr cs) (repr handlers)
-  {{{ RET #(); ∃ n', server_disconnected N kI kR n' ∗ Φ n' }}}.
+  {{{ RET #(); ∃ n', server_disconnected N kI kR n' ∗
+                     public (si_key cs) ∗ Φ n' }}}.
 Proof.
 iLöb as "IH" forall (n).
 iIntros "%Ψ (#chan_c & #ctx & conn & inv & #handlers) post".
@@ -288,27 +292,20 @@ iIntros "%Φ (#chan_c & #ctx & conn) post".
 iDestruct "conn" as "(%n1 & %n0 & -> & conn & #beg & rel & clockC)".
 iPoseProof (Conn.connected_keyE with "conn") as "#(-> & -> & _)".
 wp_lam. wp_pures. wp_list.
-iPoseProof (Conn.connected_released_session with "conn") as "#p_k".
+iMod (release with "rel") as "#relC".
 iPoseProof (ctx_close with "[//]") as "#?".
 iPoseProof (ctx_ack_close with "[//]") as "#?".
-wp_apply (Conn.wp_write with "[//] [] [] [$conn clockC]") => //.
+wp_apply (Conn.wp_write with "[//] [] [] [$conn]") => //.
 { rewrite /= public_TInt. by eauto. }
-{ iDestruct "clockC" as "[?|clockC]"; eauto.
-  iRight. iExists n0. by iFrame. }
+{ by iRight. }
 iIntros "conn". wp_pures.
-wp_apply (Conn.wp_read with "[//] [] [$]") => //.
-iIntros "%ts (conn & rel & _ & inv)".
-wp_pures. iMod (release with "rel") as "#relC".
-wp_apply (Conn.wp_free with "[$conn]"). iIntros "_".
-iApply "post". iDestruct "inv" as "[#comp|inv]".
-- iSplit.
-  + iLeft. by iApply Conn.session_failed_failure.
-  + by iDestruct "comp" as "(_ & ? & _)".
-- iDestruct "inv" as "(%n0' & #beg' & clockC & #relS)".
-  iPoseProof (term_meta_agree with "beg beg'") as "<-".
-  iSplit.
-  + by iRight.
-  + iApply "p_k". by iSplit.
+wp_apply (Conn.wp_read with "[//] [] [$]"); eauto.
+iIntros "%ts (conn & _ & #inv)".
+wp_pures. wp_apply (Conn.wp_free with "[$conn]"). iIntros "_".
+iApply "post". iDestruct "inv" as "[#p_k|[]]".
+iSplit => //. iDestruct "clockC" as "[#comp|clockC]".
++ iLeft. by iApply Conn.session_failed_failure.
++ by iRight.
 Qed.
 
 End Proofs.
