@@ -1,10 +1,10 @@
+From cryptis Require Import mathcomp_compat lib.
 From mathcomp Require Import ssreflect.
 From mathcomp Require eqtype ssrbool path.
 From deriving Require Import deriving.
 From stdpp Require Import gmap.
 From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
-From cryptis Require Import mathcomp_compat lib.
 From cryptis.core Require Export pre_term.
 
 Definition int_of_key_type kt : Z :=

@@ -1,7 +1,8 @@
+From cryptis Require Import lib.
+From HB Require Import structures.
 From mathcomp Require Import all_ssreflect.
 From deriving Require Import deriving.
-From cryptis Require Import mathcomp_compat lib.
-Require Import Coq.ZArith.ZArith Lia.
+From Stdlib Require Import ZArith.ZArith Lia.
 From iris.heap_lang Require locations.
 
 Import Order.POrderTheory Order.TotalTheory.
@@ -10,24 +11,14 @@ Inductive key_type := Seal | Open.
 
 Canonical key_type_indDef := [indDef for key_type_rect].
 Canonical key_type_indType := IndType key_type key_type_indDef.
-Definition key_type_eqMixin := [derive eqMixin for key_type].
-Canonical key_type_eqType := EqType key_type key_type_eqMixin.
-Definition key_type_choiceMixin := [derive choiceMixin for key_type].
-Canonical key_type_choiceType :=
-  Eval hnf in ChoiceType key_type key_type_choiceMixin.
-Definition key_type_countMixin := [derive countMixin for key_type].
-Canonical key_type_countType :=
-  Eval hnf in CountType key_type key_type_countMixin.
-Definition key_type_orderMixin :=
-  [derive orderMixin for key_type].
-Canonical key_type_porderType :=
-  Eval hnf in POrderType tt key_type key_type_orderMixin.
-Canonical key_type_latticeType :=
-  Eval hnf in LatticeType key_type key_type_orderMixin.
-Canonical key_type_distrLatticeType :=
-  Eval hnf in DistrLatticeType key_type key_type_orderMixin.
-Canonical key_type_orderType :=
-  Eval hnf in OrderType key_type key_type_orderMixin.
+Definition key_type_hasDecEq := [derive hasDecEq for key_type].
+HB.instance Definition _ := key_type_hasDecEq.
+Definition key_type_hasChoice := [derive hasChoice for key_type].
+HB.instance Definition _ := key_type_hasChoice.
+Definition key_type_isCountable := [derive isCountable for key_type].
+HB.instance Definition _ := key_type_isCountable.
+Definition key_type_isOrder := [derive isOrder for key_type].
+HB.instance Definition _ := key_type_isOrder.
 
 Notation TInt_tag := 0%Z.
 Notation TPair_tag := 1%Z.
@@ -104,28 +95,14 @@ Combined Scheme pre_term_list_pre_term_rect
 Definition pre_term_list_pre_term_indDef :=
   [indDef for pre_term_list_pre_term_rect].
 Canonical pre_term_indType := IndType pre_term pre_term_list_pre_term_indDef.
-Definition pre_term_eqMixin :=
-  [derive eqMixin for pre_term].
-Canonical pre_term_eqType :=
-  Eval hnf in EqType pre_term pre_term_eqMixin.
-Definition pre_term_choiceMixin :=
-  [derive choiceMixin for pre_term].
-Canonical pre_term_choiceType :=
-  Eval hnf in ChoiceType pre_term pre_term_choiceMixin.
-Definition pre_term_countMixin :=
-  [derive countMixin for pre_term].
-Canonical pre_term_countType :=
-  Eval hnf in CountType pre_term pre_term_countMixin.
-Definition pre_term_orderMixin :=
-  [derive orderMixin for pre_term].
-Canonical pre_term_porderType :=
-  Eval hnf in POrderType tt pre_term pre_term_orderMixin.
-Canonical pre_term_latticeType :=
-  Eval hnf in LatticeType pre_term pre_term_orderMixin.
-Canonical pre_term_distrLatticeType :=
-  Eval hnf in DistrLatticeType pre_term pre_term_orderMixin.
-Canonical pre_term_orderType :=
-  Eval hnf in OrderType pre_term pre_term_orderMixin.
+Definition pre_term_hasDecEq := [derive hasDecEq for pre_term].
+#[export] HB.instance Definition _ := pre_term_hasDecEq.
+Definition pre_term_hasChoice := [derive hasChoice for pre_term].
+#[export] HB.instance Definition _ := pre_term_hasChoice.
+Definition pre_term_isCountable := [derive isCountable for pre_term].
+#[export] HB.instance Definition _ := pre_term_isCountable.
+Definition pre_term_isOrder := [derive isOrder for pre_term].
+#[export] HB.instance Definition _ := pre_term_isOrder.
 
 Definition pre_term_rect (T : pre_term -> Type)
   (H1 : forall n, T (PTInt n))
@@ -145,16 +122,8 @@ Definition pre_term_ind (T : pre_term -> Prop) :=
   @pre_term_rect T.
 
 Definition seq_pre_term := seq pre_term.
-Definition seq_pre_term_orderMixin :=
-  [derive orderMixin for seq pre_term].
-Canonical seq_pre_term_porderType :=
-  Eval hnf in POrderType tt seq_pre_term seq_pre_term_orderMixin.
-Canonical seq_pre_term_latticeType :=
-  Eval hnf in LatticeType seq_pre_term seq_pre_term_orderMixin.
-Canonical seq_pre_term_distrLatticeType :=
-  Eval hnf in DistrLatticeType seq_pre_term seq_pre_term_orderMixin.
-Canonical seq_pre_term_orderType :=
-  Eval hnf in OrderType seq_pre_term seq_pre_term_orderMixin.
+Definition seq_pre_term_isOrder := [derive isOrder for seq pre_term].
+HB.instance Definition _ := seq_pre_term_isOrder.
 
 Definition cons_num pt : Z :=
   match pt with
@@ -186,7 +155,7 @@ Lemma leqE pt1 pt2 :
       else (k1 <= k2)%O
     | PTHash pt1, PTHash pt2 => (pt1 <= pt2)%O
     | PTExp pt1 pts1, PTExp pt2 pts2 =>
-      if pt1 == pt2 then ((pts1 : seqlexi_with tt _) <= pts2)%O
+      if pt1 == pt2 then ((pts1 : seqlexi_with Order.default_display _) <= pts2)%O
       else (pt1 <= pt2)%O
     | _, _ => false
     end
@@ -204,7 +173,8 @@ case: pt1 pt2
 - by rewrite (le_alt _ _ pt1).
 - by rewrite (le_alt _ _ pt12).
 - by rewrite (le_alt _ _ pt1).
-have -> : ((pts1 : seqlexi_with tt _) <= pts2)%O = ((pts1 : seq_pre_term) <= pts2)%O.
+have -> : ((pts1 : seqlexi_with Order.default_display _) <= pts2)%O =
+          ((pts1 : seq_pre_term) <= pts2)%O.
   elim: pts1 pts2 {pt1 pt2} => [|pt1 pts1 IH] [|pt2 pts2] //=.
     rewrite [LHS](_ : _ = if pt1 == pt2 then if pts1 == pts2 then true
                                              else ((pts1 : seq_pre_term) <= pts2)%O
@@ -358,15 +328,13 @@ rewrite (_ : PTExp _ _ = pt') ?wf_normalize //.
 by rewrite /pt' /= /exp size_map size_eq0 ptsN0 /=.
 Qed.
 
+Module Exports.
+HB.reexport.
+End Exports.
+
 End PreTerm.
 
-Canonical PreTerm.pre_term_eqType.
-Canonical PreTerm.pre_term_choiceType.
-Canonical PreTerm.pre_term_countType.
-Canonical PreTerm.pre_term_porderType.
-Canonical PreTerm.pre_term_latticeType.
-Canonical PreTerm.pre_term_distrLatticeType.
-Canonical PreTerm.pre_term_orderType.
+Export PreTerm.Exports.
 
 Unset Elimination Schemes.
 Inductive term :=
@@ -474,21 +442,14 @@ End TExp.
 
 Notation TExp t1 t2 := (TExpN t1 [:: t2]).
 
-Definition term_eqMixin := InjEqMixin unfold_term_inj.
-Canonical term_eqType := EqType term term_eqMixin.
-Definition term_choiceMixin := CanChoiceMixin unfold_termK.
-Canonical term_choiceType := Eval hnf in ChoiceType term term_choiceMixin.
-Definition term_countMixin := CanCountMixin unfold_termK.
-Canonical term_countType := Eval hnf in CountType term term_countMixin.
-Definition term_orderMixin := CanOrderMixin unfold_termK.
-Canonical term_porderType :=
-  Eval hnf in POrderType tt term term_orderMixin.
-Canonical term_latticeType :=
-  Eval hnf in LatticeType term term_orderMixin.
-Canonical term_distrLatticeType :=
-  Eval hnf in DistrLatticeType term term_orderMixin.
-Canonical term_orderType :=
-  Eval hnf in OrderType term term_orderMixin.
+HB.instance Definition _ :=
+  Equality.copy term (can_type unfold_termK).
+HB.instance Definition _ :=
+  Choice.copy term (can_type unfold_termK).
+HB.instance Definition _ :=
+  Countable.copy term (can_type unfold_termK).
+HB.instance Definition _ : Order.Total _ term :=
+  Order.CanIsTotal Order.default_display unfold_termK.
 
 Lemma normalize_unfold1 t :
   PreTerm.normalize (unfold_term t) = unfold_term t.

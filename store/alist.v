@@ -1,3 +1,4 @@
+From cryptis Require Import lib.
 From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
 From stdpp Require Import namespaces.
@@ -5,7 +6,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import lock ticket_lock.
-From cryptis Require Import lib term cryptis primitives tactics.
+From cryptis Require Import term cryptis primitives tactics.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

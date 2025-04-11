@@ -342,8 +342,6 @@ Global Instance Persistent_public_aux n t : Persistent (public_aux n t).
 Proof.
 elim: n t => [|n IH] /=; first by apply _.
 case; try by move=> *; apply _.
-case; try by move=> *; apply _.
-case; try by move=> *; apply _.
 Qed.
 
 (** [public t] holds when the term [t] can be declared public. *)

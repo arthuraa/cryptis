@@ -2,13 +2,14 @@
 development. Since they don't have many dependencies, they are left in their own
 file to avoid slowing down the compilation process. *)
 
+From cryptis Require Import lib.
 From mathcomp Require Import ssreflect.
 From mathcomp Require order.
 From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term.
+From cryptis Require Import term.
 From cryptis.primitives Require Import notations.
 
 Set Implicit Arguments.
@@ -259,7 +260,8 @@ iIntros "% ->"; case: (boolP (is_exp t1)) => [t1X|t1NX].
   case/and5P=> ???? sorted_pts _. wp_pures.
   wp_bind (insert_sorted _ _ _).
   rewrite -val_of_pre_term_unseal -!repr_list_val.
-  iApply (@twp_insert_sorted _ PreTerm.pre_term_orderType) => //.
+  iApply (@twp_insert_sorted _
+            (Order.Total.Pack (Order.Total.on PreTerm.pre_term))) => //.
     move=> * /=; iIntros "_ post".
     by iApply twp_leq_pre_term; iApply "post".
   iIntros "_"; wp_pures.

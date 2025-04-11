@@ -99,9 +99,9 @@ rewrite auth_frag_op_valid to_max_prefix_list_op_valid_L in valid.
 iPureIntro.
 case: valid => - [[|o os] osE].
 - by rewrite app_nil_r in osE.
-- rewrite osE app_length /= in lengthE; lia.
+- rewrite osE length_app /= in lengthE; lia.
 - by rewrite app_nil_r in osE.
-- rewrite osE app_length /= in lengthE; lia.
+- rewrite osE length_app /= in lengthE; lia.
 Qed.
 
 Lemma hist_frag_prefix_of os1 os2 k N :
@@ -288,7 +288,7 @@ iIntros "(%os1 & #hist1) (%os2 & #hist2)".
 iPoseProof (hist_at_agree with "hist1 hist2") as "%e".
 iPureIntro. suff ? : [o1] = [o2] by congruence.
 have e': length os1 = length os2.
-{ move/(f_equal length): e. rewrite !app_length /=. lia. }
+{ move/(f_equal length): e. rewrite !length_app /=. lia. }
 move/(f_equal (drop (length os1))): e.
 by rewrite drop_app_length e' drop_app_length.
 Qed.
@@ -300,8 +300,8 @@ Proof.
 iIntros "(%os & -> & auth)".
 iMod (hist_update _ _ _ o with "auth") as "[auth #frag]".
 iModIntro. iSplit.
-- iExists (os ++ [o]). rewrite app_length Nat.add_comm. by iFrame.
-- iExists os. iSplit => //. by rewrite app_length /= Nat.add_comm.
+- iExists (os ++ [o]). rewrite length_app Nat.add_comm. by iFrame.
+- iExists os. iSplit => //. by rewrite length_app /= Nat.add_comm.
 Qed.
 
 Lemma db_at_op_at k N n db o :
@@ -312,7 +312,7 @@ Proof.
 iIntros "#db_at (%os' & #hist')".
 iAssert (hist_at k N n os') as "hist''".
 { iDestruct "hist'" as "(%e_n & hist')".
-  rewrite app_length /= in e_n.
+  rewrite length_app /= in e_n.
   iSplit; first by iPureIntro; lia.
   iApply (hist_frag_prefix_of with "hist'").
   by exists [o]. }

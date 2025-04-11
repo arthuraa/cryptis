@@ -1,3 +1,4 @@
+From cryptis Require Import lib.
 From mathcomp Require Import ssreflect.
 From mathcomp Require order.
 From stdpp Require Import gmap.
@@ -6,7 +7,7 @@ From iris.base_logic.lib Require Import invariants saved_prop.
 From iris.program_logic Require Import atomic.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import nondet_bool ticket_lock.
-From cryptis Require Import lib term cryptis.
+From cryptis Require Import term cryptis.
 From cryptis.primitives Require Import notations comp.
 
 Set Implicit Arguments.

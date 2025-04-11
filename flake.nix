@@ -11,12 +11,8 @@
       let pkgs = nixpkgs.legacyPackages.${system};
           lib = pkgs.lib; in rec {
             packages = rec {
-              coq = pkgs.coq_8_18;
-              coqPackages = pkgs.coqPackages_8_18.overrideScope (self: super:
-                { mathcomp = super.mathcomp.override {
-                    version = "1.18.0";
-                  };
-                });
+              coq = pkgs.coq_9_0;
+              coqPackages = pkgs.coqPackages_9_0;
             };
 
             devShell = pkgs.mkShell {
@@ -25,7 +21,7 @@
                 coqPackages.mathcomp.ssreflect
                 coqPackages.deriving
                 coqPackages.iris
-                coqPackages.vscoq-language-server
+                # coqPackages.vscoq-language-server
               ];
             };
           }

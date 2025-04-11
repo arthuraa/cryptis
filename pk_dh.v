@@ -75,7 +75,7 @@ move=> eX.
 move/(f_equal base): (eX); rewrite !base_TExpN /= => base_nR'.
 have en: [nI; nR] ≡ₚ exps nR' ++ [nI'].
   by rewrite -exps_TExpN -eX exps_TExpN.
-have := Permutation_length en; rewrite app_length /= => ?.
+have := Permutation_length en; rewrite length_app /= => ?.
 have lenR' : length (exps nR') = 1 by lia.
 case eenR': (exps nR') => [|x [|??]] //= in lenR' en *.
 have [[-> ->]|[-> ->]] := Permutation_length_2 en.

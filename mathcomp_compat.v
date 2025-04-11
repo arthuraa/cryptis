@@ -1,24 +1,16 @@
 (** We define these instances in their own file to avoid conflicts between
 mathcomp and stdpp definitions. *)
 
+From HB Require Import structures.
 From mathcomp Require Import all_ssreflect.
 From deriving Require Import deriving.
 From stdpp Require base countable.
-Require Import Coq.ZArith.ZArith Lia.
-Require Import Permutation.
+From Stdlib Require Import ZArith.ZArith Lia Permutation.
 From iris.heap_lang Require locations.
 
 (* FIXME: This should exist in deriving *)
-Definition positive_orderMixin :=
-  [derive orderMixin for positive].
-Canonical positive_porderType :=
-  Eval hnf in POrderType tt positive positive_orderMixin.
-Canonical positive_latticeType :=
-  Eval hnf in LatticeType positive positive_orderMixin.
-Canonical positive_distrLatticeType :=
-  Eval hnf in DistrLatticeType positive positive_orderMixin.
-Canonical positive_orderType :=
-  Eval hnf in OrderType positive positive_orderMixin.
+Definition positive_isOrder := [derive isOrder for positive].
+HB.instance Definition _ := positive_isOrder.
 
 Lemma Z_leb_anti : antisymmetric Z.leb.
 Proof.
@@ -37,36 +29,17 @@ move=> ??; apply/orP.
 rewrite /is_true !Z.leb_le; lia.
 Qed.
 
-Definition Z_orderMixin :=
-  @LeOrderMixin _ Z.leb _ _ _
-                (fun _ _ => erefl) (fun _ _ => erefl) (fun _ _ => erefl)
-                Z_leb_anti Z_leb_trans Z_leb_total.
-Canonical Z_porderType :=
-  Eval hnf in POrderType tt Z Z_orderMixin.
-Canonical Z_latticeType :=
-  Eval hnf in LatticeType Z Z_orderMixin.
-Canonical Z_distrLatticeType :=
-  Eval hnf in DistrLatticeType Z Z_orderMixin.
-Canonical Z_orderType :=
-  Eval hnf in OrderType Z Z_orderMixin.
+Definition Z_isOrder :=
+  @Order.isOrder.Build Order.default_display Z Z.leb _ _ _
+    (fun _ _ => erefl) (fun _ _ => erefl) (fun _ _ => erefl)
+    Z_leb_anti Z_leb_trans Z_leb_total.
+HB.instance Definition _ := Z_isOrder.
 
-Canonical loc_newType := [newType for locations.loc_car].
-Definition loc_eqMixin := [eqMixin of locations.loc by <:].
-Canonical loc_eqType := EqType locations.loc loc_eqMixin.
-Definition loc_choiceMixin := [choiceMixin of locations.loc by <:].
-Canonical loc_choiceType := Eval hnf in ChoiceType locations.loc loc_choiceMixin.
-Definition loc_countMixin := [countMixin of locations.loc by <:].
-Canonical loc_countType := Eval hnf in CountType locations.loc loc_countMixin.
-Definition loc_porderMixin := [porderMixin of locations.loc by <:].
-Canonical loc_porderType :=
-  Eval hnf in POrderType tt locations.loc loc_porderMixin.
-Definition loc_orderMixin := [totalOrderMixin of locations.loc by <:].
-Canonical loc_latticeType :=
-  Eval hnf in LatticeType locations.loc loc_orderMixin.
-Canonical loc_distrLatticeType :=
-  Eval hnf in DistrLatticeType locations.loc loc_orderMixin.
-Canonical loc_orderType :=
-  Eval hnf in OrderType locations.loc loc_orderMixin.
+HB.instance Definition _ := [isNew for locations.loc_car].
+HB.instance Definition _ := [Equality of locations.loc by <:].
+HB.instance Definition _ := [Choice of locations.loc by <:].
+HB.instance Definition _ := [Countable of locations.loc by <:].
+HB.instance Definition _ := [Order of locations.loc by <:].
 
 Definition def_eq_decision (T : eqType) : base.RelDecision (@eq T) :=
   fun x y =>
@@ -110,7 +83,7 @@ apply/perm_sortP.
 - exact: Order.POrderTheory.le_anti.
 Qed.
 
-Lemma is_trueP (b : bool) : is_true b <-> Coq.Bool.Bool.Is_true b.
+Lemma is_trueP (b : bool) : is_true b <-> Stdlib.Bool.Bool.Is_true b.
 Proof. by case: b => /=; split. Qed.
 
 Lemma foldr_in (T : eqType) (S : T -> Type) xs :

@@ -773,7 +773,7 @@ iApply (wp_list_match_aux E vs (repr vs)); eauto.
   by iIntros (?) "?"; iApply wp_value.
 case: decide => ? //.
 iApply (wp_close_vars with "post").
-by rewrite map_length.
+by rewrite length_map.
 Qed.
 
 Lemma twp_eq_list `{EqDecision A} (f : val) (l1 l2 : list A) Φ E :
@@ -925,7 +925,7 @@ End Loc.
 Section Ordered.
 
 Import ssrbool seq ssreflect.order path deriving.instances.
-Variable (d : unit) (A : orderType d).
+Variable (d : Order.disp_t) (A : orderType d).
 Context `{!Repr A, !heapGS Σ}.
 Import Order Order.POrderTheory Order.TotalTheory.
 Implicit Types (x y z : A) (s : seqlexi_with d A).
