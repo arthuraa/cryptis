@@ -1,0 +1,21 @@
+opam-version: "2.0"
+name: "rocq-cryptis"
+version: "dev"
+license: "MIT"
+maintainer: "Arthur Azevedo de Amorim <arthur.aa@gmail.com>"
+authors: "Arthur Azevedo de Amorim, Amal Ahmed, Marco Gaboardi"
+synopsis: "Cryptis: Cryptographic Reasoning in Separation Logic"
+homepage: "https://github.com/arthuraa/cryptis"
+bug-reports: "https://github.com/arthuraa/cryptis/issues"
+dev-repo: "git+https://github.com/arthuraa/cryptis.git"
+
+depends: [
+  "rocq-prover" {= "9.0.0"}
+  "rocq-mathcomp-ssreflect" {= "2.4.0"}
+  "coq-deriving" {= "0.2.2"}
+  "coq-iris" {= "4.3.0"}
+  "coq-iris-heap-lang" {= "4.3.0"}
+]
+
+build: [make "-j%{jobs}%"]
+install: [make "install"]

@@ -1,15 +1,5 @@
 # Cryptis: Cryptographic Reasoning in Separation Logic
 
-Cryptis is known to compile with the following dependencies:
-
-- Coq v8.18
-- coq-iris v4.2
-- coq-mathcomp-ssreflect v1.18.0
-- coq-deriving v0.1.1
-
-If you use Nix, the accompanying flake file should be enough to install all the
-required dependencies.  To compile and check all proofs, simply type `make`.
-
 The material covered in the paper can be found in the following files:
 
 ## Core Library
@@ -35,3 +25,30 @@ The material covered in the paper can be found in the following files:
 - `conn/*`, `conn`: Authenticated connections
 - `store/*`, `store`: Authenticated key-value store (game is in its own file).
   
+## Building
+
+Cryptis is known to compile with the following dependencies:
+
+- rocq-prover v9.0.0
+- rocq-mathcomp-ssreflect v2.4.0
+- coq-deriving v0.2.2
+- coq-iris v4.3.0
+- coq-iris-heap-lang v4.3.0
+
+### Nix
+
+If you use Nix, the accompanying flake file should be enough to install all the
+required dependencies.  To compile and check all proofs, simply type `make`.
+
+### opam
+
+Make sure to add the Rocq opam repository to your switch:
+
+```opam repo add rocq-released https://rocq-prover.org/opam/released```
+
+Afterwards, Cryptis can be installed with:
+
+```opam install .```
+
+Alternatively, run `make builddep` to produce and install a dummy package that
+installs the correct dependencies and run `make`.
