@@ -132,16 +132,15 @@ iInv nroot as "[HP|>recv']".
   case: valid => /= ? _; lia.
 Qed.
 
-Definition connected kI kR rl cs n m : iProp :=
+Definition connected kI kR rl cs : iProp :=
   ⌜si_init cs = kI⌝ ∗
   ⌜si_resp cs = kR⌝ ∗
   ⌜cs_role cs = rl⌝ ∗
   wf_sess_info (cs_role cs) cs ∗
-  cs_ts cs ↦∗ [ #n; #m ] ∗
-  received_auth cs (cs_role cs) m.
+  ∃ n m, cs_ts cs ↦∗ [ #n; #m ] ∗ received_auth cs (cs_role cs) m.
 
-Lemma connected_public_key kI kR rl cs n m kt :
-  connected kI kR rl cs n m -∗
+Lemma connected_public_key kI kR rl cs kt :
+  connected kI kR rl cs -∗
   release_token (si_share_of rl cs) -∗
   public (TKey kt (si_key cs)) -∗
   ◇ compromised_session rl cs.
@@ -154,28 +153,28 @@ iPoseProof (senc_key_compromised_keyE with "s_key p_k") as "{p_k} >p_k".
 by iApply session_compromised.
 Qed.
 
-Lemma connected_released_session kI kR rl cs n m :
-  connected kI kR rl cs n m -∗
+Lemma connected_released_session kI kR rl cs :
+  connected kI kR rl cs -∗
   □ (▷ released_session cs → public (si_key cs)).
 Proof.
 iIntros "(_ & _ & _ & #sess & _)".
 by iDestruct "sess" as "(_ & _ & ? & sess)".
 Qed.
 
-Lemma connected_keyE kI kR rl cs n m :
-  connected kI kR rl cs n m -∗
+Lemma connected_keyE kI kR rl cs :
+  connected kI kR rl cs -∗
   ⌜kI = si_init cs⌝ ∗ ⌜kR = si_resp cs⌝ ∗ ⌜rl = cs_role cs⌝.
 Proof. by iIntros "(-> & -> & -> & _)". Qed.
 
-Lemma connected_ok kI kR rl cs n m :
-  connected kI kR rl cs n m -∗
+Lemma connected_ok kI kR rl cs :
+  connected kI kR rl cs -∗
   secret kI -∗
   secret kR -∗
   sign_key kI -∗
   sign_key kR -∗
   ◇ □ ¬ compromised_session rl cs.
 Proof.
-iIntros "(<- & <- & <- & #sess & _ & _) s_kI s_kR #signI #signR".
+iIntros "(<- & <- & <- & #sess & % & % & _ & _) s_kI s_kR #signI #signR".
 iDestruct "sess" as "(m_k & s_k & sess)".
 by iApply (session_not_compromised with "[//] s_kI s_kR").
 Qed.
@@ -187,7 +186,7 @@ Definition conn_pred rl φ kS t : iProp :=
     ([∗ list] t' ∈ ts, public t') ∗
     escrow nroot
       (received_auth si (swap_role rl) n)
-      (φ (si_init si) (si_resp si) si n ts ∗ received_auth si (swap_role rl) (S n)).
+      (φ (si_init si) (si_resp si) si ts ∗ received_auth si (swap_role rl) (S n)).
 
 Lemma session_failed_failure rl si :
   compromised_session rl si  ⊢ failure (si_init si) (si_resp si).
