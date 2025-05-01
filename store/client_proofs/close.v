@@ -34,11 +34,13 @@ Lemma wp_client_close c kI kR cs :
 Proof.
 iIntros "#chan_c (_ & _ & _ & #?)".
 iIntros "!> %Φ client post".
-iDestruct "client" as "(%n & %db & conn & version & #db_at & state)".
+iDestruct "client" as "(%db & conn & ready & state)".
+iPoseProof (RPC.client_connected_keys with "conn") as "#[-> ->]".
 wp_lam. wp_pures.
 wp_apply (RPC.wp_close with "[$conn]"); eauto.
-iIntros "(dis & pub)". iApply "post".
-by iFrame.
+iIntros "pub". iApply "post". iFrame. 
+iDestruct "ready" as "[#?|ready]"; eauto.
+iLeft. by iApply Conn.session_failed_failure.
 Qed.
 
 End Verif.

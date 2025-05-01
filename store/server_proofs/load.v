@@ -6,7 +6,7 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta nown.
 From cryptis Require Import cryptis primitives tactics.
-From cryptis Require Import role conn rpc.
+From cryptis Require Import role iso_dh conn rpc.
 From cryptis.store Require Import impl shared alist db.
 
 Set Implicit Arguments.
@@ -39,33 +39,28 @@ iPoseProof (store_ctx_rpc_ctx with "ctx") as "?".
 wp_lam; wp_pures.
 wp_apply RPC.wp_handle; last by eauto.
 do 3!iSplit => //. clear Φ.
-iIntros "!> %n %ts !> %Φ (#p_ts & #inv_ts & %db & #p_db & db & #db_at) post".
+iIntros "!> %ts !> %Φ (#p_ts & inv_ts & %db & #p_db & db & ready) post".
 wp_pures. wp_list_match => [t1 ->| ?]; wp_pures; last first.
 { iDestruct "inv_ts" as "[fail|(% & -> & ?)]" => //.
   iApply ("post" $! None).
-  iModIntro. rewrite /=. iSplit; eauto. iFrame.
-  iSplit; eauto. }
+  iModIntro. iSplit; eauto. by iFrame. }
 wp_bind (SAList.find _ _). iApply (SAList.wp_find with "db") => //.
 iIntros "!> db". rewrite lookup_fmap.
-case db_t1: (db !! t1) => [t2|]; wp_pures; last first.
-{ iApply ("post" $! None). iFrame. iModIntro. iSplit => //.
-  iDestruct "db_at" as "[fail|db_at]"; eauto.
-  iDestruct "inv_ts" as "[fail|(% & %e & load_at)]"; eauto.
-  iRight. iApply (DB.db_at_op_at with "db_at load_at"). }
+iAssert (compromised_session Resp cs ∨ DB.load_call skI skR N t1)%I
+  with "[inv_ts]" as "inv_ts".
+{ iDestruct "inv_ts" as "[?|(%t1' & %e & inv_ts)]"; eauto.
+  case: e => <-. by iFrame. }
+iMod (DB.load_callE with "ready inv_ts") as "(%t2 & #db_t1 & ready & load_at)".
+case db_t1: (db !! t1) => [t2'|]; wp_pures; last first.
+{ iDestruct "db_t1" as "[fail|%]" => //.
+  iApply ("post" $! None). iFrame. by iModIntro. }
 wp_list. wp_pures. iModIntro.
 iApply ("post" $! (Some _)). iFrame. do !iSplit; eauto.
 - rewrite /public_db big_sepM_forall /=.
-  by iDestruct ("p_db" $! t1 t2 with "[//]") as "[??]".
-- iDestruct "inv_ts" as "[fail|(% & %e & load_at)]"; eauto.
-  case: e => <-.
-  iDestruct "db_at" as "[fail|db_at]"; eauto.
-  iRight. iExists t1, t2. do 2!iSplit => //; eauto.
-  iApply DB.load_at_stored_at; eauto.
-  iApply DB.stored_atI; eauto.
-- iDestruct "inv_ts" as "[fail|(% & %e & load_at)]"; eauto.
-  case: e => <-.
-  iDestruct "db_at" as "[fail|db_at]"; eauto.
-  iRight. iApply (DB.db_at_op_at with "db_at load_at").
+  by iDestruct ("p_db" $! t1 t2' with "[//]") as "[??]".
+- iDestruct "db_t1" as "[?|%e]"; eauto.
+  case: e => -> in db_t1 *.
+  iDestruct "load_at" as "[?|load_at]"; eauto. iRight. by iFrame.
 Qed.
 
 End Verif.

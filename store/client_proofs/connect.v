@@ -45,10 +45,11 @@ iIntros "#chan_c #ctx #ctx'".
 iPoseProof (store_ctx_rpc_ctx with "ctx'") as "?".
 iIntros "#p_ekI #p_ekR".
 iIntros "!> %Φ client post".
-iDestruct "client" as "(%n & %db & dis & version & #db_at & state)".
+iDestruct "client" as "(%db & ready & state)".
 wp_lam. wp_pures.
-iApply (RPC.wp_connect True%I with "[//] [//] [//] [//] [//] [$]") => //.
-iIntros "!> %cs (conn & _)".
+iApply (RPC.wp_connect (DB.db_client_ready kI kR N db)
+         with "[//] [//] [//] [//] [//] [$]") => //.
+iIntros "!> %cs (conn & ready)".
 iApply "post".
 by iFrame.
 Qed.

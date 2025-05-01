@@ -60,7 +60,7 @@ Lemma wp_server_conn_handler c kI kR cs vdb vlock γlock :
   {{{ RET #(); True }}}.
 Proof.
 iIntros "#chan_c #lock #? #ctx".
-iIntros "!> %Φ ((%n & conn & db) & locked) post".
+iIntros "!> %Φ ((conn & db) & locked) post".
 iPoseProof (RPC.server_connected_keys with "conn") as "#[-> ->]".
 iPoseProof (store_ctx_rpc_ctx with "[//]") as "?".
 wp_lam. wp_pures.
@@ -71,12 +71,11 @@ wp_apply (RPC.wp_server with "[$conn db]").
 { iSplit => //. iSplit => //. iSplit; last first.
   { rewrite /=. do !iSplit => //. }
   by []. }
-iIntros "(%n' & dis & #? & %db & #p_db & vdb & #db_at)".
+iIntros "(dis & %db & #p_db & vdb & ready)".
 wp_pures.
-wp_apply (release_spec with "[$locked dis vdb]") => //.
-iSplit => //. iExists n'. iFrame.
-iSplit => //. iDestruct "db_at" as "[fail|db_at]"; eauto.
-iLeft. by iApply Conn.session_failed_failure.
+rewrite Conn.session_failed_failure.
+wp_apply (release_spec with "[$locked dis vdb ready]") => //.
+iSplit => //. by iFrame.
 Qed.
 
 Lemma wp_server_find_client ss skI :
@@ -161,19 +160,19 @@ wp_pures.
 wp_bind (acquire _).
 iApply acquire_spec => //.
 iIntros "!> (locked & dis)".
-iDestruct "dis" as "(%n & %db & dis & #p_db & vdb & #db_at)".
+iDestruct "dis" as "(%db & #p_db & vdb & ready)".
 iAssert (sign_key (ss_key ss)) as "#?".
 { by iDestruct "server" as "(% & % & ? & _)". }
 wp_pures.
-wp_apply (RPC.wp_confirm with "[] [] [] [$dis]") => //.
+wp_apply (RPC.wp_confirm (DB.db_server_ready skA (ss_key ss) N db)
+           with "[] [] [] [$ready]") => //.
 { do 3!iSplit => //. }
-iIntros "%cs {db_at} (conn & #db_at)".
+iIntros "%cs (conn & ready)".
 wp_pures.
-iApply (wp_fork with "[conn vdb locked]").
+iApply (wp_fork with "[conn vdb locked ready]").
 { iModIntro.
   wp_apply (wp_server_conn_handler
-             with "[] [] [] [] [$conn $locked $vdb]") => //.
-  by iSplit => //. }
+             with "[] [] [] [] [$conn $locked $vdb $ready]") => //. }
 iApply "post".
 by iFrame.
 Qed.

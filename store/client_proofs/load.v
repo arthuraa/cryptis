@@ -43,27 +43,30 @@ Lemma wp_client_load c kI kR cs t1 t2 :
       (compromised_session Init cs ∨ ⌜t2' = t2⌝) }}}.
 Proof.
 iIntros "#chan_c #? #ctx #p_t1 !> %Φ [client mapsto] post".
-iDestruct "client" as "(%n & %db & conn & version & #db_at & state)".
+iDestruct "client" as "(%db & conn & ready & state)".
 wp_lam; wp_pures. wp_list.
-iMod (DB.load_client t1 with "version db_at")
-  as "(#load_at & version & db)".
-iDestruct "ctx" as "(_ & load & _ & ctx)".
-wp_apply (RPC.wp_call with "[$conn]").
+iMod (DB.load_client t1 with "ready state mapsto")
+  as "(waiting & load & state & mapsto)".
+iPoseProof (DB.db_state_mapsto with "state mapsto") as "%db_t1".
+iDestruct "ctx" as "(_ & ? & _ & ctx)".
+wp_apply (RPC.wp_call with "[$conn load]").
 { do 4!iSplit => //=; first by eauto.
-  iSplit => //. iRight. iExists _. by eauto. }
-iIntros "%ts' (conn & #inv_ts & p_ts)". wp_pures.
+  iSplit => //.
+  iDestruct "load" as "[?|load]"; eauto.
+  iRight. iExists _. by eauto. }
+iIntros "%ts' (conn & inv_ts & p_ts)". wp_pures.
 rewrite [repr_list ts']repr_listE.
-iDestruct "inv_ts" as "[fail|inv_ts]".
+iDestruct "inv_ts" as "[#fail|inv_ts]".
 - wp_pures. case: ts' => [|t ts]; wp_pures.
-  + iApply "post". iFrame. rewrite public_TInt. by eauto.
+  + iApply "post". iFrame. rewrite public_TInt. by eauto 10.
   + rewrite /=. iDestruct "p_ts" as "[p_t _]".
     iApply "post". iFrame. by eauto.
-iDestruct "inv_ts" as "(%t1' & %t2' & -> & load_at' & stored_at)".
-iPoseProof (DB.op_at_agree with "load_at load_at'") as "%e".
-case: e => <-.
-iPoseProof (DB.client_view_stored_at with "db state mapsto stored_at") as "->".
+iDestruct "inv_ts" as "(%t2' & -> & load_at')".
 rewrite /=. iDestruct "p_ts" as "[? _]".
-wp_pures. iApply "post". iFrame. by eauto.
+wp_pures. iApply "post". iFrame.
+iDestruct "waiting" as "[#?|waiting]"; eauto.
+iPoseProof (DB.load_respE with "waiting load_at'") as "[? ->]" => //.
+by eauto.
 Qed.
 
 End Verif.

@@ -30,6 +30,7 @@ tactics.v
 session.v
 dh.v
 attacker_types.v
+replica.v
 
 # Case studies
 

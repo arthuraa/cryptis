@@ -38,31 +38,27 @@ iPoseProof (store_ctx_rpc_ctx with "[//]") as "?".
 wp_lam. wp_pures.
 wp_apply RPC.wp_handle; last by eauto.
 do 3!iSplit => //. clear Φ.
-iIntros "!> %n %ts !> %Φ (#p_ts & #inv_ts & %db & #p_db & db & #db_at) post".
+iIntros "!> %ts !> %Φ (#p_ts & inv_ts & %db & #p_db & db & ready) post".
 wp_list_match => [t1 t2 ->| ?]; wp_pures; last first.
 { iApply ("post" $! None). iFrame.
-  iDestruct "inv_ts" as "[fail|inv_ts]"; eauto.
-  by iDestruct "inv_ts" as "(% & % & -> & ?)". }
+  iDestruct "inv_ts" as "[fail|inv_ts]"; eauto. }
 rewrite /=. iDestruct "p_ts" as "(p_t1 & p_t2 & _)".
 wp_bind (SAList.find _ _). iApply (SAList.wp_find with "db") => //.
 iIntros "!> db". rewrite lookup_fmap.
 wp_bind (match: _ with InjL <> => _ | InjR <> => _ end)%E.
 iAssert (compromised_session Resp cs ∨
-           DB.db_at kI (N.@"client".@kR.@"db")
-             (S n) (DB.op_app db (Create t1 t2)))%I
-  as "#db_at'".
+           DB.create_call kI kR N t1 t2)%I
+  with "[inv_ts]" as "inv_ts".
 { iDestruct "inv_ts" as "[?|inv_ts]"; eauto.
   iDestruct "inv_ts" as "(%t1' & %t2' & %e & create_at)".
-  case: e => <- <-.
-  iDestruct "db_at" as "[?|db_at]"; eauto.
-  iRight. by iApply (DB.db_at_create_at with "db_at"). }
+  case: e => <- <-. by iFrame. }
+iMod (DB.create_callE with "ready inv_ts") as "(ready & inv_ts & #db_t1)".
 iApply (wp_wand _ _ _ (λ v,
   ∃ (b : bool), ⌜v = #((if b then 1 else 0) : Z)⌝ ∗
-                server_db_connected' N kI kR cs vdb (S n)
-  ) with "[db]")%I.
+                server_db_connected' N kI kR cs vdb
+  ) with "[db ready]")%I.
 { case db_t1: (db !! t1) => [t2'|]; wp_pures.
-  { iExists false; iModIntro; iFrame.
-    by rewrite /= db_t1; eauto. }
+  { iExists false; iModIntro; iFrame. rewrite /= db_t1. by eauto. }
   wp_bind (SAList.insert _ _ _).
   iApply (SAList.wp_insert with "db").
   iIntros "!> db". rewrite -fmap_insert.
@@ -76,7 +72,7 @@ wp_bind (tint _). iApply wp_tint.
 wp_list.
 wp_pures.
 iApply ("post" $! (Some _)).
-iModIntro. rewrite /= public_TInt. by iSplit; eauto.
+iModIntro. rewrite /= public_TInt. iFrame. by iSplit; eauto.
 Qed.
 
 End Verif.

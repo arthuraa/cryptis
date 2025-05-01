@@ -37,15 +37,12 @@ Instance scs_repr : Repr server_client_state :=
 
 Class storeGS Σ := StoreGS {
   storeGS_db  : dbGS Σ;
-  storeGS_rpc : RPC.rpcGS Σ;
 }.
 
 Local Existing Instance storeGS_db.
-Local Existing Instance storeGS_rpc.
 
 Definition storeΣ := #[
-  dbΣ;
-  RPC.rpcΣ
+  dbΣ
 ].
 
 Global Instance subG_storeGS Σ : subG storeΣ Σ → storeGS Σ.
@@ -68,17 +65,14 @@ Implicit Types (failed : bool).
 
 Variable N : namespace.
 
-Definition db_disconnected kI kR : iProp := ∃ n db,
-  RPC.client_disconnected N kI kR n ∗
-  DB.db_version kI (N.@"client".@kR.@"db") n ∗
-  DB.db_at kI (N.@"client".@kR.@"db") n db ∗
-  DB.db_state kI (N.@"client".@kR.@"db") db.
+Definition db_disconnected kI kR : iProp := ∃ db,
+  (Conn.failure kI kR ∨ DB.db_client_ready kI kR N db) ∗
+  DB.db_state kI kR N db.
 
-Definition db_connected kI kR cs : iProp := ∃ n db,
-  RPC.client_connected N kI kR cs n ∗
-  DB.db_version kI (N.@"client".@kR.@"db") n ∗
-  DB.db_at kI (N.@"client".@kR.@"db") n db ∗
-  DB.db_state kI (N.@"client".@kR.@"db") db.
+Definition db_connected kI kR cs : iProp := ∃ db,
+  RPC.client_connected kI kR cs ∗
+  (compromised_session Init cs ∨ DB.db_client_ready kI kR N db) ∗
+  DB.db_state kI kR N db.
 
 Lemma db_connected_ok kI kR cs :
   db_connected kI kR cs -∗
@@ -88,15 +82,15 @@ Lemma db_connected_ok kI kR cs :
   sign_key kR -∗
   ◇ □ ¬ compromised_session Init cs.
 Proof.
-iIntros "(% & % & conn & _ & _ & _)".
+iIntros "(% & conn & _ & _)".
 iApply (RPC.client_connected_ok with "conn").
 Qed.
 
 Definition rem_mapsto kI kR t1 t2 : iProp :=
-  DB.mapsto kI (N.@"client".@kR.@"db") t1 t2.
+  DB.mapsto kI kR N t1 t2.
 
 Definition rem_free_at kI kR T : iProp :=
-  DB.free_at kI (N.@"client".@kR.@"db") T.
+  DB.free_at kI kR N T.
 
 Lemma rem_free_at_diff kI kR T1 T2 :
   T1 ⊆ T2 →
@@ -113,14 +107,10 @@ Proof.
 iIntros "%sub kI_token".
 rewrite (term_token_difference _ _ _ sub).
 iDestruct "kI_token" as "[kI_token ?]". iFrame.
-iMod (RPC.client_alloc kI (kR := kR) with "kI_token")
-  as "[dis kI_token]" => //.
-{ solve_ndisj. }
-iMod (DB.alloc _ (N := N.@"client".@kR.@"db") with "kI_token")
-  as "(version & state & free & #server_view & kI_token)".
+iMod (DB.client_alloc _ (N := N) with "kI_token")
+  as "(ready & state & free & kI_token)".
 { solve_ndisj. }
 iModIntro. iSplitR "free".
-- iExists 0. iFrame.
 - by iFrame.
 - by iFrame.
 Qed.
@@ -141,23 +131,22 @@ case: (decide (t1' = t1)) => [-> {t1'} | ne].
 - by rewrite lookup_insert_ne //.
 Qed.
 
-Definition server_db_connected' kI kR cs vdb n : iProp := ∃ db,
+Definition server_db_connected' kI kR cs vdb : iProp := ∃ db,
   public_db db ∗
   SAList.is_alist vdb (repr <$> db) ∗
-  (compromised_session Resp cs ∨ DB.db_at kI (N.@"client".@kR.@"db") n db).
+  (compromised_session Resp cs ∨ DB.db_server_ready kI kR N db).
 
-Definition server_db_connected kI kR cs vdb : iProp := ∃ n,
-  RPC.server_connected N kI kR cs n ∗
-  server_db_connected' kI kR cs vdb n.
+Definition server_db_connected kI kR cs vdb : iProp :=
+  RPC.server_connected kI kR cs ∗
+  server_db_connected' kI kR cs vdb.
 
 Definition server_handler kI kR cs vdb h : iProp :=
-  RPC.wf_handler (λ n, server_db_connected' kI kR cs vdb n) kI kR cs N h.
+  RPC.wf_handler (server_db_connected' kI kR cs vdb) kI kR cs h.
 
-Definition server_db_disconnected kI kR vdb : iProp := ∃ n db,
-  RPC.server_disconnected N kI kR n ∗
+Definition server_db_disconnected kI kR vdb : iProp := ∃ db,
   public_db db ∗
   SAList.is_alist vdb (repr <$> db) ∗
-  (Conn.failure kI kR ∨ DB.db_at kI (N.@"client".@kR.@"db") n db).
+  (Conn.failure kI kR ∨ DB.db_server_ready kI kR N db).
 
 Lemma server_db_alloc kI kR vdb E :
   ↑N.@"server".@kI ⊆ E →
@@ -167,11 +156,10 @@ Lemma server_db_alloc kI kR vdb E :
   server_db_disconnected kI kR vdb.
 Proof.
 iIntros "%sub token vdb".
-iMod (RPC.server_alloc with "token") as "(dis & token)"; eauto.
-iModIntro. iFrame "token". iExists 0, ∅.
+iMod (DB.server_alloc with "token") as "(dis & token)"; eauto.
+iModIntro. iFrame "token". iExists ∅.
 iFrame.
-iSplit; first by rewrite /public_db big_sepM_empty.
-iFrame. iRight. iLeft. do !iSplit => //.
+by rewrite /public_db big_sepM_empty.
 Qed.
 
 Definition server ss : iProp := ∃ accounts E,
@@ -195,26 +183,23 @@ iFrame. iSplit => //. iSplit => //.
 iPureIntro. move=> *. solve_ndisj.
 Qed.
 
-Definition store_call_pred kI kR si n ts : iProp := ∃ t1 t2,
-  ⌜ts = [t1; t2]⌝ ∗
-  DB.store_at kI (N.@"client".@kR.@"db") n t1 t2.
+Definition store_call_pred kI kR si ts : iProp :=
+  ∃ t1 t2, ⌜ts = [t1; t2]⌝ ∗ DB.store_call kI kR N t1 t2.
 
-Definition store_resp_pred kI kR si n ts : iProp := True.
+Definition store_resp_pred kI kR si ts : iProp :=
+  DB.store_resp kI kR N.
 
-Definition load_call_pred kI kR si n ts : iProp :=
-  ∃ t1, ⌜ts = [t1]⌝ ∗
-        DB.load_at kI (N.@"client".@kR.@"db") n t1.
+Definition load_call_pred kI kR si ts : iProp :=
+  ∃ t1, ⌜ts = [t1]⌝ ∗ DB.load_call kI kR N t1.
 
-Definition load_resp_pred kI kR si n ts : iProp :=
-  ∃ t1 t2, ⌜ts = [t2]⌝ ∗
-    DB.load_at kI (N.@"client".@kR.@"db") n t1 ∗
-    DB.stored_at kI (N.@"client".@kR.@"db") (S n) t1 t2.
+Definition load_resp_pred kI kR si ts : iProp :=
+  ∃ t2, ⌜ts = [t2]⌝ ∗ DB.load_resp kI kR N t2.
 
-Definition create_call_pred kI kR si n ts : iProp := ∃ t1 t2,
-  ⌜ts = [t1; t2]⌝ ∗
-  DB.create_at kI (N.@"client".@kR.@"db") n t1 t2.
+Definition create_call_pred kI kR si ts : iProp :=
+  ∃ t1 t2, ⌜ts = [t1; t2]⌝ ∗ DB.create_call kI kR N t1 t2.
 
-Definition create_resp_pred kI kR si n ts : iProp := True.
+Definition create_resp_pred kI kR si ts : iProp :=
+  DB.create_resp kI kR N.
 
 Definition store_ctx : iProp :=
   RPC.rpc_pred N "store" store_call_pred store_resp_pred ∗
