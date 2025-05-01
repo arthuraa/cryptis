@@ -3,9 +3,10 @@
 *.vo
 *.vok
 *.vos
-*CoqMakefile*
+*RocqMakefile*
 .lia.cache
 *.glob
 .coqdeps.d
 .envrc
 .direnv
+builddep
