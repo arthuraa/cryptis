@@ -33,27 +33,20 @@ Lemma wp_client_store c kI kR cs t1 t2 t2' :
   store_ctx N -∗
   public t1 -∗
   public t2' -∗
-  {{{ db_connected N kI kR cs ∗ rem_mapsto N kI kR t1 t2 }}}
+  {{{ db_connected N kI kR cs ∗ db_mapsto N kI kR t1 t2 }}}
     Client.store N c (repr cs) t1 t2'
-  {{{ RET #(); db_connected N kI kR cs ∗ rem_mapsto N kI kR t1 t2' }}}.
+  {{{ RET #(); db_connected N kI kR cs ∗ db_mapsto N kI kR t1 t2' }}}.
 Proof.
 iIntros "#chan_c #? #ctx #p_t1 #p_t2 !> %Φ [client mapsto] post".
-iDestruct "client" as "(%db & conn & ready & state)".
+iDestruct "client" as "(conn & db)".
+iMod (store_call _ t2' with "db mapsto") as "(store & mapsto & waiting)".
 wp_lam. wp_pures. wp_list.
-iMod (DB.store_client t2' with "ready state mapsto")
-  as "(waiting & store & state & mapsto)".
 iPoseProof (store_ctx_store with "[//]") as "?".
 iPoseProof (store_ctx_rpc_ctx with "[//]") as "?".
-wp_apply (RPC.wp_call with "[$conn store]").
-{ do 4!iSplit => //=; first by eauto.
-  iSplit => //.
-  iDestruct "store" as "[#?|store]"; eauto.
-  iRight. iExists _, _. by eauto. }
+wp_apply (RPC.wp_call with "[$conn $store]").
+{ do 4!iSplit => //=; first by eauto. }
 iIntros "%ts' (conn & store & _)". wp_pures. iApply "post".
-iFrame.
-iDestruct "waiting" as "[?|waiting]"; eauto.
-iDestruct "store" as "[?|store]"; eauto.
-iPoseProof (DB.store_respE with "waiting store") as "?". by iFrame.
+iFrame. by iApply "waiting".
 Qed.
 
 End Verif.

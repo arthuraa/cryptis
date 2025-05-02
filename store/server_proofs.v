@@ -164,7 +164,7 @@ iDestruct "dis" as "(%db & #p_db & vdb & ready)".
 iAssert (sign_key (ss_key ss)) as "#?".
 { by iDestruct "server" as "(% & % & ? & _)". }
 wp_pures.
-wp_apply (RPC.wp_confirm (DB.db_server_ready skA (ss_key ss) N db)
+wp_apply (RPC.wp_confirm (db_server_ready N skA (ss_key ss) db)
            with "[] [] [] [$ready]") => //.
 { do 3!iSplit => //. }
 iIntros "%cs (conn & ready)".

@@ -34,27 +34,22 @@ Lemma wp_client_create c kI kR cs t1 t2 :
   public t1 -∗
   public t2 -∗
   {{{ db_connected N kI kR cs ∗
-      rem_free_at N kI kR {[t1]} }}}
+      db_free_at N kI kR {[t1]} }}}
     Client.create N c (repr cs) t1 t2
   {{{ RET #();
       db_connected N kI kR cs ∗
-      rem_mapsto N kI kR t1 t2 }}}.
+      db_mapsto N kI kR t1 t2 }}}.
 Proof.
 iIntros "#chan_c #? (_ & _ & #create & #ctx) #p_t1 #p_t2".
 iIntros "!> %Φ [client free] post".
-iDestruct "client" as "(%db & conn & ready & state)".
-iMod (DB.create_client t1 t2 with "ready state free")
-  as "(waiting & created & state & mapsto)".
+iDestruct "client" as "(conn & db)".
+iMod (create_call _ t1 t2 with "db free")
+  as "(call & mapsto & waiting)".
 wp_lam. wp_pures. wp_list.
-wp_apply (RPC.wp_call with "[$conn created]").
-{ do !iSplit => //.
-  iDestruct "created" as "[#?|created]"; eauto.
-  iRight. iExists _, _. by eauto. }
+wp_apply (RPC.wp_call with "[$conn $call]").
+{ do !iSplit => //. }
 iIntros "%ts (conn & created & _)". wp_pures.
-iApply "post". iFrame.
-iDestruct "waiting" as "[?|waiting]"; eauto.
-iDestruct "created" as "[?|created]"; eauto.
-iPoseProof (DB.create_respE with "waiting created") as "?". by eauto.
+iApply "post". iFrame. iModIntro. by iApply "waiting".
 Qed.
 
 End Verif.

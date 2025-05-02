@@ -34,39 +34,31 @@ Lemma wp_client_load c kI kR cs t1 t2 :
   store_ctx N -∗
   public t1 -∗
   {{{ db_connected N kI kR cs ∗
-      rem_mapsto N kI kR t1 t2 }}}
+      db_mapsto N kI kR t1 t2 }}}
     Client.load N c (repr cs) t1
   {{{ t2', RET (repr t2');
       db_connected N kI kR cs ∗
-      rem_mapsto N kI kR t1 t2 ∗
+      db_mapsto N kI kR t1 t2 ∗
       public t2' ∗
       (compromised_session Init cs ∨ ⌜t2' = t2⌝) }}}.
 Proof.
 iIntros "#chan_c #? #ctx #p_t1 !> %Φ [client mapsto] post".
-iDestruct "client" as "(%db & conn & ready & state)".
+iDestruct "client" as "(conn & db)".
+iMod (load_call _ t1 with "db mapsto") as "(load & mapsto & waiting)".
 wp_lam; wp_pures. wp_list.
-iMod (DB.load_client t1 with "ready state mapsto")
-  as "(waiting & load & state & mapsto)".
-iPoseProof (DB.db_state_mapsto with "state mapsto") as "%db_t1".
 iDestruct "ctx" as "(_ & ? & _ & ctx)".
-wp_apply (RPC.wp_call with "[$conn load]").
-{ do 4!iSplit => //=; first by eauto.
-  iSplit => //.
-  iDestruct "load" as "[?|load]"; eauto.
-  iRight. iExists _. by eauto. }
+wp_apply (RPC.wp_call with "[$conn $load]").
+{ do 4!iSplit => //=; by eauto. }
 iIntros "%ts' (conn & inv_ts & p_ts)". wp_pures.
-rewrite [repr_list ts']repr_listE.
-iDestruct "inv_ts" as "[#fail|inv_ts]".
-- wp_pures. case: ts' => [|t ts]; wp_pures.
-  + iApply "post". iFrame. rewrite public_TInt. by eauto 10.
-  + rewrite /=. iDestruct "p_ts" as "[p_t _]".
-    iApply "post". iFrame. by eauto.
-iDestruct "inv_ts" as "(%t2' & -> & load_at')".
-rewrite /=. iDestruct "p_ts" as "[? _]".
-wp_pures. iApply "post". iFrame.
-iDestruct "waiting" as "[#?|waiting]"; eauto.
-iPoseProof (DB.load_respE with "waiting load_at'") as "[? ->]" => //.
-by eauto.
+iPoseProof ("waiting" with "inv_ts") as "(res & db)".
+iApply (wp_wand _ _ _ (λ v : val, ⌜v = default (TInt 0) (head ts')⌝)%I).
+{ rewrite [repr_list ts']repr_listE.
+  by case: ts' => [|t2' ?] /=; wp_pures. }
+iIntros "% ->". iApply "post". iFrame.
+iDestruct "res" as "[#?|->]".
+- iSplit; eauto. case: ts' => [|??] //=; first by rewrite public_TInt.
+  by iDestruct "p_ts" as "[??]".
+- iSplit; eauto. by iDestruct "p_ts" as "[??]".
 Qed.
 
 End Verif.

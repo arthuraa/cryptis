@@ -45,34 +45,15 @@ wp_list_match => [t1 t2 ->| ?]; wp_pures; last first.
 rewrite /=. iDestruct "p_ts" as "(p_t1 & p_t2 & _)".
 wp_bind (SAList.find _ _). iApply (SAList.wp_find with "db") => //.
 iIntros "!> db". rewrite lookup_fmap.
-wp_bind (match: _ with InjL <> => _ | InjR <> => _ end)%E.
-iAssert (compromised_session Resp cs ∨
-           DB.create_call kI kR N t1 t2)%I
-  with "[inv_ts]" as "inv_ts".
-{ iDestruct "inv_ts" as "[?|inv_ts]"; eauto.
-  iDestruct "inv_ts" as "(%t1' & %t2' & %e & create_at)".
-  case: e => <- <-. by iFrame. }
-iMod (DB.create_callE with "ready inv_ts") as "(ready & inv_ts & #db_t1)".
-iApply (wp_wand _ _ _ (λ v,
-  ∃ (b : bool), ⌜v = #((if b then 1 else 0) : Z)⌝ ∗
-                server_db_connected' N kI kR cs vdb
-  ) with "[db ready]")%I.
-{ case db_t1: (db !! t1) => [t2'|]; wp_pures.
-  { iExists false; iModIntro; iFrame. rewrite /= db_t1. by eauto. }
-  wp_bind (SAList.insert _ _ _).
-  iApply (SAList.wp_insert with "db").
-  iIntros "!> db". rewrite -fmap_insert.
-  wp_pures.
-  iFrame. iExists true. rewrite /= db_t1.
-  iModIntro. do !iSplit => //.
-  by iApply public_db_insert. }
-iIntros "% (%b & -> & db)".
-wp_pures.
-wp_bind (tint _). iApply wp_tint.
-wp_list.
-wp_pures.
-iApply ("post" $! (Some _)).
-iModIntro. rewrite /= public_TInt. iFrame. by iSplit; eauto.
+case db_t1: (db !! t1) => [t2'|]; wp_pures.
+{ iApply ("post" $! None). by iFrame. }
+iMod (create_resp with "ready inv_ts") as "[ready inv_ts]".
+wp_bind (SAList.insert _ _ _).
+iApply (SAList.wp_insert with "db").
+iIntros "!> db". rewrite -fmap_insert. wp_pures.
+wp_list. wp_pures. iApply ("post" $! (Some _)).
+iModIntro. rewrite /= public_TInt. iFrame. iSplit => //.
+by iApply public_db_insert.
 Qed.
 
 End Verif.

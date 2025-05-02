@@ -41,26 +41,16 @@ wp_apply RPC.wp_handle; last by eauto.
 do 3!iSplit => //. clear Φ.
 iIntros "!> %ts !> %Φ (#p_ts & inv_ts & %db & #p_db & db & ready) post".
 wp_pures. wp_list_match => [t1 ->| ?]; wp_pures; last first.
-{ iDestruct "inv_ts" as "[fail|(% & -> & ?)]" => //.
-  iApply ("post" $! None).
-  iModIntro. iSplit; eauto. by iFrame. }
+{ iApply ("post" $! None). by iFrame. }
 wp_bind (SAList.find _ _). iApply (SAList.wp_find with "db") => //.
 iIntros "!> db". rewrite lookup_fmap.
-iAssert (compromised_session Resp cs ∨ DB.load_call skI skR N t1)%I
-  with "[inv_ts]" as "inv_ts".
-{ iDestruct "inv_ts" as "[?|(%t1' & %e & inv_ts)]"; eauto.
-  case: e => <-. by iFrame. }
-iMod (DB.load_callE with "ready inv_ts") as "(%t2 & #db_t1 & ready & load_at)".
+iMod (load_resp with "ready inv_ts") as "[ready inv_ts]".
 case db_t1: (db !! t1) => [t2'|]; wp_pures; last first.
-{ iDestruct "db_t1" as "[fail|%]" => //.
-  iApply ("post" $! None). iFrame. by iModIntro. }
+{ iApply ("post" $! None). by iFrame. }
 wp_list. wp_pures. iModIntro.
 iApply ("post" $! (Some _)). iFrame. do !iSplit; eauto.
-- rewrite /public_db big_sepM_forall /=.
-  by iDestruct ("p_db" $! t1 t2' with "[//]") as "[??]".
-- iDestruct "db_t1" as "[?|%e]"; eauto.
-  case: e => -> in db_t1 *.
-  iDestruct "load_at" as "[?|load_at]"; eauto. iRight. by iFrame.
+rewrite /public_db big_sepM_forall /=.
+by iDestruct ("p_db" $! t1 t2' with "[//]") as "[??]".
 Qed.
 
 End Verif.

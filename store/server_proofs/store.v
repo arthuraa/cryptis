@@ -40,22 +40,14 @@ do 3!iSplit => //. clear Φ.
 iIntros "!> %ts !> %Φ (#p_ts & inv_ts & %db & #p_db & db & ready) post".
 wp_pures.
 wp_list_match => [t1 t2 ->|?]; wp_pures; last first.
-{ iDestruct "inv_ts" as "[fail|inv_ts]"; last first.
-  { by iDestruct "inv_ts" as "(% & % & -> & ?)". }
-  wp_list. iApply ("post" $! None). iModIntro. iFrame.
-  by rewrite /=. }
+{ iApply ("post" $! None). by iFrame. }
+iMod (store_resp with "ready inv_ts") as "[ready inv_ts]".
 wp_bind (SAList.insert _ _ _).
 iApply (SAList.wp_insert with "db").
 iIntros "!> db". rewrite -fmap_insert.
 wp_pures. wp_list. wp_pures. iApply ("post" $! (Some _)).
-iAssert (compromised_session Resp cs ∨ DB.store_call kI kR N t1 t2)%I
-  with "[inv_ts]" as "inv_ts".
-{ iDestruct "inv_ts" as "[?|(% & % & %e & inv_ts)]"; eauto.
-  case: e => <- <-. by eauto. }
-iMod (DB.store_callE with "ready inv_ts") as "[ready inv_ts]".
-rewrite /=.
-iModIntro. iFrame. iSplitL; first by eauto.
-iDestruct "p_ts" as "(? & ? & _)".
+iFrame. rewrite /= public_TInt. iModIntro.
+iDestruct "p_ts" as "(? & ? & _)". iSplit => //.
 by iApply public_db_insert.
 Qed.
 

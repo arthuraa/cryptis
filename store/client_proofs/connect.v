@@ -47,7 +47,7 @@ iIntros "#p_ekI #p_ekR".
 iIntros "!> %Φ client post".
 iDestruct "client" as "(%db & ready & state)".
 wp_lam. wp_pures.
-iApply (RPC.wp_connect (DB.db_client_ready kI kR N db)
+iApply (RPC.wp_connect (db_client_ready N kI kR db)
          with "[//] [//] [//] [//] [//] [$]") => //.
 iIntros "!> %cs (conn & ready)".
 iApply "post".

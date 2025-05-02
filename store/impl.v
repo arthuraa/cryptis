@@ -57,7 +57,6 @@ Definition handle_store : val :=
   SAList.insert "db" "k" "v";;
   SOME [TInt 0].
 
-(* FIXME: Should return an error when the key is not present *)
 Definition handle_load : val :=
 λ: "c" "cs" "db" "req",
   list_match: ["k"] := "req" in
@@ -67,14 +66,12 @@ Definition handle_load : val :=
 Definition handle_create : val :=
 λ: "c" "cs" "db" "req",
   list_match: ["k"; "v"] := "req" in
-  let: "success" :=
-    match: SAList.find "db" "k" with
-      SOME <> => #0
-    | NONE =>
-      SAList.insert "db" "k" "v";;
-      #1
-    end in
-  SOME ["k"; "v"; tint "success"].
+  match: SAList.find "db" "k" with
+    SOME <> => NONE
+  | NONE =>
+    SAList.insert "db" "k" "v";;
+    SOME [TInt 0]
+  end.
 
 Definition conn_handler N : val := λ: "c" "cs" "db" "lock",
   RPC.server N "c" "cs" [

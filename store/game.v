@@ -120,7 +120,7 @@ iIntros "%cs client". wp_pure _ credit:"c". wp_pures.
 iPoseProof (db_connected_ok with "client s_skI s_skR [//] [//]") as "#>ok".
 wp_apply wp_recv => //. iIntros "%k #p_k". wp_pures.
 wp_apply wp_recv => //. iIntros "%v #p_v". wp_pures.
-rewrite (@rem_free_at_diff _ _ _ _ _ _ _ {[k]}) //.
+rewrite (@db_free_at_diff _ _ _ _ _ _ _ {[k]}) //.
 iDestruct "free" as "[free_k free]".
 wp_apply (wp_client_create with "[] [] [] [] [] [$client $free_k]") => //.
 iIntros "[client k_v]". wp_pures.
