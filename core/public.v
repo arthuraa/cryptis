@@ -1,10 +1,10 @@
 From mathcomp Require Import ssreflect.
 From stdpp Require Import gmap.
-From iris.algebra Require Import agree auth gset gmap list reservation_map excl.
+From iris.algebra Require Import agree auth gset gmap list excl.
 From iris.algebra Require Import functions.
 From iris.base_logic.lib Require Import saved_prop invariants.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib.
+From cryptis Require Import lib gmeta.
 From cryptis.core Require Import term minted.
 
 Set Implicit Arguments.
@@ -15,14 +15,13 @@ Class publicGpreS Σ := PublicGPreS {
   publicGpreS_nonce : savedPredG Σ term;
   publicGpreS_key   : savedPredG Σ (key_type * term);
   publicGpreS_seal  : savedPredG Σ (term * term);
-  (* TODO: Replace this with metaGS *)
-  publicGpreS_maps  : inG Σ (reservation_mapR (agreeR positiveO));
+  publicGpreS_meta  : metaGS Σ;
 }.
 
 Local Existing Instance publicGpreS_nonce.
 Local Existing Instance publicGpreS_key.
 Local Existing Instance publicGpreS_seal.
-Local Existing Instance publicGpreS_maps.
+Local Existing Instance publicGpreS_meta.
 
 Class publicGS Σ := PublicGS {
   public_inG : publicGpreS Σ;
@@ -37,7 +36,7 @@ Definition publicΣ : gFunctors :=
   #[savedPredΣ term;
     savedPredΣ (key_type * term);
     savedPredΣ (term * term);
-    GFunctor (reservation_mapR (agreeR positiveO))].
+    metaΣ].
 
 Global Instance subG_publicGpreS Σ : subG publicΣ Σ → publicGpreS Σ.
 Proof. solve_inG. Qed.
@@ -70,18 +69,17 @@ Global Instance Persistent_dh_pred t t' : Persistent (dh_pred t t').
 Proof. case: t => *; apply _. Qed.
 
 Definition seal_pred N Φ : iProp :=
-  ∃ γ, own public_seal_name (namespace_map_data N (to_agree γ)) ∧
+  ∃ γ, gmeta public_seal_name N γ ∧
        saved_pred_own γ DfracDiscarded (fun '(k, t) => Φ k t).
 
 Definition seal_pred_token E :=
-  own public_seal_name (reservation_map_token E).
+  gmeta_token public_seal_name E.
 
 Lemma seal_pred_token_difference E1 E2 :
   E1 ⊆ E2 →
   seal_pred_token E2 ⊣⊢ seal_pred_token E1 ∗ seal_pred_token (E2 ∖ E1).
 Proof.
-move=> sub; rewrite /seal_pred_token.
-by rewrite (reservation_map_token_difference E1 E2) // own_op.
+move=> sub; rewrite /seal_pred_token; exact: gmeta_token_difference.
 Qed.
 
 Lemma seal_pred_token_drop E1 E2 :
@@ -104,9 +102,7 @@ Lemma seal_pred_agree k t N Φ1 Φ2 :
 Proof.
 iDestruct 1 as (γm1) "[#meta1 #own1]".
 iDestruct 1 as (γm2) "[#meta2 #own2]".
-iPoseProof (own_valid_2 with "meta1 meta2") as "%valid".
-move: valid; rewrite -reservation_map_data_op reservation_map_data_valid.
-move=> /to_agree_op_inv_L ->.
+iPoseProof (gmeta_agree with "meta1 meta2") as "->".
 by iApply (saved_pred_agree _ _ _ _ _ (k, t) with "own1 own2").
 Qed.
 
@@ -120,8 +116,7 @@ iIntros (?) "token".
 iMod (saved_pred_alloc (λ '(k, t), Φ k t) DfracDiscarded) as (γ) "own" => //.
 rewrite (@seal_pred_token_difference (↑N)) //.
 iDestruct "token" as "[token ?]".
-iMod (own_update with "token").
-  eapply (namespace_map_alloc_update _ _ (to_agree γ)) => //.
+iMod (gmeta_set _ _ _ γ with "token") as "?" => //.
 by iModIntro; iFrame; iExists γ; iSplit.
 Qed.
 
@@ -143,18 +138,17 @@ by iIntros "!> !>"; iRewrite "e".
 Qed.
 
 Definition key_pred N (φ : key_type → term → iProp) : iProp :=
-  ∃ γ, own public_key_name (namespace_map_data N (to_agree γ)) ∧
+  ∃ γ, gmeta public_key_name N γ ∧
        saved_pred_own γ DfracDiscarded (λ '(kt, t), φ kt t).
 
 Definition key_pred_token E :=
-  own public_key_name (reservation_map_token E).
+  gmeta_token public_key_name E.
 
 Lemma key_pred_token_difference E1 E2 :
   E1 ⊆ E2 →
   key_pred_token E2 ⊣⊢ key_pred_token E1 ∗ key_pred_token (E2 ∖ E1).
 Proof.
-move=> sub; rewrite /key_pred_token.
-by rewrite (reservation_map_token_difference E1 E2) // own_op.
+move=> sub; rewrite /key_pred_token; exact: gmeta_token_difference.
 Qed.
 
 Lemma key_pred_token_drop E1 E2 :
@@ -177,9 +171,7 @@ Lemma key_pred_agree kt t N P₁ P₂ :
 Proof.
 iDestruct 1 as (γm1) "[#meta1 #own1]".
 iDestruct 1 as (γm2) "[#meta2 #own2]".
-iPoseProof (own_valid_2 with "meta1 meta2") as "%valid".
-move: valid; rewrite -reservation_map_data_op reservation_map_data_valid.
-move=> /to_agree_op_inv_L ->.
+iPoseProof (gmeta_agree with "meta1 meta2") as "->".
 by iApply (saved_pred_agree _ _ _ _ _ (kt, t) with "own1 own2").
 Qed.
 
@@ -193,8 +185,7 @@ iIntros (?) "token".
 rewrite (@key_pred_token_difference (↑N)) //.
 iDestruct "token" as "[token ?]".
 iMod (saved_pred_alloc (λ '(kt, t), P kt t) DfracDiscarded) as (γ) "own" => //.
-iMod (own_update with "token").
-  by eapply (namespace_map_alloc_update _ _ (to_agree γ)) => //.
+iMod (gmeta_set _ _ _ γ with "token") => //.
 by iModIntro; iFrame; iExists γ; iSplit.
 Qed.
 
@@ -216,18 +207,17 @@ by iIntros "!> !>"; iRewrite "e".
 Qed.
 
 Definition hash_pred N (P : term → iProp) : iProp :=
-  ∃ γ, own public_hash_name (namespace_map_data N (to_agree γ)) ∧
+  ∃ γ, gmeta public_hash_name N γ ∧
        saved_pred_own γ DfracDiscarded P.
 
 Definition hash_pred_token E :=
-  own public_hash_name (reservation_map_token E).
+  gmeta_token public_hash_name E.
 
 Lemma hash_pred_token_difference E1 E2 :
   E1 ⊆ E2 →
   hash_pred_token E2 ⊣⊢ hash_pred_token E1 ∗ hash_pred_token (E2 ∖ E1).
 Proof.
-move=> sub; rewrite /hash_pred_token.
-by rewrite (reservation_map_token_difference E1 E2) // own_op.
+move=> sub; rewrite /hash_pred_token; exact: gmeta_token_difference.
 Qed.
 
 Lemma hash_pred_token_drop E1 E2 :
@@ -250,9 +240,7 @@ Lemma hash_pred_agree t N P₁ P₂ :
 Proof.
 iDestruct 1 as (γm1) "[#meta1 #own1]".
 iDestruct 1 as (γm2) "[#meta2 #own2]".
-iPoseProof (own_valid_2 with "meta1 meta2") as "%valid".
-move: valid; rewrite -reservation_map_data_op reservation_map_data_valid.
-move=> /to_agree_op_inv_L ->.
+iPoseProof (gmeta_agree with "meta1 meta2") as "->".
 by iApply (saved_pred_agree _ _ _ _ _ t with "own1 own2").
 Qed.
 
@@ -266,8 +254,7 @@ iIntros (?) "token".
 rewrite (@hash_pred_token_difference (↑N)) //.
 iDestruct "token" as "[token ?]".
 iMod (saved_pred_alloc P DfracDiscarded) as (γ) "own" => //.
-iMod (own_update with "token").
-  by eapply (namespace_map_alloc_update _ _ (to_agree γ)) => //.
+iMod (gmeta_set _ _ _ γ with "token") => //.
 by iModIntro; iFrame; iExists γ; iSplit.
 Qed.
 
@@ -1093,12 +1080,9 @@ Lemma publicGS_alloc `{!heapGS Σ} E :
              hash_pred_token ⊤.
 Proof.
 move=> ?; iStartProof.
-iMod (own_alloc (reservation_map_token ⊤)) as (γ_seal) "own_seal".
-  apply reservation_map_token_valid.
-iMod (own_alloc (reservation_map_token ⊤)) as (γ_key) "own_key".
-  apply reservation_map_token_valid.
-iMod (own_alloc (reservation_map_token ⊤)) as (γ_hash) "own_hash".
-  apply reservation_map_token_valid.
+iMod gmeta_token_alloc as (γ_seal) "own_seal".
+iMod gmeta_token_alloc as (γ_key) "own_key".
+iMod gmeta_token_alloc as (γ_hash) "own_hash".
 pose (H := PublicGS _ γ_seal γ_key γ_hash).
 iExists H. iFrame.
 iAssert (key_pred_token ⊤) with "[own_seal]" as "token".
