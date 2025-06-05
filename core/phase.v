@@ -1,10 +1,10 @@
 From mathcomp Require Import ssreflect.
 From stdpp Require Import gmap.
-From iris.algebra Require Import agree auth gset gmap list reservation_map excl.
+From iris.algebra Require Import agree auth gset gmap list excl.
 From iris.algebra Require Import functions.
 From iris.base_logic.lib Require Import saved_prop invariants.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib.
+From cryptis Require Import lib gmeta.
 From cryptis.core Require Import term minted term_meta public comp_map.
 
 Set Implicit Arguments.
@@ -16,13 +16,12 @@ Definition mint_mapUR := discrete_funUR (fun _ : nat => authUR (gsetUR term)).
 Class phaseGpreS Σ := PhaseGPreS {
   phaseGpreS_hon   : inG Σ comp_mapR;
   phaseGpreS_mint  : inG Σ mint_mapUR;
-  (* TODO: Replace this with metaGS *)
-  phaseGpreS_maps  : inG Σ (reservation_mapR (agreeR positiveO));
+  phaseGpreS_meta  : metaGS Σ;
 }.
 
 Local Existing Instance phaseGpreS_hon.
 Local Existing Instance phaseGpreS_mint.
-Local Existing Instance phaseGpreS_maps.
+Local Existing Instance publicGpreS_meta.
 
 Class phaseGS Σ := PhaseGS {
   phase_inG : phaseGpreS Σ;
@@ -35,7 +34,7 @@ Global Existing Instance phase_inG.
 Definition phaseΣ : gFunctors :=
   #[GFunctor comp_mapR;
     GFunctor mint_mapUR;
-    GFunctor (reservation_mapR (agreeR positiveO))].
+    metaΣ].
 
 Global Instance subG_phaseGpreS Σ : subG phaseΣ Σ → phaseGpreS Σ.
 Proof. solve_inG. Qed.
@@ -51,10 +50,10 @@ Notation iPropO := (iPropO Σ).
 Notation iPropI := (iPropI Σ).
 
 Definition unknown γ : iProp :=
-  own γ (reservation_map_token ⊤).
+  gmeta_token γ ⊤.
 
 Definition known γ (x : positive) : iProp :=
-  own γ (namespace_map_data nroot (to_agree x)).
+  gmeta γ nroot x.
 
 Global Instance persistent_known γ x : Persistent (known γ x).
 Proof. apply _. Qed.
@@ -63,27 +62,16 @@ Global Instance timeless_known γ x : Timeless (known γ x).
 Proof. apply _. Qed.
 
 Lemma unknown_alloc : ⊢ |==> ∃ γ, unknown γ.
-Proof. iApply own_alloc. apply reservation_map_token_valid. Qed.
+Proof. apply gmeta_token_alloc. Qed.
 
 Lemma known_alloc γ x : unknown γ ==∗ known γ x.
-Proof.
-iApply own_update. by apply namespace_map_alloc_update.
-Qed.
+Proof. by apply gmeta_set. Qed.
 
 Lemma unknown_known γ x : unknown γ -∗ known γ x -∗ False.
-Proof.
-iIntros "no yes".
-iPoseProof (own_valid_2 with "no yes") as "%valid".
-by case: (namespace_map_disj _ _ _ _ valid).
-Qed.
+Proof. by apply gmeta_gmeta_token. Qed.
 
 Lemma known_agree γ x y : known γ x -∗ known γ y -∗ ⌜x = y⌝.
-Proof.
-iIntros "own1 own2".
-iPoseProof (own_valid_2 with "own1 own2") as "%valid".
-rewrite -reservation_map_data_op reservation_map_data_valid in valid *.
-iPureIntro. exact: to_agree_op_inv_L.
-Qed.
+Proof. apply gmeta_agree. Qed.
 
 Implicit Types dq : dfrac.
 
