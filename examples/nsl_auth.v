@@ -59,22 +59,16 @@ Definition resp : val := λ: "c" "lR" "skR",
   SOME ("pkI", term_of_list ["nI"; "nR"]).
 
 Definition corrupt kI kR : iProp :=
-  public (TKey Open kI) ∨ public (TKey Open kR).
+  compromised_key kI ∨ compromised_key kR.
 
 Global Instance corrupt_persistent kI kR :
   Persistent (corrupt kI kR).
 Proof. apply _. Qed.
 
-Definition secret k : iProp :=
-  □ (public (TKey Open k) ↔ ▷ False).
-
-Global Instance secret_persistent k : Persistent (secret k).
-Proof. apply _. Qed.
-
 Lemma corruptE kI kR :
   corrupt kI kR -∗
-  secret kI -∗
-  secret kR -∗
+  □ (compromised_key kI → ▷ False) -∗
+  □ (compromised_key kR → ▷ False) -∗
   ▷ False.
 Proof.
 by iIntros "[cor|cor] p_kI p_kR"; [iApply "p_kI"|iApply "p_kR"].
@@ -102,7 +96,7 @@ Definition msg2_pred lR kI m2 : iProp :=
 Definition msg3_pred lI lR kR nR : iProp :=
   ∃ nI kI,
     session lI kI kR (Spec.of_list [nI; nR]) ∧
-    (secret kR -∗ ▷ session lR kI kR (Spec.of_list [nI; nR])).
+    (□ (compromised_key kR → ▷ False) -∗ ▷ session lR kI kR (Spec.of_list [nI; nR])).
 
 Definition nsl_ctx lI lR : iProp :=
   seal_pred (N.@"m1") msg1_pred ∧
@@ -144,7 +138,7 @@ iApply public_TSealIS; eauto.
 - iModIntro. by iExists _, _; iSplit; eauto.
 - by rewrite minted_of_list /=; eauto.
 - rewrite public_of_list /=. iIntros "!> #p_dkR".
-  do 2?iSplit => //. iApply "p_nI". rewrite /corrupt. by eauto.
+  do 2?iSplit => //. iApply "p_nI". rewrite /corrupt. iRight. by iSplit.
 Qed.
 
 Lemma public_msg1E lI lR kI kR nI :
@@ -187,8 +181,8 @@ iApply public_TSealIS; eauto.
 - rewrite minted_of_list /=. by eauto.
 - iIntros "!> #p_dkI". rewrite public_of_list /corrupt /=.
   do 3?iSplit; eauto.
-  + by iApply "p_nI"; eauto.
-  + by iApply "p_nR"; eauto.
+  + by iApply "p_nI"; iLeft; iSplit.
+  + by iApply "p_nR"; iLeft; iSplit.
 Qed.
 
 Lemma public_msg2E lI lR kI kR nI nR :
@@ -197,11 +191,11 @@ Lemma public_msg2E lI lR kI kR nI nR :
   public (TSeal (TKey Seal kI)
             (Spec.tag (Tag $ N.@"m2") (Spec.of_list [nI; nR; TKey Seal kR]))) -∗
   public (TKey Seal kI) -∗
-  secret kI -∗
+  □ (compromised_key kI → ▷ False) -∗
   □ (public nI ↔ ▷ corrupt kI kR) -∗
   ▷ (minted nR ∗
      □ (public nR ↔ ▷ corrupt kI kR) ∗
-     □ (secret kR -∗ ▷ session lR kI kR (Spec.of_list [nI; nR]))).
+     □ (□ (compromised_key kR → ▷ False) -∗ ▷ session lR kI kR (Spec.of_list [nI; nR]))).
 Proof.
 iIntros "#? (_ & #? & _) #p_m #p_pkI #honI #s_nI".
 iDestruct (public_TSealE with "p_m [//]") as "[fail|succ]".
@@ -227,23 +221,23 @@ Lemma public_msg3I lI lR kI kR nI nR :
   minted nR -∗
   □ (public nR ↔ ▷ corrupt kI kR) -∗
   session lI kI kR (Spec.of_list [nI; nR]) -∗
-  □ (secret kR -∗ ▷ session lR kI kR (Spec.of_list [nI; nR])) -∗
+  □ (□ (compromised_key kR → ▷ False) -∗ ▷ session lR kI kR (Spec.of_list [nI; nR])) -∗
   public (TSeal (TKey Seal kR) (Spec.tag (Tag $ N.@"m3") nR)).
 Proof.
 iIntros "#? (_ & _ & #?) #p_pkR #m_nR #s_nR #authI #authR".
 iApply public_TSealIS; eauto.
 - iIntros "!>". iExists nI, kI; eauto.
-- iIntros "!> #p_dkR". iApply "s_nR". rewrite /corrupt. by eauto.
+- iIntros "!> #p_dkR". iApply "s_nR". rewrite /corrupt. iRight. by iSplit.
 Qed.
 
 Lemma public_msg3E lI lR kI kR nI nR :
   cryptis_ctx -∗
   nsl_ctx lI lR -∗
   public (TSeal (TKey Seal kR) (Spec.tag (Tag $ N.@"m3") nR)) -∗
-  secret kR -∗
+  □ (compromised_key kR → ▷ False) -∗
   □ (public nR ↔ ▷ corrupt kI kR) -∗
   session lR kI kR (Spec.of_list [nI; nR]) -∗
-  □ (secret kI -∗ ▷^2 session lI kI kR (Spec.of_list [nI; nR])).
+  □ (□ (compromised_key kI → ▷ False) -∗ ▷^2 session lI kI kR (Spec.of_list [nI; nR])).
 Proof.
 iIntros "#? #(_ & _ & ?) #p_m3 #honR #p_nR #sessR".
 iDestruct (public_TSealE with "p_m3 [//]") as "{p_m3} [[_ contra]|succ]".
@@ -265,14 +259,14 @@ Lemma wp_init c lI v0 lR kI kR :
   cryptis_ctx -∗
   nsl_ctx lI lR -∗
   public (TKey Seal kI) -∗
-  secret kI -∗
+  □ (compromised_key kI → ▷ False) -∗
   public (TKey Seal kR) -∗
   {{{ lI ↦ v0 }}}
     init c #lI kI (TKey Seal kR)
   {{{ ts, RET (repr ts);
       if ts is Some sk then
         session lI kI kR sk ∗
-        □ (secret kR -∗ ▷ session lR kI kR sk)
+        □ (□ (compromised_key kR → ▷ False) -∗ ▷ session lR kI kR sk)
       else True }}}.
 Proof.
 iIntros "#chan_c #ctx #ctx' #p_kI #s_kI #p_kR %Ψ !> Hl Hpost".
@@ -307,7 +301,7 @@ Lemma wp_resp c lI lR v0 kR :
   cryptis_ctx -∗
   nsl_ctx lI lR -∗
   public (TKey Seal kR) -∗
-  secret kR -∗
+  □ (compromised_key kR → ▷ False) -∗
   {{{ lR ↦ v0 }}}
     resp c #lR kR
   {{{ ts, RET (repr ts);
@@ -315,7 +309,7 @@ Lemma wp_resp c lI lR v0 kR :
         ⌜pkI = TKey Seal kI⌝ ∗
         public (TKey Seal kI) ∗
         session lR kI kR sk ∗
-        □ (secret kI -∗ ▷^2 session lI kI kR sk)
+        □ (□ (compromised_key kI → ▷ False) -∗ ▷^2 session lI kI kR sk)
       else True }}}.
 Proof.
 iIntros "#chan_c #ctx #ctx' #p_kR #honR %Ψ !> Hl Hpost".
@@ -380,24 +374,18 @@ Proof.
 iIntros "#ctx seal_tok key_tok hon phase"; rewrite /game; wp_pures.
 wp_apply wp_init_network => //. iIntros "%c #cP".
 wp_pures; wp_bind (mkakey _).
-iApply (wp_mkakey_phase with "[] [hon] phase"); eauto.
-iIntros "%kI #p_pkI hon phase tokenI". wp_pures.
-wp_bind (mkakey _). iApply (wp_mkakey_phase with "[] [hon] phase"); eauto.
-iIntros "%kR #p_pkR hon phase tokenR". wp_pures.
-wp_apply wp_pkey. wp_pures. set pkI := TKey Seal kI.
-set skI := TKey Open kI.
-wp_apply wp_pkey. wp_pures. set pkR := TKey Seal kR.
-set skR := TKey Open kR.
-iMod (freeze_honest with "[] hon phase") as "(hon & phase & sec)" => //; eauto.
+iApply (wp_mkakey with "[]"); eauto.
+iIntros "%skI #p_pkI #aenc_kI s_skI tokenI". wp_pures.
+wp_bind (mkakey _). iApply (wp_mkakey with "[]"); eauto.
+iIntros "%skR #p_pkR #aenc_kR s_skR tokenR". wp_pures.
+wp_apply wp_pkey. wp_pures. set pkI := TKey Seal skI.
+wp_apply wp_pkey. wp_pures. set pkR := TKey Seal skR.
+iMod (aenc_freeze_secret with "s_skI [//]")  as "#?".
+iMod (aenc_freeze_secret with "s_skR [//]")  as "#?".
 wp_pures; wp_bind (send _ _); iApply wp_send => //.
 wp_pures; wp_bind (send _ _); iApply wp_send => //.
 wp_pures; wp_bind (recv _); iApply wp_recv => //.
-iIntros (pkR') "#p_pkR'". iMod "sec" as "#sec".
-rewrite big_sepS_forall.
-iAssert (□ (public skI ↔ ▷ False))%I as "#s_dkI".
-  by iApply "sec"; iPureIntro; set_solver.
-iAssert (□ (public skR ↔ ▷ False))%I as "#s_dkR".
-  by iApply "sec"; iPureIntro; set_solver.
+iIntros (pkR') "#p_pkR'".
 wp_pures; wp_bind (is_key _); iApply wp_is_key.
 case: Spec.is_keyP => [kt kR' epkR'|_]; last by wp_pures; iLeft.
 wp_pures.
@@ -437,12 +425,12 @@ case: (bool_decide_reflect (pkR = _ ∨ _)) => [succ|_]; last by wp_pures; eauto
 iAssert (|={⊤}=> ⌜pkR = TKey Seal kR' ∧ pkI = TKey Seal kI' ∧ sess_keyI = sess_keyR⌝)%I
   with "[c1 c2]" as ">%e".
 { case: succ => [[<-]|[<-]].
-  - iSpecialize ("sessR" with "s_dkR").
+  - iSpecialize ("sessR" with "[//]").
     iMod (lc_fupd_elim_later with "c1 sessR") as "{sessR} sessR".
     iPoseProof (pointsto_agree with "sessR sessR'") as "%e".
     case/val_of_term_inj/Spec.of_list_inj: e => <- <-.
     by eauto.
-  - iSpecialize ("sessI'" with "s_dkI").
+  - iSpecialize ("sessI'" with "[//]").
     iMod (lc_fupd_elim_later with "c1 sessI'") as "{sessI'} #sessI'".
     iMod (lc_fupd_elim_later with "c2 sessI'") as "{sessI'} #sessI'".
     iPoseProof (pointsto_agree with "sessI sessI'") as "%e".

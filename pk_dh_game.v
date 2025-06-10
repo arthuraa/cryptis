@@ -65,10 +65,10 @@ pose (P rl (kI kR kS : term) :=
 iMod (pk_dh_alloc N P with "nown_tok seal_tok") as "[#dh_ctx _]" => //.
 wp_apply wp_init_network => //. iIntros "%c #cP".
 wp_pures; wp_bind (mkakey _).
-iApply (wp_mkakey_phase with "[] hon phase"); eauto.
-iIntros "%kI #p_kI #hon' phase _". wp_pures.
-wp_bind (mkakey _). iApply (wp_mkakey_phase with "[] hon' phase"); eauto.
-iIntros "%kR #p_kR #hon'' phase _". wp_pures.
+iApply (wp_mkakey with "[]"); eauto.
+iIntros "%kI #p_kI #aenc_kI s_kI _". wp_pures.
+wp_bind (mkakey _). iApply (wp_mkakey with "[]"); eauto.
+iIntros "%kR #p_kR #aenc_kR s_kR _". wp_pures.
 wp_apply wp_pkey. wp_pures. set pkI := TKey Seal kI.
 set skI := TKey Open kI.
 wp_apply wp_pkey. wp_pures. set pkR := TKey Seal kR.
@@ -83,11 +83,10 @@ wp_pures.
 case: bool_decide_reflect => [ekt|_]; last by wp_pures; iLeft.
 wp_pures; wp_bind (par _ _).
 case: kt epkR' ekt => // -> _.
-rewrite -Qp.half_half -dfrac_op_own. iDestruct "phase" as "[phase1 phase2]".
 iApply (wp_par (λ v, ∃ a : option term, ⌜v = repr a⌝ ∗ _)%I
                (λ v, ∃ a : option (term * term), ⌜v = repr a⌝ ∗ _)%I
-          with "[tokenI phase1] [tokenR phase2]").
-- iApply (wp_pk_dh_init with "[//] [//] [//] [] [] [] [tokenI phase1]") => //.
+          with "[tokenI] [tokenR]").
+- iApply (wp_pk_dh_init with "[//] [//] [//] [] [] [tokenI]") => //.
   + iFrame. iIntros "%nI %nR".
     set (kS := mk_session_key _ _ _).
     iMod (own_update with "tokenI") as "ownI".
@@ -97,7 +96,7 @@ iApply (wp_par (λ v, ∃ a : option term, ⌜v = repr a⌝ ∗ _)%I
     by eauto.
   + iIntros "!> %a H". iExists a. iSplit; first done.
     iApply "H".
-- iApply (wp_pk_dh_resp with "[//] [//] [//] [] [] [tokenR phase2]") => //.
+- iApply (wp_pk_dh_resp with "[//] [//] [//] [] [tokenR]") => //.
   + iFrame. iIntros "%kI' %nI %nR".
     set (kS := mk_session_key _ _ _).
     iMod (own_update with "tokenR") as "ownR".
@@ -108,35 +107,37 @@ iApply (wp_par (λ v, ∃ a : option term, ⌜v = repr a⌝ ∗ _)%I
   + iIntros "!> %a H"; iExists a; iSplit; first done.
     iApply "H".
 iIntros (v1 v2) "[H1 H2]".
-iDestruct "H1" as (a) "[-> [phase1 H1]]".
-iDestruct "H2" as (b) "[-> [phase2 H2]]".
-iCombine "phase1 phase2" as "phase".
-rewrite dfrac_op_own Qp.half_half.
+iDestruct "H1" as (a) "[-> H1]".
+iDestruct "H2" as (b) "[-> H2]".
 iModIntro.
-iMod (compromise_honest with "ctx hon'' phase")
-  as "(#hon''' & phase & comp)" => //.
 wp_pures.
-iMod "comp" as "#comp".
 case: a => [gabI|]; wp_pures; last by eauto.
 case: b => [[pkI' gabR]|]; wp_pures; last by eauto.
 iDestruct "H1" as "(#s_gabI & #confI & _ & H1)".
 iDestruct "H2" as (kI') "(-> & #p_pkI' & #gabR & #confR & _ & H2)".
 pose (b := bool_decide (pkR = TKey Seal kR' ∨ pkI = TKey Seal kI')).
 wp_bind (eq_term pkR _ || _)%E.
-iApply (wp_wand _ _ _ (λ v, ⌜v = #b⌝)%I with "[] [H1 H2]").
+iApply (wp_wand _ _ _ (λ v, ⌜v = #b⌝)%I with "[] [s_kI s_kR H1 H2]").
 { wp_eq_term e_pkR; wp_pures.
     iPureIntro. by rewrite /b bool_decide_decide decide_True //; eauto.
   iApply wp_eq_term. iPureIntro. congr (# (LitBool _)).
   apply bool_decide_ext. intuition congruence. }
 iIntros "% ->". rewrite {}/b.
 case: (bool_decide_reflect (pkR = _ ∨ _)) => [succ|_]; last by wp_pures; eauto.
-iAssert (⌜kR' = kR⌝ ∗
-         ⌜kI' = kI⌝ ∗
-         ⌜gabI = gabR⌝ ∗
-         □ (public gabI → ◇ False))%I with "[H1 H2]" as "#finish".
+iAssert (▷ (⌜kR' = kR⌝ ∗
+            ⌜kI' = kI⌝ ∗
+            ⌜gabI = gabR⌝ ∗
+            □ (public gabI → ◇ False)))%I as "#finish".
 { case: succ => - [<-].
   - iClear "H2".
-    rewrite /in_honest bool_decide_decide decide_True; try set_solver.
+    iDestruct "H1" as "[#fail|H1]".
+    { iDestruct "fail" as "[fail|fail]".
+      + iPoseProof (aenc_key_compromised_keyI with "aenc_kI fail")
+          as "{fail} fail".
+        by iDestruct (aenc_secret_not_compromised_key with "s_kI [//] [//]") as ">[]".
+      + iPoseProof (aenc_key_compromised_keyI with "aenc_kR fail")
+          as "{fail} fail".
+        by iDestruct (aenc_secret_not_compromised_key with "s_kR [//] [//]") as ">[]". }
     iDestruct "H1" as "(#p_gabI & token & #sess)".
     iPoseProof (session_key_confirmation _ Resp with "sess") as "confR'".
     iPoseProof (own_valid_2 with "confR confR'") as "%valid".
@@ -144,22 +145,30 @@ iAssert (⌜kR' = kR⌝ ∗
     rewrite to_agree_op_valid_L in valid.
     case: (encode_inj _ _ valid) => -> -> {kI' gabR valid}. by eauto.
   - iClear "H1".
-    rewrite /in_honest bool_decide_decide decide_True; try set_solver.
+    iDestruct "H2" as "[#fail|H2]".
+    { iDestruct "fail" as "[fail|fail]".
+      + iPoseProof (aenc_key_compromised_keyI with "aenc_kI fail")
+          as "{fail} fail".
+        by iDestruct (aenc_secret_not_compromised_key with "s_kI [//] [//]") as ">[]".
+      + iPoseProof (aenc_key_compromised_keyI with "aenc_kR fail")
+          as "{fail} fail".
+        by iDestruct (aenc_secret_not_compromised_key with "s_kR [//] [//]") as ">[]". }
     iDestruct "H2" as "(#p_gabR & token & #sess)".
     iPoseProof (session_key_confirmation _ Init with "sess") as "confI'".
     iPoseProof (own_valid_2 with "confI confI'") as "%valid".
     rewrite -reservation_map_data_op reservation_map_data_valid in valid.
     rewrite to_agree_op_valid_L in valid.
     case: (encode_inj _ _ valid) => -> -> {kR' gabI valid}. by eauto. }
+wp_pure.
 iDestruct "finish" as "(-> & -> & <- & #p_gabI) {H1 H2}".
+iMod (secret_public with "s_kI") as "#p_kI'".
+iMod (secret_public with "s_kR") as "#p_kR'".
+wp_apply wp_key.
+wp_bind (send _ _). iApply wp_send => //.
+  rewrite [public (TKey Open kI)]public_TKey. by eauto.
 wp_pures. wp_apply wp_key.
-wp_pures. wp_bind (send _ _). iApply wp_send => //.
-  iModIntro. rewrite big_sepS_forall. iApply "comp".
-  iPureIntro; set_solver.
-wp_pures. wp_apply wp_key.
-wp_pures. wp_bind (send _ _). iApply wp_send => //.
-  iModIntro. rewrite big_sepS_forall. iApply "comp".
-  iPureIntro; set_solver.
+wp_bind (send _ _). iApply wp_send => //.
+  rewrite [public (TKey Open kR)]public_TKey. by eauto.
 wp_pures. wp_bind (recv _); iApply wp_recv => //; iIntros (m) "#p_m".
 wp_pures; wp_bind (eq_term _ _); iApply wp_eq_term.
 rewrite bool_decide_decide decide_True //.

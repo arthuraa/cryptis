@@ -123,11 +123,11 @@ Definition pk_dh_session_meta kI kR :=
 Definition pk_dh_session_meta_token kI kR :=
   @session_key_meta_token _ _ _ _ N _ kI kR.
 
-Definition pk_dh_session_weak rl kI kR kS ph :=
-  session_weak N rl kI kR kS ph.
+Definition pk_dh_session_weak rl kI kR kS :=
+  session_weak N rl kI kR kS.
 
-Definition pk_dh_session_key kI kR kS ph:=
-  session_key N kI kR kS ph.
+Definition pk_dh_session_key kI kR kS :=
+  session_key N kI kR kS.
 
 Lemma pk_dh_alloc E1 E2 E' :
   ↑N ⊆ E1 →
@@ -139,8 +139,8 @@ Lemma pk_dh_alloc E1 E2 E' :
   seal_pred_token (E2 ∖ ↑N).
 Proof. exact: pk_auth_alloc. Qed.
 
-Lemma pk_dh_session_key_elim kI kR kS n :
-  pk_dh_session_key kI kR kS n -∗
+Lemma pk_dh_session_key_elim kI kR kS :
+  pk_dh_session_key kI kR kS -∗
   public kS →
   ◇ False.
 Proof.
@@ -151,78 +151,70 @@ iDestruct (dh_seed_elim2 with "priv_nI p_kS") as "[>p_sI >contra]"; eauto.
 by iDestruct (dh_seed_elim0 with "priv_nR contra") as ">[]".
 Qed.
 
-Lemma wp_pk_dh_init c kI kR dq n T :
+Lemma wp_pk_dh_init c kI kR :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
   public (TKey Seal kI) -∗
   public (TKey Seal kR) -∗
-  honest n T -∗
-  {{{ init_confirm kI kR ∗ ●Ph{dq} n }}}
+  {{{ init_confirm kI kR }}}
     pk_dh_init c kI (TKey Seal kR)
   {{{ (okS : option term), RET repr okS;
-      ●Ph{dq} n ∗
       if okS is Some kS then
         minted kS ∗
         □ pk_dh_confirmation Init kI kR kS ∗
-        pk_dh_session_weak Init kI kR kS n ∗
-        if in_honest kI kR T then
+        pk_dh_session_weak Init kI kR kS ∗
+        (corruption kI kR ∨
           □ (public kS → ◇ False) ∗
           pk_dh_session_meta_token kI kR kS (↑N.@"init") ∗
-          pk_dh_session_key kI kR kS n
-        else True
+          pk_dh_session_key kI kR kS)
       else True
   }}}.
 Proof.
-iIntros "#chan_c #ctx #ctx' #p_ekI #p_ekR #hon %Ψ !> confirm post".
+iIntros "#chan_c #ctx #ctx' #p_ekI #p_ekR %Ψ !> confirm post".
 rewrite /pk_dh_init; wp_pures.
-iApply (wp_pk_auth_init with "chan_c ctx ctx' [] [] [] [confirm]"); eauto.
+iApply (wp_pk_auth_init with "chan_c ctx ctx' [] [] [confirm]"); eauto.
 iIntros "!> %okS". case: okS => [kS|]; last first.
   by iApply ("post" $! None).
-iIntros "(phase & #s_kS & #confirmed & #sess_weak & kSP)".
+iIntros "(#s_kS & #confirmed & #sess_weak & kSP)".
 iApply ("post" $! (Some kS)).
-iFrame. iSplitR => //. iSplit => //.
-rewrite /in_honest.
-case: bool_decide_reflect => [[kIP kRP]|]; eauto.
-iDestruct "kSP" as "[token #key]"; eauto.
-iFrame. do 2!iSplit => //. iModIntro.
+iFrame. iSplitR => //. iSplit => //. iSplit => //.
+iDestruct "kSP" as "[#fail|kSP]"; eauto.
+iDestruct "kSP" as "[token #key]"; eauto. iRight.
+iFrame. iSplit => //. iModIntro.
 by iApply pk_dh_session_key_elim.
 Qed.
 
-Lemma wp_pk_dh_resp c kR dq n T :
+Lemma wp_pk_dh_resp c kR :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
   public (TKey Seal kR) -∗
-  honest n T -∗
-  {{{ resp_confirm kR ∗ ●Ph{dq} n }}}
+  {{{ resp_confirm kR }}}
     pk_dh_resp c kR
   {{{ (res : option (term * term)), RET repr res;
-      ●Ph{dq} n ∗
       if res is Some (pkI, kS) then ∃ kI,
         ⌜pkI = TKey Seal kI⌝ ∗
         public pkI ∗
         minted kS ∗
         □ pk_dh_confirmation Resp kI kR kS ∗
-        pk_dh_session_weak Resp kI kR kS n ∗
-        if in_honest kI kR T then
+        pk_dh_session_weak Resp kI kR kS ∗
+        (corruption kI kR ∨
           □ (public kS → ◇ False) ∗
           pk_dh_session_meta_token kI kR kS (↑N.@"resp") ∗
-          pk_dh_session_key kI kR kS n
-        else True
+          pk_dh_session_key kI kR kS)
       else True
   }}}.
 Proof.
-iIntros "#chan_c #ctx #ctx' #p_ekR #hon %Ψ !> confirm post".
+iIntros "#chan_c #ctx #ctx' #p_ekR %Ψ !> confirm post".
 rewrite /pk_dh_resp; wp_pures.
-iApply (wp_pk_auth_resp with "chan_c ctx ctx' [] [] [confirm]"); eauto.
+iApply (wp_pk_auth_resp with "chan_c ctx ctx' [] [confirm]"); eauto.
 iIntros "!> %res". case: res => [[pkI kS]|]; last first.
   by iApply ("post" $! None).
-iIntros "(phase & %kI & -> & #p_pkI & #s_kS & #confirmed & #sess_weak & kSP)".
+iIntros "(%kI & -> & #p_pkI & #s_kS & #confirmed & #sess_weak & kSP)".
 iApply ("post" $! (Some (TKey Seal kI, kS))). iFrame. iExists kI.
 do 5!iSplitR => //.
-rewrite /in_honest.
-case: bool_decide_reflect => // - [kIP kRP].
+iDestruct "kSP" as "[#fail|kSP]"; eauto. iRight.
 iDestruct "kSP" as "[token #key]"; eauto.
 iFrame. iSplit => //. iModIntro.
 by iApply pk_dh_session_key_elim.

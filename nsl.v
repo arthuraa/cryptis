@@ -76,59 +76,53 @@ case: rl; rewrite /nsl_mk_session_key_impl /=; wp_pures;
 iApply wp_tuple; by iApply "post".
 Qed.
 
-Lemma wp_nsl_init c kI kR dq n T :
+Lemma wp_nsl_init c kI kR :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
   public (TKey Seal kI) -∗
   public (TKey Seal kR) -∗
-  honest n T -∗
-  {{{ init_confirm kI kR ∗ ●Ph{dq} n }}}
+  {{{ init_confirm kI kR }}}
     nsl_init c kI (TKey Seal kR)
   {{{ (okS : option term), RET repr okS;
-      ●Ph{dq} n ∗
       if okS is Some kS then
         minted kS ∗
         □ nsl_confirmation Init kI kR kS ∗
-        session_weak N Init kI kR kS n ∗
-        if in_honest kI kR T then
+        session_weak N Init kI kR kS ∗
+        (corruption kI kR ∨
           session_key_meta_token N kI kR kS (↑N.@"init") ∗
-          session_key N kI kR kS n
-        else True
+          session_key N kI kR kS)
       else True
   }}}.
 Proof.
-iIntros "#chan_c #ctx #ctx' #p_ekI #p_ekR #hon %Ψ !> confirm post".
+iIntros "#chan_c #ctx #ctx' #p_ekI #p_ekR %Ψ !> confirm post".
 rewrite /nsl_init; wp_pures.
-iApply (wp_pk_auth_init with "chan_c ctx ctx' [] [] [] [confirm]"); eauto.
+iApply (wp_pk_auth_init with "chan_c ctx ctx' [] [] [confirm]"); eauto.
 Qed.
 
-Lemma wp_nsl_resp c kR dq n T :
+Lemma wp_nsl_resp c kR :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
   public (TKey Seal kR) -∗
-  honest n T -∗
-  {{{ resp_confirm kR ∗ ●Ph{dq} n }}}
+  {{{ resp_confirm kR }}}
     nsl_resp c kR
   {{{ (res : option (term * term)), RET repr res;
-      ●Ph{dq} n ∗
       if res is Some (pkI, kS) then ∃ kI,
         ⌜pkI = TKey Seal kI⌝ ∗
         public pkI ∗
         minted kS ∗
         □ confirmation Resp kI kR kS ∗
-        session_weak N Resp kI kR kS n ∗
-        if in_honest kI kR T then
+        session_weak N Resp kI kR kS ∗
+        (corruption kI kR ∨
           session_key_meta_token N kI kR kS (↑N.@"resp") ∗
-          session_key N kI kR kS n
-        else True
+          session_key N kI kR kS)
       else True
   }}}.
 Proof.
-iIntros "#chan_c #ctx #ctx' #p_ekR #hon %Ψ !> confirm post".
+iIntros "#chan_c #ctx #ctx' #p_ekR %Ψ !> confirm post".
 rewrite /nsl_resp; wp_pures.
-iApply (wp_pk_auth_resp with "chan_c ctx ctx' [] [] [confirm]"); eauto.
+iApply (wp_pk_auth_resp with "chan_c ctx ctx' [] [confirm]"); eauto.
 Qed.
 
 End NSL.

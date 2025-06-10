@@ -69,18 +69,16 @@ wp_bind (send _ _). iApply wp_send => //.
 by wp_pures.
 Qed.
 
-Lemma wp_client T n c l k φ :
-  TKey Seal k ∈ T →
+Lemma wp_client c l k φ :
   cryptis_ctx -∗
   channel c -∗
   seal_pred nroot (sig_pred l) -∗
   public (TKey Open k) -∗
-  honest n T -∗
-  ●Ph□ n -∗
+  □ (compromised_key k → ▷ False) -∗
   (∀ t : term, l ↦□ (t : val) -∗ φ (t : val)) -∗
   WP client c (TKey Open k) {{ v, φ v }}.
 Proof.
-iIntros "%hon_sk #ctx #chan_c #sig_pred #p_vk #hon #phase post".
+iIntros "#ctx #chan_c #sig_pred #p_vk #s_sk post".
 (* Unfold definition of client *)
 rewrite /client. wp_pures.
 iRevert "post". iApply wp_do_until. iIntros "!> post". wp_pures.
@@ -98,9 +96,7 @@ iPoseProof (public_TSealE with "p_reply sig_pred")
   as "[[#p_sk _]|(#replyP & #s_reply & _)]".
 { (* The signature could have been forged if the key was compromised, but we
      have ruled out this possibility.  *)
-  iPoseProof (secret_atI _ hon_sk with "hon") as "#sec".
-  iMod (honest_public with "[] sec phase p_sk") as "#contra" => //; eauto.
-  wp_pures. by iDestruct "contra" as "[]". }
+  iDestruct ("s_sk" with "[]") as ">[]". by iSplit. }
 (* Therefore, the invariant must hold. *)
 wp_pures. iModIntro. iRight. iExists reply. iSplit => //.
 by iApply "post".
@@ -143,11 +139,11 @@ rewrite /game. wp_pures.
 (* Setup attacker *)
 wp_apply wp_init_network => //. iIntros "%c #cP". wp_pures.
 (* Generate server key. Keep the signing key secret. *)
-wp_bind (mksigkey _). iApply (wp_mksigkey_phase with "[//] hon phase") => //.
-iIntros (k) "#p_vk #hon' phase".
+wp_bind (mksigkey _). iApply (wp_mksigkey with "[//]") => //.
+iIntros (sk) "#p_vk #sign_k s_sk token".
+iMod (sign_freeze_secret with "s_sk sign_k") as "#?".
 wp_pures.
 wp_apply wp_vkey. wp_pures.
-iMod (phase_auth_discard with "phase") as "#phase".
 (* Publicize verification key. *)
 wp_pures. wp_bind (send _ _). iApply wp_send => //. wp_pures.
 (* Attacker chooses value stored by the server. *)
@@ -165,7 +161,6 @@ wp_pures. wp_bind (Fork _). iApply wp_fork.
 iModIntro.
 (* Let client contact server *)
 wp_pures. wp_bind (client _ _). iApply wp_client => //.
-{ set_solver. }
 iIntros (t') "#Hl'".
 (* Now the client knows which value is stored in the server. *)
 iPoseProof (pointsto_agree with "Hl' Hl") as "->". wp_pures. wp_load.

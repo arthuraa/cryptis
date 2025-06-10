@@ -691,63 +691,6 @@ Proof.
 iIntros "#? ?". iApply twp_wp. by wp_apply twp_mkakey.
 Qed.
 
-(* FIXME: It should be possible to prove a twp for this, but right now we cannot
-generate later credits when proving in a twp, which is required for manipulating
-honest_auth. *)
-
-Lemma wp_mkakey_phase n T Ψ :
-  cryptis_ctx -∗
-  honest n T -∗
-  ●Ph n -∗
-  (∀ t, public (TKey Seal t) -∗
-        honest (S n) (T ∪ {[TKey Open t]}) -∗
-        ●Ph (S n) -∗
-        term_token t ⊤ -∗
-        Ψ t) -∗
-  WP mkakey #() {{ Ψ }}.
-Proof.
-iIntros "#ctx #hon phase post". iMod unknown_alloc as (γ) "unknown".
-rewrite /mkakey. wp_pure _ credit:"cred". wp_pures.
-iAssert (□ (∀ t, ⌜t ∈ T⌝ → minted t))%I as "#s_T".
-  iPoseProof (honest_minted with "hon") as "#?".
-  iModIntro. by rewrite -big_sepS_forall.
-wp_bind (mknonce _).
-iApply (wp_mknonce_freshN T (λ _, known γ 1) (λ _, False%I)
-  (λ t, {[Spec.tag (Tag $ nroot.@"keys".@"enc") t]})) => //.
-- iIntros "%t #t_T". by iApply "s_T".
-- iIntros "%t". rewrite big_sepS_singleton minted_tag.
-  iModIntro. by iSplit; iIntros "?".
-iIntros "%t %fresh % #s_t #p_t _ token".
-rewrite big_sepS_singleton.
-pose (t' := Spec.tag (Tag $ nroot.@"keys".@"enc") t).
-have {}fresh : TKey Open t' ∉ T.
-  move=> t'_T; apply: fresh => //.
-  apply: STKey. exact: subterm_tag.
-iAssert (secret (TKey Open t')) with "[unknown]" as "tP"; first do 2?iSplit.
-- iMod (known_alloc with "unknown") as "#known".
-  iSpecialize ("p_t" with "known").
-  iModIntro. rewrite public_TKey. iLeft. by rewrite public_tag.
-- iMod (known_alloc 2 with "unknown") as "#known".
-  iIntros "!> !>". iSplit.
-  + iIntros "#p_t'".
-    iMod (public_enc_keyE with "ctx p_t'") as "contra".
-    iPoseProof ("p_t" with "contra") as ">#known'".
-    by iPoseProof (known_agree with "known known'") as "%".
-  + iIntros "#contra".
-    rewrite public_TKey. iLeft. rewrite public_tag.
-    iApply "p_t". by iDestruct "contra" as ">[]".
-- iIntros "#p_t'".
-  iMod (public_enc_keyE with "ctx p_t'") as "contra".
-  iPoseProof ("p_t" with "contra") as ">#known".
-  by iPoseProof (unknown_known with "[$] [//]") as "[]".
-iAssert (minted (TKey Open t')) as "s_t'".
-  by rewrite minted_TKey minted_tag.
-iMod (honest_insert with "ctx cred hon phase s_t' tP") as "[#hon' phase]" => //.
-wp_pures. wp_bind (tag _ _). iApply wp_tag.
-iApply ("post" with "[] [$] [$]") => //.
-iApply (public_enc_key with "ctx"). by eauto.
-Qed.
-
 Lemma twp_mksigkey Ψ :
   cryptis_ctx -∗
   (∀ t, public (TKey Open t) -∗
@@ -807,56 +750,6 @@ Lemma wp_mksigkey Ψ :
   WP mksigkey #() {{ Ψ }}.
 Proof.
 iIntros "#? ?". iApply twp_wp. by wp_apply twp_mksigkey.
-Qed.
-
-Lemma wp_mksigkey_phase n T Ψ :
-  cryptis_ctx -∗
-  honest n T -∗
-  ●Ph n -∗
-  (∀ t, public (TKey Open t) -∗
-        honest (S n) (T ∪ {[TKey Seal t]}) -∗
-        ●Ph (S n) -∗
-        Ψ t) -∗
-  WP mksigkey #() {{ Ψ }}.
-Proof.
-iIntros "#ctx #hon phase post". iMod unknown_alloc as (γ) "unknown".
-rewrite /mksigkey. wp_pure _ credit:"cred".
-iAssert (□ (∀ t, ⌜t ∈ T⌝ → minted t))%I as "#s_T".
-  iPoseProof (honest_minted with "hon") as "#?".
-  iModIntro. by rewrite -big_sepS_forall.
-wp_bind (mknonce _).
-iApply (wp_mknonce_freshN T (λ _, known γ 1) (λ _, False%I)
-  (λ t, {[Spec.tag (Tag $ nroot.@"keys".@"sig") t]})) => //.
-- iIntros "%t #t_T". by iApply "s_T".
-- iIntros "%t". rewrite big_sepS_singleton minted_tag.
-  iModIntro. by iSplit; iIntros "?".
-iIntros "%t %fresh % #s_t #p_t _ token".
-rewrite big_sepS_singleton.
-pose (t' := Spec.tag (Tag $ nroot.@"keys".@"sig") t).
-have {}fresh : TKey Seal t' ∉ T.
-  move=> t'_T; apply: fresh => //.
-  apply: STKey. exact: subterm_tag.
-iAssert (secret (TKey Seal t')) with "[unknown]" as "tP"; first do 2?iSplit.
-- iMod (known_alloc with "unknown") as "#known".
-  iSpecialize ("p_t" with "known").
-  iModIntro. rewrite public_TKey. iLeft. by rewrite public_tag.
-- iMod (known_alloc 2 with "unknown") as "#known".
-  iIntros "!> !>". iSplit.
-  + iIntros "#p_t'". iMod (public_sig_keyE with "ctx p_t'") as "contra".
-    iPoseProof ("p_t" with "contra") as ">#known'".
-    by iPoseProof (known_agree with "known known'") as "%".
-  + iIntros "#contra".
-    rewrite public_TKey. iLeft. rewrite public_tag.
-    iApply "p_t". by iDestruct "contra" as ">[]".
-- iIntros "#p_t'". iMod (public_sig_keyE with "ctx p_t'") as "contra".
-  iPoseProof ("p_t" with "contra") as ">#known".
-  by iPoseProof (unknown_known with "[$] [//]") as "[]".
-iAssert (minted (TKey Seal t')) as "s_t'".
-  by rewrite minted_TKey minted_tag.
-iMod (honest_insert with "ctx cred hon phase s_t' tP") as "[hon' phase]" => //.
-wp_pures. wp_bind (tag _ _). iApply wp_tag.
-iApply ("post" with "[] hon'") => //.
-iApply (public_sig_key with "ctx"). eauto.
 Qed.
 
 Lemma twp_derive_key E (k : term) Ψ :
