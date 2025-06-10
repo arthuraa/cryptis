@@ -69,7 +69,7 @@ iPoseProof ("aP" with "p_t") as "{p_t} p_t".
 iAssert (▷ False)%I as ">[]".
 iModIntro.
 iDestruct "p_t" as "(%e & _)".
-rewrite exps_TExpN app_length /= in e; lia.
+rewrite exps_TExpN List.length_app /= in e; lia.
 Qed.
 
 Lemma dh_public_TExp g a :
