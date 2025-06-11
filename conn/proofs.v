@@ -164,7 +164,7 @@ Lemma wp_write kI kR rl cs N c ts φ :
   ([∗ list] t ∈ ts, public t) -∗
   {{{ connected kI kR rl cs ∗
       (public (si_key cs) ∨ φ kI kR cs ts) }}}
-    write (Tag N) c (repr cs) (repr ts)
+    write c (repr cs) (Tag N) (repr ts)
   {{{ RET #(); connected kI kR rl cs }}}.
 Proof.
 iIntros "#chan #pred #p_ts !> %Φ (conn & inv) post".
@@ -206,7 +206,7 @@ Lemma wp_try_open N φ kI kR rl cs t :
   {{{ seal_pred N (conn_pred (swap_role rl) φ) ∗
       connected kI kR rl cs ∗
       public (TSeal (TKey Seal (si_key cs)) t) }}}
-    try_open (Tag N) (repr cs) t
+    try_open (repr cs) (Tag N) t
   {{{ res, RET res;
       connected kI kR rl cs ∗
       (⌜res = NONEV⌝ ∨
@@ -323,7 +323,7 @@ Lemma wp_read N c kI kR rl cs φ :
   channel c -∗
   seal_pred N (conn_pred (swap_role rl) φ) -∗
   {{{ connected kI kR rl cs }}}
-    read (Tag N) c (repr cs)
+    read c (repr cs) (Tag N)
   {{{ ts, RET (repr (ts : list term));
       connected kI kR rl cs ∗
       ([∗ list] t ∈ ts, public t) ∗

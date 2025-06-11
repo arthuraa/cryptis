@@ -45,7 +45,7 @@ Definition confirm : val := λ: "c" "skB" "req",
 Definition sent     : val := λ: "cs", Fst "cs" +ₗ #0%nat.
 Definition received : val := λ: "cs", Fst "cs" +ₗ #1%nat.
 
-Definition write : val := λ: "N" "c" "cs" "ts",
+Definition write : val := λ: "c" "cs" "N" "ts",
   let: "n"  := sent "cs" in
   let: "sk" := session_key "cs" in
   let: "m"  := term_of_list (tint !"n" :: "ts") in
@@ -53,7 +53,7 @@ Definition write : val := λ: "N" "c" "cs" "ts",
   send "c" "m";;
   "n" <- !"n" + #1%nat.
 
-Definition try_open : val := λ: "N" "cs" "t",
+Definition try_open : val := λ: "cs" "N" "t",
   bind: "t" := untag "N" "t" in
   bind: "ts" := list_of_term "t" in
   let: "m" := !(received "cs") in
@@ -67,7 +67,7 @@ Definition try_open : val := λ: "N" "cs" "t",
   end.
 
 Definition handle : val := λ: "N" "handler" "cs" "t",
-  bind: "ts" := try_open "N" "cs" "t" in
+  bind: "ts" := try_open "cs" "N" "t" in
   SOME ("handler" "cs" "ts").
 
 Definition select : val := λ: "c" "cs" "handlers",
@@ -78,7 +78,7 @@ Definition select : val := λ: "c" "cs" "handlers",
     scan_list (λ: "handler", "handler" "cs" "t") "handlers").
 
 Definition read : val :=
-  λ: "N" "c" "cs", select "c" "cs" [handle "N" (λ: <> "ts", "ts")%E].
+  λ: "c" "cs" "N", select "c" "cs" [handle "N" (λ: <> "ts", "ts")%E].
 
 Definition free : val := λ: "c" "cs",
   let: "counters" := Fst "cs" in

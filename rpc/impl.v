@@ -26,27 +26,27 @@ Definition confirm : val := λ: "c" "skB" "req",
   Conn.confirm (N.@"rpc".@"auth") "c" "skB" "req".
 
 Definition call (s : string) : val := λ: "c" "cs" "ts",
-  Conn.write (Tag $ N.@s.@"call") "c" "cs" "ts";;
-  Conn.read  (Tag $ N.@s.@"resp") "c" "cs".
+  Conn.write "c" "cs" (Tag $ N.@s.@"call") "ts";;
+  Conn.read "c" "cs" (Tag $ N.@s.@"resp").
 
 Definition handle (s : string) : val := λ: "c" "f",
   Conn.handle (Tag $ N.@s.@"call")
     (λ: "cs" "ts",
       match: "f" "ts" with
-        SOME "res" => Conn.write (Tag (N.@s.@"resp")) "c" "cs" "res"
-      | NONE => Conn.write (Tag (N.@"rpc".@"error")) "c" "cs" [TInt 0]
+        SOME "res" => Conn.write "c" "cs" (Tag (N.@s.@"resp")) "res"
+      | NONE => Conn.write "c" "cs" (Tag (N.@"rpc".@"error")) [TInt 0]
       end;;
       #true).
 
 Definition close : val := λ: "c" "cs",
-  Conn.write (Tag $ N.@"rpc".@"close".@"call") "c" "cs" [TInt 0];;
-  Conn.read  (Tag $ N.@"rpc".@"close".@"resp") "c" "cs";;
+  Conn.write "c" "cs" (Tag $ N.@"rpc".@"close".@"call") [TInt 0];;
+  Conn.read  "c" "cs" (Tag $ N.@"rpc".@"close".@"resp");;
   Conn.free "c" "cs".
 
 Definition handle_close : val := λ: "c",
   Conn.handle (Tag $ N.@"rpc".@"close".@"call")
     (λ: "cs" "ts",
-      Conn.write (Tag (N.@"rpc".@"close".@"resp")) "c" "cs" [TInt 0];;
+      Conn.write "c" "cs" (Tag (N.@"rpc".@"close".@"resp")) [TInt 0];;
       Conn.free "c" "cs";;
       #false).
 
