@@ -46,7 +46,7 @@ Definition confirm : val := λ: "c" "skB" "req",
   let: "counters" := AllocN #2 #0%nat in
   ("counters", "sk", "c").
 
-Definition write : val := λ: "cs" "N" "ts",
+Definition send : val := λ: "cs" "N" "ts",
   let: "c"  := channel "cs" in
   let: "n"  := sent "cs" in
   let: "sk" := session_key "cs" in
@@ -79,7 +79,7 @@ Definition select : val := λ: "cs" "handlers",
     bind: "t" := open (key Open "sk") "t" in
     scan_list (λ: "handler", "handler" "cs" "t") "handlers").
 
-Definition read : val :=
+Definition recv : val :=
   λ: "cs" "N", select "cs" [handle "N" (λ: <> "ts", "ts")%E].
 
 Definition free : val := λ: "cs",

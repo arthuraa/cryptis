@@ -165,12 +165,12 @@ iIntros "%Φ _ post". wp_pures. iApply "post".
 iModIntro. by iFrame.
 Qed.
 
-Lemma wp_write kI kR rl cs N ts φ :
+Lemma wp_send kI kR rl cs N ts φ :
   seal_pred N (conn_pred rl φ) -∗
   ([∗ list] t ∈ ts, public t) -∗
   {{{ connected kI kR rl cs ∗
       (public (si_key cs) ∨ φ kI kR cs ts) }}}
-    Impl.write (repr cs) (Tag N) (repr ts)
+    Impl.send (repr cs) (Tag N) (repr ts)
   {{{ RET #(); connected kI kR rl cs }}}.
 Proof.
 iIntros "#pred #p_ts !> %Φ (conn & inv) post".
@@ -329,10 +329,10 @@ wp_apply ("wp" with "[$inv $conn $inv_ts]") => //.
 iIntros "%res ?". wp_pures. iModIntro. by iApply ("post" $! (Some res)). 
 Qed.
 
-Lemma wp_read N kI kR rl cs φ :
+Lemma wp_recv N kI kR rl cs φ :
   seal_pred N (conn_pred (swap_role rl) φ) -∗
   {{{ connected kI kR rl cs }}}
-    Impl.read (repr cs) (Tag N)
+    Impl.recv (repr cs) (Tag N)
   {{{ ts, RET (repr (ts : list term));
       connected kI kR rl cs ∗
       ([∗ list] t ∈ ts, public t) ∗

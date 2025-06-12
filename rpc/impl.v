@@ -26,27 +26,27 @@ Definition confirm : val := λ: "c" "skB" "req",
   Conn.confirm "c" "skB" "req".
 
 Definition call : val := λ: "cs" "N" "ts",
-  Conn.write "cs" "N" "ts";;
-  Conn.read "cs" (Tag $ rpcN.@"resp").
+  Conn.send "cs" "N" "ts";;
+  Conn.recv "cs" (Tag $ rpcN.@"resp").
 
 Definition handle : val := λ: "N" "f",
   Conn.handle "N"
     (λ: "cs" "ts",
       match: "f" "ts" with
-        SOME "res" => Conn.write "cs" (Tag (rpcN.@"resp")) "res"
-      | NONE => Conn.write "cs" (Tag (rpcN.@"error")) [TInt 0]
+        SOME "res" => Conn.send "cs" (Tag (rpcN.@"resp")) "res"
+      | NONE => Conn.send "cs" (Tag (rpcN.@"error")) [TInt 0]
       end;;
       #true).
 
 Definition close : val := λ: "cs",
-  Conn.write "cs" (Tag $ rpcN.@"close") [TInt 0];;
-  Conn.read  "cs" (Tag $ rpcN.@"resp");;
+  Conn.send "cs" (Tag $ rpcN.@"close") [TInt 0];;
+  Conn.recv  "cs" (Tag $ rpcN.@"resp");;
   Conn.free "cs".
 
 Definition handle_close : expr :=
   Conn.handle (Tag $ rpcN.@"close")
     (λ: "cs" "ts",
-      Conn.write "cs" (Tag (rpcN.@"resp")) [TInt 0];;
+      Conn.send "cs" (Tag (rpcN.@"resp")) [TInt 0];;
       Conn.free "cs";;
       #false)%V.
 

@@ -112,11 +112,11 @@ iAssert (|==>
   iDestruct "inv" as "[#fail|inv]"; eauto.
   iModIntro. iRight. by iFrame. }
 wp_lam. wp_pure _ credit:"c". wp_pures.
-wp_apply (Conn.wp_write with "[] [] [$conn inv]"); eauto.
+wp_apply (Conn.wp_send with "[] [] [$conn inv]"); eauto.
 { iDestruct "inv" as "[(_ & ? & _)|inv]"; first by eauto. iRight.
   by iFrame. }
 iIntros "conn". wp_pures. iApply wp_fupd.
-wp_apply (Conn.wp_read with "[] [$conn]"); eauto.
+wp_apply (Conn.wp_recv with "[] [$conn]"); eauto.
 { by iApply ctx_resp. }
 iIntros "%ts' (conn & p_ts' & inv)".
 iApply "post".
@@ -190,13 +190,13 @@ rewrite or_sep2. iDestruct "inv_ts" as "[resp_pred inv_ts]".
 wp_apply ("wp_f" with "[$]"). iIntros "%ts' (inv_ts' & inv)".
 case: ts' => [ts'|]; wp_pures; last first.
 { wp_list.
-  wp_apply (Conn.wp_write with "[] [] [$conn]") => //.
+  wp_apply (Conn.wp_send with "[] [] [$conn]") => //.
   { by rewrite /= public_TInt. }
   { by iRight. }
   iIntros "conn". wp_pures.
   iApply "post". iModIntro. iLeft. by iFrame. }
 iDestruct "inv_ts'" as "(#p_ts' & inv_ts')".
-wp_apply (Conn.wp_write with "[] [] [inv_ts' resp_pred $conn]") => //.
+wp_apply (Conn.wp_send with "[] [] [inv_ts' resp_pred $conn]") => //.
 { by iApply ctx_resp. }
 { iDestruct "inv_ts'" as "[(_ & ? & _)|inv_ts']"; first by eauto.
   iDestruct "resp_pred" as "[(_ & ? & _)|resp_pred]"; first by eauto.
@@ -223,7 +223,7 @@ iAssert (|==> public (si_key cs))%I with "[inv_ts]" as ">#p_k".
 { iDestruct "inv_ts" as "[?|[_ relC]]"; first by eauto.
   iIntros "!>". iApply "s_k". by iSplit. }
 wp_pures. wp_list.
-wp_apply (Conn.wp_write with "[] [] [$conn]") => //.
+wp_apply (Conn.wp_send with "[] [] [$conn]") => //.
 - by rewrite /= public_TInt.
 - by iLeft.
 iIntros "conn". wp_pures. wp_apply (Conn.wp_free with "[$conn]").
@@ -272,12 +272,12 @@ iMod (release with "rel") as "#relC".
 iPoseProof (ctx_close with "[//]") as "#?".
 iPoseProof (ctx_resp with "[//]") as "#?".
 rewrite or_sep2. iDestruct "resp_pred" as "[t1 t2]".
-wp_apply (Conn.wp_write with "[] [] [$conn t2]") => //.
+wp_apply (Conn.wp_send with "[] [] [$conn t2]") => //.
 { rewrite /= public_TInt. by eauto. }
 { iDestruct "t2" as "[(_ & ? & _)|?]"; first by eauto.
   iRight. by iFrame. }
 iIntros "conn". wp_pures.
-wp_apply (Conn.wp_read with "[] [$]"); eauto.
+wp_apply (Conn.wp_recv with "[] [$]"); eauto.
 iIntros "%ts (conn & _ & inv)". wp_pure _ credit:"c".
 wp_pures. iApply wp_fupd.
 wp_apply (Conn.wp_free with "[$conn]"). iIntros "_".
