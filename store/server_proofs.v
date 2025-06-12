@@ -47,17 +47,16 @@ iPureIntro.
 move=> kI _. solve_ndisj.
 Qed.
 
-Lemma wp_server_conn_handler c kI kR cs vdb vlock γlock :
-  channel c -∗
+Lemma wp_server_conn_handler kI kR cs vdb vlock γlock :
   is_lock γlock vlock (server_db_disconnected kI kR vdb) -∗
   cryptis_ctx -∗
   store_ctx -∗
   {{{ server_db_connected kI kR cs vdb ∗
       locked γlock }}}
-    Server.conn_handler c (repr cs) vdb vlock
+    Server.conn_handler (repr cs) vdb vlock
   {{{ RET #(); True }}}.
 Proof.
-iIntros "#chan_c #lock #? #ctx".
+iIntros "#lock #? #ctx".
 iIntros "!> %Φ ((conn & db) & locked) post".
 iPoseProof (RPC.server_connected_keys with "conn") as "#[-> ->]".
 iPoseProof (store_ctx_rpc_ctx with "[//]") as "?".
@@ -66,7 +65,7 @@ wp_apply wp_server_handle_create; eauto. iIntros "% #?". wp_list.
 wp_apply wp_server_handle_load; eauto. iIntros "% #?". wp_list.
 wp_apply wp_server_handle_store; eauto. iIntros "% #?". wp_list.
 wp_apply (RPC.wp_server with "[$conn db]").
-{ iSplit => //. iSplit => //. iSplit; last first.
+{ iSplit => //. iSplit; last first.
   { rewrite /=. do !iSplit => //. }
   by []. }
 iIntros "(dis & %db & #p_db & vdb & ready)".
@@ -170,7 +169,7 @@ wp_pures.
 iApply (wp_fork with "[conn vdb locked ready]").
 { iModIntro.
   wp_apply (wp_server_conn_handler
-             with "[] [] [] [] [$conn $locked $vdb $ready]") => //. }
+             with "[] [] [] [$conn $locked $vdb $ready]") => //. }
 iApply "post".
 by iFrame.
 Qed.

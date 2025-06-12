@@ -20,6 +20,7 @@ Module Props.
 Record state := State {
   cs_si   :> sess_info;
   cs_ts   :  loc;
+  cs_chan :  val;
   cs_role :  role;
 }.
 
@@ -27,7 +28,7 @@ Definition cs_share cs := si_share_of (cs_role cs) cs.
 
 #[global]
 Instance cs_repr : Repr state :=
-  λ s, (#(cs_ts s), si_key s)%V.
+  λ s, (#(cs_ts s), si_key s, cs_chan s)%V.
 
 Definition countR := authR max_natUR.
 
@@ -56,8 +57,6 @@ Implicit Types b : bool.
 Implicit Types v : val.
 Implicit Types (ok : Prop) (failed : bool).
 Implicit Types si : sess_info.
-
-
 
 Definition failure kI kR : iProp :=
   compromised_key kI ∨ compromised_key kR.
@@ -138,8 +137,14 @@ Definition connected kI kR rl cs : iProp :=
   ⌜si_init cs = kI⌝ ∗
   ⌜si_resp cs = kR⌝ ∗
   ⌜cs_role cs = rl⌝ ∗
+  channel (cs_chan cs) ∗
   wf_sess_info (cs_role cs) cs ∗
   ∃ n m, cs_ts cs ↦∗ [ #n; #m ] ∗ received_auth cs (cs_role cs) m.
+
+Lemma connected_channel kI kR rl cs :
+  connected kI kR rl cs -∗
+  channel (cs_chan cs).
+Proof. by iIntros "(_ & _ & _ & ? & _)". Qed.
 
 Lemma connected_public_key kI kR rl cs kt :
   connected kI kR rl cs -∗
@@ -148,7 +153,7 @@ Lemma connected_public_key kI kR rl cs kt :
   ◇ compromised_session rl cs.
 Proof.
 iIntros "conn rel #p_k".
-iPoseProof "conn" as "(_ & _ & <- & #sess & _)".
+iPoseProof "conn" as "(_ & _ & <- & _ & #sess & _)".
 iDestruct "sess" as "(#? & #s_key & #sess)".
 iPoseProof (senc_key_compromised_keyI with "s_key p_k") as "{p_k} p_k".
 iPoseProof (senc_key_compromised_keyE with "s_key p_k") as "{p_k} >p_k".
@@ -159,7 +164,7 @@ Lemma connected_released_session kI kR rl cs :
   connected kI kR rl cs -∗
   □ (▷ released_session cs → public (si_key cs)).
 Proof.
-iIntros "(_ & _ & _ & #sess & _)".
+iIntros "(_ & _ & _ & _ & #sess & _)".
 by iDestruct "sess" as "(_ & _ & ? & sess)".
 Qed.
 
@@ -176,7 +181,7 @@ Lemma connected_ok kI kR rl cs :
   sign_key kR -∗
   ◇ □ ¬ compromised_session rl cs.
 Proof.
-iIntros "(<- & <- & <- & #sess & % & % & _ & _) s_kI s_kR #signI #signR".
+iIntros "(<- & <- & <- & _ & #sess & % & % & _ & _) s_kI s_kR #signI #signR".
 iDestruct "sess" as "(m_k & s_k & sess)".
 by iApply (session_not_compromised with "[//] s_kI s_kR").
 Qed.
@@ -188,7 +193,8 @@ Definition conn_pred rl φ kS t : iProp :=
     ([∗ list] t' ∈ ts, public t') ∗
     escrow nroot
       (received_auth si (swap_role rl) n)
-      (φ (si_init si) (si_resp si) si ts ∗ received_auth si (swap_role rl) (S n)).
+      (φ (si_init si) (si_resp si) si ts ∗
+       received_auth si (swap_role rl) (S n)).
 
 Lemma session_failed_failure rl si :
   compromised_session rl si  ⊢ failure (si_init si) (si_resp si).

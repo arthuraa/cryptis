@@ -25,16 +25,16 @@ Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Lemma wp_server_handle_store c kI kR cs (vdb : val) :
-  {{{ channel c ∗ cryptis_ctx ∗ store_ctx }}}
-    RPC.handle c (Tag $ dbN.@"store") (Server.handle_store c (repr cs) vdb)
+Lemma wp_server_handle_store kI kR cs (vdb : val) :
+  {{{ cryptis_ctx ∗ store_ctx }}}
+    RPC.handle (Tag $ dbN.@"store") (Server.handle_store (repr cs) vdb)
   {{{ h, RET (repr h); server_handler kI kR cs vdb h }}}.
 Proof.
-iIntros "%Φ (#chan_c & #? & #ctx) post".
+iIntros "%Φ (#? & #ctx) post".
 iPoseProof (store_ctx_store with "ctx") as "?".
 iPoseProof (store_ctx_rpc_ctx with "ctx") as "?".
 wp_lam; wp_pures. wp_apply RPC.wp_handle; last by eauto.
-do 3!iSplit => //. clear Φ.
+do 2!iSplit => //. clear Φ.
 iIntros "!> %ts !> %Φ (#p_ts & inv_ts & %db & #p_db & db & ready) post".
 wp_pures.
 wp_list_match => [t1 t2 ->|?]; wp_pures; last first.

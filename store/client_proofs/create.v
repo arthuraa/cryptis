@@ -25,20 +25,19 @@ Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Lemma wp_client_create c kI kR cs t1 t2 :
-  channel c -∗
+Lemma wp_client_create kI kR cs t1 t2 :
   cryptis_ctx -∗
   store_ctx -∗
   public t1 -∗
   public t2 -∗
   {{{ db_connected kI kR cs ∗
       db_free_at kI kR {[t1]} }}}
-    Client.create c (repr cs) t1 t2
+    Client.create (repr cs) t1 t2
   {{{ RET #();
       db_connected kI kR cs ∗
       db_mapsto kI kR t1 t2 }}}.
 Proof.
-iIntros "#chan_c #? (_ & _ & #create & #ctx) #p_t1 #p_t2".
+iIntros "#? (_ & _ & #create & #ctx) #p_t1 #p_t2".
 iIntros "!> %Φ [client free] post".
 iDestruct "client" as "(conn & db)".
 iMod (create_call t1 t2 with "db free") as "(call & mapsto & waiting)".

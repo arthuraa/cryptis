@@ -51,8 +51,8 @@ Definition game : val := λ: <>,
   (* Store value in server *)
   let: "k" := recv "c" in
   let: "v" := recv "c" in
-  Client.create "c" "conn" "k" "v";;
-  Client.close "c" "conn";;
+  Client.create "conn" "k" "v";;
+  Client.close "conn";;
   (* Leak session key *)
   send "c" (Conn.session_key "conn");;
 
@@ -62,7 +62,7 @@ Definition game : val := λ: <>,
   send "c" "skR";;
 
   (* Retrive value and check that it matches the one that was stored *)
-  let: "v'" := Client.load "c" "conn" "k" in
+  let: "v'" := Client.load "conn" "k" in
   assert: eq_term "v" "v'".
 
 Lemma wp_server_loop c ss :
@@ -122,9 +122,9 @@ wp_apply wp_recv => //. iIntros "%k #p_k". wp_pures.
 wp_apply wp_recv => //. iIntros "%v #p_v". wp_pures.
 rewrite (@db_free_at_diff _ _ _ _ _ _ {[k]}) //.
 iDestruct "free" as "[free_k free]".
-wp_apply (wp_client_create with "[] [] [] [] [] [$]") => //.
+wp_apply (wp_client_create with "[] [] [] [] [$]") => //.
 iIntros "[client k_v]". wp_pures.
-wp_apply (wp_client_close with "[] [] [$client]") => //.
+wp_apply (wp_client_close with "[] [$client]") => //.
 iIntros "[client #p_sk]".
 wp_pures.
 wp_apply Conn.wp_session_key => //. iIntros "_".
@@ -136,7 +136,7 @@ iMod (secret_public with "s_skI") as "#p_skI".
 iMod (secret_public with "s_skR") as "#p_skR".
 wp_apply wp_send => //. wp_pures.
 wp_apply wp_send => //. wp_pures.
-wp_apply (wp_client_load with "[] [] [] [] [$client $k_v]") => //.
+wp_apply (wp_client_load with "[] [] [] [$client $k_v]") => //.
 iIntros "%v' (client & k_v & _ & [fail|->])".
 { by iPoseProof ("ok'" with "fail") as "[]". }
 wp_pures. wp_apply wp_assert. wp_apply wp_eq_term.

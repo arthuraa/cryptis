@@ -25,17 +25,17 @@ Implicit Types v : val.
 
 Ltac failure := iLeft; iFrame; eauto.
 
-Lemma wp_server_handle_create c kI kR cs (vdb : val) :
-  {{{ channel c ∗ cryptis_ctx ∗ store_ctx }}}
-    RPC.handle c (Tag $ dbN.@"create") (Server.handle_create c (repr cs) vdb)
+Lemma wp_server_handle_create kI kR cs (vdb : val) :
+  {{{ cryptis_ctx ∗ store_ctx }}}
+    RPC.handle (Tag $ dbN.@"create") (Server.handle_create (repr cs) vdb)
   {{{ h, RET (repr h); server_handler kI kR cs vdb h }}}.
 Proof.
-iIntros "%Φ (#chan_c & #ctx & #ctx') post".
+iIntros "%Φ (#ctx & #ctx') post".
 iPoseProof (store_ctx_create with "[//]") as "?".
 iPoseProof (store_ctx_rpc_ctx with "[//]") as "?".
 wp_lam. wp_pures.
 wp_apply RPC.wp_handle; last by eauto.
-do 3!iSplit => //. clear Φ.
+do 2!iSplit => //. clear Φ.
 iIntros "!> %ts !> %Φ (#p_ts & inv_ts & %db & #p_db & db & ready) post".
 wp_list_match => [t1 t2 ->| ?]; wp_pures; last first.
 { iApply ("post" $! None). iFrame.

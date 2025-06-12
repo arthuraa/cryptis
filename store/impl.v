@@ -21,21 +21,20 @@ Section Client.
 Definition connect : val := λ: "c" "skA" "vkB",
   RPC.connect "c" "skA" "vkB".
 
-Definition store : val := λ: "c" "cs" "k" "v",
-  RPC.call "c" "cs" (Tag $ dbN.@"store") ["k"; "v"];; #().
+Definition store : val := λ: "cs" "k" "v",
+  RPC.call "cs" (Tag $ dbN.@"store") ["k"; "v"];; #().
 
-Definition load : val := λ: "c" "cs" "k",
-  let: "ts" := RPC.call "c" "cs" (Tag $ dbN.@"load") ["k"] in
+Definition load : val := λ: "cs" "k",
+  let: "ts" := RPC.call "cs" (Tag $ dbN.@"load") ["k"] in
   match: "ts" with
     NONE => TInt 0
   | SOME "ts" => Fst "ts"
   end.
 
-Definition create : val := λ: "c" "cs" "k" "v",
-  RPC.call "c" "cs" (Tag $ dbN.@"create") ["k"; "v"];; #().
+Definition create : val := λ: "cs" "k" "v",
+  RPC.call "cs" (Tag $ dbN.@"create") ["k"; "v"];; #().
 
-Definition close : val := λ: "c" "cs",
-  RPC.close "c" "cs".
+Definition close : val := λ: "cs", RPC.close "cs".
 
 End Client.
 
@@ -50,19 +49,19 @@ Definition start : val := λ: "k",
   ("k", "accounts").
 
 Definition handle_store : val :=
-λ: "c" "cs" "db" "req",
+λ: "cs" "db" "req",
   list_match: ["k"; "v"] := "req" in
   SAList.insert "db" "k" "v";;
   SOME [TInt 0].
 
 Definition handle_load : val :=
-λ: "c" "cs" "db" "req",
+λ: "cs" "db" "req",
   list_match: ["k"] := "req" in
   bind: "data" := SAList.find "db" "k" in
   SOME ["data"].
 
 Definition handle_create : val :=
-λ: "c" "cs" "db" "req",
+λ: "cs" "db" "req",
   list_match: ["k"; "v"] := "req" in
   match: SAList.find "db" "k" with
     SOME <> => NONE
@@ -71,11 +70,11 @@ Definition handle_create : val :=
     SOME [TInt 0]
   end.
 
-Definition conn_handler : val := λ: "c" "cs" "db" "lock",
-  RPC.server "c" "cs" [
-    RPC.handle "c" (Tag $ dbN.@"store") (handle_store "c" "cs" "db");
-    RPC.handle "c" (Tag $ dbN.@"load") (handle_load "c" "cs" "db");
-    RPC.handle "c" (Tag $ dbN.@"create") (handle_create "c" "cs" "db")
+Definition conn_handler : val := λ: "cs" "db" "lock",
+  RPC.server "cs" [
+    RPC.handle (Tag $ dbN.@"store") (handle_store "cs" "db");
+    RPC.handle (Tag $ dbN.@"load") (handle_load "cs" "db");
+    RPC.handle (Tag $ dbN.@"create") (handle_create "cs" "db")
   ];;
   lock.release "lock".
 
@@ -100,6 +99,6 @@ Definition listen : val := λ: "c" "ss",
   let: "lock" := Snd "account" in
   acquire "lock";;
   let: "cs" := RPC.confirm "c" "secret_key" "res" in
-  Fork (conn_handler "c" "cs" "db" "lock").
+  Fork (conn_handler "cs" "db" "lock").
 
 End Server.

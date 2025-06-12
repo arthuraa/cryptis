@@ -85,19 +85,19 @@ iIntros "%cs (conn & dis & rel & token)".
 iApply "post". by iFrame.
 Qed.
 
-Lemma wp_call N φ ψ kI kR c cs (ts : list term) :
-  {{{ channel c ∗ cryptis_ctx ∗ ctx ∗
+Lemma wp_call N φ ψ kI kR cs (ts : list term) :
+  {{{ cryptis_ctx ∗ ctx ∗
       ([∗ list] t ∈ ts, public t) ∗
       rpc N φ ψ ∗
       client_connected kI kR cs ∗
       (compromised_session Init cs ∨ φ kI kR cs ts) }}}
-    call c (repr cs) (Tag N) (repr ts)
+    call (repr cs) (Tag N) (repr ts)
   {{{ ts', RET (repr ts');
       client_connected kI kR cs ∗
       (compromised_session Init cs ∨ ψ kI kR cs ts ts') ∗
       ([∗ list] t ∈ ts', public t) }}}.
 Proof.
-iIntros "%Φ (#? & #? & #? & #p_ts & #? & conn & inv) post".
+iIntros "%Φ (#? & #? & #p_ts & #? & conn & inv) post".
 iDestruct "conn" as "(conn & rel & resp_pred)".
 iAssert (|==>
   (compromised_session Init cs ∨ resp_pred_token cs (ψ kI kR cs ts)) ∗
@@ -112,11 +112,11 @@ iAssert (|==>
   iDestruct "inv" as "[#fail|inv]"; eauto.
   iModIntro. iRight. by iFrame. }
 wp_lam. wp_pure _ credit:"c". wp_pures.
-wp_apply (Conn.wp_write with "[//] [] [] [$conn inv]"); eauto.
+wp_apply (Conn.wp_write with "[] [] [$conn inv]"); eauto.
 { iDestruct "inv" as "[(_ & ? & _)|inv]"; first by eauto. iRight.
   by iFrame. }
 iIntros "conn". wp_pures. iApply wp_fupd.
-wp_apply (Conn.wp_read with "[//] [] [$conn]"); eauto.
+wp_apply (Conn.wp_read with "[] [$conn]"); eauto.
 { by iApply ctx_resp. }
 iIntros "%ts' (conn & p_ts' & inv)".
 iApply "post".
@@ -148,9 +148,8 @@ Definition wf_handler Φ kI kR cs h : iProp :=
       public (si_key cs))%I
     kI kR Resp cs h.
 
-Lemma wp_handle Φ N φ₁ φ₂ kI kR c cs (f : val) :
+Lemma wp_handle Φ N φ₁ φ₂ kI kR cs (f : val) :
   {{{
-    channel c ∗
     rpc N φ₁ φ₂ ∗
     ctx ∗
     □ (∀ (ts : list term),
@@ -166,10 +165,10 @@ Lemma wp_handle Φ N φ₁ φ₂ kI kR c cs (f : val) :
           end ∗
           Φ }}})
   }}}
-    handle c (Tag N) f
+    handle (Tag N) f
   {{{ h, RET (repr h); wf_handler Φ kI kR cs h }}}.
 Proof.
-iIntros "%Ψ (#chan_c & #? & #ctx & #wp_f) post".
+iIntros "%Ψ (#? & #ctx & #wp_f) post".
 iPoseProof (ctx_error with "[//]") as "#?".
 wp_lam; wp_pures.
 iApply Conn.wp_handle; last by eauto.
@@ -191,13 +190,13 @@ rewrite or_sep2. iDestruct "inv_ts" as "[resp_pred inv_ts]".
 wp_apply ("wp_f" with "[$]"). iIntros "%ts' (inv_ts' & inv)".
 case: ts' => [ts'|]; wp_pures; last first.
 { wp_list.
-  wp_apply (Conn.wp_write with "[//] [] [] [$conn]") => //.
+  wp_apply (Conn.wp_write with "[] [] [$conn]") => //.
   { by rewrite /= public_TInt. }
   { by iRight. }
   iIntros "conn". wp_pures.
   iApply "post". iModIntro. iLeft. by iFrame. }
 iDestruct "inv_ts'" as "(#p_ts' & inv_ts')".
-wp_apply (Conn.wp_write with "[//] [] [] [inv_ts' resp_pred $conn]") => //.
+wp_apply (Conn.wp_write with "[] [] [inv_ts' resp_pred $conn]") => //.
 { by iApply ctx_resp. }
 { iDestruct "inv_ts'" as "[(_ & ? & _)|inv_ts']"; first by eauto.
   iDestruct "resp_pred" as "[(_ & ? & _)|resp_pred]"; first by eauto.
@@ -206,12 +205,12 @@ iIntros "conn". wp_pures. iApply "post". iModIntro.
 iLeft. by iFrame.
 Qed.
 
-Lemma wp_handle_close Φ c kI kR cs :
-  {{{ channel c ∗ ctx }}}
-    handle_close c
+Lemma wp_handle_close Φ kI kR cs :
+  {{{ ctx }}}
+    handle_close
   {{{ h, RET (repr h); wf_handler Φ kI kR cs h }}}.
 Proof.
-iIntros "%Ψ (#chan_c & #ctx) post". wp_lam; wp_pures.
+iIntros "%Ψ #ctx post".
 wp_apply Conn.wp_handle; last by eauto. clear Ψ.
 iPoseProof (ctx_close with "ctx") as "#?".
 iPoseProof (ctx_resp with "ctx") as "#?".
@@ -224,7 +223,7 @@ iAssert (|==> public (si_key cs))%I with "[inv_ts]" as ">#p_k".
 { iDestruct "inv_ts" as "[?|[_ relC]]"; first by eauto.
   iIntros "!>". iApply "s_k". by iSplit. }
 wp_pures. wp_list.
-wp_apply (Conn.wp_write with "[//] [] [] [$conn]") => //.
+wp_apply (Conn.wp_write with "[] [] [$conn]") => //.
 - by rewrite /= public_TInt.
 - by iLeft.
 iIntros "conn". wp_pures. wp_apply (Conn.wp_free with "[$conn]").
@@ -232,25 +231,25 @@ iIntros "_". wp_pures. iApply "post".
 iModIntro. iFrame. iRight. by eauto.
 Qed.
 
-Lemma wp_server Φ kI kR c cs handlers :
-  {{{ channel c ∗ ctx ∗
+Lemma wp_server Φ kI kR cs handlers :
+  {{{ ctx ∗
       server_connected kI kR cs ∗ Φ ∗
       [∗ list] h ∈ handlers, wf_handler Φ kI kR cs h }}}
-    server c (repr cs) (repr handlers)
+    server (repr cs) (repr handlers)
   {{{ RET #(); public (si_key cs) ∗ Φ }}}.
 Proof.
 iLöb as "IH".
-iIntros "%Ψ (#chan_c & #ctx & conn & inv & #handlers) post".
+iIntros "%Ψ (#ctx & conn & inv & #handlers) post".
 iDestruct "conn" as "(conn & rel)".
 iPoseProof (Conn.connected_keyE with "conn") as "#(-> & -> & _)".
-wp_rec. wp_pures. wp_apply (wp_handle_close Φ _ _ _ cs); eauto.
+wp_rec. wp_pures. wp_apply (wp_handle_close Φ _ _ cs); eauto.
 iIntros "%hc #wp_hc". wp_list.
 iAssert ([∗ list] h ∈ (hc :: handlers), wf_handler Φ _ _ cs h)%I
   as "#wp".
 { rewrite /=; iSplit => //. eauto. }
-iClear "wp_hc". wp_bind (Conn.select _ _ _).
+iClear "wp_hc". wp_bind (Conn.select _ _).
 iApply (wp_wand with "[inv conn rel]").
-{ wp_apply (Conn.wp_select with "chan_c wp [$conn $rel $inv]"). }
+{ wp_apply (Conn.wp_select with "wp [$conn $rel $inv]"). }
 iIntros "%res Hres".
 iDestruct "Hres" as "[(-> & Hres)|(-> & Hres)]".
 - iDestruct "Hres" as "(inv & conn & rel)". wp_pures.
@@ -260,12 +259,12 @@ iDestruct "Hres" as "[(-> & Hres)|(-> & Hres)]".
   iApply "post". by iFrame.
 Qed.
 
-Lemma wp_close c kI kR cs :
-  {{{ channel c ∗ ctx ∗ client_connected kI kR cs }}}
-    close c (repr cs)
+Lemma wp_close kI kR cs :
+  {{{ ctx ∗ client_connected kI kR cs }}}
+    close (repr cs)
   {{{ RET #(); public (si_key cs) }}}.
 Proof.
-iIntros "%Φ (#chan_c & #ctx & conn) post".
+iIntros "%Φ (#ctx & conn) post".
 iDestruct "conn" as "(conn & rel & resp_pred)".
 iPoseProof (Conn.connected_keyE with "conn") as "#(-> & -> & _)".
 wp_lam. wp_pures. wp_list.
@@ -273,12 +272,12 @@ iMod (release with "rel") as "#relC".
 iPoseProof (ctx_close with "[//]") as "#?".
 iPoseProof (ctx_resp with "[//]") as "#?".
 rewrite or_sep2. iDestruct "resp_pred" as "[t1 t2]".
-wp_apply (Conn.wp_write with "[//] [] [] [$conn t2]") => //.
+wp_apply (Conn.wp_write with "[] [] [$conn t2]") => //.
 { rewrite /= public_TInt. by eauto. }
 { iDestruct "t2" as "[(_ & ? & _)|?]"; first by eauto.
   iRight. by iFrame. }
 iIntros "conn". wp_pures.
-wp_apply (Conn.wp_read with "[//] [] [$]"); eauto.
+wp_apply (Conn.wp_read with "[] [$]"); eauto.
 iIntros "%ts (conn & _ & inv)". wp_pure _ credit:"c".
 wp_pures. iApply wp_fupd.
 wp_apply (Conn.wp_free with "[$conn]"). iIntros "_".

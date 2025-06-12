@@ -23,14 +23,13 @@ Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Lemma wp_client_close c kI kR cs :
-  channel c -∗
+Lemma wp_client_close kI kR cs :
   store_ctx -∗
   {{{ db_connected kI kR cs }}}
-    Client.close c (repr cs)
+    Client.close (repr cs)
   {{{ RET #(); db_disconnected kI kR ∗ public (si_key cs) }}}.
 Proof.
-iIntros "#chan_c (_ & _ & _ & #?)".
+iIntros "(_ & _ & _ & #?)".
 iIntros "!> %Φ client post".
 iDestruct "client" as "(conn & %db & ready & state)".
 iPoseProof (RPC.client_connected_keys with "conn") as "#[-> ->]".

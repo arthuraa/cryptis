@@ -15,14 +15,20 @@ Module Impl.
 
 Section Impl.
 
-Definition session_key : val := λ: "cs",
+Definition channel : val := λ: "cs",
   Snd "cs".
+
+Definition sent     : val := λ: "cs", Fst (Fst "cs") +ₗ #0%nat.
+Definition received : val := λ: "cs", Fst (Fst "cs") +ₗ #1%nat.
+
+Definition session_key : val := λ: "cs",
+  Snd (Fst "cs").
 
 Definition connect : val := λ: "c" "skA" "vkB",
   let: "session_key" :=
     do_until (λ: <>, initiator "c" "skA" "vkB") in
   let: "counters" := AllocN #2 #0%nat in
-  ("counters", "session_key").
+  ("counters", "session_key", "c").
 
 Definition listen : val := λ: "c",
   do_until (λ: <>,
@@ -38,12 +44,10 @@ Definition confirm : val := λ: "c" "skB" "req",
   let: "sk" := do_until
     (λ: <>, responder_accept "c" "skB" "ga" "vkA") in
   let: "counters" := AllocN #2 #0%nat in
-  ("counters", "sk").
+  ("counters", "sk", "c").
 
-Definition sent     : val := λ: "cs", Fst "cs" +ₗ #0%nat.
-Definition received : val := λ: "cs", Fst "cs" +ₗ #1%nat.
-
-Definition write : val := λ: "c" "cs" "N" "ts",
+Definition write : val := λ: "cs" "N" "ts",
+  let: "c"  := channel "cs" in
   let: "n"  := sent "cs" in
   let: "sk" := session_key "cs" in
   let: "m"  := term_of_list (tint !"n" :: "ts") in
@@ -68,18 +72,18 @@ Definition handle : val := λ: "N" "handler" "cs" "t",
   bind: "ts" := try_open "cs" "N" "t" in
   SOME ("handler" "cs" "ts").
 
-Definition select : val := λ: "c" "cs" "handlers",
+Definition select : val := λ: "cs" "handlers",
   let: "sk" := session_key "cs" in
   do_until (λ: <>,
-    let: "t" := recv "c" in
+    let: "t" := recv (channel "cs") in
     bind: "t" := open (key Open "sk") "t" in
     scan_list (λ: "handler", "handler" "cs" "t") "handlers").
 
 Definition read : val :=
-  λ: "c" "cs" "N", select "c" "cs" [handle "N" (λ: <> "ts", "ts")%E].
+  λ: "cs" "N", select "cs" [handle "N" (λ: <> "ts", "ts")%E].
 
-Definition free : val := λ: "c" "cs",
-  let: "counters" := Fst "cs" in
+Definition free : val := λ: "cs",
+  let: "counters" := Fst (Fst "cs") in
   Free "counters";;
   Free ("counters" +ₗ #1%nat).
 

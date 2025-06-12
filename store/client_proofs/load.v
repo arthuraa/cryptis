@@ -26,21 +26,20 @@ Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Lemma wp_client_load c kI kR cs t1 t2 :
-  channel c -∗
+Lemma wp_client_load kI kR cs t1 t2 :
   cryptis_ctx -∗
   store_ctx -∗
   public t1 -∗
   {{{ db_connected kI kR cs ∗
       db_mapsto kI kR t1 t2 }}}
-    Client.load c (repr cs) t1
+    Client.load (repr cs) t1
   {{{ t2', RET (repr t2');
       db_connected kI kR cs ∗
       db_mapsto kI kR t1 t2 ∗
       public t2' ∗
       (compromised_session Init cs ∨ ⌜t2' = t2⌝) }}}.
 Proof.
-iIntros "#chan_c #? #ctx #p_t1 !> %Φ [client mapsto] post".
+iIntros "#? #ctx #p_t1 !> %Φ [client mapsto] post".
 iDestruct "client" as "(conn & db)".
 iMod (load_call t1 with "db mapsto") as "(load & mapsto & waiting)".
 wp_lam; wp_pures. wp_list.
