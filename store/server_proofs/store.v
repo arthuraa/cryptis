@@ -25,12 +25,10 @@ Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Variable N : namespace.
-
 Lemma wp_server_handle_store c kI kR cs (vdb : val) :
-  {{{ channel c ∗ cryptis_ctx ∗ store_ctx N }}}
-    RPC.handle N "store" c (Server.handle_store c (repr cs) vdb)
-  {{{ h, RET (repr h); server_handler N kI kR cs vdb h }}}.
+  {{{ channel c ∗ cryptis_ctx ∗ store_ctx }}}
+    RPC.handle dbN "store" c (Server.handle_store c (repr cs) vdb)
+  {{{ h, RET (repr h); server_handler kI kR cs vdb h }}}.
 Proof.
 iIntros "%Φ (#chan_c & #? & #ctx) post".
 iPoseProof (store_ctx_store with "ctx") as "?".

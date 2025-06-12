@@ -27,14 +27,14 @@ Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Lemma wp_connect P N c kI kR :
+Lemma wp_connect P c kI kR :
   channel c -∗
   cryptis_ctx -∗
-  ctx N -∗
+  ctx -∗
   sign_key kI -∗
   public (TKey Open kR) -∗
   {{{ Conn.failure kI kR ∨ P }}}
-    Impl.connect N c kI (TKey Open kR)
+    Impl.connect c kI (TKey Open kR)
   {{{ cs, RET (repr cs);
       client_connected kI kR cs ∗
       (compromised_session Init cs ∨ P) }}}.
@@ -48,10 +48,10 @@ iIntros "%cs (connected & P & rel & token)".
 iApply "post". by iFrame.
 Qed.
 
-Lemma wp_listen N c :
+Lemma wp_listen c :
   channel c -∗
   cryptis_ctx -∗
-  ctx N -∗
+  ctx -∗
   {{{ True }}}
     listen c
   {{{ ga skA, RET (ga, TKey Open skA)%V;
@@ -62,13 +62,13 @@ wp_lam. iApply Conn.wp_listen => //.
 by iApply Props.ctx_conn_ctx.
 Qed.
 
-Lemma wp_confirm P N c skA skB ga :
+Lemma wp_confirm P c skA skB ga :
   channel c -∗
   cryptis_ctx -∗
-  ctx N -∗
+  ctx -∗
   {{{ public ga ∗ public (TKey Open skA) ∗ sign_key skB ∗
       (Conn.failure skA skB ∨ P) }}}
-    confirm N c skB (ga, TKey Open skA)%V
+    confirm c skB (ga, TKey Open skA)%V
   {{{ cs, RET (repr cs);
       server_connected skA skB cs ∗
       (compromised_session Resp cs ∨ P) }}}.
@@ -84,7 +84,7 @@ iApply "post". by iFrame.
 Qed.
 
 Lemma wp_call N s φ ψ kI kR c cs (ts : list term) :
-  {{{ channel c ∗ cryptis_ctx ∗ ctx N ∗
+  {{{ channel c ∗ cryptis_ctx ∗ ctx ∗
       ([∗ list] t ∈ ts, public t) ∗
       rpc_pred N s φ ψ ∗
       client_connected kI kR cs ∗
@@ -126,7 +126,7 @@ Lemma wp_handle Φ N s φ₁ φ₂ kI kR c cs (f : val) :
   {{{
     channel c ∗
     rpc_pred N s φ₁ φ₂ ∗
-    ctx N ∗
+    ctx ∗
     □ (∀ (ts : list term),
       {{{ ▷ ([∗ list] t ∈ ts, public t) ∗
           ▷ (compromised_session Resp cs ∨ φ₁ kI kR cs ts) ∗
@@ -175,9 +175,9 @@ iIntros "conn". wp_pures. iApply "post". iModIntro.
 iLeft. by iFrame.
 Qed.
 
-Lemma wp_handle_close Φ N c kI kR cs :
-  {{{ channel c ∗ ctx N }}}
-    handle_close N c
+Lemma wp_handle_close Φ c kI kR cs :
+  {{{ channel c ∗ ctx }}}
+    handle_close c
   {{{ h, RET (repr h); wf_handler Φ kI kR cs h }}}.
 Proof.
 iIntros "%Ψ (#chan_c & #ctx) post". wp_lam; wp_pures.
@@ -201,18 +201,18 @@ iIntros "_". wp_pures. iApply "post".
 iModIntro. iFrame. iRight. by eauto.
 Qed.
 
-Lemma wp_server Φ N kI kR c cs handlers :
-  {{{ channel c ∗ ctx N ∗
+Lemma wp_server Φ kI kR c cs handlers :
+  {{{ channel c ∗ ctx ∗
       server_connected kI kR cs ∗ Φ ∗
       [∗ list] h ∈ handlers, wf_handler Φ kI kR cs h }}}
-    server N c (repr cs) (repr handlers)
+    server c (repr cs) (repr handlers)
   {{{ RET #(); public (si_key cs) ∗ Φ }}}.
 Proof.
 iLöb as "IH".
 iIntros "%Ψ (#chan_c & #ctx & conn & inv & #handlers) post".
 iDestruct "conn" as "(conn & rel)".
 iPoseProof (Conn.connected_keyE with "conn") as "#(-> & -> & _)".
-wp_rec. wp_pures. wp_apply (wp_handle_close Φ N _ _ _ cs); eauto.
+wp_rec. wp_pures. wp_apply (wp_handle_close Φ _ _ _ cs); eauto.
 iIntros "%hc #wp_hc". wp_list.
 iAssert ([∗ list] h ∈ (hc :: handlers), wf_handler Φ _ _ cs h)%I
   as "#wp".
@@ -229,9 +229,9 @@ iDestruct "Hres" as "[(-> & Hres)|(-> & Hres)]".
   iApply "post". by iFrame.
 Qed.
 
-Lemma wp_close N c kI kR cs :
-  {{{ channel c ∗ ctx N ∗ client_connected kI kR cs }}}
-    close N c (repr cs)
+Lemma wp_close c kI kR cs :
+  {{{ channel c ∗ ctx ∗ client_connected kI kR cs }}}
+    close c (repr cs)
   {{{ RET #(); public (si_key cs) }}}.
 Proof.
 iIntros "%Φ (#chan_c & #ctx & conn) post".

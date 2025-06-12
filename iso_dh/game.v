@@ -134,7 +134,7 @@ Definition do_init_loop : val :=
     let: "vkR'" := recv "c" in
     (bind: "kt" := is_key "vkR'" in
      guard: ("kt" = repr Open) in
-     bind: "sk" := initiator isoN "c" "skI" "vkR'" in
+     bind: "sk" := initiator "c" "skI" "vkR'" in
      add_fresh_lock_term_set "sk" "set";;
      if: eq_term "vkR" "vkR'" then check_key_secrecy "c" "compromised" "sk"
      else #());;
@@ -146,27 +146,28 @@ Definition do_init : val := λ: "c" "compromised" "skI" "vkR",
 
 Definition iso_dh_game_inv rl x : iProp := ∃ si,
   ⌜si_key si = x⌝ ∧
-  term_meta (si_share_of rl si) (isoN.@"fresh") ().
+  term_meta (si_share_of rl si) (gameN.@"fresh") ().
 
-Lemma iso_dh_game_fresh rl si :
-  term_token (si_share_of rl si) (↑isoN) -∗
+Lemma iso_dh_game_fresh rl si E :
+  ↑gameN.@"fresh" ⊆ E →
+  term_token (si_share_of rl si) E -∗
   fresh_term (iso_dh_game_inv rl) (si_key si) ∗
-  term_token (si_share_of rl si) (↑isoN ∖ ↑isoN.@"fresh").
+  term_token (si_share_of rl si) (E ∖ ↑gameN.@"fresh").
 Proof.
-iIntros "token".
-iPoseProof (term_token_difference _ (↑isoN.@"fresh") with "token")
-  as "[token ?]" => //; first solve_ndisj. iFrame. iSplit.
+iIntros "% token".
+iPoseProof (term_token_difference _ (↑gameN.@"fresh") with "token")
+  as "[token ?]" => //; iFrame. iSplit.
 - iIntros "# (%si' & %e & #meta)".
   rewrite (session_agree e).
   by iDestruct (term_meta_token with "token meta") as "[]".
-- iMod (term_meta_set (isoN.@"fresh") () with "token") as "#meta" => //.
+- iMod (term_meta_set (gameN.@"fresh") () with "token") as "#meta" => //.
   iIntros "!> !>". iExists si. by eauto.
 Qed.
 
 Lemma wp_do_init_loop c lcomp vset kI kR :
   channel c -∗
   cryptis_ctx -∗
-  iso_dh_ctx isoN -∗
+  iso_dh_ctx -∗
   sign_key kI -∗
   sign_key kR -∗
   inv gameN (game_inv lcomp kI kR) -∗
@@ -186,11 +187,12 @@ case: Spec.is_keyP => [kt kR' eekR|_]; wp_pures; last by iApply "Hpost".
 wp_pures.
 case: bool_decide_reflect => [ekt|_]; wp_pures ; last by iApply "Hpost".
 case: kt eekR ekt => // -> _.
-wp_pures. wp_apply (wp_initiator _ false) => //. iIntros "%ts tsP".
+wp_pures. wp_apply (wp_initiator false) => //. iIntros "%ts tsP".
 case: ts=> [sk|] => /=; wp_pures; last by iApply "Hpost".
 iDestruct "tsP"
   as "(%si & <- & <- & <- & #m_sk & #s_k & #? & rel & token)".
-iPoseProof (iso_dh_game_fresh Init with "token") as "[fresh token]".
+iPoseProof (iso_dh_game_fresh Init with "token")
+  as "[fresh token]"; first solve_ndisj.
 iMod (unrelease with "rel") as "#un".
 iAssert (□ ¬ released_session si)%I as "#?".
 { iIntros "!> #?". by iApply (unreleased_released_session _ Init). }
@@ -206,7 +208,7 @@ Qed.
 Lemma wp_do_init c lcomp kI kR :
   channel c -∗
   cryptis_ctx -∗
-  iso_dh_ctx isoN -∗
+  iso_dh_ctx -∗
   sign_key kI -∗
   sign_key kR -∗
   inv gameN (game_inv lcomp kI kR) -∗
@@ -224,7 +226,7 @@ Qed.
 Definition do_resp_loop : val :=
   rec: "loop" "c" "compromised" "set" "skR" "vkI" :=
     Fork ("loop" "c" "compromised" "set" "skR" "vkI");;
-    (bind: "res" := responder isoN "c" "skR" in
+    (bind: "res" := responder "c" "skR" in
      let: "vkI'" := Fst "res" in
      let: "sk" := Snd "res" in
      add_fresh_lock_term_set "sk" "set";;
@@ -240,7 +242,7 @@ Definition do_resp : val := λ: "c" "compromised" "skR" "vkI",
 Lemma wp_do_resp_loop c lcomp set skI skR :
   channel c -∗
   cryptis_ctx -∗
-  iso_dh_ctx isoN -∗
+  iso_dh_ctx -∗
   sign_key skI -∗
   sign_key skR -∗
   inv gameN (game_inv lcomp skI skR) -∗
@@ -258,7 +260,8 @@ iIntros "%res res".
 case: res => [[vkI' sk]|]; wp_pures; last by iApply "Hpost".
 iDestruct "res"
   as "(%si & -> & <- & <- & #p_vkI' & #m_sk & #s_k & rel & token)".
-iPoseProof (iso_dh_game_fresh Resp with "token") as "[fresh token]".
+iPoseProof (iso_dh_game_fresh Resp with "token")
+  as "[fresh token]"; first solve_ndisj.
 iMod (unrelease with "rel") as "#un".
 iAssert (¬ released_session si)%I as "?".
 { iIntros "#?". by iApply (unreleased_released_session _ Resp). }
@@ -272,7 +275,7 @@ Qed.
 Lemma wp_do_resp c lcomp skI skR :
   channel c -∗
   cryptis_ctx -∗
-  iso_dh_ctx isoN -∗
+  iso_dh_ctx -∗
   sign_key skI -∗
   sign_key skR -∗
   inv gameN (game_inv lcomp skI skR) -∗
@@ -307,7 +310,7 @@ Lemma wp_game :
   WP game #() {{ _, True }}.
 Proof.
 iIntros "#ctx enc_tok key_tok"; rewrite /game; wp_pures.
-iMod (iso_dh_ctx_alloc isoN with "enc_tok") as "#?" => //.
+iMod (iso_dh_ctx_alloc with "enc_tok") as "[#? _]" => //.
 wp_apply wp_init_network => //. iIntros "%c #cP". wp_pures.
 wp_apply (wp_mksigkey with "[]"); eauto.
 iIntros "%skI #p_vkI #sign_skI s_skI tokenI". wp_pures.

@@ -13,6 +13,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Notation connN := (nroot.@"conn").
+
 Module Props.
 
 Record state := State {
@@ -55,7 +57,7 @@ Implicit Types v : val.
 Implicit Types (ok : Prop) (failed : bool).
 Implicit Types si : sess_info.
 
-Variable N : namespace.
+
 
 Definition failure kI kR : iProp :=
   compromised_key kI ∨ compromised_key kR.
@@ -70,14 +72,14 @@ Instance wf_sess_info_persistent rl si : Persistent (wf_sess_info rl si).
 Proof. apply _. Qed.
 
 Definition never_connected kI kR : iProp :=
-  term_token kR (↑N.@"server".@kI).
+  term_token kR (↑connN.@"server".@kI).
 
 Lemma never_connected_switch kI kR Q : ⊢ switch (never_connected kI kR) Q.
 Proof. apply term_token_switch. Qed.
 
-Lemma public_sencE N' rl si t φ :
-  public (TSeal (TKey Seal (si_key si)) (Spec.tag (Tag N') t)) -∗
-  seal_pred N' φ -∗
+Lemma public_sencE N rl si t φ :
+  public (TSeal (TKey Seal (si_key si)) (Spec.tag (Tag N) t)) -∗
+  seal_pred N φ -∗
   wf_sess_info rl si -∗
   ▷ □ (public (si_key si) ∗ public t ∨ φ (si_key si) t).
 Proof.
@@ -88,10 +90,10 @@ iDestruct (public_TSealE with "[//] [//]") as "{p_m} [[p_key p_m]|p_m]".
 Qed.
 
 Definition received_auth si rl n : iProp :=
-  term_own (si_share_of rl si) (isoN.@"received") (● MaxNat n).
+  term_own (si_share_of rl si) (connN.@"received") (● MaxNat n).
 
 Definition received_frag si rl n : iProp :=
-  term_own (si_share_of rl si) (isoN.@"received") (◯ MaxNat n).
+  term_own (si_share_of rl si) (connN.@"received") (◯ MaxNat n).
 
 Lemma received_update si rl n :
   received_auth si rl n ==∗
@@ -104,13 +106,13 @@ apply: max_nat_local_update => /=; lia.
 Qed.
 
 Lemma received_alloc si rl E :
-  ↑isoN.@"received" ⊆ E →
+  ↑connN.@"received" ⊆ E →
   term_token (si_share_of rl si) E ==∗
   received_auth si rl 0 ∗
-  term_token (si_share_of rl si) (E ∖ ↑isoN.@"received").
+  term_token (si_share_of rl si) (E ∖ ↑connN.@"received").
 Proof.
 iIntros "% token".
-iMod (term_own_alloc (isoN.@"received") (● MaxNat 0)
+iMod (term_own_alloc (connN.@"received") (● MaxNat 0)
        with "token") as "[own token]" => //.
 - by rewrite auth_auth_valid.
 - by iFrame.
@@ -191,32 +193,6 @@ Definition conn_pred rl φ kS t : iProp :=
 Lemma session_failed_failure rl si :
   compromised_session rl si  ⊢ failure (si_init si) (si_resp si).
 Proof. by iIntros "(#failed & _)". Qed.
-
-Definition ctx : iProp :=
-  iso_dh_ctx N.
-
-Lemma ctx_alloc E :
-  ↑N ⊆ E →
-  seal_pred_token E ==∗
-  ctx ∗ seal_pred_token (E ∖ ↑N).
-Proof.
-iIntros "%sub token".
-rewrite (seal_pred_token_difference (↑N));
-  try solve_ndisj.
-iDestruct "token" as "[token ?]". iFrame.
-iMod (iso_dh_ctx_alloc N with "token")
-  as "#iso_dh"; try solve_ndisj.
-Qed.
-
-Ltac solve_ctx :=
-  iIntros "ctx"; repeat (
-    try solve [iApply "ctx"];
-    iDestruct "ctx" as "[H ctx]";
-    first [iApply "H" | iClear "H"]
-  ).
-
-Lemma ctx_iso_dh_ctx : ctx -∗ iso_dh_ctx N.
-Proof. solve_ctx. Qed.
 
 End Defs.
 

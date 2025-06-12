@@ -15,14 +15,12 @@ Module Impl.
 
 Section Impl.
 
-Variable N : namespace.
-
 Definition session_key : val := λ: "cs",
   Snd "cs".
 
 Definition connect : val := λ: "c" "skA" "vkB",
   let: "session_key" :=
-    do_until (λ: <>, initiator N "c" "skA" "vkB") in
+    do_until (λ: <>, initiator "c" "skA" "vkB") in
   let: "counters" := AllocN #2 #0%nat in
   ("counters", "session_key").
 
@@ -38,7 +36,7 @@ Definition confirm : val := λ: "c" "skB" "req",
   let: "ga" := Fst "req" in
   let: "vkA" := Snd "req" in
   let: "sk" := do_until
-    (λ: <>, responder_accept N "c" "skB" "ga" "vkA") in
+    (λ: <>, responder_accept "c" "skB" "ga" "vkA") in
   let: "counters" := AllocN #2 #0%nat in
   ("counters", "sk").
 

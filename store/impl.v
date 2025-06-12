@@ -6,7 +6,7 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import lock ticket_lock.
 From cryptis Require Import lib term cryptis primitives tactics rpc.
-From cryptis.store Require Import alist db.
+From cryptis.store Require Import alist db shared.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -18,26 +18,24 @@ Module Client.
 
 Section Client.
 
-Variable N : namespace.
-
 Definition connect : val := λ: "c" "skA" "vkB",
-  RPC.connect N "c" "skA" "vkB".
+  RPC.connect "c" "skA" "vkB".
 
 Definition store : val := λ: "c" "cs" "k" "v",
-  RPC.call N "store" "c" "cs" ["k"; "v"];; #().
+  RPC.call dbN "store" "c" "cs" ["k"; "v"];; #().
 
 Definition load : val := λ: "c" "cs" "k",
-  let: "ts" := RPC.call N "load" "c" "cs" ["k"] in
+  let: "ts" := RPC.call dbN "load" "c" "cs" ["k"] in
   match: "ts" with
     NONE => TInt 0
   | SOME "ts" => Fst "ts"
   end.
 
 Definition create : val := λ: "c" "cs" "k" "v",
-  RPC.call N "create" "c" "cs" ["k"; "v"];; #().
+  RPC.call dbN "create" "c" "cs" ["k"; "v"];; #().
 
 Definition close : val := λ: "c" "cs",
-  RPC.close N "c" "cs".
+  RPC.close "c" "cs".
 
 End Client.
 
@@ -73,11 +71,11 @@ Definition handle_create : val :=
     SOME [TInt 0]
   end.
 
-Definition conn_handler N : val := λ: "c" "cs" "db" "lock",
-  RPC.server N "c" "cs" [
-    RPC.handle N "store" "c" (handle_store "c" "cs" "db");
-    RPC.handle N "load" "c" (handle_load "c" "cs" "db");
-    RPC.handle N "create" "c" (handle_create "c" "cs" "db")
+Definition conn_handler : val := λ: "c" "cs" "db" "lock",
+  RPC.server "c" "cs" [
+    RPC.handle dbN "store" "c" (handle_store "c" "cs" "db");
+    RPC.handle dbN "load" "c" (handle_load "c" "cs" "db");
+    RPC.handle dbN "create" "c" (handle_create "c" "cs" "db")
   ];;
   lock.release "lock".
 
@@ -92,7 +90,7 @@ Definition find_client : val := λ: "ss" "client_key",
   | SOME "account" => "account"
   end.
 
-Definition listen N : val := λ: "c" "ss",
+Definition listen : val := λ: "c" "ss",
   let: "secret_key" := Fst "ss" in
   let: "clients" := Snd "ss" in
   let: "res" := RPC.listen "c" in
@@ -101,7 +99,7 @@ Definition listen N : val := λ: "c" "ss",
   let: "db" := Fst "account" in
   let: "lock" := Snd "account" in
   acquire "lock";;
-  let: "cs" := RPC.confirm N "c" "secret_key" "res" in
-  Fork (conn_handler N "c" "cs" "db" "lock").
+  let: "cs" := RPC.confirm "c" "secret_key" "res" in
+  Fork (conn_handler "c" "cs" "db" "lock").
 
 End Server.

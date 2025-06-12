@@ -10,6 +10,7 @@ From iris.heap_lang.lib Require Import ticket_lock.
 From cryptis Require Import lib term gmeta nown.
 From cryptis Require Import cryptis primitives tactics.
 From cryptis Require Import role iso_dh conn.
+From cryptis.rpc Require Import impl.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -92,16 +93,14 @@ iIntros "(conn & _)".
 by iPoseProof (Conn.connected_keyE with "conn") as "(-> & -> & _)".
 Qed.
 
-Variable N : namespace.
-
-Definition rpc_pred (s : string) φ ψ : iProp :=
+Definition rpc_pred N (s : string) φ ψ : iProp :=
   seal_pred (N.@s.@"call") (Conn.conn_pred Init φ) ∗
   seal_pred (N.@s.@"resp") (Conn.conn_pred Resp ψ).
 
-Lemma rpc_pred_set (s : string) φ ψ E :
+Lemma rpc_pred_set N (s : string) φ ψ E :
   ↑N.@s ⊆ E →
   seal_pred_token E ==∗
-  rpc_pred s φ ψ ∗ seal_pred_token (E ∖ ↑N.@s).
+  rpc_pred N s φ ψ ∗ seal_pred_token (E ∖ ↑N.@s).
 Proof.
 iIntros "%sub token".
 iMod (seal_pred_set (N.@s.@"call") with "token") as "[? token]";
@@ -121,30 +120,28 @@ Definition ack_close_pred kI kR si ts : iProp :=
   False.
 
 Definition ctx : iProp :=
-  seal_pred (N.@"rpc".@"error") (Conn.conn_pred Resp error_pred) ∗
-  seal_pred (N.@"rpc".@"close".@"call") (Conn.conn_pred Init close_pred) ∗
-  seal_pred (N.@"rpc".@"close".@"resp") (Conn.conn_pred Resp ack_close_pred) ∗
-  Conn.ctx  (N.@"rpc".@"auth").
+  seal_pred (rpcN.@"error") (Conn.conn_pred Resp error_pred) ∗
+  seal_pred (rpcN.@"close".@"call") (Conn.conn_pred Init close_pred) ∗
+  seal_pred (rpcN.@"close".@"resp") (Conn.conn_pred Resp ack_close_pred) ∗
+  iso_dh_ctx.
 
 Lemma ctx_alloc E :
-  ↑N.@"rpc" ⊆ E →
-  seal_pred_token E ==∗
-  ctx ∗ seal_pred_token (E ∖ ↑N.@"rpc").
+  ↑rpcN ⊆ E →
+  seal_pred_token E -∗
+  iso_dh_ctx ==∗
+  ctx ∗ seal_pred_token (E ∖ ↑rpcN).
 Proof.
-iIntros "%sub token".
-rewrite (seal_pred_token_difference (↑N.@"rpc")); try solve_ndisj.
+iIntros "%sub token #?".
+rewrite (seal_pred_token_difference (↑rpcN)); try solve_ndisj.
 iDestruct "token" as "[token ?]". iFrame.
-iMod (seal_pred_set (N.@"rpc".@"error") with "token")
+iMod (seal_pred_set (rpcN.@"error") with "token")
   as "[error token]"; try solve_ndisj.
 iFrame.
-iMod (seal_pred_set (N.@"rpc".@"close".@"call") with "token")
+iMod (seal_pred_set (rpcN.@"close".@"call") with "token")
   as "[init token]"; try solve_ndisj.
 iFrame.
-iMod (seal_pred_set (N.@"rpc".@"close".@"resp") with "token")
+iMod (seal_pred_set (rpcN.@"close".@"resp") with "token")
   as "[ack_init token]"; try solve_ndisj.
-iFrame.
-iMod (iso_dh_ctx_alloc (N.@"rpc".@"auth") with "token")
-  as "#iso_dh"; try solve_ndisj.
 Qed.
 
 Ltac solve_ctx :=
@@ -156,20 +153,20 @@ Ltac solve_ctx :=
 
 Lemma ctx_error :
   ctx -∗
-  seal_pred (N.@"rpc".@"error") (Conn.conn_pred Resp error_pred).
+  seal_pred (rpcN.@"error") (Conn.conn_pred Resp error_pred).
 Proof. solve_ctx. Qed.
 
 Lemma ctx_close :
   ctx -∗
-  seal_pred (N.@"rpc".@"close".@"call") (Conn.conn_pred Init close_pred).
+  seal_pred (rpcN.@"close".@"call") (Conn.conn_pred Init close_pred).
 Proof. solve_ctx. Qed.
 
 Lemma ctx_ack_close :
   ctx -∗
-  seal_pred (N.@"rpc".@"close".@"resp") (Conn.conn_pred Resp ack_close_pred).
+  seal_pred (rpcN.@"close".@"resp") (Conn.conn_pred Resp ack_close_pred).
 Proof. solve_ctx. Qed.
 
-Lemma ctx_conn_ctx : ctx -∗ Conn.ctx (N.@"rpc".@"auth").
+Lemma ctx_conn_ctx : ctx -∗ iso_dh_ctx.
 Proof. solve_ctx. Qed.
 
 End Defs.

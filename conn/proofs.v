@@ -34,19 +34,19 @@ Implicit Types n m : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Lemma wp_connect P N c kI kR :
+Lemma wp_connect P c kI kR :
   channel c -∗
   cryptis_ctx -∗
-  ctx N -∗
+  iso_dh_ctx -∗
   sign_key kI -∗
   public (TKey Open kR) -∗
   {{{ failure kI kR ∨ P }}}
-    Impl.connect N c kI (TKey Open kR)
+    Impl.connect c kI (TKey Open kR)
   {{{ cs, RET (repr cs);
       connected kI kR Init cs ∗
       (compromised_session Init cs ∨ P) ∗
       release_token (si_init_share cs) ∗
-      term_token (si_init_share cs) (↑isoN.@"conn") }}}.
+      term_token (si_init_share cs) (⊤ ∖ ↑iso_dhN ∖ ↑connN) }}}.
 Proof.
 iIntros "#? #? #? #? #? % !> HP post".
 rewrite bi.or_alt. iDestruct "HP" as "(%failed & HP)".
@@ -57,7 +57,7 @@ iAssert (if failed then failure kI kR else True)%I as "#?".
 iCombine "HP post c1 c2" as "post". iApply (wp_frame_wand with "post").
 wp_apply wp_do_until'. iModIntro.
 wp_pures.
-wp_apply (wp_initiator _ failed with "[//] [//] [] [] []") => //.
+wp_apply (wp_initiator failed with "[//] [//] [] [] []") => //.
 - case: failed => //. by eauto.
 iIntros "%res resP".
 case: res=> [kS|] /=; last by eauto.
@@ -80,10 +80,10 @@ iSplitR "token".
 iApply (term_token_drop with "token"). solve_ndisj.
 Qed.
 
-Lemma wp_listen N c :
+Lemma wp_listen c :
   channel c -∗
   cryptis_ctx -∗
-  ctx N -∗
+  iso_dh_ctx -∗
   {{{ True }}}
     listen c
   {{{ ga skA, RET (ga, TKey Open skA)%V;
@@ -103,18 +103,18 @@ iModIntro. iRight. iExists _. iSplit => //.
 iIntros "post". iApply "post". by eauto.
 Qed.
 
-Lemma wp_confirm P N c skA skB ga :
+Lemma wp_confirm P c skA skB ga :
   channel c -∗
   cryptis_ctx -∗
-  ctx N -∗
+  iso_dh_ctx -∗
   {{{ public ga ∗ public (TKey Open skA) ∗ sign_key skB ∗
       (failure skA skB ∨ P) }}}
-    confirm N c skB (ga, TKey Open skA)%V
+    confirm c skB (ga, TKey Open skA)%V
   {{{ cs, RET (repr cs);
       connected skA skB Resp cs ∗
       (compromised_session Resp cs ∨ P) ∗
       release_token (si_resp_share cs) ∗
-      term_token (si_resp_share cs) (↑isoN.@"conn") }}}.
+      term_token (si_resp_share cs) (⊤ ∖ ↑iso_dhN ∖ ↑connN) }}}.
 Proof.
 iIntros "#? #ctx #? !> %Φ (#p_ga & #p_vkA & #sign_skB & P) post".
 rewrite bi.or_alt. iDestruct "P" as "(%failed & P)".
@@ -127,8 +127,7 @@ iApply (wp_frame_wand with "post").
 iApply (wp_frame_wand with "P").
 iApply wp_do_until'. iIntros "!>".
 wp_pures.
-iPoseProof (ctx_iso_dh_ctx with "[//]") as "#?".
-iApply (wp_responder_accept _ failed).
+iApply (wp_responder_accept failed).
 { do !iSplit => //. case: failed => //. by eauto. }
 iIntros "!> %osi res". case: osi => [si|]; last by eauto.
 iDestruct "res" as "(%e & <- & #m_k & #sess & #comp & rel & token)".

@@ -24,10 +24,8 @@ Implicit Types rl : role.
 
 Definition gameN := nroot.@"game".
 
-Definition kvsN := nroot.@"kvs".
-
 Definition server_loop : val := rec: "loop" "c" "server" :=
-  Server.listen kvsN "c" "server";;
+  Server.listen "c" "server";;
   "loop" "c" "server".
 
 Definition start_server : val := λ: "c" "skR",
@@ -48,28 +46,28 @@ Definition game : val := λ: <>,
   Fork (start_server "c" "skR");;
 
   (* Connect client to server *)
-  let: "conn" := Client.connect kvsN "c" "skI" "vkR" in
+  let: "conn" := Client.connect "c" "skI" "vkR" in
 
   (* Store value in server *)
   let: "k" := recv "c" in
   let: "v" := recv "c" in
-  Client.create kvsN "c" "conn" "k" "v";;
-  Client.close kvsN "c" "conn";;
+  Client.create "c" "conn" "k" "v";;
+  Client.close "c" "conn";;
   (* Leak session key *)
   send "c" (Conn.session_key "conn");;
 
-  let: "conn" := Client.connect kvsN "c" "skI" "vkR" in
+  let: "conn" := Client.connect "c" "skI" "vkR" in
   (* Leak long-term keys *)
   send "c" "skI";;
   send "c" "skR";;
 
   (* Retrive value and check that it matches the one that was stored *)
-  let: "v'" := Client.load kvsN "c" "conn" "k" in
+  let: "v'" := Client.load "c" "conn" "k" in
   assert: eq_term "v" "v'".
 
 Lemma wp_server_loop c ss :
-  {{{ cryptis_ctx ∗ channel c ∗ store_ctx kvsN ∗
-      server kvsN ss }}}
+  {{{ cryptis_ctx ∗ channel c ∗ store_ctx ∗
+      server ss }}}
     server_loop c (repr ss)
   {{{ RET #(); True }}}.
 Proof.
@@ -81,7 +79,7 @@ by iApply ("IH" with "[$server]"); eauto.
 Qed.
 
 Lemma wp_start_server c skR :
-  {{{ cryptis_ctx ∗ channel c ∗ store_ctx kvsN ∗
+  {{{ cryptis_ctx ∗ channel c ∗ store_ctx ∗
       sign_key skR ∗
       term_token skR ⊤ }}}
     start_server c skR
@@ -100,7 +98,9 @@ Lemma wp_game :
   WP game #() {{ _, True }}.
 Proof.
 iIntros "#ctx enc_tok"; rewrite /game; wp_pures.
-iMod (store_ctx_alloc (N := kvsN) with "enc_tok") as "[#? _]" => //.
+iMod (iso_dh_ctx_alloc with "enc_tok") as "[#? enc_tok]" => //.
+iMod (RPC.ctx_alloc with "[$] [//]") as "[#? enc_tok]"; first solve_ndisj.
+iMod (store_ctx_alloc with "[$] [//]") as "[#? _]" => //; first solve_ndisj.
 wp_apply wp_init_network => //. iIntros "%c #cP". wp_pures.
 wp_apply (wp_mksigkey with "[]"); eauto.
 iIntros "%skI #p_vkI #sign_skI s_skI tokenI". wp_pures.
@@ -113,16 +113,16 @@ wp_apply wp_send => //. wp_pures.
 wp_apply (wp_fork with "[tokenR]").
 { iModIntro. wp_apply (wp_start_server with "[$tokenR]"); eauto. }
 wp_pures.
-iMod (@client_alloc _ _ _ _ _ _ skR with "tokenI")
+iMod (@client_alloc _ _ _ _ _ skR with "tokenI")
   as "(client & free & token)"; eauto.
 wp_apply (wp_client_connect with "[] [] [] [] [] client"); eauto.
 iIntros "%cs client". wp_pure _ credit:"c". wp_pures.
 iPoseProof (db_connected_ok with "client s_skI s_skR [//] [//]") as "#>ok".
 wp_apply wp_recv => //. iIntros "%k #p_k". wp_pures.
 wp_apply wp_recv => //. iIntros "%v #p_v". wp_pures.
-rewrite (@db_free_at_diff _ _ _ _ _ _ _ {[k]}) //.
+rewrite (@db_free_at_diff _ _ _ _ _ _ {[k]}) //.
 iDestruct "free" as "[free_k free]".
-wp_apply (wp_client_create with "[] [] [] [] [] [$client $free_k]") => //.
+wp_apply (wp_client_create with "[] [] [] [] [] [$]") => //.
 iIntros "[client k_v]". wp_pures.
 wp_apply (wp_client_close with "[] [] [$client]") => //.
 iIntros "[client #p_sk]".

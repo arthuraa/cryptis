@@ -11,7 +11,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Definition isoN := nroot.@"iso".
+Definition iso_dhN := nroot.@"iso_dh".
 
 Record sess_info := SessInfo {
   si_init : term;
@@ -38,8 +38,6 @@ Implicit Types (rl : role) (t skI skR nI nR sI sR kS : term).
 Implicit Types (γ γa γb : gname) (ok failed : bool).
 Implicit Types (ts : nat) (T : gset term).
 Implicit Types (si : sess_info).
-
-Variable N : namespace.
 
 (*
 
@@ -99,27 +97,27 @@ Qed.
 Definition compromised_session rl si : iProp :=
   (compromised_key (si_init si) ∨ compromised_key (si_resp si)) ∗
   public (si_key si) ∗
-  term_meta (si_share_of rl si) (nroot.@"failed") true.
+  term_meta (si_share_of rl si) (iso_dhN.@"failed") true.
 
 Definition release_token share : iProp :=
-  term_token share (↑nroot.@"released").
+  term_token share (↑iso_dhN.@"released").
 
 Lemma release_tokenI share E :
-  ↑nroot.@"released" ⊆ E →
+  ↑iso_dhN.@"released" ⊆ E →
   term_token share E -∗
-  release_token share ∗ term_token share (E ∖ ↑nroot.@"released").
+  release_token share ∗ term_token share (E ∖ ↑iso_dhN.@"released").
 Proof.
 iIntros "% ?"; by rewrite -term_token_difference.
 Qed.
 
 Definition released share : iProp :=
-  term_meta share (nroot.@"released") true.
+  term_meta share (iso_dhN.@"released") true.
 
 Lemma release share : release_token share ==∗ released share.
 Proof. by apply term_meta_set. Qed.
 
 Definition unreleased share : iProp :=
-  term_meta share (nroot.@"released") false.
+  term_meta share (iso_dhN.@"released") false.
 
 Lemma unrelease share : release_token share ==∗ unreleased share.
 Proof. by apply term_meta_set. Qed.
@@ -150,7 +148,7 @@ Qed.
 Definition session rl si : iProp :=
   □ (▷ released_session si → public (si_key si)) ∗
   ∃ failed,
-    term_meta (si_share_of rl si) (nroot.@"failed") failed ∗
+    term_meta (si_share_of rl si) (iso_dhN.@"failed") failed ∗
     if failed then
       compromised_key (si_init si) ∨ compromised_key (si_resp si)
     else □ (public (si_key si) → ▷ released_session si).
@@ -252,20 +250,20 @@ Definition msg3_pred kI m3 : iProp :=
      □ (public (si_key si) → ▷ released_session si)).
 
 Definition iso_dh_ctx : iProp :=
-  seal_pred (N.@"m2") msg2_pred ∗
-  seal_pred (N.@"m3") msg3_pred.
+  seal_pred (iso_dhN.@"m2") msg2_pred ∗
+  seal_pred (iso_dhN.@"m3") msg3_pred.
 
 Lemma iso_dh_ctx_alloc E :
-  ↑N ⊆ E →
+  ↑iso_dhN ⊆ E →
   seal_pred_token E ==∗
-  iso_dh_ctx.
+  iso_dh_ctx ∗ seal_pred_token (E ∖ ↑iso_dhN).
 Proof.
 iIntros "%sub token".
-iMod (seal_pred_set (N.@"m2") msg2_pred with "token")
-  as "[#? token]"; try solve_ndisj.
-iMod (seal_pred_set (N.@"m3") msg3_pred with "token")
-  as "[#? token]"; try solve_ndisj.
-iModIntro. by iSplit.
+iMod (seal_pred_set (iso_dhN.@"m2") msg2_pred with "token")
+  as "[? token]"; try solve_ndisj. iFrame.
+iMod (seal_pred_set (iso_dhN.@"m3") msg3_pred with "token")
+  as "[? token]"; try solve_ndisj. iFrame.
+iApply (seal_pred_token_drop with "token"). solve_ndisj.
 Qed.
 
 Lemma public_dh_share a :
@@ -320,4 +318,4 @@ Qed.
 
 End Verif.
 
-Arguments iso_dh_ctx_alloc {Σ _ _} N E.
+Arguments iso_dh_ctx_alloc {Σ _ _} E.

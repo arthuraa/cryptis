@@ -23,14 +23,12 @@ Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Variable N : namespace.
-
 Ltac failure := iLeft; iFrame; eauto.
 
 Lemma wp_server_handle_create c kI kR cs (vdb : val) :
-  {{{ channel c ∗ cryptis_ctx ∗ store_ctx N }}}
-    RPC.handle N "create" c (Server.handle_create c (repr cs) vdb)
-  {{{ h, RET (repr h); server_handler N kI kR cs vdb h }}}.
+  {{{ channel c ∗ cryptis_ctx ∗ store_ctx }}}
+    RPC.handle dbN "create" c (Server.handle_create c (repr cs) vdb)
+  {{{ h, RET (repr h); server_handler kI kR cs vdb h }}}.
 Proof.
 iIntros "%Φ (#chan_c & #ctx & #ctx') post".
 iPoseProof (store_ctx_create with "[//]") as "?".

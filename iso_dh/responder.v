@@ -22,8 +22,6 @@ Implicit Types (γ γa γb : gname) (failed : bool).
 Implicit Types (ts : nat) (T : gset term).
 Implicit Types (si : sess_info).
 
-Variable N : namespace.
-
 Definition responder_wait : val := λ: "c",
   do_until (λ: <>,
     let: "m1" := recv "c" in
@@ -35,9 +33,10 @@ Definition responder_accept : val := λ: "c" "skR" "ga" "vkI",
   let: "vkR" := vkey "skR" in
   let: "b" := mknonce #() in
   let: "gb" := mkkeyshare "b" in
-  let: "m2" := sign (Tag $ N.@"m2") "skR" (term_of_list ["ga"; "gb"; "vkI"]) in
+  let: "m2" := sign (Tag $ iso_dhN.@"m2") "skR"
+                 (term_of_list ["ga"; "gb"; "vkI"]) in
   send "c" "m2";;
-  bind: "m3" := verify (Tag $ N.@"m3") "vkI" (recv "c") in
+  bind: "m3" := verify (Tag $ iso_dhN.@"m3") "vkI" (recv "c") in
   bind: "m3" := list_of_term "m3" in
   list_match: ["ga'"; "gb'"; "vkR'"] := "m3" in
   guard: eq_term "ga" "ga'" && eq_term "gb" "gb'" && eq_term "vkR" "vkR'" in
@@ -74,7 +73,7 @@ Qed.
 
 Lemma wp_responder_accept failed c skR ga vkI :
   {{{ channel c ∗ cryptis_ctx ∗
-      iso_dh_ctx N ∗ sign_key skR ∗
+      iso_dh_ctx ∗ sign_key skR ∗
       public ga ∗ public vkI ∗
       if failed then
         ∃ skI, ⌜vkI = TKey Open skI⌝ ∗
@@ -90,7 +89,7 @@ Lemma wp_responder_accept failed c skR ga vkI :
         session Resp si ∗
         □ (⌜failed⌝ → compromised_session Resp si) ∗
         release_token (si_resp_share si) ∗
-        term_token (si_resp_share si) (↑isoN)
+        term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN)
       else True }}}.
 Proof.
 set vkR := TKey Open skR.
@@ -112,8 +111,8 @@ set gb := TExp (TInt 0) b.
 set gab := TExp ga b.
 rewrite big_sepS_singleton.
 iDestruct (release_tokenI with "token") as "[token_rel token]" => //.
-rewrite (term_token_difference gb (↑isoN)); last by solve_ndisj.
-iDestruct "token" as "[token token_failed]".
+rewrite (term_token_difference gb (↑iso_dhN.@"failed")); last by solve_ndisj.
+iDestruct "token" as "[token_failed token]".
 iAssert (public gb) as "#p_gb".
 { iApply public_TExp_iff; eauto.
   rewrite minted_TInt. iRight. do ![iSplit => //].
@@ -155,20 +154,20 @@ iAssert (▷ (⌜failed⌝ ∨ released_session si) → public (si_key si))%I as
 iAssert (|={⊤}=>
            □ (⌜failed⌝ → compromised_session Resp si) ∗
            ∃ failed,
-             term_meta gb (nroot.@"failed") failed ∗
+             term_meta gb (iso_dhN.@"failed") failed ∗
              if failed then
                compromised_key (si_init si) ∨ compromised_key (si_resp si)
              else □ (public (si_key si) → ▷ released_session si))%I
   with "[token_failed H4]" as "> #[comp i_m3]".
 { case: failed.
-  { iMod (term_meta_set (nroot.@"failed") true with "token_failed")
+  { iMod (term_meta_set (iso_dhN.@"failed") true with "token_failed")
       as "#?"; first by solve_ndisj.
     iDestruct "failed" as "(%skI' & %e & failed)".
     case: e => <-. iModIntro. iSplit.
     { iIntros "!> _". do !iSplit => //. iApply "s_k1". by eauto. }
     iExists true. by eauto. }
   iDestruct "inv" as "[comp|#inv]".
-  { iMod (term_meta_set (nroot.@"failed") true with "token_failed")
+  { iMod (term_meta_set (iso_dhN.@"failed") true with "token_failed")
       as "#?"; first by solve_ndisj.
     iModIntro. iSplit; first by iIntros "!> []".
     iExists true. iSplit => //. by eauto. }
@@ -176,11 +175,11 @@ iAssert (|={⊤}=>
   case/Spec.of_list_inj: e_m3 => -> <- <- {ga gb' skR'} in gb gab si *.
   rewrite !TExp_TExpN TExpC2 in gab si *.
   iDestruct "comp" as "[comp|comp]".
-  - iMod (term_meta_set (nroot.@"failed") true with "token_failed")
+  - iMod (term_meta_set (iso_dhN.@"failed") true with "token_failed")
       as "#?"; first by solve_ndisj.
     iModIntro. iSplit; first by iIntros "!> []".
     by eauto.
-  - iMod (term_meta_set (nroot.@"failed") false with "token_failed")
+  - iMod (term_meta_set (iso_dhN.@"failed") false with "token_failed")
       as "#?"; first by solve_ndisj.
     iModIntro. iSplit; first by iIntros "!> []".
     by eauto. }
@@ -193,12 +192,13 @@ iAssert (minted skI) as "#m_skI".
 wp_pures.
 iApply ("Hpost" $! (Some si)).
 iModIntro. iFrame. do !iSplit => //.
-iIntros "!> #?". iApply "s_k1". by eauto.
+- iIntros "!> #?". iApply "s_k1". by eauto.
+- iApply (term_token_drop with "token"). solve_ndisj.
 Qed.
 
 Lemma wp_responder_accept_weak c skR ga vkI :
   {{{ channel c ∗ cryptis_ctx ∗
-      iso_dh_ctx N ∗ sign_key skR ∗
+      iso_dh_ctx ∗ sign_key skR ∗
       public ga ∗ public vkI }}}
     responder_accept c skR ga vkI
   {{{ osi,
@@ -209,7 +209,7 @@ Lemma wp_responder_accept_weak c skR ga vkI :
         minted (si_key si) ∗
         ((compromised_key (si_init si) ∨ compromised_key (si_resp si))
            ∨ □ (public (si_key si) ↔ ▷ False)) ∗
-        term_token (si_resp_share si) (↑isoN)
+        term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN)
       else True
  }}}.
 Proof.
@@ -228,7 +228,7 @@ Qed.
 
 Lemma wp_responder c skR :
   {{{ channel c ∗ cryptis_ctx ∗
-      iso_dh_ctx N ∗ sign_key skR }}}
+      iso_dh_ctx ∗ sign_key skR }}}
     responder c skR
   {{{ okS, RET (repr okS);
       if okS is Some (vkI, kS) then ∃ si,
@@ -239,7 +239,7 @@ Lemma wp_responder c skR :
         minted kS ∗
         session Resp si ∗
         release_token (si_resp_share si) ∗
-        term_token (si_resp_share si) (↑isoN)
+        term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN)
       else True
  }}}.
 Proof.

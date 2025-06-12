@@ -28,18 +28,16 @@ Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Variable N : namespace.
-
 Lemma wp_client_connect c kI kR :
   channel c -∗
   cryptis_ctx -∗
-  store_ctx N -∗
+  store_ctx -∗
   sign_key kI -∗
   public (TKey Open kR) -∗
-  {{{ db_disconnected N kI kR }}}
-    Client.connect N c kI (TKey Open kR)
+  {{{ db_disconnected kI kR }}}
+    Client.connect c kI (TKey Open kR)
   {{{ cs, RET (repr cs);
-      db_connected N kI kR cs }}}.
+      db_connected kI kR cs }}}.
 Proof.
 iIntros "#chan_c #ctx #ctx'".
 iPoseProof (store_ctx_rpc_ctx with "ctx'") as "?".
@@ -47,7 +45,7 @@ iIntros "#p_ekI #p_ekR".
 iIntros "!> %Φ client post".
 iDestruct "client" as "(%db & ready & state)".
 wp_lam. wp_pures.
-iApply (RPC.wp_connect (db_client_ready N kI kR db)
+iApply (RPC.wp_connect (db_client_ready kI kR db)
          with "[//] [//] [//] [//] [//] [$]") => //.
 iIntros "!> %cs (conn & ready)".
 iApply "post".

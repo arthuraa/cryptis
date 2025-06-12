@@ -27,13 +27,11 @@ Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Variable N : namespace.
-
 Lemma wp_server_start c skR E :
-  ↑N.@"server" ⊆ E →
+  ↑dbN.@"server" ⊆ E →
   {{{ channel c ∗ sign_key skR ∗ term_token skR E }}}
     Server.start skR
-  {{{ ss, RET (repr ss); server N ss }}}.
+  {{{ ss, RET (repr ss); server ss }}}.
 Proof.
 iIntros "%sub %Ψ (#? & #? & token) post".
 wp_lam. wp_pures. wp_apply SAList.wp_empty => //.
@@ -51,12 +49,12 @@ Qed.
 
 Lemma wp_server_conn_handler c kI kR cs vdb vlock γlock :
   channel c -∗
-  is_lock γlock vlock (server_db_disconnected N kI kR vdb) -∗
+  is_lock γlock vlock (server_db_disconnected kI kR vdb) -∗
   cryptis_ctx -∗
-  store_ctx N -∗
-  {{{ server_db_connected N kI kR cs vdb ∗
+  store_ctx -∗
+  {{{ server_db_connected kI kR cs vdb ∗
       locked γlock }}}
-    Server.conn_handler N c (repr cs) vdb vlock
+    Server.conn_handler c (repr cs) vdb vlock
   {{{ RET #(); True }}}.
 Proof.
 iIntros "#chan_c #lock #? #ctx".
@@ -79,12 +77,12 @@ iSplit => //. by iFrame.
 Qed.
 
 Lemma wp_server_find_client ss skI :
-  {{{ cryptis_ctx ∗ server N ss }}}
+  {{{ cryptis_ctx ∗ server ss }}}
     Server.find_client (repr ss) (TKey Open skI)
   {{{ vdb γlock vlock, RET (vdb, vlock)%V;
-      server N ss ∗
+      server ss ∗
       is_lock γlock vlock
-        (server_db_disconnected N skI (ss_key ss) vdb) }}}.
+        (server_db_disconnected skI (ss_key ss) vdb) }}}.
 Proof.
 iIntros "%Φ [#ctx server] post".
 iDestruct "server"
@@ -103,16 +101,16 @@ case accounts_skI: (accounts !! TKey Open skI) => [scs|]; wp_pures.
   iSplit => //.
   iExists accounts, E. iFrame.
   rewrite big_sepM_forall. by eauto.
-- have ?: ↑N.@"server".@skI ⊆ E.
+- have ?: ↑dbN.@"server".@skI ⊆ E.
   { by apply: EP; rewrite elem_of_dom accounts_skI. }
-  rewrite (term_token_difference _ (↑N.@"server".@skI)) //.
+  rewrite (term_token_difference _ (↑dbN.@"server".@skI)) //.
   iDestruct "token" as "[token_skI token]".
   wp_bind (SAList.new #()).
   iApply SAList.wp_empty => //.
   iIntros "!> %vdb db". wp_pures.
   wp_bind (newlock #()).
   iDestruct (server_db_alloc with "token_skI db") as ">[_ db]"; eauto.
-  iApply (newlock_spec (server_db_disconnected N skI (ss_key ss) vdb)
+  iApply (newlock_spec (server_db_disconnected skI (ss_key ss) vdb)
            with "[db]").
   { iFrame. }
   iIntros "!> %vlock %γlock #lock".
@@ -125,7 +123,7 @@ case accounts_skI: (accounts !! TKey Open skI) => [scs|]; wp_pures.
   iModIntro.
   iApply ("post" $! vdb γlock vlock).
   iSplit => //.
-  iExists _, (E ∖ ↑N.@"server".@skI).
+  iExists _, (E ∖ ↑dbN.@"server".@skI).
   iFrame.
   do !iSplit => //.
   + iPureIntro.
@@ -141,9 +139,9 @@ case accounts_skI: (accounts !! TKey Open skI) => [scs|]; wp_pures.
 Qed.
 
 Lemma wp_server_listen c ss :
-  {{{ cryptis_ctx ∗ channel c ∗ store_ctx N ∗ server N ss }}}
-    Server.listen N c (repr ss)
-  {{{ RET #(); server N ss }}}.
+  {{{ cryptis_ctx ∗ channel c ∗ store_ctx ∗ server ss }}}
+    Server.listen c (repr ss)
+  {{{ RET #(); server ss }}}.
 Proof.
 iIntros "%Φ (#? & #chan_c & #ctx & server) post".
 wp_lam; wp_pures.
@@ -164,7 +162,7 @@ iDestruct "dis" as "(%db & #p_db & vdb & ready)".
 iAssert (sign_key (ss_key ss)) as "#?".
 { by iDestruct "server" as "(% & % & ? & _)". }
 wp_pures.
-wp_apply (RPC.wp_confirm (db_server_ready N skA (ss_key ss) db)
+wp_apply (RPC.wp_confirm (db_server_ready skA (ss_key ss) db)
            with "[] [] [] [$ready]") => //.
 { do 3!iSplit => //. }
 iIntros "%cs (conn & ready)".

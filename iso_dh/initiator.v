@@ -22,21 +22,19 @@ Implicit Types (γ γa γb : gname) (failed : bool).
 Implicit Types (ts : nat) (T : gset term).
 Implicit Types (si : sess_info).
 
-Variable N : namespace.
-
 Definition initiator : val := λ: "c" "skI" "vkR",
   let: "vkI"  := vkey "skI" in
   let: "a"    := mknonce #() in
   let: "ga"   := mkkeyshare "a" in
   let: "m1"   := term_of_list ["ga"; "vkI"] in
   send "c" "m1";;
-  bind: "m2"   := verify (Tag $ N.@"m2") "vkR" (recv "c") in
+  bind: "m2"   := verify (Tag $ iso_dhN.@"m2") "vkR" (recv "c") in
   bind: "m2"   := list_of_term "m2" in
   list_match: ["ga'"; "gb"; "vkI'"] := "m2" in
   guard: eq_term "ga" "ga'" && eq_term "vkI" "vkI'" in
   let: "gab" := texp "gb" "a" in
   let: "secret" := term_of_list ["vkI"; "vkR"; "ga"; "gb"; "gab"] in
-  let: "m3" := sign (Tag $ N.@"m3") "skI" (term_of_list ["ga"; "gb"; "vkR"]) in
+  let: "m3" := sign (Tag $ iso_dhN.@"m3") "skI" (term_of_list ["ga"; "gb"; "vkR"]) in
   send "c" "m3";;
   SOME (derive_key "secret").
 
@@ -65,7 +63,7 @@ Qed.
 Lemma wp_initiator failed c skI vkR :
   channel c -∗
   cryptis_ctx -∗
-  iso_dh_ctx N -∗
+  iso_dh_ctx -∗
   sign_key skI -∗
   public vkR -∗
   (if failed then
@@ -83,7 +81,7 @@ Lemma wp_initiator failed c skI vkR :
         session Init si ∗
         □ (⌜failed⌝ → compromised_session Init si) ∗
         release_token (si_init_share si) ∗
-        term_token (si_init_share si) (↑isoN)
+        term_token (si_init_share si) (⊤ ∖ ↑iso_dhN)
       else True
  }}}.
 Proof.
@@ -108,8 +106,8 @@ rewrite big_sepS_union; last by set_solver.
 rewrite !big_sepS_singleton.
 iDestruct "token" as "[token_a token_ga]".
 iPoseProof (release_tokenI with "token_ga") as "[token_rel token_ga]" => //.
-rewrite (term_token_difference ga (↑isoN)); last solve_ndisj.
-iDestruct "token_ga" as "[token_ga failed_token]".
+rewrite (term_token_difference ga (↑iso_dhN.@"failed")); last solve_ndisj.
+iDestruct "token_ga" as "[failed_token token_ga]".
 wp_pures. wp_apply wp_mkkeyshare => //. rewrite -/ga.
 iIntros "_". wp_pures. wp_list. wp_term_of_list.
 wp_pure _ credit:"H1".
@@ -157,13 +155,13 @@ iAssert (▷ (⌜failed⌝ ∨ released_session si) → public (si_key si))%I as
 iAssert (|={⊤}=>
            □ (⌜failed⌝ → compromised_session Init si) ∗
            ∃ failed,
-             term_meta ga (nroot.@"failed") failed ∗
+             term_meta ga (iso_dhN.@"failed") failed ∗
              if failed then
                compromised_key (si_init si) ∨ compromised_key (si_resp si)
              else □ (public (si_key si) → ▷ released_session si))%I
   with "[token_a failed_token H3]" as "{inv} > #[comp s_k2]".
 { case: failed.
-  { iMod (term_meta_set (nroot.@"failed") true with "failed_token")
+  { iMod (term_meta_set (iso_dhN.@"failed") true with "failed_token")
       as "#?"; first by solve_ndisj.
     iDestruct "failed" as "(%skR' & %e & failed)".
     case: e => <-. iModIntro. iSplit.
@@ -171,7 +169,7 @@ iAssert (|={⊤}=>
       iApply "s_k1". by eauto. }
     iExists true. iSplit => //. }
   iDestruct "inv" as "[comp|#inv]".
-  { iMod (term_meta_set (nroot.@"failed") true with "failed_token")
+  { iMod (term_meta_set (iso_dhN.@"failed") true with "failed_token")
       as "#?"; first by solve_ndisj.
     iModIntro. iSplit; first by iIntros "!> []".
     iExists true. iSplit => //. by eauto. }
@@ -180,12 +178,12 @@ iAssert (|={⊤}=>
   case/Spec.of_list_inj: e_m2 => <- -> <- {ga' gb vkI'}
     in gab seed secret si *.
   iDestruct "s_b" as "[(%skI' & %e & ?)|s_b]".
-  { iMod (term_meta_set (nroot.@"failed") true with "failed_token")
+  { iMod (term_meta_set (iso_dhN.@"failed") true with "failed_token")
       as "#?"; first by solve_ndisj.
     case: e => <- {skI'}. iModIntro.
     iSplit; first by iIntros "!> []".
     iExists true. by eauto. }
-  iMod (term_meta_set (nroot.@"failed") false with "failed_token")
+  iMod (term_meta_set (iso_dhN.@"failed") false with "failed_token")
     as "#?"; first by solve_ndisj.
   rewrite !TExp_TExpN TExpC2 in gab seed secret si *.
   iIntros "!>".
@@ -213,12 +211,13 @@ wp_pures. iApply ("Hpost" $! (Some secret)).
 iExists si. iFrame. do !iSplitR => //.
 - by rewrite minted_derive_key.
 - iIntros "!> !> #rel". iApply "s_k1". by eauto.
+iApply (term_token_drop with "token_ga"). solve_ndisj.
 Qed.
 
 Lemma wp_initiator_weak c skI vkR :
   channel c -∗
   cryptis_ctx -∗
-  iso_dh_ctx N -∗
+  iso_dh_ctx -∗
   sign_key skI -∗
   public vkR -∗
   {{{ True }}}
@@ -231,7 +230,7 @@ Lemma wp_initiator_weak c skI vkR :
         minted kS ∗
         ((compromised_key (si_init si) ∨ compromised_key (si_resp si))
           ∨ □ (public kS ↔ ▷ False)) ∗
-        term_token (si_init_share si) (↑isoN)
+        term_token (si_init_share si) (⊤ ∖ ↑iso_dhN)
       else True
  }}}.
 Proof.

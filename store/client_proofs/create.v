@@ -25,26 +25,23 @@ Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Variable N : namespace.
-
 Lemma wp_client_create c kI kR cs t1 t2 :
   channel c -∗
   cryptis_ctx -∗
-  store_ctx N -∗
+  store_ctx -∗
   public t1 -∗
   public t2 -∗
-  {{{ db_connected N kI kR cs ∗
-      db_free_at N kI kR {[t1]} }}}
-    Client.create N c (repr cs) t1 t2
+  {{{ db_connected kI kR cs ∗
+      db_free_at kI kR {[t1]} }}}
+    Client.create c (repr cs) t1 t2
   {{{ RET #();
-      db_connected N kI kR cs ∗
-      db_mapsto N kI kR t1 t2 }}}.
+      db_connected kI kR cs ∗
+      db_mapsto kI kR t1 t2 }}}.
 Proof.
 iIntros "#chan_c #? (_ & _ & #create & #ctx) #p_t1 #p_t2".
 iIntros "!> %Φ [client free] post".
 iDestruct "client" as "(conn & db)".
-iMod (create_call _ t1 t2 with "db free")
-  as "(call & mapsto & waiting)".
+iMod (create_call t1 t2 with "db free") as "(call & mapsto & waiting)".
 wp_lam. wp_pures. wp_list.
 wp_apply (RPC.wp_call with "[$conn $call]").
 { do !iSplit => //. }
