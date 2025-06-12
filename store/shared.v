@@ -39,7 +39,7 @@ Instance scs_repr : Repr server_client_state :=
 
 Class storeGS Σ := StoreGS {
   storeGS_db : dbGS Σ;
-  storeGS_replica : replicaG Σ (list operation);
+  storeGS_replica : replicaG Σ (gmap term term);
 }.
 
 Local Existing Instance storeGS_db.
@@ -47,7 +47,7 @@ Local Existing Instance storeGS_replica.
 
 Definition storeΣ := #[
   dbΣ;
-  replicaΣ (list operation)
+  replicaΣ (gmap term term)
 ].
 
 Global Instance subG_storeGS Σ : subG storeΣ Σ → storeGS Σ.
@@ -55,14 +55,13 @@ Proof. solve_inG. Qed.
 
 Section Defs.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !storeGS Σ, !tlockG Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !RPC.rpcGS Σ, !storeGS Σ, !tlockG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (si : sess_info).
 Implicit Types (cs : Conn.state).
 Implicit Types (kI kR kS t : term) (ts : list term).
 Implicit Types (db : gmap term term).
-Implicit Types (o : operation) (os : list operation).
 Implicit Types accounts : gmap term server_client_state.
 Implicit Types n : nat.
 Implicit Types b : bool.
@@ -70,11 +69,10 @@ Implicit Types v : val.
 Implicit Types (failed : bool).
 
 Definition db_client_ready kI kR db : iProp :=
-  ∃ os, ⌜db = DB.to_db os⌝ ∗
-        rep_main kI kR dbN os ∗ rep_current kI kR dbN [] os.
+  rep_main kI kR dbN db ∗ rep_current kI kR dbN ∅ db.
 
 Definition db_server_ready kI kR db : iProp :=
-  ∃ os, ⌜db = DB.to_db os⌝ ∗ rep_copy kI kR dbN [] os.
+  rep_copy kI kR dbN ∅ db.
 
 Definition db_disconnected kI kR : iProp := ∃ db,
   (Conn.failure kI kR ∨ db_client_ready kI kR db) ∗
@@ -121,12 +119,12 @@ Proof.
 iIntros "%sub kI_token".
 rewrite (term_token_difference _ _ _ sub).
 iDestruct "kI_token" as "[kI_token ?]". iFrame.
-iMod (rep_main_alloc (N := dbN) kI (kR := kR) [] with "kI_token")
+iMod (rep_main_alloc (N := dbN) kI (kR := kR) ∅ with "kI_token")
   as "(main & cur & kI_token)"; first solve_ndisj.
 iMod (DB.client_alloc _ (N := dbN) with "kI_token")
   as "(state & free & kI_token)".
 { solve_ndisj. }
-iModIntro. iFrame. iRight. iExists []. by iFrame.
+iModIntro. iFrame. iRight. by iFrame.
 Qed.
 
 Definition public_db db : iProp :=
@@ -172,8 +170,7 @@ Proof.
 iIntros "%sub token vdb".
 iMod (rep_copy_alloc with "token") as "[? rest]" => //.
 iFrame "rest". iModIntro. iExists ∅.
-iFrame. rewrite /public_db big_sepM_empty. iSplit => //.
-iRight. iExists []. by iFrame.
+iFrame. by rewrite /public_db big_sepM_empty.
 Qed.
 
 Definition server ss : iProp := ∃ accounts E,
@@ -198,18 +195,12 @@ iPureIntro. move=> *. solve_ndisj.
 Qed.
 
 Definition store_call_pred kI kR si ts : iProp :=
-  ∃ t1 t2 os,
+  ∃ t1 t2 db,
     ⌜ts = [t1; t2]⌝ ∗
-    rep_update kI kR dbN [] os (os ++ [Store t1 t2]).
+    rep_update kI kR dbN ∅ db (<[t1 := t2]> db).
 
-Definition store_resp_pred kI kR si ts : iProp :=
-  ∃ os, rep_current kI kR dbN [] os.
-
-(* MOVE *)
-Lemma to_db_app os o  :
-  DB.to_db (os ++ [o]) = DB.op_app (DB.to_db os) o.
-Proof. exact: foldl_app. Qed.
-(* /MOVE *)
+Definition store_resp_pred kI kR si ts ts' : iProp :=
+  ∃ db, rep_current kI kR dbN ∅ db.
 
 Lemma store_call t2' kI kR cs t1 t2 :
   let P := compromised_session Init cs in
@@ -217,7 +208,7 @@ Lemma store_call t2' kI kR cs t1 t2 :
   db_mapsto kI kR t1 t2 ==∗
   (P ∨ store_call_pred kI kR cs [t1; t2']) ∗
   db_mapsto kI kR t1 t2' ∗
-  ∀ ts, P ∨ store_resp_pred kI kR cs ts -∗ db_connected' kI kR cs.
+  ∀ ts', P ∨ store_resp_pred kI kR cs [t1; t2'] ts' -∗ db_connected' kI kR cs.
 Proof.
 iIntros "% (%db & ready & own_db) own_frag".
 iMod (DB.db_state_update t2' with "own_db own_frag") as "[Hstate Hmapsto]".
@@ -225,16 +216,15 @@ iFrame.
 iDestruct "ready" as "[#?|ready]".
 { iModIntro. iSplitR; eauto.
   iIntros "% _". iExists _. iFrame. eauto. }
-iDestruct "ready" as "(%os & -> & ready & cur)".
-iMod (rep_main_update (os ++ [Store t1 t2']) with "ready cur")
+iDestruct "ready" as "(ready & cur)".
+iMod (rep_main_update (<[t1 := t2']>db) with "ready cur")
   as "[ready cur]".
 iModIntro. iSplitL "cur".
 { iRight. iExists _, _, _. by iFrame. }
-iIntros "%ts [#?|(%os' & cur)]".
+iIntros "%ts [#?|(%db' & cur)]".
 { iExists _. iFrame. by eauto. }
 iPoseProof (rep_main_current with "ready cur") as "<-".
-iExists _. iFrame.
-iRight. iExists _. iFrame. by rewrite to_db_app.
+iExists _. iFrame. iRight. iFrame.
 Qed.
 
 Lemma store_resp kI kR cs db t1 t2 :
@@ -242,24 +232,21 @@ Lemma store_resp kI kR cs db t1 t2 :
   (P ∨ db_server_ready kI kR db) -∗
   (P ∨ store_call_pred kI kR cs [t1; t2]) ==∗
   (P ∨ db_server_ready kI kR (<[t1 := t2]>db)) ∗
-  (P ∨ store_resp_pred kI kR cs [TInt 0]).
+  (P ∨ store_resp_pred kI kR cs [t1; t2] [TInt 0]).
 Proof.
 iIntros "% [#?|ready] [#?|call]"; try by iModIntro; iSplitL; eauto.
-iDestruct "ready" as "(%os & -> & ready)".
-iDestruct "call" as "(% & % & %os' & %e & upd)".
+iDestruct "call" as "(% & % & %db' & %e & upd)".
 case: e => <- <-.
 iMod (rep_copy_update with "ready upd") as "(<- & ready & cur)".
-iModIntro. iSplitL "ready"; iRight.
-- iExists _; iFrame. by rewrite to_db_app.
-- iExists _; iFrame.
+iModIntro. iSplitL "ready"; iRight; iFrame.
 Qed.
 
 Definition create_call_pred kI kR si ts : iProp :=
-  ∃ t1 t2 os, ⌜ts = [t1; t2]⌝ ∗ ⌜DB.to_db os !! t1 = None⌝ ∗
-    rep_update kI kR dbN [] os (os ++ [Create t1 t2]).
+  ∃ t1 t2 db, ⌜ts = [t1; t2]⌝ ∗ ⌜db !! t1 = None⌝ ∗
+    rep_update kI kR dbN ∅ db (<[t1 := t2]>db).
 
-Definition create_resp_pred kI kR si ts : iProp :=
-  ∃ os, rep_current kI kR dbN [] os.
+Definition create_resp_pred kI kR si ts ts' : iProp :=
+  ∃ db, rep_current kI kR dbN ∅ db.
 
 Lemma create_call t1 t2 kI kR cs :
   let P := compromised_session Init cs in
@@ -267,24 +254,23 @@ Lemma create_call t1 t2 kI kR cs :
   db_free_at kI kR {[t1]} ==∗
   (P ∨ create_call_pred kI kR cs [t1; t2]) ∗
   db_mapsto kI kR t1 t2 ∗
-  ∀ ts, P ∨ create_resp_pred kI kR cs ts -∗
+  ∀ ts, P ∨ create_resp_pred kI kR cs [t1; t2] ts -∗
         db_connected' kI kR cs.
 Proof.
 iIntros "% (%db & ready & state) free".
 iMod (DB.db_state_create t1 t2 with "state free") as "(%db_t1 & state & mapsto)".
-rewrite /= db_t1. iFrame.
-iDestruct "ready" as "[#?|(%os & -> & ready & cur)]".
+iFrame.
+iDestruct "ready" as "[#?|(ready & cur)]".
 { iModIntro; iSplitR; eauto.
   iIntros "% _". iExists _. iFrame. eauto. }
-iMod (rep_main_update (os ++ [Create t1 t2]) with "ready cur")
+iMod (rep_main_update (<[t1 := t2]>db) with "ready cur")
   as "[ready upd]".
 iModIntro. iSplitL "upd".
 { iRight. iExists _, _, _. iFrame. by eauto. }
-iIntros "% [#?|(%os' & cur)]".
+iIntros "% [#?|(%db' & cur)]".
 { iExists _. iFrame. by eauto. }
 iPoseProof (rep_main_current with "ready cur") as "<-".
-iExists _. iFrame. iRight.
-iExists _. iFrame. by rewrite to_db_app /= db_t1.
+iExists _. iFrame. iRight. iFrame.
 Qed.
 
 Lemma create_resp kI kR cs db t1 t2 :
@@ -292,25 +278,22 @@ Lemma create_resp kI kR cs db t1 t2 :
   (P ∨ db_server_ready kI kR db) -∗
   (P ∨ create_call_pred kI kR cs [t1; t2]) ==∗
   (P ∨ db_server_ready kI kR (<[t1 := t2]>db)) ∗
-  (P ∨ create_resp_pred kI kR cs [TInt 0]).
+  (P ∨ create_resp_pred kI kR cs [t1; t2] [TInt 0]).
 Proof.
 iIntros "% [#?|ready] [#?|call]"; try by iModIntro; iSplitL; eauto.
-iDestruct "ready" as "(%os & -> & ready)".
-iDestruct "call" as "(% & % & %os' & %e & %db_t1 & upd)".
+iDestruct "call" as "(% & % & %db' & %e & %db_t1 & upd)".
 case: e => <- <- in db_t1 *.
 iMod (rep_copy_update with "ready upd") as "(<- & ready & cur)".
-iModIntro. iSplitL "ready"; iRight.
-- iExists _; iFrame. by rewrite to_db_app /= db_t1.
-- iExists _; iFrame.
+iModIntro. iSplitL "ready"; iRight; iFrame.
 Qed.
 
 Definition load_call_pred kI kR si ts : iProp :=
-  ∃ t1 t2 os, ⌜ts = [t1]⌝ ∗ ⌜DB.to_db os !! t1 = Some t2⌝ ∗
-              rep_update kI kR dbN [] os (os ++ [Load t1]).
+  ∃ t1 t2 db, ⌜ts = [t1]⌝ ∗ ⌜db !! t1 = Some t2⌝ ∗
+              rep_update kI kR dbN ∅ db db.
 
-Definition load_resp_pred kI kR si ts : iProp :=
-  ∃ t1 t2 os, ⌜ts = [t2]⌝ ∗ ⌜DB.to_db os !! t1 = Some t2⌝ ∗
-              rep_current kI kR dbN [] (os ++ [Load t1]).
+Definition load_resp_pred kI kR si ts ts' : iProp :=
+  ∃ t1 t2 db, ⌜ts = [t1]⌝ ∗ ⌜ts' = [t2]⌝ ∗ ⌜db !! t1 = Some t2⌝ ∗
+              rep_current kI kR dbN ∅ db.
 
 Lemma load_call t1 t2 kI kR cs :
   let P := compromised_session Init cs in
@@ -318,27 +301,25 @@ Lemma load_call t1 t2 kI kR cs :
   db_mapsto kI kR t1 t2 ==∗
   (P ∨ load_call_pred kI kR cs [t1]) ∗
   db_mapsto kI kR t1 t2 ∗
-  ∀ ts, P ∨ load_resp_pred kI kR cs ts -∗
+  ∀ ts, P ∨ load_resp_pred kI kR cs [t1] ts -∗
         (P ∨ ⌜ts = [t2]⌝) ∗
         db_connected' kI kR cs.
 Proof.
 iIntros "% (%db & ready & state) mapsto".
 iPoseProof (DB.db_state_mapsto with "state mapsto") as "%db_t1".
 iFrame.
-iDestruct "ready" as "[#?|(%os & -> & ready & cur)]".
+iDestruct "ready" as "[#?|(ready & cur)]".
 { iModIntro. iSplitR; eauto.
   iIntros "% _". iSplit; eauto. iExists _. iFrame. by eauto. }
-iMod (rep_main_update (os ++ [Load t1]) with "ready cur")
-  as "[ready cur]".
+iMod (rep_main_update db with "ready cur") as "[ready cur]".
 iModIntro. iSplitR "ready state".
 { iRight. iExists _, _, _. iFrame. by eauto. }
-iIntros "% [#?|(%t1' & %t2' & %os' & -> & %db_t1' & cur)]".
+iIntros "% [#?|(%t1' & %t2' & %db' & %et1 & -> & %db_t1' & cur)]".
 { iSplit; eauto. iFrame. by eauto. }
-iPoseProof (rep_main_current with "ready cur") as "%e".
-case: (app_inj_tail _ _ _ _ e) => [<- [<-]] in db_t1' *.
+iPoseProof (rep_main_current with "ready cur") as "<-".
+case: et1 => <- in db_t1' *.
 rewrite db_t1' in db_t1. case: db_t1 => ->.
-iSplit; eauto. iExists _. iFrame.
-iRight. iExists _. iFrame. by rewrite to_db_app.
+iSplit; eauto. iExists _. iFrame. iRight. iFrame.
 Qed.
 
 Lemma load_resp kI kR cs db t1 :
@@ -347,24 +328,20 @@ Lemma load_resp kI kR cs db t1 :
   (P ∨ db_server_ready kI kR db) -∗
   (P ∨ load_call_pred kI kR cs [t1]) ==∗
   (P ∨ db_server_ready kI kR db) ∗
-  (P ∨ load_resp_pred kI kR cs [t2]).
+  (P ∨ load_resp_pred kI kR cs [t1] [t2]).
 Proof.
 iIntros "%P /= [#?|ready] [#?|call]"; try by iModIntro; iSplitL; eauto.
-iDestruct "ready" as "(%os & -> & ready)".
-iDestruct "call" as "(%t1' & %t2 & %os' & %e & %db_t1 & upd)".
+iDestruct "call" as "(%t1' & %t2 & %db' & %e & %db_t1 & upd)".
 case: e => <- in db_t1 *.
 iMod (rep_copy_update with "ready upd") as "(<- & ready & cur)".
 rewrite db_t1 /=. iModIntro.
-iSplitL "ready"; iRight.
-- iExists (os ++ [Load t1]). rewrite to_db_app /=.
-  by iFrame.
-- iExists _; iFrame. by eauto.
+iSplitL "ready"; iRight; iFrame. by eauto.
 Qed.
 
 Definition store_ctx : iProp :=
-  RPC.rpc_pred dbN "store" store_call_pred store_resp_pred ∗
-  RPC.rpc_pred dbN "load" load_call_pred load_resp_pred ∗
-  RPC.rpc_pred dbN "create" create_call_pred create_resp_pred ∗
+  RPC.rpc (dbN.@"store") store_call_pred store_resp_pred ∗
+  RPC.rpc (dbN.@"load") load_call_pred load_resp_pred ∗
+  RPC.rpc (dbN.@"create") create_call_pred create_resp_pred ∗
   RPC.ctx.
 
 Lemma store_ctx_alloc E :
@@ -376,14 +353,15 @@ Proof.
 iIntros "%sub token #?".
 rewrite (seal_pred_token_difference (↑dbN)) => //.
 iDestruct "token" as "[token ?]". iFrame.
-iMod (RPC.rpc_pred_set _ (s := "store") with "token")
-  as "[store token]"; try solve_ndisj.
+iMod (RPC.rpc_alloc (N := dbN.@"store") with "token")
+  as "[store token]"; first solve_ndisj.
 iFrame.
-iMod (RPC.rpc_pred_set _ (s := "load") with "token")
-  as "[load token]"; try solve_ndisj.
+iMod (RPC.rpc_alloc (N := dbN.@"load") with "token")
+  as "[load token]"; first solve_ndisj.
 iFrame.
-iMod (RPC.rpc_pred_set _ (s := "create") with "token")
-  as "[create token]"; try solve_ndisj.
+iMod (RPC.rpc_alloc (N := dbN.@"create") with "token")
+  as "[create token]"; first solve_ndisj.
+by iFrame.
 Qed.
 
 Ltac solve_ctx :=
@@ -395,17 +373,17 @@ Ltac solve_ctx :=
 
 Lemma store_ctx_store :
   store_ctx -∗
-  RPC.rpc_pred dbN "store" store_call_pred store_resp_pred.
+  RPC.rpc (dbN.@"store") store_call_pred store_resp_pred.
 Proof. solve_ctx. Qed.
 
 Lemma store_ctx_load :
   store_ctx -∗
-  RPC.rpc_pred dbN "load" load_call_pred load_resp_pred.
+  RPC.rpc (dbN.@"load") load_call_pred load_resp_pred.
 Proof. solve_ctx. Qed.
 
 Lemma store_ctx_create :
   store_ctx -∗
-  RPC.rpc_pred dbN "create" create_call_pred create_resp_pred.
+  RPC.rpc (dbN.@"create") create_call_pred create_resp_pred.
 Proof. solve_ctx. Qed.
 
 Lemma store_ctx_rpc_ctx : store_ctx -∗ RPC.ctx.

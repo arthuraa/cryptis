@@ -15,7 +15,7 @@ Unset Printing Implicit Defensive.
 
 Section Verif.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !storeGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !RPC.rpcGS Σ, !storeGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (cs : Conn.state).
@@ -28,7 +28,7 @@ Ltac failure := iLeft; iFrame; eauto.
 
 Lemma wp_server_handle_load c skI skR cs (vdb : val) :
   {{{ channel c ∗ cryptis_ctx ∗ store_ctx  }}}
-    RPC.handle dbN "load" c (Server.handle_load c (repr cs) vdb)
+    RPC.handle c (Tag $ (dbN.@"load")) (Server.handle_load c (repr cs) vdb)
   {{{ h, RET (repr h); server_handler skI skR cs vdb h }}}.
 Proof.
 iIntros "%Φ (#chan_c & #? & #ctx) post".

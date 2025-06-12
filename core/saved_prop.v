@@ -53,6 +53,19 @@ Proof.
 by rewrite /saved_prop dfrac_agree_validI_2 later_equivI.
 Qed.
 
+Lemma saved_prop_op d1 d2 P :
+  saved_prop (d1 ⋅ d2) P ≡ saved_prop d1 P ⋅ saved_prop d2 P.
+Proof. exact: dfrac_agree_op. Qed.
+
+Lemma saved_prop_persist d P :
+  saved_prop d P ~~> saved_prop DfracDiscarded P.
+Proof. exact: dfrac_agree_persist. Qed.
+
+Lemma saved_prop_update_2 d1 d2 P1 P2 P' :
+  d1 ⋅ d2 = DfracOwn 1 →
+  saved_prop d1 P1 ⋅ saved_prop d2 P2 ~~> saved_prop d1 P' ⋅ saved_prop d2 P'.
+Proof. exact: dfrac_agree_update_2. Qed.
+
 Context `{A : Type}.
 
 Implicit Types (φ ψ : A → iProp Σ).
@@ -84,5 +97,18 @@ iSplit.
   rewrite discrete_fun_equivI. iIntros "%x".
   rewrite /= later_equivI. iApply "e".
 Qed.
+
+Lemma saved_pred_op d1 d2 φ :
+  saved_pred (d1 ⋅ d2) φ ≡ saved_pred d1 φ ⋅ saved_pred d2 φ.
+Proof. exact: dfrac_agree_op. Qed.
+
+Lemma saved_pred_persist d φ :
+  saved_pred d φ ~~> saved_pred DfracDiscarded φ.
+Proof. exact: dfrac_agree_persist. Qed.
+
+Lemma saved_pred_update_2 d1 d2 φ1 φ2 φ' :
+  d1 ⋅ d2 = DfracOwn 1 →
+  saved_pred d1 φ1 ⋅ saved_pred d2 φ2 ~~> saved_pred d1 φ' ⋅ saved_pred d2 φ'.
+Proof. exact: dfrac_agree_update_2. Qed.
 
 End SavedProp.

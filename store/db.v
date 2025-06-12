@@ -14,22 +14,14 @@ Unset Printing Implicit Defensive.
 Definition db_stateUR : ucmra :=
   discrete_funUR (fun _ : term => authUR (optionUR (exclR (optionO termO)))).
 
-Variant operation :=
-| Store of term & term
-| Create of term & term
-| Load of term.
-
 Class dbGS Σ := DbGS {
   dbGS_state : inG Σ db_stateUR;
-  dbGS_replica : replicaG Σ (list operation);
 }.
 
 Local Existing Instance dbGS_state.
-Local Existing Instance dbGS_replica.
 
 Definition dbΣ :=
-  #[GFunctor db_stateUR;
-    replicaΣ (list operation)].
+  #[GFunctor db_stateUR].
 
 Global Instance subG_dbGS Σ : subG dbΣ Σ → dbGS Σ.
 Proof. solve_inG. Qed.
@@ -38,28 +30,12 @@ Module DB.
 
 Section DB.
 
-Implicit Types o : operation.
-Implicit Types os : list operation.
 Implicit Types db : gmap term term.
 Implicit Types γ : gname.
 Implicit Types N : namespace.
 Implicit Types n : nat.
 Implicit Types b : bool.
 Implicit Types T : coGset term.
-
-Definition op_app db o :=
-  match o with
-  | Store t1 t2 => <[t1 := t2]>db
-  | Create t1 t2 =>
-      match db !! t1 with
-      | Some _ => db
-      | None => <[t1 := t2]>db
-      end
-  | Load t1 => db
-  end.
-
-Definition to_db os : gmap term term :=
-  foldl op_app ∅ os.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !dbGS Σ}.
 
@@ -170,7 +146,7 @@ Lemma db_state_create t1 t2 kI kR N db :
   db_state kI kR N db -∗
   free_at kI kR N {[t1]} ==∗
   ⌜db !! t1 = None⌝ ∗
-  db_state kI kR N (op_app db (Create t1 t2)) ∗
+  db_state kI kR N (<[t1 := t2]>db) ∗
   mapsto kI kR N t1 t2.
 Proof.
 iIntros "Hauth Hfree". rewrite /=.
@@ -184,11 +160,6 @@ iMod (term_own_update_2 _ _ (a' := (_ ⋅ _)) with "Hauth Hfree") as "[Hauth Hfr
 { by apply: (@db_alloc _ t1 t2). }
 iModIntro. by iFrame.
 Qed.
-
-Lemma db_state_load t1 kI kR N db :
-  db_state kI kR N db ==∗
-  db_state kI kR N (op_app db (Load t1)).
-Proof. by eauto. Qed.
 
 Lemma client_alloc kI kR N E :
   ↑N.@"client".@kR.@"state" ⊆ E →

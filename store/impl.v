@@ -22,17 +22,17 @@ Definition connect : val := λ: "c" "skA" "vkB",
   RPC.connect "c" "skA" "vkB".
 
 Definition store : val := λ: "c" "cs" "k" "v",
-  RPC.call dbN "store" "c" "cs" ["k"; "v"];; #().
+  RPC.call "c" "cs" (Tag $ dbN.@"store") ["k"; "v"];; #().
 
 Definition load : val := λ: "c" "cs" "k",
-  let: "ts" := RPC.call dbN "load" "c" "cs" ["k"] in
+  let: "ts" := RPC.call "c" "cs" (Tag $ dbN.@"load") ["k"] in
   match: "ts" with
     NONE => TInt 0
   | SOME "ts" => Fst "ts"
   end.
 
 Definition create : val := λ: "c" "cs" "k" "v",
-  RPC.call dbN "create" "c" "cs" ["k"; "v"];; #().
+  RPC.call "c" "cs" (Tag $ dbN.@"create") ["k"; "v"];; #().
 
 Definition close : val := λ: "c" "cs",
   RPC.close "c" "cs".
@@ -73,9 +73,9 @@ Definition handle_create : val :=
 
 Definition conn_handler : val := λ: "c" "cs" "db" "lock",
   RPC.server "c" "cs" [
-    RPC.handle dbN "store" "c" (handle_store "c" "cs" "db");
-    RPC.handle dbN "load" "c" (handle_load "c" "cs" "db");
-    RPC.handle dbN "create" "c" (handle_create "c" "cs" "db")
+    RPC.handle "c" (Tag $ dbN.@"store") (handle_store "c" "cs" "db");
+    RPC.handle "c" (Tag $ dbN.@"load") (handle_load "c" "cs" "db");
+    RPC.handle "c" (Tag $ dbN.@"create") (handle_create "c" "cs" "db")
   ];;
   lock.release "lock".
 

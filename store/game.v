@@ -16,7 +16,7 @@ Unset Printing Implicit Defensive.
 
 Section Game.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !storeGS Σ, !tlockG Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !RPC.rpcGS Σ, !storeGS Σ, !tlockG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -146,7 +146,7 @@ Qed.
 End Game.
 
 Definition F : gFunctors :=
-  #[heapΣ; spawnΣ; cryptisΣ; tlockΣ; Conn.connΣ; storeΣ].
+  #[heapΣ; spawnΣ; cryptisΣ; tlockΣ; Conn.connΣ; RPC.rpcΣ; storeΣ].
 
 Lemma store_secure σ₁ σ₂ (v : val) t₂ e₂ :
   rtc erased_step ([game #()], σ₁) (t₂, σ₂) →
