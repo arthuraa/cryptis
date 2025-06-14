@@ -1,5 +1,6 @@
 From stdpp Require Import base countable gmap.
 From iris.heap_lang Require Import lang notation proofmode.
+From iris.heap_lang.lib Require Import nondet_bool.
 From iris.algebra Require Import gmap gset auth reservation_map.
 From iris.base_logic Require Import gen_heap invariants.
 From mathcomp Require ssrbool order path.
@@ -1133,3 +1134,51 @@ Lemma binder_delete_commute {A} (m : gmap string A) i j :
   binder_delete i (binder_delete j m) =
   binder_delete j (binder_delete i m).
 Proof. case: i j => [|i] [|j] //=; exact: delete_commute. Qed.
+
+Definition nondet_nat_loop : val := rec: "loop" "n" :=
+  if: nondet_bool #() then "n" else "loop" ("n" + #1).
+
+Definition nondet_nat : val := λ: <>, nondet_nat_loop #0.
+
+Definition nondet_int : val := λ: <>,
+  let: "n" := nondet_nat #() in
+  if: nondet_bool #() then "n" else - "n".
+
+Section NonDetProofs.
+
+Context `{!heapGS Σ}.
+
+Implicit Types E : coPset.
+Implicit Types v : val.
+Implicit Types Ψ : val → iProp Σ.
+
+Lemma wp_nondet_nat_loop Ψ (m : nat) :
+  (∀ n : nat, Ψ #n) ⊢
+  WP nondet_nat_loop #m {{ Ψ }}.
+Proof.
+iIntros "post"; iLöb as "IH" forall (m); wp_rec.
+wp_apply nondet_bool_spec => //.
+iIntros "%b _"; case: b; wp_if; first by iApply "post".
+wp_pures. have -> : (m + 1)%Z = (m + 1)%nat by lia.
+by iApply "IH".
+Qed.
+
+Lemma wp_nondet_nat Ψ :
+  (∀ n : nat, Ψ #n) ⊢
+  WP nondet_nat #() {{ Ψ }}.
+Proof.
+iIntros "post". wp_lam. by wp_apply (wp_nondet_nat_loop _ 0).
+Qed.
+
+Lemma wp_nondet_int Ψ :
+  (∀ n : Z, Ψ #n) ⊢
+  WP nondet_int #() {{ Ψ }}.
+Proof.
+iIntros "post"; rewrite /nondet_int; wp_pures.
+wp_apply wp_nondet_nat. iIntros "%n"; wp_pures.
+wp_apply nondet_bool_spec => //. iIntros "%b _".
+case: b; wp_if; first by iApply "post".
+by wp_pures; iApply "post".
+Qed.
+
+End NonDetProofs.
