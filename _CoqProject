@@ -29,6 +29,7 @@ primitives/notations.v
 primitives/pre_term.v
 primitives/comp.v
 primitives/simple.v
+primitives/with_cryptis.v
 primitives/attacker.v
 primitives.v
 tactics.v
