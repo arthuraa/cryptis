@@ -11,7 +11,11 @@ gmeta.v
 nown.v
 role.v
 
+core/pre_term/base.v
+core/pre_term/with_stdpp.v
 core/pre_term.v
+core/term/base.v
+core/term/with_stdpp.v
 core/term.v
 core/comp_map.v
 core/minted.v
@@ -22,6 +26,7 @@ core/saved_prop.v
 cryptis.v
 
 primitives/notations.v
+primitives/pre_term.v
 primitives/comp.v
 primitives/simple.v
 primitives/attacker.v
