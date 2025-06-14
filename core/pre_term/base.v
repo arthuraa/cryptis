@@ -1,4 +1,4 @@
-From cryptis Require Import lib.
+From cryptis Require Export mathcomp_compat.
 From HB Require Import structures.
 From mathcomp Require Import all_ssreflect.
 From deriving Require Import deriving.
