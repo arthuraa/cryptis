@@ -33,10 +33,10 @@ Definition responder_accept : val := λ: "c" "skR" "ga" "vkI",
   let: "vkR" := vkey "skR" in
   let: "b" := mknonce #() in
   let: "gb" := mkkeyshare "b" in
-  let: "m2" := sign (Tag $ iso_dhN.@"m2") "skR"
+  let: "m2" := sign "skR" (Tag $ iso_dhN.@"m2")
                  (term_of_list ["ga"; "gb"; "vkI"]) in
   send "c" "m2";;
-  bind: "m3" := verify (Tag $ iso_dhN.@"m3") "vkI" (recv "c") in
+  bind: "m3" := verify "vkI" (Tag $ iso_dhN.@"m3") (recv "c") in
   bind: "m3" := list_of_term "m3" in
   list_match: ["ga'"; "gb'"; "vkR'"] := "m3" in
   guard: eq_term "ga" "ga'" && eq_term "gb" "gb'" && eq_term "vkR" "vkR'" in

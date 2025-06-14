@@ -127,20 +127,20 @@ case; eauto => k'.
 case: decide => [<-|]; eauto.
 Qed.
 
-Lemma tac_wp_enc Γ E K c t1 t2 Ψ :
-  envs_entails Γ (WP fill K (Val (Spec.enc c t1 t2)) @ E {{ Ψ }}) →
-  envs_entails Γ (WP fill K (enc c t1 t2) @ E {{ Ψ }}).
+Lemma tac_wp_enc Γ E K t1 c t2 Ψ :
+  envs_entails Γ (WP fill K (Val (Spec.enc t1 c t2)) @ E {{ Ψ }}) →
+  envs_entails Γ (WP fill K (enc t1 c t2) @ E {{ Ψ }}).
 Proof.
 rewrite envs_entails_unseal => H.
 by rewrite -wp_bind -wp_enc.
 Qed.
 
-Lemma tac_wp_dec Γ E K c k t Ψ :
+Lemma tac_wp_dec Γ E K k c t Ψ :
   (∀ t', t = TSeal (TKey Seal k) (Spec.tag c t') →
          envs_entails Γ (WP fill K (Val (SOMEV t')) @ E {{ Ψ }})) →
-  (Spec.dec c (TKey Open k) t = None →
+  (Spec.dec (TKey Open k) c t = None →
    envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →
-  envs_entails Γ (WP fill K (dec c (TKey Open k) t) @ E {{ Ψ }}).
+  envs_entails Γ (WP fill K (dec (TKey Open k) c t) @ E {{ Ψ }}).
 Proof.
 rewrite envs_entails_unseal => HSome HNone.
 rewrite -wp_bind -wp_dec.
@@ -148,12 +148,12 @@ case e: Spec.dec => [t'|]; eauto.
 by apply: HSome; apply: Spec.decK.
 Qed.
 
-Lemma tac_wp_adec Γ K c k t Ψ :
+Lemma tac_wp_adec Γ K k c t Ψ :
   (∀ t', t = TSeal (TKey Seal k) (Spec.tag c t') →
          envs_entails Γ (WP fill K (Val (SOMEV t')) {{ Ψ }})) →
-  (Spec.dec c (TKey Open k) t = None →
+  (Spec.dec (TKey Open k) c t = None →
    envs_entails Γ (WP fill K (Val NONEV) {{ Ψ }})) →
-  envs_entails Γ (WP fill K (adec c k t) {{ Ψ }}).
+  envs_entails Γ (WP fill K (adec k c t) {{ Ψ }}).
 Proof.
 rewrite envs_entails_unseal => HSome HNone.
 rewrite -wp_bind -wp_adec.
@@ -161,19 +161,19 @@ case e: Spec.dec => [t'|] in HNone *; eauto.
 by apply: HSome; apply: Spec.decK.
 Qed.
 
-Lemma tac_wp_senc Γ E K c k t Ψ :
-  envs_entails Γ (WP fill K (Val (Spec.enc c (TKey Seal k) t)) @ E {{ Ψ }}) →
-  envs_entails Γ (WP fill K (senc c k t) @ E {{ Ψ }}).
+Lemma tac_wp_senc Γ E K k c t Ψ :
+  envs_entails Γ (WP fill K (Val (Spec.enc (TKey Seal k) c t)) @ E {{ Ψ }}) →
+  envs_entails Γ (WP fill K (senc k c t) @ E {{ Ψ }}).
 Proof.
 by rewrite envs_entails_unseal => H; rewrite -wp_bind -wp_senc.
 Qed.
 
-Lemma tac_wp_sdec Γ E K c k t Ψ :
+Lemma tac_wp_sdec Γ E K k c t Ψ :
   (∀ t', t = TSeal (TKey Seal k) (Spec.tag c t') →
          envs_entails Γ (WP fill K (Val (SOMEV t')) @ E {{ Ψ }})) →
-  (Spec.dec c (TKey Open k) t = None →
+  (Spec.dec (TKey Open k) c t = None →
    envs_entails Γ (WP fill K (Val NONEV) @ E {{ Ψ }})) →
-  envs_entails Γ (WP fill K (sdec c k t) @ E {{ Ψ }}).
+  envs_entails Γ (WP fill K (sdec k c t) @ E {{ Ψ }}).
 Proof.
 rewrite envs_entails_unseal => HSome HNone.
 rewrite -wp_bind -wp_sdec.
@@ -181,12 +181,12 @@ case e: Spec.dec => [t'|] in HNone *; eauto.
 by apply: HSome; apply: Spec.decK.
 Qed.
 
-Lemma tac_wp_verify Γ K c k t Ψ :
+Lemma tac_wp_verify Γ K k c t Ψ :
   (∀ t', t = TSeal (TKey Seal k) (Spec.tag c t') →
          envs_entails Γ (WP fill K (Val (SOMEV t')) {{ Ψ }})) →
-  (Spec.dec c (TKey Open k) t = None →
+  (Spec.dec (TKey Open k) c t = None →
    envs_entails Γ (WP fill K (Val NONEV) {{ Ψ }})) →
-  envs_entails Γ (WP fill K (verify c (TKey Open k) t) {{ Ψ }}).
+  envs_entails Γ (WP fill K (verify (TKey Open k) c t) {{ Ψ }}).
 Proof.
 rewrite envs_entails_unseal => HSome HNone.
 rewrite -wp_bind -wp_verify.

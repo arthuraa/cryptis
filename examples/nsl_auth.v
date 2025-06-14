@@ -32,29 +32,29 @@ A --> B: {nB}@pkB
 Definition init : val := λ: "c" "l" "skI" "pkR",
   let: "nI" := mknonce #() in
   let: "pkI" := pkey "skI" in
-  let: "m1" := aenc (Tag $ N.@"m1") "pkR" (term_of_list ["nI"; "pkI"]) in
+  let: "m1" := aenc "pkR" (Tag $ N.@"m1") (term_of_list ["nI"; "pkI"]) in
   send "c" "m1";;
-  bind: "m2"   := adec (Tag $ N.@"m2") "skI" (recv "c") in
+  bind: "m2"   := adec "skI" (Tag $ N.@"m2") (recv "c") in
   bind: "m2"   := list_of_term "m2" in
   list_match: ["nI'"; "nR"; "pkR'"] := "m2" in
   guard: eq_term "nI'" "nI" && eq_term "pkR'" "pkR" in
   "l" <- term_of_list ["pkI"; "pkR"; term_of_list ["nI"; "nR"]];;
-  let: "m3" := aenc (Tag $ N.@"m3") "pkR" "nR" in
+  let: "m3" := aenc "pkR" (Tag $ N.@"m3") "nR" in
   send "c" "m3";;
   SOME (term_of_list ["nI"; "nR"]).
 
 Definition resp : val := λ: "c" "lR" "skR",
   let: "pkR" := pkey "skR" in
-  bind: "m1" := adec (Tag $ N.@"m1") "skR" (recv "c") in
+  bind: "m1" := adec "skR" (Tag $ N.@"m1") (recv "c") in
   bind: "m1" := list_of_term "m1" in
   list_match: ["nI"; "pkI"] := "m1" in
   bind: "kt" := is_key "pkI" in
   guard: "kt" = repr Seal in
   let: "nR" := mknonce #() in
   "lR" <- term_of_list ["pkI"; "pkR"; term_of_list ["nI"; "nR"]] ;;
-  let: "m2" := aenc (Tag $ N.@"m2") "pkI" (term_of_list ["nI"; "nR"; "pkR"]) in
+  let: "m2" := aenc "pkI" (Tag $ N.@"m2") (term_of_list ["nI"; "nR"; "pkR"]) in
   send "c" "m2";;
-  bind: "m3" := adec (Tag $ N.@"m3") "skR" (recv "c") in
+  bind: "m3" := adec "skR" (Tag $ N.@"m3") (recv "c") in
   guard: eq_term "m3" "nR" in
   SOME ("pkI", term_of_list ["nI"; "nR"]).
 

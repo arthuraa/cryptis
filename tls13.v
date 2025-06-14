@@ -1663,8 +1663,8 @@ Definition hello N sp :=
     TSeal (TKey Seal session_key) (Spec.tag (Tag $ N.@"server_hello") enc)
   ].
 
-Definition verify N k x sig :=
-  match Spec.dec N k sig with
+Definition verify k N x sig :=
+  match Spec.dec k N sig with
   | Some y => bool_decide (y = THash x)
   | None => false
   end.
@@ -1676,11 +1676,11 @@ Definition check N cp sp :=
   '(kex, other') ← prod_of_list 2 pub';
   res ← SShare.check N (CParams.share cp) kex;
   let session_key := SShare.session_key_of' N res in
-  dec_sig ← Spec.dec (Tag $ N.@"server_hello") (TKey Open session_key) sig;
+  dec_sig ← Spec.dec (TKey Open session_key) (Tag $ N.@"server_hello") sig;
   dec_sig ← Spec.to_list dec_sig;
   '(verif_key, sig) ← prod_of_list 2 dec_sig;
   if decide (other' = CParams.other cp) then
-    if verify (Tag $ N.@"server_hello_sig") verif_key pub sig then
+    if verify verif_key (Tag $ N.@"server_hello_sig") pub sig then
       Some (verif_key, res)
     else None
   else None.
@@ -1699,15 +1699,15 @@ Definition hello_pub N : val := λ: "sp",
 Definition hello N : val := λ: "sp",
   case "sp" (λ: "kex" "verif_key" "other",
     let: "pub" := hello_pub N "sp" in
-    let: "enc" := sign (Tag $ N.@"server_hello_sig") "verif_key" (hash "pub") in
+    let: "enc" := sign "verif_key" (Tag $ N.@"server_hello_sig") (hash "pub") in
     let: "enc" := term_of_list [vkey "verif_key"; "enc"] in
     let: "session_key" := SShare.I.session_key_of N "kex" in
-    let: "enc" := senc (Tag $ N.@"server_hello") "session_key" "enc" in
+    let: "enc" := senc "session_key" (Tag $ N.@"server_hello") "enc" in
     term_of_list ["pub"; "enc"]
   ).
 
-Definition verify N : val := λ: "k" "x" "sig",
-  match: simple.verify N "k" "sig" with
+Definition verify : val := λ: "k" "N" "x" "sig",
+  match: simple.verify "k" "N" "sig" with
     SOME "y" => eq_term "y" (hash "x")
   | NONE => #false
   end.
@@ -1721,11 +1721,11 @@ Definition check N : val := λ: "cp" "sh",
   list_match: ["s_kex"; "s_other"] := "pub'" in
   bind: "res" := SShare.I.check N "c_kex" "s_kex" in
   let: "session_key" := SShare.I.session_key_of' N "res" in
-  bind: "dec_sig" := sdec (Tag $ N.@"server_hello") "session_key" "sig" in
+  bind: "dec_sig" := sdec "session_key" (Tag $ N.@"server_hello") "sig" in
   bind: "dec_sig" := list_of_term "dec_sig" in
   list_match: ["verif_key"; "sig"] := "dec_sig" in
   if: eq_term "s_other" "c_other" then
-    if: verify (Tag $ N.@"server_hello_sig") "verif_key" "pub" "sig" then
+    if: verify "verif_key" (Tag $ N.@"server_hello_sig") "pub" "sig" then
       SOME ("verif_key", "res")
     else NONE
   else NONE.
@@ -1778,8 +1778,8 @@ wp_pures. wp_apply wp_senc. wp_pures. wp_list. by wp_term_of_list.
 Qed.
 
 Lemma wp_verify N k x sig Φ :
-  Φ #(verify N k x sig) -∗
-  WP I.verify N k x sig {{ Φ }}.
+  Φ #(verify k N x sig) -∗
+  WP I.verify k N x sig {{ Φ }}.
 Proof.
 iIntros "?"; rewrite /I.verify; wp_pures.
 wp_apply wp_verify.
@@ -2041,7 +2041,7 @@ Definition tls_client : val := λ: "c" "kex" "other",
   let: "vkey" := Fst "res" in
   let: "kex" := Snd "res" in
   let: "session_key" := SShare.I.session_key_of' N "kex" in
-  let: "ack" := senc (Tag $ N.@"ack") "session_key" "sh" in
+  let: "ack" := senc "session_key" (Tag $ N.@"ack") "sh" in
   send "c" "ack" ;;
   SOME ("vkey", SShare.I.cnonce "kex", SShare.I.snonce "kex", "session_key").
 
@@ -2197,7 +2197,7 @@ Definition tls_server : val := λ: "c" "psk" "g" "verif_key" "other",
   send "c" "sh" ;;
   let: "session_key" := SShare.I.session_key_of N "ke'" in
   let: "ack" := recv "c" in
-  bind: "ack" := sdec (Tag $ N.@"ack") "session_key" "ack" in
+  bind: "ack" := sdec "session_key" (Tag $ N.@"ack") "ack" in
   guard: eq_term "ack" "sh" in
   SOME "ke'".
 

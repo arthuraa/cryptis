@@ -51,7 +51,7 @@ Definition send : val := λ: "cs" "N" "ts",
   let: "n"  := sent "cs" in
   let: "sk" := session_key "cs" in
   let: "m"  := term_of_list (tint !"n" :: "ts") in
-  let: "m"  := senc "N" "sk" "m" in
+  let: "m"  := senc "sk" "N" "m" in
   send "c" "m";;
   "n" <- !"n" + #1%nat.
 

@@ -564,22 +564,22 @@ move=> ts1 ts2 e; apply: Some_inj.
 by rewrite -of_listK e of_listK.
 Qed.
 
-Definition enc c k t := TSeal k (tag c t).
+Definition enc k c t := TSeal k (tag c t).
 
-Definition dec c k t :=
+Definition dec k c t :=
   match open k t with
   | Some t => untag c t
   | None => None
   end.
 
-Variant dec_spec c k t : option term → Type :=
+Variant dec_spec k c t : option term → Type :=
 | DecSome k' t'
   of k = TKey Open k'
   &  t = TSeal (TKey Seal  k') (tag c t')
-  : dec_spec c k t (Some t')
-| DecNone : dec_spec c k t None.
+  : dec_spec k c t (Some t')
+| DecNone : dec_spec k c t None.
 
-Lemma decP c k t : dec_spec c k t (dec c k t).
+Lemma decP k c t : dec_spec k c t (dec k c t).
 Proof.
 rewrite /dec.
 case: openP; eauto using dec_spec.
@@ -588,8 +588,8 @@ case: untagP; eauto using dec_spec.
 move=> {}t ->; eauto using dec_spec.
 Qed.
 
-Lemma decK c k t t' :
-  dec c (TKey Open k) t = Some t' →
+Lemma decK k c t t' :
+  dec (TKey Open k) c t = Some t' →
   t = TSeal (TKey Seal k) (tag c t').
 Proof.
 rewrite /Spec.dec /=.
