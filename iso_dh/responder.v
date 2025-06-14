@@ -31,8 +31,8 @@ Definition responder_wait : val := λ: "c",
 
 Definition responder_accept : val := λ: "c" "skR" "ga" "vkI",
   let: "vkR" := vkey "skR" in
-  let: "b" := mknonce #() in
-  let: "gb" := mkkeyshare "b" in
+  let: "b" := mk_nonce #() in
+  let: "gb" := mk_keyshare "b" in
   let: "m2" := sign "skR" (Tag $ iso_dhN.@"m2")
                  (term_of_list ["ga"; "gb"; "vkI"]) in
   send "c" "m2";;
@@ -96,7 +96,7 @@ set vkR := TKey Open skR.
 iIntros "%Φ (#chan_c & #? & (#? & #?) & #sign_kR & #p_ga & #p_vkI & #failed)
   Hpost".
 wp_lam. wp_pures. wp_apply wp_vkey. wp_pures.
-wp_apply (wp_mknonce_freshN ∅
+wp_apply (wp_mk_nonce_freshN ∅
           (λ b, ⌜failed⌝ ∨ released ga ∧ released (TExp (TInt 0) b))%I
           iso_dh_pred
           (λ b, {[TExp (TInt 0) b]}))
@@ -119,7 +119,7 @@ iAssert (public gb) as "#p_gb".
   iApply "dh_gb". iPureIntro. by rewrite exps_TExpN. }
 wp_pure _ credit:"H1".
 wp_pure _ credit:"H2".
-wp_apply wp_mkkeyshare => //.
+wp_apply wp_mk_keyshare => //.
 iIntros "_". wp_pures. wp_list. wp_term_of_list.
 wp_apply wp_sign. wp_pures.
 wp_apply wp_send => //.

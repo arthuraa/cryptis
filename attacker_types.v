@@ -242,24 +242,24 @@ rewrite -(binder_insert_delete2 vs) evs'.
 by iApply "eP".
 Qed.
 
-Lemma has_type_mknonce Γ e :
-  ⊢ has_type Γ (mknonce #()) Pub.
+Lemma has_type_mk_nonce Γ e :
+  ⊢ has_type Γ (mk_nonce #()) Pub.
 Proof.
 iIntros "!> %γ #? #γP /=".
-iApply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
+iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
 iIntros (t) "_ _ #tP _ _".
 iExists t; iSplit => //.
 by iApply "tP".
 Qed.
 
-Lemma has_type_mkkeys Γ e :
+Lemma has_type_mk_keys Γ e :
   has_type Γ e Pub -∗
-  has_type Γ (mkkeys e) (Prod EK DK).
+  has_type Γ (mk_keys e) (Prod EK DK).
 Proof.
 iIntros "#eP !> %γ #? #γP /=".
 wp_bind (subst_map _ _); iApply wp_wand; first by iApply "eP".
 iIntros "%"; iDestruct 1 as (t) "[-> #tP]".
-iApply wp_mkkeys; iExists _, _; do 2!iSplit => //=.
+iApply wp_mk_keys; iExists _, _; do 2!iSplit => //=.
 - iExists _; iSplit => //; rewrite public_TKey; eauto.
 - iExists _; iSplit => //; rewrite public_TKey; eauto.
 Qed.
@@ -615,12 +615,12 @@ iIntros "%"; iDestruct 1 as (v1 v2) "(-> & #? & #?)".
 by wp_pures.
 Qed.
 
-Lemma has_type_mkchannel Γ :
-  ⊢ has_type Γ mkchannel (Arrow Unit Channel).
+Lemma has_type_mk_channel Γ :
+  ⊢ has_type Γ mk_channel (Arrow Unit Channel).
 Proof.
 iApply has_type_val.
 iIntros "!> %v ->"; wp_pures.
-wp_apply wp_mkchannel. by iIntros "%c ?".
+wp_apply wp_mk_channel. by iIntros "%c ?".
 Qed.
 
 Lemma has_type_fork Γ e :

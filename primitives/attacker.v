@@ -32,7 +32,7 @@ Definition add_proj : val := λ: "c",
   end.
 
 Definition add_nonce : val := λ: "c",
-  send "c" (mknonce #()).
+  send "c" (mk_nonce #()).
 
 Definition add_keys : val := λ: "c",
   let: "t" := recv "c" in
@@ -75,7 +75,7 @@ Definition init_attacker : val := rec: "loop" "c" :=
     "loop" "c").
 
 Definition init_network : val := λ: <>,
-  let: "c" := mkchannel #() in
+  let: "c" := mk_channel #() in
   init_attacker "c";;
   "c".
 
@@ -120,7 +120,7 @@ Lemma wp_add_nonce c :
   {{{ cryptis_ctx ∗ channel c }}} add_nonce c {{{ RET #(); True }}}.
 Proof.
 iIntros "%Ψ [#? #c] post". wp_lam.
-wp_apply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
+wp_apply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
 iIntros "%t _ _ #p_t _ _".
 wp_apply wp_send => //.
 - by iApply "p_t".
@@ -206,7 +206,7 @@ Lemma wp_init_network :
   {{{ cryptis_ctx }}} init_network #() {{{ c, RET c; channel c }}}.
 Proof.
 iIntros "%Ψ #ctx post".
-wp_lam. wp_apply wp_mkchannel. iIntros "%c #cP". wp_pures.
+wp_lam. wp_apply wp_mk_channel. iIntros "%c #cP". wp_pures.
 wp_apply wp_init_attacker; eauto. iIntros "_". wp_pures.
 by iApply "post".
 Qed.

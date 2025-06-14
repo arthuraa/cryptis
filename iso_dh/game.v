@@ -292,8 +292,8 @@ Qed.
 
 Definition game : val := λ: <>,
   let: "c"   := init_network #() in
-  let: "skI" := mksigkey #() in
-  let: "skR" := mksigkey #() in
+  let: "skI" := mk_sign_key #() in
+  let: "skR" := mk_sign_key #() in
   let: "vkI" := vkey "skI" in
   let: "vkR" := vkey "skR" in
   let: "compromised" := ref #false in
@@ -312,9 +312,9 @@ Proof.
 iIntros "#ctx enc_tok key_tok"; rewrite /game; wp_pures.
 iMod (iso_dh_ctx_alloc with "enc_tok") as "[#? _]" => //.
 wp_apply wp_init_network => //. iIntros "%c #cP". wp_pures.
-wp_apply (wp_mksigkey with "[]"); eauto.
+wp_apply (wp_mk_sign_key with "[]"); eauto.
 iIntros "%skI #p_vkI #sign_skI s_skI tokenI". wp_pures.
-wp_pures. wp_apply (wp_mksigkey with "[]"); eauto.
+wp_pures. wp_apply (wp_mk_sign_key with "[]"); eauto.
 iIntros "%skR #p_vkR #sign_skR s_skR tokenR". wp_pures.
 wp_apply wp_vkey. wp_pures.
 wp_apply wp_vkey. wp_pures.

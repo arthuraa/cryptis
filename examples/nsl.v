@@ -65,7 +65,7 @@ A --> B: {m3; nB}@pkB
 
 Definition init : val := λ: "c" "skI" "pkR",
   let: "pkI" := pkey "skI" in
-  let: "nI" := mknonce #() in
+  let: "nI" := mk_nonce #() in
   let: "m1" := aenc "pkR" (Tag $ nslN.@"m1") (term_of_list ["nI"; "pkI"]) in
   send "c" "m1";;
   bind: "m2"   := adec "skI" (Tag $ nslN.@"m2") (recv "c") in
@@ -82,7 +82,7 @@ Definition resp : val := λ: "c" "skR",
   bind: "m1" := adec "skR" (Tag $ nslN.@"m1") (recv "c") in
   bind: "m1" := list_of_term "m1" in
   list_match: ["nI"; "pkI"] := "m1" in
-  let: "nR" := mknonce #() in
+  let: "nR" := mk_nonce #() in
   let: "m2" := aenc "pkI" (Tag $ nslN.@"m2") (term_of_list ["nI"; "nR"; "pkR"]) in
   send "c" "m2";;
   bind: "m3" := adec "skR" (Tag $ nslN.@"m3") (recv "c") in
@@ -323,7 +323,7 @@ Proof.
 iIntros "#chan_c #ctx #ctx' #aencI #p_pkR %Ψ !> _ Hpost".
 iPoseProof (aenc_key_public with "aencI") as "?".
 rewrite /init. wp_pures. wp_apply wp_pkey. wp_pures.
-wp_apply (wp_mknonce (λ _, nonce_secrecy skI pkR)%I (λ _, False)%I) => //.
+wp_apply (wp_mk_nonce (λ _, nonce_secrecy skI pkR)%I (λ _, False)%I) => //.
 iIntros "%nI _ #m_nI #p_nI _ token".
 rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_list. wp_term_of_list. wp_apply wp_aenc => /=. wp_pures.
@@ -374,8 +374,8 @@ wp_list_match => [nI pkI {m1} ->|_]; last protocol_failure.
 iPoseProof (public_minted with "p_m1") as "m_m1".
 rewrite minted_TSeal minted_tag minted_of_list /=.
 iDestruct "m_m1" as "(_ & m_nI & m_pkI & _)".
-wp_pures. wp_bind (mknonce _).
-iApply (wp_mknonce_freshN
+wp_pures. wp_bind (mk_nonce _).
+iApply (wp_mk_nonce_freshN
           ∅
           (λ _, nonce_secrecy skR pkI)%I
           (λ _, False)%I
@@ -583,8 +583,8 @@ Qed.
 
 Definition game : val := λ: <>,
   let: "c"   := init_network #() in
-  let: "skI" := mkakey #() in
-  let: "skR" := mkakey #() in
+  let: "skI" := mk_aenc_key #() in
+  let: "skR" := mk_aenc_key #() in
   let: "pkI" := pkey "skI" in
   let: "pkR" := pkey "skR" in
   send "c" "pkI";;
@@ -600,9 +600,9 @@ Lemma wp_game :
 Proof.
 iIntros "#ctx enc_tok key_tok"; rewrite /game; wp_pures.
 wp_apply wp_init_network => //. iIntros "%c #cP".
-wp_pures. wp_apply (wp_mkakey with "[]"); eauto.
+wp_pures. wp_apply (wp_mk_aenc_key with "[]"); eauto.
 iIntros "%skI #p_pkI #aencI secI tokenI".
-wp_pures. wp_apply (wp_mkakey with "[]"); eauto.
+wp_pures. wp_apply (wp_mk_aenc_key with "[]"); eauto.
 iIntros "%skR #p_pkR #aencR secR tokenR".
 wp_pures. wp_apply wp_pkey. wp_pures. wp_apply wp_pkey. wp_pures.
 set pkI := TKey Seal skI.

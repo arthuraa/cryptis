@@ -85,19 +85,19 @@ iApply "aP"; do 2!iModIntro; iSplit => //.
 by rewrite exps_TExpN exps_expN.
 Qed.
 
-Definition mkdh : val := mknonce.
+Definition mk_dh : val := mk_nonce.
 
-Lemma wp_mkdh g (Ψ : val → iProp) :
+Lemma wp_mk_dh g (Ψ : val → iProp) :
   cryptis_ctx -∗
   minted g -∗
   (∀ a, minted a -∗
         dh_seed a -∗
         term_token (TExp g a) ⊤ -∗
         Ψ a) -∗
-  WP mkdh #() {{ Ψ }}.
+  WP mk_dh #() {{ Ψ }}.
 Proof.
 iIntros "#ctx #minted_g post".
-iApply (wp_mknonce_freshN ∅ (λ _, False%I) dh_publ (λ t, {[TExp g t]})
+iApply (wp_mk_nonce_freshN ∅ (λ _, False%I) dh_publ (λ t, {[TExp g t]})
   with "[//]" ) => //.
 - iIntros "%". rewrite elem_of_empty. by iIntros "[]".
 - iIntros "%". rewrite big_sepS_singleton. iIntros "!>".

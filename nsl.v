@@ -17,7 +17,7 @@ Notation iProp := (iProp Σ).
 Implicit Types t kI kR nI nR : term.
 
 Definition nsl_mk_key_share_impl : val := λ: <>,
-    let: "n" := mknonce #() in ("n", "n").
+    let: "n" := mk_nonce #() in ("n", "n").
 
 Definition nsl_mk_session_key rl n1 n2 : term :=
   if rl is Init then TPair n1 n2 else TPair n2 n1.
@@ -64,8 +64,8 @@ Qed.
 
 Next Obligation.
 iIntros "%kI %kR %Φ #? post". rewrite /nsl_mk_key_share_impl.
-wp_pures. wp_bind (mknonce _).
-iApply (wp_mknonce (λ _, corruption kI kR) (λ _, False)%I) => //.
+wp_pures. wp_bind (mk_nonce _).
+iApply (wp_mk_nonce (λ _, corruption kI kR) (λ _, False)%I) => //.
 iIntros "%n % #s_n #p_n _ token". wp_pures. iModIntro.
 iApply "post". rewrite bi.intuitionistic_intuitionistically. by eauto.
 Qed.

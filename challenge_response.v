@@ -73,7 +73,7 @@ Ltac protocol_failure :=
 
 Definition cr_init : val := λ: "c" "skA" "pkB",
   let:  "pkA"  := vkey "skA" in
-  let:  "nA"   := mknonce #() in
+  let:  "nA"   := mk_nonce #() in
   let:  "m1"   := term_of_list ["nA"; "pkA"] in
   send  "c" "m1";;
   bind: "m2"   := verify "pkB" (Tag $ N.@"m2") (recv "c") in
@@ -92,7 +92,7 @@ Definition cr_resp : val := λ: "c" "skB",
   list_match: ["nA"; "pkA"] := "m1" in
   bind: "kt"   := is_key "pkA" in
   if: "kt" = repr Open then
-    let:  "nB"   := mknonce #() in
+    let:  "nB"   := mk_nonce #() in
     let: "m2"    := sign "skB" (Tag $ N.@"m2") (term_of_list ["nA"; "nB"; "pkA"]) in
     send  "c" "m2";;
     bind: "m3"   := verify "pkA" (Tag $ N.@"m3") (recv "c") in
@@ -176,7 +176,7 @@ rewrite /cr_init.
 iIntros "#? #? #ctx inv #d_kA #d_kB Hpost".
 iPoseProof "ctx" as "(? & ? & ?)".
 wp_pures. wp_apply wp_vkey. wp_pures.
-wp_apply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
+wp_apply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
 iIntros (nA) "_ _ #p_nA _ unreg".
 rewrite (term_token_difference _ (↑N)) //.
 iDestruct "unreg" as "[unreg _]".
@@ -243,8 +243,8 @@ wp_is_key_eq kt kA et; last protocol_failure; subst pkA.
 wp_pures.
 case: (bool_decide_reflect (_ = repr_key_type Open)); last protocol_failure.
 case: kt=> // _.
-wp_pures; wp_bind (mknonce _).
-iApply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
+wp_pures; wp_bind (mk_nonce _).
+iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
 iIntros (nB) "_ _ #p_nB _ unreg".
 rewrite (term_token_difference _ (↑N)) //.
 iDestruct "unreg" as "[token _]".

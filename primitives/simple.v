@@ -77,7 +77,7 @@ Definition dec : val := λ: "k" "N" "t",
   bind: "t" := open "k" "t" in
   untag "N" "t".
 
-Definition mkkeys : val := λ: "k",
+Definition mk_keys : val := λ: "k",
   (key Seal "k", key Open "k").
 
 Definition derive_key : val := λ: "k",
@@ -289,22 +289,22 @@ rewrite val_of_term_unseal /=.
 by iIntros "post"; wp_lam; wp_pures.
 Qed.
 
-Lemma twp_mkkeys E (k : term) Ψ :
+Lemma twp_mk_keys E (k : term) Ψ :
   Ψ (TKey Seal k, TKey Open k)%V ⊢
-  WP mkkeys k @ E [{ Ψ }].
+  WP mk_keys k @ E [{ Ψ }].
 Proof.
-rewrite /mkkeys.
+rewrite /mk_keys.
 iIntros "post"; wp_pures.
 wp_apply twp_key.
 wp_apply twp_key.
 by wp_pures.
 Qed.
 
-Lemma wp_mkkeys E (k : term) Ψ :
+Lemma wp_mk_keys E (k : term) Ψ :
   Ψ (TKey Seal k, TKey Open k)%V ⊢
-  WP mkkeys k @ E {{ Ψ }}.
+  WP mk_keys k @ E {{ Ψ }}.
 Proof.
-by iIntros "post"; iApply twp_wp; iApply twp_mkkeys.
+by iIntros "post"; iApply twp_wp; iApply twp_mk_keys.
 Qed.
 
 Lemma twp_derive_key E (k : term) Ψ :

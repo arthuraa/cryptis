@@ -110,7 +110,7 @@ Definition game : val := λ: <>,
   let: "c"   := init_network #() in
 
   (* Generate signature keys and publicize verification key *)
-  let: "k"   := mksigkey #() in
+  let: "k"   := mk_sign_key #() in
   let: "vk"  := vkey "k" in
   send "c" "vk" ;;
 
@@ -139,7 +139,7 @@ rewrite /game. wp_pures.
 (* Setup attacker *)
 wp_apply wp_init_network => //. iIntros "%c #cP". wp_pures.
 (* Generate server key. Keep the signing key secret. *)
-wp_bind (mksigkey _). iApply (wp_mksigkey with "[//]") => //.
+wp_bind (mk_sign_key _). iApply (wp_mk_sign_key with "[//]") => //.
 iIntros (sk) "#p_vk #sign_k s_sk token".
 iMod (sign_freeze_secret with "s_sk sign_k") as "#?".
 wp_pures.

@@ -24,8 +24,8 @@ Implicit Types (si : sess_info).
 
 Definition initiator : val := λ: "c" "skI" "vkR",
   let: "vkI"  := vkey "skI" in
-  let: "a"    := mknonce #() in
-  let: "ga"   := mkkeyshare "a" in
+  let: "a"    := mk_nonce #() in
+  let: "ga"   := mk_keyshare "a" in
   let: "m1"   := term_of_list ["ga"; "vkI"] in
   send "c" "m1";;
   bind: "m2"   := verify "vkR" (Tag $ iso_dhN.@"m2") (recv "c") in
@@ -89,7 +89,7 @@ rewrite /initiator.
 set vkI := TKey Open skI.
 iIntros "#chan_c #ctx #(? & ?) #skI #p_vkR #failed %Ψ !> _ Hpost".
 wp_pures. wp_apply wp_vkey. wp_pures. rewrite -/vkI.
-wp_apply (wp_mknonce_freshN ∅
+wp_apply (wp_mk_nonce_freshN ∅
             (nonce_secrecy failed)
             iso_dh_pred
             (λ a, {[a; TExp (TInt 0) a]})) => //.
@@ -108,7 +108,7 @@ iDestruct "token" as "[token_a token_ga]".
 iPoseProof (release_tokenI with "token_ga") as "[token_rel token_ga]" => //.
 rewrite (term_token_difference ga (↑iso_dhN.@"failed")); last solve_ndisj.
 iDestruct "token_ga" as "[failed_token token_ga]".
-wp_pures. wp_apply wp_mkkeyshare => //. rewrite -/ga.
+wp_pures. wp_apply wp_mk_keyshare => //. rewrite -/ga.
 iIntros "_". wp_pures. wp_list. wp_term_of_list.
 wp_pure _ credit:"H1".
 wp_pure _ credit:"H2".

@@ -49,12 +49,12 @@ Result: derive_key [vkA; vkB; g^nA; g^nB; g^{nAnB}]
 
 *)
 
-Definition mkkeyshare : val := λ: "k",
+Definition mk_keyshare : val := λ: "k",
   texp (tint #0) "k".
 
-Lemma wp_mkkeyshare (t : term) :
+Lemma wp_mk_keyshare (t : term) :
   {{{ True }}}
-    mkkeyshare t
+    mk_keyshare t
   {{{ RET (repr (TExp (TInt 0) t)); True : iProp}}}.
 Proof.
 iIntros "%Φ _ Hpost". wp_lam.

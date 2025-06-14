@@ -20,7 +20,7 @@ Implicit Types t kI kR nI nR sI sR : term.
 Definition pk_dh_mk_key_share n := TExp (TInt 0) n.
 
 Definition pk_dh_mk_key_share_impl : val := λ: <>,
-  let: "n" := mknonce #() in
+  let: "n" := mk_nonce #() in
   ("n", texp (tint #0) "n").
 
 Definition pk_dh_mk_session_key rl n s : term :=
@@ -99,8 +99,8 @@ Qed.
 
 Next Obligation.
 iIntros "%kI %kR %Φ #? post". rewrite /pk_dh_mk_key_share_impl.
-wp_pures. wp_bind (mknonce _).
-iApply (wp_mknonce (λ _, False)%I (dh_publ (λ _, corruption kI kR))) => //.
+wp_pures. wp_bind (mk_nonce _).
+iApply (wp_mk_nonce (λ _, False)%I (dh_publ (λ _, corruption kI kR))) => //.
 iIntros "%n _ #s_n #p_n #dh token". wp_pures.
 wp_bind (tint _). iApply wp_tint.
 wp_bind (texp _ _). iApply wp_texp.

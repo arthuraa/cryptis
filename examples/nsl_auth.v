@@ -30,7 +30,7 @@ A --> B: {nB}@pkB
 *)
 
 Definition init : val := λ: "c" "l" "skI" "pkR",
-  let: "nI" := mknonce #() in
+  let: "nI" := mk_nonce #() in
   let: "pkI" := pkey "skI" in
   let: "m1" := aenc "pkR" (Tag $ N.@"m1") (term_of_list ["nI"; "pkI"]) in
   send "c" "m1";;
@@ -50,7 +50,7 @@ Definition resp : val := λ: "c" "lR" "skR",
   list_match: ["nI"; "pkI"] := "m1" in
   bind: "kt" := is_key "pkI" in
   guard: "kt" = repr Seal in
-  let: "nR" := mknonce #() in
+  let: "nR" := mk_nonce #() in
   "lR" <- term_of_list ["pkI"; "pkR"; term_of_list ["nI"; "nR"]] ;;
   let: "m2" := aenc "pkI" (Tag $ N.@"m2") (term_of_list ["nI"; "nR"; "pkR"]) in
   send "c" "m2";;
@@ -270,8 +270,8 @@ Lemma wp_init c lI v0 lR kI kR :
       else True }}}.
 Proof.
 iIntros "#chan_c #ctx #ctx' #p_kI #s_kI #p_kR %Ψ !> Hl Hpost".
-rewrite /init. wp_pures. wp_bind (mknonce _).
-iApply (wp_mknonce (λ _, corrupt kI kR) (λ _, False)%I) => //.
+rewrite /init. wp_pures. wp_bind (mk_nonce _).
+iApply (wp_mk_nonce (λ _, corrupt kI kR) (λ _, False)%I) => //.
 iIntros "%nI _ #m_nI #p_nI _ token".
 rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_apply wp_pkey. wp_pures.
@@ -324,8 +324,8 @@ case: (bool_decide_reflect (_ = repr_key_type Seal)); last protocol_failure.
 case: kt => // _.
 iDestruct (public_msg1E with "[//] [//] Hm1 [//]")
   as "(#m_nI & #p_pkI & #nIP)".
-wp_pures. wp_bind (mknonce _).
-iApply (wp_mknonce (λ _, corrupt kI kR) (λ _, False)%I) => //.
+wp_pures. wp_bind (mk_nonce _).
+iApply (wp_mk_nonce (λ _, corrupt kI kR) (λ _, False)%I) => //.
 iIntros "%nR _ #m_nR #p_nR _ _". rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_bind (term_of_list (nI :: _)%E).
 wp_list. wp_term_of_list. wp_list. wp_term_of_list.
@@ -344,8 +344,8 @@ Qed.
 
 Definition game : val := λ: <>,
   let: "c"  := init_network #() in
-  let: "kI" := mkakey #() in
-  let: "kR" := mkakey #() in
+  let: "kI" := mk_aenc_key #() in
+  let: "kR" := mk_aenc_key #() in
   let: "pkI" := pkey "kI" in
   let: "pkR" := pkey "kR" in
   send "c" "pkI";;
@@ -373,10 +373,10 @@ Lemma wp_game :
 Proof.
 iIntros "#ctx seal_tok key_tok hon phase"; rewrite /game; wp_pures.
 wp_apply wp_init_network => //. iIntros "%c #cP".
-wp_pures; wp_bind (mkakey _).
-iApply (wp_mkakey with "[]"); eauto.
+wp_pures; wp_bind (mk_aenc_key _).
+iApply (wp_mk_aenc_key with "[]"); eauto.
 iIntros "%skI #p_pkI #aenc_kI s_skI tokenI". wp_pures.
-wp_bind (mkakey _). iApply (wp_mkakey with "[]"); eauto.
+wp_bind (mk_aenc_key _). iApply (wp_mk_aenc_key with "[]"); eauto.
 iIntros "%skR #p_pkR #aenc_kR s_skR tokenR". wp_pures.
 wp_apply wp_pkey. wp_pures. set pkI := TKey Seal skI.
 wp_apply wp_pkey. wp_pures. set pkR := TKey Seal skR.

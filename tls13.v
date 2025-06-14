@@ -478,11 +478,11 @@ Definition check N : val := λ: "psk" "g" "ke",
 Definition new : val := λ: "ke",
   Meth.I.case "ke"
     (λ: "psk",
-      tag (Tag $ nroot.@"psk") (term_of_list ["psk"; mknonce #()]))
+      tag (Tag $ nroot.@"psk") (term_of_list ["psk"; mk_nonce #()]))
     (λ: "g",
-      tag (Tag $ nroot.@"dh") (term_of_list ["g"; mknonce #(); mkdh #()]))
+      tag (Tag $ nroot.@"dh") (term_of_list ["g"; mk_nonce #(); mk_dh #()]))
     (λ: "psk" "g",
-      tag (Tag $ nroot.@"pskdh") (term_of_list ["psk"; "g"; mknonce #(); mkdh #()])).
+      tag (Tag $ nroot.@"pskdh") (term_of_list ["psk"; "g"; mk_nonce #(); mk_dh #()])).
 
 End I.
 
@@ -660,17 +660,17 @@ Lemma wp_new ke Φ :
 Proof.
 iIntros "#? #p_ke post"; rewrite /I.new; wp_pures.
 iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
-- wp_bind (mknonce _); iApply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
+- wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
   iIntros (cn) "_ _ #p_cn _ token"; wp_list; wp_term_of_list.
   wp_tag.
   iApply ("post" $! (Psk psk cn) with "[] [] token") => //=.
   do !iSplit => //.
   by iApply "p_cn".
 - iDestruct "p_ke" as "[% p_ke]".
-  wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g) => //.
+  wp_bind (mk_dh _); iApply (wp_mk_dh (λ _, True)%I g) => //.
   { by iApply public_minted. }
   iIntros (a) "_ #p_a _"; wp_list.
-  wp_bind (mknonce _); iApply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
+  wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
   iIntros (cn) "_ _ #p_cn _ token"; wp_list; wp_term_of_list.
   wp_tag.
   rewrite (term_token_difference _ ⊤); try set_solver.
@@ -679,10 +679,10 @@ iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
   do !iSplit => //.
   by iApply "p_cn".
 - iDestruct "p_ke" as "(? & % & ?)".
-  wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g) => //.
+  wp_bind (mk_dh _); iApply (wp_mk_dh (λ _, True)%I g) => //.
   { by iApply public_minted. }
   iIntros (a) "_ #p_a _"; wp_list.
-  wp_bind (mknonce _); iApply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
+  wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
   iIntros (cn) "_ _ #p_cn _ token"; wp_list; wp_term_of_list.
   wp_tag.
   iApply ("post" $! (PskDh psk g cn a)) => //=.
@@ -969,11 +969,11 @@ Definition check N : val := λ: "c_kex" "s_kex",
 Definition new : val := λ: "ke",
   CShare.I.case "ke"
     (λ: "psk" "c_nonce",
-        tag (Tag $ nroot.@"psk") (term_of_list ["psk"; "c_nonce"; mknonce #()]))
+        tag (Tag $ nroot.@"psk") (term_of_list ["psk"; "c_nonce"; mk_nonce #()]))
     (λ: "g" "cn" "gx",
-      tag (Tag $ nroot.@"dh") (term_of_list ["g"; "cn"; mknonce #(); "gx"; mkdh #()]))
+      tag (Tag $ nroot.@"dh") (term_of_list ["g"; "cn"; mk_nonce #(); "gx"; mk_dh #()]))
     (λ: "psk" "g" "cn" "gx",
-      tag (Tag $ nroot.@"pskdh") (term_of_list ["psk"; "g"; "cn"; mknonce #(); "gx"; mkdh #()])).
+      tag (Tag $ nroot.@"pskdh") (term_of_list ["psk"; "g"; "cn"; mk_nonce #(); "gx"; mk_dh #()])).
 
 End I.
 
@@ -1184,7 +1184,7 @@ iIntros (gXN e_check) "#? #s_psk #p_g #p_ke post"; rewrite /I.new; wp_pures.
 iApply CShare.wp_case.
 case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
 - subst psk.
-  wp_bind (mknonce _); iApply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
+  wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
   iIntros (a) "_ _ #pred_a _ token"; wp_list; wp_term_of_list.
   wp_tag; iModIntro.
   iApply ("post" $! (Psk _ _ a)) => //=.
@@ -1193,10 +1193,10 @@ case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
   do !iSplit => //.
   by iApply "pred_a".
 - subst g'.
-  wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g) => //.
+  wp_bind (mk_dh _); iApply (wp_mk_dh (λ _, True)%I g) => //.
   { by iApply public_minted. }
   iIntros (a) "_ #pred_a _"; wp_list.
-  wp_bind (mknonce _); iApply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
+  wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
   iIntros (sn) "_ _ #p_sn _ token"; wp_list; wp_term_of_list.
   wp_tag; iModIntro.
   iApply ("post" $! (Dh g cn sn gx a)) => //=.
@@ -1205,10 +1205,10 @@ case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
   do !iSplit => //.
   by iApply "p_sn".
 - case: e_check=> -> ->.
-  wp_bind (mkdh _); iApply (wp_mkdh (λ _, True)%I g) => //.
+  wp_bind (mk_dh _); iApply (wp_mk_dh (λ _, True)%I g) => //.
   { by iApply public_minted. }
   iIntros (a) "_ #pred_a _"; wp_list.
-  wp_bind (mknonce _); iApply (wp_mknonce (λ _, True)%I (λ _, True)%I) => //.
+  wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
   iIntros (sn) "_ _ #p_sn _ token"; wp_list; wp_term_of_list.
   wp_tag; iModIntro.
   iApply ("post" $! (PskDh _ g cn sn gx a)) => //.

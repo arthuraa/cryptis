@@ -25,8 +25,8 @@ Definition N := nroot.@"nsldh".
 
 Definition game : val := λ: <>,
   let: "c"  := init_network #() in
-  let: "skI" := mkakey #() in
-  let: "skR" := mkakey #() in
+  let: "skI" := mk_aenc_key #() in
+  let: "skR" := mk_aenc_key #() in
   let: "pkI" := pkey "skI" in
   let: "pkR" := pkey "skR" in
   send "c" "pkI";;
@@ -64,10 +64,10 @@ pose (P rl (kI kR kS : term) :=
   gmeta (if rl is Init then γI else γR) nroot (kI, kR, kS)).
 iMod (pk_dh_alloc N P with "nown_tok seal_tok") as "[#dh_ctx _]" => //.
 wp_apply wp_init_network => //. iIntros "%c #cP".
-wp_pures; wp_bind (mkakey _).
-iApply (wp_mkakey with "[]"); eauto.
+wp_pures; wp_bind (mk_aenc_key _).
+iApply (wp_mk_aenc_key with "[]"); eauto.
 iIntros "%kI #p_kI #aenc_kI s_kI _". wp_pures.
-wp_bind (mkakey _). iApply (wp_mkakey with "[]"); eauto.
+wp_bind (mk_aenc_key _). iApply (wp_mk_aenc_key with "[]"); eauto.
 iIntros "%kR #p_kR #aenc_kR s_kR _". wp_pures.
 wp_apply wp_pkey. wp_pures. set pkI := TKey Seal kI.
 set skI := TKey Open kI.
