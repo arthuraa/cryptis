@@ -58,7 +58,7 @@ Qed.
 Definition tls_server_loop : val := λ: "c" "psk" "nR" "params",
   (rec: "loop" "psk" :=
      bind: "res" := tls_server tlsN "c" "psk" Spec.zero "nR" "params" in
-     let: "psk" := Fst (mk_keys (SShare.I.session_key_of tlsN "res")) in
+     let: "psk" := Fst (mk_keys (SShare.I.session_key_of "res")) in
      "loop" "psk") "psk".
 
 Lemma wp_tls_server_loop c psk nR params :
@@ -81,7 +81,7 @@ iApply wp_tls_server => //; eauto.
 - by rewrite public_TKey; eauto.
 iIntros (res) "res".
 case: res => [res|]; wp_pures; last by iApply "post".
-wp_bind (SShare.I.session_key_of _ _); iApply SShare.wp_session_key_of.
+wp_bind (SShare.I.session_key_of _); iApply SShare.wp_session_key_of.
 wp_bind (mk_keys _); iApply wp_mk_keys; wp_pure (Fst _); wp_let.
 iDestruct "res" as "(_ & _ & #psk' & _)".
 iApply ("IH" with "post").
@@ -247,8 +247,8 @@ iMod (pk_dh_alloc nslN (λ _ _ _ _, True)%I with "sess_tok seal_tok")
   as "(#pk_dh_ctx & sess_tok & seal_tok)" => //; try solve_ndisj.
 iMod (cr_alloc crN (λ _ _ _ _ _, True)%I with "sess_tok seal_tok")
   as "(#cr_ctx & sess_tok & seal_tok)"; try solve_ndisj.
-iMod (tls_ctx_alloc tlsN with "sess_tok seal_tok hash_tok key_tok")
-  as "(#tls_ctx & sess_tok & seal_tok & hash_tok & key_tok)"; try solve_ndisj.
+iMod (tls_ctx_alloc tlsN with "sess_tok seal_tok hash_tok")
+  as "(#tls_ctx & sess_tok & seal_tok & hash_tok)"; try solve_ndisj.
 iMod (key_pred_set (nroot.@"key") (λ kt _, ⌜kt = Seal⌝)%I with "key_tok")
   as "[#? key_tok]"; try solve_ndisj.
 wp_apply wp_init_network => //. iIntros "%c #cP". wp_pures.
