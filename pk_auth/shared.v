@@ -35,7 +35,7 @@ Variable N : namespace.
   parties. *)
 
 Definition corruption kI kR : iProp :=
-  public (TKey Open kI) ∨ public (TKey Open kR).
+  compromised_key kI ∨ compromised_key kR.
 
 Global Instance corruptionC : Comm (⊣⊢) corruption.
 Proof. by move=> k k'; rewrite /corruption [(_ ∨ _)%I]comm. Qed.

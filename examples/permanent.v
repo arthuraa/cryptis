@@ -50,7 +50,7 @@ Lemma wp_server c l k t :
   cryptis_ctx -∗
   channel c -∗
   seal_pred nroot (sig_pred l) -∗
-  minted (TKey Seal k) -∗
+  sign_key k -∗
   l ↦□ (t : val) -∗
   public t -∗
   WP server c #l k {{ _, True }}.
@@ -64,7 +64,7 @@ wp_bind (recv _). iApply wp_recv => //. iIntros "%request _". wp_pures.
 wp_load. wp_apply wp_sign. wp_pures.
 (* Send message. Prove that it is well formed. *)
 wp_bind (send _ _). iApply wp_send => //.
-{ iModIntro. by iApply public_TSealIS; eauto. }
+{ iModIntro. by iApply public_signIS; eauto. }
 (* Loop *)
 by wp_pures.
 Qed.
@@ -155,9 +155,7 @@ iMod (pointsto_persist with "Hl") as "#Hl".
 iMod (seal_pred_set nroot (sig_pred l) with "enc_tok") as "[#? _]" => //.
 (* Run server in a loop in parallel. *)
 wp_pures. wp_bind (Fork _). iApply wp_fork.
-{ iApply wp_server => //.
-  iPoseProof (public_minted with "p_vk") as "s_vk".
-  by rewrite !minted_TKey. }
+{ iApply wp_server => //. }
 iModIntro.
 (* Let client contact server *)
 wp_pures. wp_bind (client _ _). iApply wp_client => //.

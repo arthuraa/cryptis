@@ -87,7 +87,7 @@ Qed.
 Lemma public_msg2I kI kR sI sR :
   pk_auth_ctx N -∗
   public (TKey Seal kI) -∗
-  public (TKey Seal kR) -∗
+  aenc_key kR -∗
   minted sI -∗
   readable_by sI kI kR -∗
   minted sR -∗
@@ -95,13 +95,14 @@ Lemma public_msg2I kI kR sI sR :
   resp_accepted N kI kR sI sR -∗
   public (TSeal (TKey Seal kI) (Spec.tag (Tag $ N.@"m2") (Spec.of_list [sI; sR; TKey Seal kR]))).
 Proof.
-iIntros "(_ & _ & #? & _) #p_eI #p_eR #s_sI #p_sI #s_sR #p_sR #accepted".
+iIntros "(_ & _ & #? & _) #p_eI #aenc_kR #s_sI #p_sI #s_sR #p_sR #accepted".
+iPoseProof (aenc_key_public with "aenc_kR") as "?".
 iApply public_TSealIS; eauto.
 - iModIntro. iExists sI, sR, kR. by eauto.
 - rewrite minted_of_list /=; eauto.
 iIntros "!> #p_dkI". rewrite public_of_list /=. do !iSplit => //.
-- by iApply "p_sI"; iLeft.
-- iApply "p_sR". iModIntro. by iLeft.
+- iApply "p_sI". iLeft. by iSplit.
+- iApply "p_sR". iModIntro. iLeft. by iSplit.
 Qed.
 
 Lemma public_msg3E kI kR sR :
@@ -159,7 +160,7 @@ Lemma wp_pk_auth_resp c kR :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
-  public (TKey Seal kR) -∗
+  aenc_key kR -∗
   {{{ resp_confirm kR }}}
     pk_auth_resp N c mk_key_share_impl (mk_session_key_impl Resp) kR
   {{{ res, RET (repr res);
@@ -174,7 +175,7 @@ Lemma wp_pk_auth_resp c kR :
                 session_key N kI kR kS)
        else True }}}.
 Proof.
-iIntros "#? #ctx #ctx' #e_kR %Ψ !> confirm Hpost".
+iIntros "#? #ctx #ctx' #aenc_kR %Ψ !> confirm Hpost".
 iPoseProof "ctx'" as "(inv & _)".
 rewrite /pk_auth_resp; wp_pures.
 wp_apply wp_pkey. wp_pures.

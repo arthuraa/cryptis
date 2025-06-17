@@ -155,7 +155,7 @@ Lemma wp_pk_dh_init c kI kR :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
-  public (TKey Seal kI) -∗
+  aenc_key kI -∗
   public (TKey Seal kR) -∗
   {{{ init_confirm kI kR }}}
     pk_dh_init c kI (TKey Seal kR)
@@ -189,7 +189,7 @@ Lemma wp_pk_dh_resp c kR :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
-  public (TKey Seal kR) -∗
+  aenc_key kR -∗
   {{{ resp_confirm kR }}}
     pk_dh_resp c kR
   {{{ (res : option (term * term)), RET repr res;

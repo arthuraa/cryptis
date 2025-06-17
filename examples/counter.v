@@ -112,7 +112,7 @@ Lemma wp_server c γ l k t :
   cryptis_ctx -∗
   channel c -∗
   seal_pred nroot (sig_pred γ) -∗
-  minted (TKey Seal k) -∗
+  sign_key k -∗
   server_inv γ l -∗
   public t -∗
   WP server c #l k {{ _, True }}.
@@ -132,10 +132,9 @@ iInv "inv" as ">(%n & Hl & own & #ownf)". wp_load.
 iModIntro. iSplitL "Hl own"; first by iExists n; iFrame.
 wp_bind (tint _). iApply wp_tint. wp_apply wp_sign. wp_pures.
 wp_bind (send _ _). iApply wp_send => //.
-{ iApply public_TSealIS => //.
+{ iApply public_signIS => //.
   - iModIntro. iExists n. by eauto.
-  - by rewrite minted_TInt.
-  - iIntros "!> !> _". by rewrite public_TInt. }
+  - by rewrite public_TInt. }
 (* Loop *)
 wp_pures. iApply "IH".
 Qed.
@@ -220,9 +219,7 @@ wp_bind (newcounter _). iApply (wp_newcounter with "seal_tok").
 iIntros "%γ %l #? #inv".
 (* Run server in a loop in parallel. *)
 wp_pures. wp_bind (Fork _). iApply wp_fork.
-{ iApply wp_server => //.
-  iPoseProof (public_minted with "p_vk") as "s_vk".
-  by rewrite !minted_TKey. }
+{ iApply wp_server => //. }
 iModIntro.
 (* Let client contact server *)
 wp_pures. wp_bind (client _ _). iApply wp_client => //.

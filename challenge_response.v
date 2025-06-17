@@ -161,7 +161,7 @@ Lemma wp_cr_init c kA kB Ψ :
   cryptis_ctx -∗
   cr_ctx -∗
   (∀ nA nB, cr_sess_inv Init nA nB (kA, kB)) -∗
-  public (TKey Open kA) -∗
+  sign_key kA -∗
   public (TKey Open kB) -∗
   (∀ onB : option (term * term),
       (if onB is Some (nA, nB) then
@@ -173,7 +173,8 @@ Lemma wp_cr_init c kA kB Ψ :
   WP cr_init c kA (TKey Open kB) {{ Ψ }}.
 Proof.
 rewrite /cr_init.
-iIntros "#? #? #ctx inv #d_kA #d_kB Hpost".
+iIntros "#? #? #ctx inv #sign_kA #d_kB Hpost".
+iPoseProof (sign_key_public with "sign_kA") as "?".
 iPoseProof "ctx" as "(? & ? & ?)".
 wp_pures. wp_apply wp_vkey. wp_pures.
 wp_apply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
@@ -202,14 +203,10 @@ iAssert (|={⊤}=> ▷ (public (TKey Seal kB) ∨ P Resp nA nB kA kB))%I
   iDestruct "sessB" as "[?|sessB]"; eauto.
   by iMod ("close" with "[] sessB") as "close"; eauto.
 wp_bind (send _ _); iApply wp_send => //.
-  iApply public_TSealIS; eauto.
-  - iPoseProof (public_minted with "d_kA") as "?".
-    by rewrite !minted_TKey.
+  iApply public_signIS; eauto.
   - iModIntro.
-    iExists _, _, _; iSplit => //.
-    by rewrite minted_of_list /= -!public_minted; eauto.
-  - iIntros "!> !> _".
-    by rewrite public_of_list /=; eauto.
+    by iExists _, _, _; iSplit => //.
+  - rewrite public_of_list /=. by eauto.
 wp_pures; iApply ("Hpost" $! (Some (nA, nB))); eauto.
 Qed.
 
@@ -217,7 +214,7 @@ Lemma wp_cr_resp c kB Ψ :
   channel c -∗
   cryptis_ctx -∗
   cr_ctx -∗
-  public (TKey Open kB) -∗
+  sign_key kB -∗
   (∀ kA nA nB, cr_sess_inv Resp nA nB (kA, kB)) -∗
   (∀ ot : option (term * term * term),
       (if ot is Some (pkA, nA, nB) then
@@ -232,6 +229,7 @@ Lemma wp_cr_resp c kB Ψ :
   WP cr_resp c kB {{ Ψ }}.
 Proof.
 iIntros "#? #? #ctx #HkB inv Hpost".
+iPoseProof (sign_key_public with "HkB") as "?".
 iPoseProof "ctx" as "(? & ? & ?)".
 rewrite /cr_resp; wp_pures. wp_apply wp_vkey. wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m1) "#Hm1".
@@ -254,14 +252,9 @@ iMod (session_begin _ _ nA nB (kA, kB) with "[] [inv] [token]")
 wp_list; wp_term_of_list.
 wp_apply wp_sign. wp_pures.
 wp_apply wp_send => //.
-  iApply public_TSealIS.
-  - iPoseProof (public_minted with "HkB") as "?".
-    by rewrite !minted_TKey.
-  - by eauto.
+  iApply public_signIS; eauto.
   - iIntros "!>". by iExists _, _, _; eauto.
-  - by rewrite minted_of_list /= -!public_minted; eauto.
-  - iIntros "!> _".
-    by rewrite public_of_list /=; eauto.
+  - by rewrite public_of_list /=; eauto.
 wp_pures; wp_bind (recv _); iApply wp_recv => //; iIntros (m3) "#Hm3".
 wp_verify m3; last protocol_failure.
 wp_list_of_term m3; last protocol_failure.

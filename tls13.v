@@ -1855,7 +1855,7 @@ Qed.
 
 Definition wf sp : iProp :=
   SShare.wf (share sp) ∧
-  public (TKey Open (verif_key sp)) ∧
+  sign_key (verif_key sp) ∧
   public (other sp).
 
 #[global]
@@ -1884,7 +1884,8 @@ iMod (session_begin with "sess_ctx r [token]") as "[#sess close]".
 iFrame; iModIntro; rewrite public_of_list /=; do !iSplit=> //.
   rewrite public_of_list /=; do !iSplit => //.
   by iApply SShare.public_encode; eauto.
-iAssert (minted (TKey Open (verif_key sp))) as "s_vkey"; first by eauto.
+iAssert (minted (TKey Open (verif_key sp))) as "s_vkey".
+{ iApply public_minted. by iApply sign_key_public. }
 rewrite minted_TKey.
 iApply public_TSealIS; eauto.
 - by rewrite minted_TKey; iApply SShare.minted_session_key_of.
@@ -1894,13 +1895,10 @@ iApply public_TSealIS; eauto.
   do !iSplit; eauto.
   iApply public_minted. by iApply SShare.public_encode.
 iIntros "!> #fail"; rewrite public_of_list /=.
-do !iSplit => //.
-iApply public_TSealIS; eauto.
-- by rewrite minted_TKey.
-- iModIntro. iExists (share sp), (other sp); by do !iSplit => //.
-- rewrite minted_THash minted_of_list /=; do !iSplit; eauto.
-  by iApply public_minted; iApply SShare.public_encode.
-iIntros "!> _"; rewrite public_THash; iLeft.
+do !iSplit => //; first by iApply sign_key_public.
+iApply public_signIS => //.
+{ iModIntro. iExists (share sp), (other sp); by do !iSplit => //. }
+rewrite public_THash; iLeft.
 rewrite public_of_list /=; do !iSplit => //.
 by iApply SShare.public_encode.
 Qed.
@@ -2196,8 +2194,7 @@ Lemma wp_tls_server c psk g verif_key other Φ :
   tls_ctx -∗
   minted psk -∗
   public g -∗
-  minted (TKey Seal verif_key) -∗
-  public (TKey Open verif_key) -∗
+  sign_key verif_key -∗
   public other -∗
   (∀ ke : option SShare.t,
       match ke with
@@ -2217,7 +2214,7 @@ Lemma wp_tls_server c psk g verif_key other Φ :
   WP tls_server c psk g verif_key other {{ Φ }}.
 Proof.
 iIntros "% #? #? #(k_ctx & c_ctx & s_ctx & ? & sess_ctx)".
-iIntros "#s_psk #p_g #s_sign #s_verif #p_other post".
+iIntros "#s_psk #p_g #sign_key #p_other post".
 rewrite /tls_server; wp_pures.
 wp_bind (recv _); iApply wp_recv => //.
 iIntros (ch) "#p_ch"; wp_pures.

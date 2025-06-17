@@ -28,12 +28,13 @@ Lemma public_msg1I kI kR nI :
   session_weak' N kI kR nI -∗
   minted nI -∗
   □ is_priv_key nI kI kR -∗
-  public (TKey Seal kI) -∗
+  aenc_key kI -∗
   public (TKey Seal kR) -∗
   public (TSeal (TKey Seal kR) (Spec.tag (Tag $ N.@"m1") (Spec.of_list [sI; TKey Seal kI]))).
 Proof.
 rewrite /=.
-iIntros "(_ & #m1P & _ & _) #meta #s_nI #p_nI #p_ekI #p_ekR".
+iIntros "(_ & #m1P & _ & _) #meta #s_nI #p_nI #aenc_kI #p_ekR".
+iPoseProof (aenc_key_public with "aenc_kI") as "p_ekI".
 iPoseProof (mk_key_share_secret_of with "s_nI p_nI") as "p_sI".
 iApply public_TSealIS; eauto.
 - iModIntro. iExists (mk_key_share nI), kI. do !iSplit => //.
@@ -41,7 +42,7 @@ iApply public_TSealIS; eauto.
   + iRight. by iExists nI; eauto.
 - rewrite minted_of_list /= mk_key_share_minted. by eauto.
 iIntros "!> #p_dkR". rewrite public_of_list /=. do !iSplit => //.
-iApply "p_sI". iModIntro. by iRight.
+iApply "p_sI". iModIntro. iRight. by iSplit.
 Qed.
 
 Lemma public_msg2E kI kR sI sR :
@@ -132,7 +133,7 @@ Lemma public_msg3I kI kR sI sR :
 Proof.
 iIntros "(_ & _ & _ & #p_m3) #p_eR #s_sR #p_sR #finished".
 iApply public_TSealIS; eauto.
-iIntros "!> #p_dkR". iApply "p_sR". by iRight.
+iIntros "!> #p_dkR". iApply "p_sR". iRight. by iSplit.
 Qed.
 
 Ltac protocol_failure :=
@@ -142,7 +143,7 @@ Lemma wp_pk_auth_init c kI kR :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
-  public (TKey Seal kI) -∗
+  aenc_key kI -∗
   public (TKey Seal kR) -∗
   {{{ init_confirm kI kR }}}
     pk_auth_init N c mk_key_share_impl (mk_session_key_impl Init)
@@ -158,7 +159,7 @@ Lemma wp_pk_auth_init c kI kR :
       else True }}}.
 Proof.
 rewrite /pk_auth_init.
-iIntros "#chan_c #ctx #ctx' #p_kI #p_kR %Ψ !> confirm Hpost".
+iIntros "#chan_c #ctx #ctx' #aenc_kI #p_kR %Ψ !> confirm Hpost".
 wp_pures. wp_apply wp_pkey. wp_pures.
 wp_bind (mk_key_share_impl _).
 iApply (wp_mk_key_share kI kR) => //.

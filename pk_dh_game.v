@@ -129,12 +129,8 @@ iAssert (▷ (⌜kR' = kR⌝ ∗
   - iClear "H2".
     iDestruct "H1" as "[#fail|H1]".
     { iDestruct "fail" as "[fail|fail]".
-      + iPoseProof (aenc_key_compromised_keyI with "aenc_kI fail")
-          as "{fail} fail".
-        by iDestruct (aenc_secret_not_compromised_key with "s_kI [//] [//]") as ">[]".
-      + iPoseProof (aenc_key_compromised_keyI with "aenc_kR fail")
-          as "{fail} fail".
-        by iDestruct (aenc_secret_not_compromised_key with "s_kR [//] [//]") as ">[]". }
+      + by iDestruct (aenc_secret_not_compromised_key with "s_kI [//] [//]") as ">[]".
+      + by iDestruct (aenc_secret_not_compromised_key with "s_kR [//] [//]") as ">[]". }
     iDestruct "H1" as "(#p_gabI & token & #sess)".
     iPoseProof (session_key_confirmation _ Resp with "sess") as "confR'".
     iPoseProof (own_valid_2 with "confR confR'") as "%valid".
@@ -144,12 +140,8 @@ iAssert (▷ (⌜kR' = kR⌝ ∗
   - iClear "H1".
     iDestruct "H2" as "[#fail|H2]".
     { iDestruct "fail" as "[fail|fail]".
-      + iPoseProof (aenc_key_compromised_keyI with "aenc_kI fail")
-          as "{fail} fail".
-        by iDestruct (aenc_secret_not_compromised_key with "s_kI [//] [//]") as ">[]".
-      + iPoseProof (aenc_key_compromised_keyI with "aenc_kR fail")
-          as "{fail} fail".
-        by iDestruct (aenc_secret_not_compromised_key with "s_kR [//] [//]") as ">[]". }
+      + by iDestruct (aenc_secret_not_compromised_key with "s_kI [//] [//]") as ">[]".
+      + by iDestruct (aenc_secret_not_compromised_key with "s_kR [//] [//]") as ">[]". }
     iDestruct "H2" as "(#p_gabR & token & #sess)".
     iPoseProof (session_key_confirmation _ Init with "sess") as "confI'".
     iPoseProof (own_valid_2 with "confI confI'") as "%valid".

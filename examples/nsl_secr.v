@@ -230,7 +230,7 @@ Lemma wp_init c kI kR :
   channel c -∗
   cryptis_ctx -∗
   nsl_ctx -∗
-  public (TKey Seal kI) -∗
+  aenc_key kI -∗
   □ (compromised_key kI → ▷ False) -∗
   public (TKey Seal kR) -∗
   {{{ True }}}
@@ -240,8 +240,9 @@ Lemma wp_init c kI kR :
         minted kS ∗ □ (□ (compromised_key kR → ▷ False) → public kS → ▷^2 False)
       else True }}}.
 Proof.
-iIntros "#chan_c #ctx #ctx' #p_kI #honI #p_kR".
+iIntros "#chan_c #ctx #ctx' #aenc_kI #honI #p_kR".
 iIntros "%Ψ !> _ Hpost".
+iPoseProof (aenc_key_public with "aenc_kI") as "?".
 rewrite /init. wp_pures. wp_bind (mk_nonce _).
 iApply (wp_mk_nonce (λ _, corrupt kI kR) (λ _, False)%I) => //.
 iIntros "%nI _ #m_nI #p_nI _ token".
@@ -273,7 +274,7 @@ Lemma wp_resp c kR :
   channel c -∗
   cryptis_ctx -∗
   nsl_ctx -∗
-  public (TKey Seal kR) -∗
+  aenc_key kR -∗
   □ (compromised_key kR → ▷ False) -∗
   {{{ True }}}
     resp c kR
@@ -284,7 +285,8 @@ Lemma wp_resp c kR :
         □ (□ (compromised_key kI → ▷ False) → public kS → ▷^2 False)
       else True }}}.
 Proof.
-iIntros "#chan_c #ctx #ctx' #p_kR #honR %Ψ !> _ Hpost".
+iIntros "#chan_c #ctx #ctx' #aenc_kR #honR %Ψ !> _ Hpost".
+iPoseProof (aenc_key_public with "aenc_kR") as "?".
 rewrite /resp. wp_pures. wp_apply wp_pkey. wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m1) "#Hm1".
 wp_adec m1; last protocol_failure.
@@ -366,9 +368,9 @@ case: kt epkR' ekt => // -> _.
 iApply (wp_par (λ v, ∃ a : option term, ⌜v = repr a⌝ ∗ _)%I
                (λ v, ∃ a : option (term * term), ⌜v = repr a⌝ ∗ _)%I
           with "[] []").
-- iApply (wp_init with "[//] [//] [//] p_pkI [//] p_pkR'") => //.
+- iApply (wp_init with "[//] [//] [//] aenc_kI [//] p_pkR'") => //.
   iIntros "!> %a H". iExists a. iSplit; first done. iApply "H".
-- iApply (wp_resp with "[//] [//] [//] p_pkR [//]") => //.
+- iApply (wp_resp with "[//] [//] [//] aenc_kR [//]") => //.
   iIntros "!> %a H"; iExists a; iSplit; first done. iApply "H".
 iIntros (v1 v2) "[H1 H2]".
 iDestruct "H1" as (a) "[-> H1]".
