@@ -51,13 +51,10 @@ Definition game : val := λ: <>,
 Lemma wp_game :
   cryptis_ctx -∗
   seal_pred_token ⊤ -∗
-  key_pred_token (⊤ ∖ ↑nroot.@"keys") -∗
   session_token ⊤ -∗
-  honest 0 ∅ -∗
-  ●Ph 0 -∗
   WP game #() {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
-iIntros "#ctx seal_tok key_tok nown_tok #hon phase"; rewrite /game; wp_pures.
+iIntros "#ctx seal_tok nown_tok"; rewrite /game; wp_pures.
 iMod gmeta_token_alloc as (γI) "tokenI".
 iMod gmeta_token_alloc as (γR) "tokenR".
 pose (P rl (kI kR kS : term) :=
@@ -198,5 +195,5 @@ apply: heap_adequacy.
 iIntros (?) "?".
 iMod (cryptisGS_alloc _) as (?) "(#ctx & seal_tok & key_tok & ? & hon & phase)".
 iMod (sessionGS_alloc _) as (?) "nown_tok".
-iApply (wp_game with "ctx [seal_tok] [key_tok] [nown_tok] [hon]") => //.
+iApply (wp_game with "ctx [seal_tok]") => //.
 Qed.

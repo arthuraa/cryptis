@@ -595,10 +595,9 @@ Definition game : val := λ: <>,
 Lemma wp_game :
   cryptis_ctx -∗
   seal_pred_token ⊤ -∗
-  key_pred_token (⊤ ∖ ↑nroot.@"keys") -∗
   WP game #() {{ _, True }}.
 Proof.
-iIntros "#ctx enc_tok key_tok"; rewrite /game; wp_pures.
+iIntros "#ctx enc_tok"; rewrite /game; wp_pures.
 wp_apply wp_init_network => //. iIntros "%c #cP".
 wp_pures. wp_apply (wp_mk_aenc_key with "[]"); eauto.
 iIntros "%skI #p_pkI #aencI secI tokenI".
@@ -634,5 +633,5 @@ apply (adequate_not_stuck NotStuck _ _ (λ v _, True)) => //.
 apply: heap_adequacy.
 iIntros (?) "?".
 iMod (cryptisGS_alloc _) as (?) "(#ctx & enc_tok & key_tok & ? & hon & phase)".
-by iApply (wp_game with "ctx [enc_tok] [key_tok]").
+by iApply (wp_game with "ctx [enc_tok]").
 Qed.
