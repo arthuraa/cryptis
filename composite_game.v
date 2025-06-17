@@ -219,8 +219,8 @@ Qed.
 
 Definition game : val := λ: <>,
   let: "c"   := init_network #() in
-  let: "nI"  := tag (Tag $ nroot.@"key") (mk_nonce #()) in
-  let: "nR"  := tag (Tag $ nroot.@"key") (mk_nonce #()) in
+  let: "nI"  := mk_nonce #() in
+  let: "nR"  := mk_nonce #() in
   let: "psk" := mk_nonce #() in
   let: "kI"  := mk_keys "nI" in
   let: "ekI" := Fst "kI" in
@@ -235,12 +235,11 @@ Lemma wp_game :
   session_token ⊤ ∗
   seal_pred_token ⊤ ∗
   hash_pred_token ⊤ ∗
-  key_pred_token (⊤ ∖ ↑nroot.@"keys") ∗
   honest 0 ∅ ∗
   ●Ph 0 -∗
   WP game #() {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
-iIntros "(#ctx & sess_tok & seal_tok & hash_tok & key_tok & #hon & phase)".
+iIntros "(#ctx & sess_tok & seal_tok & hash_tok & #hon & phase)".
 iMod (phase_auth_discard with "phase") as "#phase".
 rewrite /game; wp_pures.
 iMod (pk_dh_alloc nslN (λ _ _ _ _, True)%I with "sess_tok seal_tok")
@@ -249,23 +248,15 @@ iMod (cr_alloc crN (λ _ _ _ _ _, True)%I with "sess_tok seal_tok")
   as "(#cr_ctx & sess_tok & seal_tok)"; try solve_ndisj.
 iMod (tls_ctx_alloc tlsN with "sess_tok seal_tok hash_tok")
   as "(#tls_ctx & sess_tok & seal_tok & hash_tok)"; try solve_ndisj.
-iMod (key_pred_set (nroot.@"key") (λ kt _, ⌜kt = Seal⌝)%I with "key_tok")
-  as "[#? key_tok]"; try solve_ndisj.
 wp_apply wp_init_network => //. iIntros "%c #cP". wp_pures.
 wp_pures; wp_bind (mk_nonce _).
 iApply (wp_mk_nonce (λ _, True)%I (λ _, False%I)) => //.
 iIntros (nI) "_ #t_nI #p_nI _ tok_nI".
-wp_tag.
-iAssert (public (Spec.tag (Tag $ nroot.@"key") nI)) as "{p_nI} p_nI".
-  by rewrite public_tag; iApply "p_nI".
-wp_pures.
+iAssert (public nI) as "{p_nI} p_nI". { by iApply "p_nI". }
 wp_pures; wp_bind (mk_nonce _).
 iApply (wp_mk_nonce (λ _, True)%I (λ _, False%I)) => //.
 iIntros (nR) "_ #t_nR #p_nR _ tok_nR".
-wp_tag.
-iAssert (public (Spec.tag (Tag $ nroot.@"key") nR)) as "{p_nR} p_nR".
-  by iApply public_tag; iApply "p_nR".
-wp_pures.
+iAssert (public nR) as "{p_nR} p_nR". { by iApply "p_nR". }
 wp_pures; wp_bind (mk_nonce _).
 iApply (wp_mk_nonce (λ psk, term_meta psk (nroot.@"pub") ())%I (λ _, False%I)) => //.
 iIntros (psk) "_ #t_psk #p_psk _ tok_psk".
