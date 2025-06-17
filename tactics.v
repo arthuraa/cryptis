@@ -40,7 +40,7 @@ rewrite (_ : NILV = repr (@nil A)) /=; first by apply: tac_wp_cons.
 by rewrite repr_list_unseal /=.
 Qed.
 
-Lemma tac_wp_list_match `{!Repr A} Γ E K vars vs k Ψ :
+Lemma tac_wp_list_match `{!Repr A} Γ E K vars (vs : list A) k Ψ :
   nforall_eq (length vars) vs (
     λ vs', envs_entails Γ (WP fill K (nsubst vars (map repr vs') k) @ E {{ Ψ }})) →
   (length vars ≠ length vs →
@@ -231,7 +231,7 @@ Qed.
 (* TODO:
 - Generalize to other instances of Repr
 - rename get_list -> lookup *)
-Lemma tac_twp_lookup Γ E K ts (n : Z) Ψ :
+Lemma tac_twp_lookup Γ E K (ts : list term) (n : Z) Ψ :
   (0 <= n)%Z →
   (∀ t, (ts !! Z.to_nat n)%stdpp = Some t →
         envs_entails Γ (WP fill K (Val (SOMEV t)) @ E [{ Ψ }])) →
@@ -246,7 +246,7 @@ rewrite -twp_bind -twp_get_list.
 by case e: (_ !! n)%stdpp => [t|]; eauto.
 Qed.
 
-Lemma tac_wp_lookup Γ E K ts (n : Z) Ψ :
+Lemma tac_wp_lookup Γ E K (ts : list term) (n : Z) Ψ :
   (0 <= n)%Z →
   (∀ t, (ts !! Z.to_nat n)%stdpp = Some t →
         envs_entails Γ (WP fill K (Val (SOMEV t)) @ E {{ Ψ }})) →

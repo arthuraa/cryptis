@@ -259,6 +259,7 @@ Definition flipb {T S} (b : bool) (f : T → T → S) x y :=
 
 Class Repr A := repr : A -> val.
 Arguments repr / .
+Global Hint Mode Repr ! : typeclass_instances.
 
 #[global]
 Instance repr_val : Repr val := λ x, x.
@@ -277,7 +278,7 @@ Instance repr_option `{Repr A} : Repr (option A) := λ x,
 Arguments repr_option {A} {_} !_.
 
 Definition repr_list_aux `{Repr A} :
-  seal (foldr (fun x v => SOMEV (repr x, v)%V) NONEV).
+  seal (foldr (fun (x : A) v => SOMEV (repr x, v)%V) NONEV).
   by eexists.
 Qed.
 #[global]
@@ -285,7 +286,7 @@ Instance repr_list `{Repr A} : Repr (list A) := unseal repr_list_aux.
 Arguments repr_list {A} {_} _ : simpl never.
 
 Lemma repr_list_unseal `{Repr A} :
-  repr_list = foldr (fun x v => SOMEV (repr x, v)%V) NONEV.
+  repr_list = foldr (fun (x : A) v => SOMEV (repr x, v)%V) NONEV.
 Proof. exact: seal_eq. Qed.
 
 Lemma repr_list_val `{Repr A} (xs : list A) :
@@ -656,6 +657,8 @@ Qed.
 Section ListLemmas.
 
 Context `{!Repr A, !heapGS Σ}.
+
+Implicit Types (x : A) (xs : list A).
 
 Lemma twp_get_list E (l : list A) (n : nat) Ψ :
   Ψ (repr (l !! n)) ⊢
