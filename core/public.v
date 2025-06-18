@@ -791,9 +791,9 @@ case: k => // - [] // t; iClear "p_k";
 rewrite minted_TKey public_TKey /=; eauto.
 Qed.
 
-Lemma public_senc_key k : public (TKey SEnc k) ⊣⊢ public k.
+Lemma public_senc_key k : public (SEncKey k) ⊣⊢ public k.
 Proof.
-rewrite public_TKey /=.
+rewrite [term_of_senc_key]unlock public_TKey /=.
 iSplit; eauto.
 by iIntros "[#p_k|[? []]]"; eauto.
 Qed.
@@ -801,8 +801,7 @@ Qed.
 Lemma public_senc_key' (sk : senc_key) :
   public sk ⊣⊢ public (seed_of_senc_key sk).
 Proof.
-case: sk => seed.
-by rewrite [term_of_senc_key]unlock /= public_senc_key.
+case: sk => seed. by rewrite public_senc_key.
 Qed.
 
 Lemma public_aenc_key (sk : aenc_key) : public (Spec.pkey sk) ⊣⊢ minted sk.
@@ -813,19 +812,16 @@ iIntros "[#p_k|[? ?]]"; eauto.
 by iApply public_minted.
 Qed.
 
-Lemma public_adec_key k : public (TKey ADec k) ⊣⊢ public k.
+Lemma public_adec_key k : public (AEncKey k) ⊣⊢ public k.
 Proof.
-rewrite public_TKey /=.
+rewrite [term_of_aenc_key]unlock public_TKey /=.
 iSplit; eauto.
 by iIntros "[#p_k|[? []]]"; eauto.
 Qed.
 
 Lemma public_adec_key' (sk : aenc_key) :
   public sk ⊣⊢ public (seed_of_aenc_key sk).
-Proof.
-case: sk => seed.
-by rewrite [term_of_aenc_key]unlock /= public_adec_key.
-Qed.
+Proof. case: sk => seed. by rewrite public_adec_key. Qed.
 
 Lemma public_verify_key (sk : sign_key) : public (Spec.pkey sk) ⊣⊢ minted sk.
 Proof.
@@ -835,9 +831,9 @@ iIntros "[#p_k|[? ?]]"; eauto.
 by iApply public_minted.
 Qed.
 
-Lemma public_sign_key k : public (TKey Sign k) ⊣⊢ public k.
+Lemma public_sign_key k : public (SignKey k) ⊣⊢ public k.
 Proof.
-rewrite public_TKey /=.
+rewrite [term_of_sign_key]unlock public_TKey /=.
 iSplit; eauto.
 by iIntros "[#p_k|[? []]]"; eauto.
 Qed.
@@ -845,8 +841,7 @@ Qed.
 Lemma public_sign_key' (sk : sign_key) :
   public sk ⊣⊢ public (seed_of_sign_key sk).
 Proof.
-case: sk => seed.
-by rewrite [term_of_sign_key]unlock /= public_sign_key.
+case: sk => seed. by rewrite public_sign_key.
 Qed.
 
 Definition secret t : iProp :=

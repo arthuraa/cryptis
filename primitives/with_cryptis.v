@@ -336,7 +336,7 @@ iIntros "%t %fresh % #m_t #s_t _ token".
 rewrite big_sepS_singleton.
 pose sk := AEncKey t.
 iAssert (public sk ↔ ▷ □ known γ 1)%I as "s_sk".
-{ by rewrite [term_of_aenc_key]unlock /= public_adec_key. }
+{ by rewrite public_adec_key. }
 iAssert (secret sk) with "[unknown]" as "tP"; first do 2?iSplit.
 - iMod (known_alloc with "unknown") as "#known".
   by iSpecialize ("s_sk" with "known").
@@ -389,7 +389,7 @@ iIntros "%t %fresh % #m_t #s_t _ token".
 rewrite big_sepS_singleton.
 pose sk := SignKey t.
 iAssert (public sk ↔ ▷ □ known γ 1)%I as "s_sk".
-{ by rewrite [term_of_sign_key]unlock /= public_sign_key. }
+{ by rewrite public_sign_key. }
 iAssert (secret sk) with "[unknown]" as "tP"; first do 2?iSplit.
 - iMod (known_alloc with "unknown") as "#known".
   by iSpecialize ("s_sk" with "known").
@@ -442,7 +442,7 @@ iIntros "%t %fresh % #m_t #s_t _ token".
 rewrite big_sepS_singleton.
 pose sk := SEncKey t.
 iAssert (public sk ↔ ▷ □ known γ 1)%I as "s_sk".
-{ by rewrite [term_of_senc_key]unlock /= public_senc_key. }
+{ by rewrite public_senc_key. }
 iAssert (secret sk) with "[unknown]" as "tP"; first do 2?iSplit.
 - iMod (known_alloc with "unknown") as "#known".
   by iSpecialize ("s_sk" with "known").

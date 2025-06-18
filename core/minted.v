@@ -124,4 +124,13 @@ Proof.
 by case: k => // - [] //= ?; rewrite !minted_TKey.
 Qed.
 
+Lemma minted_aenc k : minted (AEncKey k) ⊣⊢ minted k.
+Proof. by rewrite [term_of_aenc_key]unlock minted_TKey. Qed.
+
+Lemma minted_senc k : minted (SEncKey k) ⊣⊢ minted k.
+Proof. by rewrite [term_of_senc_key]unlock minted_TKey. Qed.
+
+Lemma minted_sign k : minted (SignKey k) ⊣⊢ minted k.
+Proof. by rewrite [term_of_sign_key]unlock minted_TKey. Qed.
+
 End Minted.

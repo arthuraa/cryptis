@@ -346,6 +346,33 @@ Qed.
 Lemma wp_hash E t Ψ : Ψ (THash t) ⊢ WP hash t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_hash. Qed.
 
+Lemma wp_derive_aenc_key Ψ t :
+  ▷ Ψ (AEncKey t : term) ⊢
+  WP derive_aenc_key t {{ Ψ }}.
+Proof.
+iIntros "post". wp_lam. wp_apply wp_key.
+have <- : AEncKey t = TKey ADec t :> term by rewrite [term_of_aenc_key]unlock.
+by iApply "post".
+Qed.
+
+Lemma wp_derive_senc_key Ψ t :
+  ▷ Ψ (SEncKey t : term) ⊢
+  WP derive_senc_key t {{ Ψ }}.
+Proof.
+iIntros "post". wp_lam. wp_apply wp_key.
+have <- : SEncKey t = TKey SEnc t :> term by rewrite [term_of_senc_key]unlock.
+by iApply "post".
+Qed.
+
+Lemma wp_derive_sign_key Ψ t :
+  ▷ Ψ (SignKey t : term) ⊢
+  WP derive_sign_key t {{ Ψ }}.
+Proof.
+iIntros "post". wp_lam. wp_apply wp_key.
+have <- : SignKey t = TKey Sign t :> term by rewrite [term_of_sign_key]unlock.
+by iApply "post".
+Qed.
+
 Lemma twp_open_key E t Ψ :
   Ψ (repr (Spec.open_key t)) ⊢
   WP open_key t @ E [{ Ψ }].
