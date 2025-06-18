@@ -410,15 +410,15 @@ Definition pkey t :=
 
 Lemma aenc_pkey_inj (sk1 sk2 : aenc_key) :
   pkey sk1 = pkey sk2 → sk1 = sk2.
-Proof. by rewrite unlock; case: sk1 sk2 => [?] [?] [->]. Qed.
+Proof. by rewrite keysE; case: sk1 sk2 => [?] [?] [->]. Qed.
 
 Lemma sign_pkey_inj (sk1 sk2 : sign_key) :
   pkey sk1 = pkey sk2 → sk1 = sk2.
-Proof. by rewrite unlock; case: sk1 sk2 => [?] [?] [->]. Qed.
+Proof. by rewrite keysE; case: sk1 sk2 => [?] [?] [->]. Qed.
 
 Lemma senc_pkey_inj (sk1 sk2 : senc_key) :
   pkey sk1 = pkey sk2 → sk1 = sk2.
-Proof. by rewrite unlock; case: sk1 sk2 => [?] [?] [->]. Qed.
+Proof. by rewrite keysE; case: sk1 sk2 => [?] [?] [->]. Qed.
 
 Definition tag_def N (t : term) :=
   TPair N t.
@@ -517,21 +517,21 @@ Definition open_key k : option term :=
 Lemma open_key_aenc pk (sk : aenc_key) :
   open_key pk = @Some term sk → pk = pkey sk.
 Proof.
-rewrite unlock; case: sk => seed /=.
+rewrite keysE; case: sk => seed /=.
 by case: pk => //= - [] // ?; case=> ->.
 Qed.
 
 Lemma open_key_sign k (sk : sign_key) :
   open_key k = Some (Spec.pkey sk) → k = sk.
 Proof.
-rewrite unlock; case: sk => seed /=.
+rewrite keysE; case: sk => seed /=.
 by case: k => //= - [] // ?; case=> ->.
 Qed.
 
 Lemma open_key_senc k' (k : senc_key) :
   open_key k' = @Some term k → k' = k.
 Proof.
-rewrite unlock; case: k => seed /=.
+rewrite keysE; case: k => seed /=.
 by case: k' => //= - [] // ?; case=> ->.
 Qed.
 

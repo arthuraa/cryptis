@@ -909,14 +909,14 @@ Lemma public_aencE (sk : aenc_key) N Φ t :
   aenc_pred N Φ -∗
   minted t ∧ (public t ∨ □ ▷ Φ sk t ∧ □ (public sk → public t)).
 Proof.
-rewrite [in _ sk]unlock; case: sk => seed /=.
+rewrite keysE; case: sk => seed /=.
 iIntros "#p_t #?". iSplit => //.
 { iPoseProof (public_minted with "p_t") as "#m_t".
   rewrite minted_TSeal minted_tag. by iDestruct "m_t" as "[_ ?]". }
 iPoseProof (public_TSealE with "p_t [//] [//]") as "[[_ comp]|inv]"; eauto.
 rewrite /=. iDestruct "inv" as "[#inv #?]". iRight. iSplit => //.
 iIntros "!> !>". iDestruct "inv" as "(%k' & %e & inv)".
-rewrite [in _ k']unlock in e. by case: k' e => seed' // [<-].
+rewrite keysE in e. by case: k' e => seed' // [<-].
 Qed.
 
 Lemma public_signE (sk : sign_key) N Φ t :
@@ -924,14 +924,14 @@ Lemma public_signE (sk : sign_key) N Φ t :
   sign_pred N Φ -∗
   public t ∧ (public sk ∨ □ ▷ Φ sk t).
 Proof.
-rewrite [in _ sk]unlock; case: sk => seed /=.
+rewrite keysE; case: sk => seed /=.
 iIntros "#p_t #?". iPoseProof (public_minted with "p_t") as "m_t".
 rewrite minted_TSeal minted_TKey. iDestruct "m_t" as "[? _]".
 iPoseProof (public_TSealE with "p_t [//] [//]") as "[[??]|inv]"; eauto.
 iDestruct "inv" as "{p_t} (#inv & #p_t)". iSplit => //.
 - iApply "p_t". iApply public_TKey. iRight. by iSplit => //.
 - iRight. iIntros "!> !>". iDestruct "inv" as "(%k' & %e & inv)".
-  rewrite [in _ k']unlock in e; by case: k' e => seed' // [<-].
+  rewrite keysE in e; by case: k' e => seed' // [<-].
 Qed.
 
 Lemma public_sencE (k : senc_key) N Φ t :
@@ -939,14 +939,14 @@ Lemma public_sencE (k : senc_key) N Φ t :
   senc_pred N Φ -∗
   minted t ∧ (public k ∨ □ ▷ Φ k t) ∧ □ (public k → public t).
 Proof.
-rewrite [in _ k]unlock; case: k => seed /=.
+rewrite keysE; case: k => seed /=.
 iIntros "#p_t #?". iSplit => //.
 { iPoseProof (public_minted with "p_t") as "#m_t".
   rewrite minted_TSeal minted_tag. by iDestruct "m_t" as "[_ ?]". }
 iPoseProof (public_TSealE with "p_t [//] [//]") as "[[??]|[#inv #p_t']]";
 eauto. iSplit => //. iRight.
 iIntros "!> !>". iDestruct "inv" as "(%k' & %e & inv)".
-rewrite [in _ k']unlock in e; by case: k' e => seed' // [<-].
+rewrite keysE in e; by case: k' e => seed' // [<-].
 Qed.
 
 End Public.
