@@ -21,7 +21,7 @@ Section Game.
 Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ}.
 Notation iProp := (iProp Σ).
 
-Implicit Types (l : loc) (k t : term).
+Implicit Types (l : loc) (k t : term) (sk : sign_key).
 
 Definition server : val := rec: "loop" "c" "l" "sk" :=
   (* Receive request from the network *)
@@ -43,17 +43,17 @@ Definition client : val := λ: "c" "vk",
     SOME "value"
   ).
 
-Definition sig_pred l k t : iProp :=
+Definition msg_pred l sk t : iProp :=
   l ↦□ (t : val).
 
-Lemma wp_server c l k t :
+Lemma wp_server c l sk t :
   cryptis_ctx -∗
   channel c -∗
-  seal_pred nroot (sig_pred l) -∗
-  sign_key k -∗
+  sign_pred nroot (msg_pred l) -∗
+  minted sk -∗
   l ↦□ (t : val) -∗
   public t -∗
-  WP server c #l k {{ _, True }}.
+  WP server c #l sk {{ _, True }}.
 Proof.
 iIntros "#ctx #chan_c #sig_pred #s_sk #Hl #p_t".
 (* Unfold the definition of the server *)
@@ -61,24 +61,23 @@ iLöb as "IH". wp_rec. wp_pures.
 (* Receive request from the network *)
 wp_bind (recv _). iApply wp_recv => //. iIntros "%request _". wp_pures.
 (* Load contents and sign message *)
-wp_load. wp_apply wp_sign. wp_pures.
+wp_load. wp_apply wp_sign; eauto. iIntros "%m #p_m". wp_pures.
 (* Send message. Prove that it is well formed. *)
 wp_bind (send _ _). iApply wp_send => //.
-{ iModIntro. by iApply public_signIS; eauto. }
 (* Loop *)
 by wp_pures.
 Qed.
 
-Lemma wp_client c l k φ :
+Lemma wp_client c l sk φ :
   cryptis_ctx -∗
   channel c -∗
-  seal_pred nroot (sig_pred l) -∗
-  public (TKey Open k) -∗
-  □ (compromised_key k → ▷ False) -∗
+  sign_pred nroot (msg_pred l) -∗
+  minted sk -∗
+  □ (public sk → ▷ False) -∗
   (∀ t : term, l ↦□ (t : val) -∗ φ (t : val)) -∗
-  WP client c (TKey Open k) {{ v, φ v }}.
+  WP client c (Spec.pkey sk) {{ v, φ v }}.
 Proof.
-iIntros "#ctx #chan_c #sig_pred #p_vk #s_sk post".
+iIntros "#ctx #chan_c #sig_pred #m_sk #s_sk post".
 (* Unfold definition of client *)
 rewrite /client. wp_pures.
 iRevert "post". iApply wp_do_until. iIntros "!> post". wp_pures.
@@ -91,14 +90,13 @@ wp_bind (send _ _). iApply wp_send => //.
 wp_pures. wp_bind (recv _). iApply wp_recv => //.
 iIntros "%reply #p_reply". wp_pures.
 (* Verify the signature *)
-wp_verify reply; last by wp_pures; eauto.
-iPoseProof (public_TSealE with "p_reply sig_pred")
-  as "[[#p_sk _]|(#replyP & #s_reply & _)]".
-{ (* The signature could have been forged if the key was compromised, but we
-     have ruled out this possibility.  *)
-  iDestruct ("s_sk" with "[]") as ">[]". by iSplit. }
+wp_apply wp_verify; eauto. iSplit; last by wp_pures; eauto.
+iIntros "%m #p_m [fail|#inv_m]".
+(* The signature could have been forged if the key was compromised, but we have
+   ruled out this possibility.  *)
+{ by iDestruct ("s_sk" with "fail") as ">[]". }
 (* Therefore, the invariant must hold. *)
-wp_pures. iModIntro. iRight. iExists reply. iSplit => //.
+wp_pures. iModIntro. iRight. iExists _. iSplit => //.
 by iApply "post".
 Qed.
 
@@ -111,7 +109,7 @@ Definition game : val := λ: <>,
 
   (* Generate signature keys and publicize verification key *)
   let: "k"   := mk_sign_key #() in
-  let: "vk"  := vkey "k" in
+  let: "vk"  := pkey "k" in
   send "c" "vk" ;;
 
   (* Initialize server state *)
@@ -129,7 +127,7 @@ Definition game : val := λ: <>,
 
 Lemma wp_game :
   cryptis_ctx ∗
-  seal_pred_token ⊤ ∗
+  seal_pred_token SIGN ⊤ ∗
   honest 0 ∅ ∗
   ●Ph 0 -∗
   WP game #() {{ v, ⌜v = #true⌝ }}.
@@ -140,19 +138,20 @@ rewrite /game. wp_pures.
 wp_apply wp_init_network => //. iIntros "%c #cP". wp_pures.
 (* Generate server key. Keep the signing key secret. *)
 wp_bind (mk_sign_key _). iApply (wp_mk_sign_key with "[//]") => //.
-iIntros (sk) "#p_vk #sign_k s_sk token".
-iMod (sign_freeze_secret with "s_sk sign_k") as "#?".
-wp_pures.
-wp_apply wp_vkey. wp_pures.
+iIntros (sk) "#m_sk s_sk token".
+iMod (freeze_secret with "s_sk") as "#[??]".
+wp_pures. wp_apply wp_pkey. wp_pures.
 (* Publicize verification key. *)
-wp_pures. wp_bind (send _ _). iApply wp_send => //. wp_pures.
+wp_pures. wp_bind (send _ _). iApply wp_send => //.
+{ by iApply public_verify_key. }
+wp_pures.
 (* Attacker chooses value stored by the server. *)
 wp_bind (recv _). iApply wp_recv => //. iIntros "%t #p_t". wp_pures.
 wp_alloc l as "Hl".
 (* Promise that the stored value will not change. *)
 iMod (pointsto_persist with "Hl") as "#Hl".
 (* Initialize signature invariant *)
-iMod (seal_pred_set nroot (sig_pred l) with "enc_tok") as "[#? _]" => //.
+iMod (sign_pred_set (N := nroot) (msg_pred l) with "enc_tok") as "[#? _]" => //.
 (* Run server in a loop in parallel. *)
 wp_pures. wp_bind (Fork _). iApply wp_fork.
 { iApply wp_server => //. }
@@ -179,6 +178,7 @@ have ? : heapGpreS F by apply _.
 apply (adequate_result NotStuck _ _ (λ v _, v = #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
-iMod (cryptisGS_alloc _) as (?) "(#ctx & enc_tok & key_tok & hash_tok & hon)".
+iMod (cryptisGS_alloc _)
+  as (?) "(#ctx & enc_tok & sign_tok & senc_tok & hash_tok & hon)".
 by iApply (wp_game) => //; try by iFrame.
 Qed.
