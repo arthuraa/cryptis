@@ -14,7 +14,8 @@ Section NSL.
 
 Context `{heap : !heapGS Σ, cryptis : !cryptisGS Σ, sess : !sessionGS Σ}.
 Notation iProp := (iProp Σ).
-Implicit Types t kI kR nI nR : term.
+Implicit Types t nI nR : term.
+Implicit Types skI skR : aenc_key.
 
 Definition nsl_mk_key_share_impl : val := λ: <>,
     let: "n" := mk_nonce #() in ("n", "n").
@@ -63,9 +64,9 @@ by case=> t1 t2; iIntros "#s1 #s2"; rewrite minted_TPair; iSplit.
 Qed.
 
 Next Obligation.
-iIntros "%kI %kR %Φ #? post". rewrite /nsl_mk_key_share_impl.
+iIntros "%skI %skR %Φ #? post". rewrite /nsl_mk_key_share_impl.
 wp_pures. wp_bind (mk_nonce _).
-iApply (wp_mk_nonce (λ _, corruption kI kR) (λ _, False)%I) => //.
+iApply (wp_mk_nonce (λ _, corruption skI skR) (λ _, False)%I) => //.
 iIntros "%n % #s_n #p_n _ token". wp_pures. iModIntro.
 iApply "post". rewrite bi.intuitionistic_intuitionistically. by eauto.
 Qed.
@@ -76,22 +77,22 @@ case: rl; rewrite /nsl_mk_session_key_impl /=; wp_pures;
 iApply wp_tuple; by iApply "post".
 Qed.
 
-Lemma wp_nsl_init c kI kR :
+Lemma wp_nsl_init c skI skR :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
-  aenc_key kI -∗
-  public (TKey Seal kR) -∗
-  {{{ init_confirm kI kR }}}
-    nsl_init c kI (TKey Seal kR)
+  minted skI -∗
+  minted skR -∗
+  {{{ init_confirm skI skR }}}
+    nsl_init c skI (Spec.pkey skR)
   {{{ (okS : option term), RET repr okS;
       if okS is Some kS then
         minted kS ∗
-        □ nsl_confirmation Init kI kR kS ∗
-        session_weak N Init kI kR kS ∗
-        (corruption kI kR ∨
-          session_key_meta_token N kI kR kS (↑N.@"init") ∗
-          session_key N kI kR kS)
+        □ nsl_confirmation Init skI skR kS ∗
+        session_weak N Init skI skR kS ∗
+        (corruption skI skR ∨
+          session_key_meta_token N skI skR kS (↑N.@"init") ∗
+          session_key N skI skR kS)
       else True
   }}}.
 Proof.
@@ -100,23 +101,23 @@ rewrite /nsl_init; wp_pures.
 iApply (wp_pk_auth_init with "chan_c ctx ctx' [] [] [confirm]"); eauto.
 Qed.
 
-Lemma wp_nsl_resp c kR :
+Lemma wp_nsl_resp c skR :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
-  aenc_key kR -∗
-  {{{ resp_confirm kR }}}
-    nsl_resp c kR
+  minted skR -∗
+  {{{ resp_confirm skR }}}
+    nsl_resp c skR
   {{{ (res : option (term * term)), RET repr res;
-      if res is Some (pkI, kS) then ∃ kI,
-        ⌜pkI = TKey Seal kI⌝ ∗
-        public pkI ∗
+      if res is Some (pkI, kS) then ∃ skI,
+        ⌜pkI = Spec.pkey skI⌝ ∗
+        minted skI ∗
         minted kS ∗
-        □ confirmation Resp kI kR kS ∗
-        session_weak N Resp kI kR kS ∗
-        (corruption kI kR ∨
-          session_key_meta_token N kI kR kS (↑N.@"resp") ∗
-          session_key N kI kR kS)
+        □ confirmation Resp skI skR kS ∗
+        session_weak N Resp skI skR kS ∗
+        (corruption skI skR ∨
+          session_key_meta_token N skI skR kS (↑N.@"resp") ∗
+          session_key N skI skR kS)
       else True
   }}}.
 Proof.

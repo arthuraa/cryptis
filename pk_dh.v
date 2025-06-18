@@ -15,7 +15,8 @@ Section PKDH.
 Context `{heap : !heapGS Σ, cryptis : !cryptisGS Σ, sess : !sessionGS Σ}.
 Notation iProp := (iProp Σ).
 Implicit Types rl : role.
-Implicit Types t kI kR nI nR sI sR : term.
+Implicit Types t nI nR sI sR : term.
+Implicit Types skI skR : aenc_key.
 
 Definition pk_dh_mk_key_share n := TExp (TInt 0) n.
 
@@ -31,7 +32,7 @@ Definition pk_dh_mk_session_key_impl rl : val :=
 
 Variable N : namespace.
 
-Variable pk_dh_confirmation : role → term → term → term → iProp.
+Variable pk_dh_confirmation : role → aenc_key → aenc_key → term → iProp.
 
 Definition pk_dh_init : val := λ: "c",
   pk_auth_init N "c" pk_dh_mk_key_share_impl (pk_dh_mk_session_key_impl Init).
@@ -61,7 +62,7 @@ move=> n; rewrite minted_TExp /= minted_TInt. apply: anti_symm.
 Qed.
 
 Next Obligation.
-iIntros "%nI %kI %kR #s_nI #dh".
+iIntros "%nI %skI %skR #s_nI #dh".
 rewrite /pk_dh_mk_key_share /secret_of. iModIntro. iSplit.
 - iIntros "#p_sI".
   by iPoseProof (dh_seed_elim1 with "dh p_sI") as "H"; eauto.
@@ -98,9 +99,9 @@ by rewrite /pk_dh_mk_session_key; iApply minted_TExp; iSplit.
 Qed.
 
 Next Obligation.
-iIntros "%kI %kR %Φ #? post". rewrite /pk_dh_mk_key_share_impl.
+iIntros "%skI %skR %Φ #? post". rewrite /pk_dh_mk_key_share_impl.
 wp_pures. wp_bind (mk_nonce _).
-iApply (wp_mk_nonce (λ _, False)%I (dh_publ (λ _, corruption kI kR))) => //.
+iApply (wp_mk_nonce (λ _, False)%I (dh_publ (λ _, corruption skI skR))) => //.
 iIntros "%n _ #s_n #p_n #dh token". wp_pures.
 wp_bind (tint _). iApply wp_tint.
 wp_bind (texp _ _). iApply wp_texp.
@@ -117,30 +118,30 @@ Qed.
 
 Definition pk_dh_ctx : iProp := pk_auth_ctx N.
 
-Definition pk_dh_session_meta kI kR :=
-  @session_key_meta _ _ _ _ N _ kI kR.
+Definition pk_dh_session_meta skI skR :=
+  @session_key_meta _ _ _ _ N _ skI skR.
 
-Definition pk_dh_session_meta_token kI kR :=
-  @session_key_meta_token _ _ _ _ N _ kI kR.
+Definition pk_dh_session_meta_token skI skR :=
+  @session_key_meta_token _ _ _ _ N _ skI skR.
 
-Definition pk_dh_session_weak rl kI kR kS :=
-  session_weak N rl kI kR kS.
+Definition pk_dh_session_weak rl skI skR kS :=
+  session_weak N rl skI skR kS.
 
-Definition pk_dh_session_key kI kR kS :=
-  session_key N kI kR kS.
+Definition pk_dh_session_key skI skR kS :=
+  session_key N skI skR kS.
 
 Lemma pk_dh_alloc E1 E2 E' :
   ↑N ⊆ E1 →
   ↑N ⊆ E2 →
   session_token E1 -∗
-  seal_pred_token E2 ={E'}=∗
+  seal_pred_token AENC E2 ={E'}=∗
   pk_dh_ctx ∗
   session_token (E1 ∖ ↑N) ∗
-  seal_pred_token (E2 ∖ ↑N).
+  seal_pred_token AENC (E2 ∖ ↑N).
 Proof. exact: pk_auth_alloc. Qed.
 
-Lemma pk_dh_session_key_elim kI kR kS :
-  pk_dh_session_key kI kR kS -∗
+Lemma pk_dh_session_key_elim skI skR kS :
+  pk_dh_session_key skI skR kS -∗
   public kS →
   ◇ False.
 Proof.
@@ -151,23 +152,23 @@ iDestruct (dh_seed_elim2 with "priv_nI p_kS") as "[>p_sI >contra]"; eauto.
 by iDestruct (dh_seed_elim0 with "priv_nR contra") as ">[]".
 Qed.
 
-Lemma wp_pk_dh_init c kI kR :
+Lemma wp_pk_dh_init c skI skR :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
-  aenc_key kI -∗
-  public (TKey Seal kR) -∗
-  {{{ init_confirm kI kR }}}
-    pk_dh_init c kI (TKey Seal kR)
+  minted skI -∗
+  minted skR -∗
+  {{{ init_confirm skI skR }}}
+    pk_dh_init c skI (Spec.pkey skR)
   {{{ (okS : option term), RET repr okS;
       if okS is Some kS then
         minted kS ∗
-        □ pk_dh_confirmation Init kI kR kS ∗
-        pk_dh_session_weak Init kI kR kS ∗
-        (corruption kI kR ∨
+        □ pk_dh_confirmation Init skI skR kS ∗
+        pk_dh_session_weak Init skI skR kS ∗
+        (corruption skI skR ∨
           □ (public kS → ◇ False) ∗
-          pk_dh_session_meta_token kI kR kS (↑N.@"init") ∗
-          pk_dh_session_key kI kR kS)
+          pk_dh_session_meta_token skI skR kS (↑N.@"init") ∗
+          pk_dh_session_key skI skR kS)
       else True
   }}}.
 Proof.
@@ -185,24 +186,24 @@ iFrame. iSplit => //. iModIntro.
 by iApply pk_dh_session_key_elim.
 Qed.
 
-Lemma wp_pk_dh_resp c kR :
+Lemma wp_pk_dh_resp c skR :
   channel c -∗
   cryptis_ctx -∗
   pk_auth_ctx N -∗
-  aenc_key kR -∗
-  {{{ resp_confirm kR }}}
-    pk_dh_resp c kR
+  minted skR -∗
+  {{{ resp_confirm skR }}}
+    pk_dh_resp c skR
   {{{ (res : option (term * term)), RET repr res;
-      if res is Some (pkI, kS) then ∃ kI,
-        ⌜pkI = TKey Seal kI⌝ ∗
-        public pkI ∗
+      if res is Some (pkI, kS) then ∃ skI,
+        ⌜pkI = Spec.pkey skI⌝ ∗
+        minted skI ∗
         minted kS ∗
-        □ pk_dh_confirmation Resp kI kR kS ∗
-        pk_dh_session_weak Resp kI kR kS ∗
-        (corruption kI kR ∨
+        □ pk_dh_confirmation Resp skI skR kS ∗
+        pk_dh_session_weak Resp skI skR kS ∗
+        (corruption skI skR ∨
           □ (public kS → ◇ False) ∗
-          pk_dh_session_meta_token kI kR kS (↑N.@"resp") ∗
-          pk_dh_session_key kI kR kS)
+          pk_dh_session_meta_token skI skR kS (↑N.@"resp") ∗
+          pk_dh_session_key skI skR kS)
       else True
   }}}.
 Proof.
@@ -212,7 +213,7 @@ iApply (wp_pk_auth_resp with "chan_c ctx ctx' [] [confirm]"); eauto.
 iIntros "!> %res". case: res => [[pkI kS]|]; last first.
   by iApply ("post" $! None).
 iIntros "(%kI & -> & #p_pkI & #s_kS & #confirmed & #sess_weak & kSP)".
-iApply ("post" $! (Some (TKey Seal kI, kS))). iFrame. iExists kI.
+iApply ("post" $! (Some (_, kS))). iFrame. iExists kI.
 do 5!iSplitR => //.
 iDestruct "kSP" as "[#fail|kSP]"; eauto. iRight.
 iDestruct "kSP" as "[token #key]"; eauto.

@@ -58,8 +58,7 @@ Definition pk_auth_resp : val :=
   bind: "m1" := adec "skR" (Tag $ N.@"m1") (recv "c") in
   bind: "m1" := list_of_term "m1" in
   list_match: ["sI"; "pkI"] := "m1" in
-  bind: "kt" := is_key "pkI" in
-  guard: "kt" = repr Seal in
+  guard: is_aenc_key "pkI" in
   let: "nRsR" := "mk_key_share" #() in
   let: "nR" := Fst "nRsR" in
   let: "sR" := Snd "nRsR" in
