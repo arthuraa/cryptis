@@ -14,8 +14,8 @@ Unset Printing Implicit Defensive.
 Definition iso_dhN := nroot.@"iso_dh".
 
 Record sess_info := SessInfo {
-  si_init : term;
-  si_resp : term;
+  si_init : sign_key;
+  si_resp : sign_key;
   si_init_share : term;
   si_resp_share : term;
   si_secret : term;
@@ -34,7 +34,8 @@ Section Verif.
 Context `{!heapGS Σ, !cryptisGS Σ}.
 Notation iProp := (iProp Σ).
 
-Implicit Types (rl : role) (t skI skR nI nR sI sR kS : term).
+Implicit Types (rl : role) (t nI nR sI sR kS : term).
+Implicit Types (skI skR : sign_key).
 Implicit Types (γ γa γb : gname) (ok failed : bool).
 Implicit Types (ts : nat) (T : gset term).
 Implicit Types (si : sess_info).
@@ -66,36 +67,27 @@ Qed.
 Definition iso_dh_pred t : iProp :=
   ⌜length (exps t) = 1⌝.
 
-Definition si_key si :=
-  Spec.derive_key
-    (Spec.of_list [TKey Open (si_init si);
-                   TKey Open (si_resp si);
+Definition si_key si : senc_key :=
+  SEncKey
+    (Spec.of_list [Spec.pkey (si_init si);
+                   Spec.pkey (si_resp si);
                    si_init_share si;
                    si_resp_share si;
                    si_secret si]).
-
-Lemma senc_key_si_key si :
-  cryptis_ctx -∗
-  minted (si_key si) -∗
-  senc_key (si_key si).
-Proof.
-iIntros "#ctx #m_k". iSplit => //. iIntros "!> %kt".
-rewrite public_derive_key minted_derive_key.
-by iApply public_key_derive_key => //.
-Qed.
+Arguments si_key : simpl never.
 
 Lemma session_agree si1 si2 :
   si_key si1 = si_key si2 →
   si1 = si2.
 Proof.
 case: si1 si2
-  => [skI1 skR1 ga1 gb1 gab1] [skI2 skR2 ga2 gb2 gab2] /=.
-case/Spec.tag_inj => _.
-by case/Spec.of_list_inj => <- <- <- <- <-.
+  => [[skI1] [skR1] ga1 gb1 gab1] [[skI2] [skR2] ga2 gb2 gab2] /=.
+rewrite /si_key /=. case => /Spec.of_list_inj.
+by case=> /Spec.sign_pkey_inj <- /Spec.sign_pkey_inj <- <- <- <-.
 Qed.
 
 Definition compromised_session rl si : iProp :=
-  (compromised_key (si_init si) ∨ compromised_key (si_resp si)) ∗
+  (public (si_init si) ∨ public (si_resp si)) ∗
   public (si_key si) ∗
   term_meta (si_share_of rl si) (iso_dhN.@"failed") true.
 
@@ -149,8 +141,7 @@ Definition session rl si : iProp :=
   □ (▷ released_session si → public (si_key si)) ∗
   ∃ failed,
     term_meta (si_share_of rl si) (iso_dhN.@"failed") failed ∗
-    if failed then
-      compromised_key (si_init si) ∨ compromised_key (si_resp si)
+    if failed then public (si_init si) ∨ public (si_resp si)
     else □ (public (si_key si) → ▷ released_session si).
 
 Global Instance session_persistent rl si :
@@ -160,17 +151,13 @@ Proof. apply _. Qed.
 Lemma secret_session rl si :
   secret (si_init si) -∗
   secret (si_resp si) -∗
-  sign_key (si_init si) -∗
-  sign_key (si_resp si) -∗
   session rl si -∗
   ◇ □ (public (si_key si) ↔ ▷ released_session si).
 Proof.
-iIntros "sI sR #signI #signR (#comp1 & %failed & #failed & #comp2)".
+iIntros "sI sR (#comp1 & %failed & #failed & #comp2)".
 case: failed; eauto. iDestruct "comp2" as "[comp2|comp2]".
-- by iDestruct (sign_secret_not_compromised_key with "sI [//] [//]")
-    as ">[]".
-- by iDestruct (sign_secret_not_compromised_key with "sR [//] [//]")
-    as ">[]".
+- by iDestruct (secret_not_public with "sI comp2") as ">[]".
+- by iDestruct (secret_not_public with "sR comp2") as ">[]".
 Qed.
 
 Lemma unreleased_key_secrecy rl si :
@@ -212,56 +199,50 @@ Lemma session_not_compromised rl si :
   session rl si -∗
   secret (si_init si) -∗
   secret (si_resp si) -∗
-  sign_key (si_init si) -∗
-  sign_key (si_resp si) -∗
   ◇ □ ¬ compromised_session rl si.
 Proof.
-iIntros "(#comp1 & %failed & #failed & #comp2) s_kI s_kR #signI #signR".
+iIntros "(#comp1 & %failed & #failed & #comp2) s_kI s_kR".
 case: failed; last first.
 { iIntros "!> !> (_ & _ & #contra)".
   by iPoseProof (term_meta_agree with "failed contra") as "%". }
 iDestruct "comp2" as "[comp2|comp2]".
-- iDestruct (sign_secret_not_compromised_key with "s_kI [//] [//]") as ">[]".
-- iDestruct (sign_secret_not_compromised_key with "s_kR [//] [//]") as ">[]".
+- iDestruct (secret_not_public with "s_kI comp2") as ">[]".
+- iDestruct (secret_not_public with "s_kR comp2") as ">[]".
 Qed.
 
 Definition msg2_pred skR m2 : iProp :=
-  ∃ ga b vkI,
-    let vkR := TKey Open skR in
+  ∃ ga b skI,
+    let vkI := Spec.pkey skI in
+    let vkR := Spec.pkey skR in
     let gb := TExp (TInt 0) b in
     let gab := TExp ga b in
-    let secret := Spec.of_list [vkI; vkR; ga; gb; gab] in
-    let key := Spec.derive_key secret in
-    ⌜m2 = Spec.of_list [ga; gb; vkI]⌝ ∗
-    ((∃ skI, ⌜vkI = TKey Open skI⌝ ∗
-             (compromised_key skI ∨ compromised_key skR)) ∨
-     (public b ↔ ▷ (released ga ∧ released gb))) ∗
+    ⌜m2 = Spec.of_list [ga; gb; vkI]⌝ ∧
+    ((public skI ∨ public skR) ∨ (public b ↔ ▷ (released ga ∧ released gb))) ∧
     (∀ t, dh_pred b t ↔ ▷ □ iso_dh_pred t).
 
-Definition msg3_pred kI m3 : iProp :=
-  ∃ a gb kR,
-    let vkI := TKey Open kI in
-    let vkR := TKey Open kR in
+Definition msg3_pred skI m3 : iProp :=
+  ∃ a gb skR,
+    let vkI := Spec.pkey skI in
+    let vkR := Spec.pkey skR in
     let ga := TExp (TInt 0) a in
     let gab := TExp gb a in
-    let si := SessInfo kI kR ga gb gab in
-    ⌜m3 = Spec.of_list [ga; gb; vkR]⌝ ∗
-    ((compromised_key kI ∨ compromised_key kR) ∨
-     □ (public (si_key si) → ▷ released_session si)).
+    let si := SessInfo skI skR ga gb gab in
+    ⌜m3 = Spec.of_list [ga; gb; vkR]⌝ ∧
+    ((public skI ∨ public skR) ∨ □ (public (si_key si) → ▷ released_session si)).
 
 Definition iso_dh_ctx : iProp :=
-  seal_pred (iso_dhN.@"m2") msg2_pred ∗
-  seal_pred (iso_dhN.@"m3") msg3_pred.
+  sign_pred (iso_dhN.@"m2") msg2_pred ∗
+  sign_pred (iso_dhN.@"m3") msg3_pred.
 
 Lemma iso_dh_ctx_alloc E :
   ↑iso_dhN ⊆ E →
-  seal_pred_token E ==∗
-  iso_dh_ctx ∗ seal_pred_token (E ∖ ↑iso_dhN).
+  seal_pred_token SIGN E ==∗
+  iso_dh_ctx ∗ seal_pred_token SIGN (E ∖ ↑iso_dhN).
 Proof.
 iIntros "%sub token".
-iMod (seal_pred_set (iso_dhN.@"m2") msg2_pred with "token")
+iMod (sign_pred_set (N := iso_dhN.@"m2") msg2_pred with "token")
   as "[? token]"; try solve_ndisj. iFrame.
-iMod (seal_pred_set (iso_dhN.@"m3") msg3_pred with "token")
+iMod (sign_pred_set (N := iso_dhN.@"m3") msg3_pred with "token")
   as "[? token]"; try solve_ndisj. iFrame.
 iApply (seal_pred_token_drop with "token"). solve_ndisj.
 Qed.
