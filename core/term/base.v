@@ -17,7 +17,79 @@ Inductive term :=
 | TSeal of term & term
 | THash of term
 | TExpN' pt pts of PreTerm.wf_term (PreTerm.PTExp pt pts).
+
+Record key := Key { key_type_of : key_type; seed_of : term }.
+
+Record aenc_key := AEncKey {
+  seed_of_aenc_key : term;
+}.
+
+Record sign_key := SignKey {
+  seed_of_sign_key : term;
+}.
+
+Record senc_key := SEncKey {
+  seed_of_senc_key : term;
+}.
 Set Elimination Schemes.
+
+Definition term_of_key k :=
+  match k with
+  | Key kt t => TKey kt t
+  end.
+
+Definition key_of_term t :=
+  match t with
+  | TKey kt t => Some (Key kt t)
+  | _ => None
+  end.
+
+Lemma term_of_keyK : pcancel term_of_key key_of_term.
+Proof. by case. Qed.
+
+Coercion term_of_key : key >-> term.
+
+Definition term_of_aenc_key_def sk :=
+  match sk with
+  | AEncKey seed => TKey ADec seed
+  end.
+Fact term_of_aenc_key_key : unit. exact: tt. Qed.
+Definition term_of_aenc_key :=
+  locked_with term_of_aenc_key_key term_of_aenc_key_def.
+Canonical unlockable_term_of_aenc_key :=
+  [unlockable of term_of_aenc_key].
+Coercion term_of_aenc_key : aenc_key >-> term.
+
+Lemma term_of_aenc_key_inj : injective term_of_aenc_key.
+Proof. rewrite unlock. by case=> [?] [?] [->]. Qed.
+
+Definition term_of_sign_key_def sk :=
+  match sk with
+  | SignKey seed => TKey Sign seed
+  end.
+Fact term_of_sign_key_key : unit. exact: tt. Qed.
+Definition term_of_sign_key :=
+  locked_with term_of_sign_key_key term_of_sign_key_def.
+Canonical unlockable_term_of_sign_key :=
+  [unlockable of term_of_sign_key].
+Coercion term_of_sign_key : sign_key >-> term.
+
+Lemma term_of_sign_key_inj : injective term_of_sign_key.
+Proof. rewrite unlock. by case=> [?] [?] [->]. Qed.
+
+Definition term_of_senc_key_def sk :=
+  match sk with
+  | SEncKey seed => TKey SEnc seed
+  end.
+Fact term_of_senc_key_key : unit. exact: tt. Qed.
+Definition term_of_senc_key :=
+  locked_with term_of_senc_key_key term_of_senc_key_def.
+Canonical unlockable_term_of_senc_key :=
+  [unlockable of term_of_senc_key].
+Coercion term_of_senc_key : senc_key >-> term.
+
+Lemma term_of_senc_key_inj : injective term_of_senc_key.
+Proof. rewrite unlock. by case=> [?] [?] [->]. Qed.
 
 (* We use a different name for the default induction scheme, as it does not
    allow us to recurse under exponentials.  Later, we'll prove term_ind, which
@@ -122,6 +194,33 @@ HB.instance Definition _ :=
   Countable.copy term (can_type unfold_termK).
 HB.instance Definition _ : Order.Total _ term :=
   Order.CanIsTotal Order.default_display unfold_termK.
+
+HB.instance Definition _ :=
+  Equality.copy key (pcan_type term_of_keyK).
+HB.instance Definition _ :=
+  Choice.copy key (pcan_type term_of_keyK).
+HB.instance Definition _ :=
+  Countable.copy key (pcan_type term_of_keyK).
+HB.instance Definition _ : Order.Total _ key :=
+  Order.PCanIsTotal Order.default_display term_of_keyK.
+
+HB.instance Definition _ := [isNew for seed_of_aenc_key].
+HB.instance Definition _ := [Equality of aenc_key by <:].
+HB.instance Definition _ := [Choice of aenc_key by <:].
+HB.instance Definition _ := [Countable of aenc_key by <:].
+HB.instance Definition _ := [Order of aenc_key by <:].
+
+HB.instance Definition _ := [isNew for seed_of_sign_key].
+HB.instance Definition _ := [Equality of sign_key by <:].
+HB.instance Definition _ := [Choice of sign_key by <:].
+HB.instance Definition _ := [Countable of sign_key by <:].
+HB.instance Definition _ := [Order of sign_key by <:].
+
+HB.instance Definition _ := [isNew for seed_of_senc_key].
+HB.instance Definition _ := [Equality of senc_key by <:].
+HB.instance Definition _ := [Choice of senc_key by <:].
+HB.instance Definition _ := [Countable of senc_key by <:].
+HB.instance Definition _ := [Order of senc_key by <:].
 
 Lemma normalize_unfold1 t :
   PreTerm.normalize (unfold_term t) = unfold_term t.

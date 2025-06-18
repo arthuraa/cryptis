@@ -46,11 +46,15 @@ Definition mk_nonce : val := λ: <>,
 
 Definition mk_aenc_key : val := λ: <>,
   let: "n" := mk_nonce #() in
-  tag (Tag $ nroot.@"keys".@"enc") "n".
+  derive_aenc_key "n".
 
 Definition mk_sign_key : val := λ: <>,
   let: "n" := mk_nonce #() in
-  tag (Tag $ nroot.@"keys".@"sig") "n".
+  derive_sign_key "n".
+
+Definition mk_senc_key : val := λ: <>,
+  let: "n" := mk_nonce #() in
+  derive_senc_key "n".
 
 Section Proofs.
 
@@ -313,60 +317,52 @@ Qed.
 
 Lemma twp_mk_aenc_key Ψ :
   cryptis_ctx -∗
-  (∀ t, public (TKey Seal t) -∗
-        aenc_key t -∗
-        secret t -∗
-        term_token t ⊤ -∗
-        Ψ t) -∗
+  (∀ sk : aenc_key,
+      minted sk -∗
+      secret sk -∗
+      term_token sk ⊤ -∗
+      Ψ sk) -∗
   WP mk_aenc_key #() [{ Ψ }].
 Proof.
 iIntros "#ctx post". iMod unknown_alloc as (γ) "unknown".
 rewrite /mk_aenc_key. wp_pures.
 wp_bind (mk_nonce _).
 iApply (twp_mk_nonce_freshN ∅ (λ _, known γ 1) (λ _, False%I)
-  (λ t, {[Spec.tag (Tag $ nroot.@"keys".@"enc") t]})) => //.
+  (λ t, {[(AEncKey t) : term]})) => //.
 - iIntros "% ?". by rewrite elem_of_empty.
-- iIntros "%t". rewrite big_sepS_singleton minted_tag.
+- iIntros "%t". rewrite [term_of_aenc_key]unlock big_sepS_singleton minted_TKey.
   iModIntro. by iSplit; iIntros "?".
-iIntros "%t %fresh % #s_t #p_t _ token".
+iIntros "%t %fresh % #m_t #s_t _ token".
 rewrite big_sepS_singleton.
-pose (t' := Spec.tag (Tag $ nroot.@"keys".@"enc") t).
-iAssert (secret t') with "[unknown]" as "tP"; first do 2?iSplit.
+pose sk := AEncKey t.
+iAssert (public sk ↔ ▷ □ known γ 1)%I as "s_sk".
+{ by rewrite [term_of_aenc_key]unlock /= public_adec_key. }
+iAssert (secret sk) with "[unknown]" as "tP"; first do 2?iSplit.
 - iMod (known_alloc with "unknown") as "#known".
-  iSpecialize ("p_t" with "known").
-  iModIntro. by rewrite public_tag.
+  by iSpecialize ("s_sk" with "known").
 - iMod (known_alloc 2 with "unknown") as "#known".
-  rewrite public_tag.
   iIntros "!> !>". iSplit.
-  + iIntros "#contra".
-    iPoseProof ("p_t" with "contra") as ">#known'".
+  + iIntros "#p_sk".
+    iPoseProof ("s_sk" with "p_sk") as ">#known'".
     by iPoseProof (known_agree with "known known'") as "%".
   + iIntros "#contra".
-    iApply "p_t". by iDestruct "contra" as ">[]".
-- iIntros "#contra".
-  rewrite public_tag.
-  iPoseProof ("p_t" with "contra") as ">#known".
+    iApply "s_sk". by iDestruct "contra" as ">[]".
+- iIntros "#p_sk".
+  iPoseProof ("s_sk" with "p_sk") as ">#known".
   by iPoseProof (unknown_known with "[$] [//]") as "[]".
-iAssert (minted (TKey Open t')) as "s_t'".
-  by rewrite minted_TKey minted_tag.
-wp_pures. wp_bind (tag _ _). iApply twp_tag.
-iAssert (public (TKey Seal t')) as "#?".
-  iApply (public_enc_key with "ctx"). by eauto.
-iApply ("post" with "[] [] [$] [$]") => //.
-iSplit => //. iModIntro. rewrite public_tag.
-iApply (bi.iff_trans _ (minted t ∧ ◇ (⌜Open = Seal⌝ ∨ public t))).
-iSplit; first by iApply public_enc_key. iSplit.
-- by iIntros "(_ & > [%|?])".
-- iIntros "#?". iSplit => //. by iRight.
+wp_pures. wp_lam. iApply twp_key.
+rewrite [term_of_aenc_key]unlock /=.
+iApply ("post" $! (AEncKey _) with "[] [$] [$]").
+by rewrite minted_TKey.
 Qed.
 
 Lemma wp_mk_aenc_key Ψ :
   cryptis_ctx -∗
-  (∀ t, public (TKey Seal t) -∗
-        aenc_key t -∗
-        secret t -∗
-        term_token t ⊤ -∗
-        Ψ t) -∗
+  (∀ sk : aenc_key,
+      minted sk -∗
+      secret sk -∗
+      term_token sk ⊤ -∗
+      Ψ sk) -∗
   WP mk_aenc_key #() {{ Ψ }}.
 Proof.
 iIntros "#? ?". iApply twp_wp. by wp_apply twp_mk_aenc_key.
@@ -374,63 +370,370 @@ Qed.
 
 Lemma twp_mk_sign_key Ψ :
   cryptis_ctx -∗
-  (∀ t, public (TKey Open t) -∗
-        sign_key t -∗
-        secret t -∗
-        term_token t ⊤ -∗
-        Ψ t) -∗
+  (∀ sk : sign_key,
+      minted sk -∗
+      secret sk -∗
+      term_token sk ⊤ -∗
+      Ψ sk) -∗
   WP mk_sign_key #() [{ Ψ }].
 Proof.
 iIntros "#ctx post". iMod unknown_alloc as (γ) "unknown".
 rewrite /mk_sign_key. wp_pures.
 wp_bind (mk_nonce _).
 iApply (twp_mk_nonce_freshN ∅ (λ _, known γ 1) (λ _, False%I)
-  (λ t, {[Spec.tag (Tag $ nroot.@"keys".@"sig") t]})) => //.
+  (λ t, {[(SignKey t) : term]})) => //.
 - iIntros "% ?". by rewrite elem_of_empty.
-- iIntros "%t". rewrite big_sepS_singleton minted_tag.
+- iIntros "%t". rewrite [term_of_sign_key]unlock big_sepS_singleton minted_TKey.
   iModIntro. by iSplit; iIntros "?".
-iIntros "%t %fresh % #s_t #p_t _ token".
+iIntros "%t %fresh % #m_t #s_t _ token".
 rewrite big_sepS_singleton.
-pose (t' := Spec.tag (Tag $ nroot.@"keys".@"sig") t).
-iAssert (secret t') with "[unknown]" as "tP"; first do 2?iSplit.
+pose sk := SignKey t.
+iAssert (public sk ↔ ▷ □ known γ 1)%I as "s_sk".
+{ by rewrite [term_of_sign_key]unlock /= public_sign_key. }
+iAssert (secret sk) with "[unknown]" as "tP"; first do 2?iSplit.
 - iMod (known_alloc with "unknown") as "#known".
-  iSpecialize ("p_t" with "known").
-  iModIntro. by rewrite public_tag.
+  by iSpecialize ("s_sk" with "known").
 - iMod (known_alloc 2 with "unknown") as "#known".
-  rewrite public_tag.
   iIntros "!> !>". iSplit.
-  + iIntros "#contra".
-    iPoseProof ("p_t" with "contra") as ">#known'".
+  + iIntros "#p_sk".
+    iPoseProof ("s_sk" with "p_sk") as ">#known'".
     by iPoseProof (known_agree with "known known'") as "%".
   + iIntros "#contra".
-    iApply "p_t". by iDestruct "contra" as ">[]".
-- iIntros "#contra".
-  rewrite public_tag.
-  iPoseProof ("p_t" with "contra") as ">#known".
+    iApply "s_sk". by iDestruct "contra" as ">[]".
+- iIntros "#p_sk".
+  iPoseProof ("s_sk" with "p_sk") as ">#known".
   by iPoseProof (unknown_known with "[$] [//]") as "[]".
-iAssert (minted t') as "s_t'"; first by rewrite minted_tag.
-wp_pures. wp_bind (tag _ _). iApply twp_tag.
-iAssert (public (TKey Open t')) as "#?".
-  iApply (public_sig_key with "ctx"). by eauto.
-iApply ("post" with "[] [] [$] [$]") => //.
-iSplit => //. iModIntro. rewrite public_tag.
-iApply (bi.iff_trans _ (minted t ∧ ◇ (⌜Seal = Open⌝ ∨ public t))).
-iSplit; first by iApply public_sig_key.
-iSplit.
-- by iIntros "(_ & > [%|?])".
-- iIntros "#?". iSplit => //. by iRight.
+wp_pures. wp_lam. iApply twp_key.
+rewrite [term_of_sign_key]unlock /=.
+iApply ("post" $! (SignKey _) with "[] [$] [$]").
+by rewrite minted_TKey.
 Qed.
 
 Lemma wp_mk_sign_key Ψ :
   cryptis_ctx -∗
-  (∀ t, public (TKey Open t) -∗
-        sign_key t -∗
-        secret t -∗
-        term_token t ⊤ -∗
-        Ψ t) -∗
+  (∀ sk : sign_key,
+      minted sk -∗
+      secret sk -∗
+      term_token sk ⊤ -∗
+      Ψ sk) -∗
   WP mk_sign_key #() {{ Ψ }}.
 Proof.
 iIntros "#? ?". iApply twp_wp. by wp_apply twp_mk_sign_key.
+Qed.
+
+Lemma twp_mk_senc_key Ψ :
+  cryptis_ctx -∗
+  (∀ k : senc_key,
+      minted k -∗
+      secret k -∗
+      term_token k ⊤ -∗
+      Ψ k) -∗
+  WP mk_senc_key #() [{ Ψ }].
+Proof.
+iIntros "#ctx post". iMod unknown_alloc as (γ) "unknown".
+rewrite /mk_senc_key. wp_pures.
+wp_bind (mk_nonce _).
+iApply (twp_mk_nonce_freshN ∅ (λ _, known γ 1) (λ _, False%I)
+  (λ t, {[(SEncKey t) : term]})) => //.
+- iIntros "% ?". by rewrite elem_of_empty.
+- iIntros "%t". rewrite [term_of_senc_key]unlock big_sepS_singleton minted_TKey.
+  iModIntro. by iSplit; iIntros "?".
+iIntros "%t %fresh % #m_t #s_t _ token".
+rewrite big_sepS_singleton.
+pose sk := SEncKey t.
+iAssert (public sk ↔ ▷ □ known γ 1)%I as "s_sk".
+{ by rewrite [term_of_senc_key]unlock /= public_senc_key. }
+iAssert (secret sk) with "[unknown]" as "tP"; first do 2?iSplit.
+- iMod (known_alloc with "unknown") as "#known".
+  by iSpecialize ("s_sk" with "known").
+- iMod (known_alloc 2 with "unknown") as "#known".
+  iIntros "!> !>". iSplit.
+  + iIntros "#p_sk".
+    iPoseProof ("s_sk" with "p_sk") as ">#known'".
+    by iPoseProof (known_agree with "known known'") as "%".
+  + iIntros "#contra".
+    iApply "s_sk". by iDestruct "contra" as ">[]".
+- iIntros "#p_sk".
+  iPoseProof ("s_sk" with "p_sk") as ">#known".
+  by iPoseProof (unknown_known with "[$] [//]") as "[]".
+wp_pures. wp_lam. iApply twp_key.
+rewrite [term_of_senc_key]unlock /=.
+iApply ("post" $! (SEncKey _) with "[] [$] [$]").
+by rewrite minted_TKey.
+Qed.
+
+Lemma wp_mk_senc_key Ψ :
+  cryptis_ctx -∗
+  (∀ k : senc_key,
+      minted k -∗
+      secret k -∗
+      term_token k ⊤ -∗
+      Ψ k) -∗
+  WP mk_senc_key #() {{ Ψ }}.
+Proof.
+iIntros "#? ?". iApply twp_wp. by wp_apply twp_mk_senc_key.
+Qed.
+
+Lemma twp_aenc (sk : aenc_key) N t φ Ψ :
+  aenc_pred N φ -∗
+  minted sk -∗
+  minted t -∗
+  public t ∨ □ φ sk t ∧ □ (public sk → public t) -∗
+  (∀ m, public m → Ψ m) -∗
+  WP aenc (Spec.pkey sk) (Tag N) t [{ Ψ }].
+Proof.
+iIntros "#? #? #? #inv post".
+wp_lam. wp_pures. wp_apply twp_enc. iApply "post".
+iDestruct "inv" as "[p_t|[??]]".
+- iApply public_TSealIP.
+  + by iApply public_aenc_key.
+  + by rewrite public_tag.
+- iApply public_aencIS => //.
+Qed.
+
+Lemma wp_aenc (sk : aenc_key) N t φ Ψ :
+  aenc_pred N φ -∗
+  minted sk -∗
+  minted t -∗
+  public t ∨ □ φ sk t ∧ □ (public sk → public t) -∗
+  (∀ m, public m → Ψ m) -∗
+  WP aenc (Spec.pkey sk) (Tag N) t {{ Ψ }}.
+Proof.
+iIntros "#? #? #? #? ?".
+iApply twp_wp. by wp_apply twp_aenc.
+Qed.
+
+Lemma wp_adec (sk : aenc_key) N m φ Ψ :
+  aenc_pred N φ -∗
+  public m -∗
+  (∀ t, minted t -∗
+        public t ∨ □ φ sk t ∧ □ (public sk → public t) -∗
+        Ψ (SOMEV t)) ∧
+  Ψ NONEV -∗
+  WP adec sk (Tag N) m {{ Ψ }}.
+Proof.
+iIntros "#? #p_m post".
+wp_lam. wp_pure _ credit:"c". wp_pures. iApply wp_fupd. wp_apply wp_dec.
+case: Spec.decP => [k_t t /Spec.open_key_aenc -> ->|]; last first.
+{ iDestruct "post" as "[_ post]". iApply "post". }
+iPoseProof (public_aencE with "p_m [//]") as "[? [p_t|[#inv #p_t]]]".
+- iApply "post" => //. by eauto.
+- iMod (lc_fupd_elim_later_pers with "c inv") as "#?".
+  iApply "post" => //. by eauto.
+Qed.
+
+Lemma twp_senc (sk : senc_key) N t φ Ψ :
+  senc_pred N φ -∗
+  minted sk -∗
+  minted t -∗
+  public sk ∨ □ φ sk t -∗
+  □ (public sk → public t) -∗
+  (∀ m, public m → Ψ m) -∗
+  WP senc sk (Tag N) t [{ Ψ }].
+Proof.
+iIntros "#? #? #? #inv #p_t post".
+wp_lam. wp_pures. wp_apply twp_enc. iApply "post".
+iDestruct "inv" as "[p_sk|inv]".
+- iApply public_TSealIP => //.
+  rewrite public_tag. by iApply "p_t".
+- by iApply public_sencIS => //.
+Qed.
+
+Lemma wp_senc (sk : senc_key) N t φ Ψ :
+  senc_pred N φ -∗
+  minted sk -∗
+  minted t -∗
+  public sk ∨ □ φ sk t -∗
+  □ (public sk → public t) -∗
+  (∀ m, public m → Ψ m) -∗
+  WP senc sk (Tag N) t {{ Ψ }}.
+Proof. by iIntros "#?#?#?#?#??"; iApply twp_wp; iApply twp_senc. Qed.
+
+Lemma wp_sdec (sk : senc_key) N m φ Ψ :
+  senc_pred N φ -∗
+  public m -∗
+  (∀ t, minted t -∗
+        public sk ∨ □ φ sk t -∗
+        □ (public sk → public t) -∗
+        Ψ (SOMEV t)) ∧
+  Ψ NONEV -∗
+  WP sdec sk (Tag N) m {{ Ψ }}.
+Proof.
+iIntros "#? #p_m post".
+wp_lam. wp_pure _ credit:"c". wp_pures. iApply wp_fupd. wp_apply wp_dec.
+case: Spec.decP => [k_t t /Spec.open_key_senc -> ->|]; last first.
+{ iDestruct "post" as "[_ post]". iApply "post". }
+iPoseProof (public_sencE with "p_m [//]") as "(? & [p_k|inv] & #p_t)".
+- iApply "post" => //. by eauto.
+- iMod (lc_fupd_elim_later_pers with "c inv") as "#?".
+  iApply "post" => //. by eauto.
+Qed.
+
+Lemma twp_sign (sk : sign_key) N t φ Ψ :
+  sign_pred N φ -∗
+  minted sk -∗
+  public t -∗
+  public sk ∨ □ φ sk t -∗
+  (∀ m, public m → Ψ m) -∗
+  WP sign sk (Tag N) t [{ Ψ }].
+Proof.
+iIntros "#? #? #? #inv post".
+wp_lam. wp_pures. wp_apply twp_enc. iApply "post".
+iDestruct "inv" as "[p_t|#?]".
+- iApply public_TSealIP => //.
+  by rewrite public_tag.
+- by iApply public_signIS => //.
+Qed.
+
+Lemma wp_sign (sk : sign_key) N t φ Ψ :
+  sign_pred N φ -∗
+  minted sk -∗
+  public t -∗
+  public sk ∨ □ φ sk t -∗
+  (∀ m, public m → Ψ m) -∗
+  WP sign sk (Tag N) t {{ Ψ }}.
+Proof.
+iIntros "#? #? #? #? ?".
+iApply twp_wp. by wp_apply twp_sign.
+Qed.
+
+Lemma wp_verify (sk : sign_key) N m φ Ψ :
+  sign_pred N φ -∗
+  public m -∗
+  (∀ t, public t -∗
+        public sk ∨ □ φ sk t -∗
+        Ψ (SOMEV t)) ∧
+  Ψ NONEV -∗
+  WP verify (Spec.pkey sk) (Tag N) m {{ Ψ }}.
+Proof.
+iIntros "#? #p_m post".
+wp_lam. wp_pure _ credit:"c". wp_pures. iApply wp_fupd. wp_apply wp_dec.
+case: Spec.decP => [k_t t /Spec.open_key_sign -> ->|]; last first.
+{ iDestruct "post" as "[_ post]". iApply "post". }
+iPoseProof (public_signE with "p_m [//]") as "[? [p_t|#inv]]".
+- iApply "post" => //. by eauto.
+- iMod (lc_fupd_elim_later_pers with "c inv") as "#?".
+  iApply "post" => //. by eauto.
+Qed.
+
+Lemma twp_is_aenc_key pk Ψ :
+  minted pk -∗
+  (∀ sk : aenc_key, ⌜pk = Spec.pkey sk⌝ -∗ minted sk -∗ Ψ #true) ∧ Ψ #false -∗
+  WP is_aenc_key pk [{ Ψ }].
+Proof.
+iIntros "#m_pk post".
+wp_lam. wp_apply (twp_has_key_type AEnc).
+case: pk; try by move=> *; iDestruct "post" as "[_ post]".
+move=> kt t.
+case: kt; try by iDestruct "post" as "[_ post]".
+iDestruct "post" as "[post _]".
+by iApply ("post" $! (AEncKey t)) => //;
+rewrite [term_of_aenc_key]unlock // !minted_TKey.
+Qed.
+
+Lemma wp_is_aenc_key pk Ψ :
+  minted pk -∗
+  (∀ sk : aenc_key, ⌜pk = Spec.pkey sk⌝ -∗ minted sk -∗ Ψ #true) ∧ Ψ #false -∗
+  WP is_aenc_key pk {{ Ψ }}.
+Proof.
+by iIntros "H1 H2"; iApply twp_wp;
+iApply (twp_is_aenc_key with "H1 H2").
+Qed.
+
+Lemma twp_is_adec_key sk Ψ :
+  minted sk -∗
+  (∀ sk' : aenc_key, ⌜sk = sk'⌝ -∗ Ψ #true) ∧ Ψ #false -∗
+  WP is_adec_key sk [{ Ψ }].
+Proof.
+iIntros "#m_pk post".
+wp_lam. wp_apply (twp_has_key_type ADec).
+case: sk; try by move=> *; iDestruct "post" as "[_ post]".
+move=> kt t.
+case: kt; try by iDestruct "post" as "[_ post]".
+iDestruct "post" as "[post _]".
+by iApply ("post" $! (AEncKey t)) => //;
+rewrite [term_of_aenc_key]unlock // !minted_TKey.
+Qed.
+
+Lemma wp_is_adec_key sk Ψ :
+  minted sk -∗
+  (∀ sk' : aenc_key, ⌜sk = sk'⌝ -∗ Ψ #true) ∧ Ψ #false -∗
+  WP is_adec_key sk {{ Ψ }}.
+Proof.
+by iIntros "H1 H2"; iApply twp_wp;
+iApply (twp_is_adec_key with "H1 H2").
+Qed.
+
+Lemma twp_is_senc_key k Ψ :
+  minted k -∗
+  (∀ k' : senc_key, ⌜k = k'⌝ -∗ Ψ #true) ∧ Ψ #false -∗
+  WP is_senc_key k [{ Ψ }].
+Proof.
+iIntros "#m_pk post".
+wp_lam. wp_apply (twp_has_key_type SEnc).
+case: k; try by move=> *; iDestruct "post" as "[_ post]".
+move=> kt t.
+case: kt; try by iDestruct "post" as "[_ post]".
+iDestruct "post" as "[post _]".
+by iApply ("post" $! (SEncKey t)) => //;
+rewrite [term_of_senc_key]unlock // !minted_TKey.
+Qed.
+
+Lemma wp_is_senc_key k Ψ :
+  minted k -∗
+  (∀ k' : senc_key, ⌜k = k'⌝ -∗ Ψ #true) ∧ Ψ #false -∗
+  WP is_senc_key k {{ Ψ }}.
+Proof.
+by iIntros "H1 H2"; iApply twp_wp;
+iApply (twp_is_senc_key with "H1 H2").
+Qed.
+
+Lemma twp_is_verify_key pk Ψ :
+  minted pk -∗
+  (∀ sk : sign_key, ⌜pk = Spec.pkey sk⌝ -∗ minted sk -∗ Ψ #true) ∧ Ψ #false -∗
+  WP is_verify_key pk [{ Ψ }].
+Proof.
+iIntros "#m_pk post".
+wp_lam. wp_apply (twp_has_key_type Verify).
+case: pk; try by move=> *; iDestruct "post" as "[_ post]".
+move=> kt t.
+case: kt; try by iDestruct "post" as "[_ post]".
+iDestruct "post" as "[post _]".
+by iApply ("post" $! (SignKey t)) => //;
+rewrite [term_of_sign_key]unlock // !minted_TKey.
+Qed.
+
+Lemma wp_is_verify_key pk Ψ :
+  minted pk -∗
+  (∀ sk : sign_key, ⌜pk = Spec.pkey sk⌝ -∗ minted sk -∗ Ψ #true) ∧ Ψ #false -∗
+  WP is_verify_key pk {{ Ψ }}.
+Proof.
+by iIntros "H1 H2"; iApply twp_wp;
+iApply (twp_is_verify_key with "H1 H2").
+Qed.
+
+Lemma twp_is_sign_key sk Ψ :
+  minted sk -∗
+  (∀ sk' : sign_key, ⌜sk = sk'⌝ -∗ Ψ #true) ∧ Ψ #false -∗
+  WP is_sign_key sk [{ Ψ }].
+Proof.
+iIntros "#m_pk post".
+wp_lam. wp_apply (twp_has_key_type Sign).
+case: sk; try by move=> *; iDestruct "post" as "[_ post]".
+move=> kt t.
+case: kt; try by iDestruct "post" as "[_ post]".
+iDestruct "post" as "[post _]".
+by iApply ("post" $! (SignKey t)) => //;
+rewrite [term_of_sign_key]unlock // !minted_TKey.
+Qed.
+
+Lemma wp_is_sign_key sk Ψ :
+  minted sk -∗
+  (∀ sk' : sign_key, ⌜sk = sk'⌝ -∗ Ψ #true) ∧ Ψ #false -∗
+  WP is_sign_key sk {{ Ψ }}.
+Proof.
+by iIntros "H1 H2"; iApply twp_wp;
+iApply (twp_is_sign_key with "H1 H2").
 Qed.
 
 End Proofs.

@@ -36,8 +36,12 @@ Definition add_nonce : val := λ: "c",
 
 Definition add_keys : val := λ: "c",
   let: "t" := recv "c" in
-  send "c" (key Seal "t");;
-  send "c" (key Open "t").
+  send "c" (key AEnc "t");;
+  send "c" (key ADec "t");;
+  send "c" (key Sign "t");;
+  send "c" (key Verify "t");;
+  send "c" (key SEnc "t");;
+  send "c" (pkey "t").
 
 Definition add_seal : val := λ: "c",
   let: "t1" := recv "c" in
@@ -134,8 +138,16 @@ iIntros "%Ψ #c post". wp_lam.
 wp_apply wp_recv => //. iIntros "%t #p_t". wp_pures.
 wp_apply wp_key => //.
 wp_apply wp_send => //; first by iApply public_TKey; eauto.
+wp_pures. wp_apply wp_key => //.
+wp_apply wp_send => //; first by iApply public_TKey; eauto.
+wp_pures. wp_apply wp_key => //.
+wp_apply wp_send => //; first by iApply public_TKey; eauto.
+wp_pures. wp_apply wp_key => //.
+wp_apply wp_send => //; first by iApply public_TKey; eauto.
 wp_pures. wp_apply wp_key.
 wp_apply wp_send => //; first by iApply public_TKey; eauto.
+wp_pures. wp_apply wp_pkey. wp_apply wp_send => //.
+  iApply public_pkey => //.
 by iApply "post".
 Qed.
 
@@ -157,11 +169,9 @@ iIntros "%Ψ #c post". wp_lam.
 wp_apply wp_recv => //. iIntros "%t1 #p_t1". wp_pures.
 wp_apply wp_recv => //. iIntros "%t2 #p_t2". wp_pures.
 wp_apply wp_open.
-case: Spec.openP => [ {}t1 {}t2 -> ->|]; wp_pures; last by iApply "post".
+case e: Spec.open => [t|]; wp_pures; last by iApply "post".
 wp_apply wp_send => //; last by iApply "post".
-rewrite public_TSeal.
-iDestruct "p_t2" as "[[_ ?]|(_ & _ & p_t2)]" => //.
-by iApply "p_t2".
+by iApply public_open; eauto.
 Qed.
 
 Lemma wp_add_hash c :
