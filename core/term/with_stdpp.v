@@ -53,10 +53,6 @@ Definition term_eq_dec : EqDecision term :=
   Eval hnf in def_eq_decision _.
 Global Existing Instance term_eq_dec.
 
-Definition key_eq_dec : EqDecision key :=
-  Eval hnf in def_eq_decision _.
-Global Existing Instance key_eq_dec.
-
 Definition aenc_key_eq_dec : EqDecision aenc_key :=
   Eval hnf in def_eq_decision _.
 Global Existing Instance aenc_key_eq_dec.

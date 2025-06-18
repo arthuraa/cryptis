@@ -18,8 +18,6 @@ Inductive term :=
 | THash of term
 | TExpN' pt pts of PreTerm.wf_term (PreTerm.PTExp pt pts).
 
-Record key := Key { key_type_of : key_type; seed_of : term }.
-
 Record aenc_key := AEncKey {
   seed_of_aenc_key : term;
 }.
@@ -32,22 +30,6 @@ Record senc_key := SEncKey {
   seed_of_senc_key : term;
 }.
 Set Elimination Schemes.
-
-Definition term_of_key k :=
-  match k with
-  | Key kt t => TKey kt t
-  end.
-
-Definition key_of_term t :=
-  match t with
-  | TKey kt t => Some (Key kt t)
-  | _ => None
-  end.
-
-Lemma term_of_keyK : pcancel term_of_key key_of_term.
-Proof. by case. Qed.
-
-Coercion term_of_key : key >-> term.
 
 Definition term_of_aenc_key_def sk :=
   match sk with
@@ -194,15 +176,6 @@ HB.instance Definition _ :=
   Countable.copy term (can_type unfold_termK).
 HB.instance Definition _ : Order.Total _ term :=
   Order.CanIsTotal Order.default_display unfold_termK.
-
-HB.instance Definition _ :=
-  Equality.copy key (pcan_type term_of_keyK).
-HB.instance Definition _ :=
-  Choice.copy key (pcan_type term_of_keyK).
-HB.instance Definition _ :=
-  Countable.copy key (pcan_type term_of_keyK).
-HB.instance Definition _ : Order.Total _ key :=
-  Order.PCanIsTotal Order.default_display term_of_keyK.
 
 HB.instance Definition _ := [isNew for seed_of_aenc_key].
 HB.instance Definition _ := [Equality of aenc_key by <:].
