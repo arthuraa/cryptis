@@ -21,6 +21,7 @@ Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
 Implicit Types rl : role.
+Implicit Types skI skR : sign_key.
 
 Definition nslN := nroot.@"nsldh".
 Definition crN := nroot.@"cr".
@@ -58,14 +59,14 @@ Qed.
 Definition tls_server_loop : val := λ: "c" "psk" "skR" "params",
   (rec: "loop" "psk" :=
      bind: "res" := tls_server tlsN "c" "psk" Spec.zero "skR" "params" in
-     let: "psk" := Fst (mk_keys (SShare.I.session_key_of "res")) in
+     let: "psk" := SShare.I.session_key_of "res" in
      "loop" "psk") "psk".
 
 Lemma wp_tls_server_loop c psk skR params :
   channel c -∗
   tls_ctx tlsN -∗
   minted psk -∗
-  sign_key skR  -∗
+  minted skR  -∗
   public params -∗
   {{{ cryptis_ctx }}} tls_server_loop c psk skR params {{{ v, RET v; True }}}.
 Proof.
@@ -80,10 +81,9 @@ iApply wp_tls_server => //; eauto.
 iIntros (res) "res".
 case: res => [res|]; wp_pures; last by iApply "post".
 wp_bind (SShare.I.session_key_of _); iApply SShare.wp_session_key_of.
-wp_bind (mk_keys _); iApply wp_mk_keys; wp_pure (Fst _); wp_let.
-iDestruct "res" as "(_ & _ & #psk' & _)".
+wp_let. iDestruct "res" as "(_ & _ & #psk' & _)".
 iApply ("IH" with "post").
-by rewrite minted_TKey.
+by rewrite minted_senc.
 Qed.
 
 Definition environment : val := λ: "c" "skI1" "skI2" "skR1" "skR2" "psk",
@@ -92,12 +92,12 @@ Definition environment : val := λ: "c" "skI1" "skI2" "skR1" "skR2" "psk",
   send "c" "skR1";;
   send "c" "skR2";;
   let: "pkI1" := pkey "skI1" in
-  let: "pkI2" := vkey "skI2" in
+  let: "pkI2" := pkey "skI2" in
   let: "pkR1" := pkey "skR1" in
-  let: "pkR2" := vkey "skR2" in
+  let: "pkR2" := pkey "skR2" in
   fork_loop (
     let: "pkR'" := recv "c" in
-    bind: "pkR'" := to_seal_key "pkR'" in
+    guard: is_aenc_key "pkR'" in
     pk_dh_init nslN "c" "skI1" "pkR'");;
   fork_loop (pk_dh_resp nslN "c" "skR1");;
   fork_loop (cr_init crN "c" "skI2" "pkR2");;
@@ -105,49 +105,50 @@ Definition environment : val := λ: "c" "skI1" "skI2" "skR1" "skR2" "psk",
   let: "server_params" := recv "c" in
   Fork (tls_server_loop "c" "psk" "skR2" "server_params").
 
-Lemma wp_environment c skI1 skI2 skR1 skR2 psk :
+Lemma wp_environment c (skI1 skR1 : aenc_key) (skI2 skR2 : sign_key) (psk : term) :
   cryptis_ctx -∗
   channel c -∗
   pk_dh_ctx nslN (λ _ _ _ _, True)%I -∗
   cr_ctx crN (λ _ _ _ _ _, True)%I -∗
   tls_ctx tlsN -∗
-  aenc_key skI1 -∗ public skI1 -∗
-  aenc_key skR1 -∗ public skR1 -∗
-  sign_key skI2 -∗ public skI2 -∗
-  sign_key skR2 -∗ public skR2 -∗
+  public skI1 -∗
+  public skR1 -∗
+  public skI2 -∗
+  public skR2 -∗
   minted psk -∗
   honest 0 ∅ -∗
   ●Ph□ 0 -∗
   {{{ True }}} environment c skI1 skI2 skR1 skR2 psk {{{ RET #(); True }}}.
 Proof.
-iIntros "#? #? #? #? #? #? #? #? #? #? #? #? #? #? #hon #phase %Φ !> _ post".
+iIntros "#? #? #? #? #? #? #? #? #? #? #hon #phase %Φ !> _ post".
 rewrite /environment; wp_pures.
 wp_bind (send _ _); iApply wp_send => //; wp_pures.
 wp_bind (send _ _); iApply wp_send => //; wp_pures.
 wp_bind (send _ _); iApply wp_send => //; wp_pures.
 wp_bind (send _ _); iApply wp_send => //; wp_pures.
-wp_apply wp_pkey. wp_pures. wp_apply wp_vkey. wp_pures.
-wp_apply wp_pkey. wp_pures. wp_apply wp_vkey. wp_pures.
+wp_apply wp_pkey. wp_pures. wp_apply wp_pkey. wp_pures.
+wp_apply wp_pkey. wp_pures. wp_apply wp_pkey. wp_pures.
 wp_bind (fork_loop _); iApply wp_fork_loop; eauto.
   iModIntro.
   wp_bind (recv _); iApply wp_recv => //.
   iIntros "%pkR' #?"; wp_pures.
-  wp_bind (to_seal_key _); iApply wp_to_seal_key.
-  case: Spec.to_seal_keyP => [? ->|_]; wp_pures => //.
-  iApply (wp_pk_dh_init _ (λ _ _ _ _, True)%I); eauto.
+  wp_apply wp_is_aenc_key; first by iApply public_minted.
+  iSplit; last by wp_pures; eauto.
+  iIntros "%skR' -> #m_skR'".
+  wp_pures. wp_apply (wp_pk_dh_init _ (λ _ _ _ _, True)%I); eauto.
 iIntros "!> _"; wp_pures; wp_bind (fork_loop _); iApply wp_fork_loop => //.
   iModIntro.
   by iApply (wp_pk_dh_resp _ (λ _ _ _ _, True)%I); eauto.
 iIntros "!> _"; wp_pures; wp_bind (fork_loop _); iApply wp_fork_loop => //.
   iModIntro; iApply (wp_cr_init); eauto.
-  iApply public_TKey; eauto.
 iIntros "!> _"; wp_pures; wp_bind (fork_loop _); iApply wp_fork_loop => //.
   by iModIntro; iApply (wp_cr_resp); eauto.
 iIntros "!> _"; wp_pures.
 wp_bind (recv _); iApply wp_recv => //.
 iIntros "%params #p_params"; wp_pures.
 iApply wp_fork; last by iApply "post".
-by iModIntro; iApply wp_tls_server_loop => //.
+iModIntro; iApply wp_tls_server_loop => //.
+by iApply public_minted.
 Qed.
 
 Definition tls_client_loop : val := λ: "c" "psk",
@@ -155,7 +156,7 @@ Definition tls_client_loop : val := λ: "c" "psk",
     let: "params" := recv "c" in
     let: "m" := Meth.I.PskDh "psk" Spec.zero in
     bind: "res" := tls_client tlsN "c" "m" "params" in
-    let: "psk'" := Fst (mk_keys (Snd "res")) in
+    let: "psk'" := Snd "res" in
     let: "continue" := recv "c" in
     if: eq_term "continue" Spec.zero then
       "loop" "psk'"
@@ -178,6 +179,7 @@ iIntros "#? #? #? #t_psk !> %Φ s_psk post".
 rewrite /tls_client_loop.
 wp_lam; wp_let; wp_pure (Rec _ _ _).
 iLöb as "IH" forall (psk) "t_psk".
+wp_pure _ credit:"c".
 wp_pures; wp_bind (recv _); iApply wp_recv => //.
 iIntros "%params #p_params"; wp_pures.
 wp_bind (Meth.I.PskDh _ _); iApply Meth.wp_PskDh => //.
@@ -189,19 +191,18 @@ iIntros (res) "Hres"; case: res => [res|]; wp_pures; last first.
   by iApply ("post" $! None).
 case: res => [] [] [] vkey cn sn sk /=.
 iDestruct "Hres" as (?) "(-> & _ & _ & _ & #t_sk & _ & Hres)".
-wp_bind (mk_keys _); iApply wp_mk_keys; wp_pures.
+iMod (lc_fupd_elim_later with "c Hres") as "Hres".
 iDestruct "Hres" as "[[_ contra]|[_ #s_psk']]".
   by iDestruct ("s_psk" with "contra") as ">[]".
 wp_bind (recv _); iApply wp_recv => //.
 iIntros "%continue _"; wp_pures.
 wp_eq_term e.
   wp_if.
-  iApply ("IH" with "[] post []").
-  - iIntros "#contra". iSpecialize ("s_psk'" with "contra").
-    by iDestruct "s_psk'" as ">[]".
-  - by rewrite minted_TKey.
+  iApply ("IH" with "[] post [//]").
+  iIntros "#contra". iSpecialize ("s_psk'" with "contra").
+  by iDestruct "s_psk'" as ">[]".
 wp_pures.
-iApply ("post" $! (Some (TKey Seal sk))).
+iApply ("post" $! (Some (sk : term))).
 iModIntro.
 iIntros "#contra". iSpecialize ("s_psk'" with "contra").
 by iDestruct "s_psk'" as ">[]".
@@ -222,29 +223,31 @@ Definition game : val := λ: <>,
 Lemma wp_game :
   cryptis_ctx ∗
   session_token ⊤ ∗
-  seal_pred_token ⊤ ∗
+  seal_pred_token AENC ⊤ ∗
+  seal_pred_token SIGN ⊤ ∗
+  seal_pred_token SENC ⊤ ∗
   hash_pred_token ⊤ ∗
   honest 0 ∅ ∗
   ●Ph 0 -∗
   WP game #() {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
-iIntros "(#ctx & sess_tok & seal_tok & hash_tok & #hon & phase)".
+iIntros "(#ctx & sess_tok & aenc_tok & sign_tok & senc_tok & hash_tok & #hon & phase)".
 iMod (phase_auth_discard with "phase") as "#phase".
 rewrite /game; wp_pures.
-iMod (pk_dh_alloc nslN (λ _ _ _ _, True)%I with "sess_tok seal_tok")
-  as "(#pk_dh_ctx & sess_tok & seal_tok)" => //; try solve_ndisj.
-iMod (cr_alloc crN (λ _ _ _ _ _, True)%I with "sess_tok seal_tok")
-  as "(#cr_ctx & sess_tok & seal_tok)"; try solve_ndisj.
-iMod (tls_ctx_alloc tlsN with "sess_tok seal_tok hash_tok")
-  as "(#tls_ctx & sess_tok & seal_tok & hash_tok)"; try solve_ndisj.
+iMod (pk_dh_alloc nslN (λ _ _ _ _, True)%I with "sess_tok aenc_tok")
+  as "(#pk_dh_ctx & sess_tok & aenc_tok)" => //; try solve_ndisj.
+iMod (cr_alloc crN (λ _ _ _ _ _, True)%I with "sess_tok sign_tok")
+  as "(#cr_ctx & sess_tok & sign_tok)"; try solve_ndisj.
+iMod (tls_ctx_alloc tlsN with "sess_tok senc_tok sign_tok hash_tok")
+  as "(#tls_ctx & sess_tok & senc_tok & sign_tok & hash_tok)"; try solve_ndisj.
 wp_apply wp_init_network => //. iIntros "%c #cP". wp_pures.
-wp_apply wp_mk_aenc_key => //. iIntros "%skI1 _ #? s_skI1 _".
+wp_apply wp_mk_aenc_key => //. iIntros "%skI1 #? s_skI1 _".
 iMod (secret_public with "s_skI1") as "#?". wp_pures.
-wp_apply wp_mk_sign_key => //. iIntros "%skI2 _ #? s_skI2 _".
+wp_apply wp_mk_sign_key => //. iIntros "%skI2 #? s_skI2 _".
 iMod (secret_public with "s_skI2") as "#?". wp_pures.
-wp_apply wp_mk_aenc_key => //. iIntros "%skR1 _ #? s_skR1 _".
+wp_apply wp_mk_aenc_key => //. iIntros "%skR1 #? s_skR1 _".
 iMod (secret_public with "s_skR1") as "#?". wp_pures.
-wp_apply wp_mk_sign_key => //. iIntros "%skR2 _ #? s_skR2 _".
+wp_apply wp_mk_sign_key => //. iIntros "%skR2 #? s_skR2 _".
 iMod (secret_public with "s_skR2") as "#?". wp_pures.
 wp_apply (wp_mk_nonce (λ psk, term_meta psk (nroot.@"pub") ())%I (λ _, False%I)) => //.
 iIntros (psk) "_ #t_psk #p_psk _ tok_psk". wp_pures.
