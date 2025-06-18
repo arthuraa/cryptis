@@ -514,7 +514,7 @@ Lemma wp_adec (sk : aenc_key) N m φ Ψ :
 Proof.
 iIntros "#? #p_m post".
 wp_lam. wp_pure _ credit:"c". wp_pures. iApply wp_fupd. wp_apply wp_dec.
-case: Spec.decP => [k_t t /Spec.open_key_aenc -> ->|]; last first.
+case: Spec.decP => [k_t t /Spec.open_key_aencK -> ->|]; last first.
 { iDestruct "post" as "[_ post]". iApply "post". }
 iPoseProof (public_aencE with "p_m [//]") as "[? [p_t|[#inv #p_t]]]".
 - iApply "post" => //. by eauto.
@@ -561,7 +561,7 @@ Lemma wp_sdec (sk : senc_key) N m φ Ψ :
 Proof.
 iIntros "#? #p_m post".
 wp_lam. wp_pure _ credit:"c". wp_pures. iApply wp_fupd. wp_apply wp_dec.
-case: Spec.decP => [k_t t /Spec.open_key_senc -> ->|]; last first.
+case: Spec.decP => [k_t t /Spec.open_key_sencK -> ->|]; last first.
 { iDestruct "post" as "[_ post]". iApply "post". }
 iPoseProof (public_sencE with "p_m [//]") as "(? & [p_k|inv] & #p_t)".
 - iApply "post" => //. by eauto.
@@ -608,7 +608,7 @@ Lemma wp_verify (sk : sign_key) N m φ Ψ :
 Proof.
 iIntros "#? #p_m post".
 wp_lam. wp_pure _ credit:"c". wp_pures. iApply wp_fupd. wp_apply wp_dec.
-case: Spec.decP => [k_t t /Spec.open_key_sign -> ->|]; last first.
+case: Spec.decP => [k_t t /Spec.open_key_signK -> ->|]; last first.
 { iDestruct "post" as "[_ post]". iApply "post". }
 iPoseProof (public_signE with "p_m [//]") as "[? [p_t|#inv]]".
 - iApply "post" => //. by eauto.

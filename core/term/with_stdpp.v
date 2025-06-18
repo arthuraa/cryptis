@@ -514,21 +514,33 @@ Definition open_key k : option term :=
   | _ => None
   end.
 
-Lemma open_key_aenc pk (sk : aenc_key) :
+Lemma open_key_aenc (sk : aenc_key) :
+  open_key (Spec.pkey sk) = @Some term sk.
+Proof. by rewrite keysE. Qed.
+
+Lemma open_key_sign (sk : sign_key) :
+  open_key sk = Some (Spec.pkey sk).
+Proof. by rewrite keysE. Qed.
+
+Lemma open_key_senc (sk : senc_key) :
+  open_key sk = @Some term sk.
+Proof. by rewrite keysE. Qed.
+
+Lemma open_key_aencK pk (sk : aenc_key) :
   open_key pk = @Some term sk → pk = pkey sk.
 Proof.
 rewrite keysE; case: sk => seed /=.
 by case: pk => //= - [] // ?; case=> ->.
 Qed.
 
-Lemma open_key_sign k (sk : sign_key) :
+Lemma open_key_signK k (sk : sign_key) :
   open_key k = Some (Spec.pkey sk) → k = sk.
 Proof.
 rewrite keysE; case: sk => seed /=.
 by case: k => //= - [] // ?; case=> ->.
 Qed.
 
-Lemma open_key_senc k' (k : senc_key) :
+Lemma open_key_sencK k' (k : senc_key) :
   open_key k' = @Some term k → k' = k.
 Proof.
 rewrite keysE; case: k => seed /=.

@@ -455,7 +455,7 @@ Lemma twp_adec' (sk : aenc_key) N t Ψ :
   WP adec sk N t [{ Ψ }].
 Proof.
 iIntros "post". wp_lam; wp_pures. wp_apply twp_dec.
-case: Spec.decP => [k_t t' /Spec.open_key_aenc -> ->|].
+case: Spec.decP => [k_t t' /Spec.open_key_aencK -> ->|].
 - iDestruct "post" as "[post _]". by iApply "post".
 - iDestruct "post" as "[_ post]". by iApply "post".
 Qed.
@@ -468,7 +468,7 @@ Lemma wp_adec' (sk : aenc_key) N t Ψ :
   WP adec sk N t {{ Ψ }}.
 Proof.
 iIntros "post". wp_lam; wp_pures. wp_apply wp_dec.
-case: Spec.decP => [k_t t' /Spec.open_key_aenc -> ->|].
+case: Spec.decP => [k_t t' /Spec.open_key_aencK -> ->|].
 - iDestruct "post" as "[post _]". by iApply "post".
 - iDestruct "post" as "[_ post]". by iApply "post".
 Qed.
@@ -497,7 +497,7 @@ Lemma twp_sdec' E (k : senc_key) N t Ψ :
   WP sdec k N t @ E [{ Ψ }].
 Proof.
 iIntros "post". wp_lam; wp_pures. wp_apply twp_dec.
-case: Spec.decP => [k_t t' /Spec.open_key_senc -> ->|].
+case: Spec.decP => [k_t t' /Spec.open_key_sencK -> ->|].
 - iDestruct "post" as "[post _]". by iApply "post".
 - iDestruct "post" as "[_ post]". by iApply "post".
 Qed.
@@ -510,7 +510,7 @@ Lemma wp_sdec' E (k : senc_key) N t Ψ :
   WP sdec k N t @ E {{ Ψ }}.
 Proof.
 iIntros "post". wp_lam; wp_pures. wp_apply wp_dec.
-case: Spec.decP => [k_t t' /Spec.open_key_senc -> ->|].
+case: Spec.decP => [k_t t' /Spec.open_key_sencK -> ->|].
 - iDestruct "post" as "[post _]". by iApply "post".
 - iDestruct "post" as "[_ post]". by iApply "post".
 Qed.
@@ -537,7 +537,7 @@ Lemma twp_verify' (sk : sign_key) N t Ψ :
   WP verify (Spec.pkey sk) N t [{ Ψ }].
 Proof.
 iIntros "post". wp_lam; wp_pures. wp_apply twp_dec.
-case: Spec.decP => [k_t t' /Spec.open_key_sign -> ->|].
+case: Spec.decP => [k_t t' /Spec.open_key_signK -> ->|].
 - iDestruct "post" as "[post _]". by iApply "post".
 - iDestruct "post" as "[_ post]". by iApply "post".
 Qed.
@@ -549,7 +549,7 @@ Lemma wp_verify' (sk : sign_key) N t Ψ :
   WP verify (Spec.pkey sk) N t {{ Ψ }}.
 Proof.
 iIntros "post". wp_lam; wp_pures. wp_apply wp_dec.
-case: Spec.decP => [k_t t' /Spec.open_key_sign -> ->|].
+case: Spec.decP => [k_t t' /Spec.open_key_signK -> ->|].
 - iDestruct "post" as "[post _]". by iApply "post".
 - iDestruct "post" as "[_ post]". by iApply "post".
 Qed.
