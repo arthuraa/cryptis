@@ -31,12 +31,7 @@ Definition connect : val := λ: "c" "skA" "vkB",
   ("counters", "session_key", "c").
 
 Definition listen : val := λ: "c",
-  do_until (λ: <>,
-    let: "req" := responder_wait "c" in
-    let: "vkA" := Snd "req" in
-    bind: "kt" := is_key "vkA" in
-    guard: "kt" = repr Open in
-    SOME "req").
+  responder_wait "c".
 
 Definition confirm : val := λ: "c" "skB" "req",
   let: "ga" := Fst "req" in
@@ -76,7 +71,7 @@ Definition select : val := λ: "cs" "handlers",
   let: "sk" := session_key "cs" in
   do_until (λ: <>,
     let: "t" := recv (channel "cs") in
-    bind: "t" := open (key Open "sk") "t" in
+    bind: "t" := open "sk" "t" in
     scan_list (λ: "handler", "handler" "cs" "t") "handlers").
 
 Definition recv : val :=

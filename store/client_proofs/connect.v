@@ -23,21 +23,21 @@ Notation iProp := (iProp Σ).
 Context `{!storeG Σ}.
 
 Implicit Types (cs : Conn.state).
-Implicit Types kI kR kS t : term.
+Implicit Types (skI skR : sign_key) (kS t : term).
 Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Lemma wp_client_connect c kI kR :
+Lemma wp_client_connect c skI skR :
   channel c -∗
   cryptis_ctx -∗
   store_ctx -∗
-  sign_key kI -∗
-  public (TKey Open kR) -∗
-  {{{ db_disconnected kI kR }}}
-    Client.connect c kI (TKey Open kR)
+  minted skI -∗
+  minted skR -∗
+  {{{ db_disconnected skI skR }}}
+    Client.connect c skI (Spec.pkey skR)
   {{{ cs, RET (repr cs);
-      db_connected kI kR cs }}}.
+      db_connected skI skR cs }}}.
 Proof.
 iIntros "#chan_c #ctx #ctx'".
 iPoseProof (store_ctx_rpc_ctx with "ctx'") as "?".
@@ -45,8 +45,8 @@ iIntros "#p_ekI #p_ekR".
 iIntros "!> %Φ client post".
 iDestruct "client" as "(%db & ready & state)".
 wp_lam. wp_pures.
-iApply (RPC.wp_connect (db_client_ready kI kR db)
-         with "[//] [//] [//] [//] [//] [$]") => //.
+iApply (RPC.wp_connect (db_client_ready skI skR db)
+         with "[//] [//] [//] [] [] [$]") => //.
 iIntros "!> %cs (conn & ready)".
 iApply "post".
 by iFrame.

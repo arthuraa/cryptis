@@ -19,7 +19,7 @@ Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !RPC.rpcGS Σ, !storeGS Σ
 Notation iProp := (iProp Σ).
 
 Implicit Types (cs : Conn.state).
-Implicit Types skI skR kS t : term.
+Implicit Types (skI skR : sign_key) (kS t : term).
 Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.

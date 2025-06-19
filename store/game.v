@@ -21,6 +21,7 @@ Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
 Implicit Types rl : role.
+Implicit Types skI skR : sign_key.
 
 Definition gameN := nroot.@"game".
 
@@ -38,15 +39,15 @@ Definition game : val := λ: <>,
   (* Create key pairs and give verification keys to attacker *)
   let: "skI" := mk_sign_key #() in
   let: "skR" := mk_sign_key #() in
-  let: "vkI" := vkey "skI" in
-  let: "vkR" := vkey "skR" in
-  send "c" "vkI";; send "c" "vkR";;
+  let: "pkI" := pkey "skI" in
+  let: "pkR" := pkey "skR" in
+  send "c" "pkI";; send "c" "pkR";;
 
   (* Run storage server in parallel *)
   Fork (start_server "c" "skR");;
 
   (* Connect client to server *)
-  let: "conn" := Client.connect "c" "skI" "vkR" in
+  let: "conn" := Client.connect "c" "skI" "pkR" in
 
   (* Store value in server *)
   let: "k" := recv "c" in
@@ -56,7 +57,7 @@ Definition game : val := λ: <>,
   (* Leak session key *)
   send "c" (Conn.session_key "conn");;
 
-  let: "conn" := Client.connect "c" "skI" "vkR" in
+  let: "conn" := Client.connect "c" "skI" "pkR" in
   (* Leak long-term keys *)
   send "c" "skI";;
   send "c" "skR";;
@@ -80,7 +81,7 @@ Qed.
 
 Lemma wp_start_server c skR :
   {{{ cryptis_ctx ∗ channel c ∗ store_ctx ∗
-      sign_key skR ∗
+      minted skR ∗
       term_token skR ⊤ }}}
     start_server c skR
   {{{ RET #(); True }}}.
@@ -94,22 +95,23 @@ Qed.
 
 Lemma wp_game :
   cryptis_ctx -∗
-  seal_pred_token ⊤ -∗
+  seal_pred_token SIGN ⊤ -∗
+  seal_pred_token SENC ⊤ -∗
   WP game #() {{ _, True }}.
 Proof.
-iIntros "#ctx enc_tok"; rewrite /game; wp_pures.
-iMod (iso_dh_ctx_alloc with "enc_tok") as "[#? enc_tok]" => //.
-iMod (RPC.ctx_alloc with "[$] [//]") as "[#? enc_tok]"; first solve_ndisj.
+iIntros "#ctx sign_tok senc_tok"; rewrite /game; wp_pures.
+iMod (iso_dh_ctx_alloc with "sign_tok") as "[#? sign_tok]" => //.
+iMod (RPC.ctx_alloc with "[$] [//]") as "[#? senc_tok]"; first solve_ndisj.
 iMod (store_ctx_alloc with "[$] [//]") as "[#? _]" => //; first solve_ndisj.
 wp_apply wp_init_network => //. iIntros "%c #cP". wp_pures.
 wp_apply (wp_mk_sign_key with "[]"); eauto.
-iIntros "%skI #p_vkI #sign_skI s_skI tokenI". wp_pures.
+iIntros "%skI #m_skI s_skI tokenI". wp_pures.
 wp_pures. wp_apply (wp_mk_sign_key with "[]"); eauto.
-iIntros "%skR #p_vkR #sign_skR s_skR tokenR". wp_pures.
-wp_apply wp_vkey. wp_pures.
-wp_apply wp_vkey. wp_pures.
-wp_apply wp_send => //. wp_pures.
-wp_apply wp_send => //. wp_pures.
+iIntros "%skR #m_skR s_skR tokenR". wp_pures.
+wp_apply wp_pkey. wp_pures.
+wp_apply wp_pkey. wp_pures.
+wp_apply wp_send => //. { by iApply public_verify_key. } wp_pures.
+wp_apply wp_send => //. { by iApply public_verify_key. } wp_pures.
 wp_apply (wp_fork with "[tokenR]").
 { iModIntro. wp_apply (wp_start_server with "[$tokenR]"); eauto. }
 wp_pures.
@@ -157,6 +159,6 @@ have ? : heapGpreS F by apply _.
 apply (adequate_not_stuck NotStuck _ _ (λ v _, True)) => //.
 apply: heap_adequacy.
 iIntros (?) "?".
-iMod (cryptisGS_alloc _) as (?) "(#ctx & enc_tok & key_tok & ? & hon & phase)".
-by iApply (wp_game with "ctx [enc_tok]") => //.
+iMod (cryptisGS_alloc _) as (?) "(#ctx & _ & sign_tok & senc_tok & _)".
+by iApply (wp_game with "ctx [$] [$]") => //.
 Qed.

@@ -21,21 +21,21 @@ Notation iProp := (iProp Σ).
 
 Context `{!storeG Σ}.
 
-Implicit Types kI kR kS t : term.
+Implicit Types (skI skR : sign_key) (kS t : term).
 Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Lemma wp_client_load kI kR cs t1 t2 :
+Lemma wp_client_load skI skR cs t1 t2 :
   cryptis_ctx -∗
   store_ctx -∗
   public t1 -∗
-  {{{ db_connected kI kR cs ∗
-      db_mapsto kI kR t1 t2 }}}
+  {{{ db_connected skI skR cs ∗
+      db_mapsto skI skR t1 t2 }}}
     Client.load (repr cs) t1
   {{{ t2', RET (repr t2');
-      db_connected kI kR cs ∗
-      db_mapsto kI kR t1 t2 ∗
+      db_connected skI skR cs ∗
+      db_mapsto skI skR t1 t2 ∗
       public t2' ∗
       (compromised_session Init cs ∨ ⌜t2' = t2⌝) }}}.
 Proof.

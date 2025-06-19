@@ -19,7 +19,7 @@ Local Existing Instance ticket_lock.
 Notation dbN := (nroot.@"db").
 
 Record server_state := {
-  ss_key : term;
+  ss_key : sign_key;
   ss_clients : val;
 }.
 
@@ -60,7 +60,7 @@ Notation iProp := (iProp Σ).
 
 Implicit Types (si : sess_info).
 Implicit Types (cs : Conn.state).
-Implicit Types (kI kR kS t : term) (ts : list term).
+Implicit Types (skI skR : sign_key) (kS t : term) (ts : list term).
 Implicit Types (db : gmap term term).
 Implicit Types accounts : gmap term server_client_state.
 Implicit Types n : nat.
@@ -68,61 +68,61 @@ Implicit Types b : bool.
 Implicit Types v : val.
 Implicit Types (failed : bool).
 
-Definition db_client_ready kI kR db : iProp :=
-  rep_main kI kR dbN db ∗ rep_current kI kR dbN ∅ db.
+Definition db_client_ready skI skR db : iProp :=
+  rep_main skI skR dbN db ∗ rep_current skI skR dbN ∅ db.
 
-Definition db_server_ready kI kR db : iProp :=
-  rep_copy kI kR dbN ∅ db.
+Definition db_server_ready skI skR db : iProp :=
+  rep_copy skI skR dbN ∅ db.
 
-Definition db_disconnected kI kR : iProp := ∃ db,
-  (Conn.failure kI kR ∨ db_client_ready kI kR db) ∗
-  DB.db_state kI kR dbN db.
+Definition db_disconnected skI skR : iProp := ∃ db,
+  (Conn.failure skI skR ∨ db_client_ready skI skR db) ∗
+  DB.db_state skI skR dbN db.
 
-Definition db_connected' kI kR cs : iProp := ∃ db,
-  (compromised_session Init cs ∨ db_client_ready kI kR db) ∗
-  DB.db_state kI kR dbN db.
+Definition db_connected' skI skR cs : iProp := ∃ db,
+  (compromised_session Init cs ∨ db_client_ready skI skR db) ∗
+  DB.db_state skI skR dbN db.
 
-Definition db_connected kI kR cs : iProp :=
-  RPC.client_connected kI kR cs ∗
-  db_connected' kI kR cs.
+Definition db_connected skI skR cs : iProp :=
+  RPC.client_connected skI skR cs ∗
+  db_connected' skI skR cs.
 
-Lemma db_connected_ok kI kR cs :
-  db_connected kI kR cs -∗
-  secret kI -∗
-  secret kR -∗
-  sign_key kI -∗
-  sign_key kR -∗
+Lemma db_connected_ok skI skR cs :
+  db_connected skI skR cs -∗
+  secret skI -∗
+  secret skR -∗
+  minted skI -∗
+  minted skR -∗
   ◇ □ ¬ compromised_session Init cs.
 Proof.
 iIntros "(conn & _)".
 iApply (RPC.client_connected_ok with "conn").
 Qed.
 
-Definition db_mapsto kI kR t1 t2 : iProp :=
-  DB.mapsto kI kR dbN t1 t2.
+Definition db_mapsto skI skR t1 t2 : iProp :=
+  DB.mapsto skI skR dbN t1 t2.
 
-Definition db_free_at kI kR T : iProp :=
-  DB.free_at kI kR dbN T.
+Definition db_free_at skI skR T : iProp :=
+  DB.free_at skI skR dbN T.
 
-Lemma db_free_at_diff kI kR T1 T2 :
+Lemma db_free_at_diff skI skR T1 T2 :
   T1 ⊆ T2 →
-  db_free_at kI kR T2 ⊣⊢ db_free_at kI kR T1 ∗ db_free_at kI kR (T2 ∖ T1).
+  db_free_at skI skR T2 ⊣⊢ db_free_at skI skR T1 ∗ db_free_at skI skR (T2 ∖ T1).
 Proof. iIntros "%sub". by iApply DB.free_at_diff. Qed.
 
-Lemma client_alloc kI kR E :
-  ↑dbN.@"client".@kR ⊆ E →
-  term_token kI E ={⊤}=∗
-  db_disconnected kI kR ∗
-  db_free_at kI kR ⊤ ∗
-  term_token kI (E ∖ ↑dbN.@"client".@kR).
+Lemma client_alloc skI skR E :
+  ↑dbN.@"client".@(skR : term) ⊆ E →
+  term_token skI E ={⊤}=∗
+  db_disconnected skI skR ∗
+  db_free_at skI skR ⊤ ∗
+  term_token skI (E ∖ ↑dbN.@"client".@(skR : term)).
 Proof.
-iIntros "%sub kI_token".
+iIntros "%sub skI_token".
 rewrite (term_token_difference _ _ _ sub).
-iDestruct "kI_token" as "[kI_token ?]". iFrame.
-iMod (rep_main_alloc (N := dbN) kI (kR := kR) ∅ with "kI_token")
-  as "(main & cur & kI_token)"; first solve_ndisj.
-iMod (DB.client_alloc _ (N := dbN) with "kI_token")
-  as "(state & free & kI_token)".
+iDestruct "skI_token" as "[skI_token ?]". iFrame.
+iMod (rep_main_alloc (N := dbN) skI (kR := skR) ∅ with "skI_token")
+  as "(main & cur & skI_token)"; first solve_ndisj.
+iMod (DB.client_alloc _ (N := dbN) with "skI_token")
+  as "(state & free & skI_token)".
 { solve_ndisj. }
 iModIntro. iFrame. iRight. by iFrame.
 Qed.
@@ -143,29 +143,29 @@ case: (decide (t1' = t1)) => [-> {t1'} | ne].
 - by rewrite lookup_insert_ne //.
 Qed.
 
-Definition server_db_connected' kI kR cs vdb : iProp := ∃ db,
+Definition server_db_connected' skI skR cs vdb : iProp := ∃ db,
   public_db db ∗
   SAList.is_alist vdb (repr <$> db) ∗
-  (compromised_session Resp cs ∨ db_server_ready kI kR db).
+  (compromised_session Resp cs ∨ db_server_ready skI skR db).
 
-Definition server_db_connected kI kR cs vdb : iProp :=
-  RPC.server_connected kI kR cs ∗
-  server_db_connected' kI kR cs vdb.
+Definition server_db_connected skI skR cs vdb : iProp :=
+  RPC.server_connected skI skR cs ∗
+  server_db_connected' skI skR cs vdb.
 
-Definition server_handler kI kR cs vdb h : iProp :=
-  RPC.wf_handler (server_db_connected' kI kR cs vdb) kI kR cs h.
+Definition server_handler skI skR cs vdb h : iProp :=
+  RPC.wf_handler (server_db_connected' skI skR cs vdb) skI skR cs h.
 
-Definition server_db_disconnected kI kR vdb : iProp := ∃ db,
+Definition server_db_disconnected skI skR vdb : iProp := ∃ db,
   public_db db ∗
   SAList.is_alist vdb (repr <$> db) ∗
-  (Conn.failure kI kR ∨ db_server_ready kI kR db).
+  (Conn.failure skI skR ∨ db_server_ready skI skR db).
 
-Lemma server_db_alloc kI kR vdb E :
-  ↑dbN.@"server".@kI ⊆ E →
-  term_token kR E -∗
+Lemma server_db_alloc skI skR vdb E :
+  ↑dbN.@"server".@(skI : term) ⊆ E →
+  term_token skR E -∗
   SAList.is_alist vdb ∅ ==∗
-  term_token kR (E ∖ ↑dbN.@"server".@kI) ∗
-  server_db_disconnected kI kR vdb.
+  term_token skR (E ∖ ↑dbN.@"server".@(skI : term)) ∗
+  server_db_disconnected skI skR vdb.
 Proof.
 iIntros "%sub token vdb".
 iMod (rep_copy_alloc with "token") as "[? rest]" => //.
@@ -174,19 +174,19 @@ iFrame. by rewrite /public_db big_sepM_empty.
 Qed.
 
 Definition server ss : iProp := ∃ accounts E,
-  sign_key (ss_key ss) ∗
+  minted (ss_key ss) ∗
   SAList.is_alist (ss_clients ss) (repr <$> accounts) ∗
   term_token (ss_key ss) E ∗
-  ⌜∀ kI, TKey Open kI ∉ dom accounts → ↑dbN.@"server".@kI ⊆ E⌝ ∗
-  [∗ map] vkI ↦ scs ∈ accounts, ∃ kI, ⌜vkI = TKey Open kI⌝ ∗
+  ⌜∀ skI, Spec.pkey skI ∉ dom accounts → ↑dbN.@"server".@(skI : term) ⊆ E⌝ ∗
+  [∗ map] vkI ↦ scs ∈ accounts, ∃ skI, ⌜vkI = Spec.pkey skI⌝ ∗
      is_lock (scs_name scs) (scs_lock scs)
-       (server_db_disconnected kI (ss_key ss) (scs_db scs)).
+       (server_db_disconnected skI (ss_key ss) (scs_db scs)).
 
-Lemma serverI kR vclients :
-  term_token kR (↑dbN.@"server") -∗
-  sign_key kR -∗
+Lemma serverI skR vclients :
+  term_token skR (↑dbN.@"server") -∗
+  minted skR -∗
   SAList.is_alist vclients ∅ -∗
-  server {| ss_key := kR; ss_clients := vclients |}.
+  server {| ss_key := skR; ss_clients := vclients |}.
 Proof.
 iIntros "token #p_vk clients".
 iExists ∅, (↑dbN.@"server") => /=.
@@ -194,21 +194,21 @@ iFrame. iSplit => //. iSplit => //.
 iPureIntro. move=> *. solve_ndisj.
 Qed.
 
-Definition store_call_pred kI kR si ts : iProp :=
+Definition store_call_pred skI skR si ts : iProp :=
   ∃ t1 t2 db,
     ⌜ts = [t1; t2]⌝ ∗
-    rep_update kI kR dbN ∅ db (<[t1 := t2]> db).
+    rep_update skI skR dbN ∅ db (<[t1 := t2]> db).
 
-Definition store_resp_pred kI kR si ts ts' : iProp :=
-  ∃ db, rep_current kI kR dbN ∅ db.
+Definition store_resp_pred skI skR si ts ts' : iProp :=
+  ∃ db, rep_current skI skR dbN ∅ db.
 
-Lemma store_call t2' kI kR cs t1 t2 :
+Lemma store_call t2' skI skR cs t1 t2 :
   let P := compromised_session Init cs in
-  db_connected' kI kR cs -∗
-  db_mapsto kI kR t1 t2 ==∗
-  (P ∨ store_call_pred kI kR cs [t1; t2']) ∗
-  db_mapsto kI kR t1 t2' ∗
-  ∀ ts', P ∨ store_resp_pred kI kR cs [t1; t2'] ts' -∗ db_connected' kI kR cs.
+  db_connected' skI skR cs -∗
+  db_mapsto skI skR t1 t2 ==∗
+  (P ∨ store_call_pred skI skR cs [t1; t2']) ∗
+  db_mapsto skI skR t1 t2' ∗
+  ∀ ts', P ∨ store_resp_pred skI skR cs [t1; t2'] ts' -∗ db_connected' skI skR cs.
 Proof.
 iIntros "% (%db & ready & own_db) own_frag".
 iMod (DB.db_state_update t2' with "own_db own_frag") as "[Hstate Hmapsto]".
@@ -227,12 +227,12 @@ iPoseProof (rep_main_current with "ready cur") as "<-".
 iExists _. iFrame. iRight. iFrame.
 Qed.
 
-Lemma store_resp kI kR cs db t1 t2 :
+Lemma store_resp skI skR cs db t1 t2 :
   let P := compromised_session Resp cs in
-  (P ∨ db_server_ready kI kR db) -∗
-  (P ∨ store_call_pred kI kR cs [t1; t2]) ==∗
-  (P ∨ db_server_ready kI kR (<[t1 := t2]>db)) ∗
-  (P ∨ store_resp_pred kI kR cs [t1; t2] [TInt 0]).
+  (P ∨ db_server_ready skI skR db) -∗
+  (P ∨ store_call_pred skI skR cs [t1; t2]) ==∗
+  (P ∨ db_server_ready skI skR (<[t1 := t2]>db)) ∗
+  (P ∨ store_resp_pred skI skR cs [t1; t2] [TInt 0]).
 Proof.
 iIntros "% [#?|ready] [#?|call]"; try by iModIntro; iSplitL; eauto.
 iDestruct "call" as "(% & % & %db' & %e & upd)".
@@ -241,21 +241,21 @@ iMod (rep_copy_update with "ready upd") as "(<- & ready & cur)".
 iModIntro. iSplitL "ready"; iRight; iFrame.
 Qed.
 
-Definition create_call_pred kI kR si ts : iProp :=
+Definition create_call_pred skI skR si ts : iProp :=
   ∃ t1 t2 db, ⌜ts = [t1; t2]⌝ ∗ ⌜db !! t1 = None⌝ ∗
-    rep_update kI kR dbN ∅ db (<[t1 := t2]>db).
+    rep_update skI skR dbN ∅ db (<[t1 := t2]>db).
 
-Definition create_resp_pred kI kR si ts ts' : iProp :=
-  ∃ db, rep_current kI kR dbN ∅ db.
+Definition create_resp_pred skI skR si ts ts' : iProp :=
+  ∃ db, rep_current skI skR dbN ∅ db.
 
-Lemma create_call t1 t2 kI kR cs :
+Lemma create_call t1 t2 skI skR cs :
   let P := compromised_session Init cs in
-  db_connected' kI kR cs -∗
-  db_free_at kI kR {[t1]} ==∗
-  (P ∨ create_call_pred kI kR cs [t1; t2]) ∗
-  db_mapsto kI kR t1 t2 ∗
-  ∀ ts, P ∨ create_resp_pred kI kR cs [t1; t2] ts -∗
-        db_connected' kI kR cs.
+  db_connected' skI skR cs -∗
+  db_free_at skI skR {[t1]} ==∗
+  (P ∨ create_call_pred skI skR cs [t1; t2]) ∗
+  db_mapsto skI skR t1 t2 ∗
+  ∀ ts, P ∨ create_resp_pred skI skR cs [t1; t2] ts -∗
+        db_connected' skI skR cs.
 Proof.
 iIntros "% (%db & ready & state) free".
 iMod (DB.db_state_create t1 t2 with "state free") as "(%db_t1 & state & mapsto)".
@@ -273,12 +273,12 @@ iPoseProof (rep_main_current with "ready cur") as "<-".
 iExists _. iFrame. iRight. iFrame.
 Qed.
 
-Lemma create_resp kI kR cs db t1 t2 :
+Lemma create_resp skI skR cs db t1 t2 :
   let P := compromised_session Resp cs in
-  (P ∨ db_server_ready kI kR db) -∗
-  (P ∨ create_call_pred kI kR cs [t1; t2]) ==∗
-  (P ∨ db_server_ready kI kR (<[t1 := t2]>db)) ∗
-  (P ∨ create_resp_pred kI kR cs [t1; t2] [TInt 0]).
+  (P ∨ db_server_ready skI skR db) -∗
+  (P ∨ create_call_pred skI skR cs [t1; t2]) ==∗
+  (P ∨ db_server_ready skI skR (<[t1 := t2]>db)) ∗
+  (P ∨ create_resp_pred skI skR cs [t1; t2] [TInt 0]).
 Proof.
 iIntros "% [#?|ready] [#?|call]"; try by iModIntro; iSplitL; eauto.
 iDestruct "call" as "(% & % & %db' & %e & %db_t1 & upd)".
@@ -287,23 +287,23 @@ iMod (rep_copy_update with "ready upd") as "(<- & ready & cur)".
 iModIntro. iSplitL "ready"; iRight; iFrame.
 Qed.
 
-Definition load_call_pred kI kR si ts : iProp :=
+Definition load_call_pred skI skR si ts : iProp :=
   ∃ t1 t2 db, ⌜ts = [t1]⌝ ∗ ⌜db !! t1 = Some t2⌝ ∗
-              rep_update kI kR dbN ∅ db db.
+              rep_update skI skR dbN ∅ db db.
 
-Definition load_resp_pred kI kR si ts ts' : iProp :=
+Definition load_resp_pred skI skR si ts ts' : iProp :=
   ∃ t1 t2 db, ⌜ts = [t1]⌝ ∗ ⌜ts' = [t2]⌝ ∗ ⌜db !! t1 = Some t2⌝ ∗
-              rep_current kI kR dbN ∅ db.
+              rep_current skI skR dbN ∅ db.
 
-Lemma load_call t1 t2 kI kR cs :
+Lemma load_call t1 t2 skI skR cs :
   let P := compromised_session Init cs in
-  db_connected' kI kR cs -∗
-  db_mapsto kI kR t1 t2 ==∗
-  (P ∨ load_call_pred kI kR cs [t1]) ∗
-  db_mapsto kI kR t1 t2 ∗
-  ∀ ts, P ∨ load_resp_pred kI kR cs [t1] ts -∗
+  db_connected' skI skR cs -∗
+  db_mapsto skI skR t1 t2 ==∗
+  (P ∨ load_call_pred skI skR cs [t1]) ∗
+  db_mapsto skI skR t1 t2 ∗
+  ∀ ts, P ∨ load_resp_pred skI skR cs [t1] ts -∗
         (P ∨ ⌜ts = [t2]⌝) ∗
-        db_connected' kI kR cs.
+        db_connected' skI skR cs.
 Proof.
 iIntros "% (%db & ready & state) mapsto".
 iPoseProof (DB.db_state_mapsto with "state mapsto") as "%db_t1".
@@ -322,13 +322,13 @@ rewrite db_t1' in db_t1. case: db_t1 => ->.
 iSplit; eauto. iExists _. iFrame. iRight. iFrame.
 Qed.
 
-Lemma load_resp kI kR cs db t1 :
+Lemma load_resp skI skR cs db t1 :
   let P := compromised_session Resp cs in
   let t2 := default (TInt 0) (db !! t1) in
-  (P ∨ db_server_ready kI kR db) -∗
-  (P ∨ load_call_pred kI kR cs [t1]) ==∗
-  (P ∨ db_server_ready kI kR db) ∗
-  (P ∨ load_resp_pred kI kR cs [t1] [t2]).
+  (P ∨ db_server_ready skI skR db) -∗
+  (P ∨ load_call_pred skI skR cs [t1]) ==∗
+  (P ∨ db_server_ready skI skR db) ∗
+  (P ∨ load_resp_pred skI skR cs [t1] [t2]).
 Proof.
 iIntros "%P /= [#?|ready] [#?|call]"; try by iModIntro; iSplitL; eauto.
 iDestruct "call" as "(%t1' & %t2 & %db' & %e & %db_t1 & upd)".
@@ -346,12 +346,12 @@ Definition store_ctx : iProp :=
 
 Lemma store_ctx_alloc E :
   ↑dbN ⊆ E →
-  seal_pred_token E -∗
+  seal_pred_token SENC E -∗
   RPC.ctx ==∗
-  store_ctx ∗ seal_pred_token (E ∖ ↑dbN).
+  store_ctx ∗ seal_pred_token SENC (E ∖ ↑dbN).
 Proof.
 iIntros "%sub token #?".
-rewrite (seal_pred_token_difference (↑dbN)) => //.
+rewrite (seal_pred_token_difference _ (↑dbN)) => //.
 iDestruct "token" as "[token ?]". iFrame.
 iMod (RPC.rpc_alloc (N := dbN.@"store") with "token")
   as "[store token]"; first solve_ndisj.

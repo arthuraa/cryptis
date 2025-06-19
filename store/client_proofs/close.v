@@ -18,16 +18,16 @@ Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !RPC.rpcGS Σ, !storeGS Σ
 Notation iProp := (iProp Σ).
 
 Implicit Types (cs : Conn.state).
-Implicit Types kI kR kS t : term.
+Implicit Types (skI skR : sign_key) (kS t : term).
 Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Lemma wp_client_close kI kR cs :
+Lemma wp_client_close skI skR cs :
   store_ctx -∗
-  {{{ db_connected kI kR cs }}}
+  {{{ db_connected skI skR cs }}}
     Client.close (repr cs)
-  {{{ RET #(); db_disconnected kI kR ∗ public (si_key cs) }}}.
+  {{{ RET #(); db_disconnected skI skR ∗ public (si_key cs) }}}.
 Proof.
 iIntros "(_ & _ & _ & #?)".
 iIntros "!> %Φ client post".
