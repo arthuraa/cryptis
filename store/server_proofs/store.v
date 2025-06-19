@@ -20,15 +20,15 @@ Notation iProp := (iProp Σ).
 Context `{!storeGS Σ}.
 
 Implicit Types (cs : Conn.state).
-Implicit Types kI kR kS t : term.
+Implicit Types (skI skR : sign_key) (kS t : term).
 Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Lemma wp_server_handle_store kI kR cs (vdb : val) :
+Lemma wp_server_handle_store skI skR cs (vdb : val) :
   {{{ cryptis_ctx ∗ store_ctx }}}
     RPC.handle (Tag $ dbN.@"store") (Server.handle_store (repr cs) vdb)
-  {{{ h, RET (repr h); server_handler kI kR cs vdb h }}}.
+  {{{ h, RET (repr h); server_handler skI skR cs vdb h }}}.
 Proof.
 iIntros "%Φ (#? & #ctx) post".
 iPoseProof (store_ctx_store with "ctx") as "?".

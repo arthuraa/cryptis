@@ -22,14 +22,14 @@ Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !RPC.rpcGS Σ, !storeGS Σ
 Notation iProp := (iProp Σ).
 
 Implicit Types (cs : Conn.state).
-Implicit Types skI skR kS t : term.
+Implicit Types (skI skR : sign_key) (kS t : term).
 Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
 Lemma wp_server_start c skR E :
   ↑dbN.@"server" ⊆ E →
-  {{{ channel c ∗ sign_key skR ∗ term_token skR E }}}
+  {{{ channel c ∗ minted skR ∗ term_token skR E }}}
     Server.start skR
   {{{ ss, RET (repr ss); server ss }}}.
 Proof.
@@ -44,14 +44,14 @@ iFrame.
 iModIntro.
 rewrite big_sepM_empty. iSplit => //.
 iPureIntro.
-move=> kI _. solve_ndisj.
+move=> skI _. solve_ndisj.
 Qed.
 
-Lemma wp_server_conn_handler kI kR cs vdb vlock γlock :
-  is_lock γlock vlock (server_db_disconnected kI kR vdb) -∗
+Lemma wp_server_conn_handler skI skR cs vdb vlock γlock :
+  is_lock γlock vlock (server_db_disconnected skI skR vdb) -∗
   cryptis_ctx -∗
   store_ctx -∗
-  {{{ server_db_connected kI kR cs vdb ∗
+  {{{ server_db_connected skI skR cs vdb ∗
       locked γlock }}}
     Server.conn_handler (repr cs) vdb vlock
   {{{ RET #(); True }}}.
@@ -77,7 +77,7 @@ Qed.
 
 Lemma wp_server_find_client ss skI :
   {{{ cryptis_ctx ∗ server ss }}}
-    Server.find_client (repr ss) (TKey Open skI)
+    Server.find_client (repr ss) (Spec.pkey skI)
   {{{ vdb γlock vlock, RET (vdb, vlock)%V;
       server ss ∗
       is_lock γlock vlock
@@ -90,19 +90,19 @@ wp_lam; wp_pures.
 wp_bind (SAList.find _ _).
 iApply (SAList.wp_find with "accounts").
 iIntros "!> accounts"; rewrite lookup_fmap.
-case accounts_skI: (accounts !! TKey Open skI) => [scs|]; wp_pures.
+case accounts_skI: (accounts !! Spec.pkey skI) => [scs|]; wp_pures.
 - rewrite big_sepM_forall.
-  iPoseProof ("locks" $! (TKey Open skI) scs with "[//]")
+  iPoseProof ("locks" $! (Spec.pkey skI) scs with "[//]")
     as "(%skI' & %e & #lock)".
-  case: e => <- {skI'}.
+  move/Spec.sign_pkey_inj: e => <- {skI'}.
   iModIntro.
   iApply ("post" $! (scs_db scs) (scs_name scs) (scs_lock scs)).
   iSplit => //.
   iExists accounts, E. iFrame.
   rewrite big_sepM_forall. by eauto.
-- have ?: ↑dbN.@"server".@skI ⊆ E.
+- have ?: ↑dbN.@"server".@(skI : term) ⊆ E.
   { by apply: EP; rewrite elem_of_dom accounts_skI. }
-  rewrite (term_token_difference _ (↑dbN.@"server".@skI)) //.
+  rewrite (term_token_difference _ (↑dbN.@"server".@(skI : term))) //.
   iDestruct "token" as "[token_skI token]".
   wp_bind (SAList.new #()).
   iApply SAList.wp_empty => //.
@@ -122,7 +122,7 @@ case accounts_skI: (accounts !! TKey Open skI) => [scs|]; wp_pures.
   iModIntro.
   iApply ("post" $! vdb γlock vlock).
   iSplit => //.
-  iExists _, (E ∖ ↑dbN.@"server".@skI).
+  iExists _, (E ∖ ↑dbN.@"server".@(skI : term)).
   iFrame.
   do !iSplit => //.
   + iPureIntro.
@@ -158,7 +158,7 @@ wp_bind (acquire _).
 iApply acquire_spec => //.
 iIntros "!> (locked & dis)".
 iDestruct "dis" as "(%db & #p_db & vdb & ready)".
-iAssert (sign_key (ss_key ss)) as "#?".
+iAssert (minted (ss_key ss)) as "#?".
 { by iDestruct "server" as "(% & % & ? & _)". }
 wp_pures.
 wp_apply (RPC.wp_confirm (db_server_ready skA (ss_key ss) db)

@@ -61,14 +61,37 @@ Definition hash : val := λ: "t", (#THash_tag, "t").
 Definition key kt : val := λ: "k",
   (#TKey_tag, (#(int_of_key_type kt), "k")).
 
+Definition derive_aenc_key : val := λ: "seed",
+  key ADec "seed".
+
+Definition derive_senc_key : val := λ: "seed",
+  key SEnc "seed".
+
+Definition derive_sign_key : val := λ: "seed",
+  key Sign "seed".
+
+Definition open_key : val := λ: "k",
+  if: (Fst "k" = #TKey_tag) then
+    let: "kt" := Fst (Snd "k") in
+    let: "k'" := Snd (Snd "k") in
+    if: "kt" = #(int_of_key_type AEnc) then
+      SOME (key ADec "k'")
+    else if: "kt" = #(int_of_key_type Sign) then
+      SOME (key Verify "k'")
+    else if: "kt" = #(int_of_key_type SEnc) then
+      SOME (key SEnc "k'")
+    else NONE
+  else NONE.
+
 Definition open : val := λ: "k" "t",
-  if: (Fst "k" = #TKey_tag)
-      && (Fst (Snd "k") = #(int_of_key_type Open))
-      && (Fst "t" = #TSeal_tag)
-      && (eq_term (key Seal (Snd (Snd "k"))) (Fst (Snd "t"))) then
-    SOME (Snd (Snd "t"))
-  else
-    NONE.
+  if: (Fst "t" = #TSeal_tag) then
+    let: "k_t" := Fst (Snd "t") in
+    let: "t" := Snd (Snd "t") in
+    match: open_key "k_t" with
+      SOME "k'" => if: eq_term "k'" "k" then SOME "t" else NONE
+    | NONE => NONE
+    end
+  else NONE.
 
 Definition enc : val := λ: "k" "N" "t",
   seal "k" (tag "N" "t").
@@ -77,43 +100,55 @@ Definition dec : val := λ: "k" "N" "t",
   bind: "t" := open "k" "t" in
   untag "N" "t".
 
-Definition mk_keys : val := λ: "k",
-  (key Seal "k", key Open "k").
-
-Definition derive_key : val := λ: "k",
-  tag (Tag $ nroot.@"keys".@"sym") "k".
-
-Definition pkey : val := λ: "sk", key Seal "sk".
+Definition pkey : val := λ: "k",
+  if: (Fst "k" = #TKey_tag) then
+    let: "kt" := Fst (Snd "k") in
+    let: "k'" := Snd (Snd "k") in
+    if: "kt" = #(int_of_key_type ADec) then
+      (key AEnc "k'")
+    else if: "kt" = #(int_of_key_type Sign) then
+      (key Verify "k'")
+    else "k"
+  else "k".
 
 Definition aenc : val := λ: "pk" "N" "t",
   enc "pk" "N" "t".
 
 Definition adec : val := λ: "sk" "N" "t",
-  dec (key Open "sk") "N" "t".
+  dec "sk" "N" "t".
 
 Definition senc : val := λ: "sk" "N" "t",
-  enc (key Seal "sk") "N" "t".
+  enc "sk" "N" "t".
 
 Definition sdec : val := λ: "sk" "N" "t",
-  dec (key Open "sk") "N" "t".
-
-Definition vkey : val := λ: "sk", key Open "sk".
+  dec "sk" "N" "t".
 
 Definition sign : val := λ: "sk" "N" "t",
-  enc (key Seal "sk") "N" "t".
+  enc "sk" "N" "t".
 
 Definition verify : val := λ: "vk" "N" "t",
   dec "vk" "N" "t".
 
-Definition to_seal_key : val := λ: "t",
-  bind: "kt" := is_key "t" in
-  guard: ("kt" = repr Seal) in
-  SOME "t".
+Definition has_key_type : val := λ: "kt" "t",
+  match: is_key "t" with
+    SOME "kt'" => "kt" = "kt'"
+  | NONE => #false
+  end.
 
-Definition to_open_key : val := λ: "t",
-  bind: "kt" := is_key "t" in
-  guard: ("kt" = repr Open) in
-  SOME "t".
+Definition is_aenc_key : val :=
+  λ: "t", has_key_type #(int_of_key_type AEnc) "t".
+
+Definition is_adec_key : val :=
+  λ: "t", has_key_type #(int_of_key_type ADec) "t".
+
+Definition is_sign_key : val :=
+  λ: "t", has_key_type #(int_of_key_type Sign) "t".
+
+Definition is_verify_key : val :=
+  λ: "t", has_key_type #(int_of_key_type Verify) "t".
+
+Definition is_senc_key : val :=
+  λ: "t", has_key_type #(int_of_key_type SEnc) "t".
 
 Section Proofs.
 
@@ -289,39 +324,6 @@ rewrite val_of_term_unseal /=.
 by iIntros "post"; wp_lam; wp_pures.
 Qed.
 
-Lemma twp_mk_keys E (k : term) Ψ :
-  Ψ (TKey Seal k, TKey Open k)%V ⊢
-  WP mk_keys k @ E [{ Ψ }].
-Proof.
-rewrite /mk_keys.
-iIntros "post"; wp_pures.
-wp_apply twp_key.
-wp_apply twp_key.
-by wp_pures.
-Qed.
-
-Lemma wp_mk_keys E (k : term) Ψ :
-  Ψ (TKey Seal k, TKey Open k)%V ⊢
-  WP mk_keys k @ E {{ Ψ }}.
-Proof.
-by iIntros "post"; iApply twp_wp; iApply twp_mk_keys.
-Qed.
-
-Lemma twp_derive_key E (k : term) Ψ :
-  Ψ (Spec.derive_key k) ⊢
-  WP derive_key k @ E [{ Ψ }].
-Proof.
-rewrite /derive_key. iIntros "post". wp_pures.
-wp_pures. by wp_apply twp_tag.
-Qed.
-
-Lemma wp_derive_key E (k : term) Ψ :
-  Ψ (Spec.derive_key k) ⊢
-  WP derive_key k @ E {{ Ψ }}.
-Proof.
-by iIntros "post"; iApply twp_wp; iApply twp_derive_key.
-Qed.
-
 Lemma twp_seal E t1 t2 Ψ :
   Ψ (TSeal t1 t2) ⊢
   WP seal t1 t2 @ E [{ Ψ }].
@@ -344,6 +346,45 @@ Qed.
 Lemma wp_hash E t Ψ : Ψ (THash t) ⊢ WP hash t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_hash. Qed.
 
+Lemma wp_derive_aenc_key Ψ t :
+  ▷ Ψ (AEncKey t : term) ⊢
+  WP derive_aenc_key t {{ Ψ }}.
+Proof.
+iIntros "post". wp_lam. wp_apply wp_key.
+have <- : AEncKey t = TKey ADec t :> term by rewrite [term_of_aenc_key]unlock.
+by iApply "post".
+Qed.
+
+Lemma wp_derive_senc_key Ψ t :
+  ▷ Ψ (SEncKey t : term) ⊢
+  WP derive_senc_key t {{ Ψ }}.
+Proof.
+iIntros "post". wp_lam. wp_apply wp_key.
+have <- : SEncKey t = TKey SEnc t :> term by rewrite [term_of_senc_key]unlock.
+by iApply "post".
+Qed.
+
+Lemma wp_derive_sign_key Ψ t :
+  ▷ Ψ (SignKey t : term) ⊢
+  WP derive_sign_key t {{ Ψ }}.
+Proof.
+iIntros "post". wp_lam. wp_apply wp_key.
+have <- : SignKey t = TKey Sign t :> term by rewrite [term_of_sign_key]unlock.
+by iApply "post".
+Qed.
+
+Lemma twp_open_key E t Ψ :
+  Ψ (repr (Spec.open_key t)) ⊢
+  WP open_key t @ E [{ Ψ }].
+Proof.
+rewrite /repr /repr_option /repr /repr_term !val_of_term_unseal /open_key.
+iIntros "H".
+wp_pures.
+case: t; try by move=> /= *; wp_pures.
+rewrite /= -val_of_term_unseal => kt t. wp_pures.
+by case: kt; wp_pures => //; wp_apply twp_key; wp_pures.
+Qed.
+
 Lemma twp_open E t1 t2 Ψ :
   Ψ (repr (Spec.open t1 t2)) ⊢
   WP open t1 t2 @ E [{ Ψ }].
@@ -351,19 +392,14 @@ Proof.
 rewrite /repr /repr_option /repr /repr_term !val_of_term_unseal /open.
 iIntros "H".
 wp_pures.
-case: t1; try by move=> /= *; wp_pures.
-case; try by move=> /= *; wp_pures.
-move=> tk; wp_pures.
 case: t2; try by move=> /= *; wp_pures.
-move=> tk' t /=; wp_pures.
-rewrite -val_of_term_unseal.
-wp_pures.
-wp_apply twp_key. wp_apply twp_eq_term.
-case: tk' => //=; try by move=> *; wp_pures.
-case=> [] tk' //= *; wp_pures => //.
-rewrite bool_decide_decide; case: decide => [<-|ne].
-- by rewrite decide_True //; wp_pures.
-- by rewrite decide_False; last congruence; wp_pures.
+move=> k_t t. rewrite /= -val_of_term_unseal. wp_pures.
+wp_apply twp_open_key.
+case: Spec.open_key => [t1'|] /=; wp_pures => //.
+wp_apply twp_eq_term.
+case: bool_decide_reflect => [->|ne]; wp_pures.
+- by rewrite decide_True.
+- rewrite decide_False //. congruence.
 Qed.
 
 Lemma wp_open E t1 t2 Ψ :
@@ -401,97 +437,137 @@ Lemma wp_dec E k N t Ψ :
   WP dec k N t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_dec. Qed.
 
-Lemma twp_aenc pk N t Ψ :
+Lemma twp_aenc' pk N t Ψ :
   Ψ (Spec.enc pk N t) ⊢
   WP aenc pk N t [{ Ψ }].
 Proof. iIntros "?". wp_lam. wp_pures. by wp_apply twp_enc. Qed.
 
-Lemma wp_aenc pk N t Ψ :
-  Ψ (Spec.enc pk N t) ⊢
+Lemma wp_aenc' pk N t Ψ :
+  ▷ Ψ (Spec.enc pk N t) ⊢
   WP aenc pk N t {{ Ψ }}.
 Proof. iIntros "?". wp_lam. wp_pures. by wp_apply wp_enc. Qed.
 
-Lemma twp_adec k N t Ψ :
-  Ψ (repr (Spec.dec (TKey Open k) N t)) ⊢
-  WP adec k N t [{ Ψ }].
+Lemma twp_adec' (sk : aenc_key) N t Ψ :
+  (∀ t', ⌜t = TSeal (Spec.pkey sk) (Spec.tag N t')⌝ -∗
+         ⌜Spec.dec sk N t = Some t'⌝ -∗
+         Ψ (SOMEV t')) ∧
+  (⌜Spec.dec sk N t = None⌝ → Ψ NONEV) ⊢
+  WP adec sk N t [{ Ψ }].
 Proof.
-iIntros "?". wp_lam; wp_pures.
-wp_apply twp_key. by wp_apply twp_dec.
+iIntros "post". wp_lam; wp_pures. wp_apply twp_dec.
+case: Spec.decP => [k_t t' /Spec.open_key_aencK -> ->|].
+- iDestruct "post" as "[post _]". by iApply "post".
+- iDestruct "post" as "[_ post]". by iApply "post".
 Qed.
 
-Lemma wp_adec k N t Ψ :
-  Ψ (repr (Spec.dec (TKey Open k) N t)) ⊢
-  WP adec k N t {{ Ψ }}.
+Lemma wp_adec' (sk : aenc_key) N t Ψ :
+  ▷ ((∀ t', ⌜t = TSeal (Spec.pkey sk) (Spec.tag N t')⌝ -∗
+            ⌜Spec.dec sk N t = Some t'⌝ -∗
+         Ψ (SOMEV t')) ∧
+     (⌜Spec.dec sk N t = None⌝ → Ψ NONEV)) ⊢
+  WP adec sk N t {{ Ψ }}.
 Proof.
-iIntros "?". wp_lam; wp_pures.
-wp_apply wp_key. by wp_apply wp_dec.
+iIntros "post". wp_lam; wp_pures. wp_apply wp_dec.
+case: Spec.decP => [k_t t' /Spec.open_key_aencK -> ->|].
+- iDestruct "post" as "[post _]". by iApply "post".
+- iDestruct "post" as "[_ post]". by iApply "post".
 Qed.
 
-Lemma twp_pkey k Ψ : Ψ (TKey Seal k) ⊢ WP pkey k [{ Ψ }].
-Proof. iIntros "?". wp_lam; wp_pures. by wp_apply twp_key. Qed.
-
-Lemma wp_pkey k Ψ : Ψ (TKey Seal k) ⊢ WP pkey k {{ Ψ }}.
-Proof. iIntros "?". wp_lam; wp_pures. by wp_apply wp_key. Qed.
-
-Lemma twp_senc E k N t Ψ :
-  Ψ (Spec.enc (TKey Seal k) N t) ⊢
+Lemma twp_senc' E k N t Ψ :
+  Ψ (Spec.enc k N t) ⊢
   WP senc k N t @ E [{ Ψ }].
 Proof.
 iIntros "post"; rewrite /senc /Spec.enc; wp_pures.
-wp_apply twp_key. by wp_apply twp_enc.
+by wp_apply twp_enc.
 Qed.
 
-Lemma wp_senc E k N t Ψ :
-  Ψ (Spec.enc (TKey Seal k) N t) ⊢
+Lemma wp_senc' E k N t Ψ :
+  ▷ Ψ (Spec.enc k N t) ⊢
   WP senc k N t @ E {{ Ψ }}.
-Proof. by iIntros "?"; iApply twp_wp; iApply twp_senc. Qed.
+Proof.
+iIntros "post"; rewrite /senc /Spec.enc; wp_pures.
+by wp_apply wp_enc.
+Qed.
 
-Lemma twp_sdec E k N t Ψ :
-  Ψ (repr (Spec.dec (TKey Open k) N t)) ⊢
+Lemma twp_sdec' E (k : senc_key) N t Ψ :
+  ((∀ t', ⌜t = TSeal k (Spec.tag N t')⌝ -∗
+          ⌜Spec.dec k N t = Some t'⌝ -∗
+     Ψ (SOMEV t')) ∧
+   (⌜Spec.dec k N t = None⌝ → Ψ NONEV)) ⊢
   WP sdec k N t @ E [{ Ψ }].
 Proof.
-iIntros "post"; rewrite /sdec; wp_pures.
-wp_apply twp_key. by wp_apply twp_dec.
+iIntros "post". wp_lam; wp_pures. wp_apply twp_dec.
+case: Spec.decP => [k_t t' /Spec.open_key_sencK -> ->|].
+- iDestruct "post" as "[post _]". by iApply "post".
+- iDestruct "post" as "[_ post]". by iApply "post".
 Qed.
 
-Lemma wp_sdec E k N t Ψ :
-  Ψ (repr (Spec.dec (TKey Open k) N t)) ⊢
+Lemma wp_sdec' E (k : senc_key) N t Ψ :
+  ▷ ((∀ t', ⌜t = TSeal k (Spec.tag N t')⌝ -∗
+            ⌜Spec.dec k N t = Some t'⌝ -∗
+     Ψ (SOMEV t')) ∧
+     (⌜Spec.dec k N t = None⌝ → Ψ NONEV)) ⊢
   WP sdec k N t @ E {{ Ψ }}.
-Proof. by iIntros "?"; iApply twp_wp; iApply twp_sdec. Qed.
+Proof.
+iIntros "post". wp_lam; wp_pures. wp_apply wp_dec.
+case: Spec.decP => [k_t t' /Spec.open_key_sencK -> ->|].
+- iDestruct "post" as "[post _]". by iApply "post".
+- iDestruct "post" as "[_ post]". by iApply "post".
+Qed.
 
-Lemma twp_sign k N t Ψ :
-  Ψ (Spec.enc (TKey Seal k) N t) ⊢
+Lemma twp_sign' k N t Ψ :
+  Ψ (Spec.enc k N t) ⊢
   WP sign k N t [{ Ψ }].
 Proof.
-iIntros "?". wp_lam; wp_pures. wp_apply twp_key. by wp_apply twp_enc.
+iIntros "?". wp_lam; wp_pures. by wp_apply twp_enc.
 Qed.
 
-Lemma wp_sign k N t Ψ :
-  Ψ (Spec.enc (TKey Seal k) N t) ⊢
+Lemma wp_sign' k N t Ψ :
+  ▷ Ψ (Spec.enc k N t) ⊢
   WP sign k N t {{ Ψ }}.
 Proof.
-iIntros "?". wp_lam; wp_pures. wp_apply wp_key. by wp_apply wp_enc.
+iIntros "?". wp_lam; wp_pures. by wp_apply wp_enc.
 Qed.
 
-Lemma twp_verify k N t Ψ :
-  Ψ (repr (Spec.dec k N t)) ⊢
-  WP verify k N t [{ Ψ }].
+Lemma twp_verify' (sk : sign_key) N t Ψ :
+  (∀ t', ⌜t = TSeal sk (Spec.tag N t')⌝ -∗
+         ⌜Spec.dec (Spec.pkey sk) N t = Some t'⌝ -∗
+         Ψ (SOMEV t')) ∧
+  (⌜Spec.dec (Spec.pkey sk) N t = None⌝ → Ψ NONEV) ⊢
+  WP verify (Spec.pkey sk) N t [{ Ψ }].
 Proof.
-iIntros "?". wp_lam; wp_pures. by wp_apply twp_dec.
+iIntros "post". wp_lam; wp_pures. wp_apply twp_dec.
+case: Spec.decP => [k_t t' /Spec.open_key_signK -> ->|].
+- iDestruct "post" as "[post _]". by iApply "post".
+- iDestruct "post" as "[_ post]". by iApply "post".
 Qed.
 
-Lemma wp_verify k N t Ψ :
-  Ψ (repr (Spec.dec k N t)) ⊢
-  WP verify k N t {{ Ψ }}.
+Lemma wp_verify' (sk : sign_key) N t Ψ :
+  ▷ ((∀ t', ⌜t = TSeal sk (Spec.tag N t')⌝ -∗
+            ⌜Spec.dec (Spec.pkey sk) N t = Some t'⌝ -∗ Ψ (SOMEV t')) ∧
+     (⌜Spec.dec (Spec.pkey sk) N t = None⌝ → Ψ NONEV)) ⊢
+  WP verify (Spec.pkey sk) N t {{ Ψ }}.
 Proof.
-iIntros "?". wp_lam; wp_pures. by wp_apply wp_dec.
+iIntros "post". wp_lam; wp_pures. wp_apply wp_dec.
+case: Spec.decP => [k_t t' /Spec.open_key_signK -> ->|].
+- iDestruct "post" as "[post _]". by iApply "post".
+- iDestruct "post" as "[_ post]". by iApply "post".
 Qed.
 
-Lemma twp_vkey k Ψ : Ψ (TKey Open k) ⊢ WP vkey k [{ Ψ }].
-Proof. iIntros "?". wp_lam; wp_pures. by wp_apply twp_key. Qed.
+Lemma twp_pkey k Ψ : Ψ (Spec.pkey k) ⊢ WP pkey k [{ Ψ }].
+Proof.
+rewrite /repr /repr /repr_term !val_of_term_unseal /pkey.
+iIntros "H". wp_pures.
+case: k; try by move=> /= *; wp_pures.
+move=> kt k /=. wp_pures. case: kt; wp_pures => //=.
+- rewrite -val_of_term_unseal. wp_apply twp_key.
+  by rewrite val_of_term_unseal /=.
+- rewrite -val_of_term_unseal. wp_apply twp_key.
+  by rewrite val_of_term_unseal /=.
+Qed.
 
-Lemma wp_vkey k Ψ : Ψ (TKey Open k) ⊢ WP vkey k {{ Ψ }}.
-Proof. iIntros "?". wp_lam; wp_pures. by wp_apply wp_key. Qed.
+Lemma wp_pkey k Ψ : Ψ (Spec.pkey k) ⊢ WP pkey k {{ Ψ }}.
+Proof. iIntros "?". iApply twp_wp. by iApply twp_pkey. Qed.
 
 Lemma twp_is_key E t Ψ :
   Ψ (repr (Spec.is_key t)) ⊢
@@ -506,24 +582,25 @@ Lemma wp_is_key E t Ψ :
   WP is_key t @ E {{ Ψ }}.
 Proof. by iIntros "?"; iApply twp_wp; iApply twp_is_key. Qed.
 
-Lemma wp_to_seal_key E t Ψ :
-  Ψ (repr (Spec.to_seal_key t)) ⊢
-  WP to_seal_key t @ E {{ Ψ }}.
+Lemma twp_has_key_type kt t Ψ :
+  Ψ #(Spec.has_key_type kt t) ⊢
+  WP has_key_type (repr kt) t [{ Ψ }].
 Proof.
-rewrite /to_seal_key; iIntros "post".
-wp_pures; wp_bind (is_key _); iApply wp_is_key.
-case: t => /=; try by move=> *; wp_pures => //.
-case; try by move => *; wp_pures.
+iIntros "H". wp_lam; wp_pures.
+wp_apply twp_is_key. rewrite /Spec.has_key_type.
+case: Spec.is_key => [kt'|] //=; wp_pures => //.
+by case: kt kt' => [] [] /=.
 Qed.
 
-Lemma wp_to_open_key E t Ψ :
-  Ψ (repr (Spec.to_open_key t)) ⊢
-  WP to_open_key t @ E {{ Ψ }}.
+Lemma wp_has_key_type kt t Ψ :
+  Ψ #(Spec.has_key_type kt t) ⊢
+  WP has_key_type (repr kt) t {{ Ψ }}.
 Proof.
-rewrite /to_open_key; iIntros "post".
-wp_pures; wp_bind (is_key _); iApply wp_is_key.
-case: t => /=; try by move=> *; wp_pures => //.
-case; try by move => *; wp_pures.
+iIntros "H". iApply twp_wp. by iApply twp_has_key_type.
 Qed.
 
 End Proofs.
+
+
+
+

@@ -52,7 +52,7 @@ Notation iPropO := (iPropO Σ).
 Notation iPropI := (iPropI Σ).
 
 Definition cryptis_ctx : iProp :=
-  term_meta_ctx ∧ public_ctx ∧ phase_ctx.
+  term_meta_ctx ∧ phase_ctx.
 
 #[global]
 Instance cryptis_ctx_persistent : Persistent cryptis_ctx.
@@ -61,19 +61,13 @@ Proof. apply _. Qed.
 #[global]
 Instance cryptis_ctx_has_term_meta_ctx : HasTermMetaCtx cryptis_ctx.
 Proof.
-split; last apply _. by iIntros "(? & ? & ?)".
-Qed.
-
-#[global]
-Instance cryptis_ctx_has_public_ctx : HasPublicCtx cryptis_ctx.
-Proof.
-split; last apply _. by iIntros "(? & ? & ?)".
+split; last apply _. by iIntros "(? & ?)".
 Qed.
 
 #[global]
 Instance cryptis_ctx_has_phase_ctx : HasPhaseCtx cryptis_ctx.
 Proof.
-split; last apply _. by iIntros "(? & ? & ?)".
+split; last apply _. by iIntros "(? & ?)".
 Qed.
 
 End Cryptis.
@@ -84,15 +78,16 @@ Lemma cryptisGS_alloc `{!heapGS Σ} E :
   cryptisGpreS Σ →
   ⊢ |={E}=> ∃ (H : cryptisGS Σ),
              cryptis_ctx ∗
-             seal_pred_token ⊤ ∗
-             key_pred_token (⊤ ∖ ↑nroot.@"keys") ∗
+             seal_pred_token AENC ⊤ ∗
+             seal_pred_token SIGN ⊤ ∗
+             seal_pred_token SENC ⊤ ∗
              hash_pred_token ⊤ ∗
              honest 0 ∅ ∗
              ●Ph 0.
 Proof.
 move=> ?; iStartProof.
 iMod term_metaGS_alloc as "[% #?]".
-iMod publicGS_alloc as "(% & #? & ? & ? & ?)".
+iMod publicGS_alloc as "(% & ? & ? & ? & ?)".
 iMod phaseGS_alloc as "(% & #? & ? & ?)".
 iExists (CryptisGS _ _ _ _). iFrame. iModIntro.
 by do !iSplit => //.

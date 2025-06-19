@@ -20,19 +20,19 @@ Notation iProp := (iProp Σ).
 Context `{!storeG Σ}.
 
 Implicit Types (cs : Conn.state).
-Implicit Types kI kR kS t : term.
+Implicit Types (skI skR : sign_key) (kS t : term).
 Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Lemma wp_client_store kI kR cs t1 t2 t2' :
+Lemma wp_client_store skI skR cs t1 t2 t2' :
   cryptis_ctx -∗
   store_ctx -∗
   public t1 -∗
   public t2' -∗
-  {{{ db_connected kI kR cs ∗ db_mapsto kI kR t1 t2 }}}
+  {{{ db_connected skI skR cs ∗ db_mapsto skI skR t1 t2 }}}
     Client.store (repr cs) t1 t2'
-  {{{ RET #(); db_connected kI kR cs ∗ db_mapsto kI kR t1 t2' }}}.
+  {{{ RET #(); db_connected skI skR cs ∗ db_mapsto skI skR t1 t2' }}}.
 Proof.
 iIntros "#? #ctx #p_t1 #p_t2 !> %Φ [client mapsto] post".
 iDestruct "client" as "(conn & db)".

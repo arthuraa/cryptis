@@ -9,14 +9,20 @@ From cryptis.core.pre_term Require Import base.
 
 Definition int_of_key_type kt : Z :=
   match kt with
-  | Seal => 0
-  | Open => 1
+  | AEnc => 0
+  | ADec => 1
+  | Sign => 2
+  | Verify => 3
+  | SEnc => 4
   end.
 
 Definition key_type_of_int (n : Z) :=
   match n with
-  | 0%Z => Seal
-  | _   => Open
+  | 0%Z => AEnc
+  | 1%Z => ADec
+  | 2%Z => Sign
+  | 3%Z => Verify
+  | _ => SEnc
   end.
 
 Canonical key_typeO := leibnizO key_type.
@@ -27,8 +33,11 @@ Proof.
 refine (
   fun kt1 kt2 =>
     match kt1, kt2 with
-    | Seal, Seal => left _
-    | Open, Open => left _
+    | AEnc, AEnc => left _
+    | ADec, ADec => left _
+    | Sign, Sign => left _
+    | Verify, Verify => left _
+    | SEnc, SEnc => left _
     | _, _ => right _
     end); congruence.
 Defined.

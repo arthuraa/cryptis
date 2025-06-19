@@ -40,9 +40,30 @@ Qed.
 Global Instance term_inhabited : Inhabited term.
 Proof. exact: (populate (TInt 0)). Qed.
 
+Global Instance aenc_key_inhabited : Inhabited aenc_key :=
+  populate (AEncKey inhabitant).
+
+Global Instance sign_key_inhabited : Inhabited sign_key :=
+  populate (SignKey inhabitant).
+
+Global Instance senc_key_inhabited : Inhabited senc_key :=
+  populate (SEncKey inhabitant).
+
 Definition term_eq_dec : EqDecision term :=
   Eval hnf in def_eq_decision _.
 Global Existing Instance term_eq_dec.
+
+Definition aenc_key_eq_dec : EqDecision aenc_key :=
+  Eval hnf in def_eq_decision _.
+Global Existing Instance aenc_key_eq_dec.
+
+Definition senc_key_eq_dec : EqDecision senc_key :=
+  Eval hnf in def_eq_decision _.
+Global Existing Instance senc_key_eq_dec.
+
+Definition sign_key_eq_dec : EqDecision sign_key :=
+  Eval hnf in def_eq_decision _.
+Global Existing Instance sign_key_eq_dec.
 
 Inductive subterm (t : term) : term → Prop :=
 | STRefl : subterm t t
@@ -83,6 +104,10 @@ Proof. exact: seal_eq. Qed.
 Coercion val_of_term : term >-> val.
 Global Instance repr_term : Repr term := val_of_term.
 
+Global Instance repr_aenc_key : Repr aenc_key := λ k, repr (k : term).
+Global Instance repr_senc_key : Repr senc_key := λ k, repr (k : term).
+Global Instance repr_sign_key : Repr sign_key := λ k, repr (k : term).
+
 Lemma val_of_pre_term_unfold t :
   val_of_pre_term (unfold_term t) = val_of_term t.
 Proof.
@@ -118,6 +143,15 @@ by rewrite !val_of_pre_term_unfold.
 Qed.
 
 Global Instance countable_term : Countable term.
+Proof. exact: def_countable. Qed.
+
+Global Instance countable_aenc_key : Countable aenc_key.
+Proof. exact: def_countable. Qed.
+
+Global Instance countable_sign_key : Countable sign_key.
+Proof. exact: def_countable. Qed.
+
+Global Instance countable_senc_key : Countable senc_key.
 Proof. exact: def_countable. Qed.
 
 Global Instance infinite_term : Infinite term.
@@ -348,6 +382,44 @@ Module Spec.
 
 Implicit Types N : term.
 
+Definition is_seal_key k :=
+  match k with
+  | TKey AEnc _ | TKey Sign _ | TKey SEnc _ => true
+  | _ => false
+  end.
+
+Definition public_key_type kt :=
+  match kt with
+  | AEnc | Verify => true
+  | _ => false
+  end.
+
+Definition skey t :=
+  match t with
+  | TKey AEnc t => TKey ADec t
+  | TKey Verify t => TKey Sign t
+  | _ => t
+  end.
+
+Definition pkey t :=
+  match t with
+  | TKey ADec t => TKey AEnc t
+  | TKey Sign t => TKey Verify t
+  | _ => t
+  end.
+
+Lemma aenc_pkey_inj (sk1 sk2 : aenc_key) :
+  pkey sk1 = pkey sk2 → sk1 = sk2.
+Proof. by rewrite keysE; case: sk1 sk2 => [?] [?] [->]. Qed.
+
+Lemma sign_pkey_inj (sk1 sk2 : sign_key) :
+  pkey sk1 = pkey sk2 → sk1 = sk2.
+Proof. by rewrite keysE; case: sk1 sk2 => [?] [?] [->]. Qed.
+
+Lemma senc_pkey_inj (sk1 sk2 : senc_key) :
+  pkey sk1 = pkey sk2 → sk1 = sk2.
+Proof. by rewrite keysE; case: sk1 sk2 => [?] [?] [->]. Qed.
+
 Definition tag_def N (t : term) :=
   TPair N t.
 Definition tag_aux : seal tag_def. by eexists. Qed.
@@ -434,28 +506,64 @@ Fixpoint proj t n {struct t} :=
   | _, _ => None
   end.
 
+Definition open_key k : option term :=
+  match k with
+  | TKey AEnc t => Some (TKey ADec t)
+  | TKey Sign t => Some (TKey Verify t)
+  | TKey SEnc t => Some (TKey SEnc t)
+  | _ => None
+  end.
+
+Lemma open_key_aenc (sk : aenc_key) :
+  open_key (Spec.pkey sk) = @Some term sk.
+Proof. by rewrite keysE. Qed.
+
+Lemma open_key_sign (sk : sign_key) :
+  open_key sk = Some (Spec.pkey sk).
+Proof. by rewrite keysE. Qed.
+
+Lemma open_key_senc (sk : senc_key) :
+  open_key sk = @Some term sk.
+Proof. by rewrite keysE. Qed.
+
+Lemma open_key_aencK pk (sk : aenc_key) :
+  open_key pk = @Some term sk → pk = pkey sk.
+Proof.
+rewrite keysE; case: sk => seed /=.
+by case: pk => //= - [] // ?; case=> ->.
+Qed.
+
+Lemma open_key_signK k (sk : sign_key) :
+  open_key k = Some (Spec.pkey sk) → k = sk.
+Proof.
+rewrite keysE; case: sk => seed /=.
+by case: k => //= - [] // ?; case=> ->.
+Qed.
+
+Lemma open_key_sencK k' (k : senc_key) :
+  open_key k' = @Some term k → k' = k.
+Proof.
+rewrite keysE; case: k => seed /=.
+by case: k' => //= - [] // ?; case=> ->.
+Qed.
+
 Definition open k t : option term :=
-  match k, t with
-  | TKey Open k1, TSeal (TKey Seal k2) t =>
-    if decide (k1 = k2) then Some t else None
-  | _, _ => None
+  match t with
+  | TSeal k_t t =>
+    if decide (open_key k_t = Some k) then Some t else None
+  | _ => None
   end.
 
 Variant open_spec k t : option term → Type :=
-| OpenSome k' t'
-  of k = TKey Open k' & t = TSeal (TKey Seal k') t'
+| OpenSome k_t t'
+  of open_key k_t = Some k & t = TSeal k_t t'
   : open_spec k t (Some t')
 | OpenNone : open_spec k t None.
 
 Lemma openP k t : open_spec k t (open k t).
 Proof.
-case: k; try eauto using open_spec.
-case; try eauto using open_spec.
-move=> k; case: t; try eauto using open_spec.
-case; try eauto using open_spec.
-case; try eauto using open_spec.
-move=> k' t /=.
-case: decide => [<-|?]; try eauto using open_spec.
+case: t; eauto using open_spec => k_t t /=.
+by case: decide => [e|_]; eauto using open_spec.
 Qed.
 
 Definition is_key t :=
@@ -474,33 +582,11 @@ case: t; try by right.
 by move=> kt t; eleft.
 Qed.
 
-Definition to_seal_key t :=
-  if t is TKey Seal _ then Some t else None.
-
-Variant to_seal_key_spec t : option term → Type :=
-| ToSealKeySome k of t = TKey Seal k : to_seal_key_spec t (Some t)
-| ToSealKeyNone of (∀ k, t ≠ TKey Seal k) : to_seal_key_spec t None.
-
-Lemma to_seal_keyP t : to_seal_key_spec t (to_seal_key t).
-Proof.
-case: t; try by right.
-case; try by right.
-by move=> t; eleft.
-Qed.
-
-Definition to_open_key t :=
-  if t is TKey Open _ then Some t else None.
-
-Variant to_open_key_spec t : option term → Type :=
-| ToOpenKeySome k of t = TKey Open k : to_open_key_spec t (Some t)
-| ToOpenKeyNone of (∀ k, t ≠ TKey Open k) : to_open_key_spec t None.
-
-Lemma to_open_keyP t : to_open_key_spec t (to_open_key t).
-Proof.
-case: t; try by right.
-case; try by right.
-by move=> t; eleft.
-Qed.
+Definition has_key_type kt t :=
+  match is_key t with
+  | Some kt' => bool_decide (kt = kt')
+  | None => false
+  end.
 
 Definition of_list_aux : seal (foldr TPair (TInt 0)). by eexists. Qed.
 Definition of_list := unseal of_list_aux.
@@ -519,9 +605,6 @@ Proof. by rewrite of_list_unseal; case: ts. Qed.
 
 Lemma is_exp_of_list ts : is_exp (of_list ts) = false.
 Proof. by rewrite of_list_unseal; case: ts. Qed.
-
-Definition derive_key t :=
-  tag (Tag $ nroot.@"keys".@"sym") t.
 
 Fixpoint to_list t : option (list term) :=
   match t with
@@ -573,9 +656,9 @@ Definition dec k c t :=
   end.
 
 Variant dec_spec k c t : option term → Type :=
-| DecSome k' t'
-  of k = TKey Open k'
-  &  t = TSeal (TKey Seal  k') (tag c t')
+| DecSome k_t t'
+  of open_key k_t = Some k
+  &  t = TSeal k_t (tag c t')
   : dec_spec k c t (Some t')
 | DecNone : dec_spec k c t None.
 
@@ -583,19 +666,21 @@ Lemma decP k c t : dec_spec k c t (dec k c t).
 Proof.
 rewrite /dec.
 case: openP; eauto using dec_spec.
-move=> {}k {}t -> ->.
+move=> {}k_t {}t e ->.
 case: untagP; eauto using dec_spec.
 move=> {}t ->; eauto using dec_spec.
 Qed.
 
-Lemma decK k c t t' :
-  dec (TKey Open k) c t = Some t' →
-  t = TSeal (TKey Seal k) (tag c t').
+Lemma decK k1 k2 c t t' :
+  open_key k1 = Some k2 →
+  dec k2 c t = Some t' →
+  t = TSeal k1 (tag c t').
 Proof.
 rewrite /Spec.dec /=.
-case: t => [] //= k' t.
-case: k' => // - [] // k'.
-by case: decide => //= <- /Spec.untagK ->.
+case: t => [] //= k_t t.
+case: decide => // k_t_k2 k1_k2 /untagK <-.
+case: k_t k1 => [] // kt1 ? [] //= kt2 ? in k_t_k2 k1_k2 *.
+case: kt1 kt2 => [] //= [] //= in k_t_k2 k1_k2 *; congruence.
 Qed.
 
 Definition zero : term := TInt 0.

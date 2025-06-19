@@ -36,7 +36,7 @@ Section Defs.
 Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !rpcGS Σ}.
 Notation iProp := (iProp Σ).
 
-Implicit Types (kI kR kS t : term) (ts : list term).
+Implicit Types (skI skR : sign_key) (kS t : term) (ts : list term).
 Implicit Types n : nat.
 Implicit Types b : bool.
 Implicit Types v : val.
@@ -92,12 +92,12 @@ Definition client_connected kI kR cs : iProp :=
   resp_pred_token cs (λ _, False%I) ∗
   resp_pred_token cs (λ _, False%I)).
 
-Lemma client_connected_ok kI kR cs :
-  client_connected kI kR cs -∗
-  secret kI -∗
-  secret kR -∗
-  sign_key kI -∗
-  sign_key kR -∗
+Lemma client_connected_ok skI skR cs :
+  client_connected skI skR cs -∗
+  secret skI -∗
+  secret skR -∗
+  minted skI -∗
+  minted skR -∗
   ◇ □ ¬ compromised_session Init cs.
 Proof.
 iIntros "(conn & _)".
@@ -112,76 +112,76 @@ iIntros "(conn & _)".
 by iPoseProof (Conn.connected_keyE with "conn") as "(-> & -> & _)".
 Qed.
 
-Definition server_connected kI kR cs : iProp :=
-  Conn.connected kI kR Resp cs ∗
+Definition server_connected skI skR cs : iProp :=
+  Conn.connected skI skR Resp cs ∗
   release_token (si_resp_share cs).
 
-Lemma server_connected_ok kI kR cs :
-  server_connected kI kR cs -∗
-  secret kI -∗
-  secret kR -∗
-  sign_key kI -∗
-  sign_key kR -∗
+Lemma server_connected_ok skI skR cs :
+  server_connected skI skR cs -∗
+  secret skI -∗
+  secret skR -∗
+  minted skI -∗
+  minted skR -∗
   ◇ □ ¬ compromised_session Resp cs.
 Proof.
 iIntros "(conn & _)".
 by iApply (Conn.connected_ok with "conn").
 Qed.
 
-Lemma server_connected_keys kI kR cs :
-  server_connected kI kR cs -∗
-  ⌜kI = si_init cs⌝ ∗ ⌜kR = si_resp cs⌝.
+Lemma server_connected_keys skI skR cs :
+  server_connected skI skR cs -∗
+  ⌜skI = si_init cs⌝ ∗ ⌜skR = si_resp cs⌝.
 Proof.
 iIntros "(conn & _)".
 by iPoseProof (Conn.connected_keyE with "conn") as "(-> & -> & _)".
 Qed.
 
 Definition call_pred φ ψ :=
-  Conn.conn_pred Init (λ kI kR si ts,
-    resp_pred_token si (ψ kI kR si ts) ∗
-    φ kI kR si ts
+  Conn.conn_pred Init (λ skI skR si ts,
+    resp_pred_token si (ψ skI skR si ts) ∗
+    φ skI skR si ts
   )%I.
 
 Definition rpc N φ ψ :=
-  seal_pred N (call_pred φ ψ).
+  senc_pred N (call_pred φ ψ).
 
 Lemma rpc_alloc N φ ψ E :
   ↑N ⊆ E →
-  seal_pred_token E ==∗
-  rpc N φ ψ ∗ seal_pred_token (E ∖ ↑N).
+  seal_pred_token SENC E ==∗
+  rpc N φ ψ ∗ seal_pred_token SENC (E ∖ ↑N).
 Proof. exact: seal_pred_set. Qed.
 
-Definition resp_pred kI kR si ts : iProp :=
+Definition resp_pred skI skR si ts : iProp :=
   ∃ ψ, resp_pred_token si ψ ∗ ψ ts.
 
-Definition error_pred kI kR si ts : iProp := True.
+Definition error_pred skI skR si ts : iProp := True.
 
 Definition close_pred :=
   call_pred (λ _ _ si _, released (si_init_share si))
     (λ _ _ _ _ _, False)%I.
 
 Definition ctx : iProp :=
-  seal_pred (rpcN.@"resp") (Conn.conn_pred Resp resp_pred) ∗
-  seal_pred (rpcN.@"error") (Conn.conn_pred Resp error_pred) ∗
-  seal_pred (rpcN.@"close") close_pred ∗
+  senc_pred (rpcN.@"resp") (Conn.conn_pred Resp resp_pred) ∗
+  senc_pred (rpcN.@"error") (Conn.conn_pred Resp error_pred) ∗
+  senc_pred (rpcN.@"close") close_pred ∗
   iso_dh_ctx.
 
 Lemma ctx_alloc E :
   ↑rpcN ⊆ E →
-  seal_pred_token E -∗
+  seal_pred_token SENC E -∗
   iso_dh_ctx ==∗
-  ctx ∗ seal_pred_token (E ∖ ↑rpcN).
+  ctx ∗ seal_pred_token SENC (E ∖ ↑rpcN).
 Proof.
 iIntros "%sub token #?".
-rewrite (seal_pred_token_difference (↑rpcN)); try solve_ndisj.
+rewrite (seal_pred_token_difference _ (↑rpcN)); try solve_ndisj.
 iDestruct "token" as "[token ?]". iFrame.
-iMod (seal_pred_set (rpcN.@"resp") with "token")
+iMod (senc_pred_set (N := rpcN.@"resp") with "token")
   as "[resp token]"; try solve_ndisj.
 iFrame.
-iMod (seal_pred_set (rpcN.@"error") with "token")
+iMod (senc_pred_set (N := rpcN.@"error") with "token")
   as "[error token]"; try solve_ndisj.
 iFrame.
-iMod (seal_pred_set (rpcN.@"close") with "token")
+iMod (senc_pred_set (N := rpcN.@"close") with "token")
   as "[init token]"; try solve_ndisj.
 Qed.
 
@@ -194,17 +194,17 @@ Ltac solve_ctx :=
 
 Lemma ctx_resp :
   ctx -∗
-  seal_pred (rpcN.@"resp") (Conn.conn_pred Resp resp_pred).
+  senc_pred (rpcN.@"resp") (Conn.conn_pred Resp resp_pred).
 Proof. solve_ctx. Qed.
 
 Lemma ctx_error :
   ctx -∗
-  seal_pred (rpcN.@"error") (Conn.conn_pred Resp error_pred).
+  senc_pred (rpcN.@"error") (Conn.conn_pred Resp error_pred).
 Proof. solve_ctx. Qed.
 
 Lemma ctx_close :
   ctx -∗
-  seal_pred (rpcN.@"close") close_pred.
+  senc_pred (rpcN.@"close") close_pred.
 Proof. solve_ctx. Qed.
 
 Lemma ctx_conn_ctx : ctx -∗ iso_dh_ctx.

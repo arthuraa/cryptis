@@ -119,7 +119,18 @@ rewrite Spec.tag_unseal minted_TPair; iSplit.
 - iIntros "?"; iSplit => //. iApply minted_Tag.
 Qed.
 
-Lemma minted_derive_key t : minted (Spec.derive_key t) ⊣⊢ minted t.
-Proof. exact: minted_tag. Qed.
+Lemma minted_pkey k : minted (Spec.pkey k) ⊣⊢ minted k.
+Proof.
+by case: k => // - [] //= ?; rewrite !minted_TKey.
+Qed.
+
+Lemma minted_aenc k : minted (AEncKey k) ⊣⊢ minted k.
+Proof. by rewrite [term_of_aenc_key]unlock minted_TKey. Qed.
+
+Lemma minted_senc k : minted (SEncKey k) ⊣⊢ minted k.
+Proof. by rewrite [term_of_senc_key]unlock minted_TKey. Qed.
+
+Lemma minted_sign k : minted (SignKey k) ⊣⊢ minted k.
+Proof. by rewrite [term_of_sign_key]unlock minted_TKey. Qed.
 
 End Minted.

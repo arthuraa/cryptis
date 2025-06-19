@@ -7,7 +7,7 @@ From iris.heap_lang Require locations.
 
 Import Order.POrderTheory Order.TotalTheory.
 
-Inductive key_type := Seal | Open.
+Inductive key_type := AEnc | ADec | Sign | Verify | SEnc.
 
 Canonical key_type_indDef := [indDef for key_type_rect].
 Canonical key_type_indType := IndType key_type key_type_indDef.

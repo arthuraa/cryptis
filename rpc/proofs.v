@@ -22,28 +22,28 @@ Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !rpcGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (cs : Conn.state).
-Implicit Types kI kR kS t : term.
+Implicit Types (skI skR : sign_key) (kS t : term).
 Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Lemma wp_connect P c kI kR :
+Lemma wp_connect P c skI skR :
   channel c -∗
   cryptis_ctx -∗
   ctx -∗
-  sign_key kI -∗
-  public (TKey Open kR) -∗
-  {{{ Conn.failure kI kR ∨ P }}}
-    Impl.connect c kI (TKey Open kR)
+  minted skI -∗
+  minted skR -∗
+  {{{ Conn.failure skI skR ∨ P }}}
+    Impl.connect c skI (Spec.pkey skR)
   {{{ cs, RET (repr cs);
-      client_connected kI kR cs ∗
+      client_connected skI skR cs ∗
       (compromised_session Init cs ∨ P) }}}.
 Proof.
 iIntros "#? #? #? #? #? % !> P post".
 wp_lam; wp_pures.
 iPoseProof (Props.ctx_conn_ctx with "[//]") as "?".
 iApply wp_fupd.
-wp_apply (Conn.wp_connect with "[//] [//] [//] [//] [//] P").
+wp_apply (Conn.wp_connect with "[//] [//] [//] [] [] P"); eauto.
 iIntros "%cs (connected & P & rel & token)".
 iMod (resp_pred_token_alloc with "token") as "(t1 & t2 & token)";
   first solve_ndisj.
@@ -56,26 +56,26 @@ Lemma wp_listen c :
   ctx -∗
   {{{ True }}}
     listen c
-  {{{ ga skA, RET (ga, TKey Open skA)%V;
-      public ga ∗ public (TKey Open skA) }}}.
+  {{{ ga skI, RET (ga, Spec.pkey skI)%V;
+      public ga ∗ minted skI }}}.
 Proof.
 iIntros "#? #? #? % !> _ post".
 wp_lam. iApply Conn.wp_listen => //.
 by iApply Props.ctx_conn_ctx.
 Qed.
 
-Lemma wp_confirm P c skA skB ga :
+Lemma wp_confirm P c skI skR ga :
   channel c -∗
   cryptis_ctx -∗
   ctx -∗
-  {{{ public ga ∗ public (TKey Open skA) ∗ sign_key skB ∗
-      (Conn.failure skA skB ∨ P) }}}
-    confirm c skB (ga, TKey Open skA)%V
+  {{{ public ga ∗ minted skI ∗ minted skR ∗
+      (Conn.failure skI skR ∨ P) }}}
+    confirm c skR (ga, Spec.pkey skI)%V
   {{{ cs, RET (repr cs);
-      server_connected skA skB cs ∗
+      server_connected skI skR cs ∗
       (compromised_session Resp cs ∨ P) }}}.
 Proof.
-iIntros "#? #ctx #? !> %Φ (#p_ga & #p_vkA & #sign_skB & P) post".
+iIntros "#? #ctx #? !> %Φ (#p_ga & #m_skI & #m_skR & P) post".
 wp_lam; wp_pures.
 iPoseProof (Props.ctx_conn_ctx with "[//]") as "?".
 iApply wp_fupd.
@@ -85,29 +85,29 @@ iIntros "%cs (conn & dis & rel & token)".
 iApply "post". by iFrame.
 Qed.
 
-Lemma wp_call N φ ψ kI kR cs (ts : list term) :
+Lemma wp_call N φ ψ skI skR cs (ts : list term) :
   {{{ cryptis_ctx ∗ ctx ∗
       ([∗ list] t ∈ ts, public t) ∗
       rpc N φ ψ ∗
-      client_connected kI kR cs ∗
-      (compromised_session Init cs ∨ φ kI kR cs ts) }}}
+      client_connected skI skR cs ∗
+      (compromised_session Init cs ∨ φ skI skR cs ts) }}}
     call (repr cs) (Tag N) (repr ts)
   {{{ ts', RET (repr ts');
-      client_connected kI kR cs ∗
-      (compromised_session Init cs ∨ ψ kI kR cs ts ts') ∗
+      client_connected skI skR cs ∗
+      (compromised_session Init cs ∨ ψ skI skR cs ts ts') ∗
       ([∗ list] t ∈ ts', public t) }}}.
 Proof.
 iIntros "%Φ (#? & #? & #p_ts & #? & conn & inv) post".
 iDestruct "conn" as "(conn & rel & resp_pred)".
 iAssert (|==>
-  (compromised_session Init cs ∨ resp_pred_token cs (ψ kI kR cs ts)) ∗
+  (compromised_session Init cs ∨ resp_pred_token cs (ψ skI skR cs ts)) ∗
   (compromised_session Init cs ∨
-     resp_pred_token cs (ψ kI kR cs ts) ∗
-     φ kI kR cs ts))%I
+     resp_pred_token cs (ψ skI skR cs ts) ∗
+     φ skI skR cs ts))%I
   with "[resp_pred inv]" as ">[resp_pred inv]".
 { rewrite -or_sep2.
   iDestruct "resp_pred" as "[#fail|(t1 & t2)]"; eauto.
-  iMod (resp_pred_token_update _ _ _ (ψ kI kR cs ts)
+  iMod (resp_pred_token_update _ _ _ (ψ skI skR cs ts)
          with "t1 t2") as "[t1 t2]".
   iDestruct "inv" as "[#fail|inv]"; eauto.
   iModIntro. iRight. by iFrame. }
@@ -121,9 +121,7 @@ wp_apply (Conn.wp_recv with "[] [$conn]"); eauto.
 iIntros "%ts' (conn & p_ts' & inv)".
 iApply "post".
 iDestruct "inv" as "[#inv|inv]".
-{ iAssert (public (TKey Open (si_key cs))) as "?".
-  { iApply public_TKey. by eauto. }
-  iPoseProof (Conn.connected_public_key with "conn rel [//]") as "#>?".
+{ iPoseProof (Conn.connected_public_key with "conn rel [//]") as "#>?".
   iFrame. iModIntro. iSplitL; by eauto. }
 iDestruct "resp_pred" as "[#fail|t1]".
 { iFrame. iModIntro. iSplitL; eauto. }
@@ -137,36 +135,36 @@ iMod (resp_pred_token_update _ _ _ (λ _, False%I)
 by iFrame.
 Qed.
 
-Definition wf_handler Φ kI kR cs h : iProp :=
+Definition wf_handler Φ skI skR cs h : iProp :=
   Conn.wf_handler
     (release_token (si_resp_share cs) ∗ Φ)%I
     (λ r,
       ⌜r = #true⌝ ∗ Φ ∗
-      Conn.connected kI kR Resp cs ∗
+      Conn.connected skI skR Resp cs ∗
       release_token (si_resp_share cs) ∨
       ⌜r = #false⌝ ∗ Φ ∗
       public (si_key cs))%I
-    kI kR Resp cs h.
+    skI skR Resp cs h.
 
-Lemma wp_handle Φ N φ₁ φ₂ kI kR cs (f : val) :
+Lemma wp_handle Φ N φ₁ φ₂ skI skR cs (f : val) :
   {{{
     rpc N φ₁ φ₂ ∗
     ctx ∗
     □ (∀ (ts : list term),
       {{{ ▷ ([∗ list] t ∈ ts, public t) ∗
-          ▷ (compromised_session Resp cs ∨ φ₁ kI kR cs ts) ∗
+          ▷ (compromised_session Resp cs ∨ φ₁ skI skR cs ts) ∗
           Φ }}}
         f (repr ts)
       {{{ ts', RET (repr ts');
           match ts' with
           | Some ts' => ([∗ list] t ∈ ts', public t) ∗
-                        (compromised_session Resp cs ∨ φ₂ kI kR cs ts ts')
+                        (compromised_session Resp cs ∨ φ₂ skI skR cs ts ts')
           | None => True
           end ∗
           Φ }}})
   }}}
     handle (Tag N) f
-  {{{ h, RET (repr h); wf_handler Φ kI kR cs h }}}.
+  {{{ h, RET (repr h); wf_handler Φ skI skR cs h }}}.
 Proof.
 iIntros "%Ψ (#? & #ctx & #wp_f) post".
 iPoseProof (ctx_error with "[//]") as "#?".
@@ -175,15 +173,13 @@ iApply Conn.wp_handle; last by eauto.
 iSplit => //. clear Ψ.
 iIntros "!> %ts !> %Ψ (conn & I & #p_ts & inv_ts) post".
 iDestruct "I" as "(rel & I)". wp_pures.
-iAssert (Conn.connected kI kR Resp cs ∗
+iAssert (Conn.connected skI skR Resp cs ∗
          release_token (si_resp_share cs) ∗
          ◇ (compromised_session Resp cs ∨
-              resp_pred_token cs (φ₂ kI kR cs ts) ∗
-              φ₁ kI kR cs ts))%I
+              resp_pred_token cs (φ₂ skI skR cs ts) ∗
+              φ₁ skI skR cs ts))%I
   with "[conn rel inv_ts]" as "(conn & rel & >inv_ts)".
 { iDestruct "inv_ts" as "[#fail|inv_ts]"; last by iFrame.
-  iAssert (public (TKey Open (si_key cs))) as "?".
-  { iApply public_TKey. by eauto. }
   iPoseProof (Conn.connected_public_key with "conn rel [//]") as "#H".
   iFrame. iMod "H" as "?". by eauto. }
 rewrite or_sep2. iDestruct "inv_ts" as "[resp_pred inv_ts]".
@@ -205,10 +201,10 @@ iIntros "conn". wp_pures. iApply "post". iModIntro.
 iLeft. by iFrame.
 Qed.
 
-Lemma wp_handle_close Φ kI kR cs :
+Lemma wp_handle_close Φ skI skR cs :
   {{{ ctx }}}
     handle_close
-  {{{ h, RET (repr h); wf_handler Φ kI kR cs h }}}.
+  {{{ h, RET (repr h); wf_handler Φ skI skR cs h }}}.
 Proof.
 iIntros "%Ψ #ctx post".
 wp_apply Conn.wp_handle; last by eauto. clear Ψ.
@@ -231,10 +227,10 @@ iIntros "_". wp_pures. iApply "post".
 iModIntro. iFrame. iRight. by eauto.
 Qed.
 
-Lemma wp_server Φ kI kR cs handlers :
+Lemma wp_server Φ skI skR cs handlers :
   {{{ ctx ∗
-      server_connected kI kR cs ∗ Φ ∗
-      [∗ list] h ∈ handlers, wf_handler Φ kI kR cs h }}}
+      server_connected skI skR cs ∗ Φ ∗
+      [∗ list] h ∈ handlers, wf_handler Φ skI skR cs h }}}
     server (repr cs) (repr handlers)
   {{{ RET #(); public (si_key cs) ∗ Φ }}}.
 Proof.
@@ -259,8 +255,8 @@ iDestruct "Hres" as "[(-> & Hres)|(-> & Hres)]".
   iApply "post". by iFrame.
 Qed.
 
-Lemma wp_close kI kR cs :
-  {{{ ctx ∗ client_connected kI kR cs }}}
+Lemma wp_close skI skR cs :
+  {{{ ctx ∗ client_connected skI skR cs }}}
     close (repr cs)
   {{{ RET #(); public (si_key cs) }}}.
 Proof.
