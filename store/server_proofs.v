@@ -85,7 +85,7 @@ Lemma wp_server_find_client ss skI :
 Proof.
 iIntros "%Φ [#ctx server] post".
 iDestruct "server"
-  as "(%accounts & %E & #p_vkR & accounts & token & %EP & #locks)".
+  as "(%accounts & %E & #p_pkR & accounts & token & %EP & #locks)".
 wp_lam; wp_pures.
 wp_bind (SAList.find _ _).
 iApply (SAList.wp_find with "accounts").

@@ -178,7 +178,7 @@ Definition server ss : iProp := ∃ accounts E,
   SAList.is_alist (ss_clients ss) (repr <$> accounts) ∗
   term_token (ss_key ss) E ∗
   ⌜∀ skI, Spec.pkey skI ∉ dom accounts → ↑dbN.@"server".@(skI : term) ⊆ E⌝ ∗
-  [∗ map] vkI ↦ scs ∈ accounts, ∃ skI, ⌜vkI = Spec.pkey skI⌝ ∗
+  [∗ map] pkI ↦ scs ∈ accounts, ∃ skI, ⌜pkI = Spec.pkey skI⌝ ∗
      is_lock (scs_name scs) (scs_lock scs)
        (server_db_disconnected skI (ss_key ss) (scs_db scs)).
 
@@ -188,7 +188,7 @@ Lemma serverI skR vclients :
   SAList.is_alist vclients ∅ -∗
   server {| ss_key := skR; ss_clients := vclients |}.
 Proof.
-iIntros "token #p_vk clients".
+iIntros "token #p_pk clients".
 iExists ∅, (↑dbN.@"server") => /=.
 iFrame. iSplit => //. iSplit => //.
 iPureIntro. move=> *. solve_ndisj.

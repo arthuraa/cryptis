@@ -15,9 +15,9 @@ Unset Printing Implicit Defensive.
 
 (*
 
-A --> B: g^a; vkA
-B --> A: {g^a; g^b; vkA}@skB
-A --> B: {g^a; g^b; vkB}@skA
+A --> B: g^a; pkA
+B --> A: {g^a; g^b; pkA}@skB
+A --> B: {g^a; g^b; pkB}@skA
 
 Key: [g^a; g^b; g^ab]
 

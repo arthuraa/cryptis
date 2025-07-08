@@ -42,11 +42,11 @@ Implicit Types (si : sess_info).
 
 (*
 
-A --> B: g^a; vkA
-B --> A: {g^a; g^b; vkA}@skB
-A --> B: {g^a; g^b; vkB}@skA
+A --> B: g^a; pkA
+B --> A: {g^a; g^b; pkA}@skB
+A --> B: {g^a; g^b; pkB}@skA
 
-Result: derive_key [vkA; vkB; g^nA; g^nB; g^{nAnB}]
+Result: derive_key [pkA; pkB; g^a; g^b; g^ab]
 
 *)
 
@@ -212,22 +212,22 @@ Qed.
 
 Definition msg2_pred skR m2 : iProp :=
   ∃ ga b skI,
-    let vkI := Spec.pkey skI in
-    let vkR := Spec.pkey skR in
+    let pkI := Spec.pkey skI in
+    let pkR := Spec.pkey skR in
     let gb := TExp (TInt 0) b in
     let gab := TExp ga b in
-    ⌜m2 = Spec.of_list [ga; gb; vkI]⌝ ∧
+    ⌜m2 = Spec.of_list [ga; gb; pkI]⌝ ∧
     ((public skI ∨ public skR) ∨ (public b ↔ ▷ (released ga ∧ released gb))) ∧
     (∀ t, dh_pred b t ↔ ▷ □ iso_dh_pred t).
 
 Definition msg3_pred skI m3 : iProp :=
   ∃ a gb skR,
-    let vkI := Spec.pkey skI in
-    let vkR := Spec.pkey skR in
+    let pkI := Spec.pkey skI in
+    let pkR := Spec.pkey skR in
     let ga := TExp (TInt 0) a in
     let gab := TExp gb a in
     let si := SessInfo skI skR ga gb gab in
-    ⌜m3 = Spec.of_list [ga; gb; vkR]⌝ ∧
+    ⌜m3 = Spec.of_list [ga; gb; pkR]⌝ ∧
     ((public skI ∨ public skR) ∨ □ (public (si_key si) → ▷ released_session si)).
 
 Definition iso_dh_ctx : iProp :=

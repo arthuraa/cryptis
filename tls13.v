@@ -1856,7 +1856,7 @@ Lemma public_hello E sp :
     (SShare.meth_of ss, SShare.session_key_of ss, other sp).
 Proof.
 iIntros (?) "%ss #(keys & hello_ctx & sig_ctx & sess_ctx)".
-iIntros "#(wf_share & #m_vk & p_other) token r".
+iIntros "#(wf_share & #m_pk & p_other) token r".
 iMod (session_begin with "sess_ctx r [token]") as "[#sess close]".
 - solve_ndisj.
 - by eauto.
@@ -1880,12 +1880,12 @@ iApply public_signIS; eauto.
 Qed.
 
 (* TODO: Clean this statement *)
-Lemma public_checkE cp sh vkey s_ke :
-  check N cp sh = Some (vkey, s_ke) →
+Lemma public_checkE cp sh pkey s_ke :
+  check N cp sh = Some (pkey, s_ke) →
   ctx -∗
   public sh -∗
   ∃ k : sign_key,
-       ⌜vkey = Spec.pkey k⌝ ∧
+       ⌜pkey = Spec.pkey k⌝ ∧
        ⌜CParams.share cp = SShare.cshare_of s_ke⌝ ∧
        minted k ∧
        public (SShare.cnonce s_ke) ∧
@@ -1920,18 +1920,18 @@ move/SShare.public_checkE: e_check; move: kex' => {}kex [e_cp ->].
 case e_dec: Spec.dec => [res|] //=.
 have {sig e_dec} -> := Spec.decK _ _ _ _ _ (Spec.open_key_senc _) e_dec.
 case: Spec.to_listP => //= {}res.
-elim/(@list_len_rect 2): res => [vk sig|res neq]; last first.
+elim/(@list_len_rect 2): res => [pk sig|res neq]; last first.
   by rewrite prod_of_list_neq.
 rewrite [prod_of_list _ _]unlock /=.
 case e: Spec.has_key_type => //.
-have [sk -> {vk e}] : ∃ sk : sign_key, vk = Spec.pkey sk.
-  case: vk e => // - [] // sk _; by exists (SignKey sk); rewrite keysE.
+have [sk -> {pk e}] : ∃ sk : sign_key, pk = Spec.pkey sk.
+  case: pk e => // - [] // sk _; by exists (SignKey sk); rewrite keysE.
 case: decide => [-> {other'}|//] /=.
 rewrite /verify /Spec.dec /Spec.open.
 case: sig => //= k sig.
 case: decide => [/Spec.open_key_signK -> {k}|//] /=.
 case: Spec.untagP=> [ {}sig ->|//=].
-rewrite bool_decide_decide; case: decide => [->|//] [] {s_ke vkey} <- <-.
+rewrite bool_decide_decide; case: decide => [->|//] [] {s_ke pkey} <- <-.
 do !rewrite public_of_list /=.
 iIntros "#(? & ctx1 & ctx2 & _)".
 iDestruct 1 as "# ((p_kex & p_cp & _) & p_sig & _)".
@@ -1958,7 +1958,7 @@ iClear "s_sig".
 iPoseProof (public_sencE with "p_sig ctx1") as "(m_sig & inv & #pub)".
 iDestruct "inv" as "[psk_fail|#hello]".
 - iSpecialize ("pub" with "psk_fail"). rewrite public_of_list /=.
-  iDestruct "pub" as "{p_sig} (p_vkey & p_sig & _)".
+  iDestruct "pub" as "{p_sig} (p_pkey & p_sig & _)".
   iPoseProof (public_signE with "p_sig ctx2") as "(s_sig & inv)".
   iDestruct "inv" as "[?|#hello]"; eauto.
   iModIntro.
@@ -2007,12 +2007,12 @@ Definition tls_client : val := λ: "c" "kex" "other",
   send "c" "ch";;
   let: "sh" := recv "c" in
   bind: "res" := SParams.I.check N "cp" "sh" in
-  let: "vkey" := Fst "res" in
+  let: "pkey" := Fst "res" in
   let: "kex" := Snd "res" in
   let: "session_key" := SShare.I.session_key_of' "kex" in
   let: "ack" := senc "session_key" (Tag $ N.@"ack") "sh" in
   send "c" "ack" ;;
-  SOME ("vkey", SShare.I.cnonce "kex", SShare.I.snonce "kex", "session_key").
+  SOME ("pkey", SShare.I.cnonce "kex", SShare.I.snonce "kex", "session_key").
 
 Definition ack_pred (k t : term) : iProp :=
   ∀ sp, ⌜t = SParams.hello N sp⌝ →
@@ -2077,8 +2077,8 @@ Lemma wp_tls_client c ke other Φ :
   public other -∗
   (∀ res : option (term * term * term * senc_key),
       match res with
-      | Some (vkey, cn, sn, sk) =>
-        ∃ sk', ⌜vkey = Spec.pkey sk'⌝ ∧
+      | Some (pkey, cn, sn, sk) =>
+        ∃ sk', ⌜pkey = Spec.pkey sk'⌝ ∧
              minted sk' ∧
              public cn ∧
              public sn ∧
@@ -2112,11 +2112,11 @@ wp_pures; wp_bind (recv _); iApply wp_recv => //.
 iIntros (sh) "#p_sh"; wp_pures.
 wp_bind (SParams.I.check _ _ _); iApply (SParams.wp_check N cp).
 case e_check: SParams.check => [res|]; wp_pures; last by iApply ("post" $! None).
-case: res=> vkey ke'' in e_check *.
+case: res=> pkey ke'' in e_check *.
 iDestruct (SParams.public_checkE with "s_ctx p_sh") as (k) "Hk"; eauto.
 iDestruct "Hk" as "/= (%e_k & %e_share & #s_k & #p_cn & #p_sn &
                        #s_sk & %e_hello & rest)".
-subst ke' vkey; rewrite SShare.cnonce_cshare_of.
+subst ke' pkey; rewrite SShare.cnonce_cshare_of.
 iMod (session_begin _ Init (SShare.cnonce ke'') (SShare.snonce ke'')
                     (SShare.meth_of ke'', SShare.session_key_of' ke'',
                      CParams.other cp)

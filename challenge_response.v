@@ -11,9 +11,9 @@ Unset Printing Implicit Defensive.
 
 (*
 
-A --> B: nA, vk(A)
-B --> A: {nA, nB, vk(A)}_sk(B)
-A --> B: {nA, nB, vk(B)}_sk(A)
+A --> B: nA, pk(A)
+B --> A: {nA, nB, pk(A)}_sk(B)
+A --> B: {nA, nB, pk(B)}_sk(A)
 
 *)
 

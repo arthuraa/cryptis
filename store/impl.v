@@ -18,8 +18,8 @@ Module Client.
 
 Section Client.
 
-Definition connect : val := λ: "c" "skA" "vkB",
-  RPC.connect "c" "skA" "vkB".
+Definition connect : val := λ: "c" "skA" "pkB",
+  RPC.connect "c" "skA" "pkB".
 
 Definition store : val := λ: "cs" "k" "v",
   RPC.call "cs" (Tag $ dbN.@"store") ["k"; "v"];; #().

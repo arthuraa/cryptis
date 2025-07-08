@@ -114,7 +114,7 @@ Lemma wp_confirm P c skI skR ga :
       release_token (si_resp_share cs) ∗
       term_token (si_resp_share cs) (⊤ ∖ ↑iso_dhN ∖ ↑connN) }}}.
 Proof.
-iIntros "#? #ctx #? !> %Φ (#p_ga & #p_vkA & #sign_skB & P) post".
+iIntros "#? #ctx #? !> %Φ (#p_ga & #p_pkA & #sign_skB & P) post".
 rewrite bi.or_alt. iDestruct "P" as "(%failed & P)".
 wp_lam. wp_pures.
 iAssert (if failed then failure skI skR else True)%I

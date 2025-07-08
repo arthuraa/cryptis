@@ -27,31 +27,31 @@ Definition responder_wait : val := λ: "c",
   do_until (λ: <>,
     let: "m1" := recv "c" in
     bind: "m1" := list_of_term "m1" in
-    list_match: ["ga"; "vkI"] := "m1" in
-    guard: is_verify_key "vkI" in
-    SOME ("ga", "vkI")).
+    list_match: ["ga"; "pkI"] := "m1" in
+    guard: is_verify_key "pkI" in
+    SOME ("ga", "pkI")).
 
-Definition responder_accept : val := λ: "c" "skR" "ga" "vkI",
-  let: "vkR" := pkey "skR" in
+Definition responder_accept : val := λ: "c" "skR" "ga" "pkI",
+  let: "pkR" := pkey "skR" in
   let: "b" := mk_nonce #() in
   let: "gb" := mk_keyshare "b" in
   let: "m2" := sign "skR" (Tag $ iso_dhN.@"m2")
-                 (term_of_list ["ga"; "gb"; "vkI"]) in
+                 (term_of_list ["ga"; "gb"; "pkI"]) in
   send "c" "m2";;
-  bind: "m3" := verify "vkI" (Tag $ iso_dhN.@"m3") (recv "c") in
+  bind: "m3" := verify "pkI" (Tag $ iso_dhN.@"m3") (recv "c") in
   bind: "m3" := list_of_term "m3" in
-  list_match: ["ga'"; "gb'"; "vkR'"] := "m3" in
-  guard: eq_term "ga" "ga'" && eq_term "gb" "gb'" && eq_term "vkR" "vkR'" in
+  list_match: ["ga'"; "gb'"; "pkR'"] := "m3" in
+  guard: eq_term "ga" "ga'" && eq_term "gb" "gb'" && eq_term "pkR" "pkR'" in
   let: "gab" := texp "ga" "b" in
-  let: "secret" := term_of_list ["vkI"; "vkR"; "ga"; "gb"; "gab"] in
+  let: "secret" := term_of_list ["pkI"; "pkR"; "ga"; "gb"; "gab"] in
   SOME (derive_senc_key "secret").
 
 Definition responder : val := λ: "c" "skR",
   let: "res" := responder_wait "c" in
   let: "ga"  := Fst "res" in
-  let: "vkI" := Snd "res" in
-  bind: "kS" := responder_accept "c" "skR" "ga" "vkI" in
-  SOME ("vkI", "kS").
+  let: "pkI" := Snd "res" in
+  bind: "kS" := responder_accept "c" "skR" "ga" "pkI" in
+  SOME ("pkI", "kS").
 
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
@@ -67,7 +67,7 @@ wp_apply wp_do_until'. iIntros "!>".
 wp_pures. wp_apply wp_recv => //.
 iIntros "%m1 #p_m1". wp_pures.
 wp_list_of_term m1; wp_pures; last by eauto.
-wp_list_match => [ga vkI ->|_]; wp_pures; last by eauto.
+wp_list_match => [ga pkI ->|_]; wp_pures; last by eauto.
 rewrite public_of_list /=. iDestruct "p_m1" as "(? & ? & _)".
 wp_apply wp_is_verify_key; first by iApply public_minted.
 iSplit; last by wp_pures; eauto. iIntros "%skI -> #m_skI".
@@ -93,7 +93,7 @@ Lemma wp_responder_accept failed c skI skR ga :
         term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN)
       else True }}}.
 Proof.
-set vkR := Spec.pkey skR.
+set pkR := Spec.pkey skR.
 iIntros "%Φ (#chan_c & #? & (#? & #?) & #p_ga & #m_skI & #m_skR & #failed)
   Hpost".
 wp_lam. wp_pures. wp_apply wp_pkey. wp_pures.
@@ -133,12 +133,12 @@ iIntros "%m2 #?". wp_pures. wp_apply wp_send; eauto.
 wp_pures. wp_apply wp_recv => //. iIntros "%m3 #p_m3".
 wp_apply wp_verify; eauto. iSplit; last by protocol_failure.
 iIntros "{p_m3} %m3' _ #inv_m3".
-set vkI := Spec.pkey skI.
+set pkI := Spec.pkey skI.
 wp_pures. wp_list_of_term m3'; last by protocol_failure.
-wp_list_match => [ga' gb' vkR' -> {m3}|]; last by protocol_failure.
+wp_list_match => [ga' gb' pkR' -> {m3}|]; last by protocol_failure.
 wp_eq_term e; last by protocol_failure. subst ga'.
 wp_eq_term e; last by protocol_failure. subst gb'.
-wp_eq_term e; last by protocol_failure. subst vkR'.
+wp_eq_term e; last by protocol_failure. subst pkR'.
 wp_pure _ credit:"H3".
 wp_apply wp_texp.
 wp_pure _ credit:"H4".

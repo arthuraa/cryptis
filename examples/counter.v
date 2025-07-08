@@ -51,7 +51,7 @@ Definition server : val := rec: "loop" "c" "l" "sk" :=
   ) ;;
   "loop" "c" "l" "sk".
 
-Definition client : val := λ: "c" "vk",
+Definition client : val := λ: "c" "pk",
   do_until (λ: <>,
     (* Send out request *)
     let: "request" := (tint #1) in
@@ -59,7 +59,7 @@ Definition client : val := λ: "c" "vk",
     (* Wait for response *)
     let: "reply" := recv "c" in
     (* Check signature *)
-    bind: "value" := verify "vk" (Tag nroot) "reply" in
+    bind: "value" := verify "pk" (Tag nroot) "reply" in
     to_int "value"
   ).
 
@@ -179,8 +179,8 @@ Definition game : val := λ: <>,
 
   (* Generate signature keys and publicize verification key *)
   let: "k"   := mk_sign_key #() in
-  let: "vk"  := pkey "k" in
-  send "c" "vk" ;;
+  let: "pk"  := pkey "k" in
+  send "c" "pk" ;;
 
   (* Initialize server state *)
   let: "l" := newcounter #() in
@@ -189,7 +189,7 @@ Definition game : val := λ: <>,
   Fork (server "c" "l" "k");;
 
   (* Run client *)
-  let: "n'" := client "c" "vk" in
+  let: "n'" := client "c" "pk" in
 
   (* Check if client's value agrees with the server state *)
   ("n'" ≤ !"l").

@@ -17,8 +17,8 @@ Module Impl.
 
 Section Impl.
 
-Definition connect : val := λ: "c" "skA" "vkB",
-  Conn.connect "c" "skA" "vkB".
+Definition connect : val := λ: "c" "skA" "pkB",
+  Conn.connect "c" "skA" "pkB".
 
 Definition listen : val := λ: "c", Conn.listen "c".
 

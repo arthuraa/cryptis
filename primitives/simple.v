@@ -126,8 +126,8 @@ Definition sdec : val := λ: "sk" "N" "t",
 Definition sign : val := λ: "sk" "N" "t",
   enc "sk" "N" "t".
 
-Definition verify : val := λ: "vk" "N" "t",
-  dec "vk" "N" "t".
+Definition verify : val := λ: "pk" "N" "t",
+  dec "pk" "N" "t".
 
 Definition has_key_type : val := λ: "kt" "t",
   match: is_key "t" with

@@ -189,7 +189,7 @@ iApply wp_tls_client; rewrite -?lock; eauto.
   by rewrite /= public_TInt; eauto.
 iIntros (res) "Hres"; case: res => [res|]; wp_pures; last first.
   by iApply ("post" $! None).
-case: res => [] [] [] vkey cn sn sk /=.
+case: res => [] [] [] pk cn sn sk /=.
 iDestruct "Hres" as (?) "(-> & _ & _ & _ & #t_sk & _ & Hres)".
 iMod (lc_fupd_elim_later with "c Hres") as "Hres".
 iDestruct "Hres" as "[[_ contra]|[_ #s_psk']]".

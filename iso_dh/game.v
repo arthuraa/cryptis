@@ -130,19 +130,19 @@ wp_pures. iModIntro. iSplit => //. by iApply "post".
 Qed.
 
 Definition do_init_loop : val :=
-  rec: "loop" "c" "compromised" "set" "skI" "vkR" :=
-    Fork ("loop" "c" "compromised" "set" "skI" "vkR");;
-    let: "vkR'" := recv "c" in
-    (guard: is_verify_key "vkR'" in
-     bind: "sk" := initiator "c" "skI" "vkR'" in
+  rec: "loop" "c" "compromised" "set" "skI" "pkR" :=
+    Fork ("loop" "c" "compromised" "set" "skI" "pkR");;
+    let: "pkR'" := recv "c" in
+    (guard: is_verify_key "pkR'" in
+     bind: "sk" := initiator "c" "skI" "pkR'" in
      add_fresh_lock_term_set "sk" "set";;
-     if: eq_term "vkR" "vkR'" then check_key_secrecy "c" "compromised" "sk"
+     if: eq_term "pkR" "pkR'" then check_key_secrecy "c" "compromised" "sk"
      else #());;
      #().
 
-Definition do_init : val := λ: "c" "compromised" "skI" "vkR",
+Definition do_init : val := λ: "c" "compromised" "skI" "pkR",
   let: "set" := new_lock_term_set #() in
-  do_init_loop "c" "compromised" "set" "skI" "vkR".
+  do_init_loop "c" "compromised" "set" "skI" "pkR".
 
 Definition iso_dh_game_inv rl x : iProp := ∃ si,
   ⌜(si_key si : term) = x⌝ ∧
@@ -224,20 +224,20 @@ wp_apply wp_do_init_loop => //.
 Qed.
 
 Definition do_resp_loop : val :=
-  rec: "loop" "c" "compromised" "set" "skR" "vkI" :=
-    Fork ("loop" "c" "compromised" "set" "skR" "vkI");;
+  rec: "loop" "c" "compromised" "set" "skR" "pkI" :=
+    Fork ("loop" "c" "compromised" "set" "skR" "pkI");;
     (bind: "res" := responder "c" "skR" in
-     let: "vkI'" := Fst "res" in
+     let: "pkI'" := Fst "res" in
      let: "sk" := Snd "res" in
      add_fresh_lock_term_set "sk" "set";;
-     if: eq_term "vkI" "vkI'" then
+     if: eq_term "pkI" "pkI'" then
        check_key_secrecy "c" "compromised" "sk"
      else #());;
     #().
 
-Definition do_resp : val := λ: "c" "compromised" "skR" "vkI",
+Definition do_resp : val := λ: "c" "compromised" "skR" "pkI",
   let: "set" := new_lock_term_set #() in
-  do_resp_loop "c" "compromised" "set" "skR" "vkI".
+  do_resp_loop "c" "compromised" "set" "skR" "pkI".
 
 Lemma wp_do_resp_loop c lcomp set skI skR :
   channel c -∗
@@ -251,15 +251,15 @@ Lemma wp_do_resp_loop c lcomp set skI skR :
     do_resp_loop c #lcomp set skR (Spec.pkey skI)
   {{{ RET #(); True }}}.
 Proof.
-iIntros "#chan #? #? #p_vkI #p_vkR #? #set".
+iIntros "#chan #? #? #p_pkI #p_pkR #? #set".
 iLöb as "IH". iIntros "!> %Φ _ Hpost".
 wp_rec; wp_pures; wp_apply wp_fork.
 { iApply "IH" => //. }
 wp_pures. wp_apply wp_responder; first by eauto.
 iIntros "%res res".
-case: res => [[vkI' sk]|]; wp_pures; last by iApply "Hpost".
+case: res => [[pkI' sk]|]; wp_pures; last by iApply "Hpost".
 iDestruct "res"
-  as "(%si & -> & <- & <- & #p_vkI' & #m_sk & #s_k & rel & token)".
+  as "(%si & -> & <- & <- & #p_pkI' & #m_sk & #s_k & rel & token)".
 iPoseProof (iso_dh_game_fresh Resp with "token")
   as "[fresh token]"; first solve_ndisj.
 iMod (unrelease with "rel") as "#un".
@@ -294,13 +294,13 @@ Definition game : val := λ: <>,
   let: "c"   := init_network #() in
   let: "skI" := mk_sign_key #() in
   let: "skR" := mk_sign_key #() in
-  let: "vkI" := pkey "skI" in
-  let: "vkR" := pkey "skR" in
+  let: "pkI" := pkey "skI" in
+  let: "pkR" := pkey "skR" in
   let: "compromised" := ref #false in
-  send "c" "vkI";;
-  send "c" "vkR";;
-  Fork (do_init "c" "compromised" "skI" "vkR");;
-  Fork (do_resp "c" "compromised" "skR" "vkI");;
+  send "c" "pkI";;
+  send "c" "pkR";;
+  Fork (do_init "c" "compromised" "skI" "pkR");;
+  Fork (do_resp "c" "compromised" "skR" "pkI");;
   Fork (compromise_long_term_keys "c" "compromised" "skI" "skR").
 
 Lemma wp_game :
@@ -312,9 +312,9 @@ iIntros "#ctx sign_tok"; rewrite /game; wp_pures.
 iMod (iso_dh_ctx_alloc with "sign_tok") as "[#? _]" => //.
 wp_apply wp_init_network => //. iIntros "%c #cP". wp_pures.
 wp_apply (wp_mk_sign_key with "[]"); eauto.
-iIntros "%skI #p_vkI s_skI tokenI". wp_pures.
+iIntros "%skI #p_pkI s_skI tokenI". wp_pures.
 wp_pures. wp_apply (wp_mk_sign_key with "[]"); eauto.
-iIntros "%skR #p_vkR s_skR tokenR". wp_pures.
+iIntros "%skR #p_pkR s_skR tokenR". wp_pures.
 wp_apply wp_pkey. wp_pures.
 wp_apply wp_pkey. wp_pures.
 wp_alloc lcomp as "lcomp".
