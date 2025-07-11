@@ -6,13 +6,15 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import lock ticket_lock.
 From cryptis Require Import lib term cryptis primitives tactics rpc.
-From cryptis.examples.store Require Import alist db shared.
+From cryptis.examples.store Require Import alist.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
 Local Existing Instance ticket_lock.
+
+Notation dbN := (nroot.@"db").
 
 Module Client.
 

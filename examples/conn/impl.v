@@ -11,10 +11,6 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Module Impl.
-
-Section Impl.
-
 Definition channel : val := λ: "cs",
   Snd "cs".
 
@@ -81,7 +77,3 @@ Definition free : val := λ: "cs",
   let: "counters" := Fst (Fst "cs") in
   Free "counters";;
   Free ("counters" +ₗ #1%nat).
-
-End Impl.
-
-End Impl.

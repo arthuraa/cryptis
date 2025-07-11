@@ -7,8 +7,9 @@ From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
 From cryptis Require Import lib term cryptis primitives tactics.
 From cryptis Require Import gmeta nown role iso_dh conn rpc.
-From cryptis.examples.store Require Import impl shared alist db.
-From cryptis.examples.store.server_proofs Require Import load store create.
+From cryptis.examples.store Require Import impl alist.
+From cryptis.examples.store.proofs Require Import base db.
+From cryptis.examples.store.proofs.server Require Import load store create.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

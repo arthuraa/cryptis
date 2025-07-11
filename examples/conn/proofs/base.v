@@ -15,8 +15,6 @@ Unset Printing Implicit Defensive.
 
 Notation connN := (nroot.@"conn").
 
-Module Props.
-
 Record state := State {
   cs_si   :> sess_info;
   cs_ts   :  loc;
@@ -188,6 +186,4 @@ Proof. by iIntros "(#failed & _)". Qed.
 
 End Defs.
 
-End Props.
-
-Arguments Props.connGS Σ : clear implicits.
+Arguments connGS Σ : clear implicits.

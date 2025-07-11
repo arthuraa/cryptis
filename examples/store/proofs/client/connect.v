@@ -9,7 +9,8 @@ From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta nown.
 From cryptis Require Import cryptis primitives tactics role.
 From cryptis.examples Require Import conn rpc.
-From cryptis.examples.store Require Import impl shared db.
+From cryptis.examples.store Require Import impl.
+From cryptis.examples.store.proofs Require Import base db.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

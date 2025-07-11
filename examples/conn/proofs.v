@@ -7,15 +7,12 @@ From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta cryptis primitives tactics role.
 From cryptis.examples Require Import iso_dh.
-From cryptis.examples.conn Require Import impl props.
+From cryptis.examples.conn Require impl.
+From cryptis.examples.conn.proofs Require Import base.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
-
-Module Proofs.
-
-Import Props.
 
 Record handler := Handler {
   handler_val : val;
@@ -37,7 +34,7 @@ Implicit Types v : val.
 
 Lemma wp_channel cs :
   {{{ True }}}
-    Impl.channel (repr cs)
+    impl.channel (repr cs)
   {{{ RET (cs_chan cs); True }}}.
 Proof.
 iIntros "% _ post". wp_lam. wp_pures. by iApply "post".
@@ -50,7 +47,7 @@ Lemma wp_connect P c skI skR :
   minted skI -∗
   minted skR -∗
   {{{ failure skI skR ∨ P }}}
-    Impl.connect c skI (Spec.pkey skR)
+    impl.connect c skI (Spec.pkey skR)
   {{{ cs, RET (repr cs);
       connected skI skR Init cs ∗
       (compromised_session Init cs ∨ P) ∗
@@ -93,7 +90,7 @@ Lemma wp_listen c :
   cryptis_ctx -∗
   iso_dh_ctx -∗
   {{{ True }}}
-    Impl.listen c
+    impl.listen c
   {{{ ga skI, RET (ga, Spec.pkey skI)%V;
       public ga ∗ minted skI }}}.
 Proof.
@@ -107,7 +104,7 @@ Lemma wp_confirm P c skI skR ga :
   iso_dh_ctx -∗
   {{{ public ga ∗ minted skI ∗ minted skR ∗
       (failure skI skR ∨ P) }}}
-    Impl.confirm c skR (ga, Spec.pkey skI)%V
+    impl.confirm c skR (ga, Spec.pkey skI)%V
   {{{ cs, RET (repr cs);
       connected skI skR Resp cs ∗
       (compromised_session Resp cs ∨ P) ∗
@@ -146,10 +143,10 @@ Qed.
 
 Lemma wp_session_key cs :
   {{{ True }}}
-    Impl.session_key (repr cs)
+    impl.session_key (repr cs)
   {{{ RET (repr (si_key cs)); True }}}.
 Proof.
-rewrite /Impl.session_key.
+rewrite /impl.session_key.
 iIntros "%Φ _ post". wp_pures. iApply "post".
 iModIntro. by iFrame.
 Qed.
@@ -159,7 +156,7 @@ Lemma wp_send skI skR rl cs N ts φ :
   ([∗ list] t ∈ ts, public t) -∗
   {{{ connected skI skR rl cs ∗
       (public (si_key cs) ∨ φ skI skR cs ts) }}}
-    Impl.send (repr cs) (Tag N) (repr ts)
+    impl.send (repr cs) (Tag N) (repr ts)
   {{{ RET #(); connected skI skR rl cs }}}.
 Proof.
 iIntros "#pred #p_ts !> %Φ (conn & inv) post".
@@ -196,7 +193,7 @@ Lemma wp_try_open N φ skI skR rl cs t :
   {{{ senc_pred N (conn_pred (swap_role rl) φ) ∗
       connected skI skR rl cs ∗
       public (TSeal (si_key cs) t) }}}
-    Impl.try_open (repr cs) (Tag N) t
+    impl.try_open (repr cs) (Tag N) t
   {{{ res, RET res;
       connected skI skR rl cs ∗
       (⌜res = NONEV⌝ ∨
@@ -206,7 +203,7 @@ Lemma wp_try_open N φ skI skR rl cs t :
 Proof.
 Arguments si_key : simpl never.
 iIntros "%Φ (#Φ & conn & #p_t) post".
-rewrite /Impl.try_open.
+rewrite /impl.try_open.
 wp_pure _ credit:"c1".
 wp_pure _ credit:"c2".
 wp_pures.
@@ -271,7 +268,7 @@ Proof. apply _. Qed.
 Lemma wp_select Φ Ψ skI skR rl cs hs :
   ([∗ list] h ∈ hs, wf_handler Φ Ψ skI skR rl cs h) -∗
   (connected skI skR rl cs ∗ Φ) -∗
-  WP Impl.select (repr cs) (repr hs) {{ Ψ }}.
+  WP impl.select (repr cs) (repr hs) {{ Ψ }}.
 Proof.
 iIntros "#wp_handlers [conn inv]".
 iPoseProof (connected_channel with "conn") as "#?".
@@ -301,7 +298,7 @@ Lemma wp_handle Φ Ψ skI skR rl cs φ (N : namespace) (f : val) :
         f (repr cs) (repr ts)
       {{{ v, RET v; Ψ v }}})
   }}}
-    Impl.handle (Tag N) f
+    impl.handle (Tag N) f
   {{{ h, RET (repr h); wf_handler Φ Ψ skI skR rl cs h }}}.
 Proof.
 iIntros "%Ξ [#? #wp] post". wp_lam. wp_pures.
@@ -317,7 +314,7 @@ Qed.
 Lemma wp_recv N skI skR rl cs φ :
   senc_pred N (conn_pred (swap_role rl) φ) -∗
   {{{ connected skI skR rl cs }}}
-    Impl.recv (repr cs) (Tag N)
+    impl.recv (repr cs) (Tag N)
   {{{ ts, RET (repr (ts : list term));
       connected skI skR rl cs ∗
       ([∗ list] t ∈ ts, public t) ∗
@@ -344,7 +341,7 @@ Qed.
 
 Lemma wp_free kI kR rl cs :
   {{{ connected kI kR rl cs }}}
-    Impl.free (repr cs)
+    impl.free (repr cs)
   {{{ RET #(); True }}}.
 Proof.
 iIntros "%Φ conn post".
@@ -356,7 +353,5 @@ wp_free. wp_pures.
 wp_free.
 by iApply "post".
 Qed.
-
-End Proofs.
 
 End Proofs.

@@ -13,10 +13,6 @@ Unset Printing Implicit Defensive.
 
 Notation rpcN := (nroot.@"rpc").
 
-Module Impl.
-
-Section Impl.
-
 Definition connect : val := λ: "c" "skA" "pkB",
   Conn.connect "c" "skA" "pkB".
 
@@ -54,7 +50,3 @@ Definition server : val := rec: "loop" "cs" "handlers" :=
   let: "cont" := Conn.select "cs" (handle_close :: "handlers") in
   if: "cont" then "loop" "cs" "handlers"
   else #().
-
-End Impl.
-
-End Impl.

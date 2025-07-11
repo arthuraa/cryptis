@@ -16,8 +16,6 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Module Props.
-
 Class rpcGS Σ := RpcGS {
   rpcGS_pred  : savedPredG Σ (list term);
 }.
@@ -212,6 +210,4 @@ Proof. solve_ctx. Qed.
 
 End Defs.
 
-End Props.
-
-Arguments Props.rpcGS Σ : clear implicits.
+Arguments rpcGS Σ : clear implicits.

@@ -6,15 +6,12 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta cryptis primitives tactics role.
 From cryptis.examples Require Import iso_dh conn.
-From cryptis.examples.rpc Require Import impl props.
+From cryptis.examples.rpc Require impl.
+From cryptis.examples.rpc.proofs Require Import base.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
-
-Module Proofs.
-
-Import Props Impl.
 
 Section Proofs.
 
@@ -34,20 +31,20 @@ Lemma wp_connect P c skI skR :
   minted skI -∗
   minted skR -∗
   {{{ Conn.failure skI skR ∨ P }}}
-    Impl.connect c skI (Spec.pkey skR)
+    impl.connect c skI (Spec.pkey skR)
   {{{ cs, RET (repr cs);
       client_connected skI skR cs ∗
       (compromised_session Init cs ∨ P) }}}.
 Proof.
 iIntros "#? #? #? #? #? % !> P post".
 wp_lam; wp_pures.
-iPoseProof (Props.ctx_conn_ctx with "[//]") as "?".
+iPoseProof (ctx_conn_ctx with "[//]") as "?".
 iApply wp_fupd.
 wp_apply (Conn.wp_connect with "[//] [//] [//] [] [] P"); eauto.
 iIntros "%cs (connected & P & rel & token)".
 iMod (resp_pred_token_alloc with "token") as "(t1 & t2 & token)";
   first solve_ndisj.
-iApply "post". iFrame. iModIntro. iRight. by iFrame.
+iApply ("post" $! cs). iFrame. iModIntro. iRight. by iFrame.
 Qed.
 
 Lemma wp_listen c :
@@ -55,13 +52,13 @@ Lemma wp_listen c :
   cryptis_ctx -∗
   ctx -∗
   {{{ True }}}
-    listen c
+    impl.listen c
   {{{ ga skI, RET (ga, Spec.pkey skI)%V;
       public ga ∗ minted skI }}}.
 Proof.
 iIntros "#? #? #? % !> _ post".
 wp_lam. iApply Conn.wp_listen => //.
-by iApply Props.ctx_conn_ctx.
+by iApply ctx_conn_ctx.
 Qed.
 
 Lemma wp_confirm P c skI skR ga :
@@ -70,14 +67,14 @@ Lemma wp_confirm P c skI skR ga :
   ctx -∗
   {{{ public ga ∗ minted skI ∗ minted skR ∗
       (Conn.failure skI skR ∨ P) }}}
-    confirm c skR (ga, Spec.pkey skI)%V
+    impl.confirm c skR (ga, Spec.pkey skI)%V
   {{{ cs, RET (repr cs);
       server_connected skI skR cs ∗
       (compromised_session Resp cs ∨ P) }}}.
 Proof.
 iIntros "#? #ctx #? !> %Φ (#p_ga & #m_skI & #m_skR & P) post".
 wp_lam; wp_pures.
-iPoseProof (Props.ctx_conn_ctx with "[//]") as "?".
+iPoseProof (ctx_conn_ctx with "[//]") as "?".
 iApply wp_fupd.
 wp_apply (Conn.wp_confirm P with "[//] [//] [//] [$P]").
 { by eauto. }
@@ -91,7 +88,7 @@ Lemma wp_call N φ ψ skI skR cs (ts : list term) :
       rpc N φ ψ ∗
       client_connected skI skR cs ∗
       (compromised_session Init cs ∨ φ skI skR cs ts) }}}
-    call (repr cs) (Tag N) (repr ts)
+    impl.call (repr cs) (Tag N) (repr ts)
   {{{ ts', RET (repr ts');
       client_connected skI skR cs ∗
       (compromised_session Init cs ∨ ψ skI skR cs ts ts') ∗
@@ -163,7 +160,7 @@ Lemma wp_handle Φ N φ₁ φ₂ skI skR cs (f : val) :
           end ∗
           Φ }}})
   }}}
-    handle (Tag N) f
+    impl.handle (Tag N) f
   {{{ h, RET (repr h); wf_handler Φ skI skR cs h }}}.
 Proof.
 iIntros "%Ψ (#? & #ctx & #wp_f) post".
@@ -203,7 +200,7 @@ Qed.
 
 Lemma wp_handle_close Φ skI skR cs :
   {{{ ctx }}}
-    handle_close
+    impl.handle_close
   {{{ h, RET (repr h); wf_handler Φ skI skR cs h }}}.
 Proof.
 iIntros "%Ψ #ctx post".
@@ -231,7 +228,7 @@ Lemma wp_server Φ skI skR cs handlers :
   {{{ ctx ∗
       server_connected skI skR cs ∗ Φ ∗
       [∗ list] h ∈ handlers, wf_handler Φ skI skR cs h }}}
-    server (repr cs) (repr handlers)
+    impl.server (repr cs) (repr handlers)
   {{{ RET #(); public (si_key cs) ∗ Φ }}}.
 Proof.
 iLöb as "IH".
@@ -257,7 +254,7 @@ Qed.
 
 Lemma wp_close skI skR cs :
   {{{ ctx ∗ client_connected skI skR cs }}}
-    close (repr cs)
+    impl.close (repr cs)
   {{{ RET #(); public (si_key cs) }}}.
 Proof.
 iIntros "%Φ (#ctx & conn) post".
@@ -285,7 +282,5 @@ iSpecialize ("E" $! ts). iMod (lc_fupd_elim_later_pers with "c E") as "{E} #E".
 iAssert False%I as "[]".
 by iRewrite "E".
 Qed.
-
-End Proofs.
 
 End Proofs.

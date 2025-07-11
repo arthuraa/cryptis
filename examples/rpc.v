@@ -1,10 +1,10 @@
 From cryptis.examples Require Import iso_dh.
-From cryptis.examples.rpc Require Import props impl proofs.
+From cryptis.examples.rpc Require Import impl proofs.
 
 Module RPC.
 
-Include Props.
-Include Impl.
-Include Proofs.
+Include cryptis.examples.rpc.impl.
+Include cryptis.examples.rpc.proofs.base.
+Include cryptis.examples.rpc.proofs.
 
 End RPC.
