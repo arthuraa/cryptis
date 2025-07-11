@@ -4,6 +4,8 @@ The material covered in the paper can be found in the following files:
 
 ## Core Library
 
+In the `cryptis` directory you will find:
+
 - `mathcomp_compat`: Compatibility with the Mathematical Components library
 - `lib`: General additions to Iris and MathComp.  List manipulation programs for
   HeapLang.
@@ -19,11 +21,14 @@ The material covered in the paper can be found in the following files:
 
 ## Case studies
 
-- `examples/nsl.v`: NSL protocol, including game.
-- `iso_dh/*`, `iso_dh`: ISO protocol with DH key exchange and digital signatures
-  (game is in its own file).
-- `conn/*`, `conn`: Authenticated connections
-- `store/*`, `store`: Authenticated key-value store (game is in its own file).
+In the `examples` you will find our case studies:
+
+- `nsl`: NSL protocol, including game.
+- `iso_dh`: ISO protocol with DH key exchange and digital signatures (game is in
+  its own file).
+- `conn`: Authenticated connections
+- `rpc`: Remote procedure calls
+- `store`: Authenticated key-value store (game is in its own file).
   
 ## Building
 

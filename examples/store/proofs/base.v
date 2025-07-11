@@ -112,7 +112,7 @@ Proof. iIntros "%sub". by iApply DB.free_at_diff. Qed.
 
 Lemma client_alloc skI skR E :
   ↑dbN.@"client".@(skR : term) ⊆ E →
-  term_token skI E ={⊤}=∗
+  term_token skI E ==∗
   db_disconnected skI skR ∗
   db_free_at skI skR ⊤ ∗
   term_token skI (E ∖ ↑dbN.@"client".@(skR : term)).
