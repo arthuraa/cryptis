@@ -7,27 +7,15 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import lock ticket_lock.
 From cryptis Require Import term cryptis primitives tactics.
+From cryptis.examples.alist Require Import impl.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Module AList.
+Module Pure.
 
-Definition empty : val := λ: <>, []%V.
-
-Definition find : val := λ: "kvs" "k",
-  let: "res" := find_list (λ: "kv", eq_term (Fst "kv") "k") "kvs" in
-  match: "res" with
-    SOME "res" => SOME (Snd "res")
-  | NONE => NONE
-  end.
-
-Definition insert : val := λ: "kvs" "k" "v",
-  ("k", "v") :: "kvs".
-
-Definition delete : val := λ: "kvs" "k",
-  filter_list (λ: "p", ~ eq_term "k" (Fst "p")) "kvs".
+Include impl.Pure.
 
 Section Verif.
 
@@ -108,21 +96,11 @@ Qed.
 
 End Verif.
 
-End AList.
+End Pure.
 
-Module SAList.
+Module Impure.
 
-Definition new : val := λ: <>,
-  ref (AList.empty #()).
-
-Definition find : val := λ: "l" "k",
-  AList.find !"l" "k".
-
-Definition insert : val := λ: "l" "k" "v",
-  "l" <- AList.insert !"l" "k" "v".
-
-Definition delete : val := λ: "l" "k",
-  "l" <- AList.delete !"l" "k".
+Include impl.Impure.
 
 Section Verif.
 
@@ -135,7 +113,7 @@ Implicit Types (db : gmap term val).
 Definition is_alist v db : iProp := ∃ l kvs,
   ⌜v = #l⌝ ∗
   l ↦ kvs ∗
-  ⌜AList.is_alist kvs db⌝.
+  ⌜Pure.is_alist kvs db⌝.
 
 Lemma wp_empty E :
   {{{ True }}}
@@ -143,7 +121,7 @@ Lemma wp_empty E :
   {{{ v, RET v; is_alist v ∅ }}}.
 Proof.
 iIntros "%Φ _ Hpost". wp_lam.
-wp_bind (AList.empty _). iApply AList.wp_empty => //.
+wp_bind (Pure.empty _). iApply Pure.wp_empty => //.
 iIntros "!> %kvs %".
 wp_alloc l as "Hl".
 iModIntro. iApply "Hpost". iExists _. by eauto.
@@ -156,7 +134,7 @@ Lemma wp_find E v db t :
 Proof.
 iIntros "%Φ (%l & %kvs & -> & Hl & %) post".
 wp_lam; wp_pures. wp_load.
-iApply AList.wp_find => //.
+iApply Pure.wp_find => //.
 iIntros "!> _". iApply "post".
 iExists _. by eauto.
 Qed.
@@ -168,7 +146,7 @@ Lemma wp_insert v db k v' E :
 Proof.
 iIntros "%Φ (%l & %kvs & -> & Hl & %) post".
 wp_lam; wp_pures. wp_load.
-wp_bind (AList.insert _ _ _). iApply AList.wp_insert => //.
+wp_bind (Pure.insert _ _ _). iApply Pure.wp_insert => //.
 iIntros "!> %r %". wp_store. iApply "post".
 iExists _. by eauto.
 Qed.
@@ -180,11 +158,11 @@ Lemma wp_delete v db k E :
 Proof.
 iIntros "%Φ (%l & %kvs & -> & Hl & %) post".
 wp_lam; wp_pures. wp_load.
-wp_bind (AList.delete _ _). iApply AList.wp_delete => //.
+wp_bind (Pure.delete _ _). iApply Pure.wp_delete => //.
 iIntros "!> %r %". wp_store. iApply "post".
 iExists _. by eauto.
 Qed.
 
 End Verif.
 
-End SAList.
+End Impure.

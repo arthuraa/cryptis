@@ -8,8 +8,8 @@ From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
 From cryptis Require Import lib term gmeta nown.
 From cryptis Require Import cryptis replica primitives tactics role.
-From cryptis.examples Require Import iso_dh conn rpc.
-From cryptis.examples.store Require Import alist db.
+From cryptis.examples Require Import iso_dh conn rpc alist.
+From cryptis.examples.store Require Import db.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -146,7 +146,7 @@ Qed.
 
 Definition server_db_connected' skI skR cs vdb : iProp := ∃ db,
   public_db db ∗
-  SAList.is_alist vdb (repr <$> db) ∗
+  AList.is_alist vdb (repr <$> db) ∗
   (compromised_session Resp cs ∨ db_server_ready skI skR db).
 
 Definition server_db_connected skI skR cs vdb : iProp :=
@@ -158,13 +158,13 @@ Definition server_handler skI skR cs vdb h : iProp :=
 
 Definition server_db_disconnected skI skR vdb : iProp := ∃ db,
   public_db db ∗
-  SAList.is_alist vdb (repr <$> db) ∗
+  AList.is_alist vdb (repr <$> db) ∗
   (Conn.failure skI skR ∨ db_server_ready skI skR db).
 
 Lemma server_db_alloc skI skR vdb E :
   ↑dbN.@"server".@(skI : term) ⊆ E →
   term_token skR E -∗
-  SAList.is_alist vdb ∅ ==∗
+  AList.is_alist vdb ∅ ==∗
   term_token skR (E ∖ ↑dbN.@"server".@(skI : term)) ∗
   server_db_disconnected skI skR vdb.
 Proof.
@@ -176,7 +176,7 @@ Qed.
 
 Definition server ss : iProp := ∃ accounts E,
   minted (ss_key ss) ∗
-  SAList.is_alist (ss_clients ss) (repr <$> accounts) ∗
+  AList.is_alist (ss_clients ss) (repr <$> accounts) ∗
   term_token (ss_key ss) E ∗
   ⌜∀ skI, Spec.pkey skI ∉ dom accounts → ↑dbN.@"server".@(skI : term) ⊆ E⌝ ∗
   [∗ map] pkI ↦ scs ∈ accounts, ∃ skI, ⌜pkI = Spec.pkey skI⌝ ∗
@@ -186,7 +186,7 @@ Definition server ss : iProp := ∃ accounts E,
 Lemma serverI skR vclients :
   term_token skR (↑dbN.@"server") -∗
   minted skR -∗
-  SAList.is_alist vclients ∅ -∗
+  AList.is_alist vclients ∅ -∗
   server {| ss_key := skR; ss_clients := vclients |}.
 Proof.
 iIntros "token #p_pk clients".

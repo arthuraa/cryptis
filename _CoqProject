@@ -62,6 +62,10 @@ examples/rpc/proofs/base.v
 examples/rpc/proofs.v
 examples/rpc.v
 
+examples/alist/impl.v
+examples/alist/proofs.v
+examples/alist.v
+
 examples/store.v
 examples/store/impl.v
 examples/store/proofs/base.v
@@ -77,7 +81,6 @@ examples/store/proofs/server/store.v
 examples/store/proofs/server/create.v
 examples/store/proofs/db.v
 examples/store/proofs.v
-examples/store/alist.v
 examples/store/game.v
 
 ## Simple examples

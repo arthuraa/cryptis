@@ -6,8 +6,8 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
 From cryptis Require Import lib term cryptis primitives tactics.
-From cryptis Require Import gmeta nown role iso_dh conn rpc.
-From cryptis.examples.store Require Import impl alist.
+From cryptis Require Import gmeta nown role iso_dh conn rpc alist.
+From cryptis.examples.store Require Import impl.
 From cryptis.examples.store.proofs Require Import base db.
 From cryptis.examples.store.proofs.server Require Import load store create.
 
@@ -35,7 +35,7 @@ Lemma wp_server_start c skR E :
   {{{ ss, RET (repr ss); server ss }}}.
 Proof.
 iIntros "%sub %Ψ (#? & #? & token) post".
-wp_lam. wp_pures. wp_apply SAList.wp_empty => //.
+wp_lam. wp_pures. wp_apply AList.wp_empty => //.
 iIntros "%accounts accounts". wp_pures.
 iApply ("post" $! {| ss_key := skR; ss_clients := accounts |}) .
 iExists ∅, E.
@@ -88,8 +88,8 @@ iIntros "%Φ [#ctx server] post".
 iDestruct "server"
   as "(%accounts & %E & #p_pkR & accounts & token & %EP & #locks)".
 wp_lam; wp_pures.
-wp_bind (SAList.find _ _).
-iApply (SAList.wp_find with "accounts").
+wp_bind (AList.find _ _).
+iApply (AList.wp_find with "accounts").
 iIntros "!> accounts"; rewrite lookup_fmap.
 case accounts_skI: (accounts !! Spec.pkey skI) => [scs|]; wp_pures.
 - rewrite big_sepM_forall.
@@ -105,8 +105,8 @@ case accounts_skI: (accounts !! Spec.pkey skI) => [scs|]; wp_pures.
   { by apply: EP; rewrite elem_of_dom accounts_skI. }
   rewrite (term_token_difference _ (↑dbN.@"server".@(skI : term))) //.
   iDestruct "token" as "[token_skI token]".
-  wp_bind (SAList.new #()).
-  iApply SAList.wp_empty => //.
+  wp_bind (AList.new #()).
+  iApply AList.wp_empty => //.
   iIntros "!> %vdb db". wp_pures.
   wp_bind (newlock #()).
   iDestruct (server_db_alloc with "token_skI db") as ">[_ db]"; eauto.
@@ -115,8 +115,8 @@ case accounts_skI: (accounts !! Spec.pkey skI) => [scs|]; wp_pures.
   { iFrame. }
   iIntros "!> %vlock %γlock #lock".
   wp_pures.
-  wp_bind (SAList.insert _ _ _).
-  iApply (SAList.wp_insert with "accounts").
+  wp_bind (AList.insert _ _ _).
+  iApply (AList.wp_insert with "accounts").
   iIntros "!> accounts". wp_pures.
   pose scs := {| scs_db := vdb; scs_name := γlock; scs_lock := vlock |}.
   rewrite -(fmap_insert _ _ _ scs).

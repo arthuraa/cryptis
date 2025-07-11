@@ -5,8 +5,8 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term cryptis primitives tactics role.
-From cryptis.examples Require Import iso_dh conn rpc.
-From cryptis.examples.store Require Import impl alist.
+From cryptis.examples Require Import iso_dh conn rpc alist.
+From cryptis.examples.store Require Import impl.
 From cryptis.examples.store.proofs Require Import base db.
 
 Set Implicit Arguments.
@@ -41,8 +41,8 @@ wp_pures.
 wp_list_match => [t1 t2 ->|?]; wp_pures; last first.
 { iApply ("post" $! None). by iFrame. }
 iMod (store_resp with "ready inv_ts") as "[ready inv_ts]".
-wp_bind (SAList.insert _ _ _).
-iApply (SAList.wp_insert with "db").
+wp_bind (AList.insert _ _ _).
+iApply (AList.wp_insert with "db").
 iIntros "!> db". rewrite -fmap_insert.
 wp_pures. wp_list. wp_pures. iApply ("post" $! (Some _)).
 iFrame. rewrite /= public_TInt. iModIntro.

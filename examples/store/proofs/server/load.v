@@ -6,8 +6,8 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta nown.
 From cryptis Require Import cryptis primitives tactics.
-From cryptis.examples Require Import iso_dh conn rpc.
-From cryptis.examples.store Require Import impl alist.
+From cryptis.examples Require Import iso_dh conn rpc alist.
+From cryptis.examples.store Require Import impl.
 From cryptis.examples.store.proofs Require Import base db.
 
 Set Implicit Arguments.
@@ -41,7 +41,7 @@ do 2!iSplit => //. clear Φ.
 iIntros "!> %ts !> %Φ (#p_ts & inv_ts & %db & #p_db & db & ready) post".
 wp_pures. wp_list_match => [t1 ->| ?]; wp_pures; last first.
 { iApply ("post" $! None). by iFrame. }
-wp_bind (SAList.find _ _). iApply (SAList.wp_find with "db") => //.
+wp_bind (AList.find _ _). iApply (AList.wp_find with "db") => //.
 iIntros "!> db". rewrite lookup_fmap.
 iMod (load_resp with "ready inv_ts") as "[ready inv_ts]".
 case db_t1: (db !! t1) => [t2'|]; wp_pures; last first.

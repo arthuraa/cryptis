@@ -6,7 +6,7 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import lock ticket_lock.
 From cryptis Require Import lib term cryptis primitives tactics rpc.
-From cryptis.examples.store Require Import alist.
+From cryptis.examples Require Import alist.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -47,28 +47,28 @@ Module Server.
 Implicit Types N : namespace.
 
 Definition start : val := λ: "k",
-  let: "accounts" := SAList.new #() in
+  let: "accounts" := AList.new #() in
   ("k", "accounts").
 
 Definition handle_store : val :=
 λ: "cs" "db" "req",
   list_match: ["k"; "v"] := "req" in
-  SAList.insert "db" "k" "v";;
+  AList.insert "db" "k" "v";;
   SOME [TInt 0].
 
 Definition handle_load : val :=
 λ: "cs" "db" "req",
   list_match: ["k"] := "req" in
-  bind: "data" := SAList.find "db" "k" in
+  bind: "data" := AList.find "db" "k" in
   SOME ["data"].
 
 Definition handle_create : val :=
 λ: "cs" "db" "req",
   list_match: ["k"; "v"] := "req" in
-  match: SAList.find "db" "k" with
+  match: AList.find "db" "k" with
     SOME <> => NONE
   | NONE =>
-    SAList.insert "db" "k" "v";;
+    AList.insert "db" "k" "v";;
     SOME [TInt 0]
   end.
 
@@ -82,11 +82,11 @@ Definition conn_handler : val := λ: "cs" "db" "lock",
 
 Definition find_client : val := λ: "ss" "client_key",
   let: "clients" := Snd "ss" in
-  match: SAList.find "clients" "client_key" with
+  match: AList.find "clients" "client_key" with
     NONE =>
-    let: "db"   := SAList.new #() in
+    let: "db"   := AList.new #() in
     let: "lock" := newlock #()    in
-    SAList.insert "clients" "client_key" ("db", "lock");;
+    AList.insert "clients" "client_key" ("db", "lock");;
     ("db", "lock")
   | SOME "account" => "account"
   end.
