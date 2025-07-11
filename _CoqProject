@@ -69,14 +69,14 @@ cryptis/challenge_response.v
 
 ## Public-key authentication
 
-cryptis/pk_auth/pk_auth.v
-cryptis/pk_auth/impl.v
-cryptis/pk_auth/shared.v
-cryptis/pk_auth/client_proofs.v
-cryptis/pk_auth/server_proofs.v
-cryptis/pk_auth/nsl.v
-cryptis/pk_auth/dh_game.v
-cryptis/pk_auth/dh.v
+cryptis/examples/pk_auth/pk_auth.v
+cryptis/examples/pk_auth/impl.v
+cryptis/examples/pk_auth/shared.v
+cryptis/examples/pk_auth/client_proofs.v
+cryptis/examples/pk_auth/server_proofs.v
+cryptis/examples/pk_auth/nsl.v
+cryptis/examples/pk_auth/dh_game.v
+cryptis/examples/pk_auth/dh.v
 
 ## NSL+DH
 

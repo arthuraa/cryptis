@@ -5,7 +5,7 @@ From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term cryptis primitives tactics.
 From cryptis Require Import role session.
-From cryptis.pk_auth Require Import impl shared.
+From cryptis.examples.pk_auth Require Import impl shared.
 
 
 Set Implicit Arguments.
