@@ -6,8 +6,8 @@ From iris.algebra Require Import numbers.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par.
 From cryptis Require Import lib term cryptis primitives tactics.
-From cryptis Require Import role session challenge_response.
-From cryptis Require Import pk_auth dh pk_dh tls13.
+From cryptis Require Import role session challenge_response dh tls13.
+From cryptis.pk_auth Require Import pk_auth dh.
 From cryptis.primitives Require Import attacker.
 
 Set Implicit Arguments.
