@@ -62,13 +62,18 @@ examples/permanent.v
 examples/counter.v
 examples/nsl_secr.v
 examples/nsl_auth.v
-examples/nsl.v
+
+## NSL
+
+examples/nsl/impl.v
+examples/nsl/proofs.v
+examples/nsl/game.v
 
 ## CR
 
 examples/challenge_response.v
 
-## Public-key authentication
+## Public-key authentication (generalized NSL)
 
 examples/pk_auth/pk_auth.v
 examples/pk_auth/impl.v
@@ -78,8 +83,6 @@ examples/pk_auth/server_proofs.v
 examples/pk_auth/nsl.v
 examples/pk_auth/dh_game.v
 examples/pk_auth/dh.v
-
-## NSL+DH
 
 ## TLS 1.3
 
