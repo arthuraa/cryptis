@@ -24,36 +24,6 @@ Implicit Types (γ γa γb : gname) (failed : bool).
 Implicit Types (ts : nat) (T : gset term).
 Implicit Types (si : sess_info) (osi : option sess_info).
 
-Definition responder_wait : val := λ: "c",
-  do_until (λ: <>,
-    let: "m1" := recv "c" in
-    bind: "m1" := list_of_term "m1" in
-    list_match: ["ga"; "pkI"] := "m1" in
-    guard: is_verify_key "pkI" in
-    SOME ("ga", "pkI")).
-
-Definition responder_accept : val := λ: "c" "skR" "ga" "pkI",
-  let: "pkR" := pkey "skR" in
-  let: "b" := mk_nonce #() in
-  let: "gb" := mk_keyshare "b" in
-  let: "m2" := sign "skR" (Tag $ iso_dhN.@"m2")
-                 (term_of_list ["ga"; "gb"; "pkI"]) in
-  send "c" "m2";;
-  bind: "m3" := verify "pkI" (Tag $ iso_dhN.@"m3") (recv "c") in
-  bind: "m3" := list_of_term "m3" in
-  list_match: ["ga'"; "gb'"; "pkR'"] := "m3" in
-  guard: eq_term "ga" "ga'" && eq_term "gb" "gb'" && eq_term "pkR" "pkR'" in
-  let: "gab" := texp "ga" "b" in
-  let: "secret" := term_of_list ["pkI"; "pkR"; "ga"; "gb"; "gab"] in
-  SOME (derive_senc_key "secret").
-
-Definition responder : val := λ: "c" "skR",
-  let: "res" := responder_wait "c" in
-  let: "ga"  := Fst "res" in
-  let: "pkI" := Snd "res" in
-  bind: "kS" := responder_accept "c" "skR" "ga" "pkI" in
-  SOME ("pkI", "kS").
-
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
 
