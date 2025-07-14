@@ -2,10 +2,10 @@ From mathcomp Require Import ssreflect.
 From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap list excl.
 From iris.algebra Require Import functions.
-From iris.base_logic.lib Require Import saved_prop invariants.
+From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib gmeta nown.
-From cryptis.core Require Import term minted.
+From cryptis.core Require Import term minted saved_prop.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -66,7 +66,7 @@ Notation iPropI := (iPropI Σ).
 
 Definition pnonce a : iProp :=
   ∃ γ P, meta a (nroot.@"nonce") γ ∧
-         saved_pred_own γ DfracDiscarded P ∧
+         own γ (saved_pred DfracDiscarded P) ∧
          ▷ □ P (TNonce a).
 
 Global Instance Persistent_pnonce a : Persistent (pnonce a).
@@ -76,7 +76,7 @@ Definition dh_pred (t t' : term) : iProp :=
   match t with
   | TNonce a =>
     ∃ γ φ, meta a (nroot.@"dh") γ ∧
-           saved_pred_own γ DfracDiscarded φ ∧
+           own γ (saved_pred DfracDiscarded φ) ∧
            ▷ □ φ t'
   | _ => False
   end.
@@ -93,7 +93,7 @@ Definition name_of_functionality F :=
 
 Definition seal_pred F N Φ : iProp :=
   ∃ γ, gmeta (name_of_functionality F) N γ ∧
-       saved_pred_own γ DfracDiscarded (fun '(k, t) => Φ k t).
+       own γ (saved_pred DfracDiscarded (fun '(k, t) => Φ k t)).
 
 Definition aenc_pred N (Φ : aenc_key → term → iProp) :=
   seal_pred AENC N (λ k t, ∃ k' : aenc_key, ⌜k = k'⌝ ∗ Φ k' t)%I.
@@ -135,7 +135,9 @@ Proof.
 iDestruct 1 as (γm1) "[#meta1 #own1]".
 iDestruct 1 as (γm2) "[#meta2 #own2]".
 iPoseProof (gmeta_agree with "meta1 meta2") as "->".
-by iApply (saved_pred_agree _ _ _ _ _ (k, t) with "own1 own2").
+iPoseProof (own_valid_2 with "own1 own2") as "valid".
+iPoseProof (saved_pred_op_validI with "valid") as "[_ #agree]".
+by iApply ("agree" $! (k, t)).
 Qed.
 
 Lemma seal_pred_set F E (N : namespace) Φ :
@@ -145,7 +147,8 @@ Lemma seal_pred_set F E (N : namespace) Φ :
   seal_pred_token F (E ∖ ↑N).
 Proof.
 iIntros (?) "token".
-iMod (saved_pred_alloc (λ '(k, t), Φ k t) DfracDiscarded) as (γ) "own" => //.
+iMod (own_alloc (saved_pred DfracDiscarded (λ '(k, t), Φ k t)))
+  as (γ) "own" => //.
 rewrite (@seal_pred_token_difference (↑N)) //.
 iDestruct "token" as "[token ?]".
 iMod (gmeta_set _ _ _ γ with "token") as "?" => //.
@@ -192,7 +195,7 @@ Qed.
 
 Definition hash_pred N (P : term → iProp) : iProp :=
   ∃ γ, gmeta public_hash_name N γ ∧
-       saved_pred_own γ DfracDiscarded P.
+       own γ (saved_pred DfracDiscarded P).
 
 Definition hash_pred_token E :=
   gmeta_token public_hash_name E.
@@ -225,7 +228,9 @@ Proof.
 iDestruct 1 as (γm1) "[#meta1 #own1]".
 iDestruct 1 as (γm2) "[#meta2 #own2]".
 iPoseProof (gmeta_agree with "meta1 meta2") as "->".
-by iApply (saved_pred_agree _ _ _ _ _ t with "own1 own2").
+iPoseProof (own_valid_2 with "own1 own2") as "valid".
+iPoseProof (saved_pred_op_validI with "valid") as "[_ #agree]".
+by iApply ("agree" $! t).
 Qed.
 
 Lemma hash_pred_set E N P :
@@ -237,7 +242,8 @@ Proof.
 iIntros (?) "token".
 rewrite (@hash_pred_token_difference (↑N)) //.
 iDestruct "token" as "[token ?]".
-iMod (saved_pred_alloc P DfracDiscarded) as (γ) "own" => //.
+iMod (own_alloc (saved_pred DfracDiscarded P))
+  as (γ) "own" => //.
 iMod (gmeta_set _ _ _ γ with "token") => //.
 by iModIntro; iFrame; iExists γ; iSplit.
 Qed.
@@ -754,8 +760,8 @@ iIntros "token".
 iSplit.
 { rewrite minted_TNonce. iIntros "contra".
   by iDestruct (meta_meta_token with "token contra") as "[]". }
-iMod (saved_pred_alloc P DfracDiscarded) as (γP) "#own_P" => //.
-iMod (saved_pred_alloc Q DfracDiscarded) as (γQ) "#own_Q" => //.
+iMod (own_alloc (saved_pred DfracDiscarded P)) as (γP) "#own_P" => //.
+iMod (own_alloc (saved_pred DfracDiscarded Q)) as (γQ) "#own_Q" => //.
 rewrite (meta_token_difference a (↑nroot.@"nonce")) //.
 iDestruct "token" as "[nonce token]".
 iMod (meta_set _ _ γP with "nonce") as "#nonce"; eauto.
@@ -772,14 +778,16 @@ iSplitR.
   + iIntros "[#public _]".
     iDestruct "public" as (γP' P') "(#meta_γP' & #own_P' & ?)".
     iPoseProof (meta_agree with "nonce meta_γP'") as "->".
-    iPoseProof (saved_pred_agree _ _ _ _ _ (TNonce a) with "own_P own_P'") as "e".
-    by iModIntro; iRewrite "e".
+    iPoseProof (own_valid_2 with "own_P own_P'") as "valid".
+    iPoseProof (saved_pred_op_validI with "valid") as "[_ #e]".
+    iSpecialize ("e" $! (TNonce a)). iModIntro. by iRewrite "e".
   + iIntros "#?". iSplit => //. iExists γP, P; eauto.
 iIntros "!> !> %t"; iSplit.
 - iDestruct 1 as (γQ' Q') "(#meta_γQ' & #own_Q' & ?)".
   iPoseProof (meta_agree with "dh meta_γQ'") as "->".
-  iPoseProof (saved_pred_agree _ _ _ _ _ t with "own_Q own_Q'") as "e".
-  by iModIntro; iRewrite "e".
+  iPoseProof (own_valid_2 with "own_Q own_Q'") as "valid".
+  iPoseProof (saved_pred_op_validI with "valid") as "[_ #e]".
+  iSpecialize ("e" $! t). iModIntro. by iRewrite "e".
 - by iIntros "#?"; iExists _, _; eauto.
 Qed.
 
