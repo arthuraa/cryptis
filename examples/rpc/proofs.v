@@ -15,7 +15,7 @@ Unset Printing Implicit Defensive.
 
 Section Proofs.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !rpcGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !Conn.connGS Σ, !rpcGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (cs : Conn.state).
@@ -23,6 +23,8 @@ Implicit Types (skI skR : sign_key) (kS t : term).
 Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
+
+Notation rpcN := (nroot.@"rpc").
 
 Lemma wp_connect P c skI skR :
   channel c -∗
@@ -38,9 +40,10 @@ Lemma wp_connect P c skI skR :
 Proof.
 iIntros "#? #? #? #? #? % !> P post".
 wp_lam; wp_pures.
-iPoseProof (ctx_conn_ctx with "[//]") as "?".
+iPoseProof (ctx_iso_dh_ctx with "[//]") as "?".
+iPoseProof (ctx_iso_dh_pred with "[//]") as "?".
 iApply wp_fupd.
-wp_apply (Conn.wp_connect with "[//] [//] [//] [] [] P"); eauto.
+wp_apply (Conn.wp_connect with "[] [P]"); eauto 10.
 iIntros "%cs (connected & P & rel & token)".
 iMod (resp_pred_token_alloc with "token") as "(t1 & t2 & token)";
   first solve_ndisj.
@@ -58,7 +61,7 @@ Lemma wp_listen c :
 Proof.
 iIntros "#? #? #? % !> _ post".
 wp_lam. iApply Conn.wp_listen => //.
-by iApply ctx_conn_ctx.
+by iApply ctx_iso_dh_ctx.
 Qed.
 
 Lemma wp_confirm P c skI skR ga :
@@ -74,12 +77,13 @@ Lemma wp_confirm P c skI skR ga :
 Proof.
 iIntros "#? #ctx #? !> %Φ (#p_ga & #m_skI & #m_skR & P) post".
 wp_lam; wp_pures.
-iPoseProof (ctx_conn_ctx with "[//]") as "?".
+iPoseProof (ctx_iso_dh_ctx with "[//]") as "?".
+iPoseProof (ctx_iso_dh_pred with "[//]") as "?".
 iApply wp_fupd.
-wp_apply (Conn.wp_confirm P with "[//] [//] [//] [$P]").
+wp_apply (Conn.wp_confirm P with "[//] [//] [//] [//] [$P]").
 { by eauto. }
-iIntros "%cs (conn & dis & rel & token)".
-iApply "post". by iFrame.
+iIntros "%cs %data (conn & dis & rel & token & _)".
+wp_pures. iApply "post". by iFrame.
 Qed.
 
 Lemma wp_call N φ ψ skI skR cs (ts : list term) :

@@ -14,12 +14,12 @@ Unset Printing Implicit Defensive.
 Notation rpcN := (nroot.@"rpc").
 
 Definition connect : val := λ: "c" "skA" "pkB",
-  Conn.connect "c" "skA" "pkB".
+  Conn.connect "c" "skA" "pkB" (Tag rpcN) (TInt 0).
 
 Definition listen : val := λ: "c", Conn.listen "c".
 
 Definition confirm : val := λ: "c" "skB" "req",
-  Conn.confirm "c" "skB" "req".
+  Fst (Conn.confirm "c" "skB" (Tag rpcN) "req").
 
 Definition call : val := λ: "cs" "N" "ts",
   Conn.send "cs" "N" "ts";;

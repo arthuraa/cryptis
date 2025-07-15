@@ -16,7 +16,7 @@ Unset Printing Implicit Defensive.
 
 Section Game.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !RPC.rpcGS Σ, !storeGS Σ, !tlockG Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !Conn.connGS Σ, !RPC.rpcGS Σ, !storeGS Σ, !tlockG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -95,13 +95,14 @@ Qed.
 
 Lemma wp_game :
   cryptis_ctx -∗
-  seal_pred_token SIGN ⊤ -∗
+  seal_pred_token SIGN (⊤ ∖ ↑iso_dhN) -∗
   seal_pred_token SENC ⊤ -∗
+  iso_dh_ctx -∗
+  iso_dh_token ⊤ -∗
   WP game #() {{ _, True }}.
 Proof.
-iIntros "#ctx sign_tok senc_tok"; rewrite /game; wp_pures.
-iMod (iso_dh_ctx_alloc with "sign_tok") as "[#? sign_tok]" => //.
-iMod (RPC.ctx_alloc with "[$] [//]") as "[#? senc_tok]"; first solve_ndisj.
+iIntros "#ctx sign_tok senc_tok #? iso_tok"; rewrite /game; wp_pures.
+iMod (RPC.ctx_alloc with "[$] [//] [$]") as "(#? & senc_tok & ?)"; try solve_ndisj.
 iMod (store_ctx_alloc with "[$] [//]") as "[#? _]" => //; first solve_ndisj.
 wp_apply wp_init_network => //. iIntros "%c #cP". wp_pures.
 wp_apply (wp_mk_sign_key with "[]"); eauto.
@@ -148,7 +149,7 @@ Qed.
 End Game.
 
 Definition F : gFunctors :=
-  #[heapΣ; spawnΣ; cryptisΣ; tlockΣ; Conn.connΣ; RPC.rpcΣ; storeΣ].
+  #[heapΣ; spawnΣ; cryptisΣ; tlockΣ; iso_dhΣ; Conn.connΣ; RPC.rpcΣ; storeΣ].
 
 Lemma store_secure σ₁ σ₂ (v : val) t₂ e₂ :
   rtc erased_step ([game #()], σ₁) (t₂, σ₂) →
@@ -160,5 +161,6 @@ apply (adequate_not_stuck NotStuck _ _ (λ v _, True)) => //.
 apply: heap_adequacy.
 iIntros (?) "?".
 iMod (cryptisGS_alloc _) as (?) "(#ctx & _ & sign_tok & senc_tok & _)".
-by iApply (wp_game with "ctx [$] [$]") => //.
+iMod (iso_dhGS_alloc with "sign_tok") as (?) "(#? & iso_tok & sign_tok)" => //.
+by iApply (wp_game with "ctx [$] [$] [$]") => //.
 Qed.

@@ -14,6 +14,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Local Notation connN := (nroot.@"conn").
+
 Record handler := Handler {
   handler_val : val;
 }.
@@ -22,7 +24,7 @@ Instance repr_handler : Repr handler := handler_val.
 
 Section Proofs.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !connGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !connGS Σ, !iso_dhGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (cs : state).
@@ -31,6 +33,7 @@ Implicit Types skI skR : sign_key.
 Implicit Types n m : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
+Implicit Types (N : namespace) (data : term).
 
 Lemma wp_channel cs :
   {{{ True }}}
@@ -40,30 +43,32 @@ Proof.
 iIntros "% _ post". wp_lam. wp_pures. by iApply "post".
 Qed.
 
-Lemma wp_connect P c skI skR :
-  channel c -∗
-  cryptis_ctx -∗
-  iso_dh_ctx -∗
-  minted skI -∗
-  minted skR -∗
-  {{{ failure skI skR ∨ P }}}
-    impl.connect c skI (Spec.pkey skR)
+Lemma wp_connect P c skI skR N data φ :
+  channel c ∗
+  cryptis_ctx ∗
+  iso_dh_ctx ∗
+  iso_dh_pred N φ ∗
+  minted skI ∗
+  minted skR ∗
+  public data -∗
+  {{{ (failure skI skR ∨ P) ∗ φ data }}}
+    impl.connect c skI (Spec.pkey skR) (Tag N) data
   {{{ cs, RET (repr cs);
       connected skI skR Init cs ∗
       (compromised_session Init cs ∨ P) ∗
       release_token (si_init_share cs) ∗
       term_token (si_init_share cs) (⊤ ∖ ↑iso_dhN ∖ ↑connN) }}}.
 Proof.
-iIntros "#? #? #? #? #? % !> HP post".
+iIntros "(#? & #? & #? & #? & #? & #? & #?) % !> [HP inv_data] post".
 rewrite bi.or_alt. iDestruct "HP" as "(%failed & HP)".
 wp_lam. wp_pure _ credit:"c1". wp_pure _ credit:"c2".
 wp_pures. wp_bind (do_until _).
 iAssert (if failed then failure skI skR else True)%I as "#?".
 { by case: failed. }
 iCombine "HP post c1 c2" as "post". iApply (wp_frame_wand with "post").
-wp_apply wp_do_until'. iModIntro.
+iRevert "inv_data". iApply wp_do_until. iIntros "!> inv_data".
 wp_pures.
-wp_apply (wp_initiator failed with "[//] [//] [] [] []") => //.
+wp_apply (wp_initiator failed with "[//] [//] [] [//] [] [] [] [] [$inv_data]") => //.
 iIntros "%res resP".
 case: res=> [kS|] /=; last by eauto.
 iDestruct "resP"
@@ -98,20 +103,22 @@ iIntros "#? #? #? % !> _ post". wp_lam.
 wp_apply wp_responder_wait; eauto.
 Qed.
 
-Lemma wp_confirm P c skI skR ga :
+Lemma wp_confirm P c skI skR ga N φ :
   channel c -∗
   cryptis_ctx -∗
   iso_dh_ctx -∗
+  iso_dh_pred N φ -∗
   {{{ public ga ∗ minted skI ∗ minted skR ∗
       (failure skI skR ∨ P) }}}
-    impl.confirm c skR (ga, Spec.pkey skI)%V
-  {{{ cs, RET (repr cs);
+    impl.confirm c skR (Tag N) (ga, Spec.pkey skI)%V
+  {{{ cs data, RET (repr cs, data);
       connected skI skR Resp cs ∗
       (compromised_session Resp cs ∨ P) ∗
       release_token (si_resp_share cs) ∗
-      term_token (si_resp_share cs) (⊤ ∖ ↑iso_dhN ∖ ↑connN) }}}.
+      term_token (si_resp_share cs) (⊤ ∖ ↑iso_dhN ∖ ↑connN) ∗
+      ((public skI ∨ public skR) ∨ φ data)}}}.
 Proof.
-iIntros "#? #ctx #? !> %Φ (#p_ga & #p_pkA & #sign_skB & P) post".
+iIntros "#? #ctx #? #? !> %Φ (#p_ga & #p_pkA & #sign_skB & P) post".
 rewrite bi.or_alt. iDestruct "P" as "(%failed & P)".
 wp_lam. wp_pures.
 iAssert (if failed then failure skI skR else True)%I
@@ -124,9 +131,10 @@ iApply wp_do_until'. iIntros "!>".
 wp_pures.
 iApply (wp_responder_accept failed).
 { do !iSplit => //. }
-iIntros "!> %osi res". case: osi => [si|]; last by eauto.
-iDestruct "res" as "(%e & <- & #m_k & #sess & #comp & rel & token)".
-rewrite -{}e {skI}.
+iIntros "!> %osi res". case: osi => [[kS data]|]; last by eauto.
+iDestruct "res"
+  as "(%si & <- & <- & -> &
+       #p_data & #m_k & #sess & #comp & rel & token & inv_data)".
 iRight. iExists _. iSplit => //.
 iIntros "P post".
 wp_pures.

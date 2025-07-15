@@ -31,7 +31,7 @@ Proof. solve_inG. Qed.
 
 Section Defs.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !rpcGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !Conn.connGS Σ, !rpcGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (skI skR : sign_key) (kS t : term) (ts : list term).
@@ -162,25 +162,32 @@ Definition ctx : iProp :=
   senc_pred (rpcN.@"resp") (Conn.conn_pred Resp resp_pred) ∗
   senc_pred (rpcN.@"error") (Conn.conn_pred Resp error_pred) ∗
   senc_pred (rpcN.@"close") close_pred ∗
-  iso_dh_ctx.
+  iso_dh_ctx ∗
+  iso_dh_pred rpcN (λ _, True)%I.
 
-Lemma ctx_alloc E :
-  ↑rpcN ⊆ E →
-  seal_pred_token SENC E -∗
-  iso_dh_ctx ==∗
-  ctx ∗ seal_pred_token SENC (E ∖ ↑rpcN).
+Lemma ctx_alloc E1 E2 :
+  ↑rpcN ⊆ E1 →
+  ↑rpcN ⊆ E2 →
+  seal_pred_token SENC E1 -∗
+  iso_dh_ctx -∗
+  iso_dh_token E2 ==∗
+  ctx ∗ seal_pred_token SENC (E1 ∖ ↑rpcN) ∗ iso_dh_token (E2 ∖ ↑rpcN).
 Proof.
-iIntros "%sub token #?".
+iIntros "% % token1 #? token2".
 rewrite (seal_pred_token_difference _ (↑rpcN)); try solve_ndisj.
-iDestruct "token" as "[token ?]". iFrame.
-iMod (senc_pred_set (N := rpcN.@"resp") with "token")
-  as "[resp token]"; try solve_ndisj.
+iDestruct "token1" as "[token1 ?]". iFrame.
+iMod (senc_pred_set (N := rpcN.@"resp") with "token1")
+  as "[resp token1]"; try solve_ndisj.
 iFrame.
-iMod (senc_pred_set (N := rpcN.@"error") with "token")
-  as "[error token]"; try solve_ndisj.
+iMod (senc_pred_set (N := rpcN.@"error") with "token1")
+  as "[error token1]"; try solve_ndisj.
 iFrame.
-iMod (senc_pred_set (N := rpcN.@"close") with "token")
-  as "[init token]"; try solve_ndisj.
+iMod (senc_pred_set (N := rpcN.@"close") with "token1")
+  as "[init token1]"; try solve_ndisj.
+iFrame.
+iMod (iso_dh_pred_set rpcN (λ _, True%I) with "token2")
+  as "[? token2]" => //.
+by iFrame.
 Qed.
 
 Ltac solve_ctx :=
@@ -205,7 +212,10 @@ Lemma ctx_close :
   senc_pred (rpcN.@"close") close_pred.
 Proof. solve_ctx. Qed.
 
-Lemma ctx_conn_ctx : ctx -∗ iso_dh_ctx.
+Lemma ctx_iso_dh_ctx : ctx -∗ iso_dh_ctx.
+Proof. solve_ctx. Qed.
+
+Lemma ctx_iso_dh_pred : ctx -∗ iso_dh_pred rpcN (λ _, True)%I.
 Proof. solve_ctx. Qed.
 
 End Defs.

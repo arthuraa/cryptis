@@ -11,6 +11,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Notation connN := (nroot.@"conn").
+
 Definition channel : val := λ: "cs",
   Snd "cs".
 
@@ -20,22 +22,25 @@ Definition received : val := λ: "cs", Fst (Fst "cs") +ₗ #1%nat.
 Definition session_key : val := λ: "cs",
   Snd (Fst "cs").
 
-Definition connect : val := λ: "c" "skA" "pkB",
+Definition connect : val := λ: "c" "skA" "pkB" "N" "data",
   let: "session_key" :=
-    do_until (λ: <>, initiator "c" "skA" "pkB") in
+    do_until (λ: <>, initiator "c" "skA" "pkB" "N" "data") in
   let: "counters" := AllocN #2 #0%nat in
   ("counters", "session_key", "c").
 
 Definition listen : val := λ: "c",
   responder_wait "c".
 
-Definition confirm : val := λ: "c" "skB" "req",
+Definition confirm : val := λ: "c" "skB" "N" "req",
   let: "ga" := Fst "req" in
   let: "pkA" := Snd "req" in
-  let: "sk" := do_until
-    (λ: <>, responder_accept "c" "skB" "ga" "pkA") in
+  let: "res" := do_until
+    (λ: <>, responder_accept "c" "skB" "ga" "pkA" "N") in
+  let: "sk" := Fst "res" in
+  let: "data" := Snd "res" in
   let: "counters" := AllocN #2 #0%nat in
-  ("counters", "sk", "c").
+  let: "conn" := ("counters", "sk", "c") in
+  ("conn", "data").
 
 Definition send : val := λ: "cs" "N" "ts",
   let: "c"  := channel "cs" in

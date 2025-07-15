@@ -6,12 +6,12 @@ From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta nown cryptis primitives tactics.
 From cryptis Require Import role.
+From cryptis.core Require Import saved_prop.
+From cryptis.examples.iso_dh Require Import impl.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
-
-Definition iso_dhN := nroot.@"iso_dh".
 
 Record sess_info := SessInfo {
   si_init : sign_key;
@@ -29,29 +29,76 @@ Global Instance sess_info_inhabited : Inhabited sess_info :=
   populate (SessInfo inhabitant inhabitant
               inhabitant inhabitant inhabitant).
 
+Class iso_dhGpreS Σ := IsoDhGPreS {
+  iso_dhGpreS_meta : metaGS Σ;
+  iso_dhGpreS_pred : savedPredG Σ term;
+}.
+
+Local Existing Instance iso_dhGpreS_meta.
+Local Existing Instance iso_dhGpreS_pred.
+
+Class iso_dhGS Σ := IsoDhGS {
+  iso_dh_inG : iso_dhGpreS Σ;
+  iso_dh_name : gname;
+}.
+
+Local Existing Instance iso_dh_inG.
+
+Definition iso_dhΣ := #[metaΣ; savedPredΣ term].
+
+Global Instance subG_iso_dhGpreS Σ : subG iso_dhΣ Σ → iso_dhGpreS Σ.
+Proof. solve_inG. Qed.
+
 Section Verif.
 
-Context `{!heapGS Σ, !cryptisGS Σ}.
+Context `{!heapGS Σ, !cryptisGS Σ, !iso_dhGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (rl : role) (t nI nR sI sR kS : term).
-Implicit Types (skI skR : sign_key).
-Implicit Types (γ γa γb : gname) (ok failed : bool).
-Implicit Types (ts : nat) (T : gset term).
+Implicit Types (skI skR : sign_key) (failed : bool).
 Implicit Types (si : sess_info).
+Implicit Types (N : namespace) (E : coPset) (φ : term → iProp).
 
-(*
+Definition iso_dh_token E : iProp :=
+  gmeta_token iso_dh_name E.
 
-A --> B: g^a; pkA
-B --> A: {g^a; g^b; pkA}@skB
-A --> B: {g^a; g^b; pkB}@skA
+Definition iso_dh_pred N φ : iProp :=
+  nown iso_dh_name N (saved_pred DfracDiscarded φ).
 
-Result: derive_key [pkA; pkB; g^a; g^b; g^ab]
+Lemma iso_dh_pred_set N φ E :
+  ↑N ⊆ E →
+  iso_dh_token E ==∗ iso_dh_pred N φ ∗ iso_dh_token (E ∖ ↑N).
+Proof. by iIntros "%"; iApply nown_alloc. Qed.
 
-*)
+Lemma iso_dh_token_difference E1 E2 :
+  E1 ⊆ E2 →
+  iso_dh_token E2 ⊣⊢ iso_dh_token E1 ∗ iso_dh_token (E2 ∖ E1).
+Proof. exact: gmeta_token_difference. Qed.
 
-Definition mk_keyshare : val := λ: "k",
-  texp (tint #0) "k".
+Lemma iso_dh_token_drop E1 E2 :
+  E1 ⊆ E2 →
+  iso_dh_token E2 -∗ iso_dh_token E1.
+Proof. exact: gmeta_token_drop. Qed.
+
+Definition iso_dh_ready gb N data : iProp := ∀ φ,
+  iso_dh_pred N φ →
+  term_token gb (↑iso_dhN.@"ready") ={⊤}=∗
+    ▷ φ data.
+
+Lemma iso_dh_ready_alloc gb N data φ :
+  iso_dh_pred N φ -∗
+  φ data ={⊤}=∗
+  □ iso_dh_ready gb N data.
+Proof.
+iIntros "#N_φ φ_ts".
+iMod (escrowI nroot with "φ_ts []") as "#?".
+{ by iApply (term_token_switch gb (iso_dhN.@"ready")). }
+iIntros "!> !>  %φ' #N_φ' ready".
+iPoseProof (nown_valid_2 with "N_φ N_φ'") as "#valid".
+iPoseProof (saved_pred_op_validI with "valid") as "[_ #φ_eq]".
+iSpecialize ("φ_eq" $! data). iMod (escrowE with "[//] ready") as "res" => //.
+iIntros "!> !>". by iRewrite -"φ_eq".
+Qed.
 
 Lemma wp_mk_keyshare (t : term) :
   {{{ True }}}
@@ -64,7 +111,7 @@ wp_bind (texp _ _). iApply wp_texp.
 by iApply "Hpost".
 Qed.
 
-Definition iso_dh_pred t : iProp :=
+Definition iso_dh_key_share t : iProp :=
   ⌜length (exps t) = 1⌝.
 
 Definition si_key si : senc_key :=
@@ -218,17 +265,19 @@ Definition msg2_pred skR m2 : iProp :=
     let gab := TExp ga b in
     ⌜m2 = Spec.of_list [ga; gb; pkI]⌝ ∧
     ((public skI ∨ public skR) ∨ (public b ↔ ▷ (released ga ∧ released gb))) ∧
-    (∀ t, dh_pred b t ↔ ▷ □ iso_dh_pred t).
+    (∀ t, dh_pred b t ↔ ▷ □ iso_dh_key_share t).
 
 Definition msg3_pred skI m3 : iProp :=
-  ∃ a gb skR,
+  ∃ a gb skR N data,
     let pkI := Spec.pkey skI in
     let pkR := Spec.pkey skR in
     let ga := TExp (TInt 0) a in
     let gab := TExp gb a in
     let si := SessInfo skI skR ga gb gab in
-    ⌜m3 = Spec.of_list [ga; gb; pkR]⌝ ∧
-    ((public skI ∨ public skR) ∨ □ (public (si_key si) → ▷ released_session si)).
+    ⌜m3 = Spec.of_list [ga; gb; pkR; Tag N; data]⌝ ∧
+    ((public skI ∨ public skR) ∨
+      □ (public (si_key si) → ▷ released_session si)) ∧
+    iso_dh_ready gb N data.
 
 Definition iso_dh_ctx : iProp :=
   sign_pred (iso_dhN.@"m2") msg2_pred ∗
@@ -249,7 +298,7 @@ Qed.
 
 Lemma public_dh_share a :
   minted a -∗
-  □ (∀ t, dh_pred a t ↔ ▷ □ iso_dh_pred t) -∗
+  □ (∀ t, dh_pred a t ↔ ▷ □ iso_dh_key_share t) -∗
   public (TExp (TInt 0) a).
 Proof.
 iIntros "#m_a #pred_a". rewrite public_TExpN //=; eauto.
@@ -261,8 +310,8 @@ Qed.
 Lemma public_dh_secret a b :
   minted a -∗
   minted b -∗
-  □ (∀ t, dh_pred a t ↔ ▷ □ iso_dh_pred t) -∗
-  □ (∀ t, dh_pred b t ↔ ▷ □ iso_dh_pred t) -∗
+  □ (∀ t, dh_pred a t ↔ ▷ □ iso_dh_key_share t) -∗
+  □ (∀ t, dh_pred b t ↔ ▷ □ iso_dh_key_share t) -∗
   (public (TExpN (TInt 0) [a; b]) ↔ ◇ (public a ∨ public b)).
 Proof.
 iIntros "#m_a #m_b #pred_a #pred_b".
@@ -278,14 +327,14 @@ iSplit; last first.
   - iLeft. iSplit => //. by iApply public_dh_share. }
 iIntros "[[_ #p_b] | [[_ #p_a] | (_ & contra & _)]]"; eauto.
 iPoseProof ("pred_a" with "contra") as ">%contra".
-by rewrite /iso_dh_pred exps_TExpN /= in contra.
+by rewrite /iso_dh_key_share exps_TExpN /= in contra.
 Qed.
 
 Lemma public_dh_secret' a b (P : iProp) :
   □ (public a ↔ P) -∗
-  □ (∀ t, dh_pred a t ↔ ▷ □ iso_dh_pred t) -∗
+  □ (∀ t, dh_pred a t ↔ ▷ □ iso_dh_key_share t) -∗
   □ (public b ↔ P) -∗
-  □ (∀ t, dh_pred b t ↔ ▷ □ iso_dh_pred t) -∗
+  □ (∀ t, dh_pred b t ↔ ▷ □ iso_dh_key_share t) -∗
   (public (TExpN (TInt 0) [a; b]) → ◇ P).
 Proof.
 iIntros "#s_a #pred_a #s_b #pred_b".
@@ -294,9 +343,26 @@ iIntros "[[_ #p_b] | [[_ #p_a] | (_ & contra & _)]]".
 - by iModIntro; iApply "s_b".
 - by iModIntro; iApply "s_a".
 iPoseProof ("pred_a" with "contra") as ">%contra".
-by rewrite /iso_dh_pred exps_TExpN /= in contra.
+by rewrite /iso_dh_key_share exps_TExpN /= in contra.
 Qed.
 
 End Verif.
 
-Arguments iso_dh_ctx_alloc {Σ _ _} E.
+Arguments iso_dh_ctx_alloc {Σ _ _ _} E.
+
+Lemma iso_dhGS_alloc `{!heapGS Σ, !cryptisGS Σ} E :
+  ↑iso_dhN ⊆ E →
+  iso_dhGpreS Σ →
+  seal_pred_token SIGN E ={⊤}=∗ ∃ (H : iso_dhGS Σ),
+    iso_dh_ctx ∗ iso_dh_token ⊤ ∗
+    seal_pred_token SIGN (E ∖ ↑iso_dhN).
+Proof.
+iIntros "% % token".
+iMod gmeta_token_alloc as (γ_meta) "own".
+iExists (IsoDhGS _ γ_meta).
+iMod (iso_dh_ctx_alloc with "token") as "[#H ?]" => //.
+by iFrame.
+Qed.
+
+Arguments iso_dhGS_alloc {Σ _ _ E}.
+Arguments iso_dh_pred_set {Σ _} N φ E.
