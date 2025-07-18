@@ -325,6 +325,14 @@ Proof.
 by rewrite /IsOp /IntoSep => ->; rewrite term_own_op.
 Qed.
 
+#[global]
+Instance combine_sep_gives_term_own t N (a1 a2 : A) :
+  CombineSepGives (term_own t N a1) (term_own t N a2) (✓ (a1 ⋅ a2)).
+Proof.
+rewrite /CombineSepGives. iIntros "[H1 H2]".
+by iPoseProof (term_own_valid_2 with "H1 H2") as "#?".
+Qed.
+
 Lemma term_own_mono t N (a1 a2 : A) : a1 ≼ a2 → term_own t N a2 -∗ term_own t N a1.
 Proof.
 case => ? ->.
