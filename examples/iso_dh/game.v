@@ -134,7 +134,7 @@ Definition do_init_loop : val :=
     Fork ("loop" "c" "compromised" "set" "skI" "pkR");;
     let: "pkR'" := recv "c" in
     (guard: is_verify_key "pkR'" in
-     bind: "sk" := initiator "c" "skI" "pkR'" (Tag gameN) (TInt 0) in
+     bind: "sk" := initiator "c" "skI" "pkR'" (Tag gameN) in
      add_fresh_lock_term_set "sk" "set";;
      if: eq_term "pkR" "pkR'" then check_key_secrecy "c" "compromised" "sk"
      else #());;
@@ -189,11 +189,10 @@ wp_pures; wp_apply wp_is_verify_key.
 iSplit; last by wp_pures; iApply "Hpost".
 iIntros "%skR' -> #m_skR'". wp_pures.
 wp_pures. wp_apply (wp_initiator false) => //.
-{ by rewrite public_TInt. }
 iIntros "%ts tsP".
 case: ts=> [sk|] => /=; wp_pures; last by iApply "Hpost".
 iDestruct "tsP"
-  as "(%si & <- & <- & <- & #m_sk & #s_k & #? & rel & token)".
+  as "(%si & <- & <- & <- & #m_sk & #s_k & #? & rel & token & _)".
 iPoseProof (iso_dh_game_fresh Init with "token")
   as "[fresh token]"; first solve_ndisj.
 iMod (unrelease with "rel") as "#un".
@@ -231,9 +230,8 @@ Definition do_resp_loop : val :=
   rec: "loop" "c" "compromised" "set" "skR" "pkI" :=
     Fork ("loop" "c" "compromised" "set" "skR" "pkI");;
     (bind: "res" := responder "c" "skR" (Tag gameN) in
-     let: "pkI'" := Fst (Fst "res") in
-     let: "sk" := Snd (Fst "res") in
-     let: "data" := Snd "res" in
+     let: "pkI'" := Fst "res" in
+     let: "sk" := Snd "res" in
      add_fresh_lock_term_set "sk" "set";;
      if: eq_term "pkI" "pkI'" then
        check_key_secrecy "c" "compromised" "sk"
@@ -263,7 +261,7 @@ wp_rec; wp_pures; wp_apply wp_fork.
 { iApply "IH" => //. }
 wp_pures. wp_apply wp_responder; first by eauto.
 iIntros "%res res".
-case: res => [[[] pkI' sk data]|]; wp_pures; last by iApply "Hpost".
+case: res => [[pkI' sk]|]; wp_pures; last by iApply "Hpost".
 iDestruct "res"
   as "(%si & -> & <- & -> & #p_pkI' & #m_sk & #s_k & rel & token)".
 iPoseProof (iso_dh_game_fresh Resp with "token")

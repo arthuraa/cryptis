@@ -45,6 +45,7 @@ iPoseProof (ctx_iso_dh_pred with "[//]") as "?".
 iApply wp_fupd.
 wp_apply (Conn.wp_connect with "[] [P]"); eauto 10.
 iIntros "%cs (connected & P & rel & token)".
+rewrite bi.sep_True.
 iMod (resp_pred_token_alloc with "token") as "(t1 & t2 & token)";
   first solve_ndisj.
 iApply ("post" $! cs). iFrame. iModIntro. iRight. by iFrame.
@@ -81,9 +82,9 @@ iPoseProof (ctx_iso_dh_ctx with "[//]") as "?".
 iPoseProof (ctx_iso_dh_pred with "[//]") as "?".
 iApply wp_fupd.
 wp_apply (Conn.wp_confirm P with "[//] [//] [//] [//] [$P]").
-{ by eauto. }
-iIntros "%cs %data (conn & dis & rel & token & _)".
-wp_pures. iApply "post". by iFrame.
+{ do !iSplit => //. by iIntros "!> % _ !>". }
+iIntros "%cs (conn & dis & rel & token)".
+iApply "post". by iFrame.
 Qed.
 
 Lemma wp_call N φ ψ skI skR cs (ts : list term) :

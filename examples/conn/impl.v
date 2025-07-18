@@ -22,9 +22,9 @@ Definition received : val := λ: "cs", Fst (Fst "cs") +ₗ #1%nat.
 Definition session_key : val := λ: "cs",
   Snd (Fst "cs").
 
-Definition connect : val := λ: "c" "skA" "pkB" "N" "data",
+Definition connect : val := λ: "c" "skA" "pkB" "N",
   let: "session_key" :=
-    do_until (λ: <>, initiator "c" "skA" "pkB" "N" "data") in
+    do_until (λ: <>, initiator "c" "skA" "pkB" "N") in
   let: "counters" := AllocN #2 #0%nat in
   ("counters", "session_key", "c").
 
@@ -34,13 +34,11 @@ Definition listen : val := λ: "c",
 Definition confirm : val := λ: "c" "skB" "N" "req",
   let: "ga" := Fst "req" in
   let: "pkA" := Snd "req" in
-  let: "res" := do_until
+  let: "sk" := do_until
     (λ: <>, responder_accept "c" "skB" "ga" "pkA" "N") in
-  let: "sk" := Fst "res" in
-  let: "data" := Snd "res" in
   let: "counters" := AllocN #2 #0%nat in
   let: "conn" := ("counters", "sk", "c") in
-  ("conn", "data").
+  "conn".
 
 Definition send : val := λ: "cs" "N" "ts",
   let: "c"  := channel "cs" in

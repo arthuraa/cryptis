@@ -80,23 +80,23 @@ Lemma iso_dh_token_drop E1 E2 :
   iso_dh_token E2 -∗ iso_dh_token E1.
 Proof. exact: gmeta_token_drop. Qed.
 
-Definition iso_dh_ready gb N data : iProp := ∀ φ,
+Definition iso_dh_ready ga N t : iProp := ∀ φ,
   iso_dh_pred N φ →
-  term_token gb (↑iso_dhN.@"ready") ={⊤}=∗
-    ▷ φ data.
+  term_token ga (↑iso_dhN.@"ready") ={⊤}=∗
+    ▷ φ t.
 
-Lemma iso_dh_ready_alloc gb N data φ :
+Lemma iso_dh_ready_alloc ga N t φ :
   iso_dh_pred N φ -∗
-  φ data ={⊤}=∗
-  □ iso_dh_ready gb N data.
+  φ t ={⊤}=∗
+  □ iso_dh_ready ga N t.
 Proof.
 iIntros "#N_φ φ_ts".
 iMod (escrowI nroot with "φ_ts []") as "#?".
-{ by iApply (term_token_switch gb (iso_dhN.@"ready")). }
+{ by iApply (term_token_switch ga (iso_dhN.@"ready")). }
 iIntros "!> !>  %φ' #N_φ' ready".
 iPoseProof (nown_valid_2 with "N_φ N_φ'") as "#valid".
 iPoseProof (saved_pred_op_validI with "valid") as "[_ #φ_eq]".
-iSpecialize ("φ_eq" $! data). iMod (escrowE with "[//] ready") as "res" => //.
+iSpecialize ("φ_eq" $! t). iMod (escrowE with "[//] ready") as "res" => //.
 iIntros "!> !>". by iRewrite -"φ_eq".
 Qed.
 
@@ -258,26 +258,26 @@ iDestruct "comp2" as "[comp2|comp2]".
 Qed.
 
 Definition msg2_pred skR m2 : iProp :=
-  ∃ ga b skI,
+  ∃ ga b skI N,
     let pkI := Spec.pkey skI in
     let pkR := Spec.pkey skR in
     let gb := TExp (TInt 0) b in
     let gab := TExp ga b in
-    ⌜m2 = Spec.of_list [ga; gb; pkI]⌝ ∧
+    ⌜m2 = Spec.of_list [ga; gb; pkI; Tag N]⌝ ∧
     ((public skI ∨ public skR) ∨ (public b ↔ ▷ (released ga ∧ released gb))) ∧
-    (∀ t, dh_pred b t ↔ ▷ □ iso_dh_key_share t).
+    (∀ t, dh_pred b t ↔ ▷ □ iso_dh_key_share t) ∧
+    iso_dh_ready ga N gb.
 
 Definition msg3_pred skI m3 : iProp :=
-  ∃ a gb skR N data,
+  ∃ a gb skR,
     let pkI := Spec.pkey skI in
     let pkR := Spec.pkey skR in
     let ga := TExp (TInt 0) a in
     let gab := TExp gb a in
     let si := SessInfo skI skR ga gb gab in
-    ⌜m3 = Spec.of_list [ga; gb; pkR; Tag N; data]⌝ ∧
+    ⌜m3 = Spec.of_list [ga; gb; pkR]⌝ ∧
     ((public skI ∨ public skR) ∨
-      □ (public (si_key si) → ▷ released_session si)) ∧
-    iso_dh_ready gb N data.
+      □ (public (si_key si) → ▷ released_session si)).
 
 Definition iso_dh_ctx : iProp :=
   sign_pred (iso_dhN.@"m2") msg2_pred ∗
