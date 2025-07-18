@@ -81,9 +81,9 @@ wp_lam; wp_pures.
 iPoseProof (ctx_iso_dh_ctx with "[//]") as "?".
 iPoseProof (ctx_iso_dh_pred with "[//]") as "?".
 iApply wp_fupd.
-wp_apply (Conn.wp_confirm P with "[//] [//] [//] [//] [$P]").
+wp_apply (Conn.wp_confirm P (λ _, True)%I with "[//] [//] [//] [//] [$P]").
 { do !iSplit => //. by iIntros "!> % _ !>". }
-iIntros "%cs (conn & dis & rel & token)".
+iIntros "%cs (conn & dis & rel & token & _)".
 iApply "post". by iFrame.
 Qed.
 

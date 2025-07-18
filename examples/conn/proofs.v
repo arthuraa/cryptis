@@ -104,20 +104,21 @@ iIntros "#? #? #? % !> _ post". wp_lam.
 wp_apply wp_responder_wait; eauto.
 Qed.
 
-Lemma wp_confirm P c skI skR ga N φ :
+Lemma wp_confirm P ψ c skI skR ga N φ :
   channel c -∗
   cryptis_ctx -∗
   iso_dh_ctx -∗
   iso_dh_pred N φ -∗
   {{{ public ga ∗ minted skI ∗ minted skR ∗
-      □ (∀ gb, term_token gb (↑iso_dhN.@"res") ={⊤}=∗ φ gb) ∗
+      □ (∀ gb, term_token gb (↑iso_dhN.@"res") ={⊤}=∗ φ gb ∗ ψ gb) ∗
       (failure skI skR ∨ P) }}}
     impl.confirm c skR (Tag N) (ga, Spec.pkey skI)%V
   {{{ cs, RET (repr cs);
       connected skI skR Resp cs ∗
       (compromised_session Resp cs ∨ P) ∗
       release_token (si_resp_share cs) ∗
-      term_token (si_resp_share cs) (⊤ ∖ ↑iso_dhN ∖ ↑connN) }}}.
+      term_token (si_resp_share cs) (⊤ ∖ ↑iso_dhN ∖ ↑connN) ∗
+      ψ (si_resp_share cs) }}}.
 Proof.
 iIntros "#? #ctx #? #? !> %Φ (#p_ga & #p_pkA & #sign_skB & #? & P) post".
 rewrite bi.or_alt. iDestruct "P" as "(%failed & P)".
@@ -130,11 +131,11 @@ iApply (wp_frame_wand with "post").
 iApply (wp_frame_wand with "P").
 iApply wp_do_until'. iIntros "!>".
 wp_pures.
-iApply (wp_responder_accept failed).
+iApply (wp_responder_accept failed ψ).
 { do !iSplit => //. }
 iIntros "!> %osi res". case: osi => [kS|]; last by eauto.
 iDestruct "res"
-  as "(%si & <- & <- & -> & #m_k & #sess & #comp & rel & token)".
+  as "(%si & <- & <- & -> & #m_k & #sess & #comp & rel & token & res)".
 iRight. iExists _. iSplit => //.
 iIntros "P post".
 wp_pures.

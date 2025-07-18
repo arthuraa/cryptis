@@ -47,11 +47,11 @@ wp_pures. iModIntro. iRight. iExists _; iSplit => //.
 iIntros "post". by iApply "post"; eauto.
 Qed.
 
-Lemma wp_responder_accept failed c skI skR ga N φ :
+Lemma wp_responder_accept failed ψ c skI skR ga N φ :
   {{{ channel c ∗ cryptis_ctx ∗
       iso_dh_ctx ∗ iso_dh_pred N φ ∗
       public ga ∗ minted skI ∗ minted skR ∗
-      (∀ gb, term_token gb (↑iso_dhN.@"res") ={⊤}=∗ φ gb) ∗
+      (∀ gb, term_token gb (↑iso_dhN.@"res") ={⊤}=∗ φ gb ∗ ψ gb) ∗
       if failed then public skI ∨ public skR
       else True }}}
     responder_accept c skR ga (Spec.pkey skI) (Tag N)
@@ -64,7 +64,8 @@ Lemma wp_responder_accept failed c skI skR ga N φ :
         session Resp si ∗
         □ (⌜failed⌝ → compromised_session Resp si) ∗
         release_token (si_resp_share si) ∗
-        term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN)
+        term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN) ∗
+        ψ (si_resp_share si)
       else True }}}.
 Proof.
 set pkR := Spec.pkey skR.
@@ -90,8 +91,8 @@ rewrite (term_token_difference gb (↑iso_dhN.@"failed")); last by solve_ndisj.
 iDestruct "token" as "[token_failed token]".
 iPoseProof (term_token_difference gb (↑iso_dhN.@"res") with "token")
   as "[res_token token]"; first by solve_ndisj.
-iMod ("res" with "res_token") as "res".
-iMod (iso_dh_ready_alloc ga with "[//] res") as "#ready".
+iMod ("res" with "res_token") as "[resI resR]".
+iMod (iso_dh_ready_alloc ga with "[//] resI") as "#ready".
 iAssert (public gb) as "#p_gb".
 { iApply public_TExp_iff; eauto.
   rewrite minted_TInt. iRight. do ![iSplit => //].
@@ -198,10 +199,11 @@ Lemma wp_responder_accept_weak c skR ga skI N :
  }}}.
 Proof.
 iIntros "%Φ (#chan_c & #ctx & #? & #? & #m_skR & #m_skI & #p_ga) Hpost".
-iApply wp_fupd. wp_apply (wp_responder_accept false); first by eauto 10.
+iApply wp_fupd.
+wp_apply (wp_responder_accept false (λ _, True)%I); first by eauto 10.
 iIntros "%osi Hsi".
 case: osi => [kS|]; last by iApply ("Hpost" $! None).
-iDestruct "Hsi" as "(%si & <- & <- & -> & #m_kS & #sec & #? & rel & tok)".
+iDestruct "Hsi" as "(%si & <- & <- & -> & #m_kS & #sec & #? & rel & tok & _)".
 iMod (unrelease with "rel") as "#un". iModIntro.
 iApply ("Hpost" $! (Some (si_key si))). iFrame. do !iSplit => //.
 iDestruct "sec" as "(? & %failed & ? & ?)".
@@ -232,10 +234,10 @@ wp_lam; wp_pures.
 wp_apply wp_responder_wait; first by eauto.
 iIntros "%ga %skI (#p_ga & #m_skI)".
 wp_pures.
-wp_apply (wp_responder_accept false); first by eauto 10.
+wp_apply (wp_responder_accept false (λ _, True%I)); first by eauto 10.
 iIntros "%osi Hosi".
 case: osi => [kS|]; wp_pures; last by iApply ("post" $! None).
-iDestruct "Hosi" as "(%si & <- & <- & -> & #? & #? & #? & rel & token)".
+iDestruct "Hosi" as "(%si & <- & <- & -> & #? & #? & #? & rel & token & _)".
 iModIntro. iApply ("post" $! (Some (Spec.pkey _, si_key si))).
 iExists si. iFrame. by eauto 10.
 Qed.
