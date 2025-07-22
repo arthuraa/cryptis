@@ -3,6 +3,7 @@ From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
+From cryptis Require Import lib.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -55,5 +56,8 @@ Definition swap_role rl :=
 
 Lemma swap_roleK rl : swap_role (swap_role rl) = rl.
 Proof. by case: rl. Qed.
+
+Global Instance repr_role : Repr role :=
+  λ rl, #(if rl is Init return Z then 1 else 0).
 
 End Role.
