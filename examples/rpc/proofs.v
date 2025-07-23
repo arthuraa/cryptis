@@ -134,9 +134,6 @@ iMod (resp_pred_token_update _ rpcN (TInt 0)
 by iFrame.
 Qed.
 
-(* TODO *)
-#[global] Instance repr_bool : Repr bool := λ b, #b.
-
 Definition wf_handler Φ skI skR cs (h : handler) : iProp :=
   □ ∀ t,
     {{{ public t ∗
