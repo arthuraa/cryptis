@@ -8,3 +8,7 @@ Include cryptis.examples.rpc.proofs.base.
 Include cryptis.examples.rpc.proofs.
 
 End RPC.
+
+Existing Instance RPC.repr_handler.
+Existing Instance RPC.persistent_wf_handler.
+#[global] Typeclasses Opaque RPC.wf_handler.

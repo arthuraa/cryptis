@@ -47,16 +47,9 @@ wp_lam; wp_pures. wp_list.
 iDestruct "ctx" as "(_ & ? & _ & ctx)".
 wp_apply (RPC.wp_call with "[$conn $load]").
 { do 4!iSplit => //=; by eauto. }
-iIntros "%ts' (conn & inv_ts & p_ts)". wp_pures.
-iPoseProof ("waiting" with "inv_ts") as "(res & db)".
-iApply (wp_wand _ _ _ (λ v : val, ⌜v = default (TInt 0) (head ts')⌝)%I).
-{ rewrite [repr_list ts']repr_listE.
-  by case: ts' => [|t2' ?] /=; wp_pures. }
-iIntros "% ->". iApply "post". iFrame.
-iDestruct "res" as "[#?|->]".
-- iSplit; eauto. case: ts' => [|??] //=; first by rewrite public_TInt.
-  by iDestruct "p_ts" as "[??]".
-- iSplit; eauto. by iDestruct "p_ts" as "[??]".
+iIntros "%t' (conn & inv_t & p_t)".
+iPoseProof ("waiting" with "inv_t") as "(res & db)".
+iApply "post". iFrame.
 Qed.
 
 End Verif.

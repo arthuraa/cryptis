@@ -61,7 +61,7 @@ iIntros "#lock #? #ctx".
 iIntros "!> %Φ ((conn & db) & locked) post".
 iPoseProof (RPC.server_connected_keys with "conn") as "#[-> ->]".
 iPoseProof (store_ctx_rpc_ctx with "[//]") as "?".
-wp_lam. wp_pures.
+wp_lam. wp_pures. wp_list.
 wp_apply wp_server_handle_create; eauto. iIntros "% #?". wp_list.
 wp_apply wp_server_handle_load; eauto. iIntros "% #?". wp_list.
 wp_apply wp_server_handle_store; eauto. iIntros "% #?". wp_list.

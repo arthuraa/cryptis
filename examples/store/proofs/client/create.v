@@ -43,9 +43,9 @@ iIntros "#? (_ & _ & #create & #ctx) #p_t1 #p_t2".
 iIntros "!> %Φ [client free] post".
 iDestruct "client" as "(conn & db)".
 iMod (create_call t1 t2 with "db free") as "(call & mapsto & waiting)".
-wp_lam. wp_pures. wp_list.
+wp_lam. wp_pures. wp_list. wp_term_of_list.
 wp_apply (RPC.wp_call with "[$conn $call]").
-{ do !iSplit => //. }
+{ rewrite public_of_list. do !iSplit => //. }
 iIntros "%ts (conn & created & _)". wp_pures.
 iApply "post". iFrame. iModIntro. by iApply "waiting".
 Qed.

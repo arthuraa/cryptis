@@ -95,15 +95,10 @@ Qed.
 
 Lemma wp_game :
   cryptis_ctx -∗
-  seal_pred_token SIGN (⊤ ∖ ↑iso_dhN) -∗
-  seal_pred_token SENC ⊤ -∗
-  iso_dh_ctx -∗
-  iso_dh_token ⊤ -∗
+  store_ctx -∗
   WP game #() {{ _, True }}.
 Proof.
-iIntros "#ctx sign_tok senc_tok #? iso_tok"; rewrite /game; wp_pures.
-iMod (RPC.ctx_alloc with "[$] [//] [$]") as "(#? & senc_tok & ?)"; try solve_ndisj.
-iMod (store_ctx_alloc with "[$] [//]") as "[#? _]" => //; first solve_ndisj.
+iIntros "#ctx #store_ctx"; rewrite /game; wp_pures.
 wp_apply wp_init_network => //. iIntros "%c #cP". wp_pures.
 wp_apply (wp_mk_sign_key with "[]"); eauto.
 iIntros "%skI #m_skI s_skI tokenI". wp_pures.
@@ -162,5 +157,9 @@ apply: heap_adequacy.
 iIntros (?) "?".
 iMod (cryptisGS_alloc _) as (?) "(#ctx & _ & sign_tok & senc_tok & _)".
 iMod (iso_dhGS_alloc with "sign_tok") as (?) "(#? & iso_tok & sign_tok)" => //.
-by iApply (wp_game with "ctx [$] [$] [$]") => //.
+iMod (Conn.pre_ctx_alloc with "[//] [$]") as "(#? & senc_tok)" => //.
+iMod (RPC.ctx_alloc with "[//] [$]") as (?) "(#? & iso_tok & rpc_tok)" => //.
+iMod (store_ctx_alloc with "[$] [//]") as "(#? & rpc_tok)";
+  first solve_ndisj.
+by iApply (wp_game with "ctx [//]") => //.
 Qed.

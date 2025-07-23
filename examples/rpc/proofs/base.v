@@ -16,17 +16,29 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Class rpcGS Σ := RpcGS {
-  rpcGS_pred  : savedPredG Σ (list term);
+Class rpcGpreS Σ := RpcGPreS {
+  #[local] rpcGpreS_meta :: metaGS Σ;
+  #[local] rpcGpreS_call_pred ::
+    savedPredG Σ (sign_key * sign_key * sess_info * term);
+  #[local] rpcGpreS_resp_pred ::
+    savedPredG Σ (sign_key * sign_key * sess_info * term * term);
+  #[local] rpcGpreS_last_call ::
+    inG Σ (dfrac_agreeR (leibnizO (namespace * term)));
 }.
 
-Local Existing Instance rpcGS_pred.
+Class rpcGS Σ := RpcGS {
+  #[local] rpc_inG :: rpcGpreS Σ;
+  rpc_call_name : gname;
+  rpc_resp_name : gname;
+}.
 
 Definition rpcΣ := #[
-  savedPredΣ (list term)
-].
+  metaΣ;
+  savedPredΣ (sign_key * sign_key * sess_info * term);
+  savedPredΣ (sign_key * sign_key * sess_info * term * term);
+  GFunctor (dfrac_agreeR (leibnizO (namespace * term)))].
 
-Global Instance subG_rpcGS Σ : subG rpcΣ Σ → rpcGS Σ.
+Global Instance subG_rpcGpreS Σ : subG rpcΣ Σ → rpcGpreS Σ.
 Proof. solve_inG. Qed.
 
 Section Defs.
@@ -40,55 +52,126 @@ Implicit Types b : bool.
 Implicit Types v : val.
 Implicit Types (ok : Prop) (failed : bool).
 Implicit Types si : sess_info.
+Implicit Types φ : sign_key → sign_key → sess_info → term → iProp.
+Implicit Types ψ : sign_key → sign_key → sess_info → term → term → iProp.
+Implicit Types ξ : term → iProp.
 
-Definition resp_pred_token si φ : iProp :=
-  term_own (si_init_share si) (rpcN.@"resp_pred")
-    (saved_pred (DfracOwn (1 / 2)) φ).
+Definition resp_pred_token si N t : iProp :=
+  term_own (si_init_share si) (rpcN.@"resp_saved_pred")
+    (to_dfrac_agree (DfracOwn (1 / 2)) ((N, t) : leibnizO _)).
 
 Lemma resp_pred_token_alloc si E :
-  ↑rpcN.@"resp_pred" ⊆ E →
+  ↑rpcN.@"resp_saved_pred" ⊆ E →
   term_token (si_init_share si) E ==∗
-  resp_pred_token si (λ _, False%I) ∗
-  resp_pred_token si (λ _, False%I) ∗
-  term_token (si_init_share si) (E ∖ ↑rpcN.@"resp_pred").
+  resp_pred_token si rpcN (TInt 0) ∗
+  resp_pred_token si rpcN (TInt 0) ∗
+  term_token (si_init_share si) (E ∖ ↑rpcN.@"resp_saved_pred").
 Proof.
 iIntros "% token".
-iMod (term_own_alloc (rpcN.@"resp_pred")
-        (saved_pred (DfracOwn 1) (λ _, False%I)) with "token")
+iMod (term_own_alloc (rpcN.@"resp_saved_pred")
+        (to_dfrac_agree (DfracOwn 1)
+           ((rpcN, TInt 0) : leibnizO _)) with "token")
   as "[own token]" => //. iFrame "token".
-rewrite -Qp.half_half -dfrac_op_own saved_pred_op.
+rewrite -Qp.half_half -dfrac_op_own dfrac_agree_op.
 iDestruct "own" as "[own1 own2]". by iFrame.
 Qed.
 
-Lemma resp_pred_token_agree si φ ψ :
-  resp_pred_token si φ -∗
-  resp_pred_token si ψ -∗
-  □ ∀ x, ▷ (φ x ≡ ψ x).
+Lemma resp_pred_token_agree si N₁ N₂ t₁ t₂ :
+  resp_pred_token si N₁ t₁ -∗
+  resp_pred_token si N₂ t₂ -∗
+  ⌜N₁ = N₂ ∧ t₁ = t₂⌝.
 Proof.
 iIntros "own1 own2".
-iPoseProof (term_own_valid_2 with "own1 own2") as "#valid".
-rewrite saved_pred_op_validI. iDestruct "valid" as "[_ #?]".
-by iModIntro.
+iDestruct (term_own_valid_2 with "own1 own2") as "%valid".
+rewrite dfrac_agree_op_valid_L in valid.
+by case: valid => _ [-> ->].
 Qed.
 
-Lemma resp_pred_token_update si φ1 φ2 ψ :
-  resp_pred_token si φ1 -∗
-  resp_pred_token si φ2 ==∗
-  resp_pred_token si ψ ∗ resp_pred_token si ψ.
+Lemma resp_pred_token_update si N t N₁ N₂ t₁ t₂ :
+  resp_pred_token si N₁ t₁ -∗
+  resp_pred_token si N₂ t₂ ==∗
+  resp_pred_token si N t ∗ resp_pred_token si N t.
 Proof.
 iIntros "own1 own2".
 iMod (term_own_update_2 with "own1 own2") as "own".
-apply: (saved_pred_update_2 _ _ _ _ ψ).
-{ by rewrite dfrac_op_own Qp.half_half. }
+{ apply: (dfrac_agree_update_2 _ _ _ _ ((N, t) : leibnizO _)).
+  by rewrite dfrac_op_own Qp.half_half. }
 by iDestruct "own" as "[??]"; iFrame.
 Qed.
 
+Definition rpc_token E : iProp :=
+  gmeta_token rpc_call_name E ∗
+  gmeta_token rpc_resp_name E.
+
+Definition rpc_pred N φ ψ : iProp :=
+  nown rpc_call_name N
+    (saved_pred DfracDiscarded (λ '(skI, skR, si, t), φ skI skR si t)) ∗
+  nown rpc_resp_name N
+    (saved_pred DfracDiscarded (λ '(skI, skR, si, t, t'), ψ skI skR si t t')).
+
+Lemma rpc_pred_set N φ ψ E :
+  ↑N ⊆ E →
+  rpc_token E ==∗ rpc_pred N φ ψ ∗ rpc_token (E ∖ ↑N).
+Proof.
+iIntros "%sub [call resp]".
+iMod (nown_alloc N (saved_pred DfracDiscarded (λ '(skI, skR, si, ts), φ skI skR si ts)) with "call") as "[#φ call]" => //.
+iMod (nown_alloc N (saved_pred DfracDiscarded (λ '(skI, skR, si, ts, ts'), ψ skI skR si ts ts')) with "resp") as "[#ψ resp]" => //.
+iFrame. iModIntro. iSplit; eauto.
+Qed.
+
+Lemma rpc_token_difference E1 E2 :
+  E1 ⊆ E2 →
+  rpc_token E2 ⊣⊢ rpc_token E1 ∗ rpc_token (E2 ∖ E1).
+Proof.
+move=> sub. rewrite /rpc_token.
+rewrite (gmeta_token_difference _ _ _ sub).
+rewrite (gmeta_token_difference _ _ _ sub).
+by iSplit; iIntros "((?&?)&(?&?))"; iFrame.
+Qed.
+
+Lemma rpc_token_drop E1 E2 :
+  E1 ⊆ E2 →
+  rpc_token E2 -∗ rpc_token E1.
+Proof.
+iIntros "%sub [call resp]".
+iSplitL "call"; iApply gmeta_token_drop; eauto.
+Qed.
+
+Lemma rpc_pred_agree N φ₁ φ₂ ψ₁ ψ₂ :
+  rpc_pred N φ₁ ψ₁ -∗
+  rpc_pred N φ₂ ψ₂ -∗
+  ▷ ((∀ skI skR si t,    φ₁ skI skR si t ≡ φ₂ skI skR si t) ∗
+     (∀ skI skR si t t', ψ₁ skI skR si t t' ≡ ψ₂ skI skR si t t')).
+Proof.
+iIntros "#[Nφ₁ Nψ₁] #[Nφ₂ Nψ₂]".
+iPoseProof (nown_valid_2 with "Nφ₁ Nφ₂") as "#vφ".
+iPoseProof (nown_valid_2 with "Nψ₁ Nψ₂") as "#vψ".
+rewrite !saved_pred_op_validI.
+iDestruct "vφ" as "[_ #vφ]".
+iDestruct "vψ" as "[_ #vψ]".
+iSplit.
+- iIntros "%skI %skR %si %t".
+  by iSpecialize ("vφ" $! (skI, skR, si, t)).
+- iIntros "%skI %skR %si %t %t'".
+  by iSpecialize ("vψ" $! (skI, skR, si, t, t')).
+Qed.
+
+Definition rpc_msg_pred skI skR si rl t : iProp :=
+  if rl is Init then
+    ∃ N t' φ ψ,
+      ⌜t = Spec.tag (Tag N) t'⌝ ∗
+      rpc_pred N φ ψ ∗ φ skI skR si t' ∗
+      resp_pred_token si N t'
+  else ∃ N t₀ φ ψ,
+      rpc_pred N φ ψ ∗ ψ skI skR si t₀ t ∗
+      resp_pred_token si N t₀.
+
 Definition client_connected kI kR cs : iProp :=
-  Conn.connected kI kR Init cs ∗
+  Conn.connected kI kR rpc_msg_pred Init cs ∗
   release_token (si_init_share cs) ∗
   (compromised_session Init cs ∨
-  resp_pred_token cs (λ _, False%I) ∗
-  resp_pred_token cs (λ _, False%I)).
+  resp_pred_token cs rpcN (TInt 0) ∗
+  resp_pred_token cs rpcN (TInt 0)).
 
 Lemma client_connected_ok skI skR cs :
   client_connected skI skR cs -∗
@@ -111,7 +194,7 @@ by iPoseProof (Conn.connected_keyE with "conn") as "(-> & -> & _)".
 Qed.
 
 Definition server_connected skI skR cs : iProp :=
-  Conn.connected skI skR Resp cs ∗
+  Conn.connected skI skR rpc_msg_pred Resp cs ∗
   release_token (si_resp_share cs).
 
 Lemma server_connected_ok skI skR cs :
@@ -134,90 +217,37 @@ iIntros "(conn & _)".
 by iPoseProof (Conn.connected_keyE with "conn") as "(-> & -> & _)".
 Qed.
 
-Definition call_pred φ ψ :=
-  Conn.conn_pred Init (λ skI skR si ts,
-    resp_pred_token si (ψ skI skR si ts) ∗
-    φ skI skR si ts
-  )%I.
-
-Definition rpc N φ ψ :=
-  senc_pred N (call_pred φ ψ).
-
-Lemma rpc_alloc N φ ψ E :
-  ↑N ⊆ E →
-  seal_pred_token SENC E ==∗
-  rpc N φ ψ ∗ seal_pred_token SENC (E ∖ ↑N).
-Proof. exact: seal_pred_set. Qed.
-
-Definition resp_pred skI skR si ts : iProp :=
-  ∃ ψ, resp_pred_token si ψ ∗ ψ ts.
-
-Definition error_pred skI skR si ts : iProp := True.
-
-Definition close_pred :=
-  call_pred (λ _ _ si _, released (si_init_share si))
-    (λ _ _ _ _ _, False)%I.
-
 Definition ctx : iProp :=
-  senc_pred (rpcN.@"resp") (Conn.conn_pred Resp resp_pred) ∗
-  senc_pred (rpcN.@"error") (Conn.conn_pred Resp error_pred) ∗
-  senc_pred (rpcN.@"close") close_pred ∗
-  iso_dh_ctx ∗
-  iso_dh_pred rpcN (λ _, True)%I.
-
-Lemma ctx_alloc E1 E2 :
-  ↑rpcN ⊆ E1 →
-  ↑rpcN ⊆ E2 →
-  seal_pred_token SENC E1 -∗
-  iso_dh_ctx -∗
-  iso_dh_token E2 ==∗
-  ctx ∗ seal_pred_token SENC (E1 ∖ ↑rpcN) ∗ iso_dh_token (E2 ∖ ↑rpcN).
-Proof.
-iIntros "% % token1 #? token2".
-rewrite (seal_pred_token_difference _ (↑rpcN)); try solve_ndisj.
-iDestruct "token1" as "[token1 ?]". iFrame.
-iMod (senc_pred_set (N := rpcN.@"resp") with "token1")
-  as "[resp token1]"; try solve_ndisj.
-iFrame.
-iMod (senc_pred_set (N := rpcN.@"error") with "token1")
-  as "[error token1]"; try solve_ndisj.
-iFrame.
-iMod (senc_pred_set (N := rpcN.@"close") with "token1")
-  as "[init token1]"; try solve_ndisj.
-iFrame.
-iMod (iso_dh_pred_set rpcN (λ _, True%I) with "token2")
-  as "[? token2]" => //.
-by iFrame.
-Qed.
-
-Ltac solve_ctx :=
-  iIntros "ctx"; repeat (
-    try solve [iApply "ctx"];
-    iDestruct "ctx" as "[H ctx]";
-    first [iApply "H" | iClear "H"]
-  ).
-
-Lemma ctx_resp :
-  ctx -∗
-  senc_pred (rpcN.@"resp") (Conn.conn_pred Resp resp_pred).
-Proof. solve_ctx. Qed.
-
-Lemma ctx_error :
-  ctx -∗
-  senc_pred (rpcN.@"error") (Conn.conn_pred Resp error_pred).
-Proof. solve_ctx. Qed.
-
-Lemma ctx_close :
-  ctx -∗
-  senc_pred (rpcN.@"close") close_pred.
-Proof. solve_ctx. Qed.
-
-Lemma ctx_iso_dh_ctx : ctx -∗ iso_dh_ctx.
-Proof. solve_ctx. Qed.
-
-Lemma ctx_iso_dh_pred : ctx -∗ iso_dh_pred rpcN (λ _, True)%I.
-Proof. solve_ctx. Qed.
+  rpc_pred
+    (rpcN.@"close")
+    (λ _ _ si _, released (si_init_share si))
+    (λ _ _ _ _ _, False)%I ∗
+  Conn.ctx rpcN rpc_msg_pred (λ _ _, True)%I.
 
 End Defs.
 
 Arguments rpcGS Σ : clear implicits.
+
+Lemma ctx_alloc `{!heapGS Σ, !cryptisGS Σ, !iso_dhGS Σ,
+                  !Conn.connGS Σ, Hrpc : !rpcGpreS Σ} E :
+  ↑rpcN ⊆ E →
+  Conn.pre_ctx -∗
+  iso_dh_token E ==∗ ∃ H : rpcGS Σ,
+  ctx ∗
+  iso_dh_token (E ∖ ↑rpcN) ∗
+  rpc_token (⊤ ∖ ↑rpcN).
+Proof.
+iIntros "% #? iso_tok".
+iMod gmeta_token_alloc as (γcall) "rpc_tok_call".
+iMod gmeta_token_alloc as (γresp) "rpc_tok_resp".
+pose Hrpc' := RpcGS Hrpc γcall γresp. iExists Hrpc'.
+iMod (Conn.ctx_alloc with "[//] iso_tok") as "[#? tok]" => //.
+iFrame.
+iAssert (rpc_token ⊤) with "[rpc_tok_call rpc_tok_resp]" as "rpc_tok".
+{ by iFrame. }
+rewrite (rpc_token_difference (E1 := ↑rpcN)) //.
+iDestruct "rpc_tok" as "[rpc_tok ?]". iFrame.
+iMod (rpc_pred_set (N := rpcN.@"close") with "rpc_tok") as "[??]";
+  first solve_ndisj.
+by iFrame.
+Qed.
