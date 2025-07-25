@@ -31,7 +31,7 @@ Global Instance sess_info_inhabited : Inhabited sess_info :=
 
 Class iso_dhGpreS Σ := IsoDhGPreS {
   iso_dhGpreS_meta : metaGS Σ;
-  iso_dhGpreS_pred : savedPredG Σ term;
+  iso_dhGpreS_pred : savedPredG Σ (sign_key * sign_key * sess_info * role);
 }.
 
 Local Existing Instance iso_dhGpreS_meta.
@@ -44,7 +44,10 @@ Class iso_dhGS Σ := IsoDhGS {
 
 Local Existing Instance iso_dh_inG.
 
-Definition iso_dhΣ := #[metaΣ; savedPredΣ term].
+Definition iso_dhΣ := #[
+  metaΣ;
+  savedPredΣ (sign_key * sign_key * sess_info * role)
+].
 
 Global Instance subG_iso_dhGpreS Σ : subG iso_dhΣ Σ → iso_dhGpreS Σ.
 Proof. solve_inG. Qed.
@@ -57,13 +60,15 @@ Notation iProp := (iProp Σ).
 Implicit Types (rl : role) (t nI nR sI sR kS : term).
 Implicit Types (skI skR : sign_key) (failed : bool).
 Implicit Types (si : sess_info).
-Implicit Types (N : namespace) (E : coPset) (φ : term → iProp).
+Implicit Types (N : namespace) (E : coPset).
+Implicit Types (φ : sign_key → sign_key → sess_info → role → iProp).
 
 Definition iso_dh_token E : iProp :=
   gmeta_token iso_dh_name E.
 
 Definition iso_dh_pred N φ : iProp :=
-  nown iso_dh_name N (saved_pred DfracDiscarded φ).
+  nown iso_dh_name N
+    (saved_pred DfracDiscarded (λ '(skI, skR, si, rl), φ skI skR si rl)).
 
 Lemma iso_dh_pred_set N φ E :
   ↑N ⊆ E →
@@ -80,23 +85,24 @@ Lemma iso_dh_token_drop E1 E2 :
   iso_dh_token E2 -∗ iso_dh_token E1.
 Proof. exact: gmeta_token_drop. Qed.
 
-Definition iso_dh_ready ga N t : iProp := ∀ φ,
+Definition iso_dh_ready N skI skR si : iProp := ∀ φ,
   iso_dh_pred N φ →
-  term_token ga (↑iso_dhN.@"ready") ={⊤}=∗
-    ▷ φ t.
+  term_token (si_init_share si) (↑iso_dhN.@"ready") ={⊤}=∗
+    ▷ φ skI skR si Init.
 
-Lemma iso_dh_ready_alloc ga N t φ :
+Lemma iso_dh_ready_alloc N skI skR si φ :
   iso_dh_pred N φ -∗
-  φ t ={⊤}=∗
-  □ iso_dh_ready ga N t.
+  φ skI skR si Init ={⊤}=∗
+  □ iso_dh_ready N skI skR si.
 Proof.
 iIntros "#N_φ φ_ts".
 iMod (escrowI nroot with "φ_ts []") as "#?".
-{ by iApply (term_token_switch ga (iso_dhN.@"ready")). }
+{ by iApply (term_token_switch (si_init_share si) (iso_dhN.@"ready")). }
 iIntros "!> !>  %φ' #N_φ' ready".
 iPoseProof (nown_valid_2 with "N_φ N_φ'") as "#valid".
 iPoseProof (saved_pred_op_validI with "valid") as "[_ #φ_eq]".
-iSpecialize ("φ_eq" $! t). iMod (escrowE with "[//] ready") as "res" => //.
+iSpecialize ("φ_eq" $! (skI, skR, si, Init)).
+iMod (escrowE with "[//] ready") as "res" => //.
 iIntros "!> !>". by iRewrite -"φ_eq".
 Qed.
 
@@ -263,10 +269,11 @@ Definition msg2_pred skR m2 : iProp :=
     let pkR := Spec.pkey skR in
     let gb := TExp (TInt 0) b in
     let gab := TExp ga b in
+    let si := SessInfo skI skR ga gb gab in
     ⌜m2 = Spec.of_list [ga; gb; pkI; Tag N]⌝ ∧
     ((public skI ∨ public skR) ∨ (public b ↔ ▷ (released ga ∧ released gb))) ∧
     (∀ t, dh_pred b t ↔ ▷ □ iso_dh_key_share t) ∧
-    iso_dh_ready ga N gb.
+    iso_dh_ready N skI skR si.
 
 Definition msg3_pred skI m3 : iProp :=
   ∃ a gb skR,

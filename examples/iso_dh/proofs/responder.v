@@ -47,11 +47,17 @@ wp_pures. iModIntro. iRight. iExists _; iSplit => //.
 iIntros "post". by iApply "post"; eauto.
 Qed.
 
-Lemma wp_responder_accept failed ψ c skI skR ga N φ :
+Lemma wp_responder_accept failed c skI skR ga N φ :
   {{{ channel c ∗ cryptis_ctx ∗
       iso_dh_ctx ∗ iso_dh_pred N φ ∗
       public ga ∗ minted skI ∗ minted skR ∗
-      (∀ gb, term_token gb (↑iso_dhN.@"res") ={⊤}=∗ φ gb ∗ ψ gb) ∗
+      (∀ b,
+          let gb := TExp (TInt 0) b in
+          let gab := TExp ga b in
+          let si := SessInfo skI skR ga gb gab in
+          term_token (si_resp_share si) (↑iso_dhN.@"res") ={⊤}=∗
+           φ (si_init si) (si_resp si) si Init ∗
+           φ (si_init si) (si_resp si) si Resp) ∗
       if failed then public skI ∨ public skR
       else True }}}
     responder_accept c skR ga (Spec.pkey skI) (Tag N)
@@ -62,10 +68,10 @@ Lemma wp_responder_accept failed ψ c skI skR ga N φ :
         ⌜kS = si_key si⌝ ∗
         minted (si_key si) ∗
         session Resp si ∗
-        □ (⌜failed⌝ → compromised_session Resp si) ∗
+        □ (⌜failed⌝ → public (si_key si)) ∗
         release_token (si_resp_share si) ∗
         term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN) ∗
-        ψ (si_resp_share si)
+        φ skI skR si Resp
       else True }}}.
 Proof.
 set pkR := Spec.pkey skR.
@@ -85,14 +91,15 @@ iIntros "%b _ _ #m_b #s_b #dh_gb token".
 rewrite bi.intuitionistic_intuitionistically.
 set gb := TExp (TInt 0) b.
 set gab := TExp ga b.
+pose si := SessInfo skI skR ga gb gab.
 rewrite big_sepS_singleton.
 iDestruct (release_tokenI with "token") as "[token_rel token]" => //.
 rewrite (term_token_difference gb (↑iso_dhN.@"failed")); last by solve_ndisj.
 iDestruct "token" as "[token_failed token]".
 iPoseProof (term_token_difference gb (↑iso_dhN.@"res") with "token")
   as "[res_token token]"; first by solve_ndisj.
-iMod ("res" with "res_token") as "[resI resR]".
-iMod (iso_dh_ready_alloc ga with "[//] resI") as "#ready".
+iMod ("res" $! b with "res_token") as "[resI resR]".
+iMod (iso_dh_ready_alloc N skI skR si with "[//] resI") as "#ready".
 iAssert (public gb) as "#p_gb".
 { iApply public_TExp_iff; eauto.
   rewrite minted_TInt. iRight. do ![iSplit => //].
@@ -124,7 +131,7 @@ wp_pure _ credit:"H3".
 wp_apply wp_texp.
 wp_pure _ credit:"H4".
 wp_pures. wp_list. wp_term_of_list.
-wp_pures. pose si := SessInfo skI skR ga gb gab.
+wp_pures.
 wp_apply wp_derive_senc_key. rewrite -/(released_session si).
 iAssert (▷ (⌜failed⌝ ∨ released_session si) → public (si_key si))%I as "s_k1".
 { iIntros "#released".
@@ -134,7 +141,7 @@ iAssert (▷ (⌜failed⌝ ∨ released_session si) → public (si_key si))%I as
   - by iApply public_verify_key.
   - iApply public_TExp => //. by iApply "s_b". }
 iAssert (|={⊤}=>
-           □ (⌜failed⌝ → compromised_session Resp si) ∗
+           □ (⌜failed⌝ → public (si_key si)) ∗
            ∃ failed,
              term_meta gb (iso_dhN.@"failed") failed ∗
              if failed then
@@ -144,8 +151,8 @@ iAssert (|={⊤}=>
 { case: failed.
   { iMod (term_meta_set (iso_dhN.@"failed") true with "token_failed")
       as "#?"; first by solve_ndisj.
-    iAssert (compromised_session Resp si) as "#?".
-    { do !iSplit => //. iApply "s_k1". by eauto. }
+    iAssert (public (si_key si)) as "#?".
+    { iApply "s_k1". by eauto. }
     iModIntro. iSplit; first by eauto.
     iExists true. by eauto. }
   iDestruct "inv_m3" as "[comp|#inv]".
@@ -174,14 +181,14 @@ iAssert (minted (si_key si)) as "#m_kS".
   - by iApply public_verify_key. }
 wp_pures.
 iApply ("Hpost" $! (Some (si_key si))).
-iModIntro. iFrame. iExists si. iFrame. do !iSplit => //.
+iModIntro. iFrame. do !iSplit => //.
 - iIntros "!> #?". iApply "s_k1". by eauto.
 - iApply (term_token_drop with "token"). solve_ndisj.
 Qed.
 
 Lemma wp_responder_accept_weak c skR ga skI N :
   {{{ channel c ∗ cryptis_ctx ∗
-      iso_dh_ctx ∗ iso_dh_pred N (λ _, True)%I ∗
+      iso_dh_ctx ∗ iso_dh_pred N (λ _ _ _ _, True)%I ∗
       minted skR ∗ minted skI ∗
       public ga }}}
     responder_accept c skR ga (Spec.pkey skI) (Tag N)
@@ -200,7 +207,7 @@ Lemma wp_responder_accept_weak c skR ga skI N :
 Proof.
 iIntros "%Φ (#chan_c & #ctx & #? & #? & #m_skR & #m_skI & #p_ga) Hpost".
 iApply wp_fupd.
-wp_apply (wp_responder_accept false (λ _, True)%I); first by eauto 10.
+wp_apply (wp_responder_accept false); first by eauto 10.
 iIntros "%osi Hsi".
 case: osi => [kS|]; last by iApply ("Hpost" $! None).
 iDestruct "Hsi" as "(%si & <- & <- & -> & #m_kS & #sec & #? & rel & tok & _)".
@@ -214,7 +221,7 @@ Qed.
 
 Lemma wp_responder c skR N :
   {{{ channel c ∗ cryptis_ctx ∗
-      iso_dh_ctx ∗ iso_dh_pred N (λ _, True)%I ∗ minted skR }}}
+      iso_dh_ctx ∗ iso_dh_pred N (λ _ _ _ _, True)%I ∗ minted skR }}}
     responder c skR (Tag N)
   {{{ oresa, RET (repr oresa);
       if oresa is Some (pkI, kS) then ∃ si,
@@ -234,7 +241,7 @@ wp_lam; wp_pures.
 wp_apply wp_responder_wait; first by eauto.
 iIntros "%ga %skI (#p_ga & #m_skI)".
 wp_pures.
-wp_apply (wp_responder_accept false (λ _, True%I)); first by eauto 10.
+wp_apply (wp_responder_accept false); first by eauto 10.
 iIntros "%osi Hosi".
 case: osi => [kS|]; wp_pures; last by iApply ("post" $! None).
 iDestruct "Hosi" as "(%si & <- & <- & -> & #? & #? & #? & rel & token & _)".

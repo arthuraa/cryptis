@@ -64,10 +64,10 @@ Lemma wp_initiator failed c skI skR N φ :
         ⌜si_key si = kS⌝ ∗
         minted kS ∗
         session Init si ∗
-        □ (⌜failed⌝ → compromised_session Init si) ∗
+        □ (⌜failed⌝ → public (si_key si)) ∗
         release_token (si_init_share si) ∗
         term_token (si_init_share si) (⊤ ∖ ↑iso_dhN) ∗
-        (compromised_session Init si ∨ φ (si_resp_share si))
+        (public (si_key si) ∨ φ skI skR si Init)
       else True
  }}}.
 Proof.
@@ -146,8 +146,8 @@ iAssert (▷ (term_meta ga (iso_dhN.@"failed") true ∨ released_session si) →
   - by iApply public_verify_key.
   - iApply public_TExp => //. by iApply "s_a". }
 iAssert (|={⊤}=>
-           □ (⌜failed⌝ → compromised_session Init si) ∗
-           (compromised_session Init si ∨ φ gb) ∗
+           □ (⌜failed⌝ → public (si_key si)) ∗
+           (public (si_key si) ∨ φ skI skR si Init) ∗
            ∃ failed,
              term_meta ga (iso_dhN.@"failed") failed ∗
              if failed then public (si_init si) ∨ public (si_resp si)
@@ -157,14 +157,14 @@ iAssert (|={⊤}=>
 { case: failed.
   { iMod (term_meta_set (iso_dhN.@"failed") true with "failed_token")
       as "#?"; first by solve_ndisj.
-    iAssert (compromised_session Init si) as "#?".
-    { do !iSplit => //. iApply "s_k1". by eauto. }
+    iAssert (public (si_key si)) as "#?".
+    { iApply "s_k1". by eauto. }
     iModIntro. iSplit; eauto. }
   iDestruct "inv" as "[comp|#inv]".
   { iMod (term_meta_set (iso_dhN.@"failed") true with "failed_token")
       as "#?"; first by solve_ndisj.
-    iAssert (compromised_session Init si) as "#?".
-    { do !iSplit => //; eauto. iApply "s_k1". by eauto. }
+    iAssert (public (si_key si)) as "#?".
+    { iApply "s_k1". by eauto. }
     iModIntro. iSplit; first by iIntros "!> []".
     iSplit; eauto. iExists true. iSplit => //. by eauto. }
   iMod (lc_fupd_elim_later_pers with "H3 inv") as "{inv} #inv".
@@ -175,8 +175,8 @@ iAssert (|={⊤}=>
   iDestruct "s_b" as "[?|s_b]".
   { iMod (term_meta_set (iso_dhN.@"failed") true with "failed_token")
       as "#?"; first by solve_ndisj.
-    iAssert (compromised_session Init si) as "#?".
-    { do !iSplit => //; eauto. iApply "s_k1". by eauto. }
+    iAssert (public (si_key si)) as "#?".
+    { iApply "s_k1". by eauto. }
     iModIntro.
     iSplit; first by iIntros "!> []".
     iSplit; eauto. }
@@ -218,7 +218,7 @@ Lemma wp_initiator_weak c skI skR N :
   channel c -∗
   cryptis_ctx -∗
   iso_dh_ctx -∗
-  iso_dh_pred N (λ _, True)%I -∗
+  iso_dh_pred N (λ _ _ _ _, True)%I -∗
   minted skI -∗
   minted skR -∗
   {{{ True }}}

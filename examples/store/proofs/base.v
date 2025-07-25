@@ -8,7 +8,7 @@ From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
 From cryptis Require Import lib term gmeta nown.
 From cryptis Require Import cryptis replica primitives tactics role.
-From cryptis.examples Require Import iso_dh conn rpc alist.
+From cryptis.examples Require Import iso_dh gen_conn conn rpc alist.
 From cryptis.examples.store Require Import db.
 
 Set Implicit Arguments.
@@ -56,11 +56,11 @@ Proof. solve_inG. Qed.
 
 Section Defs.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !Conn.connGS Σ, !RPC.rpcGS Σ, !storeGS Σ, !tlockG Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ, !RPC.rpcGS Σ, !storeGS Σ, !tlockG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (si : sess_info).
-Implicit Types (cs : Conn.state).
+Implicit Types (cs : GenConn.state).
 Implicit Types (skI skR : sign_key) (kS t : term) (ts : list term).
 Implicit Types (db : gmap term term).
 Implicit Types accounts : gmap term server_client_state.
@@ -76,11 +76,11 @@ Definition db_server_ready skI skR db : iProp :=
   rep_copy skI skR dbN ∅ db.
 
 Definition db_disconnected skI skR : iProp := ∃ db,
-  (Conn.failure skI skR ∨ db_client_ready skI skR db) ∗
+  (GenConn.failure skI skR ∨ db_client_ready skI skR db) ∗
   DB.db_state skI skR dbN db.
 
 Definition db_connected' skI skR cs : iProp := ∃ db,
-  (compromised_session Init cs ∨ db_client_ready skI skR db) ∗
+  (public (si_key cs) ∨ db_client_ready skI skR db) ∗
   DB.db_state skI skR dbN db.
 
 Definition db_connected skI skR cs : iProp :=
@@ -147,7 +147,7 @@ Qed.
 Definition server_db_connected' skI skR cs vdb : iProp := ∃ db,
   public_db db ∗
   AList.is_alist vdb (repr <$> db) ∗
-  (compromised_session Resp cs ∨ db_server_ready skI skR db).
+  (public (si_key cs) ∨ db_server_ready skI skR db).
 
 Definition server_db_connected skI skR cs vdb : iProp :=
   RPC.server_connected skI skR cs ∗
@@ -159,7 +159,7 @@ Definition server_handler skI skR cs vdb h : iProp :=
 Definition server_db_disconnected skI skR vdb : iProp := ∃ db,
   public_db db ∗
   AList.is_alist vdb (repr <$> db) ∗
-  (Conn.failure skI skR ∨ db_server_ready skI skR db).
+  (GenConn.failure skI skR ∨ db_server_ready skI skR db).
 
 Lemma server_db_alloc skI skR vdb E :
   ↑dbN.@"server".@(skI : term) ⊆ E →
@@ -204,7 +204,7 @@ Definition store_resp_pred skI skR si t t' : iProp :=
   ∃ db, rep_current skI skR dbN ∅ db.
 
 Lemma store_call t2' skI skR cs t1 t2 :
-  let P := compromised_session Init cs in
+  let P := public (si_key cs) in
   db_connected' skI skR cs -∗
   db_mapsto skI skR t1 t2 ==∗
   (P ∨ store_call_pred skI skR cs (Spec.of_list [t1; t2'])) ∗
@@ -230,7 +230,7 @@ iExists _. iFrame. iRight. iFrame.
 Qed.
 
 Lemma store_resp skI skR cs db t1 t2 :
-  let P := compromised_session Resp cs in
+  let P := public (si_key cs) in
   (P ∨ db_server_ready skI skR db) -∗
   (P ∨ store_call_pred skI skR cs (Spec.of_list [t1; t2])) ==∗
   (P ∨ db_server_ready skI skR (<[t1 := t2]>db)) ∗
@@ -251,7 +251,7 @@ Definition create_resp_pred skI skR si t t' : iProp :=
   ∃ db, rep_current skI skR dbN ∅ db.
 
 Lemma create_call t1 t2 skI skR cs :
-  let P := compromised_session Init cs in
+  let P := public (si_key cs) in
   db_connected' skI skR cs -∗
   db_free_at skI skR {[t1]} ==∗
   (P ∨ create_call_pred skI skR cs (Spec.of_list [t1; t2])) ∗
@@ -276,7 +276,7 @@ iExists _. iFrame. iRight. iFrame.
 Qed.
 
 Lemma create_resp skI skR cs db t1 t2 :
-  let P := compromised_session Resp cs in
+  let P := public (si_key cs) in
   (P ∨ db_server_ready skI skR db) -∗
   (P ∨ create_call_pred skI skR cs (Spec.of_list [t1; t2])) ==∗
   (P ∨ db_server_ready skI skR (<[t1 := t2]>db)) ∗
@@ -297,7 +297,7 @@ Definition load_resp_pred skI skR si t1 t2 : iProp :=
   ∃ db, ⌜db !! t1 = Some t2⌝ ∗ rep_current skI skR dbN ∅ db.
 
 Lemma load_call t1 t2 skI skR cs :
-  let P := compromised_session Init cs in
+  let P := public (si_key cs) in
   db_connected' skI skR cs -∗
   db_mapsto skI skR t1 t2 ==∗
   (P ∨ load_call_pred skI skR cs t1) ∗
@@ -323,7 +323,7 @@ iSplit; eauto. iExists _. iFrame. iRight. iFrame.
 Qed.
 
 Lemma load_resp skI skR cs db t1 :
-  let P := compromised_session Resp cs in
+  let P := public (si_key cs) in
   let t2 := default (TInt 0) (db !! t1) in
   (P ∨ db_server_ready skI skR db) -∗
   (P ∨ load_call_pred skI skR cs t1) ==∗

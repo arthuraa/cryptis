@@ -6,7 +6,7 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta nown cryptis.
 From cryptis Require Import primitives tactics role.
-From cryptis.examples Require Import iso_dh conn rpc.
+From cryptis.examples Require Import iso_dh gen_conn conn rpc.
 From cryptis.examples.store Require Import impl.
 From cryptis.examples.store.proofs Require Import base db.
 
@@ -16,10 +16,11 @@ Unset Printing Implicit Defensive.
 
 Section Verif.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !Conn.connGS Σ, !RPC.rpcGS Σ, !storeGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ}.
+Context `{!RPC.rpcGS Σ, !storeGS Σ}.
 Notation iProp := (iProp Σ).
 
-Implicit Types (cs : Conn.state).
+Implicit Types (cs : GenConn.state).
 Implicit Types (skI skR : sign_key) (kS t : term).
 Implicit Types n : nat.
 Implicit Types γ : gname.
@@ -34,12 +35,16 @@ Proof.
 iIntros "(_ & _ & _ & #?)".
 iIntros "!> %Φ client post".
 iDestruct "client" as "(conn & %db & ready & state)".
+iAssert (RPC.client_connected skI skR cs ∗
+         ◇ (GenConn.failure skI skR ∨ db_client_ready skI skR db))%I
+  with "[conn ready]" as "[conn >ready]".
+{ iDestruct "ready" as  "[fail|ready]"; last by iFrame; eauto.
+  iPoseProof (RPC.client_connected_failure with "conn fail") as "#H".
+  iFrame "conn". by iLeft. }
 iPoseProof (RPC.client_connected_keys with "conn") as "#[-> ->]".
 wp_lam. wp_pures.
 wp_apply (RPC.wp_close with "[$conn]"); eauto.
-iIntros "pub". iApply "post". iFrame. 
-iDestruct "ready" as "[#?|ready]"; eauto.
-iLeft. by iApply Conn.session_failed_failure.
+iIntros "pub". iApply "post". by iFrame.
 Qed.
 
 End Verif.

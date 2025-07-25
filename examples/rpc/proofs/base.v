@@ -9,7 +9,7 @@ From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
 From cryptis Require Import lib term gmeta nown saved_prop.
 From cryptis Require Import cryptis primitives tactics role.
-From cryptis.examples Require Import iso_dh conn.
+From cryptis.examples Require Import iso_dh gen_conn conn.
 From cryptis.examples.rpc Require Import impl.
 
 Set Implicit Arguments.
@@ -43,7 +43,7 @@ Proof. solve_inG. Qed.
 
 Section Defs.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !Conn.connGS Σ, !rpcGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ, !rpcGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (skI skR : sign_key) (kS t : term) (ts : list term).
@@ -166,10 +166,12 @@ Definition rpc_msg_pred skI skR si rl t : iProp :=
       rpc_pred N φ ψ ∗ ψ skI skR si t₀ t ∗
       resp_pred_token si N t₀.
 
+Local Definition ps := {| Conn.msg_inv := rpc_msg_pred |}.
+
 Definition client_connected kI kR cs : iProp :=
-  Conn.connected kI kR rpc_msg_pred Init cs ∗
+  Conn.connected ps kI kR Init cs ∗
   release_token (si_init_share cs) ∗
-  (compromised_session Init cs ∨
+  (public (si_key cs) ∨
   resp_pred_token cs rpcN (TInt 0) ∗
   resp_pred_token cs rpcN (TInt 0)).
 
@@ -193,8 +195,17 @@ iIntros "(conn & _)".
 by iPoseProof (Conn.connected_keyE with "conn") as "(-> & -> & _)".
 Qed.
 
+Lemma client_connected_failure skI skR cs :
+  client_connected skI skR cs -∗
+  public (si_key cs) -∗
+  ◇ GenConn.failure skI skR.
+Proof.
+iIntros "(conn & rel & _) fail".
+by iApply (Conn.connected_failure with "conn rel fail").
+Qed.
+
 Definition server_connected skI skR cs : iProp :=
-  Conn.connected skI skR rpc_msg_pred Resp cs ∗
+  Conn.connected ps skI skR Resp cs ∗
   release_token (si_resp_share cs).
 
 Lemma server_connected_ok skI skR cs :
@@ -222,14 +233,14 @@ Definition ctx : iProp :=
     (rpcN.@"close")
     (λ _ _ si _, released (si_init_share si))
     (λ _ _ _ _ _, False)%I ∗
-  Conn.ctx rpcN rpc_msg_pred (λ _ _, True)%I.
+  Conn.ctx rpcN ps.
 
 End Defs.
 
 Arguments rpcGS Σ : clear implicits.
 
 Lemma ctx_alloc `{!heapGS Σ, !cryptisGS Σ, !iso_dhGS Σ,
-                  !Conn.connGS Σ, Hrpc : !rpcGpreS Σ} E :
+                  !GenConn.connGS Σ, Hrpc : !rpcGpreS Σ} E :
   ↑rpcN ⊆ E →
   Conn.pre_ctx -∗
   iso_dh_token E ==∗ ∃ H : rpcGS Σ,

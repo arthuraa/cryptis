@@ -6,7 +6,7 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
 From cryptis Require Import lib term cryptis primitives tactics.
-From cryptis Require Import gmeta nown role iso_dh conn rpc alist.
+From cryptis Require Import gmeta nown role iso_dh gen_conn conn rpc alist.
 From cryptis.examples.store Require Import impl.
 From cryptis.examples.store.proofs Require Import base db.
 From cryptis.examples.store.proofs.server Require Import load store create.
@@ -19,10 +19,11 @@ Local Existing Instance ticket_lock.
 
 Section Verif.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !Conn.connGS Σ, !RPC.rpcGS Σ, !storeGS Σ, !tlockG Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ}.
+Context `{!RPC.rpcGS Σ, !storeGS Σ, !tlockG Σ}.
 Notation iProp := (iProp Σ).
 
-Implicit Types (cs : Conn.state).
+Implicit Types (cs : GenConn.state).
 Implicit Types (skI skR : sign_key) (kS t : term).
 Implicit Types n : nat.
 Implicit Types γ : gname.

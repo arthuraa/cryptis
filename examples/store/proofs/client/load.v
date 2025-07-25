@@ -7,7 +7,7 @@ From iris.base_logic Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta nown cryptis.
 From cryptis Require Import primitives tactics role.
-From cryptis.examples Require Import iso_dh conn rpc.
+From cryptis.examples Require Import iso_dh gen_conn conn rpc.
 From cryptis.examples.store Require Import impl.
 From cryptis.examples.store.proofs Require Import base db.
 
@@ -17,7 +17,8 @@ Unset Printing Implicit Defensive.
 
 Section Verif.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !Conn.connGS Σ, !RPC.rpcGS Σ, !storeGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ}.
+Context `{!RPC.rpcGS Σ, !storeGS Σ}.
 Notation iProp := (iProp Σ).
 
 Context `{!storeG Σ}.
@@ -38,7 +39,7 @@ Lemma wp_client_load skI skR cs t1 t2 :
       db_connected skI skR cs ∗
       db_mapsto skI skR t1 t2 ∗
       public t2' ∗
-      (compromised_session Init cs ∨ ⌜t2' = t2⌝) }}}.
+      (public (si_key cs) ∨ ⌜t2' = t2⌝) }}}.
 Proof.
 iIntros "#? #ctx #p_t1 !> %Φ [client mapsto] post".
 iDestruct "client" as "(conn & db)".

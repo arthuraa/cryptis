@@ -169,7 +169,7 @@ Lemma wp_do_init_loop c lcomp vset skI skR :
   channel c -∗
   cryptis_ctx -∗
   iso_dh_ctx -∗
-  iso_dh_pred gameN (λ _, True)%I -∗
+  iso_dh_pred gameN (λ _ _ _ _, True)%I -∗
   minted skI -∗
   minted skR -∗
   inv gameN (game_inv lcomp skI skR) -∗
@@ -211,7 +211,7 @@ Lemma wp_do_init c lcomp skI skR :
   channel c -∗
   cryptis_ctx -∗
   iso_dh_ctx -∗
-  iso_dh_pred gameN (λ _, True)%I -∗
+  iso_dh_pred gameN (λ _ _ _ _, True)%I -∗
   minted skI -∗
   minted skR -∗
   inv gameN (game_inv lcomp skI skR) -∗
@@ -246,7 +246,7 @@ Lemma wp_do_resp_loop c lcomp set skI skR :
   channel c -∗
   cryptis_ctx -∗
   iso_dh_ctx -∗
-  iso_dh_pred gameN (λ _, True)%I -∗
+  iso_dh_pred gameN (λ _ _ _ _, True)%I -∗
   minted skI -∗
   minted skR -∗
   inv gameN (game_inv lcomp skI skR) -∗
@@ -280,7 +280,7 @@ Lemma wp_do_resp c lcomp skI skR :
   channel c -∗
   cryptis_ctx -∗
   iso_dh_ctx -∗
-  iso_dh_pred gameN (λ _, True)%I -∗
+  iso_dh_pred gameN (λ _ _ _ _, True)%I -∗
   minted skI -∗
   minted skR -∗
   inv gameN (game_inv lcomp skI skR) -∗
@@ -311,7 +311,7 @@ Definition game : val := λ: <>,
 Lemma wp_game :
   cryptis_ctx -∗
   iso_dh_ctx -∗
-  iso_dh_pred gameN (λ _, True)%I -∗
+  iso_dh_pred gameN (λ _ _ _ _, True)%I -∗
   WP game #() {{ _, True }}.
 Proof.
 iIntros "#ctx #? #?"; rewrite /game; wp_pures.
@@ -350,6 +350,7 @@ apply: heap_adequacy.
 iIntros (?) "?".
 iMod (cryptisGS_alloc _) as (?) "(#ctx & aenc_tok & sign_tok & ? & _ & _)".
 iMod (iso_dhGS_alloc with "sign_tok") as (?) "(#? & iso_tok & _)"; eauto.
-iMod (iso_dh_pred_set gameN (λ _, True)%I with "iso_tok") as "[#? ?]"; eauto.
+iMod (iso_dh_pred_set gameN (λ _ _ _ _, True)%I with "iso_tok")
+  as "[#? ?]"; eauto.
 by iApply (wp_game with "ctx [//]") => //.
 Qed.
