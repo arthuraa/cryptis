@@ -27,14 +27,16 @@ Implicit Types γ : gname.
 Implicit Types v : val.
 
 Lemma wp_client_close skI skR cs :
+  cryptis_ctx -∗
   store_ctx -∗
   {{{ db_connected skI skR cs }}}
     Client.close (repr cs)
   {{{ RET #(); db_disconnected skI skR ∗ public (si_key cs) }}}.
 Proof.
-iIntros "(_ & _ & _ & #?)".
+iIntros "#? (_ & _ & _ & #?)".
 iIntros "!> %Φ client post".
 iDestruct "client" as "(conn & %db & ready & state)".
+rewrite compromised_public.
 iAssert (RPC.client_connected skI skR cs ∗
          ◇ (GenConn.failure skI skR ∨ db_client_ready skI skR db))%I
   with "[conn ready]" as "[conn >ready]".

@@ -123,7 +123,7 @@ rewrite (@db_free_at_diff _ _ _ _ _ _ {[k]}) //.
 iDestruct "free" as "[free_k free]".
 wp_apply (wp_client_create with "[] [] [] [] [$]") => //.
 iIntros "[client k_v]". wp_pures.
-wp_apply (wp_client_close with "[] [$client]") => //.
+wp_apply (wp_client_close with "[//] [] [$client]") => //.
 iIntros "[client #p_sk]".
 wp_pures.
 wp_apply GenConn.wp_session_key => //. iIntros "_".

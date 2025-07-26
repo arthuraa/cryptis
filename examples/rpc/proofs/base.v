@@ -166,14 +166,19 @@ Definition rpc_msg_pred skI skR si rl t : iProp :=
       rpc_pred N φ ψ ∗ ψ skI skR si t₀ t ∗
       resp_pred_token si N t₀.
 
-Local Definition ps := {| Conn.msg_inv := rpc_msg_pred |}.
+Definition connected skI skR rl cs : iProp :=
+  Conn.connected {| Conn.msg_inv := rpc_msg_pred |}
+    skI skR rl cs.
+
+Definition client_tokens cs : iProp :=
+  public (si_key cs) ∨
+  resp_pred_token cs rpcN (TInt 0) ∗
+  resp_pred_token cs rpcN (TInt 0).
 
 Definition client_connected kI kR cs : iProp :=
-  Conn.connected ps kI kR Init cs ∗
+  connected kI kR Init cs ∗
   release_token (si_init_share cs) ∗
-  (public (si_key cs) ∨
-  resp_pred_token cs rpcN (TInt 0) ∗
-  resp_pred_token cs rpcN (TInt 0)).
+  client_tokens cs.
 
 Lemma client_public_key_or skI skR cs P :
   client_connected skI skR cs -∗
@@ -217,7 +222,7 @@ by iApply (Conn.connected_failure with "conn rel fail").
 Qed.
 
 Definition server_connected skI skR cs : iProp :=
-  Conn.connected ps skI skR Resp cs ∗
+  connected skI skR Resp cs ∗
   release_token (si_resp_share cs).
 
 Lemma server_public_compromised skI skR cs P :
@@ -256,7 +261,7 @@ Definition ctx : iProp :=
     (rpcN.@"close")
     (λ _ _ si _, released (si_init_share si))
     (λ _ _ _ _ _, False)%I ∗
-  Conn.ctx rpcN ps.
+  Conn.ctx rpcN {| Conn.msg_inv := rpc_msg_pred |}.
 
 End Defs.
 

@@ -42,7 +42,7 @@ Lemma wp_connect P c skI skR :
     impl.connect c skI (Spec.pkey skR)
   {{{ cs, RET (repr cs);
       client_connected skI skR cs ∗
-      (public (si_key cs) ∨ P) }}}.
+      (compromised Init cs ∨ P) }}}.
 Proof.
 iIntros "#? #? [#? #?] #? #? % !> P post".
 wp_lam; wp_pures. iApply wp_fupd.
@@ -50,7 +50,10 @@ wp_apply (Conn.wp_connect with "[] [P]"); eauto 10.
 iIntros "%cs (connected & P & rel & token)".
 iMod (resp_pred_token_alloc with "token") as "(t1 & t2 & token)";
   first solve_ndisj.
-iApply ("post" $! cs). iFrame. iModIntro. iRight. by iFrame.
+iApply ("post" $! cs).
+iPoseProof (Conn.connected_public_key_or with "connected rel P")
+  as "(connected & rel & >P)".
+iFrame. iModIntro. iRight. by iFrame.
 Qed.
 
 Lemma wp_listen c :
@@ -75,7 +78,7 @@ Lemma wp_confirm P c skI skR ga :
     impl.confirm c skR (ga, Spec.pkey skI)%V
   {{{ cs, RET (repr cs);
       server_connected skI skR cs ∗
-      (public (si_key cs) ∨ P) }}}.
+      (compromised Resp cs ∨ P) }}}.
 Proof.
 iIntros "#? #ctx1 [#? #ctx2] !> %Φ (#p_ga & #m_skI & #m_skR & P) post".
 wp_lam; wp_pures. iApply wp_fupd.
@@ -83,23 +86,26 @@ wp_apply (Conn.wp_confirm P with "[] [$P]").
 - eauto.
 - eauto.
 iIntros "%cs (conn & dis & rel & token)".
+iPoseProof (Conn.connected_public_key_or with "conn rel dis")
+  as "(conn & rel & >dis)".
 iApply "post". by iFrame.
 Qed.
 
-Lemma wp_call N φ ψ skI skR cs t :
+Lemma wp_call_gen N φ ψ skI skR cs t :
   {{{ cryptis_ctx ∗ ctx ∗ public t ∗
       rpc_pred N φ ψ ∗
-      client_connected skI skR cs ∗
+      connected skI skR Init cs ∗
+      client_tokens cs ∗
       (public (si_key cs) ∨ φ skI skR cs t) }}}
     impl.call (repr cs) (Tag N) t
   {{{ t', RET (repr t');
-      client_connected skI skR cs ∗
+      connected skI skR Init cs ∗
+      client_tokens cs ∗
       (public (si_key cs) ∨ ψ skI skR cs t t') ∗
       public t' }}}.
 Proof.
-iIntros "%Φ (#? & #ctx & #p_t & #N & conn & inv) post".
+iIntros "%Φ (#? & #ctx & #p_t & #N & conn & resp_pred & inv) post".
 iDestruct "ctx" as "[? ctx]".
-iDestruct "conn" as "(conn & rel & resp_pred)".
 iAssert (|==>
   (public (si_key cs) ∨ resp_pred_token cs N t) ∗
   (public (si_key cs) ∨
@@ -120,10 +126,9 @@ wp_apply (Conn.wp_recv with "[] [$conn]"); eauto.
 iIntros "%t' (conn & p_t' & inv)".
 iApply "post".
 iDestruct "inv" as "[#inv|inv]".
-{ iPoseProof (Conn.connected_public_key with "conn rel [//]") as "#>?".
-  iFrame. iModIntro. iSplitL; by eauto. }
+{ iFrame. iModIntro. iSplitL; iLeft; by eauto. }
 iDestruct "resp_pred" as "[#fail|t1]".
-{ iFrame. iModIntro. iSplitL; eauto. }
+{ iFrame. iModIntro. iSplitL; iLeft; by eauto. }
 iDestruct "inv" as "(%N' & %t₀ & %φ' & %ψ' & #N' & inv & t2)".
 iPoseProof (resp_pred_token_agree with "t1 t2") as "[<- <-]".
 iPoseProof (rpc_pred_agree with "N N'") as "[_ E]".
@@ -132,6 +137,27 @@ iRewrite ("E" $! skI skR cs t t').
 iMod (resp_pred_token_update _ rpcN (TInt 0)
        with "t1 t2") as "t".
 by iFrame.
+Qed.
+
+Lemma wp_call N φ ψ skI skR cs t :
+  {{{ cryptis_ctx ∗ ctx ∗ public t ∗
+      rpc_pred N φ ψ ∗
+      client_connected skI skR cs ∗
+      (compromised Init cs ∨ φ skI skR cs t) }}}
+    impl.call (repr cs) (Tag N) t
+  {{{ t', RET (repr t');
+      client_connected skI skR cs ∗
+      (compromised Init cs ∨ ψ skI skR cs t t') ∗
+      public t' }}}.
+Proof.
+iIntros "%Φ (#? & #ctx & #p_t & #N & (conn & rel & tok) & inv) post".
+rewrite [in (_ ∨ φ _ _ _ _)%I]compromised_public.
+iApply wp_fupd.
+wp_apply (wp_call_gen with "[$conn $tok $inv]"); first by eauto.
+iIntros "%t' (conn & tok & res & #p_t')".
+iDestruct (Conn.connected_public_key_or with "conn rel res")
+  as "(conn & rel & >res)".
+iModIntro. iApply "post". by iFrame.
 Qed.
 
 Definition wf_handler Φ skI skR cs (h : handler) : iProp :=
@@ -191,7 +217,7 @@ iIntros "!> %t !> %Ξ (#p_t & inv_t & (conn & rel) & inv) post".
 wp_pure _ credit:"c1".
 wp_pures. wp_untag t; wp_pures; last by iApply ("post" $! None); iFrame.
 iAssert (|={⊤}=> (
-  Conn.connected base.ps skI skR Resp cs ∗
+  connected skI skR Resp cs ∗
   release_token (si_resp_share cs) ∗
   (public (si_key cs) ∨ resp_pred_token cs N t ∗ φ skI skR cs t)))%I
   with "[c1 conn rel inv_t]" as ">(conn & rel & inv_t)".
@@ -349,44 +375,18 @@ case: ob => [[]|]; wp_pures.
 Qed.
 
 Lemma wp_close skI skR cs :
-  {{{ ctx ∗ client_connected skI skR cs }}}
+  {{{ cryptis_ctx ∗ ctx ∗ client_connected skI skR cs }}}
     impl.close (repr cs)
   {{{ RET #(); public (si_key cs) }}}.
 Proof.
-iIntros "%Φ (#ctx & conn) post".
-iDestruct "ctx" as "[close ctx]".
-iDestruct "conn" as "(conn & rel & resp_pred)".
-iMod (release with "rel") as "#rel".
-iAssert (|==>
-  (public (si_key cs) ∨
-     resp_pred_token cs (rpcN.@"close") (TInt 0) ∗
-     resp_pred_token cs (rpcN.@"close") (TInt 0)))%I
-  with "[resp_pred]" as ">resp_pred".
-{ iDestruct "resp_pred" as "[#fail|(t1 & t2)]"; eauto.
-  iRight.
-  iApply (resp_pred_token_update with "t1 t2"). }
-rewrite or_sep2. iDestruct "resp_pred" as "[t1 t2]".
-wp_lam. wp_lam. wp_pures. wp_tag.
-wp_apply (Conn.wp_send with "[] [] [$conn t2]"); eauto.
-{ by rewrite public_tag public_TInt. }
-{ iDestruct "t2" as "[?|?]"; first by eauto. iRight.
-  iExists _, _, _, _. iSplit => //. iFrame "#". by iFrame. }
-iIntros "conn". wp_pure _ credit:"c". wp_pures.
-wp_apply (Conn.wp_recv with "[] [$conn]"); eauto.
-iIntros "%t' (conn & p_t' & inv)".
-iAssert (|={⊤}=> public (si_key cs))%I with "[t1 inv c]" as ">#?".
-{ iDestruct "t1" as "[?|t1]"; eauto.
-  iDestruct "inv" as "[inv|inv]"; eauto.
-  iDestruct "inv" as "(%N' & %t₀ & %φ' & %ψ' & #N' & inv & t2)".
-  iPoseProof (resp_pred_token_agree with "t1 t2") as "[<- <-]".
-  iPoseProof (rpc_pred_agree with "close N'") as "[_ E]".
-  iSpecialize ("E" $! skI skR cs (TInt 0) t').
-  iMod (lc_fupd_elim_later_pers with "c E") as "{E} #E".
-  iRevert "inv".
-  iRewrite -"E". iIntros "[]". }
-wp_pures.
-wp_apply (Conn.wp_free with "[$conn]").
-iIntros "_". by iApply "post".
+iIntros "%Φ (#? & #ctx & conn & rel & tok) post".
+iMod (release with "rel") as "#rel". wp_lam.
+iPoseProof "ctx" as "[? ?]".
+wp_apply (wp_call_gen with "[$conn $tok]").
+{ rewrite public_TInt. do ![iSplit; eauto]. }
+iIntros "% (conn & tok & [#? | []] & _)".
+wp_pures. wp_apply (Conn.wp_free with "conn"). iIntros "_".
+by iApply "post".
 Qed.
 
 End Proofs.

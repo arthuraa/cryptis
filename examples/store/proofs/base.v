@@ -80,7 +80,7 @@ Definition db_disconnected skI skR : iProp := ∃ db,
   DB.db_state skI skR dbN db.
 
 Definition db_connected' skI skR cs : iProp := ∃ db,
-  (public (si_key cs) ∨ db_client_ready skI skR db) ∗
+  (compromised Init cs ∨ db_client_ready skI skR db) ∗
   DB.db_state skI skR dbN db.
 
 Definition db_connected skI skR cs : iProp :=
@@ -204,7 +204,7 @@ Definition store_resp_pred skI skR si t t' : iProp :=
   ∃ db, rep_current skI skR dbN ∅ db.
 
 Lemma store_call t2' skI skR cs t1 t2 :
-  let P := public (si_key cs) in
+  let P := compromised Init cs in
   db_connected' skI skR cs -∗
   db_mapsto skI skR t1 t2 ==∗
   (P ∨ store_call_pred skI skR cs (Spec.of_list [t1; t2'])) ∗
@@ -251,7 +251,7 @@ Definition create_resp_pred skI skR si t t' : iProp :=
   ∃ db, rep_current skI skR dbN ∅ db.
 
 Lemma create_call t1 t2 skI skR cs :
-  let P := public (si_key cs) in
+  let P := compromised Init cs in
   db_connected' skI skR cs -∗
   db_free_at skI skR {[t1]} ==∗
   (P ∨ create_call_pred skI skR cs (Spec.of_list [t1; t2])) ∗
@@ -297,7 +297,7 @@ Definition load_resp_pred skI skR si t1 t2 : iProp :=
   ∃ db, ⌜db !! t1 = Some t2⌝ ∗ rep_current skI skR dbN ∅ db.
 
 Lemma load_call t1 t2 skI skR cs :
-  let P := public (si_key cs) in
+  let P := compromised Init cs in
   db_connected' skI skR cs -∗
   db_mapsto skI skR t1 t2 ==∗
   (P ∨ load_call_pred skI skR cs t1) ∗

@@ -51,7 +51,6 @@ wp_apply (RPC.wp_call with "[$conn $load]").
 { do 4!iSplit => //=; by eauto. }
 iIntros "%t' (conn & inv_t & p_t)".
 iPoseProof ("waiting" with "inv_t") as "(res & db)".
-iPoseProof (RPC.client_public_key_or with "conn res") as "[conn >res]".
 iApply "post". by iFrame.
 Qed.
 
