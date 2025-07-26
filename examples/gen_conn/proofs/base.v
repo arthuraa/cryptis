@@ -328,12 +328,25 @@ Lemma connected_public_key ps skI skR rl cs :
   connected ps skI skR rl cs -∗
   release_token (si_share_of rl cs) -∗
   public (si_key cs) -∗
-  ◇ compromised_session rl cs.
+  ◇ compromised rl cs.
 Proof.
 iIntros "conn rel #p_k".
 iPoseProof "conn" as "(_ & _ & <- & _ & #sess & _)".
 iDestruct "sess" as "(#? & #sess)".
 by iApply (session_compromised with "[] [//] rel").
+Qed.
+
+Lemma connected_public_key_or ps skI skR rl cs P :
+  connected ps skI skR rl cs -∗
+  release_token (si_share_of rl cs) -∗
+  public (si_key cs) ∨ P -∗
+  connected ps skI skR rl cs ∗
+  release_token (si_share_of rl cs) ∗
+  ◇ (compromised rl cs ∨ P).
+Proof.
+iIntros "conn rel [#fail|P]"; last by iFrame.
+iPoseProof (connected_public_key with "conn rel fail") as "#comp".
+iFrame. by iLeft.
 Qed.
 
 Lemma connected_released_session ps skI skR rl cs :
@@ -355,7 +368,7 @@ Lemma connected_ok ps skI skR rl cs :
   secret skR -∗
   minted skI -∗
   minted skR -∗
-  ◇ □ ¬ compromised_session rl cs.
+  ◇ □ ¬ compromised rl cs.
 Proof.
 iIntros "(<- & <- & <- & _ & #sess & % & % & _ & _)
           s_kI s_kR #signI #signR".
@@ -364,7 +377,7 @@ by iApply (session_not_compromised with "[//] s_kI s_kR").
 Qed.
 
 Lemma session_failed_failure rl si :
-  compromised_session rl si  ⊢ failure (si_init si) (si_resp si).
+  compromised rl si  ⊢ failure (si_init si) (si_resp si).
 Proof. by iIntros "(#failed & _)". Qed.
 
 Lemma connected_failure ps skI skR rl cs :

@@ -93,7 +93,7 @@ Lemma db_connected_ok skI skR cs :
   secret skR -∗
   minted skI -∗
   minted skR -∗
-  ◇ □ ¬ compromised_session Init cs.
+  ◇ □ ¬ compromised Init cs.
 Proof.
 iIntros "(conn & _)".
 iApply (RPC.client_connected_ok with "conn").

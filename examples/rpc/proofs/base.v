@@ -175,13 +175,25 @@ Definition client_connected kI kR cs : iProp :=
   resp_pred_token cs rpcN (TInt 0) ∗
   resp_pred_token cs rpcN (TInt 0)).
 
+Lemma client_public_key_or skI skR cs P :
+  client_connected skI skR cs -∗
+  (public (si_key cs) ∨ P) -∗
+  client_connected skI skR cs ∗
+  ◇ (compromised Init cs ∨ P).
+Proof.
+iIntros "(conn & rel & ?) P".
+iPoseProof (Conn.connected_public_key_or with "conn rel P")
+  as "(conn & rel & P)".
+by iFrame.
+Qed.
+
 Lemma client_connected_ok skI skR cs :
   client_connected skI skR cs -∗
   secret skI -∗
   secret skR -∗
   minted skI -∗
   minted skR -∗
-  ◇ □ ¬ compromised_session Init cs.
+  ◇ □ ¬ compromised Init cs.
 Proof.
 iIntros "(conn & _)".
 by iApply (Conn.connected_ok with "conn").
@@ -208,13 +220,24 @@ Definition server_connected skI skR cs : iProp :=
   Conn.connected ps skI skR Resp cs ∗
   release_token (si_resp_share cs).
 
+Lemma server_public_compromised skI skR cs P :
+  server_connected skI skR cs -∗
+  (public (si_key cs) ∨ P) -∗
+  server_connected skI skR cs ∗
+  ◇ (compromised Resp cs ∨ P).
+Proof.
+iIntros "(conn & rel) [#fail|?]"; last by iFrame.
+iPoseProof (Conn.connected_public_key with "conn rel fail") as "#?".
+iFrame. by iLeft.
+Qed.
+
 Lemma server_connected_ok skI skR cs :
   server_connected skI skR cs -∗
   secret skI -∗
   secret skR -∗
   minted skI -∗
   minted skR -∗
-  ◇ □ ¬ compromised_session Resp cs.
+  ◇ □ ¬ compromised Resp cs.
 Proof.
 iIntros "(conn & _)".
 by iApply (Conn.connected_ok with "conn").
