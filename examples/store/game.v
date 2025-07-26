@@ -8,7 +8,7 @@ From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par assert ticket_lock.
 From cryptis Require Import cryptis primitives tactics gmeta role.
 From cryptis.primitives Require Import attacker.
-From cryptis.examples Require Import iso_dh rpc conn store.
+From cryptis.examples Require Import iso_dh rpc gen_conn conn store.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -16,7 +16,8 @@ Unset Printing Implicit Defensive.
 
 Section Game.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !Conn.connGS Σ, !RPC.rpcGS Σ, !storeGS Σ, !tlockG Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ}.
+Context `{!RPC.rpcGS Σ, !storeGS Σ, !tlockG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -125,7 +126,7 @@ iIntros "[client k_v]". wp_pures.
 wp_apply (wp_client_close with "[] [$client]") => //.
 iIntros "[client #p_sk]".
 wp_pures.
-wp_apply Conn.wp_session_key => //. iIntros "_".
+wp_apply GenConn.wp_session_key => //. iIntros "_".
 wp_apply (wp_send with "[//]") => //. wp_pures.
 wp_apply (wp_client_connect with "[] [] [] [] [] client"); eauto.
 iIntros "%cs' client". wp_pure _ credit:"c'". wp_pures.
@@ -144,7 +145,7 @@ Qed.
 End Game.
 
 Definition F : gFunctors :=
-  #[heapΣ; spawnΣ; cryptisΣ; tlockΣ; iso_dhΣ; Conn.connΣ; RPC.rpcΣ; storeΣ].
+  #[heapΣ; spawnΣ; cryptisΣ; tlockΣ; iso_dhΣ; GenConn.connΣ; RPC.rpcΣ; storeΣ].
 
 Lemma store_secure σ₁ σ₂ (v : val) t₂ e₂ :
   rtc erased_step ([game #()], σ₁) (t₂, σ₂) →

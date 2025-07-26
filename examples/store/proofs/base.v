@@ -147,7 +147,7 @@ Qed.
 Definition server_db_connected' skI skR cs vdb : iProp := ∃ db,
   public_db db ∗
   AList.is_alist vdb (repr <$> db) ∗
-  (public (si_key cs) ∨ db_server_ready skI skR db).
+  (compromised Resp cs ∨ db_server_ready skI skR db).
 
 Definition server_db_connected skI skR cs vdb : iProp :=
   RPC.server_connected skI skR cs ∗
@@ -230,7 +230,7 @@ iExists _. iFrame. iRight. iFrame.
 Qed.
 
 Lemma store_resp skI skR cs db t1 t2 :
-  let P := public (si_key cs) in
+  let P := compromised Resp cs in
   (P ∨ db_server_ready skI skR db) -∗
   (P ∨ store_call_pred skI skR cs (Spec.of_list [t1; t2])) ==∗
   (P ∨ db_server_ready skI skR (<[t1 := t2]>db)) ∗
@@ -276,7 +276,7 @@ iExists _. iFrame. iRight. iFrame.
 Qed.
 
 Lemma create_resp skI skR cs db t1 t2 :
-  let P := public (si_key cs) in
+  let P := compromised Resp cs in
   (P ∨ db_server_ready skI skR db) -∗
   (P ∨ create_call_pred skI skR cs (Spec.of_list [t1; t2])) ==∗
   (P ∨ db_server_ready skI skR (<[t1 := t2]>db)) ∗
@@ -323,7 +323,7 @@ iSplit; eauto. iExists _. iFrame. iRight. iFrame.
 Qed.
 
 Lemma load_resp skI skR cs db t1 :
-  let P := public (si_key cs) in
+  let P := compromised Resp cs in
   let t2 := default (TInt 0) (db !! t1) in
   (P ∨ db_server_ready skI skR db) -∗
   (P ∨ load_call_pred skI skR cs t1) ==∗

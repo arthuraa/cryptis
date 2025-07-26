@@ -164,7 +164,7 @@ Lemma wp_handle_gen Φ N φ ψ skI skR cs (f : val) :
     ctx ∗
     □ (∀ t : term,
       {{{ ▷ public t ∗
-          ▷ (public (si_key cs) ∨ φ skI skR cs t) ∗
+          ▷ (compromised Resp cs ∨ φ skI skR cs t) ∗
           release_token (si_resp_share cs) ∗
           Φ }}}
         f (repr t)
@@ -188,12 +188,13 @@ iDestruct "ctx" as "(#? & #?)".
 iIntros "!>". iApply ("post" $! (Handler _)). clear Ξ.
 rewrite /wf_handler.
 iIntros "!> %t !> %Ξ (#p_t & inv_t & (conn & rel) & inv) post".
+wp_pure _ credit:"c1".
 wp_pures. wp_untag t; wp_pures; last by iApply ("post" $! None); iFrame.
-iAssert (▷ (
+iAssert (|={⊤}=> (
   Conn.connected base.ps skI skR Resp cs ∗
   release_token (si_resp_share cs) ∗
   (public (si_key cs) ∨ resp_pred_token cs N t ∗ φ skI skR cs t)))%I
-  with "[conn rel inv_t]" as "(conn & >rel & inv_t)".
+  with "[c1 conn rel inv_t]" as ">(conn & rel & inv_t)".
 { iDestruct "inv_t" as "[#fail|inv_t]".
   { iPoseProof (Conn.connected_public_key with "conn rel fail") as "#>?".
     iFrame. by eauto. }
@@ -201,9 +202,11 @@ iAssert (▷ (
   iDestruct "inv_t" as "(%N' & %t' & %φ' & %ψ' & %e & #N' & inv_t & token)".
   case/Spec.tag_inj: e => /Tag_inj <- <- {N' t'}.
   iPoseProof (rpc_pred_agree with "N N'") as "[E _]".
-  iModIntro. iRewrite ("E" $! skI skR cs t). iRight. iFrame. }
-rewrite public_tag.
-rewrite or_sep2. iDestruct "inv_t" as "[t inv_t]".
+  iMod (lc_fupd_elim_later_pers with "c1 E") as "{E} #E".
+  iRewrite ("E" $! skI skR cs t). iRight. by iFrame. }
+rewrite public_tag or_sep2. iDestruct "inv_t" as "[t inv_t]".
+iPoseProof (Conn.connected_public_key_or with "conn rel inv_t")
+  as "(conn & rel & >inv_t)".
 wp_apply ("wp" with "[$inv $rel inv_t]").
 { iSplit => //. }
 iIntros ([[continue t']|]) "[res inv]"; wp_pures; last first.
@@ -235,14 +238,14 @@ Lemma wp_handle Φ N φ ψ skI skR cs (f : val) :
     ctx ∗
     □ (∀ t : term,
       {{{ ▷ public t ∗
-          ▷ (public (si_key cs) ∨ φ skI skR cs t) ∗
+          ▷ (compromised Resp cs ∨ φ skI skR cs t) ∗
           Φ }}}
         f (repr t)
       {{{ ot', RET (repr ot');
           match ot' : option term with
           | Some t' =>
               public t' ∗
-              (public (si_key cs) ∨ ψ skI skR cs t t')
+              (compromised Resp cs ∨ ψ skI skR cs t t')
           | None => True
           end ∗
           Φ }}})
@@ -257,7 +260,8 @@ iIntros "!> %t %Ξ !> (#p_t & inv_t & rel & inv) post".
 wp_pures.
 wp_apply ("wp" with "[$inv_t $inv]") => //.
 iIntros ([t'|]) "[ot' inv]"; wp_pures; last by iApply ("post" $! None); iFrame.
-iApply ("post" $! (Some (true, t'))). by iFrame.
+iApply ("post" $! (Some (true, t'))). iClear "wp".
+rewrite compromised_public. by iFrame.
 Qed.
 
 Lemma wp_handle_close Φ skI skR cs :
@@ -273,6 +277,7 @@ iIntros "!> %t %Ξ !> (#p_t & #inv_t & rel & inv) post".
 iMod (release with "rel") as "#?".
 wp_pures. iApply ("post" $! (Some (false, _))). iFrame.
 iModIntro. iSplit; eauto.
+rewrite compromised_public.
 iDestruct "inv_t" as "[?|inv_t]"; eauto.
 iRight. by iSplit.
 Qed.

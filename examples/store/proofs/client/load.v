@@ -39,18 +39,20 @@ Lemma wp_client_load skI skR cs t1 t2 :
       db_connected skI skR cs ∗
       db_mapsto skI skR t1 t2 ∗
       public t2' ∗
-      (public (si_key cs) ∨ ⌜t2' = t2⌝) }}}.
+      (compromised Init cs ∨ ⌜t2' = t2⌝) }}}.
 Proof.
 iIntros "#? #ctx #p_t1 !> %Φ [client mapsto] post".
 iDestruct "client" as "(conn & db)".
 iMod (load_call t1 with "db mapsto") as "(load & mapsto & waiting)".
 wp_lam; wp_pures. wp_list.
 iDestruct "ctx" as "(_ & ? & _ & ctx)".
+iApply wp_fupd.
 wp_apply (RPC.wp_call with "[$conn $load]").
 { do 4!iSplit => //=; by eauto. }
 iIntros "%t' (conn & inv_t & p_t)".
 iPoseProof ("waiting" with "inv_t") as "(res & db)".
-iApply "post". iFrame.
+iPoseProof (RPC.client_public_key_or with "conn res") as "[conn >res]".
+iApply "post". by iFrame.
 Qed.
 
 End Verif.

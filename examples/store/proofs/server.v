@@ -167,6 +167,8 @@ wp_apply (RPC.wp_confirm (db_server_ready skA (ss_key ss) db)
            with "[] [] [] [$ready]") => //.
 { do 3!iSplit => //. }
 iIntros "%cs (conn & ready)".
+iPoseProof (RPC.server_public_compromised with "conn ready")
+  as "[conn >ready]".
 wp_pures.
 iApply (wp_fork with "[conn vdb locked ready]").
 { iModIntro.
