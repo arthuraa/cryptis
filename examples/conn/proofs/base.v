@@ -55,7 +55,7 @@ Lemma connected_public_key ps skI skR rl cs :
   connected ps skI skR rl cs -∗
   release_token (si_share_of rl cs) -∗
   public (si_key cs) -∗
-  ◇ compromised rl cs.
+  ◇ compromised cs.
 Proof. exact: GenConn.connected_public_key. Qed.
 
 Lemma connected_public_key_or ps skI skR rl cs P :
@@ -64,7 +64,7 @@ Lemma connected_public_key_or ps skI skR rl cs P :
   public (si_key cs) ∨ P -∗
   connected ps skI skR rl cs ∗
   release_token (si_share_of rl cs) ∗
-  ◇ (compromised rl cs ∨ P).
+  ◇ (compromised cs ∨ P).
 Proof. exact: GenConn.connected_public_key_or. Qed.
 
 Lemma connected_released_session ps skI skR rl cs :
@@ -81,13 +81,11 @@ Lemma connected_ok ps skI skR rl cs :
   connected ps skI skR rl cs -∗
   secret skI -∗
   secret skR -∗
-  minted skI -∗
-  minted skR -∗
-  ◇ □ ¬ compromised rl cs.
+  ◇ session_ok cs.
 Proof. exact: GenConn.connected_ok. Qed.
 
-Lemma session_failed_failure rl si :
-  compromised rl si  ⊢ GenConn.failure (si_init si) (si_resp si).
+Lemma session_failed_failure si :
+  compromised si  ⊢ GenConn.failure (si_init si) (si_resp si).
 Proof. exact: GenConn.session_failed_failure. Qed.
 
 Lemma connected_failure ps skI skR rl cs :

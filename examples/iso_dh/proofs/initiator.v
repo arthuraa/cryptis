@@ -63,7 +63,7 @@ Lemma wp_initiator failed c skI skR N φ :
         ⌜si_resp si = skR⌝ ∗
         ⌜si_key si = kS⌝ ∗
         minted kS ∗
-        session Init si ∗
+        session si ∗
         □ (⌜failed⌝ → public (si_key si)) ∗
         release_token (si_init_share si) ∗
         term_token (si_init_share si) (⊤ ∖ ↑iso_dhN) ∗
@@ -148,10 +148,8 @@ iAssert (▷ (term_meta ga (iso_dhN.@"failed") true ∨ released_session si) →
 iAssert (|={⊤}=>
            □ (⌜failed⌝ → public (si_key si)) ∗
            (public (si_key si) ∨ φ skI skR si Init) ∗
-           ∃ failed,
-             term_meta ga (iso_dhN.@"failed") failed ∗
-             if failed then public (si_init si) ∨ public (si_resp si)
-             else □ (public (si_key si) → ▷ released_session si))%I
+           ((public (si_init si) ∨ public (si_resp si)) ∨
+             □ (public (si_key si) → ▷ released_session si)))%I
   with "[token_a ready_token failed_token H2 H3]"
   as "{inv} > (#comp & res & #s_k2)".
 { case: failed.
@@ -166,7 +164,7 @@ iAssert (|={⊤}=>
     iAssert (public (si_key si)) as "#?".
     { iApply "s_k1". by eauto. }
     iModIntro. iSplit; first by iIntros "!> []".
-    iSplit; eauto. iExists true. iSplit => //. by eauto. }
+    iSplit; eauto. }
   iMod (lc_fupd_elim_later_pers with "H3 inv") as "{inv} #inv".
   iDestruct "inv" as "(%ga' & %b & %pkI' & %N' & %e_m2 & s_b & pred_b & res)".
   case/Spec.of_list_inj: e_m2
@@ -188,7 +186,7 @@ iAssert (|={⊤}=>
   iIntros "!>".
   iSplit; first by iIntros "!> []".
   iSplitL "res"; eauto.
-  iExists false. iSplit => //. iIntros "!> {s_k1} #p_k".
+  iRight. iIntros "!> {s_k1} #p_k".
   rewrite public_senc_key public_of_list /=.
   iDestruct "p_k" as "(_ & _ & _ & _ & p_gab & _)".
   iPoseProof (public_dh_secret' b a with "[//] [//] [] [//] [//]") as ">?" => //.
@@ -198,9 +196,7 @@ iAssert (|={⊤}=>
 wp_pures. wp_apply wp_sign; eauto.
 { rewrite public_of_list /=. do ![iSplit => //].
   by iApply public_verify_key. }
-{ iRight. iExists a, gb, skR. iModIntro.
-  iDestruct "s_k2" as "(%failed' & ? & s_k2)".
-  iSplit => //. case: failed'; by eauto. }
+{ iRight. iExists a, gb, skR. iModIntro. iSplit => //. }
 iIntros "%m3 #p_m3". wp_pures. wp_apply wp_send => //.
 wp_pures. wp_apply wp_derive_senc_key.
 set k := SEncKey _.
@@ -239,13 +235,11 @@ iIntros "#chan_c #ctx #? #? #m_skI #m_skR %Ψ !> _ Hpost".
 iApply wp_fupd. wp_apply (wp_initiator false) => //.
 iIntros "%okS HkS". case: okS => [kS|]; last by iApply ("Hpost" $! None).
 iDestruct "HkS" as "(%si & <- & <- & <- & #? & #sess & #? & rel & tok & _)".
-iMod (unrelease with "rel") as "#un". iModIntro.
+iMod (unrelease Init with "rel") as "#un". iModIntro.
 iApply ("Hpost" $! (Some (si_key si))).
 iExists si. iFrame. do !iSplit => //.
-iDestruct "sess" as "(#? & %failed & #failed & #comp)".
-case: failed; first by eauto.
-iRight. iApply (unreleased_key_secrecy Init) => //.
-iModIntro. by iSplit.
+iDestruct (session_session_ok with "sess") as "[?|sess']"; eauto.
+iRight. iApply unreleased_key_secrecy => //.
 Qed.
 
 End Verif.

@@ -92,12 +92,12 @@ case: bcomp; wp_pures; first by iApply "post".
 by wp_apply "IH"; eauto.
 Qed.
 
-Lemma wp_check_key_secrecy c lcomp rl si :
+Lemma wp_check_key_secrecy c lcomp si :
   {{{ cryptis_ctx ∗
       channel c ∗
       inv gameN (game_inv lcomp (si_init si) (si_resp si)) ∗
       minted (si_init si) ∗ minted (si_resp si) ∗
-      session rl si ∗ □ (released_session si → False) }}}
+      session si ∗ □ (¬ released_session si) }}}
     check_key_secrecy c #lcomp (si_key si)
   {{{ RET #(); True }}}.
 Proof.
@@ -118,7 +118,8 @@ iAssert (|={⊤ ∖ ↑gameN}=> secret skI ∗ secret skR ∗
   with "[c1 s_skI s_skR]" as "{s_sk} >(s_skI & s_skR & #s_sk)".
 { iPoseProof (secret_session with "s_skI s_skR [//]")
     as "{s_sk} #>#s_sk".
-  iFrame. iIntros "!> !> #p_k". iApply "un". by iApply "s_sk". }
+  iFrame. iIntros "!> !> #p_k".
+  by iApply unreleased_key_secrecy. }
 iModIntro. iSplitR "post".
 { iExists false; iFrame. }
 wp_pures. wp_apply wp_wait_for_compromise; eauto.
@@ -195,9 +196,7 @@ iDestruct "tsP"
   as "(%si & <- & <- & <- & #m_sk & #s_k & #? & rel & token & _)".
 iPoseProof (iso_dh_game_fresh Init with "token")
   as "[fresh token]"; first solve_ndisj.
-iMod (unrelease with "rel") as "#un".
-iAssert (□ ¬ released_session si)%I as "#?".
-{ iIntros "!> #?". by iApply (unreleased_released_session _ Init). }
+iMod (unrelease Init with "rel") as "#un".
 wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
 wp_pures. wp_eq_term e; wp_pures; last by iApply "Hpost".
 move: e => /Spec.sign_pkey_inj -> {skR}.
@@ -266,9 +265,7 @@ iDestruct "res"
   as "(%si & -> & <- & -> & #p_pkI' & #m_sk & #s_k & rel & token)".
 iPoseProof (iso_dh_game_fresh Resp with "token")
   as "[fresh token]"; first solve_ndisj.
-iMod (unrelease with "rel") as "#un".
-iAssert (¬ released_session si)%I as "?".
-{ iIntros "#?". by iApply (unreleased_released_session _ Resp). }
+iMod (unrelease Resp with "rel") as "#un".
 wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
 wp_eq_term e; wp_pures; last by iApply "Hpost".
 move: e => /Spec.sign_pkey_inj -> {skI}.

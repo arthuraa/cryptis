@@ -42,7 +42,7 @@ Lemma wp_connect P c skI skR :
     impl.connect c skI (Spec.pkey skR)
   {{{ cs, RET (repr cs);
       client_connected skI skR cs ∗
-      (compromised Init cs ∨ P) }}}.
+      (compromised cs ∨ P) }}}.
 Proof.
 iIntros "#? #? [#? #?] #? #? % !> P post".
 wp_lam; wp_pures. iApply wp_fupd.
@@ -78,7 +78,7 @@ Lemma wp_confirm P c skI skR ga :
     impl.confirm c skR (ga, Spec.pkey skI)%V
   {{{ cs, RET (repr cs);
       server_connected skI skR cs ∗
-      (compromised Resp cs ∨ P) }}}.
+      (compromised cs ∨ P) }}}.
 Proof.
 iIntros "#? #ctx1 [#? #ctx2] !> %Φ (#p_ga & #m_skI & #m_skR & P) post".
 wp_lam; wp_pures. iApply wp_fupd.
@@ -143,11 +143,11 @@ Lemma wp_call N φ ψ skI skR cs t :
   {{{ cryptis_ctx ∗ ctx ∗ public t ∗
       rpc_pred N φ ψ ∗
       client_connected skI skR cs ∗
-      (compromised Init cs ∨ φ skI skR cs t) }}}
+      (compromised cs ∨ φ skI skR cs t) }}}
     impl.call (repr cs) (Tag N) t
   {{{ t', RET (repr t');
       client_connected skI skR cs ∗
-      (compromised Init cs ∨ ψ skI skR cs t t') ∗
+      (compromised cs ∨ ψ skI skR cs t t') ∗
       public t' }}}.
 Proof.
 iIntros "%Φ (#? & #ctx & #p_t & #N & (conn & rel & tok) & inv) post".
@@ -190,7 +190,7 @@ Lemma wp_handle_gen Φ N φ ψ skI skR cs (f : val) :
     ctx ∗
     □ (∀ t : term,
       {{{ ▷ public t ∗
-          ▷ (compromised Resp cs ∨ φ skI skR cs t) ∗
+          ▷ (compromised cs ∨ φ skI skR cs t) ∗
           release_token (si_resp_share cs) ∗
           Φ }}}
         f (repr t)
@@ -264,14 +264,14 @@ Lemma wp_handle Φ N φ ψ skI skR cs (f : val) :
     ctx ∗
     □ (∀ t : term,
       {{{ ▷ public t ∗
-          ▷ (compromised Resp cs ∨ φ skI skR cs t) ∗
+          ▷ (compromised cs ∨ φ skI skR cs t) ∗
           Φ }}}
         f (repr t)
       {{{ ot', RET (repr ot');
           match ot' : option term with
           | Some t' =>
               public t' ∗
-              (compromised Resp cs ∨ ψ skI skR cs t t')
+              (compromised cs ∨ ψ skI skR cs t t')
           | None => True
           end ∗
           Φ }}})

@@ -67,7 +67,7 @@ Lemma wp_responder_accept failed c skI skR ga N φ :
         ⌜si_resp si = skR⌝ ∗
         ⌜kS = si_key si⌝ ∗
         minted (si_key si) ∗
-        session Resp si ∗
+        session si ∗
         □ (⌜failed⌝ → public (si_key si)) ∗
         release_token (si_resp_share si) ∗
         term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN) ∗
@@ -142,11 +142,8 @@ iAssert (▷ (⌜failed⌝ ∨ released_session si) → public (si_key si))%I as
   - iApply public_TExp => //. by iApply "s_b". }
 iAssert (|={⊤}=>
            □ (⌜failed⌝ → public (si_key si)) ∗
-           ∃ failed,
-             term_meta gb (iso_dhN.@"failed") failed ∗
-             if failed then
-               public (si_init si) ∨ public (si_resp si)
-             else □ (public (si_key si) → ▷ released_session si))%I
+             ((public (si_init si) ∨ public (si_resp si)) ∨
+              □ (public (si_key si) → ▷ released_session si)))%I
   with "[token_failed H4]" as "> (#comp & i_m3)".
 { case: failed.
   { iMod (term_meta_set (iso_dhN.@"failed") true with "token_failed")
@@ -154,12 +151,12 @@ iAssert (|={⊤}=>
     iAssert (public (si_key si)) as "#?".
     { iApply "s_k1". by eauto. }
     iModIntro. iSplit; first by eauto.
-    iExists true. by eauto. }
+    by eauto. }
   iDestruct "inv_m3" as "[comp|#inv]".
   { iMod (term_meta_set (iso_dhN.@"failed") true with "token_failed")
       as "#?"; first by solve_ndisj.
     iModIntro. iSplit; first by iIntros "!> []".
-    iExists true. iSplit => //. by eauto. }
+    by eauto. }
   iDestruct "inv" as "(%a & %gb' & %skR' & %e_m3 & comp)".
   case/Spec.of_list_inj: e_m3
     => -> <- /Spec.sign_pkey_inj <- {ga gb' skR'}
@@ -211,12 +208,10 @@ wp_apply (wp_responder_accept false); first by eauto 10.
 iIntros "%osi Hsi".
 case: osi => [kS|]; last by iApply ("Hpost" $! None).
 iDestruct "Hsi" as "(%si & <- & <- & -> & #m_kS & #sec & #? & rel & tok & _)".
-iMod (unrelease with "rel") as "#un". iModIntro.
+iMod (unrelease Resp with "rel") as "#un". iModIntro.
 iApply ("Hpost" $! (Some (si_key si))). iFrame. do !iSplit => //.
-iDestruct "sec" as "(? & %failed & ? & ?)".
-case: failed; eauto.
-iRight. iApply (unreleased_key_secrecy Resp) => //.
-iModIntro. by iSplit.
+iDestruct (session_session_ok with "sec") as "[?|ok]"; eauto.
+iRight. iApply unreleased_key_secrecy => //.
 Qed.
 
 Lemma wp_responder c skR N :
@@ -230,7 +225,7 @@ Lemma wp_responder c skR N :
         ⌜kS = si_key si⌝ ∗
         minted (si_init si) ∗
         minted kS ∗
-        session Resp si ∗
+        session si ∗
         release_token (si_resp_share si) ∗
         term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN)
       else True

@@ -184,7 +184,7 @@ Lemma client_public_key_or skI skR cs P :
   client_connected skI skR cs -∗
   (public (si_key cs) ∨ P) -∗
   client_connected skI skR cs ∗
-  ◇ (compromised Init cs ∨ P).
+  ◇ (compromised cs ∨ P).
 Proof.
 iIntros "(conn & rel & ?) P".
 iPoseProof (Conn.connected_public_key_or with "conn rel P")
@@ -196,9 +196,7 @@ Lemma client_connected_ok skI skR cs :
   client_connected skI skR cs -∗
   secret skI -∗
   secret skR -∗
-  minted skI -∗
-  minted skR -∗
-  ◇ □ ¬ compromised Init cs.
+  ◇ session_ok cs.
 Proof.
 iIntros "(conn & _)".
 by iApply (Conn.connected_ok with "conn").
@@ -221,6 +219,16 @@ iIntros "(conn & rel & _) fail".
 by iApply (Conn.connected_failure with "conn rel fail").
 Qed.
 
+Lemma client_connected_ok_compromise skI skR cs :
+  client_connected skI skR cs -∗
+  session_ok cs -∗
+  compromised cs -∗
+  ▷ False.
+Proof.
+iIntros "(_ & rel & _) ok comp".
+iApply (session_ok_compromised Init with "ok comp rel").
+Qed.
+
 Definition server_connected skI skR cs : iProp :=
   connected skI skR Resp cs ∗
   release_token (si_resp_share cs).
@@ -229,7 +237,7 @@ Lemma server_public_compromised skI skR cs P :
   server_connected skI skR cs -∗
   (public (si_key cs) ∨ P) -∗
   server_connected skI skR cs ∗
-  ◇ (compromised Resp cs ∨ P).
+  ◇ (compromised cs ∨ P).
 Proof.
 iIntros "(conn & rel) [#fail|?]"; last by iFrame.
 iPoseProof (Conn.connected_public_key with "conn rel fail") as "#?".
@@ -240,9 +248,7 @@ Lemma server_connected_ok skI skR cs :
   server_connected skI skR cs -∗
   secret skI -∗
   secret skR -∗
-  minted skI -∗
-  minted skR -∗
-  ◇ □ ¬ compromised Resp cs.
+  ◇ session_ok cs.
 Proof.
 iIntros "(conn & _)".
 by iApply (Conn.connected_ok with "conn").
@@ -254,6 +260,16 @@ Lemma server_connected_keys skI skR cs :
 Proof.
 iIntros "(conn & _)".
 by iPoseProof (Conn.connected_keyE with "conn") as "(-> & -> & _)".
+Qed.
+
+Lemma server_connected_ok_compromise skI skR cs :
+  server_connected skI skR cs -∗
+  session_ok cs -∗
+  compromised cs -∗
+  ▷ False.
+Proof.
+iIntros "(_ & rel) ok comp".
+iApply (session_ok_compromised Resp with "ok comp rel").
 Qed.
 
 Definition ctx : iProp :=

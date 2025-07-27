@@ -80,12 +80,12 @@ Implicit Types (ps : params Σ).
 Definition failure skI skR : iProp :=
    public skI ∨ public skR.
 
-Definition wf_sess_info rl si : iProp :=
+Definition wf_sess_info si : iProp :=
   minted (si_key si) ∗
-  session rl si.
+  session si.
 
 #[global]
-Instance wf_sess_info_persistent rl si : Persistent (wf_sess_info rl si).
+Instance wf_sess_info_persistent si : Persistent (wf_sess_info si).
 Proof. apply _. Qed.
 
 Definition never_connected skI skR : iProp :=
@@ -315,7 +315,7 @@ Definition connected ps skI skR rl cs : iProp :=
   ⌜si_resp cs = skR⌝ ∗
   ⌜cs_role cs = rl⌝ ∗
   channel (cs_chan cs) ∗
-  wf_sess_info (cs_role cs) cs ∗
+  wf_sess_info cs ∗
   ∃ n m, cs_ts cs ↦∗ [ #n; #m ] ∗
     (public (si_key cs) ∨ counters ps skI skR cs rl n m).
 
@@ -328,7 +328,7 @@ Lemma connected_public_key ps skI skR rl cs :
   connected ps skI skR rl cs -∗
   release_token (si_share_of rl cs) -∗
   public (si_key cs) -∗
-  ◇ compromised rl cs.
+  ◇ compromised cs.
 Proof.
 iIntros "conn rel #p_k".
 iPoseProof "conn" as "(_ & _ & <- & _ & #sess & _)".
@@ -342,7 +342,7 @@ Lemma connected_public_key_or ps skI skR rl cs P :
   public (si_key cs) ∨ P -∗
   connected ps skI skR rl cs ∗
   release_token (si_share_of rl cs) ∗
-  ◇ (compromised rl cs ∨ P).
+  ◇ (compromised cs ∨ P).
 Proof.
 iIntros "conn rel [#fail|P]"; last by iFrame.
 iPoseProof (connected_public_key with "conn rel fail") as "#comp".
@@ -366,18 +366,15 @@ Lemma connected_ok ps skI skR rl cs :
   connected ps skI skR rl cs -∗
   secret skI -∗
   secret skR -∗
-  minted skI -∗
-  minted skR -∗
-  ◇ □ ¬ compromised rl cs.
+  ◇ session_ok cs.
 Proof.
-iIntros "(<- & <- & <- & _ & #sess & % & % & _ & _)
-          s_kI s_kR #signI #signR".
+iIntros "(<- & <- & <- & _ & #sess & % & % & _ & _) s_kI s_kR".
 iDestruct "sess" as "(m_k & sess)".
-by iApply (session_not_compromised with "[//] s_kI s_kR").
+by iApply (secret_session with "s_kI s_kR").
 Qed.
 
-Lemma session_failed_failure rl si :
-  compromised rl si  ⊢ failure (si_init si) (si_resp si).
+Lemma session_failed_failure si :
+  compromised si  ⊢ failure (si_init si) (si_resp si).
 Proof. by iIntros "(#failed & _)". Qed.
 
 Lemma connected_failure ps skI skR rl cs :

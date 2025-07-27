@@ -139,13 +139,12 @@ rewrite /si_key /=. case => /Spec.of_list_inj.
 by case=> /Spec.sign_pkey_inj <- /Spec.sign_pkey_inj <- <- <- <-.
 Qed.
 
-Definition compromised rl si : iProp :=
+Definition compromised si : iProp :=
   (public (si_init si) ∨ public (si_resp si)) ∗
-  public (si_key si) ∗
-  term_meta (si_share_of rl si) (iso_dhN.@"failed") true.
+  public (si_key si).
 
-Lemma compromised_public rl si : compromised rl si ⊢ public (si_key si).
-Proof. by iIntros "(_&?&_)". Qed.
+Lemma compromised_public si : compromised si ⊢ public (si_key si).
+Proof. by iIntros "(_&?)". Qed.
 
 Definition release_token share : iProp :=
   term_token share (↑iso_dhN.@"released").
@@ -164,14 +163,17 @@ Definition released share : iProp :=
 Lemma release share : release_token share ==∗ released share.
 Proof. by apply term_meta_set. Qed.
 
-Definition unreleased share : iProp :=
-  term_meta share (iso_dhN.@"released") false.
-
-Lemma unrelease share : release_token share ==∗ unreleased share.
-Proof. by apply term_meta_set. Qed.
-
 Definition released_session si : iProp :=
   released (si_init_share si) ∧ released (si_resp_share si).
+
+Lemma unrelease rl si : release_token (si_share_of rl si) ==∗ □ ¬ released_session si.
+Proof.
+iIntros "tok".
+iMod (term_meta_set (iso_dhN.@"released") false with "tok") as "#un" => //.
+iIntros "!> !> [#init #resp]".
+iAssert (released (si_share_of rl si)) as "r"; first by case: rl.
+by iPoseProof (term_meta_agree with "r un") as "%".
+Qed.
 
 Lemma release_token_released_session si rl :
   release_token (si_share_of rl si) -∗
@@ -183,54 +185,54 @@ iApply (term_meta_token with "token"); last by case: rl.
 by [].
 Qed.
 
-Lemma unreleased_released_session si rl :
-  unreleased (si_share_of rl si) -∗
-  released_session si -∗
-  False.
-Proof.
-iIntros "#un [#rI #rR]".
-iAssert (released (si_share_of rl si)) as "r"; first by case: rl.
-by iPoseProof (term_meta_agree with "r un") as "%".
-Qed.
-
-Definition session rl si : iProp :=
+Definition session si : iProp :=
   □ (▷ released_session si → public (si_key si)) ∗
-  ∃ failed,
-    term_meta (si_share_of rl si) (iso_dhN.@"failed") failed ∗
-    if failed then public (si_init si) ∨ public (si_resp si)
-    else □ (public (si_key si) → ▷ released_session si).
+  ((public (si_init si) ∨ public (si_resp si)) ∨
+    □ (public (si_key si) → ▷ released_session si)).
 
-Global Instance session_persistent rl si :
-  Persistent (session rl si).
+Global Instance session_persistent si : Persistent (session si).
 Proof. apply _. Qed.
 
-Lemma secret_session rl si :
+Definition session_ok si : iProp :=
+  □ (public (si_key si) ↔ ▷ released_session si).
+
+Global Instance session_ok_persistent si : Persistent (session_ok si).
+Proof. apply _. Qed.
+
+Lemma secret_session si :
   secret (si_init si) -∗
   secret (si_resp si) -∗
-  session rl si -∗
-  ◇ □ (public (si_key si) ↔ ▷ released_session si).
+  session si -∗
+  ◇ session_ok si.
 Proof.
-iIntros "sI sR (#comp1 & %failed & #failed & #comp2)".
-case: failed; eauto. iDestruct "comp2" as "[comp2|comp2]".
+iIntros "sI sR (#comp1 & #comp2)".
+iDestruct "comp2" as "[[comp2|comp2]|comp2]".
 - by iDestruct (secret_not_public with "sI comp2") as ">[]".
 - by iDestruct (secret_not_public with "sR comp2") as ">[]".
+- iIntros "!> !>". by iSplit.
 Qed.
 
-Lemma unreleased_key_secrecy rl si :
-  unreleased (si_share_of rl si) -∗
-  □ (public (si_key si) ↔ ▷ released_session si) -∗
+Lemma session_session_ok si :
+  session si -∗
+  (public (si_init si) ∨ public (si_resp si)) ∨ session_ok si.
+Proof.
+iIntros "#[#? [?|#?]]"; eauto. iRight. iModIntro. by iSplit.
+Qed.
+
+Lemma unreleased_key_secrecy si :
+  □ (¬ released_session si) -∗
+  session_ok si -∗
   □ (public (si_key si) ↔ ▷ False).
 Proof.
 iIntros "#un #s_k !>".
 iApply (bi.iff_trans _ (▷ released_session si)). iSplit => //.
 iSplit; last by iIntros ">[]".
-iIntros "#re !>".
-by iApply unreleased_released_session.
+iIntros "#re !>". by iApply "un".
 Qed.
 
 Lemma release_token_key_secrecy rl si :
   release_token (si_share_of rl si) -∗
-  □ (public (si_key si) ↔ ▷ released_session si) -∗
+  session_ok si -∗
   public (si_key si) -∗
   ▷ False.
 Proof.
@@ -239,31 +241,27 @@ iPoseProof ("s_k" with "p_k") as "contra".
 iModIntro. by iApply (release_token_released_session with "token").
 Qed.
 
-Lemma session_compromised rl si :
-  session rl si -∗
-  public (si_key si) -∗
+Lemma session_ok_compromised rl si :
+  session_ok si -∗
+  compromised si -∗
   release_token (si_share_of rl si) -∗
-  ◇ compromised rl si.
+  ▷ False.
 Proof.
-iIntros "(#comp1 & %failed & #failed & #comp2) #p_k rel".
-case: failed; first by do !iSplit => //.
-iDestruct (release_token_key_secrecy with "rel [] p_k") as ">[]".
-iModIntro. by iSplit.
+iIntros "#ok [_ #comp] rel".
+iApply (release_token_key_secrecy with "rel ok comp").
 Qed.
 
-Lemma session_not_compromised rl si :
-  session rl si -∗
-  secret (si_init si) -∗
-  secret (si_resp si) -∗
-  ◇ □ ¬ compromised rl si.
+Lemma session_compromised rl si :
+  session si -∗
+  public (si_key si) -∗
+  release_token (si_share_of rl si) -∗
+  ◇ compromised si.
 Proof.
-iIntros "(#comp1 & %failed & #failed & #comp2) s_kI s_kR".
-case: failed; last first.
-{ iIntros "!> !> (_ & _ & #contra)".
-  by iPoseProof (term_meta_agree with "failed contra") as "%". }
-iDestruct "comp2" as "[comp2|comp2]".
-- iDestruct (secret_not_public with "s_kI comp2") as ">[]".
-- iDestruct (secret_not_public with "s_kR comp2") as ">[]".
+iIntros "(#comp1 & #[[comp2|comp2]|#comp2]) #p_k rel".
+- iSplit => //. by eauto.
+- iSplit => //. by eauto.
+- iSpecialize ("comp2" with "p_k").
+  iDestruct (release_token_released_session with "rel comp2") as ">[]".
 Qed.
 
 Definition msg2_pred skR m2 : iProp :=
@@ -376,3 +374,4 @@ Qed.
 
 Arguments iso_dhGS_alloc {Σ _ _ E}.
 Arguments iso_dh_pred_set {Σ _} N φ E.
+Global Typeclasses Opaque session_ok.
