@@ -54,8 +54,6 @@ Global Instance subG_connGS Σ : subG connΣ Σ → connGS Σ.
 Proof. solve_inG. Qed.
 
 Record params Σ := Params {
-  init_state : iProp Σ;
-  resp_state : iProp Σ;
   chan_inv :
     sign_key → sign_key → sess_info → list term → list term → iProp Σ;
   msg_inv :

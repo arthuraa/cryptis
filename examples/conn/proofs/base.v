@@ -38,8 +38,6 @@ Implicit Types (si : sess_info) (rl : role).
 Implicit Types (ps : params Σ).
 
 Definition gen_conn_params ps : GenConn.params Σ := {|
-  GenConn.init_state := True;
-  GenConn.resp_state := True;
   GenConn.chan_inv := λ skI skR si tsI tsR,
     ([∗ list] t ∈ tsI, msg_inv ps skI skR si Init t) ∗
     ([∗ list] t ∈ tsR, msg_inv ps skI skR si Resp t);
