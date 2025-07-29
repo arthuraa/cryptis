@@ -52,7 +52,11 @@ examples/iso_dh/proofs.v
 examples/iso_dh/game.v
 examples/iso_dh.v
 
-examples/conn/impl.v
+examples/gen_conn/impl.v
+examples/gen_conn/proofs/base.v
+examples/gen_conn/proofs.v
+examples/gen_conn.v
+
 examples/conn/proofs/base.v
 examples/conn/proofs.v
 examples/conn.v

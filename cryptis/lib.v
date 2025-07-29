@@ -269,6 +269,9 @@ Arguments repr_val / .
 Instance repr_Z : Repr Z := λ x, #x.
 Arguments repr_Z / .
 
+#[global] Instance repr_bool : Repr bool := λ b, #b.
+Arguments repr_bool / .
+
 #[global]
 Instance repr_option `{Repr A} : Repr (option A) := λ x,
   match x with
