@@ -81,17 +81,17 @@ Section ValOfTerm.
 Fixpoint val_of_term_rec t : val :=
   match t with
   | TInt n =>
-    (#TInt_tag, #n)
+    (#TOp0_tag, (#TInt_tag, #n))
   | TPair t1 t2 =>
-    (#TPair_tag, (val_of_term_rec t1, val_of_term_rec t2))%V
+    (#TOp2_tag, (#TPair_tag, val_of_term_rec t1, val_of_term_rec t2))%V
   | TNonce l =>
-    (#TNonce_tag, #l)%V
+    (#TOp0_tag, (#TNonce_tag, #l))%V
   | TKey kt t =>
-    (#TKey_tag, (#(int_of_key_type kt), val_of_term_rec t))%V
+    (#TOp1_tag, ((#TKey_tag, repr kt), val_of_term_rec t))%V
   | TSeal t1 t2 =>
-    (#TSeal_tag, (val_of_term_rec t1, val_of_term_rec t2))%V
+    (#TOp2_tag, (#TSeal_tag, val_of_term_rec t1, val_of_term_rec t2))%V
   | THash t =>
-    (#THash_tag, val_of_term_rec t)
+    (#TOp1_tag, ((#THash_tag, #()), val_of_term_rec t))%V
   | TExpN' pt pts _ =>
     (#TExp_tag, (val_of_pre_term pt,
                  repr_list (map val_of_pre_term pts)))%V
@@ -111,29 +111,11 @@ Global Instance repr_sign_key : Repr sign_key := λ k, repr (k : term).
 Lemma val_of_pre_term_unfold t :
   val_of_pre_term (unfold_term t) = val_of_term t.
 Proof.
-rewrite val_of_term_unseal val_of_pre_term_unseal.
+rewrite val_of_term_unseal.
 elim/term_ind': t => //=; try by move=> *; congruence.
-rewrite /val_of_pre_term_unseal.
-by case => //= *; rewrite val_of_pre_term_unseal.
 Qed.
 
 End ValOfTerm.
-
-Global Instance val_of_pre_term_inj : Inj (=) (=) val_of_pre_term.
-Proof.
-rewrite val_of_pre_term_unseal.
-elim.
-- by move=> n1 [] //= n2 [] ->.
-- by move=> t11 IH1 t12 IH2 [] //= t21 t22 [] /IH1 -> /IH2 ->.
-- by move=> l1 [] //= l2 [] //= ->.
-- by move=> kt1 t1 IH [] //= kt2 t2 [] /int_of_key_type_inj -> /IH ->.
-- by move=> t11 IH1 t12 IH2 [] //= ?? [] /IH1 -> /IH2 ->.
-- by move=> ? IH [] //= ? [] /IH ->.
-- move=> t1 IHt ts1 IHts [] //= t2 ts2 [] /IHt -> e_ts; congr PreTerm.PTExp.
-  move: e_ts; rewrite repr_list_unseal.
-  elim: ts1 IHts ts2 {t1 t2 IHt} => /= [_ [] //|t1 ts1 H [] IHt {}/H IHts].
-  by case=> //= t2 ts2 [] /IHt -> /IHts ->.
-Qed.
 
 Global Instance val_of_term_inj : Inj (=) (=) val_of_term.
 Proof.
@@ -211,12 +193,12 @@ Definition nonces_of_termE := (nonces_of_term_TExpN, nonces_of_termE').
 Fixpoint ssubterms_pre_def t : gset term :=
   let subterms_pre_def t := {[fold_term t]} ∪ ssubterms_pre_def t in
   match t with
-  | PreTerm.PTInt _ => ∅
-  | PreTerm.PTPair t1 t2 => subterms_pre_def t1 ∪ subterms_pre_def t2
-  | PreTerm.PTNonce _ => ∅
-  | PreTerm.PTKey _ t => subterms_pre_def t
-  | PreTerm.PTSeal t1 t2 => subterms_pre_def t1 ∪ subterms_pre_def t2
-  | PreTerm.PTHash t => subterms_pre_def t
+  | PreTerm.PT0 (O0Int _) => ∅
+  | PreTerm.PT2 O2Pair t1 t2 => subterms_pre_def t1 ∪ subterms_pre_def t2
+  | PreTerm.PT0 (O0Nonce _) => ∅
+  | PreTerm.PT1 (O1Key _) t => subterms_pre_def t
+  | PreTerm.PT2 O2Seal t1 t2 => subterms_pre_def t1 ∪ subterms_pre_def t2
+  | PreTerm.PT1 O1Hash t => subterms_pre_def t
   | PreTerm.PTExp t ts => subterms_pre_def t ∪ ⋃ map subterms_pre_def ts
   end.
 
@@ -506,11 +488,21 @@ Fixpoint proj t n {struct t} :=
   | _, _ => None
   end.
 
-Definition open_key k : option term :=
+Definition to_key k : option (key_type * term) :=
   match k with
-  | TKey AEnc t => Some (TKey ADec t)
-  | TKey Sign t => Some (TKey Verify t)
-  | TKey SEnc t => Some (TKey SEnc t)
+  | TKey kt t => Some (kt, t)
+  | _ => None
+  end.
+
+Definition open_key k : option term :=
+  match to_key k with
+  | Some (kt, t) =>
+      match kt with
+      | AEnc => Some (TKey ADec t)
+      | Sign => Some (TKey Verify t)
+      | SEnc => Some (TKey SEnc t)
+      | _ => None
+      end
   | _ => None
   end.
 
@@ -679,6 +671,7 @@ Proof.
 rewrite /Spec.dec /=.
 case: t => [] //= k_t t.
 case: decide => // k_t_k2 k1_k2 /untagK <-.
+rewrite /open_key in k_t_k2 k1_k2.
 case: k_t k1 => [] // kt1 ? [] //= kt2 ? in k_t_k2 k1_k2 *.
 case: kt1 kt2 => [] //= [] //= in k_t_k2 k1_k2 *; congruence.
 Qed.

@@ -15,30 +15,32 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
 Definition tint : val := λ: "n",
-  (#TInt_tag, "n").
+  (#TOp0_tag, (#TInt_tag, "n")).
 
 Definition to_int : val := λ: "t",
-  if: Fst "t" = #TInt_tag then SOME (Snd "t")
+  if: (Fst "t" = #TOp0_tag) && (Fst (Snd "t") = #TInt_tag) then
+    SOME (Snd (Snd "t"))
   else NONE.
 
 Definition tuple : val := λ: "t1" "t2",
-  (#TPair_tag, ("t1", "t2")).
+  (#TOp2_tag, (#TPair_tag, "t1", "t2")).
 
 Definition untuple : val := λ: "t",
-  if: Fst "t" = #TPair_tag then SOME (Snd "t")
+  if: Fst "t" = #TOp2_tag then
+    let: "t" := Snd "t" in
+    if: Fst (Fst "t") = #TPair_tag then
+      SOME (Snd (Fst "t"), Snd "t")
+    else NONE
   else NONE.
 
 Definition list_of_term : val := rec: "loop" "t" :=
-  if: Fst "t" = #TInt_tag then
-    if: Snd "t" = #0 then SOMEV NONEV else NONEV
-  else if: Fst "t" = #TPair_tag then
-    let: "t" := Snd "t" in
-    bind: "l" := "loop" (Snd "t") in
-    SOME (SOME (Fst "t", "l"))
-  else NONE.
+  if: eq_term "t" (TInt 0) then SOMEV []
+  else bind: "t" := untuple "t" in
+       bind: "l" := "loop" (Snd "t") in
+       SOME (Fst "t" :: "l").
 
 Definition term_of_list : val := rec: "loop" "l" :=
-  match: "l" with NONE => (#TInt_tag, #0)
+  match: "l" with NONE => TInt 0
   | SOME "p" => tuple (Fst "p") ("loop" (Snd "p"))
   end.
 
@@ -50,16 +52,24 @@ Definition untag : val := λ: "N" "t",
   let: "N'" := (Fst "t") in
   if: eq_term "N" "N'" then SOME (Snd "t") else NONE.
 
-Definition is_key : val := λ: "t",
-  if: Fst "t" = #TKey_tag then SOME (Fst (Snd "t"))
+Definition key (kt : key_type) : val := λ: "k",
+  (#TOp1_tag, ((#TKey_tag, repr kt), "k")).
+
+Definition to_key : val := λ: "t",
+  if: Fst "t" = #TOp1_tag then
+    let: "o" := Fst (Snd "t") in
+    let: "t" := Snd (Snd "t") in
+    if: Fst "o" = #TKey_tag then SOME (Snd "o", "t")
+    else NONE
   else NONE.
 
-Definition seal : val := λ: "k" "t", (#TSeal_tag, ("k", "t")).
+Definition is_key : val := λ: "t",
+  bind: "r" := to_key "t" in
+  SOME (Fst "r").
 
-Definition hash : val := λ: "t", (#THash_tag, "t").
+Definition seal : val := λ: "k" "t", (#TOp2_tag, (#TSeal_tag, "k", "t")).
 
-Definition key kt : val := λ: "k",
-  (#TKey_tag, (#(int_of_key_type kt), "k")).
+Definition hash : val := λ: "t", (#TOp1_tag, ((#THash_tag, #()), "t")).
 
 Definition derive_aenc_key : val := λ: "seed",
   key ADec "seed".
@@ -71,26 +81,28 @@ Definition derive_sign_key : val := λ: "seed",
   key Sign "seed".
 
 Definition open_key : val := λ: "k",
-  if: (Fst "k" = #TKey_tag) then
-    let: "kt" := Fst (Snd "k") in
-    let: "k'" := Snd (Snd "k") in
-    if: "kt" = #(int_of_key_type AEnc) then
-      SOME (key ADec "k'")
-    else if: "kt" = #(int_of_key_type Sign) then
-      SOME (key Verify "k'")
-    else if: "kt" = #(int_of_key_type SEnc) then
-      SOME (key SEnc "k'")
-    else NONE
+  bind: "r" := to_key "k" in
+  let: "kt" := Fst "r" in
+  let: "seed" := Snd "r" in
+  if: "kt" = #(int_of_key_type AEnc) then
+    SOME (key ADec "seed")
+  else if: "kt" = #(int_of_key_type Sign) then
+    SOME (key Verify "seed")
+  else if: "kt" = #(int_of_key_type SEnc) then
+    SOME (key SEnc "seed")
   else NONE.
 
 Definition open : val := λ: "k" "t",
-  if: (Fst "t" = #TSeal_tag) then
-    let: "k_t" := Fst (Snd "t") in
-    let: "t" := Snd (Snd "t") in
-    match: open_key "k_t" with
-      SOME "k'" => if: eq_term "k'" "k" then SOME "t" else NONE
-    | NONE => NONE
-    end
+  if: (Fst "t" = #TOp2_tag) then
+    let: "t" := Snd "t" in
+    if: Fst (Fst "t") = #TSeal_tag then
+      let: "k_t" := Snd (Fst "t") in
+      let: "t" := Snd "t" in
+      match: open_key "k_t" with
+        SOME "k'" => if: eq_term "k'" "k" then SOME "t" else NONE
+      | NONE => NONE
+      end
+    else NONE
   else NONE.
 
 Definition enc : val := λ: "k" "N" "t",
@@ -101,15 +113,17 @@ Definition dec : val := λ: "k" "N" "t",
   untag "N" "t".
 
 Definition pkey : val := λ: "k",
-  if: (Fst "k" = #TKey_tag) then
-    let: "kt" := Fst (Snd "k") in
-    let: "k'" := Snd (Snd "k") in
+  match: to_key "k" with
+    NONE => "k"
+  | SOME "r" =>
+    let: "kt" := Fst "r" in
+    let: "seed" := Snd "r" in
     if: "kt" = #(int_of_key_type ADec) then
-      (key AEnc "k'")
+      (key AEnc "seed")
     else if: "kt" = #(int_of_key_type Sign) then
-      (key Verify "k'")
+      (key Verify "seed")
     else "k"
-  else "k".
+  end.
 
 Definition aenc : val := λ: "pk" "N" "t",
   enc "pk" "N" "t".
@@ -205,6 +219,8 @@ Lemma twp_untuple E t Ψ :
 Proof.
 iIntros "post".
 rewrite /Spec.untuple /untuple /= val_of_term_unseal.
+wp_pures.
+
 case: t; by move=> *; wp_pures; iApply "post".
 Qed.
 
@@ -237,16 +253,19 @@ Lemma twp_list_of_term E t Ψ :
   Ψ (repr (Spec.to_list t)) ⊢
   WP list_of_term t @ E [{ Ψ }].
 Proof.
-rewrite val_of_term_unseal /= repr_list_unseal.
-elim/term_ind': t Ψ;
-try by move=> *; iIntros "post"; wp_rec; wp_pures; iApply "post".
-  move=> n Ψ /=; iIntros "post"; wp_rec; wp_pures.
-  case: bool_decide_reflect => [[->]|]; first by wp_pures.
-  case: n => *; by wp_pures.
-move=> thead _ trest IH Ψ /=; iIntros "post".
-wp_rec; wp_pures; wp_bind (list_of_term _); iApply IH.
-case: (Spec.to_list trest) => [ts|] /=; wp_pures; eauto.
-by rewrite -val_of_term_unseal.
+elim/term_lt_ind: t => t IH in Ψ *; iIntros "post"; wp_rec.
+wp_apply twp_eq_term.
+case: bool_decide_reflect => [->|t_ne_0]; wp_pures => //.
+  by rewrite /= repr_list_unseal.
+wp_apply twp_untuple.
+case e_un: Spec.untuple => [[t1 t2]|]; wp_pures; last first.
+  by case: (t) t_ne_0 e_un => //= - [].
+wp_apply IH.
+  case: (t) e_un => //= ? ? [-> ->] /=.
+  rewrite tsize_TPair. lia.
+case: (t) e_un => //= ? ? [-> ->] /=.
+case e_l: (Spec.to_list t2) => [ts|] //=; wp_pures => //.
+wp_apply twp_cons. by wp_pures.
 Qed.
 
 Lemma wp_list_of_term E t Ψ :
@@ -373,15 +392,25 @@ have <- : SignKey t = TKey Sign t :> term by rewrite [term_of_sign_key]unlock.
 by iApply "post".
 Qed.
 
+Lemma twp_to_key E t Ψ :
+  Ψ (repr (Spec.to_key t)) ⊢
+  WP to_key t @ E [{ Ψ }].
+Proof.
+iIntros "H".
+rewrite /repr /repr_option /repr /repr_prod.
+rewrite /repr /repr_term !val_of_term_unseal.
+case: t; by move=> * /=; wp_lam; wp_pures.
+Qed.
+
 Lemma twp_open_key E t Ψ :
   Ψ (repr (Spec.open_key t)) ⊢
   WP open_key t @ E [{ Ψ }].
 Proof.
-rewrite /repr /repr_option /repr /repr_term !val_of_term_unseal /open_key.
-iIntros "H".
-wp_pures.
-case: t; try by move=> /= *; wp_pures.
-rewrite /= -val_of_term_unseal => kt t. wp_pures.
+rewrite /repr /repr_option. (* /repr /repr_term !val_of_term_unseal /open_key.*)
+rewrite /Spec.open_key.
+iIntros "H"; wp_lam; wp_pures.
+wp_apply twp_to_key.
+case: Spec.to_key => [[kt t']|] //=; wp_pures => //.
 by case: kt; wp_pures => //; wp_apply twp_key; wp_pures.
 Qed.
 
@@ -556,14 +585,11 @@ Qed.
 
 Lemma twp_pkey k Ψ : Ψ (Spec.pkey k) ⊢ WP pkey k [{ Ψ }].
 Proof.
-rewrite /repr /repr /repr_term !val_of_term_unseal /pkey.
-iIntros "H". wp_pures.
-case: k; try by move=> /= *; wp_pures.
-move=> kt k /=. wp_pures. case: kt; wp_pures => //=.
-- rewrite -val_of_term_unseal. wp_apply twp_key.
-  by rewrite val_of_term_unseal /=.
-- rewrite -val_of_term_unseal. wp_apply twp_key.
-  by rewrite val_of_term_unseal /=.
+iIntros "H"; rewrite /Spec.pkey.
+wp_lam; wp_apply twp_to_key.
+case: k; try by move=> *; wp_pures.
+move=> kt t; wp_pures.
+by case: kt; wp_pures; try wp_apply twp_key.
 Qed.
 
 Lemma wp_pkey k Ψ : Ψ (Spec.pkey k) ⊢ WP pkey k {{ Ψ }}.
@@ -573,8 +599,10 @@ Lemma twp_is_key E t Ψ :
   Ψ (repr (Spec.is_key t)) ⊢
   WP is_key t @ E [{ Ψ }].
 Proof.
-rewrite /repr /repr_option val_of_term_unseal /is_key.
-iIntros "?"; by case: t=> *; wp_pures.
+rewrite /Spec.is_key.
+iIntros "?"; wp_lam.
+wp_apply twp_to_key.
+by case: t=> *; wp_pures.
 Qed.
 
 Lemma wp_is_key E t Ψ :

@@ -74,23 +74,23 @@ Scheme term_ind' := Induction for term Sort Prop.
 
 Fixpoint unfold_term t :=
   match t with
-  | TInt n => PreTerm.PTInt n
-  | TPair t1 t2 => PreTerm.PTPair (unfold_term t1) (unfold_term t2)
-  | TNonce l => PreTerm.PTNonce l
-  | TKey kt t => PreTerm.PTKey kt (unfold_term t)
-  | TSeal k t => PreTerm.PTSeal (unfold_term k) (unfold_term t)
-  | THash t => PreTerm.PTHash (unfold_term t)
+  | TInt n => PreTerm.PT0 (O0Int n)
+  | TPair t1 t2 => PreTerm.PT2 O2Pair (unfold_term t1) (unfold_term t2)
+  | TNonce l => PreTerm.PT0 (O0Nonce l)
+  | TKey kt t => PreTerm.PT1 (O1Key kt) (unfold_term t)
+  | TSeal k t => PreTerm.PT2 O2Seal (unfold_term k) (unfold_term t)
+  | THash t => PreTerm.PT1 O1Hash (unfold_term t)
   | TExpN' pt pts _ => PreTerm.PTExp pt pts
   end.
 
 Fixpoint fold_term_def pt :=
   match pt with
-  | PreTerm.PTInt n => TInt n
-  | PreTerm.PTPair pt1 pt2 => TPair (fold_term_def pt1) (fold_term_def pt2)
-  | PreTerm.PTNonce l => TNonce l
-  | PreTerm.PTKey kt pt => TKey kt (fold_term_def pt)
-  | PreTerm.PTSeal k pt => TSeal (fold_term_def k) (fold_term_def pt)
-  | PreTerm.PTHash pt => THash (fold_term_def pt)
+  | PreTerm.PT0 (O0Int n) => TInt n
+  | PreTerm.PT2 O2Pair pt1 pt2 => TPair (fold_term_def pt1) (fold_term_def pt2)
+  | PreTerm.PT0 (O0Nonce l) => TNonce l
+  | PreTerm.PT1 (O1Key kt) pt => TKey kt (fold_term_def pt)
+  | PreTerm.PT2 O2Seal k pt => TSeal (fold_term_def k) (fold_term_def pt)
+  | PreTerm.PT1 O1Hash pt => THash (fold_term_def pt)
   | PreTerm.PTExp pt' pts' =>
     if pts' =P [::] is ReflectF pts'N0 then
       TExpN' _ _ (PreTerm.normalize_exp_wf pt' pts' pts'N0)
@@ -125,10 +125,9 @@ Qed.
 Lemma unfold_fold pt : unfold_term (fold_term pt) = PreTerm.normalize pt.
 Proof.
 rewrite [fold_term]unlock; elim: pt => //=.
-- by move=> ? -> ? ->.
-- by move=> ? ? ->.
-- by move=> ? -> ? ->.
-- by move=> ? ->.
+- by case.
+- by case=> [?|] /= ? ->.
+- by case=> [] /= ? -> ? ->.
 - move=> pt IHpt pts IHpts.
   case: eqP => [->|/eqP ptsN0] //=.
   rewrite PreTerm.base_expsK // PreTerm.is_exp_exp.
@@ -210,12 +209,12 @@ Qed.
 Lemma fold_termE pt :
   fold_term pt =
   match pt with
-  | PreTerm.PTInt n => TInt n
-  | PreTerm.PTPair pt1 pt2 => TPair (fold_term pt1) (fold_term pt2)
-  | PreTerm.PTNonce l => TNonce l
-  | PreTerm.PTKey kt pt => TKey kt (fold_term pt)
-  | PreTerm.PTSeal pt1 pt2 => TSeal (fold_term pt1) (fold_term pt2)
-  | PreTerm.PTHash pt => THash (fold_term pt)
+  | PreTerm.PT0 (O0Int n) => TInt n
+  | PreTerm.PT2 O2Pair pt1 pt2 => TPair (fold_term pt1) (fold_term pt2)
+  | PreTerm.PT0 (O0Nonce l) => TNonce l
+  | PreTerm.PT1 (O1Key kt) pt => TKey kt (fold_term pt)
+  | PreTerm.PT2 O2Seal k pt => TSeal (fold_term k) (fold_term pt)
+  | PreTerm.PT1 O1Hash pt => THash (fold_term pt)
   | PreTerm.PTExp pt pts => TExpN (fold_term pt) (map fold_term pts)
   end.
 Proof.
@@ -388,7 +387,7 @@ Lemma tsize_eq t :
   | TPair t1 t2 => S (tsize t1 + tsize t2)
   | TNonce _ => 1
   | TKey _ t => S (tsize t)
-  | TSeal k t => S (S (tsize k) + tsize t)
+  | TSeal k t => S (tsize k + tsize t)
   | THash t => S (tsize t)
   | TExpN' pt pts _ => PreTerm.tsize (PreTerm.PTExp pt pts)
   end.
@@ -421,9 +420,10 @@ Lemma term_rect (T : term -> Type)
 Proof.
 move=> t; rewrite -(unfold_termK t) [fold_term]unlock.
 move: (wf_unfold_term t).
-elim: (unfold_term t) => {t} /=; do ?by move=> * /=; eauto.
-- by move=> t1 IH1 t2 IH2 /andP [/IH1 ? /IH2 ?]; eauto.
-- by move=> t1 IH1 t2 IH2 /andP [/IH1 ? /IH2 ?]; eauto.
+elim: (unfold_term t) => {t} /=.
+- by case=> *; eauto.
+- by case=> *; eauto.
+- by case=> [] t1 IH1 t2 IH2 /andP [/IH1 ? /IH2 ?]; eauto.
 move=> pt IHpt pts IHpts /and5P [wf_pt ptNexp wf_pts ptsN0 sorted_pts].
 case: eqP ptsN0 => //= ptsN0 _.
 have [t e_pt] : {t | pt = unfold_term t}.
@@ -462,4 +462,3 @@ elim: n / (lt_wf n) t => n _ IH t t_n.
 apply: H => t' t'_t.
 apply: (IH (tsize t')); lia.
 Qed.
-

@@ -56,18 +56,16 @@ Lemma twp_texp E t1 t2 Ψ :
 Proof.
 iIntros "post"; rewrite /texp /=; wp_pures; wp_bind (Fst _ = _)%E.
 iApply (twp_wand _ _ _ (λ v, ⌜v = #(is_exp t1)⌝)%I).
-  rewrite -val_of_pre_term_unfold.
-  rewrite is_exp_unfold val_of_pre_term_unseal.
+  rewrite -val_of_pre_term_unfold is_exp_unfold.
   by case: (unfold_term t1) =>> //=; wp_pures.
 iIntros "% ->"; case: (boolP (is_exp t1)) => [t1X|t1NX].
 - rewrite -!val_of_pre_term_unfold unfold_TExpN /=.
   rewrite /PreTerm.exp /=.
   wp_pures. rewrite is_exp_unfold in t1X.
-  rewrite val_of_pre_term_unseal /=.
   case: (unfold_term t1) (wf_unfold_term t1) t1X => //= pt pts.
   case/and5P=> ???? sorted_pts _. wp_pures.
   wp_bind (insert_sorted _ _ _).
-  rewrite -val_of_pre_term_unseal -!repr_list_val.
+  rewrite -!repr_list_val.
   iApply (@twp_insert_sorted _
             (Order.Total.Pack (Order.Total.on PreTerm.pre_term))) => //.
     move=> * /=; iIntros "_ post".
@@ -80,8 +78,7 @@ iIntros "% ->"; case: (boolP (is_exp t1)) => [t1X|t1NX].
 - wp_pures.
   rewrite -!val_of_pre_term_unfold unfold_TExpN /PreTerm.exp /=.
   rewrite is_exp_unfold in t1NX.
-  rewrite PreTerm.base_expN // PreTerm.exps_expN //= sortE /=.
-  rewrite val_of_pre_term_unseal /=.
+  rewrite PreTerm.base_expN // PreTerm.exps_expN //=.
   rewrite /CONS. wp_pures.
   by rewrite repr_list_unseal /=.
 Qed.

@@ -364,7 +364,7 @@ apply: bi.or_proper.
   apply: bi.and_proper => //.
   case e_k: Spec.open_key => [k'|] //.
   have ? := open_key_tsize e_k.
-  have ?: tsize (TSeal k t) = S (S (tsize k + tsize t)).
+  have ?: tsize (TSeal k t) = S (tsize k + tsize t).
     by rewrite tsize_eq -ssrnat.plusE.
   rewrite !(IH n) ?(IH m) //; lia.
 Qed.

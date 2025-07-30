@@ -42,7 +42,7 @@ Definition recv : val := λ: "c", Snd "c" #().
 
 Definition mk_nonce : val := λ: <>,
   let: "n" := ref #() in
-  (#TNonce_tag, "n").
+  (#TOp0_tag, (#TNonce_tag, "n")).
 
 Definition mk_aenc_key : val := λ: <>,
   let: "n" := mk_nonce #() in
