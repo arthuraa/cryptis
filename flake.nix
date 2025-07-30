@@ -47,6 +47,7 @@
                 final.mathcomp.ssreflect
                 final.deriving
                 final.iris
+                final.stdlib
               ];
             };
           });
