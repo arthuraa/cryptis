@@ -80,10 +80,12 @@ Lemma wp_send skI skR rl cs t N ps :
   {{{ RET #(); connected ps skI skR rl cs }}}.
 Proof.
 iIntros "#ctx #p_t !> %Φ (conn & inv) post".
-wp_apply (GenConn.wp_send with "[//] [//] [$conn inv]") => //.
-iDestruct "inv" as "[fail|inv]"; auto.
-iRight. iIntros "% % [inv1 inv2]".
-by case: rl; iFrame; eauto.
+wp_apply (GenConn.wp_send (λ skI skR si, True)%I
+  with "[//] [//] [$conn inv]") => //.
+- iDestruct "inv" as "[fail|inv]"; auto.
+  iRight. iIntros "% % [inv1 inv2]".
+  by case: rl; iFrame; eauto.
+- iIntros "[? _]". by iApply "post".
 Qed.
 
 Lemma wp_recv skI skR rl cs N ps :
@@ -96,7 +98,8 @@ Lemma wp_recv skI skR rl cs N ps :
       (public (si_key cs) ∨ msg_inv ps skI skR cs (swap_role rl) t) }}}.
 Proof.
 iIntros "#ctx !> %Φ conn post".
-wp_apply (GenConn.wp_recv with "[//] [$conn]") => //.
+wp_apply (GenConn.wp_recv (λ skI skR si t, msg_inv ps skI skR si (swap_role rl) t)
+           with "[//] [$conn]") => //.
 iRight. iIntros "% % % [inv1 inv2]". rewrite/=.
 case: rl => /=; iFrame.
 - iDestruct "inv2" as "[??]". by iFrame.

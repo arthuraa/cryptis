@@ -167,16 +167,18 @@ Proof.
 iIntros "%Φ _ post". wp_lam. wp_pures. by iApply "post".
 Qed.
 
-Lemma wp_send skI skR rl cs t N ps :
+Lemma wp_send φ skI skR rl cs t N ps :
   ctx N ps -∗
   public t -∗
   {{{ connected ps skI skR rl cs ∗
       (public (si_key cs) ∨
          (∀ ts_send ts_recv,
             ▷ chan_inv_for ps skI skR cs rl ts_send ts_recv ={⊤ ∖ ↑connN}=∗
-            ▷ chan_inv_for ps skI skR cs rl (ts_send ++ [t]) ts_recv)) }}}
+            ▷ chan_inv_for ps skI skR cs rl (ts_send ++ [t]) ts_recv ∗
+            ▷ φ skI skR (cs_si cs))) }}}
     impl.send (repr cs) t
-  {{{ RET #(); connected ps skI skR rl cs }}}.
+  {{{ RET #(); connected ps skI skR rl cs ∗
+               (public (si_key cs) ∨ φ skI skR cs) }}}.
 Proof.
 iIntros "[[_ #pred] _] #p_ts !> %Φ (conn & inv) post".
 iDestruct "conn"
@@ -197,14 +199,15 @@ iAssert (public msg) as "#?".
 iAssert (|={⊤}=>
   (public (si_key cs) ∨
      counters ps (si_init cs) (si_resp cs) cs (cs_role cs) (S n) m ∗
+     ▷ φ (si_init cs) (si_resp cs) cs ∗
      conn_msg_pred (si_key cs) msg))%I
   with "[counters inv]" as ">inv".
 { iDestruct "counters" as "[#fail|counters]"; first by eauto.
   iDestruct "inv" as "[#?|inv]"; first by eauto.
-  iMod (counters_send with "counters inv") as "[#sent_at counters]".
+  iMod (counters_send with "counters inv") as "(#sent_at & counters & post)".
   iRight. iFrame. iExists cs, (cs_role cs), n, t.
   do 3!iSplitR => //. }
-rewrite or_sep2. iDestruct "inv" as "[counters #p_t]".
+rewrite 2!or_sep2. iDestruct "inv" as "(counters & [Hφ #p_t])".
 wp_pures. wp_apply wp_senc; eauto.
 - by iDestruct "sess" as "(?&?)".
 - by iDestruct "p_t" as "[p_t|inv_t]"; eauto.
@@ -219,19 +222,19 @@ Qed.
 Ltac recv_failure :=
   iLeft; iFrame; eauto 10.
 
-Lemma wp_recv skI skR rl cs N ps :
+Lemma wp_recv φ skI skR rl cs N ps :
   ctx N ps -∗
   {{{ connected ps skI skR rl cs ∗
       (public (si_key cs) ∨
         (∀ t ts_send ts_recv,
           ▷ chan_inv_for ps skI skR cs rl ts_send (t :: ts_recv) ={⊤ ∖ ↑connN}=∗
           ▷ chan_inv_for ps skI skR cs rl ts_send ts_recv ∗
-          ▷ msg_inv ps skI skR cs rl t)) }}}
+          ▷ φ skI skR (cs_si cs) t)) }}}
     impl.recv (repr cs)
   {{{ t, RET (repr t);
       connected ps skI skR rl cs ∗
       public t ∗
-      (public (si_key cs) ∨ msg_inv ps skI skR cs rl t) }}}.
+      (public (si_key cs) ∨ φ skI skR cs t) }}}.
 Proof.
 iIntros "[[_ #Nφ] _] !> %Φ (conn & recv) post".
 wp_lam.
@@ -268,7 +271,7 @@ iAssert (|={⊤}=>
   public t ∗
   (public (si_key cs) ∨
     counters ps (si_init cs) (si_resp cs) cs (cs_role cs) n (S m) ∗
-    msg_inv ps (si_init cs) (si_resp cs) cs (cs_role cs) t))%I
+    φ (si_init cs) (si_resp cs) cs t))%I
   with "[counters recv c1 c2]" as "{inv_t} >(p_t & inv)".
 { iDestruct "recv" as "[#fail|recv]".
   { iModIntro. iSplitR; eauto. by iApply "s_t". }
@@ -283,7 +286,7 @@ iAssert (|={⊤}=>
   have {ne} -> : rl'' = swap_role (cs_role cs).
     rewrite /repr_role in ne.
     case: rl'' (cs_role cs) => [] [] /= in ne *; congruence.
-  iMod (counters_recv with "counters inv recv") as "[counters inv_t]".
+  iMod (counters_recv φ with "counters inv recv") as "[counters inv_t]".
   iMod (lc_fupd_elim_later with "c1 inv_t") as "inv_t".
   iModIntro. iSplitR; eauto. iRight. by iFrame. }
 rewrite or_sep2. iDestruct "inv" as "[counters inv_t]".

@@ -41,7 +41,6 @@ Definition gen_conn_params ps : GenConn.params Σ := {|
   GenConn.chan_inv := λ skI skR si tsI tsR,
     ([∗ list] t ∈ tsI, msg_inv ps skI skR si Init t) ∗
     ([∗ list] t ∈ tsR, msg_inv ps skI skR si Resp t);
-  GenConn.msg_inv := λ skI skR si rl t, msg_inv ps skI skR si (swap_role rl) t;
 |}%I.
 
 Local Coercion gen_conn_params : params >-> GenConn.params.

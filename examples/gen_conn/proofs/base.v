@@ -56,8 +56,6 @@ Proof. solve_inG. Qed.
 Record params Σ := Params {
   chan_inv :
     sign_key → sign_key → sess_info → list term → list term → iProp Σ;
-  msg_inv :
-    sign_key → sign_key → sess_info → role → term → iProp Σ;
 }.
 
 Section Defs.
@@ -267,30 +265,32 @@ iIntros "!> !>".
 by iSplit; iIntros "(%ts_send & %ts_recv & ? & ? & ?)"; iFrame.
 Qed.
 
-Lemma counters_send ps skI skR si rl n m t :
+Lemma counters_send φ ps skI skR si rl n m t :
   counters ps skI skR si rl n m -∗
   (∀ ts_send ts_recv,
       ▷ chan_inv_for ps skI skR si rl ts_send ts_recv ={⊤ ∖ ↑connN}=∗
-      ▷ chan_inv_for ps skI skR si rl (ts_send ++ [t]) ts_recv) ={⊤}=∗
+      ▷ chan_inv_for ps skI skR si rl (ts_send ++ [t]) ts_recv ∗
+      ▷ φ skI skR si) ={⊤}=∗
   sent_at (si_resp_share si) rl t n ∗
-  counters ps skI skR si rl (S n) m.
+  counters ps skI skR si rl (S n) m ∗
+  ▷ φ skI skR si.
 Proof.
 iIntros "(sent & recv & #inv) upd".
 iInv connN as "(%ts_send & %ts_recv & >chan & >chan' & ctx)".
-iPoseProof ("upd" with "ctx") as ">ctx".
+iPoseProof ("upd" with "ctx") as ">(ctx & post)".
 iMod (chan_send t with "sent chan") as "(? & ? & ?)".
 by iFrame.
 Qed.
 
-Lemma counters_recv ps skI skR si rl n m t :
+Lemma counters_recv φ ps skI skR si rl n m t :
   counters ps skI skR si rl n m -∗
   sent_at (si_resp_share si) (swap_role rl) t m -∗
   (∀ ts_send ts_recv,
       ▷ chan_inv_for ps skI skR si rl ts_send (t :: ts_recv) ={⊤ ∖ ↑connN}=∗
       ▷ chan_inv_for ps skI skR si rl ts_send ts_recv ∗
-      ▷ msg_inv ps skI skR si rl t) ={⊤}=∗
+      ▷ φ skI skR si t) ={⊤}=∗
   counters ps skI skR si rl n (S m) ∗
-  ▷ msg_inv ps skI skR si rl t.
+  ▷ φ skI skR si t.
 Proof.
 iIntros "(sent & recv & #inv) #sent_at upd".
 iInv connN as "(%ts_send & %ts_recv & >chan & >chan' & ctx)".
