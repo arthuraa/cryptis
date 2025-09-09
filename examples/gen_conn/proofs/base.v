@@ -84,12 +84,6 @@ Definition wf_sess_info si : iProp :=
 Instance wf_sess_info_persistent si : Persistent (wf_sess_info si).
 Proof. apply _. Qed.
 
-Definition never_connected skI skR : iProp :=
-  term_token skR (↑connN.@"server".@skI).
-
-Lemma never_connected_switch skI skR Q : ⊢ switch (never_connected skI skR) Q.
-Proof. apply term_token_switch. Qed.
-
 Local Notation chanN := (iso_dhN.@"res".@"chan").
 Local Notation recvN := (chanN.@"recv").
 Local Notation sentN := (chanN.@"sent").
