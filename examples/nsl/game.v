@@ -4,7 +4,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par ticket_lock assert.
-From cryptis Require Import lib cryptis primitives tactics role.
+From cryptis Require Import lib cryptis primitives tactics role adequacy.
 From cryptis.lib Require Import term_set.
 From cryptis.examples.nsl Require Import impl proofs.
 
@@ -198,8 +198,7 @@ iIntros "%set #set". wp_pures.
 by wp_apply wp_do_resp_loop => //.
 Qed.
 
-Definition game : val := λ: <>,
-  let: "c"   := init_network #() in
+Definition game : val := λ: "c",
   let: "skI" := mk_aenc_key #() in
   let: "skR" := mk_aenc_key #() in
   let: "pkI" := pkey "skI" in
@@ -209,13 +208,13 @@ Definition game : val := λ: <>,
   Fork (do_init "c" "skI" "pkR");;
   Fork (do_resp "c" "skR" "pkI").
 
-Lemma wp_game :
+Lemma wp_game c :
   cryptis_ctx -∗
+  channel c -∗
   seal_pred_token AENC ⊤ -∗
-  WP game #() {{ _, True }}.
+  WP game c {{ _, True }}.
 Proof.
-iIntros "#ctx enc_tok"; rewrite /game; wp_pures.
-wp_apply wp_init_network => //. iIntros "%c #cP".
+iIntros "#ctx #chan enc_tok"; rewrite /game; wp_pures.
 wp_pures. wp_apply (wp_mk_aenc_key with "[]"); eauto.
 iIntros "%skI #m_skI secI tokenI".
 wp_pures. wp_apply (wp_mk_aenc_key with "[]"); eauto.
@@ -241,14 +240,13 @@ Definition F : gFunctors :=
   #[heapΣ; cryptisΣ; tlockΣ].
 
 Lemma nsl_secure σ₁ σ₂ (v : val) t₂ e₂ :
-  rtc erased_step ([game #()], σ₁) (t₂, σ₂) →
+  rtc erased_step ([run_network game], σ₁) (t₂, σ₂) →
   e₂ ∈ t₂ →
   not_stuck e₂ σ₂.
 Proof.
 have ? : heapGpreS F by apply _.
 apply (adequate_not_stuck NotStuck _ _ (λ v _, True)) => //.
-apply: heap_adequacy.
-iIntros (?) "?".
-iMod (cryptisGS_alloc _) as (?) "(#ctx & aenc_tok & _)".
-by iApply (wp_game with "ctx [aenc_tok]").
+apply: cryptis_adequacy.
+iIntros (? ? c) "#ctx #chan (aenc & _)".
+by iApply (wp_game with "ctx chan [aenc]").
 Qed.
