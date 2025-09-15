@@ -83,6 +83,9 @@ Definition init_network : val := λ: <>,
   init_attacker "c";;
   "c".
 
+Definition run_network : val := λ: "f",
+  "f" (init_network #()).
+
 Section Proofs.
 
 Context `{!heapGS Σ, !cryptisGS Σ}.
@@ -219,6 +222,14 @@ iIntros "%Ψ #ctx post".
 wp_lam. wp_apply wp_mk_channel. iIntros "%c #cP". wp_pures.
 wp_apply wp_init_attacker; eauto. iIntros "_". wp_pures.
 by iApply "post".
+Qed.
+
+Lemma wp_run_network (f : val) φ :
+  (∀ c, cryptis_ctx -∗ channel c -∗ WP f c {{ φ }}) -∗
+  cryptis_ctx -∗ WP run_network f {{ φ }}.
+Proof.
+iIntros "wp #ctx". wp_lam. wp_apply wp_init_network => //.
+iIntros "%c #?". by iApply "wp".
 Qed.
 
 End Proofs.

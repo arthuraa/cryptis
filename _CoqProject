@@ -38,6 +38,8 @@ cryptis/session.v
 cryptis/dh.v
 cryptis/replica.v
 
+cryptis/adequacy.v
+
 # Case studies
 
 examples/nsl/impl.v

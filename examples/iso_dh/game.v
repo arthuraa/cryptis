@@ -5,7 +5,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import numbers reservation_map.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par assert ticket_lock.
-From cryptis Require Import lib cryptis primitives tactics gmeta role.
+From cryptis Require Import lib cryptis primitives tactics gmeta role adequacy.
 From cryptis.examples Require Import iso_dh.
 From cryptis.lib Require Import term_set.
 From cryptis.primitives Require Import attacker.
@@ -292,8 +292,7 @@ iIntros "%set #set". wp_pures.
 by wp_apply wp_do_resp_loop => //.
 Qed.
 
-Definition game : val := λ: <>,
-  let: "c"   := init_network #() in
+Definition game : val := λ: "c",
   let: "skI" := mk_sign_key #() in
   let: "skR" := mk_sign_key #() in
   let: "pkI" := pkey "skI" in
@@ -305,14 +304,14 @@ Definition game : val := λ: <>,
   Fork (do_resp "c" "compromised" "skR" "pkI");;
   Fork (compromise_long_term_keys "c" "compromised" "skI" "skR").
 
-Lemma wp_game :
+Lemma wp_game c :
   cryptis_ctx -∗
+  channel c -∗
   iso_dh_ctx -∗
   iso_dh_pred gameN (λ _ _ _ _, True)%I -∗
-  WP game #() {{ _, True }}.
+  WP game c {{ _, True }}.
 Proof.
-iIntros "#ctx #? #?"; rewrite /game; wp_pures.
-wp_apply wp_init_network => //. iIntros "%c #cP". wp_pures.
+iIntros "#ctx #? #? #?"; rewrite /game; wp_pures.
 wp_apply (wp_mk_sign_key with "[]"); eauto.
 iIntros "%skI #p_pkI s_skI tokenI". wp_pures.
 wp_pures. wp_apply (wp_mk_sign_key with "[]"); eauto.
@@ -337,16 +336,15 @@ Definition F : gFunctors :=
   #[heapΣ; spawnΣ; cryptisΣ; tlockΣ; iso_dhΣ].
 
 Lemma iso_dh_secure σ₁ σ₂ (v : val) t₂ e₂ :
-  rtc erased_step ([game #()], σ₁) (t₂, σ₂) →
+  rtc erased_step ([run_network game], σ₁) (t₂, σ₂) →
   e₂ ∈ t₂ →
   not_stuck e₂ σ₂.
 Proof.
 have ? : heapGpreS F by apply _.
 apply (adequate_not_stuck NotStuck _ _ (λ v _, True)) => //.
-apply: heap_adequacy.
-iIntros (?) "?".
-iMod (cryptisGS_alloc _) as (?) "(#ctx & aenc_tok & sign_tok & ? & _ & _)".
-iMod (iso_dhGS_alloc with "sign_tok") as (?) "(#? & iso_tok & _)"; eauto.
+apply: cryptis_adequacy.
+iIntros (? ? c) "#ctx #chan (_ & sign & _ & _)".
+iMod (iso_dhGS_alloc with "sign") as (?) "(#? & iso_tok & _)"; eauto.
 iMod (iso_dh_pred_set gameN (λ _ _ _ _, True)%I with "iso_tok")
   as "[#? ?]"; eauto.
 by iApply (wp_game with "ctx [//]") => //.
