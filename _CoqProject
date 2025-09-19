@@ -8,6 +8,8 @@
 cryptis/mathcomp_compat.v
 cryptis/lib.v
 cryptis/lib/term_set.v
+cryptis/lib/gen_adequacy.v
+cryptis/lib/adequacy.v
 cryptis/gmeta.v
 cryptis/nown.v
 cryptis/role.v
