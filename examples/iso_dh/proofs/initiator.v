@@ -29,12 +29,12 @@ Ltac protocol_failure :=
 
 Definition nonce_secrecy a : iProp :=
   term_meta (TExp (TInt 0) a) (iso_dhN.@"failed") true ∨
-  ∃ gb, term_meta a (nroot.@"resp_share") gb ∗
+  ∃ gb, term_meta (TExp (TInt 0) a) (iso_dhN.@"resp_share") gb ∗
           released (TExp (TInt 0) a) ∗
           released gb.
 
 Lemma nonce_secrecy_set a gb :
-  term_meta a (nroot.@"resp_share") gb ⊢
+  term_meta (TExp (TInt 0) a) (iso_dhN.@"resp_share") gb ⊢
   nonce_secrecy a ↔
   term_meta (TExp (TInt 0) a) (iso_dhN.@"failed") true ∨
   released (TExp (TInt 0) a) ∧ released gb.
@@ -79,22 +79,22 @@ wp_pures. wp_apply wp_pkey. wp_pures. rewrite -/pkI.
 wp_apply (wp_mk_nonce_freshN ∅
             nonce_secrecy
             iso_dh_key_share
-            (λ a, {[a; TExp (TInt 0) a]})) => //.
+            (λ a, {[TExp (TInt 0) a]})) => //.
 - iIntros "% ?". by rewrite elem_of_empty.
 - iIntros "%a".
-  rewrite big_sepS_union_pers !big_sepS_singleton minted_TExp minted_TInt /=.
+  rewrite !big_sepS_singleton minted_TExp minted_TInt /=.
   rewrite bi.True_and.
-  iSplit; iIntros "!>"; iSplit; eauto; by iIntros "(_ & ?)".
-iIntros "%a %fresh %nonce #m_a #s_a #a_pred token".
+  iIntros "!>"; iSplit; eauto; by iIntros "(_ & ?)".
+iIntros "%a %fresh %nonce #m_a #s_a #a_pred token_ga".
 set ga := TExp (TInt 0) a.
-have ?: a ≠ ga.
-  by move=> contra; rewrite contra is_nonce_TExp in nonce.
-rewrite big_sepS_union; last by set_solver.
 rewrite !big_sepS_singleton.
-iDestruct "token" as "[token_a token_ga]".
-iPoseProof (release_tokenI with "token_ga") as "[token_rel token_ga]" => //.
-rewrite (term_token_difference ga (↑iso_dhN.@"failed")); last solve_ndisj.
-iDestruct "token_ga" as "[failed_token token_ga]".
+rewrite (term_token_difference ga (↑iso_dhN)) //.
+iDestruct "token_ga" as "[token_ga token_ga']".
+iPoseProof (release_tokenI with "token_ga") as "[token_rel token_ga]".
+{ solve_ndisj. }
+iDestruct (term_token_difference ga (↑iso_dhN.@"failed") with "token_ga")
+  as "[failed_token token_ga]".
+{ solve_ndisj. }
 iDestruct (term_token_difference ga (↑iso_dhN.@"ready") with "token_ga")
   as "[ready_token token_ga]"; first solve_ndisj.
 wp_pures. wp_apply wp_mk_keyshare => //. rewrite -/ga.
@@ -129,8 +129,9 @@ set gab := TExp gb a.
 set seed := Spec.of_list [pkI; pkR; ga; gb; gab].
 pose si := SessInfo skI skR ga gb gab.
 wp_pures. wp_list. wp_term_of_list.
-iMod (term_meta_set' (N := nroot.@"resp_share") gb
-       with "token_a") as "[#meta token_a]" => //.
+iMod (term_meta_set' (N := iso_dhN.@"resp_share") gb
+       with "token_ga") as "[#meta token_ga]" => //.
+{ solve_ndisj. }
 iAssert (public a ↔
            ▷ (term_meta ga (iso_dhN.@"failed") true ∨ released_session si))%I
   as "{s_a} s_a".
@@ -150,7 +151,7 @@ iAssert (|={⊤}=>
            (public (si_key si) ∨ φ skI skR si Init) ∗
            ((public (si_init si) ∨ public (si_resp si)) ∨
              □ (public (si_key si) → ▷ released_session si)))%I
-  with "[token_a ready_token failed_token H2 H3]"
+  with "[ready_token failed_token H2 H3]"
   as "{inv} > (#comp & res & #s_k2)".
 { case: failed.
   { iMod (term_meta_set (iso_dhN.@"failed") true with "failed_token")
@@ -206,8 +207,7 @@ iAssert (minted k) as "#m_k".
   rewrite !minted_pkey. by do !iSplit => //. }
 wp_pures. iApply ("Hpost" $! (Some k)).
 iExists si. iFrame. do !iSplitR => //.
-- iIntros "!> !> #rel". iApply "s_k1". by eauto.
-iApply (term_token_drop with "token_ga"). solve_ndisj.
+iIntros "!> !> #rel". iApply "s_k1". by eauto.
 Qed.
 
 Lemma wp_initiator_weak c skI skR N :
