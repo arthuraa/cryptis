@@ -55,7 +55,7 @@ Definition leq_term_op0 : val := λ: "x" "y",
   if: (Fst "x" < Fst "y") then #true
   else if: (Fst "x" = Fst "y") then
     if: Fst "x" = #0 (* Int *) then Snd "x" ≤ Snd "y"
-    else leq_loc (Snd "x") (Snd "y") (* Nonce *)
+    else (Snd "x") ≤ (Snd "y") (* Nonce *)
   else #false.
 
 Definition leq_key_type : val := λ: "x" "y",
@@ -233,7 +233,10 @@ rewrite PreTerm.op0_leqE.
 case: o1 o2 => [n1|a1] [n2|a2] /=; wp_lam; wp_pures => //.
 - iPureIntro. congr (# (LitBool _)). symmetry.
   exact/(sameP (Z.leb_spec0 _ _))/bool_decide_reflect.
-- by iApply twp_leq_loc.
+- iPureIntro. congr (# (LitBool _)).
+  suff H: (reflect (a1 ≤ₗ a2) (a1 <= a2)%O) by
+    apply/(sameP (bool_decide_reflect _)).
+  by apply Z.leb_spec0.
 Qed.
 
 Lemma twp_leq_term_op1 E (o1 o2 : term_op1) :
