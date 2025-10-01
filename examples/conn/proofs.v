@@ -41,7 +41,12 @@ Lemma wp_connect P c skI skR N ps :
       (public (si_key cs) ∨ P) ∗
       release_token (si_init_share cs) ∗
       term_token (si_init_share cs) (⊤ ∖ ↑iso_dhN ∖ ↑connN) }}}.
-Proof. exact: GenConn.wp_connect. Qed.
+Proof.
+iIntros "#(? & ? & ? & ? & ?) !> %Φ pre post".
+wp_apply (GenConn.wp_connect P with "[] [pre]") ; eauto.
+iIntros "%cs (conn & HP & ? & rel & tok)" .
+by iApply "post"; iFrame.
+Qed.
 
 Lemma wp_listen c N ps :
   channel c -∗
@@ -68,7 +73,8 @@ Lemma wp_confirm P ps c skI skR ga N :
 Proof.
 iIntros "#? !> %Φ (#p_ga & #p_pkA & #sign_skB & P) post".
 wp_apply (GenConn.wp_confirm P with "[//] [$P]") => //.
-do !iSplit => //=. by eauto.
+do !iSplit => //=; first by eauto.
+iIntros "%cs (? & ? & ? & ? & ?)". iApply "post"; iFrame.
 Qed.
 
 Lemma wp_send skI skR rl cs t N ps :

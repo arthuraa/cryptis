@@ -54,6 +54,8 @@ Global Instance subG_connGS Σ : subG connΣ Σ → connGS Σ.
 Proof. solve_inG. Qed.
 
 Record params Σ := Params {
+  init_pred :
+    sign_key → sign_key → sess_info → role → iProp Σ;
   chan_inv :
     sign_key → sign_key → sess_info → list term → list term → iProp Σ;
 }.
@@ -175,6 +177,7 @@ Definition chan_inv_for ps skI skR si rl ts_send ts_recv : iProp :=
 Definition chan_ctx ps skI skR si rl : iProp := ∃ ts_send ts_recv,
   chan (si_resp_share si) rl ts_send ∗
   chan (si_resp_share si) (swap_role rl) ts_recv ∗
+  steps_lb (length ts_send) ∗ steps_lb (length ts_recv) ∗
   chan_inv_for ps skI skR si rl ts_send ts_recv.
 
 Definition counters ps skI skR si rl n m : iProp :=
@@ -241,8 +244,9 @@ iAssert (chan _ Init []) with "[sI rR]" as "cI".
 { iExists []. by iFrame. }
 iAssert (chan _ Resp []) with "[sR rI]" as "cR".
 { iExists []. by iFrame. }
+iMod steps_lb_0 as "#?".
 iApply (inv_alloc connN ⊤ (chan_ctx ps skI skR si Init) with "[$cI $cR I]").
-by iApply "I".
+iFrame. rewrite /=. by eauto.
 Qed.
 
 Lemma counters_alloc ps skI skR si :
@@ -256,24 +260,65 @@ iMod (chan_alloc ps skI skR si with "tok inv") as "(#inv & ? & ? & ? & ?)".
 iFrame. iFrame "#". iModIntro.
 iApply (inv_iff with "inv").
 iIntros "!> !>".
-by iSplit; iIntros "(%ts_send & %ts_recv & ? & ? & ?)"; iFrame.
+by iSplit; iIntros "(%ts_send & %ts_recv & ? & ? & ? & ? & ?)"; iFrame.
 Qed.
 
-Lemma counters_send φ ps skI skR si rl n m t :
-  counters ps skI skR si rl n m -∗
-  (∀ ts_send ts_recv,
-      ▷ chan_inv_for ps skI skR si rl ts_send ts_recv ={⊤ ∖ ↑connN}=∗
-      ▷ chan_inv_for ps skI skR si rl (ts_send ++ [t]) ts_recv ∗
-      ▷ φ skI skR si) ={⊤}=∗
-  sent_at (si_resp_share si) rl t n ∗
-  counters ps skI skR si rl (S n) m ∗
-  ▷ φ skI skR si.
+Definition conn_wrap_msg rl (n : nat) msg :=
+  Spec.of_list [
+    TInt (if rl is Init then 1 else 0);
+    TInt n;
+    msg
+  ].
+
+Definition conn_msg_pred kS t : iProp :=
+  ∃ si rl n t',
+    ⌜kS = si_key si⌝ ∗
+    ⌜t = conn_wrap_msg rl n t'⌝ ∗
+    public t' ∗
+    sent_at (si_resp_share si) rl t' n.
+
+Lemma counters_send φ ps skI skR si rl n m msg Φ e :
+  Atomic WeaklyAtomic e →
+  TCEq (to_val e) None →
+  senc_pred connN conn_msg_pred -∗
+  public msg -∗
+  (public (si_key si) ∨ counters ps skI skR si rl n m) -∗
+  (public (si_key si) ∨
+   (∀ ts_send ts_recv,
+      ▷ chan_inv_for ps skI skR si rl ts_send ts_recv ={⊤ ∖ ↑connN,∅}=∗
+      |={∅}▷=>^(S (length ts_recv)) |={∅,⊤ ∖ ↑connN}=>
+      chan_inv_for ps skI skR si rl (ts_send ++ [msg]) ts_recv ∗
+      φ skI skR si)) -∗
+  WP e @ ∅ {{ v,
+    (public (si_key si) ∨
+            counters ps skI skR si rl (S n) m ∗
+            ▷ φ skI skR si ∗
+            conn_msg_pred (si_key si) (conn_wrap_msg rl n msg)) ={⊤ ∖ ↑connN}=∗
+            Φ v }} -∗
+  WP e {{ Φ }}.
 Proof.
-iIntros "(sent & recv & #inv) upd".
-iInv connN as "(%ts_send & %ts_recv & >chan & >chan' & ctx)".
-iPoseProof ("upd" with "ctx") as ">(ctx & post)".
-iMod (chan_send t with "sent chan") as "(? & ? & ?)".
-by iFrame.
+iIntros (??) "#senc_pred #p_m counters upd wp".
+iDestruct "counters" as "[#fail|(sent & recv & #inv)]".
+{ iApply wp_fupd. iApply (wp_mask_mono _ ∅) => //.
+  iApply (wp_wand with "wp").
+  iIntros "% post". iApply (fupd_mask_mono (⊤ ∖ ↑connN)) => //.
+  iApply "post". by eauto. }
+iDestruct "upd" as "[#fail|upd]".
+{ iApply wp_fupd. iApply (wp_mask_mono _ ∅) => //.
+  iApply (wp_wand with "wp").
+  iIntros "% post". iApply (fupd_mask_mono (⊤ ∖ ↑connN)) => //.
+  iApply "post". by eauto. }
+iInv connN as "(%ts_send & %ts_recv & >chan & >chan' & >#Hl & >#Hr & ctx)".
+iPoseProof ("upd" with "ctx") as "upd".
+iApply (wp_step_fupdN_lb _ _ _ ∅ with "Hr [upd]"); first set_solver.
+{ rewrite difference_empty_L. iApply "upd". }
+wp_apply (wp_lb_update with "Hl").
+iMod (chan_send msg with "sent chan") as "(? & ? & #?)".
+iApply (wp_wand with "wp").
+iClear "Hl". iIntros (v) "post #Hl (? & m_p)".
+iFrame. rewrite length_app Nat.add_comm /=.
+iSplitR; eauto. iModIntro. iApply "post". iRight. iFrame.
+iSplit => //. iExists si, rl, n, msg. by eauto.
 Qed.
 
 Lemma counters_recv φ ps skI skR si rl n m t :
@@ -287,20 +332,13 @@ Lemma counters_recv φ ps skI skR si rl n m t :
   ▷ φ skI skR si t.
 Proof.
 iIntros "(sent & recv & #inv) #sent_at upd".
-iInv connN as "(%ts_send & %ts_recv & >chan & >chan' & ctx)".
+iInv connN as "(%ts_send & %ts_recv & >chan & >chan' & >#Hl & >#Hr & ctx)".
 rewrite -[in recv_count _ rl _](swap_roleK rl).
 iMod (chan_recv t with "chan' sent_at recv") as "(-> & chan' & recv)".
 rewrite swap_roleK. iPoseProof ("upd" with "ctx") as ">[ctx inv_t]".
-by iFrame.
+rewrite /=. iFrame. iModIntro. iSplit => //.
+iModIntro; iSplit => //. iApply (steps_lb_le with "Hr"). lia.
 Qed.
-
-Definition conn_msg_pred kS t : iProp :=
-  ∃ si rl n t',
-    let rl' := TInt (if rl is Init then 1 else 0) in
-    ⌜kS = si_key si⌝ ∗
-    ⌜t = Spec.of_list [rl'; TInt n; t']⌝ ∗
-    public t' ∗
-    sent_at (si_resp_share si) rl t' n.
 
 Definition connected ps skI skR rl cs : iProp :=
   ⌜si_init cs = skI⌝ ∗
@@ -396,7 +434,10 @@ Qed.
 
 Definition ctx `{!iso_dhGS Σ} N ps : iProp :=
   pre_ctx ∗
-  iso_dh_pred N (λ skI skR si rl, counters ps skI skR si rl 0 0).
+  iso_dh_pred N (λ skI skR si rl,
+    init_pred ps skI skR si rl ∗
+    counters ps skI skR si rl 0 0
+  )%I.
 
 Lemma ctx_alloc `{!iso_dhGS Σ} N ps E :
   ↑N ⊆ E →

@@ -59,6 +59,11 @@ examples/gen_conn/proofs/base.v
 examples/gen_conn/proofs.v
 examples/gen_conn.v
 
+examples/sess/impl.v
+examples/sess/proofs/base.v
+examples/sess/proofs.v
+examples/sess.v
+
 examples/conn/proofs/base.v
 examples/conn/proofs.v
 examples/conn.v
