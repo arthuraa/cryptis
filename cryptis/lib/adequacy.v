@@ -8,7 +8,7 @@ From cryptis Require Import lib.
 From cryptis.lib Require Import gen_adequacy.
 
 Lemma heap_twp_thread_exec Σ `{!heapGpreS Σ} e σ φ :
-  (∀ `{!heapGS_gen HasNoLc Σ}, ⊢ inv_heap_inv -∗ WP e [{ v, ⌜φ v⌝ }]) →
+  (∀ `{!heapGS Σ}, ⊢ inv_heap_inv -∗ WP e [{ v, ⌜φ v⌝ }]) →
   ∃ v σ', rtc thread_step (e, σ) (of_val v, σ') ∧ φ v.
 Proof.
   intros Hwp; eapply (twp_rtc _ _); iIntros (?) "".
@@ -40,7 +40,7 @@ Qed.
 
 Lemma heap_twp_pure_exec Σ `{!heapGpreS Σ} e φ :
   pure_expr e →
-  (∀ `{!heapGS_gen HasNoLc Σ}, ⊢ inv_heap_inv -∗ WP e [{ v, ⌜φ v⌝ }]) →
+  (∀ `{!heapGS Σ}, ⊢ inv_heap_inv -∗ WP e [{ v, ⌜φ v⌝ }]) →
   ∃ v, rtc pure_step e (of_val v) ∧ φ v.
 Proof.
 move=> pure_e /heap_twp_thread_exec Hwp.
