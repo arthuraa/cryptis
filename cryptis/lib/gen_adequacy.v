@@ -6,7 +6,7 @@ From iris.prelude Require Import options.
 Import uPred.
 
 Section adequacy.
-Context `{!irisGS_gen HasNoLc Λ Σ}.
+Context `{!irisGS Λ Σ}.
 Implicit Types (e : expr Λ) (v : val Λ) (es : list (expr Λ)).
 Implicit Types (Φ : val Λ → iProp Σ).
 
@@ -46,7 +46,7 @@ Qed.
 End adequacy.
 
 Theorem twp_rtc Σ Λ `{!invGpreS Σ} e σ P n :
-  (∀ `{Hinv : !invGS_gen HasNoLc Σ},
+  (∀ `{Hinv : !invGS Σ},
      ⊢ |={⊤}=> ∃
          (stateI : state Λ → nat → list (observation Λ) → nat → iProp Σ)
          (** We abstract over any instance of [irisG], and thus any value of
@@ -56,14 +56,14 @@ Theorem twp_rtc Σ Λ `{!invGpreS Σ} e σ P n :
          (num_laters_per_step : nat → nat)
          (fork_post : val Λ → iProp Σ)
          state_interp_mono,
-       let _ : irisGS_gen HasNoLc Λ Σ :=
+       let _ : irisGS Λ Σ :=
            IrisG Hinv stateI fork_post num_laters_per_step state_interp_mono
        in
        stateI σ n [] 0 ∗ WP e [{ v, ⌜ P v ⌝ }]) →
   ∃ v σ', rtc thread_step (e, σ) (of_val v, σ') ∧ P v.
 Proof.
   intros Hwp. eapply pure_soundness.
-  apply (fupd_soundness_no_lc ⊤ ⊤ _ 0)=> Hinv. iIntros "_".
+  apply (fupd_soundness_lc 0 ⊤ ⊤ _)=> Hinv. iIntros "_".
   iMod (Hwp) as (stateI num_laters_per_step fork_post stateI_mono) "[Hσ H]".
   set (iG := IrisG Hinv stateI fork_post num_laters_per_step stateI_mono).
   iPoseProof (twp_runs_until with "H") as "H".
