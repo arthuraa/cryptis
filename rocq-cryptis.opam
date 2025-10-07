@@ -13,8 +13,8 @@ depends: [
   "rocq-prover" {= "9.0.0"}
   "rocq-mathcomp-ssreflect" {= "2.4.0"}
   "coq-deriving" {= "0.2.2"}
-  "coq-iris" {= "4.3.0"}
-  "coq-iris-heap-lang" {= "4.3.0"}
+  "coq-iris" {= "4.4.0"}
+  "coq-iris-heap-lang" {= "4.4.0"}
 ]
 
 build: [make "-j%{jobs}%"]
