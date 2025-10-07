@@ -127,12 +127,10 @@ Definition game : val := λ: <>,
 
 Lemma wp_game :
   cryptis_ctx ∗
-  seal_pred_token SIGN ⊤ ∗
-  honest 0 ∅ ∗
-  ●Ph 0 -∗
+  seal_pred_token SIGN ⊤ -∗
   WP game #() {{ v, ⌜v = #true⌝ }}.
 Proof.
-iIntros "(#ctx & enc_tok & #hon & phase)".
+iIntros "(#ctx & enc_tok)".
 rewrite /game. wp_pures.
 (* Setup attacker *)
 wp_apply wp_init_network => //. iIntros "%c #cP". wp_pures.
@@ -179,6 +177,6 @@ apply (adequate_result NotStuck _ _ (λ v _, v = #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
 iMod (cryptisGS_alloc _)
-  as (?) "(#ctx & enc_tok & sign_tok & senc_tok & hash_tok & hon)".
+  as (?) "(#ctx & enc_tok & sign_tok & senc_tok & hash_tok)".
 by iApply (wp_game) => //; try by iFrame.
 Qed.

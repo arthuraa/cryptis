@@ -24,11 +24,9 @@ cryptis/core/pre_term.v
 cryptis/core/term/base.v
 cryptis/core/term/with_stdpp.v
 cryptis/core/term.v
-cryptis/core/comp_map.v
 cryptis/core/minted.v
 cryptis/core/term_meta.v
 cryptis/core/public.v
-cryptis/core/phase.v
 cryptis/cryptis.v
 
 cryptis/primitives/notations.v

@@ -25,7 +25,7 @@ Lemma cryptis_adequacy `{!heapGpreS Σ, cryptisGpreS Σ} (f : val heap_lang) σ 
 Proof.
 move=> wp_f; apply: heap_adequacy.
 iIntros (Hheap) "_".
-iMod cryptisGS_alloc as (Hcryptis) "(#? & aenc & sign & senc & hash & _)".
+iMod cryptisGS_alloc as (Hcryptis) "(#? & aenc & sign & senc & hash)".
 wp_apply (wp_run_network with "[aenc sign senc hash]") => //.
 iIntros (c) "_ #chan". by wp_apply (wp_f with "[] [] [$]").
 Qed.
