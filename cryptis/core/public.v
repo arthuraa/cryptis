@@ -853,10 +853,52 @@ Proof.
 case: sk => seed. by rewrite public_sign_key.
 Qed.
 
+Definition unknown γ : iProp :=
+  gmeta_token γ ⊤.
+
+Definition known γ (x : positive) : iProp :=
+  gmeta γ nroot x.
+
+Global Instance persistent_known γ x : Persistent (known γ x).
+Proof. apply _. Qed.
+
+Global Instance timeless_known γ x : Timeless (known γ x).
+Proof. apply _. Qed.
+
+Lemma unknown_alloc : ⊢ |==> ∃ γ, unknown γ.
+Proof. apply gmeta_token_alloc. Qed.
+
+Lemma known_alloc γ x : unknown γ ==∗ known γ x.
+Proof. by apply gmeta_set. Qed.
+
+Lemma unknown_known γ x : unknown γ -∗ known γ x -∗ False.
+Proof. by apply gmeta_gmeta_token. Qed.
+
+Lemma known_agree γ x y : known γ x -∗ known γ y -∗ ⌜x = y⌝.
+Proof. apply gmeta_agree. Qed.
+
 Definition secret t : iProp :=
   (|==> public t) ∧
   (|==> □ (public t ↔ ▷ False)) ∧
   (public t -∗ ▷ False).
+
+Lemma secret_alloc t γ :
+  □ (public t ↔ ▷ known γ 1) -∗ unknown γ -∗ secret t.
+Proof.
+iIntros "#s_t unknown"; do 2?iSplit.
+- iMod (known_alloc with "unknown") as "#known".
+  by iSpecialize ("s_t" with "known").
+- iMod (known_alloc _ 2 with "unknown") as "#known".
+  iIntros "!> !>". iSplit.
+  + iIntros "#p_t".
+    iPoseProof ("s_t" with "p_t") as ">#known'".
+    by iPoseProof (known_agree with "known known'") as "%".
+  + iIntros "#contra".
+    iApply "s_t". by iDestruct "contra" as ">[]".
+- iIntros "#p_t".
+  iPoseProof ("s_t" with "p_t") as ">#known".
+  by iPoseProof (unknown_known with "[$] [//]") as "[]".
+Qed.
 
 Lemma secret_not_public t : secret t -∗ public t -∗ ▷ False.
 Proof. by iIntros "(_ & _ & contra)". Qed.

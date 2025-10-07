@@ -337,19 +337,8 @@ rewrite big_sepS_singleton.
 pose sk := AEncKey t.
 iAssert (public sk ↔ ▷ □ known γ 1)%I as "s_sk".
 { by rewrite public_adec_key. }
-iAssert (secret sk) with "[unknown]" as "tP"; first do 2?iSplit.
-- iMod (known_alloc with "unknown") as "#known".
-  by iSpecialize ("s_sk" with "known").
-- iMod (known_alloc 2 with "unknown") as "#known".
-  iIntros "!> !>". iSplit.
-  + iIntros "#p_sk".
-    iPoseProof ("s_sk" with "p_sk") as ">#known'".
-    by iPoseProof (known_agree with "known known'") as "%".
-  + iIntros "#contra".
-    iApply "s_sk". by iDestruct "contra" as ">[]".
-- iIntros "#p_sk".
-  iPoseProof ("s_sk" with "p_sk") as ">#known".
-  by iPoseProof (unknown_known with "[$] [//]") as "[]".
+rewrite bi.intuitionistic_intuitionistically.
+iPoseProof (secret_alloc with "s_sk unknown") as "tP".
 wp_pures. wp_lam. iApply twp_key.
 rewrite [term_of_aenc_key]unlock /=.
 iApply ("post" $! (AEncKey _) with "[] [$] [$]").
@@ -390,19 +379,8 @@ rewrite big_sepS_singleton.
 pose sk := SignKey t.
 iAssert (public sk ↔ ▷ □ known γ 1)%I as "s_sk".
 { by rewrite public_sign_key. }
-iAssert (secret sk) with "[unknown]" as "tP"; first do 2?iSplit.
-- iMod (known_alloc with "unknown") as "#known".
-  by iSpecialize ("s_sk" with "known").
-- iMod (known_alloc 2 with "unknown") as "#known".
-  iIntros "!> !>". iSplit.
-  + iIntros "#p_sk".
-    iPoseProof ("s_sk" with "p_sk") as ">#known'".
-    by iPoseProof (known_agree with "known known'") as "%".
-  + iIntros "#contra".
-    iApply "s_sk". by iDestruct "contra" as ">[]".
-- iIntros "#p_sk".
-  iPoseProof ("s_sk" with "p_sk") as ">#known".
-  by iPoseProof (unknown_known with "[$] [//]") as "[]".
+rewrite bi.intuitionistic_intuitionistically.
+iPoseProof (secret_alloc with "s_sk unknown") as "tP".
 wp_pures. wp_lam. iApply twp_key.
 rewrite [term_of_sign_key]unlock /=.
 iApply ("post" $! (SignKey _) with "[] [$] [$]").
@@ -443,19 +421,8 @@ rewrite big_sepS_singleton.
 pose sk := SEncKey t.
 iAssert (public sk ↔ ▷ □ known γ 1)%I as "s_sk".
 { by rewrite public_senc_key. }
-iAssert (secret sk) with "[unknown]" as "tP"; first do 2?iSplit.
-- iMod (known_alloc with "unknown") as "#known".
-  by iSpecialize ("s_sk" with "known").
-- iMod (known_alloc 2 with "unknown") as "#known".
-  iIntros "!> !>". iSplit.
-  + iIntros "#p_sk".
-    iPoseProof ("s_sk" with "p_sk") as ">#known'".
-    by iPoseProof (known_agree with "known known'") as "%".
-  + iIntros "#contra".
-    iApply "s_sk". by iDestruct "contra" as ">[]".
-- iIntros "#p_sk".
-  iPoseProof ("s_sk" with "p_sk") as ">#known".
-  by iPoseProof (unknown_known with "[$] [//]") as "[]".
+rewrite bi.intuitionistic_intuitionistically.
+iPoseProof (secret_alloc with "s_sk unknown") as "tP".
 wp_pures. wp_lam. iApply twp_key.
 rewrite [term_of_senc_key]unlock /=.
 iApply ("post" $! (SEncKey _) with "[] [$] [$]").

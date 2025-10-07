@@ -50,31 +50,6 @@ Notation iProp := (iProp Σ).
 Notation iPropO := (iPropO Σ).
 Notation iPropI := (iPropI Σ).
 
-(* MOVE *)
-Definition unknown γ : iProp :=
-  gmeta_token γ ⊤.
-
-Definition known γ (x : positive) : iProp :=
-  gmeta γ nroot x.
-
-Global Instance persistent_known γ x : Persistent (known γ x).
-Proof. apply _. Qed.
-
-Global Instance timeless_known γ x : Timeless (known γ x).
-Proof. apply _. Qed.
-
-Lemma unknown_alloc : ⊢ |==> ∃ γ, unknown γ.
-Proof. apply gmeta_token_alloc. Qed.
-
-Lemma known_alloc γ x : unknown γ ==∗ known γ x.
-Proof. by apply gmeta_set. Qed.
-
-Lemma unknown_known γ x : unknown γ -∗ known γ x -∗ False.
-Proof. by apply gmeta_gmeta_token. Qed.
-
-Lemma known_agree γ x y : known γ x -∗ known γ y -∗ ⌜x = y⌝.
-Proof. apply gmeta_agree. Qed.
-
 Implicit Types dq : dfrac.
 
 Definition phase_auth_def dq n : iProp :=
