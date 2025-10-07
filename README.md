@@ -6,14 +6,10 @@ The material covered in the paper can be found in the following files:
 
 In the `cryptis` directory you will find:
 
-- `mathcomp_compat`: Compatibility with the Mathematical Components library
-- `lib`: General additions to Iris and MathComp.  List manipulation programs for
+- `lib/*, lib`: General additions to Iris and MathComp.  List manipulation programs for
   HeapLang.
-- `core/*`, `cryptis`: Definitions of cryptographic terms and of the `public`
-  predicate.
-- `cryptis`: Definitions of the main predicates of the Cryptis logic on top of
-  Iris.  In particular, this includes tag invariants for encrypted terms, keys
-  and hashes.
+- `core/*`, `cryptis`: Core Cryptis components: cryptographic terms, the
+  `public` predicate, encryption predicates, and term metadata.
 - `primitives/*`, `primitives`: HeapLang functions for manipulating
   cryptographic terms.  Definition of the attacker.
 - `tactics`: Ltac tactics for symbolically executing the main HeapLang functions
