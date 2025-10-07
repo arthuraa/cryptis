@@ -4,7 +4,7 @@ From iris.algebra Require Import agree auth gset gmap list reservation_map excl.
 From iris.algebra Require Import functions.
 From iris.base_logic.lib Require Import saved_prop invariants.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib gmeta nown.
+From cryptis Require Import lib.
 From cryptis.core Require Import term.
 
 Set Implicit Arguments.

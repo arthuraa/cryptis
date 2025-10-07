@@ -4,8 +4,9 @@ From stdpp Require Import namespaces coGset.
 From iris.algebra Require Import cmra agree auth csum gset gmap excl frac.
 From iris.algebra Require Import functions.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term gmeta nown cryptis.
-From cryptis Require Import replica primitives tactics.
+From cryptis Require Import lib.
+From cryptis.lib Require Import replica.
+From cryptis Require Import cryptis primitives tactics.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

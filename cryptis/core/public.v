@@ -4,8 +4,9 @@ From iris.algebra Require Import agree auth gset gmap list excl.
 From iris.algebra Require Import functions.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib gmeta nown.
-From cryptis.core Require Import term minted saved_prop.
+From cryptis Require Import lib.
+From cryptis.lib Require Import gmeta saved_prop.
+From cryptis.core Require Import term minted.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

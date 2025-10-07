@@ -4,7 +4,8 @@ From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap reservation_map.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib gmeta.
+From cryptis Require Import lib.
+From cryptis.lib Require Import gmeta.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

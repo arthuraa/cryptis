@@ -4,7 +4,8 @@ From iris.algebra Require Import agree auth gset gmap list excl.
 From iris.algebra Require Import functions.
 From iris.base_logic.lib Require Import saved_prop invariants.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib gmeta.
+From cryptis Require Import lib.
+From cryptis.lib Require Import gmeta.
 From cryptis.core Require Import term minted term_meta public comp_map.
 
 Set Implicit Arguments.
@@ -49,6 +50,7 @@ Notation iProp := (iProp Σ).
 Notation iPropO := (iPropO Σ).
 Notation iPropI := (iPropI Σ).
 
+(* MOVE *)
 Definition unknown γ : iProp :=
   gmeta_token γ ⊤.
 

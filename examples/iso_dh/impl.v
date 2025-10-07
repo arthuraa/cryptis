@@ -4,8 +4,8 @@ From mathcomp Require ssrbool.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term gmeta nown cryptis primitives tactics.
-From cryptis Require Import role.
+From cryptis Require Import lib.
+From cryptis Require Import role cryptis primitives tactics.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

@@ -5,8 +5,9 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import numbers.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par.
-From cryptis Require Import lib term cryptis primitives tactics.
-From cryptis Require Import role session challenge_response dh tls13.
+From cryptis Require Import lib cryptis primitives tactics role.
+From cryptis.lib Require Import session dh.
+From cryptis.examples Require Import challenge_response tls13.
 From cryptis.examples.pk_auth Require Import pk_auth dh.
 From cryptis.primitives Require Import attacker.
 

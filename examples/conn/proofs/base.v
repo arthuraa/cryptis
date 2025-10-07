@@ -7,9 +7,8 @@ From iris.bi.lib Require Import fractional.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
-From cryptis Require Import lib term gmeta nown.
-From cryptis Require Import cryptis primitives tactics role.
-From cryptis Require Import saved_prop.
+From cryptis Require Import lib term cryptis primitives tactics role.
+From cryptis.lib Require Import saved_prop.
 From cryptis.examples Require Import iso_dh gen_conn.
 
 Set Implicit Arguments.

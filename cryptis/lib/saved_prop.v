@@ -4,8 +4,6 @@ From iris.algebra Require Import agree auth gset gmap list reservation_map excl.
 From iris.algebra Require Import functions dfrac_agree.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib gmeta nown.
-From cryptis.core Require Import term comp_map minted.
 
 Definition savedPredR Σ A :=
   dfrac_agreeR (oFunctor_apply (A -d> ▶ ∙) (iPropO Σ)).

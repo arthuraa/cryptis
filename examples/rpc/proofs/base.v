@@ -7,7 +7,8 @@ From iris.algebra.lib Require Import dfrac_agree.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
-From cryptis Require Import lib term gmeta nown saved_prop.
+From cryptis Require Import lib.
+From cryptis.lib Require Import gmeta nown saved_prop.
 From cryptis Require Import cryptis primitives tactics role.
 From cryptis.examples Require Import iso_dh gen_conn conn.
 From cryptis.examples.rpc Require Import impl.

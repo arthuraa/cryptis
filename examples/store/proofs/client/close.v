@@ -4,7 +4,7 @@ From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term gmeta nown cryptis.
+From cryptis Require Import lib cryptis.
 From cryptis Require Import primitives tactics role.
 From cryptis.examples Require Import iso_dh gen_conn conn rpc.
 From cryptis.examples.store Require Import impl.

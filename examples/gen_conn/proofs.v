@@ -5,7 +5,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term gmeta cryptis primitives tactics role.
+From cryptis Require Import lib cryptis primitives tactics role.
 From cryptis.examples Require Import iso_dh.
 From cryptis.examples.gen_conn Require impl.
 From cryptis.examples.gen_conn.proofs Require Import base.

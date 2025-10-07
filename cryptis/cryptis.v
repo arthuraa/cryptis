@@ -5,7 +5,7 @@ From iris.algebra Require Import functions.
 From iris.base_logic.lib Require Import saved_prop invariants.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
-From cryptis Require Import lib gmeta nown.
+From cryptis Require Import lib.
 From cryptis.core Require Export term term_meta minted public phase.
 
 Set Implicit Arguments.

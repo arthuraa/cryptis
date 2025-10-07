@@ -5,7 +5,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import numbers reservation_map.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par assert ticket_lock.
-From cryptis Require Import lib cryptis primitives tactics gmeta role adequacy.
+From cryptis Require Import lib cryptis primitives tactics role adequacy.
 From cryptis.examples Require Import iso_dh.
 From cryptis.lib Require Import term_set.
 From cryptis.primitives Require Import attacker.

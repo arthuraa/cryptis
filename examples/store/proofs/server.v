@@ -5,8 +5,8 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
-From cryptis Require Import lib term cryptis primitives tactics.
-From cryptis Require Import gmeta nown role iso_dh gen_conn conn rpc alist.
+From cryptis Require Import lib cryptis primitives tactics.
+From cryptis Require Import role iso_dh gen_conn conn rpc alist.
 From cryptis.examples.store Require Import impl.
 From cryptis.examples.store.proofs Require Import base db.
 From cryptis.examples.store.proofs.server Require Import load store create.
