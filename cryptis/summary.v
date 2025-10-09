@@ -11,11 +11,7 @@ From iris.base_logic Require Import base_logic iprop.
 From iris.base_logic.lib Require Import invariants.
 From iris.program_logic Require Import adequacy.
 From iris.heap_lang Require Import adequacy notation proofmode.
-From cryptis Require Import lib cryptis primitives adequacy.
-From cryptis.examples Require iso_dh conn rpc store.
-From cryptis.examples.nsl Require impl proofs game.
-From cryptis.examples.iso_dh Require game.
-From cryptis.examples.store Require game.
+From cryptis Require Import lib cryptis primitives adequacy role.
 
 (** Equational properties of Diffie-Hellman terms.
 
@@ -375,65 +371,3 @@ move=> wp; apply: cryptis_adequacy.
 iIntros (???) "#? #? (? & ? & ? & _)".
 wp_apply (wp with "[//] [//] [$] [$] [$]").
 Qed.
-
-Section CaseStudies.
-
-Context `{!heapGS Σ, !cryptisGS Σ}.
-
-Implicit Types (t : term) (v : val).
-
-Section NSL.
-
-Import nsl.impl nsl.proofs nsl.game.
-
-Lemma wp_nsl_initiator c (skI skR : aenc_key) :
-  cryptis_ctx -∗
-  channel c -∗
-  nsl_ctx -∗
-  minted skI -∗
-  minted skR -∗
-  WP init c skI (Spec.pkey skR) {{ v,
-    ∃ o : option senc_key, ⌜v = repr o⌝ ∗
-      match o with
-      | Some sk =>
-          ∃ si, ⌜sk = si_key skI skR si⌝ ∗
-                minted sk ∗
-                term_token (si_init_share si) (⊤ ∖ ↑nslN) ∗
-                □ (public sk ↔ ▷ (public skI ∨ public skR))
-      | None => True
-      end
-  }}.
-Proof.
-iIntros "#? #? #? #? #?".
-by wp_apply wp_init; eauto.
-Qed.
-
-Lemma wp_nsl_responder c (skR : aenc_key) :
-  cryptis_ctx -∗
-  channel c -∗
-  nsl_ctx -∗
-  minted skR -∗
-  WP resp c skR {{ v,
-    ∃ o : option (term * senc_key), ⌜v = repr o⌝ ∗
-      match o with
-      | Some (pkI, sk) =>
-          ∃ (skI : aenc_key) (si : sess_info),
-          ⌜pkI = Spec.pkey skI⌝ ∗ ⌜sk = si_key skI skR si⌝ ∗
-          term_token (si_resp_share si) (⊤ ∖ ↑nslN) ∗
-          □ (public sk ↔ ▷ (public skI ∨ public skR))
-      | None => True
-      end
-  }}.
-Proof.
-iIntros "#? #? #? #?". by wp_apply wp_resp; eauto.
-Qed.
-
-Lemma nsl_secure σ₁ σ₂ t₂ e₂ :
-  rtc erased_step ([run_network game], σ₁) (t₂, σ₂) →
-  e₂ ∈ t₂ →
-  not_stuck e₂ σ₂.
-Proof. apply nsl_secure. Qed.
-
-End NSL.
-
-End CaseStudies.
