@@ -1,6 +1,61 @@
 (**
 
-This file consolidates all the claims made in the paper.
+This file consolidates the main definitions and properties about the base
+Cryptis logic.  For the proofs of individual case studies, check the
+corresponding directories under examples/.
+
+
+* Notable differences with respect to the paper
+
+** Minted terms
+
+On paper, we assume that the user can only refer to terms that contain nonces
+and keys that have already been generated.  In Rocq, we cannot impose this
+restriction, because the definition of the term datatype contains all terms,
+whether they have been generated or not.  Instead, we add a special [minted t]
+predicate to several lemmas, which holds precisely when the term [t] only
+contains nonces that have already been generated.
+
+** Invariants and explicit channels
+
+In Rocq, the [send] and [recv] functions must take an explicit channel parameter
+[c].  Functions that manipulate the network must assume that c is a valid
+channel in their preconditions.  To run a program [f] from the initial state, we
+must pass it to the [run_network] function, which allocates a new channel [c],
+initializes the attacker threads that control [c], and then passes [c] to [f]
+(cf. the cryptis_adequacy result below).  Moreover, most programs require a
+special [cryptis_ctx] invariant to hold, which is also given by the adequacy
+theorem.
+
+** Confidentiality of Diffie-Hellman terms
+
+The Rocq development uses a more general definition of [public] for
+Diffie-Hellman terms than the one in the paper.  The paper rules hold for any DH
+private key that satisfies the [dh_key] predicate.  As shown by the
+[wp_mk_nonce] specification below, any nonce can be allocated to satisfy this
+property.
+
+** Types for keys
+
+Our Rocq development uses separate types [aenc_key], [sign_key] and [senc_key]
+to describe private keys for asymmetric encryption, signature keys, and
+symmetric encryption keys.
+
+*)
+
+(*
+
+** Notation mapping
+
+|----------------+----------------------|
+| Paper notation | Rocq equivalent      |
+|----------------+----------------------|
+| t ^ t1 .. tn   | TExpN t [t1; ..; tn] |
+| F, N ↦ φ       | seal_pred F N φ      |
+| token F E      | seal_pred_token F E  |
+| t, N ↦ x       | term_meta t N x      |
+| token t E      | term_token t E       |
+|----------------+----------------------|
 
 *)
 
@@ -13,16 +68,13 @@ From iris.program_logic Require Import adequacy.
 From iris.heap_lang Require Import adequacy notation proofmode.
 From cryptis Require Import lib cryptis primitives adequacy role.
 
-(** Equational properties of Diffie-Hellman terms.
+(**
 
-[TExpN] takes in a base and a list of exponents and constructs a Diffie-Hellman
-term.
+Equational properties of Diffie-Hellman terms: exponents can be regrouped and
+permuted.
 
 *)
 
-Check TExpN : term → list term → term.
-
-(** Exponents can be regrouped and permuted *)
 Lemma TExpNA t ts1 ts2 : TExpN (TExpN t ts1) ts2 = TExpN t (ts1 ++ ts2).
 Proof. exact: TExpNA. Qed.
 
@@ -41,9 +93,11 @@ Context `{!heapGS Σ, !cryptisGS Σ}.
 
 Implicit Types (t : term) (v : val).
 
-(** [public t] means that the term [t] can be sent over the network. *)
+(**
 
-Check public : term → iProp Σ.
+Definition of public terms.
+
+*)
 
 Lemma public_persistent t : Persistent (public t).
 Proof. apply _. Qed.
@@ -136,6 +190,42 @@ iSplit; iIntros "[#?|H]"; eauto; iRight.
     iApply "H'". by rewrite exps_TExpN exps_expN //.
 Qed.
 
+Lemma public_TExpN2 t t1 t2 :
+  ¬ is_exp t →
+  minted t -∗
+  minted t1 -∗
+  minted t2 -∗
+  dh_key t1 -∗
+  dh_key t2 -∗
+  public (TExpN t [t1; t2]) ↔ ◇ (public t1 ∨ public t2).
+Proof.
+iIntros "% #m_t #m1 #m2 #dh1 #dh2".
+rewrite public_TExp2_iff //.
+iSplit.
+- iIntros "#[[??]|[[??]|H]]"; eauto.
+  iDestruct "H" as "(_ & H & _)".
+  iPoseProof ("dh1" with "H") as ">%contra".
+  rewrite exps_TExpN length_app /= in contra; lia.
+- rewrite /bi_except_0. iIntros "#[H|[H|H]]".
+  + iRight. iRight. rewrite minted_TExpN /=.
+    iSplit; eauto. iSplit.
+    * iApply "dh1". by iDestruct "H" as ">[]".
+    * iApply "dh2". by iDestruct "H" as ">[]".
+  + iRight. iLeft. iSplit => //.
+    iApply public_TExpN1 => //.
+  + iLeft. iSplit => //.
+    iApply public_TExpN1 => //.
+Qed.
+
+(**
+
+Properties of sealing predicates.
+
+*)
+
+Lemma seal_pred_persistent F N φ : Persistent (seal_pred F N φ).
+Proof. apply _. Qed.
+
 Lemma seal_pred_agree F N φ₁ φ₂ :
   seal_pred F N φ₁ -∗
   seal_pred F N φ₂ -∗
@@ -157,6 +247,12 @@ Lemma seal_pred_token_difference F E1 E2 :
   E1 ⊆ E2 →
   seal_pred_token F E2 ⊣⊢ seal_pred_token F E1 ∗ seal_pred_token F (E2 ∖ E1).
 Proof. exact: seal_pred_token_difference. Qed.
+
+(**
+
+Properties of term metadata.
+
+*)
 
 Lemma term_meta_persistent `{Countable L} t N (x : L) :
   Persistent (term_meta t N x).
@@ -185,6 +281,12 @@ Lemma term_token_difference t E1 E2 :
   E1 ⊆ E2 →
   term_token t E2 ⊣⊢ term_token t E1 ∗ term_token t (E2 ∖ E1).
 Proof. exact: term_token_difference. Qed.
+
+(**
+
+Network and nonce generation specifications.
+
+*)
 
 Lemma wp_send c t :
   channel c -∗
@@ -224,6 +326,14 @@ iIntros "!> %t'".
 iSpecialize ("dh_t" $! t').
 by rewrite bi.intuitionistic_intuitionistically.
 Qed.
+
+
+(**
+
+Derived constructs and specifications: the [secret] predicate, asymmetric
+encryption, digital signatures, symmetric encryption, key generation.
+
+*)
 
 Lemma unknown_alloc : ⊢ |==> ∃ γ, unknown γ.
 Proof. exact: unknown_alloc. Qed.
