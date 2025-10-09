@@ -5,6 +5,8 @@
 -R examples cryptis.examples
 -R cryptis cryptis
 
+cryptis/claims.v
+
 cryptis/lib/mathcomp_compat.v
 cryptis/lib/term_set.v
 cryptis/lib/gen_adequacy.v
