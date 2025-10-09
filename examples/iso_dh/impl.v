@@ -28,7 +28,7 @@ Definition initiator : val := λ: "c" "skI" "pkR",
   send "c" "m3";;
   SOME (derive_senc_key "secret").
 
-Definition responder_wait : val := λ: "c",
+Definition responder_listen : val := λ: "c",
   do_until (λ: <>,
     let: "m1" := recv "c" in
     bind: "m1" := list_of_term "m1" in
@@ -36,7 +36,7 @@ Definition responder_wait : val := λ: "c",
     guard: is_verify_key "pkI" in
     SOME ("ga", "pkI")).
 
-Definition responder_accept : val := λ: "c" "skR" "ga" "pkI",
+Definition responder_confirm : val := λ: "c" "skR" "ga" "pkI",
   let: "pkR" := pkey "skR" in
   let: "b" := mk_nonce #() in
   let: "gb" := mk_keyshare "b" in
@@ -52,8 +52,8 @@ Definition responder_accept : val := λ: "c" "skR" "ga" "pkI",
   SOME (derive_senc_key "secret").
 
 Definition responder : val := λ: "c" "skR",
-  let: "res" := responder_wait "c" in
+  let: "res" := responder_listen "c" in
   let: "ga"  := Fst "res" in
   let: "pkI" := Snd "res" in
-  bind: "kS" := responder_accept "c" "skR" "ga" "pkI" in
+  bind: "kS" := responder_confirm "c" "skR" "ga" "pkI" in
   SOME ("pkI", "kS").

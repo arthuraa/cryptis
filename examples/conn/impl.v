@@ -27,13 +27,13 @@ Definition connect : val := λ: "c" "skA" "pkB",
   ("counters", "session_key", "c").
 
 Definition listen : val := λ: "c",
-  responder_wait "c".
+  responder_listen "c".
 
 Definition confirm : val := λ: "c" "skB" "req",
   let: "ga" := Fst "req" in
   let: "pkA" := Snd "req" in
   let: "sk" := do_until
-    (λ: <>, responder_accept "c" "skB" "ga" "pkA") in
+    (λ: <>, responder_confirm "c" "skB" "ga" "pkA") in
   let: "counters" := AllocN #2 #0%nat in
   ("counters", "sk", "c").
 

@@ -92,7 +92,7 @@ Lemma wp_listen c :
       public ga ∗ minted skI }}}.
 Proof.
 iIntros "#? #? #? % !> _ post". wp_lam.
-wp_apply wp_responder_wait; eauto.
+wp_apply wp_responder_listen; eauto.
 Qed.
 
 Lemma wp_confirm P c skI skR ga :
@@ -119,7 +119,7 @@ iApply (wp_frame_wand with "post").
 iApply (wp_frame_wand with "P").
 iApply wp_do_until'. iIntros "!>".
 wp_pures.
-iApply (wp_responder_accept failed).
+iApply (wp_responder_confirm failed).
 { do !iSplit => //. }
 iIntros "!> %r [->|res]"; first by eauto.
 iDestruct "res" as "(%si & -> & #sess & #comp & rel & token)".

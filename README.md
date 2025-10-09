@@ -84,6 +84,17 @@ Each case study is structured as follows:
 - `game.v`: Security based on a symbolic game (for `nsl`, `iso_dh` and `store`).
 - `README.md`: General comments and comparison with the paper presentation.
 
+### ISO
+
+Our implementation of ISO includes the three extensions described in the end of
+Section 5: the decomposed responder and the ability to compromise a session
+before or after the handshake is completed.  The specifications for this more
+general functionality are given in `wp_initiator`
+(`examples/iso_dh/proofs/initiator.v`) and `wp_responder_listen` and
+`wp_responder_accept` (`examples/iso_dh/proofs/responder.v`).  For ease of
+reference, the specifications of Theorem 5.1 are also proved
+(`wp_initiator_weak` and `wp_responder_weak`).
+
 ## Dependencies
 
 Cryptis is known to compile with the following dependencies:

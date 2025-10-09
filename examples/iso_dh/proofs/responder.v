@@ -27,9 +27,9 @@ Implicit Types (si : sess_info) (osi : option sess_info).
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); eauto.
 
-Lemma wp_responder_wait c :
+Lemma wp_responder_listen c :
   {{{ channel c ∗ cryptis_ctx  }}}
-    responder_wait c
+    responder_listen c
   {{{ ga skI, RET (ga, Spec.pkey skI); public ga ∗ minted skI }}}.
 Proof.
 iIntros "%Φ [#chan_c #ctx] post". wp_lam. wp_pures.
@@ -46,12 +46,12 @@ wp_pures. iModIntro. iRight. iExists _; iSplit => //.
 iIntros "post". by iApply "post"; eauto.
 Qed.
 
-Lemma wp_responder_accept failed c skI skR ga :
+Lemma wp_responder_confirm failed c skI skR ga :
   {{{ channel c ∗ cryptis_ctx ∗ iso_dh_ctx ∗
       public ga ∗ minted skI ∗ minted skR ∗
       if failed then public skI ∨ public skR
       else True }}}
-    responder_accept c skR ga (Spec.pkey skI)
+    responder_confirm c skR ga (Spec.pkey skI)
   {{{ r, RET (repr r);
       ⌜r = None⌝ ∨ ∃ si,
         ⌜r = Some (si_key si)⌝ ∗
@@ -162,11 +162,11 @@ iModIntro. iRight. iExists si. iFrame. do !iSplit => //.
 - iApply (term_token_drop with "token"). solve_ndisj.
 Qed.
 
-Lemma wp_responder_accept_weak c skR ga skI :
+Lemma wp_responder_confirm_weak c skR ga skI :
   {{{ channel c ∗ cryptis_ctx ∗
       iso_dh_ctx ∗ minted skR ∗ minted skI ∗
       public ga }}}
-    responder_accept c skR ga (Spec.pkey skI)
+    responder_confirm c skR ga (Spec.pkey skI)
   {{{ r, RET (repr r);
       ⌜r = None⌝ ∨ ∃ si,
         ⌜r = Some (si_key si)⌝ ∗
@@ -174,7 +174,7 @@ Lemma wp_responder_accept_weak c skR ga skI :
         term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN) }}}.
 Proof.
 iIntros "%Φ (#chan_c & #ctx & #? & #m_skR & #m_skI & #p_ga) Hpost".
-iApply wp_fupd. wp_apply (wp_responder_accept false); first by eauto 10.
+iApply wp_fupd. wp_apply (wp_responder_confirm false); first by eauto 10.
 iIntros "%osi [->|Hsi]"; first by iApply ("Hpost" $! None); eauto.
 iDestruct "Hsi" as "(%si & -> & #sess & #sec & rel & tok)".
 iMod (unrelease with "rel") as "#un". iModIntro.
@@ -195,10 +195,10 @@ Lemma wp_responder c skR :
 Proof.
 iIntros "%Φ (#? & #? & #? & #?) post".
 wp_lam; wp_pures.
-wp_apply wp_responder_wait; first by eauto.
+wp_apply wp_responder_listen; first by eauto.
 iIntros "%ga %skI (#p_ga & #m_skI)".
 wp_pures.
-wp_apply (wp_responder_accept false); first by eauto 10.
+wp_apply (wp_responder_confirm false); first by eauto 10.
 iIntros "%osi [->|Hosi]"; wp_pures; first by iApply ("post" $! None); eauto.
 iDestruct "Hosi" as "(%si & -> & #? & #? & rel & token)".
 wp_pures.
