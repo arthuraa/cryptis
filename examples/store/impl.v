@@ -24,13 +24,17 @@ Definition connect : val := λ: "c" "skA" "pkB",
   RPC.connect "c" "skA" "pkB".
 
 Definition store : val := λ: "cs" "k" "v",
-  RPC.call "cs" (Tag $ dbN.@"store") (term_of_list ["k"; "v"]);; #().
+  RPC.call "cs" (Tag $ dbN.@"store") ["k"; "v"];; #().
 
 Definition load : val := λ: "cs" "k",
-  RPC.call "cs" (Tag $ dbN.@"load") "k".
+  let: "ts" := RPC.call "cs" (Tag $ dbN.@"load") ["k"] in
+  match: "ts" with
+    NONE => TInt 0
+  | SOME "ts" => Fst "ts"
+  end.
 
 Definition create : val := λ: "cs" "k" "v",
-  RPC.call "cs" (Tag $ dbN.@"create") (term_of_list ["k"; "v"]);; #().
+  RPC.call "cs" (Tag $ dbN.@"create") ["k"; "v"];; #().
 
 Definition close : val := λ: "cs", RPC.close "cs".
 
@@ -47,33 +51,32 @@ Definition start : val := λ: "k",
   ("k", "accounts").
 
 Definition handle_store : val :=
-λ: "db" "req",
-  bind: "req" := list_of_term "req" in
+λ: "cs" "db" "req",
   list_match: ["k"; "v"] := "req" in
   AList.insert "db" "k" "v";;
-  SOME (TInt 0).
+  SOME [TInt 0].
 
 Definition handle_load : val :=
-λ: "db" "k",
+λ: "cs" "db" "req",
+  list_match: ["k"] := "req" in
   bind: "data" := AList.find "db" "k" in
-  SOME "data".
+  SOME ["data"].
 
 Definition handle_create : val :=
-λ: "db" "req",
-  bind: "req" := list_of_term "req" in
+λ: "cs" "db" "req",
   list_match: ["k"; "v"] := "req" in
   match: AList.find "db" "k" with
     SOME <> => NONE
   | NONE =>
     AList.insert "db" "k" "v";;
-    SOME (TInt 0)
+    SOME [TInt 0]
   end.
 
 Definition conn_handler : val := λ: "cs" "db" "lock",
   RPC.server "cs" [
-    RPC.handle (Tag $ dbN.@"store") (handle_store "db");
-    RPC.handle (Tag $ dbN.@"load") (handle_load "db");
-    RPC.handle (Tag $ dbN.@"create") (handle_create "db")
+    RPC.handle (Tag $ dbN.@"store") (handle_store "cs" "db");
+    RPC.handle (Tag $ dbN.@"load") (handle_load "cs" "db");
+    RPC.handle (Tag $ dbN.@"create") (handle_create "cs" "db")
   ];;
   lock.release "lock".
 

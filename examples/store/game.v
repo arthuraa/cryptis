@@ -8,7 +8,7 @@ From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par assert ticket_lock.
 From cryptis Require Import cryptis primitives tactics role adequacy.
 From cryptis.primitives Require Import attacker.
-From cryptis.examples Require Import iso_dh rpc gen_conn conn store.
+From cryptis.examples Require Import iso_dh rpc conn store.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -16,8 +16,7 @@ Unset Printing Implicit Defensive.
 
 Section Game.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ}.
-Context `{!RPC.rpcGS Σ, !storeGS Σ, !tlockG Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !RPC.rpcGS Σ, !storeGS Σ, !tlockG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -95,10 +94,15 @@ Qed.
 Lemma wp_game c :
   cryptis_ctx -∗
   channel c -∗
-  store_ctx -∗
+  seal_pred_token SIGN ⊤ -∗
+  seal_pred_token SENC ⊤ -∗
   WP game c {{ _, True }}.
 Proof.
-iIntros "#ctx #chan #store_ctx"; rewrite /game; wp_pures.
+iIntros "#ctx #cP sign_tok senc_tok"; rewrite /game; wp_pures.
+iMod (iso_dh_ctx_alloc with "sign_tok") as "[#? sign_tok]" => //.
+iMod (RPC.ctx_alloc with "[$] [//]") as "[#? senc_tok]"; first solve_ndisj.
+iMod (store_ctx_alloc with "[$] [//]") as "[#? _]" => //; first solve_ndisj.
+wp_pures.
 wp_apply (wp_mk_sign_key with "[]"); eauto.
 iIntros "%skI #m_skI s_skI tokenI". wp_pures.
 wp_pures. wp_apply (wp_mk_sign_key with "[]"); eauto.
@@ -114,28 +118,28 @@ iMod (@client_alloc _ _ _ _ _ skR with "tokenI")
   as "(client & free & token)"; eauto.
 wp_apply (wp_client_connect with "[] [] [] [] [] client"); eauto.
 iIntros "%cs client". wp_pure _ credit:"c". wp_pures.
-iPoseProof (db_connected_ok with "client s_skI s_skR") as "#>ok".
+iPoseProof (db_connected_ok with "client s_skI s_skR [//] [//]") as "#>ok".
 wp_apply wp_recv => //. iIntros "%k #p_k". wp_pures.
 wp_apply wp_recv => //. iIntros "%v #p_v". wp_pures.
 rewrite (@db_free_at_diff _ _ _ _ _ _ {[k]}) //.
 iDestruct "free" as "[free_k free]".
 wp_apply (wp_client_create with "[] [] [] [] [$]") => //.
 iIntros "[client k_v]". wp_pures.
-wp_apply (wp_client_close with "[//] [] [$client]") => //.
+wp_apply (wp_client_close with "[] [$client]") => //.
 iIntros "[client #p_sk]".
 wp_pures.
-wp_apply GenConn.wp_session_key => //. iIntros "_".
+wp_apply Conn.wp_session_key => //. iIntros "_".
 wp_apply (wp_send with "[//]") => //. wp_pures.
 wp_apply (wp_client_connect with "[] [] [] [] [] client"); eauto.
 iIntros "%cs' client". wp_pure _ credit:"c'". wp_pures.
-iPoseProof (db_connected_ok with "client s_skI s_skR") as "#>#ok'".
+iPoseProof (db_connected_ok with "client s_skI s_skR [//] [//]") as "#>#ok'".
 iMod (secret_public with "s_skI") as "#p_skI".
 iMod (secret_public with "s_skR") as "#p_skR".
 wp_apply wp_send => //. wp_pures.
 wp_apply wp_send => //. wp_pures.
 wp_apply (wp_client_load with "[] [] [] [$client $k_v]") => //.
 iIntros "%v' (client & k_v & _ & [fail|->])".
-{ iPoseProof (db_connected_ok_compromised with "client ok' fail") as ">[]". }
+{ by iPoseProof ("ok'" with "fail") as "[]". }
 wp_pures. wp_apply wp_assert. wp_apply wp_eq_term.
 by rewrite bool_decide_eq_true_2.
 Qed.
@@ -143,7 +147,7 @@ Qed.
 End Game.
 
 Definition F : gFunctors :=
-  #[heapΣ; spawnΣ; cryptisΣ; tlockΣ; iso_dhΣ; GenConn.connΣ; RPC.rpcΣ; storeΣ].
+  #[heapΣ; spawnΣ; cryptisΣ; tlockΣ; Conn.connΣ; RPC.rpcΣ; storeΣ].
 
 Lemma store_secure σ₁ σ₂ t₂ e₂ :
   rtc erased_step ([run_network game], σ₁) (t₂, σ₂) →
@@ -153,11 +157,6 @@ Proof.
 have ? : heapGpreS F by apply _.
 apply (adequate_not_stuck NotStuck _ _ (λ v _, True)) => //.
 apply: cryptis_adequacy.
-iIntros (? ? c) "#ctx #chan (_ & sign_tok & senc_tok & _)".
-iMod (iso_dhGS_alloc with "sign_tok") as (?) "(#? & iso_tok & sign_tok)" => //.
-iMod (Conn.pre_ctx_alloc with "[//] [$]") as "(#? & senc_tok)" => //.
-iMod (RPC.ctx_alloc with "[//] [$]") as (?) "(#? & iso_tok & rpc_tok)" => //.
-iMod (store_ctx_alloc with "[$] [//]") as "(#? & rpc_tok)";
-  first solve_ndisj.
-by iApply (wp_game with "ctx chan [//]") => //.
+iIntros (???) "#ctx #chan (_ & sign_tok & senc_tok & _)".
+by iApply (wp_game with "ctx [$] [$]") => //.
 Qed.

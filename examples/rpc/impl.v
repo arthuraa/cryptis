@@ -14,52 +14,39 @@ Unset Printing Implicit Defensive.
 Notation rpcN := (nroot.@"rpc").
 
 Definition connect : val := λ: "c" "skA" "pkB",
-  Conn.connect "c" "skA" "pkB" (Tag rpcN).
+  Conn.connect "c" "skA" "pkB".
 
 Definition listen : val := λ: "c", Conn.listen "c".
 
 Definition confirm : val := λ: "c" "skB" "req",
-  Conn.confirm "c" "skB" (Tag rpcN) "req".
+  Conn.confirm "c" "skB" "req".
 
-Definition call : val := λ: "cs" "N" "t",
-  Conn.send "cs" (tag "N" "t");;
-  Conn.recv "cs".
-
-Definition handle_gen : val := λ: "N" "f" "cs" "t",
-  bind: "t" := untag "N" "t" in
-  match: "f" "t" with
-    SOME "res" =>
-      let: "cont" := Fst "res" in
-      let: "res" := Snd "res" in
-      Conn.send "cs" "res";;
-      (if: "cont" then #() else Conn.free "cs");;
-      SOME "cont"
-  | NONE => SOME #true
-  end.
+Definition call : val := λ: "cs" "N" "ts",
+  Conn.send "cs" "N" "ts";;
+  Conn.recv "cs" (Tag $ rpcN.@"resp").
 
 Definition handle : val := λ: "N" "f",
-  handle_gen "N" (λ: "t",
-    match: "f" "t" with
-      SOME "res" => SOME (#true, "res")
-    | NONE => NONE
-    end
-  ).
+  Conn.handle "N"
+    (λ: "cs" "ts",
+      match: "f" "ts" with
+        SOME "res" => Conn.send "cs" (Tag (rpcN.@"resp")) "res"
+      | NONE => Conn.send "cs" (Tag (rpcN.@"error")) [TInt 0]
+      end;;
+      #true).
 
 Definition close : val := λ: "cs",
-  call "cs" (Tag $ rpcN.@"close") (TInt 0);;
+  Conn.send "cs" (Tag $ rpcN.@"close") [TInt 0];;
+  Conn.recv  "cs" (Tag $ rpcN.@"resp");;
   Conn.free "cs".
 
 Definition handle_close : expr :=
-  handle_gen (Tag (rpcN.@"close")) (λ: "t", SOME (#false, TInt 0))%V.
-
-Definition select : val := λ: "cs" "handlers",
-  let: "m" := Conn.recv "cs" in
-  let: "handlers" := handle_close :: "handlers" in
-  scan_list (λ: "handler", "handler" "cs" "m") "handlers".
+  Conn.handle (Tag $ rpcN.@"close")
+    (λ: "cs" "ts",
+      Conn.send "cs" (Tag (rpcN.@"resp")) [TInt 0];;
+      Conn.free "cs";;
+      #false)%V.
 
 Definition server : val := rec: "loop" "cs" "handlers" :=
-  let: "res" := select "cs" "handlers" in
-  match: "res" with
-    SOME "cont" => if: "cont" then "loop" "cs" "handlers" else #()
-  | NONE => "loop" "cs" "handlers"
-  end.
+  let: "cont" := Conn.select "cs" (handle_close :: "handlers") in
+  if: "cont" then "loop" "cs" "handlers"
+  else #().

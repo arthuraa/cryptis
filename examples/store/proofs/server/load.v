@@ -5,7 +5,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib cryptis primitives tactics.
-From cryptis.examples Require Import iso_dh gen_conn conn rpc alist.
+From cryptis.examples Require Import iso_dh conn rpc alist.
 From cryptis.examples.store Require Import impl.
 From cryptis.examples.store.proofs Require Import base db.
 
@@ -15,11 +15,10 @@ Unset Printing Implicit Defensive.
 
 Section Verif.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ}.
-Context `{!RPC.rpcGS Σ, !storeGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !RPC.rpcGS Σ, !storeGS Σ}.
 Notation iProp := (iProp Σ).
 
-Implicit Types (cs : GenConn.state).
+Implicit Types (cs : Conn.state).
 Implicit Types (skI skR : sign_key) (kS t : term).
 Implicit Types n : nat.
 Implicit Types γ : gname.
@@ -29,7 +28,7 @@ Ltac failure := iLeft; iFrame; eauto.
 
 Lemma wp_server_handle_load skI skR cs (vdb : val) :
   {{{ cryptis_ctx ∗ store_ctx  }}}
-    RPC.handle (Tag $ (dbN.@"load")) (Server.handle_load vdb)
+    RPC.handle (Tag $ (dbN.@"load")) (Server.handle_load (repr cs) vdb)
   {{{ h, RET (repr h); server_handler skI skR cs vdb h }}}.
 Proof.
 iIntros "%Φ (#? & #ctx) post".
@@ -38,14 +37,16 @@ iPoseProof (store_ctx_rpc_ctx with "ctx") as "?".
 wp_lam; wp_pures.
 wp_apply RPC.wp_handle; last by eauto.
 do 2!iSplit => //. clear Φ.
-iIntros "!> %t1 !> %Φ (#p_t1 & inv_t1 & %db & #p_db & db & ready) post".
-wp_pures.
+iIntros "!> %ts !> %Φ (#p_ts & inv_ts & %db & #p_db & db & ready) post".
+wp_pures. wp_list_match => [t1 ->| ?]; wp_pures; last first.
+{ iApply ("post" $! None). by iFrame. }
 wp_bind (AList.find _ _). iApply (AList.wp_find with "db") => //.
 iIntros "!> db". rewrite lookup_fmap.
-iMod (load_resp with "ready inv_t1") as "[ready inv_t1]".
+iMod (load_resp with "ready inv_ts") as "[ready inv_ts]".
 case db_t1: (db !! t1) => [t2'|]; wp_pures; last first.
 { iApply ("post" $! None). by iFrame. }
-iApply ("post" $! (Some _)). iFrame. iModIntro. iSplit => //.
+wp_list. wp_pures. iModIntro.
+iApply ("post" $! (Some _)). iFrame. do !iSplit; eauto.
 rewrite /public_db big_sepM_forall /=.
 by iDestruct ("p_db" $! t1 t2' with "[//]") as "[??]".
 Qed.

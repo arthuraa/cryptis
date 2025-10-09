@@ -4,29 +4,15 @@ From mathcomp Require ssrbool.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib.
-From cryptis Require Import role cryptis primitives tactics.
+From cryptis Require Import lib term cryptis primitives tactics.
+From cryptis Require Import role.
+From cryptis.examples.iso_dh.proofs Require Import base.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-(*
-
-A --> B: g^a; pkA
-B --> A: {g^a; g^b; pkA}@skB
-A --> B: {g^a; g^b; pkB; N; req}@skA
-
-Result: derive_key [pkA; pkB; g^a; g^b; g^ab]
-
-*)
-
-Definition iso_dhN := nroot.@"iso_dh".
-
-Definition mk_keyshare : val := λ: "k",
-  texp (tint #0) "k".
-
-Definition initiator : val := λ: "c" "skI" "pkR" "N",
+Definition initiator : val := λ: "c" "skI" "pkR",
   let: "pkI"  := pkey "skI" in
   let: "a"    := mk_nonce #() in
   let: "ga"   := mk_keyshare "a" in
@@ -34,12 +20,11 @@ Definition initiator : val := λ: "c" "skI" "pkR" "N",
   send "c" "m1";;
   bind: "m2"   := verify "pkR" (Tag $ iso_dhN.@"m2") (recv "c") in
   bind: "m2"   := list_of_term "m2" in
-  list_match: ["ga'"; "gb"; "pkI'"; "N'"] := "m2" in
-  guard: eq_term "ga" "ga'" && eq_term "pkI" "pkI'" && eq_term "N" "N'" in
+  list_match: ["ga'"; "gb"; "pkI'"] := "m2" in
+  guard: eq_term "ga" "ga'" && eq_term "pkI" "pkI'" in
   let: "gab" := texp "gb" "a" in
   let: "secret" := term_of_list ["pkI"; "pkR"; "ga"; "gb"; "gab"] in
-  let: "m3_body" := term_of_list ["ga"; "gb"; "pkR"] in
-  let: "m3" := sign "skI" (Tag $ iso_dhN.@"m3") "m3_body" in
+  let: "m3" := sign "skI" (Tag $ iso_dhN.@"m3") (term_of_list ["ga"; "gb"; "pkR"]) in
   send "c" "m3";;
   SOME (derive_senc_key "secret").
 
@@ -51,12 +36,12 @@ Definition responder_wait : val := λ: "c",
     guard: is_verify_key "pkI" in
     SOME ("ga", "pkI")).
 
-Definition responder_accept : val := λ: "c" "skR" "ga" "pkI" "N",
+Definition responder_accept : val := λ: "c" "skR" "ga" "pkI",
   let: "pkR" := pkey "skR" in
   let: "b" := mk_nonce #() in
   let: "gb" := mk_keyshare "b" in
   let: "m2" := sign "skR" (Tag $ iso_dhN.@"m2")
-                 (term_of_list ["ga"; "gb"; "pkI"; "N"]) in
+                 (term_of_list ["ga"; "gb"; "pkI"]) in
   send "c" "m2";;
   bind: "m3" := verify "pkI" (Tag $ iso_dhN.@"m3") (recv "c") in
   bind: "m3" := list_of_term "m3" in
@@ -66,9 +51,9 @@ Definition responder_accept : val := λ: "c" "skR" "ga" "pkI" "N",
   let: "secret" := term_of_list ["pkI"; "pkR"; "ga"; "gb"; "gab"] in
   SOME (derive_senc_key "secret").
 
-Definition responder : val := λ: "c" "skR" "N",
+Definition responder : val := λ: "c" "skR",
   let: "res" := responder_wait "c" in
   let: "ga"  := Fst "res" in
   let: "pkI" := Snd "res" in
-  bind: "kS" := responder_accept "c" "skR" "ga" "pkI" "N" in
+  bind: "kS" := responder_accept "c" "skR" "ga" "pkI" in
   SOME ("pkI", "kS").

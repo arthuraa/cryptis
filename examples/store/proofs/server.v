@@ -6,7 +6,7 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
 From cryptis Require Import lib cryptis primitives tactics.
-From cryptis Require Import role iso_dh gen_conn conn rpc alist.
+From cryptis Require Import role iso_dh conn rpc alist.
 From cryptis.examples.store Require Import impl.
 From cryptis.examples.store.proofs Require Import base db.
 From cryptis.examples.store.proofs.server Require Import load store create.
@@ -19,11 +19,10 @@ Local Existing Instance ticket_lock.
 
 Section Verif.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ}.
-Context `{!RPC.rpcGS Σ, !storeGS Σ, !tlockG Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !Conn.connGS Σ, !RPC.rpcGS Σ, !storeGS Σ, !tlockG Σ}.
 Notation iProp := (iProp Σ).
 
-Implicit Types (cs : GenConn.state).
+Implicit Types (cs : Conn.state).
 Implicit Types (skI skR : sign_key) (kS t : term).
 Implicit Types n : nat.
 Implicit Types γ : gname.
@@ -62,7 +61,7 @@ iIntros "#lock #? #ctx".
 iIntros "!> %Φ ((conn & db) & locked) post".
 iPoseProof (RPC.server_connected_keys with "conn") as "#[-> ->]".
 iPoseProof (store_ctx_rpc_ctx with "[//]") as "?".
-wp_lam. wp_pures. wp_list.
+wp_lam. wp_pures.
 wp_apply wp_server_handle_create; eauto. iIntros "% #?". wp_list.
 wp_apply wp_server_handle_load; eauto. iIntros "% #?". wp_list.
 wp_apply wp_server_handle_store; eauto. iIntros "% #?". wp_list.
@@ -166,7 +165,8 @@ wp_pures.
 wp_apply (RPC.wp_confirm (db_server_ready skA (ss_key ss) db)
            with "[] [] [] [$ready]") => //.
 { do 3!iSplit => //. }
-iIntros "%cs (conn & ready)". wp_pures.
+iIntros "%cs (conn & ready)".
+wp_pures.
 iApply (wp_fork with "[conn vdb locked ready]").
 { iModIntro.
   wp_apply (wp_server_conn_handler

@@ -239,7 +239,7 @@ End NSL.
 Definition F : gFunctors :=
   #[heapΣ; cryptisΣ; tlockΣ].
 
-Lemma nsl_secure σ₁ σ₂ (v : val) t₂ e₂ :
+Lemma nsl_secure σ₁ σ₂ t₂ e₂ :
   rtc erased_step ([run_network game], σ₁) (t₂, σ₂) →
   e₂ ∈ t₂ →
   not_stuck e₂ σ₂.

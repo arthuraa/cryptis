@@ -432,7 +432,7 @@ Lemma nsl_secure σ₁ σ₂ t₂ e₂ :
   rtc erased_step ([run_network game], σ₁) (t₂, σ₂) →
   e₂ ∈ t₂ →
   not_stuck e₂ σ₂.
-Proof. apply (@nsl_secure _ _ (#0)). Qed.
+Proof. apply nsl_secure. Qed.
 
 End NSL.
 
