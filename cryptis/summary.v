@@ -1,61 +1,9 @@
 (**
 
 This file consolidates the main definitions and properties about the base
-Cryptis logic.  For the proofs of individual case studies, check the
-corresponding directories under examples/.
-
-
-* Notable differences with respect to the paper
-
-** Minted terms
-
-On paper, we assume that the user can only refer to terms that contain nonces
-and keys that have already been generated.  In Rocq, we cannot impose this
-restriction, because the definition of the term datatype contains all terms,
-whether they have been generated or not.  Instead, we add a special [minted t]
-predicate to several lemmas, which holds precisely when the term [t] only
-contains nonces that have already been generated.
-
-** Invariants and explicit channels
-
-In Rocq, the [send] and [recv] functions must take an explicit channel parameter
-[c].  Functions that manipulate the network must assume that c is a valid
-channel in their preconditions.  To run a program [f] from the initial state, we
-must pass it to the [run_network] function, which allocates a new channel [c],
-initializes the attacker threads that control [c], and then passes [c] to [f]
-(cf. the cryptis_adequacy result below).  Moreover, most programs require a
-special [cryptis_ctx] invariant to hold, which is also given by the adequacy
-theorem.
-
-** Confidentiality of Diffie-Hellman terms
-
-The Rocq development uses a more general definition of [public] for
-Diffie-Hellman terms than the one in the paper.  The paper rules hold for any DH
-private key that satisfies the [dh_key] predicate.  As shown by the
-[wp_mk_nonce] specification below, any nonce can be allocated to satisfy this
-property.
-
-** Types for keys
-
-Our Rocq development uses separate types [aenc_key], [sign_key] and [senc_key]
-to describe private keys for asymmetric encryption, signature keys, and
-symmetric encryption keys.
-
-*)
-
-(*
-
-** Notation mapping
-
-|----------------+----------------------|
-| Paper notation | Rocq equivalent      |
-|----------------+----------------------|
-| t ^ t1 .. tn   | TExpN t [t1; ..; tn] |
-| F, N ↦ φ       | seal_pred F N φ      |
-| token F E      | seal_pred_token F E  |
-| t, N ↦ x       | term_meta t N x      |
-| token t E      | term_token t E       |
-|----------------+----------------------|
+Cryptis logic, and checks that the security proofs of the main case studies are
+free of axioms and admitted lemmas.  For more details on thr proofs of
+individual case studies, check the corresponding directories under examples/.
 
 *)
 
@@ -67,6 +15,9 @@ From iris.base_logic.lib Require Import invariants.
 From iris.program_logic Require Import adequacy.
 From iris.heap_lang Require Import adequacy notation proofmode.
 From cryptis Require Import lib cryptis primitives adequacy role.
+From cryptis.examples.nsl    Require Import game.
+From cryptis.examples.iso_dh Require Import game.
+From cryptis.examples.store  Require Import game.
 
 (**
 
@@ -481,3 +432,7 @@ move=> wp; apply: cryptis_adequacy.
 iIntros (???) "#? #? (? & ? & ? & _)".
 wp_apply (wp with "[//] [//] [$] [$] [$]").
 Qed.
+
+Check nsl_secure. Print Assumptions nsl_secure.
+Check iso_dh_secure. Print Assumptions iso_dh_secure.
+Check store_secure. Print Assumptions store_secure.

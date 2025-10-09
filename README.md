@@ -1,32 +1,90 @@
 # Cryptis: Cryptographic Reasoning in Separation Logic
 
-The material covered in the paper can be found in the following files:
-
 ## Core Library
 
-In the `cryptis` directory you will find:
+The file `cryptis` contains the main components of the Cryptis logic.  The
+parts that are covered in the paper are summarized in the file
+`cryptis/summary.v`. You should consult this file to see how the Rocq
+development compares to the paper version.  The remaining files are structured
+as follows:
 
-- `lib/*, lib`: General additions to Iris and MathComp.  List manipulation programs for
-  HeapLang.
-- `core/*`, `cryptis`: Core Cryptis components: cryptographic terms, the
+- `lib/*, lib.v`: General additions to Iris and MathComp.  List manipulation
+  programs for HeapLang.
+- `core/*`, `cryptis.v`: Core Cryptis components: cryptographic terms, the
   `public` predicate, encryption predicates, and term metadata.
-- `primitives/*`, `primitives`: HeapLang functions for manipulating
+- `primitives/*`, `primitives.v`: HeapLang functions for manipulating
   cryptographic terms.  Definition of the attacker.
-- `tactics`: Ltac tactics for symbolically executing the main HeapLang functions
-  on terms.
+- `tactics.v`: Ltac tactics for symbolically executing the main HeapLang
+  functions on terms.
+  
+### Notable differences with respect to the paper
+
+#### Minted terms
+
+On paper, we assume that the user can only refer to terms that contain nonces
+and keys that have already been generated.  In Rocq, we cannot impose this
+restriction, because the definition of the term datatype contains all terms,
+whether they have been generated or not.  Instead, we add a special `minted t`
+predicate to several lemmas, which holds precisely when the term `t` only
+contains nonces that have already been generated.
+
+#### Invariants and explicit channels
+
+In Rocq, the `send` and `recv` functions must take an explicit channel parameter
+`c`.  Functions that manipulate the network must assume that c is a valid
+channel in their preconditions.  To run a program `f` from the initial state, we
+must pass it to the `run_network` function, which allocates a new channel `c`,
+initializes the attacker threads that control `c`, and then passes `c` to `f`
+(cf. the `cryptis_adequacy` in `cryptis/summary.v`).  Moreover, most programs
+require a special `cryptis_ctx` invariant to hold, which is also given by the
+adequacy theorem.
+
+#### Confidentiality of Diffie-Hellman terms
+
+The Rocq development uses a more general definition of `public` for
+Diffie-Hellman terms than the one in the paper.  The paper rules hold for any DH
+private key that satisfies the `dh_key` predicate.  As shown by the
+`wp_mk_nonce` specification in `cryptis/summary.v`, any nonce can be allocated
+to satisfy this property.
+
+#### Types for keys
+
+Our Rocq development uses separate types `aenc_key`, `sign_key` and `senc_key`
+to describe private keys for asymmetric encryption, signature keys, and
+symmetric encryption keys.
+
+#### Notation mapping
+
+| Paper notation   | Rocq equivalent                         |
+|------------------|-----------------------------------------|
+| `t ^ t1 .. tn`   | `TExpN t [t1; ..; tn]`                  |
+| `F, N ↦ φ`       | `seal_pred F N φ` (when `F` is generic) |
+| `aenc, N ↦ φ`    | `aenc_pred N φ`                         |
+| `sign, N ↦ φ`    | `sign_pred N φ`                         |
+| `senc, N ↦ φ`    | `senc_pred N φ`                         |
+| `token F E`      | `seal_pred_token F E`                   |
+| `t, N ↦ x`       | `term_meta t N x`                       |
+| `token t E`      | `term_token t E`                        |
 
 ## Case studies
 
-In the `examples` you will find our case studies:
+In `examples` you will find the code for our case studies in separate
+directories:
 
-- `nsl`: NSL protocol, including game.
-- `iso_dh`: ISO protocol with DH key exchange and digital signatures (game is in
-  its own file).
-- `conn`: Authenticated connections
-- `rpc`: Remote procedure calls
-- `store`: Authenticated key-value store (game is in its own file).
-  
-## Building
+- `nsl`: NSL protocol.
+- `iso_dh`: ISO protocol with DH key exchange and digital signatures.
+- `conn`: Authenticated connections.
+- `rpc`: Remote procedure calls.
+- `store`: Authenticated key-value store.
+
+Each case study is structured as follows:
+
+- `impl.v`: Implementation in HeapLang.
+- `proofs/*`, `proofs.v`: Proofs of correctness using the Cryptis logic.
+- `game.v`: Security based on a symbolic game (for `nsl`, `iso_dh` and `store`).
+- `README.md`: General comments and comparison with the paper presentation.
+
+## Dependencies
 
 Cryptis is known to compile with the following dependencies:
 
@@ -36,10 +94,12 @@ Cryptis is known to compile with the following dependencies:
 - coq-iris v4.4.0
 - coq-iris-heap-lang v4.4.0
 
+There are two recommended ways to install the dependencies: via Nix or opam.
+
 ### Nix
 
-If you use Nix, the accompanying flake file should be enough to install all the
-required dependencies.  To compile and check all proofs, simply type `make`.
+If you have Nix flakes enabled, the accompanying `flake.nix` file should be
+enough to install all the required dependencies.  Simply run `nix develop`.
 
 ### opam
 
@@ -52,4 +112,13 @@ Afterwards, Cryptis can be installed with:
 ```opam install .```
 
 Alternatively, run `make builddep` to produce and install a dummy package that
-installs the correct dependencies and run `make`.
+installs the correct dependencies.
+
+## Building and checking proofs
+
+After setting up the required dependencies, simply run `make`.  We recommend
+using `make -j` to enable parallel compilation.  If everything goes well, `make`
+should run until completion, and the last file `cryptis/summary.v` should print
+"Closed under the global context." three times, indicating that the security
+results for the main case studies in the paper are free of axioms and
+assumptions.

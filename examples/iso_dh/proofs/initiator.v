@@ -24,22 +24,6 @@ Implicit Types (γ γa γb : gname) (failed : bool).
 Implicit Types (ts : nat) (T : gset term).
 Implicit Types (si : sess_info).
 
-Definition initiator : val := λ: "c" "skI" "pkR",
-  let: "pkI"  := pkey "skI" in
-  let: "a"    := mk_nonce #() in
-  let: "ga"   := mk_keyshare "a" in
-  let: "m1"   := term_of_list ["ga"; "pkI"] in
-  send "c" "m1";;
-  bind: "m2"   := verify "pkR" (Tag $ iso_dhN.@"m2") (recv "c") in
-  bind: "m2"   := list_of_term "m2" in
-  list_match: ["ga'"; "gb"; "pkI'"] := "m2" in
-  guard: eq_term "ga" "ga'" && eq_term "pkI" "pkI'" in
-  let: "gab" := texp "gb" "a" in
-  let: "secret" := term_of_list ["pkI"; "pkR"; "ga"; "gb"; "gab"] in
-  let: "m3" := sign "skI" (Tag $ iso_dhN.@"m3") (term_of_list ["ga"; "gb"; "pkR"]) in
-  send "c" "m3";;
-  SOME (derive_senc_key "secret").
-
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
 
