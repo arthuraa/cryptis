@@ -60,14 +60,6 @@ Implicit Types si : sess_info.
 Definition failure skI skR : iProp :=
    public skI ∨ public skR.
 
-Definition wf_sess_info rl si : iProp :=
-  minted (si_key si) ∗
-  session rl si.
-
-#[global]
-Instance wf_sess_info_persistent rl si : Persistent (wf_sess_info rl si).
-Proof. apply _. Qed.
-
 Definition never_connected skI skR : iProp :=
   term_token skR (↑connN.@"server".@skI).
 
@@ -120,17 +112,15 @@ iInv nroot as "[HP|>recv']".
 Qed.
 
 Definition connected skI skR rl cs : iProp :=
-  ⌜si_init cs = skI⌝ ∗
-  ⌜si_resp cs = skR⌝ ∗
   ⌜cs_role cs = rl⌝ ∗
+  session skI skR rl cs ∗
   channel (cs_chan cs) ∗
-  wf_sess_info (cs_role cs) cs ∗
   ∃ n m, cs_ts cs ↦∗ [ #n; #m ] ∗ received_auth cs (cs_role cs) m.
 
 Lemma connected_channel skI skR rl cs :
   connected skI skR rl cs -∗
   channel (cs_chan cs).
-Proof. by iIntros "(_ & _ & _ & ? & _)". Qed.
+Proof. by iIntros "(_ & _ & ? & _)". Qed.
 
 Lemma connected_public_key skI skR rl cs :
   connected skI skR rl cs -∗
@@ -139,35 +129,26 @@ Lemma connected_public_key skI skR rl cs :
   ◇ compromised rl cs.
 Proof.
 iIntros "conn rel #p_k".
-iPoseProof "conn" as "(_ & _ & <- & _ & #sess & _)".
-iDestruct "sess" as "(#? & #sess)".
+iPoseProof "conn" as "(<- & #sess & _)".
 by iApply (session_compromised with "[] [//] rel").
 Qed.
 
-Lemma connected_released_session skI skR rl cs :
+Lemma connected_session skI skR rl cs :
   connected skI skR rl cs -∗
-  □ (▷ released_session cs → public (si_key cs)).
+  session skI skR rl cs.
 Proof.
-iIntros "(_ & _ & _ & _ & #sess & _)".
-by iDestruct "sess" as "(_ & ? & sess)".
+by iIntros "(_ & #sess & _)".
 Qed.
-
-Lemma connected_keyE skI skR rl cs :
-  connected skI skR rl cs -∗
-  ⌜skI = si_init cs⌝ ∗ ⌜skR = si_resp cs⌝ ∗ ⌜rl = cs_role cs⌝.
-Proof. by iIntros "(-> & -> & -> & _)". Qed.
 
 Lemma connected_ok skI skR rl cs :
   connected skI skR rl cs -∗
   secret skI -∗
   secret skR -∗
-  minted skI -∗
-  minted skR -∗
   ◇ □ ¬ compromised rl cs.
 Proof.
-iIntros "(<- & <- & <- & _ & #sess & % & % & _ & _) s_kI s_kR #signI #signR".
-iDestruct "sess" as "(m_k & sess)".
-by iApply (session_not_compromised with "[//] s_kI s_kR").
+iIntros "conn sI sR".
+iApply (session_not_compromised with "[conn] sI sR").
+by iApply connected_session.
 Qed.
 
 Definition conn_pred rl φ kS t : iProp :=
@@ -179,10 +160,6 @@ Definition conn_pred rl φ kS t : iProp :=
       (received_auth si (swap_role rl) n)
       (φ (si_init si) (si_resp si) si ts ∗
        received_auth si (swap_role rl) (S n)).
-
-Lemma session_failed_failure rl si :
-  compromised rl si  ⊢ failure (si_init si) (si_resp si).
-Proof. by iIntros "(#failed & _)". Qed.
 
 End Defs.
 

@@ -92,17 +92,16 @@ case: bcomp; wp_pures; first by iApply "post".
 by wp_apply "IH"; eauto.
 Qed.
 
-Lemma wp_check_key_secrecy c lcomp rl si :
+Lemma wp_check_key_secrecy c lcomp skI skR rl si :
   {{{ cryptis_ctx ∗
       channel c ∗
-      inv gameN (game_inv lcomp (si_init si) (si_resp si)) ∗
-      minted (si_init si) ∗ minted (si_resp si) ∗
-      session rl si ∗ □ (released_session si → False) }}}
+      inv gameN (game_inv lcomp skI skR) ∗
+      session skI skR rl si ∗
+      □ (released_session si → False) }}}
     check_key_secrecy c #lcomp (si_key si)
   {{{ RET #(); True }}}.
 Proof.
-set skI := si_init si. set skR := si_resp si.
-iIntros "%Φ (#? & #? & #? & #? & #? & #s_sk & #un) post".
+iIntros "%Φ (#? & #? & #? & #s_sk & #un) post".
 rewrite /check_key_secrecy.
 wp_pure _ credit:"c1".
 wp_pure _ credit:"c2".
@@ -187,15 +186,15 @@ wp_pures; wp_apply wp_is_verify_key.
 { by iApply public_minted. }
 iSplit; last by wp_pures; iApply "Hpost".
 iIntros "%skR' -> #m_skR'". wp_pures.
-wp_pures. wp_apply (wp_initiator false) => //. iIntros "%ts tsP".
-case: ts=> [sk|] => /=; wp_pures; last by iApply "Hpost".
-iDestruct "tsP"
-  as "(%si & <- & <- & <- & #m_sk & #s_k & #? & rel & token)".
+wp_pures. wp_apply (wp_initiator false) => //.
+iIntros "%ts [->|tsP]"; wp_pures; first by iApply "Hpost".
+iDestruct "tsP" as "(%si & -> & #s_k & #? & rel & token)".
 iPoseProof (iso_dh_game_fresh Init with "token")
   as "[fresh token]"; first solve_ndisj.
 iMod (unrelease with "rel") as "#un".
 iAssert (□ ¬ released_session si)%I as "#?".
 { iIntros "!> #?". by iApply (unreleased_released_session _ Init). }
+wp_pures.
 wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
 wp_pures. wp_eq_term e; wp_pures; last by iApply "Hpost".
 move: e => /Spec.sign_pkey_inj -> {skR}.
@@ -256,10 +255,9 @@ iLöb as "IH". iIntros "!> %Φ _ Hpost".
 wp_rec; wp_pures; wp_apply wp_fork.
 { iApply "IH" => //. }
 wp_pures. wp_apply wp_responder; first by eauto.
-iIntros "%res res".
-case: res => [[pkI' sk]|]; wp_pures; last by iApply "Hpost".
-iDestruct "res"
-  as "(%si & -> & <- & <- & #p_pkI' & #m_sk & #s_k & rel & token)".
+iIntros "%res [->|res]"; wp_pures; first by iApply "Hpost".
+iDestruct "res" as "(%skI' & %si & -> & #s_k & rel & token)".
+wp_pures.
 iPoseProof (iso_dh_game_fresh Resp with "token")
   as "[fresh token]"; first solve_ndisj.
 iMod (unrelease with "rel") as "#un".

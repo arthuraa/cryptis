@@ -91,48 +91,38 @@ Definition client_connected kI kR cs : iProp :=
   resp_pred_token cs (λ _, False%I) ∗
   resp_pred_token cs (λ _, False%I)).
 
+Lemma client_connected_session kI kR cs :
+  client_connected kI kR cs -∗
+  session kI kR Init cs.
+Proof. iIntros "(? & _)". by iApply Conn.connected_session. Qed.
+
 Lemma client_connected_ok skI skR cs :
   client_connected skI skR cs -∗
   secret skI -∗
   secret skR -∗
-  minted skI -∗
-  minted skR -∗
   ◇ □ ¬ compromised Init cs.
 Proof.
 iIntros "(conn & _)".
 by iApply (Conn.connected_ok with "conn").
 Qed.
 
-Lemma client_connected_keys kI kR cs :
-  client_connected kI kR cs -∗
-  ⌜kI = si_init cs⌝ ∗ ⌜kR = si_resp cs⌝.
-Proof.
-iIntros "(conn & _)".
-by iPoseProof (Conn.connected_keyE with "conn") as "(-> & -> & _)".
-Qed.
-
 Definition server_connected skI skR cs : iProp :=
   Conn.connected skI skR Resp cs ∗
   release_token (si_resp_share cs).
+
+Lemma server_connected_session kI kR cs :
+  server_connected kI kR cs -∗
+  session kI kR Resp cs.
+Proof. iIntros "(? & _)". by iApply Conn.connected_session. Qed.
 
 Lemma server_connected_ok skI skR cs :
   server_connected skI skR cs -∗
   secret skI -∗
   secret skR -∗
-  minted skI -∗
-  minted skR -∗
   ◇ □ ¬ compromised Resp cs.
 Proof.
 iIntros "(conn & _)".
 by iApply (Conn.connected_ok with "conn").
-Qed.
-
-Lemma server_connected_keys skI skR cs :
-  server_connected skI skR cs -∗
-  ⌜skI = si_init cs⌝ ∗ ⌜skR = si_resp cs⌝.
-Proof.
-iIntros "(conn & _)".
-by iPoseProof (Conn.connected_keyE with "conn") as "(-> & -> & _)".
 Qed.
 
 Definition call_pred φ ψ :=

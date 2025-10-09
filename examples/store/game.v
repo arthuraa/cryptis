@@ -118,7 +118,7 @@ iMod (@client_alloc _ _ _ _ _ skR with "tokenI")
   as "(client & free & token)"; eauto.
 wp_apply (wp_client_connect with "[] [] [] [] [] client"); eauto.
 iIntros "%cs client". wp_pure _ credit:"c". wp_pures.
-iPoseProof (db_connected_ok with "client s_skI s_skR [//] [//]") as "#>ok".
+iPoseProof (db_connected_ok with "client s_skI s_skR") as "#>ok".
 wp_apply wp_recv => //. iIntros "%k #p_k". wp_pures.
 wp_apply wp_recv => //. iIntros "%v #p_v". wp_pures.
 rewrite (@db_free_at_diff _ _ _ _ _ _ {[k]}) //.
@@ -132,7 +132,7 @@ wp_apply Conn.wp_session_key => //. iIntros "_".
 wp_apply (wp_send with "[//]") => //. wp_pures.
 wp_apply (wp_client_connect with "[] [] [] [] [] client"); eauto.
 iIntros "%cs' client". wp_pure _ credit:"c'". wp_pures.
-iPoseProof (db_connected_ok with "client s_skI s_skR [//] [//]") as "#>#ok'".
+iPoseProof (db_connected_ok with "client s_skI s_skR") as "#>#ok'".
 iMod (secret_public with "s_skI") as "#p_skI".
 iMod (secret_public with "s_skR") as "#p_skR".
 wp_apply wp_send => //. wp_pures.

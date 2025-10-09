@@ -92,8 +92,6 @@ Lemma db_connected_ok skI skR cs :
   db_connected skI skR cs -∗
   secret skI -∗
   secret skR -∗
-  minted skI -∗
-  minted skR -∗
   ◇ □ ¬ compromised Init cs.
 Proof.
 iIntros "(conn & _)".

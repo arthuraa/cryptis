@@ -25,7 +25,7 @@ Implicit Types (ts : nat) (T : gset term).
 Implicit Types (si : sess_info).
 
 Ltac protocol_failure :=
-  by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
+  by intros; wp_pures; iApply ("Hpost" $! None); eauto.
 
 Definition nonce_secrecy failed a : iProp :=
   if failed then True%I
@@ -55,18 +55,14 @@ Lemma wp_initiator failed c skI skR :
   (if failed then public skI ∨ public skR else True) -∗
   {{{ True }}}
     initiator c skI (Spec.pkey skR)
-  {{{ okS, RET (repr okS);
-      if okS is Some kS then ∃ si,
-        ⌜si_init si = skI⌝ ∗
-        ⌜si_resp si = skR⌝ ∗
-        ⌜si_key si = kS⌝ ∗
-        minted kS ∗
-        session Init si ∗
+  {{{ r, RET (repr r);
+      ⌜r = None⌝ ∨ ∃ si,
+        ⌜r = Some (si_key si)⌝ ∗
+        session skI skR Init si ∗
         □ (⌜failed⌝ → compromised Init si) ∗
         release_token (si_init_share si) ∗
         term_token (si_init_share si) (⊤ ∖ ↑iso_dhN)
-      else True
- }}}.
+  }}}.
 Proof.
 rewrite /initiator.
 set pkI := Spec.pkey skI.
@@ -189,8 +185,8 @@ iAssert (minted k) as "#m_k".
   rewrite !minted_TExp /= minted_TInt.
   rewrite !minted_pkey. by do !iSplit => //. }
 wp_pures. iApply ("Hpost" $! (Some k)).
-iExists si. iFrame. do !iSplitR => //.
-- iIntros "!> !> #rel". iApply "s_k1". by eauto.
+iRight. iExists si. iFrame. do !iSplitR => //.
+{ iIntros "!> !> #rel". iApply "s_k1". by eauto. }
 iApply (term_token_drop with "token_ga"). solve_ndisj.
 Qed.
 
@@ -202,29 +198,21 @@ Lemma wp_initiator_weak c skI skR :
   minted skR -∗
   {{{ True }}}
     initiator c skI (Spec.pkey skR)
-  {{{ okS, RET (repr okS);
-      if okS is Some kS then ∃ si,
-        ⌜si_init si = skI⌝ ∗
-        ⌜si_resp si = skR⌝ ∗
-        ⌜si_key si = kS⌝ ∗
-        minted kS ∗
-        ((public (si_init si) ∨ public (si_resp si))
-          ∨ □ (public kS ↔ ▷ False)) ∗
+  {{{ r, RET (repr r);
+      ⌜r = None⌝ ∨ ∃ si,
+        ⌜r = Some (si_key si)⌝ ∗
+        session_weak skI skR si ∗
         term_token (si_init_share si) (⊤ ∖ ↑iso_dhN)
-      else True
- }}}.
+  }}}.
 Proof.
 iIntros "#chan_c #ctx #? #m_skI #m_skR %Ψ !> _ Hpost".
 iApply wp_fupd. wp_apply (wp_initiator false) => //.
-iIntros "%okS HkS". case: okS => [kS|]; last by iApply ("Hpost" $! None).
-iDestruct "HkS" as "(%si & <- & <- & <- & #? & #sess & #? & rel & tok)".
+iIntros "%okS [->|HkS]"; first by iApply ("Hpost" $! None); eauto.
+iDestruct "HkS" as "(%si & -> & #sess & #? & rel & tok)".
 iMod (unrelease with "rel") as "#un". iModIntro.
-iApply ("Hpost" $! (Some (si_key si))).
-iExists si. iFrame. do !iSplit => //.
-iDestruct "sess" as "(#? & %failed & #failed & #comp)".
-case: failed; first by eauto.
-iRight. iApply (unreleased_key_secrecy Init) => //.
-iModIntro. by iSplit.
+iApply ("Hpost" $! (Some (si_key si))). iRight.
+iExists si. iFrame. iSplit => //.
+by iApply unreleased_session_weak.
 Qed.
 
 End Verif.

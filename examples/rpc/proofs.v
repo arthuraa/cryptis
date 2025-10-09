@@ -211,10 +211,10 @@ iSplit => //.
 iIntros "!> %ts !> %Ψ (conn & inv & #p_ts & inv_ts) post".
 iDestruct "inv" as "(rel & inv)". wp_pures.
 iMod (release with "rel") as "#relS".
-iPoseProof (Conn.connected_released_session with "conn") as "#s_k".
+iPoseProof (Conn.connected_session with "conn") as "#s_k".
 iAssert (|==> public (si_key cs))%I with "[inv_ts]" as ">#p_k".
 { iDestruct "inv_ts" as "[?|[_ relC]]"; first by eauto.
-  iIntros "!>". iApply "s_k". by iSplit. }
+  iIntros "!>". iApply session_released_session => //. by iSplit. }
 wp_pures. wp_list.
 wp_apply (Conn.wp_send with "[] [] [$conn]") => //.
 - by rewrite /= public_TInt.
@@ -234,7 +234,6 @@ Proof.
 iLöb as "IH".
 iIntros "%Ψ (#ctx & conn & inv & #handlers) post".
 iDestruct "conn" as "(conn & rel)".
-iPoseProof (Conn.connected_keyE with "conn") as "#(-> & -> & _)".
 wp_rec. wp_pures. wp_apply (wp_handle_close Φ _ _ cs); eauto.
 iIntros "%hc #wp_hc". wp_list.
 iAssert ([∗ list] h ∈ (hc :: handlers), wf_handler Φ _ _ cs h)%I
@@ -259,7 +258,6 @@ Lemma wp_close skI skR cs :
 Proof.
 iIntros "%Φ (#ctx & conn) post".
 iDestruct "conn" as "(conn & rel & resp_pred)".
-iPoseProof (Conn.connected_keyE with "conn") as "#(-> & -> & _)".
 wp_lam. wp_pures. wp_list.
 iMod (release with "rel") as "#relC".
 iPoseProof (ctx_close with "[//]") as "#?".

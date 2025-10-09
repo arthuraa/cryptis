@@ -25,7 +25,7 @@ Implicit Types (ts : nat) (T : gset term).
 Implicit Types (si : sess_info) (osi : option sess_info).
 
 Ltac protocol_failure :=
-  by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
+  by intros; wp_pures; iApply ("Hpost" $! None); eauto.
 
 Lemma wp_responder_wait c :
   {{{ channel c ∗ cryptis_ctx  }}}
@@ -52,17 +52,13 @@ Lemma wp_responder_accept failed c skI skR ga :
       if failed then public skI ∨ public skR
       else True }}}
     responder_accept c skR ga (Spec.pkey skI)
-  {{{ osi,
-      RET (repr (si_key <$> osi));
-      if osi is Some si then
-        ⌜si_init si = skI⌝ ∗
-        ⌜si_resp si = skR⌝ ∗
-        minted (si_key si) ∗
-        session Resp si ∗
+  {{{ r, RET (repr r);
+      ⌜r = None⌝ ∨ ∃ si,
+        ⌜r = Some (si_key si)⌝ ∗
+        session skI skR Resp si ∗
         □ (⌜failed⌝ → compromised Resp si) ∗
         release_token (si_resp_share si) ∗
-        term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN)
-      else True }}}.
+        term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN) }}}.
 Proof.
 set pkR := Spec.pkey skR.
 iIntros "%Φ (#chan_c & #? & (#? & #?) & #p_ga & #m_skI & #m_skR & #failed)
@@ -160,9 +156,8 @@ iAssert (minted (si_key si)) as "#m_kS".
   do !iSplit => //; iApply public_minted => //.
   - by iApply public_verify_key.
   - by iApply public_verify_key. }
-wp_pures.
-iApply ("Hpost" $! (Some si)).
-iModIntro. iFrame. do !iSplit => //.
+wp_pures. iApply ("Hpost" $! (Some (si_key si))).
+iModIntro. iRight. iExists si. iFrame. do !iSplit => //.
 - iIntros "!> #?". iApply "s_k1". by eauto.
 - iApply (term_token_drop with "token"). solve_ndisj.
 Qed.
@@ -172,47 +167,31 @@ Lemma wp_responder_accept_weak c skR ga skI :
       iso_dh_ctx ∗ minted skR ∗ minted skI ∗
       public ga }}}
     responder_accept c skR ga (Spec.pkey skI)
-  {{{ osi,
-      RET (repr (si_key <$> osi));
-      if osi is Some si then
-        ⌜si_init si = skI⌝ ∗
-        ⌜si_resp si = skR⌝ ∗
-        minted (si_key si) ∗
-        ((public (si_init si) ∨ public (si_resp si))
-           ∨ □ (public (si_key si) ↔ ▷ False)) ∗
-        term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN)
-      else True
- }}}.
+  {{{ r, RET (repr r);
+      ⌜r = None⌝ ∨ ∃ si,
+        ⌜r = Some (si_key si)⌝ ∗
+        session_weak skI skR si ∗
+        term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN) }}}.
 Proof.
 iIntros "%Φ (#chan_c & #ctx & #? & #m_skR & #m_skI & #p_ga) Hpost".
 iApply wp_fupd. wp_apply (wp_responder_accept false); first by eauto 10.
-iIntros "%osi Hsi".
-case: osi => [si|]; last by iApply ("Hpost" $! None).
-iDestruct "Hsi" as "(<- & <- & #m_kS & #sec & #? & rel & tok)".
+iIntros "%osi [->|Hsi]"; first by iApply ("Hpost" $! None); eauto.
+iDestruct "Hsi" as "(%si & -> & #sess & #sec & rel & tok)".
 iMod (unrelease with "rel") as "#un". iModIntro.
-iApply ("Hpost" $! (Some si)). iFrame. do !iSplit => //.
-iDestruct "sec" as "(? & %failed & ? & ?)".
-case: failed; eauto.
-iRight. iApply (unreleased_key_secrecy Resp) => //.
-iModIntro. by iSplit.
+iApply ("Hpost" $! (Some (si_key si))). iRight. iFrame. iSplit => //.
+by iApply unreleased_session_weak.
 Qed.
 
 Lemma wp_responder c skR :
   {{{ channel c ∗ cryptis_ctx ∗
       iso_dh_ctx ∗ minted skR }}}
     responder c skR
-  {{{ okS, RET (repr okS);
-      if okS is Some (pkI, kS) then ∃ si,
-        ⌜pkI = Spec.pkey (si_init si)⌝ ∗
-        ⌜si_resp si = skR⌝ ∗
-        ⌜si_key si = kS⌝ ∗
-        minted (si_init si) ∗
-        minted kS ∗
-        session Resp si ∗
+  {{{ r, RET (repr r);
+      ⌜r = None⌝ ∨ ∃ skI si,
+        ⌜r = Some (Spec.pkey skI, si_key si)⌝ ∗
+        session skI skR Resp si ∗
         release_token (si_resp_share si) ∗
-        term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN)
-      else True
- }}}.
+        term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN) }}}.
 Proof.
 iIntros "%Φ (#? & #? & #? & #?) post".
 wp_lam; wp_pures.
@@ -220,11 +199,31 @@ wp_apply wp_responder_wait; first by eauto.
 iIntros "%ga %skI (#p_ga & #m_skI)".
 wp_pures.
 wp_apply (wp_responder_accept false); first by eauto 10.
-iIntros "%osi Hosi".
-case: osi => [si|]; wp_pures; last by iApply ("post" $! None).
-iDestruct "Hosi" as "(<- & <- & #? & #? & #? & rel & token)".
+iIntros "%osi [->|Hosi]"; wp_pures; first by iApply ("post" $! None); eauto.
+iDestruct "Hosi" as "(%si & -> & #? & #? & rel & token)".
+wp_pures.
 iModIntro. iApply ("post" $! (Some (Spec.pkey _, si_key si))).
-iExists si. by iFrame; eauto 10.
+iRight. iExists skI, si. by iFrame; eauto 10.
+Qed.
+
+Lemma wp_responder_weak c skR :
+  {{{ channel c ∗ cryptis_ctx ∗
+      iso_dh_ctx ∗ minted skR }}}
+    responder c skR
+  {{{ r, RET (repr r);
+      ⌜r = None⌝ ∨ ∃ skI si,
+        ⌜r = Some (Spec.pkey skI, si_key si)⌝ ∗
+        session_weak skI skR si ∗
+        term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN) }}}.
+Proof.
+iIntros "%Φ (#? & #? & #? & #?) post". iApply wp_fupd.
+wp_apply wp_responder; first by eauto.
+iIntros "%osi [->|Hosi]"; first by iApply ("post" $! None); eauto.
+iDestruct "Hosi" as "(%skI & %si & -> & #? & rel & token)".
+iMod (unrelease with "rel") as "#un".
+iModIntro. iApply ("post" $! (Some (Spec.pkey _, si_key si))).
+iRight. iExists skI, si. iFrame. iSplit => //.
+by iApply unreleased_session_weak.
 Qed.
 
 End Verif.
