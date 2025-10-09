@@ -136,7 +136,7 @@ Lemma connected_public_key skI skR rl cs :
   connected skI skR rl cs -∗
   release_token (si_share_of rl cs) -∗
   public (si_key cs) -∗
-  ◇ compromised_session rl cs.
+  ◇ compromised rl cs.
 Proof.
 iIntros "conn rel #p_k".
 iPoseProof "conn" as "(_ & _ & <- & _ & #sess & _)".
@@ -163,7 +163,7 @@ Lemma connected_ok skI skR rl cs :
   secret skR -∗
   minted skI -∗
   minted skR -∗
-  ◇ □ ¬ compromised_session rl cs.
+  ◇ □ ¬ compromised rl cs.
 Proof.
 iIntros "(<- & <- & <- & _ & #sess & % & % & _ & _) s_kI s_kR #signI #signR".
 iDestruct "sess" as "(m_k & sess)".
@@ -181,7 +181,7 @@ Definition conn_pred rl φ kS t : iProp :=
        received_auth si (swap_role rl) (S n)).
 
 Lemma session_failed_failure rl si :
-  compromised_session rl si  ⊢ failure (si_init si) (si_resp si).
+  compromised rl si  ⊢ failure (si_init si) (si_resp si).
 Proof. by iIntros "(#failed & _)". Qed.
 
 End Defs.

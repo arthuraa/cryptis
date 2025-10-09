@@ -37,7 +37,7 @@ Lemma wp_client_load skI skR cs t1 t2 :
       db_connected skI skR cs ∗
       db_mapsto skI skR t1 t2 ∗
       public t2' ∗
-      (compromised_session Init cs ∨ ⌜t2' = t2⌝) }}}.
+      (compromised Init cs ∨ ⌜t2' = t2⌝) }}}.
 Proof.
 iIntros "#? #ctx #p_t1 !> %Φ [client mapsto] post".
 iDestruct "client" as "(conn & db)".

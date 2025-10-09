@@ -81,7 +81,7 @@ Definition db_disconnected skI skR : iProp := ∃ db,
   DB.db_state skI skR dbN db.
 
 Definition db_connected' skI skR cs : iProp := ∃ db,
-  (compromised_session Init cs ∨ db_client_ready skI skR db) ∗
+  (compromised Init cs ∨ db_client_ready skI skR db) ∗
   DB.db_state skI skR dbN db.
 
 Definition db_connected skI skR cs : iProp :=
@@ -94,7 +94,7 @@ Lemma db_connected_ok skI skR cs :
   secret skR -∗
   minted skI -∗
   minted skR -∗
-  ◇ □ ¬ compromised_session Init cs.
+  ◇ □ ¬ compromised Init cs.
 Proof.
 iIntros "(conn & _)".
 iApply (RPC.client_connected_ok with "conn").
@@ -148,7 +148,7 @@ Qed.
 Definition server_db_connected' skI skR cs vdb : iProp := ∃ db,
   public_db db ∗
   AList.is_alist vdb (repr <$> db) ∗
-  (compromised_session Resp cs ∨ db_server_ready skI skR db).
+  (compromised Resp cs ∨ db_server_ready skI skR db).
 
 Definition server_db_connected skI skR cs vdb : iProp :=
   RPC.server_connected skI skR cs ∗
@@ -205,7 +205,7 @@ Definition store_resp_pred skI skR si ts ts' : iProp :=
   ∃ db, rep_current skI skR dbN ∅ db.
 
 Lemma store_call t2' skI skR cs t1 t2 :
-  let P := compromised_session Init cs in
+  let P := compromised Init cs in
   db_connected' skI skR cs -∗
   db_mapsto skI skR t1 t2 ==∗
   (P ∨ store_call_pred skI skR cs [t1; t2']) ∗
@@ -230,7 +230,7 @@ iExists _. iFrame. iRight. iFrame.
 Qed.
 
 Lemma store_resp skI skR cs db t1 t2 :
-  let P := compromised_session Resp cs in
+  let P := compromised Resp cs in
   (P ∨ db_server_ready skI skR db) -∗
   (P ∨ store_call_pred skI skR cs [t1; t2]) ==∗
   (P ∨ db_server_ready skI skR (<[t1 := t2]>db)) ∗
@@ -251,7 +251,7 @@ Definition create_resp_pred skI skR si ts ts' : iProp :=
   ∃ db, rep_current skI skR dbN ∅ db.
 
 Lemma create_call t1 t2 skI skR cs :
-  let P := compromised_session Init cs in
+  let P := compromised Init cs in
   db_connected' skI skR cs -∗
   db_free_at skI skR {[t1]} ==∗
   (P ∨ create_call_pred skI skR cs [t1; t2]) ∗
@@ -276,7 +276,7 @@ iExists _. iFrame. iRight. iFrame.
 Qed.
 
 Lemma create_resp skI skR cs db t1 t2 :
-  let P := compromised_session Resp cs in
+  let P := compromised Resp cs in
   (P ∨ db_server_ready skI skR db) -∗
   (P ∨ create_call_pred skI skR cs [t1; t2]) ==∗
   (P ∨ db_server_ready skI skR (<[t1 := t2]>db)) ∗
@@ -298,7 +298,7 @@ Definition load_resp_pred skI skR si ts ts' : iProp :=
               rep_current skI skR dbN ∅ db.
 
 Lemma load_call t1 t2 skI skR cs :
-  let P := compromised_session Init cs in
+  let P := compromised Init cs in
   db_connected' skI skR cs -∗
   db_mapsto skI skR t1 t2 ==∗
   (P ∨ load_call_pred skI skR cs [t1]) ∗
@@ -325,7 +325,7 @@ iSplit; eauto. iExists _. iFrame. iRight. iFrame.
 Qed.
 
 Lemma load_resp skI skR cs db t1 :
-  let P := compromised_session Resp cs in
+  let P := compromised Resp cs in
   let t2 := default (TInt 0) (db !! t1) in
   (P ∨ db_server_ready skI skR db) -∗
   (P ∨ load_call_pred skI skR cs [t1]) ==∗

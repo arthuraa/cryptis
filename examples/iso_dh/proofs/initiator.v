@@ -62,7 +62,7 @@ Lemma wp_initiator failed c skI skR :
         ⌜si_key si = kS⌝ ∗
         minted kS ∗
         session Init si ∗
-        □ (⌜failed⌝ → compromised_session Init si) ∗
+        □ (⌜failed⌝ → compromised Init si) ∗
         release_token (si_init_share si) ∗
         term_token (si_init_share si) (⊤ ∖ ↑iso_dhN)
       else True
@@ -136,7 +136,7 @@ iAssert (▷ (⌜failed⌝ ∨ released_session si) → public (si_key si))%I as
   - by iApply public_verify_key.
   - iApply public_TExp => //. by iApply "s_a". }
 iAssert (|={⊤}=>
-           □ (⌜failed⌝ → compromised_session Init si) ∗
+           □ (⌜failed⌝ → compromised Init si) ∗
            ∃ failed,
              term_meta ga (iso_dhN.@"failed") failed ∗
              if failed then public (si_init si) ∨ public (si_resp si)

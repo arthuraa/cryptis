@@ -50,7 +50,7 @@ Lemma wp_connect P c skI skR :
     impl.connect c skI (Spec.pkey skR)
   {{{ cs, RET (repr cs);
       connected skI skR Init cs ∗
-      (compromised_session Init cs ∨ P) ∗
+      (compromised Init cs ∨ P) ∗
       release_token (si_init_share cs) ∗
       term_token (si_init_share cs) (⊤ ∖ ↑iso_dhN ∖ ↑connN) }}}.
 Proof.
@@ -107,7 +107,7 @@ Lemma wp_confirm P c skI skR ga :
     impl.confirm c skR (ga, Spec.pkey skI)%V
   {{{ cs, RET (repr cs);
       connected skI skR Resp cs ∗
-      (compromised_session Resp cs ∨ P) ∗
+      (compromised Resp cs ∨ P) ∗
       release_token (si_resp_share cs) ∗
       term_token (si_resp_share cs) (⊤ ∖ ↑iso_dhN ∖ ↑connN) }}}.
 Proof.

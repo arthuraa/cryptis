@@ -34,7 +34,7 @@ Lemma wp_connect P c skI skR :
     impl.connect c skI (Spec.pkey skR)
   {{{ cs, RET (repr cs);
       client_connected skI skR cs ∗
-      (compromised_session Init cs ∨ P) }}}.
+      (compromised Init cs ∨ P) }}}.
 Proof.
 iIntros "#? #? #? #? #? % !> P post".
 wp_lam; wp_pures.
@@ -70,7 +70,7 @@ Lemma wp_confirm P c skI skR ga :
     impl.confirm c skR (ga, Spec.pkey skI)%V
   {{{ cs, RET (repr cs);
       server_connected skI skR cs ∗
-      (compromised_session Resp cs ∨ P) }}}.
+      (compromised Resp cs ∨ P) }}}.
 Proof.
 iIntros "#? #ctx #? !> %Φ (#p_ga & #m_skI & #m_skR & P) post".
 wp_lam; wp_pures.
@@ -87,18 +87,18 @@ Lemma wp_call N φ ψ skI skR cs (ts : list term) :
       ([∗ list] t ∈ ts, public t) ∗
       rpc N φ ψ ∗
       client_connected skI skR cs ∗
-      (compromised_session Init cs ∨ φ skI skR cs ts) }}}
+      (compromised Init cs ∨ φ skI skR cs ts) }}}
     impl.call (repr cs) (Tag N) (repr ts)
   {{{ ts', RET (repr ts');
       client_connected skI skR cs ∗
-      (compromised_session Init cs ∨ ψ skI skR cs ts ts') ∗
+      (compromised Init cs ∨ ψ skI skR cs ts ts') ∗
       ([∗ list] t ∈ ts', public t) }}}.
 Proof.
 iIntros "%Φ (#? & #? & #p_ts & #? & conn & inv) post".
 iDestruct "conn" as "(conn & rel & resp_pred)".
 iAssert (|==>
-  (compromised_session Init cs ∨ resp_pred_token cs (ψ skI skR cs ts)) ∗
-  (compromised_session Init cs ∨
+  (compromised Init cs ∨ resp_pred_token cs (ψ skI skR cs ts)) ∗
+  (compromised Init cs ∨
      resp_pred_token cs (ψ skI skR cs ts) ∗
      φ skI skR cs ts))%I
   with "[resp_pred inv]" as ">[resp_pred inv]".
@@ -149,13 +149,13 @@ Lemma wp_handle Φ N φ₁ φ₂ skI skR cs (f : val) :
     ctx ∗
     □ (∀ (ts : list term),
       {{{ ▷ ([∗ list] t ∈ ts, public t) ∗
-          ▷ (compromised_session Resp cs ∨ φ₁ skI skR cs ts) ∗
+          ▷ (compromised Resp cs ∨ φ₁ skI skR cs ts) ∗
           Φ }}}
         f (repr ts)
       {{{ ts', RET (repr ts');
           match ts' with
           | Some ts' => ([∗ list] t ∈ ts', public t) ∗
-                        (compromised_session Resp cs ∨ φ₂ skI skR cs ts ts')
+                        (compromised Resp cs ∨ φ₂ skI skR cs ts ts')
           | None => True
           end ∗
           Φ }}})
@@ -172,7 +172,7 @@ iIntros "!> %ts !> %Ψ (conn & I & #p_ts & inv_ts) post".
 iDestruct "I" as "(rel & I)". wp_pures.
 iAssert (Conn.connected skI skR Resp cs ∗
          release_token (si_resp_share cs) ∗
-         ◇ (compromised_session Resp cs ∨
+         ◇ (compromised Resp cs ∨
               resp_pred_token cs (φ₂ skI skR cs ts) ∗
               φ₁ skI skR cs ts))%I
   with "[conn rel inv_ts]" as "(conn & rel & >inv_ts)".

@@ -59,7 +59,7 @@ Lemma wp_responder_accept failed c skI skR ga :
         ⌜si_resp si = skR⌝ ∗
         minted (si_key si) ∗
         session Resp si ∗
-        □ (⌜failed⌝ → compromised_session Resp si) ∗
+        □ (⌜failed⌝ → compromised Resp si) ∗
         release_token (si_resp_share si) ∗
         term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN)
       else True }}}.
@@ -124,7 +124,7 @@ iAssert (▷ (⌜failed⌝ ∨ released_session si) → public (si_key si))%I as
   - by iApply public_verify_key.
   - iApply public_TExp => //. by iApply "s_b". }
 iAssert (|={⊤}=>
-           □ (⌜failed⌝ → compromised_session Resp si) ∗
+           □ (⌜failed⌝ → compromised Resp si) ∗
            ∃ failed,
              term_meta gb (iso_dhN.@"failed") failed ∗
              if failed then

@@ -86,7 +86,7 @@ rewrite /si_key /=. case => /Spec.of_list_inj.
 by case=> /Spec.sign_pkey_inj <- /Spec.sign_pkey_inj <- <- <- <-.
 Qed.
 
-Definition compromised_session rl si : iProp :=
+Definition compromised rl si : iProp :=
   (public (si_init si) ∨ public (si_resp si)) ∗
   public (si_key si) ∗
   term_meta (si_share_of rl si) (iso_dhN.@"failed") true.
@@ -187,7 +187,7 @@ Lemma session_compromised rl si :
   session rl si -∗
   public (si_key si) -∗
   release_token (si_share_of rl si) -∗
-  ◇ compromised_session rl si.
+  ◇ compromised rl si.
 Proof.
 iIntros "(#comp1 & %failed & #failed & #comp2) #p_k rel".
 case: failed; first by do !iSplit => //.
@@ -199,7 +199,7 @@ Lemma session_not_compromised rl si :
   session rl si -∗
   secret (si_init si) -∗
   secret (si_resp si) -∗
-  ◇ □ ¬ compromised_session rl si.
+  ◇ □ ¬ compromised rl si.
 Proof.
 iIntros "(#comp1 & %failed & #failed & #comp2) s_kI s_kR".
 case: failed; last first.

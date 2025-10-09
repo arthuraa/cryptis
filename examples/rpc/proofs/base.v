@@ -87,7 +87,7 @@ Qed.
 Definition client_connected kI kR cs : iProp :=
   Conn.connected kI kR Init cs ∗
   release_token (si_init_share cs) ∗
-  (compromised_session Init cs ∨
+  (compromised Init cs ∨
   resp_pred_token cs (λ _, False%I) ∗
   resp_pred_token cs (λ _, False%I)).
 
@@ -97,7 +97,7 @@ Lemma client_connected_ok skI skR cs :
   secret skR -∗
   minted skI -∗
   minted skR -∗
-  ◇ □ ¬ compromised_session Init cs.
+  ◇ □ ¬ compromised Init cs.
 Proof.
 iIntros "(conn & _)".
 by iApply (Conn.connected_ok with "conn").
@@ -121,7 +121,7 @@ Lemma server_connected_ok skI skR cs :
   secret skR -∗
   minted skI -∗
   minted skR -∗
-  ◇ □ ¬ compromised_session Resp cs.
+  ◇ □ ¬ compromised Resp cs.
 Proof.
 iIntros "(conn & _)".
 by iApply (Conn.connected_ok with "conn").
