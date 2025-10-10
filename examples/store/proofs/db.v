@@ -160,7 +160,7 @@ iMod (term_own_update_2 _ _ (a' := (_ ⋅ _)) with "Hauth Hfree") as "[Hauth Hfr
 iModIntro. by iFrame.
 Qed.
 
-Lemma client_alloc kI kR N E :
+Lemma db_state_alloc kI kR N E :
   ↑N.@"client".@kR.@"state" ⊆ E →
   term_token kI E ==∗
   db_state kI kR N ∅ ∗

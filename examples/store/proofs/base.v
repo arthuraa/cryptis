@@ -121,7 +121,7 @@ rewrite (term_token_difference _ _ _ sub).
 iDestruct "skI_token" as "[skI_token ?]". iFrame.
 iMod (rep_main_alloc (N := dbN) skI (kR := skR) ∅ with "skI_token")
   as "(main & cur & skI_token)"; first solve_ndisj.
-iMod (DB.client_alloc _ (N := dbN) with "skI_token")
+iMod (DB.db_state_alloc _ (N := dbN) with "skI_token")
   as "(state & free & skI_token)".
 { solve_ndisj. }
 iModIntro. iFrame. iRight. by iFrame.
