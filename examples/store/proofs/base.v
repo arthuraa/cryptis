@@ -101,6 +101,12 @@ Qed.
 Definition db_mapsto skI skR t1 t2 : iProp :=
   DB.mapsto skI skR dbN t1 t2.
 
+Lemma db_mapsto_excl skI skR t t1 t2 :
+  db_mapsto skI skR t t1 -∗
+  db_mapsto skI skR t t2 -∗
+  False.
+Proof. exact: DB.mapsto_excl. Qed.
+
 Definition db_free_at skI skR T : iProp :=
   DB.free_at skI skR dbN T.
 

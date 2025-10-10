@@ -2,10 +2,9 @@
 -arg "-w -redundant-canonical-projection"
 -arg "-w -notation-overridden"
 
--R examples cryptis.examples
 -R cryptis cryptis
-
-cryptis/summary.v
+-R examples cryptis.examples
+-R summary cryptis.summary
 
 cryptis/lib/mathcomp_compat.v
 cryptis/lib/term_set.v
@@ -119,5 +118,6 @@ examples/tls13.v
 
 examples/composite_game.v
 
-## Storage
+# Summary
 
+summary/summary.v
