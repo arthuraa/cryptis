@@ -95,6 +95,28 @@ general functionality are given in `wp_initiator`
 reference, the specifications of Theorem 5.1 are also proved
 (`wp_initiator_weak` and `wp_responder_weak`).
 
+### Reliable connections
+
+The specifications in the paper mirror those in our development.  In terms of
+implementation, however, `recv` function works a bit differently from how it was
+defined in Section 6: it is implemented with a more general `select` function
+that allows an agent to invoke a different handler depending on the type of
+message that it received.  The reason is that `select` makes it simpler to
+implement the server logic of the RPC functionality: we just need to specify how
+each type of call is handled.
+
+### Remote procedure calls
+
+The specifications of `call` and `close` are the same in the paper and the
+development, except for some minor auxiliary definitions that we left out of the
+paper for space reasons.  The development also has the specifications for the
+server functions, which were omitted from the paper.  In particular, the
+`wp_server` function says that a connected server can initiate a loop where it
+awaits for calls from the client on the other end of the connection, provided
+that the server has correct handlers for all the calls it wants to respond to.
+
+### Key-value store
+
 ## Dependencies
 
 Cryptis is known to compile with the following dependencies:

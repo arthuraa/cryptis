@@ -71,7 +71,7 @@ Implicit Types v : val.
 Implicit Types (failed : bool).
 
 Definition db_client_ready skI skR db : iProp :=
-  rep_main skI skR dbN db ∗ rep_current skI skR dbN ∅ db.
+  rep_main skI skR dbN db ∗ rep_sync skI skR dbN ∅ db.
 
 Definition db_server_ready skI skR db : iProp :=
   rep_copy skI skR dbN ∅ db.
@@ -200,7 +200,7 @@ Definition store_call_pred skI skR si ts : iProp :=
     rep_update skI skR dbN ∅ db (<[t1 := t2]> db).
 
 Definition store_resp_pred skI skR si ts ts' : iProp :=
-  ∃ db, rep_current skI skR dbN ∅ db.
+  ∃ db, rep_sync skI skR dbN ∅ db.
 
 Lemma store_call t2' skI skR cs t1 t2 :
   let P := compromised Init cs in
@@ -223,7 +223,7 @@ iModIntro. iSplitL "cur".
 { iRight. iExists _, _, _. by iFrame. }
 iIntros "%ts [#?|(%db' & cur)]".
 { iExists _. iFrame. by eauto. }
-iPoseProof (rep_main_current with "ready cur") as "<-".
+iPoseProof (rep_main_sync with "ready cur") as "<-".
 iExists _. iFrame. iRight. iFrame.
 Qed.
 
@@ -246,7 +246,7 @@ Definition create_call_pred skI skR si ts : iProp :=
     rep_update skI skR dbN ∅ db (<[t1 := t2]>db).
 
 Definition create_resp_pred skI skR si ts ts' : iProp :=
-  ∃ db, rep_current skI skR dbN ∅ db.
+  ∃ db, rep_sync skI skR dbN ∅ db.
 
 Lemma create_call t1 t2 skI skR cs :
   let P := compromised Init cs in
@@ -269,7 +269,7 @@ iModIntro. iSplitL "upd".
 { iRight. iExists _, _, _. iFrame. by eauto. }
 iIntros "% [#?|(%db' & cur)]".
 { iExists _. iFrame. by eauto. }
-iPoseProof (rep_main_current with "ready cur") as "<-".
+iPoseProof (rep_main_sync with "ready cur") as "<-".
 iExists _. iFrame. iRight. iFrame.
 Qed.
 
@@ -293,7 +293,7 @@ Definition load_call_pred skI skR si ts : iProp :=
 
 Definition load_resp_pred skI skR si ts ts' : iProp :=
   ∃ t1 t2 db, ⌜ts = [t1]⌝ ∗ ⌜ts' = [t2]⌝ ∗ ⌜db !! t1 = Some t2⌝ ∗
-              rep_current skI skR dbN ∅ db.
+              rep_sync skI skR dbN ∅ db.
 
 Lemma load_call t1 t2 skI skR cs :
   let P := compromised Init cs in
@@ -316,7 +316,7 @@ iModIntro. iSplitR "ready state".
 { iRight. iExists _, _, _. iFrame. by eauto. }
 iIntros "% [#?|(%t1' & %t2' & %db' & %et1 & -> & %db_t1' & cur)]".
 { iSplit; eauto. iFrame. by eauto. }
-iPoseProof (rep_main_current with "ready cur") as "<-".
+iPoseProof (rep_main_sync with "ready cur") as "<-".
 case: et1 => <- in db_t1' *.
 rewrite db_t1' in db_t1. case: db_t1 => ->.
 iSplit; eauto. iExists _. iFrame. iRight. iFrame.

@@ -5,7 +5,6 @@ From iris.algebra Require Import cmra agree auth csum gset gmap excl frac.
 From iris.algebra Require Import functions.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term cryptis primitives tactics.
-From cryptis.lib Require Import replica.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
