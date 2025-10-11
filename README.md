@@ -154,11 +154,15 @@ enough to install all the required dependencies.  Simply run `nix develop`.
 
 Make sure to add the Rocq opam repository to your switch:
 
-```opam repo add rocq-released https://rocq-prover.org/opam/released```
+```
+opam repo add rocq-released https://rocq-prover.org/opam/released
+```
 
 Afterwards, Cryptis can be installed with:
 
-```opam install .```
+```
+opam install .
+```
 
 Alternatively, run `make builddep` to produce and install a dummy package that
 installs the correct dependencies.
