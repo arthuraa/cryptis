@@ -3,6 +3,7 @@
 LABEL=$1
 OUTPUT=$2
 DIR=$3
+MAKEJ=$4
 
 ALL_VOS=$(find $DIR -iname "*.v" | sed 's/$/o/')
 
@@ -12,7 +13,7 @@ fi
 
 # Compile all command arguments, outputting total time to time.out and saving
 # the make output to make.out.
-/usr/bin/time -o time.out -f "%e" make -f RocqMakefile -j8 $ALL_VOS | tee make.out
+/usr/bin/time -o time.out -f "%e" make -f RocqMakefile -j $MAKEJ $ALL_VOS | tee make.out
 
 # Round time to nearest integer
 TIME=$(cat time.out | awk '{print int($1 + 0.5)}')
