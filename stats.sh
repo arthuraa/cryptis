@@ -47,7 +47,7 @@ echo "RPC"
 
 echo "Store"
 
-./example_stats.sh "Store (\\Cref{sec:key-value-auth})" table.tex \
+./example_stats.sh "Store (\\Cref{sec:key-value})" table.tex \
      examples/store $MAKEJ
 
 cat >> table.tex <<EOF
