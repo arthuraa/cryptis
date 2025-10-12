@@ -88,10 +88,10 @@ Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); eauto.
 
 Lemma wp_init c skI skR :
-  channel c -∗
-  cryptis_ctx -∗
-  nsl_ctx -∗
-  minted skI -∗
+  channel c ∗
+  cryptis_ctx ∗
+  nsl_ctx ∗
+  minted skI ∗
   minted skR -∗
   {{{ True }}}
     init c skI (Spec.pkey skR)
@@ -101,7 +101,7 @@ Lemma wp_init c skI skR :
         session_NSL skI skR si ∗
         term_token (si_init_share si) (⊤ ∖ ↑nslN) }}}.
 Proof.
-iIntros "#chan_c #ctx #(?&?&?) #m_skI #m_skR %Ψ !> _ Hpost".
+iIntros "(#chan_c & #ctx & #(?&?&?) & #m_skI & #m_skR) !> %Ψ _ Hpost".
 iAssert (public (Spec.pkey skI)) as "?". { by iApply public_aenc_key. }
 iAssert (public (Spec.pkey skR)) as "?". { by iApply public_aenc_key. }
 rewrite /init. wp_pures. wp_apply wp_pkey. wp_pures.
@@ -150,9 +150,9 @@ iModIntro. iSplit.
 Qed.
 
 Lemma wp_resp c skR :
-  channel c -∗
-  cryptis_ctx -∗
-  nsl_ctx -∗
+  channel c ∗
+  cryptis_ctx ∗
+  nsl_ctx ∗
   minted skR -∗
   {{{ True }}}
     resp c skR
@@ -163,7 +163,7 @@ Lemma wp_resp c skR :
         term_token (si_resp_share si) (⊤ ∖ ↑nslN)
   }}}.
 Proof.
-iIntros "#chan_c #ctx #(?&?&?) #aencR %Ψ !> _ Hpost".
+iIntros "(#chan_c & #ctx & #(?&?&?) & #aencR) !> %Ψ _ Hpost".
 iAssert (public (Spec.pkey skR)) as "?". { by iApply public_aenc_key. }
 rewrite /resp. wp_pures. wp_apply wp_pkey. wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m1) "#p_m1".

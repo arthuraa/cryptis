@@ -65,8 +65,8 @@ wp_lam. wp_pures.
 wp_apply wp_server_handle_create; eauto. iIntros "% #?". wp_list.
 wp_apply wp_server_handle_load; eauto. iIntros "% #?". wp_list.
 wp_apply wp_server_handle_store; eauto. iIntros "% #?". wp_list.
-wp_apply (RPC.wp_server with "[$conn db]").
-{ iSplit => //. iSplit; last first.
+wp_apply (RPC.wp_server with "[] [$conn db]"); eauto.
+{ iSplit; last first.
   { rewrite /=. do !iSplit => //. }
   by []. }
 iIntros "(dis & %db & #p_db & vdb & ready)".
@@ -147,9 +147,7 @@ Proof.
 iIntros "%Φ (#? & #chan_c & #ctx & server) post".
 wp_lam; wp_pures.
 iPoseProof (store_ctx_rpc_ctx with "ctx") as "?".
-wp_apply (RPC.wp_listen
-         with "[# //] [# //] [# //] [#]") => //;
-  try by solve_ndisj.
+wp_apply (RPC.wp_listen with "[# $] [#]"); try by solve_ndisj.
 iIntros "%ga %skA #[p_ga p_skA]". wp_pures.
 wp_bind (Server.find_client _ _).
 iApply (wp_server_find_client with "[$server]") => //.
@@ -163,9 +161,9 @@ iDestruct "dis" as "(%db & #p_db & vdb & ready)".
 iAssert (minted (ss_key ss)) as "#?".
 { by iDestruct "server" as "(% & % & ? & _)". }
 wp_pures.
-wp_apply (RPC.wp_confirm (db_server_ready skA (ss_key ss) db)
-           with "[] [] [] [$ready]") => //.
-{ do 3!iSplit => //. }
+wp_apply (RPC.wp_confirm (db_copy skA (ss_key ss) db)
+           with "[] [$ready]") => //.
+{ by iFrame "#". }
 iIntros "%cs (conn & ready)".
 wp_pures.
 iApply (wp_fork with "[conn vdb locked ready]").

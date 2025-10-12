@@ -186,9 +186,10 @@ wp_pures; wp_apply wp_is_verify_key.
 { by iApply public_minted. }
 iSplit; last by wp_pures; iApply "Hpost".
 iIntros "%skR' -> #m_skR'". wp_pures.
-wp_pures. wp_apply (wp_initiator false) => //.
-iIntros "%ts [->|tsP]"; wp_pures; first by iApply "Hpost".
-iDestruct "tsP" as "(%si & -> & #s_k & #? & rel & token)".
+wp_smart_apply (wp_initiator false) as "%ts [->|tsP]" => //.
+- by iFrame "#".
+- wp_pures. by iApply "Hpost".
+wp_pures. iDestruct "tsP" as "(%si & -> & #s_k & #? & rel & token)".
 iPoseProof (iso_dh_game_fresh Init with "token")
   as "[fresh token]"; first solve_ndisj.
 iMod (unrelease with "rel") as "#un".

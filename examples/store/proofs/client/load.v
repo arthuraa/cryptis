@@ -27,8 +27,8 @@ Implicit Types γ : gname.
 Implicit Types v : val.
 
 Lemma wp_client_load skI skR cs t1 t2 :
-  cryptis_ctx -∗
-  store_ctx -∗
+  cryptis_ctx ∗
+  store_ctx ∗
   public t1 -∗
   {{{ db_connected skI skR cs ∗
       db_mapsto skI skR t1 t2 }}}
@@ -39,12 +39,12 @@ Lemma wp_client_load skI skR cs t1 t2 :
       public t2' ∗
       (compromised Init cs ∨ ⌜t2' = t2⌝) }}}.
 Proof.
-iIntros "#? #ctx #p_t1 !> %Φ [client mapsto] post".
+iIntros "(#? & #ctx & #p_t1) !> %Φ [client mapsto] post".
 iDestruct "client" as "(conn & db)".
 iMod (load_call t1 with "db mapsto") as "(load & mapsto & waiting)".
 wp_lam; wp_pures. wp_list.
 iDestruct "ctx" as "(_ & ? & _ & ctx)".
-wp_apply (RPC.wp_call with "[$conn $load]").
+wp_apply (RPC.wp_call with "[] [$conn $load]").
 { do 4!iSplit => //=; by eauto. }
 iIntros "%ts' (conn & inv_ts & p_ts)". wp_pures.
 iPoseProof ("waiting" with "inv_ts") as "(res & db)".

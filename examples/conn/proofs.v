@@ -41,10 +41,10 @@ iIntros "% _ post". wp_lam. wp_pures. by iApply "post".
 Qed.
 
 Lemma wp_connect P c skI skR :
-  channel c -∗
-  cryptis_ctx -∗
-  iso_dh_ctx -∗
-  minted skI -∗
+  channel c ∗
+  cryptis_ctx ∗
+  iso_dh_ctx ∗
+  minted skI ∗
   minted skR -∗
   {{{ failure skI skR ∨ P }}}
     impl.connect c skI (Spec.pkey skR)
@@ -54,7 +54,7 @@ Lemma wp_connect P c skI skR :
       release_token (si_init_share cs) ∗
       term_token (si_init_share cs) (⊤ ∖ ↑iso_dhN ∖ ↑connN) }}}.
 Proof.
-iIntros "#? #? #? #? #? % !> HP post".
+iIntros "(#? & #? & #? & #? & #?) % !> HP post".
 rewrite bi.or_alt. iDestruct "HP" as "(%failed & HP)".
 wp_lam. wp_pure _ credit:"c1". wp_pure _ credit:"c2".
 wp_pures. wp_bind (do_until _).
@@ -62,9 +62,9 @@ iAssert (if failed then failure skI skR else True)%I as "#?".
 { by case: failed. }
 iCombine "HP post c1 c2" as "post". iApply (wp_frame_wand with "post").
 wp_apply wp_do_until'. iModIntro.
-wp_pures.
-wp_apply (wp_initiator failed with "[//] [//] [] [] []") => //.
-iIntros "%res [->|resP]"; first by eauto.
+wp_smart_apply (wp_initiator failed) as "%res [->|resP]" => //.
+- by iFrame "#".
+- by eauto.
 iDestruct "resP" as "(%si & -> & #sess & #comp & rel & token)".
 iRight. iExists _. iSplit => //.
 iIntros "(dis & post & c1 & c2)".
@@ -83,24 +83,26 @@ iApply (term_token_drop with "token"). solve_ndisj.
 Qed.
 
 Lemma wp_listen c :
-  channel c -∗
-  cryptis_ctx -∗
+  channel c ∗
+  cryptis_ctx ∗
   iso_dh_ctx -∗
   {{{ True }}}
     impl.listen c
   {{{ ga skI, RET (ga, Spec.pkey skI)%V;
       public ga ∗ minted skI }}}.
 Proof.
-iIntros "#? #? #? % !> _ post". wp_lam.
+iIntros "(#? & #? & #?) % !> _ post". wp_lam.
 wp_apply wp_responder_listen; eauto.
 Qed.
 
 Lemma wp_confirm P c skI skR ga :
-  channel c -∗
-  cryptis_ctx -∗
-  iso_dh_ctx -∗
-  {{{ public ga ∗ minted skI ∗ minted skR ∗
-      (failure skI skR ∨ P) }}}
+  channel c ∗
+  cryptis_ctx ∗
+  iso_dh_ctx ∗
+  public ga ∗
+  minted skI ∗
+  minted skR -∗
+  {{{ failure skI skR ∨ P }}}
     impl.confirm c skR (ga, Spec.pkey skI)%V
   {{{ cs, RET (repr cs);
       connected skI skR Resp cs ∗
@@ -108,7 +110,7 @@ Lemma wp_confirm P c skI skR ga :
       release_token (si_resp_share cs) ∗
       term_token (si_resp_share cs) (⊤ ∖ ↑iso_dhN ∖ ↑connN) }}}.
 Proof.
-iIntros "#? #ctx #? !> %Φ (#p_ga & #p_pkA & #sign_skB & P) post".
+iIntros "(#? & #ctx & #? & #p_ga & #p_pkA & #sign_skB) !> %Φ P post".
 rewrite bi.or_alt. iDestruct "P" as "(%failed & P)".
 wp_lam. wp_pures.
 iAssert (if failed then failure skI skR else True)%I
@@ -148,14 +150,14 @@ iModIntro. by iFrame.
 Qed.
 
 Lemma wp_send skI skR rl cs N ts φ :
-  senc_pred N (conn_pred rl φ) -∗
+  senc_pred N (conn_pred rl φ) ∗
   ([∗ list] t ∈ ts, public t) -∗
   {{{ connected skI skR rl cs ∗
       (public (si_key cs) ∨ φ skI skR cs ts) }}}
     impl.send (repr cs) (Tag N) (repr ts)
   {{{ RET #(); connected skI skR rl cs }}}.
 Proof.
-iIntros "#pred #p_ts !> %Φ (conn & inv) post".
+iIntros "(#pred & #p_ts) !> %Φ (conn & inv) post".
 iDestruct "conn" as "(<- & #sess & #chan & %n & %m & counters & recv)".
 wp_lam. wp_pures.
 wp_apply wp_channel => //. iIntros "_". wp_pures.
@@ -187,9 +189,9 @@ iIntros "counters". iApply "post". iFrame. by eauto.
 Qed.
 
 Lemma wp_try_open N φ skI skR rl cs t :
-  {{{ senc_pred N (conn_pred (swap_role rl) φ) ∗
-      connected skI skR rl cs ∗
-      public (TSeal (si_key cs) t) }}}
+  senc_pred N (conn_pred (swap_role rl) φ) ∗
+  public (TSeal (si_key cs) t) -∗
+  {{{ connected skI skR rl cs }}}
     impl.try_open (repr cs) (Tag N) t
   {{{ res, RET res;
       connected skI skR rl cs ∗
@@ -198,7 +200,7 @@ Lemma wp_try_open N φ skI skR rl cs t :
              ([∗ list] t ∈ ts, public t) ∗
              (public (si_key cs) ∨ φ skI skR cs ts)) }}}.
 Proof.
-iIntros "%Φ (#Φ & conn & #p_t) post".
+iIntros "(#φ & #p_t) !> %Φ conn post".
 rewrite /impl.try_open.
 wp_pure _ credit:"c1".
 wp_pure _ credit:"c2".
@@ -300,7 +302,7 @@ Proof.
 iIntros "%Ξ [#? #wp] post". wp_lam. wp_pures.
 iIntros "!>". iApply ("post" $! (Handler _)). clear Ξ.
 iIntros "!> %t !> %Ξ (#p_t & conn & inv) post". wp_pures.
-wp_apply (wp_try_open with "[$conn]"); eauto.
+wp_apply (wp_try_open with "[] [$conn]"); eauto.
 iIntros "%res (conn & [->|(%ts & -> & #p_ts & inv_ts)])"; wp_pures.
 { iApply ("post" $! None). by iFrame. }
 wp_apply ("wp" with "[$inv $conn $inv_ts]") => //.

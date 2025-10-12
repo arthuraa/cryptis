@@ -36,7 +36,7 @@ iIntros "!> %Φ client post".
 iDestruct "client" as "(conn & %db & ready & state)".
 iPoseProof (RPC.client_connected_session with "conn") as "#sess".
 wp_lam. wp_pures.
-wp_apply (RPC.wp_close with "[$conn]"); eauto.
+wp_apply (RPC.wp_close with "[] [$conn]"); eauto.
 iIntros "pub". iApply "post". iFrame. 
 iDestruct "ready" as "[#?|ready]"; eauto.
 iLeft. by iApply session_compromised'.

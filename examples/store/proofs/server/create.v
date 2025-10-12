@@ -27,11 +27,12 @@ Implicit Types v : val.
 Ltac failure := iLeft; iFrame; eauto.
 
 Lemma wp_server_handle_create skI skR cs (vdb : val) :
-  {{{ cryptis_ctx ∗ store_ctx }}}
+  cryptis_ctx ∗ store_ctx -∗
+  {{{ True }}}
     RPC.handle (Tag $ dbN.@"create") (Server.handle_create (repr cs) vdb)
   {{{ h, RET (repr h); server_handler skI skR cs vdb h }}}.
 Proof.
-iIntros "%Φ (#ctx & #ctx') post".
+iIntros "(#ctx & #ctx') !> %Φ _ post".
 iPoseProof (store_ctx_create with "[//]") as "?".
 iPoseProof (store_ctx_rpc_ctx with "[//]") as "?".
 wp_lam. wp_pures.
