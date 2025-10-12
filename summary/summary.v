@@ -286,12 +286,12 @@ encryption, digital signatures, symmetric encryption, key generation.
 
 *)
 
-Lemma unknown_alloc : ⊢ |==> ∃ γ, unknown γ.
-Proof. exact: unknown_alloc. Qed.
+Lemma pending_alloc : ⊢ |==> ∃ γ, pending γ.
+Proof. exact: pending_alloc. Qed.
 
 Lemma secret_alloc t γ :
-  □ (public t ↔ ▷ known γ 1) -∗
-  unknown γ -∗
+  □ (public t ↔ ▷ shot γ 1) -∗
+  pending γ -∗
   secret t.
 Proof. exact: secret_alloc. Qed.
 
