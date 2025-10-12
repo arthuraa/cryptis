@@ -91,6 +91,9 @@ Definition compromised rl si : iProp :=
   public (si_key si) ∗
   term_meta (si_share_of rl si) (iso_dhN.@"failed") true.
 
+Lemma compromised_public rl si : compromised rl si ⊢ public (si_key si).
+Proof. by iIntros "(_ & ? & _)". Qed.
+
 Definition release_token share : iProp :=
   term_token share (↑iso_dhN.@"released").
 
