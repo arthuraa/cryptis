@@ -16,8 +16,8 @@ the code, follow these steps:
 1. Open a terminal by clicking on the bar icon on the top-left corner of the
    screen, typing "terminal" and hitting "enter".
    
-2. Go to the Cryptis directory by running `cd Desktop/Cryptis`.  This will set
-   up an environment with all the required dependencies.
+2. Go to the Cryptis directory by running `cd Cryptis`.  This will set up an
+   environment with all the required dependencies.
    
 3. You can compile the development with `make` (see below for more information).
    After compiling the development, you can also run the proofs interactively
