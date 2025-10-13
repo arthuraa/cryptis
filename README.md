@@ -84,8 +84,8 @@ jobs.  By default, the script will only run one job at a time.
 ## List of claims made in the paper
 
 The file `summary/summary.v` lists all the theorems and rules claimed in the
-paper. These results are group by the section where appear in the paper. You can
-run this through this file interactively after compiling the development.
+paper. These results are grouped by the section where appear in the paper. You
+can run this through this file interactively after compiling the development.
 
 The Cryptis development differs in a few ways from the paper presentation.  We
 list the most salient differences below for ease of reference.  The following
