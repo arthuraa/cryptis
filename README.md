@@ -6,8 +6,9 @@ in Separation Logic".
 ## Browsing the development with a virtual machine
 
 For your convenience, this artifact is available under a virtual machine with
-all the required dependencies pre-installed.  After turning on the VM, you can
-log in with the username "cryptis" and the password "cryptis".
+all the required dependencies pre-installed.  The VM runs under VirtualBox
+7.1. After turning on the VM, you can log in with the username "cryptis" and the
+password "cryptis".
 
 The directory with the Cryptis development is shown in the Desktop.  To compile
 the code, follow these steps:
@@ -15,8 +16,8 @@ the code, follow these steps:
 1. Open a terminal by clicking on the bar icon on the top-left corner of the
    screen, typing "terminal" and hitting "enter".
    
-2. Go to the Cryptis directory by running `cd Desktop/Cryptis`.  This will load
-   all the required dependencies.
+2. Go to the Cryptis directory by running `cd Desktop/Cryptis`.  This will set
+   up an environment with all the required dependencies.
    
 3. You can compile the development with `make` (see below for more information).
    After compiling the development, you can also run the proofs interactively
