@@ -173,7 +173,7 @@ notation corresponds to two resources: `db_mapsto skC skS t t'` says that the
 key `t` is mapped to the value `t'`, and `db_free skC skS T` says that no term
 `t ∈ T` is present in the database.
 
-The game in Figure 4 is also a bit different: the paper version was split into
+The game in Figure 6 is also a bit different: the paper version was split into
 two functions to better fit the page.
 
 ## Structure of the rest of the development
