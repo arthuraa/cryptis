@@ -10,8 +10,6 @@ cryptis/lib/mathcomp_compat.v
 cryptis/lib/term_set.v
 cryptis/lib/gen_adequacy.v
 cryptis/lib/adequacy.v
-cryptis/lib/session.v
-cryptis/lib/dh.v
 cryptis/lib/replica.v
 cryptis/lib/gmeta.v
 cryptis/lib/nown.v
@@ -85,38 +83,6 @@ examples/store/proofs/server/create.v
 examples/store/proofs/db.v
 examples/store/proofs.v
 examples/store/game.v
-
-## Simple examples
-
-examples/permanent.v
-examples/counter.v
-examples/nsl_secr.v
-examples/nsl_auth.v
-
-## NSL
-
-## CR
-
-examples/challenge_response.v
-
-## Public-key authentication (generalized NSL)
-
-examples/pk_auth/pk_auth.v
-examples/pk_auth/impl.v
-examples/pk_auth/shared.v
-examples/pk_auth/client_proofs.v
-examples/pk_auth/server_proofs.v
-examples/pk_auth/nsl.v
-examples/pk_auth/dh_game.v
-examples/pk_auth/dh.v
-
-## TLS 1.3
-
-examples/tls13.v
-
-## Composite
-
-examples/composite_game.v
 
 # Summary
 
