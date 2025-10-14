@@ -146,6 +146,12 @@ and then derives the weaker ones.  Because of this, the signature predicates
 that we use (`examples/iso_dh/proofs/base.v`) are a bit different from what
 appears in Fig. 10.
 
+One minor difference between the weak specifications and the one given in
+Theorem 5.1 is that the latter provides a full token for each key share, whereas
+the former must consume part of the token.  This is because the weak
+specifications are proved using the strong ones, and the strong specifications
+require using part of the metadata token to create the release tokens.
+
 ### Reliable connections
 
 The implementation of the `recv` function is a bit different from what is shown
