@@ -91,17 +91,17 @@ The Cryptis development differs in a few ways from the paper presentation.  We
 list the most salient differences below for ease of reference.  The following
 table summarizes how the notations in the paper map to Rocq definitions.
 
-| Paper notation   | Rocq equivalent                         |
-|------------------|-----------------------------------------|
-| `t ^ t1 .. tn`   | `TExpN t [t1; ..; tn]`                  |
-| `F, N ↦ φ`       | `seal_pred F N φ` (when `F` is generic) |
-| `aenc, N ↦ φ`    | `aenc_pred N φ`                         |
-| `sign, N ↦ φ`    | `sign_pred N φ`                         |
-| `senc, N ↦ φ`    | `senc_pred N φ`                         |
-| `token F E`      | `seal_pred_token F E`                   |
-| `t, N ↦ x`       | `term_meta t N x`                       |
-| `token t E`      | `term_token t E`                        |
-| `t ↦db ot'`      | `db_mapsto` or `db_free`                |
+| Paper notation | Rocq equivalent                         |
+|----------------|-----------------------------------------|
+| `t ^ t1 .. tn` | `TExpN t [t1; ..; tn]`                  |
+| `F ↦N φ`       | `seal_pred F N φ` (when `F` is generic) |
+| `aenc ↦N φ`    | `aenc_pred N φ`                         |
+| `sign ↦N φ`    | `sign_pred N φ`                         |
+| `senc ↦N φ`    | `senc_pred N φ`                         |
+| `token F E`    | `seal_pred_token F E`                   |
+| `t ↦N x`       | `term_meta t N x`                       |
+| `token t E`    | `term_token t E`                        |
+| `t ↦db ot'`    | `db_mapsto` or `db_free`                |
 
 
 ### Minted terms
