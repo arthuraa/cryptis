@@ -99,7 +99,7 @@ Lemma wp_init c skI skR :
       ⌜r = None⌝ ∨ ∃ si,
         ⌜r = Some (si_key si)⌝ ∗
         session_NSL skI skR si ∗
-        term_token (si_init_share si) (⊤ ∖ ↑nslN) }}}.
+        term_token (si_init_share si) ⊤ }}}.
 Proof.
 iIntros "(#chan_c & #ctx & #(?&?&?) & #m_skI & #m_skR) !> %Ψ _ Hpost".
 iAssert (public (Spec.pkey skI)) as "?". { by iApply public_aenc_key. }
@@ -107,8 +107,6 @@ iAssert (public (Spec.pkey skR)) as "?". { by iApply public_aenc_key. }
 rewrite /init. wp_pures. wp_apply wp_pkey. wp_pures.
 wp_apply (wp_mk_nonce (λ _, public skI ∨ public skR)%I (λ _, False)%I) => //.
 iIntros "%nI _ #m_nI #s_nI _ token".
-rewrite (term_token_difference _ (↑nslN)) //.
-iDestruct "token" as "[_ token]".
 rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_list. wp_term_of_list. wp_apply wp_aenc => /=; eauto.
 - by rewrite minted_of_list /= minted_pkey; eauto.
@@ -160,7 +158,7 @@ Lemma wp_resp c skR :
       ⌜r = None⌝ ∨ ∃ skI si,
         ⌜r = Some (Spec.pkey skI, si_key si)⌝ ∗
         session_NSL skI skR si ∗
-        term_token (si_resp_share si) (⊤ ∖ ↑nslN)
+        term_token (si_resp_share si) ⊤
   }}}.
 Proof.
 iIntros "(#chan_c & #ctx & #(?&?&?) & #aencR) !> %Ψ _ Hpost".
@@ -200,9 +198,7 @@ have ? : nR ≠ sess_key.
   by move=> e; rewrite e keysE in nonce.
 rewrite big_sepS_union; last set_solver.
 rewrite !big_sepS_singleton. iDestruct "tokens" as "[nR_token sk_token]".
-rewrite (term_token_difference _ (↑nslN)) //.
-iDestruct "nR_token" as "[_ nR_token]". wp_pures.
-wp_list. wp_term_of_list.
+wp_pures. wp_list. wp_term_of_list.
 wp_apply wp_aenc; eauto.
 - by rewrite minted_of_list /= minted_pkey; eauto.
 - iRight. iSplit.

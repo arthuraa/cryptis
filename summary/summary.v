@@ -613,7 +613,7 @@ Lemma wp_nsl_initiator c skI skR :
       ⌜r = None⌝ ∨ ∃ si,
         ⌜r = Some (si_key si)⌝ ∗
         session_NSL skI skR si ∗
-        term_token (si_init_share si) (⊤ ∖ ↑nslN) }}}.
+        term_token (si_init_share si) ⊤ }}}.
 Proof. exact: wp_init. Qed.
 
 Lemma wp_nsl_responder c skR :
@@ -627,7 +627,7 @@ Lemma wp_nsl_responder c skR :
       ⌜r = None⌝ ∨ ∃ skI si,
         ⌜r = Some (Spec.pkey skI, si_key si)⌝ ∗
         session_NSL skI skR si ∗
-        term_token (si_resp_share si) (⊤ ∖ ↑nslN)
+        term_token (si_resp_share si) ⊤
   }}}.
 Proof. exact: wp_resp. Qed.
 
