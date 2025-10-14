@@ -213,6 +213,5 @@ Each case study is structured as follows:
 - `impl.v`: Implementation in HeapLang.
 - `proofs/*`, `proofs.v`: Proofs of correctness using the Cryptis logic.
 - `game.v`: Security based on a symbolic game (for `nsl`, `iso_dh` and `store`).
-- `README.md`: General comments and comparison with the paper presentation.
 
 
