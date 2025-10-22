@@ -5,7 +5,7 @@ From iris.algebra Require Import functions.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib.
-From cryptis.lib Require Import gmeta saved_prop.
+From cryptis.lib Require Import gmeta nown saved_prop.
 From cryptis.core Require Import term minted.
 
 Set Implicit Arguments.
@@ -93,8 +93,8 @@ Definition name_of_functionality F :=
   end.
 
 Definition seal_pred F N Φ : iProp :=
-  ∃ γ, gmeta (name_of_functionality F) N γ ∧
-       own γ (saved_pred DfracDiscarded (fun '(k, t) => Φ k t)).
+  nown (name_of_functionality F) N
+    (saved_pred DfracDiscarded (fun '(k, t) => Φ k t)).
 
 Definition aenc_pred N (Φ : aenc_key → term → iProp) :=
   seal_pred AENC N (λ k t, ∃ k' : aenc_key, ⌜k = k'⌝ ∗ Φ k' t)%I.
@@ -133,10 +133,8 @@ Lemma seal_pred_agree k t F N Φ1 Φ2 :
   seal_pred F N Φ2 -∗
   ▷ (Φ1 k t ≡ Φ2 k t).
 Proof.
-iDestruct 1 as (γm1) "[#meta1 #own1]".
-iDestruct 1 as (γm2) "[#meta2 #own2]".
-iPoseProof (gmeta_agree with "meta1 meta2") as "->".
-iPoseProof (own_valid_2 with "own1 own2") as "valid".
+rewrite /seal_pred. iIntros "#own1 #own2".
+iPoseProof (nown_valid_2 with "own1 own2") as "#valid".
 iPoseProof (saved_pred_op_validI with "valid") as "[_ #agree]".
 by iApply ("agree" $! (k, t)).
 Qed.
@@ -146,15 +144,7 @@ Lemma seal_pred_set F E (N : namespace) Φ :
   seal_pred_token F E ==∗
   seal_pred F N Φ ∗
   seal_pred_token F (E ∖ ↑N).
-Proof.
-iIntros (?) "token".
-iMod (own_alloc (saved_pred DfracDiscarded (λ '(k, t), Φ k t)))
-  as (γ) "own" => //.
-rewrite (@seal_pred_token_difference (↑N)) //.
-iDestruct "token" as "[token ?]".
-iMod (gmeta_set _ _ _ γ with "token") as "?" => //.
-by iModIntro; iFrame; iExists γ; iSplit.
-Qed.
+Proof. iIntros (?) "token". by iApply nown_alloc. Qed.
 
 Lemma aenc_pred_set E N Φ :
   ↑N ⊆ E →
@@ -195,8 +185,7 @@ by iIntros "!> !>"; iRewrite "e".
 Qed.
 
 Definition hash_pred N (P : term → iProp) : iProp :=
-  ∃ γ, gmeta public_hash_name N γ ∧
-       own γ (saved_pred DfracDiscarded P).
+  nown public_hash_name N (saved_pred DfracDiscarded P).
 
 Definition hash_pred_token E :=
   gmeta_token public_hash_name E.
@@ -226,10 +215,8 @@ Lemma hash_pred_agree t N P₁ P₂ :
   hash_pred N P₂ -∗
   ▷ (P₁ t ≡ P₂ t).
 Proof.
-iDestruct 1 as (γm1) "[#meta1 #own1]".
-iDestruct 1 as (γm2) "[#meta2 #own2]".
-iPoseProof (gmeta_agree with "meta1 meta2") as "->".
-iPoseProof (own_valid_2 with "own1 own2") as "valid".
+rewrite /hash_pred. iIntros "#own1 #own2".
+iPoseProof (nown_valid_2 with "own1 own2") as "#valid".
 iPoseProof (saved_pred_op_validI with "valid") as "[_ #agree]".
 by iApply ("agree" $! t).
 Qed.
@@ -239,15 +226,7 @@ Lemma hash_pred_set E N P :
   hash_pred_token E ==∗
   hash_pred N P ∗
   hash_pred_token (E ∖ ↑N).
-Proof.
-iIntros (?) "token".
-rewrite (@hash_pred_token_difference (↑N)) //.
-iDestruct "token" as "[token ?]".
-iMod (own_alloc (saved_pred DfracDiscarded P))
-  as (γ) "own" => //.
-iMod (gmeta_set _ _ _ γ with "token") => //.
-by iModIntro; iFrame; iExists γ; iSplit.
-Qed.
+Proof. iIntros (?) "token". by iApply nown_alloc. Qed.
 
 Definition wf_hash t : iProp :=
   ∃ N t' P, ⌜t = Spec.tag (Tag N) t'⌝ ∧ hash_pred N P ∧ □ ▷ P t'.
