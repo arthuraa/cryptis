@@ -23,22 +23,24 @@ Implicit Types (rl : role) (t nI nR sI sR kS : term).
 Implicit Types (skI skR : aenc_key).
 
 Record sess_info : Type := SessInfo {
+  si_init : aenc_key;
+  si_resp : aenc_key;
   si_init_share : term;
   si_resp_share : term;
 }.
 
-Definition si_key skI skR si :=
-  SEncKey (Spec.of_list [Spec.pkey skI; Spec.pkey skR;
+Definition si_key si :=
+  SEncKey (Spec.of_list [Spec.pkey (si_init si);
+                         Spec.pkey (si_resp si);
                          si_init_share si;
                          si_resp_share si]).
 
-Lemma nsl_session_agree skI1 skI2 skR1 skR2 si1 si2 :
-  si_key skI1 skR1 si1 = si_key skI2 skR2 si2 →
-  (skI1, skR1, si1) = (skI2, skR2, si2).
+Lemma nsl_session_agree si1 si2 :
+  si_key si1 = si_key si2 → si1 = si2.
 Proof.
-case.
-case/Spec.of_list_inj => /Spec.aenc_pkey_inj <- /Spec.aenc_pkey_inj <-.
-by case: si1 si2 => [??] [??] /= <- <-.
+case: si1=>>; case: si2=>>; case.
+by case/Spec.of_list_inj
+   => /Spec.aenc_pkey_inj <- /Spec.aenc_pkey_inj <- <- <-.
 Qed.
 
 Definition msg1_pred skR m1 : iProp := ∃ nI skI,
@@ -77,8 +79,13 @@ Qed.
 Global Instance nsl_ctx_persistent : Persistent nsl_ctx.
 Proof. apply _. Qed.
 
+Definition session_NSL skI skR si : iProp :=
+  ⌜skI = si_init si⌝ ∗ ⌜skR = si_resp si⌝ ∗
+  minted (si_key si) ∗
+  □ (public (si_key si) ↔ ▷ (public skI ∨ public skR)).
+
 Ltac protocol_failure :=
-  by intros; wp_pures; iApply ("Hpost" $! None); iFrame.
+  by intros; wp_pures; iApply ("Hpost" $! None); eauto.
 
 Lemma wp_init c skI skR :
   channel c -∗
@@ -88,13 +95,11 @@ Lemma wp_init c skI skR :
   minted skR -∗
   {{{ True }}}
     init c skI (Spec.pkey skR)
-  {{{ sk, RET (repr sk);
-      if sk is Some sk then ∃ si,
-        ⌜sk = si_key skI skR si⌝ ∗
-        minted sk ∗
-        term_token (si_init_share si) (⊤ ∖ ↑nslN) ∗
-        □ (public sk ↔ ▷ (public skI ∨ public skR))
-      else True }}}.
+  {{{ r, RET (repr r);
+      ⌜r = None⌝ ∨ ∃ si,
+        ⌜r = Some (si_key si)⌝ ∗
+        session_NSL skI skR si ∗
+        term_token (si_init_share si) (⊤ ∖ ↑nslN) }}}.
 Proof.
 iIntros "#chan_c #ctx #(?&?&?) #m_skI #m_skR %Ψ !> _ Hpost".
 iAssert (public (Spec.pkey skI)) as "?". { by iApply public_aenc_key. }
@@ -135,9 +140,10 @@ wp_pures. wp_list. wp_term_of_list. wp_apply wp_derive_senc_key.
 set sess_key := Spec.of_list [Spec.pkey skI; _; _; _].
 wp_pures.
 iApply ("Hpost" $! (Some (SEncKey sess_key))). iModIntro.
-iExists (SessInfo nI nR). iFrame.
-rewrite minted_senc minted_of_list /= !minted_pkey.
-do !iSplit => //. rewrite public_senc_key public_of_list /=.
+iRight. iExists (SessInfo skI skR nI nR). iFrame.
+do !iSplit => //.
+{ rewrite minted_senc minted_of_list /= !minted_pkey; eauto. }
+rewrite public_senc_key public_of_list /=.
 iModIntro. iSplit.
 - iIntros "(_ & _ & _ & p_nR & _)". by iApply "s_nR".
 - iIntros "#fail". by do !iSplit => //; [iApply "s_nI"|iApply "s_nR"].
@@ -150,13 +156,12 @@ Lemma wp_resp c skR :
   minted skR -∗
   {{{ True }}}
     resp c skR
-  {{{ ts, RET (repr ts);
-      if ts is Some (pkI, sk) then ∃ skI si,
-        ⌜pkI = Spec.pkey skI⌝ ∗
-        ⌜sk = si_key skI skR si⌝ ∗
-        term_token (si_resp_share si) (⊤ ∖ ↑nslN) ∗
-        □ (public sk ↔ ▷ (public skI ∨ public skR))
-      else True }}}.
+  {{{ r, RET (repr r);
+      ⌜r = None⌝ ∨ ∃ skI si,
+        ⌜r = Some (Spec.pkey skI, si_key si)⌝ ∗
+        session_NSL skI skR si ∗
+        term_token (si_resp_share si) (⊤ ∖ ↑nslN)
+  }}}.
 Proof.
 iIntros "#chan_c #ctx #(?&?&?) #aencR %Ψ !> _ Hpost".
 iAssert (public (Spec.pkey skR)) as "?". { by iApply public_aenc_key. }
@@ -212,8 +217,9 @@ iClear "p_m3" => {m3}. iIntros "%m3 _ _". wp_pures.
 wp_eq_term e; last protocol_failure; subst m3.
 wp_pures. wp_list. wp_term_of_list. wp_apply wp_derive_senc_key.
 wp_pures. iApply ("Hpost" $! (Some (Spec.pkey skI, sess_key))).
-iModIntro. iExists skI, (SessInfo nI nR). iFrame.
-do !iSplit => //.
+iModIntro. iRight. iExists skI, (SessInfo skI skR nI nR). iFrame.
+do !iSplit => //=.
+{ rewrite minted_senc minted_of_list /= !minted_pkey; eauto. }
 rewrite public_senc_key public_of_list /=.
 iModIntro. iSplit.
 - iIntros "(_ & _ & _ & #p_nR & _)". by iApply "s_nR".

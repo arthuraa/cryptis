@@ -43,21 +43,21 @@ Definition do_init : val := λ: "c" "skI" "pkR",
 Definition si_share_of rl :=
   if rl is Init then si_init_share else si_resp_share.
 
-Definition nsl_game_inv rl t : iProp := ∃ skI skR si,
-  ⌜t = si_key skI skR si⌝ ∧
+Definition nsl_game_inv rl t : iProp := ∃ si,
+  ⌜t = si_key si⌝ ∧
   term_meta (si_share_of rl si) (nroot.@"fresh") ().
 
-Lemma nsl_game_inv_fresh skI skR rl si E :
+Lemma nsl_game_inv_fresh rl si E :
   ↑nroot.@"fresh" ⊆ E →
   term_token (si_share_of rl si) E -∗
-  fresh_term (nsl_game_inv rl) (si_key skI skR si).
+  fresh_term (nsl_game_inv rl) (si_key si).
 Proof.
 iIntros "%sub token". iSplit.
-- iIntros "(%skI' & %skR' & %si' & %e & #meta)".
-  case/term_of_senc_key_inj/nsl_session_agree: e => _ _ <-.
+- iIntros "(%si' & %e & #meta)".
+  move/term_of_senc_key_inj/nsl_session_agree: e => <-.
   by iApply (term_meta_token with "token meta").
 - iMod (term_meta_set (nroot.@"fresh") () with "token") as "#?" => //.
-  iIntros "!> !>". iExists skI, skR, si. by eauto.
+  iIntros "!> !>". iExists si. by eauto.
 Qed.
 
 Lemma wp_check_key_secrecy c k :
@@ -101,14 +101,16 @@ iSplit; last by wp_pures; iApply "Hpost".
 iIntros "%skR' -> #m_skR'". wp_pures.
 wp_apply wp_init => //. iIntros "%ts tsP".
 case: ts=> [sk|] => /=; wp_pures; last by iApply "Hpost".
-iDestruct "tsP" as "(%si & -> & _ & token & #s_sk)".
-iPoseProof (@nsl_game_inv_fresh skI skR' Init with "token")
+iDestruct "tsP" as "[%|(%si & %e_sk & #s_sk & token)]" => //.
+case: e_sk => ->.
+iPoseProof (@nsl_game_inv_fresh Init with "token")
   as "fresh" => //; try solve_ndisj.
 wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
 wp_eq_term e; wp_pures; last by iApply "Hpost".
 move: e => /Spec.aenc_pkey_inj <- {skR'}.
 wp_apply wp_check_key_secrecy => //.
 { iIntros "!> #fail".
+  iDestruct "s_sk" as "(_ & _ & _ & #s_sk)".
   iPoseProof ("s_sk" with "fail") as "{fail} fail".
   iModIntro. by iDestruct "fail" as "[fail|fail]";
   [iApply "s_skI"|iApply "s_skR"]. }
@@ -166,15 +168,17 @@ wp_rec; wp_pures; wp_apply wp_fork.
 wp_pures. wp_apply wp_resp => //.
 iIntros "%res res".
 case: res => [[ekI' sk]|]; wp_pures; last by iApply "Hpost".
-iDestruct "res" as "(%skI' & %si & -> & -> & token & #res)".
-iPoseProof (@nsl_game_inv_fresh skI' skR Resp with "token")
+iDestruct "res" as "[%|(%skI' & %si & %e & #res & token)]" => //.
+case: e => -> -> {ekI' sk}.
+iPoseProof (@nsl_game_inv_fresh Resp with "token")
   as "fresh" => //; try solve_ndisj.
 wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
 wp_eq_term e; wp_pures; last by iApply "Hpost".
 move: e => /Spec.aenc_pkey_inj <- {skI'}.
 wp_apply wp_check_key_secrecy => //.
 { iIntros "!> #fail".
-  iPoseProof ("res" with "fail") as "{fail} fail".
+  iDestruct "res" as "(_ & _ & _ & #s_sk)".
+  iPoseProof ("s_sk" with "fail") as "{fail} fail".
   iModIntro. by iDestruct "fail" as "[fail|fail]";
   [iApply "s_skI"|iApply "s_skR"]. }
 iIntros "_". wp_pures. by iApply "Hpost".
