@@ -27,13 +27,13 @@ Implicit Types γ : gname.
 Implicit Types v : val.
 
 Lemma wp_client_close skI skR cs :
-  cryptis_ctx -∗
+  cryptis_ctx ∗
   store_ctx -∗
   {{{ db_connected skI skR cs }}}
     Client.close (repr cs)
   {{{ RET #(); db_disconnected skI skR ∗ public (si_key cs) }}}.
 Proof.
-iIntros "#? (_ & _ & _ & #?)".
+iIntros "(#? & (_ & _ & _ & #?))".
 iIntros "!> %Φ client post".
 iDestruct "client" as "(conn & %db & ready & state)".
 rewrite compromised_public.
@@ -44,7 +44,7 @@ iAssert (RPC.client_connected skI skR cs ∗
   iPoseProof (RPC.client_connected_failure with "conn fail") as "#H".
   iFrame "conn". by iLeft. }
 wp_lam. wp_pures.
-wp_apply (RPC.wp_close with "[$conn]"); eauto.
+wp_apply (RPC.wp_close with "[] [$conn]"); eauto.
 iIntros "pub". iApply "post". by iFrame.
 Qed.
 

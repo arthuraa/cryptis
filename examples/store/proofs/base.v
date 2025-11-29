@@ -69,11 +69,20 @@ Implicit Types b : bool.
 Implicit Types v : val.
 Implicit Types (failed : bool).
 
-Definition db_client_ready skI skR db : iProp :=
-  rep_main skI skR dbN db ∗ rep_sync skI skR dbN ∅ db.
+Definition db_main skI skR db : iProp :=
+  rep_main skI skR dbN db.
 
-Definition db_server_ready skI skR db : iProp :=
+Definition db_sync skI skR db : iProp :=
+  rep_sync skI skR dbN ∅ db.
+
+Definition db_copy skI skR db : iProp :=
   rep_copy skI skR dbN ∅ db.
+
+Definition db_update skI skR db db' : iProp :=
+  rep_update skI skR dbN ∅ db db'.
+
+Definition db_client_ready skI skR db : iProp :=
+  db_main skI skR db ∗ db_sync skI skR db.
 
 Definition db_disconnected skI skR : iProp := ∃ db,
   (GenConn.failure skI skR ∨ db_client_ready skI skR db) ∗
@@ -161,7 +170,7 @@ Qed.
 Definition server_db_connected' skI skR cs vdb : iProp := ∃ db,
   public_db db ∗
   AList.is_alist vdb (repr <$> db) ∗
-  (compromised cs ∨ db_server_ready skI skR db).
+  (compromised cs ∨ db_copy skI skR db).
 
 Definition server_db_connected skI skR cs vdb : iProp :=
   RPC.server_connected skI skR cs ∗
@@ -173,7 +182,7 @@ Definition server_handler skI skR cs vdb h : iProp :=
 Definition server_db_disconnected skI skR vdb : iProp := ∃ db,
   public_db db ∗
   AList.is_alist vdb (repr <$> db) ∗
-  (GenConn.failure skI skR ∨ db_server_ready skI skR db).
+  (GenConn.failure skI skR ∨ db_copy skI skR db).
 
 Lemma server_db_alloc skI skR vdb E :
   ↑dbN.@"server".@(skI : term) ⊆ E →
@@ -245,9 +254,9 @@ Qed.
 
 Lemma store_resp skI skR cs db t1 t2 :
   let P := compromised cs in
-  (P ∨ db_server_ready skI skR db) -∗
+  (P ∨ db_copy skI skR db) -∗
   (P ∨ store_call_pred skI skR cs (Spec.of_list [t1; t2])) ==∗
-  (P ∨ db_server_ready skI skR (<[t1 := t2]>db)) ∗
+  (P ∨ db_copy skI skR (<[t1 := t2]>db)) ∗
   (P ∨ store_resp_pred skI skR cs (Spec.of_list [t1; t2]) (TInt 0)).
 Proof.
 iIntros "% [#?|ready] [#?|call]"; try by iModIntro; iSplitL; eauto.
@@ -291,9 +300,9 @@ Qed.
 
 Lemma create_resp skI skR cs db t1 t2 :
   let P := compromised cs in
-  (P ∨ db_server_ready skI skR db) -∗
+  (P ∨ db_copy skI skR db) -∗
   (P ∨ create_call_pred skI skR cs (Spec.of_list [t1; t2])) ==∗
-  (P ∨ db_server_ready skI skR (<[t1 := t2]>db)) ∗
+  (P ∨ db_copy skI skR (<[t1 := t2]>db)) ∗
   (P ∨ create_resp_pred skI skR cs (Spec.of_list [t1; t2]) (TInt 0)).
 Proof.
 iIntros "% [#?|ready] [#?|call]"; try by iModIntro; iSplitL; eauto.
@@ -339,9 +348,9 @@ Qed.
 Lemma load_resp skI skR cs db t1 :
   let P := compromised cs in
   let t2 := default (TInt 0) (db !! t1) in
-  (P ∨ db_server_ready skI skR db) -∗
+  (P ∨ db_copy skI skR db) -∗
   (P ∨ load_call_pred skI skR cs t1) ==∗
-  (P ∨ db_server_ready skI skR db) ∗
+  (P ∨ db_copy skI skR db) ∗
   (P ∨ load_resp_pred skI skR cs t1 t2).
 Proof.
 iIntros "%P /= [#?|ready] [#?|call]"; try by iModIntro; iSplitL; eauto.

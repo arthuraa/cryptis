@@ -48,12 +48,12 @@ iIntros "#meta"; iSplit.
 Qed.
 
 Lemma wp_initiator failed c skI skR N φ :
-  channel c -∗
-  cryptis_ctx -∗
-  iso_dh_ctx -∗
-  iso_dh_pred N φ -∗
-  minted skI -∗
-  minted skR -∗
+  channel c ∗
+  cryptis_ctx ∗
+  iso_dh_ctx ∗
+  iso_dh_pred N φ ∗
+  minted skI ∗
+  minted skR ∗
   (if failed then public skI ∨ public skR else True) -∗
   {{{ True }}}
     initiator c skI (Spec.pkey skR) (Tag N)
@@ -69,8 +69,8 @@ Lemma wp_initiator failed c skI skR N φ :
 Proof.
 rewrite /initiator.
 set pkI := Spec.pkey skI.
-iIntros "#chan_c #ctx #(? & ?) #N_φ".
-iIntros "#m_skI #m_skR #failed %Ψ !> _ Hpost".
+iIntros "(#chan_c & #ctx & #(? & ?) & #N_φ & #m_skI & #m_skR & #failed)".
+iIntros "!> %Ψ _ Hpost".
 wp_pures. wp_apply wp_pkey. wp_pures. rewrite -/pkI.
 wp_apply (wp_mk_nonce_freshN ∅
             nonce_secrecy
@@ -207,11 +207,11 @@ iRight. iExists si. iFrame. do !iSplitR => //.
 Qed.
 
 Lemma wp_initiator_weak c skI skR N :
-  channel c -∗
-  cryptis_ctx -∗
-  iso_dh_ctx -∗
-  iso_dh_pred N (λ _ _ _ _, True)%I -∗
-  minted skI -∗
+  channel c ∗
+  cryptis_ctx ∗
+  iso_dh_ctx ∗
+  iso_dh_pred N (λ _ _ _ _, True)%I ∗
+  minted skI ∗
   minted skR -∗
   {{{ True }}}
     initiator c skI (Spec.pkey skR) (Tag N)
@@ -222,8 +222,9 @@ Lemma wp_initiator_weak c skI skR N :
         term_token (si_init_share si) (⊤ ∖ ↑iso_dhN)
   }}}.
 Proof.
-iIntros "#chan_c #ctx #? #? #m_skI #m_skR %Ψ !> _ Hpost".
-iApply wp_fupd. wp_apply (wp_initiator false) => //.
+iIntros "(#chan_c & #ctx & #? & #? & #m_skI & #m_skR) !> %Ψ _ Hpost".
+iApply wp_fupd.
+wp_apply (wp_initiator false) => //; first iFrame "#".
 iIntros "%okS [->|HkS]"; first by iApply ("Hpost" $! None); eauto.
 iDestruct "HkS" as "(%si & -> & #sess & #? & rel & tok & _)".
 iMod (unrelease Init with "rel") as "#un". iModIntro.

@@ -28,11 +28,12 @@ Implicit Types γ : gname.
 Implicit Types v : val.
 
 Lemma wp_server_handle_store skI skR cs (vdb : val) :
-  {{{ cryptis_ctx ∗ store_ctx }}}
+  cryptis_ctx ∗ store_ctx -∗
+  {{{ True }}}
     RPC.handle (Tag $ dbN.@"store") (Server.handle_store vdb)
   {{{ h, RET (repr h); server_handler skI skR cs vdb h }}}.
 Proof.
-iIntros "%Φ (#? & #ctx) post".
+iIntros "(#? & #ctx) !> %Φ _ post".
 iPoseProof (store_ctx_store with "ctx") as "?".
 iPoseProof (store_ctx_rpc_ctx with "ctx") as "?".
 wp_lam; wp_pures. wp_apply RPC.wp_handle; last by eauto.

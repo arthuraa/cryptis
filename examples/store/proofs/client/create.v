@@ -28,9 +28,9 @@ Implicit Types γ : gname.
 Implicit Types v : val.
 
 Lemma wp_client_create skI skR cs t1 t2 :
-  cryptis_ctx -∗
-  store_ctx -∗
-  public t1 -∗
+  cryptis_ctx ∗
+  store_ctx ∗
+  public t1 ∗
   public t2 -∗
   {{{ db_connected skI skR cs ∗
       db_free_at skI skR {[t1]} }}}
@@ -39,12 +39,12 @@ Lemma wp_client_create skI skR cs t1 t2 :
       db_connected skI skR cs ∗
       db_mapsto skI skR t1 t2 }}}.
 Proof.
-iIntros "#? (_ & _ & #create & #ctx) #p_t1 #p_t2".
+iIntros "(#? & (_ & _ & #create & #ctx) & #p_t1 & #p_t2)".
 iIntros "!> %Φ [client free] post".
 iDestruct "client" as "(conn & db)".
 iMod (create_call t1 t2 with "db free") as "(call & mapsto & waiting)".
 wp_lam. wp_pures. wp_list. wp_term_of_list.
-wp_apply (RPC.wp_call with "[$conn $call]").
+wp_apply (RPC.wp_call with "[] [$conn $call]").
 { rewrite public_of_list. do !iSplit => //. }
 iIntros "%ts (conn & created & _)". wp_pures.
 iApply "post". iFrame. iModIntro. by iApply "waiting".

@@ -224,8 +224,9 @@ iRight. iExists skI, si. by iFrame; eauto 10.
 Qed.
 
 Lemma wp_responder_weak c skR N :
-  {{{ channel c ∗ cryptis_ctx ∗
-      iso_dh_ctx ∗ iso_dh_pred N (λ _ _ _ _, True)%I ∗ minted skR }}}
+  channel c ∗ cryptis_ctx ∗ iso_dh_ctx ∗
+  iso_dh_pred N (λ _ _ _ _, True)%I ∗ minted skR -∗
+  {{{ True }}}
     responder c skR (Tag N)
   {{{ r, RET (repr r);
       ⌜r = None⌝ ∨ ∃ skI si,
@@ -233,7 +234,7 @@ Lemma wp_responder_weak c skR N :
         session_weak skI skR si ∗
         term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN) }}}.
 Proof.
-iIntros "%Φ (#? & #? & #? & #?) post". iApply wp_fupd.
+iIntros "(#? & #? & #? & #?) !> %Φ _ post". iApply wp_fupd.
 wp_apply wp_responder; first by eauto.
 iIntros "%osi [->|Hosi]"; first by iApply ("post" $! None); eauto.
 iDestruct "Hosi" as "(%skI & %si & -> & #? & rel & token)".

@@ -99,7 +99,7 @@ wp_pures. wp_apply wp_is_aenc_key => //.
 { by iApply public_minted. }
 iSplit; last by wp_pures; iApply "Hpost".
 iIntros "%skR' -> #m_skR'". wp_pures.
-wp_apply wp_init => //. iIntros "%ts tsP".
+wp_apply wp_init as "%ts tsP" => //; first iFrame "#".
 case: ts=> [sk|] => /=; wp_pures; last by iApply "Hpost".
 iDestruct "tsP" as "[%|(%si & %e_sk & #s_sk & token)]" => //.
 case: e_sk => ->.
@@ -165,8 +165,7 @@ iIntros "#chan #? #? #m_skR #s_skR #s_skI #set".
 iLöb as "IH". iIntros "!> %Φ _ Hpost".
 wp_rec; wp_pures; wp_apply wp_fork.
 { iApply "IH" => //. }
-wp_pures. wp_apply wp_resp => //.
-iIntros "%res res".
+wp_smart_apply wp_resp as "%res res" => //; first iFrame "#".
 case: res => [[ekI' sk]|]; wp_pures; last by iApply "Hpost".
 iDestruct "res" as "[%|(%skI' & %si & %e & #res & token)]" => //.
 case: e => -> -> {ekI' sk}.
