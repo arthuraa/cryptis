@@ -853,28 +853,28 @@ Proof.
 case: sk => seed. by rewrite public_sign_key.
 Qed.
 
-Definition unknown γ : iProp :=
+Definition pending γ : iProp :=
   gmeta_token γ ⊤.
 
-Definition known γ (x : positive) : iProp :=
+Definition shot γ (x : positive) : iProp :=
   gmeta γ nroot x.
 
-Global Instance persistent_known γ x : Persistent (known γ x).
+Global Instance persistent_shot γ x : Persistent (shot γ x).
 Proof. apply _. Qed.
 
-Global Instance timeless_known γ x : Timeless (known γ x).
+Global Instance timeless_shot γ x : Timeless (shot γ x).
 Proof. apply _. Qed.
 
-Lemma unknown_alloc : ⊢ |==> ∃ γ, unknown γ.
+Lemma pending_alloc : ⊢ |==> ∃ γ, pending γ.
 Proof. apply gmeta_token_alloc. Qed.
 
-Lemma known_alloc γ x : unknown γ ==∗ known γ x.
+Lemma shot_alloc γ x : pending γ ==∗ shot γ x.
 Proof. by apply gmeta_set. Qed.
 
-Lemma unknown_known γ x : unknown γ -∗ known γ x -∗ False.
+Lemma pending_shot γ x : pending γ -∗ shot γ x -∗ False.
 Proof. by apply gmeta_gmeta_token. Qed.
 
-Lemma known_agree γ x y : known γ x -∗ known γ y -∗ ⌜x = y⌝.
+Lemma shot_agree γ x y : shot γ x -∗ shot γ y -∗ ⌜x = y⌝.
 Proof. apply gmeta_agree. Qed.
 
 Definition secret t : iProp :=
@@ -883,21 +883,21 @@ Definition secret t : iProp :=
   (public t -∗ ▷ False).
 
 Lemma secret_alloc t γ :
-  □ (public t ↔ ▷ known γ 1) -∗ unknown γ -∗ secret t.
+  □ (public t ↔ ▷ shot γ 1) -∗ pending γ -∗ secret t.
 Proof.
-iIntros "#s_t unknown"; do 2?iSplit.
-- iMod (known_alloc with "unknown") as "#known".
-  by iSpecialize ("s_t" with "known").
-- iMod (known_alloc _ 2 with "unknown") as "#known".
+iIntros "#s_t pending"; do 2?iSplit.
+- iMod (shot_alloc with "pending") as "#shot".
+  by iSpecialize ("s_t" with "shot").
+- iMod (shot_alloc _ 2 with "pending") as "#shot".
   iIntros "!> !>". iSplit.
   + iIntros "#p_t".
-    iPoseProof ("s_t" with "p_t") as ">#known'".
-    by iPoseProof (known_agree with "known known'") as "%".
+    iPoseProof ("s_t" with "p_t") as ">#shot'".
+    by iPoseProof (shot_agree with "shot shot'") as "%".
   + iIntros "#contra".
     iApply "s_t". by iDestruct "contra" as ">[]".
 - iIntros "#p_t".
-  iPoseProof ("s_t" with "p_t") as ">#known".
-  by iPoseProof (unknown_known with "[$] [//]") as "[]".
+  iPoseProof ("s_t" with "p_t") as ">#shot".
+  by iPoseProof (pending_shot with "[$] [//]") as "[]".
 Qed.
 
 Lemma secret_not_public t : secret t -∗ public t -∗ ▷ False.

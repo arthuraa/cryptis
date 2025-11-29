@@ -324,10 +324,10 @@ Lemma twp_mk_aenc_key Ψ :
       Ψ sk) -∗
   WP mk_aenc_key #() [{ Ψ }].
 Proof.
-iIntros "#ctx post". iMod unknown_alloc as (γ) "unknown".
+iIntros "#ctx post". iMod pending_alloc as (γ) "pending".
 rewrite /mk_aenc_key. wp_pures.
 wp_bind (mk_nonce _).
-iApply (twp_mk_nonce_freshN ∅ (λ _, known γ 1) (λ _, False%I)
+iApply (twp_mk_nonce_freshN ∅ (λ _, shot γ 1) (λ _, False%I)
   (λ t, {[(AEncKey t) : term]})) => //.
 - iIntros "% ?". by rewrite elem_of_empty.
 - iIntros "%t". rewrite [term_of_aenc_key]unlock big_sepS_singleton minted_TKey.
@@ -335,10 +335,10 @@ iApply (twp_mk_nonce_freshN ∅ (λ _, known γ 1) (λ _, False%I)
 iIntros "%t %fresh % #m_t #s_t _ token".
 rewrite big_sepS_singleton.
 pose sk := AEncKey t.
-iAssert (public sk ↔ ▷ □ known γ 1)%I as "s_sk".
+iAssert (public sk ↔ ▷ □ shot γ 1)%I as "s_sk".
 { by rewrite public_adec_key. }
 rewrite bi.intuitionistic_intuitionistically.
-iPoseProof (secret_alloc with "s_sk unknown") as "tP".
+iPoseProof (secret_alloc with "s_sk pending") as "tP".
 wp_pures. wp_lam. iApply twp_key.
 rewrite [term_of_aenc_key]unlock /=.
 iApply ("post" $! (AEncKey _) with "[] [$] [$]").
@@ -366,10 +366,10 @@ Lemma twp_mk_sign_key Ψ :
       Ψ sk) -∗
   WP mk_sign_key #() [{ Ψ }].
 Proof.
-iIntros "#ctx post". iMod unknown_alloc as (γ) "unknown".
+iIntros "#ctx post". iMod pending_alloc as (γ) "pending".
 rewrite /mk_sign_key. wp_pures.
 wp_bind (mk_nonce _).
-iApply (twp_mk_nonce_freshN ∅ (λ _, known γ 1) (λ _, False%I)
+iApply (twp_mk_nonce_freshN ∅ (λ _, shot γ 1) (λ _, False%I)
   (λ t, {[(SignKey t) : term]})) => //.
 - iIntros "% ?". by rewrite elem_of_empty.
 - iIntros "%t". rewrite [term_of_sign_key]unlock big_sepS_singleton minted_TKey.
@@ -377,10 +377,10 @@ iApply (twp_mk_nonce_freshN ∅ (λ _, known γ 1) (λ _, False%I)
 iIntros "%t %fresh % #m_t #s_t _ token".
 rewrite big_sepS_singleton.
 pose sk := SignKey t.
-iAssert (public sk ↔ ▷ □ known γ 1)%I as "s_sk".
+iAssert (public sk ↔ ▷ □ shot γ 1)%I as "s_sk".
 { by rewrite public_sign_key. }
 rewrite bi.intuitionistic_intuitionistically.
-iPoseProof (secret_alloc with "s_sk unknown") as "tP".
+iPoseProof (secret_alloc with "s_sk pending") as "tP".
 wp_pures. wp_lam. iApply twp_key.
 rewrite [term_of_sign_key]unlock /=.
 iApply ("post" $! (SignKey _) with "[] [$] [$]").
@@ -408,10 +408,10 @@ Lemma twp_mk_senc_key Ψ :
       Ψ k) -∗
   WP mk_senc_key #() [{ Ψ }].
 Proof.
-iIntros "#ctx post". iMod unknown_alloc as (γ) "unknown".
+iIntros "#ctx post". iMod pending_alloc as (γ) "pending".
 rewrite /mk_senc_key. wp_pures.
 wp_bind (mk_nonce _).
-iApply (twp_mk_nonce_freshN ∅ (λ _, known γ 1) (λ _, False%I)
+iApply (twp_mk_nonce_freshN ∅ (λ _, shot γ 1) (λ _, False%I)
   (λ t, {[(SEncKey t) : term]})) => //.
 - iIntros "% ?". by rewrite elem_of_empty.
 - iIntros "%t". rewrite [term_of_senc_key]unlock big_sepS_singleton minted_TKey.
@@ -419,10 +419,10 @@ iApply (twp_mk_nonce_freshN ∅ (λ _, known γ 1) (λ _, False%I)
 iIntros "%t %fresh % #m_t #s_t _ token".
 rewrite big_sepS_singleton.
 pose sk := SEncKey t.
-iAssert (public sk ↔ ▷ □ known γ 1)%I as "s_sk".
+iAssert (public sk ↔ ▷ □ shot γ 1)%I as "s_sk".
 { by rewrite public_senc_key. }
 rewrite bi.intuitionistic_intuitionistically.
-iPoseProof (secret_alloc with "s_sk unknown") as "tP".
+iPoseProof (secret_alloc with "s_sk pending") as "tP".
 wp_pures. wp_lam. iApply twp_key.
 rewrite [term_of_senc_key]unlock /=.
 iApply ("post" $! (SEncKey _) with "[] [$] [$]").
