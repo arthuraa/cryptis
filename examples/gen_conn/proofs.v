@@ -60,11 +60,8 @@ iAssert (if failed then failure skI skR else True)%I as "#?".
 iCombine "HP post c1 c2" as "post". iApply (wp_frame_wand with "post").
 iApply wp_do_until'. iIntros "!>". wp_pures.
 wp_apply (wp_initiator failed with "[//] [//] [] [//] [] [] [] []") => //.
-iIntros "%res resP".
-case: res=> [kS|] /=; last by eauto.
-iDestruct "resP"
-  as "(%si & <- & %e_kR & <- & #m_kS & #sess & #comp & rel & token & res)".
-move: e_kR => <-.
+iIntros "%res [->|resP]"; first by eauto.
+iDestruct "resP" as "(%si & -> & #sess & #comp & rel & token & res)".
 iRight. iExists _. iSplit => //.
 iIntros "(dis & post & c1 & c2)".
 wp_pures.
@@ -134,9 +131,9 @@ wp_pures. iApply (wp_responder_accept failed).
   set si := SessInfo _ _ _ _ _.
   iMod (counters_alloc _ _ _ si with "chan inv") as "[c1 c2]".
   by iFrame. }
-iIntros "!> %osi res". case: osi => [kS|]; last by eauto.
+iIntros "!> %osi [->|res]"; first by eauto.
 iDestruct "res"
-  as "(%si & <- & <- & -> & #m_k & #sess & #comp & rel & token & res)".
+  as "(%si & -> & #sess & #comp & rel & token & res)".
 iRight. iExists _. iSplit => //.
 iIntros "P post".
 wp_pures.
@@ -181,8 +178,7 @@ Lemma wp_send φ skI skR rl cs t N ps :
                (public (si_key cs) ∨ φ skI skR cs) }}}.
 Proof.
 iIntros "[[_ #pred] _] #p_ts !> %Φ (conn & inv) post".
-iDestruct "conn"
-  as "(<- & <- & <- & #chan & #sess & %n & %m & state & counters)".
+iDestruct "conn" as "(<- & #sess & #chan & %n & %m & state & counters)".
 wp_lam. wp_pures.
 wp_apply wp_channel => //. iIntros "_". wp_pures.
 wp_lam. wp_pures.
@@ -198,8 +194,8 @@ iAssert (public msg) as "#?".
 { rewrite public_of_list /= !public_TInt. by eauto. }
 iAssert (|={⊤}=>
   (public (si_key cs) ∨
-     counters ps (si_init cs) (si_resp cs) cs (cs_role cs) (S n) m ∗
-     ▷ φ (si_init cs) (si_resp cs) cs ∗
+     counters ps skI skR cs (cs_role cs) (S n) m ∗
+     ▷ φ skI skR cs ∗
      conn_msg_pred (si_key cs) msg))%I
   with "[counters inv]" as ">inv".
 { iDestruct "counters" as "[#fail|counters]"; first by eauto.
@@ -209,7 +205,7 @@ iAssert (|={⊤}=>
   do 3!iSplitR => //. }
 rewrite 2!or_sep2. iDestruct "inv" as "(counters & [Hφ #p_t])".
 wp_pures. wp_apply wp_senc; eauto.
-- by iDestruct "sess" as "(?&?)".
+- by iApply session_minted.
 - by iDestruct "p_t" as "[p_t|inv_t]"; eauto.
 iIntros "% #?". wp_pures. wp_apply wp_send => //. wp_pures.
 wp_apply (wp_load_offset with "state") => //.
@@ -247,7 +243,7 @@ iCombine "conn recv" as "I". iRevert "I". iApply wp_do_until.
 iIntros "!> (conn & recv)". wp_pure _ credit:"c1".
 wp_apply wp_recv => //. iIntros "%t #p_t". wp_pure _ credit:"c2". wp_pures.
 iDestruct "conn"
-  as "(<- & <- & <- & #chan & #sess & %n & %m & state & counters)".
+  as "(<- & #sess & #chan & %n & %m & state & counters)".
 wp_lam. wp_pures. wp_apply wp_sdec => //. iSplit; last first.
 { wp_pures. iLeft. iFrame. by eauto 10. }
 iClear "p_t" => {t}. iIntros "%t #m_t #inv_t #s_t". wp_pures.
@@ -270,8 +266,8 @@ iAssert (public (si_key cs) → public t)%I as "{s_t} s_t".
 iAssert (|={⊤}=>
   public t ∗
   (public (si_key cs) ∨
-    counters ps (si_init cs) (si_resp cs) cs (cs_role cs) n (S m) ∗
-    φ (si_init cs) (si_resp cs) cs t))%I
+    counters ps skI skR cs (cs_role cs) n (S m) ∗
+    φ skI skR cs t))%I
   with "[counters recv c1 c2]" as "{inv_t} >(p_t & inv)".
 { iDestruct "recv" as "[#fail|recv]".
   { iModIntro. iSplitR; eauto. by iApply "s_t". }
@@ -300,7 +296,7 @@ Lemma wp_free kI kR φ rl cs :
   {{{ RET #(); True }}}.
 Proof.
 iIntros "%Φ conn post".
-iDestruct "conn" as "(? & ? & ? & ? & ? & % & % & ts & ?)".
+iDestruct "conn" as "(? & ? & ? & % & % & ts & ?)".
 rewrite !array_cons array_nil.
 iDestruct "ts" as "(sent & recv & _)".
 wp_lam; wp_pures.

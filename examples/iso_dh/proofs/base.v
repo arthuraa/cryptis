@@ -185,12 +185,20 @@ iApply (term_meta_token with "token"); last by case: rl.
 by [].
 Qed.
 
-Definition session si : iProp :=
+Definition session skI skR si : iProp :=
+  ⌜skI = si_init si⌝ ∗ ⌜skR = si_resp si⌝ ∗ minted (si_key si) ∗
   □ (▷ released_session si → public (si_key si)) ∗
   ((public (si_init si) ∨ public (si_resp si)) ∨
     □ (public (si_key si) → ▷ released_session si)).
 
-Global Instance session_persistent si : Persistent (session si).
+Lemma session_minted skI skR si :
+  session skI skR si -∗
+  minted (si_key si).
+Proof.
+by iIntros "(?&?&?&?)".
+Qed.
+
+Global Instance session_persistent skI skR si : Persistent (session skI skR si).
 Proof. apply _. Qed.
 
 Definition session_ok si : iProp :=
@@ -199,24 +207,30 @@ Definition session_ok si : iProp :=
 Global Instance session_ok_persistent si : Persistent (session_ok si).
 Proof. apply _. Qed.
 
-Lemma secret_session si :
-  secret (si_init si) -∗
-  secret (si_resp si) -∗
-  session si -∗
+Lemma secret_session skI skR si :
+  secret skI -∗
+  secret skR -∗
+  session skI skR si -∗
   ◇ session_ok si.
 Proof.
-iIntros "sI sR (#comp1 & #comp2)".
+iIntros "sI sR (-> & -> & _ & #comp1 & #comp2)".
 iDestruct "comp2" as "[[comp2|comp2]|comp2]".
 - by iDestruct (secret_not_public with "sI comp2") as ">[]".
 - by iDestruct (secret_not_public with "sR comp2") as ">[]".
 - iIntros "!> !>". by iSplit.
 Qed.
 
-Lemma session_session_ok si :
-  session si -∗
+Lemma session_released_session skI skR si :
+  session skI skR si -∗
+  ▷ released_session si -∗
+  public (si_key si).
+Proof. iIntros "(_ & _ & _ & #H & _) #rel". by iApply "H". Qed.
+
+Lemma session_session_ok skI skR si :
+  session skI skR si -∗
   (public (si_init si) ∨ public (si_resp si)) ∨ session_ok si.
 Proof.
-iIntros "#[#? [?|#?]]"; eauto. iRight. iModIntro. by iSplit.
+iIntros "#(-> & -> & _ & #? & [?|#?])"; eauto. iRight. iModIntro. by iSplit.
 Qed.
 
 Lemma unreleased_key_secrecy si :
@@ -228,6 +242,21 @@ iIntros "#un #s_k !>".
 iApply (bi.iff_trans _ (▷ released_session si)). iSplit => //.
 iSplit; last by iIntros ">[]".
 iIntros "#re !>". by iApply "un".
+Qed.
+
+Definition session_weak skI skR si : iProp :=
+  ⌜skI = si_init si⌝ ∗ ⌜skR = si_resp si⌝ ∗ minted (si_key si) ∗
+  ((public skI ∨ public skR) ∨ □ (public (si_key si) ↔ ▷ False)).
+
+Lemma unreleased_session_weak skI skR si :
+  session skI skR si -∗
+  □ (¬ released_session si) -∗
+  session_weak skI skR si.
+Proof.
+iIntros "(-> & -> & #m_k & #s_k1 & #s_k2) #un".
+do !iSplit => //. iDestruct "s_k2" as "[s_k2|#s_k2]"; eauto.
+iRight. iApply unreleased_key_secrecy => //. iModIntro.
+by iSplit; eauto.
 Qed.
 
 Lemma release_token_key_secrecy rl si :
@@ -251,18 +280,24 @@ iIntros "#ok [_ #comp] rel".
 iApply (release_token_key_secrecy with "rel ok comp").
 Qed.
 
-Lemma session_compromised rl si :
-  session si -∗
+Lemma session_compromised skI skR rl si :
+  session skI skR si -∗
   public (si_key si) -∗
   release_token (si_share_of rl si) -∗
   ◇ compromised si.
 Proof.
-iIntros "(#comp1 & #[[comp2|comp2]|#comp2]) #p_k rel".
+iIntros "(-> & -> & _ & #comp1 & #[[comp2|comp2]|#comp2]) #p_k rel".
 - iSplit => //. by eauto.
 - iSplit => //. by eauto.
 - iSpecialize ("comp2" with "p_k").
   iDestruct (release_token_released_session with "rel comp2") as ">[]".
 Qed.
+
+Lemma session_compromised' skI skR si :
+  session skI skR si -∗
+  compromised si -∗
+  public skI ∨ public skR.
+Proof. by iIntros "(-> & -> & _) (? & _)". Qed.
 
 Definition msg2_pred skR m2 : iProp :=
   ∃ ga b skI N,

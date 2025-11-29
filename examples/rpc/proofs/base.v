@@ -181,6 +181,11 @@ Definition client_connected kI kR cs : iProp :=
   release_token (si_init_share cs) ∗
   client_tokens cs.
 
+Lemma client_connected_session kI kR cs :
+  client_connected kI kR cs -∗
+  session kI kR cs.
+Proof. iIntros "(? & _)". by iApply Conn.connected_session. Qed.
+
 Lemma client_public_key_or skI skR cs P :
   client_connected skI skR cs -∗
   (public (si_key cs) ∨ P) -∗
@@ -201,14 +206,6 @@ Lemma client_connected_ok skI skR cs :
 Proof.
 iIntros "(conn & _)".
 by iApply (Conn.connected_ok with "conn").
-Qed.
-
-Lemma client_connected_keys kI kR cs :
-  client_connected kI kR cs -∗
-  ⌜kI = si_init cs⌝ ∗ ⌜kR = si_resp cs⌝.
-Proof.
-iIntros "(conn & _)".
-by iPoseProof (Conn.connected_keyE with "conn") as "(-> & -> & _)".
 Qed.
 
 Lemma client_connected_failure skI skR cs :
@@ -234,6 +231,11 @@ Definition server_connected skI skR cs : iProp :=
   connected skI skR Resp cs ∗
   release_token (si_resp_share cs).
 
+Lemma server_connected_session kI kR cs :
+  server_connected kI kR cs -∗
+  session kI kR cs.
+Proof. iIntros "(? & _)". by iApply Conn.connected_session. Qed.
+
 Lemma server_public_compromised skI skR cs P :
   server_connected skI skR cs -∗
   (public (si_key cs) ∨ P) -∗
@@ -253,14 +255,6 @@ Lemma server_connected_ok skI skR cs :
 Proof.
 iIntros "(conn & _)".
 by iApply (Conn.connected_ok with "conn").
-Qed.
-
-Lemma server_connected_keys skI skR cs :
-  server_connected skI skR cs -∗
-  ⌜skI = si_init cs⌝ ∗ ⌜skR = si_resp cs⌝.
-Proof.
-iIntros "(conn & _)".
-by iPoseProof (Conn.connected_keyE with "conn") as "(-> & -> & _)".
 Qed.
 
 Lemma server_connected_ok_compromise skI skR cs :

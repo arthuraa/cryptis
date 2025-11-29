@@ -43,7 +43,6 @@ iAssert (RPC.client_connected skI skR cs ∗
 { iDestruct "ready" as  "[fail|ready]"; last by iFrame; eauto.
   iPoseProof (RPC.client_connected_failure with "conn fail") as "#H".
   iFrame "conn". by iLeft. }
-iPoseProof (RPC.client_connected_keys with "conn") as "#[-> ->]".
 wp_lam. wp_pures.
 wp_apply (RPC.wp_close with "[$conn]"); eauto.
 iIntros "pub". iApply "post". by iFrame.

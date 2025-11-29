@@ -68,10 +68,10 @@ Lemma connected_released_session ps skI skR rl cs :
   □ (▷ released_session cs → public (si_key cs)).
 Proof. exact: GenConn.connected_released_session. Qed.
 
-Lemma connected_keyE ps skI skR rl cs :
+Lemma connected_session ps skI skR rl cs :
   connected ps skI skR rl cs -∗
-  ⌜skI = si_init cs⌝ ∗ ⌜skR = si_resp cs⌝ ∗ ⌜rl = GenConn.cs_role cs⌝.
-Proof. exact: GenConn.connected_keyE. Qed.
+  session skI skR cs.
+Proof. exact: GenConn.connected_session. Qed.
 
 Lemma connected_ok ps skI skR rl cs :
   connected ps skI skR rl cs -∗
@@ -79,10 +79,6 @@ Lemma connected_ok ps skI skR rl cs :
   secret skR -∗
   ◇ session_ok cs.
 Proof. exact: GenConn.connected_ok. Qed.
-
-Lemma session_failed_failure si :
-  compromised si  ⊢ GenConn.failure (si_init si) (si_resp si).
-Proof. exact: GenConn.session_failed_failure. Qed.
 
 Lemma connected_failure ps skI skR rl cs :
   connected ps skI skR rl cs -∗
