@@ -104,6 +104,18 @@ Definition db_state kI kR N db : iProp Σ :=
 Definition mapsto kI kR N t1 t2 : iProp Σ :=
   term_own kI (N.@"client".@kR.@"state") (db_singleton t1 t2).
 
+Lemma mapsto_excl kI kR N t t1 t2 :
+  mapsto kI kR N t t1 -∗
+  mapsto kI kR N t t2 -∗
+  False.
+Proof.
+iIntros "own1 own2".
+iCombine "own1 own2" gives "%valid". move: valid.
+rewrite /db_singleton discrete_fun_singleton_op.
+rewrite -auth_frag_op -Some_op discrete_fun_singleton_valid auth_frag_valid.
+by rewrite Some_valid.
+Qed.
+
 Definition free_at kI kR N T : iProp Σ :=
   term_own kI (N.@"client".@kR.@"state") (db_free T).
 
@@ -160,7 +172,7 @@ iMod (term_own_update_2 _ _ (a' := (_ ⋅ _)) with "Hauth Hfree") as "[Hauth Hfr
 iModIntro. by iFrame.
 Qed.
 
-Lemma client_alloc kI kR N E :
+Lemma db_state_alloc kI kR N E :
   ↑N.@"client".@kR.@"state" ⊆ E →
   term_token kI E ==∗
   db_state kI kR N ∅ ∗

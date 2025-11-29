@@ -110,6 +110,12 @@ Qed.
 Definition db_mapsto skI skR t1 t2 : iProp :=
   DB.mapsto skI skR dbN t1 t2.
 
+Lemma db_mapsto_excl skI skR t t1 t2 :
+  db_mapsto skI skR t t1 -∗
+  db_mapsto skI skR t t2 -∗
+  False.
+Proof. exact: DB.mapsto_excl. Qed.
+
 Definition db_free_at skI skR T : iProp :=
   DB.free_at skI skR dbN T.
 
@@ -130,7 +136,7 @@ rewrite (term_token_difference _ _ _ sub).
 iDestruct "skI_token" as "[skI_token ?]". iFrame.
 iMod (rep_main_alloc (N := dbN) skI (kR := skR) ∅ with "skI_token")
   as "(main & cur & skI_token)"; first solve_ndisj.
-iMod (DB.client_alloc _ (N := dbN) with "skI_token")
+iMod (DB.db_state_alloc _ (N := dbN) with "skI_token")
   as "(state & free & skI_token)".
 { solve_ndisj. }
 iModIntro. iFrame. iRight. by iFrame.
