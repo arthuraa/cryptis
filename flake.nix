@@ -4,9 +4,11 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs";
     flake-parts.url = "github:hercules-ci/flake-parts";
+    coq-lsp.url = "github:ejgallego/rocq-lsp/v9.0";
+    coq-lsp.flake = false;
   };
 
-  outputs = inputs@{ self, flake-parts, nixpkgs, ... }:
+  outputs = inputs@{ self, flake-parts, nixpkgs, coq-lsp, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
         # To import a flake module
@@ -46,6 +48,10 @@
 
         overlays.default = final: prev: {
           coqPackages = prev.coqPackages.overrideScope (final: prev: {
+            coq-lsp = prev.lib.overrideCoqDerivation {
+              defaultVersion = "dev";
+              release."dev".src = coq-lsp;
+            } prev.coq-lsp;
             cryptis = prev.mkCoqDerivation {
               pname = "cryptis";
               defaultVersion = "dev";
