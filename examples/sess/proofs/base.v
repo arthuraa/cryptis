@@ -71,6 +71,10 @@ Definition sess_own skI skR si (rl : role) p : iProp :=
     session_names si γs ∗
     iProto_own (session_name_for rl γs) p.
 
+Global Instance sess_own_proper skI skR si rl :
+  Proper ((≡) ==> (≡)) (sess_own skI skR si rl).
+Proof. solve_proper. Qed.
+
 Definition sess_ctx skI skR si tsI tsR : iProp :=
   ∃ γs,
     session_names si γs ∗
@@ -143,6 +147,13 @@ Qed.
 Definition connected skI skR rl cs p : iProp :=
   GenConn.connected (sess_params p) skI skR rl cs ∗
   (public (si_key cs) ∨ sess_own skI skR cs rl p).
+
+(* FIXME: This is a hack. It relies on the definition of connected actually not
+   depending on which initial protocol p is passed as a parameter of
+   sess_params. *)
+Global Instance connected_proper skI skR rl cs :
+  Proper ((≡) ==> (≡)) (connected skI skR rl cs).
+Proof. by move=> p1 p2 e; rewrite /connected {2}e. Qed.
 
 Definition ctx N p := GenConn.ctx N (sess_params p).
 
