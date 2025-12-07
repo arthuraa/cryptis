@@ -71,6 +71,12 @@ Definition sess_own skI skR si (rl : role) p : iProp :=
     session_names si γs ∗
     iProto_own (session_name_for rl γs) p.
 
+Global Instance sess_own_proper skI skR si rl:
+  Proper ((equiv) ==> (⊣⊢)) (sess_own skI skR si rl).
+Proof.
+  solve_proper.
+Qed.
+
 Definition sess_ctx skI skR si tsI tsR : iProp :=
   ∃ γs,
     session_names si γs ∗
@@ -81,6 +87,14 @@ Definition sess_params p := {|
     sess_own skI skR si rl (if rl is Init then p else iProto_dual p);
   GenConn.chan_inv := sess_ctx;
 |}%I.
+
+(* Print bi_car. *)
+Global Instance sess_params_proper:
+  Proper ((equiv) ==> (⊣⊢)) (sess_params).
+(* Proof. *)
+(*   Admitted. *)
+  (* intros p1 p2 hp. *)
+  (* solve_proper. *)
 
 Lemma sess_send p0 skI skR si rl t p ts_send ts_recv :
   sess_own skI skR si rl (<!> MSG t; p) -∗
@@ -140,9 +154,25 @@ iClear "Hγs'". case: rl => /=.
   iExists _. iSplit; eauto. by iRewrite "Hp'".
 Qed.
 
-Definition connected skI skR rl cs p : iProp :=
-  GenConn.connected (sess_params p) skI skR rl cs ∗
-  (public (si_key cs) ∨ sess_own skI skR cs rl p).
+(* initial proto contains a list of proto, we need the history of all past messages to know which proto is the current one *))
+Definition connected skI skR rl cs init_p curr_p : iProp :=
+  GenConn.connected (sess_params init_p) skI skR rl cs ∗
+  (public (si_key cs) ∨ sess_own skI skR cs rl curr_p).
+
+Global Instance connected_proper skI skR rl cs:
+  Proper ((equiv) ==> (⊣⊢)) (connected skI skR rl cs).
+Proof.
+  unfold connected.
+
+  (* solve_proper. *)
+  (* Admitted. *)
+  intros p1 p2 Hp.
+  rewrite  /connected.
+  f_equiv.
+  -
+  solve_proper.
+(* Qed. *)
+
 
 Definition ctx N p := GenConn.ctx N (sess_params p).
 
