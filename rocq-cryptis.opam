@@ -10,7 +10,7 @@ bug-reports: "https://github.com/arthuraa/cryptis/issues"
 dev-repo: "git+https://github.com/arthuraa/cryptis.git"
 
 depends: [
-  "rocq-prover" {= "9.0.0"}
+  "rocq-prover" {= "9.1.0"}
   "rocq-mathcomp-ssreflect" {= "2.5.0"}
   "coq-deriving" {= "0.2.2"}
   "coq-iris" {= "4.4.0"}

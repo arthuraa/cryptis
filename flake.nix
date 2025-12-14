@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs";
     flake-parts.url = "github:hercules-ci/flake-parts";
-    coq-lsp.url = "github:ejgallego/rocq-lsp/v9.0";
+    coq-lsp.url = "github:ejgallego/rocq-lsp/v9.1";
     coq-lsp.flake = false;
   };
 
@@ -47,7 +47,7 @@
         # those are more easily expressed in perSystem.
 
         overlays.default = final: prev: {
-          coqPackages = prev.coqPackages.overrideScope (final: prev: {
+          coqPackages = prev.coqPackages_9_1.overrideScope (final: prev: {
             coq-lsp = prev.lib.overrideCoqDerivation {
               defaultVersion = "dev";
               release."dev".src = coq-lsp;
