@@ -4,7 +4,7 @@ file to avoid slowing down the compilation process. *)
 
 From cryptis Require Import lib.
 From mathcomp Require Import ssreflect.
-From mathcomp Require order.
+From mathcomp Require all_order ssrbool seq path eqtype.
 From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap.
 From iris.base_logic.lib Require Import invariants.
@@ -48,7 +48,7 @@ Proof.
 by iIntros "H"; iApply twp_wp; iApply twp_eq_term.
 Qed.
 
-Import ssrbool seq path ssreflect.eqtype ssreflect.order.
+Import all_order ssrbool seq path boot.eqtype.
 
 Lemma twp_texp E t1 t2 Ψ :
   Ψ (TExp t1 t2) ⊢

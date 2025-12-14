@@ -1,6 +1,6 @@
 From cryptis Require Export mathcomp_compat.
 From HB Require Import structures.
-From mathcomp Require Import all_ssreflect.
+From mathcomp Require Import all_order all_boot.
 From deriving Require Import deriving.
 From Stdlib Require Import ZArith.ZArith Lia.
 From iris.heap_lang Require locations.

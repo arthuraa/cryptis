@@ -4,7 +4,7 @@ file to avoid slowing down the compilation process. *)
 
 From cryptis Require Import lib.
 From mathcomp Require Import ssreflect.
-From mathcomp Require order.
+From mathcomp Require all_order ssrbool eqtype seq path.
 From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap.
 From iris.base_logic.lib Require Import invariants.
@@ -221,9 +221,7 @@ iApply twp_wand; first iApply twp_eq_pre_term_aux.
 by iIntros (?) "->".
 Qed.
 
-Import ssrbool seq path.
-
-Import ssreflect.eqtype ssreflect.order.
+Import all_order ssrbool boot.eqtype seq path.
 
 Lemma twp_leq_term_op0 E (o1 o2 : term_op0) :
   ⊢ WP (leq_term_op0 (repr o1) (repr o2)) @ E

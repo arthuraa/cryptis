@@ -1002,7 +1002,7 @@ End DoUntil.
 
 Section Ordered.
 
-Import ssrbool seq ssreflect.order path deriving.instances.
+Import ssrbool seq all_order path deriving.instances.
 Variable (d : Order.disp_t) (A : orderType d).
 Context `{!Repr A, !heapGS Σ}.
 Import Order Order.POrderTheory Order.TotalTheory.

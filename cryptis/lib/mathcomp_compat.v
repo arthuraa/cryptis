@@ -2,7 +2,7 @@
 mathcomp and stdpp definitions. *)
 
 From HB Require Import structures.
-From mathcomp Require Import all_ssreflect.
+From mathcomp Require Import all_order all_boot.
 From deriving Require Import deriving.
 From stdpp Require base countable.
 From Stdlib Require Import ZArith.ZArith Lia Permutation.
