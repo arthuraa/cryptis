@@ -221,6 +221,7 @@ iApply twp_wand; first iApply twp_eq_pre_term_aux.
 by iIntros (?) "->".
 Qed.
 
+#[warnings="-ambiguous-paths"]
 Import all_order ssrbool boot.eqtype seq path.
 
 Lemma twp_leq_term_op0 E (o1 o2 : term_op0) :

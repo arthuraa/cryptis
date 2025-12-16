@@ -42,6 +42,7 @@ Definition gen_conn_params ps : GenConn.params Σ := {|
     ([∗ list] t ∈ tsR, msg_inv ps skI skR si Resp t);
 |}%I.
 
+#[warnings="-uniform-inheritance"]
 Local Coercion gen_conn_params : params >-> GenConn.params.
 
 Definition connected ps skI skR rl cs : iProp :=

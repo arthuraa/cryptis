@@ -35,6 +35,7 @@ Definition Z_isOrder :=
     Z_leb_anti Z_leb_trans Z_leb_total.
 HB.instance Definition _ := Z_isOrder.
 
+#[warnings="-projection-no-head-constant"]
 HB.instance Definition _ := [isNew for locations.loc_car].
 HB.instance Definition _ := [Equality of locations.loc by <:].
 HB.instance Definition _ := [Choice of locations.loc by <:].

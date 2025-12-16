@@ -48,6 +48,7 @@ Proof.
 by iIntros "H"; iApply twp_wp; iApply twp_eq_term.
 Qed.
 
+#[warnings="-ambiguous-paths"]
 Import all_order ssrbool seq path boot.eqtype.
 
 Lemma twp_texp E t1 t2 Ψ :

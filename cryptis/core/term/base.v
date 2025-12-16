@@ -170,18 +170,21 @@ HB.instance Definition _ :=
 HB.instance Definition _ : Order.Total _ term :=
   Order.CanIsTotal Order.default_display unfold_termK.
 
+#[warnings="-projection-no-head-constant"]
 HB.instance Definition _ := [isNew for seed_of_aenc_key].
 HB.instance Definition _ := [Equality of aenc_key by <:].
 HB.instance Definition _ := [Choice of aenc_key by <:].
 HB.instance Definition _ := [Countable of aenc_key by <:].
 HB.instance Definition _ := [Order of aenc_key by <:].
 
+#[warnings="-projection-no-head-constant"]
 HB.instance Definition _ := [isNew for seed_of_sign_key].
 HB.instance Definition _ := [Equality of sign_key by <:].
 HB.instance Definition _ := [Choice of sign_key by <:].
 HB.instance Definition _ := [Countable of sign_key by <:].
 HB.instance Definition _ := [Order of sign_key by <:].
 
+#[warnings="-projection-no-head-constant"]
 HB.instance Definition _ := [isNew for seed_of_senc_key].
 HB.instance Definition _ := [Equality of senc_key by <:].
 HB.instance Definition _ := [Choice of senc_key by <:].

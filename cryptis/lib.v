@@ -584,6 +584,7 @@ Definition pure_ctx K : bool := forallb pure_item K.
 
 Section WithSsrBool.
 
+#[warnings="-ambiguous-paths"]
 Import ssreflect ssrbool.
 
 Lemma pure_expr_fill_item a (e : expr) : pure_expr (fill_item a e) = pure_item a && pure_expr e.
@@ -1002,6 +1003,7 @@ End DoUntil.
 
 Section Ordered.
 
+#[warnings="-ambiguous-paths"]
 Import ssrbool seq all_order path deriving.instances.
 Variable (d : Order.disp_t) (A : orderType d).
 Context `{!Repr A, !heapGS Σ}.
