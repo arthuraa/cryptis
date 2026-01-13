@@ -480,15 +480,16 @@ Proof. rewrite /invs_canceled all_sort. apply eq_all => ?. by rewrite mem_sort. 
 Lemma invs_canceled_insert_exp pt pts :
   wf_term pt -> all wf_term pts -> invs_canceled pts -> invs_canceled (insert_exp pt pts).
 Proof.
-rewrite /invs_canceled => wf /allP wfs /allP canceled. apply /allP. rewrite /insert_exp => pt' in_pt'.
-case: ifP => in_inv_pt in in_pt' *.
-  - have x: inv pt' \notin pts. apply canceled. exact: (mem_rem in_pt').
-    apply: contraNN x. exact: mem_rem.
-  - rewrite in_cons in in_pt'. case /orP: in_pt' => [/eqP -> | in_pts] //.
-    + by rewrite in_cons negb_or inv_Nid in_inv_pt.
-    + rewrite in_cons negb_or. apply /andP. split.
-      * apply /eqP => /(f_equal inv). rewrite (inv_involutive (wfs _ in_pts)) => eq.
-        rewrite eq in in_pts. by rewrite in_pts in in_inv_pt.
+move => ? /allP /= wfs /allP /= canceled.
+rewrite /invs_canceled. apply /allP. rewrite /insert_exp /= => pt'.
+case: ifP => [_| /negP ?].
+  - move => /mem_rem /canceled. apply: contraNN. exact: mem_rem.
+  - rewrite !inE negb_or. case /orP => [/eqP -> | in_pts].
+    + rewrite inv_Nid. exact /negP.
+    + apply /andP. split.
+      * have ? := wfs _ in_pts.
+        apply /eqP => /eqP. rewrite inv_eq_op // => /eqP => eq.
+        by rewrite eq in in_pts.
       * exact: canceled.
 Qed.
 
