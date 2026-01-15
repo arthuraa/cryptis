@@ -516,6 +516,9 @@ Definition tsize t := PreTerm.tsize (unfold_term t).
 
 Lemma tsize_gt0 t : 0 < tsize t. Proof. exact: PreTerm.tsize_gt0. Qed.
 
+Lemma tsize_TInv t : ~~ is_inv t -> tsize (TInv t) = S (tsize t).
+Proof. move => ?. by rewrite /tsize unfold_TInv PreTerm.tsize_inv -?is_inv_unfold. Qed.
+
 Lemma tsize_TExpN t ts :
   ~~ is_exp t -> invs_canceled ts ->
   tsize (TExpN t ts)

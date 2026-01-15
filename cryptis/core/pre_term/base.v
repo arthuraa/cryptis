@@ -584,6 +584,9 @@ move => pt' /eqP expsN0. rewrite base_expsK ?wf_normalize //.
 by apply: contraNT expsN0 => /exps_expN ->.
 Qed.
 
+Lemma tsize_inv pt : ~~ is_inv pt -> tsize (inv pt) = S (tsize pt).
+Proof. move => ?. by rewrite inv_invN. Qed.
+
 Lemma tsize_exp t ts :
   ~~is_exp t -> invs_canceled ts ->
   tsize (exp t ts) =
