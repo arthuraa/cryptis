@@ -653,3 +653,16 @@ elim: n / (lt_wf n) t => n _ IH t t_n.
 apply: H => t' t'_t.
 apply: (IH (tsize t')); lia.
 Qed.
+
+Lemma unfold_TExpN' t ts :
+  ~~ is_exp t -> ts != [::] -> invs_canceled ts ->
+  unfold_term (TExpN t ts) =
+    PreTerm.PTExp (unfold_term t) (sort <=%O (map unfold_term ts)).
+Proof.
+move => nExp /negbTE tsN0 canceled.
+rewrite unfold_TExpN /PreTerm.exp.
+rewrite is_exp_unfold in nExp.
+rewrite /invs_canceled in canceled.
+rewrite PreTerm.exps_expN //= PreTerm.cancel_exps_canceled //.
+by rewrite /nilp size_map size_eq0 tsN0 PreTerm.base_expN.
+Qed.
