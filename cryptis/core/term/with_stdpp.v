@@ -183,12 +183,8 @@ Proof.
 by rewrite nonces_of_term_unseal; case: t => //=.
 Qed.
 
-Lemma nonces_of_term_TInv t :
-  negb (is_inv t) -> nonces_of_term (TInv t) = nonces_of_term t.
-Proof.
-rewrite is_inv_unfold => /is_trueP ?.
-by rewrite nonces_of_term_unseal /nonces_of_term_def unfold_TInv PreTerm.inv_invN.
-Qed.
+Lemma nonces_of_term_TInv t : nonces_of_term (TInv t) = nonces_of_term t.
+Proof. rewrite nonces_of_term_unseal /nonces_of_term_def unfold_TInv. by case: t. Qed.
 
 Lemma nonces_of_term_TExpN t ts :
   negb (is_exp t) -> invs_canceled ts ->
