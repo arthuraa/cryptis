@@ -516,6 +516,20 @@ Definition tsize t := PreTerm.tsize (unfold_term t).
 
 Lemma tsize_gt0 t : 0 < tsize t. Proof. exact: PreTerm.tsize_gt0. Qed.
 
+Lemma tsize_eq t :
+  tsize t =
+  match t with
+  | TInt _ => 1
+  | TPair t1 t2 => S (tsize t1 + tsize t2)
+  | TNonce _ => 1
+  | TKey _ t => S (tsize t)
+  | TSeal k t => S (tsize k + tsize t)
+  | THash t => S (tsize t)
+  | TExpN' pt pts _ => PreTerm.tsize (PreTerm.PTExp pt pts)
+  | TInv' pt _ => PreTerm.tsize (PreTerm.PT1 O1Inv pt)
+  end.
+Proof. by case: t. Qed.
+
 Lemma tsize_TInv t : ~~ is_inv t -> tsize (TInv t) = S (tsize t).
 Proof. move => ?. by rewrite /tsize unfold_TInv PreTerm.tsize_inv -?is_inv_unfold. Qed.
 
@@ -531,6 +545,8 @@ case: (altP eqP) => [-> | _] //=.
 - by rewrite addn0.
 - by rewrite big_cons /= sumnE !big_map PreTerm.base_expN // -is_exp_unfold.
 Qed.
+
+Definition tsizeE := (tsize_TInv, tsize_TExpN, tsize_eq).
 
 Lemma TExpN_injl : left_injective TExpN.
 Proof.
@@ -557,20 +573,6 @@ Proof.
 move/TExpN_injr/perm_mem/(_ t2).
 by rewrite /cancel_exps /= !unfold_termK !inE eqxx => /eqP.
 Qed.
-
-Lemma tsize_eq t :
-  tsize t =
-  match t with
-  | TInt _ => 1
-  | TPair t1 t2 => S (tsize t1 + tsize t2)
-  | TNonce _ => 1
-  | TKey _ t => S (tsize t)
-  | TSeal k t => S (tsize k + tsize t)
-  | THash t => S (tsize t)
-  | TExpN' pt pts _ => PreTerm.tsize (PreTerm.PTExp pt pts)
-  | TInv' pt _ => PreTerm.tsize (PreTerm.PT1 O1Inv pt)
-  end.
-Proof. by case: t. Qed.
 
 (*
 Lemma tsize_TExpN_lt t1 ts1 t2 :

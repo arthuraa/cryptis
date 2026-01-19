@@ -7,10 +7,6 @@ From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
 From cryptis.core.term Require Import base.
 
-Lemma tsize_TPair t1 t2 :
-  tsize (TPair t1 t2) = S (tsize t1 + tsize t2).
-Proof. by rewrite tsize_eq. Qed.
-
 (*
 Lemma tsize_TExpN_exp t ts t' : t' ∈ ts → tsize t' < tsize (TExpN t ts).
 Proof.
@@ -595,9 +591,8 @@ Proof. exact: seal_eq. Qed.
 
 Lemma of_list_tsize t ts : t ∈ ts → tsize t < tsize (of_list ts).
 Proof.
-rewrite of_list_unseal; elim: ts => [|t' ts IH] //=.
-- by rewrite elem_of_nil.
-- rewrite tsize_TPair elem_of_cons; case=> [<-|/IH t_ts]; lia.
+rewrite of_list_unseal; elim: ts => [/elem_of_nil |t' ts IH /elem_of_cons] //=.
+rewrite [tsize (TPair _ _)]tsizeE ssrnat.addnE; case=> [<-|/IH t_ts]; lia.
 Qed.
 
 Lemma is_nonce_of_list ts : is_nonce (of_list ts) = false.
