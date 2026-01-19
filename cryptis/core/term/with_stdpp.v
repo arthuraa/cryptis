@@ -696,11 +696,10 @@ Proof. by rewrite Spec.tag_unseal; eauto using subterm. Qed.
 #[global]
 Hint Resolve STRefl : core.
 
-Lemma exps_TExpN t ts : exps (TExpN t ts) ≡ₚ path.sort order.Order.le
-    (cancel_exps (exps t ++ ts)).
+Lemma exps_TExpN t ts : exps (TExpN t ts) ≡ₚ cancel_exps (exps t ++ ts).
 Proof.
 apply/(ssrbool.elimT perm_Perm).
-by rewrite exps_TExpN.
+by rewrite exps_TExpN path.perm_sort.
 Qed.
 
 (*
