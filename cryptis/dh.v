@@ -69,8 +69,9 @@ iPoseProof ("aP" with "p_t") as "{p_t} p_t".
 iAssert (▷ False)%I as ">[]".
 iModIntro.
 iDestruct "p_t" as "(%e & _)".
-(* rewrite exps_TExpN List.length_app /= in e; lia. *)
-Admitted.
+apply (f_equal Nat.odd) in e.
+by rewrite exps_TExpN exps_expN // parity_cancel_exps in e.
+Qed.
 
 Lemma dh_public_TExp g a :
   ¬ is_exp g →

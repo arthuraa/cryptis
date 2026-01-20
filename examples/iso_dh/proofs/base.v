@@ -339,11 +339,10 @@ iSplit; last first.
   - iLeft. iSplit => //. by iApply public_dh_share. }
 iIntros "[[_ #p_b] | [[_ #p_a] | (_ & contra & _)]]"; eauto.
 iPoseProof ("pred_a" with "contra") as ">%contra".
-(* by rewrite /iso_dh_key_share. exps_TExpN /= in contra. *)
-(* Qed. *)
+apply (f_equal Nat.odd) in contra.
+by rewrite exps_TExpN parity_cancel_exps in contra.
 Admitted.
 
-(* TODO: fix *)
 Lemma public_dh_secret' a b (P : iProp) :
   □ (public a ↔ P) -∗
   □ (∀ t, dh_pred a t ↔ ▷ □ iso_dh_key_share t) -∗
@@ -357,8 +356,9 @@ iIntros "[[_ #p_b] | [[_ #p_a] | (_ & contra & _)]]".
 - by iModIntro; iApply "s_b".
 - by iModIntro; iApply "s_a".
 iPoseProof ("pred_a" with "contra") as ">%contra".
-rewrite /iso_dh_key_share. rewrite exps_TExpN /= in contra.
-Admitted.
+apply (f_equal Nat.odd) in contra.
+by rewrite exps_TExpN parity_cancel_exps in contra.
+Qed.
 
 End Verif.
 
