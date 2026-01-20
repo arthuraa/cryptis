@@ -743,3 +743,6 @@ Proof.
 rewrite (ssrbool.negbTE (is_exp_base t)) /=. by auto.
 Qed.
 Hint Resolve is_exp_base : core.
+
+Lemma parity_cancel_exps ts : Nat.odd (length (cancel_exps ts)) = Nat.odd (length ts).
+Proof. by rewrite !oddE !sizeE parity_cancel_exps. Qed.

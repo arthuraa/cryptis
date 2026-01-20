@@ -103,3 +103,9 @@ Proof.
 elim: xs => [//|x xs IH] /= [] Sx Sxs x'; rewrite inE.
 case: eqP => [-> _|_] //=; exact: IH.
 Qed.
+
+Lemma sizeE {T : eqType} : eqfun (@length T) seq.size.
+Proof. by case. Qed.
+
+Lemma oddE : eqfun Nat.odd ssrnat.odd.
+Proof. elim => // ? IH. by rewrite Nat.odd_succ -Nat.negb_odd IH -oddS. Qed.
