@@ -368,6 +368,15 @@ move => /in_insert_exps /orP [/eqP -> | /IH in_pts'].
 - by rewrite inE orbC in_pts'.
 Qed.
 
+Lemma parity_insert_exp pt pts : odd (size (insert_exp pt pts)) = ~~ odd (size pts).
+Proof.
+rewrite /insert_exp. case: ifP => //.
+case: pts => // *. by rewrite size_rem // Bool.negb_involutive.
+Qed.
+
+Lemma parity_cancel_exps pts : odd (size (cancel_exps pts)) = odd (size pts).
+Proof. elim: pts => // [?? IH]. by rewrite parity_insert_exp IH. Qed.
+
 Lemma count_insert_exp pt1 pt2 pts :
   count_mem pt1 (insert_exp pt2 pts) =
   if inv pt2 \in pts then

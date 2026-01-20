@@ -491,6 +491,9 @@ apply /(iffP idP).
   rewrite mem_map //. exact: unfold_term_inj.
 Qed.
 
+
+Lemma parity_cancel_exps ts : odd (size (cancel_exps ts)) = odd (size ts).
+Proof. by rewrite /cancel_exps size_map PreTerm.parity_cancel_exps size_map. Qed.
 Lemma is_exp_TExpN t ts :
   ~~ is_exp t -> invs_canceled ts ->
   is_exp (TExpN t ts) = (ts != [::]).
