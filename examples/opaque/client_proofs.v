@@ -16,27 +16,30 @@ Section Opaque.
 Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ}.
 Notation iProp := (iProp Σ).
 
+
+Lemma wp_hl_inv E r (Ψ: val -> iProp) :
+Ψ (TInv r) ⊢
+WP hl_inv r @ E {{ Ψ }}.
+Proof.  Admitted.
+
 Lemma wp_client_session (uid c pw : term): 
 cryptis_ctx -∗
 channel c -∗
 public uid -∗
+minted pw -∗
 WP Client.session uid c pw
 {{ x , True }}.
 Proof.
-  iIntros "#Cryptis #Hc #pubuid".
+  iIntros "#Cryptis #Hc #pubuid #mintedpw".
   wp_lam. wp_pures.
-  wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => False)%I).
-  1: iAssumption.
+  wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => False)%I) => //.
   iIntros "%x_u %Hnoncex_u #Hmintedx_u #Hprivatex_u #H!eqx_u Htokenx_u".
   wp_pures.
-  wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => False)%I).
-  1: iAssumption.
+  wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => False)%I) => //.
   iIntros "%r %Hnoncer #Hmintedr #Hprivater #H!eqr Htokenr".
   wp_pures.
-  wp_apply wp_H'.
-  1: done.
+  wp_apply wp_H' => //.
   iIntros "_".
-  unfold hash_result.
   wp_apply wp_texp.
   wp_pures.
   wp_apply wp_texp.
@@ -45,18 +48,15 @@ Proof.
   wp_term_of_list.
   wp_pures.
   do !rewrite subst_list_match /=.
-  wp_apply wp_send.
-  1: done.
+  wp_apply wp_send => //.
   do !rewrite public_of_list /=.
   do !iSplit => //.
   iApply public_TExp_iff.
-  intro contra.
-  destruct contra.
+  intro contra => //.
   iRight.
   do !iSplit => //.
   iApply minted_THash.
-  iApply minted_tag.
-  admit.
+  by iApply minted_tag.
   iApply "H!eqr".
   iNext. iModIntro.
   admit.
@@ -64,15 +64,25 @@ Proof.
   by iApply public_g.
   admit.
   wp_pures.
-  wp_apply wp_recv.
-  1: done.
+  wp_apply wp_recv => //.
   iIntros "%m2 #pubm2".
-  wp_list_of_term m2; wp_pures.
-  2: done.
+  wp_list_of_term m2; wp_pures => //.
   wp_list_match => [β X_s envelope A_s | _].
   2: by wp_pures.
   intro Hm2eq.
+  (* the start of the curse *)
   wp_pures.
+  wp_apply wp_hl_inv.
+  (* the end of the curse *)
+  wp_apply wp_texp.
+  wp_list.
+  wp_apply wp_H => //.
+  iIntros "_".
+  wp_apply wp_derive_senc_key.
+  set k := SEncKey _.
+  wp_pures.
+  unfold AuthDec. wp_pures.
+  (* wp_apply (wp_sdec $! k (opN.@"AuthEnc") (term_of_list envelope)). *)
 Admitted.
 
 End Opaque.

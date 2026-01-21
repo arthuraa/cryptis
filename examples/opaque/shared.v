@@ -68,7 +68,6 @@ Lemma public_g :
   True -∗ public g.
 Proof.
   iIntros "_".
-  unfold g.
   by iApply public_TInt.
 Qed.
 

@@ -66,29 +66,12 @@ Proof.
   wp_list.
   wp_pures.
   wp_term_of_list.
-  wp_apply wp_senc.
-  admit.
-  iApply minted_senc. iApply minted_THash. iApply minted_tag. iApply minted_of_list.
-  do !iSplit => //.
-  iApply minted_TExp.
-  by intro contra.
-  iSplit => //.
-  iApply minted_THash. by iApply minted_tag.
-  iApply minted_of_list. do !iSplit => //.
-  iApply minted_TExp.
-  by intro contra.
-  iSplit => //.
-  by iApply minted_TInt.
-  iApply minted_TExp.
-  by intro contra.
-  iSplit => //.
-  by iApply minted_TInt.
-  admit.
-  admit.
-  iIntros "%envelope #Hpubenv".
+  wp_apply wp_senc'.
+  wp_pures.
   wp_list.
   wp_term_of_list.
-Admitted.
+  by iApply "post".
+Qed.
 
 Lemma wp_server_session (db c : term) (alist : gmap term term) : 
 cryptis_ctx -∗
