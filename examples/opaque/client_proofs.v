@@ -26,17 +26,18 @@ Lemma wp_client_session (uid c pw : term):
 cryptis_ctx -∗
 channel c -∗
 public uid -∗
+minted uid -∗
 minted pw -∗
 WP Client.session uid c pw
 {{ x , True }}.
 Proof.
-  iIntros "#Cryptis #Hc #pubuid #mintedpw".
+  iIntros "#Cryptis #Hc #pubuid #minteduid #mintedpw".
   wp_lam. wp_pures.
   wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => False)%I) => //.
   iIntros "%x_u %Hnoncex_u #Hmintedx_u #Hprivatex_u #H!eqx_u Htokenx_u".
   wp_pures.
-  wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => False)%I) => //.
-  iIntros "%r %Hnoncer #Hmintedr #Hprivater #H!eqr Htokenr".
+  wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => True)%I) => //.
+  iIntros "%r %Hnoncer #Hmintedr #Hprivater #Heqr Htokenr".
   wp_pures.
   wp_apply wp_H' => //.
   iIntros "_".
@@ -57,9 +58,8 @@ Proof.
   do !iSplit => //.
   iApply minted_THash.
   by iApply minted_tag.
-  iApply "H!eqr".
-  iNext. iModIntro.
-  admit.
+  iApply "Heqr".
+  iNext. by iModIntro.
   iApply public_TExp.
   by iApply public_g.
   admit.
@@ -82,7 +82,76 @@ Proof.
   set k := SEncKey _.
   wp_pures.
   unfold AuthDec. wp_pures.
-  (* wp_apply (wp_sdec $! k (opN.@"AuthEnc") (term_of_list envelope)). *)
+  do !rewrite subst_list_match /=.
+  wp_apply wp_sdec'.
+  iSplit.
+  2: iIntros "_"; by wp_pures.
+  iIntros "%clear %henvelope %henvelopedec".
+  wp_pures.
+  wp_list_of_term clear_list.
+  2: by wp_pures.
+  wp_list_match => [p_u P_u P_s | _].
+  2: by wp_pures.
+  iIntros "%Hclearlist".
+  wp_apply wp_ke => //.
+  iIntros "_".
+  wp_pures.
+  wp_list.
+  wp_apply wp_H => //.
+  iIntros "_".
+  wp_pures.
+  unfold hash_result.
+  wp_list.
+  wp_apply wp_prf => //.
+  iIntros "_".
+  wp_pures.
+  wp_list.
+  wp_apply wp_prf => //.
+  iIntros "_".
+  wp_eq_term eq_A_s; wp_pures => //.
+  wp_list.
+  wp_apply wp_prf => //.
+  iIntros "_".
+  wp_pures.
+  unfold hash_result.
+  wp_pures.
+  wp_apply wp_send => //.
+  iApply public_THash.
+  (* start *)
+  iLeft.
+  iApply public_tag.
+
+  iApply public_of_list.
+  do !iSplit => //.
+  iApply public_THash.
+  iRight.
+  iSplit.
+  iApply minted_tag.
+  iApply minted_of_list.
+  do !iSplit => //; iApply minted_TExp.
+  admit.
+  admit.
+  admit.
+  iSplit => //.
+  admit.
+  admit.
+  iApply public_THash.
+  iRight.
+  iSplit.
+  iApply minted_tag.
+  iApply minted_of_list.
+  do !iSplit => //.
+  iApply minted_TExp.
+  by intro contra.
+  iSplit => //.
+  iApply minted_THash.
+  by iApply minted_tag.
+  admit.
+(* end *)
+  
+  wp_pures.
+  wp_list.
+  by wp_pures.
 Admitted.
 
 End Opaque.

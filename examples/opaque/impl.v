@@ -26,8 +26,8 @@ Definition _H_list : string -> val := fun _tag => (λ: "val", _H _tag (term_of_l
 Definition prf  := _H_list.
 Definition H    := _H_list.
 Definition H'   := _H.
-Definition AuthEnc : val := λ: "key" "v", senc "key" (Tag $ opN.@"AuthEnc") (term_of_list "v").
-Definition AuthDec : val := λ: "key" "v", sdec "key" (Tag $ opN.@"AuthEnc") (term_of_list "v").
+Definition AuthEnc : val := λ: "key" "v", senc "key" (Tag $ opN.@"AuthEnc") "v".
+Definition AuthDec : val := λ: "key" "v", sdec "key" (Tag $ opN.@"AuthEnc") "v".
 Definition g := (TInt 0).
 
 Definition OPRF : val := λ: "k",
@@ -53,14 +53,15 @@ Definition session : val := λ: "uid" "c" "pw",
     (* TODO: check β ∈ G *)
     let: "rw" := derive_senc_key (H "rw" [ "pw"; (texp "β" (hl_inv "r")) ]) in
     bind: "envelope_dec" := AuthDec "rw" "envelope" in
-    list_match: [ "p_u"; "P_u"; "P_s" ] := "envelope_dec" in
-    let: "K" := KE "H" "p_u" "x_u" "P_s" "X_s" in
+    bind: "list_envelope_dec" := list_of_term "envelope_dec" in
+    list_match: [ "p_u"; "P_u"; "P_s" ] := "list_envelope_dec" in
+    let: "K" := KE "p_u" "x_u" "P_s" "X_s" in
     let: "ssid'" := H "ssid'" ["uid"; "α"] in
     let: "SK" := prf "SK" [ "K"; "ssid'" ] in
     guard: eq_term "A_s" (prf "A_s" [ "K"; "ssid'" ]) in
     let: "A_u" := prf "A_u" [ "K"; "ssid'" ] in
     let: "m3" := "A_u"  in
-    send "m3" ;;
+    send "c" "m3" ;;
     SOME [ "uid"; "SK" ].
 
 End Client.
@@ -103,7 +104,7 @@ Definition make_file : val := λ: "pw",
     let: "p_u" := mk_nonce #() in
     let: "P_s" := texp g "p_s" in
     let: "P_u" := texp g "p_u" in
-    let: "envelope" := AuthEnc "rw" ["p_u"; "P_u"; "P_s"] in
+    let: "envelope" := AuthEnc "rw" (term_of_list ["p_u"; "P_u"; "P_s"]) in
     term_of_list ["k_s"; "p_s"; "P_s"; "P_u"; "envelope"].
 
 End Server.
