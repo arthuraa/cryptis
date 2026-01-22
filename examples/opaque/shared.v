@@ -19,56 +19,48 @@ Notation iProp := (iProp Σ).
 Notation opN := (nroot.@"op").
 
 Definition hash_result (tag : string) (val : term) : heap_lang.val :=
-  repr (THash (Spec.tag
-                 (Tag $ opN.@tag)
-                 val)).
+    repr (THash (Spec.tag (Tag $ opN.@tag) val)).
 
-Lemma _wp_H (tag : string) (val : term):
-{{{True}}}
-_H tag val
-{{{ RET hash_result tag val; True}}}.
+Lemma _wp_H (tag : string) (val : term) Ψ:
+    Ψ (hash_result tag val) ⊢ WP _H tag val {{ Ψ }}.
 Proof.
-  iIntros "%ϕ _ post".
-  wp_lam.
-  wp_apply wp_tag.
-  wp_apply wp_hash.
-  by iApply "post".
-Qed.  
+    iIntros "post".
+    wp_lam.
+    wp_apply wp_tag.
+    wp_apply wp_hash.
+    by iApply "post".
+Qed.
 
-Lemma _wp_H_list (tag : string) (val : list term):
-{{{True}}}
-_H_list tag (repr val)
-{{{ RET hash_result tag (Spec.of_list val); True}}}.
+Lemma _wp_H_list (tag : string) (val : list term) Ψ:
+    Ψ (hash_result tag (Spec.of_list val)) ⊢ WP _H_list tag (repr val) {{ Ψ }}.
 Proof.
-  iIntros "%ϕ _ post".
-  wp_lam.
-  wp_apply wp_term_of_list.
-  by wp_apply _wp_H.
+    iIntros "post".
+    wp_lam.
+    wp_apply wp_term_of_list.
+    by wp_apply _wp_H.
 Qed.
 
 Definition wp_prf   := _wp_H_list.
 Definition wp_H     := _wp_H_list.
 Definition wp_H'    := _wp_H.
 
-Lemma wp_ke (p_a x_a P_b X_b : term):
-{{{ True }}}
-KE p_a x_a P_b X_b
-{{{ RET hash_result "K"
-    (Spec.of_list [TExp P_b p_a; TExp X_b x_a]); True}}}.
+Lemma wp_ke (p_a x_a P_b X_b : term) Ψ:
+    Ψ (hash_result "K" (Spec.of_list [TExp P_b p_a; TExp X_b x_a])) ⊢
+    WP KE p_a x_a P_b X_b {{ Ψ }}.
 Proof.
-  iIntros "%ϕ _ post".
-  wp_lam.
-  wp_pures.
-  wp_apply wp_texp. wp_list.
-  wp_apply wp_texp. wp_list.
-  by wp_apply _wp_H_list.
+    iIntros "post".
+    wp_lam.
+    wp_pures.
+    wp_apply wp_texp. wp_list.
+    wp_apply wp_texp. wp_list.
+    by wp_apply _wp_H_list.
 Qed.
 
 Lemma public_g :
-  True -∗ public g.
+    True -∗ public g.
 Proof.
-  iIntros "_".
-  by iApply public_TInt.
+    iIntros "_".
+    by iApply public_TInt.
 Qed.
 
 End Opaque.

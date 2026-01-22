@@ -22,7 +22,7 @@ Lemma wp_hl_inv E r (Ψ: val -> iProp) :
 WP hl_inv r @ E {{ Ψ }}.
 Proof.  Admitted.
 
-Lemma wp_client_session (uid c pw : term): 
+Lemma wp_client_session (uid c pw : term):
 cryptis_ctx -∗
 channel c -∗
 public uid -∗
@@ -39,8 +39,7 @@ Proof.
   wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => True)%I) => //.
   iIntros "%r %Hnoncer #Hmintedr #Hprivater #Heqr Htokenr".
   wp_pures.
-  wp_apply wp_H' => //.
-  iIntros "_".
+  wp_apply wp_H'.
   wp_apply wp_texp.
   wp_pures.
   wp_apply wp_texp.
@@ -76,8 +75,7 @@ Proof.
   (* the end of the curse *)
   wp_apply wp_texp.
   wp_list.
-  wp_apply wp_H => //.
-  iIntros "_".
+  wp_apply wp_H.
   wp_apply wp_derive_senc_key.
   set k := SEncKey _.
   wp_pures.
@@ -93,25 +91,20 @@ Proof.
   wp_list_match => [p_u P_u P_s | _].
   2: by wp_pures.
   iIntros "%Hclearlist".
-  wp_apply wp_ke => //.
-  iIntros "_".
+  wp_apply wp_ke.
   wp_pures.
   wp_list.
-  wp_apply wp_H => //.
-  iIntros "_".
+  wp_apply wp_H.
   wp_pures.
   unfold hash_result.
   wp_list.
-  wp_apply wp_prf => //.
-  iIntros "_".
+  wp_apply wp_prf.
   wp_pures.
   wp_list.
-  wp_apply wp_prf => //.
-  iIntros "_".
+  wp_apply wp_prf.
   wp_eq_term eq_A_s; wp_pures => //.
   wp_list.
-  wp_apply wp_prf => //.
-  iIntros "_".
+  wp_apply wp_prf.
   wp_pures.
   unfold hash_result.
   wp_pures.
@@ -148,7 +141,7 @@ Proof.
   by iApply minted_tag.
   admit.
 (* end *)
-  
+
   wp_pures.
   wp_list.
   by wp_pures.

@@ -44,14 +44,12 @@ Proof.
   wp_pures.
   wp_lam.
   wp_pures.
-  wp_apply wp_H' => //.
+  wp_apply wp_H'.
   unfold hash_result.
-  iIntros "_".
   wp_pures.
   wp_apply wp_texp.
   wp_list.
-  wp_apply wp_H => //.
-  iIntros "_".
+  wp_apply wp_H.
   wp_apply wp_derive_senc_key.
   wp_pures.
   wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => False)%I) => //.
@@ -63,17 +61,15 @@ Proof.
   wp_apply wp_texp. wp_pures.
   wp_apply wp_texp. wp_pures.
   unfold AuthEnc.
-  wp_list.
-  wp_pures.
-  wp_term_of_list.
-  wp_apply wp_senc'.
-  wp_pures.
+  wp_list. wp_pures.
+  wp_term_of_list. wp_pures.
+  wp_apply wp_senc'. wp_pures.
   wp_list.
   wp_term_of_list.
   by iApply "post".
 Qed.
 
-Lemma wp_server_session (db c : term) (alist : gmap term term) : 
+Lemma wp_server_session (db c : term) (alist : gmap term term) :
 cryptis_ctx -∗
 channel c -∗
 AList.is_alist db (repr <$> alist) -∗
@@ -116,24 +112,16 @@ Proof.
   wp_apply wp_texp. wp_pures.
   wp_apply wp_texp. wp_pures.
   wp_apply wp_ke.
-  1: done.
-  iIntros "_".
   wp_pures.
   wp_list.
   wp_apply wp_H.
-  1: done.
-  iIntros "_".
   wp_pures.
   unfold hash_result.
   wp_list.
   wp_apply wp_prf.
-  1: done.
-  iIntros "_".
   wp_pures.
   wp_list.
   wp_apply wp_prf.
-  1: done.
-  iIntros "_".
   unfold hash_result.
   wp_list.
   wp_term_of_list.
@@ -160,13 +148,12 @@ Proof.
   iIntros "%m3 #Hm3pub".
   wp_pures.
   wp_list.
-  wp_apply wp_prf => //.
-  iIntros "_".
+  wp_apply wp_prf.
   wp_eq_term Heq; wp_pures.
   2: by iModIntro.
   wp_list.
   wp_pures.
   by iModIntro.
-Admitted.  
+Admitted.
 
 End Opaque.
