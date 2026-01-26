@@ -357,16 +357,19 @@ Proof.
 move => wf1 wf2. by apply /(sameP eqP) /(iffP eqP) => [-> | <-]; rewrite inv_involutive.
 Qed.
 
-Lemma in_insert_exps pt1 pt2 pts : pt1 \in insert_exp pt2 pts -> pt1 \in pt2 :: pts.
-Proof. rewrite /insert_exp. case: ifP => _ //. by rewrite inE orbC => /mem_rem ->. Qed.
-
-Lemma in_cancel_exps pt pts : pt \in cancel_exps pts -> pt \in pts.
+Lemma insert_exp_subseq pt pts : subseq (insert_exp pt pts) (pt :: pts).
 Proof.
-elim: pts => //= [?? IH].
-move => /in_insert_exps /orP [/eqP -> | /IH in_pts'].
-- exact: mem_head.
-- by rewrite inE orbC in_pts'.
+rewrite /insert_exp. case: ifP => _ //.
+by apply: subseq_trans; first apply rem_subseq; last apply subseq_cons.
 Qed.
+
+Lemma cancel_exps_subseq pts : subseq (cancel_exps pts) pts.
+elim: pts => // [?? IH]; simpl (cancel_exps _).
+apply: subseq_trans; first apply insert_exp_subseq; last by simpl; rewrite eqxx.
+Qed.
+
+Lemma mem_cancel_exps pts : { subset (cancel_exps pts) <= pts }.
+Proof. apply mem_subseq. exact: cancel_exps_subseq. Qed.
 
 Lemma parity_insert_exp pt pts : odd (size (insert_exp pt pts)) = ~~ odd (size pts).
 Proof.
@@ -415,7 +418,7 @@ Lemma count_perm_cancel pts1 pts2 :
   perm_eq (cancel_exps pts1) (cancel_exps pts2).
 move => wfs1 wfs2. split.
 - move => wt_eq. rewrite /perm_eq. apply /allP => /= pt. rewrite mem_cat => /orP pt_in.
-  have ?: wf_term pt by case: pt_in => /in_cancel_exps => [ /(allP wfs1) | /(allP wfs2) ].
+  have ?: wf_term pt by case: pt_in => /mem_cancel_exps => [ /(allP wfs1) | /(allP wfs2) ].
   by rewrite !count_cancel // wt_eq.
 - move => *. rewrite -!count_cancel //. exact: permP.
 Qed.

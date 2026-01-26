@@ -396,14 +396,12 @@ Lemma exps_TExpN t ts :
   exps (TExpN t ts) = sort <=%O (cancel_exps (exps t ++ ts)).
 Proof.
 apply: (inj_map unfold_term_inj). rewrite unfold_exps -sort_map -map_comp.
-under eq_map => ? do rewrite /= unfold_fold.
 rewrite unfold_TExpN PreTerm.exps_exp ?wf_unfold_term // map_cat unfold_exps.
-rewrite map_id_in // => ? /PreTerm.in_cancel_exps pt_in. apply PreTerm.normalize_wf.
-move: pt_in; rewrite mem_cat => /orP [? | /mapP [? _] ->].
-- have /allP H: all PreTerm.wf_term (PreTerm.exps (unfold_term t)).
-  apply PreTerm.wf_exps. apply wf_unfold_term.
-  exact: H.
-- apply wf_unfold_term.
+rewrite map_id_in //= => ? /PreTerm.mem_cancel_exps.
+rewrite mem_cat => /orP [? | /mapP [? _] ->].
+- have /allP wfs := PreTerm.wf_exps (wf_unfold_term t).
+  apply fold_termK. exact: wfs.
+- by rewrite unfold_termK.
 Qed.
 
 Definition is_nonce t :=
@@ -491,6 +489,16 @@ apply /(iffP idP).
   rewrite mem_map //. exact: unfold_term_inj.
 Qed.
 
+
+Lemma cancel_exps_subseq ts : subseq (cancel_exps ts) ts.
+Proof.
+rewrite /cancel_exps.
+apply: subseq_trans. apply map_subseq. apply PreTerm.cancel_exps_subseq.
+by rewrite (mapK unfold_termK).
+Qed.
+
+Lemma mem_cancel_exps ts : { subset cancel_exps ts <= ts }.
+Proof. apply mem_subseq. exact: cancel_exps_subseq. Qed.
 
 Lemma parity_cancel_exps ts : odd (size (cancel_exps ts)) = odd (size ts).
 Proof. by rewrite /cancel_exps size_map PreTerm.parity_cancel_exps size_map. Qed.
