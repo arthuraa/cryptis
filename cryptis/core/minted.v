@@ -42,28 +42,22 @@ iApply "m_t2". iPureIntro. set_solver.
 Qed.
 
 Lemma minted_TInt n : minted (TInt n) ⊣⊢ True.
-Proof. by rewrite unlock nonces_of_term_unseal /= big_sepS_empty. Qed.
+Proof. by rewrite unlock nonces_of_termE big_sepS_empty. Qed.
 
 Lemma minted_TPair t1 t2 : minted (TPair t1 t2) ⊣⊢ minted t1 ∧ minted t2.
-Proof.
-by rewrite unlock nonces_of_term_unseal /= !big_sepS_union_pers.
-Qed.
+Proof. by rewrite unlock nonces_of_termE !big_sepS_union_pers. Qed.
 
 Lemma minted_TNonce a : minted (TNonce a) ⊣⊢ meta a (nroot.@"minted") ().
-Proof.
-by rewrite unlock nonces_of_term_unseal /= big_sepS_singleton.
-Qed.
+Proof. by rewrite unlock nonces_of_termE big_sepS_singleton. Qed.
 
 Lemma minted_TKey kt t : minted (TKey kt t) ⊣⊢ minted t.
-Proof. by rewrite unlock nonces_of_term_unseal /=. Qed.
+Proof. by rewrite unlock nonces_of_termE. Qed.
 
 Lemma minted_TSeal k t : minted (TSeal k t) ⊣⊢ minted k ∧ minted t.
-Proof.
-by rewrite unlock nonces_of_term_unseal /= !big_sepS_union_pers.
-Qed.
+Proof. by rewrite unlock nonces_of_termE !big_sepS_union_pers. Qed.
 
 Lemma minted_THash t : minted (THash t) ⊣⊢ minted t.
-Proof. by rewrite unlock nonces_of_term_unseal /=. Qed.
+Proof. by rewrite unlock nonces_of_termE. Qed.
 
 (* TODO: no longer true: revise statement *)
 Lemma minted_TExpN t ts :
@@ -115,7 +109,6 @@ Qed.
 
 Lemma minted_Tag N : ⊢ minted (Tag N).
 Proof. by rewrite Tag_unseal minted_TInt. Qed.
-
 
 Lemma minted_tag N t : minted (Spec.tag (Tag N) t) ⊣⊢ minted t.
 Proof.
