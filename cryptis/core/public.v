@@ -536,6 +536,24 @@ apply: (anti_symm _).
   by eauto.
 Qed.
 
+Lemma public_TInv t : public (TInv t) ⊣⊢ public t.
+Proof.
+wlog: t/ ¬ is_inv t.
+{ move => H. case inv_t: (is_inv t).
+  + rewrite -{2}[t]TInvK (H (TInv t)) // is_inv_TInv inv_t. exact /neg_false.
+  + apply H. rewrite inv_t. exact /neg_false. }
+move => /[dup] ? /negb_True; rewrite -is_inv_TInv => invt.
+apply: anti_symm; rewrite [public (TInv t)]public_eq minted_TInv.
+- iIntros "(_ & [[% [%dec ?]] | ?])"; last by case: (TInv t) invt.
+  case: dec invt; try by move => > _ ->.
+  + move => t' -> _ _ /TInv_inj -> _. by iApply big_sepS_singleton.
+  + by move => > _ _ /is_trueP /(ssrbool.contraLR (is_exp_TInv t)) /is_trueP.
+- iIntros; iSplit; first by iApply public_minted.
+  iLeft; iExists {[t]}; iSplit.
+  + by iPureIntro; econstructor.
+  + by iApply big_sepS_singleton.
+Qed.
+
 Lemma public_TExpN t ts :
   ¬ is_exp t →
   ts ≠ [] →
