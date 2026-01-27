@@ -79,8 +79,9 @@ Proof.
   wp_apply wp_derive_senc_key.
   set k := SEncKey _.
   wp_pures.
-  unfold AuthDec. wp_pures.
   do !rewrite subst_list_match /=.
+  wp_lam.
+  wp_pures.
   wp_apply wp_sdec'.
   iSplit.
   2: iIntros "_"; by wp_pures.
@@ -96,7 +97,6 @@ Proof.
   wp_list.
   wp_apply wp_H.
   wp_pures.
-  unfold hash_result.
   wp_list.
   wp_apply wp_prf.
   wp_pures.
@@ -105,8 +105,6 @@ Proof.
   wp_eq_term eq_A_s; wp_pures => //.
   wp_list.
   wp_apply wp_prf.
-  wp_pures.
-  unfold hash_result.
   wp_pures.
   wp_apply wp_send => //.
   iApply public_THash.

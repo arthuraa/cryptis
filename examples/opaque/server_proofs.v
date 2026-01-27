@@ -45,8 +45,6 @@ Proof.
   wp_lam.
   wp_pures.
   wp_apply wp_H'.
-  unfold hash_result.
-  wp_pures.
   wp_apply wp_texp.
   wp_list.
   wp_apply wp_H.
@@ -60,9 +58,9 @@ Proof.
   wp_pures.
   wp_apply wp_texp. wp_pures.
   wp_apply wp_texp. wp_pures.
-  unfold AuthEnc.
   wp_list. wp_pures.
   wp_term_of_list. wp_pures.
+  wp_lam. wp_pures.
   wp_apply wp_senc'. wp_pures.
   wp_list.
   wp_term_of_list.
@@ -116,13 +114,11 @@ Proof.
   wp_list.
   wp_apply wp_H.
   wp_pures.
-  unfold hash_result.
   wp_list.
   wp_apply wp_prf.
   wp_pures.
   wp_list.
   wp_apply wp_prf.
-  unfold hash_result.
   wp_list.
   wp_term_of_list.
   wp_pures.

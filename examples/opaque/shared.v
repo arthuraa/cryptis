@@ -18,11 +18,11 @@ Notation iProp := (iProp Σ).
 
 Notation opN := (nroot.@"op").
 
-Definition hash_result (tag : string) (val : term) : heap_lang.val :=
-    repr (THash (Spec.tag (Tag $ opN.@tag) val)).
+Definition hash_result (tag : string) (val : term) : term :=
+    THash (Spec.tag (Tag $ opN.@tag) val).
 
 Lemma _wp_H (tag : string) (val : term) Ψ:
-    Ψ (hash_result tag val) ⊢ WP _H tag val {{ Ψ }}.
+    Ψ (repr (hash_result tag val)) ⊢ WP _H tag val {{ Ψ }}.
 Proof.
     iIntros "post".
     wp_lam.
@@ -32,7 +32,7 @@ Proof.
 Qed.
 
 Lemma _wp_H_list (tag : string) (val : list term) Ψ:
-    Ψ (hash_result tag (Spec.of_list val)) ⊢ WP _H_list tag (repr val) {{ Ψ }}.
+    Ψ (repr (hash_result tag (Spec.of_list val))) ⊢ WP _H_list tag (repr val) {{ Ψ }}.
 Proof.
     iIntros "post".
     wp_lam.
@@ -45,7 +45,7 @@ Definition wp_H     := _wp_H_list.
 Definition wp_H'    := _wp_H.
 
 Lemma wp_ke (p_a x_a P_b X_b : term) Ψ:
-    Ψ (hash_result "K" (Spec.of_list [TExp P_b p_a; TExp X_b x_a])) ⊢
+    Ψ (repr (hash_result "K" (Spec.of_list [TExp P_b p_a; TExp X_b x_a]))) ⊢
     WP KE p_a x_a P_b X_b {{ Ψ }}.
 Proof.
     iIntros "post".
