@@ -489,6 +489,27 @@ apply /(iffP idP).
   rewrite mem_map //. exact: unfold_term_inj.
 Qed.
 
+Lemma invs_canceled1 t : invs_canceled [:: t].
+Proof. apply /invs_canceledP => t0. rewrite !inE => /eqP ->. exact: TInv_Nid. Qed.
+
+Lemma invs_canceled_cons t ts :
+  invs_canceled ts -> TInv t \notin ts -> invs_canceled (t :: ts).
+Proof.
+move => ? H.
+apply /invs_canceledP => t'.
+rewrite inE => /orP [/eqP -> | in_exps1]; rewrite inE; apply /norP; split => //.
+- exact: TInv_Nid.
+- apply /eqP => /eqP. rewrite (inv_eq TInvK) => /eqP eq.
+  by rewrite -eq in_exps1 in H.
+- exact: invs_canceledP.
+Qed.
+
+Lemma invs_canceled2 t1 t2 : t1 != TInv t2 -> invs_canceled [:: t1 ; t2].
+Proof.
+move => ?.
+apply invs_canceled_cons; first exact: invs_canceled1.
+rewrite inE inv_eq //. exact: TInvK.
+Qed.
 
 Lemma cancel_exps_subseq ts : subseq (cancel_exps ts) ts.
 Proof.
