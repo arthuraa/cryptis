@@ -289,6 +289,9 @@ by rewrite unlock unfold_fold PreTerm.normalize_wf ?PreTerm.wf_inv ?wf_unfold_te
   PreTerm.inv_involutive ?wf_unfold_term // unfold_termK.
 Qed.
 
+Lemma TInv_inj : injective TInv.
+Proof. apply inv_inj. exact: TInvK. Qed.
+
 Lemma TExpN_perm t ts1 ts2 : perm_eq ts1 ts2 -> TExpN t ts1 = TExpN t ts2.
 Proof.
 move => ?; apply: unfold_term_inj; rewrite !unfold_TExpN. apply: PreTerm.perm_exp.
@@ -419,11 +422,24 @@ Proof. by case: t => //=. Qed.
 Lemma is_inv_unfold t : is_inv t = PreTerm.is_inv (unfold_term t).
 Proof. by case: t => //= - []. Qed.
 
+Lemma is_inv_TInv t : is_inv (TInv t) = ~~ is_inv t.
+Proof.
+rewrite !is_inv_unfold unfold_TInv.
+have := wf_unfold_term t.
+case: (unfold_term t) => //. by case => //= ? /andP [/negbTE ? _].
+Qed.
+
 Lemma is_exp_unfold t : is_exp t = PreTerm.is_exp (unfold_term t).
 Proof. by case: t => //= - []. Qed.
 
 Lemma is_exp_base t : ~~ is_exp (base t).
 Proof. rewrite is_exp_unfold unfold_base. apply PreTerm.base_Nexp. exact: wf_unfold_term. Qed.
+
+Lemma is_exp_TInv t : ~~ is_inv t -> ~~ is_exp (TInv t).
+Proof.
+rewrite is_inv_unfold => ?.
+by rewrite is_exp_unfold unfold_TInv PreTerm.inv_invN.
+Qed.
 
 Lemma base_expsK t : TExpN (base t) (exps t) = t.
 Proof.
