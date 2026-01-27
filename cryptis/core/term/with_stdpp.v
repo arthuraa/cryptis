@@ -65,6 +65,15 @@ Definition sign_key_eq_dec : EqDecision sign_key :=
   Eval hnf in def_eq_decision _.
 Global Existing Instance sign_key_eq_dec.
 
+Section with_ssrbool.
+
+Import ssrbool.
+
+Lemma subseteq_cancel_exps ts : cancel_exps ts ⊆ ts.
+Proof. by move => ? /inP /mem_cancel_exps /inP. Qed.
+
+End with_ssrbool.
+
 Inductive subterm (t : term) : term → Prop :=
 | STRefl : subterm t t
 | STPair1 t1 t2 of subterm t t1 : subterm t (TPair t1 t2)
@@ -203,6 +212,17 @@ by apply: map_ext_in => ? /elem_of_list_In /inP /wfs ?; rewrite fold_termK.
 Qed.
 
 End with_ssrbool.
+
+Lemma nonces_of_term_TExpN_subseteq t ts :
+  nonces_of_term (TExpN t ts) ⊆ nonces_of_term t ∪ ⋃ map nonces_of_term ts.
+Proof.
+rewrite -[t]base_expsK TExpNA !nonces_of_term_TExpN ?is_exp_base // cancel_exps_exps.
+rewrite -assoc -union_list_app_L -map_app -catE; apply union_mono_l.
+have ? := subseteq_cancel_exps (exps t ++ ts).
+move => ? /elem_of_union_list.
+case => _ [] /elem_of_list_fmap [] t' [] -> ??.
+rewrite elem_of_union_list; exists (nonces_of_term t'); split => //.
+rewrite elem_of_list_fmap; set_solver.
 Qed.
 
 Definition nonces_of_termE := (nonces_of_term_TInv, nonces_of_term_TExpN, nonces_of_termE').
