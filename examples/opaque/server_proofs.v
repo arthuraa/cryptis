@@ -35,7 +35,7 @@ public k ∗ opaque_file file.
 Lemma wp_make_file (pw : term) :
 {{{ cryptis_ctx ∗ minted pw }}}
 Server.make_file pw
-{{{ file , RET file ; True }}}.
+{{{ file , RET (repr file) ; opaque_file file }}}.
 Proof.
   iIntros "%ϕ [#cryptis #Hmintedpw] post".
   wp_lam.
@@ -50,22 +50,50 @@ Proof.
   wp_apply wp_H.
   wp_apply wp_derive_senc_key.
   wp_pures.
-  wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => False)%I) => //.
-  iIntros "%p_s %Hnoncep_s #Hmintedp_s #Hprivatep_s #H!eqp_s Htokenp_s".
+  wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => True)%I) => //.
+  iIntros "%p_s %Hnoncep_s #Hmintedp_s #Hprivatep_s #Heqp_s Htokenp_s".
   wp_pures.
-  wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => False)%I) => //.
-  iIntros "%p_u %Hnoncep_u #Hmintedp_u #Hprivatep_u #H!eqp_u Htokenp_u".
+  wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => True)%I) => //.
+  iIntros "%p_u %Hnoncep_u #Hmintedp_u #Hprivatep_u #Heqp_u Htokenp_u".
   wp_pures.
   wp_apply wp_texp. wp_pures.
   wp_apply wp_texp. wp_pures.
   wp_list. wp_pures.
   wp_term_of_list. wp_pures.
   wp_lam. wp_pures.
-  wp_apply wp_senc'. wp_pures.
+  wp_apply wp_senc'.
   wp_list.
   wp_term_of_list.
-  by iApply "post".
-Qed.
+  iApply "post".
+  iExists k_s, p_s, (TExp g p_s), (TExp g p_u), _.
+  do !iSplit => //.
+  1, 2: iApply public_TExp_iff.
+  1, 3: by intro contra.
+  1, 2: iRight; do !iSplit => //.
+  1, 3: by iApply minted_TInt.
+  iApply "Heqp_s".
+  2: iApply "Heqp_u".
+  1, 2: iNext; by iModIntro.
+  iApply (public_sencIS _ (opN.@"AuthEnc") _ _).
+  admit.
+  iApply minted_senc.
+  iApply minted_THash.
+  iApply minted_tag.
+  1, 2: iApply minted_of_list; do !iSplit => //; iApply minted_TExp.
+  1, 3, 5: by intro contra.
+  1- 3: iSplit => //.
+  2, 3: by iApply minted_TInt.
+  iApply minted_THash.
+  by iApply minted_tag.
+  iModIntro.
+  admit.
+  iModIntro.
+iIntros "Hcompromise".
+Admitted.
+(*   iApply "Hcompromise". *)
+(*   iApply public_of_list. *)
+(*   do !iSplit => //. *)
+(* Qed. *)
 
 Lemma wp_server_session (db c : term) (alist : gmap term term) :
 cryptis_ctx -∗
