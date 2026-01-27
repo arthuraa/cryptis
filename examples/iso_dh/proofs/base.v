@@ -310,14 +310,13 @@ Lemma public_dh_share a :
   public (TExp (TInt 0) a).
 Proof.
 iIntros "#m_a #pred_a". rewrite public_TExpN //=; eauto.
-iRight. rewrite minted_TExp// //=.
-2: intro contra; destruct contra.
+iRight. rewrite minted_TExp.
+2: exact /neg_false.
 rewrite minted_TInt.
 do !iSplit => //.
 iApply "pred_a". do !iModIntro. iPureIntro. by rewrite exps_TExpN.
 Qed.
 
-(* TODO: fix *)
 Lemma public_dh_secret a b :
   minted a -∗
   minted b -∗
@@ -331,7 +330,8 @@ iSplit; last first.
 { rewrite /bi_except_0.
   iIntros "#[H|[H|H]]".
   - iRight. iRight. iSplit; eauto.
-    rewrite minted_TExpN /= minted_TInt.
+    iApply all_minted_TExpN=> /=.
+    rewrite minted_TInt.
     do !iSplit => //.
     by iSplit; [iApply "pred_a"|iApply "pred_b"];
     iDestruct "H" as ">[]".
@@ -341,7 +341,7 @@ iIntros "[[_ #p_b] | [[_ #p_a] | (_ & contra & _)]]"; eauto.
 iPoseProof ("pred_a" with "contra") as ">%contra".
 apply (f_equal Nat.odd) in contra.
 by rewrite exps_TExpN parity_cancel_exps in contra.
-Admitted.
+Qed.
 
 Lemma public_dh_secret' a b (P : iProp) :
   □ (public a ↔ P) -∗

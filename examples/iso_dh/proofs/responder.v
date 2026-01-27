@@ -175,19 +175,15 @@ iAssert (|={⊤}=>
     iModIntro. iSplit; first by iIntros "!> []".
     by eauto. }
 iAssert (minted (si_key si)) as "#m_kS".
-{ rewrite minted_senc !minted_of_list. simpl. rewrite /= minted_TExp.
-  rewrite minted_TInt.
-  do !iSplit => //; iApply public_minted => //.
-  - by iApply public_verify_key.
-  - by iApply public_verify_key.
-  - admit.
-  - intro contra. destruct contra. }
+{ rewrite minted_senc minted_of_list /= !minted_pkey.
+  do !iSplit => //; try by iApply public_minted.
+  by iApply all_minted_TExp; iSplit; first iApply public_minted. }
 wp_pures.
 iApply ("Hpost" $! (Some (si_key si))).
 iModIntro. iFrame. do !iSplit => //.
 - iIntros "!> #?". iApply "s_k1". by eauto.
 - iApply (term_token_drop with "token"). solve_ndisj.
-Admitted.
+Qed.
 
 Lemma wp_responder_accept_weak c skR ga skI N :
   {{{ channel c ∗ cryptis_ctx ∗

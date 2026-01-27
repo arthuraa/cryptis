@@ -57,7 +57,7 @@ Qed.
 
 Next Obligation.
 move=> n; rewrite minted_TExp //=.
-2: intro contra; destruct contra.
+2: exact /neg_false.
 rewrite minted_TInt. apply: anti_symm.
 - by iIntros "(_ & ?)".
 - by eauto.
@@ -98,13 +98,10 @@ move=> nI nR; rewrite /pk_dh_mk_key_share /pk_dh_mk_session_key.
 by rewrite !TExp_TExpN TExpC2.
 Qed.
 
-(* TODO: fix *)
 Next Obligation.
   iIntros "%rl %t1 %t2 #s_t1 #s_t2".
-  rewrite /pk_dh_mk_session_key; iApply minted_TExp.
-  admit.
-  iSplit.
-Admitted.
+  by rewrite /pk_dh_mk_session_key; iApply all_minted_TExp; iSplit.
+Qed.
 
 Next Obligation.
 iIntros "%skI %skR %Φ #? post". rewrite /pk_dh_mk_key_share_impl.
@@ -230,8 +227,6 @@ by iApply pk_dh_session_key_elim.
 Qed.
 
 End PKDH.
-
-About PK_DH.
 
 Arguments PK_DH {Σ _ _ _ _} pk_dh_confirmation.
 Arguments pk_dh_ctx {Σ _ _ _} N _.

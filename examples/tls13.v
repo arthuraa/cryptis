@@ -659,8 +659,8 @@ iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
   iApply ("post" $! (Psk psk cn) with "[] [] token") => //=.
   do !iSplit => //.
   by iApply "p_cn".
-- iDestruct "p_ke" as "[%Hnotexp p_ke]".
-  wp_bind (mk_dh _). iApply (wp_mk_dh (λ _, True)%I _) => //.
+- iDestruct "p_ke" as "[% p_ke]".
+  wp_bind (mk_dh _); iApply (wp_mk_dh (λ _, True)%I _) => //.
   { by iApply public_minted. }
   iIntros (a) "_ #p_a _"; wp_list.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
@@ -1144,11 +1144,11 @@ Definition wf ke : iProp :=
   | Psk psk c_nonce s_nonce =>
     minted psk ∧ public c_nonce ∧ public s_nonce
   | Dh g cn sn gx y =>
-    ⌜¬ is_exp g⌝ (* ∧ ⌜¬ is_exp gx⌝ *) ∧ public g ∧ public cn ∧ public sn ∧ public gx ∧
+    ⌜¬ is_exp g⌝ ∧ public g ∧ public cn ∧ public sn ∧ public gx ∧
     dh_seed (λ _, True)%I y
   | PskDh psk g cn sn gx y =>
     minted psk ∧
-    ⌜¬ is_exp g⌝ (* ∧ ⌜¬ is_exp gx⌝ *) ∧ public g ∧ public cn ∧ public sn ∧
+    ⌜¬ is_exp g⌝ ∧ public g ∧ public cn ∧ public sn ∧
     public gx ∧
     dh_seed (λ _, True)%I y
   end.
@@ -1278,28 +1278,21 @@ case: ke=>> /=.
   + by iApply dh_public_TExp; eauto.
 Qed.
 
-(*
-TODO: fix.  Commented out extra clause in `wf ke` fixes this, but breaks
-wp_new.
- *)
 Lemma minted_session_key_of ke : wf ke -∗ minted (session_key_of ke).
 Proof.
 case: ke=>> /=.
 - iIntros "#(?&?&?)".
   rewrite minted_senc minted_of_list /=; do !iSplit; eauto.
-- iIntros "#(%Hnotexp&?&?&?&?&seed)".
-  rewrite minted_senc.
-  iApply minted_TExp.
-  admit.
-  iDestruct "seed" as "(?&?)".
+- iIntros "#(%&?&?&?&?&seed)".
+  rewrite minted_senc; iApply all_minted_TExp; eauto.
+  iDestruct "seed" as "(?&_)".
   by iSplit => //; iApply public_minted.
 - iIntros "#(?&%&?&?&?&?&seed)".
   rewrite minted_senc minted_of_list /=; do !iSplit => //.
-  iApply minted_TExp; eauto.
-  admit.
-  iDestruct "seed" as "(?&?)".
+  iApply all_minted_TExp; eauto.
+  iDestruct "seed" as "(?&_)".
   by iSplit => //; iApply public_minted.
-Admitted.
+Qed.
 
 Lemma public_session_key_of' ke :
   public (SShare.session_key_of' ke) -∗

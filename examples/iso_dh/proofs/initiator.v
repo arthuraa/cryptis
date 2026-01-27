@@ -204,17 +204,13 @@ iIntros "%m3 #p_m3". wp_pures. wp_apply wp_send => //.
 wp_pures. wp_apply wp_derive_senc_key.
 set k := SEncKey _.
 iAssert (minted k) as "#m_k".
-{ rewrite minted_senc minted_of_list /=.
-  rewrite !minted_TExp.
-  rewrite /= minted_TInt.
-  rewrite !minted_pkey. by do !iSplit => //.
-  admit.
-  intro contra. destruct contra. }
+{ rewrite minted_senc minted_of_list /= !minted_pkey.
+  do !iSplit => //; by iApply all_minted_TExp; rewrite ?minted_TInt; iSplit. }
 wp_pures. iApply ("Hpost" $! (Some k)).
 iExists si. iFrame. do !iSplitR => //.
 - iIntros "!> !> #rel". iApply "s_k1". by eauto.
 iApply (term_token_drop with "token_ga"). solve_ndisj.
-Admitted.
+Qed.
 
 Lemma wp_initiator_weak c skI skR N :
   channel c -∗
