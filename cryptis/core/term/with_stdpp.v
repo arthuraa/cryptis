@@ -74,11 +74,7 @@ Inductive subterm (t : term) : term → Prop :=
 | STSeal2 k t' of subterm t t' : subterm t (TSeal k t')
 | STHash t' of subterm t t' : subterm t (THash t')
 | STInv t' of negb (is_inv t') & subterm t t' : subterm t (TInv t')
-| STExp1 t' ts of
-    negb (is_exp t') &
-    invs_canceled ts &
-    subterm t t'
-  : subterm t (TExpN t' ts)
+| STExp1 t' ts of negb (is_exp t') & subterm t t' : subterm t (TExpN t' ts)
 | STExp2 t' t'' ts of
     negb (is_exp t') &
     invs_canceled ts &
@@ -186,17 +182,27 @@ Qed.
 Lemma nonces_of_term_TInv t : nonces_of_term (TInv t) = nonces_of_term t.
 Proof. rewrite nonces_of_term_unseal /nonces_of_term_def unfold_TInv. by case: t. Qed.
 
+Section with_ssrbool.
+
+Import ssrbool.
+
 Lemma nonces_of_term_TExpN t ts :
-  negb (is_exp t) -> invs_canceled ts ->
-  nonces_of_term (TExpN t ts) = nonces_of_term t ∪ ⋃ map nonces_of_term ts.
+  negb (is_exp t) ->
+  nonces_of_term (TExpN t ts) = nonces_of_term t ∪ ⋃ map nonces_of_term (cancel_exps ts).
 Proof.
-move => /is_trueP ? /is_trueP ?.
-case: (decide (ts = [])) => [-> | tsN0]; first by rewrite TExpN0 right_id_L.
-rewrite nonces_of_term_unseal /nonces_of_term_def unfold_TExpN' //=.
-2:{ rewrite is_trueP. case: (ts) => // in tsN0 *. }
-rewrite -[map _ ts]map_map -[@seq.map]/@map.
-set ts'' := path.sort _ _; by have -> : ts'' ≡ₚ map unfold_term ts
+move => /[dup] /is_trueP ?. rewrite is_exp_unfold => /is_trueP ?.
+rewrite nonces_of_term_unseal /nonces_of_term_def.
+rewrite unfold_TExpN /PreTerm.exp PreTerm.base_expN // PreTerm.exps_expN //= /cancel_exps.
+case: (ssrbool.altP seq.nilP) => [-> | _] /=; first by set_solver.
+rewrite -[@seq.map]/@map map_map.
+rewrite (_ : path.sort _ _ ≡ₚ PreTerm.cancel_exps _); last first.
   by apply/(ssrbool.elimT perm_Perm); rewrite path.perm_sort.
+congr (_ ∪ (⋃ _)).
+have /seq.allP wfs := PreTerm.wf_cancel_exps (wf_unfold_terms ts).
+by apply: map_ext_in => ? /elem_of_list_In /inP /wfs ?; rewrite fold_termK.
+Qed.
+
+End with_ssrbool.
 Qed.
 
 Definition nonces_of_termE := (nonces_of_term_TInv, nonces_of_term_TExpN, nonces_of_termE').
@@ -248,20 +254,31 @@ rewrite subterms_unseal /subterms_def.
 by rewrite unfold_TInv PreTerm.inv_invN //= unfold_termK.
 Qed.
 
+
+Section with_ssrbool.
+
+Import ssrbool.
+
 Lemma subterms_TExpN t ts :
-  negb (is_exp t) → invs_canceled ts ->
-  subterms (TExpN t ts) = {[TExpN t ts]} ∪ subterms t ∪ ⋃ (subterms <$> ts).
+  negb (is_exp t) →
+  subterms (TExpN t ts) = {[TExpN t ts]} ∪ subterms t ∪ ⋃ map subterms (cancel_exps ts).
 Proof.
-move => /is_trueP ? /is_trueP ?.
+rewrite is_exp_unfold => /is_trueP ?.
 rewrite subterms_unseal /subterms_def.
-case: (decide (ts = [])) => [-> | tsN0]; first by rewrite TExpN0; set_solver.
-rewrite unfold_TExpN' //=.
-2:{ rewrite is_trueP. case: (ts) => // in tsN0 *. }
-rewrite unfold_termK union_assoc_L.
-rewrite (_ : path.sort _ _ ≡ₚ map unfold_term ts); last first.
-  by apply/(ssrbool.elimT perm_Perm); rewrite path.perm_sort.
-congr (_ ∪ (⋃ _)). rewrite map_map. by apply: map_ext => ?; rewrite unfold_termK.
+rewrite unfold_TExpN /PreTerm.exp PreTerm.base_expN // PreTerm.exps_expN //= /cancel_exps.
+case: (ssrbool.altP seq.nilP) => [cancel_nil | _ ] /=.
+- rewrite cancel_nil (_ : TExpN t ts = t); first by set_solver.
+  rewrite [TExpN]unlock /PreTerm.exp.
+  by rewrite PreTerm.base_expN // PreTerm.exps_expN // cancel_nil unfold_termK.
+- rewrite unfold_termK union_assoc_L -[@seq.map]/@map map_map.
+  rewrite (_ : path.sort _ _ ≡ₚ PreTerm.cancel_exps _); last first.
+    by apply/(ssrbool.elimT perm_Perm); rewrite path.perm_sort.
+  congr (_ ∪ (⋃ _)).
+  have /seq.allP wfs := PreTerm.wf_cancel_exps (wf_unfold_terms ts).
+  by apply: map_ext_in => ? /elem_of_list_In /inP /wfs ?; rewrite fold_termK.
 Qed.
+
+End with_ssrbool.
 
 Definition subtermsE := (subterms_TInv, subterms_TExpN, subtermsE').
 
@@ -288,13 +305,13 @@ Lemma subtermsP t1 t2 : subterm t1 t2 ↔ t1 ∈ subterms t2.
 Proof.
 split.
 - elim: t2 /; try by intros; rewrite subtermsE; set_solver.
-  move => t' t'' *; rewrite subtermsE //.
+  move => t' t'' ?? /is_trueP ? *; rewrite subtermsE //.
   rewrite elem_of_union; right.
   rewrite elem_of_union_list; exists (subterms t''); split => //.
-  by rewrite elem_of_list_fmap; set_solver.
+  by rewrite elem_of_list_fmap cancel_exps_canceled; set_solver.
 - elim: t2; try by solve_subtermsP.
-  move => t IHt /is_trueP ? ts IHts _ _ /is_trueP ?; rewrite subtermsE //.
-  rewrite !elem_of_union elem_of_union_list elem_of_singleton.
+  move => t IHt /is_trueP ? ts IHts _ _ ?; rewrite subtermsE //.
+  rewrite cancel_exps_canceled // !elem_of_union elem_of_union_list elem_of_singleton.
   case => [[-> | /IHt ?] |]; try by constructor.
   case => _ [] /elem_of_list_fmap [] t' [] -> t'_ts sub.
   suffices: subterm t1 t' by eauto using subterm.
@@ -325,13 +342,13 @@ Lemma nonces_of_termP a t : subterm (TNonce a) t ↔ a ∈ nonces_of_term t.
 Proof.
 split.
 - elim: t /; try by intros; rewrite nonces_of_termE; set_solver.
-  move => t t' ts *; rewrite nonces_of_termE //.
+  move => t t' ts ? /is_trueP ? *; rewrite nonces_of_termE //.
   rewrite elem_of_union; right.
   rewrite elem_of_union_list; exists (nonces_of_term t'); split => //.
-  by rewrite elem_of_list_fmap; set_solver.
+  by rewrite elem_of_list_fmap cancel_exps_canceled; set_solver.
 - elim: t; try by solve_nonces_of_termP.
-  move => t IHt /is_trueP ? ts IHts ?? /is_trueP ?.
-  rewrite nonces_of_termE // !elem_of_union elem_of_union_list.
+  move => t IHt /is_trueP ? ts IHts ???; rewrite nonces_of_termE //.
+  rewrite cancel_exps_canceled // !elem_of_union elem_of_union_list.
   case => [/IHt ?|]; first by constructor.
   case => _ [] /elem_of_list_fmap [] t' [] -> t'_ts sub.
   suffices: subterm (TNonce a) t' by eauto using subterm.
@@ -343,7 +360,8 @@ Lemma subterm_nonces_of_term t1 t2 :
   subterm t1 t2 → nonces_of_term t1 ⊆ nonces_of_term t2.
 Proof.
 elim: t2 / => //; try by intros; rewrite [nonces_of_term (_ _)]nonces_of_termE; set_solver.
-move => t2 t2' ts ?? sub sub' t2'_ts; rewrite nonces_of_term_TExpN //.
+move => t2 t2' ts ? /is_trueP ? sub sub' t2'_ts; rewrite nonces_of_term_TExpN //.
+rewrite cancel_exps_canceled //.
 have: nonces_of_term t2' ⊆ ⋃ map nonces_of_term ts.
   move => t t_t2'.
   rewrite elem_of_union_list; exists (nonces_of_term t2'); split => //.
