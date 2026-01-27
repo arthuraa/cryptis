@@ -502,6 +502,19 @@ Proof. apply mem_subseq. exact: cancel_exps_subseq. Qed.
 
 Lemma parity_cancel_exps ts : odd (size (cancel_exps ts)) = odd (size ts).
 Proof. by rewrite /cancel_exps size_map PreTerm.parity_cancel_exps size_map. Qed.
+
+Lemma invs_canceled_exps t : invs_canceled (exps t).
+Proof. by rewrite /invs_canceled unfold_exps PreTerm.invs_canceled_exps // wf_unfold_term. Qed.
+
+Lemma cancel_exps_canceled ts : invs_canceled ts -> cancel_exps ts = ts.
+Proof.
+rewrite /invs_canceled => ?.
+by rewrite /cancel_exps PreTerm.cancel_exps_canceled // (mapK unfold_termK).
+Qed.
+
+Lemma cancel_exps_exps t : cancel_exps (exps t) = exps t.
+Proof. apply cancel_exps_canceled. exact: invs_canceled_exps. Qed.
+
 Lemma is_exp_TExpN t ts :
   ~~ is_exp t -> invs_canceled ts ->
   is_exp (TExpN t ts) = (ts != [::]).
