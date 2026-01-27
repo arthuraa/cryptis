@@ -216,7 +216,7 @@ Proof. by rewrite PreTerm.normalize_wf // wf_unfold_term. Qed.
 Lemma normalize_unfoldn ts :
   map PreTerm.normalize (map unfold_term ts) = map unfold_term ts.
 Proof.
-rewrite map_id_in // => ? /mapP [] {}t t_ts ->.
+rewrite map_id_in // => _ /mapP [?? ->].
 exact: normalize_unfold1.
 Qed.
 
@@ -226,13 +226,12 @@ by rewrite unlock unfold_fold PreTerm.normalize_wf ?PreTerm.wf_inv ?wf_unfold_te
 Qed.
 
 Lemma unfold_TExpN t ts :
-  unfold_term (TExpN t ts)
-  = PreTerm.exp (unfold_term t) (map unfold_term ts).
+  unfold_term (TExpN t ts) = PreTerm.exp (unfold_term t) (map unfold_term ts).
 Proof.
-    rewrite unlock unfold_fold PreTerm.normalize_wf => //.
-    rewrite PreTerm.wf_exp => //.
-    apply wf_unfold_term.
-    apply wf_unfold_terms.
+rewrite unlock unfold_fold PreTerm.normalize_wf => //.
+rewrite PreTerm.wf_exp => //.
+apply wf_unfold_term.
+apply wf_unfold_terms.
 Qed.
 
 Lemma fold_termE pt :
@@ -249,15 +248,14 @@ Lemma fold_termE pt :
   end.
 Proof.
 apply /unfold_term_inj. rewrite unfold_fold.
-case: pt => //=.
+case: pt => /=.
 - by case.
-- case => [?? | ? | p] //=.
+- case => [?? | ? | ?] /=.
   + by rewrite unfold_fold.
   + by rewrite unfold_fold.
   + by rewrite unfold_TInv unfold_fold.
 - case => [?? | ??] /=; by rewrite !unfold_fold.
-- move => pt pts. rewrite unfold_TExpN unfold_fold -map_comp.
-  by under eq_map => ? do rewrite -unfold_fold.
+- move => ??. by rewrite unfold_TExpN unfold_fold -map_comp (eq_map unfold_fold).
 Qed.
 
 Definition base t :=
@@ -276,7 +274,7 @@ Lemma unfold_exps t :
 Proof.
 case: t => //= ?? /and5P [_ _ /allP wfs _ _].
 rewrite -map_comp map_id_in //= => ? /wfs ?.
-by rewrite /= fold_termK.
+exact: fold_termK.
 Qed.
 
 Lemma TInv_Nid t : TInv t != t.

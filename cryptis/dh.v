@@ -98,14 +98,14 @@ Lemma wp_mk_dh g (Ψ : val → iProp) :
         Ψ a) -∗
   WP mk_dh #() {{ Ψ }}.
 Proof.
-iIntros "%Hnotexp #ctx #minted_g post".
+iIntros "% #ctx #minted_g post".
 iApply (wp_mk_nonce_freshN ∅ (λ _, False%I) dh_publ (λ t, {[TExp g t]})
   with "[//]" ) => //.
 - iIntros "%". rewrite elem_of_empty. by iIntros "[]".
 - iIntros "%". rewrite big_sepS_singleton. iIntros "!>".
-  rewrite minted_TExp //=.
+  rewrite minted_TExp //.
   iSplit.
-  + by iIntros "?"; do !iSplit.
+  + by iIntros; iSplit.
   + by iIntros "(? & ?)".
 iIntros (a) "_ _ #m_a #(aP1 & aP2) #? token". rewrite big_sepS_singleton.
 iApply "post" => //.

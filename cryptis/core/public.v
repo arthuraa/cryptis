@@ -335,7 +335,7 @@ Proof. rewrite unlock; apply _. Qed.
 
 Lemma open_key_tsize t1 t2 : Spec.open_key t1 = Some t2 → tsize t2 = tsize t1.
 Proof.
-by case: t1 => // - [] //= t [<-]; rewrite tsize_eq.
+by case: t1 => // - [] //= t [<-]; rewrite tsizeE.
 Qed.
 
 Lemma public_aux_eq n t : tsize t ≤ n → public_aux n t ⊣⊢ public t.
@@ -359,7 +359,7 @@ apply: bi.or_proper.
   case e_k: Spec.open_key => [k'|] //.
   have ? := open_key_tsize e_k.
   have ?: tsize (TSeal k t) = S (tsize k + tsize t).
-    by rewrite tsize_eq -ssrnat.plusE.
+    by rewrite tsizeE -ssrnat.plusE.
   rewrite !(IH n) ?(IH m) //; lia.
 Qed.
 
@@ -399,7 +399,7 @@ apply: bi.or_proper.
   move: (decompose_tsize T_t T_t') => ?.
   rewrite public_aux_eq //; lia.
 - case: t e_st => //= k t e_st.
-  rewrite tsize_eq -ssrnat.plusE in e_st.
+  rewrite tsizeE -ssrnat.plusE in e_st.
   case: func_of_term => // F.
   apply: bi.and_proper => //.
   apply: bi.and_proper => //.
