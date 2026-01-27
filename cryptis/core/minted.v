@@ -60,6 +60,9 @@ Lemma minted_THash t : minted (THash t) ⊣⊢ minted t.
 Proof. by rewrite unlock nonces_of_termE. Qed.
 
 (* TODO: no longer true: revise statement *)
+Lemma minted_TInv t : minted (TInv t) ⊣⊢ minted t.
+Proof. by rewrite unlock nonces_of_termE. Qed.
+
 Lemma minted_TExpN t ts :
   minted (TExpN t ts) ⊣⊢ minted t ∧ [∗ list] t' ∈ ts, minted t'.
 Proof.
