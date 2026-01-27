@@ -72,6 +72,11 @@ Import ssrbool.
 Lemma subseteq_cancel_exps ts : cancel_exps ts ⊆ ts.
 Proof. by move => ? /inP /mem_cancel_exps /inP. Qed.
 
+Lemma tsize_TExp_lt t1 t2 :
+  TInv t2 ∉ exps t1 ->
+  tsize t1 < tsize (TExp t1 t2) /\ tsize t2 < tsize (TExp t1 t2).
+Proof. by move => /inP; split; apply /(ssrbool.elimT ssrnat.leP); apply tsize_TExp_lt. Qed.
+
 End with_ssrbool.
 
 Inductive subterm (t : term) : term → Prop :=

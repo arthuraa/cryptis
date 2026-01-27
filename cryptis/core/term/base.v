@@ -593,6 +593,16 @@ Qed.
 
 Definition tsizeE := (tsize_TInv, tsize_TExpN, tsize_eq).
 
+Lemma tsize_TExp_lt t1 t2 :
+  TInv t2 \notin exps t1 ->
+  tsize t1 < tsize (TExp t1 t2) /\ tsize t2 < tsize (TExp t1 t2).
+Proof.
+move => /(invs_canceled_cons _ _ (invs_canceled_exps _)) ?.
+rewrite -[t1]base_expsK TExpNA TExpNC !tsize_TExpN ?is_exp_base ?invs_canceled_exps //= !addnE.
+split; apply /ssrnat.ltP; last lia.
+have /ssrnat.ltP := tsize_gt0 t2. case: (exps t1 != [::]) => /=; lia.
+Qed.
+
 Lemma TExpN_injl : left_injective TExpN.
 Proof.
 move => a g1 g2 eq. apply base_exps_inj.
@@ -618,17 +628,6 @@ Proof.
 move/TExpN_injr/perm_mem/(_ t2).
 by rewrite /cancel_exps /= !unfold_termK !inE eqxx => /eqP.
 Qed.
-
-(*
-Lemma tsize_TExpN_lt t1 ts1 t2 :
-  (tsize (TExpN t1 ts1) < tsize (TExpN t1 (t2 :: ts1)))%coq_nat /\
-  (tsize t2 < tsize (TExpN t1 (t2 :: ts1)))%coq_nat.
-Proof.
-move/ssrnat.ltP: (tsize_gt0 t1) => pos_t1.
-move/ssrnat.ltP: (tsize_gt0 t2) => pos_t2.
-rewrite !tsize_TExpN /= -!plusE; case: (altP eqP) => [->|ts1N0] //=; lia.
-Qed.
-*)
 
 Lemma term_rect (T : term -> Type)
   (H1 : forall n, T (TInt n))
