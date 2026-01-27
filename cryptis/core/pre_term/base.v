@@ -374,7 +374,7 @@ Proof. apply mem_subseq. exact: cancel_exps_subseq. Qed.
 Lemma parity_insert_exp pt pts : odd (size (insert_exp pt pts)) = ~~ odd (size pts).
 Proof.
 rewrite /insert_exp. case: ifP => //.
-case: pts => // *. by rewrite size_rem // Bool.negb_involutive.
+case: pts => // *. by rewrite size_rem // negbK.
 Qed.
 
 Lemma parity_cancel_exps pts : odd (size (cancel_exps pts)) = odd (size pts).
