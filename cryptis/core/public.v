@@ -276,7 +276,9 @@ Inductive decompose (T : gset term) (t : term) : Prop :=
 
 | DHash t' of T = {[t']} & t = THash t'
 
-| DExp t1 t2 of T = {[t1; t2]} & is_exp t & t = TExp t1 t2.
+| DInv t' of T = {[t']} & ¬ is_inv t' & is_inv t & t = TInv t'
+
+| DExp t1 t2 of T = {[t1; t2]} & TInv t2 ∉ exps t1 & is_exp t & t = TExp t1 t2.
 
 Lemma decompose_tsize T t t' : decompose T t → t' ∈ T → tsize t' < tsize t.
 Proof.
