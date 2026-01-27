@@ -59,27 +59,48 @@ Proof. by rewrite unlock nonces_of_termE !big_sepS_union_pers. Qed.
 Lemma minted_THash t : minted (THash t) ⊣⊢ minted t.
 Proof. by rewrite unlock nonces_of_termE. Qed.
 
-(* TODO: no longer true: revise statement *)
 Lemma minted_TInv t : minted (TInv t) ⊣⊢ minted t.
 Proof. by rewrite unlock nonces_of_termE. Qed.
 
 Lemma minted_TExpN t ts :
+  ~ is_exp t -> invs_canceled ts ->
   minted (TExpN t ts) ⊣⊢ minted t ∧ [∗ list] t' ∈ ts, minted t'.
 Proof.
-(* rewrite unlock nonces_of_term_TExpN big_sepS_union_pers. *)
-(* by rewrite big_sepS_union_list_pers big_sepL_fmap. *)
-(* Qed. *)
-Admitted.
+move => /negb_True ? /is_trueP ?.
+rewrite unlock nonces_of_term_TExpN // cancel_exps_canceled // big_sepS_union_pers.
+by rewrite big_sepS_union_list_pers big_sepL_fmap.
+Qed.
 
-(* TODO: this should be true: prove *)
+Lemma minted_base_exps t :
+  minted t ⊣⊢ minted (base t) ∧ [∗ list] t' ∈ exps t, minted t'.
+Proof. by rewrite -{1}[t]base_expsK minted_TExpN // invs_canceled_exps. Qed.
+
+Lemma all_minted_TExpN t ts :
+  minted t ∧ ([∗ list] t' ∈ ts, minted t') ⊢ minted (TExpN t ts).
+Proof.
+rewrite unlock !big_sepS_forall.
+iIntros "[Ht Hts]" (l) "%l_in".
+have /elem_of_subseteq in_nonces := nonces_of_term_TExpN_subseteq t ts.
+
+move: l_in => /(in_nonces l). rewrite elem_of_union elem_of_union_list.
+case => [?|]; first by iApply "Ht".
+case => _ [] /elem_of_list_fmap [] t' [] -> ??.
+rewrite big_sepL_elem_of // big_sepS_forall.
+by iApply "Hts".
+Qed.
+
 Lemma minted_TExp t1 t2 :
   ~ is_exp t1 ->
   minted (TExp t1 t2) ⊣⊢ minted t1 ∧ minted t2.
 Proof.
-(* rewrite unlock nonces_of_term_TExpN big_sepS_union_pers. *)
-(* by rewrite /= union_empty_r_L. *)
-(* Qed. *)
-Admitted.
+move => /negb_True ?. have ? := invs_canceled1 t2.
+rewrite unlock nonces_of_term_TExpN // cancel_exps_canceled //.
+by rewrite big_sepS_union_pers /= union_empty_r_L.
+Qed.
+
+Lemma all_minted_TExp t1 t2 :
+  minted t1 ∧ minted t2 ⊢ minted (TExp t1 t2).
+Proof. by iIntros; iApply all_minted_TExpN; rewrite big_sepL_singleton. Qed.
 
 Lemma minted_nonces_of_term t :
   minted t ⊣⊢ [∗ set] a ∈ nonces_of_term t, minted (TNonce a).
