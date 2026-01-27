@@ -282,24 +282,15 @@ Inductive decompose (T : gset term) (t : term) : Prop :=
 
 Lemma decompose_tsize T t t' : decompose T t → t' ∈ T → tsize t' < tsize t.
 Proof.
-(* case. *)
-(* - by move=> n -> -> //. *)
-(* - move=> t1 t2 -> ->. *)
-(*   case/elem_of_union => /elem_of_singleton ->; *)
-(*   rewrite [tsize (TPair _ _)]tsize_eq -ssrnat.plusE; lia. *)
-(* - move=> kt ? -> -> /elem_of_singleton ->. *)
-(*   rewrite [tsize (TKey _ _)]tsize_eq; lia. *)
-(* - move=> ?? -> -> /elem_of_union [] /elem_of_singleton ->; *)
-(*   rewrite ?[tsize (TKey _ _)]tsize_eq [tsize (TSeal _ _)]tsize_eq *)
-(*     -ssrnat.plusE; lia. *)
-(* - move=> ? -> -> /elem_of_singleton ->; rewrite [tsize (THash _)]tsize_eq; lia. *)
-(* - move=> t1 t2 -> _ ->. *)
-(*   rewrite tsize_TExpN /= -ssrnat.plusE /=. *)
-(*   move/(ssrbool.elimT ssrnat.leP): (tsize_gt0 t1) => ?. *)
-(*   move/(ssrbool.elimT ssrnat.leP): (tsize_gt0 t2) => ?. *)
-(*   by move=> /elem_of_union [] /elem_of_singleton ->; lia. *)
-(* Qed. *)
-Admitted.
+case; try by move => > -> -> //;
+          try move => /elem_of_union [];
+          move => /elem_of_singleton ->;
+          rewrite [tsize (_ _)]tsizeE -?ssrnat.plusE;
+          lia.
+- move => ? -> /negb_True /is_trueP ? _ -> /elem_of_singleton ->;
+  rewrite [tsize (_ _)]tsizeE //; lia.
+- by move => ?? -> /tsize_TExp_lt [??] _ -> /elem_of_union [] /elem_of_singleton ->.
+Qed.
 
 Fixpoint public_aux n t : iProp :=
   if n is S n then
