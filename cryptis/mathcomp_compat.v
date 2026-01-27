@@ -109,3 +109,6 @@ Proof. by case. Qed.
 
 Lemma oddE : eqfun Nat.odd ssrnat.odd.
 Proof. elim => // ? IH. by rewrite Nat.odd_succ -Nat.negb_odd IH -oddS. Qed.
+
+Lemma catE {T : eqType} : eqfun (@app T) seq.cat.
+Proof. by case. Qed.
