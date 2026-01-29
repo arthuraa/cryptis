@@ -77,6 +77,11 @@ Lemma tsize_lt_TExp t1 t2 :
   tsize t1 < tsize (TExp t1 t2) /\ tsize t2 < tsize (TExp t1 t2).
 Proof. by move => /inP; split; apply /(ssrbool.elimT ssrnat.leP); apply tsize_lt_TExp. Qed.
 
+Lemma tsize_TExp_TInv t1 t2 :
+  t2 ∈ exps t1 ->
+  tsize t2 < tsize t1 /\ tsize (TExp t1 (TInv t2)) < tsize t1.
+Proof. by move => /inP; split; apply /(ssrbool.elimT ssrnat.leP); apply tsize_TExp_TInv. Qed.
+
 End with_ssrbool.
 
 Inductive subterm (t : term) : term → Prop :=

@@ -625,6 +625,30 @@ split; apply /ssrnat.ltP; last lia.
 have /ssrnat.ltP := tsize_gt0 t2. case: (exps t1 != [::]) => /=; lia.
 Qed.
 
+Lemma tsize_TExp_TInv t1 t2 :
+  t2 \in exps t1 ->
+  tsize t2 < tsize t1 /\ tsize (TExp t1 (TInv t2)) < tsize t1.
+Proof.
+move => ?.
+
+set t1' := TExp t1 (TInv t2).
+have -> : t1 = TExp t1' t2 by apply TExp_TInv.
+rewrite /t1'.
+
+apply and_comm; apply tsize_lt_TExp.
+
+rewrite exps_TExpN mem_sort.
+
+have -> : cancel_exps (exps t1 ++ [:: TInv t2]) =i cancel_exps (rem t2 (exps t1)).
+{ apply perm_mem.
+  rewrite -(permPr (cancel_exps_cat_invs _ [:: t2])); apply perm_cancel_exps.
+  by rewrite catA perm_cat2r cats1 perm_sym perm_rcons perm_sym perm_to_rem. }
+
+apply: contra; first apply mem_cancel_exps.
+apply: contra; first apply mem_rem.
+by apply: invs_canceledP; first apply invs_canceled_exps.
+Qed.
+
 Lemma TExpN_injl : left_injective TExpN.
 Proof.
 move => a g1 g2 eq. apply base_exps_inj.
