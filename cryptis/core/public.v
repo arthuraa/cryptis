@@ -289,7 +289,7 @@ case; try by move => > -> -> //;
           lia.
 - move => ? -> /negb_True /is_trueP ? _ -> /elem_of_singleton ->;
   rewrite [tsize (_ _)]tsizeE //; lia.
-- by move => ?? -> /tsize_TExp_lt [??] _ -> /elem_of_union [] /elem_of_singleton ->.
+- by move => ?? -> /tsize_lt_TExp [??] _ -> /elem_of_union [] /elem_of_singleton ->.
 Qed.
 
 Fixpoint public_aux n t : iProp :=

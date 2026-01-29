@@ -607,7 +607,7 @@ Qed.
 
 Definition tsizeE := (tsize_TInv, tsize_TExpN, tsize_eq).
 
-Lemma tsize_TExp_lt t1 t2 :
+Lemma tsize_lt_TExp t1 t2 :
   TInv t2 \notin exps t1 ->
   tsize t1 < tsize (TExp t1 t2) /\ tsize t2 < tsize (TExp t1 t2).
 Proof.
