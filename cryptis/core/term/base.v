@@ -607,6 +607,14 @@ Qed.
 
 Definition tsizeE := (tsize_TInv, tsize_TExpN, tsize_eq).
 
+Lemma TExp_TInv t1 t2 : t1 = TExp (TExp t1 (TInv t2)) t2.
+Proof.
+rewrite TExpNA TExpNC.
+apply base_exps_inj; first by rewrite base_TExpN.
+rewrite exps_TExpN perm_sym perm_sort (_ :[:: TInv t2] = map TInv [:: t2]) //.
+by rewrite (permPl (cancel_exps_cat_invs _ _)) cancel_exps_exps.
+Qed.
+
 Lemma tsize_lt_TExp t1 t2 :
   TInv t2 \notin exps t1 ->
   tsize t1 < tsize (TExp t1 t2) /\ tsize t2 < tsize (TExp t1 t2).
