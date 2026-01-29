@@ -296,6 +296,8 @@ Fixpoint public_aux n t : iProp :=
   if n is S n then
     minted t ∧ (
      (∃ T, ⌜decompose T t⌝ ∧ [∗ set] t' ∈ T, public_aux n t')
+     ∨ (⌜is_exp t⌝ ∧ [∗ list] t' ∈ exps t, dh_pred t' t ∧
+                                 □ (public_aux n t' → public_aux n (TExp t (TInv t'))))
      ∨ match t with
        | TNonce a => pnonce a
        | TKey kt t => ⌜Spec.public_key_type kt⌝
@@ -311,7 +313,6 @@ Fixpoint public_aux n t : iProp :=
                end
            | None => True
            end
-       | TExpN' _ _ _ => [∗ list] t' ∈ exps t, dh_pred t' t
        | _ => False
        end%I
     )
@@ -346,12 +347,15 @@ move: (ssrbool.elimT ssrnat.ltP (tsize_gt0 t)) => H;
 first lia.
 case e_st: (tsize t) => [|m] /=; first lia.
 apply: bi.and_proper => // {H}.
-apply: bi.or_proper.
+do !apply bi.or_proper.
 - apply: bi.exist_proper => T.
   apply: and_proper_L => T_t.
   apply: big_sepS_proper => t' T_t'.
   move: (decompose_tsize T_t T_t') => ?.
   rewrite (IH n) ?(IH m) //; lia.
+- apply bi.and_proper => //.
+  apply big_sepL_proper => _ t' /(elem_of_list_lookup_2 _ _ _) /tsize_TExp_TInv ?.
+  by rewrite !IH; try lia.
 - case: t t_n e_st => //= k t t_n e_st.
   case: func_of_term => // F.
   apply: bi.and_proper => //.
@@ -368,6 +372,8 @@ Lemma public_eq t :
   public t ⊣⊢
   minted t ∧ (
       (∃ T, ⌜decompose T t⌝ ∧ [∗ set] t' ∈ T, public t')
+     ∨ (⌜is_exp t⌝ ∧ [∗ list] t' ∈ exps t, dh_pred t' t ∧
+                                 □ (public t' → public (TExp t (TInv t'))))
      ∨ match t with
        | TNonce a => pnonce a
        | TKey kt t => ⌜Spec.public_key_type kt⌝
@@ -383,7 +389,6 @@ Lemma public_eq t :
                end
            | None => True
            end
-       | TExpN' _ _ _ => [∗ list] t' ∈ exps t, dh_pred t' t
        | _ => False
        end%I
   ).
@@ -392,12 +397,15 @@ rewrite {1}[public]unlock.
 case e_st: (tsize t) => [|m] /=.
   move: (ssrbool.elimT ssrnat.ltP (tsize_gt0 t)) => H; lia.
 apply: bi.and_proper => //.
-apply: bi.or_proper.
+do !apply bi.or_proper.
 - apply: bi.exist_proper => T.
   apply: and_proper_L => T_t.
   apply: big_sepS_proper => t' T_t'.
   move: (decompose_tsize T_t T_t') => ?.
   rewrite public_aux_eq //; lia.
+- apply bi.and_proper => //.
+  apply big_sepL_proper => k t' /(elem_of_list_lookup_2 _ _ _) /tsize_TExp_TInv ?.
+  by rewrite !public_aux_eq; try lia.
 - case: t e_st => //= k t e_st.
   rewrite tsizeE -ssrnat.plusE in e_st.
   case: func_of_term => // F.
@@ -424,7 +432,7 @@ Proof.
 apply: (anti_symm _); iIntros "#Ht" => //.
 - rewrite public_eq minted_TPair.
   iDestruct "Ht" as "([Ht1 Ht2] & publ)".
-  iDestruct "publ" as "[publ | publ]" => //=.
+  iDestruct "publ" as "[publ | [(? & _) | publ]]" => //=.
   iDestruct "publ" as (T) "[%dec publ]".
   case: dec => //= {}t1 {}t2 -> [-> ->].
   by rewrite big_sepS_union_pers !big_sepS_singleton.
@@ -442,7 +450,7 @@ Proof.
 apply: (anti_symm _); iIntros "Ht".
 - rewrite public_eq; iDestruct "Ht" as "[? Ht]".
   rewrite minted_TNonce. iFrame.
-  iDestruct "Ht" as "[publ | ?]" => //.
+  iDestruct "Ht" as "[publ | [ (? & _) | ? ]]" => //.
   iDestruct "publ" as (T) "[%dec _]".
   by case: dec.
 - rewrite public_eq minted_TNonce /pnonce.
@@ -454,7 +462,7 @@ Lemma public_TKey kt t :
 Proof.
 apply: (anti_symm _).
 - rewrite public_eq minted_TKey; iDestruct 1 as "[Ht publ]".
-  iDestruct "publ" as "[publ | publ]" => //.
+  iDestruct "publ" as "[publ | [(? & _) | publ]]" => //.
   + iDestruct "publ" as (T) "[%dec publ]".
     case: dec => //= {}kt {}t -> [-> ->].
     by rewrite big_sepS_singleton; eauto.
@@ -486,7 +494,7 @@ Proof.
 apply: (anti_symm _).
 - rewrite public_eq minted_TSeal.
   iDestruct 1 as "[[Hk Ht] publ]".
-  iDestruct "publ" as "[publ | publ]".
+  iDestruct "publ" as "[publ | [(? & _) | publ]]" => //.
   + iDestruct "publ" as (T) "[%dec ?]".
     case: dec => // {}k {}t -> [-> ->].
     by rewrite big_sepS_union_pers !big_sepS_singleton; iLeft.
@@ -522,7 +530,7 @@ Lemma public_THash t :
 Proof.
 apply: (anti_symm _).
 - rewrite public_eq minted_THash.
-  iDestruct 1 as "[Ht [publ | publ]]" => //; eauto.
+  iDestruct 1 as "[Ht [publ | [(? & _) | publ]]]" => //; eauto.
   iDestruct "publ" as (T) "[%dec ?]".
   case: dec => //= {}t -> [->].
   by rewrite big_sepS_singleton; eauto.
@@ -544,10 +552,10 @@ wlog: t/ ¬ is_inv t.
   + apply H. rewrite inv_t. exact /neg_false. }
 move => /[dup] ? /negb_True; rewrite -is_inv_TInv => invt.
 apply: anti_symm; rewrite [public (TInv t)]public_eq minted_TInv.
-- iIntros "(_ & [[% [%dec ?]] | ?])"; last by case: (TInv t) invt.
-  case: dec invt; try by move => > _ ->.
-  + move => t' -> _ _ /TInv_inj -> _. by iApply big_sepS_singleton.
-  + by move => > _ _ /is_trueP /(ssrbool.contraLR (is_exp_TInv t)) /is_trueP.
+- have ?: ¬ is_exp (TInv t) by move => /is_trueP /(ssrbool.contraLR (is_exp_TInv t)) /is_trueP.
+  iIntros "(_ & [[% [%dec ?]] | [(% & _) | ?]])" => //; last by case: (TInv t) invt.
+  case: dec invt; try by move => // > _ ->.
+  move => t' -> _ _ /TInv_inj -> _. by iApply big_sepS_singleton.
 - iIntros; iSplit; first by iApply public_minted.
   iLeft; iExists {[t]}; iSplit.
   + by iPureIntro; econstructor.
