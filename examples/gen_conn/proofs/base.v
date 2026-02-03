@@ -7,9 +7,8 @@ From iris.bi.lib Require Import fractional.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
-From cryptis Require Import lib term gmeta nown.
-From cryptis Require Import cryptis primitives tactics role.
-From cryptis Require Import saved_prop.
+From cryptis Require Import lib cryptis primitives tactics role.
+From cryptis.lib Require Import saved_prop.
 From cryptis.examples Require Import iso_dh.
 
 Set Implicit Arguments.
@@ -75,14 +74,6 @@ Implicit Types (ps : params Σ).
 
 Definition failure skI skR : iProp :=
    public skI ∨ public skR.
-
-Definition wf_sess_info si : iProp :=
-  minted (si_key si) ∗
-  session si.
-
-#[global]
-Instance wf_sess_info_persistent si : Persistent (wf_sess_info si).
-Proof. apply _. Qed.
 
 Local Notation chanN := (iso_dhN.@"res".@"chan").
 Local Notation recvN := (chanN.@"recv").
@@ -303,18 +294,16 @@ Definition conn_msg_pred kS t : iProp :=
     sent_at (si_resp_share si) rl t' n.
 
 Definition connected ps skI skR rl cs : iProp :=
-  ⌜si_init cs = skI⌝ ∗
-  ⌜si_resp cs = skR⌝ ∗
   ⌜cs_role cs = rl⌝ ∗
+  session skI skR cs ∗
   channel (cs_chan cs) ∗
-  wf_sess_info cs ∗
   ∃ n m, cs_ts cs ↦∗ [ #n; #m ] ∗
     (public (si_key cs) ∨ counters ps skI skR cs rl n m).
 
 Lemma connected_channel ps skI skR rl cs :
   connected ps skI skR rl cs -∗
   channel (cs_chan cs).
-Proof. by iIntros "(_ & _ & _ & ? & _)". Qed.
+Proof. by iIntros "(_ & _ & ? & _)". Qed.
 
 Lemma connected_public_key ps skI skR rl cs :
   connected ps skI skR rl cs -∗
@@ -323,8 +312,7 @@ Lemma connected_public_key ps skI skR rl cs :
   ◇ compromised cs.
 Proof.
 iIntros "conn rel #p_k".
-iPoseProof "conn" as "(_ & _ & <- & _ & #sess & _)".
-iDestruct "sess" as "(#? & #sess)".
+iPoseProof "conn" as "(<- & #sess & _)".
 by iApply (session_compromised with "[] [//] rel").
 Qed.
 
@@ -345,14 +333,16 @@ Lemma connected_released_session ps skI skR rl cs :
   connected ps skI skR rl cs -∗
   □ (▷ released_session cs → public (si_key cs)).
 Proof.
-iIntros "(_ & _ & _ & _ & #sess & _)".
-by iDestruct "sess" as "(_ & ? & sess)".
+iIntros "(_ & #sess & _)".
+iIntros "!> #rel". by iApply session_released_session.
 Qed.
 
-Lemma connected_keyE ps skI skR rl cs :
+Lemma connected_session ps skI skR rl cs :
   connected ps skI skR rl cs -∗
-  ⌜skI = si_init cs⌝ ∗ ⌜skR = si_resp cs⌝ ∗ ⌜rl = cs_role cs⌝.
-Proof. by iIntros "(-> & -> & -> & _)". Qed.
+  session skI skR cs.
+Proof.
+by iIntros "(_ & #sess & _)".
+Qed.
 
 Lemma connected_ok ps skI skR rl cs :
   connected ps skI skR rl cs -∗
@@ -360,14 +350,18 @@ Lemma connected_ok ps skI skR rl cs :
   secret skR -∗
   ◇ session_ok cs.
 Proof.
-iIntros "(<- & <- & <- & _ & #sess & % & % & _ & _) s_kI s_kR".
-iDestruct "sess" as "(m_k & sess)".
+iIntros "(_ & #sess & _) s_kI s_kR".
 by iApply (secret_session with "s_kI s_kR").
 Qed.
 
-Lemma session_failed_failure si :
-  compromised si  ⊢ failure (si_init si) (si_resp si).
-Proof. by iIntros "(#failed & _)". Qed.
+Lemma session_failed_failure ps skI skR rl cs :
+  connected ps skI skR rl cs -∗
+  compromised cs  -∗
+  failure skI skR.
+Proof.
+iIntros "(_ & #sess & _) #comp".
+by iApply session_compromised'.
+Qed.
 
 Lemma connected_failure ps skI skR rl cs :
   connected ps skI skR rl cs -∗
@@ -376,9 +370,9 @@ Lemma connected_failure ps skI skR rl cs :
   ◇ failure skI skR.
 Proof.
 iIntros "conn rel fail".
-iPoseProof (connected_keyE with "conn") as "#(-> & -> & _)".
-iMod (connected_public_key with "conn rel fail") as "fail".
-by iApply (session_failed_failure with "fail").
+iPoseProof (connected_public_key with "conn rel fail") as "{fail} #>fail".
+iDestruct "conn" as "(_ & #sess & _)".
+iModIntro. by iApply session_compromised'.
 Qed.
 
 Definition pre_ctx `{!iso_dhGS Σ} : iProp :=

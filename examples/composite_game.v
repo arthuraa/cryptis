@@ -5,8 +5,9 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import numbers.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par.
-From cryptis Require Import lib term cryptis primitives tactics.
-From cryptis Require Import role session challenge_response dh tls13.
+From cryptis Require Import lib cryptis primitives tactics role.
+From cryptis.lib Require Import session dh.
+From cryptis.examples Require Import challenge_response tls13.
 From cryptis.examples.pk_auth Require Import pk_auth dh.
 From cryptis.primitives Require Import attacker.
 
@@ -116,11 +117,9 @@ Lemma wp_environment c (skI1 skR1 : aenc_key) (skI2 skR2 : sign_key) (psk : term
   public skI2 -∗
   public skR2 -∗
   minted psk -∗
-  honest 0 ∅ -∗
-  ●Ph□ 0 -∗
   {{{ True }}} environment c skI1 skI2 skR1 skR2 psk {{{ RET #(); True }}}.
 Proof.
-iIntros "#? #? #? #? #? #? #? #? #? #? #hon #phase %Φ !> _ post".
+iIntros "#? #? #? #? #? #? #? #? #? #? %Φ !> _ post".
 rewrite /environment; wp_pures.
 wp_bind (send _ _); iApply wp_send => //; wp_pures.
 wp_bind (send _ _); iApply wp_send => //; wp_pures.
@@ -226,13 +225,10 @@ Lemma wp_game :
   seal_pred_token AENC ⊤ ∗
   seal_pred_token SIGN ⊤ ∗
   seal_pred_token SENC ⊤ ∗
-  hash_pred_token ⊤ ∗
-  honest 0 ∅ ∗
-  ●Ph 0 -∗
+  hash_pred_token ⊤ -∗
   WP game #() {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
-iIntros "(#ctx & sess_tok & aenc_tok & sign_tok & senc_tok & hash_tok & #hon & phase)".
-iMod (phase_auth_discard with "phase") as "#phase".
+iIntros "(#ctx & sess_tok & aenc_tok & sign_tok & senc_tok & hash_tok)".
 rewrite /game; wp_pures.
 iMod (pk_dh_alloc nslN (λ _ _ _ _, True)%I with "sess_tok aenc_tok")
   as "(#pk_dh_ctx & sess_tok & aenc_tok)" => //; try solve_ndisj.
@@ -282,7 +278,7 @@ have ? : heapGpreS F by apply _.
 apply (adequate_result NotStuck _ _ (λ v _, v = NONEV ∨ v = SOMEV #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
-iMod (cryptisGS_alloc _) as (?) "(#ctx & seal_tok & key_tok & hash_tok & hon)".
+iMod (cryptisGS_alloc _) as (?) "(#ctx & seal_tok & key_tok & hash_tok)".
 iMod (sessionGS_alloc _) as (?) "sess_tok".
 by iApply (wp_game) => //; try by iFrame.
 Qed.

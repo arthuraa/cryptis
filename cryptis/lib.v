@@ -308,14 +308,6 @@ Proof.
 rewrite /= repr_list_unseal. by case: l.
 Qed.
 
-Definition leq_loc_loop : val := rec: "loop" "l1" "l2" "n" :=
-  if: "l1" +ₗ "n" = "l2" then #true
-  else if: "l2" +ₗ "n" = "l1" then #false
-  else "loop" "l1" "l2" ("n" + #1).
-
-Definition leq_loc : val := λ: "l1" "l2",
-  leq_loc_loop "l1" "l2" #0.
-
 Definition get_list : val := rec: "loop" "l" "n" :=
   match: "l" with NONE => NONE
   | SOME "p" =>
@@ -593,6 +585,134 @@ Proof.
 case: y => /=; first by split.
 by move=> ?; rewrite elem_of_singleton; split; congruence.
 Qed.
+
+Fixpoint pure_expr e : bool :=
+  match e with
+  | Val v => pure_val v
+  | Var _ => true
+  | Rec f x e => pure_expr e
+  | App e1 e2 => pure_expr e1 && pure_expr e2
+  | UnOp _ e => pure_expr e
+  | BinOp _ e1 e2 => pure_expr e1 && pure_expr e2
+  | If e1 e2 e3 => pure_expr e1 && pure_expr e2 && pure_expr e3
+  | Pair e1 e2 => pure_expr e1 && pure_expr e2
+  | Fst e | Snd e => pure_expr e
+  | InjL e | InjR e => pure_expr e
+  | Case e1 e2 e3 => pure_expr e1 && pure_expr e2 && pure_expr e3
+  | Fork _ => false
+  | AllocN _ _ => false
+  | Free _ => false
+  | Load _ => false
+  | Store _ _ => false
+  | CmpXchg _ _ _ => false
+  | Xchg _ _ => false
+  | FAA _ _ => false
+  | NewProph => false
+  | Resolve _ _ _ => false
+  end
+
+with pure_val v : bool :=
+  match v with
+  | LitV _ => true
+  | RecV _ _ e => pure_expr e
+  | PairV v1 v2 => pure_val v1 && pure_val v2
+  | InjLV v | InjRV v => pure_val v
+  end.
+
+Definition pure_item (a : ectx_item) : bool :=
+  match a with
+  | AppLCtx v => pure_val v
+  | AppRCtx e => pure_expr e
+  | UnOpCtx _ => true
+  | BinOpLCtx _ v => pure_val v
+  | BinOpRCtx _ e => pure_expr e
+  | IfCtx e1 e2 => pure_expr e1 && pure_expr e2
+  | PairLCtx v => pure_val v
+  | PairRCtx e => pure_expr e
+  | FstCtx | SndCtx | InjLCtx | InjRCtx => true
+  | CaseCtx e1 e2 => pure_expr e1 && pure_expr e2
+  | _ => false
+  end.
+
+Definition pure_ctx K : bool := forallb pure_item K.
+
+Section WithSsrBool.
+
+#[warnings="-ambiguous-paths"]
+Import ssreflect ssrbool.
+
+Lemma pure_expr_fill_item a (e : expr) : pure_expr (fill_item a e) = pure_item a && pure_expr e.
+Proof.
+case: a=> //=; try by move=> *; rewrite andbC.
+- by move=> ??; rewrite [RHS]andbC andbA.
+- by move=> ??; rewrite [RHS]andbC andbA.
+Qed.
+
+Lemma pure_expr_fill K (e : expr) : pure_expr (fill K e) = pure_ctx K && pure_expr e.
+Proof.
+elim: K=> //= a K IH in e *.
+by rewrite IH pure_expr_fill_item andbA [pure_ctx K && _]andbC.
+Qed.
+
+Lemma subst_pure x v e : pure_val v → pure_expr e → pure_expr (subst x v e).
+Proof.
+move=> /is_trueP pure_v /is_trueP pure_e; apply/is_trueP.
+elim: e pure_e => //=.
+- by move=> ? _; case: decide.
+- by move=> ??? IH pure_e; case: decide => // _; eauto.
+- by move=> e1 IH1 e2 IH2 /andP [??]; rewrite IH1 // ?IH2.
+- by move=> _ e1 IH1 e2 IH2 /andP [??]; rewrite IH1 // ?IH2.
+- by move=> e1 IH1 e2 IH2 e3 IH3 /andP [/andP[??] ?]; rewrite IH1 // ?IH2 // ?IH3.
+- by move=> e1 IH1 e2 IH2 /andP [??]; rewrite IH1 // ?IH2.
+- by move=> e1 IH1 e2 IH2 e3 IH3 /andP [/andP[??] ?]; rewrite IH1 // ?IH2 // ?IH3.
+Qed.
+
+Lemma subst'_pure x v e : pure_val v → pure_expr e → pure_expr (subst' x v e).
+Proof. case: x => //= x. exact: subst_pure. Qed.
+
+Lemma pure_exprP (e1 : expr) σ1 κs e2 σ2 efs :
+  prim_step e1 σ1 κs e2 σ2 efs →
+  pure_expr e1 →
+  pure_expr e2.
+Proof.
+move=> [K {}e1 {}e2 -> ->] Hstep; rewrite !pure_expr_fill.
+case/andb_True=> /is_trueP -> //= pure_e1.
+case: e1 σ1 κs e2 σ2 efs / Hstep pure_e1 => //=.
+- move=> f x e1 v2 e' σ -> /= /andb_True [pure_e1 pure_e2].
+  apply: subst'_pure => //.
+  by apply: subst'_pure => //.
+- case=> [] [] //=.
+  + by case=> // [l|b] ? ? [<-].
+  + by case=> // n ? ? [<-].
+- move=> op v1 v2 v' σ; rewrite /bin_op_eval.
+  case: (decide (op = EqOp)) => [_|be].
+  + by case: decide=> // _ [<-] _; eauto.
+  + case: v1 v2 => //=; case=> //= [n1|b1|l1].
+    * case=> //; case=> //= n2.
+      by case: op => //= in be *; case=> <-; eauto.
+    * case=> //; case=> //= b2.
+      by case: op => //= in be *; case=> <-; eauto.
+    * by case=> // l2; case: op=> //= in be *; case: l2 => //= ? [<-]; eauto.
+- by move=> ??? /andb_True [??]; eauto.
+- by move=> ??? /andb_True [??]; eauto.
+- by move=> ??? /andb_True [??]; eauto.
+- by move=> ??? /andb_True [??]; eauto.
+- by move=> ???? /is_trueP/andP [/andP[-> ->]_]; eauto.
+- by move=> ???? /is_trueP/andP [/andP[-> _]->]; eauto.
+Qed.
+
+Lemma pure_expr_pure_step (e₁ : expr) σ₁ κs e₂ σ₂ efs :
+  prim_step e₁ σ₁ κs e₂ σ₂ efs →
+  pure_expr e₁ →
+  pure_step e₁ e₂.
+Proof.
+move=> [K {}e₁ {}e₂ -> ->] Hstep; rewrite !pure_expr_fill.
+case/andb_True=> //= pure_K pure_e₁.
+apply: pure_step_ctx => //=; apply: nsteps_once_inv.
+case: e₁ σ₁ κs e₂ σ₂ efs / Hstep pure_e₁ => //= *; subst; exact: pure_exec.
+Qed.
+
+End WithSsrBool.
 
 Fixpoint free_vars e : gset string :=
   match e with
@@ -958,9 +1078,8 @@ End ListLemmas.
 
 Section ListLemmasEq.
 
-Import ssreflect.eqtype.
-Import ssrbool.
-Import seq.
+#[warnings="-ambiguous-paths"]
+Import ssrbool seq boot.eqtype.
 Variable (A : eqType).
 Context `{!Repr A, !heapGS Σ}.
 
@@ -1094,57 +1213,10 @@ Qed.
 
 End DoUntil.
 
-Section Loc.
-
-Context `{!heapGS Σ}.
-Import ssreflect.order deriving.instances.
-
-Lemma twp_leq_loc_loop E (l1 l2 : loc) (n k : nat) Ψ :
-  loc_car l2 = (loc_car l1 + (n + k)%nat)%Z ∨
-  loc_car l1 = (loc_car l2 + (n + k)%nat)%Z ∧ n + k ≠ 0%nat →
-  Ψ #(l1 <= l2)%O ⊢
-  WP leq_loc_loop #l1 #l2 #n @ E [{ Ψ }].
-Proof.
-have leq_locE l1' l2' :
-    (l1' <= l2')%O = bool_decide (loc_car l1' ≤ loc_car l2')%Z.
-  exact/(ssrbool.sameP (Z.leb_spec0 _ _))/bool_decide_reflect.
-have eq_locE (l1' l2' : loc) :
-    bool_decide (#l1' = #l2') = bool_decide (loc_car l1' = loc_car l2').
-  apply: bool_decide_ext; split => [[->] //|].
-  by case: l1' l2' => [?] [?] /= ->.
-elim: k n => [|k IH] n e_l1l2; iIntros "post"; wp_pures; wp_rec; wp_pures.
-- rewrite eq_locE.
-  case: bool_decide_reflect => /= [eq|neq]; wp_pures.
-    rewrite leq_locE bool_decide_decide decide_True //=.
-    lia.
-  rewrite eq_locE bool_decide_decide decide_True /=; try lia.
-  wp_pures; rewrite leq_locE bool_decide_decide decide_False //.
-  move=> H; apply: neq; rewrite /Loc.add /= in H; lia.
-- rewrite eq_locE bool_decide_decide decide_False; last by move=> /= ?; lia.
-  wp_pures.
-  rewrite eq_locE bool_decide_decide decide_False; last by move=> /= ?; lia.
-  wp_pures.
-  rewrite (_ : (n + 1)%Z = S n :> Z); try lia.
-  iApply IH => //; lia.
-Qed.
-
-Lemma twp_leq_loc E (l1 l2 : loc) Ψ :
-  Ψ #(l1 <= l2)%O ⊢
-  WP leq_loc #l1 #l2 @ E [{ Ψ }].
-Proof.
-have [off offP] :
-    ∃ off : nat, (loc_car l2 = loc_car l1 + off ∨
-                  loc_car l1 = loc_car l2 + off ∧ off ≠ 0%nat)%Z.
-  exists (Z.to_nat (Z.abs (loc_car l1 - loc_car l2))); lia.
-iIntros "post"; rewrite /leq_loc -[0%Z]/(Z.of_nat 0); wp_pures.
-by iApply twp_leq_loc_loop => //.
-Qed.
-
-End Loc.
-
 Section Ordered.
 
-Import ssrbool seq ssreflect.order path deriving.instances.
+#[warnings="-ambiguous-paths"]
+Import ssrbool seq all_order path deriving.instances.
 Variable (d : Order.disp_t) (A : orderType d).
 Context `{!Repr A, !heapGS Σ}.
 Import Order Order.POrderTheory Order.TotalTheory.

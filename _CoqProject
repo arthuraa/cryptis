@@ -5,12 +5,18 @@
 -R examples cryptis.examples
 -R cryptis cryptis
 
-cryptis/mathcomp_compat.v
-cryptis/lib.v
+cryptis/lib/mathcomp_compat.v
 cryptis/lib/term_set.v
 cryptis/lib/mathcomp_utils.v
-cryptis/gmeta.v
-cryptis/nown.v
+cryptis/lib/gen_adequacy.v
+cryptis/lib/adequacy.v
+cryptis/lib/session.v
+cryptis/lib/dh.v
+cryptis/lib/replica.v
+cryptis/lib/gmeta.v
+cryptis/lib/nown.v
+cryptis/lib/saved_prop.v
+cryptis/lib.v
 cryptis/role.v
 
 cryptis/core/pre_term/base.v
@@ -19,12 +25,9 @@ cryptis/core/pre_term.v
 cryptis/core/term/base.v
 cryptis/core/term/with_stdpp.v
 cryptis/core/term.v
-cryptis/core/comp_map.v
 cryptis/core/minted.v
 cryptis/core/term_meta.v
 cryptis/core/public.v
-cryptis/core/phase.v
-cryptis/core/saved_prop.v
 cryptis/cryptis.v
 
 cryptis/primitives/notations.v
@@ -35,9 +38,6 @@ cryptis/primitives/with_cryptis.v
 cryptis/primitives/attacker.v
 cryptis/primitives.v
 cryptis/tactics.v
-cryptis/session.v
-cryptis/dh.v
-cryptis/replica.v
 
 cryptis/adequacy.v
 

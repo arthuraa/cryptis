@@ -29,7 +29,9 @@ From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term gmeta cryptis role nown.
+From cryptis Require Import lib.
+From cryptis.lib Require Import gmeta nown.
+From cryptis Require Import cryptis role.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

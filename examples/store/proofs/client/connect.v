@@ -6,8 +6,7 @@ From iris.algebra Require Import max_prefix_list.
 From iris.algebra Require Import dfrac_agree.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term gmeta nown.
-From cryptis Require Import cryptis primitives tactics role.
+From cryptis Require Import lib cryptis primitives tactics role.
 From cryptis.examples Require Import iso_dh gen_conn conn rpc alist.
 From cryptis.examples.store Require Import impl.
 From cryptis.examples.store.proofs Require Import base db.
@@ -31,24 +30,23 @@ Implicit Types γ : gname.
 Implicit Types v : val.
 
 Lemma wp_client_connect c skI skR :
-  channel c -∗
-  cryptis_ctx -∗
-  store_ctx -∗
-  minted skI -∗
+  channel c ∗
+  cryptis_ctx ∗
+  store_ctx ∗
+  minted skI ∗
   minted skR -∗
   {{{ db_disconnected skI skR }}}
     Client.connect c skI (Spec.pkey skR)
   {{{ cs, RET (repr cs);
       db_connected skI skR cs }}}.
 Proof.
-iIntros "#chan_c #ctx #ctx'".
+iIntros "(#chan_c & #ctx & #ctx' & #? & #?)".
 iPoseProof (store_ctx_rpc_ctx with "ctx'") as "?".
-iIntros "#p_ekI #p_ekR".
 iIntros "!> %Φ client post".
 iDestruct "client" as "(%db & ready & state)".
 wp_lam. wp_pures.
 iApply (RPC.wp_connect (db_client_ready skI skR db)
-         with "[//] [//] [//] [] [] [$]") => //.
+         with "[] [$]") => //; eauto.
 iIntros "!> %cs (conn & ready)".
 iApply "post".
 by iFrame.

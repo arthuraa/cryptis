@@ -7,9 +7,8 @@ From iris.bi.lib Require Import fractional.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
-From cryptis Require Import lib term gmeta nown.
-From cryptis Require Import cryptis primitives tactics role.
-From cryptis Require Import saved_prop.
+From cryptis Require Import lib term cryptis primitives tactics role.
+From cryptis.lib Require Import saved_prop.
 From cryptis.examples Require Import iso_dh gen_conn.
 
 Set Implicit Arguments.
@@ -43,6 +42,7 @@ Definition gen_conn_params ps : GenConn.params Σ := {|
     ([∗ list] t ∈ tsR, msg_inv ps skI skR si Resp t);
 |}%I.
 
+#[warnings="-uniform-inheritance"]
 Local Coercion gen_conn_params : params >-> GenConn.params.
 
 Definition connected ps skI skR rl cs : iProp :=
@@ -69,10 +69,10 @@ Lemma connected_released_session ps skI skR rl cs :
   □ (▷ released_session cs → public (si_key cs)).
 Proof. exact: GenConn.connected_released_session. Qed.
 
-Lemma connected_keyE ps skI skR rl cs :
+Lemma connected_session ps skI skR rl cs :
   connected ps skI skR rl cs -∗
-  ⌜skI = si_init cs⌝ ∗ ⌜skR = si_resp cs⌝ ∗ ⌜rl = GenConn.cs_role cs⌝.
-Proof. exact: GenConn.connected_keyE. Qed.
+  session skI skR cs.
+Proof. exact: GenConn.connected_session. Qed.
 
 Lemma connected_ok ps skI skR rl cs :
   connected ps skI skR rl cs -∗
@@ -80,10 +80,6 @@ Lemma connected_ok ps skI skR rl cs :
   secret skR -∗
   ◇ session_ok cs.
 Proof. exact: GenConn.connected_ok. Qed.
-
-Lemma session_failed_failure si :
-  compromised si  ⊢ GenConn.failure (si_init si) (si_resp si).
-Proof. exact: GenConn.session_failed_failure. Qed.
 
 Lemma connected_failure ps skI skR rl cs :
   connected ps skI skR rl cs -∗

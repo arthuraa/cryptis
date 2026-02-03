@@ -79,7 +79,7 @@ Qed.
 Definition rep_main  kI kR N (a : A) : iProp Σ := replica kI kR N "main" a.
 Definition rep_copy' kI kR N (a : A) : iProp Σ := replica kI kR N "copy" a.
 
-Definition rep_current kI kR N a0 a : iProp Σ :=
+Definition rep_sync kI kR N a0 a : iProp Σ :=
   rep_main  kI kR N a ∗
   rep_copy' kI kR N a ∗
   (⌜a = a0⌝ ∗ rep_copy' kI kR N a0 ∨ □ ¬ never_connected kI kR N).
@@ -93,9 +93,9 @@ Definition rep_copy kI kR N a0 a : iProp Σ :=
   ⌜a = a0⌝ ∗ never_connected kI kR N ∨
   rep_copy' kI kR N a ∗ □ ¬ never_connected kI kR N.
 
-Lemma rep_main_current kI kR N a0 a a' :
+Lemma rep_main_sync kI kR N a0 a a' :
   rep_main kI kR N a -∗
-  rep_current kI kR N a0 a' -∗
+  rep_sync kI kR N a0 a' -∗
   ⌜a = a'⌝.
 Proof.
 iIntros "c1 (c2 & _)". iApply (replica_agree with "c1 c2").
@@ -104,7 +104,7 @@ Qed.
 Lemma rep_main_alloc kI kR N a0 E :
   ↑N.@"client".@kR.@"replica" ⊆ E →
   term_token kI E ==∗
-  rep_main kI kR N a0 ∗ rep_current kI kR N a0 a0 ∗
+  rep_main kI kR N a0 ∗ rep_sync kI kR N a0 a0 ∗
   term_token kI (E ∖ ↑N.@"client".@kR.@"replica").
 Proof.
 iIntros "%sub token".
@@ -131,7 +131,7 @@ Qed.
 
 Lemma rep_main_update a' kI kR N a0 a :
   rep_main kI kR N a -∗
-  rep_current kI kR N a0 a ==∗
+  rep_sync kI kR N a0 a ==∗
   rep_main kI kR N a' ∗
   rep_update kI kR N a0 a a'.
 Proof.
@@ -146,7 +146,7 @@ Lemma rep_copy_update kI kR N a0 a1 a2 a' :
   rep_update kI kR N a0 a2 a' ==∗
   ⌜a1 = a2⌝ ∗
   rep_copy kI kR N a0 a' ∗
-  rep_current kI kR N a0 a'.
+  rep_sync kI kR N a0 a'.
 Proof.
 iIntros "server upd".
 iDestruct "server" as "[(-> & never)|(s1 & #first1)]";

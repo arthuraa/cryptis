@@ -6,7 +6,7 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import numbers reservation_map.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par assert ticket_lock.
-From cryptis Require Import cryptis primitives tactics gmeta role adequacy.
+From cryptis Require Import cryptis primitives tactics role adequacy.
 From cryptis.primitives Require Import attacker.
 From cryptis.examples Require Import iso_dh rpc gen_conn conn store.
 
@@ -112,28 +112,28 @@ wp_apply (wp_fork with "[tokenR]").
 wp_pures.
 iMod (@client_alloc _ _ _ _ _ skR with "tokenI")
   as "(client & free & token)"; eauto.
-wp_apply (wp_client_connect with "[] [] [] [] [] client"); eauto.
+wp_apply (wp_client_connect with "[] client"); first iFrame "#".
 iIntros "%cs client". wp_pure _ credit:"c". wp_pures.
 iPoseProof (db_connected_ok with "client s_skI s_skR") as "#>ok".
 wp_apply wp_recv => //. iIntros "%k #p_k". wp_pures.
 wp_apply wp_recv => //. iIntros "%v #p_v". wp_pures.
 rewrite (@db_free_at_diff _ _ _ _ _ _ {[k]}) //.
 iDestruct "free" as "[free_k free]".
-wp_apply (wp_client_create with "[] [] [] [] [$]") => //.
+wp_apply (wp_client_create with "[] [$]"); iFrame "#".
 iIntros "[client k_v]". wp_pures.
-wp_apply (wp_client_close with "[//] [] [$client]") => //.
+wp_apply (wp_client_close with "[# $] [$client]") => //.
 iIntros "[client #p_sk]".
 wp_pures.
 wp_apply GenConn.wp_session_key => //. iIntros "_".
 wp_apply (wp_send with "[//]") => //. wp_pures.
-wp_apply (wp_client_connect with "[] [] [] [] [] client"); eauto.
+wp_apply (wp_client_connect with "[] client"); eauto.
 iIntros "%cs' client". wp_pure _ credit:"c'". wp_pures.
 iPoseProof (db_connected_ok with "client s_skI s_skR") as "#>#ok'".
 iMod (secret_public with "s_skI") as "#p_skI".
 iMod (secret_public with "s_skR") as "#p_skR".
 wp_apply wp_send => //. wp_pures.
 wp_apply wp_send => //. wp_pures.
-wp_apply (wp_client_load with "[] [] [] [$client $k_v]") => //.
+wp_apply (wp_client_load with "[] [$client $k_v]"); iFrame "#".
 iIntros "%v' (client & k_v & _ & [fail|->])".
 { iPoseProof (db_connected_ok_compromised with "client ok' fail") as ">[]". }
 wp_pures. wp_apply wp_assert. wp_apply wp_eq_term.

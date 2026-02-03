@@ -4,7 +4,7 @@ file to avoid slowing down the compilation process. *)
 
 From cryptis Require Import lib.
 From mathcomp Require Import ssreflect.
-From mathcomp Require order.
+From mathcomp Require all_order ssrbool eqtype seq path.
 From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap.
 From iris.base_logic.lib Require Import invariants.
@@ -55,7 +55,7 @@ Definition leq_term_op0 : val := λ: "x" "y",
   if: (Fst "x" < Fst "y") then #true
   else if: (Fst "x" = Fst "y") then
     if: Fst "x" = #0 (* Int *) then Snd "x" ≤ Snd "y"
-    else leq_loc (Snd "x") (Snd "y") (* Nonce *)
+    else (Snd "x") ≤ (Snd "y") (* Nonce *)
   else #false.
 
 Definition leq_key_type : val := λ: "x" "y",
@@ -246,9 +246,8 @@ iApply twp_wand; first iApply twp_eq_pre_term_aux.
 by iIntros (?) "->".
 Qed.
 
-Import ssrbool seq path.
-
-Import ssreflect.eqtype ssreflect.order.
+#[warnings="-ambiguous-paths"]
+Import all_order ssrbool boot.eqtype seq path.
 
 Lemma twp_leq_term_op0 E (o1 o2 : term_op0) :
   ⊢ WP (leq_term_op0 (repr o1) (repr o2)) @ E
@@ -258,7 +257,10 @@ rewrite PreTerm.op0_leqE.
 case: o1 o2 => [n1|a1] [n2|a2] /=; wp_lam; wp_pures => //.
 - iPureIntro. congr (# (LitBool _)). symmetry.
   exact/(sameP (Z.leb_spec0 _ _))/bool_decide_reflect.
-- by iApply twp_leq_loc.
+- iPureIntro. congr (# (LitBool _)).
+  suff H: (reflect (a1 ≤ₗ a2) (a1 <= a2)%O) by
+    apply/(sameP (bool_decide_reflect _)).
+  by apply Z.leb_spec0.
 Qed.
 
 Lemma twp_leq_term_op1 E (o1 o2 : term_op1) :

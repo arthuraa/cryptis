@@ -362,6 +362,6 @@ have ? : heapGpreS F by apply _.
 apply (adequate_result NotStuck _ _ (λ v _, v = NONEV ∨ v = SOMEV #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
-iMod (cryptisGS_alloc _) as (?) "(#ctx & seal_tok & key_tok & ? & hon & phase)".
+iMod (cryptisGS_alloc _) as (?) "(#ctx & seal_tok & key_tok & ?)".
 iApply (wp_game with "ctx [seal_tok]") => //.
 Qed.

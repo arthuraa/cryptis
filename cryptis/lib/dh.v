@@ -3,7 +3,8 @@ From mathcomp Require Import ssreflect.
 From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term cryptis primitives tactics session.
+From cryptis Require Import lib.
+From cryptis Require Import cryptis primitives tactics.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

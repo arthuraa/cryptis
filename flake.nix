@@ -26,6 +26,15 @@
         # module parameters provide easy access to attributes of the same
         # system.
 
+        devShells.default = pkgs.mkShell {
+          propagatedBuildInputs = [
+            pkgs.coqPackages.coq-lsp
+          ];
+          inputsFrom = [
+            self'.packages.default
+          ];
+        };
+
         # Equivalent to  inputs'.nixpkgs.legacyPackages.hello;
         packages.default = pkgs.coqPackages.cryptis;
       };
@@ -36,7 +45,7 @@
         # those are more easily expressed in perSystem.
 
         overlays.default = final: prev: {
-          coqPackages = prev.coqPackages.overrideScope (final: prev: {
+          coqPackages = prev.coqPackages_9_1.overrideScope (final: prev: {
             cryptis = prev.mkCoqDerivation {
               pname = "cryptis";
               defaultVersion = "dev";

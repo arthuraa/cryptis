@@ -4,8 +4,9 @@ From iris.algebra Require Import agree auth gset gmap list excl.
 From iris.algebra Require Import functions.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib gmeta nown.
-From cryptis.core Require Import term minted saved_prop.
+From cryptis Require Import lib.
+From cryptis.lib Require Import gmeta nown saved_prop.
+From cryptis.core Require Import term minted.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -92,8 +93,8 @@ Definition name_of_functionality F :=
   end.
 
 Definition seal_pred F N Φ : iProp :=
-  ∃ γ, gmeta (name_of_functionality F) N γ ∧
-       own γ (saved_pred DfracDiscarded (fun '(k, t) => Φ k t)).
+  nown (name_of_functionality F) N
+    (saved_pred DfracDiscarded (fun '(k, t) => Φ k t)).
 
 Definition aenc_pred N (Φ : aenc_key → term → iProp) :=
   seal_pred AENC N (λ k t, ∃ k' : aenc_key, ⌜k = k'⌝ ∗ Φ k' t)%I.
@@ -132,10 +133,8 @@ Lemma seal_pred_agree k t F N Φ1 Φ2 :
   seal_pred F N Φ2 -∗
   ▷ (Φ1 k t ≡ Φ2 k t).
 Proof.
-iDestruct 1 as (γm1) "[#meta1 #own1]".
-iDestruct 1 as (γm2) "[#meta2 #own2]".
-iPoseProof (gmeta_agree with "meta1 meta2") as "->".
-iPoseProof (own_valid_2 with "own1 own2") as "valid".
+rewrite /seal_pred. iIntros "#own1 #own2".
+iPoseProof (nown_valid_2 with "own1 own2") as "#valid".
 iPoseProof (saved_pred_op_validI with "valid") as "[_ #agree]".
 by iApply ("agree" $! (k, t)).
 Qed.
@@ -145,15 +144,7 @@ Lemma seal_pred_set F E (N : namespace) Φ :
   seal_pred_token F E ==∗
   seal_pred F N Φ ∗
   seal_pred_token F (E ∖ ↑N).
-Proof.
-iIntros (?) "token".
-iMod (own_alloc (saved_pred DfracDiscarded (λ '(k, t), Φ k t)))
-  as (γ) "own" => //.
-rewrite (@seal_pred_token_difference (↑N)) //.
-iDestruct "token" as "[token ?]".
-iMod (gmeta_set _ _ _ γ with "token") as "?" => //.
-by iModIntro; iFrame; iExists γ; iSplit.
-Qed.
+Proof. iIntros (?) "token". by iApply nown_alloc. Qed.
 
 Lemma aenc_pred_set E N Φ :
   ↑N ⊆ E →
@@ -194,8 +185,7 @@ by iIntros "!> !>"; iRewrite "e".
 Qed.
 
 Definition hash_pred N (P : term → iProp) : iProp :=
-  ∃ γ, gmeta public_hash_name N γ ∧
-       own γ (saved_pred DfracDiscarded P).
+  nown public_hash_name N (saved_pred DfracDiscarded P).
 
 Definition hash_pred_token E :=
   gmeta_token public_hash_name E.
@@ -225,10 +215,8 @@ Lemma hash_pred_agree t N P₁ P₂ :
   hash_pred N P₂ -∗
   ▷ (P₁ t ≡ P₂ t).
 Proof.
-iDestruct 1 as (γm1) "[#meta1 #own1]".
-iDestruct 1 as (γm2) "[#meta2 #own2]".
-iPoseProof (gmeta_agree with "meta1 meta2") as "->".
-iPoseProof (own_valid_2 with "own1 own2") as "valid".
+rewrite /hash_pred. iIntros "#own1 #own2".
+iPoseProof (nown_valid_2 with "own1 own2") as "#valid".
 iPoseProof (saved_pred_op_validI with "valid") as "[_ #agree]".
 by iApply ("agree" $! t).
 Qed.
@@ -238,15 +226,7 @@ Lemma hash_pred_set E N P :
   hash_pred_token E ==∗
   hash_pred N P ∗
   hash_pred_token (E ∖ ↑N).
-Proof.
-iIntros (?) "token".
-rewrite (@hash_pred_token_difference (↑N)) //.
-iDestruct "token" as "[token ?]".
-iMod (own_alloc (saved_pred DfracDiscarded P))
-  as (γ) "own" => //.
-iMod (gmeta_set _ _ _ γ with "token") => //.
-by iModIntro; iFrame; iExists γ; iSplit.
-Qed.
+Proof. iIntros (?) "token". by iApply nown_alloc. Qed.
 
 Definition wf_hash t : iProp :=
   ∃ N t' P, ⌜t = Spec.tag (Tag N) t'⌝ ∧ hash_pred N P ∧ □ ▷ P t'.
@@ -873,10 +853,52 @@ Proof.
 case: sk => seed. by rewrite public_sign_key.
 Qed.
 
+Definition pending γ : iProp :=
+  gmeta_token γ ⊤.
+
+Definition shot γ (x : positive) : iProp :=
+  gmeta γ nroot x.
+
+Global Instance persistent_shot γ x : Persistent (shot γ x).
+Proof. apply _. Qed.
+
+Global Instance timeless_shot γ x : Timeless (shot γ x).
+Proof. apply _. Qed.
+
+Lemma pending_alloc : ⊢ |==> ∃ γ, pending γ.
+Proof. apply gmeta_token_alloc. Qed.
+
+Lemma shot_alloc γ x : pending γ ==∗ shot γ x.
+Proof. by apply gmeta_set. Qed.
+
+Lemma pending_shot γ x : pending γ -∗ shot γ x -∗ False.
+Proof. by apply gmeta_gmeta_token. Qed.
+
+Lemma shot_agree γ x y : shot γ x -∗ shot γ y -∗ ⌜x = y⌝.
+Proof. apply gmeta_agree. Qed.
+
 Definition secret t : iProp :=
   (|==> public t) ∧
   (|==> □ (public t ↔ ▷ False)) ∧
   (public t -∗ ▷ False).
+
+Lemma secret_alloc t γ :
+  □ (public t ↔ ▷ shot γ 1) -∗ pending γ -∗ secret t.
+Proof.
+iIntros "#s_t pending"; do 2?iSplit.
+- iMod (shot_alloc with "pending") as "#shot".
+  by iSpecialize ("s_t" with "shot").
+- iMod (shot_alloc _ 2 with "pending") as "#shot".
+  iIntros "!> !>". iSplit.
+  + iIntros "#p_t".
+    iPoseProof ("s_t" with "p_t") as ">#shot'".
+    by iPoseProof (shot_agree with "shot shot'") as "%".
+  + iIntros "#contra".
+    iApply "s_t". by iDestruct "contra" as ">[]".
+- iIntros "#p_t".
+  iPoseProof ("s_t" with "p_t") as ">#shot".
+  by iPoseProof (pending_shot with "[$] [//]") as "[]".
+Qed.
 
 Lemma secret_not_public t : secret t -∗ public t -∗ ▷ False.
 Proof. by iIntros "(_ & _ & contra)". Qed.

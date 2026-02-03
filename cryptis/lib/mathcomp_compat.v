@@ -2,7 +2,7 @@
 mathcomp and stdpp definitions. *)
 
 From HB Require Import structures.
-From mathcomp Require Import all_ssreflect.
+From mathcomp Require Import all_order all_boot.
 From deriving Require Import deriving.
 From stdpp Require base countable.
 From Stdlib Require Import ZArith.ZArith Lia Permutation.
@@ -35,6 +35,7 @@ Definition Z_isOrder :=
     Z_leb_anti Z_leb_trans Z_leb_total.
 HB.instance Definition _ := Z_isOrder.
 
+#[warnings="-projection-no-head-constant"]
 HB.instance Definition _ := [isNew for locations.loc_car].
 HB.instance Definition _ := [Equality of locations.loc by <:].
 HB.instance Definition _ := [Choice of locations.loc by <:].
@@ -78,11 +79,11 @@ Lemma inP (T : eqType) (H : base.RelDecision (@eq T)) (x : T) (xs : seq T) :
   reflect (base.elem_of x xs) (x \in xs).
 Proof.
 apply /(equivP idP).
-elim: xs => //= [| x' xs' IH].
-- by rewrite list.elem_of_nil.
-- rewrite inE list.elem_of_cons -IH. split.
+elim: xs => //= [| ?? IH].
+- by rewrite list_basics.elem_of_nil.
+- rewrite inE list_basics.elem_of_cons -IH; split.
   + move => /orP [/eqP |]; auto.
-  + move => [/eqP -> | -> ] //. by rewrite orbT.
+  + by move => [/eqP -> | -> ] //; rewrite orbT.
 Qed.
 
 Lemma perm_sort_leP d (T : orderType d) (s1 s2 : seq T) :

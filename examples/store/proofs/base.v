@@ -6,8 +6,8 @@ From iris.algebra.lib Require Import dfrac_agree.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
-From cryptis Require Import lib term gmeta nown.
-From cryptis Require Import cryptis replica primitives tactics role.
+From cryptis Require Import lib cryptis primitives tactics role.
+From cryptis.lib Require Import replica.
 From cryptis.examples Require Import iso_dh gen_conn conn rpc alist.
 From cryptis.examples.store Require Import db.
 
@@ -69,11 +69,20 @@ Implicit Types b : bool.
 Implicit Types v : val.
 Implicit Types (failed : bool).
 
-Definition db_client_ready skI skR db : iProp :=
-  rep_main skI skR dbN db ∗ rep_current skI skR dbN ∅ db.
+Definition db_main skI skR db : iProp :=
+  rep_main skI skR dbN db.
 
-Definition db_server_ready skI skR db : iProp :=
+Definition db_sync skI skR db : iProp :=
+  rep_sync skI skR dbN ∅ db.
+
+Definition db_copy skI skR db : iProp :=
   rep_copy skI skR dbN ∅ db.
+
+Definition db_update skI skR db db' : iProp :=
+  rep_update skI skR dbN ∅ db db'.
+
+Definition db_client_ready skI skR db : iProp :=
+  db_main skI skR db ∗ db_sync skI skR db.
 
 Definition db_disconnected skI skR : iProp := ∃ db,
   (GenConn.failure skI skR ∨ db_client_ready skI skR db) ∗
@@ -110,6 +119,12 @@ Qed.
 Definition db_mapsto skI skR t1 t2 : iProp :=
   DB.mapsto skI skR dbN t1 t2.
 
+Lemma db_mapsto_excl skI skR t t1 t2 :
+  db_mapsto skI skR t t1 -∗
+  db_mapsto skI skR t t2 -∗
+  False.
+Proof. exact: DB.mapsto_excl. Qed.
+
 Definition db_free_at skI skR T : iProp :=
   DB.free_at skI skR dbN T.
 
@@ -130,7 +145,7 @@ rewrite (term_token_difference _ _ _ sub).
 iDestruct "skI_token" as "[skI_token ?]". iFrame.
 iMod (rep_main_alloc (N := dbN) skI (kR := skR) ∅ with "skI_token")
   as "(main & cur & skI_token)"; first solve_ndisj.
-iMod (DB.client_alloc _ (N := dbN) with "skI_token")
+iMod (DB.db_state_alloc _ (N := dbN) with "skI_token")
   as "(state & free & skI_token)".
 { solve_ndisj. }
 iModIntro. iFrame. iRight. by iFrame.
@@ -155,7 +170,7 @@ Qed.
 Definition server_db_connected' skI skR cs vdb : iProp := ∃ db,
   public_db db ∗
   AList.is_alist vdb (repr <$> db) ∗
-  (compromised cs ∨ db_server_ready skI skR db).
+  (compromised cs ∨ db_copy skI skR db).
 
 Definition server_db_connected skI skR cs vdb : iProp :=
   RPC.server_connected skI skR cs ∗
@@ -167,7 +182,7 @@ Definition server_handler skI skR cs vdb h : iProp :=
 Definition server_db_disconnected skI skR vdb : iProp := ∃ db,
   public_db db ∗
   AList.is_alist vdb (repr <$> db) ∗
-  (GenConn.failure skI skR ∨ db_server_ready skI skR db).
+  (GenConn.failure skI skR ∨ db_copy skI skR db).
 
 Lemma server_db_alloc skI skR vdb E :
   ↑dbN.@"server".@(skI : term) ⊆ E →
@@ -209,7 +224,7 @@ Definition store_call_pred skI skR si t : iProp :=
     rep_update skI skR dbN ∅ db (<[t1 := t2]> db).
 
 Definition store_resp_pred skI skR si t t' : iProp :=
-  ∃ db, rep_current skI skR dbN ∅ db.
+  ∃ db, rep_sync skI skR dbN ∅ db.
 
 Lemma store_call t2' skI skR cs t1 t2 :
   let P := compromised cs in
@@ -233,15 +248,15 @@ iModIntro. iSplitL "cur".
 { iRight. iExists _, _, _. by iFrame. }
 iIntros "%ts [#?|(%db' & cur)]".
 { iExists _. iFrame. by eauto. }
-iPoseProof (rep_main_current with "ready cur") as "<-".
+iPoseProof (rep_main_sync with "ready cur") as "<-".
 iExists _. iFrame. iRight. iFrame.
 Qed.
 
 Lemma store_resp skI skR cs db t1 t2 :
   let P := compromised cs in
-  (P ∨ db_server_ready skI skR db) -∗
+  (P ∨ db_copy skI skR db) -∗
   (P ∨ store_call_pred skI skR cs (Spec.of_list [t1; t2])) ==∗
-  (P ∨ db_server_ready skI skR (<[t1 := t2]>db)) ∗
+  (P ∨ db_copy skI skR (<[t1 := t2]>db)) ∗
   (P ∨ store_resp_pred skI skR cs (Spec.of_list [t1; t2]) (TInt 0)).
 Proof.
 iIntros "% [#?|ready] [#?|call]"; try by iModIntro; iSplitL; eauto.
@@ -256,7 +271,7 @@ Definition create_call_pred skI skR si t : iProp :=
     rep_update skI skR dbN ∅ db (<[t1 := t2]>db).
 
 Definition create_resp_pred skI skR si t t' : iProp :=
-  ∃ db, rep_current skI skR dbN ∅ db.
+  ∃ db, rep_sync skI skR dbN ∅ db.
 
 Lemma create_call t1 t2 skI skR cs :
   let P := compromised cs in
@@ -279,15 +294,15 @@ iModIntro. iSplitL "upd".
 { iRight. iExists _, _, _. iFrame. by eauto. }
 iIntros "% [#?|(%db' & cur)]".
 { iExists _. iFrame. by eauto. }
-iPoseProof (rep_main_current with "ready cur") as "<-".
+iPoseProof (rep_main_sync with "ready cur") as "<-".
 iExists _. iFrame. iRight. iFrame.
 Qed.
 
 Lemma create_resp skI skR cs db t1 t2 :
   let P := compromised cs in
-  (P ∨ db_server_ready skI skR db) -∗
+  (P ∨ db_copy skI skR db) -∗
   (P ∨ create_call_pred skI skR cs (Spec.of_list [t1; t2])) ==∗
-  (P ∨ db_server_ready skI skR (<[t1 := t2]>db)) ∗
+  (P ∨ db_copy skI skR (<[t1 := t2]>db)) ∗
   (P ∨ create_resp_pred skI skR cs (Spec.of_list [t1; t2]) (TInt 0)).
 Proof.
 iIntros "% [#?|ready] [#?|call]"; try by iModIntro; iSplitL; eauto.
@@ -302,7 +317,7 @@ Definition load_call_pred skI skR si t1 : iProp :=
            rep_update skI skR dbN ∅ db db.
 
 Definition load_resp_pred skI skR si t1 t2 : iProp :=
-  ∃ db, ⌜db !! t1 = Some t2⌝ ∗ rep_current skI skR dbN ∅ db.
+  ∃ db, ⌜db !! t1 = Some t2⌝ ∗ rep_sync skI skR dbN ∅ db.
 
 Lemma load_call t1 t2 skI skR cs :
   let P := compromised cs in
@@ -325,7 +340,7 @@ iModIntro. iSplitR "ready state".
 { iRight. iExists _. iFrame. by eauto. }
 iIntros "% [#?|(%db' & %db_t1' & cur)]".
 { iSplit; eauto. iFrame. by eauto. }
-iPoseProof (rep_main_current with "ready cur") as "<-".
+iPoseProof (rep_main_sync with "ready cur") as "<-".
 rewrite db_t1' in db_t1. case: db_t1 => ->.
 iSplit; eauto. iExists _. iFrame. iRight. iFrame.
 Qed.
@@ -333,9 +348,9 @@ Qed.
 Lemma load_resp skI skR cs db t1 :
   let P := compromised cs in
   let t2 := default (TInt 0) (db !! t1) in
-  (P ∨ db_server_ready skI skR db) -∗
+  (P ∨ db_copy skI skR db) -∗
   (P ∨ load_call_pred skI skR cs t1) ==∗
-  (P ∨ db_server_ready skI skR db) ∗
+  (P ∨ db_copy skI skR db) ∗
   (P ∨ load_resp_pred skI skR cs t1 t2).
 Proof.
 iIntros "%P /= [#?|ready] [#?|call]"; try by iModIntro; iSplitL; eauto.

@@ -4,8 +4,8 @@ From mathcomp Require ssrbool.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis Require Import lib term gmeta nown cryptis primitives tactics.
-From cryptis Require Import role.
+From cryptis Require Import lib.
+From cryptis Require Import role cryptis primitives tactics.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -43,7 +43,7 @@ Definition initiator : val := λ: "c" "skI" "pkR" "N",
   send "c" "m3";;
   SOME (derive_senc_key "secret").
 
-Definition responder_wait : val := λ: "c",
+Definition responder_listen : val := λ: "c",
   do_until (λ: <>,
     let: "m1" := recv "c" in
     bind: "m1" := list_of_term "m1" in
@@ -51,7 +51,7 @@ Definition responder_wait : val := λ: "c",
     guard: is_verify_key "pkI" in
     SOME ("ga", "pkI")).
 
-Definition responder_accept : val := λ: "c" "skR" "ga" "pkI" "N",
+Definition responder_confirm : val := λ: "c" "skR" "ga" "pkI" "N",
   let: "pkR" := pkey "skR" in
   let: "b" := mk_nonce #() in
   let: "gb" := mk_keyshare "b" in
@@ -67,8 +67,8 @@ Definition responder_accept : val := λ: "c" "skR" "ga" "pkI" "N",
   SOME (derive_senc_key "secret").
 
 Definition responder : val := λ: "c" "skR" "N",
-  let: "res" := responder_wait "c" in
+  let: "res" := responder_listen "c" in
   let: "ga"  := Fst "res" in
   let: "pkI" := Snd "res" in
-  bind: "kS" := responder_accept "c" "skR" "ga" "pkI" "N" in
+  bind: "kS" := responder_confirm "c" "skR" "ga" "pkI" "N" in
   SOME ("pkI", "kS").

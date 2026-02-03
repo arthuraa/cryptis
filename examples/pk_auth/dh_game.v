@@ -5,8 +5,8 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import numbers reservation_map.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par ticket_lock.
-From cryptis Require Import lib cryptis primitives tactics gmeta.
-From cryptis Require Import role session dh.
+From cryptis Require Import lib cryptis primitives tactics role.
+From cryptis.lib Require Import gmeta session dh.
 From cryptis.examples.pk_auth Require Import pk_auth dh.
 From cryptis.primitives Require Import attacker.
 
@@ -178,7 +178,7 @@ have ? : heapGpreS F by apply _.
 apply (adequate_result NotStuck _ _ (λ v _, v = NONEV ∨ v = SOMEV #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
-iMod (cryptisGS_alloc _) as (?) "(#ctx & seal_tok & key_tok & ? & hon & phase)".
+iMod (cryptisGS_alloc _) as (?) "(#ctx & seal_tok & key_tok & ?)".
 iMod (sessionGS_alloc _) as (?) "nown_tok".
 iApply (wp_game with "ctx [seal_tok]") => //.
 Qed.
