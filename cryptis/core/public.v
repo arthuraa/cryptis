@@ -524,6 +524,20 @@ apply: (anti_symm _).
   by eauto.
 Qed.
 
+Lemma public_THashIS N φ t :
+  hash_pred N φ -∗
+  minted t -∗
+  ▷ □ φ t -∗
+  public (THash (Spec.tag (Tag N) t)).
+Proof.
+  iIntros "#Hpred #Hminted #Hφ".
+  rewrite public_THash.
+  iRight.
+  rewrite minted_tag. iSplit => //.
+  iExists _, _, _.
+  eauto.
+Qed.
+
 Lemma public_TInv t : public (TInv t) ⊣⊢ public t.
 Proof.
 wlog: t/ ¬ is_inv t.
