@@ -587,8 +587,8 @@ elim: pt => //.
   by rewrite IH // /exp exps_expN // cancel_exps_canceled // nilpE tsN0 base_expN // sort_le_id.
 Qed.
 
-Lemma normalize_idem pt : normalize (normalize pt) = normalize pt.
-Proof. apply: normalize_wf; exact: wf_normalize. Qed.
+Lemma normalize_idem : idempotent_fun normalize.
+Proof. move => ?. apply: normalize_wf; exact: wf_normalize. Qed.
 
 Lemma normalize_exp_wf pt pts :
   let pt' := normalize (PTExp pt pts) in
