@@ -289,7 +289,7 @@ move => ?; apply: unfold_term_inj; rewrite !unfold_TExpN. apply: PreTerm.perm_ex
  - exact: perm_map.
 Qed.
 
-Lemma TExpNC t ts1 ts2 : TExpN t (ts1 ++ ts2) = TExpN t (ts2 ++ ts1).
+Lemma TExpN_catC t ts1 ts2 : TExpN t (ts1 ++ ts2) = TExpN t (ts2 ++ ts1).
 Proof. by apply: TExpN_perm; rewrite perm_catC. Qed.
 
 Lemma base_TExpN t ts : base (TExpN t ts) = base t.
@@ -597,7 +597,7 @@ Definition tsizeE := (tsize_TInv, tsize_TExpN, tsize_eq).
 
 Lemma TExp_TInv t1 t2 : t1 = TExp (TExp t1 (TInv t2)) t2.
 Proof.
-rewrite TExpNA TExpNC.
+rewrite TExpNA TExpN_catC.
 apply base_exps_inj; first by rewrite base_TExpN.
 rewrite exps_TExpN perm_sym perm_sort (_ :[:: TInv t2] = map TInv [:: t2]) //.
 by rewrite (permPl (cancel_exps_cat_invs _ _)) cancel_exps_exps.
@@ -608,7 +608,7 @@ Lemma tsize_lt_TExp t1 t2 :
   tsize t1 < tsize (TExp t1 t2) /\ tsize t2 < tsize (TExp t1 t2).
 Proof.
 move => /(invs_canceled_cons _ _ (invs_canceled_exps _)) ?.
-rewrite -[t1]base_expsK TExpNA TExpNC !tsize_TExpN ?is_exp_base ?invs_canceled_exps //= !addnE.
+rewrite -[t1]base_expsK TExpNA TExpN_catC !tsize_TExpN ?is_exp_base ?invs_canceled_exps //= !addnE.
 split; apply /ssrnat.ltP; last lia.
 have /ssrnat.ltP := tsize_gt0 t2. case: (exps t1 != [::]) => /=; lia.
 Qed.
