@@ -599,13 +599,23 @@ Qed.
 
 Definition tsizeE := (tsize_TInv, tsize_TExpN, tsize_eq).
 
-Lemma TExp_TInv t1 t2 : t1 = TExp (TExp t1 (TInv t2)) t2.
+Lemma TExpNK : right_loop (map TInv) TExpN.
 Proof.
+move => ts t.
 rewrite TExpNA TExpN_catC.
 apply base_exps_inj; first by rewrite base_TExpN.
-rewrite exps_TExpN perm_sym perm_sort (_ :[:: TInv t2] = map TInv [:: t2]) //.
+rewrite exps_TExpN perm_sort -{2}[ts](mapK TInvK).
 by rewrite (permPl (cancel_exps_cat_invs _ _)) cancel_exps_exps.
 Qed.
+
+Lemma TExpNK' : rev_right_loop (map TInv) TExpN.
+Proof. move => ts t. by rewrite -[RHS](TExpNK ts) !TExpNA TExpN_catC. Qed.
+
+Lemma TExpK t1 t2 : TExp (TExp t1 t2) (TInv t2) = t1.
+Proof. exact: TExpNK. Qed.
+
+Lemma TExpK' t1 t2 : TExp (TExp t1 (TInv t2)) t2 = t1.
+Proof. by rewrite (_ : [:: TInv t2] = map TInv [:: t2]) // TExpNK'. Qed.
 
 Lemma tsize_lt_TExp t1 t2 :
   TInv t2 \notin exps t1 ->
@@ -623,9 +633,7 @@ Lemma tsize_TExp_TInv t1 t2 :
 Proof.
 move => ?.
 
-set t1' := TExp t1 (TInv t2).
-have -> : t1 = TExp t1' t2 by apply TExp_TInv.
-rewrite /t1'.
+rewrite -{1 3}(TExpK' t1 t2).
 
 apply and_comm; apply tsize_lt_TExp.
 
@@ -642,16 +650,7 @@ by apply: invs_canceledP; first apply invs_canceled_exps.
 Qed.
 
 Lemma TExpN_injl : left_injective TExpN.
-Proof.
-move => a g1 g2 eq. apply base_exps_inj.
-- by rewrite -(base_TExpN _ a) eq base_TExpN.
-- rewrite -(TExpN0 g1) -(TExpN0 g2) !exps_TExpN !cats0 perm_sort perm_sym perm_sort.
-  apply perm_trans with (cancel_exps (exps g2 ++ a ++ map TInv a)); rewrite perm_sym.
-  + apply cancel_exps_cat_invs.
-  + apply perm_trans with (cancel_exps (exps g1 ++ a ++ map TInv a)).
-    * rewrite perm_sym. apply cancel_exps_cat_invs.
-    * apply /perm_sort_leP. by rewrite -!exps_TExpN -!TExpNA eq.
-Qed.
+Proof. move => ?. exact: can_inj (TExpNK _). Qed.
 
 Lemma TExpN_injr t ts1 ts2 :
   TExpN t ts1 = TExpN t ts2 ->
