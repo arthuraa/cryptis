@@ -287,7 +287,7 @@ Lemma TInvK : involutive TInv.
 Proof.
 move => ?.
 by rewrite unlock unfold_fold PreTerm.normalize_wf ?PreTerm.wf_inv ?wf_unfold_term //
-  PreTerm.inv_involutive ?wf_unfold_term // unfold_termK.
+  PreTerm.invK ?wf_unfold_term // unfold_termK.
 Qed.
 
 Lemma TInv_inj : injective TInv.

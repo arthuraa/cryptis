@@ -360,14 +360,12 @@ Proof. case: pt => // - [] // ?. apply /eqP => /(f_equal height) /=. lia. Qed.
 Lemma eq_Ninv pt1 pt2 : pt1 == pt2 -> pt1 != inv pt2.
 Proof. move => /eqP ->. rewrite eq_sym. exact: inv_Nid. Qed.
 
-Lemma inv_involutive pt : wf_term pt -> inv (inv pt) = pt.
-Proof. case: pt => // - [] //. by case => // - []. Qed.
+Lemma invK pt : wf_term pt -> inv (inv pt) = pt.
+Proof. by case: pt => // - [] // [] // []. Qed.
 
 Lemma inv_eq_op pt1 pt2 :
   wf_term pt1 -> wf_term pt2 -> (inv pt1 == pt2) = (pt1 == inv pt2).
-Proof.
-move => wf1 wf2. by apply /(sameP eqP) /(iffP eqP) => [-> | <-]; rewrite inv_involutive.
-Qed.
+Proof. move => ??; by apply /(sameP eqP) /(iffP eqP) => [-> | <-]; rewrite invK. Qed.
 
 Lemma insert_exp_subseq pt pts : subseq (insert_exp pt pts) (pt :: pts).
 Proof.
@@ -413,7 +411,7 @@ elim: pts => //= [pt' pts' IH] in pt * => ? /andP [??]. rewrite eq_sym.
 case: (pt =P pt') => [| /eqP /negbTE]; rewrite count_insert_exp => ->.
 - rewrite eqxx eq_sym (negbTE (inv_Nid _)).
   case: ifP => /count_memPn /eqP;
-    rewrite !IH ?wf_inv // inv_involutive //.
+    rewrite !IH ?wf_inv // invK //.
   + by rewrite -ltnNge => /[dup] /eqP -> /ltnW /eqP ->.
   + rewrite addnC. exact: addnBA.
 - rewrite addn0. case: ifP => [_ | /count_memPn /eqP wt0]; rewrite -inv_eq_op // eq_sym.
@@ -439,7 +437,7 @@ Lemma count_inv_cancel pt pts :
   wf_term pt -> all wf_term pts ->
   count_mem pt (cancel_exps pts) != 0 -> count_mem (inv pt) (cancel_exps pts) == 0.
 Proof.
-move => ??. by rewrite !count_cancel ?wf_inv // inv_involutive // -ltnNge => /ltnW.
+move => ??. by rewrite !count_cancel ?wf_inv // invK // -ltnNge => /ltnW.
 Qed.
 
 Lemma perm_cancel_exps pts1 pts2 :
