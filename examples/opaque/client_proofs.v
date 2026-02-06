@@ -16,14 +16,27 @@ Section Opaque.
 Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ}.
 Notation iProp := (iProp Σ).
 
+Lemma wp_hl_inv E (pt : PreTerm.pre_term) (Ψ: val -> iProp) :
+  Ψ (repr (PreTerm.inv pt)) ⊢
+  WP hl_inv (repr pt) @ E {{ Ψ }}.
+Proof.
+  iIntros "post".
+  iApply twp_wp.
+  by iApply twp_hl_inv.
+Qed.
 
-Lemma wp_hl_inv E r (Ψ: val -> iProp) :
-Ψ (TInv r) ⊢
-WP hl_inv r @ E {{ Ψ }}.
-Proof.  Admitted.
+Lemma wp_hl_inv_term E (t : term) (Ψ: val -> iProp) :
+Ψ (TInv t) ⊢
+WP hl_inv t @ E {{ Ψ }}.
+Proof.
+  iIntros "post".
+  rewrite -!val_of_pre_term_unfold unfold_TInv.
+  by iApply wp_hl_inv.
+Qed.
 
 Lemma wp_client_session (uid c pw : term):
 cryptis_ctx -∗
+hash_pred (opN.@"A_u") (λ _,  True) -∗
 channel c -∗
 public uid -∗
 minted uid -∗
@@ -31,10 +44,10 @@ minted pw -∗
 WP Client.session uid c pw
 {{ x , True }}.
 Proof.
-  iIntros "#Cryptis #Hc #pubuid #minteduid #mintedpw".
+  iIntros "#Cryptis #Hpred #Hc #pubuid #minteduid #mintedpw".
   wp_lam. wp_pures.
-  wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => False)%I) => //.
-  iIntros "%x_u %Hnoncex_u #Hmintedx_u #Hprivatex_u #H!eqx_u Htokenx_u".
+  wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => True)%I) => //.
+  iIntros "%x_u %Hnoncex_u #Hmintedx_u #Hprivatex_u #Heqx_u Htokenx_u".
   wp_pures.
   wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => True)%I) => //.
   iIntros "%r %Hnoncer #Hmintedr #Hprivater #Heqr Htokenr".
@@ -59,20 +72,24 @@ Proof.
   by iApply minted_tag.
   iApply "Heqr".
   iNext. by iModIntro.
-  iApply public_TExp.
-  by iApply public_g.
-  admit.
+  iApply public_TExp_iff.
+  by intro contra.
+  iRight.
+  do !iSplit => //.
+  by iApply minted_TInt.
+  iApply "Heqx_u".
+  iNext. by iModIntro.
   wp_pures.
   wp_apply wp_recv => //.
   iIntros "%m2 #pubm2".
+  iAssert (minted m2 ) as "minm2".
+  by iApply public_minted.
+  iClear "pubm2".
   wp_list_of_term m2; wp_pures => //.
-  wp_list_match => [β X_s envelope A_s | _].
+  wp_list_match => [β X_s envelope A_s -> | _].
   2: by wp_pures.
-  intro Hm2eq.
-  (* the start of the curse *)
   wp_pures.
-  wp_apply wp_hl_inv.
-  (* the end of the curse *)
+  wp_apply wp_hl_inv_term.
   wp_apply wp_texp.
   wp_list.
   wp_apply wp_H.
@@ -83,66 +100,47 @@ Proof.
   wp_lam.
   wp_pures.
   wp_apply wp_sdec'.
+  rewrite minted_of_list => /=.
   iSplit.
   2: iIntros "_"; by wp_pures.
-  iIntros "%clear %henvelope %henvelopedec".
+  iDestruct "minm2" as "[_ [minX_s [minenv _]]]".
+  iIntros "%clear -> _".
+  rewrite minted_TSeal.
+  iDestruct "minenv" as "[mink minclear]".
+  rewrite minted_tag.
   wp_pures.
-  wp_list_of_term clear_list.
+  wp_list_of_term clear.
   2: by wp_pures.
-  wp_list_match => [p_u P_u P_s | _].
+  wp_list_match => [p_u P_u P_s -> | _].
   2: by wp_pures.
-  iIntros "%Hclearlist".
-  wp_apply wp_ke.
-  wp_pures.
+  wp_apply wp_ke => /=.
   wp_list.
-  wp_apply wp_H.
-  wp_pures.
+  wp_apply wp_H => /=.
+  wp_list.
+  wp_apply wp_prf => /=.
   wp_list.
   wp_apply wp_prf.
-  wp_pures.
-  wp_list.
-  wp_apply wp_prf.
-  wp_eq_term eq_A_s; wp_pures => //.
+  wp_eq_term eq_A_s => /= //.
   wp_list.
   wp_apply wp_prf.
   wp_pures.
   wp_apply wp_send => //.
-  iApply public_THash.
-  (* start *)
-  iLeft.
-  iApply public_tag.
-
-  iApply public_of_list.
+  iApply public_THashIS; eauto.
+  rewrite !minted_of_list /=.
+  iDestruct "minclear" as "[minp_u [minP_u [minP_s _]]]".
   do !iSplit => //.
-  iApply public_THash.
-  iRight.
-  iSplit.
-  iApply minted_tag.
-  iApply minted_of_list.
-  do !iSplit => //; iApply minted_TExp.
-  admit.
-  admit.
-  admit.
+  rewrite minted_THash minted_tag minted_of_list.
+  do !iSplit => //; iApply all_minted_TExp; iSplit => //.
+  rewrite minted_THash minted_tag minted_of_list /=.
+  do !iSplit => //.
+  rewrite minted_TExp.
   iSplit => //.
-  admit.
-  admit.
-  iApply public_THash.
-  iRight.
-  iSplit.
-  iApply minted_tag.
-  iApply minted_of_list.
-  do !iSplit => //.
-  iApply minted_TExp.
+  by rewrite minted_THash minted_tag.
   by intro contra.
-  iSplit => //.
-  iApply minted_THash.
-  by iApply minted_tag.
-  admit.
-(* end *)
-
+  2: wp_pures; by iModIntro.
   wp_pures.
   wp_list.
   by wp_pures.
-Admitted.
+Qed.
 
 End Opaque.
