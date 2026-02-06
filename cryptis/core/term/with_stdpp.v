@@ -786,9 +786,6 @@ apply/(ssrbool.introN ssrbool.idP).
 by rewrite is_trueP.
 Qed.
 
-Lemma TExp0 t : TExpN t [] = t.
-Proof. exact: TExpN0. Qed.
-
 Lemma is_exp_base t : ¬ is_exp (base t).
 Proof.
 rewrite (ssrbool.negbTE (is_exp_base t)) /=. by auto.

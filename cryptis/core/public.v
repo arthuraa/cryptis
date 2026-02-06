@@ -621,10 +621,10 @@ apply: (anti_symm _); iIntros "#pub".
     iDestruct "pub" as (??) "(%e & p_t1 & p_t2)".
     symmetry in e.
     case/Permutation_singleton_r: e => -> ->; eauto.
-    rewrite TExp0; eauto.
+    rewrite TExpN0; eauto.
   by rewrite minted_TExp //=; iDestruct "pub" as "[[??] [??]]"; eauto.
 - iDestruct "pub" as "[[p1 p2] | (s1 & s2 & pub)]".
-    by iLeft; iExists t2, []; rewrite TExp0; eauto.
+    by iLeft; iExists t2, []; rewrite TExpN0; eauto.
   by iRight; rewrite /= minted_TExp//; do !iSplit => //=.
 Qed.
 

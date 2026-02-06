@@ -552,8 +552,9 @@ Qed.
 Lemma is_exp_TExp t1 t2 : ~~ is_exp t1 -> is_exp (TExp t1 t2).
 Proof. move => ?. rewrite is_exp_TExpN //. exact: invs_canceled1. Qed.
 
-Lemma TExpN0 t : TExpN t [::] = t.
+Lemma TExpN0 : right_id [::] TExpN.
 Proof.
+move => ?;
 rewrite unlock /= PreTerm.exp_nil.
   exact: unfold_termK.
   exact: wf_unfold_term.
