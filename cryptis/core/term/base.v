@@ -480,6 +480,9 @@ apply perm_trans with (cancel_exps (cancel_exps (exps t ++ ts1) ++ ts2)).
 - rewrite catA. apply cancel_exps_cat.
 Qed.
 
+Lemma TExpNC : right_commutative TExpN.
+Proof. by move =>>; rewrite !TExpNA TExpN_catC. Qed.
+
 Definition invs_canceled ts := PreTerm.invs_canceled (map unfold_term ts).
 
 Lemma invs_canceledP ts : reflect (forall t, t \in ts -> TInv t \notin ts) (invs_canceled ts).

@@ -159,7 +159,7 @@ iAssert (|={⊤}=>
   case/Spec.of_list_inj: e_m3
     => -> <- /Spec.sign_pkey_inj <- {ga gb' skR'}
     in gb gab si *.
-  rewrite !TExp_TExpN TExpC2 in gab si *.
+  rewrite TExpNC in gab si *.
   iDestruct "comp" as "[comp|comp]".
   - iMod (term_meta_set (iso_dhN.@"failed") true with "token_failed")
       as "#?"; first by solve_ndisj.

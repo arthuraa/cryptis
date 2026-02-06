@@ -94,8 +94,7 @@ Next Obligation.
 Admitted.
 
 Next Obligation.
-move=> nI nR; rewrite /pk_dh_mk_key_share /pk_dh_mk_session_key.
-by rewrite !TExp_TExpN TExpC2.
+by move=> nI nR; rewrite /pk_dh_mk_key_share /pk_dh_mk_session_key TExpNC.
 Qed.
 
 Next Obligation.
