@@ -468,7 +468,7 @@ by rewrite /cancel_exps map_cat unfold_exps /nilp size_map.
 case: ifP => //=. by rewrite unfold_base.
 Qed.
 
-Lemma is_nonce_TExp t1 t2 : ~~ is_exp t1 -> is_nonce (TExp t1 t2) = false.
+Lemma is_nonce_TExp t1 t2 : ~~ is_exp t1 -> ~~ is_nonce (TExp t1 t2).
 Proof. move => ?. by rewrite is_nonce_TExpN exps_expN. Qed.
 
 Lemma TExpNA t ts1 ts2 : TExpN (TExpN t ts1) ts2 = TExpN t (ts1 ++ ts2).
