@@ -32,12 +32,22 @@ Definition opaque_db (db : gmap term term) : iProp :=
 [∗ map] (k : term) ↦ (file : term) ∈ db,
 public k ∗ opaque_file file.
 
+
+Lemma public_THashE N φ t :
+  hash_pred N φ -∗
+  public (THash (Spec.tag (Tag N) t)) -∗
+  minted t ∗ ▷ □ φ t.
+Proof.
+  iIntros "#Hpred #Hpub".
+  rewrite public_THash.
+Admitted.
+
 Lemma wp_make_file (pw : term) :
-{{{ cryptis_ctx ∗ minted pw }}}
+{{{ cryptis_ctx ∗ minted pw ∗ □ (public pw -∗ False) ∗ hash_pred (opN.@"A_u") (λ _,  True) }}}
 Server.make_file pw
 {{{ file , RET (repr file) ; opaque_file file }}}.
 Proof.
-  iIntros "%ϕ [#cryptis #Hmintedpw] post".
+  iIntros "%ϕ [#cryptis [#Hmintedpw [#Hprivpw #Hhashpred]]] post".
   wp_lam.
   wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => False)%I) => //.
   iIntros "%k_s %Hnoncek_s #Hmintedk_s #Hprivatek_s #H!eqk_s Htokenk_s".
@@ -76,24 +86,21 @@ Proof.
   1, 2: iNext; by iModIntro.
   iApply (public_sencIS _ (opN.@"AuthEnc") _ _).
   admit.
-  iApply minted_senc.
-  iApply minted_THash.
-  iApply minted_tag.
+  rewrite minted_senc minted_THash minted_tag.
   1, 2: iApply minted_of_list; do !iSplit => //; iApply minted_TExp.
   1, 3, 5: by intro contra.
   1- 3: iSplit => //.
   2, 3: by iApply minted_TInt.
-  iApply minted_THash.
-  by iApply minted_tag.
+  by rewrite minted_THash minted_tag.
   iModIntro.
   admit.
   iModIntro.
-iIntros "Hcompromise".
-Admitted.
-(*   iApply "Hcompromise". *)
-(*   iApply public_of_list. *)
-(*   do !iSplit => //. *)
-(* Qed. *)
+  rewrite public_senc_key.
+rewrite public_THashE. public_tag public_of_list.
+  iIntros "[[#pubpw _] | #Hcompromise]".
+  by iSpecialize ("Hprivpw" with "pubpw").
+  iDestruct "Hcompromise" as "[Hmin Hwf]".
+  
 
 Lemma wp_server_session (db c : term) (alist : gmap term term) :
 cryptis_ctx -∗
