@@ -343,19 +343,8 @@ Proof. by case: pt => // => ?? /and5P []. Qed.
 Lemma wf_inv pt : wf_term pt -> wf_term (inv pt).
 Proof. by case: pt => // - [] ? // /andP []. Qed.
 
-Lemma wf_insert_exp pt pts :
-  wf_term pt -> all wf_term pts -> all wf_term (insert_exp pt pts).
-Proof.
-rewrite /insert_exp => wf wfs. case: ifP => _.
-  by apply /allP => ? /mem_rem /(allP wfs).
-  by rewrite /= wf.
-Qed.
-
-Lemma wf_cancel_exps pts : all wf_term pts -> all wf_term (cancel_exps pts).
-Proof. elim: pts => [| ?? IH] // /andP [??]. by rewrite wf_insert_exp // IH. Qed.
-
 Lemma inv_Nid pt : inv pt != pt.
-Proof. case: pt => // - [] // ?. apply /eqP => /(f_equal height) /=. lia. Qed.
+Proof. case: pt => // - [] // ?. apply /eqP => /(congr1 height) /=. lia. Qed.
 
 Lemma eq_Ninv pt1 pt2 : pt1 == pt2 -> pt1 != inv pt2.
 Proof. move => /eqP ->. rewrite eq_sym. exact: inv_Nid. Qed.
@@ -370,7 +359,7 @@ Proof. move => ??; by apply /(sameP eqP) /(iffP eqP) => [-> | <-]; rewrite invK.
 Lemma insert_exp_subseq pt pts : subseq (insert_exp pt pts) (pt :: pts).
 Proof.
 rewrite /insert_exp. case: ifP => _ //.
-by apply: subseq_trans; first apply rem_subseq; last apply subseq_cons.
+by apply: subseq_trans; [apply rem_subseq | apply subseq_cons].
 Qed.
 
 Lemma cancel_exps_subseq pts : subseq (cancel_exps pts) pts.
@@ -380,6 +369,9 @@ Qed.
 
 Lemma mem_cancel_exps pts : { subset (cancel_exps pts) <= pts }.
 Proof. apply mem_subseq. exact: cancel_exps_subseq. Qed.
+
+Lemma wf_cancel_exps pts : all wf_term pts -> all wf_term (cancel_exps pts).
+Proof. move => /allP H. apply /allP => ? /mem_cancel_exps. exact: H. Qed.
 
 Lemma parity_insert_exp pt pts : odd (size (insert_exp pt pts)) = ~~ odd (size pts).
 Proof.
@@ -454,7 +446,7 @@ Lemma base_Nexp pt : wf_term pt -> ~~ is_exp (base pt).
 Proof. by case: pt => // ?? /and5P []. Qed.
 
 Lemma base_idem pt : wf_term pt -> base (base pt) = base pt.
-Proof. case pt => //= ?? /and5P [_ ? *]. exact: base_expN. Qed.
+Proof. case pt => //= ?? /and5P [_ *]. exact: base_expN. Qed.
 
 Lemma base_exp pt pts : wf_term pt -> base (exp pt pts) = base pt.
 Proof. rewrite /exp => ?. case: ifP => //=. by rewrite base_idem. Qed.
@@ -466,7 +458,7 @@ Lemma expN_exps pt : wf_term pt -> exps pt = [::] -> ~~ is_exp pt.
 Proof. by case: pt => //= [_ ? /and5P [_ _ _ /eqP ?]]. Qed.
 
 Lemma exps_base pt : wf_term pt -> exps (base pt) = [::].
-Proof. case: pt => //= ?? /and5P [_ ? *]. exact: exps_expN. Qed.
+Proof. case: pt => //= ?? /and5P [_ *]. exact: exps_expN. Qed.
 
 Lemma exps_exp pt pts :
   wf_term pt ->
@@ -505,14 +497,13 @@ Proof.
 move => ? /allP /= wfs /allP /= canceled.
 rewrite /invs_canceled. apply /allP. rewrite /insert_exp /= => pt'.
 case: ifP => [_| /negP ?].
-  - move => /mem_rem /canceled. apply: contraNN. exact: mem_rem.
-  - rewrite !inE negb_or. case /orP => [/eqP -> | in_pts].
+  - move => /mem_rem /canceled. apply: contra. exact: mem_rem.
+  - rewrite !inE negb_or => /orP [/eqP -> | in_pts].
     + rewrite inv_Nid. exact /negP.
-    + apply /andP. split.
-      * have ? := wfs _ in_pts.
-        apply /eqP => /eqP. rewrite inv_eq_op // => /eqP => eq.
-        by rewrite eq in in_pts.
-      * exact: canceled.
+    + apply /andP; split; last exact: canceled.
+      have ? := wfs _ in_pts.
+      apply /eqP => /eqP. rewrite inv_eq_op // => /eqP eq.
+      by rewrite eq in in_pts.
 Qed.
 
 Lemma invs_canceled_cancel_exps pts : all wf_term pts -> invs_canceled (cancel_exps pts).
@@ -544,26 +535,24 @@ Qed.
 
 Lemma invs_canceled_cons pt pts : invs_canceled (pt :: pts) -> invs_canceled pts.
 Proof.
-rewrite /invs_canceled /= => /andP [_ /allP canceled].
-apply /allP => t t_in.
-have x: inv t \notin pt :: pts. exact: canceled.
-apply: contraNN x => in_pts. by rewrite in_cons in_pts orbT.
+rewrite /invs_canceled => /andP [_ /allP canceled].
+apply /allP => ? /canceled.
+by rewrite inE negb_or => /andP [].
 Qed.
 
 Lemma insert_exp_canceled pt pts :
   invs_canceled (pt :: pts) -> insert_exp pt pts = pt :: pts.
 Proof.
 rewrite /insert_exp => /allP canceled.
-have x: inv pt \notin pt :: pts. apply /canceled /mem_head.
-have /negbTE -> : inv pt \notin pts. apply: contraNN x => in_pts. by rewrite in_cons in_pts orbT.
-reflexivity.
+have := canceled _ (mem_head _ _).
+by rewrite inE negb_or => /andP [_ /negbTE ->].
 Qed.
 
 Lemma cancel_exps_canceled pts :
   invs_canceled pts -> cancel_exps pts = pts.
 Proof.
 elim: pts => // [?? IH] canceled /=.
-rewrite insert_exp_canceled //; rewrite IH //; exact: (invs_canceled_cons canceled).
+rewrite insert_exp_canceled // IH //; exact: invs_canceled_cons canceled.
 Qed.
 
 Lemma cancel_exps_exps pt :
@@ -589,7 +578,7 @@ Qed.
 Lemma normalize_wf pt : wf_term pt -> normalize pt = pt.
 Proof.
 elim: pt => //.
-- move => [[] ? IH ? | ? IH ? | ? IH /andP [??]] /=; rewrite ?IH //. exact: inv_invN.
+- by move => [[] ? IH ? | ? IH ? | ? IH /andP [??]] /=; rewrite IH // inv_invN.
 - by move => /= ?? IH1 ? IH2 /andP [/IH1 -> /IH2 ->].
 - move => ? IH ts IHts /and5P [?? wf_ts /negbTE tsN0 /andP [??]] /=.
   have -> : map normalize ts = ts.

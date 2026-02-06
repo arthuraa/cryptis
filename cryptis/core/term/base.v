@@ -109,7 +109,7 @@ Lemma wf_unfold_term t : PreTerm.wf_term (unfold_term t).
 Proof. by elim/term_ind': t=> //= ? -> ? ->. Qed.
 
 Lemma wf_unfold_terms ts : all PreTerm.wf_term [seq unfold_term i | i <- ts].
-Proof. elim: ts => //= ? ? ->. by rewrite wf_unfold_term.  Qed.
+Proof. elim: ts => //= ? ? ->. by rewrite wf_unfold_term. Qed.
 
 Fact fold_term_key : unit. Proof. exact: tt. Qed.
 Definition fold_term :=
@@ -120,28 +120,22 @@ Lemma unfold_termK : cancel unfold_term fold_term.
 Proof.
 rewrite [fold_term]unlock => t.
 rewrite /fold_term_def PreTerm.normalize_wf ?wf_unfold_term //.
-elim /term_ind': t => //=.
-- by move => t1 -> t2 ->.
-- by move => kt t ->.
-- by move => t1 -> t2 ->.
-- by move => t ->.
-- move => pt wf. move: (TInv' pt) (wf) => /=. rewrite wf. move: (boolP true).
-  move: {3} (true) => b pf. case: pf => // ? t ?. congr t. apply: bool_irrelevance.
-- move => pt pts wf. move: (TExpN' pt pts) (wf) => /=. rewrite wf. move: (boolP true).
-  move: {3} (true) => b pf. case: pf => // ? t ?. congr t. apply: bool_irrelevance.
+elim /term_ind': t => //=; try by move =>> -> // > ->.
+- move => pt wf. move: (TInv' pt) (wf) => /=. rewrite wf. move: (boolP _).
+  move: {3} true => _ [] // *. f_equal. apply: bool_irrelevance.
+- move => pt pts wf. move: (TExpN' pt pts) (wf) => /=. rewrite wf. move: (boolP _).
+  move: {3} true => _ [] // *. f_equal. apply: bool_irrelevance.
 Qed.
 
 Lemma unfold_fold pt : unfold_term (fold_term pt) = PreTerm.normalize pt.
 Proof.
 rewrite [fold_term]unlock. rewrite /fold_term_def.
 have := PreTerm.wf_normalize pt. elim: (PreTerm.normalize pt) => //=.
-- move => [] //.
-- move => [?||] t IH wf_t /=.
-  + by rewrite IH.
-  + by rewrite IH.
-  + move: (boolP _). move: {3} (_ && _) => b. case => //. by rewrite wf_t.
-- move => [] t1 IH1 t2 IH2 /andP [wf1 wf2] /=; rewrite IH1 //; rewrite IH2 //.
-- move => t IH ts IHs wf. move: (boolP _). move: {3} (_ && _) => b. case => //. by rewrite wf.
+- by case.
+- move => [?||] t IH wf_t /=; try by rewrite IH.
+  move: (boolP _). move: {3} (_ && _) => ? [] //. by rewrite wf_t.
+- by move => [] ? IH1 ? IH2 /andP [??] /=; rewrite IH1 ?IH2.
+- move => t IH ts IHs wf. move: (boolP _). move: {3} (_ && _) => _ [] //. by rewrite wf.
 Qed.
 
 Lemma fold_termK pt : PreTerm.wf_term pt -> unfold_term (fold_term pt) = pt.
@@ -225,7 +219,7 @@ Qed.
 
 Lemma unfold_TInv t : unfold_term (TInv t) = PreTerm.inv (unfold_term t).
 Proof.
-by rewrite unlock unfold_fold PreTerm.normalize_wf ?PreTerm.wf_inv ?wf_unfold_term.
+by rewrite unlock unfold_fold PreTerm.normalize_wf // PreTerm.wf_inv // wf_unfold_term.
 Qed.
 
 Lemma unfold_TExpN t ts :
@@ -250,15 +244,9 @@ Lemma fold_termE pt :
   | PreTerm.PTExp pt pts => TExpN (fold_term pt) (map fold_term pts)
   end.
 Proof.
-apply /unfold_term_inj. rewrite unfold_fold.
-case: pt => /=.
-- by case.
-- case => [?? | ? | ?] /=.
-  + by rewrite unfold_fold.
-  + by rewrite unfold_fold.
-  + by rewrite unfold_TInv unfold_fold.
-- case => [?? | ??] /=; by rewrite !unfold_fold.
-- move => ??. by rewrite unfold_TExpN unfold_fold -map_comp (eq_map unfold_fold).
+apply /unfold_term_inj.
+case: pt => /=; try by case =>> //=; rewrite ?unfold_TInv !unfold_fold.
+by move =>>; rewrite unfold_TExpN !unfold_fold -map_comp (eq_map unfold_fold).
 Qed.
 
 Definition base t :=
@@ -291,7 +279,7 @@ by rewrite unlock unfold_fold PreTerm.normalize_wf ?PreTerm.wf_inv ?wf_unfold_te
 Qed.
 
 Lemma TInv_inj : injective TInv.
-Proof. apply inv_inj. exact: TInvK. Qed.
+Proof. exact: inv_inj TInvK. Qed.
 
 Lemma TExpN_perm t ts1 ts2 : perm_eq ts1 ts2 -> TExpN t ts1 = TExpN t ts2.
 Proof.
@@ -562,10 +550,7 @@ by rewrite PreTerm.is_exp_exp ?wf_unfold_term // -!nilpE /nilp size_map.
 Qed.
 
 Lemma is_exp_TExp t1 t2 : ~~ is_exp t1 -> is_exp (TExp t1 t2).
-Proof.
-move => ?. rewrite is_exp_TExpN //. apply /invs_canceledP => ?.
-rewrite !inE => /eqP ->. exact: TInv_Nid.
-Qed.
+Proof. move => ?. rewrite is_exp_TExpN //. exact: invs_canceled1. Qed.
 
 Lemma TExpN0 t : TExpN t [::] = t.
 Proof.
