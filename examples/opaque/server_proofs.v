@@ -1,7 +1,5 @@
 From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
-(* From iris.algebra Require Import agree auth csum gset gmap excl frac. *)
-(* From iris.algebra Require Import max_prefix_list. *)
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import par.
 From cryptis Require Import lib term cryptis primitives tactics.
@@ -32,22 +30,29 @@ Definition opaque_db (db : gmap term term) : iProp :=
 [∗ map] (k : term) ↦ (file : term) ∈ db,
 public k ∗ opaque_file file.
 
-
 Lemma public_THashE N φ t :
   hash_pred N φ -∗
   public (THash (Spec.tag (Tag N) t)) -∗
-  minted t ∗ ▷ □ φ t.
+  public t ∨ minted t ∗ ▷ □ φ t.
 Proof.
   iIntros "#Hpred #Hpub".
   rewrite public_THash.
-Admitted.
+  iDestruct "Hpub" as "[Hpub | [Hmint Hwfhash]]".
+  rewrite public_tag.
+  by iLeft.
+  rewrite minted_tag.
+  iRight.
+  iSplit => //.
+  iDestruct (wf_hash_elim N t φ with "Hwfhash Hpred") as "H".
+  by iNext.
+Qed.
 
-Lemma wp_make_file (pw : term) :
-{{{ cryptis_ctx ∗ minted pw ∗ □ (public pw -∗ False) ∗ hash_pred (opN.@"A_u") (λ _,  True) }}}
+Lemma wp_make_file (pw : term) (Φ : senc_key → term → iProp) :
+{{{ cryptis_ctx ∗ minted pw ∗ □ (public pw ↔ ▷ □ False) ∗ hash_pred (opN.@"rw") (λ _,  False) ∗ senc_pred (opN.@"AuthEnc") Φ ∗ □ ∀ s t, Φ s t}}}
 Server.make_file pw
 {{{ file , RET (repr file) ; opaque_file file }}}.
 Proof.
-  iIntros "%ϕ [#cryptis [#Hmintedpw [#Hprivpw #Hhashpred]]] post".
+  iIntros "%ϕ [#cryptis [#Hmintedpw [#Hprivpw [#Hhashpred [#Hsencpred #Henc]]]]] post".
   wp_lam.
   wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => False)%I) => //.
   iIntros "%k_s %Hnoncek_s #Hmintedk_s #Hprivatek_s #H!eqk_s Htokenk_s".
@@ -84,8 +89,7 @@ Proof.
   iApply "Heqp_s".
   2: iApply "Heqp_u".
   1, 2: iNext; by iModIntro.
-  iApply (public_sencIS _ (opN.@"AuthEnc") _ _).
-  admit.
+  iApply (public_sencIS _ (opN.@"AuthEnc") Φ _) => //.
   rewrite minted_senc minted_THash minted_tag.
   1, 2: iApply minted_of_list; do !iSplit => //; iApply minted_TExp.
   1, 3, 5: by intro contra.
@@ -93,17 +97,23 @@ Proof.
   2, 3: by iApply minted_TInt.
   by rewrite minted_THash minted_tag.
   iModIntro.
-  admit.
-  iModIntro.
   rewrite public_senc_key.
-rewrite public_THashE. public_tag public_of_list.
-  iIntros "[[#pubpw _] | #Hcompromise]".
-  by iSpecialize ("Hprivpw" with "pubpw").
-  iDestruct "Hcompromise" as "[Hmin Hwf]".
-  
+  iIntros "#Hcompromise".
+  iDestruct (public_THashE with "Hhashpred Hcompromise") as "[Hpub | [Hmin contra]]";
+    rewrite !public_of_list /=.
+  iDestruct "Hprivpw" as "[Hprivpw _]".
+  iDestruct "Hpub" as "[Hpubpw _]".
+  iDestruct ("Hprivpw" with "Hpubpw") as "contra".
+  all: iDestruct "Hprivatep_u" as "[_ Hprivatep_u]";
+    iDestruct ("Hprivatep_u" with "contra") as "Hpubp_u";
+    iDestruct "Hprivatep_s" as "[_ Hprivatep_s]";
+    iDestruct ("Hprivatep_s" with "contra") as "Hpubp_s";
+    do !iSplit => //; do ?iApply public_TExp => //; by rewrite public_TInt.
+Qed.
 
 Lemma wp_server_session (db c : term) (alist : gmap term term) :
 cryptis_ctx -∗
+hash_pred (opN.@"A_s") (λ _,  True) -∗
 channel c -∗
 AList.is_alist db (repr <$> alist) -∗
 opaque_db alist -∗
@@ -111,7 +121,7 @@ WP Server.session db c
 {{ x , True }}.
 Proof.
   rewrite /opaque_db big_sepM_forall.
-  iIntros "#Cryptis #Hc Hdb #Hmapcontents".
+  iIntros "#Cryptis #Hpred #Hc Hdb #Hmapcontents".
   wp_lam. wp_pures.
   wp_apply (wp_recv with "Hc").
   iIntros "%m1 #Hpubm1".
@@ -127,7 +137,7 @@ Proof.
   case db_uid: (alist !! uid) => [file|]; wp_pures.
   2: by iModIntro.
   iDestruct ("Hmapcontents" $! uid file with "[//]") as
-    "[_ (%k_s & %p_s & %P_s & %P_u & %envelope &
+  "[_ (%k_s & %p_s & %P_s & %P_u & %envelope &
         %e & Hmk_s & Hmp_s & HpP_s & HpP_u & Hpenvelope)]".
   repeat rewrite subst_list_match /=.
   wp_apply wp_list_of_term.
@@ -138,9 +148,9 @@ Proof.
   wp_list_match => [k_s' p_s' P_s' P_u' envelope' e' | ].
   inversion e'. subst. clear e'.
   2: intro H; wp_pures; by iModIntro.
-  wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => False)%I).
+  wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => True)%I).
   1: iAssumption.
-  iIntros "%x_s %Hnoncex_s #Hmintedx_s #Hprivatex_s #H!eqx_s Htokenx_s".
+  iIntros "%x_s %Hnoncex_s #Hmintedx_s #Hprivatex_s #Hdhx_s Htokenx_s".
   wp_pures.
   wp_apply wp_texp. wp_pures.
   wp_apply wp_texp. wp_pures.
@@ -160,8 +170,7 @@ Proof.
   rewrite public_of_list.
   simpl.
   iDestruct "Hpubm1" as "[Hpubuid [Hpubα [HpubX_u _]]]".
-  wp_apply wp_send.
-  1: done.
+  wp_apply wp_send => //.
   1: rewrite public_of_list => //.
   do !iSplit => //.
   iApply public_TExp_iff => //.
@@ -172,8 +181,12 @@ Proof.
   iRight.
   do !iSplit => //.
   by iApply minted_TInt.
-  iApply "H!eqx_s". iNext. iModIntro. admit.
-  admit.
+  iApply "Hdhx_s". iNext. by iModIntro.
+  iApply public_THashIS => //.
+  rewrite minted_of_list /= !minted_THash !minted_tag !minted_of_list /=.
+  do !iSplit => //.
+  1, 2: iApply all_minted_TExp; iSplit => //.
+  1- 4: by iApply public_minted.
   wp_pures.
   wp_apply (wp_recv with "Hc").
   iIntros "%m3 #Hm3pub".
