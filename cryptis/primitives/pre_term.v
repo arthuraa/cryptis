@@ -336,6 +336,11 @@ Proof.
         try case: t => * /=; wp_lam; wp_pures; iApply "HΨ".
 Qed.
 
+Lemma wp_hl_inv E (pt : PreTerm.pre_term) Ψ:
+    Ψ (repr (PreTerm.inv pt)) ⊢
+    WP hl_inv (repr pt) @ E {{ Ψ }}.
+Proof. iIntros "HΨ"; iApply twp_wp; by wp_apply twp_hl_inv. Qed.
+
 Lemma twp_hl_insert_exp E pt (pts : seq PreTerm.pre_term) Φ :
     Φ (repr (PreTerm.insert_exp pt pts)) ⊢
     WP hl_insert_exp (repr pt) (repr pts) @ E [{ Φ }].

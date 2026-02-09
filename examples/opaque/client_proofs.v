@@ -16,15 +16,6 @@ Section Opaque.
 Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ}.
 Notation iProp := (iProp Σ).
 
-Lemma wp_hl_inv E (pt : PreTerm.pre_term) (Ψ: val -> iProp) :
-  Ψ (repr (PreTerm.inv pt)) ⊢
-  WP hl_inv (repr pt) @ E {{ Ψ }}.
-Proof.
-  iIntros "post".
-  iApply twp_wp.
-  by iApply twp_hl_inv.
-Qed.
-
 Lemma wp_hl_inv_term E (t : term) (Ψ: val -> iProp) :
 Ψ (TInv t) ⊢
 WP hl_inv t @ E {{ Ψ }}.
