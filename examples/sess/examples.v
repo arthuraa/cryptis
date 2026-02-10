@@ -13,6 +13,9 @@ From actris.channel Require Import proto_model proto.
 From iris.heap_lang Require Import lib.spin_lock.
 From iris.bi Require Import telescopes.
 
+From iris.proofmode Require Import coq_tactics reduction spec_patterns.
+From iris.heap_lang Require Import proofmode notation.
+From cryptis.examples Require Import proofmode.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -94,6 +97,35 @@ Lemma send42_dual_equiv:
 (* Lemma connected_send42_proper skI skR rl cs: *)
 
 
+(* Lemma wp_responder_confirm . *)
+
+  (* Lemma tac_wp_recv `{!chanG Σ, !heapGS Σ} {TT : tele} Δ i j K c p m tv tP tP' tp Φ : *)
+  (* envs_lookup i Δ = Some (false, c ↣ p)%I → *)
+  (* ProtoNormalize false p [] (<?> m) → *)
+  (* MsgTele m tv tP tp → *)
+  (* (∀.. x, MaybeIntoLaterN false 1 (tele_app tP x) (tele_app tP' x)) → *)
+  (* let Δ' := envs_delete false i false Δ in *)
+  (* (∀.. x : TT, *)
+  (*   match envs_app false *)
+  (*       (Esnoc (Esnoc Enil j (tele_app tP' x)) i (c ↣ tele_app tp x)) Δ' with *)
+  (*   | Some Δ'' => envs_entails Δ'' (WP fill K (of_val (tele_app tv x)) {{ Φ }}) *)
+  (*   | None => False *)
+  (*   end) → *)
+  (* envs_entails Δ (WP fill K (recv c) {{ Φ }}). *)
+(* Lemma tac_wp_recv `{!chanG Σ, !heapGS Σ} {TT : tele} Δ i j K c p m tv tP tP' tp Φ : *)
+(*   envs_lookup i Δ = Some (false, Sess.connected c p)%I → *)
+(*   ProtoNormalize false p [] (<?> m) → *)
+(*   MsgTele m tv tP tp → *)
+(*   (∀.. x, MaybeIntoLaterN false 1 (tele_app tP x) (tele_app tP' x)) → *)
+(*   let Δ' := envs_delete false i false Δ in *)
+(*   (∀.. x : TT, *)
+(*     match envs_app false *)
+(*         (Esnoc (Esnoc Enil j (tele_app tP' x)) i ( connected c tele_app tp x)) Δ' with *)
+(*     | Some Δ'' => envs_entails Δ'' (WP fill K (of_val (tele_app tv x)) {{ Φ }}) *)
+(*     | None => False *)
+(*     end) → *)
+(*   envs_entails Δ (WP fill K (recv c) {{ Φ }}). *)
+
 
 Lemma wp_responder_recv42 c skI skR N :
   channel c -∗
@@ -104,7 +136,7 @@ Lemma wp_responder_recv42 c skI skR N :
   {{{ True }}}
     responder_recv42 c skR (Tag N)
   {{{ cs msg, RET (repr cs, msg);
-      Sess.connected skR skI Resp cs END ∗
+      Sess.connected skI skR Resp cs END ∗
       release_token (si_resp_share cs) ∗
       (public (si_key cs) ∨ True) ∗
       ⌜msg = TInt 42⌝ }}}.
@@ -130,16 +162,20 @@ Proof.
     (* rewrite /send42_proto_dual /iProto_dual /=. *)
 
     Search iProto_dual.
-    wp_apply (@Sess.wp_recv
+    (* Search tele_unit. *)
+    wp_apply (Sess.wp_recv
             (* (TT := tele_unit) *)
             (* (skI := skI0) (skR := skR) (rl := Resp) (cs := cs) *)
             (* (N := N) (p0 := send42_proto) *)
             (* (t := λ _, TInt 42) *)
             (* (P := λ _, True%I) *)
-                _ _ _ _ _ _
-                _             (* TT *)
+                (* _             (* TT *) *)
+                (* _  *)
+                (*  _ _ _ _ _ *)
+                (TT := TeleO)
                 skI0 skR Resp cs N send42_proto
-                (fun _ => TInt 42)
+                (* (fun _ => TInt 42) *)
+                (tele_app _)
                 (fun _ => True%I)
                 (fun _ => END)
           with "[] [Hconn]"); eauto 10.
@@ -160,11 +196,33 @@ Proof.
     rewrite send42_dual_equiv .
     unfold send42_proto_dual.
     (* iExact "Hconn". *)
-    (* iApply "Hconn". *)
-    iFrame "Hconn".
+
+    iApply "Hconn".
+    iIntros (t') "Hh".
+    wp_pures.
+    iModIntro.
+    iApply "post".
+    iFrame.
+    iAssert  (⌜skI0 = skI⌝)%I as "%Heq_skI".
+    { admit. }
+    subst skI0.
+    iFrame.
+(* iDes *)
+    (* iIntros (t') "[Hpubt'  [H1 | [H2 H3 ]]] ". *)
+    admit.
+
+    wp_pures.
+    iModIntro.
+    iApply "post".
+     iFrame.
+
+    iSplitL "H3".
+    { iDestruct "H3" as "[Hc Ht]". by iFrame. }
+    iFrame.
 
 
-    (* } *)
+Admitted.
+
 
 
 

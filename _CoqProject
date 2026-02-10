@@ -60,6 +60,7 @@ examples/gen_conn/proofs.v
 examples/gen_conn.v
 
 examples/sess/impl.v
+examples/sess/proofmode.v
 examples/sess/proofs/base.v
 examples/sess/proofs.v
 examples/sess.v

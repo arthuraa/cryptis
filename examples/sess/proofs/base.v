@@ -92,8 +92,8 @@ Definition sess_params p := {|
 |}%I.
 
 (* Print bi_car. *)
-Global Instance sess_params_proper:
-  Proper ((equiv) ==> (⊣⊢)) (sess_params).
+(* Global Instance sess_params_proper: *)
+(*   Proper ((equiv) ==> (⊣⊢)) (sess_params). *)
 (* Proof. *)
 (*   Admitted. *)
   (* intros p1 p2 hp. *)
@@ -157,24 +157,24 @@ iClear "Hγs'". case: rl => /=.
   iExists _. iSplit; eauto. by iRewrite "Hp'".
 Qed.
 
-(* initial proto contains a list of proto, we need the history of all past messages to know which proto is the current one *))
-Definition connected skI skR rl cs init_p curr_p : iProp :=
-  GenConn.connected (sess_params init_p) skI skR rl cs ∗
-  (public (si_key cs) ∨ sess_own skI skR cs rl curr_p).
+(* initial proto contains a list of proto, we need the history of all past messages to know which proto is the current one *)
+Definition connected skI skR rl cs p : iProp :=
+  GenConn.connected (sess_params p) skI skR rl cs ∗
+  (public (si_key cs) ∨ sess_own skI skR cs rl p).
 
-Global Instance connected_proper skI skR rl cs:
-  Proper ((equiv) ==> (⊣⊢)) (connected skI skR rl cs).
-Proof.
-  unfold connected.
+(* Global Instance connected_proper skI skR rl cs: *)
+(*   Proper ((equiv) ==> (⊣⊢)) (connected skI skR rl cs). *)
+(* Proof. *)
+(*   unfold connected. *)
 
-  (* solve_proper. *)
-  (* Admitted. *)
-  intros p1 p2 Hp.
-  rewrite  /connected.
-  f_equiv.
-  -
-  solve_proper.
-(* Qed. *)
+(*   (* solve_proper. *) *)
+(*   (* Admitted. *) *)
+(*   intros p1 p2 Hp. *)
+(*   rewrite  /connected. *)
+(*   f_equiv. *)
+(*   - *)
+(*   solve_proper. *)
+(* (* Qed. *) *)
 
 
 (* FIXME: This is a hack. It relies on the definition of connected actually not
