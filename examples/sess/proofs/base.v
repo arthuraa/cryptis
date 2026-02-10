@@ -71,6 +71,13 @@ Definition sess_own skI skR si (rl : role) p : iProp :=
     session_names si γs ∗
     iProto_own (session_name_for rl γs) p.
 
+Lemma sess_own_le skI skR si rl p1 p2 :
+  sess_own skI skR si rl p1 ⊢ ▷ (p1 ⊑ p2) -∗ sess_own skI skR si rl p2.
+Proof.
+iIntros "(%γs & #names & own) le".
+iExists γs; iFrame "#". by iApply (iProto_own_le with "[$]").
+Qed.
+
 (* Global Instance sess_own_proper skI skR si rl: *)
 (*   Proper ((equiv) ==> (⊣⊢)) (sess_own skI skR si rl). *)
 (* Proof. *)
@@ -161,6 +168,14 @@ Qed.
 Definition connected skI skR rl cs p : iProp :=
   GenConn.connected (sess_params p) skI skR rl cs ∗
   (public (si_key cs) ∨ sess_own skI skR cs rl p).
+
+Lemma connected_le skI skR rl cs p1 p2 :
+  connected skI skR rl cs p1 ⊢ ▷ (p1 ⊑ p2) -∗ connected skI skR rl cs p2.
+Proof.
+iIntros "[conn [#fail|own]] le".
+- iFrame. by eauto.
+- iFrame. iRight. by iApply (sess_own_le with "[$]").
+Qed.
 
 (* Global Instance connected_proper skI skR rl cs: *)
 (*   Proper ((equiv) ==> (⊣⊢)) (connected skI skR rl cs). *)

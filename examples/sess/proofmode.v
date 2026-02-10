@@ -19,10 +19,10 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta cryptis primitives tactics role.
-From cryptis.examples Require Import iso_dh gen_conn sess.
-(* From crypti *)
-(* From cryptis.examples.sess Require impl. *)
-(* From cryptis.examples.sess.proofs Require Import base. *)
+From cryptis.examples Require Import iso_dh gen_conn.
+From cryptis.examples.sess Require impl.
+From cryptis.examples.sess.proofs Require Import base.
+From cryptis.examples.sess Require Import proofs.
 From actris.channel Require Import proto_model proto.
 From iris.heap_lang Require Import lib.spin_lock.
 From iris.bi Require Import telescopes.
@@ -71,7 +71,7 @@ Global Hint Mode MsgNormalize ! ! ! ! - : typeclass_instances.
 Arguments MsgNormalize {_} _ _%_msg _%_msg _%_msg.
 
 Section classes.
-  Context `{!chanG Σ, !heapGS Σ}.
+  Context `{!chanG Σ, !heapGS Σ, !cryptisGS Σ, Conn : !GenConn.connGS Σ, !sessG Σ}.
   Implicit Types TT : tele.
   Implicit Types p : iProto Σ.
   Implicit Types m : iMsg Σ.
@@ -148,8 +148,8 @@ Section classes.
   Proof. by rewrite /ActionDualIf /MsgNormalize /ProtoNormalize=> ->. Qed.
 
   Global Instance proto_normalize_swap {TT1 TT2} d a m m'
-      (tv1 : TT1 -t> val) (tP1 : TT1 -t> iProp Σ) (tm1 : TT1 -t> iMsg Σ)
-      (tv2 : TT2 -t> val) (tP2 : TT2 -t> iProp Σ)
+      (tv1 : TT1 -t> term) (tP1 : TT1 -t> iProp Σ) (tm1 : TT1 -t> iMsg Σ)
+      (tv2 : TT2 -t> term) (tP2 : TT2 -t> iProp Σ)
       (tp : TT1 -t> TT2 -t> iProto Σ) pas :
     ActionDualIf d a Recv →
     MsgNormalize d m pas m' →
@@ -172,6 +172,8 @@ Section classes.
     iApply iProto_le_base_swap.
   Qed.
 
+  (* TODO: Add iProto_choice to channel.v and bring this back *)
+(*
   Global Instance proto_normalize_choice d a1 a2 P1 P2 p1 p2 q1 q2 pas :
     ActionDualIf d a1 a2 →
     ProtoNormalize d p1 pas q1 → ProtoNormalize d p2 pas q2 →
@@ -183,24 +185,25 @@ Section classes.
       iApply iProto_le_choice; iSplit; by iIntros "$".
     - rewrite !iProto_app_choice. iApply iProto_le_choice; iSplit; by iIntros "$".
   Qed.
+*)
 
   (** Automatically perform normalization of protocols in the proof mode when
   using [iAssumption] and [iFrame]. *)
-  Global Instance pointsto_proto_from_assumption q c p1 p2 :
+  Global Instance connected_proto_from_assumption q skI skR rl cs p1 p2 :
     ProtoNormalize false p1 [] p2 →
-    FromAssumption q (c ↣ p1) (c ↣ p2).
+    FromAssumption q (connected skI skR rl cs p1) (connected skI skR rl cs p2).
   Proof.
     rewrite /FromAssumption /ProtoNormalize /= right_id.
     rewrite bi.intuitionistically_if_elim.
-    iIntros (?) "H". by iApply (iProto_pointsto_le with "H").
+    iIntros (?) "H". by iApply (connected_le with "H").
   Qed.
-  Global Instance pointsto_proto_from_frame q c p1 p2 :
+  Global Instance connected_proto_from_frame q skI skR rl cs p1 p2 :
     ProtoNormalize false p1 [] p2 →
-    Frame q (c ↣ p1) (c ↣ p2) True.
+    Frame q (connected skI skR rl cs p1) (connected skI skR rl cs p2) True.
   Proof.
     rewrite /Frame /ProtoNormalize /= right_id.
     rewrite bi.intuitionistically_if_elim.
-    iIntros (?) "[H _]". by iApply (iProto_pointsto_le with "H").
+    iIntros (?) "[H _]". by iApply (connected_le with "H").
   Qed.
 End classes.
 
