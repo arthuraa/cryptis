@@ -75,7 +75,7 @@ elim: s1 s2 / => //.
 - by move=> ? ? ? _ ? _; apply: seq.perm_trans.
 Qed.
 
-Lemma inP (T : eqType) (H : base.RelDecision (@eq T)) (x : T) (xs : seq T) :
+Lemma inP {T : eqType} {x : T} {xs : seq T} :
   reflect (base.elem_of x xs) (x \in xs).
 Proof.
 apply /(equivP idP).
