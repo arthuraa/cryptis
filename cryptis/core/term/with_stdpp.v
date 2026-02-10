@@ -65,25 +65,22 @@ Definition sign_key_eq_dec : EqDecision sign_key :=
   Eval hnf in def_eq_decision _.
 Global Existing Instance sign_key_eq_dec.
 
-Section WithSsrBool.
-
-#[warnings="-ambiguous-paths"]
-Import ssrbool.
-
 Lemma subseteq_cancel_exps ts : cancel_exps ts ⊆ ts.
-Proof. by move => ? /inP /mem_cancel_exps /inP. Qed.
+Proof. by move => ? /(ssrbool.introT inP) /mem_cancel_exps /(ssrbool.elimT inP). Qed.
 
 Lemma tsize_lt_TExp t1 t2 :
   TInv t2 ∉ exps t1 ->
   tsize t1 < tsize (TExp t1 t2) /\ tsize t2 < tsize (TExp t1 t2).
-Proof. by move => /inP; split; apply /(ssrbool.elimT ssrnat.leP); apply tsize_lt_TExp. Qed.
+Proof.
+by move => /(ssrbool.introN inP); split; apply /(ssrbool.elimT ssrnat.leP); apply tsize_lt_TExp.
+Qed.
 
 Lemma tsize_TExp_TInv t1 t2 :
   t2 ∈ exps t1 ->
   tsize t2 < tsize t1 /\ tsize (TExp t1 (TInv t2)) < tsize t1.
-Proof. by move => /inP; split; apply /(ssrbool.elimT ssrnat.leP); apply tsize_TExp_TInv. Qed.
-
-End WithSsrBool.
+Proof.
+by move => /(ssrbool.introT inP); split; apply /(ssrbool.elimT ssrnat.leP); apply tsize_TExp_TInv.
+Qed.
 
 Inductive subterm (t : term) : term → Prop :=
 | STRefl : subterm t t
@@ -202,11 +199,6 @@ Qed.
 Lemma nonces_of_term_TInv t : nonces_of_term (TInv t) = nonces_of_term t.
 Proof. rewrite nonces_of_term_unseal /nonces_of_term_def unfold_TInv. by case: t. Qed.
 
-Section WithSsrBool.
-
-#[warnings="-ambiguous-paths"]
-Import ssrbool.
-
 Lemma nonces_of_term_TExpN t ts :
   negb (is_exp t) ->
   nonces_of_term (TExpN t ts) = nonces_of_term t ∪ ⋃ map nonces_of_term (cancel_exps ts).
@@ -219,11 +211,9 @@ rewrite -[@seq.map]/@map map_map.
 rewrite (_ : path.sort _ _ ≡ₚ PreTerm.cancel_exps _); last first.
   by apply/(ssrbool.elimT perm_Perm); rewrite path.perm_sort.
 congr (_ ∪ (⋃ _)).
-have /seq.allP wfs := PreTerm.wf_cancel_exps (wf_unfold_terms ts).
-by apply: map_ext_in => ? /elem_of_list_In /inP /wfs ?; rewrite fold_termK.
+have /(ssrbool.elimT seq.allP) wfs := PreTerm.wf_cancel_exps (wf_unfold_terms ts).
+by apply: map_ext_in => ? /elem_of_list_In /(ssrbool.introT inP) /wfs ?; rewrite fold_termK.
 Qed.
-
-End WithSsrBool.
 
 Lemma nonces_of_term_TExpN_subseteq t ts :
   nonces_of_term (TExpN t ts) ⊆ nonces_of_term t ∪ ⋃ map nonces_of_term ts.
@@ -286,12 +276,6 @@ rewrite subterms_unseal /subterms_def.
 by rewrite unfold_TInv PreTerm.inv_invN //= unfold_termK.
 Qed.
 
-
-Section WithSsrBool.
-
-#[warnings="-ambiguous-paths"]
-Import ssrbool.
-
 Lemma subterms_TExpN t ts :
   negb (is_exp t) →
   subterms (TExpN t ts) = {[TExpN t ts]} ∪ subterms t ∪ ⋃ map subterms (cancel_exps ts).
@@ -307,11 +291,9 @@ case: (ssrbool.altP seq.nilP) => [cancel_nil | _ ] /=.
   rewrite (_ : path.sort _ _ ≡ₚ PreTerm.cancel_exps _); last first.
     by apply/(ssrbool.elimT perm_Perm); rewrite path.perm_sort.
   congr (_ ∪ (⋃ _)).
-  have /seq.allP wfs := PreTerm.wf_cancel_exps (wf_unfold_terms ts).
-  by apply: map_ext_in => ? /elem_of_list_In /inP /wfs ?; rewrite fold_termK.
+  have /(ssrbool.elimT seq.allP) wfs := PreTerm.wf_cancel_exps (wf_unfold_terms ts).
+  by apply: map_ext_in => ? /elem_of_list_In /(ssrbool.introT inP) /wfs ?; rewrite fold_termK.
 Qed.
-
-End WithSsrBool.
 
 Definition subtermsE := (subterms_TInv, subterms_TExpN, subtermsE').
 
