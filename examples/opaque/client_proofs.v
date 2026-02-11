@@ -16,15 +16,6 @@ Section Opaque.
 Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ}.
 Notation iProp := (iProp Σ).
 
-Lemma wp_hl_inv_term E (t : term) (Ψ: val -> iProp) :
-Ψ (TInv t) ⊢
-WP hl_inv t @ E {{ Ψ }}.
-Proof.
-  iIntros "post".
-  rewrite -!val_of_pre_term_unfold unfold_TInv.
-  by iApply wp_hl_inv.
-Qed.
-
 Lemma wp_client_session (uid c pw : term):
 cryptis_ctx -∗
 hash_pred (opN.@"A_u") (λ _,  True) -∗

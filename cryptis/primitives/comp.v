@@ -68,4 +68,14 @@ Lemma wp_texp E t1 t2 Ψ :
   WP texp t1 t2 @ E {{ Ψ }}.
 Proof. by iIntros "post"; iApply twp_wp; iApply twp_texp. Qed.
 
+
+Lemma wp_hl_inv_term E (t : term) Ψ :
+    Ψ (TInv t) ⊢
+    WP hl_inv t @ E {{ Ψ }}.
+Proof.
+    iIntros "post".
+    rewrite -!val_of_pre_term_unfold unfold_TInv.
+    by iApply wp_hl_inv.
+Qed.
+
 End Proofs.
