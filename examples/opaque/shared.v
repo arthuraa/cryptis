@@ -56,11 +56,4 @@ Proof.
     by wp_apply _wp_H_list.
 Qed.
 
-Lemma public_g :
-    True -∗ public g.
-Proof.
-    iIntros "_".
-    by iApply public_TInt.
-Qed.
-
 End Opaque.
