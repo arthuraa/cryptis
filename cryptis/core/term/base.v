@@ -501,23 +501,20 @@ Lemma invs_canceled1 t : invs_canceled [:: t].
 Proof. apply /invs_canceledP => t0. rewrite !inE => /eqP ->. exact: TInv_Nid. Qed.
 
 Lemma invs_canceled_cons t ts :
-  invs_canceled ts -> TInv t \notin ts -> invs_canceled (t :: ts).
+  invs_canceled (t :: ts) = (TInv t \notin ts) && invs_canceled ts.
 Proof.
-move => ? H.
-apply /invs_canceledP => t'.
-rewrite inE => /orP [/eqP -> | in_exps1]; rewrite inE; apply /norP; split => //.
-- exact: TInv_Nid.
-- apply /eqP => /eqP. rewrite (inv_eq TInvK) => /eqP eq.
-  by rewrite -eq in_exps1 in H.
-- exact: invs_canceledP.
+rewrite /invs_canceled /PreTerm.invs_canceled /=.
+rewrite inE negb_or PreTerm.inv_Nid /=.
+rewrite -unfold_TInv (mem_map unfold_term_inj).
+case: (boolP (_ \in _)) => //= t_ts.
+apply eq_in_all => /= pt /mapP /= [t' t'_ts ->].
+rewrite inE negb_or -unfold_TInv (eqtype.inj_eq unfold_term_inj).
+case: eqP => //= eq.
+by rewrite -eq TInvK t'_ts in t_ts.
 Qed.
 
-Lemma invs_canceled2 t1 t2 : t1 != TInv t2 -> invs_canceled [:: t1 ; t2].
-Proof.
-move => ?.
-apply invs_canceled_cons; first exact: invs_canceled1.
-rewrite inE inv_eq //. exact: TInvK.
-Qed.
+Lemma invs_canceled2 t1 t2 : invs_canceled [:: t1 ; t2] = (t1 != TInv t2).
+Proof. by rewrite !invs_canceled_cons !inE andbT (inv_eq TInvK). Qed.
 
 Lemma cancel_exps_subseq ts : subseq (cancel_exps ts) ts.
 Proof.
@@ -621,8 +618,9 @@ Lemma tsize_lt_TExp t1 t2 :
   TInv t2 \notin exps t1 ->
   tsize t1 < tsize (TExp t1 t2) /\ tsize t2 < tsize (TExp t1 t2).
 Proof.
-move => /(invs_canceled_cons _ _ (invs_canceled_exps _)) ?.
-rewrite -[t1]base_expsK TExpNA TExpN_catC !tsize_TExpN ?is_exp_base ?invs_canceled_exps //= !addnE.
+move => ?.
+rewrite -[t1]base_expsK TExpNA TExpN_catC.
+rewrite !tsize_TExpN ?is_exp_base ?invs_canceled_cons ?invs_canceled_exps ?andbT //= !addnE.
 split; apply /ssrnat.ltP; last lia.
 have /ssrnat.ltP := tsize_gt0 t2. case: (exps t1 != [::]) => /=; lia.
 Qed.
