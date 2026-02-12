@@ -488,13 +488,12 @@ Definition invs_canceled ts := PreTerm.invs_canceled (map unfold_term ts).
 Lemma invs_canceledP ts : reflect (forall t, t \in ts -> TInv t \notin ts) (invs_canceled ts).
 Proof.
 apply /(iffP idP).
-- move => /allP canceled t tin.
-  have: (PreTerm.inv (unfold_term t) \notin (map unfold_term ts)).
-  apply canceled. apply /mapP => /=. by exists t.
-  apply contra => TInv_in_ts. rewrite -unfold_TInv. apply /mapP => /=. by exists (TInv t).
-- move => canceled. apply /allP => /= pt /mapP [t t_in_ts ->].
-  rewrite -unfold_TInv. move: (canceled t t_in_ts). apply contra.
-  rewrite mem_map //. exact: unfold_term_inj.
+- move => /allP canceled ??.
+  rewrite -(mem_map unfold_term_inj) unfold_TInv.
+  apply canceled. by rewrite (mem_map unfold_term_inj).
+- move => canceled.
+  apply /allP => /= ? /mapP /= [? /canceled ? ->].
+  by rewrite -unfold_TInv (mem_map unfold_term_inj).
 Qed.
 
 Lemma invs_canceled1 t : invs_canceled [:: t].

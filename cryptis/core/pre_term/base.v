@@ -494,13 +494,13 @@ Proof.
 move => ? /allP /= wfs /allP /= canceled.
 rewrite /invs_canceled. apply /allP. rewrite /insert_exp /= => pt'.
 case: ifP => [_| /negP ?].
-  - move => /mem_rem /canceled. apply: contra. exact: mem_rem.
-  - rewrite !inE negb_or => /orP [/eqP -> | in_pts].
-    + rewrite inv_Nid. exact /negP.
-    + apply /andP; split; last exact: canceled.
-      have ? := wfs _ in_pts.
-      apply /eqP => /eqP. rewrite inv_eq_op // => /eqP eq.
-      by rewrite eq in in_pts.
+- move => /mem_rem /canceled. apply: contra. exact: mem_rem.
+- rewrite !inE negb_or => /orP [/eqP -> | in_pts].
+  + rewrite inv_Nid. exact /negP.
+  + apply /andP; split; last exact: canceled.
+    have ? := wfs _ in_pts.
+    apply /eqP => /eqP. rewrite inv_eq_op // => /eqP eq.
+    by rewrite eq in in_pts.
 Qed.
 
 Lemma invs_canceled_cancel_exps pts : all wf_term pts -> invs_canceled (cancel_exps pts).

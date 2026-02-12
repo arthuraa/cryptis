@@ -32,10 +32,7 @@ by apply/TExpN_perm/(ssrbool.introT perm_Perm).
 Qed.
 
 Lemma TExpC2 g t1 t2 : TExpN g [t1; t2] = TExpN g [t2; t1].
-Proof.
-suff -> : [t1; t2] ≡ₚ [t2; t1] by [].
-exact/Permutation_swap.
-Qed.
+Proof. by rewrite Permutation_swap. Qed.
 
 Global Instance term_inhabited : Inhabited term.
 Proof. exact: (populate (TInt 0)). Qed.

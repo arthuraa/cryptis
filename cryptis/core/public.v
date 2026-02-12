@@ -262,7 +262,7 @@ Inductive decompose (T : gset term) (t : term) : Prop :=
 
 Lemma decompose_tsize T t t' : decompose T t → t' ∈ T → tsize t' < tsize t.
 Proof.
-case; try by move => > -> -> //;
+case; try by move =>> -> -> //;
           try move => /elem_of_union [];
           move => /elem_of_singleton ->;
           rewrite [tsize (_ _)]tsizeE -?ssrnat.plusE;
