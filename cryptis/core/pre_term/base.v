@@ -346,9 +346,6 @@ Proof. by case: pt => // - [] ? // /andP []. Qed.
 Lemma inv_Nid pt : inv pt != pt.
 Proof. case: pt => // - [] // ?. apply /eqP => /(congr1 height) /=. lia. Qed.
 
-Lemma eq_Ninv pt1 pt2 : pt1 == pt2 -> pt1 != inv pt2.
-Proof. move => /eqP ->. rewrite eq_sym. exact: inv_Nid. Qed.
-
 Lemma invK pt : wf_term pt -> inv (inv pt) = pt.
 Proof. by case: pt => // - [] // [] // []. Qed.
 
