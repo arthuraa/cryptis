@@ -16,17 +16,17 @@ Section Opaque.
 Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ}.
 Notation iProp := (iProp Σ).
 
-Lemma wp_client_session (uid c pw : term):
-cryptis_ctx -∗
-hash_pred (opN.@"A_u") (λ _,  True) -∗
-channel c -∗
-public uid -∗
-minted uid -∗
-minted pw -∗
-WP Client.session uid c pw
-{{ x , True }}.
+Lemma wp_client_session (uid pw : term) (c : val):
+{{{ cryptis_ctx
+      ∗ hash_pred (opN.@"A_u") (λ _,  True)
+      ∗ channel c
+      ∗ public uid
+      ∗ minted uid
+      ∗ minted pw }}}
+Client.session uid c pw
+{{{ x , RET x ; True }}}.
 Proof.
-  iIntros "#Cryptis #Hpred #Hc #pubuid #minteduid #mintedpw".
+  iIntros "%ϕ [#Cryptis [#Hpred [#Hc [#pubuid [#minteduid #mintedpw]]]]] Hhl".
   wp_lam. wp_pures.
   wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => True)%I) => //.
   iIntros "%x_u %Hnoncex_u #Hmintedx_u #Hprivatex_u #Heqx_u Htokenx_u".
@@ -69,7 +69,8 @@ Proof.
   iClear "pubm2".
   wp_list_of_term m2; wp_pures => //.
   wp_list_match => [β X_s envelope A_s -> | _].
-  2: by wp_pures.
+  2: wp_pures.
+  2, 3: by iApply "Hhl".
   wp_pures.
   wp_apply wp_hl_inv_term.
   wp_apply wp_texp.
@@ -84,7 +85,7 @@ Proof.
   wp_apply wp_sdec'.
   rewrite minted_of_list => /=.
   iSplit.
-  2: iIntros "_"; by wp_pures.
+  2: iIntros "_"; wp_pures; by iApply "Hhl".
   iDestruct "minm2" as "[_ [minX_s [minenv _]]]".
   iIntros "%clear -> _".
   rewrite minted_TSeal.
@@ -92,9 +93,9 @@ Proof.
   rewrite minted_tag.
   wp_pures.
   wp_list_of_term clear.
-  2: by wp_pures.
+  2: wp_pures; by iApply "Hhl".
   wp_list_match => [p_u P_u P_s -> | _].
-  2: by wp_pures.
+  2: wp_pures; by iApply "Hhl".
   wp_apply wp_ke => /=.
   wp_list.
   wp_apply wp_H => /=.
@@ -119,10 +120,11 @@ Proof.
   iSplit => //.
   by rewrite minted_THash minted_tag.
   by intro contra.
-  2: wp_pures; by iModIntro.
+  2: wp_pures; by iApply "Hhl".
   wp_pures.
   wp_list.
-  by wp_pures.
+  wp_pures.
+  by iApply "Hhl".
 Qed.
 
 End Opaque.
