@@ -637,12 +637,10 @@ move => expt; apply: anti_symm; rewrite public_eq.
     by rewrite big_sepL_singleton.
   + iLeft; iExists {[ TExp t (TInv t'); t' ]}; iSplit.
     * iPureIntro; econstructor 7 => //; last by rewrite TExpK'.
-      rewrite exps_TExpN.
-      have x := elem_of_Permutation (exps t) t'.
-      rewrite x in H. case: H => ts eqp.
-      rewrite eqp Permutation_cons_append -app_assoc. admit.
+      rewrite -count_exp_gt0 count_exp_TExp_eq count_exp_TInv.
+      rewrite -count_exp_gt0 in H. lia.
     * by rewrite big_sepS_union_pers !big_sepS_singleton; iSplit.
-Admitted.
+Qed.
 
 Lemma public_TExp_iff t1 t2 :
   ¬ is_exp t1 →

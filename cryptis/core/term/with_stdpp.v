@@ -117,6 +117,16 @@ Qed.
 Definition count_exp t ts : Z :=
   (count_exp_nat t ts - count_exp_nat (TInv t) ts)%Z.
 
+Lemma count_exp_gt0 t1 t2 : (count_exp t1 t2 > 0)%Z ↔ t1 ∈ exps t2.
+Proof.
+rewrite /count_exp; case: (decide (t1 ∈ exps t2)) => t1_t2.
+  rewrite [count_exp_nat (TInv _) _]count_exp_nat_eq0; last first.
+    exact: elem_of_TInv_exps.
+  rewrite -count_exp_nat_gt0; lia.
+rewrite count_exp_nat_eq0 //; split; first lia.
+by case/t1_t2.
+Qed.
+
 Lemma count_exp_TInv t ts : count_exp (TInv t) ts = Z.opp (count_exp t ts).
 Proof. rewrite /count_exp TInvK. lia. Qed.
 
