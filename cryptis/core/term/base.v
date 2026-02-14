@@ -548,6 +548,15 @@ Qed.
 Lemma cancel_exps_exps t : cancel_exps (exps t) = exps t.
 Proof. apply cancel_exps_canceled. exact: invs_canceled_exps. Qed.
 
+Lemma invs_canceled_count t ts :
+  invs_canceled ts ->
+  count_mem t ts - count_mem (TInv t) ts = count_mem t ts.
+Proof.
+move=> /invs_canceledP can_ts.
+have [/can_ts/count_memPn ->|/count_memPn -> //] := boolP (t \in ts).
+by rewrite subn0.
+Qed.
+
 Lemma is_exp_TExpN t ts :
   ~~ is_exp t -> invs_canceled ts ->
   is_exp (TExpN t ts) = (ts != [::]).
@@ -621,6 +630,19 @@ Proof. exact: TExpNK. Qed.
 Lemma TExpK' t1 t2 : TExp (TExp t1 (TInv t2)) t2 = t1.
 Proof. by rewrite (_ : [:: TInv t2] = map TInv [:: t2]) // TExpNK'. Qed.
 
+Lemma in_TInv_exps t1 t2 : t1 \in exps t2 -> (TInv t1 \in exps t2) = false.
+Proof.
+move=> t1V_t2; apply/negbTE; move: t1V_t2; exact/invs_canceledP/invs_canceled_exps.
+Qed.
+
+Lemma in_TInv_expsV t1 t2 : TInv t1 \in exps t2 -> (t1 \in exps t2) = false.
+Proof. by rewrite -{2}[t1]TInvK; exact: in_TInv_exps. Qed.
+
+Lemma in_exps_TInv t1 t2 : (t1 \notin exps t2) || (TInv t1 \notin exps t2).
+Proof.
+by have [/in_TInv_exps ->|] := boolP (t1 \in _).
+Qed.
+
 Lemma tsize_lt_TExp t1 t2 :
   TInv t2 \notin exps t1 ->
   tsize t1 < tsize (TExp t1 t2) /\ tsize t2 < tsize (TExp t1 t2).
@@ -669,6 +691,67 @@ Lemma TExp_injr t t1 t2 : TExp t t1 = TExp t t2 -> t1 = t2.
 Proof.
 move/TExpN_injr/perm_mem/(_ t2).
 by rewrite /cancel_exps /= !unfold_termK !inE eqxx => /eqP.
+Qed.
+
+Definition count_exp_nat t1 t2 := count_mem t1 (exps t2).
+
+Lemma count_exp_nat_eq0 t1 t2 : t1 \notin exps t2 -> count_exp_nat t1 t2 = 0.
+Proof. move=> t1V_t2; exact/count_memPn. Qed.
+
+Lemma count_exp_nat_gt0 t1 t2 : (count_exp_nat t1 t2 > 0) = (t1 \in exps t2).
+Proof. by rewrite /count_exp_nat -has_count has_pred1. Qed.
+
+Lemma count_exp_nat_TExp t1 t2 t3 :
+  count_exp_nat t1 (TExp t2 t3) =
+  if t1 == TInv t3 then (count_exp_nat t1 t2).-1
+  else if t1 == t3 then (count_exp_nat t1 t2).+1 - (TInv t1 \in exps t2)
+  else count_exp_nat t1 t2.
+Proof.
+rewrite /count_exp_nat -{1}[t2]base_expsK TExpNA TExpN_catC.
+rewrite exps_TExpN exps_expN ?is_exp_base //= count_sort count_cancel /=.
+rewrite -![count_mem _ _]/(count_exp_nat _ _).
+rewrite ![t3 == _]eq_sym (can2_eq TInvK TInvK).
+case: (t1 =P t3) => [<- {t3}|t1_t3] /=.
+  rewrite [_ == TInv _]eq_sym (negbTE (TInv_Nid _)) /= add0n add1n.
+  have [t1_t2|t1_t2] := boolP (TInv t1 \in exps t2); last first.
+    by rewrite (count_exp_nat_eq0 _ _ t1_t2).
+  rewrite count_exp_nat_eq0 1?in_TInv_expsV //.
+  by move: t1_t2; rewrite -count_exp_nat_gt0; case: count_exp_nat.
+case: (t1 =P TInv t3) => [-> {t1 t1_t3}|t1_t3V] /=.
+  rewrite TInvK add1n add0n subnS -{2}[t3]TInvK invs_canceled_count //.
+  exact: invs_canceled_exps.
+by rewrite !add0n invs_canceled_count // invs_canceled_exps.
+Qed.
+
+Variant count_exp_nat_TExp_spec t1 t2 t3 : nat -> Type :=
+| CountExpTExpSame0
+  of t1 = t3 & TInv t3 \in exps t2
+: count_exp_nat_TExp_spec t1 t2 t3 0
+
+| CountExpTExpSame1
+  of t1 = t3 & TInv t3 \notin exps t2
+: count_exp_nat_TExp_spec t1 t2 t3 (count_exp_nat t1 t2).+1
+
+| CountExpTExpTInv
+  of t1 = TInv t3
+: count_exp_nat_TExp_spec t1 t2 t3 (count_exp_nat t1 t2).-1
+
+| CountExpTExpDiff
+  of t1 <> t3 & t1 <> TInv t3
+: count_exp_nat_TExp_spec t1 t2 t3 (count_exp_nat t1 t2).
+
+Lemma count_exp_nat_TExpP t1 t2 t3 :
+  count_exp_nat_TExp_spec t1 t2 t3 (count_exp_nat t1 (TExp t2 t3)).
+Proof.
+rewrite count_exp_nat_TExp.
+case: (t1 =P TInv t3) => eV; first by constructor.
+case: (t1 =P t3) => e; last by constructor.
+case: (boolP (_ \in _)) => t1_t2.
+- rewrite /count_exp_nat; suff /count_memPn -> : t1 \notin exps t2.
+    constructor => //; by rewrite -e.
+  rewrite -[t1]TInvK; apply: invs_canceledP t1_t2.
+  by exact: invs_canceled_exps.
+- by constructor => //; rewrite -e.
 Qed.
 
 Lemma term_rect (T : term -> Type)

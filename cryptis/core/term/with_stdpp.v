@@ -84,6 +84,88 @@ Proof.
 by move => /(ssrbool.introT inP); split; apply /(ssrbool.elimT ssrnat.leP); apply tsize_TExp_TInv.
 Qed.
 
+Lemma TInv_neq t : TInv t ≠ t.
+Proof.
+move=> /(ssrbool.introT eqtype.eqP) /is_trueP.
+by rewrite (ssrbool.negbTE (TInv_Nid _)).
+Qed.
+
+Hint Resolve TInv_neq : core.
+
+Lemma elem_of_TInv_exps t1 t2 : t1 ∈ exps t2 → TInv t1 ∉ exps t2.
+Proof.
+rewrite !(ssrbool.rwP inP) !is_trueP => /is_trueP/in_TInv_exps ->.
+by eauto.
+Qed.
+
+Lemma elem_of_TInv_exps' t1 t2 : TInv t1 ∈ exps t2 → t1 ∉ exps t2.
+Proof. move=> H1 H2; exact: elem_of_TInv_exps H1. Qed.
+
+Lemma count_exp_nat_eq0 t1 t2 : t1 ∉ exps t2 → count_exp_nat t1 t2 = 0.
+Proof.
+move=> t1_t2; apply: count_exp_nat_eq0.
+apply/is_trueP/negb_True.
+by rewrite in_eq bool_decide_decide decide_False //=; eauto.
+Qed.
+
+Lemma count_exp_nat_gt0 t1 t2 : (count_exp_nat t1 t2 > 0) ↔ (t1 ∈ exps t2).
+Proof.
+rewrite -[_ ∈ _]bool_decide_spec -in_eq -count_exp_nat_gt0 -is_trueP.
+rewrite -(ssrbool.rwP ssrnat.leP); split; lia.
+Qed.
+
+Definition count_exp t ts : Z :=
+  (count_exp_nat t ts - count_exp_nat (TInv t) ts)%Z.
+
+Lemma count_exp_TInv t ts : count_exp (TInv t) ts = Z.opp (count_exp t ts).
+Proof. rewrite /count_exp TInvK. lia. Qed.
+
+Lemma count_exp_TExp_eq t1 t2 :
+  count_exp t1 (TExp t2 t1) = (count_exp t1 t2 + 1)%Z.
+Proof.
+rewrite /count_exp !count_exp_nat_TExp -!eq_op_bool_decide ssrnat.subnE.
+rewrite !bool_decide_decide decide_False // decide_True //.
+rewrite decide_True // in_eq.
+case: bool_decide_reflect => [t1V_t2|t1V_t2] /=.
+  rewrite count_exp_nat_eq0; last exact: elem_of_TInv_exps'.
+  rewrite -count_exp_nat_gt0 in t1V_t2; lia.
+rewrite [count_exp_nat (TInv t1) t2]count_exp_nat_eq0 //; lia.
+Qed.
+
+Lemma count_exp_TExp_TInv t1 t2 :
+  count_exp t1 (TExp t2 (TInv t1)) = (count_exp t1 t2 - 1)%Z.
+Proof.
+rewrite -{1}[t1]TInvK count_exp_TInv count_exp_TExp_eq count_exp_TInv.
+lia.
+Qed.
+
+Lemma count_exp_TInv_TExp t1 t2 :
+  count_exp (TInv t1) (TExp t2 t1) = (count_exp (TInv t1) t2 - 1)%Z.
+Proof. by rewrite -{2}[t1]TInvK count_exp_TExp_TInv. Qed.
+
+Lemma count_exp_TExp_ne t1 t2 t3 :
+  t1 ≠ t3 → t1 ≠ TInv t3 → count_exp t1 (TExp t2 t3) = count_exp t1 t2.
+Proof.
+move=> t1_t3 t1_t3V; rewrite /count_exp !count_exp_nat_TExp.
+rewrite -!eq_op_bool_decide ssrnat.subnE !bool_decide_decide.
+rewrite decide_False // decide_False // decide_False; last first.
+  move=> /TInv_inj; congruence.
+by rewrite decide_False // => e; apply: t1_t3V; rewrite -e TInvK.
+Qed.
+
+Lemma count_exp_TExp t1 t2 t3 :
+  count_exp t1 (TExp t2 t3) =
+  if decide (t1 = t3) then
+    (count_exp t1 t2 + 1)%Z
+  else if decide (t1 = TInv t3) then
+    (count_exp t1 t2 - 1)%Z
+  else count_exp t1 t2.
+Proof.
+case: decide => [->|?]; first by rewrite count_exp_TExp_eq.
+case: decide => [->|?]; first by rewrite count_exp_TInv_TExp.
+by rewrite count_exp_TExp_ne.
+Qed.
+
 Inductive subterm (t : term) : term → Prop :=
 | STRefl : subterm t t
 | STPair1 t1 t2 of subterm t t1 : subterm t (TPair t1 t2)
