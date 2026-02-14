@@ -4,7 +4,7 @@ mathcomp and stdpp definitions. *)
 From HB Require Import structures.
 From mathcomp Require Import all_order all_boot.
 From deriving Require Import deriving.
-From stdpp Require base countable.
+From stdpp Require base countable decidable.
 From Stdlib Require Import ZArith.ZArith Lia Permutation.
 From iris.heap_lang Require locations.
 
@@ -85,6 +85,11 @@ elim: xs => //= [| ?? IH].
   + move => /orP [/eqP |]; auto.
   + by move => [/eqP -> | -> ] //; rewrite orbT.
 Qed.
+
+Lemma in_eq {T : eqType} {x : T} {xs : seq T}
+      `{base.Decision (base.elem_of x xs)} :
+  (x \in xs) = decidable.bool_decide (base.elem_of x xs).
+Proof. apply/(sameP inP). exact: decidable.bool_decide_reflect. Qed.
 
 Lemma perm_sort_leP d (T : orderType d) (s1 s2 : seq T) :
   reflect (sort <=%O s1 = sort <=%O s2) (perm_eq s1 s2).
