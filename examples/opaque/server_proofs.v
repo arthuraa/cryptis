@@ -48,7 +48,12 @@ Proof.
 Qed.
 
 Lemma wp_make_file (pw : term) (Φ : senc_key → term → iProp) :
-{{{ cryptis_ctx ∗ minted pw ∗ □ (public pw ↔ ▷ □ False) ∗ hash_pred (opN.@"rw") (λ _,  False) ∗ senc_pred (opN.@"AuthEnc") Φ ∗ □ ∀ s t, Φ s t}}}
+{{{ cryptis_ctx
+      ∗ minted pw
+      ∗ □ (public pw ↔ ▷ □ False)
+      ∗ hash_pred (opN.@"rw") (λ _,  False)
+      ∗ senc_pred (opN.@"AuthEnc") Φ
+      ∗ □ ∀ s t, Φ s t }}}
 Server.make_file pw
 {{{ file , RET (repr file) ; opaque_file file }}}.
 Proof.
