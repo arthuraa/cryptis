@@ -48,10 +48,9 @@ iIntros "%cs (conn & HP & ? & rel & tok)" .
 by iApply "post"; iFrame.
 Qed.
 
-Lemma wp_listen c N ps :
+Lemma wp_listen c :
   channel c -∗
   cryptis_ctx -∗
-  ctx N ps -∗
   {{{ True }}}
     impl.listen c
   {{{ ga skI, RET (ga, Spec.pkey skI)%V;
@@ -77,25 +76,23 @@ do !iSplit => //=; first by eauto.
 iIntros "%cs (? & ? & ? & ? & ?)". iApply "post"; iFrame.
 Qed.
 
-Lemma wp_send skI skR rl cs t N ps :
-  ctx N ps -∗
+Lemma wp_send skI skR rl cs t ps :
   public t -∗
   {{{ connected ps skI skR rl cs ∗
       (public (si_key cs) ∨ msg_inv ps skI skR cs rl t) }}}
     impl.send (repr cs) t
   {{{ RET #(); connected ps skI skR rl cs }}}.
 Proof.
-iIntros "#ctx #p_t !> %Φ (conn & inv) post".
+iIntros "#p_t !> %Φ (conn & inv) post".
 wp_apply (GenConn.wp_send (λ skI skR si, True)%I
-  with "[//] [//] [$conn inv]") => //.
+  with "[//] [$conn inv]") => //.
 - iDestruct "inv" as "[fail|inv]"; auto.
   iRight. iIntros "% % [inv1 inv2]".
   by case: rl; iFrame; eauto.
 - iIntros "[? _]". by iApply "post".
 Qed.
 
-Lemma wp_recv skI skR rl cs N ps :
-  ctx N ps -∗
+Lemma wp_recv skI skR rl cs ps :
   {{{ connected ps skI skR rl cs }}}
     impl.recv (repr cs)
   {{{ t, RET (repr t);
@@ -103,9 +100,9 @@ Lemma wp_recv skI skR rl cs N ps :
       public t ∗
       (public (si_key cs) ∨ msg_inv ps skI skR cs (swap_role rl) t) }}}.
 Proof.
-iIntros "#ctx !> %Φ conn post".
+iIntros "%Φ conn post".
 wp_apply (GenConn.wp_recv (λ skI skR si t, msg_inv ps skI skR si (swap_role rl) t)
-           with "[//] [$conn]") => //.
+           with "[$conn]") => //.
 iRight. iIntros "% % % [inv1 inv2]". rewrite/=.
 case: rl => /=; iFrame.
 - iDestruct "inv2" as "[??]". by iFrame.

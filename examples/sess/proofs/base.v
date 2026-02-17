@@ -203,7 +203,8 @@ Definition ctx N p := GenConn.ctx N (sess_params p).
 
 Lemma ctx_alloc N p E :
   ↑N ⊆ E →
-  GenConn.pre_ctx -∗
+  GenConn.base_ctx -∗
+  iso_dh_ctx -∗
   iso_dh_token E ==∗
   ctx N p ∗ iso_dh_token (E ∖ ↑N).
 Proof. exact: GenConn.ctx_alloc. Qed.

@@ -286,17 +286,18 @@ Arguments rpcGS Σ : clear implicits.
 Lemma ctx_alloc `{!heapGS Σ, !cryptisGS Σ, !iso_dhGS Σ,
                   !GenConn.connGS Σ, Hrpc : !rpcGpreS Σ} E :
   ↑rpcN ⊆ E →
-  Conn.pre_ctx -∗
+  Conn.base_ctx -∗
+  iso_dh_ctx -∗
   iso_dh_token E ==∗ ∃ H : rpcGS Σ,
   ctx ∗
   iso_dh_token (E ∖ ↑rpcN) ∗
   rpc_token (⊤ ∖ ↑rpcN).
 Proof.
-iIntros "% #? iso_tok".
+iIntros "% #? #? iso_tok".
 iMod gmeta_token_alloc as (γcall) "rpc_tok_call".
 iMod gmeta_token_alloc as (γresp) "rpc_tok_resp".
 pose Hrpc' := RpcGS Hrpc γcall γresp. iExists Hrpc'.
-iMod (Conn.ctx_alloc with "[//] iso_tok") as "[#? tok]" => //.
+iMod (Conn.ctx_alloc with "[//] [//] iso_tok") as "[#? tok]" => //.
 iFrame.
 iAssert (rpc_token ⊤) with "[rpc_tok_call rpc_tok_resp]" as "rpc_tok".
 { by iFrame. }

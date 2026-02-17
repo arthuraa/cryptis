@@ -52,7 +52,7 @@ Lemma wp_connect P c skI skR N ps :
       release_token (si_init_share cs) ∗
       term_token (si_init_share cs) (⊤ ∖ ↑iso_dhN ∖ ↑connN) }}}.
 Proof.
-iIntros "(#? & #? & ([#? #?] & #?) & #? & #?) % !> HP post".
+iIntros "(#? & #? & (#? & #? & #?) & #? & #?) % !> HP post".
 rewrite bi.or_alt. iDestruct "HP" as "(%failed & HP)".
 wp_lam. wp_pure _ credit:"c1". wp_pure _ credit:"c2".
 wp_pures. wp_bind (do_until _).
@@ -82,16 +82,15 @@ case: failed; [|iRight]; iFrame.
 iLeft. by iApply "comp".
 Qed.
 
-Lemma wp_listen c N ps :
+Lemma wp_listen c :
   channel c -∗
   cryptis_ctx -∗
-  ctx N ps -∗
   {{{ True }}}
     impl.listen c
   {{{ ga skI, RET (ga, Spec.pkey skI)%V;
       public ga ∗ minted skI }}}.
 Proof.
-iIntros "#? #? [[#? _] _] % !> _ post". wp_lam.
+iIntros "#? #? % !> _ post". wp_lam.
 wp_apply wp_responder_wait; eauto.
 Qed.
 
@@ -118,7 +117,7 @@ Lemma wp_confirm P ps c skI skR ga N :
       release_token (si_resp_share cs) ∗
       term_token (si_resp_share cs) (⊤ ∖ ↑iso_dhN ∖ ↑connN) }}}.
 Proof.
-iIntros "(#? & #ctx & [[#? #?] #?])".
+iIntros "(#? & #ctx & (#? & #? & #?))".
 iIntros "!> %Φ (#p_ga & #p_pkA & #sign_skB & #mk & P) post".
 rewrite bi.or_alt. iDestruct "P" as "(%failed & P)".
 wp_lam. wp_pures.
@@ -172,8 +171,7 @@ Proof.
 iIntros "%Φ _ post". wp_lam. wp_pures. by iApply "post".
 Qed.
 
-Lemma wp_send_fupdN φ skI skR rl cs t N ps :
-  ctx N ps -∗
+Lemma wp_send_fupdN φ skI skR rl cs t ps :
   public t -∗
   {{{ connected ps skI skR rl cs ∗
       (public (si_key cs) ∨
@@ -186,9 +184,9 @@ Lemma wp_send_fupdN φ skI skR rl cs t N ps :
   {{{ RET #(); connected ps skI skR rl cs ∗
                (public (si_key cs) ∨ φ skI skR cs) }}}.
 Proof.
-iIntros "[[_ #pred] _] #p_t !> %Φ (conn & upd) post".
+iIntros "##p_t !> %Φ (conn & upd) post".
 iDestruct "conn"
-  as "(<- & <- & <- & #chan & #sess & %n & %m & state & counters)".
+  as "(<- & <- & <- & #pred & #chan & #sess & %n & %m & state & counters)".
 wp_lam. wp_pures.
 wp_apply wp_channel => //. iIntros "_". wp_pures.
 wp_lam. wp_pures.
@@ -217,8 +215,7 @@ rewrite (_ : (_ + _)%Z = S n); last by lia.
 iIntros "state". iApply "post". iFrame. by eauto 10.
 Qed.
 
-Lemma wp_send φ skI skR rl cs t N ps :
-  ctx N ps -∗
+Lemma wp_send φ skI skR rl cs t ps :
   public t -∗
   {{{ connected ps skI skR rl cs ∗
       (public (si_key cs) ∨
@@ -230,8 +227,8 @@ Lemma wp_send φ skI skR rl cs t N ps :
   {{{ RET #(); connected ps skI skR rl cs ∗
                (public (si_key cs) ∨ φ skI skR cs) }}}.
 Proof.
-iIntros "#ctx #p_t !> %Φ (conn & upd) post".
-iApply (wp_send_fupdN φ with "[//] [//] [$conn upd] post").
+iIntros "#p_t !> %Φ (conn & upd) post".
+iApply (wp_send_fupdN φ with "[//] [$conn upd] post").
 iDestruct "upd" as "[#fail|upd]"; eauto. iRight.
 iIntros "%ts_send %ts_recv inv".
 iMod ("upd" with "inv") as "?".
@@ -244,8 +241,7 @@ Qed.
 Ltac recv_failure :=
   iLeft; iFrame; eauto 10.
 
-Lemma wp_recv φ skI skR rl cs N ps :
-  ctx N ps -∗
+Lemma wp_recv φ skI skR rl cs ps :
   {{{ connected ps skI skR rl cs ∗
       (public (si_key cs) ∨
         (∀ t ts_send ts_recv,
@@ -258,7 +254,7 @@ Lemma wp_recv φ skI skR rl cs N ps :
       public t ∗
       (public (si_key cs) ∨ φ skI skR cs t) }}}.
 Proof.
-iIntros "[[_ #Nφ] _] !> %Φ (conn & recv) post".
+iIntros "%Φ (conn & recv) post".
 wp_lam.
 iPoseProof (connected_channel with "conn") as "#?".
 wp_apply wp_channel => //. iIntros "_". wp_pures.
@@ -269,7 +265,7 @@ iCombine "conn recv" as "I". iRevert "I". iApply wp_do_until.
 iIntros "!> (conn & recv)". wp_pure _ credit:"c1".
 wp_apply wp_recv => //. iIntros "%t #p_t". wp_pure _ credit:"c2". wp_pures.
 iDestruct "conn"
-  as "(<- & <- & <- & #chan & #sess & %n & %m & state & counters)".
+  as "(<- & <- & <- & #Nφ & #chan & #sess & %n & %m & state & counters)".
 wp_lam. wp_pures. wp_apply wp_sdec => //. iSplit; last first.
 { wp_pures. iLeft. iFrame. by eauto 10. }
 iClear "p_t" => {t}. iIntros "%t #m_t #inv_t #s_t". wp_pures.
@@ -322,7 +318,7 @@ Lemma wp_free kI kR φ rl cs :
   {{{ RET #(); True }}}.
 Proof.
 iIntros "%Φ conn post".
-iDestruct "conn" as "(? & ? & ? & ? & ? & % & % & ts & ?)".
+iDestruct "conn" as "(? & ? & ? & ? & ? & ? & % & % & ts & ?)".
 rewrite !array_cons array_nil.
 iDestruct "ts" as "(sent & recv & _)".
 wp_lam; wp_pures.

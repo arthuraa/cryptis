@@ -340,10 +340,22 @@ rewrite /=. iFrame. iModIntro. iSplit => //.
 iModIntro; iSplit => //. iApply (steps_lb_le with "Hr"). lia.
 Qed.
 
+Definition base_ctx : iProp :=
+  senc_pred connN conn_msg_pred.
+
+Lemma base_ctx_alloc E :
+  ↑connN ⊆ E →
+  seal_pred_token SENC E ==∗
+  base_ctx ∗ seal_pred_token SENC (E ∖ ↑connN).
+Proof.
+iIntros "% tok". iFrame "#". by iApply seal_pred_set.
+Qed.
+
 Definition connected ps skI skR rl cs : iProp :=
   ⌜si_init cs = skI⌝ ∗
   ⌜si_resp cs = skR⌝ ∗
   ⌜cs_role cs = rl⌝ ∗
+  base_ctx ∗
   channel (cs_chan cs) ∗
   wf_sess_info cs ∗
   ∃ n m, cs_ts cs ↦∗ [ #n; #m ] ∗
@@ -352,7 +364,7 @@ Definition connected ps skI skR rl cs : iProp :=
 Lemma connected_channel ps skI skR rl cs :
   connected ps skI skR rl cs -∗
   channel (cs_chan cs).
-Proof. by iIntros "(_ & _ & _ & ? & _)". Qed.
+Proof. by iIntros "(_ & _ & _ & _ & ? & _)". Qed.
 
 Lemma connected_public_key ps skI skR rl cs :
   connected ps skI skR rl cs -∗
@@ -361,7 +373,7 @@ Lemma connected_public_key ps skI skR rl cs :
   ◇ compromised cs.
 Proof.
 iIntros "conn rel #p_k".
-iPoseProof "conn" as "(_ & _ & <- & _ & #sess & _)".
+iPoseProof "conn" as "(_ & _ & <- & _ & _ & #sess & _)".
 iDestruct "sess" as "(#? & #sess)".
 by iApply (session_compromised with "[] [//] rel").
 Qed.
@@ -383,7 +395,7 @@ Lemma connected_released_session ps skI skR rl cs :
   connected ps skI skR rl cs -∗
   □ (▷ released_session cs → public (si_key cs)).
 Proof.
-iIntros "(_ & _ & _ & _ & #sess & _)".
+iIntros "(_ & _ & _ & _ & _ & #sess & _)".
 by iDestruct "sess" as "(_ & ? & sess)".
 Qed.
 
@@ -398,7 +410,7 @@ Lemma connected_ok ps skI skR rl cs :
   secret skR -∗
   ◇ session_ok cs.
 Proof.
-iIntros "(<- & <- & <- & _ & #sess & % & % & _ & _) s_kI s_kR".
+iIntros "(<- & <- & <- & _ & _ & #sess & % & % & _ & _) s_kI s_kR".
 iDestruct "sess" as "(m_k & sess)".
 by iApply (secret_session with "s_kI s_kR").
 Qed.
@@ -419,21 +431,9 @@ iMod (connected_public_key with "conn rel fail") as "fail".
 by iApply (session_failed_failure with "fail").
 Qed.
 
-Definition pre_ctx `{!iso_dhGS Σ} : iProp :=
-  iso_dh_ctx ∗
-  senc_pred connN conn_msg_pred.
-
-Lemma pre_ctx_alloc `{!iso_dhGS Σ} E :
-  ↑connN ⊆ E →
-  iso_dh_ctx -∗
-  seal_pred_token SENC E ==∗
-  pre_ctx ∗ seal_pred_token SENC (E ∖ ↑connN).
-Proof.
-iIntros "% #? tok". iFrame "#". by iApply seal_pred_set.
-Qed.
-
 Definition ctx `{!iso_dhGS Σ} N ps : iProp :=
-  pre_ctx ∗
+  base_ctx ∗
+  iso_dh_ctx ∗
   iso_dh_pred N (λ skI skR si rl,
     init_pred ps skI skR si rl ∗
     counters ps skI skR si rl 0 0
@@ -441,11 +441,12 @@ Definition ctx `{!iso_dhGS Σ} N ps : iProp :=
 
 Lemma ctx_alloc `{!iso_dhGS Σ} N ps E :
   ↑N ⊆ E →
-  pre_ctx -∗
+  base_ctx -∗
+  iso_dh_ctx -∗
   iso_dh_token E ==∗
   ctx N ps ∗ iso_dh_token (E ∖ ↑N).
 Proof.
-iIntros "% #ctx tok". iFrame "#".
+iIntros "% #? #? tok". iFrame "#".
 by iApply iso_dh_pred_set.
 Qed.
 
