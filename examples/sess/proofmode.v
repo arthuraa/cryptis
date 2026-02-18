@@ -19,10 +19,10 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta cryptis primitives tactics role.
-From cryptis.examples Require Import iso_dh gen_conn sess.
-(* From crypti *)
-(* From cryptis.examples.sess Require impl. *)
-(* From cryptis.examples.sess.proofs Require Import base. *)
+From cryptis.examples Require Import iso_dh gen_conn.
+From cryptis.examples.sess Require impl.
+From cryptis.examples.sess.proofs Require Import base.
+From cryptis.examples.sess Require Import proofs.
 From actris.channel Require Import proto_model proto.
 From iris.heap_lang Require Import lib.spin_lock.
 From iris.bi Require Import telescopes.
@@ -71,7 +71,7 @@ Global Hint Mode MsgNormalize ! ! ! ! - : typeclass_instances.
 Arguments MsgNormalize {_} _ _%_msg _%_msg _%_msg.
 
 Section classes.
-  Context `{!chanG Σ, !heapGS Σ}.
+  Context `{!chanG Σ, !heapGS Σ, !cryptisGS Σ, Conn: !GenConn.connGS Σ, !sessG Σ}.
   Implicit Types TT : tele.
   Implicit Types p : iProto Σ.
   Implicit Types m : iMsg Σ.
@@ -148,8 +148,8 @@ Section classes.
   Proof. by rewrite /ActionDualIf /MsgNormalize /ProtoNormalize=> ->. Qed.
 
   Global Instance proto_normalize_swap {TT1 TT2} d a m m'
-      (tv1 : TT1 -t> val) (tP1 : TT1 -t> iProp Σ) (tm1 : TT1 -t> iMsg Σ)
-      (tv2 : TT2 -t> val) (tP2 : TT2 -t> iProp Σ)
+      (tv1 : TT1 -t> term) (tP1 : TT1 -t> iProp Σ) (tm1 : TT1 -t> iMsg Σ)
+      (tv2 : TT2 -t> term) (tP2 : TT2 -t> iProp Σ)
       (tp : TT1 -t> TT2 -t> iProto Σ) pas :
     ActionDualIf d a Recv →
     MsgNormalize d m pas m' →
@@ -172,66 +172,68 @@ Section classes.
     iApply iProto_le_base_swap.
   Qed.
 
-  Global Instance proto_normalize_choice d a1 a2 P1 P2 p1 p2 q1 q2 pas :
-    ActionDualIf d a1 a2 →
-    ProtoNormalize d p1 pas q1 → ProtoNormalize d p2 pas q2 →
-    ProtoNormalize d (iProto_choice a1 P1 P2 p1 p2) pas
-                     (iProto_choice a2 P1 P2 q1 q2).
-  Proof.
-    rewrite /ActionDualIf /ProtoNormalize=> -> H1 H2. destruct d; simpl.
-    - rewrite !iProto_dual_choice !iProto_app_choice.
-      iApply iProto_le_choice; iSplit; by iIntros "$".
-    - rewrite !iProto_app_choice. iApply iProto_le_choice; iSplit; by iIntros "$".
-  Qed.
+  (* Global Instance proto_normalize_choice d a1 a2 P1 P2 p1 p2 q1 q2 pas : *)
+  (*   ActionDualIf d a1 a2 → *)
+  (*   ProtoNormalize d p1 pas q1 → ProtoNormalize d p2 pas q2 → *)
+  (*   ProtoNormalize d (iProto_choice a1 P1 P2 p1 p2) pas *)
+  (*                    (iProto_choice a2 P1 P2 q1 q2). *)
+  (* Proof. *)
+  (*   rewrite /ActionDualIf /ProtoNormalize=> -> H1 H2. destruct d; simpl. *)
+  (*   - rewrite !iProto_dual_choice !iProto_app_choice. *)
+  (*     iApply iProto_le_choice; iSplit; by iIntros "$". *)
+  (*   - rewrite !iProto_app_choice. iApply iProto_le_choice; iSplit; by iIntros "$". *)
+  (* Qed. *)
 
   (** Automatically perform normalization of protocols in the proof mode when
   using [iAssumption] and [iFrame]. *)
-  Global Instance pointsto_proto_from_assumption q c p1 p2 :
+  Global Instance pointsto_proto_from_assumption q skI skR rl cs p1 p2 :
     ProtoNormalize false p1 [] p2 →
-    FromAssumption q (c ↣ p1) (c ↣ p2).
+    FromAssumption q (connected skI skR rl cs p1) (connected skI skR rl cs p2).
   Proof.
     rewrite /FromAssumption /ProtoNormalize /= right_id.
     rewrite bi.intuitionistically_if_elim.
-    iIntros (?) "H". by iApply (iProto_pointsto_le with "H").
+    iIntros (?) "H". by iApply (connected_le with "H").
   Qed.
-  Global Instance pointsto_proto_from_frame q c p1 p2 :
+
+  Global Instance pointsto_proto_from_frame q skI skR rl cs p1 p2 :
     ProtoNormalize false p1 [] p2 →
-    Frame q (c ↣ p1) (c ↣ p2) True.
+    Frame q (connected skI skR rl cs p1) (connected skI skR rl cs p2) True.
   Proof.
     rewrite /Frame /ProtoNormalize /= right_id.
     rewrite bi.intuitionistically_if_elim.
-    iIntros (?) "[H _]". by iApply (iProto_pointsto_le with "H").
+    iIntros (?) "[H _]". by iApply (connected_le with "H").
   Qed.
 End classes.
 
+Print repr.
 (** * Symbolic execution tactics *)
 (* TODO: Maybe strip laters from other hypotheses in the future? *)
-Lemma tac_wp_recv `{!chanG Σ, !heapGS Σ} {TT : tele} Δ i j K c p m tv tP tP' tp Φ :
-  envs_lookup i Δ = Some (false, c ↣ p)%I →
+Lemma tac_wp_recv `{!chanG Σ, !heapGS Σ, !cryptisGS Σ, Conn: !GenConn.connGS Σ, !sessG Σ} {TT : tele} Δ i j K skI skR rl cs N p m tv tP tP' tp Φ :
+  envs_lookup i Δ = Some (false, connected skI skR rl cs p)%I →
   ProtoNormalize false p [] (<?> m) →
   MsgTele m tv tP tp →
   (∀.. x, MaybeIntoLaterN false 1 (tele_app tP x) (tele_app tP' x)) →
   let Δ' := envs_delete false i false Δ in
   (∀.. x : TT,
     match envs_app false
-        (Esnoc (Esnoc Enil j (tele_app tP' x)) i (c ↣ tele_app tp x)) Δ' with
-    | Some Δ'' => envs_entails Δ'' (WP fill K (of_val (tele_app tv x)) {{ Φ }})
+        (Esnoc (Esnoc Enil j (tele_app tP' x)) i (connected skI skR rl cs (tele_app tp x))) Δ' with
+    | Some Δ'' => envs_entails Δ'' (WP fill K (of_val (repr (tele_app tv x))) {{ Φ }})
     | None => False
     end) →
-  envs_entails Δ (WP fill K (recv c) {{ Φ }}).
+  envs_entails Δ (WP fill K (recv (repr cs)) {{ Φ }}).
 Proof.
   rewrite envs_entails_unseal /ProtoNormalize /MsgTele /MaybeIntoLaterN /=.
   rewrite !tforall_forall right_id.
   intros ? Hp Hm HP HΦ. rewrite envs_lookup_sound //; simpl.
-  assert (c ↣ p ⊢ c ↣ <?.. x>
-    MSG tele_app tv x {{ ▷ tele_app tP' x }}; tele_app tp x) as ->.
-  { iIntros "Hc". iApply (iProto_pointsto_le with "Hc"). iIntros "!>".
+  assert (connected skI skR rl cs p ⊢ connected skI skR rl cs (<?.. x>
+    MSG tele_app tv x {{ ▷ tele_app tP' x }}; tele_app tp x)) as ->.
+  { iIntros "Hc". iApply (connected_le with "Hc"). iIntros "!>".
     iApply iProto_le_trans; [iApply Hp|rewrite Hm].
     iApply iProto_le_texist_elim_l; iIntros (x).
     iApply iProto_le_trans; [|iApply (iProto_le_texist_intro_r _ x)]; simpl.
     iIntros "H". by iDestruct (HP with "H") as "$". }
   rewrite -wp_bind. eapply bi.wand_apply;
-    [by eapply bi.wand_entails, (recv_spec _ (tele_app tv) (tele_app tP') (tele_app tp))|f_equiv; first done].
+    [by eapply bi.wand_entails, (wp_recv skI skR rl cs N _ (tele_app tv) (tele_app tP') (tele_app tp))|f_equiv; first done].
   rewrite -bi.later_intro; apply bi.forall_intro=> x.
   specialize (HΦ x). destruct (envs_app _ _) as [Δ'|] eqn:HΔ'=> //.
   rewrite envs_app_sound //; simpl. by rewrite right_id HΦ.
@@ -239,7 +241,7 @@ Qed.
 
 Tactic Notation "wp_recv_core" tactic3(tac_intros) "as" tactic3(tac) :=
   let solve_pointsto _ :=
-    let c := match goal with |- _ = Some (_, (?c ↣ _)%I) => c end in
+    let c := match goal with |- _ = Some (_, (connected _ _ _ ?c _)%I) => c end in
     iAssumptionCore || fail "wp_recv: cannot find" c "↣ ? @ ?" in
   wp_pures;
   let Hnew := iFresh in
