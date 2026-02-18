@@ -68,7 +68,7 @@ iApply AList.wp_empty => //.
 iNext.
 iIntros "%db Halist".
 wp_pures.
-wp_apply (wp_make_file pw).
+wp_apply (wp_make_file pw Φ).
 do !iSplit => //.
 iIntros "%file Hopaquefile" => /=.
 wp_bind (AList.insert db uid file).
@@ -76,12 +76,13 @@ iApply (AList.wp_insert with "Halist").
 iNext.
 iIntros "Halist".
 wp_pures.
-wp_apply (wp_fork with "[Halist]").
-iApply (wp_server_session db c (<[uid:=file]> ∅)  with "[Halist]") => //.
+wp_apply (wp_fork with "[Halist Hopaquefile]").
+iApply (wp_server_session db c (<[uid:=file]> ∅)  with "[Halist Hopaquefile]") => //.
+(* shelved goal appears here *)
 do !iSplit => //.
-unfold opaque_db.
-iClear "Hcryptis Hhprw HhpA_s HhpA_u Hsenc Henc Hchannel Hminuid Hdhuid Hpubuid Hminpw Hprivpw Hdhpw Halist".
-admit.
+iApply big_sepM_insert.
+by apply map_empty.
+do !iSplit => //.
 wp_pures.
 wp_bind (Client.session uid c pw).
 iApply (wp_client_session uid pw c).
