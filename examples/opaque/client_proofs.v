@@ -13,7 +13,7 @@ Unset Printing Implicit Defensive.
 
 Section Opaque.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ}.
 Notation iProp := (iProp Σ).
 
 Lemma wp_client_session (uid pw : term) (c : val):

@@ -20,7 +20,7 @@ Unset Printing Implicit Defensive.
 
 Section Game.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ}.
 Notation iProp := (iProp Σ).
 
 Notation opN := (nroot.@"op").
@@ -78,7 +78,6 @@ iIntros "Halist".
 wp_pures.
 wp_apply (wp_fork with "[Halist Hopaquefile]").
 iApply (wp_server_session db c (<[uid:=file]> ∅)  with "[Halist Hopaquefile]") => //.
-(* shelved goal appears here *)
 do !iSplit => //.
 iApply big_sepM_insert.
 by apply map_empty.
@@ -105,6 +104,6 @@ iModIntro.
 iSplit => //.
 iNext.
 by iApply "Hhl".
-Admitted.
+Qed.
 
 End Game.
