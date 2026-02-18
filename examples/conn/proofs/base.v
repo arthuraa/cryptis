@@ -93,22 +93,22 @@ Lemma connected_failure ps skI skR rl cs :
   ◇ GenConn.failure skI skR.
 Proof. exact: GenConn.connected_failure. Qed.
 
-Definition pre_ctx `{!iso_dhGS Σ} : iProp :=
-  GenConn.pre_ctx.
+Definition base_ctx : iProp :=
+  GenConn.base_ctx.
 
-Lemma pre_ctx_alloc `{!iso_dhGS Σ} E :
+Lemma base_ctx_alloc E :
   ↑connN ⊆ E →
-  iso_dh_ctx -∗
   seal_pred_token SENC E ==∗
-  pre_ctx ∗ seal_pred_token SENC (E ∖ ↑connN).
-Proof. exact: GenConn.pre_ctx_alloc. Qed.
+  base_ctx ∗ seal_pred_token SENC (E ∖ ↑connN).
+Proof. exact: GenConn.base_ctx_alloc. Qed.
 
 Definition ctx `{!iso_dhGS Σ} N ps : iProp :=
   GenConn.ctx N ps.
 
 Lemma ctx_alloc `{!iso_dhGS Σ} N ps E :
   ↑N ⊆ E →
-  pre_ctx -∗
+  base_ctx -∗
+  iso_dh_ctx -∗
   iso_dh_token E ==∗
   ctx N ps ∗ iso_dh_token (E ∖ ↑N).
 Proof. exact: GenConn.ctx_alloc. Qed.

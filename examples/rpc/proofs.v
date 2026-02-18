@@ -117,12 +117,12 @@ iAssert (|==>
   iDestruct "inv" as "[#fail|inv]"; eauto.
   iModIntro. iRight. by iFrame. }
 wp_lam. wp_pure _ credit:"c". wp_pures. wp_tag.
-wp_apply (Conn.wp_send with "[] [] [$conn inv]"); eauto.
+wp_apply (Conn.wp_send with "[] [$conn inv]"); eauto.
 { by rewrite public_tag. }
 { iDestruct "inv" as "[?|[??]]"; first by eauto. iRight.
   iExists N, t, φ, ψ. iSplit => //. by iFrame. }
 iIntros "conn". wp_pures. iApply wp_fupd.
-wp_apply (Conn.wp_recv with "[] [$conn]"); eauto.
+wp_apply (Conn.wp_recv with "[$conn]"); eauto.
 iIntros "%t' (conn & p_t' & inv)".
 iApply "post".
 iDestruct "inv" as "[#inv|inv]".
@@ -246,7 +246,7 @@ iAssert ((if continue then (public (si_key cs) ∨ ψ skI skR cs t t')
 { case: continue; eauto.
   iDestruct "inv_t'" as "[?|inv_t']"; eauto.
   iSplit; iApply "sess"; eauto. }
-wp_apply (Conn.wp_send with "[] p_t' [$conn t inv_t']"); eauto.
+wp_apply (Conn.wp_send with "p_t' [$conn t inv_t']"); eauto.
 { iDestruct "t" as "[?|t]"; eauto.
   case: continue; eauto.
   iDestruct "inv_t'" as "[?|inv_t']"; eauto.
@@ -322,7 +322,7 @@ Lemma wp_select Φ skI skR cs handlers :
 Proof.
 iIntros "%Ψ (#ctx & (conn & rel) & inv & #wp_handlers) post".
 wp_lam. wp_pures. iPoseProof "ctx" as "[??]".
-wp_apply (Conn.wp_recv with "[//] [$]").
+wp_apply (Conn.wp_recv with "[$]").
 iIntros "%m (conn & #p_m & inv_m)". wp_pures.
 wp_apply (wp_handle_close Φ skI skR cs); eauto.
 iIntros "%h #wp_h". wp_list. wp_pures.

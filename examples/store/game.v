@@ -155,8 +155,8 @@ apply (adequate_not_stuck NotStuck _ _ (λ v _, True)) => //.
 apply: cryptis_adequacy.
 iIntros (? ? c) "#ctx #chan (_ & sign_tok & senc_tok & _)".
 iMod (iso_dhGS_alloc with "sign_tok") as (?) "(#? & iso_tok & sign_tok)" => //.
-iMod (Conn.pre_ctx_alloc with "[//] [$]") as "(#? & senc_tok)" => //.
-iMod (RPC.ctx_alloc with "[//] [$]") as (?) "(#? & iso_tok & rpc_tok)" => //.
+iMod (Conn.base_ctx_alloc with "[$]") as "(#? & senc_tok)" => //.
+iMod (RPC.ctx_alloc with "[//] [//] [$]") as (?) "(#? & iso_tok & rpc_tok)" => //.
 iMod (store_ctx_alloc with "[$] [//]") as "(#? & rpc_tok)";
   first solve_ndisj.
 by iApply (wp_game with "ctx chan [//]") => //.

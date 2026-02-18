@@ -71,7 +71,7 @@ Global Hint Mode MsgNormalize ! ! ! ! - : typeclass_instances.
 Arguments MsgNormalize {_} _ _%_msg _%_msg _%_msg.
 
 Section classes.
-  Context `{!chanG Σ, !heapGS Σ, !cryptisGS Σ, Conn: !GenConn.connGS Σ, !sessG Σ}.
+  Context `{!chanG Σ, !heapGS Σ, !cryptisGS Σ, Conn : !GenConn.connGS Σ, !sessG Σ}.
   Implicit Types TT : tele.
   Implicit Types p : iProto Σ.
   Implicit Types m : iMsg Σ.
@@ -172,21 +172,24 @@ Section classes.
     iApply iProto_le_base_swap.
   Qed.
 
-  (* Global Instance proto_normalize_choice d a1 a2 P1 P2 p1 p2 q1 q2 pas : *)
-  (*   ActionDualIf d a1 a2 → *)
-  (*   ProtoNormalize d p1 pas q1 → ProtoNormalize d p2 pas q2 → *)
-  (*   ProtoNormalize d (iProto_choice a1 P1 P2 p1 p2) pas *)
-  (*                    (iProto_choice a2 P1 P2 q1 q2). *)
-  (* Proof. *)
-  (*   rewrite /ActionDualIf /ProtoNormalize=> -> H1 H2. destruct d; simpl. *)
-  (*   - rewrite !iProto_dual_choice !iProto_app_choice. *)
-  (*     iApply iProto_le_choice; iSplit; by iIntros "$". *)
-  (*   - rewrite !iProto_app_choice. iApply iProto_le_choice; iSplit; by iIntros "$". *)
-  (* Qed. *)
+  (* TODO: Add iProto_choice to channel.v and bring this back *)
+(*
+  Global Instance proto_normalize_choice d a1 a2 P1 P2 p1 p2 q1 q2 pas :
+    ActionDualIf d a1 a2 →
+    ProtoNormalize d p1 pas q1 → ProtoNormalize d p2 pas q2 →
+    ProtoNormalize d (iProto_choice a1 P1 P2 p1 p2) pas
+                     (iProto_choice a2 P1 P2 q1 q2).
+  Proof.
+    rewrite /ActionDualIf /ProtoNormalize=> -> H1 H2. destruct d; simpl.
+    - rewrite !iProto_dual_choice !iProto_app_choice.
+      iApply iProto_le_choice; iSplit; by iIntros "$".
+    - rewrite !iProto_app_choice. iApply iProto_le_choice; iSplit; by iIntros "$".
+  Qed.
+*)
 
   (** Automatically perform normalization of protocols in the proof mode when
   using [iAssumption] and [iFrame]. *)
-  Global Instance pointsto_proto_from_assumption q skI skR rl cs p1 p2 :
+  Global Instance connected_proto_from_assumption q skI skR rl cs p1 p2 :
     ProtoNormalize false p1 [] p2 →
     FromAssumption q (connected skI skR rl cs p1) (connected skI skR rl cs p2).
   Proof.
@@ -194,8 +197,7 @@ Section classes.
     rewrite bi.intuitionistically_if_elim.
     iIntros (?) "H". by iApply (connected_le with "H").
   Qed.
-
-  Global Instance pointsto_proto_from_frame q skI skR rl cs p1 p2 :
+  Global Instance connected_proto_from_frame q skI skR rl cs p1 p2 :
     ProtoNormalize false p1 [] p2 →
     Frame q (connected skI skR rl cs p1) (connected skI skR rl cs p2) True.
   Proof.

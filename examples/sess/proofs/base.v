@@ -72,12 +72,10 @@ Definition sess_own skI skR si (rl : role) p : iProp :=
     iProto_own (session_name_for rl γs) p.
 
 Lemma sess_own_le skI skR si rl p1 p2 :
-  sess_own skI skR si rl p1 ⊢
-  ▷ (p1 ⊑ p2) -∗
-  sess_own skI skR si rl p2.
+  sess_own skI skR si rl p1 ⊢ ▷ (p1 ⊑ p2) -∗ sess_own skI skR si rl p2.
 Proof.
-  iIntros "(%γs & #Hγs & own) Hle".
-    iExists γs; iFrame "#". by iApply (iProto_own_le with "[$]").
+iIntros "(%γs & #names & own) le".
+iExists γs; iFrame "#". by iApply (iProto_own_le with "[$]").
 Qed.
 
 (* Global Instance sess_own_proper skI skR si rl: *)
@@ -172,14 +170,12 @@ Definition connected skI skR rl cs p : iProp :=
   (public (si_key cs) ∨ sess_own skI skR cs rl p).
 
 Lemma connected_le skI skR rl cs p1 p2 :
-  connected skI skR rl cs p1
-   ⊢ ▷ (p1 ⊑ p2) -∗
-  connected skI skR rl cs p2.
+  connected skI skR rl cs p1 ⊢ ▷ (p1 ⊑ p2) -∗ connected skI skR rl cs p2.
 Proof.
-  iIntros "[Hconn [#Fail|Hown]] Hle".
-  - iFrame. by eauto.
-  - iFrame. iRight. by iApply (sess_own_le with "[$]").
-    Qed.
+iIntros "[conn [#fail|own]] le".
+- iFrame. by eauto.
+- iFrame. iRight. by iApply (sess_own_le with "[$]").
+Qed.
 
 (* Global Instance connected_proper skI skR rl cs: *)
 (*   Proper ((equiv) ==> (⊣⊢)) (connected skI skR rl cs). *)
@@ -207,7 +203,8 @@ Definition ctx N p := GenConn.ctx N (sess_params p).
 
 Lemma ctx_alloc N p E :
   ↑N ⊆ E →
-  GenConn.pre_ctx -∗
+  GenConn.base_ctx -∗
+  iso_dh_ctx -∗
   iso_dh_token E ==∗
   ctx N p ∗ iso_dh_token (E ∖ ↑N).
 Proof. exact: GenConn.ctx_alloc. Qed.
