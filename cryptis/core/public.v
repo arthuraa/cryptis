@@ -698,7 +698,7 @@ have H : ∀ t1 t2, TInv t2 ∉ exps t1 →
   by iLeft; iExists t2, (exps t1); rewrite base_expsK; eauto.
   by apply invs_canceled_cons; split; last apply invs_canceled_exps.
 case: (decide (TInv t2 ∈ exps t1)) => in_exps; last exact: H.
-elim: t1 / (well_founded_ltof _ tsize t1) => t1 _ IH in in_exps *.
+elim /term_lt_ind: t1 in_exps => t1 IH in_exps.
 have [exp_t1|contra] := decide (is_exp t1); last first.
   by rewrite exps_expN // elem_of_nil in in_exps.
 iIntros "#p1 #p2"; rewrite [public t1]public_TExpN' //.
