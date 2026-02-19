@@ -47,7 +47,7 @@ Lemma dh_seed_elim1 g a :
 Proof.
 iIntros "%gNX #aP #p_t".
 rewrite public_TExp_iff //.
-iDestruct "p_t" as "[[_ contra] | (_ & _ & p_t)]".
+iDestruct "p_t" as "[[_ contra] | (_ & _ & p_t & _)]".
   by iPoseProof (@dh_seed_elim0 with "aP contra") as ">[]".
 iDestruct "aP" as "(_ & _ & #aP)".
 iSpecialize ("aP" with "p_t"); iModIntro.
@@ -56,11 +56,12 @@ Qed.
 
 Lemma dh_seed_elim2 g a t :
   ¬ is_exp g →
+  a ≠ TInv t →
   dh_seed a -∗
   public (TExpN g [a; t]) -∗
   ◇ (public (TExp g a) ∧ public t).
 Proof.
-iIntros "%gXN #aP #p_t".
+iIntros "%gXN %a_t #aP #p_t".
 rewrite public_TExp2_iff //.
 iDestruct "p_t" as "[p_t|[[_ contra]|p_t]]"; eauto.
   by iPoseProof (@dh_seed_elim0 with "aP contra") as ">[]".
@@ -81,10 +82,12 @@ Lemma dh_public_TExp g a :
   ▷ □ P (TExp g a) -∗
   public (TExp g a).
 Proof.
-iIntros "%gXN #gP #(? & ? & aP) #P_a".
+iIntros "%gXN #gP #(? & ap1 & aP2) #P_a".
 rewrite public_TExp_iff //; iRight; do !iSplit => //.
-iApply "aP"; do 2!iModIntro; iSplit => //.
-by rewrite exps_TExpN exps_expN.
+- iApply "aP2"; do 2!iModIntro; iSplit => //.
+  by rewrite exps_TExpN exps_expN.
+- iModIntro; iIntros "#p".
+  by iApply False_public; last iApply "ap1".
 Qed.
 
 Definition mk_dh : val := mk_nonce.
