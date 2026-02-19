@@ -279,7 +279,7 @@ Fixpoint public_aux n t : iProp :=
      ∨ (⌜is_exp t⌝ ∧ [∗ list] t' ∈ exps t, dh_pred t' t ∧
                                  □ (public_aux n t' → public_aux n (TExp t (TInv t'))))
      ∨ match t with
-       | TNonce a => pnonce a
+       | TNonce a => ◇ pnonce a
        | TKey kt t => ⌜Spec.public_key_type kt⌝
        | THash t => wf_hash t
        | TSeal k t =>
@@ -355,7 +355,7 @@ Lemma public_eq t :
      ∨ (⌜is_exp t⌝ ∧ [∗ list] t' ∈ exps t, dh_pred t' t ∧
                                  □ (public t' → public (TExp t (TInv t'))))
      ∨ match t with
-       | TNonce a => pnonce a
+       | TNonce a => ◇ pnonce a
        | TKey kt t => ⌜Spec.public_key_type kt⌝
        | THash t => wf_hash t
        | TSeal k t =>
@@ -425,7 +425,7 @@ apply: (anti_symm _); iIntros "#Ht" => //.
 Qed.
 
 Lemma public_TNonce a :
-  public (TNonce a) ⊣⊢ pnonce a ∗ meta a (nroot.@"minted") ().
+  public (TNonce a) ⊣⊢ ◇ pnonce a ∗ meta a (nroot.@"minted") ().
 Proof.
 apply: (anti_symm _); iIntros "Ht".
 - rewrite public_eq; iDestruct "Ht" as "[? Ht]".
@@ -856,7 +856,7 @@ iSplitR.
 iSplitR.
   rewrite public_TNonce; do 2!iModIntro; iSplit.
   + iIntros "[#public _]".
-    iDestruct "public" as (γP' P') "(#meta_γP' & #own_P' & ?)".
+    iDestruct "public" as (γP' P') ">(#meta_γP' & #own_P' & ?)".
     iPoseProof (meta_agree with "nonce meta_γP'") as "->".
     iPoseProof (own_valid_2 with "own_P own_P'") as "valid".
     iPoseProof (saved_pred_op_validI with "valid") as "[_ #e]".
