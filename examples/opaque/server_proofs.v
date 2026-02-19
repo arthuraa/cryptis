@@ -175,13 +175,10 @@ Proof.
   rewrite public_of_list => /=.
   iDestruct "Hpubm1" as "[Hpubuid [Hpubα [HpubX_u _]]]".
   wp_apply wp_send => //.
-  1: rewrite public_of_list => //.
+   rewrite public_of_list => //.
   do !iSplit => //.
-  iApply public_TExp_iff => //.
   admit.
-  admit.
-  iApply public_TExp_iff.
-  intro contra. destruct contra.
+  iApply public_TExp_iff; auto.
   iRight.
   do !iSplit => //.
   by iApply minted_TInt.
