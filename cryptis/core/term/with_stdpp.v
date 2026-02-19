@@ -25,6 +25,11 @@ Proof. apply: tsize_TExpN_exp. rewrite elem_of_cons. by auto. Qed.
 
 Canonical termO := leibnizO term.
 
+Global Instance cancel_exps_proper : Proper ((≡ₚ) ==> (≡ₚ)) cancel_exps.
+Proof.
+by move => ts1 ts2 /(ssrbool.introT perm_Perm) /perm_cancel_exps /(ssrbool.elimT perm_Perm).
+Qed.
+
 Global Instance TExpN_proper : Proper ((=) ==> (≡ₚ) ==> (=)) TExpN.
 Proof.
 move=> t _ <- ts1 ts2 ts12.
