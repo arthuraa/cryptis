@@ -693,9 +693,43 @@ Lemma public_TExp t1 t2 :
   public (TExp t1 t2).
 Proof.
 iIntros "#p1 #p2".
-rewrite -{2}(base_expsK t1) TExp_TExpN public_TExpN //.
-by iLeft; iExists t2, (exps t1); rewrite base_expsK; eauto.
-Qed.
+
+case: (decide (TInv t2 ∈ exps t1)) => in_exps.
+- have [n sz]: exists n, tsize t1 <= n by exists (tsize t1).
+  iInduction (lt_wf n) as [m IHm IH] forall (t1 in_exps sz) "p1".
+
+  have ?: is_exp t1 by admit.
+  rewrite [public t1]public_TExpN' // big_sepL_elem_of // TInvK public_TInv.
+
+  iDestruct "p1" as "[(%t3 & %t3_t1 & ? & ?) | [_ p1]]"; last by iApply "p1".
+
+  have neq: t2 ≠ t3.
+    have ?: TInv t3 ∉ exps t1.
+      apply invs_canceledP => //. apply invs_canceled_exps.
+    congruence.
+
+  set t := TExp t1 (TInv t3).
+  have lt: length (exps t) < length (exps t1) by admit.
+  have szlt: tsize t < tsize t1 by admit.
+
+  iAssert (public (TExp t t2)) as "publ".
+    iApply ("IH" $! (tsize t)) => //.
+    + iPureIntro; lia.
+    + iPureIntro. admit.
+
+  have eq: TExp (TExp t t2) t3 = TExp t1 t2 by rewrite TExpNC TExpK'.
+  rewrite -eq.
+
+  iApply public_TExpN'.
+  + admit.
+  + iLeft. iExists t3. do !iSplit => //.
+    * iPureIntro. admit.
+    * by rewrite TExpNC TExpK'.
+
+- rewrite -{2}(base_expsK t1) TExp_TExpN public_TExpN //.
+  by iLeft; iExists t2, (exps t1); rewrite base_expsK; eauto.
+  by apply invs_canceled_cons; split; last apply invs_canceled_exps.
+Admitted.
 
 Lemma public_to_list t ts :
   Spec.to_list t = Some ts →
