@@ -620,40 +620,43 @@ Lemma public_TExp_iff t1 t2 :
   ¬ is_exp t1 →
   public (TExp t1 t2) ⊣⊢
   public t1 ∧ public t2 ∨
-  minted t1 ∧ minted t2 ∧ dh_pred t2 (TExp t1 t2).
+  minted t1 ∧ minted t2 ∧ dh_pred t2 (TExp t1 t2) ∧ □ (public t2 → public t1).
 Proof.
-move=> ?; rewrite public_TExpN //=.
+move=> ?; rewrite public_TExpN //=; last exact: invs_canceled1.
+rewrite (TExpK t1 t2).
 apply: (anti_symm _); iIntros "#pub".
 - iDestruct "pub" as "[pub | pub]" => //.
     iDestruct "pub" as (??) "(%e & p_t1 & p_t2)".
-    symmetry in e.
-    case/Permutation_singleton_r: e => -> ->; eauto.
+    case/Permutation_singleton_l: e => -> <-.
     rewrite TExpN0; eauto.
-  by rewrite minted_TExp //=; iDestruct "pub" as "[[??] [??]]"; eauto.
-- iDestruct "pub" as "[[p1 p2] | (s1 & s2 & pub)]".
+    rewrite minted_TExp //; iDestruct "pub" as "[[??] [[??] _]]"; eauto.
+- iDestruct "pub" as "[[p1 p2] | (s1 & s2 & ? & ?)]".
     by iLeft; iExists t2, []; rewrite TExpN0; eauto.
-  by iRight; rewrite /= minted_TExp//; do !iSplit => //=.
+  iRight; rewrite /= minted_TExp//; do !iSplit => //=.
 Qed.
 
 Lemma public_TExp2_iff t1 t2 t3 :
   ¬ is_exp t1 →
+  t2 ≠ TInv t3 ->
   public (TExpN t1 [t2; t3]) ⊣⊢
   public (TExpN t1 [t2]) ∧ public t3 ∨
   public (TExpN t1 [t3]) ∧ public t2 ∨
   minted (TExpN t1 [t2; t3]) ∧
   dh_pred t2 (TExpN t1 [t2; t3]) ∧
-  dh_pred t3 (TExpN t1 [t2; t3]).
+  dh_pred t3 (TExpN t1 [t2; t3]) ∧
+  □ (public t2 → public (TExpN t1 [t3])) ∧
+  □ (public t3 → public (TExpN t1 [t2])).
 Proof.
-move=> t1NX. rewrite public_TExpN //.
-apply: (anti_symm _); iIntros "#pub".
-- rewrite /=; iDestruct "pub" as "[pub | (? & ? & ? & _)]" => //; eauto.
-  iDestruct "pub" as (??) "(%e & p_t1 & p_t2)".
-  by case: (Permutation_length_2_inv e) => [[-> ->] | [-> ->]]; eauto.
-- iDestruct "pub" as "[[? ?] | [[? ?] | (? & ? & ?)]]".
-  + iLeft; iExists t3, [t2]; do !iSplit => //.
-    iPureIntro; apply: perm_swap.
-  + by iLeft; iExists t2, [t3]; do !iSplit => //.
-  + iRight; do !iSplit => //=.
+move => ??. rewrite public_TExpN //; last exact /invs_canceled2.
+apply: anti_symm; iIntros "#pub"; simpl.
+- iDestruct "pub" as "[pub | (? & (? & #?) & (? & #?) & _)]".
+  + iDestruct "pub" as (??) "(%e & p_t1 & p_t2)".
+    case: (Permutation_length_2_inv e) => [[-> ->] | [-> ->]]; eauto.
+  + rewrite -TExp_TExpN TExpNK TExpNC TExpNK; eauto 7.
+- iDestruct "pub" as "[[? ?] | [[? ?] | (? & ? & (? & #(? & ?)))]]".
+  + by iLeft; iExists t3, [t2]; do !iSplit; first rewrite perm_swap.
+  + by iLeft; iExists t2, [t3]; do !iSplit.
+  + by rewrite -TExp_TExpN TExpNK TExpNC TExpNK; iRight; do !iSplit.
 Qed.
 
 Lemma public_TExp t1 t2 :
