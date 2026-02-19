@@ -727,6 +727,21 @@ Proof. by rewrite Spec.tag_unseal; eauto using subterm. Qed.
 #[global]
 Hint Resolve STRefl : core.
 
+Lemma invs_canceledP ts : (forall t, t ∈ ts -> TInv t ∉ ts) ↔ invs_canceled ts.
+Proof.
+split.
+- move => H. apply /is_trueP /(ssrbool.introT (invs_canceledP _)).
+  by move => ? /(ssrbool.elimT inP) /H /(ssrbool.introN inP).
+- move => /is_trueP /(ssrbool.elimT (invs_canceledP _)) H.
+  by move => ? /(ssrbool.introT inP) /H /(ssrbool.elimN inP).
+Qed.
+
+Global Instance invs_canceled_proper : Proper ((≡ₚ) ==> (=)) invs_canceled.
+Proof. by move => ts1 ts2 /(ssrbool.introT perm_Perm) /perm_invs_canceled. Qed.
+
+Lemma invs_canceled1 t : invs_canceled [t].
+Proof. exact /is_trueP /invs_canceled1. Qed.
+
 Lemma invs_canceled_cons t ts :
   invs_canceled (t :: ts) ↔ (TInv t ∉ ts) ∧ invs_canceled ts.
 Proof.
@@ -741,6 +756,12 @@ rewrite invs_canceled2; split.
 - by move => /is_trueP /(ssrbool.elimN eqtype.eqP).
 - by move => /(ssrbool.introN eqtype.eqP) /is_trueP.
 Qed.
+
+Lemma invs_canceled_exps t : invs_canceled (exps t).
+Proof. exact /is_trueP /invs_canceled_exps. Qed.
+
+Lemma cancel_exps_canceled ts : invs_canceled ts -> cancel_exps ts = ts.
+Proof. move => /is_trueP ?. exact: cancel_exps_canceled. Qed.
 
 Lemma exps_TExpN t ts : exps (TExpN t ts) ≡ₚ cancel_exps (exps t ++ ts).
 Proof.

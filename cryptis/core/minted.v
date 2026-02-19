@@ -66,14 +66,14 @@ Lemma minted_TExpN t ts :
   ~ is_exp t -> invs_canceled ts ->
   minted (TExpN t ts) ⊣⊢ minted t ∧ [∗ list] t' ∈ ts, minted t'.
 Proof.
-move => /negb_True ? /is_trueP ?.
+move => /negb_True ??.
 rewrite unlock nonces_of_term_TExpN // cancel_exps_canceled // big_sepS_union_pers.
 by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
 Lemma minted_base_exps t :
   minted t ⊣⊢ minted (base t) ∧ [∗ list] t' ∈ exps t, minted t'.
-Proof. by rewrite -{1}[t]base_expsK minted_TExpN // invs_canceled_exps. Qed.
+Proof. rewrite -{1}[t]base_expsK minted_TExpN //; exact: invs_canceled_exps. Qed.
 
 Lemma all_minted_TExpN t ts :
   minted t ∧ ([∗ list] t' ∈ ts, minted t') ⊢ minted (TExpN t ts).
