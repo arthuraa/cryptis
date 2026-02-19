@@ -1079,6 +1079,52 @@ iIntros "!> !>". iDestruct "inv" as "(%k' & %e & inv)".
 rewrite keysE in e; by case: k' e => seed' // [<-].
 Qed.
 
+Lemma False_public t :
+  minted t -∗
+  ▷ False -∗
+  public t.
+Proof.
+elim: t.
+- iIntros "%n _ _".
+  by rewrite public_TInt.
+- iIntros "%t1 %IH1 %t2 %IH2".
+  rewrite minted_TPair public_TPair.
+  iIntros "#[m1 m2] #contra"; iSplit.
+  + by iApply IH1.
+  + by iApply IH2.
+- iIntros "%a #m #contra".
+  rewrite minted_TNonce public_TNonce; iSplit => //.
+  iDestruct "contra" as ">[]".
+- iIntros "%k %t %IH #m #contra".
+  by rewrite minted_TKey public_TKey; iLeft; iApply IH.
+- iIntros "%k %IHk %t %IHt".
+  rewrite minted_TSeal public_TSeal.
+  iIntros "#[m1 m2] #contra". iLeft; iSplit.
+  + by iApply IHk.
+  + by iApply IHt.
+- iIntros "%t %IH #m #contra".
+  by rewrite minted_THash public_THash; iLeft; iApply IH.
+- iIntros "%t %IH _ #m #contra".
+  by rewrite minted_TInv public_TInv; iApply IH.
+- move => t IHt nX ts IHts nZ _ canceled.
+  apply is_trueP in canceled.
+  apply is_trueP in nX; apply negb_True in nX.
+  apply (ssrbool.elimN eqtype.eqP) in nZ.
+
+  elim: ts nZ IHts canceled => //= t' ts' IHts _ [Ht' Hts'] canceled.
+  move: (canceled); rewrite invs_canceled_cons; move => [_ ?].
+  rewrite minted_TExpN //=.
+  iIntros "#[mt [mt' mts']] #contra".
+
+  case eqn: (ts'); first by iApply public_TExp; [iApply IHt | iApply Ht'].
+
+  rewrite -eqn public_TExpN //.
+  iLeft; iExists t', ts'; do !iSplit => //; last by iApply Ht'.
+  iApply IHts => //.
+  + by rewrite eqn.
+  + by rewrite minted_TExpN //; iSplit.
+Qed.
+
 End Public.
 
 Arguments public_aenc_name {Σ _}.
