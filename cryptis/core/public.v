@@ -614,6 +614,34 @@ apply: anti_symm.
     iRight; iLeft; iSplit => //.
     by rewrite exps_TExpN exps_expN // cancel_exps_canceled.
 Qed.
+
+Lemma public_TExpN' t :
+  is_exp t ->
+  public t ⊣⊢
+  (∃ t', ⌜t' ∈ exps t⌝ ∧ public (TExp t (TInv t')) ∧ public t')
+  ∨ minted t ∧ ([∗ list] t' ∈ exps t, dh_pred t' t ∧
+                            □ (public t' → public (TExp t (TInv t')))).
+Proof.
+move => expt; apply: anti_symm; rewrite public_eq.
+- iIntros "(? & [[% [%dec ?]] | [(_ & ?) | ?]])"; [| by iRight; iSplit | by case: t expt].
+  case: dec expt; try by move => > _ ->.
+    by move => t' _ /is_trueP ? _ -> /is_trueP /(ssrbool.contraLR (is_exp_TInv t')).
+  move => t1 t2 -> ?? -> ?. rewrite big_sepS_union_pers !big_sepS_singleton.
+  have ?: invs_canceled (t2 :: exps t1)
+    by rewrite invs_canceled_cons; split; last apply invs_canceled_exps.
+  iLeft; iExists t2; rewrite TExpNK; do !iSplit => //.
+  rewrite exps_TExpN -Permutation_cons_append cancel_exps_canceled //.
+  by iPureIntro; apply elem_of_list_here.
+- iIntros "#[[% [% (? & ?)]] | (? & ?)]"; iSplit => //; last by iRight; iLeft; iSplit.
+  + rewrite !public_minted -{2}(TExpK' t t'). iApply all_minted_TExpN; iSplit => //.
+    by rewrite big_sepL_singleton.
+  + iLeft; iExists {[ TExp t (TInv t'); t' ]}; iSplit.
+    * iPureIntro; econstructor 7 => //; last by rewrite TExpK'.
+      rewrite exps_TExpN.
+      have x := elem_of_Permutation (exps t) t'.
+      rewrite x in H. case: H => ts eqp.
+      rewrite eqp Permutation_cons_append -app_assoc. admit.
+    * by rewrite big_sepS_union_pers !big_sepS_singleton; iSplit.
 Admitted.
 
 Lemma public_TExp_iff t1 t2 :
