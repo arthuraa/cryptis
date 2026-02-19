@@ -87,13 +87,12 @@ Proof.
   iApply "post".
   iExists k_s, p_s, (TExp g p_s), (TExp g p_u), _.
   do !iSplit => //.
-  1, 2: iApply public_TExp_iff.
-  1, 3: by intro contra.
+  1, 2: iApply public_TExp_iff; auto.
   1, 2: iRight; do !iSplit => //.
-  1, 3: by iApply minted_TInt.
-  iApply "Heqp_s".
-  2: iApply "Heqp_u".
-  1, 2: iNext; by iModIntro.
+  1, 4: by iApply minted_TInt.
+  by iApply "Heqp_s"; auto.
+  2: by iApply "Heqp_u"; auto.
+  1, 2: by rewrite public_TInt; auto.
   iApply (public_sencIS _ (opN.@"AuthEnc") Φ _) => //.
   rewrite minted_senc minted_THash minted_tag.
   1, 2: iApply minted_of_list; do !iSplit => //; iApply minted_TExp.
@@ -186,7 +185,8 @@ Proof.
   iRight.
   do !iSplit => //.
   by iApply minted_TInt.
-  iApply "Hdhx_s". iNext. by iModIntro.
+  by iApply "Hdhx_s"; auto.
+  by rewrite public_TInt; auto.
   iApply public_THashIS => //.
   rewrite minted_of_list /= !minted_THash !minted_tag !minted_of_list /=.
   do !iSplit => //.

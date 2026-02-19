@@ -100,8 +100,9 @@ iMod ("res" $! b with "res_token") as "[resI resR]".
 iMod (iso_dh_ready_alloc N skI skR si with "[//] resI") as "#ready".
 iAssert (public gb) as "#p_gb".
 { iApply public_TExp_iff; eauto.
-  rewrite minted_TInt. iRight. do ![iSplit => //].
-  iApply "dh_gb". iPureIntro. by rewrite exps_TExpN. }
+  rewrite minted_TInt. iRight. do !iSplit => //.
+  - iApply "dh_gb". iPureIntro. by rewrite exps_TExpN.
+  - by rewrite public_TInt; auto. }
 wp_pure _ credit:"H1".
 wp_pure _ credit:"H2".
 wp_apply wp_mk_keyshare => //.

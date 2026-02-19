@@ -52,15 +52,19 @@ Proof.
   do !iSplit => //.
   iApply minted_THash.
   by iApply minted_tag.
-  iApply "Heqr".
-  iNext. by iModIntro.
-  iApply public_TExp_iff.
-  by intro contra.
+  iApply "Heqr"; auto.
+  iModIntro; iIntros "#p".
+  iApply False_public.
+  iApply minted_THash.
+  by iApply minted_tag.
+  rewrite bi.intuitionistic_intuitionistically.
+  by iApply "Hprivater".
+  iApply public_TExp_iff; auto.
   iRight.
   do !iSplit => //.
   by iApply minted_TInt.
-  iApply "Heqx_u".
-  iNext. by iModIntro.
+  iApply "Heqx_u"; auto.
+  by rewrite public_TInt; auto.
   wp_pures.
   wp_apply wp_recv => //.
   iIntros "%m2 #pubm2".

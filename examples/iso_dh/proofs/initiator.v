@@ -100,7 +100,7 @@ wp_pure _ credit:"H2".
 iAssert (public ga) as "p_ga".
 { iApply public_TExp_iff; eauto.
   rewrite minted_TInt.
-  iRight. do 2![iSplit => //].
+  iRight. do !iSplit => //; last by rewrite public_TInt; auto.
   iApply "a_pred". iModIntro. iModIntro.
   by rewrite /iso_dh_key_share exps_TExpN. }
 wp_apply wp_send => //.
