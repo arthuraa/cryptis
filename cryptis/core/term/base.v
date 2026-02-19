@@ -496,6 +496,14 @@ apply /(iffP idP).
   by rewrite -unfold_TInv (mem_map unfold_term_inj).
 Qed.
 
+Lemma perm_invs_canceled ts1 ts2 : perm_eq ts1 ts2 -> invs_canceled ts1 = invs_canceled ts2.
+Proof.
+move => /perm_mem peq.
+apply /(sameP idP); apply /(iffP idP);
+move => /invs_canceledP H; apply /invs_canceledP;
+move => t; [rewrite !peq | rewrite -!peq ]; apply H.
+Qed.
+
 Lemma invs_canceled1 t : invs_canceled [:: t].
 Proof. apply /invs_canceledP => t0. rewrite !inE => /eqP ->. exact: TInv_Nid. Qed.
 
