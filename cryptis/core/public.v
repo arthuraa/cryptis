@@ -558,55 +558,62 @@ Qed.
 
 Lemma public_TExpN t ts :
   ¬ is_exp t →
+  invs_canceled ts ->
   ts ≠ [] →
   public (TExpN t ts) ⊣⊢
   (∃ t' ts', ⌜ts ≡ₚ t' :: ts'⌝ ∧ public (TExpN t ts') ∧ public t') ∨
-  minted (TExpN t ts) ∧ [∗ list] t' ∈ ts, dh_pred t' (TExpN t ts).
+  minted (TExpN t ts) ∧ [∗ list] t' ∈ ts, dh_pred t' (TExpN t ts) ∧
+                                    □ (public t' → public (TExp (TExpN t ts) (TInv t'))).
 Proof.
-(* move=> tNX tsN0. *)
-(* have ttsX : is_exp (TExpN t ts). *)
-(*   by rewrite is_exp_TExpN; case: (ts) tsN0. *)
-(* have [? [] ? [] H etts] : ∃ t' ts' H, TExpN t ts = TExpN' t' ts' H. *)
-(*   case: (TExpN t ts) ttsX => //=; eauto. *)
-(* apply: (anti_symm _). *)
-(* - rewrite public_eq minted_TExpN {2}etts {H etts}. *)
-(*   iDestruct 1 as "[# [Ht Hts] [#publ | #publ]]". *)
-(*   + iDestruct "publ" as (T) "[%dec publ]". *)
-(*     move e: (TExpN t ts) => t' in dec ttsX *. *)
-(*     case: dec ttsX; try by move=> * {e}; subst t'. *)
-(*     rewrite -{}e {t'}. *)
-(*     move=> t1 t2 -> _ e _. *)
-(*     rewrite big_sepS_union_pers !big_sepS_singleton. *)
-(*     iDestruct "publ" as "[publ1 publ2]". *)
-(*     iLeft. iExists t2, (exps t1). *)
-(*     have -> : TExpN t (exps t1) = t1. *)
-(*       apply: base_exps_inj. *)
-(*       * by move/(f_equal base): e; rewrite !base_TExpN. *)
-(*       * by rewrite exps_TExpN exps_expN //=. *)
-(*     do !iSplit => //. iPureIntro. *)
-(*     have ->: ts ≡ₚ exps (TExpN t ts). *)
-(*       by rewrite exps_TExpN exps_expN //; apply/is_trueP. *)
-(*     by rewrite e exps_TExpN [_ ++ _]comm. *)
-(*   + iRight; do 2?iSplit => //. *)
-(*     by rewrite exps_TExpN exps_expN. *)
-(* - iDestruct 1 as "# [publ | publ]". *)
-(*   + iDestruct "publ" as (t' ts') "[%e [Ht1 Ht2]]". *)
-(*     rewrite e in ttsX *. *)
-(*     rewrite [public (TExpN _ (_ :: _))]public_eq minted_TExpN /=. *)
-(*     iSplit. *)
-(*       rewrite !public_minted minted_TExpN /=. *)
-(*       by iDestruct "Ht1" as "[??]"; eauto. *)
-(*     iLeft. *)
-(*     iExists {[TExpN t ts'; t']}. *)
-(*     rewrite big_sepS_union_pers !big_sepS_singleton. *)
-(*     do !iSplit => //. *)
-(*     iPureIntro. *)
-(*     rewrite -TExp_TExpN; apply: DExp; eauto. *)
-(*     by rewrite TExp_TExpN. *)
-(*   + iDestruct "publ" as "[s p]"; rewrite public_eq [minted]unlock; iSplit=> //. *)
-(*     rewrite {4}etts; iRight. *)
-(*     by rewrite exps_TExpN exps_expN //. *)
-(* Qed. *)
+move => /[dup] ? /negb_True /is_trueP ?.
+move => /[dup] ? /is_trueP ?.
+move => tsN0.
+
+have ttsX: is_exp (TExpN t ts) by rewrite is_exp_TExpN; first case: (ts) tsN0.
+
+apply: anti_symm.
+- rewrite public_eq minted_TExpN //.
+  iIntros "[#[Ht Hts] #[publ | [(? & ?) | publ]]]".
+  + iDestruct "publ" as (T) "[%dec publ]".
+    move e: (TExpN t ts) => t' in dec ttsX *.
+    case: dec ttsX; try by move=> * {e}; subst t'.
+    * by move => ? _ ? _ -> /is_trueP /(ssrbool.contraLR (is_exp_TInv _)) /is_trueP.
+    rewrite -{}e {t'}.
+    move=> t1 t2 -> ?? e ?.
+    rewrite big_sepS_union_pers !big_sepS_singleton.
+    iDestruct "publ" as "[publ1 publ2]".
+    iLeft. iExists t2, (exps t1).
+    have -> : TExpN t (exps t1) = t1.
+      apply: base_exps_inj.
+      * by move/(f_equal base): e; rewrite !base_TExpN.
+      * by rewrite exps_TExpN exps_expN // cancel_exps_exps.
+    do !iSplit => //. iPureIntro.
+    have ->: ts ≡ₚ exps (TExpN t ts) by rewrite exps_TExpN exps_expN // cancel_exps_canceled.
+    have ?: invs_canceled (t2 :: exps t1) by rewrite invs_canceled_cons; split; last apply invs_canceled_exps.
+    by rewrite e exps_TExpN -Permutation_cons_append cancel_exps_canceled.
+  + iRight; do !iSplit => //.
+    by rewrite exps_TExpN exps_expN // cancel_exps_canceled.
+  + by case: (TExpN t ts) ttsX.
+
+- iIntros "#[publ | publ]".
+  + iDestruct "publ" as (t' ts') "[%e [Ht1 Ht2]]".
+    have canceled_t'ts': invs_canceled (t' :: ts') by rewrite -e.
+    move: (canceled_t'ts'); rewrite invs_canceled_cons; case => ??.
+    rewrite e in ttsX *.
+    rewrite [public (TExpN _ (_ :: _))]public_eq minted_TExpN //=.
+    iSplit.
+      rewrite !public_minted minted_TExpN //=.
+      by iDestruct "Ht1" as "[??]"; eauto.
+    iLeft; iExists {[TExpN t ts'; t']}.
+    rewrite big_sepS_union_pers !big_sepS_singleton.
+    do !iSplit => //.
+    iPureIntro; apply: DExp; eauto.
+      by rewrite exps_TExpN exps_expN // cancel_exps_canceled.
+      by rewrite TExp_TExpN.
+  + iDestruct "publ" as "[s p]"; rewrite public_eq; iSplit=> //.
+    iRight; iLeft; iSplit => //.
+    by rewrite exps_TExpN exps_expN // cancel_exps_canceled.
+Qed.
 Admitted.
 
 Lemma public_TExp_iff t1 t2 :
