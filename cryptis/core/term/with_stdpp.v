@@ -898,6 +898,12 @@ apply/(ssrbool.introN ssrbool.idP).
 by rewrite is_trueP.
 Qed.
 
+Lemma exps_TExpN' t ts :
+¬ is_exp t ->
+  invs_canceled ts ->
+  exps (TExpN t ts) ≡ₚ ts.
+Proof. move => ??. by rewrite exps_TExpN exps_expN // cancel_exps_canceled. Qed.
+
 Lemma is_exp_base t : ¬ is_exp (base t).
 Proof.
 rewrite (ssrbool.negbTE (is_exp_base t)) /=. by auto.
