@@ -152,8 +152,7 @@ Proof.
 iIntros "(%nI & %nR & -> & _ & _ & #priv_nI & #priv_nR & _)".
 rewrite /= /pk_dh_mk_session_key /pk_dh_mk_key_share TExp_TExpN.
 iIntros "#p_kS".
-iDestruct (dh_seed_elim2 with "priv_nI p_kS") as "[>p_sI >contra]"; eauto; first admit.
-by iDestruct (dh_seed_elim0 with "priv_nR contra") as ">[]".
+iMod (dh_seed_elim2 with "priv_nI priv_nR p_kS"); eauto.
 Admitted.
 
 Lemma wp_pk_dh_init c skI skR :

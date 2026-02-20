@@ -348,8 +348,10 @@ iIntros "#m_a #pred_a".
 rewrite public_TExpN //=; auto; last exact: invs_canceled1.
 iRight. rewrite minted_TExp; auto.
 rewrite TExpNK public_TInt minted_TInt.
-do !iSplit => //; auto.
-iApply "pred_a". iPureIntro. by rewrite exps_TExpN.
+do !iSplit; auto.
+iExists a; iSplit.
+- by rewrite elem_of_list_singleton.
+- iApply "pred_a". iPureIntro. by rewrite exps_TExpN.
 Qed.
 
 Lemma public_dh_secret a b :
@@ -364,21 +366,21 @@ rewrite public_TExp2_iff //; eauto; last admit.
 iSplit; last first.
 { rewrite /bi_except_0.
   iIntros "#[H|[H|H]]".
-  - iRight. iRight. iSplit; eauto.
-    iApply all_minted_TExpN=> /=.
-    rewrite minted_TInt.
-    do !iSplit => //.
+  - iRight; iRight; iSplit; eauto.
+      by iApply all_minted_TExpN; rewrite minted_TInt; do !iSplit.
     do !iSplit.
-    + iApply "pred_a"; auto.
-    + by iApply "pred_b"; auto.
-    + iIntros "!> #p"; iApply public_TExp; [by rewrite public_TInt | by iApply False_public].
-    + iIntros "!> #p"; iApply public_TExp; [by rewrite public_TInt | by iApply False_public].
-  - iRight. iLeft. iSplit => //. by iApply public_dh_share.
-  - iLeft. iSplit => //. by iApply public_dh_share. }
-iIntros "[[_ #p_b] | [[_ #p_a] | (_ & contra & _)]]"; eauto.
-iPoseProof ("pred_a" with "contra") as ">%contra".
-apply (f_equal Nat.odd) in contra.
-by rewrite exps_TExpN parity_cancel_exps in contra.
+    + by iLeft; iApply "pred_a"; auto.
+    + iIntros "!> _"; iApply public_TExp; [by rewrite public_TInt | by iApply False_public].
+    + iIntros "!> _"; iApply public_TExp; [by rewrite public_TInt | by iApply False_public].
+  - by iRight; iLeft; iSplit; first iApply public_dh_share.
+  - by iLeft; iSplit; first iApply public_dh_share. }
+iIntros "[[_ #p_b] | [[_ #p_a] | (_ & [contra | contra] & _)]]"; eauto.
+- iPoseProof ("pred_a" with "contra") as ">%contra".
+  apply (f_equal Nat.odd) in contra.
+  by rewrite exps_TExpN parity_cancel_exps in contra.
+- iPoseProof ("pred_b" with "contra") as ">%contra".
+  apply (f_equal Nat.odd) in contra.
+  by rewrite exps_TExpN parity_cancel_exps in contra.
 Admitted.
 
 Lemma public_dh_secret' a b (P : iProp) :
@@ -390,12 +392,15 @@ Lemma public_dh_secret' a b (P : iProp) :
 Proof.
 iIntros "#s_a #pred_a #s_b #pred_b".
 rewrite public_TExp2_iff //; eauto; last admit.
-iIntros "[[_ #p_b] | [[_ #p_a] | (_ & contra & _)]]".
+iIntros "#[[_ #p_b] | [[_ #p_a] | (_ & [contra | contra] & _)]]".
 - by iModIntro; iApply "s_b".
 - by iModIntro; iApply "s_a".
-iPoseProof ("pred_a" with "contra") as ">%contra".
-apply (f_equal Nat.odd) in contra.
-by rewrite exps_TExpN parity_cancel_exps in contra.
+- iPoseProof ("pred_a" with "contra") as ">%contra".
+  apply (f_equal Nat.odd) in contra.
+  by rewrite exps_TExpN parity_cancel_exps in contra.
+- iPoseProof ("pred_b" with "contra") as ">%contra".
+  apply (f_equal Nat.odd) in contra.
+  by rewrite exps_TExpN parity_cancel_exps in contra.
 Admitted.
 
 End Verif.
