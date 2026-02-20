@@ -276,8 +276,9 @@ Fixpoint public_aux n t : iProp :=
   if n is S n then
     minted t ∧ (
      (∃ T, ⌜decompose T t⌝ ∧ [∗ set] t' ∈ T, public_aux n t')
-     ∨ (⌜is_exp t⌝ ∧ [∗ list] t' ∈ exps t, dh_pred t' t ∧
-                                 □ (public_aux n t' → public_aux n (TExp t (TInv t'))))
+     ∨ (⌜is_exp t⌝ ∧
+        (∃ t', ⌜t' ∈ exps t⌝ ∧ dh_pred t' t) ∧
+        [∗ list] t' ∈ exps t, □ (public_aux n t' → public_aux n (TExp t (TInv t'))))
      ∨ match t with
        | TNonce a => ◇ pnonce a
        | TKey kt t => ⌜Spec.public_key_type kt⌝
@@ -333,7 +334,7 @@ do !apply bi.or_proper.
   apply: big_sepS_proper => t' T_t'.
   move: (decompose_tsize T_t T_t') => ?.
   rewrite (IH n) ?(IH m) //; lia.
-- apply bi.and_proper => //.
+- do !apply bi.and_proper => //.
   apply big_sepL_proper => _ t' /(elem_of_list_lookup_2 _ _ _) /tsize_TExp_TInv ?.
   by rewrite !IH; try lia.
 - case: t t_n e_st => //= k t t_n e_st.
@@ -352,8 +353,9 @@ Lemma public_eq t :
   public t ⊣⊢
   minted t ∧ (
       (∃ T, ⌜decompose T t⌝ ∧ [∗ set] t' ∈ T, public t')
-     ∨ (⌜is_exp t⌝ ∧ [∗ list] t' ∈ exps t, dh_pred t' t ∧
-                                 □ (public t' → public (TExp t (TInv t'))))
+     ∨ (⌜is_exp t⌝ ∧
+        (∃ t', ⌜t' ∈ exps t⌝ ∧ dh_pred t' t) ∧
+        [∗ list] t' ∈ exps t, □ (public t' → public (TExp t (TInv t'))))
      ∨ match t with
        | TNonce a => ◇ pnonce a
        | TKey kt t => ⌜Spec.public_key_type kt⌝
@@ -383,7 +385,7 @@ do !apply bi.or_proper.
   apply: big_sepS_proper => t' T_t'.
   move: (decompose_tsize T_t T_t') => ?.
   rewrite public_aux_eq //; lia.
-- apply bi.and_proper => //.
+- do !apply bi.and_proper => //.
   apply big_sepL_proper => k t' /(elem_of_list_lookup_2 _ _ _) /tsize_TExp_TInv ?.
   by rewrite !public_aux_eq; try lia.
 - case: t e_st => //= k t e_st.
@@ -562,8 +564,9 @@ Lemma public_TExpN t ts :
   ts ≠ [] →
   public (TExpN t ts) ⊣⊢
   (∃ t' ts', ⌜ts ≡ₚ t' :: ts'⌝ ∧ public (TExpN t ts') ∧ public t') ∨
-  minted (TExpN t ts) ∧ [∗ list] t' ∈ ts, dh_pred t' (TExpN t ts) ∧
-                                    □ (public t' → public (TExp (TExpN t ts) (TInv t'))).
+  minted (TExpN t ts) ∧
+  (∃ t', ⌜t' ∈ ts⌝ ∧ dh_pred t' (TExpN t ts)) ∧
+  [∗ list] t' ∈ ts, □ (public t' → public (TExp (TExpN t ts) (TInv t'))).
 Proof.
 move => /[dup] ? /negb_True /is_trueP ?.
 move => /[dup] ? /is_trueP ?.
@@ -572,8 +575,8 @@ move => tsN0.
 have ttsX: is_exp (TExpN t ts) by rewrite is_exp_TExpN; first case: (ts) tsN0.
 
 apply: anti_symm.
-- rewrite public_eq minted_TExpN //.
-  iIntros "[#[Ht Hts] #[publ | [(? & ?) | publ]]]".
+- rewrite public_eq minted_TExpN // {2}exps_TExpN' //.
+  iIntros "#[[Ht Hts] [publ | [(m & dh & publ) | publ]]]".
   + iDestruct "publ" as (T) "[%dec publ]".
     move e: (TExpN t ts) => t' in dec ttsX *.
     case: dec ttsX; try by move=> * {e}; subst t'.
@@ -586,13 +589,12 @@ apply: anti_symm.
     have -> : TExpN t (exps t1) = t1.
       apply: base_exps_inj.
       * by move/(f_equal base): e; rewrite !base_TExpN.
-      * by rewrite exps_TExpN exps_expN // cancel_exps_exps.
-    do !iSplit => //. iPureIntro.
-    have ->: ts ≡ₚ exps (TExpN t ts) by rewrite exps_TExpN exps_expN // cancel_exps_canceled.
-    have ?: invs_canceled (t2 :: exps t1) by rewrite invs_canceled_cons; split; last apply invs_canceled_exps.
-    by rewrite e exps_TExpN -Permutation_cons_append cancel_exps_canceled.
+      * rewrite exps_TExpN' //; exact: invs_canceled_exps.
+    do !iSplit => //.
+    rewrite -(exps_TExpN' t ts) // e exps_TExpN -Permutation_cons_append cancel_exps_canceled //.
+    by rewrite invs_canceled_cons; split; last apply invs_canceled_exps.
   + iRight; do !iSplit => //.
-    by rewrite exps_TExpN exps_expN // cancel_exps_canceled.
+    iDestruct "dh" as (t') "dh". by rewrite exps_TExpN'; first iExists t'.
   + by case: (TExpN t ts) ttsX.
 
 - iIntros "#[publ | publ]".
@@ -605,22 +607,23 @@ apply: anti_symm.
       rewrite !public_minted minted_TExpN //=.
       by iDestruct "Ht1" as "[??]"; eauto.
     iLeft; iExists {[TExpN t ts'; t']}.
-    rewrite big_sepS_union_pers !big_sepS_singleton.
-    do !iSplit => //.
+    rewrite big_sepS_union_pers !big_sepS_singleton; do !iSplit; eauto.
     iPureIntro; apply: DExp; eauto.
-      by rewrite exps_TExpN exps_expN // cancel_exps_canceled.
+      by rewrite exps_TExpN'.
       by rewrite TExp_TExpN.
-  + iDestruct "publ" as "[s p]"; rewrite public_eq; iSplit=> //.
-    iRight; iLeft; iSplit => //.
-    by rewrite exps_TExpN exps_expN // cancel_exps_canceled.
+  + iDestruct "publ" as "[m [dh p]]"; rewrite public_eq; iSplit; eauto.
+    iRight; iLeft; do !iSplit; eauto.
+      iDestruct "dh" as (t') "dh". by iExists t'; rewrite exps_TExpN'.
+      by rewrite exps_TExpN'.
 Qed.
 
 Lemma public_TExpN' t :
   is_exp t ->
   public t ⊣⊢
-  (∃ t', ⌜t' ∈ exps t⌝ ∧ public (TExp t (TInv t')) ∧ public t')
-  ∨ minted t ∧ ([∗ list] t' ∈ exps t, dh_pred t' t ∧
-                            □ (public t' → public (TExp t (TInv t')))).
+  (∃ t', ⌜t' ∈ exps t⌝ ∧ public (TExp t (TInv t')) ∧ public t') ∨
+  minted t ∧
+  (∃ t', ⌜t' ∈ exps t⌝ ∧ dh_pred t' t) ∧
+  [∗ list] t' ∈ exps t, □ (public t' → public (TExp t (TInv t'))).
 Proof.
 move => expt; apply: anti_symm; rewrite public_eq.
 - iIntros "(? & [[% [%dec ?]] | [(_ & ?) | ?]])"; [| by iRight; iSplit | by case: t expt].
@@ -655,10 +658,13 @@ apply: (anti_symm _); iIntros "#pub".
     iDestruct "pub" as (??) "(%e & p_t1 & p_t2)".
     case/Permutation_singleton_l: e => -> <-.
     rewrite TExpN0; eauto.
-    rewrite minted_TExp //; iDestruct "pub" as "[[??] [[??] _]]"; eauto.
+    rewrite minted_TExp //; iDestruct "pub" as "[[??] [dh [? _]]]".
+    iDestruct "dh" as (t') "[%e dh]".
+    move: e => /elem_of_list_singleton ->; eauto.
 - iDestruct "pub" as "[[p1 p2] | (s1 & s2 & ? & ?)]".
     by iLeft; iExists t2, []; rewrite TExpN0; eauto.
-  iRight; rewrite /= minted_TExp//; do !iSplit => //=.
+  iRight; rewrite minted_TExp //; do !iSplit => //.
+  iExists t2; rewrite elem_of_list_singleton; eauto.
 Qed.
 
 Lemma public_TExp2_iff t1 t2 t3 :
@@ -668,21 +674,26 @@ Lemma public_TExp2_iff t1 t2 t3 :
   public (TExpN t1 [t2]) ∧ public t3 ∨
   public (TExpN t1 [t3]) ∧ public t2 ∨
   minted (TExpN t1 [t2; t3]) ∧
-  dh_pred t2 (TExpN t1 [t2; t3]) ∧
-  dh_pred t3 (TExpN t1 [t2; t3]) ∧
+  (dh_pred t2 (TExpN t1 [t2; t3]) ∨
+   dh_pred t3 (TExpN t1 [t2; t3])) ∧
   □ (public t2 → public (TExpN t1 [t3])) ∧
   □ (public t3 → public (TExpN t1 [t2])).
 Proof.
 move => ??. rewrite public_TExpN //; last exact /invs_canceled2.
 apply: anti_symm; iIntros "#pub"; simpl.
-- iDestruct "pub" as "[pub | (? & (? & #?) & (? & #?) & _)]".
+- iDestruct "pub" as "[pub | (? & dh & ? & ? & _)]".
   + iDestruct "pub" as (??) "(%e & p_t1 & p_t2)".
     case: (Permutation_length_2_inv e) => [[-> ->] | [-> ->]]; eauto.
-  + rewrite -TExp_TExpN TExpNK TExpNC TExpNK; eauto 7.
-- iDestruct "pub" as "[[? ?] | [[? ?] | (? & ? & (? & #(? & ?)))]]".
-  + by iLeft; iExists t3, [t2]; do !iSplit; first rewrite perm_swap.
-  + by iLeft; iExists t2, [t3]; do !iSplit.
-  + by rewrite -TExp_TExpN TExpNK TExpNC TExpNK; iRight; do !iSplit.
+  + rewrite -TExp_TExpN TExpNK TExpNC TExpNK.
+    iDestruct "dh" as (t') "[%e dh]".
+    move: e => /elem_of_cons [-> | /elem_of_list_singleton ->]; eauto 7.
+- iDestruct "pub" as "[[? ?] | [[? ?] | (? & [? | ?] & ? & ?)]]".
+  + by iLeft; iExists t3, [t2]; rewrite perm_swap; eauto.
+  + by iLeft; iExists t2, [t3]; eauto.
+  + rewrite -TExp_TExpN TExpNK TExpNC TExpNK. iRight; do !iSplit; eauto.
+    by iExists t2; iSplit; first rewrite elem_of_cons; eauto.
+  + rewrite -TExp_TExpN TExpNK TExpNC TExpNK; iRight; do !iSplit; eauto.
+    by iExists t3; iSplit; first rewrite elem_of_cons elem_of_list_singleton; eauto.
 Qed.
 
 Lemma public_TExp t1 t2 :
