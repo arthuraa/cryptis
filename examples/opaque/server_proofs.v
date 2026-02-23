@@ -24,7 +24,7 @@ Notation iProp := (iProp Σ).
 Definition opaque_file (file : val) : iProp :=
   ∃ k_s p_s P_s P_u envelope,
     ⌜file = Spec.of_list [k_s; p_s; P_s; P_u; envelope]⌝
-    ∗ minted k_s ∗ minted p_s ∗ public P_s ∗ public P_u ∗ public envelope.
+    ∗ minted k_s ∗ □(∀ t' : term, dh_pred k_s t' ↔ ▷ □ True) ∗ minted p_s ∗ public P_s ∗ public P_u ∗ public envelope.
 
 Definition opaque_db (db : gmap term val) : iProp :=
 [∗ map] (k : term) ↦ (file : val) ∈ db,
@@ -59,8 +59,8 @@ Server.make_file pw
 Proof.
   iIntros "%ϕ [#cryptis [#Hmintedpw [#Hprivpw [#Hhashpred [#Hsencpred #Henc]]]]] post".
   wp_lam.
-  wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => False)%I) => //.
-  iIntros "%k_s %Hnoncek_s #Hmintedk_s #Hprivatek_s #H!eqk_s Htokenk_s".
+  wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => True)%I) => //.
+  iIntros "%k_s %Hnoncek_s #Hmintedk_s #Hprivatek_s #Heqk_s Htokenk_s".
   wp_pures.
   wp_lam.
   wp_pures.
@@ -77,9 +77,9 @@ Proof.
   iIntros "%p_u %Hnoncep_u #Hmintedp_u #Hprivatep_u #Heqp_u Htokenp_u".
   wp_pures.
   wp_apply wp_texp. wp_pures.
-  wp_apply wp_texp. wp_pures.
-  wp_list. wp_pures.
-  wp_term_of_list. wp_pures.
+  wp_apply wp_texp.
+  wp_list.
+  wp_term_of_list.
   wp_lam. wp_pures.
   wp_apply wp_senc'.
   wp_list.
@@ -91,15 +91,15 @@ Proof.
   1, 2: iRight; do !iSplit => //.
   1, 4: by iApply minted_TInt.
   by iApply "Heqp_s"; auto.
-  2: by iApply "Heqp_u"; auto.
-  1, 2: by rewrite public_TInt; auto.
+  1, 3: by rewrite public_TInt; auto.
+  by iApply "Heqp_u"; auto.
   iApply (public_sencIS _ (opN.@"AuthEnc") Φ _) => //.
   rewrite minted_senc minted_THash minted_tag.
   1, 2: iApply minted_of_list; do !iSplit => //; iApply minted_TExp.
   1, 3, 5: by intro contra.
   1- 3: iSplit => //.
-  2, 3: by iApply minted_TInt.
   by rewrite minted_THash minted_tag.
+  1, 2: by iApply minted_TInt.
   iModIntro.
   rewrite public_senc_key.
   iIntros "#Hcompromise".
@@ -125,48 +125,42 @@ Lemma wp_server_session (db c : val) (alist : gmap term val) :
 {{{ x , RET x ; True }}}.
 Proof.
   iIntros "%ϕ".
-  rewrite /opaque_db big_sepM_forall.
+  rewrite /opaque_db. rewrite big_sepM_forall.
   iIntros "[#Cryptis [#Hpred [#Hc [Hdb #Hmapcontents]]]] Hhl".
   wp_lam. wp_pures.
   wp_apply (wp_recv with "Hc").
   iIntros "%m1 #Hpubm1".
   wp_list_of_term m1; wp_pures.
-  2: iModIntro; by iApply "Hhl".
+  2: by iApply "Hhl".
   do !rewrite subst_list_match /=.
-  wp_list_match => [uid α X_u | _].
-  2: wp_pures; iModIntro; by iApply "Hhl".
-  intro Hm1eq.
+  wp_list_match => [uid α X_u -> | _].
+  2: wp_pures; by iApply "Hhl".
   wp_bind (AList.find _ _).
   iApply (AList.wp_find with "Hdb").
   iIntros "!> Hdb".
   case db_uid: (alist !! uid) => [file|]; wp_pures.
-  2: iModIntro; by iApply "Hhl".
+  2: by iApply "Hhl".
   iDestruct ("Hmapcontents" $! uid file with "[//]") as
   "[_ (%k_s & %p_s & %P_s & %P_u & %envelope &
-        %e & Hmk_s & Hmp_s & HpP_s & HpP_u & Hpenvelope)]".
-  repeat rewrite subst_list_match /=.
-  rewrite e.
+        %e & Hmk_s & Hdhpredk_s & Hmp_s & HpP_s & HpP_u & Hpenvelope)]".
+  rewrite !subst_list_match /= e.
   wp_apply wp_list_of_term.
   rewrite Spec.of_listK.
   wp_pures.
   rewrite subst_list_match /=.
   wp_list_match => [k_s' p_s' P_s' P_u' envelope' e' | ].
   inversion e'. subst. clear e'.
-  2: intro H; wp_pures; iModIntro; by iApply "Hhl".
-  wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => True)%I).
-  1: iAssumption.
+  2: by intro contra.
+  wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => True)%I) => //.
   iIntros "%x_s %Hnoncex_s #Hmintedx_s #Hprivatex_s #Hdhx_s Htokenx_s".
   wp_pures.
   wp_apply wp_texp. wp_pures.
   wp_apply wp_texp. wp_pures.
   wp_apply wp_ke.
-  wp_pures.
   wp_list.
   wp_apply wp_H.
-  wp_pures.
   wp_list.
   wp_apply wp_prf.
-  wp_pures.
   wp_list.
   wp_apply wp_prf.
   wp_list.
@@ -175,9 +169,15 @@ Proof.
   rewrite public_of_list => /=.
   iDestruct "Hpubm1" as "[Hpubuid [Hpubα [HpubX_u _]]]".
   wp_apply wp_send => //.
-   rewrite public_of_list => //.
+  rewrite public_of_list => //.
   do !iSplit => //.
+  iApply public_TExp_iff.
   admit.
+  iRight.
+  do !iSplit => //.
+  by iApply public_minted.
+  by iApply "Hdhpredk_s".
+  iModIntro. by iIntros "#_".
   iApply public_TExp_iff; auto.
   iRight.
   do !iSplit => //.
@@ -192,14 +192,12 @@ Proof.
   wp_pures.
   wp_apply (wp_recv with "Hc").
   iIntros "%m3 #Hm3pub".
-  wp_pures.
   wp_list.
   wp_apply wp_prf.
   wp_eq_term Heq; wp_pures.
-  2: iModIntro; by iApply "Hhl".
+  2: by iApply "Hhl".
   wp_list.
   wp_pures.
-  iModIntro.
   by iApply "Hhl".
 Admitted.
 

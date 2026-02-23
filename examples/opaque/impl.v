@@ -95,8 +95,6 @@ Definition session : val := λ: "db" "c",
     guard: eq_term "A_u" (prf "A_u" [ "K"; "ssid'" ]) in
     SOME [ "uid"; "SK" ].
 
-(* not useful: assume that files in db are properly formed instead *)
-(* but maybe use this as an example?  that the files can be computed. *)
 Definition make_file : val := λ: "pw",
     let: "k_s" := mk_nonce #() in
     let: "rw" := derive_senc_key (OPRF "k_s" "pw") in

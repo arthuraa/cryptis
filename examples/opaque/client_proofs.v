@@ -38,44 +38,39 @@ Proof.
   wp_apply wp_texp.
   wp_pures.
   wp_apply wp_texp.
-  wp_pures.
   wp_list.
   wp_term_of_list.
   wp_pures.
-  do !rewrite subst_list_match /=.
   wp_apply wp_send => //.
   do !rewrite public_of_list /=.
   do !iSplit => //.
   iApply public_TExp_iff.
-  intro contra => //.
+  by intro contra.
   iRight.
   do !iSplit => //.
-  iApply minted_THash.
-  by iApply minted_tag.
-  iApply "Heqr"; auto.
+  by rewrite minted_THash minted_tag.
+  by iApply "Heqr".
   iModIntro; iIntros "#p".
   iApply False_public.
-  iApply minted_THash.
-  by iApply minted_tag.
+  by rewrite minted_THash  minted_tag.
   rewrite bi.intuitionistic_intuitionistically.
   by iApply "Hprivater".
   iApply public_TExp_iff; auto.
   iRight.
   do !iSplit => //.
   by iApply minted_TInt.
-  iApply "Heqx_u"; auto.
+  by iApply "Heqx_u".
   by rewrite public_TInt; auto.
   wp_pures.
   wp_apply wp_recv => //.
   iIntros "%m2 #pubm2".
-  iAssert (minted m2 ) as "minm2".
+  iAssert (minted m2) as "minm2".
   by iApply public_minted.
   iClear "pubm2".
   wp_list_of_term m2; wp_pures => //.
   wp_list_match => [β X_s envelope A_s -> | _].
-  2: wp_pures.
+  1, 2: wp_pures.
   2, 3: by iApply "Hhl".
-  wp_pures.
   wp_apply wp_hl_inv_term.
   wp_apply wp_texp.
   wp_list.
@@ -83,7 +78,6 @@ Proof.
   wp_apply wp_derive_senc_key.
   set k := SEncKey _.
   wp_pures.
-  do !rewrite subst_list_match /=.
   wp_lam.
   wp_pures.
   wp_apply wp_sdec'.
@@ -95,7 +89,6 @@ Proof.
   rewrite minted_TSeal.
   iDestruct "minenv" as "[mink minclear]".
   rewrite minted_tag.
-  wp_pures.
   wp_list_of_term clear.
   2: wp_pures; by iApply "Hhl".
   wp_list_match => [p_u P_u P_s -> | _].
@@ -125,7 +118,6 @@ Proof.
   by rewrite minted_THash minted_tag.
   by intro contra.
   2: wp_pures; by iApply "Hhl".
-  wp_pures.
   wp_list.
   wp_pures.
   by iApply "Hhl".

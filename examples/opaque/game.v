@@ -53,12 +53,9 @@ iIntros "%c #Hchannel".
 wp_pures.
 wp_apply (wp_mk_nonce (fun _ => True)%I (fun _ => False)%I) => //.
 iIntros "%uid %Hnonceuid #Hminuid #Hpubuid #Hdhuid Htermtokenuid".
-iDestruct "Hpubuid" as "[_ Hpubuid']".
-iAssert (public uid) as "Hpubuid".
-iApply "Hpubuid'".
-iNext.
-by iModIntro.
-iClear "Hpubuid'".
+iAssert (public uid) as "Hpubuid'".
+by iApply "Hpubuid".
+iClear "Hpubuid".
 wp_pures.
 wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => False)%I) => //.
 iIntros "%pw %Hnoncepw #Hminpw #Hprivpw #Hdhpw Htermtokenpw".
@@ -79,8 +76,7 @@ wp_pures.
 wp_apply (wp_fork with "[Halist Hopaquefile]").
 iApply (wp_server_session db c (<[uid:=file]> ∅)  with "[Halist Hopaquefile]") => //.
 do !iSplit => //.
-iApply big_sepM_insert.
-by apply map_empty.
+iApply big_sepM_insert => //.
 do !iSplit => //.
 wp_pures.
 wp_bind (Client.session uid c pw).
@@ -98,11 +94,9 @@ rewrite H.
 iDestruct "Hprivpw" as "[Hprivpw _]".
 iDestruct ("Hprivpw" with "Hpubattack") as "Hcontra".
 all: wp_pures.
-iDestruct "Hcontra" as "%Hcontra".
-destruct Hcontra.
+by iDestruct "Hcontra" as "%Hcontra".
 iModIntro.
 iSplit => //.
-iNext.
 by iApply "Hhl".
 Qed.
 
