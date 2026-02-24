@@ -3,6 +3,7 @@ From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap list excl.
 From iris.algebra Require Import functions.
 From iris.base_logic.lib Require Import invariants.
+From iris.bi Require Import fixpoint_mono.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib.
 From cryptis.lib Require Import gmeta nown saved_prop.
@@ -733,6 +734,60 @@ rewrite -eq; iApply H => //.
 rewrite -count_exp_gt0 count_exp_TInv count_exp_TExp_ne //; last first.
   move=> e; rewrite e TInvK in t2_t3V; congruence.
 rewrite count_exp_TExp_TInv; rewrite -count_exp_gt0 in t3_t1; lia.
+Qed.
+
+Definition saturate_pre
+  (s : (term → iProp) → term → iProp) :
+  (term → iProp) → term → iProp :=
+  (λ ᵠ t, ᵠ t ∨ ∃ t', public t' ∧ s ᵠ (TExp t t'))%I.
+
+Local Lemma saturate_pre_mono
+    (s1 s2 : (term → iProp) → term → iProp) :
+  ⊢ (□ ∀ ᵠ t, s1 ᵠ t -∗ s2 ᵠ t) →
+    ∀ ᵠ t, saturate_pre s1 ᵠ t -∗ saturate_pre s2 ᵠ t.
+Proof.
+iIntros "#H" (ᵠ t) "Hs"; rewrite /saturate_pre.
+iDestruct "Hs" as "[Hs | Hs]"; first by iLeft.
+iDestruct "Hs" as (t') "(#p & Hs)".
+by iRight; iExists t'; iSplit; last iApply "H".
+Qed.
+
+Local Definition saturate_pre' :
+  ((prodO (term -d> iPropO) termO) → iPropO) →
+  (prodO (term -d> iPropO) termO) → iPropO :=
+  uncurry ∘ saturate_pre ∘ curry.
+
+Local Instance saturate_pre_mono' : BiMonoPred (saturate_pre').
+Proof.
+constructor.
+- iIntros (s1 s2 ??) "#H". iIntros ([ᵠ t]); iRevert (ᵠ t).
+  iApply saturate_pre_mono. iIntros "!>" (ᵠ t). iApply ("H" $! (ᵠ, t)).
+- move => ᵠ Hs n [ᵠ1 t1] [ᵠ2 t2] [? eq]; simplify_eq /=.
+  rewrite /curry /saturate_pre. by do 5 (try f_equiv); rewrite eq.
+Qed.
+
+Local Definition saturate_def : (term → iProp) → term → iProp :=
+  λ ᵠ t, bi_least_fixpoint saturate_pre' (ᵠ,t).
+Local Definition saturate_aux : seal saturate_def. Proof. by eexists. Qed.
+Definition saturate := saturate_aux.(unseal).
+Local Lemma saturate_unseal : saturate = saturate_def.
+Proof. by rewrite -saturate_aux.(seal_eq). Qed.
+
+Lemma saturate_unfold ᵠ t :
+  saturate ᵠ t ⊣⊢ (ᵠ t ∨ ∃ t', public t' ∧ saturate ᵠ (TExp t t'))%I.
+Proof. by rewrite saturate_unseal /saturate_def least_fixpoint_unfold. Qed.
+
+Lemma saturate_ind Ψ :
+  (∀ n, Proper (pointwise_relation _ (dist n) ==> dist n ==> dist n) Ψ) →
+  □ (∀ Φ t, saturate_pre (λ ᵠ t, Ψ ᵠ t ∧ saturate ᵠ t) Φ t -∗ Ψ Φ t) -∗
+  ∀ ᵠ t, saturate ᵠ t -∗ Ψ ᵠ t.
+Proof.
+iIntros (HΨ); iIntros "#IH" (ᵠ t) "H"; rewrite saturate_unseal.
+set Ψ' := uncurry Ψ : ((prodO (term -d> iPropO) termO) → iPropO).
+assert (NonExpansive Ψ').
+  move => n [ᵠ1 t1] [ᵠ2 t2] [? eq]; simplify_eq /=. exact: HΨ.
+iApply (least_fixpoint_ind _ Ψ' with "[] H").
+iIntros "!>" ([??]). by iApply "IH".
 Qed.
 
 Lemma public_to_list t ts :
