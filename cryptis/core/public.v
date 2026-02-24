@@ -790,6 +790,38 @@ iApply (least_fixpoint_ind _ Ψ' with "[] H").
 iIntros "!>" ([??]). by iApply "IH".
 Qed.
 
+Lemma public_TExp' t1 t2 :
+  TInv t2 ∉ exps t1 →
+  public t1 -∗
+  minted t2 -∗
+  dh_pred t2 (TExp t1 t2) -∗
+  □ (∀ t, saturate (dh_pred t2) t -∗ dh_pred t2 t) -∗
+  public (TExp t1 t2).
+Proof.
+elim /term_lt_ind: t1 => t1 IH ?. iIntros "#p #m #dh #dhs".
+
+rewrite -{3}(base_expsK t1) TExp_TExpN public_TExpN //; last first.
+  by apply invs_canceled_cons; split; last exact: invs_canceled_exps.
+rewrite -(TExp_TExpN (base _)) base_expsK.
+
+iRight; do !iSplit; simpl.
+- by rewrite public_minted; iApply all_minted_TExp; iSplit.
+- by iExists t2; rewrite elem_of_cons; eauto.
+- by rewrite TExpNK; eauto.
+- rewrite big_sepL_forall. iIntros (k t' t'_in) "!> #pt'".
+  case: (decide (t2 = t')) => [-> | ?]; first by rewrite TExpNK.
+  case: (decide (t2 = TInv t')) => [-> | ?].
+    by do !iApply public_TExp; rewrite ?public_TInv.
+  rewrite TExpNC. iApply IH => //.
+  + apply tsize_TExp_TInv; exact: elem_of_list_lookup_2.
+  + rewrite -count_exp_gt0 count_exp_TInv count_exp_TExp_ne ?TInvK //.
+    by rewrite -count_exp_TInv count_exp_gt0.
+  + by iApply public_TExp; last rewrite public_TInv.
+  + iApply "dhs". rewrite saturate_unfold.
+    iRight; iExists t'; iSplit => //.
+    by rewrite TExpNC TExpK' saturate_unfold; iLeft.
+Qed.
+
 Lemma public_to_list t ts :
   Spec.to_list t = Some ts →
   public t -∗ [∗ list] t' ∈ ts, public t'.
