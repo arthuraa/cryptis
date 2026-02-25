@@ -550,8 +550,9 @@ wlog: t/ ¬ is_inv t.
 move => /[dup] ? /negb_True; rewrite -is_inv_TInv => invt.
 apply: anti_symm; rewrite [public (TInv t)]public_eq minted_TInv.
 - have ?: ¬ is_exp (TInv t) by move => /is_trueP /(ssrbool.contraLR (is_exp_TInv t)) /is_trueP.
-  iIntros "(_ & [[% [%dec ?]] | [(% & _) | ?]])" => //; last by case: (TInv t) invt.
-  case: dec invt; try by move => // > _ ->.
+  iIntros "(_ & [dec | [(% & _) | ?]])" => //; last by case: (TInv t) invt.
+  iDestruct "dec" as (T) "[%dec ?]".
+  case: dec invt; try by move =>> // _ ->.
   move => t' -> _ _ /TInv_inj -> _. by iApply big_sepS_singleton.
 - iIntros; iSplit; first by iApply public_minted.
   iLeft; iExists {[t]}; iSplit.
@@ -628,19 +629,18 @@ Lemma public_TExpN' t :
 Proof.
 move => expt; apply: anti_symm; rewrite public_eq.
 - iIntros "(? & [[% [%dec ?]] | [(_ & ?) | ?]])"; [| by iRight; iSplit | by case: t expt].
-  case: dec expt; try by move => > _ ->.
+  case: dec expt; try by move =>> _ ->.
     by move => t' _ /is_trueP ? _ -> /is_trueP /(ssrbool.contraLR (is_exp_TInv t')).
-  move => t1 t2 -> ?? -> ?. rewrite big_sepS_union_pers !big_sepS_singleton.
-  have ?: invs_canceled (t2 :: exps t1)
-    by rewrite invs_canceled_cons; split; last apply invs_canceled_exps.
+  move => t1 t2 -> ? _ -> _. rewrite big_sepS_union_pers !big_sepS_singleton.
   iLeft; iExists t2; rewrite TExpNK; do !iSplit => //.
-  rewrite exps_TExpN -Permutation_cons_append cancel_exps_canceled //.
-  by iPureIntro; apply elem_of_list_here.
+  rewrite exps_TExpN -Permutation_cons_append cancel_exps_canceled.
+  + by rewrite elem_of_cons; eauto.
+  + by rewrite invs_canceled_cons; split; last apply invs_canceled_exps.
 - iIntros "#[[% [% (? & ?)]] | (? & ?)]"; iSplit => //; last by iRight; iLeft; iSplit.
   + rewrite !public_minted -{2}(TExpK' t t'). iApply all_minted_TExpN; iSplit => //.
     by rewrite big_sepL_singleton.
   + iLeft; iExists {[ TExp t (TInv t'); t' ]}; iSplit.
-    * iPureIntro; econstructor 7 => //; last by rewrite TExpK'.
+    * iPureIntro; econstructor => //; last by rewrite TExpK'.
       rewrite -count_exp_gt0 count_exp_TExp_eq count_exp_TInv.
       rewrite -count_exp_gt0 in H. lia.
     * by rewrite big_sepS_union_pers !big_sepS_singleton; iSplit.
@@ -714,25 +714,20 @@ elim /term_lt_ind: t1 in_exps => t1 IH in_exps.
 have [exp_t1|contra] := decide (is_exp t1); last first.
   by rewrite exps_expN // elem_of_nil in in_exps.
 iIntros "#p1 #p2"; rewrite [public t1]public_TExpN' //.
-iDestruct "p1" as "[(%t3 & %t3_t1 & p1' & p3) | [m1 p1]]"; last first.
-  rewrite big_sepL_elem_of // TInvK; iDestruct "p1" as "[_ p1]".
-  by iApply "p1"; rewrite public_TInv.
-have t2_t3: t2 ≠ t3.
-  have ?: TInv t3 ∉ exps t1; last congruence.
-  apply invs_canceledP => //; exact: invs_canceled_exps.
-have [-> //|t2_t3V] := decide (t2 = TInv t3).
+iDestruct "p1" as "[(%t3 & %t3_t1 & p1' & p3) | [m1 [_ p1]]]"; last first.
+  rewrite big_sepL_elem_of // TInvK public_TInv. by iApply "p1".
+have t2_t3: t2 ≠ t3 by apply elem_of_TInv_exps' in in_exps; congruence.
+case: (decide (t2 = TInv t3)) => [-> | t2_t3V] //.
 set t1' := TExp t1 (TInv t3).
 have eq: TExp (TExp t1' t2) t3 = TExp t1 t2 by rewrite TExpNC TExpK'.
 have in_exps': TInv t2 ∈ exps t1'.
   rewrite -count_exp_gt0 count_exp_TInv /t1' count_exp_TExp_ne ?TInvK //.
   by rewrite -count_exp_TInv count_exp_gt0.
-have t1'_t1: tsize t1' < tsize t1.
-  by have [??] := tsize_TExp_TInv _ _ t3_t1.
 iAssert (public (TExp t1' t2)) as "p1''".
-  iApply (IH t1' t1'_t1) => //.
+  by iApply IH; first apply tsize_TExp_TInv.
 rewrite -eq; iApply H => //.
 rewrite -count_exp_gt0 count_exp_TInv count_exp_TExp_ne //; last first.
-  move=> e; rewrite e TInvK in t2_t3V; congruence.
+  by move => e; rewrite e TInvK in t2_t3V.
 rewrite count_exp_TExp_TInv; rewrite -count_exp_gt0 in t3_t1; lia.
 Qed.
 
