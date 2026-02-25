@@ -653,7 +653,7 @@ Lemma public_TExp_iff t1 t2 :
   minted t1 ∧ minted t2 ∧ dh_pred t2 (TExp t1 t2) ∧ □ (public t2 → public t1).
 Proof.
 move=> ?; rewrite public_TExpN //=; last exact: invs_canceled1.
-rewrite (TExpK t1 t2).
+rewrite TExpNK.
 apply: (anti_symm _); iIntros "#pub".
 - iDestruct "pub" as "[pub | pub]" => //.
     iDestruct "pub" as (??) "(%e & p_t1 & p_t2)".

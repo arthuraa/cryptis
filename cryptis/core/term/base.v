@@ -624,9 +624,6 @@ Qed.
 Lemma TExpNK' : rev_right_loop (map TInv) TExpN.
 Proof. move => ts t. by rewrite -[RHS](TExpNK ts) !TExpNA TExpN_catC. Qed.
 
-Lemma TExpK t1 t2 : TExp (TExp t1 t2) (TInv t2) = t1.
-Proof. exact: TExpNK. Qed.
-
 Lemma TExpK' t1 t2 : TExp (TExp t1 (TInv t2)) t2 = t1.
 Proof. by rewrite (_ : [:: TInv t2] = map TInv [:: t2]) // TExpNK'. Qed.
 
