@@ -473,8 +473,8 @@ Proof. move => ?. by rewrite is_nonce_TExpN exps_expN. Qed.
 
 Lemma TExpNA t ts1 ts2 : TExpN (TExpN t ts1) ts2 = TExpN t (ts1 ++ ts2).
 Proof.
-apply: base_exps_inj; rewrite ?base_TExpN // !exps_TExpN.
-rewrite perm_sort perm_sym perm_sort perm_sym.
+apply: base_exps_inj; first by rewrite !base_TExpN.
+rewrite !exps_TExpN perm_sort perm_sym perm_sort perm_sym.
 apply perm_trans with (cancel_exps (cancel_exps (exps t ++ ts1) ++ ts2)).
 - apply perm_cancel_exps. by rewrite perm_cat2r perm_sort.
 - rewrite catA. apply cancel_exps_cat.
@@ -546,7 +546,7 @@ by rewrite /cancel_exps PreTerm.cancel_exps_canceled // (mapK unfold_termK).
 Qed.
 
 Lemma cancel_exps_exps t : cancel_exps (exps t) = exps t.
-Proof. apply cancel_exps_canceled. exact: invs_canceled_exps. Qed.
+Proof. exact /cancel_exps_canceled /invs_canceled_exps. Qed.
 
 Lemma invs_canceled_count t ts :
   invs_canceled ts ->
@@ -615,10 +615,9 @@ Definition tsizeE := (tsize_TInv, tsize_TExpN, tsize_eq).
 Lemma TExpNK : right_loop (map TInv) TExpN.
 Proof.
 move => ts t.
-rewrite TExpNA TExpN_catC.
-apply base_exps_inj; first by rewrite base_TExpN.
-rewrite exps_TExpN perm_sort -{2}[ts](mapK TInvK).
-by rewrite (permPl (cancel_exps_cat_invs _ _)) cancel_exps_exps.
+rewrite TExpNA.
+apply base_exps_inj; first exact: base_TExpN.
+by rewrite exps_TExpN perm_sort (permPl (cancel_exps_cat_invs _ _)) cancel_exps_exps.
 Qed.
 
 Lemma TExpNK' : rev_right_loop (map TInv) TExpN.
