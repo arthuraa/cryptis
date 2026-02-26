@@ -785,12 +785,42 @@ iApply (least_fixpoint_ind _ Ψ' with "[] H").
 iIntros "!>" ([??]). by iApply "IH".
 Qed.
 
+Global Instance saturate_ne n :
+  Proper (pointwise_relation _ (dist n) ==> dist n ==> dist n) saturate.
+Proof.
+  move=> Φ1 Φ2 HΦ t _ <-. rewrite !saturate_unseal.
+  by apply (least_fixpoint_ne _), pair_ne.
+Qed.
+Global Instance saturate_proper :
+  Proper (pointwise_relation _ (≡) ==> (≡) ==> (≡)) saturate.
+Proof.
+  move=> Φ Φ' HΦ t _ /leibniz_equiv_iff <-.
+  apply equiv_dist=> n.
+  apply saturate_ne => // t'.
+  apply equiv_dist; apply: HΦ.
+Qed.
+
+Lemma saturate_wand φ ψ :
+  (∀ t, φ t -∗ saturate ψ t) -∗
+  ∀ t, saturate φ t -∗ saturate ψ t.
+Proof.
+iIntros "wand %t sat"; iRevert (φ t) "sat wand".
+iApply saturate_ind; try solve_proper.
+iIntros "!> %φ %t [φ_t|(%t' & #p' & IH & _)] wand".
+- by iApply "wand".
+- rewrite [saturate ψ t]saturate_unfold; iRight.
+  by iExists t'; iSplit => //; iApply "IH".
+Qed.
+
+Definition dh_pred' t φ : iProp :=
+  □ (∀ t', dh_pred t t' ↔ ▷ □ saturate φ t').
+
 Lemma public_TExp' t1 t2 :
   TInv t2 ∉ exps t1 →
   public t1 -∗
   minted t2 -∗
   dh_pred t2 (TExp t1 t2) -∗
-  □ (∀ t, saturate (dh_pred t2) t -∗ dh_pred t2 t) -∗
+  □ (∀ t, □ saturate (dh_pred t2) t -∗ dh_pred t2 t) -∗
   public (TExp t1 t2).
 Proof.
 elim /term_lt_ind: t1 => t1 IH ?. iIntros "#p #m #dh #dhs".
@@ -813,9 +843,27 @@ iRight; do !iSplit; simpl.
     by rewrite -count_exp_TInv count_exp_gt0.
   + by iApply public_TExp; last rewrite public_TInv.
   + iApply "dhs". rewrite saturate_unfold.
-    iRight; iExists t'; iSplit => //.
+    iRight; iExists t'; iIntros "!>"; iSplit => //.
     by rewrite TExpNC TExpK' saturate_unfold; iLeft.
 Qed.
+
+(*
+Lemma public_TExp'_alt t1 t2 φ :
+  TInv t2 ∉ exps t1 →
+  public t1 -∗
+  minted t2 -∗
+  dh_pred' t2 φ -∗
+  □ saturate φ (TExp t1 t2) -∗ (* Or just ▷ □ φ (TExp t1 t2) *)
+  public (TExp t1 t2).
+Proof.
+iIntros "%t1_t2 #p1 #m2 #dh #φ_t1".
+iApply (public_TExp' with "p1 m2") => //.
+- by iApply "dh".
+- iIntros "!> %t' {φ_t1} #sat_t'"; iApply "dh".
+  iDestruct "sat_t'" as "#sat_t'".
+
+  iApply (saturate_wand with "[] sat_t'").
+*)
 
 Lemma public_to_list t ts :
   Spec.to_list t = Some ts →
