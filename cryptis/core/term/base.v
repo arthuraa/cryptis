@@ -649,28 +649,6 @@ split; apply /ssrnat.ltP; last lia.
 have /ssrnat.ltP := tsize_gt0 t2. case: (exps t1 != [::]) => /=; lia.
 Qed.
 
-Lemma tsize_TExp_TInv t1 t2 :
-  t2 \in exps t1 ->
-  tsize t2 < tsize t1 /\ tsize (TExp t1 (TInv t2)) < tsize t1.
-Proof.
-move => ?.
-
-rewrite -{1 3}(TExpK' t1 t2).
-
-apply and_comm; apply tsize_lt_TExp.
-
-rewrite exps_TExpN mem_sort.
-
-have -> : cancel_exps (exps t1 ++ [:: TInv t2]) =i cancel_exps (rem t2 (exps t1)).
-{ apply perm_mem.
-  rewrite -(permPr (cancel_exps_cat_invs _ [:: t2])); apply perm_cancel_exps.
-  by rewrite catA perm_cat2r cats1 perm_sym perm_rcons perm_sym perm_to_rem. }
-
-apply: contra; first apply mem_cancel_exps.
-apply: contra; first apply mem_rem.
-by apply: invs_canceledP; first apply invs_canceled_exps.
-Qed.
-
 Lemma TExpN_injl : left_injective TExpN.
 Proof. move => ?. exact: can_inj (TExpNK _). Qed.
 
@@ -747,6 +725,18 @@ case: (boolP (_ \in _)) => t1_t2.
   rewrite -[t1]TInvK; apply: invs_canceledP t1_t2.
   by exact: invs_canceled_exps.
 - by constructor => //; rewrite -e.
+Qed.
+
+Lemma tsize_TExp_TInv t1 t2 :
+  t2 \in exps t1 ->
+  tsize t2 < tsize t1 /\ tsize (TExp t1 (TInv t2)) < tsize t1.
+Proof.
+move => H.
+rewrite -{1 3}(TExpK' t1 t2).
+apply and_comm; apply tsize_lt_TExp.
+rewrite -count_exp_nat_gt0 count_exp_nat_TExp -leqNgt.
+rewrite TInvK H count_exp_nat_eq0; last exact: in_TInv_exps.
+by do !case: ifP.
 Qed.
 
 Lemma term_rect (T : term -> Type)
