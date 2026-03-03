@@ -106,11 +106,11 @@ Definition sess_params p := {|
   (* intros p1 p2 hp. *)
   (* solve_proper. *)
 
-Lemma sess_send p0 skI skR si rl t p ts_send ts_recv :
+Lemma sess_send skI skR si rl t p ts_send ts_recv :
   sess_own skI skR si rl (<!> MSG t; p) -∗
-  ▷ GenConn.chan_inv_for (sess_params p0) skI skR si rl ts_send ts_recv
+  ▷ GenConn.chan_inv_for sess_ctx skI skR si rl ts_send ts_recv
   ={⊤ ∖ ↑GenConn.connN, ∅}=∗ |={∅}▷=>^(S (length ts_recv)) |={∅, ⊤ ∖ ↑GenConn.connN}=>
-    GenConn.chan_inv_for (sess_params p0) skI skR si rl (ts_send ++ [t]) ts_recv ∗
+    GenConn.chan_inv_for sess_ctx skI skR si rl (ts_send ++ [t]) ts_recv ∗
     sess_own skI skR si rl p.
 Proof.
 iIntros "(%γs & #Hγs & own) (%γs' & >#Hγs' & ctx)".
@@ -133,13 +133,13 @@ iClear "Hγs'". case: rl => /=.
   iModIntro. rewrite iProto_ctx_sym. by iFrame; eauto.
 Qed.
 
-Lemma sess_recv {TT : tele} p0 skI skR si rl t'
+Lemma sess_recv {TT : tele} skI skR si rl t'
   (t : TT → term) (P : TT → iProp) (p : TT → iProto Σ term) ts_send ts_recv :
   £ 1 ∗ £ 1 -∗
   sess_own skI skR si rl (<?.. x> MSG t x {{ P x }}; p x) -∗
-  ▷ GenConn.chan_inv_for (sess_params p0) skI skR si rl ts_send (t' :: ts_recv)
+  ▷ GenConn.chan_inv_for sess_ctx skI skR si rl ts_send (t' :: ts_recv)
   ={⊤ ∖ ↑GenConn.connN}=∗
-    ▷ (GenConn.chan_inv_for (sess_params p0) skI skR si rl ts_send ts_recv ∗
+    ▷ (GenConn.chan_inv_for sess_ctx skI skR si rl ts_send ts_recv ∗
        ∃.. x, ⌜t' = t x⌝ ∗ sess_own skI skR si rl (p x) ∗ P x).
 Proof.
 iIntros "[c1 c2] (%γs & #Hγs & own) (%γs' & >#Hγs' & ctx)".
@@ -166,7 +166,7 @@ Qed.
 
 (* initial proto contains a list of proto, we need the history of all past messages to know which proto is the current one *)
 Definition connected skI skR rl cs p : iProp :=
-  GenConn.connected (sess_params p) skI skR rl cs ∗
+  GenConn.connected sess_ctx skI skR rl cs ∗
   (public (si_key cs) ∨ sess_own skI skR cs rl p).
 
 Lemma connected_le skI skR rl cs p1 p2 :
@@ -192,12 +192,9 @@ Qed.
 (* (* Qed. *) *)
 
 
-(* FIXME: This is a hack. It relies on the definition of connected actually not
-   depending on which initial protocol p is passed as a parameter of
-   sess_params. *)
 Global Instance connected_proper skI skR rl cs :
   Proper ((≡) ==> (≡)) (connected skI skR rl cs).
-Proof. by move=> p1 p2 e; rewrite /connected {2}e. Qed.
+Proof. by move=> p1 p2 e; rewrite /connected e. Qed.
 
 Definition ctx N p := GenConn.ctx N (sess_params p).
 

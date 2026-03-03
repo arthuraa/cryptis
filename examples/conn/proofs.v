@@ -72,7 +72,7 @@ Lemma wp_confirm P ps c skI skR ga N :
 Proof.
 iIntros "#? !> %Φ (#p_ga & #p_pkA & #sign_skB & P) post".
 wp_apply (GenConn.wp_confirm P with "[//] [$P]") => //.
-do !iSplit => //=; first by eauto.
+do !iSplit; rewrite //= /chan_inv /=; first by eauto.
 iIntros "%cs (? & ? & ? & ? & ?)". iApply "post"; iFrame.
 Qed.
 
