@@ -3,7 +3,7 @@ From iris.heap_lang Require Import lang notation proofmode.
 From iris.heap_lang.lib Require Import nondet_bool.
 From iris.algebra Require Import gmap gset auth reservation_map.
 From iris.base_logic Require Import gen_heap invariants.
-From mathcomp Require ssrnat ssrbool eqtype order path seq.
+From mathcomp Require ssrbool order path.
 From deriving Require deriving.
 From cryptis Require Export mathcomp_compat.
 
@@ -17,41 +17,6 @@ apply/(ssrbool.sameP).
 - exact: bool_decide_reflect.
 - exact: eqtype.eqP.
 Qed.
-
-Section Lists.
-
-Context `{!EqDecision T}.
-
-Implicit Types (x : T) (xs ys : list T).
-
-Definition count_occ x xs : nat :=
-  count_occ (λ x y, decide (x = y)) xs x.
-
-Lemma Permutation_count_occ xs ys :
-  xs ≡ₚ ys ↔ (∀ x, count_occ x xs = count_occ x ys).
-Proof. exact: Permutation_count_occ. Qed.
-
-End Lists.
-
-Arguments count_occ {T _}.
-
-Section CountOccCountMem.
-
-#[warnings="-ambiguous-paths"]
-Import ssrbool mathcomp.boot.eqtype mathcomp.boot.seq.
-
-Context {T : eqType} `{!EqDecision T}.
-
-Implicit Types (x : T) (xs ys : list T).
-
-Lemma count_occ_count_mem x xs : count_occ x xs = count_mem x xs.
-Proof.
-elim: xs => //= y xs ->.
-rewrite -eq_op_bool_decide bool_decide_decide.
-by case: decide.
-Qed.
-
-End CountOccCountMem.
 
 Section Escrow.
 
