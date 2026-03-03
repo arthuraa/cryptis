@@ -1,5 +1,4 @@
 From cryptis Require Export mathcomp_compat.
-From cryptis Require Import mathcomp_utils.
 From HB Require Import structures.
 From mathcomp Require Import all_order all_boot.
 From deriving Require Import deriving.
