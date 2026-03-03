@@ -731,71 +731,53 @@ rewrite -count_exp_gt0 count_exp_TInv count_exp_TExp_ne //; last first.
 rewrite count_exp_TExp_TInv; rewrite -count_exp_gt0 in t3_t1; lia.
 Qed.
 
-Definition saturate_pre
-  (s : (term → iProp) → term → iProp) :
-  (term → iProp) → term → iProp :=
-  (λ ᵠ t, ᵠ t ∨ ∃ t', public t' ∧ s ᵠ (TExp t t'))%I.
+Definition saturate_pre (φ : term → iProp) (s : term → iProp) :=
+  (λ t, φ t ∨ ∃ t', ▷ public t' ∧ s (TExp t t'))%I.
 
-Local Lemma saturate_pre_mono
-    (s1 s2 : (term → iProp) → term → iProp) :
-  ⊢ (□ ∀ ᵠ t, s1 ᵠ t -∗ s2 ᵠ t) →
-    ∀ ᵠ t, saturate_pre s1 ᵠ t -∗ saturate_pre s2 ᵠ t.
+Local Lemma saturate_pre_mono (φ : term → iProp) (s1 s2 : term → iProp) :
+  ⊢ (□ ∀ t, s1 t -∗ s2 t) →
+    ∀ t, saturate_pre φ s1 t -∗ saturate_pre φ s2 t.
 Proof.
-iIntros "#H" (ᵠ t) "Hs"; rewrite /saturate_pre.
+iIntros "#H" (t) "Hs"; rewrite /saturate_pre.
 iDestruct "Hs" as "[Hs | Hs]"; first by iLeft.
 iDestruct "Hs" as (t') "(#p & Hs)".
 by iRight; iExists t'; iSplit; last iApply "H".
 Qed.
 
-Local Definition saturate_pre' :
-  ((prodO (term -d> iPropO) termO) → iPropO) →
-  (prodO (term -d> iPropO) termO) → iPropO :=
-  uncurry ∘ saturate_pre ∘ curry.
-
-Local Instance saturate_pre_mono' : BiMonoPred (saturate_pre').
+Local Instance saturate_pre_mono' φ : BiMonoPred (saturate_pre φ).
 Proof.
 constructor.
-- iIntros (s1 s2 ??) "#H". iIntros ([ᵠ t]); iRevert (ᵠ t).
-  iApply saturate_pre_mono. iIntros "!>" (ᵠ t). iApply ("H" $! (ᵠ, t)).
-- move => ᵠ Hs n [ᵠ1 t1] [ᵠ2 t2] [? eq]; simplify_eq /=.
-  rewrite /curry /saturate_pre. by do 5 (try f_equiv); rewrite eq.
+- move => s1 s2 _ _; iIntros "#H". by iApply saturate_pre_mono.
+- move => s _ n t1 t2 eq. rewrite /saturate_pre. by f_equiv; rewrite eq.
 Qed.
 
 Local Definition saturate_def : (term → iProp) → term → iProp :=
-  λ ᵠ t, bi_least_fixpoint saturate_pre' (ᵠ,t).
+  λ φ t, bi_least_fixpoint (saturate_pre φ) t.
 Local Definition saturate_aux : seal saturate_def. Proof. by eexists. Qed.
 Definition saturate := saturate_aux.(unseal).
 Local Lemma saturate_unseal : saturate = saturate_def.
 Proof. by rewrite -saturate_aux.(seal_eq). Qed.
 
-Lemma saturate_unfold ᵠ t :
-  saturate ᵠ t ⊣⊢ (ᵠ t ∨ ∃ t', public t' ∧ saturate ᵠ (TExp t t'))%I.
+Lemma saturate_unfold φ t :
+  saturate φ t ⊣⊢ (φ t ∨ ∃ t', ▷ public t' ∧ saturate φ (TExp t t'))%I.
 Proof. by rewrite saturate_unseal /saturate_def least_fixpoint_unfold. Qed.
 
-Lemma saturate_ind Ψ :
-  (∀ n, Proper (pointwise_relation _ (dist n) ==> dist n ==> dist n) Ψ) →
-  □ (∀ Φ t, saturate_pre (λ ᵠ t, Ψ ᵠ t ∧ saturate ᵠ t) Φ t -∗ Ψ Φ t) -∗
-  ∀ ᵠ t, saturate ᵠ t -∗ Ψ ᵠ t.
-Proof.
-iIntros (HΨ); iIntros "#IH" (ᵠ t) "H"; rewrite saturate_unseal.
-set Ψ' := uncurry Ψ : ((prodO (term -d> iPropO) termO) → iPropO).
-assert (NonExpansive Ψ').
-  move => n [ᵠ1 t1] [ᵠ2 t2] [? eq]; simplify_eq /=. exact: HΨ.
-iApply (least_fixpoint_ind _ Ψ' with "[] H").
-iIntros "!>" ([??]). by iApply "IH".
-Qed.
+Lemma saturate_ind Ψ φ :
+  □ (∀ t, saturate_pre φ (λ t, Ψ t ∧ saturate φ t) t -∗ Ψ t) -∗
+  ∀ t, saturate φ t -∗ Ψ t.
+Proof. rewrite saturate_unseal. by iApply least_fixpoint_ind. Qed.
 
 Global Instance saturate_ne n :
   Proper (pointwise_relation _ (dist n) ==> dist n ==> dist n) saturate.
 Proof.
-  move=> Φ1 Φ2 HΦ t _ <-. rewrite !saturate_unseal.
-  by apply (least_fixpoint_ne _), pair_ne.
+  move => Φ1 Φ2 HΦ t _ <-. rewrite !saturate_unseal.
+  apply least_fixpoint_ne; solve_proper.
 Qed.
 Global Instance saturate_proper :
   Proper (pointwise_relation _ (≡) ==> (≡) ==> (≡)) saturate.
 Proof.
-  move=> Φ Φ' HΦ t _ /leibniz_equiv_iff <-.
-  apply equiv_dist=> n.
+  move => Φ Φ' HΦ t _ /leibniz_equiv_iff <-.
+  apply equiv_dist => n.
   apply saturate_ne => // t'.
   apply equiv_dist; apply: HΦ.
 Qed.
@@ -804,12 +786,12 @@ Lemma saturate_wand φ ψ :
   (∀ t, φ t -∗ saturate ψ t) -∗
   ∀ t, saturate φ t -∗ saturate ψ t.
 Proof.
-iIntros "wand %t sat"; iRevert (φ t) "sat wand".
-iApply saturate_ind; try solve_proper.
-iIntros "!> %φ %t [φ_t|(%t' & #p' & IH & _)] wand".
+iIntros "wand" (t) "sat"; iRevert (t) "sat wand".
+iApply saturate_ind.
+iIntros "!> %t [φ_t|(%t' & #p' & IH & _)] wand".
 - by iApply "wand".
-- rewrite [saturate ψ t]saturate_unfold; iRight.
-  by iExists t'; iSplit => //; iApply "IH".
+- rewrite [saturate ψ t]saturate_unfold.
+  by iRight; iExists t'; iSplit; last iApply "IH".
 Qed.
 
 Definition dh_pred' t φ : iProp :=
