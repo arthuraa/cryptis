@@ -93,8 +93,8 @@ Lemma minted_TExp t1 t2 :
   ~ is_exp t1 ->
   minted (TExp t1 t2) ⊣⊢ minted t1 ∧ minted t2.
 Proof.
-move => /negb_True ?. have ? := invs_canceled1 t2.
-rewrite unlock nonces_of_term_TExpN // cancel_exps_canceled //.
+move => /negb_True ?.
+rewrite unlock nonces_of_term_TExpN // cancel_exps1.
 by rewrite big_sepS_union_pers /= union_empty_r_L.
 Qed.
 

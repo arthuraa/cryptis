@@ -548,6 +548,9 @@ Qed.
 Lemma cancel_exps_exps t : cancel_exps (exps t) = exps t.
 Proof. exact /cancel_exps_canceled /invs_canceled_exps. Qed.
 
+Lemma cancel_exps1 t : cancel_exps [:: t] = [:: t].
+Proof. exact /cancel_exps_canceled /invs_canceled1. Qed.
+
 Lemma invs_canceled_count t ts :
   invs_canceled ts ->
   count_mem t ts - count_mem (TInv t) ts = count_mem t ts.
@@ -685,8 +688,8 @@ Qed.
 
 Lemma TExp_injr t t1 t2 : TExp t t1 = TExp t t2 -> t1 = t2.
 Proof.
-move/TExpN_injr/perm_mem/(_ t2).
-by rewrite /cancel_exps /= !unfold_termK !inE eqxx => /eqP.
+move /TExpN_injr /perm_mem /(_ t2).
+by rewrite !cancel_exps1 !inE eqxx => /eqP.
 Qed.
 
 Definition count_exp_nat t1 t2 := count_mem t1 (exps t2).
