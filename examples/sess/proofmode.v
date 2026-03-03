@@ -210,7 +210,7 @@ End classes.
 Print repr.
 (** * Symbolic execution tactics *)
 (* TODO: Maybe strip laters from other hypotheses in the future? *)
-Lemma tac_wp_recv `{!chanG Σ, !heapGS Σ, !cryptisGS Σ, Conn: !GenConn.connGS Σ, !sessG Σ} {TT : tele} Δ i j K skI skR rl cs N p m tv tP tP' tp Φ :
+Lemma tac_wp_recv `{!chanG Σ, !heapGS Σ, !cryptisGS Σ, Conn: !GenConn.connGS Σ, !sessG Σ} {TT : tele} Δ i j K skI skR rl cs p m tv tP tP' tp Φ :
   envs_lookup i Δ = Some (false, connected skI skR rl cs p)%I →
   ProtoNormalize false p [] (<?> m) →
   MsgTele m tv tP tp →
@@ -234,8 +234,12 @@ Proof.
     iApply iProto_le_texist_elim_l; iIntros (x).
     iApply iProto_le_trans; [|iApply (iProto_le_texist_intro_r _ x)]; simpl.
     iIntros "H". by iDestruct (HP with "H") as "$". }
-  rewrite -wp_bind. eapply bi.wand_apply;
-    [by eapply bi.wand_entails, (wp_recv skI skR rl cs N _ (tele_app tv) (tele_app tP') (tele_app tp))|f_equiv; first done].
+  rewrite -wp_bind.
+  Check wp_recv.
+  Check recv.
+  unfold recv, GenConn.cs_repr.
+  eapply bi.wand_apply;
+    [by eapply bi.wand_entails, (wp_recv skI skR rl cs (tele_app tv) (▷ tele_app tP') (tele_app tp))|f_equiv; first done].
   rewrite -bi.later_intro; apply bi.forall_intro=> x.
   specialize (HΦ x). destruct (envs_app _ _) as [Δ'|] eqn:HΔ'=> //.
   rewrite envs_app_sound //; simpl. by rewrite right_id HΦ.

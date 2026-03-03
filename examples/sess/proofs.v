@@ -48,16 +48,15 @@ iApply ("post" $! cs).
 by iFrame.
 Qed.
 
-Lemma wp_listen c N p :
+Lemma wp_listen c :
   channel c -∗
   cryptis_ctx -∗
-  ctx N p -∗
   {{{ True }}}
     impl.listen c
   {{{ ga skI, RET (ga, Spec.pkey skI)%V;
       public ga ∗ minted skI }}}.
 Proof.
-iIntros "#? #? #? % !> _ post".
+iIntros "#? #? % !> _ post".
 wp_lam. by iApply GenConn.wp_listen.
 Qed.
 
@@ -91,36 +90,36 @@ iIntros "%cs (conn & dis & proto & rel & token)".
 iApply "post". by iFrame.
 Qed.
 
-Lemma wp_send skI skR rl cs (t : term) N p0 p :
-  ctx N p0 ∗ public t -∗
+Lemma wp_send skI skR rl cs (t : term) p :
+  (* ctx N p0 ∗  *)public t -∗
   {{{ connected skI skR rl cs (<!> MSG t; p) }}}
     impl.send (repr cs) t
   {{{ RET #(); connected skI skR rl cs p }}}.
 Proof.
-iIntros "#(ctx & p_t) !>"; iIntros (Φ) "[c own] post". wp_lam; wp_pures.
+iIntros "#p_t !>"; iIntros (Φ) "[c own] post". wp_lam; wp_pures.
 wp_apply (GenConn.wp_send_fupdN (λ skI skR si, sess_own skI skR si rl p)
-           with "[//] [//] [$c own]").
+           with " [//] [$c own]").
 { iDestruct "own" as "[#fail|own]"; eauto.
   iRight. iIntros (ts_send ts_recv) "inv".
   iMod (sess_send with "own inv") as "upd". by iIntros "!>". }
 iIntros "[??]"; iApply "post". by iFrame.
 Qed.
 
-Lemma wp_recv {TT : tele} skI skR rl cs N p0
+Lemma wp_recv {TT : tele} skI skR rl cs
   (t : TT → term) (P : TT → iProp) (p : TT → iProto Σ term) :
-  ctx N p0 -∗
+  (* ctx N p0 -∗ *)
   {{{ connected skI skR rl cs (<?.. x> MSG t x {{ P x }}; p x) }}}
     impl.recv (repr cs)
   {{{ t', RET (repr t'); public t' ∗ (public (si_key cs) ∨
       ∃.. x, ⌜t' = t x⌝ ∗ connected skI skR rl cs (p x) ∗ P x) }}}.
 Proof.
-iIntros "#ctx !>"; iIntros (Φ) "[c own] post".
+iIntros ""; iIntros (Φ) "[c own] post".
 rewrite /impl.recv. wp_pure _ credit:"c1". wp_pure _ credit:"c2".
 wp_pures.
 wp_apply (GenConn.wp_recv (λ skI skR si (t' : term),
                            ∃.. x, ⌜t' = t x⌝ ∗
                                   sess_own skI skR si rl (p x) ∗ P x)%I
-           with "[//] [$c c1 c2 own]").
+           with " [$c c1 c2 own]").
 { iDestruct "own" as "[#fail|own]"; eauto.
   iRight. iIntros (t' ts_send ts_recv) "inv".
   iMod (sess_recv with "[$c1 $c2] own inv") as "[??]".
