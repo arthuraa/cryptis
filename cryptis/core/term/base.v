@@ -629,18 +629,14 @@ Proof. move => ts t. by rewrite -[RHS](TExpNK ts) !TExpNA TExpN_catC. Qed.
 Lemma TExpK' t1 t2 : TExp (TExp t1 (TInv t2)) t2 = t1.
 Proof. by rewrite (_ : [:: TInv t2] = map TInv [:: t2]) // TExpNK'. Qed.
 
-Lemma in_TInv_exps t1 t2 : t1 \in exps t2 -> (TInv t1 \in exps t2) = false.
-Proof.
-move=> t1V_t2; apply/negbTE; move: t1V_t2; exact/invs_canceledP/invs_canceled_exps.
-Qed.
+Lemma in_TInv_exps t1 t2 : t1 \in exps t2 -> TInv t1 \notin exps t2.
+Proof. exact /invs_canceledP /invs_canceled_exps. Qed.
 
-Lemma in_TInv_expsV t1 t2 : TInv t1 \in exps t2 -> (t1 \in exps t2) = false.
+Lemma in_TInv_expsV t1 t2 : TInv t1 \in exps t2 -> t1 \notin exps t2.
 Proof. by rewrite -{2}[t1]TInvK; exact: in_TInv_exps. Qed.
 
 Lemma in_exps_TInv t1 t2 : (t1 \notin exps t2) || (TInv t1 \notin exps t2).
-Proof.
-by have [/in_TInv_exps ->|] := boolP (t1 \in _).
-Qed.
+Proof. by have [/in_TInv_exps ->|] := boolP (t1 \in _). Qed.
 
 Lemma tsize_lt_TExp t1 t2 :
   TInv t2 \notin exps t1 ->

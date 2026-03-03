@@ -93,26 +93,16 @@ Qed.
 Hint Resolve TInv_neq : core.
 
 Lemma elem_of_TInv_exps t1 t2 : t1 ∈ exps t2 → TInv t1 ∉ exps t2.
-Proof.
-rewrite !(ssrbool.rwP inP) !is_trueP => /is_trueP/in_TInv_exps ->.
-by eauto.
-Qed.
+Proof. by move => /(ssrbool.introT inP) /in_TInv_exps /(ssrbool.elimN inP). Qed.
 
 Lemma elem_of_TInv_exps' t1 t2 : TInv t1 ∈ exps t2 → t1 ∉ exps t2.
-Proof. move=> H1 H2; exact: elem_of_TInv_exps H1. Qed.
+Proof. by move => ? /elem_of_TInv_exps. Qed.
 
 Lemma count_exp_nat_eq0 t1 t2 : t1 ∉ exps t2 → count_exp_nat t1 t2 = 0.
-Proof.
-move=> t1_t2; apply: count_exp_nat_eq0.
-apply/is_trueP/negb_True.
-by rewrite in_eq bool_decide_decide decide_False //=; eauto.
-Qed.
+Proof. move => ?. exact /count_exp_nat_eq0 /(ssrbool.introN inP). Qed.
 
 Lemma count_exp_nat_gt0 t1 t2 : (count_exp_nat t1 t2 > 0) ↔ (t1 ∈ exps t2).
-Proof.
-rewrite -[_ ∈ _]bool_decide_spec -in_eq -count_exp_nat_gt0 -is_trueP.
-rewrite -(ssrbool.rwP ssrnat.leP); split; lia.
-Qed.
+Proof. by rewrite (ssrbool.rwP inP) -count_exp_nat_gt0 -(ssrbool.rwP ssrnat.leP). Qed.
 
 Definition count_exp t ts : Z :=
   (count_exp_nat t ts - count_exp_nat (TInv t) ts)%Z.
@@ -133,13 +123,12 @@ Proof. rewrite /count_exp TInvK. lia. Qed.
 Lemma count_exp_TExp_eq t1 t2 :
   count_exp t1 (TExp t2 t1) = (count_exp t1 t2 + 1)%Z.
 Proof.
-rewrite /count_exp !count_exp_nat_TExp -!eq_op_bool_decide ssrnat.subnE.
-rewrite !bool_decide_decide decide_False // decide_True //.
-rewrite decide_True // in_eq.
-case: bool_decide_reflect => [t1V_t2|t1V_t2] /=.
-  rewrite count_exp_nat_eq0; last exact: elem_of_TInv_exps'.
-  rewrite -count_exp_nat_gt0 in t1V_t2; lia.
-rewrite [count_exp_nat (TInv t1) t2]count_exp_nat_eq0 //; lia.
+rewrite /count_exp !count_exp_nat_TExp !eqtype.eqxx ssrnat.subnE.
+rewrite eqtype.eq_sym (ssrbool.negbTE (TInv_Nid _)).
+case: inP => H /=.
+- rewrite count_exp_nat_eq0; last exact: elem_of_TInv_exps'.
+  rewrite -count_exp_nat_gt0 in H; lia.
+- rewrite [count_exp_nat (TInv t1) t2]count_exp_nat_eq0 //; lia.
 Qed.
 
 Lemma count_exp_TExp_TInv t1 t2 :
