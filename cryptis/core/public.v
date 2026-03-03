@@ -797,6 +797,21 @@ Qed.
 Definition dh_pred' t φ : iProp :=
   □ (∀ t', dh_pred t t' ↔ ▷ □ saturate φ t').
 
+Lemma dh_pred'_elim x t φ :
+  dh_pred' x φ -∗
+  saturate (dh_pred x) t -∗
+  dh_pred x t.
+Proof.
+iIntros "#dhs s".
+iApply "dhs".
+iApply (@saturate_ind (λ t', ▷ □ saturate φ t')%I with "[] s").
+iIntros "!>" (t') "[#dh | IH]".
+- by iApply "dhs".
+- iDestruct "IH" as (t'') "(#p & #? & ?)".
+  rewrite [saturate _ t']saturate_unfold.
+  iRight; iExists t''; eauto.
+Qed.
+
 Lemma public_TExp' t1 t2 :
   TInv t2 ∉ exps t1 →
   public t1 -∗
