@@ -812,6 +812,21 @@ iIntros "!>" (t') "[#dh | IH]".
   iRight; iExists t''; eauto.
 Qed.
 
+Lemma saturate_elem_of_exps t t2 :
+ saturate (λ t', ⌜TInv t2 ∈ exps t'⌝) t -∗
+ ⌜TInv t2 ∉ exps t⌝ -∗
+ ▷ public t2.
+Proof.
+iIntros "s".
+iApply (@saturate_ind (λ t' : term, ⌜TInv t2 ∉ exps t'⌝ -∗ ▷ public t2)%I with "[] s").
+iIntros "!>" (t') "[% | IH]"; iIntros (nIn) => //.
+iDestruct "IH" as (t'') "(#p & #IH & _)".
+case: (decide (t2 = t'')) => [-> | ?]; first by iApply "p".
+case: (decide (TInv t2 = t'')) => [<- | ?]; first by iApply public_TInv.
+iApply "IH".
+by rewrite -!count_exp_gt0 count_exp_TExp_ne in nIn *; last move => /TInv_inj.
+Qed.
+
 Lemma public_TExp' t1 t2 :
   TInv t2 ∉ exps t1 →
   public t1 -∗
