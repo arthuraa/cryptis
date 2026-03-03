@@ -289,7 +289,7 @@ Proof.
 move => /[dup] /is_trueP ?. rewrite is_exp_unfold => /is_trueP ?.
 rewrite nonces_of_term_unseal /nonces_of_term_def.
 rewrite unfold_TExpN /PreTerm.exp PreTerm.base_expN // PreTerm.exps_expN //= /cancel_exps.
-case: (ssrbool.altP seq.nilP) => [-> | _] /=; first by set_solver.
+case: seq.nilP => [-> | _] /=; first by set_solver.
 rewrite -[@seq.map]/@map map_map.
 rewrite (_ : path.sort _ _ ≡ₚ PreTerm.cancel_exps _); last first.
   by apply/(ssrbool.elimT perm_Perm); rewrite path.perm_sort.
@@ -366,7 +366,7 @@ Proof.
 rewrite is_exp_unfold => /is_trueP ?.
 rewrite subterms_unseal /subterms_def.
 rewrite unfold_TExpN /PreTerm.exp PreTerm.base_expN // PreTerm.exps_expN //= /cancel_exps.
-case: (ssrbool.altP seq.nilP) => [cancel_nil | _ ] /=.
+case: seq.nilP => [cancel_nil | _] /=.
 - rewrite cancel_nil (_ : TExpN t ts = t); first by set_solver.
   rewrite [TExpN]unlock /PreTerm.exp.
   by rewrite PreTerm.base_expN // PreTerm.exps_expN // cancel_nil unfold_termK.

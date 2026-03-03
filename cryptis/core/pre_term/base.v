@@ -460,7 +460,7 @@ Proof. case: pt => //= ?? /and5P [_ *]. exact: exps_expN. Qed.
 Lemma exps_exp pt pts :
   wf_term pt ->
   exps (exp pt pts) = sort <=%O (cancel_exps (exps pt ++ pts)).
-Proof. move => ?. rewrite /exp. case: (altP nilP) => // ->. by rewrite exps_base. Qed.
+Proof. move => ?. rewrite /exp. case: nilP => // ->. by rewrite exps_base. Qed.
 
 Lemma base_expsK pt : is_exp pt -> PTExp (base pt) (exps pt) = pt.
 Proof. by case: pt. Qed.
@@ -516,7 +516,7 @@ Lemma wf_exp pt pts :
 Proof.
 move => ??. rewrite /exp fun_if /= wf_base //.
 rewrite /nilp -size_eq0 size_sort.
-case: (altP eqP) => //.
+case: eqP => //.
 rewrite base_Nexp //.
 rewrite all_sort wf_cancel_exps ?all_cat ?wf_exps //.
 rewrite sort_le_sorted.

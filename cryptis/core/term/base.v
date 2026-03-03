@@ -608,7 +608,7 @@ Proof.
 move => ??.
 rewrite /tsize unfold_TExpN PreTerm.tsize_exp -?is_exp_unfold //.
 rewrite -size_eq0 size_map size_eq0.
-case: (altP eqP) => [-> | _] //=.
+case: eqP => [-> | _] //=.
 - by rewrite addn0.
 - by rewrite big_cons /= sumnE !big_map PreTerm.base_expN // -is_exp_unfold.
 Qed.
