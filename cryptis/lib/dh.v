@@ -58,27 +58,20 @@ Lemma dh_seed_elim2 g a t :
   ¬ is_exp g →
   a ≠ TInv t →
   dh_seed a -∗
-  dh_seed t -∗
   public (TExpN g [a; t]) -∗
-  ▷ False.
+  ◇ (public (TExp g a) ∧ public t).
 Proof.
-iIntros "%gXN %a_t #aP #tP #p_t".
+iIntros "%gXN %a_t #aP #p_t".
 rewrite public_TExp2_iff //.
-iDestruct "p_t" as "[[_ contra] | [[_ contra] | (_ & [p_t | p_t] & _)]]"; eauto.
-- by iPoseProof (dh_seed_elim0 with "tP contra") as ">[]".
-- by iPoseProof (dh_seed_elim0 with "aP contra") as ">[]".
-- iDestruct "aP" as "(_ & _ & #aP)".
-  iPoseProof ("aP" with "p_t") as "{p_t} p_t".
-  iAssert (▷ False)%I as ">[]".
-  iModIntro.
-  iDestruct "p_t" as "(%e & _)".
-  by rewrite exps_TExpN' in e; last exact /invs_canceled2.
-- iDestruct "tP" as "(_ & _ & #tP)".
-  iPoseProof ("tP" with "p_t") as "{p_t} p_t".
-  iAssert (▷ False)%I as ">[]".
-  iModIntro.
-  iDestruct "p_t" as "(%e & _)".
-  by rewrite exps_TExpN' in e; last exact /invs_canceled2.
+iDestruct "p_t" as "[p_t|[[_ contra]|p_t]]"; eauto.
+  by iPoseProof (@dh_seed_elim0 with "aP contra") as ">[]".
+iDestruct "p_t" as "(_ & p_t & _)".
+iDestruct "aP" as "(_ & _ & #aP)".
+iPoseProof ("aP" with "p_t") as "{p_t} p_t".
+iAssert (▷ False)%I as ">[]".
+iModIntro.
+iDestruct "p_t" as "(%e & _)".
+by rewrite exps_TExpN' in e; last exact /invs_canceled2.
 Qed.
 
 Lemma dh_public_TExp g a :

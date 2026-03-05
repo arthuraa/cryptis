@@ -1334,16 +1334,16 @@ case: c_kex e => [psk cn sn|g cn sn x gy|psk g cn sn x gy] /=.
   iDestruct "wf1" as "#(% & _ & _ & dh_x)".
   iDestruct "wf2" as "#(_ & _ & _ & _ & p_gx & dh_y)".
   rewrite /session_key_of TExp_TExpN.
-  iMod (dh_seed_elim2 with "dh_y dh_x p_k") => //.
-  admit.
+  iMod (dh_seed_elim2 with "dh_y p_k") as "[_ p_x]" => //; first admit.
+  iMod (dh_seed_elim0 with "dh_x p_x") as "[]".
 - case: s_kex => //= _ ? ? ? gx y [] /Spec.tag_inj [_ <-].
   move=> <- _ _ <- e2.
   iDestruct "wf1" as "#(_ & % & _ & _ & dh_x)".
   iDestruct "wf2" as "#(_ & _ & _ & _ & _ & p_gx & dh_y)".
   rewrite TExp_TExpN.
   rewrite public_of_list /=. iDestruct "p_k" as "(_ & p_k & _)".
-  iMod (dh_seed_elim2 with "dh_y dh_x p_k") => //.
-  admit.
+  iMod (dh_seed_elim2 with "dh_y p_k") as "[_ p_x]" => //; first admit.
+  iMod (dh_seed_elim0 with "dh_x p_x") as "[]".
 Admitted.
 
 End Proofs.
