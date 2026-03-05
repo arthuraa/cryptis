@@ -539,6 +539,10 @@ Proof. by rewrite /cancel_exps size_map PreTerm.parity_cancel_exps size_map. Qed
 Lemma invs_canceled_exps t : invs_canceled (exps t).
 Proof. by rewrite /invs_canceled unfold_exps PreTerm.invs_canceled_exps // wf_unfold_term. Qed.
 
+Lemma invs_canceled_cons_exps t1 t2 :
+  invs_canceled (t1 :: exps t2) = (TInv t1 \notin exps t2).
+Proof. by rewrite invs_canceled_cons invs_canceled_exps andbT. Qed.
+
 Lemma cancel_exps_canceled ts : invs_canceled ts -> cancel_exps ts = ts.
 Proof.
 rewrite /invs_canceled => ?.
@@ -644,7 +648,7 @@ Lemma tsize_lt_TExp t1 t2 :
 Proof.
 move => ?.
 rewrite -[t1]base_expsK TExpNA TExpN_catC.
-rewrite !tsize_TExpN ?is_exp_base ?invs_canceled_cons ?invs_canceled_exps ?andbT //= !addnE.
+rewrite !tsize_TExpN ?is_exp_base ?invs_canceled_cons_exps ?invs_canceled_exps //= !addnE.
 split; apply /ssrnat.ltP; last lia.
 have /ssrnat.ltP := tsize_gt0 t2. case: (exps t1 != [::]) => /=; lia.
 Qed.

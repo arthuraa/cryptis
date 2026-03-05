@@ -841,6 +841,14 @@ Qed.
 Lemma invs_canceled_exps t : invs_canceled (exps t).
 Proof. exact /is_trueP /invs_canceled_exps. Qed.
 
+Lemma invs_canceled_cons_exps t1 t2 :
+  invs_canceled (t1 :: exps t2) ↔ (TInv t1 ∉ exps t2).
+Proof.
+rewrite invs_canceled_cons_exps; split.
+- by move => /is_trueP /(ssrbool.elimN inP).
+- by move => /(ssrbool.introN inP) /is_trueP.
+Qed.
+
 Lemma cancel_exps_canceled ts : invs_canceled ts -> cancel_exps ts = ts.
 Proof. move => /is_trueP ?. exact: cancel_exps_canceled. Qed.
 
