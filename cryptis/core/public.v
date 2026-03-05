@@ -836,6 +836,28 @@ iApply "IH".
 by rewrite -!count_exp_gt0 count_exp_TExp_ne in nIn *; last move => /TInv_inj.
 Qed.
 
+Lemma dh_pred_exps t1 t2 :
+  t2 ∈ exps t1 ->
+  public t1 -∗
+  dh_pred t2 t1.
+Proof.
+elim /term_lt_ind: t1 => t1 IH.
+have [exp_t1|contra] := decide (is_exp t1); last first.
+  by rewrite exps_expN // elem_of_nil.
+move => ?. iIntros "#p".
+rewrite public_TExpN' // big_sepL_elem_of //.
+iDestruct "p" as "[p | [_ [dh _]]]" => //.
+iDestruct "p" as (t' t'_in) "[p1 p2]".
+case: (decide (t2 = t')) => [-> | ?]; first by iApply dh_pred_intro3.
+case: (decide (t2 = TInv t')) => [-> | ?].
+  by iApply dh_pred_intro3; rewrite public_TInv.
+rewrite -{2}(TExpK' t1 t'). iApply dh_pred_intro2.
+- iApply IH => //.
+  + by apply tsize_TExp_TInv.
+  + by rewrite -count_exp_gt0 count_exp_TExp_ne ?TInvK // count_exp_gt0.
+- by iApply dh_pred_intro3.
+Qed.
+
 Lemma public_TExp' t1 t2 :
   TInv t2 ∉ exps t1 →
   public t1 -∗
