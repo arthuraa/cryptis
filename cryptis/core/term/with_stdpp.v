@@ -888,7 +888,7 @@ by rewrite is_trueP.
 Qed.
 
 Lemma exps_TExpN' t ts :
-¬ is_exp t ->
+  ¬ is_exp t ->
   invs_canceled ts ->
   exps (TExpN t ts) ≡ₚ ts.
 Proof. move => ??. by rewrite exps_TExpN exps_expN // cancel_exps_canceled. Qed.

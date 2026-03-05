@@ -624,10 +624,10 @@ by rewrite exps_TExpN perm_sort (permPl (cancel_exps_cat_invs _ _)) cancel_exps_
 Qed.
 
 Lemma TExpNK' : rev_right_loop (map TInv) TExpN.
-Proof. move => ts t. by rewrite -[RHS](TExpNK ts) !TExpNA TExpN_catC. Qed.
+Proof. move => ts t. by rewrite TExpNC TExpNK. Qed.
 
 Lemma TExpK' t1 t2 : TExp (TExp t1 (TInv t2)) t2 = t1.
-Proof. by rewrite (_ : [:: TInv t2] = map TInv [:: t2]) // TExpNK'. Qed.
+Proof. by rewrite TExpNC TExpNK. Qed.
 
 Lemma in_TInv_exps t1 t2 : t1 \in exps t2 -> TInv t1 \notin exps t2.
 Proof. exact /invs_canceledP /invs_canceled_exps. Qed.
