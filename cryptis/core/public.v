@@ -889,6 +889,41 @@ iRight; do !iSplit => //=.
       by iApply dh_pred_intro3; rewrite public_TInv.
 Qed.
 
+Lemma public_TExp'' t1 t2 :
+  public t1 -∗
+  minted t2 -∗
+  dh_pred t2 (TExp t1 t2) -∗
+  public (TExp t1 t2).
+Proof.
+case: (decide (TInv t2 ∈ exps t1)) => in_exps; last exact: public_TExp'.
+elim /term_lt_ind: t1 in_exps => t1 IH in_exps.
+
+have [exp_t1|contra] := decide (is_exp t1); last first.
+  by rewrite exps_expN // elem_of_nil in in_exps.
+iIntros "#p1 #p2 #dh".
+rewrite [public t1]public_TExpN' // big_sepL_elem_of // TInvK public_TInv.
+iDestruct "p1" as "[(%t3 & %t3_t1 & p1' & p3) | [m1 [dh1 p1]]]"; last first.
+   admit.
+
+have t2_t3: t2 ≠ t3 by apply elem_of_TInv_exps' in in_exps; congruence.
+case: (decide (t2 = TInv t3)) => [-> | t2_t3V] //.
+set t1' := TExp t1 (TInv t3).
+have eq: TExp (TExp t1' t2) t3 = TExp t1 t2 by rewrite TExpNC TExpK'.
+have in_exps': TInv t2 ∈ exps t1'.
+  rewrite -count_exp_gt0 count_exp_TInv /t1' count_exp_TExp_ne ?TInvK //.
+  by rewrite -count_exp_TInv count_exp_gt0.
+iAssert (public (TExp t1' t2)) as "p1''".
+  iApply IH => //; first by apply tsize_TExp_TInv.
+  rewrite /t1' TExpNC. iApply dh_pred_intro2 => //. iApply dh_pred_intro3.
+  by rewrite public_TInv.
+rewrite -eq; iApply public_TExp' => //.
+- rewrite -count_exp_gt0 count_exp_TInv count_exp_TExp_ne //; last first.
+    by move => e; rewrite e TInvK in t2_t3V.
+  rewrite count_exp_TExp_TInv; rewrite -count_exp_gt0 in t3_t1; lia.
+- by iApply public_minted.
+- by iApply dh_pred_intro3.
+Admitted.
+
 (*
 Lemma public_TExp'_alt t1 t2 φ :
   TInv t2 ∉ exps t1 →
