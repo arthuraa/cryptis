@@ -15,6 +15,7 @@ cryptis/lib/replica.v
 cryptis/lib/gmeta.v
 cryptis/lib/nown.v
 cryptis/lib/saved_prop.v
+cryptis/lib/repr.v
 cryptis/lib/list.v
 cryptis/lib.v
 cryptis/role.v

@@ -6,7 +6,7 @@ From iris.base_logic Require Import gen_heap invariants.
 From mathcomp Require ssrbool order path.
 From deriving Require deriving.
 From cryptis Require Export mathcomp_compat.
-From cryptis.lib Require Export list.
+From cryptis.lib Require Export list repr.
 
 Lemma eq_op_bool_decide
   {T : eqtype.Equality.type}
