@@ -74,7 +74,7 @@ Definition pnonce a : iProp :=
 Global Instance Persistent_pnonce a : Persistent (pnonce a).
 Proof. apply _. Qed.
 
-Definition dh_pred (t t' : term) : iProp :=
+Definition dh_pred_base (t t' : term) : iProp :=
   match t with
   | TNonce a =>
     ∃ γ φ, meta a (nroot.@"dh") γ ∧
@@ -83,8 +83,17 @@ Definition dh_pred (t t' : term) : iProp :=
   | _ => False
   end.
 
+Definition dh_pred_def P DH t1 t2 : iProp :=
+  dh_pred_base t1 t2 ∨
+  ▷ P t1 ∨
+  ∃ t2' t, ⌜t2 = TExp t2' t⌝ ∧ DH t1 t2' ∧ DH t t2.
+
+Axiom dh_pred : term → term → iProp.
+
+(* Definition dh_pred_def' P := bi_least_fixpoint (dh_pred_def P). *)
+
 Global Instance Persistent_dh_pred t t' : Persistent (dh_pred t t').
-Proof. case: t => *; apply _. Qed.
+Proof. Admitted. (* case: t => *; apply _. Qed. *)
 
 Definition name_of_functionality F :=
   match F with
@@ -398,6 +407,22 @@ do !apply bi.or_proper.
   have ? := open_key_tsize e_k.
   rewrite !public_aux_eq //; lia.
 Qed.
+
+Axiom dh_pred_intro1 :
+  forall t1 t2, dh_pred_base t1 t2 -∗ dh_pred t1 t2.
+
+Axiom dh_pred_intro2 :
+  forall t t1 t2, dh_pred t1 t2 -∗ dh_pred t (TExp t2 t) -∗ dh_pred t1 (TExp t2 t).
+
+Axiom dh_pred_intro3 :
+  forall t1 t2, ▷ public t1 -∗ dh_pred t1 t2.
+
+Axiom dh_pred_ind :
+  forall (φ : term → term → iProp),
+    (□ ∀ t1 t2, dh_pred_base t1 t2 -∗ φ t1 t2) -∗
+    (□ ∀ t t1 t2, φ t1 t2 -∗ φ t (TExp t2 t) -∗ φ t1 (TExp t2 t)) -∗
+    (□ ∀ t1 t2, ▷ public t1 -∗ φ t1 t2) -∗
+    ∀ t1 t2, dh_pred t1 t2 -∗ φ t1 t2.
 
 Lemma public_minted t : public t ⊢ minted t.
 Proof. rewrite public_eq; by iIntros "[??]". Qed.
@@ -1000,13 +1025,14 @@ iSplitR.
     iSpecialize ("e" $! (TNonce a)). iModIntro. by iRewrite "e".
   + iIntros "#?". iSplit => //. iExists γP, P; eauto.
 iIntros "!> !> %t"; iSplit.
-- iDestruct 1 as (γQ' Q') "(#meta_γQ' & #own_Q' & ?)".
-  iPoseProof (meta_agree with "dh meta_γQ'") as "->".
-  iPoseProof (own_valid_2 with "own_Q own_Q'") as "valid".
-  iPoseProof (saved_pred_op_validI with "valid") as "[_ #e]".
-  iSpecialize ("e" $! t). iModIntro. by iRewrite "e".
-- by iIntros "#?"; iExists _, _; eauto.
-Qed.
+- admit.
+(* - iDestruct 1 as (γQ' Q') "(#meta_γQ' & #own_Q' & ?)".
+ *   iPoseProof (meta_agree with "dh meta_γQ'") as "->".
+ *   iPoseProof (own_valid_2 with "own_Q own_Q'") as "valid".
+ *   iPoseProof (saved_pred_op_validI with "valid") as "[_ #e]".
+ *   iSpecialize ("e" $! t). iModIntro. by iRewrite "e". *)
+- by iIntros "#?"; iApply dh_pred_intro1; iExists _, _; eauto.
+Admitted.
 
 Lemma public_pkey k : public k ⊢ public (Spec.pkey k).
 Proof.
