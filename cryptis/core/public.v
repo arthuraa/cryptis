@@ -944,102 +944,6 @@ rewrite -count_exp_gt0 count_exp_TInv count_exp_TExp_ne //; last first.
 rewrite count_exp_TExp_TInv; rewrite -count_exp_gt0 in t3_t1; lia.
 Qed.
 
-Definition saturate_pre (φ : term → iProp) (s : term → iProp) :=
-  (λ t, φ t ∨ ∃ t', ▷ public t' ∧ s (TExp t t'))%I.
-
-Local Lemma saturate_pre_mono (φ : term → iProp) (s1 s2 : term → iProp) :
-  ⊢ (□ ∀ t, s1 t -∗ s2 t) →
-    ∀ t, saturate_pre φ s1 t -∗ saturate_pre φ s2 t.
-Proof.
-iIntros "#H" (t) "Hs"; rewrite /saturate_pre.
-iDestruct "Hs" as "[Hs | Hs]"; first by iLeft.
-iDestruct "Hs" as (t') "(#p & Hs)".
-by iRight; iExists t'; iSplit; last iApply "H".
-Qed.
-
-Local Instance saturate_pre_mono' φ : BiMonoPred (saturate_pre φ).
-Proof.
-constructor.
-- move => s1 s2 _ _; iIntros "#H". by iApply saturate_pre_mono.
-- move => s _ n t1 t2 eq. rewrite /saturate_pre. by f_equiv; rewrite eq.
-Qed.
-
-Local Definition saturate_def : (term → iProp) → term → iProp :=
-  λ φ t, bi_least_fixpoint (saturate_pre φ) t.
-Local Definition saturate_aux : seal saturate_def. Proof. by eexists. Qed.
-Definition saturate := saturate_aux.(unseal).
-Local Lemma saturate_unseal : saturate = saturate_def.
-Proof. by rewrite -saturate_aux.(seal_eq). Qed.
-
-Lemma saturate_unfold φ t :
-  saturate φ t ⊣⊢ (φ t ∨ ∃ t', ▷ public t' ∧ saturate φ (TExp t t'))%I.
-Proof. by rewrite saturate_unseal /saturate_def least_fixpoint_unfold. Qed.
-
-Lemma saturate_ind Ψ φ :
-  □ (∀ t, saturate_pre φ (λ t, Ψ t ∧ saturate φ t) t -∗ Ψ t) -∗
-  ∀ t, saturate φ t -∗ Ψ t.
-Proof. rewrite saturate_unseal. by iApply least_fixpoint_ind. Qed.
-
-Global Instance saturate_ne n :
-  Proper (pointwise_relation _ (dist n) ==> dist n ==> dist n) saturate.
-Proof.
-  move => Φ1 Φ2 HΦ t _ <-. rewrite !saturate_unseal.
-  apply least_fixpoint_ne; solve_proper.
-Qed.
-Global Instance saturate_proper :
-  Proper (pointwise_relation _ (≡) ==> (≡) ==> (≡)) saturate.
-Proof.
-  move => Φ Φ' HΦ t _ /leibniz_equiv_iff <-.
-  apply equiv_dist => n.
-  apply saturate_ne => // t'.
-  apply equiv_dist; apply: HΦ.
-Qed.
-
-Lemma saturate_wand φ ψ :
-  (∀ t, φ t -∗ saturate ψ t) -∗
-  ∀ t, saturate φ t -∗ saturate ψ t.
-Proof.
-iIntros "wand" (t) "sat"; iRevert (t) "sat wand".
-iApply saturate_ind.
-iIntros "!> %t [φ_t|(%t' & #p' & IH & _)] wand".
-- by iApply "wand".
-- rewrite [saturate ψ t]saturate_unfold.
-  by iRight; iExists t'; iSplit; last iApply "IH".
-Qed.
-
-Definition dh_pred' t φ : iProp :=
-  □ (∀ t', dh_pred t t' ↔ ▷ □ saturate φ t').
-
-Lemma dh_pred'_elim x t φ :
-  dh_pred' x φ -∗
-  saturate (dh_pred x) t -∗
-  dh_pred x t.
-Proof.
-iIntros "#dhs s".
-iApply "dhs".
-iApply (@saturate_ind (λ t', ▷ □ saturate φ t')%I with "[] s").
-iIntros "!>" (t') "[#dh | IH]".
-- by iApply "dhs".
-- iDestruct "IH" as (t'') "(#p & #? & ?)".
-  rewrite [saturate _ t']saturate_unfold.
-  iRight; iExists t''; eauto.
-Qed.
-
-Lemma saturate_elem_of_exps t t2 :
- saturate (λ t', ⌜TInv t2 ∈ exps t'⌝) t -∗
- ⌜TInv t2 ∉ exps t⌝ -∗
- ▷ public t2.
-Proof.
-iIntros "s".
-iApply (@saturate_ind (λ t' : term, ⌜TInv t2 ∉ exps t'⌝ -∗ ▷ public t2)%I with "[] s").
-iIntros "!>" (t') "[% | IH]"; iIntros (nIn) => //.
-iDestruct "IH" as (t'') "(#p & #IH & _)".
-case: (decide (t2 = t'')) => [-> | ?]; first by iApply "p".
-case: (decide (TInv t2 = t'')) => [<- | ?]; first by iApply public_TInv.
-iApply "IH".
-by rewrite -!count_exp_gt0 count_exp_TExp_ne in nIn *; last move => /TInv_inj.
-Qed.
-
 Lemma dh_pred_exps t1 t2 :
   t2 ∈ exps t1 ->
   public t1 -∗
@@ -1097,18 +1001,32 @@ Lemma public_TExp'' t1 t2 :
   public t1 -∗
   minted t2 -∗
   dh_pred t2 (TExp t1 t2) -∗
-  public (TExp t1 t2).
+  □ (public t2 → ▷ False) -∗
+  □ (∀ t, dh_pred_base (TInv t2) t -∗ ▷ False) -∗
+  ▷ public (TExp t1 t2).
 Proof.
-case: (decide (TInv t2 ∈ exps t1)) => in_exps; last exact: public_TExp'.
+case: (decide (TInv t2 ∈ exps t1)) => in_exps; last first.
+  iIntros "#p1 #m2 #dh #s2 #dhV".
+  by iApply public_TExp'.
 elim /term_lt_ind: t1 in_exps => t1 IH in_exps.
-
+iIntros "#p1 #m2 #dh #s2 #dhV".
 have [exp_t1|contra] := decide (is_exp t1); last first.
   by rewrite exps_expN // elem_of_nil in in_exps.
-iIntros "#p1 #p2 #dh".
-rewrite [public t1]public_TExpN' // big_sepL_elem_of // TInvK public_TInv.
-iDestruct "p1" as "[(%t3 & %t3_t1 & p1' & p3) | [m1 [dh1 p1]]]"; last first.
-   admit.
-
+rewrite [public t1]public_TExpN' //.
+iDestruct "p1" as "[(%t3 & %t3_t1 & p1' & p3) | [m1 p1]]"; last first.
+  rewrite big_sepL_elem_of // TInvK; iDestruct "p1" as "-#[contra _]".
+  rewrite -[public t2]public_TInv.
+  iAssert (▷ ▷ False)%I as "#H".
+  { iRevert "contra s2 dhV"; move: (TInv t2) => t2'.
+    iClear "m1 dh"; clear IH in_exps exp_t1; iRevert (t2' t1).
+    iApply dh_pred_ind.
+    - by iIntros "!> % % #dh _ #contra !>"; by iApply "contra".
+    - by iIntros "!> % % % IH1 _"; iApply "IH1".
+    - by iIntros "!> % _ #p1 #contra _ !>"; iApply "contra". }
+  iIntros "!>".
+  iAssert (minted (TExp t1 t2)) as "#m".
+  { by iApply all_minted_TExp; eauto. }
+  admit. (* Should follow from the lemma at the end of the file. *)
 have t2_t3: t2 ≠ t3 by apply elem_of_TInv_exps' in in_exps; congruence.
 case: (decide (t2 = TInv t3)) => [-> | t2_t3V] //.
 set t1' := TExp t1 (TInv t3).
@@ -1116,11 +1034,11 @@ have eq: TExp (TExp t1' t2) t3 = TExp t1 t2 by rewrite TExpNC TExpK'.
 have in_exps': TInv t2 ∈ exps t1'.
   rewrite -count_exp_gt0 count_exp_TInv /t1' count_exp_TExp_ne ?TInvK //.
   by rewrite -count_exp_TInv count_exp_gt0.
-iAssert (public (TExp t1' t2)) as "p1''".
+iAssert (▷ public (TExp t1' t2))%I as "p1''".
   iApply IH => //; first by apply tsize_TExp_TInv.
   rewrite /t1' TExpNC. iApply dh_pred_intro2 => //. iApply dh_pred_intro3.
   by rewrite public_TInv.
-rewrite -eq; iApply public_TExp' => //.
+rewrite -eq; iModIntro; iApply public_TExp' => //.
 - rewrite -count_exp_gt0 count_exp_TInv count_exp_TExp_ne //; last first.
     by move => e; rewrite e TInvK in t2_t3V.
   rewrite count_exp_TExp_TInv; rewrite -count_exp_gt0 in t3_t1; lia.
