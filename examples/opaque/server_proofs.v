@@ -165,19 +165,14 @@ Proof.
   wp_apply wp_prf.
   wp_list.
   wp_term_of_list.
-  wp_pures.
   rewrite public_of_list => /=.
   iDestruct "Hpubm1" as "[Hpubuid [Hpubα [HpubX_u _]]]".
+  iAssert (▷ public (TExp α k_s'))%I as "#?".
+  { admit. }
+  wp_pures.
   wp_apply wp_send => //.
   rewrite public_of_list => //.
   do !iSplit => //.
-  iApply public_TExp_iff.
-  admit.
-  iRight.
-  do !iSplit => //.
-  by iApply public_minted.
-  by iApply "Hdhpredk_s".
-  iModIntro. by iIntros "#_".
   iApply public_TExp_iff; auto.
   iRight.
   do !iSplit => //.
