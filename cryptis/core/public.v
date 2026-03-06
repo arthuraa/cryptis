@@ -83,17 +83,90 @@ Definition dh_pred_base (t t' : term) : iProp :=
   | _ => False
   end.
 
-Definition dh_pred_def P DH t1 t2 : iProp :=
-  dh_pred_base t1 t2 ∨
-  ▷ P t1 ∨
-  ∃ t2' t, ⌜t2 = TExp t2' t⌝ ∧ DH t1 t2' ∧ DH t t2.
+Global Instance dh_pred_base_persistent t t' :
+  Persistent (dh_pred_base t t').
+Proof. by case: t; apply _. Qed.
 
-Axiom dh_pred : term → term → iProp.
+Definition dh_pred0_pre P DH ts : iProp :=
+  dh_pred_base ts.1 ts.2 ∨
+  P ts.1 ∨
+  ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ DH (ts.1, t2') ∗ DH (t, ts.2).
 
-(* Definition dh_pred_def' P := bi_least_fixpoint (dh_pred_def P). *)
+Local Instance dh_pred0_pre_mono P : BiMonoPred (dh_pred0_pre P).
+Proof.
+constructor; last by move=> ??; solve_proper.
+iIntros (DH1 DH2 _ _) "#H %ts dh"; rewrite /dh_pred0_pre.
+iDestruct "dh" as "[? | [? | dh]]"; eauto.
+iDestruct "dh" as (t2 t') "(#p & dh1 & dh2)".
+iRight; iRight; iExists t2, t'; iSplit => //.
+by iSplitL "dh1"; iApply "H".
+Qed.
 
-Global Instance Persistent_dh_pred t t' : Persistent (dh_pred t t').
-Proof. Admitted. (* case: t => *; apply _. Qed. *)
+Local Definition dh_pred0_def : (term → iProp) → term * term → iProp :=
+  λ P, bi_least_fixpoint (dh_pred0_pre P).
+Local Definition dh_pred0_aux : seal dh_pred0_def. Proof. by eexists. Qed.
+Definition dh_pred0 := dh_pred0_aux.(unseal).
+Local Lemma dh_pred0_unseal : dh_pred0 = dh_pred0_def.
+Proof. by rewrite -dh_pred0_aux.(seal_eq). Qed.
+
+Lemma dh_pred0_unfold P ts :
+  dh_pred0 P ts ⊣⊢
+  dh_pred_base ts.1 ts.2 ∨
+  P ts.1 ∨
+  ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ dh_pred0 P (ts.1, t2') ∗ dh_pred0 P (t, ts.2).
+Proof. by rewrite dh_pred0_unseal /dh_pred0_def least_fixpoint_unfold. Qed.
+
+Lemma dh_pred0_ind P φ :
+  □ (∀ ts, dh_pred0_pre P (λ ts, φ ts ∧ dh_pred0 P ts) ts -∗ φ ts) -∗
+  ∀ ts, dh_pred0 P ts -∗ φ ts.
+Proof.
+rewrite dh_pred0_unseal; iApply least_fixpoint_ind; solve_proper.
+Qed.
+
+Global Instance dh_pred0_ne n :
+  Proper (pointwise_relation _ (dist n) ==> dist n ==> dist n) dh_pred0.
+Proof.
+move=> P1 P2 HP ts1 ts2 e.
+have -> : ts1 = ts2 by apply leibniz_equiv_iff.
+rewrite dh_pred0_unseal; apply least_fixpoint_ne; solve_proper.
+Qed.
+
+Global Instance dh_pred0_proper :
+  Proper (pointwise_relation _ (≡) ==> (≡) ==> (≡)) dh_pred0.
+Proof.
+move=> P1 P2 HP ts1 ts2 e.
+have -> : ts1 = ts2 by apply leibniz_equiv_iff.
+apply equiv_dist => n.
+apply dh_pred0_ne => // ts'.
+apply equiv_dist; apply: HP.
+Qed.
+
+Global Instance dh_pred0_persistent P :
+  (∀ ts, Persistent (P ts)) →
+  ∀ ts, Persistent (dh_pred0 P ts).
+Proof.
+rewrite {2}/Persistent => HP ts; iIntros "H".
+iRevert (ts) "H".
+iApply dh_pred0_ind; iIntros "!> %ts [#? | [#? | H]]"; eauto.
+- rewrite dh_pred0_unfold; eauto.
+- rewrite dh_pred0_unfold; eauto.
+- iDestruct "H" as (t2' t) "(% & [#? _] & [#? _])".
+  iModIntro; rewrite [dh_pred0 P ts]dh_pred0_unfold.
+  by iRight; iRight; iExists t2', t; iFrame "#".
+Qed.
+
+Lemma dh_pred0_mono P1 P2 :
+  □ (∀ t, P1 t -∗ P2 t) -∗
+  ∀ ts, dh_pred0 P1 ts -∗ dh_pred0 P2 ts.
+Proof.
+iIntros "#mono".
+iApply dh_pred0_ind; iIntros "!> %ts [? | [? | H]]"; eauto.
+- by rewrite dh_pred0_unfold; iLeft.
+- by rewrite dh_pred0_unfold; iRight; iLeft; iApply "mono".
+- iDestruct "H" as (t2' t) "(% & [? _] & [? _])".
+  rewrite [dh_pred0 P2 ts]dh_pred0_unfold.
+  by iRight; iRight; iExists t2', t; iFrame.
+Qed.
 
 Definition name_of_functionality F :=
   match F with
@@ -282,13 +355,13 @@ case; try by move =>> -> -> //;
 - by move => ?? -> /tsize_lt_TExp [??] _ -> /elem_of_union [] /elem_of_singleton ->.
 Qed.
 
-Fixpoint public_aux n t : iProp :=
+Fixpoint public_pre_aux P n t : iProp :=
   if n is S n then
     minted t ∧ (
-     (∃ T, ⌜decompose T t⌝ ∧ [∗ set] t' ∈ T, public_aux n t')
+     (∃ T, ⌜decompose T t⌝ ∧ [∗ set] t' ∈ T, public_pre_aux P n t')
      ∨ (⌜is_exp t⌝ ∧
         [∗ list] t' ∈ exps t,
-          dh_pred t' t ∧ □ (public_aux n t' → public_aux n (TExp t (TInv t'))))
+          dh_pred0 P (t', t) ∧ □ (public_pre_aux P n t' → public_pre_aux P n (TExp t (TInv t'))))
      ∨ match t with
        | TNonce a => ◇ pnonce a
        | TKey kt t => ⌜Spec.public_key_type kt⌝
@@ -299,7 +372,7 @@ Fixpoint public_aux n t : iProp :=
                ⌜Spec.is_seal_key k⌝ ∧
                wf_seal F (Spec.skey k) t ∧
                match Spec.open_key k with
-               | Some k' => □ (public_aux n k' → public_aux n t)
+               | Some k' => □ (public_pre_aux P n k' → public_pre_aux P n t)
                | None => True
                end
            | None => True
@@ -309,30 +382,52 @@ Fixpoint public_aux n t : iProp :=
     )
   else False.
 
-Global Instance Persistent_public_aux n t : Persistent (public_aux n t).
+Global Instance Persistent_public_pre_aux P n t :
+  (∀ t, Persistent (P t)) →
+  Persistent (public_pre_aux P n t).
 Proof.
 elim: n t => [|n IH] /=; first by apply _.
 case; try by move=> *; apply _.
 Qed.
 
-(** [public t] holds when the term [t] can be declared public. *)
+Global Instance public_pre_aux_ne n :
+  Proper (pointwise_relation _ (dist n) ==> dist n ==> dist n ==> dist n) public_pre_aux.
+Proof.
+move=> P1 P2 HP m _ <- t _ <-; elim: m => //= m IH in t *.
+f_equiv; f_equiv; last f_equiv.
+- f_equiv => T.
+  by f_equiv; f_equiv => t'.
+- f_equiv.
+  f_equiv=> ? ?; f_equiv; first by f_equiv.
+  by f_equiv; f_equiv.
+- case: t => //= k t.
+  case: func_of_term => // F.
+  f_equiv; f_equiv.
+  case e_k: Spec.open_key => [k'|] //.
+  by rewrite !IH.
+Qed.
 
-Fact public_key : unit. Proof. exact: tt. Qed.
-Definition public : term → iProp :=
-  locked_with public_key (λ t, public_aux (tsize t) t).
-Canonical public_unlock := [unlockable of public].
+Definition public_pre P t := public_pre_aux P (tsize t) t.
 
-Global Instance Persistent_public t : Persistent (public t).
-Proof. rewrite unlock; apply _. Qed.
+Global Instance public_pre_ne n :
+  Proper (pointwise_relation _ (dist n) ==> dist n ==> dist n) public_pre.
+Proof.
+rewrite /public_pre => P1 P2 HP t _ <-; by f_equiv.
+Qed.
+
+Global Instance Persistent_public_pre P t :
+  (∀ t, Persistent (P t)) →
+  Persistent (public_pre P t).
+Proof. apply _. Qed.
 
 Lemma open_key_tsize t1 t2 : Spec.open_key t1 = Some t2 → tsize t2 = tsize t1.
 Proof.
 by case: t1 => // - [] //= t [<-]; rewrite tsizeE.
 Qed.
 
-Lemma public_aux_eq n t : tsize t ≤ n → public_aux n t ⊣⊢ public t.
+Lemma public_pre_aux_eq P n t : tsize t ≤ n → public_pre_aux P n t ⊣⊢ public_pre P t.
 Proof.
-rewrite unlock.
+rewrite /public_pre.
 elim: n / (lt_wf n) t => - [|n] _ IH t t_n /=;
 move: (ssrbool.elimT ssrnat.ltP (tsize_gt0 t)) => H;
 first lia.
@@ -358,7 +453,74 @@ do !apply bi.or_proper.
   rewrite !(IH n) ?(IH m) //; lia.
 Qed.
 
-(* TODO: Merge with public_aux_eq *)
+(* TODO: Merge with public_pre_aux_eq *)
+Lemma public_pre_eq P t :
+  public_pre P t ⊣⊢
+  minted t ∧ (
+      (∃ T, ⌜decompose T t⌝ ∧ [∗ set] t' ∈ T, public_pre P t')
+     ∨ (⌜is_exp t⌝ ∧
+        [∗ list] t' ∈ exps t,
+          dh_pred0 P (t', t) ∧ □ (public_pre P t' → public_pre P (TExp t (TInv t'))))
+     ∨ match t with
+       | TNonce a => ◇ pnonce a
+       | TKey kt t => ⌜Spec.public_key_type kt⌝
+       | THash t => wf_hash t
+       | TSeal k t =>
+           match func_of_term k with
+           | Some F =>
+               ⌜Spec.is_seal_key k⌝ ∧
+               wf_seal F (Spec.skey k) t ∧
+               match Spec.open_key k with
+               | Some k' => □ (public_pre P k' → public_pre P t)
+               | None => True
+               end
+           | None => True
+           end
+       | _ => False
+       end%I
+  ).
+Proof.
+rewrite {1}/public_pre.
+case e_st: (tsize t) => [|m] /=.
+  move: (ssrbool.elimT ssrnat.ltP (tsize_gt0 t)) => H; lia.
+apply: bi.and_proper => //.
+do !apply bi.or_proper.
+- apply: bi.exist_proper => T.
+  apply: and_proper_L => T_t.
+  apply: big_sepS_proper => t' T_t'.
+  move: (decompose_tsize T_t T_t') => ?.
+  rewrite public_pre_aux_eq //; lia.
+- apply bi.and_proper => //.
+  apply big_sepL_proper => k t' /(elem_of_list_lookup_2 _ _ _) /tsize_TExp_TInv ?.
+  by rewrite !public_pre_aux_eq; try lia.
+- case: t e_st => //= k t e_st.
+  rewrite tsizeE -ssrnat.plusE in e_st.
+  case: func_of_term => // F.
+  apply: bi.and_proper => //.
+  apply: bi.and_proper => //.
+  case e_k: Spec.open_key => [k'|] //=.
+  have ? := open_key_tsize e_k.
+  rewrite !public_pre_aux_eq //; lia.
+Qed.
+
+Definition public_pre' (P : term -d> iProp) : term -d> iProp :=
+  public_pre (λ t, ▷ P t)%I.
+
+Local Instance public_pre'_contractive : Contractive public_pre'.
+Proof. rewrite /public_pre'; solve_contractive. Qed.
+
+Definition public_def := fixpoint public_pre'.
+Local Definition public_aux : seal (@public_def). Proof. by eexists. Qed.
+Definition public := public_aux.(unseal).
+Local Lemma public_unseal : public = public_def.
+Proof. rewrite -public_aux.(seal_eq) //. Qed.
+
+Definition dh_pred_def := λ t1 t2, dh_pred0 (λ t, ▷ public t)%I (t1, t2).
+Local Definition dh_pred_aux : seal (@dh_pred_def). Proof. by eexists. Qed.
+Definition dh_pred := dh_pred_aux.(unseal).
+Local Lemma dh_pred_unseal : dh_pred = dh_pred_def.
+Proof. rewrite -dh_pred_aux.(seal_eq) //. Qed.
+
 Lemma public_eq t :
   public t ⊣⊢
   minted t ∧ (
@@ -385,44 +547,61 @@ Lemma public_eq t :
        end%I
   ).
 Proof.
-rewrite {1}[public]unlock.
-case e_st: (tsize t) => [|m] /=.
-  move: (ssrbool.elimT ssrnat.ltP (tsize_gt0 t)) => H; lia.
-apply: bi.and_proper => //.
-do !apply bi.or_proper.
-- apply: bi.exist_proper => T.
-  apply: and_proper_L => T_t.
-  apply: big_sepS_proper => t' T_t'.
-  move: (decompose_tsize T_t T_t') => ?.
-  rewrite public_aux_eq //; lia.
-- apply bi.and_proper => //.
-  apply big_sepL_proper => k t' /(elem_of_list_lookup_2 _ _ _) /tsize_TExp_TInv ?.
-  by rewrite !public_aux_eq; try lia.
-- case: t e_st => //= k t e_st.
-  rewrite tsizeE -ssrnat.plusE in e_st.
-  case: func_of_term => // F.
-  apply: bi.and_proper => //.
-  apply: bi.and_proper => //.
-  case e_k: Spec.open_key => [k'|] //=.
-  have ? := open_key_tsize e_k.
-  rewrite !public_aux_eq //; lia.
+rewrite public_unseal dh_pred_unseal /public_def.
+rewrite (fixpoint_unfold public_pre' t) {1}/public_pre' public_pre_eq.
+f_equiv; f_equiv; last f_equiv.
+- f_equiv => ?.
+  f_equiv; f_equiv=> ?; by rewrite (fixpoint_unfold public_pre' _).
+- f_equiv; f_equiv => ? ?; f_equiv.
+  + by rewrite /dh_pred_def public_unseal.
+  + by rewrite !(fixpoint_unfold public_pre' _).
+- case: t => // k t.
+  case: func_of_term => // ?.
+  f_equiv; f_equiv; case: Spec.open_key => // ?.
+  by rewrite !(fixpoint_unfold public_pre' _).
 Qed.
 
-Axiom dh_pred_intro1 :
-  forall t1 t2, dh_pred_base t1 t2 -∗ dh_pred t1 t2.
+Global Instance Persistent_public t : Persistent (public t).
+Proof. Admitted.
 
-Axiom dh_pred_intro2 :
-  forall t t1 t2, dh_pred t1 t2 -∗ dh_pred t (TExp t2 t) -∗ dh_pred t1 (TExp t2 t).
+Global Instance Persistent_dh_pred t1 t2 : Persistent (dh_pred t1 t2).
+Proof. rewrite dh_pred_unseal /dh_pred_def. by apply _. Qed.
 
-Axiom dh_pred_intro3 :
-  forall t1 t2, ▷ public t1 -∗ dh_pred t1 t2.
+Lemma dh_pred_intro1 t1 t2 : dh_pred_base t1 t2 -∗ dh_pred t1 t2.
+Proof.
+rewrite dh_pred_unseal /dh_pred_def dh_pred0_unfold /=.
+by eauto.
+Qed.
 
-Axiom dh_pred_ind :
-  forall (φ : term → term → iProp),
-    (□ ∀ t1 t2, dh_pred_base t1 t2 -∗ φ t1 t2) -∗
-    (□ ∀ t t1 t2, φ t1 t2 -∗ φ t (TExp t2 t) -∗ φ t1 (TExp t2 t)) -∗
-    (□ ∀ t1 t2, ▷ public t1 -∗ φ t1 t2) -∗
-    ∀ t1 t2, dh_pred t1 t2 -∗ φ t1 t2.
+Lemma dh_pred_intro2 t t1 t2 :
+  dh_pred t1 t2 -∗ dh_pred t (TExp t2 t) -∗ dh_pred t1 (TExp t2 t).
+Proof.
+rewrite dh_pred_unseal /dh_pred_def (dh_pred0_unfold _ (t1, TExp t2 t)) /=.
+by iIntros "#H1 #H2"; iRight; iRight; iExists _, _; iFrame "#".
+Qed.
+
+Lemma dh_pred_intro3 t1 t2 : ▷ public t1 -∗ dh_pred t1 t2.
+Proof.
+rewrite dh_pred_unseal /dh_pred_def dh_pred0_unfold /=.
+by eauto.
+Qed.
+
+Lemma dh_pred_ind (φ : term → term → iProp) :
+  (□ ∀ t1 t2, dh_pred_base t1 t2 -∗ φ t1 t2) -∗
+  (□ ∀ t t1 t2, φ t1 t2 -∗ φ t (TExp t2 t) -∗ φ t1 (TExp t2 t)) -∗
+  (□ ∀ t1 t2, ▷ public t1 -∗ φ t1 t2) -∗
+  ∀ t1 t2, dh_pred t1 t2 -∗ φ t1 t2.
+Proof.
+iIntros "#H1 #H2 #H3 %t1 %t2".
+rewrite dh_pred_unseal /dh_pred_def; set ts := (t1, t2).
+rewrite -[t1]/ts.1 -[t2]/ts.2; move: ts => ts.
+iRevert (ts); iApply dh_pred0_ind.
+iIntros "!> %ts [? | [? | H]]".
+- by iApply "H1".
+- by iApply "H3".
+- iDestruct "H" as (t2' t) "/= (-> & [H1' _] & [H2' _])".
+  by iApply ("H2" with "H1'").
+Qed.
 
 Lemma public_minted t : public t ⊢ minted t.
 Proof. rewrite public_eq; by iIntros "[??]". Qed.
