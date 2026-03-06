@@ -155,7 +155,7 @@ iApply dh_pred0_ind; iIntros "!> %ts [#? | [#? | H]]"; eauto.
   by iRight; iRight; iExists t2', t; iFrame "#".
 Qed.
 
-Lemma dh_pred0_mono P1 P2 :
+Lemma dh_pred0_wand P1 P2 :
   □ (∀ t, P1 t -∗ P2 t) -∗
   ∀ ts, dh_pred0 P1 ts -∗ dh_pred0 P2 ts.
 Proof.
@@ -382,12 +382,30 @@ Fixpoint public_pre_aux P n t : iProp :=
     )
   else False.
 
-Global Instance Persistent_public_pre_aux P n t :
-  (∀ t, Persistent (P t)) →
-  Persistent (public_pre_aux P n t).
+Lemma Persistent_public_pre_aux P n t :
+  □ (∀ t, P t -∗ <pers> P t) -∗
+  public_pre_aux P n t -∗ <pers> public_pre_aux P n t.
 Proof.
-elim: n t => [|n IH] /=; first by apply _.
-case; try by move=> *; apply _.
+elim: n => [|n IH] //= in t *; eauto.
+iIntros "#wand [#m H]"; iSplit => //.
+iDestruct "H" as "[H | [H | H]]".
+- iDestruct "H" as (T ?) "H"; iLeft; iExists T; iSplit; eauto.
+  iAssert ([∗ set] t' ∈ T, <pers> public_pre_aux P n t')%I as "{H} #H".
+  { iApply (big_sepS_impl with "H"). iIntros "!> %t' _".
+    by iApply IH. }
+  by iModIntro; iApply (big_sepS_impl with "H"); eauto.
+- iDestruct "H" as "(% & H)"; iRight; iLeft.
+  set (P' := public_pre_aux P n).
+  iAssert ([∗ list] t' ∈ exps t, <pers> dh_pred0 P (t', t) ∧
+    □ (P' t' → P' (TExp t (TInv t'))))%I as "{H} #H".
+  { iApply (big_sepL_impl with "H").
+    iIntros "!> %k %t' _ [dh #?]"; iSplit => //.
+    iAssert (dh_pred0 (λ t'', <pers> P t'')%I (t', t)) as "{dh} #dh".
+    { iApply (dh_pred0_wand with "[] dh"); eauto. }
+    by iModIntro; iApply (dh_pred0_wand with "[] dh"); iIntros "!> % #?". }
+  iModIntro; iSplit => //.
+  by iApply (big_sepL_impl with "H"); iIntros "!> % % _ [#? #?]"; eauto.
+- iRight; iRight; case: t; by move=> *; iPoseProof "H" as "#H".
 Qed.
 
 Global Instance public_pre_aux_ne n :
@@ -415,10 +433,10 @@ Proof.
 rewrite /public_pre => P1 P2 HP t _ <-; by f_equiv.
 Qed.
 
-Global Instance Persistent_public_pre P t :
-  (∀ t, Persistent (P t)) →
-  Persistent (public_pre P t).
-Proof. apply _. Qed.
+Lemma Persistent_public_pre P t :
+  □ (∀ t, P t -∗ <pers> P t) -∗
+  public_pre P t -∗ <pers> public_pre P t.
+Proof. exact: Persistent_public_pre_aux. Qed.
 
 Lemma open_key_tsize t1 t2 : Spec.open_key t1 = Some t2 → tsize t2 = tsize t1.
 Proof.
@@ -562,7 +580,14 @@ f_equiv; f_equiv; last f_equiv.
 Qed.
 
 Global Instance Persistent_public t : Persistent (public t).
-Proof. Admitted.
+Proof.
+rewrite /Persistent; rewrite public_unseal /public_def.
+iIntros "H"; iLöb as "IH" forall (t).
+rewrite (fixpoint_unfold public_pre' t) {3 4}/public_pre'.
+iApply (Persistent_public_pre with "[] H").
+iIntros "!> % H"; rewrite -bi.later_persistently; iModIntro.
+by iApply "IH".
+Qed.
 
 Global Instance Persistent_dh_pred t1 t2 : Persistent (dh_pred t1 t2).
 Proof. rewrite dh_pred_unseal /dh_pred_def. by apply _. Qed.
