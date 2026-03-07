@@ -101,6 +101,7 @@ iAssert (public ga) as "p_ga".
 { iApply public_TExp_iff; eauto.
   rewrite minted_TInt.
   iRight. do !iSplit => //; last by rewrite public_TInt; auto.
+  iApply dh_pred_intro1.
   iApply "a_pred". iModIntro. iModIntro.
   by rewrite /iso_dh_key_share exps_TExpN. }
 wp_apply wp_send => //.

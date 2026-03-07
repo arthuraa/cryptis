@@ -83,6 +83,14 @@ Definition dh_pred_base (t t' : term) : iProp :=
   | _ => False
   end.
 
+Lemma dh_pred_base_TInv t t' :
+  ¬ is_inv t →
+  dh_pred_base (TInv t) t' ⊣⊢ False.
+Proof.
+rewrite -{1}[t]TInvK is_inv_TInv is_inv_unfold.
+case: (TInv t) => //=; eauto.
+Qed.
+
 Global Instance dh_pred_base_persistent t t' :
   Persistent (dh_pred_base t t').
 Proof. by case: t; apply _. Qed.
@@ -1201,7 +1209,7 @@ Lemma nonce_alloc P Q a :
   (minted (TNonce a) -∗ False) ∧
   |==> minted (TNonce a) ∗
     □ (public (TNonce a) ↔ ▷ □ P (TNonce a)) ∗
-    □ (∀ t, dh_pred (TNonce a) t ↔ ▷ □ Q t).
+    □ (∀ t, dh_pred_base (TNonce a) t ↔ ▷ □ Q t).
 Proof.
 iIntros "token".
 iSplit.
@@ -1230,14 +1238,13 @@ iSplitR.
     iSpecialize ("e" $! (TNonce a)). iModIntro. by iRewrite "e".
   + iIntros "#?". iSplit => //. iExists γP, P; eauto.
 iIntros "!> !> %t"; iSplit.
-- admit.
-(* - iDestruct 1 as (γQ' Q') "(#meta_γQ' & #own_Q' & ?)".
- *   iPoseProof (meta_agree with "dh meta_γQ'") as "->".
- *   iPoseProof (own_valid_2 with "own_Q own_Q'") as "valid".
- *   iPoseProof (saved_pred_op_validI with "valid") as "[_ #e]".
- *   iSpecialize ("e" $! t). iModIntro. by iRewrite "e". *)
-- by iIntros "#?"; iApply dh_pred_intro1; iExists _, _; eauto.
-Admitted.
+- iDestruct 1 as (γQ' Q') "(#meta_γQ' & #own_Q' & ?)".
+  iPoseProof (meta_agree with "dh meta_γQ'") as "->".
+  iPoseProof (own_valid_2 with "own_Q own_Q'") as "valid".
+  iPoseProof (saved_pred_op_validI with "valid") as "[_ #e]".
+  iSpecialize ("e" $! t). iModIntro. by iRewrite "e".
+- by iIntros "#?"; iExists _, _; eauto.
+Qed.
 
 Lemma public_pkey k : public k ⊢ public (Spec.pkey k).
 Proof.

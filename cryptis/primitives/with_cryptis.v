@@ -140,15 +140,16 @@ Lemma twp_mk_nonce_gen (P Q : term → iProp Σ) E Ψ (Φ : term → iProp Σ) :
   (∀ t, (minted t -∗ False) ∧
         (|==> minted t ∗
               □ (public t ↔ ▷ □ P t) ∗
-              □ (∀ t', dh_pred t t' ↔ ▷ □ Q t')) ={E}=∗
+              □ (∀ t', dh_pred_base t t' ↔ ▷ □ Q t')) ={E}=∗
         minted t ∗
         □ (public t ↔ ▷ □ P t) ∗
-        □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') ∗
+        □ (∀ t', dh_pred_base t t' ↔ ▷ □ Q t') ∗
         Φ t) -∗
   (∀ t, ⌜is_nonce t⌝ -∗
         minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
-        □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
+        □ (∀ t', dh_pred_base t t' ↔ ▷ □ Q t') -∗
+        □ (∀ t', dh_pred_base (TInv t) t' ↔ False) -∗
         Φ t -∗
         Ψ t) -∗
   WP mk_nonce #()%V @ E [{ Ψ }].
@@ -161,21 +162,23 @@ iPoseProof ("mint" with "fresh") as ">(#? & #? & #? & ?)".
 iSpecialize ("post" $! (TNonce a)).
 wp_pures. rewrite val_of_term_unseal /=.
 iApply ("post" with "[] [] [] [$]"); eauto.
+by iIntros "!> %"; rewrite dh_pred_base_TInv; eauto.
 Qed.
 
 Lemma wp_mk_nonce_gen (P Q : term → iProp Σ) E Ψ (Φ : term → iProp Σ) :
   (∀ t, (minted t -∗ False) ∧
         (|==> minted t ∗
               □ (public t ↔ ▷ □ P t) ∗
-              □ (∀ t', dh_pred t t' ↔ ▷ □ Q t')) ={E}=∗
+              □ (∀ t', dh_pred_base t t' ↔ ▷ □ Q t')) ={E}=∗
         minted t ∗
         □ (public t ↔ ▷ □ P t) ∗
-        □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') ∗
+        □ (∀ t', dh_pred_base t t' ↔ ▷ □ Q t') ∗
         Φ t) -∗
   (∀ t, ⌜is_nonce t⌝ -∗
         minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
-        □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
+        □ (∀ t', dh_pred_base t t' ↔ ▷ □ Q t') -∗
+        □ (∀ t', dh_pred_base (TInv t) t' ↔ False) -∗
         Φ t -∗
         Ψ t) -∗
   WP mk_nonce #()%V @ E {{ Ψ }}.
@@ -192,7 +195,8 @@ Lemma twp_mk_nonce_freshN (T : gset term) (P Q : term → iProp Σ) (T' : term �
         ⌜is_nonce t⌝ -∗
         minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
-        □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
+        □ (∀ t', dh_pred_base t t' ↔ ▷ □ Q t') -∗
+        □ (∀ t', dh_pred_base (TInv t) t' ↔ False) -∗
         ([∗ set] t' ∈ T' t, term_token t' ⊤) -∗
         Ψ t) -∗
   WP mk_nonce #()%V [{ Ψ }].
@@ -212,7 +216,7 @@ iApply (twp_mk_nonce_gen P Q ⊤ _
   iMod (term_token_alloc (T' t)
           (minted t -∗ False)
           (minted t ∗ □ (public t ↔ ▷ □ P t) ∗
-           □ (∀ t', dh_pred t t' ↔ ▷ □ Q t'))
+           □ (∀ t', dh_pred_base t t' ↔ ▷ □ Q t'))
           with "ctx [] [] [fresh]") as "(post & token)" => //.
   - iIntros "%t' %t'_t contra minted_t'". iApply "contra".
     iSpecialize ("minted_T'" $! t).
@@ -227,8 +231,8 @@ iApply (twp_mk_nonce_gen P Q ⊤ _
     + by iDestruct "fresh" as "[_ >fresh]".
   iFrame. do !iModIntro.
   iDestruct "post" as "(? & ? & ?)". eauto. }
-iIntros "% ? ? ? ? [? ?]".
-iApply ("post" with "[$] [$] [$] [$] [$] [$]").
+iIntros "% ? ? ? ? ? [? ?]".
+iApply ("post" with "[$] [$] [$] [$] [$] [$] [$]").
 Qed.
 
 Lemma wp_mk_nonce_freshN (T : gset term) P Q (T' : term → gset term) Ψ :
@@ -239,7 +243,8 @@ Lemma wp_mk_nonce_freshN (T : gset term) P Q (T' : term → gset term) Ψ :
         ⌜is_nonce t⌝ -∗
         minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
-        □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
+        □ (∀ t', dh_pred_base t t' ↔ ▷ □ Q t') -∗
+        □ (∀ t', dh_pred_base (TInv t) t' ↔ False) -∗
         ([∗ set] t' ∈ T' t, term_token t' ⊤) -∗
         Ψ t) -∗
   WP mk_nonce #()%V {{ Ψ }}.
@@ -255,7 +260,8 @@ Lemma twp_mk_nonce_fresh (T : gset term) (P Q : term → iProp Σ) Ψ :
         ⌜is_nonce t⌝ -∗
         minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
-        □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
+        □ (∀ t', dh_pred_base t t' ↔ ▷ □ Q t') -∗
+        □ (∀ t', dh_pred_base (TInv t) t' ↔ False) -∗
         term_token t ⊤ -∗
         Ψ t) -∗
   WP mk_nonce #()%V [{ Ψ }].
@@ -277,7 +283,8 @@ Lemma wp_mk_nonce_fresh (T : gset term) P Q Ψ :
         ⌜is_nonce t⌝ -∗
         minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
-        □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
+        □ (∀ t', dh_pred_base t t' ↔ ▷ □ Q t') -∗
+        □ (∀ t', dh_pred_base (TInv t) t' ↔ False) -∗
         term_token t ⊤ -∗
         Ψ t) -∗
   WP mk_nonce #()%V {{ Ψ }}.
@@ -291,7 +298,8 @@ Lemma twp_mk_nonce (P Q : term → iProp Σ) Ψ :
   (∀ t, ⌜is_nonce t⌝ -∗
         minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
-        □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
+        □ (∀ t', dh_pred_base t t' ↔ ▷ □ Q t') -∗
+        □ (∀ t', dh_pred_base (TInv t) t' ↔ False) -∗
         term_token t ⊤ -∗
         Ψ t) -∗
   WP mk_nonce #()%V [{ Ψ }].
@@ -306,7 +314,8 @@ Lemma wp_mk_nonce (P Q : term → iProp Σ) Ψ :
   (∀ t, ⌜is_nonce t⌝ -∗
         minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
-        □ (∀ t', dh_pred t t' ↔ ▷ □ Q t') -∗
+        □ (∀ t', dh_pred_base t t' ↔ ▷ □ Q t') -∗
+        □ (∀ t', dh_pred_base (TInv t) t' ↔ False) -∗
         term_token t ⊤ -∗
         Ψ t) -∗
   WP mk_nonce #()%V {{ Ψ }}.
@@ -332,7 +341,7 @@ iApply (twp_mk_nonce_freshN ∅ (λ _, shot γ 1) (λ _, False%I)
 - iIntros "% ?". by rewrite elem_of_empty.
 - iIntros "%t". rewrite [term_of_aenc_key]unlock big_sepS_singleton minted_TKey.
   iModIntro. by iSplit; iIntros "?".
-iIntros "%t %fresh % #m_t #s_t _ token".
+iIntros "%t %fresh % #m_t #s_t _ _ token".
 rewrite big_sepS_singleton.
 pose sk := AEncKey t.
 iAssert (public sk ↔ ▷ □ shot γ 1)%I as "s_sk".
@@ -374,7 +383,7 @@ iApply (twp_mk_nonce_freshN ∅ (λ _, shot γ 1) (λ _, False%I)
 - iIntros "% ?". by rewrite elem_of_empty.
 - iIntros "%t". rewrite [term_of_sign_key]unlock big_sepS_singleton minted_TKey.
   iModIntro. by iSplit; iIntros "?".
-iIntros "%t %fresh % #m_t #s_t _ token".
+iIntros "%t %fresh % #m_t #s_t _ _ token".
 rewrite big_sepS_singleton.
 pose sk := SignKey t.
 iAssert (public sk ↔ ▷ □ shot γ 1)%I as "s_sk".
@@ -416,7 +425,7 @@ iApply (twp_mk_nonce_freshN ∅ (λ _, shot γ 1) (λ _, False%I)
 - iIntros "% ?". by rewrite elem_of_empty.
 - iIntros "%t". rewrite [term_of_senc_key]unlock big_sepS_singleton minted_TKey.
   iModIntro. by iSplit; iIntros "?".
-iIntros "%t %fresh % #m_t #s_t _ token".
+iIntros "%t %fresh % #m_t #s_t _ _ token".
 rewrite big_sepS_singleton.
 pose sk := SEncKey t.
 iAssert (public sk ↔ ▷ □ shot γ 1)%I as "s_sk".
