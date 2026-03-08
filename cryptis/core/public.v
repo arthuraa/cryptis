@@ -636,6 +636,15 @@ iIntros "!> %ts [? | [? | H]]".
   by iApply ("H2" with "H1'").
 Qed.
 
+Lemma dh_pred_approx t1 t2 :
+  dh_pred t1 t2 -∗
+  ▷ public t1 ∨ ∃ t2', ⌜base t2' = base t2⌝ ∗ dh_pred_base t1 t2'.
+Proof.
+iRevert (t1 t2); iApply dh_pred_ind; eauto.
+- by iIntros "!> %t1 %t2 #base"; eauto.
+- by iIntros "!> %t %t1 %t2 #IH _"; rewrite base_TExpN.
+Qed.
+
 Lemma public_minted t : public t ⊢ minted t.
 Proof. rewrite public_eq; by iIntros "[??]". Qed.
 

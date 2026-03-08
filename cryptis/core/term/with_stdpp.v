@@ -165,6 +165,12 @@ case: decide => [->|?]; first by rewrite count_exp_TInv_TExp.
 by rewrite count_exp_TExp_ne.
 Qed.
 
+Lemma not_elem_of_TInv_exps t1 t2 :
+  TInv t1 ∉ exps t2 ↔ t1 ∈ exps (TExp t2 t1).
+Proof.
+rewrite -!count_exp_gt0 count_exp_TInv count_exp_TExp_eq; lia.
+Qed.
+
 Inductive subterm (t : term) : term → Prop :=
 | STRefl : subterm t t
 | STPair1 t1 t2 of subterm t t1 : subterm t (TPair t1 t2)
