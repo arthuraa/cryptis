@@ -175,6 +175,9 @@ Proof.
 rewrite -!count_exp_gt0 count_exp_TInv count_exp_TExp_eq; lia.
 Qed.
 
+Lemma TExpN_appC t ts1 ts2 : TExpN t (ts1 ++ ts2) = TExpN t (ts2 ++ ts1).
+Proof. exact: TExpN_catC. Qed.
+
 Inductive subterm (t : term) : term → Prop :=
 | STRefl : subterm t t
 | STPair1 t1 t2 of subterm t t1 : subterm t (TPair t1 t2)
@@ -889,6 +892,29 @@ Qed.
 Lemma TExp_TExpN t1 ts1 t2 : TExp (TExpN t1 ts1) t2 = TExpN t1 (t2 :: ts1).
 Proof.
 by rewrite TExpNA -[@seq.cat]/@app [_ ++ _]comm.
+Qed.
+
+Lemma elem_of_TExpN2l g t1 t2 :
+  t1 ≠ TInv t2 →
+  TInv t1 ∉ exps g →
+  t1 ∈ exps (TExpN g [t1; t2]).
+Proof.
+move=> t1_t2 t1_g.
+rewrite !not_elem_of_TInv_exps -count_exp_gt0 in t1_g.
+rewrite -TExp_TExpN TExpNC -count_exp_gt0 count_exp_TExp.
+rewrite (@decide_False _ (t1 = TInv t2)) //.
+by case: decide; lia.
+Qed.
+
+Lemma elem_of_TExpN2r g t1 t2 :
+  t1 ≠ TInv t2 →
+  TInv t2 ∉ exps g →
+  t2 ∈ exps (TExpN g [t1; t2]).
+Proof.
+move=> t1_t2 t2_g.
+rewrite -TExp_TExpN TExpNC TExp_TExpN.
+apply: elem_of_TExpN2l => //.
+by move=> contra; apply: t1_t2; rewrite contra TInvK.
 Qed.
 
 Lemma base_expN t : ¬ is_exp t → base t = t.
