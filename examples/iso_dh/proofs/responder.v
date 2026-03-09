@@ -74,18 +74,19 @@ set pkR := Spec.pkey skR.
 iIntros "%Φ (#chan_c & #? & (#? & #?) & #N_φ &
              #p_ga & #m_skI & #m_skR & res & #failed) Hpost".
 wp_lam. wp_pures. wp_apply wp_pkey. wp_pures.
-wp_apply (wp_mk_nonce_freshN ∅
+wp_apply (wp_mk_nonce_freshN {[ga]}
           (λ b, ⌜failed⌝ ∨ released ga ∧ released (TExp (TInt 0) b))%I
           iso_dh_key_share
           (λ b, {[TExp (TInt 0) b]}))
        => //.
-- iIntros "%". rewrite elem_of_empty. iIntros "[]".
+- iIntros "%". rewrite elem_of_singleton public_minted. by iIntros "->".
 - iIntros "%b".
   rewrite big_sepS_singleton minted_TExp.
   rewrite minted_TInt /= bi.True_and.
   iModIntro. by iApply bi.equiv_iff.
   intro contra. destruct contra.
-iIntros "%b _ _ #m_b #s_b #dh_gb token".
+iIntros "%b %fresh_b %nonce_b #m_b #s_b #dh_gb _ token".
+have {}fresh_b: ¬ subterm b ga by apply: fresh_b; exact/elem_of_singleton.
 rewrite bi.intuitionistic_intuitionistically.
 set gb := TExp (TInt 0) b.
 set gab := TExp ga b.
@@ -101,7 +102,8 @@ iMod (iso_dh_ready_alloc N skI skR si with "[//] resI") as "#ready".
 iAssert (public gb) as "#p_gb".
 { iApply public_TExp_iff; eauto.
   rewrite minted_TInt. iRight. do !iSplit => //.
-  - iApply "dh_gb". iPureIntro. by rewrite exps_TExpN.
+  - iApply dh_pred_intro1.
+    iApply "dh_gb". iPureIntro. by rewrite exps_TExpN.
   - by rewrite public_TInt; auto. }
 wp_pure _ credit:"H1".
 wp_pure _ credit:"H2".
@@ -159,7 +161,7 @@ iAssert (|={⊤}=>
   iDestruct "inv" as "(%a & %gb' & %skR' & %e_m3 & comp)".
   case/Spec.of_list_inj: e_m3
     => -> <- /Spec.sign_pkey_inj <- {ga gb' skR'}
-    in gb gab si *.
+    in fresh_b gb gab si *.
   rewrite TExpNC in gab si *.
   iDestruct "comp" as "[comp|comp]".
   - iMod (term_meta_set (iso_dhN.@"failed") true with "token_failed")

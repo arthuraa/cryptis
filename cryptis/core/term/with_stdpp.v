@@ -391,6 +391,11 @@ case: seq.nilP => [cancel_nil | _] /=.
   by apply: map_ext_in => ? /elem_of_list_In /(ssrbool.introT inP) /wfs ?; rewrite fold_termK.
 Qed.
 
+Lemma subterms_nonce t : is_nonce t → subterms t = {[t]}.
+Proof.
+by case: t => //= ? _; rewrite subtermsE' right_id_L.
+Qed.
+
 Definition subtermsE := (subterms_TInv, subterms_TExpN, subtermsE').
 
 Ltac solve_subtermsP :=

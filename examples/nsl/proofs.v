@@ -106,7 +106,7 @@ iAssert (public (Spec.pkey skI)) as "?". { by iApply public_aenc_key. }
 iAssert (public (Spec.pkey skR)) as "?". { by iApply public_aenc_key. }
 rewrite /init. wp_pures. wp_apply wp_pkey. wp_pures.
 wp_apply (wp_mk_nonce (λ _, public skI ∨ public skR)%I (λ _, False)%I) => //.
-iIntros "%nI _ #m_nI #s_nI _ token".
+iIntros "%nI _ #m_nI #s_nI _ _ token".
 rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_list. wp_term_of_list. wp_apply wp_aenc => /=; eauto.
 - by rewrite minted_of_list /= minted_pkey; eauto.
@@ -191,7 +191,7 @@ wp_apply (wp_mk_nonce_freshN
   iSplit => //; iModIntro; first by iSplit; iIntros "?".
   iSplit; last by iIntros "(_ & _ & _ & ? & _)".
   by iIntros "#m_nR"; do !iSplit => //.
-iIntros "%nR _ %nonce #m_nR #s_nR _ tokens".
+iIntros "%nR _ %nonce #m_nR #s_nR _ _ tokens".
 rewrite bi.intuitionistic_intuitionistically.
 set sess_key := SEncKey (Spec.of_list [_; _; _; _]).
 have ? : nR ≠ sess_key.

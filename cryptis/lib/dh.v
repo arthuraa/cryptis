@@ -23,13 +23,13 @@ Implicit Types kA kB : term.
 Variable P : term → iProp.
 
 Definition dh_publ t : iProp :=
-  ⌜length (exps t) = 1⌝ ∧ □ P t.
+  ⌜length (exps t) = 1⌝ ∧ P t.
 
 Definition dh_seed t : iProp :=
   minted t ∧
   □ (public t ↔ ▷ False) ∧
   □ (∀ t', dh_pred_base t t' ↔ ▷ □ dh_publ t') ∧
-  □ (∀ t', dh_pred_base (TInv t) t' ↔ False).
+  □ (∀ t', dh_pred_base (TInv t) t' ↔ ▷ False).
 
 Lemma dh_seed_elim0 a :
   dh_seed a -∗
@@ -40,17 +40,30 @@ iIntros "#(_ & aP & _) #p_t".
 by iApply "aP".
 Qed.
 
+Lemma dh_seed_dh_pred_base_elim a t :
+  a ∈ exps t →
+  dh_seed a -∗
+  dh_pred_base a t -∗
+  □ ▷ (⌜t = TExp (base t) a⌝ ∗ P t).
+Proof.
+iIntros "%a_t (_ & _ & #dh & _) #base".
+iSpecialize ("dh" with "base"); iModIntro; iNext.
+iDestruct "dh" as "#(%l_t & p_t)"; iFrame "#".
+rewrite -[t in LHS]base_expsK.
+case: (exps t) => // b [|//] in a_t l_t *.
+by rewrite elem_of_list_singleton in a_t; subst b.
+Qed.
+
 Lemma dh_seed_elim1 g a :
   ¬ is_exp g →
   dh_seed a -∗
   public (TExp g a) -∗
-  ▷ P (TExp g a).
+  ▷ ◇ P (TExp g a).
 Proof.
 iIntros "%gNX #aP #p_t".
 rewrite public_TExp_iff //.
 iDestruct "p_t" as "[[_ contra] | (_ & _ & p_t & _)]".
-  by iPoseProof (@dh_seed_elim0 with "aP contra") as ">[]".
-iDestruct "aP" as "(_ & _ & #aP & #aPV)".
+  by iPoseProof (dh_seed_elim0 with "aP contra") as ">[]".
 set t' := TExp g a.
 (* MOVE *)
 have exps_t': exps t' = [a].
@@ -58,29 +71,60 @@ have exps_t': exps t' = [a].
   by rewrite exps_TExpN exps_expN // cancel_exps1.
 (* /MOVE *)
 have a_t' : a ∈ exps t' by rewrite exps_t'; set_solver.
-iPoseProof "p_t" as "{p_t} -#p_t". iRevert (a_t'); iRevert "p_t aP aPV".
-move: t' {exps_t'} => t'; iRevert (a t').
-iApply dh_pred_ind.
-- iIntros "%t1 %t2 !> #base #aP #aPV %t1_t2".
-  iSpecialize ("aP" with "base"); iModIntro.
-  by iDestruct "aP" as "# [%e #aP]".
-- iIntros "%t %t1 %t2 !> IH1 IH2 #aP #aPV"; admit.
-- admit.
-Admitted.
+iPoseProof (dh_pred_inv_same with "p_t") as "[#contra|H]" => //.
+  by iModIntro; iDestruct (dh_seed_elim0 with "aP contra") as ">[]".
+iDestruct "H" as "(%t & %e_base & %a_t & H)".
+iDestruct (dh_seed_dh_pred_base_elim with "aP H")
+  as "{H} #[>-> H]" => //; iNext.
+by rewrite -[t' in (◇ P t')%I]base_expsK exps_t' e_base.
+Qed.
+
+(* MOVE *)
+
+
+(* /MOVE *)
 
 Lemma dh_seed_elim2 g a t :
   ¬ is_exp g →
   a ≠ TInv t →
   dh_seed a -∗
   public (TExpN g [a; t]) -∗
-  ◇ (public (TExp g a) ∧ public t).
+  ▷ ◇ (P (TExp g a) ∧ public t).
 Proof. Admitted.
 (* iIntros "%gXN %a_t #aP #p_t".
  * rewrite public_TExp2_iff //.
- * iDestruct "p_t" as "[p_t|[[_ contra]|p_t]]"; eauto.
- *   by iPoseProof (@dh_seed_elim0 with "aP contra") as ">[]".
+ * iDestruct "p_t" as "[[p_t ?]|[[_ contra]|p_t]]"; eauto.
+ * - by iSplit; eauto; iApply dh_seed_elim1.
+ * - by iPoseProof (@dh_seed_elim0 with "aP contra") as ">[]".
  * iDestruct "p_t" as "(_ & p_t & _)".
- * iDestruct "aP" as "(_ & _ & #aP)".
+ * have t_t' : t ∈ exps (TExpN g [a; t]).
+ *   by apply: elem_of_TExpN2r; rewrite // exps_expN // elem_of_nil; case.
+ * iDestruct (dh_pred_inv_same with "p_t") as "[contra|p_t']".
+ * - rewrite -TExp_TExpN -count_exp_gt0 count_exp_TExp_eq.
+ *   rewrite count_exp_TExp (@decide_False _ (a = TInv t)) //.
+ *   rewrite count_exp_eq0 ?exps_expN //; try set_solver.
+ *   by case: decide; lia.
+ * - iNext; iDestruct (dh_seed_elim0 with "aP contra") as ">[]".
+ * rewrite base_TExpN; iDestruct "p_t'" as "(%t2' & %e_base & %a_t2' & p_t2')".
+ * iDestruct (dh_seed_dh_pred_base_elim with "aP p_t2'") as "{p_t2'} #[>-> H]"
+ *   => //.
+ * rewrite {}e_base base_expN {t2' a_t2'} //; iSplit; first by eauto.
+ * iDestruct (dh_pred_inv_gen _ t_t' with "p_t") as "{p_t H} [contra|p_t]".
+ *   by iNext; iDestruct (dh_seed_elim0 with "aP contra") as ">[]".
+ * iDestruct "p_t" as "[p_t|p_t]".
+ *   iDestruct "p_t" as "(%t2' & %e_base & %a_t2' & p_t2')".
+ *   iDestruct (dh_seed_dh_pred_base_elim with "aP p_t2'") as "{p_t2'} #[>-> H]"
+ *     => //.
+ *   i
+ *
+ *
+ * iDestruct "aP" as "(_ & _ & #aP & _)".
+ * iPoseProof ("aP" with "p_t2'") as "{p_t2'} p_t2'"; iNext.
+ * iDestruct "p_t2'" as "#(%l_t2' & p_t2')".
+ * have exps_t2' : exps t2' = [a].
+ *   case: (exps
+ *
+ *
  * iPoseProof ("aP" with "p_t") as "{p_t} p_t".
  * iAssert (▷ False)%I as ">[]".
  * iModIntro.
