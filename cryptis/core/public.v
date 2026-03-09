@@ -80,12 +80,12 @@ Definition dh_pred_base (t t' : term) : iProp :=
     ∃ γ φ, meta a (nroot.@"dh") γ ∧
            own γ (saved_pred DfracDiscarded φ) ∧
            ▷ □ φ t'
-  | _ => False
+  | _ => ▷ False
   end.
 
 Lemma dh_pred_base_TInv t t' :
   ¬ is_inv t →
-  dh_pred_base (TInv t) t' ⊣⊢ False.
+  dh_pred_base (TInv t) t' ⊣⊢ ▷ False.
 Proof.
 rewrite -{1}[t]TInvK is_inv_TInv is_inv_unfold.
 case: (TInv t) => //=; eauto.
@@ -1109,7 +1109,7 @@ Lemma public_TExp'' t1 t2 :
   public t1 -∗
   minted t2 -∗
   dh_pred t2 (TExp t1 t2) -∗
-  □ (∀ t, dh_pred_base (TInv t2) t -∗ ▷ False) -∗
+  □ (∀ t, dh_pred_base (TInv t2) t ↔ ▷ False) -∗
   ▷ public (TExp t1 t2).
 Proof.
 case: (decide (TInv t2 ∈ exps t1)) => in_exps; last first.
