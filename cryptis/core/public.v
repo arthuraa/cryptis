@@ -621,7 +621,9 @@ Qed.
 
 Lemma dh_pred_ind (φ : term → term → iProp) :
   (□ ∀ t1 t2, dh_pred_base t1 t2 -∗ φ t1 t2) -∗
-  (□ ∀ t t1 t2, φ t1 t2 -∗ φ t (TExp t2 t) -∗ φ t1 (TExp t2 t)) -∗
+  (□ ∀ t t1 t2, dh_pred t1 t2 -∗ φ t1 t2 -∗
+                dh_pred t (TExp t2 t) -∗ φ t (TExp t2 t) -∗
+                φ t1 (TExp t2 t)) -∗
   (□ ∀ t1 t2, ▷ public t1 -∗ φ t1 t2) -∗
   ∀ t1 t2, dh_pred t1 t2 -∗ φ t1 t2.
 Proof.
@@ -632,17 +634,61 @@ iRevert (ts); iApply dh_pred0_ind.
 iIntros "!> %ts [? | [? | H]]".
 - by iApply "H1".
 - by iApply "H3".
-- iDestruct "H" as (t2' t) "/= (-> & [H1' _] & [H2' _])".
-  by iApply ("H2" with "H1'").
+- iDestruct "H" as (t2' t) "/= (-> & [H11 #H12] & [H21 #H22])".
+  by iApply ("H2" with "H12 H11 [$]").
 Qed.
 
-Lemma dh_pred_approx t1 t2 :
+Lemma dh_pred_inv t1 t2 :
   dh_pred t1 t2 -∗
   ▷ public t1 ∨ ∃ t2', ⌜base t2' = base t2⌝ ∗ dh_pred_base t1 t2'.
 Proof.
 iRevert (t1 t2); iApply dh_pred_ind; eauto.
 - by iIntros "!> %t1 %t2 #base"; eauto.
-- by iIntros "!> %t %t1 %t2 #IH _"; rewrite base_TExpN.
+- by iIntros "!> %t %t1 %t2 _ #IH _ _"; rewrite base_TExpN.
+Qed.
+
+Lemma dh_pred_inv_same t1 t2 :
+  t1 ∈ exps t2 →
+  dh_pred t1 t2 -∗
+  ▷ public t1 ∨
+  ∃ t2', ⌜base t2' = base t2⌝ ∗ ⌜t1 ∈ exps t2'⌝ ∗ dh_pred_base t1 t2'.
+Proof.
+iIntros "%t1_t2 dh"; iRevert (t1_t2); iRevert (t1 t2) "dh".
+iApply dh_pred_ind; last by eauto.
+- iIntros "!> %t1 %t2 #dh %t1_t2"; eauto.
+- iIntros "!> %t %t1 %t2 _ IH1 _ IH2 %t1_t2"; rewrite base_TExpN.
+  case: (decide (t = t1)) => [e|ne].
+    by move: e => -> {t} in t1_t2 *; iApply "IH2".
+  iApply "IH1"; iPureIntro.
+  move: t1_t2; rewrite -!count_exp_gt0 count_exp_TExp decide_False //.
+  by case: decide; lia.
+Qed.
+
+Lemma dh_pred_inv_gen t1 t2 t3 :
+  t3 ∈ exps t2 →
+  dh_pred t1 t2 -∗
+  ▷ public t1 ∨
+  (∃ t2', ⌜base t2' = base t2⌝ ∗ ⌜t3 ∈ exps t2'⌝ ∗ dh_pred_base t1 t2') ∨
+  ▷ public t3 ∨
+  (∃ t2', ⌜base t2' = base t2⌝ ∗ ⌜t3 ∈ exps t2'⌝ ∗ dh_pred_base t3 t2').
+Proof.
+iIntros "%t1_t2 dh".
+case: (decide (t3 = t1)) => [e|t1_t3].
+  move: e => -> {t3} in t1_t2 *.
+  by iDestruct (dh_pred_inv_same with "dh") as "[H|H]" => //; eauto.
+iRevert (t1_t2 t1_t3); iRevert (t1 t2) "dh".
+iApply dh_pred_ind; last by eauto.
+- by iIntros "!> %t1 %t2 #dh %t1_t2"; eauto 10.
+- iIntros "!> %t %t1 %t2 #dh1 IH1 #dh2 IH2 %t1_t2 %t1_t3"; rewrite base_TExpN.
+  case: (decide (t = t1)) => [e|t_t1].
+    by move: e => -> {t} in t1_t2 *; iApply "IH2".
+  case: (decide (t = t3)) => [e|t_t3].
+    move: e => -> {t} in t_t1 t1_t2 *.
+    iDestruct (dh_pred_inv_same with "dh2") as "[H|H]" => //; eauto.
+    by rewrite base_TExpN; eauto.
+  iApply "IH1" => //; iPureIntro.
+  move: t1_t2; rewrite -!count_exp_gt0 count_exp_TExp decide_False //.
+  by case: decide; lia.
 Qed.
 
 Lemma public_minted t : public t ⊢ minted t.
@@ -1084,7 +1130,7 @@ iDestruct "p1" as "[(%t3 & %t3_t1 & p1' & p3) | [m1 p1]]"; last first.
     iClear "m1 dh"; clear IH in_exps exp_t1; iRevert (t2' t1).
     iApply dh_pred_ind.
     - by iIntros "!> % % #dh _ #contra !>"; iApply "contra".
-    - by iIntros "!> % % % IH1 _"; iApply "IH1".
+    - by iIntros "!> % % % _ IH1 _ _"; iApply "IH1".
     - by iIntros "!> % _ #p1 #contra _ !>"; iApply "contra". }
   iAssert (minted (TExp t1 t2)) as "#m".
   { by iApply all_minted_TExp; eauto. }
