@@ -638,7 +638,33 @@ iIntros "!> %ts [? | [? | H]]".
   by iApply ("H2" with "H12 H11 [$]").
 Qed.
 
+Lemma dh_pred_inv_gen ts t1 t2 :
+  t1 ∈ ts →
+  ts ⊆ exps t2 →
+  dh_pred t1 t2 -∗
+  ∃ t, ⌜t ∈ ts⌝ ∧ (
+    ▷ public t ∨
+    ∃ t3, ⌜base t3 = base t2⌝ ∧ ⌜ts ⊆ exps t3⌝ ∧ dh_pred_base t t3).
+Proof.
+iIntros "%t1_ts %ts_t2 dh"; iRevert (ts t1_ts ts_t2); iRevert (t1 t2) "dh".
+iApply dh_pred_ind; eauto 10.
+iIntros "!> %t %t1 %t2 #dh_t1 IH_t1 #dh_t IH_t %ts %t1_ts %ts_t2'".
+rewrite base_TExpN; case: (decide (t ∈ ts)) => t_ts; first by iApply "IH_t".
+iApply "IH_t1"; iPureIntro => // t3 t3_ts.
+have := ts_t2' _ t3_ts.
+rewrite -!count_exp_gt0 count_exp_TExp decide_False; last by congruence.
+case: decide => ?; lia.
+Qed.
+
 Lemma dh_pred_inv t1 t2 :
+  t1 ∈ exps t2 →
+  dh_pred t1 t2 -∗
+  ∃ t, ⌜t ∈ exps t2⌝ ∧ (
+    ▷ public t ∨
+    ∃ t3, ⌜base t3 = base t2⌝ ∧ ⌜exps t2 ⊆ exps t3⌝ ∧ dh_pred_base t t3).
+Proof. by move=> t1_t2; iApply dh_pred_inv_gen. Qed.
+
+Lemma dh_pred_inv_same' t1 t2 :
   dh_pred t1 t2 -∗
   ▷ public t1 ∨ ∃ t2', ⌜base t2' = base t2⌝ ∗ dh_pred_base t1 t2'.
 Proof.
@@ -660,33 +686,6 @@ iApply dh_pred_ind; last by eauto.
   case: (decide (t = t1)) => [e|ne].
     by move: e => -> {t} in t1_t2 *; iApply "IH2".
   iApply "IH1"; iPureIntro.
-  move: t1_t2; rewrite -!count_exp_gt0 count_exp_TExp decide_False //.
-  by case: decide; lia.
-Qed.
-
-Lemma dh_pred_inv_gen t1 t2 t3 :
-  t3 ∈ exps t2 →
-  dh_pred t1 t2 -∗
-  ▷ public t1 ∨
-  (∃ t2', ⌜base t2' = base t2⌝ ∗ ⌜t3 ∈ exps t2'⌝ ∗ dh_pred_base t1 t2') ∨
-  ▷ public t3 ∨
-  (∃ t2', ⌜base t2' = base t2⌝ ∗ ⌜t3 ∈ exps t2'⌝ ∗ dh_pred_base t3 t2').
-Proof.
-iIntros "%t1_t2 dh".
-case: (decide (t3 = t1)) => [e|t1_t3].
-  move: e => -> {t3} in t1_t2 *.
-  by iDestruct (dh_pred_inv_same with "dh") as "[H|H]" => //; eauto.
-iRevert (t1_t2 t1_t3); iRevert (t1 t2) "dh".
-iApply dh_pred_ind; last by eauto.
-- by iIntros "!> %t1 %t2 #dh %t1_t2"; eauto 10.
-- iIntros "!> %t %t1 %t2 #dh1 IH1 #dh2 IH2 %t1_t2 %t1_t3"; rewrite base_TExpN.
-  case: (decide (t = t1)) => [e|t_t1].
-    by move: e => -> {t} in t1_t2 *; iApply "IH2".
-  case: (decide (t = t3)) => [e|t_t3].
-    move: e => -> {t} in t_t1 t1_t2 *.
-    iDestruct (dh_pred_inv_same with "dh2") as "[H|H]" => //; eauto.
-    by rewrite base_TExpN; eauto.
-  iApply "IH1" => //; iPureIntro.
   move: t1_t2; rewrite -!count_exp_gt0 count_exp_TExp decide_False //.
   by case: decide; lia.
 Qed.

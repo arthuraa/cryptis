@@ -107,6 +107,10 @@ Proof. by rewrite (ssrbool.rwP inP) -count_exp_nat_gt0 -(ssrbool.rwP ssrnat.leP)
 Definition count_exp t ts : Z :=
   (count_exp_nat t ts - count_exp_nat (TInv t) ts)%Z.
 
+Lemma count_exp_eq0 t1 t2 :
+  t1 ∉ exps t2 → TInv t1 ∉ exps t2 → count_exp t1 t2 = 0.
+Proof. by move=> ??; rewrite /count_exp !count_exp_nat_eq0. Qed.
+
 Lemma count_exp_gt0 t1 t2 : (count_exp t1 t2 > 0)%Z ↔ t1 ∈ exps t2.
 Proof.
 rewrite /count_exp; case: (decide (t1 ∈ exps t2)) => t1_t2.
