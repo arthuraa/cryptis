@@ -98,15 +98,16 @@ Proof. by case: t; apply _. Qed.
 Definition dh_pred0_pre P DH ts : iProp :=
   dh_pred_base ts.1 ts.2 ∨
   P ts.1 ∨
-  ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ DH (ts.1, t2') ∗ DH (t, ts.2).
+  ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ ⌜TInv t ∉ exps t2'⌝ ∗
+  DH (ts.1, t2') ∗ DH (t, ts.2).
 
 Local Instance dh_pred0_pre_mono P : BiMonoPred (dh_pred0_pre P).
 Proof.
 constructor; last by move=> ??; solve_proper.
 iIntros (DH1 DH2 _ _) "#H %ts dh"; rewrite /dh_pred0_pre.
 iDestruct "dh" as "[? | [? | dh]]"; eauto.
-iDestruct "dh" as (t2 t') "(#p & dh1 & dh2)".
-iRight; iRight; iExists t2, t'; iSplit => //.
+iDestruct "dh" as (t2 t') "(#p & #? & dh1 & dh2)".
+iRight; iRight; iExists t2, t'; iFrame "#".
 by iSplitL "dh1"; iApply "H".
 Qed.
 
@@ -121,7 +122,8 @@ Lemma dh_pred0_unfold P ts :
   dh_pred0 P ts ⊣⊢
   dh_pred_base ts.1 ts.2 ∨
   P ts.1 ∨
-  ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ dh_pred0 P (ts.1, t2') ∗ dh_pred0 P (t, ts.2).
+  ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ ⌜TInv t ∉ exps t2'⌝ ∗
+  dh_pred0 P (ts.1, t2') ∗ dh_pred0 P (t, ts.2).
 Proof. by rewrite dh_pred0_unseal /dh_pred0_def least_fixpoint_unfold. Qed.
 
 Lemma dh_pred0_ind P φ :
@@ -158,7 +160,7 @@ iRevert (ts) "H".
 iApply dh_pred0_ind; iIntros "!> %ts [#? | [#? | H]]"; eauto.
 - rewrite dh_pred0_unfold; eauto.
 - rewrite dh_pred0_unfold; eauto.
-- iDestruct "H" as (t2' t) "(% & [#? _] & [#? _])".
+- iDestruct "H" as (t2' t) "(% & % & [#? _] & [#? _])".
   iModIntro; rewrite [dh_pred0 P ts]dh_pred0_unfold.
   by iRight; iRight; iExists t2', t; iFrame "#".
 Qed.
@@ -171,7 +173,7 @@ iIntros "#mono".
 iApply dh_pred0_ind; iIntros "!> %ts [? | [? | H]]"; eauto.
 - by rewrite dh_pred0_unfold; iLeft.
 - by rewrite dh_pred0_unfold; iRight; iLeft; iApply "mono".
-- iDestruct "H" as (t2' t) "(% & [? _] & [? _])".
+- iDestruct "H" as (t2' t) "(% & % & [? _] & [? _])".
   rewrite [dh_pred0 P2 ts]dh_pred0_unfold.
   by iRight; iRight; iExists t2', t; iFrame.
 Qed.
@@ -607,10 +609,11 @@ by eauto.
 Qed.
 
 Lemma dh_pred_intro2 t t1 t2 :
+  TInv t ∉ exps t2 →
   dh_pred t1 t2 -∗ dh_pred t (TExp t2 t) -∗ dh_pred t1 (TExp t2 t).
 Proof.
 rewrite dh_pred_unseal /dh_pred_def (dh_pred0_unfold _ (t1, TExp t2 t)) /=.
-by iIntros "#H1 #H2"; iRight; iRight; iExists _, _; iFrame "#".
+by iIntros "% #H1 #H2"; iRight; iRight; iExists _, _; iFrame "#"; eauto.
 Qed.
 
 Lemma dh_pred_intro3 t1 t2 : ▷ public t1 -∗ dh_pred t1 t2.
@@ -621,7 +624,8 @@ Qed.
 
 Lemma dh_pred_ind (φ : term → term → iProp) :
   (□ ∀ t1 t2, dh_pred_base t1 t2 -∗ φ t1 t2) -∗
-  (□ ∀ t t1 t2, dh_pred t1 t2 -∗ φ t1 t2 -∗
+  (□ ∀ t t1 t2, ⌜TInv t ∉ exps t2⌝ -∗
+                dh_pred t1 t2 -∗ φ t1 t2 -∗
                 dh_pred t (TExp t2 t) -∗ φ t (TExp t2 t) -∗
                 φ t1 (TExp t2 t)) -∗
   (□ ∀ t1 t2, ▷ public t1 -∗ φ t1 t2) -∗
@@ -634,8 +638,8 @@ iRevert (ts); iApply dh_pred0_ind.
 iIntros "!> %ts [? | [? | H]]".
 - by iApply "H1".
 - by iApply "H3".
-- iDestruct "H" as (t2' t) "/= (-> & [H11 #H12] & [H21 #H22])".
-  by iApply ("H2" with "H12 H11 [$]").
+- iDestruct "H" as (t2' t) "/= (-> & % & [H11 #H12] & [H21 #H22])".
+  by iApply ("H2" with "[//] H12 H11 [$]").
 Qed.
 
 Lemma dh_pred_inv_gen ts t1 t2 :
@@ -648,7 +652,7 @@ Lemma dh_pred_inv_gen ts t1 t2 :
 Proof.
 iIntros "%t1_ts %ts_t2 dh"; iRevert (ts t1_ts ts_t2); iRevert (t1 t2) "dh".
 iApply dh_pred_ind; eauto 10.
-iIntros "!> %t %t1 %t2 #dh_t1 IH_t1 #dh_t IH_t %ts %t1_ts %ts_t2'".
+iIntros "!> %t %t1 %t2 %t_t2 #dh_t1 IH_t1 #dh_t IH_t %ts %t1_ts %ts_t2'".
 rewrite base_TExpN; case: (decide (t ∈ ts)) => t_ts; first by iApply "IH_t".
 iApply "IH_t1"; iPureIntro => // t3 t3_ts.
 have := ts_t2' _ t3_ts.
@@ -670,7 +674,7 @@ Lemma dh_pred_inv_same' t1 t2 :
 Proof.
 iRevert (t1 t2); iApply dh_pred_ind; eauto.
 - by iIntros "!> %t1 %t2 #base"; eauto.
-- by iIntros "!> %t %t1 %t2 _ #IH _ _"; rewrite base_TExpN.
+- by iIntros "!> %t %t1 %t2 _ _ #IH _ _"; rewrite base_TExpN.
 Qed.
 
 Lemma dh_pred_inv_same t1 t2 :
@@ -682,7 +686,7 @@ Proof.
 iIntros "%t1_t2 dh"; iRevert (t1_t2); iRevert (t1 t2) "dh".
 iApply dh_pred_ind; last by eauto.
 - iIntros "!> %t1 %t2 #dh %t1_t2"; eauto.
-- iIntros "!> %t %t1 %t2 _ IH1 _ IH2 %t1_t2"; rewrite base_TExpN.
+- iIntros "!> %t %t1 %t2 _ _ IH1 _ IH2 %t1_t2"; rewrite base_TExpN.
   case: (decide (t = t1)) => [e|ne].
     by move: e => -> {t} in t1_t2 *; iApply "IH2".
   iApply "IH1"; iPureIntro.
@@ -1009,23 +1013,31 @@ Qed.
 Lemma dh_pred_exps t1 t2 :
   t2 ∈ exps t1 ->
   public t1 -∗
-  dh_pred t2 t1.
+  dh_pred t2 t1 ∧ □ (public t2 → public (TExp t1 (TInv t2))).
 Proof.
 elim /term_lt_ind: t1 => t1 IH.
 have [exp_t1|contra] := decide (is_exp t1); last first.
   by rewrite exps_expN // elem_of_nil.
-move => ?. iIntros "#p".
+move => t2_t1. iIntros "#p".
 rewrite public_TExpN' // big_sepL_elem_of //.
-iDestruct "p" as "[p | [_ [dh _]]]" => //.
-iDestruct "p" as (t' t'_in) "[p1 p2]".
-case: (decide (t2 = t')) => [-> | ?]; first by iApply dh_pred_intro3.
-case: (decide (t2 = TInv t')) => [-> | ?].
-  by iApply dh_pred_intro3; rewrite public_TInv.
-rewrite -{2}(TExpK' t1 t'). iApply dh_pred_intro2.
-- iApply IH => //.
-  + by apply tsize_TExp_TInv.
-  + by rewrite -count_exp_gt0 count_exp_TExp_ne ?TInvK // count_exp_gt0.
-- by iApply dh_pred_intro3.
+iDestruct "p" as "[p | [_ [dh ?]]]" => //; eauto.
+iDestruct "p" as (t t_t1) "[p1 pt]".
+case: (decide (t2 = t)) => [-> | t2_t].
+  by iSplit; eauto; iApply dh_pred_intro3.
+have t2_tV : t2 ≠ TInv t.
+  by move=> e; rewrite e -!count_exp_gt0 count_exp_TInv in t_t1 t2_t1; lia.
+rewrite -{2}(TExpK' t1 t); set t1' := TExp t1 (TInv t).
+have size_lt: tsize t1' < tsize t1 by apply tsize_TExp_TInv.
+have t2_t1': t2 ∈ exps t1'.
+  by rewrite -count_exp_gt0 count_exp_TExp_ne // ?TInvK // count_exp_gt0.
+iPoseProof (IH _ size_lt t2_t1' with "p1") as "[dh #p]"; iSplit.
+- iApply dh_pred_intro2 => //.
+  + by rewrite not_elem_of_TInv_exps /t1' TExpK'.
+  + by iApply dh_pred_intro3.
+- iIntros "!> #p2".
+  rewrite -[in public (TExp t1 (TInv t2))](TExpK' t1 t).
+  rewrite TExpNC; iApply public_TExp => //.
+  by iApply "p".
 Qed.
 
 Lemma False_public t :
@@ -1081,17 +1093,38 @@ Lemma public_TExp' t1 t2 :
   dh_pred t2 (TExp t1 t2) -∗
   public (TExp t1 t2).
 Proof.
-elim /term_lt_ind: t1 => t1 IH ?. iIntros "#p #m #dh".
+elim/term_lt_ind: t1 => t1 IH in t2 *.
+iIntros "%t2_t1 #p1 #m #dh".
+rewrite [public (TExp _ _)]public_TExpN' //; last first.
+  case: (decide (is_exp (TExp t1 t2))) => [//|nX].
+  by rewrite not_elem_of_TInv_exps exps_expN // elem_of_nil in t2_t1.
+iRight; iSplit.
+  by rewrite public_minted; iApply all_minted_TExp; iSplit.
+iApply big_sepL_forall; iIntros (k t t_t1').
+have {}t_t1': t ∈ exps (TExp t1 t2) by apply: elem_of_list_lookup_2.
+have [->|t_t2] := decide (t = t2).
+  by iSplit => //; iIntros "!> #p2"; rewrite TExpNK.
+have t_t1: t ∈ exps t1.
+  rewrite -!count_exp_gt0 count_exp_TExp decide_False // in t_t1' *.
+  case: decide => ? in t_t1'; lia.
+iPoseProof (dh_pred_exps t_t1 with "p1") as "[dh_t #p1']".
+iSplit; first by iApply dh_pred_intro2.
+iIntros "!> #p"; iSpecialize ("p1'" with "p").
+
+
+  iDestruct "p" as "(%t & %t_t1 & p_t1' & p_t)".
+  rewrite -[X in public (TExp X t2)](TExpNK' [t]) /=.
+  rewrite (TExpNC _ [t]); iApply public_TExp => //.
 
 rewrite -{3}(base_expsK t1) TExp_TExpN public_TExpN //; last exact /invs_canceled_cons_exps.
 rewrite -(TExp_TExpN (base _)) base_expsK.
 
 iRight; do !iSplit => //=.
-- by rewrite public_minted; iApply all_minted_TExp; iSplit.
+-
 - by rewrite TExpNK; eauto.
 - rewrite big_sepL_forall. iIntros (k t' t'_in); apply elem_of_list_lookup_2 in t'_in.
   iSplit.
-  + by iApply dh_pred_intro2; first iApply dh_pred_exps.
+  + by iApply dh_pred_intro2 => //; first iApply dh_pred_exps.
   + iIntros "!> #pt'".
     case: (decide (t2 = t')) => [-> | ?]; first by rewrite TExpNK.
     case: (decide (t2 = TInv t')) => [-> | ?].
