@@ -408,182 +408,164 @@ case; try by move =>> -> -> //;
 - by move => ?? -> /tsize_lt_TExp [??] _ -> /elem_of_union [] /elem_of_singleton ->.
 Qed.
 
-Fixpoint public_pre_aux Plater n t : iProp :=
-  if n is S n then
-    minted t ∧ (
-     (∃ T, ⌜decompose T t⌝ ∧ [∗ set] t' ∈ T, public_pre_aux Plater n t')
-     ∨ (⌜is_exp t⌝ ∧
-        [∗ list] t' ∈ exps t,
-          dh_pred0 Plater (public_pre_aux Plater n) (t', t) ∧
-          □ (public_pre_aux Plater n t' →
-             public_pre_aux Plater n (TExp t (TInv t'))))
-     ∨ match t with
-       | TNonce a => ◇ pnonce a
-       | TKey kt t => ⌜Spec.public_key_type kt⌝
-       | THash t => wf_hash t
-       | TSeal k t =>
-           match func_of_term k with
-           | Some F =>
-               ⌜Spec.is_seal_key k⌝ ∧
-               wf_seal F (Spec.skey k) t ∧
-               match Spec.open_key k with
-               | Some k' =>
-                 □ (public_pre_aux Plater n k' → public_pre_aux Plater n t)
-               | None => True
-               end
-           | None => True
-           end
-       | _ => False
-       end%I
-    )
-  else False.
+(* MOVE *)
+Fixpoint term_rec_pred_aux F n : term → iProp :=
+  F (match n with
+     | 0 => λ _, False%I
+     | S n => term_rec_pred_aux F n
+     end).
 
-Lemma Persistent_public_pre_aux Plater n t :
-  □ (∀ t, Plater t -∗ <pers> Plater t) -∗
-  public_pre_aux Plater n t -∗ <pers> public_pre_aux Plater n t.
+Definition term_rec_pred F t := term_rec_pred_aux F (tsize t) t.
+
+Lemma term_rec_pred_unfold F :
+  (∀ P1 P2 t,
+    (∀ t', tsize t' < tsize t → P1 t' ≡ P2 t') →
+    F P1 t ≡ F P2 t) →
+  ∀ t, term_rec_pred F t ≡ F (term_rec_pred F) t.
 Proof.
-elim: n => [|n IH] //= in t *; eauto.
-iIntros "#wand [#m H]"; iSplit => //.
-iDestruct "H" as "[H | [H | H]]".
+move=> HF t; rewrite /term_rec_pred.
+have: tsize t ≤ tsize t by []; move: {-1}(tsize t) => n lt_n.
+elim: n / (lt_wf n) => - [|n] _ IH in t lt_n *; first by apply: HF=> ??; lia.
+rewrite /=; apply: (HF) => t' t'_t.
+by rewrite !IH //; lia.
+Qed.
+
+Lemma term_rec_pred_persistent F :
+  □ (∀ P, □ (∀ t, P t -∗ <pers> P t) -∗
+          (∀ t, F P t -∗ <pers> F P t)) -∗
+  ∀ t, term_rec_pred F t -∗ <pers> term_rec_pred F t.
+Proof.
+iIntros "#HF %t H"; rewrite /term_rec_pred; move: (tsize t) => n.
+iInduction n as [|n IH] forall (t) => /=; by iApply "HF"; eauto.
+Qed.
+
+Global Instance term_rec_pred_ne n :
+  Proper ((pointwise_relation _ (dist n) ==> dist n ==> dist n) ==>
+          dist n ==> dist n) term_rec_pred.
+Proof.
+move=> F1 F2 HF t _ <-; rewrite /term_rec_pred; move: (tsize t) => m.
+by elim: m => [|m IH] //= in t *; apply: HF.
+Qed.
+(* /MOVE *)
+
+Definition public_pre_aux Plater P t : iProp :=
+  minted t ∧ (
+   (∃ T, ⌜decompose T t⌝ ∧ [∗ set] t' ∈ T, P t')
+   ∨ (⌜is_exp t⌝ ∧
+      [∗ list] t' ∈ exps t,
+        dh_pred0 Plater P (t', t) ∧
+        □ (P t' → P (TExp t (TInv t'))))
+   ∨ match t with
+     | TNonce a => ◇ pnonce a
+     | TKey kt t => ⌜Spec.public_key_type kt⌝
+     | THash t => wf_hash t
+     | TSeal k t =>
+         match func_of_term k with
+         | Some F =>
+             ⌜Spec.is_seal_key k⌝ ∧
+             wf_seal F (Spec.skey k) t ∧
+             match Spec.open_key k with
+             | Some k' => □ (P k' → P t)
+             | None => True
+             end
+         | None => True
+         end
+     | _ => False
+     end%I
+  ).
+
+Definition public_pre Plater t :=
+  term_rec_pred (public_pre_aux Plater) t.
+
+(* MOVE *)
+Lemma open_key_tsize t1 t2 : Spec.open_key t1 = Some t2 → tsize t2 = tsize t1.
+Proof.
+by case: t1 => // - [] //= t [<-]; rewrite tsizeE.
+Qed.
+(* /MOVE *)
+
+Lemma public_pre_aux_wf Plater :
+  (∀ P1 P2 t,
+    (∀ t', tsize t' < tsize t → P1 t' ≡ P2 t') →
+    public_pre_aux Plater P1 t ≡ public_pre_aux Plater P2 t).
+Proof.
+move => P1 P2 {}t HP; rewrite /public_pre_aux.
+f_equiv; f_equiv; last f_equiv.
+- f_equiv => T; apply: and_proper_L => T_t.
+  apply: big_sepS_proper => t' T_t'.
+  by move: (decompose_tsize T_t T_t') => ?; eauto.
+- f_equiv; apply: big_sepL_proper => _ t' /(elem_of_list_lookup_2 _ _ _).
+  case/tsize_TExp_TInv=> lt1 lt2; f_equiv.
+  + admit.
+  + by f_equiv; f_equiv; apply: HP.
+- case: t => // k t in HP *.
+  case: func_of_term => // F; f_equiv; f_equiv.
+  case e_k: Spec.open_key => [k'|] //=.
+  have ? := open_key_tsize e_k.
+  have ?: tsize (TSeal k t) = S (tsize k + tsize t).
+    by rewrite tsizeE -ssrnat.plusE.
+  f_equiv; f_equiv; apply: HP; lia.
+Admitted.
+
+Global Instance public_pre_aux_proper Plater :
+  Proper (pointwise_relation _ (≡) ==> pointwise_relation _ (≡))
+   (public_pre_aux Plater).
+Proof. by move=> ????; apply: public_pre_aux_wf. Qed.
+
+Lemma public_pre_aux_persistent Plater P :
+  □ (∀ t, Plater t -∗ <pers> Plater t) -∗
+  □ (∀ t, P t -∗ <pers> P t) -∗
+  ∀ t, public_pre_aux Plater P t -∗ <pers> public_pre_aux Plater P t.
+Proof.
+iIntros "#wand1 #wand2 %t [#m [H | [H | H]]]"; iSplit => //.
 - iDestruct "H" as (T ?) "H"; iLeft; iExists T; iSplit; eauto.
-  iAssert ([∗ set] t' ∈ T, <pers> public_pre_aux Plater n t')%I as "{H} #H".
-  { iApply (big_sepS_impl with "H"). iIntros "!> %t' _".
-    by iApply IH. }
+  iAssert ([∗ set] t' ∈ T, <pers> P t')%I as "{H} #H".
+  { iApply (big_sepS_impl with "H"); iIntros "!> %t' _".
+    by iApply "wand2". }
   by iModIntro; iApply (big_sepS_impl with "H"); eauto.
 - iDestruct "H" as "(% & H)"; iRight; iLeft.
-  set (P' := public_pre_aux Plater n).
   iAssert ([∗ list] t' ∈ exps t,
-    <pers> dh_pred0 Plater (public_pre_aux Plater n) (t', t) ∧
-    □ (P' t' → P' (TExp t (TInv t'))))%I as "{H} #H".
+    <pers> dh_pred0 Plater P (t', t) ∧
+    □ (P t' → P (TExp t (TInv t'))))%I as "{H} #H".
   { iApply (big_sepL_impl with "H").
     iIntros "!> %k %t' _ [dh #?]"; iSplit => //.
     iAssert (dh_pred0 (λ t'', <pers> Plater t'')%I
-                      (λ t'', <pers> P' t'')%I (t', t)) as "{dh} #dh".
-    { iApply (dh_pred0_wand with "[] [] dh"); eauto.
-      iIntros "!> %t'' p''". iApply IH => //. }
+                      (λ t'', <pers> P t'')%I (t', t)) as "{dh} #dh".
+    { by iApply (dh_pred0_wand with "[] [] dh"); eauto. }
     by iModIntro; iApply (dh_pred0_wand with "[] [] dh"); iIntros "!> % #?". }
   iModIntro; iSplit => //.
   by iApply (big_sepL_impl with "H"); iIntros "!> % % _ [#? #?]"; eauto.
 - iRight; iRight; case: t; by move=> *; iPoseProof "H" as "#H".
 Qed.
 
-Global Instance public_pre_aux_ne n :
-  Proper (pointwise_relation _ (dist n) ==> dist n ==> dist n ==> dist n) public_pre_aux.
+Lemma public_pre_unfold Plater t :
+  public_pre Plater t ≡ public_pre_aux Plater (public_pre Plater) t.
+Proof. apply: term_rec_pred_unfold; exact: public_pre_aux_wf. Qed.
+
+Lemma public_pre_persistent Plater :
+  □ (∀ t, Plater t -∗ <pers> Plater t) -∗
+  ∀ t, public_pre Plater t -∗ <pers> public_pre Plater t.
 Proof.
-move=> Plater1 Plater2 HP m _ <- t _ <-; elim: m => //= m IH in t *.
-f_equiv; f_equiv; last f_equiv.
-- f_equiv => T.
-  by f_equiv; f_equiv => t'.
-- f_equiv.
-  f_equiv=> ? ?; f_equiv; first by f_equiv.
-  by f_equiv; f_equiv.
-- case: t => //= k t.
-  case: func_of_term => // F.
-  f_equiv; f_equiv.
-  case e_k: Spec.open_key => [k'|] //.
-  by rewrite !IH.
+iIntros "#HPlater"; rewrite /public_pre.
+iApply term_rec_pred_persistent.
+iIntros "!> %P #HP".
+by iApply public_pre_aux_persistent.
 Qed.
 
-Definition public_pre Plater t := public_pre_aux Plater (tsize t) t.
+Global Instance public_pre_aux_ne n :
+  Proper (pointwise_relation _ (dist n) ==>
+          pointwise_relation _ (dist n) ==> dist n ==> dist n) public_pre_aux.
+Proof.
+move=> Plater1 Plater2 HPlater P1 P2 HP t _ <-; rewrite /public_pre_aux.
+solve_contractive.
+Qed.
 
 Global Instance public_pre_ne n :
   Proper (pointwise_relation _ (dist n) ==> dist n ==> dist n) public_pre.
 Proof.
-rewrite /public_pre => Plater1 Plater2 HP t _ <-; by f_equiv.
+rewrite /public_pre => Plater1 Plater2 HPlater t _ <-; f_equiv.
+by f_equiv.
 Qed.
-
-Lemma Persistent_public_pre Plater t :
-  □ (∀ t, Plater t -∗ <pers> Plater t) -∗
-  public_pre Plater t -∗ <pers> public_pre Plater t.
-Proof. exact: Persistent_public_pre_aux. Qed.
-
-Lemma open_key_tsize t1 t2 : Spec.open_key t1 = Some t2 → tsize t2 = tsize t1.
-Proof.
-by case: t1 => // - [] //= t [<-]; rewrite tsizeE.
-Qed.
-
-Lemma public_pre_aux_eq P n t : tsize t ≤ n → public_pre_aux P n t ⊣⊢ public_pre P t.
-Proof.
-rewrite /public_pre.
-elim: n / (lt_wf n) t => - [|n] _ IH t t_n /=;
-move: (ssrbool.elimT ssrnat.ltP (tsize_gt0 t)) => H;
-first lia.
-case e_st: (tsize t) => [|m] /=; first lia.
-apply: bi.and_proper => // {H}.
-do !apply bi.or_proper.
-- apply: bi.exist_proper => T.
-  apply: and_proper_L => T_t.
-  apply: big_sepS_proper => t' T_t'.
-  move: (decompose_tsize T_t T_t') => ?.
-  rewrite (IH n) ?(IH m) //; lia.
-- apply bi.and_proper => //.
-  apply big_sepL_proper => _ t' /(elem_of_list_lookup_2 _ _ _) /tsize_TExp_TInv ?.
-  f_equiv.
-  + admit.
-  + by rewrite !IH; try lia.
-- case: t t_n e_st => //= k t t_n e_st.
-  case: func_of_term => // F.
-  apply: bi.and_proper => //.
-  apply: bi.and_proper => //.
-  case e_k: Spec.open_key => [k'|] //.
-  have ? := open_key_tsize e_k.
-  have ?: tsize (TSeal k t) = S (tsize k + tsize t).
-    by rewrite tsizeE -ssrnat.plusE.
-  rewrite !(IH n) ?(IH m) //; lia.
-Admitted.
-
-(* TODO: Merge with public_pre_aux_eq *)
-Lemma public_pre_eq Plater t :
-  public_pre Plater t ⊣⊢
-  minted t ∧ (
-      (∃ T, ⌜decompose T t⌝ ∧ [∗ set] t' ∈ T, public_pre Plater t')
-     ∨ (⌜is_exp t⌝ ∧
-        [∗ list] t' ∈ exps t,
-          dh_pred0 Plater (public_pre Plater) (t', t) ∧
-          □ (public_pre Plater t' → public_pre Plater (TExp t (TInv t'))))
-     ∨ match t with
-       | TNonce a => ◇ pnonce a
-       | TKey kt t => ⌜Spec.public_key_type kt⌝
-       | THash t => wf_hash t
-       | TSeal k t =>
-           match func_of_term k with
-           | Some F =>
-               ⌜Spec.is_seal_key k⌝ ∧
-               wf_seal F (Spec.skey k) t ∧
-               match Spec.open_key k with
-               | Some k' => □ (public_pre Plater k' → public_pre Plater t)
-               | None => True
-               end
-           | None => True
-           end
-       | _ => False
-       end%I
-  ).
-Proof.
-rewrite {1}/public_pre.
-case e_st: (tsize t) => [|m] /=.
-  move: (ssrbool.elimT ssrnat.ltP (tsize_gt0 t)) => H; lia.
-apply: bi.and_proper => //.
-do !apply bi.or_proper.
-- apply: bi.exist_proper => T.
-  apply: and_proper_L => T_t.
-  apply: big_sepS_proper => t' T_t'.
-  move: (decompose_tsize T_t T_t') => ?.
-  rewrite public_pre_aux_eq //; lia.
-- apply bi.and_proper => //.
-  apply big_sepL_proper => k t' /(elem_of_list_lookup_2 _ _ _) /tsize_TExp_TInv ?.
-  f_equiv.
-  + admit.
-  + by rewrite !public_pre_aux_eq; try lia.
-- case: t e_st => //= k t e_st.
-  rewrite tsizeE -ssrnat.plusE in e_st.
-  case: func_of_term => // F.
-  apply: bi.and_proper => //.
-  apply: bi.and_proper => //.
-  case e_k: Spec.open_key => [k'|] //=.
-  have ? := open_key_tsize e_k.
-  rewrite !public_pre_aux_eq //; lia.
-Admitted.
 
 Definition public_pre' (P : term -d> iProp) : term -d> iProp :=
   public_pre (λ t, ▷ P t)%I.
@@ -629,20 +611,11 @@ Lemma public_eq t :
        end%I
   ).
 Proof.
-rewrite public_unseal dh_pred_unseal /public_def.
-rewrite (fixpoint_unfold public_pre' t) {1}/public_pre' public_pre_eq.
-f_equiv; f_equiv; last f_equiv.
-- f_equiv => ?.
-  f_equiv; f_equiv=> ?; by rewrite (fixpoint_unfold public_pre' _).
-- f_equiv; f_equiv => ? ?; f_equiv.
-  + rewrite /dh_pred_def; f_equiv => // ?.
-    * by rewrite public_unseal.
-    * by rewrite public_unseal /public_def; rewrite (fixpoint_unfold public_pre' _).
-  + by rewrite !(fixpoint_unfold public_pre' _).
-- case: t => // k t.
-  case: func_of_term => // ?.
-  f_equiv; f_equiv; case: Spec.open_key => // ?.
-  by rewrite !(fixpoint_unfold public_pre' _).
+have ->: public t ⊣⊢ public_pre_aux (λ t, ▷ public t)%I public t; last first.
+  by rewrite /public_pre_aux dh_pred_unseal.
+rewrite public_unseal /public_def {1}(fixpoint_unfold public_pre' t).
+rewrite {1}/public_pre' public_pre_unfold; apply: public_pre_aux_proper => t'.
+by rewrite (fixpoint_unfold public_pre' t').
 Qed.
 
 Global Instance Persistent_public t : Persistent (public t).
@@ -650,7 +623,7 @@ Proof.
 rewrite /Persistent; rewrite public_unseal /public_def.
 iIntros "H"; iLöb as "IH" forall (t).
 rewrite (fixpoint_unfold public_pre' t) {3 4}/public_pre'.
-iApply (Persistent_public_pre with "[] H").
+iApply (public_pre_persistent with "[] H").
 iIntros "!> % H"; rewrite -bi.later_persistently; iModIntro.
 by iApply "IH".
 Qed.
