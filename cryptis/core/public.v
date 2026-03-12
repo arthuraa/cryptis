@@ -6,7 +6,7 @@ From iris.base_logic.lib Require Import invariants.
 From iris.bi Require Import fixpoint_mono.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib.
-From cryptis.lib Require Import gmeta nown saved_prop.
+From cryptis.lib Require Import gmeta nown saved_prop size_rec_pred.
 From cryptis.core Require Import term minted.
 
 Set Implicit Arguments.
@@ -408,46 +408,6 @@ case; try by move =>> -> -> //;
 - by move => ?? -> /tsize_lt_TExp [??] _ -> /elem_of_union [] /elem_of_singleton ->.
 Qed.
 
-(* MOVE *)
-Fixpoint term_rec_pred_aux F n : term → iProp :=
-  F (match n with
-     | 0 => λ _, False%I
-     | S n => term_rec_pred_aux F n
-     end).
-
-Definition term_rec_pred F t := term_rec_pred_aux F (tsize t) t.
-
-Lemma term_rec_pred_unfold F :
-  (∀ P1 P2 t,
-    (∀ t', tsize t' < tsize t → P1 t' ≡ P2 t') →
-    F P1 t ≡ F P2 t) →
-  ∀ t, term_rec_pred F t ≡ F (term_rec_pred F) t.
-Proof.
-move=> HF t; rewrite /term_rec_pred.
-have: tsize t ≤ tsize t by []; move: {-1}(tsize t) => n lt_n.
-elim: n / (lt_wf n) => - [|n] _ IH in t lt_n *; first by apply: HF=> ??; lia.
-rewrite /=; apply: (HF) => t' t'_t.
-by rewrite !IH //; lia.
-Qed.
-
-Lemma term_rec_pred_persistent F :
-  □ (∀ P, □ (∀ t, P t -∗ <pers> P t) -∗
-          (∀ t, F P t -∗ <pers> F P t)) -∗
-  ∀ t, term_rec_pred F t -∗ <pers> term_rec_pred F t.
-Proof.
-iIntros "#HF %t H"; rewrite /term_rec_pred; move: (tsize t) => n.
-iInduction n as [|n IH] forall (t) => /=; by iApply "HF"; eauto.
-Qed.
-
-Global Instance term_rec_pred_ne n :
-  Proper ((pointwise_relation _ (dist n) ==> dist n ==> dist n) ==>
-          dist n ==> dist n) term_rec_pred.
-Proof.
-move=> F1 F2 HF t _ <-; rewrite /term_rec_pred; move: (tsize t) => m.
-by elim: m => [|m IH] //= in t *; apply: HF.
-Qed.
-(* /MOVE *)
-
 Definition public_pre_aux Plater P t : iProp :=
   minted t ∧ (
    (∃ T, ⌜decompose T t⌝ ∧ [∗ set] t' ∈ T, P t')
@@ -475,7 +435,7 @@ Definition public_pre_aux Plater P t : iProp :=
   ).
 
 Definition public_pre Plater t :=
-  term_rec_pred (public_pre_aux Plater) t.
+  size_rec_pred tsize (public_pre_aux Plater) t.
 
 (* MOVE *)
 Lemma open_key_tsize t1 t2 : Spec.open_key t1 = Some t2 → tsize t2 = tsize t1.
@@ -540,14 +500,14 @@ Qed.
 
 Lemma public_pre_unfold Plater t :
   public_pre Plater t ≡ public_pre_aux Plater (public_pre Plater) t.
-Proof. apply: term_rec_pred_unfold; exact: public_pre_aux_wf. Qed.
+Proof. apply: size_rec_pred_unfold; exact: public_pre_aux_wf. Qed.
 
 Lemma public_pre_persistent Plater :
   □ (∀ t, Plater t -∗ <pers> Plater t) -∗
   ∀ t, public_pre Plater t -∗ <pers> public_pre Plater t.
 Proof.
 iIntros "#HPlater"; rewrite /public_pre.
-iApply term_rec_pred_persistent.
+iApply size_rec_pred_persistent.
 iIntros "!> %P #HP".
 by iApply public_pre_aux_persistent.
 Qed.

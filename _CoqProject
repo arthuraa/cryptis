@@ -18,6 +18,7 @@ cryptis/lib/saved_prop.v
 cryptis/lib/repr.v
 cryptis/lib/list.v
 cryptis/lib/list_match.v
+cryptis/lib/size_rec_pred.v
 cryptis/lib.v
 cryptis/role.v
 
