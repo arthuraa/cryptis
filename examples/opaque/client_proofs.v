@@ -29,10 +29,10 @@ Proof.
   iIntros "%ϕ [#Cryptis [#Hpred [#Hc [#pubuid [#minteduid #mintedpw]]]]] Hhl".
   wp_lam. wp_pures.
   wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => True)%I) => //.
-  iIntros "%x_u %Hnoncex_u #Hmintedx_u #Hprivatex_u #Heqx_u Htokenx_u".
+  iIntros "%x_u %Hnoncex_u #Hmintedx_u #Hprivatex_u #Heqx_u #Heqx_uV Htokenx_u".
   wp_pures.
   wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => True)%I) => //.
-  iIntros "%r %Hnoncer #Hmintedr #Hprivater #Heqr Htokenr".
+  iIntros "%r %Hnoncer #Hmintedr #Hprivater #Heqr #HeqrV Htokenr".
   wp_pures.
   wp_apply wp_H'.
   wp_apply wp_texp.
@@ -49,6 +49,7 @@ Proof.
   iRight.
   do !iSplit => //.
   by rewrite minted_THash minted_tag.
+  iApply dh_pred_intro1.
   by iApply "Heqr".
   iModIntro; iIntros "#p".
   iApply False_public.
@@ -59,6 +60,7 @@ Proof.
   iRight.
   do !iSplit => //.
   by iApply minted_TInt.
+  iApply dh_pred_intro1.
   by iApply "Heqx_u".
   by rewrite public_TInt; auto.
   wp_pures.

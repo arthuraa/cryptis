@@ -384,7 +384,7 @@ Lemma public_dh_secret2 a b :
   □ (∀ t, dh_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
   □ (∀ t, dh_pred_base b t ↔ ▷ □ iso_dh_key_share t) -∗
   public (TExpN (TInt 0) [a; b]) -∗
-  ▷ (public a ∨ public b).
+  ◇ (public a ∨ public b).
 Proof.
 iIntros "%a_b %a_bV #pred_a #pred_b".
 rewrite public_TExp2_iff //; eauto.
@@ -411,11 +411,11 @@ Lemma public_dh_secret' a b (P : iProp) :
   □ (∀ t, dh_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
   □ (public b ↔ P) -∗
   □ (∀ t, dh_pred_base b t ↔ ▷ □ iso_dh_key_share t) -∗
-  (public (TExpN (TInt 0) [a; b]) → ▷ P).
+  (public (TExpN (TInt 0) [a; b]) → ◇ P).
 Proof.
 iIntros "%a_b %a_bV #s_a #pred_a #s_b #pred_b #p_share".
-iPoseProof (public_dh_secret2 with "pred_a pred_b p_share") as "H" => //.
-by iDestruct "H" as "[H|H]"; [iApply "s_a"|iApply "s_b"].
+iPoseProof (public_dh_secret2 with "pred_a pred_b p_share") as ">H" => //.
+by iDestruct "H" as "[H|H]"; iModIntro; [iApply "s_a"|iApply "s_b"].
 Qed.
 
 End Verif.

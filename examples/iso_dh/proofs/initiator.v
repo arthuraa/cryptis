@@ -147,7 +147,7 @@ iAssert (|={⊤}=>
            □ (⌜failed⌝ → public (si_key si)) ∗
            (public (si_key si) ∨ φ skI skR si Init) ∗
            ((public (si_init si) ∨ public (si_resp si)) ∨
-             □ (public (si_key si) → ▷ ▷ released_session si)))%I
+             □ (public (si_key si) → ▷ released_session si)))%I
   with "[ready_token failed_token H2 H3]"
   as "{inv} > (#comp & res & #s_k2)".
 { case: failed.
@@ -198,7 +198,7 @@ iAssert (|={⊤}=>
       by rewrite is_inv_TInv; case: (a) => // in nonce_a *.
     by rewrite -contra; case: (b) => // in nonce_b *.
   iPoseProof (public_dh_secret' _ b_a with "[//] [//] [] [//] [//]")
-    as "?" => //.
+    as ">?" => //.
   iModIntro. iApply bi.iff_trans. iSplit; first auto.
   iSplit; eauto. iIntros "[#contra|?]"; auto. iModIntro.
   by iPoseProof (term_meta_agree with "failed contra") as "%". }
@@ -215,7 +215,7 @@ iAssert (minted k) as "#m_k".
 wp_pures. iApply ("Hpost" $! (Some k)).
 iRight. iExists si. iFrame. do !iSplitR => //.
 { iIntros "!> !> #rel". iApply "s_k1". by eauto. }
-Admitted.
+Qed.
 
 Lemma wp_initiator_weak c skI skR N :
   channel c ∗
