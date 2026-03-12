@@ -97,13 +97,7 @@ wp_pures. wp_apply wp_mk_keyshare => //. rewrite -/ga.
 iIntros "_". wp_pures. wp_list. wp_term_of_list.
 wp_pure _ credit:"H1".
 wp_pure _ credit:"H2".
-iAssert (public ga) as "p_ga".
-{ iApply public_TExp_iff; eauto.
-  rewrite minted_TInt.
-  iRight. do !iSplit => //; last by rewrite public_TInt; auto.
-  iApply dh_pred_intro1.
-  iApply "a_pred". iModIntro. iModIntro.
-  by rewrite /iso_dh_key_share exps_TExpN. }
+iAssert (public ga) as "p_ga"; first by iApply public_dh_share.
 wp_apply wp_send => //.
 { rewrite public_of_list /=. do 2?[iSplit => //].
   by iApply public_verify_key. }

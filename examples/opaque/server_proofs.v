@@ -91,7 +91,7 @@ Proof.
   iExists k_s, p_s, (TExp g p_s), (TExp g p_u), _.
   do !iSplit => //.
   1, 2: iApply public_TExp_iff; auto.
-  1, 2: iRight; do !iSplit => //.
+  1, 2: do !iSplit => //.
   1, 4: by iApply minted_TInt.
   iApply dh_pred_intro1.
   by iApply "Heqp_s"; auto.
@@ -179,7 +179,6 @@ Proof.
   rewrite public_of_list => //.
   do !iSplit => //.
   iApply public_TExp_iff; auto.
-  iRight.
   do !iSplit => //.
   by iApply minted_TInt.
   iApply dh_pred_intro1.

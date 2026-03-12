@@ -46,7 +46,6 @@ Proof.
   do !iSplit => //.
   iApply public_TExp_iff.
   by intro contra.
-  iRight.
   do !iSplit => //.
   by rewrite minted_THash minted_tag.
   iApply dh_pred_intro1.
@@ -57,7 +56,6 @@ Proof.
   rewrite bi.intuitionistic_intuitionistically.
   by iApply "Hprivater".
   iApply public_TExp_iff; auto.
-  iRight.
   do !iSplit => //.
   by iApply minted_TInt.
   iApply dh_pred_intro1.

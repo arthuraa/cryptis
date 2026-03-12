@@ -62,8 +62,7 @@ Lemma dh_seed_elim1 g a :
 Proof.
 iIntros "%gNX #aP #p_t".
 rewrite public_TExp_iff //.
-iDestruct "p_t" as "[[_ contra] | (_ & _ & p_t & _)]".
-  by iPoseProof (dh_seed_elim0 with "aP contra") as ">[]".
+iDestruct "p_t" as "(_ & _ & p_t & _)".
 set t' := TExp g a.
 (* MOVE *)
 have exps_t': exps t' = [a].
@@ -78,11 +77,6 @@ iDestruct (dh_seed_dh_pred_base_elim with "aP H")
   as "{H} #[>-> H]" => //; iNext.
 by rewrite -[t' in (◇ P t')%I]base_expsK exps_t' e_base.
 Qed.
-
-(* MOVE *)
-
-
-(* /MOVE *)
 
 Lemma dh_seed_elim2 g a t :
   ¬ is_exp g →

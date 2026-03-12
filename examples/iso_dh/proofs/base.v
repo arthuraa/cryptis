@@ -348,7 +348,7 @@ Lemma public_dh_share a :
 Proof.
 iIntros "#m_a #pred_a".
 rewrite public_TExpN //=; auto; last exact: invs_canceled1.
-iRight. rewrite minted_TExp; auto.
+rewrite minted_TExp; auto.
 rewrite TExpNK public_TInt minted_TInt.
 do !iSplit => //; auto.
 iApply dh_pred_intro1. iApply "pred_a". iPureIntro. by rewrite exps_TExpN.
@@ -359,23 +359,17 @@ Lemma public_dh_secret1 a b :
   minted b -∗
   □ (∀ t, dh_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
   □ (∀ t, dh_pred_base b t ↔ ▷ □ iso_dh_key_share t) -∗
-  ◇ (public a ∨ public b) -∗
+  public a ∨ public b -∗
   public (TExpN (TInt 0) [a; b]).
 Proof.
 iIntros "#m_a #m_b #pred_a #pred_b".
 case: (decide (a = TInv b)) => [-> {a} | a_b].
   by rewrite -TExp_TExpN TExpNK public_TInt; eauto.
-rewrite public_TExp2_iff // /bi_except_0; eauto.
-iIntros "#[H|[H|H]]".
-- iRight; iRight; iSplit; eauto.
-    by iApply all_minted_TExpN; rewrite minted_TInt; do !iSplit.
-  do !iSplit.
-  + by iApply dh_pred_intro1; iApply "pred_a"; auto.
-  + by iApply dh_pred_intro1; iApply "pred_b"; auto.
-  + by iIntros "!> _"; iApply public_TExp; [rewrite public_TInt | iApply False_public].
-  + by iIntros "!> _"; iApply public_TExp; [rewrite public_TInt | iApply False_public].
-- by iRight; iLeft; iSplit; first iApply public_dh_share.
-- by iLeft; iSplit; first iApply public_dh_share.
+iIntros "#[H|H]".
+- rewrite -TExp_TExpN; iApply public_TExp => //.
+  by iApply public_dh_share.
+- rewrite -TExp_TExpN TExpNC; iApply public_TExp => //.
+  by iApply public_dh_share.
 Qed.
 
 Lemma public_dh_secret2 a b :
@@ -384,11 +378,18 @@ Lemma public_dh_secret2 a b :
   □ (∀ t, dh_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
   □ (∀ t, dh_pred_base b t ↔ ▷ □ iso_dh_key_share t) -∗
   public (TExpN (TInt 0) [a; b]) -∗
-  ◇ (public a ∨ public b).
+  public a ∨ public b.
 Proof.
-iIntros "%a_b %a_bV #pred_a #pred_b".
+iIntros "%a_b %a_bV #pred_a #pred_b #p".
+iPoseProof (public_minted with "p") as "m".
+iAssert (minted a ∧ minted b)%I as "[ma mb]".
+  rewrite minted_TExpN //= ?invs_canceled2; eauto.
+  by iDestruct "m" as "(_ & ? & ? & _)"; eauto.
+iAssert (◇ (public a ∨ public b))%I as "[H|H]"; first last.
+- by iRight; iApply except_0_public.
+- by iLeft; iApply except_0_public.
 rewrite public_TExp2_iff //; eauto.
-iIntros "[[_ #p_b] | [[_ #p_a] | (_ & #contraA & #contraB & _)]]"; eauto.
+iDestruct "p" as "(_ & #contraA & #contraB & _)"; eauto.
 iPoseProof (dh_pred_inv with "contraA") as "(%t & %t_share & H)".
   by apply: elem_of_TExpN2l; rewrite //= elem_of_nil; eauto.
 have exps_share: exps (TExpN (TInt 0) [a; b]) ≡ₚ [a; b].
@@ -411,11 +412,11 @@ Lemma public_dh_secret' a b (P : iProp) :
   □ (∀ t, dh_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
   □ (public b ↔ P) -∗
   □ (∀ t, dh_pred_base b t ↔ ▷ □ iso_dh_key_share t) -∗
-  (public (TExpN (TInt 0) [a; b]) → ◇ P).
+  (public (TExpN (TInt 0) [a; b]) → P).
 Proof.
 iIntros "%a_b %a_bV #s_a #pred_a #s_b #pred_b #p_share".
-iPoseProof (public_dh_secret2 with "pred_a pred_b p_share") as ">H" => //.
-by iDestruct "H" as "[H|H]"; iModIntro; [iApply "s_a"|iApply "s_b"].
+iPoseProof (public_dh_secret2 with "pred_a pred_b p_share") as "H" => //.
+by iDestruct "H" as "[H|H]"; [iApply "s_a"|iApply "s_b"].
 Qed.
 
 End Verif.
