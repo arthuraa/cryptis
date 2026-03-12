@@ -13,23 +13,6 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-(* MOVE *)
-Variant functionality := AENC | SIGN | SENC.
-
-Definition func_of_key_type kt :=
-  match kt with
-  | AEnc | ADec => AENC
-  | Sign | Verify => SIGN
-  | SEnc => SENC
-  end.
-
-Definition func_of_term t :=
-  match t with
-  | TKey kt _ => Some (func_of_key_type kt)
-  | _ => None
-  end.
-(* /MOVE *)
-
 Class publicGpreS Σ := PublicGPreS {
   publicGpreS_nonce : savedPredG Σ term;
   publicGpreS_seal  : savedPredG Σ (term * term);
@@ -434,13 +417,6 @@ Definition public_pre_aux Plater P t : iProp :=
 Definition public_pre Plater t :=
   size_rec_pred tsize (public_pre_aux Plater) t.
 
-(* MOVE *)
-Lemma open_key_tsize t1 t2 : Spec.open_key t1 = Some t2 → tsize t2 = tsize t1.
-Proof.
-by case: t1 => // - [] //= t [<-]; rewrite tsizeE.
-Qed.
-(* /MOVE *)
-
 Lemma public_pre_aux_wf Plater :
   (∀ P1 P2 t,
     (∀ t', tsize t' < tsize t → P1 t' ≡ P2 t') →
@@ -458,7 +434,7 @@ f_equiv; f_equiv; last f_equiv.
 - case: t => // k t in HP *.
   case: func_of_term => // F; f_equiv; f_equiv.
   case e_k: Spec.open_key => [k'|] //=.
-  have ? := open_key_tsize e_k.
+  have ? := Spec.open_key_tsize e_k.
   have ?: tsize (TSeal k t) = S (tsize k + tsize t).
     by rewrite tsizeE -ssrnat.plusE.
   f_equiv; f_equiv; apply: HP; lia.
@@ -642,29 +618,6 @@ iIntros "!> %ts [#H | [#H | #H]]".
 - iDestruct "H" as (t2' t) "/= (-> & % & [#H11 #H12] & [#H21 #H22])".
   by iModIntro; iApply ("H2" with "[//] H12 H11 [$]").
 Qed.
-
-(* MOVE *)
-Lemma count_exp_TExpW t1 t2 t3 :
-  t1 ≠ TInv t3 →
-  (count_exp t1 t2 ≤ count_exp t1 (TExp t2 t3))%Z.
-Proof.
-move=> t1_t3; rewrite count_exp_TExp (@decide_False _ (t1 = TInv t3)) //.
-by case: decide => ?; lia.
-Qed.
-
-Lemma count_exp_TExpNW t1 t2 ts :
-  (∀ t, t ∈ ts → t1 ≠ TInv t) →
-  (count_exp t1 t2 ≤ count_exp t1 (TExpN t2 ts))%Z.
-Proof.
-elim: ts => [|t ts IH] t1_ts; first by rewrite TExpN0; lia.
-rewrite -TExp_TExpN; set t2' := TExpN t2 ts.
-have ?: (count_exp t1 t2' ≤ count_exp t1 (TExp t2' t))%Z.
-  apply: count_exp_TExpW; move/(_ t): t1_ts; apply; rewrite elem_of_cons.
-  by eauto.
-suff: (count_exp t1 t2 ≤ count_exp t1 t2')%Z by lia.
-by apply: IH => t' t'_ts; apply: t1_ts; rewrite elem_of_cons; eauto.
-Qed.
-(* /MOVE *)
 
 Lemma dh_pred_inv_gen ts t1 t2 :
   t1 ∈ ts →
@@ -899,7 +852,7 @@ apply: anti_symm.
   by move => ? _ ? _ -> /is_trueP /(ssrbool.contraLR (is_exp_TInv _)) /is_trueP.
 
 - iIntros "#[m dhp]".
-  by rewrite public_eq (exps_TExpN' t ts); eauto.
+  by rewrite public_eq exps_TExpN'; eauto.
 Qed.
 
 Lemma public_TExpN' t :
@@ -982,7 +935,7 @@ have t_t1: t ∈ exps t1.
 iPoseProof (dh_pred_exps t_t1 with "p1") as "[dh #p]"; iSplit.
   by iApply dh_pred_intro2 => //; iApply dh_pred_intro3.
 iIntros "!> #pt"; rewrite TExpNC; iSpecialize ("p" with "pt").
-by iApply IH => //; have [??] := tsize_TExp_TInv _ _ t_t1.
+by iApply IH => //; have [??] := tsize_TExp_TInv t_t1.
 Qed.
 
 Lemma False_public t :

@@ -246,7 +246,7 @@ iIntros "!> #s_skI". iDestruct "inv_m3" as "[p_nR|[#inv_m3 _]]".
 - iDestruct "inv_m3" as "(%nI' & %skI' & sessI & sessR)".
   iSpecialize ("sessR" with "s_skR"). iModIntro.
   iPoseProof (pointsto_agree with "sessR Hl") as "%e".
-  case/(val_of_term_inj _ _)/Spec.of_list_inj: e.
+  case/val_of_term_inj/Spec.of_list_inj: e.
   by move=> /Spec.aenc_pkey_inj -> /Spec.of_list_inj [->].
 Qed.
 

@@ -829,3 +829,18 @@ rewrite /invs_canceled in canceled.
 rewrite PreTerm.exps_expN //= PreTerm.cancel_exps_canceled //.
 by rewrite /nilp size_map size_eq0 tsN0 PreTerm.base_expN.
 Qed.
+
+Variant functionality := AENC | SIGN | SENC.
+
+Definition func_of_key_type kt :=
+  match kt with
+  | AEnc | ADec => AENC
+  | Sign | Verify => SIGN
+  | SEnc => SENC
+  end.
+
+Definition func_of_term t :=
+  match t with
+  | TKey kt _ => Some (func_of_key_type kt)
+  | _ => None
+  end.

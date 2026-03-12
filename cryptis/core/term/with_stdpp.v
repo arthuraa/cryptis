@@ -7,6 +7,10 @@ From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
 From cryptis.core.term Require Import base.
 
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
 (*
 Lemma tsize_TExpN_exp t ts t' : t' ∈ ts → tsize t' < tsize (TExpN t ts).
 Proof.
@@ -69,6 +73,7 @@ Global Existing Instance sign_key_eq_dec.
 
 Lemma subseteq_cancel_exps ts : cancel_exps ts ⊆ ts.
 Proof. by move => ? /(ssrbool.introT inP) /mem_cancel_exps /(ssrbool.elimT inP). Qed.
+Global Arguments subseteq_cancel_exps ts : clear implicits.
 
 Lemma tsize_lt_TExp t1 t2 :
   TInv t2 ∉ exps t1 ->
@@ -167,6 +172,14 @@ Proof.
 case: decide => [->|?]; first by rewrite count_exp_TExp_eq.
 case: decide => [->|?]; first by rewrite count_exp_TInv_TExp.
 by rewrite count_exp_TExp_ne.
+Qed.
+
+Lemma count_exp_TExpW t1 t2 t3 :
+  t1 ≠ TInv t3 →
+  (count_exp t1 t2 ≤ count_exp t1 (TExp t2 t3))%Z.
+Proof.
+move=> t1_t3; rewrite count_exp_TExp (@decide_False _ (t1 = TInv t3)) //.
+by case: decide => ?; lia.
 Qed.
 
 Lemma not_elem_of_TInv_exps t1 t2 :
@@ -322,6 +335,7 @@ case => _ [] /elem_of_list_fmap [] t' [] -> ??.
 rewrite elem_of_union_list; exists (nonces_of_term t'); split => //.
 rewrite elem_of_list_fmap; set_solver.
 Qed.
+Global Arguments nonces_of_term_TExpN_subseteq t ts : clear implicits.
 
 Definition nonces_of_termE := (nonces_of_term_TInv, nonces_of_term_TExpN, nonces_of_termE').
 
@@ -595,7 +609,7 @@ Variant untag_spec N t : option term → Type :=
 Lemma untagP N t : untag_spec N t (Spec.untag N t).
 Proof.
 case e: (Spec.untag N t) => [t'|]; constructor.
-- by rewrite (Spec.untagK _ _ _ e).
+- by rewrite (Spec.untagK e).
 - move=> t' e'; by rewrite e' Spec.tagK in e.
 Qed.
 
@@ -671,6 +685,11 @@ Lemma open_key_sencK k' (k : senc_key) :
 Proof.
 rewrite keysE; case: k => seed /=.
 by case: k' => //= - [] // ?; case=> ->.
+Qed.
+
+Lemma open_key_tsize t1 t2 : open_key t1 = Some t2 → tsize t2 = tsize t1.
+Proof.
+by case: t1 => // - [] //= t [<-]; rewrite tsizeE.
 Qed.
 
 Definition open k t : option term :=
@@ -763,7 +782,7 @@ Inductive to_list_spec : term → option (list term) → Type :=
 Lemma to_listP t : to_list_spec t (to_list t).
 Proof.
 case e: to_list => [ts|]; last constructor.
-by rewrite (to_listK _ _ e); constructor.
+by rewrite (to_listK e); constructor.
 Qed.
 
 Lemma of_list_inj : Inj eq eq of_list.
@@ -897,6 +916,19 @@ Qed.
 Lemma TExp_TExpN t1 ts1 t2 : TExp (TExpN t1 ts1) t2 = TExpN t1 (t2 :: ts1).
 Proof.
 by rewrite TExpNA -[@seq.cat]/@app [_ ++ _]comm.
+Qed.
+
+Lemma count_exp_TExpNW t1 t2 ts :
+  (∀ t, t ∈ ts → t1 ≠ TInv t) →
+  (count_exp t1 t2 ≤ count_exp t1 (TExpN t2 ts))%Z.
+Proof.
+elim: ts => [|t ts IH] t1_ts; first by rewrite TExpN0; lia.
+rewrite -TExp_TExpN; set t2' := TExpN t2 ts.
+have ?: (count_exp t1 t2' ≤ count_exp t1 (TExp t2' t))%Z.
+  apply: count_exp_TExpW; move/(_ t): t1_ts; apply; rewrite elem_of_cons.
+  by eauto.
+suff: (count_exp t1 t2 ≤ count_exp t1 t2')%Z by lia.
+by apply: IH => t' t'_ts; apply: t1_ts; rewrite elem_of_cons; eauto.
 Qed.
 
 Lemma elem_of_TExpN2l g t1 t2 :
