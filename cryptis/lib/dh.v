@@ -58,7 +58,7 @@ Lemma dh_seed_elim1 g a :
   ¬ is_exp g →
   dh_seed a -∗
   public (TExp g a) -∗
-  ▷ ◇ P (TExp g a).
+  ▷ P (TExp g a).
 Proof.
 iIntros "%gNX #aP #p_t".
 rewrite public_TExp_iff //.
@@ -71,60 +71,45 @@ have exps_t': exps t' = [a].
 (* /MOVE *)
 have a_t' : a ∈ exps t' by rewrite exps_t'; set_solver.
 iPoseProof (dh_pred_inv_same with "p_t") as "[#contra|H]" => //.
-  by iModIntro; iDestruct (dh_seed_elim0 with "aP contra") as ">[]".
+  by iDestruct (dh_seed_elim0 with "aP contra") as ">[]".
 iDestruct "H" as "(%t & %e_base & %a_t & H)".
 iDestruct (dh_seed_dh_pred_base_elim with "aP H")
   as "{H} #[>-> H]" => //; iNext.
-by rewrite -[t' in (◇ P t')%I]base_expsK exps_t' e_base.
+by rewrite -{2}[t']base_expsK exps_t' e_base.
 Qed.
 
-Lemma dh_seed_elim2 g a t :
+Lemma dh_seed_elim2 g a b :
   ¬ is_exp g →
-  a ≠ TInv t →
+  a ≠ TInv b →
   dh_seed a -∗
-  public (TExpN g [a; t]) -∗
-  ▷ ◇ (P (TExp g a) ∧ public t).
-Proof. Admitted.
-(* iIntros "%gXN %a_t #aP #p_t".
- * rewrite public_TExp2_iff //.
- * iDestruct "p_t" as "[[p_t ?]|[[_ contra]|p_t]]"; eauto.
- * - by iSplit; eauto; iApply dh_seed_elim1.
- * - by iPoseProof (@dh_seed_elim0 with "aP contra") as ">[]".
- * iDestruct "p_t" as "(_ & p_t & _)".
- * have t_t' : t ∈ exps (TExpN g [a; t]).
- *   by apply: elem_of_TExpN2r; rewrite // exps_expN // elem_of_nil; case.
- * iDestruct (dh_pred_inv_same with "p_t") as "[contra|p_t']".
- * - rewrite -TExp_TExpN -count_exp_gt0 count_exp_TExp_eq.
- *   rewrite count_exp_TExp (@decide_False _ (a = TInv t)) //.
- *   rewrite count_exp_eq0 ?exps_expN //; try set_solver.
- *   by case: decide; lia.
- * - iNext; iDestruct (dh_seed_elim0 with "aP contra") as ">[]".
- * rewrite base_TExpN; iDestruct "p_t'" as "(%t2' & %e_base & %a_t2' & p_t2')".
- * iDestruct (dh_seed_dh_pred_base_elim with "aP p_t2'") as "{p_t2'} #[>-> H]"
- *   => //.
- * rewrite {}e_base base_expN {t2' a_t2'} //; iSplit; first by eauto.
- * iDestruct (dh_pred_inv_gen _ t_t' with "p_t") as "{p_t H} [contra|p_t]".
- *   by iNext; iDestruct (dh_seed_elim0 with "aP contra") as ">[]".
- * iDestruct "p_t" as "[p_t|p_t]".
- *   iDestruct "p_t" as "(%t2' & %e_base & %a_t2' & p_t2')".
- *   iDestruct (dh_seed_dh_pred_base_elim with "aP p_t2'") as "{p_t2'} #[>-> H]"
- *     => //.
- *   i
- *
- *
- * iDestruct "aP" as "(_ & _ & #aP & _)".
- * iPoseProof ("aP" with "p_t2'") as "{p_t2'} p_t2'"; iNext.
- * iDestruct "p_t2'" as "#(%l_t2' & p_t2')".
- * have exps_t2' : exps t2' = [a].
- *   case: (exps
- *
- *
- * iPoseProof ("aP" with "p_t") as "{p_t} p_t".
- * iAssert (▷ False)%I as ">[]".
- * iModIntro.
- * iDestruct "p_t" as "(%e & _)".
- * by rewrite exps_TExpN' in e; last exact /invs_canceled2.
- * Qed. *)
+  dh_seed b -∗
+  public (TExpN g [a; b]) -∗
+  ▷ (⌜a = b⌝ ∧ P (TExp g a) ∧ P (TExp g b)).
+Proof.
+iIntros "%gXN %a_bV #aP #bP #p".
+have exps_t : exps (TExpN g [a; b]) ≡ₚ [a; b].
+  by rewrite exps_TExpN exps_expN //= cancel_exps_canceled ?invs_canceled2.
+have a_t : a ∈ exps (TExpN g [a; b]) by rewrite exps_t; set_solver.
+have b_t : b ∈ exps (TExpN g [a; b]) by rewrite exps_t; set_solver.
+iPoseProof (dh_pred_exps a_t with "p") as "[dh_a _]".
+iPoseProof (dh_pred_inv with "dh_a") as "(%c & %c_t & p_c)" => //.
+rewrite exps_t elem_of_cons elem_of_list_singleton in c_t.
+rewrite base_TExpN base_expN //.
+iDestruct "p_c" as "[p_c|(%t' & %ebase & %exps_t'S & contra)]".
+  case: c_t=> ->.
+  - iDestruct (dh_seed_elim0 with "aP p_c") as ">[]".
+  - iDestruct (dh_seed_elim0 with "bP p_c") as ">[]".
+rewrite exps_t in exps_t'S.
+iAssert (▷ □ dh_publ t')%I as "[>%len_t' #H]".
+  iDestruct "aP" as "(_ & _ & #aP & _)".
+  iDestruct "bP" as "(_ & _ & #bP & _)".
+  by case: c_t => ->; [iApply "aP"|iApply "bP"].
+case exps_t': (exps t') => [//|d [|//]] in exps_t'S len_t'.
+have ->: t' = TExp g d by rewrite -exps_t' -ebase base_expsK.
+have /elem_of_list_singleton ->: a ∈ [d] by set_solver.
+have /elem_of_list_singleton ->: b ∈ [d] by set_solver.
+by iModIntro; do !iSplit.
+Qed.
 
 Lemma dh_public_TExp g a :
   ¬ is_exp g →
@@ -132,14 +117,14 @@ Lemma dh_public_TExp g a :
   dh_seed a -∗
   ▷ □ P (TExp g a) -∗
   public (TExp g a).
-Proof. Admitted.
-(* iIntros "%gXN #gP #(? & ap1 & aP2) #P_a".
- * rewrite public_TExp_iff //; iRight; do !iSplit => //.
- * - iApply "aP2"; do 2!iModIntro; iSplit => //.
- *   by rewrite exps_TExpN exps_expN.
- * - iModIntro; iIntros "#p".
- *   by iApply False_public; last iApply "ap1".
- * Qed. *)
+Proof.
+iIntros "%gXN #gP (#m & #aP1 & #aP2 & _) #P_a".
+rewrite public_TExp_iff //; do !iSplit => //.
+- iApply dh_pred_intro1. iApply "aP2"; do 2!iModIntro; iSplit => //.
+  by rewrite exps_TExpN exps_expN.
+- iModIntro; iIntros "#p".
+  by iApply False_public; last iApply "aP1".
+Qed.
 
 Definition mk_dh : val := mk_nonce.
 
