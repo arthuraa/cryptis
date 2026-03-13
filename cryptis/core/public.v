@@ -429,7 +429,8 @@ f_equiv; f_equiv; last f_equiv.
   by move: (decompose_tsize T_t T_t') => ?; eauto.
 - f_equiv; apply: big_sepL_proper => _ t' /(elem_of_list_lookup_2 _ _ _).
   case/tsize_TExp_TInv=> lt1 lt2; f_equiv.
-  + admit.
+  + apply: exp_pred0_proper' => /= t'' t''_ts; apply: HP.
+    by case: t''_ts => [->//|/tsize_TExp_TInv[??]].
   + by f_equiv; f_equiv; apply: HP.
 - case: t => // k t in HP *.
   case: func_of_term => // F; f_equiv; f_equiv.
@@ -438,7 +439,7 @@ f_equiv; f_equiv; last f_equiv.
   have ?: tsize (TSeal k t) = S (tsize k + tsize t).
     by rewrite tsizeE -ssrnat.plusE.
   f_equiv; f_equiv; apply: HP; lia.
-Admitted.
+Qed.
 
 Global Instance public_pre_aux_proper Plater :
   Proper (pointwise_relation _ (≡) ==> pointwise_relation _ (≡))
