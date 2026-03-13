@@ -48,7 +48,7 @@ Proof.
   by intro contra.
   do !iSplit => //.
   by rewrite minted_THash minted_tag.
-  iApply dh_pred_intro1.
+  iApply exp_pred_intro1.
   by iApply "Heqr".
   iModIntro; iIntros "#p".
   iApply False_public.
@@ -58,7 +58,7 @@ Proof.
   iApply public_TExp_iff; auto.
   do !iSplit => //.
   by iApply minted_TInt.
-  iApply dh_pred_intro1.
+  iApply exp_pred_intro1.
   by iApply "Heqx_u".
   by rewrite public_TInt; auto.
   wp_pures.

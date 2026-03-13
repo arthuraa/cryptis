@@ -28,8 +28,8 @@ Definition dh_publ t : iProp :=
 Definition dh_seed t : iProp :=
   minted t ∧
   □ (public t ↔ ▷ False) ∧
-  □ (∀ t', dh_pred_base t t' ↔ ▷ □ dh_publ t') ∧
-  □ (∀ t', dh_pred_base (TInv t) t' ↔ ▷ False).
+  □ (∀ t', exp_pred_base t t' ↔ ▷ □ dh_publ t') ∧
+  □ (∀ t', exp_pred_base (TInv t) t' ↔ ▷ False).
 
 Lemma dh_seed_elim0 a :
   dh_seed a -∗
@@ -40,10 +40,10 @@ iIntros "#(_ & aP & _) #p_t".
 by iApply "aP".
 Qed.
 
-Lemma dh_seed_dh_pred_base_elim a t :
+Lemma dh_seed_exp_pred_base_elim a t :
   a ∈ exps t →
   dh_seed a -∗
-  dh_pred_base a t -∗
+  exp_pred_base a t -∗
   □ ▷ (⌜t = TExp (base t) a⌝ ∗ P t).
 Proof.
 iIntros "%a_t (_ & _ & #dh & _) #base".
@@ -70,10 +70,10 @@ have exps_t': exps t' = [a].
   by rewrite exps_TExpN exps_expN // cancel_exps1.
 (* /MOVE *)
 have a_t' : a ∈ exps t' by rewrite exps_t'; set_solver.
-iPoseProof (dh_pred_inv_same with "p_t") as "[#contra|H]" => //.
+iPoseProof (exp_pred_inv_same with "p_t") as "[#contra|H]" => //.
   by iDestruct (dh_seed_elim0 with "aP contra") as ">[]".
 iDestruct "H" as "(%t & %e_base & %a_t & H)".
-iDestruct (dh_seed_dh_pred_base_elim with "aP H")
+iDestruct (dh_seed_exp_pred_base_elim with "aP H")
   as "{H} #[>-> H]" => //; iNext.
 by rewrite -{2}[t']base_expsK exps_t' e_base.
 Qed.
@@ -92,8 +92,8 @@ have exps_t : exps (TExpN g [a; b]) ≡ₚ [a; b].
   by rewrite exps_TExpN exps_expN //= cancel_exps_canceled ?invs_canceled2.
 have a_t : a ∈ exps (TExpN g [a; b]) by rewrite exps_t; set_solver.
 have b_t : b ∈ exps (TExpN g [a; b]) by rewrite exps_t; set_solver.
-iPoseProof (dh_pred_exps a_t with "p") as "[dh_a _]".
-iPoseProof (dh_pred_inv with "dh_a") as "(%c & %c_t & p_c)" => //.
+iPoseProof (exp_pred_exps a_t with "p") as "[dh_a _]".
+iPoseProof (exp_pred_inv with "dh_a") as "(%c & %c_t & p_c)" => //.
 rewrite exps_t elem_of_cons elem_of_list_singleton in c_t.
 rewrite base_TExpN base_expN //.
 iDestruct "p_c" as "[p_c|(%t' & %ebase & %exps_t'S & contra)]".
@@ -122,7 +122,7 @@ Lemma dh_public_TExp g a :
 Proof.
 iIntros "%gXN #gP (#m & #aP1 & #aP2 & _) #P_a".
 rewrite public_TExp_iff //; do !iSplit => //.
-- iApply dh_pred_intro1. iApply "aP2"; do 2!iModIntro; iSplit => //.
+- iApply exp_pred_intro1. iApply "aP2"; do 2!iModIntro; iSplit => //.
   by rewrite exps_TExpN exps_expN.
 - iModIntro; iIntros "#p".
   by iApply False_public; last iApply "aP1".

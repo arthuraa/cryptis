@@ -25,8 +25,8 @@ Definition opaque_file (file : val) : iProp :=
   ∃ k_s p_s P_s P_u envelope,
     ⌜file = Spec.of_list [k_s; p_s; P_s; P_u; envelope]⌝
     ∗ minted k_s ∗
-    □(∀ t' : term, dh_pred_base k_s t' ↔ ▷ □ True) ∗
-    □(∀ t' : term, dh_pred_base (TInv k_s) t' ↔ ▷ False) ∗
+    □(∀ t' : term, exp_pred_base k_s t' ↔ ▷ □ True) ∗
+    □(∀ t' : term, exp_pred_base (TInv k_s) t' ↔ ▷ False) ∗
     minted p_s ∗ public P_s ∗ public P_u ∗ public envelope.
 
 Definition opaque_db (db : gmap term val) : iProp :=
@@ -93,10 +93,10 @@ Proof.
   1, 2: iApply public_TExp_iff; auto.
   1, 2: do !iSplit => //.
   1, 4: by iApply minted_TInt.
-  iApply dh_pred_intro1.
+  iApply exp_pred_intro1.
   by iApply "Heqp_s"; auto.
   1, 3: by rewrite public_TInt; auto.
-  iApply dh_pred_intro1.
+  iApply exp_pred_intro1.
   by iApply "Heqp_u"; auto.
   iApply (public_sencIS _ (opN.@"AuthEnc") Φ _) => //.
   rewrite minted_senc minted_THash minted_tag.
@@ -181,7 +181,7 @@ Proof.
   iApply public_TExp_iff; auto.
   do !iSplit => //.
   by iApply minted_TInt.
-  iApply dh_pred_intro1.
+  iApply exp_pred_intro1.
   by iApply "Hdhx_s"; auto.
   by rewrite public_TInt; auto.
   iApply public_THashIS => //.

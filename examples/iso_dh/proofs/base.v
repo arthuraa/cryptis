@@ -308,7 +308,7 @@ Definition msg2_pred skR m2 : iProp :=
     let si := SessInfo skI skR ga gb gab in
     ⌜m2 = Spec.of_list [ga; gb; pkI; Tag N]⌝ ∧
     ((public skI ∨ public skR) ∨ (public b ↔ ▷ (released ga ∧ released gb))) ∧
-    (∀ t, dh_pred_base b t ↔ ▷ □ iso_dh_key_share t) ∧
+    (∀ t, exp_pred_base b t ↔ ▷ □ iso_dh_key_share t) ∧
     ⌜is_nonce b⌝ ∧
     ⌜¬ subterm b ga⌝ ∧
     iso_dh_ready N skI skR si.
@@ -343,7 +343,7 @@ Qed.
 
 Lemma public_dh_share a :
   minted a -∗
-  □ (∀ t, dh_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
+  □ (∀ t, exp_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
   public (TExp (TInt 0) a).
 Proof.
 iIntros "#m_a #pred_a".
@@ -351,14 +351,14 @@ rewrite public_TExpN //=; auto; last exact: invs_canceled1.
 rewrite minted_TExp; auto.
 rewrite TExpNK public_TInt minted_TInt.
 do !iSplit => //; auto.
-iApply dh_pred_intro1. iApply "pred_a". iPureIntro. by rewrite exps_TExpN.
+iApply exp_pred_intro1. iApply "pred_a". iPureIntro. by rewrite exps_TExpN.
 Qed.
 
 Lemma public_dh_secret1 a b :
   minted a -∗
   minted b -∗
-  □ (∀ t, dh_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
-  □ (∀ t, dh_pred_base b t ↔ ▷ □ iso_dh_key_share t) -∗
+  □ (∀ t, exp_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
+  □ (∀ t, exp_pred_base b t ↔ ▷ □ iso_dh_key_share t) -∗
   public a ∨ public b -∗
   public (TExpN (TInt 0) [a; b]).
 Proof.
@@ -375,8 +375,8 @@ Qed.
 Lemma public_dh_secret2 a b :
   a ≠ b →
   a ≠ TInv b →
-  □ (∀ t, dh_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
-  □ (∀ t, dh_pred_base b t ↔ ▷ □ iso_dh_key_share t) -∗
+  □ (∀ t, exp_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
+  □ (∀ t, exp_pred_base b t ↔ ▷ □ iso_dh_key_share t) -∗
   public (TExpN (TInt 0) [a; b]) -∗
   public a ∨ public b.
 Proof.
@@ -390,7 +390,7 @@ iAssert (◇ (public a ∨ public b))%I as "[H|H]"; first last.
 - by iLeft; iApply except_0_public.
 rewrite public_TExp2_iff //; eauto.
 iDestruct "p" as "(_ & #contraA & #contraB & _)"; eauto.
-iPoseProof (dh_pred_inv with "contraA") as "(%t & %t_share & H)".
+iPoseProof (exp_pred_inv with "contraA") as "(%t & %t_share & H)".
   by apply: elem_of_TExpN2l; rewrite //= elem_of_nil; eauto.
 have exps_share: exps (TExpN (TInt 0) [a; b]) ≡ₚ [a; b].
   by rewrite exps_TExpN' //= ?invs_canceled2; eauto.
@@ -409,9 +409,9 @@ Lemma public_dh_secret' a b (P : iProp) :
   a ≠ b →
   a ≠ TInv b →
   □ (public a ↔ P) -∗
-  □ (∀ t, dh_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
+  □ (∀ t, exp_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
   □ (public b ↔ P) -∗
-  □ (∀ t, dh_pred_base b t ↔ ▷ □ iso_dh_key_share t) -∗
+  □ (∀ t, exp_pred_base b t ↔ ▷ □ iso_dh_key_share t) -∗
   (public (TExpN (TInt 0) [a; b]) → P).
 Proof.
 iIntros "%a_b %a_bV #s_a #pred_a #s_b #pred_b #p_share".
