@@ -80,13 +80,14 @@ Qed.
 
 Lemma dh_seed_elim2 g a b :
   ¬ is_exp g →
+  a ≠ b →
   a ≠ TInv b →
   dh_seed a -∗
   dh_seed b -∗
   public (TExpN g [a; b]) -∗
-  ▷ (⌜a = b⌝ ∧ P (TExp g a) ∧ P (TExp g b)).
+  ▷ False.
 Proof.
-iIntros "%gXN %a_bV #aP #bP #p".
+iIntros "%gXN %a_b %a_bV #aP #bP #p".
 have exps_t : exps (TExpN g [a; b]) ≡ₚ [a; b].
   by rewrite exps_TExpN exps_expN //= cancel_exps_canceled ?invs_canceled2.
 have a_t : a ∈ exps (TExpN g [a; b]) by rewrite exps_t; set_solver.
@@ -106,9 +107,10 @@ iAssert (▷ □ dh_publ t')%I as "[>%len_t' #H]".
   by case: c_t => ->; [iApply "aP"|iApply "bP"].
 case exps_t': (exps t') => [//|d [|//]] in exps_t'S len_t'.
 have ->: t' = TExp g d by rewrite -exps_t' -ebase base_expsK.
+move: a_b.
 have /elem_of_list_singleton ->: a ∈ [d] by set_solver.
 have /elem_of_list_singleton ->: b ∈ [d] by set_solver.
-by iModIntro; do !iSplit.
+congruence.
 Qed.
 
 Lemma dh_public_TExp g a :
@@ -128,31 +130,44 @@ Qed.
 
 Definition mk_dh : val := mk_nonce.
 
-Lemma wp_mk_dh g (Ψ : val → iProp) :
+Lemma wp_mk_dh (T : gset term) g (Ψ : val → iProp) :
   ¬ is_exp g ->
   cryptis_ctx -∗
   minted g -∗
+  □ (∀ t, ⌜t ∈ T⌝ -∗ minted t) -∗
   (∀ a, minted a -∗
         dh_seed a -∗
+        term_token a ⊤ -∗
         term_token (TExp g a) ⊤ -∗
+        ⌜∀ t t', t ∈ T → subterm t' t → a ≠ t' ∧ a ≠ TInv t'⌝ -∗
         Ψ a) -∗
   WP mk_dh #() {{ Ψ }}.
 Proof.
-iIntros "% #ctx #minted_g post".
-iApply (wp_mk_nonce_freshN ∅ (λ _, False%I) dh_publ (λ t, {[TExp g t]})
+iIntros "% #ctx #minted_g #minted_T post".
+iApply (wp_mk_nonce_freshN T (λ _, False%I) dh_publ
+         (λ t, {[t; TExp g t]})
   with "[//]" ) => //.
-- iIntros "%". rewrite elem_of_empty. by iIntros "[]".
-- iIntros "%". rewrite big_sepS_singleton. iIntros "!>".
-  rewrite minted_TExp //.
-  iSplit.
-  + by iIntros; iSplit.
-  + by iIntros "(? & ?)".
-iIntros (a) "_ _ #m_a #(aP1 & aP2) #? token". rewrite big_sepS_singleton.
-iApply "post" => //.
-rewrite /dh_seed. do !iSplit => //.
-iModIntro; iSplit.
-- by iIntros "H"; iSpecialize ("aP1" with "H"); iModIntro.
-- by iIntros "#?"; iApply "aP2"; iModIntro.
+  iIntros "%t".
+  rewrite big_sepS_forall; iIntros (t').
+  rewrite elem_of_union !elem_of_singleton; iIntros "[->|->]"; eauto.
+  rewrite minted_TExp //; iIntros "!>"; iSplit; eauto.
+  by iIntros "[??]".
+iIntros (a) "%a_T %nonce_a #m_a #aP #? #? token".
+have a_g: TInv a ∉ exps g.
+  by rewrite exps_expN // elem_of_nil; case.
+have [? a_ga] := tsize_lt_TExp a_g.
+have {}a_ga : a ≠ TExp g a.
+  move=> contra; rewrite -contra in a_ga; lia.
+rewrite big_sepS_union ?big_sepS_singleton; last set_solver.
+rewrite bi.intuitionistic_intuitionistically.
+iDestruct "token" as "[t1 t2]".
+iApply ("post" with "[//] [] [$] [$]") => //.
+  by rewrite /dh_seed; do 4!iSplit => //.
+iPureIntro => t t' t_T t'_t; split => contra.
+- apply: (a_T _ t_T); congruence.
+- rewrite -[t']TInvK -contra in t'_t.
+  apply: (a_T _ t_T); apply: subterm_trans t'_t.
+  by constructor => //; case: (a) => // in nonce_a *.
 Qed.
 
 End DH.

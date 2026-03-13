@@ -65,6 +65,8 @@ Proof. apply _. Qed.
 Class PK := {
   is_priv_key : term → aenc_key → aenc_key → iProp;
 
+  fresh_for : term → gset term → iProp;
+
   mk_key_share : term → term;
 
   mk_key_share_inj : Inj (=) (=) mk_key_share;
@@ -95,11 +97,11 @@ Class PK := {
   confirmation : role → aenc_key → aenc_key → term → iProp;
 
   mk_key_share_impl : val;
-  wp_mk_key_share : ∀ kI kR,
-    {{{ cryptis_ctx }}}
+  wp_mk_key_share : ∀ kI kR T,
+    {{{ cryptis_ctx ∗ □ (∀ t, ⌜t ∈ T⌝ -∗ minted t)}}}
       mk_key_share_impl #()
     {{{ (n : term), RET (n, mk_key_share n) : val;
-        minted n ∗ □ is_priv_key n kI kR ∗
+        minted n ∗ □ is_priv_key n kI kR ∗ □ fresh_for n T ∗
         term_token n ⊤
     }}};
 
@@ -188,6 +190,7 @@ Definition resp_accepted skI skR sI sR : iProp :=
     ⌜sR = mk_key_share nR⌝ ∧
     □ is_priv_key nR skI skR ∧
     □ confirmation Resp skI skR (mk_session_key Init nI (mk_key_share nR)) ∧
+    □ fresh_for nR {[sI]} ∧
     session (N.@"session") Resp nI nR (skI, skR).
 
 Definition resp_waiting skI skR sI nR : iProp :=
@@ -213,6 +216,7 @@ Definition init_finished skR sR : iProp :=
     □ is_priv_key nI skI skR ∧
     □ is_priv_key nR skI skR ∧
     □ confirmation Init skI skR (mk_session_key Init nI (mk_key_share nR)) ∧
+    □ fresh_for nR {[mk_key_share nI]} ∧
     session (N.@"session") Init nI nR (skI, skR) ∧
     session (N.@"session") Resp nI nR (skI, skR).
 
@@ -253,6 +257,7 @@ Definition session_key skI skR kS : iProp :=
     □ is_priv_key nR skI skR ∗
     □ confirmation Init skI skR kS ∧
     □ confirmation Resp skI skR kS ∧
+    □ fresh_for nR {[mk_key_share nI]} ∧
     session (N.@"session") Init nI nR (skI, skR) ∗
     session (N.@"session") Resp nI nR (skI, skR).
 

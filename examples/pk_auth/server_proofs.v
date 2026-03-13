@@ -53,6 +53,7 @@ Lemma resp_accept E skI skR sI nR :
   resp_confirm skR -∗
   pk_auth_ctx N -∗
   □ is_priv_key nR skI skR -∗
+  □ fresh_for nR {[sI]} -∗
   init_started N skI skR sI ={E}=∗
   □ confirmation Resp skI skR kS ∗
   session_weak' N skI skR nR ∗
@@ -60,7 +61,7 @@ Lemma resp_accept E skI skR sI nR :
   resp_waiting N skI skR sI nR ∗
   resp_accepted N skI skR sI (mk_key_share nR).
 Proof.
-iIntros (?) "%kS token conf (#ctx & _) #p_nR #started".
+iIntros (?) "%kS token conf (#ctx & _) #p_nR #fresh #started".
 iMod ("conf" $! skI sI nR) as "#conf".
 rewrite (term_token_difference _ (↑N.@"session")) //.
 iDestruct "token" as "[token_sess token]".
@@ -141,7 +142,8 @@ iIntros "%sR %kS % #(ctx & _) #sess #s_nR #p_nR [#fail|#finished] waiting".
   iModIntro. iLeft. by iApply "p_sR".
 iDestruct "finished"
   as "(%nI' & %nR' & %skI' &
-       #sessWI & #sessWR & %e_sR & p_nI & _ & confirmedI & sessI & sessR')".
+       #sessWI & #sessWR & %e_sR & p_nI & _ & confirmedI &
+       #fresh & sessI & sessR')".
 move/mk_key_share_inj: e_sR => <- {nR'}.
 iDestruct "waiting" as "[[#fail token]|waiting]".
   by iDestruct (session_not_ready with "ctx sessR' token") as "[]"; eauto.
@@ -150,7 +152,7 @@ move: @kS; rewrite -mk_session_keyC => kS.
 iPoseProof (session_agree with "sessR sessR'") as "{sessR'} %e" => //.
 case: e => <- <-.
 iPoseProof (session_weak'_agree with "sessWR sess") as "(_ & _)".
-iMod ("waiting" with "[] sessI") as "[_ >finished]".
+iMod ("waiting" with "[] sessI") as "[? >finished]".
   solve_ndisj.
 rewrite /=.
 iModIntro. iModIntro. iRight. iSplitL.
@@ -192,13 +194,15 @@ iPoseProof (public_minted with "Hm1") as "m_m1".
 rewrite minted_TSeal minted_tag minted_of_list /=.
 iDestruct "m_m1" as "(_ & _ & m_pkI & _)".
 wp_apply wp_is_aenc_key; eauto. iSplit; last protocol_failure.
-iIntros "%skI -> #m_skI". wp_pures.
+iIntros "%skI -> #m_skI". wp_pure credit:"c1".
 iDestruct (public_msg1E with "[] Hm1")
   as "{Hm1} (s_sI & p_eI & p_sI & started)"; eauto.
-wp_pures.
-wp_bind (mk_key_share_impl _). iApply (wp_mk_key_share skI skR) => //.
-iIntros "!> %nR (#s_nR & #p_nR & token)".
-iMod (resp_accept with "token confirm [//] [//] [//]")
+iMod (lc_fupd_elim_later_pers with "c1 s_sI") as "{s_sI} #s_sI".
+wp_pures; wp_bind (mk_key_share_impl _).
+iApply (wp_mk_key_share skI skR {[sI]}) => //; iFrame "#".
+  by iIntros "!> %t %t_sI"; move/elem_of_singleton: t_sI => ->.
+iIntros "!> %nR (#s_nR & #p_nR & #fresh & token)".
+iMod (resp_accept with "token confirm [//] [//] [//] [//]")
   as "(#confirmed & #? & #sess_weak & waiting & #accepted)" => //.
 wp_pures. wp_list; wp_term_of_list. wp_apply wp_aenc'. wp_pures.
 iAssert (secret_of (mk_key_share nR) skI skR) as "p_sR".

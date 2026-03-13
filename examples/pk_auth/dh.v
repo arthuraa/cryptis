@@ -21,7 +21,7 @@ Implicit Types skI skR : aenc_key.
 Definition pk_dh_mk_key_share n := TExp (TInt 0) n.
 
 Definition pk_dh_mk_key_share_impl : val := λ: <>,
-  let: "n" := mk_nonce #() in
+  let: "n" := mk_dh #() in
   ("n", texp (tint #0) "n").
 
 Definition pk_dh_mk_session_key rl n s : term :=
@@ -48,7 +48,8 @@ Program Instance PK_DH : PK := {
   mk_key_share_impl := pk_dh_mk_key_share_impl;
   mk_session_key := pk_dh_mk_session_key;
   mk_session_key_impl := pk_dh_mk_session_key_impl;
-
+  fresh_for n T :=
+    ⌜∀ t t', t ∈ T → subterm t' t → n ≠ t' ∧ n ≠ TInv t'⌝%I;
 }.
 
 Next Obligation.
@@ -71,27 +72,24 @@ rewrite /pk_dh_mk_key_share /secret_of. iModIntro. iSplit.
 - iIntros "#fail". iApply dh_public_TExp; eauto.
 Qed.
 
-
-(* TODO: fix *)
-Next Obligation.
-(* move=> rl1 rl2 nI nI' nR nR'. *)
-(* rewrite /pk_dh_mk_key_share /pk_dh_mk_session_key {rl1 rl2} TExp_TExpN. *)
-(* move=> eX. *)
-(* move/(f_equal base): (eX); rewrite !base_TExpN /= => base_nR'. *)
-(* have en: [nI; nR] ≡ₚ exps nR' ++ [nI']. *)
-(*   rewrite -exps_TExpN. -eX exps_TExpN. *)
-(* have := Permutation_length en; rewrite length_app /= => ?. *)
-(* have lenR' : length (exps nR') = 1 by lia. *)
-(* case eenR': (exps nR') => [|x [|??]] //= in lenR' en *. *)
-(* have [[-> ->]|[-> ->]] := Permutation_length_2 en. *)
-(* - right. split => //. apply: base_exps_inj. *)
-(*   + by rewrite base_TExpN. *)
-(*   + by rewrite exps_TExpN eenR'. *)
-(* - left. split => //. apply: base_exps_inj. *)
-(*   + by rewrite base_TExpN. *)
-(*   + by rewrite exps_TExpN eenR'. *)
-(* Qed. *)
-Admitted.
+Next Obligation. Admitted.
+(* move=> rl1 rl2 nI nI' nR nR'.
+ * rewrite /pk_dh_mk_key_share /pk_dh_mk_session_key {rl1 rl2} TExp_TExpN.
+ * move=> eX.
+ * move/(f_equal base): (eX); rewrite !base_TExpN /= => base_nR'.
+ * have en: [nI; nR] ≡ₚ exps nR' ++ [nI'].
+ *   rewrite -exps_TExpN. -eX exps_TExpN.
+ * have := Permutation_length en; rewrite length_app /= => ?.
+ * have lenR' : length (exps nR') = 1 by lia.
+ * case eenR': (exps nR') => [|x [|??]] //= in lenR' en *.
+ * have [[-> ->]|[-> ->]] := Permutation_length_2 en.
+ * - right. split => //. apply: base_exps_inj.
+ *   + by rewrite base_TExpN.
+ *   + by rewrite exps_TExpN eenR'.
+ * - left. split => //. apply: base_exps_inj.
+ *   + by rewrite base_TExpN.
+ *   + by rewrite exps_TExpN eenR'.
+ * Qed. *)
 
 Next Obligation.
 by move=> nI nR; rewrite /pk_dh_mk_key_share /pk_dh_mk_session_key TExpNC.
@@ -103,10 +101,10 @@ Next Obligation.
 Qed.
 
 Next Obligation.
-iIntros "%skI %skR %Φ #? post". rewrite /pk_dh_mk_key_share_impl.
-wp_pures. wp_bind (mk_nonce _).
-iApply (wp_mk_nonce (λ _, False)%I (dh_publ (λ _, corruption skI skR))) => //.
-iIntros "%n _ #s_n #p_n #dh #dhV token". wp_pures.
+iIntros "%skI %skR %T %Φ [#? #?] post". rewrite /pk_dh_mk_key_share_impl.
+wp_pures. wp_bind (mk_dh _).
+iApply (wp_mk_dh (λ _, corruption skI skR) T (g := TInt 0)); eauto.
+iIntros "%n #m #seed token _ %fresh"; wp_pures.
 wp_bind (tint _). iApply wp_tint.
 wp_bind (texp _ _). iApply wp_texp.
 wp_pures. iModIntro. iApply "post".
@@ -149,14 +147,17 @@ Lemma pk_dh_session_key_elim skI skR kS :
   public kS →
   ◇ False.
 Proof.
-iIntros "(%nI & %nR & -> & _ & _ & #priv_nI & #priv_nR & _)".
-rewrite /= /pk_dh_mk_session_key /pk_dh_mk_key_share TExp_TExpN.
+iIntros "(%nI & %nR & -> & _ & _ & #priv_nI & #priv_nR &
+          _ & _ & %fresh & _)".
+have [nRnI nRnIV] : nR ≠ nI ∧ nR ≠ TInv nI.
+  apply: (fresh (mk_key_share nI)); eauto.
+  - by rewrite elem_of_singleton.
+  - eapply STExp2; eauto; rewrite ?elem_of_list_singleton //.
+    exact: invs_canceled1.
+rewrite /= /pk_dh_mk_session_key /pk_dh_mk_key_share TExpNC TExp_TExpN.
 iIntros "#p_kS".
-iDestruct (dh_seed_elim2 with "priv_nI priv_nR p_kS")
-  as "(>%e & ? & _)"; eauto.
-- admit.
-- admit.
-Admitted.
+by iDestruct (dh_seed_elim2 with "priv_nR priv_nI p_kS") as ">[]" => //= - [].
+Qed.
 
 Lemma wp_pk_dh_init c skI skR :
   channel c -∗

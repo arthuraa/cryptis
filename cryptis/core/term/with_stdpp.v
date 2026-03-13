@@ -208,6 +208,12 @@ Inductive subterm (t : term) : term → Prop :=
     t'' ∈ ts
   : subterm t (TExpN t' ts).
 
+Global Instance subterm_trans : Transitive subterm.
+Proof.
+move=> t1 t2 t3 sub12 sub13; elim: t3 / sub13;
+by eauto using subterm.
+Qed.
+
 Section ValOfTerm.
 
 Fixpoint val_of_term_rec t : val :=

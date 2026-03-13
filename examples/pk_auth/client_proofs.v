@@ -109,7 +109,7 @@ iDestruct "accepted" as "[fail|accepted]".
 iDestruct "accepted"
   as "(%nI' & %nR &
        #sess' & #sess'' &
-       %e_sI & -> & #p_nR & #accepted & confirmed)".
+       %e_sI & -> & #p_nR & #accepted & #fresh & confirmed)".
 move/mk_key_share_inj: e_sI => <-.
 iDestruct (session_weak'_agree with "sess' sess") as "(_ & _)".
 iMod (session_begin _ Init nI nR (skI, skR) with "ctx [resp_token] token_sess")
@@ -164,8 +164,9 @@ rewrite /pk_auth_init.
 iIntros "#chan_c #ctx #ctx' #m_skI #m_skR %Ψ !> confirm Hpost".
 wp_pures. wp_apply wp_pkey. wp_pures.
 wp_bind (mk_key_share_impl _).
-iApply (wp_mk_key_share skI skR) => //.
-iIntros "!> %nI (#s_nI & #p_nI & token)".
+iApply (wp_mk_key_share skI skR ∅) => //; iFrame "#".
+  by iIntros "!> % %contra"; case/elem_of_empty: contra.
+iIntros "!> %nI (#s_nI & #p_nI & _ & token)".
 rewrite (term_token_difference _ (↑N.@"success")); eauto.
 iDestruct "token" as "[token_succ token]".
 iMod (session_weak'_set N skI skR _ with "token_succ") as "#sess".

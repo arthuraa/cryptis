@@ -46,6 +46,7 @@ Program Instance PK_NSL : PK := {
   mk_key_share_impl := nsl_mk_key_share_impl;
   mk_session_key := nsl_mk_session_key;
   mk_session_key_impl := nsl_mk_session_key_impl;
+  fresh_for _ _ := True%I;
 
 }.
 
@@ -64,7 +65,7 @@ by case=> t1 t2; iIntros "#s1 #s2"; rewrite minted_TPair; iSplit.
 Qed.
 
 Next Obligation.
-iIntros "%skI %skR %Φ #? post". rewrite /nsl_mk_key_share_impl.
+iIntros "%skI %skR % %Φ [#? _] post". rewrite /nsl_mk_key_share_impl.
 wp_pures. wp_bind (mk_nonce _).
 iApply (wp_mk_nonce (λ _, corruption skI skR) (λ _, False)%I) => //.
 iIntros "%n % #s_n #p_n _ _ token". wp_pures. iModIntro.
