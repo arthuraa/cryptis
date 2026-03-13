@@ -53,7 +53,7 @@ Lemma resp_accept E skI skR sI nR :
   resp_confirm skR -∗
   pk_auth_ctx N -∗
   □ is_priv_key nR skI skR -∗
-  □ fresh_for nR {[sI]} -∗
+  ⌜fresh_for nR {[sI]}⌝ -∗
   init_started N skI skR sI ={E}=∗
   □ confirmation Resp skI skR kS ∗
   session_weak' N skI skR nR ∗

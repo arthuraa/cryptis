@@ -663,7 +663,7 @@ iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
   wp_bind (mk_dh _); iApply (wp_mk_dh (λ _, True)%I ∅ _) => //.
   + by iApply public_minted.
   + by iIntros "!> %"; rewrite elem_of_empty; iIntros ([]).
-  iIntros (a) "_ #p_a _ _"; wp_list.
+  iIntros (a) "_ #p_a _ _ _"; wp_list.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
   iIntros (cn) "_ _ #p_cn _ _ token"; wp_list; wp_term_of_list.
   wp_tag.
@@ -676,7 +676,7 @@ iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
   wp_bind (mk_dh _); iApply (wp_mk_dh (λ _, True)%I ∅ _) => //.
   + by iApply public_minted.
   + iIntros "!> %"; rewrite elem_of_empty; iIntros "[]".
-  iIntros (a) "_ #p_a _ _"; wp_list.
+  iIntros (a) "_ #p_a _ _ _"; wp_list.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
   iIntros (cn) "_ _ #p_cn _ _ token"; wp_list; wp_term_of_list.
   wp_tag.
@@ -1193,7 +1193,7 @@ case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
   + iIntros "!> %t"; iIntros (->%elem_of_singleton); rewrite !public_minted.
     rewrite minted_tag minted_of_list /=.
     by iDestruct "p_ke" as "(_ & _ & ? & _)".
-  iIntros (a) "_ #pred_a _ %fresh_a"; wp_list.
+  iIntros (a) "_ #pred_a _ _ %fresh_a"; wp_list.
   have {}fresh_a: ∀ t, subterm t gx → a ≠ t ∧ a ≠ TInv t.
     by move=> t; apply: fresh_a; set_solver.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
@@ -1210,7 +1210,7 @@ case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
   + iIntros "!> %t"; iIntros (->%elem_of_singleton); rewrite !public_minted.
     rewrite minted_tag minted_of_list /=.
     by iDestruct "p_ke" as "(_ & _ & _ & ? & _)".
-  iIntros (a) "_ #pred_a _ %fresh_a"; wp_list.
+  iIntros (a) "_ #pred_a _ _ %fresh_a"; wp_list.
   have {}fresh_a: ∀ t, subterm t gx → a ≠ t ∧ a ≠ TInv t.
     by move=> t; apply: fresh_a; set_solver.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.

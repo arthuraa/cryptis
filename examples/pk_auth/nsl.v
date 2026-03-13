@@ -46,17 +46,13 @@ Program Instance PK_NSL : PK := {
   mk_key_share_impl := nsl_mk_key_share_impl;
   mk_session_key := nsl_mk_session_key;
   mk_session_key_impl := nsl_mk_session_key_impl;
-  fresh_for _ _ := True%I;
+  fresh_for _ _ := True;
 
 }.
 
 Next Obligation. by eauto. Qed.
 
 Next Obligation. by eauto. Qed.
-
-Next Obligation.
-case=> [] [] nI nI' nR nR' [] -> ->; eauto.
-Qed.
 
 Next Obligation. by case; eauto. Qed.
 

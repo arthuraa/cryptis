@@ -49,7 +49,7 @@ Program Instance PK_DH : PK := {
   mk_session_key := pk_dh_mk_session_key;
   mk_session_key_impl := pk_dh_mk_session_key_impl;
   fresh_for n T :=
-    ⌜∀ t t', t ∈ T → subterm t' t → n ≠ t' ∧ n ≠ TInv t'⌝%I;
+    ∀ t t', t ∈ T → subterm t' t → n ≠ t' ∧ n ≠ TInv t';
 }.
 
 Next Obligation.
@@ -72,24 +72,6 @@ rewrite /pk_dh_mk_key_share /secret_of. iModIntro. iSplit.
 - iIntros "#fail". iApply dh_public_TExp; eauto.
 Qed.
 
-Next Obligation. Admitted.
-(* move=> rl1 rl2 nI nI' nR nR'.
- * rewrite /pk_dh_mk_key_share /pk_dh_mk_session_key {rl1 rl2} TExp_TExpN.
- * move=> eX.
- * move/(f_equal base): (eX); rewrite !base_TExpN /= => base_nR'.
- * have en: [nI; nR] ≡ₚ exps nR' ++ [nI'].
- *   rewrite -exps_TExpN. -eX exps_TExpN.
- * have := Permutation_length en; rewrite length_app /= => ?.
- * have lenR' : length (exps nR') = 1 by lia.
- * case eenR': (exps nR') => [|x [|??]] //= in lenR' en *.
- * have [[-> ->]|[-> ->]] := Permutation_length_2 en.
- * - right. split => //. apply: base_exps_inj.
- *   + by rewrite base_TExpN.
- *   + by rewrite exps_TExpN eenR'.
- * - left. split => //. apply: base_exps_inj.
- *   + by rewrite base_TExpN.
- *   + by rewrite exps_TExpN eenR'.
- * Qed. *)
 
 Next Obligation.
 by move=> nI nR; rewrite /pk_dh_mk_key_share /pk_dh_mk_session_key TExpNC.
@@ -109,7 +91,7 @@ wp_bind (tint _). iApply wp_tint.
 wp_bind (texp _ _). iApply wp_texp.
 wp_pures. iModIntro. iApply "post".
 rewrite bi.intuitionistic_intuitionistically.
-iFrame. do !iSplit => //. iModIntro. by do!iSplit => //.
+iFrame. do !iSplit => //.
 Qed.
 
 Next Obligation.
@@ -230,7 +212,7 @@ Qed.
 
 End PKDH.
 
-Arguments PK_DH {Σ _ _ _ _} pk_dh_confirmation.
+Arguments PK_DH {Σ _ _} pk_dh_confirmation.
 Arguments pk_dh_ctx {Σ _ _ _} N _.
 Arguments pk_dh_session_meta {Σ _ _ _} _ _ _ _ {L _ _} _ _ _.
 Arguments pk_dh_session_meta_token {Σ _ _ _} _ _ _ _ _ _.

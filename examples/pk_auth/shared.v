@@ -65,7 +65,7 @@ Proof. apply _. Qed.
 Class PK := {
   is_priv_key : term → aenc_key → aenc_key → iProp;
 
-  fresh_for : term → gset term → iProp;
+  fresh_for : term → gset term → Prop;
 
   mk_key_share : term → term;
 
@@ -79,13 +79,6 @@ Class PK := {
     secret_of (mk_key_share n) skI skR;
 
   mk_session_key : role → term → term → term;
-
-  mk_session_key_elem_of :
-    ∀ rl1 rl2 n1 n1' n2 s2',
-      mk_session_key rl1 n1  (mk_key_share n2) =
-      mk_session_key rl2 n1' s2' →
-      n1' = n1 ∧ s2' = mk_key_share n2 ∨
-      n1' = n2 ∧ s2' = mk_key_share n1;
 
   mk_session_keyC :
     ∀ nI nR, mk_session_key Init nI (mk_key_share nR) =
@@ -101,7 +94,7 @@ Class PK := {
     {{{ cryptis_ctx ∗ □ (∀ t, ⌜t ∈ T⌝ -∗ minted t)}}}
       mk_key_share_impl #()
     {{{ (n : term), RET (n, mk_key_share n) : val;
-        minted n ∗ □ is_priv_key n kI kR ∗ □ fresh_for n T ∗
+        minted n ∗ □ is_priv_key n kI kR ∗ ⌜fresh_for n T⌝ ∗
         term_token n ⊤
     }}};
 
@@ -190,7 +183,7 @@ Definition resp_accepted skI skR sI sR : iProp :=
     ⌜sR = mk_key_share nR⌝ ∧
     □ is_priv_key nR skI skR ∧
     □ confirmation Resp skI skR (mk_session_key Init nI (mk_key_share nR)) ∧
-    □ fresh_for nR {[sI]} ∧
+    ⌜fresh_for nR {[sI]}⌝ ∧
     session (N.@"session") Resp nI nR (skI, skR).
 
 Definition resp_waiting skI skR sI nR : iProp :=
@@ -216,7 +209,7 @@ Definition init_finished skR sR : iProp :=
     □ is_priv_key nI skI skR ∧
     □ is_priv_key nR skI skR ∧
     □ confirmation Init skI skR (mk_session_key Init nI (mk_key_share nR)) ∧
-    □ fresh_for nR {[mk_key_share nI]} ∧
+    ⌜fresh_for nR {[mk_key_share nI]}⌝ ∧
     session (N.@"session") Init nI nR (skI, skR) ∧
     session (N.@"session") Resp nI nR (skI, skR).
 
@@ -236,18 +229,6 @@ Definition session_key_meta skI skR `{Countable L} kS N' (x : L) : iProp :=
     session (N.@"session") Resp nI nR (skI, skR) ∗
     term_meta nI N' x.
 
-Lemma mk_session_key_inj nI nR nI' nR' skI skR :
-  mk_session_key Init nI  (mk_key_share nR) =
-  mk_session_key Init nI' (mk_key_share nR') →
-  session (N.@"session") Init nI nR (skI, skR) -∗
-  session (N.@"session") Resp nI' nR' (skI, skR) -∗
-  ⌜nI' = nI⌝.
-Proof.
-move=> /mk_session_key_elem_of [] [-> /mk_key_share_inj ->]; first by eauto.
-iIntros "sessI sessR".
-by iDestruct (session_role_agree with "sessI sessR") as "[]".
-Qed.
-
 Definition session_key skI skR kS : iProp :=
   ∃ nI nR,
     ⌜kS = mk_session_key Init nI (mk_key_share nR)⌝ ∗
@@ -257,26 +238,13 @@ Definition session_key skI skR kS : iProp :=
     □ is_priv_key nR skI skR ∗
     □ confirmation Init skI skR kS ∧
     □ confirmation Resp skI skR kS ∧
-    □ fresh_for nR {[mk_key_share nI]} ∧
+    ⌜fresh_for nR {[mk_key_share nI]}⌝ ∧
     session (N.@"session") Init nI nR (skI, skR) ∗
     session (N.@"session") Resp nI nR (skI, skR).
 
 Global Instance session_key_persistent skI skR kS :
   Persistent (session_key skI skR kS).
 Proof. apply _. Qed.
-
-Lemma session_weak_session_key rl kI1 kI2 kR1 kR2 kS :
-  session_weak rl kI1 kR1 kS -∗
-  session_key kI2 kR2 kS -∗
-  ⌜kI1 = kI2 ∧ kR1 = kR2⌝.
-Proof.
-iIntros "(%t1 & %t2 & %e1 & #sess1)".
-iIntros "(%nI & %nR & %e2 & #sessI & #sessR & _)".
-rewrite e2 in e1.
-case/mk_session_key_elem_of: e1 => [] [-> e].
-- by iApply (session_weak'_agree with "sess1 sessI").
-- by iApply (session_weak'_agree with "sess1 sessR").
-Qed.
 
 Lemma session_key_confirmation rl skI skR kS :
   session_key skI skR kS -∗
