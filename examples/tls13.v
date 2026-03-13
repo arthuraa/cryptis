@@ -654,7 +654,7 @@ Proof.
 iIntros "#? #p_ke post"; rewrite /I.new; wp_pures.
 iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
 - wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-  iIntros (cn) "_ _ #p_cn _ token"; wp_list; wp_term_of_list.
+  iIntros (cn) "_ _ #p_cn _ _ token"; wp_list; wp_term_of_list.
   wp_tag.
   iApply ("post" $! (Psk psk cn) with "[] [] token") => //=.
   do !iSplit => //.
@@ -664,7 +664,7 @@ iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
   { by iApply public_minted. }
   iIntros (a) "_ #p_a _"; wp_list.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-  iIntros (cn) "_ _ #p_cn _ token"; wp_list; wp_term_of_list.
+  iIntros (cn) "_ _ #p_cn _ _ token"; wp_list; wp_term_of_list.
   wp_tag.
   rewrite (term_token_difference _ ⊤); try set_solver.
   iDestruct "token" as "[token _]".
@@ -676,7 +676,7 @@ iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
   { by iApply public_minted. }
   iIntros (a) "_ #p_a _"; wp_list.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-  iIntros (cn) "_ _ #p_cn _ token"; wp_list; wp_term_of_list.
+  iIntros (cn) "_ _ #p_cn _ _ token"; wp_list; wp_term_of_list.
   wp_tag.
   iApply ("post" $! (PskDh psk g cn a)) => //=.
   do !iSplit => //.
@@ -1176,7 +1176,7 @@ iApply CShare.wp_case.
 case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
 - subst psk.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-  iIntros (a) "_ _ #pred_a _ token"; wp_list; wp_term_of_list.
+  iIntros (a) "_ _ #pred_a _ _ token"; wp_list; wp_term_of_list.
   wp_tag; iModIntro.
   iApply ("post" $! (Psk _ _ a)) => //=.
   rewrite public_tag public_of_list /=.
@@ -1188,7 +1188,7 @@ case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
   { by iApply public_minted. }
   iIntros (a) "_ #pred_a _"; wp_list.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-  iIntros (sn) "_ _ #p_sn _ token"; wp_list; wp_term_of_list.
+  iIntros (sn) "_ _ #p_sn _ _ token"; wp_list; wp_term_of_list.
   wp_tag; iModIntro.
   iApply ("post" $! (Dh g cn sn gx a)) => //=.
   rewrite !public_tag !public_of_list /=.
@@ -1200,7 +1200,7 @@ case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
   { by iApply public_minted. }
   iIntros (a) "_ #pred_a _"; wp_list.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-  iIntros (sn) "_ _ #p_sn _ token"; wp_list; wp_term_of_list.
+  iIntros (sn) "_ _ #p_sn _ _ token"; wp_list; wp_term_of_list.
   wp_tag; iModIntro.
   iApply ("post" $! (PskDh _ g cn sn gx a)) => //.
   rewrite !public_tag !public_of_list /=.
@@ -1334,16 +1334,18 @@ case: c_kex e => [psk cn sn|g cn sn x gy|psk g cn sn x gy] /=.
   iDestruct "wf1" as "#(% & _ & _ & dh_x)".
   iDestruct "wf2" as "#(_ & _ & _ & _ & p_gx & dh_y)".
   rewrite /session_key_of TExp_TExpN.
-  iMod (dh_seed_elim2 with "dh_y p_k") as "[_ p_x]" => //; first admit.
-  iMod (dh_seed_elim0 with "dh_x p_x") as "[]".
+  iMod (dh_seed_elim2 with "dh_y dh_x p_k") as "(%e & _ & _)" => //.
+  + admit.
+  + admit.
 - case: s_kex => //= _ ? ? ? gx y [] /Spec.tag_inj [_ <-].
   move=> <- _ _ <- e2.
   iDestruct "wf1" as "#(_ & % & _ & _ & dh_x)".
   iDestruct "wf2" as "#(_ & _ & _ & _ & _ & p_gx & dh_y)".
   rewrite TExp_TExpN.
   rewrite public_of_list /=. iDestruct "p_k" as "(_ & p_k & _)".
-  iMod (dh_seed_elim2 with "dh_y p_k") as "[_ p_x]" => //; first admit.
-  iMod (dh_seed_elim0 with "dh_x p_x") as "[]".
+  iMod (dh_seed_elim2 with "dh_y dh_x p_k") as "(%e & _ & _)" => //.
+  + admit.
+  + admit.
 Admitted.
 
 End Proofs.
@@ -1918,7 +1920,7 @@ rewrite unlock /=.
 case e_check: SShare.check => [kex'|] //=.
 move/SShare.public_checkE: e_check; move: kex' => {}kex [e_cp ->].
 case e_dec: Spec.dec => [res|] //=.
-have {sig e_dec} -> := Spec.decK _ _ _ _ _ (Spec.open_key_senc _) e_dec.
+have {sig e_dec} -> := Spec.decK (Spec.open_key_senc _) e_dec.
 case: Spec.to_listP => //= {}res.
 elim/(@list_len_rect 2): res => [pk sig|res neq]; last first.
   by rewrite prod_of_list_neq.

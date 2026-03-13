@@ -246,7 +246,7 @@ iMod (secret_public with "s_skR1") as "#?". wp_pures.
 wp_apply wp_mk_sign_key => //. iIntros "%skR2 #? s_skR2 _".
 iMod (secret_public with "s_skR2") as "#?". wp_pures.
 wp_apply (wp_mk_nonce (λ psk, term_meta psk (nroot.@"pub") ())%I (λ _, False%I)) => //.
-iIntros (psk) "_ #t_psk #p_psk _ tok_psk". wp_pures.
+iIntros (psk) "_ #t_psk #p_psk _ _ tok_psk". wp_pures.
 wp_apply wp_environment; eauto.
 iIntros "_"; wp_pures.
 wp_bind (tls_client_loop _ _).

@@ -106,7 +106,7 @@ Next Obligation.
 iIntros "%skI %skR %Φ #? post". rewrite /pk_dh_mk_key_share_impl.
 wp_pures. wp_bind (mk_nonce _).
 iApply (wp_mk_nonce (λ _, False)%I (dh_publ (λ _, corruption skI skR))) => //.
-iIntros "%n _ #s_n #p_n #dh token". wp_pures.
+iIntros "%n _ #s_n #p_n #dh #dhV token". wp_pures.
 wp_bind (tint _). iApply wp_tint.
 wp_bind (texp _ _). iApply wp_texp.
 wp_pures. iModIntro. iApply "post".
@@ -152,8 +152,10 @@ Proof.
 iIntros "(%nI & %nR & -> & _ & _ & #priv_nI & #priv_nR & _)".
 rewrite /= /pk_dh_mk_session_key /pk_dh_mk_key_share TExp_TExpN.
 iIntros "#p_kS".
-iDestruct (dh_seed_elim2 with "priv_nI p_kS") as "[>p_sI >contra]"; eauto; first admit.
-by iDestruct (dh_seed_elim0 with "priv_nR contra") as ">[]".
+iDestruct (dh_seed_elim2 with "priv_nI priv_nR p_kS")
+  as "(>%e & ? & _)"; eauto.
+- admit.
+- admit.
 Admitted.
 
 Lemma wp_pk_dh_init c skI skR :
