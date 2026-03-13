@@ -990,6 +990,19 @@ rewrite /bi_except_0.
 by iIntros "#m #[contra|?]"; eauto; iApply False_public.
 Qed.
 
+Local Lemma exp_pred_intro4_aux t1 t2 t3 :
+  t1 ≠ t3 →
+  t3 ∈ exps t2 →
+  TInv t1 ∉ exps t2 →
+  TInv t1 ∉ exps (TExp t2 (TInv t3)).
+Proof.
+move=> t1_t3 t3_t2 t1V_t2.
+have t_t3V : TInv t1 ≠ t3 by congruence.
+move: t1V_t2; rewrite -!count_exp_gt0 count_exp_TExp TInvK.
+rewrite decide_False; last by move=> /TInv_inj; congruence.
+by rewrite decide_False.
+Qed.
+
 Lemma exp_pred_intro4 t1 t2 t3 :
   t3 ∈ exps t2 →
   exp_pred t1 t2 -∗
@@ -1000,17 +1013,24 @@ iIntros (t3_t2) "dh"; iRevert (t3_t2); iRevert (t1 t2) "dh".
 iApply exp_pred_ind.
 - iIntros "!> %ts %t1 %t2 %ts_t2 #pts #dh %t3_t2 #p3".
   iApply (@exp_pred_intro1_gen _ _ (t3 :: ts)).
-  + admit.
+  + move=> t t_ts; case: (decide (t = t3)) => [->|t_t3].
+      by rewrite not_elem_of_TInv_exps TExpK'.
+    have {}t_ts: t ∈ ts by case/elem_of_cons: t_ts => //; congruence.
+    have t_t2 := ts_t2 _ t_ts.
+    exact: exp_pred_intro4_aux.
   + by rewrite /=; eauto.
   + by rewrite -TExp_TExpN TExpNC TExpK'.
 - iIntros "!> %t %t1 %t2 %t_t2 #dh1 #IH1 #dh2 #IH2 %t3_t2' #p3".
   case: (decide (t3 = t)) => [<-|t_t3]; first by rewrite TExpNK.
+  have t3_t2: t3 ∈ exps t2.
+    move: t3_t2'; rewrite -!count_exp_gt0 count_exp_TExp decide_False //.
+    case: decide; lia.
   rewrite TExpNC; iApply exp_pred_intro2.
-  + admit.
-  + iApply "IH1" => //; iPureIntro. admit.
+  + exact: exp_pred_intro4_aux.
+  + by iApply "IH1" => //; iPureIntro.
   + by iApply "IH2" => //.
 - by iIntros "!> %t1 %t2 #p1 %t3_t2 #p3"; iApply exp_pred_intro3.
-Admitted.
+Qed.
 
 Lemma public_TExp' t1 t2 :
   TInv t2 ∉ exps t1 →
