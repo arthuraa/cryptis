@@ -237,9 +237,14 @@ Proof.
   rewrite -wp_bind.
   Check wp_recv.
   Check recv.
-  unfold recv, GenConn.cs_repr.
+  (* unfold recv, GenConn.cs_repr. *)
+
+  eapply bi.wand_apply.
+  - eapply bi.wand_entails.
+    eapply (wp_recv skI skR rl cs (tele_app tv) (tele_app tP') (tele_app tp)).
+    f_equiv; first done.
   eapply bi.wand_apply;
-    [by eapply bi.wand_entails, (wp_recv skI skR rl cs (tele_app tv) (▷ tele_app tP') (tele_app tp))|f_equiv; first done].
+    [by eapply bi.wand_entails, (wp_recv skI skR rl cs (tele_app tv) (tele_app tP') (tele_app tp))|f_equiv; first done].
   rewrite -bi.later_intro; apply bi.forall_intro=> x.
   specialize (HΦ x). destruct (envs_app _ _) as [Δ'|] eqn:HΔ'=> //.
   rewrite envs_app_sound //; simpl. by rewrite right_id HΦ.
