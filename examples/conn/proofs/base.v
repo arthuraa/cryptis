@@ -37,17 +37,19 @@ Implicit Types (ok : Prop) (failed : bool).
 Implicit Types (si : sess_info) (rl : role).
 Implicit Types (ps : params Σ).
 
+Definition chan_inv ps skI skR si tsI tsR : iProp :=
+  ([∗ list] t ∈ tsI, msg_inv ps skI skR si Init t) ∗
+  ([∗ list] t ∈ tsR, msg_inv ps skI skR si Resp t).
+
 Definition gen_conn_params ps : GenConn.params Σ := {|
   GenConn.init_pred := λ skI skR si rl, True;
-  GenConn.chan_inv := λ skI skR si tsI tsR,
-    ([∗ list] t ∈ tsI, msg_inv ps skI skR si Init t) ∗
-    ([∗ list] t ∈ tsR, msg_inv ps skI skR si Resp t);
+  GenConn.chan_inv := chan_inv ps;
 |}%I.
 
 Local Coercion gen_conn_params : params >-> GenConn.params.
 
 Definition connected ps skI skR rl cs : iProp :=
-  GenConn.connected ps skI skR rl cs.
+  GenConn.connected (chan_inv ps) skI skR rl cs.
 
 Lemma connected_public_key ps skI skR rl cs :
   connected ps skI skR rl cs -∗

@@ -46,7 +46,7 @@ Lemma wp_connect P c skI skR N ps :
   {{{ (failure skI skR ∨ P) }}}
     impl.connect c skI (Spec.pkey skR) (Tag N)
   {{{ cs, RET (repr cs);
-      connected ps skI skR Init cs ∗
+      connected (chan_inv ps) skI skR Init cs ∗
       (public (si_key cs) ∨ P) ∗
       (public (si_key cs) ∨ init_pred ps skI skR cs Init) ∗
       release_token (si_init_share cs) ∗
@@ -111,7 +111,7 @@ Lemma wp_confirm P ps c skI skR ga N :
       (failure skI skR ∨ P) }}}
     impl.confirm c skR (Tag N) (ga, Spec.pkey skI)%V
   {{{ cs, RET (repr cs);
-      connected ps skI skR Resp cs ∗
+      connected (chan_inv ps) skI skR Resp cs ∗
       (public (si_key cs) ∨ P) ∗
       (public (si_key cs) ∨ init_pred ps skI skR cs Resp) ∗
       release_token (si_resp_share cs) ∗
@@ -215,16 +215,16 @@ rewrite (_ : (_ + _)%Z = S n); last by lia.
 iIntros "state". iApply "post". iFrame. by eauto 10.
 Qed.
 
-Lemma wp_send φ skI skR rl cs t ps :
+Lemma wp_send φ skI skR rl cs t ci :
   public t -∗
-  {{{ connected ps skI skR rl cs ∗
+  {{{ connected ci skI skR rl cs ∗
       (public (si_key cs) ∨
          (∀ ts_send ts_recv,
-            ▷ chan_inv_for ps skI skR cs rl ts_send ts_recv ={⊤ ∖ ↑connN}=∗
-            ▷ chan_inv_for ps skI skR cs rl (ts_send ++ [t]) ts_recv ∗
+            ▷ chan_inv_for ci skI skR cs rl ts_send ts_recv ={⊤ ∖ ↑connN}=∗
+            ▷ chan_inv_for ci skI skR cs rl (ts_send ++ [t]) ts_recv ∗
             ▷ φ skI skR (cs_si cs))) }}}
     impl.send (repr cs) t
-  {{{ RET #(); connected ps skI skR rl cs ∗
+  {{{ RET #(); connected ci skI skR rl cs ∗
                (public (si_key cs) ∨ φ skI skR cs) }}}.
 Proof.
 iIntros "#p_t !> %Φ (conn & upd) post".
@@ -241,16 +241,16 @@ Qed.
 Ltac recv_failure :=
   iLeft; iFrame; eauto 10.
 
-Lemma wp_recv φ skI skR rl cs ps :
-  {{{ connected ps skI skR rl cs ∗
+Lemma wp_recv φ skI skR rl cs ci :
+  {{{ connected ci skI skR rl cs ∗
       (public (si_key cs) ∨
         (∀ t ts_send ts_recv,
-          ▷ chan_inv_for ps skI skR cs rl ts_send (t :: ts_recv) ={⊤ ∖ ↑connN}=∗
-          ▷ chan_inv_for ps skI skR cs rl ts_send ts_recv ∗
+          ▷ chan_inv_for ci skI skR cs rl ts_send (t :: ts_recv) ={⊤ ∖ ↑connN}=∗
+          ▷ chan_inv_for ci skI skR cs rl ts_send ts_recv ∗
           ▷ φ skI skR (cs_si cs) t)) }}}
     impl.recv (repr cs)
   {{{ t, RET (repr t);
-      connected ps skI skR rl cs ∗
+      connected ci skI skR rl cs ∗
       public t ∗
       (public (si_key cs) ∨ φ skI skR cs t) }}}.
 Proof.
@@ -288,7 +288,7 @@ iAssert (public (si_key cs) → public t)%I as "{s_t} s_t".
 iAssert (|={⊤}=>
   public t ∗
   (public (si_key cs) ∨
-    counters ps (si_init cs) (si_resp cs) cs (cs_role cs) n (S m) ∗
+    counters ci (si_init cs) (si_resp cs) cs (cs_role cs) n (S m) ∗
     φ (si_init cs) (si_resp cs) cs t))%I
   with "[counters recv c1 c2]" as "{inv_t} >(p_t & inv)".
 { iDestruct "recv" as "[#fail|recv]".
@@ -312,8 +312,8 @@ wp_pures. iModIntro. iRight. iExists _. iSplit => //.
 iIntros "post". iApply "post". iFrame. by eauto 10.
 Qed.
 
-Lemma wp_free kI kR φ rl cs :
-  {{{ connected kI kR φ rl cs }}}
+Lemma wp_free ci kI kR rl cs :
+  {{{ connected ci kI kR rl cs }}}
     impl.free (repr cs)
   {{{ RET #(); True }}}.
 Proof.

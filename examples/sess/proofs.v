@@ -91,7 +91,7 @@ iApply "post". by iFrame.
 Qed.
 
 Lemma wp_send skI skR rl cs (t : term) p :
-  (* ctx N p0 ∗  *)public t -∗
+  public t -∗
   {{{ connected skI skR rl cs (<!> MSG t; p) }}}
     impl.send (repr cs) t
   {{{ RET #(); connected skI skR rl cs p }}}.
@@ -107,27 +107,54 @@ Qed.
 
 Lemma wp_recv {TT : tele} skI skR rl cs
   (t : TT → term) (P : TT → iProp) (p : TT → iProto Σ term) :
-  (* ctx N p0 -∗ *)
-  {{{ connected skI skR rl cs (<?.. x> MSG t x {{ P x }}; p x) }}}
+  {{{ connected skI skR rl cs (<?.. x> MSG t x {{ ▷ P x }}; p x) }}}
     impl.recv (repr cs)
   {{{ t', RET (repr t'); public t' ∗ (public (si_key cs) ∨
       ∃.. x, ⌜t' = t x⌝ ∗ connected skI skR rl cs (p x) ∗ P x) }}}.
 Proof.
 iIntros ""; iIntros (Φ) "[c own] post".
 rewrite /impl.recv. wp_pure _ credit:"c1". wp_pure _ credit:"c2".
-wp_pures.
+wp_pure _ credit:"c3". wp_apply wp_fupd.
 wp_apply (GenConn.wp_recv (λ skI skR si (t' : term),
                            ∃.. x, ⌜t' = t x⌝ ∗
-                                  sess_own skI skR si rl (p x) ∗ P x)%I
+                                  sess_own skI skR si rl (p x) ∗ ▷ P x)%I
            with " [$c c1 c2 own]").
 { iDestruct "own" as "[#fail|own]"; eauto.
   iRight. iIntros (t' ts_send ts_recv) "inv".
   iMod (sess_recv with "[$c1 $c2] own inv") as "[??]".
   iModIntro. by iFrame. }
-iIntros "%t' (conn & #p_t' & inv)". iApply "post".
-iSplit => //. iDestruct "inv" as "[#fail|inv]"; eauto. iRight.
+iIntros "%t' (conn & #p_t' & inv)". iApply "post". iFrame "#".
+iDestruct "inv" as "[#fail|inv]"; eauto. iRight.
 iDestruct "inv" as (x) "(-> & own & Px)". iExists x. iFrame.
+iMod (lc_fupd_elim_later with "c3 Px") as "?".
 by eauto.
+Qed.
+
+Lemma wp_recv' {TT : tele} `{Inhabited TT} skI skR rl cs
+  (t : TT → term) (P : TT → iProp) (p : TT → iProto Σ term) :
+  {{{ connected skI skR rl cs (<?.. x> MSG t x {{ ▷ P x }}; p x) }}}
+    impl.recv (repr cs)
+  {{{ t' x, RET (repr t');
+      public t' ∗
+      connected skI skR rl cs (p x) ∗
+      (public (si_key cs) ∨ ⌜t' = t x⌝ ∗ P x) }}}.
+Proof.
+iIntros ""; iIntros (Φ) "[c own] post".
+rewrite /impl.recv. wp_pure _ credit:"c1". wp_pure _ credit:"c2".
+wp_pure _ credit:"c3". wp_apply wp_fupd.
+wp_apply (GenConn.wp_recv (λ skI skR si (t' : term),
+                           ∃.. x, ⌜t' = t x⌝ ∗
+                                  sess_own skI skR si rl (p x) ∗ ▷ P x)%I
+           with " [$c c1 c2 own]").
+{ iDestruct "own" as "[#fail|own]"; eauto.
+  iRight. iIntros (t' ts_send ts_recv) "inv".
+  iMod (sess_recv with "[$c1 $c2] own inv") as "[??]".
+  iModIntro. by iFrame. }
+iIntros "%t' (conn & #p_t' & [#fail|inv])".
+{ iApply ("post" $! t' inhabitant) . iFrame. by iFrame "#". }
+iDestruct "inv" as (x) "(-> & own & Px)". iApply ("post" $! (t x) x).
+iMod (lc_fupd_elim_later with "c3 Px") as "?".
+iFrame. by eauto.
 Qed.
 
 End Proofs.

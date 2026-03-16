@@ -207,22 +207,33 @@ Section classes.
   Qed.
 End classes.
 
-Print repr.
 (** * Symbolic execution tactics *)
 (* TODO: Maybe strip laters from other hypotheses in the future? *)
-Lemma tac_wp_recv `{!chanG Σ, !heapGS Σ, !cryptisGS Σ, Conn: !GenConn.connGS Σ, !sessG Σ} {TT : tele} Δ i j K skI skR rl cs p m tv tP tP' tp Φ :
+Lemma tac_wp_recv `{!chanG Σ, !heapGS Σ, !cryptisGS Σ, Conn: !GenConn.connGS Σ, !sessG Σ} {TT : tele} Δ i K skI skR rl cs p m tv tP tP' tp Φ :
   envs_lookup i Δ = Some (false, connected skI skR rl cs p)%I →
   ProtoNormalize false p [] (<?> m) →
   MsgTele m tv tP tp →
   (∀.. x, MaybeIntoLaterN false 1 (tele_app tP x) (tele_app tP' x)) →
   let Δ' := envs_delete false i false Δ in
-  (∀.. x : TT,
+  (* (∀.. x : TT, *)
+  (*   match envs_app false *)
+  (*       (Esnoc (Esnoc Enil j (tele_app tP' x)) i (connected skI skR rl cs (tele_app tp x))) Δ' with *)
+  (*   | Some Δ'' => envs_entails Δ'' (WP fill K (of_val (repr (tele_app tv x))) {{ Φ }}) *)
+  (*   | None => False *)
+  (*   end) → *)
+  (∀ t : term,
     match envs_app false
-        (Esnoc (Esnoc Enil j (tele_app tP' x)) i (connected skI skR rl cs (tele_app tp x))) Δ' with
-    | Some Δ'' => envs_entails Δ'' (WP fill K (of_val (repr (tele_app tv x))) {{ Φ }})
+        (Esnoc Enil i (
+           public t ∗
+           (public (si_key cs) ∨
+              (∃.. x : TT,
+                   ⌜t = tele_app tv x⌝ ∗
+                   connected skI skR rl cs (tele_app tp x) ∗
+                   tele_app tP' x)))) Δ' with
+    | Some Δ'' => envs_entails Δ'' (WP fill K (of_val (repr t)) {{ Φ }})
     | None => False
     end) →
-  envs_entails Δ (WP fill K (recv (repr cs)) {{ Φ }}).
+  envs_entails Δ (WP fill K (impl.recv (repr cs)) {{ Φ }}).
 Proof.
   rewrite envs_entails_unseal /ProtoNormalize /MsgTele /MaybeIntoLaterN /=.
   rewrite !tforall_forall right_id.
@@ -235,18 +246,12 @@ Proof.
     iApply iProto_le_trans; [|iApply (iProto_le_texist_intro_r _ x)]; simpl.
     iIntros "H". by iDestruct (HP with "H") as "$". }
   rewrite -wp_bind.
-  Check wp_recv.
-  Check recv.
-  (* unfold recv, GenConn.cs_repr. *)
-
   eapply bi.wand_apply.
   - eapply bi.wand_entails.
     eapply (wp_recv skI skR rl cs (tele_app tv) (tele_app tP') (tele_app tp)).
-    f_equiv; first done.
-  eapply bi.wand_apply;
-    [by eapply bi.wand_entails, (wp_recv skI skR rl cs (tele_app tv) (tele_app tP') (tele_app tp))|f_equiv; first done].
-  rewrite -bi.later_intro; apply bi.forall_intro=> x.
-  specialize (HΦ x). destruct (envs_app _ _) as [Δ'|] eqn:HΔ'=> //.
+  - f_equiv. done.
+  rewrite -bi.later_intro; apply bi.forall_intro=> t.
+  specialize (HΦ t). destruct (envs_app _ _) as [Δ'|] eqn:HΔ'=> //.
   rewrite envs_app_sound //; simpl. by rewrite right_id HΦ.
 Qed.
 
