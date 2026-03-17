@@ -185,6 +185,9 @@ Context `{!Repr A, !Repr B, !heapGS Σ}.
 
 Implicit Types (x : A) (xs : list A).
 
+Definition list_to_expr :=
+  foldr (fun (x : A) e => CONS (repr x) e) NILV.
+
 Lemma twp_get_list E (l : list A) (n : nat) Ψ :
   Ψ (repr (l !! n)) ⊢
   WP repr l !! #n @ E [{ Ψ }].

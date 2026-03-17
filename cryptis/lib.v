@@ -386,17 +386,6 @@ Qed.
 
 End WithSsrBool.
 
-Section ListLemmas.
-
-Context `{!Repr A, !Repr B, !heapGS Σ}.
-
-Implicit Types (x : A) (xs : list A).
-
-Definition list_to_expr :=
-  foldr (fun (x : A) e => CONS (repr x) e) NILV.
-
-End ListLemmas.
-
 #[global]
 Instance repr_prod `{Repr A, Repr B} : Repr (A * B) :=
   λ p, (repr p.1, repr p.2)%V.
