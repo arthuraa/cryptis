@@ -285,15 +285,15 @@ Tactic Notation "wp_recv" "(" simple_intropattern_list(xs) ")" "as"
     "(" ne_simple_intropattern_list(ys) ")" constr(pat) :=
   wp_recv_core (intros xs) as (fun H => _iDestructHyp H ys pat).
 
-Lemma tac_wp_send `{!chanG Σ, !heapGS Σ} {TT : tele} Δ neg i js K c v p m tv tP tp Φ :
-  envs_lookup i Δ = Some (false, c ↣ p)%I →
+Lemma tac_wp_send `{!chanG Σ, !heapGS Σ, !cryptisGS Σ, Conn: !GenConn.connGS Σ, !sessG Σ} {TT : tele} Δ neg i js K skI skR rl cs c v p m tv tP tp Φ :
+  envs_lookup i Δ = Some (false, connected skI skR rl cs p)%I →
   ProtoNormalize false p [] (<!> m) →
   MsgTele m tv tP tp →
   let Δ' := envs_delete false i false Δ in
   (∃.. x : TT,
     match envs_split (if neg is true then base.Right else base.Left) js Δ' with
     | Some (Δ1,Δ2) =>
-       match envs_app false (Esnoc Enil i (c ↣ tele_app tp x)) Δ2 with
+       match envs_app false (Esnoc Enil i (connected skI skR rl cs (tele_app tp x))) Δ2 with
        | Some Δ2' =>
           v = tele_app tv x ∧
           envs_entails Δ1 (tele_app tP x) ∧
@@ -310,17 +310,23 @@ Proof.
   destruct (envs_app _ _ _) as [Δ2'|] eqn:? => //.
   rewrite envs_split_sound //; rewrite (envs_app_sound Δ2) //; simpl.
   destruct HΦ as (-> & -> & ->). rewrite right_id assoc.
-  assert (c ↣ p ⊢
-    c ↣ <!.. (x : TT)> MSG tele_app tv x {{ tele_app tP x }}; tele_app tp x) as ->.
-  { iIntros "Hc". iApply (iProto_pointsto_le with "Hc"); iIntros "!>".
+  assert (connected skI skR rl cs p ⊢
+    connected skI skR rl cs (<!.. (x : TT)> MSG tele_app tv x {{ tele_app tP x }}; tele_app tp x)) as ->.
+  { iIntros "Hc". iApply (connected_le with "Hc"); iIntros "!>".
     iApply iProto_le_trans; [iApply Hp|]. by rewrite Hm. }
-  eapply bi.wand_apply; [rewrite -wp_bind; by eapply bi.wand_entails, send_spec_tele|].
+
+  eapply bi.wand_apply.
+  rewrite -wp_bind.
+   eapply bi.wand_entails.
+   eapply (wp_send' skI skR rl cs (tele_app tv x) p).
+   eapply (wp_send' skI skR rl cs (tele_app tv) (tele_app tP') (tele_app tp)).
+    , send_spec_tele|.
   by rewrite -bi.later_intro.
 Qed.
 
 Tactic Notation "wp_send_core" tactic3(tac_exist) "with" constr(pat) :=
   let solve_pointsto _ :=
-    let c := match goal with |- _ = Some (_, (?c ↣ _)%I) => c end in
+    let c := match goal with |- _ = Some (_, (connected _ _ _ ?c _)%I) => c end in
     iAssumptionCore || fail "wp_send: cannot find" c "↣ ? @ ?" in
   let solve_done d :=
     lazymatch d with
@@ -362,132 +368,132 @@ Tactic Notation "wp_send" "with" constr(pat) :=
 Tactic Notation "wp_send" "(" ne_uconstr_list(xs) ")" "with" constr(pat) :=
   wp_send_core (ltac1_list_iter ltac:(fun x => eexists x) xs) with pat.
 
-Lemma tac_wp_branch `{!chanG Σ, !heapGS Σ} Δ i j K
-    c p P1 P2 (p1 p2 : iProto Σ) Φ :
-  envs_lookup i Δ = Some (false, c ↣ p)%I →
-  ProtoNormalize false p [] (p1 <{P1}&{P2}> p2) →
-  let Δ' := envs_delete false i false Δ in
-  (∀ b : bool,
-    match envs_app false
-        (Esnoc (Esnoc Enil j (if b then P1 else P2)) i (c ↣ (if b then p1 else p2))) Δ' with
-    | Some Δ'' => envs_entails Δ'' (WP fill K (of_val #b) {{ Φ }})
-    | None => False
-    end) →
-  envs_entails Δ (WP fill K (recv c) {{ Φ }}).
-Proof.
-  rewrite envs_entails_unseal /ProtoNormalize /= right_id=> ? Hp HΦ.
-  rewrite envs_lookup_sound //; simpl.
-  rewrite (iProto_pointsto_le _ _ (p1 <{P1}&{P2}> p2)%proto) -bi.later_intro -Hp left_id.
-  rewrite -wp_bind. eapply bi.wand_apply; [by eapply bi.wand_entails, branch_spec|f_equiv; first done].
-  rewrite -bi.later_intro; apply bi.forall_intro=> b.
-  specialize (HΦ b). destruct (envs_app _ _) as [Δ'|] eqn:HΔ'=> //.
-  rewrite envs_app_sound //; simpl. by rewrite right_id HΦ.
-Qed.
+(* Lemma tac_wp_branch `{!chanG Σ, !heapGS Σ} Δ i j K *)
+(*     c p P1 P2 (p1 p2 : iProto Σ) Φ : *)
+(*   envs_lookup i Δ = Some (false, c ↣ p)%I → *)
+(*   ProtoNormalize false p [] (p1 <{P1}&{P2}> p2) → *)
+(*   let Δ' := envs_delete false i false Δ in *)
+(*   (∀ b : bool, *)
+(*     match envs_app false *)
+(*         (Esnoc (Esnoc Enil j (if b then P1 else P2)) i (c ↣ (if b then p1 else p2))) Δ' with *)
+(*     | Some Δ'' => envs_entails Δ'' (WP fill K (of_val #b) {{ Φ }}) *)
+(*     | None => False *)
+(*     end) → *)
+(*   envs_entails Δ (WP fill K (recv c) {{ Φ }}). *)
+(* Proof. *)
+(*   rewrite envs_entails_unseal /ProtoNormalize /= right_id=> ? Hp HΦ. *)
+(*   rewrite envs_lookup_sound //; simpl. *)
+(*   rewrite (iProto_pointsto_le _ _ (p1 <{P1}&{P2}> p2)%proto) -bi.later_intro -Hp left_id. *)
+(*   rewrite -wp_bind. eapply bi.wand_apply; [by eapply bi.wand_entails, branch_spec|f_equiv; first done]. *)
+(*   rewrite -bi.later_intro; apply bi.forall_intro=> b. *)
+(*   specialize (HΦ b). destruct (envs_app _ _) as [Δ'|] eqn:HΔ'=> //. *)
+(*   rewrite envs_app_sound //; simpl. by rewrite right_id HΦ. *)
+(* Qed. *)
 
-Tactic Notation "wp_branch_core" "as" tactic3(tac1) tactic3(tac2) :=
-  let solve_pointsto _ :=
-    let c := match goal with |- _ = Some (_, (?c ↣ _)%I) => c end in
-    iAssumptionCore || fail "wp_branch: cannot find" c "↣ ? @ ?" in
-  wp_pures;
-  let Hnew := iFresh in
-  lazymatch goal with
-  | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
-    first
-      [reshape_expr e ltac:(fun K e' => eapply (tac_wp_branch _ _ Hnew K))
-      |fail 1 "wp_branch: cannot find 'recv' in" e];
-    [solve_pointsto ()
-       |tc_solve || fail 1 "wp_send: protocol not of the shape <&>"
-    |pm_reduce; intros []; [tac1 Hnew|tac2 Hnew]; wp_finish]
-  | _ => fail "wp_branch: not a 'wp'"
-  end.
+(* Tactic Notation "wp_branch_core" "as" tactic3(tac1) tactic3(tac2) := *)
+(*   let solve_pointsto _ := *)
+(*     let c := match goal with |- _ = Some (_, (?c ↣ _)%I) => c end in *)
+(*     iAssumptionCore || fail "wp_branch: cannot find" c "↣ ? @ ?" in *)
+(*   wp_pures; *)
+(*   let Hnew := iFresh in *)
+(*   lazymatch goal with *)
+(*   | |- envs_entails _ (wp ?s ?E ?e ?Q) => *)
+(*     first *)
+(*       [reshape_expr e ltac:(fun K e' => eapply (tac_wp_branch _ _ Hnew K)) *)
+(*       |fail 1 "wp_branch: cannot find 'recv' in" e]; *)
+(*     [solve_pointsto () *)
+(*        |tc_solve || fail 1 "wp_send: protocol not of the shape <&>" *)
+(*     |pm_reduce; intros []; [tac1 Hnew|tac2 Hnew]; wp_finish] *)
+(*   | _ => fail "wp_branch: not a 'wp'" *)
+(*   end. *)
 
-Tactic Notation "wp_branch" "as" constr(pat1) "|" constr(pat2) :=
-  wp_branch_core as (fun H => iDestructHyp H as pat1) (fun H => iDestructHyp H as pat2).
-Tactic Notation "wp_branch" "as" "%" simple_intropattern(pat1) "|" constr(pat2) :=
-  wp_branch_core as (fun H => iPure H as pat1) (fun H => iDestructHyp H as pat2).
-Tactic Notation "wp_branch" "as" constr(pat1) "|" "%" simple_intropattern(pat2) :=
-  wp_branch_core as (fun H => iDestructHyp H as pat1) (fun H => iPure H as pat2).
-Tactic Notation "wp_branch" "as" "%" simple_intropattern(pat1) "|" "%" simple_intropattern(pat2) :=
-  wp_branch_core as (fun H => iPure H as pat1) (fun H => iPure H as pat2).
-Tactic Notation "wp_branch" := wp_branch as % _ | % _.
+(* Tactic Notation "wp_branch" "as" constr(pat1) "|" constr(pat2) := *)
+(*   wp_branch_core as (fun H => iDestructHyp H as pat1) (fun H => iDestructHyp H as pat2). *)
+(* Tactic Notation "wp_branch" "as" "%" simple_intropattern(pat1) "|" constr(pat2) := *)
+(*   wp_branch_core as (fun H => iPure H as pat1) (fun H => iDestructHyp H as pat2). *)
+(* Tactic Notation "wp_branch" "as" constr(pat1) "|" "%" simple_intropattern(pat2) := *)
+(*   wp_branch_core as (fun H => iDestructHyp H as pat1) (fun H => iPure H as pat2). *)
+(* Tactic Notation "wp_branch" "as" "%" simple_intropattern(pat1) "|" "%" simple_intropattern(pat2) := *)
+(*   wp_branch_core as (fun H => iPure H as pat1) (fun H => iPure H as pat2). *)
+(* Tactic Notation "wp_branch" := wp_branch as % _ | % _. *)
 
-Lemma tac_wp_select `{!chanG Σ, !heapGS Σ} Δ neg i js K
-    c (b : bool) p P1 P2 (p1 p2 : iProto Σ) Φ :
-  envs_lookup i Δ = Some (false, c ↣ p)%I →
-  ProtoNormalize false p [] (p1 <{P1}+{P2}> p2) →
-  let Δ' := envs_delete false i false Δ in
-  match envs_split (if neg is true then base.Right else base.Left) js Δ' with
-  | Some (Δ1,Δ2) =>
-     match envs_app false (Esnoc Enil i (c ↣ if b then p1 else p2)) Δ2 with
-     | Some Δ2' =>
-        envs_entails Δ1 (if b then P1 else P2) ∧
-        envs_entails Δ2' (WP fill K (of_val #()) {{ Φ }})
-     | None => False
-     end
-  | None => False
-  end →
-  envs_entails Δ (WP fill K (send c #b) {{ Φ }}).
-Proof.
-  rewrite envs_entails_unseal /ProtoNormalize /= right_id=> ? Hp HΦ.
-  rewrite envs_lookup_sound //; simpl.
-  rewrite (iProto_pointsto_le _ _ (p1 <{P1}+{P2}> p2)%proto) -bi.later_intro -Hp left_id.
-  rewrite -wp_bind. eapply bi.wand_apply; [by eapply bi.wand_entails, select_spec|].
-  rewrite -assoc; f_equiv; first done.
-  destruct (envs_split _ _ _) as [[Δ1 Δ2]|] eqn:? => //.
-  destruct (envs_app _ _ _) as [Δ2'|] eqn:? => //.
-  rewrite envs_split_sound //; rewrite (envs_app_sound Δ2) //; simpl.
-  destruct HΦ as [-> ->]. by rewrite -bi.later_intro right_id.
-Qed.
+(* Lemma tac_wp_select `{!chanG Σ, !heapGS Σ} Δ neg i js K *)
+(*     c (b : bool) p P1 P2 (p1 p2 : iProto Σ) Φ : *)
+(*   envs_lookup i Δ = Some (false, c ↣ p)%I → *)
+(*   ProtoNormalize false p [] (p1 <{P1}+{P2}> p2) → *)
+(*   let Δ' := envs_delete false i false Δ in *)
+(*   match envs_split (if neg is true then base.Right else base.Left) js Δ' with *)
+(*   | Some (Δ1,Δ2) => *)
+(*      match envs_app false (Esnoc Enil i (c ↣ if b then p1 else p2)) Δ2 with *)
+(*      | Some Δ2' => *)
+(*         envs_entails Δ1 (if b then P1 else P2) ∧ *)
+(*         envs_entails Δ2' (WP fill K (of_val #()) {{ Φ }}) *)
+(*      | None => False *)
+(*      end *)
+(*   | None => False *)
+(*   end → *)
+(*   envs_entails Δ (WP fill K (send c #b) {{ Φ }}). *)
+(* Proof. *)
+(*   rewrite envs_entails_unseal /ProtoNormalize /= right_id=> ? Hp HΦ. *)
+(*   rewrite envs_lookup_sound //; simpl. *)
+(*   rewrite (iProto_pointsto_le _ _ (p1 <{P1}+{P2}> p2)%proto) -bi.later_intro -Hp left_id. *)
+(*   rewrite -wp_bind. eapply bi.wand_apply; [by eapply bi.wand_entails, select_spec|]. *)
+(*   rewrite -assoc; f_equiv; first done. *)
+(*   destruct (envs_split _ _ _) as [[Δ1 Δ2]|] eqn:? => //. *)
+(*   destruct (envs_app _ _ _) as [Δ2'|] eqn:? => //. *)
+(*   rewrite envs_split_sound //; rewrite (envs_app_sound Δ2) //; simpl. *)
+(*   destruct HΦ as [-> ->]. by rewrite -bi.later_intro right_id. *)
+(* Qed. *)
 
-Tactic Notation "wp_select" "with" constr(pat) :=
-  let solve_pointsto _ :=
-    let c := match goal with |- _ = Some (_, (?c ↣ _)%I) => c end in
-    iAssumptionCore || fail "wp_select: cannot find" c "↣ ? @ ?" in
-  let solve_done d :=
-    lazymatch d with
-    | true =>
-       done ||
-       let Q := match goal with |- envs_entails _ ?Q => Q end in
-       fail "wp_select: cannot solve" Q "using done"
-    | false => idtac
-    end in
-  lazymatch spec_pat.parse pat with
-  | [SGoal (SpecGoal GSpatial ?neg ?Hs_frame ?Hs ?d)] =>
-     let Hs' := eval cbv in (if neg then Hs else Hs_frame ++ Hs) in
-     wp_pures;
-     lazymatch goal with
-     | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
-       first
-         [reshape_expr e ltac:(fun K e' => eapply (tac_wp_select _ neg _ Hs' K))
-         |fail 1 "wp_select: cannot find 'send' in" e];
-       [solve_pointsto ()
-       |tc_solve || fail 1 "wp_select: protocol not of the shape <+>"
-       |pm_reduce;
-        lazymatch goal with
-        | |- False => fail "wp_select:" Hs' "not fresh"
-        | _ => notypeclasses refine (conj _ _); [iFrame Hs_frame; solve_done d|wp_finish]
-        end]
-     | _ => fail "wp_select: not a 'wp'"
-     end
-  | _ => fail "wp_select: only a single goal spec pattern supported"
-  end.
+(* Tactic Notation "wp_select" "with" constr(pat) := *)
+(*   let solve_pointsto _ := *)
+(*     let c := match goal with |- _ = Some (_, (?c ↣ _)%I) => c end in *)
+(*     iAssumptionCore || fail "wp_select: cannot find" c "↣ ? @ ?" in *)
+(*   let solve_done d := *)
+(*     lazymatch d with *)
+(*     | true => *)
+(*        done || *)
+(*        let Q := match goal with |- envs_entails _ ?Q => Q end in *)
+(*        fail "wp_select: cannot solve" Q "using done" *)
+(*     | false => idtac *)
+(*     end in *)
+(*   lazymatch spec_pat.parse pat with *)
+(*   | [SGoal (SpecGoal GSpatial ?neg ?Hs_frame ?Hs ?d)] => *)
+(*      let Hs' := eval cbv in (if neg then Hs else Hs_frame ++ Hs) in *)
+(*      wp_pures; *)
+(*      lazymatch goal with *)
+(*      | |- envs_entails _ (wp ?s ?E ?e ?Q) => *)
+(*        first *)
+(*          [reshape_expr e ltac:(fun K e' => eapply (tac_wp_select _ neg _ Hs' K)) *)
+(*          |fail 1 "wp_select: cannot find 'send' in" e]; *)
+(*        [solve_pointsto () *)
+(*        |tc_solve || fail 1 "wp_select: protocol not of the shape <+>" *)
+(*        |pm_reduce; *)
+(*         lazymatch goal with *)
+(*         | |- False => fail "wp_select:" Hs' "not fresh" *)
+(*         | _ => notypeclasses refine (conj _ _); [iFrame Hs_frame; solve_done d|wp_finish] *)
+(*         end] *)
+(*      | _ => fail "wp_select: not a 'wp'" *)
+(*      end *)
+(*   | _ => fail "wp_select: only a single goal spec pattern supported" *)
+(*   end. *)
 
-Tactic Notation "wp_select" := wp_select with "[//]".
+(* Tactic Notation "wp_select" := wp_select with "[//]". *)
 
-Tactic Notation "wp_new_chan" constr(prot) "as"
-       "(" simple_intropattern(c1) simple_intropattern(c2) ")" constr(pat) :=
-  wp_smart_apply (new_chan_spec prot); [done|];
-  iIntros (c1); iIntros (c2); iIntros pat.
+(* Tactic Notation "wp_new_chan" constr(prot) "as" *)
+(*        "(" simple_intropattern(c1) simple_intropattern(c2) ")" constr(pat) := *)
+(*   wp_smart_apply (new_chan_spec prot); [done|]; *)
+(*   iIntros (c1); iIntros (c2); iIntros pat. *)
 
-Tactic Notation "wp_fork_chan" constr(prot) "as"
-       simple_intropattern(c1) constr(pat1) "and"
-       simple_intropattern(c2) constr(pat2) :=
-  wp_smart_apply (fork_chan_spec prot); [iIntros (c2); iIntros pat2|
-                                         iIntros (c1); iIntros pat1].
+(* Tactic Notation "wp_fork_chan" constr(prot) "as" *)
+(*        simple_intropattern(c1) constr(pat1) "and" *)
+(*        simple_intropattern(c2) constr(pat2) := *)
+(*   wp_smart_apply (fork_chan_spec prot); [iIntros (c2); iIntros pat2| *)
+(*                                          iIntros (c1); iIntros pat1]. *)
 
-Tactic Notation "wp_fork_chan" constr(prot) "as"
-       simple_intropattern(c) constr(pat) :=
-  wp_fork_chan prot as c pat and c pat.
+(* Tactic Notation "wp_fork_chan" constr(prot) "as" *)
+(*        simple_intropattern(c) constr(pat) := *)
+(*   wp_fork_chan prot as c pat and c pat. *)
 
-Tactic Notation "wp_fork_chan" constr(prot) :=
-  wp_fork_chan prot as ? "?".
+(* Tactic Notation "wp_fork_chan" constr(prot) := *)
+(*   wp_fork_chan prot as ? "?". *)

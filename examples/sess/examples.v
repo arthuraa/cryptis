@@ -26,13 +26,13 @@ Implicit Types skI skR pkI pkR : sign_key.
 Implicit Types N : namespace.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ, !Sess.sessG Σ}.
-Notation iProp := (iProp Σ).
+(* Notation iProp := (iProp Σ). *)
 
-Definition send42_proto : iProto Σ term :=
+Definition send42_proto : iProto Σ  :=
   (<!> MSG  (TInt 42); END)%proto.
 
 
-Definition send42_proto_dual : iProto Σ term :=
+Definition send42_proto_dual : iProto Σ  :=
   (<?> MSG (TInt 42); END)%proto.
 
 
@@ -85,6 +85,7 @@ Qed.
 
 
 Lemma send42_dual_equiv:
+
   iProto_dual send42_proto ≡ send42_proto_dual.
   Proof.
     unfold send42_proto_dual.
