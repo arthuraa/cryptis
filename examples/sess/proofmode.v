@@ -71,7 +71,7 @@ Global Hint Mode MsgNormalize ! ! ! ! - : typeclass_instances.
 Arguments MsgNormalize {_} _ _%_msg _%_msg _%_msg.
 
 Section classes.
-  Context `{!chanG Σ, !heapGS Σ, !cryptisGS Σ, Conn : !GenConn.connGS Σ, !sessG Σ}.
+  Context `{!heapGS Σ, !cryptisGS Σ, Conn : !GenConn.connGS Σ, !sessG Σ}.
   Implicit Types TT : tele.
   Implicit Types p : iProto Σ.
   Implicit Types m : iMsg Σ.
@@ -209,7 +209,7 @@ End classes.
 
 (** * Symbolic execution tactics *)
 (* TODO: Maybe strip laters from other hypotheses in the future? *)
-Lemma tac_wp_recv `{!chanG Σ, !heapGS Σ, !cryptisGS Σ, Conn: !GenConn.connGS Σ, !sessG Σ} {TT : tele} Δ i K skI skR rl cs p m tv tP tP' tp Φ :
+Lemma tac_wp_recv `{!heapGS Σ, !cryptisGS Σ, Conn: !GenConn.connGS Σ, !sessG Σ} {TT : tele} Δ i K skI skR rl cs p m tv tP tP' tp Φ :
   envs_lookup i Δ = Some (false, connected skI skR rl cs p)%I →
   ProtoNormalize false p [] (<?> m) →
   MsgTele m tv tP tp →
@@ -285,7 +285,8 @@ Tactic Notation "wp_recv" "(" simple_intropattern_list(xs) ")" "as"
     "(" ne_simple_intropattern_list(ys) ")" constr(pat) :=
   wp_recv_core (intros xs) as (fun H => _iDestructHyp H ys pat).
 
-Lemma tac_wp_send `{!chanG Σ, !heapGS Σ, !cryptisGS Σ, Conn: !GenConn.connGS Σ, !sessG Σ} {TT : tele} Δ neg i js K skI skR rl cs c v p m tv tP tp Φ :
+Lemma tac_wp_send `{!heapGS Σ, !cryptisGS Σ, Conn: !GenConn.connGS Σ, !sessG Σ}
+  {TT : tele} Δ neg i js K skI skR rl cs v p m tv tP tp Φ :
   envs_lookup i Δ = Some (false, connected skI skR rl cs p)%I →
   ProtoNormalize false p [] (<!> m) →
   MsgTele m tv tP tp →
@@ -296,38 +297,40 @@ Lemma tac_wp_send `{!chanG Σ, !heapGS Σ, !cryptisGS Σ, Conn: !GenConn.connGS 
        match envs_app false (Esnoc Enil i (connected skI skR rl cs (tele_app tp x))) Δ2 with
        | Some Δ2' =>
           v = tele_app tv x ∧
+          envs_entails Δ (public (tele_app tv x)) ∧
           envs_entails Δ1 (tele_app tP x) ∧
           envs_entails Δ2' (WP fill K (of_val #()) {{ Φ }})
        | None => False
        end
     | None => False
     end) →
-  envs_entails Δ (WP fill K (send c v) {{ Φ }}).
+  envs_entails Δ (WP fill K (impl.send (repr cs) v) {{ Φ }}).
 Proof.
   rewrite envs_entails_unseal /ProtoNormalize /MsgTele /= right_id texist_exist.
-  intros ? Hp Hm [x HΦ]. rewrite envs_lookup_sound //; simpl.
+  intros ? Hp Hm [x HΦ].
   destruct (envs_split _ _ _) as [[Δ1 Δ2]|] eqn:? => //.
   destruct (envs_app _ _ _) as [Δ2'|] eqn:? => //.
+  destruct HΦ as (-> & Hpub & HP & Hwp).
+  apply (bi.wand_apply (of_envs Δ) (public (tele_app tv x))); last first.
+  { by rewrite -bi.persistent_and_sep_1; apply bi.and_intro. }
+  rewrite envs_lookup_sound //=.
   rewrite envs_split_sound //; rewrite (envs_app_sound Δ2) //; simpl.
-  destruct HΦ as (-> & -> & ->). rewrite right_id assoc.
+  rewrite {}HP {}Hwp right_id assoc.
   assert (connected skI skR rl cs p ⊢
     connected skI skR rl cs (<!.. (x : TT)> MSG tele_app tv x {{ tele_app tP x }}; tele_app tp x)) as ->.
   { iIntros "Hc". iApply (connected_le with "Hc"); iIntros "!>".
     iApply iProto_le_trans; [iApply Hp|]. by rewrite Hm. }
-
-  eapply bi.wand_apply.
-  rewrite -wp_bind.
-   eapply bi.wand_entails.
-   eapply (wp_send' skI skR rl cs (tele_app tv x) p).
-   eapply (wp_send' skI skR rl cs (tele_app tv) (tele_app tP') (tele_app tp)).
-    , send_spec_tele|.
+  eapply bi.wand_intro_r.
+  rewrite -assoc [(_ ∗ public _)%I]comm !assoc.
+  rewrite -[(_ ∗ public _)%I]assoc -[(_ ∗ public _)%I]comm.
+  eapply bi.wand_apply; [rewrite -wp_bind; by eapply bi.wand_entails, wp_send_tele|].
   by rewrite -bi.later_intro.
 Qed.
 
 Tactic Notation "wp_send_core" tactic3(tac_exist) "with" constr(pat) :=
   let solve_pointsto _ :=
-    let c := match goal with |- _ = Some (_, (connected _ _ _ ?c _)%I) => c end in
-    iAssumptionCore || fail "wp_send: cannot find" c "↣ ? @ ?" in
+    let cs := match goal with |- _ = Some (_, (connected _ _ _ ?cs _)%I) => cs end in
+    iAssumptionCore || fail "wp_send: cannot find connected ? ? ?" cs "?" in
   let solve_done d :=
     lazymatch d with
     | true =>
@@ -354,8 +357,9 @@ Tactic Notation "wp_send_core" tactic3(tac_exist) "with" constr(pat) :=
         end;
         lazymatch goal with
         | |- False => fail "wp_send:" Hs' "not found"
-        | _ => notypeclasses refine (conj (eq_refl _) (conj _ _));
-                [iFrame Hs_frame; solve_done d
+        | _ => notypeclasses refine (conj (eq_refl _) (conj _ (conj _ _)));
+                [try done
+                |iFrame Hs_frame; solve_done d
                 |wp_finish]
         end]
      | _ => fail "wp_send: not a 'wp'"
@@ -368,7 +372,7 @@ Tactic Notation "wp_send" "with" constr(pat) :=
 Tactic Notation "wp_send" "(" ne_uconstr_list(xs) ")" "with" constr(pat) :=
   wp_send_core (ltac1_list_iter ltac:(fun x => eexists x) xs) with pat.
 
-(* Lemma tac_wp_branch `{!chanG Σ, !heapGS Σ} Δ i j K *)
+(* Lemma tac_wp_branch `{!heapGS Σ} Δ i j K *)
 (*     c p P1 P2 (p1 p2 : iProto Σ) Φ : *)
 (*   envs_lookup i Δ = Some (false, c ↣ p)%I → *)
 (*   ProtoNormalize false p [] (p1 <{P1}&{P2}> p2) → *)
@@ -417,7 +421,7 @@ Tactic Notation "wp_send" "(" ne_uconstr_list(xs) ")" "with" constr(pat) :=
 (*   wp_branch_core as (fun H => iPure H as pat1) (fun H => iPure H as pat2). *)
 (* Tactic Notation "wp_branch" := wp_branch as % _ | % _. *)
 
-(* Lemma tac_wp_select `{!chanG Σ, !heapGS Σ} Δ neg i js K *)
+(* Lemma tac_wp_select `{!heapGS Σ} Δ neg i js K *)
 (*     c (b : bool) p P1 P2 (p1 p2 : iProto Σ) Φ : *)
 (*   envs_lookup i Δ = Some (false, c ↣ p)%I → *)
 (*   ProtoNormalize false p [] (p1 <{P1}+{P2}> p2) → *)

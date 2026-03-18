@@ -6,9 +6,7 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta cryptis primitives tactics role.
 From cryptis.examples Require Import iso_dh gen_conn sess.
-(* From crypti *)
-(* From cryptis.examples.sess Require impl. *)
-(* From cryptis.examples.sess.proofs Require Import base. *)
+From cryptis.examples.sess Require Import proofmode.
 From actris.channel Require Import proto_model proto.
 From iris.heap_lang Require Import lib.spin_lock.
 From iris.bi Require Import telescopes.
@@ -61,39 +59,25 @@ Lemma wp_initiator_send42 c skI skR N :
       Sess.connected skI skR Init cs END ∗
       release_token (si_init_share cs) ∗
       (public (si_key cs) ∨ True) }}}.
-
 Proof.
   iIntros "#? #? #? #? #? % !> #P post".
-
   rewrite /initiator_send42.
   wp_lam.
-
   wp_pures.
-  wp_bind (impl.connect _ _ _ _).
   wp_apply (Sess.wp_connect with "[] [P]"); eauto 10.
-  iIntros " % ( p1 & p2 & p3 )".
-
-
-  wp_pures.
-  wp_apply (Sess.wp_send with "[] [p1]"); eauto 10.
-iIntros.
-wp_seq.
-iModIntro.
-iApply "post".
-by iFrame.
+  iIntros " % ( p1 & p2 & #p3 )".
+  wp_send with "[//]".
+  - by rewrite public_TInt.
+  - wp_pures. iApply "post". by iFrame.
 Qed.
 
-
 Lemma send42_dual_equiv:
-
   iProto_dual send42_proto ≡ send42_proto_dual.
-  Proof.
-    unfold send42_proto_dual.
-    Search iProto_dual.
-   Search iMsg_dual.
-    rewrite /send42_proto iProto_dual_message /= iMsg_dual_base  iProto_dual_end.
-    reflexivity.
-    Qed.
+Proof.
+  unfold send42_proto_dual.
+  rewrite /send42_proto iProto_dual_message /= iMsg_dual_base  iProto_dual_end.
+  reflexivity.
+Qed.
 
 (* Lemma connected_send42_proper skI skR rl cs: *)
 

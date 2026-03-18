@@ -91,18 +91,34 @@ iApply "post". by iFrame.
 Qed.
 
 Lemma wp_send skI skR rl cs (t : term) p :
-  public t -∗
-  {{{ connected skI skR rl cs (<!> MSG t; p) }}}
+  {{{ connected skI skR rl cs (<!> MSG t; p) ∗ public t}}}
     impl.send (repr cs) t
   {{{ RET #(); connected skI skR rl cs p }}}.
 Proof.
-iIntros "#p_t !>"; iIntros (Φ) "[c own] post". wp_lam; wp_pures.
+iIntros (Φ) "([c own] & #p_t) post". wp_lam; wp_pures.
 wp_apply (GenConn.wp_send_fupdN (λ skI skR si, sess_own skI skR si rl p)
            with " [//] [$c own]").
 { iDestruct "own" as "[#fail|own]"; eauto.
   iRight. iIntros (ts_send ts_recv) "inv".
   iMod (sess_send with "own inv") as "upd". by iIntros "!>". }
 iIntros "[??]"; iApply "post". by iFrame.
+Qed.
+
+Lemma wp_send_tele {TT : tele} skI skR rl cs (tt : TT)
+    (t : TT → term) (P : TT → iProp) (p : TT → iProto Σ term) :
+  {{{ connected skI skR rl cs (<!.. x> MSG t x {{ P x }}; p x) ∗
+      public (t tt) ∗ P tt }}}
+    impl.send (repr cs) (t tt)
+  {{{ RET #(); connected skI skR rl cs (p tt) }}}.
+Proof.
+iIntros (Φ) "(Hc & #pt & HP) HΦ".
+iDestruct (connected_le _ _ _ _ _ (<!> MSG t tt; p tt)%proto with "Hc [HP]")
+  as "Hc".
+{ iIntros "!>".
+  iApply iProto_le_trans.
+  iApply iProto_le_texist_intro_l.
+  by iFrame "HP". }
+by iApply (wp_send with "[$Hc]").
 Qed.
 
 (* Todo *)
