@@ -1032,7 +1032,7 @@ iApply exp_pred_ind.
 - by iIntros "!> %t1 %t2 #p1 %t3_t2 #p3"; iApply exp_pred_intro3.
 Qed.
 
-Lemma public_TExp' t1 t2 :
+Lemma public_TExp_add t1 t2 :
   TInv t2 ∉ exps t1 →
   public t1 -∗
   minted t2 -∗
@@ -1066,7 +1066,7 @@ rewrite TExpNC. iApply (IH with "p1' m []").
 - by rewrite TExpNC; iApply exp_pred_intro4 => //.
 Qed.
 
-Lemma public_TExp'' t1 t2 :
+Lemma public_TExp_exp_pred t1 t2 :
   public t1 -∗
   minted t2 -∗
   exp_pred t2 (TExp t1 t2) -∗
@@ -1076,7 +1076,7 @@ Proof.
 iIntros "#p1 #m2 #dh #dhV"; iApply except_0_public.
   by iApply all_minted_TExp; iSplit; rewrite // public_minted.
 case: (decide (TInv t2 ∈ exps t1)) => in_exps; last first.
-  by iModIntro; iApply public_TExp'.
+  by iModIntro; iApply public_TExp_add.
 iPoseProof (exp_pred_exps in_exps with "p1") as "[dh' #?]".
 iPoseProof (exp_pred_inv_same in_exps with "dh'") as "[p2|H]".
   by iModIntro; rewrite public_TInv; iApply public_TExp.
