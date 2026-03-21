@@ -28,7 +28,7 @@ Implicit Types (ores : option (term * term)).
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); eauto.
 
-Lemma wp_resp failed c skR N φ :
+Lemma wp_responder failed c skR N φ :
   {{{ channel c ∗ cryptis_ctx ∗
       nsl_dh_ctx ∗ nsl_dh_pred N φ ∗
       minted skR ∗
@@ -40,7 +40,7 @@ Lemma wp_resp failed c skR N φ :
            φ (si_init si) (si_resp si) si Init ∗
            φ (si_init si) (si_resp si) si Resp) ∗
       if failed then public skR else True }}}
-    resp c skR (Tag N)
+    responder c skR (Tag N)
   {{{ r, RET (repr r);
       ⌜r = None⌝ ∨ ∃ skI si,
         ⌜r = Some (Spec.pkey skI, si_key si)⌝ ∗
@@ -188,10 +188,10 @@ iModIntro. iRight. iExists skI, si. iFrame. do !iSplit => //.
 - iApply (term_token_drop with "token"). solve_ndisj.
 Qed.
 
-Lemma wp_resp_simple c skR N :
+Lemma wp_responder_simple c skR N :
   {{{ channel c ∗ cryptis_ctx ∗
       nsl_dh_ctx ∗ nsl_dh_pred N (λ _ _ _ _, True)%I ∗ minted skR }}}
-    resp c skR (Tag N)
+    responder c skR (Tag N)
   {{{ r, RET (repr r);
       ⌜r = None⌝ ∨ ∃ skI si,
         ⌜r = Some (Spec.pkey skI, si_key si)⌝ ∗
@@ -207,11 +207,11 @@ iApply ("Hpost" $! (Some (Spec.pkey _, si_key si))).
 iRight. iExists skI, si. by iFrame; eauto 10.
 Qed.
 
-Lemma wp_resp_weak c skR N :
+Lemma wp_responder_weak c skR N :
   channel c ∗ cryptis_ctx ∗ nsl_dh_ctx ∗
   nsl_dh_pred N (λ _ _ _ _, True)%I ∗ minted skR -∗
   {{{ True }}}
-    resp c skR (Tag N)
+    responder c skR (Tag N)
   {{{ r, RET (repr r);
       ⌜r = None⌝ ∨ ∃ skI si,
         ⌜r = Some (Spec.pkey skI, si_key si)⌝ ∗
@@ -219,7 +219,7 @@ Lemma wp_resp_weak c skR N :
         term_token (si_resp_share si) (⊤ ∖ ↑nsl_dhN) }}}.
 Proof.
 iIntros "(#? & #? & #? & #? & #?) !> %Φ _ post". iApply wp_fupd.
-wp_apply (wp_resp false); first by eauto 10.
+wp_apply (wp_responder false); first by eauto 10.
 iIntros "%osi [->|Hosi]"; first by iApply ("post" $! None); eauto.
 iDestruct "Hosi" as "(%skI & %si & -> & #? & #? & rel & token & _)".
 iMod (unrelease Resp with "rel") as "#un".
