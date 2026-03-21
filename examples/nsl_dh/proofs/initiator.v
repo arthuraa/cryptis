@@ -95,11 +95,10 @@ iDestruct (term_token_difference ga (↑nsl_dhN.@"failed") with "token_ga")
 iDestruct (term_token_difference ga (↑nsl_dhN.@"ready") with "token_ga")
   as "[ready_token token_ga]"; first solve_ndisj.
 wp_pures. wp_apply wp_mk_keyshare => //. rewrite -/ga.
-iIntros "_". wp_pures.
+iIntros "_". wp_pure _ credit:"H2". wp_pures.
 (* Create nI *)
 wp_apply (wp_mk_nonce (λ _, public skI ∨ public skR)%I (λ _, False)%I) => //.
 iIntros "%nI _ #m_nI #s_nI _ _".
-rewrite bi.intuitionistic_intuitionistically.
 wp_pures.
 iAssert (public ga) as "#p_ga".
 { iApply public_TExp_iff; eauto.
@@ -109,15 +108,13 @@ iAssert (public ga) as "#p_ga".
   by rewrite /nsl_dh_key_share exps_TExpN. }
 (* Encrypt and send msg1 *)
 wp_list. wp_term_of_list.
-wp_pure _ credit:"H1".
-wp_pure _ credit:"H2".
 wp_apply wp_aenc => //.
 { rewrite minted_of_list /= minted_pkey. by eauto. }
 { iRight. iSplit.
   + iModIntro. iExists ga, nI, skI. by eauto.
   + iIntros "!> #p_skR". rewrite public_of_list /=. do !iSplit => //.
-    - by iApply public_aenc_key.
-    - iApply "s_nI". by eauto. }
+    - iApply "s_nI". by eauto.
+    - rewrite /pkI. by iApply public_aenc_key. }
 iIntros "%m1 #p_m1". wp_pures.
 wp_apply wp_send => //.
 wp_pure _ credit:"H3".
@@ -133,12 +130,23 @@ wp_eq_term e; last protocol_failure. subst N'.
 rewrite minted_of_list public_of_list /=.
 iDestruct "m_m2" as "(_ & #m_gb & _ & #m_nR & _)".
 (* Extract nI secrecy from msg2 *)
-iAssert (public nR ↔ ▷ (public skI ∨ public skR))%I as "#s_nR".
-{ iDestruct "inv_m2" as "[(p_ga & _ & p_nI & p_nR & _)|[#inv_m2 _]]".
+iAssert (public nR ↔ ▷ □ (public skI ∨ public skR))%I as "s_nR".
+{ iDestruct "inv_m2" as "[(p_ga' & _ & p_nI & p_nR & _)|[#inv_m2 _]]".
   - iSpecialize ("s_nI" with "p_nI"). by iSplit; eauto.
   - iDestruct "inv_m2" as "(%ga' & %b & %nI' & %nR' & %skR' & %N' & %e &
       s_nR & _ & _ & _)".
     by case/Spec.of_list_inj: e => _ _ _ <- /Spec.aenc_pkey_inj <- _. }
+iAssert (public gb) as "#p_gb".
+{ iDestruct "inv_m2" as "[(_ & p_gb & _)|[#inv_m2 _]]"; first done.
+  iDestruct "inv_m2" as "(%ga' & %b & %nI' & %nR' & %skR' & %N' & %e &
+      _ & _ & #pred_b & _)".
+  case/Spec.of_list_inj: e => _ -> _ _ _ _.
+  iApply public_TExp_iff; eauto.
+  rewrite minted_TInt.
+  iRight. do 2![iSplit => //].
+  { iPoseProof (minted_TExp with "m_gb") as "[_ $]". }
+  iApply "pred_b". iModIntro. iModIntro.
+  by rewrite /nsl_dh_key_share exps_TExpN. }
 (* Extract msg2 predicate info *)
 wp_pures. wp_bind (texp _ _). iApply wp_texp.
 wp_pures. wp_list. wp_term_of_list. wp_pures.
@@ -159,7 +167,9 @@ iAssert (▷ (term_meta ga (nsl_dhN.@"failed") true ∨ released_session si) →
          public (si_key si))%I as "s_k1".
 { iIntros "#released".
   rewrite public_senc_key public_of_list /=.
-  do !iSplit => //; try by iApply public_aenc_key.
+  iSplit; first by iApply public_aenc_key.
+  iSplit; first by iApply public_aenc_key.
+  do !iSplit => //.
   iApply public_TExp => //. by iApply "s_a". }
 iAssert (|={⊤}=>
            □ (⌜failed⌝ → public (si_key si)) ∗
@@ -177,7 +187,7 @@ iAssert (|={⊤}=>
   iDestruct "inv_m2" as "[(p_ga' & _ & p_nI & p_nR & _)|[#inv_m2 #p_inv]]".
   { (* Forge case: public nI → corruption *)
     iMod (lc_fupd_elim_later_pers with "H3 [p_nI]") as "#corr".
-    { iApply "s_nI". eauto. }
+    { by iApply "s_nI". }
     iMod (term_meta_set (nsl_dhN.@"failed") true with "failed_token")
       as "#?"; first by solve_ndisj.
     iAssert (public (si_key si)) as "#?".

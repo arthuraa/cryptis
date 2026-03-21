@@ -303,14 +303,14 @@ Proof. by iIntros "(-> & -> & _) (? & _)". Qed.
 
 Definition msg1_pred skR m1 : iProp := ∃ ga nI skI,
   ⌜m1 = Spec.of_list [ga; nI; Spec.pkey skI]⌝ ∧
-  (public nI ↔ ▷ (public skI ∨ public skR)).
+  (public nI ↔ ▷ □ (public skI ∨ public skR)).
 
 Definition msg2_pred skI m2 : iProp := ∃ ga b nI nR skR N,
   let gb := TExp (TInt 0) b in
   let gab := TExp ga b in
   let si := SessInfo skI skR ga gb gab in
   ⌜m2 = Spec.of_list [ga; gb; nI; nR; Spec.pkey skR; Tag N]⌝ ∧
-  (public nR ↔ ▷ (public skI ∨ public skR)) ∧
+  (public nR ↔ ▷ □ (public skI ∨ public skR)) ∧
   ((public skI ∨ public skR) ∨ (public b ↔ ▷ (released ga ∧ released gb))) ∧
   (∀ t, dh_pred b t ↔ ▷ □ nsl_dh_key_share t) ∧
   nsl_dh_ready N skI skR si.
