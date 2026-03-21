@@ -352,15 +352,40 @@ Lemma public_dh_share skI skR a :
   □ (∀ t, dh_pred a t ↔ ▷ □ nsl_dh_key_share skI skR t) -∗
   (public skI ∨ public skR) -∗
   public (TExp (TInt 0) a).
-Proof. Admitted.
+Proof.
+iIntros "#m_a #pred_a #corr". rewrite public_TExpN //=; eauto.
+iRight. rewrite minted_TExp minted_TInt.
+do !iSplit => //.
+iApply "pred_a". do !iModIntro.
+rewrite /nsl_dh_key_share exps_TExpN /=.
+by iSplit.
+Qed.
 
 Lemma public_dh_secret a b skI skR :
   minted a -∗
   minted b -∗
   □ (∀ t, dh_pred a t ↔ ▷ □ nsl_dh_key_share skI skR t) -∗
   □ (∀ t, dh_pred b t ↔ ▷ □ nsl_dh_key_share skI skR t) -∗
+  (public skI ∨ public skR) -∗
   (public (TExpN (TInt 0) [a; b]) ↔ ◇ (public a ∨ public b)).
-Proof. Admitted.
+Proof.
+iIntros "#m_a #m_b #pred_a #pred_b #corr".
+rewrite public_TExp2_iff //; last by eauto.
+rewrite minted_TExpN /= minted_TInt.
+iSplit; last first.
+{ rewrite /bi_except_0.
+  iIntros "#[H|[H|H]]".
+  - iRight. iRight. iSplit; eauto.
+    by iSplit; [iApply "pred_a"|iApply "pred_b"];
+    iDestruct "H" as ">[]".
+  - iRight. iLeft. iSplit => //. by iApply (public_dh_share skI skR).
+  - iLeft. iSplit => //. by iApply (public_dh_share skI skR). }
+iIntros "[[_ #p_b] | [[_ #p_a] | (_ & contra & _)]]"; eauto.
+iPoseProof ("pred_a" with "contra") as "#contra2".
+iAssert (▷ False)%I as ">[]".
+{ iModIntro. iDestruct "contra2" as "[_ %contra]".
+  by rewrite /nsl_dh_key_share exps_TExpN /= in contra. }
+Qed.
 
 Lemma public_dh_secret' a b skI skR (P : iProp) :
   □ (public a ↔ P) -∗
@@ -368,7 +393,17 @@ Lemma public_dh_secret' a b skI skR (P : iProp) :
   □ (public b ↔ P) -∗
   □ (∀ t, dh_pred b t ↔ ▷ □ nsl_dh_key_share skI skR t) -∗
   (public (TExpN (TInt 0) [a; b]) → ◇ P).
-Proof. Admitted.
+Proof.
+iIntros "#s_a #pred_a #s_b #pred_b".
+rewrite public_TExp2_iff //; last by eauto.
+iIntros "[[_ #p_b] | [[_ #p_a] | (_ & contra & _)]]".
+- by iModIntro; iApply "s_b".
+- by iModIntro; iApply "s_a".
+iPoseProof ("pred_a" with "contra") as "#contra2".
+iAssert (▷ False)%I as ">[]".
+{ iModIntro. iDestruct "contra2" as "[_ %contra]".
+  by rewrite /nsl_dh_key_share exps_TExpN /= in contra. }
+Qed.
 
 End Verif.
 
