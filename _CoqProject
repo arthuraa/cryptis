@@ -54,6 +54,14 @@ examples/iso_dh/proofs.v
 examples/iso_dh/game.v
 examples/iso_dh.v
 
+examples/nsl_dh/impl.v
+examples/nsl_dh/proofs/base.v
+examples/nsl_dh/proofs/initiator.v
+examples/nsl_dh/proofs/responder.v
+examples/nsl_dh/proofs.v
+examples/nsl_dh/game.v
+examples/nsl_dh.v
+
 examples/gen_conn/impl.v
 examples/gen_conn/proofs/base.v
 examples/gen_conn/proofs.v
