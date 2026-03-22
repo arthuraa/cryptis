@@ -444,6 +444,7 @@ Definition msg2_pred skI m2 : iProp := ∃ ga b skR N,
   let si := SessInfo skI skR ga gb gab in
   ⌜m2 = Spec.of_list [ga; gb; Spec.pkey skR; Tag N]⌝ ∧
   dh_key skI skR b ∧
+  has_peer_share gb ga ∧
   ((public skI ∨ public skR) ∨ early_failure gb false) ∧
   nsl_dh_ready N skI skR si.
 
@@ -520,22 +521,29 @@ iAssert (▷ False)%I as ">[]".
   by rewrite /nsl_dh_key_share exps_TExpN /= in contra. }
 Qed.
 
-Lemma public_dh_secret' a b skI skR (P : iProp) :
-  □ (public a ↔ P) -∗
-  □ (∀ t, dh_pred a t ↔ ▷ □ nsl_dh_key_share skI skR t) -∗
-  □ (public b ↔ P) -∗
-  □ (∀ t, dh_pred b t ↔ ▷ □ nsl_dh_key_share skI skR t) -∗
-  (public (TExpN (TInt 0) [a; b]) → ◇ P).
+Lemma public_dh_secret' a b skI skR :
+  let ga := TExp (TInt 0) a in
+  let gb := TExp (TInt 0) b in
+  dh_key skI skR a -∗
+  dh_key skI skR b -∗
+  early_failure ga false -∗
+  early_failure gb false -∗
+  has_peer_share ga gb -∗
+  has_peer_share gb ga -∗
+  (public (TExpN (TInt 0) [a; b]) → ◇ (released ga ∨ released gb)).
 Proof.
-iIntros "#s_a #pred_a #s_b #pred_b".
+iIntros (ga gb) "#dh_a #dh_b #efa #efb #ps_a #ps_b".
+iPoseProof (dh_key_public_released with "dh_a efa ps_a") as "#rel_a".
+iPoseProof (dh_key_public_released with "dh_b efb ps_b") as "#rel_b".
+iDestruct "dh_a" as "(m_a & _ & pred_a)".
 rewrite public_TExp2_iff //; last by eauto.
 iIntros "[[_ #p_b] | [[_ #p_a] | (_ & contra & _)]]".
-- by iModIntro; iApply "s_b".
-- by iModIntro; iApply "s_a".
-iPoseProof ("pred_a" with "contra") as "#contra2".
-iAssert (▷ False)%I as ">[]".
-{ iModIntro. iDestruct "contra2" as "[_ %contra]".
-  by rewrite /nsl_dh_key_share exps_TExpN /= in contra. }
+- iDestruct ("rel_b" with "p_b") as ">[#r #_]". by iRight.
+- iDestruct ("rel_a" with "p_a") as ">[#r #_]". by iLeft.
+- iPoseProof ("pred_a" with "contra") as "#contra2".
+  iAssert (▷ False)%I as ">[]".
+  { iModIntro. iDestruct "contra2" as "[_ %contra]".
+    by rewrite /nsl_dh_key_share exps_TExpN /= in contra. }
 Qed.
 
 End Verif.
