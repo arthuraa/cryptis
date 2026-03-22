@@ -214,17 +214,17 @@ Three components:
 
 ```
 nonce_secrecy a :=
-  term_meta ga (nsl_dhN.@"failed") true ∨
-  ∃ gb, term_meta ga (nsl_dhN.@"peer_share") gb ∗
-        released ga ∗ released gb
+  session_failed ga ∨
+  ∃ gb, has_peer_share ga gb ∗ released ga ∗ released gb
 ```
 
 where `ga = TExp (TInt 0) a`. This predicate is initially unsatisfiable (no
 metadata set), making `public a ↔ ▷ False`. It is later refined:
-- **Failed case**: `term_meta_set failed true` — marks the session as
-  compromised, making the private key effectively public.
-- **Released case**: `term_meta_set peer_share gb` — binds the peer's share,
-  then secrecy becomes `released ga ∧ released gb`.
+- **Failed case**: `mark_failed ga` consumes `fail_token ga`, producing
+  `session_failed ga`, making the private key effectively public.
+- **Released case**: `set_peer_share ga gb` consumes `peer_share_token ga`,
+  producing `has_peer_share ga gb`. Secrecy then becomes
+  `released ga ∧ released gb`.
 
 ### `wp_mk_dh_keys` Spec (`proofs/base.v`)
 
@@ -232,15 +232,17 @@ metadata set), making `public a ↔ ▷ False`. It is later refined:
 wp_mk_dh_keys skI skR Ψ :
   cryptis_ctx -∗
   (∀ a, dh_key skI skR a -∗
-        release_token (TExp (TInt 0) a) -∗
-        term_token (TExp (TInt 0) a) (⊤ ∖ ↑nsl_dhN.@"released") -∗
-        Ψ (repr (a, TExp (TInt 0) a))) -∗
+        release_token ga -∗ fail_token ga -∗
+        peer_share_token ga -∗ ready_token ga -∗
+        res_token ga -∗ term_token ga (⊤ ∖ ↑nsl_dhN) -∗
+        Ψ (repr (a, ga))) -∗
   WP mk_dh_keys #() {{ Ψ }}
 ```
 
 **Proof**: Uses `wp_mk_nonce_freshN` with `P = nonce_secrecy` and
 `Q = nsl_dh_key_share skI skR`, `T' = λ a, {[TExp (TInt 0) a]}`.
-The token for `ga` is split into `release_token ga` and the remainder.
+The token for `ga` is split via `dh_share_tokenI` into all five
+sub-namespace tokens plus the remainder outside `nsl_dhN`.
 The `dh_key` predicate is assembled from the properties provided by
 `wp_mk_nonce_freshN`.
 
@@ -271,3 +273,81 @@ msg2_pred skI m2 := ∃ ga b skR N,
 ```
 
 **`msg3_pred`**: Unchanged (no DH-specific properties).
+
+---
+
+## Token/Meta Encapsulation (`proofs/base.v`)
+
+Raw `term_token`/`term_meta` under `nsl_dhN` are now wrapped in named
+predicates, following the pattern established by `release_token`/`released`.
+
+### Token Predicates
+
+Each sub-namespace of `nsl_dhN` has a corresponding token predicate:
+
+```
+release_token share    := term_token share (↑nsl_dhN.@"released")
+fail_token share       := term_token share (↑nsl_dhN.@"failed")
+peer_share_token share := term_token share (↑nsl_dhN.@"peer_share")
+ready_token share      := term_token share (↑nsl_dhN.@"ready")
+res_token share        := term_token share (↑nsl_dhN.@"res")
+```
+
+### Meta Predicates
+
+```
+released share           := term_meta share (nsl_dhN.@"released") true
+session_failed share     := term_meta share (nsl_dhN.@"failed") true
+has_peer_share share gb  := term_meta share (nsl_dhN.@"peer_share") gb
+```
+
+With corresponding set/consume lemmas:
+- `release : release_token share ==∗ released share`
+- `mark_failed : fail_token share ==∗ session_failed share`
+- `set_peer_share : peer_share_token share ==∗ has_peer_share share gb`
+- `has_peer_share_agree : has_peer_share share gb1 -∗ has_peer_share share gb2 -∗ ⌜gb1 = gb2⌝`
+
+### `dh_share_tokenI` (replaces `release_tokenI`)
+
+```
+dh_share_tokenI share E :
+  ↑nsl_dhN ⊆ E →
+  term_token share E -∗
+  release_token share ∗ fail_token share ∗
+  peer_share_token share ∗ ready_token share ∗
+  res_token share ∗ term_token share (E ∖ ↑nsl_dhN)
+```
+
+Splits a term token into all five sub-namespace tokens plus the remainder
+outside `nsl_dhN`. Used in `wp_mk_dh_keys` to distribute tokens from
+`wp_mk_nonce_freshN`.
+
+### Updated Definitions
+
+**`nonce_secrecy`** now uses `session_failed` and `has_peer_share`:
+```
+nonce_secrecy a :=
+  session_failed ga ∨
+  ∃ gb, has_peer_share ga gb ∗ released ga ∗ released gb
+```
+
+**`nsl_dh_ready`** now uses `ready_token`:
+```
+nsl_dh_ready N skI skR si := ∀ φ,
+  nsl_dh_pred N φ →
+  ready_token (si_init_share si) ={⊤}=∗ ▷ φ skI skR si Init
+```
+
+**`wp_mk_dh_keys`** postcondition now returns all five individual tokens:
+```
+wp_mk_dh_keys skI skR Ψ :
+  cryptis_ctx -∗
+  (∀ a, dh_key skI skR a -∗
+        release_token ga -∗ fail_token ga -∗
+        peer_share_token ga -∗ ready_token ga -∗
+        res_token ga -∗ term_token ga (⊤ ∖ ↑nsl_dhN) -∗
+        Ψ (repr (a, ga))) -∗
+  WP mk_dh_keys #() {{ Ψ }}
+```
+
+**Responder specs** use `res_token` instead of raw `term_token`.

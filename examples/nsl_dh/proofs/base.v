@@ -85,9 +85,81 @@ Lemma nsl_dh_token_drop E1 E2 :
   nsl_dh_token E2 -∗ nsl_dh_token E1.
 Proof. exact: gmeta_token_drop. Qed.
 
+(* Token predicates for nsl_dhN sub-namespaces *)
+
+Definition release_token share : iProp :=
+  term_token share (↑nsl_dhN.@"released").
+
+Definition fail_token share : iProp :=
+  term_token share (↑nsl_dhN.@"failed").
+
+Definition peer_share_token share : iProp :=
+  term_token share (↑nsl_dhN.@"peer_share").
+
+Definition ready_token share : iProp :=
+  term_token share (↑nsl_dhN.@"ready").
+
+Definition res_token share : iProp :=
+  term_token share (↑nsl_dhN.@"res").
+
+Lemma dh_share_tokenI share E :
+  ↑nsl_dhN ⊆ E →
+  term_token share E -∗
+  release_token share ∗
+  fail_token share ∗
+  peer_share_token share ∗
+  ready_token share ∗
+  res_token share ∗
+  term_token share (E ∖ ↑nsl_dhN).
+Proof.
+iIntros "% tok".
+rewrite /release_token /fail_token /peer_share_token /ready_token /res_token.
+rewrite (term_token_difference share (↑nsl_dhN) E) //.
+iDestruct "tok" as "[nsl rest]". iFrame "rest".
+iDestruct (term_token_difference share (↑nsl_dhN.@"released") (↑nsl_dhN) with "nsl") as "[$ nsl]"; first solve_ndisj.
+iDestruct (term_token_difference share (↑nsl_dhN.@"failed") _ with "nsl") as "[$ nsl]"; first solve_ndisj.
+iDestruct (term_token_difference share (↑nsl_dhN.@"peer_share") _ with "nsl") as "[$ nsl]"; first solve_ndisj.
+iDestruct (term_token_difference share (↑nsl_dhN.@"ready") _ with "nsl") as "[$ nsl]"; first solve_ndisj.
+iDestruct (term_token_difference share (↑nsl_dhN.@"res") _ with "nsl") as "[$ _]"; first solve_ndisj.
+Qed.
+
+(* Meta predicates for nsl_dhN sub-namespaces *)
+
+Definition released share : iProp :=
+  term_meta share (nsl_dhN.@"released") true.
+
+Lemma release share : release_token share ==∗ released share.
+Proof. by apply term_meta_set. Qed.
+
+Definition early_failure share (b : bool) : iProp :=
+  term_meta share (nsl_dhN.@"failed") b.
+
+Lemma set_early_failure share (b : bool) :
+  fail_token share ==∗ early_failure share b.
+Proof. by apply term_meta_set. Qed.
+
+Lemma early_failure_agree share (b1 b2 : bool) :
+  early_failure share b1 -∗
+  early_failure share b2 -∗
+  ⌜b1 = b2⌝.
+Proof. exact: term_meta_agree. Qed.
+
+Definition has_peer_share share (gb : term) : iProp :=
+  term_meta share (nsl_dhN.@"peer_share") gb.
+
+Lemma set_peer_share share gb :
+  peer_share_token share ==∗ has_peer_share share gb.
+Proof. by apply term_meta_set. Qed.
+
+Lemma has_peer_share_agree share gb1 gb2 :
+  has_peer_share share gb1 -∗
+  has_peer_share share gb2 -∗
+  ⌜gb1 = gb2⌝.
+Proof. exact: term_meta_agree. Qed.
+
 Definition nsl_dh_ready N skI skR si : iProp := ∀ φ,
   nsl_dh_pred N φ →
-  term_token (si_init_share si) (↑nsl_dhN.@"ready") ={⊤}=∗
+  ready_token (si_init_share si) ={⊤}=∗
     ▷ φ skI skR si Init.
 
 Lemma nsl_dh_ready_alloc N skI skR si φ :
@@ -135,23 +207,6 @@ Definition compromised si : iProp :=
 Lemma compromised_public si : compromised si ⊢ public (si_key si).
 Proof. by iIntros "(_&?)". Qed.
 
-Definition release_token share : iProp :=
-  term_token share (↑nsl_dhN.@"released").
-
-Lemma release_tokenI share E :
-  ↑nsl_dhN.@"released" ⊆ E →
-  term_token share E -∗
-  release_token share ∗ term_token share (E ∖ ↑nsl_dhN.@"released").
-Proof.
-iIntros "% ?"; by rewrite -term_token_difference.
-Qed.
-
-Definition released share : iProp :=
-  term_meta share (nsl_dhN.@"released") true.
-
-Lemma release share : release_token share ==∗ released share.
-Proof. by apply term_meta_set. Qed.
-
 Definition released_session si : iProp :=
   released (si_init_share si) ∧ released (si_resp_share si).
 
@@ -175,21 +230,20 @@ by [].
 Qed.
 
 Definition nonce_secrecy a : iProp :=
-  term_meta (TExp (TInt 0) a) (nsl_dhN.@"failed") true ∨
-  ∃ gb, term_meta (TExp (TInt 0) a) (nsl_dhN.@"peer_share") gb ∗
-          released (TExp (TInt 0) a) ∗
-          released gb.
+  let ga := TExp (TInt 0) a in
+  early_failure ga true ∨
+  ∃ gb, has_peer_share ga gb ∗ released ga ∗ released gb.
 
 Lemma nonce_secrecy_set a gb :
-  term_meta (TExp (TInt 0) a) (nsl_dhN.@"peer_share") gb ⊢
+  has_peer_share (TExp (TInt 0) a) gb ⊢
   nonce_secrecy a ↔
-  term_meta (TExp (TInt 0) a) (nsl_dhN.@"failed") true ∨
+  early_failure (TExp (TInt 0) a) true ∨
   released (TExp (TInt 0) a) ∧ released gb.
 Proof.
 iIntros "#meta"; iSplit.
 - iIntros "[#?|Ha]"; eauto.
   iDestruct "Ha" as "(%gb' & #meta' & #rel_a & #rel_b)". iRight.
-  iPoseProof (term_meta_agree with "meta meta'") as "->".
+  iPoseProof (has_peer_share_agree with "meta meta'") as "->".
   by iSplit.
 - rewrite /nonce_secrecy. iIntros "[#?|[#? #?]]"; eauto.
 Qed.
@@ -208,7 +262,11 @@ Lemma wp_mk_dh_keys skI skR (Ψ : val → iProp) :
     let ga := TExp (TInt 0) a in
     dh_key skI skR a -∗
     release_token ga -∗
-    term_token ga (⊤ ∖ ↑nsl_dhN.@"released") -∗
+    fail_token ga -∗
+    peer_share_token ga -∗
+    ready_token ga -∗
+    res_token ga -∗
+    term_token ga (⊤ ∖ ↑nsl_dhN) -∗
     Ψ (repr (a, ga))) -∗
   WP mk_dh_keys #() {{ Ψ }}.
 Proof.
@@ -224,14 +282,15 @@ wp_apply (wp_mk_nonce_freshN ∅
   iModIntro. by iApply bi.equiv_iff.
 iIntros "%a _ _ #m_a #s_a #dh_a token_ga".
 rewrite big_sepS_singleton.
-iDestruct (release_tokenI with "token_ga") as "[token_rel token_ga]" => //.
+iDestruct (dh_share_tokenI with "token_ga")
+  as "(rel & fail & peer & ready & res & token_ga)" => //.
 wp_pures.
 wp_bind (tint _). iApply wp_tint.
 wp_bind (texp _ _). iApply wp_texp.
 wp_pures.
 iAssert (dh_key skI skR a) as "#dh_key_a".
 { rewrite /dh_key. by do !iSplit. }
-by iApply ("post" with "dh_key_a token_rel token_ga").
+by iApply ("post" with "dh_key_a rel fail peer ready res token_ga").
 Qed.
 
 Definition session skI skR si : iProp :=
@@ -362,7 +421,7 @@ Definition msg2_pred skI m2 : iProp := ∃ ga b skR N,
   let si := SessInfo skI skR ga gb gab in
   ⌜m2 = Spec.of_list [ga; gb; Spec.pkey skR; Tag N]⌝ ∧
   dh_key skI skR b ∧
-  ((public skI ∨ public skR) ∨ (public b ↔ ▷ (released ga ∧ released gb))) ∧
+  ((public skI ∨ public skR) ∨ early_failure gb false) ∧
   nsl_dh_ready N skI skR si.
 
 Definition msg3_pred skR m3 : iProp := ∃ a gb nR skI,

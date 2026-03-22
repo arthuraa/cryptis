@@ -45,7 +45,7 @@ Lemma wp_responder_confirm failed c skR skI ga N φ :
           let gb := TExp (TInt 0) b in
           let gab := TExp ga b in
           let si := SessInfo skI skR ga gb gab in
-          term_token (si_resp_share si) (↑nsl_dhN.@"res") ={⊤}=∗
+          res_token (si_resp_share si) ={⊤}=∗
            φ (si_init si) (si_resp si) si Init ∗
            φ (si_init si) (si_resp si) si Resp) ∗
       if failed then public skR else True }}}
@@ -68,7 +68,7 @@ Lemma wp_responder failed c skR N φ :
           let gb := TExp (TInt 0) b in
           let gab := TExp ga b in
           let si := SessInfo skI skR ga gb gab in
-          term_token (si_resp_share si) (↑nsl_dhN.@"res") ={⊤}=∗
+          res_token (si_resp_share si) ={⊤}=∗
            φ (si_init si) (si_resp si) si Init ∗
            φ (si_init si) (si_resp si) si Resp) ∗
       if failed then public skR else True }}}
