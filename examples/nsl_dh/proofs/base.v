@@ -256,6 +256,29 @@ Definition dh_key skI skR a : iProp :=
 Global Instance dh_key_persistent skI skR a : Persistent (dh_key skI skR a).
 Proof. apply _. Qed.
 
+Lemma dh_key_public_released skI skR a gb :
+  let ga := TExp (TInt 0) a in
+  dh_key skI skR a -∗
+  early_failure ga false -∗
+  has_peer_share ga gb -∗
+  □ (public a ↔ ▷ (released ga ∧ released gb)).
+Proof.
+iIntros (ga) "#(m_a & s_a & dh_a) #ef #ps !>". iSplit.
+- iIntros "#p_a".
+  iDestruct ("s_a" with "p_a") as "H".
+  iNext. iDestruct "H" as "#ns".
+  iPoseProof (nonce_secrecy_set a gb with "ps") as "[Hfwd _]".
+  iDestruct ("Hfwd" with "ns") as "[#fail|#[r1 r2]]".
+  + by iPoseProof (early_failure_agree with "ef fail") as "%".
+  + by iSplit.
+- iIntros "H".
+  iAssert (▷ □ nonce_secrecy a)%I with "[H]" as "ns".
+  { iNext. iDestruct "H" as "#[r1 r2]". iModIntro.
+    iPoseProof (nonce_secrecy_set a gb with "ps") as "[_ Hbck]".
+    iApply "Hbck". iRight. by iSplit. }
+  iDestruct ("s_a" with "ns") as "$".
+Qed.
+
 Lemma wp_mk_dh_keys skI skR (Ψ : val → iProp) :
   cryptis_ctx -∗
   (∀ a,
