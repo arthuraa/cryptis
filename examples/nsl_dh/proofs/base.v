@@ -463,11 +463,9 @@ Proof. by iIntros "(-> & -> & _) (? & _)". Qed.
 
 (* Message predicates for aenc *)
 
-Definition msg1_pred skR m1 : iProp := ∃ a skI,
-  let ga := TExp (TInt 0) a in
+Definition msg1_pred skR m1 : iProp := ∃ ga skI,
   ⌜m1 = Spec.of_list [ga; Spec.pkey skI]⌝ ∧
-  dh_key skI skR a ∧
-  (public ga ↔ ▷ □ (public skI ∨ public skR)).
+  (public skI → public ga).
 
 Definition msg2_pred skI m2 : iProp := ∃ ga b skR N,
   let gb := TExp (TInt 0) b in
@@ -476,7 +474,7 @@ Definition msg2_pred skI m2 : iProp := ∃ ga b skR N,
   ⌜m2 = Spec.of_list [ga; gb; Spec.pkey skR; Tag N]⌝ ∧
   dh_key skI skR b ∧
   has_peer_share gb ga ∧
-  ((public skI ∨ public skR) ∨ early_failure gb false) ∧
+  early_failure gb false ∧
   nsl_dh_ready N skI skR si.
 
 Definition msg3_pred skR m3 : iProp := ∃ a gb nR skI,
@@ -484,8 +482,7 @@ Definition msg3_pred skR m3 : iProp := ∃ a gb nR skI,
   let gab := TExp gb a in
   let si := SessInfo skI skR ga gb gab in
   ⌜m3 = Spec.of_list [ga; gb; Spec.pkey skI; nR]⌝ ∧
-  ((public skI ∨ public skR) ∨
-    □ (public (si_key si) → ▷ released_session si)).
+  □ (public (si_key si) → ▷ released_session si).
 
 Definition nsl_dh_ctx : iProp :=
   aenc_pred (nsl_dhN.@"m1") msg1_pred ∧

@@ -52,14 +52,14 @@ Definition initiator_confirm : val := λ: "c" "skI" "pkR" "a" "ga" "gb",
   let: "m3"     := aenc "pkR" (Tag $ nsl_dhN.@"m3")
                      (term_of_list ["gb"; "pkI"]) in
   send "c" "m3";;
-  SOME (derive_senc_key "secret").
+  derive_senc_key "secret".
 
 Definition initiator : val := λ: "c" "skI" "pkR" "N",
   bind: "res" := initiator_send "c" "skI" "pkR" "N" in
   let: "a"  := Fst (Fst "res") in
   let: "ga" := Snd (Fst "res") in
   let: "gb" := Snd "res" in
-  initiator_confirm "c" "skI" "pkR" "a" "ga" "gb".
+  SOME (initiator_confirm "c" "skI" "pkR" "a" "ga" "gb").
 
 (* Responder subroutines *)
 

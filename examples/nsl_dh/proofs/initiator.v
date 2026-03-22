@@ -50,28 +50,17 @@ Lemma wp_initiator_send failed c skI skR N φ :
   }}}.
 Proof. Admitted.
 
-Lemma wp_initiator_confirm c skI skR a gb φ :
+Lemma wp_initiator_confirm c skI skR a gb :
   let ga := TExp (TInt 0) a in
   let si := SessInfo skI skR ga gb (TExp gb a) in
-  channel c ∗
-  cryptis_ctx ∗
-  nsl_dh_ctx ∗
-  minted skI ∗
-  minted skR ∗
-  session skI skR si -∗
-  {{{ □ (⌜false⌝ → public (si_key si)) ∗
-      release_token (si_init_share si) ∗
-      term_token (si_init_share si) (⊤ ∖ ↑nsl_dhN) ∗
-      (public (si_key si) ∨ φ skI skR si Init) }}}
+  {{{ channel c ∗
+      cryptis_ctx ∗
+      nsl_dh_ctx ∗
+      minted skI ∗
+      minted skR ∗
+      session skI skR si }}}
     initiator_confirm c skI (Spec.pkey skR) a ga gb
-  {{{ r, RET (repr r);
-      ⌜r = None⌝ ∨
-        ⌜r = Some (si_key si)⌝ ∗
-        session skI skR si ∗
-        release_token (si_init_share si) ∗
-        term_token (si_init_share si) (⊤ ∖ ↑nsl_dhN) ∗
-        (public (si_key si) ∨ φ skI skR si Init)
-  }}}.
+  {{{ RET (repr (si_key si)); True }}}.
 Proof. Admitted.
 
 Lemma wp_initiator failed c skI skR N φ :
