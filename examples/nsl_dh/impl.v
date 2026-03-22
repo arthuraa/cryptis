@@ -23,15 +23,18 @@ Result: derive_key [pkA; pkB; g^a; g^b; g^ab]
 
 Definition nsl_dhN := nroot.@"nsl_dh".
 
-Definition mk_keyshare : val := λ: "k",
-  texp (tint #0) "k".
+Definition mk_dh_keys : val := λ: <>,
+  let: "a"  := mk_nonce #() in
+  let: "ga" := texp (tint #0) "a" in
+  ("a", "ga").
 
 (* Initiator subroutines *)
 
 Definition initiator_send : val := λ: "c" "skI" "pkR" "N",
   let: "pkI"  := pkey "skI" in
-  let: "a"    := mk_nonce #() in
-  let: "ga"   := mk_keyshare "a" in
+  let: "keys" := mk_dh_keys #() in
+  let: "a"    := Fst "keys" in
+  let: "ga"   := Snd "keys" in
   let: "m1"   := aenc "pkR" (Tag $ nsl_dhN.@"m1")
                    (term_of_list ["ga"; "pkI"]) in
   send "c" "m1";;
@@ -70,8 +73,9 @@ Definition responder_listen : val := λ: "c" "skR",
 
 Definition responder_confirm : val := λ: "c" "skR" "ga" "pkI" "N",
   let: "pkR" := pkey "skR" in
-  let: "b"  := mk_nonce #() in
-  let: "gb" := mk_keyshare "b" in
+  let: "keys" := mk_dh_keys #() in
+  let: "b"    := Fst "keys" in
+  let: "gb"   := Snd "keys" in
   let: "m2" := aenc "pkI" (Tag $ nsl_dhN.@"m2")
                  (term_of_list ["ga"; "gb"; "pkR"; "N"]) in
   send "c" "m2";;

@@ -170,3 +170,104 @@ Three cases from `public_TExp2_iff`:
 The corruption guard in `nsl_dh_key_share` doesn't affect this case because
 the pure length check alone provides the contradiction (length 2 ≠ 1
 regardless of corruption).
+
+---
+
+## DH Key Generation Refactoring
+
+### `mk_dh_keys` (`impl.v`)
+
+Combined `mk_nonce` and `mk_keyshare` into a single function:
+
+```
+mk_dh_keys () =
+  let a  = mk_nonce () in
+  let ga = texp (tint 0) a in
+  (a, ga)
+```
+
+Both `initiator_send` and `responder_confirm` now call `mk_dh_keys` instead of
+separate `mk_nonce` + `mk_keyshare` calls.
+
+### `dh_key` Predicate (`proofs/base.v`)
+
+Persistent predicate capturing the secrecy properties of a DH private key:
+
+```
+dh_key skI skR a :=
+  minted a ∧
+  □ (public a ↔ ▷ □ nonce_secrecy a) ∧
+  □ (∀ t, dh_pred a t ↔ ▷ □ nsl_dh_key_share skI skR t)
+```
+
+Three components:
+1. **Mintedness**: `a` was properly generated (from `mk_nonce`)
+2. **Private key secrecy**: `public a` iff `nonce_secrecy a` holds (under later
+   and persistence modalities). `nonce_secrecy` is a flexible predicate refined
+   via term metadata: initially false (key is secret), later set to track
+   whether the session failed or both shares were released.
+3. **DH predicate**: controls what the attacker learns when combining `a` with
+   other exponents. Tied to `nsl_dh_key_share`, ensuring that the shared secret
+   `g^(ab)` is only public when both individual shares are.
+
+### `nonce_secrecy` (moved from `initiator.v` to `base.v`)
+
+```
+nonce_secrecy a :=
+  term_meta ga (nsl_dhN.@"failed") true ∨
+  ∃ gb, term_meta ga (nsl_dhN.@"peer_share") gb ∗
+        released ga ∗ released gb
+```
+
+where `ga = TExp (TInt 0) a`. This predicate is initially unsatisfiable (no
+metadata set), making `public a ↔ ▷ False`. It is later refined:
+- **Failed case**: `term_meta_set failed true` — marks the session as
+  compromised, making the private key effectively public.
+- **Released case**: `term_meta_set peer_share gb` — binds the peer's share,
+  then secrecy becomes `released ga ∧ released gb`.
+
+### `wp_mk_dh_keys` Spec (`proofs/base.v`)
+
+```
+wp_mk_dh_keys skI skR Ψ :
+  cryptis_ctx -∗
+  (∀ a, dh_key skI skR a -∗
+        release_token (TExp (TInt 0) a) -∗
+        term_token (TExp (TInt 0) a) (⊤ ∖ ↑nsl_dhN.@"released") -∗
+        Ψ (repr (a, TExp (TInt 0) a))) -∗
+  WP mk_dh_keys #() {{ Ψ }}
+```
+
+**Proof**: Uses `wp_mk_nonce_freshN` with `P = nonce_secrecy` and
+`Q = nsl_dh_key_share skI skR`, `T' = λ a, {[TExp (TInt 0) a]}`.
+The token for `ga` is split into `release_token ga` and the remainder.
+The `dh_key` predicate is assembled from the properties provided by
+`wp_mk_nonce_freshN`.
+
+### Message Predicate Refactoring
+
+**`msg1_pred`**: Now existentially quantifies over the private key `a` (not
+just `ga`) and includes `dh_key skI skR a`:
+```
+msg1_pred skR m1 := ∃ a skI,
+  ⌜m1 = Spec.of_list [TExp (TInt 0) a; Spec.pkey skI]⌝ ∧
+  dh_key skI skR a ∧
+  (public ga ↔ ▷ □ (public skI ∨ public skR))
+```
+
+The biconditional is kept explicitly because the forward direction
+(`public ga → corruption`) cannot be derived from `dh_key` alone — it
+requires knowledge of the metadata state (that `nonce_secrecy` is currently
+unsatisfiable).
+
+**`msg2_pred`**: Replaces the explicit `∀ t, dh_pred b t ↔ ...` with
+`dh_key skI skR b`:
+```
+msg2_pred skI m2 := ∃ ga b skR N,
+  ⌜m2 = ...⌝ ∧
+  dh_key skI skR b ∧
+  ((public skI ∨ public skR) ∨ (public b ↔ ▷ (released ga ∧ released gb))) ∧
+  nsl_dh_ready N skI skR si
+```
+
+**`msg3_pred`**: Unchanged (no DH-specific properties).

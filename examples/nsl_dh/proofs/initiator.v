@@ -27,26 +27,6 @@ Implicit Types (N : namespace).
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); eauto.
 
-Definition nonce_secrecy a : iProp :=
-  term_meta (TExp (TInt 0) a) (nsl_dhN.@"failed") true ∨
-  ∃ gb, term_meta (TExp (TInt 0) a) (nsl_dhN.@"resp_share") gb ∗
-          released (TExp (TInt 0) a) ∗
-          released gb.
-
-Lemma nonce_secrecy_set a gb :
-  term_meta (TExp (TInt 0) a) (nsl_dhN.@"resp_share") gb ⊢
-  nonce_secrecy a ↔
-  term_meta (TExp (TInt 0) a) (nsl_dhN.@"failed") true ∨
-  released (TExp (TInt 0) a) ∧ released gb.
-Proof.
-iIntros "#meta"; iSplit.
-- iIntros "[#?|Ha]"; eauto.
-  iDestruct "Ha" as "(%gb' & #meta' & #rel_a & #rel_b)". iRight.
-  iPoseProof (term_meta_agree with "meta meta'") as "->".
-  by iSplit.
-- rewrite /nonce_secrecy. iIntros "[#?|[#? #?]]"; eauto.
-Qed.
-
 Lemma wp_initiator_send failed c skI skR N φ :
   channel c ∗
   cryptis_ctx ∗

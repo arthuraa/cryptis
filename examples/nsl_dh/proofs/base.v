@@ -106,17 +106,6 @@ iMod (escrowE with "[//] ready") as "res" => //.
 iIntros "!> !>". by iRewrite -"φ_eq".
 Qed.
 
-Lemma wp_mk_keyshare (t : term) :
-  {{{ True }}}
-    mk_keyshare t
-  {{{ RET (repr (TExp (TInt 0) t)); True : iProp}}}.
-Proof.
-iIntros "%Φ _ Hpost". wp_lam.
-wp_bind (tint _). iApply wp_tint.
-wp_bind (texp _ _). iApply wp_texp.
-by iApply "Hpost".
-Qed.
-
 Definition nsl_dh_key_share skI skR t : iProp :=
   (public skI ∨ public skR) ∧ ⌜length (exps t) = 1⌝.
 
@@ -183,6 +172,66 @@ Proof.
 iIntros "token [#init #resp]".
 iApply (term_meta_token with "token"); last by case: rl.
 by [].
+Qed.
+
+Definition nonce_secrecy a : iProp :=
+  term_meta (TExp (TInt 0) a) (nsl_dhN.@"failed") true ∨
+  ∃ gb, term_meta (TExp (TInt 0) a) (nsl_dhN.@"peer_share") gb ∗
+          released (TExp (TInt 0) a) ∗
+          released gb.
+
+Lemma nonce_secrecy_set a gb :
+  term_meta (TExp (TInt 0) a) (nsl_dhN.@"peer_share") gb ⊢
+  nonce_secrecy a ↔
+  term_meta (TExp (TInt 0) a) (nsl_dhN.@"failed") true ∨
+  released (TExp (TInt 0) a) ∧ released gb.
+Proof.
+iIntros "#meta"; iSplit.
+- iIntros "[#?|Ha]"; eauto.
+  iDestruct "Ha" as "(%gb' & #meta' & #rel_a & #rel_b)". iRight.
+  iPoseProof (term_meta_agree with "meta meta'") as "->".
+  by iSplit.
+- rewrite /nonce_secrecy. iIntros "[#?|[#? #?]]"; eauto.
+Qed.
+
+Definition dh_key skI skR a : iProp :=
+  minted a ∧
+  □ (public a ↔ ▷ □ nonce_secrecy a) ∧
+  □ (∀ t, dh_pred a t ↔ ▷ □ nsl_dh_key_share skI skR t).
+
+Global Instance dh_key_persistent skI skR a : Persistent (dh_key skI skR a).
+Proof. apply _. Qed.
+
+Lemma wp_mk_dh_keys skI skR (Ψ : val → iProp) :
+  cryptis_ctx -∗
+  (∀ a,
+    let ga := TExp (TInt 0) a in
+    dh_key skI skR a -∗
+    release_token ga -∗
+    term_token ga (⊤ ∖ ↑nsl_dhN.@"released") -∗
+    Ψ (repr (a, ga))) -∗
+  WP mk_dh_keys #() {{ Ψ }}.
+Proof.
+iIntros "#ctx post".
+rewrite /mk_dh_keys. wp_lam.
+wp_apply (wp_mk_nonce_freshN ∅
+            nonce_secrecy
+            (nsl_dh_key_share skI skR)
+            (λ a, {[TExp (TInt 0) a]})) => //.
+- iIntros "%". rewrite elem_of_empty. iIntros "[]".
+- iIntros "%a".
+  rewrite big_sepS_singleton minted_TExp minted_TInt /= bi.True_and.
+  iModIntro. by iApply bi.equiv_iff.
+iIntros "%a _ _ #m_a #s_a #dh_a token_ga".
+rewrite big_sepS_singleton.
+iDestruct (release_tokenI with "token_ga") as "[token_rel token_ga]" => //.
+wp_pures.
+wp_bind (tint _). iApply wp_tint.
+wp_bind (texp _ _). iApply wp_texp.
+wp_pures.
+iAssert (dh_key skI skR a) as "#dh_key_a".
+{ rewrite /dh_key. by do !iSplit. }
+by iApply ("post" with "dh_key_a token_rel token_ga").
 Qed.
 
 Definition session skI skR si : iProp :=
@@ -301,8 +350,10 @@ Proof. by iIntros "(-> & -> & _) (? & _)". Qed.
 
 (* Message predicates for aenc *)
 
-Definition msg1_pred skR m1 : iProp := ∃ ga skI,
+Definition msg1_pred skR m1 : iProp := ∃ a skI,
+  let ga := TExp (TInt 0) a in
   ⌜m1 = Spec.of_list [ga; Spec.pkey skI]⌝ ∧
+  dh_key skI skR a ∧
   (public ga ↔ ▷ □ (public skI ∨ public skR)).
 
 Definition msg2_pred skI m2 : iProp := ∃ ga b skR N,
@@ -310,8 +361,8 @@ Definition msg2_pred skI m2 : iProp := ∃ ga b skR N,
   let gab := TExp ga b in
   let si := SessInfo skI skR ga gb gab in
   ⌜m2 = Spec.of_list [ga; gb; Spec.pkey skR; Tag N]⌝ ∧
+  dh_key skI skR b ∧
   ((public skI ∨ public skR) ∨ (public b ↔ ▷ (released ga ∧ released gb))) ∧
-  (∀ t, dh_pred b t ↔ ▷ □ nsl_dh_key_share skI skR t) ∧
   nsl_dh_ready N skI skR si.
 
 Definition msg3_pred skR m3 : iProp := ∃ a gb nR skI,
