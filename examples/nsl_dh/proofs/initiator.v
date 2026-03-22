@@ -45,7 +45,32 @@ Lemma wp_initiator_send_msg1 c skI skR :
       ready_token ga ∗
       term_token ga (⊤ ∖ ↑nsl_dhN)
   }}}.
-Proof. Admitted.
+Proof.
+iIntros "%Ψ (#chan_c & #ctx & #(m1_pred & ? & ?) & #m_skI & #m_skR) Hpost".
+rewrite /initiator_send_msg1.
+wp_pures. wp_apply wp_pkey. wp_pures.
+set pkI := Spec.pkey skI.
+wp_apply (wp_mk_dh_keys skI skR); first by iFrame "#".
+iIntros "%a #dh_a rel fail peer ready res tok".
+set ga := TExp (TInt 0) a.
+wp_pures. wp_list. wp_term_of_list. wp_pures.
+wp_apply wp_aenc => //.
+{ iDestruct "dh_a" as "(#m_a & _)".
+  rewrite minted_of_list /= minted_TExp minted_TInt /= minted_pkey.
+  by do !iSplit. }
+{ iRight. iSplit.
+  - iModIntro. iExists ga, skI. iSplit => //.
+    iIntros "#corr".
+    iApply (public_dh_share with "dh_a").
+    by iModIntro.
+  - iIntros "!> #p_skR". rewrite public_of_list /=. do !iSplit => //.
+    + iApply (public_dh_share with "dh_a"). iModIntro. by eauto.
+    + by iApply public_aenc_key. }
+iIntros "%m1 #p_m1". wp_pures.
+wp_apply wp_send => //.
+wp_pures.
+iApply ("Hpost" $! a). by iFrame "∗ #".
+Qed.
 
 Lemma wp_initiator_recv_msg2 c skI skR a φ N failed :
   let ga := TExp (TInt 0) a in
