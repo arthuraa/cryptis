@@ -41,7 +41,30 @@ Lemma wp_responder_recv_msg1 c skR :
         ⌜r = Some (ga, Spec.pkey skI)⌝ ∗
         minted ga ∗ minted skI ∗
         □ (public skI ∨ public skR → public ga) }}}.
-Proof. Admitted.
+Proof.
+iIntros "%Ψ (#chan_c & #ctx & #(m1_pred & ? & ?) & #m_skR) Hpost".
+rewrite /responder_recv_msg1.
+wp_pures. wp_apply wp_pkey. wp_pures.
+wp_bind (recv _); iApply wp_recv => //; iIntros (m) "#p_m".
+wp_apply wp_adec => //. iSplit; last by protocol_failure.
+iClear "p_m" => {m}. iIntros "%m1 #m_m1 #inv_m1".
+wp_list_of_term m1; last by protocol_failure.
+wp_list_match => [ga pkI {m1} ->|_]; last by protocol_failure.
+rewrite minted_of_list /=.
+iDestruct "m_m1" as "(#m_ga & #m_pkI & _)".
+wp_apply wp_is_aenc_key => //.
+iSplit; last by protocol_failure.
+iIntros "%skI -> #m_skI". wp_pures.
+iApply ("Hpost" $! (Some (ga, Spec.pkey skI))).
+iRight. iExists ga, skI. iModIntro. do !iSplit => //.
+iDestruct "inv_m1" as "[#p_m1|[#inv_m1 _]]".
+- rewrite public_of_list /=.
+  iDestruct "p_m1" as "(#p_ga & _)".
+  by iIntros "!> _".
+- iDestruct "inv_m1" as "(%ga' & %skI' & %e & #s_ga)".
+  case/Spec.of_list_inj: e => <- /Spec.aenc_pkey_inj <-.
+  done.
+Qed.
 
 Lemma wp_responder_send_msg2 c skI skR ga N φ failed :
   {{{
