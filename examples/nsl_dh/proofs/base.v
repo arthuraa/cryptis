@@ -256,6 +256,24 @@ Definition dh_key skI skR a : iProp :=
 Global Instance dh_key_persistent skI skR a : Persistent (dh_key skI skR a).
 Proof. apply _. Qed.
 
+(* TODO: Find a better name for this and refactor initiator.v and responder.v to use it. *)
+Definition failed_early skI skR (failed : bool) : iProp :=
+  (if failed then public skI ∨ public skR else True)%I.
+
+(* TODO: Find a better name for this and refactor rest of code to use it. *)
+Definition failed_early_set skI skR share : iProp :=
+  (public skI ∨ public skR) ∨ early_failure share false.
+
+(* TODO: Find a better name for this *)
+Lemma fail_token_failed_early skI skR a failed :
+  let ga := TExp (TInt 0) a in
+  failed_early skI skR failed -∗
+  fail_token ga -∗
+  dh_key skI skR ga ==∗
+  □ (⌜failed⌝ → public a) ∗
+  failed_early_set skI skR ga.
+Proof. Admitted.
+
 Lemma dh_key_public_released skI skR a gb :
   let ga := TExp (TInt 0) a in
   dh_key skI skR a -∗
@@ -482,46 +500,13 @@ Global Instance nsl_dh_ctx_persistent : Persistent nsl_dh_ctx.
 Proof. apply _. Qed.
 
 Lemma public_dh_share skI skR a :
-  minted a -∗
-  □ (∀ t, dh_pred a t ↔ ▷ □ nsl_dh_key_share skI skR t) -∗
-  (public skI ∨ public skR) -∗
-  public (TExp (TInt 0) a).
-Proof.
-iIntros "#m_a #pred_a #corr". rewrite public_TExpN //=; eauto.
-iRight. rewrite minted_TExp minted_TInt.
-do !iSplit => //.
-iApply "pred_a". do !iModIntro.
-rewrite /nsl_dh_key_share exps_TExpN /=.
-by iSplit.
-Qed.
+  let ga := TExp (TInt 0) a in
+  dh_key skI skR a -∗
+  ▷ (public skI ∨ public skR) -∗
+  public ga.
+Proof. Admitted.
 
 Lemma public_dh_secret a b skI skR :
-  minted a -∗
-  minted b -∗
-  □ (∀ t, dh_pred a t ↔ ▷ □ nsl_dh_key_share skI skR t) -∗
-  □ (∀ t, dh_pred b t ↔ ▷ □ nsl_dh_key_share skI skR t) -∗
-  (public skI ∨ public skR) -∗
-  (public (TExpN (TInt 0) [a; b]) ↔ ◇ (public a ∨ public b)).
-Proof.
-iIntros "#m_a #m_b #pred_a #pred_b #corr".
-rewrite public_TExp2_iff //; last by eauto.
-rewrite minted_TExpN /= minted_TInt.
-iSplit; last first.
-{ rewrite /bi_except_0.
-  iIntros "#[H|[H|H]]".
-  - iRight. iRight. iSplit; eauto.
-    by iSplit; [iApply "pred_a"|iApply "pred_b"];
-    iDestruct "H" as ">[]".
-  - iRight. iLeft. iSplit => //. by iApply (public_dh_share skI skR).
-  - iLeft. iSplit => //. by iApply (public_dh_share skI skR). }
-iIntros "[[_ #p_b] | [[_ #p_a] | (_ & contra & _)]]"; eauto.
-iPoseProof ("pred_a" with "contra") as "#contra2".
-iAssert (▷ False)%I as ">[]".
-{ iModIntro. iDestruct "contra2" as "[_ %contra]".
-  by rewrite /nsl_dh_key_share exps_TExpN /= in contra. }
-Qed.
-
-Lemma public_dh_secret' a b skI skR :
   let ga := TExp (TInt 0) a in
   let gb := TExp (TInt 0) b in
   dh_key skI skR a -∗
