@@ -27,51 +27,72 @@ Implicit Types (N : namespace).
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); eauto.
 
-Lemma wp_initiator_send failed c skI skR N φ :
-  channel c ∗
-  cryptis_ctx ∗
-  nsl_dh_ctx ∗
-  nsl_dh_pred N φ ∗
-  minted skI ∗
-  minted skR ∗
-  (if failed then public skI ∨ public skR else True) -∗
-  {{{ True }}}
-    initiator_send c skI (Spec.pkey skR) (Tag N)
-  {{{ r, RET (repr r);
-      ⌜r = None⌝ ∨ ∃ a gb,
-        let ga := TExp (TInt 0) a in
-        let si := SessInfo skI skR ga gb (TExp gb a) in
-        ⌜r = Some (a, ga, gb)⌝ ∗
-        session skI skR si ∗
-        □ (⌜failed⌝ → public (si_key si)) ∗
-        release_token (si_init_share si) ∗
-        term_token (si_init_share si) (⊤ ∖ ↑nsl_dhN) ∗
-        (public (si_key si) ∨ φ skI skR si Init)
+Lemma wp_initiator_send_msg1 c skI skR :
+  {{{
+    channel c ∗
+    cryptis_ctx ∗
+    nsl_dh_ctx ∗
+    minted skI ∗
+    minted skR
+  }}}
+    initiator_send_msg1 c skI (Spec.pkey skR)
+  {{{ (a : term), RET (a, TExp (TInt 0) a);
+      let ga := TExp (TInt 0) a in
+      dh_key skI skR a ∗
+      release_token ga ∗
+      fail_token ga ∗
+      peer_share_token ga ∗
+      ready_token ga ∗
+      term_token ga (⊤ ∖ ↑nsl_dhN)
   }}}.
 Proof. Admitted.
 
-Lemma wp_initiator_confirm c skI skR a gb :
+Lemma wp_initiator_recv_msg2 c skI skR a φ N failed :
+  let ga := TExp (TInt 0) a in
+  {{{
+    channel c ∗
+    cryptis_ctx ∗
+    nsl_dh_ctx ∗
+    nsl_dh_pred N φ ∗
+    dh_key skI skR a ∗
+    fail_token ga ∗
+    peer_share_token ga ∗
+    ready_token ga ∗
+    failed_early skI skR failed
+  }}}
+    initiator_recv_msg2 c skI (Spec.pkey skR) (Tag N) a ga
+  {{{ r, RET (repr r);
+    ⌜r = None⌝ ∨ ∃ gb : term,
+    let si := SessInfo skI skR ga gb (TExp gb a) in
+    ⌜r = Some gb⌝ ∗
+    session skI skR si ∗
+    □ (⌜failed⌝ → public (si_key si)) ∗
+    (public (si_key si) ∨ φ skI skR si Init)
+  }}}.
+Proof. Admitted.
+
+Lemma wp_initiator_send_msg3 c skI skR a gb :
   let ga := TExp (TInt 0) a in
   let si := SessInfo skI skR ga gb (TExp gb a) in
-  {{{ channel c ∗
-      cryptis_ctx ∗
-      nsl_dh_ctx ∗
-      minted skI ∗
-      minted skR ∗
-      session skI skR si }}}
-    initiator_confirm c skI (Spec.pkey skR) a ga gb
+  {{{
+    channel c ∗
+    cryptis_ctx ∗
+    nsl_dh_ctx
+  }}}
+    initiator_send_msg3 c skI (Spec.pkey skR) a ga gb
   {{{ RET (repr (si_key si)); True }}}.
 Proof. Admitted.
 
 Lemma wp_initiator failed c skI skR N φ :
-  channel c ∗
-  cryptis_ctx ∗
-  nsl_dh_ctx ∗
-  nsl_dh_pred N φ ∗
-  minted skI ∗
-  minted skR ∗
-  (if failed then public skI ∨ public skR else True) -∗
-  {{{ True }}}
+  {{{
+    channel c ∗
+    cryptis_ctx ∗
+    nsl_dh_ctx ∗
+    nsl_dh_pred N φ ∗
+    minted skI ∗
+    minted skR ∗
+    failed_early skI skR failed
+  }}}
     initiator c skI (Spec.pkey skR) (Tag N)
   {{{ r, RET (repr r);
       ⌜r = None⌝ ∨ ∃ si,
@@ -85,13 +106,14 @@ Lemma wp_initiator failed c skI skR N φ :
 Proof. Admitted.
 
 Lemma wp_initiator_weak c skI skR N :
-  channel c ∗
-  cryptis_ctx ∗
-  nsl_dh_ctx ∗
-  nsl_dh_pred N (λ _ _ _ _, True)%I ∗
-  minted skI ∗
-  minted skR -∗
-  {{{ True }}}
+  {{{
+    channel c ∗
+    cryptis_ctx ∗
+    nsl_dh_ctx ∗
+    nsl_dh_pred N (λ _ _ _ _, True)%I ∗
+    minted skI ∗
+    minted skR
+  }}}
     initiator c skI (Spec.pkey skR) (Tag N)
   {{{ r, RET (repr r);
       ⌜r = None⌝ ∨ ∃ si,

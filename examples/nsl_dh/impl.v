@@ -30,7 +30,7 @@ Definition mk_dh_keys : val := λ: <>,
 
 (* Initiator subroutines *)
 
-Definition initiator_send : val := λ: "c" "skI" "pkR" "N",
+Definition initiator_send_msg1 : val := λ: "c" "skI" "pkR",
   let: "pkI"  := pkey "skI" in
   let: "keys" := mk_dh_keys #() in
   let: "a"    := Fst "keys" in
@@ -38,32 +38,34 @@ Definition initiator_send : val := λ: "c" "skI" "pkR" "N",
   let: "m1"   := aenc "pkR" (Tag $ nsl_dhN.@"m1")
                    (term_of_list ["ga"; "pkI"]) in
   send "c" "m1";;
+  "keys".
+
+Definition initiator_recv_msg2 : val := λ: "c" "skI" "pkR" "N" "a" "ga",
   bind: "m2"   := adec "skI" (Tag $ nsl_dhN.@"m2") (recv "c") in
   bind: "m2"   := list_of_term "m2" in
   list_match: ["ga'"; "gb"; "pkR'"; "N'"] := "m2" in
   guard: eq_term "ga" "ga'" &&
          eq_term "pkR" "pkR'" && eq_term "N" "N'" in
-  SOME ("a", "ga", "gb").
+  SOME "gb".
 
-Definition initiator_confirm : val := λ: "c" "skI" "pkR" "a" "ga" "gb",
+Definition initiator_send_msg3 : val := λ: "c" "skI" "pkR" "a" "ga" "gb",
   let: "pkI"    := pkey "skI" in
   let: "gab"    := texp "gb" "a" in
   let: "secret" := term_of_list ["pkI"; "pkR"; "ga"; "gb"; "gab"] in
-  let: "m3"     := aenc "pkR" (Tag $ nsl_dhN.@"m3")
-                     (term_of_list ["gb"; "pkI"]) in
+  let: "m3"     := aenc "pkR" (Tag $ nsl_dhN.@"m3") "gb" in
   send "c" "m3";;
   derive_senc_key "secret".
 
 Definition initiator : val := λ: "c" "skI" "pkR" "N",
-  bind: "res" := initiator_send "c" "skI" "pkR" "N" in
-  let: "a"  := Fst (Fst "res") in
-  let: "ga" := Snd (Fst "res") in
-  let: "gb" := Snd "res" in
-  SOME (initiator_confirm "c" "skI" "pkR" "a" "ga" "gb").
+  let: "keys" := initiator_send_msg1 "c" "skI" "pkR" in
+  let: "a" := Fst "keys" in
+  let: "ga" := Snd "keys" in
+  bind: "gb" := initiator_recv_msg2 "c" "skI" "pkR" "N" "a" "ga" in
+  SOME (initiator_send_msg3 "c" "skI" "pkR" "a" "ga" "gb").
 
 (* Responder subroutines *)
 
-Definition responder_listen : val := λ: "c" "skR",
+Definition responder_recv_msg1 : val := λ: "c" "skR",
   let: "pkR" := pkey "skR" in
   bind: "m1" := adec "skR" (Tag $ nsl_dhN.@"m1") (recv "c") in
   bind: "m1" := list_of_term "m1" in
@@ -71,7 +73,7 @@ Definition responder_listen : val := λ: "c" "skR",
   guard: is_aenc_key "pkI" in
   SOME ("ga", "pkI").
 
-Definition responder_confirm : val := λ: "c" "skR" "ga" "pkI" "N",
+Definition responder_send_msg2 : val := λ: "c" "skR" "ga" "pkI" "N",
   let: "pkR" := pkey "skR" in
   let: "keys" := mk_dh_keys #() in
   let: "b"    := Fst "keys" in
@@ -79,17 +81,12 @@ Definition responder_confirm : val := λ: "c" "skR" "ga" "pkI" "N",
   let: "m2" := aenc "pkI" (Tag $ nsl_dhN.@"m2")
                  (term_of_list ["ga"; "gb"; "pkR"; "N"]) in
   send "c" "m2";;
+  "keys".
+
+Definition responder_recv_msg3 : val := λ: "c" "skR" "pkI" "b" "gb" "ga",
+  let: "pkR" := pkey "skR" in
   bind: "m3" := adec "skR" (Tag $ nsl_dhN.@"m3") (recv "c") in
-  bind: "m3" := list_of_term "m3" in
-  list_match: ["gb'"; "pkI'"] := "m3" in
-  guard: eq_term "gb" "gb'" && eq_term "pkI" "pkI'" in
+  guard: eq_term "gb" "gb'" in
   let: "gab"    := texp "ga" "b" in
   let: "secret" := term_of_list ["pkI"; "pkR"; "ga"; "gb"; "gab"] in
   SOME (derive_senc_key "secret").
-
-Definition responder : val := λ: "c" "skR" "N",
-  bind: "res" := responder_listen "c" "skR" in
-  let: "ga"  := Fst "res" in
-  let: "pkI" := Snd "res" in
-  bind: "kS" := responder_confirm "c" "skR" "ga" "pkI" "N" in
-  SOME ("pkI", "kS").

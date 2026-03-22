@@ -465,7 +465,7 @@ Proof. by iIntros "(-> & -> & _) (? & _)". Qed.
 
 Definition msg1_pred skR m1 : iProp := ∃ ga skI,
   ⌜m1 = Spec.of_list [ga; Spec.pkey skI]⌝ ∧
-  (public skI → public ga).
+  (public skI ∨ public skR → public ga).
 
 Definition msg2_pred skI m2 : iProp := ∃ ga b skR N,
   let gb := TExp (TInt 0) b in
@@ -477,12 +477,12 @@ Definition msg2_pred skI m2 : iProp := ∃ ga b skR N,
   early_failure gb false ∧
   nsl_dh_ready N skI skR si.
 
-Definition msg3_pred skR m3 : iProp := ∃ a gb nR skI,
-  let ga := TExp (TInt 0) a in
-  let gab := TExp gb a in
-  let si := SessInfo skI skR ga gb gab in
-  ⌜m3 = Spec.of_list [ga; gb; Spec.pkey skI; nR]⌝ ∧
-  □ (public (si_key si) → ▷ released_session si).
+Definition msg3_pred skR gb : iProp := ∀ ga b,
+  let gab := TExp ga b in
+  ⌜gb = TExp (TInt 0) b⌝ -∗
+  has_peer_share gb ga -∗
+  (▷ (released ga ∧ released gb) → public ga) ∗
+  (public gab ↔ ▷ (released ga ∧ released gb)).
 
 Definition nsl_dh_ctx : iProp :=
   aenc_pred (nsl_dhN.@"m1") msg1_pred ∧
@@ -526,6 +526,14 @@ iAssert (dh_pred a (TExp (TInt 0) a)) with "[corr]" as "#dp".
 rewrite /ga. iApply public_TExp_iff; eauto.
 rewrite minted_TInt. iRight. do ![iSplit => //].
 Qed.
+
+Lemma public_dh_share_inv skI skR a :
+  let ga := TExp (TInt 0) a in
+  dh_key skI skR a -∗
+  release_token ga -∗
+  public ga -∗
+  ▷ (public skI ∨ public skR).
+Proof. Admitted.
 
 Lemma public_dh_secret a b skI skR :
   let ga := TExp (TInt 0) a in

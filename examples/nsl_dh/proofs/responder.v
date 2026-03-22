@@ -28,83 +28,74 @@ Implicit Types (ores : option (term * term)).
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); eauto.
 
-Lemma wp_responder_listen c skR :
-  {{{ channel c ∗ cryptis_ctx ∗ nsl_dh_ctx ∗ minted skR }}}
-    responder_listen c skR
+Lemma wp_responder_recv_msg1 c skR :
+  {{{
+    channel c ∗
+    cryptis_ctx ∗
+    nsl_dh_ctx ∗
+    minted skR
+  }}}
+    responder_recv_msg1 c skR
   {{{ r, RET (repr r);
       ⌜r = None⌝ ∨ ∃ ga skI,
         ⌜r = Some (ga, Spec.pkey skI)⌝ ∗
-        public ga ∗ minted skI }}}.
+        minted ga ∗ minted skI ∗
+        □ (public skI ∨ public skR → public ga) }}}.
 Proof. Admitted.
 
-Lemma wp_responder_confirm failed c skR skI ga N φ :
-  {{{ channel c ∗ cryptis_ctx ∗
-      nsl_dh_ctx ∗ nsl_dh_pred N φ ∗
-      public ga ∗ minted skI ∗ minted skR ∗
-      (∀ b,
-          let gb := TExp (TInt 0) b in
-          let gab := TExp ga b in
-          let si := SessInfo skI skR ga gb gab in
-          res_token (si_resp_share si) ={⊤}=∗
-           φ (si_init si) (si_resp si) si Init ∗
-           φ (si_init si) (si_resp si) si Resp) ∗
-      if failed then public skR else True }}}
-    responder_confirm c skR ga (Spec.pkey skI) (Tag N)
+Lemma wp_responder_send_msg2 c skI skR ga N φ failed :
+  {{{
+    channel c ∗
+    cryptis_ctx ∗
+    nsl_dh_ctx ∗
+    nsl_dh_pred N φ ∗
+    minted skI ∗
+    minted skR ∗
+    minted ga ∗
+    □ (public skI ∨ public skR → public ga) ∗
+    (∀ b,
+        let gb := TExp (TInt 0) b in
+        let gab := TExp ga b in
+        let si := SessInfo skI skR ga gb gab in
+        res_token (si_resp_share si) ={⊤}=∗
+        φ (si_init si) (si_resp si) si Init ∗
+        φ (si_init si) (si_resp si) si Resp) ∗
+    failed_early skI skR failed
+  }}}
+    responder_send_msg2 c skR ga (Spec.pkey skI) (Tag N)
   {{{ r, RET (repr r);
-      ⌜r = None⌝ ∨ ∃ si,
-        ⌜r = Some (si_key si)⌝ ∗
-        session skI skR si ∗
-        □ (⌜failed⌝ → public (si_key si)) ∗
-        release_token (si_resp_share si) ∗
-        term_token (si_resp_share si) (⊤ ∖ ↑nsl_dhN) ∗
-        φ skI skR si Resp }}}.
+      ⌜r = None⌝ ∨ ∃ b,
+      let gb := TExp (TInt 0) b in
+      let gab := TExp ga b in
+      let si := SessInfo skI skR ga gb gab in
+      ⌜r = Some (b, gb)⌝ ∗
+      release_token gb ∗
+      term_token gb (⊤ ∖ ↑nsl_dhN) ∗
+      φ skI skR si Resp }}}.
 Proof. Admitted.
 
-Lemma wp_responder failed c skR N φ :
-  {{{ channel c ∗ cryptis_ctx ∗
-      nsl_dh_ctx ∗ nsl_dh_pred N φ ∗
-      minted skR ∗
-      (∀ skI ga b,
-          let gb := TExp (TInt 0) b in
-          let gab := TExp ga b in
-          let si := SessInfo skI skR ga gb gab in
-          res_token (si_resp_share si) ={⊤}=∗
-           φ (si_init si) (si_resp si) si Init ∗
-           φ (si_init si) (si_resp si) si Resp) ∗
-      if failed then public skR else True }}}
-    responder c skR (Tag N)
+Lemma wp_responder_recv_msg3 c skI skR ga b :
+  let gb := TExp (TInt 0) b in
+  {{{
+    channel c ∗
+    cryptis_ctx ∗
+    nsl_dh_ctx ∗
+    minted skI ∗
+    minted skR ∗
+    minted ga ∗
+    □ (public skI ∨ public skR → public ga) ∗
+    dh_key skI skR b ∗
+    release_token gb
+  }}}
+    responder_recv_msg3 c skR (Spec.pkey skI) b gb ga
   {{{ r, RET (repr r);
-      ⌜r = None⌝ ∨ ∃ skI si,
-        ⌜r = Some (Spec.pkey skI, si_key si)⌝ ∗
-        session skI skR si ∗
-        □ (⌜failed⌝ → public (si_key si)) ∗
-        release_token (si_resp_share si) ∗
-        term_token (si_resp_share si) (⊤ ∖ ↑nsl_dhN) ∗
-        φ skI skR si Resp }}}.
-Proof. Admitted.
-
-Lemma wp_responder_simple c skR N :
-  {{{ channel c ∗ cryptis_ctx ∗
-      nsl_dh_ctx ∗ nsl_dh_pred N (λ _ _ _ _, True)%I ∗ minted skR }}}
-    responder c skR (Tag N)
-  {{{ r, RET (repr r);
-      ⌜r = None⌝ ∨ ∃ skI si,
-        ⌜r = Some (Spec.pkey skI, si_key si)⌝ ∗
-        session skI skR si ∗
-        release_token (si_resp_share si) ∗
-        term_token (si_resp_share si) (⊤ ∖ ↑nsl_dhN) }}}.
-Proof. Admitted.
-
-Lemma wp_responder_weak c skR N :
-  channel c ∗ cryptis_ctx ∗ nsl_dh_ctx ∗
-  nsl_dh_pred N (λ _ _ _ _, True)%I ∗ minted skR -∗
-  {{{ True }}}
-    responder c skR (Tag N)
-  {{{ r, RET (repr r);
-      ⌜r = None⌝ ∨ ∃ skI si,
-        ⌜r = Some (Spec.pkey skI, si_key si)⌝ ∗
-        session_weak skI skR si ∗
-        term_token (si_resp_share si) (⊤ ∖ ↑nsl_dhN) }}}.
+      ⌜r = None⌝ ∨ ∃ b,
+      let gb := TExp (TInt 0) b in
+      let gab := TExp ga b in
+      let si := SessInfo skI skR ga gb gab in
+      ⌜r = Some (si_key si)⌝ ∗
+      session skI skR si ∗
+      release_token gb }}}.
 Proof. Admitted.
 
 End Verif.
