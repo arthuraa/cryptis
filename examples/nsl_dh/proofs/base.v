@@ -256,23 +256,36 @@ Definition dh_key skI skR a : iProp :=
 Global Instance dh_key_persistent skI skR a : Persistent (dh_key skI skR a).
 Proof. apply _. Qed.
 
-(* TODO: Find a better name for this and refactor initiator.v and responder.v to use it. *)
 Definition failed_early skI skR (failed : bool) : iProp :=
   (if failed then public skI ∨ public skR else True)%I.
 
-(* TODO: Find a better name for this and refactor rest of code to use it. *)
 Definition failed_early_set skI skR share : iProp :=
   (public skI ∨ public skR) ∨ early_failure share false.
 
-(* TODO: Find a better name for this *)
 Lemma fail_token_failed_early skI skR a failed :
   let ga := TExp (TInt 0) a in
   failed_early skI skR failed -∗
   fail_token ga -∗
-  dh_key skI skR ga ==∗
+  dh_key skI skR a ==∗
   □ (⌜failed⌝ → public a) ∗
   failed_early_set skI skR ga.
-Proof. Admitted.
+Proof.
+iIntros (ga) "fe ftok #dk".
+iMod (set_early_failure ga failed with "ftok") as "#ef".
+rewrite /failed_early /failed_early_set.
+destruct failed.
+- iDestruct "fe" as "#corr".
+  iDestruct "dk" as "(#m_a & #s_a & _)".
+  iModIntro. iSplit.
+  + iModIntro.
+    iAssert (▷ □ nonce_secrecy a)%I as "#ns".
+    { iNext. iModIntro. iLeft. done. }
+    by iDestruct ("s_a" with "ns") as "$".
+  + by iLeft.
+- iModIntro. iSplit.
+  + by iIntros "!> %".
+  + by iRight.
+Qed.
 
 Lemma dh_key_public_released skI skR a gb :
   let ga := TExp (TInt 0) a in
@@ -504,7 +517,18 @@ Lemma public_dh_share skI skR a :
   dh_key skI skR a -∗
   ▷ (public skI ∨ public skR) -∗
   public ga.
-Proof. Admitted.
+Proof.
+iIntros (ga) "#(m_a & _ & #pred_a) corr".
+iAssert (dh_pred a (TExp (TInt 0) a)) with "[corr]" as "#dp".
+{ iAssert (▷ □ nsl_dh_key_share skI skR (TExp (TInt 0) a))%I
+    with "[corr]" as "#ns".
+  { iNext. iDestruct "corr" as "#corr".
+    iModIntro. rewrite /nsl_dh_key_share. iSplit => //.
+    iPureIntro. by rewrite exps_TExpN /=. }
+  by iDestruct ("pred_a" $! (TExp (TInt 0) a) with "ns") as "$". }
+rewrite /ga. iApply public_TExp_iff; eauto.
+rewrite minted_TInt. iRight. do ![iSplit => //].
+Qed.
 
 Lemma public_dh_secret a b skI skR :
   let ga := TExp (TInt 0) a in
