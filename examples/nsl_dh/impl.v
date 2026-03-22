@@ -26,7 +26,9 @@ Definition nsl_dhN := nroot.@"nsl_dh".
 Definition mk_keyshare : val := λ: "k",
   texp (tint #0) "k".
 
-Definition initiator : val := λ: "c" "skI" "pkR" "N",
+(* Initiator subroutines *)
+
+Definition initiator_send : val := λ: "c" "skI" "pkR" "N",
   let: "pkI"  := pkey "skI" in
   let: "a"    := mk_nonce #() in
   let: "ga"   := mk_keyshare "a" in
@@ -38,6 +40,10 @@ Definition initiator : val := λ: "c" "skI" "pkR" "N",
   list_match: ["ga'"; "gb"; "pkR'"; "N'"] := "m2" in
   guard: eq_term "ga" "ga'" &&
          eq_term "pkR" "pkR'" && eq_term "N" "N'" in
+  SOME ("a", "ga", "gb").
+
+Definition initiator_confirm : val := λ: "c" "skI" "pkR" "a" "ga" "gb",
+  let: "pkI"    := pkey "skI" in
   let: "gab"    := texp "gb" "a" in
   let: "secret" := term_of_list ["pkI"; "pkR"; "ga"; "gb"; "gab"] in
   let: "m3"     := aenc "pkR" (Tag $ nsl_dhN.@"m3")
@@ -45,12 +51,25 @@ Definition initiator : val := λ: "c" "skI" "pkR" "N",
   send "c" "m3";;
   SOME (derive_senc_key "secret").
 
-Definition responder : val := λ: "c" "skR" "N",
+Definition initiator : val := λ: "c" "skI" "pkR" "N",
+  bind: "res" := initiator_send "c" "skI" "pkR" "N" in
+  let: "a"  := Fst (Fst "res") in
+  let: "ga" := Snd (Fst "res") in
+  let: "gb" := Snd "res" in
+  initiator_confirm "c" "skI" "pkR" "a" "ga" "gb".
+
+(* Responder subroutines *)
+
+Definition responder_listen : val := λ: "c" "skR",
   let: "pkR" := pkey "skR" in
   bind: "m1" := adec "skR" (Tag $ nsl_dhN.@"m1") (recv "c") in
   bind: "m1" := list_of_term "m1" in
   list_match: ["ga"; "pkI"] := "m1" in
   guard: is_aenc_key "pkI" in
+  SOME ("ga", "pkI").
+
+Definition responder_confirm : val := λ: "c" "skR" "ga" "pkI" "N",
+  let: "pkR" := pkey "skR" in
   let: "b"  := mk_nonce #() in
   let: "gb" := mk_keyshare "b" in
   let: "m2" := aenc "pkI" (Tag $ nsl_dhN.@"m2")
@@ -62,4 +81,11 @@ Definition responder : val := λ: "c" "skR" "N",
   guard: eq_term "gb" "gb'" && eq_term "pkI" "pkI'" in
   let: "gab"    := texp "ga" "b" in
   let: "secret" := term_of_list ["pkI"; "pkR"; "ga"; "gb"; "gab"] in
-  SOME ("pkI", derive_senc_key "secret").
+  SOME (derive_senc_key "secret").
+
+Definition responder : val := λ: "c" "skR" "N",
+  bind: "res" := responder_listen "c" "skR" in
+  let: "ga"  := Fst "res" in
+  let: "pkI" := Snd "res" in
+  bind: "kS" := responder_confirm "c" "skR" "ga" "pkI" "N" in
+  SOME ("pkI", "kS").

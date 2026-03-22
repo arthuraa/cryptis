@@ -1,5 +1,46 @@
 # NSL-DH Proof Notes
 
+## Implementation Decomposition (`impl.v`)
+
+Each protocol role is split into subroutines with at most one `send` and one
+`recv` per subroutine (following the ISO-DH responder pattern).
+
+### Initiator
+
+The initiator has 2 sends and 1 recv, split into:
+
+- **`initiator_send c skI pkR N`** (1 send, 1 recv):
+  Creates nonce `a`, key share `ga = g^a`, encrypts and sends msg1
+  `{ga; pkI}@pkR`, receives and decrypts msg2 `{ga'; gb; pkR'; N'}@pkI`,
+  checks `ga = ga'`, `pkR = pkR'`, `N = N'`.
+  Returns `SOME (a, ga, gb)`.
+
+- **`initiator_confirm c skI pkR a ga gb`** (1 send, 0 recv):
+  Computes `gab = g^(ab)`, secret, encrypts and sends msg3 `{gb; pkI}@pkR`.
+  Returns `SOME (derive_senc_key secret)`.
+
+- **`initiator c skI pkR N`**: orchestrates `initiator_send` then
+  `initiator_confirm`.
+
+### Responder
+
+The responder has 1 send and 2 recvs, split into:
+
+- **`responder_listen c skR`** (0 send, 1 recv):
+  Receives and decrypts msg1 `{ga; pkI}@pkR`, checks `pkI` is an aenc key.
+  Returns `SOME (ga, pkI)`.
+
+- **`responder_confirm c skR ga pkI N`** (1 send, 1 recv):
+  Creates nonce `b`, key share `gb = g^b`, encrypts and sends msg2
+  `{ga; gb; pkR; N}@pkI`, receives and decrypts msg3 `{gb'; pkI'}@pkR`,
+  checks `gb = gb'`, `pkI = pkI'`, computes `gab = g^(ab)`, secret.
+  Returns `SOME (derive_senc_key secret)`.
+
+- **`responder c skR N`**: orchestrates `responder_listen` then
+  `responder_confirm`, returns `SOME (pkI, kS)`.
+
+---
+
 ## Admitted Lemmas in `proofs/base.v` — Now Proved
 
 There were three admitted lemmas, all related to DH reasoning. They are

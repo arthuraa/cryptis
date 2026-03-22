@@ -227,7 +227,7 @@ Qed.
 Definition do_resp_loop : val :=
   rec: "loop" "c" "compromised" "set" "skR" "pkI" :=
     Fork ("loop" "c" "compromised" "set" "skR" "pkI");;
-    (bind: "res" := resp "c" "skR" (Tag gameN) in
+    (bind: "res" := responder "c" "skR" (Tag gameN) in
      let: "pkI'" := Fst "res" in
      let: "sk" := Snd "res" in
      add_fresh_lock_term_set "sk" "set";;
@@ -257,7 +257,7 @@ iIntros "#chan #? #? #? #p_pkI #p_pkR #? #set".
 iLöb as "IH". iIntros "!> %Φ _ Hpost".
 wp_rec; wp_pures; wp_apply wp_fork.
 { iApply "IH" => //. }
-wp_pures. wp_apply wp_resp_simple; first by eauto.
+wp_pures. wp_apply wp_responder_simple; first by eauto.
 iIntros "%res [->|res]"; wp_pures; first by iApply "Hpost".
 iDestruct "res" as "(%skI' & %si & -> & #s_k & rel & token)".
 wp_pures.
