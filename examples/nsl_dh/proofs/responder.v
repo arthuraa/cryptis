@@ -85,7 +85,7 @@ Lemma wp_responder_send_msg2 c skI skR ga N φ failed :
         φ (si_init si) (si_resp si) si Resp) ∗
     failed_early skI skR failed
   }}}
-    responder_send_msg2 c skR ga (Spec.pkey skI) (Tag N)
+    responder_send_msg2 c skR (Spec.pkey skI) ga (Tag N)
   {{{ r, RET (repr r);
       ⌜r = None⌝ ∨ ∃ b,
       let gb := TExp (TInt 0) b in
@@ -119,6 +119,24 @@ Lemma wp_responder_recv_msg3 c skI skR ga b :
       ⌜r = Some (si_key si)⌝ ∗
       session skI skR si ∗
       release_token gb }}}.
+Proof. Admitted.
+
+Lemma wp_responder_simple c skR N :
+  {{{
+    channel c ∗
+    cryptis_ctx ∗
+    nsl_dh_ctx ∗
+    nsl_dh_pred N (λ _ _ _ _, True)%I ∗
+    minted skR
+  }}}
+    responder c skR (Tag N)
+  {{{ r, RET (repr r);
+      ⌜r = None⌝ ∨ ∃ skI si,
+      ⌜r = Some (Spec.pkey skI, si_key si)⌝ ∗
+      session skI skR si ∗
+      release_token (si_resp_share si) ∗
+      term_token (si_resp_share si) (⊤ ∖ ↑nsl_dhN)
+  }}}.
 Proof. Admitted.
 
 End Verif.
