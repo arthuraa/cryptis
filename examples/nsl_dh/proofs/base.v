@@ -443,14 +443,17 @@ Definition msg1_pred skR m1 : iProp := ∃ ga skI,
   ⌜m1 = Spec.of_list [ga; Spec.pkey skI]⌝ ∧
   (public skI ∨ public skR → public ga).
 
-Definition msg2_pred skI m2 : iProp := ∃ ga b skR N,
-  let gb := TExp (TInt 0) b in
+Definition msg2_pred' skI skR ga gb N : iProp := ∃ b,
   let gab := TExp ga b in
   let si := SessInfo skI skR ga gb gab in
-  ⌜m2 = Spec.of_list [ga; gb; Spec.pkey skR; Tag N]⌝ ∧
+  ⌜gb = TExp (TInt 0) b⌝ ∧
   dh_key skI skR b ∧
   has_peer_share gb (Some ga) ∧
   nsl_dh_ready N skI skR si.
+
+Definition msg2_pred skI m2 : iProp := ∃ ga gb skR N,
+  ⌜m2 = Spec.of_list [ga; gb; Spec.pkey skR; Tag N]⌝ ∧
+  msg2_pred' skI skR ga gb N.
 
 Definition msg3_pred skR gb : iProp := ∀ ga b,
   let gab := TExp ga b in

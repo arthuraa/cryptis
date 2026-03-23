@@ -71,27 +71,34 @@ wp_pures.
 iApply ("Hpost" $! a). by iFrame "∗ #".
 Qed.
 
-Lemma wp_initiator_recv_msg2 c skI skR a φ N failed :
+Lemma wp_initiator_recv_msg2 c skI skR a N :
   let ga := TExp (TInt 0) a in
   {{{
     channel c ∗
     cryptis_ctx ∗
-    nsl_dh_ctx ∗
-    nsl_dh_pred N φ ∗
-    dh_key skI skR a ∗
-    peer_share_token ga ∗
-    ready_token ga ∗
-    failed_early skI skR failed
+    nsl_dh_ctx
   }}}
     initiator_recv_msg2 c skI (Spec.pkey skR) (Tag N) a ga
   {{{ r, RET (repr r);
     ⌜r = None⌝ ∨ ∃ gb : term,
-    let si := SessInfo skI skR ga gb (TExp gb a) in
     ⌜r = Some gb⌝ ∗
-    session skI skR si ∗
-    □ (⌜failed⌝ → public (si_key si)) ∗
-    (public (si_key si) ∨ φ skI skR si Init)
+    (public ga ∧ public gb ∨ msg2_pred' skI skR ga gb N)
   }}}.
+Proof. Admitted.
+
+Lemma initiator_process_msg2 skI skR a gb N φ failed :
+  let ga := TExp (TInt 0) a in
+  let gab := TExp gb a in
+  let si := SessInfo skI skR ga gb gab in
+  nsl_dh_pred N φ -∗
+  dh_key skI skR a -∗
+  peer_share_token ga -∗
+  ready_token ga -∗
+  failed_early skI skR failed -∗
+  (public ga ∧ public gb ∨ msg2_pred' skI skR ga gb N) ={⊤}=∗
+  session skI skR si ∗
+  □ (⌜failed⌝ → public (si_key si)) ∗
+  (public (si_key si) ∨ φ skI skR si Init).
 Proof. Admitted.
 
 Lemma wp_initiator_send_msg3 c skI skR a gb :
