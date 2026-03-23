@@ -150,7 +150,7 @@ Proof.
   2: by iApply "Hhl".
   iDestruct ("Hmapcontents" $! uid file with "[//]") as
   "[_ (%k_s & %p_s & %P_s & %P_u & %envelope &
-        %e & Hmk_s & Hdhpredk_s & #? & Hmp_s & Hmp_sV & HpP_s & HpP_u & Hpenvelope)]".
+        %e & Hmk_s & Hexppredk_s & #? & Hmp_s & Hmp_sV & HpP_s & HpP_u & Hpenvelope)]".
   rewrite !subst_list_match /= e.
   wp_apply wp_list_of_term.
   rewrite Spec.of_listK.
@@ -160,7 +160,7 @@ Proof.
   inversion e'. subst. clear e'.
   2: by intro contra.
   wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => True)%I) => //.
-  iIntros "%x_s %Hnoncex_s #Hmintedx_s #Hprivatex_s #Hdhx_s #? #Hdhx_sV Htokenx_s".
+  iIntros "%x_s %Hnoncex_s #Hmintedx_s #Hprivatex_s #Hexpx_s #? #Hexpx_sV Htokenx_s".
   wp_pures.
   wp_apply wp_texp. wp_pures.
   wp_apply wp_texp. wp_pures.
@@ -175,17 +175,18 @@ Proof.
   wp_term_of_list.
   rewrite public_of_list => /=.
   iDestruct "Hpubm1" as "[Hpubuid [Hpubα [HpubX_u _]]]".
-  iAssert (▷ public (TExp α k_s'))%I as "#?".
-  { admit. }
   wp_pures.
   wp_apply wp_send => //.
   rewrite public_of_list => //.
   do !iSplit => //.
+  iApply public_TExp_exp_pred => //.
+  iApply exp_pred_intro1.
+  by iApply "Hexppredk_s".
   iApply public_TExp_iff; auto.
   do !iSplit => //.
   by iApply minted_TInt.
   iApply exp_pred_intro1.
-  by iApply "Hdhx_s"; auto.
+  by iApply "Hexpx_s"; auto.
   by rewrite public_TInt; auto.
   iApply public_THashIS => //.
   rewrite minted_of_list /= !minted_THash !minted_tag !minted_of_list /=.
@@ -202,6 +203,6 @@ Proof.
   wp_list.
   wp_pures.
   by iApply "Hhl".
-Admitted.
+Qed.
 
 End Opaque.
