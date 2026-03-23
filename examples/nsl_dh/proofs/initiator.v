@@ -40,7 +40,6 @@ Lemma wp_initiator_send_msg1 c skI skR :
       let ga := TExp (TInt 0) a in
       dh_key skI skR a ∗
       release_token ga ∗
-      fail_token ga ∗
       peer_share_token ga ∗
       ready_token ga ∗
       term_token ga (⊤ ∖ ↑nsl_dhN)
@@ -51,7 +50,7 @@ rewrite /initiator_send_msg1.
 wp_pures. wp_apply wp_pkey. wp_pures.
 set pkI := Spec.pkey skI.
 wp_apply (wp_mk_dh_keys skI skR); first by iFrame "#".
-iIntros "%a #dh_a rel fail peer ready res tok".
+iIntros "%a #dh_a rel peer ready res tok".
 set ga := TExp (TInt 0) a.
 wp_pures. wp_list. wp_term_of_list. wp_pures.
 wp_apply wp_aenc => //.
@@ -80,7 +79,6 @@ Lemma wp_initiator_recv_msg2 c skI skR a φ N failed :
     nsl_dh_ctx ∗
     nsl_dh_pred N φ ∗
     dh_key skI skR a ∗
-    fail_token ga ∗
     peer_share_token ga ∗
     ready_token ga ∗
     failed_early skI skR failed

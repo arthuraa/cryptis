@@ -90,9 +90,6 @@ Proof. exact: gmeta_token_drop. Qed.
 Definition release_token share : iProp :=
   term_token share (↑nsl_dhN.@"released").
 
-Definition fail_token share : iProp :=
-  term_token share (↑nsl_dhN.@"failed").
-
 Definition peer_share_token share : iProp :=
   term_token share (↑nsl_dhN.@"peer_share").
 
@@ -106,18 +103,16 @@ Lemma dh_share_tokenI share E :
   ↑nsl_dhN ⊆ E →
   term_token share E -∗
   release_token share ∗
-  fail_token share ∗
   peer_share_token share ∗
   ready_token share ∗
   res_token share ∗
   term_token share (E ∖ ↑nsl_dhN).
 Proof.
 iIntros "% tok".
-rewrite /release_token /fail_token /peer_share_token /ready_token /res_token.
+rewrite /release_token /peer_share_token /ready_token /res_token.
 rewrite (term_token_difference share (↑nsl_dhN) E) //.
 iDestruct "tok" as "[nsl rest]". iFrame "rest".
 iDestruct (term_token_difference share (↑nsl_dhN.@"released") (↑nsl_dhN) with "nsl") as "[$ nsl]"; first solve_ndisj.
-iDestruct (term_token_difference share (↑nsl_dhN.@"failed") _ with "nsl") as "[$ nsl]"; first solve_ndisj.
 iDestruct (term_token_difference share (↑nsl_dhN.@"peer_share") _ with "nsl") as "[$ nsl]"; first solve_ndisj.
 iDestruct (term_token_difference share (↑nsl_dhN.@"ready") _ with "nsl") as "[$ nsl]"; first solve_ndisj.
 iDestruct (term_token_difference share (↑nsl_dhN.@"res") _ with "nsl") as "[$ _]"; first solve_ndisj.
@@ -131,30 +126,17 @@ Definition released share : iProp :=
 Lemma release share : release_token share ==∗ released share.
 Proof. by apply term_meta_set. Qed.
 
-Definition early_failure share (b : bool) : iProp :=
-  term_meta share (nsl_dhN.@"failed") b.
+Definition has_peer_share share (ogb : option term) : iProp :=
+  term_meta share (nsl_dhN.@"peer_share") ogb.
 
-Lemma set_early_failure share (b : bool) :
-  fail_token share ==∗ early_failure share b.
+Lemma set_peer_share share ogb :
+  peer_share_token share ==∗ has_peer_share share ogb.
 Proof. by apply term_meta_set. Qed.
 
-Lemma early_failure_agree share (b1 b2 : bool) :
-  early_failure share b1 -∗
-  early_failure share b2 -∗
-  ⌜b1 = b2⌝.
-Proof. exact: term_meta_agree. Qed.
-
-Definition has_peer_share share (gb : term) : iProp :=
-  term_meta share (nsl_dhN.@"peer_share") gb.
-
-Lemma set_peer_share share gb :
-  peer_share_token share ==∗ has_peer_share share gb.
-Proof. by apply term_meta_set. Qed.
-
-Lemma has_peer_share_agree share gb1 gb2 :
-  has_peer_share share gb1 -∗
-  has_peer_share share gb2 -∗
-  ⌜gb1 = gb2⌝.
+Lemma has_peer_share_agree share ogb1 ogb2 :
+  has_peer_share share ogb1 -∗
+  has_peer_share share ogb2 -∗
+  ⌜ogb1 = ogb2⌝.
 Proof. exact: term_meta_agree. Qed.
 
 Definition nsl_dh_ready N skI skR si : iProp := ∀ φ,
@@ -231,21 +213,22 @@ Qed.
 
 Definition nonce_secrecy a : iProp :=
   let ga := TExp (TInt 0) a in
-  early_failure ga true ∨
-  ∃ gb, has_peer_share ga gb ∗ released ga ∗ released gb.
+  has_peer_share ga None ∨
+  ∃ gb, has_peer_share ga (Some gb) ∗ released ga ∗ released gb.
 
 Lemma nonce_secrecy_set a gb :
-  has_peer_share (TExp (TInt 0) a) gb ⊢
+  has_peer_share (TExp (TInt 0) a) (Some gb) ⊢
   nonce_secrecy a ↔
-  early_failure (TExp (TInt 0) a) true ∨
   released (TExp (TInt 0) a) ∧ released gb.
 Proof.
 iIntros "#meta"; iSplit.
-- iIntros "[#?|Ha]"; eauto.
-  iDestruct "Ha" as "(%gb' & #meta' & #rel_a & #rel_b)". iRight.
-  iPoseProof (has_peer_share_agree with "meta meta'") as "->".
-  by iSplit.
-- rewrite /nonce_secrecy. iIntros "[#?|[#? #?]]"; eauto.
+- iIntros "[#fail|Ha]".
+  + by iPoseProof (has_peer_share_agree with "meta fail") as "%".
+  + iDestruct "Ha" as "(%gb' & #meta' & #rel_a & #rel_b)".
+    iPoseProof (has_peer_share_agree with "meta meta'") as "%".
+    case: H => <-. by iSplit.
+- rewrite /nonce_secrecy. iIntros "[#? #?]".
+  iRight. iExists gb. by do !iSplit.
 Qed.
 
 Definition dh_key skI skR a : iProp :=
@@ -259,23 +242,20 @@ Proof. apply _. Qed.
 Definition failed_early skI skR (failed : bool) : iProp :=
   (if failed then public skI ∨ public skR else True)%I.
 
-Definition failed_early_set skI skR share : iProp :=
-  (public skI ∨ public skR) ∨ early_failure share false.
-
-Lemma fail_token_failed_early skI skR a failed :
+Lemma peer_share_token_failed_early skI skR a failed :
   let ga := TExp (TInt 0) a in
   failed_early skI skR failed -∗
-  fail_token ga -∗
+  peer_share_token ga -∗
   dh_key skI skR a ==∗
   □ (⌜failed⌝ → public a) ∗
-  failed_early_set skI skR ga.
+  ((public skI ∨ public skR) ∨ peer_share_token ga).
 Proof.
-iIntros (ga) "fe ftok #dk".
-iMod (set_early_failure ga failed with "ftok") as "#ef".
-rewrite /failed_early /failed_early_set.
+iIntros (ga) "fe ptok #dk".
+rewrite /failed_early.
 destruct failed.
 - iDestruct "fe" as "#corr".
   iDestruct "dk" as "(#m_a & #s_a & _)".
+  iMod (set_peer_share ga None with "ptok") as "#ps".
   iModIntro. iSplit.
   + iModIntro.
     iAssert (▷ □ nonce_secrecy a)%I as "#ns".
@@ -290,23 +270,20 @@ Qed.
 Lemma dh_key_public_released skI skR a gb :
   let ga := TExp (TInt 0) a in
   dh_key skI skR a -∗
-  early_failure ga false -∗
-  has_peer_share ga gb -∗
+  has_peer_share ga (Some gb) -∗
   □ (public a ↔ ▷ (released ga ∧ released gb)).
 Proof.
-iIntros (ga) "#(m_a & s_a & dh_a) #ef #ps !>". iSplit.
+iIntros (ga) "#(m_a & s_a & dh_a) #ps !>". iSplit.
 - iIntros "#p_a".
   iDestruct ("s_a" with "p_a") as "H".
   iNext. iDestruct "H" as "#ns".
   iPoseProof (nonce_secrecy_set a gb with "ps") as "[Hfwd _]".
-  iDestruct ("Hfwd" with "ns") as "[#fail|#[r1 r2]]".
-  + by iPoseProof (early_failure_agree with "ef fail") as "%".
-  + by iSplit.
+  by iApply "Hfwd".
 - iIntros "H".
   iAssert (▷ □ nonce_secrecy a)%I with "[H]" as "ns".
   { iNext. iDestruct "H" as "#[r1 r2]". iModIntro.
     iPoseProof (nonce_secrecy_set a gb with "ps") as "[_ Hbck]".
-    iApply "Hbck". iRight. by iSplit. }
+    iApply "Hbck". by iSplit. }
   iDestruct ("s_a" with "ns") as "$".
 Qed.
 
@@ -316,7 +293,6 @@ Lemma wp_mk_dh_keys skI skR (Ψ : val → iProp) :
     let ga := TExp (TInt 0) a in
     dh_key skI skR a -∗
     release_token ga -∗
-    fail_token ga -∗
     peer_share_token ga -∗
     ready_token ga -∗
     res_token ga -∗
@@ -337,14 +313,14 @@ wp_apply (wp_mk_nonce_freshN ∅
 iIntros "%a _ _ #m_a #s_a #dh_a token_ga".
 rewrite big_sepS_singleton.
 iDestruct (dh_share_tokenI with "token_ga")
-  as "(rel & fail & peer & ready & res & token_ga)" => //.
+  as "(rel & peer & ready & res & token_ga)" => //.
 wp_pures.
 wp_bind (tint _). iApply wp_tint.
 wp_bind (texp _ _). iApply wp_texp.
 wp_pures.
 iAssert (dh_key skI skR a) as "#dh_key_a".
 { rewrite /dh_key. by do !iSplit. }
-by iApply ("post" with "dh_key_a rel fail peer ready res token_ga").
+by iApply ("post" with "dh_key_a rel peer ready res token_ga").
 Qed.
 
 Definition session skI skR si : iProp :=
@@ -473,14 +449,13 @@ Definition msg2_pred skI m2 : iProp := ∃ ga b skR N,
   let si := SessInfo skI skR ga gb gab in
   ⌜m2 = Spec.of_list [ga; gb; Spec.pkey skR; Tag N]⌝ ∧
   dh_key skI skR b ∧
-  has_peer_share gb ga ∧
-  early_failure gb false ∧
+  has_peer_share gb (Some ga) ∧
   nsl_dh_ready N skI skR si.
 
 Definition msg3_pred skR gb : iProp := ∀ ga b,
   let gab := TExp ga b in
   ⌜gb = TExp (TInt 0) b⌝ -∗
-  has_peer_share gb ga -∗
+  has_peer_share gb (Some ga) -∗
   (▷ (released ga ∧ released gb) → public ga) ∗
   (public gab ↔ ▷ (released ga ∧ released gb)).
 
@@ -540,15 +515,13 @@ Lemma public_dh_secret a b skI skR :
   let gb := TExp (TInt 0) b in
   dh_key skI skR a -∗
   dh_key skI skR b -∗
-  early_failure ga false -∗
-  early_failure gb false -∗
-  has_peer_share ga gb -∗
-  has_peer_share gb ga -∗
+  has_peer_share ga (Some gb) -∗
+  has_peer_share gb (Some ga) -∗
   (public (TExpN (TInt 0) [a; b]) → ◇ (released ga ∨ released gb)).
 Proof.
-iIntros (ga gb) "#dh_a #dh_b #efa #efb #ps_a #ps_b".
-iPoseProof (dh_key_public_released with "dh_a efa ps_a") as "#rel_a".
-iPoseProof (dh_key_public_released with "dh_b efb ps_b") as "#rel_b".
+iIntros (ga gb) "#dh_a #dh_b #ps_a #ps_b".
+iPoseProof (dh_key_public_released with "dh_a ps_a") as "#rel_a".
+iPoseProof (dh_key_public_released with "dh_b ps_b") as "#rel_b".
 iDestruct "dh_a" as "(m_a & _ & pred_a)".
 rewrite public_TExp2_iff //; last by eauto.
 iIntros "[[_ #p_b] | [[_ #p_a] | (_ & contra & _)]]".
