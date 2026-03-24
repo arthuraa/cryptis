@@ -336,6 +336,42 @@ Proof.
 by iIntros "(?&?&?&?)".
 Qed.
 
+Lemma session_minted_init skI skR si :
+  session skI skR si -∗
+  minted skI.
+Proof.
+iIntros "(-> & _ & #m_k & _)".
+rewrite minted_senc minted_of_list /= minted_pkey.
+by iDestruct "m_k" as "($ & _)".
+Qed.
+
+Lemma session_minted_resp skI skR si :
+  session skI skR si -∗
+  minted skR.
+Proof.
+iIntros "(_ & -> & #m_k & _)".
+rewrite minted_senc minted_of_list /= !minted_pkey.
+by iDestruct "m_k" as "(_ & $ & _)".
+Qed.
+
+Lemma session_minted_init_share skI skR si :
+  session skI skR si -∗
+  minted (si_init_share si).
+Proof.
+iIntros "(_ & _ & #m_k & _)".
+rewrite minted_senc minted_of_list /=.
+by iDestruct "m_k" as "(_ & _ & $ & _)".
+Qed.
+
+Lemma session_minted_resp_share skI skR si :
+  session skI skR si -∗
+  minted (si_resp_share si).
+Proof.
+iIntros "(_ & _ & #m_k & _)".
+rewrite minted_senc minted_of_list /=.
+by iDestruct "m_k" as "(_ & _ & _ & $ & _)".
+Qed.
+
 Global Instance session_persistent skI skR si : Persistent (session skI skR si).
 Proof. apply _. Qed.
 
