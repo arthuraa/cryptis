@@ -86,7 +86,7 @@ Definition responder_send_msg2 : val := λ: "c" "skR" "pkI" "N" "ga",
 Definition responder_recv_msg3 : val := λ: "c" "skR" "pkI" "ga" "b" "gb",
   let: "pkR" := pkey "skR" in
   bind: "m3" := adec "skR" (Tag $ nsl_dhN.@"m3") (recv "c") in
-  guard: eq_term "gb" "gb'" in
+  guard: eq_term "m3" "gb" in
   let: "gab"    := texp "ga" "b" in
   let: "secret" := term_of_list ["pkI"; "pkR"; "ga"; "gb"; "gab"] in
   SOME (derive_senc_key "secret").
@@ -97,10 +97,11 @@ Definition responder_confirm : val := λ: "c" "skR" "pkI" "N" "ga",
   let: "keys" := responder_send_msg2 "c" "skR" "pkI" "N" "ga" in
   let: "b" := Fst "keys" in
   let: "gb" := Snd "keys" in
-  responder_recv_msg3 "c" "skR" "pkI" "N" "ga" "b" "gb".
+  responder_recv_msg3 "c" "skR" "pkI" "ga" "b" "gb".
 
 Definition responder : val := λ: "c" "skR" "N",
   bind: "info" := responder_listen "c" "skR" in
   let: "ga" := Fst "info" in
   let: "pkI" := Snd "info" in
-  responder_confirm "c" "skR" "pkI" "N" "ga".
+  bind: "key" := responder_confirm "c" "skR" "pkI" "N" "ga" in
+  SOME ("pkI", "key").
