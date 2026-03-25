@@ -110,17 +110,6 @@ examples/nsl_auth.v
 
 examples/challenge_response.v
 
-## Public-key authentication (generalized NSL)
-
-examples/pk_auth/pk_auth.v
-examples/pk_auth/impl.v
-examples/pk_auth/shared.v
-examples/pk_auth/client_proofs.v
-examples/pk_auth/server_proofs.v
-examples/pk_auth/nsl.v
-examples/pk_auth/dh_game.v
-examples/pk_auth/dh.v
-
 ## TLS 1.3
 
 examples/tls13.v
