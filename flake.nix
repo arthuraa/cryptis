@@ -48,8 +48,7 @@
           coqPackages = prev.coqPackages_9_1.overrideScope (final: prev: {
             cryptis = prev.mkCoqDerivation {
               pname = "cryptis";
-              defaultVersion = "dev";
-              release.dev.src = ./.;
+              version = ./.;
               useDune = true;
               propagatedBuildInputs = [
                 final.coq
