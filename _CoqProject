@@ -54,6 +54,14 @@ examples/iso_dh/proofs.v
 examples/iso_dh/game.v
 examples/iso_dh.v
 
+examples/nsl_dh/impl.v
+examples/nsl_dh/proofs/base.v
+examples/nsl_dh/proofs/initiator.v
+examples/nsl_dh/proofs/responder.v
+examples/nsl_dh/proofs.v
+examples/nsl_dh/game.v
+examples/nsl_dh.v
+
 examples/gen_conn/impl.v
 examples/gen_conn/proofs/base.v
 examples/gen_conn/proofs.v
@@ -101,17 +109,6 @@ examples/nsl_auth.v
 ## CR
 
 examples/challenge_response.v
-
-## Public-key authentication (generalized NSL)
-
-examples/pk_auth/pk_auth.v
-examples/pk_auth/impl.v
-examples/pk_auth/shared.v
-examples/pk_auth/client_proofs.v
-examples/pk_auth/server_proofs.v
-examples/pk_auth/nsl.v
-examples/pk_auth/dh_game.v
-examples/pk_auth/dh.v
 
 ## TLS 1.3
 

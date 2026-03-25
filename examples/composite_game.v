@@ -8,7 +8,7 @@ From iris.heap_lang.lib Require Import par.
 From cryptis Require Import lib cryptis primitives tactics role.
 From cryptis.lib Require Import session dh.
 From cryptis.examples Require Import challenge_response tls13.
-From cryptis.examples.pk_auth Require Import pk_auth dh.
+From cryptis.examples Require Import nsl_dh.
 From cryptis.primitives Require Import attacker.
 
 Set Implicit Arguments.
@@ -17,7 +17,7 @@ Unset Printing Implicit Defensive.
 
 Section Game.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ, !sessionGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ, !sessionGS Σ, !nsl_dhGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -99,8 +99,8 @@ Definition environment : val := λ: "c" "skI1" "skI2" "skR1" "skR2" "psk",
   fork_loop (
     let: "pkR'" := recv "c" in
     guard: is_aenc_key "pkR'" in
-    pk_dh_init nslN "c" "skI1" "pkR'");;
-  fork_loop (pk_dh_resp nslN "c" "skR1");;
+    initiator "c" "skI1" "pkR'" (Tag nslN));;
+  fork_loop (responder "c" "skR1" (Tag nslN));;
   fork_loop (cr_init crN "c" "skI2" "pkR2");;
   fork_loop (cr_resp crN "c" "skR2");;
   let: "server_params" := recv "c" in
@@ -109,7 +109,8 @@ Definition environment : val := λ: "c" "skI1" "skI2" "skR1" "skR2" "psk",
 Lemma wp_environment c (skI1 skR1 : aenc_key) (skI2 skR2 : sign_key) (psk : term) :
   cryptis_ctx -∗
   channel c -∗
-  pk_dh_ctx nslN (λ _ _ _ _, True)%I -∗
+  nsl_dh_ctx -∗
+  nsl_dh_pred nslN (λ _ _ _ _, True)%I -∗
   cr_ctx crN (λ _ _ _ _ _, True)%I -∗
   tls_ctx tlsN -∗
   public skI1 -∗
@@ -119,7 +120,7 @@ Lemma wp_environment c (skI1 skR1 : aenc_key) (skI2 skR2 : sign_key) (psk : term
   minted psk -∗
   {{{ True }}} environment c skI1 skI2 skR1 skR2 psk {{{ RET #(); True }}}.
 Proof.
-iIntros "#? #? #? #? #? #? #? #? #? #? %Φ !> _ post".
+iIntros "#? #? #? #? #? #? #? #? #? #? #? %Φ !> _ post".
 rewrite /environment; wp_pures.
 wp_bind (send _ _); iApply wp_send => //; wp_pures.
 wp_bind (send _ _); iApply wp_send => //; wp_pures.
@@ -134,10 +135,14 @@ wp_bind (fork_loop _); iApply wp_fork_loop; eauto.
   wp_apply wp_is_aenc_key; first by iApply public_minted.
   iSplit; last by wp_pures; eauto.
   iIntros "%skR' -> #m_skR'".
-  wp_pures. wp_apply (wp_pk_dh_init _ (λ _ _ _ _, True)%I); eauto.
+  wp_pures. wp_apply wp_initiator_weak.
+  { iFrame "#". by iApply public_minted. }
+  by iIntros "%r _".
 iIntros "!> _"; wp_pures; wp_bind (fork_loop _); iApply wp_fork_loop => //.
   iModIntro.
-  by iApply (wp_pk_dh_resp _ (λ _ _ _ _, True)%I); eauto.
+  wp_apply wp_responder_simple.
+  { iFrame "#". by iApply public_minted. }
+  by iIntros "%r _".
 iIntros "!> _"; wp_pures; wp_bind (fork_loop _); iApply wp_fork_loop => //.
   iModIntro; iApply (wp_cr_init); eauto.
 iIntros "!> _"; wp_pures; wp_bind (fork_loop _); iApply wp_fork_loop => //.
@@ -221,17 +226,18 @@ Definition game : val := λ: <>,
 
 Lemma wp_game :
   cryptis_ctx ∗
+  nsl_dh_ctx ∗
+  nsl_dh_token ⊤ ∗
   session_token ⊤ ∗
-  seal_pred_token AENC ⊤ ∗
   seal_pred_token SIGN ⊤ ∗
   seal_pred_token SENC ⊤ ∗
   hash_pred_token ⊤ -∗
   WP game #() {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
-iIntros "(#ctx & sess_tok & aenc_tok & sign_tok & senc_tok & hash_tok)".
+iIntros "(#ctx & #nsl_ctx & nsl_tok & sess_tok & sign_tok & senc_tok & hash_tok)".
 rewrite /game; wp_pures.
-iMod (pk_dh_alloc nslN (λ _ _ _ _, True)%I with "sess_tok aenc_tok")
-  as "(#pk_dh_ctx & sess_tok & aenc_tok)" => //; try solve_ndisj.
+iMod (nsl_dh_pred_set nslN (λ _ _ _ _, True)%I with "nsl_tok")
+  as "(#nsl_pred & nsl_tok)"; first solve_ndisj.
 iMod (cr_alloc crN (λ _ _ _ _ _, True)%I with "sess_tok sign_tok")
   as "(#cr_ctx & sess_tok & sign_tok)"; try solve_ndisj.
 iMod (tls_ctx_alloc tlsN with "sess_tok senc_tok sign_tok hash_tok")
@@ -268,7 +274,7 @@ Qed.
 End Game.
 
 Definition F : gFunctors :=
-  #[heapΣ; spawnΣ; cryptisΣ; sessionΣ].
+  #[heapΣ; spawnΣ; cryptisΣ; sessionΣ; nsl_dhΣ].
 
 Lemma composite_secure σ₁ σ₂ (v : val) ts :
   rtc erased_step ([game #()], σ₁) (Val v :: ts, σ₂) →
@@ -278,7 +284,9 @@ have ? : heapGpreS F by apply _.
 apply (adequate_result NotStuck _ _ (λ v _, v = NONEV ∨ v = SOMEV #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
-iMod (cryptisGS_alloc _) as (?) "(#ctx & seal_tok & key_tok & hash_tok)".
+iMod (cryptisGS_alloc _) as (?) "(#ctx & aenc_tok & sign_tok & senc_tok & hash_tok)".
 iMod (sessionGS_alloc _) as (?) "sess_tok".
-by iApply (wp_game) => //; try by iFrame.
+iMod (nsl_dhGS_alloc with "aenc_tok") as (?) "(#nsl_ctx & nsl_tok & _)".
+{ solve_ndisj. }
+by iApply (wp_game) => //; iFrame "∗ #".
 Qed.
