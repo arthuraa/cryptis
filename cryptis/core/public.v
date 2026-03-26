@@ -1164,12 +1164,29 @@ Proof.
 by rewrite Spec.tag_unseal public_TPair public_Tag bi.emp_and.
 Qed.
 
+Lemma public_THashE N φ t :
+  hash_pred N φ -∗
+  public (THash (Spec.tag (Tag N) t)) -∗
+  public t ∨ minted t ∗ ▷ □ φ t.
+Proof.
+  iIntros "#Hpred #Hpub".
+  rewrite public_THash.
+  iDestruct "Hpub" as "[Hpub | [Hmint Hwfhash]]".
+  rewrite public_tag.
+  by iLeft.
+  rewrite minted_tag.
+  iRight.
+  iSplit => //.
+  iDestruct (wf_hash_elim N t φ with "Hwfhash Hpred") as "H".
+  by iNext.
+Qed.
+
 Lemma public_TSeal_tag k N t :
-  public (TSeal k (Spec.tag (Tag N) t)) ⊣⊢
-  public k ∧ public t ∨
-  minted k ∧ minted t ∧
-  match func_of_term k with
-  | Some F => ∃ Φ,
+public (TSeal k (Spec.tag (Tag N) t)) ⊣⊢
+public k ∧ public t ∨
+minted k ∧ minted t ∧
+match func_of_term k with
+| Some F => ∃ Φ,
       ⌜Spec.is_seal_key k⌝ ∧
       seal_pred F N Φ ∧
       □ ▷ Φ (Spec.skey k) t ∧

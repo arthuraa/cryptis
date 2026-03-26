@@ -56,4 +56,10 @@ Proof.
     by wp_apply _wp_H_list.
 Qed.
 
+Definition SK_priv (x : option term) : iProp :=
+  match x with
+    None => True
+  | Some x' => public x' ↔ ▷ □ False
+  end.
+
 End Opaque.

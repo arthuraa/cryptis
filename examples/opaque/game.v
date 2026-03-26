@@ -41,12 +41,14 @@ Lemma wp_game (Φ : senc_key → term → iProp) :
       ∗ hash_pred (opN.@"rw") (λ _ : term, False)
       ∗ hash_pred (opN.@"A_s") (λ _ : term, True)
       ∗ hash_pred (opN.@"A_u") (λ _ : term, True)
+      ∗ hash_pred (opN.@"SK") (λ _ : term, False)
+      ∗ hash_pred (opN.@"K") (λ _ : term, False)
       ∗ senc_pred (opN.@"AuthEnc") Φ
       ∗ □ ∀ s t, Φ s t }}}
 game #()
 {{{ x , RET x ; True }}}.
 Proof.
-iIntros "%ϕ [#Hcryptis [#Hhprw [#HhpA_s [#HhpA_u [#Hsenc #Henc]]]]] Hhl".
+iIntros "%ϕ (#Hcryptis & #Hhprw & #HhpA_s & #HhpA_u & #HhpSK & #HhpK & #Hsenc & #Henc) Hhl".
 wp_lam.
 wp_apply wp_init_network => //.
 iIntros "%c #Hchannel".
@@ -77,7 +79,7 @@ wp_apply (wp_fork with "[Halist Hopaquefile]").
 iApply (wp_server_session db c (<[uid:=file]> ∅)  with "[Halist Hopaquefile]") => //.
 do !iSplit => //.
 iApply big_sepM_insert => //.
-do !iSplit => //.
+do !iSplit => //. auto.
 wp_pures.
 wp_bind (Client.session uid c pw).
 iApply (wp_client_session uid pw c).
