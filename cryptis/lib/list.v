@@ -99,31 +99,31 @@ Definition filter_list : val := rec: "loop" "f" "l" :=
   end.
 
 Definition append_lists : val := rec: "loop" "l1" "l2" :=
-    match: "l1" with
-        SOME "p" =>
-            let: "head" := Fst "p" in
-            let: "tail" := Snd "p" in
-            SOME ("head", "loop" "tail" "l2")
-      | NONE => "l2"
-    end.
+  match: "l1" with
+    SOME "p" =>
+      let: "head" := Fst "p" in
+      let: "tail" := Snd "p" in
+        SOME ("head", "loop" "tail" "l2")
+    | NONE => "l2"
+  end.
 
 Definition map_list : val := rec: "loop" "f" "l" :=
-    match: "l" with
-        SOME "p" =>
-            let: "h" := Fst "p" in
-            let: "l'" := Snd "p" in
-            SOME ("f" "h", "loop" "f" "l'") |
-        NONE => []
-    end.
+  match: "l" with
+    SOME "p" =>
+      let: "h" := Fst "p" in
+      let: "l'" := Snd "p" in
+      SOME ("f" "h", "loop" "f" "l'") |
+    NONE => []
+  end.
 
 Definition foldr_list : val := rec: "loop" "f" "seed" "l" :=
-    match: "l" with
-        SOME "p" =>
-            let: "head" := Fst "p" in
-            let: "tail" := Snd "p" in
-            "f" "head" ("loop" "f" "seed" "tail")
-        | NONE => "seed"
-    end.
+  match: "l" with
+    SOME "p" =>
+      let: "head" := Fst "p" in
+      let: "tail" := Snd "p" in
+      "f" "head" ("loop" "f" "seed" "tail")
+    | NONE => "seed"
+  end.
 
 Definition insert_sorted : val := rec: "loop" "le" "x" "l" :=
   match: "l" with
@@ -193,8 +193,7 @@ Lemma twp_get_list E (l : list A) (n : nat) Ψ :
   WP repr l !! #n @ E [{ Ψ }].
 Proof.
 rewrite /= repr_list_unseal.
-elim: n l Ψ => [|n IH] [|x l] /= Ψ; iIntros "post";
-wp_rec; wp_pures; eauto.
+elim: n l Ψ => [|n IH] [|x l] /= Ψ; iIntros "post"; wp_rec; wp_pures; eauto.
 rewrite (_ : (S n - 1)%Z = n); try lia.
 by iApply IH.
 Qed.
@@ -207,9 +206,7 @@ Proof. by iIntros "?"; iApply twp_wp; iApply twp_get_list. Qed.
 Lemma twp_nil E Ψ :
   Ψ (repr (@nil A)) ⊢
   WP Val []%V @ E [{ Ψ }].
-Proof.
-by rewrite /NILV /= repr_list_unseal; iIntros "?"; wp_pures.
-Qed.
+Proof. by rewrite /NILV /= repr_list_unseal; iIntros "?"; wp_pures. Qed.
 
 Lemma wp_nil E Ψ :
   Ψ (repr (@nil A)) ⊢
@@ -238,7 +235,7 @@ Lemma twp_eq_list `{EqDecision A} (f : val) (l1 l2 : list A) Φ E :
 Proof.
 rewrite repr_list_unseal /=.
 elim: l1 l2 Φ => [|x1 l1 IH] [|x2 l2] Φ wp_f /=;
-iIntros "post" ; wp_rec; wp_pures; do 1?by iApply "post".
+  iIntros "post" ; wp_rec; wp_pures; do 1?by iApply "post".
 wp_bind (f _ _); iApply (wp_f x1 x2); first by set_solver.
 case: (bool_decide_reflect (x1 = x2)) => [->|n_x1x2]; wp_pures; last first.
   rewrite bool_decide_decide decide_False; by [iApply "post"|congruence].
@@ -300,8 +297,8 @@ Proof.
 rewrite repr_list_unseal /=.
 iIntros "%fP"; iLöb as "IH" forall (l); iIntros "%Φ _ Hpost"; wp_rec.
 case: l => [|x l] /=; wp_pures; first by iApply "Hpost".
-wp_bind (filter_list _ _). iApply "IH" => //. iIntros "!> _".
-wp_pures. wp_bind (fimpl _); iApply fP => //; iIntros "!> _".
+wp_bind (filter_list _ _); iApply "IH" => //; iIntros "!> _".
+wp_pures; wp_bind (fimpl _); iApply fP => //; iIntros "!> _".
 case f_x: (f x); wp_pures; by iApply "Hpost".
 Qed.
 
@@ -321,31 +318,30 @@ Lemma twp_map_list (f : A -> B) (fimpl : val) xs E :
     fimpl (repr y) @ E [[{ RET repr (f y); True }]]) xs →
   [[{ True }]] map_list fimpl (repr xs) @ E [[{ RET repr (map f xs); True }]].
 Proof.
-  rewrite !repr_list_unseal /=.
-  iIntros "%twp_fimpl_all %Φ _ HΦ"; iStopProof.
-  elim: xs twp_fimpl_all Φ => [| h xs' IH] twp_fimpl_all Φ /=; iIntros "HΦ";
-    wp_rec; wp_pures.
-      by iApply "HΦ".
-  inversion twp_fimpl_all as [| ? ? twp_fimpl twp_fimpl_rest]; subst.
-  wp_apply IH => //; iIntros "_".
-  wp_apply twp_fimpl => //; iIntros "_".
-  wp_pures. by iApply "HΦ".
+rewrite !repr_list_unseal /=.
+iIntros "%twp_fimpl_all %Φ _ HΦ"; iStopProof.
+elim: xs twp_fimpl_all Φ => [| h xs' IH] twp_fimpl_all Φ /=; iIntros "HΦ";
+  wp_rec; wp_pures.
+    by iApply "HΦ".
+inversion twp_fimpl_all as [| ? ? twp_fimpl twp_fimpl_rest]; subst.
+wp_apply IH => //; iIntros "_".
+wp_apply twp_fimpl => //; iIntros "_".
+wp_pures; by iApply "HΦ".
 Qed.
 
 Lemma twp_foldr_list (f : B -> A -> A) (fimpl : val) (l : list B) x E :
-    (∀ (b : B) (a : A), [[{ True}]]
-        fimpl (repr b) (repr a) @ E
-    [[{ RET (repr (f b a)); True }]]) →
-    [[{ True }]]
-        foldr_list fimpl (repr x) (repr l) @ E
-    [[{ RET repr (foldr f x l); True }]].
+  (∀ (b : B) (a : A), [[{ True}]]
+    fimpl (repr b) (repr a) @ E
+  [[{ RET (repr (f b a)); True }]]) →
+  [[{ True }]]
+    foldr_list fimpl (repr x) (repr l) @ E
+  [[{ RET repr (foldr f x l); True }]].
 Proof.
-    rewrite repr_list_unseal /=; iIntros "%twp_f %Φ _ HΦ".
-    iSpecialize ("HΦ" with "[//]"); iStopProof.
-    elim: l Φ => [| h l' IH] Φ /=; iIntros "HΦ";
-        wp_rec; wp_pures; first done.
-    wp_apply IH. wp_apply twp_f; first done; iIntros "_".
-    iApply "HΦ".
+  rewrite repr_list_unseal /=; iIntros "%twp_f %Φ _ HΦ".
+  iSpecialize ("HΦ" with "[//]"); iStopProof.
+  elim: l Φ => [| h l' IH] Φ /=; iIntros "HΦ"; wp_rec; wp_pures; first done.
+  wp_apply IH; wp_apply twp_f; first done; iIntros "_".
+  iApply "HΦ".
 Qed.
 
 End ListLemmas.
@@ -362,11 +358,7 @@ Lemma find_if_in (v: A) (l : list A):
               Some _ => true
             | None => false
             end.
-Proof.
-unfold in_mem.
-elim: l => [|a l IH] //=.
-by case: (v == a).
-Qed.
+Proof. unfold in_mem; elim: l => [|a l IH] //=; by case: (v == a). Qed.
 
 Lemma wp_mem_list (eqImpl : heap_lang.val) (v : A) (l : list A) E :
   (forall x y : A, {{{ True }}}
@@ -377,13 +369,12 @@ Lemma wp_mem_list (eqImpl : heap_lang.val) (v : A) (l : list A) E :
   {{{ RET #(v \in l); True }}}.
 Proof.
 iIntros "%H %Φ _ Hpost".
-wp_lam.
-wp_pures.
+wp_lam; wp_pures.
 wp_apply (wp_find_list (eq_op v)) => //.
   iIntros "%x %Φ' _ Hpost".
   wp_pures.
   by iApply H; [| iNext].
-iIntros "_". wp_pures.
+iIntros "_"; wp_pures.
 rewrite find_if_in.
 case: (List.find (eq_op v) l) => [a |]; wp_pures; iModIntro; by iApply "Hpost".
 Qed.
@@ -399,7 +390,7 @@ Proof.
 iIntros "%twp_eqImpl %Φ _ HΦ".
 wp_lam; wp_pures.
 wp_apply twp_find_list => //.
-  iIntros "%x %Ψ _ HΨ". wp_pures. wp_apply twp_eqImpl => //.
+  iIntros "%x %Ψ _ HΨ"; wp_pures; wp_apply twp_eqImpl => //.
 iIntros "_".
 rewrite find_if_in.
 case (List.find (eq_op v) l) => *; wp_pures; by iApply "HΦ".
@@ -415,30 +406,30 @@ Lemma wp_rem_list (eqImpl : heap_lang.val) (v : A) (l : list A) E :
 Proof.
   rewrite repr_list_unseal /=.
   iIntros "%eqP"; iLöb as "IH" forall (l); iIntros "%Φ _ Hpost".
-  wp_lam. wp_pures.
+  wp_lam; wp_pures.
   case: l => [|x l] /=; wp_pures; first by iApply "Hpost".
-  wp_apply eqP => //. iIntros "_".
+  wp_apply eqP => //; iIntros "_".
   case: (x == v); wp_pures; first by iApply "Hpost".
-  wp_apply "IH" => //. iIntros "_".
-  wp_pures. by iApply "Hpost".
+  wp_apply "IH" => //; iIntros "_".
+  wp_pures; by iApply "Hpost".
 Qed.
 
 Lemma twp_rem_list (eqImpl : heap_lang.val) (v : A) (l : list A) E :
-    (∀ x y : A, [[{ True }]]
-        eqImpl (repr x) (repr y) @ E
-    [[{ RET #(eq_op x y); True }]]) →
-    [[{ True }]]
-        rem_list eqImpl (repr v) (repr l) @ E
-    [[{ RET repr (seq.rem v l); True }]].
+  (∀ x y : A, [[{ True }]]
+    eqImpl (repr x) (repr y) @ E
+  [[{ RET #(eq_op x y); True }]]) →
+  [[{ True }]]
+    rem_list eqImpl (repr v) (repr l) @ E
+  [[{ RET repr (seq.rem v l); True }]].
 Proof.
-    rewrite repr_list_unseal /=.
-    iIntros "%twp_eqImpl %Φ _ HΦ".
-    iStopProof; elim: l Φ => [| h l' IH] Φ /=; iIntros "HΦ"; wp_rec; wp_pures;
-        first by iApply "HΦ".
-    wp_apply twp_eqImpl => //; iIntros "_".
-    case: (h == v) => /=; wp_pures; first by iApply "HΦ".
-    wp_apply IH; iIntros "_".
-    wp_pures. by iApply "HΦ".
+  rewrite repr_list_unseal /=.
+  iIntros "%twp_eqImpl %Φ _ HΦ".
+  iStopProof; elim: l Φ => [| h l' IH] Φ /=; iIntros "HΦ"; wp_rec; wp_pures.
+    by iApply "HΦ".
+  wp_apply twp_eqImpl => //; iIntros "_".
+  case: (h == v) => /=; wp_pures; first by iApply "HΦ".
+  wp_apply IH; iIntros "_".
+  wp_pures; by iApply "HΦ".
 Qed.
 
 End ListLemmasEq.
@@ -455,7 +446,7 @@ Lemma wp_do_until E (f : val) φ (Ψ : val → iProp Σ) :
   WP do_until f @ E {{ Ψ }}.
 Proof.
 iIntros "#wp_f Hφ"; iLöb as "IH".
-wp_rec. wp_bind (f _).
+wp_rec; wp_bind (f _).
 iApply (wp_wand with "[Hφ]"); first iApply "wp_f" => //.
 iIntros "%v [[-> Hφ] | (%v' & -> & Hv')]"; wp_pures; eauto.
 iApply ("IH" with "Hφ").
@@ -488,7 +479,7 @@ Implicit Types (x y z : A) (s : seqlexi_with d A).
 Lemma twp_insert_sorted (f : val) (x : A) (l : list A) E :
   is_true (sorted le l) →
   (∀ (y z : A),
-      [[{ True }]] f (repr y) (repr z) @ E [[{ RET #(le y z); True }]]) →
+    [[{ True }]] f (repr y) (repr z) @ E [[{ RET #(le y z); True }]]) →
   [[{ True }]]
     insert_sorted f (repr x) (repr l) @ E
   [[{ RET (repr (sort le (x :: l))); True }]].
@@ -496,7 +487,7 @@ Proof.
 rewrite repr_list_unseal => sorted_l wp_f Φ; iIntros "_ post".
 iSpecialize ("post" with "[//]"); iStopProof.
 elim: l sorted_l Φ => //= [|y l IH] path_l Φ;
-iIntros "post"; wp_rec; wp_pures => //.
+  iIntros "post"; wp_rec; wp_pures => //.
 move/(_ (path_sorted path_l)) in IH.
 wp_bind (f _ _); iApply wp_f => //; iIntros "_".
 have [le_xy|le_yx] := boolP (x <= y)%O; wp_pures.
@@ -520,26 +511,26 @@ Lemma twp_insertion_sort (f : val) (l : list A) E :
   [[{ RET (repr (sort le l)); True }]].
 Proof.
   rewrite repr_list_unseal => wp_f Φ; iIntros "_ Hpost".
-  iSpecialize ("Hpost" with "[//]"). iStopProof.
+  iSpecialize ("Hpost" with "[//]"); iStopProof.
   elim: l Φ => [| y l' IH] Φ; iIntros "Hpost"; wp_rec; wp_pures.
     iApply "Hpost".
   wp_apply IH.
   rewrite -repr_list_unseal; iApply twp_insert_sorted => //; iIntros "_".
   suff ->: sort <=%O (y :: sort <=%O l') = sort <=%O (y :: l') by [].
-  apply /perm_sort_leP. rewrite perm_cons.
+  apply /perm_sort_leP; rewrite perm_cons.
   apply /permPl /perm_sort.
 Qed.
 
 Lemma twp_leq_list (feq : val) (fle : val) s1 s2 E :
   (∀ x1 x2,
-      [[{ True }]]
-        feq (repr x1) (repr x2) @ E
-      [[{ RET #(eqtype.eq_op x1 x2); True }]]) →
+    [[{ True }]]
+      feq (repr x1) (repr x2) @ E
+    [[{ RET #(eqtype.eq_op x1 x2); True }]]) →
   (∀ x1 x2,
-      is_true (x1 \in s1) →
-      [[{ True }]]
-        fle (repr x1) (repr x2) @ E
-      [[{ RET #(le x1 x2); True }]]) →
+    is_true (x1 \in s1) →
+    [[{ True }]]
+      fle (repr x1) (repr x2) @ E
+    [[{ RET #(le x1 x2); True }]]) →
   [[{ True }]]
     leq_list feq fle (repr s1) (repr s2) @ E
   [[{ RET #(le s1 s2); True }]].
