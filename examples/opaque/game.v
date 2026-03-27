@@ -11,7 +11,7 @@ From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import lock ticket_lock.
 From cryptis.examples Require Import alist.
 
-From cryptis.examples.opaque Require Import impl server_proofs client_proofs.
+From cryptis.examples.opaque Require Import impl server_proofs client_proofs shared.
 From cryptis Require Import lib term cryptis primitives tactics.
 
 Set Implicit Arguments.
@@ -22,8 +22,6 @@ Section Game.
 
 Context `{!cryptisGS Σ, !heapGS Σ}.
 Notation iProp := (iProp Σ).
-
-Notation opN := (nroot.@"op").
 
 Definition game : val :=
 λ: <>,
@@ -36,19 +34,16 @@ Fork (Server.session "db" "c");;
 Client.session "uid" "c" "pw";;
 assert: (~ eq_term "pw" (recv "c")).
 
-Lemma wp_game (Φ : senc_key → term → iProp) :
+Lemma wp_game :
 {{{ cryptis_ctx
-      ∗ hash_pred (opN.@"rw") (λ _ : term, False)
-      ∗ hash_pred (opN.@"A_s") (λ _ : term, True)
-      ∗ hash_pred (opN.@"A_u") (λ _ : term, True)
-      ∗ hash_pred (opN.@"SK") (λ _ : term, False)
-      ∗ hash_pred (opN.@"K") (λ _ : term, False)
-      ∗ senc_pred (opN.@"AuthEnc") Φ
-      ∗ □ ∀ s t, Φ s t }}}
+    ∗ hash_pred_token ⊤
+    ∗ seal_pred_token SENC ⊤}}}
 game #()
 {{{ x , RET x ; True }}}.
 Proof.
-iIntros "%ϕ (#Hcryptis & #Hhprw & #HhpA_s & #HhpA_u & #HhpSK & #HhpK & #Hsenc & #Henc) Hhl".
+iIntros "%ϕ (#Hcryptis & h_pred_tok & s_pred_tok) Hhl".
+iMod (opaque_alloc with "h_pred_tok s_pred_tok") as
+  "(#Hhprw & #HhpA_s & #HhpA_u & #HhpSK & #HhpK & #Hsenc)" => //.
 wp_lam.
 wp_apply wp_init_network => //.
 iIntros "%c #Hchannel".
@@ -67,7 +62,7 @@ iApply AList.wp_empty => //.
 iNext.
 iIntros "%db Halist".
 wp_pures.
-wp_apply (wp_make_file pw Φ).
+wp_apply (wp_make_file pw (fun _ _ => True%I)).
 do !iSplit => //.
 iIntros "%file Hopaquefile" => /=.
 wp_bind (AList.insert db uid file).

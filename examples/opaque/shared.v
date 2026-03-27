@@ -4,7 +4,7 @@ From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import par.
 From cryptis Require Import lib term cryptis primitives tactics.
 
-From cryptis.examples Require Import alist.
+From cryptis.examples Require Import alist iso_dh.
 From cryptis.examples.opaque Require Import impl.
 
 Set Implicit Arguments.
@@ -61,5 +61,59 @@ Definition SK_priv (x : option term) : iProp :=
     None => True
   | Some x' => public x' ↔ ▷ □ False
   end.
+
+Definition opaque_secret t : iProp :=
+⌜length (exps t) = 1⌝.
+
+Lemma public_opaque_secret a b (P : iProp) :
+  a ≠ b →
+  a ≠ TInv b →
+  □ (public a ↔ P) -∗
+  □ (∀ t, exp_pred_base a t ↔ ▷ □ opaque_secret t) -∗
+  □ (public b ↔ P) -∗
+  □ (∀ t, exp_pred_base b t ↔ ▷ □ opaque_secret t) -∗
+  (public (TExpN g [a; b]) → P).
+Proof.
+  by apply public_dh_secret'.
+Qed.
+
+Definition opaque_ctx : iProp :=
+  hash_pred (opN.@"rw") (λ _ : term, False%I) ∗
+  hash_pred (opN.@"A_s") (λ _ : term, True%I) ∗
+  hash_pred (opN.@"A_u") (λ _ : term, True%I) ∗
+  hash_pred (opN.@"SK") (λ _ : term, False%I) ∗
+  hash_pred (opN.@"K") (λ _ : term, False%I) ∗
+  senc_pred (opN.@"AuthEnc") (fun _ _ => True%I).
+
+Lemma opaque_alloc E :
+↑opN ⊆ E →
+hash_pred_token E -∗
+seal_pred_token SENC E ==∗
+opaque_ctx ∗
+hash_pred_token (E ∖ ↑opN) ∗
+seal_pred_token SENC (E ∖ ↑opN).
+Proof.
+iIntros "%sub1 h_token s_token".
+iMod (hash_pred_set (opN.@"rw") (λ _ : term, False%I) with "h_token")
+as "[? h_token]"; try solve_ndisj. iFrame.
+iMod (hash_pred_set (opN.@"A_s") (λ _ : term, True%I) with "h_token")
+as "[? h_token]"; try solve_ndisj. iFrame.
+iMod (hash_pred_set (opN.@"A_u") (λ _ : term, True%I) with "h_token")
+as "[? h_token]"; try solve_ndisj. iFrame.
+iMod (hash_pred_set (opN.@"SK") (λ _ : term, False%I) with "h_token")
+as "[? h_token]"; try solve_ndisj. iFrame.
+iMod (hash_pred_set (opN.@"K") (λ _ : term, False%I) with "h_token")
+as "[? h_token]"; try solve_ndisj. iFrame.
+iMod (senc_pred_set (N := opN.@"AuthEnc") (fun _ _ => True%I) with "s_token")
+as "[? s_token]"; try solve_ndisj. iFrame.
+iSplitL "h_token".
+iApply (hash_pred_token_drop with "h_token").
+repeat match goal with
+         | H:_ ∪ _ ⊆ _ |- _ => apply union_subseteq in H as [? ?]
+         end;
+   (solve [ eauto  20 with ndisj ]).
+iApply (seal_pred_token_drop with "s_token").
+by solve_ndisj.
+Qed.
 
 End Opaque.
