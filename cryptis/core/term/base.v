@@ -642,15 +642,37 @@ Proof. by rewrite -{2}[t1]TInvK; exact: in_TInv_exps. Qed.
 Lemma in_exps_TInv t1 t2 : (t1 \notin exps t2) || (TInv t1 \notin exps t2).
 Proof. by have [/in_TInv_exps ->|] := boolP (t1 \in _). Qed.
 
-Lemma tsize_lt_TExp t1 t2 :
+Lemma tsize_lt_TInv t : tsize (TInv t) <= S (tsize t).
+Proof.
+have [inv_t|ninv_t] := boolP (is_inv t).
+- rewrite -{2}[t]TInvK [tsize (TInv (TInv _))]tsizeE ?is_inv_TInv ?negbK //.
+  apply/ssrnat.leP; lia.
+- rewrite tsizeE //.
+Qed.
+
+Lemma tsize_lt_TExp_strong t1 t2 :
   TInv t2 \notin exps t1 ->
-  tsize t1 < tsize (TExp t1 t2) /\ tsize t2 < tsize (TExp t1 t2).
+  tsize t1 < tsize (TExp t1 t2) /\
+  S (tsize t2) < tsize (TExp t1 t2).
 Proof.
 move => ?.
 rewrite -[t1]base_expsK TExpNA TExpN_catC.
 rewrite !tsize_TExpN ?is_exp_base ?invs_canceled_cons_exps ?invs_canceled_exps //= !addnE.
+have /ssrnat.ltP := tsize_gt0 (base t1).
 split; apply /ssrnat.ltP; last lia.
-have /ssrnat.ltP := tsize_gt0 t2. case: (exps t1 != [::]) => /=; lia.
+have /ssrnat.ltP := tsize_gt0 t2.
+case: (exps t1 != [::]) => /=; lia.
+Qed.
+
+Lemma tsize_lt_TExp t1 t2 :
+  TInv t2 \notin exps t1 ->
+  tsize t1 < tsize (TExp t1 t2) /\
+  tsize (TInv t2) < tsize (TExp t1 t2) /\
+  tsize t2 < tsize (TExp t1 t2).
+Proof.
+case/tsize_lt_TExp_strong=> /ssrnat.ltP H1 /ssrnat.ltP H2.
+have /ssrnat.leP ? := tsize_lt_TInv t2.
+do !split; apply/ssrnat.ltP; lia.
 Qed.
 
 Lemma TExpN_injl : left_injective TExpN.
@@ -733,14 +755,16 @@ Qed.
 
 Lemma tsize_TExp_TInv t1 t2 :
   t2 \in exps t1 ->
-  tsize t2 < tsize t1 /\ tsize (TExp t1 (TInv t2)) < tsize t1.
+  tsize t2 < tsize t1 /\
+  tsize (TInv t2) < tsize t1 /\
+  tsize (TExp t1 (TInv t2)) < tsize t1.
 Proof.
-move => H.
-rewrite -{1 3}(TExpK' t1 t2).
-apply and_comm; apply tsize_lt_TExp.
-rewrite -count_exp_nat_gt0 count_exp_nat_TExp -leqNgt.
-rewrite TInvK H count_exp_nat_eq0; last exact: in_TInv_exps.
-by do !case: ifP.
+move => H; rewrite -{1 2 4}(TExpK' t1 t2).
+set t1' := TExp t1 _; have {}H : TInv t2 \notin exps t1'.
+  rewrite -count_exp_nat_gt0 count_exp_nat_TExp -leqNgt.
+  rewrite TInvK H count_exp_nat_eq0; last exact: in_TInv_exps.
+  by do !case: ifP.
+by case: (tsize_lt_TExp t1' t2 H) => ? [] ??; eauto.
 Qed.
 
 Lemma term_rect (T : term -> Type)

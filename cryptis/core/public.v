@@ -428,9 +428,9 @@ f_equiv; f_equiv; last f_equiv.
   apply: big_sepS_proper => t' T_t'.
   by move: (decompose_tsize T_t T_t') => ?; eauto.
 - f_equiv; apply: big_sepL_proper => _ t' /(elem_of_list_lookup_2 _ _ _).
-  case/tsize_TExp_TInv=> lt1 lt2; f_equiv.
+  case/tsize_TExp_TInv=> lt1 [] lt2 lt3; f_equiv.
   + apply: exp_pred0_proper' => /= t'' t''_ts; apply: HP.
-    by case: t''_ts => [->//|/tsize_TExp_TInv[??]].
+    by case: t''_ts => [->//|/tsize_TExp_TInv[?[??]]].
   + by f_equiv; f_equiv; apply: HP.
 - case: t => // k t in HP *.
   case: func_of_term => // F; f_equiv; f_equiv.
@@ -936,7 +936,7 @@ have t_t1: t ∈ exps t1.
 iPoseProof (exp_pred_exps t_t1 with "p1") as "[dh #p]"; iSplit.
   by iApply exp_pred_intro2 => //; iApply exp_pred_intro3.
 iIntros "!> #pt"; rewrite TExpNC; iSpecialize ("p" with "pt").
-by iApply IH => //; have [??] := tsize_TExp_TInv t_t1.
+by iApply IH => //; have [?[??]] := tsize_TExp_TInv t_t1.
 Qed.
 
 Lemma False_public t :

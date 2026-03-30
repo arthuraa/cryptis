@@ -77,16 +77,20 @@ Global Arguments subseteq_cancel_exps ts : clear implicits.
 
 Lemma tsize_lt_TExp t1 t2 :
   TInv t2 ∉ exps t1 ->
-  tsize t1 < tsize (TExp t1 t2) /\ tsize t2 < tsize (TExp t1 t2).
+  tsize t1 < tsize (TExp t1 t2) /\
+  tsize (TInv t2) < tsize (TExp t1 t2) /\
+  tsize t2 < tsize (TExp t1 t2).
 Proof.
-by move => /(ssrbool.introN inP); split; apply /(ssrbool.elimT ssrnat.leP); apply tsize_lt_TExp.
+by move => /(ssrbool.introN inP); do !split; apply /(ssrbool.elimT ssrnat.leP); apply tsize_lt_TExp.
 Qed.
 
 Lemma tsize_TExp_TInv t1 t2 :
   t2 ∈ exps t1 ->
-  tsize t2 < tsize t1 /\ tsize (TExp t1 (TInv t2)) < tsize t1.
+  tsize t2 < tsize t1 /\
+  tsize (TInv t2) < tsize t1 /\
+  tsize (TExp t1 (TInv t2)) < tsize t1.
 Proof.
-by move => /(ssrbool.introT inP); split; apply /(ssrbool.elimT ssrnat.leP); apply tsize_TExp_TInv.
+by move => /(ssrbool.introT inP); do !split; apply /(ssrbool.elimT ssrnat.leP); apply tsize_TExp_TInv.
 Qed.
 
 Lemma TInv_neq t : TInv t ≠ t.
