@@ -471,6 +471,8 @@ Qed.
 
 End TermProp.
 
+Arguments term_prop_alloc {Σ _ _ _ t} N P.
+
 Section TermPred.
 
 Context {A : Type} `{!heapGS Σ, !term_metaGS Σ, !savedPredG Σ A}.
@@ -506,3 +508,5 @@ by iApply (term_token_own with "token own").
 Qed.
 
 End TermPred.
+
+Arguments term_pred_alloc {_ Σ _ _ _ t} N _ φ.

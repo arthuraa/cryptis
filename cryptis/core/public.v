@@ -7,7 +7,7 @@ From iris.bi Require Import fixpoint_mono.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib.
 From cryptis.lib Require Import gmeta nown saved_prop size_rec_pred.
-From cryptis.core Require Import term minted.
+From cryptis.core Require Import term minted term_meta.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -16,11 +16,13 @@ Unset Printing Implicit Defensive.
 Class publicGpreS Σ := PublicGPreS {
   publicGpreS_nonce : savedPredG Σ term;
   publicGpreS_seal  : savedPredG Σ (term * term);
+  publicGpreS_prop  : savedPropG Σ;
   publicGpreS_meta  : metaGS Σ;
 }.
 
 Local Existing Instance publicGpreS_nonce.
 Local Existing Instance publicGpreS_seal.
+Local Existing Instance publicGpreS_prop.
 Local Existing Instance publicGpreS_meta.
 
 Class publicGS Σ := PublicGS {
@@ -37,6 +39,7 @@ Definition publicΣ : gFunctors :=
   #[savedPredΣ term;
     savedPredΣ (key_type * term);
     savedPredΣ (term * term);
+    savedPropΣ;
     metaΣ].
 
 Global Instance subG_publicGpreS Σ : subG publicΣ Σ → publicGpreS Σ.
@@ -44,9 +47,10 @@ Proof. solve_inG. Qed.
 
 Section Public.
 
-Context `{!heapGS Σ, !publicGS Σ}.
+Context `{!heapGS Σ, !publicGS Σ, !term_metaGS Σ}.
 Notation iProp := (iProp Σ).
 Notation iPropO := (iPropO Σ).
+
 Notation iPropI := (iPropI Σ).
 
 Definition pnonce a : iProp :=
@@ -56,6 +60,25 @@ Definition pnonce a : iProp :=
 
 Global Instance Persistent_pnonce a : Persistent (pnonce a).
 Proof. apply _. Qed.
+
+Definition pinv t : iProp :=
+  □ term_prop t (nroot.@"cryptis".@"pub").
+
+Global Instance Persistent_pinv a : Persistent (pinv a).
+Proof. apply _. Qed.
+
+Lemma pinv_alloc t E P :
+  ↑nroot.@"cryptis".@"pub" ⊆ E →
+  term_token t E ==∗
+  □ (pinv t ↔ ▷ □ P) ∗ term_token t (E ∖ ↑nroot.@"cryptis".@"pub").
+Proof.
+iIntros (?) "token".
+iMod (term_prop_alloc (nroot.@"cryptis".@"pub") P with "token")
+  as "[#H1 $]" => //.
+iIntros "!> !>"; iSplit; iIntros "#H2".
+- by iSpecialize ("H1" with "H2"); eauto.
+- by iIntros "!>"; iApply "H1"; eauto.
+Qed.
 
 Definition exp_pred_base (t t' : term) : iProp :=
   match t with
@@ -81,7 +104,7 @@ Proof. by case: t; apply _. Qed.
 Definition exp_pred0_pre Plater P DH ts : iProp :=
   (∃ ts', exp_pred_base ts.1 (TExpN ts.2 ts') ∗
     ⌜∀ t, t ∈ ts' → TInv t ∉ exps ts.2⌝ ∗
-    [∗ list] t ∈ ts', Plater t) ∨
+    [∗ list] t ∈ ts', Plater (TInv t)) ∨
   P ts.1 ∨
   ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ ⌜TInv t ∉ exps t2'⌝ ∗
   DH (ts.1, t2') ∗ DH (t, ts.2).
@@ -109,7 +132,7 @@ Lemma exp_pred0_unfold Plater P ts :
   exp_pred0 Plater P ts ⊣⊢
   (∃ ts', exp_pred_base ts.1 (TExpN ts.2 ts') ∗
     ⌜∀ t, t ∈ ts' → TInv t ∉ exps ts.2⌝ ∗
-    [∗ list] t ∈ ts', Plater t) ∨
+    [∗ list] t ∈ ts', Plater (TInv t)) ∨
   P ts.1 ∨
   ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ ⌜TInv t ∉ exps t2'⌝ ∗
   exp_pred0 Plater P (ts.1, t2') ∗ exp_pred0 Plater P (t, ts.2).
@@ -373,9 +396,7 @@ Inductive decompose (T : gset term) (t : term) : Prop :=
 
 | DSeal k t' of T = {[k; t']} & t = TSeal k t'
 
-| DHash t' of T = {[t']} & t = THash t'
-
-| DInv t' of T = {[t']} & ¬ is_inv t' & is_inv t & t = TInv t'.
+| DHash t' of T = {[t']} & t = THash t'.
 
 Lemma decompose_tsize T t t' : decompose T t → t' ∈ T → tsize t' < tsize t.
 Proof.
@@ -384,17 +405,19 @@ case; try by move =>> -> -> //;
           move => /elem_of_singleton ->;
           rewrite [tsize (_ _)]tsizeE -?ssrnat.plusE;
           lia.
-move => ? -> /negb_True /is_trueP ? _ -> /elem_of_singleton ->;
-rewrite [tsize (_ _)]tsizeE //; lia.
 Qed.
+
+Lemma decompose_is_inv T t : decompose T t → is_inv t = false.
+Proof. by case => *; subst. Qed.
 
 Definition public_pre_aux Plater P t : iProp :=
   minted t ∧ (
    (∃ T, ⌜decompose T t⌝ ∧ [∗ set] t' ∈ T, P t')
+   ∨ (⌜is_inv t⌝ ∧ ◇ pinv t)
    ∨ (⌜is_exp t⌝ ∧
       [∗ list] t' ∈ exps t,
         exp_pred0 Plater P (t', t) ∧
-        □ (P t' → P (TExp t (TInv t'))))
+        □ (P (TInv t') → P (TExp t (TInv t'))))
    ∨ match t with
      | TNonce a => ◇ pnonce a
      | TKey kt t => ⌜Spec.public_key_type kt⌝
@@ -423,7 +446,7 @@ Lemma public_pre_aux_wf Plater :
     public_pre_aux Plater P1 t ≡ public_pre_aux Plater P2 t).
 Proof.
 move => P1 P2 {}t HP; rewrite /public_pre_aux.
-f_equiv; f_equiv; last f_equiv.
+f_equiv; f_equiv; last (f_equiv; f_equiv).
 - f_equiv => T; apply: and_proper_L => T_t.
   apply: big_sepS_proper => t' T_t'.
   by move: (decompose_tsize T_t T_t') => ?; eauto.
@@ -451,16 +474,17 @@ Lemma public_pre_aux_persistent Plater P :
   □ (∀ t, P t -∗ <pers> P t) -∗
   ∀ t, public_pre_aux Plater P t -∗ <pers> public_pre_aux Plater P t.
 Proof.
-iIntros "#wand1 #wand2 %t [#m [H | [H | H]]]"; iSplit => //.
+iIntros "#wand1 #wand2 %t [#m [H | [H | [H | H]]]]"; iSplit => //.
 - iDestruct "H" as (T ?) "H"; iLeft; iExists T; iSplit; eauto.
   iAssert ([∗ set] t' ∈ T, <pers> P t')%I as "{H} #H".
   { iApply (big_sepS_impl with "H"); iIntros "!> %t' _".
     by iApply "wand2". }
   by iModIntro; iApply (big_sepS_impl with "H"); eauto.
-- iDestruct "H" as "(% & H)"; iRight; iLeft.
+- by iDestruct "H" as "(%aV & #H)"; iRight; iLeft; eauto.
+- iDestruct "H" as "(% & H)"; iRight; iRight; iLeft.
   iAssert ([∗ list] t' ∈ exps t,
     <pers> exp_pred0 Plater P (t', t) ∧
-    □ (P t' → P (TExp t (TInv t'))))%I as "{H} #H".
+    □ (P (TInv t') → P (TExp t (TInv t'))))%I as "{H} #H".
   { iApply (big_sepL_impl with "H").
     iIntros "!> %k %t' _ [dh #?]"; iSplit => //.
     iAssert (exp_pred0 (λ t'', <pers> Plater t'')%I
@@ -469,7 +493,7 @@ iIntros "#wand1 #wand2 %t [#m [H | [H | H]]]"; iSplit => //.
     by iModIntro; iApply (exp_pred0_wand with "[] [] dh"); iIntros "!> % #?". }
   iModIntro; iSplit => //.
   by iApply (big_sepL_impl with "H"); iIntros "!> % % _ [#? #?]"; eauto.
-- iRight; iRight; case: t; by move=> *; iPoseProof "H" as "#H".
+- iRight; iRight; iRight; case: t; by move=> *; iPoseProof "H" as "#H".
 Qed.
 
 Lemma public_pre_unfold Plater t :
@@ -523,9 +547,10 @@ Lemma public_eq t :
   public t ⊣⊢
   minted t ∧ (
       (∃ T, ⌜decompose T t⌝ ∧ [∗ set] t' ∈ T, public t')
+     ∨ (⌜is_inv t⌝ ∧ ◇ pinv t)
      ∨ (⌜is_exp t⌝ ∧
         [∗ list] t' ∈ exps t,
-          exp_pred t' t ∧ □ (public t' → public (TExp t (TInv t'))))
+          exp_pred t' t ∧ □ (public (TInv t') → public (TExp t (TInv t'))))
      ∨ match t with
        | TNonce a => ◇ pnonce a
        | TKey kt t => ⌜Spec.public_key_type kt⌝
@@ -567,7 +592,7 @@ Proof. rewrite exp_pred_unseal /exp_pred_def. by apply _. Qed.
 
 Lemma exp_pred_intro1_gen t1 t2 ts :
   (∀ t, t ∈ ts → TInv t ∉ exps t2) →
-  ([∗ list] t ∈ ts, ▷ public t) -∗
+  ([∗ list] t ∈ ts, ▷ public (TInv t)) -∗
   exp_pred_base t1 (TExpN t2 ts) -∗ exp_pred t1 t2.
 Proof.
 iIntros "%ts_t2 #p_ts #dh".
@@ -598,7 +623,7 @@ Qed.
 Lemma exp_pred_ind (φ : term → term → iProp) :
   (□ ∀ ts t1 t2,
     ⌜∀ t, t ∈ ts → TInv t ∉ exps t2⌝ -∗
-    ([∗ list] t ∈ ts, ▷ public t) -∗
+    ([∗ list] t ∈ ts, ▷ public (TInv t)) -∗
     exp_pred_base t1 (TExpN t2 ts) -∗ φ t1 t2) -∗
   (□ ∀ t t1 t2, ⌜TInv t ∉ exps t2⌝ -∗
                 exp_pred t1 t2 -∗ □ φ t1 t2 -∗
@@ -684,10 +709,11 @@ Proof.
 apply: (anti_symm _); iIntros "#Ht" => //.
 - rewrite public_eq minted_TPair.
   iDestruct "Ht" as "([Ht1 Ht2] & publ)".
-  iDestruct "publ" as "[publ | [(? & _) | publ]]" => //=.
-  iDestruct "publ" as (T) "[%dec publ]".
-  case: dec => //= {}t1 {}t2 -> [-> ->].
-  by rewrite big_sepS_union_pers !big_sepS_singleton.
+  iDestruct "publ" as "[publ | [H | [(? & _) | publ]]]" => //=.
+  + iDestruct "publ" as (T) "[%dec publ]".
+    case: dec => //= {}t1 {}t2 -> [-> ->].
+    by rewrite big_sepS_union_pers !big_sepS_singleton.
+  + by iDestruct "H" as "([] & _)".
 - iDestruct "Ht" as "[Ht1 Ht2]".
   rewrite [public (TPair t1 t2)]public_eq minted_TPair -!public_minted.
   iSplit; eauto.
@@ -702,11 +728,44 @@ Proof.
 apply: (anti_symm _); iIntros "Ht".
 - rewrite public_eq; iDestruct "Ht" as "[? Ht]".
   rewrite minted_TNonce. iFrame.
-  iDestruct "Ht" as "[publ | [ (? & _) | ? ]]" => //.
-  iDestruct "publ" as (T) "[%dec _]".
-  by case: dec.
+  iDestruct "Ht" as "[publ | [H | [ (? & _) | ? ]]]" => //.
+  + iDestruct "publ" as (T) "[%dec _]".
+    by case: dec.
+  + by iDestruct "H" as "([] & _)".
 - rewrite public_eq minted_TNonce /pnonce.
   iDestruct "Ht" as "[Ht ?]". iFrame.
+Qed.
+
+Lemma public_TInv t :
+  negb (is_inv t) →
+  public (TInv t) ⊣⊢ minted t ∧ ◇ pinv (TInv t).
+Proof.
+rewrite -is_inv_TInv => ninv_t; apply: (anti_symm _); iIntros "Ht".
+- rewrite public_eq; iDestruct "Ht" as "[? Ht]".
+  rewrite minted_TInv. iFrame.
+  iDestruct "Ht" as "[publ | [H | [ (%exp_aV & ?) | ? ]]]" => //.
+  + iDestruct "publ" as (T) "[%dec _]".
+    by rewrite (decompose_is_inv dec) /= in ninv_t.
+  + by iDestruct "H" as "(% & #?)".
+  + by case: (TInv _) ninv_t exp_aV.
+  by case: (TInv _) ninv_t => //.
+- iDestruct "Ht" as "[Ht ?]".
+  rewrite public_eq minted_TInv. iFrame. by eauto.
+Qed.
+
+Lemma public_TInv_alloc t E P :
+  ↑nroot.@"cryptis".@"pub" ⊆ E →
+  negb (is_inv t) →
+  term_token (TInv t) E ==∗
+  □ (public (TInv t) ↔ ▷ □ P) ∗
+  term_token (TInv t) (E ∖ ↑nroot.@"cryptis".@"pub").
+Proof.
+iIntros (sub ?) "token"; rewrite public_TInv //.
+iPoseProof (term_token_minted with "token") as "#m"; rewrite minted_TInv.
+iMod (pinv_alloc _ P with "token") as "[#sV $]" => //.
+iIntros "!> !>"; iSplit.
+- by iIntros "[_ >?]"; iApply "sV".
+- by iIntros "#?"; iSplit => //; iModIntro; iApply "sV".
 Qed.
 
 Lemma public_TKey kt t :
@@ -714,10 +773,11 @@ Lemma public_TKey kt t :
 Proof.
 apply: (anti_symm _).
 - rewrite public_eq minted_TKey; iDestruct 1 as "[Ht publ]".
-  iDestruct "publ" as "[publ | [(? & _) | publ]]" => //.
+  iDestruct "publ" as "[publ | [H | [(? & _) | publ]]]" => //.
   + iDestruct "publ" as (T) "[%dec publ]".
     case: dec => //= {}kt {}t -> [-> ->].
     by rewrite big_sepS_singleton; eauto.
+  + by iDestruct "H" as "(% & ?)".
   + by eauto.
 - iDestruct 1 as "# [publ | [s_t publ]]".
     rewrite [public (TKey _ _)]public_eq minted_TKey -public_minted.
@@ -746,10 +806,11 @@ Proof.
 apply: (anti_symm _).
 - rewrite public_eq minted_TSeal.
   iDestruct 1 as "[[Hk Ht] publ]".
-  iDestruct "publ" as "[publ | [(? & _) | publ]]" => //.
+  iDestruct "publ" as "[publ | [H | [(? & _) | publ]]]" => //.
   + iDestruct "publ" as (T) "[%dec ?]".
     case: dec => // {}k {}t -> [-> ->].
     by rewrite big_sepS_union_pers !big_sepS_singleton; iLeft.
+  + by iDestruct "H" as "(% & _)".
   + iRight. iSplit; first by eauto.
     by case: k => // kt k.
 - iDestruct 1 as "[#[Hk Ht] | (#Ht & inv)]".
@@ -782,10 +843,11 @@ Lemma public_THash t :
 Proof.
 apply: (anti_symm _).
 - rewrite public_eq minted_THash.
-  iDestruct 1 as "[Ht [publ | [(? & _) | publ]]]" => //; eauto.
-  iDestruct "publ" as (T) "[%dec ?]".
-  case: dec => //= {}t -> [->].
-  by rewrite big_sepS_singleton; eauto.
+  + iDestruct 1 as "[Ht [publ | [H | [(? & _) | publ]]]]" => //; eauto.
+    iDestruct "publ" as (T) "[%dec ?]".
+    case: dec => //= {}t -> [->].
+    by rewrite big_sepS_singleton; eauto.
+  + by iDestruct "H" as "(% & _)".
 - iDestruct 1 as "[Ht | [? publ]]".
     rewrite [public (THash _)]public_eq minted_THash -public_minted.
     iSplit => //=; iLeft.
@@ -810,25 +872,6 @@ Proof.
   eauto.
 Qed.
 
-Lemma public_TInv t : public (TInv t) ⊣⊢ public t.
-Proof.
-wlog: t/ ¬ is_inv t.
-{ move => H. case inv_t: (is_inv t).
-  + rewrite -{2}[t]TInvK (H (TInv t)) // is_inv_TInv inv_t. exact /neg_false.
-  + apply H. rewrite inv_t. exact /neg_false. }
-move => /[dup] ? /negb_True; rewrite -is_inv_TInv => invt.
-apply: anti_symm; rewrite [public (TInv t)]public_eq minted_TInv.
-- have ?: ¬ is_exp (TInv t) by move => /is_trueP /(ssrbool.contraLR (is_exp_TInv t)) /is_trueP.
-  iIntros "(_ & [dec | [(% & _) | ?]])" => //; last by case: (TInv t) invt.
-  iDestruct "dec" as (T) "[%dec ?]".
-  case: dec invt; try by move =>> // _ ->.
-  move => t' -> _ _ /TInv_inj -> _. by iApply big_sepS_singleton.
-- iIntros; iSplit; first by iApply public_minted.
-  iLeft; iExists {[t]}; iSplit.
-  + by iPureIntro; econstructor.
-  + by iApply big_sepS_singleton.
-Qed.
-
 Lemma public_TExpN t ts :
   ¬ is_exp t →
   invs_canceled ts ->
@@ -836,7 +879,7 @@ Lemma public_TExpN t ts :
   public (TExpN t ts) ⊣⊢
   minted (TExpN t ts) ∧
   [∗ list] t' ∈ ts,
-    exp_pred t' (TExpN t ts) ∧ □ (public t' → public (TExp (TExpN t ts) (TInv t'))).
+    exp_pred t' (TExpN t ts) ∧ □ (public (TInv t') → public (TExp (TExpN t ts) (TInv t'))).
 Proof.
 move => /[dup] ? /negb_True /is_trueP ?.
 move => /[dup] ? /is_trueP ?.
@@ -846,14 +889,17 @@ have ttsX: is_exp (TExpN t ts) by rewrite is_exp_TExpN; first case: (ts) tsN0.
 
 apply: anti_symm.
 - rewrite public_eq minted_TExpN // exps_TExpN' //.
-  iIntros "#[[mt mts] [publ | [(_ & ?) | ?]]]"; [| by eauto | by case: (TExpN t ts) ttsX].
+  iIntros "#[[mt mts] [publ | [H | [(_ & ?) | ?]]]]"; first last.
+  + by case: (TExpN t ts) ttsX.
+  + by eauto.
+  + iDestruct "H" as "(%contra & _)".
+    by case: (TExpN t ts) ttsX contra.
   iDestruct "publ" as (T) "[%dec publ]".
   move e: (TExpN t ts) => t' in dec ttsX *.
-  case: dec ttsX; try by move=> * {e}; subst t'.
-  by move => ? _ ? _ -> /is_trueP /(ssrbool.contraLR (is_exp_TInv _)) /is_trueP.
+  by case: dec ttsX; move=> * {e}; subst t'.
 
 - iIntros "#[m dhp]".
-  by rewrite public_eq exps_TExpN'; eauto.
+  by rewrite public_eq exps_TExpN'; eauto 10.
 Qed.
 
 Lemma public_TExpN' t :
@@ -861,20 +907,22 @@ Lemma public_TExpN' t :
   public t ⊣⊢
   minted t ∧
   [∗ list] t' ∈ exps t,
-    exp_pred t' t ∧ □ (public t' → public (TExp t (TInv t'))).
+    exp_pred t' t ∧ □ (public (TInv t') → public (TExp t (TInv t'))).
 Proof.
 move => expt; apply: anti_symm; rewrite public_eq.
-- iIntros "(? & [publ | [(_ & ?) | ?]])"; [| by eauto | by case: t expt].
+- iIntros "(? & [publ | [H | [(_ & ?) | ?]]])"; first last.
+  + by case: t expt.
+  + by eauto.
+  + by iDestruct "H" as (inv_t) "_"; case: (t) expt inv_t.
   iDestruct "publ" as (T) "[%dec publ]".
-  case: dec expt; try by move =>> _ ->.
-  by move => t' _ /is_trueP ? _ -> /is_trueP /(ssrbool.contraLR (is_exp_TInv t')).
-- iIntros "#(? & ?)"; by eauto.
+  by case: dec expt; move =>> _ ->.
+- iIntros "#(? & ?)"; by eauto 10.
 Qed.
 
 Lemma public_TExp_iff t1 t2 :
   ¬ is_exp t1 →
   public (TExp t1 t2) ⊣⊢
-  minted t1 ∧ minted t2 ∧ exp_pred t2 (TExp t1 t2) ∧ □ (public t2 → public t1).
+  minted t1 ∧ minted t2 ∧ exp_pred t2 (TExp t1 t2) ∧ □ (public (TInv t2) → public t1).
 Proof.
 move=> ?; rewrite public_TExpN //=; last exact: invs_canceled1.
 rewrite TExpNK.
@@ -891,8 +939,8 @@ Lemma public_TExp2_iff t1 t2 t3 :
   minted (TExpN t1 [t2; t3]) ∧
   exp_pred t2 (TExpN t1 [t2; t3]) ∧
   exp_pred t3 (TExpN t1 [t2; t3]) ∧
-  □ (public t2 → public (TExp t1 t3)) ∧
-  □ (public t3 → public (TExp t1 t2)).
+  □ (public (TInv t2) → public (TExp t1 t3)) ∧
+  □ (public (TInv t3) → public (TExp t1 t2)).
 Proof.
 move => ? /invs_canceled2 ?; rewrite public_TExpN //=.
 apply: anti_symm; iIntros "#pub".
@@ -905,7 +953,7 @@ Qed.
 Lemma exp_pred_exps t1 t2 :
   t2 ∈ exps t1 ->
   public t1 -∗
-  exp_pred t2 t1 ∧ □ (public t2 → public (TExp t1 (TInv t2))).
+  exp_pred t2 t1 ∧ □ (public (TInv t2) → public (TExp t1 (TInv t2))).
 Proof.
 have [exp_t1|contra] := decide (is_exp t1); last first.
   by rewrite exps_expN // elem_of_nil.
@@ -922,7 +970,7 @@ Proof.
 elim /term_lt_ind: t1 => t1 IH; iIntros "#p1 #p2".
 have [t2_t1|t2_t1] := decide (TInv t2 ∈ exps t1).
   iPoseProof (exp_pred_exps t2_t1 with "p1") as "[_ #p1']".
-  by rewrite public_TInv TInvK; iApply "p1'".
+  by rewrite TInvK; iApply "p1'".
 have [exp_t1|nexp_t1] := decide (is_exp (TExp t1 t2)); last first.
   by move/not_elem_of_TInv_exps: t2_t1; rewrite exps_expN // elem_of_nil.
 rewrite [public (TExp _ _)]public_TExpN' //; iSplit.
@@ -964,8 +1012,10 @@ elim: t.
   + by iApply IHt.
 - iIntros "%t %IH #m #contra".
   by rewrite minted_THash public_THash; iLeft; iApply IH.
-- iIntros "%t %IH _ #m #contra".
-  by rewrite minted_TInv public_TInv; iApply IH.
+- iIntros "%t %IH %inv_t #m #contra"; rewrite is_trueP in inv_t.
+  rewrite public_eq is_inv_TInv; iSplit => //.
+  iRight; iLeft; iSplit => //.
+  by iDestruct "contra" as ">[]".
 - move => t IHt nX ts IHts nZ _ canceled.
   apply is_trueP in canceled.
   apply is_trueP in nX; apply negb_True in nX.
@@ -1006,7 +1056,7 @@ Qed.
 Lemma exp_pred_intro4 t1 t2 t3 :
   t3 ∈ exps t2 →
   exp_pred t1 t2 -∗
-  public t3 -∗
+  public (TInv t3) -∗
   exp_pred t1 (TExp t2 (TInv t3)).
 Proof.
 iIntros (t3_t2) "dh"; iRevert (t3_t2); iRevert (t1 t2) "dh".
@@ -1063,25 +1113,26 @@ rewrite TExpNC. iApply (IH with "p1' m []").
   rewrite -!count_exp_gt0 !count_exp_TInv in contra *.
   suff: (count_exp t2 t1 ≤ count_exp t2 (TExp t1 (TInv t)))%Z by lia.
   by rewrite count_exp_TExp_ne // TInvK.
-- by rewrite TExpNC; iApply exp_pred_intro4 => //.
+- rewrite TExpNC; iApply exp_pred_intro4 => //.
 Qed.
 
 Lemma public_TExp_exp_pred t1 t2 :
   public t1 -∗
   minted t2 -∗
   exp_pred t2 (TExp t1 t2) -∗
+  □ (public (TInv t2) ↔ ▷ False) -∗
   □ (∀ t, exp_pred_base (TInv t2) t ↔ ▷ False) -∗
   public (TExp t1 t2).
 Proof.
-iIntros "#p1 #m2 #dh #dhV"; iApply except_0_public.
+iIntros "#p1 #m2 #dh #s2 #dhV"; iApply except_0_public.
   by iApply all_minted_TExp; iSplit; rewrite // public_minted.
 case: (decide (TInv t2 ∈ exps t1)) => in_exps; last first.
   by iModIntro; iApply public_TExp_add.
-iPoseProof (exp_pred_exps in_exps with "p1") as "[dh' #?]".
+iPoseProof (exp_pred_exps in_exps with "p1") as "[dh' #?]"; rewrite TInvK.
 iPoseProof (exp_pred_inv_same in_exps with "dh'") as "[p2|H]".
-  by iModIntro; rewrite public_TInv; iApply public_TExp.
-iDestruct "H" as "(%t2' & _ & _ & contra)".
-by iDestruct ("dhV" with "contra") as ">[]".
+- by iDestruct ("s2" with "p2") as ">[]".
+- iDestruct "H" as "(%t2' & _ & _ & contra)".
+  by iDestruct ("dhV" with "contra") as ">[]".
 Qed.
 
 Lemma public_to_list t ts :

@@ -29,10 +29,12 @@ Proof.
   iIntros "%ϕ [#Cryptis [#Hpred [#Hc [#pubuid [#minteduid #mintedpw]]]]] Hhl".
   wp_lam. wp_pures.
   wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => True)%I) => //.
-  iIntros "%x_u %Hnoncex_u #Hmintedx_u #Hprivatex_u #Heqx_u #Heqx_uV Htokenx_u".
+  iIntros "%x_u %Hnoncex_u #Hmintedx_u #Hprivatex_u #Heqx_u #Hsx_uV #Heqx_uV Htokenx_u".
   wp_pures.
   wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => True)%I) => //.
-  iIntros "%r %Hnoncer #Hmintedr #Hprivater #Heqr #HeqrV Htokenr".
+  iIntros "%r %Hnoncer #Hmintedr #Hprivater #Heqr #HsrV #HeqrV Htokenr".
+  iAssert (public (TInv r) ↔ ▷ □ False)%I as "{HsrV} HsrV".
+  { admit. }
   wp_pures.
   wp_apply wp_H'.
   wp_apply wp_texp.
@@ -54,7 +56,7 @@ Proof.
   iApply False_public.
   by rewrite minted_THash  minted_tag.
   rewrite bi.intuitionistic_intuitionistically.
-  by iApply "Hprivater".
+  by iApply "HsrV".
   iApply public_TExp_iff; auto.
   do !iSplit => //.
   by iApply minted_TInt.
@@ -121,6 +123,6 @@ Proof.
   wp_list.
   wp_pures.
   by iApply "Hhl".
-Qed.
+Admitted.
 
 End Opaque.

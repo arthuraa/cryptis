@@ -85,7 +85,7 @@ wp_apply (wp_mk_nonce_freshN {[ga]}
   rewrite minted_TInt /= bi.True_and.
   iModIntro. by iApply bi.equiv_iff.
   intro contra. destruct contra.
-iIntros "%b %fresh_b %nonce_b #m_b #s_b #dh_gb _ token".
+iIntros "%b %fresh_b %nonce_b #m_b #s_b #dh_gb _ _ token".
 have {}fresh_b: ¬ subterm b ga by apply: fresh_b; exact/elem_of_singleton.
 rewrite bi.intuitionistic_intuitionistically.
 set gb := TExp (TInt 0) b.

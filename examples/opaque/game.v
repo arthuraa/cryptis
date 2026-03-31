@@ -52,13 +52,13 @@ wp_apply wp_init_network => //.
 iIntros "%c #Hchannel".
 wp_pures.
 wp_apply (wp_mk_nonce (fun _ => True)%I (fun _ => False)%I) => //.
-iIntros "%uid %Hnonceuid #Hminuid #Hpubuid #Hdhuid _ Htermtokenuid".
+iIntros "%uid %Hnonceuid #Hminuid #Hpubuid #Hdhuid _ _ Htermtokenuid".
 iAssert (public uid) as "Hpubuid'".
 by iApply "Hpubuid".
 iClear "Hpubuid".
 wp_pures.
 wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => False)%I) => //.
-iIntros "%pw %Hnoncepw #Hminpw #Hprivpw #Hdhpw _ Htermtokenpw".
+iIntros "%pw %Hnoncepw #Hminpw #Hprivpw #Hdhpw _ _ Htermtokenpw".
 wp_pures.
 wp_bind (AList.new #()).
 iApply AList.wp_empty => //.
