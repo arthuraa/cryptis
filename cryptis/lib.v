@@ -6,7 +6,7 @@ From iris.base_logic Require Import gen_heap invariants.
 From mathcomp Require ssrbool order path.
 From deriving Require deriving.
 From cryptis Require Export mathcomp_compat.
-From cryptis.lib Require Export list repr list_match.
+From cryptis.lib Require Export repr list list_match.
 
 Lemma eq_op_bool_decide
   {T : eqtype.Equality.type}
@@ -30,7 +30,7 @@ Global Typeclasses Opaque escrow.
 
 Global Instance escrow_persistent N' P Q :
   Persistent (escrow N' P Q).
-Proof. rewrite /escrow. apply _. Qed.
+Proof. by rewrite /escrow; apply _. Qed.
 
 Definition switch (P Q : iProp Σ) : iProp Σ := ∃ R,
   □ (P ∗ □ R -∗ Q) ∗
@@ -44,7 +44,7 @@ Proof.
 rewrite /escrow.
 iIntros "HQ (%R & #contra & #mint)".
 iMod (inv_alloc N' _ (Q ∨ □ R) with "[HQ]") as "#inv".
-{ by eauto. }
+  by eauto.
 iIntros "!> %E' !> %sub HP".
 iInv "inv" as "[H|#H]".
 - iMod ("mint" with "HP") as "#HR".
@@ -62,17 +62,12 @@ Lemma escrowE N' P Q E :
   escrow N' P Q -∗
   P ={E}=∗
   ▷ Q.
-Proof.
-rewrite /escrow. iIntros "%sub #e HP".
-iApply "e" => //.
-Qed.
+Proof. by rewrite /escrow; iIntros "%sub #e HP"; iApply "e". Qed.
 
 End Escrow.
 
 Lemma or_sep1 {Σ} (P Q R : iProp Σ) : P ∨ Q -∗ P ∨ R -∗ P ∨ Q ∗ R.
-Proof.
-iIntros "[?|?] [?|?]"; eauto. iRight. by iFrame.
-Qed.
+Proof. by iIntros "[?|?] [?|?]"; eauto; iRight; iFrame. Qed.
 
 Lemma or_sep2 {Σ} (P Q R : iProp Σ) :
   Persistent P →
@@ -93,7 +88,7 @@ Lemma fupd_or' `{!invGS Σ} (A B C : iProp Σ) E :
   (B ={E}=∗ C) -∗ A ∨ B ={E}=∗ A ∨ C.
 Proof.
 iIntros "BC [HA | HB]"; eauto.
-iMod ("BC" with "HB"); eauto.
+by iMod ("BC" with "HB"); eauto.
 Qed.
 
 Definition namespace_map_data {A : cmra} (N : namespace) (a : A) :=
@@ -105,10 +100,12 @@ Lemma namespace_map_alloc_update {A : cmra} E (N : namespace) (a : A) :
   reservation_map_token E ~~> namespace_map_data N a.
 Proof.
 move=> sub valid; apply: reservation_map_alloc => //.
-assert (H : positives_flatten N ∈ (↑N : coPset)).
-{ rewrite namespaces.nclose_unseal. apply elem_coPset_suffixes.
-  exists 1%positive. by rewrite left_id_L. }
-set_solver.
+assert (H : positives_flatten N ∈ (↑N : coPset)); last first.
+  by set_solver.
+rewrite namespaces.nclose_unseal.
+apply elem_coPset_suffixes.
+exists 1%positive.
+by rewrite left_id_L.
 Qed.
 
 Lemma reservation_map_disj {A : cmra} E x (a : A) :
@@ -125,10 +122,12 @@ Lemma namespace_map_disj {A : cmra} E (N : namespace) (a : A) :
   False.
 Proof.
 move=> sub /reservation_map_disj.
-assert (H : positives_flatten N ∈ (↑N : coPset)).
-{ rewrite namespaces.nclose_unseal. apply elem_coPset_suffixes.
-  exists 1%positive. by rewrite left_id_L. }
-set_solver.
+assert (H : positives_flatten N ∈ (↑N : coPset)); last first.
+  by set_solver.
+rewrite namespaces.nclose_unseal.
+apply elem_coPset_suffixes.
+exists 1%positive.
+by rewrite left_id_L.
 Qed.
 
 #[global]
@@ -154,8 +153,9 @@ iMod (meta_set _ _ (fresh X) with "Htoken") as "#Hmeta2"=> //.
 iAssert (meta l N (encode x)) as "Hmeta1'".
   by rewrite {1 3}/meta seal_eq.
 iPoseProof (meta_agree with "Hmeta1' Hmeta2") as "%e"; iPureIntro.
-assert (contra : encode x ∈ X). { by apply/elem_of_singleton. }
-destruct (is_fresh X); by rewrite -e.
+assert (contra : encode x ∈ X).
+  by apply/elem_of_singleton.
+by destruct (is_fresh X); rewrite -e.
 Qed.
 
 Lemma big_sepS_union_pers (PROP : bi) `{!BiAffine PROP, !EqDecision A, !Countable A}
@@ -165,8 +165,7 @@ Lemma big_sepS_union_pers (PROP : bi) `{!BiAffine PROP, !EqDecision A, !Countabl
 Proof.
 move=> ?; rewrite !big_sepS_forall.
 apply: (anti_symm _).
-- iIntros "H"; iSplit; iIntros "%a %a_in"; iApply "H";
-  iPureIntro; set_solver.
+- by iIntros "H"; iSplit; iIntros "%a %a_in"; iApply "H"; iPureIntro; set_solver.
 - iIntros "H %x %x_XY".
   case/elem_of_union: x_XY => [x_X|x_Y].
   + by iDestruct "H" as "[H _]"; iApply "H".
@@ -196,8 +195,7 @@ Lemma and_proper_L (PROP : bi) (P : Prop) (φ ψ : PROP) :
   (P → φ ⊣⊢ ψ) →
   ⌜P⌝ ∧ φ ⊣⊢ ⌜P⌝ ∧ ψ.
 Proof.
-by move=> φ_ψ; apply: (anti_symm _); iIntros "[% ?]";
-rewrite φ_ψ; eauto.
+by move=> φ_ψ; apply: (anti_symm _); iIntros "[% ?]"; rewrite φ_ψ; eauto.
 Qed.
 
 #[global]
@@ -241,7 +239,7 @@ Lemma option_equivE `{Equiv A} (ox oy : option A) :
   | None, None => True
   | _, _ => False
   end.
-Proof. apply option_Forall2E. Qed.
+Proof. exact: option_Forall2E. Qed.
 
 (* Double-check this does not exist *)
 Lemma singleton_inj `{!EqDecision T, !Countable T} :
@@ -282,7 +280,6 @@ Fixpoint pure_expr e : bool :=
   | NewProph => false
   | Resolve _ _ _ => false
   end
-
 with pure_val v : bool :=
   match v with
   | LitV _ => true
@@ -483,7 +480,7 @@ rewrite unlock; case: n xs=> [|n] [|x xs] //= ne.
 have {}ne : length xs ≠ n by congruence.
 suffices : ∀ B (x : B), prod_of_list_aux n x xs = None by apply.
 elim: n xs {x} => [|n IH] [|y ys] //= in ne * => B x.
-rewrite IH //; congruence.
+by rewrite IH //; congruence.
 Qed.
 
 Lemma fmap_binder_delete {A B} (f : A → B) (m : gmap string A) x :
@@ -510,7 +507,7 @@ Lemma binder_insert_same {A} (m1 m2 : gmap string A) (i : binder) (x : A) :
 Proof.
 case: i => [|i] /= e12.
 - by apply: map_eq => i; apply: e12.
-- apply: insert_same => ??; apply: e12; congruence.
+- by apply: insert_same => ??; apply: e12; congruence.
 Qed.
 
 Lemma binder_insert_delete {A} (m : gmap string A) (i : binder) (x : A) :
@@ -566,9 +563,7 @@ Qed.
 Lemma wp_nondet_nat Ψ :
   (∀ n : nat, Ψ #n) ⊢
   WP nondet_nat #() {{ Ψ }}.
-Proof.
-iIntros "post". wp_lam. by wp_apply (wp_nondet_nat_loop _ 0).
-Qed.
+Proof. by iIntros "post"; wp_lam; wp_apply (wp_nondet_nat_loop _ 0).  Qed.
 
 Lemma wp_nondet_int Ψ :
   (∀ n : Z, Ψ #n) ⊢
