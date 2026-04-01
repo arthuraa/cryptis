@@ -23,7 +23,7 @@ Ltac substC :=
 Lemma substC x1 x2 v1 v2 e :
   x1 ≠ x2 →
   subst x1 v1 (subst x2 v2 e) = subst x2 v2 (subst x1 v1 e).
-Proof. by move=> x12; elim: e => //= *; substC; congruence. Qed.
+Proof. by move=> x12; elim: e => //= *; substC; by congruence. Qed.
 
 Lemma subst_list_match_aux var v vars el ek :
   subst var v (list_match_aux vars el ek) =
@@ -33,11 +33,11 @@ Proof.
 elim: vars => [|var' vars IH] //= in el ek *.
 case: (decide (var = var')) => [<-|ne].
   rewrite decide_False; last by intuition congruence.
-  rewrite (@decide_True _ (var ∈ var :: vars)) //; last by set_solver.
+  by rewrite (@decide_True _ (var ∈ var :: vars)) //; set_solver.
 rewrite decide_True; last by intuition congruence.
 rewrite IH; case: (decide (var ∈ vars)) => [in_vars|nin_vars] /=.
   rewrite (@decide_False _ (var = var')) //.
-  rewrite !(@decide_True  _ (var ∈ _)) //; set_solver.
+  by rewrite !(@decide_True  _ (var ∈ _)) //; set_solver.
 rewrite decide_False // (@decide_False _ (var ∈ _)); last by set_solver.
 case: decide => [in_vars'|nin_vars'] //=.
 by rewrite decide_False.
@@ -57,9 +57,9 @@ Lemma subst_close_vars var v vars k :
 Proof.
 elim: vars => [|var' vars IH] //= in k *.
 case: decide => [in_vars'|nin_vars'] nin_vars /=.
-  apply: IH; set_solver.
+  by apply: IH; set_solver.
 rewrite decide_True; last by split; eauto; set_solver.
-rewrite IH //; set_solver.
+by rewrite IH //; set_solver.
 Qed.
 
 Fact list_match_key : unit. Proof. exact: tt. Qed.
@@ -88,7 +88,7 @@ have neq : var ≠ var' by set_solver.
 have {}nin_vars : var ∉ vars by set_solver.
 case: (decide (var' ∈ vars)) => [in_vars'|nin_vars'] /=.
   by rewrite IH.
-rewrite decide_True ?IH //; by intuition congruence.
+by rewrite decide_True ?IH //; intuition congruence.
 Qed.
 
 Definition binder_vars x : gset string :=
@@ -144,9 +144,7 @@ Ltac subst_free_vars :=
   end.
 
 Lemma subst_free_vars x v e : x ∉ free_vars e → subst x v e = e.
-Proof.
-elim: e => //=; try by intros; subst_free_vars; congruence.
-Qed.
+Proof. elim: e => //=; try by intros; subst_free_vars; by congruence. Qed.
 
 Fixpoint nsubst (vars : list string) (vs : list val) (k : expr) : expr :=
   match vars, vs with
@@ -181,15 +179,11 @@ Ltac subst_free_vars_rem :=
   ).
 
 Lemma subst_free_vars_rem var v e : var ∉ free_vars (subst var v e).
-Proof.
-by elim: e => /=; try by intros; subst_free_vars_rem; congruence.
-Qed.
+Proof. by elim: e => /=; try by intros; subst_free_vars_rem; by congruence. Qed.
 
 Lemma free_vars_subst var v e :
   free_vars (subst var v e) = free_vars e ∖ {[var]}.
-Proof.
-elim: e => //=; intros; subst_free_vars_rem; subst; set_solver.
-Qed.
+Proof. elim: e => //=; intros; subst_free_vars_rem; subst; by set_solver. Qed.
 
 Lemma subst_nsubst var v vars vs e :
   var ∈ vars →
@@ -197,7 +191,7 @@ Lemma subst_nsubst var v vars vs e :
 Proof.
 elim: vars vs=> [|var' vars IH] [|v' vs]; try by rewrite ?elem_of_nil //=.
 case: (decide (var = var')) => [<- _|var_var'].
-  rewrite subst_free_vars //; exact: subst_free_vars_rem.
+  by rewrite subst_free_vars //; exact: subst_free_vars_rem.
 rewrite elem_of_cons; case => var_in /=; first congruence.
 by rewrite substC // IH.
 Qed.
@@ -216,9 +210,9 @@ Lemma free_vars_nsubst vars vs e :
   free_vars (nsubst vars vs e) = free_vars e ∖ ⋃ (singleton <$> vars).
 Proof.
 elim: vars vs => [|var vars IH] [|v vs] //= in e *.
-  move=> _; set_solver.
+  by move=> _; set_solver.
 case=> e_len; rewrite free_vars_subst IH //.
-set_solver.
+by set_solver.
 Qed.
 
 Section ListLemmas.
@@ -257,13 +251,13 @@ assert (dis' : elements (free_vars k) ## vars) by set_solver.
 iApply (IH with "[]"); try by iIntros (Ψ') "p'"; wp_pures; eauto.
   case: decide => _ //=.
   rewrite free_vars_subst decide_True //=.
-  set_solver.
+  by set_solver.
 case: (decide (length vars = length vs)) => [eq_l|neq_l]; last first.
-  rewrite decide_False //; congruence.
+  by rewrite decide_False //; congruence.
 rewrite eq_l decide_True //.
 case: decide => [//|nin_vars] /=.
 rewrite decide_True //= subst_free_vars //.
-wp_pures; iApply wp_bind; wp_pures; by iApply wp_bind_inv.
+by wp_pures; iApply wp_bind; wp_pures; iApply wp_bind_inv.
 Qed.
 
 Lemma wp_close_vars E vars vs k Ψ :
@@ -296,7 +290,7 @@ Lemma wp_list_match E vars (vs : list A) k Ψ :
 Proof.
 rewrite unlock; iIntros "post".
 assert (disj : elements (free_vars (close_vars vars k)) ## vars).
-  elim: vars => [|var vars IH] /= in k *; try case: decide => ?; set_solver.
+  by elim: vars => [|var vars IH] /= in k *; try case: decide => ?; set_solver.
 iApply (wp_list_match_aux E vs (repr vs)); eauto.
   by iIntros (?) "?"; iApply wp_value.
 case: decide => ? //.
