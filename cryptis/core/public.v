@@ -450,7 +450,7 @@ f_equiv; f_equiv; last (f_equiv; f_equiv).
 - f_equiv => T; apply: and_proper_L => T_t.
   apply: big_sepS_proper => t' T_t'.
   by move: (decompose_tsize T_t T_t') => ?; eauto.
-- f_equiv; apply: big_sepL_proper => _ t' /(elem_of_list_lookup_2 _ _ _).
+- f_equiv; apply: big_sepL_proper => _ t' /(list_elem_of_lookup_2 _ _ _).
   case/tsize_TExp_TInv=> lt1 [] lt2 lt3; f_equiv.
   + apply: exp_pred0_proper' => /= t'' t''_ts; apply: HP.
     by case: t''_ts => [->//|/tsize_TExp_TInv[?[??]]].
@@ -688,7 +688,7 @@ Proof.
 iIntros "%t1_t2 #dh"; have {}t1_t2: [t1] ⊆ exps t2 by set_solver.
 have t1_t1: t1 ∈ [t1] by set_solver.
 iPoseProof (exp_pred_inv_gen t1_t1 t1_t2 with "dh") as "(%t & %t_t1 & H)".
-move: t_t1; rewrite elem_of_list_singleton => {t} ->.
+move: t_t1; rewrite list_elem_of_singleton => {t} ->.
 iDestruct "H" as "[H|(%t3 & #? & %t1_t3 & #base)]"; first by eauto.
 iRight; iExists t3; iFrame "#"; iPureIntro; set_solver.
 Qed.
@@ -975,7 +975,7 @@ have [exp_t1|nexp_t1] := decide (is_exp (TExp t1 t2)); last first.
   by move/not_elem_of_TInv_exps: t2_t1; rewrite exps_expN // elem_of_nil.
 rewrite [public (TExp _ _)]public_TExpN' //; iSplit.
   by iApply all_minted_TExp; iSplit; iApply public_minted.
-rewrite big_sepL_forall; iIntros (? t t_t1'%elem_of_list_lookup_2).
+rewrite big_sepL_forall; iIntros (? t t_t1'%list_elem_of_lookup_2).
 have [->|t_t2] := decide (t = t2).
   by rewrite TExpNK; iSplit; eauto; iApply exp_pred_intro3.
 have t_t1: t ∈ exps t1.
@@ -1097,7 +1097,7 @@ rewrite [public (TExp _ _)]public_TExpN' //; last first.
 iSplit.
   by rewrite public_minted; iApply all_minted_TExp; iSplit.
 iApply big_sepL_forall; iIntros (k t t_t1').
-have {}t_t1': t ∈ exps (TExp t1 t2) by apply: elem_of_list_lookup_2.
+have {}t_t1': t ∈ exps (TExp t1 t2) by apply: list_elem_of_lookup_2.
 have [->|t_t2] := decide (t = t2).
   by iSplit => //; iIntros "!> #p2"; rewrite TExpNK.
 have t_t1: t ∈ exps t1.

@@ -134,7 +134,7 @@ iIntros "(%nI & %nR & -> & _ & _ & #priv_nI & #priv_nR &
 have [nRnI nRnIV] : nR ≠ nI ∧ nR ≠ TInv nI.
   apply: (fresh (mk_key_share nI)); eauto.
   - by rewrite elem_of_singleton.
-  - eapply STExp2; eauto; rewrite ?elem_of_list_singleton //.
+  - eapply STExp2; eauto; rewrite ?list_elem_of_singleton //.
     exact: invs_canceled1.
 rewrite /= /pk_dh_mk_session_key /pk_dh_mk_key_share TExpNC TExp_TExpN.
 iIntros "#p_kS".

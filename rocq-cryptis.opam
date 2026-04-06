@@ -10,11 +10,12 @@ bug-reports: "https://github.com/arthuraa/cryptis/issues"
 dev-repo: "git+https://github.com/arthuraa/cryptis.git"
 
 depends: [
-  "rocq-prover" {= "9.1.0"}
+  "rocq-prover"
+  "rocq-core" {= "9.1.1"}
   "rocq-mathcomp-ssreflect" {= "2.5.0"}
   "coq-deriving" {= "0.2.2"}
-  "coq-iris" {= "4.4.0"}
-  "coq-iris-heap-lang" {= "4.4.0"}
+  "rocq-iris" {= "4.5.0"}
+  "rocq-iris-heap-lang" {= "4.5.0"}
 ]
 
 build: [make "-j%{jobs}%"]

@@ -181,7 +181,7 @@ Lemma release_token_released_session si rl :
   False.
 Proof.
 iIntros "token [#init #resp]".
-iApply (term_meta_token with "token"); last by case: rl.
+iApply (term_meta_token (L:=bool) with "token"); last by case: rl.
 by [].
 Qed.
 
@@ -394,7 +394,7 @@ iPoseProof (exp_pred_inv with "contraA") as "(%t & %t_share & H)".
   by apply: elem_of_TExpN2l; rewrite //= elem_of_nil; eauto.
 have exps_share: exps (TExpN (TInt 0) [a; b]) ≡ₚ [a; b].
   by rewrite exps_TExpN' //= ?invs_canceled2; eauto.
-rewrite exps_share elem_of_cons elem_of_list_singleton in t_share.
+rewrite exps_share elem_of_cons list_elem_of_singleton in t_share.
 iDestruct "H" as "[H|(%t3 & %e_base & %exps_sub & base)]".
   by case: t_share=> ->; eauto.
 rewrite exps_share in exps_sub.
@@ -402,7 +402,7 @@ iAssert (▷ □ iso_dh_key_share t3)%I as ">%contra".
   by case: t_share=> ->; [iApply "pred_a"|iApply "pred_b"].
 case: (exps t3) => // c [|//] in exps_sub contra.
 have [a_c b_c]: a ∈ [c] ∧ b ∈ [c] by set_solver.
-rewrite !elem_of_list_singleton in a_c b_c; congruence.
+rewrite !list_elem_of_singleton in a_c b_c; congruence.
 Qed.
 
 Lemma public_dh_secret' a b (P : iProp) :
@@ -430,9 +430,10 @@ Lemma iso_dhGS_alloc `{!heapGS Σ, !cryptisGS Σ} E :
     iso_dh_ctx ∗ iso_dh_token ⊤ ∗
     seal_pred_token SIGN (E ∖ ↑iso_dhN).
 Proof.
-iIntros "% % token".
+iIntros "% %Hpre token".
 iMod gmeta_token_alloc as (γ_meta) "own".
-iExists (IsoDhGS _ γ_meta).
+set iso_dhGS0 := {| iso_dh_inG := Hpre; iso_dh_name := γ_meta |} : iso_dhGS Σ.
+iExists iso_dhGS0.
 iMod (iso_dh_ctx_alloc with "token") as "[#H ?]" => //.
 by iFrame.
 Qed.

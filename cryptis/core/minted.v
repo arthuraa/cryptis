@@ -84,7 +84,7 @@ have /elem_of_subseteq in_nonces := nonces_of_term_TExpN_subseteq t ts.
 
 move: l_in => /(in_nonces l). rewrite elem_of_union elem_of_union_list.
 case => [?|]; first by iApply "Ht".
-case => _ [] /elem_of_list_fmap [] t' [] -> ??.
+case => _ [] /list_elem_of_fmap [] t' [] -> ??.
 rewrite big_sepL_elem_of // big_sepS_forall.
 by iApply "Hts".
 Qed.

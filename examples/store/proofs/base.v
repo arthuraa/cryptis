@@ -163,7 +163,7 @@ Proof.
 rewrite /public_db !big_sepM_forall.
 iIntros "#p_t1 #p_t2 #p_db %t1' %t2'".
 case: (decide (t1' = t1)) => [-> {t1'} | ne].
-- rewrite lookup_insert. iIntros "%e". case: e => ->. by eauto.
+- rewrite lookup_insert_eq. iIntros "%e". case: e => ->. by eauto.
 - by rewrite lookup_insert_ne //.
 Qed.
 

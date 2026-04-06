@@ -331,7 +331,7 @@ rewrite (_ : path.sort _ _ ≡ₚ PreTerm.cancel_exps _); last first.
   by apply/(ssrbool.elimT perm_Perm); rewrite path.perm_sort.
 congr (_ ∪ (⋃ _)).
 have /(ssrbool.elimT seq.allP) wfs := PreTerm.wf_cancel_exps (wf_unfold_terms ts).
-by apply: map_ext_in => ? /elem_of_list_In /(ssrbool.introT inP) /wfs ?; rewrite fold_termK.
+by apply: map_ext_in => ? /list_elem_of_In /(ssrbool.introT inP) /wfs ?; rewrite fold_termK.
 Qed.
 
 Lemma nonces_of_term_TExpN_subseteq t ts :
@@ -341,9 +341,9 @@ rewrite -[t]base_expsK TExpNA !nonces_of_term_TExpN ?is_exp_base // cancel_exps_
 rewrite -assoc -union_list_app_L -map_app -catE; apply union_mono_l.
 have ? := subseteq_cancel_exps (exps t ++ ts).
 move => ? /elem_of_union_list.
-case => _ [] /elem_of_list_fmap [] t' [] -> ??.
+case => _ [] /list_elem_of_fmap [] t' [] -> ??.
 rewrite elem_of_union_list; exists (nonces_of_term t'); split => //.
-rewrite elem_of_list_fmap; set_solver.
+rewrite list_elem_of_fmap; set_solver.
 Qed.
 Global Arguments nonces_of_term_TExpN_subseteq t ts : clear implicits.
 
@@ -412,7 +412,7 @@ case: seq.nilP => [cancel_nil | _] /=.
     by apply/(ssrbool.elimT perm_Perm); rewrite path.perm_sort.
   congr (_ ∪ (⋃ _)).
   have /(ssrbool.elimT seq.allP) wfs := PreTerm.wf_cancel_exps (wf_unfold_terms ts).
-  by apply: map_ext_in => ? /elem_of_list_In /(ssrbool.introT inP) /wfs ?; rewrite fold_termK.
+  by apply: map_ext_in => ? /list_elem_of_In /(ssrbool.introT inP) /wfs ?; rewrite fold_termK.
 Qed.
 
 Lemma subterms_nonce t : is_nonce t → subterms t = {[t]}.
@@ -448,12 +448,12 @@ split.
   move => t' t'' ?? /is_trueP ? *; rewrite subtermsE //.
   rewrite elem_of_union; right.
   rewrite elem_of_union_list; exists (subterms t''); split => //.
-  by rewrite elem_of_list_fmap cancel_exps_canceled; set_solver.
+  by rewrite list_elem_of_fmap cancel_exps_canceled; set_solver.
 - elim: t2; try by solve_subtermsP.
   move => t IHt /is_trueP ? ts IHts _ _ ?; rewrite subtermsE //.
   rewrite cancel_exps_canceled // !elem_of_union elem_of_union_list elem_of_singleton.
   case => [[-> | /IHt ?] |]; try by constructor.
-  case => _ [] /elem_of_list_fmap [] t' [] -> t'_ts sub.
+  case => _ [] /list_elem_of_fmap [] t' [] -> t'_ts sub.
   suffices: subterm t1 t' by eauto using subterm.
   elim: (ts) IHts t'_ts sub => /= [_ /elem_of_nil| ??? [??] /elem_of_cons] //.
   by case => [-> |]; eauto.
@@ -485,12 +485,12 @@ split.
   move => t t' ts ? /is_trueP ? *; rewrite nonces_of_termE //.
   rewrite elem_of_union; right.
   rewrite elem_of_union_list; exists (nonces_of_term t'); split => //.
-  by rewrite elem_of_list_fmap cancel_exps_canceled; set_solver.
+  by rewrite list_elem_of_fmap cancel_exps_canceled; set_solver.
 - elim: t; try by solve_nonces_of_termP.
   move => t IHt /is_trueP ? ts IHts ???; rewrite nonces_of_termE //.
   rewrite cancel_exps_canceled // !elem_of_union elem_of_union_list.
   case => [/IHt ?|]; first by constructor.
-  case => _ [] /elem_of_list_fmap [] t' [] -> t'_ts sub.
+  case => _ [] /list_elem_of_fmap [] t' [] -> t'_ts sub.
   suffices: subterm (TNonce a) t' by eauto using subterm.
   elim: (ts) IHts t'_ts sub => /= [_ /elem_of_nil| ??? [??] /elem_of_cons] //.
   by case => [-> |]; eauto.
@@ -505,7 +505,7 @@ rewrite cancel_exps_canceled //.
 have: nonces_of_term t2' ⊆ ⋃ map nonces_of_term ts.
   move => t t_t2'.
   rewrite elem_of_union_list; exists (nonces_of_term t2'); split => //.
-  by rewrite elem_of_list_fmap; eauto.
+  by rewrite list_elem_of_fmap; eauto.
 set_solver.
 Qed.
 

@@ -80,8 +80,8 @@ Lemma inP {T : eqType} {x : T} {xs : seq T} :
 Proof.
 apply /(equivP idP).
 elim: xs => //= [| ?? IH].
-- by rewrite list_basics.elem_of_nil.
-- rewrite inE list_basics.elem_of_cons -IH; split.
+- by rewrite list_basics.list.elem_of_nil.
+- rewrite inE list_basics.list.elem_of_cons -IH; split.
   + move => /orP [/eqP |]; auto.
   + by move => [/eqP -> | -> ] //; rewrite orbT.
 Qed.

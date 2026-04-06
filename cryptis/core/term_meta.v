@@ -99,7 +99,7 @@ iIntros "[_ name1] [_ name2]".
 iPoseProof (own_valid_2 with "name1 name2") as "%valid".
 rewrite -auth_frag_op auth_frag_valid in valid.
 move/(_ t): valid.
-rewrite lookup_op !lookup_singleton -Some_op Some_valid.
+rewrite lookup_op !lookup_singleton_eq -Some_op Some_valid.
 by move=> /to_agree_op_inv_L ->.
 Qed.
 

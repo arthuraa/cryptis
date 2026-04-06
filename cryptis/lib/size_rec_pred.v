@@ -1,7 +1,7 @@
 From mathcomp Require Import ssreflect.
 From stdpp Require Import base.
-From iris.proofmode Require Import ltac_tactics.
-From iris.base_logic Require Import iprop proofmode.
+From iris.proofmode Require Import proofmode.
+From iris.base_logic Require Import iprop.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -37,7 +37,7 @@ Lemma size_rec_pred_persistent F :
           (∀ x, F P x -∗ <pers> F P x)) -∗
   ∀ x, size_rec_pred F x -∗ <pers> size_rec_pred F x.
 Proof.
-iIntros "#HF %x H"%string; rewrite /size_rec_pred; move: (s x) => n.
+iIntros "#HF %x H"; rewrite /size_rec_pred; move: (s x) => n.
 iInduction n as [|n IH] forall (x) => /=; by iApply "HF"; eauto.
 Qed.
 

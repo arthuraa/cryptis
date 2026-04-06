@@ -52,7 +52,7 @@ iSpecialize ("dh" with "base"); iModIntro; iNext.
 iDestruct "dh" as "#(%l_t & p_t)"; iFrame "#".
 rewrite -[t in LHS]base_expsK.
 case: (exps t) => // b [|//] in a_t l_t *.
-by rewrite elem_of_list_singleton in a_t; subst b.
+by rewrite list_elem_of_singleton in a_t; subst b.
 Qed.
 
 Lemma dh_seed_elim1 g a :
@@ -95,7 +95,7 @@ have a_t : a ∈ exps (TExpN g [a; b]) by rewrite exps_t; set_solver.
 have b_t : b ∈ exps (TExpN g [a; b]) by rewrite exps_t; set_solver.
 iPoseProof (exp_pred_exps a_t with "p") as "[dh_a _]".
 iPoseProof (exp_pred_inv with "dh_a") as "(%c & %c_t & p_c)" => //.
-rewrite exps_t elem_of_cons elem_of_list_singleton in c_t.
+rewrite exps_t elem_of_cons list_elem_of_singleton in c_t.
 rewrite base_TExpN base_expN //.
 iDestruct "p_c" as "[p_c|(%t' & %ebase & %exps_t'S & contra)]".
   case: c_t=> ->.
@@ -109,8 +109,8 @@ iAssert (▷ □ dh_publ t')%I as "[>%len_t' #H]".
 case exps_t': (exps t') => [//|d [|//]] in exps_t'S len_t'.
 have ->: t' = TExp g d by rewrite -exps_t' -ebase base_expsK.
 move: a_b.
-have /elem_of_list_singleton ->: a ∈ [d] by set_solver.
-have /elem_of_list_singleton ->: b ∈ [d] by set_solver.
+have /list_elem_of_singleton ->: a ∈ [d] by set_solver.
+have /list_elem_of_singleton ->: b ∈ [d] by set_solver.
 congruence.
 Qed.
 
