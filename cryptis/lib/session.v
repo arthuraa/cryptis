@@ -333,7 +333,7 @@ iMod (nown_update with "own") as "own".
   apply: op_local_update_frame.
   apply: (insert_local_update _ _ t).
   - by rewrite lookup_fmap SM_sA.
-  - by rewrite lookup_singleton.
+  - by rewrite lookup_singleton_eq.
   rewrite /session_status_both /session_status_auth /session_status_frag /=.
   rewrite -[● None as X in (_, X)]right_id.
   apply: auth_local_update.
@@ -342,7 +342,7 @@ iMod (nown_update with "own") as "own".
   - by [].
 rewrite auth_frag_op !nown_op.
 iDestruct "own" as "(own & sessA & sessB)".
-rewrite insert_singleton -singleton_op.
+rewrite insert_singleton_eq -singleton_op.
 rewrite auth_frag_op nown_op. iDestruct "sessA" as "[_ #sessA]".
 iFrame "res"; iModIntro; iSplitL; eauto; iModIntro.
 iClear "not_fresh".
@@ -358,7 +358,7 @@ iDestruct "inv" as "[inv_s inv]".
 iSplitL "inv_s"; first by iFrame.
 rewrite (big_sepM_delete _ (delete t SM)); last first.
   rewrite lookup_delete_ne; last eauto; eauto.
-iFrame; iSplitR "inv"; last by rewrite delete_commute.
+iFrame; iSplitR "inv"; last by rewrite delete_delete.
 iExists _, _, _; iSplit => //.
 by iRight; case: (rl); iSplit.
 Qed.

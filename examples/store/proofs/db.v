@@ -70,7 +70,7 @@ move/(_ t): valid.
 rewrite !discrete_fun_lookup_op /to_db_state /db_singleton.
 case: (decide (t = t1)) => [-> {t}|t_t1]; last first.
 { rewrite lookup_insert_ne // !discrete_fun_lookup_singleton_ne //. }
-rewrite lookup_insert !discrete_fun_lookup_singleton //=.
+rewrite lookup_insert_eq !discrete_fun_lookup_singleton //=.
 move: (db' t1); apply/cmra_discrete_total_update.
 apply: auth_update.
 apply (transitivity (y := (None, None))).
@@ -89,7 +89,7 @@ case: (decide (t = t1)) => [-> {t}|t_t1]; last first.
 { rewrite lookup_insert_ne // !discrete_fun_lookup_singleton_ne //.
   rewrite decide_False //; set_solver. }
 rewrite decide_True // ?elem_of_singleton //.
-rewrite lookup_insert !discrete_fun_lookup_singleton //=.
+rewrite lookup_insert_eq !discrete_fun_lookup_singleton //=.
 move: (db' t1); apply/cmra_discrete_total_update.
 apply: auth_update.
 apply: option_local_update.

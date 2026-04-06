@@ -64,7 +64,7 @@ case=> [kvs] [-> {v}] kvs_db. iIntros "%Φ _ Hpost".
 wp_lam. wp_pures. iApply (wp_cons _ (k, v')). iApply "Hpost".
 iPureIntro. exists ((k, v') :: kvs); split => //= k'.
 case: bool_decide_reflect => [<-|ne] //=;
-by rewrite (lookup_insert, lookup_insert_ne).
+by rewrite (lookup_insert_eq, lookup_insert_ne).
 Qed.
 
 Lemma wp_delete v db k E :
@@ -81,7 +81,7 @@ iApply (wp_filter_list (λ p : term * val, negb (bool_decide (k = p.1))))
   iApply wp_eq_term. wp_pures. by iApply "Hpost". }
 iIntros "!> _". iApply "Hpost". iPureIntro.
 eexists _; split; eauto => // k'. case: (decide (k = k')) => [<- {k'}|ne].
-- rewrite lookup_delete. case eq_find: List.find => [[t1 t2]|] //=.
+- rewrite lookup_delete_eq. case eq_find: List.find => [[t1 t2]|] //=.
   case/(@find_some _ _ _ _): eq_find => /= in_filter.
   case: bool_decide_reflect => // -> in in_filter *.
   rewrite filter_In /= in in_filter; case: in_filter => _.

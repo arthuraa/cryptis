@@ -181,7 +181,7 @@ Lemma release_token_released_session si rl :
   False.
 Proof.
 iIntros "token [#init #resp]".
-iApply (term_meta_token with "token"); last by case: rl.
+iApply (term_meta_token (L:=bool) with "token"); last by case: rl.
 by [].
 Qed.
 
@@ -400,9 +400,10 @@ Lemma iso_dhGS_alloc `{!heapGS Σ, !cryptisGS Σ} E :
     iso_dh_ctx ∗ iso_dh_token ⊤ ∗
     seal_pred_token SIGN (E ∖ ↑iso_dhN).
 Proof.
-iIntros "% % token".
+iIntros "% %Hpre token".
 iMod gmeta_token_alloc as (γ_meta) "own".
-iExists (IsoDhGS _ γ_meta).
+set iso_dhGS0 := {| iso_dh_inG := Hpre; iso_dh_name := γ_meta |} : iso_dhGS Σ.
+iExists iso_dhGS0.
 iMod (iso_dh_ctx_alloc with "token") as "[#H ?]" => //.
 by iFrame.
 Qed.
