@@ -43,7 +43,7 @@ game #()
 Proof.
 iIntros "%ϕ (#Hcryptis & h_pred_tok & s_pred_tok) Hhl".
 iMod (opaque_alloc with "h_pred_tok s_pred_tok") as
-  "(#Hhprw & #HhpA_s & #HhpA_u & #HhpSK & #HhpK & #Hsenc)" => //.
+  "[(#Hhprw & #HhpA_s & #HhpA_u & #HhpSK & #HhpK & #Hhpα & #Hsenc) _]" => //.
 wp_lam.
 wp_apply wp_init_network => //.
 iIntros "%c #Hchannel".
@@ -62,7 +62,7 @@ iApply AList.wp_empty => //.
 iNext.
 iIntros "%db Halist".
 wp_pures.
-wp_apply (wp_make_file pw (fun _ _ => True%I)).
+wp_apply (wp_make_file pw).
 do !iSplit => //.
 iIntros "%file Hopaquefile" => /=.
 wp_bind (AList.insert db uid file).
