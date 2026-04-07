@@ -264,7 +264,7 @@ Tactic Notation "wp_recv_core" tactic3(tac_intros) "as" tactic3(tac) :=
   lazymatch goal with
   | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
     first
-      [reshape_expr e ltac:(fun K e' => eapply (tac_wp_recv _ _ Hnew K))
+      [reshape_expr e ltac:(fun K e' => eapply (tac_wp_recv _ Hnew K))
       |fail 1 "wp_recv: cannot find 'recv' in" e];
     [solve_pointsto ()
        |tc_solve || fail 1 "wp_recv: protocol not of the shape <?>"
