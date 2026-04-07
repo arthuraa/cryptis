@@ -162,7 +162,7 @@ iMod (lc_fupd_elim_later with "c3 Px") as "?".
 by eauto.
 Qed.
 
-Lemma wp_recv' {TT : tele} `{Inhabited TT} skI skR rl cs
+Lemma wp_recv_inhabited {TT : tele} `{Inhabited TT} skI skR rl cs
   (t : TT → term) (P : TT → iProp) (p : TT → iProto Σ term) :
   {{{ connected skI skR rl cs (<?.. x> MSG t x {{ ▷ P x }}; p x) }}}
     impl.recv (repr cs)
@@ -185,6 +185,36 @@ wp_apply (GenConn.wp_recv (λ skI skR si (t' : term),
 iIntros "%t' (conn & #p_t' & [#fail|inv])".
 { iApply ("post" $! t' inhabitant) . iFrame. by iFrame "#". }
 iDestruct "inv" as (x) "(-> & own & Px)". iApply ("post" $! (t x) x).
+iMod (lc_fupd_elim_later with "c3 Px") as "?".
+iFrame. by eauto.
+Qed.
+
+Lemma wp_recv_term skI skR rl cs (P : term → iProp) (p : term → iProto Σ term) :
+  {{{ connected skI skR rl cs (<? t> MSG t {{ ▷ P t }}; p t) }}}
+    impl.recv (repr cs)
+  {{{ t, RET (repr t); public t ∗
+      connected skI skR rl cs (p t) ∗
+      (public (si_key cs) ∨ P t) }}}.
+Proof.
+iIntros ""; iIntros (Φ) "[c own] post".
+rewrite /impl.recv. wp_pure _ credit:"c1". wp_pure _ credit:"c2".
+wp_pure _ credit:"c3". wp_apply wp_fupd.
+wp_apply (GenConn.wp_recv (λ skI skR si (t : term),
+              sess_own skI skR si rl (p t) ∗ ▷ P t)%I
+           with " [$c c1 c2 own]").
+{ iDestruct "own" as "[#fail|own]"; eauto.
+  iRight. iIntros (t ts_send ts_recv) "inv".
+  pose TT : tele := TeleS (λ t : term, TeleO).
+  iAssert (sess_own skI skR cs rl
+             (<?.. x> MSG @tele_app TT _ (λ t, t) x {{ ▷ @tele_app TT _ (λ t, P t) x }};
+                   @tele_app TT _ (λ t, p t) x)) with "[own]" as "own".
+  { iApply (sess_own_le with "own"). rewrite /=. iModIntro. eauto. }
+  iMod (sess_recv with "[$c1 $c2] own inv") as "[? H]".
+  iModIntro. iFrame. iModIntro.
+  iDestruct "H" as (x) "(-> & own & H)". rewrite /=. by iFrame. }
+iIntros "%t (conn & #p_t & [#fail|inv])".
+{ iApply ("post" $! t) . iFrame. by iFrame "#". }
+iDestruct "inv" as "(own & Px)". iApply ("post" $! t).
 iMod (lc_fupd_elim_later with "c3 Px") as "?".
 iFrame. by eauto.
 Qed.
