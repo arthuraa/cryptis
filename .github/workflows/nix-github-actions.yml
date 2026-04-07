@@ -37,4 +37,12 @@ jobs:
           purge: true
           purge-created: 604800
           purge-primary-key: never
-      - run: nix build -L '.#${{ matrix.attr }}'
+      - name: Set number of cores
+        id: cores
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            echo "count=3" >> "$GITHUB_OUTPUT"
+          else
+            echo "count=4" >> "$GITHUB_OUTPUT"
+          fi
+      - run: nix build -L --cores ${{ steps.cores.outputs.count }} '.#${{ matrix.attr }}'
