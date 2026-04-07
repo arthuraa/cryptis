@@ -144,7 +144,12 @@ Proof.
   iPureIntro.
   apply /subtermsP. rewrite subtermsE // cancel_exps1 /g subtermsE /= !right_id_L.
   rewrite [subterms p_u]subterms_nonce //.
-  admit.
+  rewrite !not_elem_of_union.
+  do !split; rewrite elem_of_singleton //; destruct p_s => //.
+  destruct p_u => //.
+  rewrite /TExpN unlock /fold_term unlock /PreTerm.exp /= /PreTerm.insert_exp /path.sort /=
+  /fold_term_def /PreTerm.normalize /= /PreTerm.insert_exp /path.sort /= /PreTerm.invs_canceled /=.
+  by destruct (ssrbool.boolP true); intro contra.
   iApply public_TExp_exp_pred => //.
   by iApply public_TInt.
   iApply exp_pred_intro1.
