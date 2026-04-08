@@ -80,84 +80,31 @@ Proof.
   by setoid_rewrite iProto_dual_end.
 Qed.
 
-Lemma wp_responder_recv42 c skI skR N :
+Lemma wp_responder_recv42 c skR N :
   channel c -∗
   cryptis_ctx -∗
   Sess.ctx N send42_proto -∗
-  minted skI -∗
   minted skR -∗
   {{{ True }}}
     responder_recv42 c skR (Tag N)
-  {{{ cs msg, RET (repr cs, msg);
+  {{{ cs msg skI, RET (repr cs, msg)%V;
+      minted skI ∗
       Sess.connected skI skR Resp cs END ∗
-      release_token (si_resp_share cs) ∗
-      (public (si_key cs) ∨ True) ∗
-      ⌜msg = TInt 42⌝ }}}.
-
+      public msg ∗
+      (public (si_key cs) ∨ ⌜msg = TInt 42⌝) }}}.
 Proof.
-  iIntros "#? #? #? #HskI #HskR % !> #P post".
-  rewrite /responder_recv42.
-  wp_lam.
-    wp_pures.
-    wp_bind (impl.listen _).
-    wp_apply (Sess.wp_listen with "[] [P]"); eauto 10.
-    (* iIntros. *)
-    iIntros (ga skI0) "[#Hpub #Hmint]".
-    wp_pures.
-    wp_bind (impl.confirm _ _ _ _).
-    wp_apply (Sess.wp_confirm True with "[] [P]"); eauto 10.
-    (* iFrame " Hmint Hpub HskR". *)
-    (* iRight. *)
-
-    iIntros (cs) "[Hconn H']".
-    wp_pures.
-    wp_bind (impl.recv _).
-    wp_recv as "n". 
-
-    simpl.
-    Search iProto_dual.
-    Existing Instance Sess.connected_proper.
-    (* iEval (rewrite /base.connected; rewrite [iProto_dual send42_proto]helper) in "Hconn". *)
-    (* rewrite /send42_proto  helper. *)
-    (* rewrite /send42_proto iProto_dual_message . /= iMsg_dual_base  iProto_dual_end. *)
-    (* rewrite helper in "Hconn". *)
-    (* iAssert (base.connected skI0 skR Resp cs send42_proto_dual) with "[Hconn]" as "Hconn". *)
-(* { rewrite -send42_dual_equiv. *)
-
-    (* iEval (rewrite send42_dual_equiv) in "Hconn". *)
-    rewrite send42_dual_equiv .
-    unfold send42_proto_dual.
-    (* iExact "Hconn". *)
-
-    iApply "Hconn".
-    iIntros (t') "Hh".
-    wp_pures.
-    iModIntro.
-    iApply "post".
-    iFrame.
-    iAssert  (⌜skI0 = skI⌝)%I as "%Heq_skI".
-    { admit. }
-    subst skI0.
-    iFrame.
-(* iDes *)
-    (* iIntros (t') "[Hpubt'  [H1 | [H2 H3 ]]] ". *)
-    admit.
-
-    wp_pures.
-    iModIntro.
-    iApply "post".
-     iFrame.
-
-    iSplitL "H3".
-    { iDestruct "H3" as "[Hc Ht]". by iFrame. }
-    iFrame.
-
-
-Admitted.
-
-
-
-
-
+  iIntros "#Hch #Hctx #Hsess #HskR !> %Φ _ post".
+  rewrite /responder_recv42. wp_lam. wp_pures.
+  wp_apply (Sess.wp_listen with "[] []") ; [done|done|done|].
+  iIntros (ga skI) "[#Hpub #HskI]".
+  wp_pures.
+  wp_apply (Sess.wp_confirm True with "[] []"); try iFrame; eauto 10.
+  iIntros (cs) "[Hconn _]".
+  wp_pures.
+  wp_recv (t) as "[Hconn' Hdisj']".
+  wp_pures. iModIntro.
+  iApply ("post" $! cs t skI).
+  iFrame "HskI". iFrame.
+Qed.
 
 End Send42Example.

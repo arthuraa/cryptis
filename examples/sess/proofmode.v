@@ -210,7 +210,7 @@ End classes.
 (** * Symbolic execution tactics *)
 (* TODO: Maybe strip laters from other hypotheses in the future? *)
 Lemma tac_wp_recv `{!heapGS Σ, !cryptisGS Σ, Conn: !GenConn.connGS Σ, !sessG Σ}
-  Δ i j k K skI skR rl cs p
+  Δ i j K skI skR rl cs p
   (tP tP' : term → iProp Σ) (tp : term → iProto Σ) Φ :
   envs_lookup i Δ = Some (false, connected skI skR rl cs p)%I →
   ProtoNormalize false p [] (<? t> MSG t {{ tP t }}; tp t) →
@@ -218,9 +218,9 @@ Lemma tac_wp_recv `{!heapGS Σ, !cryptisGS Σ, Conn: !GenConn.connGS Σ, !sessG 
   let Δ' := envs_delete false i false Δ in
   (∀ t : term,
     match envs_app false
-        (Esnoc (Esnoc (Esnoc Enil i (public t))
-                      j (connected skI skR rl cs (tp t)))
-               k ((public (si_key cs) ∨ tP' t)%I)) Δ' with
+        (Esnoc (Esnoc Enil i (public t))
+               j (connected skI skR rl cs (tp t) ∗
+                  (public (si_key cs) ∨ tP' t))%I) Δ' with
     | Some Δ'' => envs_entails Δ'' (WP fill K (of_val (repr t)) {{ Φ }})
     | None => False
     end) →
@@ -242,12 +242,9 @@ Proof.
   - f_equiv. rewrite -bi.later_intro; apply bi.forall_intro=> t.
     specialize (HΦ t). destruct (envs_app _ _) as [Δ'|] eqn:HΔ'=> //.
     rewrite envs_app_sound //; simpl.
-    iIntros "h1 h2".
-     rewrite right_id HΦ.
-     iApply "h1".
-     iDestruct "h2" as "(hpub & hcon & hpub')".
-     iSplitL "hpub'". iFrame.
-     eauto.
+    rewrite right_id HΦ.
+    iIntros "h1 (hpub & hrest)".
+    iApply "h1". iFrame.
 Qed.
 
 Tactic Notation "wp_recv_core" tactic3(tac_intros) "as" tactic3(tac) :=
@@ -259,12 +256,11 @@ Tactic Notation "wp_recv_core" tactic3(tac_intros) "as" tactic3(tac) :=
   lazymatch goal with
   | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
     first
-      [reshape_expr e ltac:(fun K e' => eapply (tac_wp_recv _ _ Hnew _ K))
+      [reshape_expr e ltac:(fun K e' => eapply (tac_wp_recv _ _ Hnew K))
       |fail 1 "wp_recv: cannot find 'recv' in" e];
     [solve_pointsto ()
        |tc_solve || fail 1 "wp_recv: protocol not of the shape <?>"
     |tc_solve || fail 1 "wp_recv: cannot convert to telescope"
-    |tc_solve
     |pm_reduce; simpl; tac_intros;
      tac Hnew;
      wp_finish]
