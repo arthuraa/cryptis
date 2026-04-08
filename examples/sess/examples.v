@@ -27,11 +27,10 @@ Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ, !Sess.ses
 (* Notation iProp := (iProp Σ). *)
 
 Definition send42_proto : iProto Σ  :=
-  (<!> MSG  (TInt 42); END)%proto.
-
+  (<! t> MSG t {{ ⌜t = TInt 42⌝ }}; END)%proto.
 
 Definition send42_proto_dual : iProto Σ  :=
-  (<?> MSG (TInt 42); END)%proto.
+  (<? t> MSG t {{ ⌜t = TInt 42⌝ }}; END)%proto.
 
 
 Definition initiator_send42 : val :=
@@ -74,43 +73,12 @@ Qed.
 Lemma send42_dual_equiv:
   iProto_dual send42_proto ≡ send42_proto_dual.
 Proof.
-  unfold send42_proto_dual.
-  rewrite /send42_proto iProto_dual_message /= iMsg_dual_base  iProto_dual_end.
-  reflexivity.
+  rewrite /send42_proto /send42_proto_dual.
+  rewrite iProto_dual_message. f_equiv.
+  rewrite iMsg_dual_exist.
+  setoid_rewrite iMsg_dual_base.
+  by setoid_rewrite iProto_dual_end.
 Qed.
-
-(* Lemma connected_send42_proper skI skR rl cs: *)
-
-
-(* Lemma wp_responder_confirm . *)
-
-  (* Lemma tac_wp_recv `{!chanG Σ, !heapGS Σ} {TT : tele} Δ i j K c p m tv tP tP' tp Φ : *)
-  (* envs_lookup i Δ = Some (false, c ↣ p)%I → *)
-  (* ProtoNormalize false p [] (<?> m) → *)
-  (* MsgTele m tv tP tp → *)
-  (* (∀.. x, MaybeIntoLaterN false 1 (tele_app tP x) (tele_app tP' x)) → *)
-  (* let Δ' := envs_delete false i false Δ in *)
-  (* (∀.. x : TT, *)
-  (*   match envs_app false *)
-  (*       (Esnoc (Esnoc Enil j (tele_app tP' x)) i (c ↣ tele_app tp x)) Δ' with *)
-  (*   | Some Δ'' => envs_entails Δ'' (WP fill K (of_val (tele_app tv x)) {{ Φ }}) *)
-  (*   | None => False *)
-  (*   end) → *)
-  (* envs_entails Δ (WP fill K (recv c) {{ Φ }}). *)
-(* Lemma tac_wp_recv `{!chanG Σ, !heapGS Σ} {TT : tele} Δ i j K c p m tv tP tP' tp Φ : *)
-(*   envs_lookup i Δ = Some (false, Sess.connected c p)%I → *)
-(*   ProtoNormalize false p [] (<?> m) → *)
-(*   MsgTele m tv tP tp → *)
-(*   (∀.. x, MaybeIntoLaterN false 1 (tele_app tP x) (tele_app tP' x)) → *)
-(*   let Δ' := envs_delete false i false Δ in *)
-(*   (∀.. x : TT, *)
-(*     match envs_app false *)
-(*         (Esnoc (Esnoc Enil j (tele_app tP' x)) i ( connected c tele_app tp x)) Δ' with *)
-(*     | Some Δ'' => envs_entails Δ'' (WP fill K (of_val (tele_app tv x)) {{ Φ }}) *)
-(*     | None => False *)
-(*     end) → *)
-(*   envs_entails Δ (WP fill K (recv c) {{ Φ }}). *)
-
 
 Lemma wp_responder_recv42 c skI skR N :
   channel c -∗
@@ -144,29 +112,8 @@ Proof.
     iIntros (cs) "[Hconn H']".
     wp_pures.
     wp_bind (impl.recv _).
-    (* rewrite /send42_proto_dual /iProto_dual /=. *)
+    wp_recv as "n". 
 
-    Search iProto_dual.
-    (* Search tele_unit. *)
-    wp_apply (Sess.wp_recv
-            (* (TT := tele_unit) *)
-            (* (skI := skI0) (skR := skR) (rl := Resp) (cs := cs) *)
-            (* (N := N) (p0 := send42_proto) *)
-            (* (t := λ _, TInt 42) *)
-            (* (P := λ _, True%I) *)
-                (* _             (* TT *) *)
-                (* _  *)
-                (*  _ _ _ _ _ *)
-                (TT := TeleO)
-                skI0 skR Resp cs N send42_proto
-                (* (fun _ => TInt 42) *)
-                (tele_app _)
-                (fun _ => True%I)
-                (fun _ => END)
-          with "[] [Hconn]"); eauto 10.
-    (* wp_apply (Sess.wp_recv with "[] [Hconn]"); eauto 10. *)
-    (* rewrite send42_proto iProto_dual_message. *)
-    (* unfold send42_proto. *)
     simpl.
     Search iProto_dual.
     Existing Instance Sess.connected_proper.

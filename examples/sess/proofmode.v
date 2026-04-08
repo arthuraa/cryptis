@@ -209,50 +209,45 @@ End classes.
 
 (** * Symbolic execution tactics *)
 (* TODO: Maybe strip laters from other hypotheses in the future? *)
-Lemma tac_wp_recv `{!heapGS Σ, !cryptisGS Σ, Conn: !GenConn.connGS Σ, !sessG Σ} {TT : tele} Δ i K skI skR rl cs p m tv tP tP' tp Φ :
+Lemma tac_wp_recv `{!heapGS Σ, !cryptisGS Σ, Conn: !GenConn.connGS Σ, !sessG Σ}
+  Δ i j k K skI skR rl cs p
+  (tP tP' : term → iProp Σ) (tp : term → iProto Σ) Φ :
   envs_lookup i Δ = Some (false, connected skI skR rl cs p)%I →
-  ProtoNormalize false p [] (<?> m) →
-  MsgTele m tv tP tp →
-  (∀.. x, MaybeIntoLaterN false 1 (tele_app tP x) (tele_app tP' x)) →
+  ProtoNormalize false p [] (<? t> MSG t {{ tP t }}; tp t) →
+  (∀ t, MaybeIntoLaterN false 1 (tP t) (tP' t)) →
   let Δ' := envs_delete false i false Δ in
-  (* (∀.. x : TT, *)
-  (*   match envs_app false *)
-  (*       (Esnoc (Esnoc Enil j (tele_app tP' x)) i (connected skI skR rl cs (tele_app tp x))) Δ' with *)
-  (*   | Some Δ'' => envs_entails Δ'' (WP fill K (of_val (repr (tele_app tv x))) {{ Φ }}) *)
-  (*   | None => False *)
-  (*   end) → *)
   (∀ t : term,
     match envs_app false
-        (Esnoc Enil i (
-           public t ∗
-           (public (si_key cs) ∨
-              (∃.. x : TT,
-                   ⌜t = tele_app tv x⌝ ∗
-                   connected skI skR rl cs (tele_app tp x) ∗
-                   tele_app tP' x)))) Δ' with
+        (Esnoc (Esnoc (Esnoc Enil i (public t))
+                      j (connected skI skR rl cs (tp t)))
+               k ((public (si_key cs) ∨ tP' t)%I)) Δ' with
     | Some Δ'' => envs_entails Δ'' (WP fill K (of_val (repr t)) {{ Φ }})
     | None => False
     end) →
   envs_entails Δ (WP fill K (impl.recv (repr cs)) {{ Φ }}).
 Proof.
-  rewrite envs_entails_unseal /ProtoNormalize /MsgTele /MaybeIntoLaterN /=.
-  rewrite !tforall_forall right_id.
-  intros ? Hp Hm HP HΦ. rewrite envs_lookup_sound //; simpl.
-  assert (connected skI skR rl cs p ⊢ connected skI skR rl cs (<?.. x>
-    MSG tele_app tv x {{ ▷ tele_app tP' x }}; tele_app tp x)) as ->.
+  rewrite envs_entails_unseal /ProtoNormalize /MaybeIntoLaterN /= right_id.
+  intros ? Hp HP HΦ. rewrite envs_lookup_sound //; simpl.
+  assert (connected skI skR rl cs p ⊢
+    connected skI skR rl cs (<? t> MSG t {{ ▷ tP' t }}; tp t)) as ->.
   { iIntros "Hc". iApply (connected_le with "Hc"). iIntros "!>".
-    iApply iProto_le_trans; [iApply Hp|rewrite Hm].
-    iApply iProto_le_texist_elim_l; iIntros (x).
-    iApply iProto_le_trans; [|iApply (iProto_le_texist_intro_r _ x)]; simpl.
-    iIntros "H". by iDestruct (HP with "H") as "$". }
+    iApply iProto_le_trans; [iApply Hp|].
+    iApply iProto_le_exist_elim_l; iIntros (t).
+    iApply iProto_le_trans; [|iApply (iProto_le_exist_intro_r _ t)]; simpl.
+    iIntros "H". by iDestruct (HP t with "H") as "$". }
   rewrite -wp_bind.
   eapply bi.wand_apply.
   - eapply bi.wand_entails.
-    eapply (wp_recv skI skR rl cs (tele_app tv) (tele_app tP') (tele_app tp)).
-  - f_equiv. done.
-  rewrite -bi.later_intro; apply bi.forall_intro=> t.
-  specialize (HΦ t). destruct (envs_app _ _) as [Δ'|] eqn:HΔ'=> //.
-  rewrite envs_app_sound //; simpl. by rewrite right_id HΦ.
+    eapply (wp_recv_term skI skR rl cs tP' tp).
+  - f_equiv. rewrite -bi.later_intro; apply bi.forall_intro=> t.
+    specialize (HΦ t). destruct (envs_app _ _) as [Δ'|] eqn:HΔ'=> //.
+    rewrite envs_app_sound //; simpl.
+    iIntros "h1 h2".
+     rewrite right_id HΦ.
+     iApply "h1".
+     iDestruct "h2" as "(hpub & hcon & hpub')".
+     iSplitL "hpub'". iFrame.
+     eauto.
 Qed.
 
 Tactic Notation "wp_recv_core" tactic3(tac_intros) "as" tactic3(tac) :=
@@ -264,7 +259,7 @@ Tactic Notation "wp_recv_core" tactic3(tac_intros) "as" tactic3(tac) :=
   lazymatch goal with
   | |- envs_entails _ (wp ?s ?E ?e ?Q) =>
     first
-      [reshape_expr e ltac:(fun K e' => eapply (tac_wp_recv _ Hnew K))
+      [reshape_expr e ltac:(fun K e' => eapply (tac_wp_recv _ _ Hnew _ K))
       |fail 1 "wp_recv: cannot find 'recv' in" e];
     [solve_pointsto ()
        |tc_solve || fail 1 "wp_recv: protocol not of the shape <?>"
