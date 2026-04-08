@@ -62,7 +62,7 @@ Theorem twp_rtc Σ Λ `{!invGpreS Σ} e σ P n :
        stateI σ n [] 0 ∗ WP e [{ v, ⌜ P v ⌝ }]) →
   ∃ v σ', rtc thread_step (e, σ) (of_val v, σ') ∧ P v.
 Proof.
-  intros Hwp. eapply pure_soundness.
+  intros Hwp. eapply (pure_soundness (PROP:=iPropI Σ)).
   apply (fupd_soundness_lc 0 ⊤ ⊤ _)=> Hinv. iIntros "_".
   iMod (Hwp) as (stateI num_laters_per_step fork_post stateI_mono) "[Hσ H]".
   set (iG := IrisG Hinv stateI fork_post num_laters_per_step stateI_mono).

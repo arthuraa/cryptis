@@ -269,12 +269,12 @@ split.
   move=> t' t'' ts t'NX _ IH ?; rewrite subtermsE //.
   do 2![rewrite elem_of_union; right].
   rewrite elem_of_union_list; exists (subterms t''); split => //.
-  by rewrite elem_of_list_fmap; eauto.
+  by rewrite list_elem_of_fmap; eauto.
 - elim: t2; try by solve_subtermsP.
   move=> t IHt /is_trueP tNX ts IHts /is_trueP tsN0 _.
   rewrite subtermsE // !elem_of_union elem_of_union_list elem_of_singleton.
   case=> [-> | [/IHt ?|sub]]; eauto using subterm.
-  case: sub => _ [] /elem_of_list_fmap [] t' [] -> t'_ts sub.
+  case: sub => _ [] /list_elem_of_fmap [] t' [] -> t'_ts sub.
   suffices: subterm t1 t' by eauto using subterm.
   elim: {t IHt tNX tsN0} ts IHts t'_ts sub => /= [_|t ts IH [IHt IHts]].
     by rewrite elem_of_nil.
@@ -307,12 +307,12 @@ split.
   move=> t t' ts _ IH t'_ts.
   rewrite nonces_of_termE elem_of_union; right.
   rewrite elem_of_union_list; exists (nonces_of_term t'); split => //.
-  by rewrite elem_of_list_fmap; eauto.
+  by rewrite list_elem_of_fmap; eauto.
 - elim: t; try by solve_nonces_of_termP.
   move=> t IHt /is_trueP tNX ts IHts _ _.
   rewrite nonces_of_termE !elem_of_union elem_of_union_list.
   case=> [/IHt ?|sub]; eauto using subterm.
-  case: sub => _ [] /elem_of_list_fmap [] t' [] -> t'_ts sub.
+  case: sub => _ [] /list_elem_of_fmap [] t' [] -> t'_ts sub.
   suffices: subterm (TNonce a) t' by eauto using subterm.
   elim: {t tNX IHt} ts IHts t'_ts sub => /= [_|t ts IH [IHt IHts]].
     by rewrite elem_of_nil.
@@ -347,7 +347,7 @@ elim: t2 / => //.
   have ?: nonces_of_term t2' ⊆ ⋃ map nonces_of_term ts.
     move=> t t_t2'. rewrite elem_of_union_list.
     exists (nonces_of_term t2'). split => //.
-    rewrite elem_of_list_fmap. by eauto.
+    rewrite list_elem_of_fmap. by eauto.
   set_solver.
 Qed.
 

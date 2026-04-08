@@ -207,7 +207,7 @@ Lemma release_token_released_session si rl :
   False.
 Proof.
 iIntros "token [#init #resp]".
-iApply (term_meta_token with "token"); last by case: rl.
+iApply (term_meta_token (L:=bool) with "token"); last by case: rl.
 by [].
 Qed.
 
@@ -583,9 +583,10 @@ Lemma nsl_dhGS_alloc `{!heapGS Σ, !cryptisGS Σ} E :
     nsl_dh_ctx ∗ nsl_dh_token ⊤ ∗
     seal_pred_token AENC (E ∖ ↑nsl_dhN).
 Proof.
-iIntros "% % token".
+iIntros "% %Hpre token".
 iMod gmeta_token_alloc as (γ_meta) "own".
-iExists (NslDhGS _ γ_meta).
+set nsl_dhGS0 := {| nsl_dh_inG := Hpre; nsl_dh_name := γ_meta |} : nsl_dhGS Σ.
+iExists nsl_dhGS0.
 iMod (nsl_dh_ctx_alloc with "token") as "[#H ?]" => //.
 by iFrame.
 Qed.
