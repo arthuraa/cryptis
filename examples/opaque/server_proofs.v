@@ -35,6 +35,22 @@ Definition opaque_db (db : gmap term val) : iProp :=
 [∗ map] (k : term) ↦ (file : val) ∈ db,
 public k ∗ opaque_file file.
 
+Lemma tokenV_of_nonce (t : term) :
+  is_nonce t ->
+  term_token t ⊤ -∗
+  term_token (TInv t) ⊤.
+Proof.
+  iIntros "%Hnonce Htok".
+  rewrite term_token_unseal /term_token_def.
+  iDestruct "Htok" as "(%γ & #Hname & Htok)".
+  iExists γ.
+  iSplitR => //.
+  rewrite /term_name.
+  iDestruct "Hname" as "[? Hown]".
+  iSplit => //.
+  by iApply minted_TInv.  
+Admitted.
+
 Lemma wp_make_file (pw : term) :
 {{{ cryptis_ctx
     ∗ minted pw
@@ -48,9 +64,10 @@ Proof.
   iIntros "%ϕ (#cryptis & #Hmintedpw & #Hprivpw & #Hhashpred & #Hsencpred) post".
   wp_lam.
   wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => True)%I) => //.
-  iIntros "%k_s %Hnoncek_s #Hmintedk_s #Hprivatek_s #Hexpk_s #? #Hexpk_sV Htokenk_s".
-  iAssert (public (TInv k_s) ↔ ▷ False)%I as "Hprivk_sV".
-  admit.
+  iIntros "%k_s %Hnoncek_s #Hmintedk_s #Hprivatek_s #Hexpk_s #H #Hexpk_sV Htokenk_s".
+  iDestruct (tokenV_of_nonce Hnoncek_s with "Htokenk_s") as "Htokenk_sV".
+  iDestruct ("H" $! False%I with "Htokenk_sV") as ">#Hprivk_sV".
+  iClear "H".
   wp_pures.
   wp_lam.
   wp_pures.
@@ -61,9 +78,10 @@ Proof.
   wp_apply wp_derive_senc_key.
   wp_pures.
   wp_apply (wp_mk_nonce (fun _ => False)%I opaque_secret) => //.
-  iIntros "%p_s %Hnoncep_s #Hmintedp_s #Hprivatep_s #Hexpp_s #? #Hexpp_sV Htokenp_s".
-  iAssert (public (TInv p_s) ↔ ▷ False)%I as "Hprivp_sV".
-  admit.
+  iIntros "%p_s %Hnoncep_s #Hmintedp_s #Hprivatep_s #Hexpp_s #H #Hexpp_sV Htokenp_s".
+  iDestruct (tokenV_of_nonce Hnoncep_s with "Htokenp_s") as "Htokenp_sV".
+  iDestruct ("H" $! False%I with "Htokenp_sV") as ">#Hprivp_sV".
+  iClear "H".
   wp_pures.
   wp_apply (wp_mk_nonce_fresh {[(TExp g p_s)]} (fun _ => False)%I opaque_secret) => //.
   - iIntros "%". rewrite elem_of_singleton. iIntros "->".
@@ -71,9 +89,10 @@ Proof.
     by intro contra.
     iSplit => //.
     by iApply minted_TInt.
-  iIntros "%p_u %Hfreshp_u %Hnoncep_u #Hmintedp_u #Hprivatep_u #Hexpp_u #Hsrp_uV #Hexpp_uV Htokenp_u".
-  iAssert (public (TInv p_u) ↔ ▷ False)%I as "Hprivp_uV".
-  admit.
+  iIntros "%p_u %Hfreshp_u %Hnoncep_u #Hmintedp_u #Hprivatep_u #Hexpp_u #H #Hexpp_uV Htokenp_u".
+  iDestruct (tokenV_of_nonce Hnoncep_u with "Htokenp_u") as "Htokenp_uV".
+  iDestruct ("H" $! False%I with "Htokenp_uV") as ">#Hprivp_uV".
+  iClear "H".
   assert (p_u ≠ p_s) as Hneq.
   intro contra.
   apply (Hfreshp_u (TExp g p_s)).
@@ -99,6 +118,9 @@ Proof.
   iApply "post".
   iExists k_s, p_s, (TExp g p_s), (TExp g p_u), _.
   do !iSplit => //.
+
+  by rewrite bi.intuitionistically_False.
+
   iApply public_TExp_iff; auto.
   do !iSplit => //.
   by iApply minted_TInt.
@@ -126,6 +148,9 @@ Proof.
   iApply exp_pred_intro1.
   iApply "Hexpp_s".
   by iNext; iModIntro; iPureIntro; rewrite exps_TExpN.
+  
+  by rewrite bi.intuitionistically_False.
+
   iModIntro.
   rewrite public_senc_key.
   iIntros "#Hcompromise".
@@ -155,7 +180,9 @@ Proof.
   iApply exp_pred_intro1.
   iApply "Hexpp_u".
   by iNext; iModIntro; iPureIntro; rewrite exps_TExpN.
-Admitted.
+
+  by rewrite bi.intuitionistically_False.
+Qed.
 
 Lemma wp_server_session (db c : val) (alist : gmap term val) :
 {{{ cryptis_ctx

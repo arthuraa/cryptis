@@ -43,7 +43,7 @@ game #()
 Proof.
 iIntros "%ϕ (#Hcryptis & h_pred_tok & s_pred_tok) Hhl".
 iMod (opaque_alloc with "h_pred_tok s_pred_tok") as
-  "[(#Hhprw & #HhpA_s & #HhpA_u & #HhpSK & #HhpK & #Hhpα & #Hsenc) _]" => //.
+  "[(#? & #? & #? & #? & #? & #? & #?) _]" => //.
 wp_lam.
 wp_apply wp_init_network => //.
 iIntros "%c #Hchannel".

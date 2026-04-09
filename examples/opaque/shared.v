@@ -145,7 +145,7 @@ iApply (hash_pred_token_drop with "h_token").
 repeat match goal with
          | H:_ ∪ _ ⊆ _ |- _ => apply union_subseteq in H as [? ?]
          end;
-   (solve [ eauto  20 with ndisj ]).
+   (solve [ eauto 20 with ndisj ]).
 iApply (seal_pred_token_drop with "s_token").
 by solve_ndisj.
 Qed.
