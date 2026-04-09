@@ -62,6 +62,18 @@ Definition SK_priv (x : option term) : iProp :=
   | Some x' => public x' ↔ ▷ □ False
   end.
 
+Definition SK_priv' (x : val) : iProp :=
+  ∃ (x' : option term),
+    ⌜x = (repr x')⌝ ∗ SK_priv x'.
+
+Lemma SK_priv_eq :
+  ∀ x : option term, SK_priv x -∗ SK_priv' (repr x).
+Proof.
+  iIntros "%x SK".
+  iExists x.
+  by iSplit => //.
+Qed.
+
 Definition opaque_secret t : iProp :=
 ⌜length (exps t) = 1⌝.
 
