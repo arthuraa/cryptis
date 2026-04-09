@@ -18,6 +18,7 @@ Notation iProp := (iProp Σ).
 
 Lemma wp_client_session (uid pw : term) (c : val):
 {{{ cryptis_ctx
+      ∗ hash_pred (opN.@"rw") (λ _, False)
       ∗ hash_pred (opN.@"A_u") A_pred
       ∗ hash_pred (opN.@"A_s") A_pred
       ∗ hash_pred (opN.@"SK") (λ _,  False)
@@ -27,17 +28,19 @@ Lemma wp_client_session (uid pw : term) (c : val):
       ∗ channel c
       ∗ public uid
       ∗ minted uid
-      ∗ minted pw }}}
+      ∗ minted pw
+      ∗ □(public pw ↔ ▷ □ False)}}}
 Client.session uid c pw
 {{{ x , RET (repr x) ; SK_priv x }}}.
 Proof.
-  iIntros "%ϕ (#Cryptis & #HpredA_u & #HpredA_s & #HpredSK & #HpredK & #Hpredα & #SpredAuth & #Hc & #pubuid & #minteduid & #mintedpw) Hhl".
+  iIntros "%ϕ (#Cryptis & #Hpredrw & #HpredA_u & #HpredA_s & #HpredSK & #HpredK & #Hpredα
+               & #SpredAuth & #Hc & #pubuid & #minteduid & #mintedpw & #privpw) Hhl".
   wp_lam. wp_pures.
   wp_apply (wp_mk_nonce (fun _ => False)%I (fun t => opaque_secret t)%I) => //.
   iIntros "%x_u %Hnoncex_u #Hmintedx_u #Hprivatex_u #Hexpx_u #? #Hexpx_uV Htokenx_u".
   wp_pures.
   wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => True)%I) => //.
-  iIntros "%r %Hnoncer #Hmintedr #Hprivater #Heqr #HsrV #HeqrV Htokenr".
+  iIntros "%r %Hnoncer #Hmintedr #Hprivater #Hexpr #HsrV #HexprV Htokenr".
   wp_pures.
   wp_apply wp_H'.
   wp_apply wp_texp.
@@ -55,7 +58,7 @@ Proof.
   do !iSplit => //.
   by rewrite minted_THash minted_tag.
   iApply exp_pred_intro1.
-  by iApply "Heqr".
+  by iApply "Hexpr".
   iModIntro; iIntros "#p".
   iApply (public_THashIS with "Hpredα") => //.
   iApply public_TExp_iff; auto.
@@ -69,7 +72,6 @@ Proof.
   iIntros "%m2 #pubm2".
   iAssert (minted m2) as "minm2".
   by iApply public_minted.
-  iClear "pubm2".
   wp_list_of_term m2; wp_pures => //.
   wp_list_match => [β X_s envelope A_s -> | _].
   1, 2: wp_pures.
@@ -83,19 +85,33 @@ Proof.
   wp_pures.
   wp_lam.
   wp_pures.
-  wp_apply wp_sdec'.
-  rewrite minted_of_list => /=.
+  rewrite minted_of_list public_of_list => /=.
+  iDestruct "minm2" as "(_ & minX_s & minenv & _)".
+  iDestruct "pubm2" as "(_ & _ & pubenv & pubA_s & _)".
+  wp_apply wp_sdec => //.
   iSplit.
-  2: iIntros "_"; wp_pures; by iApply ("Hhl" $! None).
-  iDestruct "minm2" as "[_ [minX_s [minenv _]]]".
-  iIntros "%clear -> _".
-  rewrite minted_TSeal.
-  iDestruct "minenv" as "[mink minclear]".
-  rewrite minted_tag.
-  wp_list_of_term clear.
+  2: by wp_pures; iApply ("Hhl" $! None).
+  iIntros "%clear #minclear [#pubkey | #envpred] _".
+  rewrite /k public_senc_key.
+  iPoseProof (public_THashE with "Hpredrw pubkey") as "[contra | [_ contra]]";
+    rewrite bi.intuitionistically_False.
+  rewrite public_of_list /=.
+  iDestruct "contra" as "(contra & _ & _)".
+  iPoseProof ("privpw" with "contra") as "?".
+  1, 2: by wp_pures.
+  iDestruct "envpred" as "(%p_u & %P_u & %P_s & -> & Hopaquepair)".
+  wp_pures.
+  wp_list_of_term_eq clear Hclear.
   2: wp_pures; by iApply ("Hhl" $! None).
-  wp_list_match => [p_u P_u P_s -> | _].
+  apply Spec.of_list_inj in Hclear.
+  rewrite -Hclear.
+  wp_pures.
+  wp_list_match => [p_u' P_u' P_s' H | _].
   2: wp_pures; by iApply ("Hhl" $! None).
+  symmetry in H.
+  inversion H.
+  subst.
+  clear H.
   wp_apply wp_ke => /=.
   wp_list.
   wp_apply wp_H => /=.
@@ -104,8 +120,10 @@ Proof.
   wp_list.
   wp_apply wp_prf.
   rewrite minted_of_list => /=.
-  iDestruct "minclear" as "[minp_u [minP_u [minP_s _]]]".
+  iDestruct "minclear" as "(minp_u & minP_u & minP_s & _)".
   wp_eq_term eq_A_s => /= //.
+  2: by wp_pures; iApply ("Hhl" $! None).
+  wp_pures.
   wp_list.
   wp_apply wp_prf.
   wp_pures.
@@ -117,19 +135,15 @@ Proof.
   do !iSplit => //; iApply all_minted_TExp; iSplit => //.
   rewrite minted_THash minted_tag minted_of_list /=.
   do !iSplit => //.
-  rewrite [minted (TExp _ r)]minted_TExp.
+  rewrite minted_TExp.
+  2: by intro contra.
   iSplit => //.
   by rewrite minted_THash minted_tag.
-  by intro contra.
-  3: by wp_pures; iApply ("Hhl" $! None).
   iNext. iModIntro.
   iExists P_s, p_u, X_s, x_u, (hash_result "ssid'" (Spec.of_list [uid; TExp (hash_result "α" pw) r])).
   do !iSplit => //.
-  unfold opaque_public_private_pair.
-  admit.
-  wp_list.
   wp_pures.
-  set SK := hash_result _ _.
+  set SK := hash_result "SK" _.
   iApply ("Hhl" $! (Some SK)).
   iModIntro.
   rewrite /SK_priv /SK.
@@ -140,7 +154,18 @@ Proof.
   iDestruct (public_THashE with "HpredK contra") as "[contra | [_ contra]]" => //.
   rewrite public_of_list.
   iDestruct "contra" as "(contra & _ & _)".
-  admit.
+  iDestruct "Hopaquepair" as
+    "(%p_s & -> & %Hfreshp_u & %Hnoncep_u & %Hnoncep_s & ? & ? & ? & ? & ? & ? & ?)".
+  rewrite TExp_TExpN.
+  have p_u_s: p_u ≠ p_s.
+    move=> p_u_s; apply: Hfreshp_u; rewrite -p_u_s.
+    apply/subtermsP; rewrite subtermsE // cancel_exps1 /=.
+    rewrite [subterms p_u]subterms_nonce //; set_solver.
+  have p_u_sV : p_u ≠ TInv p_s.
+    move=> contra; have: is_inv (TInv p_s).
+      by rewrite is_inv_TInv; case: (p_s) => // in Hnoncep_s *.
+    by rewrite -contra; case: (p_u) => // in Hnoncep_u *.
+  iApply (public_opaque_secret _ p_u_s p_u_sV) => //.
   iApply (public_THashIS with "HpredSK") => //.
   rewrite minted_of_list.
   do !iSplit => //; rewrite minted_THash minted_tag minted_of_list; do !iSplit => //.
@@ -149,6 +174,6 @@ Proof.
   1, 2: iSplit => //.
   rewrite -[minted (TExp _ r)] all_minted_TExp minted_THash minted_tag.
   by iSplit => //.
-Admitted.
+Qed.
 
 End Opaque.
