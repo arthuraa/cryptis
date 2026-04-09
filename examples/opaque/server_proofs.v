@@ -264,11 +264,15 @@ Proof.
   wp_apply wp_prf.
   wp_eq_term Heq; wp_pures.
   2: by iApply ("Hhl" $! None).
+  wp_list.
+  wp_term_of_list.
+  wp_pures.
   iModIntro.
-  set SK := hash_result _ _.
+  set SK := Spec.of_list _.
   iApply ("Hhl" $! (Some SK)).
-  rewrite /SK_priv /SK.
+  rewrite /SK_priv /SK public_of_list /=.
   iSplit; iIntros "contra".
+  iDestruct "contra" as "(_ & contra & _)".
   iDestruct (public_THashE with "HpredSK contra") as "[Hpub | [_ contra]]" => //.
   rewrite public_of_list /=.
   iDestruct "Hpub" as "[Hpub _]".
@@ -285,6 +289,7 @@ Proof.
       by rewrite is_inv_TInv; case: (p_u) => // in Hnoncep_u *.
     by rewrite -contra; case: (p_s) => // in Hnoncep_s *.
   by iApply (public_opaque_secret _ p_s_u p_s_uV).
+  do !iSplit => //.
   iApply (public_THashIS with "HpredSK") => //.
   rewrite minted_of_list.
   do !iSplit => //; rewrite minted_THash minted_tag minted_of_list; do !iSplit => //.

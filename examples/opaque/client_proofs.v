@@ -143,12 +143,16 @@ Proof.
   iExists P_s, p_u, X_s, x_u, (hash_result "ssid'" (Spec.of_list [uid; TExp (hash_result "α" pw) r])).
   do !iSplit => //.
   wp_pures.
-  set SK := hash_result "SK" _.
+  wp_list.
+  wp_term_of_list.
+  wp_pures.
+  set SK := Spec.of_list _.
   iApply ("Hhl" $! (Some SK)).
   iModIntro.
-  rewrite /SK_priv /SK.
+  rewrite /SK_priv /SK public_of_list /=.
   iSplit; iIntros "contra".
-  iDestruct (public_THashE with "HpredSK contra") as "[contra | [_ contra]]" => //.
+  iDestruct "contra" as "(_ & contra & _)".
+iDestruct (public_THashE with "HpredSK contra") as "[contra | [_ contra]]" => //.
   rewrite public_of_list.
   iDestruct "contra" as "[contra _]".
   iDestruct (public_THashE with "HpredK contra") as "[contra | [_ contra]]" => //.
@@ -165,7 +169,8 @@ Proof.
     move=> contra; have: is_inv (TInv p_s).
       by rewrite is_inv_TInv; case: (p_s) => // in Hnoncep_s *.
     by rewrite -contra; case: (p_u) => // in Hnoncep_u *.
-  iApply (public_opaque_secret _ p_u_s p_u_sV) => //.
+  by iApply (public_opaque_secret _ p_u_s p_u_sV) => //.
+  do !iSplit => //.
   iApply (public_THashIS with "HpredSK") => //.
   rewrite minted_of_list.
   do !iSplit => //; rewrite minted_THash minted_tag minted_of_list; do !iSplit => //.

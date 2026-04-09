@@ -62,7 +62,7 @@ Definition session : val := λ: "uid" "c" "pw",
     let: "A_u" := prf "A_u" [ "K"; "ssid'" ] in
     let: "m3" := "A_u"  in
     send "c" "m3" ;;
-    SOME "SK".
+    SOME (term_of_list ["uid"; "SK"]).
 
 End Client.
 
@@ -93,7 +93,7 @@ Definition session : val := λ: "db" "c",
     let: "m3" := recv "c" in
     let: "A_u" := "m3" in
     guard: eq_term "A_u" (prf "A_u" [ "K"; "ssid'" ]) in
-    SOME "SK".
+    SOME (term_of_list ["uid"; "SK"]).
 
 Definition make_file : val := λ: "pw",
     let: "k_s" := mk_nonce #() in
