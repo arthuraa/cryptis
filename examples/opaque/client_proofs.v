@@ -181,7 +181,15 @@ Proof.
   1, 2: iSplit => //.
   rewrite -[minted (TExp _ r)] all_minted_TExp minted_THash minted_tag.
   by iSplit => //.
-  admit.
+  iSplit; last first.
+  { rewrite !minted_of_list /= !minted_THash !minted_tag minted_of_list /=.
+    rewrite !minted_THash !minted_tag !minted_of_list /= !minted_TExp //.
+    - admit.
+    - admit.
+    - admit.
+    - admit. }
+  iPureIntro => /Hfreshr; apply.
+  admit. (* Needs a bunch of auxiliary lemmas on subterm. *)
 Admitted.
 
 End Opaque.
