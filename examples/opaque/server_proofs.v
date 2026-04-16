@@ -84,7 +84,7 @@ Proof.
     by iApply minted_TInt.
   - iIntros "%t". rewrite big_sepS_singleton minted_TInv. iModIntro.
     by auto.
-iIntros "%p_u %Hfreshp_u %Hnoncep_u #Hmintedp_u #Hprivatep_u #Hexpp_u #H #Hexpp_uV Htokenp_uV".
+  iIntros "%p_u %Hfreshp_u %Hnoncep_u #Hmintedp_u #Hprivatep_u #Hexpp_u #H #Hexpp_uV Htokenp_uV".
   rewrite big_sepS_singleton.
   iDestruct ("H" $! False%I with "Htokenp_uV") as ">#Hprivp_uV".
   iClear "H".
@@ -174,33 +174,34 @@ iIntros "%p_u %Hfreshp_u %Hnoncep_u #Hmintedp_u #Hprivatep_u #Hexpp_u #H #Hexpp_
   by rewrite bi.intuitionistically_False.
 Qed.
 
-Lemma wp_server_session (db c : val) (alist : gmap term val) :
+Lemma wp_server_session (db c : val) (alist : gmap term val) (fresh : gset term) :
 {{{ cryptis_ctx
     ∗ hash_pred (opN.@"A_s") A_pred
     ∗ hash_pred (opN.@"SK") (λ _,  False)
     ∗ hash_pred (opN.@"K") (λ _,  False)
     ∗ channel c
     ∗ AList.is_alist db alist
-    ∗ opaque_db alist }}}
+    ∗ opaque_db alist
+    ∗ ∀ t : term, ⌜t ∈ fresh⌝ -∗ minted t}}}
 Server.session db c
-{{{ x , RET (repr x) ; SK_priv x }}}.
+{{{ x , RET (repr x) ; SK_result x fresh ∗ AList.is_alist db alist }}}.
 Proof.
   iIntros "%ϕ".
-  rewrite /opaque_db. rewrite big_sepM_forall.
-  iIntros "(#Cryptis & #HpredA_s & #HpredSK & #HpredK & #Hc & Hdb & #Hmapcontents) Hhl".
+  rewrite /opaque_db big_sepM_forall.
+  iIntros "(#Cryptis & #HpredA_s & #HpredSK & #HpredK & #Hc & Hdb & #Hmapcontents & #Hfresh) Hhl".
   wp_lam. wp_pures.
   wp_apply (wp_recv with "Hc").
   iIntros "%m1 #Hpubm1".
   wp_list_of_term m1; wp_pures.
-  2: by iApply ("Hhl" $! None).
+  2: by iApply ("Hhl" $! None); iModIntro; do !iSplit.
   rewrite !subst_list_match /=.
   wp_list_match => [uid α X_u -> | _].
-  2: by wp_pures; iApply ("Hhl" $! None).
+  2: by wp_pures; iApply ("Hhl" $! None); iModIntro; do !iSplit.
   wp_bind (AList.find _ _).
   iApply (AList.wp_find with "Hdb").
   iIntros "!> Hdb".
   case db_uid: (alist !! uid) => [file|]; wp_pures.
-  2: by iApply ("Hhl" $! None).
+  2: by iApply ("Hhl" $! None); iModIntro; do !iSplit.
   iDestruct ("Hmapcontents" $! uid file with "[//]") as
     "[_ (%k_s & %p_s & %P_s & %P_u & %envelope &
         %e & Hmk_s & Hprivk_s & Hprivk_sV & Hexpk_s & Hexpk_sV &
@@ -217,10 +218,13 @@ Proof.
   2: by intro contra.
   rewrite public_of_list /=.
   iDestruct "Hpubm1" as "(? & ? & ? & _)".
-  wp_apply (wp_mk_nonce_fresh {[X_u]} (fun _ => False)%I (fun t => opaque_secret t)%I) => //.
-  - iIntros "%". rewrite elem_of_singleton public_minted. iIntros "->".
+  wp_apply (wp_mk_nonce_fresh ({[X_u]} ∪ fresh) (fun _ => False)%I (fun t => opaque_secret t)%I) => //.
+  - iIntros "%".
+    rewrite elem_of_union.
+    rewrite elem_of_singleton public_minted. iIntros "[-> | %H]".
     by iApply public_minted.
-  iIntros "%x_s %Hfreshx_s %Hnoncex_s #Hmintedx_s #Hprivatex_s #Hexpx_s #? #Hexpx_sV Htokenx_s".
+    by iApply "Hfresh".
+  iIntros "%x_s %Hfreshx_s %Hnoncex_s #Hmintedx_s #Hprivatex_s #Hexpx_s #? #Hexpx_sV _".
   wp_pures.
   wp_apply wp_texp. wp_pures.
   wp_apply wp_texp. wp_pures.
@@ -263,14 +267,17 @@ Proof.
   wp_list.
   wp_apply wp_prf.
   wp_eq_term Heq; wp_pures.
-  2: by iApply ("Hhl" $! None).
+  2: by iApply ("Hhl" $! None); iModIntro; do !iSplit.
   wp_list.
   wp_term_of_list.
   wp_pures.
   iModIntro.
   set SK := Spec.of_list _.
   iApply ("Hhl" $! (Some SK)).
-  rewrite /SK_priv /SK public_of_list /=.
+  iSplitR => //.
+  rewrite /SK_result /SK.
+  iSplit.
+  rewrite /SK_priv public_of_list /=.
   iSplit; iIntros "contra".
   iDestruct "contra" as "(_ & contra & _)".
   iDestruct (public_THashE with "HpredSK contra") as "[Hpub | [_ contra]]" => //.
@@ -294,7 +301,21 @@ Proof.
   rewrite minted_of_list.
   do !iSplit => //; rewrite minted_THash minted_tag minted_of_list; do !iSplit => //.
   1, 2: rewrite -all_minted_TExp; iSplit => //.
+  1- 4: by iApply public_minted.
+  iSplit.
+  admit.
+  rewrite minted_of_list /=.
+  do !iSplit => //.
+  by iApply public_minted.
+  rewrite minted_THash minted_tag minted_of_list /=.
+  do !iSplit => //;
+      rewrite minted_THash minted_tag minted_of_list /=; do !iSplit => //.
+  rewrite TExp_TExpN -all_minted_TExpN /=.
+  do !iSplit => //.
+  by iApply minted_TInt.
+  rewrite -all_minted_TExp.
+  iSplit => //.
   all: by iApply public_minted.
-Qed.
+Admitted.
 
 End Opaque.

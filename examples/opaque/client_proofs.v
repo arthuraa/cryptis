@@ -16,7 +16,7 @@ Section Opaque.
 Context `{!cryptisGS Σ, !heapGS Σ}.
 Notation iProp := (iProp Σ).
 
-Lemma wp_client_session (uid pw : term) (c : val):
+Lemma wp_client_session (uid pw : term) (c : val) (fresh : gset term):
 {{{ cryptis_ctx
       ∗ hash_pred (opN.@"rw") (λ _, False)
       ∗ hash_pred (opN.@"A_u") A_pred
@@ -29,18 +29,19 @@ Lemma wp_client_session (uid pw : term) (c : val):
       ∗ public uid
       ∗ minted uid
       ∗ minted pw
-      ∗ □(public pw ↔ ▷ □ False)}}}
+      ∗ □(public pw ↔ ▷ □ False)
+      ∗ ∀ t : term, ⌜t ∈ fresh⌝ -∗ minted t}}}
 Client.session uid c pw
-{{{ x , RET (repr x) ; SK_priv x }}}.
+{{{ x , RET (repr x) ; SK_result x fresh }}}.
 Proof.
   iIntros "%ϕ (#Cryptis & #Hpredrw & #HpredA_u & #HpredA_s & #HpredSK & #HpredK & #Hpredα
-               & #SpredAuth & #Hc & #pubuid & #minteduid & #mintedpw & #privpw) Hhl".
+               & #SpredAuth & #Hc & #pubuid & #minteduid & #mintedpw & #privpw & #Hfresh) Hhl".
   wp_lam. wp_pures.
-  wp_apply (wp_mk_nonce (fun _ => False)%I (fun t => opaque_secret t)%I) => //.
-  iIntros "%x_u %Hnoncex_u #Hmintedx_u #Hprivatex_u #Hexpx_u #? #Hexpx_uV Htokenx_u".
+  wp_apply (wp_mk_nonce_fresh fresh (fun _ => False)%I (fun t => opaque_secret t)%I) => //.
+  iIntros "%x_u %Hfreshx_u %Hnoncex_u #Hmintedx_u #Hprivatex_u #Hexpx_u #? #Hexpx_uV Htokenx_u".
   wp_pures.
-  wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => True)%I) => //.
-  iIntros "%r %Hnoncer #Hmintedr #Hprivater #Hexpr #HsrV #HexprV Htokenr".
+  wp_apply (wp_mk_nonce_fresh fresh (fun _ => False)%I (fun _ => True)%I) => //.
+  iIntros "%r %Hfreshr %Hnoncer #Hmintedr #Hprivater #Hexpr #HsrV #HexprV Htokenr".
   wp_pures.
   wp_apply wp_H'.
   wp_apply wp_texp.
@@ -75,7 +76,7 @@ Proof.
   wp_list_of_term m2; wp_pures => //.
   wp_list_match => [β X_s envelope A_s -> | _].
   1, 2: wp_pures.
-  2, 3: by iApply ("Hhl" $! None).
+  2, 3: by iApply ("Hhl" $! None); iModIntro; iSplit.
   wp_apply wp_hl_inv_term.
   wp_apply wp_texp.
   wp_list.
@@ -90,7 +91,7 @@ Proof.
   iDestruct "pubm2" as "(_ & _ & pubenv & pubA_s & _)".
   wp_apply wp_sdec => //.
   iSplit.
-  2: by wp_pures; iApply ("Hhl" $! None).
+  2: by wp_pures; iApply ("Hhl" $! None); iModIntro; iSplit.
   iIntros "%clear #minclear [#pubkey | #envpred] _".
   rewrite /k public_senc_key.
   iPoseProof (public_THashE with "Hpredrw pubkey") as "[contra | [_ contra]]";
@@ -102,12 +103,12 @@ Proof.
   iDestruct "envpred" as "(%p_u & %P_u & %P_s & -> & Hopaquepair)".
   wp_pures.
   wp_list_of_term_eq clear Hclear.
-  2: wp_pures; by iApply ("Hhl" $! None).
+  2: by wp_pures; iApply ("Hhl" $! None); iModIntro; iSplit.
   apply Spec.of_list_inj in Hclear.
   rewrite -Hclear.
   wp_pures.
   wp_list_match => [p_u' P_u' P_s' H | _].
-  2: wp_pures; by iApply ("Hhl" $! None).
+  2: by wp_pures; iApply ("Hhl" $! None); iModIntro; iSplit.
   symmetry in H.
   inversion H.
   subst.
@@ -122,7 +123,7 @@ Proof.
   rewrite minted_of_list => /=.
   iDestruct "minclear" as "(minp_u & minP_u & minP_s & _)".
   wp_eq_term eq_A_s => /= //.
-  2: by wp_pures; iApply ("Hhl" $! None).
+  2: by wp_pures; iApply ("Hhl" $! None); iModIntro; iSplit.
   wp_pures.
   wp_list.
   wp_apply wp_prf.
@@ -149,10 +150,11 @@ Proof.
   set SK := Spec.of_list _.
   iApply ("Hhl" $! (Some SK)).
   iModIntro.
+  iSplit.
   rewrite /SK_priv /SK public_of_list /=.
   iSplit; iIntros "contra".
   iDestruct "contra" as "(_ & contra & _)".
-iDestruct (public_THashE with "HpredSK contra") as "[contra | [_ contra]]" => //.
+  iDestruct (public_THashE with "HpredSK contra") as "[contra | [_ contra]]" => //.
   rewrite public_of_list.
   iDestruct "contra" as "[contra _]".
   iDestruct (public_THashE with "HpredK contra") as "[contra | [_ contra]]" => //.
@@ -179,6 +181,7 @@ iDestruct (public_THashE with "HpredSK contra") as "[contra | [_ contra]]" => //
   1, 2: iSplit => //.
   rewrite -[minted (TExp _ r)] all_minted_TExp minted_THash minted_tag.
   by iSplit => //.
-Qed.
+  admit.
+Admitted.
 
 End Opaque.

@@ -66,17 +66,53 @@ Definition SK_priv' (x : val) : iProp :=
   ∃ (x' : option term),
     ⌜x = (repr x')⌝ ∗ SK_priv x'.
 
-Lemma SK_priv_eq :
-  ∀ x : option term, SK_priv x -∗ SK_priv' (repr x).
+Lemma SK_priv_eq (x : option term) :
+  SK_priv x -∗ SK_priv' (repr x).
 Proof.
-  iIntros "%x SK".
+  iIntros "SK".
+  iExists x.
+  by iSplit => //.
+Qed.
+
+Definition SK_fresh (x : option term) (fresh : gset term) : iProp :=
+  match x with
+    None => True
+  | Some x' => ⌜x' ∉ fresh⌝
+  end.
+
+Definition SK_fresh' (x : val) (fresh : gset term) : iProp :=
+  ∃ (x' : option term),
+    ⌜x = (repr x')⌝ ∗ SK_fresh x' fresh.
+
+Lemma SK_fresh_eq (x : option term) (fresh : gset term) :
+  SK_fresh x fresh -∗ SK_fresh' (repr x) fresh.
+Proof.
+  iIntros "SK".
+  iExists x.
+  by iSplit => //.
+Qed.
+
+Definition SK_result (x : option term) (fresh : gset term) : iProp :=
+  SK_priv x ∗ SK_fresh x fresh
+          ∗ match x with
+              None => True
+            | Some x' => minted x'
+            end.
+
+Definition SK_result' (x : val) (fresh : gset term) : iProp :=
+  ∃ (x' : option term),
+    ⌜x = (repr x')⌝ ∗ SK_result x' fresh.
+
+Lemma SK_result_eq (x : option term) (fresh : gset term) :
+  SK_result x fresh -∗ SK_result' (repr x) fresh.
+Proof.
+  iIntros "SK".
   iExists x.
   by iSplit => //.
 Qed.
 
 Definition opaque_secret t : iProp :=
 ⌜length (exps t) = 1⌝.
-
 
 Lemma public_opaque_secret a b (P : iProp) :
   a ≠ b →
@@ -89,7 +125,6 @@ Lemma public_opaque_secret a b (P : iProp) :
 Proof.
   by apply public_dh_secret'.
 Qed.
-
 
 Definition opaque_public_private_pair a A: iProp :=
   ∃ a',
