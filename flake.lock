@@ -12,6 +12,7 @@
         "url": "https://gitlab.mpi-sws.org/iris/actris.git"
       },
       "original": {
+        "rev": "7502c27c8e6d1ff7d824a6eb23cab6223acff3f1",
         "type": "git",
         "url": "https://gitlab.mpi-sws.org/iris/actris.git"
       }
@@ -34,6 +35,23 @@
         "type": "github"
       }
     },
+    "iris-dev": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1743178558,
+        "narHash": "sha256-IZ+PB2TUDlk34V5VCfnYw9AwX5SuGyzswTjmTzqPAAI=",
+        "ref": "refs/heads/master",
+        "rev": "fa344cbe1a781fdc8c6263fbe18de976b6920751",
+        "revCount": 8306,
+        "type": "git",
+        "url": "https://gitlab.mpi-sws.org/iris/iris.git"
+      },
+      "original": {
+        "rev": "fa344cbe1a781fdc8c6263fbe18de976b6920751",
+        "type": "git",
+        "url": "https://gitlab.mpi-sws.org/iris/iris.git"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1753805735,
@@ -46,6 +64,7 @@
       "original": {
         "owner": "nixos",
         "repo": "nixpkgs",
+        "rev": "c4d5ad04f949c1c0b22f48c3917bc2f8a969b729",
         "type": "github"
       }
     },
@@ -53,11 +72,12 @@
       "inputs": {
         "actris": "actris",
         "flake-utils": "flake-utils",
+        "iris-dev": "iris-dev",
         "nixpkgs": "nixpkgs",
-        "stdpp-1-12": "stdpp-1-12"
+        "stdpp": "stdpp"
       }
     },
-    "stdpp-1-12": {
+    "stdpp": {
       "flake": false,
       "locked": {
         "lastModified": 1746195779,
