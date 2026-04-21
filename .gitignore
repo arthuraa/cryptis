@@ -11,3 +11,4 @@
 .direnv
 builddep
 actris/*
+rocq_mcp_cache_*
