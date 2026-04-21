@@ -34,7 +34,7 @@ not just under a WP.  The [▷] from the key secrecy chain is consumed inside th
 
 Definition trusted_connected skI skR rl cs p : iProp :=
   Sess.connected skI skR rl cs p ∗
-  □ (public (si_key cs) → False).
+  □ (public (si_key cs) →  ▷ False).
 
 Global Instance trusted_connected_proper skI skR rl cs :
   Proper ((≡) ==> (≡)) (trusted_connected skI skR rl cs).
@@ -47,7 +47,7 @@ Proof. rewrite /trusted_connected. by iIntros "[$ _]". Qed.
 
 Lemma trusted_connected_honest skI skR rl cs p :
   trusted_connected skI skR rl cs p -∗
-  □ (public (si_key cs) → False).
+  □ (public (si_key cs) →  ▷  False).
 Proof. rewrite /trusted_connected. by iIntros "[_ #$]". Qed.
 
 Lemma trusted_connected_le skI skR rl cs p1 p2 :
@@ -95,36 +95,42 @@ is eliminated by the honesty hypothesis carried in [trusted_connected]. *)
 Lemma trusted_wp_recv {TT : tele} skI skR rl cs
   (t : TT → term) (P : TT → iProp) (p : TT → iProto Σ term) :
   {{{ trusted_connected skI skR rl cs (<?.. x> MSG t x {{ ▷ P x }}; p x) }}}
-    Sess.recv (repr cs)
-  {{{ t', RET (repr t'); public t' ∗
-      ∃.. x, ⌜t' = t x⌝ ∗ trusted_connected skI skR rl cs (p x) ∗ P x }}}.
+    Sess.recv (repr cs) 
+  {{{ x , RET (repr (t x)); public (t x) ∗
+     trusted_connected skI skR rl cs (p x) ∗ P x }}}.
 Proof.
 iIntros (Φ) "tc post".
 iDestruct "tc" as "[conn #hon]".
+(* wp_pure _ credit: "c". *)
+(* wp_pures. *)
+iApply (wp_fupd).
 iApply (Sess.wp_recv with "conn").
 iIntros "!> %t' (p_t' & [fail | inv])".
-- iExFalso. by iApply "hon".
-- iApply "post". iFrame "p_t'".
+- iMod ("hon" with "fail") as "[]". 
+-
   iDestruct "inv" as (x) "(-> & conn & Px)".
-  iExists x. iFrame "Px". iSplit => //.
+  iApply "post". iFrame "p_t'".
+  iFrame "Px".
+  (* iSplit => //. *)
   rewrite /trusted_connected. iFrame "conn hon".
+  auto.
 Qed.
 
-Lemma trusted_wp_recv_term skI skR rl cs
-  (P : term → iProp) (p : term → iProto Σ term) :
-  {{{ trusted_connected skI skR rl cs (<? t> MSG t {{ ▷ P t }}; p t) }}}
-    Sess.recv (repr cs)
-  {{{ t, RET (repr t); public t ∗
-      trusted_connected skI skR rl cs (p t) ∗ P t }}}.
-Proof.
-iIntros (Φ) "tc post".
-iDestruct "tc" as "[conn #hon]".
-iApply (Sess.wp_recv_term with "conn").
-iIntros "!> %t (p_t & conn & [fail | Pt])".
-- iExFalso. by iApply "hon".
-- iApply "post". iFrame "p_t". iFrame "Pt".
-  rewrite /trusted_connected. iFrame "conn hon".
-Qed.
+(* Lemma trusted_wp_recv_term skI skR rl cs *)
+(*   (P : term → iProp) (p : term → iProto Σ term) : *)
+(*   {{{ trusted_connected skI skR rl cs (<? t> MSG t {{ ▷ P t }}; p t) }}} *)
+(*     Sess.recv (repr cs) *)
+(*   {{{ t, RET (repr t); public t ∗ *)
+(*       trusted_connected skI skR rl cs (p t) ∗ P t }}}. *)
+(* Proof. *)
+(* iIntros (Φ) "tc post". *)
+(* iDestruct "tc" as "[conn #hon]". *)
+(* iApply (Sess.wp_recv_term with "conn"). *)
+(* iIntros "!> %t (p_t & conn & [fail | Pt])". *)
+(* - iExFalso. by iApply "hon". *)
+(* - iApply "post". iFrame "p_t". iFrame "Pt". *)
+(*   rewrite /trusted_connected. iFrame "conn hon". *)
+(* Qed. *)
 
 (** ** Connect and confirm
 
