@@ -18,19 +18,19 @@ Notation iProp := (iProp Σ).
 
 Lemma wp_client_session (uid pw : term) (c : val) (fresh : gset term):
 {{{ cryptis_ctx
-      ∗ hash_pred (opN.@"rw") (λ _, False)
-      ∗ hash_pred (opN.@"A_u") A_pred
-      ∗ hash_pred (opN.@"A_s") A_pred
-      ∗ hash_pred (opN.@"SK") (λ _,  False)
-      ∗ hash_pred (opN.@"K") (λ _,  False)
-      ∗ hash_pred (opN.@"α") (λ _,  True)
-      ∗ senc_pred (opN.@"AuthEnc") envelope_pred
-      ∗ channel c
-      ∗ public uid
-      ∗ minted uid
-      ∗ minted pw
-      ∗ □(public pw ↔ ▷ □ False)
-      ∗ ∀ t : term, ⌜t ∈ fresh⌝ -∗ minted t}}}
+    ∗ hash_pred (opN.@"rw") (λ _, False)
+    ∗ hash_pred (opN.@"A_u") A_pred
+    ∗ hash_pred (opN.@"A_s") A_pred
+    ∗ hash_pred (opN.@"SK") (λ _,  False)
+    ∗ hash_pred (opN.@"K") (λ _,  False)
+    ∗ hash_pred (opN.@"α") (λ _,  True)
+    ∗ senc_pred (opN.@"AuthEnc") envelope_pred
+    ∗ channel c
+    ∗ public uid
+    ∗ minted uid
+    ∗ minted pw
+    ∗ □(public pw ↔ ▷ □ False)
+    ∗ ∀ t : term, ⌜t ∈ fresh⌝ -∗ minted t}}}
 Client.session uid c pw
 {{{ x , RET (repr x) ; SK_result x fresh }}}.
 Proof.
@@ -181,15 +181,40 @@ Proof.
   1, 2: iSplit => //.
   rewrite -[minted (TExp _ r)] all_minted_TExp minted_THash minted_tag.
   by iSplit => //.
-  iSplit; last first.
-  { rewrite !minted_of_list /= !minted_THash !minted_tag minted_of_list /=.
-    rewrite !minted_THash !minted_tag !minted_of_list /= !minted_TExp //.
-    - admit.
-    - admit.
-    - admit.
-    - admit. }
+  iSplit.
   iPureIntro => /Hfreshr; apply.
-  admit. (* Needs a bunch of auxiliary lemmas on subterm. *)
-Admitted.
+  rewrite /SK.
+  apply subterm_of_list.
+  clear SK eq_A_s k m1 m2.
+  set SK := hash_result "SK" _.
+  exists SK.
+  rewrite !elem_of_cons /SK.
+  split.
+  right.
+  by left.
+  apply STHash.
+  apply subterm_of_tag.
+  apply subterm_of_list.
+  set ssid' := hash_result "ssid'" _.
+  exists ssid'.
+  rewrite !elem_of_cons /ssid'.
+  split.
+  right.
+  by left.
+  apply STHash.
+  apply subterm_of_tag.
+  apply subterm_of_list.
+  set β' := TExp _ _.
+  exists β'.
+  rewrite !elem_of_cons /β'.
+  split.
+  right.
+  by left.
+  by apply subterm_TExp_exp.
+  rewrite minted_of_list /= minted_THash minted_tag minted_of_list /= !minted_THash
+  !minted_tag !minted_of_list /= -!all_minted_TExpN /=.
+  do !iSplit => //; iApply public_minted => //.
+  by iApply (public_THashIS with "Hpredα mintedpw").
+Qed.
 
 End Opaque.

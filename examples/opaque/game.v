@@ -104,12 +104,13 @@ neq_options (Snd "SK1s") (Snd "SK2s") ;;
 #().
 
 Lemma wp_game :
+proof_irrelevance ->
 cryptis_ctx -∗
 hash_pred_token ⊤ -∗
 seal_pred_token SENC ⊤ -∗
 WP game #() {{ (fun _ => True) }}.
 Proof.
-iIntros "#? h_pred_tok s_pred_tok".
+iIntros "%Hpi #? h_pred_tok s_pred_tok".
 iMod (opaque_alloc with "h_pred_tok s_pred_tok") as
 "[(#? & #? & #? & #? & #? & #? & #?) _]" => //.
 wp_lam.
@@ -181,11 +182,6 @@ wp_apply (wp_unguessable_option SKs1 c with "Hchannel HprivSKs1").
 wp_pures.
 wp_apply (wp_unguessable_option SKc1 c with "Hchannel HprivSKc1").
 wp_pures.
-Check wp_par.
-Check (fun x => match SKs1 with
-               None => True
-             | Some SKs1' => SK_result' x {[SKs1']}
-             end ∗ AList.is_alist db (<[uid:=file]> ∅))%I.
 wp_apply (wp_par
           (fun x => SK_result' x match SKs1 with
                                 None => ∅

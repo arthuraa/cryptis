@@ -93,14 +93,7 @@ Proof.
   apply (Hfreshp_u (TExp g p_s)).
   by rewrite elem_of_singleton.
   rewrite contra.
-  assert (negb (is_exp g)) as H0.
-  done.
-  assert (invs_canceled [p_s]) as H1.
-  by apply invs_canceled1.
-  assert (subterm p_s p_s) as H2.
-  by apply STRefl.
-  apply (STExp2 H0 H1 H2).
-  by rewrite elem_of_list_singleton.
+  by apply subterm_TExp_exp.
   wp_pures.
   wp_apply wp_texp. wp_pures.
   wp_apply wp_texp.
@@ -175,6 +168,7 @@ Proof.
 Qed.
 
 Lemma wp_server_session (db c : val) (alist : gmap term val) (fresh : gset term) :
+  proof_irrelevance ->
 {{{ cryptis_ctx
     ∗ hash_pred (opN.@"A_s") A_pred
     ∗ hash_pred (opN.@"SK") (λ _,  False)
@@ -186,7 +180,7 @@ Lemma wp_server_session (db c : val) (alist : gmap term val) (fresh : gset term)
 Server.session db c
 {{{ x , RET (repr x) ; SK_result x fresh ∗ AList.is_alist db alist }}}.
 Proof.
-  iIntros "%ϕ".
+  iIntros "%Hpi %ϕ".
   rewrite /opaque_db big_sepM_forall.
   iIntros "(#Cryptis & #HpredA_s & #HpredSK & #HpredK & #Hc & Hdb & #Hmapcontents & #Hfresh) Hhl".
   wp_lam. wp_pures.
@@ -275,7 +269,7 @@ Proof.
   set SK := Spec.of_list _.
   iApply ("Hhl" $! (Some SK)).
   iSplitR => //.
-  rewrite /SK_result /SK.
+  rewrite /SK_result.
   iSplit.
   rewrite /SK_priv public_of_list /=.
   iSplit; iIntros "contra".
@@ -303,19 +297,46 @@ Proof.
   1, 2: rewrite -all_minted_TExp; iSplit => //.
   1- 4: by iApply public_minted.
   iSplit.
-  admit.
-  rewrite minted_of_list /=.
-  do !iSplit => //.
-  by iApply public_minted.
-  rewrite minted_THash minted_tag minted_of_list /=.
-  do !iSplit => //;
-      rewrite minted_THash minted_tag minted_of_list /=; do !iSplit => //.
-  rewrite TExp_TExpN -all_minted_TExpN /=.
-  do !iSplit => //.
-  by iApply minted_TInt.
-  rewrite -all_minted_TExp.
-  iSplit => //.
-  all: by iApply public_minted.
-Admitted.
+  iPureIntro.
+  intro contra.
+  apply (Hfreshx_s SK).
+  by apply elem_of_union_r.
+  rewrite /SK.
+  apply subterm_of_list.
+  set SK' := hash_result "SK" _.
+  exists SK'.
+  rewrite !elem_of_cons /SK'.
+  split.
+  right.
+  by left.
+  apply STHash.
+  apply subterm_tag.
+  apply subterm_of_list.
+  set K := hash_result "K"_.
+  exists K.
+  rewrite elem_of_cons /K.
+  split.
+  by left.
+  apply STHash.
+  apply subterm_tag.
+  apply subterm_of_list.
+  exists (TExp X_u x_s).
+  split.
+  rewrite !elem_of_cons.
+  right.
+  by left.
+  apply subterm_TExp_exp' => //.
+  apply Hfreshx_s.
+  rewrite elem_of_union elem_of_singleton.
+  by left.
+  apply Hfreshx_s.
+  rewrite elem_of_union elem_of_singleton.
+  by left.
+  by destruct x_s.
+  rewrite minted_of_list /= minted_THash minted_tag minted_of_list /= !minted_THash
+                         !minted_tag !minted_of_list /= TExp_TExpN -!all_minted_TExpN /=.
+  do !iSplit => //; iApply public_minted => //.
+  by iApply public_TInt.
+Qed.
 
 End Opaque.
