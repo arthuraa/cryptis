@@ -123,7 +123,7 @@ Lemma public_opaque_secret a b (P : iProp) :
   □ (∀ t, exp_pred_base b t ↔ ▷ □ opaque_secret t) -∗
   (public (TExpN g [a; b]) → P).
 Proof.
-  by apply public_dh_secret'.
+  exact: public_dh_secret'.
 Qed.
 
 Definition opaque_public_private_pair a A: iProp :=
@@ -199,63 +199,20 @@ Qed.
 
 End Opaque.
 
-Lemma subterm_of_list (t : term) (ts : list term) :
-  (exists t', t' ∈ ts /\ subterm t t')  ->
-  subterm t (Spec.of_list ts).
-Proof.
-  intros [t' [Hmem Hsubterm]].
-  induction ts.
-  by inversion Hmem.
-  rewrite elem_of_cons in Hmem.
-  rewrite Spec.of_list_unseal.
-  simpl.
-  destruct Hmem as [Hmem|Hmem].
-  subst.
-  by apply STPair1.
-  apply STPair2.
-  rewrite -Spec.of_list_unseal.
-  by apply IHts.
-Qed.
-
-Lemma subterm_of_tag (t t' : term) (n : namespace) :
-  subterm t t' ->
-  subterm t (Spec.tag (Tag n) t').
-Proof.
-  intro.
-  rewrite Spec.tag_unseal.
-  by apply STPair2.
-Qed.
-
-Lemma subterm_TExpN_exp (t t' : term) (ts : list term) :
-  ( exists t'', subterm t t'' /\ t'' ∈ ts) ->
-  negb (is_exp t') ->
-  invs_canceled ts ->
-  subterm t (TExpN t' ts).
-Proof.
-  intros [t'' [Hst Hmem]] Hnexp Hcanceled.
-  by apply (STExp2 Hnexp Hcanceled Hst Hmem).
-Qed.
-
-Lemma subterm_TExp_exp (t t' t'' : term) :
-  negb (is_exp t') ->
-  subterm t t'' ->
-  subterm t (TExp t' t'').
-Proof.
-  intros Hnexp Hst.
-  apply subterm_TExpN_exp => //.
-  exists t''. split => //.
-  rewrite elem_of_cons.
-  by left.
-  by apply invs_canceled1.
-Qed.
-
+(* useful: roots (all raising/lowering lemmas, TExpN_inj) unused *)
 Lemma andb_is_true b1 b2:
   is_true (b1 && b2) <-> is_true b1 /\ is_true b2.
 Proof.
   by rewrite /is_true andb_true_iff.
 Qed.
 
+Lemma not_is_true b :
+  ¬ is_true b <-> is_true (negb b).
+Proof.
+  by split; intro H; destruct b.
+Qed.
 
+(* useful: roots (TExpN_TExpN', TExpN'_TExpN) unused *)
 Lemma map_cancel_if {T : Type} (P : ssrbool.pred T) (f : T -> T)
                  (H : forall x, is_true (P x) -> f x = x) :
   forall l, seq.all P l -> seq.map f l = l.
@@ -266,10 +223,11 @@ Proof.
   destruct H' as [H' H''].
   rewrite -is_trueP in H'.
   f_equal => //.
-  by apply H.
-  by apply IHl.
+  exact: H.
+  exact: IHl.
 Qed.
 
+(* useful: roots (TExpN_TExpN', TExpN'_TExpN) unused *)
 Lemma map_compose {T T' T'' : Type} (f : T -> T') (f' : T' -> T'') (f'' : T -> T'')
                   (H : forall x, f' (f x) = f'' x) :
   forall l, seq.map f' (seq.map f l) = seq.map f'' l.
@@ -279,13 +237,25 @@ Proof.
   by f_equal.
 Qed.
 
+(* useful: roots (TExpN_TExpN', TExpN'_TExpN) unused *)
 Definition normalize_wfs := map_cancel_if PreTerm.normalize_wf.
 
+(* useful: roots (TExpN_TExpN', TExpN'_TExpN) unused *)
 Definition map_unfold_fold := map_compose unfold_fold.
 
-(* unused: for completeness *)
+(* useful: roots (TExpN_inj, subterm_TInv_self) unused *)
 Definition map_fold_termK := map_cancel_if fold_termK.
 
+(* useful: roots (TExpN_inj, subterm_TInv_self) unused *)
+Lemma map_fold_termK' l :
+  is_true (seq.all PreTerm.wf_term l) →
+  seq.map unfold_term (seq.map fold_term l) = l.
+Proof.
+  intro H.
+  by rewrite -seq.map_comp map_fold_termK // H.
+Qed.
+
+(* useful: roots (TExpN_TExpN', TExpN'_TExpN) unused *)
 Lemma map_wf_unfold_fold (pts : list PreTerm.pre_term) :
   is_true (seq.all PreTerm.wf_term pts) ->
   seq.map unfold_term (seq.map fold_term pts) = pts.
@@ -294,217 +264,183 @@ Proof.
   by rewrite map_unfold_fold normalize_wfs // H.
 Qed.
 
-(* Definition propositional_extensionality : Prop := *)
-(*   forall (P Q : Prop), (P <-> Q) -> P = Q. *)
-
-Definition proof_irrelevance : Prop :=
-  forall (P : Prop) (pf1 pf2 : P), pf1 = pf2.
-
-Lemma TExpN'_TExpN (pt : PreTerm.pre_term) (pts : list PreTerm.pre_term) i :
-  proof_irrelevance ->
-  TExpN' pt pts i = TExpN (fold_term pt) (seq.map fold_term pts).
+(* useful: roots (TExpN_inj, subterm_TInv_self) unused *)
+Lemma invs_canceled_cancel_exps ts :
+is_true (invs_canceled (cancel_exps ts)).
 Proof.
-  intro Hpi.
-  rewrite /TExpN unlock.
-  specialize i as i'.
-  rewrite /= !andb_is_true in i'.
-  destruct i' as [Hwf [Hnexp [Hwfs [Hnempty [Hsorted Hcanceled]]]]].
-  apply ssrbool.negbTE in Hnexp.
-  apply ssrbool.negbTE in Hnempty.
-  rewrite map_wf_unfold_fold // /PreTerm.exp !unfold_fold !PreTerm.normalize_wf => //.
-  destruct pt; try by inversion Hnexp.
-  1- 3: rewrite /PreTerm.exps /= PreTerm.cancel_exps_canceled // path.sorted_sort //;
-                try apply preorder.Order.PreorderTheory.le_trans;
-  rewrite -seq.nilpE in Hnempty;
-  rewrite Hnempty unlock /fold_term_def PreTerm.normalize_wf // /fold_term_predef;
-  rewrite seq.nilpE in Hnempty;
-  set b := ssrbool.boolP _;
-          destruct b;
-          f_equal.
-  1, 3, 5: by apply Hpi.
-  all: by rewrite i /is_true /= in i0.
+  by rewrite /invs_canceled /cancel_exps
+             (map_fold_termK' (PreTerm.wf_cancel_exps (wf_unfold_terms _)))
+             (PreTerm.invs_canceled_cancel_exps (wf_unfold_terms _)).
 Qed.
 
+(* useful: root (elem_of_sorted_terms) unused: *)
 Definition map_unfold_termK := seq.mapK unfold_termK.
 
+(* useful: roots (TExpN_TExpN', exps_expN') unused: *)
 Lemma map_nil {T T' : Type} (l : list T) (f : T -> T') :
 seq.map f l = [] <-> l = [].
 Proof.
   by split; intro; destruct l.
 Qed.
 
-Lemma map_nnil {T T' : Type} (l : list T) (f : T -> T') :
-seq.map f l ≠ [] <-> l ≠ [].
-Proof.
-  by rewrite map_nil.
-Qed.
-
+(* useful: root (TExpN_TExpN') unused: *)
 Lemma nilp_sort {T : Type} f (l : list T) :
   seq.nilp (path.sort f l) = seq.nilp l.
 Proof.
   by rewrite /seq.nilp path.size_sort.
 Qed.
 
-(* could be useful, but not necessary for this *)
-(* Lemma cancel_exps_sort l : *)
-(*   path.sort preorder.Order.le (PreTerm.cancel_exps l) *)
-(*   = PreTerm.cancel_exps (path.sort preorder.Order.le l). *)
-(* Admitted. *)
-
+(* useful: root (TExpN_TExpN') unused: *)
 Lemma unfold_cancel_exps l:
   seq.map unfold_term (cancel_exps l) = PreTerm.cancel_exps (seq.map unfold_term l).
 Proof.
   by rewrite /cancel_exps map_wf_unfold_fold // PreTerm.wf_cancel_exps // wf_unfold_terms.
 Qed.
 
+(* useful: root (TExpN_TExpN') unused: *)
 Lemma nilp_false (ts : list PreTerm.pre_term) :
-  ts ≠ [] ->
-  seq.nilp ts = false.
+ts ≠ [] ->
+seq.nilp ts = false.
 Proof.
   intro contra.
   by destruct ts.
 Qed.
 
+(* useful: root (TExpN_inj) unused *)
+(* stronger statement than base.exps_expN *)
+Lemma exps_expN' t :
+  is_true (negb (is_exp t)) <-> exps t = [].
+Proof.
+  split; intro H.
+  exact: base.exps_expN.
+  destruct t => //.
+  specialize i as i'.
+  rewrite /= !andb_is_true -!not_is_true in i'.
+  destruct i' as [_ [_ [_ [[] _]]]].
+  rewrite /= map_nil in H.
+  by rewrite H.
+Qed.
+
+(* useful: roots (TExpN_TExpN', TExpN_inj, subterm_TInv_self) unused *)
+Lemma term_eq (t t' : term) :
+  t = t' <-> base t = base t' /\ exps t = exps t'.
+Proof.
+  split; intro H; subst => //.
+  destruct H as [H H'], (is_exp t) eqn:Eexp, (is_exp t') eqn:Eexp'.
+  by rewrite -[t]base_expsK -[t']base_expsK H H'.
+  by rewrite [exps t']base.exps_expN ?Eexp' // -exps_expN' Eexp in H'.
+  symmetry in H'.
+  by rewrite [exps t]base.exps_expN ?Eexp // -exps_expN' Eexp' in H'.
+  by rewrite !base.base_expN ?Eexp ?Eexp' in H.
+Qed.
+
+(* unused: was useful at some point *)
+Lemma TExpN'_TExpN (pt : PreTerm.pre_term) (pts : list PreTerm.pre_term) i :
+  TExpN' pt pts i = TExpN (fold_term pt) (seq.map fold_term pts).
+Proof.
+  specialize i as i'.
+  rewrite /= !andb_is_true in i'.
+  destruct i' as [Hwf [Hnexp [Hwfs [Hnempty [Hsorted Hcanceled]]]]].
+  rewrite term_eq /=.
+  rewrite -[pt](fold_termK _ Hwf) -is_exp_unfold in Hnexp.
+  split.
+  - by rewrite base_TExpN base.base_expN // is_exp_unfold fold_termK //
+               base.exps_TExpN base.exps_expN //=.
+  - by rewrite base.exps_TExpN base.exps_expN //= cancel_exps_canceled /invs_canceled
+               ?map_fold_termK' ?Hcanceled //
+               (path.sorted_sort preorder.Order.PreorderTheory.le_trans) //
+       -path.sorted_map map_fold_termK'.
+Qed.
+
+(* unused: was useful at some point *)
 Lemma TExpN_TExpN' (t : term) (ts : list term) :
-  proof_irrelevance ->
   is_true (negb (is_exp t)) ->
   cancel_exps ts ≠ [] ->
   exists i,
     TExpN t ts =
       TExpN' (unfold_term t) (path.sort preorder.Order.le (seq.map unfold_term (cancel_exps ts))) i.
 Proof.
-  intros Hpi Hnexp Hnnil.
+  intros Hnexp Hnnil.
   rewrite unfold_cancel_exps.
-  assert (is_true (PreTerm.wf_term
-                     (PreTerm.PTExp
-                        (unfold_term t)
-                        (path.sort preorder.Order.le (PreTerm.cancel_exps (seq.map unfold_term ts))))))
-    as i. {
-    rewrite /= !andb_is_true wf_unfold_term path.all_sort -is_exp_unfold (path.sort_sorted order.Order.TotalTheory.le_total).
+  set iT := is_true _.
+  assert iT as i. {
+    rewrite /iT /= !andb_is_true wf_unfold_term path.all_sort
+            -is_exp_unfold (path.sort_sorted order.Order.TotalTheory.le_total).
     do !split => //.
-       by rewrite PreTerm.wf_cancel_exps // wf_unfold_terms.
-       rewrite -seq.size_eq0 path.size_sort -unfold_cancel_exps seq.size_map.
-       by destruct (cancel_exps ts).
-       by rewrite -unfold_cancel_exps PreTerm.invs_canceled_sort /cancel_exps
-                                      map_wf_unfold_fold ?PreTerm.invs_canceled_cancel_exps
-                                      // ?PreTerm.wf_cancel_exps // wf_unfold_terms.
+       - by rewrite PreTerm.wf_cancel_exps // wf_unfold_terms.
+       - rewrite -seq.size_eq0 path.size_sort -unfold_cancel_exps seq.size_map.
+         by destruct (cancel_exps ts).
+       - by rewrite PreTerm.invs_canceled_sort PreTerm.invs_canceled_cancel_exps // wf_unfold_terms.
   }
   exists i.
-  assert (forall l, seq.cat (PreTerm.exps (unfold_term t)) l = l) as H. {
-    rewrite PreTerm.exps_expN //=.
-    by rewrite -is_exp_unfold.
+  rewrite term_eq /=.
+  split.
+  - by rewrite base_TExpN base_expN ?unfold_termK // -is_trueP not_is_true.
+  - by rewrite base.exps_TExpN base.exps_expN //= -unfold_cancel_exps path.sort_map map_unfold_termK.
+Qed.
+
+(* useful: roots (TExpN_inj, subterm_TInv_self) unused *)
+Lemma TExpN_cancel_exps t ts :
+  TExpN t ts = TExpN t (cancel_exps ts).
+Proof.
+  rewrite term_eq !base.base_TExpN !base.exps_TExpN.
+  split => //.
+  rewrite /cancel_exps !seq.map_cat map_fold_termK'.
+  2: by rewrite PreTerm.wf_cancel_exps // wf_unfold_terms.
+  rewrite !unfold_exps.
+  set a := seq.map _ _.
+  set b := seq.map _ _.
+  assert (is_true (seq.perm_eq a b)) as H. {
+    apply seq.perm_map, PreTerm.count_perm_cancel.
+    by rewrite seq.all_cat wf_unfold_terms PreTerm.wf_exps // wf_unfold_term.
+    by rewrite seq.all_cat PreTerm.wf_exps ?wf_unfold_term //
+               PreTerm.wf_cancel_exps // wf_unfold_terms.
+    intros pt H.
+    rewrite !seq.count_cat
+             !(PreTerm.count_cancel (PreTerm.wf_inv _) (wf_unfold_terms _)) //
+             !(PreTerm.count_cancel _ (wf_unfold_terms _)) //
+             (PreTerm.invK H)
+             /ssrnat.subn /ssrnat.addn.
+    set x := (seq.count _ (PreTerm.exps _)).
+    set x' := (seq.count _ (PreTerm.exps _)).
+    set y := (seq.count _ (seq.map _ _)).
+    set y' := (seq.count _ (seq.map _ _)).
+    lia.
   }
-  rewrite !unlock /fold_term_def /PreTerm.exp H. 
-  rewrite /cancel_exps map_nnil in Hnnil.
-  specialize (nilp_false Hnnil) as Hnnil'.
-  rewrite Hnnil' -unfold_base base.base_expN //= normalize_unfold1 normalize_wfs.
-  2: by rewrite path.all_sort -is_trueP;
-  apply PreTerm.wf_cancel_exps;
-  apply wf_unfold_terms.
-  rewrite /PreTerm.exp H PreTerm.cancel_exps_canceled.
-  2: by rewrite PreTerm.invs_canceled_sort PreTerm.invs_canceled_cancel_exps //;
-                apply wf_unfold_terms.
-  rewrite nilp_sort Hnnil' (path.sorted_sort order.Order.POrderTheory.le_trans).
-  2: by rewrite (path.sort_sorted order.Order.TotalTheory.le_total).
-  rewrite -unfold_base base.base_expN // /fold_term_predef.
-  set b := ssrbool.boolP _;
-          destruct b.
-  by f_equal.
-  by rewrite i in i0.
+  specialize (perm_sort_leP _ _ a b) as Heq.
+  inversion Heq => //.
+  by rewrite H in H0.
 Qed.
 
-(* Lemma eqtype_eq (l l' : list PreTerm.pre_term) : *)
-(*   @eqtype.eq_op *)
-(*     (seq.Datatypes_list__canonical__eqtype_Equality *)
-(*        PreTerm.PreTerm_pre_term__canonical__eqtype_Equality) *)
-(*     l l' = true <-> l = l'. *)
-(* Proof. *)
-(*   generalize l'. *)
-(*   clear l'. *)
-(*   induction l => l'; destruct l';  *)
-(*                 rewrite // seq.eqseq_cons andb_true_iff; *)
-(*                 split => H //. *)
-(*   destruct H as [H H']. *)
-(*   f_equal. *)
-(*   admit. *)
-(*   by apply IHl. *)
-(*   inversion H. *)
-(*   by split; apply eqtype.eq_refl. *)
-(* Admitted. *)
-
-Lemma eqtype_eq_nil (l : list PreTerm.pre_term) :
-  @eqtype.eq_op
-    (seq.Datatypes_list__canonical__eqtype_Equality
-       PreTerm.PreTerm_pre_term__canonical__eqtype_Equality)
-    l [] = true <-> l = [].
-Proof.
-  by destruct l.
-Qed.
-
-Lemma eqtype_sort_nil f (l : list PreTerm.pre_term) :
-  @eqtype.eq_op
-    (seq.Datatypes_list__canonical__eqtype_Equality
-       PreTerm.PreTerm_pre_term__canonical__eqtype_Equality)
-    (path.sort f l) [] =
-    @eqtype.eq_op
-      (seq.Datatypes_list__canonical__eqtype_Equality
-         PreTerm.PreTerm_pre_term__canonical__eqtype_Equality)
-      l [].
-Proof.
-  by rewrite -!seq.nilpE nilp_sort.
-Qed.
-
+(* unused: was useful at some point? *)
 Lemma TExpN_inj (t t' : term) (ts ts' : list term) :
-  proof_irrelevance ->
   is_true (negb (is_exp t)) ->
   is_true (negb (is_exp t')) ->
   TExpN t ts = TExpN t' ts' ->
   t = t'.
 Proof.
-  intros Hpi Hnexp Hnexp' Heq.
+  intros Hnexp Hnexp' Heq.
   destruct (list_eq_nil_dec (cancel_exps ts)) as [Hncan | Hncan'].
   destruct (list_eq_nil_dec (cancel_exps ts')) as [Hncan' | Hncan'].
   3: destruct (list_eq_nil_dec (cancel_exps ts')) as [Hncan | Hncan].
-  1- 3: rewrite /cancel_exps !map_nil in Hncan Hncan'.
-  by rewrite /TExpN unlock /PreTerm.exp -!unfold_exps !base.exps_expN //=
-             Hncan Hncan' /= -!unfold_base !base.base_expN // !unfold_termK in Heq.
-  1, 2: rewrite /TExpN unlock /PreTerm.exp -!unfold_exps !base.exps_expN //=
-                Hncan /= (nilp_false Hncan') -!unfold_base !base.base_expN //
-                unfold_termK /= /fold_term unlock /fold_term_def /=
-                normalize_unfold1 /PreTerm.exp -!unfold_exps
-                !base.exps_expN //= normalize_wfs in Heq.
-  2, 4: by rewrite path.all_sort PreTerm.wf_cancel_exps // wf_unfold_terms.
-  1, 2: rewrite PreTerm.cancel_exps_canceled in Heq.
-  2, 4: by rewrite PreTerm.invs_canceled_sort PreTerm.invs_canceled_cancel_exps //
-                   wf_unfold_terms.
-  1, 2: rewrite (path.sorted_sort
-                   order.Order.POrderTheory.le_trans
-                   (path.sort_sorted
-                      order.Order.TotalTheory.le_total
-                      (PreTerm.cancel_exps (seq.map unfold_term _))))
-                nilp_sort nilp_false // -!unfold_base !base.base_expN //
-                /fold_term_predef in Heq;
-  set b := ssrbool.boolP _ in Heq;
-          destruct b.
-  by rewrite Heq in Hnexp.
-  2: by rewrite -Heq in Hnexp'.
-  1, 2: rewrite /= /is_true negb_true_iff !andb_false_iff in i;
-  destruct i as [contra' | [contra' | [contra' | [contra' | [contra' | contra']]]]].
-  1, 7: by rewrite wf_unfold_term in contra'.
-  1, 6: by rewrite -is_exp_unfold ?Hnexp' ?Hnexp in contra'.
-  1, 5: by rewrite path.all_sort PreTerm.wf_cancel_exps // wf_unfold_terms in contra'.
-  1, 4: by destruct Hncan';
-  rewrite negb_false_iff eqtype_sort_nil eqtype_eq_nil in contra'.
-  1, 3: by rewrite (path.sort_sorted order.Order.TotalTheory.le_total) in contra'.
-  1, 2: by rewrite PreTerm.invs_canceled_sort PreTerm.invs_canceled_cancel_exps //
-                   wf_unfold_terms in contra'.
-  destruct (TExpN_TExpN' Hpi Hnexp Hncan') as [i H].
-  destruct (TExpN_TExpN' Hpi Hnexp' Hncan) as [i' H'].
-  rewrite H H' // in Heq.
-  inversion Heq.
-  by apply unfold_term_inj in H1.
+  by rewrite [TExpN _ ts]TExpN_cancel_exps [TExpN _ ts']TExpN_cancel_exps
+             Hncan Hncan' !TExpN0 in Heq.
+  1, 2: rewrite [TExpN _ ts]TExpN_cancel_exps [TExpN _ ts']TExpN_cancel_exps Hncan TExpN0 in Heq;
+  subst;
+  rewrite -?[is_true (negb (is_exp (TExpN _ _)))]not_is_true in Hnexp Hnexp'.
+  
+  destruct Hnexp.
+  2: destruct Hnexp'.
+  1, 2: rewrite is_exp_TExpN //.
+  by destruct (cancel_exps ts').
+  2: by destruct (cancel_exps ts).
+  1, 2: exact: invs_canceled_cancel_exps.
+  rewrite term_eq in Heq.
+  rewrite !base_TExpN !base.base_expN // in Heq.
+  by destruct Heq.
 Qed.
 
+(* unused: was useful at some point? *)
 Lemma is_exp_fold pt :
   is_true (PreTerm.wf_term pt) ->
   PreTerm.is_exp pt = is_exp (fold_term pt).
@@ -519,196 +455,313 @@ Proof.
   by rewrite Hwf in i.
 Qed. 
 
+(* unused: was useful at some point? *)
 Lemma elem_of_sorted_terms t ts :
-  t ∈ ts <-> t ∈ seq.map fold_term (path.sort preorder.Order.le (seq.map unfold_term ts)).
+t ∈ ts <-> t ∈ seq.map fold_term (path.sort preorder.Order.le (seq.map unfold_term ts)).
 Proof.
   by rewrite !(ssrbool.rwP inP) path.sort_map map_unfold_termK path.mem_sort.
 Qed.
 
+(* useful: root (TInv_TInv') unused *)
+Lemma TInv'_TInv (pt : PreTerm.pre_term) i :
+  TInv' pt i = TInv (fold_term pt).
+Proof.
+  apply TInv_inj.
+  by rewrite TInvK /TInv unlock /PreTerm.inv /=.
+Qed.
+
+(* unused: was useful at some point *)
 Lemma TInv_TInv' t:
-  proof_irrelevance ->
   is_true (negb (is_inv t)) ->
   exists i, TInv t = TInv' (unfold_term t) i.
 Proof.
-  intros Hpi H.
+  intros H.
   assert (is_true (PreTerm.wf_term (PreTerm.PT1 O1Inv (unfold_term t)))) as i. {
-    rewrite /= andb_is_true -is_inv_unfold wf_unfold_term.
-    by split.
+    by rewrite /= andb_is_true -is_inv_unfold wf_unfold_term.
   }
   exists i.
-  rewrite /TInv unlock /PreTerm.inv.
-  rewrite is_inv_unfold in H.
-  destruct (unfold_term t).
-  2: destruct t0.
-  all: by rewrite /fold_term unlock /fold_term_def PreTerm.normalize_wf //
-                  /fold_term_predef;
-    set b := ssrbool.boolP _;
-            destruct b;
-            f_equal => //;
-                        rewrite i in i0.
+  by rewrite TInv'_TInv unfold_termK.
 Qed.
 
-(* unused: for completeness *)
-Lemma TInv'_TInv (pt : PreTerm.pre_term) i :
-  proof_irrelevance ->
-  TInv' pt i = TInv (fold_term pt).
+Lemma subterm_of_list (t : term) (ts : list term) :
+  (exists t', t' ∈ ts /\ subterm t t')  ->
+  subterm t (Spec.of_list ts).
 Proof.
-  intro Hpi.
-  specialize i as i'.
-  rewrite /= !andb_is_true in i'.
-  destruct i' as [Hninv Hwf].
-  set t := fold_term pt.
-  assert (pt = unfold_term t) as Heq. {
-    by rewrite /t unfold_fold (PreTerm.normalize_wf Hwf).
-  }
-  rewrite Heq -is_inv_unfold in Hninv.
-  generalize i.
-  rewrite Heq.
-  intro i'.
-  destruct (TInv_TInv' Hpi Hninv) as [i'' H].
-  rewrite H /t.
-  by f_equal.
+  intros [t' [Hmem Hsubterm]].
+  induction ts.
+  by inversion Hmem.
+  rewrite elem_of_cons in Hmem.
+  rewrite Spec.of_list_unseal /= -Spec.of_list_unseal.
+  destruct Hmem as [->|Hmem].
+  exact: STPair1.
+  exact: (STPair2 a (IHts Hmem)).
+Qed.
+
+Lemma subterm_of_tag (t t' : term) (n : namespace) :
+  subterm t t' ->
+  subterm t (Spec.tag (Tag n) t').
+Proof.
+  rewrite Spec.tag_unseal.
+  exact: STPair2.
+Qed.
+
+Lemma subterm_TExpN_exp (t t' : term) (ts : list term) :
+  ( exists t'', subterm t t'' /\ t'' ∈ ts) ->
+  negb (is_exp t') ->
+  invs_canceled ts ->
+  subterm t (TExpN t' ts).
+Proof.
+  intros [t'' [Hst Hmem]] Hnexp Hcanceled.
+  exact: (STExp2 Hnexp Hcanceled Hst Hmem).
+Qed.
+
+Lemma subterm_TExp_exp (t t' t'' : term) :
+  negb (is_exp t') ->
+  subterm t t'' ->
+  subterm t (TExp t' t'').
+Proof.
+  intros Hnexp Hst.
+  apply subterm_TExpN_exp => //.
+  exists t''. split => //.
+  rewrite elem_of_cons.
+  by left.
+  exact: invs_canceled1.
 Qed.
 
 Lemma subterm_exp (t t' : term) :
-  proof_irrelevance ->
-  t ≠ t' ->
-  subterm t t' <-> subterm t (base t') \/ exists t'', subterm t t'' /\ t'' ∈ exps t'.
+  subterm t t' <-> t = t' \/ subterm t (base t') \/ exists t'', subterm t t'' /\ t'' ∈ exps t'.
 Proof.
-  intros Hpi Hneq.
-  split; intros H; destruct t'; try by left.
-  simpl.
-  rewrite TExpN'_TExpN in Hneq H => //.
+  split; intros H.
   inversion H.
-  by destruct Hneq.
-  1, 2, 3, 4, 5, 6: rewrite -TExpN'_TExpN in H0 => //; inversion H0.
-  rewrite -TExpN'_TExpN in H0 => //.
-  rewrite -is_trueP in H1.
-  destruct (TInv_TInv' Hpi H1) as [i' H'].
-  rewrite H' in H0.
-  inversion H0.
-  assert (t' = fold_term pt) as H'. {
-    rewrite /= !andb_is_true in i.
-    destruct i as [Hwf [Hnexp [Hwfs [Hnnil [Hsort Hcan]]]]].
-    rewrite (is_exp_fold Hwf) in Hnexp.
-    rewrite -is_trueP in H1.
-    specialize TExpN_inj as i.
-    apply (i t' (fold_term pt) ts (seq.map fold_term pts)) => //.
-  }
-  subst.
   by left.
-  rewrite -TExpN'_TExpN in H0 => //.
-  rewrite -is_trueP in H1.
-  assert (ts ≠ []) as Hnnil. {
-    destruct ts => //.
-    by inversion H4.
-  }
-  rewrite -(cancel_exps_canceled H2) in Hnnil.
-  destruct (TExpN_TExpN' Hpi H1 Hnnil) as [i' eqv].
-  rewrite eqv in H0.
-  inversion H0.
+  1- 9: right => /=.
+  1- 7: left.
+  exact: STPair1.
+  exact: STPair2.
+  exact: STKey.
+  exact: STSeal1.
+  exact: STSeal2.
+  exact: STHash.
+  rewrite base_expN.
+  exact: STInv.
+  by rewrite -is_trueP not_is_true is_exp_TInv // is_trueP.
+  rewrite base_TExpN base.base_expN ?is_trueP //.
+  by left.
   right.
   exists t''.
-  split => //.
-  by rewrite (cancel_exps_canceled H2) -elem_of_sorted_terms.
-  1- 7: by destruct H => //; destruct H as [t'' [_ contra]]; destruct (not_elem_of_nil t'').
-  rewrite TExpN'_TExpN //.
-  simpl in H.
-  destruct H.
+  by rewrite exps_TExpN exps_expN /= ?cancel_exps_canceled // -is_trueP not_is_true is_trueP.
+  destruct H as [-> | H] => //.
+  destruct (is_exp t') eqn:Eexp, H as [H | H].
+  1, 2: rewrite -[t']base_expsK.
   apply STExp1 => //.
-  clear Hneq.
-  rewrite /= !andb_is_true in i.
-  destruct i as [H' [i _]].
-  by rewrite is_exp_unfold unfold_fold PreTerm.normalize_wf ?i.
-  clear Hneq.
-  rewrite /= !andb_is_true in i.
-  destruct i as [Hwf [Hnexp [Hwfs [_ [_ Hcanceled]]]]].
-  apply subterm_TExpN_exp => //.
-  by rewrite is_exp_unfold unfold_fold PreTerm.normalize_wf // Hnexp.
-  by rewrite /invs_canceled map_wf_unfold_fold // Hcanceled.
+  2: apply subterm_TExpN_exp => //.
+  1, 2: by rewrite base.is_exp_base.
+  exact: invs_canceled_exps.
+  by rewrite base_expN // Eexp in H => contra.
+  destruct H as [? [_ contra]].
+  by rewrite exps_expN ?elem_of_nil // Eexp in contra => contra'.
 Qed.
 
-(* Lemma term_preterm_mem_eq (t : term) (ts : list term) : *)
-(* ssrbool.in_mem t (ssrbool.mem ts) *)
-(* = ssrbool.in_mem (unfold_term t) (ssrbool.mem (seq.map unfold_term ts)). *)
-(* Admitted. *)
-
 Lemma cons_invs_canceled t ts :
-  ¬ (TInv t ∈ ts) ->
+  TInv t ∉ ts ->
   invs_canceled ts ->
   cancel_exps (t :: ts) = t :: ts.
 Proof.
   intros Hfresh Hcan.
-  rewrite cancel_exps_canceled // invs_canceled_cons.
-  by split.
+  by rewrite cancel_exps_canceled // invs_canceled_cons.
+Qed.
+
+Lemma invs_canceled_app ts ts' :
+  invs_canceled (ts ++ ts') ↔ (forall t, t ∈ ts -> TInv t ∉ ts') /\ invs_canceled ts ∧ invs_canceled ts'.
+Proof.
+  induction ts => /=.
+  split; intro H.
+  do !split => // t contra.
+  by inversion contra.
+  by destruct H as [_ [_ ?]].
+  rewrite invs_canceled_cons.
+  destruct IHts as [IHts IHts'].
+  split; intro H.
+  destruct H as [Hnmem Hcan].
+  rewrite elem_of_app in Hnmem.
+  apply Decidable.not_or in Hnmem.
+  destruct Hnmem as [Hnmem Hnmem'], (IHts Hcan) as [Hnmem'' [Hcan' Hcan'']].
+  do !split => //.
+  intro a'.
+  rewrite elem_of_cons.
+  intros [-> | Hmem] => //.
+  exact: Hnmem''.
+  by rewrite invs_canceled_cons.
+  rewrite invs_canceled_cons in H.
+  destruct H as [Himpl [[Hnmem Hcan] Hcan']].
+  split.
+  rewrite elem_of_app => contra.
+  rewrite -!invs_canceledP in Hcan Hcan'.
+  destruct contra as [contra | contra].
+  by destruct Hnmem.
+  destruct (Himpl a) => //.
+  rewrite elem_of_cons.
+  by left.
+  apply IHts'.
+  do !split => // a' Hmem.
+  apply Himpl.
+  rewrite elem_of_cons.
+  by right.
+Qed.
+
+Lemma app_invs_canceled ts ts' :
+  invs_canceled ts ->
+  invs_canceled ts' ->
+  (forall t, t ∈ ts -> (TInv t) ∉ ts') ->
+  cancel_exps (ts ++ ts') = ts ++ ts'.
+Proof.
+  intros Hcan Hcan' Hbican.
+  by rewrite cancel_exps_canceled // invs_canceled_app.
+Qed.
+
+(* useful: root (subterm_TInv_self) unused *)
+Lemma tsize_TExpN' t ts :
+is_true (negb (is_exp t)) ->
+tsize (TExpN t ts)
+= (ssrnat.addn
+       (ssrnat.addn
+          (ssrnat.nat_of_bool (negb (@eqtype.eq_op
+                                       (seq.Datatypes_list__canonical__eqtype_Equality
+                                          base_term__canonical__eqtype_Equality)
+                                       (cancel_exps ts) []))) (tsize t))
+       (mathcomp.boot.seq.sumn (map tsize (cancel_exps ts)))).
+Proof.
+  intros.
+  rewrite TExpN_cancel_exps.
+  exact: (tsize_TExpN t (cancel_exps ts) H (invs_canceled_cancel_exps _)).
+Qed.
+
+(* useful: root (subterm_TInv_self) unused *)
+Lemma subterm_tsize t t':
+subterm t t' -> tsize t <= tsize t'.
+Proof.
+  intro Hst.
+  induction Hst => //.
+  apply le_S, (Nat.le_trans (tsize t)
+                            (tsize t1)
+                            (ssrnat.addn _ _)) => //.
+  exact: Nat.le_add_r.
+  apply le_S, (Nat.le_trans (tsize t)
+                            (tsize t2)
+                            (ssrnat.addn _ _)) => //.
+  exact: Nat.le_add_l.
+  exact: le_S.
+  rewrite [tsize (TSeal _ _)]tsizeE.
+  apply le_S.
+  apply (Nat.le_trans (tsize t)
+                      (tsize k)
+                      (ssrnat.addn _ _)) => //.
+  exact: Nat.le_add_r.
+  rewrite [tsize (TSeal _ _)]tsizeE.
+  apply le_S.
+  apply (Nat.le_trans (tsize t)
+                      (tsize t')
+                      (ssrnat.addn _ _)) => //.
+  exact: Nat.le_add_l.
+  rewrite [tsize (THash _)]tsizeE.
+  exact: le_S.
+  rewrite [tsize (TInv _)]tsizeE ?is_trueP //.
+  exact: le_S.
+  rewrite tsize_TExpN' ?is_trueP //.
+  apply (Nat.le_trans (tsize t)
+                      (tsize t')
+                      (ssrnat.addn _ _)) => //.
+  set b := ssrnat.nat_of_bool _.
+  apply (Nat.le_trans (tsize t')
+                      (ssrnat.addn b (tsize t'))
+                      (ssrnat.addn _ _)) => //.
+  exact: Nat.le_add_l.
+  exact:  Nat.le_add_r.
+  rewrite [tsize (TExpN _ _)]tsizeE ?is_trueP //.
+  apply (Nat.le_trans (tsize t)
+                      (seq.sumn (seq.map tsize ts))
+                      (ssrnat.addn _ _)) => //.
+  clear H0.
+  induction ts; inversion H1; subst => /=.
+  apply (Nat.le_trans (tsize t)
+                      (tsize a)
+                      (ssrnat.addn _ _)) => //.
+  exact: Nat.le_add_r.
+  apply (Nat.le_trans (tsize t)
+                      (seq.sumn (seq.map tsize ts))
+                      (ssrnat.addn _ _)) => //.
+  exact: IHts.
+  exact: Nat.le_add_l.
+  exact: Nat.le_add_l.
+Qed.
+
+(* useful: unused *)
+Lemma subterm_TInv_self t :
+  subterm (TInv t) t <-> is_true (is_inv t).
+Proof.
+  split; intro H.
+  destruct (is_inv t) eqn:Einv => //.
+  specialize (subterm_tsize H) as contra.
+  rewrite (tsize_TInv t) ?Einv // in contra.
+  by destruct (Nat.nle_succ_diag_l (tsize t) contra).
+  rewrite -{2}[t]TInvK.
+  apply STInv => //.
+  by rewrite is_inv_TInv H.
+Qed.
+
+(* useful: unused *)
+Lemma cancel_exps_perm_eq l1 l2 :
+is_true (seq.perm_eq l1 l2) ->
+is_true (seq.perm_eq (cancel_exps l1) (cancel_exps l2)).
+Proof.
+  intro H.
+  apply count_perm_cancel.
+  intro t.
+  specialize (@seq.permP base_term__canonical__eqtype_Equality l1 l2) as H'.
+  inversion H'.
+  by rewrite !H1.
+  by rewrite H in H0.
+Qed.
+
+Lemma subterm_TExpN_exp' (t t' : term) (ts: list term) :
+  ¬ subterm t t' ->
+  invs_canceled ts ->
+  (forall t'', t'' ∈ ts -> (TInv t'') ∉ (exps t')) ->
+  (exists t'', t'' ∈ ts /\ subterm t t'') ->
+  subterm t (TExpN t' ts).
+Proof.
+  intros Hnst Hcan Hnst' Hst.
+  rewrite subterm_exp.
+  destruct (term_eq_dec t (TExpN t' ts)).
+  by left.
+  right.
+  right.
+  destruct Hst as [t'' [Hmem Hst]].
+  exists t''.
+  split => //.
+  rewrite exps_TExpN.
+  specialize (@perm_Perm base_term__canonical__eqtype_Equality
+                         (exps t' ++ ts) (ts ++ exps t')) as H'.
+  inversion H' as [Hpeq | Hpneq].
+  rewrite Hpeq (app_invs_canceled _ (invs_canceled_exps _)) // elem_of_app.
+  by left.
+  by rewrite (seq.perm_catC (exps t') ts) /= seq.perm_refl in H.
 Qed.
 
 Lemma subterm_TExp_exp' (t t' t'' : term) :
-  proof_irrelevance ->
   ¬ subterm t t' ->
-  ¬ subterm t'' t' ->
-  negb (is_inv t'') ->
+  (TInv t'') ∉ exps t' ->
   subterm t t'' ->
   subterm t (TExp t' t'').
 Proof.
-  intros Hpi Hnst Hnst' Hninv Hst.
-  destruct (term_eq_dec t (TExp t' t'')).
-  by rewrite e.
-  destruct (is_exp t') eqn:E.
-  rewrite (subterm_exp Hpi n).
-  right.
-  assert (exps (TExp t' t'') =
-            (seq.map fold_term (path.sort preorder.Order.le (seq.map unfold_term (t'' :: exps t')))))
-    as H. {
-    destruct t'; try by inversion E.
-    set pt'' := unfold_term t''.
-    assert (t'' = fold_term pt'').
-    by rewrite /pt'' unfold_termK.
-    rewrite TExpN'_TExpN // TExp_TExpN H -seq.map_cons // path.sort_map map_unfold_termK.
-    specialize i as i'.
-    rewrite /= !andb_is_true in i'.
-    destruct i' as [Hwf [Hnexp [Hwfs [Hnnil [Hsorted Hcan]]]]].
-    rewrite (is_exp_fold Hwf) in Hnexp.
-    assert (cancel_exps (seq.map fold_term (pt'' :: pts)) ≠ []) as H'. {
-      rewrite /= cons_invs_canceled.
-      by intro contra.
-      rewrite -H.
-      intro contra.
-      destruct Hnst'.
-      rewrite TExpN'_TExpN //.
-      apply subterm_TExpN_exp.
-      exists (TInv t'').
-      split => //.
-      by apply STInv.
-      specialize i as i'.
-      rewrite /= !andb_is_true in i'.
-      destruct i' as [Hwf' [Hnexp' _]].
-      by rewrite is_exp_unfold unfold_fold (PreTerm.normalize_wf Hwf') Hnexp'.
-      all: by rewrite /invs_canceled (map_wf_unfold_fold Hwfs) Hcan.
-    }
-    destruct (TExpN_TExpN' Hpi Hnexp H') as [i' H''].
-    rewrite H'' -TExpN'_TExpN // /= path.sort_map map_unfold_termK.
-    f_equal.
-    rewrite cons_invs_canceled => //.
-    intro contra.
-    destruct Hnst'.
-    rewrite TExpN'_TExpN //.
-    apply subterm_TExpN_exp.
-    exists (TInv t'').
-    split => //.
-    by apply STInv.
-    by rewrite H.
-    specialize i as i''.
-    rewrite /= !andb_is_true in i''.
-    destruct i'' as [Hwf' [Hnexp' _]].
-    by rewrite is_exp_unfold unfold_fold (PreTerm.normalize_wf Hwf') Hnexp'.
-    all: by rewrite /invs_canceled (map_wf_unfold_fold Hwfs) Hcan.
-  }
-  rewrite H.
+  intros Hnst Hnst' Hst.
+  apply (subterm_TExpN_exp' Hnst (invs_canceled1 _)) => //.
+  intros t''' H.
+  rewrite elem_of_cons in H.
+  destruct H as [-> | contra] => //.
+  by inversion contra.
   exists t''.
   split => //.
-  rewrite -elem_of_sorted_terms elem_of_cons.
+  rewrite elem_of_cons.
   by left.
-  apply subterm_TExp_exp => //.
-  by rewrite E.
 Qed.

@@ -164,9 +164,7 @@ do !iSplit => //.
 Qed.
 
 Lemma wp_server_session (db c : val) (alist : gmap term val) (fresh : gset term) :
-  proof_irrelevance ->
-  {{{
-    cryptis_ctx
+{{{ cryptis_ctx
     ∗ hash_pred (opN.@"A_s") A_pred
     ∗ hash_pred (opN.@"SK") (λ _,  False)
     ∗ hash_pred (opN.@"K") (λ _,  False)
@@ -178,7 +176,7 @@ Lemma wp_server_session (db c : val) (alist : gmap term val) (fresh : gset term)
     Server.session db c
   {{{ x, RET (repr x); SK_result x fresh ∗ AList.is_alist db alist }}}.
 Proof.
-iIntros "%Hpi %ϕ".
+iIntros "%ϕ".
 rewrite /opaque_db big_sepM_forall.
 iIntros "(#Cryptis & #HpredA_s & #HpredSK & #HpredK & #Hc & Hdb & #Hmapcontents & #Hfresh) Hhl".
 wp_lam; wp_pures.
@@ -308,14 +306,19 @@ iSplit.
     split.
       rewrite !elem_of_cons.
       by right; left.
-    apply subterm_TExp_exp' => //.
-    * apply Hfreshx_s.
+    assert (¬ subterm x_s X_u) as Hfreshx_s'. {
+      apply Hfreshx_s.
       rewrite elem_of_union elem_of_singleton.
       by left.
-    * apply Hfreshx_s.
-      rewrite elem_of_union elem_of_singleton.
-      by left.
-    * by destruct x_s.
+    }  
+    apply subterm_TExp_exp' => // contra'.
+    destruct Hfreshx_s'.
+    rewrite subterm_exp.
+    right. right.
+    exists (TInv x_s).
+    split => //.
+    apply STInv => //.
+    by destruct x_s.
   + rewrite minted_of_list /=
       minted_THash minted_tag minted_of_list /=
       !minted_THash !minted_tag !minted_of_list /=

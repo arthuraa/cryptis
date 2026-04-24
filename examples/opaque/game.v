@@ -104,13 +104,12 @@ neq_options (Snd "SK1s") (Snd "SK2s") ;;
 #().
 
 Lemma wp_game :
-proof_irrelevance ->
 cryptis_ctx -∗
 hash_pred_token ⊤ -∗
 seal_pred_token SENC ⊤ -∗
 WP game #() {{ (fun _ => True) }}.
 Proof.
-iIntros "%Hpi #? h_pred_tok s_pred_tok".
+iIntros "#? h_pred_tok s_pred_tok".
 iMod (opaque_alloc with "h_pred_tok s_pred_tok") as
 "[(#? & #? & #? & #? & #? & #? & #?) _]" => //.
 wp_lam.
