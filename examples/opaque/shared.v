@@ -571,6 +571,7 @@ Proof.
   by rewrite cancel_exps_canceled // invs_canceled_cons.
 Qed.
 
+(* useful: root (app_invs_canceled) unused *)
 Lemma invs_canceled_app ts ts' :
   invs_canceled (ts ++ ts') ↔ (forall t, t ∈ ts -> TInv t ∉ ts') /\ invs_canceled ts ∧ invs_canceled ts'.
 Proof.
@@ -609,6 +610,7 @@ Proof.
   by right.
 Qed.
 
+(* unused: useful *)
 Lemma app_invs_canceled ts ts' :
   invs_canceled ts ->
   invs_canceled ts' ->
@@ -725,12 +727,11 @@ Qed.
 
 Lemma subterm_TExpN_exp' (t t' : term) (ts: list term) :
   ¬ subterm t t' ->
-  invs_canceled ts ->
-  (forall t'', t'' ∈ ts -> (TInv t'') ∉ (exps t')) ->
+  invs_canceled (ts ++ exps t') ->
   (exists t'', t'' ∈ ts /\ subterm t t'') ->
   subterm t (TExpN t' ts).
 Proof.
-  intros Hnst Hcan Hnst' Hst.
+  intros Hnst Hcan Hst.
   rewrite subterm_exp.
   destruct (term_eq_dec t (TExpN t' ts)).
   by left.
@@ -743,7 +744,7 @@ Proof.
   specialize (@perm_Perm base_term__canonical__eqtype_Equality
                          (exps t' ++ ts) (ts ++ exps t')) as H'.
   inversion H' as [Hpeq | Hpneq].
-  rewrite Hpeq (app_invs_canceled _ (invs_canceled_exps _)) // elem_of_app.
+  rewrite Hpeq cancel_exps_canceled // elem_of_app.
   by left.
   by rewrite (seq.perm_catC (exps t') ts) /= seq.perm_refl in H.
 Qed.
@@ -754,12 +755,11 @@ Lemma subterm_TExp_exp' (t t' t'' : term) :
   subterm t t'' ->
   subterm t (TExp t' t'').
 Proof.
-  intros Hnst Hnst' Hst.
-  apply (subterm_TExpN_exp' Hnst (invs_canceled1 _)) => //.
-  intros t''' H.
-  rewrite elem_of_cons in H.
-  destruct H as [-> | contra] => //.
-  by inversion contra.
+  intros Hnst Hnmem Hst.
+  apply (subterm_TExpN_exp' Hnst) => //.
+  rewrite invs_canceled_cons.
+  split => //.
+  exact: invs_canceled_exps.
   exists t''.
   split => //.
   rewrite elem_of_cons.
