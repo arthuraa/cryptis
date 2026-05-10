@@ -6,6 +6,7 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta cryptis primitives tactics role.
 From cryptis.examples Require Import iso_dh gen_conn sess.
+From cryptis.examples.sess.proofs Require Import base.
 From actris.channel Require Import proto_model proto.
 
 Set Implicit Arguments.
@@ -116,21 +117,26 @@ iIntros "!> %t' (p_t' & [fail | inv])".
   auto.
 Qed.
 
-(* Lemma trusted_wp_recv_term skI skR rl cs *)
-(*   (P : term → iProp) (p : term → iProto Σ term) : *)
-(*   {{{ trusted_connected skI skR rl cs (<? t> MSG t {{ ▷ P t }}; p t) }}} *)
-(*     Sess.recv (repr cs) *)
-(*   {{{ t, RET (repr t); public t ∗ *)
-(*       trusted_connected skI skR rl cs (p t) ∗ P t }}}. *)
-(* Proof. *)
-(* iIntros (Φ) "tc post". *)
-(* iDestruct "tc" as "[conn #hon]". *)
-(* iApply (Sess.wp_recv_term with "conn"). *)
-(* iIntros "!> %t (p_t & conn & [fail | Pt])". *)
-(* - iExFalso. by iApply "hon". *)
-(* - iApply "post". iFrame "p_t". iFrame "Pt". *)
-(*   rewrite /trusted_connected. iFrame "conn hon". *)
-(* Qed. *)
+(** ** Recv (fixed-message, no existential)
+
+For protocols of the form [<?> MSG t; p] — no existential quantifier, resource
+[True] — the [trusted_wp_recv] tele version is reached via a two-step subtyping
+chain: inject [▷ True] with [iProto_le_payload_intro_r], then lift to the tele
+form with [iProto_le_texist_intro_r (TT := TeleO)]. *)
+
+Lemma trusted_wp_recv_base skI skR rl cs (t : term) (p : iProto Σ term) :
+  {{{ trusted_connected skI skR rl cs (<?> MSG t; p) }}}
+    Sess.recv (repr cs)
+  {{{ RET (repr t); public t ∗ trusted_connected skI skR rl cs p }}}.
+Proof.
+iIntros (Φ) "tc post".
+iApply (trusted_wp_recv (TT := TeleO) with "[tc]").
+- iApply (trusted_connected_le with "tc"). iNext.
+  iApply iProto_le_trans.
+  { iApply (iProto_le_payload_intro_r _ (▷ True)). iNext. done. }
+  iApply (iProto_le_texist_intro_r (TT := TeleO) (fun _ => iMsg_base t (▷ True) p) tt).
+- iIntros "!> % (p_t & tc2 & _)". iApply "post". iFrame "p_t tc2".
+Qed.
 
 (** ** Connect and confirm
 
@@ -151,13 +157,34 @@ Lemma trusted_wp_connect N p c skI skR :
   minted skR -∗
   □ (public skI → ▷ False) -∗
   □ (public skR → ▷ False) -∗
-  {{{ GenConn.failure skI skR ∨ True }}}
+  {{{ True }}}
     Sess.connect c skI (Spec.pkey skR) (Tag N)
   {{{ cs, RET (repr cs);
-      trusted_connected skI skR Init cs p ∗
-      release_token (si_init_share cs) }}}.
+      trusted_connected skI skR Init cs p }}}.
 Proof.
-Admitted.
+iIntros "#chan #ctx #sess #m_skI #m_skR #hon_I #hon_R".
+iIntros "%Φ !> pre post".
+iApply wp_fupd.
+iApply (Sess.wp_connect True with "chan ctx sess m_skI m_skR [pre]").
+eauto.
+(* { iDestruct "pre" as "[fail|_]"; eauto. } *)
+iIntros "!> %cs (conn & rel & disj)".
+iDestruct "conn" as "[gconn pub_or_own]".
+iDestruct "gconn" as "(#e1 & #e2 & #e3 & #base & #chan2 & (#minted_key & #sess_cs) & rest)".
+iAssert (GenConn.connected base.sess_ctx skI skR Init cs) with "[rest]" as "gconn".
+{ iFrame "#". iExact "rest". }
+iDestruct (session_session_ok with "sess_cs") as "[comp | #ok]".
+- iDestruct "comp" as "[p_si | p_sr]".
+  + iDestruct "e1" as %<-. iMod ("hon_I" with "p_si") as "[]".
+  + iDestruct "e2" as %<-. iMod ("hon_R" with "p_sr") as "[]".
+- iMod (unrelease Init cs with "rel") as "#un".
+  iDestruct (unreleased_key_secrecy with "un ok") as "#sec".
+  iApply "post".
+  rewrite /trusted_connected /Sess.connected.
+  iSplitL "gconn pub_or_own".
+  { iModIntro. iFrame "gconn pub_or_own". }
+  iModIntro. iIntros "!> #pub". by iApply "sec".
+Qed.
 
 Lemma trusted_wp_confirm N p c skI skR ga :
   channel c -∗
@@ -167,12 +194,44 @@ Lemma trusted_wp_confirm N p c skI skR ga :
   minted skR -∗
   □ (public skI → ▷ False) -∗
   □ (public skR → ▷ False) -∗
-  {{{ public ga ∗ minted skI ∗ minted skR ∗
-      (GenConn.failure skI skR ∨ True) }}}
+  {{{ public ga ∗ minted skI ∗ minted skR 
+       }}}
     Sess.confirm c skR (Tag N) (ga, Spec.pkey skI)%V
   {{{ cs, RET (repr cs);
       trusted_connected skI skR Resp cs (iProto_dual p) }}}.
 Proof.
-Admitted.
+iIntros "#chan #ctx #sess #m_skI #m_skR #hon_I #hon_R".
+iIntros "%Φ !> (#p_ga & #m_skI' & #m_skR') post".
+rewrite /Sess.confirm.
+wp_lam; wp_pures. iApply wp_fupd.
+wp_apply (GenConn.wp_confirm True with "[]").
+- eauto.
+- iFrame "#". iSplit; last iRight => //. iIntros "!> %b tok".
+  iMod (iProto_init p) as (γl γr) "(proto_ctx & ownI & ownR)".
+  iMod (term_meta_set (sessN.@"names") (γl, γr) with "tok") as "#meta".
+  { solve_ndisj. }
+  iModIntro. iSplitL "ownI". { iExists (γl, γr). iFrame. by eauto. }
+  iSplitL "ownR". { iExists (γl, γr). iFrame. by eauto. }
+  iExists (γl, γr). iFrame. by eauto.
+iIntros "%cs (gconn & disj & proto & rel & token)".
+iDestruct "gconn" as "(#e1 & #e2 & #e3 & #base2 & #chan3 & (#minted_key & #sess_cs) & rest)".
+iAssert (gen_conn.proofs.base.connected (base.chan_inv (Sess.sess_params p)) skI skR Resp cs)
+  with "[rest]" as "gconn".
+{ iFrame "#". iExact "rest". }
+iDestruct (session_session_ok with "sess_cs") as "[comp | #ok]".
+- iDestruct "comp" as "[p_si | p_sr]".
+  + iDestruct "e1" as %<-. iMod ("hon_I" with "p_si") as "[]".
+  + iDestruct "e2" as %<-. iMod ("hon_R" with "p_sr") as "[]".
+- iMod (unrelease Resp (base.cs_si cs) with "rel") as "#un".
+  iDestruct (unreleased_key_secrecy with "un ok") as "#sec".
+  iApply "post".
+  rewrite /trusted_connected /Sess.connected.
+  iSplitL "gconn proto".
+  { iModIntro. iFrame "gconn".
+    iDestruct "proto" as "[#pub | own]".
+    - iLeft. iExact "pub".
+    - iRight. iExact "own". }
+  iModIntro. iIntros "!> #pub". by iApply "sec".
+Qed.
 
 End Trusted.

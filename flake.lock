@@ -17,6 +17,23 @@
         "url": "https://gitlab.mpi-sws.org/iris/actris.git"
       }
     },
+    "coq-lsp-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1758044597,
+        "narHash": "sha256-ICPdNxJODNqmUErdTkNk7s52MRuINWLbAPm0rmXFW18=",
+        "owner": "ejgallego",
+        "repo": "coq-lsp",
+        "rev": "ea06992c3428dbae678e9a803304669a79859a31",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ejgallego",
+        "ref": "0.2.4+9.0",
+        "repo": "coq-lsp",
+        "type": "github"
+      }
+    },
     "flake-utils": {
       "inputs": {
         "systems": "systems"
@@ -71,6 +88,7 @@
     "root": {
       "inputs": {
         "actris": "actris",
+        "coq-lsp-src": "coq-lsp-src",
         "flake-utils": "flake-utils",
         "iris-dev": "iris-dev",
         "nixpkgs": "nixpkgs",

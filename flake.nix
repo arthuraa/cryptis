@@ -10,9 +10,11 @@
     iris-dev.flake = false;
     stdpp.url = "git+https://gitlab.mpi-sws.org/iris/stdpp.git?ref=refs/tags/coq-stdpp-1.12.0";
     stdpp.flake = false;
+    coq-lsp-src.url = "github:ejgallego/coq-lsp/0.2.4+9.0";
+    coq-lsp-src.flake = false;
   };
 
-  outputs = { self, nixpkgs, flake-utils, actris, iris-dev, stdpp }:
+  outputs = { self, nixpkgs, flake-utils, actris, iris-dev, stdpp, coq-lsp-src }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs =
@@ -20,6 +22,11 @@
             inherit system;
             overlays = [ self.overlays.default ];
           };
+        coq-lsp = pkgs.coqPackages.coq-lsp.overrideAttrs (old: {
+          src = coq-lsp-src;
+          version = "0.2.4+9.0";
+          propagatedBuildInputs = (old.propagatedBuildInputs or []) ++ [ pkgs.ocaml-ng.ocamlPackages_4_14.tyxml ];
+        });
       in
         {
           devShell = pkgs.mkShell {
@@ -29,7 +36,7 @@
               pkgs.coqPackages.deriving
               pkgs.coqPackages.iris
               pkgs.coqPackages.actris
-              nixpkgs.legacyPackages.${system}.coqPackages.coq-lsp
+              coq-lsp
             ];
           };
         }

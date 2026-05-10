@@ -64,6 +64,7 @@ examples/sess/proofmode.v
 examples/sess/proofs/base.v
 examples/sess/proofs.v
 examples/sess/trusted.v
+examples/sess/examples.v
 examples/sess.v
 
 examples/conn/proofs/base.v
