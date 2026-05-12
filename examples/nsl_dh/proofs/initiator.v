@@ -128,6 +128,8 @@ Lemma initiator_process_msg2 skI skR a gb N φ failed :
   (public ga ∧ public gb ∨ msg2_pred' skI skR ga gb N) ={⊤}=∗
   session skI skR si ∗
   □ (⌜failed⌝ → public (si_key si)) ∗
+  minted gb ∗
+  (public gb ∨ □ msg3_pred skR gb ∧ □ (public skR → public gb)) ∗
   (public (si_key si) ∨ φ skI skR si Init).
 Proof.
 move=> ga gab si.
@@ -168,6 +170,7 @@ iDestruct "inv" as "[#pub|inv_m2]".
     * by iLeft.
     * by iIntros "!> _".
     * by iLeft.
+    * by iLeft.
 - (* Case 2: msg2_pred — proper invariant *)
   iDestruct "inv_m2" as "(%b & %e_gb & #dh_b & #ps_gb & ready)".
   subst gb.
@@ -183,6 +186,7 @@ iDestruct "inv" as "[#pub|inv_m2]".
     { iApply (public_dh_share with "[#]").
       { do !iSplit; eauto. }
       by iModIntro. }
+    iAssert (minted gb) as "#m_gb". { by iApply public_minted. }
     iAssert (minted (si_key si)) as "#m_k".
     { rewrite minted_senc minted_of_list /= !minted_pkey !minted_TExp minted_TInt /=.
       by do !iSplit. }
@@ -199,6 +203,7 @@ iDestruct "inv" as "[#pub|inv_m2]".
     * by iLeft.
     * by iIntros "!> _".
     * by iLeft.
+    * by iLeft.
   + (* failed = false: honest case *)
     iClear "failed_e".
     iMod (set_peer_share ga (Some gb) with "ptok") as "#ps_ga".
@@ -208,6 +213,8 @@ iDestruct "inv" as "[#pub|inv_m2]".
     iPoseProof (dh_key_public_released skI skR b ga
                  with "[#] ps_gb") as "#rel_b".
     { do !iSplit; eauto. }
+    iAssert (minted gb) as "#m_gb".
+    { rewrite minted_TExp minted_TInt /=. by iSplit. }
     iAssert (minted (si_key si)) as "#m_k".
     { rewrite minted_senc minted_of_list /= !minted_pkey !minted_TExp minted_TInt /=.
       by do !iSplit. }
@@ -248,6 +255,46 @@ iDestruct "inv" as "[#pub|inv_m2]".
             by rewrite /nsl_dh_key_share exps_TExpN /= in contra. } }
     iSplit.
     { by iIntros "!> []". }
+    iSplit; first done.
+    iSplit.
+    { (* msg3_pred ∧ public skR → public gb *)
+      iRight. iSplit.
+      - (* □ msg3_pred skR gb *)
+        iIntros "!> %ga' %b' %e_gb' #ps_gb'".
+        iPoseProof (has_peer_share_agree with "ps_gb ps_gb'") as "%e".
+        case: e => e_ga. subst ga'.
+        have e_b : b = b' by rewrite /gb in e_gb'; exact: TExp_injr e_gb'.
+        subst b'.
+        iSplitR "".
+        + (* ▷ (released ga ∧ released gb) → public ga *)
+          iIntros "#[#r_ga #r_gb]".
+          iApply public_TExp. { by rewrite public_TInt. }
+          iApply "rel_a". iNext. by iSplit.
+        + (* public (TExp ga b) ↔ ▷ (released ga ∧ released gb) *)
+          iSplit.
+          * iIntros "#p_gab".
+            have e_gab : TExp ga b = TExpN (TInt 0) [a; b].
+            { by rewrite /ga TExp_TExpN TExpC2. }
+            rewrite e_gab public_TExp2_iff; first last. { by case. }
+            iDestruct "p_gab" as "[[_ #p_b]|[[_ #p_a]|(_ & #dpa & _)]]".
+            -- iDestruct ("rel_b" with "p_b") as ">[#? #?]". by iSplit.
+            -- iDestruct ("rel_a" with "p_a") as ">[#? #?]". by iSplit.
+            -- iPoseProof ("pred_a" $! (TExpN (TInt 0) [a; b]) with "dpa")
+                 as "#contra".
+               iAssert (▷ False)%I as ">[]".
+               { iModIntro. iDestruct "contra" as "[_ %contra]".
+                 by rewrite /nsl_dh_key_share exps_TExpN /= in contra. }
+          * iIntros "#[#r_ga #r_gb]".
+            iAssert (public a) as "#p_a". { iApply "rel_a". iNext. by iSplit. }
+            iAssert (public b) as "#p_b". { iApply "rel_b". iNext. by iSplit. }
+            iApply public_TExp.
+            { iApply public_TExp. { by rewrite public_TInt. } done. }
+            done.
+      - (* □ (public skR → public gb) *)
+        iIntros "!> #p_skR".
+        iApply (public_dh_share with "[#]").
+        { do !iSplit; eauto. }
+        iModIntro. by iRight. }
     iRight.
     have -> : si = SessInfo skI skR ga gb (TExp ga b).
     { by rewrite /si /gab /ga /gb !TExp_TExpN TExpC2. }
@@ -260,11 +307,27 @@ Lemma wp_initiator_send_msg3 c skI skR a gb :
   {{{
     channel c ∗
     cryptis_ctx ∗
-    nsl_dh_ctx
+    nsl_dh_ctx ∗
+    minted skR ∗
+    minted gb ∗
+    (public gb ∨ □ msg3_pred skR gb ∧ □ (public skR → public gb))
   }}}
     initiator_send_msg3 c skI (Spec.pkey skR) a ga gb
   {{{ RET (repr (si_key si)); True }}}.
-Proof. Admitted.
+Proof.
+move=> ga si.
+iIntros "%Ψ (#chan & #ctx & #(m1_pred & m2_pred & m3_pred) &
+         #m_skR & #m_gb & #inv_m3) Hpost".
+rewrite /initiator_send_msg3. wp_pures.
+wp_apply wp_pkey. wp_pures.
+wp_bind (texp _ _). iApply wp_texp. wp_pures.
+wp_list. wp_term_of_list. wp_pures.
+wp_apply wp_aenc => //.
+iIntros "%m3 #p_m3". wp_pures.
+wp_apply wp_send => //. wp_pures.
+iApply wp_derive_senc_key. iNext.
+by iApply "Hpost".
+Qed.
 
 Lemma wp_initiator failed c skI skR N φ :
   {{{
@@ -286,7 +349,36 @@ Lemma wp_initiator failed c skI skR N φ :
         term_token (si_init_share si) (⊤ ∖ ↑nsl_dhN) ∗
         (public (si_key si) ∨ φ skI skR si Init)
   }}}.
-Proof. Admitted.
+Proof.
+iIntros "%Ψ (#chan & #ctx & #(m1_pred & m2_pred & m3_pred) & #N_φ &
+         #m_skI & #m_skR & failed_e) Hpost".
+rewrite /initiator. wp_pures.
+(* Step 1: Send msg1 *)
+wp_apply wp_initiator_send_msg1.
+{ by iFrame "#". }
+iIntros "%a (#dh_a & rel & ptok & rtok & tok)".
+set ga := TExp (TInt 0) a.
+wp_pures.
+(* Step 2: Recv msg2 *)
+wp_bind (initiator_recv_msg2 _ _ _ _ _ _).
+wp_apply wp_initiator_recv_msg2.
+{ by iFrame "#". }
+iIntros "%r [->|(%gb & -> & inv)]".
+- (* None case *)
+  wp_pures. iApply ("Hpost" $! None). by iLeft.
+- (* Some gb case *)
+  wp_pure _ credit:"Hc1". wp_pures.
+  set si := SessInfo skI skR ga gb (TExp gb a).
+  iMod (initiator_process_msg2 skI skR a gb N φ failed
+          with "Hc1 N_φ m_skI m_skR dh_a ptok rtok failed_e inv")
+    as "(#sess & #failed_p & #m_gb & #inv_m3 & p_k_or_φ)".
+  (* Step 3: Send msg3 *)
+  wp_apply wp_initiator_send_msg3; first by iFrame "#".
+  iIntros "_". wp_pures.
+  iApply ("Hpost" $! (Some (si_key si))). iRight. iExists si.
+  iModIntro. iSplit; first done.
+  by iFrame "sess failed_p rel tok p_k_or_φ".
+Qed.
 
 Lemma wp_initiator_weak c skI skR N :
   {{{
@@ -305,178 +397,16 @@ Lemma wp_initiator_weak c skI skR N :
         term_token (si_init_share si) (⊤ ∖ ↑nsl_dhN)
   }}}.
 Proof.
-iIntros "%Ψ (#chan & #ctx & #(m1_pred & m2_pred & m3_pred) & #N_φ &
-         #m_skI & #m_skR) Hpost".
-rewrite /initiator. wp_pures.
-(* Step 1: Send msg1 *)
-wp_apply wp_initiator_send_msg1.
+iIntros "%Ψ (#chan & #ctx & #N_ctx & #N_φ & #m_skI & #m_skR) Hpost".
+iApply wp_fupd.
+wp_apply (wp_initiator false c skI skR N (λ _ _ _ _, True)%I).
 { by iFrame "#". }
-iIntros "%a (#dh_a & rel & ptok & rtok & tok)".
-set ga := TExp (TInt 0) a.
-wp_pures.
-(* Step 2: Recv msg2 *)
-wp_bind (initiator_recv_msg2 _ _ _ _ _ _).
-wp_apply wp_initiator_recv_msg2.
-{ by iFrame "#". }
-iIntros "%r [->|(%gb & -> & inv)]".
-- (* None case *)
-  wp_pures. iApply ("Hpost" $! None). by iLeft.
-- (* Some gb case *)
-  wp_pure _ credit:"Hc1". wp_pures.
-  iDestruct "dh_a" as "(#m_a & #s_a & #pred_a)".
-  iDestruct "inv" as "[#pub|inv_m2]".
-  + (* Case 1: public plaintext — corruption *)
-    iDestruct "pub" as "[#p_ga #p_gb]".
-    rewrite public_TExp_iff; first last. { by case. }
-    iDestruct "p_ga" as "[[_ #p_a]|(_ & _ & #dp_a)]".
-    * (* public a — contradiction *)
-      iDestruct ("s_a" with "p_a") as "#later_ns".
-      iMod (lc_fupd_elim_later_pers with "Hc1 later_ns") as "#ns".
-      iExFalso.
-      iDestruct "ns" as "[#ps_none|(%gb' & #ps_some & _)]".
-      -- by iApply (term_meta_token with "ptok ps_none").
-      -- by iApply (term_meta_token with "ptok ps_some").
-    * (* dh_pred a ga — corruption *)
-      iPoseProof ("pred_a" $! ga with "dp_a") as "#later_ks".
-      iMod (lc_fupd_elim_later_pers with "Hc1 later_ks") as "#[#corr _]".
-      iMod (set_peer_share ga None with "ptok") as "#ps_none".
-      iAssert (public a) as "#p_a".
-      { iApply "s_a". iNext. iModIntro. iLeft. done. }
-      iAssert (minted gb) as "#m_gb". { by iApply public_minted. }
-      set si := SessInfo skI skR ga gb (TExp gb a).
-      iAssert (minted (si_key si)) as "#m_k".
-      { rewrite minted_senc minted_of_list /= !minted_pkey !minted_TExp minted_TInt /=.
-        by do !iSplit. }
-      iAssert (public (si_key si)) as "#p_k".
-      { rewrite public_senc_key public_of_list /=.
-        iSplit; [by iApply public_aenc_key|].
-        iSplit; [by iApply public_aenc_key|].
-        iSplit; [iApply public_TExp; [by rewrite public_TInt|done]|].
-        iSplit; [done|].
-        iSplit; [|done].
-        iApply public_TExp => //. }
-      (* Inline msg3 *)
-      rewrite /initiator_send_msg3. wp_pures.
-      wp_apply wp_pkey. wp_pures.
-      wp_bind (texp _ _). iApply wp_texp. wp_pures.
-      wp_list. wp_term_of_list. wp_pures.
-      wp_apply wp_aenc => //; first by iFrame "#".
-      iIntros "%m3 #p_m3". wp_pures.
-      wp_apply wp_send => //. wp_pures.
-      wp_bind (derive_senc_key _). iApply wp_derive_senc_key.
-      iNext. wp_pures.
-      iApply ("Hpost" $! (Some (si_key si))). iRight. iExists si.
-      iModIntro. iSplit => //.
-      iSplitR "tok".
-      { do !iSplit => //. by iLeft. }
-      done.
-  + (* Case 2: msg2_pred' — honest case *)
-    iDestruct "inv_m2" as "(%b & %e_gb & #dh_b & #ps_gb & ready)".
-    subst gb.
-    iDestruct "dh_b" as "(#m_b & #s_b & #pred_b)".
-    set gb := TExp (TInt 0) b.
-    (* Set peer share and establish released relationships *)
-    iMod (set_peer_share ga (Some gb) with "ptok") as "#ps_ga".
-    iPoseProof (dh_key_public_released skI skR a gb
-                 with "[#] ps_ga") as "#rel_a".
-    { do !iSplit; eauto. }
-    iPoseProof (dh_key_public_released skI skR b ga
-                 with "[#] ps_gb") as "#rel_b".
-    { do !iSplit; eauto. }
-    set si := SessInfo skI skR ga gb (TExp gb a).
-    iAssert (minted (si_key si)) as "#m_k".
-    { rewrite minted_senc minted_of_list /= !minted_pkey !minted_TExp minted_TInt /=.
-      by do !iSplit. }
-    (* Get φ = True from ready *)
-    iMod ("ready" $! (λ _ _ _ _, True)%I with "N_φ rtok") as "later_φ".
-    iMod (lc_fupd_elim_later with "Hc1 later_φ") as "_".
-    (* Inline msg3 *)
-    rewrite /initiator_send_msg3. wp_pures.
-    wp_apply wp_pkey. wp_pures.
-    wp_bind (texp _ _). iApply wp_texp. wp_pures.
-    wp_list. wp_term_of_list. wp_pures.
-    (* msg3 aenc: need msg3_pred *)
-    wp_apply wp_aenc => //.
-    { rewrite minted_TExp minted_TInt /=. by iSplit. }
-    { iRight. iSplit.
-      - (* □ msg3_pred skR gb *)
-        iIntros "!> %ga' %b' %e_gb' #ps_gb'".
-        iPoseProof (has_peer_share_agree with "ps_gb ps_gb'") as "%e".
-        case: e => e_ga. subst ga'.
-        have e_b : b = b' by rewrite /gb in e_gb'; exact: TExp_injr e_gb'.
-        subst b'.
-        iSplitR "".
-        + (* ▷ (released ga ∧ released gb) → public ga *)
-          iIntros "#[#r_ga #r_gb]".
-          iApply public_TExp. { by rewrite public_TInt. }
-          iApply "rel_a". iNext. by iSplit.
-        + (* public (TExp ga b) ↔ ▷ (released ga ∧ released gb) *)
-          iSplit.
-          * (* → *)
-            iIntros "#p_gab".
-            have e_gab : TExp ga b = TExpN (TInt 0) [a; b].
-            { by rewrite /ga TExp_TExpN TExpC2. }
-            rewrite e_gab public_TExp2_iff; first last. { by case. }
-            iDestruct "p_gab" as "[[_ #p_b]|[[_ #p_a]|(_ & #dpa & _)]]".
-            -- iDestruct ("rel_b" with "p_b") as ">[#? #?]". by iSplit.
-            -- iDestruct ("rel_a" with "p_a") as ">[#? #?]". by iSplit.
-            -- iPoseProof ("pred_a" $! (TExpN (TInt 0) [a; b]) with "dpa")
-                 as "#contra".
-               iAssert (▷ False)%I as ">[]".
-               { iModIntro. iDestruct "contra" as "[_ %contra]".
-                 by rewrite /nsl_dh_key_share exps_TExpN /= in contra. }
-          * (* ← *)
-            iIntros "#[#r_ga #r_gb]".
-            iAssert (public a) as "#p_a". { iApply "rel_a". iNext. by iSplit. }
-            iAssert (public b) as "#p_b". { iApply "rel_b". iNext. by iSplit. }
-            iApply public_TExp.
-            { iApply public_TExp. { by rewrite public_TInt. } done. }
-            done.
-      - (* □ (public skR → public gb) *)
-        iIntros "!> #p_skR".
-        iApply (public_dh_share with "[#]").
-        { do !iSplit; eauto. }
-        iModIntro. by iRight. }
-    iIntros "%m3 #p_m3". wp_pures.
-    wp_apply wp_send => //. wp_pures.
-    (* Convert to session_weak using unrelease *)
-    iMod (unrelease Init si with "rel") as "#unrel".
-    wp_bind (derive_senc_key _). iApply wp_derive_senc_key.
-    iNext. wp_pures.
-    iApply ("Hpost" $! (Some (si_key si))). iRight. iExists si.
-    iModIntro. iSplit => //.
-    iSplitR "tok".
-    { iApply unreleased_session_weak; last done.
-      do !iSplit => //.
-      - (* released → public *)
-        iIntros "!> #[#rel_ga #rel_gb]".
-        iAssert (public a) as "#p_a". { iApply "rel_a". iNext. by iSplit. }
-        iAssert (public b) as "#p_b". { iApply "rel_b". iNext. by iSplit. }
-        rewrite public_senc_key public_of_list /=.
-        iSplit; [by iApply public_aenc_key|].
-        iSplit; [by iApply public_aenc_key|].
-        iSplit; [iApply public_TExp; [by rewrite public_TInt|done]|].
-        iSplit; [iApply public_TExp; [by rewrite public_TInt|done]|].
-        iSplit; [|done].
-        iApply public_TExp.
-        + iApply public_TExp; [by rewrite public_TInt|done].
-        + done.
-      - (* public → released OR corruption *)
-        iRight. iIntros "!> #p_k".
-        rewrite public_senc_key public_of_list /=.
-        iDestruct "p_k" as "(_ & _ & _ & _ & #p_gab & _)".
-        have e_gab : TExp gb a = TExpN (TInt 0) [a; b].
-        { by rewrite /gb TExp_TExpN. }
-        rewrite e_gab public_TExp2_iff; first last. { by case. }
-        iDestruct "p_gab" as "[[_ #p_b]|[[_ #p_a]|(_ & #dpa & _)]]".
-        + iDestruct ("rel_b" with "p_b") as ">[#? #?]". by iSplit.
-        + iDestruct ("rel_a" with "p_a") as ">[#? #?]". by iSplit.
-        + iPoseProof ("pred_a" $! (TExpN (TInt 0) [a; b]) with "dpa")
-            as "#contra".
-          iAssert (▷ False)%I as ">[]".
-          { iModIntro. iDestruct "contra" as "[_ %contra]".
-            by rewrite /nsl_dh_key_share exps_TExpN /= in contra. } }
-    done.
+iIntros "%r [->|(%si & -> & #sess & _ & rel & tok & _)]".
+- iModIntro. iApply ("Hpost" $! None). by iLeft.
+- iMod (unrelease Init si with "rel") as "#unrel".
+  iModIntro. iApply ("Hpost" $! (Some (si_key si))).
+  iRight. iExists si. iSplit; first done. iFrame "tok".
+  by iApply unreleased_session_weak.
 Qed.
 
 End Verif.

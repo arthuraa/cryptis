@@ -10,25 +10,35 @@ The framework allows reasoning about protocols using a Dolev-Yao–style symboli
 
 ## Build Commands
 
+Rocq and its dependencies are not on the default PATH. Always wrap build/check commands in the project's `ai` dev shell, which provides `coq-lsp` plus `rocq-mcp`:
+
 ```bash
-# Build everything (generates RocqMakefile from _CoqProject then runs it)
-make
-
-# Install build dependencies via opam
-make builddep
-
-# Build a single file (e.g., to check just one proof)
-make cryptis/core/public.vo
-
-# Clean all build artifacts
-make clean
+nix develop .#ai --command make                                # build everything
+nix develop .#ai --command make cryptis/core/public.vo         # build one file
+nix develop .#ai --command make clean                          # clean artifacts
 ```
 
-Building is slow — individual `.vo` files can be large (e.g., `lib.vo` ~600MB). Use targeted builds when working on a specific file.
+Other useful commands inside the shell: `make builddep` (install build deps via opam, only needed outside Nix), `rocq compile <file.v>` (compile a single `.v` file directly).
+
+Building is slow — individual `.vo` files can be large (e.g., `lib.vo` ~600MB). Prefer targeted builds (`make path/to/file.vo`) when working on a specific file, and run the full `make` only when verifying everything compiles.
+
+## Interactive Proof Tooling (rocq-mcp)
+
+The project ships an MCP server in `.mcp.json` (`rocq`, launched via `nix develop .#ai --command rocq-mcp`). It exposes `mcp__rocq__*` tools for interactive proof work. The schemas are surfaced as **deferred tools** — load them on demand with `ToolSearch query="select:mcp__rocq__rocq_start,mcp__rocq__rocq_check,..."` before calling.
+
+When to use which:
+
+- **Interactive proof development** (stepping through tactics, inspecting goals, exploring lemmas): prefer the MCP tools. `rocq_start` opens a file/theorem and returns a state id + current goals; `rocq_check` advances by running tactics (imports are cached, so iteration is fast); `rocq_step_multi` tries several tactics at once without committing; `rocq_query` runs `Search`/`Check`/`Print`/`About` without touching proof state; `rocq_toc` outlines a file; `rocq_assumptions` checks what a finished theorem depends on.
+- **"Does the file still build?"** (after edits, or to confirm a full proof closes): prefer `nix develop .#ai --command make path/to/file.vo` via Bash. It exercises the real build, respects `_CoqProject`, and avoids loading large schemas into context.
+
+Caveat: a `rocq_start` session reads the file at start time and does not track later edits. After modifying a `.v` file, restart the session (`rocq_start` again) before continuing — otherwise tactic results may be stale.
 
 ## Setup
 
-**Via Nix (preferred):** Use the provided `flake.nix`.
+**Via Nix (preferred):** Use the provided `flake.nix`. Two dev shells are exposed:
+
+- `nix develop` (or `.#default`) — `coq-lsp` and the cryptis build inputs.
+- `nix develop .#ai` — everything in the default shell plus `rocq-mcp`. **Use this shell for any work that compiles Rocq files or invokes proof tooling.**
 
 **Via opam:**
 ```bash
