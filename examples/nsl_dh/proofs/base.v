@@ -541,14 +541,6 @@ rewrite /ga. iApply public_TExp_iff; eauto.
 rewrite minted_TInt. iRight. do ![iSplit => //].
 Qed.
 
-Lemma public_dh_share_inv skI skR a :
-  let ga := TExp (TInt 0) a in
-  dh_key skI skR a -∗
-  release_token ga -∗
-  public ga -∗
-  ▷ (public skI ∨ public skR).
-Proof. Admitted.
-
 Lemma public_dh_secret a b skI skR :
   let ga := TExp (TInt 0) a in
   let gb := TExp (TInt 0) b in
