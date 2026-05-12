@@ -22,6 +22,17 @@ Other useful commands inside the shell: `make builddep` (install build deps via 
 
 Building is slow — individual `.vo` files can be large (e.g., `lib.vo` ~600MB). Prefer targeted builds (`make path/to/file.vo`) when working on a specific file, and run the full `make` only when verifying everything compiles.
 
+## Interactive Proof Tooling (rocq-mcp)
+
+The project ships an MCP server in `.mcp.json` (`rocq`, launched via `nix develop .#ai --command rocq-mcp`). It exposes `mcp__rocq__*` tools for interactive proof work. The schemas are surfaced as **deferred tools** — load them on demand with `ToolSearch query="select:mcp__rocq__rocq_start,mcp__rocq__rocq_check,..."` before calling.
+
+When to use which:
+
+- **Interactive proof development** (stepping through tactics, inspecting goals, exploring lemmas): prefer the MCP tools. `rocq_start` opens a file/theorem and returns a state id + current goals; `rocq_check` advances by running tactics (imports are cached, so iteration is fast); `rocq_step_multi` tries several tactics at once without committing; `rocq_query` runs `Search`/`Check`/`Print`/`About` without touching proof state; `rocq_toc` outlines a file; `rocq_assumptions` checks what a finished theorem depends on.
+- **"Does the file still build?"** (after edits, or to confirm a full proof closes): prefer `nix develop .#ai --command make path/to/file.vo` via Bash. It exercises the real build, respects `_CoqProject`, and avoids loading large schemas into context.
+
+Caveat: a `rocq_start` session reads the file at start time and does not track later edits. After modifying a `.v` file, restart the session (`rocq_start` again) before continuing — otherwise tactic results may be stale.
+
 ## Setup
 
 **Via Nix (preferred):** Use the provided `flake.nix`. Two dev shells are exposed:
