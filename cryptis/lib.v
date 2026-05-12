@@ -100,12 +100,10 @@ Lemma namespace_map_alloc_update {A : cmra} E (N : namespace) (a : A) :
   reservation_map_token E ~~> namespace_map_data N a.
 Proof.
 move=> sub valid; apply: reservation_map_alloc => //.
-assert (H : positives_flatten (namespace_car N) ∈ (↑N : coPset)); last first.
-  by set_solver.
-rewrite namespaces.nclose_unseal.
-apply elem_coPset_suffixes.
-exists 1%positive.
-by rewrite left_id_L.
+assert (H : positives_flatten (namespace_car N) ∈ (↑N : coPset)).
+{ rewrite namespaces.nclose_unseal. apply elem_coPset_suffixes.
+  exists 1%positive. by rewrite left_id_L. }
+set_solver.
 Qed.
 
 Lemma reservation_map_disj {A : cmra} E x (a : A) :
@@ -122,12 +120,10 @@ Lemma namespace_map_disj {A : cmra} E (N : namespace) (a : A) :
   False.
 Proof.
 move=> sub /reservation_map_disj.
-assert (H : positives_flatten (namespace_car N) ∈ (↑N : coPset)); last first.
-  by set_solver.
-rewrite namespaces.nclose_unseal.
-apply elem_coPset_suffixes.
-exists 1%positive.
-by rewrite left_id_L.
+assert (H : positives_flatten (namespace_car N) ∈ (↑N : coPset)).
+{ rewrite namespaces.nclose_unseal. apply elem_coPset_suffixes.
+  exists 1%positive. by rewrite left_id_L. }
+set_solver.
 Qed.
 
 #[global]
