@@ -33,8 +33,6 @@ jobs:
         with:
           primary-key: nix-${{ matrix.system }}-${{ hashFiles('flake.lock') }}
           restore-prefixes-first-match: nix-${{ matrix.system }}-
-          gc-max-store-size-linux: 2000000000
-          gc-max-store-size-macos: 2000000000
           purge: true
           purge-created: 604800
           purge-primary-key: never
