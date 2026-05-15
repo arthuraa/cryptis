@@ -25,7 +25,7 @@ In the `examples` you will find our case studies:
 - `conn`: Authenticated connections
 - `rpc`: Remote procedure calls
 - `store`: Authenticated key-value store (game is in its own file).
-  
+
 ## Building
 
 Cryptis is known to compile with the following dependencies:
@@ -33,9 +33,9 @@ Cryptis is known to compile with the following dependencies:
 - rocq-prover
 - rocq-core v9.1.1
 - rocq-mathcomp-ssreflect v2.5.0
-- coq-deriving v0.2.2
-- coq-iris v4.5.0
-- coq-iris-heap-lang v4.5.0
+- coq-deriving v0.2.3
+- rocq-iris v4.5.0
+- rocq-iris-heap-lang v4.5.0
 
 ### Nix
 
