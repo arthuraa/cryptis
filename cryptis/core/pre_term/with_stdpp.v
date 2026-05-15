@@ -69,6 +69,7 @@ Instance repr_term_op1 : Repr term_op1 := λ o,
   match o with
   | O1Key kt => (#0, repr kt)%V
   | O1Hash => (#1, #())%V
+  | O1Inv => (#2, #())%V
   end.
 
 Canonical term_op2O := leibnizO term_op2.
@@ -128,7 +129,7 @@ Global Instance repr_term_op0_inj : Inj (=) (=) (@repr term_op0 _).
 Proof. by case=> [?|?] [?|?] //= [<-]. Qed.
 
 Global Instance repr_term_op1_inj : Inj (=) (=) (@repr term_op1 _).
-Proof. by case=> [?|] [?|] //= [/int_of_key_type_inj ->]. Qed.
+Proof. by case=> [?||] [?||] //= [/int_of_key_type_inj ->]. Qed.
 
 Global Instance repr_term_op2_inj : Inj (=) (=) (@repr term_op2 _).
 Proof. by case=> [] []. Qed.

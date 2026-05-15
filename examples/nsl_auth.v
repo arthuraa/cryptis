@@ -142,7 +142,7 @@ iIntros "%Ψ (#chan_c & #ctx & #(?&?&?) & #m_skI & #s_skI & #m_skR & Hl)".
 iIntros "Hpost".
 rewrite /init. wp_pures.
 wp_apply (wp_mk_nonce (λ _, corrupt skI skR) (λ _, False)%I) => //.
-iIntros "%nI _ #m_nI #s_nI _ token".
+iIntros "%nI _ #m_nI #s_nI _ _ _ token".
 rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_apply wp_pkey. wp_pures.
 wp_list. wp_term_of_list.
@@ -219,7 +219,7 @@ iAssert (▷ corrupt skI skR → public nI)%I as "{inv} s_nI".
   iDestruct "inv" as "(%nI' & %skI' & %e & #p_ekI & #p_nI)".
   by case/Spec.of_list_inj: e => <- /Spec.aenc_pkey_inj <- {nI' skI'}. }
 wp_apply (wp_mk_nonce (λ _, corrupt skI skR) (λ _, False)%I) => //.
-iIntros "%nR _ #m_nR #s_nR _ _". rewrite bi.intuitionistic_intuitionistically.
+iIntros "%nR _ #m_nR #s_nR _ _ _ _". rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_bind (term_of_list (nI :: _)%E).
 wp_list. wp_term_of_list. wp_list. wp_term_of_list.
 wp_store. iMod (pointsto_persist with "Hl") as "#Hl".
@@ -246,7 +246,7 @@ iIntros "!> #s_skI". iDestruct "inv_m3" as "[p_nR|[#inv_m3 _]]".
 - iDestruct "inv_m3" as "(%nI' & %skI' & sessI & sessR)".
   iSpecialize ("sessR" with "s_skR"). iModIntro.
   iPoseProof (pointsto_agree with "sessR Hl") as "%e".
-  case/(val_of_term_inj _ _)/Spec.of_list_inj: e.
+  case/val_of_term_inj/Spec.of_list_inj: e.
   by move=> /Spec.aenc_pkey_inj -> /Spec.of_list_inj [->].
 Qed.
 

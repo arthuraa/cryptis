@@ -15,6 +15,10 @@ cryptis/lib/replica.v
 cryptis/lib/gmeta.v
 cryptis/lib/nown.v
 cryptis/lib/saved_prop.v
+cryptis/lib/repr.v
+cryptis/lib/list.v
+cryptis/lib/list_match.v
+cryptis/lib/size_rec_pred.v
 cryptis/lib.v
 cryptis/role.v
 
@@ -109,6 +113,15 @@ examples/nsl_auth.v
 ## CR
 
 examples/challenge_response.v
+
+## Opaque verification
+
+examples/opaque.v
+examples/opaque/impl.v
+examples/opaque/shared.v
+examples/opaque/client_proofs.v
+examples/opaque/server_proofs.v
+examples/opaque/game.v
 
 ## TLS 1.3
 

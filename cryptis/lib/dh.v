@@ -23,12 +23,14 @@ Implicit Types kA kB : term.
 Variable P : term → iProp.
 
 Definition dh_publ t : iProp :=
-  ⌜length (exps t) = 1⌝ ∧ □ P t.
+  ⌜length (exps t) = 1⌝ ∧ P t.
 
 Definition dh_seed t : iProp :=
   minted t ∧
   □ (public t ↔ ▷ False) ∧
-  □ (∀ t', dh_pred t t' ↔ ▷ □ dh_publ t').
+  □ (∀ t', exp_pred_base t t' ↔ ▷ □ dh_publ t') ∧
+  □ (public (TInv t) ↔ ▷ False) ∧
+  □ (∀ t', exp_pred_base (TInv t) t' ↔ ▷ False).
 
 Lemma dh_seed_elim0 a :
   dh_seed a -∗
@@ -39,6 +41,20 @@ iIntros "#(_ & aP & _) #p_t".
 by iApply "aP".
 Qed.
 
+Lemma dh_seed_exp_pred_base_elim a t :
+  a ∈ exps t →
+  dh_seed a -∗
+  exp_pred_base a t -∗
+  □ ▷ (⌜t = TExp (base t) a⌝ ∗ P t).
+Proof.
+iIntros "%a_t (_ & _ & #dh & _) #base".
+iSpecialize ("dh" with "base"); iModIntro; iNext.
+iDestruct "dh" as "#(%l_t & p_t)"; iFrame "#".
+rewrite -[t in LHS]base_expsK.
+case: (exps t) => // b [|//] in a_t l_t *.
+by rewrite list_elem_of_singleton in a_t; subst b.
+Qed.
+
 Lemma dh_seed_elim1 g a :
   ¬ is_exp g →
   dh_seed a -∗
@@ -47,30 +63,55 @@ Lemma dh_seed_elim1 g a :
 Proof.
 iIntros "%gNX #aP #p_t".
 rewrite public_TExp_iff //.
-iDestruct "p_t" as "[[_ contra] | (_ & _ & p_t)]".
-  by iPoseProof (@dh_seed_elim0 with "aP contra") as ">[]".
-iDestruct "aP" as "(_ & _ & #aP)".
-iSpecialize ("aP" with "p_t"); iModIntro.
-by iDestruct "aP" as "# [%e #aP]".
+iDestruct "p_t" as "(_ & _ & p_t & _)".
+set t' := TExp g a.
+(* MOVE *)
+have exps_t': exps t' = [a].
+  apply Permutation_singleton_r.
+  by rewrite exps_TExpN exps_expN // cancel_exps1.
+(* /MOVE *)
+have a_t' : a ∈ exps t' by rewrite exps_t'; set_solver.
+iPoseProof (exp_pred_inv_same with "p_t") as "[#contra|H]" => //.
+  by iDestruct (dh_seed_elim0 with "aP contra") as ">[]".
+iDestruct "H" as "(%t & %e_base & %a_t & H)".
+iDestruct (dh_seed_exp_pred_base_elim with "aP H")
+  as "{H} #[>-> H]" => //; iNext.
+by rewrite -{2}[t']base_expsK exps_t' e_base.
 Qed.
 
-Lemma dh_seed_elim2 g a t :
+Lemma dh_seed_elim2 g a b :
   ¬ is_exp g →
+  a ≠ b →
+  a ≠ TInv b →
   dh_seed a -∗
-  public (TExpN g [a; t]) -∗
-  ◇ (public (TExp g a) ∧ public t).
+  dh_seed b -∗
+  public (TExpN g [a; b]) -∗
+  ▷ False.
 Proof.
-iIntros "%gXN #aP #p_t".
-rewrite public_TExp2_iff //.
-iDestruct "p_t" as "[p_t|[[_ contra]|p_t]]"; eauto.
-  by iPoseProof (@dh_seed_elim0 with "aP contra") as ">[]".
-iDestruct "p_t" as "(_ & p_t & _)".
-iDestruct "aP" as "(_ & _ & #aP)".
-iPoseProof ("aP" with "p_t") as "{p_t} p_t".
-iAssert (▷ False)%I as ">[]".
-iModIntro.
-iDestruct "p_t" as "(%e & _)".
-rewrite exps_TExpN List.length_app /= in e; lia.
+iIntros "%gXN %a_b %a_bV #aP #bP #p".
+have exps_t : exps (TExpN g [a; b]) ≡ₚ [a; b].
+  by rewrite exps_TExpN exps_expN //= cancel_exps_canceled ?invs_canceled2.
+have a_t : a ∈ exps (TExpN g [a; b]) by rewrite exps_t; set_solver.
+have b_t : b ∈ exps (TExpN g [a; b]) by rewrite exps_t; set_solver.
+iPoseProof (exp_pred_exps a_t with "p") as "[dh_a _]".
+iPoseProof (exp_pred_inv with "dh_a") as "(%c & %c_t & p_c)" => //.
+rewrite exps_t elem_of_cons list_elem_of_singleton in c_t.
+rewrite base_TExpN base_expN //.
+iDestruct "p_c" as "[p_c|(%t' & %ebase & %exps_t'S & contra)]".
+  case: c_t=> ->.
+  - iDestruct (dh_seed_elim0 with "aP p_c") as ">[]".
+  - iDestruct (dh_seed_elim0 with "bP p_c") as ">[]".
+rewrite exps_t in exps_t'S.
+iAssert (▷ □ dh_publ t')%I as "[>%len_t' #H]".
+  iDestruct "aP" as "(_ & _ & #aP & _)".
+  iDestruct "bP" as "(_ & _ & #bP & _)".
+  by case: c_t => ->; [iApply "aP"|iApply "bP"].
+case exps_t': (exps t') => [//|d [|//]] in exps_t'S len_t'.
+have ->: t' = TExp g d by rewrite -exps_t' -ebase base_expsK.
+move: a_b.
+have /list_elem_of_singleton ->: a ∈ [d] by set_solver.
+have /list_elem_of_singleton ->: b ∈ [d] by set_solver.
+congruence.
 Qed.
 
 Lemma dh_public_TExp g a :
@@ -80,38 +121,62 @@ Lemma dh_public_TExp g a :
   ▷ □ P (TExp g a) -∗
   public (TExp g a).
 Proof.
-iIntros "%gXN #gP #(? & ? & aP) #P_a".
-rewrite public_TExp_iff //; iRight; do !iSplit => //.
-iApply "aP"; do 2!iModIntro; iSplit => //.
-by rewrite exps_TExpN exps_expN.
+iIntros "%gXN #gP (#m & #aP1 & #aP2 & #aPV & _) #P_a".
+rewrite public_TExp_iff //; do !iSplit => //.
+- iApply exp_pred_intro1. iApply "aP2"; do 2!iModIntro; iSplit => //.
+  by rewrite exps_TExpN exps_expN.
+- iModIntro; iIntros "#p".
+  by iApply False_public; last iApply "aPV".
 Qed.
 
 Definition mk_dh : val := mk_nonce.
 
-Lemma wp_mk_dh g (Ψ : val → iProp) :
+Lemma wp_mk_dh (T : gset term) g (Ψ : val → iProp) :
+  ¬ is_exp g ->
   cryptis_ctx -∗
   minted g -∗
+  □ (∀ t, ⌜t ∈ T⌝ -∗ minted t) -∗
   (∀ a, minted a -∗
         dh_seed a -∗
+        term_token a ⊤ -∗
         term_token (TExp g a) ⊤ -∗
+        ⌜∀ t t', t ∈ T → subterm t' t → a ≠ t' ∧ a ≠ TInv t'⌝ -∗
         Ψ a) -∗
   WP mk_dh #() {{ Ψ }}.
 Proof.
-iIntros "#ctx #minted_g post".
-iApply (wp_mk_nonce_freshN ∅ (λ _, False%I) dh_publ (λ t, {[TExp g t]})
+iIntros "% #ctx #minted_g #minted_T post".
+iApply wp_fupd.
+iApply (wp_mk_nonce_freshN T (λ _, False%I) dh_publ
+         (λ t, {[t; TInv t; TExp g t]})
   with "[//]" ) => //.
-- iIntros "%". rewrite elem_of_empty. by iIntros "[]".
-- iIntros "%". rewrite big_sepS_singleton. iIntros "!>".
-  rewrite minted_TExp /=.
-  iSplit.
-  + by iIntros "?"; do !iSplit.
-  + by iIntros "(? & ?)".
-iIntros (a) "_ _ #m_a #(aP1 & aP2) #? token". rewrite big_sepS_singleton.
-iApply "post" => //.
-rewrite /dh_seed. do !iSplit => //.
-iModIntro; iSplit.
-- by iIntros "H"; iSpecialize ("aP1" with "H"); iModIntro.
-- by iIntros "#?"; iApply "aP2"; iModIntro.
+  iIntros "%t".
+  rewrite big_sepS_forall; iIntros (t').
+  rewrite !elem_of_union !elem_of_singleton; iIntros "[[->|->]|->]"; eauto.
+  - by rewrite minted_TInv; iIntros "!>"; iSplit; eauto.
+  - rewrite minted_TExp //; iIntros "!>"; iSplit; eauto.
+    by iIntros "[??]".
+iIntros (a) "%a_T %nonce_a #m_a #aP #? #sV #? token".
+have a_g: TInv a ∉ exps g.
+  by rewrite exps_expN // elem_of_nil; case.
+have [? [] aV_ga a_ga] := tsize_lt_TExp a_g.
+have {}a_aV : TInv a ≠ a := @TInv_neq a.
+have {}a_ga : a ≠ TExp g a.
+  move=> contra; rewrite -contra in a_ga; lia.
+have {}aV_ga : TInv a ≠ TExp g a.
+  move=> contra; rewrite -contra in aV_ga; lia.
+rewrite big_sepS_union ?big_sepS_singleton; last set_solver.
+iDestruct "token" as "[t1 t3]".
+rewrite big_sepS_union ?big_sepS_singleton; last set_solver.
+iDestruct "t1" as "[t1 t2]".
+iMod ("sV" $! False%I with "t2") as "#s2V" => //.
+iApply ("post" with "[//] [] [$] [$]") => //.
+  iFrame "#"; rewrite bi.intuitionistic_intuitionistically.
+  by eauto.
+iPureIntro => t t' t_T t'_t; split => contra.
+- apply: (a_T _ t_T); congruence.
+- rewrite -[t']TInvK -contra in t'_t.
+  apply: (a_T _ t_T); apply: subterm_trans t'_t.
+  by constructor => //; case: (a) => // in nonce_a *.
 Qed.
 
 End DH.

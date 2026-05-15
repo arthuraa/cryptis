@@ -133,7 +133,7 @@ iIntros "#chan_c #ctx #(? & ? & ?) #m_skI #honI #m_skR".
 iIntros "%Ψ !> _ Hpost".
 rewrite /init. wp_pures. wp_bind (mk_nonce _).
 iApply (wp_mk_nonce (λ _, corrupt skI skR) (λ _, False)%I) => //.
-iIntros "%nI _ #m_nI #s_nI _ token".
+iIntros "%nI _ #m_nI #s_nI _ _ _ token".
 rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_apply wp_pkey. wp_pures.
 wp_list. wp_term_of_list.
@@ -203,7 +203,7 @@ iAssert (▷ corrupt skI skR → public nI)%I as "{inv} s_nI".
   iDestruct "inv" as "(%nI' & %skI' & %e & #p_ekI & #p_nI)".
   by case/Spec.of_list_inj: e => <- /Spec.aenc_pkey_inj <- {nI' skI'}. }
 wp_apply (wp_mk_nonce (λ _, corrupt skI skR) (λ _, False)%I) => //.
-iIntros "%nR _ #m_nR #s_nR _ _".
+iIntros "%nR _ #m_nR #s_nR _ _ _ _".
 rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_list; wp_term_of_list. wp_apply wp_aenc; eauto.
 - rewrite minted_of_list /= minted_pkey; eauto.

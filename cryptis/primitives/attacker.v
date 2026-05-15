@@ -128,7 +128,7 @@ Lemma wp_add_nonce c :
 Proof.
 iIntros "%Ψ [#? #c] post". wp_lam.
 wp_apply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-iIntros "%t _ _ #p_t _ _".
+iIntros "%t _ _ #p_t _ _ _ _".
 wp_apply wp_send => //.
 - by iApply "p_t".
 - by iApply "post".

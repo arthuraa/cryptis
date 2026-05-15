@@ -100,8 +100,11 @@ iIntros "%Ψ (#chan & #ctx & #(m1_pred & m2_pred & m3_pred) & #N_φ &
          #m_skI & #m_skR & #m_ga & #s_ga & φ_cb & failed_e) Hpost".
 rewrite /responder_send_msg2.
 wp_pures. wp_apply wp_pkey. wp_pures.
-wp_apply (wp_mk_dh_keys skI skR); first by iFrame "#".
-iIntros "%b #dh_b rel ptok rtok res tok".
+wp_apply (wp_mk_dh_keys {[ga]} skI skR); first by iFrame "#".
+{ iIntros "%t %t_in". rewrite elem_of_singleton in t_in. by subst t. }
+iIntros "%b %fresh_b %nonce_b #dh_b rel ptok rtok res tok".
+have b_ga : ¬ subterm b ga.
+{ apply: fresh_b. by rewrite elem_of_singleton. }
 set gb := TExp (TInt 0) b.
 wp_pures.
 (* Set peer share for gb *)
@@ -114,12 +117,13 @@ iMod ("φ_cb" $! b with "res") as "[φ_init φ_resp]".
 iMod (nsl_dh_ready_alloc N skI skR si with "N_φ φ_init") as "#ready".
 (* Build and encrypt msg2 *)
 wp_list. wp_term_of_list. wp_pures.
-iDestruct "dh_b" as "(#m_b & #s_b & #pred_b)".
+iDestruct "dh_b" as "(_ & #m_b & #s_b & #pred_b)".
 wp_apply wp_aenc => //.
 { (* minted plaintext *)
-  rewrite minted_of_list /= minted_pkey !minted_TExp minted_TInt /=.
-  rewrite Tag_unseal /Tag_def minted_TInt.
-  by do !iSplit. }
+  rewrite minted_of_list /= minted_pkey.
+  do !iSplit => //.
+  - by iApply all_minted_TExp; rewrite minted_TInt; iSplit.
+  - rewrite Tag_unseal /Tag_def. by rewrite minted_TInt. }
 { (* encryption invariant *)
   iRight. iSplit.
   - (* □ msg2_pred skI plaintext *)
@@ -166,7 +170,7 @@ Proof.
 move=> gb gab si.
 iIntros "%Ψ (#chan & #ctx & #(m1_pred & m2_pred & m3_pred) &
          #m_skI & #m_skR & #m_ga & #s_ga & #dh_b & #ps_gb & rel) Hpost".
-iDestruct "dh_b" as "(#m_b & #s_b & #pred_b)".
+iDestruct "dh_b" as "(%nonce_b & #m_b & #s_b & #pred_b)".
 rewrite /responder_recv_msg3. wp_pures.
 wp_apply wp_pkey. wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m) "#p_m".
@@ -184,12 +188,16 @@ iPoseProof (dh_key_public_released skI skR b ga
              with "[#] ps_gb") as "#rel_b".
 { do !iSplit; eauto. }
 iAssert (minted (si_key si)) as "#m_k".
-{ rewrite minted_senc minted_of_list /= !minted_pkey !minted_TExp minted_TInt /=.
-  by do !iSplit. }
+{ rewrite minted_senc minted_of_list /= !minted_pkey.
+  do !iSplit => //.
+  - by iApply all_minted_TExp; iSplit. }
 iDestruct "inv_m3" as "[#p_gb|(#inv_m3 & _)]".
 - (* public gb — case split via public_TExp_iff *)
   rewrite public_TExp_iff; first last. { by case. }
-  iDestruct "p_gb" as "[[_ #p_b]|(_ & _ & #dp_b)]".
+  iDestruct "p_gb" as "(_ & _ & #exp_b & _)".
+  iPoseProof (exp_pred_inv_same with "exp_b") as "exp_b_inv";
+    first (rewrite exps_TExpN'; [set_solver | by case | exact: invs_canceled1]).
+  iDestruct "exp_b_inv" as "[#p_b | (%t3 & %base_t3 & %t3_sub & #base_b)]".
   + (* public b — contradiction with release_token *)
     iDestruct ("s_b" with "p_b") as "#later_ns".
     iMod (lc_fupd_elim_later_pers with "Hc1 later_ns") as "#ns".
@@ -197,8 +205,8 @@ iDestruct "inv_m3" as "[#p_gb|(#inv_m3 & _)]".
     iDestruct "ns" as "[#ps_none|(%ga' & #ps_some & #r_gb & _)]".
     * by iPoseProof (has_peer_share_agree with "ps_gb ps_none") as "%".
     * by iApply (term_meta_token with "rel r_gb").
-  + (* dh_pred b gb — derive corruption *)
-    iPoseProof ("pred_b" $! gb with "dp_b") as "#later_ks".
+  + (* exp_pred_base b t3 — derive corruption *)
+    iPoseProof ("pred_b" $! t3 with "base_b") as "#later_ks".
     iMod (lc_fupd_elim_later_pers with "Hc1 later_ks") as "#[#corr _]".
     wp_bind (derive_senc_key _). iApply wp_derive_senc_key. iNext. wp_pures.
     iApply ("Hpost" $! (Some (si_key si))). iRight. iModIntro. iSplit => //.

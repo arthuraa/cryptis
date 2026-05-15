@@ -49,13 +49,15 @@ iIntros "%Ψ (#chan_c & #ctx & #(m1_pred & ? & ?) & #m_skI & #m_skR) Hpost".
 rewrite /initiator_send_msg1.
 wp_pures. wp_apply wp_pkey. wp_pures.
 set pkI := Spec.pkey skI.
-wp_apply (wp_mk_dh_keys skI skR); first by iFrame "#".
-iIntros "%a #dh_a rel peer ready res tok".
+wp_apply (wp_mk_dh_keys ∅ skI skR); first by iFrame "#".
+{ iIntros "%t". rewrite elem_of_empty. by iIntros "[]". }
+iIntros "%a _ %nonce_a #dh_a rel peer ready res tok".
 set ga := TExp (TInt 0) a.
 wp_pures. wp_list. wp_term_of_list. wp_pures.
 wp_apply wp_aenc => //.
-{ iDestruct "dh_a" as "(#m_a & _)".
-  rewrite minted_of_list /= minted_TExp minted_TInt /= minted_pkey.
+{ iDestruct "dh_a" as "(_ & #m_a & _)".
+  rewrite minted_of_list /= minted_TExp; last by case.
+  rewrite minted_TInt /= minted_pkey.
   by do !iSplit. }
 { iRight. iSplit.
   - iModIntro. iExists ga, skI. iSplit => //.
@@ -134,12 +136,15 @@ Lemma initiator_process_msg2 skI skR a gb N φ failed :
 Proof.
 move=> ga gab si.
 iIntros "Hc1 #N_φ #m_skI #m_skR #dh_a ptok rtok failed_e inv".
-iDestruct "dh_a" as "(#m_a & #s_a & #pred_a)".
+iDestruct "dh_a" as "(%nonce_a & #m_a & #s_a & #pred_a)".
 iDestruct "inv" as "[#pub|inv_m2]".
 - (* Case 1: public plaintext — attacker forged message *)
   iDestruct "pub" as "(#p_ga & #p_gb)".
   rewrite public_TExp_iff; first last. { by case. }
-  iDestruct "p_ga" as "[[_ #p_a]|(_ & _ & #dp_a)]".
+  iDestruct "p_ga" as "(_ & _ & #exp_a & _)".
+  iPoseProof (exp_pred_inv_same with "exp_a") as "exp_a_inv";
+    first (rewrite exps_TExpN'; [set_solver | by case | exact: invs_canceled1]).
+  iDestruct "exp_a_inv" as "[#p_a | (%t3 & %base_t3 & %t3_sub & #base_a)]".
   + (* Sub-case: public a — contradiction with peer_share_token *)
     iDestruct ("s_a" with "p_a") as "#later_ns".
     iMod (lc_fupd_elim_later_pers with "Hc1 later_ns") as "#ns".
@@ -147,16 +152,18 @@ iDestruct "inv" as "[#pub|inv_m2]".
     iDestruct "ns" as "[#ps_none|(%gb' & #ps_some & _)]".
     * by iApply (term_meta_token with "ptok ps_none").
     * by iApply (term_meta_token with "ptok ps_some").
-  + (* Sub-case: dh_pred a ga — derive corruption *)
-    iPoseProof ("pred_a" $! ga with "dp_a") as "#later_ks".
+  + (* Sub-case: exp_pred_base a t3 — derive corruption *)
+    iPoseProof ("pred_a" $! t3 with "base_a") as "#later_ks".
     iMod (lc_fupd_elim_later_pers with "Hc1 later_ks") as "#[#corr _]".
     iMod (set_peer_share ga None with "ptok") as "#ps_none".
     iAssert (public a) as "#p_a".
     { iApply "s_a". iNext. iModIntro. iLeft. done. }
     iAssert (minted gb) as "#m_gb". { by iApply public_minted. }
     iAssert (minted (si_key si)) as "#m_k".
-    { rewrite minted_senc minted_of_list /= !minted_pkey !minted_TExp minted_TInt /=.
-      by do !iSplit. }
+    { rewrite minted_senc minted_of_list /= !minted_pkey.
+      do !iSplit => //.
+      - by iApply all_minted_TExp; rewrite minted_TInt; iSplit.
+      - by iApply all_minted_TExp; iSplit. }
     iAssert (public (si_key si)) as "#p_k".
     { rewrite public_senc_key public_of_list /=.
       iSplit; [by iApply public_aenc_key|].
@@ -172,10 +179,24 @@ iDestruct "inv" as "[#pub|inv_m2]".
     * by iLeft.
     * by iLeft.
 - (* Case 2: msg2_pred — proper invariant *)
-  iDestruct "inv_m2" as "(%b & %e_gb & #dh_b & #ps_gb & ready)".
+  iDestruct "inv_m2" as "(%b & %e_gb & %b_ga & #dh_b & #ps_gb & ready)".
   subst gb.
-  iDestruct "dh_b" as "(#m_b & #s_b & #pred_b)".
+  iDestruct "dh_b" as "(%nonce_b & #m_b & #s_b & #pred_b)".
   set gb := TExp (TInt 0) b.
+  have b_a : b ≠ a.
+  { move=> e. apply: b_ga. rewrite /ga -e.
+    apply/subtermsP. rewrite subtermsE // cancel_exps1 /=.
+    rewrite [subterms b]subterms_nonce //. set_solver. }
+  have aV_b : a ≠ TInv b.
+  { move=> contra.
+    have inv_a : is_inv a.
+    { by rewrite contra is_inv_TInv; case: (b) => // in nonce_b *. }
+    by case: (a) => // in nonce_a inv_a *. }
+  have bV_a : b ≠ TInv a.
+  { move=> contra.
+    have inv_b : is_inv b.
+    { by rewrite contra is_inv_TInv; case: (a) => // in nonce_a *. }
+    by case: (b) => // in nonce_b inv_b *. }
   case: failed.
   + (* failed = true: corruption *)
     rewrite /=. iDestruct "failed_e" as "#corr".
@@ -188,8 +209,10 @@ iDestruct "inv" as "[#pub|inv_m2]".
       by iModIntro. }
     iAssert (minted gb) as "#m_gb". { by iApply public_minted. }
     iAssert (minted (si_key si)) as "#m_k".
-    { rewrite minted_senc minted_of_list /= !minted_pkey !minted_TExp minted_TInt /=.
-      by do !iSplit. }
+    { rewrite minted_senc minted_of_list /= !minted_pkey.
+      do !iSplit => //.
+      - by iApply all_minted_TExp; rewrite minted_TInt; iSplit.
+      - by iApply all_minted_TExp; iSplit. }
     iAssert (public (si_key si)) as "#p_k".
     { rewrite public_senc_key public_of_list /=.
       iSplit; [by iApply public_aenc_key|].
@@ -214,10 +237,13 @@ iDestruct "inv" as "[#pub|inv_m2]".
                  with "[#] ps_gb") as "#rel_b".
     { do !iSplit; eauto. }
     iAssert (minted gb) as "#m_gb".
-    { rewrite minted_TExp minted_TInt /=. by iSplit. }
+    { rewrite minted_TExp; last by case.
+      rewrite minted_TInt /=. by iSplit. }
     iAssert (minted (si_key si)) as "#m_k".
-    { rewrite minted_senc minted_of_list /= !minted_pkey !minted_TExp minted_TInt /=.
-      by do !iSplit. }
+    { rewrite minted_senc minted_of_list /= !minted_pkey.
+      do !iSplit => //.
+      - by iApply all_minted_TExp; rewrite minted_TInt; iSplit.
+      - by iApply all_minted_TExp; iSplit. }
     (* Get φ from nsl_dh_ready *)
     iMod ("ready" $! φ with "N_φ rtok") as "later_φ".
     iMod (lc_fupd_elim_later with "Hc1 later_φ") as "φ_res".
@@ -244,15 +270,25 @@ iDestruct "inv" as "[#pub|inv_m2]".
         rewrite public_senc_key public_of_list /=.
         iDestruct "p_k" as "(_ & _ & _ & _ & #p_gab & _)".
         have e_gab : gab = TExpN (TInt 0) [a; b] by rewrite /gab /gb TExp_TExpN.
-        rewrite e_gab public_TExp2_iff; first last. { by case. }
-        iDestruct "p_gab" as "[[_ #p_b]|[[_ #p_a]|(_ & #dpa & _)]]".
-        + iDestruct ("rel_b" with "p_b") as ">[#? #?]". by iSplit.
-        + iDestruct ("rel_a" with "p_a") as ">[#? #?]". by iSplit.
-        + iPoseProof ("pred_a" $! (TExpN (TInt 0) [a; b]) with "dpa")
-            as "#contra".
-          iAssert (▷ False)%I as ">[]".
-          { iModIntro. iDestruct "contra" as "[_ %contra]".
-            by rewrite /nsl_dh_key_share exps_TExpN /= in contra. } }
+        rewrite e_gab public_TExp2_iff //; last by case.
+        iDestruct "p_gab" as "(_ & #exp_a & _ & _ & _)".
+        iPoseProof (exp_pred_inv with "exp_a") as "(%t & %t_in & H)";
+          first by apply: elem_of_TExpN2l; rewrite //= elem_of_nil; eauto.
+        have exps_share : exps (TExpN (TInt 0) [a; b]) ≡ₚ [a; b].
+        { rewrite exps_TExpN'; [done | by case | by apply/invs_canceled2]. }
+        rewrite exps_share elem_of_cons list_elem_of_singleton in t_in.
+        iDestruct "H" as "[#p_t|(%t3 & %base_t3 & %exps_sub & #base_t)]".
+        { case: t_in => ->.
+          - iDestruct ("rel_a" with "p_t") as ">[#? #?]". by iSplit.
+          - iDestruct ("rel_b" with "p_t") as ">[#? #?]". by iSplit. }
+        rewrite exps_share in exps_sub.
+        iAssert (▷ □ nsl_dh_key_share skI skR t3)%I as "#ks".
+        { case: t_in => ->; [by iApply "pred_a" | by iApply "pred_b"]. }
+        iAssert (▷ False)%I as ">[]".
+        { iModIntro. iDestruct "ks" as "[_ %contra]". iPureIntro.
+          case e_t3 : (exps t3) => [|c [|??]] // in exps_sub contra.
+          have [a_c b_c] : a ∈ [c] ∧ b ∈ [c] by set_solver.
+          rewrite !list_elem_of_singleton in a_c b_c. congruence. } }
     iSplit.
     { by iIntros "!> []". }
     iSplit; first done.
@@ -275,15 +311,25 @@ iDestruct "inv" as "[#pub|inv_m2]".
           * iIntros "#p_gab".
             have e_gab : TExp ga b = TExpN (TInt 0) [a; b].
             { by rewrite /ga TExp_TExpN TExpC2. }
-            rewrite e_gab public_TExp2_iff; first last. { by case. }
-            iDestruct "p_gab" as "[[_ #p_b]|[[_ #p_a]|(_ & #dpa & _)]]".
-            -- iDestruct ("rel_b" with "p_b") as ">[#? #?]". by iSplit.
-            -- iDestruct ("rel_a" with "p_a") as ">[#? #?]". by iSplit.
-            -- iPoseProof ("pred_a" $! (TExpN (TInt 0) [a; b]) with "dpa")
-                 as "#contra".
-               iAssert (▷ False)%I as ">[]".
-               { iModIntro. iDestruct "contra" as "[_ %contra]".
-                 by rewrite /nsl_dh_key_share exps_TExpN /= in contra. }
+            rewrite e_gab public_TExp2_iff //; last by case.
+            iDestruct "p_gab" as "(_ & #exp_a & _ & _ & _)".
+            iPoseProof (exp_pred_inv with "exp_a") as "(%t & %t_in & H)";
+              first by apply: elem_of_TExpN2l; rewrite //= elem_of_nil; eauto.
+            have exps_share : exps (TExpN (TInt 0) [a; b]) ≡ₚ [a; b].
+            { rewrite exps_TExpN'; [done | by case | by apply/invs_canceled2]. }
+            rewrite exps_share elem_of_cons list_elem_of_singleton in t_in.
+            iDestruct "H" as "[#p_t|(%t3 & %base_t3 & %exps_sub & #base_t)]".
+            { case: t_in => ->.
+              - iDestruct ("rel_a" with "p_t") as ">[#? #?]". by iSplit.
+              - iDestruct ("rel_b" with "p_t") as ">[#? #?]". by iSplit. }
+            rewrite exps_share in exps_sub.
+            iAssert (▷ □ nsl_dh_key_share skI skR t3)%I as "#ks".
+            { case: t_in => ->; [by iApply "pred_a" | by iApply "pred_b"]. }
+            iAssert (▷ False)%I as ">[]".
+            { iModIntro. iDestruct "ks" as "[_ %contra]". iPureIntro.
+              case e_t3 : (exps t3) => [|c [|??]] // in exps_sub contra.
+              have [a_c b_c] : a ∈ [c] ∧ b ∈ [c] by set_solver.
+              rewrite !list_elem_of_singleton in a_c b_c. congruence. }
           * iIntros "#[#r_ga #r_gb]".
             iAssert (public a) as "#p_a". { iApply "rel_a". iNext. by iSplit. }
             iAssert (public b) as "#p_b". { iApply "rel_b". iNext. by iSplit. }

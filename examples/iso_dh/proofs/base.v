@@ -308,7 +308,9 @@ Definition msg2_pred skR m2 : iProp :=
     let si := SessInfo skI skR ga gb gab in
     ⌜m2 = Spec.of_list [ga; gb; pkI; Tag N]⌝ ∧
     ((public skI ∨ public skR) ∨ (public b ↔ ▷ (released ga ∧ released gb))) ∧
-    (∀ t, dh_pred b t ↔ ▷ □ iso_dh_key_share t) ∧
+    (∀ t, exp_pred_base b t ↔ ▷ □ iso_dh_key_share t) ∧
+    ⌜is_nonce b⌝ ∧
+    ⌜¬ subterm b ga⌝ ∧
     iso_dh_ready N skI skR si.
 
 Definition msg3_pred skI m3 : iProp :=
@@ -341,52 +343,80 @@ Qed.
 
 Lemma public_dh_share a :
   minted a -∗
-  □ (∀ t, dh_pred a t ↔ ▷ □ iso_dh_key_share t) -∗
+  □ (∀ t, exp_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
   public (TExp (TInt 0) a).
 Proof.
-iIntros "#m_a #pred_a". rewrite public_TExpN //=; eauto.
-iRight. rewrite minted_TExp minted_TInt.
-do !iSplit => //.
-iApply "pred_a". do !iModIntro. iPureIntro. by rewrite exps_TExpN.
+iIntros "#m_a #pred_a".
+rewrite public_TExpN //=; auto; last exact: invs_canceled1.
+rewrite minted_TExp; auto.
+rewrite TExpNK public_TInt minted_TInt.
+do !iSplit => //; auto.
+iApply exp_pred_intro1. iApply "pred_a". iPureIntro. by rewrite exps_TExpN.
 Qed.
 
-Lemma public_dh_secret a b :
+Lemma public_dh_secret1 a b :
   minted a -∗
   minted b -∗
-  □ (∀ t, dh_pred a t ↔ ▷ □ iso_dh_key_share t) -∗
-  □ (∀ t, dh_pred b t ↔ ▷ □ iso_dh_key_share t) -∗
-  (public (TExpN (TInt 0) [a; b]) ↔ ◇ (public a ∨ public b)).
+  □ (∀ t, exp_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
+  □ (∀ t, exp_pred_base b t ↔ ▷ □ iso_dh_key_share t) -∗
+  public a ∨ public b -∗
+  public (TExpN (TInt 0) [a; b]).
 Proof.
 iIntros "#m_a #m_b #pred_a #pred_b".
-rewrite public_TExp2_iff //; last by eauto.
-rewrite minted_TExpN /= minted_TInt.
-iSplit; last first.
-{ rewrite /bi_except_0.
-  iIntros "#[H|[H|H]]".
-  - iRight. iRight. iSplit; eauto.
-    by iSplit; [iApply "pred_a"|iApply "pred_b"];
-    iDestruct "H" as ">[]".
-  - iRight. iLeft. iSplit => //. by iApply public_dh_share.
-  - iLeft. iSplit => //. by iApply public_dh_share. }
-iIntros "[[_ #p_b] | [[_ #p_a] | (_ & contra & _)]]"; eauto.
-iPoseProof ("pred_a" with "contra") as ">%contra".
-by rewrite /iso_dh_key_share exps_TExpN /= in contra.
+case: (decide (a = TInv b)) => [-> {a} | a_b].
+  by rewrite -TExp_TExpN TExpNK public_TInt; eauto.
+iIntros "#[H|H]".
+- rewrite -TExp_TExpN; iApply public_TExp => //.
+  by iApply public_dh_share.
+- rewrite -TExp_TExpN TExpNC; iApply public_TExp => //.
+  by iApply public_dh_share.
+Qed.
+
+Lemma public_dh_secret2 a b :
+  a ≠ b →
+  a ≠ TInv b →
+  □ (∀ t, exp_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
+  □ (∀ t, exp_pred_base b t ↔ ▷ □ iso_dh_key_share t) -∗
+  public (TExpN (TInt 0) [a; b]) -∗
+  public a ∨ public b.
+Proof.
+iIntros "%a_b %a_bV #pred_a #pred_b #p".
+iPoseProof (public_minted with "p") as "m".
+iAssert (minted a ∧ minted b)%I as "[ma mb]".
+  rewrite minted_TExpN //= ?invs_canceled2; eauto.
+  by iDestruct "m" as "(_ & ? & ? & _)"; eauto.
+iAssert (◇ (public a ∨ public b))%I as "[H|H]"; first last.
+- by iRight; iApply except_0_public.
+- by iLeft; iApply except_0_public.
+rewrite public_TExp2_iff //; eauto.
+iDestruct "p" as "(_ & #contraA & #contraB & _)"; eauto.
+iPoseProof (exp_pred_inv with "contraA") as "(%t & %t_share & H)".
+  by apply: elem_of_TExpN2l; rewrite //= elem_of_nil; eauto.
+have exps_share: exps (TExpN (TInt 0) [a; b]) ≡ₚ [a; b].
+  by rewrite exps_TExpN' //= ?invs_canceled2; eauto.
+rewrite exps_share elem_of_cons list_elem_of_singleton in t_share.
+iDestruct "H" as "[H|(%t3 & %e_base & %exps_sub & base)]".
+  by case: t_share=> ->; eauto.
+rewrite exps_share in exps_sub.
+iAssert (▷ □ iso_dh_key_share t3)%I as ">%contra".
+  by case: t_share=> ->; [iApply "pred_a"|iApply "pred_b"].
+case: (exps t3) => // c [|//] in exps_sub contra.
+have [a_c b_c]: a ∈ [c] ∧ b ∈ [c] by set_solver.
+rewrite !list_elem_of_singleton in a_c b_c; congruence.
 Qed.
 
 Lemma public_dh_secret' a b (P : iProp) :
+  a ≠ b →
+  a ≠ TInv b →
   □ (public a ↔ P) -∗
-  □ (∀ t, dh_pred a t ↔ ▷ □ iso_dh_key_share t) -∗
+  □ (∀ t, exp_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
   □ (public b ↔ P) -∗
-  □ (∀ t, dh_pred b t ↔ ▷ □ iso_dh_key_share t) -∗
-  (public (TExpN (TInt 0) [a; b]) → ◇ P).
+  □ (∀ t, exp_pred_base b t ↔ ▷ □ iso_dh_key_share t) -∗
+  (public (TExpN (TInt 0) [a; b]) → P).
 Proof.
-iIntros "#s_a #pred_a #s_b #pred_b".
-rewrite public_TExp2_iff //; last by eauto.
-iIntros "[[_ #p_b] | [[_ #p_a] | (_ & contra & _)]]".
-- by iModIntro; iApply "s_b".
-- by iModIntro; iApply "s_a".
-iPoseProof ("pred_a" with "contra") as ">%contra".
-by rewrite /iso_dh_key_share exps_TExpN /= in contra.
+iIntros "%a_b %a_bV #s_a #pred_a #s_b #pred_b #p_share".
+iPoseProof (public_dh_secret2 with "pred_a pred_b p_share") as "H" => //.
+by iDestruct "H" as "[H|H]"; [iApply "s_a"|iApply "s_b"].
 Qed.
 
 End Verif.

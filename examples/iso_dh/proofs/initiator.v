@@ -78,10 +78,10 @@ wp_apply (wp_mk_nonce_freshN ∅
             (λ a, {[TExp (TInt 0) a]})) => //.
 - iIntros "% ?". by rewrite elem_of_empty.
 - iIntros "%a".
-  rewrite !big_sepS_singleton minted_TExp minted_TInt /=.
-  rewrite bi.True_and.
+  rewrite big_sepS_singleton minted_TExp. rewrite minted_TInt bi.True_and.
+  2: exact /neg_false.
   iIntros "!>"; iSplit; eauto; by iIntros "(_ & ?)".
-iIntros "%a %fresh %nonce #m_a #s_a #a_pred token_ga".
+iIntros "%a %fresh %nonce_a #m_a #s_a #a_pred _ _ token_ga".
 set ga := TExp (TInt 0) a.
 rewrite !big_sepS_singleton.
 rewrite (term_token_difference ga (↑iso_dhN)) //.
@@ -97,12 +97,7 @@ wp_pures. wp_apply wp_mk_keyshare => //. rewrite -/ga.
 iIntros "_". wp_pures. wp_list. wp_term_of_list.
 wp_pure _ credit:"H1".
 wp_pure _ credit:"H2".
-iAssert (public ga) as "p_ga".
-{ iApply public_TExp_iff; eauto.
-  rewrite minted_TInt.
-  iRight. do 2![iSplit => //].
-  iApply "a_pred". iModIntro. iModIntro.
-  by rewrite /iso_dh_key_share exps_TExpN. }
+iAssert (public ga) as "p_ga"; first by iApply public_dh_share.
 wp_apply wp_send => //.
 { rewrite public_of_list /=. do 2?[iSplit => //].
   by iApply public_verify_key. }
@@ -163,10 +158,12 @@ iAssert (|={⊤}=>
     iModIntro. iSplit; first by iIntros "!> []".
     iSplit; eauto. }
   iMod (lc_fupd_elim_later_pers with "H3 inv") as "{inv} #inv".
-  iDestruct "inv" as "(%ga' & %b & %pkI' & %N' & %e_m2 & s_b & pred_b & res)".
+  iDestruct "inv"
+    as "(%ga' & %b & %pkI' & %N' & %e_m2 & s_b & pred_b &
+         %nonce_b & %fresh_b & res)".
   case/Spec.of_list_inj: e_m2
       => <- -> /Spec.sign_pkey_inj <- /Tag_inj <- {ga' gb pkI' N'}
-    in gab seed si *.
+    in fresh_b gab seed si *.
   iDestruct "s_b" as "[?|s_b]".
   { iMod (term_meta_set (iso_dhN.@"failed") true with "failed_token")
       as "#?"; first by solve_ndisj.
@@ -186,7 +183,16 @@ iAssert (|={⊤}=>
   iRight. iIntros "!> {s_k1} #p_k".
   rewrite public_senc_key public_of_list /=.
   iDestruct "p_k" as "(_ & _ & _ & _ & p_gab & _)".
-  iPoseProof (public_dh_secret' b a with "[//] [//] [] [//] [//]") as ">?" => //.
+  have b_a: b ≠ a.
+    move=> b_a; apply: fresh_b; rewrite /ga -b_a.
+    apply/subtermsP; rewrite subtermsE // cancel_exps1 /=.
+    rewrite [subterms b]subterms_nonce //; set_solver.
+  have b_aV : b ≠ TInv a.
+    move=> contra; have: is_inv (TInv a).
+      by rewrite is_inv_TInv; case: (a) => // in nonce_a *.
+    by rewrite -contra; case: (b) => // in nonce_b *.
+  iPoseProof (public_dh_secret' _ b_a with "[//] [//] [] [//] [//]")
+    as ">?" => //.
   iModIntro. iApply bi.iff_trans. iSplit; first auto.
   iSplit; eauto. iIntros "[#contra|?]"; auto. iModIntro.
   by iPoseProof (term_meta_agree with "failed contra") as "%". }
@@ -198,9 +204,8 @@ iIntros "%m3 #p_m3". wp_pures. wp_apply wp_send => //.
 wp_pures. wp_apply wp_derive_senc_key.
 set k := SEncKey _.
 iAssert (minted k) as "#m_k".
-{ rewrite minted_senc minted_of_list /=.
-  rewrite !minted_TExp /= minted_TInt.
-  rewrite !minted_pkey. by do !iSplit => //. }
+{ rewrite minted_senc minted_of_list /= !minted_pkey.
+  do !iSplit => //; by iApply all_minted_TExp; rewrite ?minted_TInt; iSplit. }
 wp_pures. iApply ("Hpost" $! (Some k)).
 iRight. iExists si. iFrame. do !iSplitR => //.
 { iIntros "!> !> #rel". iApply "s_k1". by eauto. }

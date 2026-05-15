@@ -654,17 +654,18 @@ Proof.
 iIntros "#? #p_ke post"; rewrite /I.new; wp_pures.
 iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
 - wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-  iIntros (cn) "_ _ #p_cn _ token"; wp_list; wp_term_of_list.
+  iIntros (cn) "_ _ #p_cn _ _ _ token"; wp_list; wp_term_of_list.
   wp_tag.
   iApply ("post" $! (Psk psk cn) with "[] [] token") => //=.
   do !iSplit => //.
   by iApply "p_cn".
 - iDestruct "p_ke" as "[% p_ke]".
-  wp_bind (mk_dh _); iApply (wp_mk_dh (λ _, True)%I g) => //.
-  { by iApply public_minted. }
-  iIntros (a) "_ #p_a _"; wp_list.
+  wp_bind (mk_dh _); iApply (wp_mk_dh (λ _, True)%I ∅ _) => //.
+  + by iApply public_minted.
+  + by iIntros "!> %"; rewrite elem_of_empty; iIntros ([]).
+  iIntros (a) "_ #p_a _ _ _"; wp_list.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-  iIntros (cn) "_ _ #p_cn _ token"; wp_list; wp_term_of_list.
+  iIntros (cn) "_ _ #p_cn _ _ _ token"; wp_list; wp_term_of_list.
   wp_tag.
   rewrite (term_token_difference _ ⊤); try set_solver.
   iDestruct "token" as "[token _]".
@@ -672,11 +673,12 @@ iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
   do !iSplit => //.
   by iApply "p_cn".
 - iDestruct "p_ke" as "(? & % & ?)".
-  wp_bind (mk_dh _); iApply (wp_mk_dh (λ _, True)%I g) => //.
-  { by iApply public_minted. }
-  iIntros (a) "_ #p_a _"; wp_list.
+  wp_bind (mk_dh _); iApply (wp_mk_dh (λ _, True)%I ∅ _) => //.
+  + by iApply public_minted.
+  + iIntros "!> %"; rewrite elem_of_empty; iIntros "[]".
+  iIntros (a) "_ #p_a _ _ _"; wp_list.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-  iIntros (cn) "_ _ #p_cn _ token"; wp_list; wp_term_of_list.
+  iIntros (cn) "_ _ #p_cn _ _ _ token"; wp_list; wp_term_of_list.
   wp_tag.
   iApply ("post" $! (PskDh psk g cn a)) => //=.
   do !iSplit => //.
@@ -828,8 +830,8 @@ Proof.
 rewrite /session_key_of.
 case: kex1 kex2 => [???|?????|??????] [???|?????|??????] //=.
 - by case=> [/Spec.tag_inj [_ ->] -> ->].
-- by case=> e_g -> -> <- ->; rewrite e_g !TExp_TExpN TExpC2.
-- by case=> [] /Spec.tag_inj [_ ->] e_g -> -> <- ->; rewrite e_g !TExp_TExpN TExpC2.
+- by case=> e_g -> -> <- ->; rewrite e_g TExpNC.
+- by case=> [] /Spec.tag_inj [_ ->] e_g -> -> <- ->; rewrite e_g TExpNC.
 Qed.
 
 (** Check a server share against a corresponding client share.  This function
@@ -1145,11 +1147,13 @@ Definition wf ke : iProp :=
     minted psk ∧ public c_nonce ∧ public s_nonce
   | Dh g cn sn gx y =>
     ⌜¬ is_exp g⌝ ∧ public g ∧ public cn ∧ public sn ∧ public gx ∧
+    ⌜∀ x, subterm x gx → y ≠ x ∧ y ≠ TInv x⌝ ∧
     dh_seed (λ _, True)%I y
   | PskDh psk g cn sn gx y =>
     minted psk ∧
     ⌜¬ is_exp g⌝ ∧ public g ∧ public cn ∧ public sn ∧
     public gx ∧
+    ⌜∀ x, subterm x gx → y ≠ x ∧ y ≠ TInv x⌝ ∧
     dh_seed (λ _, True)%I y
   end.
 
@@ -1176,7 +1180,7 @@ iApply CShare.wp_case.
 case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
 - subst psk.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-  iIntros (a) "_ _ #pred_a _ token"; wp_list; wp_term_of_list.
+  iIntros (a) "_ _ #pred_a _ _ _ token"; wp_list; wp_term_of_list.
   wp_tag; iModIntro.
   iApply ("post" $! (Psk _ _ a)) => //=.
   rewrite public_tag public_of_list /=.
@@ -1184,11 +1188,16 @@ case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
   do !iSplit => //.
   by iApply "pred_a".
 - subst g'.
-  wp_bind (mk_dh _); iApply (wp_mk_dh (λ _, True)%I g) => //.
-  { by iApply public_minted. }
-  iIntros (a) "_ #pred_a _"; wp_list.
+  wp_bind (mk_dh _); iApply (wp_mk_dh (λ _, True)%I {[gx]} _) => //.
+  + by iApply public_minted.
+  + iIntros "!> %t"; iIntros (->%elem_of_singleton); rewrite !public_minted.
+    rewrite minted_tag minted_of_list /=.
+    by iDestruct "p_ke" as "(_ & _ & ? & _)".
+  iIntros (a) "_ #pred_a _ _ %fresh_a"; wp_list.
+  have {}fresh_a: ∀ t, subterm t gx → a ≠ t ∧ a ≠ TInv t.
+    by move=> t; apply: fresh_a; set_solver.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-  iIntros (sn) "_ _ #p_sn _ token"; wp_list; wp_term_of_list.
+  iIntros (sn) "_ _ #p_sn _ _ _ token"; wp_list; wp_term_of_list.
   wp_tag; iModIntro.
   iApply ("post" $! (Dh g cn sn gx a)) => //=.
   rewrite !public_tag !public_of_list /=.
@@ -1196,11 +1205,16 @@ case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
   do !iSplit => //.
   by iApply "p_sn".
 - case: e_check=> -> ->.
-  wp_bind (mk_dh _); iApply (wp_mk_dh (λ _, True)%I g) => //.
-  { by iApply public_minted. }
-  iIntros (a) "_ #pred_a _"; wp_list.
+  wp_bind (mk_dh _); iApply (wp_mk_dh (λ _, True)%I {[gx]} _) => //.
+  + by iApply public_minted.
+  + iIntros "!> %t"; iIntros (->%elem_of_singleton); rewrite !public_minted.
+    rewrite minted_tag minted_of_list /=.
+    by iDestruct "p_ke" as "(_ & _ & _ & ? & _)".
+  iIntros (a) "_ #pred_a _ _ %fresh_a"; wp_list.
+  have {}fresh_a: ∀ t, subterm t gx → a ≠ t ∧ a ≠ TInv t.
+    by move=> t; apply: fresh_a; set_solver.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-  iIntros (sn) "_ _ #p_sn _ token"; wp_list; wp_term_of_list.
+  iIntros (sn) "_ _ #p_sn _ _ _ token"; wp_list; wp_term_of_list.
   wp_tag; iModIntro.
   iApply ("post" $! (PskDh _ g cn sn gx a)) => //.
   rewrite !public_tag !public_of_list /=.
@@ -1265,11 +1279,11 @@ case: ke=>> /=.
   rewrite public_THash; iRight.
   rewrite minted_tag; iSplit => //.
   by iExists _, _, _; eauto.
-- iIntros "#(% & p_g & p_cn & p_sn & p_gx & seed_y)".
+- iIntros "#(% & p_g & p_cn & p_sn & p_gx & _ & seed_y)".
   rewrite public_tag public_of_list /=.
   do !iSplit => //.
   by iApply dh_public_TExp; eauto.
-- iIntros "#(p_psk & % & p_g & p_cn & p_sn & p_gx & seed_y)".
+- iIntros "#(p_psk & % & p_g & p_cn & p_sn & p_gx & _ & seed_y)".
   rewrite public_tag public_of_list /=.
   do !iSplit => //.
   + rewrite public_THash; iRight.
@@ -1282,15 +1296,15 @@ Lemma minted_session_key_of ke : wf ke -∗ minted (session_key_of ke).
 Proof.
 case: ke=>> /=.
 - iIntros "#(?&?&?)".
-  by rewrite minted_senc minted_of_list /=; do !iSplit; eauto.
-- iIntros "#(%&?&?&?&?&seed)".
-  rewrite minted_senc; iApply minted_TExp; eauto.
-  iDestruct "seed" as "(?&?)".
+  rewrite minted_senc minted_of_list /=; do !iSplit; eauto.
+- iIntros "#(%&?&?&?&?&_&seed)".
+  rewrite minted_senc; iApply all_minted_TExp; eauto.
+  iDestruct "seed" as "(?&_)".
   by iSplit => //; iApply public_minted.
-- iIntros "#(?&%&?&?&?&?&seed)".
+- iIntros "#(?&%&?&?&?&?&_&seed)".
   rewrite minted_senc minted_of_list /=; do !iSplit => //.
-  iApply minted_TExp; eauto.
-  iDestruct "seed" as "(?&?)".
+  iApply all_minted_TExp; eauto.
+  iDestruct "seed" as "(?&_)".
   by iSplit => //; iApply public_minted.
 Qed.
 
@@ -1329,21 +1343,27 @@ Proof.
 iIntros (e) "#wf1 #wf2 #p_k". rewrite public_senc_key.
 case: c_kex e => [psk cn sn|g cn sn x gy|psk g cn sn x gy] /=.
 - case: s_kex => //= _ _ _ [] /Spec.tag_inj [_ <-] <- <-.
-  rewrite public_of_list /=. iDestruct "p_k" as "(?&?&?&_)". by eauto.
+  by rewrite public_of_list /=; iDestruct "p_k" as "(?&?&?&_)"; eauto.
 - case: s_kex => //= _ ? ? gx y [] <- _ _ <- e2.
-  iDestruct "wf1" as "#(% & _ & _ & dh_x)".
-  iDestruct "wf2" as "#(_ & _ & _ & _ & p_gx & dh_y)".
+  iDestruct "wf1" as "#(%gXN & _ & _ & dh_x)".
+  move/negb_True: (gXN) => ?.
+  iDestruct "wf2" as "#(_ & _ & _ & _ & p_gx & %fresh_y & dh_y)".
+  have [??]: y ≠ x ∧ y ≠ TInv x.
+    apply: fresh_y; apply: STExp2; eauto; first exact: invs_canceled1.
+    set_solver.
   rewrite /session_key_of TExp_TExpN.
-  iMod (dh_seed_elim2 with "dh_y p_k") as "[_ p_x]" => //.
-  iMod (dh_seed_elim0 with "dh_x p_x") as "[]".
+  by iMod (dh_seed_elim2 with "dh_y dh_x p_k") as "[]".
 - case: s_kex => //= _ ? ? ? gx y [] /Spec.tag_inj [_ <-].
   move=> <- _ _ <- e2.
-  iDestruct "wf1" as "#(_ & % & _ & _ & dh_x)".
-  iDestruct "wf2" as "#(_ & _ & _ & _ & _ & p_gx & dh_y)".
+  iDestruct "wf1" as "#(_ & %gXN & _ & _ & dh_x)".
+  move/negb_True: (gXN) => ?.
+  iDestruct "wf2" as "#(_ & _ & _ & _ & _ & p_gx & %fresh_y & dh_y)".
+  have [??]: y ≠ x ∧ y ≠ TInv x.
+    apply: fresh_y; apply: STExp2; eauto; first exact: invs_canceled1.
+    set_solver.
   rewrite TExp_TExpN.
   rewrite public_of_list /=. iDestruct "p_k" as "(_ & p_k & _)".
-  iMod (dh_seed_elim2 with "dh_y p_k") as "[_ p_x]" => //.
-  iMod (dh_seed_elim0 with "dh_x p_x") as "[]".
+  by iMod (dh_seed_elim2 with "dh_y dh_x p_k") as "[]".
 Qed.
 
 End Proofs.
@@ -1918,7 +1938,7 @@ rewrite unlock /=.
 case e_check: SShare.check => [kex'|] //=.
 move/SShare.public_checkE: e_check; move: kex' => {}kex [e_cp ->].
 case e_dec: Spec.dec => [res|] //=.
-have {sig e_dec} -> := Spec.decK _ _ _ _ _ (Spec.open_key_senc _) e_dec.
+have {sig e_dec} -> := Spec.decK (Spec.open_key_senc _) e_dec.
 case: Spec.to_listP => //= {}res.
 elim/(@list_len_rect 2): res => [pk sig|res neq]; last first.
   by rewrite prod_of_list_neq.

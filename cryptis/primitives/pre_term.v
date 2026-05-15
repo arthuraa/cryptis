@@ -110,12 +110,37 @@ Definition leq_term : val := rec: "loop" "t1" "t2" :=
     else #false
   else #false)%V.
 
-Definition texp : val := λ: "t1" "t2",
-  if: Fst "t1" = #TExp_tag then
-    let: "base" := Fst (Snd "t1") in
-    let: "exp"  := Snd (Snd "t1") in
-    (#TExp_tag, ("base", insert_sorted leq_term "t2" "exp"))
-  else (#TExp_tag, ("t1", ["t2"])).
+(* TODO: Better names / separate file *)
+Definition hl_base : val := λ: "pt",
+    if: Fst "pt" = #TExp_tag then
+        Fst (Snd "pt")
+    else "pt".
+
+Definition hl_exps : val := λ: "t",
+    if: Fst "t" = #TExp_tag then
+        Snd (Snd "t")
+    else NILV.
+
+Definition hl_inv : val := λ: "pt",
+    if: Fst "pt" = #TOp1_tag then
+        if: Fst (Fst (Snd "pt")) = #TInv_tag then Snd (Snd "pt")
+        else (#TOp1_tag, (#TInv_tag, #(), "pt"))
+    else (#TOp1_tag, (#TInv_tag, #(), "pt")).
+
+Definition hl_insert_exp : val := λ: "pt" "pts",
+    if: mem_list eq_term (hl_inv "pt") "pts" then
+        rem_list eq_term (hl_inv "pt") "pts"
+    else "pt" :: "pts".
+
+Definition hl_cancel_exps : val := λ: "exps", foldr_list hl_insert_exp [] "exps".
+
+Definition hl_exp : val := λ: "pt" "pts",
+    let: "canceled" := hl_cancel_exps (append_lists (hl_exps "pt") "pts") in
+    if: "canceled" = [] then hl_base "pt"
+    else (#TExp_tag, (hl_base "pt", insertion_sort leq_term "canceled")).
+
+Definition texp : val := λ: "base" "exp",
+    hl_exp "base" ["exp"].
 
 Section Proofs.
 
@@ -151,7 +176,7 @@ Lemma twp_eq_term_op1 E (o1 o2 : term_op1) :
   ⊢ WP (eq_term_op1 (repr o1) (repr o2)) @ E
     [{ v, ⌜v = #(bool_decide (o1 = o2))⌝}].
 Proof.
-case: o1 o2 => [o1|] [o2|] /=; wp_lam; wp_pures => //.
+case: o1 o2 => [o1||] [o2||] /=. all: wp_lam; wp_pures => //.
 iApply twp_wand; first wp_apply twp_eq_key_type.
 iIntros (?) "->". iPureIntro.
 congr (# (LitBool _)). apply: bool_decide_ext.
@@ -243,7 +268,7 @@ Lemma twp_leq_term_op1 E (o1 o2 : term_op1) :
     [{ v, ⌜v = #(o1 <= o2)%O⌝}].
 Proof.
 rewrite PreTerm.op1_leqE.
-case: o1 o2 => [k1|] [k2|] /=; wp_lam; wp_pures => //.
+case: o1 o2 => [k1||] [k2||] /=; wp_lam; wp_pures => //.
 wp_lam; wp_pures. iPureIntro.
 by case: k1 k2 => [] [].
 Qed.
@@ -288,6 +313,94 @@ iIntros "post"; wp_rec; wp_pures; try by iApply "post".
     move=> ????; iIntros "_ post".
     by rewrite /=; iApply IHts1 => //; iApply "post".
   + by iIntros "_".
+Qed.
+
+Lemma twp_hl_base E (pt : PreTerm.pre_term) Ψ:
+    Ψ (repr (PreTerm.base pt)) ⊢
+    WP hl_base (repr pt) @ E [{ Ψ }].
+Proof. case: pt => * /=; iIntros "HΨ"; wp_lam; wp_pures; iApply "HΨ". Qed.
+
+Lemma twp_hl_exps E (pt : PreTerm.pre_term) Ψ :
+    Ψ (repr (PreTerm.exps pt)) ⊢
+    WP hl_exps (repr pt) @ E [{ Ψ }].
+Proof.
+    case: pt => * /=; iIntros "HΨ"; wp_lam; wp_pures;
+        rewrite -?repr_list_val repr_list_unseal; iApply "HΨ".
+Qed.
+
+Lemma twp_hl_inv E (pt : PreTerm.pre_term) Ψ :
+    Ψ (repr (PreTerm.inv pt)) ⊢
+    WP hl_inv (repr pt) @ E [{ Ψ }].
+Proof.
+    case: pt => [*|t *|*|*] /=; iIntros "HΨ";
+        try case: t => * /=; wp_lam; wp_pures; iApply "HΨ".
+Qed.
+
+Lemma wp_hl_inv E (pt : PreTerm.pre_term) Ψ:
+    Ψ (repr (PreTerm.inv pt)) ⊢
+    WP hl_inv (repr pt) @ E {{ Ψ }}.
+Proof. iIntros "HΨ"; iApply twp_wp; by wp_apply twp_hl_inv. Qed.
+
+Lemma twp_hl_insert_exp E pt (pts : seq PreTerm.pre_term) Φ :
+    Φ (repr (PreTerm.insert_exp pt pts)) ⊢
+    WP hl_insert_exp (repr pt) (repr pts) @ E [{ Φ }].
+Proof.
+    iIntros "HΦ".
+    rewrite /PreTerm.insert_exp.
+    wp_lam; wp_pures.
+    wp_apply twp_hl_inv.
+    wp_apply twp_mem_list => //.
+        iIntros "%x %y %Ψ _ HΨ". wp_apply twp_eq_pre_term.
+        rewrite eq_op_bool_decide. by iApply "HΨ".
+        iIntros "_".
+    case: (PreTerm.inv pt \in pts); wp_pures.
+        - wp_apply twp_hl_inv.
+          wp_apply twp_rem_list => //.
+          iIntros "%x %y %Ψ _ HΨ". wp_apply twp_eq_pre_term.
+          rewrite eq_op_bool_decide. by iApply "HΨ".
+          iIntros "_". iApply "HΦ".
+        - wp_apply twp_cons. iApply "HΦ".
+Qed.
+
+Lemma twp_hl_cancel_exps E (pts : seq PreTerm.pre_term) Φ :
+    Φ (repr (PreTerm.cancel_exps pts)) ⊢
+    WP hl_cancel_exps (repr pts) @ E [{ Φ }].
+Proof.
+    iIntros "HΦ"; wp_lam; wp_pures.
+    wp_apply twp_nil.
+    wp_apply twp_foldr_list => //.
+    iIntros "%a %b %Ψ _ HΨ".
+        wp_apply twp_hl_insert_exp.
+        by iApply "HΨ".
+    iIntros "_". iApply "HΦ".
+Qed.
+
+Lemma twp_hl_exp E (pt : PreTerm.pre_term) (pts : seq PreTerm.pre_term) Φ :
+    Φ (repr (PreTerm.exp pt pts)) ⊢
+    WP hl_exp (repr pt) (repr pts) @ E [{ Φ }].
+Proof.
+    iIntros "HΦ"; wp_lam.
+    wp_pures.
+    wp_apply twp_hl_exps.
+    wp_apply twp_append_lists.
+    wp_apply twp_hl_cancel_exps.
+    wp_pures.
+    rewrite /PreTerm.exp.
+    case: (PreTerm.cancel_exps _) => /= [| pt' pts'].
+    - rewrite repr_list_unseal.
+      wp_pures.
+      wp_apply twp_hl_base.
+      iApply "HΦ".
+    - have -> : (bool_decide (repr_list (pt' :: pts') = NONEV) = false)
+        by rewrite repr_list_unseal.
+      wp_pures.
+      wp_apply twp_insertion_sort => //.
+        iIntros "%x %y %Ψ _ HΨ". iApply twp_leq_pre_term. by iApply "HΨ".
+        iIntros "_".
+      wp_apply twp_hl_base.
+      wp_pures.
+      rewrite -repr_list_val.
+      iApply "HΦ".
 Qed.
 
 End Proofs.

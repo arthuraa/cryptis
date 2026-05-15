@@ -75,6 +75,17 @@ elim: s1 s2 / => //.
 - by move=> ? ? ? _ ? _; apply: seq.perm_trans.
 Qed.
 
+Lemma inP {T : eqType} {x : T} {xs : seq T} :
+  reflect (base.elem_of x xs) (x \in xs).
+Proof.
+apply /(equivP idP).
+elim: xs => //= [| ?? IH].
+- by rewrite list_basics.list.elem_of_nil.
+- rewrite inE list_basics.list.elem_of_cons -IH; split.
+  + move => /orP [/eqP |]; auto.
+  + by move => [/eqP -> | -> ] //; rewrite orbT.
+Qed.
+
 Lemma perm_sort_leP d (T : orderType d) (s1 s2 : seq T) :
   reflect (sort <=%O s1 = sort <=%O s2) (perm_eq s1 s2).
 Proof.
@@ -93,3 +104,12 @@ Proof.
 elim: xs => [//|x xs IH] /= [] Sx Sxs x'; rewrite inE.
 case: eqP => [-> _|_] //=; exact: IH.
 Qed.
+
+Lemma sizeE {T : eqType} : eqfun (@length T) seq.size.
+Proof. by case. Qed.
+
+Lemma oddE : eqfun Nat.odd ssrnat.odd.
+Proof. elim => // ? IH. by rewrite Nat.odd_succ -Nat.negb_odd IH -oddS. Qed.
+
+Lemma catE {T : eqType} : eqfun (@app T) seq.cat.
+Proof. by case. Qed.
