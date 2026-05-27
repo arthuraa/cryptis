@@ -164,6 +164,11 @@ iClear "Hγs'". case: rl => /=.
   iExists _. iSplit; eauto. by iRewrite "Hp'".
 Qed.
 
+
+Definition iProto_choice_term (a : action) (P1 P2 : iProp) (p1 p2 : iProto Σ term) : iProto Σ term :=
+(<a @ (b : bool)> MSG (TInt (if b then 1 else 0)) {{ if b then P1 else P2 }};
+if b then p1 else p2)%proto.
+
 (* initial proto contains a list of proto, we need the history of all past messages to know which proto is the current one *)
 Definition connected skI skR rl cs p : iProp :=
   GenConn.connected sess_ctx skI skR rl cs ∗

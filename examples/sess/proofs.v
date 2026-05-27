@@ -219,4 +219,104 @@ iMod (lc_fupd_elim_later with "c3 Px") as "?".
 iFrame. by eauto.
 Qed.
 
+(** ** Select and Branch (untrusted setting)
+
+The choice operator [iProto_choice_term] (defined in [proofs/base.v]) is the
+Cryptis analogue of Actris's [iProto_choice], binary-choice protocol over a
+boolean encoded as [TInt 0]/[TInt 1].  In the untrusted setting the
+adversary may have compromised the session, so [wp_select] requires either
+the protocol's payload [P1]/[P2] OR the session key being public, and
+[wp_branch] returns either the payload OR public-key evidence in its
+postcondition.
+
+[wp_branch] uses plan.org's term-binder design: the postcondition binds
+the actual received term [t] and derives [b := bool_decide (t = TInt 1)].
+This is needed because in the compromised case the adversary controls
+[t] so it may not be a [TInt 0/1]. *)
+
+Local Instance bool_tele_inhabited :
+  Inhabited (tele_arg (TeleS (λ _ : bool, TeleO))) :=
+  populate (TeleArgCons false tt).
+
+Lemma wp_select skI skR rl cs (b : bool) (P1 P2 : iProp)
+    (p1 p2 : iProto Σ term) :
+  {{{ connected skI skR rl cs
+        (iProto_choice_term Send P1 P2 p1 p2) ∗
+      (public (si_key cs) ∨ if b then P1 else P2) }}}
+    impl.send (repr cs) (TInt (if b then 1 else 0))
+  {{{ RET #(); connected skI skR rl cs (if b then p1 else p2) }}}.
+Proof.
+iIntros (Φ) "[tc HP_or] post".
+iDestruct "HP_or" as "[#pub | HP]".
+- iApply (wp_send _ _ _ _ (TInt (if b then 1 else 0))
+                       (if b then p1 else p2) with "[tc]").
+  + iSplitL.
+    * iDestruct "tc" as "[gc _]".
+      iSplitL "gc"; first iExact "gc".
+      iLeft. iExact "pub".
+    * by rewrite public_TInt.
+  + iIntros "!> tc". by iApply "post".
+- iApply (wp_send _ _ _ _ (TInt (if b then 1 else 0))
+                       (if b then p1 else p2) with "[tc HP]").
+  + iSplitL.
+    * iApply (connected_le with "tc"). iNext.
+      rewrite /iProto_choice_term.
+      iApply iProto_le_trans.
+      { iApply (iProto_le_exist_intro_l _ b). }
+      by iApply iProto_le_payload_intro_l.
+    * by rewrite public_TInt.
+  + iIntros "!> tc". by iApply "post".
+Qed.
+
+Lemma wp_branch skI skR rl cs (P1 P2 : iProp)
+    (p1 p2 : iProto Σ term) :
+  {{{ connected skI skR rl cs
+        (iProto_choice_term Recv P1 P2 p1 p2) }}}
+    impl.recv (repr cs)
+  {{{ t, RET (repr t);
+      let b := bool_decide (t = TInt 1) in
+      connected skI skR rl cs (if b then p1 else p2) ∗
+      (public (si_key cs) ∨ if b then P1 else P2) }}}.
+Proof.
+iIntros (Φ) "tc post".
+iApply (wp_recv_inhabited
+          (TT := TeleS (λ _ : bool, TeleO))
+          skI skR rl cs
+          (tele_app (TT := TeleS (λ _ : bool, TeleO))
+                    (λ b : bool, TInt (if b then 1 else 0)))
+          (tele_app (TT := TeleS (λ _ : bool, TeleO))
+                    (λ b : bool, if b then P1 else P2))
+          (tele_app (TT := TeleS (λ _ : bool, TeleO))
+                    (λ b : bool, if b then p1 else p2))
+          with "[tc]").
+- iApply (connected_le with "tc"). iNext.
+  rewrite /iProto_choice_term.
+  iApply iProto_le_exist_elim_l_inhabited.
+  iIntros (b).
+  iApply (iProto_le_payload_elim_l Recv).
+  iIntros "HP".
+  iApply (iProto_le_trans _
+           (<?> MSG (TInt (if b then 1 else 0))
+                  {{ ▷ (if b then P1 else P2) }};
+                if b then p1 else p2)
+           with "[HP]").
+  + iApply (iProto_le_payload_intro_r _ (▷ (if b then P1 else P2))).
+    iNext. iExact "HP".
+  + iApply (iProto_le_texist_intro_r (TT := TeleS (λ _ : bool, TeleO))
+             _ (TeleArgCons b tt)).
+- iIntros "!> %t' %x (#p_t & tc' & disj)".
+  destruct x as [b []].
+  iDestruct "disj" as "[#fail | (-> & HP)]".
+  + iApply ("post" $! t').
+    iDestruct "tc'" as "[gc _]".
+    iSplitL "gc".
+    { iSplitL "gc"; first iExact "gc". iLeft. iExact "fail". }
+    iLeft. iExact "fail".
+  + iApply ("post" $! (TInt (if b then 1 else 0))).
+    destruct b => /=.
+    * iFrame "tc'". iRight. iExact "HP".
+    * iFrame "tc'". iRight. iExact "HP".
+  Unshelve. apply _.
+Qed.
+
 End Proofs.

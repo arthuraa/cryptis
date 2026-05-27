@@ -60,10 +60,6 @@ iIntros "[conn #hon] le".
 iFrame "hon". by iApply (Sess.connected_le with "conn le").
 Qed.
 
-Definition iProto_choice_term (a : action) (P1 P2 : iProp) (p1 p2 : iProto Σ term) : iProto Σ term :=
-(<a @ (b : bool)> MSG (TInt (if b then 1 else 0)) {{ if b then P1 else P2 }};
-if b then p1 else p2)%proto.
-
 (** ** Send *)
 
 Lemma trusted_wp_send skI skR rl cs (t : term) p :
