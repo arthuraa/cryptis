@@ -9,7 +9,6 @@ cryptis/lib/mathcomp_compat.v
 cryptis/lib/term_set.v
 cryptis/lib/gen_adequacy.v
 cryptis/lib/adequacy.v
-cryptis/lib/session.v
 cryptis/lib/dh.v
 cryptis/lib/replica.v
 cryptis/lib/gmeta.v
