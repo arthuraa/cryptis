@@ -3,7 +3,7 @@ From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib cryptis primitives tactics role.
-From cryptis.lib Require Import dh gmeta nown saved_prop.
+From cryptis.lib Require Import dh.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -262,85 +262,30 @@ Coercion Meth.term_of : Meth.t >-> term.
 #[global]
 Existing Instance Meth.Persistent_wf.
 
-Class tlsGpreS Σ := TlsGPreS {
-  tlsGpreS_meta : metaGS Σ;
-  tlsGpreS_pred : savedPredG Σ
-    (role * term * term * (Meth.t * senc_key * term));
-}.
-
-Local Existing Instance tlsGpreS_meta.
-Local Existing Instance tlsGpreS_pred.
-
-Class tlsGS Σ := TlsGS {
-  tls_inG : tlsGpreS Σ;
-  tls_name : gname;
-}.
-
-Local Existing Instance tls_inG.
-
-Definition tlsΣ : gFunctors :=
-  #[metaΣ; savedPredΣ (role * term * term * (Meth.t * senc_key * term))].
-
-Global Instance subG_tlsGpreS Σ : subG tlsΣ Σ → tlsGpreS Σ.
-Proof. solve_inG. Qed.
-
 Section TlsLib.
 
-Context `{!heapGS Σ, !cryptisGS Σ, !tlsGS Σ}.
+Context `{!heapGS Σ, !cryptisGS Σ}.
 Notation iProp := (iProp Σ).
 
-Implicit Types (φ : role → term → term → (Meth.t * senc_key * term) → iProp).
+Definition tls_ready N (P : role → term → term → (Meth.t * senc_key * term) → iProp)
+    rl cn sn (x : Meth.t * senc_key * term) : iProp :=
+  escrow nroot
+    (term_token (if rl is Init then sn else cn) (↑N.@"sess"))
+    (P rl cn sn x).
 
-Definition tls_token E : iProp :=
-  gmeta_token tls_name E.
-
-Definition tls_pred N φ : iProp :=
-  nown tls_name N
-    (saved_pred DfracDiscarded
-                (λ '(rl, cn, sn, x), φ rl cn sn x)).
-
-Lemma tls_pred_set N φ E :
-  ↑N ⊆ E →
-  tls_token E ==∗ tls_pred N φ ∗ tls_token (E ∖ ↑N).
-Proof. by iIntros "%"; iApply nown_alloc. Qed.
-
-Lemma tls_token_difference E1 E2 :
-  E1 ⊆ E2 →
-  tls_token E2 ⊣⊢ tls_token E1 ∗ tls_token (E2 ∖ E1).
-Proof. exact: gmeta_token_difference. Qed.
-
-Lemma tls_token_drop E1 E2 :
-  E1 ⊆ E2 →
-  tls_token E2 -∗ tls_token E1.
-Proof. exact: gmeta_token_drop. Qed.
-
-Definition tls_ready N rl cn sn (x : Meth.t * senc_key * term) : iProp := ∀ φ,
-  tls_pred N φ →
-  term_token (if rl is Init then sn else cn) (↑N.@"sess") ={⊤}=∗
-    ▷ φ rl cn sn x.
-
-Lemma tls_ready_alloc N rl cn sn (x : Meth.t * senc_key * term) φ E :
-  tls_pred N φ -∗
-  φ rl cn sn x ={E}=∗
-  □ tls_ready N rl cn sn x.
+Lemma tls_ready_alloc N P rl cn sn (x : Meth.t * senc_key * term) E :
+  P rl cn sn x ={E}=∗
+  tls_ready N P rl cn sn x.
 Proof.
-iIntros "#N_φ φ_ts".
-iMod (escrowI nroot with "φ_ts []") as "#?".
-{ by iApply (term_token_switch (if rl is Init then sn else cn) (N.@"sess")). }
-iIntros "!> !> %φ' #N_φ' ready".
-iPoseProof (nown_valid_2 with "N_φ N_φ'") as "#valid".
-iPoseProof (saved_pred_op_validI with "valid") as "[_ #φ_eq]".
-iSpecialize ("φ_eq" $! (rl, cn, sn, x)).
-iMod (escrowE with "[//] ready") as "res" => //.
-iIntros "!> !>". by iRewrite -"φ_eq".
+iIntros "P_inv".
+iApply (escrowI nroot with "P_inv []").
+by iApply (term_token_switch (if rl is Init then sn else cn) (N.@"sess")).
 Qed.
 
 End TlsLib.
 
-Arguments tls_pred {Σ _} N φ.
-Arguments tls_pred_set {Σ _} N φ E.
-Arguments tls_ready {Σ _ _ _} N rl cn sn x.
-Arguments tls_ready_alloc {Σ _ _ _} N rl cn sn x φ E.
+Arguments tls_ready {Σ _ _} N P rl cn sn x.
+Arguments tls_ready_alloc {Σ _ _} N P rl cn sn x E.
 
 (**
 
@@ -1891,21 +1836,20 @@ wp_bind (I.verify _ _ _ _); iApply wp_verify.
 by case: verify; wp_pures => //=.
 Qed.
 
-Context `{!tlsGS Σ}.
 Variable (N : namespace) (P : role → term → term → Meth.t * senc_key * term → iProp).
 
 Definition hello_pred (k : senc_key) (t : term) : iProp := ∃ sp,
   let ss := share sp in
   ⌜t = hello_priv N sp⌝ ∧
   SShare.wf ss ∧
-  tls_ready N Resp (SShare.cnonce ss) (SShare.snonce ss)
-            (SShare.meth_of ss, SShare.session_key_of ss, other sp).
+  tls_ready N P Resp (SShare.cnonce ss) (SShare.snonce ss)
+              (SShare.meth_of ss, SShare.session_key_of ss, other sp).
 
 Definition hello_sig_pred (k : sign_key) (t : term) : iProp := ∃ kex other,
   ⌜t = THash (Spec.of_list [SShare.term_of (SShare.encode N kex); other])⌝ ∧
   SShare.wf kex ∧
-  tls_ready N Resp (SShare.cnonce kex) (SShare.snonce kex)
-            (SShare.meth_of kex, SShare.session_key_of kex, other).
+  tls_ready N P Resp (SShare.cnonce kex) (SShare.snonce kex)
+              (SShare.meth_of kex, SShare.session_key_of kex, other).
 
 Definition ctx : iProp :=
   Keys.ctx N ∧
@@ -1943,18 +1887,17 @@ Lemma public_hello E sp :
   ↑N ⊆ E →
   let ss := share sp in
   ctx -∗
-  tls_pred N P -∗
   wf sp -∗
   P Resp (SShare.cnonce ss) (SShare.snonce ss)
     (SShare.meth_of ss, SShare.session_key_of ss, other sp) ={E}=∗
   public (hello N sp) ∗
-  □ tls_ready N Resp (SShare.cnonce ss) (SShare.snonce ss)
-      (SShare.meth_of ss, SShare.session_key_of ss, other sp).
+  tls_ready N P Resp (SShare.cnonce ss) (SShare.snonce ss)
+              (SShare.meth_of ss, SShare.session_key_of ss, other sp).
 Proof.
-iIntros (?) "%ss #(keys & hello_ctx & sig_ctx) #N_φ".
+iIntros (?) "%ss #(keys & hello_ctx & sig_ctx)".
 iIntros "#(wf_share & #m_pk & p_other) r".
-iMod (tls_ready_alloc N Resp _ _ _ with "N_φ r") as "#sess".
-iModIntro; iSplitR; last by iModIntro.
+iMod (tls_ready_alloc N P Resp _ _ _ with "r") as "#sess".
+iModIntro; iFrame "sess".
 rewrite public_of_list /=; do !iSplit=> //.
   rewrite public_of_list /=; do !iSplit => //.
   by iApply SShare.public_encode; eauto.
@@ -1997,11 +1940,11 @@ Lemma public_checkE cp sh pkey s_ke :
        ▷ (public k ∧ public (SShare.session_key_of' s_ke) ∨
           ∃ sp, ⌜sh = hello N sp⌝ ∧
                 SShare.wf (share sp) ∧
-                tls_ready N Resp
-                          (SShare.cnonce s_ke)
-                          (SShare.snonce s_ke)
-                          (SShare.meth_of s_ke,
-                           SShare.session_key_of' s_ke, CParams.other cp)).
+                tls_ready N P Resp
+                            (SShare.cnonce s_ke)
+                            (SShare.snonce s_ke)
+                            (SShare.meth_of s_ke,
+                             SShare.session_key_of' s_ke, CParams.other cp)).
 Proof.
 rewrite /check; case: Spec.to_listP => //= {}sh.
 elim/(@list_len_rect 2): sh => [pub sig|sh ne]; last first.
@@ -2085,7 +2028,6 @@ Coercion SParams.term_of : SParams.t >-> term.
 Section Protocol.
 
 Context `{!heapGS Σ, !cryptisGS Σ}.
-Context `{!tlsGS Σ}.
 Notation iProp := (iProp Σ).
 Variable N : namespace.
 
@@ -2114,38 +2056,32 @@ Definition ack_pred (k t : term) : iProp :=
   let ss := SParams.share sp in
   let m  := SShare.meth_of ss in
   let sk := SShare.session_key_of ss in
-  tls_ready N Init
-            (SShare.cnonce ss) (SShare.snonce ss) (m, sk, SParams.other sp) ∧
+  tls_ready N P Init
+              (SShare.cnonce ss) (SShare.snonce ss) (m, sk, SParams.other sp) ∧
   ∃ ke, ⌜SShare.encode' N ke = SShare.encode N ss⌝ ∧
         CShare.wf (SShare.cshare_of ke).
 
 Definition tls_ctx : iProp :=
   Keys.ctx N ∧
   CParams.ctx N ∧
-  SParams.ctx N ∧
-  senc_pred (N.@"ack") ack_pred ∧
-  tls_pred N P.
+  SParams.ctx N P ∧
+  senc_pred (N.@"ack") ack_pred.
 
-Lemma tls_ctx_alloc E1 E2 E3 E4 E' :
+Lemma tls_ctx_alloc E1 E2 E3 E' :
   ↑N ⊆ E1 →
   ↑N ⊆ E2 →
   ↑N ⊆ E3 →
-  ↑N ⊆ E4 →
-  tls_token E1 -∗
-  seal_pred_token SENC E2 -∗
-  seal_pred_token SIGN E3 -∗
-  hash_pred_token E4 ={E'}=∗
+  seal_pred_token SENC E1 -∗
+  seal_pred_token SIGN E2 -∗
+  hash_pred_token E3 ={E'}=∗
   tls_ctx ∗
-  tls_token (E1 ∖ ↑N) ∗
-  seal_pred_token SENC (E2 ∖ ↑N) ∗
-  seal_pred_token SIGN (E3 ∖ ↑N) ∗
-  hash_pred_token (E4 ∖ ↑N).
+  seal_pred_token SENC (E1 ∖ ↑N) ∗
+  seal_pred_token SIGN (E2 ∖ ↑N) ∗
+  hash_pred_token (E3 ∖ ↑N).
 Proof.
-iIntros (????) "nown_tok senc_tok sign_tok hash_tok".
+iIntros (???) "senc_tok sign_tok hash_tok".
 iMod (Keys.ctx_alloc with "hash_tok")
   as "(#kctx & hash_tok)"; try solve_ndisj.
-iMod (tls_pred_set N P with "nown_tok")
-  as "[#N_φ nown_tok]"; try solve_ndisj.
 iMod (CParams.ctx_alloc with "kctx hash_tok")
   as "[#cctx hash_tok]"; first solve_ndisj.
 iMod (SParams.ctx_alloc with "kctx senc_tok sign_tok")
@@ -2155,8 +2091,6 @@ iMod (senc_pred_set (N := N.@"ack") ack_pred with "senc_tok")
 iModIntro.
 iSplit.
   do !iSplit => //.
-iSplitL "nown_tok".
-  iApply tls_token_drop; last eauto; solve_ndisj.
 iSplitL "senc_tok".
   iApply seal_pred_token_drop; last eauto; solve_ndisj.
 iSplitL "sign_tok".
@@ -2178,9 +2112,9 @@ Lemma wp_tls_client c ke other Φ :
              public cn ∧
              public sn ∧
              minted sk ∧
-             tls_ready N Init cn sn (ke, sk, other) ∧
+             tls_ready N P Init cn sn (ke, sk, other) ∧
              ▷ (public sk ∧ public (Meth.psk ke) ∨
-                tls_ready N Resp cn sn (ke, sk, other) ∧
+                tls_ready N P Resp cn sn (ke, sk, other) ∧
                 □ (public sk -∗
                 ◇ if Meth.has_dh ke then False else public (Meth.psk ke)))
       | None => True
@@ -2188,7 +2122,7 @@ Lemma wp_tls_client c ke other Φ :
       Φ (repr res)) -∗
   WP tls_client c ke other {{ Φ }}.
 Proof.
-iIntros "#? #? #(k_ctx & c_ctx & s_ctx & ackP & N_φ) #p_ke #p_other post".
+iIntros "#? #? #(k_ctx & c_ctx & s_ctx & ackP) #p_ke #p_other post".
 rewrite /tls_client; wp_pures.
 wp_bind (CShare.I.new _); iApply (CShare.wp_new _) => //.
 iIntros (ke' e) "#p_ke' token"; wp_pures.
@@ -2212,10 +2146,10 @@ iDestruct (SParams.public_checkE with "s_ctx p_sh") as (k) "Hk"; eauto.
 iDestruct "Hk" as "/= (%e_k & %e_share & #s_k & #p_cn & #p_sn &
                        #s_sk & %e_hello & rest)".
 subst ke' pkey; rewrite SShare.cnonce_cshare_of.
-iMod (tls_ready_alloc N Init (SShare.cnonce ke'') (SShare.snonce ke'')
+iMod (tls_ready_alloc N P Init (SShare.cnonce ke'') (SShare.snonce ke'')
                     (SShare.meth_of ke'', SShare.session_key_of' ke'',
                      CParams.other cp)
-        with "N_φ []") as "#ready"; first done.
+        with "[]") as "#ready"; first done.
 wp_bind (SShare.I.session_key_of' _); iApply SShare.wp_session_key_of'; wp_pures.
 wp_apply wp_senc'. wp_pures.
 iDestruct "rest" as "[[fail_vsk fail_psk]|succ]".
@@ -2275,18 +2209,18 @@ Lemma wp_tls_server c psk g (verif_key : sign_key) other Φ :
         public (SShare.cnonce ke) ∧
         public (SShare.snonce ke) ∧
         minted (SShare.session_key_of ke) ∧
-        tls_ready N Resp (SShare.cnonce ke) (SShare.snonce ke)
-                  (SShare.meth_of ke, SShare.session_key_of ke, other) ∧
+        tls_ready N P Resp (SShare.cnonce ke) (SShare.snonce ke)
+                    (SShare.meth_of ke, SShare.session_key_of ke, other) ∧
         ▷ (public (SShare.psk ke) ∨
-           tls_ready N Init (SShare.cnonce ke) (SShare.snonce ke)
-                     (SShare.meth_of ke, SShare.session_key_of ke, other) ∧
+           tls_ready N P Init (SShare.cnonce ke) (SShare.snonce ke)
+                       (SShare.meth_of ke, SShare.session_key_of ke, other) ∧
            □ (public (SShare.session_key_of ke) -∗
            ◇ if SShare.has_dh ke then False else public (SShare.psk ke)))
       | None => True
       end -∗ Φ (repr (SShare.term_of <$> ke))) -∗
   WP tls_server c psk g verif_key other {{ Φ }}.
 Proof.
-iIntros "% #? #? #(k_ctx & c_ctx & s_ctx & ? & N_φ)".
+iIntros "% #? #? #(k_ctx & c_ctx & s_ctx & ?)".
 iIntros "#s_psk #p_g #sign_key #p_other post".
 rewrite /tls_server; wp_pures.
 wp_bind (recv _); iApply wp_recv => //.
@@ -2306,7 +2240,7 @@ wp_pures.
 wp_bind (SParams.I.hello _ _); iApply (SParams.wp_hello _ sp).
 rewrite (term_token_difference _ (↑N.@"sess")); eauto.
 iDestruct "token" as "[token _]".
-iMod (SParams.public_hello with "s_ctx N_φ wf_sp []")
+iMod (SParams.public_hello with "s_ctx wf_sp []")
   as "(#p_hello & #sess)" => //.
 wp_pures; wp_bind (send _ _); iApply wp_send; eauto.
 wp_pures.
@@ -2348,14 +2282,4 @@ Qed.
 
 End Protocol.
 
-Arguments tls_ctx_alloc {Σ _ _ _} N E1 E2 E3 E4 E'.
-
-Lemma tlsGS_alloc `{!heapGS Σ, !cryptisGS Σ} :
-  tlsGpreS Σ →
-  ⊢ |==> ∃ (H : tlsGS Σ), tls_token ⊤.
-Proof.
-iIntros (?). iMod gmeta_token_alloc as "(%γ & ?)".
-iExists (TlsGS _ _). by eauto.
-Qed.
-
-Arguments tlsGS_alloc {Σ _ _}.
+Arguments tls_ctx_alloc {Σ _ _} N E1 E2 E3 E'.

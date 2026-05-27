@@ -3,7 +3,6 @@ From mathcomp Require Import ssreflect.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib cryptis primitives tactics role.
-From cryptis.lib Require Import gmeta nown saved_prop.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -17,80 +16,29 @@ A --> B: {nA, nB, pk(B)}_sk(A)
 
 *)
 
-Class crGpreS Σ := CrGPreS {
-  crGpreS_meta : metaGS Σ;
-  crGpreS_pred : savedPredG Σ (role * term * term * sign_key * sign_key);
-}.
-
-Local Existing Instance crGpreS_meta.
-Local Existing Instance crGpreS_pred.
-
-Class crGS Σ := CrGS {
-  cr_inG : crGpreS Σ;
-  cr_name : gname;
-}.
-
-Local Existing Instance cr_inG.
-
-Definition crΣ : gFunctors :=
-  #[metaΣ; savedPredΣ (role * term * term * sign_key * sign_key)].
-
-Global Instance subG_crGpreS Σ : subG crΣ Σ → crGpreS Σ.
-Proof. solve_inG. Qed.
-
 Section CR.
 
-Context `{!heapGS Σ, !cryptisGS Σ, !crGS Σ}.
+Context `{!heapGS Σ, !cryptisGS Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
 Implicit Types skA skB : sign_key.
-Implicit Types (φ : role → term → term → sign_key → sign_key → iProp).
 
-Definition cr_token E : iProp :=
-  gmeta_token cr_name E.
+Variable (N : namespace).
+Variable (P : role → term → term → sign_key → sign_key → iProp).
 
-Definition cr_pred N φ : iProp :=
-  nown cr_name N
-    (saved_pred DfracDiscarded
-                (λ '(rl, nA, nB, skA, skB), φ rl nA nB skA skB)).
+Definition cr_ready rl nA nB skA skB : iProp :=
+  escrow nroot
+    (term_token (if rl is Init then nB else nA) (↑N.@"ready"))
+    (P rl nA nB skA skB).
 
-Lemma cr_pred_set N φ E :
-  ↑N ⊆ E →
-  cr_token E ==∗ cr_pred N φ ∗ cr_token (E ∖ ↑N).
-Proof. by iIntros "%"; iApply nown_alloc. Qed.
-
-Lemma cr_token_difference E1 E2 :
-  E1 ⊆ E2 →
-  cr_token E2 ⊣⊢ cr_token E1 ∗ cr_token (E2 ∖ E1).
-Proof. exact: gmeta_token_difference. Qed.
-
-Lemma cr_token_drop E1 E2 :
-  E1 ⊆ E2 →
-  cr_token E2 -∗ cr_token E1.
-Proof. exact: gmeta_token_drop. Qed.
-
-Context (N : namespace).
-
-Definition cr_ready rl nA nB skA skB : iProp := ∀ φ,
-  cr_pred N φ →
-  term_token (if rl is Init then nB else nA) (↑N.@"ready") ={⊤}=∗
-    ▷ φ rl nA nB skA skB.
-
-Lemma cr_ready_alloc rl nA nB skA skB φ :
-  cr_pred N φ -∗
-  φ rl nA nB skA skB ={⊤}=∗
-  □ cr_ready rl nA nB skA skB.
+Lemma cr_ready_alloc rl nA nB skA skB :
+  P rl nA nB skA skB ={⊤}=∗
+  cr_ready rl nA nB skA skB.
 Proof.
-iIntros "#N_φ φ_ts".
-iMod (escrowI nroot with "φ_ts []") as "#?".
-{ by iApply (term_token_switch (if rl is Init then nB else nA) (N.@"ready")). }
-iIntros "!> !> %φ' #N_φ' ready".
-iPoseProof (nown_valid_2 with "N_φ N_φ'") as "#valid".
-iPoseProof (saved_pred_op_validI with "valid") as "[_ #φ_eq]".
-iSpecialize ("φ_eq" $! (rl, nA, nB, skA, skB)).
-iMod (escrowE with "[//] ready") as "res" => //.
-iIntros "!> !>". by iRewrite -"φ_eq".
+iIntros "P_inv".
+iApply (escrowI nroot with "P_inv []").
+by iApply (term_token_switch (if rl is Init then nB else nA) (N.@"ready")).
 Qed.
 
 Definition msg2_pred skB t : iProp :=
@@ -157,25 +105,24 @@ Definition cr_resp : val := λ: "c" "skB",
 
 Implicit Types Ψ : val → iProp.
 
-Lemma wp_cr_init c skA skB φ Ψ :
+Lemma wp_cr_init c skA skB Ψ :
   channel c -∗
   cryptis_ctx -∗
   cr_ctx -∗
-  cr_pred N φ -∗
-  (∀ nA nB, φ Init nA nB skA skB) -∗
+  (∀ nA nB, P Init nA nB skA skB) -∗
   minted skA -∗
   minted skB -∗
   (∀ onB : option (term * term),
       (if onB is Some (nA, nB) then
          public nA ∧
          public nB ∧
-         (public skB ∨ φ Resp nA nB skA skB)
+         (public skB ∨ P Resp nA nB skA skB)
        else True) -∗
       Ψ (repr onB)) -∗
   WP cr_init c skA (Spec.pkey skB) {{ Ψ }}.
 Proof.
 rewrite /cr_init.
-iIntros "#? #? #ctx #N_φ inv #m_skA #m_skB Hpost".
+iIntros "#? #? #ctx inv #m_skA #m_skB Hpost".
 iPoseProof "ctx" as "[? ?]".
 wp_pures. wp_apply wp_pkey. wp_pures.
 wp_apply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
@@ -205,11 +152,11 @@ iAssert (public skB ∨ cr_ready Resp nA nB skA skB)%I
   by eauto. }
 wp_list; wp_term_of_list.
 iSpecialize ("inv" $! nA nB).
-iMod (cr_ready_alloc Init nA nB skA skB with "N_φ inv") as "#sessA".
-iAssert (|={⊤}=> ▷ (public skB ∨ φ Resp nA nB skA skB))%I
+iMod (cr_ready_alloc Init nA nB skA skB with "inv") as "#sessA".
+iAssert (|={⊤}=> ▷ (public skB ∨ P Resp nA nB skA skB))%I
     with "[unreg]" as ">inv".
   iDestruct "sessB" as "[?|sessB]"; eauto.
-  iMod ("sessB" $! φ with "N_φ unreg") as "res".
+  iMod (escrowE with "sessB unreg") as "res"; first solve_ndisj.
   by iIntros "!> !>"; iRight.
 wp_pures. wp_apply wp_sign; eauto.
 { rewrite public_of_list /=. do !iSplit => //.
@@ -220,13 +167,12 @@ wp_pures.
 iApply ("Hpost" $! (Some (nA, nB))); eauto.
 Qed.
 
-Lemma wp_cr_resp c skB φ Ψ :
+Lemma wp_cr_resp c skB Ψ :
   channel c -∗
   cryptis_ctx -∗
   cr_ctx -∗
-  cr_pred N φ -∗
   minted skB -∗
-  (∀ skA nA nB, φ Resp nA nB skA skB) -∗
+  (∀ skA nA nB, P Resp nA nB skA skB) -∗
   (∀ ot : option (term * term * term),
       (if ot is Some (pkA, nA, nB) then
          ∃ skA,
@@ -234,12 +180,12 @@ Lemma wp_cr_resp c skB φ Ψ :
            public pkA ∧
            public nA ∧
            public nB ∧
-           (public skA ∨ φ Init nA nB skA skB)
+           (public skA ∨ P Init nA nB skA skB)
        else True) -∗
        Ψ (repr ot)) -∗
   WP cr_resp c skB {{ Ψ }}.
 Proof.
-iIntros "#? #? #ctx #N_φ #m_skB inv Hpost".
+iIntros "#? #? #ctx #m_skB inv Hpost".
 iPoseProof "ctx" as "[? ?]".
 rewrite /cr_resp; wp_pures. wp_apply wp_pkey. wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m1) "#Hm1".
@@ -259,7 +205,7 @@ rewrite (term_token_difference _ (↑N.@"ready")); last solve_ndisj.
 iDestruct "unreg" as "[token _]".
 iAssert (public nB) as "{p_nB} HnB"; first by iApply "p_nB".
 iSpecialize ("inv" $! skA nA nB).
-iMod (cr_ready_alloc Resp nA nB skA skB with "N_φ inv") as "#sessB".
+iMod (cr_ready_alloc Resp nA nB skA skB with "inv") as "#sessB".
 wp_pures.
 wp_list; wp_term_of_list.
 wp_apply wp_sign => //.
@@ -275,12 +221,12 @@ wp_eq_term e; last protocol_failure; subst nA'.
 wp_eq_term e; last protocol_failure; subst nB'.
 wp_eq_term e; last protocol_failure; subst pkB'.
 wp_if.
-iAssert (|={⊤}=> ▷ (public skA ∨ φ Init nA nB skA skB))%I
+iAssert (|={⊤}=> ▷ (public skA ∨ P Init nA nB skA skB))%I
     with "[token]" as ">inv".
   iDestruct "inv_m3" as "[inv_m3 | #inv_m3]"; eauto.
   iDestruct "inv_m3" as "(% & % & % & %e & sessA)".
   case/Spec.of_list_inj: e => <- <- /Spec.sign_pkey_inj <-.
-  iMod ("sessA" $! φ with "N_φ token") as "res".
+  iMod (escrowE with "sessA token") as "res"; first solve_ndisj.
   by iIntros "!> !>"; iRight.
 wp_pures; iApply ("Hpost" $! (Some (_, _, _))).
 by iModIntro; iExists _; do ![iSplit=> //].
@@ -288,18 +234,4 @@ Qed.
 
 End CR.
 
-Arguments cr_alloc {Σ _ _ _} N.
-Arguments cr_pred {Σ _} N φ.
-Arguments cr_pred_set {Σ _} N φ E.
-Arguments cr_ready {Σ _ _ _} N rl nA nB skA skB.
-Arguments cr_ready_alloc {Σ _ _ _} N rl nA nB skA skB φ.
-
-Lemma crGS_alloc `{!heapGS Σ, !cryptisGS Σ} :
-  crGpreS Σ →
-  ⊢ |==> ∃ (H : crGS Σ), cr_token ⊤.
-Proof.
-iIntros (?). iMod gmeta_token_alloc as "(%γ & ?)".
-iExists (CrGS _ _). by eauto.
-Qed.
-
-Arguments crGS_alloc {Σ _ _}.
+Arguments cr_alloc {Σ _ _} N P.
