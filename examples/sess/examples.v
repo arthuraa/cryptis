@@ -7,6 +7,7 @@ From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta cryptis primitives tactics role.
 From cryptis.examples Require Import iso_dh gen_conn sess.
 From cryptis.examples.sess Require Import proofmode trusted.
+From cryptis.examples.sess.proofs Require Import base.
 From actris.channel Require Import proto_model proto.
 From iris.heap_lang Require Import lib.spin_lock.
 From iris.bi Require Import telescopes.
@@ -185,3 +186,212 @@ Proof.
   iFrame "HskI tc2". done.
 Qed.
 End TrustedSend42Example.
+
+
+(** * Vote example: exercises [wp_select] and [wp_branch] (untrusted).
+
+The initiator selects [true] (vote yes); the responder branches and learns
+which way the initiator voted.  Both payloads are trivial ([True]/[True])
+so the example focuses on the choice mechanism rather than payload reasoning. *)
+
+Section VoteExample.
+Implicit Types skI skR pkI pkR : sign_key.
+Implicit Types N : namespace.
+
+Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ, !Sess.sessG Σ}.
+
+Definition vote_proto : iProto Σ :=
+  iProto_choice_term Send (⌜True⌝)%I (⌜True⌝)%I END END.
+
+(* [vote_proto_dual] / [vote_dual_equiv] are no longer needed: the
+   [proto_normalize_choice_term] instance auto-coerces the dual inside
+   [wp_branch].  See the responder proof below. *)
+
+Definition initiator_vote_yes : val :=
+  λ: "c" "skI" "pkR" "tagN",
+    let: "cs" := Sess.connect "c" "skI" "pkR" "tagN" in
+    Sess.send "cs" (TInt 1);;
+    "cs".
+
+Definition responder_vote : val :=
+  λ: "c" "skR" "tagN",
+    let: "req" := Sess.listen "c" in
+    let: "cs" := Sess.confirm "c" "skR" "tagN" "req" in
+    let: "msg" := Sess.recv "cs" in
+    ("cs", "msg").
+
+Lemma wp_initiator_vote_yes c skI skR N :
+  channel c -∗
+  cryptis_ctx -∗
+  Sess.ctx N vote_proto -∗
+  minted skI -∗
+  minted skR -∗
+  {{{ GenConn.failure skI skR ∨ True }}}
+    initiator_vote_yes c skI (Spec.pkey skR) (Tag N)
+  {{{ cs, RET (repr cs);
+      Sess.connected skI skR Init cs END ∗
+      release_token (si_init_share cs) ∗
+      (public (si_key cs) ∨ True) }}}.
+Proof.
+  iIntros "#? #? #? #? #? %Φ !> #P post".
+  rewrite /initiator_vote_yes. wp_lam. wp_pures.
+  wp_apply (Sess.wp_connect with "[] [P]"); eauto 10.
+  iIntros "% (conn & rel & #disj)".
+  wp_select true.
+  - by iRight.
+  - wp_pures. iApply "post". by iFrame.
+Qed.
+
+Lemma wp_responder_vote c skR N :
+  channel c -∗
+  cryptis_ctx -∗
+  Sess.ctx N vote_proto -∗
+  minted skR -∗
+  {{{ True }}}
+    responder_vote c skR (Tag N)
+  {{{ cs msg skI, RET (repr cs, msg)%V;
+      let b := bool_decide (msg = TInt 1) in
+      minted skI ∗
+      Sess.connected skI skR Resp cs END ∗
+      (public (si_key cs) ∨ True) }}}.
+Proof.
+  iIntros "#Hch #Hctx #Hsess #HskR !> %Φ _ post".
+  rewrite /responder_vote. wp_lam. wp_pures.
+  wp_apply (Sess.wp_listen with "[]"); [done|done|done|].
+  iIntros (ga skI) "[#Hpub #HskI]".
+  wp_pures.
+  wp_apply (Sess.wp_confirm True with "[]"); try iFrame; eauto 10.
+  iIntros (cs) "[Hconn _]".
+  (* No manual dual rewrite, and no need to name the channel: [wp_branch]
+     auto-looks-up [Hconn] and the [proto_normalize_choice_term] instance
+     coerces [iProto_dual vote_proto] to the [Recv]-choice. *)
+  wp_branch (t) as "[Hconn' Hdisj]". wp_pures. iModIntro.
+  iApply ("post" $! cs t skI). iFrame "HskI".
+  destruct (bool_decide (t = TInt 1)); iFrame "Hconn'";
+    iDestruct "Hdisj" as "[$|_]"; by iRight.
+Qed.
+
+End VoteExample.
+
+
+(** * DB example: a key-value store with two operations dispatched by a
+      session-typed binary choice — the type-level analogue of the RPC store's
+      runtime tag dispatch.  The client SELECTS store-vs-load; the server
+      BRANCHES.  Untrusted setting: exercises [wp_select]/[wp_branch] and the
+      [proto_normalize_choice_term] auto-coercion of the server's dual. *)
+
+Section DBExample.
+Implicit Types skI skR pkI pkR : sign_key.
+Implicit Types N : namespace.
+Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ, !Sess.sessG Σ}.
+
+(*  select TRUE  -> STORE : send key k, send value v, END
+    select FALSE -> LOAD  : send key k, receive value v, END  *)
+Definition db_store_cont : iProto Σ :=
+  (<! (k : term)> MSG k; <! (v : term)> MSG v; END)%proto.
+
+Definition db_load_cont : iProto Σ :=
+  (<! (k : term)> MSG k; <? (v : term)> MSG v; END)%proto.
+
+Definition db_proto : iProto Σ :=
+  iProto_choice_term Send (⌜True⌝)%I (⌜True⌝)%I db_store_cont db_load_cont.
+
+Definition db_client_store : val :=
+  λ: "c" "skI" "pkR" "tagN" "k" "v",
+    let: "cs" := Sess.connect "c" "skI" "pkR" "tagN" in
+    Sess.send "cs" (TInt 1);;
+    Sess.send "cs" "k";;
+    Sess.send "cs" "v";;
+    "cs".
+
+Definition db_client_load : val :=
+  λ: "c" "skI" "pkR" "tagN" "k",
+    let: "cs" := Sess.connect "c" "skI" "pkR" "tagN" in
+    Sess.send "cs" (TInt 0);;
+    Sess.send "cs" "k";;
+    let: "v" := Sess.recv "cs" in
+    ("cs", "v").
+
+Definition db_server : val :=
+  λ: "c" "skR" "tagN" "vans",
+    let: "req" := Sess.listen "c" in
+    let: "cs"  := Sess.confirm "c" "skR" "tagN" "req" in
+    let: "op"  := Sess.recv "cs" in
+    (if: eq_term "op" (TInt 1) then
+       let: "k" := Sess.recv "cs" in
+       let: "v" := Sess.recv "cs" in
+       ("cs", #true)
+     else
+       let: "k" := Sess.recv "cs" in
+       Sess.send "cs" "vans";;
+       ("cs", #false)).
+
+Lemma wp_db_client_store c skI skR N k v :
+  channel c -∗ cryptis_ctx -∗ Sess.ctx N db_proto -∗
+  minted skI -∗ minted skR -∗
+  public k -∗ public v -∗
+  {{{ GenConn.failure skI skR ∨ True }}}
+    db_client_store c skI (Spec.pkey skR) (Tag N) k v
+  {{{ cs, RET (repr cs);
+      Sess.connected skI skR Init cs END ∗
+      release_token (si_init_share cs) ∗
+      (public (si_key cs) ∨ True) }}}.
+Proof.
+  iIntros "#? #? #? #? #? #pk #pv %Φ !> #P post".
+  rewrite /db_client_store. wp_lam. wp_pures.
+  wp_apply (Sess.wp_connect with "[] [P]"); eauto 10.
+  iIntros "% (conn & rel & #disj)".
+  wp_select true.
+  - by iRight.
+  - wp_send (k) with "[//]".
+    wp_send (v) with "[//]".
+    wp_pures. iModIntro. iApply "post". by iFrame.
+Qed.
+
+Lemma wp_db_client_load c skI skR N k :
+  channel c -∗ cryptis_ctx -∗ Sess.ctx N db_proto -∗
+  minted skI -∗ minted skR -∗ public k -∗
+  {{{ GenConn.failure skI skR ∨ True }}}
+    db_client_load c skI (Spec.pkey skR) (Tag N) k
+  {{{ cs v, RET (repr cs, v)%V;
+      Sess.connected skI skR Init cs END ∗ public v }}}.
+Proof.
+  iIntros "#? #? #? #? #? #pk %Φ !> #P post".
+  rewrite /db_client_load. wp_lam. wp_pures.
+  wp_apply (Sess.wp_connect with "[] [P]"); eauto 10.
+  iIntros "% (conn & rel & #disj)".
+  wp_select false.
+  - by iRight.
+  - wp_send (k) with "[//]".
+    wp_recv (v) as "[conn2 Hv]".
+    wp_pures. iModIntro. iApply ("post" $! _ v). iFrame "conn2".
+    iDestruct "Hv" as "[#?|#?]"; by iFrame "#".
+Qed.
+
+Lemma wp_db_server c skR N vans :
+  channel c -∗ cryptis_ctx -∗ Sess.ctx N db_proto -∗
+  minted skR -∗ public vans -∗
+  {{{ True }}}
+    db_server c skR (Tag N) vans
+  {{{ cs res skI, RET (repr cs, res)%V;
+      minted skI ∗ Sess.connected skI skR Resp cs END }}}.
+Proof.
+  iIntros "#Hch #Hctx #Hsess #HskR #pvans !> %Φ _ post".
+  rewrite /db_server. wp_lam. wp_pures.
+  wp_apply (Sess.wp_listen with "[]"); [done|done|done|].
+  iIntros (ga skI) "[#Hpub #HskI]". wp_pures.
+  wp_apply (Sess.wp_confirm True with "[]"); try iFrame; eauto 10.
+  iIntros (cs) "[Hconn _]".
+  wp_branch (op) as "[Hconn _]". wp_pures.
+  wp_apply wp_eq_term. case_bool_decide as Hop; wp_pures.
+  - (* STORE branch: server receives key then value *)
+    wp_recv (k) as "[Hc1 _]".
+    wp_recv (v) as "[Hc2 _]".
+    wp_pures. iModIntro. iApply ("post" $! cs _ skI). by iFrame "HskI Hc2".
+  - (* LOAD branch: server receives key then sends back the answer *)
+    wp_recv (k) as "[Hc1 _]".
+    wp_send (vans) with "[//]".
+    wp_pures. iModIntro. iApply ("post" $! cs _ skI). by iFrame "HskI Hc1".
+Qed.
+
+End DBExample.

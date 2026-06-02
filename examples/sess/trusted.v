@@ -234,4 +234,60 @@ iDestruct (session_session_ok with "sess_cs") as "[comp | #ok]".
   iModIntro. iIntros "!> #pub". by iApply "sec".
 Qed.
 
+(** **Select and branch *)
+Lemma trusted_wp_select skI skR rl cs (b : bool) (P1 P2 : iProp) (p1 p2 : iProto Σ term) :
+{{{ trusted_connected skI skR rl cs 
+(iProto_choice_term Send P1 P2 p1 p2) ∗
+(if b then P1 else P2) }}}
+Sess.send (repr cs) (TInt (if b then 1 else 0))
+{{{ RET #(); trusted_connected skI skR rl cs (if b then p1 else p2) }}}.
+Proof.
+ iIntros (ϕ) "[tc Hp] post".
+ iApply (trusted_wp_send _ _ _ _ (TInt (if b then 1 else 0)) (if b then p1 else p2) with "[tc Hp]").
+ - iSplitL. 
+ + iApply (trusted_connected_le with "tc"). iNext.
+ rewrite /iProto_choice_term.
+ iApply iProto_le_trans.
+ { iApply (iProto_le_exist_intro_l _ b). }
+ by iApply iProto_le_payload_intro_l.
+ + by rewrite public_TInt.
+ - iFrame.
+ Qed.
+
+Lemma trusted_wp_branch skI skR rl cs (P1 P2 : iProp) (p1 p2 : iProto Σ term) :
+{{{ trusted_connected skI skR rl cs 
+(iProto_choice_term Recv P1 P2 p1 p2)}}}
+Sess.recv (repr cs) 
+{{{ (b : bool), RET (repr (TInt (if b then 1 else 0))); trusted_connected skI skR rl cs (if b then p1 else p2) ∗
+(if b then P1 else P2)}}}.
+Proof.
+iIntros (Φ) "tc Post".
+iApply (trusted_wp_recv
+(TT := TeleS ( λ _ : bool, TeleO))
+skI skR rl cs
+(tele_app (TT := TeleS ( λ _ : bool, TeleO))
+( λ b : bool, TInt (if b then 1 else 0)))
+(tele_app (TT := TeleS (λ _ : bool, TeleO))
+(λ b : bool, if b then P1 else P2))
+(tele_app (TT := TeleS (λ _ : bool, TeleO))
+(λ b : bool, if b then p1 else p2))
+with "[tc]").
+- iApply (trusted_connected_le with "tc"). iNext.
+  rewrite /iProto_choice_term.
+  iApply iProto_le_exist_elim_l_inhabited.
+  iIntros (b).
+  iApply (iProto_le_payload_elim_l Recv).
+  iIntros "HP". 
+  iApply (iProto_le_trans _
+  (<?> MSG (TInt (if b then 1 else 0))
+  {{▷(if b then P1 else P2)}};
+  if b then p1 else p2)
+  with "[HP]").
++ iApply (iProto_le_payload_intro_r _ (▷(if b then P1 else P2))).
+iNext. iExact "HP".
++ iApply (iProto_le_texist_intro_r (TT := TeleS (λ _ : bool, TeleO)) _ (TeleArgCons b tt)).
+- iIntros ([b []]) "!> /= (#p_t & tc & HP)".
+  iApply ("Post" $! b). by iFrame.
+  Unshelve. apply _.
+Qed.
 End Trusted.
