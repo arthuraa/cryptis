@@ -169,6 +169,41 @@ Definition iProto_choice_term (a : action) (P1 P2 : iProp) (p1 p2 : iProto Σ te
 (<a @ (b : bool)> MSG (TInt (if b then 1 else 0)) {{ if b then P1 else P2 }};
 if b then p1 else p2)%proto.
 
+(** Algebra of [iProto_choice_term].  These mirror Actris's [iProto_dual_choice]
+    / [iProto_app_choice] / [iProto_le_choice] (channel.v) verbatim: duality,
+    append, and subtyping act only on the payload and continuation, never the
+    message value, so the proofs are value-agnostic.  They are what lets the
+    [ProtoNormalize] instance for choice (in proofmode.v) push duals through a
+    choice node automatically. *)
+
+Lemma iProto_dual_choice_term (a : action) (P1 P2 : iProp)
+    (p1 p2 : iProto Σ term) :
+  iProto_dual (iProto_choice_term a P1 P2 p1 p2)
+  ≡ iProto_choice_term (action_dual a) P1 P2 (iProto_dual p1) (iProto_dual p2).
+Proof.
+  rewrite /iProto_choice_term iProto_dual_message /= iMsg_dual_exist.
+  f_equiv; f_equiv => -[]; by rewrite iMsg_dual_base.
+Qed.
+
+Lemma iProto_app_choice_term (a : action) (P1 P2 : iProp)
+    (p1 p2 q : iProto Σ term) :
+  (iProto_choice_term a P1 P2 p1 p2 <++> q)%proto
+  ≡ (iProto_choice_term a P1 P2 (p1 <++> q) (p2 <++> q))%proto.
+Proof.
+  rewrite /iProto_choice_term iProto_app_message /= iMsg_app_exist.
+  f_equiv; f_equiv => -[]; by rewrite iMsg_app_base.
+Qed.
+
+Lemma iProto_le_choice_term (a : action) (P1 P2 : iProp)
+    (p1 p2 p1' p2' : iProto Σ term) :
+  (P1 -∗ P1 ∗ ▷ (p1 ⊑ p1')) ∧ (P2 -∗ P2 ∗ ▷ (p2 ⊑ p2')) -∗
+  iProto_choice_term a P1 P2 p1 p2 ⊑ iProto_choice_term a P1 P2 p1' p2'.
+Proof.
+  iIntros "H". rewrite /iProto_choice_term. destruct a;
+    iIntros (b) "HP"; iExists b; destruct b;
+    iDestruct ("H" with "HP") as "[$ ?]"; by iModIntro.
+Qed.
+
 (* initial proto contains a list of proto, we need the history of all past messages to know which proto is the current one *)
 Definition connected skI skR rl cs p : iProp :=
   GenConn.connected sess_ctx skI skR rl cs ∗
