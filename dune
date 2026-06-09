@@ -1,0 +1,12 @@
+(env
+ (_ ; Applies to all profiles (dev, release, ...).
+  (rocq
+   ; Configure rocq compile flags.
+   (flags (:standard %{read-lines:flags.dune})))))
+
+(rule
+ (action
+  (with-stdout-to flags.dune
+   (pipe-stdout
+    (cat config/flags)
+    (bash "grep '^[^#]\\+' || true")))))

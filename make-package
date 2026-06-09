@@ -1,0 +1,44 @@
+#!/bin/sh
+set -e
+# Helper script to build and/or install just one package out of this repository.
+# Assumes that all the other packages it depends on have been installed already!
+
+# Make sure we get a GNU version of make.
+# This is exactly how opam determines which make executable to use.
+OS=$(uname)
+MAKE="make"
+if [ $OS == "FreeBSD" ] || [ $OS == "OpenBSD" ] ||\
+       [ $OS == "NetBSD" ] || [ $OS == "DragonFly" ]; then
+    MAKE="gmake"
+fi
+
+PROJECT="$1"
+shift
+
+ROCQFILE="_RocqProject.$PROJECT"
+MAKEFILE="Makefile.package.$PROJECT"
+
+# Ensure we have an up-to-date _RocqProject file.
+$MAKE _RocqProject
+
+if ! grep -E -q "^$PROJECT/" _RocqProject; then
+    echo "No files in $PROJECT/ found in _RocqProject; this does not seem to be a valid project name."
+    exit 1
+fi
+
+# Generate _RocqProject file and Makefile
+rm -f "$ROCQFILE"
+# Get the right "-Q" line.
+grep -E "^-Q $PROJECT[ /]" _RocqProject >> "$ROCQFILE"
+# Get everything until the first empty line except for the "-Q" lines.
+sed -n '/./!q;p' _RocqProject | grep -E -v "^-Q " >> "$ROCQFILE"
+# Get the files.
+grep -E "^$PROJECT/" _RocqProject >> "$ROCQFILE"
+# Now we can generate the makefile.
+"${COQBIN}rocq" makefile -f "$ROCQFILE" -o "$MAKEFILE"
+
+# Run build
+$MAKE -f "$MAKEFILE" "$@"
+
+# Cleanup
+rm -f ".$MAKEFILE.d" "$MAKEFILE"*
