@@ -1,5 +1,5 @@
 opam-version: "2.0"
-name: "rocq-cryptis"
+name: "rocq-cryptis-examples"
 version: "dev"
 license: "MIT"
 maintainer: "Arthur Azevedo de Amorim <arthur.aa@gmail.com>"
@@ -9,21 +9,9 @@ homepage: "https://github.com/arthuraa/cryptis"
 bug-reports: "https://github.com/arthuraa/cryptis/issues"
 dev-repo: "git+https://github.com/arthuraa/cryptis.git"
 
-tags: [
-  "logpath:cryptis.lib"
-  "logpath:cryptis.core"
-  "logpath:cryptis.primitives"
-  "logpath:cryptis"
-]
-
 depends: [
-  "rocq-prover"
-  "rocq-core" {= "9.1.1"}
-  "rocq-mathcomp-ssreflect" {= "2.5.0"}
-  "coq-deriving" {= "0.2.3"}
-  "rocq-iris" {= "4.5.0"}
-  "rocq-iris-heap-lang" {= "4.5.0"}
+  "rocq-cryptis" {= version}
 ]
 
-build: ["./make-package" "cryptis" "-j%{jobs}%"]
-install: ["./make-package" "cryptis" "install"]
+build: ["./make-package" "examples" "-j%{jobs}%"]
+install: ["./make-package" "examples" "install"]

@@ -1,0 +1,14 @@
+# Specification for custom Rocq compilation flags (turns into `-arg` values in `_RocqProject`).
+# Syntax:
+# - One flag per line with no leading/trailing blanks.
+# - Empty lines and lines starting with '#' are ignored.
+
+# We sometimes want to locally override notation, and there is no good way to do
+# that with scopes.
+-w
+-notation-overridden
+
+# Cannot use non-canonical projections as it causes massive unification failures
+# (https://github.com/coq/coq/issues/6294).
+-w
+-redundant-canonical-projection
