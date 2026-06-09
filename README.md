@@ -49,10 +49,13 @@ tagged-message layer `tag`, the `trusted` wrapper for honest parties, and
 
 Cryptis is known to compile with the following dependencies:
 
-- rocq-prover
 - rocq-core v9.2.0
+- rocq-stdlib
+- rocq-hierarchy-builder
+- rocq-elpi
 - rocq-mathcomp-ssreflect v2.6.0
 - coq-deriving v0.2.3
+- rocq-stdpp
 - rocq-iris v4.5.0
 - rocq-iris-heap-lang v4.5.0
 - rocq-actris fa66960 (Nix)/367149a (opam)

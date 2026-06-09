@@ -1,0 +1,21 @@
+opam-version: "2.0"
+name: "rocq-cryptis-examples"
+version: "dev"
+license: "MIT"
+maintainer: "Arthur Azevedo de Amorim <arthur.aa@gmail.com>"
+authors: "Arthur Azevedo de Amorim, Amal Ahmed, Marco Gaboardi"
+synopsis: "Cryptis: Cryptographic Reasoning in Separation Logic"
+homepage: "https://github.com/arthuraa/cryptis"
+bug-reports: "https://github.com/arthuraa/cryptis/issues"
+dev-repo: "git+https://github.com/arthuraa/cryptis.git"
+
+tags: [
+  "logpath:cryptis.examples"
+]
+
+depends: [
+  "rocq-cryptis" {= version}
+]
+
+build: ["./make-package" "examples" "-j%{jobs}%"]
+install: ["./make-package" "examples" "install"]

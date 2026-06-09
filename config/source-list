@@ -1,10 +1,4 @@
--arg "-w -redundant-canonical-projection"
--arg "-w -notation-overridden"
--arg "-w -level-tolerance"
-
--R examples cryptis.examples
--R cryptis cryptis
--R session cryptis.sess
+# List of source files included in the libraries.
 
 cryptis/lib/mathcomp_compat.v
 cryptis/lib/list_sort.v

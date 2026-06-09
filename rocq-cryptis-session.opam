@@ -1,0 +1,27 @@
+opam-version: "2.0"
+name: "rocq-cryptis-session"
+version: "dev"
+license: "MIT"
+maintainer: "Arthur Azevedo de Amorim <arthur.aa@gmail.com>"
+authors: "Arthur Azevedo de Amorim, Amal Ahmed, Marco Gaboardi"
+synopsis: "Cryptis: Cryptographic Reasoning in Separation Logic"
+homepage: "https://github.com/arthuraa/cryptis"
+bug-reports: "https://github.com/arthuraa/cryptis/issues"
+dev-repo: "git+https://github.com/arthuraa/cryptis.git"
+
+tags: [
+  "logpath:cryptis.sess"
+  "logpath:cryptis.sess.examples"
+]
+
+depends: [
+  "rocq-cryptis-examples" {= version}
+  "rocq-actris" {= "dev"}
+]
+
+pin-depends: [
+  ["rocq-actris.dev" "git+https://gitlab.mpi-sws.org/chandradeepdey/actris.git#367149af8552433256d96394a40227f3b15b2cf2"]
+]
+
+build: ["./make-package" "session" "-j%{jobs}%"]
+install: ["./make-package" "session" "install"]
