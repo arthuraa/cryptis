@@ -1,2 +1,2 @@
-(lang dune 3.23)
-(using rocq 0.13)
+(lang dune 3.21)
+(using rocq 0.11)

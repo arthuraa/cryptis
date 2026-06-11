@@ -82,6 +82,7 @@
             cryptis = prev.mkCoqDerivation {
               pname = "cryptis";
               version = ./.;
+              useDune = true;
               propagatedBuildInputs = [
                 final.coq
                 final.mathcomp.ssreflect
