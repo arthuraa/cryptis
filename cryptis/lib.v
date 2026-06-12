@@ -1,3 +1,4 @@
+From elpi.apps Require Import locker.
 From stdpp Require Import base countable gmap.
 From iris.heap_lang Require Import lang notation proofmode.
 From iris.heap_lang.lib Require Import nondet_bool.
@@ -451,23 +452,17 @@ Definition prod_of_list_type A n : Type :=
   | S n => prod_of_list_aux_type A A n
   end.
 
-Fact prod_of_list_key : unit. Proof. exact: tt. Qed.
-
-Definition prod_of_list {A} n xs : option (prod_of_list_type A n) :=
-  locked_with prod_of_list_key (
-    match n return list A → option (prod_of_list_type A n) with
-    | 0 => fun xs => match xs with
-                     | [] => Some tt
-                     | _  => None
-                     end
-    | S n => fun xs => match xs with
-                       | [] => None
-                       | x :: xs => prod_of_list_aux n x xs
-                       end
-    end xs).
-
-Canonical prod_of_list_unlockable A n xs :=
-  [unlockable of @prod_of_list A n xs].
+lock Definition prod_of_list {A} n xs : option (prod_of_list_type A n) :=
+  match n return list A → option (prod_of_list_type A n) with
+  | 0 => fun xs => match xs with
+                    | [] => Some tt
+                    | _  => None
+                    end
+  | S n => fun xs => match xs with
+                      | [] => None
+                      | x :: xs => prod_of_list_aux n x xs
+                      end
+  end xs.
 
 Lemma prod_of_list_neq {A} n (xs : list A) :
   length xs ≠ n → prod_of_list n xs = None.

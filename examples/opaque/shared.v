@@ -411,7 +411,7 @@ Lemma is_exp_fold pt :
   PreTerm.is_exp pt = is_exp (fold_term pt).
 Proof.
 intro Hwf.
-rewrite /is_exp /fold_term /PreTerm.is_exp unlock /fold_term_def
+rewrite /is_exp /fold_term /PreTerm.is_exp unlock
         /fold_term_predef PreTerm.normalize_wf ?Hwf //.
 destruct pt => //.
 1-3: destruct t => //.

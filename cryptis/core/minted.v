@@ -1,3 +1,4 @@
+From elpi.apps Require Import locker.
 From mathcomp Require Import ssreflect.
 From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap list reservation_map excl.
@@ -17,15 +18,8 @@ Context `{heapGS Σ}.
 
 Notation iProp := (iProp Σ).
 
-Fact minted_key : unit. Proof. exact: tt. Qed.
-
-Definition minted : term → iProp :=
-  locked_with minted_key (
-    λ t, [∗ set] a ∈ nonces_of_term t,
-      meta a (nroot.@"minted") ()
-  )%I.
-
-Canonical minted_unlock := [unlockable of minted].
+lock Definition minted t : iProp :=
+  [∗ set] a ∈ nonces_of_term t, meta a (nroot.@"minted") ().
 
 Global Instance Persistent_minted t : Persistent (minted t).
 Proof. rewrite unlock; apply _. Qed.

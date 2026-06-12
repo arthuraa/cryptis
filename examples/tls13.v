@@ -1263,14 +1263,14 @@ case: c_kex => [psk cn|g cn x|psk g cn x] /=.
   case: Spec.to_listP => //= {}ke.
   elim/(@list_len_rect 5): ke => [g' cn' sn gx gy|ke neq]; last first.
     by rewrite prod_of_list_neq.
-  rewrite [prod_of_list _ _]unlock /=; case: decide => //= - [] -> [] -> ->.
+  rewrite [in prod_of_list _ _]unlock /=; case: decide => //= - [] -> [] -> ->.
   case=> [] {ke'} <-.
   by split => //.
 - case: Spec.untagP => //= {}ke ->.
   case: Spec.to_listP => //= {}ke.
   elim/(@list_len_rect 6): ke => [psk' g' cn' sn gx gy|ke neq]; last first.
     by rewrite prod_of_list_neq.
-  rewrite [prod_of_list _ _]unlock /=.
+  rewrite [in prod_of_list _ _]unlock /=.
   case: decide => //= - [] -> [] -> [] -> -> [] {ke'} <-.
   by split.
 Qed.
@@ -1594,7 +1594,7 @@ rewrite /check.
 case: Spec.to_listP=> //= {}ch.
 elim/(list_len_rect 2): ch => [ch mac|ch neq]; last first.
   by rewrite prod_of_list_neq.
-rewrite unlock /=.
+rewrite [in prod_of_list _ _]unlock /=.
 case: Spec.to_listP=> //= {}ch.
 elim/(list_len_rect 2): ch => [ke' other'|ch neq]; last first.
   by rewrite prod_of_list_neq.
@@ -1949,10 +1949,10 @@ Proof.
 rewrite /check; case: Spec.to_listP => //= {}sh.
 elim/(@list_len_rect 2): sh => [pub sig|sh ne]; last first.
   by rewrite prod_of_list_neq.
-rewrite unlock /=; case: Spec.to_listP => //= {}pub.
+rewrite [in prod_of_list _ _]unlock /=; case: Spec.to_listP => //= {}pub.
 elim/(@list_len_rect 2): pub => [kex other'|pub ne]; last first.
   by rewrite prod_of_list_neq.
-rewrite unlock /=.
+rewrite [in prod_of_list _ _]unlock /=.
 case e_check: SShare.check => [kex'|] //=.
 move/SShare.public_checkE: e_check; move: kex' => {}kex [e_cp ->].
 case e_dec: Spec.dec => [res|] //=.
@@ -1960,7 +1960,7 @@ have {sig e_dec} -> := Spec.decK (Spec.open_key_senc _) e_dec.
 case: Spec.to_listP => //= {}res.
 elim/(@list_len_rect 2): res => [pk sig|res neq]; last first.
   by rewrite prod_of_list_neq.
-rewrite [prod_of_list _ _]unlock /=.
+rewrite [in prod_of_list _ _]unlock /=.
 case e: Spec.has_key_type => //.
 have [sk -> {pk e}] : ∃ sk : sign_key, pk = Spec.pkey sk.
   case: pk e => // - [] // sk _; by exists (SignKey sk); rewrite keysE.
