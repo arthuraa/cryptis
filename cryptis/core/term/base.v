@@ -1,5 +1,6 @@
 From cryptis Require Import lib.
 From HB Require Import structures.
+From elpi.apps Require Import locker.
 From mathcomp Require Import all_order all_boot.
 From deriving Require Import deriving.
 From Stdlib Require Import ZArith.ZArith Lia.
@@ -103,7 +104,7 @@ Fixpoint fold_term_predef pt :=
     else TInt 0 (*should never*)
   end.
 
-Definition fold_term_def pt := fold_term_predef (PreTerm.normalize pt).
+lock Definition fold_term pt := fold_term_predef (PreTerm.normalize pt).
 
 Lemma wf_unfold_term t : PreTerm.wf_term (unfold_term t).
 Proof. by elim/term_ind': t=> //= ? -> ? ->. Qed.
@@ -111,15 +112,10 @@ Proof. by elim/term_ind': t=> //= ? -> ? ->. Qed.
 Lemma wf_unfold_terms ts : all PreTerm.wf_term [seq unfold_term i | i <- ts].
 Proof. elim: ts => //= ? ? ->. by rewrite wf_unfold_term. Qed.
 
-Fact fold_term_key : unit. Proof. exact: tt. Qed.
-Definition fold_term :=
-  locked_with fold_term_key fold_term_def.
-Canonical fold_term_unlockable := [unlockable of fold_term].
-
 Lemma unfold_termK : cancel unfold_term fold_term.
 Proof.
 rewrite [fold_term]unlock => t.
-rewrite /fold_term_def PreTerm.normalize_wf ?wf_unfold_term //.
+rewrite PreTerm.normalize_wf ?wf_unfold_term //.
 elim /term_ind': t => //=; try by move =>> -> // > ->.
 - move => pt wf. move: (TInv' pt) (wf) => /=. rewrite wf. move: (boolP _).
   move: {3} true => _ [] // *. f_equal. apply: bool_irrelevance.
@@ -129,7 +125,7 @@ Qed.
 
 Lemma unfold_fold pt : unfold_term (fold_term pt) = PreTerm.normalize pt.
 Proof.
-rewrite [fold_term]unlock. rewrite /fold_term_def.
+rewrite [fold_term]unlock.
 have := PreTerm.wf_normalize pt. elim: (PreTerm.normalize pt) => //=.
 - by case.
 - move => [?||] t IH wf_t /=; try by rewrite IH.
@@ -153,24 +149,14 @@ Implicit Types (t k : term) (ts : seq term).
 
 Section TInv.
 
-Fact TInv_key : unit. Proof. exact: tt. Qed.
-Definition TInv :=
-  locked_with TInv_key (
-      fun t => fold_term (PreTerm.inv (unfold_term t))
-  ).
-Canonical TInv_unlock := [unlockable of TInv].
+lock Definition TInv t := fold_term (PreTerm.inv (unfold_term t)).
 
 End TInv.
 
 Section TExp.
 
-Fact TExpN_key : unit. Proof. exact: tt. Qed.
-Definition TExpN :=
-  locked_with TExpN_key (
-    fun t ts =>
-      fold_term (PreTerm.exp (unfold_term t) (map unfold_term ts))
-  ).
-Canonical TExpN_unlock := [unlockable of TExpN].
+lock Definition TExpN t ts :=
+  fold_term (PreTerm.exp (unfold_term t) (map unfold_term ts)).
 
 End TExp.
 
@@ -788,15 +774,15 @@ Proof.
 move => t; rewrite -(unfold_termK t) [fold_term]unlock.
 move: (wf_unfold_term t).
 elim: (unfold_term t) => {t} /=.
-- by case; rewrite /fold_term_def /=.
-- case; [rewrite /fold_term_def /=; auto .. |].
+- by case=> /=.
+- case=> /=; auto.
   move => pt IH /andP [nInv /[dup] ? /IH /H7 H].
   have: fold_term (PreTerm.PT1 O1Inv pt) = TInv (fold_term pt).
   apply unfold_term_inj.
   by rewrite unfold_TInv -PreTerm.inv_invN // !fold_termK // PreTerm.wf_inv.
   rewrite [fold_term]unlock => ->.
   apply H. rewrite -[pt]fold_termK // [fold_term]unlock in nInv. by rewrite is_inv_unfold.
-- by case => [] ???? /andP [??]; rewrite /fold_term_def /=; auto.
+- by case => [] ???? /andP [??] /=; auto.
 - move => pt IHpt pts IHpts /[dup] wf_exp /and5P [wf_pt ptNexp wf_pts ptsN0 /andP [sorted_pts canceled_pts]].
 
 case: eqP ptsN0 => //= ptsN0 _.

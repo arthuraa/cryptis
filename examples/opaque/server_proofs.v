@@ -151,7 +151,7 @@ do !iSplit => //.
     destruct p_u => //.
     rewrite /TExpN unlock /fold_term unlock /PreTerm.exp /=
         /PreTerm.insert_exp /path.sort /=
-        /fold_term_def /PreTerm.normalize /=
+        /PreTerm.normalize /=
         /PreTerm.insert_exp /path.sort /=
         /PreTerm.invs_canceled /=.
     by destruct (ssrbool.boolP true); intro contra.
@@ -310,7 +310,7 @@ iSplit.
       apply Hfreshx_s.
       rewrite elem_of_union elem_of_singleton.
       by left.
-    }  
+    }
     apply subterm_TExp_exp' => // contra'.
     destruct Hfreshx_s'.
     rewrite subterm_exp.

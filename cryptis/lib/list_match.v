@@ -1,3 +1,4 @@
+From elpi.apps Require Import locker.
 From iris.heap_lang Require Import lang notation proofmode.
 From mathcomp Require ssrbool order path.
 From cryptis Require Import lib.repr.
@@ -62,15 +63,7 @@ rewrite decide_True; last by split; eauto; set_solver.
 by rewrite IH //; set_solver.
 Qed.
 
-Fact list_match_key : unit. Proof. exact: tt. Qed.
-
-Definition list_match :=
-  locked_with list_match_key (
-    λ vars l k,
-      list_match_aux vars l (close_vars vars k)
-  ).
-
-Canonical list_match_unlockable := [unlockable of list_match].
+lock Definition list_match vars l k := list_match_aux vars l (close_vars vars k).
 
 Notation "'list_match:' vars := e1 'in' e2" :=
   (list_match vars e1 e2)%E
