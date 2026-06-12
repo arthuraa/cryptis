@@ -1,0 +1,6 @@
+(include_subdirs qualified)
+(rocq.theory
+ (name cryptis)
+ (package rocq-cryptis)
+ (generate_project_file)
+ (theories Stdlib Ltac2 HB elpi elpi_elpi mathcomp deriving stdpp iris))

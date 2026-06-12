@@ -1,0 +1,6 @@
+# Search paths for all packages.
+# Each line should be of the form "<PACKAGE> <LOGICAL_PATH>",
+# where <PACKAGE> is the name of a directory that matches the
+# corresponding package name.
+cryptis cryptis
+examples cryptis.examples
