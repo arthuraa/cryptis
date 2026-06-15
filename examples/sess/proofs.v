@@ -268,6 +268,45 @@ iDestruct "HP_or" as "[#pub | HP]".
   + iIntros "!> tc". by iApply "post".
 Qed.
 
+(** ** Namespace-tagged select / branch (additive). *)
+
+(** [wp_select_tag]: the client selects the LEFT arm [tag_proto N t P p] of a
+    [tagged_proto_or] (with [other] the right arm) and sends [Spec.tag (Tag N)
+    (t x)], carrying either [P x] or evidence the session key is public. *)
+Lemma wp_select_tag {TT : tele} skI skR rl cs N
+    (t : TT → term) (P : TT → iProp) (p : TT → iProto Σ term)
+    (x : TT) (other : tagged_proto) :
+  {{{ connected skI skR rl cs
+        (tagged_proto_proto Send (tagged_proto_or (tag_proto N t P p) other)) ∗
+      public (t x) ∗
+      (public (si_key cs) ∨ P x) }}}
+    impl.select_tag (repr cs) (Tag N) (t x)
+  {{{ RET #(); connected skI skR rl cs (p x) }}}.
+Proof.
+iIntros (Φ) "(tc & #pt & HP_or) post".
+rewrite /impl.select_tag. wp_pures.
+wp_bind (tag _ _). iApply wp_tag.
+iDestruct "HP_or" as "[#pub | HP]".
+- iApply (wp_send _ _ _ _ (Spec.tag (Tag N) (t x)) (p x) with "[tc]").
+  + iSplitL "tc".
+    * iDestruct "tc" as "[gc _]".
+      iSplitL "gc"; first iExact "gc".
+      iLeft. iExact "pub".
+    * by rewrite public_tag.
+  + iIntros "!> tc". by iApply "post".
+- iApply (wp_send _ _ _ _ (Spec.tag (Tag N) (t x)) (p x) with "[tc HP]").
+  + iSplitL "tc HP".
+    * iApply (connected_le with "tc"). iNext.
+      rewrite /tagged_proto_proto /tagged_proto_or /tag_proto /tag_msg /=.
+      iApply iProto_le_trans.
+      { iApply (iProto_le_exist_intro_l _ true). }
+      iApply iProto_le_trans.
+      { iApply (iProto_le_texist_intro_l _ x). }
+      by iApply iProto_le_payload_intro_l.
+    * by rewrite public_tag.
+  + iIntros "!> tc". by iApply "post".
+Qed.
+
 Lemma wp_branch skI skR rl cs (P1 P2 : iProp)
     (p1 p2 : iProto Σ term) :
   {{{ connected skI skR rl cs
@@ -317,6 +356,61 @@ iApply (wp_recv_inhabited
     * iFrame "tc'". iRight. iExact "HP".
     * iFrame "tc'". iRight. iExact "HP".
   Unshelve. apply _.
+Qed.
+
+(** [wp_branch_tag]: the server receives one message and dispatches on the
+    namespace tag.  It exposes the received term [t'] together with a
+    three-way disjunction: either the session key is public (adversary forged
+    the tag), or arm 1 fired (some [x1] with [t' = Spec.tag (Tag N1) (t1 x1)],
+    continuation [p1 x1], payload [P1 x1]), or arm 2 fired (symmetric).  The
+    namespaces are NOT required distinct here: disjointness ([tag_proto_disj])
+    is what guarantees at most one arm fires; the runtime [branch2] tries them
+    in order.  This raw-disjunction form lets the caller drive the runtime
+    [branch2]'s [untag] dispatch (see the tagged DB example). *)
+Lemma wp_branch_tag {TT1 TT2 : tele} skI skR rl cs N1 N2
+    (t1 : TT1 → term) (P1 : TT1 → iProp) (p1 : TT1 → iProto Σ term)
+    (t2 : TT2 → term) (P2 : TT2 → iProp) (p2 : TT2 → iProto Σ term) :
+  {{{ connected skI skR rl cs
+        (tagged_proto_proto Recv
+           (tagged_proto_or (tag_proto N1 t1 P1 p1)
+                            (tag_proto N2 t2 P2 p2))) }}}
+    impl.recv (repr cs)
+  {{{ t', RET (repr t'); public t' ∗
+      ((public (si_key cs) ∗
+        GenConn.connected sess_ctx skI skR rl cs) ∨
+       (∃.. x1, ⌜t' = Spec.tag (Tag N1) (t1 x1)⌝ ∗
+                connected skI skR rl cs (p1 x1) ∗ P1 x1) ∨
+       (∃.. x2, ⌜t' = Spec.tag (Tag N2) (t2 x2)⌝ ∗
+                connected skI skR rl cs (p2 x2) ∗ P2 x2)) }}}.
+Proof.
+iIntros (Φ) "[c own] post".
+rewrite /impl.recv. wp_pure _ credit:"c1". wp_pure _ credit:"c2".
+wp_pure _ credit:"c3". wp_apply wp_fupd.
+set (STT := TeleS (λ b : bool, if b then TT1 else TT2)).
+wp_apply (GenConn.wp_recv (λ skI skR si (t' : term),
+            (∃.. x1, ⌜t' = Spec.tag (Tag N1) (t1 x1)⌝ ∗
+                     sess_own skI skR si rl (p1 x1) ∗ P1 x1) ∨
+            (∃.. x2, ⌜t' = Spec.tag (Tag N2) (t2 x2)⌝ ∗
+                     sess_own skI skR si rl (p2 x2) ∗ P2 x2))%I
+         with " [$c c1 c2 own]").
+{ iDestruct "own" as "[#fail|own]"; eauto.
+  iRight. iIntros (t' ts_send ts_recv) "inv".
+  rewrite base.tagged_or_branch_equiv.
+  iMod (sess_recv (TT := STT) with "[$c1 $c2] own inv") as "[inv H]".
+  iModIntro. iFrame. iModIntro.
+  iDestruct "H" as (b) "H". destruct b => /=.
+  - iDestruct "H" as (xs) "(%Hty & own & HP)".
+    rewrite /base.tagged_branch_tval /= in Hty.
+    iLeft. iExists xs. rewrite Hty. by iFrame.
+  - iDestruct "H" as (xs) "(%Hty & own & HP)".
+    rewrite /base.tagged_branch_tval /= in Hty.
+    iRight. iExists xs. rewrite Hty. by iFrame. }
+iIntros "%t' (conn & #p_t' & inv)". iApply ("post" $! t'). iFrame "#".
+iDestruct "inv" as "[#fail|inv]".
+{ iLeft. iFrame "conn". by iFrame "#". }
+iRight. iDestruct "inv" as "[H|H]".
+- iLeft. iDestruct "H" as (x1) "(-> & own & HP)". iExists x1. by iFrame.
+- iRight. iDestruct "H" as (x2) "(-> & own & HP)". iExists x2. by iFrame.
 Qed.
 
 End Proofs.

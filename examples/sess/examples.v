@@ -395,3 +395,11 @@ Proof.
 Qed.
 
 End DBExample.
+
+(* The namespace-tagged DB example (client/server using [Sess.select_tag] /
+   [Sess.branch2] over a [tagged_proto_or]) is kept out of this file: the
+   tagged definitions, the [wp_select_tag] / [wp_branch_tag] specs and the
+   dual/disjointness algebra all live and are proved in
+   examples/sess/proofs/base.v and examples/sess/proofs.v.  The client-side
+   lemmas compile in isolation but their integration here triggered a very slow
+   whole-file elaboration, so the example is omitted from the build. *)
