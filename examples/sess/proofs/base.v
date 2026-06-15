@@ -204,6 +204,164 @@ Proof.
     iDestruct ("H" with "HP") as "[$ ?]"; by iModIntro.
 Qed.
 
+(** ** Namespace-tagged select/branch (additive generalization of the boolean
+    [iProto_choice_term]).
+
+    A [tagged_proto] bundles (1) a predicate on terms characterising which wire
+    terms select this arm, and (2) the [iProto] continuation.  [tag_proto] builds
+    a single arm whose wire term is [Spec.tag (Tag N) (t x)] (mirroring
+    [sess_recv]'s message shape); [tagged_proto_or] combines two arms under a
+    single [iProto_message Recv] node with a boolean selector, exactly like
+    [iProto_choice_term]. *)
+
+(** A [tagged_proto] stores (1) the selector predicate on wire terms and (2) the
+    underlying [iMsg] (NOT the wrapped proto, Option B from the plan).  Storing
+    the [iMsg] lets [tagged_proto_or] place both arms under one shared
+    [iProto_message Recv (∃ b, …)] node, structurally identical to
+    [iProto_choice_term Recv], so its algebra transfers directly.  The proto of
+    a single arm is recovered as [iProto_message Recv q.2]. *)
+Definition tagged_proto : Type := (term → Prop) * iMsg Σ term.
+
+(** The [iMsg] for a single tagged arm: a telescopic receive of a term shaped
+    [Spec.tag (Tag N) (t x)], carrying [P x], continuing [p x]. *)
+Definition tag_msg {TT : tele} (N : namespace)
+    (t : TT → term) (P : TT → iProp) (p : TT → iProto Σ term) : iMsg Σ term :=
+  (∃.. x, MSG Spec.tag (Tag N) (t x) {{ P x }}; p x)%msg.
+
+Definition tag_proto {TT : tele} (N : namespace)
+    (t : TT → term) (P : TT → iProp) (p : TT → iProto Σ term) : tagged_proto :=
+  ( (λ t', ∃ x : TT, t' = Spec.tag (Tag N) (t x)),
+    tag_msg N t P p ).
+
+(** The proto of a single tagged arm, parameterized by the action [a] (so the
+    sender/client uses [Send] and the receiver/server uses [Recv], exactly as
+    [iProto_choice_term] takes its action as a parameter). *)
+Definition tagged_proto_proto (a : action) (q : tagged_proto) : iProto Σ term :=
+  iProto_message a q.2.
+
+(** Combine two arms: the [.1] predicate is the literal disjunction; the [.2]
+    [iMsg] uses a boolean selector picking the chosen arm's message, exactly as
+    [iProto_choice_term]'s [(b : bool)] selector. *)
+Definition tagged_proto_or (q1 q2 : tagged_proto) : tagged_proto :=
+  ( (λ t', q1.1 t' ∨ q2.1 t'),
+    (∃ b : bool, if b then q1.2 else q2.2)%msg ).
+
+(** Duality distributes through a single tagged arm onto its continuation,
+    leaving the tag/payload untouched (mirrors [iMsg_dual_base]).  This lets the
+    responder's dualised arm be read back as a [tag_proto] with dualised
+    continuation. *)
+Lemma iMsg_dual_texist {TT : tele} (m : TT → iMsg Σ term) :
+  iMsg_dual (iMsg_texist m) ≡ iMsg_texist (λ x, iMsg_dual (m x)).
+Proof.
+  induction TT as [|X b IH] in m |- *; rewrite /iMsg_texist /=; first done.
+  rewrite iMsg_dual_exist. f_equiv => x.
+  apply (IH x (λ xs, m (TeleArgCons x xs))).
+Qed.
+
+Lemma iMsg_dual_tag_msg {TT : tele} (N : namespace)
+    (t : TT → term) (P : TT → iProp) (p : TT → iProto Σ term) :
+  iMsg_dual (tag_msg N t P p) ≡ tag_msg N t P (λ x, iProto_dual (p x)).
+Proof.
+  rewrite /tag_msg.
+  induction TT as [|X b IH] in t, P, p |- *; rewrite /iMsg_texist /=.
+  - by rewrite iMsg_dual_base.
+  - rewrite iMsg_dual_exist. f_equiv => x.
+    apply (IH x (λ xs, t (TeleArgCons x xs)) (λ xs, P (TeleArgCons x xs))
+              (λ xs, p (TeleArgCons x xs))).
+Qed.
+
+(** *** Dual algebra for [tagged_proto_or], mirroring [iProto_dual_choice_term].
+    Duality acts only on the underlying messages of the two arms and flips the
+    action, never the selector, so the proof is value-agnostic. *)
+Lemma iProto_dual_tagged_proto_or (a : action) (q1 q2 : tagged_proto) :
+  iProto_dual (tagged_proto_proto a (tagged_proto_or q1 q2))
+  ≡ tagged_proto_proto (action_dual a)
+      (tagged_proto_or (q1.1, iMsg_dual q1.2) (q2.1, iMsg_dual q2.2)).
+Proof.
+  rewrite /tagged_proto_proto /tagged_proto_or /=.
+  rewrite iProto_dual_message /= iMsg_dual_exist.
+  f_equiv; f_equiv => -[] //.
+Qed.
+
+Lemma iProto_app_tagged_proto_or (a : action) (q1 q2 : tagged_proto)
+    (q : iProto Σ term) :
+  (tagged_proto_proto a (tagged_proto_or q1 q2) <++> q)%proto
+  ≡ tagged_proto_proto a
+      (tagged_proto_or (q1.1, (q1.2 <++> q)%msg) (q2.1, (q2.2 <++> q)%msg)).
+Proof.
+  rewrite /tagged_proto_proto /tagged_proto_or /=.
+  rewrite iProto_app_message /= iMsg_app_exist.
+  f_equiv; f_equiv => -[] //.
+Qed.
+
+(** *** Disjointness = security.  Distinct namespaces make the two arms'
+    selector predicates mutually exclusive: this is the formal content of
+    plan.org's "p2 fires only when p1.1 does not hold".  Proven via the
+    sanctioned [Spec.tag_inj] / [Tag_inj] round-trip lemmas (the same ones the
+    rpc layer relies on), NOT raw constructor injectivity. *)
+Lemma tag_proto_disj {TT1 TT2 : tele} (N1 N2 : namespace)
+    (t1 : TT1 → term) (P1 : TT1 → iProp) (p1 : TT1 → iProto Σ term)
+    (t2 : TT2 → term) (P2 : TT2 → iProp) (p2 : TT2 → iProto Σ term) t' :
+  N1 ≠ N2 →
+  (tag_proto N1 t1 P1 p1).1 t' →
+  (tag_proto N2 t2 P2 p2).1 t' →
+  False.
+Proof.
+  move=> Hne /= [x1 ->] [x2 He].
+  move: He => /Spec.tag_inj [/Tag_inj HN _].
+  by apply: Hne.
+Qed.
+
+(** *** Coercion of a two-arm [tagged_proto_or] receive node to a single
+    telescopic receive over the SUM telescope [TeleS (λ b, if b then TT1 else
+    TT2)].  This lets [wp_branch_tag] (proofs.v) reuse the generic telescopic
+    [wp_recv].  The payloads gain a [▷] (a valid receiver weakening: the holder
+    promises [P x], which entails [▷ P x]).  Proved by structurally peeling the
+    selector bool and each arm's telescope, so no higher-order unification on
+    the dependent sum telescope is needed. *)
+Definition tagged_branch_tval {TT1 TT2 : tele} (N1 N2 : namespace)
+    (t1 : TT1 → term) (t2 : TT2 → term)
+    (y : TeleS (λ b : bool, if b then TT1 else TT2)) : term :=
+  match y with TeleArgCons b xs =>
+    Spec.tag (Tag (if b then N1 else N2))
+      ((if b as b' return ((if b' then TT1 else TT2) → term)
+        then t1 else t2) xs) end.
+
+Definition tagged_branch_Pval {TT1 TT2 : tele}
+    (P1 : TT1 → iProp) (P2 : TT2 → iProp)
+    (y : TeleS (λ b : bool, if b then TT1 else TT2)) : iProp :=
+  match y with TeleArgCons b xs =>
+    (if b as b' return ((if b' then TT1 else TT2) → iProp)
+     then P1 else P2) xs end.
+
+Definition tagged_branch_pcont {TT1 TT2 : tele}
+    (p1 : TT1 → iProto Σ term) (p2 : TT2 → iProto Σ term)
+    (y : TeleS (λ b : bool, if b then TT1 else TT2)) : iProto Σ term :=
+  match y with TeleArgCons b xs =>
+    (if b as b' return ((if b' then TT1 else TT2) → iProto Σ term)
+     then p1 else p2) xs end.
+
+(** The combined receive node, viewed through the sum telescope
+    [STT := TeleS (λ b, if b then TT1 else TT2)], equals (up to [≡]) the
+    telescopic receive with [▷]-weakened payloads.  Proved by [f_equiv] over the
+    selector bool and each arm's telescope (the [Proper] instances of
+    [iMsg_exist]/[iMsg_base] absorb the higher-order structure, dodging the
+    explicit-witness unification problems of [iProto_le_texist_intro_r]).
+    [wp_branch_tag] (proofs.v) rewrites with this to reuse the telescopic
+    [sess_recv] over [STT]. *)
+Lemma tagged_or_branch_equiv {TT1 TT2 : tele} (N1 N2 : namespace)
+    (t1 : TT1 → term) (P1 : TT1 → iProp) (p1 : TT1 → iProto Σ term)
+    (t2 : TT2 → term) (P2 : TT2 → iProp) (p2 : TT2 → iProto Σ term) :
+  tagged_proto_proto Recv
+    (tagged_proto_or (tag_proto N1 t1 P1 p1) (tag_proto N2 t2 P2 p2))
+  ≡ (<?.. y> MSG tagged_branch_tval N1 N2 t1 t2 y
+              {{ tagged_branch_Pval P1 P2 y }};
+              tagged_branch_pcont p1 p2 y)%proto.
+Proof.
+  rewrite /tagged_proto_proto /tagged_proto_or /tag_proto /tag_msg /=.
+  f_equiv. f_equiv => -[] /=; done.
+Qed.
+
 (* initial proto contains a list of proto, we need the history of all past messages to know which proto is the current one *)
 Definition connected skI skR rl cs p : iProp :=
   GenConn.connected sess_ctx skI skR rl cs ∗
