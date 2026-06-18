@@ -62,18 +62,18 @@ Global Instance Persistent_pnonce a : Persistent (pnonce a).
 Proof. apply _. Qed.
 
 Definition pinv t : iProp :=
-  □ term_prop t (nroot.@"cryptis".@"pub").
+  □ term_prop t (cryptisN.@"pub").
 
 Global Instance Persistent_pinv a : Persistent (pinv a).
 Proof. apply _. Qed.
 
 Lemma pinv_alloc t E P :
-  ↑nroot.@"cryptis".@"pub" ⊆ E →
+  ↑cryptisN.@"pub" ⊆ E →
   term_token t E ==∗
-  □ (pinv t ↔ ▷ □ P) ∗ term_token t (E ∖ ↑nroot.@"cryptis".@"pub").
+  □ (pinv t ↔ ▷ □ P) ∗ term_token t (E ∖ ↑cryptisN.@"pub").
 Proof.
 iIntros (?) "token".
-iMod (term_prop_alloc (nroot.@"cryptis".@"pub") P with "token")
+iMod (term_prop_alloc (cryptisN.@"pub") P with "token")
   as "[#H1 $]" => //.
 iIntros "!> !>"; iSplit; iIntros "#H2".
 - by iSpecialize ("H1" with "H2"); eauto.
@@ -754,11 +754,11 @@ rewrite -is_inv_TInv => ninv_t; apply: (anti_symm _); iIntros "Ht".
 Qed.
 
 Lemma public_TInv_alloc t E P :
-  ↑nroot.@"cryptis".@"pub" ⊆ E →
+  ↑cryptisN.@"pub" ⊆ E →
   negb (is_inv t) →
   term_token (TInv t) E ==∗
   □ (public (TInv t) ↔ ▷ □ P) ∗
-  term_token (TInv t) (E ∖ ↑nroot.@"cryptis".@"pub").
+  term_token (TInv t) (E ∖ ↑cryptisN.@"pub").
 Proof.
 iIntros (sub ?) "token"; rewrite public_TInv //.
 iPoseProof (term_token_minted with "token") as "#m"; rewrite minted_TInv.

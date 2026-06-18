@@ -42,7 +42,7 @@ Definition term_meta_inv `{!term_metaGS Σ} : iProp :=
     [∗ set] t ∈ dom names, minted t.
 
 Definition term_meta_ctx `{!term_metaGS Σ} : iProp :=
-  inv (nroot.@"cryptis".@"meta") term_meta_inv.
+  inv (cryptisN.@"meta") term_meta_inv.
 
 Lemma term_metaGS_alloc E :
   term_metaGpreS Σ →
@@ -395,11 +395,11 @@ Qed.
 Context `{!HasTermMetaCtx ctx}.
 
 Lemma term_token_alloc (T : gset term) (P Q : iProp) E :
-  ↑nroot.@"cryptis".@"meta" ⊆ E →
+  ↑cryptisN.@"meta" ⊆ E →
   ctx -∗
   (∀ t, ⌜t ∈ T⌝ -∗ P -∗ minted t -∗ False) -∗
   (∀ t, ⌜t ∈ T⌝ -∗ Q -∗ minted t) -∗
-  (P ∧ |={E ∖ ↑nroot.@"cryptis".@"meta"}=> Q) ={E}=∗
+  (P ∧ |={E ∖ ↑cryptisN.@"meta"}=> Q) ={E}=∗
   Q ∗ [∗ set] t ∈ T, term_token t ⊤.
 Proof.
 iIntros "%sub ctx H1 H2 H3".
