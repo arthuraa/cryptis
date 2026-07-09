@@ -27,3 +27,12 @@ Definition recv : val := λ: "c",
      it should be possible to remove it.  *)
   let: <> := #() in
   GenConn.recv "c".
+
+Definition handle : val := λ: "N" "f" "t",
+  bind: "t" := untag "N" "t" in
+  "f" "t".
+
+Definition select : val := λ: "cs" "handlers",
+  let: "m" := GenConn.recv "cs" in
+  let: "handlers" := "handlers" in
+  scan_list (λ: "handler", "handler" "cs" "m") "handlers".
