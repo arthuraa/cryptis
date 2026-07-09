@@ -208,18 +208,17 @@ Program Definition iMsg_tag (m : namespace → iMsg Σ term) : iMsg Σ term :=
   IMsg (λ t, λne pp, ∃ N t', ⌜t = Spec.tag (Tag N) t'⌝ ∗ iMsg_car (m N) t' pp)%I.
 Next Obligation. solve_proper. Qed.
 
-Definition iTag_nil (N0 : namespace) : iMsg Σ term :=
+Definition iTag_fail (N0 : namespace) : iMsg Σ term :=
   MSG (TInt 0) {{ False }}; END.
 
-Definition iTag_cons {TT : tele} (N : namespace) (t : TT → term) (P : TT → iProp)
-    (p : TT → iProto Σ term) (m : namespace → iMsg Σ term)
-    (N0 : namespace) : iMsg Σ term :=
-  if decide (N0 = N) then
-    (∃.. x, MSG (t x) {{ P x }}; p x)%msg
+Definition iTag_or
+  (p : namespace * iMsg Σ term) (m : namespace → iMsg Σ term) N0 :=
+  if decide (N0 = p.1) then p.2
   else m N0.
 
-Definition iProto_tag (a : action) m : iProto Σ term :=
-  iProto_message a (iMsg_tag m).
+Definition iProto_tag (a : action) (ms : list (namespace * iMsg Σ term)) :
+    iProto Σ term :=
+  iProto_message a (iMsg_tag (foldr iTag_or iTag_fail ms)).
 
 (* initial proto contains a list of proto, we need the history of all past messages to know which proto is the current one *)
 Definition connected skI skR rl cs p : iProp :=
