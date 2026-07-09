@@ -204,6 +204,23 @@ Proof.
     iDestruct ("H" with "HP") as "[$ ?]"; by iModIntro.
 Qed.
 
+Program Definition iMsg_tag (m : namespace → iMsg Σ term) : iMsg Σ term :=
+  IMsg (λ t, λne pp, ∃ N t', ⌜t = Spec.tag (Tag N) t'⌝ ∗ iMsg_car (m N) t' pp)%I.
+Next Obligation. solve_proper. Qed.
+
+Definition iTag_nil (N0 : namespace) : iMsg Σ term :=
+  MSG (TInt 0) {{ False }}; END.
+
+Definition iTag_cons {TT : tele} (N : namespace) (t : TT → term) (P : TT → iProp)
+    (p : TT → iProto Σ term) (m : namespace → iMsg Σ term)
+    (N0 : namespace) : iMsg Σ term :=
+  if decide (N0 = N) then
+    (∃.. x, MSG (t x) {{ P x }}; p x)%msg
+  else m N0.
+
+Definition iProto_tag (a : action) m : iProto Σ term :=
+  iProto_message a (iMsg_tag m).
+
 (* initial proto contains a list of proto, we need the history of all past messages to know which proto is the current one *)
 Definition connected skI skR rl cs p : iProp :=
   GenConn.connected sess_ctx skI skR rl cs ∗
