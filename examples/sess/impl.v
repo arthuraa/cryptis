@@ -30,7 +30,7 @@ Definition recv : val := λ: "c",
 
 Definition handle : val := λ: "N" "f" "t",
   bind: "t" := untag "N" "t" in
-  "f" "t".
+  SOME ("f" "t").
 
 Definition select : val := λ: "cs" "handlers",
   let: "m" := GenConn.recv "cs" in
