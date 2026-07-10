@@ -105,7 +105,7 @@ iDestruct "tc" as "[conn #hon]".
 (* wp_pure _ credit: "c". *)
 (* wp_pures. *)
 iApply (wp_fupd).
-iApply (Sess.wp_recv with "conn").
+iApply (Sess.wp_recv_tele with "conn").
 iIntros "!> %t' (p_t' & [fail | inv])".
 - iMod ("hon" with "fail") as "[]". 
 -

@@ -16,6 +16,16 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Record handler := Handler {
+  handler_tag : namespace;
+  handler_val : val;
+}.
+
+Global Instance repr_handler : Repr handler := λ h,
+  (λ: "t",
+     bind: "t" := untag (Tag (handler_tag h)) "t" in
+     SOME (handler_val h "t"))%V.
+
 Notation sessN := (iso_dhN.@"res".@"sess").
 
 Definition savedProtoR Σ V :=
@@ -78,13 +88,12 @@ iIntros "(%γs & #names & own) le".
 iExists γs; iFrame "#". by iApply (iProto_own_le with "[$]").
 Qed.
 
-(* Global Instance sess_own_proper skI skR si rl: *)
-(*   Proper ((equiv) ==> (⊣⊢)) (sess_own skI skR si rl). *)
-(* Proof. *)
-(*   solve_proper. *)
-(* Qed. *)
 Global Instance sess_own_proper skI skR si rl :
   Proper ((≡) ==> (≡)) (sess_own skI skR si rl).
+Proof. solve_proper. Qed.
+
+Global Instance sess_own_ne skI skR si rl n :
+  Proper ((≡{n}≡) ==> (≡{n}≡)) (sess_own skI skR si rl).
 Proof. solve_proper. Qed.
 
 Definition sess_ctx skI skR si tsI tsR : iProp :=
@@ -97,14 +106,6 @@ Definition sess_params p := {|
     sess_own skI skR si rl (if rl is Init then p else iProto_dual p);
   GenConn.chan_inv := sess_ctx;
 |}%I.
-
-(* Print bi_car. *)
-(* Global Instance sess_params_proper: *)
-(*   Proper ((equiv) ==> (⊣⊢)) (sess_params). *)
-(* Proof. *)
-(*   Admitted. *)
-  (* intros p1 p2 hp. *)
-  (* solve_proper. *)
 
 Lemma sess_send skI skR si rl t p ts_send ts_recv :
   sess_own skI skR si rl (<!> MSG t; p) -∗
@@ -133,7 +134,29 @@ iClear "Hγs'". case: rl => /=.
   iModIntro. rewrite iProto_ctx_sym. by iFrame; eauto.
 Qed.
 
-Lemma sess_recv {TT : tele} skI skR si rl t'
+Lemma sess_recv skI skR si rl (m : iMsg Σ term) ts_send t ts_recv :
+  £ 1 -∗
+  sess_own skI skR si rl (<?> m) -∗
+  ▷ GenConn.chan_inv_for sess_ctx skI skR si rl ts_send (t :: ts_recv)
+  ={⊤ ∖ ↑GenConn.connN}=∗
+    ▷ (GenConn.chan_inv_for sess_ctx skI skR si rl ts_send ts_recv ∗
+       ∃ p, sess_own skI skR si rl p ∗ iMsg_car m t (Next p)).
+Proof.
+iIntros "c1 (%γs & #Hγs & own) (%γs' & >#Hγs' & ctx)".
+iPoseProof (session_names_agree with "Hγs Hγs'") as "<-".
+iClear "Hγs'". case: rl => /=.
+- iMod (lc_fupd_elim_later with "c1 ctx") as "ctx".
+  iMod (iProto_recv with "ctx own") as "(%p & ctx & own & Ht')".
+  iIntros "!> !>".
+  by iFrame; eauto.
+- rewrite iProto_ctx_sym.
+  iMod (lc_fupd_elim_later with "c1 ctx") as "ctx".
+  iMod (iProto_recv with "ctx own") as "(%p & ctx & own & Ht)".
+  iIntros "!> !>".
+  rewrite iProto_ctx_sym. by iFrame; eauto.
+Qed.
+
+Lemma sess_recv_tele {TT : tele} skI skR si rl t'
   (t : TT → term) (P : TT → iProp) (p : TT → iProto Σ term) ts_send ts_recv :
   £ 1 ∗ £ 1 -∗
   sess_own skI skR si rl (<?.. x> MSG t x {{ P x }}; p x) -∗
@@ -142,28 +165,13 @@ Lemma sess_recv {TT : tele} skI skR si rl t'
     ▷ (GenConn.chan_inv_for sess_ctx skI skR si rl ts_send ts_recv ∗
        ∃.. x, ⌜t' = t x⌝ ∗ sess_own skI skR si rl (p x) ∗ P x).
 Proof.
-iIntros "[c1 c2] (%γs & #Hγs & own) (%γs' & >#Hγs' & ctx)".
-iPoseProof (session_names_agree with "Hγs Hγs'") as "<-".
-iClear "Hγs'". case: rl => /=.
-- iMod (lc_fupd_elim_later with "c1 ctx") as "ctx".
-  iMod (iProto_recv with "ctx own") as "(%p' & ctx & own & Ht')".
-  rewrite iMsg_base_eq /=.
-  iMod (lc_fupd_elim_later with "c2 Ht'") as "Ht'".
-  iDestruct (iMsg_texist_exist with "Ht'") as (x <-) "[Hp' HP]".
-  iIntros "!> !>".
-  iFrame. iSplit => //. iExists x. iFrame. iSplit => //.
-  iExists _. iSplit; eauto. by iRewrite "Hp'".
-- rewrite iProto_ctx_sym.
-- iMod (lc_fupd_elim_later with "c1 ctx") as "ctx".
-  iMod (iProto_recv with "ctx own") as "(%p' & ctx & own & Ht')".
-  rewrite iMsg_base_eq /=.
-  iMod (lc_fupd_elim_later with "c2 Ht'") as "Ht'".
-  iDestruct (iMsg_texist_exist with "Ht'") as (x <-) "[Hp' HP]".
-  iIntros "!> !>". rewrite iProto_ctx_sym.
-  iFrame. iSplit => //. iExists x. iFrame. iSplit => //.
-  iExists _. iSplit; eauto. by iRewrite "Hp'".
+iIntros "[c1 c2] own inv".
+iMod (sess_recv with "c1 own inv") as "H".
+iMod (lc_fupd_elim_later with "c2 H") as "(inv & %p' & own & Ht')".
+rewrite iMsg_base_eq /=.
+iDestruct (iMsg_texist_exist with "Ht'") as (x <-) "[Hp' HP]".
+iIntros "!> !>". iFrame. iExists x. iFrame. iSplit => //. by iRewrite "Hp'".
 Qed.
-
 
 Definition iProto_choice_term (a : action) (P1 P2 : iProp) (p1 p2 : iProto Σ term) : iProto Σ term :=
 (<a @ (b : bool)> MSG (TInt (if b then 1 else 0)) {{ if b then P1 else P2 }};
@@ -204,21 +212,14 @@ Proof.
     iDestruct ("H" with "HP") as "[$ ?]"; by iModIntro.
 Qed.
 
-Program Definition iMsg_tag (m : namespace → iMsg Σ term) : iMsg Σ term :=
-  IMsg (λ t, λne pp, ∃ N t', ⌜t = Spec.tag (Tag N) t'⌝ ∗ iMsg_car (m N) t' pp)%I.
+Program Definition iMsg_tag (ms : gmap namespace (iMsg Σ term)) : iMsg Σ term :=
+  IMsg (λ t, λne pp, ∃ N t' m,
+          ⌜ms !! N = Some m ∧ t = Spec.tag (Tag N) t'⌝ ∗
+          iMsg_car m t' pp)%I.
 Next Obligation. solve_proper. Qed.
 
-Definition iTag_fail (N0 : namespace) : iMsg Σ term :=
-  MSG (TInt 0) {{ False }}; END.
-
-Definition iTag_or
-  (p : namespace * iMsg Σ term) (m : namespace → iMsg Σ term) N0 :=
-  if decide (N0 = p.1) then p.2
-  else m N0.
-
-Definition iProto_tag (a : action) (ms : list (namespace * iMsg Σ term)) :
-    iProto Σ term :=
-  iProto_message a (iMsg_tag (foldr iTag_or iTag_fail ms)).
+Definition iProto_tag (a : action) ms : iProto Σ term :=
+  iProto_message a (iMsg_tag ms).
 
 (* initial proto contains a list of proto, we need the history of all past messages to know which proto is the current one *)
 Definition connected skI skR rl cs p : iProp :=
@@ -233,23 +234,12 @@ iIntros "[conn [#fail|own]] le".
 - iFrame. iRight. by iApply (sess_own_le with "[$]").
 Qed.
 
-(* Global Instance connected_proper skI skR rl cs: *)
-(*   Proper ((equiv) ==> (⊣⊢)) (connected skI skR rl cs). *)
-(* Proof. *)
-(*   unfold connected. *)
-
-(*   (* solve_proper. *) *)
-(*   (* Admitted. *) *)
-(*   intros p1 p2 Hp. *)
-(*   rewrite  /connected. *)
-(*   f_equiv. *)
-(*   - *)
-(*   solve_proper. *)
-(* (* Qed. *) *)
-
-
 Global Instance connected_proper skI skR rl cs :
   Proper ((≡) ==> (≡)) (connected skI skR rl cs).
+Proof. by move=> p1 p2 e; rewrite /connected e. Qed.
+
+Global Instance connected_ne skI skR rl cs n :
+  Proper ((≡{n}≡) ==> (≡{n}≡)) (connected skI skR rl cs).
 Proof. by move=> p1 p2 e; rewrite /connected e. Qed.
 
 Definition ctx N p := GenConn.ctx N (sess_params p).
