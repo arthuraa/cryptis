@@ -820,6 +820,26 @@ iIntros "%r ψ_r"; case: r => [r|]; wp_pures; first done.
 by wp_apply ("IH" with "[$]").
 Qed.
 
+Lemma wp_scan_list' `{Repr A} (φ : list A → iProp Σ) ψ (f : val) :
+  □ (∀ (x : A) (xs : list A),
+    {{{ φ (x :: xs) }}}
+      f (repr x)
+    {{{ (r : option val), RET (repr r);
+        match r with
+        | Some r => ψ (SOMEV r)
+        | None => φ xs
+        end }}}) -∗
+  (φ [] -∗ ψ NONEV) -∗
+  ∀ xs, φ xs -∗ WP scan_list f (repr xs) {{ ψ }}.
+Proof.
+rewrite repr_list_unseal /=.
+iIntros "#wp_f end %xs φ"; iLöb as "IH" forall (xs).
+wp_rec; case: xs => [|x xs] /=; wp_pures; first by iApply "end".
+wp_apply ("wp_f" with "[$φ]").
+iIntros "%r φ"; case: r => [r|]; wp_pures; first done.
+by wp_apply ("IH" with "[$]").
+Qed.
+
 Lemma wp_find_list (f : A → bool) (fimpl : val) (l : list A) E :
   (∀ x : A, {{{ True }}} fimpl (repr x) @ E {{{ RET #(f x); True }}}) →
   {{{ True }}} find_list fimpl (repr l) @ E {{{ RET (repr (find f l)); True }}}.

@@ -33,6 +33,6 @@ Definition handle : val := λ: "N" "f" "t",
   SOME ("f" "t").
 
 Definition select : val := λ: "cs" "handlers",
-  let: "m" := GenConn.recv "cs" in
+  let: "m" := recv "cs" in
   let: "handlers" := "handlers" in
-  scan_list (λ: "handler", "handler" "cs" "m") "handlers".
+  scan_list (λ: "handler", "handler" "m") "handlers".

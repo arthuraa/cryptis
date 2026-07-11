@@ -400,7 +400,7 @@ Proof.
   rewrite envs_lookup_sound //=. rewrite -wp_bind.
   iIntros "[Hc HΔ']".
   iDestruct (envs_split_sound _ _ _ _ _ Hsplit with "HΔ'") as "[HΔ1 HΔ2]".
-  iApply (wp_select with "[Hc HΔ1]").
+  iApply (wp_select2 with "[Hc HΔ1]").
   - iSplitR "HΔ1".
     + iApply (connected_le with "Hc"). iNext. iApply Hp.
     + iApply Hdisj. iExact "HΔ1".
@@ -460,7 +460,7 @@ Proof.
   rewrite envs_lookup_sound //=.
   rewrite -wp_bind.
   iIntros "(Hc & HΔ')".
-  iApply (wp_branch with "[Hc]").
+  iApply (wp_branch2 with "[Hc]").
   { iApply (connected_le with "Hc"). iNext. iApply Hp. }
   iIntros "!> %t Hpost".
   specialize (Hcont t). simpl in Hcont.

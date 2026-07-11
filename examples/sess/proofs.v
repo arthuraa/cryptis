@@ -243,6 +243,76 @@ iMod (lc_fupd_elim_later with "c3 Px") as "?".
 iFrame. by eauto.
 Qed.
 
+Lemma wp_handle N f φ :
+  (∀ h, ⌜h = Handler N f⌝ -∗ φ (repr h)) -∗
+  WP impl.handle (Tag N) f {{ φ }}.
+Proof.
+iIntros "post"; wp_lam; wp_pures.
+by iApply ("post" $! (Handler N f)).
+Qed.
+
+Definition select_vc skI skR rl cs
+    (ms : gmap namespace (iMsg Σ term)) (handlers : list handler) φ : iProp :=
+  [∧ list] h ∈ handlers,
+    ∀ (t : term) p,
+      connected skI skR rl cs p -∗
+      public (si_key cs) ∨
+        match ms !! handler_tag h with
+        | Some m => iMsg_car m t (Next p)
+        | None => False
+        end -∗
+       WP handler_val h t {{ v, φ (SOMEV v) }}.
+
+Lemma wp_select skI skR rl cs ms (handlers : list handler) φ :
+  dom ms ⊆ list_to_set (map handler_tag handlers) →
+  connected skI skR rl cs (<?> iMsg_tag ms) -∗
+  select_vc skI skR rl cs ms handlers φ -∗
+  (∀ p, connected skI skR rl cs p -∗ public (si_key cs) -∗ φ NONEV) -∗
+  WP impl.select (repr cs) (repr handlers) {{ φ }}.
+Proof.
+iIntros "%sub conn vc fail"; wp_lam; wp_pures.
+wp_apply (wp_recv with "conn").
+iIntros (t p) "(#p_t & conn & t_p)"; wp_pures.
+pose (I := (λ hs : list handler,
+  (public (si_key cs) ∨
+     ∃ N t', ⌜t = Spec.tag (Tag N) t'⌝ ∗
+             ⌜N ∈ map handler_tag hs⌝ ∗
+             match ms !! N with
+             | Some m => iMsg_car m t' (Next p)
+             | None => False
+             end) ∗
+  connected skI skR rl cs p ∗
+  select_vc skI skR rl cs ms hs φ)%I).
+iApply (wp_scan_list' I φ with "[] [fail] [$vc $conn t_p]").
+- iIntros "!> %h %hs %ξ !> (t_p & conn & vc) post".
+  wp_pures; wp_lam; wp_apply wp_untag.
+  case: Spec.untagP => [ {}t ->|ne] in I *; wp_pures.
+  { rewrite /select_vc /=; iDestruct "vc" as "[vc _]".
+    wp_bind (handler_val h t).
+    iApply (wp_wand with "[t_p conn vc]").
+    - iApply ("vc" with "[$]").
+      iDestruct "t_p" as "[#fail|(%N & %t' & %HN & _ & t_p)]"; eauto.
+      by case/Spec.tag_inj: HN => /Tag_inj <- <- {t'}; eauto.
+    - by iIntros "%v φ_v"; wp_pures; iApply ("post" $! (Some v)). }
+  iApply ("post" $! None); iModIntro; iFrame.
+  iSplitL "t_p".
+  + iDestruct "t_p" as "[#fail|(%N & %t' & %et & %HN & t_p)]"; eauto.
+    rewrite /= elem_of_cons in HN.
+    case: HN => [->|HN] in et *; first by case: (ne _ et).
+    by iRight; iExists N, t'; eauto.
+  + by rewrite /select_vc /=; iDestruct "vc" as "[_ vc]".
+- iIntros "(t_p & conn & _)".
+  iApply ("fail" with "conn").
+  iDestruct "t_p" as "[#fail|(%N & %t' & _ & %contra & _)]"; eauto.
+  by rewrite /= elem_of_nil in contra.
+- iDestruct "t_p" as "[#fail|t_p]"; first by eauto.
+  rewrite iMsg_tag_eq; iDestruct "t_p" as "(%N & %t' & %m & %em & t_p)".
+  case: em => ms_N ->; iRight; iExists N, t'; rewrite ms_N; iFrame.
+  iSplit; eauto; iPureIntro.
+  have /sub: N ∈ dom ms by rewrite elem_of_dom ms_N.
+  by rewrite elem_of_list_to_set.
+Qed.
+
 (** ** Select and Branch (untrusted setting)
 
 The choice operator [iProto_choice_term] (defined in [proofs/base.v]) is the
@@ -262,7 +332,7 @@ Local Instance bool_tele_inhabited :
   Inhabited (tele_arg (TeleS (λ _ : bool, TeleO))) :=
   populate (TeleArgCons false tt).
 
-Lemma wp_select skI skR rl cs (b : bool) (P1 P2 : iProp)
+Lemma wp_select2 skI skR rl cs (b : bool) (P1 P2 : iProp)
     (p1 p2 : iProto Σ term) :
   {{{ connected skI skR rl cs
         (iProto_choice_term Send P1 P2 p1 p2) ∗
@@ -292,7 +362,7 @@ iDestruct "HP_or" as "[#pub | HP]".
   + iIntros "!> tc". by iApply "post".
 Qed.
 
-Lemma wp_branch skI skR rl cs (P1 P2 : iProp)
+Lemma wp_branch2 skI skR rl cs (P1 P2 : iProp)
     (p1 p2 : iProto Σ term) :
   {{{ connected skI skR rl cs
         (iProto_choice_term Recv P1 P2 p1 p2) }}}

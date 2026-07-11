@@ -212,11 +212,23 @@ Proof.
     iDestruct ("H" with "HP") as "[$ ?]"; by iModIntro.
 Qed.
 
-Program Definition iMsg_tag (ms : gmap namespace (iMsg Σ term)) : iMsg Σ term :=
+Program Definition iMsg_tag_def (ms : gmap namespace (iMsg Σ term)) : iMsg Σ term :=
   IMsg (λ t, λne pp, ∃ N t' m,
           ⌜ms !! N = Some m ∧ t = Spec.tag (Tag N) t'⌝ ∗
           iMsg_car m t' pp)%I.
 Next Obligation. solve_proper. Qed.
+Definition iMsg_tag_aux : seal iMsg_tag_def.
+Proof. by eexists. Qed.
+Definition iMsg_tag := unseal iMsg_tag_aux.
+Lemma iMsg_tag_unseal : iMsg_tag = iMsg_tag_def.
+Proof. exact: seal_eq. Qed.
+
+Lemma iMsg_tag_eq ms t pp :
+  iMsg_car (iMsg_tag ms) t pp =
+  (∃ N t' m,
+     ⌜ms !! N = Some m ∧ t = Spec.tag (Tag N) t'⌝ ∗
+     iMsg_car m t' pp)%I.
+Proof. by rewrite iMsg_tag_unseal. Qed.
 
 Definition iProto_tag (a : action) ms : iProto Σ term :=
   iProto_message a (iMsg_tag ms).
