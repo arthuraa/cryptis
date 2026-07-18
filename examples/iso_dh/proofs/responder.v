@@ -99,7 +99,7 @@ iPoseProof (term_token_difference gb (↑iso_dhN.@"res") with "token")
   as "[res_token token]"; first by solve_ndisj.
 iMod ("res" $! b with "res_token") as "[resI resR]".
 iMod (iso_dh_ready_alloc N skI skR si with "[//] resI") as "#ready".
-iAssert (public gb) as "#p_gb"; first by iApply public_dh_share.
+iAssert (public gb) as "#p_gb"; first by iApply (public_dh_share (nonce_Nmul nonce_b)).
 wp_pure _ credit:"H1".
 wp_pure _ credit:"H2".
 wp_apply wp_mk_keyshare => //.
@@ -157,7 +157,7 @@ iAssert (|={⊤}=>
   case/Spec.of_list_inj: e_m3
     => -> <- /Spec.sign_pkey_inj <- {ga gb' skR'}
     in fresh_b gb gab si *.
-  rewrite TExpNC in gab si *.
+  rewrite TExp_comm in gab si *.
   iDestruct "comp" as "[comp|comp]".
   - iMod (term_meta_set (iso_dhN.@"failed") true with "token_failed")
       as "#?"; first by solve_ndisj.

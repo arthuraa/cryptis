@@ -163,6 +163,41 @@ Qed.
 Definition nsl_dh_key_share skI skR t : iProp :=
   (public skI ∨ public skR) ∧ ⌜length (exps t) = 1⌝.
 
+Lemma nonce_Nmul t : is_nonce t -> is_true (negb (is_mul t)).
+Proof. by case: t. Qed.
+
+(* With binary [TExp], [TExp (TExp g a) b] is no longer definitionally
+   [TExpN g [b; a]]; these shims recover the old spellings. *)
+Lemma TExp2_TExpN g a b : TExp (TExp g a) b = TExpN g [b; a].
+Proof.
+rewrite (_ : TExp g a = TExpN g [a]); last by rewrite /TExpN TMulN1.
+by rewrite TExp_TExpN.
+Qed.
+
+Lemma TExp_comm g a b : TExp (TExp g a) b = TExp (TExp g b) a.
+Proof.
+rewrite (_ : TExp g a = TExpN g [a]); last by rewrite /TExpN TMulN1.
+rewrite (_ : TExp g b = TExpN g [b]); last by rewrite /TExpN TMulN1.
+by rewrite !TExp_TExpN TExpC2.
+Qed.
+
+Lemma exps_TExp1 a : is_true (negb (is_mul a)) -> exps (TExp (TInt 0) a) ≡ₚ [a].
+Proof.
+move=> Nm.
+rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [a]); last by rewrite /TExpN TMulN1.
+rewrite exps_TExpN';
+  [done | by case | by rewrite /atomic /= Nm | exact: (invs_canceled1 Nm)].
+Qed.
+
+Lemma exps_TExp2 a b :
+  is_true (negb (is_mul a)) -> is_true (negb (is_mul b)) -> a ≠ TInv b ->
+  exps (TExpN (TInt 0) [a; b]) ≡ₚ [a; b].
+Proof.
+move=> Nm_a Nm_b aVb.
+rewrite exps_TExpN';
+  [done | by case | by rewrite /atomic /= Nm_a Nm_b | by apply/(invs_canceled2 Nm_a Nm_b)].
+Qed.
+
 Definition si_key si : senc_key :=
   SEncKey
     (Spec.of_list [Spec.pkey (si_init si);
@@ -500,6 +535,7 @@ Definition msg2_pred skI m2 : iProp := ∃ ga gb skR N,
 Definition msg3_pred skR gb : iProp := ∀ ga b,
   let gab := TExp ga b in
   ⌜gb = TExp (TInt 0) b⌝ -∗
+  ⌜is_nonce b⌝ -∗
   has_peer_share gb (Some ga) -∗
   (▷ (released ga ∧ released gb) → public ga) ∗
   (public gab ↔ ▷ (released ga ∧ released gb)).
@@ -535,15 +571,20 @@ Lemma public_dh_share skI skR a :
   ▷ (public skI ∨ public skR) -∗
   public ga.
 Proof.
-iIntros (ga) "#(_ & m_a & _ & #pred_a) corr".
+iIntros (ga) "#(%nonce_a & m_a & _ & #pred_a) corr".
+have Nm : is_true (negb (is_mul a)) := nonce_Nmul nonce_a.
+have Nm' : Is_true (negb (is_mul a)) := proj1 (is_trueP _) Nm.
 iAssert (exp_pred_base a (TExp (TInt 0) a)) with "[corr]" as "#dp".
 { iAssert (▷ □ nsl_dh_key_share skI skR (TExp (TInt 0) a))%I
     with "[corr]" as "#ns".
   { iNext. iDestruct "corr" as "#corr".
     iModIntro. rewrite /nsl_dh_key_share. iSplit => //.
-    iPureIntro. by rewrite exps_TExpN /=. }
+    iPureIntro.
+    rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [a]); last by rewrite /TExpN TMulN1.
+    rewrite exps_TExpN';
+      [by [] | by case | by rewrite /atomic /= Nm | exact: (invs_canceled1 Nm)]. }
   by iDestruct ("pred_a" $! (TExp (TInt 0) a) with "ns") as "$". }
-rewrite /ga public_TExp_iff; last by case.
+rewrite /ga public_TExp_iff //; last by case.
 rewrite minted_TInt. do 3?[iSplit => //].
 - by iApply exp_pred_intro1.
 - iIntros "!> _". by rewrite public_TInt.

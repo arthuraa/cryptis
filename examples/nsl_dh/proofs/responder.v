@@ -171,6 +171,8 @@ move=> gb gab si.
 iIntros "%Ψ (#chan & #ctx & #(m1_pred & m2_pred & m3_pred) &
          #m_skI & #m_skR & #m_ga & #s_ga & #dh_b & #ps_gb & rel) Hpost".
 iDestruct "dh_b" as "(%nonce_b & #m_b & #s_b & #pred_b)".
+have Nm_b : is_true (negb (is_mul b)) := nonce_Nmul nonce_b.
+have Nm_b' : Is_true (negb (is_mul b)) := proj1 (is_trueP _) Nm_b.
 rewrite /responder_recv_msg3. wp_pures.
 wp_apply wp_pkey. wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m) "#p_m".
@@ -193,10 +195,10 @@ iAssert (minted (si_key si)) as "#m_k".
   - by iApply all_minted_TExp; iSplit. }
 iDestruct "inv_m3" as "[#p_gb|(#inv_m3 & _)]".
 - (* public gb — case split via public_TExp_iff *)
-  rewrite public_TExp_iff; first last. { by case. }
+  rewrite public_TExp_iff //; last by case.
   iDestruct "p_gb" as "(_ & _ & #exp_b & _)".
   iPoseProof (exp_pred_inv_same with "exp_b") as "exp_b_inv";
-    first (rewrite exps_TExpN'; [set_solver | by case | exact: invs_canceled1]).
+    first by rewrite (exps_TExp1 Nm_b); set_solver.
   iDestruct "exp_b_inv" as "[#p_b | (%t3 & %base_t3 & %t3_sub & #base_b)]".
   + (* public b — contradiction with release_token *)
     iDestruct ("s_b" with "p_b") as "#later_ns".
@@ -226,7 +228,8 @@ iDestruct "inv_m3" as "[#p_gb|(#inv_m3 & _)]".
       iApply public_TExp => //.
     * by iLeft.
 - (* msg3_pred — honest case *)
-  iPoseProof ("inv_m3" $! ga b with "[%] ps_gb") as "[#rel_ga_gb #gab_iff]".
+  iPoseProof ("inv_m3" $! ga b with "[%] [%] ps_gb") as "[#rel_ga_gb #gab_iff]".
+  { done. }
   { done. }
   wp_bind (derive_senc_key _). iApply wp_derive_senc_key. iNext. wp_pures.
   iApply ("Hpost" $! (Some (si_key si))). iRight. iModIntro. iSplit => //.

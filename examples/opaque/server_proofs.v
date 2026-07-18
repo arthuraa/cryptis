@@ -24,6 +24,7 @@ Notation iProp := (iProp Σ).
 Definition opaque_file (file : val) : iProp :=
   ∃ k_s p_s P_s P_u envelope,
     ⌜file = Spec.of_list [k_s; p_s; P_s; P_u; envelope]⌝
+    ∗ ⌜is_nonce k_s⌝
     ∗ minted k_s ∗ □(public k_s ↔ ▷ □ False) ∗
     □(public (TInv k_s) ↔ ▷ False) ∗
     □(∀ t' : term, exp_pred_base k_s t' ↔ ▷ □ True) ∗
@@ -87,7 +88,7 @@ assert (p_u ≠ p_s) as Hneq.
   apply (Hfreshp_u (TExp g p_s)).
     by rewrite elem_of_singleton.
   rewrite contra.
-  by apply subterm_TExp_exp.
+  apply: subterm_TExp_exp; [done | exact: (nonce_Nmul Hnoncep_s) | exact: STRefl].
 wp_pures.
 wp_apply wp_texp; wp_pures.
 wp_apply wp_texp.
@@ -99,12 +100,17 @@ iApply "post".
 iExists k_s, p_s, (TExp g p_s), (TExp g p_u), _.
 do !iSplit => //.
 - by rewrite bi.intuitionistically_False.
-- iApply public_TExp_iff; auto.
+- iApply public_TExp_iff.
+    by case.
+    by exact: (proj1 (is_trueP _) (nonce_Nmul Hnoncep_s)).
   do !iSplit => //.
   + by iApply minted_TInt.
   + iApply exp_pred_intro1.
     iApply "Hexpp_s".
-    by iNext; iModIntro; iPureIntro; rewrite exps_TExpN.
+    iNext; iModIntro; iPureIntro.
+    have Nm : is_true (negb (is_mul p_s)) := nonce_Nmul Hnoncep_s.
+    rewrite (_ : TExp g p_s = TExpN g [p_s]); last by rewrite /TExpN TMulN1.
+    by rewrite exps_TExpN' //; [by case | by rewrite /atomic /= Nm | exact: (invs_canceled1 Nm)].
   + by iModIntro; iIntros "?"; iApply public_TInt.
 - iApply (public_sencIS _ (opN.@"AuthEnc") envelope_pred _) => //.
   1: rewrite minted_senc minted_THash minted_tag.
@@ -121,12 +127,18 @@ do !iSplit => //.
     iPureIntro.
     apply Hfreshp_u.
     by rewrite elem_of_singleton.
-  iApply public_TExp_exp_pred => //.
+  iApply public_TExp_exp_pred;
+    first by exact: (proj1 (is_trueP _) (nonce_Nmul Hnoncep_s)).
     + by iApply public_TInt.
+    + done.
     + iApply exp_pred_intro1.
       iApply "Hexpp_s".
-      by iNext; iModIntro; iPureIntro; rewrite exps_TExpN.
+      iNext; iModIntro; iPureIntro.
+      have Nm : is_true (negb (is_mul p_s)) := nonce_Nmul Hnoncep_s.
+      rewrite (_ : TExp g p_s = TExpN g [p_s]); last by rewrite /TExpN TMulN1.
+      by rewrite exps_TExpN' //; [by case | by rewrite /atomic /= Nm | exact: (invs_canceled1 Nm)].
     + by rewrite bi.intuitionistically_False.
+    + done.
   iModIntro.
   rewrite public_senc_key.
   iIntros "#Hcompromise".
@@ -144,23 +156,30 @@ do !iSplit => //.
   do !iSplit => //.
   + iPureIntro.
     apply /subtermsP.
-    rewrite subtermsE // cancel_exps1 /g subtermsE /= !right_id_L.
-    rewrite [subterms p_u]subterms_nonce //.
-    rewrite !not_elem_of_union.
-    do !split; rewrite elem_of_singleton //; destruct p_s => //.
-    destruct p_u => //.
-    rewrite /TExpN unlock /fold_term unlock /PreTerm.exp /=
-        /PreTerm.insert_exp /path.sort /=
-        /PreTerm.normalize /=
-        /PreTerm.insert_exp /path.sort /=
-        /PreTerm.invs_canceled /=.
-    by destruct (ssrbool.boolP true); intro contra.
-  + iApply public_TExp_exp_pred => //.
+    have Nm : is_true (negb (is_mul p_u)) := nonce_Nmul Hnoncep_u.
+    rewrite (_ : TExp g p_u = TExpN g [p_u]); last by rewrite /TExpN TMulN1.
+    rewrite subtermsE //; last by rewrite /atomic /= Nm.
+    rewrite cancel_exps1 /= [subterms p_u]subterms_nonce //.
+    rewrite /g subtermsE /=.
+    have p_s_ne2 : p_s ≠ TInt 0 by move=> E; rewrite E in Hnoncep_s.
+    have Hne1 : is_true (negb (is_nonce (TExpN (TInt 0) [p_u]))).
+      rewrite (_ : TExpN (TInt 0) [p_u] = TExp (TInt 0) p_u); last by rewrite /TExpN TMulN1.
+      by apply: is_nonce_TExp => //; exact: (nonce_Nmul Hnoncep_u).
+    have p_s_ne1 : p_s ≠ TExpN (TInt 0) [p_u].
+      move=> E; move: Hne1; rewrite -E; move: Hnoncep_s; by case: (is_nonce p_s).
+    set_solver.
+  + iApply public_TExp_exp_pred;
+      first by exact: (proj1 (is_trueP _) (nonce_Nmul Hnoncep_u)).
     * by iApply public_TInt.
+    * done.
     * iApply exp_pred_intro1.
       iApply "Hexpp_u".
-      by iNext; iModIntro; iPureIntro; rewrite exps_TExpN.
+      iNext; iModIntro; iPureIntro.
+      have Nm : is_true (negb (is_mul p_u)) := nonce_Nmul Hnoncep_u.
+      rewrite (_ : TExp g p_u = TExpN g [p_u]); last by rewrite /TExpN TMulN1.
+      by rewrite exps_TExpN' //; [by case | by rewrite /atomic /= Nm | exact: (invs_canceled1 Nm)].
     * by rewrite bi.intuitionistically_False.
+    * done.
 Qed.
 
 Lemma wp_server_session (db c : val) (alist : gmap term val) (fresh : gset term) :
@@ -191,7 +210,7 @@ case db_uid: (alist !! uid) => [file|]; wp_pures; last first.
   by iApply ("Hhl" $! None); iModIntro; do !iSplit.
 iDestruct ("Hmapcontents" $! uid file with "[//]") as
     "[_ (%k_s & %p_s & %P_s & %P_u & %envelope &
-         %e & Hmk_s & Hprivk_s & Hprivk_sV & Hexpk_s & Hexpk_sV &
+         %e & %Hnoncek_s & Hmk_s & Hprivk_s & Hprivk_sV & Hexpk_s & Hexpk_sV &
          HpubP_s & Hpenvelope & %p_u & %HP_u & %Hfreshp_u &
          %Hnoncep_s & %Hnoncep_u & HpubP_u & Hminp_s & ? & Hexpp_s & ? & Hprivp_s & ?)]".
 rewrite !subst_list_match /= e.
@@ -225,14 +244,20 @@ set m2 := (Spec.of_list [_; _; _; _]).
 wp_apply wp_send => //.
   rewrite public_of_list => //.
   do !iSplit => //.
-  - iApply public_TExp_exp_pred => //.
+  - iApply public_TExp_exp_pred => //;
+      first by exact: (proj1 (is_trueP _) (nonce_Nmul Hnoncek_s)).
     iApply exp_pred_intro1 => //.
     by iApply "Hexpk_s".
-  - iApply public_TExp_iff; auto.
+  - iApply public_TExp_iff.
+      by case.
+      by exact: (proj1 (is_trueP _) (nonce_Nmul Hnoncex_s)).
     do !iSplit => //.
     + by iApply minted_TInt.
     + iApply exp_pred_intro1.
-      by iApply "Hexpx_s"; iPureIntro; rewrite exps_TExpN.
+      iApply "Hexpx_s"; iPureIntro.
+      have Nm : is_true (negb (is_mul x_s)) := nonce_Nmul Hnoncex_s.
+      rewrite (_ : TExp g x_s = TExpN g [x_s]); last by rewrite /TExpN TMulN1.
+      by rewrite exps_TExpN' //; [by case | by rewrite /atomic /= Nm | exact: (invs_canceled1 Nm)].
     + by rewrite public_TInt; auto.
   - iApply public_THashIS => //.
       rewrite minted_of_list /= !minted_THash !minted_tag !minted_of_list /=.
@@ -265,16 +290,20 @@ iSplit.
     iDestruct (public_THashE with "HpredK Hpub") as "[Hpub' | [_ contra]]" => //.
     rewrite public_of_list /=.
     iDestruct "Hpub'" as "(contra & _)".
-    rewrite TExp_TExpN.
+    rewrite TExp2_TExpN.
     have p_s_u: p_s ≠ p_u.
       move=> p_u_s; apply: Hfreshp_u; rewrite -p_u_s.
-      apply/subtermsP; rewrite subtermsE // cancel_exps1 /=.
+      apply/subtermsP.
+      rewrite (_ : TExp g p_s = TExpN g [p_s]); last by rewrite /TExpN TMulN1.
+      have Nm : is_true (negb (is_mul p_s)) := nonce_Nmul Hnoncep_s.
+      rewrite subtermsE //; last by rewrite /atomic /= Nm.
+      rewrite cancel_exps1 /=.
       by rewrite [subterms p_s]subterms_nonce //; set_solver.
     have p_s_uV : p_s ≠ TInv p_u.
       move=> contra; have: is_inv (TInv p_u).
         by rewrite is_inv_TInv; case: (p_u) => // in Hnoncep_u *.
       by rewrite -contra; case: (p_s) => // in Hnoncep_s *.
-    by iApply (public_opaque_secret _ p_s_u p_s_uV).
+    by iApply (public_opaque_secret _ (nonce_Nmul Hnoncep_s) (nonce_Nmul Hnoncep_u) p_s_u p_s_uV).
   + do !iSplit => //.
     iApply (public_THashIS with "HpredSK") => //.
     rewrite minted_of_list.
@@ -311,18 +340,18 @@ iSplit.
       rewrite elem_of_union elem_of_singleton.
       by left.
     }
-    apply subterm_TExp_exp' => // contra'.
+    apply subterm_TExp_exp' => //; first exact: (nonce_Nmul Hnoncex_s).
+    move=> contra'.
     destruct Hfreshx_s'.
     rewrite subterm_exp.
     right. right.
     exists (TInv x_s).
     split => //.
-    apply STInv => //.
-    by destruct x_s.
+    apply STInv => //; by destruct x_s.
   + rewrite minted_of_list /=
       minted_THash minted_tag minted_of_list /=
       !minted_THash !minted_tag !minted_of_list /=
-      TExp_TExpN -!all_minted_TExpN /=.
+      -!all_minted_TExp /=.
     do !iSplit => //; iApply public_minted => //.
     by iApply public_TInt.
 Qed.
