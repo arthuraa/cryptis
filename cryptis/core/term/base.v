@@ -657,18 +657,31 @@ apply/and5P; split.
 - by rewrite size_map.
 Qed.
 
-Lemma invs_canceledP {ts} :
-  atomic ts ->
-  reflect (forall t, t \in ts -> TInv t \notin ts) (invs_canceled ts).
+(* Characterisation of the (real-[inv]) [invs_canceled] at the term level: a
+   factor list is canceled iff no factor's *distributing* inverse [TInv] is also
+   in the list.  Unconditional now — [invs_canceled] is defined via [PreTerm.inv]
+   (the real inverse), so [unfold_TInv] (which needs no side condition) bridges it
+   directly, no atomicity required. *)
+Lemma invs_canceledE ts : invs_canceled ts = all (fun t => TInv t \notin ts) ts.
 Proof.
-move => /allP atom; apply /(iffP idP).
-- move => /allP canceled t t_ts.
-  rewrite -(mem_map unfold_term_inj) (unfold_TInv_Nmul (atom _ t_ts)).
-  apply canceled. by rewrite (mem_map unfold_term_inj).
-- move => canceled; apply /allP => /= pt /mapP [t t_ts ->].
-  rewrite -(unfold_TInv_Nmul (atom _ t_ts)) (mem_map unfold_term_inj).
-  exact: canceled.
+rewrite /invs_canceled /PreTerm.invs_canceled all_map.
+apply: eq_all => t /=.
+by rewrite -unfold_TInv (mem_map unfold_term_inj).
 Qed.
+
+(* [TMulN []] (the multiplicative identity) is the unique self-inverse term. *)
+Lemma TInv_fixed t : (TInv t == t) = (t == TMulN [::]).
+Proof.
+apply/idP/idP.
+- move=> /eqP E; apply/eqP/unfold_term_inj; rewrite unfold_TMulN /=.
+  move: E => /(congr1 unfold_term); rewrite unfold_TInv => /eqP.
+  by rewrite (PreTerm.inv_fixed (wf_unfold_term t)) => /eqP.
+- by move=> /eqP ->; apply/eqP/unfold_term_inj; rewrite unfold_TInv unfold_TMulN /=.
+Qed.
+
+Lemma invs_canceledP {ts} :
+  reflect (forall t, t \in ts -> TInv t \notin ts) (invs_canceled ts).
+Proof. rewrite invs_canceledE; exact: allP. Qed.
 
 (* Permutation-invariance of [invs_canceled] holds universally: it is [all] of a
    membership test, and both are stable under permutation (no atomicity needed). *)
@@ -676,40 +689,62 @@ Lemma perm_invs_canceled ts1 ts2 :
   perm_eq ts1 ts2 -> invs_canceled ts1 = invs_canceled ts2.
 Proof.
 move => peq.
-have peqU : perm_eq (map unfold_term ts1) (map unfold_term ts2) by rewrite perm_map.
-rewrite /invs_canceled /PreTerm.invs_canceled.
-rewrite (perm_all (fun pt => PreTerm.inv_aux pt \notin map unfold_term ts1) peqU).
-by apply: eq_all => pt; rewrite (perm_mem peqU).
+rewrite !invs_canceledE (perm_all (fun t => TInv t \notin ts1) peq).
+by apply: eq_all => t; rewrite (perm_mem peq).
 Qed.
 
-Lemma invs_canceled1 t : invs_canceled [:: t].
+(* A singleton cancels iff it is not the identity ([TInv (TMulN []) = TMulN []]). *)
+Lemma invs_canceled1 t : invs_canceled [:: t] = (t != TMulN [::]).
+Proof. by rewrite invs_canceledE /= andbT inE TInv_fixed. Qed.
+
+(* The identity [TMulN []] is a product, so no atomic term equals it. *)
+Lemma Nmul_neq_unit {t} : ~~ is_mul t -> t != TMulN [::].
+Proof. by apply: contra => /eqP ->; rewrite is_mul_unfold unfold_TMulN. Qed.
+
+(* Atomic terms are never the identity, so a single atomic factor always cancels. *)
+Lemma invs_canceled_Nmul1 {t} : ~~ is_mul t -> invs_canceled [:: t].
+Proof. by move=> Nm; rewrite invs_canceled1; exact: Nmul_neq_unit. Qed.
+
+Lemma all_TInv_neq (t : term) us : all (fun t' => TInv t' != t) us = (TInv t \notin us).
 Proof.
-by rewrite /invs_canceled /PreTerm.invs_canceled /= andbT !inE PreTerm.inv_Nid.
+rewrite (eq_all (a2 := fun t' => t' != TInv t)); last first.
+  by move=> t' /=; rewrite (inv_eq TInvK).
+by rewrite -has_pred1 -all_predC.
 Qed.
 
+(* [atomic ts] is no longer needed — only [~~ is_mul t] (so the head is not the
+   self-inverse identity); the tail conditions collapse via [TInvK]. *)
 Lemma invs_canceled_cons {t ts} :
-  ~~ is_mul t -> atomic ts ->
+  ~~ is_mul t ->
   invs_canceled (t :: ts) = (TInv t \notin ts) && invs_canceled ts.
 Proof.
-move => Nm atom.
-rewrite /invs_canceled /PreTerm.invs_canceled /=.
-rewrite inE negb_or PreTerm.inv_Nid /=.
-rewrite -(unfold_TInv_Nmul Nm) (mem_map unfold_term_inj).
-case: (boolP (_ \in _)) => //= t_ts.
-apply eq_in_all => /= pt /mapP /= [t' t'_ts ->].
-rewrite inE negb_or -(unfold_TInv_Nmul (allP atom _ t'_ts)) (eqtype.inj_eq unfold_term_inj).
-case: eqP => //= eq.
-by rewrite -eq TInvK t'_ts in t_ts.
+move=> Nm; rewrite !invs_canceledE /= inE (negbTE (TInv_Nid Nm)) /=.
+under eq_in_all => t' t'_us do rewrite inE negb_or.
+by rewrite all_predI all_TInv_neq -invs_canceledE andbA andbb.
 Qed.
 
-Lemma invs_canceled2 {t1 t2} :
+(* Two atomic factors cancel iff they are not inverses of each other and neither
+   is the identity.  Unconditional in the [~~ is_mul] sense the old version needed:
+   the self-inverse conditions are captured exactly by [TMulN [] \notin _]. *)
+Lemma invs_canceled2 t1 t2 :
+  invs_canceled [:: t1 ; t2] = (TInv t1 != t2) && (TMulN [::] \notin [:: t1; t2]).
+Proof.
+rewrite invs_canceledE /= !inE !negb_or andbT !TInv_fixed.
+have -> : (TInv t2 != t1) = (TInv t1 != t2) by rewrite [TInv t2 == t1]eq_sym (inv_eq TInvK).
+rewrite [TMulN [::] == t1]eq_sym [TMulN [::] == t2]eq_sym.
+by case: (t1 != TMulN [::]); case: (TInv t1 != t2); case: (t2 != TMulN [::]).
+Qed.
+
+(* Atomic specialisation: for non-product factors the identity conditions vanish,
+   so [[t1;t2]] cancels iff [t1] and [t2] are not inverses.  Used by the stdpp
+   [invs_canceled2] mirror (where ssreflect [!=] notation is unavailable). *)
+Lemma invs_canceled2_Nmul {t1 t2} :
   ~~ is_mul t1 -> ~~ is_mul t2 ->
   invs_canceled [:: t1 ; t2] = (t1 != TInv t2).
 Proof.
-move => Nm1 Nm2.
-have a2 : atomic [:: t2] by rewrite /atomic /= Nm2.
-by rewrite (invs_canceled_cons Nm1 a2) (invs_canceled1 t2)
-   andbT !inE (inv_eq TInvK).
+move=> Nm1 Nm2; rewrite invs_canceled2 (inv_eq TInvK) !inE negb_or.
+rewrite [TMulN [::] == t1]eq_sym [TMulN [::] == t2]eq_sym.
+by rewrite (Nmul_neq_unit Nm1) (Nmul_neq_unit Nm2) !andbT.
 Qed.
 
 Lemma parity_cancel_exps ts : odd (size (cancel_exps ts)) = odd (size ts).
@@ -733,33 +768,37 @@ Lemma invs_canceled_cons_exps {t1} t2 :
   ~~ is_mul t1 ->
   invs_canceled (t1 :: exps t2) = (TInv t1 \notin exps t2).
 Proof.
-by move => Nm; rewrite (invs_canceled_cons Nm (atom_exps t2))
-   invs_canceled_exps andbT.
+by move => Nm; rewrite (invs_canceled_cons Nm) invs_canceled_exps andbT.
 Qed.
 
-Lemma cancel_exps_canceled ts : invs_canceled ts -> cancel_exps ts = ts.
+(* [cancel_exps] leaves a canonical *atomic* list unchanged.  Atomicity is
+   required: the (factor-level) [cancel_exps] would still cancel a product and its
+   [inv_aux]-wrapper even when the list is [invs_canceled] w.r.t. the real inverse. *)
+Lemma cancel_exps_canceled ts :
+  atomic ts -> invs_canceled ts -> cancel_exps ts = ts.
 Proof.
-rewrite /invs_canceled => ?.
-by rewrite /cancel_exps PreTerm.cancel_exps_canceled // (mapK unfold_termK).
+move=> atom canc.
+have atomU : all (fun pt => ~~ PreTerm.is_mul pt) (map unfold_term ts).
+  rewrite all_map; apply/allP => t' t'ts /=; rewrite -is_mul_unfold.
+  by move/allP: atom; apply.
+by rewrite /cancel_exps (PreTerm.cancel_exps_canceled atomU) ?(mapK unfold_termK).
 Qed.
 
 Lemma cancel_exps_exps t : cancel_exps (exps t) = exps t.
-Proof. exact /cancel_exps_canceled /invs_canceled_exps. Qed.
+Proof. apply: cancel_exps_canceled; [exact: atom_exps | exact: invs_canceled_exps]. Qed.
 
 Lemma cancel_exps1 t : cancel_exps [:: t] = [:: t].
-Proof. exact /cancel_exps_canceled /invs_canceled1. Qed.
+Proof. by rewrite /cancel_exps /= unfold_termK. Qed.
 
 Lemma invs_canceled_count {t} ts :
-  ~~ is_mul t -> invs_canceled ts ->
+  invs_canceled ts ->
   count_mem t ts - count_mem (TInv t) ts = count_mem t ts.
 Proof.
-move=> Nm can_ts.
+move=> can_ts.
 have [t_ts|/count_memPn -> //] := boolP (t \in ts).
 suff -> : count_mem (TInv t) ts = 0 by rewrite subn0.
 apply/count_memPn.
-rewrite -(mem_map unfold_term_inj) (unfold_TInv_Nmul Nm).
-move: can_ts; rewrite /invs_canceled /PreTerm.invs_canceled => /allP H.
-by apply: H; rewrite (mem_map unfold_term_inj).
+by move: can_ts; rewrite invs_canceledE => /allP/(_ _ t_ts).
 Qed.
 
 Lemma is_exp_TExpN t ts :
@@ -784,7 +823,7 @@ Proof.
 move => Nx1 Nm2.
 have -> : TExp t1 t2 = TExpN t1 [:: t2] by rewrite /TExpN TMulN1.
 have atom : all (fun t => ~~ is_mul t) [:: t2] by rewrite /= Nm2.
-by rewrite (@is_exp_TExpN t1 [:: t2] Nx1 atom (invs_canceled1 t2)).
+by rewrite (@is_exp_TExpN t1 [:: t2] Nx1 atom (invs_canceled_Nmul1 Nm2)).
 Qed.
 
 Lemma TExpN0 : right_id [::] TExpN.
@@ -865,7 +904,7 @@ Qed.
 
 Lemma in_TInv_exps t1 t2 : t1 \in exps t2 -> TInv t1 \notin exps t2.
 Proof.
-move: (invs_canceled_exps t2) => /(invs_canceledP (atom_exps t2)) H.
+move: (invs_canceled_exps t2) => /invs_canceledP H.
 exact: H.
 Qed.
 
@@ -924,7 +963,7 @@ have atom : all (fun t => ~~ is_mul t) (exps t1 ++ [:: t2]).
 have canc : invs_canceled (exps t1 ++ [:: t2]).
   have pperm : perm_eq (exps t1 ++ [:: t2]) (t2 :: exps t1) by rewrite -cat1s perm_catC.
   rewrite (@perm_invs_canceled _ _ pperm).
-  by rewrite (invs_canceled_cons Nm2 (atom_exps t1)) t2_t1 (invs_canceled_exps t1).
+  by rewrite (invs_canceled_cons Nm2) t2_t1 (invs_canceled_exps t1).
 have e1 : tsize t1 = (exps t1 != [::]) + (1 < size (exps t1)) + tsize (base t1)
                      + sumn (map tsize (exps t1)).
   by rewrite -{1}(base_expsK t1)
@@ -1013,8 +1052,8 @@ case: (t1 =P t3) => [<-|t1_t3] /=.
   by move: t1_t2; rewrite -count_exp_nat_gt0; case: count_exp_nat.
 case: (t1 =P TInv t3) => [t1E|t1_t3V] /=.
   by rewrite add0n add1n subnS
-     (invs_canceled_count (exps t2) Nmt1 (invs_canceled_exps t2)).
-by rewrite !add0n (invs_canceled_count (exps t2) Nmt1 (invs_canceled_exps t2)).
+     (invs_canceled_count (exps t2) (invs_canceled_exps t2)).
+by rewrite !add0n (invs_canceled_count (exps t2) (invs_canceled_exps t2)).
 Qed.
 
 Variant count_exp_nat_TExp_spec t1 t2 t3 : nat -> Type :=

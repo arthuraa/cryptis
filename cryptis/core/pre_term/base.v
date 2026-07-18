@@ -345,7 +345,13 @@ Fixpoint normalize pt :=
   | PTMul ts => mul (map normalize ts)
   end.
 
-Definition invs_canceled pts := all (fun pt => inv_aux pt \notin pts) pts.
+(* Inverse-canceled: no element's (real, distributing) inverse also occurs.  A
+   self-inverse element — only the identity [PTMul []], the unique fixed point of
+   [inv] — is not flagged: it has no partner.  On atomic lists (which well-formed
+   products require) [inv = inv_aux] and nothing is self-inverse, so this agrees
+   with the naive [inv_aux] form; using the real [inv] lets the term-level
+   [invs_canceled2] avoid the [~~ is_mul] side conditions. *)
+Definition invs_canceled pts := all (fun pt => inv pt \notin pts) pts.
 
 Fixpoint wf_term pt :=
   match pt with
@@ -516,14 +522,47 @@ Proof. by move => wf; rewrite exps_expN // base_Nexp. Qed.
 Lemma base_expoK pt : is_exp pt -> PTExp (base pt) (expo pt) = pt.
 Proof. by case: pt => [o|o t|[||] t1 t2|ts]. Qed.
 
+(* [inv_aux] (the factor-level inverse) is inverted back by the real [inv]. *)
+Lemma inv_inv_aux pt : wf_term pt -> inv (inv_aux pt) = pt.
+Proof.
+move=> wf; have Nm := is_mul_inv wf.
+rewrite (_ : inv (inv_aux pt) = inv_aux (inv_aux pt));
+  last by rewrite /inv; case: (inv_aux pt) Nm.
+exact: invK.
+Qed.
+
+(* Being canceled under the real [inv] implies being canceled under [inv_aux]:
+   an [inv_aux]-pair always induces an [inv]-pair (the [O1Inv] wrapper is
+   non-product, so its real inverse is the unwrapped element). *)
+Lemma invs_canceled_inv_aux pts :
+  all wf_term pts -> invs_canceled pts -> all (fun pt => inv_aux pt \notin pts) pts.
+Proof.
+move=> /allP wfs /allP canc; apply/allP => pt pt_pts; apply/negP => inv_aux_in.
+by move: (canc _ inv_aux_in); rewrite (inv_inv_aux (wfs _ pt_pts)) pt_pts.
+Qed.
+
+(* On atomic lists [inv = inv_aux], so [invs_canceled] reduces to the naive form. *)
+Lemma invs_canceled_atomic pts :
+  all (fun pt => ~~ is_mul pt) pts ->
+  invs_canceled pts = all (fun pt => inv_aux pt \notin pts) pts.
+Proof.
+move=> /allP atom; rewrite /invs_canceled; apply: eq_in_all => pt pt_pts.
+have Nm := atom _ pt_pts; clear pt_pts.
+by move: Nm; rewrite /inv; case: pt.
+Qed.
+
 Lemma invs_canceled_sort pts : invs_canceled (sort <=%O pts) = invs_canceled pts.
 Proof. rewrite /invs_canceled all_sort. apply eq_all => ?. by rewrite mem_sort. Qed.
 
-Lemma invs_canceled_insert_exp pt pts :
-  wf_term pt -> all wf_term pts -> invs_canceled pts -> invs_canceled (insert_exp pt pts).
+(* [cancel_exps]/[insert_exp] produce lists with no [inv_aux]-pair (the underlying
+   cancellation algorithm operates on [inv_aux]). *)
+Lemma insert_exp_no_pair pt pts :
+  wf_term pt -> all wf_term pts ->
+  all (fun q => inv_aux q \notin pts) pts ->
+  all (fun q => inv_aux q \notin insert_exp pt pts) (insert_exp pt pts).
 Proof.
 move => ? /allP /= wfs /allP /= canceled.
-rewrite /invs_canceled. apply /allP. rewrite /insert_exp /= => pt'.
+apply /allP. rewrite /insert_exp /= => pt'.
 case: ifP => [_| /negP ?].
 - move => /mem_rem /canceled. apply: contra. exact: mem_rem.
 - rewrite !inE negb_or => /orP [/eqP -> | in_pts].
@@ -534,12 +573,23 @@ case: ifP => [_| /negP ?].
     by rewrite eq in in_pts.
 Qed.
 
-Lemma invs_canceled_cancel_exps pts : all wf_term pts -> invs_canceled (cancel_exps pts).
+Lemma cancel_exps_no_pair pts :
+  all wf_term pts ->
+  all (fun q => inv_aux q \notin cancel_exps pts) (cancel_exps pts).
 Proof.
 elim: pts => // [?? IH] /andP [??].
-apply invs_canceled_insert_exp => //.
+apply insert_exp_no_pair => //.
   exact: wf_cancel_exps.
   exact: IH.
+Qed.
+
+(* On atomic input [cancel_exps] output is real-[inv]-canceled too. *)
+Lemma invs_canceled_cancel_exps pts :
+  all (fun pt => ~~ is_mul pt) pts -> all wf_term pts ->
+  invs_canceled (cancel_exps pts).
+Proof.
+move=> atom wf.
+by rewrite (invs_canceled_atomic (Nmul_cancel_exps atom)); exact: cancel_exps_no_pair.
 Qed.
 
 Lemma invs_canceled_cons pt pts : invs_canceled (pt :: pts) -> invs_canceled pts.
@@ -549,27 +599,45 @@ apply /allP => ? /canceled.
 by rewrite inE negb_or => /andP [].
 Qed.
 
-Lemma insert_exp_canceled pt pts :
-  invs_canceled (pt :: pts) -> insert_exp pt pts = pt :: pts.
+(* No [inv_aux]-pair in the input ⇒ [cancel_exps] is the identity. *)
+Lemma no_pair_cons pt pts :
+  all (fun q => inv_aux q \notin (pt :: pts)) (pt :: pts) ->
+  all (fun q => inv_aux q \notin pts) pts.
 Proof.
-rewrite /insert_exp => /allP canceled.
+move=> /andP [_ /allP canceled]; apply/allP => ? /canceled.
+by rewrite inE negb_or => /andP [].
+Qed.
+
+Lemma insert_exp_id pt pts :
+  all (fun q => inv_aux q \notin (pt :: pts)) (pt :: pts) -> insert_exp pt pts = pt :: pts.
+Proof.
+move=> /allP canceled; rewrite /insert_exp.
 have := canceled _ (mem_head _ _).
 by rewrite inE negb_or => /andP [_ /negbTE ->].
 Qed.
 
-Lemma cancel_exps_canceled pts :
-  invs_canceled pts -> cancel_exps pts = pts.
+Lemma cancel_exps_id pts :
+  all (fun q => inv_aux q \notin pts) pts -> cancel_exps pts = pts.
 Proof.
-elim: pts => // [?? IH] canceled /=.
-rewrite insert_exp_canceled // IH //; exact: invs_canceled_cons canceled.
+elim: pts => // [pt pts IH] canceled /=.
+rewrite (IH (no_pair_cons canceled)).
+exact: (insert_exp_id canceled).
 Qed.
 
-Lemma invs_canceled1 t : invs_canceled [:: t].
-Proof. by rewrite /invs_canceled /= andbT !inE inv_Nid. Qed.
+Lemma cancel_exps_canceled pts :
+  all (fun pt => ~~ is_mul pt) pts -> invs_canceled pts -> cancel_exps pts = pts.
+Proof. by move=> atom; rewrite (invs_canceled_atomic atom); exact: cancel_exps_id. Qed.
+
+Lemma invs_canceled1 t : ~~ is_mul t -> invs_canceled [:: t].
+Proof.
+move=> Nm; rewrite invs_canceled_atomic; last by rewrite /= Nm.
+by rewrite /= andbT !inE inv_Nid.
+Qed.
 
 Lemma invs_canceled_factors pt : wf_term pt -> invs_canceled (factors pt).
 Proof.
-case: pt => [o|o t|o t1 t2|ts] wf; rewrite /factors; try exact: invs_canceled1.
+case: pt => [o|o t|o t1 t2|ts] wf; rewrite /factors;
+  try by apply: invs_canceled1.
 by case/and5P: wf.
 Qed.
 
@@ -587,7 +655,10 @@ Proof. by move => wf; rewrite /exps; apply/sorted_factors/wf_expo. Qed.
 
 Lemma cancel_exps_exps pt :
   wf_term pt -> cancel_exps (exps pt) = exps pt.
-Proof. move => ?. apply cancel_exps_canceled. exact: invs_canceled_exps. Qed.
+Proof.
+move => wf. apply: cancel_exps_canceled; last exact: invs_canceled_exps.
+by rewrite /exps; apply/Nmul_factors/wf_expo.
+Qed.
 
 (* Multiplication *)
 
@@ -630,8 +701,9 @@ have Nmul_sc : all (fun t => ~~ is_mul t) (sort <=%O c).
   by move/allP: (flatten_factors_Nmul wf) => /(_ x xin).
 have sorted_sc : sorted <=%O (sort <=%O c) by exact: sort_le_sorted.
 have inv_sc : invs_canceled (sort <=%O c).
-  by rewrite invs_canceled_sort; apply: invs_canceled_cancel_exps;
-     exact: flatten_factors_wf.
+  rewrite invs_canceled_sort; apply: invs_canceled_cancel_exps.
+  - exact: flatten_factors_Nmul wf.
+  - exact: flatten_factors_wf.
 case E: (sort <=%O c) => [|t [|t' c']] //=.
   have : t \in sort <=%O c by rewrite E mem_head.
   by rewrite mem_sort => /(allP wf_c).
@@ -656,7 +728,7 @@ Qed.
 Lemma mul_wf1 t : wf_term t -> mul [:: t] = t.
 Proof.
 move => wf; rewrite /mul /= cats0.
-rewrite cancel_exps_canceled ?invs_canceled_factors //.
+rewrite (cancel_exps_canceled (Nmul_factors wf) (invs_canceled_factors wf)).
 rewrite sort_le_id ?sorted_factors //.
 case: t wf => [o|o t|o t1 t2|ts] //= wf.
 by case/and5P: wf => _ _ _ _; case: ts => [|t [|t' c']].
@@ -722,7 +794,7 @@ Lemma mul_factors pt : wf_term pt -> mul (factors pt) = pt.
 Proof.
 case: pt => [o|o t|o t1 t2|ts] wf; rewrite /factors; try exact: (mul_wf1 wf).
 move: wf => /and5P [_ Nmul sorted_ts inv_ts sizeN1]; rewrite /mul.
-rewrite (flatten_factors_Nmul_id Nmul) cancel_exps_canceled // sort_le_id //.
+rewrite (flatten_factors_Nmul_id Nmul) (cancel_exps_canceled Nmul inv_ts) sort_le_id //.
 by case: ts sizeN1 {Nmul sorted_ts inv_ts} => [|? [|? ?]].
 Qed.
 
@@ -971,7 +1043,7 @@ Lemma mul_eq_unit ts :
 Proof.
 move => atom canc.
 rewrite -size_eq0 -(size_sort <=%O ts) size_eq0.
-rewrite /mul (flatten_factors_Nmul_id atom) (cancel_exps_canceled canc).
+rewrite /mul (flatten_factors_Nmul_id atom) (cancel_exps_canceled atom canc).
 case E: (sort <=%O ts) => [|a [|b l]] //=.
 have : a \in ts by rewrite -(mem_sort <=%O ts) E mem_head.
 by move/(allP atom); case: (a) => // - [].
@@ -982,7 +1054,7 @@ Lemma tsize_mul ts :
   tsize (mul ts) = (1 < size ts) + sumn [seq tsize t | t <- ts].
 Proof.
 move => atom canc tsN0.
-rewrite /mul (flatten_factors_Nmul_id atom) (cancel_exps_canceled canc).
+rewrite /mul (flatten_factors_Nmul_id atom) (cancel_exps_canceled atom canc).
 have <- : size (sort <=%O ts) = size ts by rewrite size_sort.
 have <- : sumn [seq tsize t | t <- sort <=%O ts] = sumn [seq tsize t | t <- ts].
   rewrite !sumnE !big_map; apply: perm_big; by rewrite perm_sort.
@@ -997,9 +1069,9 @@ Lemma invs_canceled_map_inv ts :
 Proof.
 move => wf canc; apply/allP => x /mapP [t t_ts ->].
 have wft := allP wf _ t_ts.
-rewrite (invK wft); apply/negP => /mapP [s s_ts e].
+rewrite (inv_inv_aux wft); apply/negP => /mapP [s s_ts e].
 have ws := allP wf _ s_ts.
-by move: (allP canc _ t_ts); rewrite e (invK ws) s_ts.
+by move: (allP canc _ t_ts); rewrite e (inv_inv_aux ws) s_ts.
 Qed.
 
 Lemma dinvK pt : wf_term pt -> inv (inv pt) = pt.
@@ -1018,7 +1090,7 @@ have mapK : map inv_aux (map inv_aux (factors pt)) = factors pt.
   rewrite -map_comp -[RHS]map_id; apply/eq_in_map => t t_fs.
   exact: (invK (allP fs_wf _ t_fs)).
 rewrite (dinv_factors wf) (dinv_factors (wf_mul wfinv)).
-rewrite (factors_mul wfinv) (flatten_factors_Nmul_id Nminv) (cancel_exps_canceled canc_inv).
+rewrite (factors_mul wfinv) (flatten_factors_Nmul_id Nminv) (cancel_exps_canceled Nminv canc_inv).
 rewrite -{2}(mul_factors wf).
 apply: perm_mul.
 - rewrite all_map; apply/allP => t; rewrite mem_sort => t_in.
@@ -1026,6 +1098,45 @@ apply: perm_mul.
 - apply: (perm_trans (y := map inv_aux (map inv_aux (factors pt)))).
   + by rewrite perm_map // perm_sort.
   + by rewrite mapK.
+Qed.
+
+(* The inverse of a non-empty canonical product is a *different* product: a
+   canonical factor list has no [inv_aux]-pairs, so inverting every factor
+   cannot reproduce the same list.  Hence the identity [PTMul []] is the unique
+   self-inverse well-formed pre-term (see [inv_fixed]). *)
+Lemma mul_map_inv_neq us :
+  all wf_term us -> all (fun t => ~~ is_mul t) us ->
+  invs_canceled us -> us != [::] -> mul (map inv_aux us) != PTMul us.
+Proof.
+move=> wfs atoms canc usN0.
+have wfI : all wf_term (map inv_aux us).
+  by apply/allP => x /mapP [t t_in ->]; apply: wf_inv; [exact: (allP wfs) | exact: (allP atoms)].
+have atomI : all (fun t => ~~ is_mul t) (map inv_aux us).
+  by apply/allP => x /mapP [t t_in ->]; exact: is_mul_inv (allP wfs _ t_in).
+have cancI : invs_canceled (map inv_aux us) := invs_canceled_map_inv wfs canc.
+apply/negP => /eqP E.
+have factE : factors (mul (map inv_aux us)) = sort <=%O (map inv_aux us).
+  rewrite (factors_mul wfI) (flatten_factors_Nmul_id atomI).
+  by rewrite (cancel_exps_canceled atomI cancI).
+move: factE; rewrite E /= => sortE.
+have perm_us : perm_eq us (map inv_aux us) by rewrite {1}sortE perm_sort.
+have [u u_us] : exists u, u \in us by case: (us) usN0 => [|x ?] // _; exists x; rewrite mem_head.
+have inus : inv_aux u \in us by rewrite (perm_mem perm_us); apply/mapP; exists u.
+by move: (allP canc _ u_us); rewrite (dinv_Nmul (allP atoms _ u_us)) inus.
+Qed.
+
+(* [PTMul []] is the unique fixed point of the (distributing) inverse. *)
+Lemma inv_fixed pt : wf_term pt -> (inv pt == pt) = (pt == PTMul [::]).
+Proof.
+move=> wf; case: (boolP (is_mul pt)) => [mul_pt|Nm]; last first.
+  rewrite (dinv_Nmul Nm) (negbTE (inv_Nid _)).
+  by case: pt Nm {wf} => //= ts; case: ts.
+case: pt mul_pt wf => // us _ wf.
+have -> : inv (PTMul us) = mul (map inv_aux us) by [].
+move: wf => /and5P [wfs atoms _ canc _].
+case: (altP (us =P [::])) => [->|usN0]; first by rewrite /mul /= !eqxx.
+rewrite (negbTE (mul_map_inv_neq wfs atoms canc usN0)).
+by apply/esym; apply/eqP => - [] /eqP; rewrite (negbTE usN0).
 Qed.
 
 Module Exports.

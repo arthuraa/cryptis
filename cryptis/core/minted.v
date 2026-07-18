@@ -62,7 +62,7 @@ Lemma minted_TExpN t ts :
 Proof.
 move => /negb_True nx atom ic.
 rewrite unlock (nonces_of_term_TExpN (proj2 (is_trueP _) nx) atom).
-rewrite (cancel_exps_canceled ic) big_sepS_union_pers.
+rewrite (cancel_exps_canceled atom ic) big_sepS_union_pers.
 by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 

@@ -98,12 +98,13 @@ Proof.
 iIntros "%gXN %a_b %a_bV #aP #bP #p".
 iAssert ⌜negb (is_mul a)⌝%I as %Nm_a; first by iDestruct "aP" as "(_ & $ & _)".
 iAssert ⌜negb (is_mul b)⌝%I as %Nm_b; first by iDestruct "bP" as "(_ & $ & _)".
+have atom_ab : is_true (atomic [a; b]).
+  by rewrite /= (proj2 (is_trueP _) Nm_a) (proj2 (is_trueP _) Nm_b).
 have exps_t : exps (TExpN g [a; b]) ≡ₚ [a; b].
   rewrite exps_TExpN ?exps_expN //=.
-  - by rewrite (cancel_exps_canceled
-      (proj2 (invs_canceled2 (proj2 (is_trueP _) Nm_a)
-                             (proj2 (is_trueP _) Nm_b)) a_bV)).
-  - by rewrite (proj2 (is_trueP _) Nm_a) (proj2 (is_trueP _) Nm_b).
+  by rewrite (cancel_exps_canceled atom_ab
+    (proj2 (invs_canceled2 (proj2 (is_trueP _) Nm_a)
+                           (proj2 (is_trueP _) Nm_b)) a_bV)).
 have a_t : a ∈ exps (TExpN g [a; b]) by rewrite exps_t; set_solver.
 have b_t : b ∈ exps (TExpN g [a; b]) by rewrite exps_t; set_solver.
 iPoseProof (exp_pred_exps a_t with "p") as "[dh_a _]".
