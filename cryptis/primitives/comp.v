@@ -56,11 +56,11 @@ Lemma twp_texp E t1 t2 Ψ :
   WP texp t1 t2 @ E [{ Ψ }].
 Proof.
     iIntros "HΨ".
-    rewrite -!val_of_pre_term_unfold unfold_TExpN => /=.
-    wp_lam; wp_pures.
-    wp_apply twp_nil; wp_apply twp_cons.
+    rewrite /texp; wp_lam; wp_pures.
+    rewrite -[val_of_term t1]val_of_pre_term_unfold.
+    rewrite -[val_of_term t2]val_of_pre_term_unfold.
     wp_apply twp_hl_exp.
-    iApply "HΨ".
+    rewrite -unfold_TExp; rewrite [repr _]val_of_pre_term_unfold; iApply "HΨ".
 Qed.
 
 Lemma wp_texp E t1 t2 Ψ :
@@ -70,11 +70,12 @@ Proof. by iIntros "post"; iApply twp_wp; iApply twp_texp. Qed.
 
 
 Lemma wp_hl_inv_term E (t : term) Ψ :
+    is_true (~~ is_mul t) ->
     Ψ (TInv t) ⊢
     WP hl_inv t @ E {{ Ψ }}.
 Proof.
-    iIntros "post".
-    rewrite -!val_of_pre_term_unfold unfold_TInv.
+    move=> Nm; iIntros "post".
+    rewrite -!val_of_pre_term_unfold (unfold_TInv_Nmul Nm).
     by iApply wp_hl_inv.
 Qed.
 

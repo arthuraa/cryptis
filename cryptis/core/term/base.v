@@ -18,7 +18,8 @@ Inductive term :=
 | TSeal of term & term
 | THash of term
 | TInv' pt of PreTerm.wf_term (PreTerm.PT1 O1Inv pt)
-| TExpN' pt pts of PreTerm.wf_term (PreTerm.PTExp pt pts).
+| TExp' b e of PreTerm.wf_term (PreTerm.PTExp b e)
+| TMul' ts of PreTerm.wf_term (PreTerm.PTMul ts).
 
 Record aenc_key := AEncKey {
   seed_of_aenc_key : term;
@@ -83,7 +84,8 @@ Fixpoint unfold_term t :=
   | TSeal k t => PreTerm.PT2 O2Seal (unfold_term k) (unfold_term t)
   | THash t => PreTerm.PT1 O1Hash (unfold_term t)
   | TInv' pt _ => PreTerm.PT1 O1Inv pt
-  | TExpN' pt pts _ => PreTerm.PTExp pt pts
+  | TExp' b e _ => PreTerm.PTExp b e
+  | TMul' ts _ => PreTerm.PTMul ts
   end.
 
 Fixpoint fold_term_predef pt :=
@@ -98,9 +100,13 @@ Fixpoint fold_term_predef pt :=
     if boolP (PreTerm.wf_term (PreTerm.PT1 O1Inv pt')) is AltTrue pf then
       TInv' pt' pf
     else TInt 0 (*should never*)
-  | PreTerm.PTExp pt' pts' =>
-    if boolP (PreTerm.wf_term (PreTerm.PTExp pt' pts')) is AltTrue pf then
-      TExpN' pt' pts' pf
+  | PreTerm.PTExp b e =>
+    if boolP (PreTerm.wf_term (PreTerm.PTExp b e)) is AltTrue pf then
+      TExp' b e pf
+    else TInt 0 (*should never*)
+  | PreTerm.PTMul ts =>
+    if boolP (PreTerm.wf_term (PreTerm.PTMul ts)) is AltTrue pf then
+      TMul' ts pf
     else TInt 0 (*should never*)
   end.
 
@@ -112,26 +118,52 @@ Proof. by elim/term_ind': t=> //= ? -> ? ->. Qed.
 Lemma wf_unfold_terms ts : all PreTerm.wf_term [seq unfold_term i | i <- ts].
 Proof. elim: ts => //= ? ? ->. by rewrite wf_unfold_term. Qed.
 
+Lemma fold_predef_TInv {pt} (pf : PreTerm.wf_term (PreTerm.PT1 O1Inv pt)) :
+  fold_term_predef (PreTerm.PT1 O1Inv pt) = TInv' pt pf.
+Proof.
+rewrite /=; case: (boolP (PreTerm.wf_term (PreTerm.PT1 O1Inv pt))) => [pf'|npf].
+  by congr TInv'; apply: bool_irrelevance.
+by move: npf; rewrite pf.
+Qed.
+
+Lemma fold_predef_TExp {b e} (pf : PreTerm.wf_term (PreTerm.PTExp b e)) :
+  fold_term_predef (PreTerm.PTExp b e) = TExp' b e pf.
+Proof.
+rewrite /=; case: (boolP (PreTerm.wf_term (PreTerm.PTExp b e))) => [pf'|npf].
+  by congr TExp'; apply: bool_irrelevance.
+by move: npf; rewrite pf.
+Qed.
+
+Lemma fold_predef_TMul {ts} (pf : PreTerm.wf_term (PreTerm.PTMul ts)) :
+  fold_term_predef (PreTerm.PTMul ts) = TMul' ts pf.
+Proof.
+rewrite /=; case: (boolP (PreTerm.wf_term (PreTerm.PTMul ts))) => [pf'|npf].
+  by congr TMul'; apply: bool_irrelevance.
+by move: npf; rewrite pf.
+Qed.
+
 Lemma unfold_termK : cancel unfold_term fold_term.
 Proof.
 rewrite [fold_term]unlock => t.
 rewrite PreTerm.normalize_wf ?wf_unfold_term //.
 elim /term_ind': t => //=; try by move =>> -> // > ->.
-- move => pt wf. move: (TInv' pt) (wf) => /=. rewrite wf. move: (boolP _).
-  move: {3} true => _ [] // *. f_equal. apply: bool_irrelevance.
-- move => pt pts wf. move: (TExpN' pt pts) (wf) => /=. rewrite wf. move: (boolP _).
-  move: {3} true => _ [] // *. f_equal. apply: bool_irrelevance.
+- by move => pt wf; apply: fold_predef_TInv.
+- by move => b e wf; apply: fold_predef_TExp.
+- by move => ts wf; apply: fold_predef_TMul.
 Qed.
 
 Lemma unfold_fold pt : unfold_term (fold_term pt) = PreTerm.normalize pt.
 Proof.
 rewrite [fold_term]unlock.
-have := PreTerm.wf_normalize pt. elim: (PreTerm.normalize pt) => //=.
+have := PreTerm.wf_normalize pt. elim: (PreTerm.normalize pt) => //.
 - by case.
-- move => [?||] t IH wf_t /=; try by rewrite IH.
-  move: (boolP _). move: {3} (_ && _) => ? [] //. by rewrite wf_t.
-- by move => [] ? IH1 ? IH2 /andP [??] /=; rewrite IH1 ?IH2.
-- move => t IH ts IHs wf. move: (boolP _). move: {3} (_ && _) => _ [] //. by rewrite wf.
+- move => [?||] t IH wf_t; try by rewrite /= IH.
+  by rewrite (fold_predef_TInv wf_t).
+- move => [] t1 IH1 t2 IH2 wf.
+  + by move: wf; rewrite /= => /andP [??]; rewrite IH1 ?IH2.
+  + by move: wf; rewrite /= => /andP [??]; rewrite IH1 ?IH2.
+  + by rewrite (fold_predef_TExp wf).
+- by move => ts IHts wf; rewrite (fold_predef_TMul wf).
 Qed.
 
 Lemma fold_termK pt : PreTerm.wf_term pt -> unfold_term (fold_term pt) = pt.
@@ -155,12 +187,15 @@ End TInv.
 
 Section TExp.
 
-lock Definition TExpN t ts :=
-  fold_term (PreTerm.exp (unfold_term t) (map unfold_term ts)).
+lock Definition TExp b e :=
+  fold_term (PreTerm.exp (unfold_term b) (unfold_term e)).
+
+lock Definition TMulN ts :=
+  fold_term (PreTerm.mul (map unfold_term ts)).
 
 End TExp.
 
-Notation TExp t1 t2 := (TExpN t1 [:: t2]).
+Definition TExpN t ts := TExp t (TMulN ts).
 
 HB.instance Definition _ :=
   Equality.copy term (can_type unfold_termK).
@@ -205,17 +240,27 @@ Qed.
 
 Lemma unfold_TInv t : unfold_term (TInv t) = PreTerm.inv (unfold_term t).
 Proof.
-by rewrite unlock unfold_fold PreTerm.normalize_wf // PreTerm.wf_inv // wf_unfold_term.
+by rewrite unlock unfold_fold PreTerm.normalize_wf // PreTerm.wf_dinv // wf_unfold_term.
+Qed.
+
+Lemma unfold_TExp b e :
+  unfold_term (TExp b e) = PreTerm.exp (unfold_term b) (unfold_term e).
+Proof.
+rewrite unlock unfold_fold PreTerm.normalize_wf => //.
+by rewrite PreTerm.wf_exp //; apply wf_unfold_term.
+Qed.
+
+Lemma unfold_TMulN ts :
+  unfold_term (TMulN ts) = PreTerm.mul (map unfold_term ts).
+Proof.
+rewrite unlock unfold_fold PreTerm.normalize_wf => //.
+by rewrite PreTerm.wf_mul //; apply wf_unfold_terms.
 Qed.
 
 Lemma unfold_TExpN t ts :
-  unfold_term (TExpN t ts) = PreTerm.exp (unfold_term t) (map unfold_term ts).
-Proof.
-rewrite unlock unfold_fold PreTerm.normalize_wf => //.
-rewrite PreTerm.wf_exp => //.
-apply wf_unfold_term.
-apply wf_unfold_terms.
-Qed.
+  unfold_term (TExpN t ts) =
+  PreTerm.exp (unfold_term t) (PreTerm.mul (map unfold_term ts)).
+Proof. by rewrite /TExpN unfold_TExp unfold_TMulN. Qed.
 
 Lemma fold_termE pt :
   fold_term pt =
@@ -227,74 +272,135 @@ Lemma fold_termE pt :
   | PreTerm.PT2 O2Seal k pt => TSeal (fold_term k) (fold_term pt)
   | PreTerm.PT1 O1Hash pt => THash (fold_term pt)
   | PreTerm.PT1 O1Inv pt => TInv (fold_term pt)
-  | PreTerm.PTExp pt pts => TExpN (fold_term pt) (map fold_term pts)
+  | PreTerm.PTExp b e => TExp (fold_term b) (fold_term e)
+  | PreTerm.PTMul ts => TMulN (map fold_term ts)
   end.
 Proof.
 apply /unfold_term_inj.
 case: pt => /=; try by case =>> //=; rewrite ?unfold_TInv !unfold_fold.
-by move =>>; rewrite unfold_TExpN !unfold_fold -map_comp (eq_map unfold_fold).
+- by move=> [] >; rewrite /= ?unfold_TExp !unfold_fold.
+- by move =>>; rewrite unfold_TMulN !unfold_fold -map_comp (eq_map unfold_fold).
 Qed.
 
-Definition base t :=
-  if t is TExpN' pt _ _ then fold_term pt else t.
-Definition exps t :=
-  if t is TExpN' _ pts _ then map fold_term pts else [::].
+Definition base t := fold_term (PreTerm.base (unfold_term t)).
+Definition exps t := map fold_term (PreTerm.exps (unfold_term t)).
+Definition tfactors t := map fold_term (PreTerm.factors (unfold_term t)).
+
+Definition is_mul t :=
+  if t is TMul' _ _ then true else false.
+
+Lemma is_mul_unfold t : is_mul t = PreTerm.is_mul (unfold_term t).
+Proof. by case: t => //= - []. Qed.
 
 Lemma unfold_base t : unfold_term (base t) = PreTerm.base (unfold_term t).
 Proof.
-case: t => //= ?? wf; rewrite fold_termK //.
-by case/and5P: wf.
+by rewrite /base unfold_fold PreTerm.normalize_wf //
+  PreTerm.wf_base // wf_unfold_term.
 Qed.
 
 Lemma unfold_exps t :
   map unfold_term (exps t) = PreTerm.exps (unfold_term t).
 Proof.
-case: t => //= ?? /and5P [_ _ /allP wfs _ _].
-rewrite -map_comp map_id_in //= => ? /wfs ?.
-exact: fold_termK.
+rewrite /exps -map_comp map_id_in // => pt pt_in.
+apply: fold_termK.
+by move/allP: (PreTerm.wf_exps (wf_unfold_term t)); apply.
 Qed.
 
-Lemma TInv_Nid t : TInv t != t.
-Proof. by rewrite -(eqtype.inj_eq unfold_term_inj) unfold_TInv PreTerm.inv_Nid. Qed.
+Lemma unfold_tfactors t :
+  map unfold_term (tfactors t) = PreTerm.factors (unfold_term t).
+Proof.
+rewrite /tfactors -map_comp map_id_in // => pt pt_in.
+apply: fold_termK.
+by move/allP: (PreTerm.wf_factors (wf_unfold_term t)); apply.
+Qed.
+
+(* Only the identity [TMulN []] is its own inverse, so [TInv_Nid] now needs the
+   term to be a non-product (all real factor-level uses are on atomic factors). *)
+Lemma TInv_Nid {t} : ~~ is_mul t -> TInv t != t.
+Proof.
+rewrite is_mul_unfold => Nm.
+by rewrite -(eqtype.inj_eq unfold_term_inj) unfold_TInv (PreTerm.dinv_Nmul Nm)
+  PreTerm.inv_Nid.
+Qed.
 
 Lemma TInvK : involutive TInv.
 Proof.
-move => ?.
-by rewrite unlock unfold_fold PreTerm.normalize_wf ?PreTerm.wf_inv ?wf_unfold_term //
-  PreTerm.invK ?wf_unfold_term // unfold_termK.
+move => t; apply: unfold_term_inj.
+by rewrite !unfold_TInv PreTerm.dinvK // wf_unfold_term.
 Qed.
 
 Lemma TInv_inj : injective TInv.
 Proof. exact: inv_inj TInvK. Qed.
 
-Lemma TExpN_perm t ts1 ts2 : perm_eq ts1 ts2 -> TExpN t ts1 = TExpN t ts2.
+Lemma TMulN_perm ts1 ts2 : perm_eq ts1 ts2 -> TMulN ts1 = TMulN ts2.
 Proof.
-move => ?; apply: unfold_term_inj; rewrite !unfold_TExpN. apply: PreTerm.perm_exp.
- - exact: wf_unfold_term.
- - exact: wf_unfold_terms.
- - exact: perm_map.
+move => peq; apply: unfold_term_inj; rewrite !unfold_TMulN.
+by apply: PreTerm.perm_mul; [exact: wf_unfold_terms | exact: perm_map].
 Qed.
+
+Lemma TMulN1 t : TMulN [:: t] = t.
+Proof.
+by apply: unfold_term_inj;
+   rewrite unfold_TMulN /= (PreTerm.mul_wf1 (wf_unfold_term t)).
+Qed.
+
+Lemma TMulN_cat ts ts' : TMulN (TMulN ts :: ts') = TMulN (ts ++ ts').
+Proof.
+apply: unfold_term_inj; rewrite !unfold_TMulN map_cons unfold_TMulN map_cat.
+by rewrite (PreTerm.mul_cat (wf_unfold_terms _) (wf_unfold_terms _)).
+Qed.
+
+Lemma TExpN_perm t ts1 ts2 : perm_eq ts1 ts2 -> TExpN t ts1 = TExpN t ts2.
+Proof. by move => peq; rewrite /TExpN (@TMulN_perm _ _ peq). Qed.
 
 Lemma TExpN_catC t ts1 ts2 : TExpN t (ts1 ++ ts2) = TExpN t (ts2 ++ ts1).
 Proof. by apply: TExpN_perm; rewrite perm_catC. Qed.
 
-Lemma base_TExpN t ts : base (TExpN t ts) = base t.
+Lemma base_TExp b e : base (TExp b e) = base b.
 Proof.
-apply: unfold_term_inj; rewrite !unfold_base unfold_TExpN.
-rewrite PreTerm.base_exp //. exact: wf_unfold_term.
+apply: unfold_term_inj; rewrite !unfold_base unfold_TExp.
+by rewrite (@PreTerm.base_exp _ _ (wf_unfold_term b)).
 Qed.
+
+Lemma base_TExpN t ts : base (TExpN t ts) = base t.
+Proof. by rewrite /TExpN base_TExp. Qed.
 
 Definition cancel_exps ts :=
   map fold_term (PreTerm.cancel_exps (map unfold_term ts)).
 
+Lemma map_unfold_Nmul ts :
+  all (fun pt => ~~ PreTerm.is_mul pt) (map unfold_term ts) =
+  all (fun t => ~~ is_mul t) ts.
+Proof. by rewrite all_map; apply: eq_all => t /=; rewrite is_mul_unfold. Qed.
+
+Lemma unfold_TInv_Nmul {t} :
+  ~~ is_mul t -> unfold_term (TInv t) = PreTerm.inv_aux (unfold_term t).
+Proof. rewrite is_mul_unfold => Nm; by rewrite unfold_TInv (PreTerm.dinv_Nmul Nm). Qed.
+
+Lemma Nmul_TInv {t} : ~~ is_mul t -> ~~ is_mul (TInv t).
+Proof.
+move => Nm; rewrite is_mul_unfold (unfold_TInv_Nmul Nm).
+exact: (PreTerm.is_mul_inv (wf_unfold_term t)).
+Qed.
+
 Lemma perm_cancel_exps ts1 ts2 :
+  all (fun t => ~~ is_mul t) ts1 ->
   perm_eq ts1 ts2 -> perm_eq (cancel_exps ts1) (cancel_exps ts2).
 Proof.
-move => ?. rewrite /cancel_exps.
-apply perm_map. apply PreTerm.perm_cancel_exps.
-- apply wf_unfold_terms.
-- exact: perm_map.
+move => Nm1 peq. rewrite /cancel_exps.
+apply perm_map; apply PreTerm.perm_cancel_exps;
+  [exact: wf_unfold_terms | by rewrite map_unfold_Nmul | exact: perm_map].
 Qed.
+
+Lemma cancel_exps_subseq ts : subseq (cancel_exps ts) ts.
+Proof.
+rewrite /cancel_exps.
+apply: subseq_trans. apply map_subseq. apply PreTerm.cancel_exps_subseq.
+by rewrite (mapK unfold_termK).
+Qed.
+
+Lemma mem_cancel_exps ts : { subset cancel_exps ts <= ts }.
+Proof. apply mem_subseq. exact: cancel_exps_subseq. Qed.
 
 Lemma count_map_fold t pts :
   all PreTerm.wf_term pts ->
@@ -307,56 +413,88 @@ by move: neq => /negbTE ->.
 Qed.
 
 Lemma count_cancel t ts :
+  ~~ is_mul t -> all (fun t => ~~ is_mul t) ts ->
   count_mem t (cancel_exps ts) = count_mem t ts - count_mem (TInv t) ts.
 Proof.
-by rewrite /cancel_exps count_map_fold ?PreTerm.wf_cancel_exps ?wf_unfold_terms //
-  PreTerm.count_cancel ?wf_unfold_term ?wf_unfold_terms // -unfold_TInv !count_map.
+move => Nmt Nm.
+have Nmt' : ~~ PreTerm.is_mul (unfold_term t) by rewrite -is_mul_unfold.
+have Nm' : all (fun pt => ~~ PreTerm.is_mul pt) (map unfold_term ts)
+  by rewrite map_unfold_Nmul.
+rewrite /cancel_exps count_map_fold ?PreTerm.wf_cancel_exps ?wf_unfold_terms //.
+rewrite (PreTerm.count_cancel (wf_unfold_term t) Nmt' (wf_unfold_terms ts) Nm').
+by rewrite -(unfold_TInv_Nmul Nmt) !count_map.
 Qed.
 
-Lemma count_perm_cancel ts1 ts2 :
-  (forall t, count_mem t ts1 - count_mem (TInv t) ts1 =
+Lemma count_perm_cancel {ts1 ts2} :
+  all (fun t => ~~ is_mul t) ts1 -> all (fun t => ~~ is_mul t) ts2 ->
+  (forall t, ~~ is_mul t ->
+        count_mem t ts1 - count_mem (TInv t) ts1 =
         count_mem t ts2 - count_mem (TInv t) ts2) <->
   perm_eq (cancel_exps ts1) (cancel_exps ts2).
 Proof.
-split.
-- move => wt_eq. apply /allP => /= ? _. by rewrite !count_cancel wt_eq.
-- move => *. rewrite -!count_cancel. exact: permP.
+move => Nm1 Nm2; split.
+- move => wt_eq. apply /allP => /= t; rewrite mem_cat => /orP t_in.
+  have Nmt : ~~ is_mul t.
+    case: t_in => /mem_cancel_exps h;
+      [exact: (allP Nm1 _ h) | exact: (allP Nm2 _ h)].
+  by rewrite !count_cancel // wt_eq.
+- move => peq t Nmt. rewrite -!count_cancel //. exact: (elimT permP peq).
 Qed.
 
-Lemma count_perm_cancel_redux ts1 ts2 :
-  (forall t, count_mem t ts1 + count_mem (TInv t) ts2 =
+Lemma count_perm_cancel_redux {ts1 ts2} :
+  all (fun t => ~~ is_mul t) ts1 -> all (fun t => ~~ is_mul t) ts2 ->
+  (forall t, ~~ is_mul t ->
+        count_mem t ts1 + count_mem (TInv t) ts2 =
         count_mem t ts2 + count_mem (TInv t) ts1) <->
   perm_eq (cancel_exps ts1) (cancel_exps ts2).
 Proof.
-rewrite -count_perm_cancel !addnE !subnE.
-split => H t; have := H t; first lia.
-have := H (TInv t). rewrite TInvK. lia.
+move => Nm1 Nm2; rewrite -(count_perm_cancel Nm1 Nm2) !addnE !subnE.
+split => H t Nmt; have := H t Nmt; first lia.
+have := H (TInv t) (Nmul_TInv Nmt); rewrite TInvK. lia.
 Qed.
 
-Lemma count_TInv_cancel t ts :
+Lemma count_TInv_cancel {t ts} :
+  ~~ is_mul t -> all (fun t => ~~ is_mul t) ts ->
   count_mem t (cancel_exps ts) != 0 -> count_mem (TInv t) (cancel_exps ts) == 0.
-Proof. by rewrite !count_cancel TInvK -ltnNge => /ltnW. Qed.
+Proof.
+move => Nmt Nm.
+by rewrite !count_cancel ?(Nmul_TInv Nmt) // TInvK -ltnNge => /ltnW.
+Qed.
 
 Lemma cancel_exps_cat ts1 ts2 :
+  all (fun t => ~~ is_mul t) ts1 -> all (fun t => ~~ is_mul t) ts2 ->
   perm_eq (cancel_exps (cancel_exps ts1 ++ ts2))
           (cancel_exps (ts1 ++ ts2)).
 Proof.
-apply count_perm_cancel => t. rewrite !count_cat.
+move => Nm1 Nm2.
+have Nmc1 : all (fun t => ~~ is_mul t) (cancel_exps ts1).
+  by apply/allP => t /mem_cancel_exps h; exact: (allP Nm1 _ h).
+apply count_perm_cancel; rewrite ?all_cat ?Nmc1 ?Nm1 ?Nm2 //.
+move => t Nmt. rewrite !count_cat.
 case: (count_mem t (cancel_exps ts1) =P 0)
-    => /eqP => [| /count_TInv_cancel];
-      rewrite !count_cancel TInvK => /[dup] ? /eqP ->;
+    => /eqP => [| /(count_TInv_cancel Nmt Nm1)];
+      rewrite !count_cancel ?(Nmul_TInv Nmt) // TInvK => /[dup] ? /eqP ->;
       rewrite add0n !subnDA.
 - by rewrite addnC subnBA.
 - by rewrite addnBAC.
 Qed.
 
 Lemma perm_cancel_exps_catl ts1 ts2 ts :
+  all (fun t => ~~ is_mul t) ts1 -> all (fun t => ~~ is_mul t) ts2 ->
+  all (fun t => ~~ is_mul t) ts ->
   perm_eq (cancel_exps (ts ++ ts1)) (cancel_exps (ts ++ ts2)) =
   perm_eq (cancel_exps ts1) (cancel_exps ts2).
 Proof.
-apply /(sameP idP); apply /(iffP idP);
-move => /count_perm_cancel_redux wt_eq; apply count_perm_cancel_redux => t;
-have := wt_eq t; rewrite !count_cat !addnE; lia.
+move => Nm1 Nm2 Nm.
+have Ntts1 : all (fun t => ~~ is_mul t) (ts ++ ts1) by rewrite all_cat Nm Nm1.
+have Ntts2 : all (fun t => ~~ is_mul t) (ts ++ ts2) by rewrite all_cat Nm Nm2.
+apply /(sameP idP); apply /(iffP idP) => H.
+- apply/(count_perm_cancel_redux Ntts1 Ntts2) => t Nmt.
+  have := (proj2 (count_perm_cancel_redux Nm1 Nm2) H) t Nmt.
+  rewrite !count_cat !addnE; lia.
+- apply/(count_perm_cancel_redux Nm1 Nm2) => t Nmt.
+  have := (proj2 (count_perm_cancel_redux Ntts1 Ntts2) H) t Nmt.
+  rewrite !count_cat !addnE; lia.
 Qed.
 
 Lemma count_map_TInv t ts:
@@ -364,22 +502,47 @@ Lemma count_map_TInv t ts:
 Proof. elim: ts => //= [?? ->]. by rewrite (inv_eq TInvK). Qed.
 
 Lemma cancel_exps_cat_invs ts1 ts2 :
+  all (fun t => ~~ is_mul t) ts1 -> all (fun t => ~~ is_mul t) ts2 ->
   perm_eq (cancel_exps (ts1 ++ ts2 ++ map TInv ts2)) (cancel_exps ts1).
 Proof.
-apply count_perm_cancel.
-move => t. rewrite !count_cat !count_map_TInv /= TInvK !addnE !subnE. lia.
+move => Nm1 Nm2.
+have NmT2 : all (fun t => ~~ is_mul t) (map TInv ts2).
+  by apply/allP => t /mapP [s /(allP Nm2) Nms ->]; exact: Nmul_TInv.
+apply count_perm_cancel; rewrite ?all_cat ?Nm1 ?Nm2 ?NmT2 //.
+move => t Nmt. rewrite !count_cat !count_map_TInv /= TInvK !addnE !subnE. lia.
 Qed.
 
+Lemma unfold_cancel_exps ts :
+  map unfold_term (cancel_exps ts) = PreTerm.cancel_exps (map unfold_term ts).
+Proof.
+rewrite /cancel_exps -map_comp map_id_in // => pt pt_in.
+apply: fold_termK.
+by move/allP: (PreTerm.wf_cancel_exps (wf_unfold_terms ts)); apply.
+Qed.
+
+Lemma unfold_sort s :
+  map unfold_term (sort <=%O s) = sort <=%O (map unfold_term s).
+Proof. by rewrite sort_map. Qed.
+
 Lemma exps_TExpN t ts :
+  all (fun t => ~~ is_mul t) ts ->
   exps (TExpN t ts) = sort <=%O (cancel_exps (exps t ++ ts)).
 Proof.
-apply: (inj_map unfold_term_inj). rewrite unfold_exps -sort_map -map_comp.
-rewrite unfold_TExpN PreTerm.exps_exp ?wf_unfold_term // map_cat unfold_exps.
-rewrite map_id_in //= => ? /PreTerm.mem_cancel_exps.
-rewrite mem_cat => /orP [? | /mapP [? _] ->].
-- have /allP wfs := PreTerm.wf_exps (wf_unfold_term t).
-  apply fold_termK. exact: wfs.
-- by rewrite unfold_termK.
+move => atom.
+have atomU : all (fun pt => ~~ PreTerm.is_mul pt) [seq unfold_term i | i <- ts].
+  rewrite all_map; apply/allP => t' t'ts /=.
+  by rewrite -is_mul_unfold; move/allP: atom; apply.
+apply: (inj_map unfold_term_inj).
+rewrite unfold_exps unfold_TExpN.
+rewrite (PreTerm.exps_exp (wf_unfold_term t)
+          (PreTerm.wf_mul (wf_unfold_terms ts))).
+rewrite (PreTerm.factors_mul (wf_unfold_terms ts))
+        (PreTerm.flatten_factors_Nmul_id atomU).
+rewrite unfold_sort unfold_cancel_exps map_cat unfold_exps.
+by rewrite (PreTerm.sortcancel_catr
+             (PreTerm.wf_exps (wf_unfold_term t))
+             (PreTerm.Nmul_factors (PreTerm.wf_expo (wf_unfold_term t)))
+             (wf_unfold_terms ts) atomU).
 Qed.
 
 Definition is_nonce t :=
@@ -389,7 +552,7 @@ Definition is_inv t :=
   if t is TInv' _ _ then true else false.
 
 Definition is_exp t :=
-  if t is TExpN' _ _ _ then true else false.
+  if t is TExp' _ _ _ then true else false.
 
 Lemma is_nonce_unfold t : is_nonce t = PreTerm.is_nonce (unfold_term t).
 Proof. by case: t => //=. Qed.
@@ -397,11 +560,11 @@ Proof. by case: t => //=. Qed.
 Lemma is_inv_unfold t : is_inv t = PreTerm.is_inv (unfold_term t).
 Proof. by case: t => //= - []. Qed.
 
-Lemma is_inv_TInv t : is_inv (TInv t) = ~~ is_inv t.
+Lemma is_inv_TInv t : ~~ is_mul t -> is_inv (TInv t) = ~~ is_inv t.
 Proof.
-rewrite !is_inv_unfold unfold_TInv.
+move => Nm; rewrite !is_inv_unfold (unfold_TInv_Nmul Nm).
 have := wf_unfold_term t.
-case: (unfold_term t) => //. by case => //= ? /andP [/negbTE ? _].
+case: (unfold_term t) => //. by case => //= ? /and3P [/negbTE ? _ _].
 Qed.
 
 Lemma is_exp_unfold t : is_exp t = PreTerm.is_exp (unfold_term t).
@@ -410,19 +573,17 @@ Proof. by case: t => //= - []. Qed.
 Lemma is_exp_base t : ~~ is_exp (base t).
 Proof. rewrite is_exp_unfold unfold_base. apply PreTerm.base_Nexp. exact: wf_unfold_term. Qed.
 
-Lemma is_exp_TInv t : ~~ is_inv t -> ~~ is_exp (TInv t).
+Lemma is_exp_TInv t : ~~ is_mul t -> ~~ is_inv t -> ~~ is_exp (TInv t).
 Proof.
-rewrite is_inv_unfold => ?.
-by rewrite is_exp_unfold unfold_TInv PreTerm.inv_invN.
+move => Nm; rewrite is_inv_unfold => ?.
+by rewrite is_exp_unfold (unfold_TInv_Nmul Nm) PreTerm.inv_invN.
 Qed.
 
 Lemma base_expsK t : TExpN (base t) (exps t) = t.
 Proof.
-apply /unfold_term_inj; rewrite unfold_TExpN unfold_base unfold_exps.
-case: (unfold_term t) (wf_unfold_term t) => //=.
-move => ?? /and5P [_ ? _ /negbTE ptsN0 /andP [??]].
-by rewrite /PreTerm.exp PreTerm.exps_expN //= PreTerm.cancel_exps_canceled // nilpE ptsN0
-  PreTerm.base_expN // sort_le_id.
+apply/unfold_term_inj; rewrite unfold_TExpN unfold_base unfold_exps /PreTerm.exps.
+rewrite (PreTerm.mul_factors (PreTerm.wf_expo (wf_unfold_term t))).
+exact: (PreTerm.exp_base_expo (wf_unfold_term t)).
 Qed.
 
 Lemma base_exps_inj t1 t2 :
@@ -444,26 +605,27 @@ rewrite is_exp_unfold=> tNX; apply: (inj_map unfold_term_inj).
 by rewrite unfold_exps PreTerm.exps_expN.
 Qed.
 
-Lemma is_nonce_TExpN t ts :
-  is_nonce (TExpN t ts) = nilp (cancel_exps (exps t ++ ts)) && is_nonce (base t).
+Lemma is_nonce_TExp t1 t2 : ~~ is_exp t1 -> ~~ is_mul t2 -> ~~ is_nonce (TExp t1 t2).
 Proof.
-rewrite !is_nonce_unfold unfold_TExpN /PreTerm.exp.
-set es := PreTerm.cancel_exps _.
-have -> : nilp es = nilp (cancel_exps (exps t ++ ts))
-by rewrite /cancel_exps map_cat unfold_exps /nilp size_map.
-case: ifP => //=. by rewrite unfold_base.
+move => Nx1 Nm2.
+rewrite is_exp_unfold in Nx1; rewrite is_mul_unfold in Nm2.
+rewrite is_nonce_unfold unfold_TExp /PreTerm.exp (PreTerm.expo_expN Nx1).
+have -> : PreTerm.mul [:: PreTerm.PTMul [::]; unfold_term t2] = unfold_term t2.
+  have -> : PreTerm.mul [:: PreTerm.PTMul [::]; unfold_term t2]
+          = PreTerm.mul [:: unfold_term t2] by rewrite /PreTerm.mul /= !cats0.
+  exact: PreTerm.mul_wf1 (wf_unfold_term t2).
+have -> : (unfold_term t2 == PreTerm.PTMul [::]) = false.
+  by apply/negbTE; apply: contra Nm2 => /eqP ->.
+by [].
 Qed.
-
-Lemma is_nonce_TExp t1 t2 : ~~ is_exp t1 -> ~~ is_nonce (TExp t1 t2).
-Proof. move => ?. by rewrite is_nonce_TExpN exps_expN. Qed.
 
 Lemma TExpNA t ts1 ts2 : TExpN (TExpN t ts1) ts2 = TExpN t (ts1 ++ ts2).
 Proof.
-apply: base_exps_inj; first by rewrite !base_TExpN.
-rewrite !exps_TExpN perm_sort perm_sym perm_sort perm_sym.
-apply perm_trans with (cancel_exps (cancel_exps (exps t ++ ts1) ++ ts2)).
-- apply perm_cancel_exps. by rewrite perm_cat2r perm_sort.
-- rewrite catA. apply cancel_exps_cat.
+rewrite /TExpN; apply: unfold_term_inj.
+rewrite !unfold_TExp !unfold_TMulN.
+rewrite (PreTerm.expA (wf_unfold_term t)
+          (PreTerm.wf_mul (wf_unfold_terms ts1)) (PreTerm.wf_mul (wf_unfold_terms ts2))).
+by rewrite (PreTerm.mul_mul2 (wf_unfold_terms ts1) (wf_unfold_terms ts2)) map_cat.
 Qed.
 
 Lemma TExpNC : right_commutative TExpN.
@@ -471,53 +633,84 @@ Proof. by move =>>; rewrite !TExpNA TExpN_catC. Qed.
 
 Definition invs_canceled ts := PreTerm.invs_canceled (map unfold_term ts).
 
-Lemma invs_canceledP ts : reflect (forall t, t \in ts -> TInv t \notin ts) (invs_canceled ts).
+Definition atomic (ts : seq term) : bool := all (fun t => ~~ is_mul t) ts.
+
+Definition wf_mul_list (ts : seq term) : bool :=
+  [&& atomic ts, sorted <=%O ts, invs_canceled ts & size ts != 1].
+
+Lemma atomic_unfold ts :
+  atomic ts -> all (fun pt => ~~ PreTerm.is_mul pt) (map unfold_term ts).
 Proof.
-apply /(iffP idP).
-- move => /allP canceled ??.
-  rewrite -(mem_map unfold_term_inj) unfold_TInv.
-  apply canceled. by rewrite (mem_map unfold_term_inj).
-- move => canceled.
-  apply /allP => /= ? /mapP /= [? /canceled ? ->].
-  by rewrite -unfold_TInv (mem_map unfold_term_inj).
+rewrite /atomic => /allP H; rewrite all_map; apply/allP => x x_ts.
+by rewrite /= -is_mul_unfold; apply: H.
 Qed.
 
-Lemma perm_invs_canceled ts1 ts2 : perm_eq ts1 ts2 -> invs_canceled ts1 = invs_canceled ts2.
+Lemma wf_mul_list_unfold ts :
+  wf_mul_list ts -> PreTerm.wf_term (PreTerm.PTMul (map unfold_term ts)).
 Proof.
-move => /perm_mem peq.
-apply /(sameP idP); apply /(iffP idP);
-move => /invs_canceledP H; apply /invs_canceledP;
-move => t; [rewrite !peq | rewrite -!peq ]; apply H.
+case/and4P => atom sort canc szN1.
+apply/and5P; split.
+- exact: wf_unfold_terms.
+- exact: atomic_unfold.
+- by rewrite sorted_map.
+- exact: canc.
+- by rewrite size_map.
+Qed.
+
+Lemma invs_canceledP {ts} :
+  atomic ts ->
+  reflect (forall t, t \in ts -> TInv t \notin ts) (invs_canceled ts).
+Proof.
+move => /allP atom; apply /(iffP idP).
+- move => /allP canceled t t_ts.
+  rewrite -(mem_map unfold_term_inj) (unfold_TInv_Nmul (atom _ t_ts)).
+  apply canceled. by rewrite (mem_map unfold_term_inj).
+- move => canceled; apply /allP => /= pt /mapP [t t_ts ->].
+  rewrite -(unfold_TInv_Nmul (atom _ t_ts)) (mem_map unfold_term_inj).
+  exact: canceled.
+Qed.
+
+(* Permutation-invariance of [invs_canceled] holds universally: it is [all] of a
+   membership test, and both are stable under permutation (no atomicity needed). *)
+Lemma perm_invs_canceled ts1 ts2 :
+  perm_eq ts1 ts2 -> invs_canceled ts1 = invs_canceled ts2.
+Proof.
+move => peq.
+have peqU : perm_eq (map unfold_term ts1) (map unfold_term ts2) by rewrite perm_map.
+rewrite /invs_canceled /PreTerm.invs_canceled.
+rewrite (perm_all (fun pt => PreTerm.inv_aux pt \notin map unfold_term ts1) peqU).
+by apply: eq_all => pt; rewrite (perm_mem peqU).
 Qed.
 
 Lemma invs_canceled1 t : invs_canceled [:: t].
-Proof. apply /invs_canceledP => t0. rewrite !inE => /eqP ->. exact: TInv_Nid. Qed.
+Proof.
+by rewrite /invs_canceled /PreTerm.invs_canceled /= andbT !inE PreTerm.inv_Nid.
+Qed.
 
-Lemma invs_canceled_cons t ts :
+Lemma invs_canceled_cons {t ts} :
+  ~~ is_mul t -> atomic ts ->
   invs_canceled (t :: ts) = (TInv t \notin ts) && invs_canceled ts.
 Proof.
+move => Nm atom.
 rewrite /invs_canceled /PreTerm.invs_canceled /=.
 rewrite inE negb_or PreTerm.inv_Nid /=.
-rewrite -unfold_TInv (mem_map unfold_term_inj).
+rewrite -(unfold_TInv_Nmul Nm) (mem_map unfold_term_inj).
 case: (boolP (_ \in _)) => //= t_ts.
 apply eq_in_all => /= pt /mapP /= [t' t'_ts ->].
-rewrite inE negb_or -unfold_TInv (eqtype.inj_eq unfold_term_inj).
+rewrite inE negb_or -(unfold_TInv_Nmul (allP atom _ t'_ts)) (eqtype.inj_eq unfold_term_inj).
 case: eqP => //= eq.
 by rewrite -eq TInvK t'_ts in t_ts.
 Qed.
 
-Lemma invs_canceled2 t1 t2 : invs_canceled [:: t1 ; t2] = (t1 != TInv t2).
-Proof. by rewrite !invs_canceled_cons !inE andbT (inv_eq TInvK). Qed.
-
-Lemma cancel_exps_subseq ts : subseq (cancel_exps ts) ts.
+Lemma invs_canceled2 {t1 t2} :
+  ~~ is_mul t1 -> ~~ is_mul t2 ->
+  invs_canceled [:: t1 ; t2] = (t1 != TInv t2).
 Proof.
-rewrite /cancel_exps.
-apply: subseq_trans. apply map_subseq. apply PreTerm.cancel_exps_subseq.
-by rewrite (mapK unfold_termK).
+move => Nm1 Nm2.
+have a2 : atomic [:: t2] by rewrite /atomic /= Nm2.
+by rewrite (invs_canceled_cons Nm1 a2) (invs_canceled1 t2)
+   andbT !inE (inv_eq TInvK).
 Qed.
-
-Lemma mem_cancel_exps ts : { subset cancel_exps ts <= ts }.
-Proof. apply mem_subseq. exact: cancel_exps_subseq. Qed.
 
 Lemma parity_cancel_exps ts : odd (size (cancel_exps ts)) = odd (size ts).
 Proof. by rewrite /cancel_exps size_map PreTerm.parity_cancel_exps size_map. Qed.
@@ -525,9 +718,24 @@ Proof. by rewrite /cancel_exps size_map PreTerm.parity_cancel_exps size_map. Qed
 Lemma invs_canceled_exps t : invs_canceled (exps t).
 Proof. by rewrite /invs_canceled unfold_exps PreTerm.invs_canceled_exps // wf_unfold_term. Qed.
 
-Lemma invs_canceled_cons_exps t1 t2 :
+Lemma exps_Nmul t' t : t' \in exps t -> ~~ is_mul t'.
+Proof.
+move => t'_t; rewrite is_mul_unfold.
+move: (PreTerm.Nmul_factors (PreTerm.wf_expo (wf_unfold_term t))) => /allP H.
+apply: H; rewrite -/(PreTerm.exps (unfold_term t)) -unfold_exps.
+exact: map_f.
+Qed.
+
+Lemma atom_exps t : all (fun t => ~~ is_mul t) (exps t).
+Proof. by apply/allP => t' t't; exact: exps_Nmul t't. Qed.
+
+Lemma invs_canceled_cons_exps {t1} t2 :
+  ~~ is_mul t1 ->
   invs_canceled (t1 :: exps t2) = (TInv t1 \notin exps t2).
-Proof. by rewrite invs_canceled_cons invs_canceled_exps andbT. Qed.
+Proof.
+by move => Nm; rewrite (invs_canceled_cons Nm (atom_exps t2))
+   invs_canceled_exps andbT.
+Qed.
 
 Lemma cancel_exps_canceled ts : invs_canceled ts -> cancel_exps ts = ts.
 Proof.
@@ -541,32 +749,49 @@ Proof. exact /cancel_exps_canceled /invs_canceled_exps. Qed.
 Lemma cancel_exps1 t : cancel_exps [:: t] = [:: t].
 Proof. exact /cancel_exps_canceled /invs_canceled1. Qed.
 
-Lemma invs_canceled_count t ts :
-  invs_canceled ts ->
+Lemma invs_canceled_count {t} ts :
+  ~~ is_mul t -> invs_canceled ts ->
   count_mem t ts - count_mem (TInv t) ts = count_mem t ts.
 Proof.
-move=> /invs_canceledP can_ts.
-have [/can_ts/count_memPn ->|/count_memPn -> //] := boolP (t \in ts).
-by rewrite subn0.
+move=> Nm can_ts.
+have [t_ts|/count_memPn -> //] := boolP (t \in ts).
+suff -> : count_mem (TInv t) ts = 0 by rewrite subn0.
+apply/count_memPn.
+rewrite -(mem_map unfold_term_inj) (unfold_TInv_Nmul Nm).
+move: can_ts; rewrite /invs_canceled /PreTerm.invs_canceled => /allP H.
+by apply: H; rewrite (mem_map unfold_term_inj).
 Qed.
 
 Lemma is_exp_TExpN t ts :
-  ~~ is_exp t -> invs_canceled ts ->
+  ~~ is_exp t -> all (fun t => ~~ is_mul t) ts -> invs_canceled ts ->
   is_exp (TExpN t ts) = (ts != [::]).
 Proof.
-rewrite !is_exp_unfold unfold_TExpN => ??.
-by rewrite PreTerm.is_exp_exp ?wf_unfold_term // -!nilpE /nilp size_map.
+move => Nxt atom canc.
+have atomU : all (fun pt => ~~ PreTerm.is_mul pt) (map unfold_term ts).
+  rewrite all_map; apply/allP => t' t'ts /=; rewrite -is_mul_unfold.
+  by move/allP: atom; apply.
+rewrite /TExpN is_exp_unfold unfold_TExp.
+rewrite (@PreTerm.is_exp_exp _ _ (wf_unfold_term t)).
+rewrite (PreTerm.expo_expN _); last by rewrite -is_exp_unfold.
+rewrite unfold_TMulN -[PreTerm.PTMul [::]]/(PreTerm.mul [::]).
+rewrite (PreTerm.mul_mul2 (ts1 := [::]) isT (wf_unfold_terms ts)) /=.
+rewrite (PreTerm.mul_eq_unit atomU canc).
+by case: ts {atom canc atomU}.
 Qed.
 
-Lemma is_exp_TExp t1 t2 : ~~ is_exp t1 -> is_exp (TExp t1 t2).
-Proof. move => ?. rewrite is_exp_TExpN //. exact: invs_canceled1. Qed.
+Lemma is_exp_TExp t1 t2 : ~~ is_exp t1 -> ~~ is_mul t2 -> is_exp (TExp t1 t2).
+Proof.
+move => Nx1 Nm2.
+have -> : TExp t1 t2 = TExpN t1 [:: t2] by rewrite /TExpN TMulN1.
+have atom : all (fun t => ~~ is_mul t) [:: t2] by rewrite /= Nm2.
+by rewrite (@is_exp_TExpN t1 [:: t2] Nx1 atom (invs_canceled1 t2)).
+Qed.
 
 Lemma TExpN0 : right_id [::] TExpN.
 Proof.
-move => ?;
-rewrite unlock /= PreTerm.exp_nil.
-  exact: unfold_termK.
-  exact: wf_unfold_term.
+move => t; rewrite /TExpN; apply: unfold_term_inj.
+rewrite unfold_TExp unfold_TMulN /=.
+by rewrite (PreTerm.exp_unit (wf_unfold_term t)).
 Qed.
 
 Definition tsize t := PreTerm.tsize (unfold_term t).
@@ -582,45 +807,67 @@ Lemma tsize_eq t :
   | TKey _ t => S (tsize t)
   | TSeal k t => S (tsize k + tsize t)
   | THash t => S (tsize t)
-  | TExpN' pt pts _ => PreTerm.tsize (PreTerm.PTExp pt pts)
+  | TExp' b e _ => PreTerm.tsize (PreTerm.PTExp b e)
+  | TMul' ts _ => PreTerm.tsize (PreTerm.PTMul ts)
   | TInv' pt _ => PreTerm.tsize (PreTerm.PT1 O1Inv pt)
   end.
 Proof. by case: t. Qed.
 
-Lemma tsize_TInv t : ~~ is_inv t -> tsize (TInv t) = S (tsize t).
-Proof. move => ?. by rewrite /tsize unfold_TInv PreTerm.tsize_inv -?is_inv_unfold. Qed.
-
-Lemma tsize_TExpN t ts :
-  ~~ is_exp t -> invs_canceled ts ->
-  tsize (TExpN t ts)
-  = (ts != [::]) + tsize t + sumn (map tsize ts).
+Lemma tsize_TInv t : ~~ is_mul t -> ~~ is_inv t -> tsize (TInv t) = S (tsize t).
 Proof.
-move => ??.
-rewrite /tsize unfold_TExpN PreTerm.tsize_exp -?is_exp_unfold //.
-rewrite -size_eq0 size_map size_eq0.
-case: eqP => [-> | _] //=.
-- by rewrite addn0.
-- by rewrite big_cons /= sumnE !big_map PreTerm.base_expN // -is_exp_unfold.
+move => Nm ?.
+by rewrite /tsize (unfold_TInv_Nmul Nm) PreTerm.tsize_inv -?is_inv_unfold.
 Qed.
 
-Definition tsizeE := (tsize_TInv, tsize_TExpN, tsize_eq).
-
-Lemma TExpNK : right_loop (map TInv) TExpN.
+Lemma tsize_TExp t1 t2 :
+  ~~ is_exp t1 -> ~~ is_mul t2 -> tsize (TExp t1 t2) = S (tsize t1 + tsize t2).
 Proof.
-move => ts t.
-rewrite TExpNA.
-apply base_exps_inj; first exact: base_TExpN.
-by rewrite exps_TExpN perm_sort (permPl (cancel_exps_cat_invs _ _)) cancel_exps_exps.
+move => Nx1 Nm2.
+rewrite is_exp_unfold in Nx1; rewrite is_mul_unfold in Nm2.
+have neq : unfold_term t2 != PreTerm.PTMul [::] by apply: contra Nm2 => /eqP ->.
+by rewrite /tsize unfold_TExp (PreTerm.tsize_exp_Nexp Nx1 (wf_unfold_term t2) neq).
 Qed.
 
-Lemma TExpNK' : rev_right_loop (map TInv) TExpN.
-Proof. move => ts t. by rewrite TExpNC TExpNK. Qed.
+Definition tsizeE := (tsize_TInv, tsize_TExp, tsize_eq).
 
-Lemma TExpK' t1 t2 : TExp (TExp t1 (TInv t2)) t2 = t1.
-Proof. by rewrite TExpNC TExpNK. Qed.
+Lemma TExpNK ts t :
+  all (fun t => ~~ is_mul t) ts -> all (fun t => ~~ is_mul t) (map TInv ts) ->
+  TExpN (TExpN t ts) (map TInv ts) = t.
+Proof.
+move => atom atomInv.
+rewrite TExpNA /TExpN.
+have -> : TMulN (ts ++ map TInv ts) = TMulN [::].
+  apply: unfold_term_inj; rewrite !unfold_TMulN map_cat.
+  have -> : map unfold_term (map TInv ts) = map PreTerm.inv_aux (map unfold_term ts).
+    rewrite -!map_comp; apply/eq_in_map => x x_ts /=.
+    exact: unfold_TInv_Nmul (allP atom _ x_ts).
+  apply: PreTerm.mul_invs; first exact: wf_unfold_terms.
+  rewrite all_cat; apply/andP; split.
+    rewrite all_map; apply/allP => t' t'ts /=; rewrite -is_mul_unfold.
+    by move/allP: atom; apply.
+  rewrite -map_comp; apply/allP => pt /mapP [t' t'ts ->] /=.
+  rewrite -(unfold_TInv_Nmul (allP atom _ t'ts)) -is_mul_unfold.
+  by move/allP: atomInv; apply; rewrite (map_f TInv).
+by apply: unfold_term_inj;
+   rewrite unfold_TExp unfold_TMulN /= (PreTerm.exp_unit (wf_unfold_term t)).
+Qed.
+
+Lemma TExpK' t1 t2 :
+  ~~ is_mul (TInv t2) -> ~~ is_mul t2 ->
+  TExp (TExp t1 (TInv t2)) t2 = t1.
+Proof.
+move => NmI2 Nm2.
+have atom : all (fun t => ~~ is_mul t) [:: TInv t2] by rewrite /= NmI2.
+have atomInv : all (fun t => ~~ is_mul t) (map TInv [:: TInv t2]) by rewrite /= TInvK Nm2.
+move: (@TExpNK [:: TInv t2] t1 atom atomInv) => H.
+by rewrite /= TInvK /TExpN !TMulN1 in H.
+Qed.
 
 Lemma in_TInv_exps t1 t2 : t1 \in exps t2 -> TInv t1 \notin exps t2.
-Proof. exact /invs_canceledP /invs_canceled_exps. Qed.
+Proof.
+move: (invs_canceled_exps t2) => /(invs_canceledP (atom_exps t2)) H.
+exact: H.
+Qed.
 
 Lemma in_TInv_expsV t1 t2 : TInv t1 \in exps t2 -> t1 \notin exps t2.
 Proof. by rewrite -{2}[t1]TInvK; exact: in_TInv_exps. Qed.
@@ -628,53 +875,100 @@ Proof. by rewrite -{2}[t1]TInvK; exact: in_TInv_exps. Qed.
 Lemma in_exps_TInv t1 t2 : (t1 \notin exps t2) || (TInv t1 \notin exps t2).
 Proof. by have [/in_TInv_exps ->|] := boolP (t1 \in _). Qed.
 
-Lemma tsize_lt_TInv t : tsize (TInv t) <= S (tsize t).
+Lemma tsize_lt_TInv {t} : ~~ is_mul t -> tsize (TInv t) <= S (tsize t).
 Proof.
+move => Nm; have NmT := Nmul_TInv Nm.
 have [inv_t|ninv_t] := boolP (is_inv t).
 - rewrite -{2}[t]TInvK [tsize (TInv (TInv _))]tsizeE ?is_inv_TInv ?negbK //.
   apply/ssrnat.leP; lia.
 - rewrite tsizeE //.
 Qed.
 
+Lemma TExp_expsE t1 t2 : TExp t1 t2 = TExpN (base t1) (exps t1 ++ [:: t2]).
+Proof. by rewrite -{1}(base_expsK t1) -TExpNA /TExpN TMulN1. Qed.
+
+Lemma tsize_TExpN t ts :
+  ~~ is_exp t -> all (fun t => ~~ is_mul t) ts -> invs_canceled ts ->
+  tsize (TExpN t ts) =
+  (ts != [::]) + (1 < size ts) + tsize t + sumn (map tsize ts).
+Proof.
+move => Nxt atom canc.
+have atomU : all (fun pt => ~~ PreTerm.is_mul pt) (map unfold_term ts).
+  rewrite all_map; apply/allP => t' t'ts /=; rewrite -is_mul_unfold.
+  by move/allP: atom; apply.
+have [->|tsN0] := eqVneq ts [::].
+  have -> : TExpN t [::] = t.
+    apply: unfold_term_inj; rewrite /TExpN unfold_TExp unfold_TMulN /=.
+    by rewrite (PreTerm.exp_unit (wf_unfold_term t)).
+  by rewrite /= !add0n addn0.
+have eneq : PreTerm.mul (map unfold_term ts) != PreTerm.PTMul [::].
+  by rewrite (PreTerm.mul_eq_unit atomU canc) -size_eq0 size_map size_eq0.
+have sumeq : sumn [seq PreTerm.tsize pt | pt <- map unfold_term ts] = sumn (map tsize ts).
+  by rewrite -map_comp.
+rewrite [tsize (TExpN t ts)]/tsize /TExpN unfold_TExp unfold_TMulN.
+rewrite (PreTerm.tsize_exp_Nexp _ (PreTerm.wf_mul (wf_unfold_terms ts)) eneq);
+  last by rewrite -is_exp_unfold.
+rewrite (PreTerm.tsize_mul atomU canc); last by rewrite -size_eq0 size_map size_eq0.
+rewrite size_map sumeq -[PreTerm.tsize (unfold_term t)]/(tsize t) /=.
+by rewrite !addnE; lia.
+Qed.
+
 Lemma tsize_lt_TExp_strong t1 t2 :
-  TInv t2 \notin exps t1 ->
+  ~~ is_mul t2 -> TInv t2 \notin exps t1 ->
   tsize t1 < tsize (TExp t1 t2) /\
   S (tsize t2) < tsize (TExp t1 t2).
 Proof.
-move => ?.
-rewrite -[t1]base_expsK TExpNA TExpN_catC.
-rewrite !tsize_TExpN ?is_exp_base ?invs_canceled_cons_exps ?invs_canceled_exps //= !addnE.
-have /ssrnat.ltP := tsize_gt0 (base t1).
-split; apply /ssrnat.ltP; last lia.
-have /ssrnat.ltP := tsize_gt0 t2.
-case: (exps t1 != [::]) => /=; lia.
+move => Nm2 t2_t1.
+have atom : all (fun t => ~~ is_mul t) (exps t1 ++ [:: t2]).
+  by rewrite all_cat (atom_exps t1) /= Nm2.
+have canc : invs_canceled (exps t1 ++ [:: t2]).
+  have pperm : perm_eq (exps t1 ++ [:: t2]) (t2 :: exps t1) by rewrite -cat1s perm_catC.
+  rewrite (@perm_invs_canceled _ _ pperm).
+  by rewrite (invs_canceled_cons Nm2 (atom_exps t1)) t2_t1 (invs_canceled_exps t1).
+have e1 : tsize t1 = (exps t1 != [::]) + (1 < size (exps t1)) + tsize (base t1)
+                     + sumn (map tsize (exps t1)).
+  by rewrite -{1}(base_expsK t1)
+     (@tsize_TExpN (base t1) (exps t1) (is_exp_base t1) (atom_exps t1)
+        (invs_canceled_exps t1)).
+rewrite TExp_expsE (@tsize_TExpN (base t1) (exps t1 ++ [:: t2]) (is_exp_base t1) atom canc).
+rewrite map_cat size_cat sumn_cat /= e1 !addn0 addn1.
+have /ssrnat.ltP g1 := tsize_gt0 (base t1).
+have /ssrnat.ltP g2 := tsize_gt0 t2.
+rewrite (_ : (exps t1 != [::]) = (0 < size (exps t1))); last by rewrite lt0n size_eq0.
+rewrite (_ : (exps t1 ++ [:: t2] != [::]) = true); last by case: (exps t1).
+by split; apply/ssrnat.ltP;
+   case: (size (exps t1)) => [|[|n]]; rewrite /= ?addn0 ?add0n !addnE; lia.
 Qed.
 
 Lemma tsize_lt_TExp t1 t2 :
-  TInv t2 \notin exps t1 ->
+  ~~ is_mul t2 -> TInv t2 \notin exps t1 ->
   tsize t1 < tsize (TExp t1 t2) /\
   tsize (TInv t2) < tsize (TExp t1 t2) /\
   tsize t2 < tsize (TExp t1 t2).
 Proof.
-case/tsize_lt_TExp_strong=> /ssrnat.ltP H1 /ssrnat.ltP H2.
-have /ssrnat.leP ? := tsize_lt_TInv t2.
+move => Nm2 t2_t1; case: (@tsize_lt_TExp_strong t1 t2 Nm2 t2_t1) => /ssrnat.ltP H1 /ssrnat.ltP H2.
+have /ssrnat.leP ? := tsize_lt_TInv Nm2.
 do !split; apply/ssrnat.ltP; lia.
 Qed.
 
-Lemma TExpN_injl : left_injective TExpN.
-Proof. move => ?. exact: can_inj (TExpNK _). Qed.
-
 Lemma TExpN_injr t ts1 ts2 :
+  all (fun t => ~~ is_mul t) ts1 -> all (fun t => ~~ is_mul t) ts2 ->
   TExpN t ts1 = TExpN t ts2 ->
   perm_eq (cancel_exps ts1) (cancel_exps ts2).
 Proof.
-move => /(congr1 exps). rewrite !exps_TExpN => /perm_sort_leP.
-by rewrite perm_cancel_exps_catl.
+move => atom1 atom2 /(congr1 exps).
+rewrite (@exps_TExpN t ts1 atom1) (@exps_TExpN t ts2 atom2) => /perm_sort_leP.
+by rewrite (@perm_cancel_exps_catl ts1 ts2 (exps t) atom1 atom2 (atom_exps t)).
 Qed.
 
-Lemma TExp_injr t t1 t2 : TExp t t1 = TExp t t2 -> t1 = t2.
+Lemma TExp_injr t t1 t2 :
+  ~~ is_mul t1 -> ~~ is_mul t2 -> TExp t t1 = TExp t t2 -> t1 = t2.
 Proof.
-move /TExpN_injr /perm_mem /(_ t2).
+move => Nm1 Nm2 e.
+have e' : TExpN t [:: t1] = TExpN t [:: t2] by rewrite /TExpN !TMulN1.
+have a1 : all (fun t => ~~ is_mul t) [:: t1] by rewrite /= Nm1.
+have a2 : all (fun t => ~~ is_mul t) [:: t2] by rewrite /= Nm2.
+move: (@TExpN_injr t [:: t1] [:: t2] a1 a2 e') => /perm_mem /(_ t2).
 by rewrite !cancel_exps1 !inE eqxx => /eqP.
 Qed.
 
@@ -687,25 +981,40 @@ Lemma count_exp_nat_gt0 t1 t2 : (count_exp_nat t1 t2 > 0) = (t1 \in exps t2).
 Proof. by rewrite /count_exp_nat -has_count has_pred1. Qed.
 
 Lemma count_exp_nat_TExp t1 t2 t3 :
+  ~~ is_mul t3 ->
   count_exp_nat t1 (TExp t2 t3) =
   if t1 == TInv t3 then (count_exp_nat t1 t2).-1
   else if t1 == t3 then (count_exp_nat t1 t2).+1 - (TInv t1 \in exps t2)
   else count_exp_nat t1 t2.
 Proof.
-rewrite /count_exp_nat -{1}[t2]base_expsK TExpNA TExpN_catC.
-rewrite exps_TExpN exps_expN ?is_exp_base //= count_sort count_cancel /=.
+move => Nm3.
+have [Mt1|Nmt1] := boolP (is_mul t1).
+  have z : forall X, count_mem t1 (exps X) = 0.
+    by move => X; apply/count_memPn/negP => /exps_Nmul H; rewrite Mt1 in H.
+  rewrite /count_exp_nat !z.
+  have -> : (t1 == TInv t3) = false.
+    by apply/negP => /eqP e; move: Mt1; rewrite e (negbTE (Nmul_TInv Nm3)).
+  have -> : (t1 == t3) = false.
+    by apply/negP => /eqP e; move: Mt1; rewrite e (negbTE Nm3).
+  by [].
+have atom : all (fun t => ~~ is_mul t) ([:: t3] ++ exps t2).
+  by rewrite all_cat /= Nm3 (atom_exps t2).
+rewrite /count_exp_nat TExp_expsE TExpN_catC.
+rewrite (@exps_TExpN (base t2) ([:: t3] ++ exps t2) atom).
+rewrite (@exps_expN (base t2) (is_exp_base t2)) cat0s count_sort.
+rewrite (@count_cancel t1 ([:: t3] ++ exps t2) Nmt1 atom) /=.
 rewrite -![count_mem _ _]/(count_exp_nat _ _).
 rewrite ![t3 == _]eq_sym (can2_eq TInvK TInvK).
-case: (t1 =P t3) => [<- {t3}|t1_t3] /=.
-  rewrite [_ == TInv _]eq_sym (negbTE (TInv_Nid _)) /= add0n add1n.
+case: (t1 =P t3) => [<-|t1_t3] /=.
+  rewrite [_ == TInv _]eq_sym (negbTE (TInv_Nid Nmt1)) /= add0n add1n.
   have [t1_t2|t1_t2] := boolP (TInv t1 \in exps t2); last first.
     by rewrite (count_exp_nat_eq0 _ _ t1_t2).
   rewrite count_exp_nat_eq0 1?in_TInv_expsV //.
   by move: t1_t2; rewrite -count_exp_nat_gt0; case: count_exp_nat.
-case: (t1 =P TInv t3) => [-> {t1 t1_t3}|t1_t3V] /=.
-  rewrite TInvK add1n add0n subnS -{2}[t3]TInvK invs_canceled_count //.
-  exact: invs_canceled_exps.
-by rewrite !add0n invs_canceled_count // invs_canceled_exps.
+case: (t1 =P TInv t3) => [t1E|t1_t3V] /=.
+  by rewrite add0n add1n subnS
+     (invs_canceled_count (exps t2) Nmt1 (invs_canceled_exps t2)).
+by rewrite !add0n (invs_canceled_count (exps t2) Nmt1 (invs_canceled_exps t2)).
 Qed.
 
 Variant count_exp_nat_TExp_spec t1 t2 t3 : nat -> Type :=
@@ -726,31 +1035,155 @@ Variant count_exp_nat_TExp_spec t1 t2 t3 : nat -> Type :=
 : count_exp_nat_TExp_spec t1 t2 t3 (count_exp_nat t1 t2).
 
 Lemma count_exp_nat_TExpP t1 t2 t3 :
+  ~~ is_mul t3 ->
   count_exp_nat_TExp_spec t1 t2 t3 (count_exp_nat t1 (TExp t2 t3)).
 Proof.
-rewrite count_exp_nat_TExp.
+move => Nm3; rewrite (@count_exp_nat_TExp t1 t2 t3 Nm3).
 case: (t1 =P TInv t3) => eV; first by constructor.
 case: (t1 =P t3) => e; last by constructor.
 case: (boolP (_ \in _)) => t1_t2.
 - rewrite /count_exp_nat; suff /count_memPn -> : t1 \notin exps t2.
     constructor => //; by rewrite -e.
-  rewrite -[t1]TInvK; apply: invs_canceledP t1_t2.
-  by exact: invs_canceled_exps.
+  by exact: (@in_TInv_expsV t1 t2 t1_t2).
 - by constructor => //; rewrite -e.
 Qed.
 
 Lemma tsize_TExp_TInv t1 t2 :
-  t2 \in exps t1 ->
+  ~~ is_mul (TInv t2) -> t2 \in exps t1 ->
   tsize t2 < tsize t1 /\
   tsize (TInv t2) < tsize t1 /\
   tsize (TExp t1 (TInv t2)) < tsize t1.
 Proof.
-move => H; rewrite -{1 2 4}(TExpK' t1 t2).
+move => NmI2 H.
+have Nm2 : ~~ is_mul t2 := @exps_Nmul t2 t1 H.
+rewrite -{1 2 4}(@TExpK' t1 t2 NmI2 Nm2).
 set t1' := TExp t1 _; have {}H : TInv t2 \notin exps t1'.
-  rewrite -count_exp_nat_gt0 count_exp_nat_TExp -leqNgt.
+  rewrite -count_exp_nat_gt0 (@count_exp_nat_TExp (TInv t2) t1 (TInv t2) NmI2) -leqNgt.
   rewrite TInvK H count_exp_nat_eq0; last exact: in_TInv_exps.
   by do !case: ifP.
-by case: (tsize_lt_TExp t1' t2 H) => ? [] ??; eauto.
+by case: (@tsize_lt_TExp t1' t2 Nm2 H) => ? [] ??; eauto.
+Qed.
+
+Lemma exps_sorted t : sorted <=%O (exps t).
+Proof.
+move: (PreTerm.exps_sorted (wf_unfold_term t)); rewrite -unfold_exps sorted_map.
+by [].
+Qed.
+
+Lemma exps_Nnil t : is_exp t -> exps t != [::].
+Proof.
+move => xt.
+rewrite -(@is_exp_TExpN (base t) (exps t)
+  (is_exp_base t) (atom_exps t) (invs_canceled_exps t)) base_expsK.
+exact: xt.
+Qed.
+
+Lemma term_lt_rect (T : term -> Type) :
+  (forall t, (forall t', (tsize t' < tsize t)%coq_nat -> T t') -> T t) ->
+  forall t, T t.
+Proof.
+move=> H t.
+move: {-1}(tsize t) (Nat.le_refl (tsize t)) => n.
+elim: n / (lt_wf n) t => n _ IH t t_n.
+apply: H => t' t'_t.
+apply: (IH (tsize t')); lia.
+Qed.
+
+Lemma tsize_in_sumn t' ts : t' \in ts -> tsize t' <= sumn (map tsize ts).
+Proof.
+elim: ts => // t ts IH; rewrite inE => /orP [/eqP -> /=|/IH h /=].
+- exact: leq_addr.
+- by rewrite (leq_trans h) // leq_addl.
+Qed.
+
+Lemma tsize_base_lt t : is_exp t -> tsize (base t) < tsize t.
+Proof.
+rewrite is_exp_unfold => xt.
+rewrite /tsize unfold_base; move: xt.
+by case: (unfold_term t) => [o|o t'|[||] t1 t2|ts] //= _; rewrite ltnS leq_addr.
+Qed.
+
+Lemma tsize_exps_lt t' t : t' \in exps t -> tsize t' < tsize t.
+Proof.
+move => t'_t.
+have en : exps t != [::] by apply/eqP => e; rewrite e in_nil in t'_t.
+have xt : is_exp t by apply: contraTT en => /exps_expN ->.
+rewrite -{1}(base_expsK t)
+  (@tsize_TExpN (base t) (exps t) (is_exp_base t) (atom_exps t) (invs_canceled_exps t)).
+have /ssrnat.leP := @tsize_in_sumn t' (exps t) t'_t.
+have /ssrnat.ltP := tsize_gt0 (base t).
+rewrite en /= => ??; apply/ssrnat.ltP; rewrite !addnE; lia.
+Qed.
+
+Lemma tfactorsK t : TMulN (tfactors t) = t.
+Proof.
+apply: unfold_term_inj; rewrite unfold_TMulN unfold_tfactors.
+exact: (PreTerm.mul_factors (wf_unfold_term t)).
+Qed.
+
+Lemma mul_wf_list_eq ts :
+  wf_mul_list ts ->
+  PreTerm.mul (map unfold_term ts) = PreTerm.PTMul (map unfold_term ts).
+Proof.
+move => wf.
+have E := PreTerm.normalize_wf (wf_mul_list_unfold ts wf).
+move: E => /= <-.
+congr PreTerm.mul.
+rewrite -map_comp; apply/eq_in_map => t' t'_ts /=; apply/esym.
+apply: PreTerm.normalize_wf.
+move/allP: (wf_unfold_terms ts); apply; exact: map_f.
+Qed.
+
+Lemma is_mul_TMulN ts : wf_mul_list ts -> is_mul (TMulN ts).
+Proof. by move => wf; rewrite is_mul_unfold unfold_TMulN mul_wf_list_eq. Qed.
+
+Lemma tfactors_TMulN ts : wf_mul_list ts -> tfactors (TMulN ts) = ts.
+Proof.
+move => wf; rewrite /tfactors unfold_TMulN mul_wf_list_eq //=.
+rewrite -map_comp map_id_in // => t' t'_ts.
+exact: unfold_termK.
+Qed.
+
+Lemma atom_tfactors t : all (fun t => ~~ is_mul t) (tfactors t).
+Proof.
+apply/allP => x x_t; rewrite is_mul_unfold.
+move: (PreTerm.Nmul_factors (wf_unfold_term t)) => /allP; apply.
+by rewrite -unfold_tfactors (map_f _ x_t).
+Qed.
+
+Lemma invs_canceled_tfactors t : invs_canceled (tfactors t).
+Proof.
+rewrite /invs_canceled unfold_tfactors.
+exact: PreTerm.invs_canceled_factors (wf_unfold_term t).
+Qed.
+
+Lemma tsize_TMulN ts :
+  all (fun t => ~~ is_mul t) ts -> invs_canceled ts -> ts != [::] ->
+  tsize (TMulN ts) = (1 < size ts) + sumn (map tsize ts).
+Proof.
+move => atom canc tsN0.
+have atomU : all (fun pt => ~~ PreTerm.is_mul pt) (map unfold_term ts).
+  rewrite all_map; apply/allP => t' t'ts /=; rewrite -is_mul_unfold.
+  by move/allP: atom; apply.
+rewrite /tsize /TMulN unfold_TMulN.
+rewrite (PreTerm.tsize_mul atomU canc); last by rewrite -size_eq0 size_map size_eq0.
+rewrite size_map; congr addn; by rewrite -map_comp.
+Qed.
+
+Lemma tsize_tfactors_lt t' t : is_mul t -> t' \in tfactors t -> tsize t' < tsize t.
+Proof.
+move => xt t'_t.
+have tsN0 : tfactors t != [::] by apply/eqP => e; rewrite e in_nil in t'_t.
+rewrite -{1}(tfactorsK t)
+  (@tsize_TMulN (tfactors t) (atom_tfactors t) (invs_canceled_tfactors t) tsN0).
+have /ssrnat.leP := @tsize_in_sumn t' (tfactors t) t'_t.
+have szge : 1 < size (tfactors t).
+  have szN1 : size (tfactors t) != 1.
+    rewrite /tfactors size_map; move: xt; rewrite is_mul_unfold.
+    case: (unfold_term t) (wf_unfold_term t) => //= ts /and5P [_ _ _ _] ? _.
+    by rewrite /PreTerm.factors.
+  by move: szN1 tsN0; case: (tfactors t) => [|?[|??]].
+rewrite szge /= => ?; apply/ssrnat.ltP; rewrite !addnE; lia.
 Qed.
 
 Lemma term_rect (T : term -> Type)
@@ -762,56 +1195,75 @@ Lemma term_rect (T : term -> Type)
   (H4 : forall kt t, T t -> T (TKey kt t))
   (H5 : forall k, T k -> forall t, T t -> T (TSeal k t))
   (H6 : forall t, T t -> T (THash t))
-  (H7 : forall t, T t -> ~~ is_inv t -> T (TInv t))
+  (H7 : forall t, T t -> ~~ is_mul t -> ~~ is_inv t -> T (TInv t))
   (H8 : forall t, T t -> ~~ is_exp t ->
         forall ts, foldr (fun t R => T t * R)%type unit ts ->
+                   all (fun t => ~~ is_mul t) ts ->
                    ts != [::] ->
                    sorted <=%O ts ->
                    invs_canceled ts ->
-        T (TExpN t ts)) :
+        T (TExpN t ts))
+  (H9 : forall ts, foldr (fun t R => T t * R)%type unit ts ->
+                   all (fun t => ~~ is_mul t) ts ->
+                   sorted <=%O ts ->
+                   invs_canceled ts ->
+                   size ts != 1 ->
+        T (TMulN ts)) :
   forall t, T t.
 Proof.
-move => t; rewrite -(unfold_termK t) [fold_term]unlock.
-move: (wf_unfold_term t).
-elim: (unfold_term t) => {t} /=.
-- by case=> /=.
-- case=> /=; auto.
-  move => pt IH /andP [nInv /[dup] ? /IH /H7 H].
-  have: fold_term (PreTerm.PT1 O1Inv pt) = TInv (fold_term pt).
-  apply unfold_term_inj.
-  by rewrite unfold_TInv -PreTerm.inv_invN // !fold_termK // PreTerm.wf_inv.
-  rewrite [fold_term]unlock => ->.
-  apply H. rewrite -[pt]fold_termK // [fold_term]unlock in nInv. by rewrite is_inv_unfold.
-- by case => [] ???? /andP [??] /=; auto.
-- move => pt IHpt pts IHpts /[dup] wf_exp /and5P [wf_pt ptNexp wf_pts ptsN0 /andP [sorted_pts canceled_pts]].
-
-case: eqP ptsN0 => //= ptsN0 _.
-have [t e_pt] : {t | pt = unfold_term t}.
-  by exists (fold_term pt); rewrite fold_termK.
-rewrite {}e_pt {pt} in IHpt wf_pt ptNexp wf_exp *.
-have [ts e_pts] : {ts | pts = map unfold_term ts}.
-  exists (map fold_term pts).
-  rewrite -map_comp map_id_in // => pt' pt'_pts.
-  by rewrite /= fold_termK // (allP wf_pts).
-
-  have: fold_term (PreTerm.PTExp (unfold_term t) pts) = TExpN t ts.
-  apply unfold_term_inj.
-  rewrite unfold_TExpN !fold_termK // -e_pts /PreTerm.exp PreTerm.base_expN //
-    PreTerm.exps_expN //= PreTerm.cancel_exps_canceled // !sort_le_id //.
-  move: ptsN0 => /nilP. by rewrite /nilp => /negbTE ->.
-  rewrite [fold_term]unlock => ->.
-
-  apply H8.
-  - rewrite -(unfold_termK t) unlock. apply: IHpt. exact: wf_unfold_term.
-  - by rewrite is_exp_unfold.
-  - have -> : ts = map fold_term pts. rewrite e_pts -map_comp map_id_in //= => ?.
-    by rewrite unfold_termK.
-    elim: (pts) IHpts wf_pts => //= [pt' ? IH [T_pt' ?] /andP [??]]; split.
-      + rewrite [fold_term]unlock. exact: T_pt'.
-      + exact: IH.
-  - rewrite -size_eq0 -(size_map unfold_term) -e_pts size_eq0. exact /eqP.
-  - move: sorted_pts. by rewrite e_pts sorted_map.
-  - by rewrite /invs_canceled -e_pts canceled_pts.
+elim/term_lt_rect => t IH.
+have build : forall s, (forall t', t' \in s -> tsize t' < tsize t) ->
+    foldr (fun t R => T t * R)%type unit s.
+  elim => // x s' IHs h; split.
+    by apply: IH; apply/ssrnat.ltP; apply: h; rewrite inE eqxx.
+  by apply: IHs => t' t's; apply: h; rewrite inE t's orbT.
+case: t IH build => [n|t1 t2|a|kt t|k t|t|pt wf|b e wf|ts wf] IH build.
+- exact: H1.
+- apply: H2; apply: IH; apply/ssrnat.ltP;
+    rewrite [tsize (TPair t1 t2)]tsize_eq ltnS; [exact: leq_addr | exact: leq_addl].
+- exact: H3.
+- apply: H4; apply: IH; apply/ssrnat.ltP.
+  by rewrite [tsize (TKey kt t)]tsize_eq.
+- apply: H5; apply: IH; apply/ssrnat.ltP;
+    rewrite [tsize (TSeal k t)]tsize_eq ltnS; [exact: leq_addr | exact: leq_addl].
+- apply: H6; apply: IH; apply/ssrnat.ltP.
+  by rewrite [tsize (THash t)]tsize_eq.
+- (* TInv' pt wf *)
+  have /and3P [Ninvpt Nmpt wfpt] := wf.
+  have e : TInv' pt wf = TInv (fold_term pt).
+    apply: unfold_term_inj.
+    by rewrite unfold_TInv (@fold_termK pt wfpt) (@PreTerm.dinv_Nmul pt Nmpt)
+       (@PreTerm.inv_invN pt Ninvpt).
+  have Ninv : ~~ is_inv (fold_term pt) by rewrite is_inv_unfold (@fold_termK pt wfpt).
+  have Nmf : ~~ is_mul (fold_term pt) by rewrite is_mul_unfold (@fold_termK pt wfpt).
+  rewrite e; apply: (H7 _ _ Nmf Ninv).
+  apply: IH.
+  rewrite (tsize_eq (TInv' pt wf)) /tsize (@fold_termK pt wfpt) /=.
+  apply/ssrnat.ltP; exact: ltnSn.
+- (* TExp' b e wf: an exp *)
+  set t := TExp' b e wf.
+  have xt : is_exp t by [].
+  rewrite -(base_expsK t).
+  apply: H8.
+  + apply: IH; apply/ssrnat.ltP; exact: tsize_base_lt.
+  + exact: is_exp_base.
+  + by apply: build => t' t'_t; exact: (@tsize_exps_lt t' t t'_t).
+  + exact: atom_exps.
+  + exact: exps_Nnil xt.
+  + exact: exps_sorted.
+  + exact: invs_canceled_exps.
+- (* TMul' ts wf: a product *)
+  set t := TMul' ts wf.
+  have xt : is_mul t by [].
+  rewrite -(tfactorsK t).
+  apply: H9.
+  + by apply: build => t' t'_t; exact: (@tsize_tfactors_lt t' t xt t'_t).
+  + exact: atom_tfactors.
+  + move: (PreTerm.sorted_factors (wf_unfold_term t)); rewrite -unfold_tfactors sorted_map.
+    by [].
+  + exact: invs_canceled_tfactors.
+  + rewrite /tfactors size_map /t /=.
+    by have /and5P [_ _ _ _ szN1] := wf.
 Qed.
 
 Definition term_ind (P : term -> Prop) := @term_rect P.
@@ -819,26 +1271,7 @@ Definition term_ind (P : term -> Prop) := @term_rect P.
 Lemma term_lt_ind (T : term -> Prop) :
   (forall t, (forall t', (tsize t' < tsize t)%coq_nat -> T t') -> T t) ->
   forall t, T t.
-Proof.
-move=> H t.
-move: {-1}(tsize t) (Nat.le_refl (tsize t)) => n.
-elim: n / (lt_wf n) t => n _ IH t t_n.
-apply: H => t' t'_t.
-apply: (IH (tsize t')); lia.
-Qed.
-
-Lemma unfold_TExpN' t ts :
-  ~~ is_exp t -> ts != [::] -> invs_canceled ts ->
-  unfold_term (TExpN t ts) =
-    PreTerm.PTExp (unfold_term t) (sort <=%O (map unfold_term ts)).
-Proof.
-move => nExp /negbTE tsN0 canceled.
-rewrite unfold_TExpN /PreTerm.exp.
-rewrite is_exp_unfold in nExp.
-rewrite /invs_canceled in canceled.
-rewrite PreTerm.exps_expN //= PreTerm.cancel_exps_canceled //.
-by rewrite /nilp size_map size_eq0 tsN0 PreTerm.base_expN.
-Qed.
+Proof. exact: term_lt_rect. Qed.
 
 Variant functionality := AENC | SIGN | SENC.
 
