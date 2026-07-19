@@ -78,7 +78,7 @@ Inductive term_op2 :=
 
 Notation TPair_tag := 0%Z.
 Notation TSeal_tag := 1%Z.
-Notation TExpOp_tag := 2%Z.
+Notation TExp_tag := 2%Z.
 
 Canonical term_op2_indDef := [indDef for term_op2_rect].
 Canonical term_op2_indType := IndType term_op2 term_op2_indDef.
@@ -97,8 +97,7 @@ HB.instance Definition _ := term_op2_isOrder.
 Notation TOp0_tag := 0%Z.
 Notation TOp1_tag := 1%Z.
 Notation TOp2_tag := 2%Z.
-Notation TExp_tag := 3%Z.
-Notation TMul_tag := 4%Z.
+Notation TMul_tag := 3%Z.
 
 Module PreTerm.
 

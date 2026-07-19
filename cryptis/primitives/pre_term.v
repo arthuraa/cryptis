@@ -106,7 +106,7 @@ Definition leq_term : val := rec: "loop" "t1" "t2" :=
 (* TODO: Better names / separate file *)
 Definition hl_base : val := λ: "pt",
     if: Fst "pt" = #TOp2_tag then
-        if: Fst (Fst (Snd "pt")) = #TExpOp_tag then Snd (Fst (Snd "pt"))
+        if: Fst (Fst (Snd "pt")) = #TExp_tag then Snd (Fst (Snd "pt"))
         else "pt"
     else "pt".
 
@@ -116,7 +116,7 @@ Definition hl_factors : val := λ: "pt",
 
 Definition hl_exps : val := λ: "pt",
     if: Fst "pt" = #TOp2_tag then
-        if: Fst (Fst (Snd "pt")) = #TExpOp_tag then hl_factors (Snd (Snd "pt"))
+        if: Fst (Fst (Snd "pt")) = #TExp_tag then hl_factors (Snd (Snd "pt"))
         else NILV
     else NILV.
 
@@ -151,7 +151,7 @@ Definition hl_exp : val := λ: "b" "e",
           (hl_cancel_exps (append_lists (hl_exps "b") (hl_factors "e"))) in
     let: "e'" := hl_mk_mul "c" in
     if: eq_term "e'" (#TMul_tag, NILV) then hl_base "b"
-    else (#TOp2_tag, (#TExpOp_tag, hl_base "b", "e'")).
+    else (#TOp2_tag, (#TExp_tag, hl_base "b", "e'")).
 
 Definition texp : val := λ: "base" "exp",
     hl_exp "base" "exp".

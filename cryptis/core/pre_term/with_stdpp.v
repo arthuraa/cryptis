@@ -16,8 +16,8 @@ Proof. exact: def_eq_decision. Defined.
 #[global]
 Instance repr_term_op0 : Repr term_op0 := λ o,
   match o with
-  | O0Int n => (#0, #n)%V
-  | O0Nonce a => (#1, #a)%V
+  | O0Int n => (#TInt_tag, #n)%V
+  | O0Nonce a => (#TNonce_tag, #a)%V
   end.
 
 Definition int_of_key_type kt : Z :=
@@ -67,9 +67,9 @@ Proof. exact: def_eq_decision. Defined.
 
 Instance repr_term_op1 : Repr term_op1 := λ o,
   match o with
-  | O1Key kt => (#0, repr kt)%V
-  | O1Hash => (#1, #())%V
-  | O1Inv => (#2, #())%V
+  | O1Key kt => (#TKey_tag, repr kt)%V
+  | O1Hash => (#THash_tag, #())%V
+  | O1Inv => (#TInv_tag, #())%V
   end.
 
 Canonical term_op2O := leibnizO term_op2.
@@ -80,9 +80,9 @@ Proof. exact: def_eq_decision. Defined.
 
 Instance repr_term_op2 : Repr term_op2 := λ o,
   match o with
-  | O2Pair => #0
-  | O2Seal => #1
-  | O2Exp => #TExpOp_tag
+  | O2Pair => #TPair_tag
+  | O2Seal => #TSeal_tag
+  | O2Exp => #TExp_tag
   end.
 
 Section ValOfPreTerm.

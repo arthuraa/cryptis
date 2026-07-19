@@ -267,7 +267,7 @@ Fixpoint val_of_term_rec t : val :=
   | TInv' pt _ =>
     (#TOp1_tag, ((#TInv_tag, #()), val_of_pre_term pt))
   | TExp' b e _ =>
-    (#TOp2_tag, (#TExpOp_tag, val_of_pre_term b, val_of_pre_term e))%V
+    (#TOp2_tag, (#TExp_tag, val_of_pre_term b, val_of_pre_term e))%V
   | TMul' ts _ =>
     (#TMul_tag, repr_list (map val_of_pre_term ts))%V
   end.
