@@ -105,13 +105,18 @@ Global Existing Instance val_of_pre_term.
 
 End ValOfPreTerm.
 
-Definition nonces_of_term_op0 o : gset loc :=
+Definition nonce_eq_dec : EqDecision nonce := Eval hnf in def_eq_decision _.
+Global Existing Instance nonce_eq_dec.
+Global Instance nonce_countable : Countable nonce.
+Proof. exact: def_countable. Qed.
+
+Definition nonces_of_term_op0 o : gset nonce :=
   match o with
   | O0Int _ => ∅
-  | O0Nonce a => {[nonce_loc a]}
+  | O0Nonce a => {[a]}
   end.
 
-Fixpoint nonces_of_pre_term pt : gset loc :=
+Fixpoint nonces_of_pre_term pt : gset nonce :=
   match pt with
   | PreTerm.PT0 o => nonces_of_term_op0 o
   | PreTerm.PT1 _ t => nonces_of_pre_term t

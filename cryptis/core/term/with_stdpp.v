@@ -334,7 +334,7 @@ Lemma nonces_of_termE' t :
   match t with
   | TInt _ => ∅
   | TPair t1 t2 => nonces_of_term t1 ∪ nonces_of_term t2
-  | TNonce l => {[nonce_loc l]}
+  | TNonce l => {[l]}
   | TKey _ t => nonces_of_term t
   | TSeal t1 t2 => nonces_of_term t1 ∪ nonces_of_term t2
   | THash t => nonces_of_term t
@@ -723,9 +723,6 @@ split.
       apply: (STMul (proj1 (is_trueP _) wf) sub' t'_ts).
 Qed.
 
-Lemma nonce_loc_inj : forall x y : nonce, nonce_loc x = nonce_loc y -> x = y.
-Proof. by move=> [x] [y] /= ->. Qed.
-
 Ltac solve_nonces_of_termP :=
   intros;
   repeat match goal with
@@ -733,7 +730,6 @@ Ltac solve_nonces_of_termP :=
       rewrite [nonces_of_term (X Y)]nonces_of_termE /= in H
   | H : _ ∈ {[_]} |- _ =>
       rewrite elem_of_singleton in H;
-      apply nonce_loc_inj in H;
       rewrite {}H
   | H : _ ∈ _ ∪ _ |- _ =>
       rewrite elem_of_union in H;
@@ -746,7 +742,7 @@ Ltac solve_nonces_of_termP :=
   end;
   eauto using subterm.
 
-Lemma nonces_of_termP (a : nonce) t : subterm (TNonce a) t ↔ nonce_loc a ∈ nonces_of_term t.
+Lemma nonces_of_termP (a : nonce) t : subterm (TNonce a) t ↔ a ∈ nonces_of_term t.
 Proof.
 split.
 - elim: t /; try by intros; rewrite nonces_of_termE; set_solver.

@@ -19,7 +19,7 @@ Context `{heapGS Σ}.
 Notation iProp := (iProp Σ).
 
 lock Definition minted t : iProp :=
-  [∗ set] a ∈ nonces_of_term t, meta a (nroot.@"minted") ().
+  [∗ set] a ∈ nonces_of_term t, meta (nonce_loc a) (nroot.@"minted") ().
 
 Global Instance Persistent_minted t : Persistent (minted t).
 Proof. rewrite unlock; apply _. Qed.
@@ -129,7 +129,7 @@ exact: (all_minted_TExpN t1 (tfactors t2)).
 Qed.
 
 Lemma minted_nonces_of_term t :
-  minted t ⊣⊢ [∗ set] a ∈ nonces_of_term t, minted (TNonce (Nonce a)).
+  minted t ⊣⊢ [∗ set] a ∈ nonces_of_term t, minted (TNonce a).
 Proof.
 rewrite {1}unlock. apply: big_sepS_proper => a a_t.
 by rewrite minted_TNonce.
