@@ -41,7 +41,7 @@ Proof. by rewrite unlock nonces_of_termE big_sepS_empty. Qed.
 Lemma minted_TPair t1 t2 : minted (TPair t1 t2) ⊣⊢ minted t1 ∧ minted t2.
 Proof. by rewrite unlock nonces_of_termE !big_sepS_union_pers. Qed.
 
-Lemma minted_TNonce a : minted (TNonce a) ⊣⊢ meta a (nroot.@"minted") ().
+Lemma minted_TNonce a : minted (TNonce a) ⊣⊢ meta (nonce_loc a) (nroot.@"minted") ().
 Proof. by rewrite unlock nonces_of_termE big_sepS_singleton. Qed.
 
 Lemma minted_TKey kt t : minted (TKey kt t) ⊣⊢ minted t.
@@ -129,11 +129,10 @@ exact: (all_minted_TExpN t1 (tfactors t2)).
 Qed.
 
 Lemma minted_nonces_of_term t :
-  minted t ⊣⊢ [∗ set] a ∈ nonces_of_term t, minted (TNonce a).
+  minted t ⊣⊢ [∗ set] a ∈ nonces_of_term t, minted (TNonce (Nonce a)).
 Proof.
-rewrite {1}unlock !big_sepS_forall; iSplit; iIntros "#H %a %a_t".
-- by rewrite minted_TNonce; iApply "H".
-- by rewrite -minted_TNonce; iApply "H".
+rewrite {1}unlock. apply: big_sepS_proper => a a_t.
+by rewrite minted_TNonce.
 Qed.
 
 Lemma minted_to_list t ts :

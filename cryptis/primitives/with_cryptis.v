@@ -59,10 +59,9 @@ Definition mk_senc_key : val := λ: <>,
 Section Proofs.
 
 Context `{!heapGS Σ, !cryptisGS Σ}.
-Notation nonce := loc.
 
 Implicit Types E : coPset.
-Implicit Types a : nonce.
+Implicit Types a : loc.
 Implicit Types t : term.
 Implicit Types v : val.
 Implicit Types Φ : prodO locO termO -n> iPropO Σ.
@@ -157,9 +156,9 @@ Proof.
 rewrite /mk_nonce; iIntros "mint post".
 wp_pures; wp_bind (ref _)%E; iApply twp_alloc=> //.
 iIntros (a) "[_ token]".
-iPoseProof (nonce_alloc P Q with "token") as "fresh".
+iPoseProof (nonce_alloc P Q (Nonce a) with "token") as "fresh".
 iPoseProof ("mint" with "fresh") as ">(#? & #? & #? & ?)".
-iSpecialize ("post" $! (TNonce a)).
+iSpecialize ("post" $! (TNonce (Nonce a))).
 wp_pures. rewrite val_of_term_unseal /=.
 iApply ("post" with "[] [] [] [$]"); eauto.
 by iIntros "!> %"; rewrite exp_pred_base_TInv; eauto.

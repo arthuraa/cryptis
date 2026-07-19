@@ -19,10 +19,9 @@ Unset Printing Implicit Defensive.
 Section Proofs.
 
 Context `{!heapGS Σ}.
-Notation nonce := loc.
 
 Implicit Types E : coPset.
-Implicit Types a : nonce.
+Implicit Types a : loc.
 Implicit Types t : term.
 Implicit Types v : val.
 Implicit Types Ψ : val → iProp Σ.

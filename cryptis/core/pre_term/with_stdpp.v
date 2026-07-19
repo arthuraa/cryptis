@@ -17,7 +17,7 @@ Proof. exact: def_eq_decision. Defined.
 Instance repr_term_op0 : Repr term_op0 := λ o,
   match o with
   | O0Int n => (#TInt_tag, #n)%V
-  | O0Nonce a => (#TNonce_tag, #a)%V
+  | O0Nonce a => (#TNonce_tag, #(nonce_loc a))%V
   end.
 
 Definition int_of_key_type kt : Z :=
@@ -108,7 +108,7 @@ End ValOfPreTerm.
 Definition nonces_of_term_op0 o : gset loc :=
   match o with
   | O0Int _ => ∅
-  | O0Nonce a => {[a]}
+  | O0Nonce a => {[nonce_loc a]}
   end.
 
 Fixpoint nonces_of_pre_term pt : gset loc :=
@@ -127,7 +127,7 @@ Definition pre_term_eq_dec : EqDecision PreTerm.pre_term :=
 Global Existing Instance pre_term_eq_dec.
 
 Global Instance repr_term_op0_inj : Inj (=) (=) (@repr term_op0 _).
-Proof. by case=> [?|?] [?|?] //= [<-]. Qed.
+Proof. by case=> [?|[?]] [?|[?]] //= [<-]. Qed.
 
 Global Instance repr_term_op1_inj : Inj (=) (=) (@repr term_op1 _).
 Proof. by case=> [?||] [?||] //= [/int_of_key_type_inj ->]. Qed.

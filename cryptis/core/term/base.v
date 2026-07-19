@@ -19,7 +19,7 @@ Unset Elimination Schemes.
 Inductive term :=
 | TInt of Z
 | TPair of term & term
-| TNonce of locations.loc
+| TNonce of nonce
 | TKey of key_type & term
 | TSeal of term & term
 | THash of term

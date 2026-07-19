@@ -167,10 +167,9 @@ Definition is_senc_key : val :=
 Section Proofs.
 
 Context `{!heapGS Σ}.
-Notation nonce := loc.
 
 Implicit Types E : coPset.
-Implicit Types a : nonce.
+Implicit Types a : loc.
 Implicit Types t : term.
 Implicit Types v : val.
 Implicit Types Φ : prodO locO termO -n> iPropO Σ.

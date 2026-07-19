@@ -159,10 +159,9 @@ Definition texp : val := λ: "base" "exp",
 Section Proofs.
 
 Context `{!heapGS Σ}.
-Notation nonce := loc.
 
 Implicit Types E : coPset.
-Implicit Types a : nonce.
+Implicit Types a : loc.
 Implicit Types pt : PreTerm.pre_term.
 Implicit Types v : val.
 Implicit Types Ψ : val → iProp Σ.
@@ -172,7 +171,7 @@ Lemma twp_eq_term_op0 E (o1 o2 : term_op0) :
   ⊢ WP (eq_term_op0 (repr o1) (repr o2)) @ E
     [{ v, ⌜v = #(bool_decide (o1 = o2))⌝}].
 Proof.
-case: o1 o2 => [n1|a1] [n2|a2] /=; wp_lam; wp_pures => //.
+case: o1 o2 => [n1|[a1]] [n2|[a2]] /=; wp_lam; wp_pures => //.
 - iPureIntro. congr (# (LitBool _)). apply: bool_decide_ext.
   intuition congruence.
 - iPureIntro. congr (# (LitBool _)). apply: bool_decide_ext.

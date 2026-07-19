@@ -11,9 +11,21 @@ Unset Printing Implicit Defensive.
 
 Import Order.POrderTheory Order.TotalTheory.
 
+(* A nonce is a nominal wrapper around a heap location.  It coerces back to its
+   location, so the meta / freshness machinery (all keyed on [loc]) is unchanged. *)
+Record nonce := Nonce { nonce_loc : locations.loc }.
+
+#[warnings="-projection-no-head-constant"]
+HB.instance Definition _ := [isNew for nonce_loc].
+HB.instance Definition _ := [Equality of nonce by <:].
+HB.instance Definition _ := [Choice of nonce by <:].
+HB.instance Definition _ := [Countable of nonce by <:].
+HB.instance Definition _ := [Order of nonce by <:].
+Coercion nonce_loc : nonce >-> locations.loc.
+
 Inductive term_op0 :=
 | O0Int of Z
-| O0Nonce of locations.loc.
+| O0Nonce of nonce.
 
 Notation TInt_tag := 0%Z.
 Notation TNonce_tag := 1%Z.

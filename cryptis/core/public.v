@@ -54,7 +54,7 @@ Notation iPropO := (iPropO Σ).
 Notation iPropI := (iPropI Σ).
 
 Definition pnonce a : iProp :=
-  ∃ γ P, meta a (nroot.@"nonce") γ ∧
+  ∃ γ P, meta (nonce_loc a) (nroot.@"nonce") γ ∧
          own γ (saved_pred DfracDiscarded P) ∧
          ▷ □ P (TNonce a).
 
@@ -83,7 +83,7 @@ Qed.
 Definition exp_pred_base (t t' : term) : iProp :=
   match t with
   | TNonce a =>
-    ∃ γ φ, meta a (nroot.@"dh") γ ∧
+    ∃ γ φ, meta (nonce_loc a) (nroot.@"dh") γ ∧
            own γ (saved_pred DfracDiscarded φ) ∧
            ▷ □ φ t'
   | _ => ▷ False
@@ -753,7 +753,7 @@ apply: (anti_symm _); iIntros "#Ht" => //.
 Qed.
 
 Lemma public_TNonce a :
-  public (TNonce a) ⊣⊢ ◇ pnonce a ∗ meta a (nroot.@"minted") ().
+  public (TNonce a) ⊣⊢ ◇ pnonce a ∗ meta (nonce_loc a) (nroot.@"minted") ().
 Proof.
 apply: (anti_symm _); iIntros "Ht".
 - rewrite public_eq; iDestruct "Ht" as "[? Ht]".
@@ -1474,7 +1474,7 @@ Lemma public_TSealIP k t :
 Proof. by iIntros "? ?"; rewrite public_TSeal; eauto. Qed.
 
 Lemma nonce_alloc P Q a :
-  meta_token a ⊤ -∗
+  meta_token (nonce_loc a) ⊤ -∗
   (minted (TNonce a) -∗ False) ∧
   |==> minted (TNonce a) ∗
     □ (public (TNonce a) ↔ ▷ □ P (TNonce a)) ∗
@@ -1486,13 +1486,13 @@ iSplit.
   by iDestruct (meta_meta_token with "token contra") as "[]". }
 iMod (own_alloc (saved_pred DfracDiscarded P)) as (γP) "#own_P" => //.
 iMod (own_alloc (saved_pred DfracDiscarded Q)) as (γQ) "#own_Q" => //.
-rewrite (meta_token_difference a (↑nroot.@"nonce")) //.
+rewrite (meta_token_difference (nonce_loc a) (↑nroot.@"nonce")) //.
 iDestruct "token" as "[nonce token]".
 iMod (meta_set _ _ γP with "nonce") as "#nonce"; eauto.
-rewrite (meta_token_difference a (↑nroot.@"dh")); last solve_ndisj.
+rewrite (meta_token_difference (nonce_loc a) (↑nroot.@"dh")); last solve_ndisj.
 iDestruct "token" as "[dh token]".
 iMod (meta_set _ _ γQ with "dh") as "#dh"; eauto.
-rewrite (meta_token_difference a (↑nroot.@"minted")); last solve_ndisj.
+rewrite (meta_token_difference (nonce_loc a) (↑nroot.@"minted")); last solve_ndisj.
 iDestruct "token" as "[minted token]".
 iMod (meta_set _ _ () (nroot.@"minted") with "minted") as "#minted" => //.
 iSplitR.
