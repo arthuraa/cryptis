@@ -83,13 +83,11 @@ exact: atom_exps.
 Qed.
 
 Lemma all_minted_TExpN t ts :
-  is_true (atomic ts) ->
   minted t ∧ ([∗ list] t' ∈ ts, minted t') ⊢ minted (TExpN t ts).
 Proof.
-move => atom.
 rewrite unlock !big_sepS_forall.
 iIntros "[Ht Hts]" (l) "%l_in".
-have /elem_of_subseteq in_nonces := nonces_of_term_TExpN_subseteq t ts atom.
+have /elem_of_subseteq in_nonces := nonces_of_term_TExpN_subseteq t ts.
 
 move: l_in => /(in_nonces l). rewrite elem_of_union elem_of_union_list.
 case => [?|]; first by iApply "Ht".
@@ -127,7 +125,7 @@ Lemma all_minted_TExp t1 t2 :
 Proof.
 have -> : TExp t1 t2 = TExpN t1 (tfactors t2) by rewrite /TExpN tfactorsK.
 rewrite (minted_tfactors t2).
-exact: (all_minted_TExpN t1 (atom_tfactors t2)).
+exact: (all_minted_TExpN t1 (tfactors t2)).
 Qed.
 
 Lemma minted_nonces_of_term t :

@@ -432,23 +432,66 @@ rewrite (_ : path.sort _ (cancel_invs ts) ≡ₚ cancel_invs ts); last first.
 done.
 Qed.
 
+Lemma nonces_flatten_factors us :
+  ⋃ map nonces_of_pre_term (seq.flatten (seq.map PreTerm.factors us)) =
+  ⋃ map nonces_of_pre_term us.
+Proof.
+elim: us => [|u us IH] //=.
+by rewrite map_app union_list_app_L -(nonces_of_pre_term_factors u) IH.
+Qed.
+
+(* [PreTerm.mul] cancels/sorts/flattens its argument, so its nonces are a subset
+   of the union of the factors' nonces — no atomicity needed. *)
+Lemma nonces_of_pre_term_mul_sub us :
+  nonces_of_pre_term (PreTerm.mul us) ⊆ ⋃ map nonces_of_pre_term us.
+Proof.
+rewrite /PreTerm.mul.
+set M := seq.flatten (seq.map PreTerm.factors us).
+rewrite (_ : nonces_of_pre_term _ =
+             ⋃ map nonces_of_pre_term
+                 (path.sort preorder.Order.le (PreTerm.cancel_invs M))); last first.
+  by case: (path.sort preorder.Order.le (PreTerm.cancel_invs M)) => [|t [|t' l]] //=;
+     rewrite union_empty_r_L.
+rewrite (_ : path.sort preorder.Order.le (PreTerm.cancel_invs M) ≡ₚ PreTerm.cancel_invs M);
+  last by apply/(ssrbool.elimT perm_Perm); rewrite path.perm_sort.
+have HM : ⋃ map nonces_of_pre_term M = ⋃ map nonces_of_pre_term us
+  by rewrite /M nonces_flatten_factors.
+rewrite -HM.
+move => a /elem_of_union_list [X [/list_elem_of_fmap [x [-> xL]] aX]].
+apply/elem_of_union_list; exists (nonces_of_pre_term x); split => //.
+apply/list_elem_of_fmap; exists x; split => //.
+by move: xL => /(ssrbool.introT inP) /(PreTerm.mem_cancel_invs) /(ssrbool.elimT inP).
+Qed.
+
+(* [PreTerm.exp] folds the new exponent into the base and cancels, so nonces are a
+   subset of [nonces base ∪ nonces exponent] — no atomicity needed. *)
+Lemma nonces_of_pre_term_exp_sub b e :
+  nonces_of_pre_term (PreTerm.exp b e) ⊆ nonces_of_pre_term b ∪ nonces_of_pre_term e.
+Proof.
+rewrite /PreTerm.exp.
+have Hbe := nonces_of_pre_term_base_expo b.
+case: (eqtype.eq_op (PreTerm.mul [PreTerm.expo b; e]) (PreTerm.PTMul [])).
+- set_solver.
+- have Hmul := @nonces_of_pre_term_mul_sub [PreTerm.expo b; e].
+  move: Hmul => /=; set_solver.
+Qed.
+
+(* The atomicity hypothesis is not needed: [TExpN t ts = TExp t (TMulN ts)], and the
+   nonces of both [exp] and [mul] are subsets of their parts regardless of atomicity. *)
 Lemma nonces_of_term_TExpN_subseteq t ts :
-  is_true (atomic ts) ->
   nonces_of_term (TExpN t ts) ⊆ nonces_of_term t ∪ ⋃ map nonces_of_term ts.
 Proof.
-move => atom.
-have a1 : is_true (atomic (exps t ++ ts)).
-  rewrite /atomic seq.all_cat.
-  by apply/(ssrbool.introT ssrbool.andP); split; [exact: (atom_exps t) | exact: atom].
-rewrite -[t]base_expsK TExpNA.
-rewrite (nonces_of_term_TExpN (is_exp_base t) a1).
-rewrite (nonces_of_term_TExpN (is_exp_base t) (atom_exps t)) cancel_invs_exps.
-rewrite -assoc -union_list_app_L -map_app; apply union_mono_l.
-have ? := subseteq_cancel_invs (exps t ++ ts).
-move => ? /elem_of_union_list.
-case => _ [] /list_elem_of_fmap [] t' [] -> ??.
-rewrite elem_of_union_list; exists (nonces_of_term t'); split => //.
-rewrite list_elem_of_fmap; set_solver.
+have Hts : ⋃ map nonces_of_term ts = ⋃ map nonces_of_pre_term (map unfold_term ts).
+  congr union_list. elim: ts => [|t' ts IH] //=.
+  by rewrite IH nonces_of_term_unseal /nonces_of_term_def.
+rewrite Hts !nonces_of_term_unseal /nonces_of_term_def.
+have -> : unfold_term (TExpN t ts) =
+          PreTerm.exp (unfold_term t) (PreTerm.mul (map unfold_term ts)).
+  by rewrite /TExpN unfold_TExp unfold_TMulN.
+etrans; first exact: (@nonces_of_pre_term_exp_sub (unfold_term t)
+                        (PreTerm.mul (map unfold_term ts))).
+have Hmul := @nonces_of_pre_term_mul_sub (map unfold_term ts).
+set_solver.
 Qed.
 Global Arguments nonces_of_term_TExpN_subseteq t ts : clear implicits.
 
