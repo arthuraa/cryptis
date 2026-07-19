@@ -191,7 +191,7 @@ Definition cons_num pt : Z :=
   | PT0 _ => TOp0_tag
   | PT1 _ _ => TOp1_tag
   | PT2 _ _ _ => TOp2_tag
-  | PTMul _ => 3%Z
+  | PTMul _ => TMul_tag
   end.
 
 Open Scope order_scope.
