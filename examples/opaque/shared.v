@@ -311,7 +311,7 @@ rewrite exps_TExpN //.
 specialize (@perm_Perm base_term__canonical__eqtype_Equality
            (exps t' ++ ts) (ts ++ exps t')) as H'.
 inversion H' as [Hpeq | Hpneq].
-- rewrite Hpeq cancel_exps_canceled //.
+- rewrite Hpeq cancel_invs_canceled //.
   + by rewrite elem_of_app; left.
   + rewrite /atomic seq.all_cat.
     move: Hatomic; rewrite /atomic => ->.

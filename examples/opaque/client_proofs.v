@@ -158,7 +158,7 @@ iModIntro; iSplit.
       rewrite (_ : TExp g p_u = TExpN g [p_u]); last by rewrite /TExpN TMulN1.
       have Nm : is_true (negb (is_mul p_u)) := nonce_Nmul Hnoncep_u.
       rewrite subtermsE //; last by rewrite /atomic /= Nm.
-      rewrite cancel_exps1 /=.
+      rewrite cancel_invs1 /=.
       by rewrite [subterms p_u]subterms_nonce //; set_solver.
     have p_u_sV : p_u ≠ TInv p_s.
       move=> contra; have: is_inv (TInv p_s).

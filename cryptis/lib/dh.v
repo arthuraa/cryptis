@@ -73,7 +73,7 @@ have exps_t': exps t' = [a].
   apply Permutation_singleton_r.
   rewrite /t' (_ : TExp g a = TExpN g [a]); last by rewrite /TExpN TMulN1.
   rewrite exps_TExpN ?exps_expN //=;
-    [by rewrite cancel_exps1
+    [by rewrite cancel_invs1
     |by rewrite ssrbool.andbT; exact: (proj2 (is_trueP _) Nm_a)].
 (* /MOVE *)
 have a_t' : a ∈ exps t' by rewrite exps_t'; set_solver.
@@ -102,7 +102,7 @@ have atom_ab : is_true (atomic [a; b]).
   by rewrite /= (proj2 (is_trueP _) Nm_a) (proj2 (is_trueP _) Nm_b).
 have exps_t : exps (TExpN g [a; b]) ≡ₚ [a; b].
   rewrite exps_TExpN ?exps_expN //=.
-  by rewrite (cancel_exps_canceled atom_ab
+  by rewrite (cancel_invs_canceled atom_ab
     (proj2 (invs_canceled2 (proj2 (is_trueP _) Nm_a)
                            (proj2 (is_trueP _) Nm_b)) a_bV)).
 have a_t : a ∈ exps (TExpN g [a; b]) by rewrite exps_t; set_solver.
@@ -143,7 +143,7 @@ rewrite public_TExp_iff //; do !iSplit => //.
   apply Permutation_singleton_r.
   rewrite (_ : TExp g a = TExpN g [a]); last by rewrite /TExpN TMulN1.
   rewrite exps_TExpN ?exps_expN //=;
-    [by rewrite cancel_exps1
+    [by rewrite cancel_invs1
     |by rewrite ssrbool.andbT; exact: (proj2 (is_trueP _) Nm_a)].
 - iModIntro; iIntros "#p".
   by iApply False_public; last iApply "aPV".

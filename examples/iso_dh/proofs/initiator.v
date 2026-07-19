@@ -187,7 +187,7 @@ iAssert (|={⊤}=>
     move=> b_a; apply: fresh_b; rewrite /ga -b_a.
     apply/subtermsP.
     rewrite (_ : TExp (TInt 0) b = TExpN (TInt 0) [b]); last by rewrite /TExpN TMulN1.
-    rewrite subtermsE // ?cancel_exps1 //=.
+    rewrite subtermsE // ?cancel_invs1 //=.
     rewrite [subterms b]subterms_nonce //; set_solver.
     by rewrite ssrbool.andbT; exact: (nonce_Nmul nonce_b).
   have b_aV : b ≠ TInv a.

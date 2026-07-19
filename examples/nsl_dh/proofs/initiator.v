@@ -191,7 +191,7 @@ iDestruct "inv" as "[#pub|inv_m2]".
   { move=> e. apply: b_ga. rewrite /ga -e.
     apply/subtermsP.
     rewrite (_ : TExp (TInt 0) b = TExpN (TInt 0) [b]); last by rewrite /TExpN TMulN1.
-    rewrite subtermsE // ?cancel_exps1 //=.
+    rewrite subtermsE // ?cancel_invs1 //=.
     rewrite [subterms b]subterms_nonce //; first set_solver.
     by rewrite ssrbool.andbT; exact: (nonce_Nmul nonce_b). }
   have aV_b : a ≠ TInv b.

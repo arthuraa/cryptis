@@ -159,7 +159,7 @@ do !iSplit => //.
     have Nm : is_true (negb (is_mul p_u)) := nonce_Nmul Hnoncep_u.
     rewrite (_ : TExp g p_u = TExpN g [p_u]); last by rewrite /TExpN TMulN1.
     rewrite subtermsE //; last by rewrite /atomic /= Nm.
-    rewrite cancel_exps1 /= [subterms p_u]subterms_nonce //.
+    rewrite cancel_invs1 /= [subterms p_u]subterms_nonce //.
     rewrite /g subtermsE /=.
     have p_s_ne2 : p_s ≠ TInt 0 by move=> E; rewrite E in Hnoncep_s.
     have Hne1 : is_true (negb (is_nonce (TExpN (TInt 0) [p_u]))).
@@ -297,7 +297,7 @@ iSplit.
       rewrite (_ : TExp g p_s = TExpN g [p_s]); last by rewrite /TExpN TMulN1.
       have Nm : is_true (negb (is_mul p_s)) := nonce_Nmul Hnoncep_s.
       rewrite subtermsE //; last by rewrite /atomic /= Nm.
-      rewrite cancel_exps1 /=.
+      rewrite cancel_invs1 /=.
       by rewrite [subterms p_s]subterms_nonce //; set_solver.
     have p_s_uV : p_s ≠ TInv p_u.
       move=> contra; have: is_inv (TInv p_u).

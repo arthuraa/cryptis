@@ -131,7 +131,7 @@ Definition hl_insert_exp : val := λ: "pt" "pts",
         rem_list eq_term (hl_inv "pt") "pts"
     else "pt" :: "pts".
 
-Definition hl_cancel_exps : val := λ: "exps", foldr_list hl_insert_exp [] "exps".
+Definition hl_cancel_invs : val := λ: "exps", foldr_list hl_insert_exp [] "exps".
 
 (* Collapse a sorted+canceled factor list into a product term:
    [] ↦ PTMul [] (identity), [t] ↦ t, otherwise PTMul list. *)
@@ -148,7 +148,7 @@ Definition hl_mk_mul : val := λ: "c",
 Definition hl_exp : val := λ: "b" "e",
     let: "c" :=
         insertion_sort leq_term
-          (hl_cancel_exps (append_lists (hl_exps "b") (hl_factors "e"))) in
+          (hl_cancel_invs (append_lists (hl_exps "b") (hl_factors "e"))) in
     let: "e'" := hl_mk_mul "c" in
     if: eq_term "e'" (#TMul_tag, NILV) then hl_base "b"
     else (#TOp2_tag, (#TExp_tag, hl_base "b", "e'")).
@@ -373,12 +373,12 @@ Lemma wp_hl_inv E (pt : PreTerm.pre_term) Ψ:
     WP hl_inv (repr pt) @ E {{ Ψ }}.
 Proof. iIntros "HΨ"; iApply twp_wp; by wp_apply twp_hl_inv. Qed.
 
-Lemma twp_hl_insert_exp E pt (pts : seq PreTerm.pre_term) Φ :
-    Φ (repr (PreTerm.insert_exp pt pts)) ⊢
+Lemma twp_hl_insert_factor E pt (pts : seq PreTerm.pre_term) Φ :
+    Φ (repr (PreTerm.insert_factor pt pts)) ⊢
     WP hl_insert_exp (repr pt) (repr pts) @ E [{ Φ }].
 Proof.
     iIntros "HΦ".
-    rewrite /PreTerm.insert_exp.
+    rewrite /PreTerm.insert_factor.
     wp_lam; wp_pures.
     wp_apply twp_hl_inv.
     wp_apply twp_mem_list => //.
@@ -394,15 +394,15 @@ Proof.
         - wp_apply twp_cons. iApply "HΦ".
 Qed.
 
-Lemma twp_hl_cancel_exps E (pts : seq PreTerm.pre_term) Φ :
-    Φ (repr (PreTerm.cancel_exps pts)) ⊢
-    WP hl_cancel_exps (repr pts) @ E [{ Φ }].
+Lemma twp_hl_cancel_invs E (pts : seq PreTerm.pre_term) Φ :
+    Φ (repr (PreTerm.cancel_invs pts)) ⊢
+    WP hl_cancel_invs (repr pts) @ E [{ Φ }].
 Proof.
     iIntros "HΦ"; wp_lam; wp_pures.
     wp_apply twp_nil.
     wp_apply twp_foldr_list => //.
     iIntros "%a %b %Ψ _ HΨ".
-        wp_apply twp_hl_insert_exp.
+        wp_apply twp_hl_insert_factor.
         by iApply "HΨ".
     iIntros "_". iApply "HΦ".
 Qed.
@@ -430,7 +430,7 @@ iIntros "HΦ"; wp_lam; wp_pures.
 wp_apply twp_hl_factors.
 wp_apply twp_hl_exps.
 wp_apply twp_append_lists.
-wp_apply twp_hl_cancel_exps.
+wp_apply twp_hl_cancel_invs.
 wp_apply twp_insertion_sort => //.
   iIntros "%x %y %Ψ _ HΨ". iApply twp_leq_pre_term. by iApply "HΨ".
 iIntros "_".
@@ -443,7 +443,7 @@ wp_pures.
 rewrite (_ : (#TMul_tag, NILV)%V = repr (PreTerm.PTMul [::])); last first.
   by rewrite /= repr_list_unseal.
 wp_bind (eq_term _ _); iApply twp_eq_pre_term.
-set c := (sort <=%O (PreTerm.cancel_exps
+set c := (sort <=%O (PreTerm.cancel_invs
   (PreTerm.factors (PreTerm.expo b) ++ PreTerm.factors e ++ [::]))).
 have Emul : PreTerm.mul [:: PreTerm.expo b; e] =
    match c with
