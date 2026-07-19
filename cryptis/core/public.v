@@ -94,7 +94,7 @@ Lemma exp_pred_base_TInv t t' :
   exp_pred_base (TInv t) t' ⊣⊢ ▷ False.
 Proof.
 move => Ninv; rewrite /exp_pred_base.
-case E: (TInv t) => [n|t1 t2|a|kt k|k m|h|pt' wf|b e wf|ts wf] //=.
+case E: (TInv t) => [n|t1 t2|a|kt k|k m|h|pt wf nf] //=.
 exfalso; apply: Ninv.
 have -> : t = TInv (TNonce a) by rewrite -E TInvK.
 by rewrite is_inv_TInv.
@@ -777,8 +777,12 @@ move => Nm; rewrite -(@is_inv_TInv t (proj2 (is_trueP _) Nm)) => ninv_t; apply: 
   + iDestruct "publ" as (T) "[%dec _]".
     by rewrite (decompose_is_inv dec) /= in ninv_t.
   + by iDestruct "H" as "(% & #?)".
-  + by case: (TInv _) ninv_t mul_aV.
-  + by case: (TInv _) ninv_t exp_aV.
+  + by move: (proj2 (is_trueP _) mul_aV);
+       rewrite (ssrbool.negbTE (Nmul_TInv (proj2 (is_trueP _) Nm))).
+  + have Ni : is_true (negb (is_inv t))
+      by move: (proj2 (is_trueP _) ninv_t); rewrite (@is_inv_TInv t (proj2 (is_trueP _) Nm)).
+    by move: (proj2 (is_trueP _) exp_aV);
+       rewrite (ssrbool.negbTE (@is_exp_TInv t (proj2 (is_trueP _) Nm) Ni)).
   by case: (TInv _) ninv_t => //.
 - iDestruct "Ht" as "[Ht ?]".
   rewrite public_eq minted_TInv. iFrame. by eauto.
@@ -939,9 +943,11 @@ apply: anti_symm; last first.
     move e: (TExpN t ts) => t'' in dec ttsX *.
     by case: dec ttsX; move=> * {e}; subst t''.
   + iDestruct "c2" as "(%contra & _)".
-    by case: (TExpN t ts) ttsX contra.
+    by move: (proj2 (is_trueP _) ttsX) (proj2 (is_trueP _) contra);
+       rewrite is_exp_unfold is_inv_unfold; case: (unfold_term (TExpN t ts)).
   + iDestruct "c3" as "(%mul_c & _)".
-    by case: (TExpN t ts) ttsX mul_c.
+    by move: (proj2 (is_trueP _) ttsX) (proj2 (is_trueP _) mul_c);
+       rewrite is_exp_unfold is_mul_unfold; case: (unfold_term (TExpN t ts)).
   + iDestruct "c4" as "(_ & exp)".
     iApply (big_sepL_mono with "exp"). by iIntros (k t' _) "(_ & $)".
   + by case: (TExpN t ts) ttsX => // *; iDestruct "c5" as "[]".
@@ -970,9 +976,12 @@ move => expt; apply: anti_symm; last first.
   iDestruct "Hdisj" as "[c1 | [c2 | [c3 | [c4 | c5]]]]".
   + iDestruct "c1" as (T) "[%dec _]".
     by case: dec expt; move =>> _ ->.
-  + by iDestruct "c2" as (inv_t) "_"; case: (t) expt inv_t.
+  + iDestruct "c2" as (inv_t) "_".
+    by move: (proj2 (is_trueP _) expt) (proj2 (is_trueP _) inv_t);
+       rewrite is_exp_unfold is_inv_unfold; case: (unfold_term t).
   + iDestruct "c3" as "(%mul_c & _)".
-    by case: (t) expt mul_c.
+    by move: (proj2 (is_trueP _) expt) (proj2 (is_trueP _) mul_c);
+       rewrite is_exp_unfold is_mul_unfold; case: (unfold_term t).
   + iDestruct "c4" as "(_ & exp)".
     iApply (big_sepL_mono with "exp"). by iIntros (k t' _) "(_ & $)".
   + by case: (t) expt => // *; iDestruct "c5" as "[]".
@@ -1096,9 +1105,12 @@ move=> mul_t; rewrite public_eq.
 iIntros "[_ [publ | [H | [ [_ Hfs] | [ (%exp_t & _) | Hstr ]]]]]".
 - iDestruct "publ" as (T) "[%dec _]".
   by move: mul_t; rewrite (decompose_is_mul dec).
-- by iDestruct "H" as "(%inv_t & _)"; move: mul_t inv_t; case: (t).
+- iDestruct "H" as "(%inv_t & _)".
+  by move: (proj2 (is_trueP _) mul_t) (proj2 (is_trueP _) inv_t);
+     rewrite is_mul_unfold is_inv_unfold; case: (unfold_term t).
 - by iApply "Hfs".
-- by move: mul_t exp_t; case: (t).
+- by move: (proj2 (is_trueP _) mul_t) (proj2 (is_trueP _) exp_t);
+     rewrite is_mul_unfold is_exp_unfold; case: (unfold_term t).
 - by move: mul_t; case: (t) => //=; iDestruct "Hstr" as "[]".
 Qed.
 

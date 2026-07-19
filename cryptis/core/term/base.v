@@ -9,6 +9,12 @@ From cryptis.core Require Export pre_term.
 
 Import Order.POrderTheory Order.TotalTheory.
 
+(* The three "non-free" operations — inverse, exponentiation and product — are
+   represented indirectly, by a well-formed pre-term whose head is one of
+   [O1Inv] / [PTExp] / [PTMul].  [is_non_free] recognises exactly those heads. *)
+Definition is_non_free (pt : PreTerm.pre_term) :=
+  PreTerm.is_inv pt || PreTerm.is_exp pt || PreTerm.is_mul pt.
+
 Unset Elimination Schemes.
 Inductive term :=
 | TInt of Z
@@ -17,9 +23,7 @@ Inductive term :=
 | TKey of key_type & term
 | TSeal of term & term
 | THash of term
-| TInv' pt of PreTerm.wf_term (PreTerm.PT1 O1Inv pt)
-| TExp' b e of PreTerm.wf_term (PreTerm.PTExp b e)
-| TMul' ts of PreTerm.wf_term (PreTerm.PTMul ts).
+| TNonFree pt of PreTerm.wf_term pt & is_non_free pt.
 
 Record aenc_key := AEncKey {
   seed_of_aenc_key : term;
@@ -83,9 +87,7 @@ Fixpoint unfold_term t :=
   | TKey kt t => PreTerm.PT1 (O1Key kt) (unfold_term t)
   | TSeal k t => PreTerm.PT2 O2Seal (unfold_term k) (unfold_term t)
   | THash t => PreTerm.PT1 O1Hash (unfold_term t)
-  | TInv' pt _ => PreTerm.PT1 O1Inv pt
-  | TExp' b e _ => PreTerm.PTExp b e
-  | TMul' ts _ => PreTerm.PTMul ts
+  | TNonFree pt _ _ => pt
   end.
 
 Fixpoint fold_term_predef pt :=
@@ -98,15 +100,15 @@ Fixpoint fold_term_predef pt :=
   | PreTerm.PT1 O1Hash pt => THash (fold_term_predef pt)
   | PreTerm.PT1 O1Inv pt' =>
     if boolP (PreTerm.wf_term (PreTerm.PT1 O1Inv pt')) is AltTrue pf then
-      TInv' pt' pf
+      TNonFree (PreTerm.PT1 O1Inv pt') pf isT
     else TInt 0 (*should never*)
   | PreTerm.PTExp b e =>
     if boolP (PreTerm.wf_term (PreTerm.PTExp b e)) is AltTrue pf then
-      TExp' b e pf
+      TNonFree (PreTerm.PTExp b e) pf isT
     else TInt 0 (*should never*)
   | PreTerm.PTMul ts =>
     if boolP (PreTerm.wf_term (PreTerm.PTMul ts)) is AltTrue pf then
-      TMul' ts pf
+      TNonFree (PreTerm.PTMul ts) pf isT
     else TInt 0 (*should never*)
   end.
 
@@ -118,28 +120,24 @@ Proof. by elim/term_ind': t=> //= ? -> ? ->. Qed.
 Lemma wf_unfold_terms ts : all PreTerm.wf_term [seq unfold_term i | i <- ts].
 Proof. elim: ts => //= ? ? ->. by rewrite wf_unfold_term. Qed.
 
-Lemma fold_predef_TInv {pt} (pf : PreTerm.wf_term (PreTerm.PT1 O1Inv pt)) :
-  fold_term_predef (PreTerm.PT1 O1Inv pt) = TInv' pt pf.
-Proof.
-rewrite /=; case: (boolP (PreTerm.wf_term (PreTerm.PT1 O1Inv pt))) => [pf'|npf].
-  by congr TInv'; apply: bool_irrelevance.
-by move: npf; rewrite pf.
-Qed.
+Lemma TNonFree_irr pt (w1 w2 : PreTerm.wf_term pt) (n1 n2 : is_non_free pt) :
+  TNonFree pt w1 n1 = TNonFree pt w2 n2.
+Proof. by rewrite (@bool_irrelevance _ w1 w2) (@bool_irrelevance _ n1 n2). Qed.
 
-Lemma fold_predef_TExp {b e} (pf : PreTerm.wf_term (PreTerm.PTExp b e)) :
-  fold_term_predef (PreTerm.PTExp b e) = TExp' b e pf.
+Lemma fold_predef_NonFree {pt} (wf : PreTerm.wf_term pt) (nf : is_non_free pt) :
+  fold_term_predef pt = TNonFree pt wf nf.
 Proof.
-rewrite /=; case: (boolP (PreTerm.wf_term (PreTerm.PTExp b e))) => [pf'|npf].
-  by congr TExp'; apply: bool_irrelevance.
-by move: npf; rewrite pf.
-Qed.
-
-Lemma fold_predef_TMul {ts} (pf : PreTerm.wf_term (PreTerm.PTMul ts)) :
-  fold_term_predef (PreTerm.PTMul ts) = TMul' ts pf.
-Proof.
-rewrite /=; case: (boolP (PreTerm.wf_term (PreTerm.PTMul ts))) => [pf'|npf].
-  by congr TMul'; apply: bool_irrelevance.
-by move: npf; rewrite pf.
+case: pt wf nf => [o|[kt||] pt'|[||] b e|ts] wf nf.
+1,2,3,5,6: by move: nf; rewrite /is_non_free /=.
+- rewrite /=; case: (boolP (PreTerm.wf_term (PreTerm.PT1 O1Inv pt'))) => [pf'|npf];
+    last by rewrite wf in npf.
+  exact: TNonFree_irr.
+- rewrite /=; case: (boolP (PreTerm.wf_term (PreTerm.PTExp b e))) => [pf'|npf];
+    last by rewrite wf in npf.
+  exact: TNonFree_irr.
+- rewrite /=; case: (boolP (PreTerm.wf_term (PreTerm.PTMul ts))) => [pf'|npf];
+    last by rewrite wf in npf.
+  exact: TNonFree_irr.
 Qed.
 
 Lemma unfold_termK : cancel unfold_term fold_term.
@@ -147,9 +145,7 @@ Proof.
 rewrite [fold_term]unlock => t.
 rewrite PreTerm.normalize_wf ?wf_unfold_term //.
 elim /term_ind': t => //=; try by move =>> -> // > ->.
-- by move => pt wf; apply: fold_predef_TInv.
-- by move => b e wf; apply: fold_predef_TExp.
-- by move => ts wf; apply: fold_predef_TMul.
+by move => pt wf nf; apply: fold_predef_NonFree.
 Qed.
 
 Lemma unfold_fold pt : unfold_term (fold_term pt) = PreTerm.normalize pt.
@@ -158,12 +154,12 @@ rewrite [fold_term]unlock.
 have := PreTerm.wf_normalize pt. elim: (PreTerm.normalize pt) => //.
 - by case.
 - move => [?||] t IH wf_t; try by rewrite /= IH.
-  by rewrite (fold_predef_TInv wf_t).
+  by rewrite (fold_predef_NonFree wf_t isT).
 - move => [] t1 IH1 t2 IH2 wf.
   + by move: wf; rewrite /= => /andP [??]; rewrite IH1 ?IH2.
   + by move: wf; rewrite /= => /andP [??]; rewrite IH1 ?IH2.
-  + by rewrite (fold_predef_TExp wf).
-- by move => ts IHts wf; rewrite (fold_predef_TMul wf).
+  + by rewrite (fold_predef_NonFree wf isT).
+- by move => ts IHts wf; rewrite (fold_predef_NonFree wf isT).
 Qed.
 
 Lemma fold_termK pt : PreTerm.wf_term pt -> unfold_term (fold_term pt) = pt.
@@ -287,10 +283,10 @@ Definition exps t := map fold_term (PreTerm.exps (unfold_term t)).
 Definition tfactors t := map fold_term (PreTerm.factors (unfold_term t)).
 
 Definition is_mul t :=
-  if t is TMul' _ _ then true else false.
+  if t is TNonFree pt _ _ then PreTerm.is_mul pt else false.
 
 Lemma is_mul_unfold t : is_mul t = PreTerm.is_mul (unfold_term t).
-Proof. by case: t => //= - []. Qed.
+Proof. by case: t. Qed.
 
 Lemma unfold_base t : unfold_term (base t) = PreTerm.base (unfold_term t).
 Proof.
@@ -549,16 +545,16 @@ Definition is_nonce t :=
   if t is TNonce _ then true else false.
 
 Definition is_inv t :=
-  if t is TInv' _ _ then true else false.
+  if t is TNonFree pt _ _ then PreTerm.is_inv pt else false.
 
 Definition is_exp t :=
-  if t is TExp' _ _ _ then true else false.
+  if t is TNonFree pt _ _ then PreTerm.is_exp pt else false.
 
 Lemma is_nonce_unfold t : is_nonce t = PreTerm.is_nonce (unfold_term t).
-Proof. by case: t => //=. Qed.
+Proof. by case: t => //= pt _ nf; move: nf; case: pt. Qed.
 
 Lemma is_inv_unfold t : is_inv t = PreTerm.is_inv (unfold_term t).
-Proof. by case: t => //= - []. Qed.
+Proof. by case: t. Qed.
 
 Lemma is_inv_TInv t : ~~ is_mul t -> is_inv (TInv t) = ~~ is_inv t.
 Proof.
@@ -568,7 +564,7 @@ case: (unfold_term t) => //. by case => //= ? /and3P [/negbTE ? _ _].
 Qed.
 
 Lemma is_exp_unfold t : is_exp t = PreTerm.is_exp (unfold_term t).
-Proof. by case: t => //= - []. Qed.
+Proof. by case: t. Qed.
 
 Lemma is_exp_base t : ~~ is_exp (base t).
 Proof. rewrite is_exp_unfold unfold_base. apply PreTerm.base_Nexp. exact: wf_unfold_term. Qed.
@@ -846,9 +842,7 @@ Lemma tsize_eq t :
   | TKey _ t => S (tsize t)
   | TSeal k t => S (tsize k + tsize t)
   | THash t => S (tsize t)
-  | TExp' b e _ => PreTerm.tsize (PreTerm.PTExp b e)
-  | TMul' ts _ => PreTerm.tsize (PreTerm.PTMul ts)
-  | TInv' pt _ => PreTerm.tsize (PreTerm.PT1 O1Inv pt)
+  | TNonFree pt _ _ => PreTerm.tsize pt
   end.
 Proof. by case: t. Qed.
 
@@ -1256,7 +1250,7 @@ have build : forall s, (forall t', t' \in s -> tsize t' < tsize t) ->
   elim => // x s' IHs h; split.
     by apply: IH; apply/ssrnat.ltP; apply: h; rewrite inE eqxx.
   by apply: IHs => t' t's; apply: h; rewrite inE t's orbT.
-case: t IH build => [n|t1 t2|a|kt t|k t|t|pt wf|b e wf|ts wf] IH build.
+case: t IH build => [n|t1 t2|a|kt t|k t|t|pt wf nf] IH build.
 - exact: H1.
 - apply: H2; apply: IH; apply/ssrnat.ltP;
     rewrite [tsize (TPair t1 t2)]tsize_eq ltnS; [exact: leq_addr | exact: leq_addl].
@@ -1267,42 +1261,46 @@ case: t IH build => [n|t1 t2|a|kt t|k t|t|pt wf|b e wf|ts wf] IH build.
     rewrite [tsize (TSeal k t)]tsize_eq ltnS; [exact: leq_addr | exact: leq_addl].
 - apply: H6; apply: IH; apply/ssrnat.ltP.
   by rewrite [tsize (THash t)]tsize_eq.
-- (* TInv' pt wf *)
-  have /and3P [Ninvpt Nmpt wfpt] := wf.
-  have e : TInv' pt wf = TInv (fold_term pt).
-    apply: unfold_term_inj.
-    by rewrite unfold_TInv (@fold_termK pt wfpt) (@PreTerm.inv_Nmul pt Nmpt)
-       (@PreTerm.inv_invN pt Ninvpt).
-  have Ninv : ~~ is_inv (fold_term pt) by rewrite is_inv_unfold (@fold_termK pt wfpt).
-  have Nmf : ~~ is_mul (fold_term pt) by rewrite is_mul_unfold (@fold_termK pt wfpt).
-  rewrite e; apply: (H7 _ _ Nmf Ninv).
-  apply: IH.
-  rewrite (tsize_eq (TInv' pt wf)) /tsize (@fold_termK pt wfpt) /=.
-  apply/ssrnat.ltP; exact: ltnSn.
-- (* TExp' b e wf: an exp *)
-  set t := TExp' b e wf.
-  have xt : is_exp t by [].
-  rewrite -(base_expsK t).
-  apply: H8.
-  + apply: IH; apply/ssrnat.ltP; exact: tsize_base_lt.
-  + exact: is_exp_base.
-  + by apply: build => t' t'_t; exact: (@tsize_exps_lt t' t t'_t).
-  + exact: atom_exps.
-  + exact: exps_Nnil xt.
-  + exact: exps_sorted.
-  + exact: invs_canceled_exps.
-- (* TMul' ts wf: a product *)
-  set t := TMul' ts wf.
-  have xt : is_mul t by [].
-  rewrite -(tfactorsK t).
-  apply: H9.
-  + by apply: build => t' t'_t; exact: (@tsize_tfactors_lt t' t xt t'_t).
-  + exact: atom_tfactors.
-  + move: (PreTerm.sorted_factors (wf_unfold_term t)); rewrite -unfold_tfactors sorted_map.
-    by [].
-  + exact: invs_canceled_tfactors.
-  + rewrite /tfactors size_map /t /=.
-    by have /and5P [_ _ _ _ szN1] := wf.
+- (* TNonFree pt wf nf — re-split on the head of [pt] *)
+  case: pt wf nf IH build => [o|[kt||] operand|[||] b e|ts] wf nf IH build.
+  1,2,3,5,6: by move: {IH build} nf; rewrite /is_non_free /=.
+  + (* PT1 O1Inv operand: an inverse *)
+    have /and3P [Ninvpt Nmpt wfpt] := wf.
+    have e : TNonFree (PreTerm.PT1 O1Inv operand) wf nf = TInv (fold_term operand).
+      apply: unfold_term_inj.
+      by rewrite unfold_TInv (@fold_termK operand wfpt) (@PreTerm.inv_Nmul operand Nmpt)
+         (@PreTerm.inv_invN operand Ninvpt).
+    have Ninv : ~~ is_inv (fold_term operand) by rewrite is_inv_unfold (@fold_termK operand wfpt).
+    have Nmf : ~~ is_mul (fold_term operand) by rewrite is_mul_unfold (@fold_termK operand wfpt).
+    rewrite e; apply: (H7 _ _ Nmf Ninv).
+    apply: IH.
+    rewrite (tsize_eq (TNonFree (PreTerm.PT1 O1Inv operand) wf nf))
+            /tsize (@fold_termK operand wfpt) /=.
+    apply/ssrnat.ltP; exact: ltnSn.
+  + (* PT2 O2Exp b e: an exp *)
+    set t := TNonFree (PreTerm.PTExp b e) wf nf.
+    have xt : is_exp t by [].
+    rewrite -(base_expsK t).
+    apply: H8.
+    * apply: IH; apply/ssrnat.ltP; exact: tsize_base_lt.
+    * exact: is_exp_base.
+    * by apply: build => t' t'_t; exact: (@tsize_exps_lt t' t t'_t).
+    * exact: atom_exps.
+    * exact: exps_Nnil xt.
+    * exact: exps_sorted.
+    * exact: invs_canceled_exps.
+  + (* PTMul ts: a product *)
+    set t := TNonFree (PreTerm.PTMul ts) wf nf.
+    have xt : is_mul t by [].
+    rewrite -(tfactorsK t).
+    apply: H9.
+    * by apply: build => t' t'_t; exact: (@tsize_tfactors_lt t' t xt t'_t).
+    * exact: atom_tfactors.
+    * move: (PreTerm.sorted_factors (wf_unfold_term t)); rewrite -unfold_tfactors sorted_map.
+      by [].
+    * exact: invs_canceled_tfactors.
+    * rewrite /tfactors size_map /t /=.
+      by have /and5P [_ _ _ _ szN1] := wf.
 Qed.
 
 Definition term_ind (P : term -> Prop) := @term_rect P.

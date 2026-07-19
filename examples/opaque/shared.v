@@ -275,8 +275,10 @@ split; intros H.
   + right; right. exists t''. split => //.
     have Nexp : ¬ is_exp t'0 by move: H0; rewrite -is_trueP -not_is_true is_trueP.
     by rewrite exps_TExpN' //; exact: (proj2 (is_trueP _) H1).
-  + have Nexp : ¬ is_exp (TMulN ts)
-      by move: (is_mul_TMulN ts (proj2 (is_trueP _) H0)); rewrite -is_trueP; case: (TMulN ts).
+  + have Nexp : ¬ is_exp (TMulN ts).
+      move=> Hexp.
+      move: (is_mul_TMulN ts (proj2 (is_trueP _) H0)) (proj2 (is_trueP _) Hexp);
+        rewrite is_mul_unfold is_exp_unfold; by case: (unfold_term (TMulN ts)).
     right; left. rewrite (base_expN Nexp). by apply: (STMul H0 H1 H2).
 - destruct H as [-> | H] => //.
   destruct (is_exp t') eqn:Eexp, H as [H | H].

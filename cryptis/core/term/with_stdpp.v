@@ -29,14 +29,18 @@ Proof. apply: tsize_TExpN_exp. rewrite elem_of_cons. by auto. Qed.
 
 Canonical termO := leibnizO term.
 
-(* TODO(tinv-distrib): [perm_cancel_invs] now requires list-atomicity, but this
-   instance is universal. It IS combinatorially true for wf lists (muls pass
-   through [cancel_invs] untouched, non-muls cancel by count), but proving it
-   needs a wf-only (atomicity-free) [count_cancel] re-derivation. Admitted while
-   the rest of the TInv-distribution ripple is threaded; revisit. *)
+(* Universal on wf lists: products pass through [cancel_invs] untouched and atoms
+   cancel by count, both permutation-stable (see [PreTerm.perm_cancel_invs_wf]).
+   [cancel_invs] only ever feeds [map unfold_term _], which is always wf. *)
 Global Instance cancel_invs_proper : Proper ((≡ₚ) ==> (≡ₚ)) cancel_invs.
 Proof.
-Admitted.
+move=> ts1 ts2 H12.
+have peq : is_true (seq.perm_eq ts1 ts2) := ssrbool.introT perm_Perm H12.
+apply: (ssrbool.elimT perm_Perm).
+rewrite /cancel_invs; apply: seq.perm_map.
+apply: PreTerm.perm_cancel_invs_wf; first exact: wf_unfold_terms.
+exact: seq.perm_map.
+Qed.
 
 Global Instance TExpN_proper : Proper ((=) ==> (≡ₚ) ==> (=)) TExpN.
 Proof.
@@ -264,12 +268,7 @@ Fixpoint val_of_term_rec t : val :=
     (#TOp2_tag, (#TSeal_tag, val_of_term_rec t1, val_of_term_rec t2))%V
   | THash t =>
     (#TOp1_tag, ((#THash_tag, #()), val_of_term_rec t))%V
-  | TInv' pt _ =>
-    (#TOp1_tag, ((#TInv_tag, #()), val_of_pre_term pt))
-  | TExp' b e _ =>
-    (#TOp2_tag, (#TExp_tag, val_of_pre_term b, val_of_pre_term e))%V
-  | TMul' ts _ =>
-    (#TMul_tag, repr_list (map val_of_pre_term ts))%V
+  | TNonFree pt _ _ => val_of_pre_term pt
   end.
 
 Definition val_of_term_aux : seal val_of_term_rec. by eexists. Qed.
@@ -339,9 +338,7 @@ Lemma nonces_of_termE' t :
   | TKey _ t => nonces_of_term t
   | TSeal t1 t2 => nonces_of_term t1 ∪ nonces_of_term t2
   | THash t => nonces_of_term t
-  | TInv' pt _ => nonces_of_pre_term (PreTerm.PT1 O1Inv pt)
-  | TExp' b e _ => nonces_of_pre_term (PreTerm.PTExp b e)
-  | TMul' ts _ => nonces_of_pre_term (PreTerm.PTMul ts)
+  | TNonFree pt _ _ => nonces_of_pre_term pt
   end.
 Proof.
 by rewrite nonces_of_term_unseal; case: t => //=.
@@ -608,9 +605,7 @@ Lemma subtermsE' t :
   | TKey _ t => subterms t
   | TSeal t1 t2 => subterms t1 ∪ subterms t2
   | THash t => subterms t
-  | TInv' pt _ => ssubterms_pre_def (PreTerm.PT1 O1Inv pt)
-  | TExp' b e _ => ssubterms_pre_def (PreTerm.PTExp b e)
-  | TMul' ts _ => ssubterms_pre_def (PreTerm.PTMul ts)
+  | TNonFree pt _ _ => ssubterms_pre_def pt
   end.
 Proof.
 rewrite subterms_unseal /=.

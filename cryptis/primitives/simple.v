@@ -189,7 +189,8 @@ Lemma twp_to_int E t Ψ :
   WP to_int t @ E [{ Ψ }].
 Proof.
 rewrite /to_int val_of_term_unseal; iIntros "Hpost"; wp_pures.
-case: t; by move=> *; wp_pures; eauto.
+case: t => [n|t1 t2|a|kt k|k m|h|pt wf nf]; try by wp_pures; eauto.
+by case: pt wf nf => [o|[kt2||] operand|[||] b e|ts] wf nf //=; wp_pures; eauto.
 Qed.
 
 Lemma wp_to_int E t Ψ :
@@ -221,7 +222,8 @@ iIntros "post".
 rewrite /Spec.untuple /untuple /= val_of_term_unseal.
 wp_pures.
 
-case: t; by move=> *; wp_pures; iApply "post".
+case: t => [n|t1 t2|a|kt k|k m|h|pt wf nf]; try by wp_pures; iApply "post".
+by case: pt wf nf => [o|[kt2||] operand|[||] b e|ts] wf nf //=; wp_pures; iApply "post".
 Qed.
 
 Lemma wp_untuple E t Ψ :
@@ -399,7 +401,8 @@ Proof.
 iIntros "H".
 rewrite /repr /repr_option /repr /repr_prod.
 rewrite /repr /repr_term !val_of_term_unseal.
-case: t; by move=> * /=; wp_lam; wp_pures.
+case: t => [n|t1 t2|a|kt k|k m|h|pt wf nf]; try by wp_lam; wp_pures.
+by case: pt wf nf => [o|[kt2||] operand|[||] b e|ts] wf nf //=; wp_lam; wp_pures.
 Qed.
 
 Lemma twp_open_key E t Ψ :
@@ -421,14 +424,15 @@ Proof.
 rewrite /repr /repr_option /repr /repr_term !val_of_term_unseal /open.
 iIntros "H".
 wp_pures.
-case: t2; try by move=> /= *; wp_pures.
-move=> k_t t. rewrite /= -val_of_term_unseal. wp_pures.
-wp_apply twp_open_key.
-case: Spec.open_key => [t1'|] /=; wp_pures => //.
-wp_apply twp_eq_term.
-case: bool_decide_reflect => [->|ne]; wp_pures.
-- by rewrite decide_True.
-- rewrite decide_False //. congruence.
+case: t2 => [n|ta tb|a|kt k|k_t t|h|pt wf nf]; try by wp_pures.
+- rewrite /= -val_of_term_unseal. wp_pures.
+  wp_apply twp_open_key.
+  case: Spec.open_key => [t1'|] /=; wp_pures => //.
+  wp_apply twp_eq_term.
+  case: bool_decide_reflect => [->|ne]; wp_pures.
+  + by rewrite decide_True.
+  + rewrite decide_False //. congruence.
+- by case: pt wf nf => [o|[kt2||] operand|[||] b e|ts] wf nf //=; wp_pures.
 Qed.
 
 Lemma wp_open E t1 t2 Ψ :

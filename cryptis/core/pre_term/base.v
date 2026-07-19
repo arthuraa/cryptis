@@ -507,6 +507,67 @@ have Nm2: all (fun t => ~~ is_mul t) pts2 by rewrite -(perm_all _ peq).
 apply count_perm_cancel => // ? _ _. by rewrite !(permP peq).
 Qed.
 
+(* [count_cancel] without list-atomicity: for a single *atomic* [pt] the count
+   formula holds on any wf list.  (In the [pt = pt'] recursion [pt'] is atomic
+   because it equals [pt]; products in the tail never interfere.) *)
+Lemma count_cancel_wf pt pts :
+  wf_term pt -> ~~ is_mul pt -> all wf_term pts ->
+  count_mem pt (cancel_invs pts) = count_mem pt pts - count_mem (inv_aux pt) pts.
+Proof.
+elim: pts => //= [pt' pts' IH] in pt * => wfpt Nmpt /andP [wfpt' wfpts'].
+rewrite count_insert_factor eq_sym.
+case: (pt =P pt') => [<-{pt' wfpt'} | /eqP/negbTE neq].
+- rewrite eqxx (negbTE (inv_aux_Nid pt)) [in RHS]eq_sym (negbTE (inv_aux_Nid pt)).
+  case: ifP => /count_memPn /eqP;
+    rewrite !IH ?wf_inv_aux ?is_mul_inv_aux // inv_auxK //.
+  + by rewrite -ltnNge => /[dup] /eqP -> /ltnW /eqP ->.
+  + rewrite addnC. exact: addnBA.
+- rewrite [pt' == pt]eq_sym neq add0n addn0.
+  case: ifP => [_ | /count_memPn /eqP wt0]; rewrite -inv_aux_eq_op // eq_sym.
+  + by rewrite IH // subBnAC.
+  + move: wt0. case: (pt =P inv_aux pt') => [<- | _ _]; rewrite IH //.
+    by rewrite -subBnAC => /eqP ->.
+Qed.
+
+(* A product [pt] passes through [cancel_invs] untouched: its factor-level
+   inverse [inv_aux pt = O1Inv pt] is ill-formed (an [O1Inv] of a product), so it
+   is absent from any wf list and [pt] never cancels. *)
+Lemma count_cancel_mul pt pts :
+  is_mul pt -> all wf_term pts ->
+  count_mem pt (cancel_invs pts) = count_mem pt pts.
+Proof.
+move=> Mpt; elim: pts => //= [pt' pts' IH] /andP [wfpt' wfpts'].
+rewrite count_insert_factor IH //.
+have Ne : (pt == inv_aux pt') = false.
+  by apply/negbTE/eqP => e; move: Mpt; rewrite e (negbTE (is_mul_inv_aux wfpt')).
+case: ifP => [Hin | _]; last by rewrite [pt' == pt]eq_sym addnC.
+rewrite Ne subn0.
+suff -> : (pt' == pt) = false by [].
+apply/negbTE/eqP => e; move: Hin; rewrite e => Hin.
+move: (allP (wf_cancel_invs wfpts') _ Hin) Mpt.
+by case: (pt) => //=.
+Qed.
+
+(* Permutation-invariance of [cancel_invs] on wf lists (no atomicity): the two
+   count lemmas above pin every element's multiplicity to a permutation-stable
+   value. *)
+Lemma perm_cancel_invs_wf pts1 pts2 :
+  all wf_term pts1 -> perm_eq pts1 pts2 ->
+  perm_eq (cancel_invs pts1) (cancel_invs pts2).
+Proof.
+move=> wf1 peq.
+have wf2 : all wf_term pts2 by rewrite -(perm_all _ peq).
+rewrite /perm_eq; apply/allP => /= pt; rewrite mem_cat => /orP[] /mem_cancel_invs h.
+- have wfpt := allP wf1 _ h; apply/eqP.
+  have [Mpt|Nmpt] := boolP (is_mul pt).
+  + by rewrite !count_cancel_mul // (permP peq).
+  + by rewrite !count_cancel_wf // !(permP peq).
+- have wfpt := allP wf2 _ h; apply/eqP.
+  have [Mpt|Nmpt] := boolP (is_mul pt).
+  + by rewrite !count_cancel_mul // (permP peq).
+  + by rewrite !count_cancel_wf // !(permP peq).
+Qed.
+
 Lemma inv_invN pt : ~~ is_inv pt -> inv_aux pt = PT1 O1Inv pt.
 Proof. by case: pt => - []. Qed.
 
