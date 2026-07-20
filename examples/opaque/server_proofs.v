@@ -25,7 +25,6 @@ Definition opaque_file (file : val) : iProp :=
   ∃ (k_s : nonce) (p_s : nonce) P_s P_u envelope,
     ⌜file = Spec.of_list [TNonce k_s; TNonce p_s; P_s; P_u; envelope]⌝
     ∗ minted k_s ∗ □(public k_s ↔ ▷ □ False) ∗
-    □(public (TInv k_s) ↔ ▷ False) ∗
     □(∀ t' : term, exp_pred_base k_s t' ↔ ▷ □ True) ∗
     □(∀ t' : term, exp_pred_base (TInv k_s) t' ↔ ▷ False) ∗
     public P_s ∗ public envelope ∗
@@ -52,9 +51,8 @@ wp_apply (wp_mk_nonce_freshN ∅ (fun _ => False)%I (fun _ => True)%I
 - iIntros "%t".
   rewrite big_sepS_singleton minted_TInv.
   by iModIntro; auto.
-iIntros "%k_s _ #Hmintedk_s #Hprivatek_s #Hexpk_s #H #Hexpk_sV Htokenk_sV".
+iIntros "%k_s _ #Hmintedk_s #Hprivatek_s #Hexpk_s #Hexpk_sV Htokenk_sV".
 rewrite big_sepS_singleton.
-iDestruct ("H" $! False%I with "Htokenk_sV") as ">#Hprivk_sV"; iClear "H".
 wp_pures; wp_lam; wp_pures.
 wp_apply wp_H'; wp_apply wp_texp; wp_list; wp_apply wp_H.
 wp_apply wp_derive_senc_key.
@@ -65,9 +63,8 @@ wp_apply (wp_mk_nonce_freshN ∅ (fun _ => False)%I opaque_secret
 - iIntros "%t".
   rewrite big_sepS_singleton minted_TInv.
   by iModIntro; auto.
-iIntros "%p_s _ #Hmintedp_s #Hprivatep_s #Hexpp_s #H #Hexpp_sV Htokenp_sV".
+iIntros "%p_s _ #Hmintedp_s #Hprivatep_s #Hexpp_s #Hexpp_sV Htokenp_sV".
 rewrite big_sepS_singleton.
-iDestruct ("H" $! False%I with "Htokenp_sV") as ">#Hprivp_sV"; iClear "H".
 wp_pures.
 wp_apply (wp_mk_nonce_freshN {[(TExp g p_s)]} (fun _ => False)%I opaque_secret
                                               (fun t =>  {[(TInv t)]})) => //.
@@ -79,9 +76,8 @@ wp_apply (wp_mk_nonce_freshN {[(TExp g p_s)]} (fun _ => False)%I opaque_secret
 - iIntros "%t".
   rewrite big_sepS_singleton minted_TInv.
   by iModIntro; auto.
-iIntros "%p_u %Hfreshp_u #Hmintedp_u #Hprivatep_u #Hexpp_u #H #Hexpp_uV Htokenp_uV".
+iIntros "%p_u %Hfreshp_u #Hmintedp_u #Hprivatep_u #Hexpp_u #Hexpp_uV Htokenp_uV".
 rewrite big_sepS_singleton.
-iDestruct ("H" $! False%I with "Htokenp_uV") as ">#Hprivp_uV"; iClear "H".
 assert (p_u ≠ p_s) as Hneq.
   intro contra.
   apply (Hfreshp_u (TExp g p_s)).
@@ -98,7 +94,6 @@ wp_list; wp_term_of_list.
 iApply "post".
 iExists k_s, p_s, (TExp g p_s), (TExp g p_u), _.
 do !iSplit => //.
-- by rewrite bi.intuitionistically_False.
 - iApply public_TExp_iff.
     by case.
     by exact: (proj1 (is_trueP _) (negb_is_mul_nonce p_s)).
@@ -136,7 +131,6 @@ do !iSplit => //.
       have Nm : is_true (negb (is_mul p_s)) := negb_is_mul_nonce p_s.
       rewrite (_ : TExp g p_s = TExpN g [TNonce p_s]); last by rewrite /TExpN TMulN1.
       by rewrite exps_TExpN'; [by [] | by case | by [] | exact: (invs_canceled1 Nm)].
-    + by rewrite bi.intuitionistically_False.
     + done.
   iModIntro.
   rewrite public_senc_key.
@@ -177,7 +171,6 @@ do !iSplit => //.
       have Nm : is_true (negb (is_mul p_u)) := negb_is_mul_nonce p_u.
       rewrite (_ : TExp g p_u = TExpN g [TNonce p_u]); last by rewrite /TExpN TMulN1.
       by rewrite exps_TExpN'; [by [] | by case | by [] | exact: (invs_canceled1 Nm)].
-    * by rewrite bi.intuitionistically_False.
     * done.
 Qed.
 
@@ -209,7 +202,7 @@ case db_uid: (alist !! uid) => [file|]; wp_pures; last first.
   by iApply ("Hhl" $! None); iModIntro; do !iSplit.
 iDestruct ("Hmapcontents" $! uid file with "[//]") as
     "[_ (%k_s & %p_s & %P_s & %P_u & %envelope &
-         %e & Hmk_s & Hprivk_s & Hprivk_sV & Hexpk_s & Hexpk_sV &
+         %e & Hmk_s & Hprivk_s & Hexpk_s & Hexpk_sV &
          HpubP_s & Hpenvelope & %p_u & %HP_u & %Hfreshp_u &
          HpubP_u & Hminp_s & ? & Hexpp_s & ? & Hprivp_s & ?)]".
 rewrite !subst_list_match /= e.
@@ -230,7 +223,7 @@ wp_apply (wp_mk_nonce_fresh ({[X_u]} ∪ fresh) (fun _ => False)%I
   iIntros "[-> | %H]".
   - by iApply public_minted.
   - by iApply "Hfresh".
-iIntros "%x_s %Hfreshx_s #Hmintedx_s #Hprivatex_s #Hexpx_s #? #Hexpx_sV _".
+iIntros "%x_s %Hfreshx_s #Hmintedx_s #Hprivatex_s #Hexpx_s #Hexpx_sV _".
 wp_pures.
 wp_apply wp_texp; wp_pures.
 wp_apply wp_texp; wp_pures.

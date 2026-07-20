@@ -30,7 +30,6 @@ Definition dh_seed t : iProp :=
   ⌜negb (is_mul t)⌝ ∧
   □ (public t ↔ ▷ False) ∧
   □ (∀ t', exp_pred_base t t' ↔ ▷ □ dh_publ t') ∧
-  □ (public (TInv t) ↔ ▷ False) ∧
   □ (∀ t', exp_pred_base (TInv t) t' ↔ ▷ False).
 
 Lemma dh_seed_elim0 a :
@@ -136,7 +135,7 @@ Lemma dh_public_TExp g a :
   ▷ □ P (TExp g a) -∗
   public (TExp g a).
 Proof.
-iIntros "%gXN #gP (#m & %Nm_a & #aP1 & #aP2 & #aPV & _) #P_a".
+iIntros "%gXN #gP (#m & %Nm_a & #aP1 & #aP2 & _) #P_a".
 rewrite public_TExp_iff //; do !iSplit => //.
 - iApply exp_pred_intro1. iApply "aP2"; do 2!iModIntro; iSplit => //.
   iPureIntro; suff -> : exps (TExp g a) = [a] by [].
@@ -146,7 +145,7 @@ rewrite public_TExp_iff //; do !iSplit => //.
     [by rewrite cancel_invs1
     |by rewrite ssrbool.andbT; exact: (proj2 (is_trueP _) Nm_a)].
 - iModIntro; iIntros "#p".
-  by iApply False_public; last iApply "aPV".
+  by iApply False_public; last iApply "aP1".
 Qed.
 
 Definition mk_dh : val := mk_nonce.
@@ -165,32 +164,24 @@ Lemma wp_mk_dh (T : gset term) g (Ψ : val → iProp) :
   WP mk_dh #() {{ Ψ }}.
 Proof.
 iIntros "% #ctx #minted_g #minted_T post".
-iApply wp_fupd.
 iApply (wp_mk_nonce_freshN T (λ _, False%I) dh_publ
-         (λ t, {[t; TInv t; TExp g t]})
+         (λ t, {[t; TExp g t]})
   with "[//]" ) => //.
   iIntros "%t".
   rewrite big_sepS_forall; iIntros (t').
-  rewrite !elem_of_union !elem_of_singleton; iIntros "[[->|->]|->]"; eauto.
-  - by rewrite minted_TInv; iIntros "!>"; iSplit; eauto.
-  - rewrite minted_TExp //; iIntros "!>"; iSplit; eauto.
-    by iIntros "[??]".
-iIntros (a) "%a_T #m_a #aP #? #sV #? token".
+  rewrite elem_of_union !elem_of_singleton; iIntros "[->|->]"; eauto.
+  rewrite minted_TExp //; iIntros "!>"; iSplit; eauto.
+  by iIntros "[??]".
+iIntros (a) "%a_T #m_a #aP #? #? token".
 have Nm_a : negb (is_mul a) by [].
 have a_g: TInv a ∉ exps g.
   by rewrite exps_expN // elem_of_nil; case.
 have [? [] aV_ga a_ga] := tsize_lt_TExp Nm_a a_g.
-have {}a_aV : TInv a ≠ a := TInv_neq Nm_a.
 have {}a_ga : TNonce a ≠ TExp g a.
   move=> contra; rewrite -contra in a_ga; lia.
-have {}aV_ga : TInv a ≠ TExp g a.
-  move=> contra; rewrite -contra in aV_ga; lia.
 rewrite big_sepS_union ?big_sepS_singleton; last set_solver.
 iDestruct "token" as "[t1 t3]".
-rewrite big_sepS_union ?big_sepS_singleton; last set_solver.
-iDestruct "t1" as "[t1 t2]".
-iMod ("sV" $! False%I with "t2") as "#s2V" => //.
-iApply ("post" with "[//] [] [$] [$]") => //.
+iApply ("post" with "[$] [] [$] [$]") => //.
   iFrame "#"; rewrite bi.intuitionistic_intuitionistically.
   by eauto.
 iPureIntro => t t' t_T t'_t; split => contra.

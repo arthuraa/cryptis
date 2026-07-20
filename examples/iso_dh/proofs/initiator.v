@@ -81,7 +81,7 @@ wp_apply (wp_mk_nonce_freshN ∅
   rewrite big_sepS_singleton minted_TExp. rewrite minted_TInt bi.True_and.
   2: exact /neg_false.
   iIntros "!>"; iSplit; eauto; by iIntros "(_ & ?)".
-iIntros "%a %fresh #m_a #s_a #a_pred _ _ token_ga".
+iIntros "%a %fresh #m_a #s_a #a_pred _ token_ga".
 have Nm_a : is_true (negb (is_mul (TNonce a))) by [].
 set ga := TExp (TInt 0) a.
 rewrite !big_sepS_singleton.

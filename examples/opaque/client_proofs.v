@@ -39,10 +39,10 @@ iIntros "%ϕ (#Cryptis & #Hpredrw & #HpredA_u & #HpredA_s & #HpredSK & #HpredK
   #Hfresh) Hhl".
 wp_lam; wp_pures.
 wp_apply (wp_mk_nonce_fresh fresh (fun _ => False)%I (fun t => opaque_secret t)%I) => //.
-iIntros "%x_u %Hfreshx_u #Hmintedx_u #Hprivatex_u #Hexpx_u #? #Hexpx_uV Htokenx_u".
+iIntros "%x_u %Hfreshx_u #Hmintedx_u #Hprivatex_u #Hexpx_u #Hexpx_uV Htokenx_u".
 wp_pures.
 wp_apply (wp_mk_nonce_fresh fresh (fun _ => False)%I (fun _ => True)%I) => //.
-iIntros "%r %Hfreshr #Hmintedr #Hprivater #Hexpr #HsrV #HexprV Htokenr".
+iIntros "%r %Hfreshr #Hmintedr #Hprivater #Hexpr #HexprV Htokenr".
 wp_pures.
 wp_apply wp_H'; wp_apply wp_texp; wp_pures.
 wp_apply wp_texp; wp_list; wp_term_of_list; wp_pures.

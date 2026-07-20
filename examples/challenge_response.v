@@ -126,7 +126,7 @@ iIntros "#? #? #ctx inv #m_skA #m_skB Hpost".
 iPoseProof "ctx" as "[? ?]".
 wp_pures. wp_apply wp_pkey. wp_pures.
 wp_apply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-iIntros (nA) "_ #p_nA _ _ _ unreg".
+iIntros (nA) "_ #p_nA _ _ unreg".
 rewrite (term_token_difference _ (↑N.@"ready")); last solve_ndisj.
 iDestruct "unreg" as "[unreg _]".
 iAssert (public nA) as "{p_nA} p_nA"; first by iApply "p_nA".
@@ -200,7 +200,7 @@ iIntros "%skA -> #m_skA".
 wp_pures.
 wp_pures; wp_bind (mk_nonce _).
 iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-iIntros (nB) "_ #p_nB _ _ _ unreg".
+iIntros (nB) "_ #p_nB _ _ unreg".
 rewrite (term_token_difference _ (↑N.@"ready")); last solve_ndisj.
 iDestruct "unreg" as "[token _]".
 iAssert (public nB) as "{p_nB} HnB"; first by iApply "p_nB".

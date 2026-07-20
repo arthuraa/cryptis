@@ -61,25 +61,6 @@ Definition pnonce a : iProp :=
 Global Instance Persistent_pnonce a : Persistent (pnonce a).
 Proof. apply _. Qed.
 
-Definition pinv t : iProp :=
-  □ term_prop t (nroot.@"cryptis".@"pub").
-
-Global Instance Persistent_pinv a : Persistent (pinv a).
-Proof. apply _. Qed.
-
-Lemma pinv_alloc t E P :
-  ↑nroot.@"cryptis".@"pub" ⊆ E →
-  term_token t E ==∗
-  □ (pinv t ↔ ▷ □ P) ∗ term_token t (E ∖ ↑nroot.@"cryptis".@"pub").
-Proof.
-iIntros (?) "token".
-iMod (term_prop_alloc (nroot.@"cryptis".@"pub") P with "token")
-  as "[#H1 $]" => //.
-iIntros "!> !>"; iSplit; iIntros "#H2".
-- by iSpecialize ("H1" with "H2"); eauto.
-- by iIntros "!>"; iApply "H1"; eauto.
-Qed.
-
 Definition exp_pred_base (t t' : term) : iProp :=
   match t with
   | TNonce a =>
@@ -108,7 +89,7 @@ Definition exp_pred0_pre Plater P DH ts : iProp :=
   (∃ ts', exp_pred_base ts.1 (TExpN ts.2 ts') ∗
     ⌜atomic ts'⌝ ∗
     ⌜∀ t, t ∈ ts' → TInv t ∉ exps ts.2⌝ ∗
-    [∗ list] t ∈ ts', Plater (TInv t)) ∨
+    [∗ list] t ∈ ts', Plater t) ∨
   P ts.1 ∨
   ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ ⌜negb (is_mul t)⌝ ∗ ⌜TInv t ∉ exps t2'⌝ ∗
   DH (ts.1, t2') ∗ DH (t, ts.2).
@@ -137,7 +118,7 @@ Lemma exp_pred0_unfold Plater P ts :
   (∃ ts', exp_pred_base ts.1 (TExpN ts.2 ts') ∗
     ⌜atomic ts'⌝ ∗
     ⌜∀ t, t ∈ ts' → TInv t ∉ exps ts.2⌝ ∗
-    [∗ list] t ∈ ts', Plater (TInv t)) ∨
+    [∗ list] t ∈ ts', Plater t) ∨
   P ts.1 ∨
   ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ ⌜negb (is_mul t)⌝ ∗ ⌜TInv t ∉ exps t2'⌝ ∗
   exp_pred0 Plater P (ts.1, t2') ∗ exp_pred0 Plater P (t, ts.2).
@@ -392,6 +373,18 @@ iPoseProof (hash_pred_agree t with "HP HP'") as "e".
 by iIntros "!> !>"; iRewrite "e".
 Qed.
 
+Lemma is_inv_Nmul t : is_inv t -> is_mul t = false.
+Proof.
+rewrite is_inv_unfold is_mul_unfold.
+by case: (unfold_term t) => [?|[?| |]?|???|?] //=.
+Qed.
+
+Lemma is_inv_Nexp t : is_inv t -> is_exp t = false.
+Proof.
+rewrite is_inv_unfold is_exp_unfold.
+by case: (unfold_term t) => [?|[?| |]?|???|?] //=.
+Qed.
+
 Inductive decompose (T : gset term) (t : term) : Prop :=
 | DInt n of T = ∅ & t = TInt n
 
@@ -401,7 +394,9 @@ Inductive decompose (T : gset term) (t : term) : Prop :=
 
 | DSeal k t' of T = {[k; t']} & t = TSeal k t'
 
-| DHash t' of T = {[t']} & t = THash t'.
+| DHash t' of T = {[t']} & t = THash t'
+
+| DInv t' of T = {[t']} & ¬ is_inv t' & is_inv t & t = TInv t'.
 
 Lemma decompose_tsize T t t' : decompose T t → t' ∈ T → tsize t' < tsize t.
 Proof.
@@ -410,24 +405,35 @@ case; try by move =>> -> -> //;
           move => /elem_of_singleton ->;
           rewrite [tsize (_ _)]tsizeE -?ssrnat.plusE;
           lia.
+move => t'' -> Ninv inv_t E; rewrite E in inv_t *.
+move => /elem_of_singleton ->.
+have NmI : is_true (negb (is_mul (TInv t''))) by rewrite (is_inv_Nmul inv_t).
+have Nm : is_true (negb (is_mul t'')) by move: (Nmul_TInv NmI); rewrite TInvK.
+have Ninv' : is_true (negb (is_inv t'')) by case: (is_inv t'') Ninv => // /(_ I).
+rewrite (tsize_TInv t'' Nm Ninv'); lia.
 Qed.
 
-Lemma decompose_is_inv T t : decompose T t → is_inv t = false.
-Proof. by case => *; subst. Qed.
-
 Lemma decompose_is_mul T t : decompose T t → is_mul t = false.
-Proof. by case => *; subst. Qed.
+Proof.
+case => *; subst => //=.
+by apply: is_inv_Nmul.
+Qed.
+
+Lemma decompose_is_exp T t : decompose T t → is_exp t = false.
+Proof.
+case => *; subst => //=.
+by apply: is_inv_Nexp.
+Qed.
 
 Definition public_pre_aux Plater P t : iProp :=
   minted t ∧ (
    (∃ T, ⌜decompose T t⌝ ∧ [∗ set] t' ∈ T, P t')
-   ∨ (⌜is_inv t⌝ ∧ ◇ pinv t)
    ∨ (⌜is_mul t⌝ ∧ [∗ list] t' ∈ tfactors t, P t')
    ∨ (⌜is_exp t⌝ ∧
       [∗ list] t' ∈ exps t,
         ⌜negb (is_mul (TInv t'))⌝ ∧
         exp_pred0 Plater P (t', t) ∧
-        □ (P (TInv t') → P (TExp t (TInv t'))))
+        □ (P t' → P (TExp t (TInv t'))))
    ∨ match t with
      | TNonce a => ◇ pnonce a
      | TKey kt t => ⌜Spec.public_key_type kt⌝
@@ -457,7 +463,7 @@ Lemma public_pre_aux_wf Plater :
 Proof.
 move => P1 P2 {}t HP; rewrite /public_pre_aux.
 f_equiv.
-f_equiv; last (f_equiv; last (f_equiv; last f_equiv)).
+f_equiv; last (f_equiv; last f_equiv).
 - f_equiv => T; apply: and_proper_L => T_t.
   apply: big_sepS_proper => t' T_t'.
   by move: (decompose_tsize T_t T_t') => ?; eauto.
@@ -493,23 +499,22 @@ Lemma public_pre_aux_persistent Plater P :
   □ (∀ t, P t -∗ <pers> P t) -∗
   ∀ t, public_pre_aux Plater P t -∗ <pers> public_pre_aux Plater P t.
 Proof.
-iIntros "#wand1 #wand2 %t [#m [H | [H | [H | [H | H]]]]]"; iSplit => //.
+iIntros "#wand1 #wand2 %t [#m [H | [H | [H | H]]]]"; iSplit => //.
 - iDestruct "H" as (T ?) "H"; iLeft; iExists T; iSplit; eauto.
   iAssert ([∗ set] t' ∈ T, <pers> P t')%I as "{H} #H".
   { iApply (big_sepS_impl with "H"); iIntros "!> %t' _".
     by iApply "wand2". }
   by iModIntro; iApply (big_sepS_impl with "H"); eauto.
-- by iDestruct "H" as "(%aV & #H)"; iRight; iLeft; eauto.
-- iDestruct "H" as "(% & H)"; iRight; iRight; iLeft.
+- iDestruct "H" as "(% & H)"; iRight; iLeft.
   iAssert ([∗ list] t' ∈ tfactors t, <pers> P t')%I as "{H} #H".
   { iApply (big_sepL_impl with "H"); iIntros "!> %k %t' _".
     by iApply "wand2". }
   by iModIntro; iSplit => //; iApply (big_sepL_impl with "H"); eauto.
-- iDestruct "H" as "(% & H)"; iRight; iRight; iRight; iLeft.
+- iDestruct "H" as "(% & H)"; iRight; iRight; iLeft.
   iAssert ([∗ list] t' ∈ exps t,
     ⌜negb (is_mul (TInv t'))⌝ ∧
     <pers> exp_pred0 Plater P (t', t) ∧
-    □ (P (TInv t') → P (TExp t (TInv t'))))%I as "{H} #H".
+    □ (P t' → P (TExp t (TInv t'))))%I as "{H} #H".
   { iApply (big_sepL_impl with "H").
     iIntros "!> %k %t' _ [%Nm [dh #?]]"; iSplit => //; iSplit => //.
     iAssert (exp_pred0 (λ t'', <pers> Plater t'')%I
@@ -518,7 +523,7 @@ iIntros "#wand1 #wand2 %t [#m [H | [H | [H | [H | H]]]]]"; iSplit => //.
     by iModIntro; iApply (exp_pred0_wand with "[] [] dh"); iIntros "!> % #?". }
   iModIntro; iSplit => //.
   by iApply (big_sepL_impl with "H"); iIntros "!> % % _ [% [#? #?]]"; eauto.
-- iRight; iRight; iRight; iRight; case: t; by move=> *; iPoseProof "H" as "#H".
+- iRight; iRight; iRight; case: t; by move=> *; iPoseProof "H" as "#H".
 Qed.
 
 Lemma public_pre_unfold Plater t :
@@ -572,12 +577,11 @@ Lemma public_eq t :
   public t ⊣⊢
   minted t ∧ (
       (∃ T, ⌜decompose T t⌝ ∧ [∗ set] t' ∈ T, public t')
-     ∨ (⌜is_inv t⌝ ∧ ◇ pinv t)
      ∨ (⌜is_mul t⌝ ∧ [∗ list] t' ∈ tfactors t, public t')
      ∨ (⌜is_exp t⌝ ∧
         [∗ list] t' ∈ exps t,
           ⌜negb (is_mul (TInv t'))⌝ ∧
-          exp_pred t' t ∧ □ (public (TInv t') → public (TExp t (TInv t'))))
+          exp_pred t' t ∧ □ (public t' → public (TExp t (TInv t'))))
      ∨ match t with
        | TNonce a => ◇ pnonce a
        | TKey kt t => ⌜Spec.public_key_type kt⌝
@@ -620,7 +624,7 @@ Proof. rewrite exp_pred_unseal /exp_pred_def. by apply _. Qed.
 Lemma exp_pred_intro1_gen t1 t2 ts :
   is_true (atomic ts) ->
   (∀ t, t ∈ ts → TInv t ∉ exps t2) →
-  ([∗ list] t ∈ ts, ▷ public (TInv t)) -∗
+  ([∗ list] t ∈ ts, ▷ public t) -∗
   exp_pred_base t1 (TExpN t2 ts) -∗ exp_pred t1 t2.
 Proof.
 iIntros "%atom %ts_t2 #p_ts #dh".
@@ -653,7 +657,7 @@ Lemma exp_pred_ind (φ : term → term → iProp) :
   (□ ∀ ts t1 t2,
     ⌜atomic ts⌝ -∗
     ⌜∀ t, t ∈ ts → TInv t ∉ exps t2⌝ -∗
-    ([∗ list] t ∈ ts, ▷ public (TInv t)) -∗
+    ([∗ list] t ∈ ts, ▷ public t) -∗
     exp_pred_base t1 (TExpN t2 ts) -∗ φ t1 t2) -∗
   (□ ∀ t t1 t2, ⌜negb (is_mul t)⌝ -∗ ⌜TInv t ∉ exps t2⌝ -∗
                 exp_pred t1 t2 -∗ □ φ t1 t2 -∗
@@ -739,11 +743,10 @@ Proof.
 apply: (anti_symm _); iIntros "#Ht" => //.
 - rewrite public_eq minted_TPair.
   iDestruct "Ht" as "([Ht1 Ht2] & publ)".
-  iDestruct "publ" as "[publ | [H | [(? & _) | [(? & _) | publ]]]]" => //=.
-  + iDestruct "publ" as (T) "[%dec publ]".
-    case: dec => //= {}t1 {}t2 -> [-> ->].
-    by rewrite big_sepS_union_pers !big_sepS_singleton.
-  + by iDestruct "H" as "([] & _)".
+  iDestruct "publ" as "[publ | [(? & _) | [(? & _) | publ]]]" => //=.
+  iDestruct "publ" as (T) "[%dec publ]".
+  case: dec => //= {}t1 {}t2 -> [-> ->].
+  by rewrite big_sepS_union_pers !big_sepS_singleton.
 - iDestruct "Ht" as "[Ht1 Ht2]".
   rewrite [public (TPair t1 t2)]public_eq minted_TPair -!public_minted.
   iSplit; eauto.
@@ -758,50 +761,97 @@ Proof.
 apply: (anti_symm _); iIntros "Ht".
 - rewrite public_eq; iDestruct "Ht" as "[? Ht]".
   rewrite minted_TNonce. iFrame.
-  iDestruct "Ht" as "[publ | [H | [ (? & _) | [ (? & _) | ? ] ]]]" => //.
-  + iDestruct "publ" as (T) "[%dec _]".
-    by case: dec.
-  + by iDestruct "H" as "([] & _)".
+  iDestruct "Ht" as "[publ | [ (? & _) | [ (? & _) | ? ] ]]" => //.
+  iDestruct "publ" as (T) "[%dec _]".
+  by case: dec.
 - rewrite public_eq minted_TNonce /pnonce.
   iDestruct "Ht" as "[Ht ?]". iFrame.
 Qed.
 
-Lemma public_TInv t :
-  negb (is_mul t) → negb (is_inv t) →
-  public (TInv t) ⊣⊢ minted t ∧ ◇ pinv (TInv t).
+Lemma public_TInv_Nmul t : negb (is_mul t) → public (TInv t) ⊣⊢ public t.
 Proof.
-move => Nm; rewrite -(@is_inv_TInv t (proj2 (is_trueP _) Nm)) => ninv_t; apply: (anti_symm _); iIntros "Ht".
-- rewrite public_eq; iDestruct "Ht" as "[? Ht]".
-  rewrite minted_TInv. iFrame.
-  iDestruct "Ht" as "[publ | [H | [ (%mul_aV & _) | [ (%exp_aV & ?) | ? ] ]]]" => //.
-  + iDestruct "publ" as (T) "[%dec _]".
-    by rewrite (decompose_is_inv dec) /= in ninv_t.
-  + by iDestruct "H" as "(% & #?)".
-  + by move: (proj2 (is_trueP _) mul_aV);
-       rewrite (ssrbool.negbTE (Nmul_TInv (proj2 (is_trueP _) Nm))).
-  + have Ni : is_true (negb (is_inv t))
-      by move: (proj2 (is_trueP _) ninv_t); rewrite (@is_inv_TInv t (proj2 (is_trueP _) Nm)).
-    by move: (proj2 (is_trueP _) exp_aV);
-       rewrite (ssrbool.negbTE (@is_exp_TInv t (proj2 (is_trueP _) Nm) Ni)).
-  by case: (TInv _) ninv_t => //.
-- iDestruct "Ht" as "[Ht ?]".
-  rewrite public_eq minted_TInv. iFrame. by eauto.
+wlog: t / negb (is_inv t).
+{ move => H Nm.
+  case Einv: (is_inv t); last by apply: H => //; rewrite Einv.
+  have Nm' : is_true (negb (is_mul t)) := proj2 (is_trueP _) Nm.
+  have NmI : is_true (negb (is_mul (TInv t))) := Nmul_TInv Nm'.
+  have NinvI : is_true (negb (is_inv (TInv t))) by rewrite (is_inv_TInv t Nm') Einv.
+  by move: (H (TInv t) (proj1 (is_trueP _) NinvI) (proj1 (is_trueP _) NmI));
+     rewrite TInvK => <-. }
+move => Ninv Nm.
+have Nm' : is_true (negb (is_mul t)) := proj2 (is_trueP _) Nm.
+have Ninv' : is_true (negb (is_inv t)) := proj2 (is_trueP _) Ninv.
+apply: anti_symm.
+- rewrite [public (TInv t)]public_eq minted_TInv.
+  iIntros "[_ [dec | [ [%mul _] | [ [%exp _] | Hstr]]]]".
+  + iDestruct "dec" as (T) "[%d publ]".
+    have invI : is_true (is_inv (TInv t)) by rewrite (is_inv_TInv t Nm').
+    case: d => [n eT et|t1 t2 eT et|kt t0 eT et|k t0 eT et|t0 eT et|s eT Ns Hi et];
+      try by move: invI; rewrite et.
+    move: et => /TInv_inj ->; rewrite eT big_sepS_singleton. by [].
+  + by move: (Nmul_TInv Nm'); rewrite (proj2 (is_trueP _) mul).
+  + by move: (is_exp_TInv t Nm' Ninv'); rewrite (proj2 (is_trueP _) exp).
+  + have invI : is_true (is_inv (TInv t)) by rewrite (is_inv_TInv t Nm').
+    by case E: (TInv t) invI => [n|t1 t2|a|kt k|k m|h|pt wf nf] //= _.
+- iIntros "#publ".
+  rewrite [public (TInv t)]public_eq minted_TInv.
+  iSplit; first by iApply public_minted.
+  iLeft. iExists {[t]}. iSplit; last by rewrite big_sepS_singleton.
+  iPureIntro. apply: DInv => //.
+  + by move=> H; move: Ninv'; rewrite (proj2 (is_trueP _) H).
+  + by rewrite (is_inv_TInv t Nm').
 Qed.
 
-Lemma public_TInv_alloc t E P :
-  ↑nroot.@"cryptis".@"pub" ⊆ E →
-  negb (is_mul t) →
-  negb (is_inv t) →
-  term_token (TInv t) E ==∗
-  □ (public (TInv t) ↔ ▷ □ P) ∗
-  term_token (TInv t) (E ∖ ↑nroot.@"cryptis".@"pub").
+Lemma tfactorsN t : negb (is_mul t) -> tfactors t = [t].
 Proof.
-iIntros (sub Nm ?) "token"; rewrite public_TInv //.
-iPoseProof (term_token_minted with "token") as "#m"; rewrite minted_TInv.
-iMod (pinv_alloc _ P with "token") as "[#sV $]" => //.
-iIntros "!> !>"; iSplit.
-- by iIntros "[_ >?]"; iApply "sV".
-- by iIntros "#?"; iSplit => //; iModIntro; iApply "sV".
+move=> Nm.
+have Nm' : is_true (negb (PreTerm.is_mul (unfold_term t))).
+  by rewrite -is_mul_unfold; exact: (proj2 (is_trueP _) Nm).
+by rewrite /tfactors (PreTerm.factorsN Nm') /= unfold_termK.
+Qed.
+
+(* Elimination form: a product is public iff all its factors are. *)
+Lemma public_TMulN t :
+  is_mul t ->
+  public t ⊢ [∗ list] t' ∈ tfactors t, public t'.
+Proof.
+move=> mul_t; rewrite public_eq.
+iIntros "[_ [publ | [ [_ Hfs] | [ (%exp_t & _) | Hstr ]]]]".
+- iDestruct "publ" as (T) "[%dec _]".
+  by move: mul_t; rewrite (decompose_is_mul dec).
+- by iApply "Hfs".
+- by move: (proj2 (is_trueP _) mul_t) (proj2 (is_trueP _) exp_t);
+     rewrite is_mul_unfold is_exp_unfold; case: (unfold_term t).
+- by move: mul_t; case: (t) => //=; iDestruct "Hstr" as "[]".
+Qed.
+
+Lemma public_tfactors t :
+  public t ⊣⊢ minted t ∧ [∗ list] t' ∈ tfactors t, public t'.
+Proof.
+case Emul: (is_mul t); last first.
+- rewrite tfactorsN; last by rewrite Emul.
+  rewrite big_sepL_singleton.
+  apply: (anti_symm _).
+  + by iIntros "#p"; iSplit; first iApply public_minted.
+  + by iIntros "[_ $]".
+- have mulI : is_mul t by rewrite Emul.
+  apply: (anti_symm _).
+  + iIntros "#p"; iSplit; first by iApply public_minted.
+    by iApply (public_TMulN mulI with "p").
+  + iIntros "[#m #fs]"; rewrite [public t]public_eq; iSplit => //.
+    by iRight; iLeft; iSplit.
+Qed.
+
+Lemma public_TInv t : public (TInv t) ⊣⊢ public t.
+Proof.
+rewrite (public_tfactors (TInv t)) (public_tfactors t) minted_TInv.
+f_equiv.
+rewrite tfactors_TInv big_sepL_fmap.
+apply: big_sepL_proper => k u u_in.
+apply: public_TInv_Nmul.
+exact: (proj1 (is_trueP _)
+  (ssrbool.elimT seq.allP (atom_tfactors t) _
+     (ssrbool.introT inP (list_elem_of_lookup_2 _ _ _ u_in)))).
 Qed.
 
 Lemma public_TKey kt t :
@@ -809,11 +859,10 @@ Lemma public_TKey kt t :
 Proof.
 apply: (anti_symm _).
 - rewrite public_eq minted_TKey; iDestruct 1 as "[Ht publ]".
-  iDestruct "publ" as "[publ | [H | [(? & _) | [(? & _) | publ]]]]" => //.
+  iDestruct "publ" as "[publ | [(? & _) | [(? & _) | publ]]]" => //.
   + iDestruct "publ" as (T) "[%dec publ]".
     case: dec => //= {}kt {}t -> [-> ->].
     by rewrite big_sepS_singleton; eauto.
-  + by iDestruct "H" as "(% & ?)".
   + by eauto.
 - iDestruct 1 as "# [publ | [s_t publ]]".
     rewrite [public (TKey _ _)]public_eq minted_TKey -public_minted.
@@ -842,11 +891,10 @@ Proof.
 apply: (anti_symm _).
 - rewrite public_eq minted_TSeal.
   iDestruct 1 as "[[Hk Ht] publ]".
-  iDestruct "publ" as "[publ | [H | [(? & _) | [(? & _) | publ]]]]" => //.
+  iDestruct "publ" as "[publ | [(? & _) | [(? & _) | publ]]]" => //.
   + iDestruct "publ" as (T) "[%dec ?]".
     case: dec => // {}k {}t -> [-> ->].
     by rewrite big_sepS_union_pers !big_sepS_singleton; iLeft.
-  + by iDestruct "H" as "(% & _)".
   + iRight. iSplit; first by eauto.
     by case: k => // kt k.
 - iDestruct 1 as "[#[Hk Ht] | (#Ht & inv)]".
@@ -879,11 +927,10 @@ Lemma public_THash t :
 Proof.
 apply: (anti_symm _).
 - rewrite public_eq minted_THash.
-  + iDestruct 1 as "[Ht [publ | [H | [(? & _) | [(? & _) | publ]]]]]" => //; eauto.
-    iDestruct "publ" as (T) "[%dec ?]".
-    case: dec => //= {}t -> [->].
-    by rewrite big_sepS_singleton; eauto.
-  + by iDestruct "H" as "(% & _)".
+  iDestruct 1 as "[Ht [publ | [(? & _) | [(? & _) | publ]]]]" => //; eauto.
+  iDestruct "publ" as (T) "[%dec ?]".
+  case: dec => //= {}t -> [->].
+  by rewrite big_sepS_singleton; eauto.
 - iDestruct 1 as "[Ht | [? publ]]".
     rewrite [public (THash _)]public_eq minted_THash -public_minted.
     iSplit => //=; iLeft.
@@ -916,7 +963,7 @@ Lemma public_TExpN t ts :
   public (TExpN t ts) ⊣⊢
   minted (TExpN t ts) ∧
   [∗ list] t' ∈ ts,
-    exp_pred t' (TExpN t ts) ∧ □ (public (TInv t') → public (TExp (TExpN t ts) (TInv t'))).
+    exp_pred t' (TExpN t ts) ∧ □ (public t' → public (TExp (TExpN t ts) (TInv t'))).
 Proof.
 move => /[dup] Nx /negb_True /is_trueP nx atom /[dup] ic /is_trueP ic' tsN0.
 have ttsX: is_exp (TExpN t ts).
@@ -927,7 +974,7 @@ apply: anti_symm; last first.
   iIntros "#[m dhp]".
   rewrite public_eq (exps_TExpN' Nx atom ic).
   iSplit; first done.
-  iRight; iRight; iRight; iLeft.
+  iRight; iRight; iLeft.
   iSplit; first done.
   iApply (big_sepL_mono with "dhp").
   iIntros (k t' Hk) "H"; iSplit; last by [].
@@ -938,19 +985,15 @@ apply: anti_symm; last first.
   rewrite public_eq !(minted_TExpN Nx atom ic) (exps_TExpN' Nx atom ic).
   iIntros "#[[mt mts] Hdisj]".
   iSplit; first by iSplit.
-  iDestruct "Hdisj" as "[c1 | [c2 | [c3 | [c4 | c5]]]]".
+  iDestruct "Hdisj" as "[c1 | [c2 | [c3 | c4]]]".
   + iDestruct "c1" as (T) "[%dec _]".
-    move e: (TExpN t ts) => t'' in dec ttsX *.
-    by case: dec ttsX; move=> * {e}; subst t''.
-  + iDestruct "c2" as "(%contra & _)".
-    by move: (proj2 (is_trueP _) ttsX) (proj2 (is_trueP _) contra);
-       rewrite is_exp_unfold is_inv_unfold; case: (unfold_term (TExpN t ts)).
-  + iDestruct "c3" as "(%mul_c & _)".
+    by move: ttsX; rewrite (decompose_is_exp dec).
+  + iDestruct "c2" as "(%mul_c & _)".
     by move: (proj2 (is_trueP _) ttsX) (proj2 (is_trueP _) mul_c);
        rewrite is_exp_unfold is_mul_unfold; case: (unfold_term (TExpN t ts)).
-  + iDestruct "c4" as "(_ & exp)".
+  + iDestruct "c3" as "(_ & exp)".
     iApply (big_sepL_mono with "exp"). by iIntros (k t' _) "(_ & $)".
-  + by case: (TExpN t ts) ttsX => // *; iDestruct "c5" as "[]".
+  + by case: (TExpN t ts) ttsX => // *; iDestruct "c4" as "[]".
 Qed.
 
 Lemma public_TExpN' t :
@@ -958,13 +1001,13 @@ Lemma public_TExpN' t :
   public t ⊣⊢
   minted t ∧
   [∗ list] t' ∈ exps t,
-    exp_pred t' t ∧ □ (public (TInv t') → public (TExp t (TInv t'))).
+    exp_pred t' t ∧ □ (public t' → public (TExp t (TInv t'))).
 Proof.
 move => expt; apply: anti_symm; last first.
 - iIntros "#[m dhp]".
   rewrite public_eq.
   iSplit; first done.
-  iRight; iRight; iRight; iLeft.
+  iRight; iRight; iLeft.
   iSplit; first done.
   iApply (big_sepL_mono with "dhp").
   iIntros (k t' Hk) "H"; iSplit; last by [].
@@ -973,25 +1016,22 @@ move => expt; apply: anti_symm; last first.
 - rewrite public_eq.
   iIntros "#[m Hdisj]".
   iSplit; first done.
-  iDestruct "Hdisj" as "[c1 | [c2 | [c3 | [c4 | c5]]]]".
+  iDestruct "Hdisj" as "[c1 | [c2 | [c3 | c4]]]".
   + iDestruct "c1" as (T) "[%dec _]".
-    by case: dec expt; move =>> _ ->.
-  + iDestruct "c2" as (inv_t) "_".
-    by move: (proj2 (is_trueP _) expt) (proj2 (is_trueP _) inv_t);
-       rewrite is_exp_unfold is_inv_unfold; case: (unfold_term t).
-  + iDestruct "c3" as "(%mul_c & _)".
+    by move: expt; rewrite (decompose_is_exp dec).
+  + iDestruct "c2" as "(%mul_c & _)".
     by move: (proj2 (is_trueP _) expt) (proj2 (is_trueP _) mul_c);
        rewrite is_exp_unfold is_mul_unfold; case: (unfold_term t).
-  + iDestruct "c4" as "(_ & exp)".
+  + iDestruct "c3" as "(_ & exp)".
     iApply (big_sepL_mono with "exp"). by iIntros (k t' _) "(_ & $)".
-  + by case: (t) expt => // *; iDestruct "c5" as "[]".
+  + by case: (t) expt => // *; iDestruct "c4" as "[]".
 Qed.
 
 Lemma public_TExp_iff t1 t2 :
   ¬ is_exp t1 →
   negb (is_mul t2) ->
   public (TExp t1 t2) ⊣⊢
-  minted t1 ∧ minted t2 ∧ exp_pred t2 (TExp t1 t2) ∧ □ (public (TInv t2) → public t1).
+  minted t1 ∧ minted t2 ∧ exp_pred t2 (TExp t1 t2) ∧ □ (public t2 → public t1).
 Proof.
 move=> Nexp Nm2.
 have eq12 : TExp t1 t2 = TExpN t1 [t2].
@@ -1015,8 +1055,8 @@ Lemma public_TExp2_iff t1 t2 t3 :
   minted (TExpN t1 [t2; t3]) ∧
   exp_pred t2 (TExpN t1 [t2; t3]) ∧
   exp_pred t3 (TExpN t1 [t2; t3]) ∧
-  □ (public (TInv t2) → public (TExp t1 t3)) ∧
-  □ (public (TInv t3) → public (TExp t1 t2)).
+  □ (public t2 → public (TExp t1 t3)) ∧
+  □ (public t3 → public (TExp t1 t2)).
 Proof.
 move => Nexp Nm2 Nm3 t2t3.
 have Nm2' : is_true (negb (is_mul t2)) := proj2 (is_trueP _) Nm2.
@@ -1043,7 +1083,7 @@ Qed.
 Lemma exp_pred_exps t1 t2 :
   t2 ∈ exps t1 ->
   public t1 -∗
-  exp_pred t2 t1 ∧ □ (public (TInv t2) → public (TExp t1 (TInv t2))).
+  exp_pred t2 t1 ∧ □ (public t2 → public (TExp t1 (TInv t2))).
 Proof.
 have [exp_t1|contra] := decide (is_exp t1); last first.
   by rewrite exps_expN // elem_of_nil.
@@ -1062,7 +1102,7 @@ move=> Nm2; have Nm2' : is_true (negb (is_mul t2)) := proj2 (is_trueP _) Nm2.
 elim /term_lt_ind: t1 => t1 IH; iIntros "#p1 #p2".
 have [t2_t1|t2_t1] := decide (TInv t2 ∈ exps t1).
   iPoseProof (exp_pred_exps t2_t1 with "p1") as "[_ #p1']".
-  by rewrite TInvK; iApply "p1'".
+  by rewrite public_TInv TInvK; iApply "p1'".
 have [exp_t1|nexp_t1] := decide (is_exp (TExp t1 t2)); last first.
   by move/not_elem_of_TInv_exps: t2_t1; rewrite exps_expN // elem_of_nil.
 rewrite [public (TExp _ _)]public_TExpN' //; iSplit.
@@ -1086,32 +1126,6 @@ have comm : TExp (TExp t1 t2) (TInv t) = TExp (TExp t1 (TInv t)) t2.
 rewrite comm; iApply (IH with "p p2").
 have NmTt : negb (is_mul (TInv t)) := proj1 (is_trueP _) (Nmul_TInv Nmt').
 by have [?[??]] := tsize_TExp_TInv NmTt t_t1.
-Qed.
-
-Lemma tfactorsN t : negb (is_mul t) -> tfactors t = [t].
-Proof.
-move=> Nm.
-have Nm' : is_true (negb (PreTerm.is_mul (unfold_term t))).
-  by rewrite -is_mul_unfold; exact: (proj2 (is_trueP _) Nm).
-by rewrite /tfactors (PreTerm.factorsN Nm') /= unfold_termK.
-Qed.
-
-(* Elimination form: a product is public iff all its factors are. *)
-Lemma public_TMulN t :
-  is_mul t ->
-  public t ⊢ [∗ list] t' ∈ tfactors t, public t'.
-Proof.
-move=> mul_t; rewrite public_eq.
-iIntros "[_ [publ | [H | [ [_ Hfs] | [ (%exp_t & _) | Hstr ]]]]]".
-- iDestruct "publ" as (T) "[%dec _]".
-  by move: mul_t; rewrite (decompose_is_mul dec).
-- iDestruct "H" as "(%inv_t & _)".
-  by move: (proj2 (is_trueP _) mul_t) (proj2 (is_trueP _) inv_t);
-     rewrite is_mul_unfold is_inv_unfold; case: (unfold_term t).
-- by iApply "Hfs".
-- by move: (proj2 (is_trueP _) mul_t) (proj2 (is_trueP _) exp_t);
-     rewrite is_mul_unfold is_exp_unfold; case: (unfold_term t).
-- by move: mul_t; case: (t) => //=; iDestruct "Hstr" as "[]".
 Qed.
 
 (* Peel one atomic factor at a time onto the exponent. *)
@@ -1149,7 +1163,7 @@ move => wf; have wf' : is_true (wf_mul_list ts) := proj2 (is_trueP _) wf.
 rewrite public_eq; iIntros "#H"; iSplit.
 - rewrite minted_TMulN //.
   iApply (big_sepL_mono with "H"); iIntros (k t' _) "?"; by iApply public_minted.
-- iRight; iRight; iLeft; iSplit.
+- iRight; iLeft; iSplit.
   + by iPureIntro; apply/is_trueP; exact: (is_mul_TMulN ts wf').
   + by rewrite (tfactors_TMulN ts wf').
 Qed.
@@ -1179,10 +1193,9 @@ elim: t.
   + by iApply IHt.
 - iIntros "%t %IH #m #contra".
   by rewrite minted_THash public_THash; iLeft; iApply IH.
-- iIntros "%t %IH %Nmul %inv_t #m #contra"; rewrite is_trueP in inv_t.
-  rewrite public_eq is_inv_TInv //; iSplit => //.
-  iRight; iLeft; iSplit => //.
-  by iDestruct "contra" as ">[]".
+- iIntros "%t %IH %Nmul %inv_t #m #contra".
+  iEval (rewrite minted_TInv) in "m".
+  rewrite public_TInv. by iApply IH.
 - move => t IHt nX ts IHts atom nZ sorted canceled.
   apply is_trueP in canceled.
   apply is_trueP in nX; apply negb_True in nX.
@@ -1238,7 +1251,7 @@ Qed.
 Lemma exp_pred_intro4 t1 t2 t3 :
   t3 ∈ exps t2 →
   exp_pred t1 t2 -∗
-  public (TInv t3) -∗
+  public t3 -∗
   exp_pred t1 (TExp t2 (TInv t3)).
 Proof.
 iIntros (t3_t2) "dh"; iRevert (t3_t2); iRevert (t1 t2) "dh".
@@ -1335,18 +1348,19 @@ Lemma public_TExp_exp_pred t1 t2 :
   public t1 -∗
   minted t2 -∗
   exp_pred t2 (TExp t1 t2) -∗
-  □ (public (TInv t2) ↔ ▷ False) -∗
   □ (∀ t, exp_pred_base (TInv t2) t ↔ ▷ False) -∗
   public (TExp t1 t2).
 Proof.
 move=> Nm2; have Nm2' : is_true (negb (is_mul t2)) := proj2 (is_trueP _) Nm2.
-iIntros "#p1 #m2 #dh #s2 #dhV"; iApply except_0_public.
+iIntros "#p1 #m2 #dh #dhV"; iApply except_0_public.
   by iApply all_minted_TExp; iSplit; rewrite // public_minted.
 case: (decide (TInv t2 ∈ exps t1)) => in_exps; last first.
   by iModIntro; iApply (public_TExp_add Nm2).
 iPoseProof (exp_pred_exps in_exps with "p1") as "[dh' #?]"; rewrite TInvK.
 iPoseProof (exp_pred_inv_same in_exps with "dh'") as "[p2|H]".
-- by iDestruct ("s2" with "p2") as ">[]".
+- iModIntro.
+  iEval (rewrite public_TInv) in "p2".
+  by iApply (public_TExp with "p1 p2").
 - iDestruct "H" as "(%t2' & _ & _ & contra)".
   by iDestruct ("dhV" with "contra") as ">[]".
 Qed.

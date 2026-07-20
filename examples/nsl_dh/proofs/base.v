@@ -348,7 +348,7 @@ wp_apply (wp_mk_nonce_freshN T
   rewrite minted_TInt /= bi.True_and.
   iModIntro. by iApply bi.equiv_iff.
   intro contra. by destruct contra.
-iIntros "%a %fresh_a #m_a #s_a #dh_a _ _ token_ga".
+iIntros "%a %fresh_a #m_a #s_a #dh_a _ token_ga".
 rewrite big_sepS_singleton.
 iDestruct (dh_share_tokenI with "token_ga")
   as "(rel & peer & ready & res & token_ga)" => //.

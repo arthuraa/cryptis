@@ -391,6 +391,42 @@ rewrite !nonces_of_term_unseal /nonces_of_term_def unfold_TInv.
 exact: nonces_of_pre_term_inv (wf_unfold_term t).
 Qed.
 
+(* [TInv] distributes over products: the canonical factor list of [TInv t] is
+   a permutation of the inverses of the factors of [t].  Used to prove
+   [public (TInv t) ⊣⊢ public t] for products by reducing to the factors. *)
+Lemma tfactors_TInv t : tfactors (TInv t) ≡ₚ map TInv (tfactors t).
+Proof.
+rewrite /tfactors unfold_TInv (PreTerm.inv_factors (wf_unfold_term t)).
+set F := PreTerm.factors (unfold_term t).
+have wfF : is_true (seq.all PreTerm.wf_term F) := PreTerm.wf_factors (wf_unfold_term t).
+have NmF : is_true (seq.all (fun t => negb (PreTerm.is_mul t)) F) :=
+  PreTerm.Nmul_factors (wf_unfold_term t).
+have cancF : is_true (PreTerm.invs_canceled F) := PreTerm.invs_canceled_factors (wf_unfold_term t).
+have wfMI : is_true (seq.all PreTerm.wf_term (seq.map PreTerm.inv_aux F)).
+  apply: (ssrbool.introT seq.allP) => x /(ssrbool.elimT seq.mapP) [y yF ->].
+  by apply: PreTerm.wf_inv_aux;
+     [exact: (ssrbool.elimT seq.allP wfF _ yF)|exact: (ssrbool.elimT seq.allP NmF _ yF)].
+have NmMI : is_true (seq.all (fun t => negb (PreTerm.is_mul t)) (seq.map PreTerm.inv_aux F)).
+  apply: (ssrbool.introT seq.allP) => x /(ssrbool.elimT seq.mapP) [y yF ->].
+  by apply: PreTerm.is_mul_inv_aux; exact: (ssrbool.elimT seq.allP wfF _ yF).
+have cancMI : is_true (PreTerm.invs_canceled (seq.map PreTerm.inv_aux F)).
+  exact: PreTerm.invs_canceled_map_inv wfF cancF.
+rewrite (PreTerm.factors_mul wfMI) (PreTerm.flatten_factors_Nmul_id NmMI).
+rewrite (PreTerm.cancel_invs_canceled NmMI cancMI).
+rewrite (_ : path.sort preorder.Order.le (seq.map PreTerm.inv_aux F) ≡ₚ
+             seq.map PreTerm.inv_aux F); last first.
+  by apply/(ssrbool.elimT perm_Perm); rewrite path.perm_sort.
+suff E : seq.map fold_term (seq.map PreTerm.inv_aux F) = map TInv (seq.map fold_term F)
+  by rewrite E.
+move: wfF NmF; rewrite /F; elim: (PreTerm.factors (unfold_term t)) => [//|x fs IH] /=.
+move=> /andb_prop [Wx wfs] /andb_prop [Nmx Nms].
+rewrite (IH wfs Nms); congr cons.
+apply: unfold_term_inj.
+by rewrite unfold_TInv (fold_termK x Wx)
+           (fold_termK (PreTerm.inv_aux x) (PreTerm.wf_inv_aux Wx Nmx))
+           (PreTerm.inv_Nmul Nmx).
+Qed.
+
 Lemma nonces_of_pre_term_base_expo pt :
   nonces_of_pre_term pt =
   nonces_of_pre_term (PreTerm.base pt) ∪ nonces_of_pre_term (PreTerm.expo pt).
