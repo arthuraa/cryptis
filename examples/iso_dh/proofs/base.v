@@ -318,7 +318,7 @@ Lemma session_compromised' skI skR si :
 Proof. by iIntros "(-> & -> & _) (? & _)". Qed.
 
 Definition msg2_pred skR m2 : iProp :=
-  ∃ ga b skI N,
+  ∃ ga (b : nonce) skI N,
     let pkI := Spec.pkey skI in
     let pkR := Spec.pkey skR in
     let gb := TExp (TInt 0) b in
@@ -327,7 +327,6 @@ Definition msg2_pred skR m2 : iProp :=
     ⌜m2 = Spec.of_list [ga; gb; pkI; Tag N]⌝ ∧
     ((public skI ∨ public skR) ∨ (public b ↔ ▷ (released ga ∧ released gb))) ∧
     (∀ t, exp_pred_base b t ↔ ▷ □ iso_dh_key_share t) ∧
-    ⌜is_nonce b⌝ ∧
     ⌜¬ subterm b ga⌝ ∧
     iso_dh_ready N skI skR si.
 

@@ -116,12 +116,10 @@ Proof.
   exact: public_dh_secret'.
 Qed.
 
-Definition opaque_public_private_pair a A: iProp :=
-  ∃ a',
+Definition opaque_public_private_pair (a : nonce) A : iProp :=
+  ∃ (a' : nonce),
     ⌜A = TExp g a'⌝ ∗
     ⌜¬ subterm a A⌝ ∗
-    ⌜is_nonce a⌝ ∗
-    ⌜is_nonce a'⌝ ∗
     public A ∗
     minted a ∗
     minted a' ∗
@@ -132,7 +130,7 @@ Definition opaque_public_private_pair a A: iProp :=
 
 Definition A_pred : (term -> iProp) :=
 λ t : term,
-(∃ P p X x ssid,
+(∃ P (p : nonce) X x ssid,
      opaque_public_private_pair p P ∗
      ⌜t =
      Spec.of_list
@@ -141,8 +139,8 @@ Definition A_pred : (term -> iProp) :=
 
 Definition envelope_pred : (senc_key -> term -> iProp) :=
   λ _ (t : term),
-    (∃ p_u P_u P_s,
-        ⌜ t = Spec.of_list [p_u; P_u; P_s] ⌝ ∗
+    (∃ (p_u : nonce) P_u P_s,
+        ⌜ t = Spec.of_list [TNonce p_u; P_u; P_s] ⌝ ∗
         opaque_public_private_pair p_u P_s)%I.
 
 Definition opaque_ctx : iProp :=
@@ -195,6 +193,9 @@ Proof. by split; intro H; destruct b. Qed.
 
 Lemma nonce_Nmul t : is_nonce t -> is_true (negb (is_mul t)).
 Proof. by case: t. Qed.
+
+Lemma negb_is_mul_nonce (a : nonce) : is_true (negb (is_mul (TNonce a))).
+Proof. by []. Qed.
 
 Lemma TExp2_TExpN g a b : TExp (TExp g a) b = TExpN g [b; a].
 Proof.

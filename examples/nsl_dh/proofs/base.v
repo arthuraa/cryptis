@@ -266,8 +266,7 @@ iIntros "#meta"; iSplit.
   iRight. iExists gb. by do !iSplit.
 Qed.
 
-Definition dh_key skI skR a : iProp :=
-  ⌜is_nonce a⌝ ∧
+Definition dh_key skI skR (a : nonce) : iProp :=
   minted a ∧
   □ (public a ↔ ▷ □ nonce_secrecy a) ∧
   □ (∀ t, exp_pred_base a t ↔ ▷ □ nsl_dh_key_share skI skR t).
@@ -278,7 +277,7 @@ Proof. apply _. Qed.
 Definition failed_early skI skR (failed : bool) : iProp :=
   (if failed then public skI ∨ public skR else True)%I.
 
-Lemma peer_share_token_failed_early skI skR a failed :
+Lemma peer_share_token_failed_early skI skR (a : nonce) failed :
   let ga := TExp (TInt 0) a in
   failed_early skI skR failed -∗
   peer_share_token ga -∗
@@ -290,7 +289,7 @@ iIntros (ga) "fe ptok #dk".
 rewrite /failed_early.
 destruct failed.
 - iDestruct "fe" as "#corr".
-  iDestruct "dk" as "(_ & #m_a & #s_a & _)".
+  iDestruct "dk" as "(#m_a & #s_a & _)".
   iMod (set_peer_share ga None with "ptok") as "#ps".
   iModIntro. iSplit.
   + iModIntro.
@@ -303,13 +302,13 @@ destruct failed.
   + by iRight.
 Qed.
 
-Lemma dh_key_public_released skI skR a gb :
+Lemma dh_key_public_released skI skR (a : nonce) gb :
   let ga := TExp (TInt 0) a in
   dh_key skI skR a -∗
   has_peer_share ga (Some gb) -∗
   □ (public a ↔ ▷ (released ga ∧ released gb)).
 Proof.
-iIntros (ga) "#(_ & m_a & s_a & dh_a) #ps !>". iSplit.
+iIntros (ga) "#(m_a & s_a & dh_a) #ps !>". iSplit.
 - iIntros "#p_a".
   iDestruct ("s_a" with "p_a") as "H".
   iNext. iDestruct "H" as "#ns".
@@ -326,17 +325,16 @@ Qed.
 Lemma wp_mk_dh_keys (T : gset term) skI skR (Ψ : val → iProp) :
   cryptis_ctx -∗
   (∀ t, ⌜t ∈ T⌝ -∗ minted t) -∗
-  (∀ a,
+  (∀ (a : nonce),
     let ga := TExp (TInt 0) a in
     ⌜∀ t', t' ∈ T → ¬ subterm a t'⌝ -∗
-    ⌜is_nonce a⌝ -∗
     dh_key skI skR a -∗
     release_token ga -∗
     peer_share_token ga -∗
     ready_token ga -∗
     res_token ga -∗
     term_token ga (⊤ ∖ ↑nsl_dhN) -∗
-    Ψ (repr (a, ga))) -∗
+    Ψ (repr (TNonce a, ga))) -∗
   WP mk_dh_keys #() {{ Ψ }}.
 Proof.
 iIntros "#ctx #minted_T post".
@@ -350,7 +348,7 @@ wp_apply (wp_mk_nonce_freshN T
   rewrite minted_TInt /= bi.True_and.
   iModIntro. by iApply bi.equiv_iff.
   intro contra. by destruct contra.
-iIntros "%a %fresh_a %nonce_a #m_a #s_a #dh_a _ _ token_ga".
+iIntros "%a %fresh_a #m_a #s_a #dh_a _ _ token_ga".
 rewrite big_sepS_singleton.
 iDestruct (dh_share_tokenI with "token_ga")
   as "(rel & peer & ready & res & token_ga)" => //.
@@ -360,7 +358,7 @@ wp_bind (texp _ _). iApply wp_texp.
 wp_pures.
 iAssert (dh_key skI skR a) as "#dh_key_a".
 { rewrite /dh_key. by do !iSplit. }
-by iApply ("post" with "[//] [//] dh_key_a rel peer ready res token_ga").
+by iApply ("post" with "[//] dh_key_a rel peer ready res token_ga").
 Qed.
 
 Definition session skI skR si : iProp :=
@@ -519,7 +517,7 @@ Definition msg1_pred skR m1 : iProp := ∃ ga skI,
   ⌜m1 = Spec.of_list [ga; Spec.pkey skI]⌝ ∧
   (public skI ∨ public skR → public ga).
 
-Definition msg2_pred' skI skR ga gb N : iProp := ∃ b,
+Definition msg2_pred' skI skR ga gb N : iProp := ∃ (b : nonce),
   let gab := TExp ga b in
   let si := SessInfo skI skR ga gb gab in
   ⌜gb = TExp (TInt 0) b⌝ ∧
@@ -532,10 +530,9 @@ Definition msg2_pred skI m2 : iProp := ∃ ga gb skR N,
   ⌜m2 = Spec.of_list [ga; gb; Spec.pkey skR; Tag N]⌝ ∧
   msg2_pred' skI skR ga gb N.
 
-Definition msg3_pred skR gb : iProp := ∀ ga b,
+Definition msg3_pred skR gb : iProp := ∀ ga (b : nonce),
   let gab := TExp ga b in
   ⌜gb = TExp (TInt 0) b⌝ -∗
-  ⌜is_nonce b⌝ -∗
   has_peer_share gb (Some ga) -∗
   (▷ (released ga ∧ released gb) → public ga) ∗
   (public gab ↔ ▷ (released ga ∧ released gb)).
@@ -565,14 +562,14 @@ Qed.
 Global Instance nsl_dh_ctx_persistent : Persistent nsl_dh_ctx.
 Proof. apply _. Qed.
 
-Lemma public_dh_share skI skR a :
+Lemma public_dh_share skI skR (a : nonce) :
   let ga := TExp (TInt 0) a in
   dh_key skI skR a -∗
   ▷ (public skI ∨ public skR) -∗
   public ga.
 Proof.
-iIntros (ga) "#(%nonce_a & m_a & _ & #pred_a) corr".
-have Nm : is_true (negb (is_mul a)) := nonce_Nmul nonce_a.
+iIntros (ga) "#(m_a & _ & #pred_a) corr".
+have Nm : is_true (negb (is_mul a)) by [].
 have Nm' : Is_true (negb (is_mul a)) := proj1 (is_trueP _) Nm.
 iAssert (exp_pred_base a (TExp (TInt 0) a)) with "[corr]" as "#dp".
 { iAssert (▷ □ nsl_dh_key_share skI skR (TExp (TInt 0) a))%I
@@ -580,9 +577,9 @@ iAssert (exp_pred_base a (TExp (TInt 0) a)) with "[corr]" as "#dp".
   { iNext. iDestruct "corr" as "#corr".
     iModIntro. rewrite /nsl_dh_key_share. iSplit => //.
     iPureIntro.
-    rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [a]); last by rewrite /TExpN TMulN1.
+    rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [TNonce a]); last by rewrite /TExpN TMulN1.
     rewrite exps_TExpN';
-      [by [] | by case | by rewrite /atomic /= Nm | exact: (invs_canceled1 Nm)]. }
+      [by [] | by case | by [] | exact: (invs_canceled1 Nm)]. }
   by iDestruct ("pred_a" $! (TExp (TInt 0) a) with "ns") as "$". }
 rewrite /ga public_TExp_iff //; last by case.
 rewrite minted_TInt. do 3?[iSplit => //].

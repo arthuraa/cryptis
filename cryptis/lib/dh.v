@@ -175,13 +175,13 @@ iApply (wp_mk_nonce_freshN T (λ _, False%I) dh_publ
   - by rewrite minted_TInv; iIntros "!>"; iSplit; eauto.
   - rewrite minted_TExp //; iIntros "!>"; iSplit; eauto.
     by iIntros "[??]".
-iIntros (a) "%a_T %nonce_a #m_a #aP #? #sV #? token".
-have Nm_a : negb (is_mul a) by case: (a) nonce_a.
+iIntros (a) "%a_T #m_a #aP #? #sV #? token".
+have Nm_a : negb (is_mul a) by [].
 have a_g: TInv a ∉ exps g.
   by rewrite exps_expN // elem_of_nil; case.
 have [? [] aV_ga a_ga] := tsize_lt_TExp Nm_a a_g.
 have {}a_aV : TInv a ≠ a := TInv_neq Nm_a.
-have {}a_ga : a ≠ TExp g a.
+have {}a_ga : TNonce a ≠ TExp g a.
   move=> contra; rewrite -contra in a_ga; lia.
 have {}aV_ga : TInv a ≠ TExp g a.
   move=> contra; rewrite -contra in aV_ga; lia.
@@ -197,7 +197,7 @@ iPureIntro => t t' t_T t'_t; split => contra.
 - apply: (a_T _ t_T); congruence.
 - rewrite -[t']TInvK -contra in t'_t.
   apply: (a_T _ t_T); apply: subterm_trans t'_t.
-  by constructor => //; case: (a) => // in nonce_a *.
+  by constructor => //; case: (a) => //.
 Qed.
 
 End DH.

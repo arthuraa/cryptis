@@ -38,6 +38,8 @@ Record senc_key := SEncKey {
 }.
 Set Elimination Schemes.
 
+Coercion TNonce : nonce >-> term.
+
 Definition term_of_aenc_key_def sk := TKey ADec (seed_of_aenc_key sk).
 Fact term_of_aenc_key_key : unit. exact: tt. Qed.
 Definition term_of_aenc_key :=
