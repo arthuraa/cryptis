@@ -96,9 +96,6 @@ rewrite big_sepL_elem_of // big_sepS_forall.
 by iApply "Hts".
 Qed.
 
-(* Elimination form of [minted] over a product's factors — holds for all [t]
-   ([tfactors] of a non-product is the singleton, of a product its canonical
-   factors), so no [wf_mul_list] side condition is needed. *)
 Lemma minted_tfactors t :
   minted t ⊣⊢ [∗ list] t' ∈ tfactors t, minted t'.
 Proof.
@@ -106,12 +103,9 @@ rewrite unlock (nonces_of_term_tfactors t).
 by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
-(* [minted] distributes over exponentiation for *all* exponents [t2] — a product
-   exponent flattens into the factor list without changing the nonces, so the
-   [~~ is_mul t2] guard is unnecessary.  ([~ is_exp t1] is still needed: for an
-   exponential base the new exponent can cancel with the base's own exponent.) *)
 Lemma minted_TExp t1 t2 :
-  ~ is_exp t1 -> minted (TExp t1 t2) ⊣⊢ minted t1 ∧ minted t2.
+  ~ is_exp t1 ->
+  minted (TExp t1 t2) ⊣⊢ minted t1 ∧ minted t2.
 Proof.
 move => nx.
 have -> : TExp t1 t2 = TExpN t1 (tfactors t2) by rewrite /TExpN tfactorsK.
