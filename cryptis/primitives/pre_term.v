@@ -156,6 +156,20 @@ Definition hl_exp : val := λ: "b" "e",
 Definition texp : val := λ: "base" "exp",
     hl_exp "base" "exp".
 
+(* Product of two terms: concatenate their factor lists, cancel matching
+   inverses, sort, and collapse — mirrors [hl_exp] but without an exponent
+   base. *)
+Definition hl_mul : val := λ: "t1" "t2",
+    hl_mk_mul (insertion_sort leq_term
+                 (hl_cancel_invs (append_lists (hl_factors "t1") (hl_factors "t2")))).
+
+(* Distributing inverse: invert each factor with [hl_inv], then re-fold with the
+   product machinery.  This computes [PreTerm.inv] (not the raw [hl_inv], which
+   only handles non-products). *)
+Definition hl_inv_distr : val := λ: "t",
+    hl_mk_mul (insertion_sort leq_term
+                 (hl_cancel_invs (map_list hl_inv (hl_factors "t")))).
+
 Section Proofs.
 
 Context `{!heapGS Σ}.
@@ -460,6 +474,68 @@ case: bool_decide_reflect => [HM|HM]; wp_pures.
             PreTerm.PTExp (PreTerm.base b) (PreTerm.mul [:: PreTerm.expo b; e]).
     by rewrite /PreTerm.exp (introF eqP HM).
   by iApply "HΦ".
+Qed.
+
+Lemma twp_hl_mul E (pt1 pt2 : PreTerm.pre_term) Φ :
+    Φ (repr (PreTerm.mul [:: pt1; pt2])) ⊢
+    WP hl_mul (repr pt1) (repr pt2) @ E [{ Φ }].
+Proof.
+iIntros "HΦ"; wp_lam; wp_pures.
+wp_apply twp_hl_factors.
+wp_apply twp_hl_factors.
+wp_apply twp_append_lists.
+wp_apply twp_hl_cancel_invs.
+wp_apply twp_insertion_sort => //.
+  iIntros "%x %y %Ψ _ HΨ". iApply twp_leq_pre_term. by iApply "HΨ".
+iIntros "_".
+wp_apply twp_hl_mk_mul.
+set c := sort <=%O (PreTerm.cancel_invs (PreTerm.factors pt1 ++ PreTerm.factors pt2)).
+have Emul : PreTerm.mul [:: pt1; pt2] =
+   match c with
+   | [::] => PreTerm.PTMul c | [:: t] => t | [:: t, _ & _] => PreTerm.PTMul c
+   end.
+  by rewrite /PreTerm.mul /= cats0 -/c; case: (c) => [|? []].
+rewrite -Emul.
+by iApply "HΦ".
+Qed.
+
+Lemma twp_hl_inv_spec E (pt : PreTerm.pre_term) :
+    [[{ True }]] hl_inv (repr pt) @ E [[{ RET repr (PreTerm.inv_aux pt); True }]].
+Proof. iIntros (Φ) "_ HΦ". iApply twp_hl_inv. by iApply "HΦ". Qed.
+
+Lemma twp_hl_inv_distr E (pt : PreTerm.pre_term) Φ
+    (wf : is_true (PreTerm.wf_term pt)) :
+    Φ (repr (PreTerm.inv pt)) ⊢
+    WP hl_inv_distr (repr pt) @ E [{ Φ }].
+Proof.
+iIntros "HΦ"; wp_lam; wp_pures.
+wp_apply twp_hl_factors.
+wp_apply (twp_map_list PreTerm.inv_aux hl_inv).
+- apply/Forall_forall => x _. exact: twp_hl_inv_spec.
+- done.
+- iIntros "_".
+  wp_apply twp_hl_cancel_invs.
+  wp_apply twp_insertion_sort => //.
+    iIntros "%x %y %Ψ _ HΨ". iApply twp_leq_pre_term. by iApply "HΨ".
+  iIntros "_".
+  wp_apply twp_hl_mk_mul.
+  have mapE : ListDef.map PreTerm.inv_aux (PreTerm.factors pt)
+            = seq.map PreTerm.inv_aux (PreTerm.factors pt).
+    by elim: (PreTerm.factors pt) => //= ? ? ->.
+  rewrite mapE.
+  have Nm : all (fun t => ~~ PreTerm.is_mul t)
+              (seq.map PreTerm.inv_aux (PreTerm.factors pt)).
+    move: (PreTerm.wf_factors wf). elim: (PreTerm.factors pt) => [_ //|t l IH] /=.
+    move=> /andP[wft wfl]. rewrite (PreTerm.is_mul_inv_aux wft). exact: (IH wfl).
+  set c := sort <=%O
+             (PreTerm.cancel_invs (seq.map PreTerm.inv_aux (PreTerm.factors pt))).
+  have HE : PreTerm.inv pt =
+     match c with
+     | [::] => PreTerm.PTMul c | [:: t] => t | [:: t, _ & _] => PreTerm.PTMul c end.
+    rewrite (PreTerm.inv_factors wf) /PreTerm.mul
+            (PreTerm.flatten_factors_Nmul_id (proj2 (is_trueP _) Nm)) -/c.
+    by case: (c) => [|? []].
+  rewrite -HE. by iApply "HΦ".
 Qed.
 
 End Proofs.

@@ -1168,6 +1168,52 @@ rewrite public_eq; iIntros "#H"; iSplit.
   + by rewrite (tfactors_TMulN ts wf').
 Qed.
 
+(* The canonical factors of a product [t1 * t2] are a sub(multi)set of the
+   factors of [t1] and [t2] (cancellation only removes). *)
+Lemma mem_tfactors_TMulN2 t1 t2 t' :
+  t' ∈ tfactors (TMulN (t1 :: t2 :: nil)) → t' ∈ tfactors t1 ++ tfactors t2.
+Proof.
+move=> Hc. apply/(ssrbool.elimT inP). move: Hc => /(ssrbool.introT inP).
+rewrite /tfactors unfold_TMulN /=.
+rewrite PreTerm.factors_mul; last by rewrite /= !wf_unfold_term.
+rewrite /= seq.cats0.
+move=> /(ssrbool.elimT seq.mapP) [pt] pt_in ->.
+move: pt_in; rewrite path.mem_sort => /PreTerm.mem_cancel_invs.
+have E2 : (seq.map fold_term (PreTerm.factors (unfold_term t1)) ++
+           seq.map fold_term (PreTerm.factors (unfold_term t2)))
+        = seq.map fold_term (seq.cat (PreTerm.factors (unfold_term t1))
+                                     (PreTerm.factors (unfold_term t2))).
+  by rewrite seq.map_cat.
+rewrite E2. exact: seq.map_f.
+Qed.
+
+Lemma big_sepL_tfactors_TMulN2 (Φ : term → iProp) `{!∀ t, Persistent (Φ t)} t1 t2 :
+  ([∗ list] t' ∈ tfactors t1, Φ t') -∗
+  ([∗ list] t' ∈ tfactors t2, Φ t') -∗
+  [∗ list] t' ∈ tfactors (TMulN (t1 :: t2 :: nil)), Φ t'.
+Proof.
+iIntros "#H1 #H2"; iApply big_sepL_intro; iIntros "!>" (k u Hk).
+move: (mem_tfactors_TMulN2 (list_elem_of_lookup_2 _ _ _ Hk)) => /elem_of_app[Hin|Hin].
+- by iApply (big_sepL_elem_of with "H1").
+- by iApply (big_sepL_elem_of with "H2").
+Qed.
+
+Lemma public_TMulN2 t1 t2 :
+  public t1 -∗ public t2 -∗ public (TMulN (t1 :: t2 :: nil)).
+Proof.
+iIntros "#p1 #p2".
+iDestruct (public_tfactors t1 with "p1") as "#[m1 f1]".
+iDestruct (public_tfactors t2 with "p2") as "#[m2 f2]".
+iEval (rewrite minted_tfactors) in "m1".
+iEval (rewrite minted_tfactors) in "m2".
+iApply public_tfactors; iSplit.
+- rewrite minted_tfactors. by iApply (big_sepL_tfactors_TMulN2 with "m1 m2").
+- by iApply (big_sepL_tfactors_TMulN2 with "f1 f2").
+Qed.
+
+Lemma public_TMul0 : ⊢ public (TMulN nil).
+Proof. by iApply (public_TMulN_intro (ts := nil)). Qed.
+
 Lemma False_public t :
   minted t -∗
   ▷ False -∗
