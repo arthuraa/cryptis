@@ -281,7 +281,7 @@ case: o1 o2 => [n1|a1] [n2|a2] /=; wp_lam; wp_pures => //.
 - iPureIntro. congr (# (LitBool _)). symmetry.
   exact/(sameP (Z.leb_spec0 _ _))/bool_decide_reflect.
 - iPureIntro. congr (# (LitBool _)).
-  suff H: (reflect (a1 ≤ₗ a2) (a1 <= a2)%O) by
+  suff H: (reflect (nonce_loc a1 ≤ₗ nonce_loc a2) (a1 <= a2)%O) by
     apply/(sameP (bool_decide_reflect _)).
   by apply Z.leb_spec0.
 Qed.

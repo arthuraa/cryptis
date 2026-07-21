@@ -21,7 +21,6 @@ HB.instance Definition _ := [Equality of nonce by <:].
 HB.instance Definition _ := [Choice of nonce by <:].
 HB.instance Definition _ := [Countable of nonce by <:].
 HB.instance Definition _ := [Order of nonce by <:].
-Coercion nonce_loc : nonce >-> locations.loc.
 
 Inductive term_op0 :=
 | O0Int of Z
@@ -121,10 +120,8 @@ Inductive pre_term :=
 | PTMul of list pre_term.
 Set Elimination Schemes.
 
-(* Exponentiation is a binary operation, encoded as the [O2Exp] case of the
-   generic binary constructor [PT2] (just like sealing).  Keeping it out of the
-   [pre_term] inductive proper keeps the deriving-generated order/countability
-   machinery small (4 constructors, one nested list). *)
+(** Convenient shorthands for some operations *)
+Notation PTInv e := (PT1 O1Inv e).
 Notation PTExp b e := (PT2 O2Exp b e).
 
 Definition pre_term_rect'
@@ -302,7 +299,7 @@ Definition is_nonce pt :=
   if pt is PT0 (O0Nonce _) then true else false.
 
 Definition is_inv pt :=
-  if pt is PT1 O1Inv _ then true else false.
+  if pt is PTInv _ then true else false.
 
 Definition is_exp pt :=
   if pt is PTExp _ _ then true else false.
@@ -315,10 +312,30 @@ Definition expo pt := if pt is PTExp _ e then e else PTMul [::].
 Definition factors pt := if pt is PTMul ts then ts else [:: pt].
 Definition exps pt := factors (expo pt).
 
+(** We now define smart constructors for all the operations that validate
+    non-trivial equations: [inv], [mul] and [exp].  The definitions work as
+    follows:
+
+    - [inv_aux] computes the inverse of terms that do not begin with [PTMul] by
+      simply adding or removing a [PTInv].
+
+    - [mul] computes the product of a list of terms. It flattens inner terms
+      that begin with [PTMul] (so that multiplication is associative) and then
+      cancels out multiplicative inverses by using [inv_aux].  This works
+      because, on normalized terms, consecutive occurrences of [PTMul] are
+      flattened, so [inv_aux] is only called on non-multiplication terms.
+
+    - [inv] computes the inverse of arbitrary terms by distributivity: [inv (a1
+      * ... * an) = inv_aux a1 * ... inv_aux an].  Once again, this works
+      because, on normalized terms, the [ai] do not begin with [PTMul].
+
+    - [exp] combines exponents using [mul].  If the resulting exponent is [1 =
+      PTMul []], we simply return the base. *)
+
 Definition inv_aux pt :=
   match pt with
-  | PT1 O1Inv t => t
-  | _ => PT1 O1Inv pt
+  | PTInv t => t
+  | _ => PTInv pt
   end.
 
 Definition insert_factor pt pts :=
@@ -333,9 +350,6 @@ Definition mul ts :=
   | canceled => PTMul canceled
   end.
 
-(* Distributing inverse: (a * b)⁻¹ = a⁻¹ * b⁻¹.  Non-recursive — it distributes
-   the factor-level [inv_aux] over a product's factors and re-folds with [mul].  This
-   is what makes [TInv (TMulN us) = TMulN (map TInv us)] hold. *)
 Definition inv pt :=
   if pt is PTMul ts then mul (map inv_aux ts) else inv_aux pt.
 
@@ -347,29 +361,23 @@ Definition exp b e :=
 Fixpoint normalize pt :=
   match pt with
   | PT0 o => PT0 o
-  | PT1 o t => match o with
-              | O1Inv => inv (normalize t)
-              | _ => PT1 o (normalize t)
-              end
-  | PT2 O2Exp b e => exp (normalize b) (normalize e)
+  | PTInv t => inv (normalize t)
+  | PT1 o t => PT1 o (normalize t)
+  | PTExp b e => exp (normalize b) (normalize e)
   | PT2 o t1 t2 => PT2 o (normalize t1) (normalize t2)
   | PTMul ts => mul (map normalize ts)
   end.
 
-(* Inverse-canceled: no element's (real, distributing) inverse also occurs.  A
-   self-inverse element — only the identity [PTMul []], the unique fixed point of
-   [inv] — is not flagged: it has no partner.  On atomic lists (which well-formed
-   products require) [inv = inv_aux] and nothing is self-inverse, so this agrees
-   with the naive [inv_aux] form; using the real [inv] lets the term-level
-   [invs_canceled2] avoid the [~~ is_mul] side conditions. *)
+(** [invs_canceled pts] holds when all the inverses in [pts] have been canceled
+    out. *)
 Definition invs_canceled pts := all (fun pt => inv pt \notin pts) pts.
 
 Fixpoint wf_term pt :=
   match pt with
   | PT0 _ => true
-  | PT1 O1Inv pt => [&& ~~ is_inv pt, ~~ is_mul pt & wf_term pt]
+  | PTInv pt => [&& ~~ is_inv pt, ~~ is_mul pt & wf_term pt]
   | PT1 _ pt => wf_term pt
-  | PT2 O2Exp b e => [&& wf_term b, ~~ is_exp b, wf_term e & e != PTMul [::]]
+  | PTExp b e => [&& wf_term b, ~~ is_exp b, wf_term e & e != PTMul [::]]
   | PT2 _ pt1 pt2 => wf_term pt1 && wf_term pt2
   | PTMul ts => [&& all wf_term ts, all (fun t => ~~ is_mul t) ts,
                     sorted <=%O ts, invs_canceled ts & size ts != 1]
@@ -470,20 +478,22 @@ case: ifP => _; rewrite eq_sym.
 - exact: addnC.
 Qed.
 
+(* [count_cancel] without list-atomicity: for a single *atomic* [pt] the count
+   formula holds on any wf list.  (In the [pt = pt'] recursion [pt'] is atomic
+   because it equals [pt]; products in the tail never interfere.) *)
 Lemma count_cancel pt pts :
-  wf_term pt -> ~~ is_mul pt ->
-  all wf_term pts -> all (fun t => ~~ is_mul t) pts ->
+  wf_term pt -> ~~ is_mul pt -> all wf_term pts ->
   count_mem pt (cancel_invs pts) = count_mem pt pts - count_mem (inv_aux pt) pts.
 Proof.
-elim: pts => //= [pt' pts' IH] in pt * => wfpt Nmpt.
-move => /andP [wfpt' wfpts'] /andP [Nmpt' Nmpts']. rewrite eq_sym.
-case: (pt =P pt') => [| /eqP /negbTE]; rewrite count_insert_factor => ->.
-- rewrite eqxx eq_sym (negbTE (inv_aux_Nid _)).
+elim: pts => //= [pt' pts' IH] in pt * => wfpt Nmpt /andP [wfpt' wfpts'].
+rewrite count_insert_factor eq_sym.
+case: (pt =P pt') => [<-{pt' wfpt'} | /eqP/negbTE neq].
+- rewrite eqxx (negbTE (inv_aux_Nid pt)) [in RHS]eq_sym (negbTE (inv_aux_Nid pt)).
   case: ifP => /count_memPn /eqP;
     rewrite !IH ?wf_inv_aux ?is_mul_inv_aux // inv_auxK //.
   + by rewrite -ltnNge => /[dup] /eqP -> /ltnW /eqP ->.
   + rewrite addnC. exact: addnBA.
-- rewrite addn0.
+- rewrite [pt' == pt]eq_sym neq add0n addn0.
   case: ifP => [_ | /count_memPn /eqP wt0]; rewrite -inv_aux_eq_op // eq_sym.
   + by rewrite IH // subBnAC.
   + move: wt0. case: (pt =P inv_aux pt') => [<- | _ _]; rewrite IH //.
@@ -509,40 +519,8 @@ apply /allP => /= pt; rewrite mem_cat => /orP [] /mem_cancel_invs h.
   by rewrite !count_cancel // wt_eq.
 Qed.
 
-Lemma perm_cancel_invs pts1 pts2 :
-  all wf_term pts1 -> all (fun t => ~~ is_mul t) pts1 ->
-  perm_eq pts1 pts2 -> perm_eq (cancel_invs pts1) (cancel_invs pts2).
-Proof.
-move => wf1 Nm1 peq.
-have wf2: all wf_term pts2 by rewrite -(perm_all _ peq).
-have Nm2: all (fun t => ~~ is_mul t) pts2 by rewrite -(perm_all _ peq).
-apply count_perm_cancel => // ? _ _. by rewrite !(permP peq).
-Qed.
-
-(* [count_cancel] without list-atomicity: for a single *atomic* [pt] the count
-   formula holds on any wf list.  (In the [pt = pt'] recursion [pt'] is atomic
-   because it equals [pt]; products in the tail never interfere.) *)
-Lemma count_cancel_wf pt pts :
-  wf_term pt -> ~~ is_mul pt -> all wf_term pts ->
-  count_mem pt (cancel_invs pts) = count_mem pt pts - count_mem (inv_aux pt) pts.
-Proof.
-elim: pts => //= [pt' pts' IH] in pt * => wfpt Nmpt /andP [wfpt' wfpts'].
-rewrite count_insert_factor eq_sym.
-case: (pt =P pt') => [<-{pt' wfpt'} | /eqP/negbTE neq].
-- rewrite eqxx (negbTE (inv_aux_Nid pt)) [in RHS]eq_sym (negbTE (inv_aux_Nid pt)).
-  case: ifP => /count_memPn /eqP;
-    rewrite !IH ?wf_inv_aux ?is_mul_inv_aux // inv_auxK //.
-  + by rewrite -ltnNge => /[dup] /eqP -> /ltnW /eqP ->.
-  + rewrite addnC. exact: addnBA.
-- rewrite [pt' == pt]eq_sym neq add0n addn0.
-  case: ifP => [_ | /count_memPn /eqP wt0]; rewrite -inv_aux_eq_op // eq_sym.
-  + by rewrite IH // subBnAC.
-  + move: wt0. case: (pt =P inv_aux pt') => [<- | _ _]; rewrite IH //.
-    by rewrite -subBnAC => /eqP ->.
-Qed.
-
 (* A product [pt] passes through [cancel_invs] untouched: its factor-level
-   inverse [inv_aux pt = O1Inv pt] is ill-formed (an [O1Inv] of a product), so it
+   inverse [inv_aux pt = PTInv pt] is ill-formed (a [PTInv] of a product), so it
    is absent from any wf list and [pt] never cancels. *)
 Lemma count_cancel_mul pt pts :
   is_mul pt -> all wf_term pts ->
@@ -560,10 +538,7 @@ move: (allP (wf_cancel_invs wfpts') _ Hin) Mpt.
 by case: (pt) => //=.
 Qed.
 
-(* Permutation-invariance of [cancel_invs] on wf lists (no atomicity): the two
-   count lemmas above pin every element's multiplicity to a permutation-stable
-   value. *)
-Lemma perm_cancel_invs_wf pts1 pts2 :
+Lemma perm_cancel_invs pts1 pts2 :
   all wf_term pts1 -> perm_eq pts1 pts2 ->
   perm_eq (cancel_invs pts1) (cancel_invs pts2).
 Proof.
@@ -573,14 +548,14 @@ rewrite /perm_eq; apply/allP => /= pt; rewrite mem_cat => /orP[] /mem_cancel_inv
 - have wfpt := allP wf1 _ h; apply/eqP.
   have [Mpt|Nmpt] := boolP (is_mul pt).
   + by rewrite !count_cancel_mul // (permP peq).
-  + by rewrite !count_cancel_wf // !(permP peq).
+  + by rewrite !count_cancel // !(permP peq).
 - have wfpt := allP wf2 _ h; apply/eqP.
   have [Mpt|Nmpt] := boolP (is_mul pt).
   + by rewrite !count_cancel_mul // (permP peq).
-  + by rewrite !count_cancel_wf // !(permP peq).
+  + by rewrite !count_cancel // !(permP peq).
 Qed.
 
-Lemma inv_invN pt : ~~ is_inv pt -> inv_aux pt = PT1 O1Inv pt.
+Lemma inv_invN pt : ~~ is_inv pt -> inv_aux pt = PTInv pt.
 Proof. by case: pt => - []. Qed.
 
 Lemma base_exp b e : wf_term b -> base (exp b e) = base b.
@@ -605,8 +580,8 @@ exact: inv_auxK.
 Qed.
 
 (* Being canceled under the real [inv] implies being canceled under [inv_aux]:
-   an [inv_aux]-pair always induces an [inv]-pair (the [O1Inv] wrapper is
-   non-product, so its real inverse is the unwrapped element). *)
+   an [inv_aux]-pair always induces an [inv]-pair (the [O1Inv] wrapper is not a
+   product, so its real inverse is the unwrapped element). *)
 Lemma invs_canceled_inv_aux pts :
   all wf_term pts -> invs_canceled pts -> all (fun pt => inv_aux pt \notin pts) pts.
 Proof.
@@ -794,8 +769,7 @@ rewrite /mul.
 have -> : sort <=%O (cancel_invs (flatten [seq factors t | t <- ts1])) =
           sort <=%O (cancel_invs (flatten [seq factors t | t <- ts2])).
   apply/perm_sort_leP/perm_cancel_invs;
-    [exact: flatten_factors_wf | exact: flatten_factors_Nmul |
-     by rewrite perm_flatten // perm_map].
+    [exact: flatten_factors_wf | by rewrite perm_flatten // perm_map].
 by [].
 Qed.
 
@@ -982,11 +956,9 @@ move => wf1 Nm1 wf2 Nm2; apply count_perm_cancel.
 - by rewrite all_cat (Nmul_cancel_invs Nm1) Nm2.
 - by rewrite all_cat wf1 wf2.
 - by rewrite all_cat Nm1 Nm2.
-move => pt wfpt Nmpt; rewrite !count_cat.
-rewrite (count_cancel wfpt Nmpt wf1 Nm1)
-        (count_cancel (wf_inv_aux wfpt Nmpt) (is_mul_inv_aux wfpt) wf1 Nm1)
-        (inv_auxK wfpt).
-rewrite !addnE !subnE. lia.
+move => pt wfpt Nmpt; rewrite !count_cat count_cancel //.
+rewrite count_cancel // ?is_mul_inv_aux // ?wf_inv_aux // ?inv_auxK //.
+by rewrite !addnE !subnE; lia.
 Qed.
 
 Lemma mul_cat ts1 ts2 :
@@ -1001,8 +973,6 @@ apply: perm_trans;
 apply: perm_cancel_invs.
 - by rewrite all_cat all_sort (wf_cancel_invs (flatten_factors_wf wf1))
              (flatten_factors_wf wf2).
-- by rewrite all_cat all_sort (Nmul_cancel_invs (flatten_factors_Nmul wf1))
-             (flatten_factors_Nmul wf2).
 - by rewrite perm_cat2r perm_sort.
 Qed.
 
@@ -1018,18 +988,15 @@ have NmcB := Nmul_cancel_invs NmB.
 apply: (perm_trans (y := cancel_invs (A ++ cancel_invs B))).
   apply: perm_cancel_invs.
   - by rewrite all_cat wfA all_sort wfcB.
-  - by rewrite all_cat NmA all_sort NmcB.
   - by rewrite perm_cat2l perm_sort.
 apply: (perm_trans (y := cancel_invs (cancel_invs B ++ A))).
   apply: perm_cancel_invs.
   - by rewrite all_cat wfA wfcB.
-  - by rewrite all_cat NmA NmcB.
   - by rewrite perm_catC.
 apply: (perm_trans (y := cancel_invs (B ++ A))).
   exact: (cancel_invs_cat wfB NmB wfA NmA).
 apply: perm_cancel_invs.
 - by rewrite all_cat wfB wfA.
-- by rewrite all_cat NmB NmA.
 - by rewrite perm_catC.
 Qed.
 

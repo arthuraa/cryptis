@@ -387,7 +387,7 @@ Lemma perm_cancel_invs ts1 ts2 :
 Proof.
 move => Nm1 peq. rewrite /cancel_invs.
 apply perm_map; apply PreTerm.perm_cancel_invs;
-  [exact: wf_unfold_terms | by rewrite map_unfold_Nmul | exact: perm_map].
+  [exact: wf_unfold_terms | exact: perm_map].
 Qed.
 
 Lemma cancel_invs_subseq ts : subseq (cancel_invs ts) ts.
@@ -419,7 +419,7 @@ have Nmt' : ~~ PreTerm.is_mul (unfold_term t) by rewrite -is_mul_unfold.
 have Nm' : all (fun pt => ~~ PreTerm.is_mul pt) (map unfold_term ts)
   by rewrite map_unfold_Nmul.
 rewrite /cancel_invs count_map_fold ?PreTerm.wf_cancel_invs ?wf_unfold_terms //.
-rewrite (PreTerm.count_cancel (wf_unfold_term t) Nmt' (wf_unfold_terms ts) Nm').
+rewrite PreTerm.count_cancel // ?wf_unfold_term // ?wf_unfold_terms //.
 by rewrite -(unfold_TInv_Nmul Nmt) !count_map.
 Qed.
 

@@ -38,7 +38,7 @@ move=> ts1 ts2 H12.
 have peq : is_true (seq.perm_eq ts1 ts2) := ssrbool.introT perm_Perm H12.
 apply: (ssrbool.elimT perm_Perm).
 rewrite /cancel_invs; apply: seq.perm_map.
-apply: PreTerm.perm_cancel_invs_wf; first exact: wf_unfold_terms.
+apply: PreTerm.perm_cancel_invs; first exact: wf_unfold_terms.
 exact: seq.perm_map.
 Qed.
 
