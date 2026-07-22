@@ -478,9 +478,6 @@ case: ifP => _; rewrite eq_sym.
 - exact: addnC.
 Qed.
 
-(* [count_cancel] without list-atomicity: for a single *atomic* [pt] the count
-   formula holds on any wf list.  (In the [pt = pt'] recursion [pt'] is atomic
-   because it equals [pt]; products in the tail never interfere.) *)
 Lemma count_cancel pt pts :
   wf_term pt -> ~~ is_mul pt -> all wf_term pts ->
   count_mem pt (cancel_invs pts) = count_mem pt pts - count_mem (inv_aux pt) pts.
@@ -500,9 +497,6 @@ case: (pt =P pt') => [<-{pt' wfpt'} | /eqP/negbTE neq].
     by rewrite -subBnAC => /eqP ->.
 Qed.
 
-(* Forward direction only — the [perm_eq -> forall pt] converse is unused and
-   would need [count_cancel] on arbitrary (possibly product) [pt], which no longer
-   holds now that [wf_inv_aux] requires atomicity. *)
 Lemma count_perm_cancel pts1 pts2 :
   all wf_term pts1 -> all (fun t => ~~ is_mul t) pts1 ->
   all wf_term pts2 -> all (fun t => ~~ is_mul t) pts2 ->
@@ -519,9 +513,6 @@ apply /allP => /= pt; rewrite mem_cat => /orP [] /mem_cancel_invs h.
   by rewrite !count_cancel // wt_eq.
 Qed.
 
-(* A product [pt] passes through [cancel_invs] untouched: its factor-level
-   inverse [inv_aux pt = PTInv pt] is ill-formed (a [PTInv] of a product), so it
-   is absent from any wf list and [pt] never cancels. *)
 Lemma count_cancel_mul pt pts :
   is_mul pt -> all wf_term pts ->
   count_mem pt (cancel_invs pts) = count_mem pt pts.
@@ -570,7 +561,6 @@ Proof. by move => wf; rewrite exps_expN // base_Nexp. Qed.
 Lemma base_expoK pt : is_exp pt -> PTExp (base pt) (expo pt) = pt.
 Proof. by case: pt => [o|o t|[||] t1 t2|ts]. Qed.
 
-(* [inv_aux] (the factor-level inverse) is inverted back by the real [inv]. *)
 Lemma inv_inv_aux pt : wf_term pt -> inv (inv_aux pt) = pt.
 Proof.
 move=> wf; have Nm := is_mul_inv_aux wf.
@@ -579,9 +569,6 @@ rewrite (_ : inv (inv_aux pt) = inv_aux (inv_aux pt));
 exact: inv_auxK.
 Qed.
 
-(* Being canceled under the real [inv] implies being canceled under [inv_aux]:
-   an [inv_aux]-pair always induces an [inv]-pair (the [O1Inv] wrapper is not a
-   product, so its real inverse is the unwrapped element). *)
 Lemma invs_canceled_inv_aux pts :
   all wf_term pts -> invs_canceled pts -> all (fun pt => inv_aux pt \notin pts) pts.
 Proof.
@@ -589,7 +576,6 @@ move=> /allP wfs /allP canc; apply/allP => pt pt_pts; apply/negP => inv_aux_in.
 by move: (canc _ inv_aux_in); rewrite (inv_inv_aux (wfs _ pt_pts)) pt_pts.
 Qed.
 
-(* On atomic lists [inv = inv_aux], so [invs_canceled] reduces to the naive form. *)
 Lemma invs_canceled_atomic pts :
   all (fun pt => ~~ is_mul pt) pts ->
   invs_canceled pts = all (fun pt => inv_aux pt \notin pts) pts.
@@ -602,8 +588,6 @@ Qed.
 Lemma invs_canceled_sort pts : invs_canceled (sort <=%O pts) = invs_canceled pts.
 Proof. rewrite /invs_canceled all_sort. apply eq_all => ?. by rewrite mem_sort. Qed.
 
-(* [cancel_invs]/[insert_factor] produce lists with no [inv_aux]-pair (the underlying
-   cancellation algorithm operates on [inv_aux]). *)
 Lemma insert_factor_no_pair pt pts :
   wf_term pt -> all wf_term pts ->
   all (fun q => inv_aux q \notin pts) pts ->
@@ -631,7 +615,6 @@ apply insert_factor_no_pair => //.
   exact: IH.
 Qed.
 
-(* On atomic input [cancel_invs] output is real-[inv]-canceled too. *)
 Lemma invs_canceled_cancel_invs pts :
   all (fun pt => ~~ is_mul pt) pts -> all wf_term pts ->
   invs_canceled (cancel_invs pts).
@@ -647,7 +630,6 @@ apply /allP => ? /canceled.
 by rewrite inE negb_or => /andP [].
 Qed.
 
-(* No [inv_aux]-pair in the input ⇒ [cancel_invs] is the identity. *)
 Lemma no_pair_cons pt pts :
   all (fun q => inv_aux q \notin (pt :: pts)) (pt :: pts) ->
   all (fun q => inv_aux q \notin pts) pts.
@@ -885,9 +867,6 @@ case: pt => [o|[k| |] t|o t1 t2|ts] wf; rewrite /inv /=.
   [exact: (allP wf_ts) | exact: (allP Nm_ts)].
 Qed.
 
-(* Uniform view of [inv]: distribute [inv_aux] over the factors and re-fold.  Holds
-   for products (by definition) and non-products (where [factors pt = [:: pt]] and
-   [mul [:: inv_aux pt] = inv_aux pt]). *)
 Lemma inv_factors pt : wf_term pt -> inv pt = mul (map inv_aux (factors pt)).
 Proof.
 case: pt => [o|o t|o t1 t2|ts] wf; rewrite /inv /factors //=;
@@ -1145,10 +1124,6 @@ apply: perm_mul.
   + by rewrite mapK.
 Qed.
 
-(* The inverse of a non-empty canonical product is a *different* product: a
-   canonical factor list has no [inv_aux]-pairs, so inverting every factor
-   cannot reproduce the same list.  Hence the identity [PTMul []] is the unique
-   self-inverse well-formed pre-term (see [inv_fixed]). *)
 Lemma mul_map_inv_aux_neq us :
   all wf_term us -> all (fun t => ~~ is_mul t) us ->
   invs_canceled us -> us != [::] -> mul (map inv_aux us) != PTMul us.
@@ -1171,7 +1146,6 @@ have inus : inv_aux u \in us by rewrite (perm_mem perm_us); apply/mapP; exists u
 by move: (allP canc _ u_us); rewrite (inv_Nmul (allP atoms _ u_us)) inus.
 Qed.
 
-(* [PTMul []] is the unique fixed point of the (distributing) inverse. *)
 Lemma inv_fixed pt : wf_term pt -> (inv pt == pt) = (pt == PTMul [::]).
 Proof.
 move=> wf; case: (boolP (is_mul pt)) => [mul_pt|Nm]; last first.

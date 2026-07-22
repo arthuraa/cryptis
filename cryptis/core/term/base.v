@@ -710,8 +710,6 @@ rewrite (eq_all (a2 := fun t' => t' != TInv t)); last first.
 by rewrite -has_pred1 -all_predC.
 Qed.
 
-(* [atomic ts] is no longer needed — only [~~ is_mul t] (so the head is not the
-   self-inverse identity); the tail conditions collapse via [TInvK]. *)
 Lemma invs_canceled_cons {t ts} :
   ~~ is_mul t ->
   invs_canceled (t :: ts) = (TInv t \notin ts) && invs_canceled ts.
@@ -721,9 +719,6 @@ under eq_in_all => t' t'_us do rewrite inE negb_or.
 by rewrite all_predI all_TInv_neq -invs_canceledE andbA andbb.
 Qed.
 
-(* Two atomic factors cancel iff they are not inverses of each other and neither
-   is the identity.  Unconditional in the [~~ is_mul] sense the old version needed:
-   the self-inverse conditions are captured exactly by [TMulN [] \notin _]. *)
 Lemma invs_canceled2 t1 t2 :
   invs_canceled [:: t1 ; t2] = (TInv t1 != t2) && (TMulN [::] \notin [:: t1; t2]).
 Proof.
@@ -733,9 +728,6 @@ rewrite [TMulN [::] == t1]eq_sym [TMulN [::] == t2]eq_sym.
 by case: (t1 != TMulN [::]); case: (TInv t1 != t2); case: (t2 != TMulN [::]).
 Qed.
 
-(* Atomic specialisation: for non-product factors the identity conditions vanish,
-   so [[t1;t2]] cancels iff [t1] and [t2] are not inverses.  Used by the stdpp
-   [invs_canceled2] mirror (where ssreflect [!=] notation is unavailable). *)
 Lemma invs_canceled2_Nmul {t1 t2} :
   ~~ is_mul t1 -> ~~ is_mul t2 ->
   invs_canceled [:: t1 ; t2] = (t1 != TInv t2).
