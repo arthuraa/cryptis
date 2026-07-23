@@ -86,7 +86,7 @@ Lemma wp_responder_send_msg2 c skI skR ga N φ failed :
     failed_early skI skR failed
   }}}
     responder_send_msg2 c skR (Spec.pkey skI) (Tag N) ga
-  {{{ (b : term), RET (b, TExp (TInt 0) b);
+  {{{ (b : nonce), RET (TNonce b, TExp (TInt 0) b);
       let gb := TExp (TInt 0) b in
       let gab := TExp ga b in
       let si := SessInfo skI skR ga gb gab in
@@ -102,7 +102,7 @@ rewrite /responder_send_msg2.
 wp_pures. wp_apply wp_pkey. wp_pures.
 wp_apply (wp_mk_dh_keys {[ga]} skI skR); first by iFrame "#".
 { iIntros "%t %t_in". rewrite elem_of_singleton in t_in. by subst t. }
-iIntros "%b %fresh_b %nonce_b #dh_b rel ptok rtok res tok".
+iIntros "%b %fresh_b #dh_b rel ptok rtok res tok".
 have b_ga : ¬ subterm b ga.
 { apply: fresh_b. by rewrite elem_of_singleton. }
 set gb := TExp (TInt 0) b.
@@ -112,12 +112,12 @@ iMod (set_peer_share gb (Some ga) with "ptok") as "#ps_gb".
 (* Get φ from callback *)
 set gab := TExp ga b.
 set si := SessInfo skI skR ga gb gab.
-iMod ("φ_cb" $! b with "res") as "[φ_init φ_resp]".
+iMod ("φ_cb" $! (TNonce b) with "res") as "[φ_init φ_resp]".
 (* Allocate nsl_dh_ready *)
 iMod (nsl_dh_ready_alloc N skI skR si with "N_φ φ_init") as "#ready".
 (* Build and encrypt msg2 *)
 wp_list. wp_term_of_list. wp_pures.
-iDestruct "dh_b" as "(_ & #m_b & #s_b & #pred_b)".
+iDestruct "dh_b" as "(#m_b & #s_b & #pred_b)".
 wp_apply wp_aenc => //.
 { (* minted plaintext *)
   rewrite minted_of_list /= minted_pkey.
@@ -144,7 +144,7 @@ wp_apply wp_send => //. wp_pures.
 iApply ("Hpost" $! b). by iFrame "∗ #".
 Qed.
 
-Lemma wp_responder_recv_msg3 c skI skR ga b :
+Lemma wp_responder_recv_msg3 c skI skR ga (b : nonce) :
   let gb := TExp (TInt 0) b in
   let gab := TExp ga b in
   let si := SessInfo skI skR ga gb gab in
@@ -170,7 +170,9 @@ Proof.
 move=> gb gab si.
 iIntros "%Ψ (#chan & #ctx & #(m1_pred & m2_pred & m3_pred) &
          #m_skI & #m_skR & #m_ga & #s_ga & #dh_b & #ps_gb & rel) Hpost".
-iDestruct "dh_b" as "(%nonce_b & #m_b & #s_b & #pred_b)".
+iDestruct "dh_b" as "(#m_b & #s_b & #pred_b)".
+have Nm_b : is_true (negb (is_mul b)) by [].
+have Nm_b' : Is_true (negb (is_mul b)) := proj1 (is_trueP _) Nm_b.
 rewrite /responder_recv_msg3. wp_pures.
 wp_apply wp_pkey. wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m) "#p_m".
@@ -193,10 +195,10 @@ iAssert (minted (si_key si)) as "#m_k".
   - by iApply all_minted_TExp; iSplit. }
 iDestruct "inv_m3" as "[#p_gb|(#inv_m3 & _)]".
 - (* public gb — case split via public_TExp_iff *)
-  rewrite public_TExp_iff; first last. { by case. }
+  rewrite public_TExp_iff //; last by case.
   iDestruct "p_gb" as "(_ & _ & #exp_b & _)".
   iPoseProof (exp_pred_inv_same with "exp_b") as "exp_b_inv";
-    first (rewrite exps_TExpN'; [set_solver | by case | exact: invs_canceled1]).
+    first by rewrite (exps_TExp1 Nm_b); set_solver.
   iDestruct "exp_b_inv" as "[#p_b | (%t3 & %base_t3 & %t3_sub & #base_b)]".
   + (* public b — contradiction with release_token *)
     iDestruct ("s_b" with "p_b") as "#later_ns".

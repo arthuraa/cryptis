@@ -142,7 +142,7 @@ iIntros "%Ψ (#chan_c & #ctx & #(?&?&?) & #m_skI & #s_skI & #m_skR & Hl)".
 iIntros "Hpost".
 rewrite /init. wp_pures.
 wp_apply (wp_mk_nonce (λ _, corrupt skI skR) (λ _, False)%I) => //.
-iIntros "%nI _ #m_nI #s_nI _ _ _ token".
+iIntros "%nI #m_nI #s_nI _ _ token".
 rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_apply wp_pkey. wp_pures.
 wp_list. wp_term_of_list.
@@ -171,7 +171,7 @@ wp_list. wp_term_of_list.
 wp_store. iMod (pointsto_persist with "Hl") as "#Hl".
 iAssert (▷ ((public nR ↔ ▷ corrupt skI skR) ∧
             (□ (public skR ↔ ▷ False) -∗
-             ▷ session lR skI skR (Spec.of_list [nI; nR]))))%I
+             ▷ session lR skI skR (Spec.of_list [TNonce nI; nR]))))%I
   as "sessR".
 { iDestruct "inv_m2" as "[(p_nI&p_nR&_)|(#inv_m2&_)]".
   - iSpecialize ("s_nI" with "p_nI"). iSplit; first by iSplit; eauto.
@@ -187,7 +187,7 @@ wp_apply wp_aenc; eauto.
   - iIntros "!> #p_skR". iApply "s_nR". by iRight. }
 iIntros "%m3 #p_m3". wp_pures. wp_apply wp_send => //.
 wp_pures. wp_list. wp_term_of_list. wp_pures.
-iApply ("Hpost" $! (Some (Spec.of_list [nI; nR]))).
+iApply ("Hpost" $! (Some (Spec.of_list [TNonce nI; nR]))).
 iModIntro. by eauto.
 Qed.
 
@@ -219,7 +219,7 @@ iAssert (▷ corrupt skI skR → public nI)%I as "{inv} s_nI".
   iDestruct "inv" as "(%nI' & %skI' & %e & #p_ekI & #p_nI)".
   by case/Spec.of_list_inj: e => <- /Spec.aenc_pkey_inj <- {nI' skI'}. }
 wp_apply (wp_mk_nonce (λ _, corrupt skI skR) (λ _, False)%I) => //.
-iIntros "%nR _ #m_nR #s_nR _ _ _ _". rewrite bi.intuitionistic_intuitionistically.
+iIntros "%nR #m_nR #s_nR _ _ _". rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_bind (term_of_list (nI :: _)%E).
 wp_list. wp_term_of_list. wp_list. wp_term_of_list.
 wp_store. iMod (pointsto_persist with "Hl") as "#Hl".
@@ -238,7 +238,7 @@ wp_apply wp_adec; eauto. iSplit; last protocol_failure.
 iClear "p_m3" => {m3}. iIntros "%m3 #m_m3 #inv_m3". wp_pures.
 wp_eq_term e; last protocol_failure; subst m3.
 wp_pures. wp_list. wp_term_of_list. wp_pures.
-iApply ("Hpost" $! (Some (Spec.pkey skI, (Spec.of_list [nI; nR])))).
+iApply ("Hpost" $! (Some (Spec.pkey skI, (Spec.of_list [nI; TNonce nR])))).
 iModIntro. iExists skI. do !iSplit => //.
 iIntros "!> #s_skI". iDestruct "inv_m3" as "[p_nR|[#inv_m3 _]]".
 - iSpecialize ("s_nR" with "p_nR"). iModIntro.

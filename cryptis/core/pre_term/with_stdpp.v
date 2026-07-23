@@ -16,8 +16,8 @@ Proof. exact: def_eq_decision. Defined.
 #[global]
 Instance repr_term_op0 : Repr term_op0 := λ o,
   match o with
-  | O0Int n => (#0, #n)%V
-  | O0Nonce a => (#1, #a)%V
+  | O0Int n => (#TInt_tag, #n)%V
+  | O0Nonce a => (#TNonce_tag, #(nonce_loc a))%V
   end.
 
 Definition int_of_key_type kt : Z :=
@@ -67,9 +67,9 @@ Proof. exact: def_eq_decision. Defined.
 
 Instance repr_term_op1 : Repr term_op1 := λ o,
   match o with
-  | O1Key kt => (#0, repr kt)%V
-  | O1Hash => (#1, #())%V
-  | O1Inv => (#2, #())%V
+  | O1Key kt => (#TKey_tag, repr kt)%V
+  | O1Hash => (#THash_tag, #())%V
+  | O1Inv => (#TInv_tag, #())%V
   end.
 
 Canonical term_op2O := leibnizO term_op2.
@@ -80,8 +80,9 @@ Proof. exact: def_eq_decision. Defined.
 
 Instance repr_term_op2 : Repr term_op2 := λ o,
   match o with
-  | O2Pair => #0
-  | O2Seal => #1
+  | O2Pair => #TPair_tag
+  | O2Seal => #TSeal_tag
+  | O2Exp => #TExp_tag
   end.
 
 Section ValOfPreTerm.
@@ -96,26 +97,31 @@ Definition val_of_pre_term : Repr pre_term := fix val_of_pre_term pt :=
     (#TOp1_tag, (repr o, val_of_pre_term t))%V
   | PT2 o t1 t2 =>
     (#TOp2_tag, (repr o, val_of_pre_term t1, val_of_pre_term t2))%V
-  | PTExp t ts =>
-    (#TExp_tag, (val_of_pre_term t, repr_list (map val_of_pre_term ts)))%V
+  | PTMul ts =>
+    (#TMul_tag, repr_list (map val_of_pre_term ts))%V
   end.
 
 Global Existing Instance val_of_pre_term.
 
 End ValOfPreTerm.
 
-Definition nonces_of_term_op0 o : gset loc :=
+Definition nonce_eq_dec : EqDecision nonce := Eval hnf in def_eq_decision _.
+Global Existing Instance nonce_eq_dec.
+Global Instance nonce_countable : Countable nonce.
+Proof. exact: def_countable. Qed.
+
+Definition nonces_of_term_op0 o : gset nonce :=
   match o with
   | O0Int _ => ∅
   | O0Nonce a => {[a]}
   end.
 
-Fixpoint nonces_of_pre_term pt : gset loc :=
+Fixpoint nonces_of_pre_term pt : gset nonce :=
   match pt with
   | PreTerm.PT0 o => nonces_of_term_op0 o
   | PreTerm.PT1 _ t => nonces_of_pre_term t
   | PreTerm.PT2 _ t1 t2 => nonces_of_pre_term t1 ∪ nonces_of_pre_term t2
-  | PreTerm.PTExp t ts => nonces_of_pre_term t ∪ ⋃ map nonces_of_pre_term ts
+  | PreTerm.PTMul ts => ⋃ map nonces_of_pre_term ts
   end.
 
 Global Instance pre_term_inhabited : Inhabited PreTerm.pre_term.
@@ -126,7 +132,7 @@ Definition pre_term_eq_dec : EqDecision PreTerm.pre_term :=
 Global Existing Instance pre_term_eq_dec.
 
 Global Instance repr_term_op0_inj : Inj (=) (=) (@repr term_op0 _).
-Proof. by case=> [?|?] [?|?] //= [<-]. Qed.
+Proof. by case=> [?|[?]] [?|[?]] //= [<-]. Qed.
 
 Global Instance repr_term_op1_inj : Inj (=) (=) (@repr term_op1 _).
 Proof. by case=> [?||] [?||] //= [/int_of_key_type_inj ->]. Qed.
@@ -141,8 +147,8 @@ elim.
 - by move=> o1 t1 IH [] //= o2 t2 [] /repr_term_op1_inj -> /IH ->.
 - move=> o1 t11 IH1 t12 IH2 [] //= o2 t21 t22.
   by move=> [] /repr_term_op2_inj -> /IH1 -> /IH2 ->.
-move=> t1 IHt ts1 IHts [] //= t2 ts2 [] /IHt -> e_ts; congr PreTerm.PTExp.
+move=> ts1 IHts [] //= ts2 [] e_ts; congr PreTerm.PTMul.
 move: e_ts; rewrite repr_list_unseal.
-elim: ts1 IHts ts2 {t1 t2 IHt} => /= [_ [] //|t1 ts1 H [] IHt {}/H IHts].
+elim: ts1 IHts ts2 => /= [_ [] //|t1 ts1 H [] IHt {}/H IHts].
 by case=> //= t2 ts2 [] /IHt -> /IHts ->.
 Qed.

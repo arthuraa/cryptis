@@ -132,7 +132,7 @@ iIntros "#chan_c #ctx #(? & ? & ?) #m_skI #honI #m_skR".
 iIntros "%Ψ !> _ Hpost".
 rewrite /init. wp_pures. wp_bind (mk_nonce _).
 iApply (wp_mk_nonce (λ _, corrupt skI skR) (λ _, False)%I) => //.
-iIntros "%nI _ #m_nI #s_nI _ _ _ token".
+iIntros "%nI #m_nI #s_nI _ _ token".
 rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_apply wp_pkey. wp_pures.
 wp_list. wp_term_of_list.
@@ -164,7 +164,7 @@ wp_pures. wp_apply wp_aenc; eauto. iRight. iSplit; eauto.
 - iIntros "!> #p_skR". iApply "inv_m2". by iRight.
 iIntros "%m3 #p_m3". wp_pures. wp_apply wp_send => //.
 wp_pures. wp_list. wp_term_of_list. wp_pures.
-iApply ("Hpost" $! (Some (Spec.of_list [nI; nR]))). iModIntro.
+iApply ("Hpost" $! (Some (Spec.of_list [TNonce nI; nR]))). iModIntro.
 rewrite minted_of_list /=. do 3?iSplit => //.
 iIntros "!> #honR". rewrite public_of_list /=.
 iIntros "(#p_nI & _)". iSpecialize ("s_nI" with "p_nI").
@@ -202,7 +202,7 @@ iAssert (▷ corrupt skI skR → public nI)%I as "{inv} s_nI".
   iDestruct "inv" as "(%nI' & %skI' & %e & #p_ekI & #p_nI)".
   by case/Spec.of_list_inj: e => <- /Spec.aenc_pkey_inj <- {nI' skI'}. }
 wp_apply (wp_mk_nonce (λ _, corrupt skI skR) (λ _, False)%I) => //.
-iIntros "%nR _ #m_nR #s_nR _ _ _ _".
+iIntros "%nR #m_nR #s_nR _ _ _".
 rewrite bi.intuitionistic_intuitionistically.
 wp_pures. wp_list; wp_term_of_list. wp_apply wp_aenc; eauto.
 - rewrite minted_of_list /= minted_pkey; eauto.
@@ -219,7 +219,7 @@ iIntros "%m3 #p_m3". wp_apply wp_adec; eauto. iSplit; last protocol_failure.
 iClear "p_m3" => {m3}. iIntros "%m3 #m_m3 #m3P". wp_pures.
 wp_eq_term e; last protocol_failure; subst m3. wp_pures.
 wp_list. wp_term_of_list. wp_pures.
-iApply ("Hpost" $! (Some (Spec.pkey skI, Spec.of_list [nI; nR]))).
+iApply ("Hpost" $! (Some (Spec.pkey skI, Spec.of_list [nI; TNonce nR]))).
 iModIntro. iExists skI. rewrite minted_of_list /=. do 5?[iSplit => //].
 rewrite public_of_list /=.
 iIntros "!> #s_skI (_ & #p_nR & _)".

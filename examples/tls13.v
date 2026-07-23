@@ -9,6 +9,22 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Lemma nonce_Nmul t : is_nonce t -> is_true (negb (is_mul t)).
+Proof. by case: t. Qed.
+
+Lemma TExp2_TExpN g a b : TExp (TExp g a) b = TExpN g [b; a].
+Proof.
+rewrite (_ : TExp g a = TExpN g [a]); last by rewrite /TExpN TMulN1.
+by rewrite TExp_TExpN.
+Qed.
+
+Lemma TExp_comm g a b : TExp (TExp g a) b = TExp (TExp g b) a.
+Proof.
+rewrite (_ : TExp g a = TExpN g [a]); last by rewrite /TExpN TMulN1.
+rewrite (_ : TExp g b = TExpN g [b]); last by rewrite /TExpN TMulN1.
+by rewrite !TExp_TExpN TExpC2.
+Qed.
+
 Module Keys.
 
 Section Keys.
@@ -679,7 +695,7 @@ Proof.
 iIntros "#? #p_ke post"; rewrite /I.new; wp_pures.
 iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
 - wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-  iIntros (cn) "_ _ #p_cn _ _ _ token"; wp_list; wp_term_of_list.
+  iIntros (cn) "_ #p_cn _ _ token"; wp_list; wp_term_of_list.
   wp_tag.
   iApply ("post" $! (Psk psk cn) with "[] [] token") => //=.
   do !iSplit => //.
@@ -690,7 +706,7 @@ iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
   + by iIntros "!> %"; rewrite elem_of_empty; iIntros ([]).
   iIntros (a) "_ #p_a _ _ _"; wp_list.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-  iIntros (cn) "_ _ #p_cn _ _ _ token"; wp_list; wp_term_of_list.
+  iIntros (cn) "_ #p_cn _ _ token"; wp_list; wp_term_of_list.
   wp_tag.
   rewrite (term_token_difference _ ⊤); try set_solver.
   iDestruct "token" as "[token _]".
@@ -703,7 +719,7 @@ iApply Meth.wp_case; case: ke => [psk|g|psk g]; wp_pures.
   + iIntros "!> %"; rewrite elem_of_empty; iIntros "[]".
   iIntros (a) "_ #p_a _ _ _"; wp_list.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-  iIntros (cn) "_ _ #p_cn _ _ _ token"; wp_list; wp_term_of_list.
+  iIntros (cn) "_ #p_cn _ _ token"; wp_list; wp_term_of_list.
   wp_tag.
   iApply ("post" $! (PskDh psk g cn a)) => //=.
   do !iSplit => //.
@@ -855,8 +871,8 @@ Proof.
 rewrite /session_key_of.
 case: kex1 kex2 => [???|?????|??????] [???|?????|??????] //=.
 - by case=> [/Spec.tag_inj [_ ->] -> ->].
-- by case=> e_g -> -> <- ->; rewrite e_g TExpNC.
-- by case=> [] /Spec.tag_inj [_ ->] e_g -> -> <- ->; rewrite e_g TExpNC.
+- by case=> e_g -> -> <- ->; rewrite e_g TExp_comm.
+- by case=> [] /Spec.tag_inj [_ ->] e_g -> -> <- ->; rewrite e_g TExp_comm.
 Qed.
 
 (** Check a server share against a corresponding client share.  This function
@@ -1205,7 +1221,7 @@ iApply CShare.wp_case.
 case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
 - subst psk.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-  iIntros (a) "_ _ #pred_a _ _ _ token"; wp_list; wp_term_of_list.
+  iIntros (a) "_ #pred_a _ _ token"; wp_list; wp_term_of_list.
   wp_tag; iModIntro.
   iApply ("post" $! (Psk _ _ a)) => //=.
   rewrite public_tag public_of_list /=.
@@ -1222,7 +1238,7 @@ case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
   have {}fresh_a: ∀ t, subterm t gx → a ≠ t ∧ a ≠ TInv t.
     by move=> t; apply: fresh_a; set_solver.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-  iIntros (sn) "_ _ #p_sn _ _ _ token"; wp_list; wp_term_of_list.
+  iIntros (sn) "_ #p_sn _ _ token"; wp_list; wp_term_of_list.
   wp_tag; iModIntro.
   iApply ("post" $! (Dh g cn sn gx a)) => //=.
   rewrite !public_tag !public_of_list /=.
@@ -1239,7 +1255,7 @@ case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
   have {}fresh_a: ∀ t, subterm t gx → a ≠ t ∧ a ≠ TInv t.
     by move=> t; apply: fresh_a; set_solver.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-  iIntros (sn) "_ _ #p_sn _ _ _ token"; wp_list; wp_term_of_list.
+  iIntros (sn) "_ #p_sn _ _ token"; wp_list; wp_term_of_list.
   wp_tag; iModIntro.
   iApply ("post" $! (PskDh _ g cn sn gx a)) => //.
   rewrite !public_tag !public_of_list /=.
@@ -1371,23 +1387,33 @@ case: c_kex e => [psk cn sn|g cn sn x gy|psk g cn sn x gy] /=.
   by rewrite public_of_list /=; iDestruct "p_k" as "(?&?&?&_)"; eauto.
 - case: s_kex => //= _ ? ? gx y [] <- _ _ <- e2.
   iDestruct "wf1" as "#(%gXN & _ & _ & dh_x)".
+  iPoseProof "dh_x" as "#dh_x2". iDestruct "dh_x2" as "(_ & %Nm_x & _)".
   move/negb_True: (gXN) => ?.
   iDestruct "wf2" as "#(_ & _ & _ & _ & p_gx & %fresh_y & dh_y)".
+  have Nm_x' : is_true (negb (is_mul x)) := proj2 (is_trueP _) Nm_x.
   have [??]: y ≠ x ∧ y ≠ TInv x.
-    apply: fresh_y; apply: STExp2; eauto; first exact: invs_canceled1.
-    set_solver.
-  rewrite /session_key_of TExp_TExpN.
+    apply: fresh_y. rewrite (_ : TExp g x = TExpN g [x]); last by rewrite /TExpN TMulN1.
+    apply: STExp2; eauto.
+    - by rewrite /atomic /= Nm_x'.
+    - exact: (invs_canceled1 Nm_x').
+    - set_solver.
+  iEval (rewrite TExp2_TExpN) in "p_k".
   by iMod (dh_seed_elim2 with "dh_y dh_x p_k") as "[]".
 - case: s_kex => //= _ ? ? ? gx y [] /Spec.tag_inj [_ <-].
   move=> <- _ _ <- e2.
   iDestruct "wf1" as "#(_ & %gXN & _ & _ & dh_x)".
+  iPoseProof "dh_x" as "#dh_x2". iDestruct "dh_x2" as "(_ & %Nm_x & _)".
   move/negb_True: (gXN) => ?.
   iDestruct "wf2" as "#(_ & _ & _ & _ & _ & p_gx & %fresh_y & dh_y)".
+  have Nm_x' : is_true (negb (is_mul x)) := proj2 (is_trueP _) Nm_x.
   have [??]: y ≠ x ∧ y ≠ TInv x.
-    apply: fresh_y; apply: STExp2; eauto; first exact: invs_canceled1.
-    set_solver.
-  rewrite TExp_TExpN.
+    apply: fresh_y. rewrite (_ : TExp g x = TExpN g [x]); last by rewrite /TExpN TMulN1.
+    apply: STExp2; eauto.
+    - by rewrite /atomic /= Nm_x'.
+    - exact: (invs_canceled1 Nm_x').
+    - set_solver.
   rewrite public_of_list /=. iDestruct "p_k" as "(_ & p_k & _)".
+  iEval (rewrite TExp2_TExpN) in "p_k".
   by iMod (dh_seed_elim2 with "dh_y dh_x p_k") as "[]".
 Qed.
 

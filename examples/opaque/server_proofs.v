@@ -22,10 +22,9 @@ Context `{!cryptisGS Σ, !heapGS Σ}.
 Notation iProp := (iProp Σ).
 
 Definition opaque_file (file : val) : iProp :=
-  ∃ k_s p_s P_s P_u envelope,
-    ⌜file = Spec.of_list [k_s; p_s; P_s; P_u; envelope]⌝
+  ∃ (k_s : nonce) (p_s : nonce) P_s P_u envelope,
+    ⌜file = Spec.of_list [TNonce k_s; TNonce p_s; P_s; P_u; envelope]⌝
     ∗ minted k_s ∗ □(public k_s ↔ ▷ □ False) ∗
-    □(public (TInv k_s) ↔ ▷ False) ∗
     □(∀ t' : term, exp_pred_base k_s t' ↔ ▷ □ True) ∗
     □(∀ t' : term, exp_pred_base (TInv k_s) t' ↔ ▷ False) ∗
     public P_s ∗ public envelope ∗
@@ -52,9 +51,8 @@ wp_apply (wp_mk_nonce_freshN ∅ (fun _ => False)%I (fun _ => True)%I
 - iIntros "%t".
   rewrite big_sepS_singleton minted_TInv.
   by iModIntro; auto.
-iIntros "%k_s _ %Hnoncek_s #Hmintedk_s #Hprivatek_s #Hexpk_s #H #Hexpk_sV Htokenk_sV".
+iIntros "%k_s _ #Hmintedk_s #Hprivatek_s #Hexpk_s #Hexpk_sV Htokenk_sV".
 rewrite big_sepS_singleton.
-iDestruct ("H" $! False%I with "Htokenk_sV") as ">#Hprivk_sV"; iClear "H".
 wp_pures; wp_lam; wp_pures.
 wp_apply wp_H'; wp_apply wp_texp; wp_list; wp_apply wp_H.
 wp_apply wp_derive_senc_key.
@@ -65,9 +63,8 @@ wp_apply (wp_mk_nonce_freshN ∅ (fun _ => False)%I opaque_secret
 - iIntros "%t".
   rewrite big_sepS_singleton minted_TInv.
   by iModIntro; auto.
-iIntros "%p_s _ %Hnoncep_s #Hmintedp_s #Hprivatep_s #Hexpp_s #H #Hexpp_sV Htokenp_sV".
+iIntros "%p_s _ #Hmintedp_s #Hprivatep_s #Hexpp_s #Hexpp_sV Htokenp_sV".
 rewrite big_sepS_singleton.
-iDestruct ("H" $! False%I with "Htokenp_sV") as ">#Hprivp_sV"; iClear "H".
 wp_pures.
 wp_apply (wp_mk_nonce_freshN {[(TExp g p_s)]} (fun _ => False)%I opaque_secret
                                               (fun t =>  {[(TInv t)]})) => //.
@@ -79,15 +76,14 @@ wp_apply (wp_mk_nonce_freshN {[(TExp g p_s)]} (fun _ => False)%I opaque_secret
 - iIntros "%t".
   rewrite big_sepS_singleton minted_TInv.
   by iModIntro; auto.
-iIntros "%p_u %Hfreshp_u %Hnoncep_u #Hmintedp_u #Hprivatep_u #Hexpp_u #H #Hexpp_uV Htokenp_uV".
+iIntros "%p_u %Hfreshp_u #Hmintedp_u #Hprivatep_u #Hexpp_u #Hexpp_uV Htokenp_uV".
 rewrite big_sepS_singleton.
-iDestruct ("H" $! False%I with "Htokenp_uV") as ">#Hprivp_uV"; iClear "H".
 assert (p_u ≠ p_s) as Hneq.
   intro contra.
   apply (Hfreshp_u (TExp g p_s)).
     by rewrite elem_of_singleton.
   rewrite contra.
-  by apply subterm_TExp_exp.
+  apply: subterm_TExp_exp; [done | exact: (negb_is_mul_nonce p_s) | exact: STRefl].
 wp_pures.
 wp_apply wp_texp; wp_pures.
 wp_apply wp_texp.
@@ -98,13 +94,17 @@ wp_list; wp_term_of_list.
 iApply "post".
 iExists k_s, p_s, (TExp g p_s), (TExp g p_u), _.
 do !iSplit => //.
-- by rewrite bi.intuitionistically_False.
-- iApply public_TExp_iff; auto.
+- iApply public_TExp_iff.
+    by case.
+    by exact: (proj1 (is_trueP _) (negb_is_mul_nonce p_s)).
   do !iSplit => //.
   + by iApply minted_TInt.
   + iApply exp_pred_intro1.
     iApply "Hexpp_s".
-    by iNext; iModIntro; iPureIntro; rewrite exps_TExpN.
+    iNext; iModIntro; iPureIntro.
+    have Nm : is_true (negb (is_mul p_s)) := negb_is_mul_nonce p_s.
+    rewrite (_ : TExp g p_s = TExpN g [TNonce p_s]); last by rewrite /TExpN TMulN1.
+    by rewrite exps_TExpN'; [by [] | by case | by [] | exact: (invs_canceled1 Nm)].
   + by iModIntro; iIntros "?"; iApply public_TInt.
 - iApply (public_sencIS _ (opN.@"AuthEnc") envelope_pred _) => //.
   1: rewrite minted_senc minted_THash minted_tag.
@@ -121,12 +121,17 @@ do !iSplit => //.
     iPureIntro.
     apply Hfreshp_u.
     by rewrite elem_of_singleton.
-  iApply public_TExp_exp_pred => //.
+  iApply public_TExp_exp_pred;
+    first by exact: (proj1 (is_trueP _) (negb_is_mul_nonce p_s)).
     + by iApply public_TInt.
+    + done.
     + iApply exp_pred_intro1.
       iApply "Hexpp_s".
-      by iNext; iModIntro; iPureIntro; rewrite exps_TExpN.
-    + by rewrite bi.intuitionistically_False.
+      iNext; iModIntro; iPureIntro.
+      have Nm : is_true (negb (is_mul p_s)) := negb_is_mul_nonce p_s.
+      rewrite (_ : TExp g p_s = TExpN g [TNonce p_s]); last by rewrite /TExpN TMulN1.
+      by rewrite exps_TExpN'; [by [] | by case | by [] | exact: (invs_canceled1 Nm)].
+    + done.
   iModIntro.
   rewrite public_senc_key.
   iIntros "#Hcompromise".
@@ -144,23 +149,29 @@ do !iSplit => //.
   do !iSplit => //.
   + iPureIntro.
     apply /subtermsP.
-    rewrite subtermsE // cancel_exps1 /g subtermsE /= !right_id_L.
-    rewrite [subterms p_u]subterms_nonce //.
-    rewrite !not_elem_of_union.
-    do !split; rewrite elem_of_singleton //; destruct p_s => //.
-    destruct p_u => //.
-    rewrite /TExpN unlock /fold_term unlock /PreTerm.exp /=
-        /PreTerm.insert_exp /path.sort /=
-        /PreTerm.normalize /=
-        /PreTerm.insert_exp /path.sort /=
-        /PreTerm.invs_canceled /=.
-    by destruct (ssrbool.boolP true); intro contra.
-  + iApply public_TExp_exp_pred => //.
+    have Nm : is_true (negb (is_mul p_u)) := negb_is_mul_nonce p_u.
+    rewrite (_ : TExp g p_u = TExpN g [TNonce p_u]); last by rewrite /TExpN TMulN1.
+    rewrite subtermsE //.
+    rewrite cancel_invs1 /= [subterms p_u]subterms_nonce //.
+    rewrite /g subtermsE /=.
+    have p_s_ne2 : TNonce p_s ≠ TInt 0 by move=> E; discriminate E.
+    have Hne1 : is_true (negb (is_nonce (TExpN (TInt 0) [TNonce p_u]))).
+      rewrite (_ : TExpN (TInt 0) [TNonce p_u] = TExp (TInt 0) p_u); last by rewrite /TExpN TMulN1.
+      by apply: is_nonce_TExp => //; exact: (negb_is_mul_nonce p_u).
+    have p_s_ne1 : TNonce p_s ≠ TExpN (TInt 0) [TNonce p_u].
+      by move=> E; rewrite -E in Hne1; discriminate Hne1.
+    set_solver.
+  + iApply public_TExp_exp_pred;
+      first by exact: (proj1 (is_trueP _) (negb_is_mul_nonce p_u)).
     * by iApply public_TInt.
+    * done.
     * iApply exp_pred_intro1.
       iApply "Hexpp_u".
-      by iNext; iModIntro; iPureIntro; rewrite exps_TExpN.
-    * by rewrite bi.intuitionistically_False.
+      iNext; iModIntro; iPureIntro.
+      have Nm : is_true (negb (is_mul p_u)) := negb_is_mul_nonce p_u.
+      rewrite (_ : TExp g p_u = TExpN g [TNonce p_u]); last by rewrite /TExpN TMulN1.
+      by rewrite exps_TExpN'; [by [] | by case | by [] | exact: (invs_canceled1 Nm)].
+    * done.
 Qed.
 
 Lemma wp_server_session (db c : val) (alist : gmap term val) (fresh : gset term) :
@@ -191,9 +202,9 @@ case db_uid: (alist !! uid) => [file|]; wp_pures; last first.
   by iApply ("Hhl" $! None); iModIntro; do !iSplit.
 iDestruct ("Hmapcontents" $! uid file with "[//]") as
     "[_ (%k_s & %p_s & %P_s & %P_u & %envelope &
-         %e & Hmk_s & Hprivk_s & Hprivk_sV & Hexpk_s & Hexpk_sV &
+         %e & Hmk_s & Hprivk_s & Hexpk_s & Hexpk_sV &
          HpubP_s & Hpenvelope & %p_u & %HP_u & %Hfreshp_u &
-         %Hnoncep_s & %Hnoncep_u & HpubP_u & Hminp_s & ? & Hexpp_s & ? & Hprivp_s & ?)]".
+         HpubP_u & Hminp_s & ? & Hexpp_s & ? & Hprivp_s & ?)]".
 rewrite !subst_list_match /= e.
 wp_apply wp_list_of_term.
 rewrite Spec.of_listK.
@@ -212,7 +223,7 @@ wp_apply (wp_mk_nonce_fresh ({[X_u]} ∪ fresh) (fun _ => False)%I
   iIntros "[-> | %H]".
   - by iApply public_minted.
   - by iApply "Hfresh".
-iIntros "%x_s %Hfreshx_s %Hnoncex_s #Hmintedx_s #Hprivatex_s #Hexpx_s #? #Hexpx_sV _".
+iIntros "%x_s %Hfreshx_s #Hmintedx_s #Hprivatex_s #Hexpx_s #Hexpx_sV _".
 wp_pures.
 wp_apply wp_texp; wp_pures.
 wp_apply wp_texp; wp_pures.
@@ -228,11 +239,16 @@ wp_apply wp_send => //.
   - iApply public_TExp_exp_pred => //.
     iApply exp_pred_intro1 => //.
     by iApply "Hexpk_s".
-  - iApply public_TExp_iff; auto.
+  - iApply public_TExp_iff.
+      by case.
+      by exact: (proj1 (is_trueP _) (negb_is_mul_nonce x_s)).
     do !iSplit => //.
     + by iApply minted_TInt.
     + iApply exp_pred_intro1.
-      by iApply "Hexpx_s"; iPureIntro; rewrite exps_TExpN.
+      iApply "Hexpx_s"; iPureIntro.
+      have Nm : is_true (negb (is_mul x_s)) := negb_is_mul_nonce x_s.
+      rewrite (_ : TExp g x_s = TExpN g [TNonce x_s]); last by rewrite /TExpN TMulN1.
+      by rewrite exps_TExpN'; [by [] | by case | by [] | exact: (invs_canceled1 Nm)].
     + by rewrite public_TInt; auto.
   - iApply public_THashIS => //.
       rewrite minted_of_list /= !minted_THash !minted_tag !minted_of_list /=.
@@ -265,16 +281,20 @@ iSplit.
     iDestruct (public_THashE with "HpredK Hpub") as "[Hpub' | [_ contra]]" => //.
     rewrite public_of_list /=.
     iDestruct "Hpub'" as "(contra & _)".
-    rewrite TExp_TExpN.
-    have p_s_u: p_s ≠ p_u.
+    rewrite TExp2_TExpN.
+    have p_s_u: TNonce p_s ≠ TNonce p_u.
       move=> p_u_s; apply: Hfreshp_u; rewrite -p_u_s.
-      apply/subtermsP; rewrite subtermsE // cancel_exps1 /=.
+      apply/subtermsP.
+      rewrite (_ : TExp g p_s = TExpN g [TNonce p_s]); last by rewrite /TExpN TMulN1.
+      have Nm : is_true (negb (is_mul p_s)) := negb_is_mul_nonce p_s.
+      rewrite subtermsE //.
+      rewrite cancel_invs1 /=.
       by rewrite [subterms p_s]subterms_nonce //; set_solver.
-    have p_s_uV : p_s ≠ TInv p_u.
+    have p_s_uV : TNonce p_s ≠ TInv p_u.
       move=> contra; have: is_inv (TInv p_u).
-        by rewrite is_inv_TInv; case: (p_u) => // in Hnoncep_u *.
-      by rewrite -contra; case: (p_s) => // in Hnoncep_s *.
-    by iApply (public_opaque_secret _ p_s_u p_s_uV).
+        by rewrite (is_inv_TInv (TNonce p_u) (negb_is_mul_nonce p_u)).
+      by rewrite -contra; case: (p_s) => //.
+    by iApply (public_opaque_secret _ (negb_is_mul_nonce p_s) (negb_is_mul_nonce p_u) p_s_u p_s_uV).
   + do !iSplit => //.
     iApply (public_THashIS with "HpredSK") => //.
     rewrite minted_of_list.
@@ -311,18 +331,18 @@ iSplit.
       rewrite elem_of_union elem_of_singleton.
       by left.
     }
-    apply subterm_TExp_exp' => // contra'.
+    apply subterm_TExp_exp' => //.
+    move=> contra'.
     destruct Hfreshx_s'.
     rewrite subterm_exp.
     right. right.
     exists (TInv x_s).
     split => //.
-    apply STInv => //.
-    by destruct x_s.
+    apply STInv => //; by destruct x_s.
   + rewrite minted_of_list /=
       minted_THash minted_tag minted_of_list /=
       !minted_THash !minted_tag !minted_of_list /=
-      TExp_TExpN -!all_minted_TExpN /=.
+      -!all_minted_TExp /=.
     do !iSplit => //; iApply public_minted => //.
     by iApply public_TInt.
 Qed.

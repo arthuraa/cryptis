@@ -117,13 +117,13 @@ wp_apply wp_init_network => //.
 iIntros "%c #Hchannel".
 wp_pures.
 wp_apply (wp_mk_nonce (fun _ => True)%I (fun _ => False)%I) => //.
-iIntros "%uid %Hnonceuid #Hminuid #Hpubuid #Hdhuid _ _ _".
+iIntros "%uid #Hminuid #Hpubuid #Hdhuid _ _".
 iAssert (public uid) as "Hpubuid'".
 by iApply "Hpubuid".
 iClear "Hpubuid".
 wp_pures.
 wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => False)%I) => //.
-iIntros "%pw %Hnoncepw #Hminpw #Hprivpw #Hdhpw _ _ _".
+iIntros "%pw #Hminpw #Hprivpw #Hdhpw _ _".
 wp_pures.
 wp_bind (AList.new #()).
 iApply AList.wp_empty => //.
@@ -138,9 +138,9 @@ iApply (AList.wp_insert with "Halist").
 iNext.
 iIntros "Halist".
 wp_pures.
-wp_apply (wp_par (fun x => (SK_result' x ∅ ∗ AList.is_alist db (<[uid:=file]> ∅))%I)
+wp_apply (wp_par (fun x => (SK_result' x ∅ ∗ AList.is_alist db (<[TNonce uid:=file]> ∅))%I)
                  (fun x => (SK_result' x ∅)) with "[Halist]").
-iApply (wp_server_session db c (<[uid:=file]> ∅) ∅  with "[Halist]") => //.
+iApply (wp_server_session db c (<[TNonce uid:=file]> ∅) ∅  with "[Halist]") => //.
 do !iSplit => //.
 iApply big_sepM_insert => //.
 do !iSplit => //.
@@ -186,12 +186,12 @@ wp_apply (wp_par
                                 None => ∅
                               | Some x' => {[x']}
                               end
-                            ∗ AList.is_alist db (<[uid:=file]> ∅))%I
+                            ∗ AList.is_alist db (<[TNonce uid:=file]> ∅))%I
           (fun x => SK_result' x match SKc1 with
                                 None => ∅
                               | Some x' => {[x']}
                               end)%I with "[Halist HminSKs1] [HminSKc1]").
-iApply (wp_server_session db c (<[uid:=file]> ∅) match SKs1 with
+iApply (wp_server_session db c (<[TNonce uid:=file]> ∅) match SKs1 with
                                 None => ∅
                               | Some x' => {[x']}
                               end  with "[Halist HminSKs1]") => //.

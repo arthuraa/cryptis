@@ -65,6 +65,18 @@ Definition add_exp : val := λ: "c",
   let: "t2" := recv "c" in
   send "c" (texp "t1" "t2").
 
+Definition add_mul_unit : val := λ: "c",
+  send "c" (tone #()).
+
+Definition add_mul : val := λ: "c",
+  let: "t1" := recv "c" in
+  let: "t2" := recv "c" in
+  send "c" (tmul "t1" "t2").
+
+Definition add_inv : val := λ: "c",
+  let: "t" := recv "c" in
+  send "c" (tinv "t").
+
 Definition init_attacker : val := rec: "loop" "c" :=
   Fork (
     add_int "c";;
@@ -76,6 +88,9 @@ Definition init_attacker : val := rec: "loop" "c" :=
     add_open "c";;
     add_hash "c";;
     add_exp "c";;
+    add_mul_unit "c";;
+    add_mul "c";;
+    add_inv "c";;
     "loop" "c").
 
 Definition init_network : val := λ: <>,
@@ -128,7 +143,7 @@ Lemma wp_add_nonce c :
 Proof.
 iIntros "%Ψ [#? #c] post". wp_lam.
 wp_apply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
-iIntros "%t _ _ #p_t _ _ _ _".
+iIntros "%t _ #p_t _ _ _".
 wp_apply wp_send => //.
 - by iApply "p_t".
 - by iApply "post".
@@ -197,6 +212,33 @@ wp_apply wp_texp. wp_apply wp_send => //; last by iApply "post".
 by iApply public_TExp.
 Qed.
 
+Lemma wp_add_mul_unit c :
+  {{{ channel c }}} add_mul_unit c {{{ RET #(); True }}}.
+Proof.
+iIntros "%Ψ #c post". wp_lam.
+wp_apply wp_tone. wp_apply wp_send => //; last by iApply "post".
+by iApply public_TMul0.
+Qed.
+
+Lemma wp_add_mul c :
+  {{{ channel c }}} add_mul c {{{ RET #(); True }}}.
+Proof.
+iIntros "%Ψ #c post". wp_lam.
+wp_apply wp_recv => //. iIntros "%t1 #p_t1". wp_pures.
+wp_apply wp_recv => //. iIntros "%t2 #p_t2". wp_pures.
+wp_apply wp_tmul. wp_apply wp_send => //; last by iApply "post".
+by iApply (public_TMulN2 with "p_t1 p_t2").
+Qed.
+
+Lemma wp_add_inv c :
+  {{{ channel c }}} add_inv c {{{ RET #(); True }}}.
+Proof.
+iIntros "%Ψ #c post". wp_lam.
+wp_apply wp_recv => //. iIntros "%t #p_t". wp_pures.
+wp_apply wp_tinv. wp_apply wp_send => //; last by iApply "post".
+rewrite public_TInv. by iApply "p_t".
+Qed.
+
 Lemma wp_init_attacker c :
   {{{ cryptis_ctx ∗ channel c }}} init_attacker c {{{ RET #(); True }}}.
 Proof.
@@ -212,6 +254,9 @@ wp_apply wp_add_seal => //. iIntros "_". wp_pures.
 wp_apply wp_add_open => //. iIntros "_". wp_pures.
 wp_apply wp_add_hash => //. iIntros "_". wp_pures.
 wp_apply wp_add_exp => //. iIntros "_". wp_pures.
+wp_apply wp_add_mul_unit => //. iIntros "_". wp_pures.
+wp_apply wp_add_mul => //. iIntros "_". wp_pures.
+wp_apply wp_add_inv => //. iIntros "_". wp_pures.
 by wp_apply "IH"; eauto.
 Qed.
 
