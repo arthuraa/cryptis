@@ -6,6 +6,7 @@
 -R cryptis cryptis
 
 cryptis/lib/mathcomp_compat.v
+cryptis/lib/list_sort.v
 cryptis/lib/term_set.v
 cryptis/lib/gen_adequacy.v
 cryptis/lib/adequacy.v

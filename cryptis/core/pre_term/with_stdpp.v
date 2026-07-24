@@ -1,5 +1,6 @@
 From cryptis Require Import mathcomp_compat lib.
 From mathcomp Require Import ssreflect.
+From mathcomp Require Import all_order.
 From mathcomp Require eqtype ssrbool path.
 From deriving Require Import deriving.
 From stdpp Require Import gmap.
@@ -130,6 +131,35 @@ Proof. exact: (populate (PreTerm.PT0 (O0Int 0))). Qed.
 Definition pre_term_eq_dec : EqDecision PreTerm.pre_term :=
   Eval hnf in def_eq_decision _.
 Global Existing Instance pre_term_eq_dec.
+
+(** stdpp typeclass wrappers around the ssreflect total order on pre-terms
+    defined in [base.v], so that stdpp's [merge_sort] and [StronglySorted] can be
+    used to canonicalise products. *)
+Section PreTermOrder.
+Import Order.POrderTheory Order.TotalTheory ssrbool.
+Open Scope order_scope.
+
+(* We spell out [is_true] so that this order relation lands on ssreflect's
+   boolean coercion (matching the mathcomp order lemmas) rather than stdpp's
+   [Is_true]. *)
+Definition pt_order : relation PreTerm.pre_term := fun x y => is_true (x <= y).
+
+Global Instance pt_order_dec : RelDecision pt_order.
+Proof. rewrite /pt_order /RelDecision => x y; case: (x <= y); [by left | by right]. Qed.
+
+Global Instance pt_order_refl : Reflexive pt_order.
+Proof. move=> x; exact: lexx. Qed.
+
+Global Instance pt_order_trans : Transitive pt_order.
+Proof. move=> x y z; exact: le_trans. Qed.
+
+Global Instance pt_order_total : Total pt_order.
+Proof. by move=> x y; case/orP: (le_total x y); [left|right]. Qed.
+
+Global Instance pt_order_antisymm : AntiSymm eq pt_order.
+Proof. move=> x y Hxy Hyx; apply: le_anti; apply/andP; by split. Qed.
+
+End PreTermOrder.
 
 Global Instance repr_term_op0_inj : Inj (=) (=) (@repr term_op0 _).
 Proof. by case=> [?|[?]] [?|[?]] //= [<-]. Qed.
