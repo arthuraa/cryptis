@@ -13,19 +13,15 @@
     The same definitions also live in [theory.v]; they are kept here on purpose
     (nothing is moved out of [theory.v]). *)
 
+From stdpp Require Import sorting list numbers.
 From cryptis Require Import lib.
 From cryptis.lib Require Import list_sort.
 From mathcomp Require Import ssreflect.
-From stdpp Require Import sorting list numbers.
 From Stdlib Require Import Lia.
 From cryptis.core.pre_term Require Export base with_stdpp.
 
 Module PreTerm.
 Import base.PreTerm.
-
-(** Products are canonicalised by sorting their factors with [merge_sort] for
-    the total order [pt_order], which is the mathcomp order on pre-terms from
-    [base.v] packaged as stdpp typeclasses in [with_stdpp.v]. *)
 
 Fixpoint height (pt : pre_term) : nat :=
   match pt with
@@ -49,9 +45,6 @@ Definition factors pt := if pt is PTMul ts then ts else [pt].
 
     - [inv_aux] computes the inverse of terms that do not begin with [PTMul] by
       simply adding or removing a [PTInv].
-
-    - [rem] removes the first occurrence of an element from a list, and
-      [insert_factor] uses it to cancel a term against its inverse.
 
     - [mul] computes the product of a list of terms. It flattens inner terms
       that begin with [PTMul] (so that multiplication is associative) and then
@@ -103,23 +96,24 @@ Fixpoint normalize pt :=
     out. *)
 Definition invs_canceled pts := Forall (fun pt => inv pt ∉ pts) pts.
 
-Fixpoint wf_term pt : Prop :=
+(** The well-formedness of the factors of a product is stated with an explicit
+    [foldr] rather than [Forall wf] so that [wf] passes the guard
+    checker; this bridge lemma recovers the [Forall] view. *)
+
+Fixpoint wf pt : Prop :=
   match pt with
   | PT0 _ => True
-  | PTInv pt => negb (is_inv pt) /\ negb (is_mul pt) /\ wf_term pt
-  | PT1 _ pt => wf_term pt
-  | PTExp b e => wf_term b /\ negb (is_exp b) /\ wf_term e /\ e ≠ PTMul []
-  | PT2 _ pt1 pt2 => wf_term pt1 /\ wf_term pt2
-  | PTMul ts => foldr (fun t acc => wf_term t /\ acc) True ts /\
+  | PTInv pt => negb (is_inv pt) /\ negb (is_mul pt) /\ wf pt
+  | PT1 _ pt => wf pt
+  | PTExp b e => wf b /\ negb (is_exp b) /\ wf e /\ e ≠ PTMul []
+  | PT2 _ pt1 pt2 => wf pt1 /\ wf pt2
+  | PTMul ts => foldr (fun t acc => wf t /\ acc) True ts /\
                 Forall (fun t => negb (is_mul t)) ts /\
                 StronglySorted pt_order ts /\ invs_canceled ts /\ length ts ≠ 1
   end.
 
-(** The well-formedness of the factors of a product is stated with an explicit
-    [foldr] rather than [Forall wf_term] so that [wf_term] passes the guard
-    checker; this bridge lemma recovers the [Forall] view. *)
-Lemma wf_termsP ts :
-  foldr (fun t acc => wf_term t /\ acc) True ts <-> Forall wf_term ts.
+Lemma wfsP ts :
+  foldr (fun t acc => wf t /\ acc) True ts <-> Forall wf ts.
 Proof.
 elim: ts => [|t ts IH] /=.
 - by split => _ //; constructor.
@@ -129,12 +123,6 @@ elim: ts => [|t ts IH] /=.
     * exact: (Forall_inv H).
     * apply/IH; exact: (Forall_inv_tail H).
 Qed.
-
-(** [ForallP] recovers the [∈]-based view of [Forall].  The [rem] and
-    [merge_sort] helper lemmas used below are generic and come from
-    [cryptis.lib.list_sort] (instantiated here at [pt_order]). *)
-Lemma ForallP (P : pre_term -> Prop) l : Forall P l <-> (forall x, x ∈ l -> P x).
-Proof. exact: list.Forall_forall. Qed.
 
 Lemma mem_insert_factor pt pts z : z ∈ insert_factor pt pts -> z ∈ pt :: pts.
 Proof.
@@ -151,27 +139,27 @@ move=> /mem_insert_factor; rewrite elem_of_cons => -[->|/IH ?].
 - exact: list_elem_of_further.
 Qed.
 
-Lemma wf_nil : wf_term (PTMul []).
+Lemma wf_nil : wf (PTMul []).
 Proof.
 rewrite /=. split => //. split; first by constructor.
-split; first by constructor. split => //. by constructor.
+by split; constructor.
 Qed.
 
 (** Structural facts about [base], [expo], [factors] and [inv_aux]. *)
 
-Lemma wf_base pt : wf_term pt -> wf_term (base pt).
+Lemma wf_base pt : wf pt -> wf (base pt).
 Proof. by case: pt => [o|o t|[||] t1 t2|ts] //= []. Qed.
 
 Lemma base_expN pt : negb (is_exp pt) -> base pt = pt.
 Proof. by case: pt => [o|o t|[||] t1 t2|ts]. Qed.
 
-Lemma base_Nexp pt : wf_term pt -> negb (is_exp (base pt)).
+Lemma base_Nexp pt : wf pt -> negb (is_exp (base pt)).
 Proof. by case: pt => [o|o t|[||] t1 t2|ts] //= [_ [? _]]. Qed.
 
 Lemma expo_expN pt : negb (is_exp pt) -> expo pt = PTMul [].
 Proof. by case: pt => [o|o t|[||] t1 t2|ts]. Qed.
 
-Lemma wf_expo pt : wf_term pt -> wf_term (expo pt).
+Lemma wf_expo pt : wf pt -> wf (expo pt).
 Proof.
 case: pt => [o|o t|[||] t1 t2|ts] //=; try (move=> _; exact: wf_nil).
 by move=> [_ [_ [? _]]].
@@ -180,19 +168,19 @@ Qed.
 Lemma factorsN pt : negb (is_mul pt) -> factors pt = [pt].
 Proof. by case: pt. Qed.
 
-Lemma wf_factors pt : wf_term pt -> Forall wf_term (factors pt).
+Lemma wf_factors pt : wf pt -> Forall wf (factors pt).
 Proof.
 case: pt => [o|o t|o t1 t2|ts] wf; rewrite /factors /=; try by apply/Forall_singleton.
-by move: wf => [/wf_termsP ? _].
+by move: wf => [/wfsP ? _].
 Qed.
 
-Lemma Nmul_factors pt : wf_term pt -> Forall (fun t => negb (is_mul t)) (factors pt).
+Lemma Nmul_factors pt : wf pt -> Forall (fun t => negb (is_mul t)) (factors pt).
 Proof.
 case: pt => [o|o t|o t1 t2|ts] wf; rewrite /factors /=; try by apply/Forall_singleton.
 by move: wf => [_ [? _]].
 Qed.
 
-Lemma wf_inv_aux pt : wf_term pt -> negb (is_mul pt) -> wf_term (inv_aux pt).
+Lemma wf_inv_aux pt : wf pt -> negb (is_mul pt) -> wf (inv_aux pt).
 Proof.
 case: pt => [o|[k| |] t|o t1 t2|ts] //= wf Nm; try by (split=> //; split).
 by case: wf => _ [_ ?].
@@ -204,10 +192,10 @@ Proof. by case: pt => [o|[k| |] t|o t1 t2|ts] /=; move=> /(f_equal height) /=; l
 Lemma inv_invN pt : negb (is_inv pt) -> inv_aux pt = PTInv pt.
 Proof. by case: pt => [o|[k| |] t|o t1 t2|ts]. Qed.
 
-Lemma inv_auxK pt : wf_term pt -> inv_aux (inv_aux pt) = pt.
+Lemma inv_auxK pt : wf pt -> inv_aux (inv_aux pt) = pt.
 Proof. case: pt => [o|[k| |] t|o t1 t2|ts] //=. by move=> [/inv_invN -> _]. Qed.
 
-Lemma inv_aux_eq_op pt1 pt2 : wf_term pt1 -> wf_term pt2 ->
+Lemma inv_aux_eq_op pt1 pt2 : wf pt1 -> wf pt2 ->
   (inv_aux pt1 = pt2) <-> (pt1 = inv_aux pt2).
 Proof.
 move=> w1 w2; split=> e.
@@ -274,45 +262,51 @@ apply/Forall_singleton. rewrite list_elem_of_singleton.
 exact: inv_aux_Nid.
 Qed.
 
-Lemma invs_canceled_factors pt : wf_term pt -> invs_canceled (factors pt).
+Lemma invs_canceled_factors pt : wf pt -> invs_canceled (factors pt).
 Proof.
 case: pt => [o|o t|o t1 t2|ts] wf; rewrite /factors /=; try by apply: invs_canceled1.
 by move: wf => [_ [_ [_ [? _]]]].
 Qed.
 
-Lemma sorted_factors pt : wf_term pt -> StronglySorted pt_order (factors pt).
+Lemma sorted_factors pt : wf pt -> StronglySorted pt_order (factors pt).
 Proof.
 case: pt => [o|o t|o t1 t2|ts] wf; rewrite /factors; try by (repeat constructor).
 by move: wf => [_ [_ [? _]]].
 Qed.
 
 Lemma insert_factor_no_pair pt pts :
-  wf_term pt -> Forall wf_term pts ->
+  wf pt -> Forall wf pts ->
   Forall (fun q => inv_aux q ∉ pts) pts ->
   Forall (fun q => inv_aux q ∉ insert_factor pt pts) (insert_factor pt pts).
 Proof.
-move=> wfpt /ForallP wfs /ForallP canceled.
+move=> wfpt /list.Forall_forall wfs /list.Forall_forall canceled.
 rewrite /insert_factor; case_bool_decide as Hin.
-- apply/ForallP => q qin_rem.
+- apply/list.Forall_forall => q qin_rem.
   have qin := elem_of_rem qin_rem.
   move=> Hc; exact: (canceled q qin (elem_of_rem Hc)).
-- apply/ForallP => q; rewrite elem_of_cons => -[-> | qin].
+- apply/list.Forall_forall => q; rewrite elem_of_cons => -[-> | qin].
   + rewrite not_elem_of_cons; split; [exact: inv_aux_Nid | exact: Hin].
   + rewrite not_elem_of_cons; split; last exact: (canceled q qin).
     move=> eq; apply: Hin.
     by rewrite -(proj1 (inv_aux_eq_op q pt (wfs q qin) wfpt) eq).
 Qed.
 
-Lemma wf_cancel_invs pts : Forall wf_term pts -> Forall wf_term (cancel_invs pts).
-Proof. move=> /ForallP H; apply/ForallP => q /mem_cancel_invs Hin; exact: (H q Hin). Qed.
+Lemma wf_cancel_invs pts : Forall wf pts -> Forall wf (cancel_invs pts).
+Proof.
+move=> /list.Forall_forall H; apply/list.Forall_forall=> q /mem_cancel_invs Hin.
+exact: H.
+Qed.
 
 Lemma Nmul_cancel_invs pts :
   Forall (fun t => negb (is_mul t)) pts ->
   Forall (fun t => negb (is_mul t)) (cancel_invs pts).
-Proof. move=> /ForallP H; apply/ForallP => q /mem_cancel_invs Hin; exact: (H q Hin). Qed.
+Proof.
+move=> /list.Forall_forall H; apply/list.Forall_forall => q /mem_cancel_invs Hin.
+exact: (H q Hin).
+Qed.
 
 Lemma cancel_invs_no_pair pts :
-  Forall wf_term pts ->
+  Forall wf pts ->
   Forall (fun q => inv_aux q ∉ cancel_invs pts) (cancel_invs pts).
 Proof.
 elim: pts => [_|pt pts IH]; first by constructor.
@@ -322,7 +316,7 @@ apply: insert_factor_no_pair;
 Qed.
 
 Lemma invs_canceled_cancel_invs pts :
-  Forall (fun pt => negb (is_mul pt)) pts -> Forall wf_term pts ->
+  Forall (fun pt => negb (is_mul pt)) pts -> Forall wf pts ->
   invs_canceled (cancel_invs pts).
 Proof.
 move=> atom wf.
@@ -333,7 +327,7 @@ Qed.
 (* Multiplication *)
 
 Lemma flatten_factors_wf ts :
-  Forall wf_term ts -> Forall wf_term (concat (factors <$> ts)).
+  Forall wf ts -> Forall wf (concat (factors <$> ts)).
 Proof.
 elim: ts => [//|t ts IH] /=.
 move=> H; have [wft wfts] := Forall_cons_1 _ _ _ H.
@@ -341,19 +335,19 @@ apply/Forall_app; split; [exact: wf_factors | exact: (IH wfts)].
 Qed.
 
 Lemma flatten_factors_Nmul ts :
-  Forall wf_term ts -> Forall (fun t => negb (is_mul t)) (concat (factors <$> ts)).
+  Forall wf ts -> Forall (fun t => negb (is_mul t)) (concat (factors <$> ts)).
 Proof.
 elim: ts => [//|t ts IH] /=.
 move=> H; have [wft wfts] := Forall_cons_1 _ _ _ H.
 apply/Forall_app; split; [exact: Nmul_factors | exact: (IH wfts)].
 Qed.
 
-Lemma wf_mul ts : Forall wf_term ts -> wf_term (mul ts).
+Lemma wf_mul ts : Forall wf ts -> wf (mul ts).
 Proof.
-move=> wf; rewrite /mul.
+move=> wf_ts; rewrite /mul.
 set c := cancel_invs _.
-have wf_c : Forall wf_term c by apply: wf_cancel_invs; exact: flatten_factors_wf.
-have wf_sc : Forall wf_term (merge_sort pt_order c) by apply/(Forall_merge_sort pt_order).
+have wf_c : Forall wf c by apply: wf_cancel_invs; exact: flatten_factors_wf.
+have wf_sc : Forall wf (merge_sort pt_order c) by apply/(Forall_merge_sort pt_order).
 have Nmul_sc : Forall (fun t => negb (is_mul t)) (merge_sort pt_order c).
 { apply/(Forall_merge_sort pt_order); apply: Nmul_cancel_invs; exact: flatten_factors_Nmul. }
 have inv_sc : invs_canceled (merge_sort pt_order c).
@@ -363,13 +357,13 @@ case E: (merge_sort pt_order c) => [|t [|t' c']].
 - exact: wf_nil.
 - move: wf_sc; rewrite E => H; exact: (Forall_inv H).
 - move: wf_sc Nmul_sc inv_sc; rewrite E => wf' Nmul' inv'.
-  split; [apply/wf_termsP; exact: wf' |].
+  split; [apply/wfsP; exact: wf' |].
   split; [exact: Nmul' |].
   split; [rewrite -E; exact: (merge_sort_sorted pt_order c) |].
   split; [exact: inv' | done].
 Qed.
 
-Lemma mul_wf1 t : wf_term t -> mul [t] = t.
+Lemma mul_wf1 t : wf t -> mul [t] = t.
 Proof.
 move=> wf; rewrite /mul /= app_nil_r.
 rewrite (cancel_invs_canceled _ (Nmul_factors _ wf) (invs_canceled_factors _ wf)).
@@ -379,18 +373,18 @@ move: wf => [_ [_ [_ [_ Hlen]]]].
 by case: ts Hlen => [|t [|t' c']].
 Qed.
 
-Lemma wf_exp b e : wf_term b -> wf_term e -> wf_term (exp b e).
+Lemma wf_exp b e : wf b -> wf e -> wf (exp b e).
 Proof.
 move=> wfb wfe; rewrite /exp; case_bool_decide as Hf.
 - exact: (wf_base _ wfb).
-- have wf' : Forall wf_term [expo b; e]
+- have wf' : Forall wf [expo b; e]
     by constructor; [exact: (wf_expo _ wfb) | constructor; [exact: wfe | constructor]].
   split; [exact: (wf_base _ wfb) |].
   split; [exact: (base_Nexp _ wfb) |].
   split; [exact: (wf_mul _ wf') | exact: Hf].
 Qed.
 
-Lemma wf_inv pt : wf_term pt -> wf_term (inv pt).
+Lemma wf_inv pt : wf pt -> wf (inv pt).
 Proof.
 case: pt => [o|[k| |] t|o t1 t2|ts] wf; rewrite /inv /=.
 - done.
@@ -399,12 +393,12 @@ case: pt => [o|[k| |] t|o t1 t2|ts] wf; rewrite /inv /=.
 - by move: wf => [_ [_ ?]].
 - by split; [done | split; [done | exact: wf]].
 - apply: wf_mul; apply/Forall_fmap.
-  move: wf => [/wf_termsP /ForallP wf_ts [/ForallP Nm_ts _]].
-  apply/ForallP => t t_ts.
+  move: wf => [/wfsP /list.Forall_forall wf_ts [/list.Forall_forall Nm_ts _]].
+  apply/list.Forall_forall => t t_ts.
   exact: (wf_inv_aux _ (wf_ts t t_ts) (Nm_ts t t_ts)).
 Qed.
 
-Lemma wf_normalize pt : wf_term (normalize pt).
+Lemma wf_normalize pt : wf (normalize pt).
 Proof.
 elim: pt => //=.
 - move=> [k| |] t IH /=; [exact: IH | exact: IH | exact: (wf_inv _ IH)].
@@ -416,7 +410,7 @@ elim: pt => //=.
     |by move=> [wt wts]; constructor; [exact: wt | exact: IH wts]].
 Qed.
 
-Lemma normalize_wf pt : wf_term pt -> normalize pt = pt.
+Lemma normalize_wf pt : wf pt -> normalize pt = pt.
 Proof.
 elim: pt => //=.
 - move=> [k| |] t IH /=.
@@ -433,7 +427,7 @@ elim: pt => //=.
       exact: (mul_wf1 _ wfe). }
     by rewrite (bool_decide_eq_false_2 _ eN0).
 - move=> ts IHts [wfF [Nmul_ts [sorted_ts [inv_ts sizeN1]]]].
-  have wf_ts := proj1 (wf_termsP ts) wfF.
+  have wf_ts := proj1 (wfsP ts) wfF.
   have Nts : normalize <$> ts = ts.
   { elim: ts IHts wf_ts {wfF Nmul_ts sorted_ts inv_ts sizeN1}
       => [//|t ts' IH] /= [IHt IHts'] Hwf.
