@@ -1,8 +1,8 @@
 From cryptis Require Import mathcomp_compat lib.
 From mathcomp Require Import ssreflect.
-From mathcomp Require eqtype ssrbool path.
 From deriving Require Import deriving.
-From stdpp Require Import gmap.
+From stdpp Require Import sorting gmap.
+From cryptis.lib Require Import list_sort.
 From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
 From cryptis.core.term Require Import base.
@@ -34,19 +34,16 @@ Canonical termO := leibnizO term.
    [cancel_invs] only ever feeds [map unfold_term _], which is always wf. *)
 Global Instance cancel_invs_proper : Proper ((≡ₚ) ==> (≡ₚ)) cancel_invs.
 Proof.
-move=> ts1 ts2 H12.
-have peq : is_true (seq.perm_eq ts1 ts2) := ssrbool.introT perm_Perm H12.
-apply: (ssrbool.elimT perm_Perm).
-rewrite /cancel_invs; apply: seq.perm_map.
-apply: PreTerm.perm_cancel_invs; first exact: wf_unfold_terms.
-exact: seq.perm_map.
+move=> ts1 ts2 H12; rewrite /cancel_invs.
+have H : PreTerm.cancel_invs (unfold_term <$> ts1)
+       ≡ₚ PreTerm.cancel_invs (unfold_term <$> ts2).
+  apply: PreTerm.perm_cancel_invs; first exact: wf_unfold_terms.
+  by rewrite H12.
+by rewrite H.
 Qed.
 
 Global Instance TExpN_proper : Proper ((=) ==> (≡ₚ) ==> (=)) TExpN.
-Proof.
-move=> t _ <- ts1 ts2 ts12.
-by apply/TExpN_perm/(ssrbool.introT perm_Perm).
-Qed.
+Proof. by move=> t _ <- ts1 ts2 ts12; apply: (TExpN_perm _ _ _ ts12). Qed.
 
 Lemma TExpC2 g t1 t2 : TExpN g [t1; t2] = TExpN g [t2; t1].
 Proof. by rewrite Permutation_swap. Qed.
@@ -63,24 +60,8 @@ Global Instance sign_key_inhabited : Inhabited sign_key :=
 Global Instance senc_key_inhabited : Inhabited senc_key :=
   populate (SEncKey inhabitant).
 
-Definition term_eq_dec : EqDecision term :=
-  Eval hnf in def_eq_decision _.
-Global Existing Instance term_eq_dec.
-
-Definition aenc_key_eq_dec : EqDecision aenc_key :=
-  Eval hnf in def_eq_decision _.
-Global Existing Instance aenc_key_eq_dec.
-
-Definition senc_key_eq_dec : EqDecision senc_key :=
-  Eval hnf in def_eq_decision _.
-Global Existing Instance senc_key_eq_dec.
-
-Definition sign_key_eq_dec : EqDecision sign_key :=
-  Eval hnf in def_eq_decision _.
-Global Existing Instance sign_key_eq_dec.
-
 Lemma subseteq_cancel_invs ts : cancel_invs ts ⊆ ts.
-Proof. by move => ? /(ssrbool.introT inP) /mem_cancel_invs /(ssrbool.elimT inP). Qed.
+Proof. apply/elem_of_subseteq => t; exact: mem_cancel_invs. Qed.
 Global Arguments subseteq_cancel_invs ts : clear implicits.
 
 Lemma tsize_lt_TExp t1 t2 :
@@ -89,11 +70,7 @@ Lemma tsize_lt_TExp t1 t2 :
   tsize t1 < tsize (TExp t1 t2) /\
   tsize (TInv t2) < tsize (TExp t1 t2) /\
   tsize t2 < tsize (TExp t1 t2).
-Proof.
-move => /is_trueP Nm2 /(ssrbool.introN inP) t2_t1.
-move: (@tsize_lt_TExp t1 t2 Nm2 t2_t1) => [h1 [h2 h3]].
-by split; [|split]; apply/(ssrbool.elimT ssrnat.leP).
-Qed.
+Proof. exact: tsize_lt_TExp. Qed.
 
 Lemma tsize_TExp_TInv t1 t2 :
   negb (is_mul (TInv t2)) ->
@@ -101,29 +78,22 @@ Lemma tsize_TExp_TInv t1 t2 :
   tsize t2 < tsize t1 /\
   tsize (TInv t2) < tsize t1 /\
   tsize (TExp t1 (TInv t2)) < tsize t1.
-Proof.
-move => /is_trueP NmI2 /(ssrbool.introT inP) t2_t1.
-move: (@tsize_TExp_TInv t1 t2 NmI2 t2_t1) => [h1 [h2 h3]].
-by split; [|split]; apply/(ssrbool.elimT ssrnat.leP).
-Qed.
+Proof. exact: tsize_TExp_TInv. Qed.
 
 Lemma TInv_neq {t} : negb (is_mul t) -> TInv t ≠ t.
-Proof.
-move=> /is_trueP Nm /(ssrbool.introT eqtype.eqP) /is_trueP.
-by rewrite (ssrbool.negbTE (TInv_Nid Nm)).
-Qed.
+Proof. exact: TInv_Nid. Qed.
 
 Lemma elem_of_TInv_exps t1 t2 : t1 ∈ exps t2 → TInv t1 ∉ exps t2.
-Proof. by move => /(ssrbool.introT inP) /in_TInv_exps /(ssrbool.elimN inP). Qed.
+Proof. exact: in_TInv_exps. Qed.
 
 Lemma elem_of_TInv_exps' t1 t2 : TInv t1 ∈ exps t2 → t1 ∉ exps t2.
-Proof. by move => ? /elem_of_TInv_exps. Qed.
+Proof. exact: in_TInv_expsV. Qed.
 
 Lemma count_exp_nat_eq0 t1 t2 : t1 ∉ exps t2 → count_exp_nat t1 t2 = 0.
-Proof. move => ?. exact /count_exp_nat_eq0 /(ssrbool.introN inP). Qed.
+Proof. exact: count_exp_nat_eq0. Qed.
 
 Lemma count_exp_nat_gt0 t1 t2 : (count_exp_nat t1 t2 > 0) ↔ (t1 ∈ exps t2).
-Proof. by rewrite (ssrbool.rwP inP) -count_exp_nat_gt0 -(ssrbool.rwP ssrnat.leP). Qed.
+Proof. exact: count_exp_nat_gt0. Qed.
 
 Definition count_exp t ts : Z :=
   (count_exp_nat t ts - count_exp_nat (TInv t) ts)%Z.
@@ -150,12 +120,22 @@ Lemma count_exp_TExp_eq t1 t2 :
   count_exp t1 (TExp t2 t1) = (count_exp t1 t2 + 1)%Z.
 Proof.
 move => Nm1.
-rewrite /count_exp !(count_exp_nat_TExp _ _ _ (proj2 (is_trueP _) Nm1)) !eqtype.eqxx ssrnat.subnE.
-rewrite eqtype.eq_sym (ssrbool.negbTE (TInv_Nid (proj2 (is_trueP _) Nm1))).
-case: inP => H /=.
-- rewrite count_exp_nat_eq0; last exact: elem_of_TInv_exps'.
-  rewrite -count_exp_nat_gt0 in H; lia.
-- rewrite [count_exp_nat (TInv t1) t2]count_exp_nat_eq0 //; lia.
+have Ht1 : t1 ≠ TInv t1 by move=> E; move: (TInv_Nid Nm1); rewrite -E.
+have E1 : count_exp_nat t1 (TExp t2 t1)
+        = S (count_exp_nat t1 t2) - (if bool_decide (TInv t1 ∈ exps t2) then 1 else 0).
+  rewrite (count_exp_nat_TExp t1 t2 t1 Nm1).
+  by rewrite (bool_decide_eq_false_2 (t1 = TInv t1) Ht1)
+             (bool_decide_eq_true_2 (t1 = t1) eq_refl).
+have E2 : count_exp_nat (TInv t1) (TExp t2 t1) = pred (count_exp_nat (TInv t1) t2).
+  rewrite (count_exp_nat_TExp (TInv t1) t2 t1 Nm1).
+  by rewrite (bool_decide_eq_true_2 (TInv t1 = TInv t1) eq_refl).
+rewrite /count_exp E1 E2; clear E1 E2.
+case_bool_decide as H.
+- have Ha : count_exp_nat t1 t2 = 0 by apply: count_exp_nat_eq0; exact: (elem_of_TInv_exps' H).
+  have Hb : count_exp_nat (TInv t1) t2 > 0 by apply/count_exp_nat_gt0.
+  rewrite Ha; lia.
+- have Hb : count_exp_nat (TInv t1) t2 = 0 by apply: count_exp_nat_eq0.
+  rewrite Hb; lia.
 Qed.
 
 Lemma count_exp_TExp_TInv t1 t2 :
@@ -181,11 +161,11 @@ Lemma count_exp_TExp_ne t1 t2 t3 :
   t1 ≠ t3 → t1 ≠ TInv t3 → count_exp t1 (TExp t2 t3) = count_exp t1 t2.
 Proof.
 move=> Nm3 t1_t3 t1_t3V.
-rewrite /count_exp !(count_exp_nat_TExp _ _ _ (proj2 (is_trueP _) Nm3)).
-rewrite -!eq_op_bool_decide ssrnat.subnE !bool_decide_decide.
-rewrite decide_False // decide_False // decide_False; last first.
-  move=> /TInv_inj; congruence.
-by rewrite decide_False // => e; apply: t1_t3V; rewrite -e TInvK.
+have H1 : TInv t1 ≠ TInv t3 by move=> /TInv_inj E; exact: (t1_t3 E).
+have H2 : TInv t1 ≠ t3 by move=> E; apply: t1_t3V; rewrite -E TInvK.
+rewrite /count_exp (count_exp_nat_TExp t1 t2 t3 Nm3) (count_exp_nat_TExp (TInv t1) t2 t3 Nm3).
+rewrite (bool_decide_eq_false_2 (t1 = TInv t3) t1_t3V) (bool_decide_eq_false_2 (t1 = t3) t1_t3).
+by rewrite (bool_decide_eq_false_2 (TInv t1 = TInv t3) H1) (bool_decide_eq_false_2 (TInv t1 = t3) H2).
 Qed.
 
 Lemma count_exp_TExp t1 t2 t3 :
@@ -298,18 +278,6 @@ apply: val_of_pre_term_inj.
 by rewrite !val_of_pre_term_unfold.
 Qed.
 
-Global Instance countable_term : Countable term.
-Proof. exact: def_countable. Qed.
-
-Global Instance countable_aenc_key : Countable aenc_key.
-Proof. exact: def_countable. Qed.
-
-Global Instance countable_sign_key : Countable sign_key.
-Proof. exact: def_countable. Qed.
-
-Global Instance countable_senc_key : Countable senc_key.
-Proof. exact: def_countable. Qed.
-
 Global Instance infinite_term : Infinite term.
 Proof.
 pose int_of_term (t : term) :=
@@ -345,7 +313,7 @@ by rewrite nonces_of_term_unseal; case: t => //=.
 Qed.
 
 Lemma nonces_of_term_fold pt :
-  is_true (PreTerm.wf_term pt) -> nonces_of_term (fold_term pt) = nonces_of_pre_term pt.
+  PreTerm.wf pt -> nonces_of_term (fold_term pt) = nonces_of_pre_term pt.
 Proof. move => wf. by rewrite nonces_of_term_unseal /nonces_of_term_def (@fold_termK pt wf). Qed.
 
 Lemma nonces_of_pre_term_factors e :
@@ -356,32 +324,42 @@ Lemma nonces_of_pre_term_inv_aux x :
   nonces_of_pre_term (PreTerm.inv_aux x) = nonces_of_pre_term x.
 Proof. by case: x => [o|[kt||] e|o e1 e2|es] //=. Qed.
 
+(* Local bridge: [merge_sort] only permutes, and [⋃ ∘ map f] is
+   permutation-invariant, so sorting the list before mapping is transparent. *)
+Lemma union_list_map_merge_sort {A X} `{Countable X} (f : A → gset X)
+  (R : relation A) `{!RelDecision R} l :
+  ⋃ map f (merge_sort R l) = ⋃ map f l.
+Proof.
+apply: union_list_permutation_proper_L; apply: Permutation_map.
+exact: (merge_sort_Permutation R l).
+Qed.
+
 (* [inv] distributes [inv] over the factors and re-multiplies; [inv] preserves
    nonces, and (for wf [pt]) no cancellation occurs, so nonces are preserved. *)
 Lemma nonces_of_pre_term_inv pt :
-  is_true (PreTerm.wf_term pt) ->
+  PreTerm.wf pt ->
   nonces_of_pre_term (PreTerm.inv pt) = nonces_of_pre_term pt.
 Proof.
 move => wf.
-rewrite (PreTerm.inv_factors wf) (nonces_of_pre_term_factors pt).
+rewrite (PreTerm.inv_factors pt wf) (nonces_of_pre_term_factors pt).
 set F := PreTerm.factors pt.
-have wfF : is_true (seq.all PreTerm.wf_term F) := PreTerm.wf_factors wf.
-have NmF : is_true (seq.all (fun t => negb (PreTerm.is_mul t)) F) := PreTerm.Nmul_factors wf.
-have cancF : is_true (PreTerm.invs_canceled F) := PreTerm.invs_canceled_factors wf.
-have wfMI : is_true (seq.all PreTerm.wf_term (seq.map PreTerm.inv_aux F)).
-  apply: (ssrbool.introT seq.allP) => x /(ssrbool.elimT seq.mapP) [y yF ->].
-  by apply: PreTerm.wf_inv_aux; [exact: (ssrbool.elimT seq.allP wfF _ yF)|exact: (ssrbool.elimT seq.allP NmF _ yF)].
-have NmMI : is_true (seq.all (fun t => negb (PreTerm.is_mul t)) (seq.map PreTerm.inv_aux F)).
-  apply: (ssrbool.introT seq.allP) => x /(ssrbool.elimT seq.mapP) [y yF ->].
-  by apply: PreTerm.is_mul_inv_aux; exact: (ssrbool.elimT seq.allP wfF _ yF).
-have cancMI : is_true (PreTerm.invs_canceled (seq.map PreTerm.inv_aux F)).
-  exact: PreTerm.invs_canceled_map_inv wfF cancF.
-rewrite (nonces_of_pre_term_factors (PreTerm.mul (seq.map PreTerm.inv_aux F))).
-rewrite (PreTerm.factors_mul wfMI) (PreTerm.flatten_factors_Nmul_id NmMI).
-rewrite (PreTerm.cancel_invs_canceled NmMI cancMI).
-rewrite (_ : path.sort preorder.Order.le (seq.map PreTerm.inv_aux F) ≡ₚ seq.map PreTerm.inv_aux F); last first.
-  by apply/(ssrbool.elimT perm_Perm); rewrite path.perm_sort.
-congr union_list; rewrite /F; elim: (PreTerm.factors pt) => //= x fs IH.
+have wfF : Forall PreTerm.wf F := PreTerm.wf_factors pt wf.
+have NmF : Forall (fun t => negb (PreTerm.is_mul t)) F := PreTerm.Nmul_factors pt wf.
+have cancF : PreTerm.invs_canceled F := PreTerm.invs_canceled_factors pt wf.
+have wfMI : Forall PreTerm.wf (PreTerm.inv_aux <$> F).
+  apply/Forall_fmap; apply/Forall_forall => x xF.
+  apply: PreTerm.wf_inv_aux; [exact: (Forall_mem wfF xF) | exact: (Forall_mem NmF xF)].
+have NmMI : Forall (fun t => negb (PreTerm.is_mul t)) (PreTerm.inv_aux <$> F).
+  apply/Forall_fmap; apply/Forall_forall => x xF.
+  apply: PreTerm.is_mul_inv_aux; exact: (Forall_mem wfF xF).
+have cancMI : PreTerm.invs_canceled (PreTerm.inv_aux <$> F).
+  exact: PreTerm.invs_canceled_map_inv F wfF cancF.
+rewrite (nonces_of_pre_term_factors (PreTerm.mul (PreTerm.inv_aux <$> F))).
+rewrite (PreTerm.factors_mul (PreTerm.inv_aux <$> F) wfMI).
+rewrite (PreTerm.flatten_factors_Nmul_id (PreTerm.inv_aux <$> F) NmMI).
+rewrite (PreTerm.cancel_invs_canceled (PreTerm.inv_aux <$> F) NmMI cancMI).
+rewrite union_list_map_merge_sort.
+rewrite /F; elim: (PreTerm.factors pt) => [//|x fs IH] /=.
 by rewrite nonces_of_pre_term_inv_aux IH.
 Qed.
 
@@ -391,40 +369,45 @@ rewrite !nonces_of_term_unseal /nonces_of_term_def unfold_TInv.
 exact: nonces_of_pre_term_inv (wf_unfold_term t).
 Qed.
 
+(* Elementwise: folding the inverse of a well-formed atomic factor is [TInv] of
+   the folded factor.  Stated as a standalone lemma to keep [fmap]'s typeclass
+   instance resolved (a [have] with [<$>] in its type spuriously generalises it). *)
+Lemma fmap_fold_inv_aux G :
+  Forall PreTerm.wf G ->
+  Forall (fun t => negb (PreTerm.is_mul t)) G ->
+  fold_term <$> (PreTerm.inv_aux <$> G) = TInv <$> (fold_term <$> G).
+Proof.
+elim: G => [//|x fs IH] /Forall_cons [Wx wfs] /Forall_cons [Nmx Nms].
+rewrite !fmap_cons (IH wfs Nms); congr cons.
+apply: unfold_term_inj.
+by rewrite unfold_TInv (fold_termK x Wx)
+           (fold_termK (PreTerm.inv_aux x) (PreTerm.wf_inv_aux x Wx Nmx))
+           (PreTerm.inv_Nmul x Nmx).
+Qed.
+
 (* [TInv] distributes over products: the canonical factor list of [TInv t] is
    a permutation of the inverses of the factors of [t].  Used to prove
    [public (TInv t) ⊣⊢ public t] for products by reducing to the factors. *)
 Lemma tfactors_TInv t : tfactors (TInv t) ≡ₚ map TInv (tfactors t).
 Proof.
-rewrite /tfactors unfold_TInv (PreTerm.inv_factors (wf_unfold_term t)).
+rewrite /tfactors unfold_TInv (PreTerm.inv_factors (unfold_term t) (wf_unfold_term t)).
 set F := PreTerm.factors (unfold_term t).
-have wfF : is_true (seq.all PreTerm.wf_term F) := PreTerm.wf_factors (wf_unfold_term t).
-have NmF : is_true (seq.all (fun t => negb (PreTerm.is_mul t)) F) :=
-  PreTerm.Nmul_factors (wf_unfold_term t).
-have cancF : is_true (PreTerm.invs_canceled F) := PreTerm.invs_canceled_factors (wf_unfold_term t).
-have wfMI : is_true (seq.all PreTerm.wf_term (seq.map PreTerm.inv_aux F)).
-  apply: (ssrbool.introT seq.allP) => x /(ssrbool.elimT seq.mapP) [y yF ->].
-  by apply: PreTerm.wf_inv_aux;
-     [exact: (ssrbool.elimT seq.allP wfF _ yF)|exact: (ssrbool.elimT seq.allP NmF _ yF)].
-have NmMI : is_true (seq.all (fun t => negb (PreTerm.is_mul t)) (seq.map PreTerm.inv_aux F)).
-  apply: (ssrbool.introT seq.allP) => x /(ssrbool.elimT seq.mapP) [y yF ->].
-  by apply: PreTerm.is_mul_inv_aux; exact: (ssrbool.elimT seq.allP wfF _ yF).
-have cancMI : is_true (PreTerm.invs_canceled (seq.map PreTerm.inv_aux F)).
-  exact: PreTerm.invs_canceled_map_inv wfF cancF.
-rewrite (PreTerm.factors_mul wfMI) (PreTerm.flatten_factors_Nmul_id NmMI).
-rewrite (PreTerm.cancel_invs_canceled NmMI cancMI).
-rewrite (_ : path.sort preorder.Order.le (seq.map PreTerm.inv_aux F) ≡ₚ
-             seq.map PreTerm.inv_aux F); last first.
-  by apply/(ssrbool.elimT perm_Perm); rewrite path.perm_sort.
-suff E : seq.map fold_term (seq.map PreTerm.inv_aux F) = map TInv (seq.map fold_term F)
-  by rewrite E.
-move: wfF NmF; rewrite /F; elim: (PreTerm.factors (unfold_term t)) => [//|x fs IH] /=.
-move=> /andb_prop [Wx wfs] /andb_prop [Nmx Nms].
-rewrite (IH wfs Nms); congr cons.
-apply: unfold_term_inj.
-by rewrite unfold_TInv (fold_termK x Wx)
-           (fold_termK (PreTerm.inv_aux x) (PreTerm.wf_inv_aux Wx Nmx))
-           (PreTerm.inv_Nmul Nmx).
+have wfF : Forall PreTerm.wf F := PreTerm.wf_factors _ (wf_unfold_term t).
+have NmF : Forall (fun t => negb (PreTerm.is_mul t)) F := PreTerm.Nmul_factors _ (wf_unfold_term t).
+have cancF : PreTerm.invs_canceled F := PreTerm.invs_canceled_factors _ (wf_unfold_term t).
+have wfMI : Forall PreTerm.wf (PreTerm.inv_aux <$> F).
+  apply/Forall_fmap; apply/Forall_forall => x xF.
+  apply: PreTerm.wf_inv_aux; [exact: (Forall_mem wfF xF) | exact: (Forall_mem NmF xF)].
+have NmMI : Forall (fun t => negb (PreTerm.is_mul t)) (PreTerm.inv_aux <$> F).
+  apply/Forall_fmap; apply/Forall_forall => x xF.
+  apply: PreTerm.is_mul_inv_aux; exact: (Forall_mem wfF xF).
+have cancMI : PreTerm.invs_canceled (PreTerm.inv_aux <$> F).
+  exact: PreTerm.invs_canceled_map_inv F wfF cancF.
+rewrite (PreTerm.factors_mul (PreTerm.inv_aux <$> F) wfMI).
+rewrite (PreTerm.flatten_factors_Nmul_id (PreTerm.inv_aux <$> F) NmMI).
+rewrite (PreTerm.cancel_invs_canceled (PreTerm.inv_aux <$> F) NmMI cancMI).
+rewrite (merge_sort_Permutation pt_order (PreTerm.inv_aux <$> F)).
+by rewrite (fmap_fold_inv_aux wfF NmF).
 Qed.
 
 Lemma nonces_of_pre_term_base_expo pt :
@@ -441,32 +424,29 @@ transitivity (nonces_of_pre_term (PreTerm.base (unfold_term t)) ∪
   rewrite (nonces_of_pre_term_base_expo (unfold_term t)).
   by rewrite (nonces_of_pre_term_factors (PreTerm.expo (unfold_term t))).
 congr (_ ∪ _).
-  by rewrite /base (nonces_of_term_fold (PreTerm.wf_base (wf_unfold_term t))).
-rewrite /exps -[@seq.map]/@map map_map; congr union_list.
-have /(ssrbool.elimT seq.allP) wfs := PreTerm.wf_exps (wf_unfold_term t).
-apply: map_ext_in => pt /list_elem_of_In /(ssrbool.introT inP) pt_in.
-by rewrite /= (nonces_of_term_fold (wfs _ pt_in)).
+  by rewrite /base (nonces_of_term_fold (PreTerm.wf_base _ (wf_unfold_term t))).
+rewrite /exps.
+have wfs : Forall PreTerm.wf (PreTerm.exps (unfold_term t)) := PreTerm.wf_exps _ (wf_unfold_term t).
+elim: (PreTerm.exps (unfold_term t)) wfs => [//|pt pts IH] /Forall_cons [wpt wpts] /=.
+by rewrite (nonces_of_term_fold wpt) (IH wpts).
 Qed.
 
 Lemma nonces_of_term_TExpN t ts :
-  is_true (negb (is_exp t)) -> is_true (atomic ts) ->
+  negb (is_exp t) -> atomic ts ->
   nonces_of_term (TExpN t ts) = nonces_of_term t ∪ ⋃ map nonces_of_term (cancel_invs ts).
 Proof.
 move => tNexp atom.
-have nexp : is_true (negb (PreTerm.is_exp (unfold_term t))).
+have nexp : negb (PreTerm.is_exp (unfold_term t)).
   by move: tNexp; rewrite is_exp_unfold.
-have bt : base t = t by rewrite /base (PreTerm.base_expN nexp) unfold_termK.
-have et : exps t = [] by rewrite /exps (PreTerm.exps_expN nexp).
+have bt : base t = t by rewrite /base (PreTerm.base_expN _ nexp) unfold_termK.
+have et : exps t = [] by rewrite /exps (PreTerm.exps_expN _ nexp).
 rewrite (nonces_of_term_base_exps (TExpN t ts)) base_TExpN bt.
 congr (_ ∪ _).
-rewrite (exps_TExpN t ts atom) et seq.cat0s.
-rewrite (_ : path.sort _ (cancel_invs ts) ≡ₚ cancel_invs ts); last first.
-  by apply/(ssrbool.elimT perm_Perm); rewrite path.perm_sort.
-done.
+by rewrite (exps_TExpN t ts atom) et app_nil_l union_list_map_merge_sort.
 Qed.
 
 Lemma nonces_flatten_factors us :
-  ⋃ map nonces_of_pre_term (seq.flatten (seq.map PreTerm.factors us)) =
+  ⋃ map nonces_of_pre_term (concat (PreTerm.factors <$> us)) =
   ⋃ map nonces_of_pre_term us.
 Proof.
 elim: us => [|u us IH] //=.
@@ -479,21 +459,20 @@ Lemma nonces_of_pre_term_mul_sub us :
   nonces_of_pre_term (PreTerm.mul us) ⊆ ⋃ map nonces_of_pre_term us.
 Proof.
 rewrite /PreTerm.mul.
-set M := seq.flatten (seq.map PreTerm.factors us).
+set M := concat (PreTerm.factors <$> us).
 rewrite (_ : nonces_of_pre_term _ =
              ⋃ map nonces_of_pre_term
-                 (path.sort preorder.Order.le (PreTerm.cancel_invs M))); last first.
-  by case: (path.sort preorder.Order.le (PreTerm.cancel_invs M)) => [|t [|t' l]] //=;
+                 (merge_sort pt_order (PreTerm.cancel_invs M))); last first.
+  by case: (merge_sort pt_order (PreTerm.cancel_invs M)) => [|t [|t' l]] //=;
      rewrite union_empty_r_L.
-rewrite (_ : path.sort preorder.Order.le (PreTerm.cancel_invs M) ≡ₚ PreTerm.cancel_invs M);
-  last by apply/(ssrbool.elimT perm_Perm); rewrite path.perm_sort.
+rewrite union_list_map_merge_sort.
 have HM : ⋃ map nonces_of_pre_term M = ⋃ map nonces_of_pre_term us
   by rewrite /M nonces_flatten_factors.
 rewrite -HM.
 move => a /elem_of_union_list [X [/list_elem_of_fmap [x [-> xL]] aX]].
 apply/elem_of_union_list; exists (nonces_of_pre_term x); split => //.
 apply/list_elem_of_fmap; exists x; split => //.
-by move: xL => /(ssrbool.introT inP) /(PreTerm.mem_cancel_invs) /(ssrbool.elimT inP).
+exact: (PreTerm.mem_cancel_invs M x xL).
 Qed.
 
 (* [PreTerm.exp] folds the new exponent into the base and cancels, so nonces are a
@@ -501,9 +480,9 @@ Qed.
 Lemma nonces_of_pre_term_exp_sub b e :
   nonces_of_pre_term (PreTerm.exp b e) ⊆ nonces_of_pre_term b ∪ nonces_of_pre_term e.
 Proof.
-rewrite /PreTerm.exp.
+rewrite /PreTerm.exp; cbv zeta.
 have Hbe := nonces_of_pre_term_base_expo b.
-case: (eqtype.eq_op (PreTerm.mul [PreTerm.expo b; e]) (PreTerm.PTMul [])).
+case: (bool_decide (PreTerm.mul [PreTerm.expo b; e] = PreTerm.PTMul [])).
 - set_solver.
 - have Hmul := @nonces_of_pre_term_mul_sub [PreTerm.expo b; e].
   move: Hmul => /=; set_solver.
@@ -532,14 +511,14 @@ Lemma nonces_of_term_TMulN ts :
   wf_mul_list ts ->
   nonces_of_term (TMulN ts) = ⋃ map nonces_of_term ts.
 Proof.
-move => wf; have wfU := wf_mul_list_unfold ts (proj2 (is_trueP _) wf).
+move => wf; have wfU := wf_mul_list_unfold ts wf.
 have e : TMulN ts = fold_term (PreTerm.PTMul (map unfold_term ts)).
   apply: unfold_term_inj; rewrite unfold_TMulN (@fold_termK _ wfU).
-  exact: (PreTerm.mul_factors wfU).
+  exact: (PreTerm.mul_factors _ wfU).
 rewrite {1}e (nonces_of_term_fold wfU) /=.
-rewrite -[@seq.map]/@map map_map; congr union_list.
-apply: map_ext_in => x /list_elem_of_In /(ssrbool.introT inP) x_ts.
-by rewrite /= nonces_of_term_unseal.
+elim: ts {wf wfU e} => [//|t' ts' IH] /=.
+rewrite -IH; congr (_ ∪ _).
+by rewrite nonces_of_term_unseal.
 Qed.
 
 Lemma nonces_of_term_tfactors t :
@@ -548,10 +527,9 @@ Proof.
 rewrite nonces_of_term_unseal /nonces_of_term_def
   (nonces_of_pre_term_factors (unfold_term t)) /tfactors.
 congr union_list.
-elim: (PreTerm.factors (unfold_term t)) (PreTerm.wf_factors (wf_unfold_term t))
-  => //= pt pts IH wf.
-have [wpt wpts] := ssrbool.elimT ssrbool.andP wf.
-by rewrite IH // (@fold_termK pt wpt).
+elim: (PreTerm.factors (unfold_term t)) (PreTerm.wf_factors _ (wf_unfold_term t))
+  => [//|pt pts IH] /Forall_cons [wpt wpts] /=.
+by rewrite (fold_termK pt wpt) (IH wpts).
 Qed.
 
 Definition nonces_of_termE :=
@@ -602,7 +580,7 @@ rewrite /subterms_pre; case: pt => [o|o e|[||] e1 e2|es] //=.
 Qed.
 
 Lemma subterms_fold pt :
-  is_true (PreTerm.wf_term pt) -> subterms (fold_term pt) = subterms_pre pt.
+  PreTerm.wf pt -> subterms (fold_term pt) = subterms_pre pt.
 Proof. move => wf; by rewrite subterms_unseal /subterms_def /subterms_pre (@fold_termK pt wf). Qed.
 
 Lemma subterms_via_pre t : subterms t = subterms_pre (unfold_term t).
@@ -612,9 +590,10 @@ Lemma subterms_pre_base_exps pt :
   subterms_pre pt =
   {[fold_term pt]} ∪ subterms_pre (PreTerm.base pt) ∪ ⋃ map subterms_pre (PreTerm.exps pt).
 Proof.
-case: (ssrbool.boolP (PreTerm.is_exp pt)) => [xp | Nxp].
-- case: pt xp => [o|o e|[||] e1 e2|es] //= _; rewrite subterms_preE /=; set_solver.
-- rewrite (PreTerm.base_expN Nxp) (PreTerm.exps_expN Nxp) /=.
+case E: (PreTerm.is_exp pt).
+- case: pt E => [o|o e|[||] e1 e2|es] //= E; rewrite subterms_preE /=; set_solver.
+- have Nxp : negb (PreTerm.is_exp pt) by rewrite E.
+  rewrite (PreTerm.base_expN pt Nxp) (PreTerm.exps_expN pt Nxp) /=.
   rewrite /subterms_pre; set_solver.
 Qed.
 
@@ -622,12 +601,12 @@ Lemma subterms_base_exps t :
   subterms t = {[t]} ∪ subterms (base t) ∪ ⋃ map subterms (exps t).
 Proof.
 have hb : subterms_pre (PreTerm.base (unfold_term t)) = subterms (base t).
-  by rewrite /base (subterms_fold (PreTerm.wf_base (wf_unfold_term t))).
+  by rewrite /base (subterms_fold (PreTerm.wf_base _ (wf_unfold_term t))).
 have he : ⋃ map subterms_pre (PreTerm.exps (unfold_term t)) = ⋃ map subterms (exps t).
-  rewrite /exps -[@seq.map]/@map map_map; congr union_list.
-  have /(ssrbool.elimT seq.allP) wfs := PreTerm.wf_exps (wf_unfold_term t).
-  apply: map_ext_in => pt /list_elem_of_In /(ssrbool.introT inP) pt_in.
-  by rewrite /= (subterms_fold (wfs _ pt_in)).
+  rewrite /exps.
+  have wfs : Forall PreTerm.wf (PreTerm.exps (unfold_term t)) := PreTerm.wf_exps _ (wf_unfold_term t).
+  elim: (PreTerm.exps (unfold_term t)) wfs => [//|pt pts IH] /Forall_cons [wpt wpts] /=.
+  by rewrite (subterms_fold wpt) (IH wpts).
 by rewrite (subterms_via_pre t) (subterms_pre_base_exps (unfold_term t)) unfold_termK hb he.
 Qed.
 
@@ -652,40 +631,38 @@ Lemma subterms_TInv t :
   negb (is_mul t) -> negb (is_inv t) ->
   subterms (TInv t) = {[TInv t]} ∪ subterms t.
 Proof.
-move => /is_trueP Nm. rewrite is_inv_unfold. move /is_trueP => ?.
+move => Nm Ni.
+have Ni' : negb (PreTerm.is_inv (unfold_term t)) by rewrite -is_inv_unfold.
 rewrite subterms_unseal /subterms_def.
-by rewrite (unfold_TInv_Nmul Nm) PreTerm.inv_invN //= unfold_termK.
+by rewrite (unfold_TInv_Nmul Nm) (PreTerm.inv_invN _ Ni') /= unfold_termK.
 Qed.
 
 Lemma subterms_TExpN t ts :
-  is_true (negb (is_exp t)) -> is_true (atomic ts) ->
+  negb (is_exp t) -> atomic ts ->
   subterms (TExpN t ts) = {[TExpN t ts]} ∪ subterms t ∪ ⋃ map subterms (cancel_invs ts).
 Proof.
 move => tNexp atom.
-have nexp : is_true (negb (PreTerm.is_exp (unfold_term t))).
+have nexp : negb (PreTerm.is_exp (unfold_term t)).
   by move: tNexp; rewrite is_exp_unfold.
-have bt : base t = t by rewrite /base (PreTerm.base_expN nexp) unfold_termK.
-have et : exps t = [] by rewrite /exps (PreTerm.exps_expN nexp).
+have bt : base t = t by rewrite /base (PreTerm.base_expN _ nexp) unfold_termK.
+have et : exps t = [] by rewrite /exps (PreTerm.exps_expN _ nexp).
 rewrite (subterms_base_exps (TExpN t ts)) base_TExpN bt.
-rewrite (exps_TExpN t ts atom) et seq.cat0s.
-rewrite (_ : path.sort _ (cancel_invs ts) ≡ₚ cancel_invs ts); last first.
-  by apply/(ssrbool.elimT perm_Perm); rewrite path.perm_sort.
-done.
+by rewrite (exps_TExpN t ts atom) et app_nil_l union_list_map_merge_sort.
 Qed.
 
 Lemma subterms_TMulN ts :
   wf_mul_list ts ->
   subterms (TMulN ts) = {[TMulN ts]} ∪ ⋃ map subterms ts.
 Proof.
-move => wf; have wfU := wf_mul_list_unfold ts (proj2 (is_trueP _) wf).
+move => wf; have wfU := wf_mul_list_unfold ts wf.
 have e : TMulN ts = fold_term (PreTerm.PTMul (map unfold_term ts)).
   apply: unfold_term_inj; rewrite unfold_TMulN (@fold_termK _ wfU).
-  exact: (PreTerm.mul_factors wfU).
+  exact: (PreTerm.mul_factors _ wfU).
 rewrite {1}e (subterms_fold wfU) subterms_preE -e /=.
 congr (_ ∪ _).
-rewrite -[@seq.map]/@map map_map; congr union_list.
-apply: map_ext_in => x /list_elem_of_In /(ssrbool.introT inP) x_ts.
-by rewrite /= subterms_via_pre.
+elim: ts {wf wfU e} => [//|t' ts' IH] /=.
+rewrite -IH; congr (_ ∪ _).
+by rewrite subterms_via_pre.
 Qed.
 
 Lemma subterms_nonce t : is_nonce t → subterms t = {[t]}.
@@ -720,12 +697,12 @@ split.
 - elim: t2 /; try by intros; rewrite subtermsE //; set_solver.
   + move => t' ts Nexp sub IH.
     have bt' : base t' = t'.
-      rewrite /base; move: Nexp; rewrite is_exp_unfold => /is_trueP n.
-      by rewrite (PreTerm.base_expN n) unfold_termK.
+      rewrite /base; move: Nexp; rewrite is_exp_unfold => n.
+      by rewrite (PreTerm.base_expN _ n) unfold_termK.
     rewrite (subterms_base_exps (TExpN t' ts)) base_TExpN bt'; set_solver.
   + move => t' t'' ts Nexp atom canc sub IH t''_ts.
-    rewrite (subterms_TExpN (proj2 (is_trueP _) Nexp) (proj2 (is_trueP _) atom)).
-    rewrite (cancel_invs_canceled ts (proj2 (is_trueP _) atom) (proj2 (is_trueP _) canc)) !elem_of_union; right.
+    rewrite (subterms_TExpN Nexp atom).
+    rewrite (cancel_invs_canceled ts atom canc) !elem_of_union; right.
     rewrite elem_of_union_list; exists (subterms t''); split => //.
     by rewrite list_elem_of_fmap; exists t''; split.
   + move => t'' ts wf sub IH t''_ts.
@@ -739,24 +716,21 @@ split.
     rewrite !elem_of_union elem_of_union_list elem_of_singleton.
     case => [[-> | /IHt sub] | [X [/list_elem_of_fmap [t' [-> t'_ts]] t1_t']]].
     * exact: STRefl.
-    * apply: STExp1; [exact: (proj1 (is_trueP _) Nexp)|exact: sub].
+    * apply: STExp1; [exact: Nexp|exact: sub].
     * have sub' : subterm t1 t'.
         move: IHts t'_ts t1_t'; elim: (ts) => /= [_ /elem_of_nil //|t0 ts0 IH0 [IH1 IHrest]].
         rewrite elem_of_cons; case => [-> //|/(IH0 IHrest)] // h ?; exact: h.
-      apply: (STExp2 (proj1 (is_trueP _) Nexp) (proj1 (is_trueP _) atom)
-                     (proj1 (is_trueP _) canc) sub' t'_ts).
+      apply: (STExp2 Nexp atom canc sub' t'_ts).
   + move => ts IHts atom sort canc szN1.
-    have wf : is_true (wf_mul_list ts).
-      rewrite /wf_mul_list; apply/(ssrbool.introT ssrbool.and4P); split;
-        [exact: atom|exact: sort|exact: canc|exact: szN1].
-    rewrite (subterms_TMulN (proj1 (is_trueP _) wf)).
+    have wf : wf_mul_list ts := conj atom (conj sort (conj canc szN1)).
+    rewrite (subterms_TMulN wf).
     rewrite elem_of_union elem_of_union_list elem_of_singleton.
     case => [-> | [X [/list_elem_of_fmap [t' [-> t'_ts]] t1_t']]].
     * exact: STRefl.
     * have sub' : subterm t1 t'.
         move: IHts t'_ts t1_t'; elim: (ts) => /= [_ /elem_of_nil //|t0 ts0 IH0 [IH1 IHrest]].
         rewrite elem_of_cons; case => [-> //|/(IH0 IHrest)] // h ?; exact: h.
-      apply: (STMul (proj1 (is_trueP _) wf) sub' t'_ts).
+      apply: (STMul wf sub' t'_ts).
 Qed.
 
 Ltac solve_nonces_of_termP :=
@@ -784,12 +758,12 @@ split.
 - elim: t /; try by intros; rewrite nonces_of_termE; set_solver.
   + move => t' ts Nexp sub IH.
     have bt' : base t' = t'.
-      rewrite /base; move: Nexp; rewrite is_exp_unfold => /is_trueP n.
-      by rewrite (PreTerm.base_expN n) unfold_termK.
+      rewrite /base; move: Nexp; rewrite is_exp_unfold => n.
+      by rewrite (PreTerm.base_expN _ n) unfold_termK.
     rewrite (nonces_of_term_base_exps (TExpN t' ts)) base_TExpN bt'; set_solver.
   + move => t' t'' ts Nexp atom canc sub IH t''_ts.
-    rewrite (nonces_of_term_TExpN (proj2 (is_trueP _) Nexp) (proj2 (is_trueP _) atom)).
-    rewrite (cancel_invs_canceled ts (proj2 (is_trueP _) atom) (proj2 (is_trueP _) canc)) elem_of_union; right.
+    rewrite (nonces_of_term_TExpN Nexp atom).
+    rewrite (cancel_invs_canceled ts atom canc) elem_of_union; right.
     rewrite elem_of_union_list; exists (nonces_of_term t''); split => //.
     by rewrite list_elem_of_fmap; exists t''; split.
   + move => t'' ts wf sub IH t''_ts.
@@ -801,22 +775,19 @@ split.
     rewrite nonces_of_termE //.
     rewrite (cancel_invs_canceled ts atom canc) elem_of_union elem_of_union_list.
     case => [/IHt sub | [X [/list_elem_of_fmap [t' [-> t'_ts]] a_t']]].
-    * apply: STExp1; [exact: (proj1 (is_trueP _) Nexp)|exact: sub].
+    * apply: STExp1; [exact: Nexp|exact: sub].
     * have sub' : subterm (TNonce a) t'.
         move: IHts t'_ts a_t'; elim: (ts) => /= [_ /elem_of_nil //|t0 ts0 IH0 [IH1 IHrest]].
         rewrite elem_of_cons; case => [-> //|/(IH0 IHrest)] // h ?; exact: h.
-      apply: (STExp2 (proj1 (is_trueP _) Nexp) (proj1 (is_trueP _) atom)
-                     (proj1 (is_trueP _) canc) sub' t'_ts).
+      apply: (STExp2 Nexp atom canc sub' t'_ts).
   + move => ts IHts atom sort canc szN1.
-    have wf : is_true (wf_mul_list ts).
-      rewrite /wf_mul_list; apply/(ssrbool.introT ssrbool.and4P); split;
-        [exact: atom|exact: sort|exact: canc|exact: szN1].
-    rewrite (nonces_of_term_TMulN (proj1 (is_trueP _) wf)) elem_of_union_list.
+    have wf : wf_mul_list ts := conj atom (conj sort (conj canc szN1)).
+    rewrite (nonces_of_term_TMulN wf) elem_of_union_list.
     case => [X [/list_elem_of_fmap [t' [-> t'_ts]] a_t']].
     have sub' : subterm (TNonce a) t'.
       move: IHts t'_ts a_t'; elim: (ts) => /= [_ /elem_of_nil //|t0 ts0 IH0 [IH1 IHrest]].
       rewrite elem_of_cons; case => [-> //|/(IH0 IHrest)] // h ?; exact: h.
-    apply: (STMul (proj1 (is_trueP _) wf) sub' t'_ts).
+    apply: (STMul wf sub' t'_ts).
 Qed.
 
 Lemma subterm_nonces_of_term t1 t2 :
@@ -825,12 +796,12 @@ Proof.
 elim: t2 / => //; try by intros; rewrite [nonces_of_term (_ _)]nonces_of_termE; set_solver.
 - move => t' ts Nexp sub IH.
   have bt' : base t' = t'.
-    rewrite /base; move: Nexp; rewrite is_exp_unfold => /is_trueP n.
-    by rewrite (PreTerm.base_expN n) unfold_termK.
+    rewrite /base; move: Nexp; rewrite is_exp_unfold => n.
+    by rewrite (PreTerm.base_expN _ n) unfold_termK.
   rewrite (nonces_of_term_base_exps (TExpN t' ts)) base_TExpN bt'; set_solver.
 - move => t' t'' ts Nexp atom canc sub IH t''_ts.
-  rewrite (nonces_of_term_TExpN (proj2 (is_trueP _) Nexp) (proj2 (is_trueP _) atom)).
-  rewrite (cancel_invs_canceled ts (proj2 (is_trueP _) atom) (proj2 (is_trueP _) canc)).
+  rewrite (nonces_of_term_TExpN Nexp atom).
+  rewrite (cancel_invs_canceled ts atom canc).
   have sub2 : nonces_of_term t'' ⊆ ⋃ map nonces_of_term ts.
     move => x x_t''; rewrite elem_of_union_list; exists (nonces_of_term t''); split => //.
     by rewrite list_elem_of_fmap; exists t''; split.
@@ -1085,7 +1056,7 @@ Proof. exact: seal_eq. Qed.
 Lemma of_list_tsize t ts : t ∈ ts → tsize t < tsize (of_list ts).
 Proof.
 rewrite of_list_unseal; elim: ts => [/elem_of_nil |t' ts IH /elem_of_cons] //=.
-rewrite [tsize (TPair _ _)]tsizeE ssrnat.addnE; case=> [<-|/IH t_ts]; lia.
+rewrite [tsize (TPair _ _)]tsizeE; case=> [<-|/IH t_ts]; lia.
 Qed.
 
 Lemma is_nonce_of_list ts : is_nonce (of_list ts) = false.
@@ -1191,63 +1162,42 @@ Hint Resolve STRefl : core.
 
 Lemma invs_canceledP ts :
   (forall t, t ∈ ts -> TInv t ∉ ts) ↔ invs_canceled ts.
-Proof.
-split.
-- move => H. apply /is_trueP /(ssrbool.introT invs_canceledP).
-  by move => ? /(ssrbool.elimT inP) /H /(ssrbool.introN inP).
-- move => /is_trueP /(ssrbool.elimT invs_canceledP) H.
-  by move => ? /(ssrbool.introT inP) /H /(ssrbool.elimN inP).
-Qed.
+Proof. symmetry; exact: invs_canceledP. Qed.
 
-Global Instance invs_canceled_proper : Proper ((≡ₚ) ==> (=)) invs_canceled.
-Proof. by move => ts1 ts2 /(ssrbool.introT perm_Perm) /perm_invs_canceled. Qed.
+Global Instance invs_canceled_proper : Proper ((≡ₚ) ==> iff) invs_canceled.
+Proof. move => ts1 ts2 e; exact: perm_invs_canceled. Qed.
 
-Lemma invs_canceled1 t : is_true (negb (is_mul t)) -> invs_canceled [t].
-Proof. move => Nm. exact /is_trueP /(invs_canceled_Nmul1 Nm). Qed.
+Lemma invs_canceled1 t : negb (is_mul t) -> invs_canceled [t].
+Proof. exact: invs_canceled_Nmul1. Qed.
 
 Lemma invs_canceled_cons t ts :
-  is_true (negb (is_mul t)) ->
+  negb (is_mul t) ->
   invs_canceled (t :: ts) ↔ (TInv t ∉ ts) ∧ invs_canceled ts.
-Proof.
-move => Nm.
-rewrite (invs_canceled_cons Nm); split.
-- by move => /andb_prop_elim [/is_trueP /(ssrbool.elimN inP)].
-- move => [/(ssrbool.introN inP) /is_trueP ? ?]. exact /andb_prop_intro.
-Qed.
+Proof. exact: invs_canceled_cons. Qed.
 
 Lemma invs_canceled2 t1 t2 :
-  is_true (negb (is_mul t1)) -> is_true (negb (is_mul t2)) ->
+  negb (is_mul t1) -> negb (is_mul t2) ->
   invs_canceled [t1 ; t2] ↔ (t1 ≠ TInv t2).
-Proof.
-move => Nm1 Nm2.
-rewrite (invs_canceled2_Nmul Nm1 Nm2); split.
-- by move => /is_trueP /(ssrbool.elimN eqtype.eqP).
-- by move => /(ssrbool.introN eqtype.eqP) /is_trueP.
-Qed.
+Proof. exact: invs_canceled2_Nmul. Qed.
 
 Lemma invs_canceled_exps t : invs_canceled (exps t).
-Proof. exact /is_trueP /invs_canceled_exps. Qed.
+Proof. exact: invs_canceled_exps. Qed.
 
 Lemma invs_canceled_cons_exps t1 t2 :
-  is_true (negb (is_mul t1)) ->
+  negb (is_mul t1) ->
   invs_canceled (t1 :: exps t2) ↔ (TInv t1 ∉ exps t2).
-Proof.
-move => Nm.
-rewrite (invs_canceled_cons_exps t2 Nm); split.
-- by move => /is_trueP /(ssrbool.elimN inP).
-- by move => /(ssrbool.introN inP) /is_trueP.
-Qed.
+Proof. exact: invs_canceled_cons_exps. Qed.
 
 Lemma cancel_invs_canceled ts :
-  is_true (atomic ts) -> invs_canceled ts -> cancel_invs ts = ts.
-Proof. move => atom /is_trueP ic. exact: (cancel_invs_canceled ts atom ic). Qed.
+  atomic ts -> invs_canceled ts -> cancel_invs ts = ts.
+Proof. exact: cancel_invs_canceled. Qed.
 
 Lemma exps_TExpN t ts :
-  is_true (atomic ts) -> exps (TExpN t ts) ≡ₚ cancel_invs (exps t ++ ts).
+  atomic ts -> exps (TExpN t ts) ≡ₚ cancel_invs (exps t ++ ts).
 Proof.
 move => atom.
-apply/(ssrbool.elimT perm_Perm).
-by rewrite (exps_TExpN _ _ atom) path.perm_sort.
+rewrite (exps_TExpN t ts atom).
+exact: (merge_sort_Permutation term_order (cancel_invs (exps t ++ ts))).
 Qed.
 
 (*
@@ -1263,52 +1213,50 @@ Lemma base_exps_inj t1 t2 :
   base t1 = base t2 →
   exps t1 ≡ₚ exps t2 →
   t1 = t2.
-Proof.
-move=> eb /(ssrbool.introT perm_Perm) ?.
-by apply: base_exps_inj.
-Qed.
+Proof. exact: base_exps_inj. Qed.
 
 Lemma TExp_TExpN t1 ts1 t2 : TExp (TExpN t1 ts1) t2 = TExpN t1 (t2 :: ts1).
 Proof.
 have -> : TExp (TExpN t1 ts1) t2 = TExpN (TExpN t1 ts1) [t2].
   by rewrite /TExpN TMulN1.
-by rewrite TExpNA -[@seq.cat]/@app [_ ++ _]comm.
+rewrite TExpNA; apply: TExpN_perm.
+by rewrite -Permutation_cons_append.
 Qed.
 
 Lemma count_exp_TExpNW t1 t2 ts :
-  is_true (atomic ts) ->
+  atomic ts ->
   (∀ t, t ∈ ts → t1 ≠ TInv t) →
   (count_exp t1 t2 ≤ count_exp t1 (TExpN t2 ts))%Z.
 Proof.
 elim: ts => [|t ts IH]; first by move => _ _; rewrite TExpN0; lia.
 move => atom t1_ts.
-move: (atom); rewrite /atomic /= => /(ssrbool.elimT ssrbool.andP) [Nmt atom'].
+move: atom => /Forall_cons [Nmt atom'].
 rewrite -TExp_TExpN; set t2' := TExpN t2 ts.
 have ?: (count_exp t1 t2' ≤ count_exp t1 (TExp t2' t))%Z.
-  apply: (count_exp_TExpW (proj1 (is_trueP _) Nmt)); move/(_ t): t1_ts; apply.
+  apply: (count_exp_TExpW Nmt); move/(_ t): t1_ts; apply.
   rewrite elem_of_cons; by eauto.
 suff: (count_exp t1 t2 ≤ count_exp t1 t2')%Z by lia.
 apply: (IH atom') => t' t'_ts; apply: t1_ts; rewrite elem_of_cons; eauto.
 Qed.
 
 Lemma elem_of_TExpN2l g t1 t2 :
-  is_true (negb (is_mul t1)) -> is_true (negb (is_mul t2)) ->
+  negb (is_mul t1) -> negb (is_mul t2) ->
   t1 ≠ TInv t2 →
   TInv t1 ∉ exps g →
   t1 ∈ exps (TExpN g [t1; t2]).
 Proof.
 move=> Nm1 Nm2 t1_t2 t1_g.
-rewrite (not_elem_of_TInv_exps g (proj1 (is_trueP _) Nm1)) -count_exp_gt0 in t1_g.
+rewrite (not_elem_of_TInv_exps _ Nm1) -count_exp_gt0 in t1_g.
 have e : TExpN g [t1; t2] = TExp (TExp g t1) t2.
   rewrite (_ : TExp g t1 = TExpN g [t1]); last by rewrite /TExpN TMulN1.
   rewrite TExp_TExpN; exact: TExpC2.
-rewrite e -count_exp_gt0 (count_exp_TExp t1 (TExp g t1) (proj1 (is_trueP _) Nm2)).
+rewrite e -count_exp_gt0 (count_exp_TExp t1 (TExp g t1) Nm2).
 rewrite (@decide_False _ (t1 = TInv t2)); last exact: t1_t2.
 by case: decide; lia.
 Qed.
 
 Lemma elem_of_TExpN2r g t1 t2 :
-  is_true (negb (is_mul t1)) -> is_true (negb (is_mul t2)) ->
+  negb (is_mul t1) -> negb (is_mul t2) ->
   t1 ≠ TInv t2 →
   TInv t2 ∉ exps g →
   t2 ∈ exps (TExpN g [t1; t2]).
@@ -1320,34 +1268,24 @@ by move=> contra; apply: t1_t2; rewrite contra TInvK.
 Qed.
 
 Lemma base_expN t : ¬ is_exp t → base t = t.
-Proof.
-move=> tNX; apply: base_expN.
-apply/(ssrbool.introN ssrbool.idP).
-by rewrite is_trueP.
-Qed.
+Proof. move=> tNX; apply: base_expN; apply/negb_True; exact: tNX. Qed.
 
 Lemma exps_expN t : ¬ is_exp t → exps t = [].
-Proof.
-move=> tNX; apply: exps_expN.
-apply/(ssrbool.introN ssrbool.idP).
-by rewrite is_trueP.
-Qed.
+Proof. move=> tNX; apply: exps_expN; apply/negb_True; exact: tNX. Qed.
 
 Lemma exps_TExpN' t ts :
-  ¬ is_exp t -> is_true (atomic ts) ->
+  ¬ is_exp t -> atomic ts ->
   invs_canceled ts ->
   exps (TExpN t ts) ≡ₚ ts.
 Proof.
-move => ? atom canc.
-by rewrite (@exps_TExpN t ts atom) exps_expN //
+move => tNexp atom canc.
+by rewrite (@exps_TExpN t ts atom) (exps_expN tNexp) app_nil_l
    (cancel_invs_canceled atom canc).
 Qed.
 
 Lemma is_exp_base t : ¬ is_exp (base t).
-Proof.
-rewrite (ssrbool.negbTE (is_exp_base t)) /=. by auto.
-Qed.
+Proof. apply/negb_True; exact: is_exp_base. Qed.
 Hint Resolve is_exp_base : core.
 
 Lemma parity_cancel_invs ts : Nat.odd (length (cancel_invs ts)) = Nat.odd (length ts).
-Proof. by rewrite !oddE !sizeE parity_cancel_invs. Qed.
+Proof. exact: parity_cancel_invs. Qed.

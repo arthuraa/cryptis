@@ -182,4 +182,29 @@ move=> H; apply: (StronglySorted_unique R);
 by rewrite !(merge_sort_Permutation R).
 Qed.
 
+Lemma merge_sort_eq_Permutation l1 l2 :
+  merge_sort R l1 = merge_sort R l2 -> l1 ≡ₚ l2.
+Proof.
+move=> H. by rewrite -(merge_sort_Permutation R l1) H merge_sort_Permutation.
+Qed.
+
 End MergeSort.
+
+Section MergeSortFmap.
+Context {A B} (RA : relation A) (RB : relation B)
+  `{!RelDecision RA, !Transitive RA, !Total RA,
+    !RelDecision RB, !Transitive RB, !Total RB, !@AntiSymm B (=) RB}.
+
+Lemma merge_sort_fmap (f : A -> B) (Hf : forall x y, RA x y <-> RB (f x) (f y)) l :
+  f <$> merge_sort RA l = merge_sort RB (f <$> l).
+Proof.
+apply: (StronglySorted_unique RB).
+- apply: (StronglySorted_fmap f RA RB).
+  + move=> x y HR; exact: (proj1 (Hf x y) HR).
+  + exact: (StronglySorted_merge_sort RA l).
+- exact: (StronglySorted_merge_sort RB (f <$> l)).
+- rewrite (merge_sort_Permutation RB (f <$> l)).
+  by rewrite (merge_sort_Permutation RA l).
+Qed.
+
+End MergeSortFmap.

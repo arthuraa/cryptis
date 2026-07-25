@@ -75,7 +75,7 @@ Proof. by iIntros "post"; iApply twp_wp; iApply twp_texp. Qed.
 
 
 Lemma wp_hl_inv_term E (t : term) Ψ :
-    is_true (~~ is_mul t) ->
+    negb (is_mul t) ->
     Ψ (TInv t) ⊢
     WP hl_inv t @ E {{ Ψ }}.
 Proof.

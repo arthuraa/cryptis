@@ -133,6 +133,9 @@ Definition pre_term_eq_dec : EqDecision PreTerm.pre_term :=
   Eval hnf in def_eq_decision _.
 Global Existing Instance pre_term_eq_dec.
 
+Global Instance pre_term_countable : Countable PreTerm.pre_term :=
+  def_countable _ pre_term_eq_dec.
+
 (** stdpp typeclass wrappers around the ssreflect total order on pre-terms
     defined in [base.v], so that stdpp's [merge_sort] and [StronglySorted] can be
     used to canonicalise products. *)
