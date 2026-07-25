@@ -1,6 +1,5 @@
 From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
-From mathcomp Require ssrbool.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode.
@@ -137,8 +136,8 @@ Proof.
 move=> ga gab si.
 iIntros "Hc1 #N_φ #m_skI #m_skR #dh_a ptok rtok failed_e inv".
 iDestruct "dh_a" as "(#m_a & #s_a & #pred_a)".
-have Nm_a : is_true (negb (is_mul a)) by [].
-have Nm_a' : Is_true (negb (is_mul a)) := proj1 (is_trueP _) Nm_a.
+have Nm_a : negb (is_mul a) by [].
+have Nm_a' : Is_true (negb (is_mul a)) := Nm_a.
 iDestruct "inv" as "[#pub|inv_m2]".
 - (* Case 1: public plaintext — attacker forged message *)
   iDestruct "pub" as "(#p_ga & #p_gb)".
@@ -184,12 +183,13 @@ iDestruct "inv" as "[#pub|inv_m2]".
   iDestruct "inv_m2" as "(%b & %e_gb & %b_ga & #dh_b & #ps_gb & ready)".
   subst gb.
   iDestruct "dh_b" as "(#m_b & #s_b & #pred_b)".
-  have Nm_b : is_true (negb (is_mul b)) by [].
-  have Nm_b' : Is_true (negb (is_mul b)) := proj1 (is_trueP _) Nm_b.
+  have Nm_b : negb (is_mul b) by [].
+  have Nm_b' : Is_true (negb (is_mul b)) := Nm_b.
   set gb := TExp (TInt 0) b.
   have b_a : TNonce b ≠ TNonce a.
   { move=> e. apply: b_ga. rewrite /ga -e.
     apply/subtermsP.
+    have atom_b : atomic [TNonce b] by rewrite /atomic; apply/Forall_singleton.
     rewrite (_ : TExp (TInt 0) b = TExpN (TInt 0) [TNonce b]); last by rewrite /TExpN TMulN1.
     rewrite subtermsE // ?cancel_invs1 //=.
     by rewrite [subterms b]subterms_nonce //; set_solver. }
@@ -305,7 +305,7 @@ iDestruct "inv" as "[#pub|inv_m2]".
         iIntros "!> %ga' %b' %e_gb' #ps_gb'".
         iPoseProof (has_peer_share_agree with "ps_gb ps_gb'") as "%e".
         case: e => e_ga. subst ga'.
-        have Nm_bp : is_true (negb (is_mul (TNonce b'))) by [].
+        have Nm_bp : negb (is_mul (TNonce b')) by [].
         have e_b : b = b'.
         { rewrite /gb in e_gb'.
           have e := TExp_injr _ _ _ Nm_b Nm_bp e_gb'. congruence. }

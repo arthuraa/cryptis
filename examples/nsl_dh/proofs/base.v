@@ -1,6 +1,5 @@
 From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
-From mathcomp Require ssrbool.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode.
@@ -163,7 +162,7 @@ Qed.
 Definition nsl_dh_key_share skI skR t : iProp :=
   (public skI ∨ public skR) ∧ ⌜length (exps t) = 1⌝.
 
-Lemma nonce_Nmul t : is_nonce t -> is_true (negb (is_mul t)).
+Lemma nonce_Nmul t : is_nonce t -> negb (is_mul t).
 Proof. by case: t. Qed.
 
 (* With binary [TExp], [TExp (TExp g a) b] is no longer definitionally
@@ -181,21 +180,21 @@ rewrite (_ : TExp g b = TExpN g [b]); last by rewrite /TExpN TMulN1.
 by rewrite !TExp_TExpN TExpC2.
 Qed.
 
-Lemma exps_TExp1 a : is_true (negb (is_mul a)) -> exps (TExp (TInt 0) a) ≡ₚ [a].
+Lemma exps_TExp1 a : negb (is_mul a) -> exps (TExp (TInt 0) a) ≡ₚ [a].
 Proof.
 move=> Nm.
 rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [a]); last by rewrite /TExpN TMulN1.
 rewrite exps_TExpN';
-  [done | by case | by rewrite /atomic /= Nm | exact: (invs_canceled1 Nm)].
+  [done | by case | by rewrite /atomic; apply/Forall_singleton | exact: (invs_canceled1 Nm)].
 Qed.
 
 Lemma exps_TExp2 a b :
-  is_true (negb (is_mul a)) -> is_true (negb (is_mul b)) -> a ≠ TInv b ->
+  negb (is_mul a) -> negb (is_mul b) -> a ≠ TInv b ->
   exps (TExpN (TInt 0) [a; b]) ≡ₚ [a; b].
 Proof.
 move=> Nm_a Nm_b aVb.
 rewrite exps_TExpN';
-  [done | by case | by rewrite /atomic /= Nm_a Nm_b | by apply/(invs_canceled2 Nm_a Nm_b)].
+  [done | by case | by rewrite /atomic Forall_cons Forall_singleton; split | by apply/(invs_canceled2 Nm_a Nm_b)].
 Qed.
 
 Definition si_key si : senc_key :=
@@ -569,8 +568,7 @@ Lemma public_dh_share skI skR (a : nonce) :
   public ga.
 Proof.
 iIntros (ga) "#(m_a & _ & #pred_a) corr".
-have Nm : is_true (negb (is_mul a)) by [].
-have Nm' : Is_true (negb (is_mul a)) := proj1 (is_trueP _) Nm.
+have Nm : negb (is_mul a) by [].
 iAssert (exp_pred_base a (TExp (TInt 0) a)) with "[corr]" as "#dp".
 { iAssert (▷ □ nsl_dh_key_share skI skR (TExp (TInt 0) a))%I
     with "[corr]" as "#ns".
@@ -579,7 +577,8 @@ iAssert (exp_pred_base a (TExp (TInt 0) a)) with "[corr]" as "#dp".
     iPureIntro.
     rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [TNonce a]); last by rewrite /TExpN TMulN1.
     rewrite exps_TExpN';
-      [by [] | by case | by [] | exact: (invs_canceled1 Nm)]. }
+      [by [] | by case | by rewrite /atomic; apply/Forall_singleton
+       | exact: (invs_canceled1 Nm)]. }
   by iDestruct ("pred_a" $! (TExp (TInt 0) a) with "ns") as "$". }
 rewrite /ga public_TExp_iff //; last by case.
 rewrite minted_TInt. do 3?[iSplit => //].

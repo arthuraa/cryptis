@@ -52,7 +52,7 @@ wp_apply wp_send => //.
   do !iSplit => //.
   - iApply public_TExp_iff.
       by case.
-      by exact: (proj1 (is_trueP _) (negb_is_mul_nonce r)).
+      by exact: (negb_is_mul_nonce r).
     do !iSplit => //.
     + by rewrite minted_THash minted_tag.
     + iApply exp_pred_intro1.
@@ -61,14 +61,14 @@ wp_apply wp_send => //.
       by iApply (public_THashIS with "Hpredα") => //.
   - iApply public_TExp_iff.
       by case.
-      by exact: (proj1 (is_trueP _) (negb_is_mul_nonce x_u)).
+      by exact: (negb_is_mul_nonce x_u).
     do !iSplit => //.
     + by iApply minted_TInt.
     + iApply exp_pred_intro1.
       iApply "Hexpx_u"; iPureIntro.
-      have Nm : is_true (negb (is_mul x_u)) := negb_is_mul_nonce x_u.
+      have Nm : negb (is_mul x_u) := negb_is_mul_nonce x_u.
       rewrite (_ : TExp g x_u = TExpN g [TNonce x_u]); last by rewrite /TExpN TMulN1.
-      by rewrite exps_TExpN'; [by [] | by case | by [] | exact: (invs_canceled1 Nm)].
+      by rewrite exps_TExpN'; [by [] | by case | by rewrite /atomic; apply/Forall_singleton | exact: (invs_canceled1 Nm)].
     + by rewrite public_TInt; auto.
 wp_pures.
 wp_apply wp_recv => //.
@@ -156,8 +156,8 @@ iModIntro; iSplit.
       move=> p_u_s; apply: Hfreshp_u; rewrite -p_u_s.
       apply/subtermsP.
       rewrite (_ : TExp g p_u = TExpN g [TNonce p_u]); last by rewrite /TExpN TMulN1.
-      have Nm : is_true (negb (is_mul p_u)) := negb_is_mul_nonce p_u.
-      rewrite subtermsE //.
+      have Nm : negb (is_mul p_u) := negb_is_mul_nonce p_u.
+      rewrite subtermsE //; last by rewrite /atomic; apply/Forall_singleton.
       rewrite cancel_invs1 /=.
       by rewrite [subterms p_u]subterms_nonce //; set_solver.
     have p_u_sV : TNonce p_u ≠ TInv p_s.

@@ -9,7 +9,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Lemma nonce_Nmul t : is_nonce t -> is_true (negb (is_mul t)).
+Lemma nonce_Nmul t : is_nonce t -> negb (is_mul t).
 Proof. by case: t. Qed.
 
 Lemma TExp2_TExpN g a b : TExp (TExp g a) b = TExpN g [b; a].
@@ -1390,12 +1390,11 @@ case: c_kex e => [psk cn sn|g cn sn x gy|psk g cn sn x gy] /=.
   iPoseProof "dh_x" as "#dh_x2". iDestruct "dh_x2" as "(_ & %Nm_x & _)".
   move/negb_True: (gXN) => ?.
   iDestruct "wf2" as "#(_ & _ & _ & _ & p_gx & %fresh_y & dh_y)".
-  have Nm_x' : is_true (negb (is_mul x)) := proj2 (is_trueP _) Nm_x.
   have [??]: y ≠ x ∧ y ≠ TInv x.
     apply: fresh_y. rewrite (_ : TExp g x = TExpN g [x]); last by rewrite /TExpN TMulN1.
     apply: STExp2; eauto.
-    - by rewrite /atomic /= Nm_x'.
-    - exact: (invs_canceled1 Nm_x').
+    - by rewrite /atomic; apply/Forall_singleton.
+    - exact: (invs_canceled1 Nm_x).
     - set_solver.
   iEval (rewrite TExp2_TExpN) in "p_k".
   by iMod (dh_seed_elim2 with "dh_y dh_x p_k") as "[]".
@@ -1405,12 +1404,11 @@ case: c_kex e => [psk cn sn|g cn sn x gy|psk g cn sn x gy] /=.
   iPoseProof "dh_x" as "#dh_x2". iDestruct "dh_x2" as "(_ & %Nm_x & _)".
   move/negb_True: (gXN) => ?.
   iDestruct "wf2" as "#(_ & _ & _ & _ & _ & p_gx & %fresh_y & dh_y)".
-  have Nm_x' : is_true (negb (is_mul x)) := proj2 (is_trueP _) Nm_x.
   have [??]: y ≠ x ∧ y ≠ TInv x.
     apply: fresh_y. rewrite (_ : TExp g x = TExpN g [x]); last by rewrite /TExpN TMulN1.
     apply: STExp2; eauto.
-    - by rewrite /atomic /= Nm_x'.
-    - exact: (invs_canceled1 Nm_x').
+    - by rewrite /atomic; apply/Forall_singleton.
+    - exact: (invs_canceled1 Nm_x).
     - set_solver.
   rewrite public_of_list /=. iDestruct "p_k" as "(_ & p_k & _)".
   iEval (rewrite TExp2_TExpN) in "p_k".
