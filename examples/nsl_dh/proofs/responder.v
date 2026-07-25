@@ -171,7 +171,6 @@ iIntros "%Ψ (#chan & #ctx & #(m1_pred & m2_pred & m3_pred) &
          #m_skI & #m_skR & #m_ga & #s_ga & #dh_b & #ps_gb & rel) Hpost".
 iDestruct "dh_b" as "(#m_b & #s_b & #pred_b)".
 have Nm_b : negb (is_mul b) by [].
-have Nm_b' : Is_true (negb (is_mul b)) := Nm_b.
 rewrite /responder_recv_msg3. wp_pures.
 wp_apply wp_pkey. wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m) "#p_m".

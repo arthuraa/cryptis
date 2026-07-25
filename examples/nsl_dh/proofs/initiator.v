@@ -137,7 +137,6 @@ move=> ga gab si.
 iIntros "Hc1 #N_φ #m_skI #m_skR #dh_a ptok rtok failed_e inv".
 iDestruct "dh_a" as "(#m_a & #s_a & #pred_a)".
 have Nm_a : negb (is_mul a) by [].
-have Nm_a' : Is_true (negb (is_mul a)) := Nm_a.
 iDestruct "inv" as "[#pub|inv_m2]".
 - (* Case 1: public plaintext — attacker forged message *)
   iDestruct "pub" as "(#p_ga & #p_gb)".
