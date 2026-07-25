@@ -267,7 +267,7 @@ split; intros H.
   + right; left. rewrite base_expN;
       last by apply/negb_True; exact: (is_exp_TInv t'0 H0 H1).
     by apply: (STInv H0 H1 H2).
-  + right; left. by rewrite base_TExpN base.base_expN //; exact: H0.
+  + right; left. by rewrite base_TExpN base.base_expN_bool //; exact: H0.
   + right; right. exists t''. split => //.
     have Nexp : ¬ is_exp t'0 by apply/negb_True; exact: H0.
     by rewrite exps_TExpN' //.
@@ -279,10 +279,10 @@ split; intros H.
 - destruct H as [-> | H] => //.
   destruct (is_exp t') eqn:Eexp, H as [H | H].
   + rewrite -[t']base_expsK.
-    by apply: (STExp1 (exps t') (base.is_exp_base _) H).
+    by apply: (STExp1 (exps t') (base.is_exp_base_bool _) H).
   + rewrite -[t']base_expsK.
     apply: subterm_TExpN_exp => //.
-    * exact: (base.is_exp_base _).
+    * exact: (base.is_exp_base_bool _).
     * exact: atom_exps.
     * exact: invs_canceled_exps.
   + have Nexp : ¬ is_exp t' := Is_true_false_2 _ Eexp.
