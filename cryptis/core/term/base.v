@@ -1,6 +1,6 @@
 From cryptis Require Import lib.
 From elpi.apps Require Import locker.
-From mathcomp Require Import ssreflect ssrfun.
+From mathcomp Require Import ssreflect.
 From Stdlib Require Import ZArith.ZArith Lia.
 From stdpp Require Import sorting gmap.
 From cryptis.lib Require Import list_sort mathcomp_compat.
@@ -72,13 +72,13 @@ Coercion term_of_senc_key : senc_key >-> term.
 Definition keysE :=
   (term_of_aenc_keyE, term_of_sign_keyE, term_of_senc_keyE).
 
-Lemma term_of_aenc_key_inj : injective term_of_aenc_key.
+Lemma term_of_aenc_key_inj : Inj (=) (=) term_of_aenc_key.
 Proof. rewrite keysE. by case=> [?] [?] [->]. Qed.
 
-Lemma term_of_sign_key_inj : injective term_of_sign_key.
+Lemma term_of_sign_key_inj : Inj (=) (=) term_of_sign_key.
 Proof. rewrite keysE. by case=> [?] [?] [->]. Qed.
 
-Lemma term_of_senc_key_inj : injective term_of_senc_key.
+Lemma term_of_senc_key_inj : Inj (=) (=) term_of_senc_key.
 Proof. rewrite keysE. by case=> [?] [?] [->]. Qed.
 
 (* We use a different name for the default induction scheme, as it does not
@@ -173,10 +173,9 @@ case: pt wf nf => [o|[kt||] pt'|[||] b e|ts] wf nf.
   exact: TNonFree_irr.
 Qed.
 
-Lemma unfold_termK : ssrfun.cancel unfold_term fold_term.
+Lemma unfold_termK t : fold_term (unfold_term t) = t.
 Proof.
-rewrite [fold_term]unlock => t.
-rewrite (PreTerm.normalize_wf _ (wf_unfold_term t)).
+rewrite [fold_term]unlock (PreTerm.normalize_wf _ (wf_unfold_term t)).
 elim /term_ind': t.
 - by move=> z /=.
 - by move=> t1 IH1 t2 IH2 /=; rewrite IH1 IH2.
@@ -220,11 +219,8 @@ Qed.
 Lemma fold_normalize pt : fold_term (PreTerm.normalize pt) = fold_term pt.
 Proof. by rewrite -unfold_fold unfold_termK. Qed.
 
-Lemma unfold_term_inj : injective unfold_term.
-Proof. exact: can_inj unfold_termK. Qed.
-
-Global Instance unfold_term_inj_inst : Inj (=) (=) unfold_term := unfold_term_inj.
-
+Global Instance unfold_term_inj : Inj (=) (=) unfold_term.
+Proof. by move=> t1 t2 /(f_equal fold_term); rewrite !unfold_termK. Qed.
 
 Implicit Types (t k : term) (ts : list term).
 
@@ -250,12 +246,8 @@ Definition TExpN t ts := TExp t (TMulN ts).
     Equality and countability factor through [unfold_term]; the total order is the
     pre-term order [pt_order] transported along [unfold_term]. *)
 
-Global Instance term_eq_dec : EqDecision term.
-Proof.
-move=> t1 t2; case: (decide (unfold_term t1 = unfold_term t2)) => [e|n].
-- left; apply: unfold_term_inj; exact: e.
-- right => E; apply: n; by rewrite E.
-Defined.
+Global Instance term_eq_dec : EqDecision term :=
+  inj_eq_dec unfold_term.
 
 Global Instance term_countable : Countable term :=
   inj_countable' unfold_term fold_term unfold_termK.
@@ -395,16 +387,14 @@ move: (f_equal unfold_term E); rewrite unfold_TInv (PreTerm.inv_Nmul _ Nm).
 exact: PreTerm.inv_aux_Nid.
 Qed.
 
-Lemma TInvK : ssrfun.involutive TInv.
+Lemma TInvK t : TInv (TInv t) = t.
 Proof.
-move => t; apply: unfold_term_inj.
+apply: unfold_term_inj.
 by rewrite !unfold_TInv (PreTerm.invK _ (wf_unfold_term t)).
 Qed.
 
-Lemma TInv_inj : injective TInv.
-Proof. exact: inv_inj TInvK. Qed.
-
-Global Instance TInv_inj_inst : Inj (=) (=) TInv := TInv_inj.
+Global Instance TInv_inj : Inj (=) (=) TInv.
+Proof. by move=> t1 t2 /(f_equal TInv); rewrite !TInvK. Qed.
 
 Lemma TMulN_perm ts1 ts2 : ts1 ≡ₚ ts2 -> TMulN ts1 = TMulN ts2.
 Proof.
@@ -731,7 +721,7 @@ rewrite (PreTerm.expA _ _ _ (wf_unfold_term t)
 by rewrite (PreTerm.mul_mul2 _ _ (wf_unfold_terms ts1) (wf_unfold_terms ts2)) fmap_app.
 Qed.
 
-Lemma TExpNC : right_commutative TExpN.
+Lemma TExpNC t ts1 ts2 : TExpN (TExpN t ts1) ts2 = TExpN (TExpN t ts2) ts1.
 Proof. by move =>>; rewrite !TExpNA TExpN_catC. Qed.
 
 Definition invs_canceled ts := PreTerm.invs_canceled (unfold_term <$> ts).
@@ -831,8 +821,8 @@ have Fx1 : (TInv t1 = t1) <-> (t1 = TMulN []) := TInv_fixed t1.
 have Fx2 : (TInv t2 = t2) <-> (t2 = TMulN []) := TInv_fixed t2.
 have K : (TInv t2 = t1) <-> (TInv t1 = t2).
   by split => <-; rewrite TInvK.
-have S1 : (TMulN [] = t1) <-> (t1 = TMulN []) by split; apply: esym.
-have S2 : (TMulN [] = t2) <-> (t2 = TMulN []) by split; apply: esym.
+have S1 : (TMulN [] = t1) <-> (t1 = TMulN []) by split.
+have S2 : (TMulN [] = t2) <-> (t2 = TMulN []) by split.
 rewrite invs_canceledE Forall_cons Forall_singleton !NE2.
 clear NE2; naive_solver.
 Qed.
@@ -1236,7 +1226,7 @@ have {}H : TInv t2 ∉ exps t1'.
   have Hcount : count_exp_nat (TInv t2) t1' = 0.
     rewrite /t1' (count_exp_nat_TExp (TInv t2) t1 (TInv t2) NmI2).
     rewrite (bool_decide_eq_false_2 (TInv t2 = TInv (TInv t2))); last first.
-      by move=> /TInv_inj e; apply: (Nmul_neq_unit Nm2); apply/TInv_fixed; exact: (esym e).
+      by move=> /(inj TInv) e; apply: (Nmul_neq_unit Nm2); apply/TInv_fixed.
     rewrite (bool_decide_eq_true_2 (TInv t2 = TInv t2) eq_refl) TInvK.
     have -> : count_exp_nat (TInv t2) t1 = 0 by apply: count_exp_nat_eq0; exact: (in_TInv_exps _ _ H).
     by rewrite (bool_decide_eq_true_2 (t2 ∈ exps t1) H).
@@ -1479,22 +1469,6 @@ Definition func_of_term t :=
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
-
-(*
-Lemma tsize_TExpN_exp t ts t' : t' ∈ ts → tsize t' < tsize (TExpN t ts).
-Proof.
-elim: ts => [|t'' ts IH].
-- by rewrite elem_of_nil.
-- rewrite elem_of_cons; case => [->|/IH t'_ts].
-  + by case: (tsize_TExpN_lt t ts t'').
-  + case: (tsize_TExpN_lt t ts t'') => ??; lia.
-Qed.
-*)
-
-(*
-Lemma tsize_TExp_exp t1 t2 : tsize t2 < tsize (TExp t1 t2).
-Proof. apply: tsize_TExpN_exp. rewrite elem_of_cons. by auto. Qed.
-*)
 
 Canonical termO := leibnizO term.
 
@@ -2625,15 +2599,6 @@ move => atom.
 rewrite (exps_TExpN_sort t ts atom).
 exact: (merge_sort_Permutation term_order (cancel_invs (exps t ++ ts))).
 Qed.
-
-(*
-Lemma is_exp_TExpN t ts :
-  is_exp (TExpN t ts) = implb (bool_decide (ts = [])) (is_exp t).
-Proof.
-rewrite is_exp_TExpN -eq_op_bool_decide implb_orb.
-by case: ts.
-Qed.
-*)
 
 Lemma TExp_TExpN t1 ts1 t2 : TExp (TExpN t1 ts1) t2 = TExpN t1 (t2 :: ts1).
 Proof.
