@@ -1,6 +1,5 @@
 From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
-From mathcomp Require ssrbool.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode.
@@ -86,7 +85,7 @@ wp_apply (wp_mk_nonce_freshN {[ga]}
   iModIntro. by iApply bi.equiv_iff.
   intro contra. destruct contra.
 iIntros "%b %fresh_b #m_b #s_b #dh_gb _ token".
-have Nm_b : is_true (negb (is_mul (TNonce b))) by [].
+have Nm_b : negb (is_mul (TNonce b)) by [].
 have {}fresh_b: ¬ subterm b ga by apply: fresh_b; exact/elem_of_singleton.
 rewrite bi.intuitionistic_intuitionistically.
 set gb := TExp (TInt 0) b.

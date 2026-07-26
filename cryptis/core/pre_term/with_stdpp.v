@@ -1,8 +1,10 @@
 From cryptis Require Import mathcomp_compat lib.
+From cryptis.lib Require Import list_sort.
 From mathcomp Require Import ssreflect.
+From mathcomp Require Import all_order.
 From mathcomp Require eqtype ssrbool path.
 From deriving Require Import deriving.
-From stdpp Require Import gmap.
+From stdpp Require Import gmap sorting.
 From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
 From cryptis.core.pre_term Require Import base.
@@ -130,6 +132,70 @@ Proof. exact: (populate (PreTerm.PT0 (O0Int 0))). Qed.
 Definition pre_term_eq_dec : EqDecision PreTerm.pre_term :=
   Eval hnf in def_eq_decision _.
 Global Existing Instance pre_term_eq_dec.
+
+Global Instance pre_term_countable : Countable PreTerm.pre_term :=
+  def_countable _ pre_term_eq_dec.
+
+(** stdpp typeclass wrappers around the ssreflect total order on pre-terms
+    defined in [base.v], so that stdpp's [merge_sort] and [StronglySorted] can be
+    used to canonicalise products. *)
+Section PreTermOrder.
+Import Order.POrderTheory Order.TotalTheory ssrbool.
+Open Scope order_scope.
+
+(* We spell out [is_true] so that this order relation lands on ssreflect's
+   boolean coercion (matching the mathcomp order lemmas) rather than stdpp's
+   [Is_true]. *)
+Definition pt_order : relation PreTerm.pre_term := fun x y => is_true (x <= y).
+
+Global Instance pt_order_dec : RelDecision pt_order.
+Proof. rewrite /pt_order /RelDecision => x y; case: (x <= y); [by left | by right]. Qed.
+
+Global Instance pt_order_refl : Reflexive pt_order.
+Proof. move=> x; exact: lexx. Qed.
+
+Global Instance pt_order_trans : Transitive pt_order.
+Proof. move=> x y z; exact: le_trans. Qed.
+
+Global Instance pt_order_total : Total pt_order.
+Proof. by move=> x y; case/orP: (le_total x y); [left|right]. Qed.
+
+Global Instance pt_order_antisymm : AntiSymm eq pt_order.
+Proof. move=> x y Hxy Hyx; apply: le_anti; apply/andP; by split. Qed.
+
+End PreTermOrder.
+
+(* Bridge between mathcomp's [sort <=%O] and stdpp's [merge_sort pt_order]: both
+   are *the* sorted permutation of the input under the (antisymmetric, total)
+   order, so they coincide.  Lives here because resolving [merge_sort]'s
+   decidability instance needs stdpp's [sorting] typeclass machinery, which the
+   (mathcomp-only) [term] layer downstream cannot import. *)
+Section SortMergeSort.
+Import Order.POrderTheory Order.TotalTheory ssrbool.
+Open Scope order_scope.
+
+Lemma sorted_StronglySorted (l : list PreTerm.pre_term) :
+  is_true (path.sorted <=%O l) -> StronglySorted pt_order l.
+Proof.
+elim: l => [_|x l IH]; first by constructor.
+move=> Hs.
+have Hl : is_true (path.sorted <=%O l) := path.path_sorted Hs.
+have Ha : is_true (seq.all (<=%O x) l) := path.order_path_min le_trans Hs.
+constructor; first exact: IH Hl.
+by elim: l Ha {IH Hl Hs} => [//|y l IH] /ssrbool.andP [xy /IH ?]; constructor.
+Qed.
+
+Lemma sort_merge_sort (l : list PreTerm.pre_term) :
+  path.sort <=%O l = merge_sort pt_order l.
+Proof.
+have Hss : StronglySorted pt_order (path.sort <=%O l).
+  apply: sorted_StronglySorted; exact: (path.sort_sorted le_total).
+rewrite -{1}(merge_sort_id _ _ Hss).
+apply: merge_sort_Permutation_eq.
+apply/perm_Perm; rewrite path.perm_sort; exact: seq.perm_refl.
+Qed.
+
+End SortMergeSort.
 
 Global Instance repr_term_op0_inj : Inj (=) (=) (@repr term_op0 _).
 Proof. by case=> [?|[?]] [?|[?]] //= [<-]. Qed.

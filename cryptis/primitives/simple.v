@@ -263,7 +263,7 @@ case e_un: Spec.untuple => [[t1 t2]|]; wp_pures; last first.
   by case: (t) t_ne_0 e_un => //= - [].
 wp_apply IH.
   case: (t) e_un => //= ? ? [-> ->] /=.
-  rewrite [tsize (TPair _ _)]tsizeE ssrnat.addnE. lia.
+  rewrite [tsize (TPair _ _)]tsizeE. lia.
 case: (t) e_un => //= ? ? [-> ->] /=.
 case e_l: (Spec.to_list t2) => [ts|] //=; wp_pures => //.
 wp_apply twp_cons. by wp_pures.

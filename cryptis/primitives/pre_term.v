@@ -3,6 +3,7 @@ development. Since they don't have many dependencies, they are left in their own
 file to avoid slowing down the compilation process. *)
 
 From cryptis Require Import lib.
+From cryptis.lib Require list_sort.
 From mathcomp Require Import ssreflect.
 From mathcomp Require all_order ssrbool eqtype seq path.
 From stdpp Require Import gmap.
@@ -272,6 +273,37 @@ Qed.
 #[warnings="-ambiguous-paths"]
 Import all_order ssrbool boot.eqtype seq path.
 
+(* Bridges between the mathcomp-flavoured outputs of the HeapLang list specs
+   ([seq.rem], [\in]) and the stdpp-based [PreTerm] operations from
+   [normalize.v] ([list_sort.rem], [bool_decide (_ ∈ _)]). *)
+Lemma seq_rem_rem (x : PreTerm.pre_term) l :
+  seq.rem x l = list_sort.rem x l.
+Proof.
+elim: l => [//|y l IH] /=.
+case: eqP => [->|Hne].
+- by rewrite bool_decide_eq_true_2.
+- rewrite bool_decide_eq_false_2; last congruence.
+  by rewrite IH.
+Qed.
+
+Lemma pt_inb (x : PreTerm.pre_term) (l : seq PreTerm.pre_term) :
+  bool_decide (x ∈ l) = (x \in l).
+Proof.
+case E: (x \in l).
+- by apply: bool_decide_eq_true_2; apply/inP; rewrite E.
+- apply: bool_decide_eq_false_2 => Hin.
+  by move/inP: Hin; rewrite E.
+Qed.
+
+(* [PreTerm.exp] with its [let] inlined, so that the [bool_decide] guard is
+   exposed for [case]/rewriting. *)
+Lemma expE (b e : PreTerm.pre_term) :
+  PreTerm.exp b e =
+  if bool_decide (PreTerm.mul [:: PreTerm.expo b; e] = PreTerm.PTMul [::])
+  then PreTerm.base b
+  else PreTerm.PTExp (PreTerm.base b) (PreTerm.mul [:: PreTerm.expo b; e]).
+Proof. by rewrite /PreTerm.exp. Qed.
+
 Lemma twp_leq_term_op0 E (o1 o2 : term_op0) :
   ⊢ WP (leq_term_op0 (repr o1) (repr o2)) @ E
     [{ v, ⌜v = #(o1 <= o2)%O⌝}].
@@ -391,7 +423,7 @@ Lemma twp_hl_insert_factor E pt (pts : seq PreTerm.pre_term) Φ :
     WP hl_insert_exp (repr pt) (repr pts) @ E [{ Φ }].
 Proof.
     iIntros "HΦ".
-    rewrite /PreTerm.insert_factor.
+    rewrite /PreTerm.insert_factor pt_inb -seq_rem_rem.
     wp_lam; wp_pures.
     wp_apply twp_hl_inv.
     wp_apply twp_mem_list => //.
@@ -447,32 +479,32 @@ wp_apply twp_hl_cancel_invs.
 wp_apply twp_insertion_sort => //.
   iIntros "%x %y %Ψ _ HΨ". iApply twp_leq_pre_term. by iApply "HΨ".
 iIntros "_".
-rewrite (_ : (PreTerm.exps b ++ PreTerm.factors e)%list =
-             flatten (map PreTerm.factors [:: PreTerm.expo b; e]));
-  last by rewrite /PreTerm.exps /= cats0.
 wp_pures.
 wp_apply twp_hl_mk_mul.
 wp_pures.
 rewrite (_ : (#TMul_tag, NILV)%V = repr (PreTerm.PTMul [::])); last first.
   by rewrite /= repr_list_unseal.
 wp_bind (eq_term _ _); iApply twp_eq_pre_term.
-set c := (sort <=%O (PreTerm.cancel_invs
-  (PreTerm.factors (PreTerm.expo b) ++ PreTerm.factors e ++ [::]))).
+set c := sort <=%O (PreTerm.cancel_invs (PreTerm.exps b ++ PreTerm.factors e)).
 have Emul : PreTerm.mul [:: PreTerm.expo b; e] =
    match c with
    | [::] => PreTerm.PTMul c | [:: t] => t | [:: t, _ & _] => PreTerm.PTMul c
    end.
-  by rewrite /PreTerm.mul /= -/c; case: (c) => [|? []].
+  rewrite /PreTerm.mul.
+  have -> : concat (PreTerm.factors <$> [:: PreTerm.expo b; e])
+          = PreTerm.exps b ++ PreTerm.factors e.
+    by rewrite /PreTerm.exps /= app_nil_r.
+  by rewrite -sort_merge_sort -/c; case: (c) => [|? []].
 rewrite -!Emul.
 case: bool_decide_reflect => [HM|HM]; wp_pures.
 - wp_apply twp_hl_base.
   have -> : PreTerm.exp b e = PreTerm.base b.
-    by rewrite /PreTerm.exp HM eqxx.
+    by rewrite expE HM bool_decide_eq_true_2.
   by iApply "HΦ".
 - wp_apply twp_hl_base. wp_pures.
   have -> : PreTerm.exp b e =
             PreTerm.PTExp (PreTerm.base b) (PreTerm.mul [:: PreTerm.expo b; e]).
-    by rewrite /PreTerm.exp (introF eqP HM).
+    by rewrite expE (bool_decide_eq_false_2 _ HM).
   by iApply "HΦ".
 Qed.
 
@@ -494,7 +526,11 @@ have Emul : PreTerm.mul [:: pt1; pt2] =
    match c with
    | [::] => PreTerm.PTMul c | [:: t] => t | [:: t, _ & _] => PreTerm.PTMul c
    end.
-  by rewrite /PreTerm.mul /= cats0 -/c; case: (c) => [|? []].
+  rewrite /PreTerm.mul.
+  have -> : concat (PreTerm.factors <$> [:: pt1; pt2])
+          = PreTerm.factors pt1 ++ PreTerm.factors pt2.
+    by rewrite /= app_nil_r.
+  by rewrite -sort_merge_sort -/c; case: (c) => [|? []].
 rewrite -Emul.
 by iApply "HΦ".
 Qed.
@@ -504,7 +540,7 @@ Lemma twp_hl_inv_spec E (pt : PreTerm.pre_term) :
 Proof. iIntros (Φ) "_ HΦ". iApply twp_hl_inv. by iApply "HΦ". Qed.
 
 Lemma twp_hl_inv_distr E (pt : PreTerm.pre_term) Φ
-    (wf : is_true (PreTerm.wf_term pt)) :
+    (wf : PreTerm.wf_term pt) :
     Φ (repr (PreTerm.inv pt)) ⊢
     WP hl_inv_distr (repr pt) @ E [{ Φ }].
 Proof.
@@ -520,21 +556,24 @@ wp_apply (twp_map_list PreTerm.inv_aux hl_inv).
   iIntros "_".
   wp_apply twp_hl_mk_mul.
   have mapE : ListDef.map PreTerm.inv_aux (PreTerm.factors pt)
-            = seq.map PreTerm.inv_aux (PreTerm.factors pt).
+            = PreTerm.inv_aux <$> PreTerm.factors pt.
     by elim: (PreTerm.factors pt) => //= ? ? ->.
   rewrite mapE.
-  have Nm : all (fun t => ~~ PreTerm.is_mul t)
-              (seq.map PreTerm.inv_aux (PreTerm.factors pt)).
-    move: (PreTerm.wf_factors wf). elim: (PreTerm.factors pt) => [_ //|t l IH] /=.
-    move=> /andP[wft wfl]. rewrite (PreTerm.is_mul_inv_aux wft). exact: (IH wfl).
+  have Nm : Forall (fun t => negb (PreTerm.is_mul t))
+              (PreTerm.inv_aux <$> PreTerm.factors pt).
+    apply/Forall_fmap. apply/Forall_forall => x x_in.
+    apply: PreTerm.is_mul_inv_aux.
+    by move: (PreTerm.wf_factors _ wf) => /Forall_forall; apply.
   set c := sort <=%O
-             (PreTerm.cancel_invs (seq.map PreTerm.inv_aux (PreTerm.factors pt))).
+             (PreTerm.cancel_invs (PreTerm.inv_aux <$> PreTerm.factors pt)).
   have HE : PreTerm.inv pt =
      match c with
      | [::] => PreTerm.PTMul c | [:: t] => t | [:: t, _ & _] => PreTerm.PTMul c end.
-    rewrite (PreTerm.inv_factors wf) /PreTerm.mul
-            (PreTerm.flatten_factors_Nmul_id (proj2 (is_trueP _) Nm)) -/c.
-    by case: (c) => [|? []].
+    rewrite (PreTerm.inv_factors _ wf) /PreTerm.mul.
+    have -> : concat (PreTerm.factors <$> (PreTerm.inv_aux <$> PreTerm.factors pt))
+            = PreTerm.inv_aux <$> PreTerm.factors pt.
+      exact: (PreTerm.flatten_factors_Nmul_id _ Nm).
+    by rewrite -sort_merge_sort -/c; case: (c) => [|? []].
   rewrite -HE. by iApply "HΦ".
 Qed.
 

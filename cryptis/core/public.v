@@ -37,7 +37,6 @@ Global Existing Instance public_inG.
 
 Definition publicΣ : gFunctors :=
   #[savedPredΣ term;
-    savedPredΣ (key_type * term);
     savedPredΣ (term * term);
     savedPropΣ;
     metaΣ].
@@ -403,13 +402,13 @@ Proof.
 case; try by move =>> -> -> //;
           try move => /elem_of_union [];
           move => /elem_of_singleton ->;
-          rewrite [tsize (_ _)]tsizeE -?ssrnat.plusE;
+          rewrite [tsize (_ _)]tsize_eq;
           lia.
 move => t'' -> Ninv inv_t E; rewrite E in inv_t *.
 move => /elem_of_singleton ->.
-have NmI : is_true (negb (is_mul (TInv t''))) by rewrite (is_inv_Nmul inv_t).
-have Nm : is_true (negb (is_mul t'')) by move: (Nmul_TInv NmI); rewrite TInvK.
-have Ninv' : is_true (negb (is_inv t'')) by case: (is_inv t'') Ninv => // /(_ I).
+have NmI : negb (is_mul (TInv t'')) by rewrite (is_inv_Nmul inv_t).
+have Nm : negb (is_mul t'') by move: (Nmul_TInv NmI); rewrite TInvK.
+have Ninv' : negb (is_inv t'') by apply/negb_True.
 rewrite (tsize_TInv t'' Nm Ninv'); lia.
 Qed.
 
@@ -469,23 +468,22 @@ f_equiv; last (f_equiv; last f_equiv).
   by move: (decompose_tsize T_t T_t') => ?; eauto.
 - apply: and_proper_L => mul_t.
   apply: big_sepL_proper => _ t' /(list_elem_of_lookup_2 _ _ _) t'_in.
-  apply: HP; apply: (ssrbool.elimT ssrnat.ltP).
-  exact: (@tsize_tfactors_lt t' t (proj2 (is_trueP _) mul_t) (ssrbool.introT inP t'_in)).
+  apply: HP.
+  exact: (tsize_tfactors_lt t' t mul_t t'_in).
 - apply: and_proper_L => exp_t.
   apply: big_sepL_proper => _ t' /(list_elem_of_lookup_2 _ _ _) t'_in.
   apply: and_proper_L => Nm.
   case: (@tsize_TExp_TInv t t' Nm t'_in) => lt1 [] lt2 lt3; f_equiv.
   + apply: exp_pred0_proper' => /= t'' t''_ts; apply: HP.
     case: t''_ts => [->|t''_in]; first exact: lt1.
-    apply: (ssrbool.elimT ssrnat.ltP).
-    exact: (@tsize_exps_lt t'' t (ssrbool.introT inP t''_in)).
+    exact: (tsize_exps_lt t'' t t''_in).
   + by f_equiv; f_equiv; apply: HP.
 - case: t => // k t in HP *.
   case: func_of_term => // F; f_equiv; f_equiv.
   case e_k: Spec.open_key => [k'|] //=.
   have ? := Spec.open_key_tsize e_k.
   have ?: tsize (TSeal k t) = S (tsize k + tsize t).
-    by rewrite tsizeE -ssrnat.plusE.
+    by rewrite tsize_eq.
   f_equiv; f_equiv; apply: HP; lia.
 Qed.
 
@@ -622,7 +620,7 @@ Global Instance Persistent_exp_pred t1 t2 : Persistent (exp_pred t1 t2).
 Proof. rewrite exp_pred_unseal /exp_pred_def. by apply _. Qed.
 
 Lemma exp_pred_intro1_gen t1 t2 ts :
-  is_true (atomic ts) ->
+  atomic ts ->
   (∀ t, t ∈ ts → TInv t ∉ exps t2) →
   ([∗ list] t ∈ ts, ▷ public t) -∗
   exp_pred_base t1 (TExpN t2 ts) -∗ exp_pred t1 t2.
@@ -634,12 +632,15 @@ Qed.
 
 Lemma exp_pred_intro1 t1 t2 : exp_pred_base t1 t2 -∗ exp_pred t1 t2.
 Proof.
-rewrite -{1}[t2]TExpN0; iApply exp_pred_intro1_gen => //.
-by move=> ?; rewrite elem_of_nil.
+have atom0 : atomic (@nil term) := Forall_nil_2 _.
+have hexps : ∀ t, t ∈ (@nil term) → TInv t ∉ exps t2.
+{ by move=> ?; rewrite elem_of_nil. }
+rewrite -{1}[t2]TExpN0.
+by iApply (@exp_pred_intro1_gen t1 t2 [] atom0 hexps).
 Qed.
 
 Lemma exp_pred_intro2 t t1 t2 :
-  is_true (negb (is_mul t)) ->
+  negb (is_mul t) ->
   TInv t ∉ exps t2 →
   exp_pred t1 t2 -∗ exp_pred t (TExp t2 t) -∗ exp_pred t1 (TExp t2 t).
 Proof.
@@ -696,7 +697,7 @@ iApply exp_pred_ind; eauto 10.
     by move=> t' /ts_t2 t'_t2 t'_t; apply: t'_t2; rewrite -t'_t; eauto.
   move/ts'_t2: t_ts'; rewrite -!count_exp_gt0 => t_ts'.
   suff: (count_exp t t2 ≤ count_exp t (TExpN t2 ts))%Z by lia.
-  by apply: count_exp_TExpNW; [exact: (proj2 (is_trueP _) atom_ts) | exact: ts_t].
+  by apply: count_exp_TExpNW; [exact: atom_ts | exact: ts_t].
 - iIntros "!> %t %t1 %t2 %Nm_t %t_t2 #dh_t1 IH_t1 #dh_t IH_t %ts %t1_ts %ts_t2'".
   rewrite base_TExp; case: (decide (t ∈ ts)) => t_ts; first by iApply "IH_t".
   iApply "IH_t1"; iPureIntro => // t3 t3_ts.
@@ -773,26 +774,28 @@ Proof.
 wlog: t / negb (is_inv t).
 { move => H Nm.
   case Einv: (is_inv t); last by apply: H => //; rewrite Einv.
-  have Nm' : is_true (negb (is_mul t)) := proj2 (is_trueP _) Nm.
-  have NmI : is_true (negb (is_mul (TInv t))) := Nmul_TInv Nm'.
-  have NinvI : is_true (negb (is_inv (TInv t))) by rewrite (is_inv_TInv t Nm') Einv.
-  by move: (H (TInv t) (proj1 (is_trueP _) NinvI) (proj1 (is_trueP _) NmI));
+  have Nm' : negb (is_mul t) := Nm.
+  have NmI : negb (is_mul (TInv t)) := Nmul_TInv Nm'.
+  have NinvI : negb (is_inv (TInv t)) by rewrite (is_inv_TInv t Nm') Einv.
+  by move: (H (TInv t) NinvI NmI);
      rewrite TInvK => <-. }
 move => Ninv Nm.
-have Nm' : is_true (negb (is_mul t)) := proj2 (is_trueP _) Nm.
-have Ninv' : is_true (negb (is_inv t)) := proj2 (is_trueP _) Ninv.
+have Nm' : negb (is_mul t) := Nm.
+have Ninv' : negb (is_inv t) := Ninv.
 apply: anti_symm.
 - rewrite [public (TInv t)]public_eq minted_TInv.
   iIntros "[_ [dec | [ [%mul _] | [ [%exp _] | Hstr]]]]".
   + iDestruct "dec" as (T) "[%d publ]".
-    have invI : is_true (is_inv (TInv t)) by rewrite (is_inv_TInv t Nm').
+    have invI : is_inv (TInv t) by rewrite (is_inv_TInv t Nm').
     case: d => [n eT et|t1 t2 eT et|kt t0 eT et|k t0 eT et|t0 eT et|s eT Ns Hi et];
       try by move: invI; rewrite et.
     move: et => /TInv_inj ->; rewrite eT big_sepS_singleton. by [].
   + by move: (Nmul_TInv Nm'); rewrite (proj2 (is_trueP _) mul).
   + by move: (is_exp_TInv t Nm' Ninv'); rewrite (proj2 (is_trueP _) exp).
-  + have invI : is_true (is_inv (TInv t)) by rewrite (is_inv_TInv t Nm').
-    by case E: (TInv t) invI => [n|t1 t2|a|kt k|k m|h|pt wf nf] //= _.
+  + have invI : is_inv (TInv t) by rewrite (is_inv_TInv t Nm').
+    iRevert "Hstr".
+    case E: (TInv t) invI => [n|t1 t2|a|kt k|k m|h|pt wf nf] //= _;
+      by iIntros "[]".
 - iIntros "#publ".
   rewrite [public (TInv t)]public_eq minted_TInv.
   iSplit; first by iApply public_minted.
@@ -805,9 +808,8 @@ Qed.
 Lemma tfactorsN t : negb (is_mul t) -> tfactors t = [t].
 Proof.
 move=> Nm.
-have Nm' : is_true (negb (PreTerm.is_mul (unfold_term t))).
-  by rewrite -is_mul_unfold; exact: (proj2 (is_trueP _) Nm).
-by rewrite /tfactors (PreTerm.factorsN Nm') /= unfold_termK.
+have Nm' : negb (PreTerm.is_mul (unfold_term t)) by rewrite -is_mul_unfold.
+by rewrite /tfactors (PreTerm.factorsN _ Nm') /= unfold_termK.
 Qed.
 
 (* Elimination form: a product is public iff all its factors are. *)
@@ -820,9 +822,9 @@ iIntros "[_ [publ | [ [_ Hfs] | [ (%exp_t & _) | Hstr ]]]]".
 - iDestruct "publ" as (T) "[%dec _]".
   by move: mul_t; rewrite (decompose_is_mul dec).
 - by iApply "Hfs".
-- by move: (proj2 (is_trueP _) mul_t) (proj2 (is_trueP _) exp_t);
+- by move: mul_t exp_t;
      rewrite is_mul_unfold is_exp_unfold; case: (unfold_term t).
-- by move: mul_t; case: (t) => //=; iDestruct "Hstr" as "[]".
+- by case: (t) mul_t => // *; iDestruct "Hstr" as "[]".
 Qed.
 
 Lemma public_tfactors t :
@@ -844,14 +846,15 @@ Qed.
 
 Lemma public_TInv t : public (TInv t) ⊣⊢ public t.
 Proof.
+have key : forall l, atomic l ->
+  ([∗ list] u ∈ map TInv l, public u) ⊣⊢ [∗ list] u ∈ l, public u.
+{ elim => [//|u us IH] /Forall_cons [Nmu atom].
+  rewrite (_ : map TInv (u :: us) = TInv u :: map TInv us) //.
+  by rewrite !big_sepL_cons (public_TInv_Nmul Nmu) (IH atom). }
 rewrite (public_tfactors (TInv t)) (public_tfactors t) minted_TInv.
 f_equiv.
-rewrite tfactors_TInv big_sepL_fmap.
-apply: big_sepL_proper => k u u_in.
-apply: public_TInv_Nmul.
-exact: (proj1 (is_trueP _)
-  (ssrbool.elimT seq.allP (atom_tfactors t) _
-     (ssrbool.introT inP (list_elem_of_lookup_2 _ _ _ u_in)))).
+setoid_rewrite (tfactors_TInv t).
+by rewrite (key _ (atom_tfactors t)).
 Qed.
 
 Lemma public_TKey kt t :
@@ -957,7 +960,7 @@ Qed.
 
 Lemma public_TExpN t ts :
   ¬ is_exp t →
-  is_true (atomic ts) ->
+  atomic ts ->
   invs_canceled ts ->
   ts ≠ [] →
   public (TExpN t ts) ⊣⊢
@@ -965,35 +968,35 @@ Lemma public_TExpN t ts :
   [∗ list] t' ∈ ts,
     exp_pred t' (TExpN t ts) ∧ □ (public t' → public (TExp (TExpN t ts) (TInv t'))).
 Proof.
-move => /[dup] Nx /negb_True /is_trueP nx atom /[dup] ic /is_trueP ic' tsN0.
+move => /[dup] Nx /negb_True nx atom ic tsN0.
 have ttsX: is_exp (TExpN t ts).
-  by rewrite (@is_exp_TExpN t ts nx atom ic'); first case: (ts) tsN0.
+  by rewrite (is_exp_TExpN t ts nx atom ic); first case: (ts) tsN0.
 apply: anti_symm; last first.
 - (* backward: [∗list] is guard-free, [public_eq]'s is_exp disjunct carries the
      ⌜~~ is_mul (TInv t')⌝ guard — add it (free, since factors are atomic). *)
   iIntros "#[m dhp]".
-  rewrite public_eq (exps_TExpN' Nx atom ic).
+  rewrite public_eq; setoid_rewrite (exps_TExpN' Nx atom ic).
   iSplit; first done.
   iRight; iRight; iLeft.
   iSplit; first done.
   iApply (big_sepL_mono with "dhp").
   iIntros (k t' Hk) "H"; iSplit; last by [].
-  iPureIntro; apply/is_trueP/Nmul_TInv.
-  move: (list_elem_of_lookup_2 _ _ _ Hk) => /(ssrbool.introT inP) t'ts.
-  exact: (ssrbool.elimT seq.allP atom _ t'ts).
+  iPureIntro; apply: Nmul_TInv.
+  exact: (Forall_mem atom (list_elem_of_lookup_2 _ _ _ Hk)).
 - (* forward: drop the guard from the is_exp disjunct. *)
-  rewrite public_eq !(minted_TExpN Nx atom ic) (exps_TExpN' Nx atom ic).
+  rewrite public_eq !(minted_TExpN Nx atom ic).
+  setoid_rewrite (exps_TExpN' Nx atom ic).
   iIntros "#[[mt mts] Hdisj]".
   iSplit; first by iSplit.
   iDestruct "Hdisj" as "[c1 | [c2 | [c3 | c4]]]".
   + iDestruct "c1" as (T) "[%dec _]".
     by move: ttsX; rewrite (decompose_is_exp dec).
   + iDestruct "c2" as "(%mul_c & _)".
-    by move: (proj2 (is_trueP _) ttsX) (proj2 (is_trueP _) mul_c);
+    by move: ttsX mul_c;
        rewrite is_exp_unfold is_mul_unfold; case: (unfold_term (TExpN t ts)).
   + iDestruct "c3" as "(_ & exp)".
     iApply (big_sepL_mono with "exp"). by iIntros (k t' _) "(_ & $)".
-  + by case: (TExpN t ts) ttsX => // *; iDestruct "c4" as "[]".
+  + iRevert "c4"; case: (TExpN t ts) ttsX => // *; by iIntros "[]".
 Qed.
 
 Lemma public_TExpN' t :
@@ -1011,8 +1014,8 @@ move => expt; apply: anti_symm; last first.
   iSplit; first done.
   iApply (big_sepL_mono with "dhp").
   iIntros (k t' Hk) "H"; iSplit; last by [].
-  iPureIntro; apply/is_trueP/Nmul_TInv.
-  by apply: (exps_Nmul t' t); apply: (ssrbool.introT inP); exact: list_elem_of_lookup_2 Hk.
+  iPureIntro; apply: Nmul_TInv.
+  by apply: (exps_Nmul t' t); exact: list_elem_of_lookup_2 Hk.
 - rewrite public_eq.
   iIntros "#[m Hdisj]".
   iSplit; first done.
@@ -1020,7 +1023,7 @@ move => expt; apply: anti_symm; last first.
   + iDestruct "c1" as (T) "[%dec _]".
     by move: expt; rewrite (decompose_is_exp dec).
   + iDestruct "c2" as "(%mul_c & _)".
-    by move: (proj2 (is_trueP _) expt) (proj2 (is_trueP _) mul_c);
+    by move: expt mul_c;
        rewrite is_exp_unfold is_mul_unfold; case: (unfold_term t).
   + iDestruct "c3" as "(_ & exp)".
     iApply (big_sepL_mono with "exp"). by iIntros (k t' _) "(_ & $)".
@@ -1036,8 +1039,8 @@ Proof.
 move=> Nexp Nm2.
 have eq12 : TExp t1 t2 = TExpN t1 [t2].
   by rewrite TExp_expsE base_expN // exps_expN // cat0s.
-have Nm2' : is_true (negb (is_mul t2)) := proj2 (is_trueP _) Nm2.
-have atom2 : is_true (atomic [t2]) by rewrite /atomic /= Nm2'.
+have Nm2' : negb (is_mul t2) := Nm2.
+have atom2 : atomic [t2] by rewrite /atomic; apply/Forall_singleton.
 have expK : TExp (TExp t1 t2) (TInv t2) = t1.
   by rewrite -{1}[t2]TInvK; apply: TExpK';
      [ rewrite TInvK | exact: (Nmul_TInv Nm2') ].
@@ -1059,9 +1062,9 @@ Lemma public_TExp2_iff t1 t2 t3 :
   □ (public t3 → public (TExp t1 t2)).
 Proof.
 move => Nexp Nm2 Nm3 t2t3.
-have Nm2' : is_true (negb (is_mul t2)) := proj2 (is_trueP _) Nm2.
-have Nm3' : is_true (negb (is_mul t3)) := proj2 (is_trueP _) Nm3.
-have atom23 : is_true (atomic [t2; t3]) by rewrite /atomic /= Nm2' Nm3'.
+have Nm2' : negb (is_mul t2) := Nm2.
+have Nm3' : negb (is_mul t3) := Nm3.
+have atom23 : atomic [t2; t3] by rewrite /atomic Forall_cons Forall_singleton; split.
 have ic23 : invs_canceled [t2; t3] := proj2 (@invs_canceled2 t2 t3 Nm2' Nm3') t2t3.
 have e2 : TExp (TExpN t1 [t2; t3]) (TInv t2) = TExp t1 t3.
   rewrite -TExp_TExpN -{1}[t2]TInvK TExpK'; first last.
@@ -1098,7 +1101,7 @@ Lemma public_TExp_Nmul t1 t2 :
   public t2 -∗
   public (TExp t1 t2).
 Proof.
-move=> Nm2; have Nm2' : is_true (negb (is_mul t2)) := proj2 (is_trueP _) Nm2.
+move=> Nm2; have Nm2' : negb (is_mul t2) := Nm2.
 elim /term_lt_ind: t1 => t1 IH; iIntros "#p1 #p2".
 have [t2_t1|t2_t1] := decide (TInv t2 ∈ exps t1).
   iPoseProof (exp_pred_exps t2_t1 with "p1") as "[_ #p1']".
@@ -1115,7 +1118,7 @@ have [->|t_t2] := decide (t = t2).
 have t_t1: t ∈ exps t1.
   move: t_t1'; rewrite -!count_exp_gt0 count_exp_TExp // decide_False //.
   case: decide => ?; lia.
-have Nmt' : is_true (negb (is_mul t)) := exps_Nmul _ _ (ssrbool.introT inP t_t1).
+have Nmt' : negb (is_mul t) := exps_Nmul _ _ t_t1.
 iPoseProof (exp_pred_exps t_t1 with "p1") as "[dh #p]"; iSplit.
   by iApply exp_pred_intro2 => //; iApply exp_pred_intro3.
 iIntros "!> #pt"; iSpecialize ("p" with "pt").
@@ -1124,20 +1127,20 @@ have comm : TExp (TExp t1 t2) (TInv t) = TExp (TExp t1 (TInv t)) t2.
   rewrite (_ : TExp t1 (TInv t) = TExpN t1 [TInv t]); last by rewrite /TExpN TMulN1.
   by rewrite !TExp_TExpN TExpC2.
 rewrite comm; iApply (IH with "p p2").
-have NmTt : negb (is_mul (TInv t)) := proj1 (is_trueP _) (Nmul_TInv Nmt').
+have NmTt : negb (is_mul (TInv t)) := Nmul_TInv Nmt'.
 by have [?[??]] := tsize_TExp_TInv NmTt t_t1.
 Qed.
 
 (* Peel one atomic factor at a time onto the exponent. *)
 Lemma public_TExpN_intro t ts :
-  is_true (atomic ts) ->
+  atomic ts ->
   public t -∗ ([∗ list] t' ∈ ts, public t') -∗ public (TExpN t ts).
 Proof.
 elim: ts => [|u us IH] atom; iIntros "#p #pus".
 - by rewrite TExpN0.
-- have [Nu atom_us] := ssrbool.elimT ssrbool.andP atom.
+- move: atom => /Forall_cons [Nu atom_us].
   rewrite -TExp_TExpN big_sepL_cons; iDestruct "pus" as "[#pu #pus']".
-  iApply (public_TExp_Nmul _ (proj1 (is_trueP _) Nu) with "[] pu").
+  iApply (public_TExp_Nmul _ Nu with "[] pu").
   by iApply (IH atom_us with "p pus'").
 Qed.
 
@@ -1159,12 +1162,12 @@ Lemma public_TMulN_intro ts :
   wf_mul_list ts ->
   ([∗ list] t' ∈ ts, public t') ⊢ public (TMulN ts).
 Proof.
-move => wf; have wf' : is_true (wf_mul_list ts) := proj2 (is_trueP _) wf.
+move => wf; have wf' : wf_mul_list ts := wf.
 rewrite public_eq; iIntros "#H"; iSplit.
 - rewrite minted_TMulN //.
   iApply (big_sepL_mono with "H"); iIntros (k t' _) "?"; by iApply public_minted.
 - iRight; iLeft; iSplit.
-  + by iPureIntro; apply/is_trueP; exact: (is_mul_TMulN ts wf').
+  + by iPureIntro; exact: (is_mul_TMulN ts wf').
   + by rewrite (tfactors_TMulN ts wf').
 Qed.
 
@@ -1173,18 +1176,15 @@ Qed.
 Lemma mem_tfactors_TMulN2 t1 t2 t' :
   t' ∈ tfactors (TMulN (t1 :: t2 :: nil)) → t' ∈ tfactors t1 ++ tfactors t2.
 Proof.
-move=> Hc. apply/(ssrbool.elimT inP). move: Hc => /(ssrbool.introT inP).
-rewrite /tfactors unfold_TMulN /=.
-rewrite PreTerm.factors_mul; last by rewrite /= !wf_unfold_term.
-rewrite /= seq.cats0.
-move=> /(ssrbool.elimT seq.mapP) [pt] pt_in ->.
-move: pt_in; rewrite path.mem_sort => /PreTerm.mem_cancel_invs.
-have E2 : (seq.map fold_term (PreTerm.factors (unfold_term t1)) ++
-           seq.map fold_term (PreTerm.factors (unfold_term t2)))
-        = seq.map fold_term (seq.cat (PreTerm.factors (unfold_term t1))
-                                     (PreTerm.factors (unfold_term t2))).
-  by rewrite seq.map_cat.
-rewrite E2. exact: seq.map_f.
+rewrite /tfactors unfold_TMulN.
+rewrite (PreTerm.factors_mul _ (wf_unfold_terms [t1; t2])).
+move=> /list_elem_of_fmap [pt [-> Hpt]].
+move: Hpt; rewrite (list_sort.elem_of_merge_sort pt_order) => /PreTerm.mem_cancel_invs.
+have -> : concat (PreTerm.factors <$> (unfold_term <$> [t1; t2]))
+        = PreTerm.factors (unfold_term t1) ++ PreTerm.factors (unfold_term t2).
+{ by rewrite /= app_nil_r. }
+rewrite elem_of_app => -[Hin|Hin]; rewrite elem_of_app; [left|right];
+  apply: list_elem_of_fmap_2; exact: Hin.
 Qed.
 
 Lemma big_sepL_tfactors_TMulN2 (Φ : term → iProp) `{!∀ t, Persistent (Φ t)} t1 t2 :
@@ -1212,7 +1212,14 @@ iApply public_tfactors; iSplit.
 Qed.
 
 Lemma public_TMul0 : ⊢ public (TMulN nil).
-Proof. by iApply (public_TMulN_intro (ts := nil)). Qed.
+Proof.
+have wf0 : wf_mul_list (@nil term).
+{ split; first exact: Forall_nil_2.
+  split; first by constructor.
+  split; first by apply/invs_canceledE; exact: Forall_nil_2.
+  done. }
+by iApply (public_TMulN_intro wf0).
+Qed.
 
 Lemma False_public t :
   minted t -∗
@@ -1243,25 +1250,22 @@ elim: t.
   iEval (rewrite minted_TInv) in "m".
   rewrite public_TInv. by iApply IH.
 - move => t IHt nX ts IHts atom nZ sorted canceled.
-  apply is_trueP in canceled.
-  apply is_trueP in nX; apply negb_True in nX.
-  apply (ssrbool.elimN eqtype.eqP) in nZ.
+  move: nX => /negb_True nX.
   iIntros "#mt #contra"; rewrite minted_TExpN // {canceled nZ sorted}.
   have {}IHts : ∀ t', t' ∈ ts → minted t' -∗ ▷ False -∗ public t'.
     elim: ts IHts {atom} => [_ /elem_of_nil [] //|t' ts IH] /=.
     by case=> Ht' Hts t'' /elem_of_cons [->|t''_ts]; eauto.
   iDestruct "mt" as "[mt mts]"; iInduction ts as [|t' ts IH].
     by rewrite TExpN0; iApply IHt.
-  have [Nmt' atomts] := ssrbool.elimT ssrbool.andP atom.
+  have /Forall_cons [Nmt' atomts] := atom.
   rewrite /= -TExp_TExpN; iDestruct "mts" as "[mt' mts]".
-  iApply (public_TExp_Nmul _ (proj1 (is_trueP _) Nmt'));
+  iApply (public_TExp_Nmul _ Nmt');
     last by iApply IHts; rewrite // elem_of_cons; eauto.
   by iApply "IH" => //; iPureIntro => t'' t''_ts; apply: IHts; rewrite elem_of_cons; eauto.
 - move => ts IHts atom sorted canceled sizeN1.
-  have wf : is_true (wf_mul_list ts)
-    by rewrite /wf_mul_list /atomic atom sorted canceled sizeN1.
+  have wf : wf_mul_list ts := conj atom (conj sorted (conj canceled sizeN1)).
   iIntros "#mt #contra".
-  iApply (public_TMulN_intro (proj1 (is_trueP _) wf)).
+  iApply (public_TMulN_intro wf).
   iEval (rewrite minted_TMulN //) in "mt".
   have {}IHts : ∀ t', t' ∈ ts → minted t' -∗ ▷ False -∗ public t'.
     elim: ts IHts {atom sorted canceled sizeN1 wf} => [_ /elem_of_nil [] //|t' ts IH] /=.
@@ -1287,7 +1291,7 @@ Local Lemma exp_pred_intro4_aux t1 t2 t3 :
 Proof.
 move=> t1_t3 t3_t2 t1V_t2.
 have NmI3 : negb (is_mul (TInv t3)).
-  by apply/is_trueP; apply: Nmul_TInv; exact: exps_Nmul _ _ (ssrbool.introT inP t3_t2).
+  by apply: Nmul_TInv; exact: exps_Nmul _ _ t3_t2.
 have t_t3V : TInv t1 ≠ t3 by congruence.
 move: t1V_t2; rewrite -!count_exp_gt0 count_exp_TExp // TInvK.
 rewrite decide_False; last by move=> /TInv_inj; congruence.
@@ -1304,26 +1308,26 @@ iIntros (t3_t2) "dh"; iRevert (t3_t2); iRevert (t1 t2) "dh".
 iApply exp_pred_ind.
 - iIntros "!> %ts %t1 %t2 %atom_ts %ts_t2 #pts #dh %t3_t2 #p3".
   iApply (@exp_pred_intro1_gen _ _ (t3 :: ts)).
-  + have Nm3 : is_true (negb (is_mul t3)) := exps_Nmul _ _ (ssrbool.introT inP t3_t2).
-    exact: (ssrbool.introT ssrbool.andP (conj Nm3 (proj2 (is_trueP _) atom_ts))).
+  + have Nm3 : negb (is_mul t3) := exps_Nmul _ _ t3_t2.
+    by rewrite /atomic; constructor; [exact: Nm3 | exact: atom_ts].
   + move=> t t_ts; case: (decide (t = t3)) => [->|t_t3].
-      have Nm3 : is_true (negb (is_mul t3)) := exps_Nmul _ _ (ssrbool.introT inP t3_t2).
-      have NmI3 : is_true (negb (is_mul (TInv t3))) := Nmul_TInv Nm3.
-      rewrite not_elem_of_TInv_exps; last exact: (proj1 (is_trueP _) Nm3).
+      have Nm3 : negb (is_mul t3) := exps_Nmul _ _ t3_t2.
+      have NmI3 : negb (is_mul (TInv t3)) := Nmul_TInv Nm3.
+      rewrite not_elem_of_TInv_exps; last exact: Nm3.
       by rewrite (TExpK' _ _ NmI3 Nm3).
     have {}t_ts: t ∈ ts by case/elem_of_cons: t_ts => //; congruence.
     have t_t2 := ts_t2 _ t_ts.
     exact: exp_pred_intro4_aux.
   + by rewrite /=; eauto.
-  + have Nm3 : is_true (negb (is_mul t3)) := exps_Nmul _ _ (ssrbool.introT inP t3_t2).
-    have NmI3 : is_true (negb (is_mul (TInv t3))) := Nmul_TInv Nm3.
+  + have Nm3 : negb (is_mul t3) := exps_Nmul _ _ t3_t2.
+    have NmI3 : negb (is_mul (TInv t3)) := Nmul_TInv Nm3.
     have e : TExpN (TExp t2 (TInv t3)) (t3 :: ts) = TExpN t2 ts.
       rewrite -TExp_TExpN (_ : TExpN (TExp t2 (TInv t3)) ts = TExp (TExpN t2 ts) (TInv t3)).
         by rewrite (TExpK' _ _ NmI3 Nm3).
       by rewrite TExp_TExpN (_ : TExp t2 (TInv t3) = TExpN t2 [TInv t3]) ?TExpNA /TExpN ?TMulN1 //.
     rewrite e; iApply "dh".
 - iIntros "!> %t %t1 %t2 %Nm_t %t_t2 #dh1 #IH1 #dh2 #IH2 %t3_t2' #p3".
-  have Nmt : is_true (negb (is_mul t)) := proj2 (is_trueP _) Nm_t.
+  have Nmt : negb (is_mul t) := Nm_t.
   case: (decide (t3 = t)) => [->|t_t3].
     have expK : TExp (TExp t2 t) (TInv t) = t2.
       by rewrite -{1}[t]TInvK; apply: TExpK'; [ rewrite TInvK | exact: (Nmul_TInv Nmt) ].
@@ -1351,7 +1355,7 @@ Lemma public_TExp_add t1 t2 :
   exp_pred t2 (TExp t1 t2) -∗
   public (TExp t1 t2).
 Proof.
-move=> Nm2; have Nm2' : is_true (negb (is_mul t2)) := proj2 (is_trueP _) Nm2.
+move=> Nm2; have Nm2' : negb (is_mul t2) := Nm2.
 elim/term_lt_ind: t1 => t1 IH in t2 Nm2 Nm2' *.
 iIntros "%t2_t1 #p1 #m #dh".
 rewrite [public (TExp _ _)]public_TExpN' //; last first.
@@ -1371,13 +1375,13 @@ have t_t1: t ∈ exps t1.
 iPoseProof (exp_pred_exps t_t1 with "p1") as "[dh_t #p1']".
 iSplit; first by iApply exp_pred_intro2.
 iIntros "!> #p"; iSpecialize ("p1'" with "p").
-have Nmt : is_true (negb (is_mul t)) := exps_Nmul _ _ (ssrbool.introT inP t_t1).
+have Nmt : negb (is_mul t) := exps_Nmul _ _ t_t1.
 have comm : TExp (TExp t1 t2) (TInv t) = TExp (TExp t1 (TInv t)) t2.
   rewrite (_ : TExp t1 t2 = TExpN t1 [t2]); last by rewrite /TExpN TMulN1.
   rewrite (_ : TExp t1 (TInv t) = TExpN t1 [TInv t]); last by rewrite /TExpN TMulN1.
   by rewrite !TExp_TExpN TExpC2.
 rewrite comm; iApply (IH with "p1' m []").
-- by have [_ [_ ?]] := tsize_TExp_TInv (proj1 (is_trueP _) (Nmul_TInv Nmt)) t_t1.
+- by have [_ [_ ?]] := tsize_TExp_TInv (Nmul_TInv Nmt) t_t1.
 - exact: Nm2.
 - exact: Nm2'.
 - have t2_tV : t2 ≠ TInv t by move=> contra; apply: t2_t1; rewrite contra TInvK.
@@ -1385,7 +1389,7 @@ rewrite comm; iApply (IH with "p1' m []").
   rewrite -!count_exp_gt0 !count_exp_TInv in contra *.
   suff: (count_exp t2 t1 ≤ count_exp t2 (TExp t1 (TInv t)))%Z by lia.
   by apply: count_exp_TExpW;
-     [exact: (proj1 (is_trueP _) (Nmul_TInv Nmt)) | rewrite TInvK; exact: not_eq_sym t_t2].
+     [exact: (Nmul_TInv Nmt) | rewrite TInvK; exact: not_eq_sym t_t2].
 - by rewrite -comm; iApply exp_pred_intro4 => //.
 Qed.
 
@@ -1397,7 +1401,7 @@ Lemma public_TExp_exp_pred t1 t2 :
   □ (∀ t, exp_pred_base (TInv t2) t ↔ ▷ False) -∗
   public (TExp t1 t2).
 Proof.
-move=> Nm2; have Nm2' : is_true (negb (is_mul t2)) := proj2 (is_trueP _) Nm2.
+move=> Nm2; have Nm2' : negb (is_mul t2) := Nm2.
 iIntros "#p1 #m2 #dh #dhV"; iApply except_0_public.
   by iApply all_minted_TExp; iSplit; rewrite // public_minted.
 case: (decide (TInv t2 ∈ exps t1)) => in_exps; last first.

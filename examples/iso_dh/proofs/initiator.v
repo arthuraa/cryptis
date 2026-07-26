@@ -1,6 +1,5 @@
 From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
-From mathcomp Require ssrbool.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode.
@@ -82,7 +81,7 @@ wp_apply (wp_mk_nonce_freshN ∅
   2: exact /neg_false.
   iIntros "!>"; iSplit; eauto; by iIntros "(_ & ?)".
 iIntros "%a %fresh #m_a #s_a #a_pred _ token_ga".
-have Nm_a : is_true (negb (is_mul (TNonce a))) by [].
+have Nm_a : negb (is_mul (TNonce a)) by [].
 set ga := TExp (TInt 0) a.
 rewrite !big_sepS_singleton.
 rewrite (term_token_difference ga (↑iso_dhN)) //.
@@ -162,7 +161,7 @@ iAssert (|={⊤}=>
   iDestruct "inv"
     as "(%ga' & %b & %pkI' & %N' & %e_m2 & s_b & pred_b &
          %fresh_b & res)".
-  have Nm_b : is_true (negb (is_mul (TNonce b))) by [].
+  have Nm_b : negb (is_mul (TNonce b)) by [].
   case/Spec.of_list_inj: e_m2
       => <- -> /Spec.sign_pkey_inj <- /Tag_inj <- {ga' gb pkI' N'}
     in fresh_b gab seed si *.
@@ -188,6 +187,7 @@ iAssert (|={⊤}=>
   have b_a: TNonce b ≠ TNonce a.
     move=> b_a; apply: fresh_b; rewrite /ga -b_a.
     apply/subtermsP.
+    have atom_b : atomic [TNonce b] by rewrite /atomic; apply/Forall_singleton.
     rewrite (_ : TExp (TInt 0) b = TExpN (TInt 0) [TNonce b]); last by rewrite /TExpN TMulN1.
     rewrite subtermsE // ?cancel_invs1 //=.
     rewrite [subterms b]subterms_nonce //; set_solver.
