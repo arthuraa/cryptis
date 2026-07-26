@@ -37,7 +37,6 @@ Global Existing Instance public_inG.
 
 Definition publicΣ : gFunctors :=
   #[savedPredΣ term;
-    savedPredΣ (key_type * term);
     savedPredΣ (term * term);
     savedPropΣ;
     metaΣ].

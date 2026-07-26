@@ -255,15 +255,12 @@ Lemma leqE pt1 pt2 :
     end
   else (cons_num pt1 <=? cons_num pt2)%Z.
 Proof.
-have le_alt (T : orderType _) (x y : T) :
-    (x <= y)%O = if x == y then true else (x <= y)%O.
-  by case: (ltgtP x y).
 case: pt1 pt2
     => [o1|o1 t1|o1 t11 t12|ts1]
        [o2|o2 t2|o2 t21 t22|ts2] //=.
 - by rewrite [RHS]le_alt.
 - by rewrite [(t1 <= t2)%O]le_alt.
-- by rewrite (le_alt _ _ t12).
+- by rewrite (le_alt t12).
 have -> : ((ts1 : seqlexi_with Order.default_display _) <= ts2)%O =
           ((ts1 : seq_pre_term) <= ts2)%O.
   elim: ts1 ts2 => [|t1 ts1 IH] [|t2 ts2] //=.
