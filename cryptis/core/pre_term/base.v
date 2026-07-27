@@ -11,8 +11,7 @@ Unset Printing Implicit Defensive.
 
 Import Order.POrderTheory Order.TotalTheory.
 
-(* A nonce is a nominal wrapper around a heap location.  It coerces back to its
-   location, so the meta / freshness machinery (all keyed on [loc]) is unchanged. *)
+(* A nonce is a nominal wrapper around a heap location. *)
 Record nonce := Nonce { nonce_loc : locations.loc }.
 
 #[warnings="-projection-no-head-constant"]
