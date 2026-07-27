@@ -293,7 +293,7 @@ rewrite exps_TExpN //.
 have Hac : atomic (exps t' ++ ts).
   by apply/Forall_app; split; [exact: atom_exps | exact: Hatomic].
 have Hic : invs_canceled (exps t' ++ ts).
-  by rewrite (Permutation_app_comm (exps t') ts).
+  by rewrite (perm_invs_canceled _ _ (Permutation_app_comm (exps t') ts)).
 rewrite (cancel_invs_canceled Hac Hic) elem_of_app; by right.
 Qed.
 

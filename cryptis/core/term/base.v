@@ -750,7 +750,7 @@ Qed.
 
 Lemma invs_canceledE ts : invs_canceled ts <-> Forall (fun t => TInv t ∉ ts) ts.
 Proof.
-rewrite /invs_canceled /PreTerm.invs_canceled Forall_fmap.
+rewrite /invs_canceled PreTerm.invs_canceledP Forall_fmap.
 apply: Forall_iff => t /=.
 by rewrite -unfold_TInv list_elem_of_fmap_inj.
 Qed.

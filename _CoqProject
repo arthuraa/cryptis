@@ -7,6 +7,7 @@
 
 cryptis/lib/mathcomp_compat.v
 cryptis/lib/list_sort.v
+cryptis/lib/sms.v
 cryptis/lib/term_set.v
 cryptis/lib/gen_adequacy.v
 cryptis/lib/adequacy.v
@@ -34,6 +35,7 @@ cryptis/core/public.v
 cryptis/cryptis.v
 
 cryptis/primitives/notations.v
+cryptis/primitives/sms.v
 cryptis/primitives/pre_term.v
 cryptis/primitives/comp.v
 cryptis/primitives/simple.v
