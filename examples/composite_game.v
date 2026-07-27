@@ -84,7 +84,7 @@ iApply wp_tls_server => //; eauto.
 - by rewrite public_TInt.
 iIntros (res) "res".
 case: res => [res|]; wp_pures; last by iApply "post".
-wp_bind (SShare.I.session_key_of _); iApply SShare.wp_session_key_of.
+wp_bind (SShare.I.session_key_of _); iApply wp_SShare_session_key_of.
 wp_let. iDestruct "res" as "(_ & _ & #psk' & _)".
 iApply ("IH" with "post").
 by rewrite minted_senc.
@@ -189,7 +189,7 @@ iLöb as "IH" forall (psk) "t_psk".
 wp_pure _ credit:"c".
 wp_pures; wp_bind (recv _); iApply wp_recv => //.
 iIntros "%params #p_params"; wp_pures.
-wp_bind (Meth.I.PskDh _ _); iApply Meth.wp_PskDh => //.
+wp_bind (Meth.I.PskDh _ _); iApply wp_Meth_PskDh => //.
 iIntros "!> % ->"; rewrite [Meth.PskDh]lock; wp_pures.
 wp_bind (tls_client _ _ _ _).
 iApply wp_tls_client; rewrite -?lock; eauto.

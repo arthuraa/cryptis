@@ -125,7 +125,7 @@ Directory-structured protocols use some of: `impl.v` (HeapLang implementation), 
 - `rpc/` — remote procedure calls over `conn`.
 - `store/` — authenticated key-value store over `rpc` (game in `store/game.v`); `alist/` is a supporting association-list module.
 - `opaque/` — OPAQUE-style password-authenticated key exchange (partial: `impl.v` + `game.v`, no closed theorem yet).
-- `tls13.v` — TLS 1.3 handshake (partial; single file, no closed theorem yet).
+- `tls13/` — TLS 1.3 handshake (partial; `impl.v` executable layer + per-component `proofs/` (meth, cshare, sshare, cparams, sparams) + `proofs/protocol.v`, no closed theorem yet).
 - `challenge_response.v` — signature-based mutual authentication; `composite_game.v` runs several protocols together under one adequacy game.
 - `permanent.v`, `counter.v` — small digital-signature demos (immutable state / monotone counter).
 

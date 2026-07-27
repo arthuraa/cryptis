@@ -119,24 +119,6 @@ Qed.
 Definition iso_dh_key_share t : iProp :=
   ⌜length (exps t) = 1⌝.
 
-Lemma nonce_Nmul t : is_nonce t -> negb (is_mul t).
-Proof. by case: t. Qed.
-
-(* With binary [TExp], [TExp (TExp g a) b] is no longer definitionally
-   [TExpN g [b; a]]; these shims recover the old spellings. *)
-Lemma TExp2_TExpN g a b : TExp (TExp g a) b = TExpN g [b; a].
-Proof.
-rewrite (_ : TExp g a = TExpN g [a]); last by rewrite /TExpN TMulN1.
-by rewrite TExp_TExpN.
-Qed.
-
-Lemma TExp_comm g a b : TExp (TExp g a) b = TExp (TExp g b) a.
-Proof.
-rewrite (_ : TExp g a = TExpN g [a]); last by rewrite /TExpN TMulN1.
-rewrite (_ : TExp g b = TExpN g [b]); last by rewrite /TExpN TMulN1.
-by rewrite !TExp_TExpN TExpC2.
-Qed.
-
 Definition si_key si : senc_key :=
   SEncKey
     (Spec.of_list [Spec.pkey (si_init si);

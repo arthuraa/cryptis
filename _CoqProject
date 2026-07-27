@@ -125,6 +125,15 @@ examples/opaque/game.v
 
 ## TLS 1.3
 
+examples/tls13/impl.v
+examples/tls13/proofs/base.v
+examples/tls13/proofs/meth.v
+examples/tls13/proofs/cshare.v
+examples/tls13/proofs/sshare.v
+examples/tls13/proofs/cparams.v
+examples/tls13/proofs/sparams.v
+examples/tls13/proofs/protocol.v
+examples/tls13/proofs.v
 examples/tls13.v
 
 ## Composite

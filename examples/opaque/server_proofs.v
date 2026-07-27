@@ -3,6 +3,7 @@ From mathcomp Require Import ssreflect.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import par.
 From cryptis Require Import lib term cryptis primitives tactics.
+From cryptis.lib Require Import dh.
 
 From cryptis.examples Require Import alist.
 From cryptis.examples.opaque Require Import impl shared.
