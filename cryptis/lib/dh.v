@@ -10,6 +10,25 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+(* DH term-algebra shims.  With binary [TExp], [TExp (TExp g a) b] is no longer
+   definitionally [TExpN g [b; a]]; these lemmas recover the old spellings.  They
+   are pure (no Iris), so they live outside [Section DH]. *)
+Lemma nonce_Nmul t : is_nonce t -> negb (is_mul t).
+Proof. by case: t. Qed.
+
+Lemma TExp2_TExpN g a b : TExp (TExp g a) b = TExpN g [b; a].
+Proof.
+rewrite (_ : TExp g a = TExpN g [a]); last by rewrite /TExpN TMulN1.
+by rewrite TExp_TExpN.
+Qed.
+
+Lemma TExp_comm g a b : TExp (TExp g a) b = TExp (TExp g b) a.
+Proof.
+rewrite (_ : TExp g a = TExpN g [a]); last by rewrite /TExpN TMulN1.
+rewrite (_ : TExp g b = TExpN g [b]); last by rewrite /TExpN TMulN1.
+by rewrite !TExp_TExpN TExpC2.
+Qed.
+
 Section DH.
 
 Context `{!cryptisGS Σ, !heapGS Σ}.

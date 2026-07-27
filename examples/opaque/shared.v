@@ -187,24 +187,8 @@ Qed.
 
 End Opaque.
 
-Lemma nonce_Nmul t : is_nonce t -> negb (is_mul t).
-Proof. by case: t. Qed.
-
 Lemma negb_is_mul_nonce (a : nonce) : negb (is_mul (TNonce a)).
 Proof. by []. Qed.
-
-Lemma TExp2_TExpN g a b : TExp (TExp g a) b = TExpN g [b; a].
-Proof.
-rewrite (_ : TExp g a = TExpN g [a]); last by rewrite /TExpN TMulN1.
-by rewrite TExp_TExpN.
-Qed.
-
-Lemma TExp_comm g a b : TExp (TExp g a) b = TExp (TExp g b) a.
-Proof.
-rewrite (_ : TExp g a = TExpN g [a]); last by rewrite /TExpN TMulN1.
-rewrite (_ : TExp g b = TExpN g [b]); last by rewrite /TExpN TMulN1.
-by rewrite !TExp_TExpN TExpC2.
-Qed.
 
 Lemma subterm_of_list (t : term) (ts : list term) :
   (exists t', t' ∈ ts /\ subterm t t')  ->
