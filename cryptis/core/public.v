@@ -6,7 +6,7 @@ From iris.base_logic.lib Require Import invariants.
 From iris.bi Require Import fixpoint_mono.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib.
-From cryptis.lib Require Import gmeta nown saved_prop size_rec_pred.
+From cryptis.lib Require Import gmeta nown saved_prop size_rec_pred sms.
 From cryptis.core Require Import term minted term_meta.
 
 Set Implicit Arguments.
@@ -196,12 +196,12 @@ iApply exp_pred0_ind; iIntros "!> %ts [H | [H | H]] %HP".
   do 3!iSplit => //; iSplitL "IH1".
   + iApply "IH1"; iPureIntro => t' /= [->|t'_t2']; eauto.
     apply: HP; right; move: t'_t2' t_t2'.
-    rewrite e -!count_exp_gt0 count_exp_TInv (count_exp_TExp _ _ Nm).
+    rewrite e -!exps_count_gt0 exps_count_TInv (exps_count_TExp _ t2' t Nm).
     case: decide => [->|t'_t]; first lia.
-    case: decide => [->|]; rewrite ?count_exp_TInv; lia.
+    case: decide => [->|]; rewrite ?exps_count_TInv; lia.
   + iApply "IH2"; iPureIntro => t' /= [->|t'_t2']; eauto.
     apply: HP; right; move: t_t2'.
-    rewrite e -!count_exp_gt0 (count_exp_TExp_eq _ Nm) count_exp_TInv; lia.
+    rewrite e -!exps_count_gt0 (exps_count_TExp_eq t _ Nm) exps_count_TInv; lia.
 Qed.
 
 Lemma exp_pred0_proper' Plater P1 P2 ts :
@@ -695,14 +695,14 @@ iApply exp_pred_ind; eauto 10.
   rewrite base_TExpN; do !iSplit => //; iPureIntro => t t_ts'.
   have ts_t: ∀ t', t' ∈ ts → t ≠ TInv t'.
     by move=> t' /ts_t2 t'_t2 t'_t; apply: t'_t2; rewrite -t'_t; eauto.
-  move/ts'_t2: t_ts'; rewrite -!count_exp_gt0 => t_ts'.
-  suff: (count_exp t t2 ≤ count_exp t (TExpN t2 ts))%Z by lia.
-  by apply: count_exp_TExpNW; [exact: atom_ts | exact: ts_t].
+  move/ts'_t2: t_ts'; rewrite -!exps_count_gt0 => t_ts'.
+  have Hmono := @exps_count_TExpNW t t2 ts atom_ts ts_t.
+  move: t_ts' Hmono; lia.
 - iIntros "!> %t %t1 %t2 %Nm_t %t_t2 #dh_t1 IH_t1 #dh_t IH_t %ts %t1_ts %ts_t2'".
   rewrite base_TExp; case: (decide (t ∈ ts)) => t_ts; first by iApply "IH_t".
   iApply "IH_t1"; iPureIntro => // t3 t3_ts.
   have := ts_t2' _ t3_ts.
-  rewrite -!count_exp_gt0 (count_exp_TExp _ _ Nm_t) decide_False; last by congruence.
+  rewrite -!exps_count_gt0 (exps_count_TExp _ t2 t Nm_t) decide_False; last by congruence.
   case: decide => ?; lia.
 Qed.
 
@@ -982,7 +982,7 @@ apply: anti_symm; last first.
   iApply (big_sepL_mono with "dhp").
   iIntros (k t' Hk) "H"; iSplit; last by [].
   iPureIntro; apply: Nmul_TInv.
-  exact: (Forall_mem atom (list_elem_of_lookup_2 _ _ _ Hk)).
+  have /list.Forall_forall H := atom; exact: (H t' (list_elem_of_lookup_2 _ _ _ Hk)).
 - (* forward: drop the guard from the is_exp disjunct. *)
   rewrite public_eq !(minted_TExpN Nx atom ic).
   setoid_rewrite (exps_TExpN' Nx atom ic).
@@ -1044,7 +1044,7 @@ have atom2 : atomic [t2] by rewrite /atomic; apply/Forall_singleton.
 have expK : TExp (TExp t1 t2) (TInv t2) = t1.
   by rewrite -{1}[t2]TInvK; apply: TExpK';
      [ rewrite TInvK | exact: (Nmul_TInv Nm2') ].
-rewrite {1}eq12 public_TExpN //=; last exact: invs_canceled1.
+rewrite {1}eq12 public_TExpN //=; last exact: no_inv_singleton.
 rewrite -eq12 expK minted_TExp //.
 by rewrite bi.sep_emp -!bi.and_assoc.
 Qed.
@@ -1066,7 +1066,7 @@ have Nm2' : negb (is_mul t2) := Nm2.
 have Nm3' : negb (is_mul t3) := Nm3.
 have atom23 : atomic [t2; t3] by rewrite /atomic Forall_cons Forall_singleton; split.
 have ic23 : forall x, x ∈ [t2; t3] -> TInv x ∉ [t2; t3]
-  := proj2 (@invs_canceled2 t2 t3 Nm2' Nm3') t2t3.
+  := proj2 (@no_inv2 t2 t3 Nm2' Nm3') t2t3.
 have e2 : TExp (TExpN t1 [t2; t3]) (TInv t2) = TExp t1 t3.
   rewrite -TExp_TExpN -{1}[t2]TInvK TExpK'; first last.
   - exact: (Nmul_TInv Nm2').
@@ -1117,7 +1117,7 @@ have [->|t_t2] := decide (t = t2).
     by rewrite -{1}[t2]TInvK; apply: TExpK'; [ rewrite TInvK | exact: (Nmul_TInv Nm2') ].
   by rewrite expK; iSplit; eauto; iApply exp_pred_intro3.
 have t_t1: t ∈ exps t1.
-  move: t_t1'; rewrite -!count_exp_gt0 count_exp_TExp // decide_False //.
+  move: t_t1'; rewrite -!exps_count_gt0 exps_count_TExp // decide_False //.
   case: decide => ?; lia.
 have Nmt' : negb (is_mul t) := exps_Nmul _ _ t_t1.
 iPoseProof (exp_pred_exps t_t1 with "p1") as "[dh #p]"; iSplit.
@@ -1180,7 +1180,7 @@ Proof.
 rewrite /tfactors unfold_TMulN.
 rewrite (PreTerm.factors_mul _ (wf_unfold_terms [t1; t2])).
 move=> /list_elem_of_fmap [pt [-> Hpt]].
-move: Hpt; rewrite (list_sort.elem_of_merge_sort pt_order) => /PreTerm.mem_cancel_invs.
+move: Hpt => /(SMS.mem_to pt_order PreTerm.inv_aux).
 have -> : concat (PreTerm.factors <$> (unfold_term <$> [t1; t2]))
         = PreTerm.factors (unfold_term t1) ++ PreTerm.factors (unfold_term t2).
 { by rewrite /= app_nil_r. }
@@ -1249,9 +1249,10 @@ elim: t.
 - iIntros "%t %IH %Nmul %inv_t #m #contra".
   iEval (rewrite minted_TInv) in "m".
   rewrite public_TInv. by iApply IH.
-- move => t IHt nX ts IHts atom nZ sorted canceled.
+- move => t IHt nX ts IHts atom nZ swf.
   move: nX => /negb_True nX.
-  iIntros "#mt #contra"; rewrite minted_TExpN // {canceled nZ sorted}.
+  have canc := no_inv_of_wf ts swf.
+  iIntros "#mt #contra"; rewrite minted_TExpN // {canc nZ swf}.
   have {}IHts : ∀ t', t' ∈ ts → minted t' -∗ ▷ False -∗ public t'.
     elim: ts IHts {atom} => [_ /elem_of_nil [] //|t' ts IH] /=.
     by case=> Ht' Hts t'' /elem_of_cons [->|t''_ts]; eauto.
@@ -1262,13 +1263,13 @@ elim: t.
   iApply (public_TExp_Nmul _ Nmt');
     last by iApply IHts; rewrite // elem_of_cons; eauto.
   by iApply "IH" => //; iPureIntro => t'' t''_ts; apply: IHts; rewrite elem_of_cons; eauto.
-- move => ts IHts atom sorted canceled sizeN1.
-  have wf : wf_mul_list ts := conj atom (conj (wf_TInvI ts atom sorted canceled) sizeN1).
+- move => ts IHts atom swf sizeN1.
+  have wf : wf_mul_list ts := conj atom (conj swf sizeN1).
   iIntros "#mt #contra".
   iApply (public_TMulN_intro wf).
   iEval (rewrite minted_TMulN //) in "mt".
   have {}IHts : ∀ t', t' ∈ ts → minted t' -∗ ▷ False -∗ public t'.
-    elim: ts IHts {atom sorted canceled sizeN1 wf} => [_ /elem_of_nil [] //|t' ts IH] /=.
+    elim: ts IHts {atom swf sizeN1 wf} => [_ /elem_of_nil [] //|t' ts IH] /=.
     by case=> Ht' Hts t'' /elem_of_cons [->|t''_ts]; eauto.
   iApply (big_sepL_impl with "mt"); iIntros "!>" (k t' t'_lk) "#mt'".
   by iApply (IHts t' (list_elem_of_lookup_2 _ _ _ t'_lk) with "mt' contra").
@@ -1293,7 +1294,7 @@ move=> t1_t3 t3_t2 t1V_t2.
 have NmI3 : negb (is_mul (TInv t3)).
   by apply: Nmul_TInv; exact: exps_Nmul _ _ t3_t2.
 have t_t3V : TInv t1 ≠ t3 by congruence.
-move: t1V_t2; rewrite -!count_exp_gt0 count_exp_TExp // TInvK.
+move: t1V_t2; rewrite -!exps_count_gt0 exps_count_TExp // TInvK.
 rewrite decide_False; last by move=> /TInv_inj; congruence.
 by rewrite decide_False.
 Qed.
@@ -1333,7 +1334,7 @@ iApply exp_pred_ind.
       by rewrite -{1}[t]TInvK; apply: TExpK'; [ rewrite TInvK | exact: (Nmul_TInv Nmt) ].
     by rewrite expK; iApply "dh1".
   have t3_t2: t3 ∈ exps t2.
-    move: t3_t2'; rewrite -!count_exp_gt0 count_exp_TExp // decide_False //.
+    move: t3_t2'; rewrite -!exps_count_gt0 exps_count_TExp // decide_False //.
     case: decide; lia.
   have comm : TExp (TExp t2 t) (TInv t3) = TExp (TExp t2 (TInv t3)) t.
     rewrite (_ : TExp t2 t = TExpN t2 [t]); last by rewrite /TExpN TMulN1.
@@ -1370,7 +1371,7 @@ have [->|t_t2] := decide (t = t2).
     by rewrite -{1}[t2]TInvK; apply: TExpK'; [ rewrite TInvK | exact: (Nmul_TInv Nm2') ].
   by iSplit => //; iIntros "!> #p2"; rewrite expK.
 have t_t1: t ∈ exps t1.
-  rewrite -!count_exp_gt0 count_exp_TExp // decide_False // in t_t1' *.
+  rewrite -!exps_count_gt0 exps_count_TExp // decide_False // in t_t1' *.
   case: decide => ? in t_t1'; lia.
 iPoseProof (exp_pred_exps t_t1 with "p1") as "[dh_t #p1']".
 iSplit; first by iApply exp_pred_intro2.
@@ -1386,10 +1387,11 @@ rewrite comm; iApply (IH with "p1' m []").
 - exact: Nm2'.
 - have t2_tV : t2 ≠ TInv t by move=> contra; apply: t2_t1; rewrite contra TInvK.
   move=> contra; apply: t2_t1.
-  rewrite -!count_exp_gt0 !count_exp_TInv in contra *.
-  suff: (count_exp t2 t1 ≤ count_exp t2 (TExp t1 (TInv t)))%Z by lia.
-  by apply: count_exp_TExpW;
-     [exact: (Nmul_TInv Nmt) | rewrite TInvK; exact: not_eq_sym t_t2].
+  rewrite -!exps_count_gt0 !exps_count_TInv in contra *.
+  have Hmono : (SMS.count TInv t2 (exps t1) ≤ SMS.count TInv t2 (exps (TExp t1 (TInv t))))%Z.
+    by apply: (exps_count_TExpW t2 t1 (TInv t));
+       [exact: (Nmul_TInv Nmt) | rewrite TInvK; exact: not_eq_sym t_t2].
+  move: contra Hmono; lia.
 - by rewrite -comm; iApply exp_pred_intro4 => //.
 Qed.
 

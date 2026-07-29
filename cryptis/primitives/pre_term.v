@@ -491,7 +491,7 @@ have Emul : PreTerm.mul [:: PreTerm.expo b; e] =
    match c with
    | [::] => PreTerm.PTMul c | [:: t] => t | [:: t, _ & _] => PreTerm.PTMul c
    end.
-  rewrite PreTerm.mulE.
+  rewrite /PreTerm.mul /SMS.to.
   have -> : concat (PreTerm.factors <$> [:: PreTerm.expo b; e])
           = PreTerm.exps b ++ PreTerm.factors e.
     by rewrite /PreTerm.exps /= app_nil_r.
@@ -527,7 +527,7 @@ have Emul : PreTerm.mul [:: pt1; pt2] =
    match c with
    | [::] => PreTerm.PTMul c | [:: t] => t | [:: t, _ & _] => PreTerm.PTMul c
    end.
-  rewrite PreTerm.mulE.
+  rewrite /PreTerm.mul /SMS.to.
   have -> : concat (PreTerm.factors <$> [:: pt1; pt2])
           = PreTerm.factors pt1 ++ PreTerm.factors pt2.
     by rewrite /= app_nil_r.
@@ -541,7 +541,7 @@ Lemma twp_hl_inv_spec E (pt : PreTerm.pre_term) :
 Proof. iIntros (Φ) "_ HΦ". iApply twp_hl_inv. by iApply "HΦ". Qed.
 
 Lemma twp_hl_inv_distr E (pt : PreTerm.pre_term) Φ
-    (wf : PreTerm.wf_term pt) :
+    (wf : PreTerm.wf pt) :
     Φ (repr (PreTerm.inv pt)) ⊢
     WP hl_inv_distr (repr pt) @ E [{ Φ }].
 Proof.
@@ -570,7 +570,7 @@ wp_apply (twp_map_list PreTerm.inv_aux hl_inv).
   have HE : PreTerm.inv pt =
      match c with
      | [::] => PreTerm.PTMul c | [:: t] => t | [:: t, _ & _] => PreTerm.PTMul c end.
-    rewrite (PreTerm.inv_factors _ wf) PreTerm.mulE.
+    rewrite (PreTerm.inv_factors _ wf) /PreTerm.mul /SMS.to.
     have -> : concat (PreTerm.factors <$> (PreTerm.inv_aux <$> PreTerm.factors pt))
             = PreTerm.inv_aux <$> PreTerm.factors pt.
       exact: (PreTerm.flatten_factors_Nmul_id _ Nm).

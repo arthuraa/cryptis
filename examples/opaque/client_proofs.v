@@ -69,7 +69,7 @@ wp_apply wp_send => //.
       iApply "Hexpx_u"; iPureIntro.
       have Nm : negb (is_mul x_u) := negb_is_mul_nonce x_u.
       rewrite (_ : TExp g x_u = TExpN g [TNonce x_u]); last by rewrite /TExpN TMulN1.
-      by rewrite exps_TExpN'; [by [] | by case | by rewrite /atomic; apply/Forall_singleton | exact: (invs_canceled1 Nm)].
+      by rewrite exps_TExpN'; [by [] | by case | by rewrite /atomic; apply/Forall_singleton | exact: (no_inv_singleton Nm)].
     + by rewrite public_TInt; auto.
 wp_pures.
 wp_apply wp_recv => //.

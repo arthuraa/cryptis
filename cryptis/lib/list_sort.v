@@ -136,6 +136,29 @@ Qed.
 
 End Count.
 
+(** [rem] and [count_mem] commute with an injective map. *)
+
+Lemma fmap_rem {A B} `{EqDecision A} `{EqDecision B} (f : A -> B) x l :
+  (forall a b, f a = f b -> a = b) ->
+  f <$> rem x l = rem (f x) (f <$> l).
+Proof.
+move=> finj; elim: l => [//|y l IH] /=.
+case_bool_decide as Hxy; case_bool_decide as Hfxy.
+- done.
+- exfalso; apply: Hfxy; by rewrite Hxy.
+- exfalso; apply: Hxy; exact: (finj _ _ Hfxy).
+- by rewrite fmap_cons IH.
+Qed.
+
+Lemma count_mem_fmap {A B} `{EqDecision A} `{EqDecision B} (f : A -> B) x l :
+  (forall a b, f a = f b -> a = b) ->
+  count_mem (f x) (f <$> l) = count_mem x l.
+Proof.
+move=> finj; elim: l => [//|y l IH] /=; rewrite IH.
+rewrite (bool_decide_ext (f x = f y) (x = y)) //.
+split; [exact: finj | by move=> ->].
+Qed.
+
 Section SumList.
 Context {A : Type} (f : A -> nat).
 

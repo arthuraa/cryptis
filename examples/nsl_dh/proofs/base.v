@@ -167,7 +167,7 @@ Proof.
 move=> Nm.
 rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [a]); last by rewrite /TExpN TMulN1.
 rewrite exps_TExpN';
-  [done | by case | by rewrite /atomic; apply/Forall_singleton | exact: (invs_canceled1 Nm)].
+  [done | by case | by rewrite /atomic; apply/Forall_singleton | exact: (no_inv_singleton Nm)].
 Qed.
 
 Lemma exps_TExp2 a b :
@@ -176,7 +176,7 @@ Lemma exps_TExp2 a b :
 Proof.
 move=> Nm_a Nm_b aVb.
 rewrite exps_TExpN';
-  [done | by case | by rewrite /atomic Forall_cons Forall_singleton; split | by apply/(invs_canceled2 Nm_a Nm_b)].
+  [done | by case | by rewrite /atomic Forall_cons Forall_singleton; split | by apply/(no_inv2 Nm_a Nm_b)].
 Qed.
 
 Definition si_key si : senc_key :=
@@ -560,7 +560,7 @@ iAssert (exp_pred_base a (TExp (TInt 0) a)) with "[corr]" as "#dp".
     rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [TNonce a]); last by rewrite /TExpN TMulN1.
     rewrite exps_TExpN';
       [by [] | by case | by rewrite /atomic; apply/Forall_singleton
-       | exact: (invs_canceled1 Nm)]. }
+       | exact: (no_inv_singleton Nm)]. }
   by iDestruct ("pred_a" $! (TExp (TInt 0) a) with "ns") as "$". }
 rewrite /ga public_TExp_iff //; last by case.
 rewrite minted_TInt. do 3?[iSplit => //].

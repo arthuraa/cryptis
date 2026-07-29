@@ -105,7 +105,7 @@ do !iSplit => //.
     iNext; iModIntro; iPureIntro.
     have Nm : negb (is_mul p_s) := negb_is_mul_nonce p_s.
     rewrite (_ : TExp g p_s = TExpN g [TNonce p_s]); last by rewrite /TExpN TMulN1.
-    by rewrite exps_TExpN'; [by [] | by case | by rewrite /atomic; apply/Forall_singleton | exact: (invs_canceled1 Nm)].
+    by rewrite exps_TExpN'; [by [] | by case | by rewrite /atomic; apply/Forall_singleton | exact: (no_inv_singleton Nm)].
   + by iModIntro; iIntros "?"; iApply public_TInt.
 - iApply (public_sencIS _ (opN.@"AuthEnc") envelope_pred _) => //.
   1: rewrite minted_senc minted_THash minted_tag.
@@ -131,7 +131,7 @@ do !iSplit => //.
       iNext; iModIntro; iPureIntro.
       have Nm : negb (is_mul p_s) := negb_is_mul_nonce p_s.
       rewrite (_ : TExp g p_s = TExpN g [TNonce p_s]); last by rewrite /TExpN TMulN1.
-      by rewrite exps_TExpN'; [by [] | by case | by rewrite /atomic; apply/Forall_singleton | exact: (invs_canceled1 Nm)].
+      by rewrite exps_TExpN'; [by [] | by case | by rewrite /atomic; apply/Forall_singleton | exact: (no_inv_singleton Nm)].
     + done.
   iModIntro.
   rewrite public_senc_key.
@@ -171,7 +171,7 @@ do !iSplit => //.
       iNext; iModIntro; iPureIntro.
       have Nm : negb (is_mul p_u) := negb_is_mul_nonce p_u.
       rewrite (_ : TExp g p_u = TExpN g [TNonce p_u]); last by rewrite /TExpN TMulN1.
-      by rewrite exps_TExpN'; [by [] | by case | by rewrite /atomic; apply/Forall_singleton | exact: (invs_canceled1 Nm)].
+      by rewrite exps_TExpN'; [by [] | by case | by rewrite /atomic; apply/Forall_singleton | exact: (no_inv_singleton Nm)].
     * done.
 Qed.
 
@@ -249,7 +249,7 @@ wp_apply wp_send => //.
       iApply "Hexpx_s"; iPureIntro.
       have Nm : negb (is_mul x_s) := negb_is_mul_nonce x_s.
       rewrite (_ : TExp g x_s = TExpN g [TNonce x_s]); last by rewrite /TExpN TMulN1.
-      by rewrite exps_TExpN'; [by [] | by case | by rewrite /atomic; apply/Forall_singleton | exact: (invs_canceled1 Nm)].
+      by rewrite exps_TExpN'; [by [] | by case | by rewrite /atomic; apply/Forall_singleton | exact: (no_inv_singleton Nm)].
     + by rewrite public_TInt; auto.
   - iApply public_THashIS => //.
       rewrite minted_of_list /= !minted_THash !minted_tag !minted_of_list /=.

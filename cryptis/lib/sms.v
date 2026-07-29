@@ -146,6 +146,20 @@ Proof. rewrite /count /=; case_bool_decide; case_bool_decide; simpl; lia. Qed.
 Lemma count_app z X Y : count z (X ++ Y) = (count z X + count z Y)%Z.
 Proof. rewrite /count !count_mem_app !Nat2Z.inj_add; lia. Qed.
 
+(** Mapping the involution over a list negates every signed count: [i <$> X] is
+    the "inverse" multiset of [X].  Needs the involution at the query point and
+    on the list's elements. *)
+Lemma count_fmap_i z X :
+  i (i z) = z -> (forall x, x ∈ X -> i (i x) = x) ->
+  count z (i <$> X) = (- count z X)%Z.
+Proof.
+move=> iKz; elim: X => [_|x X IH iKX]; first by rewrite /count /=; lia.
+have iKx : i (i x) = x by apply: iKX; rewrite elem_of_cons; left.
+have iKX' : forall y, y ∈ X -> i (i y) = y
+  by move=> y yin; apply: iKX; rewrite elem_of_cons; right.
+rewrite fmap_cons !count_cons (IH iKX') (bool_decide_ii iKz iKx) (bool_decide_ix iKz iKx); lia.
+Qed.
+
 (** Cancelling one [i x] against [x] leaves every signed count unchanged:
     [insert] behaves like consing as far as [count] is concerned.  Needs the
     involution at the query point [z] and at the inserted point [x]. *)
@@ -288,6 +302,11 @@ Proof. move=> /andb_True [/andb_True [/andb_True [HS _] _] _]; exact: bool_decid
 Lemma wf_invs_canceled X : wf X -> invs_canceled X.
 Proof. by move=> /andb_True [/andb_True [/andb_True [_ ?] _] _]. Qed.
 
+(** The no-inverse-pairs content of [wf], spelled out as a first-order fact, so
+    callers can consume it without naming the internal [invs_canceled]. *)
+Lemma wf_no_pairs X : wf X -> forall x, x ∈ X -> i x ∉ X.
+Proof. move=> wfX; apply/invs_canceledP; exact: (wf_invs_canceled X wfX). Qed.
+
 Lemma wf_invol X : wf X -> forall x, x ∈ X -> i (i x) = x.
 Proof. move=> /andb_True [/andb_True [_ Hinvol] _]; by apply/wf_involP. Qed.
 
@@ -397,6 +416,16 @@ Proof. rewrite /to => zin; apply: mem_cancel; by rewrite -(merge_sort_Permutatio
 Lemma to_singleton x : i x <> x -> i (i x) = x -> to [x] = [x].
 Proof. move=> iNx iKx; apply: to_id; exact: wf_singleton. Qed.
 
+(** A list with no inverse pairs is only reordered by [to] (no cancellation
+    happens); law-free.  This is the exposed permutation-level form of
+    [cancel_id], for callers that only need [to X] up to permutation and do not
+    want to mention [cancel]/[invs_canceled]. *)
+Lemma to_id_perm X : (forall x, x ∈ X -> i x ∉ X) -> to X ≡ₚ X.
+Proof.
+move=> nc; rewrite /to (cancel_id (proj2 (invs_canceledP X) nc)).
+exact: (merge_sort_Permutation R X).
+Qed.
+
 (** [to] is a genuine (Leibniz) function of the underlying signed multiset:
     permutation-equal inputs give *equal* canonical forms. *)
 Lemma to_Permutation X Y :
@@ -453,7 +482,44 @@ Qed.
 
 End SignedMultiset.
 
+(** [to] transports along an injective, order-preserving, involution-conjugating
+    map [f]: this is how the canonical form interacts with mapping (used e.g. to
+    bridge the [term] and [pre_term] layers through [unfold_term]). *)
+Lemma to_fmap {T U} `{EqDecision T} `{EqDecision U}
+    (R : relation T) (S : relation U)
+    `{!RelDecision R, !Transitive R, !Total R,
+      !RelDecision S, !Transitive S, !Total S, !@AntiSymm U (=) S}
+    (i : T -> T) (j : U -> U) (f : T -> U) X :
+  (forall a b, f a = f b -> a = b) ->
+  (forall x, x ∈ X -> f (i x) = j (f x)) ->
+  (forall x y, R x y <-> S (f x) (f y)) ->
+  f <$> to R i X = to S j (f <$> X).
+Proof.
+move=> finj fij fRS.
+rewrite /to (merge_sort_fmap R S f fRS); congr (merge_sort S _).
+elim: X fij => [//|x X IH] fij; rewrite fmap_cons !cancel_cons.
+have fijx : f (i x) = j (f x) by apply: fij; rewrite elem_of_cons; left.
+rewrite -IH; last by move=> y yX; apply: fij; rewrite elem_of_cons; right.
+rewrite /insert (bool_decide_ext (i x ∈ cancel i X) (j (f x) ∈ f <$> cancel i X)); last first.
+{ rewrite -fijx; split.
+  - move=> Hin; apply/list_elem_of_fmap; exists (i x); by split.
+  - by move=> /list_elem_of_fmap [a [/finj <- ?]]. }
+case_bool_decide.
+- by rewrite (fmap_rem f _ _ finj) fijx.
+- by [].
+Qed.
+
 End SMS.
+
+(* [to] is the canonical (sorted, cancelled) form; keep it opaque to [simpl] so
+   its [merge_sort]/[cancel] implementation never leaks into goals — reason about
+   it through the lemmas above ([to_eq]/[to_id]/[count_to]/[mem_to]/…). *)
+Global Arguments SMS.to : simpl never.
+
+(* Well-formedness is a client-facing predicate; keep [simpl] from exposing its
+   [invs_canceled]/involution internals.  Reason about it through the extractors
+   ([wf_sorted]/[wf_no_pairs]/[wf_intro]/…), never by unfolding. *)
+Global Arguments SMS.wf : simpl never.
 
 Global Existing Instance SMS.count_proper.
 Global Existing Instance SMS.invs_canceled_proper.

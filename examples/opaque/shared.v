@@ -233,7 +233,7 @@ apply subterm_TExpN_exp => //.
   rewrite elem_of_cons.
   by left.
 - by rewrite /atomic; apply/Forall_singleton.
-- exact: (invs_canceled1 Nm).
+- exact: (no_inv_singleton Nm).
 Qed.
 
 Lemma subterm_exp (t t' : term) :

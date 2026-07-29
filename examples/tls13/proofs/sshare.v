@@ -405,7 +405,7 @@ case: c_kex e => [psk cn sn|g cn sn x gy|psk g cn sn x gy] /=.
     apply: fresh_y. rewrite (_ : TExp g x = TExpN g [x]); last by rewrite /TExpN TMulN1.
     apply: STExp2; eauto.
     - by rewrite /atomic; apply/Forall_singleton.
-    - exact: (invs_canceled1 Nm_x).
+    - exact: (no_inv_singleton Nm_x).
     - set_solver.
   iEval (rewrite TExp2_TExpN) in "p_k".
   by iMod (dh_seed_elim2 with "dh_y dh_x p_k") as "[]".
@@ -419,7 +419,7 @@ case: c_kex e => [psk cn sn|g cn sn x gy|psk g cn sn x gy] /=.
     apply: fresh_y. rewrite (_ : TExp g x = TExpN g [x]); last by rewrite /TExpN TMulN1.
     apply: STExp2; eauto.
     - by rewrite /atomic; apply/Forall_singleton.
-    - exact: (invs_canceled1 Nm_x).
+    - exact: (no_inv_singleton Nm_x).
     - set_solver.
   rewrite public_of_list /=. iDestruct "p_k" as "(_ & p_k & _)".
   iEval (rewrite TExp2_TExpN) in "p_k".
