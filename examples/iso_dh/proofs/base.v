@@ -387,7 +387,8 @@ Proof.
 move=> Nm_a Nm_b; iIntros "%a_b %a_bV #pred_a #pred_b #p".
 have NInt : ¬ is_exp (TInt 0) by case.
 have atom_ab : atomic [a; b] by rewrite /atomic Forall_cons Forall_singleton; split.
-have ic_ab : invs_canceled [a; b] by apply/(invs_canceled2 Nm_a Nm_b).
+have ic_ab : forall x, x ∈ [a; b] -> TInv x ∉ [a; b]
+  by apply/(invs_canceled2 Nm_a Nm_b).
 iPoseProof (public_minted with "p") as "m".
 iAssert (minted a ∧ minted b)%I as "[ma mb]".
   rewrite minted_TExpN //. iDestruct "m" as "[_ m]". rewrite /=.

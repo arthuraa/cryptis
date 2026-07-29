@@ -4,6 +4,7 @@ file to avoid slowing down the compilation process. *)
 
 From cryptis Require Import lib.
 From cryptis.lib Require list_sort.
+From cryptis.lib Require Import sms.
 From mathcomp Require Import ssreflect.
 From mathcomp Require all_order ssrbool eqtype seq path.
 From stdpp Require Import gmap.
@@ -419,11 +420,11 @@ Lemma wp_hl_inv E (pt : PreTerm.pre_term) Ψ:
 Proof. iIntros "HΨ"; iApply twp_wp; by wp_apply twp_hl_inv. Qed.
 
 Lemma twp_hl_insert_factor E pt (pts : seq PreTerm.pre_term) Φ :
-    Φ (repr (PreTerm.insert_factor pt pts)) ⊢
+    Φ (repr (SMS.insert PreTerm.inv_aux pt pts)) ⊢
     WP hl_insert_exp (repr pt) (repr pts) @ E [{ Φ }].
 Proof.
     iIntros "HΦ".
-    rewrite /PreTerm.insert_factor pt_inb -seq_rem_rem.
+    rewrite /SMS.insert pt_inb -seq_rem_rem.
     wp_lam; wp_pures.
     wp_apply twp_hl_inv.
     wp_apply twp_mem_list => //.
@@ -440,7 +441,7 @@ Proof.
 Qed.
 
 Lemma twp_hl_cancel_invs E (pts : seq PreTerm.pre_term) Φ :
-    Φ (repr (PreTerm.cancel_invs pts)) ⊢
+    Φ (repr (SMS.cancel PreTerm.inv_aux pts)) ⊢
     WP hl_cancel_invs (repr pts) @ E [{ Φ }].
 Proof.
     iIntros "HΦ"; wp_lam; wp_pures.
@@ -485,12 +486,12 @@ wp_pures.
 rewrite (_ : (#TMul_tag, NILV)%V = repr (PreTerm.PTMul [::])); last first.
   by rewrite /= repr_list_unseal.
 wp_bind (eq_term _ _); iApply twp_eq_pre_term.
-set c := sort <=%O (PreTerm.cancel_invs (PreTerm.exps b ++ PreTerm.factors e)).
+set c := sort <=%O (SMS.cancel PreTerm.inv_aux (PreTerm.exps b ++ PreTerm.factors e)).
 have Emul : PreTerm.mul [:: PreTerm.expo b; e] =
    match c with
    | [::] => PreTerm.PTMul c | [:: t] => t | [:: t, _ & _] => PreTerm.PTMul c
    end.
-  rewrite /PreTerm.mul.
+  rewrite PreTerm.mulE.
   have -> : concat (PreTerm.factors <$> [:: PreTerm.expo b; e])
           = PreTerm.exps b ++ PreTerm.factors e.
     by rewrite /PreTerm.exps /= app_nil_r.
@@ -521,12 +522,12 @@ wp_apply twp_insertion_sort => //.
   iIntros "%x %y %Ψ _ HΨ". iApply twp_leq_pre_term. by iApply "HΨ".
 iIntros "_".
 wp_apply twp_hl_mk_mul.
-set c := sort <=%O (PreTerm.cancel_invs (PreTerm.factors pt1 ++ PreTerm.factors pt2)).
+set c := sort <=%O (SMS.cancel PreTerm.inv_aux (PreTerm.factors pt1 ++ PreTerm.factors pt2)).
 have Emul : PreTerm.mul [:: pt1; pt2] =
    match c with
    | [::] => PreTerm.PTMul c | [:: t] => t | [:: t, _ & _] => PreTerm.PTMul c
    end.
-  rewrite /PreTerm.mul.
+  rewrite PreTerm.mulE.
   have -> : concat (PreTerm.factors <$> [:: pt1; pt2])
           = PreTerm.factors pt1 ++ PreTerm.factors pt2.
     by rewrite /= app_nil_r.
@@ -565,11 +566,11 @@ wp_apply (twp_map_list PreTerm.inv_aux hl_inv).
     apply: PreTerm.is_mul_inv_aux.
     by move: (PreTerm.wf_factors _ wf) => /Forall_forall; apply.
   set c := sort <=%O
-             (PreTerm.cancel_invs (PreTerm.inv_aux <$> PreTerm.factors pt)).
+             (SMS.cancel PreTerm.inv_aux (PreTerm.inv_aux <$> PreTerm.factors pt)).
   have HE : PreTerm.inv pt =
      match c with
      | [::] => PreTerm.PTMul c | [:: t] => t | [:: t, _ & _] => PreTerm.PTMul c end.
-    rewrite (PreTerm.inv_factors _ wf) /PreTerm.mul.
+    rewrite (PreTerm.inv_factors _ wf) PreTerm.mulE.
     have -> : concat (PreTerm.factors <$> (PreTerm.inv_aux <$> PreTerm.factors pt))
             = PreTerm.inv_aux <$> PreTerm.factors pt.
       exact: (PreTerm.flatten_factors_Nmul_id _ Nm).

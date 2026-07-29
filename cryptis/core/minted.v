@@ -57,12 +57,12 @@ Lemma minted_TInv t : minted (TInv t) ⊣⊢ minted t.
 Proof. by rewrite unlock nonces_of_termE. Qed.
 
 Lemma minted_TExpN t ts :
-  ~ is_exp t -> atomic ts -> invs_canceled ts ->
+  ~ is_exp t -> atomic ts -> (forall t', t' ∈ ts -> TInv t' ∉ ts) ->
   minted (TExpN t ts) ⊣⊢ minted t ∧ [∗ list] t' ∈ ts, minted t'.
 Proof.
 move => /negb_True nx atom ic.
 rewrite unlock (nonces_of_term_TExpN nx atom).
-rewrite (cancel_invs_canceled atom ic) big_sepS_union_pers.
+rewrite (union_list_map_to _ ts ic) big_sepS_union_pers.
 by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
@@ -78,7 +78,7 @@ Qed.
 Lemma minted_base_exps t :
   minted t ⊣⊢ minted (base t) ∧ [∗ list] t' ∈ exps t, minted t'.
 Proof.
-rewrite -{1}[t]base_expsK minted_TExpN //; last exact: invs_canceled_exps.
+rewrite -{1}[t]base_expsK minted_TExpN //; last exact: no_inv_exps.
 exact: atom_exps.
 Qed.
 
@@ -110,7 +110,7 @@ Proof.
 move => nx.
 have -> : TExp t1 t2 = TExpN t1 (tfactors t2) by rewrite /TExpN tfactorsK.
 rewrite (minted_TExpN nx (atom_tfactors t2)
-           (invs_canceled_tfactors t2)).
+           (no_inv_tfactors t2)).
 by rewrite -minted_tfactors.
 Qed.
 

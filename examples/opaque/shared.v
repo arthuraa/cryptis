@@ -213,7 +213,7 @@ Lemma subterm_TExpN_exp (t t' : term) (ts : list term) :
   ( exists t'', subterm t t'' /\ t'' ∈ ts) ->
   negb (is_exp t') ->
   atomic ts ->
-  invs_canceled ts ->
+  (forall x, x ∈ ts -> TInv x ∉ ts) ->
   subterm t (TExpN t' ts).
 Proof.
 intros [t'' [Hst Hmem]] Hnexp Hatomic Hcanceled.
@@ -268,7 +268,7 @@ split; intros H.
     apply: subterm_TExpN_exp => //.
     * exact: (base.is_exp_base_bool _).
     * exact: atom_exps.
-    * exact: invs_canceled_exps.
+    * exact: no_inv_exps.
   + have Nexp : ¬ is_exp t' := Is_true_false_2 _ Eexp.
     by rewrite (base_expN Nexp) in H.
   + destruct H as [? [_ contra]].
@@ -279,7 +279,7 @@ Qed.
 Lemma subterm_TExpN_exp' (t t' : term) (ts: list term) :
   ¬ subterm t t' ->
   atomic ts ->
-  invs_canceled (ts ++ exps t') ->
+  (forall x, x ∈ ts ++ exps t' -> TInv x ∉ ts ++ exps t') ->
   (exists t'', t'' ∈ ts /\ subterm t t'') ->
   subterm t (TExpN t' ts).
 Proof.
@@ -290,11 +290,9 @@ right; right.
 destruct Hst as [t'' [Hmem Hst]].
 exists t''; split => //.
 rewrite exps_TExpN //.
-have Hac : atomic (exps t' ++ ts).
-  by apply/Forall_app; split; [exact: atom_exps | exact: Hatomic].
-have Hic : invs_canceled (exps t' ++ ts).
-  by rewrite (perm_invs_canceled _ _ (Permutation_app_comm (exps t') ts)).
-rewrite (cancel_invs_canceled Hac Hic) elem_of_app; by right.
+have Hic : forall x, x ∈ exps t' ++ ts -> TInv x ∉ exps t' ++ ts.
+  apply/(no_inv_Permutation _ _ (Permutation_app_comm (exps t') ts)); exact: Hcan.
+rewrite (to_perm_id _ Hic) elem_of_app; by right.
 Qed.
 
 Lemma subterm_TExp_exp' (t t' t'' : term) :
@@ -308,9 +306,7 @@ intros Hnst Nm Hnmem Hst.
 rewrite (_ : TExp t' t'' = TExpN t' [t'']); last by rewrite /TExpN TMulN1.
 apply (subterm_TExpN_exp' Hnst) => //.
 - by rewrite /atomic; apply/Forall_singleton.
-- rewrite invs_canceled_cons //.
-  split => //.
-  exact: invs_canceled_exps.
+- apply/(no_inv_cons Nm); split; [exact: Hnmem | exact: (no_inv_exps t')].
 - exists t''.
   split => //.
   rewrite elem_of_cons.

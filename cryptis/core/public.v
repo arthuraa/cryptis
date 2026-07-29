@@ -961,7 +961,7 @@ Qed.
 Lemma public_TExpN t ts :
   ¬ is_exp t →
   atomic ts ->
-  invs_canceled ts ->
+  (forall t', t' ∈ ts -> TInv t' ∉ ts) ->
   ts ≠ [] →
   public (TExpN t ts) ⊣⊢
   minted (TExpN t ts) ∧
@@ -1065,7 +1065,8 @@ move => Nexp Nm2 Nm3 t2t3.
 have Nm2' : negb (is_mul t2) := Nm2.
 have Nm3' : negb (is_mul t3) := Nm3.
 have atom23 : atomic [t2; t3] by rewrite /atomic Forall_cons Forall_singleton; split.
-have ic23 : invs_canceled [t2; t3] := proj2 (@invs_canceled2 t2 t3 Nm2' Nm3') t2t3.
+have ic23 : forall x, x ∈ [t2; t3] -> TInv x ∉ [t2; t3]
+  := proj2 (@invs_canceled2 t2 t3 Nm2' Nm3') t2t3.
 have e2 : TExp (TExpN t1 [t2; t3]) (TInv t2) = TExp t1 t3.
   rewrite -TExp_TExpN -{1}[t2]TInvK TExpK'; first last.
   - exact: (Nmul_TInv Nm2').
@@ -1215,9 +1216,8 @@ Lemma public_TMul0 : ⊢ public (TMulN nil).
 Proof.
 have wf0 : wf_mul_list (@nil term).
 { split; first exact: Forall_nil_2.
-  split; first by constructor.
-  split; first by apply/invs_canceledE; exact: Forall_nil_2.
-  done. }
+  split; last done.
+  apply: wf_TInvI; [exact: Forall_nil_2 | by constructor | by move=> ? /elem_of_nil []]. }
 by iApply (public_TMulN_intro wf0).
 Qed.
 
@@ -1263,7 +1263,7 @@ elim: t.
     last by iApply IHts; rewrite // elem_of_cons; eauto.
   by iApply "IH" => //; iPureIntro => t'' t''_ts; apply: IHts; rewrite elem_of_cons; eauto.
 - move => ts IHts atom sorted canceled sizeN1.
-  have wf : wf_mul_list ts := conj atom (conj sorted (conj canceled sizeN1)).
+  have wf : wf_mul_list ts := conj atom (conj (wf_TInvI ts atom sorted canceled) sizeN1).
   iIntros "#mt #contra".
   iApply (public_TMulN_intro wf).
   iEval (rewrite minted_TMulN //) in "mt".
