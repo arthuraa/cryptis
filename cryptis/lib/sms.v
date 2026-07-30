@@ -1,27 +1,26 @@
 (** Signed multisets over a type [T] equipped with a decidable total order [R]
-    and an involution [i : T -> T].  The involution's laws — that [i] is an
-    involution ([i (i x) = x]) and has no fixed points ([i x <> x]) — are NOT
-    assumed globally: they are taken as hypotheses on exactly the elements of the
+    and an involution [i : T -> T].  The involution's law ([i (i x) = x]) is not
+    assumed globally: it is taken as hypotheses on exactly the elements of the
     list each lemma operates on.  This lets [T] be a large type whose involution
     only behaves well on a sub-collection (e.g. all pre-terms, with [inv_aux] an
     involution only on the well-formed ones): to use [to X]/[wf_to X]/… one only
-    needs the laws to hold on the elements of [X].
+    needs the laws to hold on the elements of [X].  Moreover [to] itself prunes
+    the involution's fixed points (see below), so the [to]-lemmas need only the
+    involution law [i (i x) = x] on the elements — never fixed-point-freeness.
 
     A signed multiset is represented by a [list T].  Its "signed count" at [x] is
 
         count x X = count_mem x X - count_mem (i x) X   (in Z),
 
-    so that [count (i x) X = - count x X].  A list is well-formed ([wf]) when it
-    is sorted and no element occurs together with its inverse ([invs_canceled]).
-    [to] normalises a list by cancelling inverse pairs and sorting; when the
-    involution laws hold on the elements of [X] it is the canonical form:
+    so that [count (i x) X = - count x X]; in particular an involution fixed point
+    [x] (with [i x = x]) has [count x X = 0].  A list is well-formed ([wf]) when
+    it is sorted, no element occurs together with its inverse ([invs_canceled]),
+    and [i] is a fixed-point-free involution on its elements.  [to] normalises a
+    list by pruning involution fixed points, cancelling inverse pairs and sorting;
+    when [i] is involutive on the elements of [X] it is the canonical form:
 
       (1) [wf (to X)];
-      (2) [to X = to Y <-> forall z, i (i z) = z -> count z X = count z Y].
-
-    The [count]/[invs_canceled]/[wf]/[insert]/[cancel]/[to] *definitions* never
-    mention the involution laws, so their types are independent of them; only the
-    *theorems* take the per-list hypotheses. *)
+      (2) [to X = to Y <-> forall z, i (i z) = z -> count z X = count z Y]. *)
 
 From mathcomp Require Import ssreflect.
 From stdpp Require Import sorting list numbers.
@@ -60,10 +59,23 @@ Definition insert x X : list T :=
 
 Definition cancel : list T -> list T := foldr insert [].
 
-Definition to X : list T := merge_sort R (cancel X).
+(** [prune] drops the involution's fixed points ([i x = x]); such an [x] has
+    signed [count x X = 0], so pruning it changes no signed count.  Removing
+    fixed points up front lets [to] (and its lemmas) require only that [i] be
+    involutive on the elements — never fixed-point-free. *)
+Definition prune X : list T := filter (fun x => i x <> x) X.
+
+Definition to X : list T := merge_sort R (cancel (prune X)).
 
 Lemma cancel_cons x X : cancel (x :: X) = insert x (cancel X).
 Proof. reflexivity. Qed.
+
+Lemma prune_cons x X :
+  prune (x :: X) = (if bool_decide (i x <> x) then x :: prune X else prune X).
+Proof.
+rewrite /prune filter_cons; case_bool_decide as H; case_decide as H';
+  by [|case: (H' H)|case: (H H')|].
+Qed.
 
 (** ** The involution (per-point laws)
 
@@ -107,6 +119,27 @@ rewrite cancel_cons => /mem_insert /elem_of_cons [->|xin].
 - by rewrite elem_of_cons; right; exact: (IH xin).
 Qed.
 
+(** [prune] only removes elements (the involution's fixed points). *)
+Lemma elem_of_prune z X : z ∈ prune X <-> i z <> z /\ z ∈ X.
+Proof. by rewrite /prune list_elem_of_filter. Qed.
+
+Lemma mem_prune z X : z ∈ prune X -> z ∈ X.
+Proof. rewrite elem_of_prune; by case. Qed.
+
+Lemma prune_fpf z X : z ∈ prune X -> i z <> z.
+Proof. rewrite elem_of_prune; by case. Qed.
+
+(** A list already free of fixed points is a fixed point of [prune]; law-free. *)
+Lemma prune_id X : (forall x, x ∈ X -> i x <> x) -> prune X = X.
+Proof.
+elim: X => [//|x X IH] H.
+have Hx : i x <> x by apply: H; rewrite elem_of_cons; left.
+have HX : forall y, y ∈ X -> i y <> y
+  by move=> y yX; apply: H; rewrite elem_of_cons; right.
+rewrite prune_cons; case_bool_decide as Hd; last by case: (Hx Hd).
+by rewrite (IH HX).
+Qed.
+
 (** [insert]/[cancel] preserve the parity of the length (each [insert] flips it,
     and [cancel] flips it once per element); law-free. *)
 
@@ -126,8 +159,13 @@ elim: X => [//|x X IH].
 by rewrite cancel_cons parity_insert IH Nat.odd_succ Nat.negb_odd.
 Qed.
 
-Lemma parity_to X : Nat.odd (length (to X)) = Nat.odd (length X).
-Proof. by rewrite /to (length_merge_sort R (cancel X)) parity_cancel. Qed.
+Lemma parity_to X :
+  (forall x, x ∈ X -> i x <> x) ->
+  Nat.odd (length (to X)) = Nat.odd (length X).
+Proof.
+move=> fpf.
+by rewrite /to (length_merge_sort R (cancel (prune X))) parity_cancel (prune_id X fpf).
+Qed.
 
 (** ** Signed counts *)
 
@@ -188,12 +226,30 @@ by rewrite cancel_cons (count_insert z x (cancel X) iKz iKx)
            (count_cons z x (cancel X)) (count_cons z x X) (IH iKX).
 Qed.
 
+(** Pruning the involution's fixed points leaves every signed count unchanged (a
+    fixed point contributes [0]).  Needs the involution only at the query point. *)
+Lemma count_prune z X :
+  i (i z) = z -> count z (prune X) = count z X.
+Proof.
+move=> iKz; elim: X => [//|x X IH].
+rewrite (count_cons z x X) prune_cons; case_bool_decide as Hx.
+- by rewrite (count_cons z x (prune X)) IH.
+- have Hxx : i x = x := Hx.
+  have e : bool_decide (z = x) = bool_decide (i z = x).
+    apply: bool_decide_ext; split.
+    + by move=> ->; rewrite Hxx.
+    + by move=> izx; rewrite -iKz izx Hxx.
+  rewrite IH e; lia.
+Qed.
+
 Lemma count_to z X :
   i (i z) = z -> (forall x, x ∈ X -> i (i x) = x) ->
   count z (to X) = count z X.
 Proof.
 move=> iKz iKX.
-by rewrite /to merge_sort_Permutation count_cancel.
+rewrite /to merge_sort_Permutation.
+rewrite (count_cancel z (prune X) iKz (fun x xin => iKX x (mem_prune _ _ xin))).
+exact: (count_prune z X iKz).
 Qed.
 
 (** ** Cancellation removes all inverse pairs *)
@@ -348,69 +404,71 @@ Qed.
 (** ** Main results *)
 
 Lemma wf_to X :
-  (forall x, x ∈ X -> i x <> x) -> (forall x, x ∈ X -> i (i x) = x) ->
-  wf (to X).
+  (forall x, x ∈ X -> i (i x) = x) -> wf (to X).
 Proof.
-move=> iNX iKX.
-have memX : forall x, x ∈ to X -> x ∈ X.
+move=> iKX.
+have mempX : forall x, x ∈ to X -> x ∈ prune X.
   move=> x; rewrite /to => xin; apply: mem_cancel.
-  by rewrite -(merge_sort_Permutation R (cancel X)).
+  by rewrite -(merge_sort_Permutation R (cancel (prune X))).
 apply: wf_intro.
 - rewrite /to; exact: merge_sort_sorted.
 - apply/invs_canceledP; rewrite /to merge_sort_Permutation.
-  exact: (invs_canceled_cancel X iNX iKX).
-- move=> x /memX xX; exact: iKX.
-- move=> x /memX xX; exact: iNX.
+  exact: (invs_canceled_cancel (prune X)
+            (fun x xin => prune_fpf x _ xin)
+            (fun x xin => iKX x (mem_prune _ _ xin))).
+- move=> x /mempX xin; exact: (iKX x (mem_prune _ _ xin)).
+- move=> x /mempX xin; exact: (prune_fpf x _ xin).
 Qed.
 
 (** A well-formed list is a fixed point of [to]; law-free.  This is the exposed
     form (over [to]) of [cancel_id] + [merge_sort_id]. *)
 Lemma to_id X : wf X -> to X = X.
 Proof.
-move=> /andb_True [/andb_True [/andb_True [/bool_decide_unpack Hs Hc] _] _].
-by rewrite /to (cancel_id Hc) (merge_sort_id R X Hs).
+move=> wfX.
+rewrite /to (prune_id X (wf_fpf X wfX)) (cancel_id (wf_invs_canceled X wfX)).
+exact: (merge_sort_id R X (wf_sorted X wfX)).
 Qed.
 
 Lemma to_eq X Y :
-  (forall x, x ∈ X -> i x <> x) -> (forall x, x ∈ X -> i (i x) = x) ->
-  (forall x, x ∈ Y -> i x <> x) -> (forall x, x ∈ Y -> i (i x) = x) ->
+  (forall x, x ∈ X -> i (i x) = x) -> (forall x, x ∈ Y -> i (i x) = x) ->
   (to X = to Y <-> (forall z, i (i z) = z -> count z X = count z Y)).
 Proof.
-move=> iNX iKX iNY iKY; split.
+move=> iKX iKY; split.
 - move=> e z iKz.
   by rewrite -(count_to z X iKz iKX) -(count_to z Y iKz iKY) e.
 - move=> Hc; rewrite /to.
   apply: merge_sort_Permutation_eq; apply: Permutation_count_mem => z.
   apply: Nat2Z.inj.
-  case: (decide (z ∈ cancel X)) => zX.
-  + have iKz : i (i z) = z := iKX z (mem_cancel zX).
-    rewrite (count_mem_of_invs_canceled z (cancel X) (invs_canceled_cancel X iNX iKX)).
-    rewrite (count_mem_of_invs_canceled z (cancel Y) (invs_canceled_cancel Y iNY iKY)).
-    by rewrite (count_cancel z X iKz iKX) (count_cancel z Y iKz iKY) (Hc z iKz).
-  + case: (decide (z ∈ cancel Y)) => zY.
-    * have iKz : i (i z) = z := iKY z (mem_cancel zY).
-      rewrite (count_mem_of_invs_canceled z (cancel X) (invs_canceled_cancel X iNX iKX)).
-      rewrite (count_mem_of_invs_canceled z (cancel Y) (invs_canceled_cancel Y iNY iKY)).
-      by rewrite (count_cancel z X iKz iKX) (count_cancel z Y iKz iKY) (Hc z iKz).
-    * by rewrite (proj1 (not_elem_of_count_mem z (cancel X)) zX)
-                 (proj1 (not_elem_of_count_mem z (cancel Y)) zY).
+  have iKpX : forall x, x ∈ prune X -> i (i x) = x
+    by move=> x /mem_prune xX; exact: (iKX x xX).
+  have iKpY : forall x, x ∈ prune Y -> i (i x) = x
+    by move=> x /mem_prune xX; exact: (iKY x xX).
+  have icX : invs_canceled (cancel (prune X))
+    := invs_canceled_cancel (prune X) (fun x xin => prune_fpf x _ xin) iKpX.
+  have icY : invs_canceled (cancel (prune Y))
+    := invs_canceled_cancel (prune Y) (fun x xin => prune_fpf x _ xin) iKpY.
+  case: (decide (z ∈ cancel (prune X))) => zX.
+  + have iKz : i (i z) = z := iKpX z (mem_cancel zX).
+    rewrite (count_mem_of_invs_canceled z (cancel (prune X)) icX).
+    rewrite (count_mem_of_invs_canceled z (cancel (prune Y)) icY).
+    rewrite (count_cancel z (prune X) iKz iKpX) (count_cancel z (prune Y) iKz iKpY).
+    by rewrite (count_prune z X iKz) (count_prune z Y iKz) (Hc z iKz).
+  + case: (decide (z ∈ cancel (prune Y))) => zY.
+    * have iKz : i (i z) = z := iKpY z (mem_cancel zY).
+      rewrite (count_mem_of_invs_canceled z (cancel (prune X)) icX).
+      rewrite (count_mem_of_invs_canceled z (cancel (prune Y)) icY).
+      rewrite (count_cancel z (prune X) iKz iKpX) (count_cancel z (prune Y) iKz iKpY).
+      by rewrite (count_prune z X iKz) (count_prune z Y iKz) (Hc z iKz).
+    * by rewrite (proj1 (not_elem_of_count_mem z (cancel (prune X))) zX)
+                 (proj1 (not_elem_of_count_mem z (cancel (prune Y))) zY).
 Qed.
 
-(** [cancel] respects the signed counts up to permutation — [to_eq] read through
-    [merge_sort] being a permutation. *)
-Lemma cancel_Permutation X Y :
-  (forall x, x ∈ X -> i x <> x) -> (forall x, x ∈ X -> i (i x) = x) ->
-  (forall x, x ∈ Y -> i x <> x) -> (forall x, x ∈ Y -> i (i x) = x) ->
-  (forall z, i (i z) = z -> count z X = count z Y) -> cancel X ≡ₚ cancel Y.
-Proof.
-move=> iNX iKX iNY iKY Hc.
-rewrite -(merge_sort_Permutation R (cancel X)) -(merge_sort_Permutation R (cancel Y)).
-by rewrite -/(to X) -/(to Y) (proj2 (to_eq X Y iNX iKX iNY iKY) Hc).
-Qed.
-
-(** [to] only shrinks the underlying set of elements (via [cancel]). *)
+(** [to] only shrinks the underlying set of elements (via [prune]/[cancel]). *)
 Lemma mem_to z X : z ∈ to X -> z ∈ X.
-Proof. rewrite /to => zin; apply: mem_cancel; by rewrite -(merge_sort_Permutation R (cancel X)). Qed.
+Proof.
+rewrite /to => zin; apply: mem_prune; apply: mem_cancel.
+by rewrite -(merge_sort_Permutation R (cancel (prune X))).
+Qed.
 
 (** A well-formed singleton is a fixed point of [to]. *)
 Lemma to_singleton x : i x <> x -> i (i x) = x -> to [x] = [x].
@@ -422,65 +480,102 @@ Proof. move=> iNx iKx; apply: to_id; exact: wf_singleton. Qed.
     want to mention [cancel]/[invs_canceled]. *)
 Lemma to_id_perm X : (forall x, x ∈ X -> i x ∉ X) -> to X ≡ₚ X.
 Proof.
-move=> nc; rewrite /to (cancel_id (proj2 (invs_canceledP X) nc)).
+move=> nc.
+have fpf : forall x, x ∈ X -> i x <> x.
+  move=> x xX e; apply: (nc x xX); rewrite e; exact: xX.
+rewrite /to (prune_id X fpf) (cancel_id (proj2 (invs_canceledP X) nc)).
 exact: (merge_sort_Permutation R X).
 Qed.
 
 (** [to] is a genuine (Leibniz) function of the underlying signed multiset:
     permutation-equal inputs give *equal* canonical forms. *)
 Lemma to_Permutation X Y :
-  (forall x, x ∈ X -> i x <> x) -> (forall x, x ∈ X -> i (i x) = x) ->
-  (forall x, x ∈ Y -> i x <> x) -> (forall x, x ∈ Y -> i (i x) = x) ->
+  (forall x, x ∈ X -> i (i x) = x) -> (forall x, x ∈ Y -> i (i x) = x) ->
   X ≡ₚ Y -> to X = to Y.
 Proof.
-move=> iNX iKX iNY iKY e.
-apply: (proj2 (to_eq X Y iNX iKX iNY iKY)) => z iKz.
+move=> iKX iKY e.
+apply: (proj2 (to_eq X Y iKX iKY)) => z iKz.
 by rewrite e.
 Qed.
 
 (** Canonicalising a suffix before concatenating does not change the canonical
     form of the whole: [to] absorbs an inner [to]. *)
 Lemma to_cat_to A B :
-  (forall x, x ∈ A -> i x <> x) -> (forall x, x ∈ A -> i (i x) = x) ->
-  (forall x, x ∈ B -> i x <> x) -> (forall x, x ∈ B -> i (i x) = x) ->
+  (forall x, x ∈ A -> i (i x) = x) -> (forall x, x ∈ B -> i (i x) = x) ->
   to (A ++ to B) = to (A ++ B).
 Proof.
-move=> iNA iKA iNB iKB.
+move=> iKA iKB.
 have memB : forall x, x ∈ to B -> x ∈ B by move=> x; exact: mem_to.
-have lawN : forall x, x ∈ A ++ to B -> i x <> x.
-  move=> x; rewrite elem_of_app => - [xA|xtoB]; [exact: iNA | exact: (iNB _ (memB _ xtoB))].
 have lawK : forall x, x ∈ A ++ to B -> i (i x) = x.
   move=> x; rewrite elem_of_app => - [xA|xtoB]; [exact: iKA | exact: (iKB _ (memB _ xtoB))].
-have lawN' : forall x, x ∈ A ++ B -> i x <> x.
-  move=> x; rewrite elem_of_app => - [xA|xB]; [exact: iNA | exact: iNB].
 have lawK' : forall x, x ∈ A ++ B -> i (i x) = x.
   move=> x; rewrite elem_of_app => - [xA|xB]; [exact: iKA | exact: iKB].
-apply: (proj2 (to_eq _ _ lawN lawK lawN' lawK')) => z iKz.
+apply: (proj2 (to_eq _ _ lawK lawK')) => z iKz.
 by rewrite !count_app (count_to z B iKz iKB).
 Qed.
 
 (** Left-cancellation of a common prefix under [to]: since [to] is determined by
     the signed counts, a shared prefix [A] can be cancelled. *)
 Lemma to_app_cancel_l A X Y :
-  (forall x, x ∈ A -> i x <> x) -> (forall x, x ∈ A -> i (i x) = x) ->
-  (forall x, x ∈ X -> i x <> x) -> (forall x, x ∈ X -> i (i x) = x) ->
-  (forall x, x ∈ Y -> i x <> x) -> (forall x, x ∈ Y -> i (i x) = x) ->
+  (forall x, x ∈ A -> i (i x) = x) -> (forall x, x ∈ X -> i (i x) = x) ->
+  (forall x, x ∈ Y -> i (i x) = x) ->
   to (A ++ X) = to (A ++ Y) -> to X = to Y.
 Proof.
-move=> iNA iKA iNX iKX iNY iKY e.
-have lawN : forall Z, (forall x, x ∈ Z -> i x <> x) ->
-              forall x, x ∈ A ++ Z -> i x <> x.
-  move=> Z hZ x; rewrite elem_of_app => -[?|?]; by [apply: iNA|apply: hZ].
+move=> iKA iKX iKY e.
 have lawK : forall Z, (forall x, x ∈ Z -> i (i x) = x) ->
               forall x, x ∈ A ++ Z -> i (i x) = x.
   move=> Z hZ x; rewrite elem_of_app => -[?|?]; by [apply: iKA|apply: hZ].
-apply: (proj2 (to_eq X Y iNX iKX iNY iKY)) => z iKz.
-have := proj1 (to_eq (A ++ X) (A ++ Y) (lawN _ iNX) (lawK _ iKX)
-                     (lawN _ iNY) (lawK _ iKY)) e z iKz.
+apply: (proj2 (to_eq X Y iKX iKY)) => z iKz.
+have := proj1 (to_eq (A ++ X) (A ++ Y) (lawK _ iKX) (lawK _ iKY)) e z iKz.
 rewrite !count_app; lia.
 Qed.
 
 End SignedMultiset.
+
+(** [cancel] transports along an injective, involution-conjugating map [f]. *)
+Lemma cancel_fmap {T U} `{EqDecision T} `{EqDecision U}
+    (i : T -> T) (j : U -> U) (f : T -> U) X :
+  (forall a b, f a = f b -> a = b) ->
+  (forall x, x ∈ X -> f (i x) = j (f x)) ->
+  f <$> cancel i X = cancel j (f <$> X).
+Proof.
+move=> finj fij.
+elim: X fij => [//|x X IH] fij; rewrite fmap_cons !cancel_cons.
+have fijx : f (i x) = j (f x) by apply: fij; rewrite elem_of_cons; left.
+rewrite -IH; last by move=> y yX; apply: fij; rewrite elem_of_cons; right.
+rewrite /insert (bool_decide_ext (i x ∈ cancel i X) (j (f x) ∈ f <$> cancel i X)); last first.
+{ rewrite -fijx; split.
+  - move=> Hin; apply/list_elem_of_fmap; exists (i x); by split.
+  - by move=> /list_elem_of_fmap [a [/finj <- ?]]. }
+case_bool_decide.
+- by rewrite (fmap_rem f _ _ finj) fijx.
+- by [].
+Qed.
+
+(** [prune] transports along an injective, involution-conjugating map [f]: the
+    fixed-point tests [i x = x] and [j (f x) = f x] agree under [f]. *)
+Lemma prune_fmap {T U} `{EqDecision T} `{EqDecision U}
+    (i : T -> T) (j : U -> U) (f : T -> U) X :
+  (forall a b, f a = f b -> a = b) ->
+  (forall x, x ∈ X -> f (i x) = j (f x)) ->
+  f <$> prune i X = prune j (f <$> X).
+Proof.
+move=> finj fij.
+elim: X fij => [//|x X IH] fij.
+have fijx : f (i x) = j (f x) by apply: fij; rewrite elem_of_cons; left.
+have fijX : forall y, y ∈ X -> f (i y) = j (f y)
+  by move=> y yX; apply: fij; rewrite elem_of_cons; right.
+have Hiff : i x = x <-> j (f x) = f x.
+  split.
+  - by move=> e; rewrite -fijx e.
+  - by move=> e; apply: finj; rewrite fijx e.
+rewrite (prune_cons i x X) fmap_cons (prune_cons j (f x) (f <$> X)).
+case_bool_decide as Hx; case_bool_decide as Hy.
+- by rewrite fmap_cons (IH fijX).
+- exfalso; exact: (Hx (proj2 Hiff Hy)).
+- exfalso; exact: (Hy (proj1 Hiff Hx)).
+- by rewrite (IH fijX).
+Qed.
 
 (** [to] transports along an injective, order-preserving, involution-conjugating
     map [f]: this is how the canonical form interacts with mapping (used e.g. to
@@ -497,16 +592,9 @@ Lemma to_fmap {T U} `{EqDecision T} `{EqDecision U}
 Proof.
 move=> finj fij fRS.
 rewrite /to (merge_sort_fmap R S f fRS); congr (merge_sort S _).
-elim: X fij => [//|x X IH] fij; rewrite fmap_cons !cancel_cons.
-have fijx : f (i x) = j (f x) by apply: fij; rewrite elem_of_cons; left.
-rewrite -IH; last by move=> y yX; apply: fij; rewrite elem_of_cons; right.
-rewrite /insert (bool_decide_ext (i x ∈ cancel i X) (j (f x) ∈ f <$> cancel i X)); last first.
-{ rewrite -fijx; split.
-  - move=> Hin; apply/list_elem_of_fmap; exists (i x); by split.
-  - by move=> /list_elem_of_fmap [a [/finj <- ?]]. }
-case_bool_decide.
-- by rewrite (fmap_rem f _ _ finj) fijx.
-- by [].
+rewrite (cancel_fmap i j f (prune i X) finj); last first.
+{ move=> x xin; apply: fij; exact: (mem_prune _ _ _ xin). }
+by rewrite (prune_fmap i j f X finj fij).
 Qed.
 
 End SMS.

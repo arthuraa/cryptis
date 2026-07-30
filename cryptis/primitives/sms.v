@@ -30,8 +30,14 @@ Definition sms_insert : val := λ: "eq" "inv" "x" "xs",
 Definition sms_cancel : val := λ: "eq" "inv" "xs",
   foldr_list (λ: "x" "acc", sms_insert "eq" "inv" "x" "acc") [] "xs".
 
+(* Drop the involution's fixed points, matching [SMS.prune]: keep [x] unless
+   [inv x = x]. *)
+Definition sms_prune : val := λ: "eq" "inv" "xs",
+  foldr_list (λ: "x" "acc", if: "eq" ("inv" "x") "x" then "acc" else "x" :: "acc")
+    [] "xs".
+
 Definition sms_to : val := λ: "le" "eq" "inv" "xs",
-  insertion_sort "le" (sms_cancel "eq" "inv" "xs").
+  insertion_sort "le" (sms_cancel "eq" "inv" (sms_prune "eq" "inv" "xs")).
 
 Section Proofs.
 
@@ -104,6 +110,31 @@ wp_apply twp_nil.
 wp_apply twp_foldr_list => //.
 iIntros "%b %a %Φ _ HΦ"; wp_pures; wp_apply twp_sms_insert; by iApply "HΦ".
 iIntros "_"; by iApply "HΨ".
+Qed.
+
+(* The foldr the [sms_prune] closure runs is exactly [SMS.prune] (= [filter]). *)
+Lemma sms_prune_foldr xs :
+  foldr (fun b a => if bool_decide (i b = b) then a else b :: a) [] xs = SMS.prune i xs.
+Proof.
+elim: xs => [//|x xs IH] /=.
+rewrite SMS.prune_cons IH.
+case: (bool_decide_reflect (i x = x)) => [e|ne].
+- by rewrite (bool_decide_eq_false_2 (i x ≠ x) (fun h => h e)).
+- by rewrite (bool_decide_eq_true_2 (i x ≠ x) ne).
+Qed.
+
+Lemma twp_sms_prune xs E Ψ :
+  Ψ (repr (SMS.prune i xs)) ⊢ WP sms_prune eqv invv (repr xs) @ E [{ Ψ }].
+Proof.
+iIntros "HΨ"; wp_lam; wp_pures.
+wp_apply twp_nil.
+wp_apply (twp_foldr_list (fun b a => if bool_decide (i b = b) then a else b :: a)) => //.
+iIntros "%b %a %Φ _ HΦ"; wp_pures.
+wp_apply invvP; wp_apply eqvP.
+case: (bool_decide (i b = b)); wp_pures.
+- by iApply "HΦ".
+- wp_apply twp_cons; by iApply "HΦ".
+iIntros "_"; rewrite sms_prune_foldr; by iApply "HΨ".
 Qed.
 
 End Proofs.
@@ -191,6 +222,7 @@ Lemma twp_sms_to xs E Ψ :
   Ψ (repr (SMS.to ole i xs)) ⊢ WP sms_to lev eqv invv (repr xs) @ E [{ Ψ }].
 Proof.
 iIntros "HΨ"; wp_lam; wp_pures.
+wp_apply (twp_sms_prune (i := i)); try exact: eqvP; try exact: invvP.
 wp_apply (twp_sms_cancel (i := i)); try exact: eqvP; try exact: invvP.
 wp_apply twp_insertion_sort_merge.
 rewrite /SMS.to; by iApply "HΨ".

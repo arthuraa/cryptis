@@ -453,15 +453,11 @@ move=> /list.Forall_forall atom; apply: SMS.to_fmap.
 Qed.
 
 Lemma perm_cancel_invs ts1 ts2 :
-  Forall (fun t => negb (is_mul t)) ts1 ->
   ts1 ≡ₚ ts2 -> SMS.to term_order TInv ts1 = SMS.to term_order TInv ts2.
 Proof.
-move => Nm1 peq.
-have Nm2 : Forall (fun t => negb (is_mul t)) ts2 by rewrite -peq.
+move => peq.
 apply: (SMS.to_Permutation term_order TInv ts1 ts2).
-- move=> x xin; have /list.Forall_forall H := Nm1; exact: (TInv_Nid (H x xin)).
 - move=> x _; exact: TInvK.
-- move=> x xin; have /list.Forall_forall H := Nm2; exact: (TInv_Nid (H x xin)).
 - move=> x _; exact: TInvK.
 - exact: peq.
 Qed.
@@ -947,11 +943,8 @@ Proof.
 move => atom1 atom2 /(f_equal exps).
 rewrite (exps_TExpN _ _ atom1) (exps_TExpN _ _ atom2) => Hsort.
 apply: (SMS.to_app_cancel_l term_order TInv (exps t) ts1 ts2).
-- move=> x xin; have /list.Forall_forall H := atom_exps t; exact: (TInv_Nid (H x xin)).
 - move=> x _; exact: TInvK.
-- move=> x xin; have /list.Forall_forall H := atom1; exact: (TInv_Nid (H x xin)).
 - move=> x _; exact: TInvK.
-- move=> x xin; have /list.Forall_forall H := atom2; exact: (TInv_Nid (H x xin)).
 - move=> x _; exact: TInvK.
 - exact: Hsort.
 Qed.

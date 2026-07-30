@@ -1,17 +1,37 @@
-(** Self-contained development of pre-term normalization, phrased entirely in
-    terms of stdpp's list and number operations: the [normalize] function, the
-    definitions it depends on, and just the theory needed to prove that
-    normalization is idempotent ([normalize_idem]).
+(** Pre-term normalization
 
-    Unlike [theory.v] (which is built on mathcomp's [seq]/[order]/[bigop]), this
-    file only uses the base ssreflect tactic language together with stdpp: lists
-    are canonicalised with [merge_sort] for the total order [pt_order], well-
-    formedness is expressed with [Forall]/[StronglySorted], and membership with
-    [∈].  [pt_order] is the mathcomp order on pre-terms from [base.v], packaged
-    as stdpp typeclasses (reflexivity, transitivity, …) in [with_stdpp.v].
+    This file defines a normalization function on pre-terms.  Two pre-terms have
+    the same normal form if and only if they are equal according to the
+    following equations:
 
-    The same definitions also live in [theory.v]; they are kept here on purpose
-    (nothing is moved out of [theory.v]). *)
+    - [(g ^ a) ^ b = g ^ (a * b)]
+    - [a * b = b * a]
+    - [a * (b * c) = (a * b) * c]
+    - [a * a^-1 = 1]
+    - [a * 1 = a]
+    - [g ^ 1 = g]
+
+    where [1 := TMulN []], [g ^ x := TExp g x] and [a * b := TMulN [a; b]].
+    From these equations, several other properties follow, such as
+
+    - [a * b = a * c -> b = c]
+    - [(a^-1)^-1 = a]
+    - [(1^-1) = 1]
+    - [(a * b)^-1 = a^-1 * b^-1]
+    - [a^-1 * a = 1]
+    - [1 * a = a]
+    - [(g ^ a) ^ (a^-1) = g]
+    - [(g ^ a) ^ b = (g ^ b) ^ a]
+
+    The predicate [wf : pre_term -> bool] characterizes normal forms and is
+    defined by structural recursion on the pre-term.  We have the following
+    properties:
+
+   - [normalize_wf : wf t -> normalize t = t]
+   - [wf_normalize : wf (normalize t)]
+   - [normalize_idem : normalize (normalize t) = normalize t]
+
+*)
 
 From stdpp Require Import sorting list numbers.
 From cryptis Require Import lib.
@@ -93,27 +113,6 @@ Fixpoint normalize pt :=
   | PTMul ts => mul (normalize <$> ts)
   end.
 
-(** The signed-multiset canonical form [SMS.to pt_order inv_aux] and its
-    well-formedness predicate [SMS.wf pt_order inv_aux] are the only [SMS]
-    operators the pre-term layer builds on; the cancellation *internals*
-    ([SMS.cancel]/[SMS.insert]/[SMS.invs_canceled]) stay inside [cryptis.lib.sms].
-    "No inverse pairs" is expressed here as the plain first-order statement
-    [forall pt, pt ∈ pts -> inv pt ∉ pts] — equivalently with [inv_aux] on the
-    atomic factor lists, since [inv] and [inv_aux] agree there ([inv_Nmul]). *)
-
-(** [wf] is a genuine [bool] (so it doubles as the proof-irrelevant
-    well-formedness field of the [term] datatype downstream, via
-    [bool_irrelevance]).  The recursive well-formedness of the factors of a
-    product is written with [forallb wf ts] — that keeps [wf] structurally
-    recursive (unlike [Forall wf ts]) and gives it good reduction behaviour.
-    The "sorted and inverse-free" part of a product's well-formedness is exactly
-    the generic signed-multiset predicate [SMS.wf pt_order inv_aux] (factors
-    sorted under [pt_order] and no factor occurring with its [inv_aux]-inverse) —
-    the same involution [mul] cancels with, via [SMS.to pt_order inv_aux].  Since
-    the factors are atomic, [inv_aux] there agrees with the full [inv]
-    ([inv_Nmul]), so it also spells out as "no [inv] pairs" ([no_inv_factors]).
-    The [length] side-condition is reflected with [bool_decide]. *)
-
 Fixpoint wf (pt : pre_term) : bool :=
   match pt with
   | PT0 _ => true
@@ -127,16 +126,19 @@ Fixpoint wf (pt : pre_term) : bool :=
     && SMS.wf pt_order inv_aux ts && bool_decide (length ts ≠ 1)
   end.
 
-(* Keep [SMS.wf] as a single opaque conjunct under [simpl]: proofs that unfold
-   [wf (PTMul _)] via [/=] then see a clean [_ && _ && SMS.wf _ _ _ && _], and
-   extract from the [SMS.wf] conjunct with [SMS.wf_sorted]/[SMS.wf_no_pairs]. *)
-Arguments SMS.wf : simpl never.
-
 Lemma wfsP ts : forallb wf ts <-> Forall wf ts.
 Proof. exact: forallb_True. Qed.
 
 Lemma inv_aux_Nid pt : inv_aux pt ≠ pt.
 Proof. by case: pt => [o|[k| |] t|o t1 t2|ts] /=; move=> /(f_equal height) /=; lia. Qed.
+
+(* On [inv_aux]-lists the fixed-point pruning inside [SMS.to] is vacuous
+   ([inv_aux] has no fixed points, [inv_aux_Nid]), so [SMS.to] is just
+   sort-after-cancel — the shape the executable primitives ([hl_mul]/[hl_exp])
+   compute.  Lets those spec proofs unfold [SMS.to] without exposing [prune]. *)
+Lemma to_inv_aux X :
+  SMS.to pt_order inv_aux X = merge_sort pt_order (SMS.cancel inv_aux X).
+Proof. by rewrite /SMS.to (SMS.prune_id inv_aux X (fun x _ => inv_aux_Nid x)). Qed.
 
 Lemma inv_invN pt : negb (is_inv pt) -> inv_aux pt = PTInv pt.
 Proof. by case: pt => [o|[k| |] t|o t1 t2|ts]. Qed.
@@ -147,11 +149,6 @@ case: pt => [o|[k| |] t|o t1 t2|ts] //=.
 by rewrite !andb_True => - [[/inv_invN -> _] _].
 Qed.
 
-(* Elimination for [wf (PTMul ts)] that keeps the [SMS.wf] conjunct *whole*
-   (as [Forall]-flavoured pieces).  [/=] exposes the four top-level conjuncts of
-   [wf (PTMul ts)] while [SMS.wf] stays folded (it is [simpl never]); bounded
-   [/andb_True] splits keep it that way.  Read the [SMS.wf] fact with
-   [SMS.wf_sorted]/[SMS.wf_no_pairs], never by unfolding it. *)
 Lemma wf_Mul_inv ts :
   wf (PTMul ts) ->
   Forall wf ts /\ Forall (fun t => negb (is_mul t)) ts /\
@@ -168,7 +165,7 @@ Qed.
 Lemma wf_nil : wf (PTMul []).
 Proof. by rewrite /wf !andb_True; split_and!. Qed.
 
-(** Structural facts about [base], [expo], [factors] and [inv_aux]. *)
+(** Facts about [base], [expo], [factors] and [inv_aux]. *)
 
 Lemma wf_base pt : wf pt -> wf (base pt).
 Proof.
@@ -226,13 +223,11 @@ case: pt => [o|[k| |] t|o t1 t2|ts] wf //=.
 by move: wf; rewrite /= !andb_True => - [[_ H] _].
 Qed.
 
-(** Discharge the generic [SMS] involution hypotheses from well-formedness:
-    [inv_aux] is a fixed-point-free involution on every wf element, so on a
-    [Forall wf] list the per-element laws [SMS] asks for hold. *)
+(** Discharge the generic [SMS] involution hypothesis from well-formedness:
+    [inv_aux] is an involution on every wf element ([inv_auxK]), so on a
+    [Forall wf] list the per-element law [SMS] asks for holds. *)
 Lemma wf_invol pts : Forall wf pts -> forall x, x ∈ pts -> inv_aux (inv_aux x) = x.
 Proof. move=> /list.Forall_forall H x xin; exact: (inv_auxK _ (H _ xin)). Qed.
-Lemma wf_fpf (pts : list pre_term) : forall x, x ∈ pts -> inv_aux x <> x.
-Proof. move=> x _; exact: inv_aux_Nid. Qed.
 
 Lemma flatten_factors_wf ts :
   Forall wf ts -> Forall wf (concat (factors <$> ts)).
@@ -244,8 +239,8 @@ Qed.
 
 (** Two products are equal when their flattened factor lists carry the same
     signed [SMS.count] at every involution fixed point — the [SMS.to_eq]
-    characterisation, with the per-list involution laws discharged from
-    well-formedness ([wf_fpf]/[wf_invol]).  ([mul] depends on its arguments only
+    characterisation, with the per-list involution law discharged from
+    well-formedness ([wf_invol]).  ([mul] depends on its arguments only
     through the canonical form [SMS.to] of the flattened factor list.) *)
 Lemma mul_count_eq ts1 ts2 :
   Forall wf ts1 -> Forall wf ts2 ->
@@ -259,8 +254,8 @@ have Heq : SMS.to pt_order inv_aux (concat (factors <$> ts1))
          = SMS.to pt_order inv_aux (concat (factors <$> ts2)).
   apply: (proj2 (SMS.to_eq pt_order inv_aux
                    (concat (factors <$> ts1)) (concat (factors <$> ts2))
-                   (wf_fpf _) (wf_invol _ (flatten_factors_wf _ wf1))
-                   (wf_fpf _) (wf_invol _ (flatten_factors_wf _ wf2)))).
+                   (wf_invol _ (flatten_factors_wf _ wf1))
+                   (wf_invol _ (flatten_factors_wf _ wf2)))).
   exact: Hc.
 by rewrite /mul Heq.
 Qed.
@@ -277,7 +272,7 @@ Lemma to_cat_to A B :
 Proof.
 move=> wfA wfB.
 exact: (SMS.to_cat_to pt_order inv_aux A B
-          (wf_fpf _) (wf_invol _ wfA) (wf_fpf _) (wf_invol _ wfB)).
+          (wf_invol _ wfA) (wf_invol _ wfB)).
 Qed.
 
 (** No inverse pairs, spelled out as a first-order fact about [factors] (and, in
@@ -296,7 +291,10 @@ Qed.
 Lemma no_inv_aux_of_no_inv X :
   Forall (fun t => negb (is_mul t)) X -> (forall q, q ∈ X -> inv q ∉ X) ->
   forall q, q ∈ X -> inv_aux q ∉ X.
-Proof. move=> /list.Forall_forall Nm H q qin; rewrite -(inv_Nmul _ (Nm q qin)); exact: (H q qin). Qed.
+Proof.
+move=> /list.Forall_forall Nm H q qin.
+rewrite -(inv_Nmul _ (Nm q qin)); exact: (H q qin).
+Qed.
 
 Lemma no_inv_factors pt : wf pt -> forall q, q ∈ factors pt -> inv q ∉ factors pt.
 Proof.
@@ -363,7 +361,7 @@ move=> wf_ts; rewrite /mul.
 have wfX := flatten_factors_wf _ wf_ts.
 have NmX := flatten_factors_Nmul _ wf_ts.
 have swf : SMS.wf pt_order inv_aux (SMS.to pt_order inv_aux (concat (factors <$> ts))).
-{ exact: (SMS.wf_to pt_order inv_aux _ (wf_fpf _) (wf_invol _ wfX)). }
+{ exact: (SMS.wf_to pt_order inv_aux _ (wf_invol _ wfX)). }
 have wf_L : Forall wf (SMS.to pt_order inv_aux (concat (factors <$> ts))).
 { apply/list.Forall_forall => x /(SMS.mem_to pt_order inv_aux) xin.
   have /list.Forall_forall H := wfX; exact: (H x xin). }
@@ -487,11 +485,7 @@ Qed.
 Lemma normalize_idem pt : normalize (normalize pt) = normalize pt.
 Proof. apply: normalize_wf; exact: wf_normalize. Qed.
 
-(** ** Additional theory ported from [theory.v]
-
-    Everything below is the remaining pre-term theory of [theory.v], reproved on
-    top of stdpp instead of mathcomp's [seq]/[order]/[bigop].  [count_mem] and
-    the multiset characterisation of permutations live in [lib/list_sort.v]. *)
+(** ** Additional theory on pre-terms. *)
 
 (** The size of a pre-term, used as a termination measure. *)
 Fixpoint tsize (pt : pre_term) : nat :=
