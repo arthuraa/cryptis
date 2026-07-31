@@ -23,6 +23,13 @@
     - [(g ^ a) ^ (a^-1) = g]
     - [(g ^ a) ^ b = (g ^ b) ^ a]
 
+    This file establishes only the normalization machinery.  The *fundamental*
+    equations above (on well-formed pre-terms), and the theory of the
+    destructors, are proved separately, in [laws.v].  The *derived* equations are
+    not proved on pre-terms at all: they are consequences of the fundamentals and
+    are proved once, at the [term] layer, in [core/term/base.v] ([TInvK],
+    [TInv_fixed], [TMul_cancel], …).
+
     The predicate [wf : pre_term -> bool] characterizes normal forms and is
     defined by structural recursion on the pre-term.  We have the following
     properties:
@@ -132,14 +139,6 @@ Proof. exact: forallb_True. Qed.
 Lemma inv_aux_Nid pt : inv_aux pt ≠ pt.
 Proof. by case: pt => [o|[k| |] t|o t1 t2|ts] /=; move=> /(f_equal height) /=; lia. Qed.
 
-(* On [inv_aux]-lists the fixed-point pruning inside [SMS.to] is vacuous
-   ([inv_aux] has no fixed points, [inv_aux_Nid]), so [SMS.to] is just
-   sort-after-cancel — the shape the executable primitives ([hl_mul]/[hl_exp])
-   compute.  Lets those spec proofs unfold [SMS.to] without exposing [prune]. *)
-Lemma to_inv_aux X :
-  SMS.to pt_order inv_aux X = merge_sort pt_order (SMS.cancel inv_aux X).
-Proof. by rewrite /SMS.to (SMS.prune_id inv_aux X (fun x _ => inv_aux_Nid x)). Qed.
-
 Lemma inv_invN pt : negb (is_inv pt) -> inv_aux pt = PTInv pt.
 Proof. by case: pt => [o|[k| |] t|o t1 t2|ts]. Qed.
 
@@ -217,12 +216,6 @@ Qed.
 Lemma inv_Nmul pt : negb (is_mul pt) -> inv pt = inv_aux pt.
 Proof. by case: pt. Qed.
 
-Lemma is_mul_inv_aux pt : wf pt -> negb (is_mul (inv_aux pt)).
-Proof.
-case: pt => [o|[k| |] t|o t1 t2|ts] wf //=.
-by move: wf; rewrite /= !andb_True => - [[_ H] _].
-Qed.
-
 (** Discharge the generic [SMS] involution hypothesis from well-formedness:
     [inv_aux] is an involution on every wf element ([inv_auxK]), so on a
     [Forall wf] list the per-element law [SMS] asks for holds. *)
@@ -237,44 +230,6 @@ move=> H; have [wft wfts] := Forall_cons_1 _ _ _ H.
 apply/Forall_app; split; [exact: wf_factors | exact: (IH wfts)].
 Qed.
 
-(** Two products are equal when their flattened factor lists carry the same
-    signed [SMS.count] at every involution fixed point — the [SMS.to_eq]
-    characterisation, with the per-list involution law discharged from
-    well-formedness ([wf_invol]).  ([mul] depends on its arguments only
-    through the canonical form [SMS.to] of the flattened factor list.) *)
-Lemma mul_count_eq ts1 ts2 :
-  Forall wf ts1 -> Forall wf ts2 ->
-  (forall z, inv_aux (inv_aux z) = z ->
-     SMS.count inv_aux z (concat (factors <$> ts1)) =
-     SMS.count inv_aux z (concat (factors <$> ts2))) ->
-  mul ts1 = mul ts2.
-Proof.
-move=> wf1 wf2 Hc.
-have Heq : SMS.to pt_order inv_aux (concat (factors <$> ts1))
-         = SMS.to pt_order inv_aux (concat (factors <$> ts2)).
-  apply: (proj2 (SMS.to_eq pt_order inv_aux
-                   (concat (factors <$> ts1)) (concat (factors <$> ts2))
-                   (wf_invol _ (flatten_factors_wf _ wf1))
-                   (wf_invol _ (flatten_factors_wf _ wf2)))).
-  exact: Hc.
-by rewrite /mul Heq.
-Qed.
-
-(** Canonicalising a suffix before concatenating does not change the canonical
-    form of the whole: [SMS.to] absorbs an inner [SMS.to].  This is the generic
-    engine behind [mul_cat] (and the [term]-layer [exps_TExpN]); it is the
-    [pt_order]/[inv_aux] instance of [SMS.to_cat_to], with the involution laws
-    discharged from well-formedness. *)
-Lemma to_cat_to A B :
-  Forall wf A -> Forall wf B ->
-  SMS.to pt_order inv_aux (A ++ SMS.to pt_order inv_aux B)
-  = SMS.to pt_order inv_aux (A ++ B).
-Proof.
-move=> wfA wfB.
-exact: (SMS.to_cat_to pt_order inv_aux A B
-          (wf_invol _ wfA) (wf_invol _ wfB)).
-Qed.
-
 (** No inverse pairs, spelled out as a first-order fact about [factors] (and, in
     the ported theory below, [exps]).  On the atomic factor lists [inv] and
     [inv_aux] coincide ([inv_Nmul]), so the [inv_aux]-cancellation carried by the
@@ -284,16 +239,6 @@ Lemma no_inv1 t : negb (is_mul t) -> forall q, q ∈ [t] -> inv q ∉ [t].
 Proof.
 move=> Nm q /list_elem_of_singleton -> Hin.
 move: Hin; rewrite list_elem_of_singleton (inv_Nmul _ Nm); exact: inv_aux_Nid.
-Qed.
-
-(* On an atomic list [inv] and [inv_aux] agree, so "no [inv] pairs" is exactly the
-   [inv_aux]-form the generic [SMS.to]/[SMS.wf] lemmas consume. *)
-Lemma no_inv_aux_of_no_inv X :
-  Forall (fun t => negb (is_mul t)) X -> (forall q, q ∈ X -> inv q ∉ X) ->
-  forall q, q ∈ X -> inv_aux q ∉ X.
-Proof.
-move=> /list.Forall_forall Nm H q qin.
-rewrite -(inv_Nmul _ (Nm q qin)); exact: (H q qin).
 Qed.
 
 Lemma no_inv_factors pt : wf pt -> forall q, q ∈ factors pt -> inv q ∉ factors pt.
@@ -392,8 +337,6 @@ Qed.
 
 (* [PTMul []] is a unit for [mul]: dropping it from a two-element product does
    not change the flattened factor list, hence not [mul]. *)
-Lemma mul_unit_r X : mul [X; PTMul []] = mul [X].
-Proof. by rewrite /mul /= !app_nil_r. Qed.
 Lemma mul_unit_l X : mul [PTMul []; X] = mul [X].
 Proof. by rewrite /mul /= !app_nil_r. Qed.
 
@@ -484,405 +427,5 @@ Qed.
 
 Lemma normalize_idem pt : normalize (normalize pt) = normalize pt.
 Proof. apply: normalize_wf; exact: wf_normalize. Qed.
-
-(** ** Additional theory on pre-terms. *)
-
-(** The size of a pre-term, used as a termination measure. *)
-Fixpoint tsize (pt : pre_term) : nat :=
-  match pt with
-  | PT0 _ => 1
-  | PT1 _ pt => S (tsize pt)
-  | PT2 _ t1 t2 => S (tsize t1 + tsize t2)
-  | PTMul ts => S (sum_list_with tsize ts)
-  end.
-
-Lemma tsize_gt0 pt : 0 < tsize pt.
-Proof. case: pt => * /=; lia. Qed.
-
-Lemma tsize_inv pt : negb (is_inv pt) -> tsize (inv_aux pt) = S (tsize pt).
-Proof. by move=> H; rewrite (inv_invN _ H). Qed.
-
-(** The exponents of a pre-term. *)
-Definition exps pt := factors (expo pt).
-
-Lemma wf_exps pt : wf pt -> Forall wf (exps pt).
-Proof. move=> wf; rewrite /exps; apply: wf_factors; exact: (wf_expo _ wf). Qed.
-
-Lemma exps_expN pt : negb (is_exp pt) -> exps pt = [].
-Proof. move=> H; rewrite /exps (expo_expN _ H) //. Qed.
-
-Lemma exps_base pt : wf pt -> exps (base pt) = [].
-Proof. move=> wf; exact: (exps_expN _ (base_Nexp _ wf)). Qed.
-
-Lemma base_idem pt : wf pt -> base (base pt) = base pt.
-Proof. move=> wf; exact: (base_expN _ (base_Nexp _ wf)). Qed.
-
-Lemma base_expoK pt : is_exp pt -> PTExp (base pt) (expo pt) = pt.
-Proof. by case: pt => [o|o t|[||] t1 t2|ts]. Qed.
-
-Lemma expo_exp b : expo b ≠ PTMul [] -> is_exp b.
-Proof. by case: b => [o|o t|[||] t1 t2|ts] //= H; case: (H eq_refl). Qed.
-
-Lemma expo_unit_Nexp b : wf b -> expo b = PTMul [] -> negb (is_exp b).
-Proof.
-case: b => [o|o t|[||] t1 t2|ts] //= wf e0.
-move: wf; rewrite !andb_True => - [[[_ _] _] /bool_decide_unpack eN0].
-exfalso; apply: eN0; exact: e0.
-Qed.
-
-Lemma inv_inv_aux pt : wf pt -> inv (inv_aux pt) = pt.
-Proof.
-move=> wf; have Nm := is_mul_inv_aux _ wf.
-have -> : inv (inv_aux pt) = inv_aux (inv_aux pt).
-{ rewrite /inv; by case: (inv_aux pt) Nm => [o|o t|o t1 t2|ts]. }
-exact: (inv_auxK _ wf).
-Qed.
-
-Lemma no_inv_exps_pt pt : wf pt -> forall q, q ∈ exps pt -> inv q ∉ exps pt.
-Proof. move=> wf; rewrite /exps; exact: (no_inv_factors _ (wf_expo _ wf)). Qed.
-
-Lemma exps_sorted pt : wf pt -> StronglySorted pt_order (exps pt).
-Proof. move=> wf; rewrite /exps; exact: (sorted_factors _ (wf_expo _ wf)). Qed.
-
-Lemma base_exp b e : wf b -> base (exp b e) = base b.
-Proof.
-move=> wf; rewrite /exp; case_bool_decide as H.
-- exact: (base_idem _ wf).
-- done.
-Qed.
-
-Lemma flatten_factors_Nmul_id us :
-  Forall (fun t => negb (is_mul t)) us -> concat (factors <$> us) = us.
-Proof.
-elim: us => [//|u us' IH] /= H.
-have [Nu Nus'] := Forall_cons_1 _ _ _ H.
-by rewrite (factorsN _ Nu) (IH Nus').
-Qed.
-
-Lemma factors_mul ts :
-  Forall wf ts ->
-  factors (mul ts) = SMS.to pt_order inv_aux (concat (factors <$> ts)).
-Proof.
-move=> wf; rewrite /mul; set c := concat (factors <$> ts).
-have Nmul_c : Forall (fun t => negb (is_mul t)) (SMS.to pt_order inv_aux c).
-{ apply/list.Forall_forall => x /(SMS.mem_to pt_order inv_aux) xin.
-  have /list.Forall_forall H := flatten_factors_Nmul _ wf; exact: (H x xin). }
-case E: (SMS.to pt_order inv_aux c) => [|t [|t' c']] //=.
-have Ht : t ∈ SMS.to pt_order inv_aux c by rewrite E; exact: list_elem_of_here.
-have /list.Forall_forall H := Nmul_c; by rewrite (factorsN _ (H t Ht)).
-Qed.
-
-Lemma perm_mul ts1 ts2 :
-  Forall wf ts1 -> ts1 ≡ₚ ts2 -> mul ts1 = mul ts2.
-Proof.
-move=> wf1 peq.
-have peq' : concat (factors <$> ts1) ≡ₚ concat (factors <$> ts2) by rewrite peq.
-apply: mul_count_eq.
-- exact: wf1.
-- by rewrite -peq.
-- by move=> z _; rewrite peq'.
-Qed.
-
-Lemma mul_factors pt : wf pt -> mul (factors pt) = pt.
-Proof.
-case: pt => [o|o t|o t1 t2|ts] wf; rewrite /factors; try exact: (mul_wf1 _ wf).
-case: (wf_Mul_inv _ wf) => _ [Nmul [swf sizeN1]]; clear wf.
-rewrite /mul (flatten_factors_Nmul_id _ Nmul) (SMS.to_id pt_order inv_aux ts swf).
-by case: ts sizeN1 {Nmul swf} => [|x [|y ts']] // sizeN1; case: (sizeN1 erefl).
-Qed.
-
-Lemma exp_unit b : wf b -> exp b (PTMul []) = b.
-Proof.
-move=> wf; rewrite /exp.
-have -> : mul [expo b; PTMul []] = expo b.
-{ rewrite mul_unit_r; exact: (mul_wf1 _ (wf_expo _ wf)). }
-case: (decide (expo b = PTMul [])) => [e0 | eN0].
-- rewrite (bool_decide_eq_true_2 _ e0).
-  by rewrite (base_expN _ (expo_unit_Nexp _ wf e0)).
-- rewrite (bool_decide_eq_false_2 _ eN0).
-  by rewrite (base_expoK _ (expo_exp _ eN0)).
-Qed.
-
-Lemma expo_exp_eq b e : wf b -> expo (exp b e) = mul [expo b; e].
-Proof.
-move=> wfb; rewrite /exp.
-case: (decide (mul [expo b; e] = PTMul [])) => [heq | hne].
-- rewrite (bool_decide_eq_true_2 _ heq) heq.
-  by rewrite (expo_expN _ (base_Nexp _ wfb)).
-- by rewrite (bool_decide_eq_false_2 _ hne).
-Qed.
-
-Lemma exp_base_expo pt : wf pt -> exp (base pt) (expo pt) = pt.
-Proof.
-case: pt => [o|o t|[||] t1 t2|ts] wf; rewrite /base /expo; try exact: (exp_unit _ wf).
-move: wf; rewrite /= !andb_True => - [[[wfb Nxb] wfe] /bool_decide_unpack eN0].
-rewrite /exp (expo_expN _ Nxb) (base_expN _ Nxb).
-have -> : mul [PTMul []; t2] = t2.
-{ rewrite mul_unit_l; exact: (mul_wf1 _ wfe). }
-by rewrite (bool_decide_eq_false_2 _ eN0).
-Qed.
-
-Lemma tsize_exp_Nexp b e :
-  negb (is_exp b) -> wf e -> e ≠ PTMul [] ->
-  tsize (exp b e) = S (tsize b + tsize e).
-Proof.
-move=> Nxb wfe eN0; rewrite /exp.
-have -> : mul [expo b; e] = e.
-{ rewrite (expo_expN _ Nxb) mul_unit_l; exact: (mul_wf1 _ wfe). }
-by rewrite (bool_decide_eq_false_2 _ eN0) (base_expN _ Nxb).
-Qed.
-
-Lemma exps_exp b e :
-  wf b -> wf e ->
-  exps (exp b e) = SMS.to pt_order inv_aux (exps b ++ factors e).
-Proof.
-move=> wfb wfe.
-have wf' : Forall wf [expo b; e]
-  by constructor; [exact: (wf_expo _ wfb) | constructor; [exact: wfe | constructor]].
-rewrite /exps (expo_exp_eq _ _ wfb) (factors_mul _ wf') /=.
-by rewrite app_nil_r.
-Qed.
-
-Lemma is_exp_exp b e :
-  wf b -> is_exp (exp b e) = negb (bool_decide (mul [expo b; e] = PTMul [])).
-Proof.
-move=> wfb; rewrite /exp.
-case: (decide (mul [expo b; e] = PTMul [])) => [heq | hne].
-- rewrite !(bool_decide_eq_true_2 _ heq).
-  move: (base_Nexp _ wfb) => Hb; by case: (is_exp (base b)) Hb.
-- by rewrite !(bool_decide_eq_false_2 _ hne).
-Qed.
-
-Lemma inv_factors pt : wf pt -> inv pt = mul (inv_aux <$> factors pt).
-Proof.
-case: pt => [o|[k| |] t|o t1 t2|ts] wf; rewrite /inv /factors //.
-all: rewrite fmap_cons fmap_nil (mul_wf1 _ (wf_inv_aux _ wf ltac:(done))) //.
-Qed.
-
-Lemma mul_cat ts1 ts2 :
-  Forall wf ts1 -> Forall wf ts2 -> mul (mul ts1 :: ts2) = mul (ts1 ++ ts2).
-Proof.
-move=> wf1 wf2.
-have wfX1 := flatten_factors_wf _ wf1.
-apply: mul_count_eq.
-- constructor; [exact: (wf_mul _ wf1) | exact: wf2].
-- by apply/Forall_app.
-- move=> z iKz.
-  rewrite fmap_cons /= (factors_mul _ wf1) fmap_app concat_app.
-  by rewrite !(SMS.count_app inv_aux) (SMS.count_to pt_order inv_aux z _ iKz (wf_invol _ wfX1)).
-Qed.
-
-Lemma expo_exp_eq_key b e1 e2 :
-  wf b -> wf e1 -> wf e2 ->
-  mul [mul [expo b; e1]; e2] = mul [expo b; mul [e1; e2]].
-Proof.
-move=> wfb wfe1 wfe2.
-have wfeb : wf (expo b) := wf_expo _ wfb.
-have wf_e12 : Forall wf [e1; e2]
-  by constructor; [exact: wfe1 | constructor; [exact: wfe2 | constructor]].
-have wfm : wf (mul [e1; e2]) := wf_mul _ wf_e12.
-have wf_be1 : Forall wf [expo b; e1]
-  by constructor; [exact: wfeb | constructor; [exact: wfe1 | constructor]].
-have wf_e2l : Forall wf [e2] by constructor; [exact: wfe2 | constructor].
-have wf_ebl : Forall wf [expo b] by constructor; [exact: wfeb | constructor].
-have wf_bm : Forall wf [expo b; mul [e1; e2]]
-  by constructor; [exact: wfeb | constructor; [exact: wfm | constructor]].
-have wf_be1e2 : Forall wf [expo b; e1; e2]
-  by constructor; [exact: wfeb | exact: wf_e12].
-rewrite (mul_cat [expo b; e1] [e2] wf_be1 wf_e2l).
-rewrite (perm_mul [expo b; mul [e1; e2]] [mul [e1; e2]; expo b] wf_bm
-           (Permutation_swap (mul [e1; e2]) (expo b) [])).
-rewrite (mul_cat [e1; e2] [expo b] wf_e12 wf_ebl).
-apply: perm_mul; first exact: wf_be1e2.
-exact: (Permutation_cons_append [e1; e2] (expo b)).
-Qed.
-
-Lemma expA b e1 e2 :
-  wf b -> wf e1 -> wf e2 -> exp (exp b e1) e2 = exp b (mul [e1; e2]).
-Proof.
-move=> wfb wfe1 wfe2.
-by rewrite {1}/exp (base_exp _ _ wfb) (expo_exp_eq _ _ wfb)
-           (expo_exp_eq_key _ _ _ wfb wfe1 wfe2).
-Qed.
-
-Lemma mul_mul2 ts1 ts2 :
-  Forall wf ts1 -> Forall wf ts2 -> mul [mul ts1; mul ts2] = mul (ts1 ++ ts2).
-Proof.
-move=> wf1 wf2.
-have wfm2 : wf (mul ts2) := wf_mul _ wf2.
-have wf1m : Forall wf (ts1 ++ [mul ts2])
-  by apply/Forall_app; split; [exact: wf1 | constructor; [exact: wfm2 | constructor]].
-have wfm2l : Forall wf [mul ts2] by constructor; [exact: wfm2 | constructor].
-rewrite (mul_cat ts1 [mul ts2] wf1 wfm2l).
-rewrite (perm_mul (ts1 ++ [mul ts2]) (mul ts2 :: ts1) wf1m
-                  (Permutation_app_comm ts1 [mul ts2])).
-rewrite (mul_cat ts2 ts1 wf2 wf1).
-apply: perm_mul; first by apply/Forall_app; split; [exact: wf2 | exact: wf1].
-exact: Permutation_app_comm.
-Qed.
-
-Lemma count_map_inv pt ts :
-  wf pt -> Forall wf ts ->
-  count_mem pt (inv_aux <$> ts) = count_mem (inv_aux pt) ts.
-Proof.
-move=> wfpt; elim: ts => [//|t ts IH] wfts.
-have [wft wfts'] := Forall_cons_1 _ _ _ wfts.
-rewrite fmap_cons /= (IH wfts').
-have E : bool_decide (pt = inv_aux t) = bool_decide (inv_aux pt = t).
-{ apply: bool_decide_ext; split=> e;
-    [by rewrite e (inv_auxK _ wft) | by rewrite -e (inv_auxK _ wfpt)]. }
-by rewrite E.
-Qed.
-
-Lemma no_inv_map_inv ts :
-  Forall wf ts -> (forall q, q ∈ ts -> inv q ∉ ts) ->
-  forall q, q ∈ (inv_aux <$> ts) -> inv q ∉ (inv_aux <$> ts).
-Proof.
-move=> /list.Forall_forall wfa canca x /list_elem_of_fmap [t [-> t_ts]].
-rewrite (inv_inv_aux _ (wfa _ t_ts)) => /list_elem_of_fmap [s [e s_ts]].
-move: (canca _ t_ts); rewrite e (inv_inv_aux _ (wfa _ s_ts)) => Habs.
-exact: (Habs s_ts).
-Qed.
-
-Lemma mul_invs ts :
-  Forall wf ts -> Forall (fun t => negb (is_mul t)) (ts ++ (inv_aux <$> ts)) ->
-  mul (ts ++ (inv_aux <$> ts)) = PTMul [].
-Proof.
-move=> wfs atom.
-move: (atom) => /Forall_app [Nm _].
-have wfinv : Forall wf (inv_aux <$> ts).
-{ apply/Forall_fmap; move: (wfs) => /list.Forall_forall wfa; move: (Nm) => /list.Forall_forall Nma.
-  apply/list.Forall_forall => t t_ts; exact: (wf_inv_aux _ (wfa _ t_ts) (Nma _ t_ts)). }
-have -> : PTMul [] = mul [] by rewrite /mul.
-apply: mul_count_eq.
-- by apply/Forall_app; split; [exact: wfs | exact: wfinv].
-- by constructor.
-- move=> z iKz.
-  rewrite (flatten_factors_Nmul_id _ atom) (SMS.count_app inv_aux)
-          (SMS.count_fmap_i inv_aux z ts iKz (wf_invol _ wfs)).
-  rewrite /SMS.count /=; lia.
-Qed.
-
-Lemma mul_eq_unit ts :
-  Forall (fun t => negb (is_mul t)) ts -> (forall q, q ∈ ts -> inv q ∉ ts) ->
-  mul ts = PTMul [] <-> ts = [].
-Proof.
-move=> atom canc; split; last first.
-{ move=> ->; by rewrite /mul. }
-rewrite /mul (flatten_factors_Nmul_id _ atom).
-have Hperm : SMS.to pt_order inv_aux ts ≡ₚ ts.
-{ exact: (SMS.to_id_perm pt_order inv_aux ts (no_inv_aux_of_no_inv _ atom canc)). }
-case E: (SMS.to pt_order inv_aux ts) => [|a [|b l]].
-- move=> _.
-  have Hlen : length ts = 0 by rewrite -(Permutation_length Hperm) E.
-  by move: Hlen; case: ts {atom canc Hperm E}.
-- move=> Ha.
-  have Hin : a ∈ ts.
-  { apply: (SMS.mem_to pt_order inv_aux); rewrite E; exact: list_elem_of_here. }
-  by have /list.Forall_forall H := atom; move: (H a Hin); rewrite Ha /=.
-- by move=> [].
-Qed.
-
-Lemma tsize_mul ts :
-  Forall (fun t => negb (is_mul t)) ts -> (forall q, q ∈ ts -> inv q ∉ ts) -> ts ≠ [] ->
-  tsize (mul ts) = (if bool_decide (1 < length ts) then 1 else 0) + sum_list_with tsize ts.
-Proof.
-move=> atom canc tsN0.
-rewrite /mul (flatten_factors_Nmul_id _ atom).
-have Hperm : SMS.to pt_order inv_aux ts ≡ₚ ts.
-{ exact: (SMS.to_id_perm pt_order inv_aux ts (no_inv_aux_of_no_inv _ atom canc)). }
-have Hlen : length (SMS.to pt_order inv_aux ts) = length ts by exact: Permutation_length Hperm.
-have Hsum : sum_list_with tsize (SMS.to pt_order inv_aux ts) = sum_list_with tsize ts
-  by exact: (sum_list_with_Permutation tsize _ _ Hperm).
-case E: (SMS.to pt_order inv_aux ts) => [|a [|b l]].
-- move: Hlen; rewrite E /= => Hlen0.
-  by case: ts tsN0 Hlen0 {E atom canc Hperm Hsum} => [|x xs].
-- move: Hlen Hsum; rewrite E /= => Hlen1 Hsum1.
-  rewrite (bool_decide_eq_false_2 (1 < length ts)); last by rewrite -Hlen1; lia.
-  by rewrite -Hsum1 /= Nat.add_0_r.
-- move: Hlen Hsum; rewrite E /= => Hlen2 Hsum2.
-  rewrite (bool_decide_eq_true_2 (1 < length ts)); last by rewrite -Hlen2; lia.
-  rewrite -Hsum2 /=; lia.
-Qed.
-
-Lemma invK pt : wf pt -> inv (inv pt) = pt.
-Proof.
-move=> wfpt.
-have fs_wf := wf_factors _ wfpt.
-have fs_Nm := Nmul_factors _ wfpt.
-have fs_canc := no_inv_factors _ wfpt.
-have wfinv : Forall wf (inv_aux <$> factors pt).
-{ apply/Forall_fmap; move: (fs_wf) => /list.Forall_forall wfa; move: (fs_Nm) => /list.Forall_forall Nma.
-  apply/list.Forall_forall => t t_fs; exact: (wf_inv_aux _ (wfa _ t_fs) (Nma _ t_fs)). }
-have Nminv : Forall (fun t => negb (is_mul t)) (inv_aux <$> factors pt).
-{ apply/Forall_fmap; move: (fs_wf) => /list.Forall_forall wfa.
-  apply/list.Forall_forall => t t_fs; exact: (is_mul_inv_aux _ (wfa _ t_fs)). }
-have canc_inv := no_inv_map_inv _ fs_wf fs_canc.
-have mapK : forall l, Forall wf l -> inv_aux <$> (inv_aux <$> l) = l.
-{ elim=> [//|x xs IH] Hxs.
-  have [wx wxs] := Forall_cons_1 _ _ _ Hxs.
-  by rewrite !fmap_cons (inv_auxK _ wx) (IH wxs). }
-rewrite (inv_factors _ wfpt) (inv_factors _ (wf_mul _ wfinv)).
-rewrite (factors_mul _ wfinv) (flatten_factors_Nmul_id _ Nminv).
-rewrite -{2}(mul_factors _ wfpt).
-apply: perm_mul.
-- apply/Forall_fmap.
-  move: (wfinv) => /list.Forall_forall wfia; move: (Nminv) => /list.Forall_forall Nmia.
-  apply/list.Forall_forall => t /(SMS.mem_to pt_order inv_aux) t_in.
-  exact: (wf_inv_aux _ (wfia _ t_in) (Nmia _ t_in)).
-- rewrite -{2}(mapK (factors pt) fs_wf).
-  apply: Permutation_map.
-  exact: (SMS.to_id_perm pt_order inv_aux _ (no_inv_aux_of_no_inv _ Nminv canc_inv)).
-Qed.
-
-Lemma mul_map_inv_aux_neq us :
-  Forall wf us -> Forall (fun t => negb (is_mul t)) us ->
-  (forall q, q ∈ us -> inv q ∉ us) -> us ≠ [] -> mul (inv_aux <$> us) ≠ PTMul us.
-Proof.
-move=> wfs atoms canc usN0.
-have wfI : Forall wf (inv_aux <$> us).
-{ apply/Forall_fmap; move: (wfs) => /list.Forall_forall wfa; move: (atoms) => /list.Forall_forall ata.
-  apply/list.Forall_forall => t t_us; exact: (wf_inv_aux _ (wfa _ t_us) (ata _ t_us)). }
-have atomI : Forall (fun t => negb (is_mul t)) (inv_aux <$> us).
-{ apply/Forall_fmap; move: (wfs) => /list.Forall_forall wfa.
-  apply/list.Forall_forall => t t_us; exact: (is_mul_inv_aux _ (wfa _ t_us)). }
-have cancI := no_inv_map_inv _ wfs canc.
-move=> E.
-have factE : factors (mul (inv_aux <$> us)) = SMS.to pt_order inv_aux (inv_aux <$> us).
-{ by rewrite (factors_mul _ wfI) (flatten_factors_Nmul_id _ atomI). }
-move: factE; rewrite E /= => sortE.
-have perm_us : us ≡ₚ (inv_aux <$> us).
-{ rewrite {1}sortE.
-  exact: (SMS.to_id_perm pt_order inv_aux _ (no_inv_aux_of_no_inv _ atomI cancI)). }
-have [u u_us] : exists u, u ∈ us.
-{ case: us usN0 {wfs atoms canc wfI atomI cancI E sortE perm_us} => [//|x xs] _.
-  exists x; exact: list_elem_of_here. }
-have inus : inv_aux u ∈ us.
-{ rewrite perm_us; apply/list_elem_of_fmap; exists u; split; [done | exact: u_us]. }
-have /list.Forall_forall Hat := atoms; move: (canc _ u_us); rewrite (inv_Nmul _ (Hat u u_us)) => Habs.
-exact: (Habs inus).
-Qed.
-
-Lemma inv_fixed pt : wf pt -> (inv pt = pt) <-> (pt = PTMul []).
-Proof.
-move=> wf; case Hm: (is_mul pt); last first.
-- have Nm : negb (is_mul pt) by rewrite Hm.
-  rewrite (inv_Nmul _ Nm); split.
-  + move=> E; exfalso; apply: (inv_aux_Nid pt); exact: E.
-  + by move=> E; move: Nm; rewrite E /=.
-- have Mpt : is_mul pt by rewrite Hm.
-  case: pt Mpt wf {Hm} => [o|o t|o t1 t2|us] //= _ wf.
-  case: (wf_Mul_inv _ wf) => wfs [atoms [swf _]].
-  have canc : forall q, q ∈ us -> inv q ∉ us.
-  { move=> q qin; have /list.Forall_forall H := atoms; rewrite (inv_Nmul _ (H q qin)).
-    exact: (SMS.wf_no_pairs pt_order inv_aux us swf q qin). }
-  case: (decide (us = [])) => [-> | usN0].
-  + split=> _; first done.
-    by rewrite /mul.
-  + split.
-    * move=> E; exfalso.
-      exact: (mul_map_inv_aux_neq _ wfs atoms canc usN0 E).
-    * move=> E; exfalso; case: E => Hus; exact: (usN0 Hus).
-Qed.
 
 End PreTerm.

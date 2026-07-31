@@ -67,6 +67,14 @@ Definition prune X : list T := filter (fun x => i x <> x) X.
 
 Definition to X : list T := merge_sort R (cancel (prune X)).
 
+Lemma not_elem_of_count x X : x ∉ X → (count x X ≤ 0)%Z.
+Proof.
+rewrite not_elem_of_count_mem => x_X; rewrite /count x_X; lia.
+Qed.
+
+Lemma not_elem_of_count_strong x X : x ∉ X → i x ∉ X → count x X = 0%Z.
+Proof. by rewrite !not_elem_of_count_mem /count => -> ->. Qed.
+
 Lemma cancel_cons x X : cancel (x :: X) = insert x (cancel X).
 Proof. reflexivity. Qed.
 
@@ -463,6 +471,20 @@ move=> iKX iKY; split.
                  (proj1 (not_elem_of_count_mem z (cancel (prune Y))) zY).
 Qed.
 
+Lemma count_to_eq X Y :
+  (∀ x, x ∈ X → i (i x) = x) →
+  (∀ x, x ∈ Y → i (i x) = x) →
+  (∀ x, x ∈ X ++ Y → count x X = count x Y) →
+  to X = to Y.
+Proof.
+move=> iKX iKY ecount; apply/to_eq => // x ex.
+case: (decide (x ∈ X ++ Y)) => x_in; first exact: ecount.
+move: x_in; rewrite elem_of_app; case/Decidable.not_or => x_X x_Y.
+case: (decide (i x ∈ X ++ Y)) => [/ecount|]; first by rewrite /count ex; lia.
+rewrite elem_of_app; case/Decidable.not_or => ix_X ix_Y.
+by rewrite !not_elem_of_count_strong.
+Qed.
+
 (** [to] only shrinks the underlying set of elements (via [prune]/[cancel]). *)
 Lemma mem_to z X : z ∈ to X -> z ∈ X.
 Proof.
@@ -595,6 +617,21 @@ rewrite /to (merge_sort_fmap R S f fRS); congr (merge_sort S _).
 rewrite (cancel_fmap i j f (prune i X) finj); last first.
 { move=> x xin; apply: fij; exact: (mem_prune _ _ _ xin). }
 by rewrite (prune_fmap i j f X finj fij).
+Qed.
+
+(** [count] transports along an injective map [f] that conjugates the two
+    involutions at the query point ([f (i x) = j (f x)]): the signed count is
+    preserved.  Companion to [count_fmap_i] (which instead maps the involution
+    [i] over the list, negating).  This is the bridge for carrying [SMS.count]
+    facts across an injective relabelling (e.g. the [term] -> [pre_term]
+    embedding [unfold_term]) with no reference to the order [R] or [to]. *)
+Lemma count_fmap {T U} `{EqDecision T} `{EqDecision U}
+    (i : T -> T) (j : U -> U) (f : T -> U) (x : T) (X : list T) :
+  (forall a b, f a = f b -> a = b) -> f (i x) = j (f x) ->
+  count j (f x) (f <$> X) = count i x X.
+Proof.
+move=> finj fij; rewrite /count.
+by rewrite (count_mem_fmap f x X finj) -fij (count_mem_fmap f (i x) X finj).
 Qed.
 
 End SMS.

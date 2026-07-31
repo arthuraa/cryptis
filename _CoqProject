@@ -26,6 +26,7 @@ cryptis/role.v
 cryptis/core/pre_term/base.v
 cryptis/core/pre_term/normalize.v
 cryptis/core/pre_term/with_stdpp.v
+cryptis/core/pre_term/laws.v
 cryptis/core/pre_term.v
 cryptis/core/term/base.v
 cryptis/core/term.v

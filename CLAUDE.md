@@ -112,7 +112,7 @@ examples/*
 
 The `_CoqProject` file specifies the exact file ordering for compilation.
 
-**mathcomp ↔ stdpp boundary:** `core/pre_term/` is implemented in mathcomp (`seq`, `%O` order, `~~`, `sort <=%O`, bigops) and exposes a stdpp-facing API via `core/pre_term/normalize.v` and `with_stdpp.v`. Everything from `core/term/` upward is stdpp (`Forall`, `≡ₚ`, `∈`, `merge_sort`). The active boolean→Prop coercion above `pre_term` is stdpp's `Is_true`, **not** ssreflect's `is_true` (bridged by `is_trueP` in `lib/mathcomp_compat.v`); mixing the two silently breaks `rewrite`/`apply`.
+**mathcomp ↔ stdpp boundary:** `core/pre_term/` is implemented in mathcomp (`seq`, `%O` order, `~~`, `sort <=%O`, bigops) and exposes a stdpp-facing API via `core/pre_term/normalize.v` (normal forms + the `wf`/`normalize` machinery), `laws.v` (the algebraic theory of the operations and destructors), and `with_stdpp.v`. Everything from `core/term/` upward is stdpp (`Forall`, `≡ₚ`, `∈`, `merge_sort`). The active boolean→Prop coercion above `pre_term` is stdpp's `Is_true`, **not** ssreflect's `is_true` (bridged by `is_trueP` in `lib/mathcomp_compat.v`); mixing the two silently breaks `rewrite`/`apply`.
 
 ### Case Studies
 
