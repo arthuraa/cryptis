@@ -16,13 +16,11 @@ Unset Printing Implicit Defensive.
 Class publicGpreS Σ := PublicGPreS {
   publicGpreS_nonce : savedPredG Σ term;
   publicGpreS_seal  : savedPredG Σ (term * term);
-  publicGpreS_prop  : savedPropG Σ;
   publicGpreS_meta  : metaGS Σ;
 }.
 
 Local Existing Instance publicGpreS_nonce.
 Local Existing Instance publicGpreS_seal.
-Local Existing Instance publicGpreS_prop.
 Local Existing Instance publicGpreS_meta.
 
 Class publicGS Σ := PublicGS {
@@ -38,7 +36,6 @@ Global Existing Instance public_inG.
 Definition publicΣ : gFunctors :=
   #[savedPredΣ term;
     savedPredΣ (term * term);
-    savedPropΣ;
     metaΣ].
 
 Global Instance subG_publicGpreS Σ : subG publicΣ Σ → publicGpreS Σ.
