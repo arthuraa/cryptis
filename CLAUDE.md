@@ -30,7 +30,7 @@ nix develop .#ai --command make clean                          # clean artifacts
 
 Other useful commands inside the shell: `make builddep` (install build deps via opam, only needed outside Nix), `rocq compile <file.v>` (compile a single `.v` file directly).
 
-Building is slow (Iris typechecking dominates). Foundational files — `core/term/base.v`, `core/public.v`, `cryptis.v` — cascade a rebuild through much of the tree, so an edit there costs minutes, not seconds. Prefer targeted builds (`make path/to/file.vo`) while iterating, and run the full `make` only to verify everything compiles. `make -k -j<N>` keeps going past the first error and surfaces every root failure at once (dependents of a failed file are silently skipped, so re-run after each fix).
+Building is slow (Iris typechecking dominates). Foundational files — the `core/term/` layer (especially `base.v` and `algebra.v`), `core/public.v`, `cryptis.v` — cascade a rebuild through much of the tree, so an edit there costs minutes, not seconds. Prefer targeted builds (`make path/to/file.vo`) while iterating, and run the full `make` only to verify everything compiles. `make -k -j<N>` keeps going past the first error and surfaces every root failure at once (dependents of a failed file are silently skipped, so re-run after each fix).
 
 ## Interactive Proof Tooling (rocq-mcp)
 
@@ -83,7 +83,9 @@ Key dependencies (authoritative pins live in `rocq-cryptis.opam` — treat it as
 - `THash t` — hashes
 - `TNonFree pt of PreTerm.wf_term pt & is_non_free pt` — the Diffie–Hellman fragment (inverse / exponentiation / product), represented indirectly by a well-formed `PreTerm.pre_term`
 
-`TInv`, `TExp`, `TExpN`, `TMul`, `TMulN` are **smart constructors** (locked `Definition`s over `TNonFree`), *not* real constructors — so `case`/`elim` on them is not structural; use the custom induction principles in `core/term/base.v` (e.g. `term_ind'`). Typed key wrappers `aenc_key`/`sign_key`/`senc_key` sit on top of `TKey`, and the surface API lives in `Module Spec` (`Spec.tag`, `Spec.of_list`, `Spec.pkey`, `Spec.to_list`, …).
+`TInv`, `TExp`, `TExpN`, `TMul`, `TMulN` are **smart constructors** (locked `Definition`s over `TNonFree`), *not* real constructors — so `case`/`elim` on them is not structural; use the custom induction principles (`term_ind`/`term_lt_ind`/`term_rect`, in `core/term/algebra.v`). Typed key wrappers `aenc_key`/`sign_key`/`senc_key` sit on top of `TKey`, and the surface API lives in `Module Spec` (`core/term/spec.v`: `Spec.tag`, `Spec.of_list`, `Spec.pkey`, `Spec.to_list`, …).
+
+The term layer is split across `core/term/` and aggregated by `core/term.v`: `base.v` (the `term` inductive, the `unfold`/`fold` ↔ `pre_term` conjugation, smart constructors, instances, destructor defs, and the `count_tfactors_*` counting API), `algebra.v` (multiplicative-group + DH-exponentiation laws, `tsize`, induction principles), `repr.v` (`val_of_term`/`repr`), `nonces.v`, `subterms.v`, `spec.v`. Downstream imports `cryptis.core.term`, so the split is transparent — but **module-qualified references (`base.foo`) break when a lemma moves file**; prefer unqualified names. Each split file must re-declare the file-local `Implicit Types (t k : term) (ts : list term).` and `Set Implicit Arguments.` block (those do not cross a `Require` boundary).
 
 **The Public Predicate** (`core/public.v`): Central to the framework. `public t` (an Iris proposition) holds when term `t` is known to the attacker. Protocol proofs establish invariants about which terms are and are not public.
 

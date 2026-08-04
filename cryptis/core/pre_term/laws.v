@@ -198,7 +198,58 @@ case E: (SMS.to pt_order inv_aux ts) => [|a [|b l]].
   rewrite -Hsum2 /=; lia.
 Qed.
 
-(* BEGIN DELETION CANDIDATES *)
+Lemma base_idem pt : wf pt -> base (base pt) = base pt.
+Proof. move=> wf; exact: (base_expN _ (base_Nexp _ wf)). Qed.
+
+Lemma expo_unit_Nexp b : wf b -> expo b = PTMul [] -> negb (is_exp b).
+Proof.
+case: b => [o|o t|[||] t1 t2|ts] //= wf e0.
+move: wf; rewrite !andb_True => - [[[_ _] _] /bool_decide_unpack eN0].
+exfalso; apply: eN0; exact: e0.
+Qed.
+
+Lemma expo_exp b : expo b ≠ PTMul [] -> is_exp b.
+Proof. by case: b => [o|o t|[||] t1 t2|ts] //= H; case: (H eq_refl). Qed.
+
+(* [PTMul []] is a right unit for [mul] (companion to [mul_unit_l] in
+   [normalize.v]): dropping it from a two-element product leaves the flattened
+   factor list, hence [mul], unchanged. *)
+Lemma mul_unit_r X : mul [X; PTMul []] = mul [X].
+Proof. by rewrite /mul /= !app_nil_r. Qed.
+
+Lemma base_expoK pt : is_exp pt -> PTExp (base pt) (expo pt) = pt.
+Proof. by case: pt => [o|o t|[||] t1 t2|ts]. Qed.
+
+Lemma exp_unit b : wf b -> exp b (PTMul []) = b.
+Proof.
+move=> wf; rewrite /exp.
+have -> : mul [expo b; PTMul []] = expo b.
+{ rewrite mul_unit_r; exact: (mul_wf1 _ (wf_expo _ wf)). }
+case: (decide (expo b = PTMul [])) => [e0 | eN0].
+- rewrite (bool_decide_eq_true_2 _ e0).
+  by rewrite (base_expN _ (expo_unit_Nexp _ wf e0)).
+- rewrite (bool_decide_eq_false_2 _ eN0).
+  by rewrite (base_expoK _ (expo_exp _ eN0)).
+Qed.
+
+Lemma expo_exp_eq b e : wf b -> expo (exp b e) = mul [expo b; e].
+Proof.
+move=> wfb; rewrite /exp.
+case: (decide (mul [expo b; e] = PTMul [])) => [heq | hne].
+- rewrite (bool_decide_eq_true_2 _ heq) heq.
+  by rewrite (expo_expN _ (base_Nexp _ wfb)).
+- by rewrite (bool_decide_eq_false_2 _ hne).
+Qed.
+
+Lemma exp_base_expo pt : wf pt -> exp (base pt) (expo pt) = pt.
+Proof.
+case: pt => [o|o t|[||] t1 t2|ts] wf; rewrite /base /expo; try exact: (exp_unit _ wf).
+move: wf; rewrite /= !andb_True => - [[[wfb Nxb] wfe] /bool_decide_unpack eN0].
+rewrite /exp (expo_expN _ Nxb) (base_expN _ Nxb).
+have -> : mul [PTMul []; t2] = t2.
+{ rewrite mul_unit_l; exact: (mul_wf1 _ wfe). }
+by rewrite (bool_decide_eq_false_2 _ eN0).
+Qed.
 
 (** ** Pre-term algebra infrastructure.
 
@@ -207,10 +258,7 @@ Qed.
     development): [SMS] canonical-form plumbing, the [inv_aux] shape/no-pairs
     facts, and the right-unit law. *)
 
-(* On [inv_aux]-lists the fixed-point pruning inside [SMS.to] is vacuous
-   ([inv_aux] has no fixed points, [inv_aux_Nid]), so [SMS.to] is just
-   sort-after-cancel — the shape the executable primitives ([hl_mul]/[hl_exp])
-   compute.  Lets those spec proofs unfold [SMS.to] without exposing [prune]. *)
+(* TODO: Delete. Reimplement primitives to use pruning to avoid this unfolding. *)
 Lemma to_inv_aux X :
   SMS.to pt_order inv_aux X = merge_sort pt_order (SMS.cancel inv_aux X).
 Proof. by rewrite /SMS.to (SMS.prune_id inv_aux X (fun x _ => inv_aux_Nid x)). Qed.
@@ -261,12 +309,6 @@ move=> /list.Forall_forall Nm H q qin.
 rewrite -(inv_Nmul _ (Nm q qin)); exact: (H q qin).
 Qed.
 
-(* [PTMul []] is a right unit for [mul] (companion to [mul_unit_l] in
-   [normalize.v]): dropping it from a two-element product leaves the flattened
-   factor list, hence [mul], unchanged. *)
-Lemma mul_unit_r X : mul [X; PTMul []] = mul [X].
-Proof. by rewrite /mul /= !app_nil_r. Qed.
-
 (** ** Additional theory on pre-terms. *)
 
 (** The exponents of a pre-term. *)
@@ -277,22 +319,6 @@ Proof. move=> wf; rewrite /exps; apply: wf_factors; exact: (wf_expo _ wf). Qed.
 
 Lemma exps_expN pt : negb (is_exp pt) -> exps pt = [].
 Proof. move=> H; rewrite /exps (expo_expN _ H) //. Qed.
-
-Lemma base_idem pt : wf pt -> base (base pt) = base pt.
-Proof. move=> wf; exact: (base_expN _ (base_Nexp _ wf)). Qed.
-
-Lemma base_expoK pt : is_exp pt -> PTExp (base pt) (expo pt) = pt.
-Proof. by case: pt => [o|o t|[||] t1 t2|ts]. Qed.
-
-Lemma expo_exp b : expo b ≠ PTMul [] -> is_exp b.
-Proof. by case: b => [o|o t|[||] t1 t2|ts] //= H; case: (H eq_refl). Qed.
-
-Lemma expo_unit_Nexp b : wf b -> expo b = PTMul [] -> negb (is_exp b).
-Proof.
-case: b => [o|o t|[||] t1 t2|ts] //= wf e0.
-move: wf; rewrite !andb_True => - [[[_ _] _] /bool_decide_unpack eN0].
-exfalso; apply: eN0; exact: e0.
-Qed.
 
 Lemma inv_inv_aux pt : wf pt -> inv (inv_aux pt) = pt.
 Proof.
@@ -332,37 +358,6 @@ case: pt => [o|o t|o t1 t2|ts] wf; rewrite /factors; try exact: (mul_wf1 _ wf).
 case: (wf_Mul_inv _ wf) => _ [Nmul [swf sizeN1]]; clear wf.
 rewrite /mul (flatten_factors_Nmul_id _ Nmul) (SMS.to_id pt_order inv_aux ts swf).
 by case: ts sizeN1 {Nmul swf} => [|x [|y ts']] // sizeN1; case: (sizeN1 erefl).
-Qed.
-
-Lemma exp_unit b : wf b -> exp b (PTMul []) = b.
-Proof.
-move=> wf; rewrite /exp.
-have -> : mul [expo b; PTMul []] = expo b.
-{ rewrite mul_unit_r; exact: (mul_wf1 _ (wf_expo _ wf)). }
-case: (decide (expo b = PTMul [])) => [e0 | eN0].
-- rewrite (bool_decide_eq_true_2 _ e0).
-  by rewrite (base_expN _ (expo_unit_Nexp _ wf e0)).
-- rewrite (bool_decide_eq_false_2 _ eN0).
-  by rewrite (base_expoK _ (expo_exp _ eN0)).
-Qed.
-
-Lemma expo_exp_eq b e : wf b -> expo (exp b e) = mul [expo b; e].
-Proof.
-move=> wfb; rewrite /exp.
-case: (decide (mul [expo b; e] = PTMul [])) => [heq | hne].
-- rewrite (bool_decide_eq_true_2 _ heq) heq.
-  by rewrite (expo_expN _ (base_Nexp _ wfb)).
-- by rewrite (bool_decide_eq_false_2 _ hne).
-Qed.
-
-Lemma exp_base_expo pt : wf pt -> exp (base pt) (expo pt) = pt.
-Proof.
-case: pt => [o|o t|[||] t1 t2|ts] wf; rewrite /base /expo; try exact: (exp_unit _ wf).
-move: wf; rewrite /= !andb_True => - [[[wfb Nxb] wfe] /bool_decide_unpack eN0].
-rewrite /exp (expo_expN _ Nxb) (base_expN _ Nxb).
-have -> : mul [PTMul []; t2] = t2.
-{ rewrite mul_unit_l; exact: (mul_wf1 _ wfe). }
-by rewrite (bool_decide_eq_false_2 _ eN0).
 Qed.
 
 Lemma exps_exp b e :
@@ -477,7 +472,5 @@ case E: (SMS.to pt_order inv_aux ts) => [|a [|b l]].
   by have /list.Forall_forall H := atom; move: (H a Hin); rewrite Ha /=.
 - by move=> [].
 Qed.
-
-(* END DELETION CANDIDATES *)
 
 End PreTerm.
