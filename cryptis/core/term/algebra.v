@@ -895,82 +895,20 @@ have szge : 1 < length (tfactors t).
 rewrite (bool_decide_eq_true_2 (1 < length (tfactors t)) szge) /=; lia.
 Qed.
 
-Lemma term_rect (T : term -> Type)
-  (H1 : forall n, T (TInt n))
-  (H2 : forall t1, T t1 ->
-        forall t2, T t2 ->
-        T (TPair t1 t2))
-  (H3 : forall a, T (TNonce a))
-  (H4 : forall kt t, T t -> T (TKey kt t))
-  (H5 : forall k, T k -> forall t, T t -> T (TSeal k t))
-  (H6 : forall t, T t -> T (THash t))
-  (H7 : forall t, T t -> negb (is_mul t) -> negb (is_inv t) -> T (TInv t))
-  (H8 : forall t, T t -> negb (is_exp t) ->
-        forall ts, foldr (fun t R => T t * R)%type unit ts ->
-                   atomic ts ->
-                   ts ≠ [] ->
-                   SMS.wf term_order TInv ts ->
-        T (TExpN t ts))
-  (H9 : forall ts, foldr (fun t R => T t * R)%type unit ts ->
-                   atomic ts ->
-                   SMS.wf term_order TInv ts ->
-                   length ts ≠ 1 ->
-        T (TMulN ts)) :
-  forall t, T t.
+Lemma wf_mul_list_tfactors t : is_mul t -> wf_mul_list (tfactors t).
 Proof.
-elim/term_lt_rect => t IH.
-have build : forall s, (forall t', t' ∈ s -> tsize t' < tsize t) ->
-    foldr (fun t R => T t * R)%type unit s.
-  elim => // x s' IHs h; split.
-    by apply: IH; apply: h; apply/list_elem_of_here.
-  by apply: IHs => t' t's; apply: h; apply/list_elem_of_further.
-case: t IH build => [n|t1 t2|a|kt t|k t|t|pt wf nf] IH build.
-- exact: H1.
-- apply: H2; apply: IH; rewrite [tsize (TPair t1 t2)]tsize_eq; lia.
-- exact: H3.
-- apply: H4; apply: IH; rewrite [tsize (TKey kt t)]tsize_eq; lia.
-- apply: H5; apply: IH; rewrite [tsize (TSeal k t)]tsize_eq; lia.
-- apply: H6; apply: IH; rewrite [tsize (THash t)]tsize_eq; lia.
-- case: pt wf nf IH build => [o|[kt||] operand|[||] b e|ts] wf nf IH build.
-  1,2,3,5,6: by move: {IH build} nf; rewrite /is_non_free /=.
-  + have /andb_True [/andb_True [Ninvpt Nmpt] wfpt] := wf.
-    have e : TNonFree (PreTerm.PT1 O1Inv operand) wf nf = TInv (fold_term operand).
-      apply: unfold_term_inj.
-      by rewrite unfold_TInv (fold_termK operand wfpt) (PreTerm.inv_Nmul operand Nmpt)
-         (PreTerm.inv_invN operand Ninvpt).
-    have Ninv : negb (is_inv (fold_term operand)) by rewrite is_inv_unfold (fold_termK operand wfpt).
-    have Nmf : negb (is_mul (fold_term operand)) by rewrite is_mul_unfold (fold_termK operand wfpt).
-    rewrite e; apply: (H7 _ _ Nmf Ninv).
-    apply: IH.
-    rewrite (tsize_eq (TNonFree (PreTerm.PT1 O1Inv operand) wf nf))
-            /tsize (fold_termK operand wfpt) /=; lia.
-  + set t := TNonFree (PreTerm.PTExp b e) wf nf.
-    have xt : is_exp t by [].
-    rewrite -(base_expsK t).
-    apply: H8.
-    * apply: IH; exact: tsize_base_lt.
-    * exact: is_exp_base_bool.
-    * by apply: build => t' t'_t; exact: (tsize_exps_lt _ _ t'_t).
-    * exact: atom_exps.
-    * exact: exps_Nnil xt.
-    * apply: wf_TInvI; [exact: atom_exps | exact: exps_sorted | exact: no_inv_exps].
-  + set t := TNonFree (PreTerm.PTMul ts) wf nf.
-    have xt : is_mul t by [].
-    rewrite -(tfactorsK t).
-    apply: H9.
-    * by apply: build => t' t'_t; exact: (tsize_tfactors_lt _ _ xt t'_t).
-    * exact: atom_tfactors.
-    * apply: wf_TInvI;
-        [exact: atom_tfactors
-        | apply: StronglySorted_term_unfold; rewrite unfold_tfactors;
-            exact: (PreTerm.sorted_factors _ (wf_unfold_term t))
-        | exact: no_inv_tfactors].
-    * rewrite /tfactors length_fmap /t /=.
-      have /andb_True [_ /bool_decide_unpack Hlen] := wf.
-      by rewrite /PreTerm.factors.
+move=> xt; split; last split.
+- exact: atom_tfactors.
+- apply: wf_TInvI;
+    [ exact: atom_tfactors
+    | apply: StronglySorted_term_unfold; rewrite unfold_tfactors;
+        exact: (PreTerm.sorted_factors _ (wf_unfold_term t))
+    | exact: no_inv_tfactors ].
+- rewrite /tfactors length_fmap.
+  move: xt (wf_unfold_term t); rewrite is_mul_unfold /PreTerm.factors.
+  case: (unfold_term t) => [o|o t'|o t1 t2|ts] //= _ wf'.
+  by have /andb_True [_ /bool_decide_unpack Hlen] := wf'.
 Qed.
-
-Definition term_ind (P : term -> Prop) := @term_rect P.
 
 Lemma term_lt_ind (T : term -> Prop) :
   (forall t, (forall t', (tsize t' < tsize t) -> T t') -> T t) ->

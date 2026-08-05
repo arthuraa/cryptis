@@ -221,29 +221,61 @@ split.
     rewrite (subterms_TMulN wf) elem_of_union; right.
     rewrite elem_of_union_list; exists (subterms t''); split => //.
     by rewrite list_elem_of_fmap; exists t''; split.
-- elim: t2; try by solve_subtermsP.
-  + move => t IHt Nexp ts IHts atom tsN0 swf.
-    have canc := no_inv_of_wf ts swf.
-    rewrite subtermsE //.
-    rewrite (union_list_map_to _ ts canc).
-    rewrite !elem_of_union elem_of_union_list elem_of_singleton.
-    case => [[-> | /IHt sub] | [X [/list_elem_of_fmap [t' [-> t'_ts]] t1_t']]].
+- elim/term_lt_ind: t2 => t2 IH.
+  case: t2 IH => [n|ta tb|a|kt tt|kk tt|tt|pt wf nf] IH.
+  + rewrite subtermsE' /=; move => /elem_of_union [/elem_of_singleton -> | /elem_of_empty []].
+    exact: STRefl.
+  + rewrite subtermsE' /=; move => /elem_of_union [/elem_of_singleton -> | /elem_of_union [H|H]].
     * exact: STRefl.
-    * apply: STExp1; [exact: Nexp|exact: sub].
-    * have sub' : subterm t1 t'.
-        move: IHts t'_ts t1_t'; elim: (ts) => /= [_ /elem_of_nil //|t0 ts0 IH0 [IH1 IHrest]].
-        rewrite elem_of_cons; case => [-> //|/(IH0 IHrest)] // h ?; exact: h.
-      apply: (STExp2 Nexp atom canc sub' t'_ts).
-  + move => ts IHts atom swf szN1.
-    have wf : wf_mul_list ts := conj atom (conj swf szN1).
-    rewrite (subterms_TMulN wf).
-    rewrite elem_of_union elem_of_union_list elem_of_singleton.
-    case => [-> | [X [/list_elem_of_fmap [t' [-> t'_ts]] t1_t']]].
+    * by apply: STPair1; apply: (IH ta _ H); rewrite [tsize (TPair ta tb)]tsize_eq; lia.
+    * by apply: STPair2; apply: (IH tb _ H); rewrite [tsize (TPair ta tb)]tsize_eq; lia.
+  + rewrite subtermsE' /=; move => /elem_of_union [/elem_of_singleton -> | /elem_of_empty []].
+    exact: STRefl.
+  + rewrite subtermsE' /=; move => /elem_of_union [/elem_of_singleton -> | H].
     * exact: STRefl.
-    * have sub' : subterm t1 t'.
-        move: IHts t'_ts t1_t'; elim: (ts) => /= [_ /elem_of_nil //|t0 ts0 IH0 [IH1 IHrest]].
-        rewrite elem_of_cons; case => [-> //|/(IH0 IHrest)] // h ?; exact: h.
-      apply: (STMul wf sub' t'_ts).
+    * by apply: STKey; apply: (IH tt _ H); rewrite [tsize (TKey kt tt)]tsize_eq; lia.
+  + rewrite subtermsE' /=; move => /elem_of_union [/elem_of_singleton -> | /elem_of_union [H|H]].
+    * exact: STRefl.
+    * by apply: STSeal1; apply: (IH kk _ H); rewrite [tsize (TSeal kk tt)]tsize_eq; lia.
+    * by apply: STSeal2; apply: (IH tt _ H); rewrite [tsize (TSeal kk tt)]tsize_eq; lia.
+  + rewrite subtermsE' /=; move => /elem_of_union [/elem_of_singleton -> | H].
+    * exact: STRefl.
+    * by apply: STHash; apply: (IH tt _ H); rewrite [tsize (THash tt)]tsize_eq; lia.
+  + case: pt wf nf IH => [o|[kt'||] operand|[||] b e|ts] wf nf IH.
+    1,2,3,5,6: by move: {IH} nf; rewrite /is_non_free /=.
+    * have /andb_True [/andb_True [Ninvpt Nmpt] wfpt] := wf.
+      have E : TNonFree (PreTerm.PT1 O1Inv operand) wf nf = TInv (fold_term operand).
+        apply: unfold_term_inj.
+        by rewrite unfold_TInv (fold_termK operand wfpt) (PreTerm.inv_Nmul operand Nmpt)
+           (PreTerm.inv_invN operand Ninvpt).
+      have Ninv : negb (is_inv (fold_term operand)) by rewrite is_inv_unfold (fold_termK operand wfpt).
+      have Nmf : negb (is_mul (fold_term operand)) by rewrite is_mul_unfold (fold_termK operand wfpt).
+      rewrite E in IH *; rewrite (subterms_TInv Nmf Ninv).
+      move => /elem_of_union [/elem_of_singleton -> | H].
+      -- exact: STRefl.
+      -- apply: (STInv Nmf Ninv); apply: (IH (fold_term operand) _ H).
+         rewrite (tsize_TInv _ Nmf Ninv); lia.
+    * set t2' := TNonFree (PreTerm.PTExp b e) wf nf.
+      have xt : is_exp t2' by [].
+      rewrite (subterms_base_exps t2').
+      move => /elem_of_union [/elem_of_union [/elem_of_singleton -> | Hb] | He].
+      -- exact: STRefl.
+      -- rewrite -(base_expsK t2'); apply: STExp1; first exact: is_exp_base_bool.
+         by apply: (IH (base t2') _ Hb); exact: (tsize_base_lt _ xt).
+      -- move: He => /elem_of_union_list [X [/list_elem_of_fmap [ee [-> ee_exps]] Hin]].
+         rewrite -(base_expsK t2').
+         apply: (STExp2 (is_exp_base_bool t2') (atom_exps t2') (no_inv_exps t2') _ ee_exps).
+         by apply: (IH ee _ Hin); exact: (tsize_exps_lt _ _ ee_exps).
+    * set t2' := TNonFree (PreTerm.PTMul ts) wf nf.
+      have xt : is_mul t2' by [].
+      have wfl : wf_mul_list (tfactors t2') := wf_mul_list_tfactors _ xt.
+      rewrite -(tfactorsK t2') (subterms_TMulN wfl).
+      move => /elem_of_union [/elem_of_singleton -> | He].
+      -- exact: STRefl.
+      -- move: He => /elem_of_union_list [X [/list_elem_of_fmap [ff [-> ff_facts]] Hin]].
+         apply: (STMul wfl _ ff_facts).
+         apply: (IH ff _ Hin).
+         exact: (tsize_tfactors_lt _ _ xt ff_facts).
 Qed.
 
 Ltac solve_nonces_of_termP :=
@@ -283,25 +315,50 @@ split.
     rewrite (nonces_of_term_TMulN wf) elem_of_union_list.
     exists (nonces_of_term t''); split => //.
     by rewrite list_elem_of_fmap; exists t''; split.
-- elim: t; try by solve_nonces_of_termP.
-  + move => t IHt Nexp ts IHts atom tsN0 swf.
-    have canc := no_inv_of_wf ts swf.
-    rewrite nonces_of_termE //.
-    rewrite (union_list_map_to _ ts canc) elem_of_union elem_of_union_list.
-    case => [/IHt sub | [X [/list_elem_of_fmap [t' [-> t'_ts]] a_t']]].
-    * apply: STExp1; [exact: Nexp|exact: sub].
-    * have sub' : subterm (TNonce a) t'.
-        move: IHts t'_ts a_t'; elim: (ts) => /= [_ /elem_of_nil //|t0 ts0 IH0 [IH1 IHrest]].
-        rewrite elem_of_cons; case => [-> //|/(IH0 IHrest)] // h ?; exact: h.
-      apply: (STExp2 Nexp atom canc sub' t'_ts).
-  + move => ts IHts atom swf szN1.
-    have wf : wf_mul_list ts := conj atom (conj swf szN1).
-    rewrite (nonces_of_term_TMulN wf) elem_of_union_list.
-    case => [X [/list_elem_of_fmap [t' [-> t'_ts]] a_t']].
-    have sub' : subterm (TNonce a) t'.
-      move: IHts t'_ts a_t'; elim: (ts) => /= [_ /elem_of_nil //|t0 ts0 IH0 [IH1 IHrest]].
-      rewrite elem_of_cons; case => [-> //|/(IH0 IHrest)] // h ?; exact: h.
-    apply: (STMul wf sub' t'_ts).
+- elim/term_lt_ind: t => t IH.
+  case: t IH => [n|ta tb|a'|kt tt|kk tt|tt|pt wf nf] IH.
+  + rewrite nonces_of_termE' /=; move => /elem_of_empty [].
+  + rewrite nonces_of_termE' /=; move => /elem_of_union [H|H].
+    * by apply: STPair1; apply: (IH ta _ H); rewrite [tsize (TPair ta tb)]tsize_eq; lia.
+    * by apply: STPair2; apply: (IH tb _ H); rewrite [tsize (TPair ta tb)]tsize_eq; lia.
+  + rewrite nonces_of_termE' /=; move => /elem_of_singleton ->; exact: STRefl.
+  + rewrite nonces_of_termE' /=; move => H.
+    by apply: STKey; apply: (IH tt _ H); rewrite [tsize (TKey kt tt)]tsize_eq; lia.
+  + rewrite nonces_of_termE' /=; move => /elem_of_union [H|H].
+    * by apply: STSeal1; apply: (IH kk _ H); rewrite [tsize (TSeal kk tt)]tsize_eq; lia.
+    * by apply: STSeal2; apply: (IH tt _ H); rewrite [tsize (TSeal kk tt)]tsize_eq; lia.
+  + rewrite nonces_of_termE' /=; move => H.
+    by apply: STHash; apply: (IH tt _ H); rewrite [tsize (THash tt)]tsize_eq; lia.
+  + case: pt wf nf IH => [o|[kt'||] operand|[||] b e|ts] wf nf IH.
+    1,2,3,5,6: by move: {IH} nf; rewrite /is_non_free /=.
+    * have /andb_True [/andb_True [Ninvpt Nmpt] wfpt] := wf.
+      have E : TNonFree (PreTerm.PT1 O1Inv operand) wf nf = TInv (fold_term operand).
+        apply: unfold_term_inj.
+        by rewrite unfold_TInv (fold_termK operand wfpt) (PreTerm.inv_Nmul operand Nmpt)
+           (PreTerm.inv_invN operand Ninvpt).
+      have Ninv : negb (is_inv (fold_term operand)) by rewrite is_inv_unfold (fold_termK operand wfpt).
+      have Nmf : negb (is_mul (fold_term operand)) by rewrite is_mul_unfold (fold_termK operand wfpt).
+      rewrite E in IH *; rewrite nonces_of_term_TInv.
+      move => H; apply: (STInv Nmf Ninv); apply: (IH (fold_term operand) _ H).
+      rewrite (tsize_TInv _ Nmf Ninv); lia.
+    * set t2' := TNonFree (PreTerm.PTExp b e) wf nf.
+      have xt : is_exp t2' by [].
+      rewrite (nonces_of_term_base_exps t2').
+      move => /elem_of_union [Hb | He].
+      -- rewrite -(base_expsK t2'); apply: STExp1; first exact: is_exp_base_bool.
+         by apply: (IH (base t2') _ Hb); exact: (tsize_base_lt _ xt).
+      -- move: He => /elem_of_union_list [X [/list_elem_of_fmap [ee [-> ee_exps]] Hin]].
+         rewrite -(base_expsK t2').
+         apply: (STExp2 (is_exp_base_bool t2') (atom_exps t2') (no_inv_exps t2') _ ee_exps).
+         by apply: (IH ee _ Hin); exact: (tsize_exps_lt _ _ ee_exps).
+    * set t2' := TNonFree (PreTerm.PTMul ts) wf nf.
+      have xt : is_mul t2' by [].
+      have wfl : wf_mul_list (tfactors t2') := wf_mul_list_tfactors _ xt.
+      rewrite -(tfactorsK t2') (nonces_of_term_TMulN wfl).
+      move => /elem_of_union_list [X [/list_elem_of_fmap [ff [-> ff_facts]] Hin]].
+      apply: (STMul wfl _ ff_facts).
+      apply: (IH ff _ Hin).
+      exact: (tsize_tfactors_lt _ _ xt ff_facts).
 Qed.
 
 Lemma subterm_nonces_of_term t1 t2 :

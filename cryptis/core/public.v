@@ -1226,53 +1226,71 @@ Lemma False_public t :
   ▷ False -∗
   public t.
 Proof.
-elim: t.
-- iIntros "%n _ _".
-  by rewrite public_TInt.
-- iIntros "%t1 %IH1 %t2 %IH2".
+elim/term_lt_ind: t => t IH.
+case: t IH => [n|ta tb|a|kt tt|kk tt|tt|pt wf nf] IH.
+- iIntros "_ _"; by rewrite public_TInt.
+- have H1 : tsize ta < tsize (TPair ta tb) by rewrite [X in _ < X]tsize_eq /=; lia.
+  have H2 : tsize tb < tsize (TPair ta tb) by rewrite [X in _ < X]tsize_eq /=; lia.
   rewrite minted_TPair public_TPair.
   iIntros "#[m1 m2] #contra"; iSplit.
-  + by iApply IH1.
-  + by iApply IH2.
-- iIntros "%a #m #contra".
+  + iApply (IH ta H1 with "m1 contra").
+  + iApply (IH tb H2 with "m2 contra").
+- iIntros "#m #contra".
   rewrite minted_TNonce public_TNonce; iSplit => //.
   iDestruct "contra" as ">[]".
-- iIntros "%k %t %IH #m #contra".
-  by rewrite minted_TKey public_TKey; iLeft; iApply IH.
-- iIntros "%k %IHk %t %IHt".
+- have H1 : tsize tt < tsize (TKey kt tt) by rewrite [X in _ < X]tsize_eq /=; lia.
+  rewrite minted_TKey public_TKey.
+  iIntros "#m #contra"; iLeft.
+  iApply (IH tt H1 with "m contra").
+- have H1 : tsize kk < tsize (TSeal kk tt) by rewrite [X in _ < X]tsize_eq /=; lia.
+  have H2 : tsize tt < tsize (TSeal kk tt) by rewrite [X in _ < X]tsize_eq /=; lia.
   rewrite minted_TSeal public_TSeal.
-  iIntros "#[m1 m2] #contra". iLeft; iSplit.
-  + by iApply IHk.
-  + by iApply IHt.
-- iIntros "%t %IH #m #contra".
-  by rewrite minted_THash public_THash; iLeft; iApply IH.
-- iIntros "%t %IH %Nmul %inv_t #m #contra".
-  iEval (rewrite minted_TInv) in "m".
-  rewrite public_TInv. by iApply IH.
-- move => t IHt nX ts IHts atom nZ swf.
-  move: nX => /negb_True nX.
-  have canc := no_inv_of_wf ts swf.
-  iIntros "#mt #contra"; rewrite minted_TExpN // {canc nZ swf}.
-  have {}IHts : ∀ t', t' ∈ ts → minted t' -∗ ▷ False -∗ public t'.
-    elim: ts IHts {atom} => [_ /elem_of_nil [] //|t' ts IH] /=.
-    by case=> Ht' Hts t'' /elem_of_cons [->|t''_ts]; eauto.
-  iDestruct "mt" as "[mt mts]"; iInduction ts as [|t' ts IH].
-    by rewrite TExpN0; iApply IHt.
-  have /Forall_cons [Nmt' atomts] := atom.
-  rewrite /= -TExp_TExpN; iDestruct "mts" as "[mt' mts]".
-  iApply (public_TExp_Nmul _ Nmt');
-    last by iApply IHts; rewrite // elem_of_cons; eauto.
-  by iApply "IH" => //; iPureIntro => t'' t''_ts; apply: IHts; rewrite elem_of_cons; eauto.
-- move => ts IHts atom swf sizeN1.
-  have wf : wf_mul_list ts := conj atom (conj swf sizeN1).
-  iIntros "#mt #contra".
-  iApply (public_TMulN_intro wf).
-  iEval (rewrite minted_TMulN //) in "mt".
-  have {}IHts : ∀ t', t' ∈ ts → minted t' -∗ ▷ False -∗ public t'.
-    elim: ts IHts {atom swf sizeN1 wf} => [_ /elem_of_nil [] //|t' ts IH] /=.
-    by case=> Ht' Hts t'' /elem_of_cons [->|t''_ts]; eauto.
-  iApply (big_sepL_impl with "mt"); iIntros "!>" (k t' t'_lk) "#mt'".
-  by iApply (IHts t' (list_elem_of_lookup_2 _ _ _ t'_lk) with "mt' contra").
+  iIntros "#[m1 m2] #contra"; iLeft; iSplit.
+  + iApply (IH kk H1 with "m1 contra").
+  + iApply (IH tt H2 with "m2 contra").
+- have H1 : tsize tt < tsize (THash tt) by rewrite [X in _ < X]tsize_eq /=; lia.
+  rewrite minted_THash public_THash.
+  iIntros "#m #contra"; iLeft.
+  iApply (IH tt H1 with "m contra").
+- case: pt wf nf IH => [o|[kt'||] operand|[||] b e|ts] wf nf IH.
+  1,2,3,5,6: by move: {IH} nf; rewrite /is_non_free /=.
+  + have /andb_True [/andb_True [Ninvpt Nmpt] wfpt] := wf.
+    have E : TNonFree (PreTerm.PT1 O1Inv operand) wf nf = TInv (fold_term operand).
+      apply: unfold_term_inj.
+      by rewrite unfold_TInv (fold_termK operand wfpt) (PreTerm.inv_Nmul operand Nmpt)
+         (PreTerm.inv_invN operand Ninvpt).
+    have Ninv : negb (is_inv (fold_term operand)) by rewrite is_inv_unfold (fold_termK operand wfpt).
+    have Nmf : negb (is_mul (fold_term operand)) by rewrite is_mul_unfold (fold_termK operand wfpt).
+    have Hlt : tsize (fold_term operand) < tsize (TInv (fold_term operand)).
+      rewrite (tsize_TInv _ Nmf Ninv); lia.
+    rewrite E in IH *.
+    iIntros "#m #contra".
+    iEval (rewrite minted_TInv) in "m".
+    rewrite public_TInv.
+    iApply (IH (fold_term operand) Hlt with "m contra").
+  + set t := TNonFree (PreTerm.PTExp b e) wf nf.
+    have xt : is_exp t by [].
+    have Nxb : ~ is_exp (base t) by apply/negb_True; exact: is_exp_base_bool.
+    iIntros "#mt #contra".
+    iEval (rewrite -(base_expsK t) (minted_TExpN Nxb (atom_exps t) (no_inv_exps t))) in "mt".
+    iDestruct "mt" as "[#mb #mes]".
+    iAssert (public (base t)) as "#pb".
+    { iApply (IH (base t) (tsize_base_lt t xt) with "mb contra"). }
+    iEval (rewrite -(base_expsK t)).
+    iApply (public_TExpN_intro (base t) (atom_exps t) with "pb").
+    iApply (big_sepL_impl with "mes").
+    iIntros "!>" (k e' e'_lk) "#me'".
+    iApply (IH e' (tsize_exps_lt _ _ (list_elem_of_lookup_2 _ _ _ e'_lk)) with "me' contra").
+  + set t := TNonFree (PreTerm.PTMul ts) wf nf.
+    have xt : is_mul t by [].
+    have wfl : wf_mul_list (tfactors t) := wf_mul_list_tfactors _ xt.
+    iIntros "#mt #contra".
+    iEval (rewrite -(tfactorsK t)).
+    iApply (public_TMulN_intro wfl).
+    iEval (rewrite -(tfactorsK t) (minted_TMulN wfl)) in "mt".
+    iApply (big_sepL_impl with "mt").
+    iIntros "!>" (k ff ff_lk) "#mff".
+    iApply (IH ff (tsize_tfactors_lt _ _ xt (list_elem_of_lookup_2 _ _ _ ff_lk)) with "mff contra").
 Qed.
 
 Lemma except_0_public t :

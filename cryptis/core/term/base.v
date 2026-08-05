@@ -214,6 +214,13 @@ rewrite -{2}(list_fmap_id S). apply: Forall_fmap_ext_1.
 apply/Forall_forall => pt Hpt; exact: (fold_termK pt (wfS pt Hpt)).
 Qed.
 
+Lemma fmap_unfold_termK ts :
+  fold_term <$> (unfold_term <$> ts) = ts.
+Proof.
+rewrite -list_fmap_compose -[RHS]list_fmap_id.
+apply/Forall_fmap_ext/list.Forall_forall => t _; exact: unfold_termK.
+Qed.
+
 Lemma fold_normalize pt : fold_term (PreTerm.normalize pt) = fold_term pt.
 Proof. by rewrite -unfold_fold unfold_termK. Qed.
 
@@ -514,3 +521,69 @@ apply/Forall_forall => x x_t; rewrite is_mul_unfold.
 have /list.Forall_forall H := PreTerm.Nmul_factors _ (wf_unfold_term t).
 apply: H; rewrite -unfold_tfactors; apply: list_elem_of_fmap_2; exact: x_t.
 Qed.
+
+Lemma term_rect (T : term -> Type)
+  (H1 : forall n, T (TInt n))
+  (H2 : forall t1, T t1 ->
+        forall t2, T t2 ->
+        T (TPair t1 t2))
+  (H3 : forall a, T (TNonce a))
+  (H4 : forall kt t, T t -> T (TKey kt t))
+  (H5 : forall k, T k -> forall t, T t -> T (TSeal k t))
+  (H6 : forall t, T t -> T (THash t))
+  (H7 : forall t, T t -> negb (is_mul t) -> negb (is_inv t) -> T (TInv t))
+  (H8 : forall t1, T t1 ->
+        forall t2, T t2 ->
+                   negb (is_exp t1) ->
+                   t2 ≠ TMulN [] ->
+        T (TExp t1 t2))
+  (H9 : forall ts, foldr (fun t R => T t * R)%type unit ts ->
+                   atomic ts ->
+                   (forall t', t' ∈ ts -> TInv t' ∉ ts) ->
+                   length ts ≠ 1 ->
+        T (TMulN ts)) :
+  forall t, T t.
+Proof.
+move=> t; rewrite -(unfold_termK t).
+elim: (unfold_term t) (wf_unfold_term t)=>
+  {t} [o|o pt IHpt|o pt1 IHpt1 pt2 IHpt2|ts IHts] wfpt.
+- case: o wfpt => [n|l] _; rewrite fold_termE /=; [exact: H1|exact: H3].
+- case: o wfpt => [kt| |]; rewrite fold_termE /=.
+  + by move=> wfpt; exact: (H4 kt _ (IHpt wfpt)).
+  + by move=> wfpt; exact: (H6 _ (IHpt wfpt)).
+  + move=> /andb_True [/andb_True [Ninv Nmul] wfpt].
+    apply: (H7 _ (IHpt wfpt)).
+    * by rewrite is_mul_unfold (fold_termK _ wfpt).
+    * by rewrite is_inv_unfold (fold_termK _ wfpt).
+- case: o wfpt => [||]; rewrite fold_termE /=.
+  + by move=> /andb_True [w1 w2]; exact: (H2 _ (IHpt1 w1) _ (IHpt2 w2)).
+  + by move=> /andb_True [w1 w2]; exact: (H5 _ (IHpt1 w1) _ (IHpt2 w2)).
+  + move=> /andb_True [/andb_True [/andb_True [w1 Nexp1] w2] Hne].
+    have pt2N : pt2 ≠ PreTerm.PTMul [] := bool_decide_unpack _ Hne.
+    apply: (H8 _ (IHpt1 w1) _ (IHpt2 w2)).
+    * by rewrite is_exp_unfold (fold_termK _ w1).
+    * have E0 : TMulN [] = fold_term (PreTerm.PTMul []) by rewrite fold_termE.
+      rewrite E0 => Heq; apply: pt2N.
+      by move: (f_equal unfold_term Heq);
+        rewrite (fold_termK _ w2) (fold_termK _ PreTerm.wf_nil) => ->.
+- have [wfts [Nmts [sms lenN1]]] := PreTerm.wf_Mul_inv _ wfpt.
+  rewrite fold_termE; apply: H9.
+  + elim: ts IHts wfts {wfpt Nmts sms lenN1} => [//|pt ts' IH] /=.
+    move=> [IHpt IHts'] /Forall_cons [w ws].
+    by split; [exact: (IHpt w)|exact: (IH IHts' ws)].
+  + move/list.Forall_forall in wfts.
+    move/list.Forall_forall in Nmts.
+    apply/Forall_fmap/list.Forall_forall => t t_ts /=.
+    rewrite /= is_mul_unfold fold_termK //; eauto.
+  + move=> _ /list_elem_of_fmap [t [] -> t_ts] tV_ts.
+    move/SMS.wf_no_pairs in sms; apply: sms (t_ts) _.
+    rewrite -[ts]unfold_fold_map //; apply/list_elem_of_fmap.
+    exists (TInv (fold_term t)); split => //.
+    have wft: PreTerm.wf t by move/list.Forall_forall: wfts; exact.
+    rewrite unfold_TInv_Nmul ?fold_termK //.
+    rewrite is_mul_unfold // fold_termK //.
+    move/list.Forall_forall: Nmts; exact.
+  + by rewrite length_fmap.
+Qed.
+
+Definition term_ind (P : term -> Prop) := @term_rect P.
