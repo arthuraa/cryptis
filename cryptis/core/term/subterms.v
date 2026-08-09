@@ -8,7 +8,7 @@ From iris.heap_lang Require locations.
 From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
 From cryptis.core Require Export pre_term.
-From cryptis.core.term Require Import base algebra repr nonces.
+From cryptis.core.term Require Import base algebra tsize repr nonces.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -268,14 +268,14 @@ split.
          by apply: (IH ee _ Hin); exact: (tsize_exps_lt _ _ ee_exps).
     * set t2' := TNonFree (PreTerm.PTMul ts) wf nf.
       have xt : is_mul t2' by [].
-      have wfl : wf_mul_list (tfactors t2') := wf_mul_list_tfactors _ xt.
-      rewrite -(tfactorsK t2') (subterms_TMulN wfl).
+      have wfl : wf_mul_list (factors t2') := wf_mul_list_factors _ xt.
+      rewrite -(factorsK t2') (subterms_TMulN wfl).
       move => /elem_of_union [/elem_of_singleton -> | He].
       -- exact: STRefl.
       -- move: He => /elem_of_union_list [X [/list_elem_of_fmap [ff [-> ff_facts]] Hin]].
          apply: (STMul wfl _ ff_facts).
          apply: (IH ff _ Hin).
-         exact: (tsize_tfactors_lt _ _ xt ff_facts).
+         exact: (tsize_factors_lt _ _ xt ff_facts).
 Qed.
 
 Ltac solve_nonces_of_termP :=
@@ -353,12 +353,12 @@ split.
          by apply: (IH ee _ Hin); exact: (tsize_exps_lt _ _ ee_exps).
     * set t2' := TNonFree (PreTerm.PTMul ts) wf nf.
       have xt : is_mul t2' by [].
-      have wfl : wf_mul_list (tfactors t2') := wf_mul_list_tfactors _ xt.
-      rewrite -(tfactorsK t2') (nonces_of_term_TMulN wfl).
+      have wfl : wf_mul_list (factors t2') := wf_mul_list_factors _ xt.
+      rewrite -(factorsK t2') (nonces_of_term_TMulN wfl).
       move => /elem_of_union_list [X [/list_elem_of_fmap [ff [-> ff_facts]] Hin]].
       apply: (STMul wfl _ ff_facts).
       apply: (IH ff _ Hin).
-      exact: (tsize_tfactors_lt _ _ xt ff_facts).
+      exact: (tsize_factors_lt _ _ xt ff_facts).
 Qed.
 
 Lemma subterm_nonces_of_term t1 t2 :

@@ -8,7 +8,7 @@ From iris.heap_lang Require locations.
 From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
 From cryptis.core Require Export pre_term.
-From cryptis.core.term Require Import base algebra.
+From cryptis.core.term Require Import base algebra tsize.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

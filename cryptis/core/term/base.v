@@ -203,19 +203,15 @@ Proof.
 by move=> wf; rewrite unfold_fold (PreTerm.normalize_wf _ wf).
 Qed.
 
-(* [unfold_term <$> (fold_term <$> _)] is the identity on lists of well-formed
-   pre-terms.  Used to bridge the [fold]/[unfold] round-trip through lists. *)
-Lemma unfold_fold_map S :
-  Forall (fun pt => PreTerm.wf pt) S ->
-  unfold_term <$> (fold_term <$> S) = S.
+Lemma fmap_fold_termK pts :
+  Forall (fun pt => PreTerm.wf pt) pts ->
+  unfold_term <$> (fold_term <$> pts) = pts.
 Proof.
-move=> /list.Forall_forall wfS. rewrite -(list_fmap_compose fold_term unfold_term).
-rewrite -{2}(list_fmap_id S). apply: Forall_fmap_ext_1.
-apply/Forall_forall => pt Hpt; exact: (fold_termK pt (wfS pt Hpt)).
+move=> /list.Forall_forall wfs. rewrite -list_fmap_compose -[RHS]list_fmap_id.
+by apply/Forall_fmap_ext/Forall_forall=> pt /wfs ?; rewrite /= fold_termK.
 Qed.
 
-Lemma fmap_unfold_termK ts :
-  fold_term <$> (unfold_term <$> ts) = ts.
+Lemma fmap_unfold_termK ts : fold_term <$> (unfold_term <$> ts) = ts.
 Proof.
 rewrite -list_fmap_compose -[RHS]list_fmap_id.
 apply/Forall_fmap_ext/list.Forall_forall => t _; exact: unfold_termK.
@@ -276,16 +272,16 @@ Proof. apply: (inj_countable' seed_of_senc_key SEncKey); by case. Qed.
 Global Instance senc_key_inhabited : Inhabited senc_key :=
   populate (SEncKey inhabitant).
 
-Lemma normalize_unfold1 t :
+Lemma normalize_unfold t :
   PreTerm.normalize (unfold_term t) = unfold_term t.
 Proof. by rewrite (PreTerm.normalize_wf _ (wf_unfold_term t)). Qed.
 
-Lemma normalize_unfoldn ts :
+Lemma fmap_normalize_unfold ts :
   PreTerm.normalize <$> (unfold_term <$> ts) = unfold_term <$> ts.
 Proof.
 rewrite -{2}(list_fmap_id (unfold_term <$> ts)).
 apply: Forall_fmap_ext_1. apply/Forall_forall => pt.
-move=> /list_elem_of_fmap [t [-> _]]; exact: normalize_unfold1.
+move=> /list_elem_of_fmap [t [-> _]]; exact: normalize_unfold.
 Qed.
 
 lock Definition TInv t := fold_term (PreTerm.inv (unfold_term t)).
@@ -349,7 +345,7 @@ Qed.
 
 Definition base t := fold_term (PreTerm.base (unfold_term t)).
 Definition exps t := fold_term <$> PreTerm.exps (unfold_term t).
-Definition tfactors t := fold_term <$> PreTerm.factors (unfold_term t).
+Definition factors t := fold_term <$> PreTerm.factors (unfold_term t).
 
 Definition is_nonce t :=
   if t is TNonce _ then true else false.
@@ -401,47 +397,47 @@ move => Nm; rewrite is_mul_unfold (unfold_TInv_Nmul Nm).
 exact: (PreTerm.is_mul_inv_aux _ (wf_unfold_term t)).
 Qed.
 
-Lemma unfold_tfactors t :
-  unfold_term <$> tfactors t = PreTerm.factors (unfold_term t).
-Proof. rewrite /tfactors unfold_fold_map //; exact: (PreTerm.wf_factors _ (wf_unfold_term t)). Qed.
+Lemma unfold_factors t :
+  unfold_term <$> factors t = PreTerm.factors (unfold_term t).
+Proof.
+rewrite /factors fmap_fold_termK //.
+exact: (PreTerm.wf_factors _ (wf_unfold_term t)).
+Qed.
 
-Lemma count_tfactors_unfold {t} Y :
+Lemma count_factors_unfold {t} Y :
   negb (is_mul t) ->
-  SMS.count TInv t (tfactors Y) =
+  SMS.count TInv t (factors Y) =
   SMS.count PreTerm.inv_aux (unfold_term t) (PreTerm.factors (unfold_term Y)).
 Proof.
-move=> Nt; rewrite -unfold_tfactors.
-by rewrite (SMS.count_fmap TInv PreTerm.inv_aux unfold_term t (tfactors Y)
+move=> Nt; rewrite -unfold_factors.
+by rewrite (SMS.count_fmap TInv PreTerm.inv_aux unfold_term t (factors Y)
               (@unfold_term_inj) (unfold_TInv_Nmul Nt)).
 Qed.
 
-Lemma count_tfactors_TInv t t' :
+Lemma count_factors_TInv t t' :
   negb (is_mul t) →
-  SMS.count TInv t (tfactors (TInv t')) = (- SMS.count TInv t (tfactors t'))%Z.
+  SMS.count TInv t (factors (TInv t')) = (- SMS.count TInv t (factors t'))%Z.
 Proof.
-move=> Nm; rewrite !count_tfactors_unfold // unfold_TInv.
+move=> Nm; rewrite !count_factors_unfold // unfold_TInv.
 rewrite PreTerm.count_factors_inv //; exact: wf_unfold_term.
 Qed.
 
-Lemma count_tfactors_TMulN t t' ts :
+Lemma count_factors_TMulN t t' ts :
   negb (is_mul t) →
-  SMS.count TInv t (tfactors (TMulN (t' :: ts))) =
-  (SMS.count TInv t (tfactors t') + SMS.count TInv t (tfactors (TMulN ts)))%Z.
+  SMS.count TInv t (factors (TMulN (t' :: ts))) =
+  (SMS.count TInv t (factors t') + SMS.count TInv t (factors (TMulN ts)))%Z.
 Proof.
 move=> Nm.
-rewrite (count_tfactors_unfold (TMulN (t' :: ts)) Nm)
-        (count_tfactors_unfold t' Nm) (count_tfactors_unfold (TMulN ts) Nm)
+rewrite (count_factors_unfold (TMulN (t' :: ts)) Nm)
+        (count_factors_unfold t' Nm) (count_factors_unfold (TMulN ts) Nm)
         !unfold_TMulN fmap_cons.
 exact: (PreTerm.count_factors_mul _ _ _
           (wf_unfold_term t) (wf_unfold_term t') (wf_unfold_terms ts)).
 Qed.
 
-(* Terms with equal signed factor counts at every atom are equal
-   (<- [PreTerm.count_factors_inj]): the characterisation used to prove algebraic
-   identities on terms without pre-term reasoning. *)
-Lemma count_tfactors_inj t1 t2 :
+Lemma count_factors_inj t1 t2 :
   (forall x, negb (is_mul x) ->
-     SMS.count TInv x (tfactors t1) = SMS.count TInv x (tfactors t2)) ->
+     SMS.count TInv x (factors t1) = SMS.count TInv x (factors t2)) ->
   t1 = t2.
 Proof.
 move=> ecount; apply: unfold_term_inj.
@@ -449,7 +445,7 @@ apply: (PreTerm.count_factors_inj _ _ (wf_unfold_term t1) (wf_unfold_term t2)).
 move=> pt Npt wfpt.
 have wfE : unfold_term (fold_term pt) = pt := fold_termK pt wfpt.
 have Nx : negb (is_mul (fold_term pt)) by rewrite is_mul_unfold wfE.
-rewrite -wfE -(count_tfactors_unfold t1 Nx) -(count_tfactors_unfold t2 Nx).
+rewrite -wfE -(count_factors_unfold t1 Nx) -(count_factors_unfold t2 Nx).
 exact: (ecount _ Nx).
 Qed.
 
@@ -461,17 +457,18 @@ Qed.
 
 Lemma unfold_exps t :
   unfold_term <$> exps t = PreTerm.exps (unfold_term t).
-Proof. rewrite /exps unfold_fold_map //; exact: (PreTerm.wf_exps _ (wf_unfold_term t)). Qed.
-
-Lemma tfactors_one : tfactors (TMulN []) = [].
 Proof.
-have /list_fmap_eq_inj :
-    unfold_term <$> tfactors (TMulN []) = unfold_term <$> [] => //.
-  by rewrite unfold_tfactors unfold_TMulN.
+rewrite /exps fmap_fold_termK //.
+exact: (PreTerm.wf_exps _ (wf_unfold_term t)).
 Qed.
 
-(** Bridge term-level atomicity ([~~ is_mul]) to pre-term atomicity through
-    [unfold_term]. *)
+Lemma factors_one : factors (TMulN []) = [].
+Proof.
+have /list_fmap_eq_inj :
+    unfold_term <$> factors (TMulN []) = unfold_term <$> [] => //.
+by rewrite unfold_factors unfold_TMulN.
+Qed.
+
 Lemma map_unfold_Nmul ts :
   Forall (fun pt => negb (PreTerm.is_mul pt)) (unfold_term <$> ts) <->
   Forall (fun t => negb (is_mul t)) ts.
@@ -479,34 +476,31 @@ Proof.
 rewrite Forall_fmap; apply: Forall_iff => t; by rewrite is_mul_unfold.
 Qed.
 
-Lemma tfactors_inj t1 t2 : tfactors t1 = tfactors t2 -> t1 = t2.
+Lemma factors_inj t1 t2 : factors t1 = factors t2 -> t1 = t2.
 Proof.
 move=> efactors; apply: unfold_term_inj.
 apply: PreTerm.factors_inj.
 - exact: wf_unfold_term.
 - exact: wf_unfold_term.
-by rewrite -!unfold_tfactors efactors.
+by rewrite -!unfold_factors efactors.
 Qed.
 
-Lemma tfactors_atomic t : negb (is_mul t) -> tfactors t = [t].
+Lemma factors_atomic t : negb (is_mul t) -> factors t = [t].
 Proof.
-move=> Nt; apply: (inj (fmap unfold_term)); rewrite unfold_tfactors.
+move=> Nt; apply: (inj (fmap unfold_term)); rewrite unfold_factors.
 have Nt' : negb (PreTerm.is_mul (unfold_term t)) by rewrite -is_mul_unfold.
 by rewrite (PreTerm.factorsN _ Nt').
 Qed.
 
-(* The signed factor-count of a product [TMulN ts] is the count over the
-   concatenation of its arguments' factor lists — the term-level engine behind
-   the multiplicative group laws below (used through [count_tfactors_inj]). *)
-Lemma count_tfactors_TMulN_concat x ts :
+Lemma count_factors_TMulN_concat x ts :
   negb (is_mul x) ->
-  SMS.count TInv x (tfactors (TMulN ts)) =
-  SMS.count TInv x (concat (tfactors <$> ts)).
+  SMS.count TInv x (factors (TMulN ts)) =
+  SMS.count TInv x (concat (factors <$> ts)).
 Proof.
 move=> Nx; elim: ts => [|u ts IH].
-- by rewrite tfactors_one.
-- rewrite fmap_cons concat_cons (count_tfactors_TMulN x u ts Nx) IH.
-  by rewrite (SMS.count_app TInv x (tfactors u) (concat (tfactors <$> ts))).
+- by rewrite factors_one.
+- rewrite fmap_cons concat_cons (count_factors_TMulN x u ts Nx) IH.
+  by rewrite (SMS.count_app TInv x (factors u) (concat (factors <$> ts))).
 Qed.
 
 Definition atomic (ts : list term) : Prop := Forall (fun t => negb (is_mul t)) ts.
@@ -515,11 +509,24 @@ Lemma atomic_unfold ts :
   atomic ts -> Forall (fun pt => negb (PreTerm.is_mul pt)) (unfold_term <$> ts).
 Proof. rewrite /atomic; exact: (proj2 (map_unfold_Nmul ts)). Qed.
 
-Lemma atom_tfactors t : atomic (tfactors t).
+Lemma atom_factors t : atomic (factors t).
 Proof.
 apply/Forall_forall => x x_t; rewrite is_mul_unfold.
 have /list.Forall_forall H := PreTerm.Nmul_factors _ (wf_unfold_term t).
-apply: H; rewrite -unfold_tfactors; apply: list_elem_of_fmap_2; exact: x_t.
+apply: H; rewrite -unfold_factors; apply: list_elem_of_fmap_2; exact: x_t.
+Qed.
+
+Lemma fmap_TInv_fold_term pts :
+  Forall PreTerm.wf pts ->
+  Forall (fun pt => negb (PreTerm.is_mul pt)) pts ->
+  TInv <$> (fold_term <$> pts) = fold_term <$> (PreTerm.inv_aux <$> pts).
+Proof.
+elim: pts => [//|pt pts IH] /Forall_cons [Wpt wfs] /Forall_cons [Nmpt Nms].
+rewrite !fmap_cons (IH wfs Nms); congr cons.
+apply: unfold_term_inj.
+by rewrite unfold_TInv (fold_termK pt Wpt)
+           (fold_termK (PreTerm.inv_aux pt) (PreTerm.wf_inv_aux pt Wpt Nmpt))
+           (PreTerm.inv_Nmul pt Nmpt).
 Qed.
 
 Lemma term_rect (T : term -> Type)
@@ -577,7 +584,7 @@ elim: (unfold_term t) (wf_unfold_term t)=>
     rewrite /= is_mul_unfold fold_termK //; eauto.
   + move=> _ /list_elem_of_fmap [t [] -> t_ts] tV_ts.
     move/SMS.wf_no_pairs in sms; apply: sms (t_ts) _.
-    rewrite -[ts]unfold_fold_map //; apply/list_elem_of_fmap.
+    rewrite -[ts]fmap_fold_termK //; apply/list_elem_of_fmap.
     exists (TInv (fold_term t)); split => //.
     have wft: PreTerm.wf t by move/list.Forall_forall: wfts; exact.
     rewrite unfold_TInv_Nmul ?fold_termK //.

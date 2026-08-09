@@ -427,7 +427,7 @@ Qed.
 Definition public_pre_aux Plater P t : iProp :=
   minted t ∧ (
    (∃ T, ⌜decompose T t⌝ ∧ [∗ set] t' ∈ T, P t')
-   ∨ (⌜is_mul t⌝ ∧ [∗ list] t' ∈ tfactors t, P t')
+   ∨ (⌜is_mul t⌝ ∧ [∗ list] t' ∈ factors t, P t')
    ∨ (⌜is_exp t⌝ ∧
       [∗ list] t' ∈ exps t,
         ⌜negb (is_mul (TInv t'))⌝ ∧
@@ -469,7 +469,7 @@ f_equiv; last (f_equiv; last f_equiv).
 - apply: and_proper_L => mul_t.
   apply: big_sepL_proper => _ t' /(list_elem_of_lookup_2 _ _ _) t'_in.
   apply: HP.
-  exact: (tsize_tfactors_lt t' t mul_t t'_in).
+  exact: (tsize_factors_lt t' t mul_t t'_in).
 - apply: and_proper_L => exp_t.
   apply: big_sepL_proper => _ t' /(list_elem_of_lookup_2 _ _ _) t'_in.
   apply: and_proper_L => Nm.
@@ -504,7 +504,7 @@ iIntros "#wand1 #wand2 %t [#m [H | [H | [H | H]]]]"; iSplit => //.
     by iApply "wand2". }
   by iModIntro; iApply (big_sepS_impl with "H"); eauto.
 - iDestruct "H" as "(% & H)"; iRight; iLeft.
-  iAssert ([∗ list] t' ∈ tfactors t, <pers> P t')%I as "{H} #H".
+  iAssert ([∗ list] t' ∈ factors t, <pers> P t')%I as "{H} #H".
   { iApply (big_sepL_impl with "H"); iIntros "!> %k %t' _".
     by iApply "wand2". }
   by iModIntro; iSplit => //; iApply (big_sepL_impl with "H"); eauto.
@@ -575,7 +575,7 @@ Lemma public_eq t :
   public t ⊣⊢
   minted t ∧ (
       (∃ T, ⌜decompose T t⌝ ∧ [∗ set] t' ∈ T, public t')
-     ∨ (⌜is_mul t⌝ ∧ [∗ list] t' ∈ tfactors t, public t')
+     ∨ (⌜is_mul t⌝ ∧ [∗ list] t' ∈ factors t, public t')
      ∨ (⌜is_exp t⌝ ∧
         [∗ list] t' ∈ exps t,
           ⌜negb (is_mul (TInv t'))⌝ ∧
@@ -805,17 +805,17 @@ apply: anti_symm.
   + by rewrite (is_inv_TInv t Nm').
 Qed.
 
-Lemma tfactorsN t : negb (is_mul t) -> tfactors t = [t].
+Lemma factorsN t : negb (is_mul t) -> factors t = [t].
 Proof.
 move=> Nm.
 have Nm' : negb (PreTerm.is_mul (unfold_term t)) by rewrite -is_mul_unfold.
-by rewrite /tfactors (PreTerm.factorsN _ Nm') /= unfold_termK.
+by rewrite /factors (PreTerm.factorsN _ Nm') /= unfold_termK.
 Qed.
 
 (* Elimination form: a product is public iff all its factors are. *)
 Lemma public_TMulN t :
   is_mul t ->
-  public t ⊢ [∗ list] t' ∈ tfactors t, public t'.
+  public t ⊢ [∗ list] t' ∈ factors t, public t'.
 Proof.
 move=> mul_t; rewrite public_eq.
 iIntros "[_ [publ | [ [_ Hfs] | [ (%exp_t & _) | Hstr ]]]]".
@@ -827,11 +827,11 @@ iIntros "[_ [publ | [ [_ Hfs] | [ (%exp_t & _) | Hstr ]]]]".
 - by case: (t) mul_t => // *; iDestruct "Hstr" as "[]".
 Qed.
 
-Lemma public_tfactors t :
-  public t ⊣⊢ minted t ∧ [∗ list] t' ∈ tfactors t, public t'.
+Lemma public_factors t :
+  public t ⊣⊢ minted t ∧ [∗ list] t' ∈ factors t, public t'.
 Proof.
 case Emul: (is_mul t); last first.
-- rewrite tfactorsN; last by rewrite Emul.
+- rewrite factorsN; last by rewrite Emul.
   rewrite big_sepL_singleton.
   apply: (anti_symm _).
   + by iIntros "#p"; iSplit; first iApply public_minted.
@@ -851,10 +851,10 @@ have key : forall l, atomic l ->
 { elim => [//|u us IH] /Forall_cons [Nmu atom].
   rewrite (_ : map TInv (u :: us) = TInv u :: map TInv us) //.
   by rewrite !big_sepL_cons (public_TInv_Nmul Nmu) (IH atom). }
-rewrite (public_tfactors (TInv t)) (public_tfactors t) minted_TInv.
+rewrite (public_factors (TInv t)) (public_factors t) minted_TInv.
 f_equiv.
-setoid_rewrite (tfactors_TInv t).
-by rewrite (key _ (atom_tfactors t)).
+setoid_rewrite (factors_TInv t).
+by rewrite (key _ (atom_factors t)).
 Qed.
 
 Lemma public_TKey kt t :
@@ -1150,13 +1150,13 @@ Qed.
 Lemma public_TExp t1 t2 :
   public t1 -∗ public t2 -∗ public (TExp t1 t2).
 Proof.
-rewrite (_ : TExp t1 t2 = TExpN t1 (tfactors t2)); last by rewrite /TExpN tfactorsK.
+rewrite (_ : TExp t1 t2 = TExpN t1 (factors t2)); last by rewrite /TExpN factorsK.
 iIntros "#p1 #p2".
-iApply (public_TExpN_intro _ (atom_tfactors t2) with "p1").
+iApply (public_TExpN_intro _ (atom_factors t2) with "p1").
 case E: (is_mul t2).
 - by iApply (public_TMulN (proj1 (is_trueP _) E) with "p2").
 - have Hmul : negb (is_mul t2) by rewrite E.
-  by rewrite (tfactorsN Hmul) /= bi.sep_emp; iApply "p2".
+  by rewrite (factorsN Hmul) /= bi.sep_emp; iApply "p2".
 Qed.
 
 Lemma public_TMulN_intro ts :
@@ -1169,15 +1169,15 @@ rewrite public_eq; iIntros "#H"; iSplit.
   iApply (big_sepL_mono with "H"); iIntros (k t' _) "?"; by iApply public_minted.
 - iRight; iLeft; iSplit.
   + by iPureIntro; exact: (is_mul_TMulN ts wf').
-  + by rewrite (tfactors_TMulN ts wf').
+  + by rewrite (factors_TMulN ts wf').
 Qed.
 
 (* The canonical factors of a product [t1 * t2] are a sub(multi)set of the
    factors of [t1] and [t2] (cancellation only removes). *)
-Lemma mem_tfactors_TMulN2 t1 t2 t' :
-  t' ∈ tfactors (TMulN (t1 :: t2 :: nil)) → t' ∈ tfactors t1 ++ tfactors t2.
+Lemma mem_factors_TMulN2 t1 t2 t' :
+  t' ∈ factors (TMulN (t1 :: t2 :: nil)) → t' ∈ factors t1 ++ factors t2.
 Proof.
-rewrite /tfactors unfold_TMulN.
+rewrite /factors unfold_TMulN.
 rewrite (PreTerm.factors_mul _ (wf_unfold_terms [t1; t2])).
 move=> /list_elem_of_fmap [pt [-> Hpt]].
 move: Hpt => /(SMS.mem_to pt_order PreTerm.inv_aux).
@@ -1188,13 +1188,13 @@ rewrite elem_of_app => -[Hin|Hin]; rewrite elem_of_app; [left|right];
   apply: list_elem_of_fmap_2; exact: Hin.
 Qed.
 
-Lemma big_sepL_tfactors_TMulN2 (Φ : term → iProp) `{!∀ t, Persistent (Φ t)} t1 t2 :
-  ([∗ list] t' ∈ tfactors t1, Φ t') -∗
-  ([∗ list] t' ∈ tfactors t2, Φ t') -∗
-  [∗ list] t' ∈ tfactors (TMulN (t1 :: t2 :: nil)), Φ t'.
+Lemma big_sepL_factors_TMulN2 (Φ : term → iProp) `{!∀ t, Persistent (Φ t)} t1 t2 :
+  ([∗ list] t' ∈ factors t1, Φ t') -∗
+  ([∗ list] t' ∈ factors t2, Φ t') -∗
+  [∗ list] t' ∈ factors (TMulN (t1 :: t2 :: nil)), Φ t'.
 Proof.
 iIntros "#H1 #H2"; iApply big_sepL_intro; iIntros "!>" (k u Hk).
-move: (mem_tfactors_TMulN2 (list_elem_of_lookup_2 _ _ _ Hk)) => /elem_of_app[Hin|Hin].
+move: (mem_factors_TMulN2 (list_elem_of_lookup_2 _ _ _ Hk)) => /elem_of_app[Hin|Hin].
 - by iApply (big_sepL_elem_of with "H1").
 - by iApply (big_sepL_elem_of with "H2").
 Qed.
@@ -1203,13 +1203,13 @@ Lemma public_TMulN2 t1 t2 :
   public t1 -∗ public t2 -∗ public (TMulN (t1 :: t2 :: nil)).
 Proof.
 iIntros "#p1 #p2".
-iDestruct (public_tfactors t1 with "p1") as "#[m1 f1]".
-iDestruct (public_tfactors t2 with "p2") as "#[m2 f2]".
-iEval (rewrite minted_tfactors) in "m1".
-iEval (rewrite minted_tfactors) in "m2".
-iApply public_tfactors; iSplit.
-- rewrite minted_tfactors. by iApply (big_sepL_tfactors_TMulN2 with "m1 m2").
-- by iApply (big_sepL_tfactors_TMulN2 with "f1 f2").
+iDestruct (public_factors t1 with "p1") as "#[m1 f1]".
+iDestruct (public_factors t2 with "p2") as "#[m2 f2]".
+iEval (rewrite minted_factors) in "m1".
+iEval (rewrite minted_factors) in "m2".
+iApply public_factors; iSplit.
+- rewrite minted_factors. by iApply (big_sepL_factors_TMulN2 with "m1 m2").
+- by iApply (big_sepL_factors_TMulN2 with "f1 f2").
 Qed.
 
 Lemma public_TMul0 : ⊢ public (TMulN nil).
@@ -1226,7 +1226,7 @@ Lemma False_public t :
   ▷ False -∗
   public t.
 Proof.
-elim/term_lt_ind: t => t IH.
+elim/term_lt_ind: t => t IH;
 case: t IH => [n|ta tb|a|kt tt|kk tt|tt|pt wf nf] IH.
 - iIntros "_ _"; by rewrite public_TInt.
 - have H1 : tsize ta < tsize (TPair ta tb) by rewrite [X in _ < X]tsize_eq /=; lia.
@@ -1283,14 +1283,14 @@ case: t IH => [n|ta tb|a|kt tt|kk tt|tt|pt wf nf] IH.
     iApply (IH e' (tsize_exps_lt _ _ (list_elem_of_lookup_2 _ _ _ e'_lk)) with "me' contra").
   + set t := TNonFree (PreTerm.PTMul ts) wf nf.
     have xt : is_mul t by [].
-    have wfl : wf_mul_list (tfactors t) := wf_mul_list_tfactors _ xt.
+    have wfl : wf_mul_list (factors t) := wf_mul_list_factors _ xt.
     iIntros "#mt #contra".
-    iEval (rewrite -(tfactorsK t)).
+    iEval (rewrite -(factorsK t)).
     iApply (public_TMulN_intro wfl).
-    iEval (rewrite -(tfactorsK t) (minted_TMulN wfl)) in "mt".
+    iEval (rewrite -(factorsK t) (minted_TMulN wfl)) in "mt".
     iApply (big_sepL_impl with "mt").
     iIntros "!>" (k ff ff_lk) "#mff".
-    iApply (IH ff (tsize_tfactors_lt _ _ xt (list_elem_of_lookup_2 _ _ _ ff_lk)) with "mff contra").
+    iApply (IH ff (tsize_factors_lt _ _ xt (list_elem_of_lookup_2 _ _ _ ff_lk)) with "mff contra").
 Qed.
 
 Lemma except_0_public t :

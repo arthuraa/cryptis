@@ -96,10 +96,10 @@ rewrite big_sepL_elem_of // big_sepS_forall.
 by iApply "Hts".
 Qed.
 
-Lemma minted_tfactors t :
-  minted t ⊣⊢ [∗ list] t' ∈ tfactors t, minted t'.
+Lemma minted_factors t :
+  minted t ⊣⊢ [∗ list] t' ∈ factors t, minted t'.
 Proof.
-rewrite unlock (nonces_of_term_tfactors t).
+rewrite unlock (nonces_of_term_factors t).
 by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
@@ -108,18 +108,18 @@ Lemma minted_TExp t1 t2 :
   minted (TExp t1 t2) ⊣⊢ minted t1 ∧ minted t2.
 Proof.
 move => nx.
-have -> : TExp t1 t2 = TExpN t1 (tfactors t2) by rewrite /TExpN tfactorsK.
-rewrite (minted_TExpN nx (atom_tfactors t2)
-           (no_inv_tfactors t2)).
-by rewrite -minted_tfactors.
+have -> : TExp t1 t2 = TExpN t1 (factors t2) by rewrite /TExpN factorsK.
+rewrite (minted_TExpN nx (atom_factors t2)
+           (no_inv_factors t2)).
+by rewrite -minted_factors.
 Qed.
 
 Lemma all_minted_TExp t1 t2 :
   minted t1 ∧ minted t2 ⊢ minted (TExp t1 t2).
 Proof.
-have -> : TExp t1 t2 = TExpN t1 (tfactors t2) by rewrite /TExpN tfactorsK.
-rewrite (minted_tfactors t2).
-exact: (all_minted_TExpN t1 (tfactors t2)).
+have -> : TExp t1 t2 = TExpN t1 (factors t2) by rewrite /TExpN factorsK.
+rewrite (minted_factors t2).
+exact: (all_minted_TExpN t1 (factors t2)).
 Qed.
 
 Lemma minted_nonces_of_term t :
