@@ -1,8 +1,8 @@
 (** * Recursive tagged DB protocol (plan.org July: "Define protocol for DB example").
 
     Realizes the plan's [db_st] sketch on top of the tagged select/branch
-    machinery: [iProto_tag]/[iMsg_tag] (upstream) + the send-side and algebra
-    lemmas from sketch_send_tag.v.  The protocol is RECURSIVE (Iris [fixpoint]
+    machinery of tag.v: [iProto_tag]/[iMsg_tag] plus its send-side and algebra
+    lemmas.  The protocol is RECURSIVE (Iris [fixpoint]
     over the [gmap term term -d> iProto] COFE) and parameterized by [auth]
     (the [db_auth] slot, returned to the client at close/ack). *)
 
@@ -16,19 +16,8 @@ From cryptis Require Import lib term gmeta cryptis primitives tactics role.
 From cryptis.examples Require Import iso_dh gen_conn.
 From cryptis.examples.sess Require impl.
 From cryptis.examples.sess.proofs Require Import base.
-From cryptis.examples.sess Require Import proofs sketch_send_tag.
+From cryptis.examples.sess Require Import proofs tag.
 From actris.channel Require Import proto_model proto.
-
-(* Copied from actris.channel.proofmode (importing it wholesale would bring
-   channel.v's [Notation iMsg Σ := (iMsg Σ val)], clobbering [iMsg Σ term]). *)
-Ltac f_dist_le :=
-  match goal with
-  | H : _ ≡{?n}≡ _ |- _ ≡{?n'}≡ _ => apply (dist_le n); [apply H|lia]
-  end.
-
-Ltac solve_proto_contractive :=
-  solve_proper_core ltac:(fun _ =>
-    first [f_contractive; simpl in * | f_equiv | f_dist_le]).
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -47,39 +36,6 @@ Notation iProp := (iProp Σ).
 Implicit Types (cs : GenConn.state).
 Implicit Types (skI skR : sign_key) (kS t : term).
 Implicit Types (db : gmap term term).
-
-(** ** [iMsg_tag] is non-expansive in the map.
-
-    Needed for contractiveness of the recursive protocol.  The sealed
-    definition's pure [ms !! N = Some m] blocks a direct [f_equiv] chain, so we
-    first restate the car with [from_option], where the lookup sits in a
-    non-expansive position. *)
-Lemma iMsg_tag_alt (ms : gmap namespace (iMsg Σ term)) v lp :
-  iMsg_car (iMsg_tag ms) v lp ⊣⊢
-  ∃ N t', ⌜v = Spec.tag (Tag N) t'⌝ ∗
-          from_option (λ m, iMsg_car m t' lp) False%I (ms !! N).
-Proof.
-rewrite iMsg_tag_eq. iSplit.
-- iDestruct 1 as (N t' m [HN ->]) "Hm".
-  iExists N, t'. rewrite HN /=. by iFrame.
-- iDestruct 1 as (N t') "[-> Hm]".
-  case E: (ms !! N) => [m|] /=; last by iDestruct "Hm" as "[]".
-  iExists N, t', m. iFrame. by iPureIntro.
-Qed.
-
-Global Instance iMsg_tag_ne : NonExpansive (iMsg_tag (Σ:=Σ)).
-Proof.
-move=> n ms1 ms2 Hms v lp.
-rewrite !iMsg_tag_alt.
-apply bi.exist_ne => N. apply bi.exist_ne => t'.
-f_equiv.
-move: (Hms N).
-case: (ms1 !! N) => [m1|]; case: (ms2 !! N) => [m2|] //= Hm.
-- inversion Hm as [?? Hm'|]; subst.
-  by apply: iMsg_car_ne.
-- by inversion Hm.
-- by inversion Hm.
-Qed.
 
 (** ** The recursive protocol, client view (Send at the tagged node).
 

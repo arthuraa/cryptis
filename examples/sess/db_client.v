@@ -24,7 +24,7 @@ From cryptis Require Import lib term gmeta cryptis primitives tactics role.
 From cryptis.examples Require Import iso_dh gen_conn.
 From cryptis.examples.sess Require impl.
 From cryptis.examples.sess.proofs Require Import base.
-From cryptis.examples.sess Require Import proofs sketch_send_tag db_tagged.
+From cryptis.examples.sess Require Import proofs tag db_tagged.
 From cryptis.examples.store Require Import db.
 From actris.channel Require Import proto_model proto.
 

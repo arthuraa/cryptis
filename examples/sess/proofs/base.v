@@ -16,16 +16,6 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Record handler := Handler {
-  handler_tag : namespace;
-  handler_val : val;
-}.
-
-Global Instance repr_handler : Repr handler := λ h,
-  (λ: "t",
-     bind: "t" := untag (Tag (handler_tag h)) "t" in
-     SOME (handler_val h "t"))%V.
-
 Notation sessN := (iso_dhN.@"res".@"sess").
 
 Definition savedProtoR Σ V :=
@@ -134,6 +124,32 @@ iClear "Hγs'". case: rl => /=.
   iModIntro. rewrite iProto_ctx_sym. by iFrame; eauto.
 Qed.
 
+Lemma sess_send_msg skI skR si rl (m : iMsg Σ term) t p ts_send ts_recv :
+  sess_own skI skR si rl (<!> m) -∗
+  iMsg_car m t (Next p) -∗
+  ▷ GenConn.chan_inv_for sess_ctx skI skR si rl ts_send ts_recv
+  ={⊤ ∖ ↑GenConn.connN, ∅}=∗ |={∅}▷=>^(S (length ts_recv)) |={∅, ⊤ ∖ ↑GenConn.connN}=>
+    GenConn.chan_inv_for sess_ctx skI skR si rl (ts_send ++ [t]) ts_recv ∗
+    sess_own skI skR si rl p.
+Proof.
+iIntros "(%γs & #Hγs & own) Hm (%γs' & >#Hγs' & ctx)".
+iPoseProof (session_names_agree with "Hγs Hγs'") as "<-".
+iClear "Hγs'". case: rl => /=.
+- iApply fupd_mask_intro; first set_solver.
+  iIntros "close !> !>".
+  iMod (iProto_send with "ctx own Hm") as "[ctx own]".
+  iApply step_fupdN_intro => //.
+  iIntros "!> !>". iMod "close" as "_".
+  iModIntro. by iFrame; eauto.
+- rewrite iProto_ctx_sym.
+  iApply fupd_mask_intro; first set_solver.
+  iIntros "close !> !>".
+  iMod (iProto_send with "ctx own Hm") as "[ctx own]".
+  iApply step_fupdN_intro => //.
+  iIntros "!> !>". iMod "close" as "_".
+  iModIntro. rewrite iProto_ctx_sym. by iFrame; eauto.
+Qed.
+
 Lemma sess_recv skI skR si rl (m : iMsg Σ term) ts_send t ts_recv :
   £ 1 -∗
   sess_own skI skR si rl (<?> m) -∗
@@ -211,27 +227,6 @@ Proof.
     iIntros (b) "HP"; iExists b; destruct b;
     iDestruct ("H" with "HP") as "[$ ?]"; by iModIntro.
 Qed.
-
-Program Definition iMsg_tag_def (ms : gmap namespace (iMsg Σ term)) : iMsg Σ term :=
-  IMsg (λ t, λne pp, ∃ N t' m,
-          ⌜ms !! N = Some m ∧ t = Spec.tag (Tag N) t'⌝ ∗
-          iMsg_car m t' pp)%I.
-Next Obligation. solve_proper. Qed.
-Definition iMsg_tag_aux : seal iMsg_tag_def.
-Proof. by eexists. Qed.
-Definition iMsg_tag := unseal iMsg_tag_aux.
-Lemma iMsg_tag_unseal : iMsg_tag = iMsg_tag_def.
-Proof. exact: seal_eq. Qed.
-
-Lemma iMsg_tag_eq ms t pp :
-  iMsg_car (iMsg_tag ms) t pp =
-  (∃ N t' m,
-     ⌜ms !! N = Some m ∧ t = Spec.tag (Tag N) t'⌝ ∗
-     iMsg_car m t' pp)%I.
-Proof. by rewrite iMsg_tag_unseal. Qed.
-
-Definition iProto_tag (a : action) ms : iProto Σ term :=
-  iProto_message a (iMsg_tag ms).
 
 (* initial proto contains a list of proto, we need the history of all past messages to know which proto is the current one *)
 Definition connected skI skR rl cs p : iProp :=
