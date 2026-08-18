@@ -63,6 +63,9 @@ examples/sess/impl.v
 examples/sess/proofmode.v
 examples/sess/proofs/base.v
 examples/sess/proofs.v
+examples/sess/tag.v
+examples/sess/db_tagged.v
+examples/sess/db_client.v
 examples/sess/trusted.v
 examples/sess/examples.v
 examples/sess.v
@@ -130,4 +133,16 @@ examples/tls13.v
 examples/composite_game.v
 
 ## Storage
+
+examples/store_sess/impl.v
+examples/store_sess/proofs/base.v
+examples/store_sess/proofs/client/store.v
+examples/store_sess/proofs/client/load.v
+examples/store_sess/proofs/client/create.v
+examples/store_sess/proofs/client/connect.v
+examples/store_sess/proofs/client/close.v
+examples/store_sess/proofs/client.v
+examples/store_sess/proofs/server.v
+examples/store_sess/proofs.v
+examples/store_sess/game.v
 
