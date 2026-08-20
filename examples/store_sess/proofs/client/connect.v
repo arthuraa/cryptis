@@ -44,7 +44,7 @@ Lemma wp_connect' (P : iProp) c skI skR :
   {{{ GenConn.failure skI skR ∨ P }}}
     Sess.connect c skI (Spec.pkey skR) (Tag dbN)
   {{{ cs, RET (repr cs);
-      connected skI skR Init cs (db_st0 skI skR cs) ∗
+      connected skI skR Init cs (db_st skI skR cs None) ∗
       release_token (si_init_share cs) ∗
       (public (si_key cs) ∨ P) }}}.
 Proof.
@@ -69,41 +69,18 @@ Proof.
 iIntros "#chan_c #ctx #ctx' #p_ekI #p_ekR".
 iIntros "!> %Φ client post".
 iDestruct "client" as "(%db & ready & state)".
-wp_lam. wp_pures.
-wp_apply (wp_connect' (db_client_ready skI skR db)
+wp_lam. wp_pures. iApply wp_fupd.
+wp_apply (wp_connect' (db_main' skI skR db)
            with "chan_c ctx ctx' p_ekI p_ekR [$ready]").
-iIntros "%cs (conn & rel & ready)". wp_pures.
+iIntros "%cs (conn & rel & ready)".
 iDestruct (connected_public_key_or' with "conn rel ready")
   as "(conn & rel & >ready)".
-iAssert (|==> (public (si_key cs) ∨ rep_update skI skR dbN ∅ db db) ∗
-              (compromised cs ∨ db_client_busy skI skR))%I
-  with "[ready]" as ">[upd busy]".
+iAssert (|==> (public (si_key cs) ∨ db_client_token skI skR None db))%I
+  with "[ready]" as ">token".
 { iDestruct "ready" as "[#comp|ready]".
-  - iModIntro. iSplitR "".
-    + iLeft. by iApply compromised_public.
-    + by iLeft.
-  - iMod (db_connect_call with "ready") as "[busy upd]".
-    iModIntro. iSplitL "upd"; first by iRight.
-    by iRight. }
-wp_bind (tag _ _). iApply wp_tag.
-wp_bind (Sess.send _ _).
-iApply (wp_send_msg _ _ _ _
-          (iMsg_tag {[dbN.@"connect" :=
-             (∃ db', MSG (TInt 0) {{ rep_update skI skR dbN ∅ db' db' }};
-                db_st skI skR cs db')%msg]}) _
-          (db_st skI skR cs db) with "[conn upd]").
-{ iSplitL "conn"; first by rewrite /db_st0 /iProto_tag.
-  iSplitR; first by rewrite public_tag public_TInt.
-  iDestruct "upd" as "[#fail|upd]"; first by iLeft.
-  iRight.
-  iApply (iMsg_tag_intro _ _ (lookup_singleton _ _)).
-  rewrite iMsg_exist_eq /=. iExists db.
-  rewrite iMsg_base_eq /=.
-  iSplit; first done.
-  iSplitR "upd"; first by auto.
-  iExact "upd". }
-iIntros "!> conn". wp_pures.
-iApply "post". iModIntro. iExists db. iFrame.
+  - iLeft. by iApply compromised_public.
+  - iModIntro. iFrame. }
+iApply "post". iModIntro. iExists None, db. iFrame.
 Qed.
 
 End Verif.

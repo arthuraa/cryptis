@@ -43,27 +43,25 @@ Lemma wp_client_close skI skR cs :
   {{{ RET #(); db_disconnected skI skR ∗ public (si_key cs) }}}.
 Proof.
 iIntros "#? #ctx !> %Φ client post".
-iDestruct "client" as "(%db & conn & rel & ready & state)".
+iDestruct "client" as "(%odb & %db & conn & rel & token & state)".
 wp_lam; wp_pures.
 wp_bind (tag _ _). iApply wp_tag.
 wp_bind (Sess.send _ _).
 iApply (wp_send_msg _ _ _ _
-          (iMsg_tag (db_arms skI skR cs (db_st skI skR cs) db)) _
-          (<?> MSG (TInt 0) {{ db_client_ready skI skR db ∗
+          (iMsg_tag (db_arms skI skR cs (db_st skI skR cs) odb)) _
+          (<?> MSG (TInt 0) {{ db_main' skI skR db ∗
                                released (si_resp_share cs) }}; END)%proto
-          with "[conn ready]").
+          with "[conn token]").
 { iSplitL "conn".
   { iApply (connected_le with "conn"). iNext.
     iApply iProto_le_of_equiv. exact: db_st_unfold. }
   iSplitR; first by rewrite public_tag public_TInt.
-  iDestruct "ready" as "[#comp|busy]".
-  { iLeft. by iApply compromised_public. }
+  iDestruct "token" as "[#?|token]"; eauto.
   iRight.
   iApply (iMsg_tag_intro _ _ (db_arms_close _ _ _ _ _)).
+  rewrite iMsg_exist_eq /=. iExists db.
   rewrite iMsg_base_eq /=.
-  iSplit; first done.
-  iSplitR "busy"; first by auto.
-  iExact "busy". }
+  iSplit; first done. iFrame; eauto. }
 iIntros "!> conn". wp_pures.
 wp_apply (wp_recv with "conn").
 iIntros "%t' %p' (#p_t' & conn & disj)".

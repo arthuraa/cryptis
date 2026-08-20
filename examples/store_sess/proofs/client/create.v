@@ -48,31 +48,32 @@ Lemma wp_client_create skI skR cs t1 t2 :
       db_mapsto skI skR t1 t2 }}}.
 Proof.
 iIntros "#? #ctx #p_t1 #p_t2 !> %Φ [client free] post".
-iDestruct "client" as "(%db & conn & rel & ready & state)".
+iDestruct "client" as "(%odb & %db & conn & rel & token & state)".
 iMod (DB.db_state_create t1 t2 with "state free")
   as "(%Hfresh & state & mapsto)".
 wp_lam. wp_pures. wp_list. wp_term_of_list.
 wp_bind (tag _ _). iApply wp_tag.
 wp_bind (Sess.send _ _).
 iApply (wp_send_msg _ _ _ _
-          (iMsg_tag (db_arms skI skR cs (db_st skI skR cs) db)) _
-          (db_st skI skR cs (<[t1 := t2]> db))
-          with "[conn]").
+          (iMsg_tag (db_arms skI skR cs (db_st skI skR cs) odb)) _
+          (db_st skI skR cs (Some (<[t1 := t2]> db)))
+          with "[conn token]").
 { iSplitL "conn".
   { iApply (connected_le with "conn"). iNext.
     iApply iProto_le_of_equiv. exact: db_st_unfold. }
   iSplitR.
   { rewrite public_tag public_of_list /=. by iFrame "#". }
+  iDestruct "token" as "[#?|token]"; eauto.
   iRight.
   iApply (iMsg_tag_intro _ _ (db_arms_create _ _ _ _ _)).
-  rewrite iMsg_exist_eq /=. iExists t1. iExists t2.
+  rewrite iMsg_exist_eq /=. iExists db, t1, t2.
   rewrite iMsg_base_eq /=.
   iSplit; first done.
   iSplit; first done.
   by eauto. }
 iIntros "!> conn". wp_pures.
 iApply "post". iFrame "mapsto". iModIntro.
-iExists (<[t1 := t2]> db). iFrame.
+iExists (Some (<[t1 := t2]> db)), _. iFrame. by eauto.
 Qed.
 
 End Verif.

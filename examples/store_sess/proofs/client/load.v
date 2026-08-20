@@ -49,24 +49,25 @@ Lemma wp_client_load skI skR cs t1 t2 :
       (compromised cs ∨ ⌜t2' = t2⌝) }}}.
 Proof.
 iIntros "#? #ctx #p_t1 !> %Φ [client mapsto] post".
-iDestruct "client" as "(%db & conn & rel & ready & state)".
+iDestruct "client" as "(%odb & %db & conn & rel & token & state)".
 iPoseProof (DB.db_state_mapsto with "state mapsto") as "%Hk".
 wp_lam; wp_pures.
 wp_bind (tag _ _). iApply wp_tag.
 wp_bind (Sess.send _ _).
 iApply (wp_send_msg _ _ _ _
-          (iMsg_tag (db_arms skI skR cs (db_st skI skR cs) db)) _
+          (iMsg_tag (db_arms skI skR cs (db_st skI skR cs) odb)) _
           (<? v> MSG v {{ ⌜db !! t1 = Some v⌝ }};
-             db_st skI skR cs db)%proto
-          with "[conn]").
+             db_st skI skR cs (Some db))%proto
+          with "[conn token]").
 { iSplitL "conn".
   { iApply (connected_le with "conn"). iNext.
     iApply iProto_le_of_equiv. exact: db_st_unfold. }
   iSplitR; first by rewrite public_tag.
+  iDestruct "token" as "[#?|token]"; eauto.
   iRight.
   iApply (iMsg_tag_intro _ _ (db_arms_load _ _ _ _ _)).
-  rewrite iMsg_exist_eq /=. iExists t1.
-  rewrite iMsg_base_eq /=.
+  rewrite iMsg_exist_eq /=. iExists db, t1.
+  rewrite iMsg_base_eq /=. iFrame.
   iSplit; first done.
   iSplit; first by eauto.
   auto. }
@@ -79,7 +80,7 @@ iDestruct (connected_public_key_or' with "conn rel disj")
 iDestruct "disj" as "[#comp|car]".
 - iModIntro. iApply "post". iFrame "mapsto p_t2'".
   iSplitL; last by iLeft.
-  iExists db. iFrame "rel ready state".
+  iExists (Some db). iFrame "rel state". iSplit; eauto.
   by iApply (connected_compromised with "conn comp").
 - rewrite iMsg_exist_eq /=. iDestruct "car" as "(%v & car)".
   rewrite iMsg_base_eq /=.
@@ -87,7 +88,8 @@ iDestruct "disj" as "[#comp|car]".
   rewrite later_equivI_1.
   iModIntro. iApply "post". iFrame "mapsto p_t2'".
   iSplitL; last by rewrite Hk in Hv; case: Hv => ->; iRight.
-  iExists db. iFrame "rel ready state".
+  iExists (Some db). iFrame "rel state".
+  iSplit; eauto.
   iApply (connected_le with "conn"). iNext.
   iRewrite -"Heq". iApply iProto_le_refl.
 Qed.

@@ -68,102 +68,111 @@ Notation iProp := (iProp Σ).
 Implicit Types (si : sess_info).
 Implicit Types (cs : GenConn.state).
 Implicit Types (skI skR : sign_key) (kS t k v : term) (ts : list term).
-Implicit Types (db : gmap term term).
+Implicit Types (db : gmap term term) (odb : option (gmap term term)).
 Implicit Types accounts : gmap term server_client_state.
 Implicit Types n : nat.
 Implicit Types b : bool.
 Implicit Types (failed : bool).
 
-Definition db_client_ready skI skR db : iProp :=
+Definition db_main' skI skR db : iProp :=
   rep_main skI skR dbN db ∗ rep_current skI skR dbN ∅ db.
 
-Definition db_server_ready skI skR db : iProp :=
+Definition db_main skI skR db : iProp :=
+  GenConn.failure skI skR ∨ db_main' skI skR db.
+
+Definition db_copy' skI skR db : iProp :=
   rep_copy skI skR dbN ∅ db.
 
-Definition db_client_busy skI skR : iProp :=
-  ∃ db, rep_main skI skR dbN db.
+Definition db_copy skI skR db : iProp :=
+  GenConn.failure skI skR ∨ db_copy' skI skR db.
 
-Definition db_server_busy skI skR : iProp :=
-  ∃ db, rep_copy skI skR dbN ∅ db ∗ rep_current skI skR dbN ∅ db.
+Definition db_client_token skI skR odb db : iProp :=
+  match odb with
+  | Some db' => ⌜db' = db⌝
+  | None => db_main' skI skR db
+  end.
 
-Lemma db_connect_call skI skR db :
-  db_client_ready skI skR db ==∗
-  db_client_busy skI skR ∗ rep_update skI skR dbN ∅ db db.
+Definition db_server_token skI skR odb db : iProp :=
+  match odb with
+  | Some db' => ⌜db' = db⌝ ∗ db_main' skI skR db ∗ db_copy' skI skR db
+  | None => db_copy' skI skR db
+  end.
+
+Lemma db_update db' skI skR db1 db2 :
+  db_main' skI skR db1 -∗
+  db_copy' skI skR db2 ==∗
+  ⌜db1 = db2⌝ ∗
+  db_main' skI skR db' ∗
+  db_copy' skI skR db'.
 Proof.
-iIntros "[main cur]".
-iMod (rep_main_update db with "main cur") as "[main upd]".
-iModIntro. by iFrame.
+iIntros "(main & cur) copy".
+iMod (rep_main_update db' with "main cur") as "[main upd]".
+iMod (rep_copy_update with "copy upd") as "(<- & ? & ?)".
+by iFrame.
 Qed.
 
-Lemma db_connect_resp skI skR db db' :
-  db_server_ready skI skR db -∗
-  rep_update skI skR dbN ∅ db' db' ==∗
-  ⌜db' = db⌝ ∗ db_server_busy skI skR.
+Lemma db_update_token db' skI skR odb db1 db2 :
+  db_client_token skI skR odb db1 -∗
+  db_server_token skI skR odb db2 ==∗
+  ⌜db1 = db2⌝ ∗ db_server_token skI skR (Some db') db'.
 Proof.
-iIntros "copy upd".
-iMod (rep_copy_update with "copy upd") as "(%e & copy & cur)".
-iModIntro. iSplit; first by rewrite e.
-iExists db'. iFrame.
-Qed.
-
-Lemma db_close_resp skI skR db :
-  db_server_busy skI skR -∗
-  db_client_busy skI skR ==∗
-  db_client_ready skI skR db ∗ db_server_ready skI skR db.
-Proof.
-iIntros "(%db0 & copy & cur) (%db1 & main)".
-iPoseProof (rep_main_current with "main cur") as "->".
-iMod (rep_main_update db with "main cur") as "[main upd]".
-iMod (rep_copy_update with "copy upd") as "(_ & copy & cur)".
-iModIntro. rewrite /db_client_ready /db_server_ready. by iFrame.
+iIntros "token1 token2"; case: odb => [db|] /=.
+- iDestruct "token1" as "<-".
+  iDestruct "token2" as "(<- & main & copy)".
+  iMod (db_update db' with "main copy") as "(_ & main & copy)".
+  iModIntro. iSplitR; eauto. by iFrame.
+- iMod (db_update db' with "token1 token2") as "(<- & main & copy)".
+  iModIntro. iSplitR; eauto. by iFrame.
 Qed.
 
 Definition db_arms skI skR si
-    (rec : gmap term term -d> iProto Σ term)
-    db : gmap namespace (iMsg Σ term) :=
+    (rec : option (gmap term term) -d> iProto Σ term)
+    (odb : option (gmap term term)) : gmap namespace (iMsg Σ term) :=
   <[dbN.@"store" :=
-      (∃ k, ∃ v, MSG Spec.of_list [k; v] {{ True }};
-         rec (<[k := v]> db))%msg]>
+      (∃ db k v, MSG Spec.of_list [k; v] {{ db_client_token skI skR odb db }};
+         rec (Some (<[k := v]> db)))%msg]>
   (<[dbN.@"load" :=
-      (∃ k, MSG k {{ ⌜is_Some (db !! k)⌝ }};
-         (<? v> MSG v {{ ⌜db !! k = Some v⌝ }}; rec db)%proto)%msg]>
+      (∃ db k, MSG k {{ db_client_token skI skR odb db ∗ ⌜is_Some (db !! k)⌝ }};
+         (<? v> MSG v {{ ⌜db !! k = Some v⌝ }}; rec (Some db))%proto)%msg]>
   (<[dbN.@"create" :=
-      (∃ k, ∃ v, MSG Spec.of_list [k; v] {{ ⌜db !! k = None⌝ }};
-         rec (<[k := v]> db))%msg]>
+      (∃ db k v, MSG Spec.of_list [k; v] {{ db_client_token skI skR odb db
+                                            ∗ ⌜db !! k = None⌝ }};
+         rec (Some (<[k := v]> db)))%msg]>
   {[dbN.@"close" :=
-      (MSG (TInt 0) {{ db_client_busy skI skR }};
-         (<?> MSG (TInt 0) {{ db_client_ready skI skR db ∗
+      (∃ db, MSG (TInt 0) {{ db_client_token skI skR odb db }};
+         (<?> MSG (TInt 0) {{ db_main' skI skR db ∗
                               released (si_resp_share si) }};
           END)%proto)%msg]})).
 
 Definition db_st_aux skI skR si
-    (rec : gmap term term -d> iProto Σ term) :
-    gmap term term -d> iProto Σ term :=
-  λ db, iProto_tag Send (db_arms skI skR si rec db).
+    (rec : option (gmap term term) -d> iProto Σ term) :
+    option (gmap term term) -d> iProto Σ term :=
+  λ odb, iProto_tag Send (db_arms skI skR si rec odb).
 
 Global Instance db_st_aux_contractive skI skR si :
   Contractive (db_st_aux skI skR si).
 Proof.
-move=> n r1 r2 Hr db.
+move=> n r1 r2 Hr odb.
 rewrite /db_st_aux /iProto_tag /db_arms.
 f_equiv.
 apply iMsg_tag_ne.
 solve_proto_contractive.
 Qed.
 
-Definition db_st skI skR si : gmap term term -d> iProto Σ term :=
+Definition db_st skI skR si : option (gmap term term) -d> iProto Σ term :=
   fixpoint (db_st_aux skI skR si).
 
-Lemma db_st_unfold skI skR si db :
-  db_st skI skR si db ≡
-  iProto_tag Send (db_arms skI skR si (db_st skI skR si) db).
-Proof. exact: (fixpoint_unfold (db_st_aux skI skR si) db). Qed.
+Lemma db_st_unfold skI skR si odb :
+  db_st skI skR si odb ≡
+  iProto_tag Send (db_arms skI skR si (db_st skI skR si) odb).
+Proof. exact: (fixpoint_unfold (db_st_aux skI skR si) odb). Qed.
 
-Lemma db_st_dual_unfold skI skR si db :
-  iProto_dual (db_st skI skR si db)
-  ≡ iProto_tag Recv (iMsg_dual <$> db_arms skI skR si (db_st skI skR si) db).
+Lemma db_st_dual_unfold skI skR si odb :
+  iProto_dual (db_st skI skR si odb)
+  ≡ iProto_tag Recv (iMsg_dual <$> db_arms skI skR si (db_st skI skR si) odb).
 Proof. rewrite db_st_unfold iProto_dual_tag //. Qed.
 
+(* TODO: Remove *)
 Lemma iProto_le_of_equiv (p q : iProto Σ term) : p ≡ q → ⊢ p ⊑ q.
 Proof. intros E. setoid_rewrite E. iApply iProto_le_refl. Qed.
 
@@ -224,35 +233,36 @@ Proof. move=> e; case: (ndot_inj _ _ _ _ e) => _ e2; by discriminate e2. Qed.
 Lemma db_create_close : dbN.@"create" ≠ dbN.@"close".
 Proof. move=> e; case: (ndot_inj _ _ _ _ e) => _ e2; by discriminate e2. Qed.
 
-Lemma db_arms_store skI skR si rec db :
-  db_arms skI skR si rec db !! dbN.@"store" =
-  Some (∃ k, ∃ v, MSG Spec.of_list [k; v] {{ True }};
-          rec (<[k := v]> db))%msg.
+Lemma db_arms_store skI skR si rec odb :
+  db_arms skI skR si rec odb !! dbN.@"store" =
+  Some (∃ db k v, MSG Spec.of_list [k; v] {{ db_client_token skI skR odb db }};
+          rec (Some (<[k := v]> db)))%msg.
 Proof. by rewrite /db_arms lookup_insert. Qed.
 
-Lemma db_arms_load skI skR si rec db :
-  db_arms skI skR si rec db !! dbN.@"load" =
-  Some (∃ k, MSG k {{ ⌜is_Some (db !! k)⌝ }};
-          (<? v> MSG v {{ ⌜db !! k = Some v⌝ }}; rec db)%proto)%msg.
+Lemma db_arms_load skI skR si rec odb :
+  db_arms skI skR si rec odb !! dbN.@"load" =
+  Some (∃ db k, MSG k {{ db_client_token skI skR odb db ∗ ⌜is_Some (db !! k)⌝ }};
+          (<? v> MSG v {{ ⌜db !! k = Some v⌝ }}; rec (Some db))%proto)%msg.
 Proof.
 rewrite /db_arms lookup_insert_ne; last exact: db_store_load.
 by rewrite lookup_insert.
 Qed.
 
-Lemma db_arms_create skI skR si rec db :
-  db_arms skI skR si rec db !! dbN.@"create" =
-  Some (∃ k, ∃ v, MSG Spec.of_list [k; v] {{ ⌜db !! k = None⌝ }};
-          rec (<[k := v]> db))%msg.
+Lemma db_arms_create skI skR si rec odb :
+  db_arms skI skR si rec odb !! dbN.@"create" =
+  Some (∃ db k v, MSG Spec.of_list [k; v] {{ db_client_token skI skR odb db
+                                             ∗ ⌜db !! k = None⌝ }};
+          rec (Some (<[k := v]> db)))%msg.
 Proof.
 rewrite /db_arms lookup_insert_ne; last exact: db_store_create.
 rewrite lookup_insert_ne; last exact: db_load_create.
 by rewrite lookup_insert.
 Qed.
 
-Lemma db_arms_close skI skR si rec db :
-  db_arms skI skR si rec db !! dbN.@"close" =
-  Some (MSG (TInt 0) {{ db_client_busy skI skR }};
-          (<?> MSG (TInt 0) {{ db_client_ready skI skR db ∗
+Lemma db_arms_close skI skR si rec odb :
+  db_arms skI skR si rec odb !! dbN.@"close" =
+  Some (∃ db, MSG (TInt 0) {{ db_client_token skI skR odb db }};
+          (<?> MSG (TInt 0) {{ db_main' skI skR db ∗
                                released (si_resp_share si) }};
            END)%proto)%msg.
 Proof.
@@ -262,22 +272,18 @@ rewrite lookup_insert_ne; last exact: db_create_close.
 by rewrite lookup_singleton.
 Qed.
 
-Lemma db_arms_dom skI skR si rec db :
-  dom (db_arms skI skR si rec db) =
+Lemma db_arms_dom skI skR si rec odb :
+  dom (db_arms skI skR si rec odb) =
   {[dbN.@"store"; dbN.@"load"; dbN.@"create"; dbN.@"close"]}.
 Proof. rewrite /db_arms !dom_insert_L dom_empty_L. set_solver. Qed.
 
-Definition db_st0 skI skR si : iProto Σ term :=
-  iProto_tag Send
-    {[dbN.@"connect" :=
-        (∃ db, MSG (TInt 0) {{ rep_update skI skR dbN ∅ db db }};
-           db_st skI skR si db)%msg]}.
-
+(* TODO: This module should not set up the fields of this record directly. The
+   sess module should expose a more convenient wrapper. *)
 Definition store_params : GenConn.params Σ := {|
   GenConn.init_pred := λ skI skR si rl,
     sess_own skI skR si rl
-      (if rl is Init then db_st0 skI skR si
-       else iProto_dual (db_st0 skI skR si));
+      (if rl is Init then db_st skI skR si None
+       else iProto_dual (db_st skI skR si None));
   GenConn.chan_inv := sess_ctx;
 |}%I.
 
@@ -292,17 +298,17 @@ Lemma store_ctx_alloc E :
 Proof. exact: GenConn.ctx_alloc. Qed.
 
 Definition db_disconnected skI skR : iProp := ∃ db,
-  (GenConn.failure skI skR ∨ db_client_ready skI skR db) ∗
+  db_main skI skR db ∗
   DB.db_state skI skR dbN db.
 
-Definition db_connected' skI skR cs db : iProp :=
-  (compromised cs ∨ db_client_busy skI skR) ∗
+Definition db_connected' skI skR cs odb db : iProp :=
+  (public (si_key cs) ∨ db_client_token skI skR odb db) ∗
   DB.db_state skI skR dbN db.
 
-Definition db_connected skI skR cs : iProp := ∃ db,
-  connected skI skR Init cs (db_st skI skR cs db) ∗
+Definition db_connected skI skR cs : iProp := ∃ odb db,
+  connected skI skR Init cs (db_st skI skR cs odb) ∗
   release_token (si_init_share cs) ∗
-  db_connected' skI skR cs db.
+  db_connected' skI skR cs odb db.
 
 Lemma db_connected_ok skI skR cs :
   db_connected skI skR cs -∗
@@ -310,7 +316,7 @@ Lemma db_connected_ok skI skR cs :
   secret skR -∗
   ◇ session_ok cs.
 Proof.
-iIntros "(%db & (gc & _) & _ & _) s1 s2".
+iIntros "(%odb & %db & (gc & _) & _ & _ & _) s1 s2".
 by iApply (GenConn.connected_ok with "gc s1 s2").
 Qed.
 
@@ -320,7 +326,7 @@ Lemma db_connected_ok_compromised skI skR cs :
   compromised cs -∗
   ▷ False.
 Proof.
-iIntros "(%db & _ & rel & _) ok comp".
+iIntros "(%odb & %db & _ & rel & _) ok comp".
 iApply (session_ok_compromised Init with "ok comp rel").
 Qed.
 
@@ -369,20 +375,20 @@ case: (decide (t1' = t1)) => [-> {t1'} | ne].
 - by rewrite lookup_insert_ne //.
 Qed.
 
-Definition server_db_connected' skI skR cs vdb db : iProp :=
+Definition server_db_connected' skI skR cs vdb odb db : iProp :=
   public_db db ∗
   AList.is_alist vdb (repr <$> db) ∗
-  (compromised cs ∨ db_server_busy skI skR).
+  (public (si_key cs) ∨ db_server_token skI skR odb db).
 
-Definition server_db_connected skI skR cs vdb : iProp := ∃ db,
-  connected skI skR Resp cs (iProto_dual (db_st skI skR cs db)) ∗
+Definition server_db_connected skI skR cs vdb : iProp := ∃ odb db,
+  connected skI skR Resp cs (iProto_dual (db_st skI skR cs odb)) ∗
   release_token (si_resp_share cs) ∗
-  server_db_connected' skI skR cs vdb db.
+  server_db_connected' skI skR cs vdb odb db.
 
 Definition server_db_disconnected skI skR vdb : iProp := ∃ db,
   public_db db ∗
   AList.is_alist vdb (repr <$> db) ∗
-  (GenConn.failure skI skR ∨ db_server_ready skI skR db).
+  db_copy skI skR db.
 
 Lemma server_db_alloc skI skR vdb E :
   ↑dbN.@"server".@(skI : term) ⊆ E →
@@ -398,13 +404,13 @@ iFrame. by rewrite /public_db big_sepM_empty.
 Qed.
 
 Definition server_handler skI skR cs vdb (h : handler) : iProp :=
-  □ ∀ db (t : term) p,
+  □ ∀ odb db (t : term) p,
     {{{ connected skI skR Resp cs p ∗
         release_token (si_resp_share cs) ∗
-        server_db_connected' skI skR cs vdb db ∗
+        server_db_connected' skI skR cs vdb odb db ∗
         public t ∗
         (public (si_key cs) ∨
-           match (iMsg_dual <$> db_arms skI skR cs (db_st skI skR cs) db)
+           match (iMsg_dual <$> db_arms skI skR cs (db_st skI skR cs) odb)
                    !! handler_tag h with
            | Some m => iMsg_car m t (Next p)
            | None => False
