@@ -160,7 +160,7 @@ iDestruct "disj" as "[#pub|[token disj]]".
     { iApply (connected_le with "conn"). iNext.
       iRewrite "HeqD". iRewrite -"Heq1".
       rewrite iMsg_exist_eq iMsg_base_eq.
-      iApply iProto_le_of_equiv. exact: iProto_dual_message. }
+      by rewrite iProto_dual_message. }
     iSplit => //.
     iRight. iExists (db_st skI skR cs (Some db)).
     iSplit; last by auto.
@@ -292,8 +292,7 @@ iDestruct (or_sep1 with "token disj") as "[#pub|[token car]]".
   { iSplitL "conn".
     { iApply (connected_le with "conn"). iNext.
       iRewrite "HeqD". iRewrite -"Heq1".
-      rewrite iMsg_base_eq.
-      iApply iProto_le_of_equiv. exact: iProto_dual_message. }
+      by rewrite iMsg_base_eq iProto_dual_message. }
     iSplit; first by rewrite public_TInt.
     iRight. iExists END.
     iSplit; last by auto.
@@ -307,20 +306,6 @@ iDestruct (or_sep1 with "token disj") as "[#pub|[token car]]".
   iApply ("post" $! false). iModIntro. iExists db.
   iFrame "vdb p_db". by iRight.
 Qed.
-
-Lemma wp_handle' N f φ :
-  (∀ h, ⌜h = Handler N f⌝ -∗ φ (repr h)) -∗
-  WP Sess.handle (Tag N) f {{ φ }}.
-Proof. exact: wp_handle. Qed.
-
-Lemma wp_select' skI skR rl cs ms (handlers : list handler) (V : iProp) φ :
-  dom ms ⊆ list_to_set (map handler_tag handlers) →
-  connected skI skR rl cs (<?> iMsg_tag ms) -∗
-  V -∗
-  (V -∗ select_vc skI skR rl cs ms handlers φ) -∗
-  (∀ p, connected skI skR rl cs p -∗ public (si_key cs) -∗ V -∗ φ NONEV) -∗
-  WP Sess.select (repr cs) (repr handlers) {{ φ }}.
-Proof. exact: wp_select. Qed.
 
 Lemma wp_server_conn_handler skI skR cs vdb vlock γlock db :
   cryptis_ctx -∗
@@ -346,13 +331,13 @@ iAssert (|={⊤}=> server_db_connected skI skR cs vdb)%I
 { iModIntro. iExists None, db. iFrame; eauto. }
 wp_pures.
 
-wp_bind (Sess.handle _ _). iApply wp_handle'.
+wp_bind (Sess.handle _ _). iApply wp_handle.
 iIntros "%h_cl %e_cl". subst h_cl. wp_list.
-wp_pures. wp_bind (Sess.handle _ _). iApply wp_handle'.
+wp_pures. wp_bind (Sess.handle _ _). iApply wp_handle.
 iIntros "%h_cr %e_cr". subst h_cr. wp_list.
-wp_pures. wp_bind (Sess.handle _ _). iApply wp_handle'.
+wp_pures. wp_bind (Sess.handle _ _). iApply wp_handle.
 iIntros "%h_ld %e_ld". subst h_ld. wp_list.
-wp_pures. wp_bind (Sess.handle _ _). iApply wp_handle'.
+wp_pures. wp_bind (Sess.handle _ _). iApply wp_handle.
 iIntros "%h_st %e_st". subst h_st. wp_list.
 wp_pures.
 
@@ -388,7 +373,7 @@ iApply (wp_wand _ _ _ φ with "[conn rel sdc']"); last first.
     + by iApply ("IH" with "locked post Hb").
     + wp_apply (release_spec with "[$lock $locked $Hb]").
       iIntros "_". by iApply "post". }
-iApply (@wp_select' skI skR Resp cs
+iApply (@wp_select _ _ _ _ _ skI skR Resp cs
           (iMsg_dual <$> db_arms skI skR cs (db_st skI skR cs) odb)
           handlers
           (release_token (si_resp_share cs) ∗
@@ -396,8 +381,7 @@ iApply (@wp_select' skI skR Resp cs
           φ
          with "[conn] [rel sdc'] [] []").
 - rewrite dom_fmap_L db_arms_dom /=. set_solver.
-- iApply (connected_le with "conn"). iNext.
-  iApply iProto_le_of_equiv. exact: db_st_dual_unfold.
+- iApply (connected_le with "conn"). iNext. by rewrite db_st_dual_unfold.
 - by iFrame.
 - iIntros "[rel sdc']".
   rewrite /select_vc /=.
@@ -505,38 +489,6 @@ case accounts_skI: (accounts !! Spec.pkey skI) => [scs|]; wp_pures.
     iExists _. iSplit => //.
 Qed.
 
-(* TODO: This should follow from Sess.wp_confirm *)
-Lemma wp_confirm' (P : iProp) c skI skR ga :
-  channel c -∗
-  cryptis_ctx -∗
-  store_ctx -∗
-  {{{ public ga ∗ minted skI ∗ minted skR ∗
-      (GenConn.failure skI skR ∨ P) }}}
-    Sess.confirm c skR (Tag dbN) (ga, Spec.pkey skI)%V
-  {{{ cs, RET (repr cs);
-      connected skI skR Resp cs (iProto_dual (db_st skI skR cs None)) ∗
-      release_token (si_resp_share cs) ∗
-      (public (si_key cs) ∨ P) }}}.
-Proof.
-iIntros "#? #ctx1 #?" (Φ) "!> (#p_ga & #m_skI & #m_skR & P) post".
-wp_lam; wp_pures. iApply wp_fupd.
-wp_apply (GenConn.wp_confirm P with "[] [$P]").
-- eauto.
-- eauto.
-- do 3!iSplit => //.
-  iIntros "!> %b tok".
-  iMod (iProto_init (db_st skI skR _ None)) as (γl γr) "(pctx & ownI & ownR)".
-  iMod (term_meta_set (sessN.@"names") (γl, γr) with "tok") as "#meta".
-  { solve_ndisj. }
-  iModIntro. iSplitL "ownI".
-  { iExists (γl, γr). iFrame. by eauto. }
-  iSplitL "ownR".
-  { iExists (γl, γr). iFrame. by eauto. }
-  iExists (γl, γr). iFrame. by eauto.
-iIntros "%cs (conn & dis & proto & rel & token)".
-iApply "post". rewrite /connected. by iFrame.
-Qed.
-
 Lemma wp_server_listen c ss :
   {{{ cryptis_ctx ∗ channel c ∗ store_ctx ∗ server ss }}}
     Server.listen c (repr ss)
@@ -557,7 +509,7 @@ iDestruct "dis" as "(%db & #p_db & vdb & ready)".
 iAssert (minted (ss_key ss)) as "#?".
 { by iDestruct "server" as "(% & % & ? & _)". }
 wp_pures.
-wp_apply (wp_confirm' (db_copy' skA (ss_key ss) db)
+wp_apply (Sess.wp_confirm (db_copy' skA (ss_key ss) db)
            with "chan_c cctx ctx [ready]").
 { do 3?(iSplit; [done|]). iExact "ready". }
 iIntros "%cs (conn & rel & ready)". wp_pures.

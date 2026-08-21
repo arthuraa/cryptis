@@ -55,8 +55,7 @@ iApply (wp_send_msg _ _ _ _
           (db_st skI skR cs (Some (<[t1 := t2']> db)))
           with "[conn token]").
 { iSplitL "conn".
-  { iApply (connected_le with "conn"). iNext.
-    iApply iProto_le_of_equiv. exact: db_st_unfold. }
+  { iApply (connected_le with "conn"). iNext. by rewrite db_st_unfold. }
   iSplitR.
   { rewrite public_tag public_of_list /=. by iFrame "#". }
   iDestruct "token" as "[#?|token]"; eauto.

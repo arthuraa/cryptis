@@ -50,7 +50,7 @@ Definition responder_recv42 : val :=
 Lemma wp_initiator_send42 c skI skR N :
   channel c -∗
   cryptis_ctx -∗
-  Sess.ctx N send42_proto -∗
+  Sess.ctx N (λ _ _ _, send42_proto) -∗
   minted skI -∗
   minted skR -∗
   {{{ GenConn.failure skI skR ∨ True }}}
@@ -84,7 +84,7 @@ Qed.
 Lemma wp_responder_recv42 c skR N :
   channel c -∗
   cryptis_ctx -∗
-  Sess.ctx N send42_proto -∗
+  Sess.ctx N (λ _ _ _, send42_proto) -∗
   minted skR -∗
   {{{ True }}}
     responder_recv42 c skR (Tag N)
@@ -137,7 +137,7 @@ Definition trusted_responder_recv42 : val :=
 Lemma trusted_wp_initiator_send42 c skI skR N :
   channel c -∗
   cryptis_ctx -∗
-  Sess.ctx N trusted_send42_proto -∗
+  Sess.ctx N (λ _ _ _, trusted_send42_proto) -∗
   minted skI -∗
   minted skR -∗
   □ (public skI → ▷ False) -∗
@@ -159,7 +159,7 @@ Qed.
 Lemma trusted_wp_responder_recv42 c skR N :
   channel c -∗
   cryptis_ctx -∗
-  Sess.ctx N trusted_send42_proto -∗
+  Sess.ctx N (λ _ _ _, trusted_send42_proto) -∗
   minted skR -∗
   □ (public skR → ▷ False) -∗
   □ (∀ skI, minted skI -∗ □ (public skI → ▷ False)) -∗
@@ -223,7 +223,7 @@ Definition responder_vote : val :=
 Lemma wp_initiator_vote_yes c skI skR N :
   channel c -∗
   cryptis_ctx -∗
-  Sess.ctx N vote_proto -∗
+  Sess.ctx N (λ _ _ _, vote_proto) -∗
   minted skI -∗
   minted skR -∗
   {{{ GenConn.failure skI skR ∨ True }}}
@@ -245,7 +245,7 @@ Qed.
 Lemma wp_responder_vote c skR N :
   channel c -∗
   cryptis_ctx -∗
-  Sess.ctx N vote_proto -∗
+  Sess.ctx N (λ _ _ _, vote_proto) -∗
   minted skR -∗
   {{{ True }}}
     responder_vote c skR (Tag N)
@@ -327,7 +327,7 @@ Definition db_server : val :=
        ("cs", #false)).
 
 Lemma wp_db_client_store c skI skR N k v :
-  channel c -∗ cryptis_ctx -∗ Sess.ctx N db_proto -∗
+  channel c -∗ cryptis_ctx -∗ Sess.ctx N (λ _ _ _, db_proto) -∗
   minted skI -∗ minted skR -∗
   public k -∗ public v -∗
   {{{ GenConn.failure skI skR ∨ True }}}
@@ -349,7 +349,7 @@ Proof.
 Qed.
 
 Lemma wp_db_client_load c skI skR N k :
-  channel c -∗ cryptis_ctx -∗ Sess.ctx N db_proto -∗
+  channel c -∗ cryptis_ctx -∗ Sess.ctx N (λ _ _ _, db_proto) -∗
   minted skI -∗ minted skR -∗ public k -∗
   {{{ GenConn.failure skI skR ∨ True }}}
     db_client_load c skI (Spec.pkey skR) (Tag N) k
@@ -369,7 +369,7 @@ Proof.
 Qed.
 
 Lemma wp_db_server c skR N vans :
-  channel c -∗ cryptis_ctx -∗ Sess.ctx N db_proto -∗
+  channel c -∗ cryptis_ctx -∗ Sess.ctx N (λ _ _ _, db_proto) -∗
   minted skR -∗ public vans -∗
   {{{ True }}}
     db_server c skR (Tag N) vans

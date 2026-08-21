@@ -91,9 +91,12 @@ Definition sess_ctx skI skR si tsI tsR : iProp :=
     session_names si γs ∗
     iProto_ctx γs.1 γs.2 tsI tsR.
 
-Definition sess_params p := {|
+Definition sess_params P := {|
   GenConn.init_pred := λ skI skR si rl,
-    sess_own skI skR si rl (if rl is Init then p else iProto_dual p);
+    sess_own skI skR si rl (
+        if rl is Init then P skI skR si
+        else iProto_dual (P skI skR si)
+    );
   GenConn.chan_inv := sess_ctx;
 |}%I.
 
@@ -249,14 +252,14 @@ Global Instance connected_ne skI skR rl cs n :
   Proper ((≡{n}≡) ==> (≡{n}≡)) (connected skI skR rl cs).
 Proof. by move=> p1 p2 e; rewrite /connected e. Qed.
 
-Definition ctx N p := GenConn.ctx N (sess_params p).
+Definition ctx N P := GenConn.ctx N (sess_params P).
 
-Lemma ctx_alloc N p E :
+Lemma ctx_alloc N P E :
   ↑N ⊆ E →
   GenConn.base_ctx -∗
   iso_dh_ctx -∗
   iso_dh_token E ==∗
-  ctx N p ∗ iso_dh_token (E ∖ ↑N).
+  ctx N P ∗ iso_dh_token (E ∖ ↑N).
 Proof. exact: GenConn.ctx_alloc. Qed.
 
 End Verif.

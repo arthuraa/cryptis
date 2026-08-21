@@ -54,7 +54,7 @@ iApply (wp_send_msg _ _ _ _
           with "[conn token]").
 { iSplitL "conn".
   { iApply (connected_le with "conn"). iNext.
-    iApply iProto_le_of_equiv. exact: db_st_unfold. }
+    by rewrite db_st_unfold. }
   iSplitR; first by rewrite public_tag public_TInt.
   iDestruct "token" as "[#?|token]"; eauto.
   iRight.

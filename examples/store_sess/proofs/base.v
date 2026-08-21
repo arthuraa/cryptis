@@ -9,10 +9,7 @@ From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
 From cryptis Require Import lib term gmeta nown.
 From cryptis Require Import cryptis replica primitives tactics role.
-From cryptis.examples Require Import iso_dh gen_conn alist.
-From cryptis.examples.sess Require impl.
-From cryptis.examples.sess.proofs Require Import base.
-From cryptis.examples.sess Require Import proofs tag.
+From cryptis.examples Require Import iso_dh gen_conn alist sess.
 From cryptis.examples.store Require Import db.
 From actris.channel Require Import proto_model proto.
 
@@ -62,7 +59,7 @@ Proof. solve_inG. Qed.
 Section Defs.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ,
-          !sessG Σ, !storeGS Σ, !tlockG Σ}.
+          !Sess.sessG Σ, !storeGS Σ, !tlockG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types (si : sess_info).
@@ -172,50 +169,46 @@ Lemma db_st_dual_unfold skI skR si odb :
   ≡ iProto_tag Recv (iMsg_dual <$> db_arms skI skR si (db_st skI skR si) odb).
 Proof. rewrite db_st_unfold iProto_dual_tag //. Qed.
 
-(* TODO: Remove *)
-Lemma iProto_le_of_equiv (p q : iProto Σ term) : p ≡ q → ⊢ p ⊑ q.
-Proof. intros E. setoid_rewrite E. iApply iProto_le_refl. Qed.
-
 Lemma connected_public_key_or' skI skR rl cs p P :
-  connected skI skR rl cs p -∗
+  Sess.connected skI skR rl cs p -∗
   release_token (si_share_of rl cs) -∗
   (public (si_key cs) ∨ P) -∗
-  connected skI skR rl cs p ∗
+  Sess.connected skI skR rl cs p ∗
   release_token (si_share_of rl cs) ∗
   ◇ (compromised cs ∨ P).
 Proof.
-rewrite /connected. iIntros "[gc own] rel disj".
+rewrite /Sess.connected. iIntros "[gc own] rel disj".
 iDestruct (GenConn.connected_public_key_or with "gc rel disj")
   as "(gc & rel & disj)".
 by iFrame.
 Qed.
 
 Lemma connected_compromised skI skR rl cs p q :
-  connected skI skR rl cs p -∗
+  Sess.connected skI skR rl cs p -∗
   compromised cs -∗
-  connected skI skR rl cs q.
+  Sess.connected skI skR rl cs q.
 Proof.
-rewrite /connected. iIntros "[gc _] #comp". iFrame.
+rewrite /Sess.connected. iIntros "[gc _] #comp". iFrame.
 iLeft. by iApply compromised_public.
 Qed.
 
 Lemma connected_failure' skI skR rl cs p :
-  connected skI skR rl cs p -∗
+  Sess.connected skI skR rl cs p -∗
   compromised cs -∗
   GenConn.failure skI skR.
 Proof.
-rewrite /connected. iIntros "[gc _] #comp".
+rewrite /Sess.connected. iIntros "[gc _] #comp".
 iPoseProof (GenConn.connected_keyE with "gc") as "(-> & -> & _)".
 by iApply GenConn.session_failed_failure.
 Qed.
 
 Lemma connected_released skI skR rl cs p :
-  connected skI skR rl cs p -∗
+  Sess.connected skI skR rl cs p -∗
   released (si_init_share cs) -∗
   released (si_resp_share cs) -∗
   public (si_key cs).
 Proof.
-rewrite /connected. iIntros "[gc _] #r1 #r2".
+rewrite /Sess.connected. iIntros "[gc _] #r1 #r2".
 iPoseProof (GenConn.connected_released_session with "gc") as "#H".
 iApply "H". iNext. by iSplit.
 Qed.
@@ -277,17 +270,8 @@ Lemma db_arms_dom skI skR si rec odb :
   {[dbN.@"store"; dbN.@"load"; dbN.@"create"; dbN.@"close"]}.
 Proof. rewrite /db_arms !dom_insert_L dom_empty_L. set_solver. Qed.
 
-(* TODO: This module should not set up the fields of this record directly. The
-   sess module should expose a more convenient wrapper. *)
-Definition store_params : GenConn.params Σ := {|
-  GenConn.init_pred := λ skI skR si rl,
-    sess_own skI skR si rl
-      (if rl is Init then db_st skI skR si None
-       else iProto_dual (db_st skI skR si None));
-  GenConn.chan_inv := sess_ctx;
-|}%I.
-
-Definition store_ctx : iProp := GenConn.ctx dbN store_params.
+Definition store_ctx : iProp :=
+  Sess.ctx dbN (λ skI skR si, db_st skI skR si None).
 
 Lemma store_ctx_alloc E :
   ↑dbN ⊆ E →
@@ -306,7 +290,7 @@ Definition db_connected' skI skR cs odb db : iProp :=
   DB.db_state skI skR dbN db.
 
 Definition db_connected skI skR cs : iProp := ∃ odb db,
-  connected skI skR Init cs (db_st skI skR cs odb) ∗
+  Sess.connected skI skR Init cs (db_st skI skR cs odb) ∗
   release_token (si_init_share cs) ∗
   db_connected' skI skR cs odb db.
 
@@ -381,7 +365,7 @@ Definition server_db_connected' skI skR cs vdb odb db : iProp :=
   (public (si_key cs) ∨ db_server_token skI skR odb db).
 
 Definition server_db_connected skI skR cs vdb : iProp := ∃ odb db,
-  connected skI skR Resp cs (iProto_dual (db_st skI skR cs odb)) ∗
+  Sess.connected skI skR Resp cs (iProto_dual (db_st skI skR cs odb)) ∗
   release_token (si_resp_share cs) ∗
   server_db_connected' skI skR cs vdb odb db.
 
@@ -405,7 +389,7 @@ Qed.
 
 Definition server_handler skI skR cs vdb (h : handler) : iProp :=
   □ ∀ odb db (t : term) p,
-    {{{ connected skI skR Resp cs p ∗
+    {{{ Sess.connected skI skR Resp cs p ∗
         release_token (si_resp_share cs) ∗
         server_db_connected' skI skR cs vdb odb db ∗
         public t ∗
