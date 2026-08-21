@@ -36,7 +36,7 @@ Lemma wp_connect P N p c skI skR :
   {{{ GenConn.failure skI skR ∨ P }}}
     impl.connect c skI (Spec.pkey skR) (Tag N)
   {{{ cs, RET (repr cs);
-      connected skI skR Init cs p ∗
+      connected skI skR Init cs (p skI skR cs) ∗
       release_token (si_init_share cs) ∗
       (public (si_key cs) ∨ P) }}}.
 Proof.
@@ -68,7 +68,8 @@ Lemma wp_confirm P N p c skI skR ga :
       (GenConn.failure skI skR ∨ P) }}}
     impl.confirm c skR (Tag N) (ga, Spec.pkey skI)%V
   {{{ cs, RET (repr cs);
-      connected skI skR Resp cs (iProto_dual p) ∗
+      connected skI skR Resp cs (iProto_dual (p skI skR cs)) ∗
+      release_token (si_resp_share cs) ∗
       (public (si_key cs) ∨ P) }}}.
 Proof.
 iIntros "#? #ctx1 #? !> %Φ (#p_ga & #m_skI & #m_skR & P) post".
@@ -78,7 +79,8 @@ wp_apply (GenConn.wp_confirm P with "[] [$P]").
 - eauto.
 - do 3!iSplit => //.
   iIntros "!> %b tok".
-  iMod (iProto_init p) as (γl γr) "(ctx & ownI & ownR)".
+  set si := SessInfo _ _ _ _ _.
+  iMod (iProto_init (p skI skR si)) as (γl γr) "(ctx & ownI & ownR)".
   iMod (term_meta_set (sessN.@"names") (γl, γr) with "tok") as "#meta".
   { solve_ndisj. }
   iModIntro. iSplitL "ownI".

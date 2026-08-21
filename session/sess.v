@@ -1,5 +1,6 @@
 From cryptis.examples Require Import iso_dh.
 From cryptis.sess Require Import impl proofs.
+From cryptis.sess Require Export tag.
 
 Module Sess.
 
