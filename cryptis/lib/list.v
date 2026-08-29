@@ -1,5 +1,5 @@
+From stdpp Require Import sorting list.
 From iris.heap_lang Require Import lang notation proofmode.
-From mathcomp Require ssrbool order path.
 From cryptis Require Export mathcomp_compat.
 From cryptis Require Import lib.repr.
 

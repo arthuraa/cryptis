@@ -116,10 +116,10 @@ Definition hl_factors : val := λ: "pt",
     if: Fst "pt" = #TMul_tag then Snd "pt"
     else "pt" :: NILV.
 
-Definition hl_exps : val := λ: "pt",
+Definition hl_expo : val := λ: "pt",
     if: Fst "pt" = #TOp2_tag then
-        if: Fst (Fst (Snd "pt")) = #TExp_tag then hl_factors (Snd (Snd "pt"))
-        else NILV
+        if: Fst (Fst (Snd "pt")) = #TExp_tag then Snd (Snd "pt")
+        else
     else NILV.
 
 Definition hl_inv : val := λ: "pt",
@@ -135,9 +135,7 @@ Definition hl_insert_exp : val := λ: "pt" "pts",
 
 Definition hl_cancel_invs : val := λ: "exps", foldr_list hl_insert_exp [] "exps".
 
-(* Collapse a sorted+canceled factor list into a product term:
-   [] ↦ PTMul [] (identity), [t] ↦ t, otherwise PTMul list. *)
-Definition hl_mk_mul : val := λ: "c",
+Definition hl_mul_aux : val := λ: "c",
     match: "c" with
       NONE => (#TMul_tag, NILV)
     | SOME "x" =>
@@ -150,8 +148,8 @@ Definition hl_mk_mul : val := λ: "c",
 Definition hl_exp : val := λ: "b" "e",
     let: "c" :=
         insertion_sort leq_term
-          (hl_cancel_invs (append_lists (hl_exps "b") (hl_factors "e"))) in
-    let: "e'" := hl_mk_mul "c" in
+          (hl_cancel_invs (append_lists (hl_factors (hl_expo "b")) (hl_factors "e"))) in
+    let: "e'" := hl_mul_aux "c" in
     if: eq_term "e'" (#TMul_tag, NILV) then hl_base "b"
     else (#TOp2_tag, (#TExp_tag, hl_base "b", "e'")).
 
@@ -162,7 +160,7 @@ Definition texp : val := λ: "base" "exp",
    inverses, sort, and collapse — mirrors [hl_exp] but without an exponent
    base. *)
 Definition hl_mul : val := λ: "t1" "t2",
-    hl_mk_mul (insertion_sort leq_term
+    hl_mul_aux (insertion_sort leq_term
                  (hl_cancel_invs (append_lists (hl_factors "t1") (hl_factors "t2")))).
 
 (* Distributing inverse: invert each factor with [hl_inv], then re-fold with the
@@ -393,14 +391,14 @@ case: pt => [o|o t|o t1 t2|ts]; iIntros "HΨ"; wp_lam; wp_pures.
 - rewrite -!repr_list_val; by iApply "HΨ".
 Qed.
 
-Lemma twp_hl_exps E (pt : PreTerm.pre_term) Ψ :
-    Ψ (repr (PreTerm.exps pt)) ⊢
-    WP hl_exps (repr pt) @ E [{ Ψ }].
+Lemma twp_hl_expo E (pt : PreTerm.pre_term) Ψ :
+    Ψ (repr (PreTerm.expo pt)) ⊢
+    WP hl_expo (repr pt) @ E [{ Ψ }].
 Proof.
-rewrite /PreTerm.exps /PreTerm.expo.
-case: pt => [o|o t|o t1 t2|ts]; iIntros "HΨ"; wp_lam; wp_pures;
-  try (by iEval (rewrite [PreTerm.factors _]/= repr_list_unseal /=) in "HΨ";
-       iApply "HΨ").
+rewrite /PreTerm.expo.
+case: pt => [o|o t|o t1 t2|ts]; iIntros "HΨ"; wp_lam; wp_pures.
+- rewrite /= repr_list_unseal /=.
+       iApply "HΨ".
 case: o => /=; wp_pures;
   try (by iEval (rewrite repr_list_unseal /=) in "HΨ"; iApply "HΨ").
 by wp_apply twp_hl_factors; iApply "HΨ".

@@ -11,7 +11,6 @@
 
 From cryptis Require Import lib.
 From mathcomp Require Import ssreflect.
-From mathcomp Require all_order path.
 From stdpp Require Import sorting list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis.lib Require Import list_sort sms.
@@ -151,14 +150,7 @@ End Proofs.
 
 Section Ordered.
 
-#[warnings="-ambiguous-paths"]
-Import all_order path Order.POrderTheory Order.TotalTheory ssrbool.
-Open Scope order_scope.
-
 Context `{!heapGS Σ}.
-Context {d : Order.disp_t} {A : orderType d} `{!Repr A, !EqDecision A}.
-Context (i : A -> A) (eqv invv lev : val).
-
 Hypothesis eqvP : forall (x y : A) E Ψ,
   Ψ #(bool_decide (x = y)) ⊢ WP eqv (repr x) (repr y) @ E [{ Ψ }].
 Hypothesis invvP : forall (x : A) E Ψ,

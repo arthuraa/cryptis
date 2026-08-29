@@ -20,7 +20,8 @@ Implicit Types (t k : term) (ts : list term).
 
 Definition tsize t := PreTerm.tsize (unfold_term t).
 
-Lemma tsize_gt0 t : 0 < tsize t. Proof. exact: PreTerm.tsize_gt0. Qed.
+Lemma tsize_gt0 t : 0 < tsize t.
+Proof. rewrite /tsize; case: unfold_term => /=; lia. Qed.
 
 Lemma tsize_eq t :
   tsize t =
@@ -35,103 +36,198 @@ Lemma tsize_eq t :
   end.
 Proof. by case: t. Qed.
 
-Lemma tsize_TInv t : negb (is_mul t) -> negb (is_inv t) -> tsize (TInv t) = S (tsize t).
+Lemma tsize_TInv t :
+  negb (is_mul t) → negb (is_inv t) → tsize (TInv t) = S (tsize t).
 Proof.
-move => Nm Ni.
-rewrite /tsize (unfold_TInv_Nmul Nm) PreTerm.tsize_inv // -is_inv_unfold //.
+rewrite /tsize is_mul_unfold is_inv_unfold unfold_TInv => Nm Ni.
+rewrite PreTerm.inv_Nmul //.
+by case: unfold_term Nm Ni => //=; case.
 Qed.
 
 Lemma tsize_TExp t1 t2 :
-  negb (is_exp t1) -> negb (is_mul t2) -> tsize (TExp t1 t2) = S (tsize t1 + tsize t2).
+  negb (is_exp t1) → t2 ≠ TMulN [] →
+  tsize (TExp t1 t2) = S (tsize t1 + tsize t2).
 Proof.
-move => Nx1 Nm2.
-rewrite is_exp_unfold in Nx1; rewrite is_mul_unfold in Nm2.
-have neq : unfold_term t2 ≠ PreTerm.PTMul [].
-  by move=> e; move: Nm2; rewrite e.
-by rewrite /tsize unfold_TExp (PreTerm.tsize_exp_Nexp _ _ Nx1 (wf_unfold_term t2) neq).
+rewrite /tsize is_exp_unfold unfold_TExp /PreTerm.exp=> Nx1 N12.
+rewrite PreTerm.expo_expN // PreTerm.mul_unit_l PreTerm.mul1; last first.
+  exact: wf_unfold_term.
+rewrite PreTerm.base_expN // /PreTerm.exp_aux bool_decide_eq_false_2 //.
+move=> e; apply: N12; apply: (inj unfold_term).
+by rewrite unfold_TMulN.
 Qed.
 
-Definition tsizeE := (tsize_TInv, tsize_TExp, tsize_eq).
-
-Lemma tsize_lt_TInv {t} : negb (is_mul t) -> tsize (TInv t) <= S (tsize t).
+Lemma unfold_TMulN_strong ts :
+  invs_canceled ts →
+  length ts ≠ 1 →
+  ∃ ts' : list _,
+    unfold_term (TMulN ts) = PreTerm.PTMul ts' ∧
+    ts' ≡ₚ unfold_term <$> ts.
 Proof.
-move => Nm; have NmT := Nmul_TInv Nm.
-case: (decide (Is_true (is_inv t))) => [inv_t|ninv_t].
-- have Ni : negb (is_inv (TInv t)) by rewrite is_inv_TInv // negb_involutive.
-  rewrite -{2}[t]TInvK (tsize_TInv _ NmT Ni); lia.
-- rewrite (tsize_TInv _ Nm); first lia.
-  by apply/negb_True.
+move=> ic tsN1; rewrite unfold_TMulN.
+pose (ts' := PreTerm.normalize_factors (unfold_term <$> ts)).
+have e: ts' ≡ₚ unfold_term <$> ts.
+  rewrite /ts' /PreTerm.normalize_factors.
+  rewrite list_fmap_bind SMS.to_id_perm; first last.
+  - move=> t0 /list_elem_of_bind [/= t [] t0_t t_ts].
+    admit.
+  - elim: ts ic {tsN1 ts'} => //= t ts IH /invs_canceled_cons [tP [] Nm ic].
+    rewrite /mbind in IH.
+    by rewrite -unfold_factors factors_Nmul //= IH.
+exists ts'; split => //.
+rewrite -(length_fmap unfold_term) -e /ts' in tsN1.
+rewrite /PreTerm.mul /ts'.
+by case: PreTerm.normalize_factors tsN1 => //= ? [].
+Admitted.
+
+(* MOVE *)
+Lemma sum_list_with_fmap {A B} (f : B → nat) (g : A → B) xs :
+  sum_list_with f (g <$> xs) = sum_list_with (f ∘ g) xs.
+Proof. by elim: xs => //= x xs ->. Qed.
+
+Lemma tsize_TMulN ts :
+  invs_canceled ts →
+  tsize (TMulN ts) =
+  Nat.b2n (bool_decide (length ts ≠ 1)) +
+  sum_list_with tsize ts.
+Proof.
+move=> ic; case: (decide (length ts = 1)) => len_ts.
+  rewrite bool_decide_eq_false_2 //=; last congruence.
+  case: ts len_ts {ic} => // t [] //.
+  rewrite TMulN1 /=; lia.
+rewrite /tsize.
+case: (unfold_TMulN_strong _ ic len_ts)=> ts' [] -> /= e.
+by rewrite bool_decide_eq_true_2 //= e sum_list_with_fmap.
+Qed.
+
+Definition tsizeE := (tsize_TInv, tsize_TExp, tsize_TMulN, tsize_eq).
+
+Lemma tsize_lt_TInv {t} : negb (is_mul t) → tsize (TInv t) ≤ S (tsize t).
+Proof.
+move=> Nm.
+case: (decide (is_inv t)) => [tV|/negb_True tNV].
+- rewrite -{2}[t]TInvK (tsize_TInv (TInv t)) ?is_mul_TInv //; first lia.
+  by rewrite is_inv_TInv // negb_involutive.
+- by rewrite tsize_TInv.
+Qed.
+
+Lemma tunitP t : t = TMulN [] ↔ factors t = [].
+Proof.
+by split=> [->|<-]; rewrite ?factorsK // factors_TMulN0.
+Qed.
+
+(* MOVE *)
+Lemma Permutation_fmap_inv_l {A B} (f : A → B) (xs : list A) (ys : list B) :
+  f <$> xs ≡ₚ ys → ∃ xs', ys = f <$> xs' ∧ xs ≡ₚ xs'.
+Proof.
+elim: xs ys => //= [|x xs IH] ys.
+- by move=> /Permutation_nil ->; exists [].
+- move=> e; have := Permutation_cons_inv_l _ _ _ e.
+  case=> ys1 [] ys2 [] eys {}e.
+  case: (IH _ e)=> xs' [] eys' exs.
+  exists (take (length ys1) xs' ++ x :: drop (length ys1) xs').
+  rewrite fmap_app fmap_take fmap_cons fmap_drop.
+  rewrite -eys' take_app_length drop_app_length; split => //.
+  rewrite exs -Permutation_middle.
+  by rewrite take_drop.
+Qed.
+
+Global Instance list_fmap_perm_inj {A B} (f : A → B) :
+  Inj (=) (=) f →
+  Inj (≡ₚ) (≡ₚ) (fmap f).
+Proof.
+move=> inj_f xs ys /Permutation_fmap_inv_l [xs' [] e1 e2].
+have {}e1: ys = xs' by apply: (inj (fmap f : list _ → _)).
+by rewrite e1.
+Qed.
+(* /MOVE *)
+
+
+Lemma factors_TMulN ts :
+  invs_canceled ts →
+  factors (TMulN ts) ≡ₚ ts.
+Proof.
+move=> ic; apply: (inj (fmap unfold_term : list _ → _)).
+rewrite unfold_factors; case: (decide (length ts = 1)).
+  case: ts ic => // t [] //=; rewrite TMulN1 -unfold_factors.
+  move=> ic _; rewrite factors_Nmul //=.
+  by have /ic [??] : t ∈ [t] by rewrite list_elem_of_singleton.
+move=> tsN1; case: (unfold_TMulN_strong _ ic tsN1)=> ts' [] -> e.
+symmetry in e; case/Permutation_fmap_inv_l: e=> {}ts' [] -> e.
+by rewrite e.
 Qed.
 
 Lemma tsize_TExpN t ts :
-  negb (is_exp t) -> atomic ts -> (forall t', t' ∈ ts -> TInv t' ∉ ts) ->
+  negb (is_exp t) →
+  invs_canceled ts →
   tsize (TExpN t ts) =
-  (if bool_decide (ts ≠ []) then 1 else 0) + (if bool_decide (1 < length ts) then 1 else 0)
+  (if bool_decide (ts ≠ []) then 1 else 0) +
+  (if bool_decide (1 < length ts) then 1 else 0)
   + tsize t + sum_list_with tsize ts.
 Proof.
-move => Nxt atom nc.
-have /list.Forall_forall atom' := atom.
-have atomU : Forall (fun pt => negb (PreTerm.is_mul pt)) (unfold_term <$> ts).
-  exact: (atomic_unfold _ atom).
-have canc := no_inv_unfold ts nc.
-have canc' := no_inv_aux_unfold ts atom' nc.
-case: (decide (ts = [])) => [->|tsN0].
-  have H1 : bool_decide (@nil term ≠ []) = false.
-    by apply: bool_decide_eq_false_2; move=> H; exact: (H eq_refl).
-  have H2 : bool_decide (1 < length (@nil term)) = false.
-    by apply: bool_decide_eq_false_2; rewrite /=; lia.
-  rewrite TExpN0 H1 H2 /=; lia.
-have eneq : PreTerm.mul (unfold_term <$> ts) ≠ PreTerm.PTMul [].
-  by move=> H; apply: tsN0; apply: (inj (fmap unfold_term)); rewrite (proj1 (PreTerm.mul_eq_unit _ atomU canc) H).
-have sumeq : sum_list_with PreTerm.tsize (unfold_term <$> ts) = sum_list_with tsize ts.
-  by elim: ts {atom nc canc canc' atom' atomU tsN0 eneq} => [//|t' ts IH] /=; rewrite IH.
-rewrite [tsize (TExpN t ts)]/tsize /TExpN unfold_TExp unfold_TMulN.
-rewrite (PreTerm.tsize_exp_Nexp _ _ _ (PreTerm.wf_mul _ (wf_unfold_terms ts)) eneq);
-  last by rewrite -is_exp_unfold.
-rewrite (PreTerm.tsize_mul _ atomU canc'); last first.
-  by move=> H; apply: tsN0; apply: (inj (fmap unfold_term)); rewrite H.
-rewrite length_fmap sumeq -[PreTerm.tsize (unfold_term t)]/(tsize t).
-rewrite (bool_decide_eq_true_2 (ts ≠ [])) //; lia.
+move=> tNx ic; rewrite /TExpN.
+case: (decide (ts = [])) => [->|tsN0] /=; first by rewrite TExp_unit; lia.
+rewrite bool_decide_eq_true_2 //= tsize_TExp //; first last.
+  move=> /(f_equal factors) e; have /Permutation_nil ? : [] ≡ₚ ts.
+    rewrite -(factors_TMulN ts) // -(factors_TMulN []) ?e //.
+    exact: invs_canceled0.
+  congruence.
+rewrite tsize_TMulN //.
+have ->: bool_decide (length ts ≠ 1) = bool_decide (1 < length ts).
+  apply: bool_decide_ext; split; last lia.
+  case: (ts) tsN0=> //= ? [] //=; lia.
+case: bool_decide => /=; lia.
+Qed.
+
+Lemma is_expE t : is_exp t ↔ expo t ≠ TMulN [].
+Proof.
+rewrite is_exp_unfold.
+have ->: expo t ≠ TMulN [] ↔ unfold_term (expo t) ≠ unfold_term (TMulN []).
+  split; last congruence.
+  by move=> n1 contra; apply: n1; apply: inj contra.
+rewrite unfold_expo unfold_TMulN /= -[PreTerm.mul _]/(PreTerm.PTMul []).
+case: unfold_term (wf_unfold_term t) => /=; try by intuition congruence.
+case; try by intuition congruence.
+by move=> t1 t2; rewrite !andb_True bool_decide_spec; case; intuition.
+Qed.
+
+Lemma is_expNE t : negb (is_exp t) ↔ expo t = TMulN [].
+Proof.
+rewrite negb_True is_expE; split; eauto.
+exact: dec_stable.
 Qed.
 
 Lemma tsize_lt_TExp_strong t1 t2 :
-  negb (is_mul t2) -> TInv t2 ∉ exps t1 ->
-  tsize t1 < tsize (TExp t1 t2) /\
+  negb (is_mul t2) → TInv t2 ∉ exps t1 →
+  tsize t1 < tsize (TExp t1 t2) ∧
   S (tsize t2) < tsize (TExp t1 t2).
 Proof.
-move => Nm2 t2_t1.
-have atom : atomic (exps t1 ++ [t2]).
-  by rewrite /atomic; apply/Forall_app; split; [exact: atom_exps | apply/Forall_singleton].
-have canc : forall x, x ∈ exps t1 ++ [t2] -> TInv x ∉ exps t1 ++ [t2].
-  have pperm : exps t1 ++ [t2] ≡ₚ t2 :: exps t1 by rewrite -Permutation_cons_append.
-  apply/(no_inv_Permutation _ _ pperm).
-  apply/(no_inv_cons Nm2); split; [exact: t2_t1 | exact: (no_inv_exps t1)].
-have e1 : tsize t1 = (if bool_decide (exps t1 ≠ []) then 1 else 0)
-                     + (if bool_decide (1 < length (exps t1)) then 1 else 0)
-                     + tsize (base t1) + sum_list_with tsize (exps t1).
-  by rewrite -{1}(base_expsK t1)
-     (tsize_TExpN _ _ (is_exp_base_bool t1) (atom_exps t1) (no_inv_exps t1)).
-rewrite TExp_expsE (tsize_TExpN _ _ (is_exp_base_bool t1) atom canc).
-rewrite length_app sum_list_with_app /=.
-have g1 := tsize_gt0 (base t1).
-have g2 := tsize_gt0 t2.
-have HP : exps t1 ++ [t2] ≠ [] by case: (exps t1).
-have Hd : (if bool_decide (exps t1 ++ [t2] ≠ []) then 1 else 0) = 1
-  by rewrite (bool_decide_eq_true_2 _ HP).
-have Ha1 : (if bool_decide (exps t1 ≠ []) then 1 else 0) ≤ 1
-  by case E: (bool_decide (exps t1 ≠ [])); simpl; lia.
-have Hbc : (if bool_decide (1 < length (exps t1)) then 1 else 0)
-        ≤ (if bool_decide (1 < length (exps t1) + 1) then 1 else 0).
-  case E: (bool_decide (1 < length (exps t1)));
-    case E': (bool_decide (1 < length (exps t1) + 1)); simpl; try lia.
-  move/bool_decide_eq_true_1 in E; move/bool_decide_eq_false_1 in E'; lia.
-rewrite e1 Hd; split; move: g1 g2 Ha1 Hbc; lia.
+move=> t2Nm t2_t1; rewrite TExpE -/(TMul _ _).
+have xE: TMul (expo t1) t2 = TMulN (t2 :: factors (expo t1)).
+  by rewrite /TMul -{1}[expo t1]factorsK TMulN_cat TMulN_catC.
+have xN1: TMul (expo t1) t2 ≠ TMulN [].
+  rewrite -/(TMul _ _) => /(f_equal (TMul (TInv t2))).
+  rewrite [TMul _ t2]TMulC -TMulA TMulK_l TMul1_l TMul1 => eexpo.
+  move: t2_t1; rewrite /exps eexpo factors_Nmul ?is_mul_TInv //.
+  rewrite list_elem_of_singleton; congruence.
+have ic: invs_canceled (t2 :: factors (expo t1)).
+  rewrite invs_canceled_cons; do 2!split => //.
+  exact: invs_canceled_factors.
+rewrite tsize_TExp //; last exact: base_Nexp.
+rewrite xE tsize_TMulN //=.
+have ? := tsize_gt0 (base t1); split; last lia.
+rewrite -{1}[t1]TExp_base_expo.
+case: (decide (expo t1 = TMulN [])) => [->|n1].
+  rewrite factors_TMulN0 /= TExp_unit; lia.
+rewrite tsize_TExp //; last exact: base_Nexp.
+rewrite -{1}[expo t1]factorsK tsize_TMulN; last exact: invs_canceled_factors.
+have ? := tsize_gt0 t2.
+move: n1; rewrite tunitP; case: factors=> [|? [| ??]] //=; lia.
 Qed.
 
 Lemma tsize_lt_TExp t1 t2 :
-  negb (is_mul t2) -> TInv t2 ∉ exps t1 ->
-  tsize t1 < tsize (TExp t1 t2) /\
-  tsize (TInv t2) < tsize (TExp t1 t2) /\
+  negb (is_mul t2) → TInv t2 ∉ exps t1 →
+  tsize t1 < tsize (TExp t1 t2) ∧
+  tsize (TInv t2) < tsize (TExp t1 t2) ∧
   tsize t2 < tsize (TExp t1 t2).
 Proof.
 move => Nm2 t2_t1; case: (tsize_lt_TExp_strong _ _ Nm2 t2_t1) => H1 H2.
@@ -140,27 +236,22 @@ do !split; lia.
 Qed.
 
 Lemma tsize_TExp_TInv t1 t2 :
-  negb (is_mul (TInv t2)) -> t2 ∈ exps t1 ->
-  tsize t2 < tsize t1 /\
-  tsize (TInv t2) < tsize t1 /\
+  negb (is_mul (TInv t2)) → t2 ∈ exps t1 →
+  tsize t2 < tsize t1 ∧
+  tsize (TInv t2) < tsize t1 ∧
   tsize (TExp t1 (TInv t2)) < tsize t1.
 Proof.
 move => NmI2 H.
-have Nm2 : negb (is_mul t2) := exps_Nmul _ _ H.
-rewrite -{1 2 4}(TExpK' t1 t2 NmI2 Nm2).
-set t1' := TExp t1 _.
-have {}H : TInv t2 ∉ exps t1'.
-  have Hpos : (SMS.count TInv t2 (exps t1) > 0)%Z by apply/exps_count_gt0.
-  have Hval : SMS.count TInv t2 (exps t1') = (SMS.count TInv t2 (exps t1) - 1)%Z.
-    rewrite /t1' (exps_count_TExp t2 t1 (TInv t2) NmI2).
-    case: (decide (t2 = TInv t2)) => [e|_].
-      by case: (TInv_Nid Nm2 (eq_sym e)).
-    case: (decide (t2 = TInv (TInv t2))) => [_|ne]; first done.
-    by case: (ne (eq_sym (TInvK t2))).
-  move=> Hin.
-  have := proj2 (exps_count_gt0 (TInv t2) t1') Hin.
-  rewrite exps_count_TInv Hval; lia.
-by case: (tsize_lt_TExp _ _ Nm2 H) => ? [] ??; eauto.
+have Nm2 : negb (is_mul t2) by rewrite is_mul_TInv in NmI2.
+set t1' := TExp t1 (TInv t2).
+have t1E: t1 = TExp t1' t2.
+  by rewrite /t1' TExpA -/(TMul _ _) TMulK_l TExp_unit.
+have {}H: TInv t2 ∉ exps t1'.
+  rewrite /exps -count_gt0 in H.
+  rewrite /exps -count_gt0 /t1' expo_TExp count_TMulN /=.
+  rewrite !count_TInv_l count_TInv count_diag.
+  case: is_mul Nm2 => //=; lia.
+rewrite t1E; case: (tsize_lt_TExp _ _ Nm2 H)=> ? [] ??; eauto.
 Qed.
 
 Lemma term_lt_rect (T : term -> Type) :
@@ -174,63 +265,43 @@ apply: H => t' t'_t.
 apply: (IH (tsize t')); lia.
 Qed.
 
-Lemma tsize_in_sumn t' ts : t' ∈ ts -> tsize t' <= sum_list_with tsize ts.
-Proof.
-elim: ts => [|t ts IH]; first by rewrite elem_of_nil.
-rewrite elem_of_cons => -[-> /=|/IH h /=]; lia.
-Qed.
-
-Lemma tsize_base_lt t : is_exp t -> tsize (base t) < tsize t.
+Lemma tsize_base_lt t : is_exp t → tsize (base t) < tsize t.
 Proof.
 rewrite is_exp_unfold => xt.
 rewrite /tsize unfold_base; move: xt.
 by case: (unfold_term t) => [o|o t'|[||] t1 t2|ts] //= _; lia.
 Qed.
 
-Lemma tsize_exps_lt t' t : t' ∈ exps t -> tsize t' < tsize t.
+Lemma tsize_expo_lt t : is_exp t → tsize (expo t) < tsize t.
+Proof.
+rewrite /tsize is_exp_unfold unfold_expo.
+case: unfold_term (wf_unfold_term t) => //=; try lia.
+case=> //=; try lia.
+Qed.
+
+Lemma tsize_factors_le t t' : t ∈ factors t' → tsize t ≤ tsize t'.
+Proof.
+move=> ?; rewrite -[t']factorsK tsize_TMulN; last exact: invs_canceled_factors.
+suff: tsize t ≤ sum_list_with tsize (factors t') by lia.
+exact: sum_list_with_in.
+Qed.
+
+Lemma tsize_exps_lt t' t : t' ∈ exps t → tsize t' < tsize t.
 Proof.
 move => t'_t.
-have en : exps t ≠ [] by move=> e; rewrite e elem_of_nil in t'_t.
-have xt : is_exp t.
-  case E: (is_exp t) => //; move: en; rewrite (exps_expN_bool _ _) //; by rewrite E.
-rewrite -{1}(base_expsK t)
-  (tsize_TExpN _ _ (is_exp_base_bool t) (atom_exps t) (no_inv_exps t)).
-have Hle := tsize_in_sumn _ _ t'_t.
-have Hb := tsize_gt0 (base t).
-rewrite (bool_decide_eq_true_2 (exps t ≠ []) en) /=; lia.
+have en: exps t ≠ [] by move=> e; rewrite e elem_of_nil in t'_t.
+have xt: is_exp t by move: en; rewrite /exps -tunitP is_expE.
+have ?: tsize (expo t) < tsize t by exact: tsize_expo_lt.
+have := tsize_factors_le _ _ t'_t; lia.
 Qed.
 
-Lemma tsize_TMulN ts :
-  atomic ts -> (forall t', t' ∈ ts -> TInv t' ∉ ts) -> ts ≠ [] ->
-  tsize (TMulN ts) = (if bool_decide (1 < length ts) then 1 else 0) + sum_list_with tsize ts.
-Proof.
-move => atom nc tsN0.
-have /list.Forall_forall atom' := atom.
-have atomU : Forall (fun pt => negb (PreTerm.is_mul pt)) (unfold_term <$> ts).
-  exact: (atomic_unfold _ atom).
-have canc := no_inv_aux_unfold ts atom' nc.
-rewrite /tsize /TMulN unfold_TMulN.
-rewrite (PreTerm.tsize_mul _ atomU canc); last first.
-  by move=> H; apply: tsN0; apply: (inj (fmap unfold_term)); rewrite H.
-rewrite length_fmap; congr Nat.add.
-by elim: ts {atom nc canc tsN0 atom' atomU} => [//|t' ts IH] /=; rewrite IH.
-Qed.
-
-Lemma tsize_factors_lt t' t : is_mul t -> t' ∈ factors t -> tsize t' < tsize t.
+Lemma tsize_factors_lt t' t : is_mul t → t' ∈ factors t → tsize t' < tsize t.
 Proof.
 move => xt t'_t.
 have tsN0 : factors t ≠ [] by move=> e; rewrite e elem_of_nil in t'_t.
-rewrite -{1}(factorsK t)
-  (tsize_TMulN _ (atom_factors t) (no_inv_factors t) tsN0).
-have Hle := tsize_in_sumn _ _ t'_t.
-have szge : 1 < length (factors t).
-  have szN1 : length (factors t) ≠ 1.
-    rewrite /factors length_fmap; move: xt; rewrite is_mul_unfold.
-    case: (unfold_term t) (wf_unfold_term t) => // ts wf _.
-    case: (PreTerm.wf_Mul_inv _ wf) => _ [_ [_ Hlen]]; by rewrite /PreTerm.factors.
-  have : factors t ≠ [] := tsN0.
-  case: (factors t) szN1 => [|?[|??]] //=; lia.
-rewrite (bool_decide_eq_true_2 (1 < length (factors t)) szge) /=; lia.
+rewrite -{1}(factorsK t) tsize_TMulN; last exact: invs_canceled_factors.
+have le: tsize t' ≤ sum_list_with tsize (factors t) by exact: sum_list_with_in.
+rewrite -is_mulE; case: is_mul xt => //=; lia.
 Qed.
 
 Lemma term_lt_ind (T : term -> Prop) :

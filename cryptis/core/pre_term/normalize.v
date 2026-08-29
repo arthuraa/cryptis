@@ -1,4 +1,5 @@
 (** Pre-term normalization
+    ======================
 
     This file defines a normalization function on pre-terms.  Two pre-terms have
     the same normal form if and only if they are equal according to the
@@ -23,12 +24,11 @@
     - [(g ^ a) ^ (a^-1) = g]
     - [(g ^ a) ^ b = (g ^ b) ^ a]
 
-    This file establishes only the normalization machinery.  The *fundamental*
-    equations above (on well-formed pre-terms), and the theory of the
-    destructors, are proved separately, in [laws.v].  The *derived* equations are
-    not proved on pre-terms at all: they are consequences of the fundamentals and
-    are proved once, at the [term] layer, in [core/term/base.v] ([TInvK],
-    [TInv_fixed], [TMul_cancel], …).
+    This file establishes only the normalization machinery.  The basic equations
+    above (on well-formed pre-terms), and the theory of the destructors, are
+    proved separately, in [laws.v].  The derived equations are not proved on
+    pre-terms at all: they are consequences of the fundamentals and are proved
+    for terms in [core/term/base.v] ([TInvK], [TInv_fixed], [TMul_cancel], …).
 
     The predicate [wf : pre_term -> bool] characterizes normal forms and is
     defined by structural recursion on the pre-term.  We have the following
@@ -90,25 +90,25 @@ Definition inv_aux pt :=
   | _ => PTInv pt
   end.
 
-Definition mul ts :=
-  match SMS.to pt_order inv_aux (concat (factors <$> ts)) with
+Definition mul_aux ts :=
+  match ts with
   | [t] => t
-  | l => PTMul l
+  | _ => PTMul ts
   end.
 
-(* Keep [mul] folded under [simpl]; reason about it through its definition
-   [SMS.to pt_order inv_aux (concat (factors <$> ts))] and the [SMS.to]/[SMS.count]
-   theory, unfolding with [/mul] when a case split on the canonical factor list
-   is needed. *)
-Arguments mul : simpl never.
+Definition normalize_factors ts :=
+  SMS.to pt_order inv_aux (mbind factors ts).
+
+Definition mul ts := mul_aux (normalize_factors ts).
 
 Definition inv pt :=
   if pt is PTMul ts then mul (inv_aux <$> ts) else inv_aux pt.
 
+Definition exp_aux b e :=
+  if bool_decide (e = PTMul []) then b else PTExp b e.
+
 Definition exp b e :=
-  let e' := mul [expo b; e] in
-  if bool_decide (e' = PTMul []) then base b
-  else PTExp (base b) e'.
+  exp_aux (base b) (mul [expo b; e]).
 
 Fixpoint normalize pt :=
   match pt with
@@ -129,15 +129,33 @@ Fixpoint wf (pt : pre_term) : bool :=
     wf b && negb (is_exp b) && wf e && bool_decide (e ≠ PTMul [])
   | PT2 _ pt1 pt2 => wf pt1 && wf pt2
   | PTMul ts =>
-    forallb wf ts && forallb (fun t => negb (is_mul t)) ts
-    && SMS.wf pt_order inv_aux ts && bool_decide (length ts ≠ 1)
+    (forallb (λ t, wf t && negb (is_mul t)) ts
+     && SMS.wf pt_order inv_aux ts)
+    && bool_decide (length ts ≠ 1)
   end.
 
-Lemma wfsP ts : forallb wf ts <-> Forall wf ts.
-Proof. exact: forallb_True. Qed.
+Definition wf_factors ts :=
+  forallb (λ t, wf t && negb (is_mul t)) ts
+  && SMS.wf pt_order inv_aux ts.
+
+Lemma wf_factors_wf t ts : wf_factors ts → t ∈ ts → wf t.
+Proof.
+move=> /andb_True [/forallb_True/list.Forall_forall wf_ts _] t_ts.
+by case/andb_True: (wf_ts _ t_ts).
+Qed.
+
+Lemma wf_factors_Nmul t ts : wf_factors ts → t ∈ ts → negb (is_mul t).
+move=> /andb_True [/forallb_True/list.Forall_forall wf_ts _] t_ts.
+by case/andb_True: (wf_ts _ t_ts).
+Qed.
+
+Lemma wf_factors_sms ts : wf_factors ts → SMS.wf pt_order inv_aux ts.
+Proof. by case/andb_True. Qed.
 
 Lemma inv_aux_Nid pt : inv_aux pt ≠ pt.
-Proof. by case: pt => [o|[k| |] t|o t1 t2|ts] /=; move=> /(f_equal height) /=; lia. Qed.
+Proof.
+by case: pt => [o|[k| |] t|o t1 t2|ts] /=; move=> /(f_equal height) /=; lia.
+Qed.
 
 Lemma inv_invN pt : negb (is_inv pt) -> inv_aux pt = PTInv pt.
 Proof. by case: pt => [o|[k| |] t|o t1 t2|ts]. Qed.
@@ -148,23 +166,8 @@ case: pt => [o|[k| |] t|o t1 t2|ts] //=.
 by rewrite !andb_True => - [[/inv_invN -> _] _].
 Qed.
 
-Lemma wf_Mul_inv ts :
-  wf (PTMul ts) ->
-  Forall wf ts /\ Forall (fun t => negb (is_mul t)) ts /\
-  SMS.wf pt_order inv_aux ts /\ length ts ≠ 1.
-Proof.
-rewrite /= => /andb_True [/andb_True [/andb_True [Hwf Hnm] Hsms] Hlen].
-split_and!.
-- exact: (proj1 (wfsP _) Hwf).
-- exact: (proj1 (forallb_True _ _) Hnm).
-- exact: Hsms.
-- exact: (bool_decide_unpack _ Hlen).
-Qed.
-
-Lemma wf_nil : wf (PTMul []).
+Lemma wf_one : wf (PTMul []).
 Proof. by rewrite /wf !andb_True; split_and!. Qed.
-
-(** Facts about [base], [expo], [factors] and [inv_aux]. *)
 
 Lemma wf_base pt : wf pt -> wf (base pt).
 Proof.
@@ -186,25 +189,21 @@ Proof. by case: pt => [o|o t|[||] t1 t2|ts]. Qed.
 
 Lemma wf_expo pt : wf pt -> wf (expo pt).
 Proof.
-case: pt => [o|o t|[||] b e|ts]; try (move=> _; exact: wf_nil).
+case: pt => [o|o t|[||] b e|ts]; try (move=> _; exact: wf_one).
 by move=> wf_pt; move: wf_pt; rewrite /= !andb_True => - [[[_ _] ?] _].
 Qed.
 
-Lemma factorsN pt : negb (is_mul pt) -> factors pt = [pt].
+Lemma factors_Nmul pt : negb (is_mul pt) -> factors pt = [pt].
 Proof. by case: pt. Qed.
 
-Lemma wf_factors pt : wf pt -> Forall wf (factors pt).
+Lemma wf_wf_factors pt : wf pt -> wf_factors (factors pt).
 Proof.
-case: pt => [o|o t|o t1 t2|ts] wf_pt; rewrite /factors /=;
-  try by rewrite Forall_singleton.
-by case: (wf_Mul_inv _ wf_pt).
-Qed.
-
-Lemma Nmul_factors pt : wf pt -> Forall (fun t => negb (is_mul t)) (factors pt).
-Proof.
-case: pt => [o|o t|o t1 t2|ts] wf_pt; rewrite /factors /=;
-  try by rewrite Forall_singleton.
-by case: (wf_Mul_inv _ wf_pt) => _ [? _].
+case E: (is_mul pt) => wf_pt.
+  by case: pt E wf_pt => //= pts _ /andb_True [].
+rewrite /wf_factors factors_Nmul //= ?E //= 3!andb_True; do !split => //.
+apply: SMS.wf_singleton.
+- exact: inv_aux_Nid.
+- by rewrite inv_auxK.
 Qed.
 
 Lemma wf_inv_aux pt : wf pt -> negb (is_mul pt) -> wf (inv_aux pt).
@@ -216,165 +215,97 @@ Qed.
 Lemma inv_Nmul pt : negb (is_mul pt) -> inv pt = inv_aux pt.
 Proof. by case: pt. Qed.
 
-(** Discharge the generic [SMS] involution hypothesis from well-formedness:
-    [inv_aux] is an involution on every wf element ([inv_auxK]), so on a
-    [Forall wf] list the per-element law [SMS] asks for holds. *)
-Lemma wf_invol pts : Forall wf pts -> forall x, x ∈ pts -> inv_aux (inv_aux x) = x.
-Proof. move=> /list.Forall_forall H x xin; exact: (inv_auxK _ (H _ xin)). Qed.
-
-Lemma flatten_factors_wf ts :
-  Forall wf ts -> Forall wf (concat (factors <$> ts)).
+Lemma wf_mul_aux ts : wf_factors ts → wf (mul_aux ts).
 Proof.
-elim: ts => [//|t ts IH] /=.
-move=> H; have [wft wfts] := Forall_cons_1 _ _ _ H.
-apply/Forall_app; split; [exact: wf_factors | exact: (IH wfts)].
+case: (decide (length ts = 1)) => E.
+  case: ts => [//|t [|//]] in E *.
+  move=> /wf_factors_wf wf_t /=; apply: wf_t; exact/list_elem_of_singleton.
+have ->: mul_aux ts = PTMul ts by case: ts => [|?[|??]] in E *.
+move=> wf_ts; apply/andb_True; split => //.
+exact/bool_decide_spec.
 Qed.
 
-(** No inverse pairs, spelled out as a first-order fact about [factors] (and, in
-    the ported theory below, [exps]).  On the atomic factor lists [inv] and
-    [inv_aux] coincide ([inv_Nmul]), so the [inv_aux]-cancellation carried by the
-    generic [SMS.wf] conjunct is exactly "no [inv] pairs". *)
-
-Lemma no_inv1 t : negb (is_mul t) -> forall q, q ∈ [t] -> inv q ∉ [t].
+Lemma wf_normalize_factors ts :
+  Forall wf ts → wf_factors (normalize_factors ts).
 Proof.
-move=> Nm q /list_elem_of_singleton -> Hin.
-move: Hin; rewrite list_elem_of_singleton (inv_Nmul _ Nm); exact: inv_aux_Nid.
-Qed.
-
-Lemma no_inv_factors pt : wf pt -> forall q, q ∈ factors pt -> inv q ∉ factors pt.
-Proof.
-case: pt => [o|o t|o t1 t2|ts] wf_pt; rewrite /factors; try by apply: no_inv1.
-case: (wf_Mul_inv _ wf_pt) => _ [/list.Forall_forall Nm [swf _]].
-move=> q qin; rewrite (inv_Nmul _ (Nm q qin)).
-exact: (SMS.wf_no_pairs pt_order inv_aux ts swf q qin).
-Qed.
-
-Lemma sorted_factors pt : wf pt -> StronglySorted pt_order (factors pt).
-Proof.
-case: pt => [o|o t|o t1 t2|ts] wf_pt; rewrite /factors;
-  try by (repeat constructor).
-case: (wf_Mul_inv _ wf_pt) => _ [_ [swf _]].
-exact: (SMS.wf_sorted pt_order inv_aux ts swf).
-Qed.
-
-(* The factor list of a well-formed pre-term is a well-formed signed multiset
-   (sorted, no inverse pairs) — the bundled [SMS.wf] form of [sorted_factors] +
-   [no_inv_factors], which [SMS.to_id] and friends consume directly. *)
-Lemma wf_factors_sms pt : wf pt -> SMS.wf pt_order inv_aux (factors pt).
-Proof.
-move=> wf; apply: (SMS.wf_intro pt_order inv_aux (factors pt) (sorted_factors _ wf)).
-- move=> q qin; have /list.Forall_forall H := Nmul_factors _ wf; rewrite -(inv_Nmul _ (H q qin)).
-  exact: (no_inv_factors _ wf q qin).
-- move=> q qin; have /list.Forall_forall H := wf_factors _ wf; exact: (inv_auxK _ (H q qin)).
-- move=> q _; exact: inv_aux_Nid.
-Qed.
-
-(* Multiplication *)
-
-Lemma flatten_factors_Nmul ts :
-  Forall wf ts -> Forall (fun t => negb (is_mul t)) (concat (factors <$> ts)).
-Proof.
-elim: ts => [//|t ts IH] /=.
-move=> H; have [wft wfts] := Forall_cons_1 _ _ _ H.
-apply/Forall_app; split; [exact: Nmul_factors | exact: (IH wfts)].
-Qed.
-
-(* Introduction rule for [wf (PTMul ts)].  Stated with an *abstract* [ts] so
-   that [forallb wf ts] stays folded — otherwise [andb_True] would split it into
-   its per-element conjuncts.  "No inverse pairs" is the spelled-out [inv] form;
-   the generic [SMS.wf] conjunct is rebuilt from it via [SMS.wf_intro]. *)
-Lemma wf_MulI ts :
-  Forall wf ts -> Forall (fun t => negb (is_mul t)) ts ->
-  StronglySorted pt_order ts -> (forall q, q ∈ ts -> inv q ∉ ts) -> length ts ≠ 1 ->
-  wf (PTMul ts).
-Proof.
-move=> H1 H2 H3 H4 H5; rewrite /=.
-apply/andb_True; split; last by apply: bool_decide_pack.
-apply/andb_True; split; last first.
-{ apply: (SMS.wf_intro pt_order inv_aux ts H3).
-  - move=> q qin; have /list.Forall_forall Hff := H2; rewrite -(inv_Nmul _ (Hff q qin)); exact: (H4 q qin).
-  - move=> q qin; have /list.Forall_forall Hff := H1; exact: (inv_auxK _ (Hff q qin)).
-  - move=> q _; exact: inv_aux_Nid. }
-apply/andb_True; split.
-- exact: (proj2 (wfsP _) H1).
-- exact: (proj2 (forallb_True _ _) H2).
+move=> wf_ts; rewrite /normalize_factors /wf_factors andb_True.
+set ts1 := mbind factors ts.
+set ts2 := SMS.to pt_order inv_aux ts1.
+have wf_ts1: Forall (λ t, wf t && negb (is_mul t)) ts1.
+  rewrite Forall_bind; apply: Forall_impl wf_ts => t /wf_wf_factors wf_t.
+  apply/list.Forall_forall=> t' t'_t; apply/andb_True; split.
+  - by apply: wf_factors_wf; eauto.
+  - by apply: wf_factors_Nmul; eauto.
+split.
+- apply/forallb_True/list.Forall_forall=> t /(SMS.mem_to _ _ _).
+  move/list.Forall_forall: wf_ts1; exact.
+- apply: SMS.wf_to => t t_ts1; apply: inv_auxK.
+  by case/list.Forall_forall/(_ _ t_ts1)/andb_True: wf_ts1.
 Qed.
 
 Lemma wf_mul ts : Forall wf ts -> wf (mul ts).
 Proof.
 move=> wf_ts; rewrite /mul.
-have wfX := flatten_factors_wf _ wf_ts.
-have NmX := flatten_factors_Nmul _ wf_ts.
-have swf : SMS.wf pt_order inv_aux (SMS.to pt_order inv_aux (concat (factors <$> ts))).
-{ exact: (SMS.wf_to pt_order inv_aux _ (wf_invol _ wfX)). }
-have wf_L : Forall wf (SMS.to pt_order inv_aux (concat (factors <$> ts))).
-{ apply/list.Forall_forall => x /(SMS.mem_to pt_order inv_aux) xin.
-  have /list.Forall_forall H := wfX; exact: (H x xin). }
-have Nmul_L : Forall (fun t => negb (is_mul t)) (SMS.to pt_order inv_aux (concat (factors <$> ts))).
-{ apply/list.Forall_forall => x /(SMS.mem_to pt_order inv_aux) xin.
-  have /list.Forall_forall H := NmX; exact: (H x xin). }
-case E: (SMS.to pt_order inv_aux (concat (factors <$> ts))) => [|t [|t' c']].
-- exact: wf_nil.
-- move: wf_L; rewrite E => H; exact: (Forall_inv H).
-- move: wf_L Nmul_L swf; rewrite E => wf' Nmul' swf'.
-  apply: wf_MulI.
-  + exact: wf'.
-  + exact: Nmul'.
-  + exact: (SMS.wf_sorted pt_order inv_aux _ swf').
-  + move=> q qin; have /list.Forall_forall H := Nmul'; rewrite (inv_Nmul _ (H q qin)).
-    exact: (SMS.wf_no_pairs pt_order inv_aux _ swf' q qin).
-  + by [].
+apply: wf_mul_aux; exact: wf_normalize_factors.
 Qed.
 
-Lemma mul_wf1 t : wf t -> mul [t] = t.
+Lemma normalize_factors1 t : wf t → normalize_factors [t] = factors t.
 Proof.
-move=> wf; rewrite /mul /= app_nil_r.
-rewrite (SMS.to_id pt_order inv_aux (factors t) (wf_factors_sms _ wf)).
-case: t wf => [o|o t|o t1 t2|ts] //= wf.
-move: wf; rewrite !andb_True => - [_ Hlen].
+move=> wf_t; rewrite /normalize_factors /= app_nil_r.
+rewrite (SMS.to_id pt_order inv_aux (factors t)) //.
+apply: wf_factors_sms; exact: wf_wf_factors.
+Qed.
+
+Lemma factorsK t : wf t → mul_aux (factors t) = t.
+Proof.
+case: t => [o|o t|o t1 t2|ts] //= wf_t.
+case/andb_True: wf_t=> _ Hlen.
 by case: ts Hlen => [|t [|t' c']].
 Qed.
 
-(* [PTMul []] is a unit for [mul]: dropping it from a two-element product does
-   not change the flattened factor list, hence not [mul]. *)
-Lemma mul_unit_l X : mul [PTMul []; X] = mul [X].
-Proof. by rewrite /mul /= !app_nil_r. Qed.
+Lemma mul_auxK ts : wf_factors ts → factors (mul_aux ts) = ts.
+Proof.
+case: ts => [| t [| ??]] //= wf_t; rewrite factors_Nmul //.
+apply: wf_factors_Nmul; eauto; exact/list_elem_of_singleton.
+Qed.
 
-(* Introduction rules for [wf] at the [PTInv] and [PTExp] heads.  Abstract [pt]
-   / [b], [e] keep the recursive [wf] calls folded. *)
-Lemma wf_InvI pt : negb (is_inv pt) -> negb (is_mul pt) -> wf pt -> wf (PTInv pt).
-Proof. by move=> H1 H2 H3; rewrite /= !andb_True; repeat split. Qed.
+Lemma mul1 t : wf t -> mul [t] = t.
+Proof.
+by move=> wf_t; rewrite /mul normalize_factors1 // factorsK.
+Qed.
 
-Lemma wf_ExpI b e :
-  wf b -> negb (is_exp b) -> wf e -> bool_decide (e ≠ PTMul []) ->
-  wf (PTExp b e).
-Proof. by move=> H1 H2 H3 H4; rewrite /= !andb_True; repeat split. Qed.
+Lemma mul_unit_l t : mul [PTMul []; t] = mul [t].
+Proof. by []. Qed.
+
+Lemma wf_exp_aux b e :
+  negb (is_exp b) →
+  wf b →
+  wf e →
+  wf (exp_aux b e).
+Proof.
+move=> bNx wf_b wf_e; rewrite /exp_aux; case_bool_decide as Hf => //=.
+rewrite !andb_True bool_decide_spec; eauto.
+Qed.
 
 Lemma wf_exp b e : wf b -> wf e -> wf (exp b e).
 Proof.
-move=> wfb wfe; rewrite /exp; case_bool_decide as Hf.
-- exact: (wf_base _ wfb).
-- have wf' : Forall wf [expo b; e]
-    by constructor; [exact: (wf_expo _ wfb) | constructor; [exact: wfe | constructor]].
-  apply: wf_ExpI.
-  + exact: (wf_base _ wfb).
-  + exact: (base_Nexp _ wfb).
-  + exact: (wf_mul _ wf').
-  + by apply: bool_decide_pack.
+move=> wf_b wf_e; apply: wf_exp_aux => //.
+- exact: base_Nexp.
+- exact: wf_base.
+- apply: wf_mul.
+  by rewrite !list.Forall_cons list.Forall_nil; eauto using wf_expo.
 Qed.
 
-Lemma wf_inv pt : wf pt -> wf (inv pt).
+Lemma wf_inv t : wf t -> wf (inv t).
 Proof.
-case: pt => [o|[k| |] t|o t1 t2|ts] wf; rewrite /inv.
-- by apply: wf_InvI.
-- by apply: wf_InvI.
-- by apply: wf_InvI.
-- by move: wf; rewrite /= !andb_True => - [[_ _] ?].
-- by apply: wf_InvI.
-- apply: wf_mul; apply/Forall_fmap.
-  case: (wf_Mul_inv _ wf) => /list.Forall_forall wf_ts [/list.Forall_forall Nm_ts _].
-  apply/list.Forall_forall => t t_ts.
-  exact: (wf_inv_aux _ (wf_ts t t_ts) (Nm_ts t t_ts)).
+move=> wf_t; case e: (is_mul t); last first.
+  by rewrite inv_Nmul ?e //; apply: wf_inv_aux; rewrite // e.
+case: t => //= ts in wf_t e *.
+case/andb_True: wf_t => wf_ts tsN1.
+apply: wf_mul; apply/list.Forall_forall=> _ /list_elem_of_fmap [t [] -> t_ts].
+apply: wf_inv_aux.
+- exact: wf_factors_wf t_ts.
+- exact: wf_factors_Nmul t_ts.
 Qed.
 
 Lemma wf_normalize pt : wf (normalize pt).
@@ -390,6 +321,19 @@ elim: pt => //=.
     [by move=> _; constructor
     |by move=> [wt wts]; constructor; [exact: wt | exact: IH wts]].
 Qed.
+Hint Resolve wf_normalize : core.
+
+Lemma normalize_factors_wf_factors ts :
+  wf_factors ts → normalize_factors ts = ts.
+Proof.
+move=> wf_ts; rewrite /normalize_factors.
+have ->: mbind factors ts = ts.
+  case/andb_True: wf_ts=> wf_ts _.
+  elim: ts wf_ts => //= t ts IH.
+  case/andb_True=> [/andb_True [wf_t Nm_t] /IH E].
+  by rewrite factors_Nmul //= -[in RHS]E.
+rewrite SMS.to_id //; exact: wf_factors_sms.
+Qed.
 
 Lemma normalize_wf pt : wf pt -> normalize pt = pt.
 Proof.
@@ -403,29 +347,28 @@ elim: pt => //=.
   + by rewrite andb_True => - [/IH1 -> /IH2 ->].
   + by rewrite andb_True => - [/IH1 -> /IH2 ->].
   + rewrite !andb_True => - [[[wfb Nxb] wfe] /bool_decide_unpack eN0].
-    rewrite (IH1 wfb) (IH2 wfe) /exp (expo_expN _ Nxb) (base_expN _ Nxb).
-    have -> : mul [PTMul []; t2] = t2.
-    { rewrite mul_unit_l; exact: (mul_wf1 _ wfe). }
-    by rewrite (bool_decide_eq_false_2 _ eN0).
-- move=> ts IHts wf_pt.
-  case: (wf_Mul_inv _ wf_pt) => wf_ts [Nmul_F [swf sizeN1]]; clear wf_pt.
-  have Nts : normalize <$> ts = ts.
-  { elim: ts IHts wf_ts {Nmul_F swf sizeN1}
-      => [//|t ts' IH] /= [IHt IHts'] Hwf.
-    rewrite (IHt (Forall_inv Hwf)); f_equal.
-    exact: (IH IHts' (Forall_inv_tail Hwf)). }
-  rewrite Nts /mul.
-  have ff : concat (factors <$> ts) = ts.
-  { elim: ts Nmul_F {IHts wf_ts swf sizeN1 Nts}
-      => [//|t ts' IH] /= HNm.
-    rewrite (factorsN _ (Forall_inv HNm)) /=; f_equal.
-    exact: (IH (Forall_inv_tail HNm)). }
-  rewrite ff (SMS.to_id pt_order inv_aux ts swf).
-  by case: ts sizeN1 {IHts wf_ts Nmul_F swf Nts ff}
-    => [|t [|t' ts'']].
+    rewrite IH1 // IH2 // /exp base_expN // expo_expN //.
+    by rewrite mul_unit_l // mul1 // /exp_aux bool_decide_eq_false_2.
+- move=> ts IHts /andb_True [wf_ts /bool_decide_spec tsN1].
+  have {}IHts: Forall (λ t, wf t → normalize t = t) ts.
+    by elim: (ts) IHts => //= t' ts' IH [? /IH ?]; eauto.
+  have {IHts} ->: normalize <$> ts = ts.
+    rewrite -[RHS]list_fmap_id; apply/Forall_fmap_ext.
+    apply/list.Forall_forall => t t_ts.
+    move/list.Forall_forall: IHts; apply => //.
+    exact: wf_factors_wf t_ts.
+  rewrite /mul normalize_factors_wf_factors //.
+  by case: (ts) tsN1 => [|? [|??]].
 Qed.
 
 Lemma normalize_idem pt : normalize (normalize pt) = normalize pt.
-Proof. apply: normalize_wf; exact: wf_normalize. Qed.
+Proof. exact: normalize_wf. Qed.
+
+Lemma fmap_normalize_wf ts : Forall wf ts → normalize <$> ts = ts.
+Proof.
+move=> /list.Forall_forall wf_ts.
+rewrite -[RHS]list_fmap_id; apply/Forall_fmap_ext/list.Forall_forall.
+by move=> t t_ts'; apply: normalize_wf; eauto.
+Qed.
 
 End PreTerm.

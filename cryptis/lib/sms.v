@@ -75,6 +75,26 @@ Qed.
 Lemma not_elem_of_count_strong x X : x ∉ X → i x ∉ X → count x X = 0%Z.
 Proof. by rewrite !not_elem_of_count_mem /count => -> ->. Qed.
 
+Lemma not_elem_of_count0 x X : x ∉ X → i x ∉ X ↔ count x X = 0%Z.
+Proof.
+rewrite !not_elem_of_count_mem /count => ->; lia.
+Qed.
+
+Lemma count_eq0_elem_of x X : count x X = 0%Z → x ∈ X ↔ i x ∈ X.
+Proof.
+rewrite /count => e0; have e: count_mem x X = count_mem (i x) X by lia.
+by rewrite !elem_of_count_mem e.
+Qed.
+
+Lemma count_gt0_elem_of x X : (count x X > 0)%Z → x ∈ X.
+Proof. rewrite /count elem_of_count_mem; lia. Qed.
+
+Lemma count_count_mem x X : i x ∉ X → count x X = Z.of_nat (count_mem x X).
+Proof.
+move=> /not_elem_of_count_mem ix_X; rewrite /count ix_X.
+lia.
+Qed.
+
 Lemma cancel_cons x X : cancel (x :: X) = insert x (cancel X).
 Proof. reflexivity. Qed.
 
@@ -191,6 +211,9 @@ Proof. rewrite /count /=; case_bool_decide; case_bool_decide; simpl; lia. Qed.
 
 Lemma count_app z X Y : count z (X ++ Y) = (count z X + count z Y)%Z.
 Proof. rewrite /count !count_mem_app !Nat2Z.inj_add; lia. Qed.
+
+Lemma count_i z X : i (i z) = z → count (i z) X = (- count z X)%Z.
+Proof. move=> e; rewrite /count e; lia. Qed.
 
 (** Mapping the involution over a list negates every signed count: [i <$> X] is
     the "inverse" multiset of [X].  Needs the involution at the query point and
