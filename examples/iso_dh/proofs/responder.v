@@ -81,10 +81,9 @@ wp_apply (wp_mk_nonce_freshN {[ga]}
        => //.
 - iIntros "%". rewrite elem_of_singleton public_minted. by iIntros "->".
 - iIntros "%b".
-  rewrite big_sepS_singleton minted_TExp.
+  rewrite big_sepS_singleton minted_TExp //.
   rewrite minted_TInt /= bi.True_and.
   iModIntro. by iApply bi.equiv_iff.
-  intro contra. destruct contra.
 iIntros "%b %fresh_b #m_b #s_b #dh_gb _ token".
 have Nm_b : negb (is_mul (TNonce b)) by [].
 have {}fresh_b: ¬ subterm b ga by apply: fresh_b; exact/elem_of_singleton.
@@ -158,7 +157,7 @@ iAssert (|={⊤}=>
   case/Spec.of_list_inj: e_m3
     => -> <- /Spec.sign_pkey_inj <- {ga gb' skR'}
     in fresh_b gb gab si *.
-  rewrite TExp_comm in gab si *.
+  rewrite TExpC in gab si *.
   iDestruct "comp" as "[comp|comp]".
   - iMod (term_meta_set (iso_dhN.@"failed") true with "token_failed")
       as "#?"; first by solve_ndisj.

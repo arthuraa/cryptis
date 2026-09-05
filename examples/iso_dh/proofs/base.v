@@ -346,15 +346,13 @@ Lemma public_dh_share a :
   public (TExp (TInt 0) a).
 Proof.
 move=> Nm; iIntros "#m_a #pred_a".
-rewrite public_TExp_iff //; last by case.
+rewrite public_TExp_iff //.
 rewrite minted_TInt public_TInt.
 do !iSplit => //; last by iIntros "!> _".
 iApply exp_pred_intro1. iApply "pred_a". iPureIntro. rewrite /iso_dh_key_share.
 rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [a]); last by rewrite /TExpN TMulN1.
-rewrite exps_TExpN' //.
-- by case.
-- by rewrite /atomic; apply/Forall_singleton.
-- exact: (no_inv_singleton Nm).
+have NInt : negb (is_exp (TInt 0)) by [].
+by rewrite (exps_TExpN NInt (invs_canceled1 Nm)).
 Qed.
 
 Lemma public_dh_secret1 a b :
@@ -370,7 +368,7 @@ Proof.
 move=> Nm_a Nm_b; iIntros "#m_a #m_b #pred_a #pred_b #[H|H]".
 - rewrite -TExp_TExpN /TExpN TMulN1.
   iApply public_TExp => //. by iApply (public_dh_share Nm_b).
-- rewrite TExpC2 -TExp_TExpN /TExpN TMulN1.
+- rewrite TExpNC2 -TExp_TExpN /TExpN TMulN1.
   iApply public_TExp => //. by iApply (public_dh_share Nm_a).
 Qed.
 
@@ -385,10 +383,8 @@ Lemma public_dh_secret2 a b :
   public a ∨ public b.
 Proof.
 move=> Nm_a Nm_b; iIntros "%a_b %a_bV #pred_a #pred_b #p".
-have NInt : ¬ is_exp (TInt 0) by case.
-have atom_ab : atomic [a; b] by rewrite /atomic Forall_cons Forall_singleton; split.
-have ic_ab : forall x, x ∈ [a; b] -> TInv x ∉ [a; b]
-  by apply/(no_inv2 Nm_a Nm_b).
+have NInt : negb (is_exp (TInt 0)) by [].
+have ic_ab : invs_canceled [a; b] := proj2 (invs_canceled2 Nm_a Nm_b) a_bV.
 iPoseProof (public_minted with "p") as "m".
 iAssert (minted a ∧ minted b)%I as "[ma mb]".
   rewrite minted_TExpN //. iDestruct "m" as "[_ m]". rewrite /=.
@@ -399,9 +395,10 @@ iAssert (◇ (public a ∨ public b))%I as "[H|H]"; first last.
 rewrite public_TExp2_iff //.
 iDestruct "p" as "(_ & #contraA & #contraB & _)"; eauto.
 iPoseProof (exp_pred_inv with "contraA") as "(%t & %t_share & H)".
-  by apply: (elem_of_TExpN2l Nm_a Nm_b); rewrite //= elem_of_nil.
+  apply: (elem_of_TExpN2l Nm_a Nm_b) => //.
+  by rewrite /exps (expo_expN _ NInt) factors_TMulN0 elem_of_nil; case.
 have exps_share: exps (TExpN (TInt 0) [a; b]) ≡ₚ [a; b].
-  by rewrite exps_TExpN' //.
+  by rewrite exps_TExpN //.
 rewrite exps_share elem_of_cons list_elem_of_singleton in t_share.
 iDestruct "H" as "[H|(%t3 & %e_base & %exps_sub & base)]".
   by case: t_share=> ->; eauto.

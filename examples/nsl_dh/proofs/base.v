@@ -166,8 +166,8 @@ Lemma exps_TExp1 a : negb (is_mul a) -> exps (TExp (TInt 0) a) ≡ₚ [a].
 Proof.
 move=> Nm.
 rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [a]); last by rewrite /TExpN TMulN1.
-rewrite exps_TExpN;
-  [done | by case | by rewrite /atomic; apply/Forall_singleton | exact: (no_inv_singleton Nm)].
+have NInt : negb (is_exp (TInt 0)) by [].
+by rewrite (exps_TExpN NInt (invs_canceled1 Nm)).
 Qed.
 
 Lemma exps_TExp2 a b :
@@ -175,8 +175,8 @@ Lemma exps_TExp2 a b :
   exps (TExpN (TInt 0) [a; b]) ≡ₚ [a; b].
 Proof.
 move=> Nm_a Nm_b aVb.
-rewrite exps_TExpN';
-  [done | by case | by rewrite /atomic Forall_cons Forall_singleton; split | by apply/(no_inv2 Nm_a Nm_b)].
+have NInt : negb (is_exp (TInt 0)) by [].
+by rewrite (exps_TExpN NInt (proj2 (invs_canceled2 Nm_a Nm_b) aVb)).
 Qed.
 
 Definition si_key si : senc_key :=
@@ -325,10 +325,9 @@ wp_apply (wp_mk_nonce_freshN T
             (nsl_dh_key_share skI skR)
             (λ a, {[TExp (TInt 0) a]})) => //.
 - iIntros "%a".
-  rewrite big_sepS_singleton minted_TExp.
+  rewrite big_sepS_singleton minted_TExp //.
   rewrite minted_TInt /= bi.True_and.
   iModIntro. by iApply bi.equiv_iff.
-  intro contra. by destruct contra.
 iIntros "%a %fresh_a #m_a #s_a #dh_a _ token_ga".
 rewrite big_sepS_singleton.
 iDestruct (dh_share_tokenI with "token_ga")
@@ -558,11 +557,10 @@ iAssert (exp_pred_base a (TExp (TInt 0) a)) with "[corr]" as "#dp".
     iModIntro. rewrite /nsl_dh_key_share. iSplit => //.
     iPureIntro.
     rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [TNonce a]); last by rewrite /TExpN TMulN1.
-    rewrite exps_TExpN';
-      [by [] | by case | by rewrite /atomic; apply/Forall_singleton
-       | exact: (no_inv_singleton Nm)]. }
+    have NInt : negb (is_exp (TInt 0)) by [].
+    by rewrite (exps_TExpN NInt (invs_canceled1 Nm)). }
   by iDestruct ("pred_a" $! (TExp (TInt 0) a) with "ns") as "$". }
-rewrite /ga public_TExp_iff //; last by case.
+rewrite /ga public_TExp_iff //.
 rewrite minted_TInt. do 3?[iSplit => //].
 - by iApply exp_pred_intro1.
 - iIntros "!> _". by rewrite public_TInt.

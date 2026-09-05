@@ -56,7 +56,7 @@ set ga := TExp (TInt 0) a.
 wp_pures. wp_list. wp_term_of_list. wp_pures.
 wp_apply wp_aenc => //.
 { iDestruct "dh_a" as "(#m_a & _)".
-  rewrite minted_of_list /= minted_TExp; last by case.
+  rewrite minted_of_list /= minted_TExp //.
   rewrite minted_TInt /= minted_pkey.
   by do !iSplit. }
 { iRight. iSplit.
@@ -141,7 +141,7 @@ have Nm_a : negb (is_mul a) by [].
 iDestruct "inv" as "[#pub|inv_m2]".
 - (* Case 1: public plaintext — attacker forged message *)
   iDestruct "pub" as "(#p_ga & #p_gb)".
-  rewrite public_TExp_iff //; last by case.
+  rewrite public_TExp_iff //.
   iDestruct "p_ga" as "(_ & _ & #exp_a & _)".
   iPoseProof (exp_pred_inv_same with "exp_a") as "exp_a_inv";
     first by rewrite (exps_TExp1 Nm_a); set_solver.
@@ -189,9 +189,9 @@ iDestruct "inv" as "[#pub|inv_m2]".
   have b_a : TNonce b ≠ TNonce a.
   { move=> e. apply: b_ga. rewrite /ga -e.
     apply/subtermsP.
-    have atom_b : atomic [TNonce b] by rewrite /atomic; apply/Forall_singleton.
+    have ic_b : invs_canceled [TNonce b] := invs_canceled1 Nm_b.
     rewrite (_ : TExp (TInt 0) b = TExpN (TInt 0) [TNonce b]); last by rewrite /TExpN TMulN1.
-    rewrite subtermsE // ?cancel_invs1 //=.
+    rewrite subtermsE //=.
     by rewrite [subterms b]subterms_nonce //; set_solver. }
   have aV_b : TNonce a ≠ TInv b.
   { move=> contra.
@@ -243,7 +243,7 @@ iDestruct "inv" as "[#pub|inv_m2]".
                  with "[#] ps_gb") as "#rel_b".
     { do !iSplit; eauto. }
     iAssert (minted gb) as "#m_gb".
-    { rewrite minted_TExp; last by case.
+    { rewrite minted_TExp //.
       rewrite minted_TInt /=. by iSplit. }
     iAssert (minted (si_key si)) as "#m_k".
     { rewrite minted_senc minted_of_list /= !minted_pkey.
@@ -276,10 +276,11 @@ iDestruct "inv" as "[#pub|inv_m2]".
         rewrite public_senc_key public_of_list /=.
         iDestruct "p_k" as "(_ & _ & _ & _ & #p_gab & _)".
         have e_gab : gab = TExpN (TInt 0) [TNonce a; TNonce b] by rewrite /gab /gb TExp2_TExpN.
-        rewrite e_gab public_TExp2_iff //; last by case.
+        rewrite e_gab public_TExp2_iff //.
         iDestruct "p_gab" as "(_ & #exp_a & _ & _ & _)".
         iPoseProof (exp_pred_inv with "exp_a") as "(%t & %t_in & H)";
-          first by apply: (elem_of_TExpN2l Nm_a Nm_b); rewrite //= elem_of_nil; eauto.
+          first (apply: (elem_of_TExpN2l Nm_a Nm_b) => //;
+                 by rewrite /exps (expo_expN (TInt 0) I) factors_TMulN0 elem_of_nil; case).
         have exps_share : exps (TExpN (TInt 0) [TNonce a; TNonce b]) ≡ₚ [TNonce a; TNonce b].
         { exact: (exps_TExp2 Nm_a Nm_b aV_b). }
         rewrite exps_share elem_of_cons list_elem_of_singleton in t_in.
@@ -308,7 +309,7 @@ iDestruct "inv" as "[#pub|inv_m2]".
         have Nm_bp : negb (is_mul (TNonce b')) by [].
         have e_b : b = b'.
         { rewrite /gb in e_gb'.
-          have e := TExp_injr _ _ _ Nm_b Nm_bp e_gb'. congruence. }
+          have e := TExp_injr _ _ _ e_gb'. congruence. }
         subst b'.
         iSplitR "".
         + (* ▷ (released ga ∧ released gb) → public ga *)
@@ -319,11 +320,12 @@ iDestruct "inv" as "[#pub|inv_m2]".
           iSplit.
           * iIntros "#p_gab".
             have e_gab : TExp ga b = TExpN (TInt 0) [TNonce a; TNonce b].
-            { by rewrite /ga TExp2_TExpN TExpC2. }
-            rewrite e_gab public_TExp2_iff //; last by case.
+            { by rewrite /ga TExp2_TExpN TExpNC2. }
+            rewrite e_gab public_TExp2_iff //.
             iDestruct "p_gab" as "(_ & #exp_a & _ & _ & _)".
             iPoseProof (exp_pred_inv with "exp_a") as "(%t & %t_in & H)";
-              first by apply: (elem_of_TExpN2l Nm_a Nm_b); rewrite //= elem_of_nil; eauto.
+              first (apply: (elem_of_TExpN2l Nm_a Nm_b) => //;
+                 by rewrite /exps (expo_expN (TInt 0) I) factors_TMulN0 elem_of_nil; case).
             have exps_share : exps (TExpN (TInt 0) [TNonce a; TNonce b]) ≡ₚ [TNonce a; TNonce b].
             { exact: (exps_TExp2 Nm_a Nm_b aV_b). }
             rewrite exps_share elem_of_cons list_elem_of_singleton in t_in.
@@ -352,7 +354,7 @@ iDestruct "inv" as "[#pub|inv_m2]".
         iModIntro. by iRight. }
     iRight.
     have -> : si = SessInfo skI skR ga gb (TExp ga b).
-    { by rewrite /si /gab /ga /gb TExp_comm. }
+    { by rewrite /si /gab /ga /gb TExpC. }
     iExact "φ_res".
 Qed.
 
