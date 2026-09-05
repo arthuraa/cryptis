@@ -57,29 +57,28 @@ Lemma minted_TInv t : minted (TInv t) ⊣⊢ minted t.
 Proof. by rewrite unlock nonces_of_termE. Qed.
 
 Lemma minted_TExpN t ts :
-  ~ is_exp t -> atomic ts -> (forall t', t' ∈ ts -> TInv t' ∉ ts) ->
+  negb (is_exp t) -> invs_canceled ts ->
   minted (TExpN t ts) ⊣⊢ minted t ∧ [∗ list] t' ∈ ts, minted t'.
 Proof.
-move => /negb_True nx atom ic.
-rewrite unlock (nonces_of_term_TExpN nx atom).
-rewrite (union_list_map_to _ ts ic) big_sepS_union_pers.
+move => nx ic.
+rewrite unlock (nonces_of_term_TExpN nx ic) big_sepS_union_pers.
 by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
 Lemma minted_TMulN ts :
-  wf_mul_list ts ->
+  invs_canceled ts ->
   minted (TMulN ts) ⊣⊢ [∗ list] t ∈ ts, minted t.
 Proof.
-move => wf.
-rewrite unlock (nonces_of_term_TMulN wf).
+move => ic.
+rewrite unlock (nonces_of_term_TMulN ic).
 by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
 Lemma minted_base_exps t :
   minted t ⊣⊢ minted (base t) ∧ [∗ list] t' ∈ exps t, minted t'.
 Proof.
-rewrite -{1}[t]base_expsK minted_TExpN //; last exact: no_inv_exps.
-exact: atom_exps.
+by rewrite -{1}[t]base_expsK
+  (minted_TExpN (base_Nexp t) (invs_canceled_factors (expo t))).
 Qed.
 
 Lemma all_minted_TExpN t ts :
@@ -87,7 +86,7 @@ Lemma all_minted_TExpN t ts :
 Proof.
 rewrite unlock !big_sepS_forall.
 iIntros "[Ht Hts]" (l) "%l_in".
-have /elem_of_subseteq in_nonces := nonces_of_term_TExpN_subseteq t ts.
+have /elem_of_subseteq in_nonces := @nonces_of_term_TExpN_subseteq t ts.
 
 move: l_in => /(in_nonces l). rewrite elem_of_union elem_of_union_list.
 case => [?|]; first by iApply "Ht".
@@ -104,13 +103,12 @@ by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
 Lemma minted_TExp t1 t2 :
-  ~ is_exp t1 ->
+  negb (is_exp t1) ->
   minted (TExp t1 t2) ⊣⊢ minted t1 ∧ minted t2.
 Proof.
 move => nx.
 have -> : TExp t1 t2 = TExpN t1 (factors t2) by rewrite /TExpN factorsK.
-rewrite (minted_TExpN nx (atom_factors t2)
-           (no_inv_factors t2)).
+rewrite (minted_TExpN nx (invs_canceled_factors t2)).
 by rewrite -minted_factors.
 Qed.
 

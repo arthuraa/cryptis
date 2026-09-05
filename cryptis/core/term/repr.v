@@ -57,6 +57,8 @@ Qed.
 
 End ValOfTerm.
 
+Arguments repr_term /.
+
 Global Instance val_of_term_inj : Inj (=) (=) val_of_term.
 Proof.
 move=> t1 t2 e_t1t2; apply: unfold_term_inj.

@@ -79,7 +79,7 @@ wp_list_of_term m2; wp_pures => //.
   1: wp_list_match => [β X_s envelope A_s -> | _].
   1, 2: wp_pures.
   2, 3: by iApply ("Hhl" $! None); iModIntro; iSplit.
-wp_apply wp_hl_inv_term; first by exact: (negb_is_mul_nonce r).
+wp_apply wp_hl_inv_aux_term; first by exact: (negb_is_mul_nonce r).
 wp_apply wp_texp; wp_list; wp_apply wp_H.
 wp_apply wp_derive_senc_key; set k := SEncKey _.
 wp_pures; wp_lam; wp_pures.

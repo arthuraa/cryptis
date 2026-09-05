@@ -30,13 +30,12 @@ Inductive subterm (t : term) : term → Prop :=
 | STExp1 t' ts of negb (is_exp t') & subterm t t' : subterm t (TExpN t' ts)
 | STExp2 t' t'' ts of
     negb (is_exp t') &
-    atomic ts &
-    (forall x, x ∈ ts -> TInv x ∉ ts) &
+    invs_canceled ts &
     subterm t t'' &
     t'' ∈ ts
   : subterm t (TExpN t' ts)
 | STMul t'' ts of
-    wf_mul_list ts &
+    invs_canceled ts &
     subterm t t'' &
     t'' ∈ ts
   : subterm t (TMulN ts).
@@ -100,12 +99,13 @@ Proof. by rewrite subterms_unseal /subterms_def /subterms_pre unfold_termK. Qed.
 
 Lemma subterms_pre_base_exps pt :
   subterms_pre pt =
-  {[fold_term pt]} ∪ subterms_pre (PreTerm.base pt) ∪ ⋃ map subterms_pre (PreTerm.exps pt).
+  {[fold_term pt]} ∪ subterms_pre (PreTerm.base pt) ∪
+  ⋃ map subterms_pre (PreTerm.factors (PreTerm.expo pt)).
 Proof.
 case E: (PreTerm.is_exp pt).
 - case: pt E => [o|o e|[||] e1 e2|es] //= E; rewrite subterms_preE /=; set_solver.
 - have Nxp : negb (PreTerm.is_exp pt) by rewrite E.
-  rewrite (PreTerm.base_expN pt Nxp) (PreTerm.exps_expN pt Nxp) /=.
+  rewrite (PreTerm.base_expN pt Nxp) (PreTerm.expo_expN pt Nxp) /=.
   rewrite /subterms_pre; set_solver.
 Qed.
 
@@ -114,10 +114,15 @@ Lemma subterms_base_exps t :
 Proof.
 have hb : subterms_pre (PreTerm.base (unfold_term t)) = subterms (base t).
   by rewrite /base (subterms_fold (PreTerm.wf_base _ (wf_unfold_term t))).
-have he : ⋃ map subterms_pre (PreTerm.exps (unfold_term t)) = ⋃ map subterms (exps t).
-  rewrite /exps.
-  have wfs : Forall PreTerm.wf (PreTerm.exps (unfold_term t)) := PreTerm.wf_exps _ (wf_unfold_term t).
-  elim: (PreTerm.exps (unfold_term t)) wfs => [//|pt pts IH] /Forall_cons [wpt wpts] /=.
+have he : ⋃ map subterms_pre (PreTerm.factors (PreTerm.expo (unfold_term t)))
+        = ⋃ map subterms (exps t).
+  rewrite /exps /factors unfold_expo.
+  have wfs : Forall PreTerm.wf (PreTerm.factors (PreTerm.expo (unfold_term t))).
+    apply/Forall_forall => x xin.
+    apply: PreTerm.wf_factors_wf
+      (PreTerm.wf_wf_factors _ (PreTerm.wf_expo _ (wf_unfold_term t))) xin.
+  elim: (PreTerm.factors (PreTerm.expo (unfold_term t))) wfs
+    => [//|pt pts IH] /Forall_cons [wpt wpts] /=.
   by rewrite (subterms_fold wpt) (IH wpts).
 by rewrite (subterms_via_pre t) (subterms_pre_base_exps (unfold_term t)) unfold_termK hb he.
 Qed.
@@ -145,36 +150,49 @@ Lemma subterms_TInv t :
 Proof.
 move => Nm Ni.
 have Ni' : negb (PreTerm.is_inv (unfold_term t)) by rewrite -is_inv_unfold.
+have Nm' : negb (PreTerm.is_mul (unfold_term t)) by rewrite -is_mul_unfold.
 rewrite subterms_unseal /subterms_def.
-by rewrite (unfold_TInv_Nmul Nm) (PreTerm.inv_invN _ Ni') /= unfold_termK.
+by rewrite unfold_TInv (PreTerm.inv_Nmul _ Nm') (PreTerm.inv_invN _ Ni')
+   /= unfold_termK.
 Qed.
 
+(* Restated: [atomic] and [term_order] no longer exist.  [invs_canceled] plays
+   the role of [atomic] together with the old no-inverse-pair side condition,
+   and since [TMulN] is permutation-invariant there is no term order left to
+   normalise the exponent list with. *)
 Lemma subterms_TExpN t ts :
-  negb (is_exp t) -> atomic ts ->
-  subterms (TExpN t ts) = {[TExpN t ts]} ∪ subterms t ∪ ⋃ map subterms (SMS.to term_order TInv ts).
+  negb (is_exp t) -> invs_canceled ts ->
+  subterms (TExpN t ts) = {[TExpN t ts]} ∪ subterms t ∪ ⋃ map subterms ts.
 Proof.
-move => tNexp atom.
-have nexp : negb (PreTerm.is_exp (unfold_term t)).
-  by move: tNexp; rewrite is_exp_unfold.
-have bt : base t = t by rewrite /base (PreTerm.base_expN _ nexp) unfold_termK.
-have et : exps t = [] by rewrite /exps (PreTerm.exps_expN _ nexp).
-rewrite (subterms_base_exps (TExpN t ts)) base_TExpN bt.
-by rewrite (exps_TExpN t ts atom) et app_nil_l.
+move=> tNexp ic.
+rewrite (subterms_base_exps (TExpN t ts)) /TExpN base_TExp (base_expN _ tNexp).
+congr (_ ∪ _).
+rewrite /exps expo_TExp (expo_expN _ tNexp) TMulN_cat /= TMulN1.
+(* [TMulN] sorts its factors, so [factors_TMulN] is only a permutation -- which
+   is all the union over [subterms] needs. *)
+by apply: union_list_permutation_proper_L; apply: Permutation_map;
+   apply: factors_TMulN.
 Qed.
 
+(* [wf_mul_list] no longer exists; [invs_canceled] is its replacement. *)
 Lemma subterms_TMulN ts :
-  wf_mul_list ts ->
+  invs_canceled ts ->
   subterms (TMulN ts) = {[TMulN ts]} ∪ ⋃ map subterms ts.
 Proof.
-move => wf; have wfU := wf_mul_list_unfold ts wf.
-have e : TMulN ts = fold_term (PreTerm.PTMul (map unfold_term ts)).
-  apply: unfold_term_inj; rewrite unfold_TMulN (@fold_termK _ wfU).
-  exact: (PreTerm.mul_factors _ wfU).
-rewrite {1}e (subterms_fold wfU) subterms_preE -e /=.
+move=> ic.
+(* [subterms_pre] of any pre-term is its own root plus the subterms of its
+   factors (for a non-product the factor list is the singleton). *)
+have preF : forall pt, subterms_pre pt
+                     = {[fold_term pt]} ∪ ⋃ map subterms_pre (PreTerm.factors pt).
+  move=> pt; case: pt => [o|o e|o e1 e2|es] //=.
+  1-3: by rewrite /subterms_pre; set_solver.
+have perm : PreTerm.factors (unfold_term (TMulN ts)) ≡ₚ unfold_term <$> ts.
+  by rewrite -unfold_factors; apply: Permutation_map; apply: factors_TMulN.
+rewrite subterms_via_pre preF unfold_termK.
 congr (_ ∪ _).
-elim: ts {wf wfU e} => [//|t' ts' IH] /=.
-rewrite -IH; congr (_ ∪ _).
-by rewrite subterms_via_pre.
+transitivity (⋃ map subterms_pre (unfold_term <$> ts)).
+  by apply: union_list_permutation_proper_L; apply: Permutation_map.
+by elim: ts {ic perm} => [//|t l IH] /=; rewrite IH subterms_via_pre.
 Qed.
 
 Lemma subterms_nonce t : is_nonce t → subterms t = {[t]}.
@@ -211,14 +229,13 @@ split.
     have bt' : base t' = t'.
       rewrite /base; move: Nexp; rewrite is_exp_unfold => n.
       by rewrite (PreTerm.base_expN _ n) unfold_termK.
-    rewrite (subterms_base_exps (TExpN t' ts)) base_TExpN bt'; set_solver.
-  + move => t' t'' ts Nexp atom canc sub IH t''_ts.
-    rewrite (subterms_TExpN Nexp atom).
-    rewrite (union_list_map_to _ ts canc) !elem_of_union; right.
+    rewrite (subterms_base_exps (TExpN t' ts)) /TExpN base_TExp bt'; set_solver.
+  + move => t' t'' ts Nexp ic sub IH t''_ts.
+    rewrite (subterms_TExpN Nexp ic) !elem_of_union; right.
     rewrite elem_of_union_list; exists (subterms t''); split => //.
     by rewrite list_elem_of_fmap; exists t''; split.
-  + move => t'' ts wf sub IH t''_ts.
-    rewrite (subterms_TMulN wf) elem_of_union; right.
+  + move => t'' ts ic sub IH t''_ts.
+    rewrite (subterms_TMulN ic) elem_of_union; right.
     rewrite elem_of_union_list; exists (subterms t''); split => //.
     by rewrite list_elem_of_fmap; exists t''; split.
 - elim/term_lt_ind: t2 => t2 IH.
@@ -260,15 +277,15 @@ split.
       rewrite (subterms_base_exps t2').
       move => /elem_of_union [/elem_of_union [/elem_of_singleton -> | Hb] | He].
       -- exact: STRefl.
-      -- rewrite -(base_expsK t2'); apply: STExp1; first exact: is_exp_base_bool.
+      -- rewrite -(base_expsK t2'); apply: STExp1; first exact: base_Nexp.
          by apply: (IH (base t2') _ Hb); exact: (tsize_base_lt _ xt).
       -- move: He => /elem_of_union_list [X [/list_elem_of_fmap [ee [-> ee_exps]] Hin]].
          rewrite -(base_expsK t2').
-         apply: (STExp2 (is_exp_base_bool t2') (atom_exps t2') (no_inv_exps t2') _ ee_exps).
+         apply: (STExp2 (base_Nexp t2') (invs_canceled_factors (expo t2')) _ ee_exps).
          by apply: (IH ee _ Hin); exact: (tsize_exps_lt _ _ ee_exps).
     * set t2' := TNonFree (PreTerm.PTMul ts) wf nf.
       have xt : is_mul t2' by [].
-      have wfl : wf_mul_list (factors t2') := wf_mul_list_factors _ xt.
+      have wfl : invs_canceled (factors t2') := invs_canceled_factors t2'.
       rewrite -(factorsK t2') (subterms_TMulN wfl).
       move => /elem_of_union [/elem_of_singleton -> | He].
       -- exact: STRefl.
@@ -305,14 +322,13 @@ split.
     have bt' : base t' = t'.
       rewrite /base; move: Nexp; rewrite is_exp_unfold => n.
       by rewrite (PreTerm.base_expN _ n) unfold_termK.
-    rewrite (nonces_of_term_base_exps (TExpN t' ts)) base_TExpN bt'; set_solver.
-  + move => t' t'' ts Nexp atom canc sub IH t''_ts.
-    rewrite (nonces_of_term_TExpN Nexp atom).
-    rewrite (union_list_map_to _ ts canc) elem_of_union; right.
+    rewrite (nonces_of_term_base_exps (TExpN t' ts)) /TExpN base_TExp bt'; set_solver.
+  + move => t' t'' ts Nexp ic sub IH t''_ts.
+    rewrite (nonces_of_term_TExpN Nexp ic) elem_of_union; right.
     rewrite elem_of_union_list; exists (nonces_of_term t''); split => //.
     by rewrite list_elem_of_fmap; exists t''; split.
-  + move => t'' ts wf sub IH t''_ts.
-    rewrite (nonces_of_term_TMulN wf) elem_of_union_list.
+  + move => t'' ts ic sub IH t''_ts.
+    rewrite (nonces_of_term_TMulN ic) elem_of_union_list.
     exists (nonces_of_term t''); split => //.
     by rewrite list_elem_of_fmap; exists t''; split.
 - elim/term_lt_ind: t => t IH.
@@ -345,15 +361,15 @@ split.
       have xt : is_exp t2' by [].
       rewrite (nonces_of_term_base_exps t2').
       move => /elem_of_union [Hb | He].
-      -- rewrite -(base_expsK t2'); apply: STExp1; first exact: is_exp_base_bool.
+      -- rewrite -(base_expsK t2'); apply: STExp1; first exact: base_Nexp.
          by apply: (IH (base t2') _ Hb); exact: (tsize_base_lt _ xt).
       -- move: He => /elem_of_union_list [X [/list_elem_of_fmap [ee [-> ee_exps]] Hin]].
          rewrite -(base_expsK t2').
-         apply: (STExp2 (is_exp_base_bool t2') (atom_exps t2') (no_inv_exps t2') _ ee_exps).
+         apply: (STExp2 (base_Nexp t2') (invs_canceled_factors (expo t2')) _ ee_exps).
          by apply: (IH ee _ Hin); exact: (tsize_exps_lt _ _ ee_exps).
     * set t2' := TNonFree (PreTerm.PTMul ts) wf nf.
       have xt : is_mul t2' by [].
-      have wfl : wf_mul_list (factors t2') := wf_mul_list_factors _ xt.
+      have wfl : invs_canceled (factors t2') := invs_canceled_factors t2'.
       rewrite -(factorsK t2') (nonces_of_term_TMulN wfl).
       move => /elem_of_union_list [X [/list_elem_of_fmap [ff [-> ff_facts]] Hin]].
       apply: (STMul wfl _ ff_facts).
@@ -369,19 +385,20 @@ elim: t2 / => //; try by intros; rewrite [nonces_of_term (_ _)]nonces_of_termE; 
   have bt' : base t' = t'.
     rewrite /base; move: Nexp; rewrite is_exp_unfold => n.
     by rewrite (PreTerm.base_expN _ n) unfold_termK.
-  rewrite (nonces_of_term_base_exps (TExpN t' ts)) base_TExpN bt'; set_solver.
-- move => t' t'' ts Nexp atom canc sub IH t''_ts.
-  rewrite (nonces_of_term_TExpN Nexp atom).
-  rewrite (union_list_map_to _ ts canc).
+  rewrite (nonces_of_term_base_exps (TExpN t' ts)) /TExpN base_TExp bt'; set_solver.
+- move => t' t'' ts Nexp ic sub IH t''_ts.
+  rewrite (nonces_of_term_TExpN Nexp ic).
   have sub2 : nonces_of_term t'' ⊆ ⋃ map nonces_of_term ts.
     move => x x_t''; rewrite elem_of_union_list; exists (nonces_of_term t''); split => //.
     by rewrite list_elem_of_fmap; exists t''; split.
   set_solver.
-- move => t'' ts wf sub IH t''_ts.
-  rewrite (nonces_of_term_TMulN wf).
+- move => t'' ts ic sub IH t''_ts.
+  rewrite (nonces_of_term_TMulN ic).
   have sub2 : nonces_of_term t'' ⊆ ⋃ map nonces_of_term ts.
     move => x x_t''; rewrite elem_of_union_list; exists (nonces_of_term t''); split => //.
     by rewrite list_elem_of_fmap; exists t''; split.
   set_solver.
 Qed.
 
+#[global]
+Hint Resolve STRefl : core.

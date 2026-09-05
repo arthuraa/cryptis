@@ -4,7 +4,6 @@ file to avoid slowing down the compilation process. *)
 
 From cryptis Require Import lib.
 From mathcomp Require Import ssreflect.
-From mathcomp Require all_order ssrbool seq path eqtype.
 From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap.
 From iris.base_logic.lib Require Import invariants.
@@ -18,9 +17,9 @@ Unset Printing Implicit Defensive.
 
 Definition tmul : val := λ: "t1" "t2", hl_mul "t1" "t2".
 
-Definition tinv : val := λ: "t", hl_inv_distr "t".
+Definition tinv : val := λ: "t", hl_inv "t".
 
-Definition tone : val := λ: <>, hl_mk_mul NILV.
+Definition tone : val := λ: <>, hl_mul_aux NILV.
 
 Section Proofs.
 
@@ -53,9 +52,6 @@ Proof.
 by iIntros "H"; iApply twp_wp; iApply twp_eq_term.
 Qed.
 
-#[warnings="-ambiguous-paths"]
-Import all_order ssrbool seq path boot.eqtype.
-
 Lemma twp_texp E t1 t2 Ψ :
   Ψ (TExp t1 t2) ⊢
   WP texp t1 t2 @ E [{ Ψ }].
@@ -74,30 +70,31 @@ Lemma wp_texp E t1 t2 Ψ :
 Proof. by iIntros "post"; iApply twp_wp; iApply twp_texp. Qed.
 
 
-Lemma wp_hl_inv_term E (t : term) Ψ :
+Lemma wp_hl_inv_aux_term E (t : term) Ψ :
     negb (is_mul t) ->
     Ψ (TInv t) ⊢
-    WP hl_inv t @ E {{ Ψ }}.
+    WP hl_inv_aux t @ E {{ Ψ }}.
 Proof.
     move=> Nm; iIntros "post".
-    rewrite -!val_of_pre_term_unfold (unfold_TInv_Nmul Nm).
-    by iApply wp_hl_inv.
+    have Nm' : negb (PreTerm.is_mul (unfold_term t)) by rewrite -is_mul_unfold.
+    rewrite -!val_of_pre_term_unfold unfold_TInv (PreTerm.inv_Nmul _ Nm').
+    by iApply wp_hl_inv_aux.
 Qed.
 
 Lemma twp_tmul E t1 t2 Ψ :
-  Ψ (TMulN [:: t1; t2]) ⊢
+  Ψ (TMulN [t1; t2]) ⊢
   WP tmul t1 t2 @ E [{ Ψ }].
 Proof.
 iIntros "HΨ". rewrite /tmul; wp_lam; wp_pures.
 rewrite -[val_of_term t1]val_of_pre_term_unfold.
 rewrite -[val_of_term t2]val_of_pre_term_unfold.
 wp_apply twp_hl_mul.
-rewrite -(unfold_TMulN [:: t1; t2]) [repr _]val_of_pre_term_unfold.
+rewrite -(unfold_TMulN [t1; t2]) [repr _]val_of_pre_term_unfold.
 by iApply "HΨ".
 Qed.
 
 Lemma wp_tmul E t1 t2 Ψ :
-  Ψ (TMulN [:: t1; t2]) ⊢
+  Ψ (TMulN [t1; t2]) ⊢
   WP tmul t1 t2 @ E {{ Ψ }}.
 Proof. by iIntros "post"; iApply twp_wp; iApply twp_tmul. Qed.
 
@@ -107,7 +104,7 @@ Lemma twp_tinv E t Ψ :
 Proof.
 iIntros "HΨ". rewrite /tinv; wp_lam; wp_pures.
 rewrite -[val_of_term t]val_of_pre_term_unfold.
-wp_apply (twp_hl_inv_distr _ _ (wf_unfold_term t)).
+wp_apply twp_hl_inv.
 rewrite -unfold_TInv [repr _]val_of_pre_term_unfold.
 by iApply "HΨ".
 Qed.
@@ -118,21 +115,21 @@ Lemma wp_tinv E t Ψ :
 Proof. by iIntros "post"; iApply twp_wp; iApply twp_tinv. Qed.
 
 Lemma twp_tone E Ψ :
-  Ψ (TMulN [::]) ⊢
+  Ψ (TMulN []) ⊢
   WP tone #() @ E [{ Ψ }].
 Proof.
 iIntros "HΨ". rewrite /tone; wp_pures.
-rewrite (_ : NILV = repr ([::] : seq PreTerm.pre_term));
+rewrite (_ : NILV = repr ([] : list PreTerm.pre_term));
   last by rewrite repr_list_unseal.
-wp_apply (twp_hl_mk_mul E [::]).
-rewrite (_ : PreTerm.PTMul [::] = unfold_term (TMulN [::]));
-  last by rewrite (unfold_TMulN [::]).
+wp_apply (twp_hl_mul_aux E []).
+rewrite (_ : PreTerm.mul_aux [] = unfold_term (TMulN []));
+  last by rewrite (unfold_TMulN []).
 rewrite [repr _]val_of_pre_term_unfold.
 by iApply "HΨ".
 Qed.
 
 Lemma wp_tone E Ψ :
-  Ψ (TMulN [::]) ⊢
+  Ψ (TMulN []) ⊢
   WP tone #() @ E {{ Ψ }}.
 Proof. by iIntros "post"; iApply twp_wp; iApply twp_tone. Qed.
 

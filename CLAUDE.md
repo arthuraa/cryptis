@@ -43,6 +43,8 @@ When to use which:
 
 Caveat: a `rocq_start` session reads the file at start time and does not track later edits. After modifying a `.v` file, restart the session (`rocq_start` again) before continuing — otherwise tactic results may be stale.
 
+A second caveat, with a much worse symptom: the coq-lsp process behind the MCP caches loaded `.vo` libraries for its whole lifetime and does **not** invalidate them when you recompile underneath it. After a `make` mid-session, a later `Require` of anything that was rebuilt fails with `Compiled library X ... makes inconsistent assumptions over library Y` — and `rocq_start`/`rocq_query` swallow that into a bare "The reference … was not found in the current environment", which looks like a load-path problem and is not. Fix: `rocq_start` with `force_restart: true`. Rule of thumb: **any `make` invalidates every open MCP session** — restart after rebuilding, not just after editing. (Editor clients drive the same `coq-lsp` binary, so the same rebuild-then-everything-is-"not found" symptom appears there; restarting the LSP server clears it.)
+
 ## Setup
 
 **Via Nix (preferred):** Use the provided `flake.nix`. Two dev shells are exposed:
@@ -114,7 +116,7 @@ examples/*
 
 The `_CoqProject` file specifies the exact file ordering for compilation.
 
-**mathcomp ↔ stdpp boundary:** `core/pre_term/` is implemented in mathcomp (`seq`, `%O` order, `~~`, `sort <=%O`, bigops) and exposes a stdpp-facing API via `core/pre_term/normalize.v` (normal forms + the `wf`/`normalize` machinery), `laws.v` (the algebraic theory of the operations and destructors), and `with_stdpp.v`. Everything from `core/term/` upward is stdpp (`Forall`, `≡ₚ`, `∈`, `merge_sort`). The active boolean→Prop coercion above `pre_term` is stdpp's `Is_true`, **not** ssreflect's `is_true` (bridged by `is_trueP` in `lib/mathcomp_compat.v`); mixing the two silently breaks `rewrite`/`apply`.
+**mathcomp ↔ stdpp boundary:** `core/pre_term/base.v` is implemented in mathcomp (`seq`, `%O` order, `~~`, `sort <=%O`, bigops, `deriving`); `core/pre_term/normalize.v` (normal forms + the `wf`/`normalize` machinery) is already stdpp-only. `core/pre_term/with_stdpp.v` is *the* bridge, and is where any new mathcomp→stdpp translation belongs: it packages the deriving-generated order both as `pt_order` (a stdpp `relation` with `RelDecision`/`Transitive`/`Total`/`AntiSymm`) and as a global `Lexico PreTerm.pre_term` instance (with `StrictOrder`/`TrichotomyT`, which is what makes `bool_decide (x = y ∨ lexico x y)` decidable), and proves `pt_order_lexico`, `pt_order_mul` (the derived order on `PTMul ts` *is* stdpp's `lexico` on `ts`) and `pt_orderE` (the structural comparison equation, stated with `bool_decide` and `op0_le`/`op1_le`/`op2_le` instead of `<=%O`). Because of that bridge, `primitives/pre_term.v` — which implements the `normalize.v` operations in HeapLang — needs no mathcomp beyond `ssreflect`. Everything from `core/term/` upward is stdpp (`Forall`, `≡ₚ`, `∈`, `merge_sort`). The active boolean→Prop coercion above `pre_term` is stdpp's `Is_true`, **not** ssreflect's `is_true` (bridged by `is_trueP` in `lib/mathcomp_compat.v`); mixing the two silently breaks `rewrite`/`apply`.
 
 ### Case Studies
 

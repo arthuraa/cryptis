@@ -166,7 +166,7 @@ Lemma exps_TExp1 a : negb (is_mul a) -> exps (TExp (TInt 0) a) ≡ₚ [a].
 Proof.
 move=> Nm.
 rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [a]); last by rewrite /TExpN TMulN1.
-rewrite exps_TExpN';
+rewrite exps_TExpN;
   [done | by case | by rewrite /atomic; apply/Forall_singleton | exact: (no_inv_singleton Nm)].
 Qed.
 

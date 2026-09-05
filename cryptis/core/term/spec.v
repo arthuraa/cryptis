@@ -351,7 +351,6 @@ Definition zero : term := TInt 0.
 
 End Spec.
 
-Arguments repr_term /.
 Arguments Spec.tag_def /.
 Arguments Spec.untag_def /.
 
@@ -360,83 +359,3 @@ Existing Instance Spec.of_list_inj.
 
 Lemma subterm_tag c t1 t2 : subterm t1 t2 → subterm t1 (Spec.tag c t2).
 Proof. by rewrite Spec.tag_unseal; eauto using subterm. Qed.
-
-#[global]
-Hint Resolve STRefl : core.
-
-Lemma TExp_TExpN t1 ts1 t2 : TExp (TExpN t1 ts1) t2 = TExpN t1 (t2 :: ts1).
-Proof.
-have -> : TExp (TExpN t1 ts1) t2 = TExpN (TExpN t1 ts1) [t2].
-  by rewrite /TExpN TMulN1.
-rewrite TExpNA; apply: TExpN_perm.
-by rewrite -Permutation_cons_append.
-Qed.
-
-Lemma exps_count_TExpNW t1 t2 ts :
-  atomic ts ->
-  (∀ t, t ∈ ts → t1 ≠ TInv t) →
-  (SMS.count TInv t1 (exps t2) ≤ SMS.count TInv t1 (exps (TExpN t2 ts)))%Z.
-Proof.
-elim: ts => [|t ts IH]; first by move => _ _; rewrite TExpN0; lia.
-move => atom t1_ts.
-move: atom => /Forall_cons [Nmt atom'].
-rewrite -TExp_TExpN; set t2' := TExpN t2 ts.
-apply: (Z.le_trans _ (SMS.count TInv t1 (exps t2'))).
-- apply: (IH atom') => t' t'_ts; apply: t1_ts; rewrite elem_of_cons; eauto.
-- apply: (exps_count_TExpW t1 t2' t Nmt); move/(_ t): t1_ts; apply.
-  rewrite elem_of_cons; by eauto.
-Qed.
-
-Lemma elem_of_TExpN2l g t1 t2 :
-  negb (is_mul t1) -> negb (is_mul t2) ->
-  t1 ≠ TInv t2 →
-  TInv t1 ∉ exps g →
-  t1 ∈ exps (TExpN g [t1; t2]).
-Proof.
-move=> Nm1 Nm2 t1_t2 t1_g.
-rewrite (not_elem_of_TInv_exps _ Nm1) -exps_count_gt0 in t1_g.
-have e : TExpN g [t1; t2] = TExp (TExp g t1) t2.
-  rewrite (_ : TExp g t1 = TExpN g [t1]); last by rewrite /TExpN TMulN1.
-  rewrite TExp_TExpN; exact: TExpC2.
-rewrite e -exps_count_gt0 (exps_count_TExp t1 (TExp g t1) t2 Nm2).
-rewrite (@decide_False _ (t1 = TInv t2)); last exact: t1_t2.
-by case: decide; lia.
-Qed.
-
-Lemma elem_of_TExpN2r g t1 t2 :
-  negb (is_mul t1) -> negb (is_mul t2) ->
-  t1 ≠ TInv t2 →
-  TInv t2 ∉ exps g →
-  t2 ∈ exps (TExpN g [t1; t2]).
-Proof.
-move=> Nm1 Nm2 t1_t2 t2_g.
-rewrite TExpC2.
-apply: (elem_of_TExpN2l Nm2 Nm1); last exact: t2_g.
-by move=> contra; apply: t1_t2; rewrite contra TInvK.
-Qed.
-
-Lemma base_expN t : ¬ is_exp t → base t = t.
-Proof. move=> tNX; apply: base_expN_bool; apply/negb_True; exact: tNX. Qed.
-
-Lemma exps_expN t : ¬ is_exp t → exps t = [].
-Proof. move=> tNX; apply: exps_expN_bool; apply/negb_True; exact: tNX. Qed.
-
-Lemma exps_TExpN' t ts :
-  ¬ is_exp t -> atomic ts ->
-  (forall t', t' ∈ ts -> TInv t' ∉ ts) ->
-  exps (TExpN t ts) ≡ₚ ts.
-Proof.
-move => tNexp atom nc.
-rewrite (@exps_TExpN t ts atom) (exps_expN tNexp) app_nil_l.
-exact: (to_perm_id _ nc).
-Qed.
-
-Lemma is_exp_base t : ¬ is_exp (base t).
-Proof. apply/negb_True; exact: is_exp_base_bool. Qed.
-Hint Resolve is_exp_base : core.
-
-(* Re-export the [Set Implicit Arguments] argument structure that the old
-   with_stdpp.v restatements provided for these lemmas, so downstream callers
-   that pass only the hypotheses keep working. *)
-Arguments tsize_lt_TExp {t1 t2} _ _.
-Arguments tsize_TExp_TInv {t1 t2} _ _.
