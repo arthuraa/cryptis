@@ -71,7 +71,7 @@ wp_apply (wp_mk_nonce_freshN {[(TExp g p_s)]} (fun _ => False)%I opaque_secret
                                               (fun t =>  {[(TInv t)]})) => //.
 - iIntros "%"; rewrite elem_of_singleton; iIntros "->".
   iApply minted_TExp.
-    by intro contra.
+    by [].
   iSplit => //.
   by iApply minted_TInt.
 - iIntros "%t".
@@ -96,7 +96,7 @@ iApply "post".
 iExists k_s, p_s, (TExp g p_s), (TExp g p_u), _.
 do !iSplit => //.
 - iApply public_TExp_iff.
-    by case.
+    by [].
     by exact: (negb_is_mul_nonce p_s).
   do !iSplit => //.
   + by iApply minted_TInt.
@@ -105,12 +105,12 @@ do !iSplit => //.
     iNext; iModIntro; iPureIntro.
     have Nm : negb (is_mul p_s) := negb_is_mul_nonce p_s.
     rewrite (_ : TExp g p_s = TExpN g [TNonce p_s]); last by rewrite /TExpN TMulN1.
-    by rewrite exps_TExpN'; [by [] | by case | by rewrite /atomic; apply/Forall_singleton | exact: (invs_canceled1 Nm)].
+    by rewrite exps_TExpN; [by [] | by [] | exact: invs_canceled1 Nm].
   + by iModIntro; iIntros "?"; iApply public_TInt.
 - iApply (public_sencIS _ (opN.@"AuthEnc") envelope_pred _) => //.
   1: rewrite minted_senc minted_THash minted_tag.
   1, 2: iApply minted_of_list; do !iSplit => //; iApply minted_TExp.
-  1, 3, 5: by intro contra.
+  1, 3, 5: by [].
   1-3: iSplit => //.
   1: by rewrite minted_THash minted_tag.
   1, 2: by iApply minted_TInt.
@@ -131,7 +131,7 @@ do !iSplit => //.
       iNext; iModIntro; iPureIntro.
       have Nm : negb (is_mul p_s) := negb_is_mul_nonce p_s.
       rewrite (_ : TExp g p_s = TExpN g [TNonce p_s]); last by rewrite /TExpN TMulN1.
-      by rewrite exps_TExpN'; [by [] | by case | by rewrite /atomic; apply/Forall_singleton | exact: (invs_canceled1 Nm)].
+      by rewrite exps_TExpN; [by [] | by [] | exact: invs_canceled1 Nm].
     + done.
   iModIntro.
   rewrite public_senc_key.
@@ -152,15 +152,17 @@ do !iSplit => //.
     apply /subtermsP.
     have Nm : negb (is_mul p_u) := negb_is_mul_nonce p_u.
     rewrite (_ : TExp g p_u = TExpN g [TNonce p_u]); last by rewrite /TExpN TMulN1.
-    rewrite subtermsE //; last by rewrite /atomic; apply/Forall_singleton.
-    rewrite cancel_invs1 /= [subterms p_u]subterms_nonce //.
+    rewrite subtermsE //; last exact: invs_canceled1 Nm.
+    rewrite /= [subterms p_u]subterms_nonce //.
     rewrite /g subtermsE /=.
     have p_s_ne2 : TNonce p_s ≠ TInt 0 by move=> E; discriminate E.
-    have Hne1 : negb (is_nonce (TExpN (TInt 0) [TNonce p_u])).
-      rewrite (_ : TExpN (TInt 0) [TNonce p_u] = TExp (TInt 0) p_u); last by rewrite /TExpN TMulN1.
-      by apply: is_nonce_TExp => //; exact: (negb_is_mul_nonce p_u).
     have p_s_ne1 : TNonce p_s ≠ TExpN (TInt 0) [TNonce p_u].
-      by move=> E; rewrite -E in Hne1; case: Hne1.
+      move=> E.
+      have H1 : exps (TExpN (TInt 0) [TNonce p_u]) ≡ₚ [TNonce p_u].
+        rewrite exps_TExpN //; exact: invs_canceled1 (negb_is_mul_nonce p_u).
+      have H2 : exps (TNonce p_s) = [].
+        by rewrite /exps (expo_expN (TNonce p_s) I) factors_TMulN0.
+      by move: H1; rewrite -E H2 => /Permutation_length.
     set_solver.
   + iApply public_TExp_exp_pred;
       first by exact: (negb_is_mul_nonce p_u).
@@ -171,7 +173,7 @@ do !iSplit => //.
       iNext; iModIntro; iPureIntro.
       have Nm : negb (is_mul p_u) := negb_is_mul_nonce p_u.
       rewrite (_ : TExp g p_u = TExpN g [TNonce p_u]); last by rewrite /TExpN TMulN1.
-      by rewrite exps_TExpN'; [by [] | by case | by rewrite /atomic; apply/Forall_singleton | exact: (invs_canceled1 Nm)].
+      by rewrite exps_TExpN; [by [] | by [] | exact: invs_canceled1 Nm].
     * done.
 Qed.
 
@@ -212,7 +214,7 @@ rewrite Spec.of_listK.
 wp_pures.
 rewrite subst_list_match /=.
 wp_list_match => [k_s' p_s' P_s' P_u' envelope' e' | ]; last first.
-  by intro contra.
+  by [].
 symmetry in e'; inversion e'; subst; clear e'.
 rewrite public_of_list /=.
 iDestruct "Hpubm1" as "(? & ? & ? & _)".
@@ -241,7 +243,7 @@ wp_apply wp_send => //.
     iApply exp_pred_intro1 => //.
     by iApply "Hexpk_s".
   - iApply public_TExp_iff.
-      by case.
+      by [].
       by exact: (negb_is_mul_nonce x_s).
     do !iSplit => //.
     + by iApply minted_TInt.
@@ -249,7 +251,7 @@ wp_apply wp_send => //.
       iApply "Hexpx_s"; iPureIntro.
       have Nm : negb (is_mul x_s) := negb_is_mul_nonce x_s.
       rewrite (_ : TExp g x_s = TExpN g [TNonce x_s]); last by rewrite /TExpN TMulN1.
-      by rewrite exps_TExpN'; [by [] | by case | by rewrite /atomic; apply/Forall_singleton | exact: (invs_canceled1 Nm)].
+      by rewrite exps_TExpN; [by [] | by [] | exact: invs_canceled1 Nm].
     + by rewrite public_TInt; auto.
   - iApply public_THashIS => //.
       rewrite minted_of_list /= !minted_THash !minted_tag !minted_of_list /=.
@@ -288,8 +290,8 @@ iSplit.
       apply/subtermsP.
       rewrite (_ : TExp g p_s = TExpN g [TNonce p_s]); last by rewrite /TExpN TMulN1.
       have Nm : negb (is_mul p_s) := negb_is_mul_nonce p_s.
-      rewrite subtermsE //; last by rewrite /atomic; apply/Forall_singleton.
-      rewrite cancel_invs1 /=.
+      rewrite subtermsE //; last exact: invs_canceled1 Nm.
+      rewrite /=.
       by rewrite [subterms p_s]subterms_nonce //; set_solver.
     have p_s_uV : TNonce p_s ≠ TInv p_u.
       move=> contra; have: is_inv (TInv p_u).

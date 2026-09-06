@@ -20,6 +20,36 @@ apply/(ssrbool.sameP).
 - exact: eqtype.eqP.
 Qed.
 
+(* UPSTREAM *)
+Lemma Permutation_fmap_inv_l {A B} (f : A → B) (xs : list A) (ys : list B) :
+  f <$> xs ≡ₚ ys → ∃ xs', ys = f <$> xs' ∧ xs ≡ₚ xs'.
+Proof.
+elim: xs ys => //= [|x xs IH] ys.
+- by move=> /Permutation_nil ->; exists [].
+- move=> e; have := Permutation_cons_inv_l _ _ _ e.
+  case=> ys1 [] ys2 [] eys {}e.
+  case: (IH _ e)=> xs' [] eys' exs.
+  exists (take (length ys1) xs' ++ x :: drop (length ys1) xs').
+  rewrite fmap_app fmap_take fmap_cons fmap_drop.
+  rewrite -eys' take_app_length drop_app_length; split => //.
+  rewrite exs -Permutation_middle.
+  by rewrite take_drop.
+Qed.
+
+Global Instance list_fmap_perm_inj {A B} (f : A → B) :
+  Inj (=) (=) f →
+  Inj (≡ₚ) (≡ₚ) (fmap f).
+Proof.
+move=> inj_f xs ys /Permutation_fmap_inv_l [xs' [] e1 e2].
+have {}e1: ys = xs' by apply: (inj (fmap f : list _ → _)).
+by rewrite e1.
+Qed.
+
+Lemma sum_list_with_fmap {A B} (f : B → nat) (g : A → B) xs :
+  sum_list_with f (g <$> xs) = sum_list_with (f ∘ g) xs.
+Proof. by elim: xs => //= x xs ->. Qed.
+(* /UPSTREAM *)
+
 Section Escrow.
 
 Context `{invGS Σ}.

@@ -51,7 +51,7 @@ Definition session : val := λ: "uid" "c" "pw",
     bind: "m2" := list_of_term (recv "c") in
     list_match: [ "β"; "X_s"; "envelope"; "A_s" ] := "m2" in
     (* TODO: check β ∈ G *)
-    let: "rw" := derive_senc_key (H "rw" [ "pw"; (texp "β" (hl_inv "r")) ]) in
+    let: "rw" := derive_senc_key (H "rw" [ "pw"; (texp "β" (hl_inv_aux "r")) ]) in
     bind: "envelope_dec" := AuthDec "rw" "envelope" in
     bind: "list_envelope_dec" := list_of_term "envelope_dec" in
     list_match: [ "p_u"; "P_u"; "P_s" ] := "list_envelope_dec" in

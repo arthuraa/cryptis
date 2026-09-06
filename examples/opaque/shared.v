@@ -212,12 +212,11 @@ Proof. rewrite Spec.tag_unseal; exact: STPair2. Qed.
 Lemma subterm_TExpN_exp (t t' : term) (ts : list term) :
   ( exists t'', subterm t t'' /\ t'' ∈ ts) ->
   negb (is_exp t') ->
-  atomic ts ->
   invs_canceled ts ->
   subterm t (TExpN t' ts).
 Proof.
-intros [t'' [Hst Hmem]] Hnexp Hatomic Hcanceled.
-exact: (STExp2 Hnexp Hatomic Hcanceled Hst Hmem).
+intros [t'' [Hst Hmem]] Hnexp Hic.
+exact: (STExp2 Hnexp Hic Hst Hmem).
 Qed.
 
 Lemma subterm_TExp_exp (t t' t'' : term) :
@@ -232,69 +231,41 @@ apply subterm_TExpN_exp => //.
 - exists t''. split => //.
   rewrite elem_of_cons.
   by left.
-- by rewrite /atomic; apply/Forall_singleton.
-- exact: (invs_canceled1 Nm).
+- exact: invs_canceled1 Nm.
 Qed.
 
 Lemma subterm_exp (t t' : term) :
   subterm t t' <-> t = t' \/ subterm t (base t') \/ exists t'', subterm t t'' /\ t'' ∈ exps t'.
 Proof.
-split; intros H.
-- inversion H; subst.
-  + by left.
-  + right; left; rewrite base_expN; [by apply: STPair1 | by case].
-  + right; left; rewrite base_expN; [by apply: (STPair2 t1) | by case].
-  + right; left; rewrite base_expN; [by apply: STKey | by case].
-  + right; left; rewrite base_expN; [by apply: STSeal1 | by case].
-  + right; left; rewrite base_expN; [by apply: (STSeal2 k) | by case].
-  + right; left; rewrite base_expN; [by apply: STHash | by case].
-  + right; left. rewrite base_expN;
-      last by apply/negb_True; exact: (is_exp_TInv t'0 H0 H1).
-    by apply: (STInv H0 H1 H2).
-  + right; left. by rewrite base_TExpN base.base_expN_bool //; exact: H0.
-  + right; right. exists t''. split => //.
-    have Nexp : ¬ is_exp t'0 by apply/negb_True; exact: H0.
-    by rewrite exps_TExpN' //.
-  + have Nexp : ¬ is_exp (TMulN ts).
-      move=> Hexp.
-      move: (is_mul_TMulN ts H0) Hexp;
-        rewrite is_mul_unfold is_exp_unfold; by case: (unfold_term (TMulN ts)).
-    right; left. rewrite (base_expN Nexp). by apply: (STMul H0 H1 H2).
-- destruct H as [-> | H] => //.
-  destruct (is_exp t') eqn:Eexp, H as [H | H].
-  + rewrite -[t']base_expsK.
-    by apply: (STExp1 (exps t') (base.is_exp_base_bool _) H).
-  + rewrite -[t']base_expsK.
-    apply: subterm_TExpN_exp => //.
-    * exact: (base.is_exp_base_bool _).
-    * exact: atom_exps.
-    * exact: invs_canceled_exps.
-  + have Nexp : ¬ is_exp t' := Is_true_false_2 _ Eexp.
-    by rewrite (base_expN Nexp) in H.
-  + destruct H as [? [_ contra]].
-    have Nexp : ¬ is_exp t' := Is_true_false_2 _ Eexp.
-    by rewrite (exps_expN Nexp) elem_of_nil in contra.
+rewrite subtermsP (subterms_base_exps t') !elem_of_union elem_of_singleton.
+rewrite -subtermsP elem_of_union_list.
+split.
+- case=> [[?|?]|]; eauto.
+  case=> X [] /list_elem_of_fmap [u [-> u_in]] t_u.
+  by right; right; exists u; split => //; apply/subtermsP.
+- case=> [?|[?|[u [t_u u_in]]]]; eauto.
+  right; exists (subterms u); split; last exact/subtermsP.
+  by apply/list_elem_of_fmap; exists u.
 Qed.
 
 Lemma subterm_TExpN_exp' (t t' : term) (ts: list term) :
   ¬ subterm t t' ->
-  atomic ts ->
   invs_canceled (ts ++ exps t') ->
   (exists t'', t'' ∈ ts /\ subterm t t'') ->
   subterm t (TExpN t' ts).
 Proof.
-intros Hnst Hatomic Hcan Hst.
+intros Hnst Hcan Hst.
+have Hic : invs_canceled (exps t' ++ ts).
+  by rewrite Permutation_app_comm.
+have E : exps (TExpN t' ts) ≡ₚ exps t' ++ ts.
+  rewrite /exps /TExpN expo_TExp -{1}[expo t']factorsK TMulN_app.
+  exact: factors_TMulN Hic.
 rewrite subterm_exp.
 destruct (term_eq_dec t (TExpN t' ts)); first by left.
 right; right.
 destruct Hst as [t'' [Hmem Hst]].
 exists t''; split => //.
-rewrite exps_TExpN //.
-have Hac : atomic (exps t' ++ ts).
-  by apply/Forall_app; split; [exact: atom_exps | exact: Hatomic].
-have Hic : invs_canceled (exps t' ++ ts).
-  by rewrite (Permutation_app_comm (exps t') ts).
-rewrite (cancel_invs_canceled Hac Hic) elem_of_app; by right.
+by rewrite E elem_of_app; right.
 Qed.
 
 Lemma subterm_TExp_exp' (t t' t'' : term) :
@@ -307,10 +278,10 @@ Proof.
 intros Hnst Nm Hnmem Hst.
 rewrite (_ : TExp t' t'' = TExpN t' [t'']); last by rewrite /TExpN TMulN1.
 apply (subterm_TExpN_exp' Hnst) => //.
-- by rewrite /atomic; apply/Forall_singleton.
-- rewrite invs_canceled_cons //.
-  split => //.
-  exact: invs_canceled_exps.
+- rewrite /=; apply/invs_canceled_cons.
+  split; first exact: Hnmem.
+  split; first exact: Nm.
+  exact: invs_canceled_factors (expo t').
 - exists t''.
   split => //.
   rewrite elem_of_cons.

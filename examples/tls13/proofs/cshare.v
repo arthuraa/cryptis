@@ -141,10 +141,10 @@ Definition CShare_wf ke : iProp :=
   | Psk psk cn =>
     minted psk ∧ public cn
   | Dh g cn x  =>
-    ⌜¬ is_exp g⌝ ∧ public g ∧ public cn ∧ dh_seed (λ _, True)%I x
+    ⌜negb (is_exp g)⌝ ∧ public g ∧ public cn ∧ dh_seed (λ _, True)%I x
   | PskDh psk g cn x =>
     minted psk ∧
-    ⌜¬ is_exp g⌝ ∧ public g ∧ public cn ∧ dh_seed (λ _, True)%I x
+    ⌜negb (is_exp g)⌝ ∧ public g ∧ public cn ∧ dh_seed (λ _, True)%I x
   end.
 
 #[global]

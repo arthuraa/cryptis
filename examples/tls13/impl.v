@@ -487,8 +487,8 @@ Proof.
 rewrite /session_key_of.
 case: kex1 kex2 => [???|?????|??????] [???|?????|??????] //=.
 - by case=> [/Spec.tag_inj [_ ->] -> ->].
-- by case=> e_g -> -> <- ->; rewrite e_g TExp_comm.
-- by case=> [] /Spec.tag_inj [_ ->] e_g -> -> <- ->; rewrite e_g TExp_comm.
+- by case=> e_g -> -> <- ->; rewrite e_g TExpC.
+- by case=> [] /Spec.tag_inj [_ ->] e_g -> -> <- ->; rewrite e_g TExpC.
 Qed.
 
 (** Check a server share against a corresponding client share.  This function

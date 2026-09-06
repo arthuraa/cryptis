@@ -1,7 +1,8 @@
+From mathcomp Require Import ssreflect.
+From stdpp Require Import sorting list lexico.
 From iris.heap_lang Require Import lang notation proofmode.
-From mathcomp Require ssrbool order path.
-From cryptis Require Export mathcomp_compat.
 From cryptis Require Import lib.repr.
+From cryptis.lib Require Import list_sort.
 
 Definition get_list : val := rec: "loop" "l" "n" :=
   match: "l" with NONE => NONE
@@ -348,88 +349,95 @@ End ListLemmas.
 
 Section ListLemmasEq.
 
-#[warnings="-ambiguous-paths"]
-Import ssrbool seq boot.eqtype.
-Variable (A : eqType).
-Context `{!Repr A, !heapGS Σ}.
+Context `{!EqDecision A, !Repr A, !heapGS Σ}.
 
-Lemma find_if_in (v: A) (l : list A):
-  v \in l = match List.find (eq_op v) l with
-              Some _ => true
-            | None => false
-            end.
-Proof. unfold in_mem; elim: l => [|a l IH] //=; by case: (v == a). Qed.
+Implicit Types (v x : A) (l : list A).
 
-Lemma twp_mem_list (eqImpl : heap_lang.val) (v : A) (l : list A) E :
+Lemma find_if_in v l :
+  bool_decide (v ∈ l) =
+  match List.find (λ x, bool_decide (v = x)) l with
+  | Some _ => true
+  | None => false
+  end.
+Proof.
+elim: l => [|x l IH] /=; first exact: bool_decide_eq_false_2 (not_elem_of_nil v).
+case: (bool_decide_reflect (v = x)) => [->|ne].
+  by rewrite bool_decide_eq_true_2 //; exact: list_elem_of_here.
+by rewrite -IH; apply: bool_decide_ext; rewrite elem_of_cons; naive_solver.
+Qed.
+
+Lemma twp_mem_list (eqImpl : val) v l E :
   (∀ x y : A, [[{ True }]]
     eqImpl (repr x) (repr y) @ E
-  [[{ RET #(eq_op x y); True }]]) →
+  [[{ RET #(bool_decide (x = y)); True }]]) →
   [[{ True }]]
     mem_list eqImpl (repr v) (repr l) @ E
-  [[{ RET #(v \in l); True }]].
+  [[{ RET #(bool_decide (v ∈ l)); True }]].
 Proof.
 iIntros "%twp_eqImpl %Φ _ HΦ".
 wp_lam; wp_pures.
-wp_apply twp_find_list => //.
+wp_apply (twp_find_list (λ x, bool_decide (v = x))) => //.
   iIntros "%x %Ψ _ HΨ"; wp_pures; wp_apply twp_eqImpl => //.
-iIntros "_".
-rewrite find_if_in.
-case (List.find (eq_op v) l) => *; wp_pures; by iApply "HΦ".
+iIntros "_"; rewrite find_if_in.
+case: (List.find (λ x, bool_decide (v = x)) l) => *; wp_pures; by iApply "HΦ".
 Qed.
 
-Lemma wp_mem_list (eqImpl : heap_lang.val) (v : A) (l : list A) E :
-  (forall x y : A, {{{ True }}}
+Lemma wp_mem_list (eqImpl : val) v l E :
+  (∀ x y : A, {{{ True }}}
     eqImpl (repr x) (repr y) @ E
-  {{{ RET #(eq_op x y); True }}}) ->
+  {{{ RET #(bool_decide (x = y)); True }}}) →
   {{{ True }}}
     mem_list eqImpl (repr v) (repr l) @ E
-  {{{ RET #(v \in l); True }}}.
+  {{{ RET #(bool_decide (v ∈ l)); True }}}.
 Proof.
-iIntros "%H %Φ _ Hpost".
+iIntros "%wp_eqImpl %Φ _ HΦ".
 wp_lam; wp_pures.
-wp_apply (wp_find_list (eq_op v)) => //.
-  iIntros "%x %Φ' _ Hpost".
-  wp_pures.
-  by iApply H; [| iNext].
-iIntros "_"; wp_pures.
-rewrite find_if_in.
-case: (List.find (eq_op v) l) => [a |]; wp_pures; iModIntro; by iApply "Hpost".
+wp_apply (wp_find_list (λ x, bool_decide (v = x))) => //.
+  iIntros "%x %Ψ _ HΨ"; wp_pures.
+  by iApply wp_eqImpl; [|iNext].
+iIntros "_"; wp_pures; rewrite find_if_in.
+case: (List.find (λ x, bool_decide (v = x)) l) => *; wp_pures; iModIntro;
+  by iApply "HΦ".
 Qed.
 
-Lemma twp_rem_list (eqImpl : heap_lang.val) (v : A) (l : list A) E :
+Lemma twp_rem_list (eqImpl : val) v l E :
   (∀ x y : A, [[{ True }]]
     eqImpl (repr x) (repr y) @ E
-  [[{ RET #(eq_op x y); True }]]) →
+  [[{ RET #(bool_decide (x = y)); True }]]) →
   [[{ True }]]
     rem_list eqImpl (repr v) (repr l) @ E
-  [[{ RET repr (seq.rem v l); True }]].
+  [[{ RET repr (rem v l); True }]].
 Proof.
 rewrite repr_list_unseal /=.
 iIntros "%twp_eqImpl %Φ _ HΦ".
-iStopProof; elim: l Φ => [| h l' IH] Φ /=; iIntros "HΦ"; wp_rec; wp_pures.
+iStopProof; elim: l Φ => [|x l IH] Φ /=; iIntros "HΦ"; wp_rec; wp_pures.
   by iApply "HΦ".
 wp_apply twp_eqImpl => //; iIntros "_".
-case: (h == v) => /=; wp_pures; first by iApply "HΦ".
+rewrite (_ : bool_decide (v = x) = bool_decide (x = v)); last first.
+  by apply: bool_decide_ext; split; congruence.
+case: (bool_decide (x = v)) => /=; wp_pures; first by iApply "HΦ".
 wp_apply IH; iIntros "_".
 wp_pures; by iApply "HΦ".
 Qed.
 
-Lemma wp_rem_list (eqImpl : heap_lang.val) (v : A) (l : list A) E :
+Lemma wp_rem_list (eqImpl : val) v l E :
   (∀ x y : A, {{{ True }}}
     eqImpl (repr x) (repr y) @ E
-  {{{ RET #(eq_op x y); True }}}) →
+  {{{ RET #(bool_decide (x = y)); True }}}) →
   {{{ True }}}
     rem_list eqImpl (repr v) (repr l) @ E
-  {{{ RET (repr (seq.rem v l)); True }}}.
+  {{{ RET (repr (rem v l)); True }}}.
 Proof.
 rewrite repr_list_unseal /=.
-iIntros "%eqP"; iLöb as "IH" forall (l); iIntros "%Φ _ Hpost".
+iIntros "%wp_eqImpl"; iLöb as "IH" forall (l); iIntros "%Φ _ HΦ".
 wp_lam; wp_pures.
-case: l => [|x l] /=; wp_pures; first by iApply "Hpost".
-wp_apply eqP => //; iIntros "_".
-case: (x == v); wp_pures; first by iApply "Hpost".
+case: l => [|x l] /=; wp_pures; first by iApply "HΦ".
+wp_apply wp_eqImpl => //; iIntros "_".
+rewrite (_ : bool_decide (v = x) = bool_decide (x = v)); last first.
+  by apply: bool_decide_ext; split; congruence.
+case: (bool_decide (x = v)); wp_pures; first by iApply "HΦ".
 wp_apply "IH" => //; iIntros "_".
-wp_pures; by iApply "Hpost".
+wp_pures; by iApply "HΦ".
 Qed.
 
 End ListLemmasEq.
@@ -469,82 +477,127 @@ End DoUntil.
 
 Section Ordered.
 
-#[warnings="-ambiguous-paths"]
-Import ssrbool seq all_order path deriving.instances.
-Variable (d : Order.disp_t) (A : orderType d).
+Context {A : Type}.
+Context (R : relation A)
+  `{!RelDecision R, !Transitive R, !Total R, !AntiSymm (=@{A}) R}.
 Context `{!Repr A, !heapGS Σ}.
-Import Order Order.POrderTheory Order.TotalTheory.
-Implicit Types (x y z : A) (s : seqlexi_with d A).
 
-Lemma twp_insert_sorted (f : val) (x : A) (l : list A) E :
-  is_true (sorted le l) →
-  (∀ (y z : A),
-    [[{ True }]] f (repr y) (repr z) @ E [[{ RET #(le y z); True }]]) →
+Implicit Types (x y z : A) (l : list A).
+
+Lemma twp_insert_sorted (f : val) x l E :
+  StronglySorted R l →
+  (∀ y z : A,
+    [[{ True }]] f (repr y) (repr z) @ E
+    [[{ RET #(bool_decide (R y z)); True }]]) →
   [[{ True }]]
     insert_sorted f (repr x) (repr l) @ E
-  [[{ RET (repr (sort le (x :: l))); True }]].
+  [[{ l', RET (repr l'); ⌜StronglySorted R l'⌝ ∗ ⌜l' ≡ₚ x :: l⌝ }]].
 Proof.
-rewrite repr_list_unseal => sorted_l wp_f Φ; iIntros "_ post".
-iSpecialize ("post" with "[//]"); iStopProof.
-elim: l sorted_l Φ => //= [|y l IH] path_l Φ;
-  iIntros "post"; wp_rec; wp_pures => //.
-move/(_ (path_sorted path_l)) in IH.
+rewrite repr_list_unseal => sorted_l wp_f Φ; iIntros "_ post"; iStopProof.
+elim: l sorted_l Φ => [|y l IH] sorted_l Φ /=; iIntros "post"; wp_rec; wp_pures.
+  iApply ("post" $! [x]); iPureIntro; split; last done.
+  by repeat constructor.
+move: (sorted_l) => /StronglySorted_cons [Ry_l sorted_l'].
+move/(_ sorted_l') in IH.
 wp_bind (f _ _); iApply wp_f => //; iIntros "_".
-have [le_xy|le_yx] := boolP (x <= y)%O; wp_pures.
-  by rewrite sort_le_id //= ?le_xy.
-move: le_yx; rewrite -ltNge => /ltW le_yx.
+case: (bool_decide_reflect (R x y)) => [Rxy|nRxy]; wp_pures.
+  iApply ("post" $! (x :: y :: l)); iPureIntro; split; last done.
+  apply/StronglySorted_cons; split; last exact: sorted_l.
+  constructor; first exact: Rxy.
+  apply: (Forall_impl _ _ _ Ry_l) => z Ryz; exact: (transitivity Rxy Ryz).
 wp_bind (insert_sorted _ _ _); iApply IH.
-suff -> : sort le [:: x, y & l] = y :: sort le (x :: l) by wp_pures.
-rewrite -[RHS]sort_le_id /=.
-  apply/perm_sort_leP/perm_consP.
-  exists 1, (l ++ [:: x])%SEQ.
-  by rewrite /= perm_catC perm_sym /= perm_sort; split.
-rewrite path_min_sorted ?sort_le_sorted // all_sort /= le_yx /=.
-apply: order_path_min => //; apply: le_trans.
+iIntros "%l' [%ss' %perm']"; wp_pures.
+iApply ("post" $! (y :: l')); iPureIntro; split; last first.
+  by rewrite perm'; exact: Permutation_swap.
+apply/StronglySorted_cons; split; last exact: ss'.
+apply/Forall_forall => z; rewrite perm' elem_of_cons => - [->|z_l].
+  exact: (total_not _ _ nRxy).
+by move/Forall_forall: Ry_l; apply.
 Qed.
 
-Lemma twp_insertion_sort (f : val) (l : list A) E :
-  (∀ (x y : A),
-    [[{ True }]] f (repr x) (repr y) @ E [[{ RET #(le x y); True }]]) →
+Lemma twp_insertion_sort (f : val) l E :
+  (∀ x y : A,
+    [[{ True }]] f (repr x) (repr y) @ E
+    [[{ RET #(bool_decide (R x y)); True }]]) →
   [[{ True }]]
     insertion_sort f (repr l) @ E
-  [[{ RET (repr (sort le l)); True }]].
+  [[{ RET (repr (merge_sort R l)); True }]].
 Proof.
-rewrite repr_list_unseal => wp_f Φ; iIntros "_ Hpost".
-iSpecialize ("Hpost" with "[//]"); iStopProof.
-elim: l Φ => [| y l' IH] Φ; iIntros "Hpost"; wp_rec; wp_pures.
-  iApply "Hpost".
-wp_apply IH.
-rewrite -repr_list_unseal; iApply twp_insert_sorted => //; iIntros "_".
-suff ->: sort <=%O (y :: sort <=%O l') = sort <=%O (y :: l') by [].
-apply /perm_sort_leP; rewrite perm_cons.
-apply /permPl /perm_sort.
-Qed.
-
-Lemma twp_leq_list (feq : val) (fle : val) s1 s2 E :
-  (∀ x1 x2,
-    [[{ True }]]
-      feq (repr x1) (repr x2) @ E
-    [[{ RET #(eqtype.eq_op x1 x2); True }]]) →
-  (∀ x1 x2,
-    is_true (x1 \in s1) →
-    [[{ True }]]
-      fle (repr x1) (repr x2) @ E
-    [[{ RET #(le x1 x2); True }]]) →
-  [[{ True }]]
-    leq_list feq fle (repr s1) (repr s2) @ E
-  [[{ RET #(le s1 s2); True }]].
-Proof.
-move=> feqP fleqP Φ; iIntros "_ post".
+rewrite repr_list_unseal => wp_f Φ; iIntros "_ post".
 iSpecialize ("post" with "[//]"); iStopProof.
-move: fleqP; rewrite /= repr_list_unseal.
-elim: s1 s2 => [|x1 s1 IH] [|x2 s2] fleP; iIntros "HΦ"; wp_rec; wp_pures => //.
-rewrite lexi_cons; wp_bind (feq _ _); iApply feqP => //; iIntros "_".
-case: (ltgtP x1 x2) => [l_x1x2|l_x2x1|<-] /=; wp_pures.
-- by iApply fleP; rewrite ?inE ?eqtype.eqxx // ltW //; iIntros "_".
-- by iApply fleP; rewrite ?inE ?eqtype.eqxx // leNgt l_x2x1 //; iIntros "_".
-- iApply IH => // x1' ? x1'_in ?; iIntros "_ post".
-  by iApply fleP; rewrite // inE x1'_in orbT.
+elim: l Φ => [|y l IH] Φ; iIntros "post"; wp_rec; wp_pures => //.
+wp_apply IH.
+rewrite -repr_list_unseal.
+iApply (twp_insert_sorted _ _ _ _ (merge_sort_sorted R l) wp_f) => //.
+iIntros "%l' [%ss' %perm']".
+have -> : merge_sort R (y :: l) = l'.
+  apply: (StronglySorted_unique R); [exact: merge_sort_sorted|exact: ss'|].
+  by rewrite merge_sort_Permutation perm' merge_sort_Permutation.
+by iApply "post".
 Qed.
 
 End Ordered.
+
+Section Lexicographic.
+
+(** [leq_list] computes the *non-strict* lexicographic order.  stdpp's [lexico]
+    is strict, so that order is spelled [l1 = l2 ∨ lexico l1 l2].  It is
+    decidable for free: [list_lexico_po] and [list_lexico_trichotomy] lift the
+    element instances to [list A], and [trichotomyT_dec] turns those into a
+    [RelDecision]. *)
+
+Context `{!EqDecision A, !Lexico A,
+          !StrictOrder (@lexico A _), !TrichotomyT (@lexico A _),
+          !Repr A, !heapGS Σ}.
+
+Implicit Types (x : A) (l : list A).
+
+Lemma bool_decide_lexico_le l1 l2 :
+  bool_decide (l1 = l2 ∨ lexico l1 l2) =
+  match l1, l2 with
+  | [], _ => true
+  | _ :: _, [] => false
+  | x1 :: l1, x2 :: l2 =>
+      if bool_decide (x1 = x2) then bool_decide (l1 = l2 ∨ lexico l1 l2)
+      else bool_decide (x1 = x2 ∨ lexico x1 x2)
+  end.
+Proof.
+case: l1 l2 => [|x1 l1] [|x2 l2].
+- by apply: bool_decide_eq_true_2; left.
+- by apply: bool_decide_eq_true_2; right; exact I.
+- have e : lexico (x1 :: l1) (@nil A) ↔ False by done.
+  by apply: bool_decide_eq_false_2; rewrite e; naive_solver.
+- have irr : ¬ lexico x1 x1 by apply: (irreflexivity lexico).
+  have e : lexico (x1 :: l1) (x2 :: l2)
+           ↔ lexico x1 x2 ∨ (x1 = x2 ∧ lexico l1 l2) by done.
+  case: (bool_decide_reflect (x1 = x2)) => [ex|ne]; apply: bool_decide_ext;
+    rewrite e; naive_solver.
+Qed.
+
+Lemma twp_leq_list (feq fle : val) l1 l2 E :
+  (∀ x1 x2 : A,
+    [[{ True }]]
+      feq (repr x1) (repr x2) @ E
+    [[{ RET #(bool_decide (x1 = x2)); True }]]) →
+  (∀ x1 x2 : A,
+    x1 ∈ l1 →
+    [[{ True }]]
+      fle (repr x1) (repr x2) @ E
+    [[{ RET #(bool_decide (x1 = x2 ∨ lexico x1 x2)); True }]]) →
+  [[{ True }]]
+    leq_list feq fle (repr l1) (repr l2) @ E
+  [[{ RET #(bool_decide (l1 = l2 ∨ lexico l1 l2)); True }]].
+Proof.
+move=> feqP fleP Φ; iIntros "_ post".
+iSpecialize ("post" with "[//]"); iStopProof.
+move: fleP; rewrite /= repr_list_unseal.
+elim: l1 l2 => [|x1 l1 IH] [|x2 l2] fleP; iIntros "post"; wp_rec; wp_pures;
+  rewrite bool_decide_lexico_le; try by iApply "post".
+wp_bind (feq _ _); iApply feqP => //; iIntros "_".
+case: (bool_decide_reflect (x1 = x2)) => [ex|ne]; wp_pures.
+- iApply IH => // x1' x2' x1'_in; apply: fleP.
+  by apply: list_elem_of_further.
+- iApply fleP; [exact: list_elem_of_here|done|by iIntros "_"].
+Qed.
+
+End Lexicographic.

@@ -10,25 +10,6 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-(* DH term-algebra shims.  With binary [TExp], [TExp (TExp g a) b] is no longer
-   definitionally [TExpN g [b; a]]; these lemmas recover the old spellings.  They
-   are pure (no Iris), so they live outside [Section DH]. *)
-Lemma nonce_Nmul t : is_nonce t -> negb (is_mul t).
-Proof. by case: t. Qed.
-
-Lemma TExp2_TExpN g a b : TExp (TExp g a) b = TExpN g [b; a].
-Proof.
-rewrite (_ : TExp g a = TExpN g [a]); last by rewrite /TExpN TMulN1.
-by rewrite TExp_TExpN.
-Qed.
-
-Lemma TExp_comm g a b : TExp (TExp g a) b = TExp (TExp g b) a.
-Proof.
-rewrite (_ : TExp g a = TExpN g [a]); last by rewrite /TExpN TMulN1.
-rewrite (_ : TExp g b = TExpN g [b]); last by rewrite /TExpN TMulN1.
-by rewrite !TExp_TExpN TExpC2.
-Qed.
-
 Section DH.
 
 Context `{!cryptisGS Σ, !heapGS Σ}.
@@ -76,7 +57,7 @@ by rewrite /TExpN TMulN1.
 Qed.
 
 Lemma dh_seed_elim1 g a :
-  ¬ is_exp g →
+  negb (is_exp g) →
   dh_seed a -∗
   public (TExp g a) -∗
   ▷ P (TExp g a).
@@ -86,13 +67,10 @@ iAssert ⌜negb (is_mul a)⌝%I as %Nm_a; first by iDestruct "aP" as "(_ & $ & _
 rewrite public_TExp_iff //.
 iDestruct "p_t" as "(_ & _ & p_t & _)".
 set t' := TExp g a.
-(* MOVE *)
 have exps_t': exps t' = [a].
   apply Permutation_singleton_r.
   rewrite /t' (_ : TExp g a = TExpN g [a]); last by rewrite /TExpN TMulN1.
-  have atom_a : atomic [a] by rewrite /atomic; apply/Forall_singleton.
-  by rewrite (exps_TExpN' gNX atom_a (invs_canceled1 Nm_a)).
-(* /MOVE *)
+  by rewrite (exps_TExpN gNX (invs_canceled1 Nm_a)).
 have a_t' : a ∈ exps t' by rewrite exps_t'; set_solver.
 iPoseProof (exp_pred_inv_same with "p_t") as "[#contra|H]" => //.
   by iDestruct (dh_seed_elim0 with "aP contra") as ">[]".
@@ -104,7 +82,7 @@ by rewrite /t' e_base base_TExp base_expN.
 Qed.
 
 Lemma dh_seed_elim2 g a b :
-  ¬ is_exp g →
+  negb (is_exp g) →
   a ≠ b →
   a ≠ TInv b →
   dh_seed a -∗
@@ -115,17 +93,16 @@ Proof.
 iIntros "%gXN %a_b %a_bV #aP #bP #p".
 iAssert ⌜negb (is_mul a)⌝%I as %Nm_a; first by iDestruct "aP" as "(_ & $ & _)".
 iAssert ⌜negb (is_mul b)⌝%I as %Nm_b; first by iDestruct "bP" as "(_ & $ & _)".
-have atom_ab : atomic [a; b].
-  by rewrite /atomic Forall_cons Forall_singleton; split.
+have ic_ab : invs_canceled [a; b] := proj2 (invs_canceled2 Nm_a Nm_b) a_bV.
 have exps_t : exps (TExpN g [a; b]) ≡ₚ [a; b].
-  by rewrite (exps_TExpN' gXN atom_ab
-    (proj2 (invs_canceled2 Nm_a Nm_b) a_bV)).
+  by rewrite (exps_TExpN gXN ic_ab).
+have baseE : base (TExpN g [a; b]) = g by rewrite /TExpN base_TExp base_expN.
 have a_t : a ∈ exps (TExpN g [a; b]) by rewrite exps_t; set_solver.
 have b_t : b ∈ exps (TExpN g [a; b]) by rewrite exps_t; set_solver.
 iPoseProof (exp_pred_exps a_t with "p") as "[dh_a _]".
 iPoseProof (exp_pred_inv with "dh_a") as "(%c & %c_t & p_c)" => //.
 rewrite exps_t elem_of_cons list_elem_of_singleton in c_t.
-rewrite base_TExpN base_expN //.
+rewrite baseE.
 iDestruct "p_c" as "[p_c|(%t' & %ebase & %exps_t'S & contra)]".
   case: c_t=> ->.
   - iDestruct (dh_seed_elim0 with "aP p_c") as ">[]".
@@ -145,7 +122,7 @@ congruence.
 Qed.
 
 Lemma dh_public_TExp g a :
-  ¬ is_exp g →
+  negb (is_exp g) →
   minted g -∗
   dh_seed a -∗
   ▷ □ P (TExp g a) -∗
@@ -157,8 +134,7 @@ rewrite public_TExp_iff //; do !iSplit => //.
   iPureIntro; suff -> : exps (TExp g a) = [a] by [].
   apply Permutation_singleton_r.
   rewrite (_ : TExp g a = TExpN g [a]); last by rewrite /TExpN TMulN1.
-  have atom_a : atomic [a] by rewrite /atomic; apply/Forall_singleton.
-  by rewrite (exps_TExpN' gXN atom_a (invs_canceled1 Nm_a)).
+  by rewrite (exps_TExpN gXN (invs_canceled1 Nm_a)).
 - iModIntro; iIntros "#p".
   by iApply False_public; last iApply "aP1".
 Qed.
@@ -166,7 +142,7 @@ Qed.
 Definition mk_dh : val := mk_nonce.
 
 Lemma wp_mk_dh (T : gset term) g (Ψ : val → iProp) :
-  ¬ is_exp g ->
+  negb (is_exp g) ->
   cryptis_ctx -∗
   minted g -∗
   □ (∀ t, ⌜t ∈ T⌝ -∗ minted t) -∗
@@ -178,7 +154,7 @@ Lemma wp_mk_dh (T : gset term) g (Ψ : val → iProp) :
         Ψ a) -∗
   WP mk_dh #() {{ Ψ }}.
 Proof.
-iIntros "% #ctx #minted_g #minted_T post".
+iIntros "%gNX #ctx #minted_g #minted_T post".
 iApply (wp_mk_nonce_freshN T (λ _, False%I) dh_publ
          (λ t, {[t; TExp g t]})
   with "[//]" ) => //.
@@ -190,7 +166,7 @@ iApply (wp_mk_nonce_freshN T (λ _, False%I) dh_publ
 iIntros (a) "%a_T #m_a #aP #? #? token".
 have Nm_a : negb (is_mul a) by [].
 have a_g: TInv a ∉ exps g.
-  by rewrite exps_expN // elem_of_nil; case.
+  by rewrite /exps (expo_expN _ gNX) factors_TMulN0 elem_of_nil; case.
 have [? [] aV_ga a_ga] := tsize_lt_TExp Nm_a a_g.
 have {}a_ga : TNonce a ≠ TExp g a.
   move=> contra; rewrite -contra in a_ga; lia.

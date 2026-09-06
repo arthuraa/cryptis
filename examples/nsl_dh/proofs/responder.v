@@ -193,7 +193,7 @@ iAssert (minted (si_key si)) as "#m_k".
   - by iApply all_minted_TExp; iSplit. }
 iDestruct "inv_m3" as "[#p_gb|(#inv_m3 & _)]".
 - (* public gb — case split via public_TExp_iff *)
-  rewrite public_TExp_iff //; last by case.
+  rewrite public_TExp_iff //.
   iDestruct "p_gb" as "(_ & _ & #exp_b & _)".
   iPoseProof (exp_pred_inv_same with "exp_b") as "exp_b_inv";
     first by rewrite (exps_TExp1 Nm_b); set_solver.

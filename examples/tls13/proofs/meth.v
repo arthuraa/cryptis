@@ -76,8 +76,8 @@ Qed.
 Definition Meth_wf ke : iProp :=
   match ke with
   | Psk psk => minted psk
-  | Dh g => ⌜¬ is_exp g⌝ ∧ public g
-  | PskDh psk g => minted psk ∧ ⌜¬ is_exp g⌝ ∧ public g
+  | Dh g => ⌜negb (is_exp g)⌝ ∧ public g
+  | PskDh psk g => minted psk ∧ ⌜negb (is_exp g)⌝ ∧ public g
   end.
 
 #[global]

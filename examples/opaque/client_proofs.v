@@ -52,7 +52,7 @@ wp_apply wp_send => //.
   do !rewrite public_of_list /=.
   do !iSplit => //.
   - iApply public_TExp_iff.
-      by case.
+      by [].
       by exact: (negb_is_mul_nonce r).
     do !iSplit => //.
     + by rewrite minted_THash minted_tag.
@@ -61,7 +61,7 @@ wp_apply wp_send => //.
     + iModIntro; iIntros "#p".
       by iApply (public_THashIS with "Hpredα") => //.
   - iApply public_TExp_iff.
-      by case.
+      by [].
       by exact: (negb_is_mul_nonce x_u).
     do !iSplit => //.
     + by iApply minted_TInt.
@@ -69,7 +69,7 @@ wp_apply wp_send => //.
       iApply "Hexpx_u"; iPureIntro.
       have Nm : negb (is_mul x_u) := negb_is_mul_nonce x_u.
       rewrite (_ : TExp g x_u = TExpN g [TNonce x_u]); last by rewrite /TExpN TMulN1.
-      by rewrite exps_TExpN'; [by [] | by case | by rewrite /atomic; apply/Forall_singleton | exact: (invs_canceled1 Nm)].
+      by rewrite exps_TExpN; [by [] | by [] | exact: invs_canceled1 Nm].
     + by rewrite public_TInt; auto.
 wp_pures.
 wp_apply wp_recv => //.
@@ -79,7 +79,7 @@ wp_list_of_term m2; wp_pures => //.
   1: wp_list_match => [β X_s envelope A_s -> | _].
   1, 2: wp_pures.
   2, 3: by iApply ("Hhl" $! None); iModIntro; iSplit.
-wp_apply wp_hl_inv_term; first by exact: (negb_is_mul_nonce r).
+wp_apply wp_hl_inv_aux_term; first by exact: (negb_is_mul_nonce r).
 wp_apply wp_texp; wp_list; wp_apply wp_H.
 wp_apply wp_derive_senc_key; set k := SEncKey _.
 wp_pures; wp_lam; wp_pures.
@@ -130,7 +130,7 @@ wp_apply wp_send => //.
     + rewrite minted_THash minted_tag minted_of_list /=.
       do !iSplit => //.
       rewrite minted_TExp; last first.
-        by intro contra.
+        by [].
       iSplit => //.
       by rewrite minted_THash minted_tag.
   - iNext; iModIntro.
@@ -158,8 +158,8 @@ iModIntro; iSplit.
       apply/subtermsP.
       rewrite (_ : TExp g p_u = TExpN g [TNonce p_u]); last by rewrite /TExpN TMulN1.
       have Nm : negb (is_mul p_u) := negb_is_mul_nonce p_u.
-      rewrite subtermsE //; last by rewrite /atomic; apply/Forall_singleton.
-      rewrite cancel_invs1 /=.
+      rewrite subtermsE //; last exact: invs_canceled1 Nm.
+      rewrite /=.
       by rewrite [subterms p_u]subterms_nonce //; set_solver.
     have p_u_sV : TNonce p_u ≠ TInv p_s.
       move=> contra; have: is_inv (TInv p_s).

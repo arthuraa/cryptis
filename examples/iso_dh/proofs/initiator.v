@@ -78,8 +78,7 @@ wp_apply (wp_mk_nonce_freshN ∅
             (λ a, {[TExp (TInt 0) a]})) => //.
 - iIntros "% ?". by rewrite elem_of_empty.
 - iIntros "%a".
-  rewrite big_sepS_singleton minted_TExp. rewrite minted_TInt bi.True_and.
-  2: exact /neg_false.
+  rewrite big_sepS_singleton minted_TExp //. rewrite minted_TInt bi.True_and.
   iIntros "!>"; iSplit; eauto; by iIntros "(_ & ?)".
 iIntros "%a %fresh #m_a #s_a #a_pred _ token_ga".
 have Nm_a : negb (is_mul (TNonce a)) by [].
@@ -178,7 +177,7 @@ iAssert (|={⊤}=>
     as "{failed} #failed"; first by solve_ndisj.
   iMod ("res" with "N_φ ready_token") as "{res} res".
   iMod (lc_fupd_elim_later with "H2 res") as "res".
-  rewrite TExp_comm in gab seed si *.
+  rewrite TExpC in gab seed si *.
   iIntros "!>".
   iSplit; first by iIntros "!> []".
   iSplitL "res"; eauto.
@@ -188,9 +187,9 @@ iAssert (|={⊤}=>
   have b_a: TNonce b ≠ TNonce a.
     move=> b_a; apply: fresh_b; rewrite /ga -b_a.
     apply/subtermsP.
-    have atom_b : atomic [TNonce b] by rewrite /atomic; apply/Forall_singleton.
+    have ic_b : invs_canceled [TNonce b] := invs_canceled1 Nm_b.
     rewrite (_ : TExp (TInt 0) b = TExpN (TInt 0) [TNonce b]); last by rewrite /TExpN TMulN1.
-    rewrite subtermsE // ?cancel_invs1 //=.
+    rewrite subtermsE //=.
     rewrite [subterms b]subterms_nonce //; set_solver.
   have b_aV : TNonce b ≠ TInv a.
     move=> contra; have: is_inv (TInv a).
