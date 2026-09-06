@@ -408,7 +408,7 @@ Lemma twp_open_key E t Ψ :
   Ψ (repr (Spec.open_key t)) ⊢
   WP open_key t @ E [{ Ψ }].
 Proof.
-rewrite /repr /repr_option. (* /repr /repr_term !val_of_term_unseal /open_key.*)
+rewrite /repr /repr_option.
 rewrite /Spec.open_key.
 iIntros "H"; wp_lam; wp_pures.
 wp_apply twp_to_key.

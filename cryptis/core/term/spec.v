@@ -15,8 +15,7 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 Implicit Types (t k : term) (ts : list term).
 
-(* Surface API: Tag and Module Spec (tag/untag, of_list/to_list, open, key predicates, enc/dec), plus trailing exponentiation lemmas.
-   (Split out of the former monolithic core/term/base.v.) *)
+(* Surface API: Tag and Module Spec (tag/untag, of_list/to_list, open, key predicates *)
 
 Definition Tag_def (N : namespace) :=
   TInt (Zpos (encode N)).

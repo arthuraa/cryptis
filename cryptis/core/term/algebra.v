@@ -18,7 +18,6 @@ Proof. by rewrite Permutation_app_comm. Qed.
 Lemma TExpN_catC t ts1 ts2 : TExpN t (ts1 ++ ts2) = TExpN t (ts2 ++ ts1).
 Proof. by rewrite /TExpN TMulN_catC. Qed.
 
-(* [n]-ary associativity glue: [(prod A) * (prod B) = prod (A ++ B)]. *)
 Lemma TMulN_app A B : TMulN [TMulN A; TMulN B] = TMulN (A ++ B).
 Proof. by rewrite TMulN_cat TMulN_catC /= TMulN_cat TMulN_catC. Qed.
 
@@ -42,7 +41,6 @@ Qed.
 Lemma TMul1_l a : TMul (TMulN []) a = a.
 Proof. by rewrite TMulC TMul1. Qed.
 
-(* [a * a^-1 = 1] for arbitrary [a], via the factor decomposition. *)
 Lemma TMulK a : TMul a (TInv a) = TMulN [].
 Proof.
 by apply: count_inj => x _; rewrite /TMul !count_TMulN /= count_TInv; lia.
@@ -51,7 +49,6 @@ Qed.
 Lemma TMulK_l a : TMul (TInv a) a = TMulN [].
 Proof. by rewrite TMulC TMulK. Qed.
 
-(* Left cancellation — the workhorse for the derived inverse laws. *)
 Lemma TMul_cancel a b c : TMul a b = TMul a c -> b = c.
 Proof.
 move=> E.
@@ -59,7 +56,6 @@ have H : TMul (TInv a) (TMul a b) = TMul (TInv a) (TMul a c) by rewrite E.
 by rewrite -!TMulA !TMulK_l !TMul1_l in H.
 Qed.
 
-(* [(a^-1)^-1 = a], derived at [T = term] from cancellation (no [PreTerm.invK]). *)
 Lemma TInvK t : TInv (TInv t) = t.
 Proof. apply: (@TMul_cancel (TInv t)); by rewrite TMulK TMulK_l. Qed.
 
@@ -121,13 +117,9 @@ Proof.
 by rewrite /TExpN TExpA -TInv_TMulN -/(TMul _ _) TMulC TMulK_l TExp_unit.
 Qed.
 
-(* [TExpNK] at a singleton exponent list.  Unconditional: dividing an
-   exponential by an exponent it was just multiplied by needs no atomicity
-   assumption on that exponent. *)
 Lemma TExpK u v : TExp (TExp u v) (TInv v) = u.
 Proof. by have := TExpNK [v] u; rewrite /TExpN /= !TMulN1. Qed.
 
-(* Same cancellation with the inverse applied first. *)
 Lemma TExpKV u v : TExp (TExp u (TInv v)) v = u.
 Proof. by have := TExpK u (TInv v); rewrite TInvK. Qed.
 
@@ -339,23 +331,15 @@ split.
 - by move=> ->; rewrite TInvE factors_TMulN0.
 Qed.
 
-(* Proved directly, via [PreTerm.mul_auxK], rather than through
-   [unfold_TMulN_strong] below: [mul_auxK] computes the factors of [mul_aux]
-   uniformly, so no case split on [length ts = 1] is needed, and the
-   [SMS.to_id_perm] side condition stays at the level of [ts] itself.  The
-   dependency now runs the other way -- [unfold_TMulN_strong] is derived from
-   this. *)
 Lemma factors_TMulN ts :
   invs_canceled ts →
   factors (TMulN ts) ≡ₚ ts.
 Proof.
 move=> ic.
 have wfU : Forall PreTerm.wf (unfold_term <$> ts) := wf_unfold_terms ts.
-(* No factor of [unfold_term <$> ts] is itself a product, ... *)
 have Nm : forall x, x ∈ (unfold_term <$> ts) -> negb (PreTerm.is_mul x).
   move=> _ /list_elem_of_fmap [t' [-> t'in]].
   by rewrite -is_mul_unfold; case: (ic t' t'in).
-(* ... and no two of them are inverses of one another. *)
 have nopairs : forall x, x ∈ (unfold_term <$> ts) ->
                  PreTerm.inv_aux x ∉ (unfold_term <$> ts).
   move=> _ /list_elem_of_fmap [t' [-> t'in]].
@@ -363,14 +347,12 @@ have nopairs : forall x, x ∈ (unfold_term <$> ts) ->
   rewrite -PreTerm.inv_Nmul; last by rewrite -is_mul_unfold.
   rewrite -unfold_TInv => /list_elem_of_fmap [t'' [/unfold_term_inj e t''in]].
   by apply: Vnin; rewrite e.
-(* So the [mbind] inside [normalize_factors] is the identity, ... *)
 have flat : forall l, (forall x, x ∈ l -> negb (PreTerm.is_mul x)) ->
               mbind PreTerm.factors l = l.
   elim=> [//|x l IH] H /=.
   rewrite PreTerm.factors_Nmul; last by apply: H; apply/elem_of_cons; left.
   by rewrite -/(mbind PreTerm.factors l) IH // => y yin; apply: H;
      apply/elem_of_cons; right.
-(* ... and [SMS.to] on top of it is a permutation. *)
 rewrite /factors unfold_TMulN /PreTerm.mul PreTerm.mul_auxK;
   last exact: PreTerm.wf_normalize_factors wfU.
 rewrite /PreTerm.normalize_factors flat // (SMS.to_id_perm _ _ _ nopairs).
@@ -427,10 +409,9 @@ have -> : TExp (TExpN t1 ts1) t2 = TExpN (TExpN t1 ts1) [t2].
 by rewrite TExpNA Permutation_app_comm.
 Qed.
 
-(* The [t1 <> TInv t'] premise is not optional: without it, taking [ts = [x]]
+(* The [t1 ≠ TInv t'] premise is not optional: without it, taking [ts = [x]]
    and [t1 = TInv x] over a non-exponential [t2] gives [0 <= -1].  It is the
-   [n]-ary form of the side condition [exps_count_TExpW] already carries, and
-   the call site in [core/public.v] supplies it. *)
+   [n]-ary form of the side condition [exps_count_TExpW] carries. *)
 Lemma exps_count_TExpNW t1 t2 ts :
   invs_canceled ts →
   (∀ t', t' ∈ ts → t1 ≠ TInv t') →

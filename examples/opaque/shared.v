@@ -257,8 +257,6 @@ Proof.
 intros Hnst Hcan Hst.
 have Hic : invs_canceled (exps t' ++ ts).
   by rewrite Permutation_app_comm.
-(* [exps] of an exponentiation, with no assumption on the base: the exponents
-   of [t'] and [ts] merge (only a permutation -- [TMulN] sorts). *)
 have E : exps (TExpN t' ts) ≡ₚ exps t' ++ ts.
   rewrite /exps /TExpN expo_TExp -{1}[expo t']factorsK TMulN_app.
   exact: factors_TMulN Hic.

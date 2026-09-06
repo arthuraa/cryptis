@@ -15,8 +15,8 @@ Implicit Types (t k : term) (ts : list term).
 (* The [tsize] measure and the well-founded induction principles it supports.
    [tsize] is [PreTerm.tsize] pulled back along [unfold_term]; the [tsize_*_lt]
    lemmas are the termination side conditions feeding [term_lt_rect] /
-   [term_lt_ind].  Split out of core/term/algebra.v, which it depends on but
-   which does not depend on it — no term-algebra lemma mentions [tsize]. *)
+   [term_lt_ind].  It depends on core/term/algebra.v, which does not depend on
+   it — no term-algebra lemma mentions [tsize]. *)
 
 Definition tsize t := PreTerm.tsize (unfold_term t).
 
@@ -217,7 +217,5 @@ Lemma term_lt_ind (T : term -> Prop) :
   forall t, T t.
 Proof. exact: term_lt_rect. Qed.
 
-(* Stated with explicit [t1]/[t2] above so the proofs in this file can pass
-   them positionally; downstream callers supply only the hypotheses. *)
 Arguments tsize_lt_TExp {t1 t2} _ _.
 Arguments tsize_TExp_TInv {t1 t2} _ _.

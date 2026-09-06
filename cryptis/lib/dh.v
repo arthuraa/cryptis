@@ -10,9 +10,6 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-(* DH term-algebra shims.  With binary [TExp], [TExp (TExp g a) b] is no longer
-   definitionally [TExpN g [b; a]]; these lemmas recover the old spellings.  They
-   are pure (no Iris), so they live outside [Section DH]. *)
 Section DH.
 
 Context `{!cryptisGS Σ, !heapGS Σ}.
@@ -70,12 +67,10 @@ iAssert ⌜negb (is_mul a)⌝%I as %Nm_a; first by iDestruct "aP" as "(_ & $ & _
 rewrite public_TExp_iff //.
 iDestruct "p_t" as "(_ & _ & p_t & _)".
 set t' := TExp g a.
-(* MOVE *)
 have exps_t': exps t' = [a].
   apply Permutation_singleton_r.
   rewrite /t' (_ : TExp g a = TExpN g [a]); last by rewrite /TExpN TMulN1.
   by rewrite (exps_TExpN gNX (invs_canceled1 Nm_a)).
-(* /MOVE *)
 have a_t' : a ∈ exps t' by rewrite exps_t'; set_solver.
 iPoseProof (exp_pred_inv_same with "p_t") as "[#contra|H]" => //.
   by iDestruct (dh_seed_elim0 with "aP contra") as ">[]".
@@ -101,7 +96,6 @@ iAssert ⌜negb (is_mul b)⌝%I as %Nm_b; first by iDestruct "bP" as "(_ & $ & _
 have ic_ab : invs_canceled [a; b] := proj2 (invs_canceled2 Nm_a Nm_b) a_bV.
 have exps_t : exps (TExpN g [a; b]) ≡ₚ [a; b].
   by rewrite (exps_TExpN gXN ic_ab).
-(* [base_TExpN] is gone; keep the [TExpN] unfolding local to this equation. *)
 have baseE : base (TExpN g [a; b]) = g by rewrite /TExpN base_TExp base_expN.
 have a_t : a ∈ exps (TExpN g [a; b]) by rewrite exps_t; set_solver.
 have b_t : b ∈ exps (TExpN g [a; b]) by rewrite exps_t; set_solver.

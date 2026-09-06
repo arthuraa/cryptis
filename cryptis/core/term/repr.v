@@ -15,8 +15,7 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 Implicit Types (t k : term) (ts : list term).
 
-(* The HeapLang value embedding (val_of_term / repr), the Infinite instance, and term_height.
-   (Split out of the former monolithic core/term/base.v.) *)
+(* The HeapLang value embedding (val_of_term / repr), the Infinite instance, and term_height. *)
 
 Section ValOfTerm.
 

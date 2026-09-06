@@ -15,8 +15,8 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 Implicit Types (t k : term) (ts : list term).
 
-(* subterms (the subterm set); subtermsP links it to the subterm relation in algebra.v.
-   (Split out of the former monolithic core/term/base.v.) *)
+(* subterms (the subterm set); subtermsP links it to the subterm relation in
+   algebra.v. *)
 
 Inductive subterm (t : term) : term → Prop :=
 | STRefl : subterm t t
@@ -156,10 +156,6 @@ by rewrite unfold_TInv (PreTerm.inv_Nmul _ Nm') (PreTerm.inv_invN _ Ni')
    /= unfold_termK.
 Qed.
 
-(* Restated: [atomic] and [term_order] no longer exist.  [invs_canceled] plays
-   the role of [atomic] together with the old no-inverse-pair side condition,
-   and since [TMulN] is permutation-invariant there is no term order left to
-   normalise the exponent list with. *)
 Lemma subterms_TExpN t ts :
   negb (is_exp t) -> invs_canceled ts ->
   subterms (TExpN t ts) = {[TExpN t ts]} ∪ subterms t ∪ ⋃ map subterms ts.
@@ -174,7 +170,6 @@ by apply: union_list_permutation_proper_L; apply: Permutation_map;
    apply: factors_TMulN.
 Qed.
 
-(* [wf_mul_list] no longer exists; [invs_canceled] is its replacement. *)
 Lemma subterms_TMulN ts :
   invs_canceled ts ->
   subterms (TMulN ts) = {[TMulN ts]} ∪ ⋃ map subterms ts.

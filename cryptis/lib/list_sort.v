@@ -136,8 +136,6 @@ Qed.
 
 End Count.
 
-(** [rem] and [count_mem] commute with an injective map. *)
-
 Lemma fmap_rem {A B} `{EqDecision A} `{EqDecision B} (f : A -> B) x l :
   (forall a b, f a = f b -> a = b) ->
   f <$> rem x l = rem (f x) (f <$> l).

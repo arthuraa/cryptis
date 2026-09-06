@@ -1,10 +1,8 @@
 (* HeapLang implementations of the signed-multiset operations from
    [cryptis.lib.sms], parameterised by HeapLang closures for the element
    operations: an equality test [eq], the involution [inv], and (for [to]) an
-   order comparison [le].  They mirror the pre-term counterparts in
-   [primitives/pre_term.v] ([hl_insert_exp], [hl_cancel_invs], and the
-   [insertion_sort]-of-[hl_cancel_invs] pattern in [hl_mul]/[hl_exp]) and reuse
-   the shared [insertion_sort] of [lib/list.v] for [to].
+   order comparison [le].  [to] reuses the shared [insertion_sort] of
+   [lib/list.v].
 
    Each implementation gets a continuation-style spec relating it to the pure
    [SMS.*] model (same shape as the [twp_hl_*] specs in [pre_term.v]). *)

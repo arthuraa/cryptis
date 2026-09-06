@@ -76,7 +76,6 @@ Proof.
 case: pt => [o|o t|o t1 t2|ts] wf;
   try by rewrite PreTerm.inv_Nmul // nonces_of_pre_term_inv_aux.
 rewrite /PreTerm.inv /PreTerm.mul.
-(* [mul_aux] only collapses a singleton, which does not change the union. *)
 have mulauxE : forall X, nonces_of_pre_term (PreTerm.mul_aux X)
                        = ⋃ map nonces_of_pre_term X.
   by case=> [|x [|y l]] //=; rewrite union_empty_r_L.
@@ -88,7 +87,6 @@ have nopairs : forall x, x ∈ ts -> PreTerm.inv_aux x ∉ ts.
   by apply: SMS.wf_no_pairs sms.
 have invol : forall x, x ∈ ts -> PreTerm.inv_aux (PreTerm.inv_aux x) = x.
   by apply: SMS.wf_invol sms.
-(* Inverting a well-formed non-product never produces a product. *)
 have NmI : forall x, x ∈ ts -> negb (PreTerm.is_mul (PreTerm.inv_aux x)).
   move=> x xin; have := wfx x xin.
   by case: x {xin} => [o|[k| |] t|o t1 t2|ts'] //= /andb_True [] /andb_True [] _.
@@ -98,8 +96,6 @@ have flat : forall l, (forall x, x ∈ l -> negb (PreTerm.is_mul x)) ->
   rewrite PreTerm.factors_Nmul; last by apply: H; apply/elem_of_cons; left.
   by rewrite -/(mbind PreTerm.factors l) IH // => y yin; apply: H;
      apply/elem_of_cons; right.
-(* [inv_aux] is an involution on [ts], so it maps the no-inverse-pair condition
-   to itself. *)
 have nopairsI : forall y, y ∈ (PreTerm.inv_aux <$> ts) ->
                   PreTerm.inv_aux y ∉ (PreTerm.inv_aux <$> ts).
   move=> _ /list_elem_of_fmap [x [-> xin]].
@@ -154,8 +150,6 @@ elim: us => [|u us IH] //=.
 by rewrite map_app union_list_app_L -(nonces_of_pre_term_factors u) IH.
 Qed.
 
-(* [PreTerm.mul] cancels/sorts/flattens its argument, so its nonces are a subset
-   of the union of the factors' nonces — no atomicity needed. *)
 Lemma nonces_of_pre_term_mul_sub us :
   nonces_of_pre_term (PreTerm.mul us) ⊆ ⋃ map nonces_of_pre_term us.
 Proof.
@@ -173,8 +167,6 @@ apply/list_elem_of_fmap; exists x; split => //.
 exact: (SMS.mem_to pt_order PreTerm.inv_aux x M xL).
 Qed.
 
-(* [PreTerm.exp] folds the new exponent into the base and cancels, so nonces are a
-   subset of [nonces base ∪ nonces exponent] — no atomicity needed. *)
 Lemma nonces_of_pre_term_exp_sub b e :
   nonces_of_pre_term (PreTerm.exp b e) ⊆ nonces_of_pre_term b ∪ nonces_of_pre_term e.
 Proof.
@@ -186,8 +178,6 @@ case: (bool_decide (PreTerm.mul [PreTerm.expo b; e] = PreTerm.PTMul [])).
   move: Hmul => /=; set_solver.
 Qed.
 
-(* The atomicity hypothesis is not needed: [TExpN t ts = TExp t (TMulN ts)], and the
-   nonces of both [exp] and [mul] are subsets of their parts regardless of atomicity. *)
 Lemma nonces_of_term_TExpN_subseteq t ts :
   nonces_of_term (TExpN t ts) ⊆ nonces_of_term t ∪ ⋃ map nonces_of_term ts.
 Proof.
@@ -204,8 +194,6 @@ have Hmul := @nonces_of_pre_term_mul_sub (map unfold_term ts).
 set_solver.
 Qed.
 
-(* [wf_mul_list] no longer exists; [invs_canceled] (core/term/base.v) is its
-   replacement: no factor is a product, and no two factors cancel. *)
 Lemma nonces_of_term_TMulN ts :
   invs_canceled ts ->
   nonces_of_term (TMulN ts) = ⋃ map nonces_of_term ts.
@@ -236,9 +224,6 @@ rewrite (union_list_map_to_pt nonces_of_pre_term nopairs).
 by elim: ts {ic Nm nopairs} => [//|t l IH] /=; rewrite IH.
 Qed.
 
-(* Restated: [atomic] and [term_order] no longer exist.  [invs_canceled] plays
-   the role of [atomic], and since [TMulN] is now permutation-invariant there is
-   no term order left to normalise the exponent list with. *)
 Lemma nonces_of_term_TExpN t ts :
   negb (is_exp t) -> invs_canceled ts ->
   nonces_of_term (TExpN t ts) = nonces_of_term t ∪ ⋃ map nonces_of_term ts.

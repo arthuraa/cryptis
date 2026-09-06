@@ -156,7 +156,6 @@ do !iSplit => //.
     rewrite /= [subterms p_u]subterms_nonce //.
     rewrite /g subtermsE /=.
     have p_s_ne2 : TNonce p_s ≠ TInt 0 by move=> E; discriminate E.
-    (* [is_nonce_TExp] is gone; separate the two by their exponent lists. *)
     have p_s_ne1 : TNonce p_s ≠ TExpN (TInt 0) [TNonce p_u].
       move=> E.
       have H1 : exps (TExpN (TInt 0) [TNonce p_u]) ≡ₚ [TNonce p_u].

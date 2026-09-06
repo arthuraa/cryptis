@@ -807,7 +807,6 @@ apply: anti_symm.
   + by rewrite (is_inv_TInv t Nm').
 Qed.
 
-(* Elimination form: a product is public iff all its factors are. *)
 Lemma public_TMulN t :
   is_mul t ->
   public t ⊢ [∗ list] t' ∈ factors t, public t'.
@@ -963,17 +962,13 @@ Lemma public_TExpN t ts :
     exp_pred t' (TExpN t ts) ∧ □ (public t' → public (TExp (TExpN t ts) (TInv t'))).
 Proof.
 move => Nx ic tsN0.
-(* [expo] of an exponential with a non-exponential base is just the product of
-   the exponents, so it is a unit exactly when the exponent list is empty. *)
 have expE : expo (TExpN t ts) = TMulN ts.
   by rewrite /TExpN expo_TExp (expo_expN _ Nx) TMulN_cat /= TMulN1.
 have ttsX: is_exp (TExpN t ts).
   rewrite is_expE expE => contra; apply: tsN0.
   by apply/Permutation_nil; rewrite -(factors_TMulN ic) contra factors_TMulN0.
 apply: anti_symm; last first.
-- (* backward: [∗list] is guard-free, [public_eq]'s is_exp disjunct carries the
-     ⌜~~ is_mul (TInv t')⌝ guard — add it (free, since factors are atomic). *)
-  iIntros "#[m dhp]".
+- iIntros "#[m dhp]".
   rewrite public_eq; setoid_rewrite (exps_TExpN Nx ic).
   iSplit; first done.
   iRight; iRight; iLeft.
@@ -982,8 +977,7 @@ apply: anti_symm; last first.
   iIntros (k t' Hk) "H"; iSplit; last by [].
   iPureIntro; rewrite is_mul_TInv.
   exact: proj2 (ic t' (list_elem_of_lookup_2 _ _ _ Hk)).
-- (* forward: drop the guard from the is_exp disjunct. *)
-  rewrite public_eq !(minted_TExpN Nx ic).
+- rewrite public_eq !(minted_TExpN Nx ic).
   setoid_rewrite (exps_TExpN Nx ic).
   iIntros "#[[mt mts] Hdisj]".
   iSplit; first by iSplit.
@@ -1121,7 +1115,6 @@ have NmTt : negb (is_mul (TInv t)) by rewrite is_mul_TInv.
 by have [?[??]] := tsize_TExp_TInv NmTt t_t1.
 Qed.
 
-(* Peel one atomic factor at a time onto the exponent. *)
 Lemma public_TExpN_intro t ts :
   invs_canceled ts ->
   public t -∗ ([∗ list] t' ∈ ts, public t') -∗ public (TExpN t ts).
@@ -1134,8 +1127,6 @@ elim: ts => [|u us IH] ic; iIntros "#p #pus".
   by iApply (IH atom_us with "p pus'").
 Qed.
 
-(* [public_TExp] holds unconditionally: flatten the (possibly product)
-   exponent into its atomic factors, then peel them on one at a time. *)
 Lemma public_TExp t1 t2 :
   public t1 -∗ public t2 -∗ public (TExp t1 t2).
 Proof.
@@ -1158,8 +1149,6 @@ iIntros "#H"; iSplit; last done.
 iApply (big_sepL_mono with "H"); iIntros (k t' _) "?"; by iApply public_minted.
 Qed.
 
-(* The canonical factors of a product [t1 * t2] are a sub(multi)set of the
-   factors of [t1] and [t2] (cancellation only removes). *)
 Lemma mem_factors_TMulN2 t1 t2 t' :
   t' ∈ factors (TMulN (t1 :: t2 :: nil)) → t' ∈ factors t1 ++ factors t2.
 Proof.

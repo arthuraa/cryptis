@@ -83,11 +83,11 @@ Key dependencies (authoritative pins live in `rocq-cryptis.opam` — treat it as
 - `TKey (kt : key_type) t` — keys, where `key_type = AEnc | ADec | Sign | Verify | SEnc`
 - `TSeal k t` — a single sealing constructor covering asymmetric encryption, signatures, and symmetric encryption (disambiguated by the key's `key_type`)
 - `THash t` — hashes
-- `TNonFree pt of PreTerm.wf_term pt & is_non_free pt` — the Diffie–Hellman fragment (inverse / exponentiation / product), represented indirectly by a well-formed `PreTerm.pre_term`
+- `TNonFree pt of PreTerm.wf pt & is_non_free pt` — the Diffie–Hellman fragment (inverse / exponentiation / product), represented indirectly by a well-formed `PreTerm.pre_term`
 
 `TInv`, `TExp`, `TExpN`, `TMul`, `TMulN` are **smart constructors** (locked `Definition`s over `TNonFree`), *not* real constructors — so `case`/`elim` on them is not structural; use the custom induction principles (`term_ind`/`term_rect` in `core/term/base.v`, `term_lt_ind` in `core/term/tsize.v`). Typed key wrappers `aenc_key`/`sign_key`/`senc_key` sit on top of `TKey`, and the surface API lives in `Module Spec` (`core/term/spec.v`: `Spec.tag`, `Spec.of_list`, `Spec.pkey`, `Spec.to_list`, …).
 
-The term layer is split across `core/term/` and aggregated by `core/term.v`: `base.v` (the `term` inductive, the `unfold`/`fold` ↔ `pre_term` conjugation, smart constructors, instances, destructor defs, the `count_factors_*` counting API, and the structural `term_rect`/`term_ind` eliminators), `algebra.v` (multiplicative-group + DH-exponentiation laws), `tsize.v` (the `tsize` measure, its termination lemmas, and the well-founded `term_lt_rect`/`term_lt_ind`), `repr.v` (`val_of_term`/`repr`), `nonces.v`, `subterms.v`, `spec.v`. Downstream imports `cryptis.core.term`, so the split is transparent — but **module-qualified references (`base.foo`) break when a lemma moves file**; prefer unqualified names. Each split file must re-declare the file-local `Implicit Types (t k : term) (ts : list term).` and `Set Implicit Arguments.` block (those do not cross a `Require` boundary).
+The term layer is split across `core/term/` and aggregated by `core/term.v`: `base.v` (the `term` inductive, the `unfold`/`fold` ↔ `pre_term` conjugation, smart constructors, instances, destructor defs, the `count` API (`count`, `count_inj`, `count_TMulN`, `count_TInv`, …), and the structural `term_rect`/`term_ind` eliminators), `algebra.v` (multiplicative-group + DH-exponentiation laws), `tsize.v` (the `tsize` measure, its termination lemmas, and the well-founded `term_lt_rect`/`term_lt_ind`), `repr.v` (`val_of_term`/`repr`), `nonces.v`, `subterms.v`, `spec.v`. Downstream imports `cryptis.core.term`, so the split is transparent — but **module-qualified references (`base.foo`) break when a lemma moves file**; prefer unqualified names. Each split file must re-declare the file-local `Implicit Types (t k : term) (ts : list term).` and `Set Implicit Arguments.` block (those do not cross a `Require` boundary).
 
 **The Public Predicate** (`core/public.v`): Central to the framework. `public t` (an Iris proposition) holds when term `t` is known to the attacker. Protocol proofs establish invariants about which terms are and are not public.
 
@@ -128,8 +128,8 @@ Directory-structured protocols use some of: `impl.v` (HeapLang implementation), 
 - `gen_conn/`, `conn/` — generic and authenticated secure-connection layers (building blocks).
 - `rpc/` — remote procedure calls over `conn`.
 - `store/` — authenticated key-value store over `rpc` (game in `store/game.v`); `alist/` is a supporting association-list module.
-- `opaque/` — OPAQUE-style password-authenticated key exchange (partial: `impl.v` + `game.v`, no closed theorem yet).
-- `tls13/` — TLS 1.3 handshake (partial; `impl.v` executable layer + per-component `proofs/` (meth, cshare, sshare, cparams, sparams) + `proofs/protocol.v`, no closed theorem yet).
+- `opaque/` — OPAQUE-style password-authenticated key exchange (partial: `impl.v`, `shared.v`, `client_proofs.v`, `server_proofs.v`, `game.v`; `game.v` stops at `wp_game`, no closed theorem yet).
+- `tls13/` — TLS 1.3 handshake (partial; `impl.v` executable layer + per-component `proofs/` (base, meth, cshare, sshare, cparams, sparams) + `proofs/protocol.v`, no closed theorem yet).
 - `challenge_response.v` — signature-based mutual authentication; `composite_game.v` runs several protocols together under one adequacy game.
 - `permanent.v`, `counter.v` — small digital-signature demos (immutable state / monotone counter).
 
