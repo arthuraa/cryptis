@@ -10,4 +10,5 @@
 .envrc
 .direnv
 builddep
+rocq_mcp_cache_*
 .nia.cache
