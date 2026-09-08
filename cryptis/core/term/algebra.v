@@ -12,6 +12,8 @@ From cryptis.core.term Require Import base.
 
 Implicit Types (t k : term) (ts : list term).
 
+(** Multiplication, factors, counting and inverses *)
+
 Lemma factors_TMulN0 : factors (TMulN []) = [].
 Proof. by rewrite !unlock /=. Qed.
 
@@ -23,12 +25,6 @@ rewrite !count_TMulN.
 elim: ts1 => //= t' ts1 ->; rewrite /fmap; lia.
 Qed.
 
-Lemma base_idem pt : base (base pt) = base pt.
-Proof.
-apply: unfold_term_inj; rewrite !unfold_base.
-rewrite PreTerm.base_expN //; exact: PreTerm.base_Nexp.
-Qed.
-
 Lemma TMulN1 t : TMulN [t] = t.
 Proof.
 by apply: unfold_term_inj; rewrite unfold_TMulN /= PreTerm.mul1.
@@ -38,94 +34,6 @@ Lemma TMulN_unit_r t : TMulN [t; TMulN []] = t.
 Proof.
 apply: count_inj=> t0 ?; rewrite count_TMulN /= count_TMulN /=; lia.
 Qed.
-
-Lemma base_Nexp t : negb (is_exp (base t)).
-Proof. rewrite is_exp_unfold unfold_base; exact: PreTerm.base_Nexp. Qed.
-
-Lemma expo_expN t : negb (is_exp t) → expo t = TMulN [].
-Proof.
-rewrite is_exp_unfold => tNx; apply: unfold_term_inj.
-rewrite unfold_expo unfold_TMulN /=.
-exact: PreTerm.expo_expN.
-Qed.
-
-Lemma base_expN t : negb (is_exp t) → base t = t.
-Proof.
-rewrite is_exp_unfold => tNx; apply: unfold_term_inj.
-rewrite unfold_base; exact: PreTerm.base_expN.
-Qed.
-
-Lemma TExp_base_expo t : TExp (base t) (expo t) = t.
-Proof.
-apply: unfold_term_inj; rewrite unfold_TExp unfold_base unfold_expo.
-exact: PreTerm.exp_base_expo.
-Qed.
-
-(* [TExp] distributes over a product or an inverse base, so the base and the
-   exponent are only readable back when [b] is neither. *)
-Lemma base_TExp b e :
-  negb (is_mul b) -> negb (is_inv b) -> base (TExp b e) = base b.
-Proof.
-rewrite is_mul_unfold is_inv_unfold => Nm Ni.
-apply: unfold_term_inj; rewrite !unfold_base unfold_TExp.
-exact: PreTerm.base_exp.
-Qed.
-
-Lemma expo_TExp b e :
-  negb (is_mul b) -> negb (is_inv b) -> expo (TExp b e) = TMulN [expo b; e].
-Proof.
-rewrite is_mul_unfold is_inv_unfold => Nm Ni.
-apply: unfold_term_inj; rewrite !unfold_expo unfold_TExp unfold_TMulN /=.
-by rewrite unfold_expo; apply: PreTerm.expo_exp.
-Qed.
-
-(** ** Distributivity
-
-    [_ ^ e] is an endomorphism of the multiplicative group: it spreads over the
-    factors of its base, and commutes with the inverse.  These are the laws the
-    normalizer was extended to decide. *)
-
-Lemma TExp_factors b e : TExp b e = TMulN ((λ t, TExp t e) <$> factors b).
-Proof.
-apply: unfold_term_inj; rewrite unfold_TExp unfold_TMulN.
-rewrite -list_fmap_compose /compose.
-have -> : (λ t, unfold_term (TExp t e)) <$> factors b
-        = (λ pt, PreTerm.exp_aux pt (unfold_term e)) <$> (unfold_term <$> factors b).
-  rewrite -list_fmap_compose /compose.
-  apply/Forall_fmap_ext_1/list.Forall_forall => t t_b.
-  rewrite unfold_TExp PreTerm.exp_Nmul //.
-  have H : unfold_term t ∈ PreTerm.factors (unfold_term b).
-    by rewrite -unfold_factors; apply/list_elem_of_fmap; exists t.
-  apply: (PreTerm.wf_factors_Nmul _ _ _ H); exact: PreTerm.wf_wf_factors.
-by rewrite unfold_factors.
-Qed.
-
-Lemma TExp_TMulN ts e :
-  Forall (λ t, negb (is_mul t)) ts ->
-  TExp (TMulN ts) e = TMulN ((λ t, TExp t e) <$> ts).
-Proof.
-move=> Nm_ts; apply: unfold_term_inj.
-rewrite unfold_TExp !unfold_TMulN -list_fmap_compose /compose.
-have -> : (λ t, unfold_term (TExp t e)) <$> ts
-        = (λ pt, PreTerm.exp_aux pt (unfold_term e)) <$> (unfold_term <$> ts).
-  rewrite -list_fmap_compose /compose.
-  apply/Forall_fmap_ext_1/list.Forall_forall => t t_ts.
-  rewrite unfold_TExp PreTerm.exp_Nmul // -is_mul_unfold.
-  by move/list.Forall_forall: Nm_ts; apply.
-apply: PreTerm.exp_mul => //.
-- by apply/Forall_fmap/list.Forall_forall => t _; exact: wf_unfold_term.
-- apply/Forall_fmap/list.Forall_forall => t t_ts.
-  rewrite /compose -is_mul_unfold; by move/list.Forall_forall: Nm_ts; apply.
-Qed.
-
-Lemma TExp_TInv t e : negb (is_mul t) -> TExp (TInv t) e = TInv (TExp t e).
-Proof.
-rewrite is_mul_unfold => Nm; apply: unfold_term_inj.
-rewrite unfold_TExp !unfold_TInv unfold_TExp.
-exact: PreTerm.exp_inv.
-Qed.
-
-Definition exps pt := factors (expo pt).
 
 Instance perm_TMulN : Proper ((≡ₚ) ==> (=)) TMulN.
 Proof.
@@ -147,22 +55,6 @@ rewrite !is_mul_unfold unfold_TExp => Nm.
 exact: PreTerm.Nmul_exp.
 Qed.
 
-(* REMOVE *)
-Lemma Nmul_TInv t : negb (is_mul t) -> negb (is_mul (TInv t)).
-Proof.
-rewrite !is_mul_unfold unfold_TInv => Nm.
-rewrite PreTerm.inv_Nmul //.
-move: (wf_unfold_term t) Nm; case: (unfold_term t) => [o|[k| |] u|o c d|us] //=.
-by rewrite !andb_True => - [[_ ?] _].
-Qed.
-
-Lemma Ninv_TExp b e :
-  negb (is_mul b) -> negb (is_inv b) -> negb (is_inv (TExp b e)).
-Proof.
-rewrite is_mul_unfold !is_inv_unfold unfold_TExp => Nm Ni.
-exact: PreTerm.Ninv_exp.
-Qed.
-
 Lemma TMulN_inv_r t : TMulN [TInv t; t] = TMulN [].
 Proof.
 apply: count_inj=> t0 t0Nm; rewrite !count_TMulN /=.
@@ -178,64 +70,8 @@ split.
 - by move=> <-; rewrite factorsK.
 Qed.
 
-(* The atomic case: the base is neither a product nor an inverse, so the
-   destructors see through both exponentiations. *)
-Lemma TExpA_atom b e1 e2 :
-  negb (is_mul b) -> negb (is_inv b) ->
-  TExp (TExp b e1) e2 = TExp b (TMulN [e1; e2]).
-Proof.
-move=> Nm Ni.
-have Nm1 := Nmul_TExp b e1 Nm.
-have Ni1 := Ninv_TExp b e1 Nm Ni.
-rewrite -[LHS]TExp_base_expo -[RHS]TExp_base_expo.
-rewrite !(base_TExp _ _ Nm1 Ni1) !(expo_TExp _ _ Nm1 Ni1).
-rewrite !(base_TExp _ _ Nm Ni) !(expo_TExp _ _ Nm Ni) TMulN_cat /=.
-rewrite [in RHS]Permutation_swap TMulN_cat /=.
-by rewrite -[[e1; e2; expo b]]/([e1; e2] ++ [expo b]) Permutation_app_comm.
-Qed.
-
-(* An inverse base is pushed through by [TExp_TInv], reducing to the atomic
-   case. *)
-Lemma TExpA_Nmul b e1 e2 :
-  negb (is_mul b) -> TExp (TExp b e1) e2 = TExp b (TMulN [e1; e2]).
-Proof.
-move=> Nm; case Ei: (is_inv b); last by apply: TExpA_atom => //; rewrite Ei.
-have Nmu : negb (is_mul (TInv b)) := Nmul_TInv _ Nm.
-have Niu : negb (is_inv (TInv b)) by rewrite (is_inv_TInv _ Nm) Ei.
-have bE : b = TInv (TInv b) by rewrite TInvK.
-rewrite [in LHS]bE [in RHS]bE.
-rewrite (TExp_TInv _ e1 Nmu) (TExp_TInv _ e2 (Nmul_TExp _ _ Nmu)).
-rewrite (TExp_TInv _ _ Nmu).
-by rewrite (TExpA_atom _ _ _ Nmu Niu).
-Qed.
-
-(* A product base distributes into its factors, each of which is a non-product,
-   so the previous case applies pointwise. *)
-Lemma TExpA b e1 e2 : TExp (TExp b e1) e2 = TExp b (TMulN [e1; e2]).
-Proof.
-rewrite [in LHS](TExp_factors b e1).
-have Nmf : Forall (fun t => negb (is_mul t)) ((fun t => TExp t e1) <$> factors b).
-  apply/Forall_fmap/list.Forall_forall => t t_b.
-  by rewrite /compose; apply: Nmul_TExp; exact: Nmul_factors t_b.
-rewrite (TExp_TMulN _ _ Nmf) -list_fmap_compose /compose.
-rewrite [in RHS](TExp_factors b (TMulN [e1; e2])).
-congr TMulN; apply/Forall_fmap_ext_1/list.Forall_forall => t t_b.
-by apply: TExpA_Nmul; exact: Nmul_factors t_b.
-Qed.
-
-Lemma TExpE b e : TExp b e = TExp (base b) (TMulN [expo b; e]).
-Proof. by rewrite -{1}(TExp_base_expo b) TExpA. Qed.
-
-Lemma TExp_unit b : TExp b (TMulN []) = b.
-Proof.
-by rewrite -{1}(TExp_base_expo b) TExpA TMulN_unit_r TExp_base_expo.
-Qed.
-
 Lemma TMulN_catC ts1 ts2 : TMulN (ts1 ++ ts2) = TMulN (ts2 ++ ts1).
 Proof. by rewrite Permutation_app_comm. Qed.
-
-Lemma TExpN_catC t ts1 ts2 : TExpN t (ts1 ++ ts2) = TExpN t (ts2 ++ ts1).
-Proof. by rewrite /TExpN TMulN_catC. Qed.
 
 Lemma TMulN_app A B : TMulN [TMulN A; TMulN B] = TMulN (A ++ B).
 Proof. by rewrite TMulN_cat TMulN_catC /= TMulN_cat TMulN_catC. Qed.
@@ -280,80 +116,6 @@ Proof. apply: (@TMul_cancel (TInv t)); by rewrite TMulK TMulK_l. Qed.
 
 Global Instance TInv_inj : Inj (=) (=) TInv.
 Proof. by move=> t1 t2 /(f_equal TInv); rewrite !TInvK. Qed.
-
-Lemma base_expsK t : TExpN (base t) (exps t) = t.
-Proof.
-by rewrite /TExpN /exps factorsK TExp_base_expo.
-Qed.
-
-Lemma TExpNA t ts1 ts2 : TExpN (TExpN t ts1) ts2 = TExpN t (ts1 ++ ts2).
-Proof. by rewrite /TExpN TExpA TMulN_app. Qed.
-
-Lemma no_inv_singleton {t} : negb (is_mul t) -> forall x, x ∈ [t] -> TInv x ∉ [t].
-Proof.
-move=> Nm x /list_elem_of_singleton ->.
-rewrite list_elem_of_singleton; exact: (TInv_Nid _ Nm).
-Qed.
-
-Lemma invs_canceled1 {t} : negb (is_mul t) → invs_canceled [t].
-Proof.
-move=> tNm x x_t; split; first exact: no_inv_singleton tNm x x_t.
-by move: x_t => /list_elem_of_singleton ->.
-Qed.
-
-Lemma invs_canceled2 {t1 t2} :
-  negb (is_mul t1) → negb (is_mul t2) →
-  invs_canceled [t1; t2] ↔ t1 ≠ TInv t2.
-Proof.
-move=> t1Nm t2Nm.
-rewrite !invs_canceled_cons !elem_of_nil !list_elem_of_singleton.
-split.
-- by case=> neq _ contra; apply: neq; rewrite contra TInvK.
-- move=> t1_t2; do 4?split => //; eauto.
-  + by move=> contra; apply: t1_t2; rewrite -contra TInvK.
-  + exact: invs_canceled0.
-Qed.
-
-Global Instance invs_canceled_Permutation :
-  Proper ((≡ₚ) ==> (↔)) invs_canceled.
-Proof.
-move=> ts1 ts2 peq; split => H x Hx.
-- rewrite -peq; apply: H; by rewrite peq.
-- rewrite peq; apply: H; by rewrite -peq.
-Qed.
-
-Lemma TExpN0 t : TExpN t [] = t.
-Proof. by rewrite /TExpN TExp_unit. Qed.
-
-Lemma TInv_TMulN ts : TInv (TMulN ts) = TMulN (TInv <$> ts).
-Proof.
-apply: count_inj => t _; rewrite count_TInv !count_TMulN.
-elim: ts => //= t0 ts <-; rewrite count_TInv /fmap; lia.
-Qed.
-
-Lemma TExpNK ts t : TExpN (TExpN t ts) (TInv <$> ts) = t.
-Proof.
-by rewrite /TExpN TExpA -TInv_TMulN -/(TMul _ _) TMulC TMulK_l TExp_unit.
-Qed.
-
-Lemma TExpK u v : TExp (TExp u v) (TInv v) = u.
-Proof. by have := TExpNK [v] u; rewrite /TExpN /= !TMulN1. Qed.
-
-Lemma TExpKV u v : TExp (TExp u (TInv v)) v = u.
-Proof. by have := TExpK u (TInv v); rewrite TInvK. Qed.
-
-(* The base must be neither a product nor an inverse.  Distributivity makes
-   [TMulN [] ^ e = TMulN []] for every [e], so exponentiation is genuinely not
-   injective in the exponent at the unit base. *)
-Lemma TExp_injr t t1 t2 :
-  negb (is_mul t) -> negb (is_inv t) -> TExp t t1 = TExp t t2 -> t1 = t2.
-Proof.
-move=> Nm Ni e.
-have: TMul (expo t) t1 = TMul (expo t) t2.
-  by have /(f_equal expo) := e; rewrite !(expo_TExp _ _ Nm Ni).
-move=> /(f_equal (TMul (TInv (expo t)))).
-by rewrite -TMulA TMulK_l -TMulA TMulK_l !TMul1_l.
-Qed.
 
 Lemma not_elem_of_count t t' : t ∉ factors t' → (count t t' ≤ 0)%Z.
 Proof.
@@ -446,66 +208,6 @@ split.
   lia.
 Qed.
 
-(* Reading the exponent back needs a base that [TExp] does not distribute
-   over; see [expo_TExp]. *)
-Lemma count_expo_TExp t1 t2 t3 :
-  negb (is_mul t2) -> negb (is_inv t2) ->
-  count t1 (expo (TExp t2 t3)) =
-  (count t1 (expo t2) + count t1 t3)%Z.
-Proof. by move=> Nm Ni; rewrite (expo_TExp _ _ Nm Ni) count_TMulN /=; lia. Qed.
-
-Lemma count_diag t : count t t = if is_mul t then 0 else 1.
-Proof.
-case e: is_mul; first by apply: is_mul_count; rewrite e.
-rewrite /count -unfold_factors factors_Nmul ?e //=.
-rewrite SMS.count_cons bool_decide_eq_true_2 //= bool_decide_eq_false_2 /=.
-- rewrite /SMS.count /=; lia.
-- exact: PreTerm.inv_aux_Nid.
-Qed.
-
-Lemma count_expo_TExp_eq t1 t2 :
-  negb (is_mul t1) -> negb (is_mul t2) -> negb (is_inv t2) ->
-  count t1 (expo (TExp t2 t1)) = (count t1 (expo t2) + 1)%Z.
-Proof.
-move=> Nm1 Nm2 Ni2; rewrite (count_expo_TExp _ _ _ Nm2 Ni2) count_diag.
-by case: is_mul Nm1.
-Qed.
-
-Lemma exps_count_TExpW t1 t2 t3 :
-  negb (is_mul t3) →
-  negb (is_mul t2) -> negb (is_inv t2) ->
-  t1 ≠ TInv t3 →
-  (count t1 (expo t2) ≤ count t1 (expo (TExp t2 t3)))%Z.
-Proof.
-move=> Nm3 Nm2 Ni2 t1_t3; rewrite (count_expo_TExp _ _ _ Nm2 Ni2).
-suff: (0 ≤ count t1 t3)%Z by lia.
-have: t1 ∉ factors (TInv t3).
-  by rewrite factors_Nmul ?list_elem_of_singleton // is_mul_TInv.
-rewrite -count_gt0 count_TInv; lia.
-Qed.
-
-Set Implicit Arguments.
-Unset Strict Implicit.
-Unset Printing Implicit Defensive.
-
-Global Instance TExpN_proper : Proper ((=) ==> (≡ₚ) ==> (=)) TExpN.
-Proof.
-by rewrite /TExpN => t _ <- ts1 ts2 <-.
-Qed.
-
-Lemma TExpNC2 g t1 t2 : TExpN g [t1; t2] = TExpN g [t2; t1].
-Proof. by rewrite Permutation_swap. Qed.
-
-Lemma not_elem_of_TInv_exps t1 t2 :
-  negb (is_mul t1) →
-  negb (is_mul t2) -> negb (is_inv t2) ->
-  TInv t1 ∉ exps t2 ↔ t1 ∈ exps (TExp t2 t1).
-Proof.
-move=> Nm1 Nm2 Ni2.
-rewrite /exps (expo_TExp _ _ Nm2 Ni2) -!count_gt0 count_TInv_l count_TMulN /=.
-by rewrite count_diag; case: is_mul Nm1 => //= _; lia.
-Qed.
-
 Lemma countE t1 t2 : count t1 t2 = SMS.count TInv t1 (factors t2).
 Proof.
 have E: ∀ t1, t1 ∈ factors t2 → count t1 t2 = SMS.count TInv t1 (factors t2).
@@ -543,14 +245,14 @@ have t0V_nin1: TInv t0 ∉ factors (TInv t).
   by case: (invs_canceled_factors _ _ t0_in1).
 move/e: (t0_in1) => t0_in2.
 move/e: (t0V_nin1) => t0V_nin2.
-have := count_count_mem t0_in1; rewrite count_TInv => e1.
+have := count_count_mem _ _ t0_in1; rewrite count_TInv => e1.
 rewrite -(list_elem_of_fmap_inj TInv) in t0_in2.
 rewrite -[RHS](count_mem_fmap TInv); last exact: inj.
 have ef: TInv <$> (TInv <$> factors t) = factors t.
   rewrite -list_fmap_compose -[RHS]list_fmap_id.
   apply/Forall_fmap_ext/Forall_forall=> ? _; exact: TInvK.
 rewrite ef in t0_in2 *.
-have := count_count_mem t0_in2; rewrite count_TInv_l => e2.
+have := count_count_mem _ _ t0_in2; rewrite count_TInv_l => e2.
 lia.
 Qed.
 
@@ -614,6 +316,285 @@ Qed.
 Lemma tunitP t : t = TMulN [] ↔ factors t = [].
 Proof.
 by split=> [->|<-]; rewrite ?factorsK // factors_TMulN0.
+Qed.
+
+Lemma invs_canceled1 {t} : negb (is_mul t) → invs_canceled [t].
+Proof.
+move=> tNm x /list_elem_of_singleton ->; rewrite list_elem_of_singleton.
+by split=> //; apply: TInv_Nid.
+Qed.
+
+Lemma invs_canceled2 {t1 t2} :
+  negb (is_mul t1) → negb (is_mul t2) →
+  invs_canceled [t1; t2] ↔ t1 ≠ TInv t2.
+Proof.
+move=> t1Nm t2Nm.
+rewrite !invs_canceled_cons !elem_of_nil !list_elem_of_singleton.
+split.
+- by case=> neq _ contra; apply: neq; rewrite contra TInvK.
+- move=> t1_t2; do 4?split => //; eauto.
+  + by move=> contra; apply: t1_t2; rewrite -contra TInvK.
+  + exact: invs_canceled0.
+Qed.
+
+Global Instance invs_canceled_Permutation :
+  Proper ((≡ₚ) ==> (↔)) invs_canceled.
+Proof.
+move=> ts1 ts2 peq; split => H x Hx.
+- rewrite -peq; apply: H; by rewrite peq.
+- rewrite peq; apply: H; by rewrite -peq.
+Qed.
+
+Lemma TInv_TMulN ts : TInv (TMulN ts) = TMulN (TInv <$> ts).
+Proof.
+apply: count_inj => t _; rewrite count_TInv !count_TMulN.
+elim: ts => //= t0 ts <-; rewrite count_TInv /fmap; lia.
+Qed.
+
+Lemma count_diag t : count t t = if is_mul t then 0 else 1.
+Proof.
+case e: is_mul; first by apply: is_mul_count; rewrite e.
+rewrite /count -unfold_factors factors_Nmul ?e //=.
+rewrite SMS.count_cons bool_decide_eq_true_2 //= bool_decide_eq_false_2 /=.
+- rewrite /SMS.count /=; lia.
+- exact: PreTerm.inv_aux_Nid.
+Qed.
+
+(** Exponentiation, base, exponents *)
+
+Lemma base_idem pt : base (base pt) = base pt.
+Proof.
+apply: unfold_term_inj; rewrite !unfold_base.
+rewrite PreTerm.base_expN //; exact: PreTerm.base_Nexp.
+Qed.
+
+Lemma base_Nexp t : negb (is_exp (base t)).
+Proof. rewrite is_exp_unfold unfold_base; exact: PreTerm.base_Nexp. Qed.
+
+Lemma expo_expN t : negb (is_exp t) → expo t = TMulN [].
+Proof.
+rewrite is_exp_unfold => tNx; apply: unfold_term_inj.
+rewrite unfold_expo unfold_TMulN /=.
+exact: PreTerm.expo_expN.
+Qed.
+
+Lemma base_expN t : negb (is_exp t) → base t = t.
+Proof.
+rewrite is_exp_unfold => tNx; apply: unfold_term_inj.
+rewrite unfold_base; exact: PreTerm.base_expN.
+Qed.
+
+Lemma base_TExp b e :
+  negb (is_mul b) -> negb (is_inv b) -> base (TExp b e) = base b.
+Proof.
+rewrite is_mul_unfold is_inv_unfold => Nm Ni.
+apply: unfold_term_inj; rewrite !unfold_base unfold_TExp.
+exact: PreTerm.base_exp.
+Qed.
+
+Lemma expo_TExp b e :
+  negb (is_mul b) -> negb (is_inv b) -> expo (TExp b e) = TMulN [expo b; e].
+Proof.
+rewrite is_mul_unfold is_inv_unfold => Nm Ni.
+apply: unfold_term_inj; rewrite !unfold_expo unfold_TExp unfold_TMulN /=.
+by rewrite unfold_expo; apply: PreTerm.expo_exp.
+Qed.
+
+Lemma TExp_factors b e : TExp b e = TMulN ((λ t, TExp t e) <$> factors b).
+Proof.
+apply: unfold_term_inj; rewrite unfold_TExp unfold_TMulN.
+rewrite -list_fmap_compose /compose.
+have -> : (λ t, unfold_term (TExp t e)) <$> factors b
+        = (λ pt, PreTerm.exp_aux pt (unfold_term e)) <$> (unfold_term <$> factors b).
+  rewrite -list_fmap_compose /compose.
+  apply/Forall_fmap_ext_1/list.Forall_forall => t t_b.
+  rewrite unfold_TExp PreTerm.exp_Nmul //.
+  have H : unfold_term t ∈ PreTerm.factors (unfold_term b).
+    by rewrite -unfold_factors; apply/list_elem_of_fmap; exists t.
+  apply: (PreTerm.wf_factors_Nmul _ _ _ H); exact: PreTerm.wf_wf_factors.
+by rewrite unfold_factors.
+Qed.
+
+Lemma TExp_TMulN ts e :
+  Forall (λ t, negb (is_mul t)) ts ->
+  TExp (TMulN ts) e = TMulN ((λ t, TExp t e) <$> ts).
+Proof.
+move=> Nm_ts; apply: unfold_term_inj.
+rewrite unfold_TExp !unfold_TMulN -list_fmap_compose /compose.
+have -> : (λ t, unfold_term (TExp t e)) <$> ts
+        = (λ pt, PreTerm.exp_aux pt (unfold_term e)) <$> (unfold_term <$> ts).
+  rewrite -list_fmap_compose /compose.
+  apply/Forall_fmap_ext_1/list.Forall_forall => t t_ts.
+  rewrite unfold_TExp PreTerm.exp_Nmul // -is_mul_unfold.
+  by move/list.Forall_forall: Nm_ts; apply.
+apply: PreTerm.exp_mul => //.
+- by apply/Forall_fmap/list.Forall_forall => t _; exact: wf_unfold_term.
+- apply/Forall_fmap/list.Forall_forall => t t_ts.
+  rewrite /compose -is_mul_unfold; by move/list.Forall_forall: Nm_ts; apply.
+Qed.
+
+Lemma TExp_TInv t e : negb (is_mul t) -> TExp (TInv t) e = TInv (TExp t e).
+Proof.
+rewrite is_mul_unfold => Nm; apply: unfold_term_inj.
+rewrite unfold_TExp !unfold_TInv unfold_TExp.
+exact: PreTerm.exp_inv.
+Qed.
+
+Definition exps pt := factors (expo pt).
+
+Lemma Ninv_TExp b e :
+  negb (is_mul b) -> negb (is_inv b) -> negb (is_inv (TExp b e)).
+Proof.
+rewrite is_mul_unfold !is_inv_unfold unfold_TExp => Nm Ni.
+exact: PreTerm.Ninv_exp.
+Qed.
+
+Lemma TExp_base_expo t : TExp (base t) (expo t) = t.
+Proof.
+apply: unfold_term_inj; rewrite unfold_TExp unfold_base unfold_expo.
+exact: PreTerm.exp_base_expo.
+Qed.
+
+(* The atomic case: the base is neither a product nor an inverse, so the
+   destructors see through both exponentiations. *)
+Lemma TExpA_atom b e1 e2 :
+  negb (is_mul b) -> negb (is_inv b) ->
+  TExp (TExp b e1) e2 = TExp b (TMulN [e1; e2]).
+Proof.
+move=> Nm Ni.
+have Nm1 := Nmul_TExp b e1 Nm.
+have Ni1 := Ninv_TExp b e1 Nm Ni.
+rewrite -[LHS]TExp_base_expo -[RHS]TExp_base_expo.
+rewrite !(base_TExp _ _ Nm1 Ni1) !(expo_TExp _ _ Nm1 Ni1).
+rewrite !(base_TExp _ _ Nm Ni) !(expo_TExp _ _ Nm Ni) TMulN_cat /=.
+rewrite [in RHS]Permutation_swap TMulN_cat /=.
+by rewrite -[[e1; e2; expo b]]/([e1; e2] ++ [expo b]) Permutation_app_comm.
+Qed.
+
+(* An inverse base is pushed through by [TExp_TInv], reducing to the atomic
+   case. *)
+Lemma TExpA_Nmul b e1 e2 :
+  negb (is_mul b) -> TExp (TExp b e1) e2 = TExp b (TMulN [e1; e2]).
+Proof.
+move=> Nm; case Ei: (is_inv b); last by apply: TExpA_atom => //; rewrite Ei.
+have Nmu : negb (is_mul (TInv b)) by rewrite is_mul_TInv.
+have Niu : negb (is_inv (TInv b)) by rewrite (is_inv_TInv _ Nm) Ei.
+have bE : b = TInv (TInv b) by rewrite TInvK.
+rewrite [in LHS]bE [in RHS]bE.
+rewrite (TExp_TInv _ e1 Nmu) (TExp_TInv _ e2 (Nmul_TExp _ _ Nmu)).
+rewrite (TExp_TInv _ _ Nmu).
+by rewrite (TExpA_atom _ _ _ Nmu Niu).
+Qed.
+
+(* A product base distributes into its factors, each of which is a non-product,
+   so the previous case applies pointwise. *)
+Lemma TExpA b e1 e2 : TExp (TExp b e1) e2 = TExp b (TMulN [e1; e2]).
+Proof.
+rewrite [in LHS](TExp_factors b e1).
+have Nmf : Forall (fun t => negb (is_mul t)) ((fun t => TExp t e1) <$> factors b).
+  apply/Forall_fmap/list.Forall_forall => t t_b.
+  by rewrite /compose; apply: Nmul_TExp; exact: Nmul_factors t_b.
+rewrite (TExp_TMulN _ _ Nmf) -list_fmap_compose /compose.
+rewrite [in RHS](TExp_factors b (TMulN [e1; e2])).
+congr TMulN; apply/Forall_fmap_ext_1/list.Forall_forall => t t_b.
+by apply: TExpA_Nmul; exact: Nmul_factors t_b.
+Qed.
+
+Lemma TExpE b e : TExp b e = TExp (base b) (TMulN [expo b; e]).
+Proof. by rewrite -{1}(TExp_base_expo b) TExpA. Qed.
+
+Lemma TExp_unit b : TExp b (TMulN []) = b.
+Proof.
+by rewrite -{1}(TExp_base_expo b) TExpA TMulN_unit_r TExp_base_expo.
+Qed.
+
+Lemma TExpN_catC t ts1 ts2 : TExpN t (ts1 ++ ts2) = TExpN t (ts2 ++ ts1).
+Proof. by rewrite /TExpN TMulN_catC. Qed.
+
+Lemma base_expsK t : TExpN (base t) (exps t) = t.
+Proof.
+by rewrite /TExpN /exps factorsK TExp_base_expo.
+Qed.
+
+Lemma TExpNA t ts1 ts2 : TExpN (TExpN t ts1) ts2 = TExpN t (ts1 ++ ts2).
+Proof. by rewrite /TExpN TExpA TMulN_app. Qed.
+
+Lemma TExpN0 t : TExpN t [] = t.
+Proof. by rewrite /TExpN TExp_unit. Qed.
+
+Lemma TExpNK ts t : TExpN (TExpN t ts) (TInv <$> ts) = t.
+Proof.
+by rewrite /TExpN TExpA -TInv_TMulN -/(TMul _ _) TMulC TMulK_l TExp_unit.
+Qed.
+
+Lemma TExpK u v : TExp (TExp u v) (TInv v) = u.
+Proof. by have := TExpNK [v] u; rewrite /TExpN /= !TMulN1. Qed.
+
+Lemma TExpKV u v : TExp (TExp u (TInv v)) v = u.
+Proof. by have := TExpK u (TInv v); rewrite TInvK. Qed.
+
+(* The base must be neither a product nor an inverse.  Distributivity makes
+   [TMulN [] ^ e = TMulN []] for every [e], so exponentiation is genuinely not
+   injective in the exponent at the unit base. *)
+Lemma TExp_injr t t1 t2 :
+  negb (is_mul t) -> negb (is_inv t) -> TExp t t1 = TExp t t2 -> t1 = t2.
+Proof.
+move=> Nm Ni e.
+have: TMul (expo t) t1 = TMul (expo t) t2.
+  by have /(f_equal expo) := e; rewrite !(expo_TExp _ _ Nm Ni).
+move=> /(f_equal (TMul (TInv (expo t)))).
+by rewrite -TMulA TMulK_l -TMulA TMulK_l !TMul1_l.
+Qed.
+
+(* Reading the exponent back needs a base that [TExp] does not distribute
+   over; see [expo_TExp]. *)
+Lemma count_expo_TExp t1 t2 t3 :
+  negb (is_mul t2) -> negb (is_inv t2) ->
+  count t1 (expo (TExp t2 t3)) =
+  (count t1 (expo t2) + count t1 t3)%Z.
+Proof. by move=> Nm Ni; rewrite (expo_TExp _ _ Nm Ni) count_TMulN /=; lia. Qed.
+
+Lemma count_expo_TExp_eq t1 t2 :
+  negb (is_mul t1) -> negb (is_mul t2) -> negb (is_inv t2) ->
+  count t1 (expo (TExp t2 t1)) = (count t1 (expo t2) + 1)%Z.
+Proof.
+move=> Nm1 Nm2 Ni2; rewrite (count_expo_TExp _ _ _ Nm2 Ni2) count_diag.
+by case: is_mul Nm1.
+Qed.
+
+Lemma exps_count_TExpW t1 t2 t3 :
+  negb (is_mul t3) →
+  negb (is_mul t2) -> negb (is_inv t2) ->
+  t1 ≠ TInv t3 →
+  (count t1 (expo t2) ≤ count t1 (expo (TExp t2 t3)))%Z.
+Proof.
+move=> Nm3 Nm2 Ni2 t1_t3; rewrite (count_expo_TExp _ _ _ Nm2 Ni2).
+suff: (0 ≤ count t1 t3)%Z by lia.
+have: t1 ∉ factors (TInv t3).
+  by rewrite factors_Nmul ?list_elem_of_singleton // is_mul_TInv.
+rewrite -count_gt0 count_TInv; lia.
+Qed.
+
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
+Global Instance TExpN_proper : Proper ((=) ==> (≡ₚ) ==> (=)) TExpN.
+Proof.
+by rewrite /TExpN => t _ <- ts1 ts2 <-.
+Qed.
+
+Lemma TExpNC2 g t1 t2 : TExpN g [t1; t2] = TExpN g [t2; t1].
+Proof. by rewrite Permutation_swap. Qed.
+
+Lemma not_elem_of_TInv_exps t1 t2 :
+  negb (is_mul t1) →
+  negb (is_mul t2) -> negb (is_inv t2) ->
+  TInv t1 ∉ exps t2 ↔ t1 ∈ exps (TExp t2 t1).
+Proof.
+move=> Nm1 Nm2 Ni2.
+rewrite /exps (expo_TExp _ _ Nm2 Ni2) -!count_gt0 count_TInv_l count_TMulN /=.
+by rewrite count_diag; case: is_mul Nm1 => //= _; lia.
 Qed.
 
 Lemma is_expE t : is_exp t ↔ expo t ≠ TMulN [].
