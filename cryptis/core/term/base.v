@@ -11,9 +11,10 @@ From cryptis.core Require Export pre_term.
 
 (* The three "non-free" operations — inverse, exponentiation and product — are
    represented indirectly, by a well-formed pre-term whose head is one of
-   [O1Inv] / [PTExp] / [PTMul].  [is_non_free] recognises exactly those heads. *)
-Definition is_non_free (pt : PreTerm.pre_term) :=
-  PreTerm.is_inv pt || PreTerm.is_exp pt || PreTerm.is_mul pt.
+   [O1Inv] / [PTExp] / [PTMul].  [is_non_free] recognises exactly those heads;
+   it lives in [PreTerm] because [wf] uses it too (the base of a normal-form
+   exponential is never non-free). *)
+Notation is_non_free := PreTerm.is_non_free.
 
 Unset Elimination Schemes.
 Inductive term :=
@@ -492,9 +493,6 @@ rewrite /PreTerm.mul PreTerm.normalize_factors_wf_factors.
 - exact: PreTerm.wf_wf_factors.
 Qed.
 
-Lemma factors_TMulN0 : factors (TMulN []) = [].
-Proof. by rewrite !unlock /=. Qed.
-
 Lemma count_TInv t t' : count t (TInv t') = (- count t t')%Z.
 Proof.
 rewrite TInvE count_TMulN -list_fmap_compose.
@@ -518,129 +516,12 @@ rewrite -[t' in RHS]factorsK count_TMulN.
 elim: {t'} (factors t') => //= t' ts ->; rewrite /fmap; lia.
 Qed.
 
-Lemma count_TMulN_app t ts1 ts2 :
-  count t (TMulN (ts1 ++ ts2)) =
-  (count t (TMulN ts1) + count t (TMulN ts2))%Z.
+Lemma Nmul_factors b t : t ∈ factors b -> negb (is_mul t).
 Proof.
-rewrite !count_TMulN.
-elim: ts1 => //= t' ts1 ->; rewrite /fmap; lia.
-Qed.
-
-Lemma base_idem pt : base (base pt) = base pt.
-Proof.
-apply: unfold_term_inj; rewrite !unfold_base.
-rewrite PreTerm.base_expN //; exact: PreTerm.base_Nexp.
-Qed.
-
-Lemma TMulN1 t : TMulN [t] = t.
-Proof.
-by apply: unfold_term_inj; rewrite unfold_TMulN /= PreTerm.mul1.
-Qed.
-
-Lemma TMulN_unit_r t : TMulN [t; TMulN []] = t.
-Proof.
-apply: count_inj=> t0 ?; rewrite count_TMulN /= count_TMulN /=; lia.
-Qed.
-
-Lemma base_Nexp t : negb (is_exp (base t)).
-Proof. rewrite is_exp_unfold unfold_base; exact: PreTerm.base_Nexp. Qed.
-
-Lemma expo_expN t : negb (is_exp t) → expo t = TMulN [].
-Proof.
-rewrite is_exp_unfold => tNx; apply: unfold_term_inj.
-rewrite unfold_expo unfold_TMulN /=.
-exact: PreTerm.expo_expN.
-Qed.
-
-Lemma base_expN t : negb (is_exp t) → base t = t.
-Proof.
-rewrite is_exp_unfold => tNx; apply: unfold_term_inj.
-rewrite unfold_base; exact: PreTerm.base_expN.
-Qed.
-
-Lemma TExpE b e : TExp b e = TExp (base b) (TMulN [expo b; e]).
-Proof.
-apply: unfold_term_inj; rewrite !unfold_TExp !unfold_base !unfold_TMulN /=.
-rewrite unfold_expo /PreTerm.exp.
-rewrite [PreTerm.expo (PreTerm.base _)]PreTerm.expo_expN //.
-- rewrite -!unfold_base base_idem PreTerm.mul_unit_l PreTerm.mul1 //.
-  apply: PreTerm.wf_mul; rewrite Forall_cons_iff Forall_singleton.
-  split => //; exact: PreTerm.wf_expo.
-- exact: PreTerm.base_Nexp.
-Qed.
-
-Lemma TExp_base_expo t : TExp (base t) (expo t) = t.
-Proof.
-apply: unfold_term_inj; rewrite unfold_TExp unfold_base unfold_expo.
-rewrite /PreTerm.exp -!unfold_base -unfold_expo base_idem.
-rewrite expo_expN; last exact: base_Nexp.
-rewrite unfold_TMulN /= PreTerm.mul_unit_l -unfold_expo.
-rewrite -(unfold_TMulN [expo t]) TMulN1 unfold_base unfold_expo.
-case: t; case => //=; case=> //= t1 t2.
-rewrite !andb_True; case=> [] [] [] wf1 t1Nx wf2 /bool_decide_spec t2N1.
-by rewrite /PreTerm.exp_aux bool_decide_eq_false_2.
-Qed.
-
-Lemma base_TExp b e : base (TExp b e) = base b.
-Proof.
-apply: unfold_term_inj; rewrite !unfold_base unfold_TExp.
-rewrite /base // /PreTerm.exp /PreTerm.exp_aux -/(PreTerm.base _).
-case_bool_decide as H => //.
-by rewrite -!unfold_base base_idem.
-Qed.
-
-Lemma expo_TExp b e : expo (TExp b e) = TMulN [expo b; e].
-Proof.
-apply: unfold_term_inj; rewrite !unfold_expo unfold_TExp unfold_TMulN /=.
-rewrite unfold_expo /PreTerm.exp /PreTerm.exp_aux.
-case_bool_decide as H => //.
-rewrite H -unfold_base -unfold_expo expo_expN ?unfold_TMulN //=.
-exact: base_Nexp.
-Qed.
-
-Lemma TExp_unit b : TExp b (TMulN []) = b.
-Proof.
-rewrite -[LHS]TExp_base_expo -[RHS]TExp_base_expo.
-by rewrite base_TExp expo_TExp TMulN_unit_r.
-Qed.
-
-Definition exps pt := factors (expo pt).
-
-Instance perm_TMulN : Proper ((≡ₚ) ==> (=)) TMulN.
-Proof.
-move=> ts1 ts2 peq; apply: count_inj => t tNm.
-rewrite !count_TMulN; apply: foldr_permutation_proper.
-- lia.
-- by rewrite peq.
-Qed.
-
-Lemma TMulN_cat ts1 ts2 : TMulN (TMulN ts1 :: ts2) = TMulN (ts1 ++ ts2).
-Proof.
-apply: count_inj => t tNm.
-by rewrite (count_TMulN_app _ [TMulN ts1]) count_TMulN_app TMulN1.
-Qed.
-
-Lemma TExpA b e1 e2 : TExp (TExp b e1) e2 = TExp b (TMulN [e1; e2]).
-Proof.
-rewrite -[LHS]TExp_base_expo -[RHS]TExp_base_expo.
-rewrite !base_TExp !expo_TExp TMulN_cat /=.
-rewrite [in RHS]Permutation_swap TMulN_cat /=.
-by rewrite -[[e1; e2; expo b]]/([e1; e2] ++ [expo b]) Permutation_app_comm.
-Qed.
-
-Lemma TMulN_inv_r t : TMulN [TInv t; t] = TMulN [].
-Proof.
-apply: count_inj=> t0 t0Nm; rewrite !count_TMulN /=.
-rewrite count_TInv; lia.
-Qed.
-
-Lemma TMulN_eq_unit ts : TMulN ts = TMulN [] ↔ factors (TMulN ts) = [].
-Proof.
-split.
-- move=> /(f_equal factors) => ->.
-  apply: (inj (fmap unfold_term : list _ → _)).
-  by rewrite unfold_factors /= unfold_TMulN.
-- by move=> <-; rewrite factorsK.
+move=> t_b; rewrite is_mul_unfold.
+have H : unfold_term t ∈ PreTerm.factors (unfold_term b).
+  by rewrite -unfold_factors; apply/list_elem_of_fmap; exists t.
+apply: (PreTerm.wf_factors_Nmul _ _ _ H); exact: PreTerm.wf_wf_factors.
 Qed.
 
 Lemma TInv_Nid t : negb (is_mul t) → TInv t ≠ t.
@@ -706,9 +587,14 @@ Lemma term_rect (T : term -> Type)
   (H5 : forall k, T k -> forall t, T t -> T (TSeal k t))
   (H6 : forall t, T t -> T (THash t))
   (H7 : forall t, T t -> negb (is_mul t) -> negb (is_inv t) -> T (TInv t))
+  (* The base of a normal-form exponential is an atom: [wf] rules out a
+     product and an inverse there as well as an exponential, since [TExp]
+     distributes over the first two. *)
   (H8 : forall t1, T t1 ->
         forall t2, T t2 ->
                    negb (is_exp t1) ->
+                   negb (is_mul t1) ->
+                   negb (is_inv t1) ->
                    t2 ≠ TMulN [] ->
         T (TExp t1 t2))
   (H9 : forall ts, foldr (fun t R => T t * R)%type unit ts ->
@@ -731,10 +617,12 @@ elim: (unfold_term t) (wf_unfold_term t)=>
 - case: o wfpt => [||]; rewrite fold_termE /=.
   + by move=> /andb_True [w1 w2]; exact: (H2 _ (IHpt1 w1) _ (IHpt2 w2)).
   + by move=> /andb_True [w1 w2]; exact: (H5 _ (IHpt1 w1) _ (IHpt2 w2)).
-  + move=> /andb_True [/andb_True [/andb_True [w1 Nexp1] w2] Hne].
+  + move=> /andb_True [/andb_True [/andb_True [w1 Nnf1] w2] Hne].
     have pt2N : pt2 ≠ PreTerm.PTMul [] := bool_decide_unpack _ Hne.
     apply: (H8 _ (IHpt1 w1) _ (IHpt2 w2)).
-    * by rewrite is_exp_unfold (fold_termK _ w1).
+    * rewrite is_exp_unfold (fold_termK _ w1); exact: (PreTerm.Nnf_Nexp _ Nnf1).
+    * rewrite is_mul_unfold (fold_termK _ w1); exact: (PreTerm.Nnf_Nmul _ Nnf1).
+    * rewrite is_inv_unfold (fold_termK _ w1); exact: (PreTerm.Nnf_Ninv _ Nnf1).
     * have E0 : TMulN [] = fold_term (PreTerm.PTMul []) by rewrite fold_termE.
       rewrite E0 => Heq; apply: pt2N.
       move/(f_equal unfold_term): Heq.

@@ -11,9 +11,11 @@
     - [a * a^-1 = 1]
     - [a * 1 = a]
     - [g ^ 1 = g]
+    - [(a * b) ^ x = a^x * b^x]
 
     where [1 := TMulN []], [g ^ x := TExp g x] and [a * b := TMulN [a; b]].
-    From these equations, several other properties follow, such as
+    The last equation makes [_ ^ x] an endomorphism of the multiplicative
+    group.  From these equations, several other properties follow, such as
 
     - [a * b = a * c -> b = c]
     - [(a^-1)^-1 = a]
@@ -23,6 +25,12 @@
     - [1 * a = a]
     - [(g ^ a) ^ (a^-1) = g]
     - [(g ^ a) ^ b = (g ^ b) ^ a]
+    - [1 ^ x = 1]
+    - [(a^-1) ^ x = (a ^ x)^-1]
+
+    The last two are why [exp] distributes over [PTInv] as well as [PTMul], and
+    why [wf] demands an *atom* — neither product, inverse, nor exponential — in
+    the base of an exponential: [(a^-1) ^ x] has normal form [(a ^ x)^-1].
 
     This file establishes only the normalization machinery.  The basic equations
     above (on well-formed pre-terms), and the theory of the destructors, are
@@ -63,6 +71,21 @@ Definition is_exp pt := if pt is PTExp _ _ then true else false.
 Definition is_mul pt := if pt is PTMul _ then true else false.
 Definition is_nonce pt := if pt is PT0 (O0Nonce _) then true else false.
 
+(** The three "non-free" operations: inverse, exponentiation and product.  A
+    pre-term whose head is none of them is an *atom*.  Atoms are exactly the
+    bases allowed in a normal-form exponential, since [exp] distributes over
+    both products and inverses. *)
+Definition is_non_free pt := is_inv pt || is_exp pt || is_mul pt.
+
+Lemma Nnf_Ninv pt : negb (is_non_free pt) → negb (is_inv pt).
+Proof. by case: pt => [o|[k| |] t|[||] t1 t2|ts]. Qed.
+
+Lemma Nnf_Nexp pt : negb (is_non_free pt) → negb (is_exp pt).
+Proof. by case: pt => [o|[k| |] t|[||] t1 t2|ts]. Qed.
+
+Lemma Nnf_Nmul pt : negb (is_non_free pt) → negb (is_mul pt).
+Proof. by case: pt => [o|[k| |] t|[||] t1 t2|ts]. Qed.
+
 Definition base pt := if pt is PTExp b _ then b else pt.
 Definition expo pt := if pt is PTExp _ e then e else PTMul [].
 Definition factors pt := if pt is PTMul ts then ts else [pt].
@@ -81,8 +104,18 @@ Definition factors pt := if pt is PTMul ts then ts else [pt].
 
     - [inv] computes the inverse of arbitrary terms by distributivity.
 
-    - [exp] combines exponents using [mul].  If the resulting exponent is [1 =
-      PTMul []], we simply return the base. *)
+    - [mk_exp] builds an exponential, collapsing [g ^ 1] to [g].
+
+    - [exp_aux] exponentiates terms that do not begin with [PTMul].  It merges
+      the exponents of an iterated exponentiation using [mul], and pushes
+      through a leading [PTInv]: exponentiation distributes over inverses as
+      well as products, since [(a * a^-1) ^ x = 1] forces [(a^-1) ^ x =
+      (a ^ x)^-1].
+
+    - [exp] exponentiates arbitrary terms by distributivity, spreading
+      [exp_aux] over the factors.  No case analysis is needed: [factors]
+      already returns [ts] on [PTMul ts] and the singleton [[b]] otherwise, and
+      [mul] collapses that singleton back (see [exp_Nmul]). *)
 
 Definition inv_aux pt :=
   match pt with
@@ -104,11 +137,14 @@ Definition mul ts := mul_aux (normalize_factors ts).
 Definition inv pt :=
   if pt is PTMul ts then mul (inv_aux <$> ts) else inv_aux pt.
 
-Definition exp_aux b e :=
+Definition mk_exp b e :=
   if bool_decide (e = PTMul []) then b else PTExp b e.
 
-Definition exp b e :=
-  exp_aux (base b) (mul [expo b; e]).
+Definition exp_aux b e :=
+  if b is PTInv t then inv_aux (mk_exp (base t) (mul [expo t; e]))
+  else mk_exp (base b) (mul [expo b; e]).
+
+Definition exp b e := mul ((λ t, exp_aux t e) <$> factors b).
 
 Fixpoint normalize pt :=
   match pt with
@@ -126,7 +162,7 @@ Fixpoint wf (pt : pre_term) : bool :=
   | PTInv pt => negb (is_inv pt) && negb (is_mul pt) && wf pt
   | PT1 _ pt => wf pt
   | PTExp b e =>
-    wf b && negb (is_exp b) && wf e && bool_decide (e ≠ PTMul [])
+    wf b && negb (is_non_free b) && wf e && bool_decide (e ≠ PTMul [])
   | PT2 _ pt1 pt2 => wf pt1 && wf pt2
   | PTMul ts =>
     (forallb (λ t, wf t && negb (is_mul t)) ts
@@ -181,7 +217,7 @@ Proof. by case: pt => [o|o t|[||] t1 t2|ts]. Qed.
 Lemma base_Nexp pt : wf pt -> negb (is_exp (base pt)).
 Proof.
 case: pt => [o|o t|[||] b e|ts] wf_pt //=.
-by move: wf_pt; rewrite /= !andb_True => - [[[_ ?] _] _].
+by move: wf_pt; rewrite /= !andb_True => - [[[_ /Nnf_Nexp ?] _] _].
 Qed.
 
 Lemma expo_expN pt : negb (is_exp pt) -> expo pt = PTMul [].
@@ -277,23 +313,97 @@ Qed.
 Lemma mul_unit_l t : mul [PTMul []; t] = mul [t].
 Proof. by []. Qed.
 
-Lemma wf_exp_aux b e :
-  negb (is_exp b) →
+Lemma wf_mk_exp b e :
+  negb (is_non_free b) →
   wf b →
   wf e →
-  wf (exp_aux b e).
+  wf (mk_exp b e).
 Proof.
-move=> bNx wf_b wf_e; rewrite /exp_aux; case_bool_decide as Hf => //=.
+move=> bNnf wf_b wf_e; rewrite /mk_exp; case_bool_decide as Hf => //=.
 rewrite !andb_True bool_decide_spec; eauto.
+Qed.
+
+(* [base t] is an atom as soon as [t] is well formed and is neither a product
+   nor an inverse: either [t] is an exponential, and [wf] says so directly, or
+   [base t = t].  Both exclusions are needed — [base (PTInv u) = PTInv u]. *)
+Lemma base_Nnf t :
+  wf t -> negb (is_mul t) -> negb (is_inv t) -> negb (is_non_free (base t)).
+Proof.
+case: t => [o|[k| |] t|[||] t1 t2|ts] //= wf_t Nm Ni.
+by move: wf_t; rewrite !andb_True => - [[[_ ?] _] _].
+Qed.
+
+Lemma exp_aux_Ninv b e :
+  negb (is_inv b) -> exp_aux b e = mk_exp (base b) (mul [expo b; e]).
+Proof. by case: b => [o|[k| |] t|[||] t1 t2|ts]. Qed.
+
+(* Each mapped exponentiation is well formed, so the [mul] in [exp] always
+   receives a legal factor list. *)
+Lemma wf_exp_aux t e : wf t -> negb (is_mul t) -> wf e -> wf (exp_aux t e).
+Proof.
+move=> wf_t Nm wf_e.
+have wf_mul_e u : wf u -> wf (mul [expo u; e]).
+  move=> wf_u; apply: wf_mul.
+  by rewrite !list.Forall_cons list.Forall_nil; eauto using wf_expo.
+have main u : wf u -> negb (is_mul u) -> negb (is_inv u) ->
+              wf (mk_exp (base u) (mul [expo u; e])).
+  move=> wf_u Nm_u Ni_u.
+  by apply: wf_mk_exp; [apply: base_Nnf|apply: wf_base|apply: wf_mul_e].
+case Ei: (is_inv t); last first.
+  have Ni : negb (is_inv t) by rewrite Ei.
+  by rewrite exp_aux_Ninv //; apply: main.
+(* [t = PTInv u]: exponentiate [u], then re-apply the inverse. *)
+case: t Ei wf_t Nm => [o|[k| |] u|o t1 t2|ts] // _ /=.
+rewrite !andb_True => - [[Ni Nm] wf_u] _.
+apply: wf_inv_aux; last first.
+  rewrite /mk_exp; case_bool_decide => //=.
+  exact: (Nnf_Nmul _ (base_Nnf _ wf_u Nm Ni)).
+by apply: main.
 Qed.
 
 Lemma wf_exp b e : wf b -> wf e -> wf (exp b e).
 Proof.
-move=> wf_b wf_e; apply: wf_exp_aux => //.
-- exact: base_Nexp.
-- exact: wf_base.
-- apply: wf_mul.
-  by rewrite !list.Forall_cons list.Forall_nil; eauto using wf_expo.
+move=> wf_b wf_e; rewrite /exp; apply: wf_mul.
+apply/Forall_fmap/list.Forall_forall => t t_b.
+have wf_fs := wf_wf_factors _ wf_b.
+by apply: wf_exp_aux => //;
+  [exact: wf_factors_wf t_b | exact: wf_factors_Nmul t_b].
+Qed.
+
+(* On a non-product base the [mul] of [exp] collapses, so [exp] agrees with
+   [exp_aux].  Unlike [inv_Nmul], this needs well-formedness: the collapse goes
+   through [mul1]. *)
+Lemma exp_Nmul b e : wf b -> wf e -> negb (is_mul b) -> exp b e = exp_aux b e.
+Proof.
+move=> wf_b wf_e Nm; rewrite /exp factors_Nmul //= mul1 //.
+exact: wf_exp_aux.
+Qed.
+
+Lemma mul_unit_r t : wf t -> mul [t; PTMul []] = t.
+Proof.
+move=> wf_t.
+rewrite -{2}(mul1 _ wf_t) /mul /normalize_factors /=.
+by rewrite !app_nil_r.
+Qed.
+
+Lemma mk_exp_base_expo t : wf t -> mk_exp (base t) (expo t) = t.
+Proof.
+case: t => [o|o u|[||] c d|ts] /= wf_t; rewrite /mk_exp;
+  try by rewrite bool_decide_eq_true_2.
+move: wf_t; rewrite !andb_True => - [_ /bool_decide_unpack dN0].
+by rewrite bool_decide_eq_false_2.
+Qed.
+
+Lemma exp_aux_unit t : wf t -> negb (is_mul t) -> exp_aux t (PTMul []) = t.
+Proof.
+move=> wf_t Nm.
+case Ei: (is_inv t).
+  case: t Ei wf_t Nm => [o|[k| |] u|o c d|ts] // _ /=.
+  rewrite !andb_True => - [[Ni Nm_u] wf_u] _.
+  by rewrite (mul_unit_r _ (wf_expo _ wf_u)) (mk_exp_base_expo _ wf_u) (inv_invN _ Ni).
+have Ni : negb (is_inv t) by rewrite Ei.
+rewrite (exp_aux_Ninv _ _ Ni) (mul_unit_r _ (wf_expo _ wf_t)).
+exact: mk_exp_base_expo.
 Qed.
 
 Lemma wf_inv t : wf t -> wf (inv t).
@@ -346,9 +456,12 @@ elim: pt => //=.
 - move=> o t1 IH1 t2 IH2; case: o => /=.
   + by rewrite andb_True => - [/IH1 -> /IH2 ->].
   + by rewrite andb_True => - [/IH1 -> /IH2 ->].
-  + rewrite !andb_True => - [[[wfb Nxb] wfe] /bool_decide_unpack eN0].
-    rewrite IH1 // IH2 // /exp base_expN // expo_expN //.
-    by rewrite mul_unit_l // mul1 // /exp_aux bool_decide_eq_false_2.
+  + rewrite !andb_True => - [[[wfb Nnfb] wfe] /bool_decide_unpack eN0].
+    rewrite IH1 // IH2 // exp_Nmul //; last exact: Nnf_Nmul.
+    rewrite exp_aux_Ninv; last exact: Nnf_Ninv.
+    rewrite base_expN; last exact: Nnf_Nexp.
+    rewrite expo_expN; last exact: Nnf_Nexp.
+    by rewrite mul_unit_l mul1 // /mk_exp bool_decide_eq_false_2.
 - move=> ts IHts /andb_True [wf_ts /bool_decide_spec tsN1].
   have {}IHts: Forall (λ t, wf t → normalize t = t) ts.
     by elim: (ts) IHts => //= t' ts' IH [? /IH ?]; eauto.
@@ -369,6 +482,187 @@ Proof.
 move=> /list.Forall_forall wf_ts.
 rewrite -[RHS]list_fmap_id; apply/Forall_fmap_ext/list.Forall_forall.
 by move=> t t_ts'; apply: normalize_wf; eauto.
+Qed.
+
+(* [g ^ 1 = g].  Every factor is fixed by [exp_aux _ 1], so the product is
+   rebuilt unchanged.  Only [exp_base_expo] needs this; the term layer derives
+   [TExp_unit] from [TExpA] instead. *)
+Lemma exp_unit b : wf b -> exp b (PTMul []) = b.
+Proof.
+move=> wf_b; rewrite /exp.
+have wf_fs := wf_wf_factors _ wf_b.
+have -> : (λ t, exp_aux t (PTMul [])) <$> factors b = factors b.
+  rewrite -[RHS]list_fmap_id; apply/Forall_fmap_ext/list.Forall_forall.
+  move=> t t_b; apply: exp_aux_unit;
+    [exact: wf_factors_wf t_b|exact: wf_factors_Nmul t_b].
+rewrite /mul normalize_factors_wf_factors //.
+exact: factorsK.
+Qed.
+
+Lemma exp_base_expo b : wf b -> exp (base b) (expo b) = b.
+Proof.
+move=> wf_b; case Ex: (is_exp b).
+  case: b Ex wf_b => [o|o u|[||] c d|ts] // _ /=.
+  rewrite !andb_True => - [[[wf_c Nnf_c] wf_d] /bool_decide_unpack dN0].
+  rewrite (exp_Nmul _ _ wf_c wf_d (Nnf_Nmul _ Nnf_c)).
+  rewrite (exp_aux_Ninv _ _ (Nnf_Ninv _ Nnf_c)).
+  rewrite (base_expN _ (Nnf_Nexp _ Nnf_c)) (expo_expN _ (Nnf_Nexp _ Nnf_c)).
+  by rewrite mul_unit_l (mul1 _ wf_d) /mk_exp bool_decide_eq_false_2.
+have Nx : negb (is_exp b) by rewrite Ex.
+by rewrite (base_expN _ Nx) (expo_expN _ Nx) exp_unit.
+Qed.
+
+(* The destructors see through [exp] only when the base is neither a product
+   nor an inverse — otherwise [exp] distributes and the result is not an
+   exponential at all. *)
+Lemma base_exp b e :
+  wf b -> wf e -> negb (is_mul b) -> negb (is_inv b) ->
+  base (exp b e) = base b.
+Proof.
+move=> wf_b wf_e Nm Ni.
+rewrite (exp_Nmul _ _ wf_b wf_e Nm) (exp_aux_Ninv _ _ Ni) /mk_exp.
+case_bool_decide => //=.
+exact: (base_expN _ (base_Nexp _ wf_b)).
+Qed.
+
+Lemma expo_exp b e :
+  wf b -> wf e -> negb (is_mul b) -> negb (is_inv b) ->
+  expo (exp b e) = mul [expo b; e].
+Proof.
+move=> wf_b wf_e Nm Ni.
+rewrite (exp_Nmul _ _ wf_b wf_e Nm) (exp_aux_Ninv _ _ Ni) /mk_exp.
+case_bool_decide as H => //=.
+by rewrite H (expo_expN _ (base_Nexp _ wf_b)).
+Qed.
+
+(* [_ ^ e] conjugates the involution: this is [(a^-1) ^ x = (a ^ x)^-1] at the
+   level of [exp_aux], and it is what makes [exp] commute with the cancellation
+   inside [mul]. *)
+Lemma exp_aux_inv_aux u e :
+  wf u -> negb (is_mul u) -> wf e ->
+  exp_aux (inv_aux u) e = inv_aux (exp_aux u e).
+Proof.
+move=> wf_u Nm wf_e.
+case Ei: (is_inv u); last first.
+  have Ni : negb (is_inv u) by rewrite Ei.
+  by rewrite (inv_invN _ Ni) /= (exp_aux_Ninv _ _ Ni).
+case: u Ei wf_u Nm => [o|[k| |] v|o c d|ts] // _ /=.
+rewrite !andb_True => - [[Ni Nm_v] wf_v] _.
+rewrite (exp_aux_Ninv _ _ Ni) inv_auxK //.
+apply: wf_mk_exp.
+- exact: (base_Nnf _ wf_v Nm_v Ni).
+- exact: wf_base.
+- apply: wf_mul; rewrite !list.Forall_cons list.Forall_nil.
+  by split; [exact: wf_expo|].
+Qed.
+
+(* [exp] preserves "neither a product nor an inverse", so iterated
+   exponentiation stays in the range where [base_exp]/[expo_exp] apply. *)
+Lemma Nmul_mk_exp X Y : negb (is_mul X) -> negb (is_mul (mk_exp X Y)).
+Proof. by rewrite /mk_exp; case_bool_decide. Qed.
+
+Lemma Ninv_mk_exp X Y : negb (is_inv X) -> negb (is_inv (mk_exp X Y)).
+Proof. by rewrite /mk_exp; case_bool_decide. Qed.
+
+(* The images of [exp_aux _ e] are never products, so [mbind factors] is the
+   identity on a mapped factor list and [mul] sees the images directly. *)
+Lemma exp_aux_Nmul t e :
+  wf t -> negb (is_mul t) -> wf e -> negb (is_mul (exp_aux t e)).
+Proof.
+move=> wf_t Nm wf_e.
+case Ei: (is_inv t); last first.
+  have Ni : negb (is_inv t) by rewrite Ei.
+  rewrite (exp_aux_Ninv _ _ Ni); apply: Nmul_mk_exp.
+  exact: (Nnf_Nmul _ (base_Nnf _ wf_t Nm Ni)).
+case: t Ei wf_t Nm => [o|[k| |] u|o c d|ts] // _ /=.
+rewrite !andb_True => - [[Ni Nm_u] wf_u] _.
+have NnfB := base_Nnf _ wf_u Nm_u Ni.
+rewrite /mk_exp; case_bool_decide => /=.
+- by rewrite (inv_invN _ (Nnf_Ninv _ NnfB)).
+- by [].
+Qed.
+
+(* [(a^-1) ^ x = (a ^ x)^-1] at the level of [exp]/[inv].  This is the form the
+   term layer conjugates; [exp_aux_inv_aux] is the [exp_aux]-level version it
+   is proved from. *)
+Lemma exp_inv t e :
+  wf t -> negb (is_mul t) -> wf e -> exp (inv t) e = inv (exp t e).
+Proof.
+move=> wft Nm wfe.
+have NmI : negb (is_mul (inv_aux t)).
+  move: wft Nm; case: t => [o|[k| |] u|o c d|us] //=.
+  by rewrite !andb_True => - [[_ ?] _].
+rewrite (inv_Nmul _ Nm) (exp_Nmul _ _ (wf_inv_aux _ wft Nm) wfe NmI).
+rewrite (exp_aux_inv_aux _ _ wft Nm wfe) (exp_Nmul _ _ wft wfe Nm).
+by rewrite (inv_Nmul _ (exp_aux_Nmul _ _ wft Nm wfe)).
+Qed.
+
+Lemma mbind_factors_Nmul ts :
+  Forall (λ t, negb (is_mul t)) ts -> mbind factors ts = ts.
+Proof.
+elim: ts => [//|t ts IH]; rewrite list.Forall_cons => - [Nm NmL].
+by rewrite bind_cons (factors_Nmul _ Nm) (IH NmL).
+Qed.
+
+(* [to] does not disturb a mapped list's signed counts, because [exp_aux _ e]
+   conjugates [inv_aux] ([exp_aux_inv_aux]).  This is [SMS.count_fmap_to] at the
+   pre-term instance. *)
+Lemma to_fmap_exp_aux ts e :
+  Forall wf ts -> Forall (λ t, negb (is_mul t)) ts -> wf e ->
+  SMS.to pt_order inv_aux ((λ t, exp_aux t e) <$> SMS.to pt_order inv_aux ts)
+  = SMS.to pt_order inv_aux ((λ t, exp_aux t e) <$> ts).
+Proof.
+move=> /list.Forall_forall wf_ts /list.Forall_forall Nm_ts wf_e.
+have wff : forall t, t ∈ ts -> wf (exp_aux t e).
+  by move=> t t_ts; apply: wf_exp_aux; auto.
+have jKf : forall t, t ∈ ts -> inv_aux (inv_aux (exp_aux t e)) = exp_aux t e.
+  by move=> t t_ts; apply: inv_auxK; exact: wff.
+have fij : forall t, t ∈ ts -> exp_aux (inv_aux t) e = inv_aux (exp_aux t e).
+  by move=> t t_ts; apply: exp_aux_inv_aux; auto.
+have h : forall X : list pre_term, (forall t, t ∈ X -> t ∈ ts) ->
+         forall x, x ∈ ((λ t, exp_aux t e) <$> X) -> inv_aux (inv_aux x) = x.
+  by move=> X sub x /list_elem_of_fmap [t [-> t_X]]; exact: (jKf _ (sub _ t_X)).
+apply/(SMS.to_eq pt_order inv_aux _ _
+        (h _ (fun t t_in => SMS.mem_to _ _ _ _ t_in)) (h _ (fun t t_in => t_in))).
+move=> z jKz.
+exact: (SMS.count_fmap_to pt_order inv_aux inv_aux
+          (λ t, exp_aux t e) z ts jKz jKf fij).
+Qed.
+
+(* Distributivity, on a list of atoms: [(t1 * … * tn) ^ e = t1^e * … * tn^e]. *)
+Lemma exp_mul ts e :
+  Forall wf ts -> Forall (λ t, negb (is_mul t)) ts -> wf e ->
+  exp (mul ts) e = mul ((λ t, exp_aux t e) <$> ts).
+Proof.
+move=> wf_ts Nm_ts wf_e.
+have Nmf : Forall (λ t, negb (is_mul t)) ((λ t, exp_aux t e) <$> ts).
+  apply/Forall_fmap/list.Forall_forall => t t_ts.
+  apply: exp_aux_Nmul => //; by [move/list.Forall_forall: wf_ts; apply
+                               |move/list.Forall_forall: Nm_ts; apply].
+rewrite /exp /mul !mul_auxK; first last.
+- exact: wf_normalize_factors.
+congr mul_aux; rewrite /normalize_factors (mbind_factors_Nmul _ Nm_ts).
+have Nmf' : Forall (λ t, negb (is_mul t))
+              ((λ t, exp_aux t e) <$> SMS.to pt_order inv_aux ts).
+  apply/Forall_fmap/list.Forall_forall => t /(SMS.mem_to _ _ _ _) t_ts.
+  apply: exp_aux_Nmul => //; by [move/list.Forall_forall: wf_ts; apply
+                               |move/list.Forall_forall: Nm_ts; apply].
+rewrite (mbind_factors_Nmul _ Nmf') (mbind_factors_Nmul _ Nmf).
+exact: to_fmap_exp_aux.
+Qed.
+
+Lemma Nmul_exp b e :
+  wf b -> wf e -> negb (is_mul b) -> negb (is_mul (exp b e)).
+Proof.
+move=> wf_b wf_e Nm; rewrite (exp_Nmul _ _ wf_b wf_e Nm).
+exact: exp_aux_Nmul.
+Qed.
+
+Lemma Ninv_exp b e :
+  wf b -> wf e -> negb (is_mul b) -> negb (is_inv b) -> negb (is_inv (exp b e)).
+Proof.
+move=> wf_b wf_e Nm Ni; rewrite (exp_Nmul _ _ wf_b wf_e Nm) (exp_aux_Ninv _ _ Ni).
+by apply: Ninv_mk_exp; exact: (Nnf_Ninv _ (base_Nnf _ wf_b Nm Ni)).
 Qed.
 
 End PreTerm.
