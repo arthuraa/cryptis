@@ -657,6 +657,81 @@ move=> finj fij; rewrite /count.
 by rewrite (count_mem_fmap f x X finj) -fij (count_mem_fmap f (i x) X finj).
 Qed.
 
+(** [to] leaves every signed count of a *mapped* list unchanged, for any
+    involution-conjugating [f].  Unlike [to_fmap], this needs neither
+    injectivity nor order-preservation of [f]: the cancellation and the pruning
+    inside [to] act on pairs [x], [i x] and on fixed points of [i], and [f]
+    carries those to pairs [f x], [j (f x)] and to fixed points of [j] — and
+    neither kind of step changes a signed count.  (The underlying identity is
+    [count j z (f <$> L) = sum of count i y L over the fibre f⁻¹ z], which is
+    why no injectivity is required.) *)
+
+Lemma count_fmap_insert {T U} `{EqDecision T} `{EqDecision U}
+    (i : T -> T) (j : U -> U) (f : T -> U) z x X :
+  j (j z) = z -> j (j (f x)) = f x -> f (i x) = j (f x) ->
+  count j z (f <$> insert i x X) = count j z (f <$> (x :: X)).
+Proof.
+move=> jKz jKfx fijx; rewrite /insert; case_bool_decide as Hin; last done.
+have e : f <$> X ≡ₚ f (i x) :: (f <$> rem (i x) X).
+  by rewrite -fmap_cons; apply: fmap_Permutation; exact: rem_Permutation.
+rewrite fmap_cons count_cons (count_proper j z _ _ e) count_cons fijx.
+by rewrite (bool_decide_ii j jKz jKfx) (bool_decide_ix j jKz jKfx); lia.
+Qed.
+
+Lemma count_fmap_cancel {T U} `{EqDecision T} `{EqDecision U}
+    (i : T -> T) (j : U -> U) (f : T -> U) z X :
+  j (j z) = z ->
+  (forall x, x ∈ X -> j (j (f x)) = f x) ->
+  (forall x, x ∈ X -> f (i x) = j (f x)) ->
+  count j z (f <$> cancel i X) = count j z (f <$> X).
+Proof.
+move=> jKz; elim: X => [//|x X IH] jKf fij.
+have jKfx : j (j (f x)) = f x by apply: jKf; rewrite elem_of_cons; left.
+have fijx : f (i x) = j (f x) by apply: fij; rewrite elem_of_cons; left.
+have jKfX : forall y, y ∈ X -> j (j (f y)) = f y
+  by move=> y yX; apply: jKf; rewrite elem_of_cons; right.
+have fijX : forall y, y ∈ X -> f (i y) = j (f y)
+  by move=> y yX; apply: fij; rewrite elem_of_cons; right.
+rewrite cancel_cons (count_fmap_insert i j f z x _ jKz jKfx fijx).
+by rewrite !fmap_cons !count_cons (IH jKfX fijX).
+Qed.
+
+Lemma count_fmap_prune {T U} `{EqDecision T} `{EqDecision U}
+    (i : T -> T) (j : U -> U) (f : T -> U) z X :
+  j (j z) = z ->
+  (forall x, x ∈ X -> f (i x) = j (f x)) ->
+  count j z (f <$> prune i X) = count j z (f <$> X).
+Proof.
+move=> jKz; elim: X => [//|x X IH] fij.
+have fijx : f (i x) = j (f x) by apply: fij; rewrite elem_of_cons; left.
+have fijX : forall y, y ∈ X -> f (i y) = j (f y)
+  by move=> y yX; apply: fij; rewrite elem_of_cons; right.
+rewrite prune_cons; case_bool_decide as Hx.
+  by rewrite !fmap_cons !count_cons (IH fijX).
+have jfx : j (f x) = f x by rewrite -fijx Hx.
+have jKfx : j (j (f x)) = f x by rewrite jfx jfx.
+rewrite (IH fijX) fmap_cons count_cons (bool_decide_ix j jKz jKfx) jfx.
+by lia.
+Qed.
+
+Lemma count_fmap_to {T U} `{EqDecision T} `{EqDecision U}
+    (R : relation T) `{!RelDecision R, !Transitive R, !Total R}
+    (i : T -> T) (j : U -> U) (f : T -> U) z X :
+  j (j z) = z ->
+  (forall x, x ∈ X -> j (j (f x)) = f x) ->
+  (forall x, x ∈ X -> f (i x) = j (f x)) ->
+  count j z (f <$> to R i X) = count j z (f <$> X).
+Proof.
+move=> jKz jKf fij.
+have e : f <$> to R i X ≡ₚ f <$> cancel i (prune i X).
+  by rewrite /to; apply: fmap_Permutation; exact: merge_sort_Permutation.
+rewrite (count_proper j z _ _ e).
+rewrite (count_fmap_cancel i j f z (prune i X) jKz);
+  [ |move=> x xin; apply: jKf; exact: (mem_prune _ _ _ xin)
+   |move=> x xin; apply: fij; exact: (mem_prune _ _ _ xin)].
+exact: count_fmap_prune.
+Qed.
+
 End SMS.
 
 (* [to] is the canonical (sorted, cancelled) form; keep it opaque to [simpl] so
