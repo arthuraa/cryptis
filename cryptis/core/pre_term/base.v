@@ -5,11 +5,25 @@ From deriving Require Import deriving.
 From Stdlib Require Import ZArith.ZArith Lia.
 From iris.heap_lang Require locations.
 
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
 Import Order.POrderTheory Order.TotalTheory.
+
+(* A nonce is a nominal wrapper around a heap location. *)
+Record nonce := Nonce { nonce_loc : locations.loc }.
+
+#[warnings="-projection-no-head-constant"]
+HB.instance Definition _ := [isNew for nonce_loc].
+HB.instance Definition _ := [Equality of nonce by <:].
+HB.instance Definition _ := [Choice of nonce by <:].
+HB.instance Definition _ := [Countable of nonce by <:].
+HB.instance Definition _ := [Order of nonce by <:].
 
 Inductive term_op0 :=
 | O0Int of Z
-| O0Nonce of locations.loc.
+| O0Nonce of nonce.
 
 Notation TInt_tag := 0%Z.
 Notation TNonce_tag := 1%Z.
@@ -46,10 +60,12 @@ HB.instance Definition _ := key_type_isOrder.
 
 Inductive term_op1 :=
 | O1Key of key_type
-| O1Hash.
+| O1Hash
+| O1Inv.
 
 Notation TKey_tag := 0%Z.
 Notation THash_tag := 1%Z.
+Notation TInv_tag := 2%Z.
 
 Canonical term_op1_indDef := [indDef for term_op1_rect].
 Canonical term_op1_indType := IndType term_op1 term_op1_indDef.
@@ -67,10 +83,12 @@ HB.instance Definition _ := term_op1_isOrder.
 
 Inductive term_op2 :=
 | O2Pair
-| O2Seal.
+| O2Seal
+| O2Exp.
 
 Notation TPair_tag := 0%Z.
 Notation TSeal_tag := 1%Z.
+Notation TExp_tag := 2%Z.
 
 Canonical term_op2_indDef := [indDef for term_op2_rect].
 Canonical term_op2_indType := IndType term_op2 term_op2_indDef.
@@ -89,7 +107,7 @@ HB.instance Definition _ := term_op2_isOrder.
 Notation TOp0_tag := 0%Z.
 Notation TOp1_tag := 1%Z.
 Notation TOp2_tag := 2%Z.
-Notation TExp_tag := 3%Z.
+Notation TMul_tag := 3%Z.
 
 Module PreTerm.
 
@@ -98,8 +116,12 @@ Inductive pre_term :=
 | PT0 of term_op0
 | PT1 of term_op1 & pre_term
 | PT2 of term_op2 & pre_term & pre_term
-| PTExp of pre_term & list pre_term.
+| PTMul of list pre_term.
 Set Elimination Schemes.
+
+(** Convenient shorthands for some operations *)
+Notation PTInv e := (PT1 O1Inv e).
+Notation PTExp b e := (PT2 O2Exp b e).
 
 Definition pre_term_rect'
   (T1 : pre_term -> Type)
@@ -107,7 +129,7 @@ Definition pre_term_rect'
   (H1 : forall o, T1 (PT0 o))
   (H2 : forall o t1, T1 t1 -> T1 (PT1 o t1))
   (H3 : forall o t1, T1 t1 -> forall t2, T1 t2 -> T1 (PT2 o t1 t2))
-  (H4 : forall t, T1 t -> forall ts, T2 ts -> T1 (PTExp t ts))
+  (Hmul : forall ts, T2 ts -> T1 (PTMul ts))
   (H5 : T2 [::])
   (H6 : forall t, T1 t -> forall ts, T2 ts -> T2 (t :: ts)) :=
   fix loop1 t {struct t} : T1 t :=
@@ -115,13 +137,13 @@ Definition pre_term_rect'
     | PT0 o => H1 o
     | PT1 o t => H2 o t (loop1 t)
     | PT2 o t1 t2 => H3 o t1 (loop1 t1) t2 (loop1 t2)
-    | PTExp t ts =>
+    | PTMul ts =>
       let fix loop2 ts {struct ts} : T2 ts :=
           match ts with
           | [::] => H5
           | t :: ts => H6 t (loop1 t) ts (loop2 ts)
           end in
-      H4 t (loop1 t) ts (loop2 ts)
+      Hmul ts (loop2 ts)
     end.
 
 Definition list_pre_term_rect'
@@ -130,14 +152,14 @@ Definition list_pre_term_rect'
   (H1 : forall o, T1 (PT0 o))
   (H2 : forall o t1, T1 t1 -> T1 (PT1 o t1))
   (H3 : forall o t1, T1 t1 -> forall t2, T1 t2 -> T1 (PT2 o t1 t2))
-  (H4 : forall t, T1 t -> forall ts, T2 ts -> T1 (PTExp t ts))
+  (Hmul : forall ts, T2 ts -> T1 (PTMul ts))
   (H5 : T2 [::])
   (H6 : forall t, T1 t -> forall ts, T2 ts -> T2 (t :: ts)) :=
   fix loop2 ts {struct ts} : T2 ts :=
     match ts with
     | [::] => H5
     | t :: ts =>
-      H6 t (pre_term_rect' T1 T2 H1 H2 H3 H4 H5 H6 t) ts (loop2 ts)
+      H6 t (@pre_term_rect' T1 T2 H1 H2 H3 Hmul H5 H6 t) ts (loop2 ts)
     end.
 
 Combined Scheme pre_term_list_pre_term_rect
@@ -159,9 +181,8 @@ Definition pre_term_rect (T : pre_term -> Type)
   (H1 : forall o, T (PT0 o))
   (H2 : forall o t1, T t1 -> T (PT1 o t1))
   (H3 : forall o t1, T t1 -> forall t2, T t2 -> T (PT2 o t1 t2))
-  (H4 : forall t, T t ->
-        forall ts, foldr (fun t R => T t * R)%type unit ts ->
-          T (PTExp t ts)) t : T t.
+  (Hmul : forall ts, foldr (fun t R => T t * R)%type unit ts ->
+          T (PTMul ts)) t : T t.
 Proof.
 exact: (@pre_term_rect' T (foldr (fun t R => T t * R)%type unit)).
 Defined.
@@ -178,7 +199,7 @@ Definition cons_num pt : Z :=
   | PT0 _ => TOp0_tag
   | PT1 _ _ => TOp1_tag
   | PT2 _ _ _ => TOp2_tag
-  | PTExp _ _ => TExp_tag
+  | PTMul _ => TMul_tag
   end.
 
 Open Scope order_scope.
@@ -206,11 +227,13 @@ Lemma op1_leqE (o1 o2 : term_op1) :
   match o1, o2 with
   | O1Key k1, O1Key k2 => (k1 <= k2)%O
   | O1Hash, O1Hash => true
+  | O1Inv, O1Inv => true
   | O1Key _, _ => true
+  | O1Hash, O1Inv => true
   | _, _ => false
   end.
 Proof.
-case: o1 o2 => [k1|] [k2|] //=.
+case: o1 o2 => [k1| |] [k2| |] //=.
 by rewrite [RHS]le_alt.
 Qed.
 
@@ -225,25 +248,21 @@ Lemma leqE pt1 pt2 :
       if o1 == o2 then
         if t11 == t21 then (t12 <= t22)%O else (t11 <= t21)%O
       else (o1 <= o2)%O
-    | PTExp pt1 pts1, PTExp pt2 pts2 =>
-      if pt1 == pt2 then ((pts1 : seqlexi_with Order.default_display _) <= pts2)%O
-      else (pt1 <= pt2)%O
+    | PTMul ts1, PTMul ts2 =>
+      ((ts1 : seqlexi_with Order.default_display _) <= ts2)%O
     | _, _ => false
     end
   else (cons_num pt1 <=? cons_num pt2)%Z.
 Proof.
-have le_alt (T : orderType _) (x y : T) :
-    (x <= y)%O = if x == y then true else (x <= y)%O.
-  by case: (ltgtP x y).
 case: pt1 pt2
-    => [o1|o1 t1|o1 t11 t12|t1 ts1]
-       [o2|o2 t2|o2 t21 t22|t2 ts2] //=.
+    => [o1|o1 t1|o1 t11 t12|ts1]
+       [o2|o2 t2|o2 t21 t22|ts2] //=.
 - by rewrite [RHS]le_alt.
 - by rewrite [(t1 <= t2)%O]le_alt.
-- by rewrite (le_alt _ _ t12).
+- by rewrite (le_alt t12).
 have -> : ((ts1 : seqlexi_with Order.default_display _) <= ts2)%O =
           ((ts1 : seq_pre_term) <= ts2)%O.
-  elim: ts1 ts2 {t1 t2} => [|t1 ts1 IH] [|t2 ts2] //=.
+  elim: ts1 ts2 => [|t1 ts1 IH] [|t2 ts2] //=.
   rewrite [LHS](_ : _ = if t1 == t2 then if ts1 == ts2 then true
                                          else ((ts1 : seq_pre_term) <= ts2)%O
                         else (t1 <= t2)%O) //.
@@ -253,133 +272,6 @@ by rewrite [(ts1 : seq_pre_term)  <= ts2]le_alt.
 Qed.
 
 Close Scope order_scope.
-
-Fixpoint height pt :=
-  match pt with
-  | PT0 _ => 1
-  | PT1 _ pt => S (height pt)
-  | PT2 _ pt1 pt2 => S (maxn (height pt1) (height pt2))
-  | PTExp t ts => S (\max_(x <- height t :: map height ts) x)
-  end.
-
-Fixpoint tsize pt :=
-  match pt with
-  | PT0 _ => 1
-  | PT1 _ pt => S (tsize pt)
-  | PT2 _ t1 t2 => S (tsize t1 + tsize t2)
-  | PTExp t ts => S (\sum_(x <- tsize t :: map tsize ts) x)
-  end.
-
-Lemma tsize_gt0 pt : 0 < tsize pt. Proof. by case: pt. Qed.
-
-Definition base pt := if pt is PTExp pt _   then pt  else pt.
-Definition exps pt := if pt is PTExp pt pts then pts else [::].
-
-Definition exp pt pts :=
-  if size pts == 0 then pt
-  else PTExp (base pt) (sort <=%O (exps pt ++ pts)).
-
-Lemma tsize_exp t ts :
-  tsize (exp t ts) =
-  if ts == [::] then tsize t
-  else S (\sum_(t' <- base t :: exps t ++ ts) tsize t').
-Proof.
-rewrite /exp [LHS]fun_if /= size_eq0.
-have: perm_eq (sort <=%O (exps t ++ ts)) (exps t ++ ts) by rewrite perm_sort.
-by move=> e; rewrite !big_cons !big_map (perm_big _ e).
-Qed.
-
-Definition is_nonce pt :=
-  if pt is PT0 (O0Nonce _) then true else false.
-
-Definition is_exp pt :=
-  if pt is PTExp _ _ then true else false.
-
-Lemma base_expN pt : ~~ is_exp pt -> base pt = pt.
-Proof. by case: pt. Qed.
-
-Lemma exps_expN pt : ~~ is_exp pt -> exps pt = [::].
-Proof. by case: pt. Qed.
-
-Lemma base_expsK pt : is_exp pt -> PTExp (base pt) (exps pt) = pt.
-Proof. by case: pt. Qed.
-
-Lemma is_exp_exp pt pts : is_exp (exp pt pts) = (pts != [::]) || is_exp pt.
-Proof. by rewrite /exp size_eq0; case: eqP. Qed.
-
-Lemma perm_exp pt pts1 pts2 : perm_eq pts1 pts2 -> exp pt pts1 = exp pt pts2.
-Proof.
-move=> pts12; rewrite /exp (perm_size pts12); case: (_ == _) => //.
-have /perm_sort_leP -> // : perm_eq (exps pt ++ pts1) (exps pt ++ pts2).
-by rewrite perm_cat2l.
-Qed.
-
-Fixpoint normalize pt :=
-  match pt with
-  | PT0 o => PT0 o
-  | PT1 o t => PT1 o (normalize t)
-  | PT2 o t1 t2 => PT2 o (normalize t1) (normalize t2)
-  | PTExp t ts => exp (normalize t) (map normalize ts)
-  end.
-
-Fixpoint wf_term pt :=
-  match pt with
-  | PT0 _ => true
-  | PT1 _ pt => wf_term pt
-  | PT2 _ pt1 pt2 => wf_term pt1 && wf_term pt2
-  | PTExp pt pts => [&& wf_term pt, ~~ is_exp pt,
-                        all wf_term pts, pts != [::] & sorted <=%O pts]
-  end.
-
-Lemma wf_exp pt pts :
-  wf_term pt ->
-  all wf_term pts ->
-  wf_term (exp pt pts).
-Proof.
-rewrite /exp; case: (altP eqP) => //= ptsN0 wf_pt wf_pts.
-have ->: wf_term (base pt) by case: pt wf_pt => //= ?? /and5P [].
-have ->: ~~ is_exp (base pt) by case: pt wf_pt => //= ?? /and5P [].
-rewrite all_sort all_cat wf_pts.
-have ->: all wf_term (exps pt) by case: pt wf_pt => //= ?? /and5P [].
-rewrite sort_le_sorted andbT -size_eq0 size_sort size_cat addn_eq0 negb_and.
-by rewrite ptsN0 orbT.
-Qed.
-
-Lemma wf_normalize pt : wf_term (normalize pt).
-Proof.
-elim: pt => //=.
-- by move=> _ ? -> ? ->.
-- move=> pt IHpt pts IHpts; apply: wf_exp => //.
-  by elim: pts IHpts {pt IHpt} => //= pt pts IH [-> ?]; rewrite IH.
-Qed.
-
-Lemma normalize_wf pt : wf_term pt -> normalize pt = pt.
-Proof.
-elim: pt => //=.
-- by move=> ?? IH ?; rewrite IH.
-- by move=> ? pt1 IH1 pt2 IH2 /andP [??]; rewrite IH1 ?IH2.
-move=> pt IH1 pts IH2 /and5P [wf_pt ptNexp wf_pts ptsN0 sorted_pts].
-rewrite /exp size_map size_eq0 (negbTE ptsN0) IH1 //.
-rewrite base_expN // exps_expN //=.
-suff -> : map normalize pts = pts by rewrite sort_le_id.
-elim: pts {ptsN0 sorted_pts} => //= pt' pts IH in IH2 wf_pts *.
-case: IH2 => IHpt' IHpts.
-case/andP: wf_pts => wf_pt' wf_pts.
-by rewrite IHpt' // IH.
-Qed.
-
-Lemma normalize_idem pt : normalize (normalize pt) = normalize pt.
-Proof. apply: normalize_wf; exact: wf_normalize. Qed.
-
-Lemma normalize_exp_wf pt pts :
-  let pt' := normalize (PTExp pt pts) in
-  pts <> [::] ->
-  wf_term (PTExp (base pt') (exps pt')).
-Proof.
-move=> pt' /eqP/negbTE ptsN0.
-rewrite (_ : PTExp _ _ = pt') ?wf_normalize //.
-by rewrite /pt' /= /exp size_map size_eq0 ptsN0 /=.
-Qed.
 
 Module Exports.
 HB.reexport.

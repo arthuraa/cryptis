@@ -1,3 +1,4 @@
+From elpi.apps Require Import locker.
 From mathcomp Require Import ssreflect.
 From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset gmap list reservation_map excl.
@@ -17,15 +18,8 @@ Context `{heapGS Σ}.
 
 Notation iProp := (iProp Σ).
 
-Fact minted_key : unit. Proof. exact: tt. Qed.
-
-Definition minted : term → iProp :=
-  locked_with minted_key (
-    λ t, [∗ set] a ∈ nonces_of_term t,
-      meta a (nroot.@"minted") ()
-  )%I.
-
-Canonical minted_unlock := [unlockable of minted].
+lock Definition minted t : iProp :=
+  [∗ set] a ∈ nonces_of_term t, meta (nonce_loc a) (nroot.@"minted") ().
 
 Global Instance Persistent_minted t : Persistent (minted t).
 Proof. rewrite unlock; apply _. Qed.
@@ -42,49 +36,95 @@ iApply "m_t2". iPureIntro. set_solver.
 Qed.
 
 Lemma minted_TInt n : minted (TInt n) ⊣⊢ True.
-Proof. by rewrite unlock nonces_of_term_unseal /= big_sepS_empty. Qed.
+Proof. by rewrite unlock nonces_of_termE big_sepS_empty. Qed.
 
 Lemma minted_TPair t1 t2 : minted (TPair t1 t2) ⊣⊢ minted t1 ∧ minted t2.
-Proof.
-by rewrite unlock nonces_of_term_unseal /= !big_sepS_union_pers.
-Qed.
+Proof. by rewrite unlock nonces_of_termE !big_sepS_union_pers. Qed.
 
-Lemma minted_TNonce a : minted (TNonce a) ⊣⊢ meta a (nroot.@"minted") ().
-Proof.
-by rewrite unlock nonces_of_term_unseal /= big_sepS_singleton.
-Qed.
+Lemma minted_TNonce a : minted (TNonce a) ⊣⊢ meta (nonce_loc a) (nroot.@"minted") ().
+Proof. by rewrite unlock nonces_of_termE big_sepS_singleton. Qed.
 
 Lemma minted_TKey kt t : minted (TKey kt t) ⊣⊢ minted t.
-Proof. by rewrite unlock nonces_of_term_unseal /=. Qed.
+Proof. by rewrite unlock nonces_of_termE. Qed.
 
 Lemma minted_TSeal k t : minted (TSeal k t) ⊣⊢ minted k ∧ minted t.
-Proof.
-by rewrite unlock nonces_of_term_unseal /= !big_sepS_union_pers.
-Qed.
+Proof. by rewrite unlock nonces_of_termE !big_sepS_union_pers. Qed.
 
 Lemma minted_THash t : minted (THash t) ⊣⊢ minted t.
-Proof. by rewrite unlock nonces_of_term_unseal /=. Qed.
+Proof. by rewrite unlock nonces_of_termE. Qed.
+
+Lemma minted_TInv t : minted (TInv t) ⊣⊢ minted t.
+Proof. by rewrite unlock nonces_of_termE. Qed.
 
 Lemma minted_TExpN t ts :
+  negb (is_exp t) -> invs_canceled ts ->
   minted (TExpN t ts) ⊣⊢ minted t ∧ [∗ list] t' ∈ ts, minted t'.
 Proof.
-rewrite unlock nonces_of_term_TExpN big_sepS_union_pers.
+move => nx ic.
+rewrite unlock (nonces_of_term_TExpN nx ic) big_sepS_union_pers.
+by rewrite big_sepS_union_list_pers big_sepL_fmap.
+Qed.
+
+Lemma minted_TMulN ts :
+  invs_canceled ts ->
+  minted (TMulN ts) ⊣⊢ [∗ list] t ∈ ts, minted t.
+Proof.
+move => ic.
+rewrite unlock (nonces_of_term_TMulN ic).
+by rewrite big_sepS_union_list_pers big_sepL_fmap.
+Qed.
+
+Lemma minted_base_exps t :
+  minted t ⊣⊢ minted (base t) ∧ [∗ list] t' ∈ exps t, minted t'.
+Proof.
+by rewrite -{1}[t]base_expsK
+  (minted_TExpN (base_Nexp t) (invs_canceled_factors (expo t))).
+Qed.
+
+Lemma all_minted_TExpN t ts :
+  minted t ∧ ([∗ list] t' ∈ ts, minted t') ⊢ minted (TExpN t ts).
+Proof.
+rewrite unlock !big_sepS_forall.
+iIntros "[Ht Hts]" (l) "%l_in".
+have /elem_of_subseteq in_nonces := @nonces_of_term_TExpN_subseteq t ts.
+
+move: l_in => /(in_nonces l). rewrite elem_of_union elem_of_union_list.
+case => [?|]; first by iApply "Ht".
+case => _ [] /list_elem_of_fmap [] t' [] -> ??.
+rewrite big_sepL_elem_of // big_sepS_forall.
+by iApply "Hts".
+Qed.
+
+Lemma minted_factors t :
+  minted t ⊣⊢ [∗ list] t' ∈ factors t, minted t'.
+Proof.
+rewrite unlock (nonces_of_term_factors t).
 by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
 Lemma minted_TExp t1 t2 :
+  negb (is_exp t1) ->
   minted (TExp t1 t2) ⊣⊢ minted t1 ∧ minted t2.
 Proof.
-rewrite unlock nonces_of_term_TExpN big_sepS_union_pers.
-by rewrite /= union_empty_r_L.
+move => nx.
+have -> : TExp t1 t2 = TExpN t1 (factors t2) by rewrite /TExpN factorsK.
+rewrite (minted_TExpN nx (invs_canceled_factors t2)).
+by rewrite -minted_factors.
+Qed.
+
+Lemma all_minted_TExp t1 t2 :
+  minted t1 ∧ minted t2 ⊢ minted (TExp t1 t2).
+Proof.
+have -> : TExp t1 t2 = TExpN t1 (factors t2) by rewrite /TExpN factorsK.
+rewrite (minted_factors t2).
+exact: (all_minted_TExpN t1 (factors t2)).
 Qed.
 
 Lemma minted_nonces_of_term t :
   minted t ⊣⊢ [∗ set] a ∈ nonces_of_term t, minted (TNonce a).
 Proof.
-rewrite {1}unlock !big_sepS_forall; iSplit; iIntros "#H %a %a_t".
-- by rewrite minted_TNonce; iApply "H".
-- by rewrite -minted_TNonce; iApply "H".
+rewrite {1}unlock. apply: big_sepS_proper => a a_t.
+by rewrite minted_TNonce.
 Qed.
 
 Lemma minted_to_list t ts :
@@ -110,7 +150,6 @@ Qed.
 
 Lemma minted_Tag N : ⊢ minted (Tag N).
 Proof. by rewrite Tag_unseal minted_TInt. Qed.
-
 
 Lemma minted_tag N t : minted (Spec.tag (Tag N) t) ⊣⊢ minted t.
 Proof.

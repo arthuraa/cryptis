@@ -15,7 +15,7 @@ Global Hint Extern 0 (envs_entails _ (public (TInt ?n))) =>
 
 Section Proofs.
 
-Context `{!heapGS Σ, !cryptisG Σ}.
+Context `{!heapGS Σ}.
 
 Implicit Types E : coPset.
 Implicit Types l : loc.

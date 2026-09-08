@@ -8,9 +8,11 @@
     nix-github-actions.inputs.nixpkgs.follows = "nixpkgs";
     actris.url = "git+https://gitlab.mpi-sws.org/iris/actris.git?rev=fa669607568fbf897f6551b7bc9e912b10e1b577";
     actris.flake = false;
+    rocq-mcp.url = "github:arthuraa/rocq-mcp-flake";
+    rocq-mcp.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = inputs@{ self, flake-parts, nixpkgs, nix-github-actions, ... }:
+  outputs = inputs@{ self, flake-parts, nixpkgs, nix-github-actions, rocq-mcp, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
         # To import a flake module
@@ -38,6 +40,26 @@
             self'.packages.default
           ];
         };
+
+        devShells.ai =
+          let
+            aiPkgs = import self.inputs.nixpkgs {
+              inherit system;
+              overlays = [
+                self.overlays.default
+                rocq-mcp.overlays.default
+              ];
+            };
+          in
+          pkgs.mkShell {
+            propagatedBuildInputs = [
+              pkgs.coqPackages.coq-lsp
+              aiPkgs.rocq-mcp
+            ];
+            inputsFrom = [
+              self'.packages.default
+            ];
+          };
 
         # Equivalent to  inputs'.nixpkgs.legacyPackages.hello;
         packages.default = pkgs.coqPackages.cryptis;

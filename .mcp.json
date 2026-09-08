@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "rocq": {
+      "type": "stdio",
+      "command": "nix",
+      "args": [
+        "develop",
+        ".#ai",
+        "--command",
+        "rocq-mcp"
+      ],
+      "env": {}
+    }
+  }
+}

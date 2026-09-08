@@ -1,11 +1,11 @@
 From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
-From mathcomp Require ssrbool.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term cryptis primitives tactics.
 From cryptis Require Import role.
+From cryptis.lib Require Import dh.
 From cryptis.examples.iso_dh Require Import impl.
 From cryptis.examples.iso_dh.proofs Require Import base.
 
@@ -74,16 +74,19 @@ set pkR := Spec.pkey skR.
 iIntros "%Φ (#chan_c & #? & (#? & #?) & #N_φ &
              #p_ga & #m_skI & #m_skR & res & #failed) Hpost".
 wp_lam. wp_pures. wp_apply wp_pkey. wp_pures.
-wp_apply (wp_mk_nonce_freshN ∅
+wp_apply (wp_mk_nonce_freshN {[ga]}
           (λ b, ⌜failed⌝ ∨ released ga ∧ released (TExp (TInt 0) b))%I
           iso_dh_key_share
           (λ b, {[TExp (TInt 0) b]}))
        => //.
-- iIntros "%". rewrite elem_of_empty. iIntros "[]".
+- iIntros "%". rewrite elem_of_singleton public_minted. by iIntros "->".
 - iIntros "%b".
-  rewrite big_sepS_singleton minted_TExp minted_TInt /= bi.True_and.
+  rewrite big_sepS_singleton minted_TExp //.
+  rewrite minted_TInt /= bi.True_and.
   iModIntro. by iApply bi.equiv_iff.
-iIntros "%b _ _ #m_b #s_b #dh_gb token".
+iIntros "%b %fresh_b #m_b #s_b #dh_gb _ token".
+have Nm_b : negb (is_mul (TNonce b)) by [].
+have {}fresh_b: ¬ subterm b ga by apply: fresh_b; exact/elem_of_singleton.
 rewrite bi.intuitionistic_intuitionistically.
 set gb := TExp (TInt 0) b.
 set gab := TExp ga b.
@@ -94,12 +97,9 @@ rewrite (term_token_difference gb (↑iso_dhN.@"failed")); last by solve_ndisj.
 iDestruct "token" as "[token_failed token]".
 iPoseProof (term_token_difference gb (↑iso_dhN.@"res") with "token")
   as "[res_token token]"; first by solve_ndisj.
-iMod ("res" $! b with "res_token") as "[resI resR]".
+iMod ("res" $! (TNonce b) with "res_token") as "[resI resR]".
 iMod (iso_dh_ready_alloc N skI skR si with "[//] resI") as "#ready".
-iAssert (public gb) as "#p_gb".
-{ iApply public_TExp_iff; eauto.
-  rewrite minted_TInt. iRight. do ![iSplit => //].
-  iApply "dh_gb". iPureIntro. by rewrite exps_TExpN. }
+iAssert (public gb) as "#p_gb"; first by iApply (public_dh_share Nm_b).
 wp_pure _ credit:"H1".
 wp_pure _ credit:"H2".
 wp_apply wp_mk_keyshare => //.
@@ -156,8 +156,8 @@ iAssert (|={⊤}=>
   iDestruct "inv" as "(%a & %gb' & %skR' & %e_m3 & comp)".
   case/Spec.of_list_inj: e_m3
     => -> <- /Spec.sign_pkey_inj <- {ga gb' skR'}
-    in gb gab si *.
-  rewrite !TExp_TExpN TExpC2 in gab si *.
+    in fresh_b gb gab si *.
+  rewrite TExpC in gab si *.
   iDestruct "comp" as "[comp|comp]".
   - iMod (term_meta_set (iso_dhN.@"failed") true with "token_failed")
       as "#?"; first by solve_ndisj.
@@ -168,10 +168,9 @@ iAssert (|={⊤}=>
     iModIntro. iSplit; first by iIntros "!> []".
     by eauto. }
 iAssert (minted (si_key si)) as "#m_kS".
-{ rewrite minted_senc !minted_of_list /= !minted_TExp minted_TInt.
-  do !iSplit => //; iApply public_minted => //.
-  - by iApply public_verify_key.
-  - by iApply public_verify_key. }
+{ rewrite minted_senc minted_of_list /= !minted_pkey.
+  do !iSplit => //; try by iApply public_minted.
+  by iApply all_minted_TExp; iSplit; first iApply public_minted. }
 wp_pures. iApply ("Hpost" $! (Some (si_key si))).
 iModIntro. iRight. iExists si. iFrame. do !iSplit => //.
 - iIntros "!> #?". iApply "s_k1". by eauto.

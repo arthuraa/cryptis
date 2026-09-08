@@ -6,8 +6,8 @@ The material covered in the paper can be found in the following files:
 
 In the `cryptis` directory you will find:
 
-- `lib/*, lib`: General additions to Iris and MathComp.  List manipulation programs for
-  HeapLang.
+- `lib/*, lib`: General additions to Iris, MathComp, and stdpp; Diffie–Hellman and
+  ghost-state helpers; list-manipulation programs for HeapLang.
 - `core/*`, `cryptis`: Core Cryptis components: cryptographic terms, the
   `public` predicate, encryption predicates, and term metadata.
 - `primitives/*`, `primitives`: HeapLang functions for manipulating
@@ -17,15 +17,22 @@ In the `cryptis` directory you will find:
 
 ## Case studies
 
-In the `examples` you will find our case studies:
+In the `examples` directory you will find our case studies:
 
-- `nsl`: NSL protocol, including game.
+- `nsl`: Needham–Schroeder–Lowe public-key protocol, including game (`nsl_secr.v`
+  and `nsl_auth.v` are standalone single-file variants for secrecy / agreement).
+- `nsl_dh`: NSL with Diffie–Hellman key exchange, including game.
 - `iso_dh`: ISO protocol with DH key exchange and digital signatures (game is in
   its own file).
-- `conn`: Authenticated connections
-- `rpc`: Remote procedure calls
-- `store`: Authenticated key-value store (game is in its own file).
-  
+- `gen_conn`, `conn`: Generic and authenticated secure-connection layers.
+- `rpc`: Remote procedure calls (built on `conn`).
+- `store`: Authenticated key-value store built on `rpc` (game is in its own file);
+  `alist` is a supporting association-list module.
+- `opaque`: OPAQUE-style password-authenticated key exchange (partial).
+- `tls13`: TLS 1.3 handshake (partial; `impl.v` + per-component `proofs/`).
+- `challenge_response`, `composite_game`, `permanent`, `counter`: smaller
+  single-file examples plus a composite security game.
+
 ## Building
 
 Cryptis is known to compile with the following dependencies:
@@ -33,9 +40,9 @@ Cryptis is known to compile with the following dependencies:
 - rocq-prover
 - rocq-core v9.1.1
 - rocq-mathcomp-ssreflect v2.5.0
-- coq-deriving v0.2.2
-- coq-iris v4.5.0
-- coq-iris-heap-lang v4.5.0
+- coq-deriving v0.2.3
+- rocq-iris v4.5.0
+- rocq-iris-heap-lang v4.5.0
 
 ### Nix
 

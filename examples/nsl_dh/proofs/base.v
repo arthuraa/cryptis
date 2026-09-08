@@ -1,6 +1,5 @@
 From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
-From mathcomp Require ssrbool.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import reservation_map.
 From iris.heap_lang Require Import notation proofmode.
@@ -163,6 +162,23 @@ Qed.
 Definition nsl_dh_key_share skI skR t : iProp :=
   (public skI ∨ public skR) ∧ ⌜length (exps t) = 1⌝.
 
+Lemma exps_TExp1 a : negb (is_mul a) -> exps (TExp (TInt 0) a) ≡ₚ [a].
+Proof.
+move=> Nm.
+rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [a]); last by rewrite /TExpN TMulN1.
+have NInt : negb (is_exp (TInt 0)) by [].
+by rewrite (exps_TExpN NInt (invs_canceled1 Nm)).
+Qed.
+
+Lemma exps_TExp2 a b :
+  negb (is_mul a) -> negb (is_mul b) -> a ≠ TInv b ->
+  exps (TExpN (TInt 0) [a; b]) ≡ₚ [a; b].
+Proof.
+move=> Nm_a Nm_b aVb.
+have NInt : negb (is_exp (TInt 0)) by [].
+by rewrite (exps_TExpN NInt (proj2 (invs_canceled2 Nm_a Nm_b) aVb)).
+Qed.
+
 Definition si_key si : senc_key :=
   SEncKey
     (Spec.of_list [Spec.pkey (si_init si);
@@ -231,10 +247,10 @@ iIntros "#meta"; iSplit.
   iRight. iExists gb. by do !iSplit.
 Qed.
 
-Definition dh_key skI skR a : iProp :=
+Definition dh_key skI skR (a : nonce) : iProp :=
   minted a ∧
   □ (public a ↔ ▷ □ nonce_secrecy a) ∧
-  □ (∀ t, dh_pred a t ↔ ▷ □ nsl_dh_key_share skI skR t).
+  □ (∀ t, exp_pred_base a t ↔ ▷ □ nsl_dh_key_share skI skR t).
 
 Global Instance dh_key_persistent skI skR a : Persistent (dh_key skI skR a).
 Proof. apply _. Qed.
@@ -242,7 +258,7 @@ Proof. apply _. Qed.
 Definition failed_early skI skR (failed : bool) : iProp :=
   (if failed then public skI ∨ public skR else True)%I.
 
-Lemma peer_share_token_failed_early skI skR a failed :
+Lemma peer_share_token_failed_early skI skR (a : nonce) failed :
   let ga := TExp (TInt 0) a in
   failed_early skI skR failed -∗
   peer_share_token ga -∗
@@ -267,7 +283,7 @@ destruct failed.
   + by iRight.
 Qed.
 
-Lemma dh_key_public_released skI skR a gb :
+Lemma dh_key_public_released skI skR (a : nonce) gb :
   let ga := TExp (TInt 0) a in
   dh_key skI skR a -∗
   has_peer_share ga (Some gb) -∗
@@ -287,30 +303,32 @@ iIntros (ga) "#(m_a & s_a & dh_a) #ps !>". iSplit.
   iDestruct ("s_a" with "ns") as "$".
 Qed.
 
-Lemma wp_mk_dh_keys skI skR (Ψ : val → iProp) :
+Lemma wp_mk_dh_keys (T : gset term) skI skR (Ψ : val → iProp) :
   cryptis_ctx -∗
-  (∀ a,
+  (∀ t, ⌜t ∈ T⌝ -∗ minted t) -∗
+  (∀ (a : nonce),
     let ga := TExp (TInt 0) a in
+    ⌜∀ t', t' ∈ T → ¬ subterm a t'⌝ -∗
     dh_key skI skR a -∗
     release_token ga -∗
     peer_share_token ga -∗
     ready_token ga -∗
     res_token ga -∗
     term_token ga (⊤ ∖ ↑nsl_dhN) -∗
-    Ψ (repr (a, ga))) -∗
+    Ψ (repr (TNonce a, ga))) -∗
   WP mk_dh_keys #() {{ Ψ }}.
 Proof.
-iIntros "#ctx post".
+iIntros "#ctx #minted_T post".
 rewrite /mk_dh_keys. wp_lam.
-wp_apply (wp_mk_nonce_freshN ∅
+wp_apply (wp_mk_nonce_freshN T
             nonce_secrecy
             (nsl_dh_key_share skI skR)
             (λ a, {[TExp (TInt 0) a]})) => //.
-- iIntros "%". rewrite elem_of_empty. iIntros "[]".
 - iIntros "%a".
-  rewrite big_sepS_singleton minted_TExp minted_TInt /= bi.True_and.
+  rewrite big_sepS_singleton minted_TExp //.
+  rewrite minted_TInt /= bi.True_and.
   iModIntro. by iApply bi.equiv_iff.
-iIntros "%a _ _ #m_a #s_a #dh_a token_ga".
+iIntros "%a %fresh_a #m_a #s_a #dh_a _ token_ga".
 rewrite big_sepS_singleton.
 iDestruct (dh_share_tokenI with "token_ga")
   as "(rel & peer & ready & res & token_ga)" => //.
@@ -320,7 +338,7 @@ wp_bind (texp _ _). iApply wp_texp.
 wp_pures.
 iAssert (dh_key skI skR a) as "#dh_key_a".
 { rewrite /dh_key. by do !iSplit. }
-by iApply ("post" with "dh_key_a rel peer ready res token_ga").
+by iApply ("post" with "[//] dh_key_a rel peer ready res token_ga").
 Qed.
 
 Definition session skI skR si : iProp :=
@@ -479,10 +497,11 @@ Definition msg1_pred skR m1 : iProp := ∃ ga skI,
   ⌜m1 = Spec.of_list [ga; Spec.pkey skI]⌝ ∧
   (public skI ∨ public skR → public ga).
 
-Definition msg2_pred' skI skR ga gb N : iProp := ∃ b,
+Definition msg2_pred' skI skR ga gb N : iProp := ∃ (b : nonce),
   let gab := TExp ga b in
   let si := SessInfo skI skR ga gb gab in
   ⌜gb = TExp (TInt 0) b⌝ ∧
+  ⌜¬ subterm b ga⌝ ∧
   dh_key skI skR b ∧
   has_peer_share gb (Some ga) ∧
   nsl_dh_ready N skI skR si.
@@ -491,7 +510,7 @@ Definition msg2_pred skI m2 : iProp := ∃ ga gb skR N,
   ⌜m2 = Spec.of_list [ga; gb; Spec.pkey skR; Tag N]⌝ ∧
   msg2_pred' skI skR ga gb N.
 
-Definition msg3_pred skR gb : iProp := ∀ ga b,
+Definition msg3_pred skR gb : iProp := ∀ ga (b : nonce),
   let gab := TExp ga b in
   ⌜gb = TExp (TInt 0) b⌝ -∗
   has_peer_share gb (Some ga) -∗
@@ -523,53 +542,28 @@ Qed.
 Global Instance nsl_dh_ctx_persistent : Persistent nsl_dh_ctx.
 Proof. apply _. Qed.
 
-Lemma public_dh_share skI skR a :
+Lemma public_dh_share skI skR (a : nonce) :
   let ga := TExp (TInt 0) a in
   dh_key skI skR a -∗
   ▷ (public skI ∨ public skR) -∗
   public ga.
 Proof.
 iIntros (ga) "#(m_a & _ & #pred_a) corr".
-iAssert (dh_pred a (TExp (TInt 0) a)) with "[corr]" as "#dp".
+have Nm : negb (is_mul a) by [].
+iAssert (exp_pred_base a (TExp (TInt 0) a)) with "[corr]" as "#dp".
 { iAssert (▷ □ nsl_dh_key_share skI skR (TExp (TInt 0) a))%I
     with "[corr]" as "#ns".
   { iNext. iDestruct "corr" as "#corr".
     iModIntro. rewrite /nsl_dh_key_share. iSplit => //.
-    iPureIntro. by rewrite exps_TExpN /=. }
+    iPureIntro.
+    rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [TNonce a]); last by rewrite /TExpN TMulN1.
+    have NInt : negb (is_exp (TInt 0)) by [].
+    by rewrite (exps_TExpN NInt (invs_canceled1 Nm)). }
   by iDestruct ("pred_a" $! (TExp (TInt 0) a) with "ns") as "$". }
-rewrite /ga. iApply public_TExp_iff; eauto.
-rewrite minted_TInt. iRight. do ![iSplit => //].
-Qed.
-
-Lemma public_dh_share_inv skI skR a :
-  let ga := TExp (TInt 0) a in
-  dh_key skI skR a -∗
-  release_token ga -∗
-  public ga -∗
-  ▷ (public skI ∨ public skR).
-Proof. Admitted.
-
-Lemma public_dh_secret a b skI skR :
-  let ga := TExp (TInt 0) a in
-  let gb := TExp (TInt 0) b in
-  dh_key skI skR a -∗
-  dh_key skI skR b -∗
-  has_peer_share ga (Some gb) -∗
-  has_peer_share gb (Some ga) -∗
-  (public (TExpN (TInt 0) [a; b]) → ◇ (released ga ∨ released gb)).
-Proof.
-iIntros (ga gb) "#dh_a #dh_b #ps_a #ps_b".
-iPoseProof (dh_key_public_released with "dh_a ps_a") as "#rel_a".
-iPoseProof (dh_key_public_released with "dh_b ps_b") as "#rel_b".
-iDestruct "dh_a" as "(m_a & _ & pred_a)".
-rewrite public_TExp2_iff //; last by eauto.
-iIntros "[[_ #p_b] | [[_ #p_a] | (_ & contra & _)]]".
-- iDestruct ("rel_b" with "p_b") as ">[#r #_]". by iRight.
-- iDestruct ("rel_a" with "p_a") as ">[#r #_]". by iLeft.
-- iPoseProof ("pred_a" with "contra") as "#contra2".
-  iAssert (▷ False)%I as ">[]".
-  { iModIntro. iDestruct "contra2" as "[_ %contra]".
-    by rewrite /nsl_dh_key_share exps_TExpN /= in contra. }
+rewrite /ga public_TExp_iff //.
+rewrite minted_TInt. do 3?[iSplit => //].
+- by iApply exp_pred_intro1.
+- iIntros "!> _". by rewrite public_TInt.
 Qed.
 
 End Verif.
