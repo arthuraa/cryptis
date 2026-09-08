@@ -10,3 +10,7 @@
 .envrc
 .direnv
 builddep
+actris/*
+rocq_mcp_cache_*
+CLAUDE.md
+config/
