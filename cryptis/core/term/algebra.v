@@ -12,6 +12,35 @@ From cryptis.core.term Require Import base.
 
 Implicit Types (t k : term) (ts : list term).
 
+(** [invs_canceled] *)
+
+Lemma invs_canceled1 {t} : negb (is_mul t) → invs_canceled [t].
+Proof.
+move=> tNm x /list_elem_of_singleton ->; rewrite list_elem_of_singleton.
+by split=> //; apply: TInv_Nid.
+Qed.
+
+Lemma invs_canceled2 {t1 t2} :
+  negb (is_mul t1) → negb (is_mul t2) →
+  invs_canceled [t1; t2] ↔ t1 ≠ TInv t2.
+Proof.
+move=> t1Nm t2Nm.
+rewrite !invs_canceled_cons !elem_of_nil !list_elem_of_singleton.
+split.
+- by case=> neq _ contra; apply: neq; rewrite contra TInvK.
+- move=> t1_t2; do 4?split => //; eauto.
+  + by move=> contra; apply: t1_t2; rewrite -contra TInvK.
+  + exact: invs_canceled0.
+Qed.
+
+Global Instance invs_canceled_Permutation :
+  Proper ((≡ₚ) ==> (↔)) invs_canceled.
+Proof.
+move=> ts1 ts2 peq; split => H x Hx.
+- rewrite -peq; apply: H; by rewrite peq.
+- rewrite peq; apply: H; by rewrite -peq.
+Qed.
+
 (** Multiplication, factors, counting and inverses *)
 
 Lemma factors_TMulN0 : factors (TMulN []) = [].
@@ -318,33 +347,6 @@ Proof.
 by split=> [->|<-]; rewrite ?factorsK // factors_TMulN0.
 Qed.
 
-Lemma invs_canceled1 {t} : negb (is_mul t) → invs_canceled [t].
-Proof.
-move=> tNm x /list_elem_of_singleton ->; rewrite list_elem_of_singleton.
-by split=> //; apply: TInv_Nid.
-Qed.
-
-Lemma invs_canceled2 {t1 t2} :
-  negb (is_mul t1) → negb (is_mul t2) →
-  invs_canceled [t1; t2] ↔ t1 ≠ TInv t2.
-Proof.
-move=> t1Nm t2Nm.
-rewrite !invs_canceled_cons !elem_of_nil !list_elem_of_singleton.
-split.
-- by case=> neq _ contra; apply: neq; rewrite contra TInvK.
-- move=> t1_t2; do 4?split => //; eauto.
-  + by move=> contra; apply: t1_t2; rewrite -contra TInvK.
-  + exact: invs_canceled0.
-Qed.
-
-Global Instance invs_canceled_Permutation :
-  Proper ((≡ₚ) ==> (↔)) invs_canceled.
-Proof.
-move=> ts1 ts2 peq; split => H x Hx.
-- rewrite -peq; apply: H; by rewrite peq.
-- rewrite peq; apply: H; by rewrite -peq.
-Qed.
-
 Lemma TInv_TMulN ts : TInv (TMulN ts) = TMulN (TInv <$> ts).
 Proof.
 apply: count_inj => t _; rewrite count_TInv !count_TMulN.
@@ -486,8 +488,6 @@ rewrite (TExp_TInv _ _ Nmu).
 by rewrite (TExpA_atom _ _ _ Nmu Niu).
 Qed.
 
-(* A product base distributes into its factors, each of which is a non-product,
-   so the previous case applies pointwise. *)
 Lemma TExpA b e1 e2 : TExp (TExp b e1) e2 = TExp b (TMulN [e1; e2]).
 Proof.
 rewrite [in LHS](TExp_factors b e1).
