@@ -417,10 +417,28 @@ have -> : (λ t, unfold_term (TExp t e)) <$> factors b
 by rewrite unfold_factors.
 Qed.
 
-Lemma TExp_TMulN ts e :
-  Forall (λ t, negb (is_mul t)) ts ->
-  TExp (TMulN ts) e = TMulN ((λ t, TExp t e) <$> ts).
+Lemma TMulN_bind (f : term -> list term) ts :
+  TMulN ((λ t, TMulN (f t)) <$> ts) = TMulN (ts ≫= f).
 Proof.
+elim: ts => [//|t ts IH].
+by rewrite fmap_cons bind_cons TMulN_cat -TMulN_app IH TMulN_app.
+Qed.
+
+(* No side condition: a general list is first flattened into its atoms, where
+   [PreTerm.exp_mul] applies, and [TExp_factors] puts it back together. *)
+Lemma TExp_TMulN ts e : TExp (TMulN ts) e = TMulN ((λ t, TExp t e) <$> ts).
+Proof.
+wlog: ts / Forall (λ t, negb (is_mul t)) ts.
+  move=> H.
+  have -> : TMulN ts = TMulN (ts ≫= factors).
+    rewrite -TMulN_bind; congr TMulN; rewrite -[LHS]list_fmap_id.
+    by apply/Forall_fmap_ext/list.Forall_forall => t _; rewrite factorsK.
+  rewrite H; first last.
+    apply/Forall_bind/list.Forall_forall => t _.
+    by apply/list.Forall_forall => x x_t; exact: Nmul_factors x_t.
+  rewrite list_bind_fmap -TMulN_bind.
+  congr TMulN; apply/Forall_fmap_ext_1/list.Forall_forall => t _.
+  by rewrite -TExp_factors.
 move=> Nm_ts; apply: unfold_term_inj.
 rewrite unfold_TExp !unfold_TMulN -list_fmap_compose /compose.
 have -> : (λ t, unfold_term (TExp t e)) <$> ts
@@ -435,8 +453,16 @@ apply: PreTerm.exp_mul => //.
   rewrite /compose -is_mul_unfold; by move/list.Forall_forall: Nm_ts; apply.
 Qed.
 
-Lemma TExp_TInv t e : negb (is_mul t) -> TExp (TInv t) e = TInv (TExp t e).
+Lemma TExp_TInv t e : TExp (TInv t) e = TInv (TExp t e).
 Proof.
+wlog: t / negb (is_mul t).
+  move=> H.
+  have -> : TExp (TInv t) e = TMulN ((λ x, TExp (TInv x) e) <$> factors t).
+    by rewrite -{1}(factorsK t) TInv_TMulN TExp_TMulN -list_fmap_compose.
+  have -> : TInv (TExp t e) = TMulN ((λ x, TInv (TExp x e)) <$> factors t).
+    by rewrite -{1}(factorsK t) TExp_TMulN TInv_TMulN -list_fmap_compose.
+  congr TMulN; apply/Forall_fmap_ext_1/list.Forall_forall => x x_t.
+  by apply: H; exact: Nmul_factors x_t.
 rewrite is_mul_unfold => Nm; apply: unfold_term_inj.
 rewrite unfold_TExp !unfold_TInv unfold_TExp.
 exact: PreTerm.exp_inv.
@@ -461,10 +487,7 @@ Lemma TExpA b e1 e2 : TExp (TExp b e1) e2 = TExp b (TMulN [e1; e2]).
 Proof.
 wlog: b / negb (is_mul b).
   rewrite [in LHS](TExp_factors b e1) => Hb.
-  have Nmf : Forall (fun t => negb (is_mul t)) ((fun t => TExp t e1) <$> factors b).
-    apply/Forall_fmap/list.Forall_forall => t t_b.
-    by rewrite /compose; apply: Nmul_TExp; exact: Nmul_factors t_b.
-  rewrite (TExp_TMulN _ _ Nmf) -list_fmap_compose /compose.
+  rewrite TExp_TMulN -list_fmap_compose /compose.
   rewrite [in RHS](TExp_factors b (TMulN [e1; e2])).
   congr TMulN; apply/Forall_fmap_ext_1/list.Forall_forall => t t_b.
   by apply: Hb; exact: Nmul_factors t_b.
@@ -474,8 +497,8 @@ wlog: b / negb (is_inv b).
   have Niu : negb (is_inv (TInv b)) by rewrite (is_inv_TInv _ Nm) Ei.
   have bE : b = TInv (TInv b) by rewrite TInvK.
   rewrite [in LHS]bE [in RHS]bE.
-  rewrite (TExp_TInv _ e1 Nmu) (TExp_TInv _ e2 (Nmul_TExp _ _ Nmu)).
-  rewrite (TExp_TInv _ _ Nmu).
+  rewrite (TExp_TInv (TInv b) e1) (TExp_TInv (TExp (TInv b) e1) e2).
+  rewrite (TExp_TInv (TInv b) (TMulN [e1; e2])).
   by rewrite (Hb _ Niu Nmu).
 move=> Ni Nm.
 have Nm1 := Nmul_TExp b e1 Nm.
