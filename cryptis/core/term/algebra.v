@@ -322,6 +322,25 @@ rewrite /PreTerm.normalize_factors flat // (SMS.to_id_perm _ _ _ nopairs).
 by rewrite fmap_unfold_termK.
 Qed.
 
+(* Every factor of a product of non-products is one of them: [TMulN] only
+   permutes and cancels its argument, it never introduces new factors.  This is
+   [SMS.mem_to] at the term layer. *)
+Lemma mem_factors_TMulN t ts :
+  Forall (fun u => negb (is_mul u)) ts -> t ∈ factors (TMulN ts) -> t ∈ ts.
+Proof.
+move=> Nm t_in.
+have Nm' : Forall (fun pt => negb (PreTerm.is_mul pt)) (unfold_term <$> ts).
+  apply/Forall_fmap/list.Forall_forall => u u_ts.
+  rewrite /compose -is_mul_unfold; by move/list.Forall_forall: Nm; apply.
+have : unfold_term t ∈ PreTerm.factors (unfold_term (TMulN ts)).
+  by rewrite -unfold_factors; apply/list_elem_of_fmap; exists t.
+rewrite unfold_TMulN /PreTerm.mul PreTerm.mul_auxK; last first.
+  exact: (PreTerm.wf_normalize_factors _ (wf_unfold_terms ts)).
+rewrite /PreTerm.normalize_factors (PreTerm.mbind_factors_Nmul _ Nm').
+move=> /(SMS.mem_to _ _ _ _).
+by rewrite (list_elem_of_fmap_inj unfold_term).
+Qed.
+
 Lemma unfold_TMulN_strong ts :
   invs_canceled ts →
   length ts ≠ 1 →
@@ -383,6 +402,9 @@ Qed.
 (* The three non-free heads are mutually exclusive. *)
 Lemma is_exp_Nmul t : is_exp t -> negb (is_mul t).
 Proof. rewrite is_exp_unfold is_mul_unfold; by case: (unfold_term t). Qed.
+
+Lemma is_inv_Nmul t : is_inv t -> negb (is_mul t).
+Proof. rewrite is_inv_unfold is_mul_unfold; by case: (unfold_term t). Qed.
 
 Lemma is_exp_Ninv t : is_exp t -> negb (is_inv t).
 Proof. rewrite is_exp_unfold is_inv_unfold; by case: (unfold_term t). Qed.
@@ -571,6 +593,78 @@ move=> /(f_equal (TMul (TInv (expo t)))).
 by rewrite -TMulA TMulK_l -TMulA TMulK_l !TMul1_l.
 Qed.
 
+(* Exponentiation preserves the head shape of a non-product base: an inverse
+   base stays an inverse, because [(a⁻¹) ^ e = (a ^ e)⁻¹]. *)
+Lemma is_inv_TExp t e : negb (is_mul t) -> is_inv (TExp t e) = is_inv t.
+Proof.
+move=> Nm; case Ei: (is_inv t); last first.
+  have Ni : negb (is_inv t) by rewrite Ei.
+  by move: (Ninv_TExp t e Nm Ni); case: (is_inv (TExp t e)) => // _.
+have Nmv : negb (is_mul (TInv t)) by rewrite is_mul_TInv.
+have Niv : negb (is_inv (TInv t)) by rewrite (is_inv_TInv t Nm) Ei.
+have E : TExp t e = TInv (TExp (TInv t) e) by rewrite -TExp_TInv TInvK.
+rewrite E (is_inv_TInv _ (Nmul_TExp (TInv t) e Nmv)).
+by move: (Ninv_TExp (TInv t) e Nmv Niv); case: (is_inv (TExp (TInv t) e)) => // _.
+Qed.
+
+(* Exponentiation is injective in the base, once products are excluded.  The
+   unit is the only base it collapses, and the unit is a product. *)
+Lemma TExp_injl t1 t2 e :
+  negb (is_mul t1) -> negb (is_mul t2) ->
+  TExp t1 e = TExp t2 e -> t1 = t2.
+Proof.
+have main : forall u1 u2, negb (is_mul u1) -> negb (is_inv u1) ->
+                          negb (is_mul u2) -> negb (is_inv u2) ->
+                          TExp u1 e = TExp u2 e -> u1 = u2.
+  move=> u1 u2 Nm1 Ni1 Nm2 Ni2 E.
+  have Eb : base u1 = base u2.
+    by rewrite -(base_TExp u1 e Nm1 Ni1) -(base_TExp u2 e Nm2 Ni2) E.
+  have Ee : expo u1 = expo u2.
+    apply: (TMul_cancel e).
+    rewrite (TMulC e (expo u1)) (TMulC e (expo u2)) /TMul.
+    by rewrite -(expo_TExp u1 e Nm1 Ni1) -(expo_TExp u2 e Nm2 Ni2) E.
+  by rewrite -(TExp_base_expo u1) -(TExp_base_expo u2) Eb Ee.
+move=> Nm1 Nm2 E.
+have Einv : is_inv t1 = is_inv t2.
+  by rewrite -(is_inv_TExp t1 e Nm1) -(is_inv_TExp t2 e Nm2) E.
+case Ei: (is_inv t1) Einv => Einv; last first.
+  have Ni1 : negb (is_inv t1) by rewrite Ei.
+  have Ni2 : negb (is_inv t2) by rewrite -Einv.
+  exact: main.
+have Nmv1 : negb (is_mul (TInv t1)) by rewrite is_mul_TInv.
+have Nmv2 : negb (is_mul (TInv t2)) by rewrite is_mul_TInv.
+have Niv1 : negb (is_inv (TInv t1)) by rewrite (is_inv_TInv t1 Nm1) Ei.
+have Niv2 : negb (is_inv (TInv t2)) by rewrite (is_inv_TInv t2 Nm2) -Einv.
+have E' : TExp (TInv t1) e = TExp (TInv t2) e.
+  have H1 : TInv (TExp (TInv t1) e) = TExp t1 e by rewrite -TExp_TInv TInvK.
+  have H2 : TInv (TExp (TInv t2) e) = TExp t2 e by rewrite -TExp_TInv TInvK.
+  have H3 : TInv (TExp (TInv t1) e) = TInv (TExp (TInv t2) e) by rewrite H1 H2.
+  by rewrite -(TInvK (TExp (TInv t1) e)) H3 TInvK.
+by rewrite -(TInvK t1) -(TInvK t2) (main _ _ Nmv1 Niv1 Nmv2 Niv2 E').
+Qed.
+
+Lemma invs_canceled_TExp b e :
+  invs_canceled ((fun u => TExp u e) <$> factors b).
+Proof.
+move=> t /list_elem_of_fmap [u [-> u_b]].
+have Nmu : negb (is_mul u) := Nmul_factors b u u_b.
+split; last exact: Nmul_TExp.
+move=> /list_elem_of_fmap [u' [E u'_b]].
+have Nmu' : negb (is_mul u') := Nmul_factors b u' u'_b.
+have Nmiu : negb (is_mul (TInv u)) by rewrite is_mul_TInv.
+have E' : TExp (TInv u) e = TExp u' e by rewrite TExp_TInv.
+have [VI _] := invs_canceled_factors b u u_b.
+by apply: VI; rewrite (TExp_injl (TInv u) u' e Nmiu Nmu' E').
+Qed.
+
+(* Distributivity, read off the factor multiset. *)
+Lemma factors_TExp b e :
+  factors (TExp b e) ≡ₚ (fun u => TExp u e) <$> factors b.
+Proof.
+by rewrite {1}(TExp_factors b e) factors_TMulN //; exact: invs_canceled_TExp.
+Qed.
+
+
 (* Reading the exponent back needs a base that [TExp] does not distribute
    over; see [expo_TExp]. *)
 Lemma count_expo_TExp t1 t2 t3 :
@@ -638,6 +732,15 @@ Lemma is_expNE t : negb (is_exp t) ↔ expo t = TMulN [].
 Proof.
 rewrite negb_True is_expE; split; eauto.
 exact: dec_stable.
+Qed.
+
+(* Having an exponent makes a term an exponential, hence an atom-headed one.
+   This is how the side conditions of the [exps]-counting lemmas are usually
+   discharged: their hypotheses already mention [exps]. *)
+Lemma is_exp_of_exps t t' : t' ∈ exps t -> is_exp t.
+Proof.
+move=> t'_t; apply/is_expE => e.
+by move: t'_t; rewrite /exps e factors_TMulN0 elem_of_nil.
 Qed.
 
 Lemma TExp_TExpN t1 ts1 t2 : TExp (TExpN t1 ts1) t2 = TExpN t1 (t2 :: ts1).

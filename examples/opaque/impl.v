@@ -29,6 +29,8 @@ Definition H'   := _H.
 Definition AuthEnc : val := λ: "key" "v", senc "key" (Tag $ opN.@"AuthEnc") "v".
 Definition AuthDec : val := λ: "key" "v", sdec "key" (Tag $ opN.@"AuthEnc") "v".
 Definition g := (TInt 0).
+(* The identity of the DH group. *)
+Definition one := TMulN [].
 
 Definition OPRF : val := λ: "k",
     λ: "x", H "rw" ["x"; (texp (H' "α" "x") "k")].
@@ -78,6 +80,10 @@ Definition session : val := λ: "db" "c",
     bind: "m1" := list_of_term (recv "c") in
     list_match: [ "uid"; "α"; "X_u" ] := "m1" in
     (* TODO: check α ∈ G *)
+    (* [X_u] must not be the identity: exponentiation distributes over
+       products, so [one ^ x_s = one] would drop the server's ephemeral
+       secret out of the session key altogether. *)
+    guard: (~ eq_term "X_u" one) in
     bind: "file" := AList.find "db" "uid" in
     bind: "file_list" := list_of_term "file" in
     list_match: [ "k_s"; "p_s"; "P_s"; "P_u"; "envelope" ] := "file_list" in

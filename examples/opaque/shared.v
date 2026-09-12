@@ -211,21 +211,21 @@ Proof. rewrite Spec.tag_unseal; exact: STPair2. Qed.
 
 Lemma subterm_TExpN_exp (t t' : term) (ts : list term) :
   ( exists t'', subterm t t'' /\ t'' ∈ ts) ->
-  negb (is_exp t') ->
+  negb (is_exp t') -> negb (is_mul t') -> negb (is_inv t') ->
   invs_canceled ts ->
   subterm t (TExpN t' ts).
 Proof.
-intros [t'' [Hst Hmem]] Hnexp Hic.
-exact: (STExp2 Hnexp Hic Hst Hmem).
+intros [t'' [Hst Hmem]] Hnexp Hnmul Hninv Hic.
+exact: (STExp2 Hnexp Hnmul Hninv Hic Hst Hmem).
 Qed.
 
 Lemma subterm_TExp_exp (t t' t'' : term) :
-  negb (is_exp t') ->
+  negb (is_exp t') -> negb (is_mul t') -> negb (is_inv t') ->
   negb (is_mul t'') ->
   subterm t t'' ->
   subterm t (TExp t' t'').
 Proof.
-intros Hnexp Nm Hst.
+intros Hnexp Hnmul Hninv Nm Hst.
 rewrite (_ : TExp t' t'' = TExpN t' [t'']); last by rewrite /TExpN TMulN1.
 apply subterm_TExpN_exp => //.
 - exists t''. split => //.
@@ -250,15 +250,17 @@ Qed.
 
 Lemma subterm_TExpN_exp' (t t' : term) (ts: list term) :
   ¬ subterm t t' ->
+  negb (is_mul t') -> negb (is_inv t') ->
   invs_canceled (ts ++ exps t') ->
   (exists t'', t'' ∈ ts /\ subterm t t'') ->
   subterm t (TExpN t' ts).
 Proof.
-intros Hnst Hcan Hst.
+intros Hnst Hnmul Hninv Hcan Hst.
 have Hic : invs_canceled (exps t' ++ ts).
   by rewrite Permutation_app_comm.
 have E : exps (TExpN t' ts) ≡ₚ exps t' ++ ts.
-  rewrite /exps /TExpN expo_TExp -{1}[expo t']factorsK TMulN_app.
+  rewrite /exps /TExpN (expo_TExp _ _ Hnmul Hninv).
+  rewrite -{1}[expo t']factorsK TMulN_app.
   exact: factors_TMulN Hic.
 rewrite subterm_exp.
 destruct (term_eq_dec t (TExpN t' ts)); first by left.
@@ -270,14 +272,15 @@ Qed.
 
 Lemma subterm_TExp_exp' (t t' t'' : term) :
   ¬ subterm t t' ->
+  negb (is_mul t') -> negb (is_inv t') ->
   negb (is_mul t'') ->
   (TInv t'') ∉ exps t' ->
   subterm t t'' ->
   subterm t (TExp t' t'').
 Proof.
-intros Hnst Nm Hnmem Hst.
+intros Hnst Hnmul Hninv Nm Hnmem Hst.
 rewrite (_ : TExp t' t'' = TExpN t' [t'']); last by rewrite /TExpN TMulN1.
-apply (subterm_TExpN_exp' Hnst) => //.
+apply (subterm_TExpN_exp' Hnst Hnmul Hninv) => //.
 - rewrite /=; apply/invs_canceled_cons.
   split; first exact: Hnmem.
   split; first exact: Nm.
@@ -286,4 +289,49 @@ apply (subterm_TExpN_exp' Hnst) => //.
   split => //.
   rewrite elem_of_cons.
   by left.
+Qed.
+
+(* The product-tolerant form of [subterm_TExp_exp']: [t' ^ t''] spreads over
+   the factors of [t'], so one factor is enough -- but the unit base has none,
+   and [1 ^ t'' = 1] really does lose [t'']. *)
+Lemma subterm_TExp_exp_factors (t t' t'' : term) :
+  ¬ subterm t t' ->
+  negb (is_mul t'') -> negb (is_inv t'') ->
+  factors t' ≠ [] ->
+  subterm t t'' ->
+  subterm t (TExp t' t'').
+Proof.
+move=> Hnst Nm2 Ni2 Hne Hst.
+have [u u_t'] : exists u, u ∈ factors t'.
+  case E: (factors t') => [|u us]; first by exfalso; exact: (Hne E).
+  by exists u; apply/elem_of_cons; left.
+have Nmu : negb (is_mul u) := Nmul_factors t' u u_t'.
+have sub_u : subterm u t' := @subterm_factors u t' u u_t' (STRefl u).
+have key : forall v, negb (is_mul v) -> negb (is_inv v) -> subterm v t' ->
+                     subterm t (TExp v t'').
+  move=> v Nmv Niv sub_v.
+  have Hnv : ¬ subterm t v.
+    by move=> contra; apply: Hnst; apply: transitivity contra sub_v.
+  apply: subterm_TExp_exp' => //.
+  move=> in_exps; apply: Hnv.
+  have sub_iv : subterm (TInv t'') v.
+    by rewrite subterm_exp; right; right; exists (TInv t''); split => //; exact: STRefl.
+  have sub_2v : subterm t'' v.
+    by apply: transitivity sub_iv; apply: STInv => //; exact: STRefl.
+  exact: transitivity Hst sub_2v.
+apply: (@subterm_TExp_factors t t' t'' u u_t').
+case Ei: (is_inv u); last first.
+  by apply: key => //; rewrite Ei.
+have Nmw : negb (is_mul (TInv u)) by rewrite is_mul_TInv.
+have Niw : negb (is_inv (TInv u)) by rewrite (is_inv_TInv u Nmu) Ei.
+have sub_wu : subterm (TInv u) u.
+  by rewrite -{2}(TInvK u); apply: STInv => //; exact: STRefl.
+have sub_w : subterm (TInv u) t'.
+  by transitivity u.
+have E : TExp u t'' = TInv (TExp (TInv u) t'').
+  by rewrite -TExp_TInv TInvK.
+rewrite E; apply: STInv.
+- exact: Nmul_TExp.
+- exact: Ninv_TExp.
+- exact: (key _ Nmw Niw sub_w).
 Qed.

@@ -352,7 +352,9 @@ do !iSplit => //; last by iIntros "!> _".
 iApply exp_pred_intro1. iApply "pred_a". iPureIntro. rewrite /iso_dh_key_share.
 rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [a]); last by rewrite /TExpN TMulN1.
 have NInt : negb (is_exp (TInt 0)) by [].
-by rewrite (exps_TExpN NInt (invs_canceled1 Nm)).
+have NIntM : negb (is_mul (TInt 0)) by [].
+have NIntI : negb (is_inv (TInt 0)) by [].
+by rewrite (exps_TExpN NInt NIntM NIntI (invs_canceled1 Nm)).
 Qed.
 
 Lemma public_dh_secret1 a b :
@@ -384,6 +386,8 @@ Lemma public_dh_secret2 a b :
 Proof.
 move=> Nm_a Nm_b; iIntros "%a_b %a_bV #pred_a #pred_b #p".
 have NInt : negb (is_exp (TInt 0)) by [].
+have NIntM : negb (is_mul (TInt 0)) by [].
+have NIntI : negb (is_inv (TInt 0)) by [].
 have ic_ab : invs_canceled [a; b] := proj2 (invs_canceled2 Nm_a Nm_b) a_bV.
 iPoseProof (public_minted with "p") as "m".
 iAssert (minted a ∧ minted b)%I as "[ma mb]".

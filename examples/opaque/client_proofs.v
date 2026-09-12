@@ -53,6 +53,8 @@ wp_apply wp_send => //.
   do !iSplit => //.
   - iApply public_TExp_iff.
       by [].
+      by [].
+      by [].
       by exact: (negb_is_mul_nonce r).
     do !iSplit => //.
     + by rewrite minted_THash minted_tag.
@@ -62,6 +64,8 @@ wp_apply wp_send => //.
       by iApply (public_THashIS with "Hpredα") => //.
   - iApply public_TExp_iff.
       by [].
+      by [].
+      by [].
       by exact: (negb_is_mul_nonce x_u).
     do !iSplit => //.
     + by iApply minted_TInt.
@@ -69,7 +73,7 @@ wp_apply wp_send => //.
       iApply "Hexpx_u"; iPureIntro.
       have Nm : negb (is_mul x_u) := negb_is_mul_nonce x_u.
       rewrite (_ : TExp g x_u = TExpN g [TNonce x_u]); last by rewrite /TExpN TMulN1.
-      by rewrite exps_TExpN; [by [] | by [] | exact: invs_canceled1 Nm].
+      by rewrite exps_TExpN; [by [] | by [] | by [] | by [] | exact: invs_canceled1 Nm].
     + by rewrite public_TInt; auto.
 wp_pures.
 wp_apply wp_recv => //.
@@ -129,8 +133,7 @@ wp_apply wp_send => //.
       by do !iSplit => //; iApply all_minted_TExp; iSplit => //.
     + rewrite minted_THash minted_tag minted_of_list /=.
       do !iSplit => //.
-      rewrite minted_TExp; last first.
-        by [].
+      rewrite minted_TExp; [|by []|by []|by []].
       iSplit => //.
       by rewrite minted_THash minted_tag.
   - iNext; iModIntro.
@@ -199,7 +202,7 @@ iSplit.
   rewrite !elem_of_cons /β'.
   split.
     by right; left.
-  apply: subterm_TExp_exp; [done | exact: (negb_is_mul_nonce r) | exact: STRefl].
+  apply: subterm_TExp_exp; [done | done | done | exact: (negb_is_mul_nonce r) | exact: STRefl].
 - rewrite minted_of_list /=
       minted_THash minted_tag minted_of_list /=
       !minted_THash !minted_tag !minted_of_list /=

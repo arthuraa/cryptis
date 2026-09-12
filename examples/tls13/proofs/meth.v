@@ -76,8 +76,8 @@ Qed.
 Definition Meth_wf ke : iProp :=
   match ke with
   | Psk psk => minted psk
-  | Dh g => ⌜negb (is_exp g)⌝ ∧ public g
-  | PskDh psk g => minted psk ∧ ⌜negb (is_exp g)⌝ ∧ public g
+  | Dh g => ⌜negb (is_exp g)⌝ ∧ ⌜negb (is_mul g)⌝ ∧ ⌜negb (is_inv g)⌝ ∧ public g
+  | PskDh psk g => minted psk ∧ ⌜negb (is_exp g)⌝ ∧ ⌜negb (is_mul g)⌝ ∧ ⌜negb (is_inv g)⌝ ∧ public g
   end.
 
 #[global]
@@ -93,8 +93,8 @@ iIntros "#hash #p_ke"; case: ke => [psk|g|psk g] /=.
 - rewrite public_tag public_THash minted_tag.
   iRight; iSplit => //.
   by iExists _; eauto.
-- iDestruct "p_ke" as "[_ ?]". by rewrite public_tag.
-- iDestruct "p_ke" as "(s_psk & _ & p_g)".
+- iDestruct "p_ke" as "(_ & _ & _ & ?)". by rewrite public_tag.
+- iDestruct "p_ke" as "(s_psk & _ & _ & _ & p_g)".
   rewrite !public_tag public_of_list /= public_THash minted_tag.
   do !iSplit => //=.
   iRight; iSplit => //.
