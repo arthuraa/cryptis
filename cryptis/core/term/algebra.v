@@ -457,13 +457,27 @@ apply: unfold_term_inj; rewrite unfold_TExp unfold_base unfold_expo.
 exact: PreTerm.exp_base_expo.
 Qed.
 
-(* The atomic case: the base is neither a product nor an inverse, so the
-   destructors see through both exponentiations. *)
-Lemma TExpA_atom b e1 e2 :
-  negb (is_mul b) -> negb (is_inv b) ->
-  TExp (TExp b e1) e2 = TExp b (TMulN [e1; e2]).
+Lemma TExpA b e1 e2 : TExp (TExp b e1) e2 = TExp b (TMulN [e1; e2]).
 Proof.
-move=> Nm Ni.
+wlog: b / negb (is_mul b).
+  rewrite [in LHS](TExp_factors b e1) => Hb.
+  have Nmf : Forall (fun t => negb (is_mul t)) ((fun t => TExp t e1) <$> factors b).
+    apply/Forall_fmap/list.Forall_forall => t t_b.
+    by rewrite /compose; apply: Nmul_TExp; exact: Nmul_factors t_b.
+  rewrite (TExp_TMulN _ _ Nmf) -list_fmap_compose /compose.
+  rewrite [in RHS](TExp_factors b (TMulN [e1; e2])).
+  congr TMulN; apply/Forall_fmap_ext_1/list.Forall_forall => t t_b.
+  by apply: Hb; exact: Nmul_factors t_b.
+wlog: b / negb (is_inv b).
+  move=> Hb Nm; case Ei: (is_inv b); last by apply: Hb => //; rewrite Ei.
+  have Nmu : negb (is_mul (TInv b)) by rewrite is_mul_TInv.
+  have Niu : negb (is_inv (TInv b)) by rewrite (is_inv_TInv _ Nm) Ei.
+  have bE : b = TInv (TInv b) by rewrite TInvK.
+  rewrite [in LHS]bE [in RHS]bE.
+  rewrite (TExp_TInv _ e1 Nmu) (TExp_TInv _ e2 (Nmul_TExp _ _ Nmu)).
+  rewrite (TExp_TInv _ _ Nmu).
+  by rewrite (Hb _ Niu Nmu).
+move=> Ni Nm.
 have Nm1 := Nmul_TExp b e1 Nm.
 have Ni1 := Ninv_TExp b e1 Nm Ni.
 rewrite -[LHS]TExp_base_expo -[RHS]TExp_base_expo.
@@ -471,33 +485,6 @@ rewrite !(base_TExp _ _ Nm1 Ni1) !(expo_TExp _ _ Nm1 Ni1).
 rewrite !(base_TExp _ _ Nm Ni) !(expo_TExp _ _ Nm Ni) TMulN_cat /=.
 rewrite [in RHS]Permutation_swap TMulN_cat /=.
 by rewrite -[[e1; e2; expo b]]/([e1; e2] ++ [expo b]) Permutation_app_comm.
-Qed.
-
-(* An inverse base is pushed through by [TExp_TInv], reducing to the atomic
-   case. *)
-Lemma TExpA_Nmul b e1 e2 :
-  negb (is_mul b) -> TExp (TExp b e1) e2 = TExp b (TMulN [e1; e2]).
-Proof.
-move=> Nm; case Ei: (is_inv b); last by apply: TExpA_atom => //; rewrite Ei.
-have Nmu : negb (is_mul (TInv b)) by rewrite is_mul_TInv.
-have Niu : negb (is_inv (TInv b)) by rewrite (is_inv_TInv _ Nm) Ei.
-have bE : b = TInv (TInv b) by rewrite TInvK.
-rewrite [in LHS]bE [in RHS]bE.
-rewrite (TExp_TInv _ e1 Nmu) (TExp_TInv _ e2 (Nmul_TExp _ _ Nmu)).
-rewrite (TExp_TInv _ _ Nmu).
-by rewrite (TExpA_atom _ _ _ Nmu Niu).
-Qed.
-
-Lemma TExpA b e1 e2 : TExp (TExp b e1) e2 = TExp b (TMulN [e1; e2]).
-Proof.
-rewrite [in LHS](TExp_factors b e1).
-have Nmf : Forall (fun t => negb (is_mul t)) ((fun t => TExp t e1) <$> factors b).
-  apply/Forall_fmap/list.Forall_forall => t t_b.
-  by rewrite /compose; apply: Nmul_TExp; exact: Nmul_factors t_b.
-rewrite (TExp_TMulN _ _ Nmf) -list_fmap_compose /compose.
-rewrite [in RHS](TExp_factors b (TMulN [e1; e2])).
-congr TMulN; apply/Forall_fmap_ext_1/list.Forall_forall => t t_b.
-by apply: TExpA_Nmul; exact: Nmul_factors t_b.
 Qed.
 
 Lemma TExpE b e : TExp b e = TExp (base b) (TMulN [expo b; e]).
