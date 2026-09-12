@@ -136,6 +136,12 @@ Qed.
 
 End Count.
 
+(* [fmap] commutes with [mbind].  Mirrors stdpp's [list_fmap_bind], which has
+   the [fmap] inside the [bind] rather than outside. *)
+Lemma list_bind_fmap {A B C} (g : B -> C) (h : A -> list B) l :
+  g <$> (l ≫= h) = l ≫= (λ x, g <$> h x).
+Proof. elim: l => [//|x l IH]; by rewrite !bind_cons fmap_app IH. Qed.
+
 Lemma fmap_rem {A B} `{EqDecision A} `{EqDecision B} (f : A -> B) x l :
   (forall a b, f a = f b -> a = b) ->
   f <$> rem x l = rem (f x) (f <$> l).
