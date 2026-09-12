@@ -15,7 +15,7 @@ Fixpoint tsize (pt : pre_term) : nat :=
   | PT0 _ => 1
   | PT1 _ pt => S (tsize pt)
   | PT2 _ t1 t2 => S (tsize t1 + tsize t2)
-  | PTMul ts => S (sum_list_with tsize ts)
+  | PTN _ ts => S (sum_list_with tsize ts)
   end.
 
 End PreTerm.

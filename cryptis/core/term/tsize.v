@@ -21,7 +21,7 @@ Implicit Types (t k : term) (ts : list term).
 Definition tsize t := PreTerm.tsize (unfold_term t).
 
 Lemma tsize_gt0 t : 0 < tsize t.
-Proof. rewrite /tsize; case: unfold_term => /=; lia. Qed.
+Proof. rewrite /tsize; case: unfold_term => [o|o t'|o t1 t2|[] ts] /=; lia. Qed.
 
 Lemma tsize_eq t :
   tsize t =
@@ -205,7 +205,7 @@ Lemma tsize_base_lt t : is_exp t → tsize (base t) < tsize t.
 Proof.
 rewrite is_exp_unfold => xt.
 rewrite /tsize unfold_base; move: xt.
-by case: (unfold_term t) => [o|o t'|[||] t1 t2|ts] //= _; lia.
+by case: (unfold_term t) => [o|o t'|[||] t1 t2|[] ts] //= _; lia.
 Qed.
 
 Lemma tsize_expo_lt t : is_exp t → tsize (expo t) < tsize t.

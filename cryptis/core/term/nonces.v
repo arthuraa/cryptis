@@ -46,11 +46,11 @@ Proof. move => wf. by rewrite nonces_of_term_unseal /nonces_of_term_def (@fold_t
 
 Lemma nonces_of_pre_term_factors e :
   nonces_of_pre_term e = ⋃ map nonces_of_pre_term (PreTerm.factors e).
-Proof. by case: e => [o|o1 e1|o2 e1 e2|es] //=; rewrite union_empty_r_L. Qed.
+Proof. by case: e => [o|o1 e1|o2 e1 e2|[] es] //=; rewrite union_empty_r_L. Qed.
 
 Lemma nonces_of_pre_term_inv_aux x :
   nonces_of_pre_term (PreTerm.inv_aux x) = nonces_of_pre_term x.
-Proof. by case: x => [o|[kt||] e|o e1 e2|es] //=. Qed.
+Proof. by case: x => [o|[kt||] e|o e1 e2|[] es] //=. Qed.
 
 Lemma union_list_map_merge_sort {A X} `{Countable X} (f : A → gset X)
   (R : relation A) `{!RelDecision R} l :
@@ -73,7 +73,7 @@ Lemma nonces_of_pre_term_inv pt :
   PreTerm.wf pt ->
   nonces_of_pre_term (PreTerm.inv pt) = nonces_of_pre_term pt.
 Proof.
-case: pt => [o|o t|o t1 t2|ts] wf;
+case: pt => [o|o t|o t1 t2|[] ts] wf;
   try by rewrite PreTerm.inv_Nmul // nonces_of_pre_term_inv_aux.
 rewrite /PreTerm.inv /PreTerm.mul.
 have mulauxE : forall X, nonces_of_pre_term (PreTerm.mul_aux X)
@@ -89,7 +89,7 @@ have invol : forall x, x ∈ ts -> PreTerm.inv_aux (PreTerm.inv_aux x) = x.
   by apply: SMS.wf_invol sms.
 have NmI : forall x, x ∈ ts -> negb (PreTerm.is_mul (PreTerm.inv_aux x)).
   move=> x xin; have := wfx x xin.
-  by case: x {xin} => [o|[k| |] t|o t1 t2|ts'] //= /andb_True [] /andb_True [] _.
+  by case: x {xin} => [o|[k| |] t|o t1 t2|[] ts'] //= /andb_True [] /andb_True [] _.
 have flat : forall l, (forall x, x ∈ l -> negb (PreTerm.is_mul x)) ->
               mbind PreTerm.factors l = l.
   elim=> [//|x l IH] H /=.
@@ -132,7 +132,7 @@ Qed.
 Lemma nonces_of_pre_term_base_expo pt :
   nonces_of_pre_term pt =
   nonces_of_pre_term (PreTerm.base pt) ∪ nonces_of_pre_term (PreTerm.expo pt).
-Proof. by case: pt => [o|o1 e1|[||] e1 e2|es] //=; rewrite union_empty_r_L. Qed.
+Proof. by case: pt => [o|o1 e1|[||] e1 e2|[] es] //=; rewrite union_empty_r_L. Qed.
 
 Lemma nonces_of_term_base_exps t :
   nonces_of_term t = nonces_of_term (base t) ∪ ⋃ map nonces_of_term (exps t).
@@ -187,7 +187,7 @@ have main : forall u, nonces_of_pre_term
   rewrite Hbe -union_assoc_L.
   by apply: union_mono.
 case Ei: (PreTerm.is_inv pt).
-  case: pt Ei => [o|[k| |] u|o c d|us] // _ /=.
+  case: pt Ei => [o|[k| |] u|o c d|[] us] // _ /=.
   rewrite nonces_of_pre_term_inv_aux; exact: main.
 have Ni : negb (PreTerm.is_inv pt) by rewrite Ei.
 rewrite (PreTerm.exp_aux_Ninv _ _ Ni); exact: main.

@@ -160,7 +160,7 @@ Proof. by rewrite (proof_irrel w1 w2) (proof_irrel n1 n2). Qed.
 Lemma fold_predef_NonFree {pt} (wf : PreTerm.wf pt) (nf : is_non_free pt) :
   fold_term_predef pt = TNonFree pt wf nf.
 Proof.
-case: pt wf nf => [o|[kt||] pt'|[||] b e|ts] wf nf.
+case: pt wf nf => [o|[kt||] pt'|[||] b e|[] ts] wf nf.
 1,2,3,5,6: by move: nf; rewrite /is_non_free /=.
 - rewrite /=; case: (decide (PreTerm.wf (PreTerm.PTInv pt'))) => [pf'|npf];
     last by case: (npf wf).
@@ -197,7 +197,7 @@ move: (PreTerm.wf_normalize pt). elim: (PreTerm.normalize pt) => //.
   + by move: wf; rewrite /= => /andb_True [w1 w2]; rewrite (IH1 w1) (IH2 w2).
   + by move: wf; rewrite /= => /andb_True [w1 w2]; rewrite (IH1 w1) (IH2 w2).
   + by rewrite (fold_predef_NonFree wf I).
-- by move => ts IHts wf; rewrite (fold_predef_NonFree wf I).
+- by move => [] ts IHts wf; rewrite (fold_predef_NonFree wf I).
 Qed.
 
 Lemma fold_termK pt : PreTerm.wf pt -> unfold_term (fold_term pt) = pt.
@@ -323,7 +323,7 @@ Proof.
 apply /unfold_term_inj.
 case: pt => /=; try by case =>> //=; rewrite ?unfold_TInv !unfold_fold.
 - by move=> [] >; rewrite /= ?unfold_TExp !unfold_fold.
-- move=> ts; rewrite unfold_fold unfold_TMulN.
+- move=> [] ts; rewrite unfold_fold unfold_TMulN.
   have -> : unfold_term <$> (fold_term <$> ts) = PreTerm.normalize <$> ts.
     rewrite -(list_fmap_compose fold_term unfold_term).
     apply: Forall_fmap_ext_1; apply/Forall_forall => pt _; exact: (unfold_fold pt).
@@ -375,14 +375,14 @@ Qed.
 Lemma is_mulE t : is_mul t = bool_decide (length (factors t) ≠ 1).
 Proof.
 rewrite -(length_fmap unfold_term) unfold_factors is_mul_unfold.
-case: (unfold_term t) (wf_unfold_term t) => //= ts.
+case: (unfold_term t) (wf_unfold_term t) => [o|o t'|o t1 t2|[] ts] //=.
 by rewrite andb_True; case=> _ /Is_true_true ->.
 Qed.
 
 Lemma is_inv_TInv t : negb (is_mul t) → is_inv (TInv t) = negb (is_inv t).
 Proof.
 rewrite !is_inv_unfold is_mul_unfold unfold_TInv.
-case: {t} (unfold_term t) (wf_unfold_term t) => //=.
+case: {t} (unfold_term t) (wf_unfold_term t) => [|||[] ts] //=.
 by case=> //= t; case: PreTerm.is_inv.
 Qed.
 
@@ -390,7 +390,7 @@ Lemma is_exp_TInv t : negb (is_mul t) → negb (is_inv t) → negb (is_exp (TInv
 Proof.
 rewrite is_mul_unfold is_inv_unfold is_exp_unfold unfold_TInv.
 move=> Nm Ni; rewrite PreTerm.inv_Nmul //.
-case: (unfold_term t) Nm Ni => //=.
+case: (unfold_term t) Nm Ni => [|||[] ts] //=.
 by case=> //=.
 Qed.
 
@@ -401,7 +401,7 @@ rewrite !unfold_factors => e.
 apply: unfold_term_inj => /=.
 move: (unfold_term t2) (wf_unfold_term t2) => {}t2 wf2 in e *.
 move: (unfold_term t1) (wf_unfold_term t1) => {}t1 wf1 in e *.
-case: t1 t2 => [o1|o1 t1|o1 t11 t12|ts1] [o2|o2 t2|o2 t21 t22|ts2] //=
+case: t1 t2 => [o1|o1 t1|o1 t11 t12|[] ts1] [o2|o2 t2|o2 t21 t22|[] ts2] //=
   in wf1 wf2 e *;
 do 1?congruence.
 - by rewrite -e /= andb_false_r in wf2.
@@ -473,7 +473,7 @@ have ->: unfold_term ∘ TInv <$> factors t =
   apply: PreTerm.wf_factors_Nmul t0_in.
   exact: PreTerm.wf_wf_factors.
 rewrite list_fmap_compose unfold_factors /PreTerm.inv.
-case: (unfold_term t) (wf_unfold_term t) => //=.
+case: (unfold_term t) (wf_unfold_term t) => [|||[] ts] //=.
 case => //= {}t /andb_True [] /andb_True [] tNV tNM wf_t.
 by rewrite PreTerm.mul1.
 Qed.
@@ -504,7 +504,7 @@ have ->: count t ∘ TInv <$> factors t' =
     apply: PreTerm.wf_factors_Nmul t0_in.
     exact: PreTerm.wf_wf_factors.
   have t0V_Nmul: negb (PreTerm.is_mul (PreTerm.inv_aux (unfold_term t0))).
-    case: (unfold_term t0) (wf_unfold_term t0) t0_Nmul {t0_in} => //=.
+    case: (unfold_term t0) (wf_unfold_term t0) t0_Nmul {t0_in} => [|||[] ts] //=.
     by case => //= ? /andb_True [] /andb_True [].
   rewrite /count unfold_TInv PreTerm.inv_Nmul //.
   rewrite PreTerm.factors_Nmul // PreTerm.factors_Nmul //.
@@ -605,7 +605,7 @@ Lemma term_rect (T : term -> Type)
 Proof.
 move=> t; rewrite -(unfold_termK t).
 elim: (unfold_term t) (wf_unfold_term t)=>
-  {t} [o|o pt IHpt|o pt1 IHpt1 pt2 IHpt2|ts IHts] wfpt.
+  {t} [o|o pt IHpt|o pt1 IHpt1 pt2 IHpt2|[] ts IHts] wfpt.
 - case: o wfpt => [n|l] _; rewrite fold_termE /=; [exact: H1|exact: H3].
 - case: o wfpt => [kt| |]; rewrite fold_termE /=.
   + by move=> wfpt; exact: (H4 kt _ (IHpt wfpt)).

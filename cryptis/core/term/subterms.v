@@ -86,9 +86,9 @@ Lemma subterms_preE pt :
   | PreTerm.PTMul ts => ⋃ map subterms_pre ts
   end.
 Proof.
-rewrite /subterms_pre; case: pt => [o|o e|[||] e1 e2|es] //=.
+rewrite /subterms_pre; case: pt => [o|o e|[||] e1 e2|[] es] //=.
 - by case: o.
-- case: e2 => //= *; set_solver.
+- case: e2 => [o'|o' u|o' u1 u2|[] us] //=; set_solver.
 Qed.
 
 Lemma subterms_fold pt :
@@ -104,7 +104,7 @@ Lemma subterms_pre_base_exps pt :
   ⋃ map subterms_pre (PreTerm.factors (PreTerm.expo pt)).
 Proof.
 case E: (PreTerm.is_exp pt).
-- case: pt E => [o|o e|[||] e1 e2|es] //= E; rewrite subterms_preE /=; set_solver.
+- case: pt E => [o|o e|[||] e1 e2|[] es] //= E; rewrite subterms_preE /=; set_solver.
 - have Nxp : negb (PreTerm.is_exp pt) by rewrite E.
   rewrite (PreTerm.base_expN pt Nxp) (PreTerm.expo_expN pt Nxp) /=.
   rewrite /subterms_pre; set_solver.
@@ -182,7 +182,7 @@ move=> ic.
    factors (for a non-product the factor list is the singleton). *)
 have preF : forall pt, subterms_pre pt
                      = {[fold_term pt]} ∪ ⋃ map subterms_pre (PreTerm.factors pt).
-  move=> pt; case: pt => [o|o e|o e1 e2|es] //=.
+  move=> pt; case: pt => [o|o e|o e1 e2|[] es] //=.
   1-3: by rewrite /subterms_pre; set_solver.
 have perm : PreTerm.factors (unfold_term (TMulN ts)) ≡ₚ unfold_term <$> ts.
   by rewrite -unfold_factors; apply: Permutation_map; apply: factors_TMulN.
@@ -272,7 +272,7 @@ split.
   + rewrite subtermsE' /=; move => /elem_of_union [/elem_of_singleton -> | H].
     * exact: STRefl.
     * by apply: STHash; apply: (IH tt _ H); rewrite [tsize (THash tt)]tsize_eq; lia.
-  + case: pt wf nf IH => [o|[kt'||] operand|[||] b e|ts] wf nf IH.
+  + case: pt wf nf IH => [o|[kt'||] operand|[||] b e|[] ts] wf nf IH.
     1,2,3,5,6: by move: {IH} nf; rewrite /is_non_free /=.
     * have /andb_True [/andb_True [Ninvpt Nmpt] wfpt] := wf.
       have E : TNonFree (PreTerm.PT1 O1Inv operand) wf nf = TInv (fold_term operand).
@@ -368,7 +368,7 @@ split.
     * by apply: STSeal2; apply: (IH tt _ H); rewrite [tsize (TSeal kk tt)]tsize_eq; lia.
   + rewrite nonces_of_termE' /=; move => H.
     by apply: STHash; apply: (IH tt _ H); rewrite [tsize (THash tt)]tsize_eq; lia.
-  + case: pt wf nf IH => [o|[kt'||] operand|[||] b e|ts] wf nf IH.
+  + case: pt wf nf IH => [o|[kt'||] operand|[||] b e|[] ts] wf nf IH.
     1,2,3,5,6: by move: {IH} nf; rewrite /is_non_free /=.
     * have /andb_True [/andb_True [Ninvpt Nmpt] wfpt] := wf.
       have E : TNonFree (PreTerm.PT1 O1Inv operand) wf nf = TInv (fold_term operand).
