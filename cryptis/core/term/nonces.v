@@ -167,15 +167,42 @@ apply/list_elem_of_fmap; exists x; split => //.
 exact: (SMS.mem_to pt_order PreTerm.inv_aux x M xL).
 Qed.
 
-Lemma nonces_of_pre_term_exp_sub b e :
-  nonces_of_pre_term (PreTerm.exp b e) ⊆ nonces_of_pre_term b ∪ nonces_of_pre_term e.
+Lemma nonces_of_pre_term_exp_aux_sub (pt pe : PreTerm.pre_term) :
+  nonces_of_pre_term (PreTerm.exp_aux pt pe)
+  ⊆ nonces_of_pre_term pt ∪ nonces_of_pre_term pe.
 Proof.
-rewrite /PreTerm.exp /PreTerm.exp_aux.
-have Hbe := nonces_of_pre_term_base_expo b.
-case: (bool_decide (PreTerm.mul [PreTerm.expo b; e] = PreTerm.PTMul [])).
-- set_solver.
-- have Hmul := @nonces_of_pre_term_mul_sub [PreTerm.expo b; e].
-  move: Hmul => /=; set_solver.
+have mk : forall X Y, nonces_of_pre_term (PreTerm.mk_exp X Y)
+                    ⊆ nonces_of_pre_term X ∪ nonces_of_pre_term Y.
+  by move=> X Y; rewrite /PreTerm.mk_exp; case: bool_decide => /=; set_solver.
+have main : forall u, nonces_of_pre_term
+                        (PreTerm.mk_exp (PreTerm.base u)
+                           (PreTerm.mul [PreTerm.expo u; pe]))
+                    ⊆ nonces_of_pre_term u ∪ nonces_of_pre_term pe.
+  move=> u.
+  have Hbe := nonces_of_pre_term_base_expo u.
+  have Hmul := @nonces_of_pre_term_mul_sub [PreTerm.expo u; pe].
+  have Hmk := mk (PreTerm.base u) (PreTerm.mul [PreTerm.expo u; pe]).
+  etrans; first exact: Hmk.
+  move: Hmul => /=; rewrite union_empty_r_L => Hmul'.
+  rewrite Hbe -union_assoc_L.
+  by apply: union_mono.
+case Ei: (PreTerm.is_inv pt).
+  case: pt Ei => [o|[k| |] u|o c d|us] // _ /=.
+  rewrite nonces_of_pre_term_inv_aux; exact: main.
+have Ni : negb (PreTerm.is_inv pt) by rewrite Ei.
+rewrite (PreTerm.exp_aux_Ninv _ _ Ni); exact: main.
+Qed.
+
+Lemma nonces_of_pre_term_exp_sub (pb pe : PreTerm.pre_term) :
+  nonces_of_pre_term (PreTerm.exp pb pe)
+  ⊆ nonces_of_pre_term pb ∪ nonces_of_pre_term pe.
+Proof.
+rewrite /PreTerm.exp.
+etrans; first exact: nonces_of_pre_term_mul_sub.
+rewrite (nonces_of_pre_term_factors pb).
+elim: (PreTerm.factors pb) => [|x xs IH] /=; first set_solver.
+have Hx := @nonces_of_pre_term_exp_aux_sub x pe.
+set_solver.
 Qed.
 
 Lemma nonces_of_term_TExpN_subseteq t ts :
@@ -225,14 +252,15 @@ by elim: ts {ic Nm nopairs} => [//|t l IH] /=; rewrite IH.
 Qed.
 
 Lemma nonces_of_term_TExpN t ts :
-  negb (is_exp t) -> invs_canceled ts ->
+  negb (is_exp t) -> negb (is_mul t) -> negb (is_inv t) ->
+  invs_canceled ts ->
   nonces_of_term (TExpN t ts) = nonces_of_term t ∪ ⋃ map nonces_of_term ts.
 Proof.
-move=> tNexp ic.
+move=> tNexp tNm tNi ic.
 rewrite (nonces_of_term_base_exps (TExpN t ts)).
-rewrite /TExpN base_TExp (base_expN _ tNexp).
+rewrite /TExpN (base_TExp _ _ tNm tNi) (base_expN _ tNexp).
 congr (_ ∪ _).
-rewrite /exps expo_TExp (expo_expN _ tNexp) TMulN_cat /= TMulN1.
+rewrite /exps (expo_TExp _ _ tNm tNi) (expo_expN _ tNexp) TMulN_cat /= TMulN1.
 by rewrite -(nonces_of_term_factors (TMulN ts)) nonces_of_term_TMulN.
 Qed.
 

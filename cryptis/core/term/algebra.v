@@ -380,6 +380,21 @@ rewrite unfold_expo unfold_TMulN /=.
 exact: PreTerm.expo_expN.
 Qed.
 
+(* The three non-free heads are mutually exclusive. *)
+Lemma is_exp_Nmul t : is_exp t -> negb (is_mul t).
+Proof. rewrite is_exp_unfold is_mul_unfold; by case: (unfold_term t). Qed.
+
+Lemma is_exp_Ninv t : is_exp t -> negb (is_inv t).
+Proof. rewrite is_exp_unfold is_inv_unfold; by case: (unfold_term t). Qed.
+
+(* [base] does not change the [is_mul] / [is_inv] head; see the [PreTerm]
+   versions for why [is_exp] is different. *)
+Lemma is_mul_base t : is_mul (base t) = is_mul t.
+Proof. rewrite !is_mul_unfold unfold_base; exact: PreTerm.is_mul_base. Qed.
+
+Lemma is_inv_base t : is_inv (base t) = is_inv t.
+Proof. rewrite !is_inv_unfold unfold_base; exact: PreTerm.is_inv_base. Qed.
+
 Lemma base_expN t : negb (is_exp t) → base t = t.
 Proof.
 rewrite is_exp_unfold => tNx; apply: unfold_term_inj.

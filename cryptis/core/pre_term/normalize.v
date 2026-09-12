@@ -220,6 +220,24 @@ case: pt => [o|o t|[||] b e|ts] wf_pt //=.
 by move: wf_pt; rewrite /= !andb_True => - [[[_ /Nnf_Nexp ?] _] _].
 Qed.
 
+(* [base] does not change the [is_mul] / [is_inv] head: for a non-exponential
+   [base pt = pt], and for an exponential both sides are [false], since [wf]
+   makes the base an atom.  ([is_exp] is not like this: [is_exp (base pt)] is
+   always false -- see [base_Nexp].) *)
+Lemma is_mul_base pt : wf pt -> is_mul (base pt) = is_mul pt.
+Proof.
+case: pt => [o|o t|[||] b e|ts] //= wf_pt.
+move: wf_pt; rewrite !andb_True => - [[[_ Nnf] _] _].
+by case: (is_mul b) (Nnf_Nmul _ Nnf).
+Qed.
+
+Lemma is_inv_base pt : wf pt -> is_inv (base pt) = is_inv pt.
+Proof.
+case: pt => [o|o t|[||] b e|ts] //= wf_pt.
+move: wf_pt; rewrite !andb_True => - [[[_ Nnf] _] _].
+by case: (is_inv b) (Nnf_Ninv _ Nnf).
+Qed.
+
 Lemma expo_expN pt : negb (is_exp pt) -> expo pt = PTMul [].
 Proof. by case: pt => [o|o t|[||] t1 t2|ts]. Qed.
 
