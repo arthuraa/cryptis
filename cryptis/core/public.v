@@ -375,13 +375,13 @@ Qed.
 Lemma is_inv_Nmul t : is_inv t -> is_mul t = false.
 Proof.
 rewrite is_inv_unfold is_mul_unfold.
-by case: (unfold_term t) => [?|[?| |]?|???|?] //=.
+by case: (unfold_term t) => [?|[?| |]?|???|[] ?] //=.
 Qed.
 
 Lemma is_inv_Nexp t : is_inv t -> is_exp t = false.
 Proof.
 rewrite is_inv_unfold is_exp_unfold.
-by case: (unfold_term t) => [?|[?| |]?|???|?] //=.
+by case: (unfold_term t) => [?|[?| |]?|???|[] ?] //=.
 Qed.
 
 Inductive decompose (T : gset term) (t : term) : Prop :=
@@ -829,7 +829,7 @@ iIntros "[_ [publ | [ [_ Hfs] | [ (%exp_t & _) | Hstr ]]]]".
   by move: mul_t; rewrite (decompose_is_mul dec).
 - by iApply "Hfs".
 - by move: mul_t exp_t;
-     rewrite is_mul_unfold is_exp_unfold; case: (unfold_term t).
+     rewrite is_mul_unfold is_exp_unfold; case: (unfold_term t) => [|||[] ?].
 - by case: (t) mul_t => // *; iDestruct "Hstr" as "[]".
 Qed.
 
@@ -998,7 +998,8 @@ apply: anti_symm; last first.
     by move: ttsX; rewrite (decompose_is_exp dec).
   + iDestruct "c2" as "(%mul_c & _)".
     by move: ttsX mul_c;
-       rewrite is_exp_unfold is_mul_unfold; case: (unfold_term (TExpN t ts)).
+       rewrite is_exp_unfold is_mul_unfold;
+       case: (unfold_term (TExpN t ts)) => [|||[] ?].
   + iDestruct "c3" as "(_ & exp)".
     iApply (big_sepL_mono with "exp"). by iIntros (k t' _) "(_ & $)".
   + iRevert "c4"; case: (TExpN t ts) ttsX => // *; by iIntros "[]".
@@ -1030,7 +1031,7 @@ move => expt; apply: anti_symm; last first.
     by move: expt; rewrite (decompose_is_exp dec).
   + iDestruct "c2" as "(%mul_c & _)".
     by move: expt mul_c;
-       rewrite is_exp_unfold is_mul_unfold; case: (unfold_term t).
+       rewrite is_exp_unfold is_mul_unfold; case: (unfold_term t) => [|||[] ?].
   + iDestruct "c3" as "(_ & exp)".
     iApply (big_sepL_mono with "exp"). by iIntros (k t' _) "(_ & $)".
   + by case: (t) expt => // *; iDestruct "c4" as "[]".
@@ -1283,7 +1284,7 @@ case: t IH => [n|ta tb|a|kt tt|kk tt|tt|pt wf nf] IH.
   rewrite minted_THash public_THash.
   iIntros "#m #contra"; iLeft.
   iApply (IH tt H1 with "m contra").
-- case: pt wf nf IH => [o|[kt'||] operand|[||] b e|ts] wf nf IH.
+- case: pt wf nf IH => [o|[kt'||] operand|[||] b e|[] ts] wf nf IH.
   1,2,3,5,6: by move: {IH} nf; rewrite /is_non_free /=.
   + have /andb_True [/andb_True [Ninvpt Nmpt] wfpt] := wf.
     have E : TNonFree (PreTerm.PT1 O1Inv operand) wf nf = TInv (fold_term operand).
@@ -1484,7 +1485,7 @@ Lemma public_to_list t ts :
   public t -∗ [∗ list] t' ∈ ts, public t'.
 Proof.
 elim/term_ind': t ts => //=.
-  by case=> // ts [<-] /=; iIntros "?".
+  by case=> // [] ts [<-] /=; iIntros "?".
 move=> t _ tl IH ts.
 case e: (Spec.to_list tl) => [ts'|] // [<-] /=.
 rewrite public_TPair /=; iIntros "[??]"; iFrame.

@@ -63,7 +63,7 @@ Fixpoint height (pt : pre_term) : nat :=
   | PT0 _ => 1
   | PT1 _ pt => S (height pt)
   | PT2 _ pt1 pt2 => S (Nat.max (height pt1) (height pt2))
-  | PTMul ts => S (max_list_with height ts)
+  | PTN _ ts => S (max_list_with height ts)
   end.
 
 Definition is_inv pt := if pt is PTInv _ then true else false.
@@ -78,13 +78,13 @@ Definition is_nonce pt := if pt is PT0 (O0Nonce _) then true else false.
 Definition is_non_free pt := is_inv pt || is_exp pt || is_mul pt.
 
 Lemma Nnf_Ninv pt : negb (is_non_free pt) → negb (is_inv pt).
-Proof. by case: pt => [o|[k| |] t|[||] t1 t2|ts]. Qed.
+Proof. by case: pt => [o|[k| |] t|[||] t1 t2|[] ts]. Qed.
 
 Lemma Nnf_Nexp pt : negb (is_non_free pt) → negb (is_exp pt).
-Proof. by case: pt => [o|[k| |] t|[||] t1 t2|ts]. Qed.
+Proof. by case: pt => [o|[k| |] t|[||] t1 t2|[] ts]. Qed.
 
 Lemma Nnf_Nmul pt : negb (is_non_free pt) → negb (is_mul pt).
-Proof. by case: pt => [o|[k| |] t|[||] t1 t2|ts]. Qed.
+Proof. by case: pt => [o|[k| |] t|[||] t1 t2|[] ts]. Qed.
 
 Definition base pt := if pt is PTExp b _ then b else pt.
 Definition expo pt := if pt is PTExp _ e then e else PTMul [].
@@ -190,15 +190,15 @@ Proof. by case/andb_True. Qed.
 
 Lemma inv_aux_Nid pt : inv_aux pt ≠ pt.
 Proof.
-by case: pt => [o|[k| |] t|o t1 t2|ts] /=; move=> /(f_equal height) /=; lia.
+by case: pt => [o|[k| |] t|o t1 t2|[] ts] /=; move=> /(f_equal height) /=; lia.
 Qed.
 
 Lemma inv_invN pt : negb (is_inv pt) -> inv_aux pt = PTInv pt.
-Proof. by case: pt => [o|[k| |] t|o t1 t2|ts]. Qed.
+Proof. by case: pt => [o|[k| |] t|o t1 t2|[] ts]. Qed.
 
 Lemma inv_auxK pt : wf pt -> inv_aux (inv_aux pt) = pt.
 Proof.
-case: pt => [o|[k| |] t|o t1 t2|ts] //=.
+case: pt => [o|[k| |] t|o t1 t2|[] ts] //=.
 by rewrite !andb_True => - [[/inv_invN -> _] _].
 Qed.
 
@@ -207,16 +207,16 @@ Proof. by rewrite /wf !andb_True; split_and!. Qed.
 
 Lemma wf_base pt : wf pt -> wf (base pt).
 Proof.
-case: pt => [o|o t|[||] b e|ts] wf_pt //.
+case: pt => [o|o t|[||] b e|[] ts] wf_pt //.
 by move: wf_pt; rewrite /= !andb_True => - [[[? _] _] _].
 Qed.
 
 Lemma base_expN pt : negb (is_exp pt) -> base pt = pt.
-Proof. by case: pt => [o|o t|[||] t1 t2|ts]. Qed.
+Proof. by case: pt => [o|o t|[||] t1 t2|[] ts]. Qed.
 
 Lemma base_Nexp pt : wf pt -> negb (is_exp (base pt)).
 Proof.
-case: pt => [o|o t|[||] b e|ts] wf_pt //=.
+case: pt => [o|o t|[||] b e|[] ts] wf_pt //=.
 by move: wf_pt; rewrite /= !andb_True => - [[[_ /Nnf_Nexp ?] _] _].
 Qed.
 
@@ -226,34 +226,34 @@ Qed.
    always false -- see [base_Nexp].) *)
 Lemma is_mul_base pt : wf pt -> is_mul (base pt) = is_mul pt.
 Proof.
-case: pt => [o|o t|[||] b e|ts] //= wf_pt.
+case: pt => [o|o t|[||] b e|[] ts] //= wf_pt.
 move: wf_pt; rewrite !andb_True => - [[[_ Nnf] _] _].
 by case: (is_mul b) (Nnf_Nmul _ Nnf).
 Qed.
 
 Lemma is_inv_base pt : wf pt -> is_inv (base pt) = is_inv pt.
 Proof.
-case: pt => [o|o t|[||] b e|ts] //= wf_pt.
+case: pt => [o|o t|[||] b e|[] ts] //= wf_pt.
 move: wf_pt; rewrite !andb_True => - [[[_ Nnf] _] _].
 by case: (is_inv b) (Nnf_Ninv _ Nnf).
 Qed.
 
 Lemma expo_expN pt : negb (is_exp pt) -> expo pt = PTMul [].
-Proof. by case: pt => [o|o t|[||] t1 t2|ts]. Qed.
+Proof. by case: pt => [o|o t|[||] t1 t2|[] ts]. Qed.
 
 Lemma wf_expo pt : wf pt -> wf (expo pt).
 Proof.
-case: pt => [o|o t|[||] b e|ts]; try (move=> _; exact: wf_one).
+case: pt => [o|o t|[||] b e|[] ts]; try (move=> _; exact: wf_one).
 by move=> wf_pt; move: wf_pt; rewrite /= !andb_True => - [[[_ _] ?] _].
 Qed.
 
 Lemma factors_Nmul pt : negb (is_mul pt) -> factors pt = [pt].
-Proof. by case: pt. Qed.
+Proof. by case: pt => [o|o t|o t1 t2|[] ts]. Qed.
 
 Lemma wf_wf_factors pt : wf pt -> wf_factors (factors pt).
 Proof.
 case E: (is_mul pt) => wf_pt.
-  by case: pt E wf_pt => //= pts _ /andb_True [].
+  by case: pt E wf_pt => [o|o t|o t1 t2|[] ts] //= _ /andb_True [].
 rewrite /wf_factors factors_Nmul //= ?E //= 3!andb_True; do !split => //.
 apply: SMS.wf_singleton.
 - exact: inv_aux_Nid.
@@ -262,12 +262,12 @@ Qed.
 
 Lemma wf_inv_aux pt : wf pt -> negb (is_mul pt) -> wf (inv_aux pt).
 Proof.
-case: pt => [o|[k| |] t|o t1 t2|ts] wf_pt Nm //=.
+case: pt => [o|[k| |] t|o t1 t2|[] ts] wf_pt Nm //=.
 by move: wf_pt; rewrite /= !andb_True => - [[_ _] ?].
 Qed.
 
 Lemma inv_Nmul pt : negb (is_mul pt) -> inv pt = inv_aux pt.
-Proof. by case: pt. Qed.
+Proof. by case: pt => [o|o t|o t1 t2|[] ts]. Qed.
 
 Lemma wf_mul_aux ts : wf_factors ts → wf (mul_aux ts).
 Proof.
@@ -312,7 +312,7 @@ Qed.
 
 Lemma factorsK t : wf t → mul_aux (factors t) = t.
 Proof.
-case: t => [o|o t|o t1 t2|ts] //= wf_t.
+case: t => [o|o t|o t1 t2|[] ts] //= wf_t.
 case/andb_True: wf_t=> _ Hlen.
 by case: ts Hlen => [|t [|t' c']].
 Qed.
@@ -347,13 +347,13 @@ Qed.
 Lemma base_Nnf t :
   wf t -> negb (is_mul t) -> negb (is_inv t) -> negb (is_non_free (base t)).
 Proof.
-case: t => [o|[k| |] t|[||] t1 t2|ts] //= wf_t Nm Ni.
+case: t => [o|[k| |] t|[||] t1 t2|[] ts] //= wf_t Nm Ni.
 by move: wf_t; rewrite !andb_True => - [[[_ ?] _] _].
 Qed.
 
 Lemma exp_aux_Ninv b e :
   negb (is_inv b) -> exp_aux b e = mk_exp (base b) (mul [expo b; e]).
-Proof. by case: b => [o|[k| |] t|[||] t1 t2|ts]. Qed.
+Proof. by case: b => [o|[k| |] t|[||] t1 t2|[] ts]. Qed.
 
 (* Each mapped exponentiation is well formed, so the [mul] in [exp] always
    receives a legal factor list. *)
@@ -371,7 +371,7 @@ case Ei: (is_inv t); last first.
   have Ni : negb (is_inv t) by rewrite Ei.
   by rewrite exp_aux_Ninv //; apply: main.
 (* [t = PTInv u]: exponentiate [u], then re-apply the inverse. *)
-case: t Ei wf_t Nm => [o|[k| |] u|o t1 t2|ts] // _ /=.
+case: t Ei wf_t Nm => [o|[k| |] u|o t1 t2|[] ts] // _ /=.
 rewrite !andb_True => - [[Ni Nm] wf_u] _.
 apply: wf_inv_aux; last first.
   rewrite /mk_exp; case_bool_decide => //=.
@@ -406,7 +406,7 @@ Qed.
 
 Lemma mk_exp_base_expo t : wf t -> mk_exp (base t) (expo t) = t.
 Proof.
-case: t => [o|o u|[||] c d|ts] /= wf_t; rewrite /mk_exp;
+case: t => [o|o u|[||] c d|[] ts] /= wf_t; rewrite /mk_exp;
   try by rewrite bool_decide_eq_true_2.
 move: wf_t; rewrite !andb_True => - [_ /bool_decide_unpack dN0].
 by rewrite bool_decide_eq_false_2.
@@ -416,7 +416,7 @@ Lemma exp_aux_unit t : wf t -> negb (is_mul t) -> exp_aux t (PTMul []) = t.
 Proof.
 move=> wf_t Nm.
 case Ei: (is_inv t).
-  case: t Ei wf_t Nm => [o|[k| |] u|o c d|ts] // _ /=.
+  case: t Ei wf_t Nm => [o|[k| |] u|o c d|[] ts] // _ /=.
   rewrite !andb_True => - [[Ni Nm_u] wf_u] _.
   by rewrite (mul_unit_r _ (wf_expo _ wf_u)) (mk_exp_base_expo _ wf_u) (inv_invN _ Ni).
 have Ni : negb (is_inv t) by rewrite Ei.
@@ -428,7 +428,7 @@ Lemma wf_inv t : wf t -> wf (inv t).
 Proof.
 move=> wf_t; case e: (is_mul t); last first.
   by rewrite inv_Nmul ?e //; apply: wf_inv_aux; rewrite // e.
-case: t => //= ts in wf_t e *.
+case: t wf_t e => [o|o u|o c d|[] ts] //= wf_t e.
 case/andb_True: wf_t => wf_ts tsN1.
 apply: wf_mul; apply/list.Forall_forall=> _ /list_elem_of_fmap [t [] -> t_ts].
 apply: wf_inv_aux.
@@ -444,7 +444,7 @@ elim: pt => //=.
     [by rewrite andb_True; split
     |by rewrite andb_True; split
     |exact: (wf_exp _ _ IH1 IH2)].
-- move=> ts IHts; apply: wf_mul; apply/Forall_fmap.
+- move=> [] ts IHts; apply: wf_mul; apply/Forall_fmap.
   elim: ts IHts => [|t ts' IH] /=;
     [by move=> _; constructor
     |by move=> [wt wts]; constructor; [exact: wt | exact: IH wts]].
@@ -480,7 +480,7 @@ elim: pt => //=.
     rewrite base_expN; last exact: Nnf_Nexp.
     rewrite expo_expN; last exact: Nnf_Nexp.
     by rewrite mul_unit_l mul1 // /mk_exp bool_decide_eq_false_2.
-- move=> ts IHts /andb_True [wf_ts /bool_decide_spec tsN1].
+- move=> [] ts IHts /andb_True [wf_ts /bool_decide_spec tsN1].
   have {}IHts: Forall (λ t, wf t → normalize t = t) ts.
     by elim: (ts) IHts => //= t' ts' IH [? /IH ?]; eauto.
   have {IHts} ->: normalize <$> ts = ts.
@@ -520,7 +520,7 @@ Qed.
 Lemma exp_base_expo b : wf b -> exp (base b) (expo b) = b.
 Proof.
 move=> wf_b; case Ex: (is_exp b).
-  case: b Ex wf_b => [o|o u|[||] c d|ts] // _ /=.
+  case: b Ex wf_b => [o|o u|[||] c d|[] ts] // _ /=.
   rewrite !andb_True => - [[[wf_c Nnf_c] wf_d] /bool_decide_unpack dN0].
   rewrite (exp_Nmul _ _ wf_c wf_d (Nnf_Nmul _ Nnf_c)).
   rewrite (exp_aux_Ninv _ _ (Nnf_Ninv _ Nnf_c)).
@@ -564,7 +564,7 @@ move=> wf_u Nm wf_e.
 case Ei: (is_inv u); last first.
   have Ni : negb (is_inv u) by rewrite Ei.
   by rewrite (inv_invN _ Ni) /= (exp_aux_Ninv _ _ Ni).
-case: u Ei wf_u Nm => [o|[k| |] v|o c d|ts] // _ /=.
+case: u Ei wf_u Nm => [o|[k| |] v|o c d|[] ts] // _ /=.
 rewrite !andb_True => - [[Ni Nm_v] wf_v] _.
 rewrite (exp_aux_Ninv _ _ Ni) inv_auxK //.
 apply: wf_mk_exp.
@@ -592,7 +592,7 @@ case Ei: (is_inv t); last first.
   have Ni : negb (is_inv t) by rewrite Ei.
   rewrite (exp_aux_Ninv _ _ Ni); apply: Nmul_mk_exp.
   exact: (Nnf_Nmul _ (base_Nnf _ wf_t Nm Ni)).
-case: t Ei wf_t Nm => [o|[k| |] u|o c d|ts] // _ /=.
+case: t Ei wf_t Nm => [o|[k| |] u|o c d|[] ts] // _ /=.
 rewrite !andb_True => - [[Ni Nm_u] wf_u] _.
 have NnfB := base_Nnf _ wf_u Nm_u Ni.
 rewrite /mk_exp; case_bool_decide => /=.
@@ -608,7 +608,7 @@ Lemma exp_inv t e :
 Proof.
 move=> wft Nm wfe.
 have NmI : negb (is_mul (inv_aux t)).
-  move: wft Nm; case: t => [o|[k| |] u|o c d|us] //=.
+  move: wft Nm; case: t => [o|[k| |] u|o c d|[] us] //=.
   by rewrite !andb_True => - [[_ ?] _].
 rewrite (inv_Nmul _ Nm) (exp_Nmul _ _ (wf_inv_aux _ wft Nm) wfe NmI).
 rewrite (exp_aux_inv_aux _ _ wft Nm wfe) (exp_Nmul _ _ wft wfe Nm).

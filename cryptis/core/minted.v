@@ -135,7 +135,7 @@ Lemma minted_to_list t ts :
   minted t -∗ [∗ list] t' ∈ ts, minted t'.
 Proof.
 elim/term_ind': t ts => //=.
-  by case=> // ts [<-] /=; iIntros "?".
+  by case=> // [] ts [<-] /=; iIntros "?".
 move=> t _ tl IH ts.
 case e: (Spec.to_list tl) => [ts'|] // [<-] /=.
 rewrite minted_TPair /=; iIntros "[??]"; iFrame.

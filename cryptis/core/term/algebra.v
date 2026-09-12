@@ -178,7 +178,7 @@ have wf_tV: PreTerm.wf tV.
   apply: PreTerm.wf_factors_wf tV_in.
   exact: PreTerm.wf_wf_factors.
 have tNm : negb (PreTerm.is_mul (unfold_term t)).
-  by rewrite /tV in wf_tV; case: unfold_term wf_tV.
+  by rewrite /tV in wf_tV; case: unfold_term wf_tV => [o|o u|o c d|[] us] //=.
 rewrite -(list_elem_of_fmap_inj unfold_term) unfold_TInv PreTerm.inv_Nmul //.
 by rewrite unfold_factors.
 Qed.
@@ -401,13 +401,13 @@ Qed.
 
 (* The three non-free heads are mutually exclusive. *)
 Lemma is_exp_Nmul t : is_exp t -> negb (is_mul t).
-Proof. rewrite is_exp_unfold is_mul_unfold; by case: (unfold_term t). Qed.
+Proof. rewrite is_exp_unfold is_mul_unfold; by case: (unfold_term t) => [|||[] ?]. Qed.
 
 Lemma is_inv_Nmul t : is_inv t -> negb (is_mul t).
-Proof. rewrite is_inv_unfold is_mul_unfold; by case: (unfold_term t). Qed.
+Proof. rewrite is_inv_unfold is_mul_unfold; by case: (unfold_term t) => [|||[] ?]. Qed.
 
 Lemma is_exp_Ninv t : is_exp t -> negb (is_inv t).
-Proof. rewrite is_exp_unfold is_inv_unfold; by case: (unfold_term t). Qed.
+Proof. rewrite is_exp_unfold is_inv_unfold; by case: (unfold_term t) => [|||[] ?]. Qed.
 
 (* [base] does not change the [is_mul] / [is_inv] head; see the [PreTerm]
    versions for why [is_exp] is different. *)

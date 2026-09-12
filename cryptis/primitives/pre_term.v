@@ -52,6 +52,9 @@ Definition eq_term_op1 : val := λ: "x" "y",
 Definition eq_term_op2 : val := λ: "x" "y",
   "x" = "y".
 
+Definition eq_term_opN : val := λ: "x" "y",
+  "x" = "y".
+
 Definition eq_term : val := (rec: "eq" "x" "y" :=
   if: (Fst "x" = Fst "y") then
     let: "tag" := Fst "x" in
@@ -64,8 +67,9 @@ Definition eq_term : val := (rec: "eq" "x" "y" :=
       eq_term_op2 (Fst (Fst (Snd "x"))) (Fst (Fst (Snd "y"))) &&
       "eq" (Snd (Fst (Snd "x"))) (Snd (Fst (Snd "y"))) &&
       "eq" (Snd (Snd "x")) (Snd (Snd "y"))
-    else if: "tag" = #TMul_tag then
-      eq_list "eq" (Snd "x") (Snd "y")
+    else if: "tag" = #TOpN_tag then
+      eq_term_opN (Fst (Snd "x")) (Fst (Snd "y")) &&
+      eq_list "eq" (Snd (Snd "x")) (Snd (Snd "y"))
     else #false
   else #false)%V.
 
@@ -89,6 +93,9 @@ Definition leq_term_op1 : val := λ: "x" "y",
 Definition leq_term_op2 : val := λ: "x" "y",
   "x" ≤ "y".
 
+Definition leq_term_opN : val := λ: "x" "y",
+  "x" ≤ "y".
+
 Definition leq_term : val := (rec: "loop" "t1" "t2" :=
   if: (Fst "t1" < Fst "t2") then #true
   else if: (Fst "t1" = Fst "t2") then
@@ -110,8 +117,12 @@ Definition leq_term : val := (rec: "loop" "t1" "t2" :=
          then "loop" (Snd "a1") (Snd "a2")
          else "loop" (Snd (Fst "a1")) (Snd (Fst "a2")))
       else leq_term_op2 "o1" "o2"
-    else if: "tag" = #TMul_tag then
-      leq_list eq_term "loop" "a1" "a2"
+    else if: "tag" = #TOpN_tag then
+      let: "o1" := Fst "a1" in
+      let: "o2" := Fst "a2" in
+      if: eq_term_opN "o1" "o2" then
+        leq_list eq_term "loop" (Snd "a1") (Snd "a2")
+      else leq_term_opN "o1" "o2"
     else #false
   else #false)%V.
 
@@ -123,7 +134,8 @@ Definition hl_is_inv : val := λ: "pt",
 Definition hl_is_exp : val := λ: "pt",
   if: Fst "pt" = #TOp2_tag then Fst (Fst (Snd "pt")) = #TExp_tag else #false.
 
-Definition hl_is_mul : val := λ: "pt", Fst "pt" = #TMul_tag.
+Definition hl_is_mul : val := λ: "pt",
+  if: Fst "pt" = #TOpN_tag then Fst (Snd "pt") = #TMul_tag else #false.
 
 Definition hl_is_nonce : val := λ: "pt",
   if: Fst "pt" = #TOp0_tag then Fst (Snd "pt") = #TNonce_tag else #false.
@@ -131,7 +143,7 @@ Definition hl_is_nonce : val := λ: "pt",
 (** ** Destructors *)
 
 (* [repr (PreTerm.PTMul [])], i.e. the unit of the product. *)
-Definition hl_one : val := (#TMul_tag, NILV)%V.
+Definition hl_one : val := (#TOpN_tag, (#TMul_tag, NILV))%V.
 
 Definition hl_base : val := λ: "pt",
   if: hl_is_exp "pt" then Snd (Fst (Snd "pt")) else "pt".
@@ -140,7 +152,7 @@ Definition hl_expo : val := λ: "pt",
   if: hl_is_exp "pt" then Snd (Snd "pt") else hl_one.
 
 Definition hl_factors : val := λ: "pt",
-  if: hl_is_mul "pt" then Snd "pt" else "pt" :: NILV.
+  if: hl_is_mul "pt" then Snd (Snd "pt") else "pt" :: NILV.
 
 (** ** Smart constructors *)
 
@@ -154,7 +166,7 @@ Definition hl_mul_aux : val := λ: "c",
   | SOME "x" =>
       match: Snd "x" with
         NONE => Fst "x"
-      | SOME <> => (#TMul_tag, "c")
+      | SOME <> => (#TOpN_tag, (#TMul_tag, "c"))
       end
   end.
 
@@ -239,12 +251,17 @@ Lemma twp_eq_term_op2 E (o1 o2 : term_op2) :
     [{ v, ⌜v = #(bool_decide (o1 = o2))⌝}].
 Proof. case: o1 o2 => [] [] /=; wp_lam; wp_pures => //. Qed.
 
+Lemma twp_eq_term_opN E (o1 o2 : term_opN) :
+  ⊢ WP (eq_term_opN (repr o1) (repr o2)) @ E
+    [{ v, ⌜v = #(bool_decide (o1 = o2))⌝}].
+Proof. case: o1 o2 => [] [] /=; wp_lam; wp_pures => //. Qed.
+
 Lemma twp_eq_pre_term_aux E pt1 pt2 :
   ⊢ WP (eq_term (repr pt1) (repr pt2)) @ E
        [{ v, ⌜v = #(bool_decide (pt1 = pt2))⌝ }].
 Proof.
-elim: pt1 pt2 => [o1|o1 t1 IH1|o1 t11 IH1 t12 IH2|ts1 IHts1];
-case=> [o2|o2 t2|o2 t21 t22|ts2]; wp_rec; wp_pures=> //.
+elim: pt1 pt2 => [o1|o1 t1 IH1|o1 t11 IH1 t12 IH2|[] ts1 IHts1];
+case=> [o2|o2 t2|o2 t21 t22|[] ts2]; wp_rec; wp_pures=> //.
 - iApply twp_wand; first by wp_apply twp_eq_term_op0.
   iIntros (?) "->". iPureIntro; congr (# (LitBool _)).
   apply: bool_decide_ext; intuition congruence.
@@ -270,7 +287,12 @@ case=> [o2|o2 t2|o2 t21 t22|ts2]; wp_rec; wp_pures=> //.
     by apply: bool_decide_ext; intuition congruence.
   wp_pures; iPureIntro; congr (# (LitBool _)).
   rewrite bool_decide_false; congruence.
-- rewrite -!repr_list_val.
+- wp_bind (eq_term_opN _ _).
+  iApply twp_wand; first by wp_apply (twp_eq_term_opN _ ONMul ONMul).
+  iIntros (?) "->".
+  have eN : bool_decide (ONMul = ONMul) = true by apply: bool_decide_eq_true_2.
+  rewrite eN; wp_pures.
+  rewrite -!repr_list_val.
   iApply (@twp_eq_list PreTerm.pre_term); last first.
     iPureIntro; congr (# (LitBool _)); apply: bool_decide_ext.
     by split; congruence.
@@ -315,12 +337,16 @@ Lemma twp_leq_term_op2 E (o1 o2 : term_op2) :
   ⊢ WP (leq_term_op2 (repr o1) (repr o2)) @ E [{ v, ⌜v = #(op2_le o1 o2)⌝}].
 Proof. by case: o1 o2 => [] [] /=; wp_lam; wp_pures. Qed.
 
+Lemma twp_leq_term_opN E (o1 o2 : term_opN) :
+  ⊢ WP (leq_term_opN (repr o1) (repr o2)) @ E [{ v, ⌜v = #(opN_le o1 o2)⌝}].
+Proof. by case: o1 o2 => [] [] /=; wp_lam; wp_pures. Qed.
+
 Lemma twp_leq_pre_term pt1 pt2 E Ψ :
   Ψ #(bool_decide (pt_order pt1 pt2)) ⊢
   WP (leq_term (repr pt1) (repr pt2)) @ E [{ Ψ }].
 Proof.
-elim: pt1 pt2 Ψ => [o1|o1 t1 IH1|o1 t11 IH1 t12 IH2|ts1 IHts1];
-case => [o2|o2 t2|o2 t21 t22|ts2] Ψ;
+elim: pt1 pt2 Ψ => [o1|o1 t1 IH1|o1 t11 IH1 t12 IH2|[] ts1 IHts1];
+case => [o2|o2 t2|o2 t21 t22|[] ts2] Ψ;
 iIntros "post"; rewrite pt_orderE /=; wp_rec; wp_pures; try by iApply "post".
 - iApply twp_wand; first by wp_apply twp_leq_term_op0.
   by iIntros "% ->".
@@ -341,6 +367,11 @@ iIntros "post"; rewrite pt_orderE /=; wp_rec; wp_pures; try by iApply "post".
   case: (bool_decide_reflect (t11 = t21)) => e2; wp_pures.
   + by iApply IH2.
   + by iApply IH1.
+wp_bind (eq_term_opN _ _).
+iApply twp_wand; first by wp_apply (twp_eq_term_opN _ ONMul ONMul).
+iIntros "% ->".
+have eN : bool_decide (ONMul = ONMul) = true by apply: bool_decide_eq_true_2.
+rewrite eN; wp_pures.
 rewrite -!repr_list_val.
 iApply twp_leq_list => //.
 - move=> x1 x2 Φ; iIntros "_ post".
@@ -361,7 +392,7 @@ Lemma twp_hl_is_inv pt E Ψ :
   Ψ #(PreTerm.is_inv pt) ⊢ WP hl_is_inv (repr pt) @ E [{ Ψ }].
 Proof.
 iIntros "HΨ"; wp_lam.
-case: pt => [o|o t|o t1 t2|ts] /=; wp_pures; try by iApply "HΨ".
+case: pt => [o|o t|o t1 t2|[] ts] /=; wp_pures; try by iApply "HΨ".
 by case: o => [k| |] /=; wp_pures; iApply "HΨ".
 Qed.
 
@@ -369,7 +400,7 @@ Lemma twp_hl_is_exp pt E Ψ :
   Ψ #(PreTerm.is_exp pt) ⊢ WP hl_is_exp (repr pt) @ E [{ Ψ }].
 Proof.
 iIntros "HΨ"; wp_lam.
-case: pt => [o|o t|o t1 t2|ts]; try by (wp_pures; iApply "HΨ").
+case: pt => [o|o t|o t1 t2|[] ts]; try by (wp_pures; iApply "HΨ").
 all: by case: o; wp_pures; iApply "HΨ".
 Qed.
 
@@ -377,14 +408,14 @@ Lemma twp_hl_is_mul pt E Ψ :
   Ψ #(PreTerm.is_mul pt) ⊢ WP hl_is_mul (repr pt) @ E [{ Ψ }].
 Proof.
 iIntros "HΨ"; wp_lam.
-by case: pt => [o|o t|o t1 t2|ts] /=; wp_pures; iApply "HΨ".
+by case: pt => [o|o t|o t1 t2|[] ts] /=; wp_pures; iApply "HΨ".
 Qed.
 
 Lemma twp_hl_is_nonce pt E Ψ :
   Ψ #(PreTerm.is_nonce pt) ⊢ WP hl_is_nonce (repr pt) @ E [{ Ψ }].
 Proof.
 iIntros "HΨ"; wp_lam.
-case: pt => [o|o t|o t1 t2|ts]; try by (wp_pures; iApply "HΨ").
+case: pt => [o|o t|o t1 t2|[] ts]; try by (wp_pures; iApply "HΨ").
 all: by case: o => [n|a]; wp_pures; iApply "HΨ".
 Qed.
 
@@ -395,7 +426,7 @@ Lemma twp_hl_base pt E Ψ :
 Proof.
 iIntros "HΨ"; wp_lam.
 wp_apply twp_hl_is_exp.
-case: pt => [o|o t|o t1 t2|ts]; try by (wp_pures; iApply "HΨ").
+case: pt => [o|o t|o t1 t2|[] ts]; try by (wp_pures; iApply "HΨ").
 all: by case: o; wp_pures; iApply "HΨ".
 Qed.
 
@@ -407,7 +438,7 @@ have one : repr (PreTerm.PTMul []) = hl_one.
 iIntros "HΨ"; wp_lam.
 wp_apply twp_hl_is_exp.
 rewrite /PreTerm.expo -?one.
-case: pt => [o|o t|o t1 t2|ts]; try by (wp_pures; rewrite -?one; iApply "HΨ").
+case: pt => [o|o t|o t1 t2|[] ts]; try by (wp_pures; rewrite -?one; iApply "HΨ").
 all: by case: o; wp_pures; rewrite -?one; iApply "HΨ".
 Qed.
 
@@ -420,7 +451,7 @@ have reprS : forall pt' : PreTerm.pre_term,
 iIntros "HΨ"; wp_lam.
 wp_apply twp_hl_is_mul.
 rewrite /PreTerm.factors.
-case: pt => [o|o t|o t1 t2|ts]; wp_pures.
+case: pt => [o|o t|o t1 t2|[] ts]; wp_pures.
 1-3: rewrite /CONS; wp_pures; iEval (rewrite reprS /=) in "HΨ"; by iApply "HΨ".
 by rewrite -repr_list_val; iApply "HΨ".
 Qed.
@@ -432,7 +463,7 @@ Lemma twp_hl_inv_aux pt E Ψ :
 Proof.
 iIntros "HΨ"; wp_lam.
 wp_apply twp_hl_is_inv.
-case: pt => [o|o t|o t1 t2|ts]; try by (wp_pures; iApply "HΨ").
+case: pt => [o|o t|o t1 t2|[] ts]; try by (wp_pures; iApply "HΨ").
 all: by case: o => [k| |]; wp_pures; iApply "HΨ".
 Qed.
 
@@ -507,7 +538,7 @@ have mapE : forall T (f : PreTerm.pre_term -> T) (l : list PreTerm.pre_term),
   by move=> T f; elim=> [//|x l IH] /=; rewrite IH.
 have invE : PreTerm.is_mul pt = true ->
     PreTerm.inv pt = PreTerm.mul (PreTerm.inv_aux <$> PreTerm.factors pt).
-  by case: pt.
+  by case: pt => [o|o t|o t1 t2|[] ts].
 iIntros "HΨ"; wp_lam.
 wp_apply twp_hl_is_mul.
 case Em: (PreTerm.is_mul pt); wp_pures.
@@ -559,7 +590,7 @@ case Ei: (PreTerm.is_inv b); wp_pures.
 - wp_apply twp_hl_inv_aux; wp_pures.
   wp_apply twp_hl_exp_aux_body.
   wp_apply twp_hl_inv_aux.
-  by case: b Ei => [o|[k| |] u|o c d|us] //= _; iApply "HΨ".
+  by case: b Ei => [o|[k| |] u|o c d|[] us] //= _; iApply "HΨ".
 - wp_apply twp_hl_exp_aux_body.
   rewrite PreTerm.exp_aux_Ninv; last by rewrite Ei.
   by iApply "HΨ".
