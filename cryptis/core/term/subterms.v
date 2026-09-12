@@ -198,6 +198,23 @@ Proof.
 by case: t => //= ? _; rewrite subtermsE' right_id_L.
 Qed.
 
+(* [TExp] spreads over the factors of its base ([factors_TExp]), so a subterm
+   of any one factor-exponential is a subterm of the whole. *)
+Lemma subterm_TExp_factors t b e u :
+  u ∈ factors b -> subterm t (TExp u e) -> subterm t (TExp b e).
+Proof.
+move=> u_b sub.
+rewrite -(factorsK (TExp b e)).
+apply: (@STMul _ (TExp u e) _) => //; first exact: invs_canceled_factors.
+by rewrite (factors_TExp b e); apply/list_elem_of_fmap; exists u.
+Qed.
+
+Lemma subterm_factors t b u : u ∈ factors b -> subterm t u -> subterm t b.
+Proof.
+move=> u_b sub; rewrite -(factorsK b).
+by apply: (@STMul _ u _) => //; exact: invs_canceled_factors.
+Qed.
+
 Definition subtermsE := (subterms_TInv, subterms_TExpN, subterms_TMulN, subtermsE').
 
 Ltac solve_subtermsP :=

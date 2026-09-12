@@ -87,7 +87,8 @@ Definition exp_pred0_pre Plater P DH ts : iProp :=
     ⌜∀ t, t ∈ ts' → TInv t ∉ exps ts.2⌝ ∗
     [∗ list] t ∈ ts', Plater t) ∨
   P ts.1 ∨
-  ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ ⌜negb (is_mul t)⌝ ∗ ⌜TInv t ∉ exps t2'⌝ ∗
+  ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ ⌜negb (is_mul t)⌝ ∗
+  ⌜negb (is_mul t2')⌝ ∗ ⌜negb (is_inv t2')⌝ ∗ ⌜TInv t ∉ exps t2'⌝ ∗
   DH (ts.1, t2') ∗ DH (t, ts.2).
 
 Local Instance exp_pred0_pre_mono Plater P :
@@ -96,7 +97,7 @@ Proof.
 constructor; last by move=> ??; solve_proper.
 iIntros (DH1 DH2 _ _) "#H %ts dh"; rewrite /exp_pred0_pre.
 iDestruct "dh" as "[? | [? | dh]]"; eauto.
-iDestruct "dh" as (t2 t') "(#p & #Nm & #? & dh1 & dh2)".
+iDestruct "dh" as (t2 t') "(#p & #Nm & #Nm2 & #Ni2 & #? & dh1 & dh2)".
 iRight; iRight; iExists t2, t'; iFrame "#".
 by iSplitL "dh1"; iApply "H".
 Qed.
@@ -116,7 +117,8 @@ Lemma exp_pred0_unfold Plater P ts :
     ⌜∀ t, t ∈ ts' → TInv t ∉ exps ts.2⌝ ∗
     [∗ list] t ∈ ts', Plater t) ∨
   P ts.1 ∨
-  ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ ⌜negb (is_mul t)⌝ ∗ ⌜TInv t ∉ exps t2'⌝ ∗
+  ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ ⌜negb (is_mul t)⌝ ∗
+  ⌜negb (is_mul t2')⌝ ∗ ⌜negb (is_inv t2')⌝ ∗ ⌜TInv t ∉ exps t2'⌝ ∗
   exp_pred0 Plater P (ts.1, t2') ∗ exp_pred0 Plater P (t, ts.2).
 Proof. by rewrite exp_pred0_unseal /exp_pred0_def least_fixpoint_unfold. Qed.
 
@@ -157,7 +159,7 @@ iRevert (ts) "H".
 iApply exp_pred0_ind; iIntros "!> %ts [#H | [#H | H]]"; eauto.
 - rewrite exp_pred0_unfold; eauto.
 - rewrite exp_pred0_unfold; eauto.
-- iDestruct "H" as (t2' t) "(% & % & % & [#? _] & [#? _])".
+- iDestruct "H" as (t2' t) "(% & % & % & % & % & [#? _] & [#? _])".
   iModIntro; rewrite [exp_pred0 Plater P ts]exp_pred0_unfold.
   by iRight; iRight; iExists t2', t; iFrame "#".
 Qed.
@@ -174,7 +176,7 @@ iApply exp_pred0_ind; iIntros "!> %ts [H | [H | H]]"; eauto.
   iFrame; do 2!(iSplit => //); iApply (big_sepL_impl with "Hts'").
   iIntros "!> % % %"; iApply "monolater".
 - by rewrite exp_pred0_unfold; iRight; iLeft; iApply "mono".
-- iDestruct "H" as (t2' t) "(% & % & % & [? _] & [? _])".
+- iDestruct "H" as (t2' t) "(% & % & % & % & % & [? _] & [? _])".
   rewrite [exp_pred0 Plater2 P2 ts]exp_pred0_unfold.
   by iRight; iRight; iExists t2', t; iFrame.
 Qed.
@@ -187,18 +189,19 @@ iIntros "%HP dh"; iRevert (HP); iRevert (ts) "dh".
 iApply exp_pred0_ind; iIntros "!> %ts [H | [H | H]] %HP".
 - by rewrite exp_pred0_unfold; eauto.
 - by rewrite exp_pred0_unfold HP; eauto.
-- iDestruct "H" as (t2' t e Nm t_t2') "([IH1 _] & [IH2 _])".
+- iDestruct "H" as (t2' t e Nm Nm2 Ni2 t_t2') "([IH1 _] & [IH2 _])".
   rewrite [exp_pred0 Plater P2 ts]exp_pred0_unfold.
   iRight; iRight; iExists t2', t.
-  do 3!iSplit => //; iSplitL "IH1".
+  do 5!iSplit => //; iSplitL "IH1".
   + iApply "IH1"; iPureIntro => t' /= [->|t'_t2']; eauto.
     apply: HP; right.
     have t'_tV : t' ≠ TInv t by move=> e'; apply: t_t2'; rewrite -e'.
-    have := exps_count_TExpW t' t2' t Nm t'_tV.
+    have := exps_count_TExpW t' t2' t Nm Nm2 Ni2 t'_tV.
     move: t'_t2'; rewrite e /exps -!count_gt0; lia.
   + iApply "IH2"; iPureIntro => t' /= [->|t'_t2']; eauto.
     apply: HP; right; move: t_t2'.
-    rewrite e /exps -!count_gt0 (count_expo_TExp_eq t _ Nm) count_TInv_l; lia.
+    rewrite e /exps -!count_gt0 (count_expo_TExp_eq t _ Nm Nm2 Ni2) count_TInv_l.
+    lia.
 Qed.
 
 Lemma exp_pred0_proper' Plater P1 P2 ts :
@@ -637,12 +640,13 @@ by iApply (@exp_pred_intro1_gen t1 t2 [] atom0 hexps).
 Qed.
 
 Lemma exp_pred_intro2 t t1 t2 :
-  negb (is_mul t) ->
+  negb (is_mul t) -> negb (is_mul t2) -> negb (is_inv t2) ->
   TInv t ∉ exps t2 →
   exp_pred t1 t2 -∗ exp_pred t (TExp t2 t) -∗ exp_pred t1 (TExp t2 t).
 Proof.
 rewrite exp_pred_unseal /exp_pred_def (exp_pred0_unfold _ _ (t1, TExp t2 t)) /=.
-by iIntros "%Nm % #H1 #H2"; iRight; iRight; iExists _, _; iFrame "#"; eauto.
+iIntros "%Nm %Nm2 %Ni2 % #H1 #H2".
+by iRight; iRight; iExists _, _; iFrame "#"; eauto.
 Qed.
 
 Lemma exp_pred_intro3 t1 t2 : public t1 -∗ exp_pred t1 t2.
@@ -657,7 +661,9 @@ Lemma exp_pred_ind (φ : term → term → iProp) :
     ⌜∀ t, t ∈ ts → TInv t ∉ exps t2⌝ -∗
     ([∗ list] t ∈ ts, ▷ public t) -∗
     exp_pred_base t1 (TExpN t2 ts) -∗ φ t1 t2) -∗
-  (□ ∀ t t1 t2, ⌜negb (is_mul t)⌝ -∗ ⌜TInv t ∉ exps t2⌝ -∗
+  (□ ∀ t t1 t2, ⌜negb (is_mul t)⌝ -∗
+                ⌜negb (is_mul t2)⌝ -∗ ⌜negb (is_inv t2)⌝ -∗
+                ⌜TInv t ∉ exps t2⌝ -∗
                 exp_pred t1 t2 -∗ □ φ t1 t2 -∗
                 exp_pred t (TExp t2 t) -∗ □ φ t (TExp t2 t) -∗
                 φ t1 (TExp t2 t)) -∗
@@ -673,8 +679,10 @@ iIntros "!> %ts [#H | [#H | #H]]".
 - iDestruct "H" as "(%ts' & #? & % & % & #?)"; iModIntro.
   by iApply "H1"; eauto.
 - by iModIntro; iApply "H3".
-- iDestruct "H" as (t2' t) "/= (-> & % & % & [#H11 #H12] & [#H21 #H22])".
-  by iModIntro; iApply ("H2" with "[//] [//] H12 H11 [$]").
+- iDestruct "H" as (t2' t)
+    "/= (-> & %Nm & %Nm2 & %Ni2 & %tn & [#H11 #H12] & [#H21 #H22])".
+  iModIntro.
+  by iApply ("H2" $! t ts.1 t2' with "[//] [//] [//] [//] H12 H11 [$]").
 Qed.
 
 Lemma exp_pred_inv_gen ts t1 t2 :
@@ -688,21 +696,28 @@ Proof.
 iIntros "%t1_ts %ts_t2 dh"; iRevert (ts t1_ts ts_t2); iRevert (t1 t2) "dh".
 iApply exp_pred_ind; eauto 10.
 - iIntros "!> %ts %t1 %t2 %atom_ts %ts_t2 #p_ts #base %ts' %t1_ts' %ts'_t2".
+  (* [t1 ∈ ts' ⊆ exps t2] makes [t2] an exponential, hence atom-headed *)
+  have xt2 := is_exp_of_exps (ts'_t2 _ t1_ts').
+  have Nm2 := is_exp_Nmul _ xt2; have Ni2 := is_exp_Ninv _ xt2.
   iExists t1; iSplit=> //; iRight; iExists (TExpN t2 ts).
-  have baseE : base (TExpN t2 ts) = base t2 by rewrite /TExpN base_TExp.
+  have baseE : base (TExpN t2 ts) = base t2.
+    by rewrite /TExpN (base_TExp _ _ Nm2 Ni2).
   rewrite baseE; do !iSplit => //; iPureIntro => t t_ts'.
   have ts_t: ∀ t', t' ∈ ts → t ≠ TInv t'.
     by move=> t' /ts_t2 t'_t2 t'_t; apply: t'_t2; rewrite -t'_t; eauto.
   move/ts'_t2: t_ts'; rewrite /exps -!count_gt0 => t_ts'.
-  have Hmono := @exps_count_TExpNW t t2 ts atom_ts ts_t.
+  have Hmono := @exps_count_TExpNW t t2 ts Nm2 Ni2 atom_ts ts_t.
   move: t_ts' Hmono; lia.
-- iIntros "!> %t %t1 %t2 %Nm_t %t_t2 #dh_t1 IH_t1 #dh_t IH_t %ts %t1_ts %ts_t2'".
-  rewrite base_TExp; case: (decide (t ∈ ts)) => t_ts; first by iApply "IH_t".
+- iIntros "!> %t %t1 %t2 %Nm_t %Nm_t2 %Ni_t2 %t_t2".
+  iIntros "#dh_t1 IH_t1 #dh_t IH_t %ts %t1_ts %ts_t2'".
+  rewrite (base_TExp _ _ Nm_t2 Ni_t2).
+  case: (decide (t ∈ ts)) => t_ts; first by iApply "IH_t".
   iApply "IH_t1"; iPureIntro => // t3 t3_ts.
   have t3_nin : t3 ∉ factors t.
     by rewrite factors_Nmul // list_elem_of_singleton; congruence.
   have := not_elem_of_count _ _ t3_nin.
-  move: (ts_t2' _ t3_ts); rewrite /exps -!count_gt0 count_expo_TExp; lia.
+  move: (ts_t2' _ t3_ts).
+  by rewrite /exps -!count_gt0 (count_expo_TExp _ _ _ Nm_t2 Ni_t2); lia.
 Qed.
 
 Lemma exp_pred_inv t1 t2 :
@@ -950,7 +965,7 @@ Proof.
 Qed.
 
 Lemma public_TExpN t ts :
-  negb (is_exp t) →
+  negb (is_exp t) → negb (is_mul t) → negb (is_inv t) →
   invs_canceled ts ->
   ts ≠ [] →
   public (TExpN t ts) ⊣⊢
@@ -958,15 +973,15 @@ Lemma public_TExpN t ts :
   [∗ list] t' ∈ ts,
     exp_pred t' (TExpN t ts) ∧ □ (public t' → public (TExp (TExpN t ts) (TInv t'))).
 Proof.
-move => Nx ic tsN0.
+move => Nx Nm Ni ic tsN0.
 have expE : expo (TExpN t ts) = TMulN ts.
-  by rewrite /TExpN expo_TExp (expo_expN _ Nx) TMulN_cat /= TMulN1.
+  by rewrite /TExpN (expo_TExp _ _ Nm Ni) (expo_expN _ Nx) TMulN_cat /= TMulN1.
 have ttsX: is_exp (TExpN t ts).
   rewrite is_expE expE => contra; apply: tsN0.
-  by apply/Permutation_nil; rewrite -(factors_TMulN ic) contra factors_TMulN0.
+  by apply/Permutation_nil; rewrite -(factors_TMulN _ ic) contra factors_TMulN0.
 apply: anti_symm; last first.
 - iIntros "#[m dhp]".
-  rewrite public_eq; setoid_rewrite (exps_TExpN Nx ic).
+  rewrite public_eq; setoid_rewrite (exps_TExpN Nx Nm Ni ic).
   iSplit; first done.
   iRight; iRight; iLeft.
   iSplit; first done.
@@ -974,8 +989,8 @@ apply: anti_symm; last first.
   iIntros (k t' Hk) "H"; iSplit; last by [].
   iPureIntro; rewrite is_mul_TInv.
   exact: proj2 (ic t' (list_elem_of_lookup_2 _ _ _ Hk)).
-- rewrite public_eq !(minted_TExpN Nx ic).
-  setoid_rewrite (exps_TExpN Nx ic).
+- rewrite public_eq !(minted_TExpN Nx Nm Ni ic).
+  setoid_rewrite (exps_TExpN Nx Nm Ni ic).
   iIntros "#[[mt mts] Hdisj]".
   iSplit; first by iSplit.
   iDestruct "Hdisj" as "[c1 | [c2 | [c3 | c4]]]".
@@ -1022,21 +1037,21 @@ move => expt; apply: anti_symm; last first.
 Qed.
 
 Lemma public_TExp_iff t1 t2 :
-  negb (is_exp t1) →
+  negb (is_exp t1) → negb (is_mul t1) → negb (is_inv t1) →
   negb (is_mul t2) ->
   public (TExp t1 t2) ⊣⊢
   minted t1 ∧ minted t2 ∧ exp_pred t2 (TExp t1 t2) ∧ □ (public t2 → public t1).
 Proof.
-move=> Nexp Nm2.
+move=> Nexp Nm1 Ni1 Nm2.
 have eq12 : TExp t1 t2 = TExpN t1 [t2] by rewrite /TExpN TMulN1.
 have ic2 : invs_canceled [t2] := invs_canceled1 Nm2.
-rewrite {1}eq12 (public_TExpN Nexp ic2) //=.
+rewrite {1}eq12 (public_TExpN Nexp Nm1 Ni1 ic2) //=.
 rewrite -eq12 TExpK minted_TExp //.
 by rewrite bi.sep_emp -!bi.and_assoc.
 Qed.
 
 Lemma public_TExp2_iff t1 t2 t3 :
-  negb (is_exp t1) →
+  negb (is_exp t1) → negb (is_mul t1) → negb (is_inv t1) →
   negb (is_mul t2) ->
   negb (is_mul t3) ->
   t2 ≠ TInv t3 ->
@@ -1047,7 +1062,7 @@ Lemma public_TExp2_iff t1 t2 t3 :
   □ (public t2 → public (TExp t1 t3)) ∧
   □ (public t3 → public (TExp t1 t2)).
 Proof.
-move => Nexp Nm2 Nm3 t2t3.
+move => Nexp Nm1 Ni1 Nm2 Nm3 t2t3.
 have Nm2' : negb (is_mul t2) := Nm2.
 have Nm3' : negb (is_mul t3) := Nm3.
 have ic23 : invs_canceled [t2; t3] := proj2 (invs_canceled2 Nm2' Nm3') t2t3.
@@ -1055,7 +1070,7 @@ have e2 : TExp (TExpN t1 [t2; t3]) (TInv t2) = TExp t1 t3.
   by rewrite -TExp_TExpN /TExpN TMulN1 TExpK.
 have e3 : TExp (TExpN t1 [t2; t3]) (TInv t3) = TExp t1 t2.
   by rewrite TExpNC2 -TExp_TExpN /TExpN TMulN1 TExpK.
-rewrite (public_TExpN Nexp ic23) //= e2 e3.
+rewrite (public_TExpN Nexp Nm1 Ni1 ic23) //= e2 e3.
 apply: anti_symm; iIntros "#H";
   [iDestruct "H" as "(m & [p2 d2] & [p3 d3] & _)"
   |iDestruct "H" as "(m & p2 & p3 & d2 & d3)"];
@@ -1076,20 +1091,21 @@ by iDestruct "p" as "[_ [dh ?]]" => //; eauto.
 Qed.
 
 Lemma public_TExp_Nmul t1 t2 :
+  negb (is_mul t1) -> negb (is_inv t1) ->
   negb (is_mul t2) ->
   public t1 -∗
   public t2 -∗
   public (TExp t1 t2).
 Proof.
-move=> Nm2; have Nm2' : negb (is_mul t2) := Nm2.
-elim /term_lt_ind: t1 => t1 IH; iIntros "#p1 #p2".
+move=> Nm1 Ni1 Nm2; have Nm2' : negb (is_mul t2) := Nm2.
+move: t1 Nm1 Ni1; elim /term_lt_ind => t1 IH Nm1 Ni1; iIntros "#p1 #p2".
 have [t2_t1|t2_t1] := decide (TInv t2 ∈ exps t1).
   iPoseProof (exp_pred_exps t2_t1 with "p1") as "[_ #p1']".
   by rewrite public_TInv TInvK; iApply "p1'".
 have [exp_t1|nexp_t1] := decide (is_exp (TExp t1 t2)); last first.
   have nX : negb (is_exp (TExp t1 t2)) by apply/negb_True.
-  by move/not_elem_of_TInv_exps: t2_t1;
-     rewrite /exps (expo_expN _ nX) factors_TMulN0 elem_of_nil.
+  move: t2_t1 => /(not_elem_of_TInv_exps Nm2 Nm1 Ni1).
+  by rewrite /exps (expo_expN _ nX) factors_TMulN0 elem_of_nil.
 rewrite [public (TExp _ _)]public_TExpN' //; iSplit.
   by iApply all_minted_TExp; iSplit; iApply public_minted.
 rewrite big_sepL_forall; iIntros (? t t_t1'%list_elem_of_lookup_2).
@@ -1098,7 +1114,7 @@ have [->|t_t2] := decide (t = t2).
 have t_t1: t ∈ exps t1.
   have t_nin : t ∉ factors t2 by rewrite factors_Nmul // list_elem_of_singleton.
   have := not_elem_of_count _ _ t_nin.
-  move: t_t1'; rewrite /exps -!count_gt0 count_expo_TExp; lia.
+  move: t_t1'; rewrite /exps -!count_gt0 (count_expo_TExp _ _ _ Nm1 Ni1); lia.
 have Nmt' : negb (is_mul t) := proj2 (invs_canceled_factors (expo t1) _ t_t1).
 iPoseProof (exp_pred_exps t_t1 with "p1") as "[dh #p]"; iSplit.
   by iApply exp_pred_intro2 => //; iApply exp_pred_intro3.
@@ -1108,32 +1124,87 @@ have comm : TExp (TExp t1 t2) (TInv t) = TExp (TExp t1 (TInv t)) t2.
   rewrite (_ : TExp t1 (TInv t) = TExpN t1 [TInv t]); last by rewrite /TExpN TMulN1.
   by rewrite !TExp_TExpN TExpNC2.
 rewrite comm; iApply (IH with "p p2").
-have NmTt : negb (is_mul (TInv t)) by rewrite is_mul_TInv.
-by have [?[??]] := tsize_TExp_TInv NmTt t_t1.
+- have NmTt : negb (is_mul (TInv t)) by rewrite is_mul_TInv.
+  by have [?[??]] := tsize_TExp_TInv NmTt t_t1.
+- by apply: Nmul_TExp.
+- by apply: Ninv_TExp.
 Qed.
 
 Lemma public_TExpN_intro t ts :
+  negb (is_mul t) -> negb (is_inv t) ->
   invs_canceled ts ->
   public t -∗ ([∗ list] t' ∈ ts, public t') -∗ public (TExpN t ts).
 Proof.
+move=> Nm Ni.
 elim: ts => [|u us IH] ic; iIntros "#p #pus".
 - by rewrite TExpN0.
 - move: ic => /invs_canceled_cons [_ [Nu atom_us]].
   rewrite -TExp_TExpN big_sepL_cons; iDestruct "pus" as "[#pu #pus']".
-  iApply (public_TExp_Nmul _ Nu with "[] pu").
+  iApply (public_TExp_Nmul (Nmul_TExp _ _ Nm) (Ninv_TExp _ _ Nm Ni) Nu
+            with "[] pu").
   by iApply (IH atom_us with "p pus'").
 Qed.
 
+(* Unconditional in both arguments.  A product base distributes, and every
+   factor of the result comes from a factor of [t1] ([mem_factors_TMulN]); an
+   inverse base is pushed out through [TExp_TInv]. *)
 Lemma public_TExp t1 t2 :
   public t1 -∗ public t2 -∗ public (TExp t1 t2).
 Proof.
+move: t1; elim/term_lt_ind => t1 IH; iIntros "#p1 #p2".
+case Em: (is_mul t1).
+  have Xm : is_mul t1 by rewrite Em.
+  have Nmf : Forall (fun u => negb (is_mul u))
+               ((fun u => TExp u t2) <$> factors t1).
+    apply/Forall_fmap/list.Forall_forall => u u_t1.
+    by rewrite /compose; apply: Nmul_TExp; exact: Nmul_factors u_t1.
+  rewrite [public (TExp t1 t2)]public_factors; iSplit.
+    by iApply all_minted_TExp; iSplit; iApply public_minted.
+  rewrite big_sepL_forall; iIntros (k x Hx).
+  have x_in : x ∈ factors (TExp t1 t2) := list_elem_of_lookup_2 _ _ _ Hx.
+  move: x_in; rewrite {1}(TExp_factors t1 t2).
+  move=> /(mem_factors_TMulN _ _ Nmf) /list_elem_of_fmap [u [-> u_t1]].
+  iApply (IH u (tsize_factors_lt _ _ Xm u_t1) with "[] p2").
+  rewrite (public_factors t1); iDestruct "p1" as "[_ #fs]".
+  by iApply (big_sepL_elem_of with "fs").
+have Nm : negb (is_mul t1) by rewrite Em.
+case Ei: (is_inv t1).
+  have Xi : is_inv t1 by rewrite Ei.
+  have -> : TExp t1 t2 = TInv (TExp (TInv t1) t2).
+    by rewrite -TExp_TInv TInvK.
+  rewrite public_TInv.
+  iApply (IH (TInv t1) (tsize_TInv_lt _ Xi) with "[] p2").
+  by rewrite public_TInv.
+have Ni : negb (is_inv t1) by rewrite Ei.
 rewrite (_ : TExp t1 t2 = TExpN t1 (factors t2)); last by rewrite /TExpN factorsK.
-iIntros "#p1 #p2".
-iApply (public_TExpN_intro _ (invs_canceled_factors t2) with "p1").
+iApply (public_TExpN_intro Nm Ni (invs_canceled_factors t2) with "p1").
 case E: (is_mul t2).
 - by iApply (public_TMulN (proj1 (is_trueP _) E) with "p2").
 - have Hmul : negb (is_mul t2) by rewrite E.
   by rewrite (factors_Nmul _ Hmul) /= bi.sep_emp; iApply "p2".
+Qed.
+
+(* Distributivity, as a publicity principle: [TExp t1 t2] is the product of the
+   [TExp u t2] for [u] a factor of [t1], so it is public exactly when each of
+   those is.  For an atom-headed [t1] this degenerates to the single factor
+   [t1] itself ([factors t1 = [t1]]), so it subsumes the atomic reasoning. *)
+Lemma public_TExp_factors t1 t2 :
+  ([∗ list] u ∈ factors t1, public (TExp u t2)) -∗
+  public (TExp t1 t2).
+Proof.
+iIntros "#H".
+have Nmf : Forall (fun v => negb (is_mul v)) ((fun u => TExp u t2) <$> factors t1).
+  apply/Forall_fmap/list.Forall_forall => u u_t1.
+  by rewrite /compose; apply: Nmul_TExp; exact: Nmul_factors u_t1.
+have factE : forall x, x ∈ factors (TExp t1 t2) ->
+    exists u, x = TExp u t2 /\ u ∈ factors t1.
+  move=> x; rewrite {1}(TExp_factors t1 t2).
+  by move=> /(mem_factors_TMulN _ _ Nmf) /list_elem_of_fmap [u [-> u_t1]]; eauto.
+rewrite [public (TExp t1 t2)]public_factors [minted (TExp t1 t2)]minted_factors.
+iSplit; iApply big_sepL_forall; iIntros (k x Hx);
+  case: (factE x (list_elem_of_lookup_2 _ _ _ Hx)) => u [-> u_t1].
+- by iApply public_minted; iApply (big_sepL_elem_of with "H").
+- by iApply (big_sepL_elem_of with "H").
 Qed.
 
 Lemma public_TMulN_intro ts :
@@ -1141,7 +1212,7 @@ Lemma public_TMulN_intro ts :
   ([∗ list] t' ∈ ts, public t') ⊢ public (TMulN ts).
 Proof.
 move => ic.
-rewrite public_factors (factors_TMulN ic) minted_TMulN //.
+rewrite public_factors (factors_TMulN _ ic) minted_TMulN //.
 iIntros "#H"; iSplit; last done.
 iApply (big_sepL_mono with "H"); iIntros (k t' _) "?"; by iApply public_minted.
 Qed.
@@ -1231,14 +1302,18 @@ case: t IH => [n|ta tb|a|kt tt|kk tt|tt|pt wf nf] IH.
   + set t := TNonFree (PreTerm.PTExp b e) wf nf.
     have xt : is_exp t by [].
     have Nxb : negb (is_exp (base t)) := base_Nexp t.
+    have Nmb : negb (is_mul (base t)).
+      by rewrite is_mul_base; exact: (is_exp_Nmul _ xt).
+    have Nib : negb (is_inv (base t)).
+      by rewrite is_inv_base; exact: (is_exp_Ninv _ xt).
     have icx : invs_canceled (exps t) := invs_canceled_factors (expo t).
     iIntros "#mt #contra".
-    iEval (rewrite -(base_expsK t) (minted_TExpN Nxb icx)) in "mt".
+    iEval (rewrite -(base_expsK t) (minted_TExpN Nxb Nmb Nib icx)) in "mt".
     iDestruct "mt" as "[#mb #mes]".
     iAssert (public (base t)) as "#pb".
     { iApply (IH (base t) (tsize_base_lt t xt) with "mb contra"). }
     iEval (rewrite -(base_expsK t)).
-    iApply (public_TExpN_intro (base t) icx with "pb").
+    iApply (public_TExpN_intro Nmb Nib icx with "pb").
     iApply (big_sepL_impl with "mes").
     iIntros "!>" (k e' e'_lk) "#me'".
     iApply (IH e' (tsize_exps_lt _ _ (list_elem_of_lookup_2 _ _ _ e'_lk)) with "me' contra").
@@ -1271,10 +1346,13 @@ Local Lemma exp_pred_intro4_aux t1 t2 t3 :
 Proof.
 move=> t1_t3 t3_t2 t1V_t2.
 have Nm3 : negb (is_mul t3) := proj2 (invs_canceled_factors (expo t2) _ t3_t2).
+have xt2 := is_exp_of_exps t3_t2.
 have t1_nin : t1 ∉ factors t3 by rewrite factors_Nmul // list_elem_of_singleton.
 have := not_elem_of_count _ _ t1_nin.
 move: t1V_t2.
-rewrite /exps -!count_gt0 count_expo_TExp !count_TInv_l count_TInv.
+rewrite /exps -!count_gt0
+  (count_expo_TExp _ _ _ (is_exp_Nmul _ xt2) (is_exp_Ninv _ xt2)).
+rewrite !count_TInv_l count_TInv.
 lia.
 Qed.
 
@@ -1288,13 +1366,16 @@ iIntros (t3_t2) "dh"; iRevert (t3_t2); iRevert (t1 t2) "dh".
 iApply exp_pred_ind.
 - iIntros "!> %ts %t1 %t2 %atom_ts %ts_t2 #pts #dh %t3_t2 #p3".
   have Nm3 : negb (is_mul t3) := proj2 (invs_canceled_factors (expo t2) _ t3_t2).
+  have xt2 := is_exp_of_exps t3_t2.
+  have Nm2 := is_exp_Nmul _ xt2; have Ni2 := is_exp_Ninv _ xt2.
   have t3V_nin : TInv t3 ∉ ts.
     move=> t3V_ts; move: (ts_t2 _ t3V_ts); rewrite TInvK => H.
     exact: H t3_t2.
   iApply (@exp_pred_intro1_gen _ _ (t3 :: ts)).
   + by apply/invs_canceled_cons; split; last split.
   + move=> t t_ts; case: (decide (t = t3)) => [->|t_t3].
-      rewrite not_elem_of_TInv_exps; last exact: Nm3.
+      rewrite (not_elem_of_TInv_exps Nm3 (Nmul_TExp _ _ Nm2)
+               (Ninv_TExp _ _ Nm2 Ni2)).
       by rewrite TExpKV.
     have {}t_ts: t ∈ ts by case/elem_of_cons: t_ts => //; congruence.
     have t_t2 := ts_t2 _ t_ts.
@@ -1305,20 +1386,23 @@ iApply exp_pred_ind.
         by rewrite TExpKV.
       by rewrite TExp_TExpN (_ : TExp t2 (TInv t3) = TExpN t2 [TInv t3]) ?TExpNA /TExpN ?TMulN1 //.
     rewrite e; iApply "dh".
-- iIntros "!> %t %t1 %t2 %Nm_t %t_t2 #dh1 #IH1 #dh2 #IH2 %t3_t2' #p3".
+- iIntros "!> %t %t1 %t2 %Nm_t %Nm_t2 %Ni_t2 %t_t2 #dh1 #IH1 #dh2 #IH2 %t3_t2' #p3".
   have Nmt : negb (is_mul t) := Nm_t.
   case: (decide (t3 = t)) => [->|t_t3].
     by rewrite TExpK; iApply "dh1".
   have t3_t2: t3 ∈ exps t2.
     have t3_nin : t3 ∉ factors t by rewrite factors_Nmul // list_elem_of_singleton.
     have := not_elem_of_count _ _ t3_nin.
-    move: t3_t2'; rewrite /exps -!count_gt0 count_expo_TExp; lia.
+    move: t3_t2'.
+    by rewrite /exps -!count_gt0 (count_expo_TExp _ _ _ Nm_t2 Ni_t2); lia.
   have comm : TExp (TExp t2 t) (TInv t3) = TExp (TExp t2 (TInv t3)) t.
     rewrite (_ : TExp t2 t = TExpN t2 [t]); last by rewrite /TExpN TMulN1.
     rewrite (_ : TExp t2 (TInv t3) = TExpN t2 [TInv t3]); last by rewrite /TExpN TMulN1.
     by rewrite !TExp_TExpN TExpNC2.
   rewrite comm; iApply exp_pred_intro2.
   + exact: Nmt.
+  + exact: (Nmul_TExp _ _ Nm_t2).
+  + exact: (Ninv_TExp _ _ Nm_t2 Ni_t2).
   + exact: (exp_pred_intro4_aux (not_eq_sym t_t3) t3_t2 t_t2).
   + by iApply "IH1" => //.
   + by iApply "IH2" => //.
@@ -1326,6 +1410,7 @@ iApply exp_pred_ind.
 Qed.
 
 Lemma public_TExp_add t1 t2 :
+  negb (is_mul t1) → negb (is_inv t1) →
   negb (is_mul t2) →
   TInv t2 ∉ exps t1 →
   public t1 -∗
@@ -1333,14 +1418,15 @@ Lemma public_TExp_add t1 t2 :
   exp_pred t2 (TExp t1 t2) -∗
   public (TExp t1 t2).
 Proof.
-move=> Nm2; have Nm2' : negb (is_mul t2) := Nm2.
-elim/term_lt_ind: t1 => t1 IH in t2 Nm2 Nm2' *.
+move=> Nm1 Ni1 Nm2; have Nm2' : negb (is_mul t2) := Nm2.
+move: Nm1 Ni1 t2 Nm2 Nm2'; move: t1.
+elim/term_lt_ind => t1 IH Nm1 Ni1 t2 Nm2 Nm2'.
 iIntros "%t2_t1 #p1 #m #dh".
 rewrite [public (TExp _ _)]public_TExpN' //; last first.
   case: (decide (is_exp (TExp t1 t2))) => [//|nX].
   have nX' : negb (is_exp (TExp t1 t2)) by apply/negb_True.
-  by rewrite not_elem_of_TInv_exps // /exps (expo_expN _ nX') factors_TMulN0
-     elem_of_nil in t2_t1.
+  rewrite (not_elem_of_TInv_exps Nm2 Nm1 Ni1) in t2_t1.
+  by rewrite /exps (expo_expN _ nX') factors_TMulN0 elem_of_nil in t2_t1.
 iSplit.
   by rewrite public_minted; iApply all_minted_TExp; iSplit.
 iApply big_sepL_forall; iIntros (k t t_t1').
@@ -1350,7 +1436,7 @@ have [->|t_t2] := decide (t = t2).
 have t_t1: t ∈ exps t1.
   have t_nin : t ∉ factors t2 by rewrite factors_Nmul // list_elem_of_singleton.
   have := not_elem_of_count _ _ t_nin.
-  move: t_t1'; rewrite /exps -!count_gt0 count_expo_TExp; lia.
+  move: t_t1'; rewrite /exps -!count_gt0 (count_expo_TExp _ _ _ Nm1 Ni1); lia.
 iPoseProof (exp_pred_exps t_t1 with "p1") as "[dh_t #p1']".
 iSplit; first by iApply exp_pred_intro2.
 iIntros "!> #p"; iSpecialize ("p1'" with "p").
@@ -1358,17 +1444,20 @@ have Nmt : negb (is_mul t) := proj2 (invs_canceled_factors (expo t1) _ t_t1).
 have NmIt : negb (is_mul (TInv t)) by rewrite is_mul_TInv.
 rewrite TExpC; iApply (IH with "p1' m []").
 - by have [_ [_ ?]] := tsize_TExp_TInv NmIt t_t1.
+- exact: (Nmul_TExp _ _ Nm1).
+- exact: (Ninv_TExp _ _ Nm1 Ni1).
 - exact: Nm2.
 - exact: Nm2'.
 - have t2_tV : t2 ≠ TInv t by move=> contra; apply: t2_t1; rewrite contra TInvK.
   move=> contra; apply: t2_t1.
   have t2_tVV : t2 ≠ TInv (TInv t) by rewrite TInvK; exact: not_eq_sym t_t2.
-  have Hmono := exps_count_TExpW t2 t1 (TInv t) NmIt t2_tVV.
+  have Hmono := exps_count_TExpW t2 t1 (TInv t) NmIt Nm1 Ni1 t2_tVV.
   move: contra; rewrite /exps -!count_gt0 !count_TInv_l; lia.
 - by rewrite -TExpC; iApply exp_pred_intro4 => //.
 Qed.
 
 Lemma public_TExp_exp_pred t1 t2 :
+  negb (is_mul t1) → negb (is_inv t1) →
   negb (is_mul t2) →
   public t1 -∗
   minted t2 -∗
@@ -1376,11 +1465,11 @@ Lemma public_TExp_exp_pred t1 t2 :
   □ (∀ t, exp_pred_base (TInv t2) t ↔ ▷ False) -∗
   public (TExp t1 t2).
 Proof.
-move=> Nm2; have Nm2' : negb (is_mul t2) := Nm2.
+move=> Nm1 Ni1 Nm2; have Nm2' : negb (is_mul t2) := Nm2.
 iIntros "#p1 #m2 #dh #dhV"; iApply except_0_public.
   by iApply all_minted_TExp; iSplit; rewrite // public_minted.
 case: (decide (TInv t2 ∈ exps t1)) => in_exps; last first.
-  by iModIntro; iApply (public_TExp_add Nm2).
+  by iModIntro; iApply (public_TExp_add Nm1 Ni1 Nm2).
 iPoseProof (exp_pred_exps in_exps with "p1") as "[dh' #?]"; rewrite TInvK.
 iPoseProof (exp_pred_inv_same in_exps with "dh'") as "[p2|H]".
 - iModIntro.

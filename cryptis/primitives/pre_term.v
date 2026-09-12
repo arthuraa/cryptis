@@ -10,7 +10,7 @@
      inv_aux / mul_aux                     ->  hl_inv_aux / hl_mul_aux
      normalize_factors                     ->  hl_normalize_factors
      mul / inv                             ->  hl_mul_list / hl_inv
-     exp_aux / exp                         ->  hl_exp_aux / hl_exp
+     mk_exp / exp_aux / exp                ->  hl_mk_exp / hl_exp_aux / hl_exp
 
    [normalize] itself is not implemented: the HeapLang layer only ever builds
    pre-terms with the smart constructors, so it never needs to renormalise.
@@ -176,11 +176,23 @@ Definition hl_inv : val := λ: "t",
   if: hl_is_mul "t" then hl_mul_list (map_list hl_inv_aux (hl_factors "t"))
   else hl_inv_aux "t".
 
-Definition hl_exp_aux : val := λ: "b" "e",
+Definition hl_mk_exp : val := λ: "b" "e",
   if: eq_term "e" hl_one then "b" else (#TOp2_tag, (#TExp_tag, "b", "e")).
 
+(* [exp_aux]: on a [PTInv] the inverse is stripped with [hl_inv_aux], the
+   exponent merged, and the inverse put back -- mirroring the [PTInv] branch of
+   [PreTerm.exp_aux]. *)
+Definition hl_exp_aux : val := λ: "b" "e",
+  if: hl_is_inv "b" then
+    let: "u" := hl_inv_aux "b" in
+    hl_inv_aux (hl_mk_exp (hl_base "u")
+                  (hl_mul_list (hl_expo "u" :: "e" :: NILV)))
+  else hl_mk_exp (hl_base "b") (hl_mul_list (hl_expo "b" :: "e" :: NILV)).
+
+(* [exp] spreads [exp_aux] over the factors, exactly as [hl_inv] spreads
+   [hl_inv_aux]. *)
 Definition hl_exp : val := λ: "b" "e",
-  hl_exp_aux (hl_base "b") (hl_mul_list (hl_expo "b" :: "e" :: NILV)).
+  hl_mul_list (map_list (λ: "t", hl_exp_aux "t" "e") (hl_factors "b")).
 
 Definition texp : val := λ: "base" "exp", hl_exp "base" "exp".
 
@@ -510,28 +522,66 @@ case Em: (PreTerm.is_mul pt); wp_pures.
   by wp_apply twp_hl_inv_aux; iApply "HΨ".
 Qed.
 
-Lemma twp_hl_exp_aux E (b e : PreTerm.pre_term) Ψ :
-  Ψ (repr (PreTerm.exp_aux b e)) ⊢ WP hl_exp_aux (repr b) (repr e) @ E [{ Ψ }].
+Lemma twp_hl_mk_exp E (b e : PreTerm.pre_term) Ψ :
+  Ψ (repr (PreTerm.mk_exp b e)) ⊢ WP hl_mk_exp (repr b) (repr e) @ E [{ Ψ }].
 Proof.
 have one : hl_one = repr (PreTerm.PTMul []).
   by rewrite /hl_one /= repr_list_unseal.
 iIntros "HΨ"; wp_lam; wp_pures; rewrite one.
 wp_apply twp_eq_pre_term.
-rewrite /PreTerm.exp_aux.
+rewrite /PreTerm.mk_exp.
 by case: (bool_decide (e = PreTerm.PTMul [])); wp_pures; iApply "HΨ".
 Qed.
 
-Lemma twp_hl_exp E (b e : PreTerm.pre_term) Ψ :
-  Ψ (repr (PreTerm.exp b e)) ⊢ WP hl_exp (repr b) (repr e) @ E [{ Ψ }].
+(* The body shared by both branches of [exp_aux]. *)
+Lemma twp_hl_exp_aux_body E (u e : PreTerm.pre_term) Ψ :
+  Ψ (repr (PreTerm.mk_exp (PreTerm.base u) (PreTerm.mul [PreTerm.expo u; e])))
+  ⊢ WP hl_mk_exp (hl_base (repr u))
+        (hl_mul_list (hl_expo (repr u) :: (repr e) :: NILV)) @ E [{ Ψ }].
 Proof.
-iIntros "HΨ"; wp_lam; wp_pures.
+iIntros "HΨ".
 wp_apply twp_nil.
 wp_apply twp_cons.
 wp_apply twp_hl_expo.
 wp_apply twp_cons.
 wp_apply twp_hl_mul_list.
 wp_apply twp_hl_base.
-wp_apply twp_hl_exp_aux.
+wp_apply twp_hl_mk_exp.
+by iApply "HΨ".
+Qed.
+
+Lemma twp_hl_exp_aux E (b e : PreTerm.pre_term) Ψ :
+  Ψ (repr (PreTerm.exp_aux b e)) ⊢ WP hl_exp_aux (repr b) (repr e) @ E [{ Ψ }].
+Proof.
+iIntros "HΨ"; wp_lam; wp_pures.
+wp_apply twp_hl_is_inv.
+case Ei: (PreTerm.is_inv b); wp_pures.
+- wp_apply twp_hl_inv_aux; wp_pures.
+  wp_apply twp_hl_exp_aux_body.
+  wp_apply twp_hl_inv_aux.
+  by case: b Ei => [o|[k| |] u|o c d|us] //= _; iApply "HΨ".
+- wp_apply twp_hl_exp_aux_body.
+  rewrite PreTerm.exp_aux_Ninv; last by rewrite Ei.
+  by iApply "HΨ".
+Qed.
+
+Lemma twp_hl_exp E (b e : PreTerm.pre_term) Ψ :
+  Ψ (repr (PreTerm.exp b e)) ⊢ WP hl_exp (repr b) (repr e) @ E [{ Ψ }].
+Proof.
+have expS : forall pt' : PreTerm.pre_term,
+    [[{ True }]] (λ: "t", hl_exp_aux "t" (repr e))%V (repr pt') @ E
+    [[{ RET repr (PreTerm.exp_aux pt' e); True }]].
+  iIntros "%pt' %Φ _ HΦ"; wp_pures.
+  by wp_apply twp_hl_exp_aux; iApply "HΦ".
+have mapE : forall T (f : PreTerm.pre_term -> T) (l : list PreTerm.pre_term),
+    map f l = f <$> l.
+  by move=> T f; elim=> [//|x l IH] /=; rewrite IH.
+iIntros "HΨ"; wp_lam; wp_pures.
+wp_apply twp_hl_factors; wp_pures.
+wp_apply (twp_map_list (fun t => PreTerm.exp_aux t e)) => //.
+  by apply/Forall_forall => x _; exact: expS.
+iIntros "_"; rewrite mapE.
+wp_apply twp_hl_mul_list.
 by iApply "HΨ".
 Qed.
 

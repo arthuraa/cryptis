@@ -167,7 +167,9 @@ Proof.
 move=> Nm.
 rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [a]); last by rewrite /TExpN TMulN1.
 have NInt : negb (is_exp (TInt 0)) by [].
-by rewrite (exps_TExpN NInt (invs_canceled1 Nm)).
+have NIntM : negb (is_mul (TInt 0)) by [].
+have NIntI : negb (is_inv (TInt 0)) by [].
+by rewrite (exps_TExpN NInt NIntM NIntI (invs_canceled1 Nm)).
 Qed.
 
 Lemma exps_TExp2 a b :
@@ -176,7 +178,9 @@ Lemma exps_TExp2 a b :
 Proof.
 move=> Nm_a Nm_b aVb.
 have NInt : negb (is_exp (TInt 0)) by [].
-by rewrite (exps_TExpN NInt (proj2 (invs_canceled2 Nm_a Nm_b) aVb)).
+have NIntM : negb (is_mul (TInt 0)) by [].
+have NIntI : negb (is_inv (TInt 0)) by [].
+by rewrite (exps_TExpN NInt NIntM NIntI (proj2 (invs_canceled2 Nm_a Nm_b) aVb)).
 Qed.
 
 Definition si_key si : senc_key :=
@@ -558,7 +562,9 @@ iAssert (exp_pred_base a (TExp (TInt 0) a)) with "[corr]" as "#dp".
     iPureIntro.
     rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [TNonce a]); last by rewrite /TExpN TMulN1.
     have NInt : negb (is_exp (TInt 0)) by [].
-    by rewrite (exps_TExpN NInt (invs_canceled1 Nm)). }
+have NIntM : negb (is_mul (TInt 0)) by [].
+have NIntI : negb (is_inv (TInt 0)) by [].
+    by rewrite (exps_TExpN NInt NIntM NIntI (invs_canceled1 Nm)). }
   by iDestruct ("pred_a" $! (TExp (TInt 0) a) with "ns") as "$". }
 rewrite /ga public_TExp_iff //.
 rewrite minted_TInt. do 3?[iSplit => //].

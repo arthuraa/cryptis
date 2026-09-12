@@ -79,6 +79,16 @@ Qed.
 
 Definition tsizeE := (tsize_TInv, tsize_TExp, tsize_TMulN, tsize_eq).
 
+(* Peeling an inverse strictly shrinks the term. *)
+Lemma tsize_TInv_lt t : is_inv t -> tsize (TInv t) < tsize t.
+Proof.
+move=> Xi.
+have Nm : negb (is_mul (TInv t)) by rewrite is_mul_TInv; exact: is_inv_Nmul.
+have Ni : negb (is_inv (TInv t)).
+  by rewrite (is_inv_TInv _ (is_inv_Nmul _ Xi)); case: is_inv Xi.
+have := tsize_TInv _ Nm Ni; rewrite TInvK; lia.
+Qed.
+
 Lemma tsize_lt_TInv {t} : negb (is_mul t) → tsize (TInv t) ≤ S (tsize t).
 Proof.
 move=> Nm.
