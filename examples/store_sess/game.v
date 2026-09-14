@@ -6,9 +6,12 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import numbers reservation_map.
 From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par assert ticket_lock.
-From cryptis Require Import cryptis primitives tactics role adequacy.
+From cryptis Require Import cryptis primitives tactics gmeta role adequacy.
 From cryptis.primitives Require Import attacker.
-From cryptis.examples Require Import iso_dh rpc gen_conn conn store.
+From cryptis.examples Require Import iso_dh sess gen_conn.
+From cryptis.examples.sess.proofs Require base.
+From cryptis.examples.store_sess Require Import impl proofs.
+From cryptis.examples.store_sess.proofs Require Import base.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -17,7 +20,7 @@ Unset Printing Implicit Defensive.
 Section Game.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ}.
-Context `{!RPC.rpcGS Σ, !storeGS Σ, !tlockG Σ}.
+Context `{!cryptis.examples.sess.proofs.base.sessG Σ, !storeGS Σ, !tlockG Σ}.
 Notation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -35,33 +38,29 @@ Definition start_server : val := λ: "c" "skR",
   server_loop "c" "server".
 
 Definition game : val := λ: "c",
-  (* Create key pairs and give verification keys to attacker *)
+
   let: "skI" := mk_sign_key #() in
   let: "skR" := mk_sign_key #() in
   let: "pkI" := pkey "skI" in
   let: "pkR" := pkey "skR" in
   send "c" "pkI";; send "c" "pkR";;
 
-  (* Run storage server in parallel *)
   Fork (start_server "c" "skR");;
 
-  (* Connect client to server *)
   let: "conn" := Client.connect "c" "skI" "pkR" in
 
-  (* Store value in server *)
   let: "k" := recv "c" in
   let: "v" := recv "c" in
   Client.create "conn" "k" "v";;
   Client.close "conn";;
-  (* Leak session key *)
-  send "c" (Conn.session_key "conn");;
+
+  send "c" (GenConn.session_key "conn");;
 
   let: "conn" := Client.connect "c" "skI" "pkR" in
-  (* Leak long-term keys *)
+
   send "c" "skI";;
   send "c" "skR";;
 
-  (* Retrive value and check that it matches the one that was stored *)
   let: "v'" := Client.load "conn" "k" in
   assert: eq_term "v" "v'".
 
@@ -110,30 +109,32 @@ wp_apply wp_send => //. { by iApply public_verify_key. } wp_pures.
 wp_apply (wp_fork with "[tokenR]").
 { iModIntro. wp_apply (wp_start_server with "[$tokenR]"); eauto. }
 wp_pures.
-iMod (@client_alloc _ _ _ _ _ skR with "tokenI")
-  as "(client & free & token)"; eauto.
-wp_apply (wp_client_connect with "[] client"); first iFrame "#".
+have sub : ↑dbN.@"client".@(skR : term) ⊆ (⊤ : coPset) by solve_ndisj.
+iMod (client_alloc skI sub with "tokenI")
+  as "(client & free & token)".
+wp_apply (wp_client_connect with "[] [] [] [] [] client"); eauto.
 iIntros "%cs client". wp_pure _ credit:"c". wp_pures.
 iPoseProof (db_connected_ok with "client s_skI s_skR") as "#>ok".
 wp_apply wp_recv => //. iIntros "%k #p_k". wp_pures.
 wp_apply wp_recv => //. iIntros "%v #p_v". wp_pures.
-rewrite (@db_free_at_diff _ _ _ _ _ _ {[k]}) //.
+have subk : ({[k]} : coGset.coGset term) ⊆ ⊤ by set_solver.
+rewrite (db_free_at_diff skI skR subk).
 iDestruct "free" as "[free_k free]".
-wp_apply (wp_client_create with "[] [$]"); iFrame "#".
+wp_apply (wp_client_create with "[] [] [] [] [$client $free_k]") => //.
 iIntros "[client k_v]". wp_pures.
-wp_apply (wp_client_close with "[# $] [$client]") => //.
+wp_apply (wp_client_close with "[//] [] [$client]") => //.
 iIntros "[client #p_sk]".
 wp_pures.
 wp_apply GenConn.wp_session_key => //. iIntros "_".
 wp_apply (wp_send with "[//]") => //. wp_pures.
-wp_apply (wp_client_connect with "[] client"); eauto.
+wp_apply (wp_client_connect with "[] [] [] [] [] client"); eauto.
 iIntros "%cs' client". wp_pure _ credit:"c'". wp_pures.
 iPoseProof (db_connected_ok with "client s_skI s_skR") as "#>#ok'".
 iMod (secret_public with "s_skI") as "#p_skI".
 iMod (secret_public with "s_skR") as "#p_skR".
 wp_apply wp_send => //. wp_pures.
 wp_apply wp_send => //. wp_pures.
-wp_apply (wp_client_load with "[] [$client $k_v]"); iFrame "#".
+wp_apply (wp_client_load with "[] [] [] [$client $k_v]") => //.
 iIntros "%v' (client & k_v & _ & [fail|->])".
 { iPoseProof (db_connected_ok_compromised with "client ok' fail") as ">[]". }
 wp_pures. wp_apply wp_assert. wp_apply wp_eq_term.
@@ -143,9 +144,10 @@ Qed.
 End Game.
 
 Definition F : gFunctors :=
-  #[heapΣ; spawnΣ; cryptisΣ; tlockΣ; iso_dhΣ; GenConn.connΣ; RPC.rpcΣ; storeΣ].
+  #[heapΣ; spawnΣ; cryptisΣ; tlockΣ; iso_dhΣ; GenConn.connΣ;
+    cryptis.examples.sess.proofs.base.sessΣ; storeΣ].
 
-Lemma store_secure σ₁ σ₂ t₂ e₂ :
+Lemma store_sess_secure σ₁ σ₂ t₂ e₂ :
   rtc erased_step ([run_network game], σ₁) (t₂, σ₂) →
   e₂ ∈ t₂ →
   not_stuck e₂ σ₂.
@@ -154,10 +156,9 @@ have ? : heapGpreS F by apply _.
 apply (adequate_not_stuck NotStuck _ _ (λ v _, True)) => //.
 apply: cryptis_adequacy.
 iIntros (? ? c) "#ctx #chan (_ & sign_tok & senc_tok & _)".
-iMod (iso_dhGS_alloc with "sign_tok") as (?) "(#? & iso_tok & sign_tok)" => //.
-iMod (Conn.base_ctx_alloc with "[$]") as "(#? & senc_tok)" => //.
-iMod (RPC.ctx_alloc with "[//] [//] [$]") as (?) "(#? & iso_tok & rpc_tok)" => //.
-iMod (store_ctx_alloc with "[$] [//]") as "(#? & rpc_tok)";
+iMod (iso_dhGS_alloc with "sign_tok") as (?) "(#iso & iso_tok & sign_tok)" => //.
+iMod (GenConn.base_ctx_alloc with "senc_tok") as "(#conn & senc_tok)" => //.
+iMod (store_ctx_alloc with "conn iso iso_tok") as "(#sctx & iso_tok)";
   first solve_ndisj.
-by iApply (wp_game with "ctx chan [//]") => //.
+by iApply (wp_game with "ctx chan sctx") => //.
 Qed.

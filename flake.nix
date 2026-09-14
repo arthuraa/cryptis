@@ -6,6 +6,8 @@
     flake-parts.url = "github:hercules-ci/flake-parts";
     nix-github-actions.url = "github:nix-community/nix-github-actions";
     nix-github-actions.inputs.nixpkgs.follows = "nixpkgs";
+    actris.url = "git+https://gitlab.mpi-sws.org/iris/actris.git?rev=fa669607568fbf897f6551b7bc9e912b10e1b577";
+    actris.flake = false;
     rocq-mcp.url = "github:arthuraa/rocq-mcp-flake";
     rocq-mcp.inputs.nixpkgs.follows = "nixpkgs";
   };
@@ -79,6 +81,27 @@
 
         overlays.default = final: prev: {
           coqPackages = prev.coqPackages_9_1.overrideScope (final: prev: {
+            actris = prev.mkCoqDerivation {
+              pname = "actris";
+              defaultVersion = "dev";
+              release.dev.src = inputs.actris;
+              propagatedBuildInputs = [
+                final.coq
+                final.iris
+              ];
+              # The actris repository bundles experimental side developments
+              # (multris, linking_actris, linear_actris) that lag behind the
+              # iris release; build and install only the core actris/ library.
+              preBuild = ''
+                patchShebangs .
+                for f in _CoqProject _RocqProject; do
+                  if [ -f "$f" ]; then
+                    grep -E '^(-.*|actris/.*)$' "$f" > "$f".new
+                    mv "$f".new "$f"
+                  fi
+                done
+              '';
+            };
             cryptis = prev.mkCoqDerivation {
               pname = "cryptis";
               version = ./.;
@@ -87,6 +110,7 @@
                 final.mathcomp.ssreflect
                 final.deriving
                 final.iris
+                final.actris
                 final.stdlib
               ];
             };

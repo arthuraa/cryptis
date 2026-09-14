@@ -46,7 +46,7 @@ iMod (load_call t1 with "db mapsto") as "(load & mapsto & waiting)".
 wp_lam; wp_pures. wp_list.
 iDestruct "ctx" as "(_ & ? & _ & ctx)".
 iApply wp_fupd.
-wp_apply (RPC.wp_call with "[] [$conn $load]").
+wp_apply (RPC.wp_call with "[$conn $load]").
 { do 4!iSplit => //=; by eauto. }
 iIntros "%t' (conn & inv_t & p_t)".
 iPoseProof ("waiting" with "inv_t") as "(res & db)".

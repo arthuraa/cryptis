@@ -7,8 +7,8 @@ From iris.bi.lib Require Import fractional.
 From iris.base_logic.lib Require Import invariants.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import ticket_lock.
-From cryptis Require Import lib cryptis primitives tactics role.
-From cryptis.lib Require Import saved_prop.
+From cryptis Require Import lib term cryptis primitives tactics role.
+From cryptis.lib Require Import gmeta nown saved_prop.
 From cryptis.examples Require Import iso_dh.
 
 Set Implicit Arguments.
@@ -53,6 +53,8 @@ Global Instance subG_connGS Σ : subG connΣ Σ → connGS Σ.
 Proof. solve_inG. Qed.
 
 Record params Σ := Params {
+  init_pred :
+    sign_key → sign_key → sess_info → role → iProp Σ;
   chan_inv :
     sign_key → sign_key → sess_info → list term → list term → iProp Σ;
 }.
@@ -70,10 +72,18 @@ Implicit Types b : bool.
 Implicit Types v : val.
 Implicit Types (ok : Prop) (failed : bool).
 Implicit Types (si : sess_info) (rl : role).
+Implicit Types (ci : sign_key → sign_key → sess_info → list term → list term → iProp).
 Implicit Types (ps : params Σ).
 
 Definition failure skI skR : iProp :=
    public skI ∨ public skR.
+
+Definition wf_sess_info si : iProp :=
+  session (si_init si) (si_resp si) si.
+
+#[global]
+Instance wf_sess_info_persistent si : Persistent (wf_sess_info si).
+Proof. apply _. Qed.
 
 Local Notation chanN := (iso_dhN.@"res".@"chan").
 Local Notation recvN := (chanN.@"recv").
@@ -158,20 +168,21 @@ Definition chan gb rl ts : iProp := ∃ ts',
   sent_list gb rl (ts' ++ ts) ∗
   recv_count gb (swap_role rl) (length ts').
 
-Definition chan_inv_for ps skI skR si rl ts_send ts_recv : iProp :=
-  chan_inv ps skI skR si
+Definition chan_inv_for ci skI skR si rl ts_send ts_recv : iProp :=
+  ci skI skR si
     (if rl is Init then ts_send else ts_recv)
     (if rl is Init then ts_recv else ts_send).
 
-Definition chan_ctx ps skI skR si rl : iProp := ∃ ts_send ts_recv,
+Definition chan_ctx ci skI skR si rl : iProp := ∃ ts_send ts_recv,
   chan (si_resp_share si) rl ts_send ∗
   chan (si_resp_share si) (swap_role rl) ts_recv ∗
-  chan_inv_for ps skI skR si rl ts_send ts_recv.
+  steps_lb (length ts_send) ∗ steps_lb (length ts_recv) ∗
+  chan_inv_for ci skI skR si rl ts_send ts_recv.
 
-Definition counters ps skI skR si rl n m : iProp :=
+Definition counters ci skI skR si rl n m : iProp :=
   sent_count (si_resp_share si) rl n ∗
   recv_count (si_resp_share si) rl m ∗
-  inv connN (chan_ctx ps skI skR si rl).
+  inv connN (chan_ctx ci skI skR si rl).
 
 Lemma chan_send t gb rl n ts :
   sent_count gb rl n -∗
@@ -210,10 +221,10 @@ iFrame. iModIntro. iSplit => //=. iExists (ts1 ++ [t]).
 rewrite -app_assoc /= length_app Nat.add_comm. by iFrame.
 Qed.
 
-Lemma chan_alloc ps skI skR si :
+Lemma chan_alloc ci skI skR si :
   term_token (si_resp_share si) (↑chanN) -∗
-  chan_inv ps skI skR si [] [] ={⊤}=∗
-  inv connN (chan_ctx ps skI skR si Init) ∗
+  ci skI skR si [] [] ={⊤}=∗
+  inv connN (chan_ctx ci skI skR si Init) ∗
   recv_count (si_resp_share si) Init 0 ∗
   recv_count (si_resp_share si) Resp 0 ∗
   sent_count (si_resp_share si) Init 0 ∗
@@ -232,95 +243,144 @@ iAssert (chan _ Init []) with "[sI rR]" as "cI".
 { iExists []. by iFrame. }
 iAssert (chan _ Resp []) with "[sR rI]" as "cR".
 { iExists []. by iFrame. }
-iApply (inv_alloc connN ⊤ (chan_ctx ps skI skR si Init) with "[$cI $cR I]").
-by iApply "I".
+iMod steps_lb_0 as "#?".
+iApply (inv_alloc connN ⊤ (chan_ctx ci skI skR si Init) with "[$cI $cR I]").
+iFrame. rewrite /=. by eauto.
 Qed.
 
-Lemma counters_alloc ps skI skR si :
+Lemma counters_alloc ci skI skR si :
   term_token (si_resp_share si) (↑chanN) -∗
-  chan_inv ps skI skR si [] [] ={⊤}=∗
-  counters ps skI skR si Init 0 0 ∗
-  counters ps skI skR si Resp 0 0.
+  ci skI skR si [] [] ={⊤}=∗
+  counters ci skI skR si Init 0 0 ∗
+  counters ci skI skR si Resp 0 0.
 Proof.
 iIntros "tok inv".
-iMod (chan_alloc ps skI skR si with "tok inv") as "(#inv & ? & ? & ? & ?)".
+iMod (chan_alloc ci skI skR si with "tok inv") as "(#inv & ? & ? & ? & ?)".
 iFrame. iFrame "#". iModIntro.
 iApply (inv_iff with "inv").
 iIntros "!> !>".
-by iSplit; iIntros "(%ts_send & %ts_recv & ? & ? & ?)"; iFrame.
+by iSplit; iIntros "(%ts_send & %ts_recv & ? & ? & ? & ? & ?)"; iFrame.
 Qed.
 
-Lemma counters_send φ ps skI skR si rl n m t :
-  counters ps skI skR si rl n m -∗
-  (∀ ts_send ts_recv,
-      ▷ chan_inv_for ps skI skR si rl ts_send ts_recv ={⊤ ∖ ↑connN}=∗
-      ▷ chan_inv_for ps skI skR si rl (ts_send ++ [t]) ts_recv ∗
-      ▷ φ skI skR si) ={⊤}=∗
-  sent_at (si_resp_share si) rl t n ∗
-  counters ps skI skR si rl (S n) m ∗
-  ▷ φ skI skR si.
-Proof.
-iIntros "(sent & recv & #inv) upd".
-iInv connN as "(%ts_send & %ts_recv & >chan & >chan' & ctx)".
-iPoseProof ("upd" with "ctx") as ">(ctx & post)".
-iMod (chan_send t with "sent chan") as "(? & ? & ?)".
-by iFrame.
-Qed.
-
-Lemma counters_recv φ ps skI skR si rl n m t :
-  counters ps skI skR si rl n m -∗
-  sent_at (si_resp_share si) (swap_role rl) t m -∗
-  (∀ ts_send ts_recv,
-      ▷ chan_inv_for ps skI skR si rl ts_send (t :: ts_recv) ={⊤ ∖ ↑connN}=∗
-      ▷ chan_inv_for ps skI skR si rl ts_send ts_recv ∗
-      ▷ φ skI skR si t) ={⊤}=∗
-  counters ps skI skR si rl n (S m) ∗
-  ▷ φ skI skR si t.
-Proof.
-iIntros "(sent & recv & #inv) #sent_at upd".
-iInv connN as "(%ts_send & %ts_recv & >chan & >chan' & ctx)".
-rewrite -[in recv_count _ rl _](swap_roleK rl).
-iMod (chan_recv t with "chan' sent_at recv") as "(-> & chan' & recv)".
-rewrite swap_roleK. iPoseProof ("upd" with "ctx") as ">[ctx inv_t]".
-by iFrame.
-Qed.
+Definition conn_wrap_msg rl (n : nat) msg :=
+  Spec.of_list [
+    TInt (if rl is Init then 1 else 0);
+    TInt n;
+    msg
+  ].
 
 Definition conn_msg_pred kS t : iProp :=
   ∃ si rl n t',
-    let rl' := TInt (if rl is Init then 1 else 0) in
     ⌜kS = si_key si⌝ ∗
-    ⌜t = Spec.of_list [rl'; TInt n; t']⌝ ∗
+    ⌜t = conn_wrap_msg rl n t'⌝ ∗
     public t' ∗
     sent_at (si_resp_share si) rl t' n.
 
-Definition connected ps skI skR rl cs : iProp :=
+Lemma counters_send φ ci skI skR si rl n m msg Φ e :
+  Atomic WeaklyAtomic e →
+  TCEq (to_val e) None →
+  senc_pred connN conn_msg_pred -∗
+  public msg -∗
+  (public (si_key si) ∨ counters ci skI skR si rl n m) -∗
+  (public (si_key si) ∨
+   (∀ ts_send ts_recv,
+      ▷ chan_inv_for ci skI skR si rl ts_send ts_recv ={⊤ ∖ ↑connN,∅}=∗
+      |={∅}▷=>^(S (length ts_recv)) |={∅,⊤ ∖ ↑connN}=>
+      chan_inv_for ci skI skR si rl (ts_send ++ [msg]) ts_recv ∗
+      φ skI skR si)) -∗
+  WP e @ ∅ {{ v,
+    (public (si_key si) ∨
+            counters ci skI skR si rl (S n) m ∗
+            ▷ φ skI skR si ∗
+            conn_msg_pred (si_key si) (conn_wrap_msg rl n msg)) ={⊤ ∖ ↑connN}=∗
+            Φ v }} -∗
+  WP e {{ Φ }}.
+Proof.
+iIntros (??) "#senc_pred #p_m counters upd wp".
+iDestruct "counters" as "[#fail|(sent & recv & #inv)]".
+{ iApply wp_fupd. iApply (wp_mask_mono _ ∅) => //.
+  iApply (wp_wand with "wp").
+  iIntros "% post". iApply (fupd_mask_mono (⊤ ∖ ↑connN)) => //.
+  iApply "post". by eauto. }
+iDestruct "upd" as "[#fail|upd]".
+{ iApply wp_fupd. iApply (wp_mask_mono _ ∅) => //.
+  iApply (wp_wand with "wp").
+  iIntros "% post". iApply (fupd_mask_mono (⊤ ∖ ↑connN)) => //.
+  iApply "post". by eauto. }
+iInv connN as "(%ts_send & %ts_recv & >chan & >chan' & >#Hl & >#Hr & ctx)".
+iPoseProof ("upd" with "ctx") as "upd".
+iApply (wp_step_fupdN_lb _ _ _ ∅ with "Hr [upd]"); first set_solver.
+{ rewrite difference_empty_L. iApply "upd". }
+wp_apply (wp_lb_update with "Hl").
+iMod (chan_send msg with "sent chan") as "(? & ? & #?)".
+iApply (wp_wand with "wp").
+iClear "Hl". iIntros (v) "post #Hl (? & m_p)".
+iFrame. rewrite length_app Nat.add_comm /=.
+iSplitR; eauto. iModIntro. iApply "post". iRight. iFrame.
+iSplit => //. iExists si, rl, n, msg. by eauto.
+Qed.
+
+Lemma counters_recv φ ci skI skR si rl n m t :
+  counters ci skI skR si rl n m -∗
+  sent_at (si_resp_share si) (swap_role rl) t m -∗
+  (∀ ts_send ts_recv,
+      ▷ chan_inv_for ci skI skR si rl ts_send (t :: ts_recv) ={⊤ ∖ ↑connN}=∗
+      ▷ chan_inv_for ci skI skR si rl ts_send ts_recv ∗
+      ▷ φ skI skR si t) ={⊤}=∗
+  counters ci skI skR si rl n (S m) ∗
+  ▷ φ skI skR si t.
+Proof.
+iIntros "(sent & recv & #inv) #sent_at upd".
+iInv connN as "(%ts_send & %ts_recv & >chan & >chan' & >#Hl & >#Hr & ctx)".
+rewrite -[in recv_count _ rl _](swap_roleK rl).
+iMod (chan_recv t with "chan' sent_at recv") as "(-> & chan' & recv)".
+rewrite swap_roleK. iPoseProof ("upd" with "ctx") as ">[ctx inv_t]".
+rewrite /=. iFrame. iModIntro. iSplit => //.
+iModIntro; iSplit => //. iApply (steps_lb_le with "Hr"). lia.
+Qed.
+
+Definition base_ctx : iProp :=
+  senc_pred connN conn_msg_pred.
+
+Lemma base_ctx_alloc E :
+  ↑connN ⊆ E →
+  seal_pred_token SENC E ==∗
+  base_ctx ∗ seal_pred_token SENC (E ∖ ↑connN).
+Proof.
+iIntros "% tok". iFrame "#". by iApply seal_pred_set.
+Qed.
+
+Definition connected ci skI skR rl cs : iProp :=
+  ⌜si_init cs = skI⌝ ∗
+  ⌜si_resp cs = skR⌝ ∗
   ⌜cs_role cs = rl⌝ ∗
-  session skI skR cs ∗
+  base_ctx ∗
   channel (cs_chan cs) ∗
+  wf_sess_info cs ∗
   ∃ n m, cs_ts cs ↦∗ [ #n; #m ] ∗
-    (public (si_key cs) ∨ counters ps skI skR cs rl n m).
+    (public (si_key cs) ∨ counters ci skI skR cs rl n m).
 
-Lemma connected_channel ps skI skR rl cs :
-  connected ps skI skR rl cs -∗
+Lemma connected_channel ci skI skR rl cs :
+  connected ci skI skR rl cs -∗
   channel (cs_chan cs).
-Proof. by iIntros "(_ & _ & ? & _)". Qed.
+Proof. by iIntros "(_ & _ & _ & _ & ? & _)". Qed.
 
-Lemma connected_public_key ps skI skR rl cs :
-  connected ps skI skR rl cs -∗
+Lemma connected_public_key ci skI skR rl cs :
+  connected ci skI skR rl cs -∗
   release_token (si_share_of rl cs) -∗
   public (si_key cs) -∗
   ◇ compromised cs.
 Proof.
 iIntros "conn rel #p_k".
-iPoseProof "conn" as "(<- & #sess & _)".
-by iApply (session_compromised with "[] [//] rel").
+iPoseProof "conn" as "(_ & _ & <- & _ & _ & #sess & _)".
+by iApply (session_compromised with "sess p_k rel").
 Qed.
 
-Lemma connected_public_key_or ps skI skR rl cs P :
-  connected ps skI skR rl cs -∗
+Lemma connected_public_key_or ci skI skR rl cs P :
+  connected ci skI skR rl cs -∗
   release_token (si_share_of rl cs) -∗
   public (si_key cs) ∨ P -∗
-  connected ps skI skR rl cs ∗
+  connected ci skI skR rl cs ∗
   release_token (si_share_of rl cs) ∗
   ◇ (compromised cs ∨ P).
 Proof.
@@ -329,76 +389,68 @@ iPoseProof (connected_public_key with "conn rel fail") as "#comp".
 iFrame. by iLeft.
 Qed.
 
-Lemma connected_released_session ps skI skR rl cs :
-  connected ps skI skR rl cs -∗
+Lemma connected_released_session ci skI skR rl cs :
+  connected ci skI skR rl cs -∗
   □ (▷ released_session cs → public (si_key cs)).
 Proof.
-iIntros "(_ & #sess & _)".
-iIntros "!> #rel". by iApply session_released_session.
+iIntros "(_ & _ & _ & _ & _ & #sess & _)".
+iIntros "!> #rel". by iApply (session_released_session with "sess rel").
 Qed.
 
-Lemma connected_session ps skI skR rl cs :
-  connected ps skI skR rl cs -∗
+Lemma connected_session ci skI skR rl cs :
+  connected ci skI skR rl cs -∗
   session skI skR cs.
 Proof.
-by iIntros "(_ & #sess & _)".
+by iIntros "(<- & <- & _ & _ & _ & #sess & _)".
 Qed.
 
-Lemma connected_ok ps skI skR rl cs :
-  connected ps skI skR rl cs -∗
+Lemma connected_keyE ci skI skR rl cs :
+  connected ci skI skR rl cs -∗
+  ⌜skI = si_init cs⌝ ∗ ⌜skR = si_resp cs⌝ ∗ ⌜rl = cs_role cs⌝.
+Proof. by iIntros "(-> & -> & -> & _)". Qed.
+
+Lemma connected_ok ci skI skR rl cs :
+  connected ci skI skR rl cs -∗
   secret skI -∗
   secret skR -∗
   ◇ session_ok cs.
 Proof.
-iIntros "(_ & #sess & _) s_kI s_kR".
-by iApply (secret_session with "s_kI s_kR").
+iIntros "(<- & <- & <- & _ & _ & #sess & % & % & _ & _) s_kI s_kR".
+by iApply (secret_session with "s_kI s_kR sess").
 Qed.
 
-Lemma session_failed_failure ps skI skR rl cs :
-  connected ps skI skR rl cs -∗
-  compromised cs  -∗
-  failure skI skR.
-Proof.
-iIntros "(_ & #sess & _) #comp".
-by iApply session_compromised'.
-Qed.
+Lemma session_failed_failure si :
+  compromised si  ⊢ failure (si_init si) (si_resp si).
+Proof. by iIntros "(#failed & _)". Qed.
 
-Lemma connected_failure ps skI skR rl cs :
-  connected ps skI skR rl cs -∗
+Lemma connected_failure ci skI skR rl cs :
+  connected ci skI skR rl cs -∗
   release_token (si_share_of rl cs) -∗
   public (si_key cs) -∗
   ◇ failure skI skR.
 Proof.
 iIntros "conn rel fail".
-iPoseProof (connected_public_key with "conn rel fail") as "{fail} #>fail".
-iDestruct "conn" as "(_ & #sess & _)".
-iModIntro. by iApply session_compromised'.
-Qed.
-
-Definition pre_ctx `{!iso_dhGS Σ} : iProp :=
-  iso_dh_ctx ∗
-  senc_pred connN conn_msg_pred.
-
-Lemma pre_ctx_alloc `{!iso_dhGS Σ} E :
-  ↑connN ⊆ E →
-  iso_dh_ctx -∗
-  seal_pred_token SENC E ==∗
-  pre_ctx ∗ seal_pred_token SENC (E ∖ ↑connN).
-Proof.
-iIntros "% #? tok". iFrame "#". by iApply seal_pred_set.
+iPoseProof (connected_keyE with "conn") as "#(-> & -> & _)".
+iMod (connected_public_key with "conn rel fail") as "fail".
+by iApply (session_failed_failure with "fail").
 Qed.
 
 Definition ctx `{!iso_dhGS Σ} N ps : iProp :=
-  pre_ctx ∗
-  iso_dh_pred N (λ skI skR si rl, counters ps skI skR si rl 0 0).
+  base_ctx ∗
+  iso_dh_ctx ∗
+  iso_dh_pred N (λ skI skR si rl,
+    init_pred ps skI skR si rl ∗
+    counters (chan_inv ps) skI skR si rl 0 0
+  )%I.
 
 Lemma ctx_alloc `{!iso_dhGS Σ} N ps E :
   ↑N ⊆ E →
-  pre_ctx -∗
+  base_ctx -∗
+  iso_dh_ctx -∗
   iso_dh_token E ==∗
   ctx N ps ∗ iso_dh_token (E ∖ ↑N).
 Proof.
-iIntros "% #ctx tok". iFrame "#".
+iIntros "% #? #? tok". iFrame "#".
 by iApply iso_dh_pred_set.
 Qed.
 
