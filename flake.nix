@@ -83,8 +83,7 @@
           coqPackages = prev.coqPackages_9_1.overrideScope (final: prev: {
             actris = prev.mkCoqDerivation {
               pname = "actris";
-              defaultVersion = "dev";
-              release.dev.src = inputs.actris;
+              version = inputs.actris.outPath;
               propagatedBuildInputs = [
                 final.coq
                 final.iris
