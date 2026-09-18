@@ -16,6 +16,11 @@ depends: [
   "coq-deriving" {= "0.2.3"}
   "rocq-iris" {= "4.5.0"}
   "rocq-iris-heap-lang" {= "4.5.0"}
+  "rocq-actris" {= "dev"}
+]
+
+pin-depends: [
+  ["rocq-actris.dev" "git+https://gitlab.mpi-sws.org/chandradeepdey/actris.git#367149af8552433256d96394a40227f3b15b2cf2"]
 ]
 
 build: [make "-j%{jobs}%"]
