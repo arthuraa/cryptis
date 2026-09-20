@@ -1,9 +1,4 @@
--arg "-w -convert_concl_no_check"
--arg "-w -redundant-canonical-projection"
--arg "-w -notation-overridden"
-
--R examples cryptis.examples
--R cryptis cryptis
+# List of source files included in the libraries.
 
 cryptis/lib/mathcomp_compat.v
 cryptis/lib/list_sort.v
@@ -101,6 +96,8 @@ examples/alist/impl.v
 examples/alist/proofs.v
 examples/alist.v
 
+## Storage
+
 examples/store.v
 examples/store/impl.v
 examples/store/proofs/base.v
@@ -122,10 +119,11 @@ examples/store/game.v
 
 examples/permanent.v
 examples/counter.v
-examples/nsl_secr.v
-examples/nsl_auth.v
 
 ## NSL
+
+examples/nsl_secr.v
+examples/nsl_auth.v
 
 ## CR
 
@@ -170,4 +168,3 @@ examples/store_sess/proofs/client.v
 examples/store_sess/proofs/server.v
 examples/store_sess/proofs.v
 examples/store_sess/game.v
-

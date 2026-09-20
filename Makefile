@@ -1,29 +1,40 @@
 # Default target
-all: RocqMakefile
-	+@$(MAKE) -f RocqMakefile all
+all: Makefile.rocq
+	+@$(MAKE) -f Makefile.rocq all
 .PHONY: all
+
+# Build with dune.
+# This exists only for CI; you should just call `dune build` directly instead.
+dune:
+	@dune build --display=short
+.PHONY: dune
 
 # Permit local customization
 -include Makefile.local
 
+# Generate the _RocqProject file.
+_RocqProject: gen_RocqProject.sh config/paths config/flags config/source-list $(wildcard config/local)
+	@./$< > $@
+
 # Forward most targets to Rocq makefile (with some trick to make this phony)
-%: RocqMakefile phony
+%: Makefile.rocq phony
 	@#echo "Forwarding $@"
-	+@$(MAKE) -f RocqMakefile $@
+	+@$(MAKE) -f Makefile.rocq $@
 phony: ;
 .PHONY: phony
 
-clean: RocqMakefile
-	+@$(MAKE) -f RocqMakefile clean
+clean: Makefile.rocq
+	+@$(MAKE) -f Makefile.rocq clean
 	@# Make sure not to enter the `_opam` folder.
 	find [a-z]*/ \( -name "*.d" -o -name "*.vo" -o -name "*.vo[sk]" -o -name "*.aux" -o -name "*.cache" -o -name "*.glob" -o -name "*.vio" \) -print -delete || true
-	find . -maxdepth 1 \( -name "*.d" -o -name "*.vo" -o -name "*.vo[sk]" -o -name "*.aux" -o -name "*.cache" -o -name "*.glob" -o -name "*.vio" \) -print -delete || true
-	rm -f RocqMakefile* .lia.cache builddep/*
+	rm -rf Makefile.rocq Makefile.rocq.conf .lia.cache builddep/* _build */_RocqProject
+	# We do not clean _RocqProject since ProofGeneral and other editors need that,
+	# and 'make clean' is often needed to remove the .vo files after a dependency update.
 .PHONY: clean
 
 # Create Rocq Makefile.
-RocqMakefile: _CoqProject Makefile
-	"$(COQBIN)coq_makefile" -f _CoqProject -o RocqMakefile $(EXTRA_COQFILES)
+Makefile.rocq: _RocqProject Makefile
+	"$(COQBIN)rocq" makefile -f _RocqProject -o Makefile.rocq $(EXTRA_COQFILES)
 
 # Install build-dependencies
 OPAMFILES=$(wildcard *.opam)
@@ -47,6 +58,10 @@ builddep: builddep-opamfiles
 	@opam install $(OPAMFLAGS) -y $(BUILDDEPFILES)
 .PHONY: builddep
 
-# Some files that do *not* need to be forwarded to RocqMakefile.
+# Backwards compatibility target
+build-dep: builddep
+.PHONY: build-dep
+
+# Some files that do *not* need to be forwarded to Makefile.rocq.
 # ("::" lets Makefile.local overwrite this.)
-Makefile Makefile.local _CoqProject $(OPAMFILES):: ;
+Makefile Makefile.local config/paths config/flags config/source-list config/local $(OPAMFILES):: ;

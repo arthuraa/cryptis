@@ -1,0 +1,6 @@
+(include_subdirs qualified)
+(rocq.theory
+ (name cryptis.examples)
+ (package rocq-cryptis-examples)
+ (generate_project_file)
+ (theories cryptis))
