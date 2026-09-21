@@ -22,7 +22,7 @@ Unset Printing Implicit Defensive.
 
 Local Existing Instance ticket_lock.
 
-Notation dbN := (nroot.@"db_sess").
+Abbreviation dbN := (nroot.@"db_sess").
 
 Record server_state := {
   ss_key : sign_key;
@@ -63,7 +63,7 @@ Section Defs.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ,
           !sessG Σ, !storeGS Σ, !tlockG Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types (si : sess_info).
 Implicit Types (cs : GenConn.state).

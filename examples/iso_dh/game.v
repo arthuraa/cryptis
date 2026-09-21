@@ -19,7 +19,7 @@ Existing Instance ticket_lock.
 Section Game.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ, !tlockG Σ, !iso_dhGS Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types t : term.
 Implicit Types (skI skR : sign_key).

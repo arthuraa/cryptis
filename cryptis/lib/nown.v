@@ -14,7 +14,7 @@ Unset Printing Implicit Defensive.
 Section NOwn.
 
 Context `{!metaGS Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types γ : gname.
 

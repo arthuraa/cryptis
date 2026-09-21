@@ -587,8 +587,8 @@ Proof.
 move=> finj fij.
 elim: X fij => [//|x X IH] fij; rewrite fmap_cons !cancel_cons.
 have fijx : f (i x) = j (f x) by apply: fij; rewrite elem_of_cons; left.
-rewrite -IH; last by move=> y yX; apply: fij; rewrite elem_of_cons; right.
-rewrite /insert (bool_decide_ext (i x ∈ cancel i X) (j (f x) ∈ f <$> cancel i X)); last first.
+rewrite -IH; first by move=> y yX; apply: fij; rewrite elem_of_cons; right.
+rewrite /insert (bool_decide_ext (i x ∈ cancel i X) (j (f x) ∈ f <$> cancel i X)).
 { rewrite -fijx; split.
   - move=> Hin; apply/list_elem_of_fmap; exists (i x); by split.
   - by move=> /list_elem_of_fmap [a [/finj <- ?]]. }
@@ -637,7 +637,7 @@ Lemma to_fmap {T U} `{EqDecision T} `{EqDecision U}
 Proof.
 move=> finj fij fRS.
 rewrite /to (merge_sort_fmap R S f fRS); congr (merge_sort S _).
-rewrite (cancel_fmap i j f (prune i X) finj); last first.
+rewrite (cancel_fmap i j f (prune i X) finj).
 { move=> x xin; apply: fij; exact: (prune_elem_of _ _ _ xin). }
 by rewrite (prune_fmap i j f X finj fij).
 Qed.
@@ -727,8 +727,8 @@ have e : f <$> to R i X ≡ₚ f <$> cancel i (prune i X).
   by rewrite /to; apply: fmap_Permutation; exact: merge_sort_Permutation.
 rewrite (count_proper j z _ _ e).
 rewrite (count_fmap_cancel i j f z (prune i X) jKz);
-  [ |move=> x xin; apply: jKf; exact: (prune_elem_of _ _ _ xin)
-   |move=> x xin; apply: fij; exact: (prune_elem_of _ _ _ xin)].
+  [move=> x xin; apply: jKf; exact: (prune_elem_of _ _ _ xin)
+   |move=> x xin; apply: fij; exact: (prune_elem_of _ _ _ xin)| ].
 exact: count_fmap_prune.
 Qed.
 

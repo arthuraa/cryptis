@@ -15,7 +15,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Local Notation connN := (nroot.@"conn").
+#[local] Abbreviation connN := (nroot.@"conn").
 
 Record state := State {
   cs_si   :> sess_info;
@@ -62,7 +62,7 @@ Record params Σ := Params {
 Section Defs.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !connGS Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types (cs : state).
 Implicit Types (kS t : term) (ts : list term).
@@ -85,10 +85,10 @@ Definition wf_sess_info si : iProp :=
 Instance wf_sess_info_persistent si : Persistent (wf_sess_info si).
 Proof. apply _. Qed.
 
-Local Notation chanN := (iso_dhN.@"res".@"chan").
-Local Notation recvN := (chanN.@"recv").
-Local Notation sentN := (chanN.@"sent").
-Local Notation predN := (chanN.@"pred").
+#[local] Abbreviation chanN := (iso_dhN.@"res".@"chan").
+#[local] Abbreviation recvN := (chanN.@"recv").
+#[local] Abbreviation sentN := (chanN.@"sent").
+#[local] Abbreviation predN := (chanN.@"pred").
 
 Definition recv_count gb rl n : iProp :=
   term_own gb (recvN.@rl) (●{#1/2} MaxNat n).

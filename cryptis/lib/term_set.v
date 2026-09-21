@@ -15,7 +15,7 @@ Local Existing Instance ticket_lock.
 Section TermSet.
 
 Context `{!heapGS Σ, !spawnG Σ, !cryptisGS Σ, !tlockG Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types (rl : role) (t kI kR nI nR sI sR kS : term).
 

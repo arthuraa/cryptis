@@ -1,6 +1,6 @@
--arg "-w -convert_concl_no_check"
 -arg "-w -redundant-canonical-projection"
 -arg "-w -notation-overridden"
+-arg "-w -level-tolerance"
 
 -R examples cryptis.examples
 -R cryptis cryptis
@@ -170,4 +170,3 @@ examples/store_sess/proofs/client.v
 examples/store_sess/proofs/server.v
 examples/store_sess/proofs.v
 examples/store_sess/game.v
-
