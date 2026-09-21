@@ -16,7 +16,7 @@ Section Minted.
 
 Context `{heapGS Σ}.
 
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 lock Definition minted t : iProp :=
   [∗ set] a ∈ nonces_of_term t, meta (nonce_loc a) (nroot.@"minted") ().

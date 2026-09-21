@@ -22,7 +22,7 @@ Instance repr_handler : Repr handler := handler_val.
 Section Proofs.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ, !rpcGS Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types (cs : GenConn.state).
 Implicit Types (skI skR : sign_key) (kS t : term).
@@ -30,7 +30,7 @@ Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Notation rpcN := (nroot.@"rpc").
+Abbreviation rpcN := (nroot.@"rpc").
 
 Lemma wp_connect P c skI skR :
   channel c -∗

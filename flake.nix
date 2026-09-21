@@ -80,7 +80,7 @@
         };
 
         overlays.default = final: prev: {
-          coqPackages = prev.coqPackages_9_1.overrideScope (final: prev: {
+          coqPackages = prev.coqPackages_9_2.overrideScope (final: prev: {
             actris = prev.mkCoqDerivation {
               pname = "actris";
               version = inputs.actris.outPath;

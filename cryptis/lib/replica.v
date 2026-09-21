@@ -10,10 +10,10 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Notation replicaG Σ A :=
+Abbreviation replicaG Σ A :=
   (inG Σ (dfrac_agreeR (leibnizO A))).
 
-Notation replicaΣ A :=
+Abbreviation replicaΣ A :=
   (GFunctor (dfrac_agreeR (leibnizO A))).
 
 Section Updates.

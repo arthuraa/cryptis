@@ -18,7 +18,7 @@ Section Verif.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ}.
 Context `{!RPC.rpcGS Σ, !storeGS Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Context `{!storeG Σ}.
 

@@ -1,7 +1,7 @@
 From cryptis Require Import mathcomp_compat lib.
 From cryptis.lib Require Import list_sort.
 From mathcomp Require Import ssreflect.
-From mathcomp Require Import all_order.
+From mathcomp Require Import order.
 From mathcomp Require eqtype ssrbool path.
 From deriving Require Import deriving.
 From stdpp Require Import gmap sorting lexico.
@@ -153,6 +153,7 @@ Global Instance pre_term_countable : Countable PreTerm.pre_term :=
     defined in [base.v], so that stdpp's [merge_sort] and [StronglySorted] can be
     used to canonicalise products. *)
 Section PreTermOrder.
+#[warnings="-ambiguous-paths"]
 Import Order.POrderTheory Order.TotalTheory ssrbool.
 Open Scope order_scope.
 
@@ -392,6 +393,7 @@ End OrderE.
    decidability instance needs stdpp's [sorting] typeclass machinery, which the
    (mathcomp-only) [term] layer downstream cannot import. *)
 Section SortMergeSort.
+#[warnings="-ambiguous-paths"]
 Import Order.POrderTheory Order.TotalTheory ssrbool.
 Open Scope order_scope.
 

@@ -32,9 +32,9 @@ Proof. solve_inG. Qed.
 Section TermMeta.
 
 Context `{!heapGS Σ}.
-Notation iProp := (iProp Σ).
-Notation iPropO := (iPropO Σ).
-Notation iPropI := (iPropI Σ).
+Abbreviation iProp := (iProp Σ).
+Abbreviation iPropO := (iPropO Σ).
+Abbreviation iPropI := (iPropI Σ).
 
 Definition term_meta_inv `{!term_metaGS Σ} : iProp :=
   ∃ names : gmap term gname,

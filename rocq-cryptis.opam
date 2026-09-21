@@ -11,8 +11,8 @@ dev-repo: "git+https://github.com/arthuraa/cryptis.git"
 
 depends: [
   "rocq-prover"
-  "rocq-core" {= "9.1.1"}
-  "rocq-mathcomp-ssreflect" {= "2.5.0"}
+  "rocq-core" {= "9.2.0"}
+  "rocq-mathcomp-ssreflect" {= "2.6.0"}
   "coq-deriving" {= "0.2.3"}
   "rocq-iris" {= "4.5.0"}
   "rocq-iris-heap-lang" {= "4.5.0"}

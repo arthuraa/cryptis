@@ -16,7 +16,7 @@ Unset Printing Implicit Defensive.
 Section Verif.
 
 Context `{!heapGS Σ, !cryptisGS Σ, !iso_dhGS Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types (rl : role) (t pkI pkR ga kS : term).
 Implicit Types (skI skR : sign_key).

@@ -19,7 +19,7 @@ A --> B: {nA, nB, pk(B)}_sk(A)
 Section CR.
 
 Context `{!heapGS Σ, !cryptisGS Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types t : term.
 Implicit Types skA skB : sign_key.

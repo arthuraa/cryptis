@@ -519,7 +519,7 @@ Qed.
 Lemma subterm_nonces_of_term t1 t2 :
   subterm t1 t2 → nonces_of_term t1 ⊆ nonces_of_term t2.
 Proof.
-elim: t2 / => //; try by intros; rewrite [nonces_of_term (_ _)]nonces_of_termE; set_solver.
+elim: t2 / => //; try by intros; rewrite [X in _ ⊆ X]nonces_of_termE; set_solver.
 - move => t' ts Nexp Nm Ni sub IH.
   have bt' : base t' = t' by exact: base_expN.
   rewrite (nonces_of_term_base_exps (TExpN t' ts)) /TExpN.

@@ -324,9 +324,9 @@ Qed.
 Section Opaque.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
-Notation opN := (nroot.@"op").
+Abbreviation opN := (nroot.@"op").
 
 Lemma _wp_H (tag : string) (val : term) Ψ:
   Ψ (repr (hash_result tag val)) ⊢ WP _H tag val {{ Ψ }}.
