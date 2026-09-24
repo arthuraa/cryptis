@@ -141,10 +141,10 @@ Definition CShare_wf ke : iProp :=
   | Psk psk cn =>
     minted psk ∧ public cn
   | Dh g cn x  =>
-    ⌜negb (is_exp g)⌝ ∧ public g ∧ public cn ∧ dh_seed (λ _, True)%I x
+    ⌜negb (is_exp g)⌝ ∧ ⌜negb (is_gmul g)⌝ ∧ ⌜negb (is_ginv g)⌝ ∧ public g ∧ public cn ∧ dh_seed (λ _, True)%I x
   | PskDh psk g cn x =>
     minted psk ∧
-    ⌜negb (is_exp g)⌝ ∧ public g ∧ public cn ∧ dh_seed (λ _, True)%I x
+    ⌜negb (is_exp g)⌝ ∧ ⌜negb (is_gmul g)⌝ ∧ ⌜negb (is_ginv g)⌝ ∧ public g ∧ public cn ∧ dh_seed (λ _, True)%I x
   end.
 
 #[global]
@@ -170,11 +170,11 @@ case: ke => [psk cn|g cn x|psk g cn x] //=.
   rewrite public_tag public_of_list /=; do !iSplit => //.
   rewrite public_THash minted_tag; iRight; iSplit => //.
   by iExists _, _, _; eauto.
-- iDestruct "wf" as "(% & ? & ? & ?)".
+- iDestruct "wf" as "(% & % & % & ? & ? & ?)".
   rewrite public_tag public_of_list /=.
   do !iSplit => //.
   by iApply dh_public_TExp; eauto.
-- iDestruct "wf" as "(? & % & ? & ? & ?)".
+- iDestruct "wf" as "(? & % & % & % & ? & ? & ?)".
   rewrite public_tag public_of_list /=.
   do !iSplit => //.
     rewrite public_THash minted_tag; iRight; iSplit => //.
@@ -199,7 +199,7 @@ iApply wp_Meth_case; case: ke => [psk|g|psk g]; wp_pures.
   iApply ("post" $! (Psk psk cn) with "[] [] token") => //=.
   do !iSplit => //.
   by iApply "p_cn".
-- iDestruct "p_ke" as "[% p_ke]".
+- iDestruct "p_ke" as "(% & % & % & p_ke)".
   wp_bind (mk_dh _); iApply (wp_mk_dh (λ _, True)%I ∅ _) => //.
   + by iApply public_minted.
   + by iIntros "!> %"; rewrite elem_of_empty; iIntros ([]).
@@ -212,7 +212,7 @@ iApply wp_Meth_case; case: ke => [psk|g|psk g]; wp_pures.
   iApply ("post" $! (Dh g cn a)) => //=.
   do !iSplit => //.
   by iApply "p_cn".
-- iDestruct "p_ke" as "(? & % & ?)".
+- iDestruct "p_ke" as "(? & % & % & % & ?)".
   wp_bind (mk_dh _); iApply (wp_mk_dh (λ _, True)%I ∅ _) => //.
   + by iApply public_minted.
   + iIntros "!> %"; rewrite elem_of_empty; iIntros "[]".

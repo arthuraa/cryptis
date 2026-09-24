@@ -198,12 +198,12 @@ Definition SShare_wf ke : iProp :=
   | Psk psk c_nonce s_nonce =>
     minted psk ∧ public c_nonce ∧ public s_nonce
   | Dh g cn sn gx y =>
-    ⌜negb (is_exp g)⌝ ∧ public g ∧ public cn ∧ public sn ∧ public gx ∧
+    ⌜negb (is_exp g)⌝ ∧ ⌜negb (is_gmul g)⌝ ∧ ⌜negb (is_ginv g)⌝ ∧ public g ∧ public cn ∧ public sn ∧ public gx ∧
     ⌜∀ x, subterm x gx → y ≠ x ∧ y ≠ TInv x⌝ ∧
     dh_seed (λ _, True)%I y
   | PskDh psk g cn sn gx y =>
     minted psk ∧
-    ⌜negb (is_exp g)⌝ ∧ public g ∧ public cn ∧ public sn ∧
+    ⌜negb (is_exp g)⌝ ∧ ⌜negb (is_gmul g)⌝ ∧ ⌜negb (is_ginv g)⌝ ∧ public g ∧ public cn ∧ public sn ∧
     public gx ∧
     ⌜∀ x, subterm x gx → y ≠ x ∧ y ≠ TInv x⌝ ∧
     dh_seed (λ _, True)%I y
@@ -214,7 +214,7 @@ Instance SShare_Persistent_wf ke : Persistent (SShare_wf ke).
 Proof. case: ke => *; apply _. Qed.
 
 Lemma wp_SShare_new N psk g (ke : CShare.t) Φ :
-  negb (is_exp g) →
+  negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
   Meth.compatible psk g (CShare.meth_of ke) →
   cryptis_ctx -∗
   minted psk -∗
@@ -227,7 +227,8 @@ Lemma wp_SShare_new N psk g (ke : CShare.t) Φ :
       Φ (term_of ke')) -∗
   WP I.new ke {{ Φ }}.
 Proof.
-iIntros (gXN e_check) "#? #s_psk #p_g #p_ke post"; rewrite /I.new; wp_pures.
+iIntros (gXN gNm gNi e_check) "#? #s_psk #p_g #p_ke post";
+  rewrite /I.new; wp_pures.
 iApply wp_CShare_case.
 case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
 - subst psk.
@@ -331,11 +332,11 @@ case: ke=>> /=.
   rewrite public_THash; iRight.
   rewrite minted_tag; iSplit => //.
   by iExists _, _, _; eauto.
-- iIntros "#(% & p_g & p_cn & p_sn & p_gx & _ & seed_y)".
+- iIntros "#(% & % & % & p_g & p_cn & p_sn & p_gx & _ & seed_y)".
   rewrite public_tag public_of_list /=.
   do !iSplit => //.
   by iApply dh_public_TExp; eauto.
-- iIntros "#(p_psk & % & p_g & p_cn & p_sn & p_gx & _ & seed_y)".
+- iIntros "#(p_psk & % & % & % & p_g & p_cn & p_sn & p_gx & _ & seed_y)".
   rewrite public_tag public_of_list /=.
   do !iSplit => //.
   + rewrite public_THash; iRight.
@@ -349,11 +350,11 @@ Proof.
 case: ke=>> /=.
 - iIntros "#(?&?&?)".
   rewrite minted_senc minted_of_list /=; do !iSplit; eauto.
-- iIntros "#(%&?&?&?&?&_&seed)".
+- iIntros "#(%&%&%&?&?&?&?&_&seed)".
   rewrite minted_senc; iApply all_minted_TExp; eauto.
   iDestruct "seed" as "(?&_)".
   by iSplit => //; iApply public_minted.
-- iIntros "#(?&%&?&?&?&?&_&seed)".
+- iIntros "#(?&%&%&%&?&?&?&?&_&seed)".
   rewrite minted_senc minted_of_list /=; do !iSplit => //.
   iApply all_minted_TExp; eauto.
   iDestruct "seed" as "(?&_)".
@@ -381,7 +382,7 @@ case: kex => [psk cn sn|g cn sn gx y|psk g cn sn gx y] /=.
 - iIntros "#(s_psk & p_cn & p_sn)".
   rewrite public_of_list /=. iIntros "(?&?&?)". by eauto.
 - by rewrite public_TInt /=; eauto.
-- iIntros "#(_ & _ & _ & _ & p_gx & dh_y)".
+- iIntros "#(_ & _ & _ & _ & _ & _ & p_gx & dh_y)".
   rewrite public_of_list /=. iIntros "(? & ? & _)". by eauto.
 Qed.
 
@@ -397,10 +398,10 @@ case: c_kex e => [psk cn sn|g cn sn x gy|psk g cn sn x gy] /=.
 - case: s_kex => //= _ _ _ [] /Spec.tag_inj [_ <-] <- <-.
   by rewrite public_of_list /=; iDestruct "p_k" as "(?&?&?&_)"; eauto.
 - case: s_kex => //= _ ? ? gx y [] <- _ _ <- e2.
-  iDestruct "wf1" as "#(%gXN & _ & _ & dh_x)".
+  iDestruct "wf1" as "#(%gXN & %gNm & %gNi & _ & _ & dh_x)".
   iPoseProof "dh_x" as "#dh_x2". iDestruct "dh_x2" as "(_ & %Nm_x & _)".
   move/negb_True: (gXN) => ?.
-  iDestruct "wf2" as "#(_ & _ & _ & _ & p_gx & %fresh_y & dh_y)".
+  iDestruct "wf2" as "#(_ & _ & _ & _ & _ & _ & p_gx & %fresh_y & dh_y)".
   have [??]: y ≠ x ∧ y ≠ TInv x.
     apply: fresh_y. rewrite (_ : TExp g x = TExpN g [x]); last by rewrite /TExpN TMulN1.
     apply: STExp2; eauto.
@@ -410,10 +411,10 @@ case: c_kex e => [psk cn sn|g cn sn x gy|psk g cn sn x gy] /=.
   by iMod (dh_seed_elim2 with "dh_y dh_x p_k") as "[]".
 - case: s_kex => //= _ ? ? ? gx y [] /Spec.tag_inj [_ <-].
   move=> <- _ _ <- e2.
-  iDestruct "wf1" as "#(_ & %gXN & _ & _ & dh_x)".
+  iDestruct "wf1" as "#(_ & %gXN & %gNm & %gNi & _ & _ & dh_x)".
   iPoseProof "dh_x" as "#dh_x2". iDestruct "dh_x2" as "(_ & %Nm_x & _)".
   move/negb_True: (gXN) => ?.
-  iDestruct "wf2" as "#(_ & _ & _ & _ & _ & p_gx & %fresh_y & dh_y)".
+  iDestruct "wf2" as "#(_ & _ & _ & _ & _ & _ & _ & p_gx & %fresh_y & dh_y)".
   have [??]: y ≠ x ∧ y ≠ TInv x.
     apply: fresh_y. rewrite (_ : TExp g x = TExpN g [x]); last by rewrite /TExpN TMulN1.
     apply: STExp2; eauto.

@@ -61,11 +61,13 @@ HB.instance Definition _ := key_type_isOrder.
 Inductive term_op1 :=
 | O1Key of key_type
 | O1Hash
-| O1Inv.
+| O1Inv
+| O1GInv.
 
 Notation TKey_tag := 0%Z.
 Notation THash_tag := 1%Z.
 Notation TInv_tag := 2%Z.
+Notation TGInv_tag := 3%Z.
 
 Canonical term_op1_indDef := [indDef for term_op1_rect].
 Canonical term_op1_indType := IndType term_op1 term_op1_indDef.
@@ -104,10 +106,31 @@ HB.instance Definition _ := term_op2_isCountable.
 Definition term_op2_isOrder := [derive isOrder for term_op2].
 HB.instance Definition _ := term_op2_isOrder.
 
+Inductive term_opN :=
+| ONMul
+| ONGMul.
+
+Notation TMul_tag := 0%Z.
+Notation TGMul_tag := 1%Z.
+
+Canonical term_opN_indDef := [indDef for term_opN_rect].
+Canonical term_opN_indType := IndType term_opN term_opN_indDef.
+Definition term_opN_hasDecEq := [derive hasDecEq for term_opN].
+#[warnings="-projection-no-head-constant"]
+HB.instance Definition _ := term_opN_hasDecEq.
+Definition term_opN_hasChoice := [derive hasChoice for term_opN].
+#[warnings="-projection-no-head-constant"]
+HB.instance Definition _ := term_opN_hasChoice.
+Definition term_opN_isCountable := [derive isCountable for term_opN].
+#[warnings="-projection-no-head-constant"]
+HB.instance Definition _ := term_opN_isCountable.
+Definition term_opN_isOrder := [derive isOrder for term_opN].
+HB.instance Definition _ := term_opN_isOrder.
+
 Notation TOp0_tag := 0%Z.
 Notation TOp1_tag := 1%Z.
 Notation TOp2_tag := 2%Z.
-Notation TMul_tag := 3%Z.
+Notation TOpN_tag := 3%Z.
 
 Module PreTerm.
 
@@ -116,12 +139,15 @@ Inductive pre_term :=
 | PT0 of term_op0
 | PT1 of term_op1 & pre_term
 | PT2 of term_op2 & pre_term & pre_term
-| PTMul of list pre_term.
+| PTN of term_opN & list pre_term.
 Set Elimination Schemes.
 
 (** Convenient shorthands for some operations *)
 Notation PTInv e := (PT1 O1Inv e).
+Notation PTGInv e := (PT1 O1GInv e).
 Notation PTExp b e := (PT2 O2Exp b e).
+Notation PTMul ts := (PTN ONMul ts).
+Notation PTGMul ts := (PTN ONGMul ts).
 
 Definition pre_term_rect'
   (T1 : pre_term -> Type)
@@ -129,7 +155,7 @@ Definition pre_term_rect'
   (H1 : forall o, T1 (PT0 o))
   (H2 : forall o t1, T1 t1 -> T1 (PT1 o t1))
   (H3 : forall o t1, T1 t1 -> forall t2, T1 t2 -> T1 (PT2 o t1 t2))
-  (Hmul : forall ts, T2 ts -> T1 (PTMul ts))
+  (HN : forall o ts, T2 ts -> T1 (PTN o ts))
   (H5 : T2 [::])
   (H6 : forall t, T1 t -> forall ts, T2 ts -> T2 (t :: ts)) :=
   fix loop1 t {struct t} : T1 t :=
@@ -137,13 +163,13 @@ Definition pre_term_rect'
     | PT0 o => H1 o
     | PT1 o t => H2 o t (loop1 t)
     | PT2 o t1 t2 => H3 o t1 (loop1 t1) t2 (loop1 t2)
-    | PTMul ts =>
+    | PTN o ts =>
       let fix loop2 ts {struct ts} : T2 ts :=
           match ts with
           | [::] => H5
           | t :: ts => H6 t (loop1 t) ts (loop2 ts)
           end in
-      Hmul ts (loop2 ts)
+      HN o ts (loop2 ts)
     end.
 
 Definition list_pre_term_rect'
@@ -152,14 +178,14 @@ Definition list_pre_term_rect'
   (H1 : forall o, T1 (PT0 o))
   (H2 : forall o t1, T1 t1 -> T1 (PT1 o t1))
   (H3 : forall o t1, T1 t1 -> forall t2, T1 t2 -> T1 (PT2 o t1 t2))
-  (Hmul : forall ts, T2 ts -> T1 (PTMul ts))
+  (HN : forall o ts, T2 ts -> T1 (PTN o ts))
   (H5 : T2 [::])
   (H6 : forall t, T1 t -> forall ts, T2 ts -> T2 (t :: ts)) :=
   fix loop2 ts {struct ts} : T2 ts :=
     match ts with
     | [::] => H5
     | t :: ts =>
-      H6 t (@pre_term_rect' T1 T2 H1 H2 H3 Hmul H5 H6 t) ts (loop2 ts)
+      H6 t (@pre_term_rect' T1 T2 H1 H2 H3 HN H5 H6 t) ts (loop2 ts)
     end.
 
 Combined Scheme pre_term_list_pre_term_rect
@@ -181,8 +207,8 @@ Definition pre_term_rect (T : pre_term -> Type)
   (H1 : forall o, T (PT0 o))
   (H2 : forall o t1, T t1 -> T (PT1 o t1))
   (H3 : forall o t1, T t1 -> forall t2, T t2 -> T (PT2 o t1 t2))
-  (Hmul : forall ts, foldr (fun t R => T t * R)%type unit ts ->
-          T (PTMul ts)) t : T t.
+  (HN : forall o ts, foldr (fun t R => T t * R)%type unit ts ->
+          T (PTN o ts)) t : T t.
 Proof.
 exact: (@pre_term_rect' T (foldr (fun t R => T t * R)%type unit)).
 Defined.
@@ -199,7 +225,7 @@ Definition cons_num pt : Z :=
   | PT0 _ => TOp0_tag
   | PT1 _ _ => TOp1_tag
   | PT2 _ _ _ => TOp2_tag
-  | PTMul _ => TMul_tag
+  | PTN _ _ => TOpN_tag
   end.
 
 Open Scope order_scope.
@@ -228,12 +254,15 @@ Lemma op1_leqE (o1 o2 : term_op1) :
   | O1Key k1, O1Key k2 => (k1 <= k2)%O
   | O1Hash, O1Hash => true
   | O1Inv, O1Inv => true
+  | O1GInv, O1GInv => true
   | O1Key _, _ => true
   | O1Hash, O1Inv => true
+  | O1Hash, O1GInv => true
+  | O1Inv, O1GInv => true
   | _, _ => false
   end.
 Proof.
-case: o1 o2 => [k1| |] [k2| |] //=.
+case: o1 o2 => [k1| | |] [k2| | |] //=.
 by rewrite [RHS]le_alt.
 Qed.
 
@@ -248,15 +277,16 @@ Lemma leqE pt1 pt2 :
       if o1 == o2 then
         if t11 == t21 then (t12 <= t22)%O else (t11 <= t21)%O
       else (o1 <= o2)%O
-    | PTMul ts1, PTMul ts2 =>
-      ((ts1 : seqlexi_with Order.default_display _) <= ts2)%O
+    | PTN o1 ts1, PTN o2 ts2 =>
+      if o1 == o2 then ((ts1 : seqlexi_with Order.default_display _) <= ts2)%O
+      else (o1 <= o2)%O
     | _, _ => false
     end
   else (cons_num pt1 <=? cons_num pt2)%Z.
 Proof.
 case: pt1 pt2
-    => [o1|o1 t1|o1 t11 t12|ts1]
-       [o2|o2 t2|o2 t21 t22|ts2] //=.
+    => [o1|o1 t1|o1 t11 t12|o1 ts1]
+       [o2|o2 t2|o2 t21 t22|o2 ts2] //=.
 - by rewrite [RHS]le_alt.
 - by rewrite [(t1 <= t2)%O]le_alt.
 - by rewrite (le_alt t12).

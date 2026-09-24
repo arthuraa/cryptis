@@ -21,7 +21,7 @@ Implicit Types (t k : term) (ts : list term).
 Definition tsize t := PreTerm.tsize (unfold_term t).
 
 Lemma tsize_gt0 t : 0 < tsize t.
-Proof. rewrite /tsize; case: unfold_term => /=; lia. Qed.
+Proof. rewrite /tsize; case: unfold_term => [o|o t'|o t1 t2|[] ts] /=; lia. Qed.
 
 Lemma tsize_eq t :
   tsize t =
@@ -44,16 +44,48 @@ rewrite PreTerm.inv_Nmul //.
 by case: unfold_term Nm Ni => //=; case.
 Qed.
 
+Lemma tsize_TGInv t :
+  negb (is_gmul t) → negb (is_ginv t) → tsize (TGInv t) = S (tsize t).
+Proof.
+rewrite /tsize is_gmul_unfold is_ginv_unfold unfold_TGInv => Nm Ni.
+rewrite PreTerm.ginv_Ngmul //.
+by case: unfold_term Nm Ni => //=; case.
+Qed.
+
+(* The base must not be a group product or a group inverse: [TExp] distributes
+   over those, and the result is not an exponential at all.  A *scalar* product
+   or inverse in the base is fine — it is an atom. *)
 Lemma tsize_TExp t1 t2 :
-  negb (is_exp t1) → t2 ≠ TMulN [] →
+  negb (is_exp t1) → negb (is_gmul t1) → negb (is_ginv t1) →
+  t2 ≠ TMulN [] →
   tsize (TExp t1 t2) = S (tsize t1 + tsize t2).
 Proof.
-rewrite /tsize is_exp_unfold unfold_TExp /PreTerm.exp=> Nx1 N12.
-rewrite PreTerm.expo_expN // PreTerm.mul_unit_l PreTerm.mul1; last first.
-  exact: wf_unfold_term.
-rewrite PreTerm.base_expN // /PreTerm.exp_aux bool_decide_eq_false_2 //.
+rewrite /tsize is_exp_unfold is_gmul_unfold is_ginv_unfold unfold_TExp.
+move=> Nx1 Nm1 Ni1 N12.
+rewrite (PreTerm.exp_Ngmul _ _ (wf_unfold_term _) (wf_unfold_term _) Nm1).
+rewrite (PreTerm.exp_aux_Nginv _ _ Ni1).
+rewrite (PreTerm.base_expN _ Nx1) (PreTerm.expo_expN _ Nx1).
+rewrite PreTerm.mul_unit_l PreTerm.mul1; last exact: wf_unfold_term.
+rewrite /PreTerm.mk_exp bool_decide_eq_false_2 //.
 move=> e; apply: N12; apply: (inj unfold_term).
 by rewrite unfold_TMulN.
+Qed.
+
+(* The negative check the group/exponent split exists to make true: a *scalar*
+   product in a base is an atom.  [TExp] does not distribute over it, so
+   [TExp (t1 * t2) e] is a genuine exponential node whose size is the sum.  The
+   same statement with [TGMulN] in place of [TMulN] is false --- there [TExp]
+   distributes, and at the group unit it even collapses ([TExp_gunit]). *)
+Lemma tsize_TExp_TMulN t1 t2 e :
+  negb (is_mul t1) -> negb (is_mul t2) -> t1 ≠ TInv t2 ->
+  e ≠ TMulN [] ->
+  tsize (TExp (TMulN [t1; t2]) e)
+  = S (tsize (TMulN [t1; t2]) + tsize e).
+Proof.
+move=> Nm1 Nm2 ne eN0.
+have Xm : is_mul (TMulN [t1; t2]) := is_mul_TMulN2 _ _ Nm1 Nm2 ne.
+by apply: tsize_TExp => //;
+  [exact: is_mul_Nexp | exact: is_mul_Ngmul | exact: is_mul_Nginv].
 Qed.
 
 Lemma tsize_TMulN ts :
@@ -67,11 +99,46 @@ move=> ic; case: (decide (length ts = 1)) => len_ts.
   case: ts len_ts {ic} => // t [] //.
   rewrite TMulN1 /=; lia.
 rewrite /tsize.
-case: (unfold_TMulN_strong ic len_ts)=> ts' [] -> /= e.
+case: (unfold_TMulN_strong _ ic len_ts)=> ts' [] -> /= e.
 by rewrite bool_decide_eq_true_2 //= e sum_list_with_fmap.
 Qed.
 
-Definition tsizeE := (tsize_TInv, tsize_TExp, tsize_TMulN, tsize_eq).
+Lemma tsize_TGMulN ts :
+  ginvs_canceled ts →
+  tsize (TGMulN ts) =
+  Nat.b2n (bool_decide (length ts ≠ 1)) +
+  sum_list_with tsize ts.
+Proof.
+move=> ic; case: (decide (length ts = 1)) => len_ts.
+  rewrite bool_decide_eq_false_2 //=; last congruence.
+  case: ts len_ts {ic} => // t [] //.
+  rewrite TGMulN1 /=; lia.
+rewrite /tsize.
+case: (unfold_TGMulN_strong _ ic len_ts)=> ts' [] -> /= e.
+by rewrite bool_decide_eq_true_2 //= e sum_list_with_fmap.
+Qed.
+
+Definition tsizeE :=
+  (tsize_TInv, tsize_TGInv, tsize_TExp, tsize_TMulN, tsize_TGMulN, tsize_eq).
+
+(* Peeling an inverse strictly shrinks the term. *)
+Lemma tsize_TInv_lt t : is_inv t -> tsize (TInv t) < tsize t.
+Proof.
+move=> Xi.
+have Nm : negb (is_mul (TInv t)) by rewrite is_mul_TInv; exact: is_inv_Nmul.
+have Ni : negb (is_inv (TInv t)).
+  by rewrite (is_inv_TInv _ (is_inv_Nmul _ Xi)); case: is_inv Xi.
+have := tsize_TInv _ Nm Ni; rewrite TInvK; lia.
+Qed.
+
+Lemma tsize_TGInv_lt t : is_ginv t -> tsize (TGInv t) < tsize t.
+Proof.
+move=> Xi.
+have Nm : negb (is_gmul (TGInv t)) by rewrite is_gmul_TGInv; exact: is_ginv_Ngmul.
+have Ni : negb (is_ginv (TGInv t)).
+  by rewrite (is_ginv_TGInv _ (is_ginv_Ngmul _ Xi)); case: is_ginv Xi.
+have := tsize_TGInv _ Nm Ni; rewrite TGInvK; lia.
+Qed.
 
 Lemma tsize_lt_TInv {t} : negb (is_mul t) → tsize (TInv t) ≤ S (tsize t).
 Proof.
@@ -83,14 +150,14 @@ case: (decide (is_inv t)) => [tV|/negb_True tNV].
 Qed.
 
 Lemma tsize_TExpN t ts :
-  negb (is_exp t) →
+  negb (is_exp t) → negb (is_gmul t) → negb (is_ginv t) →
   invs_canceled ts →
   tsize (TExpN t ts) =
   (if bool_decide (ts ≠ []) then 1 else 0) +
   (if bool_decide (1 < length ts) then 1 else 0)
   + tsize t + sum_list_with tsize ts.
 Proof.
-move=> tNx ic; rewrite /TExpN.
+move=> tNx tNm tNi ic; rewrite /TExpN.
 case: (decide (ts = [])) => [->|tsN0] /=; first by rewrite TExp_unit; lia.
 rewrite bool_decide_eq_true_2 //= tsize_TExp //; first last.
   move=> /(f_equal factors) e; have /Permutation_nil ? : [] ≡ₚ ts.
@@ -104,12 +171,16 @@ have ->: bool_decide (length ts ≠ 1) = bool_decide (1 < length ts).
 case: bool_decide => /=; lia.
 Qed.
 
+(* [t1] must not be a group product or a group inverse:
+   [TExp (TGMulN []) t2 = TGMulN []], so the strict inequality genuinely fails
+   at the group unit. *)
 Lemma tsize_lt_TExp_strong t1 t2 :
+  negb (is_gmul t1) → negb (is_ginv t1) →
   negb (is_mul t2) → TInv t2 ∉ exps t1 →
   tsize t1 < tsize (TExp t1 t2) ∧
   S (tsize t2) < tsize (TExp t1 t2).
 Proof.
-move=> t2Nm t2_t1; rewrite TExpE -/(TMul _ _).
+move=> t1Nm t1Ni t2Nm t2_t1; rewrite TExpE -/(TMul _ _).
 have xE: TMul (expo t1) t2 = TMulN (t2 :: factors (expo t1)).
   by rewrite /TMul -{1}[expo t1]factorsK TMulN_cat TMulN_catC.
 have xN1: TMul (expo t1) t2 ≠ TMulN [].
@@ -120,25 +191,27 @@ have xN1: TMul (expo t1) t2 ≠ TMulN [].
 have ic: invs_canceled (t2 :: factors (expo t1)).
   rewrite invs_canceled_cons; do 2!split => //.
   exact: invs_canceled_factors.
-rewrite tsize_TExp //; last exact: base_Nexp.
+rewrite (tsize_TExp _ _ (base_Nexp _)) ?is_gmul_base ?is_ginv_base //.
 rewrite xE tsize_TMulN //=.
 have ? := tsize_gt0 (base t1); split; last lia.
 rewrite -{1}[t1]TExp_base_expo.
 case: (decide (expo t1 = TMulN [])) => [->|n1].
   rewrite factors_TMulN0 /= TExp_unit; lia.
-rewrite tsize_TExp //; last exact: base_Nexp.
+rewrite (tsize_TExp _ _ (base_Nexp _)) ?is_gmul_base ?is_ginv_base //.
 rewrite -{1}[expo t1]factorsK tsize_TMulN; last exact: invs_canceled_factors.
 have ? := tsize_gt0 t2.
 move: n1; rewrite tunitP; case: factors=> [|? [| ??]] //=; lia.
 Qed.
 
 Lemma tsize_lt_TExp t1 t2 :
+  negb (is_gmul t1) → negb (is_ginv t1) →
   negb (is_mul t2) → TInv t2 ∉ exps t1 →
   tsize t1 < tsize (TExp t1 t2) ∧
   tsize (TInv t2) < tsize (TExp t1 t2) ∧
   tsize t2 < tsize (TExp t1 t2).
 Proof.
-move => Nm2 t2_t1; case: (tsize_lt_TExp_strong _ _ Nm2 t2_t1) => H1 H2.
+move => Nm1 Ni1 Nm2 t2_t1.
+case: (tsize_lt_TExp_strong _ _ Nm1 Ni1 Nm2 t2_t1) => H1 H2.
 have H3 := tsize_lt_TInv Nm2.
 do !split; lia.
 Qed.
@@ -151,15 +224,22 @@ Lemma tsize_TExp_TInv t1 t2 :
 Proof.
 move => NmI2 H.
 have Nm2 : negb (is_mul t2) by rewrite is_mul_TInv in NmI2.
+(* [t2 ∈ exps t1] forces [t1] to be an exponential, hence an atom-headed one *)
+have en : exps t1 ≠ [] by move=> e; rewrite e elem_of_nil in H.
+have xt : is_exp t1 by move: en; rewrite /exps -tunitP is_expE.
+have Nm1 := is_exp_Ngmul _ xt.
+have Ni1 := is_exp_Nginv _ xt.
 set t1' := TExp t1 (TInv t2).
 have t1E: t1 = TExp t1' t2.
   by rewrite /t1' TExpA -/(TMul _ _) TMulK_l TExp_unit.
 have {}H: TInv t2 ∉ exps t1'.
   rewrite /exps -count_gt0 in H.
-  rewrite /exps -count_gt0 /t1' expo_TExp count_TMulN /=.
+  rewrite /exps -count_gt0 /t1' (expo_TExp _ _ Nm1 Ni1) count_TMulN /=.
   rewrite !count_TInv_l count_TInv count_diag.
   case: is_mul Nm2 => //=; lia.
-rewrite t1E; case: (tsize_lt_TExp _ _ Nm2 H)=> ? [] ??; eauto.
+rewrite t1E.
+case: (tsize_lt_TExp _ _ (Ngmul_TExp _ _ Nm1) (Nginv_TExp _ _ Nm1 Ni1) Nm2 H).
+by move=> ? [] ??; eauto.
 Qed.
 
 Lemma term_lt_rect (T : term -> Type) :
@@ -177,7 +257,7 @@ Lemma tsize_base_lt t : is_exp t → tsize (base t) < tsize t.
 Proof.
 rewrite is_exp_unfold => xt.
 rewrite /tsize unfold_base; move: xt.
-by case: (unfold_term t) => [o|o t'|[||] t1 t2|ts] //= _; lia.
+by case: (unfold_term t) => [o|o t'|[||] t1 t2|[] ts] //= _; lia.
 Qed.
 
 Lemma tsize_expo_lt t : is_exp t → tsize (expo t) < tsize t.
@@ -212,6 +292,23 @@ have le: tsize t' ≤ sum_list_with tsize (factors t) by exact: sum_list_with_in
 rewrite -is_mulE; case: is_mul xt => //=; lia.
 Qed.
 
+Lemma tsize_gfactors_le t t' : t ∈ gfactors t' → tsize t ≤ tsize t'.
+Proof.
+move=> ?; rewrite -[t']gfactorsK tsize_TGMulN;
+  last exact: ginvs_canceled_gfactors.
+suff: tsize t ≤ sum_list_with tsize (gfactors t') by lia.
+exact: sum_list_with_in.
+Qed.
+
+Lemma tsize_gfactors_lt t' t : is_gmul t → t' ∈ gfactors t → tsize t' < tsize t.
+Proof.
+move => xt t'_t.
+have tsN0 : gfactors t ≠ [] by move=> e; rewrite e elem_of_nil in t'_t.
+rewrite -{1}(gfactorsK t) tsize_TGMulN; last exact: ginvs_canceled_gfactors.
+have le: tsize t' ≤ sum_list_with tsize (gfactors t) by exact: sum_list_with_in.
+rewrite -is_gmulE; case: is_gmul xt => //=; lia.
+Qed.
+
 Lemma term_lt_ind (T : term -> Prop) :
   (forall t, (forall t', (tsize t' < tsize t) -> T t') -> T t) ->
   forall t, T t.
@@ -219,3 +316,68 @@ Proof. exact: term_lt_rect. Qed.
 
 Arguments tsize_lt_TExp {t1 t2} _ _.
 Arguments tsize_TExp_TInv {t1 t2} _ _.
+
+(** * Occurs-check: an exponent too big to be inside [X]
+
+    If [u] is an exponent of [w] and [u] is strictly bigger than [X], then no
+    group factor of [X ^ c] can be [w] or its inverse, so [w] survives in any
+    group product [X ^ c] is multiplied into.
+
+    This is the symbolic form of HMQV's argument: the multiplier [e = H(X, …)]
+    is built from [X], hence strictly bigger than it, so [X] cannot contain
+    [e] — and any group factor of [X ^ c] equal to [w] would have to. *)
+
+Lemma gcount_TExp_eq0 X c w u :
+  u ∈ exps w -> u ∉ factors c -> tsize X < tsize u ->
+  gcount w (TExp X c) = 0%Z.
+Proof.
+move=> u_w u_c ltX.
+have xw : is_exp w := is_exp_of_exps u_w.
+have Nmw : negb (is_gmul w) := is_exp_Ngmul _ xw.
+have Niw : negb (is_ginv w) := is_exp_Nginv _ xw.
+(* On a group atom [v], neither [w] nor its inverse is [v ^ c].  A group
+   inverse is peeled with [TExp_TGInv] and handled by the induction. *)
+have key : forall v, negb (is_gmul v) -> tsize v < tsize u ->
+                     w ≠ TExp v c /\ TGInv w ≠ TExp v c.
+  elim/term_lt_ind => v IH Nmv ltv.
+  case Ei: (is_ginv v); last first.
+  - have Niv : negb (is_ginv v) by rewrite Ei.
+    split.
+    + move=> e_w.
+      have eE : expo w = TMulN [expo v; c] by rewrite e_w (expo_TExp _ _ Nmv Niv).
+      move: u_w; rewrite /exps eE.
+      move=> /mem_factors_TMulN2 /elem_of_app [u_v|//].
+      have := tsize_exps_lt _ _ u_v; lia.
+    + move=> e_w.
+      have contra : is_ginv (TGInv w) = is_ginv (TExp v c) by rewrite e_w.
+      move: contra; rewrite (is_ginv_TGInv _ Nmw) (is_ginv_TExp _ _ Nmv) Ei.
+      by case: is_ginv Niw.
+  - have Xi : is_ginv v by rewrite Ei.
+    have Nmv' : negb (is_gmul (TGInv v)) by rewrite is_gmul_TGInv.
+    have Niv' : negb (is_ginv (TGInv v)) by rewrite (is_ginv_TGInv _ Nmv) Ei.
+    have ltv' : tsize (TGInv v) < tsize v := tsize_TGInv_lt _ Xi.
+    have eE : TExp v c = TGInv (TExp (TGInv v) c).
+      by rewrite -TExp_TGInv TGInvK.
+    have [ne1 _] : w ≠ TExp (TGInv v) c /\ TGInv w ≠ TExp (TGInv v) c.
+      by apply: IH => //; lia.
+    split.
+    + rewrite eE => e_w.
+      have contra : is_ginv w = is_ginv (TGInv (TExp (TGInv v) c)) by rewrite -e_w.
+      move: contra.
+      rewrite (is_ginv_TGInv _ (Ngmul_TExp _ _ Nmv')) (is_ginv_TExp _ _ Nmv').
+      by case: is_ginv Niv' => //=; case: is_ginv Niw.
+    + by rewrite eE => /TGInv_inj.
+have main : forall v, v ∈ gfactors X -> gcount w (TExp v c) = 0%Z.
+  move=> v v_X.
+  have Nmv : negb (is_gmul v) := Ngmul_gfactors _ _ v_X.
+  have ltv : tsize v < tsize u.
+    have := tsize_gfactors_le _ _ v_X; lia.
+  have [ne1 ne2] := key v Nmv ltv.
+  apply: not_elem_of_gcount_strong;
+    by rewrite (gfactors_Ngmul _ (Ngmul_TExp _ _ Nmv)) list_elem_of_singleton.
+rewrite (TExp_gfactors X c) gcount_TGMulN -list_fmap_compose.
+elim: (gfactors X) main => [//|v vs IH] main /=.
+rewrite /compose main; last by apply/elem_of_cons; left.
+rewrite IH ?Z.add_0_l // => v' v'_vs.
+by apply: main; apply/elem_of_cons; right.
+Qed.

@@ -188,7 +188,7 @@ Definition tls_server : val := λ: "c" "psk" "g" "verif_key" "other",
   SOME "ke'".
 
 Lemma wp_tls_server c psk g (verif_key : sign_key) other Φ :
-  negb (is_exp g) →
+  negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
   channel c -∗
   cryptis_ctx -∗
   tls_ctx -∗
@@ -213,7 +213,7 @@ Lemma wp_tls_server c psk g (verif_key : sign_key) other Φ :
       end -∗ Φ (repr (SShare.term_of <$> ke))) -∗
   WP tls_server c psk g verif_key other {{ Φ }}.
 Proof.
-iIntros "% #? #? #(k_ctx & c_ctx & s_ctx & ?)".
+iIntros "% % % #? #? #(k_ctx & c_ctx & s_ctx & ?)".
 iIntros "#s_psk #p_g #sign_key #p_other post".
 rewrite /tls_server; wp_pures.
 wp_bind (recv _); iApply wp_recv => //.

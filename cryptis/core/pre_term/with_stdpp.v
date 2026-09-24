@@ -72,6 +72,7 @@ Instance repr_term_op1 : Repr term_op1 := λ o,
   | O1Key kt => (#TKey_tag, repr kt)%V
   | O1Hash => (#THash_tag, #())%V
   | O1Inv => (#TInv_tag, #())%V
+  | O1GInv => (#TGInv_tag, #())%V
   end.
 
 Canonical term_op2O := leibnizO term_op2.
@@ -87,6 +88,18 @@ Instance repr_term_op2 : Repr term_op2 := λ o,
   | O2Exp => #TExp_tag
   end.
 
+Canonical term_opNO := leibnizO term_opN.
+
+#[global]
+Instance term_opN_eq_dec : EqDecision term_opN.
+Proof. exact: def_eq_decision. Defined.
+
+Instance repr_term_opN : Repr term_opN := λ o,
+  match o with
+  | ONMul => #TMul_tag
+  | ONGMul => #TGMul_tag
+  end.
+
 Section ValOfPreTerm.
 
 Import PreTerm.
@@ -99,8 +112,8 @@ Definition val_of_pre_term : Repr pre_term := fix val_of_pre_term pt :=
     (#TOp1_tag, (repr o, val_of_pre_term t))%V
   | PT2 o t1 t2 =>
     (#TOp2_tag, (repr o, val_of_pre_term t1, val_of_pre_term t2))%V
-  | PTMul ts =>
-    (#TMul_tag, repr_list (map val_of_pre_term ts))%V
+  | PTN o ts =>
+    (#TOpN_tag, (repr o, repr_list (map val_of_pre_term ts)))%V
   end.
 
 Global Existing Instance val_of_pre_term.
@@ -123,7 +136,7 @@ Fixpoint nonces_of_pre_term pt : gset nonce :=
   | PreTerm.PT0 o => nonces_of_term_op0 o
   | PreTerm.PT1 _ t => nonces_of_pre_term t
   | PreTerm.PT2 _ t1 t2 => nonces_of_pre_term t1 ∪ nonces_of_pre_term t2
-  | PreTerm.PTMul ts => ⋃ map nonces_of_pre_term ts
+  | PreTerm.PTN _ ts => ⋃ map nonces_of_pre_term ts
   end.
 
 Global Instance pre_term_inhabited : Inhabited PreTerm.pre_term.
@@ -167,11 +180,11 @@ End PreTermOrder.
 
 (** stdpp [Lexico] packaging of the same derived order.  [lib/list.v] states the
     HeapLang comparison spec [twp_leq_list] with stdpp's strict [lexico], so
-    the [PTMul] case of the pre-term comparison needs the derived order exposed
-    under that class.  Since the derived order on [PTMul ts] is
+    the [PTN] case of the pre-term comparison needs the derived order exposed
+    under that class.  Since the derived order on [PTN o ts] is
     mathcomp's lexicographic order on [ts] ([base.leqE]), and stdpp's
     [list_lexico] is the lexicographic order built from [lexico] on the
-    elements, the two agree — that is [pt_order_mul] below. *)
+    elements, the two agree — that is [pt_order_N] below. *)
 Section PreTermLexico.
 #[warnings="-ambiguous-paths"]
 Import Order.POrderTheory Order.TotalTheory ssrbool boot.eqtype.
@@ -230,10 +243,10 @@ case: (bool_decide_reflect (pt_order x y)) => H.
 Qed.
 
 (** The derived order on products is stdpp's [lexico] on the factor lists. *)
-Lemma pt_order_mul (ts1 ts2 : list PreTerm.pre_term) :
-  pt_order (PreTerm.PTMul ts1) (PreTerm.PTMul ts2) ↔ ts1 = ts2 ∨ lexico ts1 ts2.
+Lemma pt_order_N (o : term_opN) (ts1 ts2 : list PreTerm.pre_term) :
+  pt_order (PreTerm.PTN o ts1) (PreTerm.PTN o ts2) ↔ ts1 = ts2 ∨ lexico ts1 ts2.
 Proof.
-rewrite /pt_order PreTerm.leqE /=.
+rewrite /pt_order PreTerm.leqE /= eqxx.
 elim: ts1 ts2 => [|t1 ts1 IH] [|t2 ts2].
 - split=> _; by [left|].
 - split=> _; by [right|].
@@ -286,11 +299,23 @@ Definition op1_le (o1 o2 : term_op1) : bool :=
   | O1Hash, O1Key _ => false
   | O1Hash, _ => true
   | O1Inv, O1Inv => true
+  | O1Inv, O1GInv => true
   | O1Inv, _ => false
+  | O1GInv, O1GInv => true
+  | O1GInv, _ => false
   end.
 
 Definition op2_le (o1 o2 : term_op2) : bool :=
   bool_decide (int_of_term_op2 o1 <= int_of_term_op2 o2)%Z.
+
+Definition int_of_term_opN (o : term_opN) : Z :=
+  match o with
+  | ONMul => TMul_tag
+  | ONGMul => TGMul_tag
+  end.
+
+Definition opN_le (o1 o2 : term_opN) : bool :=
+  bool_decide (int_of_term_opN o1 <= int_of_term_opN o2)%Z.
 
 Section OrderE.
 #[warnings="-ambiguous-paths"]
@@ -308,17 +333,20 @@ rewrite PreTerm.op0_leqE; case: o1 o2 => [n1|[l1]] [n2|[l2]] //=.
 Qed.
 
 Lemma op1_leE o1 o2 : op1_le o1 o2 = (o1 <= o2).
-Proof. by rewrite PreTerm.op1_leqE; case: o1 o2 => [k1||] [k2||] //=; rewrite kt_leE. Qed.
+Proof. by rewrite PreTerm.op1_leqE; case: o1 o2 => [k1|||] [k2|||] //=; rewrite kt_leE. Qed.
 
 Lemma op2_leE o1 o2 : op2_le o1 o2 = (o1 <= o2).
+Proof. by case: o1; case: o2. Qed.
+
+Lemma opN_leE o1 o2 : opN_le o1 o2 = (o1 <= o2).
 Proof. by case: o1; case: o2. Qed.
 
 (** The stdpp-side structural equation for the derived order on pre-terms: the
     exact shape the HeapLang [leq_term] branches on.  This is [base.leqE] with
     every mathcomp notion replaced by its stdpp counterpart — [==] by
-    [bool_decide], [<=%O] on the operator types by [op0_le]/[op1_le]/[op2_le],
+    [bool_decide], [<=%O] on the operator types by [op0_le]/[op1_le]/[op2_le]/[opN_le],
     [<=%O] on pre-terms by [bool_decide (pt_order _ _)], and the [seqlexi] order
-    on the factor lists by stdpp's [lexico] (see [pt_order_mul]). *)
+    on the factor lists by stdpp's [lexico] (see [pt_order_N]). *)
 Lemma pt_orderE pt1 pt2 :
   bool_decide (pt_order pt1 pt2) =
   if bool_decide (PreTerm.cons_num pt1 = PreTerm.cons_num pt2) then
@@ -332,8 +360,9 @@ Lemma pt_orderE pt1 pt2 :
           (if bool_decide (t11 = t21) then bool_decide (pt_order t12 t22)
            else bool_decide (pt_order t11 t21))
         else op2_le o1 o2
-    | PreTerm.PTMul ts1, PreTerm.PTMul ts2 =>
-        bool_decide (ts1 = ts2 ∨ lexico ts1 ts2)
+    | PreTerm.PTN o1 ts1, PreTerm.PTN o2 ts2 =>
+        if bool_decide (o1 = o2) then bool_decide (ts1 = ts2 ∨ lexico ts1 ts2)
+        else opN_le o1 o2
     | _, _ => false
     end
   else bool_decide (PreTerm.cons_num pt1 <= PreTerm.cons_num pt2)%Z.
@@ -344,12 +373,15 @@ rewrite (_ : bool_decide (PreTerm.cons_num pt1 = PreTerm.cons_num pt2)
   by apply/(sameP (bool_decide_reflect _))/eqP.
 case: (PreTerm.cons_num pt1 == PreTerm.cons_num pt2); last first.
   by apply/(sameP (Z.leb_spec0 _ _))/bool_decide_reflect.
-case: pt1 pt2 => [o1|o1 t1|o1 t11 t12|ts1] [o2|o2 t2|o2 t21 t22|ts2] //=.
+case: pt1 pt2 => [o1|o1 t1|o1 t11 t12|o1 ts1] [o2|o2 t2|o2 t21 t22|o2 ts2] //=.
 - by rewrite op0_leE.
 - by rewrite op1_leE bool_decide_pt_order eq_op_bool_decide.
 - by rewrite op2_leE !bool_decide_pt_order !eq_op_bool_decide.
-- by rewrite -(bool_decide_ext _ _ (pt_order_mul ts1 ts2))
-             bool_decide_pt_order PreTerm.leqE /=.
+- case: o1 o2 => [|] [|]; rewrite ?opN_leE //=.
+  + by rewrite -(bool_decide_ext _ _ (pt_order_N ONMul ts1 ts2))
+               bool_decide_pt_order PreTerm.leqE /=.
+  + by rewrite -(bool_decide_ext _ _ (pt_order_N ONGMul ts1 ts2))
+               bool_decide_pt_order PreTerm.leqE /=.
 Qed.
 
 End OrderE.
@@ -390,10 +422,13 @@ Global Instance repr_term_op0_inj : Inj (=) (=) (@repr term_op0 _).
 Proof. by case=> [?|[?]] [?|[?]] //= [<-]. Qed.
 
 Global Instance repr_term_op1_inj : Inj (=) (=) (@repr term_op1 _).
-Proof. by case=> [?||] [?||] //= [/int_of_key_type_inj ->]. Qed.
+Proof. by case=> [?|||] [?|||] //= [/int_of_key_type_inj ->]. Qed.
 
 Global Instance repr_term_op2_inj : Inj (=) (=) (@repr term_op2 _).
 Proof. by case=> [] []. Qed.
+
+Global Instance repr_term_opN_inj : Inj (=) (=) (@repr term_opN _).
+Proof. by case=> [|] [|]. Qed.
 
 Global Instance val_of_pre_term_inj : Inj (=) (=) val_of_pre_term.
 Proof.
@@ -402,7 +437,7 @@ elim.
 - by move=> o1 t1 IH [] //= o2 t2 [] /repr_term_op1_inj -> /IH ->.
 - move=> o1 t11 IH1 t12 IH2 [] //= o2 t21 t22.
   by move=> [] /repr_term_op2_inj -> /IH1 -> /IH2 ->.
-move=> ts1 IHts [] //= ts2 [] e_ts; congr PreTerm.PTMul.
+move=> o1 ts1 IHts [] //= o2 ts2 [] /repr_term_opN_inj -> e_ts; congr PreTerm.PTN.
 move: e_ts; rewrite repr_list_unseal.
 elim: ts1 IHts ts2 => /= [_ [] //|t1 ts1 H [] IHt {}/H IHts].
 by case=> //= t2 ts2 [] /IHt -> /IHts ->.

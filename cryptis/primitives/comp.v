@@ -21,6 +21,13 @@ Definition tinv : val := λ: "t", hl_inv "t".
 
 Definition tone : val := λ: <>, hl_mul_aux NILV.
 
+(* The Diffie-Hellman group operations. *)
+Definition tgmul : val := λ: "t1" "t2", hl_gmul "t1" "t2".
+
+Definition tginv : val := λ: "t", hl_ginv "t".
+
+Definition tgone : val := λ: <>, hl_gmul_aux NILV.
+
 Section Proofs.
 
 Context `{!heapGS Σ}.
@@ -132,5 +139,68 @@ Lemma wp_tone E Ψ :
   Ψ (TMulN []) ⊢
   WP tone #() @ E {{ Ψ }}.
 Proof. by iIntros "post"; iApply twp_wp; iApply twp_tone. Qed.
+
+Lemma wp_hl_ginv_aux_term E (t : term) Ψ :
+    negb (is_gmul t) ->
+    Ψ (TGInv t) ⊢
+    WP hl_ginv_aux t @ E {{ Ψ }}.
+Proof.
+    move=> Nm; iIntros "post".
+    have Nm' : negb (PreTerm.is_gmul (unfold_term t)) by rewrite -is_gmul_unfold.
+    rewrite -!val_of_pre_term_unfold unfold_TGInv (PreTerm.ginv_Ngmul _ Nm').
+    by iApply wp_hl_ginv_aux.
+Qed.
+
+Lemma twp_tgmul E t1 t2 Ψ :
+  Ψ (TGMulN [t1; t2]) ⊢
+  WP tgmul t1 t2 @ E [{ Ψ }].
+Proof.
+iIntros "HΨ". rewrite /tgmul; wp_lam; wp_pures.
+rewrite -[val_of_term t1]val_of_pre_term_unfold.
+rewrite -[val_of_term t2]val_of_pre_term_unfold.
+wp_apply twp_hl_gmul.
+rewrite -(unfold_TGMulN [t1; t2]) [repr _]val_of_pre_term_unfold.
+by iApply "HΨ".
+Qed.
+
+Lemma wp_tgmul E t1 t2 Ψ :
+  Ψ (TGMulN [t1; t2]) ⊢
+  WP tgmul t1 t2 @ E {{ Ψ }}.
+Proof. by iIntros "post"; iApply twp_wp; iApply twp_tgmul. Qed.
+
+Lemma twp_tginv E t Ψ :
+  Ψ (TGInv t) ⊢
+  WP tginv t @ E [{ Ψ }].
+Proof.
+iIntros "HΨ". rewrite /tginv; wp_lam; wp_pures.
+rewrite -[val_of_term t]val_of_pre_term_unfold.
+wp_apply twp_hl_ginv.
+rewrite -unfold_TGInv [repr _]val_of_pre_term_unfold.
+by iApply "HΨ".
+Qed.
+
+Lemma wp_tginv E t Ψ :
+  Ψ (TGInv t) ⊢
+  WP tginv t @ E {{ Ψ }}.
+Proof. by iIntros "post"; iApply twp_wp; iApply twp_tginv. Qed.
+
+Lemma twp_tgone E Ψ :
+  Ψ (TGMulN []) ⊢
+  WP tgone #() @ E [{ Ψ }].
+Proof.
+iIntros "HΨ". rewrite /tgone; wp_pures.
+rewrite (_ : NILV = repr ([] : list PreTerm.pre_term));
+  last by rewrite repr_list_unseal.
+wp_apply (twp_hl_gmul_aux E []).
+rewrite (_ : PreTerm.gmul_aux [] = unfold_term (TGMulN []));
+  last by rewrite (unfold_TGMulN []).
+rewrite [repr _]val_of_pre_term_unfold.
+by iApply "HΨ".
+Qed.
+
+Lemma wp_tgone E Ψ :
+  Ψ (TGMulN []) ⊢
+  WP tgone #() @ E {{ Ψ }}.
+Proof. by iIntros "post"; iApply twp_wp; iApply twp_tgone. Qed.
 
 End Proofs.

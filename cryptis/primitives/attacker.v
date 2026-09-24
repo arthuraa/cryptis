@@ -77,6 +77,21 @@ Definition add_inv : val := λ: "c",
   let: "t" := recv "c" in
   send "c" (tinv "t").
 
+(* The Diffie-Hellman group operations.  The symbolic attacker must be able to
+   build group products and inverses, or it is strictly weaker than a real
+   one. *)
+Definition add_gmul_unit : val := λ: "c",
+  send "c" (tgone #()).
+
+Definition add_gmul : val := λ: "c",
+  let: "t1" := recv "c" in
+  let: "t2" := recv "c" in
+  send "c" (tgmul "t1" "t2").
+
+Definition add_ginv : val := λ: "c",
+  let: "t" := recv "c" in
+  send "c" (tginv "t").
+
 Definition init_attacker : val := rec: "loop" "c" :=
   Fork (
     add_int "c";;
@@ -91,6 +106,9 @@ Definition init_attacker : val := rec: "loop" "c" :=
     add_mul_unit "c";;
     add_mul "c";;
     add_inv "c";;
+    add_gmul_unit "c";;
+    add_gmul "c";;
+    add_ginv "c";;
     "loop" "c").
 
 Definition init_network : val := λ: <>,
@@ -239,6 +257,33 @@ wp_apply wp_tinv. wp_apply wp_send => //; last by iApply "post".
 rewrite public_TInv. by iApply "p_t".
 Qed.
 
+Lemma wp_add_gmul_unit c :
+  {{{ channel c }}} add_gmul_unit c {{{ RET #(); True }}}.
+Proof.
+iIntros "%Ψ #c post". wp_lam.
+wp_apply wp_tgone. wp_apply wp_send => //; last by iApply "post".
+by iApply public_TGMul0.
+Qed.
+
+Lemma wp_add_gmul c :
+  {{{ channel c }}} add_gmul c {{{ RET #(); True }}}.
+Proof.
+iIntros "%Ψ #c post". wp_lam.
+wp_apply wp_recv => //. iIntros "%t1 #p_t1". wp_pures.
+wp_apply wp_recv => //. iIntros "%t2 #p_t2". wp_pures.
+wp_apply wp_tgmul. wp_apply wp_send => //; last by iApply "post".
+by iApply (public_TGMulN2 with "p_t1 p_t2").
+Qed.
+
+Lemma wp_add_ginv c :
+  {{{ channel c }}} add_ginv c {{{ RET #(); True }}}.
+Proof.
+iIntros "%Ψ #c post". wp_lam.
+wp_apply wp_recv => //. iIntros "%t #p_t". wp_pures.
+wp_apply wp_tginv. wp_apply wp_send => //; last by iApply "post".
+rewrite public_TGInv. by iApply "p_t".
+Qed.
+
 Lemma wp_init_attacker c :
   {{{ cryptis_ctx ∗ channel c }}} init_attacker c {{{ RET #(); True }}}.
 Proof.
@@ -257,6 +302,9 @@ wp_apply wp_add_exp => //. iIntros "_". wp_pures.
 wp_apply wp_add_mul_unit => //. iIntros "_". wp_pures.
 wp_apply wp_add_mul => //. iIntros "_". wp_pures.
 wp_apply wp_add_inv => //. iIntros "_". wp_pures.
+wp_apply wp_add_gmul_unit => //. iIntros "_". wp_pures.
+wp_apply wp_add_gmul => //. iIntros "_". wp_pures.
+wp_apply wp_add_ginv => //. iIntros "_". wp_pures.
 by wp_apply "IH"; eauto.
 Qed.
 
