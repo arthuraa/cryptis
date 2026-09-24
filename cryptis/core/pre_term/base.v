@@ -61,11 +61,13 @@ HB.instance Definition _ := key_type_isOrder.
 Inductive term_op1 :=
 | O1Key of key_type
 | O1Hash
-| O1Inv.
+| O1Inv
+| O1GInv.
 
 Notation TKey_tag := 0%Z.
 Notation THash_tag := 1%Z.
 Notation TInv_tag := 2%Z.
+Notation TGInv_tag := 3%Z.
 
 Canonical term_op1_indDef := [indDef for term_op1_rect].
 Canonical term_op1_indType := IndType term_op1 term_op1_indDef.
@@ -105,9 +107,11 @@ Definition term_op2_isOrder := [derive isOrder for term_op2].
 HB.instance Definition _ := term_op2_isOrder.
 
 Inductive term_opN :=
-| ONMul.
+| ONMul
+| ONGMul.
 
 Notation TMul_tag := 0%Z.
+Notation TGMul_tag := 1%Z.
 
 Canonical term_opN_indDef := [indDef for term_opN_rect].
 Canonical term_opN_indType := IndType term_opN term_opN_indDef.
@@ -140,8 +144,10 @@ Set Elimination Schemes.
 
 (** Convenient shorthands for some operations *)
 Notation PTInv e := (PT1 O1Inv e).
+Notation PTGInv e := (PT1 O1GInv e).
 Notation PTExp b e := (PT2 O2Exp b e).
 Notation PTMul ts := (PTN ONMul ts).
+Notation PTGMul ts := (PTN ONGMul ts).
 
 Definition pre_term_rect'
   (T1 : pre_term -> Type)
@@ -248,12 +254,15 @@ Lemma op1_leqE (o1 o2 : term_op1) :
   | O1Key k1, O1Key k2 => (k1 <= k2)%O
   | O1Hash, O1Hash => true
   | O1Inv, O1Inv => true
+  | O1GInv, O1GInv => true
   | O1Key _, _ => true
   | O1Hash, O1Inv => true
+  | O1Hash, O1GInv => true
+  | O1Inv, O1GInv => true
   | _, _ => false
   end.
 Proof.
-case: o1 o2 => [k1| |] [k2| |] //=.
+case: o1 o2 => [k1| | |] [k2| | |] //=.
 by rewrite [RHS]le_alt.
 Qed.
 

@@ -198,12 +198,12 @@ Definition SShare_wf ke : iProp :=
   | Psk psk c_nonce s_nonce =>
     minted psk ∧ public c_nonce ∧ public s_nonce
   | Dh g cn sn gx y =>
-    ⌜negb (is_exp g)⌝ ∧ ⌜negb (is_mul g)⌝ ∧ ⌜negb (is_inv g)⌝ ∧ public g ∧ public cn ∧ public sn ∧ public gx ∧
+    ⌜negb (is_exp g)⌝ ∧ ⌜negb (is_gmul g)⌝ ∧ ⌜negb (is_ginv g)⌝ ∧ public g ∧ public cn ∧ public sn ∧ public gx ∧
     ⌜∀ x, subterm x gx → y ≠ x ∧ y ≠ TInv x⌝ ∧
     dh_seed (λ _, True)%I y
   | PskDh psk g cn sn gx y =>
     minted psk ∧
-    ⌜negb (is_exp g)⌝ ∧ ⌜negb (is_mul g)⌝ ∧ ⌜negb (is_inv g)⌝ ∧ public g ∧ public cn ∧ public sn ∧
+    ⌜negb (is_exp g)⌝ ∧ ⌜negb (is_gmul g)⌝ ∧ ⌜negb (is_ginv g)⌝ ∧ public g ∧ public cn ∧ public sn ∧
     public gx ∧
     ⌜∀ x, subterm x gx → y ≠ x ∧ y ≠ TInv x⌝ ∧
     dh_seed (λ _, True)%I y
@@ -214,7 +214,7 @@ Instance SShare_Persistent_wf ke : Persistent (SShare_wf ke).
 Proof. case: ke => *; apply _. Qed.
 
 Lemma wp_SShare_new N psk g (ke : CShare.t) Φ :
-  negb (is_exp g) → negb (is_mul g) → negb (is_inv g) →
+  negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
   Meth.compatible psk g (CShare.meth_of ke) →
   cryptis_ctx -∗
   minted psk -∗

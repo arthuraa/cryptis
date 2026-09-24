@@ -188,7 +188,7 @@ Definition tls_server : val := λ: "c" "psk" "g" "verif_key" "other",
   SOME "ke'".
 
 Lemma wp_tls_server c psk g (verif_key : sign_key) other Φ :
-  negb (is_exp g) → negb (is_mul g) → negb (is_inv g) →
+  negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
   channel c -∗
   cryptis_ctx -∗
   tls_ctx -∗

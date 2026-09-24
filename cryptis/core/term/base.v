@@ -9,11 +9,12 @@ From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
 From cryptis.core Require Export pre_term.
 
-(* The three "non-free" operations — inverse, exponentiation and product — are
-   represented indirectly, by a well-formed pre-term whose head is one of
-   [O1Inv] / [PTExp] / [PTMul].  [is_non_free] recognises exactly those heads;
-   it lives in [PreTerm] because [wf] uses it too (the base of a normal-form
-   exponential is never non-free). *)
+(* The five "non-free" operations — the two inverses, the two products and
+   exponentiation — are represented indirectly, by a well-formed pre-term whose
+   head is one of [O1Inv] / [O1GInv] / [PTExp] / [PTMul] / [PTGMul].
+   [is_non_free] recognises exactly those heads; it lives in [PreTerm] alongside
+   [is_gnon_free], the smaller predicate [wf] uses for the base of a normal-form
+   exponential. *)
 Notation is_non_free := PreTerm.is_non_free.
 
 Unset Elimination Schemes.
@@ -122,6 +123,10 @@ Fixpoint fold_term_predef pt :=
     if decide (PreTerm.wf (PreTerm.PT1 O1Inv pt')) is left pf then
       TNonFree (PreTerm.PT1 O1Inv pt') pf I
     else TInt 0 (*should never*)
+  | PreTerm.PT1 O1GInv pt' =>
+    if decide (PreTerm.wf (PreTerm.PT1 O1GInv pt')) is left pf then
+      TNonFree (PreTerm.PT1 O1GInv pt') pf I
+    else TInt 0 (*should never*)
   | PreTerm.PTExp b e =>
     if decide (PreTerm.wf (PreTerm.PTExp b e)) is left pf then
       TNonFree (PreTerm.PTExp b e) pf I
@@ -129,6 +134,10 @@ Fixpoint fold_term_predef pt :=
   | PreTerm.PTMul ts =>
     if decide (PreTerm.wf (PreTerm.PTMul ts)) is left pf then
       TNonFree (PreTerm.PTMul ts) pf I
+    else TInt 0 (*should never*)
+  | PreTerm.PTGMul ts =>
+    if decide (PreTerm.wf (PreTerm.PTGMul ts)) is left pf then
+      TNonFree (PreTerm.PTGMul ts) pf I
     else TInt 0 (*should never*)
   end.
 
@@ -160,15 +169,21 @@ Proof. by rewrite (proof_irrel w1 w2) (proof_irrel n1 n2). Qed.
 Lemma fold_predef_NonFree {pt} (wf : PreTerm.wf pt) (nf : is_non_free pt) :
   fold_term_predef pt = TNonFree pt wf nf.
 Proof.
-case: pt wf nf => [o|[kt||] pt'|[||] b e|[] ts] wf nf.
-1,2,3,5,6: by move: nf; rewrite /is_non_free /=.
+case: pt wf nf => [o|[kt|||] pt'|[||] b e|[|] ts] wf nf.
+1,2,3,6,7: by move: nf; rewrite /is_non_free /=.
 - rewrite /=; case: (decide (PreTerm.wf (PreTerm.PTInv pt'))) => [pf'|npf];
+    last by case: (npf wf).
+  exact: TNonFree_irr.
+- rewrite /=; case: (decide (PreTerm.wf (PreTerm.PTGInv pt'))) => [pf'|npf];
     last by case: (npf wf).
   exact: TNonFree_irr.
 - rewrite /=; case: (decide (PreTerm.wf (PreTerm.PTExp b e))) => [pf'|npf];
     last by case: (npf wf).
   exact: TNonFree_irr.
 - rewrite /=; case: (decide (PreTerm.wf (PreTerm.PTMul ts))) => [pf'|npf];
+    last by case: (npf wf).
+  exact: TNonFree_irr.
+- rewrite /=; case: (decide (PreTerm.wf (PreTerm.PTGMul ts))) => [pf'|npf];
     last by case: (npf wf).
   exact: TNonFree_irr.
 Qed.
@@ -191,13 +206,14 @@ Proof.
 rewrite [fold_term]unlock.
 move: (PreTerm.wf_normalize pt). elim: (PreTerm.normalize pt) => //.
 - by case.
-- move => [?||] t IH wf_t; try by rewrite /= IH.
-  by rewrite (fold_predef_NonFree wf_t I).
+- move => [?|||] t IH wf_t; try by rewrite /= IH.
+  + by rewrite (fold_predef_NonFree wf_t I).
+  + by rewrite (fold_predef_NonFree wf_t I).
 - move => [] t1 IH1 t2 IH2 wf.
   + by move: wf; rewrite /= => /andb_True [w1 w2]; rewrite (IH1 w1) (IH2 w2).
   + by move: wf; rewrite /= => /andb_True [w1 w2]; rewrite (IH1 w1) (IH2 w2).
   + by rewrite (fold_predef_NonFree wf I).
-- by move => [] ts IHts wf; rewrite (fold_predef_NonFree wf I).
+- by move => [|] ts IHts wf; rewrite (fold_predef_NonFree wf I).
 Qed.
 
 Lemma fold_termK pt : PreTerm.wf pt -> unfold_term (fold_term pt) = pt.
@@ -277,6 +293,15 @@ lock Definition TExp b e :=
 lock Definition TMulN ts :=
   fold_term (PreTerm.mul (unfold_term <$> ts)).
 
+(* The Diffie-Hellman group: [TGInv] / [TGMulN] are the same construction as
+   [TInv] / [TMulN] at the group operations.  They live in the *base* of an
+   exponential, where [TExp] distributes over them; [TInv] / [TMulN] live in the
+   exponent, where it does not. *)
+lock Definition TGInv t := fold_term (PreTerm.ginv (unfold_term t)).
+
+lock Definition TGMulN ts :=
+  fold_term (PreTerm.gmul (unfold_term <$> ts)).
+
 Definition TExpN t ts := TExp t (TMulN ts).
 
 Lemma unfold_TInv t : unfold_term (TInv t) = PreTerm.inv (unfold_term t).
@@ -306,6 +331,22 @@ apply: PreTerm.wf_mul; rewrite Forall_fmap Forall_forall.
 by eauto.
 Qed.
 
+Lemma unfold_TGInv t : unfold_term (TGInv t) = PreTerm.ginv (unfold_term t).
+Proof.
+rewrite unlock unfold_fold PreTerm.normalize_wf //.
+rewrite -(PreTerm.normalize_wf (unfold_term t)) //.
+apply: PreTerm.wf_ginv.
+exact: PreTerm.wf_normalize.
+Qed.
+
+Lemma unfold_TGMulN ts :
+  unfold_term (TGMulN ts) = PreTerm.gmul (unfold_term <$> ts).
+Proof.
+rewrite unlock unfold_fold PreTerm.normalize_wf //.
+apply: PreTerm.wf_gmul; rewrite Forall_fmap Forall_forall.
+by eauto.
+Qed.
+
 Lemma fold_termE pt :
   fold_term pt =
   match pt with
@@ -316,23 +357,27 @@ Lemma fold_termE pt :
   | PreTerm.PT2 O2Seal k pt => TSeal (fold_term k) (fold_term pt)
   | PreTerm.PT1 O1Hash pt => THash (fold_term pt)
   | PreTerm.PT1 O1Inv pt => TInv (fold_term pt)
+  | PreTerm.PT1 O1GInv pt => TGInv (fold_term pt)
   | PreTerm.PTExp b e => TExp (fold_term b) (fold_term e)
   | PreTerm.PTMul ts => TMulN (fold_term <$> ts)
+  | PreTerm.PTGMul ts => TGMulN (fold_term <$> ts)
   end.
 Proof.
+have fmapE (ts : list PreTerm.pre_term) :
+    unfold_term <$> (fold_term <$> ts) = PreTerm.normalize <$> ts.
+  rewrite -(list_fmap_compose fold_term unfold_term).
+  apply: Forall_fmap_ext_1; apply/Forall_forall => pt0 _; exact: (unfold_fold pt0).
 apply /unfold_term_inj.
-case: pt => /=; try by case =>> //=; rewrite ?unfold_TInv !unfold_fold.
+case: pt => /=;
+  try by case =>> //=; rewrite ?unfold_TInv ?unfold_TGInv !unfold_fold.
 - by move=> [] >; rewrite /= ?unfold_TExp !unfold_fold.
-- move=> [] ts; rewrite unfold_fold unfold_TMulN.
-  have -> : unfold_term <$> (fold_term <$> ts) = PreTerm.normalize <$> ts.
-    rewrite -(list_fmap_compose fold_term unfold_term).
-    apply: Forall_fmap_ext_1; apply/Forall_forall => pt _; exact: (unfold_fold pt).
-  done.
+- by move=> [|] ts; rewrite unfold_fold ?unfold_TMulN ?unfold_TGMulN fmapE.
 Qed.
 
 Definition base t := fold_term (PreTerm.base (unfold_term t)).
 Definition expo t := fold_term (PreTerm.expo (unfold_term t)).
 Definition factors t := fold_term <$> PreTerm.factors (unfold_term t).
+Definition gfactors t := fold_term <$> PreTerm.gfactors (unfold_term t).
 
 Definition is_nonce t :=
   if t is TNonce _ then true else false.
@@ -346,6 +391,12 @@ Definition is_exp t :=
 Definition is_mul t :=
   if t is TNonFree pt _ _ then PreTerm.is_mul pt else false.
 
+Definition is_ginv t :=
+  if t is TNonFree pt _ _ then PreTerm.is_ginv pt else false.
+
+Definition is_gmul t :=
+  if t is TNonFree pt _ _ then PreTerm.is_gmul pt else false.
+
 Lemma is_nonce_unfold t : is_nonce t = PreTerm.is_nonce (unfold_term t).
 Proof. by case: t => //= pt _ nf; move: nf; case: pt. Qed.
 
@@ -356,6 +407,12 @@ Lemma is_exp_unfold t : is_exp t = PreTerm.is_exp (unfold_term t).
 Proof. by case: t. Qed.
 
 Lemma is_mul_unfold t : is_mul t = PreTerm.is_mul (unfold_term t).
+Proof. by case: t. Qed.
+
+Lemma is_ginv_unfold t : is_ginv t = PreTerm.is_ginv (unfold_term t).
+Proof. by case: t. Qed.
+
+Lemma is_gmul_unfold t : is_gmul t = PreTerm.is_gmul (unfold_term t).
 Proof. by case: t. Qed.
 
 Lemma unfold_base t : unfold_term (base t) = PreTerm.base (unfold_term t).
@@ -372,25 +429,56 @@ apply: PreTerm.wf_factors_wf t0_in.
 exact: PreTerm.wf_wf_factors.
 Qed.
 
+Lemma unfold_gfactors t :
+  unfold_term <$> gfactors t = PreTerm.gfactors (unfold_term t).
+Proof.
+rewrite /gfactors fmap_fold_termK //; apply/list.Forall_forall => t0 t0_in.
+apply: PreTerm.wf_gfactors_wf t0_in.
+exact: PreTerm.wf_wf_gfactors.
+Qed.
+
 Lemma is_mulE t : is_mul t = bool_decide (length (factors t) ≠ 1).
 Proof.
 rewrite -(length_fmap unfold_term) unfold_factors is_mul_unfold.
-case: (unfold_term t) (wf_unfold_term t) => [o|o t'|o t1 t2|[] ts] //=.
+case: (unfold_term t) (wf_unfold_term t) => [o|o t'|o t1 t2|[|] ts] //=.
+by rewrite andb_True; case=> _ /Is_true_true ->.
+Qed.
+
+Lemma is_gmulE t : is_gmul t = bool_decide (length (gfactors t) ≠ 1).
+Proof.
+rewrite -(length_fmap unfold_term) unfold_gfactors is_gmul_unfold.
+case: (unfold_term t) (wf_unfold_term t) => [o|o t'|o t1 t2|[|] ts] //=.
 by rewrite andb_True; case=> _ /Is_true_true ->.
 Qed.
 
 Lemma is_inv_TInv t : negb (is_mul t) → is_inv (TInv t) = negb (is_inv t).
 Proof.
 rewrite !is_inv_unfold is_mul_unfold unfold_TInv.
-case: {t} (unfold_term t) (wf_unfold_term t) => [|||[] ts] //=.
+case: {t} (unfold_term t) (wf_unfold_term t) => [|||[|] ts] //=.
 by case=> //= t; case: PreTerm.is_inv.
+Qed.
+
+Lemma is_ginv_TGInv t : negb (is_gmul t) → is_ginv (TGInv t) = negb (is_ginv t).
+Proof.
+rewrite !is_ginv_unfold is_gmul_unfold unfold_TGInv.
+case: {t} (unfold_term t) (wf_unfold_term t) => [|||[|] ts] //=.
+by case=> //= t; case: PreTerm.is_ginv.
 Qed.
 
 Lemma is_exp_TInv t : negb (is_mul t) → negb (is_inv t) → negb (is_exp (TInv t)).
 Proof.
 rewrite is_mul_unfold is_inv_unfold is_exp_unfold unfold_TInv.
 move=> Nm Ni; rewrite PreTerm.inv_Nmul //.
-case: (unfold_term t) Nm Ni => [|||[] ts] //=.
+case: (unfold_term t) Nm Ni => [|||[|] ts] //=.
+by case=> //=.
+Qed.
+
+Lemma is_exp_TGInv t :
+  negb (is_gmul t) → negb (is_ginv t) → negb (is_exp (TGInv t)).
+Proof.
+rewrite is_gmul_unfold is_ginv_unfold is_exp_unfold unfold_TGInv.
+move=> Nm Ni; rewrite PreTerm.ginv_Ngmul //.
+case: (unfold_term t) Nm Ni => [|||[|] ts] //=.
 by case=> //=.
 Qed.
 
@@ -401,15 +489,23 @@ rewrite !unfold_factors => e.
 apply: unfold_term_inj => /=.
 move: (unfold_term t2) (wf_unfold_term t2) => {}t2 wf2 in e *.
 move: (unfold_term t1) (wf_unfold_term t1) => {}t1 wf1 in e *.
-case: t1 t2 => [o1|o1 t1|o1 t11 t12|[] ts1] [o2|o2 t2|o2 t21 t22|[] ts2] //=
+case: t1 t2 => [o1|o1 t1|o1 t11 t12|[|] ts1] [o2|o2 t2|o2 t21 t22|[|] ts2] //=
   in wf1 wf2 e *;
-do 1?congruence.
-- by rewrite -e /= andb_false_r in wf2.
-- by rewrite -e /= andb_false_r in wf2.
-- by rewrite -e /= andb_false_r in wf2.
-- by rewrite e /= andb_false_r in wf1.
-- by rewrite e /= andb_false_r in wf1.
-- by rewrite e /= andb_false_r in wf1.
+do 1?congruence;
+by [rewrite -e /= andb_false_r in wf2 | rewrite e /= andb_false_r in wf1].
+Qed.
+
+Lemma gfactors_inj t1 t2 : gfactors t1 = gfactors t2 → t1 = t2.
+Proof.
+move/(f_equal (λ ts : list _, unfold_term <$> ts)).
+rewrite !unfold_gfactors => e.
+apply: unfold_term_inj => /=.
+move: (unfold_term t2) (wf_unfold_term t2) => {}t2 wf2 in e *.
+move: (unfold_term t1) (wf_unfold_term t1) => {}t1 wf1 in e *.
+case: t1 t2 => [o1|o1 t1|o1 t11 t12|[|] ts1] [o2|o2 t2|o2 t21 t22|[|] ts2] //=
+  in wf1 wf2 e *;
+do 1?congruence;
+by [rewrite -e /= andb_false_r in wf2 | rewrite e /= andb_false_r in wf1].
 Qed.
 
 Definition count t t' :=
@@ -445,6 +541,54 @@ rewrite -[t]PreTerm.normalize_wf // -unfold_fold.
 by apply: ecount; rewrite is_mul_unfold fold_termK.
 Qed.
 
+Definition gcount t t' :=
+  SMS.count PreTerm.ginv_aux
+    (unfold_term t) (PreTerm.gfactors (unfold_term t')).
+
+Lemma gcount_inj t1 t2 :
+  (∀ x, negb (is_gmul x) → gcount x t1 = gcount x t2) →
+  t1 = t2.
+Proof.
+move=> ecount; apply: gfactors_inj.
+apply: (inj (fmap unfold_term : list _ → _)).
+rewrite !unfold_gfactors.
+set ts1 := PreTerm.gfactors (unfold_term t1).
+set ts2 := PreTerm.gfactors (unfold_term t2).
+have wfs1: PreTerm.wf_gfactors ts1 by exact: PreTerm.wf_wf_gfactors.
+have wfs2: PreTerm.wf_gfactors ts2 by exact: PreTerm.wf_wf_gfactors.
+have /SMS.to_id <- := PreTerm.wf_gfactors_sms _ wfs1.
+have /SMS.to_id <- := PreTerm.wf_gfactors_sms _ wfs2.
+apply: SMS.count_to_eq.
+- move=> t t_ts; apply: PreTerm.ginv_auxK; exact: PreTerm.wf_gfactors_wf t_ts.
+- move=> t t_ts; apply: PreTerm.ginv_auxK; exact: PreTerm.wf_gfactors_wf t_ts.
+move=> t t_ts.
+have [t' t_t'] : ∃ t', t ∈ PreTerm.gfactors (unfold_term t').
+  case/elem_of_app: t_ts=> ?; eauto.
+have wf_t: PreTerm.wf t.
+  apply: PreTerm.wf_gfactors_wf t_t'.
+  exact: PreTerm.wf_wf_gfactors.
+have tNm: negb (PreTerm.is_gmul t).
+  apply: PreTerm.wf_gfactors_Ngmul t_t'.
+  exact: PreTerm.wf_wf_gfactors.
+rewrite -[t]PreTerm.normalize_wf // -unfold_fold.
+by apply: ecount; rewrite is_gmul_unfold fold_termK.
+Qed.
+
+Lemma gcount_TGMulN t ts :
+  gcount t (TGMulN ts) = foldr Z.add 0%Z (gcount t <$> ts).
+Proof.
+rewrite /gcount unfold_TGMulN /PreTerm.gmul PreTerm.gmul_auxK; last first.
+  apply: PreTerm.wf_normalize_gfactors.
+  by apply/Forall_fmap/list.Forall_forall=> ?? /=.
+rewrite /PreTerm.normalize_gfactors list_fmap_bind SMS.count_to; last first.
+- move=> t0 /list_elem_of_bind [t1 [] /= t0_t1 t1_ts].
+  apply: PreTerm.ginv_auxK.
+  apply: PreTerm.wf_gfactors_wf t0_t1.
+  exact: PreTerm.wf_wf_gfactors.
+- exact: PreTerm.ginv_auxK.
+by elim: ts => //= t0 ts IH; rewrite SMS.count_app IH.
+Qed.
+
 Lemma count_TMulN t ts :
   count t (TMulN ts) = foldr Z.add 0%Z (count t <$> ts).
 Proof.
@@ -458,6 +602,24 @@ rewrite /PreTerm.normalize_factors list_fmap_bind SMS.count_to; last first.
   exact: PreTerm.wf_wf_factors.
 - exact: PreTerm.inv_auxK.
 by elim: ts => //= t0 ts IH; rewrite SMS.count_app IH.
+Qed.
+
+Lemma TGInvE t : TGInv t = TGMulN (TGInv <$> gfactors t).
+Proof.
+apply: unfold_term_inj; rewrite unfold_TGMulN unfold_TGInv.
+rewrite -list_fmap_compose.
+have ->: unfold_term ∘ TGInv <$> gfactors t =
+         PreTerm.ginv_aux ∘ unfold_term <$> gfactors t.
+  apply/Forall_fmap_ext/list.Forall_forall.
+  move=> t0 t0_in /=; rewrite unfold_TGInv PreTerm.ginv_Ngmul //.
+  have {}t0_in: unfold_term t0 ∈ PreTerm.gfactors (unfold_term t).
+    by rewrite -unfold_gfactors; apply/list_elem_of_fmap; eauto.
+  apply: PreTerm.wf_gfactors_Ngmul t0_in.
+  exact: PreTerm.wf_wf_gfactors.
+rewrite list_fmap_compose unfold_gfactors /PreTerm.ginv.
+case: (unfold_term t) (wf_unfold_term t) => [|||[|] ts] //=.
+case => //= {}t /andb_True [] /andb_True [] tNV tNM wf_t.
+by rewrite PreTerm.gmul1.
 Qed.
 
 Lemma TInvE t : TInv t = TMulN (TInv <$> factors t).
@@ -485,12 +647,50 @@ apply: (inj (fmap unfold_term : list _ → _)).
 by rewrite /= unfold_factors PreTerm.factors_Nmul.
 Qed.
 
+Lemma gfactors_Ngmul t : negb (is_gmul t) → gfactors t = [t].
+Proof.
+rewrite is_gmul_unfold => tNm.
+apply: (inj (fmap unfold_term : list _ → _)).
+by rewrite /= unfold_gfactors PreTerm.gfactors_Ngmul.
+Qed.
+
 Lemma factorsK t : TMulN (factors t) = t.
 Proof.
 apply: unfold_term_inj; rewrite unfold_TMulN unfold_factors.
 rewrite /PreTerm.mul PreTerm.normalize_factors_wf_factors.
 - by rewrite PreTerm.factorsK.
 - exact: PreTerm.wf_wf_factors.
+Qed.
+
+Lemma gfactorsK t : TGMulN (gfactors t) = t.
+Proof.
+apply: unfold_term_inj; rewrite unfold_TGMulN unfold_gfactors.
+rewrite /PreTerm.gmul PreTerm.normalize_gfactors_wf_gfactors.
+- by rewrite PreTerm.gfactorsK.
+- exact: PreTerm.wf_wf_gfactors.
+Qed.
+
+Lemma gcount_TGInv t t' : gcount t (TGInv t') = (- gcount t t')%Z.
+Proof.
+rewrite TGInvE gcount_TGMulN -list_fmap_compose.
+have ->: gcount t ∘ TGInv <$> gfactors t' =
+         (λ t0, - gcount t t0)%Z <$> gfactors t'.
+  apply/Forall_fmap_ext/list.Forall_forall=> t0 t0_in /=.
+  rewrite -(list_elem_of_fmap_inj unfold_term) unfold_gfactors in t0_in.
+  have t0_Nmul: negb (PreTerm.is_gmul (unfold_term t0)).
+    apply: PreTerm.wf_gfactors_Ngmul t0_in.
+    exact: PreTerm.wf_wf_gfactors.
+  have t0V_Nmul: negb (PreTerm.is_gmul (PreTerm.ginv_aux (unfold_term t0))).
+    case: (unfold_term t0) (wf_unfold_term t0) t0_Nmul {t0_in} => [|||[|] ts] //=.
+    by case => //= ? /andb_True [] /andb_True [].
+  rewrite /gcount unfold_TGInv PreTerm.ginv_Ngmul //.
+  rewrite PreTerm.gfactors_Ngmul // PreTerm.gfactors_Ngmul //.
+  rewrite -SMS.count_fmap_i //.
+  - exact: PreTerm.ginv_auxK.
+  - move=> ? /list_elem_of_singleton ->.
+    exact: PreTerm.ginv_auxK.
+rewrite -[t' in RHS]gfactorsK gcount_TGMulN.
+elim: {t'} (gfactors t') => //= t' ts ->; rewrite /fmap; lia.
 Qed.
 
 Lemma count_TInv t t' : count t (TInv t') = (- count t t')%Z.
@@ -524,6 +724,14 @@ have H : unfold_term t ∈ PreTerm.factors (unfold_term b).
 apply: (PreTerm.wf_factors_Nmul _ _ _ H); exact: PreTerm.wf_wf_factors.
 Qed.
 
+Lemma Ngmul_gfactors b t : t ∈ gfactors b -> negb (is_gmul t).
+Proof.
+move=> t_b; rewrite is_gmul_unfold.
+have H : unfold_term t ∈ PreTerm.gfactors (unfold_term b).
+  by rewrite -unfold_gfactors; apply/list_elem_of_fmap; exists t.
+apply: (PreTerm.wf_gfactors_Ngmul _ _ _ H); exact: PreTerm.wf_wf_gfactors.
+Qed.
+
 Lemma TInv_Nid t : negb (is_mul t) → TInv t ≠ t.
 Proof.
 move=> tNm e.
@@ -531,8 +739,18 @@ have {}e : is_inv t = negb (is_inv t) by rewrite -{1}e is_inv_TInv.
 by case: is_inv e.
 Qed.
 
+Lemma TGInv_Nid t : negb (is_gmul t) → TGInv t ≠ t.
+Proof.
+move=> tNm e.
+have {}e : is_ginv t = negb (is_ginv t) by rewrite -{1}e is_ginv_TGInv.
+by case: is_ginv e.
+Qed.
+
 Lemma TInvK t : TInv (TInv t) = t.
 Proof. apply: count_inj=> t0 _; rewrite !count_TInv; lia. Qed.
+
+Lemma TGInvK t : TGInv (TGInv t) = t.
+Proof. apply: gcount_inj=> t0 _; rewrite !gcount_TGInv; lia. Qed.
 
 Definition invs_canceled (ts : list term) : Prop :=
   ∀ t, t ∈ ts → TInv t ∉ ts ∧ negb (is_mul t).
@@ -558,6 +776,49 @@ split.
   + have /ic [V0nin t0Nm] := t0_in.
     split => // /elem_of_cons [e|//].
     rewrite -e TInvK in Vnin; tauto.
+Qed.
+
+Definition ginvs_canceled (ts : list term) : Prop :=
+  ∀ t, t ∈ ts → TGInv t ∉ ts ∧ negb (is_gmul t).
+
+Lemma ginvs_canceled0 : ginvs_canceled [].
+Proof. by move=> ? /elem_of_nil. Qed.
+
+Lemma ginvs_canceled_cons t ts :
+  ginvs_canceled (t :: ts) ↔
+  TGInv t ∉ ts ∧ negb (is_gmul t) ∧ ginvs_canceled ts.
+Proof.
+split.
+- move=> ic.
+  have /ic [Vnin tNm] : t ∈ t :: ts by rewrite elem_of_cons; eauto.
+  do 2?split => //.
+  + by move=> contra; apply: Vnin; apply/elem_of_cons; eauto.
+  + move=> t0 t0_in.
+    have /ic [V0nin t0Nm] : t0 ∈ t :: ts by rewrite elem_of_cons; eauto.
+    by split=> // contra; apply: V0nin; apply/elem_of_cons; eauto.
+- case=> Vnin [] tNm ic t0 /elem_of_cons [->|t0_in].
+  + split=> // /elem_of_cons [e|//].
+    exact: TGInv_Nid.
+  + have /ic [V0nin t0Nm] := t0_in.
+    split => // /elem_of_cons [e|//].
+    rewrite -e TGInvK in Vnin; tauto.
+Qed.
+
+Lemma wf_gfactors_ginvs_canceled (ts : list _) :
+  PreTerm.wf_gfactors ts →
+  ginvs_canceled (fold_term <$> ts).
+Proof.
+case/andb_True=> [] /forallb_True/Forall_forall wfts sms.
+move=> _ /list_elem_of_fmap [t [] -> t_ts].
+have /andb_True [wft tNm] := wfts _ t_ts.
+rewrite is_gmul_unfold fold_termK //; split => //.
+rewrite -(list_elem_of_fmap_inj unfold_term) unfold_TGInv fold_termK //.
+rewrite PreTerm.ginv_Ngmul //.
+have -> : unfold_term <$> (fold_term <$> ts) = ts.
+  rewrite -[RHS]list_fmap_id -list_fmap_compose; apply/Forall_fmap_ext.
+  apply/Forall_forall=> t0 /wfts/andb_True [wft0 ?].
+  by rewrite /= fold_termK.
+by move/SMS.wf_no_pairs/(_ _ t_ts) in sms.
 Qed.
 
 Lemma wf_factors_invs_canceled (ts : list _) :
@@ -587,42 +848,54 @@ Lemma term_rect (T : term -> Type)
   (H5 : forall k, T k -> forall t, T t -> T (TSeal k t))
   (H6 : forall t, T t -> T (THash t))
   (H7 : forall t, T t -> negb (is_mul t) -> negb (is_inv t) -> T (TInv t))
-  (* The base of a normal-form exponential is an atom: [wf] rules out a
-     product and an inverse there as well as an exponential, since [TExp]
-     distributes over the first two. *)
+  (H7g : forall t, T t -> negb (is_gmul t) -> negb (is_ginv t) -> T (TGInv t))
+  (* The base of a normal-form exponential is a *group* atom: [wf] rules out a
+     group product and a group inverse there as well as an exponential, since
+     [TExp] distributes over the first two.  A scalar product or scalar inverse
+     in the base is fine -- [TExp] does not distribute over those. *)
   (H8 : forall t1, T t1 ->
         forall t2, T t2 ->
                    negb (is_exp t1) ->
-                   negb (is_mul t1) ->
-                   negb (is_inv t1) ->
+                   negb (is_gmul t1) ->
+                   negb (is_ginv t1) ->
                    t2 ≠ TMulN [] ->
         T (TExp t1 t2))
   (H9 : forall ts, foldr (fun t R => T t * R)%type unit ts ->
                    invs_canceled ts →
                    length ts ≠ 1 ->
-        T (TMulN ts)) :
+        T (TMulN ts))
+  (H9g : forall ts, foldr (fun t R => T t * R)%type unit ts ->
+                    ginvs_canceled ts →
+                    length ts ≠ 1 ->
+        T (TGMulN ts)) :
   forall t, T t.
 Proof.
 move=> t; rewrite -(unfold_termK t).
 elim: (unfold_term t) (wf_unfold_term t)=>
-  {t} [o|o pt IHpt|o pt1 IHpt1 pt2 IHpt2|[] ts IHts] wfpt.
+  {t} [o|o pt IHpt|o pt1 IHpt1 pt2 IHpt2|[|] ts IHts] wfpt.
 - case: o wfpt => [n|l] _; rewrite fold_termE /=; [exact: H1|exact: H3].
-- case: o wfpt => [kt| |]; rewrite fold_termE /=.
+- case: o wfpt => [kt| | |]; rewrite fold_termE /=.
   + by move=> wfpt; exact: (H4 kt _ (IHpt wfpt)).
   + by move=> wfpt; exact: (H6 _ (IHpt wfpt)).
   + move=> /andb_True [/andb_True [Ninv Nmul] wfpt].
     apply: (H7 _ (IHpt wfpt)).
     * by rewrite is_mul_unfold (fold_termK _ wfpt).
     * by rewrite is_inv_unfold (fold_termK _ wfpt).
+  + move=> /andb_True [/andb_True [Ninv Nmul] wfpt].
+    apply: (H7g _ (IHpt wfpt)).
+    * by rewrite is_gmul_unfold (fold_termK _ wfpt).
+    * by rewrite is_ginv_unfold (fold_termK _ wfpt).
 - case: o wfpt => [||]; rewrite fold_termE /=.
   + by move=> /andb_True [w1 w2]; exact: (H2 _ (IHpt1 w1) _ (IHpt2 w2)).
   + by move=> /andb_True [w1 w2]; exact: (H5 _ (IHpt1 w1) _ (IHpt2 w2)).
   + move=> /andb_True [/andb_True [/andb_True [w1 Nnf1] w2] Hne].
     have pt2N : pt2 ≠ PreTerm.PTMul [] := bool_decide_unpack _ Hne.
     apply: (H8 _ (IHpt1 w1) _ (IHpt2 w2)).
-    * rewrite is_exp_unfold (fold_termK _ w1); exact: (PreTerm.Nnf_Nexp _ Nnf1).
-    * rewrite is_mul_unfold (fold_termK _ w1); exact: (PreTerm.Nnf_Nmul _ Nnf1).
-    * rewrite is_inv_unfold (fold_termK _ w1); exact: (PreTerm.Nnf_Ninv _ Nnf1).
+    * rewrite is_exp_unfold (fold_termK _ w1); exact: (PreTerm.Ngnf_Nexp _ Nnf1).
+    * rewrite is_gmul_unfold (fold_termK _ w1);
+        exact: (PreTerm.Ngnf_Ngmul _ Nnf1).
+    * rewrite is_ginv_unfold (fold_termK _ w1);
+        exact: (PreTerm.Ngnf_Nginv _ Nnf1).
     * have E0 : TMulN [] = fold_term (PreTerm.PTMul []) by rewrite fold_termE.
       rewrite E0 => Heq; apply: pt2N.
       move/(f_equal unfold_term): Heq.
@@ -637,6 +910,17 @@ elim: (unfold_term t) (wf_unfold_term t)=>
     move=> [IHpt IHts'] /Forall_cons [w ws].
     by split; [exact: (IHpt w)|exact: (IH IHts' ws)].
   + exact: wf_factors_invs_canceled.
+  + by rewrite length_fmap.
+- rewrite fold_termE.
+  have [wff tsN1]: PreTerm.wf_gfactors ts ∧ length ts ≠ 1.
+    by rewrite /= andb_True bool_decide_spec in wfpt; case: wfpt.
+  apply: H9g.
+  + have {}wfts: Forall PreTerm.wf ts.
+      by apply/list.Forall_forall => ?; apply: PreTerm.wf_gfactors_wf.
+    elim: ts IHts wfts {wfpt wff tsN1} => [//|pt ts' IH] /=.
+    move=> [IHpt IHts'] /Forall_cons [w ws].
+    by split; [exact: (IHpt w)|exact: (IH IHts' ws)].
+  + exact: wf_gfactors_ginvs_canceled.
   + by rewrite length_fmap.
 Qed.
 

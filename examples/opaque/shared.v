@@ -211,7 +211,7 @@ Proof. rewrite Spec.tag_unseal; exact: STPair2. Qed.
 
 Lemma subterm_TExpN_exp (t t' : term) (ts : list term) :
   ( exists t'', subterm t t'' /\ t'' ∈ ts) ->
-  negb (is_exp t') -> negb (is_mul t') -> negb (is_inv t') ->
+  negb (is_exp t') -> negb (is_gmul t') -> negb (is_ginv t') ->
   invs_canceled ts ->
   subterm t (TExpN t' ts).
 Proof.
@@ -220,7 +220,7 @@ exact: (STExp2 Hnexp Hnmul Hninv Hic Hst Hmem).
 Qed.
 
 Lemma subterm_TExp_exp (t t' t'' : term) :
-  negb (is_exp t') -> negb (is_mul t') -> negb (is_inv t') ->
+  negb (is_exp t') -> negb (is_gmul t') -> negb (is_ginv t') ->
   negb (is_mul t'') ->
   subterm t t'' ->
   subterm t (TExp t' t'').
@@ -250,7 +250,7 @@ Qed.
 
 Lemma subterm_TExpN_exp' (t t' : term) (ts: list term) :
   ¬ subterm t t' ->
-  negb (is_mul t') -> negb (is_inv t') ->
+  negb (is_gmul t') -> negb (is_ginv t') ->
   invs_canceled (ts ++ exps t') ->
   (exists t'', t'' ∈ ts /\ subterm t t'') ->
   subterm t (TExpN t' ts).
@@ -272,7 +272,7 @@ Qed.
 
 Lemma subterm_TExp_exp' (t t' t'' : term) :
   ¬ subterm t t' ->
-  negb (is_mul t') -> negb (is_inv t') ->
+  negb (is_gmul t') -> negb (is_ginv t') ->
   negb (is_mul t'') ->
   (TInv t'') ∉ exps t' ->
   subterm t t'' ->
@@ -292,22 +292,22 @@ apply (subterm_TExpN_exp' Hnst Hnmul Hninv) => //.
 Qed.
 
 (* The product-tolerant form of [subterm_TExp_exp']: [t' ^ t''] spreads over
-   the factors of [t'], so one factor is enough -- but the unit base has none,
-   and [1 ^ t'' = 1] really does lose [t'']. *)
-Lemma subterm_TExp_exp_factors (t t' t'' : term) :
+   the *group* factors of [t'], so one factor is enough -- but the group unit
+   has none, and [1 ^ t'' = 1] really does lose [t'']. *)
+Lemma subterm_TExp_exp_gfactors (t t' t'' : term) :
   ¬ subterm t t' ->
   negb (is_mul t'') -> negb (is_inv t'') ->
-  factors t' ≠ [] ->
+  gfactors t' ≠ [] ->
   subterm t t'' ->
   subterm t (TExp t' t'').
 Proof.
 move=> Hnst Nm2 Ni2 Hne Hst.
-have [u u_t'] : exists u, u ∈ factors t'.
-  case E: (factors t') => [|u us]; first by exfalso; exact: (Hne E).
+have [u u_t'] : exists u, u ∈ gfactors t'.
+  case E: (gfactors t') => [|u us]; first by exfalso; exact: (Hne E).
   by exists u; apply/elem_of_cons; left.
-have Nmu : negb (is_mul u) := Nmul_factors t' u u_t'.
-have sub_u : subterm u t' := @subterm_factors u t' u u_t' (STRefl u).
-have key : forall v, negb (is_mul v) -> negb (is_inv v) -> subterm v t' ->
+have Nmu : negb (is_gmul u) := Ngmul_gfactors t' u u_t'.
+have sub_u : subterm u t' := @subterm_gfactors u t' u u_t' (STRefl u).
+have key : forall v, negb (is_gmul v) -> negb (is_ginv v) -> subterm v t' ->
                      subterm t (TExp v t'').
   move=> v Nmv Niv sub_v.
   have Hnv : ¬ subterm t v.
@@ -319,19 +319,19 @@ have key : forall v, negb (is_mul v) -> negb (is_inv v) -> subterm v t' ->
   have sub_2v : subterm t'' v.
     by apply: transitivity sub_iv; apply: STInv => //; exact: STRefl.
   exact: transitivity Hst sub_2v.
-apply: (@subterm_TExp_factors t t' t'' u u_t').
-case Ei: (is_inv u); last first.
+apply: (@subterm_TExp_gfactors t t' t'' u u_t').
+case Ei: (is_ginv u); last first.
   by apply: key => //; rewrite Ei.
-have Nmw : negb (is_mul (TInv u)) by rewrite is_mul_TInv.
-have Niw : negb (is_inv (TInv u)) by rewrite (is_inv_TInv u Nmu) Ei.
-have sub_wu : subterm (TInv u) u.
-  by rewrite -{2}(TInvK u); apply: STInv => //; exact: STRefl.
-have sub_w : subterm (TInv u) t'.
+have Nmw : negb (is_gmul (TGInv u)) by rewrite is_gmul_TGInv.
+have Niw : negb (is_ginv (TGInv u)) by rewrite (is_ginv_TGInv u Nmu) Ei.
+have sub_wu : subterm (TGInv u) u.
+  by rewrite -{2}(TGInvK u); apply: STGInv => //; exact: STRefl.
+have sub_w : subterm (TGInv u) t'.
   by transitivity u.
-have E : TExp u t'' = TInv (TExp (TInv u) t'').
-  by rewrite -TExp_TInv TInvK.
-rewrite E; apply: STInv.
-- exact: Nmul_TExp.
-- exact: Ninv_TExp.
+have E : TExp u t'' = TGInv (TExp (TGInv u) t'').
+  by rewrite -TExp_TGInv TGInvK.
+rewrite E; apply: STGInv.
+- exact: Ngmul_TExp.
+- exact: Nginv_TExp.
 - exact: (key _ Nmw Niw sub_w).
 Qed.

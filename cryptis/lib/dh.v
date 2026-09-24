@@ -57,7 +57,7 @@ by rewrite /TExpN TMulN1.
 Qed.
 
 Lemma dh_seed_elim1 g a :
-  negb (is_exp g) → negb (is_mul g) → negb (is_inv g) →
+  negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
   dh_seed a -∗
   public (TExp g a) -∗
   ▷ P (TExp g a).
@@ -82,7 +82,7 @@ by rewrite /t' e_base (base_TExp _ _ gNm gNi) base_expN.
 Qed.
 
 Lemma dh_seed_elim2 g a b :
-  negb (is_exp g) → negb (is_mul g) → negb (is_inv g) →
+  negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
   a ≠ b →
   a ≠ TInv b →
   dh_seed a -∗
@@ -123,7 +123,7 @@ congruence.
 Qed.
 
 Lemma dh_public_TExp g a :
-  negb (is_exp g) → negb (is_mul g) → negb (is_inv g) →
+  negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
   minted g -∗
   dh_seed a -∗
   ▷ □ P (TExp g a) -∗
@@ -143,7 +143,7 @@ Qed.
 Definition mk_dh : val := mk_nonce.
 
 Lemma wp_mk_dh (T : gset term) g (Ψ : val → iProp) :
-  negb (is_exp g) -> negb (is_mul g) -> negb (is_inv g) ->
+  negb (is_exp g) -> negb (is_gmul g) -> negb (is_ginv g) ->
   cryptis_ctx -∗
   minted g -∗
   □ (∀ t, ⌜t ∈ T⌝ -∗ minted t) -∗

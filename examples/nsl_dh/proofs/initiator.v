@@ -309,8 +309,8 @@ iDestruct "inv" as "[#pub|inv_m2]".
         have Nm_bp : negb (is_mul (TNonce b')) by [].
         have e_b : b = b'.
         { rewrite /gb in e_gb'.
-          have NmInt : negb (is_mul (TInt 0)) by [].
-    have NiInt : negb (is_inv (TInt 0)) by [].
+          have NmInt : negb (is_gmul (TInt 0)) by [].
+    have NiInt : negb (is_ginv (TInt 0)) by [].
     have e := TExp_injr _ _ _ NmInt NiInt e_gb'. congruence. }
         subst b'.
         iSplitR "".

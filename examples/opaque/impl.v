@@ -30,7 +30,7 @@ Definition AuthEnc : val := λ: "key" "v", senc "key" (Tag $ opN.@"AuthEnc") "v"
 Definition AuthDec : val := λ: "key" "v", sdec "key" (Tag $ opN.@"AuthEnc") "v".
 Definition g := (TInt 0).
 (* The identity of the DH group. *)
-Definition one := TMulN [].
+Definition one := TGMulN [].
 
 Definition OPRF : val := λ: "k",
     λ: "x", H "rw" ["x"; (texp (H' "α" "x") "k")].

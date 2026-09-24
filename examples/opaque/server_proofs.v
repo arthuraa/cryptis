@@ -250,31 +250,32 @@ set m2 := (Spec.of_list [_; _; _; _]).
 wp_apply wp_send => //.
   rewrite public_of_list => //.
   do !iSplit => //.
-  - (* [α] comes off the network, so it may well be a product.  Exponentiation
-       distributes over products, so it is enough that each factor of [α],
-       raised to [k_s], be public on its own -- and [k_s]'s seed predicate is
-       permissive enough to grant exactly that, factor by factor. *)
-    iApply public_TExp_factors.
-    iEval (rewrite public_factors) in "p_α".
+  - (* [α] comes off the network, so it may well be a group product.
+       Exponentiation distributes over those, so it is enough that each group
+       factor of [α], raised to [k_s], be public on its own -- and [k_s]'s seed
+       predicate is permissive enough to grant exactly that, factor by
+       factor. *)
+    iApply public_TExp_gfactors.
+    iEval (rewrite public_gfactors) in "p_α".
     iDestruct "p_α" as "[_ #fs]".
     iApply big_sepL_forall; iIntros "%k %u %Hu".
-    have u_α : u ∈ factors α := list_elem_of_lookup_2 _ _ _ Hu.
-    have Nmu : negb (is_mul u) := Nmul_factors _ _ u_α.
+    have u_α : u ∈ gfactors α := list_elem_of_lookup_2 _ _ _ Hu.
+    have Nmu : negb (is_gmul u) := Ngmul_gfactors _ _ u_α.
     iAssert (public u) as "#p_u".
       by iApply (big_sepL_elem_of with "fs").
-    case Ei: (is_inv u); last first.
-    + have Niu : negb (is_inv u) by rewrite Ei.
+    case Ei: (is_ginv u); last first.
+    + have Niu : negb (is_ginv u) by rewrite Ei.
       iApply public_TExp_exp_pred => //.
       iApply exp_pred_intro1.
       by iApply "Hexpk_s".
-    + (* An inverse factor: [(v⁻¹) ^ k_s = (v ^ k_s)⁻¹], so peel it off. *)
-      have Nmv : negb (is_mul (TInv u)) by rewrite is_mul_TInv.
-      have Niv : negb (is_inv (TInv u)) by rewrite (is_inv_TInv _ Nmu) Ei.
-      have -> : TExp u k_s = TInv (TExp (TInv u) k_s).
-        by rewrite -TExp_TInv TInvK.
-      rewrite [public (TInv (TExp _ _))]public_TInv.
-      iAssert (public (TInv u)) as "#p_Iu".
-        by rewrite [public (TInv u)]public_TInv.
+    + (* A group-inverse factor: [(v⁻¹) ^ k_s = (v ^ k_s)⁻¹], so peel it off. *)
+      have Nmv : negb (is_gmul (TGInv u)) by rewrite is_gmul_TGInv.
+      have Niv : negb (is_ginv (TGInv u)) by rewrite (is_ginv_TGInv _ Nmu) Ei.
+      have -> : TExp u k_s = TGInv (TExp (TGInv u) k_s).
+        by rewrite -TExp_TGInv TGInvK.
+      rewrite [public (TGInv (TExp _ _))]public_TGInv.
+      iAssert (public (TGInv u)) as "#p_Iu".
+        by rewrite [public (TGInv u)]public_TGInv.
       iApply public_TExp_exp_pred => //.
       iApply exp_pred_intro1.
       by iApply "Hexpk_s".
@@ -372,11 +373,11 @@ iSplit.
       rewrite elem_of_union elem_of_singleton.
       by left.
     }
-    apply: subterm_TExp_exp_factors.
+    apply: subterm_TExp_exp_gfactors.
     - exact: Hfreshx_s'.
     - exact: (negb_is_mul_nonce x_s).
     - by [].
-    - by move=> factors0; apply: X_u_one; rewrite -(factorsK X_u) factors0.
+    - by move=> factors0; apply: X_u_one; rewrite -(gfactorsK X_u) factors0.
     - exact: STRefl.
   + rewrite minted_of_list /=
       minted_THash minted_tag minted_of_list /=

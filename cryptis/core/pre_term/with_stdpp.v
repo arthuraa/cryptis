@@ -72,6 +72,7 @@ Instance repr_term_op1 : Repr term_op1 := λ o,
   | O1Key kt => (#TKey_tag, repr kt)%V
   | O1Hash => (#THash_tag, #())%V
   | O1Inv => (#TInv_tag, #())%V
+  | O1GInv => (#TGInv_tag, #())%V
   end.
 
 Canonical term_op2O := leibnizO term_op2.
@@ -96,6 +97,7 @@ Proof. exact: def_eq_decision. Defined.
 Instance repr_term_opN : Repr term_opN := λ o,
   match o with
   | ONMul => #TMul_tag
+  | ONGMul => #TGMul_tag
   end.
 
 Section ValOfPreTerm.
@@ -297,7 +299,10 @@ Definition op1_le (o1 o2 : term_op1) : bool :=
   | O1Hash, O1Key _ => false
   | O1Hash, _ => true
   | O1Inv, O1Inv => true
+  | O1Inv, O1GInv => true
   | O1Inv, _ => false
+  | O1GInv, O1GInv => true
+  | O1GInv, _ => false
   end.
 
 Definition op2_le (o1 o2 : term_op2) : bool :=
@@ -306,6 +311,7 @@ Definition op2_le (o1 o2 : term_op2) : bool :=
 Definition int_of_term_opN (o : term_opN) : Z :=
   match o with
   | ONMul => TMul_tag
+  | ONGMul => TGMul_tag
   end.
 
 Definition opN_le (o1 o2 : term_opN) : bool :=
@@ -327,7 +333,7 @@ rewrite PreTerm.op0_leqE; case: o1 o2 => [n1|[l1]] [n2|[l2]] //=.
 Qed.
 
 Lemma op1_leE o1 o2 : op1_le o1 o2 = (o1 <= o2).
-Proof. by rewrite PreTerm.op1_leqE; case: o1 o2 => [k1||] [k2||] //=; rewrite kt_leE. Qed.
+Proof. by rewrite PreTerm.op1_leqE; case: o1 o2 => [k1|||] [k2|||] //=; rewrite kt_leE. Qed.
 
 Lemma op2_leE o1 o2 : op2_le o1 o2 = (o1 <= o2).
 Proof. by case: o1; case: o2. Qed.
@@ -371,9 +377,11 @@ case: pt1 pt2 => [o1|o1 t1|o1 t11 t12|o1 ts1] [o2|o2 t2|o2 t21 t22|o2 ts2] //=.
 - by rewrite op0_leE.
 - by rewrite op1_leE bool_decide_pt_order eq_op_bool_decide.
 - by rewrite op2_leE !bool_decide_pt_order !eq_op_bool_decide.
-- case: o1 o2 => [] [].
-  by rewrite -(bool_decide_ext _ _ (pt_order_N ONMul ts1 ts2))
-             bool_decide_pt_order PreTerm.leqE /=.
+- case: o1 o2 => [|] [|]; rewrite ?opN_leE //=.
+  + by rewrite -(bool_decide_ext _ _ (pt_order_N ONMul ts1 ts2))
+               bool_decide_pt_order PreTerm.leqE /=.
+  + by rewrite -(bool_decide_ext _ _ (pt_order_N ONGMul ts1 ts2))
+               bool_decide_pt_order PreTerm.leqE /=.
 Qed.
 
 End OrderE.
@@ -414,13 +422,13 @@ Global Instance repr_term_op0_inj : Inj (=) (=) (@repr term_op0 _).
 Proof. by case=> [?|[?]] [?|[?]] //= [<-]. Qed.
 
 Global Instance repr_term_op1_inj : Inj (=) (=) (@repr term_op1 _).
-Proof. by case=> [?||] [?||] //= [/int_of_key_type_inj ->]. Qed.
+Proof. by case=> [?|||] [?|||] //= [/int_of_key_type_inj ->]. Qed.
 
 Global Instance repr_term_op2_inj : Inj (=) (=) (@repr term_op2 _).
 Proof. by case=> [] []. Qed.
 
 Global Instance repr_term_opN_inj : Inj (=) (=) (@repr term_opN _).
-Proof. by case=> [] []. Qed.
+Proof. by case=> [|] [|]. Qed.
 
 Global Instance val_of_pre_term_inj : Inj (=) (=) val_of_pre_term.
 Proof.

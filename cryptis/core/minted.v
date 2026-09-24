@@ -56,8 +56,11 @@ Proof. by rewrite unlock nonces_of_termE. Qed.
 Lemma minted_TInv t : minted (TInv t) ⊣⊢ minted t.
 Proof. by rewrite unlock nonces_of_termE. Qed.
 
+Lemma minted_TGInv t : minted (TGInv t) ⊣⊢ minted t.
+Proof. by rewrite unlock nonces_of_termE. Qed.
+
 Lemma minted_TExpN t ts :
-  negb (is_exp t) -> negb (is_mul t) -> negb (is_inv t) ->
+  negb (is_exp t) -> negb (is_gmul t) -> negb (is_ginv t) ->
   invs_canceled ts ->
   minted (TExpN t ts) ⊣⊢ minted t ∧ [∗ list] t' ∈ ts, minted t'.
 Proof.
@@ -72,6 +75,15 @@ Lemma minted_TMulN ts :
 Proof.
 move => ic.
 rewrite unlock (nonces_of_term_TMulN ic).
+by rewrite big_sepS_union_list_pers big_sepL_fmap.
+Qed.
+
+Lemma minted_TGMulN ts :
+  ginvs_canceled ts ->
+  minted (TGMulN ts) ⊣⊢ [∗ list] t ∈ ts, minted t.
+Proof.
+move => ic.
+rewrite unlock (nonces_of_term_TGMulN ic).
 by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
@@ -105,8 +117,15 @@ rewrite unlock (nonces_of_term_factors t).
 by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
+Lemma minted_gfactors t :
+  minted t ⊣⊢ [∗ list] t' ∈ gfactors t, minted t'.
+Proof.
+rewrite unlock (nonces_of_term_gfactors t).
+by rewrite big_sepS_union_list_pers big_sepL_fmap.
+Qed.
+
 Lemma minted_TExp t1 t2 :
-  negb (is_exp t1) -> negb (is_mul t1) -> negb (is_inv t1) ->
+  negb (is_exp t1) -> negb (is_gmul t1) -> negb (is_ginv t1) ->
   minted (TExp t1 t2) ⊣⊢ minted t1 ∧ minted t2.
 Proof.
 move => nx nm ni.
