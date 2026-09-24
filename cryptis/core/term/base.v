@@ -397,6 +397,14 @@ Definition is_ginv t :=
 Definition is_gmul t :=
   if t is TNonFree pt _ _ then PreTerm.is_gmul pt else false.
 
+(* The exponent-side counterpart of [PreTerm.is_gnon_free]: the heads an
+   exponent may have that are not free.  [is_non_free] collects all five
+   operations, [is_gnon_free] the group ones ([TGInv], [TExp], [TGMul]), and
+   [is_enon_free] the exponent ones ([TInv], [TMul]).  Nonces, hashes and the
+   other free constructors satisfy [negb (is_enon_free _)], which is what makes
+   the signed-count reasoning of [core/term/algebra.v] apply to them. *)
+Definition is_enon_free t := is_inv t || is_mul t.
+
 Lemma is_nonce_unfold t : is_nonce t = PreTerm.is_nonce (unfold_term t).
 Proof. by case: t => //= pt _ nf; move: nf; case: pt. Qed.
 
@@ -414,6 +422,18 @@ Proof. by case: t. Qed.
 
 Lemma is_gmul_unfold t : is_gmul t = PreTerm.is_gmul (unfold_term t).
 Proof. by case: t. Qed.
+
+Lemma Nenf_Ninv t : negb (is_enon_free t) → negb (is_inv t).
+Proof. by rewrite /is_enon_free; case: (is_inv t) => //=. Qed.
+
+Lemma Nenf_Nmul t : negb (is_enon_free t) → negb (is_mul t).
+Proof. by rewrite /is_enon_free; case: (is_inv t) => //=. Qed.
+
+Lemma Nenf_TNonce a : negb (is_enon_free (TNonce a)).
+Proof. by []. Qed.
+
+Lemma Nenf_THash t : negb (is_enon_free (THash t)).
+Proof. by []. Qed.
 
 Lemma unfold_base t : unfold_term (base t) = PreTerm.base (unfold_term t).
 Proof. rewrite /base fold_termK //; exact: PreTerm.wf_base. Qed.

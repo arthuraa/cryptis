@@ -372,54 +372,6 @@ iPoseProof (hash_pred_agree t with "HP HP'") as "e".
 by iIntros "!> !>"; iRewrite "e".
 Qed.
 
-Lemma is_inv_Nmul t : is_inv t -> is_mul t = false.
-Proof.
-rewrite is_inv_unfold is_mul_unfold.
-by case: (unfold_term t) => [?|[?| | |]?|???|[|] ?] //=.
-Qed.
-
-Lemma is_inv_Nexp t : is_inv t -> is_exp t = false.
-Proof.
-rewrite is_inv_unfold is_exp_unfold.
-by case: (unfold_term t) => [?|[?| | |]?|???|[|] ?] //=.
-Qed.
-
-Lemma is_inv_Ngmul t : is_inv t -> is_gmul t = false.
-Proof.
-rewrite is_inv_unfold is_gmul_unfold.
-by case: (unfold_term t) => [?|[?| | |]?|???|[|] ?] //=.
-Qed.
-
-Lemma is_ginv_Nmul t : is_ginv t -> is_mul t = false.
-Proof.
-rewrite is_ginv_unfold is_mul_unfold.
-by case: (unfold_term t) => [?|[?| | |]?|???|[|] ?] //=.
-Qed.
-
-Lemma is_ginv_Ngmul' t : is_ginv t -> is_gmul t = false.
-Proof.
-rewrite is_ginv_unfold is_gmul_unfold.
-by case: (unfold_term t) => [?|[?| | |]?|???|[|] ?] //=.
-Qed.
-
-Lemma is_inv_Nginv t : is_inv t -> is_ginv t = false.
-Proof.
-rewrite is_inv_unfold is_ginv_unfold.
-by case: (unfold_term t) => [?|[?| | |]?|???|[|] ?] //=.
-Qed.
-
-Lemma is_ginv_Ninv t : is_ginv t -> is_inv t = false.
-Proof.
-rewrite is_ginv_unfold is_inv_unfold.
-by case: (unfold_term t) => [?|[?| | |]?|???|[|] ?] //=.
-Qed.
-
-Lemma is_ginv_Nexp t : is_ginv t -> is_exp t = false.
-Proof.
-rewrite is_ginv_unfold is_exp_unfold.
-by case: (unfold_term t) => [?|[?| | |]?|???|[|] ?] //=.
-Qed.
-
 Inductive decompose (T : gset term) (t : term) : Prop :=
 | DInt n of T = ∅ & t = TInt n
 
@@ -444,33 +396,33 @@ case; try by move =>> -> -> //;
           lia.
 - move => t'' -> Ninv inv_t E; rewrite E in inv_t *.
   move => /elem_of_singleton ->.
-  have NmI : negb (is_mul (TInv t'')) by rewrite (is_inv_Nmul inv_t).
+  have NmI : negb (is_mul (TInv t'')) := is_inv_Nmul _ inv_t.
   have Nm : negb (is_mul t'') by move: NmI; rewrite is_mul_TInv.
   have Ninv' : negb (is_inv t'') by apply/negb_True.
   rewrite (tsize_TInv t'' Nm Ninv'); lia.
 - move => t'' -> Ninv inv_t E; rewrite E in inv_t *.
   move => /elem_of_singleton ->.
-  have NmI : negb (is_gmul (TGInv t'')) by rewrite (is_ginv_Ngmul' inv_t).
+  have NmI : negb (is_gmul (TGInv t'')) := is_ginv_Ngmul _ inv_t.
   have Nm : negb (is_gmul t'') by move: NmI; rewrite is_gmul_TGInv.
   have Ninv' : negb (is_ginv t'') by apply/negb_True.
   rewrite (tsize_TGInv t'' Nm Ninv'); lia.
 Qed.
 
-Lemma decompose_is_mul T t : decompose T t → is_mul t = false.
+Lemma decompose_Nmul T t : decompose T t → negb (is_mul t).
 Proof.
 case => *; subst => //=.
 - by apply: is_inv_Nmul.
 - by apply: is_ginv_Nmul.
 Qed.
 
-Lemma decompose_is_gmul T t : decompose T t → is_gmul t = false.
+Lemma decompose_Ngmul T t : decompose T t → negb (is_gmul t).
 Proof.
 case => *; subst => //=.
 - by apply: is_inv_Ngmul.
-- by apply: is_ginv_Ngmul'.
+- by apply: is_ginv_Ngmul.
 Qed.
 
-Lemma decompose_is_exp T t : decompose T t → is_exp t = false.
+Lemma decompose_Nexp T t : decompose T t → negb (is_exp t).
 Proof.
 case => *; subst => //=.
 - by apply: is_inv_Nexp.
@@ -869,10 +821,10 @@ apply: anti_symm.
                |s eT Ns Hi et|s eT Ns Hi et];
       try by move: invI; rewrite et.
     * move: et => /TInv_inj ->; rewrite eT big_sepS_singleton. by [].
-    * by move: Hi; rewrite (is_inv_Nginv invI).
+    * by case: (is_ginv (TInv t)) (is_inv_Nginv _ invI) Hi.
   + by move: Nm'; rewrite -is_mul_TInv (proj2 (is_trueP _) mul).
   + have invI : is_inv (TInv t) by rewrite (is_inv_TInv t Nm').
-    by move: (is_inv_Ngmul invI); rewrite (proj2 (is_trueP _) gmul).
+    by case: (is_gmul (TInv t)) (is_inv_Ngmul _ invI) gmul.
   + by move: (is_exp_TInv t Nm' Ninv'); rewrite (proj2 (is_trueP _) exp).
   + have invI : is_inv (TInv t) by rewrite (is_inv_TInv t Nm').
     iRevert "Hstr".
@@ -894,7 +846,7 @@ Proof.
 move=> mul_t; rewrite public_eq.
 iIntros "[_ [publ | [ [_ Hfs] | [ [%gmul_t _] | [ (%exp_t & _) | Hstr ]]]]]".
 - iDestruct "publ" as (T) "[%dec _]".
-  by move: mul_t; rewrite (decompose_is_mul dec).
+  by case: (is_mul t) (decompose_Nmul dec) mul_t.
 - by iApply "Hfs".
 - by move: mul_t gmul_t;
      rewrite is_mul_unfold is_gmul_unfold; case: (unfold_term t) => [|||[|] ?].
@@ -945,10 +897,10 @@ apply: anti_symm.
     case: d => [n eT et|t1 t2 eT et|kt t0 eT et|k t0 eT et|t0 eT et
                |s eT Ns Hi et|s eT Ns Hi et];
       try by move: invI; rewrite et.
-    * by move: Hi; rewrite (is_ginv_Ninv invI).
+    * by case: (is_inv (TGInv t)) (is_ginv_Ninv _ invI) Hi.
     * move: et => /TGInv_inj ->; rewrite eT big_sepS_singleton. by [].
   + have invI : is_ginv (TGInv t) by rewrite (is_ginv_TGInv t Nm').
-    by move: (is_ginv_Nmul invI); rewrite (proj2 (is_trueP _) mul).
+    by case: (is_mul (TGInv t)) (is_ginv_Nmul _ invI) mul.
   + by move: Nm'; rewrite -is_gmul_TGInv (proj2 (is_trueP _) gmul).
   + by move: (is_exp_TGInv t Nm' Ninv'); rewrite (proj2 (is_trueP _) exp).
   + have invI : is_ginv (TGInv t) by rewrite (is_ginv_TGInv t Nm').
@@ -971,7 +923,7 @@ Proof.
 move=> mul_t; rewrite public_eq.
 iIntros "[_ [publ | [ [%mul_t' _] | [ [_ Hfs] | [ (%exp_t & _) | Hstr ]]]]]".
 - iDestruct "publ" as (T) "[%dec _]".
-  by move: mul_t; rewrite (decompose_is_gmul dec).
+  by case: (is_gmul t) (decompose_Ngmul dec) mul_t.
 - by move: mul_t mul_t';
      rewrite is_mul_unfold is_gmul_unfold; case: (unfold_term t) => [|||[|] ?].
 - by iApply "Hfs".
@@ -1155,7 +1107,7 @@ apply: anti_symm; last first.
   iSplit; first by iSplit.
   iDestruct "Hdisj" as "[c1 | [c2 | [c2' | [c3 | c4]]]]".
   + iDestruct "c1" as (T) "[%dec _]".
-    by move: ttsX; rewrite (decompose_is_exp dec).
+    by case: (is_exp (TExpN t ts)) (decompose_Nexp dec) ttsX.
   + iDestruct "c2" as "(%mul_c & _)".
     by move: ttsX mul_c;
        rewrite is_exp_unfold is_mul_unfold;
@@ -1192,7 +1144,7 @@ move => expt; apply: anti_symm; last first.
   iSplit; first done.
   iDestruct "Hdisj" as "[c1 | [c2 | [c2' | [c3 | c4]]]]".
   + iDestruct "c1" as (T) "[%dec _]".
-    by move: expt; rewrite (decompose_is_exp dec).
+    by case: (is_exp t) (decompose_Nexp dec) expt.
   + iDestruct "c2" as "(%mul_c & _)".
     by move: expt mul_c;
        rewrite is_exp_unfold is_mul_unfold; case: (unfold_term t) => [|||[|] ?].
@@ -1315,7 +1267,7 @@ Qed.
 
 (* Unconditional in both arguments.  A group product base distributes, and every
    group factor of the result comes from a group factor of [t1]
-   ([mem_gfactors_TGMulN]); a group inverse base is pushed out through
+   ([elem_of_gfactors_TGMulN]); a group inverse base is pushed out through
    [TExp_TGInv]. *)
 Lemma public_TExp t1 t2 :
   public t1 -∗ public t2 -∗ public (TExp t1 t2).
@@ -1332,7 +1284,7 @@ case Em: (is_gmul t1).
   rewrite big_sepL_forall; iIntros (k x Hx).
   have x_in : x ∈ gfactors (TExp t1 t2) := list_elem_of_lookup_2 _ _ _ Hx.
   move: x_in; rewrite {1}(TExp_gfactors t1 t2).
-  move=> /(mem_gfactors_TGMulN _ _ Nmf) /list_elem_of_fmap [u [-> u_t1]].
+  move=> /(elem_of_gfactors_TGMulN _ _ Nmf) /list_elem_of_fmap [u [-> u_t1]].
   iApply (IH u (tsize_gfactors_lt _ _ Xm u_t1) with "[] p2").
   rewrite (public_gfactors t1); iDestruct "p1" as "[_ #fs]".
   by iApply (big_sepL_elem_of with "fs").
@@ -1370,7 +1322,7 @@ have Nmf : Forall (fun v => negb (is_gmul v))
 have factE : forall x, x ∈ gfactors (TExp t1 t2) ->
     exists u, x = TExp u t2 /\ u ∈ gfactors t1.
   move=> x; rewrite {1}(TExp_gfactors t1 t2).
-  by move=> /(mem_gfactors_TGMulN _ _ Nmf) /list_elem_of_fmap [u [-> u_t1]]; eauto.
+  by move=> /(elem_of_gfactors_TGMulN _ _ Nmf) /list_elem_of_fmap [u [-> u_t1]]; eauto.
 rewrite [public (TExp t1 t2)]public_gfactors [minted (TExp t1 t2)]minted_gfactors.
 iSplit; iApply big_sepL_forall; iIntros (k x Hx);
   case: (factE x (list_elem_of_lookup_2 _ _ _ Hx)) => u [-> u_t1].
@@ -1391,16 +1343,16 @@ Qed.
 Lemma big_sepL_factors_TMulN2 (Φ : term → iProp) `{!∀ t, Persistent (Φ t)} t1 t2 :
   ([∗ list] t' ∈ factors t1, Φ t') -∗
   ([∗ list] t' ∈ factors t2, Φ t') -∗
-  [∗ list] t' ∈ factors (TMulN (t1 :: t2 :: nil)), Φ t'.
+  [∗ list] t' ∈ factors (TMulN [t1; t2]), Φ t'.
 Proof.
 iIntros "#H1 #H2"; iApply big_sepL_intro; iIntros "!>" (k u Hk).
-move: (mem_factors_TMulN2 _ _ _ (list_elem_of_lookup_2 _ _ _ Hk)) => /elem_of_app[Hin|Hin].
+move: (elem_of_factors_TMulN2 _ _ _ (list_elem_of_lookup_2 _ _ _ Hk)) => /elem_of_app[Hin|Hin].
 - by iApply (big_sepL_elem_of with "H1").
 - by iApply (big_sepL_elem_of with "H2").
 Qed.
 
 Lemma public_TMulN2 t1 t2 :
-  public t1 -∗ public t2 -∗ public (TMulN (t1 :: t2 :: nil)).
+  public t1 -∗ public t2 -∗ public (TMulN [t1; t2]).
 Proof.
 iIntros "#p1 #p2".
 iDestruct (public_factors t1 with "p1") as "#[m1 f1]".
@@ -1412,7 +1364,7 @@ iApply public_factors; iSplit.
 - by iApply (big_sepL_factors_TMulN2 with "f1 f2").
 Qed.
 
-Lemma public_TMul0 : ⊢ public (TMulN nil).
+Lemma public_TMul0 : ⊢ public (TMulN []).
 Proof.
 by iApply (public_TMulN_intro invs_canceled0).
 Qed.
@@ -1427,27 +1379,21 @@ iIntros "#H"; iSplit; last done.
 iApply (big_sepL_mono with "H"); iIntros (k t' _) "?"; by iApply public_minted.
 Qed.
 
-Lemma mem_gfactors_TGMulN2 t1 t2 t' :
-  t' ∈ gfactors (TGMulN (t1 :: t2 :: nil)) → t' ∈ gfactors t1 ++ gfactors t2.
-Proof.
-by rewrite elem_of_app -!gcount_gt0 gcount_TGMulN /fmap /=; lia.
-Qed.
-
 Lemma big_sepL_gfactors_TGMulN2
   (Φ : term → iProp) `{!∀ t, Persistent (Φ t)} t1 t2 :
   ([∗ list] t' ∈ gfactors t1, Φ t') -∗
   ([∗ list] t' ∈ gfactors t2, Φ t') -∗
-  [∗ list] t' ∈ gfactors (TGMulN (t1 :: t2 :: nil)), Φ t'.
+  [∗ list] t' ∈ gfactors (TGMulN [t1; t2]), Φ t'.
 Proof.
 iIntros "#H1 #H2"; iApply big_sepL_intro; iIntros "!>" (k u Hk).
-move: (mem_gfactors_TGMulN2 (list_elem_of_lookup_2 _ _ _ Hk))
+move: (elem_of_gfactors_TGMulN2 _ _ _ (list_elem_of_lookup_2 _ _ _ Hk))
   => /elem_of_app[Hin|Hin].
 - by iApply (big_sepL_elem_of with "H1").
 - by iApply (big_sepL_elem_of with "H2").
 Qed.
 
 Lemma public_TGMulN2 t1 t2 :
-  public t1 -∗ public t2 -∗ public (TGMulN (t1 :: t2 :: nil)).
+  public t1 -∗ public t2 -∗ public (TGMulN [t1; t2]).
 Proof.
 iIntros "#p1 #p2".
 iDestruct (public_gfactors t1 with "p1") as "#[m1 f1]".
@@ -1459,7 +1405,7 @@ iApply public_gfactors; iSplit.
 - by iApply (big_sepL_gfactors_TGMulN2 with "f1 f2").
 Qed.
 
-Lemma public_TGMul0 : ⊢ public (TGMulN nil).
+Lemma public_TGMul0 : ⊢ public (TGMulN []).
 Proof.
 by iApply (public_TGMulN_intro ginvs_canceled0).
 Qed.

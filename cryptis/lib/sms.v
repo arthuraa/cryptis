@@ -132,17 +132,17 @@ Qed.
 
 (** [cancel] only shrinks the underlying set of elements. *)
 
-Lemma mem_insert y x X : y ∈ insert x X -> y ∈ x :: X.
+Lemma elem_of_insert y x X : y ∈ insert x X -> y ∈ x :: X.
 Proof.
 rewrite /insert; case_bool_decide as Hin => yin.
 - rewrite elem_of_cons; right; exact: (elem_of_rem yin).
 - exact: yin.
 Qed.
 
-Lemma mem_cancel {z X} : z ∈ cancel X -> z ∈ X.
+Lemma elem_of_cancel {z X} : z ∈ cancel X -> z ∈ X.
 Proof.
 elim: X => [H|x X IH]; first exact: H.
-rewrite cancel_cons => /mem_insert /elem_of_cons [->|xin].
+rewrite cancel_cons => /elem_of_insert /elem_of_cons [->|xin].
 - by rewrite elem_of_cons; left.
 - by rewrite elem_of_cons; right; exact: (IH xin).
 Qed.
@@ -151,7 +151,7 @@ Qed.
 Lemma elem_of_prune z X : z ∈ prune X <-> i z <> z /\ z ∈ X.
 Proof. by rewrite /prune list_elem_of_filter. Qed.
 
-Lemma mem_prune z X : z ∈ prune X -> z ∈ X.
+Lemma prune_elem_of z X : z ∈ prune X -> z ∈ X.
 Proof. rewrite elem_of_prune; by case. Qed.
 
 Lemma prune_fpf z X : z ∈ prune X -> i z <> z.
@@ -279,7 +279,7 @@ Lemma count_to z X :
 Proof.
 move=> iKz iKX.
 rewrite /to merge_sort_Permutation.
-rewrite (count_cancel z (prune X) iKz (fun x xin => iKX x (mem_prune _ _ xin))).
+rewrite (count_cancel z (prune X) iKz (fun x xin => iKX x (prune_elem_of _ _ xin))).
 exact: (count_prune z X iKz).
 Qed.
 
@@ -328,7 +328,7 @@ elim: X => [_ _|x X IH iNX iKX].
 - rewrite cancel_cons.
   apply: (invs_canceled_insert x (cancel X)).
   + apply: iNX; rewrite elem_of_cons; by left.
-  + move=> y /mem_cancel yin; apply: iKX; rewrite elem_of_cons; by right.
+  + move=> y /elem_of_cancel yin; apply: iKX; rewrite elem_of_cons; by right.
   + apply: IH.
     * move=> y yX; apply: iNX; rewrite elem_of_cons; by right.
     * move=> y yX; apply: iKX; rewrite elem_of_cons; by right.
@@ -439,15 +439,15 @@ Lemma wf_to X :
 Proof.
 move=> iKX.
 have mempX : forall x, x ∈ to X -> x ∈ prune X.
-  move=> x; rewrite /to => xin; apply: mem_cancel.
+  move=> x; rewrite /to => xin; apply: elem_of_cancel.
   by rewrite -(merge_sort_Permutation R (cancel (prune X))).
 apply: wf_intro.
 - rewrite /to; exact: merge_sort_sorted.
 - apply/invs_canceledP; rewrite /to merge_sort_Permutation.
   exact: (invs_canceled_cancel (prune X)
             (fun x xin => prune_fpf x _ xin)
-            (fun x xin => iKX x (mem_prune _ _ xin))).
-- move=> x /mempX xin; exact: (iKX x (mem_prune _ _ xin)).
+            (fun x xin => iKX x (prune_elem_of _ _ xin))).
+- move=> x /mempX xin; exact: (iKX x (prune_elem_of _ _ xin)).
 - move=> x /mempX xin; exact: (prune_fpf x _ xin).
 Qed.
 
@@ -471,21 +471,21 @@ move=> iKX iKY; split.
   apply: merge_sort_Permutation_eq; apply: Permutation_count_mem => z.
   apply: Nat2Z.inj.
   have iKpX : forall x, x ∈ prune X -> i (i x) = x
-    by move=> x /mem_prune xX; exact: (iKX x xX).
+    by move=> x /prune_elem_of xX; exact: (iKX x xX).
   have iKpY : forall x, x ∈ prune Y -> i (i x) = x
-    by move=> x /mem_prune xX; exact: (iKY x xX).
+    by move=> x /prune_elem_of xX; exact: (iKY x xX).
   have icX : invs_canceled (cancel (prune X))
     := invs_canceled_cancel (prune X) (fun x xin => prune_fpf x _ xin) iKpX.
   have icY : invs_canceled (cancel (prune Y))
     := invs_canceled_cancel (prune Y) (fun x xin => prune_fpf x _ xin) iKpY.
   case: (decide (z ∈ cancel (prune X))) => zX.
-  + have iKz : i (i z) = z := iKpX z (mem_cancel zX).
+  + have iKz : i (i z) = z := iKpX z (elem_of_cancel zX).
     rewrite (count_mem_of_invs_canceled z (cancel (prune X)) icX).
     rewrite (count_mem_of_invs_canceled z (cancel (prune Y)) icY).
     rewrite (count_cancel z (prune X) iKz iKpX) (count_cancel z (prune Y) iKz iKpY).
     by rewrite (count_prune z X iKz) (count_prune z Y iKz) (Hc z iKz).
   + case: (decide (z ∈ cancel (prune Y))) => zY.
-    * have iKz : i (i z) = z := iKpY z (mem_cancel zY).
+    * have iKz : i (i z) = z := iKpY z (elem_of_cancel zY).
       rewrite (count_mem_of_invs_canceled z (cancel (prune X)) icX).
       rewrite (count_mem_of_invs_canceled z (cancel (prune Y)) icY).
       rewrite (count_cancel z (prune X) iKz iKpX) (count_cancel z (prune Y) iKz iKpY).
@@ -509,9 +509,9 @@ by rewrite !not_elem_of_count_strong.
 Qed.
 
 (** [to] only shrinks the underlying set of elements (via [prune]/[cancel]). *)
-Lemma mem_to z X : z ∈ to X -> z ∈ X.
+Lemma elem_of_to z X : z ∈ to X -> z ∈ X.
 Proof.
-rewrite /to => zin; apply: mem_prune; apply: mem_cancel.
+rewrite /to => zin; apply: prune_elem_of; apply: elem_of_cancel.
 by rewrite -(merge_sort_Permutation R (cancel (prune X))).
 Qed.
 
@@ -550,7 +550,7 @@ Lemma to_cat_to A B :
   to (A ++ to B) = to (A ++ B).
 Proof.
 move=> iKA iKB.
-have memB : forall x, x ∈ to B -> x ∈ B by move=> x; exact: mem_to.
+have memB : forall x, x ∈ to B -> x ∈ B by move=> x; exact: elem_of_to.
 have lawK : forall x, x ∈ A ++ to B -> i (i x) = x.
   move=> x; rewrite elem_of_app => - [xA|xtoB]; [exact: iKA | exact: (iKB _ (memB _ xtoB))].
 have lawK' : forall x, x ∈ A ++ B -> i (i x) = x.
@@ -638,7 +638,7 @@ Proof.
 move=> finj fij fRS.
 rewrite /to (merge_sort_fmap R S f fRS); congr (merge_sort S _).
 rewrite (cancel_fmap i j f (prune i X) finj); last first.
-{ move=> x xin; apply: fij; exact: (mem_prune _ _ _ xin). }
+{ move=> x xin; apply: fij; exact: (prune_elem_of _ _ _ xin). }
 by rewrite (prune_fmap i j f X finj fij).
 Qed.
 
@@ -727,8 +727,8 @@ have e : f <$> to R i X ≡ₚ f <$> cancel i (prune i X).
   by rewrite /to; apply: fmap_Permutation; exact: merge_sort_Permutation.
 rewrite (count_proper j z _ _ e).
 rewrite (count_fmap_cancel i j f z (prune i X) jKz);
-  [ |move=> x xin; apply: jKf; exact: (mem_prune _ _ _ xin)
-   |move=> x xin; apply: fij; exact: (mem_prune _ _ _ xin)].
+  [ |move=> x xin; apply: jKf; exact: (prune_elem_of _ _ _ xin)
+   |move=> x xin; apply: fij; exact: (prune_elem_of _ _ _ xin)].
 exact: count_fmap_prune.
 Qed.
 
@@ -736,7 +736,7 @@ End SMS.
 
 (* [to] is the canonical (sorted, cancelled) form; keep it opaque to [simpl] so
    its [merge_sort]/[cancel] implementation never leaks into goals — reason about
-   it through the lemmas above ([to_eq]/[to_id]/[count_to]/[mem_to]/…). *)
+   it through the lemmas above ([to_eq]/[to_id]/[count_to]/[elem_of_to]/…). *)
 Global Arguments SMS.to : simpl never.
 
 (* Well-formedness is a client-facing predicate; keep [simpl] from exposing its
