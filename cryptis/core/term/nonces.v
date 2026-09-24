@@ -314,6 +314,30 @@ have Hmul := @nonces_of_pre_term_mul_sub (map unfold_term ts).
 set_solver.
 Qed.
 
+Lemma nonces_of_term_TMulN_subseteq ts :
+  nonces_of_term (TMulN ts) ⊆ ⋃ map nonces_of_term ts.
+Proof.
+have Hts : ⋃ map nonces_of_term ts
+         = ⋃ map nonces_of_pre_term (map unfold_term ts).
+  congr union_list. elim: ts => [|t' ts IH] //=.
+  by rewrite IH nonces_of_term_unseal /nonces_of_term_def.
+rewrite Hts nonces_of_term_unseal /nonces_of_term_def unfold_TMulN.
+exact: nonces_of_pre_term_mul_sub.
+Qed.
+
+(* The [⊆] companion of [nonces_of_term_TGMulN], with no [ginvs_canceled] side
+   condition: cancellation only ever removes factors. *)
+Lemma nonces_of_term_TGMulN_subseteq ts :
+  nonces_of_term (TGMulN ts) ⊆ ⋃ map nonces_of_term ts.
+Proof.
+have Hts : ⋃ map nonces_of_term ts
+         = ⋃ map nonces_of_pre_term (map unfold_term ts).
+  congr union_list. elim: ts => [|t' ts IH] //=.
+  by rewrite IH nonces_of_term_unseal /nonces_of_term_def.
+rewrite Hts nonces_of_term_unseal /nonces_of_term_def unfold_TGMulN.
+exact: nonces_of_pre_term_gmul_sub.
+Qed.
+
 Lemma nonces_of_term_TMulN ts :
   invs_canceled ts ->
   nonces_of_term (TMulN ts) = ⋃ map nonces_of_term ts.

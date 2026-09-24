@@ -316,3 +316,68 @@ Proof. exact: term_lt_rect. Qed.
 
 Arguments tsize_lt_TExp {t1 t2} _ _.
 Arguments tsize_TExp_TInv {t1 t2} _ _.
+
+(** * Occurs-check: an exponent too big to be inside [X]
+
+    If [u] is an exponent of [w] and [u] is strictly bigger than [X], then no
+    group factor of [X ^ c] can be [w] or its inverse, so [w] survives in any
+    group product [X ^ c] is multiplied into.
+
+    This is the symbolic form of HMQV's argument: the multiplier [e = H(X, …)]
+    is built from [X], hence strictly bigger than it, so [X] cannot contain
+    [e] — and any group factor of [X ^ c] equal to [w] would have to. *)
+
+Lemma gcount_TExp_eq0 X c w u :
+  u ∈ exps w -> u ∉ factors c -> tsize X < tsize u ->
+  gcount w (TExp X c) = 0%Z.
+Proof.
+move=> u_w u_c ltX.
+have xw : is_exp w := is_exp_of_exps u_w.
+have Nmw : negb (is_gmul w) := is_exp_Ngmul _ xw.
+have Niw : negb (is_ginv w) := is_exp_Nginv _ xw.
+(* On a group atom [v], neither [w] nor its inverse is [v ^ c].  A group
+   inverse is peeled with [TExp_TGInv] and handled by the induction. *)
+have key : forall v, negb (is_gmul v) -> tsize v < tsize u ->
+                     w ≠ TExp v c /\ TGInv w ≠ TExp v c.
+  elim/term_lt_ind => v IH Nmv ltv.
+  case Ei: (is_ginv v); last first.
+  - have Niv : negb (is_ginv v) by rewrite Ei.
+    split.
+    + move=> e_w.
+      have eE : expo w = TMulN [expo v; c] by rewrite e_w (expo_TExp _ _ Nmv Niv).
+      move: u_w; rewrite /exps eE.
+      move=> /mem_factors_TMulN2 /elem_of_app [u_v|//].
+      have := tsize_exps_lt _ _ u_v; lia.
+    + move=> e_w.
+      have contra : is_ginv (TGInv w) = is_ginv (TExp v c) by rewrite e_w.
+      move: contra; rewrite (is_ginv_TGInv _ Nmw) (is_ginv_TExp _ _ Nmv) Ei.
+      by case: is_ginv Niw.
+  - have Xi : is_ginv v by rewrite Ei.
+    have Nmv' : negb (is_gmul (TGInv v)) by rewrite is_gmul_TGInv.
+    have Niv' : negb (is_ginv (TGInv v)) by rewrite (is_ginv_TGInv _ Nmv) Ei.
+    have ltv' : tsize (TGInv v) < tsize v := tsize_TGInv_lt _ Xi.
+    have eE : TExp v c = TGInv (TExp (TGInv v) c).
+      by rewrite -TExp_TGInv TGInvK.
+    have [ne1 _] : w ≠ TExp (TGInv v) c /\ TGInv w ≠ TExp (TGInv v) c.
+      by apply: IH => //; lia.
+    split.
+    + rewrite eE => e_w.
+      have contra : is_ginv w = is_ginv (TGInv (TExp (TGInv v) c)) by rewrite -e_w.
+      move: contra.
+      rewrite (is_ginv_TGInv _ (Ngmul_TExp _ _ Nmv')) (is_ginv_TExp _ _ Nmv').
+      by case: is_ginv Niv' => //=; case: is_ginv Niw.
+    + by rewrite eE => /TGInv_inj.
+have main : forall v, v ∈ gfactors X -> gcount w (TExp v c) = 0%Z.
+  move=> v v_X.
+  have Nmv : negb (is_gmul v) := Ngmul_gfactors _ _ v_X.
+  have ltv : tsize v < tsize u.
+    have := tsize_gfactors_le _ _ v_X; lia.
+  have [ne1 ne2] := key v Nmv ltv.
+  apply: not_elem_of_gcount_strong;
+    by rewrite (gfactors_Ngmul _ (Ngmul_TExp _ _ Nmv)) list_elem_of_singleton.
+rewrite (TExp_gfactors X c) gcount_TGMulN -list_fmap_compose.
+elim: (gfactors X) main => [//|v vs IH] main /=.
+rewrite /compose main; last by apply/elem_of_cons; left.
+rewrite IH ?Z.add_0_l // => v' v'_vs.
+by apply: main; apply/elem_of_cons; right.
+Qed.

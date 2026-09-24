@@ -1388,19 +1388,13 @@ iIntros "#H"; iSplit; last done.
 iApply (big_sepL_mono with "H"); iIntros (k t' _) "?"; by iApply public_minted.
 Qed.
 
-Lemma mem_factors_TMulN2 t1 t2 t' :
-  t' ∈ factors (TMulN (t1 :: t2 :: nil)) → t' ∈ factors t1 ++ factors t2.
-Proof.
-by rewrite elem_of_app -!count_gt0 count_TMulN /fmap /=; lia.
-Qed.
-
 Lemma big_sepL_factors_TMulN2 (Φ : term → iProp) `{!∀ t, Persistent (Φ t)} t1 t2 :
   ([∗ list] t' ∈ factors t1, Φ t') -∗
   ([∗ list] t' ∈ factors t2, Φ t') -∗
   [∗ list] t' ∈ factors (TMulN (t1 :: t2 :: nil)), Φ t'.
 Proof.
 iIntros "#H1 #H2"; iApply big_sepL_intro; iIntros "!>" (k u Hk).
-move: (mem_factors_TMulN2 (list_elem_of_lookup_2 _ _ _ Hk)) => /elem_of_app[Hin|Hin].
+move: (mem_factors_TMulN2 _ _ _ (list_elem_of_lookup_2 _ _ _ Hk)) => /elem_of_app[Hin|Hin].
 - by iApply (big_sepL_elem_of with "H1").
 - by iApply (big_sepL_elem_of with "H2").
 Qed.

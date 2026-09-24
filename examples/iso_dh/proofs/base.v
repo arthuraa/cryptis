@@ -374,6 +374,58 @@ move=> Nm_a Nm_b; iIntros "#m_a #m_b #pred_a #pred_b #[H|H]".
   iApply public_TExp => //. by iApply (public_dh_share Nm_a).
 Qed.
 
+(* The general form of [public_dh_secret2]: [a] and [b] need only *occur* among
+   the exponents of [t], not exhaust them.  [exp_pred_inv_gen] already takes an
+   arbitrary sublist of [exps t], so the other exponents -- which may well be
+   public, as HMQV's hash multipliers are -- are simply skipped.  A version that
+   concluded only "*some* exponent of [t] is public" would be vacuous there. *)
+Lemma public_dh_secret_gen2 a b t :
+  a ≠ b →
+  a ∈ exps t →
+  b ∈ exps t →
+  □ (∀ u, exp_pred_base a u ↔ ▷ □ iso_dh_key_share u) -∗
+  □ (∀ u, exp_pred_base b u ↔ ▷ □ iso_dh_key_share u) -∗
+  public t -∗
+  public a ∨ public b.
+Proof.
+iIntros "%a_b %a_t %b_t #pred_a #pred_b #p".
+iPoseProof (public_minted with "p") as "#m".
+iAssert (minted a ∧ minted b)%I as "#[ma mb]".
+  iEval (rewrite minted_base_exps) in "m"; iDestruct "m" as "[_ #mes]".
+  by iSplit; iApply (big_sepL_elem_of with "mes").
+iAssert (◇ (public a ∨ public b))%I as "[H|H]"; first last.
+- by iRight; iApply except_0_public.
+- by iLeft; iApply except_0_public.
+iPoseProof (exp_pred_exps a_t with "p") as "[#dh_a _]".
+have a_ab : a ∈ [a; b] by set_solver.
+have ab_t : [a; b] ⊆ exps t by set_solver.
+iPoseProof (exp_pred_inv_gen a_ab ab_t with "dh_a") as "(%c & %c_ab & H)".
+rewrite elem_of_cons list_elem_of_singleton in c_ab.
+iDestruct "H" as "[H|(%t3 & %e_base & %exps_sub & base)]".
+  by case: c_ab => ->; eauto.
+iAssert (▷ □ iso_dh_key_share t3)%I as ">%contra".
+  by case: c_ab => ->; [iApply "pred_a"|iApply "pred_b"].
+case: (exps t3) => // c' [|//] in exps_sub contra.
+have [a_c b_c]: a ∈ [c'] ∧ b ∈ [c'] by set_solver.
+rewrite !list_elem_of_singleton in a_c b_c; congruence.
+Qed.
+
+Lemma public_dh_secret_gen a b t (P : iProp) :
+  a ≠ b →
+  a ∈ exps t →
+  b ∈ exps t →
+  □ (public a ↔ P) -∗
+  □ (∀ u, exp_pred_base a u ↔ ▷ □ iso_dh_key_share u) -∗
+  □ (public b ↔ P) -∗
+  □ (∀ u, exp_pred_base b u ↔ ▷ □ iso_dh_key_share u) -∗
+  (public t → P).
+Proof.
+move=> a_b a_t b_t.
+iIntros "#s_a #pred_a #s_b #pred_b #p".
+iPoseProof (public_dh_secret_gen2 a_b a_t b_t with "pred_a pred_b p") as "H".
+by iDestruct "H" as "[H|H]"; [iApply "s_a"|iApply "s_b"].
+Qed.
+
 Lemma public_dh_secret2 a b :
   negb (is_mul a) ->
   negb (is_mul b) ->
@@ -385,33 +437,12 @@ Lemma public_dh_secret2 a b :
   public a ∨ public b.
 Proof.
 move=> Nm_a Nm_b; iIntros "%a_b %a_bV #pred_a #pred_b #p".
-have NInt : negb (is_exp (TInt 0)) by [].
-have NIntM : negb (is_mul (TInt 0)) by [].
-have NIntI : negb (is_inv (TInt 0)) by [].
 have ic_ab : invs_canceled [a; b] := proj2 (invs_canceled2 Nm_a Nm_b) a_bV.
-iPoseProof (public_minted with "p") as "m".
-iAssert (minted a ∧ minted b)%I as "[ma mb]".
-  rewrite minted_TExpN //. iDestruct "m" as "[_ m]". rewrite /=.
-  by iDestruct "m" as "($ & $ & _)".
-iAssert (◇ (public a ∨ public b))%I as "[H|H]"; first last.
-- by iRight; iApply except_0_public.
-- by iLeft; iApply except_0_public.
-rewrite public_TExp2_iff //.
-iDestruct "p" as "(_ & #contraA & #contraB & _)"; eauto.
-iPoseProof (exp_pred_inv with "contraA") as "(%t & %t_share & H)".
-  apply: (elem_of_TExpN2l Nm_a Nm_b) => //.
-  by rewrite /exps (expo_expN _ NInt) factors_TMulN0 elem_of_nil; case.
-have exps_share: exps (TExpN (TInt 0) [a; b]) ≡ₚ [a; b].
-  by rewrite exps_TExpN //.
-rewrite exps_share elem_of_cons list_elem_of_singleton in t_share.
-iDestruct "H" as "[H|(%t3 & %e_base & %exps_sub & base)]".
-  by case: t_share=> ->; eauto.
-rewrite exps_share in exps_sub.
-iAssert (▷ □ iso_dh_key_share t3)%I as ">%contra".
-  by case: t_share=> ->; [iApply "pred_a"|iApply "pred_b"].
-case: (exps t3) => // c [|//] in exps_sub contra.
-have [a_c b_c]: a ∈ [c] ∧ b ∈ [c] by set_solver.
-rewrite !list_elem_of_singleton in a_c b_c; congruence.
+have exps_share : exps (TExpN (TInt 0) [a; b]) ≡ₚ [a; b].
+  by rewrite exps_TExpN.
+have a_t : a ∈ exps (TExpN (TInt 0) [a; b]) by rewrite exps_share; set_solver.
+have b_t : b ∈ exps (TExpN (TInt 0) [a; b]) by rewrite exps_share; set_solver.
+by iApply (public_dh_secret_gen2 a_b a_t b_t with "pred_a pred_b p").
 Qed.
 
 Lemma public_dh_secret' a b (P : iProp) :

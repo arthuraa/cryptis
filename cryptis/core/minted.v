@@ -110,6 +110,30 @@ rewrite big_sepL_elem_of // big_sepS_forall.
 by iApply "Hts".
 Qed.
 
+Lemma all_minted_TMulN ts :
+  ([∗ list] t ∈ ts, minted t) ⊢ minted (TMulN ts).
+Proof.
+rewrite unlock !big_sepS_forall.
+iIntros "Hts" (l) "%l_in".
+have /elem_of_subseteq in_nonces := @nonces_of_term_TMulN_subseteq ts.
+move: l_in => /(in_nonces l); rewrite elem_of_union_list.
+case => _ [] /list_elem_of_fmap [] t' [] -> ??.
+rewrite big_sepL_elem_of // big_sepS_forall.
+by iApply "Hts".
+Qed.
+
+Lemma all_minted_TGMulN ts :
+  ([∗ list] t ∈ ts, minted t) ⊢ minted (TGMulN ts).
+Proof.
+rewrite unlock !big_sepS_forall.
+iIntros "Hts" (l) "%l_in".
+have /elem_of_subseteq in_nonces := @nonces_of_term_TGMulN_subseteq ts.
+move: l_in => /(in_nonces l); rewrite elem_of_union_list.
+case => _ [] /list_elem_of_fmap [] t' [] -> ??.
+rewrite big_sepL_elem_of // big_sepS_forall.
+by iApply "Hts".
+Qed.
+
 Lemma minted_factors t :
   minted t ⊣⊢ [∗ list] t' ∈ factors t, minted t'.
 Proof.

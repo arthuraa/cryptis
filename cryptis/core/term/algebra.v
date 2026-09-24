@@ -335,6 +335,15 @@ move=> /(SMS.mem_to _ _ _ _).
 by rewrite (list_elem_of_fmap_inj unfold_term).
 Qed.
 
+(* Every factor of a two-element product comes from one of the two.  Unlike
+   [mem_factors_TMulN] this needs no side condition: it is read straight off the
+   signed counts. *)
+Lemma mem_factors_TMulN2 t1 t2 t' :
+  t' ∈ factors (TMulN (t1 :: t2 :: nil)) → t' ∈ factors t1 ++ factors t2.
+Proof.
+by rewrite elem_of_app -!count_gt0 count_TMulN /fmap /=; lia.
+Qed.
+
 Lemma unfold_TMulN_strong ts :
   invs_canceled ts →
   length ts ≠ 1 →

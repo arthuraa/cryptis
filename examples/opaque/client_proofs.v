@@ -111,6 +111,9 @@ wp_pures.
 wp_list_match => [p_u' P_u' P_s' H | _]; last first.
   by wp_pures; iApply ("Hhl" $! None); iModIntro; iSplit.
 symmetry in H; inversion H; subst; clear H.
+(* [d := H "d" [X_u; P_s]] and [e := H "e" [X_s; P_u]] *)
+wp_list; wp_apply wp_H; wp_pures.
+wp_list; wp_apply wp_H; wp_pures.
 wp_apply wp_ke => /=.
 wp_list.
 wp_apply wp_H => /=.
@@ -120,6 +123,12 @@ wp_list.
 wp_apply wp_prf.
 rewrite minted_of_list => /=.
 iDestruct "minclear" as "(minp_u & minP_u & minP_s & _)".
+iAssert (minted (hash_result "d" (Spec.of_list [TExp g x_u; P_s])))
+  as "#mintedd".
+  iApply minted_hash_listI; rewrite /=; do !iSplit => //.
+  by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
+iAssert (minted (hash_result "e" (Spec.of_list [X_s; P_u]))) as "#mintede".
+  by iApply minted_hash_listI; rewrite /=; do !iSplit => //.
 wp_eq_term eq_A_s => //=; last first.
   by wp_pures; iApply ("Hhl" $! None); iModIntro; iSplit.
 wp_pures; wp_list.
@@ -129,19 +138,20 @@ wp_apply wp_send => //.
   iApply public_THashIS; eauto.
   - rewrite !minted_of_list /=.
     do !iSplit => //.
-    + rewrite minted_THash minted_tag minted_of_list.
-      by do !iSplit => //; iApply all_minted_TExp; iSplit => //.
-    + rewrite minted_THash minted_tag minted_of_list /=.
-      do !iSplit => //.
-      rewrite minted_TExp; [|by []|by []|by []].
-      iSplit => //.
-      by rewrite minted_THash minted_tag.
+    + iApply minted_hash_listI; rewrite /=; iSplit => //.
+      by iApply (minted_hmqv_K with
+                   "minp_u Hmintedx_u mintedd minP_s minX_s mintede").
+    + iApply minted_hash_listI; rewrite /=; do !iSplit => //.
+      iApply all_minted_TExp; iSplit => //.
+      by iApply minted_hash_resultI.
   - iNext; iModIntro.
     iExists P_s, p_u, X_s, x_u,
+        (hash_result "d" (Spec.of_list [TExp g x_u; P_s])),
+        (hash_result "e" (Spec.of_list [X_s; P_u])),
         (hash_result "ssid'" (Spec.of_list [uid; TExp (hash_result "α" pw) r])).
     by do !iSplit => //.
 wp_pures; wp_list; wp_term_of_list; wp_pures.
-set SK := Spec.of_list _.
+set SK := (Spec.of_list [uid; _] : term).
 iApply ("Hhl" $! (Some SK)).
 iModIntro; iSplit.
   rewrite /SK_priv /SK public_of_list /=.
@@ -152,33 +162,44 @@ iModIntro; iSplit.
     iDestruct "contra" as "[contra _]".
     iDestruct (public_THashE with "HpredK contra") as "[contra | [_ contra]]" => //.
     rewrite public_of_list.
-    iDestruct "contra" as "(contra & _ & _)".
+    iDestruct "contra" as "(contra & _)".
     iDestruct "Hopaquepair" as
-        "(%p_s & -> & %Hfreshp_u & ? & ? & ? & ? & ? & ? & ?)".
-    rewrite TExp2_TExpN.
-    have p_u_s: TNonce p_u ≠ TNonce p_s.
-      move=> p_u_s; apply: Hfreshp_u; rewrite -p_u_s.
+        "(%p_s & -> & %Hfreshp_u & _ & _ & _ & #pred_p_u & #pred_p_s
+          & #priv_p_u & #priv_p_s)".
+    (* The client's static private key and the server's are distinct: [p_u] is
+       not a subterm of [P_s = g^p_s]. *)
+    have p_u_s : p_u ≠ p_s.
+      move=> e; apply: Hfreshp_u; rewrite e.
       apply/subtermsP.
-      rewrite (_ : TExp g p_u = TExpN g [TNonce p_u]); last by rewrite /TExpN TMulN1.
-      have Nm : negb (is_mul p_u) := negb_is_mul_nonce p_u.
+      rewrite (_ : TExp g p_s = TExpN g [TNonce p_s]); last by rewrite /TExpN TMulN1.
+      have Nm : negb (is_mul p_s) := negb_is_mul_nonce p_s.
       rewrite subtermsE //; last exact: invs_canceled1 Nm.
       rewrite /=.
-      by rewrite [subterms p_u]subterms_nonce //; set_solver.
-    have p_u_sV : TNonce p_u ≠ TInv p_s.
-      move=> contra; have: is_inv (TInv p_s).
-        by rewrite (is_inv_TInv (TNonce p_s) (negb_is_mul_nonce p_s)).
-      by rewrite -contra; case: (p_u) => //.
-    by iApply (public_opaque_secret _ (negb_is_mul_nonce p_u) (negb_is_mul_nonce p_s) p_u_s p_u_sV) => //.
+      by rewrite [subterms p_s]subterms_nonce //; set_solver.
+    (* The static-static factor [g^(p_s·e·d·p_u)] is a group factor of the key
+       whatever [X_s] the peer sent, so the key is public only if it is; and it
+       is not, since [p_u] and [p_s] are both honest DH seeds. *)
+    have Xs_in : X_s ∈ [X_s; P_u] by set_solver.
+    have tags : "d"%string ≠ "e"%string by [].
+    have [gf [_ [in_pu in_ps]]] :=
+      @hmqv_key_gfactors p_u p_s x_u "d" "e"
+        (Spec.of_list [TExp g x_u; TExp g p_s]) [X_s; P_u] X_s
+        tags p_u_s Xs_in.
+    iEval (rewrite public_gfactors) in "contra".
+    iDestruct "contra" as "[_ #fs]".
+    have p_u_sT : TNonce p_u ≠ TNonce p_s by case=> /p_u_s.
+    iApply (public_opaque_secret_gen _ p_u_sT in_pu in_ps with
+              "priv_p_u pred_p_u priv_p_s pred_p_s").
+    by iApply (big_sepL_elem_of with "fs").
   - do !iSplit => //.
     iApply (public_THashIS with "HpredSK") => //.
-    rewrite minted_of_list.
-    do !iSplit => //; rewrite minted_THash minted_tag minted_of_list; do !iSplit => //.
-    + rewrite -[minted (TExp P_s p_u)]all_minted_TExp.
-      by iSplit => //.
-    + rewrite -all_minted_TExp.
-      by iSplit => //.
-    + rewrite -[minted (TExp _ r)] all_minted_TExp minted_THash minted_tag.
-      by iSplit => //.
+    iApply minted_of_listI; rewrite /=; do !iSplit => //.
+    + iApply minted_hash_listI; rewrite /=; iSplit => //.
+      by iApply (minted_hmqv_K with
+                   "minp_u Hmintedx_u mintedd minP_s minX_s mintede").
+    + iApply minted_hash_listI; rewrite /=; do !iSplit => //.
+      iApply all_minted_TExp; iSplit => //.
+      by iApply minted_hash_resultI.
 iSplit.
 - iPureIntro => /Hfreshr; apply.
   rewrite /SK.
@@ -203,12 +224,14 @@ iSplit.
   split.
     by right; left.
   apply: subterm_TExp_exp; [done | done | done | exact: (negb_is_mul_nonce r) | exact: STRefl].
-- rewrite minted_of_list /=
-      minted_THash minted_tag minted_of_list /=
-      !minted_THash !minted_tag !minted_of_list /=
-      -!all_minted_TExp /=.
-  do !iSplit => //; iApply public_minted => //.
-  by iApply (public_THashIS with "Hpredα mintedpw").
+- iApply minted_of_listI; rewrite /=; do !iSplit => //.
+  iApply minted_hash_listI; rewrite /=; do !iSplit => //.
+  + iApply minted_hash_listI; rewrite /=; iSplit => //.
+    by iApply (minted_hmqv_K with
+                 "minp_u Hmintedx_u mintedd minP_s minX_s mintede").
+  + iApply minted_hash_listI; rewrite /=; do !iSplit => //.
+    iApply all_minted_TExp; iSplit => //.
+    by iApply minted_hash_resultI.
 Qed.
 
 End Opaque.
