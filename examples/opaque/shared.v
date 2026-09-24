@@ -157,68 +157,18 @@ Qed.
 (** ** Counting nonces and hashes
 
     All the exponents in play are nonces or hashes: neither a product nor an
-    inverse.  [tfree] names that, and the three lemmas below turn pairwise
-    disequality into the [factors] memberships [hmqv_K_gfactor] and
-    [public_opaque_secret_gen] ask for. *)
+    inverse, i.e. [negb (is_enon_free _)].  The generic machinery that turns
+    pairwise disequality into the [factors] memberships [hmqv_K_gfactor] and
+    [public_opaque_secret_gen] ask for lives in [cryptis.core.term]
+    ([elem_of_factors_cons] and friends); all that is needed here is that a
+    hash is exponent-free and that distinct tags give distinct hashes. *)
 
-Definition tfree (t : term) : Prop := negb (is_mul t) /\ negb (is_inv t).
-
-Lemma tfree_nonce (a : nonce) : tfree (TNonce a).
-Proof. by []. Qed.
-
-Lemma tfree_hash tag t : tfree (hash_result tag t).
-Proof. by []. Qed.
-
-Lemma TInv_tfree_ne a b : tfree a -> tfree b -> TInv a ≠ b.
+(* Two hashes are equal only if both their tags and their payloads are. *)
+Lemma hash_result_inj (tag1 tag2 : string) t1 t2 :
+  hash_result tag1 t1 = hash_result tag2 t2 -> tag1 = tag2 /\ t1 = t2.
 Proof.
-move=> [Nma Nia] [Nmb Nib] e.
-have ea : a = TInv b by rewrite -e TInvK.
-move: Nia; rewrite ea (is_inv_TInv _ Nmb).
-by case: is_inv Nib.
-Qed.
-
-Lemma count_tfree_ne a b : tfree a -> tfree b -> a ≠ b -> count a b = 0%Z.
-Proof.
-move=> fa fb ne; apply: not_elem_of_count_strong;
-  rewrite (factors_Nmul _ (proj1 fb)) list_elem_of_singleton //.
-exact: TInv_tfree_ne.
-Qed.
-
-Lemma count_TMulN_tfree a ts :
-  tfree a -> Forall (fun b => tfree b /\ a ≠ b) ts -> count a (TMulN ts) = 0%Z.
-Proof.
-move=> fa; elim: ts => [|b ts IH] /=; first by rewrite count_TMulN.
-case/Forall_cons => [[fb ne] /IH IHts].
-rewrite count_TMulN /= -count_TMulN IHts (count_tfree_ne fa fb ne); lia.
-Qed.
-
-Lemma elem_of_factors_cons a ts :
-  tfree a -> Forall (fun b => tfree b /\ a ≠ b) ts ->
-  a ∈ factors (TMulN (a :: ts)).
-Proof.
-move=> fa H; apply/count_gt0.
-rewrite count_TMulN /= -count_TMulN (count_TMulN_tfree fa H) count_diag.
-by case: is_mul (proj1 fa) => //=; lia.
-Qed.
-
-Lemma not_elem_of_factors_tfree a ts :
-  tfree a -> Forall (fun b => tfree b /\ a ≠ b) ts -> a ∉ factors (TMulN ts).
-Proof.
-move=> fa H /count_gt0; rewrite (count_TMulN_tfree fa H); lia.
-Qed.
-
-Lemma not_elem_of_factors_tfree1 a b :
-  tfree a -> tfree b -> a ≠ b -> a ∉ factors b.
-Proof.
-move=> fa fb ne; rewrite (factors_Nmul _ (proj1 fb)) list_elem_of_singleton //.
-Qed.
-
-(* Two hashes with different tags are different terms. *)
-Lemma hash_result_ne (tag1 tag2 : string) t1 t2 :
-  tag1 ≠ tag2 -> hash_result tag1 t1 ≠ hash_result tag2 t2.
-Proof.
-move=> ne; rewrite /hash_result => - [] /Spec.tag_inj [] /Tag_inj c _.
-by case: (ndot_inj _ _ _ _ c) => _ /ne.
+rewrite /hash_result => - [] /Spec.tag_inj [] /Tag_inj c ->.
+by case: (ndot_inj _ _ _ _ c).
 Qed.
 
 (* A hash is strictly bigger than any component of the list it hashes.  This is
@@ -253,10 +203,10 @@ Lemma exps_hmqv_ss (p_a p_b : nonce) tag_a tag_b v_a v_b :
 Proof.
 move=> tab pab.
 set m_a := hash_result tag_a v_a; set m_b := hash_result tag_b v_b.
-have fa : tfree (TNonce p_a) := tfree_nonce p_a.
-have fb : tfree (TNonce p_b) := tfree_nonce p_b.
-have fma : tfree m_a := tfree_hash _ _.
-have fmb : tfree m_b := tfree_hash _ _.
+have fa : negb (is_enon_free (TNonce p_a)) := Nenf_TNonce p_a.
+have fb : negb (is_enon_free (TNonce p_b)) := Nenf_TNonce p_b.
+have fma : negb (is_enon_free m_a) := Nenf_THash _.
+have fmb : negb (is_enon_free m_b) := Nenf_THash _.
 have ab : TNonce p_a ≠ TNonce p_b by case=> /pab.
 have ba : TNonce p_b ≠ TNonce p_a by congruence.
 have amb : TNonce p_a ≠ m_b by rewrite /m_b /hash_result.
@@ -265,7 +215,7 @@ have bmb : TNonce p_b ≠ m_b by rewrite /m_b /hash_result.
 have bma : TNonce p_b ≠ m_a by rewrite /m_a /hash_result.
 have mba : TNonce p_a ≠ m_b by [].
 have mab : m_b ≠ m_a.
-  by rewrite /m_a /m_b; apply: hash_result_ne => ?; apply: tab; congruence.
+  by rewrite /m_a /m_b => /hash_result_inj [] e _; apply: tab; congruence.
 have mb_a : m_b ≠ TNonce p_a by congruence.
 have mb_b : m_b ≠ TNonce p_b by congruence.
 have ma_a : m_a ≠ TNonce p_a by congruence.
@@ -285,38 +235,6 @@ split; last split.
      rewrite !Forall_cons Forall_nil; do !split => //.
 Qed.
 
-(* Weaker than [elem_of_factors_cons]: the tail may repeat [a], which still only
-   pushes the count up.  Needed where two of the exponents are not known to
-   differ. *)
-Lemma count_tfree_ge0 a b :
-  tfree a -> tfree b -> TInv a ≠ b -> (0 <= count a b)%Z.
-Proof.
-move=> fa fb neV.
-case: (decide (a = b)) => [->|ne].
-- by rewrite count_diag; case: is_mul (proj1 fb).
-- by rewrite (count_tfree_ne fa fb ne).
-Qed.
-
-Lemma count_TMulN_tfree_ge0 a ts :
-  tfree a -> Forall (fun b => tfree b /\ TInv a ≠ b) ts ->
-  (0 <= count a (TMulN ts))%Z.
-Proof.
-move=> fa; elim: ts => [|b ts IH] /=; first by rewrite count_TMulN.
-case/Forall_cons => [[fb neV] /IH IHts].
-rewrite count_TMulN /= -count_TMulN.
-have := count_tfree_ge0 fa fb neV; lia.
-Qed.
-
-Lemma elem_of_factors_cons_weak a ts :
-  tfree a -> Forall (fun b => tfree b /\ TInv a ≠ b) ts ->
-  a ∈ factors (TMulN (a :: ts)).
-Proof.
-move=> fa H; apply/count_gt0.
-rewrite count_TMulN /= -count_TMulN count_diag.
-have := count_TMulN_tfree_ge0 fa H.
-by case: is_mul (proj1 fa) => //=; lia.
-Qed.
-
 (* An exponent of [g^s] is a subterm of it. *)
 Lemma subterm_exps_TExp_g t s : t ∈ exps (TExp g s) -> subterm t (TExp g s).
 Proof.
@@ -333,14 +251,14 @@ Lemma exps_hmqv_eph_x (p_b x_a : nonce) tag_b v_b :
     ∈ exps (TExp g (TMulN [TNonce p_b; hash_result tag_b v_b; TNonce x_a])).
 Proof.
 set m_b := hash_result tag_b v_b.
-have fb : tfree (TNonce p_b) := tfree_nonce p_b.
-have fx : tfree (TNonce x_a) := tfree_nonce x_a.
-have fmb : tfree m_b := tfree_hash _ _.
+have fb : negb (is_enon_free (TNonce p_b)) := Nenf_TNonce p_b.
+have fx : negb (is_enon_free (TNonce x_a)) := Nenf_TNonce x_a.
+have fmb : negb (is_enon_free m_b) := Nenf_THash _.
 have perm : [TNonce p_b; m_b; TNonce x_a] ≡ₚ [TNonce x_a; TNonce p_b; m_b].
   by symmetry; apply: Permutation_cons_append.
 rewrite exps_TExp_g perm.
 apply: elem_of_factors_cons_weak => //.
-by rewrite !Forall_cons Forall_nil; do !split => //; apply: TInv_tfree_ne.
+by rewrite !Forall_cons Forall_nil; do !split => //; apply: TInv_Nenf_ne.
 Qed.
 
 Lemma exps_hmqv_eph (p_b x_a : nonce) tag_b v_b :
@@ -348,9 +266,9 @@ Lemma exps_hmqv_eph (p_b x_a : nonce) tag_b v_b :
     ∈ exps (TExp g (TMulN [TNonce p_b; hash_result tag_b v_b; TNonce x_a])).
 Proof.
 set m_b := hash_result tag_b v_b.
-have fb : tfree (TNonce p_b) := tfree_nonce p_b.
-have fx : tfree (TNonce x_a) := tfree_nonce x_a.
-have fmb : tfree m_b := tfree_hash _ _.
+have fb : negb (is_enon_free (TNonce p_b)) := Nenf_TNonce p_b.
+have fx : negb (is_enon_free (TNonce x_a)) := Nenf_TNonce x_a.
+have fmb : negb (is_enon_free m_b) := Nenf_THash _.
 have e1 : m_b ≠ TNonce p_b by rewrite /m_b /hash_result.
 have e2 : m_b ≠ TNonce x_a by rewrite /m_b /hash_result.
 rewrite exps_TExp_g Permutation_swap.
@@ -384,17 +302,17 @@ Proof.
 move=> tab pab Xb_lb.
 set m_a := hash_result tag_a v_a.
 set m_b := hash_result tag_b (Spec.of_list l_b).
-have fa : tfree (TNonce p_a) := tfree_nonce p_a.
-have fx : tfree (TNonce x_a) := tfree_nonce x_a.
-have fma : tfree m_a := tfree_hash _ _.
-have fmb : tfree m_b := tfree_hash _ _.
+have fa : negb (is_enon_free (TNonce p_a)) := Nenf_TNonce p_a.
+have fx : negb (is_enon_free (TNonce x_a)) := Nenf_TNonce x_a.
+have fma : negb (is_enon_free m_a) := Nenf_THash _.
+have fmb : negb (is_enon_free m_b) := Nenf_THash _.
 have mb_x : m_b ≠ TNonce x_a by rewrite /m_b /hash_result.
 have mb_a : m_b ≠ TNonce p_a by rewrite /m_b /hash_result.
 have mb_ma : m_b ≠ m_a.
-  by rewrite /m_a /m_b; apply: hash_result_ne => ?; apply: tab; congruence.
-have H1 : m_b ∉ factors (TNonce x_a) by apply: not_elem_of_factors_tfree1.
+  by rewrite /m_a /m_b => /hash_result_inj [] e _; apply: tab; congruence.
+have H1 : m_b ∉ factors (TNonce x_a) by apply: not_elem_of_factors_Nenf.
 have H2 : m_b ∉ factors (TMulN [m_a; TNonce p_a]).
-  by apply: not_elem_of_factors_tfree => //;
+  by apply: not_elem_of_factors_TMulN_Nenf => //;
      rewrite !Forall_cons Forall_nil; do !split => //.
 have H3 : tsize X_b < tsize m_b := tsize_hash_result_lt _ Xb_lb.
 have [in_pa [in_pb in_mb]] := @exps_hmqv_ss p_a p_b tag_a tag_b v_a (Spec.of_list l_b) tab pab.

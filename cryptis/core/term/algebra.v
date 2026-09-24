@@ -318,8 +318,8 @@ Qed.
 
 (* Every factor of a product of non-products is one of them: [TMulN] only
    permutes and cancels its argument, it never introduces new factors.  This is
-   [SMS.mem_to] at the term layer. *)
-Lemma mem_factors_TMulN t ts :
+   [SMS.elem_of_to] at the term layer. *)
+Lemma elem_of_factors_TMulN t ts :
   Forall (fun u => negb (is_mul u)) ts -> t ∈ factors (TMulN ts) -> t ∈ ts.
 Proof.
 move=> Nm t_in.
@@ -331,15 +331,15 @@ have : unfold_term t ∈ PreTerm.factors (unfold_term (TMulN ts)).
 rewrite unfold_TMulN /PreTerm.mul PreTerm.mul_auxK; last first.
   exact: (PreTerm.wf_normalize_factors _ (wf_unfold_terms ts)).
 rewrite /PreTerm.normalize_factors (PreTerm.mbind_factors_Nmul _ Nm').
-move=> /(SMS.mem_to _ _ _ _).
+move=> /(SMS.elem_of_to _ _ _ _).
 by rewrite (list_elem_of_fmap_inj unfold_term).
 Qed.
 
 (* Every factor of a two-element product comes from one of the two.  Unlike
-   [mem_factors_TMulN] this needs no side condition: it is read straight off the
-   signed counts. *)
-Lemma mem_factors_TMulN2 t1 t2 t' :
-  t' ∈ factors (TMulN (t1 :: t2 :: nil)) → t' ∈ factors t1 ++ factors t2.
+   [elem_of_factors_TMulN] this needs no side condition: it is read straight
+   off the signed counts. *)
+Lemma elem_of_factors_TMulN2 t1 t2 t' :
+  t' ∈ factors (TMulN [t1; t2]) → t' ∈ factors t1 ++ factors t2.
 Proof.
 by rewrite elem_of_app -!count_gt0 count_TMulN /fmap /=; lia.
 Qed.
@@ -692,7 +692,7 @@ rewrite /PreTerm.normalize_gfactors flat // (SMS.to_id_perm _ _ _ nopairs).
 by rewrite fmap_unfold_termK.
 Qed.
 
-Lemma mem_gfactors_TGMulN t ts :
+Lemma elem_of_gfactors_TGMulN t ts :
   Forall (fun u => negb (is_gmul u)) ts -> t ∈ gfactors (TGMulN ts) -> t ∈ ts.
 Proof.
 move=> Nm t_in.
@@ -704,8 +704,17 @@ have : unfold_term t ∈ PreTerm.gfactors (unfold_term (TGMulN ts)).
 rewrite unfold_TGMulN /PreTerm.gmul PreTerm.gmul_auxK; last first.
   exact: (PreTerm.wf_normalize_gfactors _ (wf_unfold_terms ts)).
 rewrite /PreTerm.normalize_gfactors (PreTerm.mbind_gfactors_Ngmul _ Nm').
-move=> /(SMS.mem_to _ _ _ _).
+move=> /(SMS.elem_of_to _ _ _ _).
 by rewrite (list_elem_of_fmap_inj unfold_term).
+Qed.
+
+(* The group counterpart of [elem_of_factors_TMulN2]: every group factor of a
+   two-element group product comes from one of the two, with no side condition
+   -- it is read straight off the signed counts. *)
+Lemma elem_of_gfactors_TGMulN2 t1 t2 t' :
+  t' ∈ gfactors (TGMulN [t1; t2]) → t' ∈ gfactors t1 ++ gfactors t2.
+Proof.
+by rewrite elem_of_app -!gcount_gt0 gcount_TGMulN /fmap /=; lia.
 Qed.
 
 Lemma unfold_TGMulN_strong ts :
@@ -802,6 +811,30 @@ Proof. rewrite is_exp_unfold is_inv_unfold; by case: (unfold_term t) => [|||[|] 
 
 Lemma is_exp_Nginv t : is_exp t -> negb (is_ginv t).
 Proof. rewrite is_exp_unfold is_ginv_unfold; by case: (unfold_term t) => [|||[|] ?]. Qed.
+
+Lemma is_inv_Ngmul t : is_inv t -> negb (is_gmul t).
+Proof. rewrite is_inv_unfold is_gmul_unfold; by case: (unfold_term t) => [|||[|] ?]. Qed.
+
+Lemma is_inv_Nexp t : is_inv t -> negb (is_exp t).
+Proof. rewrite is_inv_unfold is_exp_unfold; by case: (unfold_term t) => [|||[|] ?]. Qed.
+
+Lemma is_inv_Nginv t : is_inv t -> negb (is_ginv t).
+Proof.
+rewrite is_inv_unfold is_ginv_unfold.
+by case: (unfold_term t) => [?|[?| | |]?|???|[|] ?].
+Qed.
+
+Lemma is_ginv_Nmul t : is_ginv t -> negb (is_mul t).
+Proof. rewrite is_ginv_unfold is_mul_unfold; by case: (unfold_term t) => [|||[|] ?]. Qed.
+
+Lemma is_ginv_Nexp t : is_ginv t -> negb (is_exp t).
+Proof. rewrite is_ginv_unfold is_exp_unfold; by case: (unfold_term t) => [|||[|] ?]. Qed.
+
+Lemma is_ginv_Ninv t : is_ginv t -> negb (is_inv t).
+Proof.
+rewrite is_ginv_unfold is_inv_unfold.
+by case: (unfold_term t) => [?|[?| | |]?|???|[|] ?].
+Qed.
 
 (* [base] does not change the [is_gmul] / [is_ginv] head; see the [PreTerm]
    versions for why [is_exp] is different, and why there is no scalar
@@ -1263,4 +1296,101 @@ Proof.
 rewrite (_ : TExp g a = TExpN g [a]); last by rewrite /TExpN TMulN1.
 rewrite (_ : TExp g b = TExpN g [b]); last by rewrite /TExpN TMulN1.
 by rewrite !TExp_TExpN TExpNC2.
+Qed.
+
+(** ** Exponent-free terms
+
+    A term that is neither a scalar product nor a scalar inverse -- a nonce or a
+    hash, say -- is the single factor of itself, so its signed count against
+    another such term is decided by plain disequality.  That is what turns a
+    handful of pairwise disequalities into the [factors] memberships a protocol
+    needs when it must locate one exponent inside a product of others. *)
+
+Lemma TInv_Nenf_ne t1 t2 :
+  negb (is_enon_free t1) -> negb (is_enon_free t2) -> TInv t1 ≠ t2.
+Proof.
+move=> f1 f2 e.
+have e1 : t1 = TInv t2 by rewrite -e TInvK.
+move: (Nenf_Ninv _ f1); rewrite e1 (is_inv_TInv _ (Nenf_Nmul _ f2)).
+by case: is_inv (Nenf_Ninv _ f2).
+Qed.
+
+Lemma count_Nenf_ne t1 t2 :
+  negb (is_enon_free t1) -> negb (is_enon_free t2) -> t1 ≠ t2 ->
+  count t1 t2 = 0%Z.
+Proof.
+move=> f1 f2 ne; apply: not_elem_of_count_strong;
+  rewrite (factors_Nmul _ (Nenf_Nmul _ f2)) list_elem_of_singleton //.
+exact: TInv_Nenf_ne.
+Qed.
+
+Lemma count_TMulN_Nenf t ts :
+  negb (is_enon_free t) ->
+  Forall (fun u => negb (is_enon_free u) /\ t ≠ u) ts ->
+  count t (TMulN ts) = 0%Z.
+Proof.
+move=> ft; elim: ts => [|u ts IH] /=; first by rewrite count_TMulN.
+case/Forall_cons => [[fu ne] /IH IHts].
+rewrite count_TMulN /= -count_TMulN IHts (count_Nenf_ne ft fu ne); lia.
+Qed.
+
+Lemma elem_of_factors_cons t ts :
+  negb (is_enon_free t) ->
+  Forall (fun u => negb (is_enon_free u) /\ t ≠ u) ts ->
+  t ∈ factors (TMulN (t :: ts)).
+Proof.
+move=> ft H; apply/count_gt0.
+rewrite count_TMulN /= -count_TMulN (count_TMulN_Nenf ft H) count_diag.
+by case: is_mul (Nenf_Nmul _ ft) => //=; lia.
+Qed.
+
+Lemma not_elem_of_factors_TMulN_Nenf t ts :
+  negb (is_enon_free t) ->
+  Forall (fun u => negb (is_enon_free u) /\ t ≠ u) ts ->
+  t ∉ factors (TMulN ts).
+Proof.
+move=> ft H /count_gt0; rewrite (count_TMulN_Nenf ft H); lia.
+Qed.
+
+Lemma not_elem_of_factors_Nenf t1 t2 :
+  negb (is_enon_free t1) -> negb (is_enon_free t2) -> t1 ≠ t2 ->
+  t1 ∉ factors t2.
+Proof.
+move=> f1 f2 ne.
+by rewrite (factors_Nmul _ (Nenf_Nmul _ f2)) list_elem_of_singleton.
+Qed.
+
+(* Weaker than [elem_of_factors_cons]: the tail may repeat [t], which still only
+   pushes the count up.  Needed where two of the exponents are not known to
+   differ. *)
+Lemma count_Nenf_ge0 t1 t2 :
+  negb (is_enon_free t1) -> negb (is_enon_free t2) -> TInv t1 ≠ t2 ->
+  (0 <= count t1 t2)%Z.
+Proof.
+move=> f1 f2 neV.
+case: (decide (t1 = t2)) => [->|ne].
+- by rewrite count_diag; case: is_mul (Nenf_Nmul _ f2).
+- by rewrite (count_Nenf_ne f1 f2 ne).
+Qed.
+
+Lemma count_TMulN_Nenf_ge0 t ts :
+  negb (is_enon_free t) ->
+  Forall (fun u => negb (is_enon_free u) /\ TInv t ≠ u) ts ->
+  (0 <= count t (TMulN ts))%Z.
+Proof.
+move=> ft; elim: ts => [|u ts IH] /=; first by rewrite count_TMulN.
+case/Forall_cons => [[fu neV] /IH IHts].
+rewrite count_TMulN /= -count_TMulN.
+have := count_Nenf_ge0 ft fu neV; lia.
+Qed.
+
+Lemma elem_of_factors_cons_weak t ts :
+  negb (is_enon_free t) ->
+  Forall (fun u => negb (is_enon_free u) /\ TInv t ≠ u) ts ->
+  t ∈ factors (TMulN (t :: ts)).
+Proof.
+move=> ft H; apply/count_gt0.
+rewrite count_TMulN /= -count_TMulN count_diag.
+have := count_TMulN_Nenf_ge0 ft H.
+by case: is_mul (Nenf_Nmul _ ft) => //=; lia.
 Qed.

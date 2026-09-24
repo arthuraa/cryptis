@@ -346,7 +346,7 @@ have key : forall v, negb (is_gmul v) -> tsize v < tsize u ->
     + move=> e_w.
       have eE : expo w = TMulN [expo v; c] by rewrite e_w (expo_TExp _ _ Nmv Niv).
       move: u_w; rewrite /exps eE.
-      move=> /mem_factors_TMulN2 /elem_of_app [u_v|//].
+      move=> /elem_of_factors_TMulN2 /elem_of_app [u_v|//].
       have := tsize_exps_lt _ _ u_v; lia.
     + move=> e_w.
       have contra : is_ginv (TGInv w) = is_ginv (TExp v c) by rewrite e_w.

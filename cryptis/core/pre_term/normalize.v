@@ -441,7 +441,7 @@ have wf_ts1: Forall (λ t, wf t && negb (is_gmul t)) ts1.
   - by apply: wf_gfactors_wf; eauto.
   - by apply: wf_gfactors_Ngmul; eauto.
 split.
-- apply/forallb_True/list.Forall_forall=> t /(SMS.mem_to _ _ _).
+- apply/forallb_True/list.Forall_forall=> t /(SMS.elem_of_to _ _ _).
   move/list.Forall_forall: wf_ts1; exact.
 - apply: SMS.wf_to => t t_ts1; apply: ginv_auxK.
   by case/list.Forall_forall/(_ _ t_ts1)/andb_True: wf_ts1.
@@ -465,7 +465,7 @@ have wf_ts1: Forall (λ t, wf t && negb (is_mul t)) ts1.
   - by apply: wf_factors_wf; eauto.
   - by apply: wf_factors_Nmul; eauto.
 split.
-- apply/forallb_True/list.Forall_forall=> t /(SMS.mem_to _ _ _).
+- apply/forallb_True/list.Forall_forall=> t /(SMS.elem_of_to _ _ _).
   move/list.Forall_forall: wf_ts1; exact.
 - apply: SMS.wf_to => t t_ts1; apply: inv_auxK.
   by case/list.Forall_forall/(_ _ t_ts1)/andb_True: wf_ts1.
@@ -889,7 +889,7 @@ have h : forall X : list pre_term, (forall t, t ∈ X -> t ∈ ts) ->
          forall x, x ∈ ((λ t, exp_aux t e) <$> X) -> ginv_aux (ginv_aux x) = x.
   by move=> X sub x /list_elem_of_fmap [t [-> t_X]]; exact: (jKf _ (sub _ t_X)).
 apply/(SMS.to_eq pt_order ginv_aux _ _
-        (h _ (fun t t_in => SMS.mem_to _ _ _ _ t_in)) (h _ (fun t t_in => t_in))).
+        (h _ (fun t t_in => SMS.elem_of_to _ _ _ _ t_in)) (h _ (fun t t_in => t_in))).
 move=> z jKz.
 exact: (SMS.count_fmap_to pt_order ginv_aux ginv_aux
           (λ t, exp_aux t e) z ts jKz jKf fij).
@@ -911,7 +911,7 @@ rewrite /exp /gmul !gmul_auxK; first last.
 congr gmul_aux; rewrite /normalize_gfactors (mbind_gfactors_Ngmul _ Nm_ts).
 have Nmf' : Forall (λ t, negb (is_gmul t))
               ((λ t, exp_aux t e) <$> SMS.to pt_order ginv_aux ts).
-  apply/Forall_fmap/list.Forall_forall => t /(SMS.mem_to _ _ _ _) t_ts.
+  apply/Forall_fmap/list.Forall_forall => t /(SMS.elem_of_to _ _ _ _) t_ts.
   apply: exp_aux_Ngmul => //; by [move/list.Forall_forall: wf_ts; apply
                                 |move/list.Forall_forall: Nm_ts; apply].
 rewrite (mbind_gfactors_Ngmul _ Nmf') (mbind_gfactors_Ngmul _ Nmf).

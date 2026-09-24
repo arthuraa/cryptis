@@ -232,7 +232,7 @@ rewrite -HM.
 move => a /elem_of_union_list [X [/list_elem_of_fmap [x [-> xL]] aX]].
 apply/elem_of_union_list; exists (nonces_of_pre_term x); split => //.
 apply/list_elem_of_fmap; exists x; split => //.
-exact: (SMS.mem_to pt_order PreTerm.ginv_aux x M xL).
+exact: (SMS.elem_of_to pt_order PreTerm.ginv_aux x M xL).
 Qed.
 
 Lemma nonces_flatten_factors us :
@@ -257,7 +257,7 @@ rewrite -HM.
 move => a /elem_of_union_list [X [/list_elem_of_fmap [x [-> xL]] aX]].
 apply/elem_of_union_list; exists (nonces_of_pre_term x); split => //.
 apply/list_elem_of_fmap; exists x; split => //.
-exact: (SMS.mem_to pt_order PreTerm.inv_aux x M xL).
+exact: (SMS.elem_of_to pt_order PreTerm.inv_aux x M xL).
 Qed.
 
 Lemma nonces_of_pre_term_exp_aux_sub (pt pe : PreTerm.pre_term) :
