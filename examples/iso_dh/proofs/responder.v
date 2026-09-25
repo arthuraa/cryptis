@@ -76,7 +76,7 @@ iIntros "%Φ (#chan_c & #? & (#? & #?) & #N_φ &
 wp_lam. wp_pures. wp_apply wp_pkey. wp_pures.
 wp_apply (wp_mk_nonce_freshN {[ga]}
           (λ b, ⌜failed⌝ ∨ released ga ∧ released (TExp (TInt 0) b))%I
-          iso_dh_key_share
+          dh_key_share
           (λ b, {[TExp (TInt 0) b]}))
        => //.
 - iIntros "%". rewrite elem_of_singleton public_minted. by iIntros "->".
@@ -86,6 +86,11 @@ wp_apply (wp_mk_nonce_freshN {[ga]}
   iModIntro. by iApply bi.equiv_iff.
 iIntros "%b %fresh_b #m_b #s_b #dh_gb _ token".
 have Nm_b : negb (is_mul (TNonce b)) by [].
+(* [dh.v] takes the generator as a parameter; ISO-DH always uses [TInt 0]. *)
+have NInt : negb (is_exp (TInt 0)) by [].
+have NIntM : negb (is_gmul (TInt 0)) by [].
+have NIntI : negb (is_ginv (TInt 0)) by [].
+iAssert (public (TInt 0)) as "#p_g"; first by rewrite public_TInt.
 have {}fresh_b: ¬ subterm b ga by apply: fresh_b; exact/elem_of_singleton.
 rewrite bi.intuitionistic_intuitionistically.
 set gb := TExp (TInt 0) b.
@@ -99,7 +104,8 @@ iPoseProof (term_token_difference gb (↑iso_dhN.@"res") with "token")
   as "[res_token token]"; first by solve_ndisj.
 iMod ("res" $! (TNonce b) with "res_token") as "[resI resR]".
 iMod (iso_dh_ready_alloc N skI skR si with "[//] resI") as "#ready".
-iAssert (public gb) as "#p_gb"; first by iApply (public_dh_share Nm_b).
+iAssert (public gb) as "#p_gb";
+  first by iApply (public_dh_share NInt NIntM NIntI Nm_b).
 wp_pure _ credit:"H1".
 wp_pure _ credit:"H2".
 wp_apply wp_mk_keyshare => //.

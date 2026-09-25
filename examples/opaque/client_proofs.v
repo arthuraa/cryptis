@@ -39,7 +39,7 @@ iIntros "%ϕ (#Cryptis & #Hpredrw & #HpredA_u & #HpredA_s & #HpredSK & #HpredK
   & #Hpredα & #SpredAuth & #Hc & #pubuid & #minteduid & #mintedpw & #privpw &
   #Hfresh) Hhl".
 wp_lam; wp_pures.
-wp_apply (wp_mk_nonce_fresh fresh (fun _ => False)%I (fun t => opaque_secret t)%I) => //.
+wp_apply (wp_mk_nonce_fresh fresh (fun _ => False)%I (fun t => dh_key_share t)%I) => //.
 iIntros "%x_u %Hfreshx_u #Hmintedx_u #Hprivatex_u #Hexpx_u #Hexpx_uV Htokenx_u".
 wp_pures.
 wp_apply (wp_mk_nonce_fresh fresh (fun _ => False)%I (fun _ => True)%I) => //.
@@ -188,7 +188,7 @@ iModIntro; iSplit.
     iEval (rewrite public_gfactors) in "contra".
     iDestruct "contra" as "[_ #fs]".
     have p_u_sT : TNonce p_u ≠ TNonce p_s by case=> /p_u_s.
-    iApply (public_opaque_secret_gen _ p_u_sT in_pu in_ps with
+    iApply (public_dh_secret_gen _ p_u_sT in_pu in_ps with
               "priv_p_u pred_p_u priv_p_s pred_p_s").
     by iApply (big_sepL_elem_of with "fs").
   - do !iSplit => //.

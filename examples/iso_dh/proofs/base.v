@@ -6,6 +6,7 @@ From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib.
 From cryptis.lib Require Import gmeta nown saved_prop.
 From cryptis Require Import cryptis primitives tactics role.
+From cryptis.lib Require Import dh.
 From cryptis.examples.iso_dh Require Import impl.
 
 Set Implicit Arguments.
@@ -115,9 +116,6 @@ wp_bind (tint _). iApply wp_tint.
 wp_bind (texp _ _). iApply wp_texp.
 by iApply "Hpost".
 Qed.
-
-Definition iso_dh_key_share t : iProp :=
-  ⌜length (exps t) = 1⌝.
 
 Definition si_key si : senc_key :=
   SEncKey
@@ -307,7 +305,7 @@ Definition msg2_pred skR m2 : iProp :=
     let si := SessInfo skI skR ga gb gab in
     ⌜m2 = Spec.of_list [ga; gb; pkI; Tag N]⌝ ∧
     ((public skI ∨ public skR) ∨ (public b ↔ ▷ (released ga ∧ released gb))) ∧
-    (∀ t, exp_pred_base b t ↔ ▷ □ iso_dh_key_share t) ∧
+    (∀ t, exp_pred_base b t ↔ ▷ □ dh_key_share t) ∧
     ⌜¬ subterm b ga⌝ ∧
     iso_dh_ready N skI skR si.
 
@@ -337,130 +335,6 @@ iMod (sign_pred_set (N := iso_dhN.@"m2") msg2_pred with "token")
 iMod (sign_pred_set (N := iso_dhN.@"m3") msg3_pred with "token")
   as "[? token]"; try solve_ndisj. iFrame.
 iApply (seal_pred_token_drop with "token"). solve_ndisj.
-Qed.
-
-Lemma public_dh_share a :
-  negb (is_mul a) ->
-  minted a -∗
-  □ (∀ t, exp_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
-  public (TExp (TInt 0) a).
-Proof.
-move=> Nm; iIntros "#m_a #pred_a".
-rewrite public_TExp_iff //.
-rewrite minted_TInt public_TInt.
-do !iSplit => //; last by iIntros "!> _".
-iApply exp_pred_intro1. iApply "pred_a". iPureIntro. rewrite /iso_dh_key_share.
-rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [a]); last by rewrite /TExpN TMulN1.
-have NInt : negb (is_exp (TInt 0)) by [].
-have NIntM : negb (is_mul (TInt 0)) by [].
-have NIntI : negb (is_inv (TInt 0)) by [].
-by rewrite (exps_TExpN NInt NIntM NIntI (invs_canceled1 Nm)).
-Qed.
-
-Lemma public_dh_secret1 a b :
-  negb (is_mul a) ->
-  negb (is_mul b) ->
-  minted a -∗
-  minted b -∗
-  □ (∀ t, exp_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
-  □ (∀ t, exp_pred_base b t ↔ ▷ □ iso_dh_key_share t) -∗
-  public a ∨ public b -∗
-  public (TExpN (TInt 0) [a; b]).
-Proof.
-move=> Nm_a Nm_b; iIntros "#m_a #m_b #pred_a #pred_b #[H|H]".
-- rewrite -TExp_TExpN /TExpN TMulN1.
-  iApply public_TExp => //. by iApply (public_dh_share Nm_b).
-- rewrite TExpNC2 -TExp_TExpN /TExpN TMulN1.
-  iApply public_TExp => //. by iApply (public_dh_share Nm_a).
-Qed.
-
-(* The general form of [public_dh_secret2]: [a] and [b] need only *occur* among
-   the exponents of [t], not exhaust them.  [exp_pred_inv_gen] already takes an
-   arbitrary sublist of [exps t], so the other exponents -- which may well be
-   public, as HMQV's hash multipliers are -- are simply skipped.  A version that
-   concluded only "*some* exponent of [t] is public" would be vacuous there. *)
-Lemma public_dh_secret_gen2 a b t :
-  a ≠ b →
-  a ∈ exps t →
-  b ∈ exps t →
-  □ (∀ u, exp_pred_base a u ↔ ▷ □ iso_dh_key_share u) -∗
-  □ (∀ u, exp_pred_base b u ↔ ▷ □ iso_dh_key_share u) -∗
-  public t -∗
-  public a ∨ public b.
-Proof.
-iIntros "%a_b %a_t %b_t #pred_a #pred_b #p".
-iPoseProof (public_minted with "p") as "#m".
-iAssert (minted a ∧ minted b)%I as "#[ma mb]".
-  iEval (rewrite minted_base_exps) in "m"; iDestruct "m" as "[_ #mes]".
-  by iSplit; iApply (big_sepL_elem_of with "mes").
-iAssert (◇ (public a ∨ public b))%I as "[H|H]"; first last.
-- by iRight; iApply except_0_public.
-- by iLeft; iApply except_0_public.
-iPoseProof (exp_pred_exps a_t with "p") as "[#dh_a _]".
-have a_ab : a ∈ [a; b] by set_solver.
-have ab_t : [a; b] ⊆ exps t by set_solver.
-iPoseProof (exp_pred_inv_gen a_ab ab_t with "dh_a") as "(%c & %c_ab & H)".
-rewrite elem_of_cons list_elem_of_singleton in c_ab.
-iDestruct "H" as "[H|(%t3 & %e_base & %exps_sub & base)]".
-  by case: c_ab => ->; eauto.
-iAssert (▷ □ iso_dh_key_share t3)%I as ">%contra".
-  by case: c_ab => ->; [iApply "pred_a"|iApply "pred_b"].
-case: (exps t3) => // c' [|//] in exps_sub contra.
-have [a_c b_c]: a ∈ [c'] ∧ b ∈ [c'] by set_solver.
-rewrite !list_elem_of_singleton in a_c b_c; congruence.
-Qed.
-
-Lemma public_dh_secret_gen a b t (P : iProp) :
-  a ≠ b →
-  a ∈ exps t →
-  b ∈ exps t →
-  □ (public a ↔ P) -∗
-  □ (∀ u, exp_pred_base a u ↔ ▷ □ iso_dh_key_share u) -∗
-  □ (public b ↔ P) -∗
-  □ (∀ u, exp_pred_base b u ↔ ▷ □ iso_dh_key_share u) -∗
-  (public t → P).
-Proof.
-move=> a_b a_t b_t.
-iIntros "#s_a #pred_a #s_b #pred_b #p".
-iPoseProof (public_dh_secret_gen2 a_b a_t b_t with "pred_a pred_b p") as "H".
-by iDestruct "H" as "[H|H]"; [iApply "s_a"|iApply "s_b"].
-Qed.
-
-Lemma public_dh_secret2 a b :
-  negb (is_mul a) ->
-  negb (is_mul b) ->
-  a ≠ b →
-  a ≠ TInv b →
-  □ (∀ t, exp_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
-  □ (∀ t, exp_pred_base b t ↔ ▷ □ iso_dh_key_share t) -∗
-  public (TExpN (TInt 0) [a; b]) -∗
-  public a ∨ public b.
-Proof.
-move=> Nm_a Nm_b; iIntros "%a_b %a_bV #pred_a #pred_b #p".
-have ic_ab : invs_canceled [a; b] := proj2 (invs_canceled2 Nm_a Nm_b) a_bV.
-have exps_share : exps (TExpN (TInt 0) [a; b]) ≡ₚ [a; b].
-  by rewrite exps_TExpN.
-have a_t : a ∈ exps (TExpN (TInt 0) [a; b]) by rewrite exps_share; set_solver.
-have b_t : b ∈ exps (TExpN (TInt 0) [a; b]) by rewrite exps_share; set_solver.
-by iApply (public_dh_secret_gen2 a_b a_t b_t with "pred_a pred_b p").
-Qed.
-
-Lemma public_dh_secret' a b (P : iProp) :
-  negb (is_mul a) ->
-  negb (is_mul b) ->
-  a ≠ b →
-  a ≠ TInv b →
-  □ (public a ↔ P) -∗
-  □ (∀ t, exp_pred_base a t ↔ ▷ □ iso_dh_key_share t) -∗
-  □ (public b ↔ P) -∗
-  □ (∀ t, exp_pred_base b t ↔ ▷ □ iso_dh_key_share t) -∗
-  (public (TExpN (TInt 0) [a; b]) → P).
-Proof.
-move=> Nm_a Nm_b a_b a_bV.
-iIntros "#s_a #pred_a #s_b #pred_b #p_share".
-iPoseProof (public_dh_secret2 Nm_a Nm_b a_b a_bV with "pred_a pred_b p_share")
-  as "H".
-by iDestruct "H" as "[H|H]"; [iApply "s_a"|iApply "s_b"].
 Qed.
 
 End Verif.

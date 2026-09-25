@@ -58,7 +58,7 @@ wp_pures; wp_lam; wp_pures.
 wp_apply wp_H'; wp_apply wp_texp; wp_list; wp_apply wp_H.
 wp_apply wp_derive_senc_key.
 wp_pures.
-wp_apply (wp_mk_nonce_freshN ∅ (fun _ => False)%I opaque_secret
+wp_apply (wp_mk_nonce_freshN ∅ (fun _ => False)%I dh_key_share
                                (fun t =>  {[(TInv t)]})) => //.
 - by iIntros "%_ %contra".
 - iIntros "%t".
@@ -67,7 +67,7 @@ wp_apply (wp_mk_nonce_freshN ∅ (fun _ => False)%I opaque_secret
 iIntros "%p_s _ #Hmintedp_s #Hprivatep_s #Hexpp_s #Hexpp_sV Htokenp_sV".
 rewrite big_sepS_singleton.
 wp_pures.
-wp_apply (wp_mk_nonce_freshN {[(TExp g p_s)]} (fun _ => False)%I opaque_secret
+wp_apply (wp_mk_nonce_freshN {[(TExp g p_s)]} (fun _ => False)%I dh_key_share
                                               (fun t =>  {[(TInv t)]})) => //.
 - iIntros "%"; rewrite elem_of_singleton; iIntros "->".
   iApply minted_TExp.
@@ -231,7 +231,7 @@ symmetry in e'; inversion e'; subst; clear e'.
 rewrite public_of_list /=.
 iDestruct "Hpubm1" as "(#p_uid & #p_α & #p_X_u & _)".
 wp_apply (wp_mk_nonce_fresh ({[X_u]} ∪ fresh) (fun _ => False)%I
-                                              (fun t => opaque_secret t)%I) => //.
+                                              (fun t => dh_key_share t)%I) => //.
   iIntros "%".
   rewrite elem_of_union.
   rewrite elem_of_singleton public_minted.
@@ -363,7 +363,7 @@ iSplit.
     iEval (rewrite public_gfactors) in "contra".
     iDestruct "contra" as "[_ #fs]".
     have p_s_uT : TNonce p_s ≠ TNonce p_u by case=> /p_s_u.
-    iApply (public_opaque_secret_gen _ p_s_uT in_ps in_pu with
+    iApply (public_dh_secret_gen _ p_s_uT in_ps in_pu with
               "Hprivp_s Hexpp_s Hprivp_u Hexpp_u").
     by iApply (big_sepL_elem_of with "fs").
   + do !iSplit => //.

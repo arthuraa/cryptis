@@ -65,7 +65,7 @@ Key dependencies (authoritative pins live in `rocq-cryptis.opam` — treat it as
 ### Directory Structure
 
 - **`cryptis/`** — Core library (Rocq namespace `cryptis`)
-  - `lib/` — Utilities: session management, adequacy, Diffie-Hellman helpers, ghost state helpers
+  - `lib/` — Utilities: session management, adequacy, Diffie-Hellman helpers, ghost state helpers. `dh.v` owns the protocol-independent DH reasoning, in two flavours: `dh_seed`/`dh_publ` for a seed that is never public and carries a protocol payload `P` (`dh_seed_elim*`, `dh_public_TExp`, `wp_mk_dh`), and the bare `dh_key_share` for a seed whose secrecy is conditional (`public_dh_share`, `public_dh_secret*`, used by `iso_dh` and `opaque`). Case studies instantiate these rather than re-deriving them.
   - `core/` — Foundation: term definitions, public predicate, term metadata
   - `primitives/` — HeapLang implementations of cryptographic operations
   - `tactics.v` — Ltac2 automation for symbolic execution of HeapLang programs

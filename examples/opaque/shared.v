@@ -3,6 +3,7 @@ From mathcomp Require Import ssreflect.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import par.
 From cryptis Require Import lib term cryptis primitives tactics.
+From cryptis.lib Require Import dh.
 
 From cryptis.examples Require Import alist iso_dh.
 From cryptis.examples.opaque Require Import impl.
@@ -52,20 +53,6 @@ Proof. by rewrite (is_ginv_TExp _ _ gNgmul). Qed.
 Lemma Ngmul_TExp_g s : negb (is_gmul (TExp g s)).
 Proof. exact: Ngmul_TExp gNgmul. Qed.
 
-(* Flattening of nested scalar products, read off the signed counts.  [TExpA]
-   nests to the right, so this is the shape that comes up. *)
-Lemma TMulN_cons_flat a ts : TMulN [a; TMulN ts] = TMulN (a :: ts).
-Proof.
-rewrite Permutation_swap TMulN_cat.
-by rewrite -Permutation_cons_append.
-Qed.
-
-Lemma TMulN_flat_last a b c d :
-  TMulN [a; b; TMulN [c; d]] = TMulN [a; b; c; d].
-Proof.
-by apply: count_inj => t _; rewrite !count_TMulN /= !count_TMulN /=; lia.
-Qed.
-
 (* Exponentiation distributes over the group product in the base, so the key is
    a four-factor product.  [X_b] stays arbitrary -- it comes off the network. *)
 Lemma hmqv_K_expand p_a x_a m_a p_b X_b m_b :
@@ -75,8 +62,15 @@ Lemma hmqv_K_expand p_a x_a m_a p_b X_b m_b :
             TExp X_b (TMulN [m_a; p_a]);
             hmqv_ss p_a m_a p_b m_b].
 Proof.
-rewrite /hmqv_K /hmqv_Y /hmqv_ss !TExp_TGMulN /= !TExpA
-        !TMulN_cons_flat !TMulN_flat_last.
+(* [TExpA] nests the scalar products to the right; these flatten them out
+   again, and are read off the signed counts. *)
+have flat2 : forall a ts, TMulN [a; TMulN ts] = TMulN (a :: ts).
+  move=> a ts; rewrite Permutation_swap TMulN_cat.
+  by rewrite -Permutation_cons_append.
+have flat4 : forall a b c d, TMulN [a; b; TMulN [c; d]] = TMulN [a; b; c; d].
+  by move=> a b c d; apply: count_inj => t _;
+     rewrite !count_TMulN /= !count_TMulN /=; lia.
+rewrite /hmqv_K /hmqv_Y /hmqv_ss !TExp_TGMulN /= !TExpA !flat2 !flat4.
 by rewrite TGMulN_app.
 Qed.
 
@@ -92,7 +86,10 @@ have scal : forall ts1 ts2 : list term,
              = foldr Z.add 0%Z (count t <$> ts2)) ->
     TMulN ts1 = TMulN ts2.
   by move=> ts1 ts2 H; apply: count_inj => t _; rewrite !count_TMulN.
-rewrite !hmqv_K_expand /hmqv_ss !TExpA !TMulN_cons_flat.
+have flat2 : forall a ts, TMulN [a; TMulN ts] = TMulN (a :: ts).
+  move=> a ts; rewrite Permutation_swap TMulN_cat.
+  by rewrite -Permutation_cons_append.
+rewrite !hmqv_K_expand /hmqv_ss !TExpA !flat2.
 have e1 : TMulN [x_b; x_a] = TMulN [x_a; x_b] by apply: scal => t /=; lia.
 have e2 : TMulN [p_b; m_b; x_a] = TMulN [x_a; m_b; p_b]
   by apply: scal => t /=; lia.
@@ -159,7 +156,7 @@ Qed.
     All the exponents in play are nonces or hashes: neither a product nor an
     inverse, i.e. [negb (is_enon_free _)].  The generic machinery that turns
     pairwise disequality into the [factors] memberships [hmqv_K_gfactor] and
-    [public_opaque_secret_gen] ask for lives in [cryptis.core.term]
+    [public_dh_secret_gen] ask for lives in [cryptis.core.term]
     ([elem_of_factors_cons] and friends); all that is needed here is that a
     hash is exponent-free and that distinct tags give distinct hashes. *)
 
@@ -190,7 +187,9 @@ Proof. by rewrite /hash_result. Qed.
 
 (* The exponents of the static-static factor: two static private keys and the
    two hash multipliers.  Each occurs among [exps], which is what
-   [hmqv_K_gfactor] and [public_opaque_secret_gen] ask for. *)
+   [hmqv_K_gfactor] and [public_dh_secret_gen] ask for: the key's
+   static-static factor has four exponents, two of them the public hash
+   multipliers, so the two-exponent [public_dh_secret'] does not apply. *)
 Lemma exps_hmqv_ss (p_a p_b : nonce) tag_a tag_b v_a v_b :
   tag_a ≠ tag_b -> p_a ≠ p_b ->
   TNonce p_a ∈ exps (hmqv_ss p_a (hash_result tag_a v_a)
@@ -448,38 +447,6 @@ Lemma SK_result_eq (x : option term) (fresh : gset term) :
   SK_result x fresh -∗ SK_result' (repr x) fresh.
 Proof. by iIntros "SK"; iExists x; iSplit. Qed.
 
-Definition opaque_secret t : iProp :=
-  ⌜length (exps t) = 1⌝.
-
-Lemma public_opaque_secret a b (P : iProp) :
-  negb (is_mul a) →
-  negb (is_mul b) →
-  a ≠ b →
-  a ≠ TInv b →
-  □ (public a ↔ P) -∗
-  □ (∀ t, exp_pred_base a t ↔ ▷ □ opaque_secret t) -∗
-  □ (public b ↔ P) -∗
-  □ (∀ t, exp_pred_base b t ↔ ▷ □ opaque_secret t) -∗
-  (public (TExpN g [a; b]) → P).
-Proof.
-  exact: public_dh_secret'.
-Qed.
-
-(* The [exps]-membership form of [public_opaque_secret]: the two honest seeds
-   need only *occur* among the exponents.  The HMQV key's static-static factor
-   has four exponents, two of which are the public hash multipliers, so the
-   two-exponent form does not apply. *)
-Lemma public_opaque_secret_gen a b t (P : iProp) :
-  a ≠ b →
-  a ∈ exps t →
-  b ∈ exps t →
-  □ (public a ↔ P) -∗
-  □ (∀ u, exp_pred_base a u ↔ ▷ □ opaque_secret u) -∗
-  □ (public b ↔ P) -∗
-  □ (∀ u, exp_pred_base b u ↔ ▷ □ opaque_secret u) -∗
-  (public t → P).
-Proof. exact: public_dh_secret_gen. Qed.
-
 Definition opaque_public_private_pair (a : nonce) A : iProp :=
   ∃ (a' : nonce),
     ⌜A = TExp g a'⌝ ∗
@@ -487,8 +454,8 @@ Definition opaque_public_private_pair (a : nonce) A : iProp :=
     public A ∗
     minted a ∗
     minted a' ∗
-    □ (∀ t, exp_pred_base a t ↔ ▷ □ opaque_secret t) ∗
-    □ (∀ t, exp_pred_base a' t ↔ ▷ □ opaque_secret t) ∗
+    □ (∀ t, exp_pred_base a t ↔ ▷ □ dh_key_share t) ∗
+    □ (∀ t, exp_pred_base a' t ↔ ▷ □ dh_key_share t) ∗
     □ (public a ↔ ▷ □ False) ∗
     □ (public a' ↔ ▷ □ False).
 
