@@ -13,7 +13,7 @@ Unset Printing Implicit Defensive.
 Section DH.
 
 Context `{!cryptisGS Σ, !heapGS Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types t : term.
 

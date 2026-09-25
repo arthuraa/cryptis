@@ -20,7 +20,7 @@ Section Opaque.
 
 Context `{!cryptisGS Σ, !heapGS Σ}.
 
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Definition opaque_file (file : val) : iProp :=
   ∃ (k_s : nonce) (p_s : nonce) P_s P_u envelope,

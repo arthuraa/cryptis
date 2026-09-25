@@ -11,7 +11,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Notation connN := (nroot.@"conn").
+Abbreviation connN := (nroot.@"conn").
 
 Definition channel : val := λ: "cs",
   Snd (Fst "cs").

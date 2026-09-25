@@ -21,7 +21,7 @@ Unset Printing Implicit Defensive.
 Section Game.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Definition unguessable_option : val :=
   λ: "x" "c",
@@ -175,7 +175,7 @@ by iDestruct "Hcontra" as "%Hcontra".
 clear H.
 iModIntro.
 iSplit => //.
-iNext. 
+iNext.
 wp_pures.
 wp_apply (wp_unguessable_option SKs1 c with "Hchannel HprivSKs1").
 wp_pures.

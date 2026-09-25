@@ -58,7 +58,13 @@ opam repo add rocq-released https://rocq-prover.org/opam/released
 opam install . # or: make builddep && make
 ```
 
-Key dependencies (authoritative pins live in `rocq-cryptis.opam` — treat it as the single source of truth): rocq-core 9.1.1, rocq-mathcomp-ssreflect 2.5.0, rocq-iris 4.5.0, rocq-iris-heap-lang 4.5.0, coq-deriving 0.2.3. `README.md` and this file must agree with the opam file.
+Key dependencies (authoritative pins live in `rocq-cryptis.opam` — treat it as the single source of truth): rocq-core 9.2.0, rocq-mathcomp-ssreflect 2.6.0, rocq-iris 4.5.0, rocq-iris-heap-lang 4.5.0, coq-deriving 0.2.3. `README.md` and this file must agree with the opam file.
+
+nixpkgs has no Rocq 9.2 build of two of these, so `flake.nix` overrides them: `deriving` is
+pinned to release 0.2.3 — which does support 9.2, nixpkgs' own compatibility table merely
+stops at 9.1 — and `coq-lsp` is built from the upstream `v9.2` branch, since no 9.2 release is
+tagged. Drop each override once nixpkgs catches up. `actris` is pinned to a fixed upstream
+commit and must not be updated; it is intentionally absent from the opam file.
 
 ## Code Architecture
 

@@ -15,7 +15,7 @@ From cryptis.core Require Export pre_term.
    [is_non_free] recognises exactly those heads; it lives in [PreTerm] alongside
    [is_gnon_free], the smaller predicate [wf] uses for the base of a normal-form
    exponential. *)
-Notation is_non_free := PreTerm.is_non_free.
+Abbreviation is_non_free := PreTerm.is_non_free.
 
 Unset Elimination Schemes.
 Inductive term :=
@@ -944,4 +944,8 @@ elim: (unfold_term t) (wf_unfold_term t)=>
   + by rewrite length_fmap.
 Qed.
 
+Register Scheme term_rect as rect_dep for term.
+
 Definition term_ind (P : term -> Prop) := @term_rect P.
+
+Register Scheme term_ind as ind_dep for term.

@@ -1,6 +1,6 @@
 From cryptis Require Export mathcomp_compat.
 From HB Require Import structures.
-From mathcomp Require Import all_order all_boot.
+From mathcomp Require Import order boot.
 From deriving Require Import deriving.
 From Stdlib Require Import ZArith.ZArith Lia.
 From iris.heap_lang Require locations.
@@ -25,8 +25,8 @@ Inductive term_op0 :=
 | O0Int of Z
 | O0Nonce of nonce.
 
-Notation TInt_tag := 0%Z.
-Notation TNonce_tag := 1%Z.
+Abbreviation TInt_tag := 0%Z.
+Abbreviation TNonce_tag := 1%Z.
 
 Canonical term_op0_indDef := [indDef for term_op0_rect].
 Canonical term_op0_indType := IndType term_op0 term_op0_indDef.
@@ -64,10 +64,10 @@ Inductive term_op1 :=
 | O1Inv
 | O1GInv.
 
-Notation TKey_tag := 0%Z.
-Notation THash_tag := 1%Z.
-Notation TInv_tag := 2%Z.
-Notation TGInv_tag := 3%Z.
+Abbreviation TKey_tag := 0%Z.
+Abbreviation THash_tag := 1%Z.
+Abbreviation TInv_tag := 2%Z.
+Abbreviation TGInv_tag := 3%Z.
 
 Canonical term_op1_indDef := [indDef for term_op1_rect].
 Canonical term_op1_indType := IndType term_op1 term_op1_indDef.
@@ -88,9 +88,9 @@ Inductive term_op2 :=
 | O2Seal
 | O2Exp.
 
-Notation TPair_tag := 0%Z.
-Notation TSeal_tag := 1%Z.
-Notation TExp_tag := 2%Z.
+Abbreviation TPair_tag := 0%Z.
+Abbreviation TSeal_tag := 1%Z.
+Abbreviation TExp_tag := 2%Z.
 
 Canonical term_op2_indDef := [indDef for term_op2_rect].
 Canonical term_op2_indType := IndType term_op2 term_op2_indDef.
@@ -110,8 +110,8 @@ Inductive term_opN :=
 | ONMul
 | ONGMul.
 
-Notation TMul_tag := 0%Z.
-Notation TGMul_tag := 1%Z.
+Abbreviation TMul_tag := 0%Z.
+Abbreviation TGMul_tag := 1%Z.
 
 Canonical term_opN_indDef := [indDef for term_opN_rect].
 Canonical term_opN_indType := IndType term_opN term_opN_indDef.
@@ -127,10 +127,10 @@ HB.instance Definition _ := term_opN_isCountable.
 Definition term_opN_isOrder := [derive isOrder for term_opN].
 HB.instance Definition _ := term_opN_isOrder.
 
-Notation TOp0_tag := 0%Z.
-Notation TOp1_tag := 1%Z.
-Notation TOp2_tag := 2%Z.
-Notation TOpN_tag := 3%Z.
+Abbreviation TOp0_tag := 0%Z.
+Abbreviation TOp1_tag := 1%Z.
+Abbreviation TOp2_tag := 2%Z.
+Abbreviation TOpN_tag := 3%Z.
 
 Module PreTerm.
 
@@ -143,11 +143,11 @@ Inductive pre_term :=
 Set Elimination Schemes.
 
 (** Convenient shorthands for some operations *)
-Notation PTInv e := (PT1 O1Inv e).
-Notation PTGInv e := (PT1 O1GInv e).
-Notation PTExp b e := (PT2 O2Exp b e).
-Notation PTMul ts := (PTN ONMul ts).
-Notation PTGMul ts := (PTN ONGMul ts).
+Abbreviation PTInv e := (PT1 O1Inv e).
+Abbreviation PTGInv e := (PT1 O1GInv e).
+Abbreviation PTExp b e := (PT2 O2Exp b e).
+Abbreviation PTMul ts := (PTN ONMul ts).
+Abbreviation PTGMul ts := (PTN ONGMul ts).
 
 Definition pre_term_rect'
   (T1 : pre_term -> Type)
@@ -213,8 +213,12 @@ Proof.
 exact: (@pre_term_rect' T (foldr (fun t R => T t * R)%type unit)).
 Defined.
 
+Register Scheme pre_term_rect as rect_dep for pre_term.
+
 Definition pre_term_ind (T : pre_term -> Prop) :=
   @pre_term_rect T.
+
+Register Scheme pre_term_ind as ind_dep for pre_term.
 
 Definition seq_pre_term := seq pre_term.
 Definition seq_pre_term_isOrder := [derive isOrder for seq pre_term].

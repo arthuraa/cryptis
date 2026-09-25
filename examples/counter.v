@@ -28,7 +28,7 @@ Proof. solve_inG. Qed.
 Section Game.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ, !mcounterG Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types (γ : gname) (l : loc) (k t : term) (sk : sign_key).
 

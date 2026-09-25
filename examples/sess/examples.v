@@ -25,7 +25,7 @@ Implicit Types skI skR pkI pkR : sign_key.
 Implicit Types N : namespace.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ, !Sess.sessG Σ}.
-(* Notation iProp := (iProp Σ). *)
+(* Abbreviation iProp := (iProp Σ). *)
 
 Definition send42_proto : iProto Σ  :=
   (<! t> MSG t {{ ⌜t = TInt 42⌝ }}; END)%proto.
@@ -115,7 +115,7 @@ Implicit Types skI skR pkI pkR : sign_key.
 Implicit Types N : namespace.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ, !Sess.sessG Σ}.
-(* Notation iProp := (iProp Σ). *)
+(* Abbreviation iProp := (iProp Σ). *)
 
 Definition trusted_send42_proto : iProto Σ :=
   (<!> MSG (TInt 42); END)%proto.

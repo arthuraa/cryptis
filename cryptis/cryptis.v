@@ -12,7 +12,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Notation cryptisN := (nroot.@"cryptis").
+Abbreviation cryptisN := (nroot.@"cryptis").
 
 Class cryptisGpreS Σ := CryptisGPreS {
   cryptisGpreS_term_meta : term_metaGpreS Σ;
@@ -43,9 +43,9 @@ Proof. solve_inG. Qed.
 Section Cryptis.
 
 Context `{!heapGS Σ, !cryptisGS Σ}.
-Notation iProp := (iProp Σ).
-Notation iPropO := (iPropO Σ).
-Notation iPropI := (iPropI Σ).
+Abbreviation iProp := (iProp Σ).
+Abbreviation iPropO := (iPropO Σ).
+Abbreviation iPropI := (iPropI Σ).
 
 Definition cryptis_ctx : iProp :=
   term_meta_ctx.

@@ -44,10 +44,10 @@ Proof. solve_inG. Qed.
 Section Public.
 
 Context `{!heapGS Σ, !publicGS Σ, !term_metaGS Σ}.
-Notation iProp := (iProp Σ).
-Notation iPropO := (iPropO Σ).
+Abbreviation iProp := (iProp Σ).
+Abbreviation iPropO := (iPropO Σ).
 
-Notation iPropI := (iPropI Σ).
+Abbreviation iPropI := (iPropI Σ).
 
 Definition pnonce a : iProp :=
   ∃ γ P, meta (nonce_loc a) (nroot.@"nonce") γ ∧
@@ -392,7 +392,7 @@ Proof.
 case; try by move =>> -> -> //;
           try move => /elem_of_union [];
           move => /elem_of_singleton ->;
-          rewrite [tsize (_ _)]tsize_eq;
+          rewrite [X in _ < X]tsize_eq;
           lia.
 - move => t'' -> Ninv inv_t E; rewrite E in inv_t *.
   move => /elem_of_singleton ->.

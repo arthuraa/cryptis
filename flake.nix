@@ -8,11 +8,19 @@
     nix-github-actions.inputs.nixpkgs.follows = "nixpkgs";
     actris.url = "git+https://gitlab.mpi-sws.org/iris/actris.git?rev=fa669607568fbf897f6551b7bc9e912b10e1b577";
     actris.flake = false;
+    # nixpkgs has no coq-lsp release for Rocq 9.2 (upstream has not tagged one
+    # yet); build the v9.2 release branch instead.
+    coq-lsp.url = "github:ejgallego/coq-lsp/v9.2";
+    coq-lsp.flake = false;
+    # Deliberately *not* following our nixpkgs: rocq-mcp is pure Python and
+    # independent of the Rocq version, and on a nixpkgs this recent its
+    # dependency chain pulls in python3-inline-snapshot, whose own test suite
+    # fails.  Pin the revision rocq-mcp's own flake.lock was tested against.
     rocq-mcp.url = "github:arthuraa/rocq-mcp-flake";
-    rocq-mcp.inputs.nixpkgs.follows = "nixpkgs";
+    rocq-mcp.inputs.nixpkgs.url = "github:NixOS/nixpkgs/8f21ecf6d80d56dd43f4c7c9191fb805aa8ac98f";
   };
 
-  outputs = inputs@{ self, flake-parts, nixpkgs, nix-github-actions, rocq-mcp, ... }:
+  outputs = inputs@{ self, flake-parts, nixpkgs, nix-github-actions, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
         # To import a flake module
@@ -41,25 +49,15 @@
           ];
         };
 
-        devShells.ai =
-          let
-            aiPkgs = import self.inputs.nixpkgs {
-              inherit system;
-              overlays = [
-                self.overlays.default
-                rocq-mcp.overlays.default
-              ];
-            };
-          in
-          pkgs.mkShell {
-            propagatedBuildInputs = [
-              pkgs.coqPackages.coq-lsp
-              aiPkgs.rocq-mcp
-            ];
-            inputsFrom = [
-              self'.packages.default
-            ];
-          };
+        devShells.ai = pkgs.mkShell {
+          propagatedBuildInputs = [
+            pkgs.coqPackages.coq-lsp
+            inputs'.rocq-mcp.packages.rocq-mcp
+          ];
+          inputsFrom = [
+            self'.packages.default
+          ];
+        };
 
         # Equivalent to  inputs'.nixpkgs.legacyPackages.hello;
         packages.default = pkgs.coqPackages.cryptis;
@@ -80,7 +78,13 @@
         };
 
         overlays.default = final: prev: {
-          coqPackages = prev.coqPackages_9_1.overrideScope (final: prev: {
+          coqPackages = prev.coqPackages_9_2.overrideScope (final: prev: {
+            deriving = prev.deriving.override {
+              version = "0.2.3";
+            };
+            coq-lsp = prev.coq-lsp.override {
+              version = inputs.coq-lsp.outPath;
+            };
             actris = prev.mkCoqDerivation {
               pname = "actris";
               version = inputs.actris.outPath;

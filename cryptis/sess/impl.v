@@ -62,7 +62,7 @@ Section Proofs.
                        }.
 
   Context `{!cryptisGS Σ, !heapGS Σ, !GenConn.connGS Σ, !protoG Σ term}.
-  Notation iProp := (iProp Σ).
+  Abbreviation iProp := (iProp Σ).
 
   Implicit Types (cs : GenConn.state).
   Implicit Types (kS t : term) (ts : list term).

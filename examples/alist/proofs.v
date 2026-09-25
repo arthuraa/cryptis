@@ -20,7 +20,7 @@ Include impl.Pure.
 Section Verif.
 
 Context `{!cryptisGS Σ, !heapGS Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types (γ : gname) (l : loc) (k t : term) (v : val).
 Implicit Types (kvs : list (term * val)) (db : gmap term val).
@@ -105,7 +105,7 @@ Include impl.Impure.
 Section Verif.
 
 Context `{!cryptisGS Σ, !heapGS Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types (γ : gname) (l : loc) (k t : term) (v kvs : val).
 Implicit Types (db : gmap term val).

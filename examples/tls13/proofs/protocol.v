@@ -21,7 +21,7 @@ Unset Printing Implicit Defensive.
 Section Protocol.
 
 Context `{!heapGS Σ, !cryptisGS Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 Variable N : namespace.
 
 Implicit Types t : term.

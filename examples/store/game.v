@@ -18,7 +18,7 @@ Section Game.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ}.
 Context `{!RPC.rpcGS Σ, !storeGS Σ, !tlockG Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types t : term.
 Implicit Types rl : role.
