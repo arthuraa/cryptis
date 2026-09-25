@@ -74,7 +74,7 @@ iIntros "!> %Ψ _ Hpost".
 wp_pures. wp_apply wp_pkey. wp_pures. rewrite -/pkI.
 wp_apply (wp_mk_nonce_freshN ∅
             nonce_secrecy
-            iso_dh_key_share
+            dh_key_share
             (λ a, {[TExp (TInt 0) a]})) => //.
 - iIntros "% ?". by rewrite elem_of_empty.
 - iIntros "%a".
@@ -82,6 +82,11 @@ wp_apply (wp_mk_nonce_freshN ∅
   iIntros "!>"; iSplit; eauto; by iIntros "(_ & ?)".
 iIntros "%a %fresh #m_a #s_a #a_pred _ token_ga".
 have Nm_a : negb (is_mul (TNonce a)) by [].
+(* [dh.v] takes the generator as a parameter; ISO-DH always uses [TInt 0]. *)
+have NInt : negb (is_exp (TInt 0)) by [].
+have NIntM : negb (is_gmul (TInt 0)) by [].
+have NIntI : negb (is_ginv (TInt 0)) by [].
+iAssert (public (TInt 0)) as "#p_g"; first by rewrite public_TInt.
 set ga := TExp (TInt 0) a.
 rewrite !big_sepS_singleton.
 rewrite (term_token_difference ga (↑iso_dhN)) //.
@@ -97,7 +102,8 @@ wp_pures. wp_apply wp_mk_keyshare => //. rewrite -/ga.
 iIntros "_". wp_pures. wp_list. wp_term_of_list.
 wp_pure _ credit:"H1".
 wp_pure _ credit:"H2".
-iAssert (public ga) as "p_ga"; first by iApply (public_dh_share Nm_a).
+iAssert (public ga) as "p_ga";
+  first by iApply (public_dh_share NInt NIntM NIntI Nm_a).
 wp_apply wp_send => //.
 { rewrite public_of_list /=. do 2?[iSplit => //].
   by iApply public_verify_key. }
@@ -196,8 +202,9 @@ iAssert (|={⊤}=>
       by rewrite (is_inv_TInv (TNonce a) Nm_a).
     by rewrite -contra; case: (b) => //.
   iEval (rewrite /gab TExp2_TExpN) in "p_gab".
-  iPoseProof (@public_dh_secret' _ _ _ (TNonce b) (TNonce a) _ Nm_b Nm_a
-                b_a b_aV with "s_b pred_b [] a_pred p_gab") as ">?".
+  iPoseProof (@public_dh_secret' _ _ _ (TInt 0) (TNonce b) (TNonce a) _
+                NInt NIntM NIntI Nm_b Nm_a b_a b_aV
+                with "s_b pred_b [] a_pred p_gab") as ">?".
   iModIntro. iApply bi.iff_trans. iSplit; first auto.
   iSplit; eauto. iIntros "[#contra|?]"; auto.
   iNext. by iPoseProof (term_meta_agree with "failed contra") as "%".
