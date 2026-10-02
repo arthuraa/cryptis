@@ -216,14 +216,16 @@ have H3 := tsize_lt_TInv Nm2.
 do !split; lia.
 Qed.
 
+(* No [negb (is_mul t2)] premise is needed: [exps t1] is [factors (expo t1)],
+   whose elements are never products ([Nmul_factors]). *)
 Lemma tsize_TExp_TInv t1 t2 :
-  negb (is_mul (TInv t2)) → t2 ∈ exps t1 →
+  t2 ∈ exps t1 →
   tsize t2 < tsize t1 ∧
   tsize (TInv t2) < tsize t1 ∧
   tsize (TExp t1 (TInv t2)) < tsize t1.
 Proof.
-move => NmI2 H.
-have Nm2 : negb (is_mul t2) by rewrite is_mul_TInv in NmI2.
+move => H.
+have Nm2 : negb (is_mul t2) := Nmul_factors (expo t1) t2 H.
 (* [t2 ∈ exps t1] forces [t1] to be an exponential, hence an atom-headed one *)
 have en : exps t1 ≠ [] by move=> e; rewrite e elem_of_nil in H.
 have xt : is_exp t1 by move: en; rewrite /exps -tunitP is_expE.
@@ -315,7 +317,7 @@ Lemma term_lt_ind (T : term -> Prop) :
 Proof. exact: term_lt_rect. Qed.
 
 Arguments tsize_lt_TExp {t1 t2} _ _.
-Arguments tsize_TExp_TInv {t1 t2} _ _.
+Arguments tsize_TExp_TInv {t1 t2} _.
 
 (** * Occurs-check: an exponent too big to be inside [X]
 
