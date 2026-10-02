@@ -436,7 +436,6 @@ Definition public_pre_aux Plater P t : iProp :=
    ∨ (⌜is_gmul t⌝ ∧ [∗ list] t' ∈ gfactors t, P t')
    ∨ (⌜is_exp t⌝ ∧
       [∗ list] t' ∈ exps t,
-        ⌜negb (is_mul (TInv t'))⌝ ∧
         exp_pred0 Plater P (t', t) ∧
         □ (P t' → P (TExp t (TInv t'))))
    ∨ match t with
@@ -482,8 +481,7 @@ f_equiv; last (f_equiv; last (f_equiv; last f_equiv)).
   exact: (tsize_gfactors_lt t' t mul_t t'_in).
 - apply: and_proper_L => exp_t.
   apply: big_sepL_proper => _ t' /(list_elem_of_lookup_2 _ _ _) t'_in.
-  apply: and_proper_L => Nm.
-  case: (@tsize_TExp_TInv t t' Nm t'_in) => lt1 [] lt2 lt3; f_equiv.
+  case: (@tsize_TExp_TInv t t' t'_in) => lt1 [] lt2 lt3; f_equiv.
   + apply: exp_pred0_proper' => /= t'' t''_ts; apply: HP.
     case: t''_ts => [->|t''_in]; first exact: lt1.
     exact: (tsize_exps_lt t'' t t''_in).
@@ -525,17 +523,16 @@ iIntros "#wand1 #wand2 %t [#m [H | [H | [H | [H | H]]]]]"; iSplit => //.
   by iModIntro; iSplit => //; iApply (big_sepL_impl with "H"); eauto.
 - iDestruct "H" as "(% & H)"; iRight; iRight; iRight; iLeft.
   iAssert ([∗ list] t' ∈ exps t,
-    ⌜negb (is_mul (TInv t'))⌝ ∧
     <pers> exp_pred0 Plater P (t', t) ∧
     □ (P t' → P (TExp t (TInv t'))))%I as "{H} #H".
   { iApply (big_sepL_impl with "H").
-    iIntros "!> %k %t' _ [%Nm [dh #?]]"; iSplit => //; iSplit => //.
+    iIntros "!> %k %t' _ [dh #?]"; iSplit => //.
     iAssert (exp_pred0 (λ t'', <pers> Plater t'')%I
                       (λ t'', <pers> P t'')%I (t', t)) as "{dh} #dh".
     { by iApply (exp_pred0_wand with "[] [] dh"); eauto. }
     by iModIntro; iApply (exp_pred0_wand with "[] [] dh"); iIntros "!> % #?". }
   iModIntro; iSplit => //.
-  by iApply (big_sepL_impl with "H"); iIntros "!> % % _ [% [#? #?]]"; eauto.
+  by iApply (big_sepL_impl with "H"); iIntros "!> % % _ [#? #?]"; eauto.
 - iRight; iRight; iRight; iRight; case: t; by move=> *; iPoseProof "H" as "#H".
 Qed.
 
@@ -594,7 +591,6 @@ Lemma public_eq t :
      ∨ (⌜is_gmul t⌝ ∧ [∗ list] t' ∈ gfactors t, public t')
      ∨ (⌜is_exp t⌝ ∧
         [∗ list] t' ∈ exps t,
-          ⌜negb (is_mul (TInv t'))⌝ ∧
           exp_pred t' t ∧ □ (public t' → public (TExp t (TInv t'))))
      ∨ match t with
        | TNonce a => ◇ pnonce a
@@ -1095,12 +1091,7 @@ apply: anti_symm; last first.
 - iIntros "#[m dhp]".
   rewrite public_eq; setoid_rewrite (exps_TExpN Nx Nm Ni ic).
   iSplit; first done.
-  iRight; iRight; iRight; iLeft.
-  iSplit; first done.
-  iApply (big_sepL_mono with "dhp").
-  iIntros (k t' Hk) "H"; iSplit; last by [].
-  iPureIntro; rewrite is_mul_TInv.
-  exact: proj2 (ic t' (list_elem_of_lookup_2 _ _ _ Hk)).
+  by iRight; iRight; iRight; iLeft; iSplit.
 - rewrite public_eq !(minted_TExpN Nx Nm Ni ic).
   setoid_rewrite (exps_TExpN Nx Nm Ni ic).
   iIntros "#[[mt mts] Hdisj]".
@@ -1116,8 +1107,7 @@ apply: anti_symm; last first.
     by move: ttsX mul_c;
        rewrite is_exp_unfold is_gmul_unfold;
        case: (unfold_term (TExpN t ts)) => [|||[|] ?].
-  + iDestruct "c3" as "(_ & exp)".
-    iApply (big_sepL_mono with "exp"). by iIntros (k t' _) "(_ & $)".
+  + by iDestruct "c3" as "(_ & $)".
   + iRevert "c4"; case: (TExpN t ts) ttsX => // *; by iIntros "[]".
 Qed.
 
@@ -1132,13 +1122,7 @@ move => expt; apply: anti_symm; last first.
 - iIntros "#[m dhp]".
   rewrite public_eq.
   iSplit; first done.
-  iRight; iRight; iRight; iLeft.
-  iSplit; first done.
-  iApply (big_sepL_mono with "dhp").
-  iIntros (k t' Hk) "H"; iSplit; last by [].
-  iPureIntro; rewrite is_mul_TInv.
-  have t'_t : t' ∈ exps t by exact: list_elem_of_lookup_2 Hk.
-  exact: proj2 (invs_canceled_factors (expo t) _ t'_t).
+  by iRight; iRight; iRight; iLeft; iSplit.
 - rewrite public_eq.
   iIntros "#[m Hdisj]".
   iSplit; first done.
@@ -1151,8 +1135,7 @@ move => expt; apply: anti_symm; last first.
   + iDestruct "c2'" as "(%mul_c & _)".
     by move: expt mul_c;
        rewrite is_exp_unfold is_gmul_unfold; case: (unfold_term t) => [|||[|] ?].
-  + iDestruct "c3" as "(_ & exp)".
-    iApply (big_sepL_mono with "exp"). by iIntros (k t' _) "(_ & $)".
+  + by iDestruct "c3" as "(_ & $)".
   + by case: (t) expt => // *; iDestruct "c4" as "[]".
 Qed.
 
@@ -1244,8 +1227,7 @@ have comm : TExp (TExp t1 t2) (TInv t) = TExp (TExp t1 (TInv t)) t2.
   rewrite (_ : TExp t1 (TInv t) = TExpN t1 [TInv t]); last by rewrite /TExpN TMulN1.
   by rewrite !TExp_TExpN TExpNC2.
 rewrite comm; iApply (IH with "p p2").
-- have NmTt : negb (is_mul (TInv t)) by rewrite is_mul_TInv.
-  by have [?[??]] := tsize_TExp_TInv NmTt t_t1.
+- by have [?[??]] := tsize_TExp_TInv t_t1.
 - by apply: Ngmul_TExp.
 - by apply: Nginv_TExp.
 Qed.
@@ -1628,7 +1610,7 @@ iIntros "!> #p"; iSpecialize ("p1'" with "p").
 have Nmt : negb (is_mul t) := proj2 (invs_canceled_factors (expo t1) _ t_t1).
 have NmIt : negb (is_mul (TInv t)) by rewrite is_mul_TInv.
 rewrite TExpC; iApply (IH with "p1' m []").
-- by have [_ [_ ?]] := tsize_TExp_TInv NmIt t_t1.
+- by have [_ [_ ?]] := tsize_TExp_TInv t_t1.
 - exact: (Ngmul_TExp _ _ Nm1).
 - exact: (Nginv_TExp _ _ Nm1 Ni1).
 - exact: Nm2.
