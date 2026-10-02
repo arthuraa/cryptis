@@ -11,7 +11,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Notation rpcN := (nroot.@"rpc").
+Abbreviation rpcN := (nroot.@"rpc").
 
 Definition connect : val := λ: "c" "skA" "pkB",
   Conn.connect "c" "skA" "pkB" (Tag rpcN).

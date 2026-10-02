@@ -23,7 +23,7 @@ Import SShare.
 Section Proofs.
 
 Context `{!heapGS Σ, !cryptisGS Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types t : term.
 Implicit Types Φ : val → iProp.

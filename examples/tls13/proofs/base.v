@@ -21,7 +21,7 @@ Module Keys.
 Section Keys.
 
 Context `{!heapGS Σ, cryptisGS Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types t : term.
 Implicit Types Φ : val → iProp.
@@ -53,7 +53,7 @@ Existing Instance Keys.ctx_persistent.
 Section TlsLib.
 
 Context `{!heapGS Σ, !cryptisGS Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Definition tls_ready N (P : role → term → term → (Meth.t * senc_key * term) → iProp)
     rl cn sn (x : Meth.t * senc_key * term) : iProp :=

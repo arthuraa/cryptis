@@ -15,7 +15,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Local Notation connN := (nroot.@"conn").
+#[local] Abbreviation connN := (nroot.@"conn").
 
 Record params Σ := Params {
   msg_inv : sign_key → sign_key → sess_info → role → term → iProp Σ;
@@ -24,7 +24,7 @@ Record params Σ := Params {
 Section Defs.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !GenConn.connGS Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types (cs : GenConn.state).
 Implicit Types (kS t : term) (ts : list term).

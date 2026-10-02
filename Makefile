@@ -23,7 +23,7 @@ clean: RocqMakefile
 
 # Create Rocq Makefile.
 RocqMakefile: _CoqProject Makefile
-	"$(COQBIN)coq_makefile" -f _CoqProject -o RocqMakefile $(EXTRA_COQFILES)
+	"$(COQBIN)rocq" makefile -f _CoqProject -o RocqMakefile $(EXTRA_COQFILES)
 
 # Install build-dependencies
 OPAMFILES=$(wildcard *.opam)

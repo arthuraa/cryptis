@@ -30,8 +30,8 @@ From iris.bi Require Import telescopes.
 From iris.proofmode Require Import coq_tactics reduction spec_patterns.
 From iris.heap_lang Require Export proofmode notation.
 
-Notation iProto Σ := (iProto Σ term).
-Notation iMsg Σ := (iMsg Σ term).
+Abbreviation iProto Σ := (iProto Σ term).
+Abbreviation iMsg Σ := (iMsg Σ term).
 
 (** * Tactics for proving contractiveness of protocols *)
 Ltac f_dist_le :=
@@ -60,7 +60,7 @@ Class ProtoNormalize {Σ} (d : bool) (p : iProto Σ)
 Global Hint Mode ProtoNormalize ! ! ! ! - : typeclass_instances.
 Arguments ProtoNormalize {_} _ _%_proto _%_proto _%_proto.
 
-Notation ProtoUnfold p1 p2 := (∀ d pas q,
+Abbreviation ProtoUnfold p1 p2 := (∀ d pas q,
   ProtoNormalize d p2 pas q → ProtoNormalize d p1 pas q).
 
 Class MsgNormalize {Σ} (d : bool) (m1 : iMsg Σ)

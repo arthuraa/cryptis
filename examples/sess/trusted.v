@@ -16,7 +16,7 @@ Unset Printing Implicit Defensive.
 Section Trusted.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ, !Sess.sessG Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types (cs : GenConn.state).
 Implicit Types (skI skR : sign_key) (kS t : term).
@@ -96,7 +96,7 @@ is eliminated by the honesty hypothesis carried in [trusted_connected]. *)
 Lemma trusted_wp_recv {TT : tele} skI skR rl cs
   (t : TT → term) (P : TT → iProp) (p : TT → iProto Σ term) :
   {{{ trusted_connected skI skR rl cs (<?.. x> MSG t x {{ ▷ P x }}; p x) }}}
-    Sess.recv (repr cs) 
+    Sess.recv (repr cs)
   {{{ x , RET (repr (t x)); public (t x) ∗
      trusted_connected skI skR rl cs (p x) ∗ P x }}}.
 Proof.
@@ -107,7 +107,7 @@ iDestruct "tc" as "[conn #hon]".
 iApply (wp_fupd).
 iApply (Sess.wp_recv_tele with "conn").
 iIntros "!> %t' (p_t' & [fail | inv])".
-- iMod ("hon" with "fail") as "[]". 
+- iMod ("hon" with "fail") as "[]".
 -
   iDestruct "inv" as (x) "(-> & conn & Px)".
   iApply "post". iFrame "p_t'".
@@ -194,7 +194,7 @@ Lemma trusted_wp_confirm N p c skI skR ga :
   minted skR -∗
   □ (public skI → ▷ False) -∗
   □ (public skR → ▷ False) -∗
-  {{{ public ga ∗ minted skI ∗ minted skR 
+  {{{ public ga ∗ minted skI ∗ minted skR
        }}}
     Sess.confirm c skR (Tag N) (ga, Spec.pkey skI)%V
   {{{ cs, RET (repr cs);
@@ -236,7 +236,7 @@ Qed.
 
 (** **Select and branch *)
 Lemma trusted_wp_select skI skR rl cs (b : bool) (P1 P2 : iProp) (p1 p2 : iProto Σ term) :
-{{{ trusted_connected skI skR rl cs 
+{{{ trusted_connected skI skR rl cs
 (iProto_choice_term Send P1 P2 p1 p2) ∗
 (if b then P1 else P2) }}}
 Sess.send (repr cs) (TInt (if b then 1 else 0))
@@ -244,7 +244,7 @@ Sess.send (repr cs) (TInt (if b then 1 else 0))
 Proof.
  iIntros (ϕ) "[tc Hp] post".
  iApply (trusted_wp_send _ _ _ _ (TInt (if b then 1 else 0)) (if b then p1 else p2) with "[tc Hp]").
- - iSplitL. 
+ - iSplitL.
  + iApply (trusted_connected_le with "tc"). iNext.
  rewrite /iProto_choice_term.
  iApply iProto_le_trans.
@@ -255,9 +255,9 @@ Proof.
  Qed.
 
 Lemma trusted_wp_branch skI skR rl cs (P1 P2 : iProp) (p1 p2 : iProto Σ term) :
-{{{ trusted_connected skI skR rl cs 
+{{{ trusted_connected skI skR rl cs
 (iProto_choice_term Recv P1 P2 p1 p2)}}}
-Sess.recv (repr cs) 
+Sess.recv (repr cs)
 {{{ (b : bool), RET (repr (TInt (if b then 1 else 0))); trusted_connected skI skR rl cs (if b then p1 else p2) ∗
 (if b then P1 else P2)}}}.
 Proof.
@@ -277,7 +277,7 @@ with "[tc]").
   iApply iProto_le_exist_elim_l_inhabited.
   iIntros (b).
   iApply (iProto_le_payload_elim_l Recv).
-  iIntros "HP". 
+  iIntros "HP".
   iApply (iProto_le_trans _
   (<?> MSG (TInt (if b then 1 else 0))
   {{▷(if b then P1 else P2)}};

@@ -19,7 +19,7 @@ Implicit Types N : namespace.
 
 Local Existing Instance ticket_lock.
 
-Notation opN := (nroot.@"op").
+Abbreviation opN := (nroot.@"op").
 
 Definition _H : string -> val := fun _tag => (λ: "val", hash (tag (Tag $ opN.@_tag) "val"))%V.
 Definition _H_list : string -> val := fun _tag => (λ: "val", _H _tag (term_of_list "val"))%V.

@@ -18,7 +18,7 @@ Unset Printing Implicit Defensive.
 Section Game.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ, !nsl_dhGS Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types t : term.
 Implicit Types rl : role.

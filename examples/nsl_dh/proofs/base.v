@@ -54,7 +54,7 @@ Proof. solve_inG. Qed.
 Section Verif.
 
 Context `{!heapGS Σ, !cryptisGS Σ, !nsl_dhGS Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types (rl : role) (t sI sR kS : term).
 Implicit Types (skI skR : aenc_key) (failed : bool).

@@ -17,7 +17,7 @@ Unset Printing Implicit Defensive.
 Section Proofs.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ, !sessG Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types (cs : GenConn.state).
 Implicit Types (skI skR : sign_key) (kS t : term).
@@ -25,7 +25,7 @@ Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Notation sessN := (iso_dhN.@"res".@"sess").
+Abbreviation sessN := (iso_dhN.@"res".@"sess").
 
 Lemma wp_connect P N p c skI skR :
   channel c -∗

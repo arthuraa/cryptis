@@ -17,7 +17,7 @@ Local Existing Instance ticket_lock.
 Section NSL.
 
 Context `{!heapGS Σ, !cryptisGS Σ, !tlockG Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types (rl : role) (t nI nR sI sR kS : term).
 Implicit Types (skI skR : aenc_key).

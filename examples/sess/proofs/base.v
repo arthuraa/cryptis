@@ -16,7 +16,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Notation sessN := (iso_dhN.@"res".@"sess").
+Abbreviation sessN := (iso_dhN.@"res".@"sess").
 
 Definition savedProtoR Σ V :=
   agreeR (laterO (iProto Σ V)).
@@ -43,7 +43,7 @@ Proof. solve_inG. Qed.
 Section Verif.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ, !sessG Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Implicit Types (skI skR : sign_key) (kS t : term) (ts : list term).
 Implicit Types n : nat.

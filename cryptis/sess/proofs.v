@@ -27,7 +27,7 @@ Local Notation connN := (nroot.@"conn").
 Section Proofs.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !connGS Σ, !iso_dhGS Σ}.
-Notation iProp := (iProp Σ).
+Abbreviation iProp := (iProp Σ).
 
 Notation iProto Σ := (iProto Σ val).
 Notation iMsg Σ := (iMsg Σ val).

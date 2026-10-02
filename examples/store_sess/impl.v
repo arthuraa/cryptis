@@ -14,7 +14,7 @@ Unset Printing Implicit Defensive.
 
 Local Existing Instance ticket_lock.
 
-Notation dbN := (nroot.@"db_sess").
+Abbreviation dbN := (nroot.@"db_sess").
 
 Module Client.
 
