@@ -8,13 +8,15 @@ From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import lock ticket_lock.
 From cryptis Require Import lib term gmeta nown cryptis.
 From cryptis Require Import replica primitives tactics role.
-From cryptis.examples Require Import iso_dh gen_conn sess alist.
-From cryptis.examples.sess Require impl.
-From cryptis.examples.sess.proofs Require Import base.
-From cryptis.examples.sess Require Import proofs tag.
+From cryptis.examples Require Import iso_dh gen_conn.
+From cryptis.sess Require Import sess.
+From cryptis.examples Require Import alist.
+From cryptis.sess Require impl.
+From cryptis.sess.proofs Require Import base.
+From cryptis.sess Require Import proofs tag.
 From cryptis.examples.store Require Import db.
-From cryptis.examples.store_sess Require Import impl.
-From cryptis.examples.store_sess.proofs Require Import base.
+From cryptis.sess.examples.store Require Import impl.
+From cryptis.sess.examples.store.proofs Require Import base.
 From actris.channel Require Import proto_model proto.
 
 From iris.heap_lang.lib Require Import lock ticket_lock.

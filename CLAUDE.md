@@ -58,12 +58,11 @@ opam repo add rocq-released https://rocq-prover.org/opam/released
 opam install . # or: make builddep && make
 ```
 
-Key dependencies (authoritative pins live in `rocq-cryptis.opam` — treat it as the single source of truth): rocq-core 9.2.0, rocq-mathcomp-ssreflect 2.6.0, rocq-iris 4.5.0, rocq-iris-heap-lang 4.5.0, coq-deriving 0.2.3. `README.md` and this file must agree with the opam file.
+Key dependencies (authoritative pins live in `rocq-cryptis.opam` — treat it as the single source of truth): rocq-core 9.2.0, rocq-mathcomp-ssreflect 2.6.0, rocq-iris 4.5.0, rocq-iris-heap-lang 4.5.0, coq-deriving 0.2.3, rocq-actris 367149a (`stable_fa66960` branch of `chandradeepdey/actris`). `README.md` and this file must agree with the opam file.
 
 nixpkgs has no Rocq 9.2 build of `coq-lsp`, and `rocq-community/rocq-lsp` has no 9.2 release
 yet, so `flake.nix` builds its `v9.2` branch; switch to the nixpkgs package once there is one.
-`actris` is pinned to a fixed upstream commit and must not be updated; it is intentionally
-absent from the opam file.
+`actris` is pinned to a fixed upstream commit and must not be updated.
 
 ## Code Architecture
 
@@ -78,6 +77,8 @@ absent from the opam file.
   - `adequacy.v` — Soundness/adequacy theorems
 
 - **`examples/`** — Case studies (Rocq namespace `cryptis.examples`)
+
+- **`session/`** — Actris-style session types over `iso_dh` + `gen_conn` (Rocq namespace `cryptis.sess`, a separate `-R` in `_CoqProject`): `impl.v`, `proofs/base.v`, `proofs.v`, aggregated by `sess.v` (`Module Sess`), plus `tag.v`, `trusted.v`, `proofmode.v`. Its case studies live in `session/examples/` (`cryptis.sess.examples`): `basic.v` and the `store/` key-value store (game in `store/game.v`). Import it as `From cryptis.sess Require Import sess`.
 
 ### Core Concepts
 
@@ -127,6 +128,7 @@ These are thin wrappers over the generic `seal_pred F N Φ` (with `F : functiona
 ### Module Dependency Order
 
 ```
+session/examples/* → session/* → examples/{iso_dh,gen_conn}
 examples/*
   → cryptis + primitives + tactics
     → cryptis.v (integration)

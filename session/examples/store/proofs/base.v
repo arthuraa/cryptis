@@ -10,9 +10,9 @@ From iris.heap_lang.lib Require Import ticket_lock.
 From cryptis Require Import lib term gmeta nown.
 From cryptis Require Import cryptis replica primitives tactics role.
 From cryptis.examples Require Import iso_dh gen_conn alist.
-From cryptis.examples.sess Require impl.
-From cryptis.examples.sess.proofs Require Import base.
-From cryptis.examples.sess Require Import proofs tag.
+From cryptis.sess Require impl.
+From cryptis.sess.proofs Require Import base.
+From cryptis.sess Require Import proofs tag.
 From cryptis.examples.store Require Import db.
 From actris.channel Require Import proto_model proto.
 

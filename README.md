@@ -33,6 +33,18 @@ In the `examples` directory you will find our case studies:
 - `challenge_response`, `composite_game`, `permanent`, `counter`: smaller
   single-file examples plus a composite security game.
 
+## Session types
+
+In the `session` directory (Rocq namespace `cryptis.sess`) you will find
+Actris-style session types for authenticated channels built on `iso_dh` and
+`gen_conn`: `impl`, `proofs`, `proofs/base` (aggregated by `sess`), the
+tagged-message layer `tag`, the `trusted` wrapper for honest parties, and
+`proofmode` tactics.  Its case studies live in `session/examples`:
+
+- `basic`: small protocols (send-42, vote, key-value database).
+- `store`: authenticated key-value store over session types (game is in its
+  own file).
+
 ## Building
 
 Cryptis is known to compile with the following dependencies:

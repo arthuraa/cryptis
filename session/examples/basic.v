@@ -5,16 +5,17 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta cryptis primitives tactics role.
-From cryptis.examples Require Import iso_dh gen_conn sess.
-From cryptis.examples.sess Require Import proofmode trusted.
-From cryptis.examples.sess.proofs Require Import base.
+From cryptis.examples Require Import iso_dh gen_conn.
+From cryptis.sess Require Import sess.
+From cryptis.sess Require Import proofmode trusted.
+From cryptis.sess.proofs Require Import base.
 From actris.channel Require Import proto_model proto.
 From iris.heap_lang Require Import lib.spin_lock.
 From iris.bi Require Import telescopes.
 
 From iris.proofmode Require Import coq_tactics reduction spec_patterns.
 From iris.heap_lang Require Import proofmode notation.
-From cryptis.examples Require Import proofmode.
+From cryptis.sess Require Import proofmode.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

@@ -8,10 +8,12 @@ From iris.heap_lang Require Import notation proofmode adequacy.
 From iris.heap_lang.lib Require Import par assert ticket_lock.
 From cryptis Require Import cryptis primitives tactics gmeta role adequacy.
 From cryptis.primitives Require Import attacker.
-From cryptis.examples Require Import iso_dh sess gen_conn.
-From cryptis.examples.sess.proofs Require base.
-From cryptis.examples.store_sess Require Import impl proofs.
-From cryptis.examples.store_sess.proofs Require Import base.
+From cryptis.examples Require Import iso_dh.
+From cryptis.sess Require Import sess.
+From cryptis.examples Require Import gen_conn.
+From cryptis.sess.proofs Require base.
+From cryptis.sess.examples.store Require Import impl proofs.
+From cryptis.sess.examples.store.proofs Require Import base.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -20,7 +22,7 @@ Unset Printing Implicit Defensive.
 Section Game.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !iso_dhGS Σ, !GenConn.connGS Σ}.
-Context `{!cryptis.examples.sess.proofs.base.sessG Σ, !storeGS Σ, !tlockG Σ}.
+Context `{!cryptis.sess.proofs.base.sessG Σ, !storeGS Σ, !tlockG Σ}.
 Abbreviation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -145,7 +147,7 @@ End Game.
 
 Definition F : gFunctors :=
   #[heapΣ; spawnΣ; cryptisΣ; tlockΣ; iso_dhΣ; GenConn.connΣ;
-    cryptis.examples.sess.proofs.base.sessΣ; storeΣ].
+    cryptis.sess.proofs.base.sessΣ; storeΣ].
 
 Lemma store_sess_secure σ₁ σ₂ t₂ e₂ :
   rtc erased_step ([run_network game], σ₁) (t₂, σ₂) →
