@@ -5,8 +5,9 @@ From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta cryptis primitives tactics role.
-From cryptis.examples Require Import iso_dh gen_conn sess.
-From cryptis.examples.sess.proofs Require Import base.
+From cryptis.examples Require Import iso_dh gen_conn.
+From cryptis.sess Require Import sess.
+From cryptis.sess.proofs Require Import base.
 From actris.channel Require Import proto_model proto.
 
 Set Implicit Arguments.

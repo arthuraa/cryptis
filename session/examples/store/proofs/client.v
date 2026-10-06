@@ -1,2 +1,2 @@
-From cryptis.examples.store_sess.proofs.client
+From cryptis.sess.examples.store.proofs.client
   Require Export store load create connect close.

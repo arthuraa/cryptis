@@ -4,6 +4,7 @@
 
 -R examples cryptis.examples
 -R cryptis cryptis
+-R session cryptis.sess
 
 cryptis/lib/mathcomp_compat.v
 cryptis/lib/list_sort.v
@@ -79,15 +80,6 @@ examples/gen_conn/proofs/base.v
 examples/gen_conn/proofs.v
 examples/gen_conn.v
 
-examples/sess/impl.v
-examples/sess/proofmode.v
-examples/sess/proofs/base.v
-examples/sess/proofs.v
-examples/sess/tag.v
-examples/sess/trusted.v
-examples/sess/examples.v
-examples/sess.v
-
 examples/conn/proofs/base.v
 examples/conn/proofs.v
 examples/conn.v
@@ -133,12 +125,12 @@ examples/challenge_response.v
 
 ## Opaque verification
 
-examples/opaque.v
 examples/opaque/impl.v
 examples/opaque/shared.v
 examples/opaque/client_proofs.v
 examples/opaque/server_proofs.v
 examples/opaque/game.v
+examples/opaque.v
 
 ## TLS 1.3
 
@@ -157,16 +149,26 @@ examples/tls13.v
 
 examples/composite_game.v
 
-## Storage
+# Session types
 
-examples/store_sess/impl.v
-examples/store_sess/proofs/base.v
-examples/store_sess/proofs/client/store.v
-examples/store_sess/proofs/client/load.v
-examples/store_sess/proofs/client/create.v
-examples/store_sess/proofs/client/connect.v
-examples/store_sess/proofs/client/close.v
-examples/store_sess/proofs/client.v
-examples/store_sess/proofs/server.v
-examples/store_sess/proofs.v
-examples/store_sess/game.v
+session/impl.v
+session/proofs/base.v
+session/proofs.v
+session/sess.v
+session/tag.v
+session/trusted.v
+session/proofmode.v
+
+session/examples/basic.v
+
+session/examples/store/impl.v
+session/examples/store/proofs/base.v
+session/examples/store/proofs/client/store.v
+session/examples/store/proofs/client/load.v
+session/examples/store/proofs/client/create.v
+session/examples/store/proofs/client/connect.v
+session/examples/store/proofs/client/close.v
+session/examples/store/proofs/client.v
+session/examples/store/proofs/server.v
+session/examples/store/proofs.v
+session/examples/store/game.v

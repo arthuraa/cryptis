@@ -20,9 +20,9 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term gmeta cryptis primitives tactics role.
 From cryptis.examples Require Import iso_dh gen_conn.
-From cryptis.examples.sess Require impl.
-From cryptis.examples.sess.proofs Require Import base.
-From cryptis.examples.sess Require Import proofs.
+From cryptis.sess Require impl.
+From cryptis.sess.proofs Require Import base.
+From cryptis.sess Require Import proofs.
 From actris.channel Require Import proto_model proto.
 From iris.heap_lang Require Import lib.spin_lock.
 From iris.bi Require Import telescopes.
