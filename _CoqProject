@@ -125,12 +125,12 @@ examples/challenge_response.v
 
 ## Opaque verification
 
-examples/opaque.v
 examples/opaque/impl.v
 examples/opaque/shared.v
 examples/opaque/client_proofs.v
 examples/opaque/server_proofs.v
 examples/opaque/game.v
+examples/opaque.v
 
 ## TLS 1.3
 
