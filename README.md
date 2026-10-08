@@ -60,7 +60,7 @@ Cryptis is known to compile with the following dependencies:
 - rocq-stdpp
 - rocq-iris v4.5.0
 - rocq-iris-heap-lang v4.5.0
-- rocq-actris fa66960 (Nix)/367149a (opam)
+- rocq-actris v4.5.0
 
 ### Nix
 
