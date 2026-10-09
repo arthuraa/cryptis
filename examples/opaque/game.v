@@ -18,16 +18,6 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-(* Two slices of a token on the same term and the same namespace cannot
-   coexist ([term_token_disj]); this is the contradiction that makes two
-   sessions' keys provably different. *)
-Lemma nclose_not_disjoint (N : namespace) : ¬ ((↑N : coPset) ## ↑N).
-Proof.
-move=> /elem_of_disjoint dis.
-have [x [x_N _]] := nclose_infinite N [].
-exact: (dis x x_N x_N).
-Qed.
-
 Section Game.
 
 Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ, !opaqueGS Σ}.
@@ -116,7 +106,7 @@ wp_eq_term H.
   { iDestruct ("s2" with "p2") as "contra". wp_pures. by iDestruct "contra" as "[]". }
   iEval (rewrite -ekey) in "tok2".
   iDestruct (term_token_disj with "tok1 tok2") as %dis.
-  by case: (nclose_not_disjoint dis).
+  pose proof (nclose_non_empty N). set_solver.
 - wp_pures.
   iModIntro.
   iSplitR => //.
