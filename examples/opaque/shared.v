@@ -118,26 +118,22 @@ Definition server_fresh_set (uid α X_u P_s P_u p_s : term) (t : nonce) : gset t
 Definition client_fresh_set (pw : term) (t : nonce) : gset term :=
   {[TExp (hash_result "α" pw) t]}.
 
-Lemma gNexp : negb (is_exp g). Proof. by []. Qed.
-Lemma gNgmul : negb (is_gmul g). Proof. by []. Qed.
-Lemma gNginv : negb (is_ginv g). Proof. by []. Qed.
-
 Lemma expo_TExp_g s : expo (TExp g s) = s.
 Proof.
-by rewrite (expo_TExp _ _ gNgmul gNginv) (expo_expN _ gNexp) TMulN_cat /= TMulN1.
+by rewrite expo_TExp // expo_expN // TMulN_cat /= TMulN1.
 Qed.
 
 Lemma exps_TExp_g s : exps (TExp g s) = factors s.
 Proof. by rewrite /exps expo_TExp_g. Qed.
 
 Lemma is_ginv_TExp_g s : is_ginv (TExp g s) = false.
-Proof. by rewrite (is_ginv_TExp _ _ gNgmul). Qed.
+Proof. by rewrite is_ginv_TExp. Qed.
 
 Lemma Ngmul_TExp_g s : negb (is_gmul (TExp g s)).
-Proof. exact: Ngmul_TExp gNgmul. Qed.
+Proof. exact: Ngmul_TExp. Qed.
 
 (* Exponentiation distributes over the group product in the base, so the key is
-   a four-factor product.  [X_b] stays arbitrary -- it comes off the network. *)
+   a four-factor product.  [X_b] stays arbitrary -- it comes from the network. *)
 Lemma hmqv_K_expand p_a x_a m_a p_b X_b m_b :
   hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b
   = TGMulN [TExp X_b x_a;
@@ -322,8 +318,7 @@ Lemma subterm_exps_TExp_g t s : t ∈ exps (TExp g s) -> subterm t (TExp g s).
 Proof.
 rewrite exps_TExp_g => t_s.
 rewrite (_ : TExp g s = TExpN g (factors s)); last by rewrite /TExpN factorsK.
-by apply: (STExp2 gNexp gNgmul gNginv (invs_canceled_factors s)
-                  (STRefl t) t_s).
+apply: STExp2 => //; exact: invs_canceled_factors.
 Qed.
 
 (* The own-ephemeral [x_a] is an exponent of the peer-static x own-ephemeral
@@ -784,7 +779,7 @@ iAssert (minted (TExp g p_u)) as "#m_Pu".
   by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
 iSplit; iModIntro; iSplit.
 - iIntros "#m_xs". by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
-- rewrite (minted_TExp (TNonce x_s) gNexp gNgmul gNginv). by iIntros "[_ ?]".
+- rewrite (minted_TExp x_s) //; by iIntros "[_ ?]".
 - iIntros "#m_xs".
   iAssert (minted (TExp g x_s)) as "#m_Xs".
     by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
