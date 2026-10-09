@@ -135,8 +135,10 @@ iIntros "?"; rewrite /recv; wp_pures.
 by iApply "H".
 Qed.
 
-Lemma twp_mk_nonce_gen (P Q : term → iProp Σ) E Ψ (Φ : term → iProp Σ) :
-  (∀ t, (minted t -∗ False) ∧
+Lemma twp_mk_nonce_gen
+  (P : nonce → iProp Σ) (Q : term → iProp Σ) E Ψ (Φ : nonce → iProp Σ) :
+  (∀ t : nonce,
+        (minted t -∗ False) ∧
         (|==> minted t ∗
               □ (public t ↔ ▷ □ P t) ∗
               □ (∀ t', exp_pred_base t t' ↔ ▷ □ Q t')) ={E}=∗
@@ -164,8 +166,10 @@ iApply ("post" with "[$] [$] [$] [] [$]").
 by iIntros "!> %"; rewrite exp_pred_base_TInv; eauto.
 Qed.
 
-Lemma wp_mk_nonce_gen (P Q : term → iProp Σ) E Ψ (Φ : term → iProp Σ) :
-  (∀ t, (minted t -∗ False) ∧
+Lemma wp_mk_nonce_gen
+  (P : nonce → iProp Σ) (Q : term → iProp Σ) E Ψ (Φ : nonce → iProp Σ) :
+  (∀ t : nonce,
+        (minted t -∗ False) ∧
         (|==> minted t ∗
               □ (public t ↔ ▷ □ P t) ∗
               □ (∀ t', exp_pred_base t t' ↔ ▷ □ Q t')) ={E}=∗
@@ -186,10 +190,12 @@ iIntros "H1 H2". iApply twp_wp.
 iApply (twp_mk_nonce_gen with "H1 H2").
 Qed.
 
-Lemma twp_mk_nonce_freshN (T : gset term) (P Q : term → iProp Σ) (T' : term → gset term) Ψ :
+Lemma twp_mk_nonce_freshN
+    (T : gset term) (P : nonce → iProp Σ) (Q : term → iProp Σ)
+    (T' : nonce → gset term) Ψ :
   cryptis_ctx -∗
   (∀ t, ⌜t ∈ T⌝ -∗ minted t) -∗
-  (∀ t, [∗ set] t' ∈ T' t, □ (minted t ↔ minted t')) -∗
+  (∀ t : nonce, [∗ set] t' ∈ T' t, □ (minted t ↔ minted t')) -∗
   (∀ t : nonce, ⌜∀ t', t' ∈ T → ¬ subterm t t'⌝ -∗
         minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
@@ -201,7 +207,7 @@ Lemma twp_mk_nonce_freshN (T : gset term) (P Q : term → iProp Σ) (T' : term �
 Proof.
 iIntros "#ctx minted_T #minted_T' post".
 iApply (twp_mk_nonce_gen P Q ⊤ _
-          (λ t, ⌜∀ t', t' ∈ T → ¬ subterm t t'⌝ ∗
+          (λ t : nonce, ⌜∀ t', t' ∈ T → ¬ subterm t t'⌝ ∗
           [∗ set] t' ∈ T' t, term_token t' ⊤)%I
          with "[minted_T] [post]").
 { iIntros "%t fresh".
@@ -233,10 +239,12 @@ iIntros "%a #ma ? ? ? [? ?]".
 iApply ("post" with "[$] [$] [$] [$] [$] [$]").
 Qed.
 
-Lemma wp_mk_nonce_freshN (T : gset term) (P Q : term → iProp Σ) (T' : term → gset term) Ψ :
+Lemma wp_mk_nonce_freshN
+  (T : gset term) (P : nonce → iProp Σ) (Q : term → iProp Σ)
+  (T' : nonce → gset term) Ψ :
   cryptis_ctx -∗
-  (∀ t, ⌜t ∈ T⌝ -∗ minted t) -∗
-  (∀ t, [∗ set] t' ∈ T' t, □ (minted t ↔ minted t')) -∗
+  (∀ t : term, ⌜t ∈ T⌝ -∗ minted t) -∗
+  (∀ t : nonce, [∗ set] t' ∈ T' t, □ (minted t ↔ minted t')) -∗
   (∀ t : nonce, ⌜∀ t', t' ∈ T → ¬ subterm t t'⌝ -∗
         minted t -∗
         □ (public t ↔ ▷ □ P t) -∗
@@ -250,7 +258,8 @@ iIntros "#ctx H1 H2 H3".
 by iApply twp_wp; iApply (twp_mk_nonce_freshN with "[//] H1 H2 H3").
 Qed.
 
-Lemma twp_mk_nonce_fresh (T : gset term) (P Q : term → iProp Σ) Ψ :
+Lemma twp_mk_nonce_fresh
+  (T : gset term) (P : nonce → iProp Σ) (Q : term → iProp Σ) Ψ :
   cryptis_ctx -∗
   (∀ t, ⌜t ∈ T⌝ -∗ minted t) -∗
   (∀ t : nonce, ⌜∀ t', t' ∈ T → ¬ subterm t t'⌝ -∗
@@ -263,7 +272,7 @@ Lemma twp_mk_nonce_fresh (T : gset term) (P Q : term → iProp Σ) Ψ :
   WP mk_nonce #()%V [{ Ψ }].
 Proof.
 iIntros "#ctx minted_T post".
-iApply (twp_mk_nonce_freshN T P Q (λ t : term, {[t]}) _
+iApply (twp_mk_nonce_freshN T P Q (λ t : nonce, {[t : term]}) _
          with "[//] minted_T [] [post]") => //.
 { iIntros "%t". rewrite big_sepS_singleton. iModIntro.
   iSplit; by iIntros "?". }
@@ -272,7 +281,8 @@ rewrite big_sepS_singleton.
 by iApply ("post" with "[$] [$] [$] [$] [$]").
 Qed.
 
-Lemma wp_mk_nonce_fresh (T : gset term) (P Q : term → iProp Σ) Ψ :
+Lemma wp_mk_nonce_fresh
+ (T : gset term) (P : nonce → iProp Σ) (Q : term → iProp Σ) Ψ :
   cryptis_ctx -∗
   (∀ t, ⌜t ∈ T⌝ -∗ minted t) -∗
   (∀ t : nonce, ⌜∀ t', t' ∈ T → ¬ subterm t t'⌝ -∗
@@ -288,7 +298,8 @@ iIntros "#ctx H1 H2".
 by iApply twp_wp; iApply (twp_mk_nonce_fresh with "[//] H1 H2").
 Qed.
 
-Lemma twp_mk_nonce (P Q : term → iProp Σ) Ψ :
+Lemma twp_mk_nonce
+  (P : nonce → iProp Σ) (Q : term → iProp Σ) Ψ :
   cryptis_ctx -∗
   (∀ t : nonce,
         minted t -∗
@@ -304,7 +315,8 @@ iIntros "#ctx post". iApply (twp_mk_nonce_fresh ∅ P Q) => //.
 - iIntros "% _". iApply "post".
 Qed.
 
-Lemma wp_mk_nonce (P Q : term → iProp Σ) Ψ :
+Lemma wp_mk_nonce
+  (P : nonce → iProp Σ) (Q : term → iProp Σ) Ψ :
   cryptis_ctx -∗
   (∀ t : nonce,
         minted t -∗
@@ -332,7 +344,7 @@ iIntros "#ctx post". iMod pending_alloc as (γ) "pending".
 rewrite /mk_aenc_key. wp_pures.
 wp_bind (mk_nonce _).
 iApply (twp_mk_nonce_freshN ∅ (λ _, shot γ 1) (λ _, False%I)
-  (λ t, {[(AEncKey t) : term]})) => //.
+  (λ t : nonce, {[(AEncKey t) : term]})) => //.
 - iIntros "% ?". by rewrite elem_of_empty.
 - iIntros "%t". rewrite [term_of_aenc_key]unlock big_sepS_singleton minted_TKey.
   iModIntro. by iSplit; iIntros "?".
@@ -374,7 +386,7 @@ iIntros "#ctx post". iMod pending_alloc as (γ) "pending".
 rewrite /mk_sign_key. wp_pures.
 wp_bind (mk_nonce _).
 iApply (twp_mk_nonce_freshN ∅ (λ _, shot γ 1) (λ _, False%I)
-  (λ t, {[(SignKey t) : term]})) => //.
+  (λ t : nonce, {[(SignKey t) : term]})) => //.
 - iIntros "% ?". by rewrite elem_of_empty.
 - iIntros "%t". rewrite [term_of_sign_key]unlock big_sepS_singleton minted_TKey.
   iModIntro. by iSplit; iIntros "?".
@@ -416,7 +428,7 @@ iIntros "#ctx post". iMod pending_alloc as (γ) "pending".
 rewrite /mk_senc_key. wp_pures.
 wp_bind (mk_nonce _).
 iApply (twp_mk_nonce_freshN ∅ (λ _, shot γ 1) (λ _, False%I)
-  (λ t, {[(SEncKey t) : term]})) => //.
+  (λ t : nonce, {[(SEncKey t) : term]})) => //.
 - iIntros "% ?". by rewrite elem_of_empty.
 - iIntros "%t". rewrite [term_of_senc_key]unlock big_sepS_singleton minted_TKey.
   iModIntro. by iSplit; iIntros "?".

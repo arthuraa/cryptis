@@ -14,7 +14,8 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
 Class publicGpreS Σ := PublicGPreS {
-  #[local] publicGpreS_nonce :: savedPredG Σ term;
+  #[local] publicGpreS_nonce :: savedPredG Σ nonce;
+  #[local] publicGpreS_term  :: savedPredG Σ term;
   #[local] publicGpreS_seal  :: savedPredG Σ (term * term);
   #[local] publicGpreS_meta  :: metaGS Σ;
 }.
@@ -28,7 +29,8 @@ Class publicGS Σ := PublicGS {
 }.
 
 Definition publicΣ : gFunctors :=
-  #[savedPredΣ term;
+  #[savedPredΣ nonce;
+    savedPredΣ term;
     savedPredΣ (term * term);
     metaΣ].
 
@@ -46,7 +48,7 @@ Abbreviation iPropI := (iPropI Σ).
 Definition pnonce a : iProp :=
   ∃ γ P, meta (nonce_loc a) (nroot.@"nonce") γ ∧
          own γ (saved_pred DfracDiscarded P) ∧
-         ▷ □ P (TNonce a).
+         ▷ □ P a.
 
 #[global] Instance Persistent_pnonce a : Persistent (pnonce a).
 Proof. apply _. Qed.
@@ -1766,7 +1768,7 @@ Lemma nonce_alloc P Q a :
   meta_token (nonce_loc a) ⊤ -∗
   (minted (TNonce a) -∗ False) ∧
   |==> minted (TNonce a) ∗
-    □ (public (TNonce a) ↔ ▷ □ P (TNonce a)) ∗
+    □ (public (TNonce a) ↔ ▷ □ P a) ∗
     □ (∀ t, exp_pred_base (TNonce a) t ↔ ▷ □ Q t).
 Proof.
 iIntros "token".
@@ -1793,7 +1795,7 @@ iSplitR.
     iPoseProof (meta_agree with "nonce meta_γP'") as "->".
     iPoseProof (own_valid_2 with "own_P own_P'") as "valid".
     iPoseProof (saved_pred_op_validI with "valid") as "[_ #e]".
-    iSpecialize ("e" $! (TNonce a)). iModIntro. by iRewrite "e".
+    iSpecialize ("e" $! a). iModIntro. by iRewrite "e".
   + iIntros "#?". iSplit => //. iExists γP, P; eauto.
 iIntros "!> !> %t"; iSplit.
 - iDestruct 1 as (γQ' Q') "(#meta_γQ' & #own_Q' & ?)".

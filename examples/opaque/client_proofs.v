@@ -46,10 +46,10 @@ wp_pures.
    token, so it is minted together with [r]. *)
 wp_apply (wp_mk_nonce_freshN ∅ (fun _ => False)%I (fun _ => True)%I
             (client_fresh_set pw)) => //.
-  by iIntros "% %contra".
-  by iApply client_fresh_set_minted.
+- by iIntros "% %contra".
+- by iApply client_fresh_set_minted.
 iIntros "%r _ #Hmintedr #Hprivater #Hexpr #HexprV tok_α".
-rewrite client_fresh_setE big_sepS_singleton.
+rewrite /client_fresh_set big_sepS_singleton.
 iAssert (minted (TExp (hash_result "α" pw) r)) as "#mintedα".
   by iApply all_minted_TExp; iSplit => //; iApply minted_hash_resultI.
 set α := TExp (hash_result "α" pw) r.
