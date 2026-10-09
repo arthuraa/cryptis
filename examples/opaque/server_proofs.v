@@ -38,13 +38,13 @@ public k ∗ opaque_file file.
 Lemma wp_make_file (pw : term) :
   {{{
     cryptis_ctx
+    ∗ opaque_ctx
     ∗ minted pw
     ∗ □ (public pw ↔ ▷ □ False)
-    ∗ hash_pred (opN.@"rw") (λ _,  False)
-    ∗ senc_pred (opN.@"AuthEnc") envelope_pred
   }}} Server.make_file pw {{{ file, RET (repr file); opaque_file file }}}.
 Proof.
-iIntros "%ϕ (#cryptis & #Hmintedpw & #Hprivpw & #Hhashpred & #Hsencpred) post".
+iIntros "%ϕ (#cryptis & #ctx & #Hmintedpw & #Hprivpw) post".
+iPoseProof "ctx" as "(#Hhashpred & _ & _ & _ & _ & _ & #Hsencpred)".
 wp_lam.
 wp_apply (wp_mk_nonce_freshN ∅ (fun _ => False)%I (fun _ => True)%I
                                (fun t =>  {[(TInv t)]})) => //.

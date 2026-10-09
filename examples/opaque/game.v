@@ -114,45 +114,72 @@ wp_eq_term H.
   by wp_pures.
 Qed.
 
-Definition game : val :=
-λ: "c",
-let: "uid" := mk_nonce #() in
-let: "pw" := mk_nonce #() in
-let: "db" := AList.new #() in
-AList.insert "db" "uid" (Server.make_file "pw") ;;
-let: "SK1s" := Server.session "db" "c" ||| Client.session "uid" "c" "pw" in
-assert: (~ eq_term "pw" (recv "c")) ;;
-unguessable_option (Fst "SK1s") "c" ;;
-unguessable_option (Snd "SK1s") "c" ;;
-let: "SK2s" := Server.session "db" "c" ||| Client.session "uid" "c" "pw" in
-unguessable_option (Fst "SK2s") "c" ;;
-unguessable_option (Snd "SK2s") "c" ;;
-neq_options (Fst "SK1s") (Fst "SK2s") ;;
-neq_options (Snd "SK1s") (Snd "SK2s") ;;
-#().
+Definition game_round : val := λ: "c" "db" "uid" "pw",
+  let: "SKs" := Server.session "db" "c" ||| Client.session "uid" "c" "pw" in
+  unguessable_option (Fst "SKs") "c";;
+  unguessable_option (Snd "SKs") "c";;
+  "SKs".
 
-(* One round of the protocol, as [wp_par] wants it, with both roles' results
-   converted to [session_res]. *)
-Ltac game_round uid pw db alist c :=
-  wp_apply (wp_par (λ x, session_res' (opN.@"server") x ∗
-                         AList.is_alist db alist)%I
-                   (λ x, session_res' (opN.@"client") x)%I with "[Halist]");
-  [ iApply (wp_server_session db c alist (λ _ _, True)%I with "[Halist]") => //;
-      [ iFrame "Halist"; do !iSplit => //; by iIntros "%si _ !>"
-      | iNext; iIntros "%r [Halist Hres]"; iFrame "Halist";
-        iExists _; iSplit; first by [];
-        iDestruct "Hres" as "[-> | (%si & -> & (_ & #p_uid & _ & _ & _)
-                                       & _ & #sec & tok & _)]" => //=;
-        iExists _; iSplit; first by []; by iFrame "tok #" ]
-  | iApply (wp_client_session uid pw c (λ _ _, True)%I) => //;
-      [ by do !iSplit => //
-      | iNext; iIntros "%r Hres";
-        iExists _; iSplit; first by [];
-        iDestruct "Hres" as "[-> | (%si & -> & (_ & #p_uid & _ & _ & _)
-                                       & #sec & [#p | [tok _]])]" => //=;
-        iExists _; (iSplit; first by []);
-        [ iSplit => //; iSplit => //; by iLeft | by iFrame "tok #" ] ]
-  | ].
+Definition game : val := λ: "c",
+  let: "uid" := mk_nonce #() in
+  let: "pw" := mk_nonce #() in
+  let: "db" := AList.new #() in
+  AList.insert "db" "uid" (Server.make_file "pw") ;;
+  let: "SK1s" := game_round "c" "db" "uid" "pw" in
+  let: "SK2s" := game_round "c" "db" "uid" "pw" in
+  assert: (~ eq_term "pw" (recv "c")) ;;
+  neq_options (Fst "SK1s") (Fst "SK2s") ;;
+  neq_options (Snd "SK1s") (Snd "SK2s") ;;
+  #().
+
+(** One round of the game: both roles run in parallel, and both results are
+    tested against the attacker.  Each role's result is converted to
+    [session_res] on the role's own token slice, which is what [neq_options]
+    needs to compare two rounds. *)
+Lemma wp_game_round c db alist uid pw :
+  cryptis_ctx -∗
+  channel c -∗
+  opaque_ctx -∗
+  opaque_pred (λ _ _, True)%I -∗
+  public uid -∗
+  minted pw -∗
+  □ (public pw ↔ ▷ □ False) -∗
+  opaque_db alist -∗
+  {{{ AList.is_alist db alist }}}
+    game_round c db uid pw
+  {{{ (rs rc : option term), RET (repr rs, repr rc)%V;
+      AList.is_alist db alist ∗
+      session_res (opN.@"server") rs ∗
+      session_res (opN.@"client") rc }}}.
+Proof.
+iIntros "#? #Hchannel #ctx #N_φ #p_uid #m_pw #s_pw #Hdb %Φ !> Halist Hpost".
+wp_lam. wp_pures.
+wp_apply (wp_par (λ x, session_res' (opN.@"server") x ∗
+                       AList.is_alist db alist)%I
+                 (λ x, session_res' (opN.@"client") x)%I with "[Halist]").
+- iApply (wp_server_session db c alist (λ _ _, True)%I with "[Halist]") => //.
+  { iFrame "Halist"; do !iSplit => //. by iIntros "%si _ !>". }
+  iNext. iIntros "%r [Halist Hres]". iFrame "Halist".
+  iExists r. iSplit; first by [].
+  iDestruct "Hres" as "[-> | (%si & -> & (_ & #p_uid' & _ & _ & _)
+                                 & _ & #sec & tok & _)]" => //=.
+  iExists si. iSplit; first by []. by iFrame "tok #".
+- iApply (wp_client_session uid pw c (λ _ _, True)%I) => //.
+  { by do !iSplit => //. }
+  iNext. iIntros "%r Hres".
+  iExists r. iSplit; first by [].
+  iDestruct "Hres" as "[-> | (%si & -> & (_ & #p_uid' & _ & _ & _)
+                                 & #sec & [#p | [tok _]])]" => //=.
+  + iExists si. iSplit; first by []. iSplit => //. iSplit => //. by iLeft.
+  + iExists si. iSplit; first by []. by iFrame "tok #".
+- iIntros "%vs %vc [[(%rs & -> & Hs) Halist] (%rc & -> & Hc)]".
+  iNext. wp_pures.
+  wp_apply (wp_unguessable_option _ rs c with "Hchannel Hs").
+  iIntros "Hs". wp_pures.
+  wp_apply (wp_unguessable_option _ rc c with "Hchannel Hc").
+  iIntros "Hc". wp_pures.
+  iModIntro. iApply "Hpost". iFrame.
+Qed.
 
 Lemma wp_game c :
   cryptis_ctx -∗
@@ -161,8 +188,7 @@ Lemma wp_game c :
   opaque_pred (λ _ _, True)%I -∗
   WP game c {{ _, True }}.
 Proof.
-iIntros "#? #Hchannel #ctx #N_φ".
-iPoseProof "ctx" as "(#Hrw & #HAs & #HAu & #HSK & #HK & #Hα & #Henv)".
+iIntros "#Hcryptis #Hchannel #ctx #N_φ".
 wp_lam.
 wp_apply (wp_mk_nonce (fun _ => True)%I (fun _ => False)%I) => //.
 iIntros "%uid #Hminuid #Hpubuid #Hdhuid _ _".
@@ -189,9 +215,13 @@ wp_pures.
 iAssert (opaque_db (<[TNonce uid:=file]> ∅ : gmap term val)) as "#Hdb".
   iApply big_sepM_insert => //.
   by do !iSplit => //.
-game_round uid pw db (<[TNonce uid:=file]> ∅ : gmap term val) c.
-iIntros "%SKs1' %SKc1' [[(%SKs1 & -> & Hs1) Halist] (%SKc1 & -> & Hc1)]".
-iNext.
+wp_apply (wp_game_round
+            with "Hcryptis Hchannel ctx N_φ Hpubuid' Hminpw Hprivpw Hdb Halist").
+iIntros "%SKs1 %SKc1 (Halist & Hs1 & Hc1)".
+wp_pures.
+wp_apply (wp_game_round
+            with "Hcryptis Hchannel ctx N_φ Hpubuid' Hminpw Hprivpw Hdb Halist").
+iIntros "%SKs2 %SKc2 (Halist & Hs2 & Hc2)".
 wp_pures.
 wp_apply wp_assert.
 wp_apply wp_recv => //.
@@ -207,22 +237,6 @@ wp_pures.
 iModIntro.
 iSplit => //.
 iNext.
-wp_pures.
-wp_apply (wp_unguessable_option _ SKs1 c with "Hchannel Hs1").
-iIntros "Hs1".
-wp_pures.
-wp_apply (wp_unguessable_option _ SKc1 c with "Hchannel Hc1").
-iIntros "Hc1".
-wp_pures.
-game_round uid pw db (<[TNonce uid:=file]> ∅ : gmap term val) c.
-iIntros "%SKs2' %SKc2' [[(%SKs2 & -> & Hs2) Halist] (%SKc2 & -> & Hc2)]".
-iNext.
-wp_pures.
-wp_apply (wp_unguessable_option _ SKs2 c with "Hchannel Hs2").
-iIntros "Hs2".
-wp_pures.
-wp_apply (wp_unguessable_option _ SKc2 c with "Hchannel Hc2").
-iIntros "Hc2".
 wp_pures.
 wp_apply (wp_neq_options _ SKs1 SKs2 with "Hs1 Hs2").
 wp_pures.
