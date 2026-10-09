@@ -265,7 +265,6 @@ wp_apply (wp_mk_nonce_freshN ∅ (fun _ => False)%I (fun t => dh_key_share t)%I
   by iApply (server_fresh_set_minted uid α X_u P_s p_s_u
                with "minuid minα minX_u minP_s Hminp_s Hminp_u").
 iIntros "%x_s _ #Hmintedx_s #Hprivatex_s #Hexpx_s #Hexpx_sV tokens".
-rewrite server_fresh_setE.
 set si := server_si uid α X_u P_s (TExp g p_u) p_s x_s.
 have ne : TExp g x_s ≠ si_key si by exact: TExp_g_nonce_hash_ne.
 rewrite big_sepS_union ?big_sepS_singleton; last set_solver.

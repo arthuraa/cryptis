@@ -110,24 +110,13 @@ Definition server_si (uid α X_u P_s P_u p_s x_s : term) : sess_info :=
    and the session key.  [wp_mk_nonce_freshN]'s side condition quantifies over
    *every* term, not just nonces, and [minted (si_key …) ↔ minted t] is false
    for, say, [t := TInv d] -- so the set is guarded by [is_nonce]. *)
-Definition server_fresh_set (uid α X_u P_s P_u p_s t : term) : gset term :=
-  if is_nonce t then {[TExp g t; si_key (server_si uid α X_u P_s P_u p_s t)]}
-  else ∅.
-
-Lemma server_fresh_setE uid α X_u P_s P_u p_s (x_s : nonce) :
-  server_fresh_set uid α X_u P_s P_u p_s (TNonce x_s)
-  = {[TExp g (TNonce x_s);
-      si_key (server_si uid α X_u P_s P_u p_s (TNonce x_s))]}.
-Proof. by []. Qed.
+Definition server_fresh_set (uid α X_u P_s P_u p_s : term) (t : nonce) : gset term :=
+  {[TExp g t; si_key (server_si uid α X_u P_s P_u p_s t)]}.
 
 (* The client's counterpart: the token on its share [α = (H' "α" pw)^r] comes
    with [r].  Both of the server's escrows are keyed on it. *)
-Definition client_fresh_set (pw t : term) : gset term :=
-  if is_nonce t then {[TExp (hash_result "α" pw) t]} else ∅.
-
-Lemma client_fresh_setE pw (r : nonce) :
-  client_fresh_set pw (TNonce r) = {[TExp (hash_result "α" pw) (TNonce r)]}.
-Proof. by []. Qed.
+Definition client_fresh_set (pw : term) (t : nonce) : gset term :=
+  {[TExp (hash_result "α" pw) t]}.
 
 Lemma gNexp : negb (is_exp g). Proof. by []. Qed.
 Lemma gNgmul : negb (is_gmul g). Proof. by []. Qed.
@@ -785,13 +774,11 @@ Lemma server_fresh_set_minted uid α X_u P_s (p_s p_u : nonce) :
   p_s ≠ p_u →
   minted uid -∗ minted α -∗ minted X_u -∗ minted P_s -∗
   minted p_s -∗ minted p_u -∗
-  ∀ t, [∗ set] t' ∈ server_fresh_set uid α X_u P_s (TExp g p_u) p_s t,
+  ∀ t : nonce,
+    [∗ set] t' ∈ server_fresh_set uid α X_u P_s (TExp g p_u) p_s t,
          □ (minted t ↔ minted t').
 Proof.
-iIntros "%p_s_u #m_uid #m_α #m_Xu #m_Ps #m_ps #m_pu %t".
-rewrite /server_fresh_set.
-case E: (is_nonce t); last by rewrite big_sepS_empty.
-case: t E => // x_s _.
+iIntros "%p_s_u #m_uid #m_α #m_Xu #m_Ps #m_ps #m_pu %x_s".
 rewrite big_sepS_union_pers !big_sepS_singleton.
 iAssert (minted (TExp g p_u)) as "#m_Pu".
   by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
@@ -821,12 +808,10 @@ Qed.
 
 Lemma client_fresh_set_minted pw :
   minted pw -∗
-  ∀ t, [∗ set] t' ∈ client_fresh_set pw t, □ (minted t ↔ minted t').
+  ∀ r : nonce, [∗ set] t' ∈ client_fresh_set pw r, □ (minted r ↔ minted t').
 Proof.
-iIntros "#m_pw %t".
+iIntros "#m_pw %r".
 rewrite /client_fresh_set.
-case E: (is_nonce t); last by rewrite big_sepS_empty.
-case: t E => // r _.
 rewrite big_sepS_singleton.
 iModIntro; iSplit.
 - iIntros "#?"; iApply all_minted_TExp; iSplit => //.
