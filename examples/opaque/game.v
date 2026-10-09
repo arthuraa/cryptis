@@ -41,22 +41,35 @@ Definition session_res (N : namespace) (r : option term) : iProp :=
 Definition session_res' N (x : val) : iProp :=
   ∃ r : option term, ⌜x = repr r⌝ ∗ session_res N r.
 
+Definition session_secret (r : option term) : iProp :=
+  match r with
+  | None => True
+  | Some t => ∃ si, ⌜t = si_result si⌝ ∗ □ (public (si_key si) ↔ ▷ □ False)
+  end.
+
+Global Instance session_secret_persistent r : Persistent (session_secret r).
+Proof. by case: r => [t|] /=; apply _. Qed.
+
+Lemma session_res_secret N r : session_res N r -∗ session_secret r.
+Proof.
+case: r => [t|] /=; last by iIntros "_".
+iIntros "(%si & -> & _ & #s & _)". iExists si. by iSplit.
+Qed.
+
 Definition unguessable_option : val :=
   λ: "x" "c",
     bind: "x'" := "x" in
       assert: (~ eq_term "x'" (recv "c")).
 
-Lemma wp_unguessable_option N (x : option term) (c : val) ϕ e :
+Lemma wp_unguessable_option (x : option term) (c : val) :
   channel c -∗
-  session_res N x -∗
-  (session_res N x -∗ WP e {{ v, ϕ v }}) -∗
-  WP unguessable_option (repr x) c ;; e {{ v, ϕ v }}.
+  session_secret x -∗
+  WP unguessable_option (repr x) c {{ _, True }}.
 Proof.
-iIntros "#? Hx Hpost".
-wp_lam.
-wp_pures.
-destruct x as [x|]; wp_pures => //; last by iApply "Hpost".
-iDestruct "Hx" as "(%si & -> & #p_uid & #s & tok)".
+iIntros "#? #Hx".
+wp_lam. wp_pures.
+destruct x as [x|]; wp_pures => //.
+iDestruct "Hx" as "(%si & -> & #s)".
 wp_apply wp_assert.
 wp_apply wp_recv => //.
 iIntros "%guess #pubguess".
@@ -67,13 +80,7 @@ wp_eq_term H.
   iDestruct "pubguess" as "(_ & p_key & _)".
   iDestruct ("s" with "p_key") as "contra".
   wp_pures. by iDestruct "contra" as "[]".
-- wp_pures.
-  iModIntro.
-  iSplit => //.
-  iNext.
-  wp_pures.
-  iApply "Hpost".
-  iExists si. iFrame "tok". by eauto.
+- wp_pures. iModIntro. by iSplit.
 Qed.
 
 Definition neq_options : val :=
@@ -82,13 +89,12 @@ bind: "x1'" := "x1" in
 bind: "x2'" := "x2" in
 assert: (~ eq_term "x1'" "x2'").
 
-Lemma wp_neq_options N (x1 x2 : option term) ϕ e :
+Lemma wp_neq_options N (x1 x2 : option term) :
   session_res N x1 -∗
   session_res N x2 -∗
-  WP e {{ v , ϕ v }} -∗
-  WP neq_options (repr x1) (repr x2) ;; e {{ v, ϕ v }}.
+  WP neq_options (repr x1) (repr x2) {{ _, True }}.
 Proof.
-iIntros "H1 H2 Hpost".
+iIntros "H1 H2".
 wp_lam.
 destruct x1 as [x1|]; wp_pures => //.
 destruct x2 as [x2|]; wp_pures => //.
@@ -107,11 +113,7 @@ wp_eq_term H.
   iEval (rewrite -ekey) in "tok2".
   iDestruct (term_token_disj with "tok1 tok2") as %dis.
   pose proof (nclose_non_empty N). set_solver.
-- wp_pures.
-  iModIntro.
-  iSplitR => //.
-  iNext.
-  by wp_pures.
+- wp_pures. iModIntro. by iSplit.
 Qed.
 
 Definition game_round : val := λ: "c" "db" "uid" "pw",
@@ -174,10 +176,14 @@ wp_apply (wp_par (λ x, session_res' (opN.@"server") x ∗
   + iExists si. iSplit; first by []. by iFrame "tok #".
 - iIntros "%vs %vc [[(%rs & -> & Hs) Halist] (%rc & -> & Hc)]".
   iNext. wp_pures.
-  wp_apply (wp_unguessable_option _ rs c with "Hchannel Hs").
-  iIntros "Hs". wp_pures.
-  wp_apply (wp_unguessable_option _ rc c with "Hchannel Hc").
-  iIntros "Hc". wp_pures.
+  iDestruct (session_res_secret with "Hs") as "#sec_s".
+  iDestruct (session_res_secret with "Hc") as "#sec_c".
+  wp_bind (unguessable_option _ _).
+  iApply wp_wand; first by iApply (wp_unguessable_option with "Hchannel sec_s").
+  iIntros "% _". wp_pures.
+  wp_bind (unguessable_option _ _).
+  iApply wp_wand; first by iApply (wp_unguessable_option with "Hchannel sec_c").
+  iIntros "% _". wp_pures.
   iModIntro. iApply "Hpost". iFrame.
 Qed.
 
@@ -238,10 +244,12 @@ iModIntro.
 iSplit => //.
 iNext.
 wp_pures.
-wp_apply (wp_neq_options _ SKs1 SKs2 with "Hs1 Hs2").
-wp_pures.
-wp_apply (wp_neq_options _ SKc1 SKc2 with "Hc1 Hc2").
-by wp_pures.
+wp_bind (neq_options _ _).
+iApply (wp_wand with "[Hs1 Hs2]"); first by iApply (wp_neq_options with "Hs1 Hs2").
+iIntros "% _". wp_pures.
+wp_bind (neq_options _ _).
+iApply (wp_wand with "[Hc1 Hc2]"); first by iApply (wp_neq_options with "Hc1 Hc2").
+iIntros "% _". by wp_pures.
 Qed.
 
 End Game.
