@@ -183,7 +183,10 @@ wp_apply (wp_mk_nonce_freshN
            ∅
            (λ _, public skI ∨ public skR)%I
            (λ _, False)%I
-           (λ nR, {[nR; SEncKey (Spec.of_list [Spec.pkey skI; Spec.pkey skR; nI; nR]) : term]})) => //.
+           (λ nR : nonce,
+             {[nR : term;
+               SEncKey (Spec.of_list [Spec.pkey skI; Spec.pkey skR;
+                                      nI; nR : term]) : term]})) => //.
 - by iIntros "% %".
 - iIntros "%nR".
   rewrite big_sepS_union_pers !big_sepS_singleton minted_senc minted_of_list.

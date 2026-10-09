@@ -164,7 +164,7 @@ Lemma wp_mk_dh (T : gset term) g (Ψ : val → iProp) :
 Proof.
 iIntros "%gNX %gNm %gNi #ctx #minted_g #minted_T post".
 iApply (wp_mk_nonce_freshN T (λ _, False%I) dh_publ
-         (λ t, {[t; TExp g t]})
+         (λ t : nonce, {[t : term; TExp g t]})
   with "[//]" ) => //.
   iIntros "%t".
   rewrite big_sepS_forall; iIntros (t').
