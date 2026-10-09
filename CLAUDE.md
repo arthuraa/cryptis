@@ -13,7 +13,7 @@ The framework allows reasoning about protocols using a Dolev-Yao–style symboli
 When you change code, check in the **same pass** whether the change invalidates any documentation, and update it. Docs that drift from the code are worse than no docs — a wrong `term` datatype or stale version misleads both human maintainers and future agent sessions. In particular:
 
 - **This file (`CLAUDE.md`)** — the `term` datatype and smart-constructor list, the encryption-predicate and primitive names, the dependency versions, the module dependency order, and the case-study list.
-- **`README.md`** — the case-study list and dependency versions. Keep both files consistent with `rocq-cryptis.opam`, which is the single source of truth for versions.
+- **`README.md`** — the case-study list and dependency versions. Keep both files consistent with the `*.opam` files, which are the single source of truth for versions.
 - **File header comments** that state a module's purpose, invariants, or dependency position.
 
 Cheap check: after renaming or removing an identifier, `grep` it across `*.md` (and file headers) before considering the change done. Adding a case study / primitive, or changing the term representation, requires updating `CLAUDE.md` and `README.md`.
@@ -39,7 +39,7 @@ The project ships an MCP server in `.mcp.json` (`rocq`, launched via `nix develo
 When to use which:
 
 - **Interactive proof development** (stepping through tactics, inspecting goals, exploring lemmas): prefer the MCP tools. `rocq_start` opens a file/theorem and returns a state id + current goals; `rocq_check` advances by running tactics (imports are cached, so iteration is fast); `rocq_step_multi` tries several tactics at once without committing; `rocq_query` runs `Search`/`Check`/`Print`/`About` without touching proof state; `rocq_toc` outlines a file; `rocq_assumptions` checks what a finished theorem depends on.
-- **"Does the file still build?"** (after edits, or to confirm a full proof closes): prefer `nix develop .#ai --command make path/to/file.vo` via Bash. It exercises the real build, respects `_CoqProject`, and avoids loading large schemas into context.
+- **"Does the file still build?"** (after edits, or to confirm a full proof closes): prefer `nix develop .#ai --command make path/to/file.vo` via Bash. It exercises the real build, respects `_RocqProject`, and avoids loading large schemas into context.
 
 Caveat: a `rocq_start` session reads the file at start time and does not track later edits. After modifying a `.v` file, restart the session (`rocq_start` again) before continuing — otherwise tactic results may be stale.
 
@@ -58,7 +58,9 @@ opam repo add rocq-released https://rocq-prover.org/opam/released
 opam install . # or: make builddep && make
 ```
 
-Key dependencies (authoritative pins live in `rocq-cryptis.opam` — treat it as the single source of truth): rocq-core 9.2.0, rocq-mathcomp-ssreflect 2.6.0, rocq-iris 4.5.0, rocq-iris-heap-lang 4.5.0, coq-deriving 0.2.3, rocq-actris 367149a (`stable_fa66960` branch of `chandradeepdey/actris`). `README.md` and this file must agree with the opam file.
+The repository holds three opam packages, one per top-level source directory: `rocq-cryptis` (`cryptis/`), `rocq-cryptis-examples` (`examples/`) and `rocq-cryptis-session` (`session/`). Each builds and installs only its own directory through `./make-package <dir>`, assuming the packages it depends on are installed; `make` alone builds all three. Only `rocq-cryptis-session` depends on actris.
+
+Key dependencies (authoritative pins live in the `*.opam` files — treat them as the single source of truth): rocq-core 9.2.0, rocq-stdlib, rocq-hierarchy-builder, rocq-elpi, rocq-mathcomp-ssreflect 2.6.0, coq-deriving 0.2.3, rocq-stdpp, rocq-iris 4.5.0, rocq-iris-heap-lang 4.5.0, rocq-actris 367149a (`stable_fa66960` branch of `chandradeepdey/actris`; `rocq-cryptis-session` only). The unversioned ones follow from the pinned packages. `README.md` and this file must agree with the opam files.
 
 nixpkgs has no Rocq 9.2 build of `coq-lsp`, and `rocq-community/rocq-lsp` has no 9.2 release
 yet, so `flake.nix` builds its `v9.2` branch; switch to the nixpkgs package once there is one.
@@ -78,7 +80,7 @@ yet, so `flake.nix` builds its `v9.2` branch; switch to the nixpkgs package once
 
 - **`examples/`** — Case studies (Rocq namespace `cryptis.examples`)
 
-- **`session/`** — Actris-style session types over `iso_dh` + `gen_conn` (Rocq namespace `cryptis.sess`, a separate `-R` in `_CoqProject`): `impl.v`, `proofs/base.v`, `proofs.v`, aggregated by `sess.v` (`Module Sess`), plus `tag.v`, `trusted.v`, `proofmode.v`. Its case studies live in `session/examples/` (`cryptis.sess.examples`): `basic.v` and the `store/` key-value store (game in `store/game.v`). Import it as `From cryptis.sess Require Import sess`.
+- **`session/`** — Actris-style session types over `iso_dh` + `gen_conn` (Rocq namespace `cryptis.sess`, its own line in `config/paths` and its own package `rocq-cryptis-session`): `impl.v`, `proofs/base.v`, `proofs.v`, aggregated by `sess.v` (`Module Sess`), plus `tag.v`, `trusted.v`, `proofmode.v`. Its case studies live in `session/examples/` (`cryptis.sess.examples`): `basic.v` and the `store/` key-value store (game in `store/game.v`). Import it as `From cryptis.sess Require Import sess`.
 
 ### Core Concepts
 
@@ -138,7 +140,7 @@ examples/*
             → mathcomp, iris, iris.heap_lang
 ```
 
-The `_CoqProject` file specifies the exact file ordering for compilation.
+`config/source-list` specifies the exact file ordering for compilation; `config/paths` holds the `-Q` load paths and `config/flags` the warning flags. `make` generates `_RocqProject` from the three (`gen_RocqProject.sh`); edit `config/*`, never `_RocqProject`. `dune build` instead uses one `rocq.theory` per directory (`cryptis/dune`, `examples/dune`, `session/dune`).
 
 **mathcomp ↔ stdpp boundary:** `core/pre_term/base.v` is implemented in mathcomp (`seq`, `%O` order, `~~`, `sort <=%O`, bigops, `deriving`); `core/pre_term/normalize.v` (normal forms + the `wf`/`normalize` machinery) is already stdpp-only. `core/pre_term/with_stdpp.v` is *the* bridge, and is where any new mathcomp→stdpp translation belongs: it packages the deriving-generated order both as `pt_order` (a stdpp `relation` with `RelDecision`/`Transitive`/`Total`/`AntiSymm`) and as a global `Lexico PreTerm.pre_term` instance (with `StrictOrder`/`TrichotomyT`, which is what makes `bool_decide (x = y ∨ lexico x y)` decidable), and proves `pt_order_lexico`, `pt_order_N` (the derived order on `PTN o ts` *is* stdpp's `lexico` on `ts`) and `pt_orderE` (the structural comparison equation, stated with `bool_decide` and `op0_le`/`op1_le`/`op2_le`/`opN_le` instead of `<=%O`). Because of that bridge, `primitives/pre_term.v` — which implements the `normalize.v` operations in HeapLang — needs no mathcomp beyond `ssreflect`. Everything from `core/term/` upward is stdpp (`Forall`, `≡ₚ`, `∈`, `merge_sort`). The active boolean→Prop coercion above `pre_term` is stdpp's `Is_true`, **not** ssreflect's `is_true` (bridged by `is_trueP` in `lib/mathcomp_compat.v`); mixing the two silently breaks `rewrite`/`apply`.
 
