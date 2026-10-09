@@ -85,9 +85,7 @@ assert (p_u ≠ p_s) as Hneq.
   intro contra.
   apply (Hfreshp_u (TExp g p_s)).
     by rewrite elem_of_singleton.
-  rewrite contra.
-  apply: subterm_TExp_exp;
-    [done | done | done | exact: (negb_is_mul_nonce p_s) | exact: STRefl].
+  rewrite contra; exact: subterm_TExp_exp.
 wp_pures.
 wp_apply wp_texp; wp_pures.
 wp_apply wp_texp.
@@ -98,19 +96,14 @@ wp_list; wp_term_of_list.
 iApply "post".
 iExists k_s, p_s, (TExp g p_s), (TExp g p_u), _.
 do !iSplit => //.
-- iApply public_TExp_iff.
-    by [].
-    by [].
-    by [].
-    by exact: (negb_is_mul_nonce p_s).
+- iApply public_TExp_iff => //.
   do !iSplit => //.
   + by iApply minted_TInt.
   + iApply exp_pred_intro1.
     iApply "Hexpp_s".
     iNext; iModIntro; iPureIntro.
-    have Nm : negb (is_mul p_s) := negb_is_mul_nonce p_s.
     rewrite (_ : TExp g p_s = TExpN g [TNonce p_s]); last by rewrite /TExpN TMulN1.
-    by rewrite exps_TExpN; [by [] | by [] | by [] | by [] | exact: invs_canceled1 Nm].
+    by rewrite exps_TExpN //; exact: invs_canceled1.
   + by iModIntro; iIntros "?"; iApply public_TInt.
 - iApply (public_sencIS _ (opN.@"AuthEnc") envelope_pred _) => //.
   1: rewrite minted_senc minted_THash minted_tag.
@@ -127,19 +120,13 @@ do !iSplit => //.
     iPureIntro.
     apply Hfreshp_u.
     by rewrite elem_of_singleton.
-  iApply public_TExp_exp_pred.
-    + by [].
-    + by [].
-    + by exact: (negb_is_mul_nonce p_s).
+  iApply public_TExp_exp_pred => //.
     + by iApply public_TInt.
-    + done.
     + iApply exp_pred_intro1.
       iApply "Hexpp_s".
       iNext; iModIntro; iPureIntro.
-      have Nm : negb (is_mul p_s) := negb_is_mul_nonce p_s.
       rewrite (_ : TExp g p_s = TExpN g [TNonce p_s]); last by rewrite /TExpN TMulN1.
-      by rewrite exps_TExpN; [by [] | by [] | by [] | by [] | exact: invs_canceled1 Nm].
-    + done.
+      by rewrite exps_TExpN //; exact: invs_canceled1.
   iModIntro.
   rewrite public_senc_key.
   iIntros "#Hcompromise".
@@ -157,33 +144,26 @@ do !iSplit => //.
   do !iSplit => //.
   + iPureIntro.
     apply /subtermsP.
-    have Nm : negb (is_mul p_u) := negb_is_mul_nonce p_u.
     rewrite (_ : TExp g p_u = TExpN g [TNonce p_u]); last by rewrite /TExpN TMulN1.
-    rewrite subtermsE //; last exact: invs_canceled1 Nm.
+    rewrite subtermsE //; last exact: invs_canceled1.
     rewrite /= [subterms p_u]subterms_nonce //.
     rewrite /g subtermsE /=.
     have p_s_ne2 : TNonce p_s ≠ TInt 0 by move=> E; discriminate E.
     have p_s_ne1 : TNonce p_s ≠ TExpN (TInt 0) [TNonce p_u].
       move=> E.
       have H1 : exps (TExpN (TInt 0) [TNonce p_u]) ≡ₚ [TNonce p_u].
-        rewrite exps_TExpN //; exact: invs_canceled1 (negb_is_mul_nonce p_u).
+        rewrite exps_TExpN //; exact: invs_canceled1.
       have H2 : exps (TNonce p_s) = [].
         by rewrite /exps (expo_expN (TNonce p_s) I) factors_TMulN0.
       by move: H1; rewrite -E H2 => /Permutation_length.
     set_solver.
-  iApply public_TExp_exp_pred.
-    * by [].
-    * by [].
-    * by exact: (negb_is_mul_nonce p_u).
+  iApply public_TExp_exp_pred => //.
     * by iApply public_TInt.
-    * done.
     * iApply exp_pred_intro1.
       iApply "Hexpp_u".
       iNext; iModIntro; iPureIntro.
-      have Nm : negb (is_mul p_u) := negb_is_mul_nonce p_u.
       rewrite (_ : TExp g p_u = TExpN g [TNonce p_u]); last by rewrite /TExpN TMulN1.
-      by rewrite exps_TExpN; [by [] | by [] | by [] | by [] | exact: invs_canceled1 Nm].
-    * done.
+      by rewrite exps_TExpN //; exact: invs_canceled1.
 Qed.
 
 Lemma wp_server_session (db c : val) (alist : gmap term val) φ :
@@ -248,9 +228,7 @@ have p_s_u : p_s ≠ p_u.
   move=> e; apply: Hfreshp_u; rewrite e.
   apply/subtermsP.
   rewrite (_ : TExp g p_u = TExpN g [TNonce p_u]); last by rewrite /TExpN TMulN1.
-  have Nm : negb (is_mul p_u) := negb_is_mul_nonce p_u.
-  rewrite subtermsE //; last exact: invs_canceled1 Nm.
-  rewrite /=.
+  rewrite subtermsE //=; last exact: invs_canceled1.
   by rewrite [subterms p_u]subterms_nonce //; set_solver.
 iAssert (minted uid) as "#minuid". by iApply public_minted.
 iAssert (minted α) as "#minα". by iApply public_minted.
@@ -337,18 +315,13 @@ wp_apply wp_send => //.
       iApply public_TExp_exp_pred => //.
       iApply exp_pred_intro1.
       by iApply "Hexpk_s".
-  - iApply public_TExp_iff.
-      by [].
-      by [].
-      by [].
-      by exact: (negb_is_mul_nonce x_s).
+  - iApply public_TExp_iff => //.
     do !iSplit => //.
     + by iApply minted_TInt.
     + iApply exp_pred_intro1.
       iApply "Hexpx_s"; iPureIntro.
-      have Nm : negb (is_mul x_s) := negb_is_mul_nonce x_s.
       rewrite (_ : TExp g x_s = TExpN g [TNonce x_s]); last by rewrite /TExpN TMulN1.
-      by rewrite exps_TExpN; [by [] | by [] | by [] | by [] | exact: invs_canceled1 Nm].
+      by rewrite exps_TExpN //; exact: invs_canceled1.
     + by rewrite public_TInt; auto.
   - iApply public_THashIS => //.
       iApply minted_of_listI; rewrite /=; do !iSplit => //.

@@ -64,29 +64,20 @@ set m1 := Spec.of_list _.
 wp_apply wp_send => //.
   do !rewrite public_of_list /=.
   do !iSplit => //.
-  - iApply public_TExp_iff.
-      by [].
-      by [].
-      by [].
-      by exact: (negb_is_mul_nonce r).
+  - iApply public_TExp_iff => //.
     do !iSplit => //.
     + by rewrite minted_THash minted_tag.
     + iApply exp_pred_intro1.
       by iApply "Hexpr".
     + iModIntro; iIntros "#p".
       by iApply (public_THashIS with "Hpredα") => //.
-  - iApply public_TExp_iff.
-      by [].
-      by [].
-      by [].
-      by exact: (negb_is_mul_nonce x_u).
+  - iApply public_TExp_iff => //.
     do !iSplit => //.
     + by iApply minted_TInt.
     + iApply exp_pred_intro1.
       iApply "Hexpx_u"; iPureIntro.
-      have Nm : negb (is_mul x_u) := negb_is_mul_nonce x_u.
       rewrite (_ : TExp g x_u = TExpN g [TNonce x_u]); last by rewrite /TExpN TMulN1.
-      by rewrite exps_TExpN; [by [] | by [] | by [] | by [] | exact: invs_canceled1 Nm].
+      by rewrite exps_TExpN //; exact: invs_canceled1.
     + by rewrite public_TInt; auto.
 wp_pures.
 wp_apply wp_recv => //.
@@ -96,7 +87,7 @@ wp_list_of_term m2; wp_pures => //.
   1: wp_list_match => [β X_s envelope A_s -> | _].
   1, 2: wp_pures.
   2, 3: by iApply ("Hhl" $! None); iModIntro; iLeft.
-wp_apply wp_hl_inv_aux_term; first by exact: (negb_is_mul_nonce r).
+wp_apply wp_hl_inv_aux_term => //.
 wp_apply wp_texp; wp_list; wp_apply wp_H.
 wp_apply wp_derive_senc_key; set k := SEncKey _.
 wp_pures; wp_lam; wp_pures.
@@ -163,8 +154,7 @@ have p_u_s : p_u ≠ p_s.
   move=> e'; apply: Hfreshp_u; rewrite e'.
   apply/subtermsP.
   rewrite (_ : TExp g p_s = TExpN g [TNonce p_s]); last by rewrite /TExpN TMulN1.
-  have Nm : negb (is_mul p_s) := negb_is_mul_nonce p_s.
-  rewrite subtermsE //; last exact: invs_canceled1 Nm.
+  rewrite subtermsE //; last exact: invs_canceled1.
   rewrite /=.
   by rewrite [subterms p_s]subterms_nonce //; set_solver.
 (* The static-static factor [g^(p_s·e·d·p_u)] is a group factor of the key

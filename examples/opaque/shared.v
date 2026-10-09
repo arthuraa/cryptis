@@ -399,9 +399,6 @@ do !split => //.
   exact: exps_hmqv_eph.
 Qed.
 
-Lemma negb_is_mul_nonce (a : nonce) : negb (is_mul (TNonce a)).
-Proof. by []. Qed.
-
 Lemma subterm_of_list (t : term) (ts : list term) :
   (exists t', t' ∈ ts /\ subterm t t')  ->
   subterm t (Spec.of_list ts).
