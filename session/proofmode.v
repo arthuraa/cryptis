@@ -46,18 +46,18 @@ Ltac solve_proto_contractive :=
 (** * Normalization of protocols *)
 Class ActionDualIf (d : bool) (a1 a2 : action) :=
   dual_action_if : a2 = if d then action_dual a1 else a1.
-Global Hint Mode ActionDualIf ! ! - : typeclass_instances.
+#[global] Hint Mode ActionDualIf ! ! - : typeclass_instances.
 
-Global Instance action_dual_if_false a : ActionDualIf false a a := eq_refl.
-Global Instance action_dual_if_true_send : ActionDualIf true Send Recv := eq_refl.
-Global Instance action_dual_if_true_recv : ActionDualIf true Recv Send := eq_refl.
+#[global] Instance action_dual_if_false a : ActionDualIf false a a := eq_refl.
+#[global] Instance action_dual_if_true_send : ActionDualIf true Send Recv := eq_refl.
+#[global] Instance action_dual_if_true_recv : ActionDualIf true Recv Send := eq_refl.
 
 Class ProtoNormalize {Σ} (d : bool) (p : iProto Σ)
     (pas : list (bool * iProto Σ)) (q : iProto Σ) :=
   proto_normalize :
     ⊢ iProto_dual_if d p <++>
         foldr (iProto_app ∘ uncurry iProto_dual_if) END%proto pas ⊑ q.
-Global Hint Mode ProtoNormalize ! ! ! ! - : typeclass_instances.
+#[global] Hint Mode ProtoNormalize ! ! ! ! - : typeclass_instances.
 Arguments ProtoNormalize {_} _ _%_proto _%_proto _%_proto.
 
 Abbreviation ProtoUnfold p1 p2 := (∀ d pas q,
@@ -67,7 +67,7 @@ Class MsgNormalize {Σ} (d : bool) (m1 : iMsg Σ)
     (pas : list (bool * iProto Σ)) (m2 : iMsg Σ) :=
   msg_normalize a :
     ProtoNormalize d (<a> m1) pas (<(if d then action_dual a else a)> m2).
-Global Hint Mode MsgNormalize ! ! ! ! - : typeclass_instances.
+#[global] Hint Mode MsgNormalize ! ! ! ! - : typeclass_instances.
 Arguments MsgNormalize {_} _ _%_msg _%_msg _%_msg.
 
 Section classes.
@@ -80,21 +80,21 @@ Section classes.
   Lemma proto_unfold_eq p1 p2 : p1 ≡ p2 → ProtoUnfold p1 p2.
   Proof. rewrite /ProtoNormalize=> Hp d pas q. by rewrite Hp. Qed.
 
-  Global Instance proto_normalize_done p : ProtoNormalize false p [] p | 0.
+  #[global] Instance proto_normalize_done p : ProtoNormalize false p [] p | 0.
   Proof. rewrite /ProtoNormalize /= right_id. auto. Qed.
-  Global Instance proto_normalize_done_dual p :
+  #[global] Instance proto_normalize_done_dual p :
     ProtoNormalize true p [] (iProto_dual p) | 0.
   Proof. rewrite /ProtoNormalize /= right_id. auto. Qed.
-  Global Instance proto_normalize_done_dual_end :
+  #[global] Instance proto_normalize_done_dual_end :
     ProtoNormalize (Σ:=Σ) true END [] END | 0.
   Proof. rewrite /ProtoNormalize /= right_id iProto_dual_end. auto. Qed.
 
-  Global Instance proto_normalize_dual d p pas q :
+  #[global] Instance proto_normalize_dual d p pas q :
     ProtoNormalize (negb d) p pas q →
     ProtoNormalize d (iProto_dual p) pas q.
   Proof. rewrite /ProtoNormalize. by destruct d; rewrite /= ?involutive. Qed.
 
-  Global Instance proto_normalize_app_l d p1 p2 pas q :
+  #[global] Instance proto_normalize_app_l d p1 p2 pas q :
     ProtoNormalize d p1 ((d,p2) :: pas) q →
     ProtoNormalize d (p1 <++> p2) pas q.
   Proof.
@@ -102,7 +102,7 @@ Section classes.
     by destruct d; by rewrite /= ?iProto_dual_app.
   Qed.
 
-  Global Instance proto_normalize_end d d' p pas q :
+  #[global] Instance proto_normalize_end d d' p pas q :
     ProtoNormalize d p pas q →
     ProtoNormalize d' END ((d,p) :: pas) q | 0.
   Proof.
@@ -110,17 +110,17 @@ Section classes.
     destruct d'; by rewrite /= ?iProto_dual_end left_id.
   Qed.
 
-  Global Instance proto_normalize_app_r d p1 p2 pas q :
+  #[global] Instance proto_normalize_app_r d p1 p2 pas q :
     ProtoNormalize d p2 pas q →
     ProtoNormalize false p1 ((d,p2) :: pas) (p1 <++> q) | 0.
   Proof. rewrite /ProtoNormalize /= => H. by iApply iProto_le_app. Qed.
 
-  Global Instance proto_normalize_app_r_dual d p1 p2 pas q :
+  #[global] Instance proto_normalize_app_r_dual d p1 p2 pas q :
     ProtoNormalize d p2 pas q →
     ProtoNormalize true p1 ((d,p2) :: pas) (iProto_dual p1 <++> q) | 0.
   Proof. rewrite /ProtoNormalize /= => H. by iApply iProto_le_app. Qed.
 
-  Global Instance msg_normalize_base d v P p q pas :
+  #[global] Instance msg_normalize_base d v P p q pas :
     ProtoNormalize d p pas q →
     MsgNormalize d (MSG v {{ P }}; p) pas (MSG v {{ P }}; q).
   Proof.
@@ -130,7 +130,7 @@ Section classes.
       iProto_app_message iMsg_app_base.
   Qed.
 
-  Global Instance msg_normalize_exist {A} d (m1 m2 : A → iMsg Σ) pas :
+  #[global] Instance msg_normalize_exist {A} d (m1 m2 : A → iMsg Σ) pas :
     (∀ x, MsgNormalize d (m1 x) pas (m2 x)) →
     MsgNormalize d (∃ x, m1 x) pas (∃ x, m2 x).
   Proof.
@@ -141,13 +141,13 @@ Section classes.
       |move: (H x Recv); by rewrite ?iProto_dual_message ?iProto_app_message].
   Qed.
 
-  Global Instance proto_normalize_message d a1 a2 m1 m2 pas :
+  #[global] Instance proto_normalize_message d a1 a2 m1 m2 pas :
     ActionDualIf d a1 a2 →
     MsgNormalize d m1 pas m2 →
     ProtoNormalize d (<a1> m1) pas (<a2> m2).
   Proof. by rewrite /ActionDualIf /MsgNormalize /ProtoNormalize=> ->. Qed.
 
-  Global Instance proto_normalize_swap {TT1 TT2} d a m m'
+  #[global] Instance proto_normalize_swap {TT1 TT2} d a m m'
       (tv1 : TT1 -t> term) (tP1 : TT1 -t> iProp Σ) (tm1 : TT1 -t> iMsg Σ)
       (tv2 : TT2 -t> term) (tP2 : TT2 -t> iProp Σ)
       (tp : TT1 -t> TT2 -t> iProto Σ) pas :
@@ -177,7 +177,7 @@ Section classes.
       [proto_normalize_choice]; with it, [iAssumption]/[iFrame]/[connected_le]
       automatically coerce [iProto_dual (choice Send …)] to [choice Recv …],
       so callers no longer need a hand-written dual-equivalence lemma. *)
-  Global Instance proto_normalize_choice_term d a1 a2 P1 P2 p1 p2 q1 q2 pas :
+  #[global] Instance proto_normalize_choice_term d a1 a2 P1 P2 p1 p2 q1 q2 pas :
     ActionDualIf d a1 a2 →
     ProtoNormalize d p1 pas q1 → ProtoNormalize d p2 pas q2 →
     ProtoNormalize d (iProto_choice_term a1 P1 P2 p1 p2) pas
@@ -192,7 +192,7 @@ Section classes.
 
   (** Automatically perform normalization of protocols in the proof mode when
   using [iAssumption] and [iFrame]. *)
-  Global Instance connected_proto_from_assumption q skI skR rl cs p1 p2 :
+  #[global] Instance connected_proto_from_assumption q skI skR rl cs p1 p2 :
     ProtoNormalize false p1 [] p2 →
     FromAssumption q (connected skI skR rl cs p1) (connected skI skR rl cs p2).
   Proof.
@@ -200,7 +200,7 @@ Section classes.
     rewrite bi.intuitionistically_if_elim.
     iIntros (?) "H". by iApply (connected_le with "H").
   Qed.
-  Global Instance connected_proto_from_frame q skI skR rl cs p1 p2 :
+  #[global] Instance connected_proto_from_frame q skI skR rl cs p1 p2 :
     ProtoNormalize false p1 [] p2 →
     Frame q (connected skI skR rl cs p1) (connected skI skR rl cs p2) True.
   Proof.

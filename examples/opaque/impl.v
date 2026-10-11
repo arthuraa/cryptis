@@ -17,7 +17,7 @@ Unset Printing Implicit Defensive.
 
 Implicit Types N : namespace.
 
-Local Existing Instance ticket_lock.
+#[local] Existing Instance ticket_lock.
 
 Abbreviation opN := (nroot.@"op").
 

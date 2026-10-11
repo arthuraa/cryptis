@@ -46,7 +46,7 @@ Definition gen_conn_params ps : GenConn.params Σ := {|
 |}%I.
 
 #[warnings="-uniform-inheritance"]
-Local Coercion gen_conn_params : params >-> GenConn.params.
+#[local] Coercion gen_conn_params : params >-> GenConn.params.
 
 Definition connected ps skI skR rl cs : iProp :=
   GenConn.connected (chan_inv ps) skI skR rl cs.

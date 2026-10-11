@@ -275,7 +275,7 @@ the actual received term [t] and derives [b := bool_decide (t = TInt 1)].
 This is needed because in the compromised case the adversary controls
 [t] so it may not be a [TInt 0/1]. *)
 
-Local Instance bool_tele_inhabited :
+#[local] Instance bool_tele_inhabited :
   Inhabited (tele_arg (TeleS (λ _ : bool, TeleO))) :=
   populate (TeleArgCons false tt).
 

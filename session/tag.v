@@ -30,7 +30,7 @@ Record handler := Handler {
   handler_val : val;
 }.
 
-Global Instance repr_handler : Repr handler := λ h,
+#[global] Instance repr_handler : Repr handler := λ h,
   (λ: "t",
      bind: "t" := untag (Tag (handler_tag h)) "t" in
      SOME (handler_val h "t"))%V.
@@ -74,7 +74,7 @@ rewrite iMsg_tag_eq. iSplit.
   iExists N, t', m. iFrame. by iPureIntro.
 Qed.
 
-Global Instance iMsg_tag_ne : NonExpansive iMsg_tag.
+#[global] Instance iMsg_tag_ne : NonExpansive iMsg_tag.
 Proof.
 move=> n ms1 ms2 Hms v lp.
 rewrite !iMsg_tag_alt.

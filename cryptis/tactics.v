@@ -8,9 +8,9 @@ From cryptis Require Import lib term cryptis primitives.
 Import bi.
 Import env_notations.
 
-Global Hint Extern 1 (envs_entails _ (minted _)) =>
+#[global] Hint Extern 1 (envs_entails _ (minted _)) =>
   iApply public_minted : core.
-Global Hint Extern 0 (envs_entails _ (public (TInt ?n))) =>
+#[global] Hint Extern 0 (envs_entails _ (public (TInt ?n))) =>
   rewrite (public_TInt n) : core.
 
 Section Proofs.

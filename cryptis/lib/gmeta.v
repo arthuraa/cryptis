@@ -9,17 +9,15 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Class metaGS Σ := {
-  metaG_map  : inG Σ (reservation_mapR (agreeR positiveO));
+Class metaGS Σ := MetaGS {
+  #[local] metaG_map  :: inG Σ (reservation_mapR (agreeR positiveO));
 }.
-
-Local Existing Instance metaG_map.
 
 Definition metaΣ := #[
   GFunctor (reservation_mapR (agreeR positiveO))
 ].
 
-Global Instance subG_metaGS Σ : subG metaΣ Σ → metaGS Σ.
+#[global] Instance subG_metaGS Σ : subG metaΣ Σ → metaGS Σ.
 Proof. solve_inG. Qed.
 
 Section Laws.
@@ -34,15 +32,15 @@ Definition gmeta `{Countable L} γ N (x : L) :=
 Definition gmeta_token γ E :=
   own γ (reservation_map_token E).
 
-Global Instance gmeta_timeless `{Countable L} γ N (x : L) :
+#[global] Instance gmeta_timeless `{Countable L} γ N (x : L) :
   Timeless (gmeta γ N x).
 Proof. apply _. Qed.
 
-Global Instance gmeta_token_timeless γ E :
+#[global] Instance gmeta_token_timeless γ E :
   Timeless (gmeta_token γ E).
 Proof. apply _. Qed.
 
-Global Instance gmeta_persistent `{Countable L} γ N (x : L) :
+#[global] Instance gmeta_persistent `{Countable L} γ N (x : L) :
   Persistent (gmeta γ N x).
 Proof. apply _. Qed.
 

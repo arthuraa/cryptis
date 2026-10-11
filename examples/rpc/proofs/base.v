@@ -39,7 +39,7 @@ Definition rpcΣ := #[
   savedPredΣ (sign_key * sign_key * sess_info * term * term);
   GFunctor (dfrac_agreeR (leibnizO (namespace * term)))].
 
-Global Instance subG_rpcGpreS Σ : subG rpcΣ Σ → rpcGpreS Σ.
+#[global] Instance subG_rpcGpreS Σ : subG rpcΣ Σ → rpcGpreS Σ.
 Proof. solve_inG. Qed.
 
 Section Defs.

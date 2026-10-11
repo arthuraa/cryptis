@@ -116,13 +116,13 @@ Definition val_of_pre_term : Repr pre_term := fix val_of_pre_term pt :=
     (#TOpN_tag, (repr o, repr_list (map val_of_pre_term ts)))%V
   end.
 
-Global Existing Instance val_of_pre_term.
+#[global] Existing Instance val_of_pre_term.
 
 End ValOfPreTerm.
 
 Definition nonce_eq_dec : EqDecision nonce := Eval hnf in def_eq_decision _.
-Global Existing Instance nonce_eq_dec.
-Global Instance nonce_countable : Countable nonce.
+#[global] Existing Instance nonce_eq_dec.
+#[global] Instance nonce_countable : Countable nonce.
 Proof. exact: def_countable. Qed.
 
 Definition nonces_of_term_op0 o : gset nonce :=
@@ -139,14 +139,14 @@ Fixpoint nonces_of_pre_term pt : gset nonce :=
   | PreTerm.PTN _ ts => ⋃ map nonces_of_pre_term ts
   end.
 
-Global Instance pre_term_inhabited : Inhabited PreTerm.pre_term.
+#[global] Instance pre_term_inhabited : Inhabited PreTerm.pre_term.
 Proof. exact: (populate (PreTerm.PT0 (O0Int 0))). Qed.
 
 Definition pre_term_eq_dec : EqDecision PreTerm.pre_term :=
   Eval hnf in def_eq_decision _.
-Global Existing Instance pre_term_eq_dec.
+#[global] Existing Instance pre_term_eq_dec.
 
-Global Instance pre_term_countable : Countable PreTerm.pre_term :=
+#[global] Instance pre_term_countable : Countable PreTerm.pre_term :=
   def_countable _ pre_term_eq_dec.
 
 (** stdpp typeclass wrappers around the ssreflect total order on pre-terms
@@ -162,19 +162,19 @@ Open Scope order_scope.
    [Is_true]. *)
 Definition pt_order : relation PreTerm.pre_term := fun x y => is_true (x <= y).
 
-Global Instance pt_order_dec : RelDecision pt_order.
+#[global] Instance pt_order_dec : RelDecision pt_order.
 Proof. rewrite /pt_order /RelDecision => x y; case: (x <= y); [by left | by right]. Qed.
 
-Global Instance pt_order_refl : Reflexive pt_order.
+#[global] Instance pt_order_refl : Reflexive pt_order.
 Proof. move=> x; exact: lexx. Qed.
 
-Global Instance pt_order_trans : Transitive pt_order.
+#[global] Instance pt_order_trans : Transitive pt_order.
 Proof. move=> x y z; exact: le_trans. Qed.
 
-Global Instance pt_order_total : Total pt_order.
+#[global] Instance pt_order_total : Total pt_order.
 Proof. by move=> x y; case/orP: (le_total x y); [left|right]. Qed.
 
-Global Instance pt_order_antisymm : AntiSymm eq pt_order.
+#[global] Instance pt_order_antisymm : AntiSymm eq pt_order.
 Proof. move=> x y Hxy Hyx; apply: le_anti; apply/andP; by split. Qed.
 
 End PreTermOrder.
@@ -193,22 +193,22 @@ Open Scope order_scope.
 
 (* As with [pt_order], [is_true] is spelled out so the relation lands on
    ssreflect's boolean coercion rather than stdpp's [Is_true]. *)
-Global Instance pre_term_lexico : Lexico PreTerm.pre_term :=
+#[global] Instance pre_term_lexico : Lexico PreTerm.pre_term :=
   fun x y => is_true (x < y).
 
-Global Instance pre_term_lexico_irrefl :
+#[global] Instance pre_term_lexico_irrefl :
   Irreflexive (@lexico PreTerm.pre_term _).
 Proof. move=> x Hx; move: Hx; by rewrite /lexico /pre_term_lexico ltxx. Qed.
 
-Global Instance pre_term_lexico_trans :
+#[global] Instance pre_term_lexico_trans :
   Transitive (@lexico PreTerm.pre_term _).
 Proof. move=> x y z; exact: lt_trans. Qed.
 
-Global Instance pre_term_lexico_strict :
+#[global] Instance pre_term_lexico_strict :
   StrictOrder (@lexico PreTerm.pre_term _).
 Proof. split; apply _. Qed.
 
-Global Instance pre_term_lexico_trichotomyT :
+#[global] Instance pre_term_lexico_trichotomyT :
   TrichotomyT (@lexico PreTerm.pre_term _).
 Proof.
 refine (fun x y =>
@@ -420,19 +420,19 @@ Qed.
 
 End SortMergeSort.
 
-Global Instance repr_term_op0_inj : Inj (=) (=) (@repr term_op0 _).
+#[global] Instance repr_term_op0_inj : Inj (=) (=) (@repr term_op0 _).
 Proof. by case=> [?|[?]] [?|[?]] //= [<-]. Qed.
 
-Global Instance repr_term_op1_inj : Inj (=) (=) (@repr term_op1 _).
+#[global] Instance repr_term_op1_inj : Inj (=) (=) (@repr term_op1 _).
 Proof. by case=> [?|||] [?|||] //= [/int_of_key_type_inj ->]. Qed.
 
-Global Instance repr_term_op2_inj : Inj (=) (=) (@repr term_op2 _).
+#[global] Instance repr_term_op2_inj : Inj (=) (=) (@repr term_op2 _).
 Proof. by case=> [] []. Qed.
 
-Global Instance repr_term_opN_inj : Inj (=) (=) (@repr term_opN _).
+#[global] Instance repr_term_opN_inj : Inj (=) (=) (@repr term_opN _).
 Proof. by case=> [|] [|]. Qed.
 
-Global Instance val_of_pre_term_inj : Inj (=) (=) val_of_pre_term.
+#[global] Instance val_of_pre_term_inj : Inj (=) (=) val_of_pre_term.
 Proof.
 elim.
 - by move=> o1 [] //= o2 [] /repr_term_op0_inj ->.

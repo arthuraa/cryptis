@@ -3,7 +3,7 @@ From elpi.apps Require Import locker.
 
 Class Repr A := repr : A -> val.
 Arguments repr / .
-Global Hint Mode Repr ! : typeclass_instances.
+#[global] Hint Mode Repr ! : typeclass_instances.
 
 #[global]
 Instance repr_val : Repr val := λ x, x.

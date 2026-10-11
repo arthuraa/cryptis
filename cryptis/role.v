@@ -17,7 +17,7 @@ Canonical roleO := leibnizO role.
 
 Implicit Types rl : role.
 
-Global Instance role_inhabited : Inhabited role := populate Init.
+#[global] Instance role_inhabited : Inhabited role := populate Init.
 
 Lemma role_equivI {Σ} rl1 rl2 :
   rl1 ≡ rl2 ⊣⊢@{iPropI Σ}
@@ -38,7 +38,7 @@ Definition role_of_bool (b : bool) : role :=
 Lemma bool_of_roleK : Cancel (=) role_of_bool bool_of_role.
 Proof. by case. Qed.
 
-Global Instance role_eq_dec : EqDecision role.
+#[global] Instance role_eq_dec : EqDecision role.
 Proof.
 refine (λ rl1 rl2,
           match rl1, rl2 with
@@ -48,7 +48,7 @@ refine (λ rl1 rl2,
           end); abstract intuition congruence.
 Defined.
 
-Global Instance role_countable : Countable role.
+#[global] Instance role_countable : Countable role.
 Proof. apply (inj_countable' _ _ bool_of_roleK). Qed.
 
 Definition swap_role rl :=
@@ -57,7 +57,7 @@ Definition swap_role rl :=
 Lemma swap_roleK rl : swap_role (swap_role rl) = rl.
 Proof. by case: rl. Qed.
 
-Global Instance repr_role : Repr role :=
+#[global] Instance repr_role : Repr role :=
   λ rl, #(if rl is Init return Z then 1 else 0).
 
 End Role.

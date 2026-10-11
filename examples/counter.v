@@ -17,12 +17,13 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
 (** Monotone counter *)
-Class mcounterG Σ := MCounterG { mcounter_inG : inG Σ (authR max_natUR) }.
-Local Existing Instance mcounter_inG.
+Class mcounterG Σ := MCounterG {
+  #[local] mcounter_inG :: inG Σ (authR max_natUR)
+}.
 
 Definition mcounterΣ : gFunctors := #[GFunctor (authR max_natUR)].
 
-Global Instance subG_mcounterΣ {Σ} : subG mcounterΣ Σ → mcounterG Σ.
+#[global] Instance subG_mcounterΣ {Σ} : subG mcounterΣ Σ → mcounterG Σ.
 Proof. solve_inG. Qed.
 
 Section Game.

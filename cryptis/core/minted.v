@@ -21,10 +21,10 @@ Abbreviation iProp := (iProp Σ).
 lock Definition minted t : iProp :=
   [∗ set] a ∈ nonces_of_term t, meta (nonce_loc a) (nroot.@"minted") ().
 
-Global Instance Persistent_minted t : Persistent (minted t).
+#[global] Instance Persistent_minted t : Persistent (minted t).
 Proof. rewrite unlock; apply _. Qed.
 
-Global Instance Timeless_minted t : Timeless (minted t).
+#[global] Instance Timeless_minted t : Timeless (minted t).
 Proof. rewrite unlock; apply _. Qed.
 
 Lemma subterm_minted t1 t2 :

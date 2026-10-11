@@ -24,31 +24,26 @@ Definition si_share_of rl :=
   if rl is Init then si_init_share
   else si_resp_share.
 
-Global Instance sess_info_inhabited : Inhabited sess_info :=
+#[global] Instance sess_info_inhabited : Inhabited sess_info :=
   populate (SessInfo inhabitant inhabitant
               inhabitant inhabitant inhabitant).
 
 Class nsl_dhGpreS Σ := NslDhGPreS {
-  nsl_dhGpreS_meta : metaGS Σ;
-  nsl_dhGpreS_pred : savedPredG Σ (aenc_key * aenc_key * sess_info * role);
+  #[local] nsl_dhGpreS_meta :: metaGS Σ;
+  #[local] nsl_dhGpreS_pred :: savedPredG Σ (aenc_key * aenc_key * sess_info * role);
 }.
-
-Local Existing Instance nsl_dhGpreS_meta.
-Local Existing Instance nsl_dhGpreS_pred.
 
 Class nsl_dhGS Σ := NslDhGS {
-  nsl_dh_inG : nsl_dhGpreS Σ;
+  #[local] nsl_dh_inG :: nsl_dhGpreS Σ;
   nsl_dh_name : gname;
 }.
-
-Local Existing Instance nsl_dh_inG.
 
 Definition nsl_dhΣ := #[
   metaΣ;
   savedPredΣ (aenc_key * aenc_key * sess_info * role)
 ].
 
-Global Instance subG_nsl_dhGpreS Σ : subG nsl_dhΣ Σ → nsl_dhGpreS Σ.
+#[global] Instance subG_nsl_dhGpreS Σ : subG nsl_dhΣ Σ → nsl_dhGpreS Σ.
 Proof. solve_inG. Qed.
 
 Section Verif.
@@ -256,7 +251,7 @@ Definition dh_key skI skR (a : nonce) : iProp :=
   □ (public a ↔ ▷ □ nonce_secrecy a) ∧
   □ (∀ t, exp_pred_base a t ↔ ▷ □ nsl_dh_key_share skI skR t).
 
-Global Instance dh_key_persistent skI skR a : Persistent (dh_key skI skR a).
+#[global] Instance dh_key_persistent skI skR a : Persistent (dh_key skI skR a).
 Proof. apply _. Qed.
 
 Definition failed_early skI skR (failed : bool) : iProp :=
@@ -394,13 +389,13 @@ rewrite minted_senc minted_of_list /=.
 by iDestruct "m_k" as "(_ & _ & _ & $ & _)".
 Qed.
 
-Global Instance session_persistent skI skR si : Persistent (session skI skR si).
+#[global] Instance session_persistent skI skR si : Persistent (session skI skR si).
 Proof. apply _. Qed.
 
 Definition session_ok si : iProp :=
   □ (public (si_key si) ↔ ▷ released_session si).
 
-Global Instance session_ok_persistent si : Persistent (session_ok si).
+#[global] Instance session_ok_persistent si : Persistent (session_ok si).
 Proof. apply _. Qed.
 
 Lemma secret_session skI skR si :
@@ -543,7 +538,7 @@ iMod (aenc_pred_set (N := nsl_dhN.@"m3") msg3_pred with "token")
 iModIntro; iFrame; do !iSplit => //.
 Qed.
 
-Global Instance nsl_dh_ctx_persistent : Persistent nsl_dh_ctx.
+#[global] Instance nsl_dh_ctx_persistent : Persistent nsl_dh_ctx.
 Proof. apply _. Qed.
 
 Lemma public_dh_share skI skR (a : nonce) :
@@ -593,4 +588,4 @@ Qed.
 
 Arguments nsl_dhGS_alloc {Σ _ _ E}.
 Arguments nsl_dh_pred_set {Σ _} N φ E.
-Global Typeclasses Opaque session_ok.
+#[global] Typeclasses Opaque session_ok.

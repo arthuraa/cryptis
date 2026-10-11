@@ -25,31 +25,26 @@ Definition si_share_of rl :=
   if rl is Init then si_init_share
   else si_resp_share.
 
-Global Instance sess_info_inhabited : Inhabited sess_info :=
+#[global] Instance sess_info_inhabited : Inhabited sess_info :=
   populate (SessInfo inhabitant inhabitant
               inhabitant inhabitant inhabitant).
 
 Class iso_dhGpreS Σ := IsoDhGPreS {
-  iso_dhGpreS_meta : metaGS Σ;
-  iso_dhGpreS_pred : savedPredG Σ (sign_key * sign_key * sess_info * role);
+  #[local] iso_dhGpreS_meta :: metaGS Σ;
+  #[local] iso_dhGpreS_pred :: savedPredG Σ (sign_key * sign_key * sess_info * role);
 }.
-
-Local Existing Instance iso_dhGpreS_meta.
-Local Existing Instance iso_dhGpreS_pred.
 
 Class iso_dhGS Σ := IsoDhGS {
-  iso_dh_inG : iso_dhGpreS Σ;
+  #[local] iso_dh_inG :: iso_dhGpreS Σ;
   iso_dh_name : gname;
 }.
-
-Local Existing Instance iso_dh_inG.
 
 Definition iso_dhΣ := #[
   metaΣ;
   savedPredΣ (sign_key * sign_key * sess_info * role)
 ].
 
-Global Instance subG_iso_dhGpreS Σ : subG iso_dhΣ Σ → iso_dhGpreS Σ.
+#[global] Instance subG_iso_dhGpreS Σ : subG iso_dhΣ Σ → iso_dhGpreS Σ.
 Proof. solve_inG. Qed.
 
 Section Verif.
@@ -195,13 +190,13 @@ Proof.
 by iIntros "(?&?&?&?)".
 Qed.
 
-Global Instance session_persistent skI skR si : Persistent (session skI skR si).
+#[global] Instance session_persistent skI skR si : Persistent (session skI skR si).
 Proof. apply _. Qed.
 
 Definition session_ok si : iProp :=
   □ (public (si_key si) ↔ ▷ released_session si).
 
-Global Instance session_ok_persistent si : Persistent (session_ok si).
+#[global] Instance session_ok_persistent si : Persistent (session_ok si).
 Proof. apply _. Qed.
 
 Lemma secret_session skI skR si :
@@ -358,4 +353,4 @@ Qed.
 
 Arguments iso_dhGS_alloc {Σ _ _ E}.
 Arguments iso_dh_pred_set {Σ _} N φ E.
-Global Typeclasses Opaque session_ok.
+#[global] Typeclasses Opaque session_ok.

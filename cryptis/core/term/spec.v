@@ -20,7 +20,7 @@ Implicit Types (t k : term) (ts : list term).
 lock Definition Tag (N : namespace) :=
   TInt (Zpos (encode N)).
 
-Global Instance Tag_inj : Inj (=) (=) Tag.
+#[global] Instance Tag_inj : Inj (=) (=) Tag.
 Proof. by rewrite [Tag]unlock => ?? [] /(inj _ _ _). Qed.
 
 Module Spec.

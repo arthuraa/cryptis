@@ -38,7 +38,7 @@ Definition trusted_connected skI skR rl cs p : iProp :=
   Sess.connected skI skR rl cs p ∗
   □ (public (si_key cs) →  ▷ False).
 
-Global Instance trusted_connected_proper skI skR rl cs :
+#[global] Instance trusted_connected_proper skI skR rl cs :
   Proper ((≡) ==> (≡)) (trusted_connected skI skR rl cs).
 Proof. solve_proper. Qed.
 

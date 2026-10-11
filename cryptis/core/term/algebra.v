@@ -33,7 +33,7 @@ split.
   + exact: invs_canceled0.
 Qed.
 
-Global Instance invs_canceled_Permutation :
+#[global] Instance invs_canceled_Permutation :
   Proper ((≡ₚ) ==> (↔)) invs_canceled.
 Proof.
 move=> ts1 ts2 peq; split => H x Hx.
@@ -137,7 +137,7 @@ Qed.
 Lemma TInvK t : TInv (TInv t) = t.
 Proof. apply: (@TMul_cancel (TInv t)); by rewrite TMulK TMulK_l. Qed.
 
-Global Instance TInv_inj : Inj (=) (=) TInv.
+#[global] Instance TInv_inj : Inj (=) (=) TInv.
 Proof. by move=> t1 t2 /(f_equal TInv); rewrite !TInvK. Qed.
 
 Lemma not_elem_of_count t t' : t ∉ factors t' → (count t t' ≤ 0)%Z.
@@ -411,7 +411,7 @@ split.
   + exact: ginvs_canceled0.
 Qed.
 
-Global Instance ginvs_canceled_Permutation :
+#[global] Instance ginvs_canceled_Permutation :
   Proper ((≡ₚ) ==> (↔)) ginvs_canceled.
 Proof.
 move=> ts1 ts2 peq; split => H x Hx.
@@ -510,7 +510,7 @@ have H : TGMul (TGInv a) (TGMul a b) = TGMul (TGInv a) (TGMul a c) by rewrite E.
 by rewrite -!TGMulA !TGMulK_l !TGMul1_l in H.
 Qed.
 
-Global Instance TGInv_inj : Inj (=) (=) TGInv.
+#[global] Instance TGInv_inj : Inj (=) (=) TGInv.
 Proof. by move=> t1 t2 /(f_equal TGInv); rewrite !TGInvK. Qed.
 
 Lemma not_elem_of_gcount t t' : t ∉ gfactors t' → (gcount t t' ≤ 0)%Z.
@@ -1169,7 +1169,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Global Instance TExpN_proper : Proper ((=) ==> (≡ₚ) ==> (=)) TExpN.
+#[global] Instance TExpN_proper : Proper ((=) ==> (≡ₚ) ==> (=)) TExpN.
 Proof.
 by rewrite /TExpN => t _ <- ts1 ts2 <-.
 Qed.

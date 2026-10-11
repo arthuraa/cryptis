@@ -26,7 +26,7 @@ Class term_metaGS Σ : Type := TermMetaGS {
 Definition term_metaΣ : gFunctors :=
   #[metaΣ; ghost_mapΣ term gname].
 
-Global Instance subG_term_metaGpreS Σ :
+#[global] Instance subG_term_metaGpreS Σ :
   subG term_metaΣ Σ → term_metaGpreS Σ.
 Proof. solve_inG. Qed.
 
@@ -59,7 +59,7 @@ Qed.
 
 Context `{!term_metaGS Σ}.
 
-Global Instance term_meta_inv_timeless : Timeless term_meta_inv.
+#[global] Instance term_meta_inv_timeless : Timeless term_meta_inv.
 Proof. rewrite /term_meta_inv. apply _. Qed.
 
 #[global]
@@ -68,18 +68,16 @@ Proof. apply _. Qed.
 
 Class HasTermMetaCtx (ctx : iProp) := {
   has_term_meta_ctx : ctx ⊢ term_meta_ctx;
-  has_term_meta_ctx_persistent : Persistent ctx;
+  #[local] has_term_meta_ctx_persistent :: Persistent ctx;
 }.
-
-Local Existing Instance has_term_meta_ctx_persistent.
 
 Definition term_name t γ : iProp :=
   minted t ∗ t ↪[term_meta_name]□ γ.
 
-Global Instance term_name_persistent t γ : Persistent (term_name t γ).
+#[global] Instance term_name_persistent t γ : Persistent (term_name t γ).
 Proof. apply _. Qed.
 
-Global Instance term_name_timeless t γ : Timeless (term_name t γ).
+#[global] Instance term_name_timeless t γ : Timeless (term_name t γ).
 Proof. apply _. Qed.
 
 Lemma term_name_agree t γ1 γ2 :
@@ -114,14 +112,14 @@ rewrite [@term_meta]unlock. iIntros "(%γ & #name & _)".
 by iApply term_name_minted.
 Qed.
 
-Global Instance term_token_timeless t E : Timeless (term_token t E).
+#[global] Instance term_token_timeless t E : Timeless (term_token t E).
 Proof. rewrite [@term_token]unlock. apply _. Qed.
 
-Global Instance term_meta_timeless `{Countable L} t N (x : L) :
+#[global] Instance term_meta_timeless `{Countable L} t N (x : L) :
   Timeless (term_meta t N x).
 Proof. rewrite [@term_meta]unlock. apply _. Qed.
 
-Global Instance term_meta_persistent `{Countable L} t N (x : L) :
+#[global] Instance term_meta_persistent `{Countable L} t N (x : L) :
   Persistent (term_meta t N x).
 Proof. rewrite [@term_meta]unlock. apply _. Qed.
 

@@ -14,15 +14,13 @@ Definition db_stateUR : ucmra :=
   discrete_funUR (fun _ : term => authUR (optionUR (exclR (optionO termO)))).
 
 Class dbGS Σ := DbGS {
-  dbGS_state : inG Σ db_stateUR;
+  #[local] dbGS_state :: inG Σ db_stateUR;
 }.
-
-Local Existing Instance dbGS_state.
 
 Definition dbΣ :=
   #[GFunctor db_stateUR].
 
-Global Instance subG_dbGS Σ : subG dbΣ Σ → dbGS Σ.
+#[global] Instance subG_dbGS Σ : subG dbΣ Σ → dbGS Σ.
 Proof. solve_inG. Qed.
 
 Module DB.

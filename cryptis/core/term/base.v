@@ -220,39 +220,39 @@ Qed.
 Lemma fold_normalize pt : fold_term (PreTerm.normalize pt) = fold_term pt.
 Proof. by rewrite -unfold_fold unfold_termK. Qed.
 
-Global Instance unfold_term_inj : Inj (=) (=) unfold_term.
+#[global] Instance unfold_term_inj : Inj (=) (=) unfold_term.
 Proof. by move=> t1 t2 /(f_equal fold_term); rewrite !unfold_termK. Qed.
 
-Global Instance term_eq_dec : EqDecision term :=
+#[global] Instance term_eq_dec : EqDecision term :=
   inj_eq_dec unfold_term.
 
-Global Instance term_countable : Countable term :=
+#[global] Instance term_countable : Countable term :=
   inj_countable' unfold_term fold_term unfold_termK.
 
-Global Instance term_inhabited : Inhabited term.
+#[global] Instance term_inhabited : Inhabited term.
 Proof. exact: (populate (TInt 0)). Qed.
 
 Canonical termO := leibnizO term.
 
-Global Instance aenc_key_eq_dec : EqDecision aenc_key.
+#[global] Instance aenc_key_eq_dec : EqDecision aenc_key.
 Proof. solve_decision. Defined.
-Global Instance aenc_key_countable : Countable aenc_key.
+#[global] Instance aenc_key_countable : Countable aenc_key.
 Proof. apply: (inj_countable' seed_of_aenc_key AEncKey); by case. Qed.
-Global Instance aenc_key_inhabited : Inhabited aenc_key :=
+#[global] Instance aenc_key_inhabited : Inhabited aenc_key :=
   populate (AEncKey inhabitant).
 
-Global Instance sign_key_eq_dec : EqDecision sign_key.
+#[global] Instance sign_key_eq_dec : EqDecision sign_key.
 Proof. solve_decision. Defined.
-Global Instance sign_key_countable : Countable sign_key.
+#[global] Instance sign_key_countable : Countable sign_key.
 Proof. apply: (inj_countable' seed_of_sign_key SignKey); by case. Qed.
-Global Instance sign_key_inhabited : Inhabited sign_key :=
+#[global] Instance sign_key_inhabited : Inhabited sign_key :=
   populate (SignKey inhabitant).
 
-Global Instance senc_key_eq_dec : EqDecision senc_key.
+#[global] Instance senc_key_eq_dec : EqDecision senc_key.
 Proof. solve_decision. Defined.
-Global Instance senc_key_countable : Countable senc_key.
+#[global] Instance senc_key_countable : Countable senc_key.
 Proof. apply: (inj_countable' seed_of_senc_key SEncKey); by case. Qed.
-Global Instance senc_key_inhabited : Inhabited senc_key :=
+#[global] Instance senc_key_inhabited : Inhabited senc_key :=
   populate (SEncKey inhabitant).
 
 Lemma normalize_unfold t :

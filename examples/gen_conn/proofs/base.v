@@ -34,14 +34,10 @@ Definition countR := authR max_natUR.
 Definition channelR := authR (max_prefix_listUR termO).
 
 Class connGS Σ := ConnGS {
-  connGS_count  : inG Σ countR;
-  connGS_channel : inG Σ channelR;
-  connGS_pred : savedPredG Σ (list term * list term);
+  #[local] connGS_count :: inG Σ countR;
+  #[local] connGS_channel :: inG Σ channelR;
+  #[local] connGS_pred :: savedPredG Σ (list term * list term);
 }.
-
-Local Existing Instance connGS_count.
-Local Existing Instance connGS_channel.
-Local Existing Instance connGS_pred.
 
 Definition connΣ := #[
   GFunctor countR;
@@ -49,7 +45,7 @@ Definition connΣ := #[
   savedPredΣ (list term * list term)
 ].
 
-Global Instance subG_connGS Σ : subG connΣ Σ → connGS Σ.
+#[global] Instance subG_connGS Σ : subG connΣ Σ → connGS Σ.
 Proof. solve_inG. Qed.
 
 Record params Σ := Params {

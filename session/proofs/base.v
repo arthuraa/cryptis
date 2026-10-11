@@ -37,7 +37,7 @@ Definition sessΣ := #[
   savedProtoΣ term
 ].
 
-Global Instance subG_sess Σ : subG sessΣ Σ → sessG Σ.
+#[global] Instance subG_sess Σ : subG sessΣ Σ → sessG Σ.
 Proof. solve_inG. Qed.
 
 Section Verif.
@@ -78,11 +78,11 @@ iIntros "(%γs & #names & own) le".
 iExists γs; iFrame "#". by iApply (iProto_own_le with "[$]").
 Qed.
 
-Global Instance sess_own_proper skI skR si rl :
+#[global] Instance sess_own_proper skI skR si rl :
   Proper ((≡) ==> (≡)) (sess_own skI skR si rl).
 Proof. solve_proper. Qed.
 
-Global Instance sess_own_ne skI skR si rl n :
+#[global] Instance sess_own_ne skI skR si rl n :
   Proper ((≡{n}≡) ==> (≡{n}≡)) (sess_own skI skR si rl).
 Proof. solve_proper. Qed.
 
@@ -241,11 +241,11 @@ iIntros "[conn [#fail|own]] le".
 - iFrame. iRight. by iApply (sess_own_le with "[$]").
 Qed.
 
-Global Instance connected_proper skI skR rl cs :
+#[global] Instance connected_proper skI skR rl cs :
   Proper ((≡) ==> (≡)) (connected skI skR rl cs).
 Proof. by move=> p1 p2 e; rewrite /connected e. Qed.
 
-Global Instance connected_ne skI skR rl cs n :
+#[global] Instance connected_ne skI skR rl cs n :
   Proper ((≡{n}≡) ==> (≡{n}≡)) (connected skI skR rl cs).
 Proof. by move=> p1 p2 e; rewrite /connected e. Qed.
 

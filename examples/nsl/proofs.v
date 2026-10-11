@@ -12,7 +12,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Local Existing Instance ticket_lock.
+#[local] Existing Instance ticket_lock.
 
 Section NSL.
 
@@ -76,7 +76,7 @@ iMod (aenc_pred_set (N := nslN.@"m3") msg3_pred with "t1")
 iModIntro; iFrame; do !iSplit => //.
 Qed.
 
-Global Instance nsl_ctx_persistent : Persistent nsl_ctx.
+#[global] Instance nsl_ctx_persistent : Persistent nsl_ctx.
 Proof. apply _. Qed.
 
 Definition session_NSL skI skR si : iProp :=

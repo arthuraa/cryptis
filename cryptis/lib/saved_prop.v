@@ -10,20 +10,21 @@ Definition savedPredR Σ A :=
 Definition savedPropR Σ :=
   dfrac_agreeR (oFunctor_apply (▶ ∙) (iPropO Σ)).
 
-Class savedPredG Σ A := savedPred_inG : inG Σ (savedPredR Σ A).
-Class savedPropG Σ := savedProp_inG : inG Σ (savedPropR Σ).
+Class savedPredG Σ A := SavedPredG {
+  #[global] savedPred_inG :: inG Σ (savedPredR Σ A)
+}.
+Class savedPropG Σ := SavedPropG {
+  #[global] savedProp_inG :: inG Σ (savedPropR Σ)
+}.
 
 Definition savedPredΣ A :=
   #[GFunctor (dfrac_agreeRF (A -d> ▶ ∙))].
 Definition savedPropΣ :=
   #[GFunctor (dfrac_agreeRF (▶ ∙))].
 
-Global Existing Instance savedPred_inG.
-Global Existing Instance savedProp_inG.
-
-Global Instance subG_savedPredG Σ A : subG (savedPredΣ A) Σ → savedPredG Σ A.
+#[global] Instance subG_savedPredG Σ A : subG (savedPredΣ A) Σ → savedPredG Σ A.
 Proof. solve_inG. Qed.
-Global Instance subG_savedPropG Σ : subG savedPropΣ Σ → savedPropG Σ.
+#[global] Instance subG_savedPropG Σ : subG savedPropΣ Σ → savedPropG Σ.
 Proof. solve_inG. Qed.
 
 Section SavedProp.
