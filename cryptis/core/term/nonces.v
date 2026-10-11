@@ -17,13 +17,8 @@ Implicit Types (t k : term) (ts : list term).
 
 (* nonces_of_term and its theory. *)
 
-Definition nonces_of_term_def (t : term) :=
+lock Definition nonces_of_term (t : term) :=
   nonces_of_pre_term (unfold_term t).
-Arguments nonces_of_term_def /.
-Definition nonces_of_term_aux : seal nonces_of_term_def. by eexists. Qed.
-Definition nonces_of_term := unseal nonces_of_term_aux.
-Lemma nonces_of_term_unseal : nonces_of_term = nonces_of_term_def.
-Proof. exact: seal_eq. Qed.
 
 Lemma nonces_of_termE' t :
   nonces_of_term t =
@@ -37,12 +32,12 @@ Lemma nonces_of_termE' t :
   | TNonFree pt _ _ => nonces_of_pre_term pt
   end.
 Proof.
-by rewrite nonces_of_term_unseal; case: t => //=.
+by rewrite [nonces_of_term]unlock; case: t => //=.
 Qed.
 
 Lemma nonces_of_term_fold pt :
   PreTerm.wf pt -> nonces_of_term (fold_term pt) = nonces_of_pre_term pt.
-Proof. move => wf. by rewrite nonces_of_term_unseal /nonces_of_term_def (@fold_termK pt wf). Qed.
+Proof. move => wf. by rewrite [nonces_of_term]unlock (@fold_termK pt wf). Qed.
 
 Lemma nonces_of_pre_term_factors e :
   nonces_of_pre_term e = ⋃ map nonces_of_pre_term (PreTerm.factors e).
@@ -157,13 +152,13 @@ Qed.
 
 Lemma nonces_of_term_TInv t : nonces_of_term (TInv t) = nonces_of_term t.
 Proof.
-rewrite !nonces_of_term_unseal /nonces_of_term_def unfold_TInv.
+rewrite ![nonces_of_term]unlock unfold_TInv.
 exact: nonces_of_pre_term_inv (wf_unfold_term t).
 Qed.
 
 Lemma nonces_of_term_TGInv t : nonces_of_term (TGInv t) = nonces_of_term t.
 Proof.
-rewrite !nonces_of_term_unseal /nonces_of_term_def unfold_TGInv.
+rewrite ![nonces_of_term]unlock unfold_TGInv.
 exact: nonces_of_pre_term_ginv (wf_unfold_term t).
 Qed.
 
@@ -174,7 +169,7 @@ have wfs : Forall PreTerm.wf (PreTerm.factors (unfold_term t)).
   apply/Forall_forall => x xin.
   by apply: PreTerm.wf_factors_wf
        (PreTerm.wf_wf_factors _ (wf_unfold_term t)) xin.
-rewrite nonces_of_term_unseal /nonces_of_term_def
+rewrite [nonces_of_term]unlock
   (nonces_of_pre_term_factors (unfold_term t)) /factors.
 congr union_list.
 elim: (PreTerm.factors (unfold_term t)) wfs
@@ -191,7 +186,7 @@ Lemma nonces_of_term_base_exps t :
   nonces_of_term t = nonces_of_term (base t) ∪ ⋃ map nonces_of_term (exps t).
 Proof.
 rewrite /exps -(nonces_of_term_factors (expo t)).
-rewrite !nonces_of_term_unseal /nonces_of_term_def unfold_base unfold_expo.
+rewrite ![nonces_of_term]unlock unfold_base unfold_expo.
 exact: nonces_of_pre_term_base_expo.
 Qed.
 
@@ -202,7 +197,7 @@ have wfs : Forall PreTerm.wf (PreTerm.gfactors (unfold_term t)).
   apply/Forall_forall => x xin.
   by apply: PreTerm.wf_gfactors_wf
        (PreTerm.wf_wf_gfactors _ (wf_unfold_term t)) xin.
-rewrite nonces_of_term_unseal /nonces_of_term_def
+rewrite [nonces_of_term]unlock
   (nonces_of_pre_term_gfactors (unfold_term t)) /gfactors.
 congr union_list.
 elim: (PreTerm.gfactors (unfold_term t)) wfs
@@ -303,8 +298,8 @@ Lemma nonces_of_term_TExpN_subseteq t ts :
 Proof.
 have Hts : ⋃ map nonces_of_term ts = ⋃ map nonces_of_pre_term (map unfold_term ts).
   congr union_list. elim: ts => [|t' ts IH] //=.
-  by rewrite IH nonces_of_term_unseal /nonces_of_term_def.
-rewrite Hts !nonces_of_term_unseal /nonces_of_term_def.
+  by rewrite IH [nonces_of_term]unlock.
+rewrite Hts ![nonces_of_term]unlock.
 have -> : unfold_term (TExpN t ts) =
           PreTerm.exp (unfold_term t) (PreTerm.mul (map unfold_term ts)).
   by rewrite /TExpN unfold_TExp unfold_TMulN.
@@ -320,8 +315,8 @@ Proof.
 have Hts : ⋃ map nonces_of_term ts
          = ⋃ map nonces_of_pre_term (map unfold_term ts).
   congr union_list. elim: ts => [|t' ts IH] //=.
-  by rewrite IH nonces_of_term_unseal /nonces_of_term_def.
-rewrite Hts nonces_of_term_unseal /nonces_of_term_def unfold_TMulN.
+  by rewrite IH [nonces_of_term]unlock.
+rewrite Hts [nonces_of_term]unlock unfold_TMulN.
 exact: nonces_of_pre_term_mul_sub.
 Qed.
 
@@ -333,8 +328,8 @@ Proof.
 have Hts : ⋃ map nonces_of_term ts
          = ⋃ map nonces_of_pre_term (map unfold_term ts).
   congr union_list. elim: ts => [|t' ts IH] //=.
-  by rewrite IH nonces_of_term_unseal /nonces_of_term_def.
-rewrite Hts nonces_of_term_unseal /nonces_of_term_def unfold_TGMulN.
+  by rewrite IH [nonces_of_term]unlock.
+rewrite Hts [nonces_of_term]unlock unfold_TGMulN.
 exact: nonces_of_pre_term_gmul_sub.
 Qed.
 
@@ -362,7 +357,7 @@ have flat : forall l, (forall x, x ∈ l -> negb (PreTerm.is_mul x)) ->
   rewrite PreTerm.factors_Nmul; last by apply: H; apply/elem_of_cons; left.
   by rewrite -/(mbind PreTerm.factors l) IH // => y yin; apply: H;
      apply/elem_of_cons; right.
-rewrite nonces_of_term_unseal /nonces_of_term_def unfold_TMulN.
+rewrite [nonces_of_term]unlock unfold_TMulN.
 rewrite /PreTerm.mul /PreTerm.normalize_factors mulauxE flat //.
 rewrite (union_list_map_to_pt nonces_of_pre_term nopairs).
 by elim: ts {ic Nm nopairs} => [//|t l IH] /=; rewrite IH.
@@ -392,7 +387,7 @@ have flat : forall l, (forall x, x ∈ l -> negb (PreTerm.is_gmul x)) ->
   rewrite PreTerm.gfactors_Ngmul; last by apply: H; apply/elem_of_cons; left.
   by rewrite -/(mbind PreTerm.gfactors l) IH // => y yin; apply: H;
      apply/elem_of_cons; right.
-rewrite nonces_of_term_unseal /nonces_of_term_def unfold_TGMulN.
+rewrite [nonces_of_term]unlock unfold_TGMulN.
 rewrite /PreTerm.gmul /PreTerm.normalize_gfactors gmulauxE flat //.
 rewrite (union_list_map_to_pt nonces_of_pre_term nopairs).
 by elim: ts {ic Nm nopairs} => [//|t l IH] /=; rewrite IH.

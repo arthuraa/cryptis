@@ -157,7 +157,7 @@ rewrite [in prod_of_list _ _]unlock /=.
 case: Spec.to_listP=> //= {}ch.
 elim/(list_len_rect 2): ch => [ke' other'|ch neq]; last first.
   by rewrite prod_of_list_neq.
-rewrite unlock /=.
+rewrite [in prod_of_list _ _]unlock /=.
 case e_of_term: CShare.of_term => [ke''|] //=.
 move: ke'' e_of_term => {}ke' /CShare.of_termK ->.
 case e_check: CShare.check => [c_ke|] //= e.

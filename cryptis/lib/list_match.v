@@ -231,7 +231,7 @@ Lemma wp_list_match_aux E (vs : list A) evs vars k Ψ :
    else Ψ NONEV) -∗
   WP list_match_aux vars evs k @ E {{ Ψ }}.
 Proof.
-rewrite repr_list_unseal.
+rewrite [@repr_list]unlock.
 elim: vars vs => [|var vars IH] [|v vs] /= in evs k *; iIntros (dis) "evs pS".
 - by wp_pures; wp_bind evs; iApply "evs"; wp_pures.
 - by wp_pures; wp_bind evs; iApply "evs"; wp_pures.

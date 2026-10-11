@@ -59,41 +59,23 @@ Implicit Types (t k : term) (ts : list term).
 
 Coercion TNonce : nonce >-> term.
 
-Definition term_of_aenc_key_def sk := TKey ADec (seed_of_aenc_key sk).
-Fact term_of_aenc_key_key : unit. exact: tt. Qed.
-Definition term_of_aenc_key :=
-  locked_with term_of_aenc_key_key term_of_aenc_key_def.
-Lemma term_of_aenc_keyE : term_of_aenc_key = term_of_aenc_key_def.
-Proof. exact: locked_withE. Qed.
+lock Definition term_of_aenc_key sk := TKey ADec (seed_of_aenc_key sk).
 Coercion term_of_aenc_key : aenc_key >-> term.
 
-Definition term_of_sign_key_def sk := TKey Sign (seed_of_sign_key sk).
-Fact term_of_sign_key_key : unit. exact: tt. Qed.
-Definition term_of_sign_key :=
-  locked_with term_of_sign_key_key term_of_sign_key_def.
-Lemma term_of_sign_keyE : term_of_sign_key = term_of_sign_key_def.
-Proof. exact: locked_withE. Qed.
+lock Definition term_of_sign_key sk := TKey Sign (seed_of_sign_key sk).
 Coercion term_of_sign_key : sign_key >-> term.
 
-Definition term_of_senc_key_def sk := TKey SEnc (seed_of_senc_key sk).
-Fact term_of_senc_key_key : unit. exact: tt. Qed.
-Definition term_of_senc_key :=
-  locked_with term_of_senc_key_key term_of_senc_key_def.
-Lemma term_of_senc_keyE : term_of_senc_key = term_of_senc_key_def.
-Proof. exact: locked_withE. Qed.
+lock Definition term_of_senc_key sk := TKey SEnc (seed_of_senc_key sk).
 Coercion term_of_senc_key : senc_key >-> term.
 
-Definition keysE :=
-  (term_of_aenc_keyE, term_of_sign_keyE, term_of_senc_keyE).
-
 Lemma term_of_aenc_key_inj : Inj (=) (=) term_of_aenc_key.
-Proof. rewrite keysE. by case=> [?] [?] [->]. Qed.
+Proof. rewrite unlock. by case=> [?] [?] [->]. Qed.
 
 Lemma term_of_sign_key_inj : Inj (=) (=) term_of_sign_key.
-Proof. rewrite keysE. by case=> [?] [?] [->]. Qed.
+Proof. rewrite unlock. by case=> [?] [?] [->]. Qed.
 
 Lemma term_of_senc_key_inj : Inj (=) (=) term_of_senc_key.
-Proof. rewrite keysE. by case=> [?] [?] [->]. Qed.
+Proof. rewrite unlock. by case=> [?] [?] [->]. Qed.
 
 (* We use a different name for the default induction scheme, as it does not
    allow us to recurse under exponentials.  Later, we'll prove term_ind, which

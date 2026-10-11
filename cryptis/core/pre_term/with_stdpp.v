@@ -440,7 +440,7 @@ elim.
 - move=> o1 t11 IH1 t12 IH2 [] //= o2 t21 t22.
   by move=> [] /repr_term_op2_inj -> /IH1 -> /IH2 ->.
 move=> o1 ts1 IHts [] //= o2 ts2 [] /repr_term_opN_inj -> e_ts; congr PreTerm.PTN.
-move: e_ts; rewrite repr_list_unseal.
+move: e_ts; rewrite [@repr_list]unlock.
 elim: ts1 IHts ts2 => /= [_ [] //|t1 ts1 H [] IHt {}/H IHts].
 by case=> //= t2 ts2 [] /IHt -> /IHts ->.
 Qed.

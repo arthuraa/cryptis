@@ -240,7 +240,7 @@ elim/(@list_len_rect 2): res => [pk sig|res neq]; last first.
 rewrite [in prod_of_list _ _]unlock /=.
 case e: Spec.has_key_type => //.
 have [sk -> {pk e}] : ∃ sk : sign_key, pk = Spec.pkey sk.
-  case: pk e => // - [] // sk _; by exists (SignKey sk); rewrite keysE.
+  case: pk e => // - [] // sk _; by exists (SignKey sk); rewrite [term_of_sign_key]unlock.
 case: decide => [-> {other'}|//] /=.
 rewrite /verify /Spec.dec /Spec.open.
 case: sig => //= k sig.

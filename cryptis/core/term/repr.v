@@ -36,10 +36,7 @@ Fixpoint val_of_term_rec t : val :=
   | TNonFree pt _ _ => val_of_pre_term pt
   end.
 
-Definition val_of_term_aux : seal val_of_term_rec. by eexists. Qed.
-Definition val_of_term : term -> val := unseal val_of_term_aux.
-Lemma val_of_term_unseal : val_of_term = val_of_term_rec.
-Proof. exact: seal_eq. Qed.
+lock Definition val_of_term : term -> val := val_of_term_rec.
 Coercion val_of_term : term >-> val.
 Global Instance repr_term : Repr term := val_of_term.
 
@@ -50,7 +47,7 @@ Global Instance repr_sign_key : Repr sign_key := λ k : sign_key, val_of_term (t
 Lemma val_of_pre_term_unfold t :
   val_of_pre_term (unfold_term t) = val_of_term t.
 Proof.
-rewrite val_of_term_unseal.
+rewrite [val_of_term]unlock.
 elim/term_ind': t => //=; try by move=> *; congruence.
 Qed.
 

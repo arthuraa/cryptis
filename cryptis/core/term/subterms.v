@@ -72,12 +72,7 @@ Fixpoint ssubterms_pre_def (t : PreTerm.pre_term) : gset term :=
   | PreTerm.PTGMul ts => ⋃ map subterms_pre_def ts
   end.
 
-Definition subterms_def t := {[t]} ∪ ssubterms_pre_def (unfold_term t).
-Arguments subterms_def /.
-Definition subterms_aux : seal subterms_def. by eexists. Qed.
-Definition subterms := unseal subterms_aux.
-Lemma subterms_unseal : subterms = subterms_def.
-Proof. exact: seal_eq. Qed.
+lock Definition subterms t := {[t]} ∪ ssubterms_pre_def (unfold_term t).
 
 Definition subterms_pre pt := {[fold_term pt]} ∪ ssubterms_pre_def pt.
 
@@ -104,10 +99,10 @@ Qed.
 
 Lemma subterms_fold pt :
   PreTerm.wf pt -> subterms (fold_term pt) = subterms_pre pt.
-Proof. move => wf; by rewrite subterms_unseal /subterms_def /subterms_pre (@fold_termK pt wf). Qed.
+Proof. move => wf; by rewrite [subterms]unlock /subterms_pre (@fold_termK pt wf). Qed.
 
 Lemma subterms_via_pre t : subterms t = subterms_pre (unfold_term t).
-Proof. by rewrite subterms_unseal /subterms_def /subterms_pre unfold_termK. Qed.
+Proof. by rewrite [subterms]unlock /subterms_pre unfold_termK. Qed.
 
 Lemma subterms_pre_base_exps pt :
   subterms_pre pt =
@@ -152,7 +147,7 @@ Lemma subtermsE' t :
   | TNonFree pt _ _ => ssubterms_pre_def pt
   end.
 Proof.
-rewrite subterms_unseal /=.
+rewrite [subterms]unlock /=.
 case: t =>> //=; try by rewrite ?unfold_termK.
 Qed.
 
@@ -163,7 +158,7 @@ Proof.
 move => Nm Ni.
 have Ni' : negb (PreTerm.is_inv (unfold_term t)) by rewrite -is_inv_unfold.
 have Nm' : negb (PreTerm.is_mul (unfold_term t)) by rewrite -is_mul_unfold.
-rewrite subterms_unseal /subterms_def.
+rewrite [subterms]unlock.
 by rewrite unfold_TInv (PreTerm.inv_Nmul _ Nm') (PreTerm.inv_invN _ Ni')
    /= unfold_termK.
 Qed.
@@ -175,7 +170,7 @@ Proof.
 move => Nm Ni.
 have Ni' : negb (PreTerm.is_ginv (unfold_term t)) by rewrite -is_ginv_unfold.
 have Nm' : negb (PreTerm.is_gmul (unfold_term t)) by rewrite -is_gmul_unfold.
-rewrite subterms_unseal /subterms_def.
+rewrite [subterms]unlock.
 by rewrite unfold_TGInv (PreTerm.ginv_Ngmul _ Nm') (PreTerm.ginv_invN _ Ni')
    /= unfold_termK.
 Qed.

@@ -35,7 +35,7 @@ Lemma wp_empty E :
   {{{ v, RET v; ⌜is_alist v ∅⌝ }}}.
 Proof.
 iIntros "%Φ _ Hpost". wp_lam. iApply "Hpost". iIntros "!>".
-iPureIntro. exists []. rewrite /repr repr_list_unseal. split => //.
+iPureIntro. exists []. rewrite /repr [@repr_list]unlock. split => //.
 Qed.
 
 Lemma wp_find E v db t :

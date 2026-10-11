@@ -495,7 +495,7 @@ Lemma twp_hl_expo pt E Ψ :
   Ψ (repr (PreTerm.expo pt)) ⊢ WP hl_expo (repr pt) @ E [{ Ψ }].
 Proof.
 have one : repr (PreTerm.PTMul []) = hl_one.
-  by rewrite /= repr_list_unseal.
+  by rewrite /= [@repr_list]unlock.
 iIntros "HΨ"; wp_lam.
 wp_apply twp_hl_is_exp.
 rewrite /PreTerm.expo -?one.
@@ -508,7 +508,7 @@ Lemma twp_hl_factors pt E Ψ :
 Proof.
 have reprS : forall pt' : PreTerm.pre_term,
     repr [pt'] = InjRV (repr pt', InjLV #()).
-  by move=> pt'; rewrite repr_list_unseal.
+  by move=> pt'; rewrite [@repr_list]unlock.
 iIntros "HΨ"; wp_lam.
 wp_apply twp_hl_is_mul.
 rewrite /PreTerm.factors.
@@ -522,7 +522,7 @@ Lemma twp_hl_gfactors pt E Ψ :
 Proof.
 have reprS : forall pt' : PreTerm.pre_term,
     repr [pt'] = InjRV (repr pt', InjLV #()).
-  by move=> pt'; rewrite repr_list_unseal.
+  by move=> pt'; rewrite [@repr_list]unlock.
 iIntros "HΨ"; wp_lam.
 wp_apply twp_hl_is_gmul.
 rewrite /PreTerm.gfactors.
@@ -563,8 +563,8 @@ Lemma twp_hl_gmul_aux E (ts : list PreTerm.pre_term) Ψ :
   Ψ (repr (PreTerm.gmul_aux ts)) ⊢ WP hl_gmul_aux (repr ts) @ E [{ Ψ }].
 Proof.
 iIntros "HΨ"; rewrite /hl_gmul_aux /hl_gone; wp_lam.
-case: ts => [|t [|u ts]]; rewrite {1}repr_list_unseal /=; wp_pures.
-- iEval (rewrite repr_list_unseal /=) in "HΨ"; by iApply "HΨ".
+case: ts => [|t [|u ts]]; rewrite {1}[@repr_list]unlock /=; wp_pures.
+- iEval (rewrite [@repr_list]unlock /=) in "HΨ"; by iApply "HΨ".
 - by iApply "HΨ".
 - by rewrite [repr_list (t :: u :: ts)]repr_list_val; iApply "HΨ".
 Qed.
@@ -573,8 +573,8 @@ Lemma twp_hl_mul_aux E (ts : list PreTerm.pre_term) Ψ :
   Ψ (repr (PreTerm.mul_aux ts)) ⊢ WP hl_mul_aux (repr ts) @ E [{ Ψ }].
 Proof.
 iIntros "HΨ"; rewrite /hl_mul_aux /hl_one; wp_lam.
-case: ts => [|t [|u ts]]; rewrite {1}repr_list_unseal /=; wp_pures.
-- iEval (rewrite repr_list_unseal /=) in "HΨ"; by iApply "HΨ".
+case: ts => [|t [|u ts]]; rewrite {1}[@repr_list]unlock /=; wp_pures.
+- iEval (rewrite [@repr_list]unlock /=) in "HΨ"; by iApply "HΨ".
 - by iApply "HΨ".
 - by rewrite [repr_list (t :: u :: ts)]repr_list_val; iApply "HΨ".
 Qed.
@@ -729,7 +729,7 @@ Lemma twp_hl_mk_exp E (b e : PreTerm.pre_term) Ψ :
   Ψ (repr (PreTerm.mk_exp b e)) ⊢ WP hl_mk_exp (repr b) (repr e) @ E [{ Ψ }].
 Proof.
 have one : hl_one = repr (PreTerm.PTMul []).
-  by rewrite /hl_one /= repr_list_unseal.
+  by rewrite /hl_one /= [@repr_list]unlock.
 iIntros "HΨ"; wp_lam; wp_pures; rewrite one.
 wp_apply twp_eq_pre_term.
 rewrite /PreTerm.mk_exp.

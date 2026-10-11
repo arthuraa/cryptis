@@ -189,17 +189,17 @@ Lemma minted_of_list ts :
   minted (Spec.of_list ts) ⊣⊢
   [∗ list] t ∈ ts, minted t.
 Proof.
-rewrite Spec.of_list_unseal.
+rewrite [Spec.of_list]unlock.
 elim: ts => [|t ts IH]; first by rewrite minted_TInt.
 by rewrite minted_TPair /= IH bi.persistent_and_sep.
 Qed.
 
 Lemma minted_Tag N : ⊢ minted (Tag N).
-Proof. by rewrite Tag_unseal minted_TInt. Qed.
+Proof. by rewrite [Tag]unlock minted_TInt. Qed.
 
 Lemma minted_tag N t : minted (Spec.tag (Tag N) t) ⊣⊢ minted t.
 Proof.
-rewrite Spec.tag_unseal minted_TPair; iSplit.
+rewrite [Spec.tag]unlock minted_TPair; iSplit.
 - by iIntros "[_ ?]".
 - iIntros "?"; iSplit => //. iApply minted_Tag.
 Qed.

@@ -1662,17 +1662,17 @@ Lemma public_of_list ts :
   public (Spec.of_list ts) ⊣⊢
   [∗ list] t ∈ ts, public t.
 Proof.
-rewrite Spec.of_list_unseal.
+rewrite [Spec.of_list]unlock.
 elim: ts => [|t ts IH]; first by rewrite public_TInt.
 by rewrite public_TPair /= IH bi.persistent_and_sep.
 Qed.
 
 Lemma public_Tag N : public (Tag N) ⊣⊢ True.
-Proof. by rewrite Tag_unseal public_TInt. Qed.
+Proof. by rewrite [Tag]unlock public_TInt. Qed.
 
 Lemma public_tag N t : public (Spec.tag (Tag N) t) ⊣⊢ public t.
 Proof.
-by rewrite Spec.tag_unseal public_TPair public_Tag bi.emp_and.
+by rewrite [Spec.tag]unlock public_TPair public_Tag bi.emp_and.
 Qed.
 
 Lemma public_THashE N φ t :
@@ -1978,14 +1978,14 @@ Lemma public_aencE (sk : aenc_key) N Φ t :
   aenc_pred N Φ -∗
   minted t ∧ (public t ∨ □ ▷ Φ sk t ∧ □ (public sk → public t)).
 Proof.
-rewrite keysE; case: sk => seed /=.
+rewrite [term_of_aenc_key]unlock; case: sk => seed /=.
 iIntros "#p_t #?". iSplit => //.
 { iPoseProof (public_minted with "p_t") as "#m_t".
   rewrite minted_TSeal minted_tag. by iDestruct "m_t" as "[_ ?]". }
 iPoseProof (public_TSealE with "p_t [//] [//]") as "[[_ comp]|inv]"; eauto.
 rewrite /=. iDestruct "inv" as "[#inv #?]". iRight. iSplit => //.
 iIntros "!> !>". iDestruct "inv" as "(%k' & %e & inv)".
-rewrite keysE in e. by case: k' e => seed' // [<-].
+rewrite [term_of_aenc_key]unlock in e. by case: k' e => seed' // [<-].
 Qed.
 
 Lemma public_signE (sk : sign_key) N Φ t :
@@ -1993,14 +1993,14 @@ Lemma public_signE (sk : sign_key) N Φ t :
   sign_pred N Φ -∗
   public t ∧ (public sk ∨ □ ▷ Φ sk t).
 Proof.
-rewrite keysE; case: sk => seed /=.
+rewrite [term_of_sign_key]unlock; case: sk => seed /=.
 iIntros "#p_t #?". iPoseProof (public_minted with "p_t") as "m_t".
 rewrite minted_TSeal minted_TKey. iDestruct "m_t" as "[? _]".
 iPoseProof (public_TSealE with "p_t [//] [//]") as "[[??]|inv]"; eauto.
 iDestruct "inv" as "{p_t} (#inv & #p_t)". iSplit => //.
 - iApply "p_t". iApply public_TKey. iRight. by iSplit => //.
 - iRight. iIntros "!> !>". iDestruct "inv" as "(%k' & %e & inv)".
-  rewrite keysE in e; by case: k' e => seed' // [<-].
+  rewrite [term_of_sign_key]unlock in e; by case: k' e => seed' // [<-].
 Qed.
 
 Lemma public_sencE (k : senc_key) N Φ t :
@@ -2008,14 +2008,14 @@ Lemma public_sencE (k : senc_key) N Φ t :
   senc_pred N Φ -∗
   minted t ∧ (public k ∨ □ ▷ Φ k t) ∧ □ (public k → public t).
 Proof.
-rewrite keysE; case: k => seed /=.
+rewrite [term_of_senc_key]unlock; case: k => seed /=.
 iIntros "#p_t #?". iSplit => //.
 { iPoseProof (public_minted with "p_t") as "#m_t".
   rewrite minted_TSeal minted_tag. by iDestruct "m_t" as "[_ ?]". }
 iPoseProof (public_TSealE with "p_t [//] [//]") as "[[??]|[#inv #p_t']]";
 eauto. iSplit => //. iRight.
 iIntros "!> !>". iDestruct "inv" as "(%k' & %e & inv)".
-rewrite keysE in e; by case: k' e => seed' // [<-].
+rewrite [term_of_senc_key]unlock in e; by case: k' e => seed' // [<-].
 Qed.
 End Public.
 

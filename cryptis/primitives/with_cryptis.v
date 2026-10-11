@@ -159,7 +159,7 @@ iIntros (a) "[_ token]".
 iPoseProof (nonce_alloc P Q (Nonce a) with "token") as "fresh".
 iPoseProof ("mint" with "fresh") as ">(#? & #? & #? & ?)".
 iSpecialize ("post" $! (Nonce a)).
-wp_pures. rewrite val_of_term_unseal /=.
+wp_pures. rewrite [val_of_term]unlock /=.
 iApply ("post" with "[$] [$] [$] [] [$]").
 by iIntros "!> %"; rewrite exp_pred_base_TInv; eauto.
 Qed.

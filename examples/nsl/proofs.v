@@ -195,7 +195,7 @@ iIntros "%nR _ #m_nR #s_nR _ _ tokens".
 rewrite bi.intuitionistic_intuitionistically.
 set sess_key := SEncKey (Spec.of_list [_; _; _; _]).
 have ? : TNonce nR ≠ sess_key.
-  rewrite /sess_key keysE. by move=> E; discriminate E.
+  rewrite /sess_key [term_of_senc_key]unlock. by move=> E; discriminate E.
 rewrite big_sepS_union; last set_solver.
 rewrite !big_sepS_singleton. iDestruct "tokens" as "[nR_token sk_token]".
 wp_pures. wp_list. wp_term_of_list.

@@ -37,7 +37,7 @@ Lemma tac_wp_cons1 `{!Repr A} Γ E K (x : A) Ψ :
   envs_entails Γ (WP fill K (repr x :: []%V) @ E {{ Ψ }}).
 Proof.
 rewrite (_ : NILV = repr (@nil A)) /=; first by apply: tac_wp_cons.
-by rewrite repr_list_unseal /=.
+by rewrite [@repr_list]unlock /=.
 Qed.
 
 Lemma tac_wp_list_match `{!Repr A} Γ E K vars (vs : list A) k Ψ :
