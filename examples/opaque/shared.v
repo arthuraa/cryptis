@@ -287,31 +287,6 @@ destruct Hmem as [->|Hmem].
 - exact: (STPair2 a (IHts Hmem)).
 Qed.
 
-Lemma subterm_TExpN_exp (t t' : term) (ts : list term) :
-  ( exists t'', subterm t t'' /\ t'' ∈ ts) ->
-  negb (is_exp t') -> negb (is_gmul t') -> negb (is_ginv t') ->
-  invs_canceled ts ->
-  subterm t (TExpN t' ts).
-Proof.
-intros [t'' [Hst Hmem]] Hnexp Hnmul Hninv Hic.
-exact: (STExp2 Hnexp Hnmul Hninv Hic Hst Hmem).
-Qed.
-
-Lemma subterm_TExp_exp (t t' t'' : term) :
-  negb (is_exp t') -> negb (is_gmul t') -> negb (is_ginv t') ->
-  negb (is_mul t'') ->
-  subterm t t'' ->
-  subterm t (TExp t' t'').
-Proof.
-intros Hnexp Hnmul Hninv Nm Hst.
-rewrite (_ : TExp t' t'' = TExpN t' [t'']); last by rewrite /TExpN TMulN1.
-apply subterm_TExpN_exp => //.
-- exists t''. split => //.
-  rewrite elem_of_cons.
-  by left.
-- exact: invs_canceled1 Nm.
-Qed.
-
 (* The server's share and its session key are different terms: the one is an
    exponential with one exponent, the other a hash with none. *)
 Lemma TExp_g_nonce_hash_ne (a : nonce) tag t :
@@ -554,7 +529,7 @@ Qed.
 Definition opaque_public_private_pair (a : nonce) A : iProp :=
   ∃ (a' : nonce),
     ⌜A = TExp g a'⌝ ∗
-    ⌜¬ subterm a A⌝ ∗
+    ⌜a ≠ a'⌝ ∗
     public A ∗
     minted a ∗
     minted a' ∗

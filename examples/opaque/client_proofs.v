@@ -149,17 +149,8 @@ iAssert (minted SK) as "#mintedSK".
   iApply minted_hash_result; iApply minted_of_list => /=.
   by do !iSplit => //.
 iPoseProof "Hopaquepair" as
-    "(%p_s & -> & %Hfreshp_u & #pubP_s & _ & #minp_s & #pred_p_u & #pred_p_s
+    "(%p_s & -> & %p_u_s & #pubP_s & _ & #minp_s & #pred_p_u & #pred_p_s
       & #priv_p_u & #priv_p_s)".
-(* The client's static private key and the server's are distinct: [p_u] is
-   not a subterm of [P_s = g^p_s]. *)
-have p_u_s : p_u ≠ p_s.
-  move=> e'; apply: Hfreshp_u; rewrite e'.
-  apply/subtermsP.
-  rewrite (_ : TExp g p_s = TExpN g [TNonce p_s]); last by rewrite /TExpN TMulN1.
-  rewrite subtermsE //; last exact: invs_canceled1.
-  rewrite /=.
-  by rewrite [subterms p_s]subterms_nonce //; set_solver.
 (* The static-static factor [g^(p_s·e·d·p_u)] is a group factor of the key
    whatever [X_s] the peer sent, so the key is public only if it is; and it
    is not, since [p_u] and [p_s] are both honest DH seeds. *)

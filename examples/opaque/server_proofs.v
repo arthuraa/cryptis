@@ -67,22 +67,18 @@ wp_apply (wp_mk_nonce_freshN ∅ (fun _ => False)%I dh_key_share
 iIntros "%p_s _ #Hmintedp_s #Hprivatep_s #Hexpp_s #Hexpp_sV Htokenp_sV".
 rewrite big_sepS_singleton.
 wp_pures.
-wp_apply (wp_mk_nonce_freshN {[(TExp g p_s)]} (fun _ => False)%I dh_key_share
+(* Fresh against [p_s] itself: distinctness is all the pair predicate records. *)
+wp_apply (wp_mk_nonce_freshN {[TNonce p_s]} (fun _ => False)%I dh_key_share
                                               (fun t =>  {[(TInv t)]})) => //.
-- iIntros "%"; rewrite elem_of_singleton; iIntros "->".
-  iApply minted_TExp => //.
-  iSplit => //.
-  by iApply minted_TInt.
+- by iIntros "%"; rewrite elem_of_singleton; iIntros "->".
 - iIntros "%t".
   rewrite big_sepS_singleton minted_TInv.
   by iModIntro; auto.
 iIntros "%p_u %Hfreshp_u #Hmintedp_u #Hprivatep_u #Hexpp_u #Hexpp_uV Htokenp_uV".
 rewrite big_sepS_singleton.
-assert (p_u ≠ p_s) as Hneq.
-  intro contra.
-  apply (Hfreshp_u (TExp g p_s)).
-    by rewrite elem_of_singleton.
-  rewrite contra; exact: subterm_TExp_exp.
+have Hneq : p_u ≠ p_s.
+  move=> e; apply: (Hfreshp_u (TNonce p_s)); first by rewrite elem_of_singleton.
+  by rewrite e.
 wp_pures.
 wp_apply wp_texp; wp_pures.
 wp_apply wp_texp.
@@ -114,9 +110,6 @@ do !iSplit => //.
   iSplit => //.
   iExists p_s.
   do !iSplit => //.
-    iPureIntro.
-    apply Hfreshp_u.
-    by rewrite elem_of_singleton.
   iApply public_TExp_exp_pred => //.
     + by iApply public_TInt.
     + iApply exp_pred_intro1.
@@ -139,21 +132,6 @@ do !iSplit => //.
         by do !iSplit => //; do ?iApply public_TExp => //; rewrite public_TInt.
 - iExists p_u.
   do !iSplit => //.
-  + iPureIntro.
-    apply /subtermsP.
-    rewrite (_ : TExp g p_u = TExpN g [TNonce p_u]); last by rewrite /TExpN TMulN1.
-    rewrite subtermsE //; last exact: invs_canceled1.
-    rewrite /= [subterms p_u]subterms_nonce //.
-    rewrite /g subtermsE /=.
-    have p_s_ne2 : TNonce p_s ≠ TInt 0 by move=> E; discriminate E.
-    have p_s_ne1 : TNonce p_s ≠ TExpN (TInt 0) [TNonce p_u].
-      move=> E.
-      have H1 : exps (TExpN (TInt 0) [TNonce p_u]) ≡ₚ [TNonce p_u].
-        rewrite exps_TExpN //; exact: invs_canceled1.
-      have H2 : exps (TNonce p_s) = [].
-        by rewrite /exps (expo_expN (TNonce p_s) I) factors_TMulN0.
-      by move: H1; rewrite -E H2 => /Permutation_length.
-    set_solver.
   iApply public_TExp_exp_pred => //.
     * by iApply public_TInt.
     * iApply exp_pred_intro1.
@@ -206,7 +184,7 @@ case db_uid: (alist !! uid) => [file|]; wp_pures; last first.
 iDestruct ("Hmapcontents" $! uid file with "[//]") as
     "[_ (%k_s & %p_s & %P_s & %P_u & %envelope &
          %e & #Hmk_s & #Hprivk_s & #Hexpk_s & #Hexpk_sV &
-         #HpubP_s & #Hpenvelope & %p_u & %HP_u & %Hfreshp_u &
+         #HpubP_s & #Hpenvelope & %p_u & %HP_u & %p_s_u &
          #HpubP_u & #Hminp_s & #Hminp_u & #Hexpp_s & #Hexpp_u & #Hprivp_s
          & #Hprivp_u)]".
 rewrite !subst_list_match /= e.
@@ -219,14 +197,6 @@ wp_list_match => [k_s' p_s' P_s' P_u' envelope' e' | ]; last first.
 symmetry in e'; inversion e'; subst; clear e'.
 rewrite public_of_list /=.
 iDestruct "Hpubm1" as "(#p_uid & #p_α & #p_X_u & _)".
-(* The server's static private key and the client's are distinct: [p_s] is not
-   a subterm of [P_u = g^p_u]. *)
-have p_s_u : p_s ≠ p_u.
-  move=> e; apply: Hfreshp_u; rewrite e.
-  apply/subtermsP.
-  rewrite (_ : TExp g p_u = TExpN g [TNonce p_u]); last by rewrite /TExpN TMulN1.
-  rewrite subtermsE //=; last exact: invs_canceled1.
-  by rewrite [subterms p_u]subterms_nonce //; set_solver.
 iAssert (minted uid) as "#minuid". by iApply public_minted.
 iAssert (minted α) as "#minα". by iApply public_minted.
 iAssert (minted X_u) as "#minX_u". by iApply public_minted.
