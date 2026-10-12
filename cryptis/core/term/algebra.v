@@ -1315,6 +1315,15 @@ move: (Nenf_Ninv _ f1); rewrite e1 (is_inv_TInv _ (Nenf_Nmul _ f2)).
 by case: is_inv (Nenf_Ninv _ f2).
 Qed.
 
+Lemma invs_canceled_Nenf ts :
+  Forall (fun t => negb (is_enon_free t)) ts -> invs_canceled ts.
+Proof.
+move=> /list.Forall_forall H t t_in.
+have ft := H _ t_in; split; last exact: Nenf_Nmul.
+by move=> /H fV; apply: (@TInv_Nenf_ne t (TInv t) ft fV).
+Qed.
+Hint Resolve invs_canceled_Nenf : core.
+
 Lemma count_Nenf_ne t1 t2 :
   negb (is_enon_free t1) -> negb (is_enon_free t2) -> t1 ≠ t2 ->
   count t1 t2 = 0%Z.
