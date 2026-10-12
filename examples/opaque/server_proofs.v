@@ -237,7 +237,7 @@ iAssert (minted (TExp g p_u)) as "#minP_u". by iApply public_minted.
 wp_apply (wp_mk_nonce_freshN ∅ (fun _ => False)%I (fun t => dh_key_share t)%I
             (server_fresh_set uid α X_u P_s (TExp g p_u) p_s)) => //.
   by iIntros "% %contra".
-  by iApply (server_fresh_set_minted uid α X_u P_s p_s_u
+  by iApply (server_fresh_set_minted uid α X_u P_s p_s p_u
                with "minuid minα minX_u minP_s Hminp_s Hminp_u").
 iIntros "%x_s _ #Hmintedx_s #Hprivatex_s #Hexpx_s #Hexpx_sV tokens".
 set si := server_si uid α X_u P_s (TExp g p_u) p_s x_s.
@@ -347,7 +347,7 @@ iFrame "tok_server res_R".
    own-ephemeral one, which carries freshness. *)
 have tags : "e"%string ≠ "d"%string by [].
 have [gf_ss [gf_eph [in_ps in_pu]]] :=
-  @hmqv_key_gfactors p_s p_u x_s "e" "d" P_s X_u tags p_s_u.
+  @hmqv_key_gfactors p_s p_u x_s "e" "d" P_s X_u tags.
 iSplit; first by [].
 iSplit.
   by do !iSplit => //.

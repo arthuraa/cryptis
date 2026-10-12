@@ -184,47 +184,10 @@ have := Spec.of_list_tsize t_l; lia.
 Qed.
 
 Lemma exps_hmqv_ss (p_a p_b : nonce) tag_a tag_b v_a v_b :
-  tag_a ≠ tag_b -> p_a ≠ p_b ->
-  TNonce p_a ∈ exps (hmqv_ss p_a (hash_result tag_a v_a)
-                             p_b (hash_result tag_b v_b))
-  /\ TNonce p_b ∈ exps (hmqv_ss p_a (hash_result tag_a v_a)
-                                p_b (hash_result tag_b v_b))
-  /\ hash_result tag_b v_b
-       ∈ exps (hmqv_ss p_a (hash_result tag_a v_a)
-                       p_b (hash_result tag_b v_b)).
+  exps (hmqv_ss p_a (hash_result tag_a v_a) p_b (hash_result tag_b v_b))
+  ≡ₚ [TNonce p_b; hash_result tag_b v_b; hash_result tag_a v_a; TNonce p_a].
 Proof.
-move=> tab pab.
-set m_a := hash_result tag_a v_a; set m_b := hash_result tag_b v_b.
-have fa : negb (is_enon_free (TNonce p_a)) := Nenf_TNonce p_a.
-have fb : negb (is_enon_free (TNonce p_b)) := Nenf_TNonce p_b.
-have fma : negb (is_enon_free m_a) := Nenf_THash _.
-have fmb : negb (is_enon_free m_b) := Nenf_THash _.
-have ab : TNonce p_a ≠ TNonce p_b by case=> /pab.
-have ba : TNonce p_b ≠ TNonce p_a by congruence.
-have amb : TNonce p_a ≠ m_b by rewrite /m_b /hash_result.
-have ama : TNonce p_a ≠ m_a by rewrite /m_a /hash_result.
-have bmb : TNonce p_b ≠ m_b by rewrite /m_b /hash_result.
-have bma : TNonce p_b ≠ m_a by rewrite /m_a /hash_result.
-have mba : TNonce p_a ≠ m_b by [].
-have mab : m_b ≠ m_a.
-  by rewrite /m_a /m_b => /hash_result_inj [] e _; apply: tab; congruence.
-have mb_a : m_b ≠ TNonce p_a by congruence.
-have mb_b : m_b ≠ TNonce p_b by congruence.
-have ma_a : m_a ≠ TNonce p_a by congruence.
-have ma_b : m_a ≠ TNonce p_b by congruence.
-rewrite /hmqv_ss exps_TExp_g.
-split; last split.
-- have perm : [TNonce p_b; m_b; m_a; TNonce p_a]
-            ≡ₚ [TNonce p_a; TNonce p_b; m_b; m_a].
-    by symmetry; apply: Permutation_cons_append.
-  rewrite perm.
-  by apply: elem_of_factors_cons => //;
-     rewrite !Forall_cons Forall_nil; do !split => //.
-- by apply: elem_of_factors_cons => //;
-     rewrite !Forall_cons Forall_nil; do !split => //.
-- rewrite Permutation_swap.
-  by apply: elem_of_factors_cons => //;
-     rewrite !Forall_cons Forall_nil; do !split => //.
+rewrite /hmqv_ss exps_TExp_g; apply: factors_TMulN; auto 6.
 Qed.
 
 (* An exponent of [g^s] is a subterm of it. *)
@@ -304,20 +267,17 @@ Lemma hmqv_key_gfactors (p_a p_b x_a : nonce) tag_a tag_b P_a X_b :
   let m_a := hash_result tag_a (Spec.of_list [TExp g x_a; TExp g p_b]) in
   let m_b := hash_result tag_b (Spec.of_list [X_b; P_a]) in
   tag_a ≠ tag_b ->
-  p_a ≠ p_b ->
   hmqv_ss p_a m_a p_b m_b ∈ gfactors (hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b)
   /\ TExp g (TMulN [TNonce p_b; m_b; TNonce x_a])
        ∈ gfactors (hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b)
   /\ TNonce p_a ∈ exps (hmqv_ss p_a m_a p_b m_b)
   /\ TNonce p_b ∈ exps (hmqv_ss p_a m_a p_b m_b).
 Proof.
-move=> m_a m_b tab pab.
-have [in_pa [in_pb _]] :=
-  @exps_hmqv_ss p_a p_b tag_a tag_b
-    (Spec.of_list [TExp g x_a; TExp g p_b]) (Spec.of_list [X_b; P_a]) tab pab.
-do !split => //.
+move=> m_a m_b tab; do !split.
 - rewrite /hmqv_ss; apply: hmqv_K_gfactor => //; by right.
 - apply: hmqv_K_gfactor => //; by left.
+- by rewrite /m_a /m_b exps_hmqv_ss; set_solver.
+- by rewrite /m_a /m_b exps_hmqv_ss; set_solver.
 Qed.
 
 Lemma subterm_of_list (t : term) (ts : list term) :
@@ -484,15 +444,13 @@ Qed.
    peer-static x own-ephemeral group factor.  This is the freshness of the key
    ([wp_mk_nonce_freshN] needs [minted (si_key …) → minted x_s]). *)
 Lemma subterm_SK_eph uid α X_u P_s (p_s p_u x_s : nonce) :
-  p_s ≠ p_u ->
   subterm (TNonce x_s)
           (si_key (server_si uid α X_u P_s (TExp g p_u)
                              (TNonce p_s) (TNonce x_s))).
 Proof.
-move=> p_s_u.
 have tags : "e"%string ≠ "d"%string by [].
 have [_ [gf_eph _]] :=
-  @hmqv_key_gfactors p_s p_u x_s "e" "d" P_s X_u tags p_s_u.
+  @hmqv_key_gfactors p_s p_u x_s "e" "d" P_s X_u tags.
 rewrite /si_key /si_K /si_ssid /server_si /=.
 apply: STHash; apply: subterm_tag; apply: subterm_of_list.
 eexists; split; first by apply/elem_of_cons; left.
@@ -659,14 +617,13 @@ by do !iSplit => //; iApply all_minted_TExp; iSplit.
 Qed.
 
 Lemma server_fresh_set_minted uid α X_u P_s (p_s p_u : nonce) :
-  p_s ≠ p_u →
   minted uid -∗ minted α -∗ minted X_u -∗ minted P_s -∗
   minted p_s -∗ minted p_u -∗
   ∀ t : nonce,
     [∗ set] t' ∈ server_fresh_set uid α X_u P_s (TExp g p_u) p_s t,
          □ (minted t ↔ minted t').
 Proof.
-iIntros "%p_s_u #m_uid #m_α #m_Xu #m_Ps #m_ps #m_pu %x_s".
+iIntros "#m_uid #m_α #m_Xu #m_Ps #m_ps #m_pu %x_s".
 rewrite big_sepS_union_pers !big_sepS_singleton.
 iAssert (minted (TExp g p_u)) as "#m_Pu".
   by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
@@ -691,7 +648,7 @@ iSplit; iModIntro; iSplit.
     * by rewrite minted_hash_result minted_of_list /=; eauto.
   + by rewrite minted_hash_result minted_of_list /=; eauto.
 - iIntros "#m_SK".
-  by iApply (subterm_minted (@subterm_SK_eph uid α X_u P_s p_s p_u x_s p_s_u)
+  by iApply (subterm_minted (@subterm_SK_eph uid α X_u P_s p_s p_u x_s)
                with "m_SK").
 Qed.
 

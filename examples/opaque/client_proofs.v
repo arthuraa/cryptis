@@ -165,7 +165,7 @@ have p_u_s : p_u ≠ p_s.
    is not, since [p_u] and [p_s] are both honest DH seeds. *)
 have tags : "d"%string ≠ "e"%string by [].
 have [gf [_ [in_pu in_ps]]] :=
-  @hmqv_key_gfactors p_u p_s x_u "d" "e" P_u X_s tags p_u_s.
+  @hmqv_key_gfactors p_u p_s x_u "d" "e" P_u X_s tags.
 have p_u_sT : TNonce p_u ≠ TNonce p_s by case=> /p_u_s.
 iAssert (□ (public K → ▷ □ False))%I as "#secK".
   iIntros "!> #pubK".
