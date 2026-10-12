@@ -48,6 +48,9 @@ Inductive subterm (t : term) : term → Prop :=
     t'' ∈ ts
   : subterm t (TGMulN ts).
 
+#[global] Instance subterm_refl : Reflexive subterm.
+Proof. exact: STRefl. Qed.
+
 #[global] Instance subterm_trans : Transitive subterm.
 Proof.
 move=> t1 t2 t3 sub12 sub13; elim: t3 / sub13;
@@ -393,6 +396,20 @@ split.
          apply: (STGMul wfl _ ff_facts).
          apply: (IH ff _ Hin).
          exact: (tsize_gfactors_lt _ _ xt ff_facts).
+Qed.
+
+Lemma subterm_base t : subterm (base t) t.
+Proof.
+rewrite subtermsP subterms_base_exps !elem_of_union -subtermsP; eauto.
+left; right; exact: reflexivity.
+Qed.
+
+Lemma subterm_exps t1 t2 : t1 ∈ exps t2 → subterm t1 t2.
+Proof.
+rewrite subtermsP subterms_base_exps !elem_of_union => t1_t2.
+right; rewrite elem_of_union_list; exists (subterms t1).
+rewrite -subtermsP; split; last exact: reflexivity.
+by apply/list_elem_of_fmap; eauto.
 Qed.
 
 Ltac solve_nonces_of_termP :=
