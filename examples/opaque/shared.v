@@ -190,14 +190,6 @@ Proof.
 rewrite /hmqv_ss exps_TExp_g; apply: factors_TMulN; auto 6.
 Qed.
 
-(* An exponent of [g^s] is a subterm of it. *)
-Lemma subterm_exps_TExp_g t s : t ∈ exps (TExp g s) -> subterm t (TExp g s).
-Proof.
-rewrite exps_TExp_g => t_s.
-rewrite (_ : TExp g s = TExpN g (factors s)); last by rewrite /TExpN factorsK.
-apply: STExp2 => //; exact: invs_canceled_factors.
-Qed.
-
 (* The own-ephemeral [x_a] is an exponent of the peer-static x own-ephemeral
    factor; this is what the server's freshness argument rides on. *)
 Lemma exps_hmqv_eph_x (p_b x_a : nonce) tag_b v_b :
@@ -295,11 +287,6 @@ destruct Hmem as [->|Hmem].
 - exact: (STPair2 a (IHts Hmem)).
 Qed.
 
-Lemma subterm_of_tag (t t' : term) (n : namespace) :
-  subterm t t' ->
-  subterm t (Spec.tag (Tag n) t').
-Proof. rewrite [Spec.tag]unlock; exact: STPair2. Qed.
-
 Lemma subterm_TExpN_exp (t t' : term) (ts : list term) :
   ( exists t'', subterm t t'' /\ t'' ∈ ts) ->
   negb (is_exp t') -> negb (is_gmul t') -> negb (is_ginv t') ->
@@ -323,108 +310,6 @@ apply subterm_TExpN_exp => //.
   rewrite elem_of_cons.
   by left.
 - exact: invs_canceled1 Nm.
-Qed.
-
-Lemma subterm_exp (t t' : term) :
-  subterm t t' <-> t = t' \/ subterm t (base t') \/ exists t'', subterm t t'' /\ t'' ∈ exps t'.
-Proof.
-rewrite subtermsP (subterms_base_exps t') !elem_of_union elem_of_singleton.
-rewrite -subtermsP elem_of_union_list.
-split.
-- case=> [[?|?]|]; eauto.
-  case=> X [] /list_elem_of_fmap [u [-> u_in]] t_u.
-  by right; right; exists u; split => //; apply/subtermsP.
-- case=> [?|[?|[u [t_u u_in]]]]; eauto.
-  right; exists (subterms u); split; last exact/subtermsP.
-  by apply/list_elem_of_fmap; exists u.
-Qed.
-
-Lemma subterm_TExpN_exp' (t t' : term) (ts: list term) :
-  ¬ subterm t t' ->
-  negb (is_gmul t') -> negb (is_ginv t') ->
-  invs_canceled (ts ++ exps t') ->
-  (exists t'', t'' ∈ ts /\ subterm t t'') ->
-  subterm t (TExpN t' ts).
-Proof.
-intros Hnst Hnmul Hninv Hcan Hst.
-have Hic : invs_canceled (exps t' ++ ts).
-  by rewrite Permutation_app_comm.
-have E : exps (TExpN t' ts) ≡ₚ exps t' ++ ts.
-  rewrite /exps /TExpN (expo_TExp _ _ Hnmul Hninv).
-  rewrite -{1}[expo t']factorsK TMulN_app.
-  exact: factors_TMulN Hic.
-rewrite subterm_exp.
-destruct (term_eq_dec t (TExpN t' ts)); first by left.
-right; right.
-destruct Hst as [t'' [Hmem Hst]].
-exists t''; split => //.
-by rewrite E elem_of_app; right.
-Qed.
-
-Lemma subterm_TExp_exp' (t t' t'' : term) :
-  ¬ subterm t t' ->
-  negb (is_gmul t') -> negb (is_ginv t') ->
-  negb (is_mul t'') ->
-  (TInv t'') ∉ exps t' ->
-  subterm t t'' ->
-  subterm t (TExp t' t'').
-Proof.
-intros Hnst Hnmul Hninv Nm Hnmem Hst.
-rewrite (_ : TExp t' t'' = TExpN t' [t'']); last by rewrite /TExpN TMulN1.
-apply (subterm_TExpN_exp' Hnst Hnmul Hninv) => //.
-- rewrite /=; apply/invs_canceled_cons.
-  split; first exact: Hnmem.
-  split; first exact: Nm.
-  exact: invs_canceled_factors (expo t').
-- exists t''.
-  split => //.
-  rewrite elem_of_cons.
-  by left.
-Qed.
-
-(* The product-tolerant form of [subterm_TExp_exp']: [t' ^ t''] spreads over
-   the *group* factors of [t'], so one factor is enough -- but the group unit
-   has none, and [1 ^ t'' = 1] really does lose [t'']. *)
-Lemma subterm_TExp_exp_gfactors (t t' t'' : term) :
-  ¬ subterm t t' ->
-  negb (is_mul t'') -> negb (is_inv t'') ->
-  gfactors t' ≠ [] ->
-  subterm t t'' ->
-  subterm t (TExp t' t'').
-Proof.
-move=> Hnst Nm2 Ni2 Hne Hst.
-have [u u_t'] : exists u, u ∈ gfactors t'.
-  case E: (gfactors t') => [|u us]; first by exfalso; exact: (Hne E).
-  by exists u; apply/elem_of_cons; left.
-have Nmu : negb (is_gmul u) := Ngmul_gfactors t' u u_t'.
-have sub_u : subterm u t' := @subterm_gfactors u t' u u_t' (STRefl u).
-have key : forall v, negb (is_gmul v) -> negb (is_ginv v) -> subterm v t' ->
-                     subterm t (TExp v t'').
-  move=> v Nmv Niv sub_v.
-  have Hnv : ¬ subterm t v.
-    by move=> contra; apply: Hnst; apply: transitivity contra sub_v.
-  apply: subterm_TExp_exp' => //.
-  move=> in_exps; apply: Hnv.
-  have sub_iv : subterm (TInv t'') v.
-    by rewrite subterm_exp; right; right; exists (TInv t''); split => //; exact: STRefl.
-  have sub_2v : subterm t'' v.
-    by apply: transitivity sub_iv; apply: STInv => //; exact: STRefl.
-  exact: transitivity Hst sub_2v.
-apply: (@subterm_TExp_gfactors t t' t'' u u_t').
-case Ei: (is_ginv u); last first.
-  by apply: key => //; rewrite Ei.
-have Nmw : negb (is_gmul (TGInv u)) by rewrite is_gmul_TGInv.
-have Niw : negb (is_ginv (TGInv u)) by rewrite (is_ginv_TGInv u Nmu) Ei.
-have sub_wu : subterm (TGInv u) u.
-  by rewrite -{2}(TGInvK u); apply: STGInv => //; exact: STRefl.
-have sub_w : subterm (TGInv u) t'.
-  by transitivity u.
-have E : TExp u t'' = TGInv (TExp (TGInv u) t'').
-  by rewrite -TExp_TGInv TGInvK.
-rewrite E; apply: STGInv.
-- exact: Ngmul_TExp.
-- exact: Nginv_TExp.
-- exact: (key _ Nmw Niw sub_w).
 Qed.
 
 (* The server's share and its session key are different terms: the one is an
@@ -457,7 +342,7 @@ eexists; split; first by apply/elem_of_cons; left.
 apply: STHash; apply: subterm_tag; apply: subterm_of_list.
 eexists; split; first by apply/elem_of_cons; left.
 apply: (subterm_gfactors gf_eph).
-apply: subterm_exps_TExp_g.
+apply: subterm_exps.
 exact: exps_hmqv_eph_x.
 Qed.
 
