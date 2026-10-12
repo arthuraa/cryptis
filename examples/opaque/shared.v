@@ -808,49 +808,6 @@ iModIntro; iSplit.
   by iIntros "[_ ?]".
 Qed.
 
-Definition SK_priv (x : option term) : iProp :=
-  match x with
-    None => True
-  | Some x' => public x' ↔ ▷ □ False
-  end.
-
-Definition SK_priv' (x : val) : iProp :=
-  ∃ (x' : option term),
-    ⌜x = (repr x')⌝ ∗ SK_priv x'.
-
-Lemma SK_priv_eq (x : option term) :
-  SK_priv x -∗ SK_priv' (repr x).
-Proof. by iIntros "SK"; iExists x; iSplit. Qed.
-
-Definition SK_fresh (x : option term) (fresh : gset term) : iProp :=
-  match x with
-    None => True
-  | Some x' => ⌜x' ∉ fresh⌝
-  end.
-
-Definition SK_fresh' (x : val) (fresh : gset term) : iProp :=
-  ∃ (x' : option term),
-    ⌜x = (repr x')⌝ ∗ SK_fresh x' fresh.
-
-Lemma SK_fresh_eq (x : option term) (fresh : gset term) :
-  SK_fresh x fresh -∗ SK_fresh' (repr x) fresh.
-Proof. by iIntros "SK"; iExists x; iSplit. Qed.
-
-Definition SK_result (x : option term) (fresh : gset term) : iProp :=
-  SK_priv x ∗ SK_fresh x fresh
-          ∗ match x with
-              None => True
-            | Some x' => minted x'
-            end.
-
-Definition SK_result' (x : val) (fresh : gset term) : iProp :=
-  ∃ (x' : option term),
-    ⌜x = (repr x')⌝ ∗ SK_result x' fresh.
-
-Lemma SK_result_eq (x : option term) (fresh : gset term) :
-  SK_result x fresh -∗ SK_result' (repr x) fresh.
-Proof. by iIntros "SK"; iExists x; iSplit. Qed.
-
 Definition opaque_public_private_pair (a : nonce) A : iProp :=
   ∃ (a' : nonce),
     ⌜A = TExp g a'⌝ ∗
