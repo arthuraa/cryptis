@@ -14,51 +14,26 @@ Unset Printing Implicit Defensive.
 
 (** * OPAQUE: shared definitions
 
-    The HMQV key exchange of the OPAQUE paper (Jarecki, Krawczyk and Xu,
-    Eurocrypt 2018) as a term, the session record both roles agree on, and the
-    hash/encryption predicates that give the protocol's messages their
-    meaning.  Authentication follows [examples/iso_dh]: the server's
-    authenticator [A_s] carries [A_s_pred], which names the server's
-    [sess_info] and escrows for the client -- against tokens on the client's
-    share [α] -- both the client's copy of a caller-chosen resource
-    ([opaque_pred] / [opaque_ready]) and the client's slice of a [term_token]
-    on the session key.  The server owns that token because the key is a
-    function of its ephemeral ([server_fresh_set]).
+    This file provides several basic OPAQUE definitions, including:
 
-    Where this is deliberately weaker than ISO-DH, and why:
+    - The HMQV key exchange formula;
 
-    - The session key is a hash, so it does not syntactically determine the
-      session ([hmqv_K] is not injective: [hmqv_K_sym] is a witness).
-      [hash_result_inj] pins [si_uid], [si_blind] and [si_secret] -- hence
-      [si_key] -- to the client's own values, and the long-term keys are read
-      off the server's [si].  There is no [session_agree]; the game's
-      freshness argument uses [term_token_disj] on the key tokens instead.
-    - The client does not additionally prove [si_skey si = P_s] for the [P_s]
-      it decrypted from its envelope.  That needs an occurs-check argument on
-      the key's group factors under [public X_s] and the seeds'
-      [exp_pred_base] invariants (as bare terms, an [X_s] carrying [TInv x_u]
-      or [TInv d] cancels the exponents the argument rests on).  Not done.
-    - There is one resource predicate, not one per namespace: ISO-DH can let
-      the caller pick a namespace because the protocol transmits it (a
-      [Tag N] in message 2); OPAQUE's authenticator carries no tag.
-    - [Server.session] is monolithic, so the caller's resource view shift
-      quantifies over the whole session rather than over the ephemeral.
-    - Secrecy is unconditional, since the password and both static keys are
-      assumed honest; the [public (si_key si) ∨ _] disjunct in the client's
-      postcondition is therefore refutable, and is kept only so that
-      modelling compromise later is a local change. *)
+    - The session record containing all the data that the parties agree on; and
 
-(* [hash_result] does not depend on the Iris context, so it lives outside the
-   section: the HMQV term lemmas below need it. *)
+    - The hash/encryption predicates used by the protocol.
+
+    We state authentication following the ISO-DH protocol ([examples/iso_dh]):
+    the server can send to the client non-ephemeral resources that pertain to
+    the newly established session. *)
+
 Definition hash_result (tag : string) (val : term) : term :=
     THash (Spec.tag (Tag $ opN.@tag) val).
 
-(** * The HMQV key, as a term
+(** * The HMQV key
 
-    [hmqv_K p_a x_a m_a P_b X_b m_b] is the [K] computed by [impl.KE]: the group
-    element [(X_b · P_b^m_b)^x_a · (X_b · P_b^m_b)^(m_a·p_a)], which is the
-    OPAQUE paper's [(X_b · P_b^m_b)^(x_a + m_a·p_a)] with the exponent sum
-    traded for a group product. *)
+    [hmqv_K p_a x_a m_a P_b X_b m_b] is the [K] computed by [impl.KE], [(X_b ·
+    P_b^m_b)^(x_a + m_a·p_a)].  We compute this using a multiplication in the DH
+    group because we currently do not have exponent addition. *)
 
 Definition hmqv_Y (P_b X_b m_b : term) : term := TGMulN [X_b; TExp P_b m_b].
 
@@ -73,12 +48,8 @@ Definition hmqv_ss (p_a m_a p_b m_b : term) : term :=
 
 (** * Session information
 
-    What a completed session is about.  Both roles build one of these; the
-    server's is the authoritative one, and it is what the server's authenticator
-    [A_s] vouches for (see [A_s_pred]).  The key is a hash of a hash, so unlike
-    ISO-DH's [si_key] it does not syntactically contain the two long-term keys
-    -- which is why [A_s_pred] names the session explicitly instead of relying
-    on an injectivity lemma. *)
+    This record contains all the information that is relevant to an OPAQUE
+    session. *)
 
 Record sess_info := SessInfo {
   si_uid    : term;   (* client identity, public *)
@@ -96,9 +67,7 @@ Definition si_K si := hash_result "K" (Spec.of_list [si_secret si]).
 Definition si_key si := hash_result "SK" (Spec.of_list [si_K si; si_ssid si]).
 Definition si_result si := Spec.of_list [si_uid si; si_key si].
 
-(* The server's view of a session, as a function of its ephemeral [x_s].  The
-   ephemeral is a [term] rather than a [nonce] so that [server_fresh_set] can be
-   handed to [wp_mk_nonce_freshN]. *)
+(** Build a [sess_info] record based on the values accessible by the server. *)
 Definition server_si (uid α X_u P_s P_u p_s x_s : term) : sess_info :=
   SessInfo uid P_u P_s α X_u (TExp g x_s)
     (hmqv_K p_s x_s
@@ -106,15 +75,13 @@ Definition server_si (uid α X_u P_s P_u p_s x_s : term) : sess_info :=
        P_u X_u
        (hash_result "d" (Spec.of_list [X_u; P_s]))).
 
-(* The terms the server wants a [term_token] on when it mints [x_s]: its share
-   and the session key.  [wp_mk_nonce_freshN]'s side condition quantifies over
-   *every* term, not just nonces, and [minted (si_key …) ↔ minted t] is false
-   for, say, [t := TInv d] -- so the set is guarded by [is_nonce]. *)
+(** These sets list which terms the client and the server should generate tokens
+    for.  The client's tokens are solely used to receive resources from the
+    server via an escrow. *)
+
 Definition server_fresh_set (uid α X_u P_s P_u p_s : term) (t : nonce) : gset term :=
   {[TExp g t; si_key (server_si uid α X_u P_s P_u p_s t)]}.
 
-(* The client's counterpart: the token on its share [α = (H' "α" pw)^r] comes
-   with [r].  Both of the server's escrows are keyed on it. *)
 Definition client_fresh_set (pw : term) (t : nonce) : gset term :=
   {[TExp (hash_result "α" pw) t]}.
 
@@ -132,8 +99,6 @@ Proof. by rewrite is_ginv_TExp. Qed.
 Lemma Ngmul_TExp_g s : negb (is_gmul (TExp g s)).
 Proof. exact: Ngmul_TExp. Qed.
 
-(* Exponentiation distributes over the group product in the base, so the key is
-   a four-factor product.  [X_b] stays arbitrary -- it comes from the network. *)
 Lemma hmqv_K_expand p_a x_a m_a p_b X_b m_b :
   hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b
   = TGMulN [TExp X_b x_a;
@@ -141,8 +106,6 @@ Lemma hmqv_K_expand p_a x_a m_a p_b X_b m_b :
             TExp X_b (TMulN [m_a; p_a]);
             hmqv_ss p_a m_a p_b m_b].
 Proof.
-(* [TExpA] nests the scalar products to the right; these flatten them out
-   again, and are read off the signed counts. *)
 have flat2 : forall a ts, TMulN [a; TMulN ts] = TMulN (a :: ts).
   move=> a ts; rewrite Permutation_swap TMulN_cat.
   by rewrite -Permutation_cons_append.
@@ -153,9 +116,10 @@ rewrite /hmqv_K /hmqv_Y /hmqv_ss !TExp_TGMulN /= !TExpA !flat2 !flat4.
 by rewrite TGMulN_app.
 Qed.
 
-(* Correctness of the formula: the two roles compute the same group element.
-   The client instantiates [(m_a, m_b) := (d, e)] and the server
-   [(m_a, m_b) := (e, d)]. *)
+(** The [hmqv_K] definition produces the same session key when we swap the keys
+    provided by the client and the server.  This property allows the two parties
+    to agree on the resulting session key. *)
+
 Lemma hmqv_K_sym p_a x_a m_a p_b x_b m_b :
   hmqv_K p_a x_a m_a (TExp g p_b) (TExp g x_b) m_b
   = hmqv_K p_b x_b m_b (TExp g p_a) (TExp g x_a) m_a.
