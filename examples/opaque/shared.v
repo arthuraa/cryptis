@@ -144,19 +144,13 @@ rewrite e1 e2 e3 e4.
 by apply: gcount_inj => t _; rewrite !gcount_TGMulN /=; lia.
 Qed.
 
-(** ** Which factors of the key survive
+(** ** Secrecy the HMQV key
 
-    [public_gfactors] makes the key public exactly when all of its group factors
-    are, so one secret factor is enough.  The two that matter are built from [g]:
+    The HMQV formula guarantees the secrecy of the exchanged key.  To prove this
+    property, we need to reason about which factors of the Diffie-Hellman group
+    appear in the formula.
 
-      [g^(p_b·m_b·x_a)]      peer static x own ephemeral
-      [g^(p_b·m_b·m_a·p_a)]  static-static, [hmqv_ss]
-
-    Neither can be cancelled by the attacker's [X_b].  That is HMQV's own
-    argument, symbolically an occurs check: [m_b] is a hash of [X_b], hence
-    strictly bigger, so no group factor of [X_b ^ c] can equal either of them
-    ([gcount_TExp_eq0]).  And the two cannot cancel *each other*, because
-    neither is a group inverse. *)
+*)
 
 Lemma gcount_TExp_g_diag s : gcount (TExp g s) (TExp g s) = 1%Z.
 Proof. rewrite gcount_diag; by case: is_gmul (Ngmul_TExp_g s). Qed.
@@ -171,39 +165,6 @@ have := not_elem_of_gcount (TGInv (TExp g s1)) (TExp g s2) ne.
 rewrite gcount_TGInv_l; lia.
 Qed.
 
-Lemma hmqv_K_gfactor p_a x_a m_a p_b X_b m_b s u :
-  s = TMulN [p_b; m_b; x_a] \/ s = TMulN [p_b; m_b; m_a; p_a] ->
-  u ∈ exps (TExp g s) ->
-  u ∉ factors x_a ->
-  u ∉ factors (TMulN [m_a; p_a]) ->
-  tsize X_b < tsize u ->
-  TExp g s ∈ gfactors (hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b).
-Proof.
-move=> Hs u_w u_xa u_ma ltX.
-have z1 : gcount (TExp g s) (TExp X_b x_a) = 0%Z
-  := gcount_TExp_eq0 X_b x_a (TExp g s) u u_w u_xa ltX.
-have z3 : gcount (TExp g s) (TExp X_b (TMulN [m_a; p_a])) = 0%Z
-  := gcount_TExp_eq0 X_b (TMulN [m_a; p_a]) (TExp g s) u u_w u_ma ltX.
-apply/gcount_gt0; rewrite hmqv_K_expand gcount_TGMulN /= /hmqv_ss z1 z3.
-case: Hs => ->.
-- rewrite gcount_TExp_g_diag.
-  have := @gcount_TExp_g_ge0 (TMulN [p_b; m_b; x_a])
-                            (TMulN [p_b; m_b; m_a; p_a]); lia.
-- rewrite gcount_TExp_g_diag.
-  have := @gcount_TExp_g_ge0 (TMulN [p_b; m_b; m_a; p_a])
-                            (TMulN [p_b; m_b; x_a]); lia.
-Qed.
-
-(** ** Counting nonces and hashes
-
-    All the exponents in play are nonces or hashes: neither a product nor an
-    inverse, i.e. [negb (is_enon_free _)].  The generic machinery that turns
-    pairwise disequality into the [factors] memberships [hmqv_K_gfactor] and
-    [public_dh_secret_gen] ask for lives in [cryptis.core.term]
-    ([elem_of_factors_cons] and friends); all that is needed here is that a
-    hash is exponent-free and that distinct tags give distinct hashes. *)
-
-(* Two hashes are equal only if both their tags and their payloads are. *)
 Lemma hash_result_inj (tag1 tag2 : string) t1 t2 :
   hash_result tag1 t1 = hash_result tag2 t2 -> tag1 = tag2 /\ t1 = t2.
 Proof.
@@ -211,9 +172,6 @@ rewrite /hash_result => - [] /Spec.tag_inj [] /Tag_inj c ->.
 by case: (ndot_inj _ _ _ _ c).
 Qed.
 
-(* A hash is strictly bigger than any component of the list it hashes.  This is
-   the occurs check behind [hmqv_K_gfactor]: the multiplier [m_b] is a hash of
-   the peer's ephemeral [X_b], so [X_b] cannot contain it. *)
 Lemma tsize_hash_result_lt tag t l :
   t ∈ l -> tsize t < tsize (hash_result tag (Spec.of_list l)).
 Proof.
@@ -225,14 +183,6 @@ rewrite e.
 have := Spec.of_list_tsize t_l; lia.
 Qed.
 
-Lemma hash_result_nonce_ne tag t (a : nonce) : hash_result tag t ≠ TNonce a.
-Proof. by rewrite /hash_result. Qed.
-
-(* The exponents of the static-static factor: two static private keys and the
-   two hash multipliers.  Each occurs among [exps], which is what
-   [hmqv_K_gfactor] and [public_dh_secret_gen] ask for: the key's
-   static-static factor has four exponents, two of them the public hash
-   multipliers, so the two-exponent [public_dh_secret'] does not apply. *)
 Lemma exps_hmqv_ss (p_a p_b : nonce) tag_a tag_b v_a v_b :
   tag_a ≠ tag_b -> p_a ≠ p_b ->
   TNonce p_a ∈ exps (hmqv_ss p_a (hash_result tag_a v_a)
@@ -302,65 +252,72 @@ apply: elem_of_factors_cons_weak => //.
 by rewrite !Forall_cons Forall_nil; do !split => //; apply: TInv_Nenf_ne.
 Qed.
 
-Lemma exps_hmqv_eph (p_b x_a : nonce) tag_b v_b :
-  hash_result tag_b v_b
-    ∈ exps (TExp g (TMulN [TNonce p_b; hash_result tag_b v_b; TNonce x_a])).
-Proof.
-set m_b := hash_result tag_b v_b.
-have fb : negb (is_enon_free (TNonce p_b)) := Nenf_TNonce p_b.
-have fx : negb (is_enon_free (TNonce x_a)) := Nenf_TNonce x_a.
-have fmb : negb (is_enon_free m_b) := Nenf_THash _.
-have e1 : m_b ≠ TNonce p_b by rewrite /m_b /hash_result.
-have e2 : m_b ≠ TNonce x_a by rewrite /m_b /hash_result.
-rewrite exps_TExp_g Permutation_swap.
-by apply: elem_of_factors_cons => //;
-   rewrite !Forall_cons Forall_nil; do !split => //.
-Qed.
+(** This lemma guarantees that, when the protocol runs normally, the HMQV key
+    contains at least [g^(p_b ⋅ m_b ⋅ x_a)] and [g^(p_b ⋅ m_b ⋅ m_a ⋅ p_a)] as
+    factors. *)
 
-(** ** Everything the two roles need, in one place
-
-    Both the client and the server compute the key with two nonces of their own
-    ([p_a], [x_a]), the peer's static public key [TExp g p_b], the peer's
-    ephemeral [X_b] straight off the network, and two hash multipliers with
-    different tags -- the peer's, [m_b], being a hash of a list containing
-    [X_b].  That last point is the occurs check. *)
-Lemma hmqv_key_gfactors (p_a p_b x_a : nonce) tag_a tag_b v_a l_b X_b :
+Lemma hmqv_K_gfactor (p_a x_a p_b : nonce) tag_a tag_b P_a X_b s :
+  let m_a := hash_result tag_a (Spec.of_list [TExp g x_a; TExp g p_b]) in
+  let m_b := hash_result tag_b (Spec.of_list [X_b; P_a]) in
   tag_a ≠ tag_b ->
-  p_a ≠ p_b ->
-  X_b ∈ l_b ->
-  hmqv_ss p_a (hash_result tag_a v_a) p_b (hash_result tag_b (Spec.of_list l_b))
-    ∈ gfactors (hmqv_K p_a x_a (hash_result tag_a v_a) (TExp g p_b) X_b
-                       (hash_result tag_b (Spec.of_list l_b)))
-  /\ TExp g (TMulN [TNonce p_b;
-                    hash_result tag_b (Spec.of_list l_b); TNonce x_a])
-       ∈ gfactors (hmqv_K p_a x_a (hash_result tag_a v_a) (TExp g p_b) X_b
-                          (hash_result tag_b (Spec.of_list l_b)))
-  /\ TNonce p_a ∈ exps (hmqv_ss p_a (hash_result tag_a v_a)
-                                p_b (hash_result tag_b (Spec.of_list l_b)))
-  /\ TNonce p_b ∈ exps (hmqv_ss p_a (hash_result tag_a v_a)
-                                p_b (hash_result tag_b (Spec.of_list l_b))).
+  s = TMulN [TNonce p_b; m_b; TNonce x_a] \/
+  s = TMulN [TNonce p_b; m_b; m_a; TNonce p_a] ->
+  TExp g s ∈ gfactors (hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b).
 Proof.
-move=> tab pab Xb_lb.
-set m_a := hash_result tag_a v_a.
-set m_b := hash_result tag_b (Spec.of_list l_b).
+move=> m_a m_b tab Hs.
 have fa : negb (is_enon_free (TNonce p_a)) := Nenf_TNonce p_a.
+have fb : negb (is_enon_free (TNonce p_b)) := Nenf_TNonce p_b.
 have fx : negb (is_enon_free (TNonce x_a)) := Nenf_TNonce x_a.
 have fma : negb (is_enon_free m_a) := Nenf_THash _.
 have fmb : negb (is_enon_free m_b) := Nenf_THash _.
-have mb_x : m_b ≠ TNonce x_a by rewrite /m_b /hash_result.
 have mb_a : m_b ≠ TNonce p_a by rewrite /m_b /hash_result.
+have mb_b : m_b ≠ TNonce p_b by rewrite /m_b /hash_result.
+have mb_x : m_b ≠ TNonce x_a by rewrite /m_b /hash_result.
 have mb_ma : m_b ≠ m_a.
   by rewrite /m_a /m_b => /hash_result_inj [] e _; apply: tab; congruence.
-have H1 : m_b ∉ factors (TNonce x_a) by apply: not_elem_of_factors_Nenf.
-have H2 : m_b ∉ factors (TMulN [m_a; TNonce p_a]).
+(* [m_b] is an exponent of the factor, and of nothing [X_b] gets raised to. *)
+have mb_s : m_b ∈ exps (TExp g s).
+  rewrite exps_TExp_g; case: Hs => ->; rewrite Permutation_swap;
+  by apply: elem_of_factors_cons => //;
+     rewrite !Forall_cons Forall_nil; do !split => //.
+have mb_xa : m_b ∉ factors (TNonce x_a) by apply: not_elem_of_factors_Nenf.
+have mb_ma_pa : m_b ∉ factors (TMulN [m_a; TNonce p_a]).
   by apply: not_elem_of_factors_TMulN_Nenf => //;
      rewrite !Forall_cons Forall_nil; do !split => //.
-have H3 : tsize X_b < tsize m_b := tsize_hash_result_lt _ Xb_lb.
-have [in_pa [in_pb in_mb]] := @exps_hmqv_ss p_a p_b tag_a tag_b v_a (Spec.of_list l_b) tab pab.
+have ltX : tsize X_b < tsize m_b.
+  by rewrite /m_b; apply: tsize_hash_result_lt; set_solver.
+have z1 : gcount (TExp g s) (TExp X_b (TNonce x_a)) = 0%Z
+  := gcount_TExp_eq0 X_b (TNonce x_a) (TExp g s) m_b mb_s mb_xa ltX.
+have z3 : gcount (TExp g s) (TExp X_b (TMulN [m_a; TNonce p_a])) = 0%Z
+  := gcount_TExp_eq0 X_b (TMulN [m_a; TNonce p_a]) (TExp g s) m_b mb_s mb_ma_pa ltX.
+apply/gcount_gt0; rewrite hmqv_K_expand gcount_TGMulN /= /hmqv_ss z1 z3.
+case: Hs => ->.
+- rewrite gcount_TExp_g_diag.
+  have := @gcount_TExp_g_ge0 (TMulN [TNonce p_b; m_b; TNonce x_a])
+                            (TMulN [TNonce p_b; m_b; m_a; TNonce p_a]); lia.
+- rewrite gcount_TExp_g_diag.
+  have := @gcount_TExp_g_ge0 (TMulN [TNonce p_b; m_b; m_a; TNonce p_a])
+                            (TMulN [TNonce p_b; m_b; TNonce x_a]); lia.
+Qed.
+
+Lemma hmqv_key_gfactors (p_a p_b x_a : nonce) tag_a tag_b P_a X_b :
+  let m_a := hash_result tag_a (Spec.of_list [TExp g x_a; TExp g p_b]) in
+  let m_b := hash_result tag_b (Spec.of_list [X_b; P_a]) in
+  tag_a ≠ tag_b ->
+  p_a ≠ p_b ->
+  hmqv_ss p_a m_a p_b m_b ∈ gfactors (hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b)
+  /\ TExp g (TMulN [TNonce p_b; m_b; TNonce x_a])
+       ∈ gfactors (hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b)
+  /\ TNonce p_a ∈ exps (hmqv_ss p_a m_a p_b m_b)
+  /\ TNonce p_b ∈ exps (hmqv_ss p_a m_a p_b m_b).
+Proof.
+move=> m_a m_b tab pab.
+have [in_pa [in_pb _]] :=
+  @exps_hmqv_ss p_a p_b tag_a tag_b
+    (Spec.of_list [TExp g x_a; TExp g p_b]) (Spec.of_list [X_b; P_a]) tab pab.
 do !split => //.
-- rewrite /hmqv_ss; apply: (hmqv_K_gfactor (u := m_b)) => //; by right.
-- apply: (hmqv_K_gfactor (u := m_b)) => //; first by left.
-  exact: exps_hmqv_eph.
+- rewrite /hmqv_ss; apply: hmqv_K_gfactor => //; by right.
+- apply: hmqv_K_gfactor => //; by left.
 Qed.
 
 Lemma subterm_of_list (t : term) (ts : list term) :
@@ -533,11 +490,9 @@ Lemma subterm_SK_eph uid α X_u P_s (p_s p_u x_s : nonce) :
                              (TNonce p_s) (TNonce x_s))).
 Proof.
 move=> p_s_u.
-have Xu_in : X_u ∈ [X_u; P_s] by set_solver.
 have tags : "e"%string ≠ "d"%string by [].
 have [_ [gf_eph _]] :=
-  @hmqv_key_gfactors p_s p_u x_s "e" "d"
-    (Spec.of_list [TExp g x_s; TExp g p_u]) [X_u; P_s] X_u tags p_s_u Xu_in.
+  @hmqv_key_gfactors p_s p_u x_s "e" "d" P_s X_u tags p_s_u.
 rewrite /si_key /si_K /si_ssid /server_si /=.
 apply: STHash; apply: subterm_tag; apply: subterm_of_list.
 eexists; split; first by apply/elem_of_cons; left.
@@ -685,25 +640,9 @@ wp_list.
 by wp_apply _wp_H_list.
 Qed.
 
-(* Introduction forms for [minted] of a hash.  Rewriting with [minted_THash] in
-   an Iris goal hits the *context* too, so once a [minted (hash_result …)]
-   hypothesis is around the rewrite fires in the wrong place; these apply
-   forwards instead. *)
-Lemma minted_hash_resultE tag t : minted (hash_result tag t) ⊣⊢ minted t.
+Lemma minted_hash_result tag t : minted (hash_result tag t) ⊣⊢ minted t.
 Proof. by rewrite /hash_result minted_THash minted_tag. Qed.
 
-Lemma minted_hash_resultI tag t : minted t ⊢ minted (hash_result tag t).
-Proof. by rewrite minted_hash_resultE. Qed.
-
-Lemma minted_of_listI l : ([∗ list] t ∈ l, minted t) ⊢ minted (Spec.of_list l).
-Proof. by rewrite minted_of_list. Qed.
-
-Lemma minted_hash_listI tag l :
-  ([∗ list] t ∈ l, minted t) ⊢ minted (hash_result tag (Spec.of_list l)).
-Proof. by rewrite minted_hash_resultE minted_of_list. Qed.
-
-(* [minted] of the HMQV key, from [minted] of its ingredients.  Both roles need
-   this when they publish an authenticator built from the key. *)
 Lemma minted_hmqv_K p_a x_a m_a P_b X_b m_b :
   minted p_a -∗ minted x_a -∗ minted m_a -∗
   minted P_b -∗ minted X_b -∗ minted m_b -∗
@@ -719,9 +658,6 @@ rewrite /hmqv_K; iApply all_minted_TGMulN; rewrite /=.
 by do !iSplit => //; iApply all_minted_TExp; iSplit.
 Qed.
 
-(* The side condition [wp_mk_nonce_freshN] asks of [server_fresh_set]: both
-   terms are minted exactly when the fresh nonce is.  Backwards, for the key,
-   is the freshness of the key itself. *)
 Lemma server_fresh_set_minted uid α X_u P_s (p_s p_u : nonce) :
   p_s ≠ p_u →
   minted uid -∗ minted α -∗ minted X_u -∗ minted P_s -∗
@@ -748,11 +684,12 @@ iSplit; iModIntro; iSplit.
                  [hash_result "K"
                     (Spec.of_list [hmqv_K p_s x_s e (TExp g p_u) X_u d]);
                   hash_result "ssid'" (Spec.of_list [uid; α])]) by [].
-  iApply minted_hash_listI; rewrite /=; do !iSplit => //.
-  + iApply minted_hash_listI; rewrite /=; iSplit => //.
-    by iApply (minted_hmqv_K with "m_ps m_xs [] m_Pu m_Xu []");
-       iApply minted_hash_listI; rewrite /=; do !iSplit => //.
-  + by iApply minted_hash_listI; rewrite /=; do !iSplit => //.
+  rewrite minted_hash_result minted_of_list /=; do !iSplit => //.
+  + rewrite minted_hash_result minted_of_list /=; iSplit => //.
+    iApply (minted_hmqv_K with "m_ps m_xs [] m_Pu m_Xu []").
+    * by rewrite minted_hash_result minted_of_list /=; eauto.
+    * by rewrite minted_hash_result minted_of_list /=; eauto.
+  + by rewrite minted_hash_result minted_of_list /=; eauto.
 - iIntros "#m_SK".
   by iApply (subterm_minted (@subterm_SK_eph uid α X_u P_s p_s p_u x_s p_s_u)
                with "m_SK").
@@ -767,7 +704,7 @@ rewrite /client_fresh_set.
 rewrite big_sepS_singleton.
 iModIntro; iSplit.
 - iIntros "#?"; iApply all_minted_TExp; iSplit => //.
-  by iApply minted_hash_resultI.
+  by rewrite minted_hash_result.
 - rewrite (minted_TExp (t1 := hash_result "α" pw) (TNonce r) I I I).
   by iIntros "[_ ?]".
 Qed.
@@ -784,34 +721,24 @@ Definition opaque_public_private_pair (a : nonce) A : iProp :=
     □ (public a ↔ ▷ □ False) ∗
     □ (public a' ↔ ▷ □ False).
 
-(* The client's authenticator [A_u].  The server consumes nothing from it
-   beyond what it recomputes, so this is only what the client can show. *)
-Definition A_u_pred : (term -> iProp) :=
-λ t : term,
-(∃ P (p : nonce) X x m_a m_b ssid,
+Definition A_u_pred (t : term) : iProp :=
+  ∃ P (p : nonce) X x m_a m_b ssid,
      opaque_public_private_pair p P ∗
      ⌜t =
      Spec.of_list
      [hash_result "K" (Spec.of_list [hmqv_K p x m_a P X m_b]);
-                  ssid]⌝)%I.
+                  ssid]⌝.
 
-(** What the server's authenticator [A_s = prf "A_s" [K; ssid']] vouches for:
-    the server built a session [si] with exactly this [K] and [ssid'], and has
-    escrowed for the client both its slice of the token on the session key and
-    its copy of the resource.  A client that computed the same [K] and [ssid']
-    pins [si_uid], [si_blind] and [si_secret] -- hence [si_key] -- to its own
-    values by [hash_result_inj]; the long-term keys it simply reads off [si]. *)
-Definition A_s_pred : term → iProp := λ t,
-  (∃ si, ⌜t = Spec.of_list [si_K si; si_ssid si]⌝ ∗
-         public (si_ckey si) ∗ public (si_skey si) ∗
-         opaque_client_token si ∗
-         opaque_ready si)%I.
+Definition A_s_pred (t : term) : iProp :=
+  ∃ si, ⌜t = Spec.of_list [si_K si; si_ssid si]⌝ ∗
+        public (si_ckey si) ∗ public (si_skey si) ∗
+        opaque_client_token si ∗
+        opaque_ready si.
 
-Definition envelope_pred : (senc_key -> term -> iProp) :=
-  λ _ (t : term),
-    (∃ (p_u : nonce) P_u P_s,
-        ⌜ t = Spec.of_list [TNonce p_u; P_u; P_s] ⌝ ∗
-        opaque_public_private_pair p_u P_s)%I.
+Definition envelope_pred (sk : senc_key) (t : term) : iProp :=
+  ∃ (p_u : nonce) P_u P_s,
+      ⌜ t = Spec.of_list [TNonce p_u; P_u; P_s] ⌝ ∗
+      opaque_public_private_pair p_u P_s.
 
 Definition opaque_ctx : iProp :=
   hash_pred (opN.@"rw") (λ _ : term, False%I) ∗

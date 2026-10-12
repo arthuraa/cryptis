@@ -70,10 +70,7 @@ wp_pures.
 wp_apply (wp_mk_nonce_freshN {[(TExp g p_s)]} (fun _ => False)%I dh_key_share
                                               (fun t =>  {[(TInv t)]})) => //.
 - iIntros "%"; rewrite elem_of_singleton; iIntros "->".
-  iApply minted_TExp.
-    by [].
-    by [].
-    by [].
+  iApply minted_TExp => //.
   iSplit => //.
   by iApply minted_TInt.
 - iIntros "%t".
@@ -259,17 +256,18 @@ wp_apply wp_prf; wp_list.
 wp_apply wp_prf; wp_list.
 wp_term_of_list; wp_pures.
 iAssert (minted (hash_result "d" (Spec.of_list [X_u; P_s]))) as "#mintedd".
-  by iApply minted_hash_listI; rewrite /=; do !iSplit => //.
+{ iApply minted_hash_result; iApply minted_of_list => /=.
+  by do !iSplit => //. }
 iAssert (minted (hash_result "e" (Spec.of_list [TExp g x_s; TExp g p_u])))
   as "#mintede".
-  iApply minted_hash_listI; rewrite /=; do !iSplit => //.
-  by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
+{ iApply minted_hash_result; iApply minted_of_list => /=; do !iSplit => //=.
+  by iApply all_minted_TExp; iSplit => //; iApply minted_TInt. }
 iAssert (minted (si_key si)) as "#mintedSK".
-  iApply minted_hash_listI; rewrite /=; do !iSplit => //.
-  - iApply minted_hash_listI; rewrite /=; iSplit => //.
-    by iApply (minted_hmqv_K with
-                 "Hminp_s Hmintedx_s mintede minP_u minX_u mintedd").
-  - by iApply minted_hash_listI; rewrite /=; do !iSplit => //.
+{ iApply minted_hash_result; iApply minted_of_list; rewrite /=; do !iSplit => //.
+  - iApply minted_hash_result; rewrite minted_of_list /=; iSplit => //.
+    by iApply minted_hmqv_K => //.
+  - iEval (rewrite minted_hash_result minted_of_list /=).
+    by eauto. }
 (* The caller's resources for this session come from the [↑opN.@"res"] slice
    of the token on the server's share; the client's copy is escrowed at once,
    as is the client's slice of the token on the session key. *)
@@ -324,12 +322,12 @@ wp_apply wp_send => //.
       by rewrite exps_TExpN //; exact: invs_canceled1.
     + by rewrite public_TInt; auto.
   - iApply public_THashIS => //.
-      iApply minted_of_listI; rewrite /=; do !iSplit => //.
-      + iApply minted_hash_listI; rewrite /=; iSplit => //.
+      iEval (rewrite minted_of_list /=); do !iSplit => //.
+      + iEval (rewrite minted_hash_result minted_of_list /=); iSplit => //.
         by iApply (minted_hmqv_K with
                      "Hminp_s Hmintedx_s mintede minP_u minX_u mintedd").
-      + iApply minted_hash_listI; rewrite /=; do !iSplit => //;
-          by iApply public_minted.
+      + iEval (rewrite minted_hash_result minted_of_list /=); do !iSplit => //;
+        by iApply public_minted.
     iNext; iModIntro.
     iExists si; rewrite /si /server_si /si_K /si_ssid /=.
     by do !iSplit => //.
@@ -347,12 +345,9 @@ iFrame "tok_server res_R".
 (* Two group factors of the key survive whatever [X_u] the peer sent: the
    static-static one, which carries secrecy, and the peer-static x
    own-ephemeral one, which carries freshness. *)
-have Xu_in : X_u ∈ [X_u; P_s] by set_solver.
 have tags : "e"%string ≠ "d"%string by [].
 have [gf_ss [gf_eph [in_ps in_pu]]] :=
-  @hmqv_key_gfactors p_s p_u x_s "e" "d"
-    (Spec.of_list [TExp g x_s; TExp g p_u]) [X_u; P_s] X_u
-    tags p_s_u Xu_in.
+  @hmqv_key_gfactors p_s p_u x_s "e" "d" P_s X_u tags p_s_u.
 iSplit; first by [].
 iSplit.
   by do !iSplit => //.
@@ -373,7 +368,7 @@ iModIntro; iSplit; iIntros "#contra".
             "Hprivp_s Hexpp_s Hprivp_u Hexpp_u").
   by iApply (big_sepL_elem_of with "fs").
 - iApply (public_THashIS with "HpredSK [] contra").
-  by iEval (rewrite /si_key minted_hash_resultE) in "mintedSK".
+  by iEval (rewrite /si_key minted_hash_result) in "mintedSK".
 Qed.
 
 End Opaque.
