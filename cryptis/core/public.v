@@ -14,31 +14,25 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
 Class publicGpreS Σ := PublicGPreS {
-  publicGpreS_nonce : savedPredG Σ term;
-  publicGpreS_seal  : savedPredG Σ (term * term);
-  publicGpreS_meta  : metaGS Σ;
+  #[local] publicGpreS_nonce :: savedPredG Σ term;
+  #[local] publicGpreS_seal  :: savedPredG Σ (term * term);
+  #[local] publicGpreS_meta  :: metaGS Σ;
 }.
 
-Local Existing Instance publicGpreS_nonce.
-Local Existing Instance publicGpreS_seal.
-Local Existing Instance publicGpreS_meta.
-
 Class publicGS Σ := PublicGS {
-  public_inG : publicGpreS Σ;
+  #[global] public_inG :: publicGpreS Σ;
   public_hash_name  : gname;
   public_aenc_name  : gname;
   public_sign_name  : gname;
   public_senc_name  : gname;
 }.
 
-Global Existing Instance public_inG.
-
 Definition publicΣ : gFunctors :=
   #[savedPredΣ term;
     savedPredΣ (term * term);
     metaΣ].
 
-Global Instance subG_publicGpreS Σ : subG publicΣ Σ → publicGpreS Σ.
+#[global] Instance subG_publicGpreS Σ : subG publicΣ Σ → publicGpreS Σ.
 Proof. solve_inG. Qed.
 
 Section Public.
@@ -54,7 +48,7 @@ Definition pnonce a : iProp :=
          own γ (saved_pred DfracDiscarded P) ∧
          ▷ □ P (TNonce a).
 
-Global Instance Persistent_pnonce a : Persistent (pnonce a).
+#[global] Instance Persistent_pnonce a : Persistent (pnonce a).
 Proof. apply _. Qed.
 
 Definition exp_pred_base (t t' : term) : iProp :=
@@ -77,7 +71,7 @@ have -> : t = TInv (TNonce a) by rewrite -E TInvK.
 by rewrite is_inv_TInv.
 Qed.
 
-Global Instance exp_pred_base_persistent t t' :
+#[global] Instance exp_pred_base_persistent t t' :
   Persistent (exp_pred_base t t').
 Proof. by case: t; apply _. Qed.
 
@@ -91,7 +85,7 @@ Definition exp_pred0_pre Plater P DH ts : iProp :=
   ⌜negb (is_gmul t2')⌝ ∗ ⌜negb (is_ginv t2')⌝ ∗ ⌜TInv t ∉ exps t2'⌝ ∗
   DH (ts.1, t2') ∗ DH (t, ts.2).
 
-Local Instance exp_pred0_pre_mono Plater P :
+#[local] Instance exp_pred0_pre_mono Plater P :
   BiMonoPred (exp_pred0_pre Plater P).
 Proof.
 constructor; last by move=> ??; solve_proper.
@@ -102,12 +96,12 @@ iRight; iRight; iExists t2, t'; iFrame "#".
 by iSplitL "dh1"; iApply "H".
 Qed.
 
-Local Definition exp_pred0_def :
+#[local] Definition exp_pred0_def :
   (term → iProp) → (term → iProp) → term * term → iProp :=
   λ Plater P, bi_least_fixpoint (exp_pred0_pre Plater P).
-Local Definition exp_pred0_aux : seal exp_pred0_def. Proof. by eexists. Qed.
+#[local] Definition exp_pred0_aux : seal exp_pred0_def. Proof. by eexists. Qed.
 Definition exp_pred0 := exp_pred0_aux.(unseal).
-Local Lemma exp_pred0_unseal : exp_pred0 = exp_pred0_def.
+#[local] Lemma exp_pred0_unseal : exp_pred0 = exp_pred0_def.
 Proof. by rewrite -exp_pred0_aux.(seal_eq). Qed.
 
 Lemma exp_pred0_unfold Plater P ts :
@@ -129,7 +123,7 @@ Proof.
 rewrite exp_pred0_unseal; iApply least_fixpoint_ind; solve_proper.
 Qed.
 
-Global Instance exp_pred0_ne n :
+#[global] Instance exp_pred0_ne n :
   Proper (pointwise_relation _ (dist n) ==>
           pointwise_relation _ (dist n) ==>
           dist n ==> dist n) exp_pred0.
@@ -139,7 +133,7 @@ have -> : ts1 = ts2 by apply leibniz_equiv_iff.
 rewrite exp_pred0_unseal; apply least_fixpoint_ne; solve_proper.
 Qed.
 
-Global Instance exp_pred0_proper :
+#[global] Instance exp_pred0_proper :
   Proper (pointwise_relation _ (≡) ==>
           pointwise_relation _ (≡) ==> (≡) ==> (≡)) exp_pred0.
 Proof.
@@ -149,7 +143,7 @@ apply equiv_dist => n.
 by apply exp_pred0_ne => // ts'; apply equiv_dist; eauto.
 Qed.
 
-Global Instance exp_pred0_persistent Plater P :
+#[global] Instance exp_pred0_persistent Plater P :
   (∀ ts, Persistent (Plater ts)) →
   (∀ ts, Persistent (P ts)) →
   ∀ ts, Persistent (exp_pred0 Plater P ts).
@@ -252,7 +246,7 @@ rewrite seal_pred_token_difference //.
 by iDestruct "t" as "[t _]".
 Qed.
 
-Global Instance seal_pred_persistent F N Φ : Persistent (seal_pred F N Φ).
+#[global] Instance seal_pred_persistent F N Φ : Persistent (seal_pred F N Φ).
 Proof. apply _. Qed.
 
 Lemma seal_pred_agree k t F N Φ1 Φ2 :
@@ -297,7 +291,7 @@ Proof. move=> ?. by iApply seal_pred_set. Qed.
 Definition wf_seal F k t : iProp :=
   ∃ N t' Φ, ⌜t = Spec.tag (Tag N) t'⌝ ∧ seal_pred F N Φ ∧ □ ▷ Φ k t'.
 
-Global Instance wf_seal_persistent F k t : Persistent (wf_seal F k t).
+#[global] Instance wf_seal_persistent F k t : Persistent (wf_seal F k t).
 Proof. by apply _. Qed.
 
 Lemma wf_seal_elim F k N t Φ :
@@ -334,7 +328,7 @@ rewrite hash_pred_token_difference //.
 by iDestruct "t" as "[t _]".
 Qed.
 
-Global Instance hash_pred_persistent N P : Persistent (hash_pred N P).
+#[global] Instance hash_pred_persistent N P : Persistent (hash_pred N P).
 Proof. apply _. Qed.
 
 Lemma hash_pred_agree t N P₁ P₂ :
@@ -358,7 +352,7 @@ Proof. iIntros (?) "token". by iApply nown_alloc. Qed.
 Definition wf_hash t : iProp :=
   ∃ N t' P, ⌜t = Spec.tag (Tag N) t'⌝ ∧ hash_pred N P ∧ □ ▷ P t'.
 
-Global Instance wf_hash_persistent t : Persistent (wf_hash t).
+#[global] Instance wf_hash_persistent t : Persistent (wf_hash t).
 Proof. by apply _. Qed.
 
 Lemma wf_hash_elim N t P :
@@ -495,7 +489,7 @@ f_equiv; last (f_equiv; last (f_equiv; last f_equiv)).
   f_equiv; f_equiv; apply: HP; lia.
 Qed.
 
-Global Instance public_pre_aux_proper Plater :
+#[global] Instance public_pre_aux_proper Plater :
   Proper (pointwise_relation _ (≡) ==> pointwise_relation _ (≡))
    (public_pre_aux Plater).
 Proof. by move=> ????; apply: public_pre_aux_wf. Qed.
@@ -550,7 +544,7 @@ iIntros "!> %P #HP".
 by iApply public_pre_aux_persistent.
 Qed.
 
-Global Instance public_pre_aux_ne n :
+#[global] Instance public_pre_aux_ne n :
   Proper (pointwise_relation _ (dist n) ==>
           pointwise_relation _ (dist n) ==> dist n ==> dist n) public_pre_aux.
 Proof.
@@ -558,7 +552,7 @@ move=> Plater1 Plater2 HPlater P1 P2 HP t _ <-; rewrite /public_pre_aux.
 solve_contractive.
 Qed.
 
-Global Instance public_pre_ne n :
+#[global] Instance public_pre_ne n :
   Proper (pointwise_relation _ (dist n) ==> dist n ==> dist n) public_pre.
 Proof.
 rewrite /public_pre => Plater1 Plater2 HPlater t _ <-; f_equiv.
@@ -568,19 +562,19 @@ Qed.
 Definition public_pre' (P : term -d> iProp) : term -d> iProp :=
   public_pre (λ t, ▷ P t)%I.
 
-Local Instance public_pre'_contractive : Contractive public_pre'.
+#[local] Instance public_pre'_contractive : Contractive public_pre'.
 Proof. rewrite /public_pre'; solve_contractive. Qed.
 
 Definition public_def := fixpoint public_pre'.
-Local Definition public_aux : seal (@public_def). Proof. by eexists. Qed.
+#[local] Definition public_aux : seal (@public_def). Proof. by eexists. Qed.
 Definition public := public_aux.(unseal).
-Local Lemma public_unseal : public = public_def.
+#[local] Lemma public_unseal : public = public_def.
 Proof. rewrite -public_aux.(seal_eq) //. Qed.
 
 Definition exp_pred_def := λ t1 t2, exp_pred0 (λ t, ▷ public t)%I public (t1, t2).
-Local Definition exp_pred_aux : seal (@exp_pred_def). Proof. by eexists. Qed.
+#[local] Definition exp_pred_aux : seal (@exp_pred_def). Proof. by eexists. Qed.
 Definition exp_pred := exp_pred_aux.(unseal).
-Local Lemma exp_pred_unseal : exp_pred = exp_pred_def.
+#[local] Lemma exp_pred_unseal : exp_pred = exp_pred_def.
 Proof. rewrite -exp_pred_aux.(seal_eq) //. Qed.
 
 Lemma public_eq t :
@@ -618,7 +612,7 @@ rewrite {1}/public_pre' public_pre_unfold; apply: public_pre_aux_proper => t'.
 by rewrite (fixpoint_unfold public_pre' t').
 Qed.
 
-Global Instance Persistent_public t : Persistent (public t).
+#[global] Instance Persistent_public t : Persistent (public t).
 Proof.
 rewrite /Persistent; rewrite public_unseal /public_def.
 iIntros "H"; iLöb as "IH" forall (t).
@@ -628,7 +622,7 @@ iIntros "!> % H"; rewrite -bi.later_persistently; iModIntro.
 by iApply "IH".
 Qed.
 
-Global Instance Persistent_exp_pred t1 t2 : Persistent (exp_pred t1 t2).
+#[global] Instance Persistent_exp_pred t1 t2 : Persistent (exp_pred t1 t2).
 Proof. rewrite exp_pred_unseal /exp_pred_def. by apply _. Qed.
 
 Lemma exp_pred_intro1_gen t1 t2 ts :
@@ -1505,7 +1499,7 @@ rewrite /bi_except_0.
 by iIntros "#m #[contra|?]"; eauto; iApply False_public.
 Qed.
 
-Local Lemma exp_pred_intro4_aux t1 t2 t3 :
+#[local] Lemma exp_pred_intro4_aux t1 t2 t3 :
   t1 ≠ t3 →
   t3 ∈ exps t2 →
   TInv t1 ∉ exps t2 →
@@ -1662,17 +1656,17 @@ Lemma public_of_list ts :
   public (Spec.of_list ts) ⊣⊢
   [∗ list] t ∈ ts, public t.
 Proof.
-rewrite Spec.of_list_unseal.
+rewrite [Spec.of_list]unlock.
 elim: ts => [|t ts IH]; first by rewrite public_TInt.
 by rewrite public_TPair /= IH bi.persistent_and_sep.
 Qed.
 
 Lemma public_Tag N : public (Tag N) ⊣⊢ True.
-Proof. by rewrite Tag_unseal public_TInt. Qed.
+Proof. by rewrite [Tag]unlock public_TInt. Qed.
 
 Lemma public_tag N t : public (Spec.tag (Tag N) t) ⊣⊢ public t.
 Proof.
-by rewrite Spec.tag_unseal public_TPair public_Tag bi.emp_and.
+by rewrite [Spec.tag]unlock public_TPair public_Tag bi.emp_and.
 Qed.
 
 Lemma public_THashE N φ t :
@@ -1877,10 +1871,10 @@ Definition pending γ : iProp :=
 Definition shot γ (x : positive) : iProp :=
   gmeta γ nroot x.
 
-Global Instance persistent_shot γ x : Persistent (shot γ x).
+#[global] Instance persistent_shot γ x : Persistent (shot γ x).
 Proof. apply _. Qed.
 
-Global Instance timeless_shot γ x : Timeless (shot γ x).
+#[global] Instance timeless_shot γ x : Timeless (shot γ x).
 Proof. apply _. Qed.
 
 Lemma pending_alloc : ⊢ |==> ∃ γ, pending γ.
@@ -1978,14 +1972,14 @@ Lemma public_aencE (sk : aenc_key) N Φ t :
   aenc_pred N Φ -∗
   minted t ∧ (public t ∨ □ ▷ Φ sk t ∧ □ (public sk → public t)).
 Proof.
-rewrite keysE; case: sk => seed /=.
+rewrite [term_of_aenc_key]unlock; case: sk => seed /=.
 iIntros "#p_t #?". iSplit => //.
 { iPoseProof (public_minted with "p_t") as "#m_t".
   rewrite minted_TSeal minted_tag. by iDestruct "m_t" as "[_ ?]". }
 iPoseProof (public_TSealE with "p_t [//] [//]") as "[[_ comp]|inv]"; eauto.
 rewrite /=. iDestruct "inv" as "[#inv #?]". iRight. iSplit => //.
 iIntros "!> !>". iDestruct "inv" as "(%k' & %e & inv)".
-rewrite keysE in e. by case: k' e => seed' // [<-].
+rewrite [term_of_aenc_key]unlock in e. by case: k' e => seed' // [<-].
 Qed.
 
 Lemma public_signE (sk : sign_key) N Φ t :
@@ -1993,14 +1987,14 @@ Lemma public_signE (sk : sign_key) N Φ t :
   sign_pred N Φ -∗
   public t ∧ (public sk ∨ □ ▷ Φ sk t).
 Proof.
-rewrite keysE; case: sk => seed /=.
+rewrite [term_of_sign_key]unlock; case: sk => seed /=.
 iIntros "#p_t #?". iPoseProof (public_minted with "p_t") as "m_t".
 rewrite minted_TSeal minted_TKey. iDestruct "m_t" as "[? _]".
 iPoseProof (public_TSealE with "p_t [//] [//]") as "[[??]|inv]"; eauto.
 iDestruct "inv" as "{p_t} (#inv & #p_t)". iSplit => //.
 - iApply "p_t". iApply public_TKey. iRight. by iSplit => //.
 - iRight. iIntros "!> !>". iDestruct "inv" as "(%k' & %e & inv)".
-  rewrite keysE in e; by case: k' e => seed' // [<-].
+  rewrite [term_of_sign_key]unlock in e; by case: k' e => seed' // [<-].
 Qed.
 
 Lemma public_sencE (k : senc_key) N Φ t :
@@ -2008,14 +2002,14 @@ Lemma public_sencE (k : senc_key) N Φ t :
   senc_pred N Φ -∗
   minted t ∧ (public k ∨ □ ▷ Φ k t) ∧ □ (public k → public t).
 Proof.
-rewrite keysE; case: k => seed /=.
+rewrite [term_of_senc_key]unlock; case: k => seed /=.
 iIntros "#p_t #?". iSplit => //.
 { iPoseProof (public_minted with "p_t") as "#m_t".
   rewrite minted_TSeal minted_tag. by iDestruct "m_t" as "[_ ?]". }
 iPoseProof (public_TSealE with "p_t [//] [//]") as "[[??]|[#inv #p_t']]";
 eauto. iSplit => //. iRight.
 iIntros "!> !>". iDestruct "inv" as "(%k' & %e & inv)".
-rewrite keysE in e; by case: k' e => seed' // [<-].
+rewrite [term_of_senc_key]unlock in e; by case: k' e => seed' // [<-].
 Qed.
 End Public.
 

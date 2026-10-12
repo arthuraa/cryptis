@@ -59,41 +59,23 @@ Implicit Types (t k : term) (ts : list term).
 
 Coercion TNonce : nonce >-> term.
 
-Definition term_of_aenc_key_def sk := TKey ADec (seed_of_aenc_key sk).
-Fact term_of_aenc_key_key : unit. exact: tt. Qed.
-Definition term_of_aenc_key :=
-  locked_with term_of_aenc_key_key term_of_aenc_key_def.
-Lemma term_of_aenc_keyE : term_of_aenc_key = term_of_aenc_key_def.
-Proof. exact: locked_withE. Qed.
+lock Definition term_of_aenc_key sk := TKey ADec (seed_of_aenc_key sk).
 Coercion term_of_aenc_key : aenc_key >-> term.
 
-Definition term_of_sign_key_def sk := TKey Sign (seed_of_sign_key sk).
-Fact term_of_sign_key_key : unit. exact: tt. Qed.
-Definition term_of_sign_key :=
-  locked_with term_of_sign_key_key term_of_sign_key_def.
-Lemma term_of_sign_keyE : term_of_sign_key = term_of_sign_key_def.
-Proof. exact: locked_withE. Qed.
+lock Definition term_of_sign_key sk := TKey Sign (seed_of_sign_key sk).
 Coercion term_of_sign_key : sign_key >-> term.
 
-Definition term_of_senc_key_def sk := TKey SEnc (seed_of_senc_key sk).
-Fact term_of_senc_key_key : unit. exact: tt. Qed.
-Definition term_of_senc_key :=
-  locked_with term_of_senc_key_key term_of_senc_key_def.
-Lemma term_of_senc_keyE : term_of_senc_key = term_of_senc_key_def.
-Proof. exact: locked_withE. Qed.
+lock Definition term_of_senc_key sk := TKey SEnc (seed_of_senc_key sk).
 Coercion term_of_senc_key : senc_key >-> term.
 
-Definition keysE :=
-  (term_of_aenc_keyE, term_of_sign_keyE, term_of_senc_keyE).
-
 Lemma term_of_aenc_key_inj : Inj (=) (=) term_of_aenc_key.
-Proof. rewrite keysE. by case=> [?] [?] [->]. Qed.
+Proof. rewrite unlock. by case=> [?] [?] [->]. Qed.
 
 Lemma term_of_sign_key_inj : Inj (=) (=) term_of_sign_key.
-Proof. rewrite keysE. by case=> [?] [?] [->]. Qed.
+Proof. rewrite unlock. by case=> [?] [?] [->]. Qed.
 
 Lemma term_of_senc_key_inj : Inj (=) (=) term_of_senc_key.
-Proof. rewrite keysE. by case=> [?] [?] [->]. Qed.
+Proof. rewrite unlock. by case=> [?] [?] [->]. Qed.
 
 (* We use a different name for the default induction scheme, as it does not
    allow us to recurse under exponentials.  Later, we'll prove term_ind, which
@@ -238,39 +220,39 @@ Qed.
 Lemma fold_normalize pt : fold_term (PreTerm.normalize pt) = fold_term pt.
 Proof. by rewrite -unfold_fold unfold_termK. Qed.
 
-Global Instance unfold_term_inj : Inj (=) (=) unfold_term.
+#[global] Instance unfold_term_inj : Inj (=) (=) unfold_term.
 Proof. by move=> t1 t2 /(f_equal fold_term); rewrite !unfold_termK. Qed.
 
-Global Instance term_eq_dec : EqDecision term :=
+#[global] Instance term_eq_dec : EqDecision term :=
   inj_eq_dec unfold_term.
 
-Global Instance term_countable : Countable term :=
+#[global] Instance term_countable : Countable term :=
   inj_countable' unfold_term fold_term unfold_termK.
 
-Global Instance term_inhabited : Inhabited term.
+#[global] Instance term_inhabited : Inhabited term.
 Proof. exact: (populate (TInt 0)). Qed.
 
 Canonical termO := leibnizO term.
 
-Global Instance aenc_key_eq_dec : EqDecision aenc_key.
+#[global] Instance aenc_key_eq_dec : EqDecision aenc_key.
 Proof. solve_decision. Defined.
-Global Instance aenc_key_countable : Countable aenc_key.
+#[global] Instance aenc_key_countable : Countable aenc_key.
 Proof. apply: (inj_countable' seed_of_aenc_key AEncKey); by case. Qed.
-Global Instance aenc_key_inhabited : Inhabited aenc_key :=
+#[global] Instance aenc_key_inhabited : Inhabited aenc_key :=
   populate (AEncKey inhabitant).
 
-Global Instance sign_key_eq_dec : EqDecision sign_key.
+#[global] Instance sign_key_eq_dec : EqDecision sign_key.
 Proof. solve_decision. Defined.
-Global Instance sign_key_countable : Countable sign_key.
+#[global] Instance sign_key_countable : Countable sign_key.
 Proof. apply: (inj_countable' seed_of_sign_key SignKey); by case. Qed.
-Global Instance sign_key_inhabited : Inhabited sign_key :=
+#[global] Instance sign_key_inhabited : Inhabited sign_key :=
   populate (SignKey inhabitant).
 
-Global Instance senc_key_eq_dec : EqDecision senc_key.
+#[global] Instance senc_key_eq_dec : EqDecision senc_key.
 Proof. solve_decision. Defined.
-Global Instance senc_key_countable : Countable senc_key.
+#[global] Instance senc_key_countable : Countable senc_key.
 Proof. apply: (inj_countable' seed_of_senc_key SEncKey); by case. Qed.
-Global Instance senc_key_inhabited : Inhabited senc_key :=
+#[global] Instance senc_key_inhabited : Inhabited senc_key :=
   populate (SEncKey inhabitant).
 
 Lemma normalize_unfold t :

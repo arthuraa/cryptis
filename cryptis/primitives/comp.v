@@ -127,7 +127,7 @@ Lemma twp_tone E Ψ :
 Proof.
 iIntros "HΨ". rewrite /tone; wp_pures.
 rewrite (_ : NILV = repr ([] : list PreTerm.pre_term));
-  last by rewrite repr_list_unseal.
+  last by rewrite [@repr_list]unlock.
 wp_apply (twp_hl_mul_aux E []).
 rewrite (_ : PreTerm.mul_aux [] = unfold_term (TMulN []));
   last by rewrite (unfold_TMulN []).
@@ -190,7 +190,7 @@ Lemma twp_tgone E Ψ :
 Proof.
 iIntros "HΨ". rewrite /tgone; wp_pures.
 rewrite (_ : NILV = repr ([] : list PreTerm.pre_term));
-  last by rewrite repr_list_unseal.
+  last by rewrite [@repr_list]unlock.
 wp_apply (twp_hl_gmul_aux E []).
 rewrite (_ : PreTerm.gmul_aux [] = unfold_term (TGMulN []));
   last by rewrite (unfold_TGMulN []).

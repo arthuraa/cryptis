@@ -41,7 +41,7 @@ iIntros "#HF %x H"; rewrite /size_rec_pred; move: (s x) => n.
 iInduction n as [|n IH] forall (x) => /=; by iApply "HF"; eauto.
 Qed.
 
-Global Instance size_rec_pred_ne n :
+#[global] Instance size_rec_pred_ne n :
   Proper ((pointwise_relation _ (dist n) ==> (=) ==> dist n) ==>
           (=) ==> dist n) size_rec_pred.
 Proof.

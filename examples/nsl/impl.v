@@ -11,7 +11,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Local Existing Instance ticket_lock.
+#[local] Existing Instance ticket_lock.
 
 (*
 

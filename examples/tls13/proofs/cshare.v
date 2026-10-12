@@ -95,7 +95,7 @@ wp_untag_eq args e; wp_pures.
   rewrite {}e Spec.of_listK /=.
   wp_list_match => [?? -> {args'} | neq]; wp_finish; last first.
     by rewrite prod_of_list_neq.
-  by rewrite unlock /=; wp_pures.
+  by rewrite [in prod_of_list _ _]unlock /=; wp_pures.
 rewrite {}e.
 wp_untag_eq args e; wp_pures.
   rewrite {}e Spec.tagK /=.
@@ -103,7 +103,7 @@ wp_untag_eq args e; wp_pures.
   rewrite {}e Spec.of_listK /=.
   wp_list_match => [??? -> {args'} | neq]; wp_finish; last first.
     by rewrite prod_of_list_neq.
-  by rewrite unlock /=; wp_pures.
+  by rewrite [in prod_of_list _ _]unlock /=; wp_pures.
 rewrite {}e.
 wp_untag_eq args e; wp_pures.
   rewrite {}e Spec.tagK /=.
@@ -111,7 +111,7 @@ wp_untag_eq args e; wp_pures.
   rewrite {}e Spec.of_listK /=.
   wp_list_match => [???? -> {args'} | neq]; wp_finish; last first.
     by rewrite prod_of_list_neq.
-  by rewrite unlock /=; wp_pures.
+  by rewrite [in prod_of_list _ _]unlock /=; wp_pures.
 by rewrite {}e.
 Qed.
 

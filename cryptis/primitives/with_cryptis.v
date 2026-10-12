@@ -14,8 +14,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Local Existing Instance cryptisGS_tlock.
-Local Existing Instance ticket_lock.
+#[local] Existing Instance cryptisGS_tlock.
+#[local] Existing Instance ticket_lock.
 
 Definition get_chan : val := λ: "c" "lock", rec: "loop" <> :=
   let: "n" := nondet_nat #() in
@@ -72,7 +72,7 @@ Definition channel c : iProp Σ :=
     □ (∀ t Ψ, public t -∗ Ψ #() -∗ WP sf t {{ Ψ }}) ∗
     □ (∀ Ψ, (∀ t, public t -∗ Ψ t) -∗ WP rf #() {{ Ψ }}).
 
-Global Instance channel_persistent c : Persistent (channel c).
+#[global] Instance channel_persistent c : Persistent (channel c).
 Proof. apply _. Qed.
 
 Definition chan_inv (c : loc) : iProp Σ :=
@@ -159,7 +159,7 @@ iIntros (a) "[_ token]".
 iPoseProof (nonce_alloc P Q (Nonce a) with "token") as "fresh".
 iPoseProof ("mint" with "fresh") as ">(#? & #? & #? & ?)".
 iSpecialize ("post" $! (Nonce a)).
-wp_pures. rewrite val_of_term_unseal /=.
+wp_pures. rewrite [val_of_term]unlock /=.
 iApply ("post" with "[$] [$] [$] [] [$]").
 by iIntros "!> %"; rewrite exp_pred_base_TInv; eauto.
 Qed.

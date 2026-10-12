@@ -15,29 +15,21 @@ Unset Printing Implicit Defensive.
 Abbreviation cryptisN := (nroot.@"cryptis").
 
 Class cryptisGpreS Σ := CryptisGPreS {
-  cryptisGpreS_term_meta : term_metaGpreS Σ;
-  cryptisGpreS_public : publicGpreS Σ;
-  cryptisGpreS_tlock : tlockG Σ;
+  #[local] cryptisGpreS_term_meta :: term_metaGpreS Σ;
+  #[local] cryptisGpreS_public :: publicGpreS Σ;
+  #[local] cryptisGpreS_tlock :: tlockG Σ;
 }.
-
-Local Existing Instance cryptisGpreS_term_meta.
-Local Existing Instance cryptisGpreS_public.
-Local Existing Instance cryptisGpreS_tlock.
 
 Class cryptisGS Σ := CryptisGS {
-  cryptisGS_term_meta : term_metaGS Σ;
-  cryptisGS_public : publicGS Σ;
-  cryptisGS_tlock : tlockG Σ;
+  #[global] cryptisGS_term_meta :: term_metaGS Σ;
+  #[global] cryptisGS_public :: publicGS Σ;
+  #[local] cryptisGS_tlock :: tlockG Σ;
 }.
-
-Global Existing Instance cryptisGS_term_meta.
-Global Existing Instance cryptisGS_public.
-Local Existing Instance cryptisGS_tlock.
 
 Definition cryptisΣ : gFunctors :=
   #[term_metaΣ; publicΣ; tlockΣ].
 
-Global Instance subG_cryptisGpreS Σ : subG cryptisΣ Σ → cryptisGpreS Σ.
+#[global] Instance subG_cryptisGpreS Σ : subG cryptisΣ Σ → cryptisGpreS Σ.
 Proof. solve_inG. Qed.
 
 Section Cryptis.

@@ -737,12 +737,12 @@ End SMS.
 (* [to] is the canonical (sorted, cancelled) form; keep it opaque to [simpl] so
    its [merge_sort]/[cancel] implementation never leaks into goals — reason about
    it through the lemmas above ([to_eq]/[to_id]/[count_to]/[elem_of_to]/…). *)
-Global Arguments SMS.to : simpl never.
+#[global] Arguments SMS.to : simpl never.
 
 (* Well-formedness is a client-facing predicate; keep [simpl] from exposing its
    [invs_canceled]/involution internals.  Reason about it through the extractors
    ([wf_sorted]/[wf_no_pairs]/[wf_intro]/…), never by unfolding. *)
-Global Arguments SMS.wf : simpl never.
+#[global] Arguments SMS.wf : simpl never.
 
-Global Existing Instance SMS.count_proper.
-Global Existing Instance SMS.invs_canceled_proper.
+#[global] Existing Instance SMS.count_proper.
+#[global] Existing Instance SMS.invs_canceled_proper.

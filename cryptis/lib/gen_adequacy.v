@@ -19,7 +19,7 @@ Definition runs_until e Φ : iProp Σ :=
     state_interp σ' ns' ks' nt' ∗
     Φ v.
 
-Local Instance runs_until_proper n e :
+#[local] Instance runs_until_proper n e :
   Proper (pointwise_relation (val Λ) (dist n) ==> dist n) (runs_until e).
 Proof. solve_proper. Qed.
 

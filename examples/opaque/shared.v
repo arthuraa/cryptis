@@ -174,7 +174,7 @@ Qed.
 Lemma tsize_hash_result_lt tag t l :
   t ∈ l -> tsize t < tsize (hash_result tag (Spec.of_list l)).
 Proof.
-move=> t_l; rewrite /hash_result Spec.tag_unseal /Spec.tag_def.
+move=> t_l; rewrite /hash_result [Spec.tag]unlock.
 have e : tsize (THash (TPair (Tag (opN.@tag)) (Spec.of_list l)))
        = S (S (tsize (Tag (opN.@tag)) + tsize (Spec.of_list l))).
   by rewrite [tsize (THash _)]tsize_eq [tsize (TPair _ _)]tsize_eq.
@@ -529,7 +529,8 @@ intros [t' [Hmem Hsubterm]].
 induction ts.
   by inversion Hmem.
 rewrite elem_of_cons in Hmem.
-rewrite Spec.of_list_unseal /= -Spec.of_list_unseal.
+have -> : Spec.of_list (a :: ts) = TPair a (Spec.of_list ts)
+  by rewrite [Spec.of_list]unlock.
 destruct Hmem as [->|Hmem].
 - exact: STPair1.
 - exact: (STPair2 a (IHts Hmem)).
@@ -538,7 +539,7 @@ Qed.
 Lemma subterm_of_tag (t t' : term) (n : namespace) :
   subterm t t' ->
   subterm t (Spec.tag (Tag n) t').
-Proof. rewrite Spec.tag_unseal; exact: STPair2. Qed.
+Proof. rewrite [Spec.tag]unlock; exact: STPair2. Qed.
 
 Lemma subterm_TExpN_exp (t t' : term) (ts : list term) :
   ( exists t'', subterm t t'' /\ t'' ∈ ts) ->

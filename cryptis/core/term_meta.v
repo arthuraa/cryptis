@@ -1,4 +1,5 @@
 From mathcomp Require Import ssreflect.
+From elpi.apps Require Import locker.
 From stdpp Require Import gmap.
 From iris.algebra Require Import agree auth gset list reservation_map excl.
 From iris.algebra Require Import functions.
@@ -25,7 +26,7 @@ Class term_metaGS Σ : Type := TermMetaGS {
 Definition term_metaΣ : gFunctors :=
   #[metaΣ; ghost_mapΣ term gname].
 
-Global Instance subG_term_metaGpreS Σ :
+#[global] Instance subG_term_metaGpreS Σ :
   subG term_metaΣ Σ → term_metaGpreS Σ.
 Proof. solve_inG. Qed.
 
@@ -58,7 +59,7 @@ Qed.
 
 Context `{!term_metaGS Σ}.
 
-Global Instance term_meta_inv_timeless : Timeless term_meta_inv.
+#[global] Instance term_meta_inv_timeless : Timeless term_meta_inv.
 Proof. rewrite /term_meta_inv. apply _. Qed.
 
 #[global]
@@ -67,18 +68,16 @@ Proof. apply _. Qed.
 
 Class HasTermMetaCtx (ctx : iProp) := {
   has_term_meta_ctx : ctx ⊢ term_meta_ctx;
-  has_term_meta_ctx_persistent : Persistent ctx;
+  #[local] has_term_meta_ctx_persistent :: Persistent ctx;
 }.
-
-Local Existing Instance has_term_meta_ctx_persistent.
 
 Definition term_name t γ : iProp :=
   minted t ∗ t ↪[term_meta_name]□ γ.
 
-Global Instance term_name_persistent t γ : Persistent (term_name t γ).
+#[global] Instance term_name_persistent t γ : Persistent (term_name t γ).
 Proof. apply _. Qed.
 
-Global Instance term_name_timeless t γ : Timeless (term_name t γ).
+#[global] Instance term_name_timeless t γ : Timeless (term_name t γ).
 Proof. apply _. Qed.
 
 Lemma term_name_agree t γ1 γ2 :
@@ -93,49 +92,41 @@ Qed.
 Lemma term_name_minted t γ : term_name t γ -∗ minted t.
 Proof. by iIntros "[? _]". Qed.
 
-Definition term_token_def t E : iProp :=
+lock Definition term_token t E : iProp :=
   ∃ γ, term_name t γ ∗ gmeta_token γ E.
-Definition term_token_aux : seal term_token_def. by eexists. Qed.
-Definition term_token := unseal term_token_aux.
-Lemma term_token_unseal : term_token = term_token_def.
-Proof. exact: seal_eq. Qed.
 
-Definition term_meta_def `{Countable L} t N (x : L) : iProp :=
+lock Definition term_meta `{Countable L} t N (x : L) : iProp :=
   ∃ γ, term_name t γ ∗ gmeta γ N x.
-Definition term_meta_aux : seal (@term_meta_def). by eexists. Qed.
-Definition term_meta := unseal term_meta_aux.
-Lemma term_meta_unseal : @term_meta = @term_meta_def.
-Proof. exact: seal_eq. Qed.
 Arguments term_meta {L _ _} t N x.
 
 Lemma term_token_minted t E : term_token t E -∗ minted t.
 Proof.
-rewrite term_token_unseal. iIntros "(%γ & #name & _)".
+rewrite [@term_token]unlock. iIntros "(%γ & #name & _)".
 by iApply term_name_minted.
 Qed.
 
 Lemma term_meta_minted `{Countable L} t N (x : L) :
   term_meta t N x -∗ minted t.
 Proof.
-rewrite term_meta_unseal. iIntros "(%γ & #name & _)".
+rewrite [@term_meta]unlock. iIntros "(%γ & #name & _)".
 by iApply term_name_minted.
 Qed.
 
-Global Instance term_token_timeless t E : Timeless (term_token t E).
-Proof. rewrite term_token_unseal. apply _. Qed.
+#[global] Instance term_token_timeless t E : Timeless (term_token t E).
+Proof. rewrite [@term_token]unlock. apply _. Qed.
 
-Global Instance term_meta_timeless `{Countable L} t N (x : L) :
+#[global] Instance term_meta_timeless `{Countable L} t N (x : L) :
   Timeless (term_meta t N x).
-Proof. rewrite term_meta_unseal. apply _. Qed.
+Proof. rewrite [@term_meta]unlock. apply _. Qed.
 
-Global Instance term_meta_persistent `{Countable L} t N (x : L) :
+#[global] Instance term_meta_persistent `{Countable L} t N (x : L) :
   Persistent (term_meta t N x).
-Proof. rewrite term_meta_unseal. apply _. Qed.
+Proof. rewrite [@term_meta]unlock. apply _. Qed.
 
 Lemma term_token_drop E1 E2 t :
   E1 ⊆ E2 → term_token t E2 -∗ term_token t E1.
 Proof.
-rewrite term_token_unseal.
+rewrite [@term_token]unlock.
 iIntros "% (%γ & #name & token)".
 iExists γ. iSplit => //. by iApply gmeta_token_drop.
 Qed.
@@ -143,7 +134,7 @@ Qed.
 Lemma term_token_disj E1 E2 t :
   term_token t E1 -∗ term_token t E2 -∗ ⌜E1 ## E2⌝.
 Proof.
-rewrite term_token_unseal.
+rewrite [@term_token]unlock.
 iIntros "(% & #name1 & token1) (% & #name2 & token2)".
 iPoseProof (term_name_agree with "name1 name2") as "<-".
 iApply (gmeta_token_disj with "token1 token2").
@@ -152,7 +143,7 @@ Qed.
 Lemma term_token_difference t E1 E2 :
   E1 ⊆ E2 → term_token t E2 ⊣⊢ term_token t E1 ∗ term_token t (E2 ∖ E1).
 Proof.
-rewrite term_token_unseal.
+rewrite [@term_token]unlock.
 move=> sub. iSplit.
 - iIntros "(% & #name & token)".
   rewrite (gmeta_token_difference _ _ _ sub).
@@ -167,7 +158,7 @@ Qed.
 Lemma term_meta_token `{Countable L} t (x : L) N E :
   ↑N ⊆ E → term_token t E -∗ term_meta t N x -∗ False.
 Proof.
-rewrite term_token_unseal term_meta_unseal => sub.
+rewrite [@term_token]unlock [@term_meta]unlock => sub.
 iIntros "(% & #name1 & token) (% & #name2 & #meta)".
 iPoseProof (term_name_agree with "name1 name2") as "<-".
 by iApply (gmeta_gmeta_token with "token meta").
@@ -176,7 +167,7 @@ Qed.
 Lemma term_meta_set' `{Countable L} N (x : L) E t :
   ↑N ⊆ E → term_token t E ==∗ term_meta t N x ∗ term_token t (E ∖ ↑N).
 Proof.
-rewrite term_token_unseal term_meta_unseal.
+rewrite [@term_token]unlock [@term_meta]unlock.
 iIntros "%sub (%γ & #name & token)".
 iMod (gmeta_set' _ _ _ x sub with "token") as "[#meta token]".
 iModIntro.
@@ -194,7 +185,7 @@ Qed.
 Lemma term_meta_agree `{Countable L} t N (x1 x2 : L) :
   term_meta t N x1 -∗ term_meta t N x2 -∗ ⌜x1 = x2⌝.
 Proof.
-rewrite term_meta_unseal.
+rewrite [@term_meta]unlock.
 iIntros "(% & #name1 & #meta1) (% & #name2 & #meta2)".
 iPoseProof (term_name_agree with "name1 name2") as "<-".
 iApply (gmeta_agree with "meta1 meta2").
@@ -211,12 +202,8 @@ Qed.
 
 Section TermOwn.
 
-Definition term_own_def `{inG Σ A} t N (x : A) : iProp :=
+lock Definition term_own `{inG Σ A} t N (x : A) : iProp :=
   ∃ γ, term_name t γ ∗ nown γ N x.
-Definition term_own_aux : seal (@term_own_def). by eexists. Qed.
-Definition term_own := unseal (@term_own_aux).
-Lemma term_own_unseal : @term_own = @term_own_def.
-Proof. exact: seal_eq. Qed.
 Arguments term_own {A _} t N x.
 
 Context `{inG Σ A}.
@@ -224,7 +211,7 @@ Context `{inG Σ A}.
 Lemma term_own_alloc t N {E} (a : A) :
   ↑N ⊆ E → ✓ a → term_token t E ==∗ term_own t N a ∗ term_token t (E ∖ ↑N).
 Proof.
-rewrite term_own_unseal term_token_unseal.
+rewrite [@term_own]unlock [@term_token]unlock.
 iIntros "%sub %val (% & #name & token)".
 iMod (nown_alloc _ _ sub val with "token") as "[own token]".
 iModIntro.
@@ -234,7 +221,7 @@ Qed.
 Lemma term_token_own t N E (a : A) :
   ↑N ⊆ E → term_token t E -∗ term_own t N a -∗ False.
 Proof.
-rewrite term_own_unseal term_token_unseal.
+rewrite [@term_own]unlock [@term_token]unlock.
 iIntros "%sub (%γ & #name & token) (%γ' & #name' & own)" .
 iPoseProof (term_name_agree with "name name'") as "->".
 by iApply (nown_token with "token own").
@@ -242,14 +229,14 @@ Qed.
 
 Lemma term_own_valid t N (a : A) : term_own t N a -∗ ✓ a.
 Proof.
-rewrite term_own_unseal.
+rewrite [@term_own]unlock.
 iIntros "(%γ' & #own_γ & own)". iApply (nown_valid with "own").
 Qed.
 
 Lemma term_own_valid_2 t N (a1 a2 : A) :
   term_own t N a1 -∗ term_own t N a2 -∗ ✓ (a1 ⋅ a2).
 Proof.
-rewrite term_own_unseal.
+rewrite [@term_own]unlock.
 iIntros "(%γ1 & #own_γ1 & own1) (%γ2 & #own_γ2 & own2)".
 iPoseProof (term_name_agree with "own_γ1 own_γ2") as "<-".
 by iApply (nown_valid_2 with "own1 own2").
@@ -258,34 +245,33 @@ Qed.
 Lemma term_own_update t N (a a' : A) :
   a ~~> a' → term_own t N a ==∗ term_own t N a'.
 Proof.
-rewrite term_own_unseal.
+rewrite [@term_own]unlock.
 iIntros (?) "(%γ' & #? & own)".
-iMod (nown_update with "own") as "own"; eauto.
-iModIntro. iExists γ'. eauto.
+by iMod (nown_update with "own") as "own"; eauto.
 Qed.
 
 #[global]
 Instance term_own_core_persistent t N (a : A) :
   CoreId a → Persistent (term_own t N a).
-Proof. rewrite term_own_unseal. apply _. Qed.
+Proof. rewrite [@term_own]unlock. apply _. Qed.
 
 #[global]
 Instance term_own_timeless t N (a : A) :
   Discrete a → Timeless (term_own t N a).
-Proof. rewrite term_own_unseal. apply _. Qed.
+Proof. rewrite [@term_own]unlock. apply _. Qed.
 
 #[global]
 Instance term_own_ne t N : NonExpansive (@term_own A _ t N).
-Proof. rewrite term_own_unseal. solve_proper. Qed.
+Proof. rewrite [@term_own]unlock. solve_proper. Qed.
 
 #[global]
 Instance term_own_proper t N : Proper ((≡) ==> (≡)) (@term_own A _ t N).
-Proof. rewrite term_own_unseal. solve_proper. Qed.
+Proof. rewrite [@term_own]unlock. solve_proper. Qed.
 
 Lemma term_own_op t N (a1 a2 : A) :
   term_own t N (a1 ⋅ a2) ⊣⊢ term_own t N a1 ∗ term_own t N a2.
 Proof.
-rewrite term_own_unseal.
+rewrite [@term_own]unlock.
 iSplit.
 - iIntros "(%γ' & #? & [own1 own2])".
   by iSplitL "own1"; iExists γ'; iSplit.
@@ -373,7 +359,7 @@ assert (∀ names : gmap term gname,
     rewrite dom_names' dom_insert_L. iSplit; first by iPureIntro; set_solver.
     rewrite big_sepS_union; last by set_solver.
     iFrame. rewrite big_sepS_singleton.
-    iIntros "#m_t". rewrite term_token_unseal. iExists γ. by iFrame. }
+    iIntros "#m_t". rewrite [@term_token]unlock. iExists γ. by iFrame. }
 iIntros "PE QE PQ (%names & own & #minted_names)".
 iAssert (⌜dom names ## T⌝)%I as "%dis".
 { rewrite elem_of_disjoint. iIntros "%t %t_names %t_T".

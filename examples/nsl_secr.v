@@ -60,7 +60,7 @@ Definition resp : val := λ: "c" "skR",
 Definition corrupt skI skR : iProp :=
   public skI ∨ public skR.
 
-Global Instance corrupt_persistent skI skR :
+#[global] Instance corrupt_persistent skI skR :
   Persistent (corrupt skI skR).
 Proof. apply _. Qed.
 
@@ -108,7 +108,7 @@ iMod (aenc_pred_set (N := N.@"m3") msg3_pred with "t1")
 iModIntro; iFrame; do !iSplit => //.
 Qed.
 
-Global Instance nsl_ctx_persistent : Persistent nsl_ctx.
+#[global] Instance nsl_ctx_persistent : Persistent nsl_ctx.
 Proof. apply _. Qed.
 
 Ltac protocol_failure :=

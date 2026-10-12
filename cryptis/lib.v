@@ -36,7 +36,7 @@ elim: xs ys => //= [|x xs IH] ys.
   by rewrite take_drop.
 Qed.
 
-Global Instance list_fmap_perm_inj {A B} (f : A → B) :
+#[global] Instance list_fmap_perm_inj {A B} (f : A → B) :
   Inj (=) (=) f →
   Inj (≡ₚ) (≡ₚ) (fmap f).
 Proof.
@@ -57,9 +57,9 @@ Context `{invGS Σ}.
 Definition escrow (N' : namespace) (P Q : iProp Σ) : iProp Σ :=
   □ (∀ E, ⌜↑N' ⊆ E⌝ -∗ P ={E}=∗ ▷ Q).
 
-Global Typeclasses Opaque escrow.
+#[global] Typeclasses Opaque escrow.
 
-Global Instance escrow_persistent N' P Q :
+#[global] Instance escrow_persistent N' P Q :
   Persistent (escrow N' P Q).
 Proof. by rewrite /escrow; apply _. Qed.
 

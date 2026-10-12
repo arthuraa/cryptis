@@ -61,7 +61,7 @@ Definition resp : val := λ: "c" "lR" "skR",
 Definition corrupt skI skR : iProp :=
   public skI ∨ public skR.
 
-Global Instance corrupt_persistent kI kR :
+#[global] Instance corrupt_persistent kI kR :
   Persistent (corrupt kI kR).
 Proof. apply _. Qed.
 
@@ -77,7 +77,7 @@ Qed.
 Definition session l skI skR (sk : term) : iProp :=
   l ↦□ (Spec.of_list [Spec.pkey skI; Spec.pkey skR; sk] : val).
 
-Global Instance session_persistent l skI skR sk :
+#[global] Instance session_persistent l skI skR sk :
   Persistent (session l skI skR sk).
 Proof. apply _. Qed.
 
@@ -120,7 +120,7 @@ iMod (aenc_pred_set (N := N.@"m3") (msg3_pred lI lR) with "t1")
 iModIntro; iFrame; do !iSplit => //.
 Qed.
 
-Global Instance nsl_ctx_persistent lI lR :
+#[global] Instance nsl_ctx_persistent lI lR :
   Persistent (nsl_ctx lI lR).
 Proof. apply _. Qed.
 

@@ -122,7 +122,7 @@ wp_apply wp_aenc => //.
   rewrite minted_of_list /= minted_pkey.
   do !iSplit => //.
   - by iApply all_minted_TExp; rewrite minted_TInt; iSplit.
-  - rewrite Tag_unseal /Tag_def. by rewrite minted_TInt. }
+  - rewrite [Tag]unlock. by rewrite minted_TInt. }
 { (* encryption invariant *)
   iRight. iSplit.
   - (* □ msg2_pred skI plaintext *)
@@ -137,7 +137,7 @@ wp_apply wp_aenc => //.
       { do !iSplit; eauto. }
       iModIntro. by iLeft.
     + by iApply public_aenc_key.
-    + rewrite Tag_unseal /Tag_def. by rewrite public_TInt. }
+    + rewrite [Tag]unlock. by rewrite public_TInt. }
 iIntros "%m2 #p_m2". wp_pures.
 wp_apply wp_send => //. wp_pures.
 iApply ("Hpost" $! b). by iFrame "∗ #".

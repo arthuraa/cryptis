@@ -15,7 +15,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Local Existing Instance ticket_lock.
+#[local] Existing Instance ticket_lock.
 
 Abbreviation dbN := (nroot.@"db").
 
@@ -39,19 +39,16 @@ Instance scs_repr : Repr server_client_state :=
   λ s, (scs_db s, scs_lock s)%V.
 
 Class storeGS Σ := StoreGS {
-  storeGS_db : dbGS Σ;
-  storeGS_replica : replicaG Σ (gmap term term);
+  #[local] storeGS_db :: dbGS Σ;
+  #[local] storeGS_replica :: replicaG Σ (gmap term term);
 }.
-
-Local Existing Instance storeGS_db.
-Local Existing Instance storeGS_replica.
 
 Definition storeΣ := #[
   dbΣ;
   replicaΣ (gmap term term)
 ].
 
-Global Instance subG_storeGS Σ : subG storeΣ Σ → storeGS Σ.
+#[global] Instance subG_storeGS Σ : subG storeΣ Σ → storeGS Σ.
 Proof. solve_inG. Qed.
 
 Section Defs.

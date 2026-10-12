@@ -17,14 +17,11 @@ Implicit Types (t k : term) (ts : list term).
 
 (* Surface API: Tag and Module Spec (tag/untag, of_list/to_list, open, key predicates *)
 
-Definition Tag_def (N : namespace) :=
+lock Definition Tag (N : namespace) :=
   TInt (Zpos (encode N)).
-Definition Tag_aux : seal Tag_def. by eexists. Qed.
-Definition Tag := unseal Tag_aux.
-Lemma Tag_unseal : Tag = Tag_def. Proof. exact: seal_eq. Qed.
 
-Global Instance Tag_inj : Inj (=) (=) Tag.
-Proof. by rewrite Tag_unseal => ?? [] /(inj _ _ _). Qed.
+#[global] Instance Tag_inj : Inj (=) (=) Tag.
+Proof. by rewrite [Tag]unlock => ?? [] /(inj _ _ _). Qed.
 
 Module Spec.
 
@@ -58,48 +55,42 @@ Definition pkey t :=
 
 Lemma aenc_pkey_inj (sk1 sk2 : aenc_key) :
   pkey sk1 = pkey sk2 → sk1 = sk2.
-Proof. by rewrite keysE; case: sk1 sk2 => [?] [?] [->]. Qed.
+Proof. by rewrite [term_of_aenc_key]unlock; case: sk1 sk2 => [?] [?] [->]. Qed.
 
 Lemma sign_pkey_inj (sk1 sk2 : sign_key) :
   pkey sk1 = pkey sk2 → sk1 = sk2.
-Proof. by rewrite keysE; case: sk1 sk2 => [?] [?] [->]. Qed.
+Proof. by rewrite [term_of_sign_key]unlock; case: sk1 sk2 => [?] [?] [->]. Qed.
 
 Lemma senc_pkey_inj (sk1 sk2 : senc_key) :
   pkey sk1 = pkey sk2 → sk1 = sk2.
-Proof. by rewrite keysE; case: sk1 sk2 => [?] [?] [->]. Qed.
+Proof. by rewrite [term_of_senc_key]unlock; case: sk1 sk2 => [?] [?] [->]. Qed.
 
-Definition tag_def N (t : term) :=
+lock Definition tag N (t : term) :=
   TPair N t.
-Definition tag_aux : seal tag_def. by eexists. Qed.
-Definition tag := unseal tag_aux.
-Lemma tag_unseal : tag = tag_def. Proof. exact: seal_eq. Qed.
 
 Lemma is_nonce_tag N t : is_nonce (tag N t) = false.
-Proof. by rewrite tag_unseal. Qed.
+Proof. by rewrite [tag]unlock. Qed.
 
 Lemma is_exp_tag N t : is_exp (tag N t) = false.
-Proof. by rewrite tag_unseal. Qed.
+Proof. by rewrite [tag]unlock. Qed.
 
-Definition untag_def N (t : term) :=
+lock Definition untag N (t : term) :=
   match t with
   | TPair N' t =>
     if decide (N = N') then Some t else None
   | _ => None
   end.
-Definition untag_aux : seal untag_def. by eexists. Qed.
-Definition untag := unseal untag_aux.
-Lemma untag_unseal : untag = untag_def. Proof. exact: seal_eq. Qed.
 
 Lemma tagK N t : untag N (tag N t) = Some t.
 Proof.
-rewrite untag_unseal tag_unseal /untag_def /tag_def /=.
+rewrite [untag]unlock [tag]unlock /=.
 by rewrite decide_True_pi.
 Qed.
 
 #[global]
 Instance tag_inj : Inj2 (=) (=) (=) tag.
 Proof.
-rewrite tag_unseal /tag_def => c1 t1 c2 t2 [] e ->.
+rewrite [tag]unlock => c1 t1 c2 t2 [] e ->.
 split=> //; by apply: inj e.
 Qed.
 
@@ -107,7 +98,7 @@ Lemma untagK N t1 t2 :
   untag N t1 = Some t2 ->
   t1 = tag N t2.
 Proof.
-rewrite untag_unseal tag_unseal /=.
+rewrite [untag]unlock [tag]unlock /=.
 case: t1=> [] // N' t1 /=.
 by case: decide => // <- [<-].
 Qed.
@@ -116,7 +107,7 @@ Lemma untag_tag_ne N1 N2 t :
   N1 ≠ N2 →
   Spec.untag N1 (Spec.tag N2 t) = None.
 Proof.
-move=> neq; rewrite Spec.untag_unseal Spec.tag_unseal /=.
+move=> neq; rewrite [Spec.untag]unlock [Spec.tag]unlock /=.
 rewrite decide_False //.
 Qed.
 
@@ -174,34 +165,34 @@ Definition open_key k : option term :=
 
 Lemma open_key_aenc (sk : aenc_key) :
   open_key (Spec.pkey sk) = @Some term sk.
-Proof. by rewrite keysE. Qed.
+Proof. by rewrite [term_of_aenc_key]unlock. Qed.
 
 Lemma open_key_sign (sk : sign_key) :
   open_key sk = Some (Spec.pkey sk).
-Proof. by rewrite keysE. Qed.
+Proof. by rewrite [term_of_sign_key]unlock. Qed.
 
 Lemma open_key_senc (sk : senc_key) :
   open_key sk = @Some term sk.
-Proof. by rewrite keysE. Qed.
+Proof. by rewrite [term_of_senc_key]unlock. Qed.
 
 Lemma open_key_aencK pk (sk : aenc_key) :
   open_key pk = @Some term sk → pk = pkey sk.
 Proof.
-rewrite keysE; case: sk => seed /=.
+rewrite [term_of_aenc_key]unlock; case: sk => seed /=.
 by case: pk => //= - [] // ?; case=> ->.
 Qed.
 
 Lemma open_key_signK k (sk : sign_key) :
   open_key k = Some (Spec.pkey sk) → k = sk.
 Proof.
-rewrite keysE; case: sk => seed /=.
+rewrite [term_of_sign_key]unlock; case: sk => seed /=.
 by case: k => //= - [] // ?; case=> ->.
 Qed.
 
 Lemma open_key_sencK k' (k : senc_key) :
   open_key k' = @Some term k → k' = k.
 Proof.
-rewrite keysE; case: k => seed /=.
+rewrite [term_of_senc_key]unlock; case: k => seed /=.
 by case: k' => //= - [] // ?; case=> ->.
 Qed.
 
@@ -251,22 +242,19 @@ Definition has_key_type kt t :=
   | None => false
   end.
 
-Definition of_list_aux : seal (foldr TPair (TInt 0)). by eexists. Qed.
-Definition of_list := unseal of_list_aux.
-Lemma of_list_unseal : of_list = foldr TPair (TInt 0).
-Proof. exact: seal_eq. Qed.
+lock Definition of_list := foldr TPair (TInt 0).
 
 Lemma of_list_tsize t ts : t ∈ ts → tsize t < tsize (of_list ts).
 Proof.
-rewrite of_list_unseal; elim: ts => [/elem_of_nil |t' ts IH /elem_of_cons] //=.
+rewrite [of_list]unlock; elim: ts => [/elem_of_nil |t' ts IH /elem_of_cons] //=.
 rewrite [tsize (TPair _ _)]tsizeE; case=> [<-|/IH t_ts]; lia.
 Qed.
 
 Lemma is_nonce_of_list ts : is_nonce (of_list ts) = false.
-Proof. by rewrite of_list_unseal; case: ts. Qed.
+Proof. by rewrite [of_list]unlock; case: ts. Qed.
 
 Lemma is_exp_of_list ts : is_exp (of_list ts) = false.
-Proof. by rewrite of_list_unseal; case: ts. Qed.
+Proof. by rewrite [of_list]unlock; case: ts. Qed.
 
 Fixpoint to_list t : option (list term) :=
   match t with
@@ -280,13 +268,13 @@ Fixpoint to_list t : option (list term) :=
   end.
 
 Lemma of_listK l : to_list (of_list l) = Some l.
-Proof. rewrite of_list_unseal; by elim: l => //= t l ->. Qed.
+Proof. rewrite [of_list]unlock; by elim: l => //= t l ->. Qed.
 
 Lemma to_listK t ts :
   to_list t = Some ts →
   t = of_list ts.
 Proof.
-rewrite of_list_unseal /=; elim/term_ind': t ts => //.
+rewrite [of_list]unlock /=; elim/term_ind': t ts => //.
   by case=> [] // _ [<-].
 move=> t _ ts' IH /= ts.
 case e: to_list => [ts''|] // [<-].
@@ -350,11 +338,8 @@ Definition zero : term := TInt 0.
 
 End Spec.
 
-Arguments Spec.tag_def /.
-Arguments Spec.untag_def /.
-
 #[global]
 Existing Instance Spec.of_list_inj.
 
 Lemma subterm_tag c t1 t2 : subterm t1 t2 → subterm t1 (Spec.tag c t2).
-Proof. by rewrite Spec.tag_unseal; eauto using subterm. Qed.
+Proof. by rewrite [Spec.tag]unlock; eauto using subterm. Qed.

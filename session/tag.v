@@ -1,5 +1,6 @@
 From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
+From elpi.apps Require Import locker.
 From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import max_prefix_list.
@@ -29,7 +30,7 @@ Record handler := Handler {
   handler_val : val;
 }.
 
-Global Instance repr_handler : Repr handler := λ h,
+#[global] Instance repr_handler : Repr handler := λ h,
   (λ: "t",
      bind: "t" := untag (Tag (handler_tag h)) "t" in
      SOME (handler_val h "t"))%V.
@@ -48,18 +49,14 @@ Program Definition iMsg_tag_def (ms : gmap namespace (iMsg Σ term)) : iMsg Σ t
           ⌜ms !! N = Some m ∧ t = Spec.tag (Tag N) t'⌝ ∗
           iMsg_car m t' pp)%I.
 Next Obligation. solve_proper. Qed.
-Definition iMsg_tag_aux : seal iMsg_tag_def.
-Proof. by eexists. Qed.
-Definition iMsg_tag := unseal iMsg_tag_aux.
-Lemma iMsg_tag_unseal : iMsg_tag = iMsg_tag_def.
-Proof. exact: seal_eq. Qed.
+lock Definition iMsg_tag := iMsg_tag_def.
 
 Lemma iMsg_tag_eq ms t pp :
   iMsg_car (iMsg_tag ms) t pp =
   (∃ N t' m,
      ⌜ms !! N = Some m ∧ t = Spec.tag (Tag N) t'⌝ ∗
      iMsg_car m t' pp)%I.
-Proof. by rewrite iMsg_tag_unseal. Qed.
+Proof. by rewrite [@iMsg_tag]unlock. Qed.
 
 Definition iProto_tag (a : action) ms : iProto Σ term :=
   iProto_message a (iMsg_tag ms).
@@ -77,7 +74,7 @@ rewrite iMsg_tag_eq. iSplit.
   iExists N, t', m. iFrame. by iPureIntro.
 Qed.
 
-Global Instance iMsg_tag_ne : NonExpansive iMsg_tag.
+#[global] Instance iMsg_tag_ne : NonExpansive iMsg_tag.
 Proof.
 move=> n ms1 ms2 Hms v lp.
 rewrite !iMsg_tag_alt.
@@ -94,7 +91,7 @@ Qed.
 Lemma iMsg_tag_proper :
   Proper ((≡) ==> (≡)) iMsg_tag.
 Proof.
-rewrite iMsg_tag_unseal.
+rewrite [@iMsg_tag]unlock.
 intros ms1 ms2 Hms v lp; simpl. iSplit.
 - iDestruct 1 as (N t' m0 [HN ->]) "Hm".
   move: (Hms N); rewrite HN.
@@ -116,7 +113,7 @@ Lemma iMsg_map_tag (f : iProto Σ term → iProto Σ term)
     (ms : gmap namespace (iMsg Σ term)) :
   iMsg_map f (iMsg_tag ms) ≡ iMsg_tag ((λ m, iMsg_map f m) <$> ms).
 Proof.
-rewrite iMsg_tag_unseal. intros v lp; simpl. iSplit.
+rewrite [@iMsg_tag]unlock. intros v lp; simpl. iSplit.
 - iDestruct 1 as (p1) "[H Heq]".
   iDestruct "H" as (N t' m0 [HN ->]) "Hm".
   iExists N, t', (iMsg_map f m0).

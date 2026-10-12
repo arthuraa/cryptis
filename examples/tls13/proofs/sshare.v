@@ -133,7 +133,7 @@ case: c_kex => [psk c_nonce|g cn x|psk g cn x] /=; wp_pures.
   rewrite {}e Spec.of_listK /=.
   wp_list_match => [psk' c_nonce' s_nonce ->|ne] //=; wp_finish; last first.
     by rewrite prod_of_list_neq //=.
-  rewrite unlock /=.
+  rewrite [in prod_of_list _ _]unlock /=.
   wp_tag; wp_hash; wp_eq_term e; last first.
     rewrite decide_False; try by intuition congruence.
     by wp_pures.
@@ -285,7 +285,7 @@ case: c_kex => [psk cn|g cn x|psk g cn x] /=.
   case: Spec.to_listP=> //= {}ke.
   elim/(@list_len_rect 3): ke => [psk' cn' sn|ke neq]; last first.
     by rewrite prod_of_list_neq.
-  rewrite unlock /=; case: decide => //= - [] {psk' cn'} -> -> [] {ke'} <-.
+  rewrite [in prod_of_list _ _]unlock /=; case: decide => //= - [] {psk' cn'} -> -> [] {ke'} <-.
   by split => //.
 - case: Spec.untagP => //= {}ke ->.
   case: Spec.to_listP => //= {}ke.

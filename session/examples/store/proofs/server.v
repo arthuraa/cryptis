@@ -25,8 +25,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Local Existing Instance ticket_lock.
-Local Existing Instance storeGS_replica.
+#[local] Existing Instance ticket_lock.
+#[local] Existing Instance storeGS_replica.
 
 Section Verif.
 

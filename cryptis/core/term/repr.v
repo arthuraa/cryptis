@@ -36,21 +36,18 @@ Fixpoint val_of_term_rec t : val :=
   | TNonFree pt _ _ => val_of_pre_term pt
   end.
 
-Definition val_of_term_aux : seal val_of_term_rec. by eexists. Qed.
-Definition val_of_term : term -> val := unseal val_of_term_aux.
-Lemma val_of_term_unseal : val_of_term = val_of_term_rec.
-Proof. exact: seal_eq. Qed.
+lock Definition val_of_term : term -> val := val_of_term_rec.
 Coercion val_of_term : term >-> val.
-Global Instance repr_term : Repr term := val_of_term.
+#[global] Instance repr_term : Repr term := val_of_term.
 
-Global Instance repr_aenc_key : Repr aenc_key := λ k : aenc_key, val_of_term (term_of_aenc_key k).
-Global Instance repr_senc_key : Repr senc_key := λ k : senc_key, val_of_term (term_of_senc_key k).
-Global Instance repr_sign_key : Repr sign_key := λ k : sign_key, val_of_term (term_of_sign_key k).
+#[global] Instance repr_aenc_key : Repr aenc_key := λ k : aenc_key, val_of_term (term_of_aenc_key k).
+#[global] Instance repr_senc_key : Repr senc_key := λ k : senc_key, val_of_term (term_of_senc_key k).
+#[global] Instance repr_sign_key : Repr sign_key := λ k : sign_key, val_of_term (term_of_sign_key k).
 
 Lemma val_of_pre_term_unfold t :
   val_of_pre_term (unfold_term t) = val_of_term t.
 Proof.
-rewrite val_of_term_unseal.
+rewrite [val_of_term]unlock.
 elim/term_ind': t => //=; try by move=> *; congruence.
 Qed.
 
@@ -58,14 +55,14 @@ End ValOfTerm.
 
 Arguments repr_term /.
 
-Global Instance val_of_term_inj : Inj (=) (=) val_of_term.
+#[global] Instance val_of_term_inj : Inj (=) (=) val_of_term.
 Proof.
 move=> t1 t2 e_t1t2; apply: unfold_term_inj.
 apply: val_of_pre_term_inj.
 by rewrite !val_of_pre_term_unfold.
 Qed.
 
-Global Instance infinite_term : Infinite term.
+#[global] Instance infinite_term : Infinite term.
 Proof.
 pose int_of_term (t : term) :=
   if t is TInt n then Some n else None.

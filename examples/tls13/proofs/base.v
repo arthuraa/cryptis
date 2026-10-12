@@ -29,7 +29,7 @@ Implicit Types Φ : val → iProp.
 Definition ctx N : iProp :=
   hash_pred (N.@"psk") (λ _, True)%I.
 
-Global Instance ctx_persistent N : Persistent (ctx N).
+#[global] Instance ctx_persistent N : Persistent (ctx N).
 Proof. apply _. Qed.
 
 Lemma ctx_alloc N E E' :

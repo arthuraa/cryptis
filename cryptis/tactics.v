@@ -8,9 +8,9 @@ From cryptis Require Import lib term cryptis primitives.
 Import bi.
 Import env_notations.
 
-Global Hint Extern 1 (envs_entails _ (minted _)) =>
+#[global] Hint Extern 1 (envs_entails _ (minted _)) =>
   iApply public_minted : core.
-Global Hint Extern 0 (envs_entails _ (public (TInt ?n))) =>
+#[global] Hint Extern 0 (envs_entails _ (public (TInt ?n))) =>
   rewrite (public_TInt n) : core.
 
 Section Proofs.
@@ -37,7 +37,7 @@ Lemma tac_wp_cons1 `{!Repr A} Γ E K (x : A) Ψ :
   envs_entails Γ (WP fill K (repr x :: []%V) @ E {{ Ψ }}).
 Proof.
 rewrite (_ : NILV = repr (@nil A)) /=; first by apply: tac_wp_cons.
-by rewrite repr_list_unseal /=.
+by rewrite [@repr_list]unlock /=.
 Qed.
 
 Lemma tac_wp_list_match `{!Repr A} Γ E K vars (vs : list A) k Ψ :
