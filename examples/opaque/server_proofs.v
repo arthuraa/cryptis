@@ -23,12 +23,12 @@ Context `{!cryptisGS Σ, !heapGS Σ, !opaqueGS Σ}.
 Abbreviation iProp := (iProp Σ).
 
 Definition opaque_file (file : val) : iProp :=
-  ∃ (k_s : nonce) (p_s : nonce) P_s P_u envelope,
-    ⌜file = Spec.of_list [TNonce k_s; TNonce p_s; P_s; P_u; envelope]⌝
+  ∃ (k_s : nonce) (p_s : nonce) P_u envelope,
+    ⌜file = Spec.of_list [TNonce k_s; TNonce p_s; TExp g p_s; P_u; envelope]⌝
     ∗ minted k_s ∗ □(public k_s ↔ ▷ □ False) ∗
     □(∀ t' : term, exp_pred_base k_s t' ↔ ▷ □ True) ∗
     □(∀ t' : term, exp_pred_base (TInv k_s) t' ↔ ▷ False) ∗
-    public P_s ∗ public envelope ∗
+    public (TExp g p_s) ∗ public envelope ∗
     opaque_public_private_pair p_s P_u.
 
 Definition opaque_db (db : gmap term val) : iProp :=
@@ -87,7 +87,7 @@ wp_lam; wp_pures.
 wp_apply wp_senc'.
 wp_list; wp_term_of_list.
 iApply "post".
-iExists k_s, p_s, (TExp g p_s), (TExp g p_u), _.
+iExists k_s, p_s, (TExp g p_u), _.
 do !iSplit => //.
 - iApply public_TExp_iff => //.
   do !iSplit => //.
@@ -156,13 +156,14 @@ Lemma wp_server_session (db c : val) (alist : gmap term val) φ :
       AList.is_alist db alist ∗
       (⌜r = None⌝ ∨ ∃ si,
          ⌜r = Some (si_result si)⌝ ∗
+         ⌜server_session si⌝ ∗
          opaque_session_for (si_uid si) si ∗
          (∃ (k_s p_s : nonce) envelope,
             ⌜alist !! si_uid si =
              Some (Spec.of_list [TNonce k_s; TNonce p_s;
                                  si_skey si; si_ckey si; envelope] : val)⌝) ∗
          □ (public (si_key si) ↔ ▷ □ False) ∗
-         term_token (si_key si) (↑opN.@"server") ∗
+         term_token (si_sshare si) (⊤ ∖ ↑opN) ∗
          φ si Resp) }}}.
 Proof.
 iIntros "%ϕ".
@@ -182,11 +183,12 @@ wp_bind (AList.find _ _); iApply (AList.wp_find with "Hdb"); iIntros "!> Hdb".
 case db_uid: (alist !! uid) => [file|]; wp_pures; last first.
   by iApply ("Hhl" $! None); iModIntro; iFrame "Hdb"; iLeft.
 iDestruct ("Hmapcontents" $! uid file with "[//]") as
-    "[_ (%k_s & %p_s & %P_s & %P_u & %envelope &
+    "[_ (%k_s & %p_s & %P_u & %envelope &
          %e & #Hmk_s & #Hprivk_s & #Hexpk_s & #Hexpk_sV &
          #HpubP_s & #Hpenvelope & %p_u & %HP_u & %p_s_u &
          #HpubP_u & #Hminp_s & #Hminp_u & #Hexpp_s & #Hexpp_u & #Hprivp_s
          & #Hprivp_u)]".
+set P_s := TExp g p_s.
 rewrite !subst_list_match /= e.
 wp_apply wp_list_of_term.
 rewrite Spec.of_listK.
@@ -202,18 +204,17 @@ iAssert (minted α) as "#minα". by iApply public_minted.
 iAssert (minted X_u) as "#minX_u". by iApply public_minted.
 iAssert (minted P_s) as "#minP_s". by iApply public_minted.
 iAssert (minted (TExp g p_u)) as "#minP_u". by iApply public_minted.
-(* The fresh ephemeral comes with tokens on the server's share and on the
-   session key, which is a function of the ephemeral: see [server_fresh_set]. *)
+(* The fresh ephemeral comes with a token on the server's share, as in
+   [iso_dh]. *)
 wp_apply (wp_mk_nonce_freshN ∅ (fun _ => False)%I (fun t => dh_key_share t)%I
-            (server_fresh_set uid α X_u P_s (TExp g p_u) p_s)) => //.
+            (fun t => {[TExp g t]})) => //.
   by iIntros "% %contra".
-  by iApply (server_fresh_set_minted uid α X_u P_s p_s p_u
-               with "minuid minα minX_u minP_s Hminp_s Hminp_u").
-iIntros "%x_s _ #Hmintedx_s #Hprivatex_s #Hexpx_s #Hexpx_sV tokens".
-set si := server_si uid α X_u P_s (TExp g p_u) p_s x_s.
-have ne : TExp g x_s ≠ si_key si by exact: TExp_g_nonce_hash_ne.
-rewrite big_sepS_union ?big_sepS_singleton; last set_solver.
-iDestruct "tokens" as "[tok_Xs tok_SK]".
+  iIntros "%t"; rewrite big_sepS_singleton; iModIntro; iSplit.
+  - iIntros "#?"; by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
+  - rewrite (minted_TExp t) //; by iIntros "[_ ?]".
+iIntros "%x_s _ #Hmintedx_s #Hprivatex_s #Hexpx_s #Hexpx_sV tok_Xs".
+rewrite big_sepS_singleton.
+set si := server_si uid α X_u (TExp g p_u) p_s x_s.
 wp_pures.
 wp_apply wp_texp; wp_pures.
 wp_apply wp_texp; wp_pures.
@@ -239,16 +240,13 @@ iAssert (minted (si_key si)) as "#mintedSK".
   - iEval (rewrite minted_hash_result minted_of_list /=).
     by eauto. }
 (* The caller's resources for this session come from the [↑opN.@"res"] slice
-   of the token on the server's share; the client's copy is escrowed at once,
-   as is the client's slice of the token on the session key. *)
+   of the token on the server's share; the client's copy is escrowed at once.
+   The part of the token outside [↑opN] goes back to the caller. *)
 iDestruct (term_token_difference (TExp g x_s) (↑opN.@"res") with "tok_Xs")
-  as "[tok_res _]"; first solve_ndisj.
+  as "[tok_res tok_Xs]"; first solve_ndisj.
 iMod ("res" $! si with "tok_res") as "[res_I res_R]".
 iMod (opaque_ready_alloc with "N_φ res_I") as "#ready".
-iDestruct (term_token_difference (si_key si) (↑opN.@"client") with "tok_SK")
-  as "[tok_client tok_SK]"; first solve_ndisj.
-iMod (opaque_client_token_alloc with "tok_client") as "#cl_tok".
-iDestruct (term_token_drop (↑opN.@"server") with "tok_SK") as "tok_server";
+iDestruct (term_token_drop (⊤ ∖ ↑opN) with "tok_Xs") as "tok_Xs";
   first solve_ndisj.
 set m2 := (Spec.of_list [_; _; _; _]).
 wp_apply wp_send => //.
@@ -311,7 +309,8 @@ iModIntro.
 iApply ("Hhl" $! (Some (si_result si))).
 iFrame "Hdb".
 iRight; iExists si.
-iFrame "tok_server res_R".
+have -> : si_sshare si = TExp g x_s by [].
+iFrame "tok_Xs res_R".
 (* Two group factors of the key survive whatever [X_u] the peer sent: the
    static-static one, which carries secrecy, and the peer-static x
    own-ephemeral one, which carries freshness. *)
@@ -319,6 +318,7 @@ have tags : "e"%string ≠ "d"%string by [].
 have [gf_ss [gf_eph [in_ps in_pu]]] :=
   @hmqv_key_gfactors p_s p_u x_s "e" "d" P_s X_u tags.
 iSplit; first by [].
+iSplit; first by iPureIntro; exists uid, α, X_u, p_u, p_s, x_s.
 iSplit.
   by do !iSplit => //.
 iSplit.

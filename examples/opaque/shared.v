@@ -68,19 +68,16 @@ Definition si_key si := hash_result "SK" (Spec.of_list [si_K si; si_ssid si]).
 Definition si_result si := Spec.of_list [si_uid si; si_key si].
 
 (** Build a [sess_info] record based on the values accessible by the server. *)
-Definition server_si (uid α X_u P_s P_u p_s x_s : term) : sess_info :=
-  SessInfo uid P_u P_s α X_u (TExp g x_s)
+Definition server_si (uid α X_u P_u p_s x_s : term) : sess_info :=
+  SessInfo uid P_u (TExp g p_s) α X_u (TExp g x_s)
     (hmqv_K p_s x_s
        (hash_result "e" (Spec.of_list [TExp g x_s; P_u]))
        P_u X_u
-       (hash_result "d" (Spec.of_list [X_u; P_s]))).
+       (hash_result "d" (Spec.of_list [X_u; TExp g p_s]))).
 
-(** These sets list which terms the client and the server should generate tokens
-    for.  The client's tokens are solely used to receive resources from the
-    server via an escrow. *)
-
-Definition server_fresh_set (uid α X_u P_s P_u p_s : term) (t : nonce) : gset term :=
-  {[TExp g t; si_key (server_si uid α X_u P_s P_u p_s t)]}.
+(** The client mints a token on its blind [α]: the server keys the resource
+    escrow on the [↑opN.@"ready"] slice and the client returns the rest to its
+    caller.  The server's own token is on its share [X_s], as in [iso_dh]. *)
 
 Definition client_fresh_set (pw : term) (t : nonce) : gset term :=
   {[TExp (hash_result "α" pw) t]}.
@@ -272,63 +269,199 @@ move=> m_a m_b tab; do !split.
 - by rewrite /m_a /m_b exps_hmqv_ss; set_solver.
 Qed.
 
-Lemma subterm_of_list (t : term) (ts : list term) :
-  (exists t', t' ∈ ts /\ subterm t t')  ->
-  subterm t (Spec.of_list ts).
+(** * Injectivity of the key in the session: Two sessions with the same key have
+    the same shares. *)
+
+Lemma gcount_ss_hmqv_K tag_a tag_b (p_a x_a p_b p_a' x_a' p_b' : nonce)
+    X_b X_b' :
+  let m_a  := hash_result tag_a (Spec.of_list [TExp g x_a; TExp g p_b]) in
+  let m_b  := hash_result tag_b (Spec.of_list [X_b; TExp g p_a]) in
+  let m_a' := hash_result tag_a (Spec.of_list [TExp g x_a'; TExp g p_b']) in
+  let m_b' := hash_result tag_b (Spec.of_list [X_b'; TExp g p_a']) in
+  tag_a ≠ tag_b ->
+  tsize X_b' < tsize m_b ->
+  gcount (hmqv_ss p_a m_a p_b m_b)
+         (hmqv_K p_a' x_a' m_a' (TExp g p_b') X_b' m_b')
+  = if bool_decide (p_a = p_a' ∧ x_a = x_a' ∧ p_b = p_b' ∧ X_b = X_b')
+    then 1%Z else 0%Z.
 Proof.
-intros [t' [Hmem Hsubterm]].
-induction ts.
-  by inversion Hmem.
-rewrite elem_of_cons in Hmem.
-have -> : Spec.of_list (a :: ts) = TPair a (Spec.of_list ts)
-  by rewrite [Spec.of_list]unlock.
-destruct Hmem as [->|Hmem].
-- exact: STPair1.
-- exact: (STPair2 a (IHts Hmem)).
+move=> m_a m_b m_a' m_b' tab ltX.
+have fa := Nenf_TNonce p_a; have fb := Nenf_TNonce p_b.
+have fa' := Nenf_TNonce p_a'; have fb' := Nenf_TNonce p_b'.
+have fx' := Nenf_TNonce x_a'.
+have fma : negb (is_enon_free m_a) := Nenf_THash _.
+have fmb : negb (is_enon_free m_b) := Nenf_THash _.
+have fma' : negb (is_enon_free m_a') := Nenf_THash _.
+have fmb' : negb (is_enon_free m_b') := Nenf_THash _.
+have mb_x' : m_b ≠ TNonce x_a' by rewrite /m_b /hash_result.
+have mb_a' : m_b ≠ TNonce p_a' by rewrite /m_b /hash_result.
+have mb_ma' : m_b ≠ m_a'.
+  by rewrite /m_b /m_a' => /hash_result_inj [] e _; apply: tab; congruence.
+have ma_b' : m_a ≠ TNonce p_b' by rewrite /m_a /hash_result.
+have ma_a' : m_a ≠ TNonce p_a' by rewrite /m_a /hash_result.
+have ma_x' : m_a ≠ TNonce x_a' by rewrite /m_a /hash_result.
+have ma_mb' : m_a ≠ m_b'.
+  by rewrite /m_a /m_b' => /hash_result_inj [] e _; apply: tab; congruence.
+have mb_b' : m_b ≠ TNonce p_b' by rewrite /m_b /hash_result.
+have exps4 : exps (hmqv_ss p_a m_a p_b m_b) ≡ₚ [TNonce p_b; m_b; m_a; TNonce p_a].
+  by rewrite /m_a /m_b exps_hmqv_ss.
+have exps4' : exps (hmqv_ss p_a' m_a' p_b' m_b')
+              ≡ₚ [TNonce p_b'; m_b'; m_a'; TNonce p_a'].
+  by rewrite /m_a' /m_b' exps_hmqv_ss.
+have mb_4 : m_b ∈ exps (hmqv_ss p_a m_a p_b m_b) by rewrite exps4; set_solver.
+have ma_4 : m_a ∈ exps (hmqv_ss p_a m_a p_b m_b) by rewrite exps4; set_solver.
+(* The cross terms: [m_b] is an exponent of the counted factor, but of nothing
+   [X_b'] gets raised to, and [X_b'] is smaller than it. *)
+have mb_x : m_b ∉ factors (TNonce x_a') by apply: not_elem_of_factors_Nenf.
+have mb_ma_pa : m_b ∉ factors (TMulN [m_a'; TNonce p_a']).
+  by apply: not_elem_of_factors_TMulN_Nenf => //;
+     rewrite !Forall_cons Forall_nil; do !split => //.
+have z1 : gcount (hmqv_ss p_a m_a p_b m_b) (TExp X_b' (TNonce x_a')) = 0%Z
+  := gcount_TExp_eq0 X_b' (TNonce x_a') _ m_b mb_4 mb_x ltX.
+have z3 : gcount (hmqv_ss p_a m_a p_b m_b)
+                 (TExp X_b' (TMulN [m_a'; TNonce p_a'])) = 0%Z
+  := gcount_TExp_eq0 X_b' (TMulN [m_a'; TNonce p_a']) _ m_b mb_4 mb_ma_pa ltX.
+(* The ephemeral factor has three exponents, the counted one four. *)
+have z2 : gcount (hmqv_ss p_a m_a p_b m_b)
+                 (TExp g (TMulN [TNonce p_b'; m_b'; TNonce x_a'])) = 0%Z.
+  have ne : hmqv_ss p_a m_a p_b m_b
+            ≠ TExp g (TMulN [TNonce p_b'; m_b'; TNonce x_a']).
+    move=> e; move: ma_4; rewrite e exps_TExp_g.
+    by apply: not_elem_of_factors_TMulN_Nenf => //;
+       rewrite !Forall_cons Forall_nil; do !split => //.
+  have nin : hmqv_ss p_a m_a p_b m_b
+             ∉ gfactors (TExp g (TMulN [TNonce p_b'; m_b'; TNonce x_a'])).
+    by rewrite (gfactors_Ngmul _ (Ngmul_TExp_g _)) list_elem_of_singleton.
+  have := not_elem_of_gcount _ _ nin.
+  have := @gcount_TExp_g_ge0 (TMulN [TNonce p_b; m_b; m_a; TNonce p_a])
+                            (TMulN [TNonce p_b'; m_b'; TNonce x_a']).
+  rewrite /hmqv_ss; lia.
+rewrite hmqv_K_expand gcount_TGMulN /= z1 z2 z3.
+case_bool_decide as cond.
+- case: cond => epa [exa [epb eXb]].
+  have -> : hmqv_ss p_a' m_a' p_b' m_b' = hmqv_ss p_a m_a p_b m_b.
+    by rewrite /m_a /m_b /m_a' /m_b' epa exa epb eXb.
+  by rewrite /hmqv_ss gcount_TExp_g_diag.
+- have ne : hmqv_ss p_a m_a p_b m_b ≠ hmqv_ss p_a' m_a' p_b' m_b'.
+    move=> e4; apply: cond.
+    have perm : [TNonce p_b; m_b; m_a; TNonce p_a]
+                ≡ₚ [TNonce p_b'; m_b'; m_a'; TNonce p_a'].
+      by rewrite -exps4 -exps4' e4.
+    have ema : m_a = m_a'.
+      have : m_a ∈ [TNonce p_b'; m_b'; m_a'; TNonce p_a'] by rewrite -perm; set_solver.
+      by rewrite !elem_of_cons elem_of_nil; case=> [|[|[|[|[]]]]].
+    have emb : m_b = m_b'.
+      have : m_b ∈ [TNonce p_b'; m_b'; m_a'; TNonce p_a'] by rewrite -perm; set_solver.
+      by rewrite !elem_of_cons elem_of_nil; case=> [|[|[|[|[]]]]].
+    move: (ema); rewrite /m_a /m_a' => /hash_result_inj [] _ /Spec.of_list_inj [] exa epb.
+    move/(f_equal expo): exa; rewrite !expo_TExp_g; case=> exa.
+    move/(f_equal expo): epb; rewrite !expo_TExp_g; case=> epb.
+    move: (emb); rewrite /m_b /m_b' => /hash_result_inj [] _ /Spec.of_list_inj [] eXb ePa.
+    move: perm; rewrite ema emb epb => perm.
+    change ([TNonce p_b'; m_b'; m_a'] ++ [TNonce p_a]
+            ≡ₚ [TNonce p_b'; m_b'; m_a'] ++ [TNonce p_a']) in perm.
+    apply Permutation_app_inv_l in perm.
+    by apply Permutation_singleton_inj in perm; case: perm => epa; do !split => //.
+  have nin : hmqv_ss p_a m_a p_b m_b ∉ gfactors (hmqv_ss p_a' m_a' p_b' m_b').
+    by rewrite /hmqv_ss (gfactors_Ngmul _ (Ngmul_TExp_g _)) list_elem_of_singleton -/(hmqv_ss _ _ _ _) -/(hmqv_ss _ _ _ _).
+  have := not_elem_of_gcount _ _ nin.
+  have := @gcount_TExp_g_ge0 (TMulN [TNonce p_b; m_b; m_a; TNonce p_a])
+                            (TMulN [TNonce p_b'; m_b'; m_a'; TNonce p_a']).
+  rewrite /hmqv_ss; lia.
 Qed.
 
-(* The server's share and its session key are different terms: the one is an
-   exponential with one exponent, the other a hash with none. *)
-Lemma TExp_g_nonce_hash_ne (a : nonce) tag t :
-  TExp g (TNonce a) ≠ hash_result tag t.
+Lemma hmqv_K_inj tag_a tag_b (p_a x_a p_b p_a' x_a' p_b' : nonce)
+    X_b X_b' :
+  let m_a  := hash_result tag_a (Spec.of_list [TExp g x_a; TExp g p_b]) in
+  let m_b  := hash_result tag_b (Spec.of_list [X_b; TExp g p_a]) in
+  let m_a' := hash_result tag_a (Spec.of_list [TExp g x_a'; TExp g p_b']) in
+  let m_b' := hash_result tag_b (Spec.of_list [X_b'; TExp g p_a']) in
+  tag_a ≠ tag_b ->
+  hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b
+  = hmqv_K p_a' x_a' m_a' (TExp g p_b') X_b' m_b' ->
+  p_a = p_a' /\ x_a = x_a' /\ p_b = p_b' /\ X_b = X_b'.
 Proof.
-move=> E.
-have H1 : exps (TExp g (TNonce a)) = [TNonce a].
-  by rewrite exps_TExp_g (factors_Nmul (TNonce a) I).
-have H2 : exps (hash_result tag t) = [].
-  by rewrite /exps (expo_expN (hash_result tag t) I) factors_TMulN0.
-by move: H1; rewrite E H2.
+move=> m_a m_b m_a' m_b' tab eK.
+have in4 : (gcount (hmqv_ss p_a m_a p_b m_b)
+                   (hmqv_K p_a' x_a' m_a' (TExp g p_b') X_b' m_b') > 0)%Z.
+  apply/gcount_gt0; rewrite -eK; apply: hmqv_K_gfactor => //; by right.
+have in4' : (gcount (hmqv_ss p_a' m_a' p_b' m_b')
+                    (hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b) > 0)%Z.
+  apply/gcount_gt0; rewrite eK; apply: hmqv_K_gfactor => //; by right.
+have ltb : tsize X_b < tsize m_b.
+  by rewrite /m_b; apply: tsize_hash_result_lt; set_solver.
+have ltb' : tsize X_b' < tsize m_b'.
+  by rewrite /m_b'; apply: tsize_hash_result_lt; set_solver.
+case: (decide (tsize X_b' < tsize m_b)) => [lt|le].
+- move: in4.
+  have E := @gcount_ss_hmqv_K tag_a tag_b p_a x_a p_b p_a' x_a' p_b'
+                              X_b X_b' tab lt.
+  cbv zeta in E; rewrite E; case_bool_decide as cond; last by lia.
+  by case: cond => ? [? [? ?]].
+- move: in4'.
+  have lt' : tsize X_b < tsize m_b' by lia.
+  have E := @gcount_ss_hmqv_K tag_a tag_b p_a' x_a' p_b' p_a x_a p_b
+                              X_b' X_b tab lt'.
+  cbv zeta in E; rewrite E; case_bool_decide as cond; last by lia.
+  by case: cond => ? [? [? ?]].
 Qed.
 
-(* The server's ephemeral is a subterm of its session key, through the
-   peer-static x own-ephemeral group factor.  This is the freshness of the key
-   ([wp_mk_nonce_freshN] needs [minted (si_key …) → minted x_s]). *)
-Lemma subterm_SK_eph uid α X_u P_s (p_s p_u x_s : nonce) :
-  subterm (TNonce x_s)
-          (si_key (server_si uid α X_u P_s (TExp g p_u)
-                             (TNonce p_s) (TNonce x_s))).
+(** The server's view of a session is determined by its key: this is what the
+    game needs to tell two server sessions apart by their shares. *)
+Lemma server_si_key_inj uid α X_u (p_u p_s x_s : nonce)
+                        uid' α' X_u' (p_u' p_s' x_s' : nonce) :
+  si_key (server_si uid α X_u (TExp g p_u) p_s x_s)
+  = si_key (server_si uid' α' X_u' (TExp g p_u') p_s' x_s') ->
+  x_s = x_s'.
 Proof.
-have tags : "e"%string ≠ "d"%string by [].
-have [_ [gf_eph _]] :=
-  @hmqv_key_gfactors p_s p_u x_s "e" "d" P_s X_u tags.
 rewrite /si_key /si_K /si_ssid /server_si /=.
-apply: STHash; apply: subterm_tag; apply: subterm_of_list.
-eexists; split; first by apply/elem_of_cons; left.
-apply: STHash; apply: subterm_tag; apply: subterm_of_list.
-eexists; split; first by apply/elem_of_cons; left.
-apply: (subterm_gfactors gf_eph).
-apply: subterm_exps.
-exact: exps_hmqv_eph_x.
+move/hash_result_inj => - [] _ e; apply Spec.of_list_inj in e.
+move/(f_equal (λ l, nth 0 l (TInt 0))): e => /= e.
+move/hash_result_inj: e => - [] _ e; apply Spec.of_list_inj in e.
+move/(f_equal (λ l, nth 0 l (TInt 0))): e => /= eK.
+have tags : "e"%string ≠ "d"%string by [].
+by have [_ [exs _]] := @hmqv_K_inj "e" "d" p_s x_s p_u p_s' x_s' p_u'
+                                    X_u X_u' tags eK.
 Qed.
 
-(** * Ghost state for the resource exchange
+Definition server_session si : Prop :=
+  ∃ uid α X_u (p_u p_s x_s : nonce),
+    si = server_si uid α X_u (TExp g p_u) p_s x_s.
 
-    As in [iso_dh], the resource a server hands to the client is a saved
-    predicate chosen at allocation time.  Unlike [iso_dh], there is one such
-    predicate rather than one per namespace: ISO-DH can let the caller pick a
-    namespace because the protocol transmits it (a [Tag N] in message 2),
-    whereas OPAQUE's authenticator is just [prf "A_s" [K; ssid']], so nothing
-    would tell the client which [φ] the server meant. *)
+Lemma server_session_key_inj si1 si2 :
+  server_session si1 -> server_session si2 ->
+  si_key si1 = si_key si2 -> si_sshare si1 = si_sshare si2.
+Proof.
+move=> [uid [α [X_u [p_u [p_s [x_s ->]]]]]].
+move=> [uid' [α' [X_u' [p_u' [p_s' [x_s' ->]]]]]] e.
+by rewrite /= (server_si_key_inj e).
+Qed.
+
+Lemma si_key_blind_inj si1 si2 :
+  si_key si1 = si_key si2 -> si_blind si1 = si_blind si2.
+Proof.
+rewrite /si_key /si_ssid.
+move/hash_result_inj => - [] _ e; apply Spec.of_list_inj in e.
+move/(f_equal (λ l, nth 1 l (TInt 0))): e => /= e.
+move/hash_result_inj: e => - [] _ e; apply Spec.of_list_inj in e.
+by move/(f_equal (λ l, nth 1 l (TInt 0))): e => /=.
+Qed.
+
+(** The term each role holds a token on, and what the game must know about a
+    session to read its share off its key. *)
+Definition share_of (rl : role) si : term :=
+  if rl is Init then si_blind si else si_sshare si.
+
+Definition session_of (rl : role) si : Prop :=
+  if rl is Resp then server_session si else True.
+
+Lemma share_of_key_inj rl si1 si2 :
+  session_of rl si1 -> session_of rl si2 ->
+  si_key si1 = si_key si2 -> share_of rl si1 = share_of rl si2.
+Proof.
+case: rl => /= [_ _|ss1 ss2]; first exact: si_key_blind_inj.
+exact: server_session_key_inj.
+Qed.
 
 Class opaqueGpreS Σ := OpaqueGPreS {
   #[local] opaqueGpreS_meta :: metaGS Σ;
@@ -368,11 +501,8 @@ Lemma opaque_pred_set φ E :
   opaque_token E ==∗ opaque_pred φ ∗ opaque_token (E ∖ ↑opN.@"res").
 Proof. by iIntros "%"; iApply nown_alloc. Qed.
 
-(** The server escrows the client's copy of the resource against the
-    [↑opN.@"ready"] slice of the token on the client's share [α]; only the
-    client holds that slice, so only the client can redeem it. *)
-Definition opaque_ready si : iProp := ∀ φ,
-  opaque_pred φ →
+Definition opaque_ready si : iProp :=
+  ∀ φ, opaque_pred φ →
   term_token (si_blind si) (↑opN.@"ready") ={⊤}=∗ ▷ φ si Init.
 
 Lemma opaque_ready_alloc si φ :
@@ -389,23 +519,6 @@ iPoseProof (saved_pred_op_validI with "valid") as "[_ #φ_eq]".
 iSpecialize ("φ_eq" $! (si, Init)).
 iMod (escrowE with "[//] ready") as "res" => //.
 iIntros "!> !>". by iRewrite -"φ_eq".
-Qed.
-
-(** Likewise for the client's slice of the token on the session key: the
-    server owns the whole token (it minted the key, see [server_fresh_set]) and
-    gives the [↑opN.@"client"] part away against the [↑opN.@"tok"] slice on
-    [α]. *)
-Definition opaque_client_token si : iProp :=
-  escrow nroot
-    (term_token (si_blind si) (↑opN.@"tok"))
-    (term_token (si_key si) (↑opN.@"client")).
-
-Lemma opaque_client_token_alloc si :
-  term_token (si_key si) (↑opN.@"client") ={⊤}=∗ opaque_client_token si.
-Proof.
-iIntros "tok".
-iApply (escrowI nroot with "tok []").
-by iApply (term_token_switch (si_blind si) (opN.@"tok")).
 Qed.
 
 (** The identity equations the specifications export, in the style of
@@ -476,42 +589,6 @@ rewrite /hmqv_K; iApply all_minted_TGMulN; rewrite /=.
 by do !iSplit => //; iApply all_minted_TExp; iSplit.
 Qed.
 
-Lemma server_fresh_set_minted uid α X_u P_s (p_s p_u : nonce) :
-  minted uid -∗ minted α -∗ minted X_u -∗ minted P_s -∗
-  minted p_s -∗ minted p_u -∗
-  ∀ t : nonce,
-    [∗ set] t' ∈ server_fresh_set uid α X_u P_s (TExp g p_u) p_s t,
-         □ (minted t ↔ minted t').
-Proof.
-iIntros "#m_uid #m_α #m_Xu #m_Ps #m_ps #m_pu %x_s".
-rewrite big_sepS_union_pers !big_sepS_singleton.
-iAssert (minted (TExp g p_u)) as "#m_Pu".
-  by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
-iSplit; iModIntro; iSplit.
-- iIntros "#m_xs". by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
-- rewrite (minted_TExp x_s) //; by iIntros "[_ ?]".
-- iIntros "#m_xs".
-  iAssert (minted (TExp g x_s)) as "#m_Xs".
-    by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
-  set d := hash_result "d" (Spec.of_list [X_u; P_s]).
-  set e := hash_result "e" (Spec.of_list [TExp g x_s; TExp g p_u]).
-  have -> : si_key (server_si uid α X_u P_s (TExp g p_u) p_s x_s)
-          = hash_result "SK"
-              (Spec.of_list
-                 [hash_result "K"
-                    (Spec.of_list [hmqv_K p_s x_s e (TExp g p_u) X_u d]);
-                  hash_result "ssid'" (Spec.of_list [uid; α])]) by [].
-  rewrite minted_hash_result minted_of_list /=; do !iSplit => //.
-  + rewrite minted_hash_result minted_of_list /=; iSplit => //.
-    iApply (minted_hmqv_K with "m_ps m_xs [] m_Pu m_Xu []").
-    * by rewrite minted_hash_result minted_of_list /=; eauto.
-    * by rewrite minted_hash_result minted_of_list /=; eauto.
-  + by rewrite minted_hash_result minted_of_list /=; eauto.
-- iIntros "#m_SK".
-  by iApply (subterm_minted (@subterm_SK_eph uid α X_u P_s p_s p_u x_s)
-               with "m_SK").
-Qed.
-
 Lemma client_fresh_set_minted pw :
   minted pw -∗
   ∀ r : nonce, [∗ set] t' ∈ client_fresh_set pw r, □ (minted r ↔ minted t').
@@ -549,7 +626,6 @@ Definition A_u_pred (t : term) : iProp :=
 Definition A_s_pred (t : term) : iProp :=
   ∃ si, ⌜t = Spec.of_list [si_K si; si_ssid si]⌝ ∗
         public (si_ckey si) ∗ public (si_skey si) ∗
-        opaque_client_token si ∗
         opaque_ready si.
 
 Definition envelope_pred (sk : senc_key) (t : term) : iProp :=

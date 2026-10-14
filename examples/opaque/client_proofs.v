@@ -32,8 +32,8 @@ Lemma wp_client_session (uid pw : term) (c : val) φ :
         ⌜r = Some (si_result si)⌝ ∗
         opaque_session_for uid si ∗
         □ (public (si_key si) ↔ ▷ □ False) ∗
-        (public (si_key si) ∨
-           term_token (si_key si) (↑opN.@"client") ∗ φ si Init) }}}.
+        term_token (si_blind si) (⊤ ∖ ↑opN) ∗
+        (public (si_key si) ∨ φ si Init) }}}.
 Proof.
 iIntros "%ϕ (#Cryptis & (#Hpredrw & #HpredA_s & #HpredA_u & #HpredSK & #HpredK
   & #Hpredα & #SpredAuth) & #N_φ & #Hc & #pubuid & #mintedpw & #privpw) Hhl".
@@ -42,8 +42,9 @@ wp_lam; wp_pures.
 wp_apply (wp_mk_nonce (fun _ => False)%I (fun t => dh_key_share t)%I) => //.
 iIntros "%x_u #Hmintedx_u #Hprivatex_u #Hexpx_u #Hexpx_uV _".
 wp_pures.
-(* The blind [α] is the client's share: the server keys both escrows on its
-   token, so it is minted together with [r]. *)
+(* The blind [α] is the client's share: the server keys the resource escrow
+   on its token, so it is minted together with [r]; the part outside [↑opN]
+   goes back to the caller. *)
 wp_apply (wp_mk_nonce_freshN ∅ (fun _ => False)%I (fun _ => True)%I
             (client_fresh_set pw)) => //.
 - by iIntros "% %contra".
@@ -56,8 +57,8 @@ set α := TExp (hash_result "α" pw) r.
 wp_pures.
 iDestruct (term_token_difference α (↑opN.@"ready") with "tok_α")
   as "[tok_ready tok_α]"; first solve_ndisj.
-iDestruct (term_token_difference α (↑opN.@"tok") with "tok_α")
-  as "[tok_tok _]"; first solve_ndisj.
+iDestruct (term_token_drop (⊤ ∖ ↑opN) with "tok_α") as "tok_α";
+  first solve_ndisj.
 wp_apply wp_H'; wp_apply wp_texp; wp_pures.
 wp_apply wp_texp; wp_list; wp_term_of_list; wp_pures.
 set m1 := Spec.of_list _.
@@ -184,12 +185,10 @@ iAssert (▷ □ A_s_pred (Spec.of_list [K; ssid']))%I as "#auth".
 wp_pures; wp_list.
 wp_apply wp_prf.
 wp_pures.
-iDestruct "auth" as "(%si & %e_si & #pubck & #pubsk & #cl_tok & #ready)".
+iDestruct "auth" as "(%si & %e_si & #pubck & #pubsk & #ready)".
 have eSK : si_key si = SK by rewrite /si_key /SK e_si.
 case/Spec.of_list_inj: e_si => _ essid.
 case/Spec.tag_inj: essid => _ /Spec.of_list_inj [] euid eα.
-iMod (escrowE with "cl_tok [tok_tok]") as "tok_SK" => //.
-  by rewrite -eα.
 iMod ("ready" with "N_φ [tok_ready]") as "res" => //.
   by rewrite -eα.
 wp_apply wp_send => //.
@@ -204,10 +203,11 @@ have -> : Spec.of_list [uid; SK] = si_result si.
   by rewrite /si_result eSK -euid.
 iApply ("Hhl" $! (Some (si_result si))).
 iModIntro; iRight; iExists si.
-rewrite eSK.
+rewrite eSK -eα.
+iFrame "tok_α".
 iSplit; first by [].
 iSplit; first by rewrite /opaque_session_for -euid eSK; do !iSplit => //.
-iSplit; last by iRight; iFrame "tok_SK res".
+iSplit; last by iRight; iFrame "res".
 iModIntro; iSplit; iIntros "#contra".
 - iDestruct (public_THashE with "HpredSK contra") as "[Hpub | [_ contra']]" => //.
   rewrite public_of_list /=.

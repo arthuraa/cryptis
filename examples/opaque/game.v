@@ -23,23 +23,19 @@ Section Game.
 Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ, !opaqueGS Σ}.
 Abbreviation iProp := (iProp Σ).
 
-(** What the game keeps of a completed session: the secrecy of its key, and
-    -- unless the key is public, which under the game's assumptions it never
-    is -- the role's slice of the token on the key.  The latter is what makes
-    two sessions' keys provably different: the same key would carry two
-    overlapping tokens. *)
-Definition session_res (N : namespace) (r : option term) : iProp :=
+Definition gameN := nroot.@"game".
+
+(** Postcondition after a party completes a handshake. *)
+Definition session_res (rl : role) (r : option term) : iProp :=
   match r with
   | None => True
   | Some t =>
       ∃ si, ⌜t = si_result si⌝ ∗
+            ⌜session_of rl si⌝ ∗
             public (si_uid si) ∗
             □ (public (si_key si) ↔ ▷ □ False) ∗
-            (public (si_key si) ∨ term_token (si_key si) (↑N))
+            term_token (share_of rl si) (↑gameN)
   end.
-
-Definition session_res' N (x : val) : iProp :=
-  ∃ r : option term, ⌜x = repr r⌝ ∗ session_res N r.
 
 Definition session_secret (r : option term) : iProp :=
   match r with
@@ -50,10 +46,10 @@ Definition session_secret (r : option term) : iProp :=
 #[global] Instance session_secret_persistent r : Persistent (session_secret r).
 Proof. by case: r => [t|] /=; apply _. Qed.
 
-Lemma session_res_secret N r : session_res N r -∗ session_secret r.
+Lemma session_res_secret rl r : session_res rl r -∗ session_secret r.
 Proof.
 case: r => [t|] /=; last by iIntros "_".
-iIntros "(%si & -> & _ & #s & _)". iExists si. by iSplit.
+iIntros "(%si & -> & _ & _ & #s & _)". iExists si. by iSplit.
 Qed.
 
 Definition unguessable_option : val :=
@@ -89,9 +85,9 @@ bind: "x1'" := "x1" in
 bind: "x2'" := "x2" in
 assert: (~ eq_term "x1'" "x2'").
 
-Lemma wp_neq_options N (x1 x2 : option term) :
-  session_res N x1 -∗
-  session_res N x2 -∗
+Lemma wp_neq_options rl (x1 x2 : option term) :
+  session_res rl x1 -∗
+  session_res rl x2 -∗
   WP neq_options (repr x1) (repr x2) {{ _, True }}.
 Proof.
 iIntros "H1 H2".
@@ -99,20 +95,16 @@ wp_lam.
 destruct x1 as [x1|]; wp_pures => //.
 destruct x2 as [x2|]; wp_pures => //.
 wp_apply wp_assert.
-iDestruct "H1" as "(%si1 & -> & #p_uid1 & #s1 & tok1)".
-iDestruct "H2" as "(%si2 & -> & #p_uid2 & #s2 & tok2)".
+iDestruct "H1" as "(%si1 & -> & %sh1 & #p_uid1 & #s1 & tok1)".
+iDestruct "H2" as "(%si2 & -> & %sh2 & #p_uid2 & #s2 & tok2)".
 wp_bind (eq_term _ _).
 wp_eq_term H.
-- (* Both results are the same term, hence the same key, which then carries
-     two overlapping token slices. *)
+- (* Both results are the same term, hence the same key, hence the same share,
+     which then carries two overlapping tokens. *)
   move: (H) => /Spec.of_list_inj /(f_equal (λ l, nth 1 l (TInt 0))) /= ekey.
-  iDestruct "tok1" as "[#p1|tok1]".
-  { iDestruct ("s1" with "p1") as "contra". wp_pures. by iDestruct "contra" as "[]". }
-  iDestruct "tok2" as "[#p2|tok2]".
-  { iDestruct ("s2" with "p2") as "contra". wp_pures. by iDestruct "contra" as "[]". }
-  iEval (rewrite -ekey) in "tok2".
+  iEval (rewrite -(share_of_key_inj sh1 sh2 ekey)) in "tok2".
   iDestruct (term_token_disj with "tok1 tok2") as %dis.
-  pose proof (nclose_non_empty N). set_solver.
+  pose proof (nclose_non_empty gameN). set_solver.
 - wp_pures. iModIntro. by iSplit.
 Qed.
 
@@ -134,10 +126,13 @@ Definition game : val := λ: "c",
   neq_options (Snd "SK1s") (Snd "SK2s") ;;
   #().
 
+Definition session_res' rl (x : val) : iProp :=
+  ∃ r : option term, ⌜x = repr r⌝ ∗ session_res rl r.
+
 (** One round of the game: both roles run in parallel, and both results are
     tested against the attacker.  Each role's result is converted to
-    [session_res] on the role's own token slice, which is what [neq_options]
-    needs to compare two rounds. *)
+    [session_res], carrying the role's token on its own share, which is what
+    [neq_options] needs to compare two rounds. *)
 Lemma wp_game_round c db alist uid pw :
   cryptis_ctx -∗
   channel c -∗
@@ -151,29 +146,33 @@ Lemma wp_game_round c db alist uid pw :
     game_round c db uid pw
   {{{ (rs rc : option term), RET (repr rs, repr rc)%V;
       AList.is_alist db alist ∗
-      session_res (opN.@"server") rs ∗
-      session_res (opN.@"client") rc }}}.
+      session_res Resp rs ∗
+      session_res Init rc }}}.
 Proof.
 iIntros "#? #Hchannel #ctx #N_φ #p_uid #m_pw #s_pw #Hdb %Φ !> Halist Hpost".
 wp_lam. wp_pures.
-wp_apply (wp_par (λ x, session_res' (opN.@"server") x ∗
-                       AList.is_alist db alist)%I
-                 (λ x, session_res' (opN.@"client") x)%I with "[Halist]").
+wp_apply (wp_par (λ x, session_res' Resp x ∗ AList.is_alist db alist)%I
+                 (λ x, session_res' Init x)%I with "[Halist]").
 - iApply (wp_server_session db c alist (λ _ _, True)%I with "[Halist]") => //.
   { iFrame "Halist"; do !iSplit => //. by iIntros "%si _ !>". }
   iNext. iIntros "%r [Halist Hres]". iFrame "Halist".
   iExists r. iSplit; first by [].
-  iDestruct "Hres" as "[-> | (%si & -> & (_ & #p_uid' & _ & _ & _)
+  iDestruct "Hres" as "[-> | (%si & -> & %ss & (_ & #p_uid' & _ & _ & _)
                                  & _ & #sec & tok & _)]" => //=.
-  iExists si. iSplit; first by []. by iFrame "tok #".
+  iExists si. iSplit; first by []. iSplit; first by [].
+  iSplit => //. iSplit => //.
+  rewrite /share_of /=.
+  iApply (term_token_drop with "tok"); solve_ndisj.
 - iApply (wp_client_session uid pw c (λ _ _, True)%I) => //.
   { by do !iSplit => //. }
   iNext. iIntros "%r Hres".
   iExists r. iSplit; first by [].
   iDestruct "Hres" as "[-> | (%si & -> & (_ & #p_uid' & _ & _ & _)
-                                 & #sec & [#p | [tok _]])]" => //=.
-  + iExists si. iSplit; first by []. iSplit => //. iSplit => //. by iLeft.
-  + iExists si. iSplit; first by []. by iFrame "tok #".
+                                 & #sec & tok & _)]" => //=.
+  iExists si. iSplit; first by []. iSplit; first by [].
+  iSplit => //. iSplit => //.
+  rewrite /share_of /=.
+  iApply (term_token_drop with "tok"); solve_ndisj.
 - iIntros "%vs %vc [[(%rs & -> & Hs) Halist] (%rc & -> & Hc)]".
   iNext. wp_pures.
   iDestruct (session_res_secret with "Hs") as "#sec_s".
