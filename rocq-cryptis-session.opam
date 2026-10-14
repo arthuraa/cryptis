@@ -15,12 +15,9 @@ tags: [
 ]
 
 depends: [
+  "rocq-cryptis" {= version}
   "rocq-cryptis-examples" {= version}
-  "rocq-actris" {= "dev"}
-]
-
-pin-depends: [
-  ["rocq-actris.dev" "git+https://gitlab.mpi-sws.org/chandradeepdey/actris.git#367149af8552433256d96394a40227f3b15b2cf2"]
+  "rocq-actris" {= "4.5.0"}
 ]
 
 build: ["./make-package" "session" "-j%{jobs}%"]

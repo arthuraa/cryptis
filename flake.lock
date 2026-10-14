@@ -1,22 +1,5 @@
 {
   "nodes": {
-    "actris": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1773651268,
-        "narHash": "sha256-Kp3YDN2C2QNIDHfg9AJGfOjQ/9sM2MHRICO8iPgYdBw=",
-        "ref": "refs/heads/master",
-        "rev": "fa669607568fbf897f6551b7bc9e912b10e1b577",
-        "revCount": 873,
-        "type": "git",
-        "url": "https://gitlab.mpi-sws.org/iris/actris.git"
-      },
-      "original": {
-        "rev": "fa669607568fbf897f6551b7bc9e912b10e1b577",
-        "type": "git",
-        "url": "https://gitlab.mpi-sws.org/iris/actris.git"
-      }
-    },
     "flake-parts": {
       "inputs": {
         "nixpkgs-lib": "nixpkgs-lib"
@@ -75,11 +58,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1790956036,
-        "narHash": "sha256-kBHhnmxlcQ4ZIiwL8H8s+6DYjbomXqva0xm5llbRGoU=",
+        "lastModified": 1791926053,
+        "narHash": "sha256-HMi8rDf7arFNmmTGDEMOwFgKoJPO1qFXmEqx0NWRmes=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "b9210733e3e46fceaddc624cc2e3be94e94dd7cb",
+        "rev": "df7bdddf1349852180c9c0be4ae95978a90d705c",
         "type": "github"
       },
       "original": {
@@ -206,7 +189,6 @@
     },
     "root": {
       "inputs": {
-        "actris": "actris",
         "flake-parts": "flake-parts",
         "nix-github-actions": "nix-github-actions",
         "nixpkgs": "nixpkgs",

@@ -6,8 +6,6 @@
     flake-parts.url = "github:hercules-ci/flake-parts";
     nix-github-actions.url = "github:nix-community/nix-github-actions";
     nix-github-actions.inputs.nixpkgs.follows = "nixpkgs";
-    actris.url = "git+https://gitlab.mpi-sws.org/iris/actris.git?rev=fa669607568fbf897f6551b7bc9e912b10e1b577";
-    actris.flake = false;
     # nixpkgs has no coq-lsp for Rocq 9.2, and rocq-lsp has no 9.2 release yet;
     # build its v9.2 branch.
     rocq-lsp.url = "github:rocq-community/rocq-lsp/v9.2";
@@ -81,26 +79,6 @@
           rocqPackages = prev.rocqPackages_9_2.overrideScope (final: prev: {
             coq-lsp = prev.coq-lsp.override {
               version = inputs.rocq-lsp.outPath;
-            };
-            actris = prev.mkRocqDerivation {
-              pname = "actris";
-              version = inputs.actris.outPath;
-              propagatedBuildInputs = [
-                final.rocq-core
-                final.iris
-              ];
-              # The actris repository bundles experimental side developments
-              # (multris, linking_actris, linear_actris) that lag behind the
-              # iris release; build and install only the core actris/ library.
-              preBuild = ''
-                patchShebangs .
-                for f in _CoqProject _RocqProject; do
-                  if [ -f "$f" ]; then
-                    grep -E '^(-.*|actris/.*)$' "$f" > "$f".new
-                    mv "$f".new "$f"
-                  fi
-                done
-              '';
             };
             cryptis = prev.mkRocqDerivation {
               pname = "cryptis";
