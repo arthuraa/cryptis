@@ -24,7 +24,10 @@ Unset Printing Implicit Defensive.
 
     We state authentication following the ISO-DH protocol ([examples/iso_dh]):
     the server can send to the client non-ephemeral resources that pertain to
-    the newly established session. *)
+    the newly established session.  Compromise is modelled as there: the
+    password may become public, the long-term keys are exactly as secret as the
+    password, and a completed session's key is public iff both parties release
+    their tokens, unless the password was already public. *)
 
 Definition hash_result (tag : string) (val : term) : term :=
     THash (Spec.tag (Tag $ opN.@tag) val).
@@ -74,6 +77,15 @@ Definition server_si (uid α X_u P_u p_s x_s : term) : sess_info :=
        (hash_result "e" (Spec.of_list [TExp g x_s; P_u]))
        P_u X_u
        (hash_result "d" (Spec.of_list [X_u; TExp g p_s]))).
+
+(** The record the client builds on its own when it cannot trust the server's,
+    i.e. when the password was already public. *)
+Definition client_si (uid P_u P_s α x_u X_s p_u : term) : sess_info :=
+  SessInfo uid P_u P_s α (TExp g x_u) X_s
+    (hmqv_K p_u x_u
+       (hash_result "d" (Spec.of_list [TExp g x_u; P_s]))
+       P_s X_s
+       (hash_result "e" (Spec.of_list [X_s; P_u]))).
 
 (** The client mints a token on its blind [α]: the server keys the resource
     escrow on the [↑opN.@"ready"] slice and the client returns the rest to its
@@ -269,6 +281,23 @@ move=> m_a m_b tab; do !split.
 - by rewrite /m_a /m_b exps_hmqv_ss; set_solver.
 Qed.
 
+(** With an honest peer share, the ephemeral-ephemeral factor is in the key;
+    it is the one that survives the compromise of the password. *)
+Lemma hmqv_K_gfactor_eph (p_a x_a p_b x_b : nonce) m_a m_b :
+  TExp g (TMulN [TNonce x_b; TNonce x_a])
+    ∈ gfactors (hmqv_K p_a x_a m_a (TExp g p_b) (TExp g x_b) m_b).
+Proof.
+apply/gcount_gt0; rewrite hmqv_K_expand !TExpA gcount_TGMulN /=.
+rewrite gcount_TExp_g_diag.
+have := @gcount_TExp_g_ge0 (TMulN [TNonce x_b; TNonce x_a])
+                          (TMulN [TNonce p_b; m_b; TNonce x_a]).
+have := @gcount_TExp_g_ge0 (TMulN [TNonce x_b; TNonce x_a])
+                          (TMulN [TNonce x_b; TMulN [m_a; TNonce p_a]]).
+have := @gcount_TExp_g_ge0 (TMulN [TNonce x_b; TNonce x_a])
+                          (TMulN [TNonce p_b; m_b; m_a; TNonce p_a]).
+rewrite /hmqv_ss; lia.
+Qed.
+
 (** * Injectivity of the key in the session: Two sessions with the same key have
     the same shares. *)
 
@@ -406,13 +435,138 @@ case: (decide (tsize X_b' < tsize m_b)) => [lt|le].
   by case: cond => ? [? [? ?]].
 Qed.
 
+(** The same key seen from the two sides: the static-static factor of the key
+    written from one party's side, counted in the key written from the other's.
+    Off the honest pair, the count vanishes under a size premise; the
+    injectivity lemma below obtains the premise in one of the two directions. *)
+Lemma gcount_ss_hmqv_K_cross tag_a tag_b (p_a x_a p_b p_a' x_b' p_b' : nonce)
+    X_b X_a' :
+  let m_a  := hash_result tag_a (Spec.of_list [TExp g x_a; TExp g p_b]) in
+  let m_b  := hash_result tag_b (Spec.of_list [X_b; TExp g p_a]) in
+  let m_b' := hash_result tag_b (Spec.of_list [TExp g x_b'; TExp g p_a']) in
+  let m_a' := hash_result tag_a (Spec.of_list [X_a'; TExp g p_b']) in
+  tag_a ≠ tag_b ->
+  m_a ≠ m_a' -> m_b ≠ m_b' ->
+  tsize X_a' < tsize m_b ->
+  gcount (hmqv_ss p_a m_a p_b m_b)
+         (hmqv_K p_b' x_b' m_b' (TExp g p_a') X_a' m_a') = 0%Z.
+Proof.
+move=> m_a m_b m_b' m_a' tab nea neb ltX.
+have fa := Nenf_TNonce p_a; have fb := Nenf_TNonce p_b.
+have fa' := Nenf_TNonce p_a'; have fb' := Nenf_TNonce p_b'.
+have fx' := Nenf_TNonce x_b'.
+have fma : negb (is_enon_free m_a) := Nenf_THash _.
+have fmb : negb (is_enon_free m_b) := Nenf_THash _.
+have fma' : negb (is_enon_free m_a') := Nenf_THash _.
+have fmb' : negb (is_enon_free m_b') := Nenf_THash _.
+have mb_x' : m_b ≠ TNonce x_b' by rewrite /m_b /hash_result.
+have mb_b' : m_b ≠ TNonce p_b' by rewrite /m_b /hash_result.
+have ma_a' : m_a ≠ TNonce p_a' by rewrite /m_a /hash_result.
+have ma_b' : m_a ≠ TNonce p_b' by rewrite /m_a /hash_result.
+have ma_x' : m_a ≠ TNonce x_b' by rewrite /m_a /hash_result.
+have ma_mb' : m_a ≠ m_b'.
+  by rewrite /m_a /m_b' => /hash_result_inj [] e _; apply: tab; congruence.
+have exps4 : exps (hmqv_ss p_a m_a p_b m_b) ≡ₚ [TNonce p_b; m_b; m_a; TNonce p_a].
+  by rewrite /m_a /m_b exps_hmqv_ss.
+have mb_4 : m_b ∈ exps (hmqv_ss p_a m_a p_b m_b) by rewrite exps4; set_solver.
+have ma_4 : m_a ∈ exps (hmqv_ss p_a m_a p_b m_b) by rewrite exps4; set_solver.
+have mb_x : m_b ∉ factors (TNonce x_b') by apply: not_elem_of_factors_Nenf.
+have mb_mb_pb : m_b ∉ factors (TMulN [m_b'; TNonce p_b']).
+  by apply: not_elem_of_factors_TMulN_Nenf => //;
+     rewrite !Forall_cons Forall_nil; do !split => //.
+have z1 : gcount (hmqv_ss p_a m_a p_b m_b) (TExp X_a' (TNonce x_b')) = 0%Z
+  := gcount_TExp_eq0 X_a' (TNonce x_b') _ m_b mb_4 mb_x ltX.
+have z3 : gcount (hmqv_ss p_a m_a p_b m_b)
+                 (TExp X_a' (TMulN [m_b'; TNonce p_b'])) = 0%Z
+  := gcount_TExp_eq0 X_a' (TMulN [m_b'; TNonce p_b']) _ m_b mb_4 mb_mb_pb ltX.
+(* [m_a] is an exponent of the counted factor but of neither remaining one. *)
+have z2 : gcount (hmqv_ss p_a m_a p_b m_b)
+                 (TExp g (TMulN [TNonce p_a'; m_a'; TNonce x_b'])) = 0%Z.
+  have ne : hmqv_ss p_a m_a p_b m_b
+            ≠ TExp g (TMulN [TNonce p_a'; m_a'; TNonce x_b']).
+    move=> e; move: ma_4; rewrite e exps_TExp_g.
+    by apply: not_elem_of_factors_TMulN_Nenf => //;
+       rewrite !Forall_cons Forall_nil; do !split => //.
+  have nin : hmqv_ss p_a m_a p_b m_b
+             ∉ gfactors (TExp g (TMulN [TNonce p_a'; m_a'; TNonce x_b'])).
+    by rewrite (gfactors_Ngmul _ (Ngmul_TExp_g _)) list_elem_of_singleton.
+  have := not_elem_of_gcount _ _ nin.
+  have := @gcount_TExp_g_ge0 (TMulN [TNonce p_b; m_b; m_a; TNonce p_a])
+                            (TMulN [TNonce p_a'; m_a'; TNonce x_b']).
+  rewrite /hmqv_ss; lia.
+have z4 : gcount (hmqv_ss p_a m_a p_b m_b) (hmqv_ss p_b' m_b' p_a' m_a') = 0%Z.
+  have ne : hmqv_ss p_a m_a p_b m_b ≠ hmqv_ss p_b' m_b' p_a' m_a'.
+    move=> e; move: ma_4; rewrite e /hmqv_ss exps_TExp_g.
+    by apply: not_elem_of_factors_TMulN_Nenf => //;
+       rewrite !Forall_cons Forall_nil; do !split => //.
+  have nin : hmqv_ss p_a m_a p_b m_b ∉ gfactors (hmqv_ss p_b' m_b' p_a' m_a').
+    by rewrite /hmqv_ss (gfactors_Ngmul _ (Ngmul_TExp_g _)) list_elem_of_singleton
+       -/(hmqv_ss _ _ _ _) -/(hmqv_ss _ _ _ _).
+  have := not_elem_of_gcount _ _ nin.
+  have := @gcount_TExp_g_ge0 (TMulN [TNonce p_b; m_b; m_a; TNonce p_a])
+                            (TMulN [TNonce p_a'; m_a'; m_b'; TNonce p_b']).
+  rewrite /hmqv_ss; lia.
+rewrite hmqv_K_expand gcount_TGMulN /= z1 z2 z3 z4; lia.
+Qed.
+
+(** Cross-shape injectivity: a key computed by one party equals a key computed
+    by the other only for the honest pair of shares.  Two of the cases reduce
+    to [hmqv_K_sym] and same-shape injectivity; in the third, each key's
+    static-static factor sits in the other key, which is impossible by size. *)
+Lemma hmqv_K_inj' tag_a tag_b (p_a x_a p_b p_a' x_b' p_b' : nonce) X_b X_a' :
+  let m_a  := hash_result tag_a (Spec.of_list [TExp g x_a; TExp g p_b]) in
+  let m_b  := hash_result tag_b (Spec.of_list [X_b; TExp g p_a]) in
+  let m_b' := hash_result tag_b (Spec.of_list [TExp g x_b'; TExp g p_a']) in
+  let m_a' := hash_result tag_a (Spec.of_list [X_a'; TExp g p_b']) in
+  tag_a ≠ tag_b ->
+  hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b
+  = hmqv_K p_b' x_b' m_b' (TExp g p_a') X_a' m_a' ->
+  p_a = p_a' /\ p_b = p_b' /\ X_b = TExp g x_b' /\ X_a' = TExp g x_a.
+Proof.
+move=> m_a m_b m_b' m_a' tab eK.
+have tba : tag_b ≠ tag_a by congruence.
+case: (decide (m_a = m_a')) => [ema|nea].
+  move: (ema); rewrite /m_a /m_a' => /hash_result_inj [] _ /Spec.of_list_inj [] eXa epb.
+  move/(f_equal expo): epb; rewrite !expo_TExp_g; case=> epb.
+  rewrite -eXa hmqv_K_sym -ema -epb in eK.
+  have [epa [_ [_ eXb]]] := @hmqv_K_inj tag_a tag_b p_a x_a p_b p_a' x_a p_b
+                                        X_b (TExp g x_b') tab eK.
+  by do !split => //.
+case: (decide (m_b = m_b')) => [emb|neb].
+  move: (emb); rewrite /m_b /m_b' => /hash_result_inj [] _ /Spec.of_list_inj [] eXb epa.
+  move/(f_equal expo): epa; rewrite !expo_TExp_g; case=> epa.
+  rewrite eXb hmqv_K_sym emb epa in eK.
+  have [epb [_ [_ eXa]]] := @hmqv_K_inj tag_b tag_a p_b x_b' p_a' p_b' x_b' p_a'
+                                        (TExp g x_a) X_a' tba eK.
+  by do !split => //.
+have in4 : (gcount (hmqv_ss p_a m_a p_b m_b)
+                   (hmqv_K p_b' x_b' m_b' (TExp g p_a') X_a' m_a') > 0)%Z.
+  apply/gcount_gt0; rewrite -eK; apply: hmqv_K_gfactor => //; by right.
+have in4' : (gcount (hmqv_ss p_b' m_b' p_a' m_a')
+                    (hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b) > 0)%Z.
+  apply/gcount_gt0; rewrite eK; apply: hmqv_K_gfactor => //; by right.
+have ltb : tsize X_b < tsize m_b.
+  by rewrite /m_b; apply: tsize_hash_result_lt; set_solver.
+have lta' : tsize X_a' < tsize m_a'.
+  by rewrite /m_a'; apply: tsize_hash_result_lt; set_solver.
+case: (decide (tsize X_a' < tsize m_b)) => [lt|nlt].
+  have E := @gcount_ss_hmqv_K_cross tag_a tag_b p_a x_a p_b p_a' x_b' p_b'
+                                    X_b X_a' tab nea neb lt.
+  by cbv zeta in E; move: in4; rewrite E; lia.
+case: (decide (tsize X_b < tsize m_a')) => [lt'|nlt']; last by lia.
+have E := @gcount_ss_hmqv_K_cross tag_b tag_a p_b' x_b' p_a' p_b x_a p_a
+                                  X_a' X_b tba (not_eq_sym neb) (not_eq_sym nea) lt'.
+by cbv zeta in E; move: in4'; rewrite E; lia.
+Qed.
+
 (** The server's view of a session is determined by its key: this is what the
-    game needs to tell two server sessions apart by their shares. *)
+    game needs to tell two server sessions apart by their shares, and what the
+    server needs to read the client's share off the client's authenticator. *)
 Lemma server_si_key_inj uid α X_u (p_u p_s x_s : nonce)
                         uid' α' X_u' (p_u' p_s' x_s' : nonce) :
   si_key (server_si uid α X_u (TExp g p_u) p_s x_s)
   = si_key (server_si uid' α' X_u' (TExp g p_u') p_s' x_s') ->
-  x_s = x_s'.
+  x_s = x_s' /\ X_u = X_u'.
 Proof.
 rewrite /si_key /si_K /si_ssid /server_si /=.
 move/hash_result_inj => - [] _ e; apply Spec.of_list_inj in e.
@@ -420,8 +574,8 @@ move/(f_equal (λ l, nth 0 l (TInt 0))): e => /= e.
 move/hash_result_inj: e => - [] _ e; apply Spec.of_list_inj in e.
 move/(f_equal (λ l, nth 0 l (TInt 0))): e => /= eK.
 have tags : "e"%string ≠ "d"%string by [].
-by have [_ [exs _]] := @hmqv_K_inj "e" "d" p_s x_s p_u p_s' x_s' p_u'
-                                    X_u X_u' tags eK.
+by have [_ [exs [_ eX]]] := @hmqv_K_inj "e" "d" p_s x_s p_u p_s' x_s' p_u'
+                                         X_u X_u' tags eK.
 Qed.
 
 Definition server_session si : Prop :=
@@ -430,11 +584,12 @@ Definition server_session si : Prop :=
 
 Lemma server_session_key_inj si1 si2 :
   server_session si1 -> server_session si2 ->
-  si_key si1 = si_key si2 -> si_sshare si1 = si_sshare si2.
+  si_key si1 = si_key si2 ->
+  si_sshare si1 = si_sshare si2 /\ si_cshare si1 = si_cshare si2.
 Proof.
 move=> [uid [α [X_u [p_u [p_s [x_s ->]]]]]].
 move=> [uid' [α' [X_u' [p_u' [p_s' [x_s' ->]]]]]] e.
-by rewrite /= (server_si_key_inj e).
+by have [-> ->] := server_si_key_inj e.
 Qed.
 
 Lemma si_key_blind_inj si1 si2 :
@@ -460,7 +615,7 @@ Lemma share_of_key_inj rl si1 si2 :
   si_key si1 = si_key si2 -> share_of rl si1 = share_of rl si2.
 Proof.
 case: rl => /= [_ _|ss1 ss2]; first exact: si_key_blind_inj.
-exact: server_session_key_inj.
+by move=> e; have [] := server_session_key_inj ss1 ss2 e.
 Qed.
 
 Class opaqueGpreS Σ := OpaqueGPreS {
@@ -528,6 +683,93 @@ Qed.
 Definition opaque_session_for uid si : iProp :=
   ⌜si_uid si = uid⌝ ∗ public (si_uid si) ∗ minted (si_key si) ∗
   public (si_ckey si) ∗ public (si_skey si).
+
+(** * Compromise and release, as in [iso_dh]
+
+    Each party gets a one-shot [release_token] on its own share.  A completed
+    session's key is public iff both are released, unless the password was
+    already public when the session was established. *)
+
+Definition release_token share : iProp :=
+  term_token share (↑opN.@"released").
+
+Definition released share : iProp :=
+  term_meta share (opN.@"released") true.
+
+Lemma release share : release_token share ==∗ released share.
+Proof. by apply term_meta_set. Qed.
+
+Definition released_session si : iProp :=
+  released (si_blind si) ∧ released (si_sshare si).
+
+Lemma unrelease rl si :
+  release_token (share_of rl si) ==∗ □ ¬ released_session si.
+Proof.
+iIntros "tok".
+iMod (term_meta_set (opN.@"released") false with "tok") as "#un" => //.
+iIntros "!> !> [#init #resp]".
+iAssert (released (share_of rl si)) as "r"; first by case: rl.
+by iPoseProof (term_meta_agree with "r un") as "%".
+Qed.
+
+Lemma release_token_released_session si rl :
+  release_token (share_of rl si) -∗
+  released_session si -∗
+  False.
+Proof.
+iIntros "token [#init #resp]".
+iApply (term_meta_token (L:=bool) with "token"); last by case: rl.
+by [].
+Qed.
+
+Definition compromised pw si : iProp :=
+  ▷ public pw ∗ public (si_key si).
+
+Definition session pw si : iProp :=
+  minted (si_key si) ∗
+  □ (▷ released_session si → public (si_key si)) ∗
+  (compromised pw si ∨ □ (public (si_key si) → ▷ released_session si)).
+
+#[global] Instance session_persistent pw si : Persistent (session pw si).
+Proof. apply _. Qed.
+
+Definition session_ok si : iProp :=
+  □ (public (si_key si) ↔ ▷ released_session si).
+
+(* The extra later comes from the long-term keys' predicate, [▷ □ public pw]. *)
+Lemma secret_session pw si :
+  secret pw -∗ session pw si -∗ ▷ ◇ session_ok si.
+Proof.
+iIntros "s_pw (_ & #rel & [[#p_pw _]|#sec])".
+- iNext. by iDestruct (secret_not_public with "s_pw p_pw") as ">[]".
+- iIntros "!> !> !>". by iSplit.
+Qed.
+
+Lemma unreleased_key_secrecy si :
+  □ (¬ released_session si) -∗
+  session_ok si -∗
+  □ (public (si_key si) ↔ ▷ False).
+Proof.
+iIntros "#un #s_k !>".
+iApply (bi.iff_trans _ (▷ released_session si)). iSplit => //.
+iSplit; last by iIntros ">[]".
+iIntros "#rel". iNext. by iApply "un".
+Qed.
+
+(** What the authenticators say about an honest ephemeral. *)
+Definition eph_seed (x : nonce) : iProp :=
+  □ (public x → ▷ False) ∗
+  □ (∀ t, exp_pred_base x t ↔ ▷ □ dh_key_share t).
+
+Lemma eph_seed_intro (x : nonce) :
+  □ (public x ↔ ▷ □ False) -∗
+  □ (∀ t, exp_pred_base x t ↔ ▷ □ dh_key_share t) -∗
+  eph_seed x.
+Proof.
+iIntros "#[s _] #e"; iSplit => //.
+iIntros "!> #p". iDestruct ("s" with "p") as "contra". iNext.
+by iDestruct "contra" as "[]".
+Qed.
 
 Lemma _wp_H (tag : string) (val : term) Ψ:
   Ψ (repr (hash_result tag val)) ⊢ WP _H tag val {{ Ψ }}.
@@ -603,7 +845,8 @@ iModIntro; iSplit.
   by iIntros "[_ ?]".
 Qed.
 
-Definition opaque_public_private_pair (a : nonce) A : iProp :=
+(** The long-term keys are exactly as secret as the password. *)
+Definition opaque_public_private_pair pw (a : nonce) A : iProp :=
   ∃ (a' : nonce),
     ⌜A = TExp g a'⌝ ∗
     ⌜a ≠ a'⌝ ∗
@@ -612,32 +855,43 @@ Definition opaque_public_private_pair (a : nonce) A : iProp :=
     minted a' ∗
     □ (∀ t, exp_pred_base a t ↔ ▷ □ dh_key_share t) ∗
     □ (∀ t, exp_pred_base a' t ↔ ▷ □ dh_key_share t) ∗
-    □ (public a ↔ ▷ □ False) ∗
-    □ (public a' ↔ ▷ □ False).
+    □ (public a ↔ ▷ □ public pw) ∗
+    □ (public a' ↔ ▷ □ public pw).
 
 Definition A_u_pred (t : term) : iProp :=
-  ∃ P (p : nonce) X x m_a m_b ssid,
-     opaque_public_private_pair p P ∗
-     ⌜t =
-     Spec.of_list
-     [hash_result "K" (Spec.of_list [hmqv_K p x m_a P X m_b]);
-                  ssid]⌝.
+  ∃ si (x_u : nonce),
+    ⌜t = Spec.of_list [si_K si; si_ssid si]⌝ ∗
+    ⌜server_session si⌝ ∗
+    ⌜si_cshare si = TExp g x_u⌝ ∗
+    eph_seed x_u.
 
 Definition A_s_pred (t : term) : iProp :=
-  ∃ si, ⌜t = Spec.of_list [si_K si; si_ssid si]⌝ ∗
-        public (si_ckey si) ∗ public (si_skey si) ∗
-        opaque_ready si.
+  ∃ uid α X_u (p_u p_s x_s : nonce),
+    let si := server_si uid α X_u (TExp g p_u) p_s x_s in
+    ⌜t = Spec.of_list [si_K si; si_ssid si]⌝ ∗
+    ⌜X_u ≠ TExp g x_s⌝ ∗
+    eph_seed x_s ∗
+    public (si_ckey si) ∗ public (si_skey si) ∗
+    opaque_ready si.
 
+(* The key pins the password: the client compares it with its own. *)
 Definition envelope_pred (sk : senc_key) (t : term) : iProp :=
-  ∃ (p_u : nonce) P_u P_s,
-      ⌜ t = Spec.of_list [TNonce p_u; P_u; P_s] ⌝ ∗
-      opaque_public_private_pair p_u P_s.
+  ∃ pw β (p_u : nonce) P_s,
+      ⌜sk = SEncKey (hash_result "rw" (Spec.of_list [pw; β]))⌝ ∗
+      ⌜t = Spec.of_list [TNonce p_u; TExp g p_u; P_s]⌝ ∗
+      public (TExp g p_u) ∗
+      opaque_public_private_pair pw p_u P_s.
+
+Definition SK_pred (t : term) : iProp :=
+  ∃ si, ⌜t = Spec.of_list [si_K si; si_ssid si]⌝ ∗
+        ⌜server_session si⌝ ∗
+        released_session si.
 
 Definition opaque_ctx : iProp :=
   hash_pred (opN.@"rw") (λ _ : term, False%I) ∗
   hash_pred (opN.@"A_s") A_s_pred ∗
   hash_pred (opN.@"A_u") A_u_pred ∗
-  hash_pred (opN.@"SK") (λ _ : term, False%I) ∗
+  hash_pred (opN.@"SK") SK_pred ∗
   hash_pred (opN.@"K") (λ _ : term, False%I) ∗
   hash_pred (opN.@"α") (λ _ : term, True%I) ∗
   senc_pred (opN.@"AuthEnc") envelope_pred.
@@ -657,7 +911,7 @@ iMod (hash_pred_set (opN.@"A_s") A_s_pred with "h_token")
 as "[? h_token]"; try solve_ndisj; iFrame.
 iMod (hash_pred_set (opN.@"A_u") A_u_pred with "h_token")
 as "[? h_token]"; try solve_ndisj; iFrame.
-iMod (hash_pred_set (opN.@"SK") (λ _ : term, False%I) with "h_token")
+iMod (hash_pred_set (opN.@"SK") SK_pred with "h_token")
 as "[? h_token]"; try solve_ndisj; iFrame.
 iMod (hash_pred_set (opN.@"K") (λ _ : term, False%I) with "h_token")
 as "[? h_token]"; try solve_ndisj; iFrame.
@@ -673,6 +927,63 @@ repeat match goal with
    (solve [ eauto 20 with ndisj ]).
 iApply (seal_pred_token_drop with "s_token").
 by solve_ndisj.
+Qed.
+
+(** Both roles conclude the same way once they know the peer's share is an
+    honest ephemeral: the ephemeral-ephemeral factor keeps the key secret
+    whatever happens to the password, so only release can publish it. *)
+Lemma honest_session_ok uid α (p_u p_s x_u x_s : nonce) :
+  let si := server_si uid α (TExp g x_u) (TExp g p_u) p_s x_s in
+  x_u ≠ x_s →
+  hash_pred (opN.@"SK") SK_pred -∗
+  hash_pred (opN.@"K") (λ _ : term, False%I) -∗
+  eph_seed x_u -∗
+  eph_seed x_s -∗
+  minted (si_key si) -∗
+  session_ok si.
+Proof.
+move=> si x_u_s.
+iIntros "#HpredSK #HpredK #[s_u e_u] #[s_s e_s] #m_SK".
+have ss : server_session si by exists uid, α, (TExp g x_u), p_u, p_s, x_s.
+have NInt : negb (is_exp g) by [].
+have NIntM : negb (is_gmul g) by [].
+have NIntI : negb (is_ginv g) by [].
+have Nm_u : negb (is_mul (TNonce x_u)) by [].
+have Nm_s : negb (is_mul (TNonce x_s)) by [].
+have x_u_sT : TNonce x_u ≠ TNonce x_s by case=> /x_u_s.
+have x_u_sV : TNonce x_u ≠ TInv (TNonce x_s).
+  by move=> e; apply: (TInv_Nenf_ne (t1 := TNonce x_s) (t2 := TNonce x_u)) => //;
+     rewrite e.
+iModIntro; iSplit.
+- iIntros "#p_SK".
+  iDestruct (public_THashE with "HpredSK p_SK") as "[p_t | [_ #rel]]".
+  + rewrite public_of_list /=.
+    iDestruct "p_t" as "[p_K _]".
+    iDestruct (public_THashE with "HpredK p_K") as "[p_t | [_ contra]]";
+      last by iNext; iDestruct "contra" as "[]".
+    rewrite public_of_list /=.
+    iDestruct "p_t" as "[p_K' _]".
+    iEval (rewrite public_gfactors) in "p_K'".
+    iDestruct "p_K'" as "[_ #fs]".
+    iAssert (public (TExp g (TMulN [TNonce x_u; TNonce x_s]))) as "#p_eph".
+      iApply (big_sepL_elem_of with "fs").
+      exact: hmqv_K_gfactor_eph.
+    iDestruct (@public_dh_secret2 _ _ _ g (TNonce x_u) (TNonce x_s)
+                 NInt NIntM NIntI Nm_u Nm_s x_u_sT x_u_sV
+                 with "e_u e_s p_eph") as "[p_x | p_x]".
+    * iDestruct ("s_u" with "p_x") as "contra"; iNext.
+      by iDestruct "contra" as "[]".
+    * iDestruct ("s_s" with "p_x") as "contra"; iNext.
+      by iDestruct "contra" as "[]".
+  + iNext. iDestruct "rel" as "(%si' & %e & %ss' & #rel')".
+    have ek : si_key si = si_key si' by rewrite /si_key e.
+    have [e_s _] := server_session_key_inj ss ss' ek.
+    by rewrite /released_session (si_key_blind_inj ek) e_s.
+- iIntros "#rel".
+  iApply (public_THashIS with "HpredSK [] []").
+  + by iEval (rewrite /si_key minted_hash_result) in "m_SK".
+  + iNext; iModIntro; iExists si.
+    by do !iSplit => //.
 Qed.
 
 End Opaque.

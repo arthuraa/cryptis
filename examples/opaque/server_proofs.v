@@ -22,28 +22,28 @@ Context `{!cryptisGS Σ, !heapGS Σ, !opaqueGS Σ}.
 
 Abbreviation iProp := (iProp Σ).
 
-Definition opaque_file (file : val) : iProp :=
+Definition opaque_file (pw : term) (file : val) : iProp :=
   ∃ (k_s : nonce) (p_s : nonce) P_u envelope,
     ⌜file = Spec.of_list [TNonce k_s; TNonce p_s; TExp g p_s; P_u; envelope]⌝
     ∗ minted k_s ∗ □(public k_s ↔ ▷ □ False) ∗
     □(∀ t' : term, exp_pred_base k_s t' ↔ ▷ □ True) ∗
     □(∀ t' : term, exp_pred_base (TInv k_s) t' ↔ ▷ False) ∗
     public (TExp g p_s) ∗ public envelope ∗
-    opaque_public_private_pair p_s P_u.
+    opaque_public_private_pair pw p_s P_u.
 
-Definition opaque_db (db : gmap term val) : iProp :=
+(** The database, with the password each file was registered with. *)
+Definition opaque_db (pw_of : term → term) (db : gmap term val) : iProp :=
 [∗ map] (k : term) ↦ (file : val) ∈ db,
-public k ∗ opaque_file file.
+public k ∗ opaque_file (pw_of k) file.
 
 Lemma wp_make_file (pw : term) :
   {{{
     cryptis_ctx
     ∗ opaque_ctx
     ∗ minted pw
-    ∗ □ (public pw ↔ ▷ □ False)
-  }}} Server.make_file pw {{{ file, RET (repr file); opaque_file file }}}.
+  }}} Server.make_file pw {{{ file, RET (repr file); opaque_file pw file }}}.
 Proof.
-iIntros "%ϕ (#cryptis & #ctx & #Hmintedpw & #Hprivpw) post".
+iIntros "%ϕ (#cryptis & #ctx & #Hmintedpw) post".
 iPoseProof "ctx" as "(#Hhashpred & _ & _ & _ & _ & _ & #Hsencpred)".
 wp_lam.
 wp_apply (wp_mk_nonce_freshN ∅ (fun _ => False)%I (fun _ => True)%I
@@ -58,7 +58,8 @@ wp_pures; wp_lam; wp_pures.
 wp_apply wp_H'; wp_apply wp_texp; wp_list; wp_apply wp_H.
 wp_apply wp_derive_senc_key.
 wp_pures.
-wp_apply (wp_mk_nonce_freshN ∅ (fun _ => False)%I dh_key_share
+(* The long-term keys are exactly as secret as the password. *)
+wp_apply (wp_mk_nonce_freshN ∅ (fun _ => public pw)%I dh_key_share
                                (fun t =>  {[(TInv t)]})) => //.
 - by iIntros "%_ %contra".
 - iIntros "%t".
@@ -68,7 +69,7 @@ iIntros "%p_s _ #Hmintedp_s #Hprivatep_s #Hexpp_s #Hexpp_sV Htokenp_sV".
 rewrite big_sepS_singleton.
 wp_pures.
 (* Fresh against [p_s] itself: distinctness is all the pair predicate records. *)
-wp_apply (wp_mk_nonce_freshN {[TNonce p_s]} (fun _ => False)%I dh_key_share
+wp_apply (wp_mk_nonce_freshN {[TNonce p_s]} (fun _ => public pw)%I dh_key_share
                                               (fun t =>  {[(TInv t)]})) => //.
 - by iIntros "%"; rewrite elem_of_singleton; iIntros "->".
 - iIntros "%t".
@@ -86,18 +87,19 @@ wp_list; wp_term_of_list.
 wp_lam; wp_pures.
 wp_apply wp_senc'.
 wp_list; wp_term_of_list.
+have NInt : negb (is_exp g) by [].
+have NIntM : negb (is_gmul g) by [].
+have NIntI : negb (is_ginv g) by [].
+have Nm_s : negb (is_mul (TNonce p_s)) by [].
+have Nm_u : negb (is_mul (TNonce p_u)) by [].
+iAssert (public g) as "#pubg"; first by iApply public_TInt.
+iAssert (public (TExp g p_s)) as "#pubP_s".
+  by iApply (public_dh_share NInt NIntM NIntI Nm_s with "pubg Hmintedp_s Hexpp_s").
+iAssert (public (TExp g p_u)) as "#pubP_u".
+  by iApply (public_dh_share NInt NIntM NIntI Nm_u with "pubg Hmintedp_u Hexpp_u").
 iApply "post".
 iExists k_s, p_s, (TExp g p_u), _.
 do !iSplit => //.
-- iApply public_TExp_iff => //.
-  do !iSplit => //.
-  + by iApply minted_TInt.
-  + iApply exp_pred_intro1.
-    iApply "Hexpp_s".
-    iNext; iModIntro; iPureIntro.
-    rewrite (_ : TExp g p_s = TExpN g [TNonce p_s]); last by rewrite /TExpN TMulN1.
-    by rewrite exps_TExpN //; exact: invs_canceled1.
-  + by iModIntro; iIntros "?"; iApply public_TInt.
 - iApply (public_sencIS _ (opN.@"AuthEnc") envelope_pred _) => //.
   1: rewrite minted_senc minted_THash minted_tag.
   1, 2: iApply minted_of_list; do !iSplit => //; iApply minted_TExp.
@@ -106,48 +108,38 @@ do !iSplit => //.
   all: try by rewrite minted_THash minted_tag.
   all: try by iApply minted_TInt.
   iModIntro.
-  iExists p_u, (TExp g p_u), (TExp g p_s).
-  iSplit => //.
-  iExists p_s.
+  iExists pw, (TExp (hash_result "α" pw) k_s), p_u, (TExp g p_s).
   do !iSplit => //.
-  iApply public_TExp_exp_pred => //.
-    + by iApply public_TInt.
-    + iApply exp_pred_intro1.
-      iApply "Hexpp_s".
-      iNext; iModIntro; iPureIntro.
-      rewrite (_ : TExp g p_s = TExpN g [TNonce p_s]); last by rewrite /TExpN TMulN1.
-      by rewrite exps_TExpN //; exact: invs_canceled1.
+  iExists p_s.
+  by do !iSplit => //.
   iModIntro.
   rewrite public_senc_key.
   iIntros "#Hcompromise".
-  iDestruct (public_THashE with "Hhashpred Hcompromise") as "[Hpub | [Hmin contra]]";
-      rewrite !public_of_list /=.
-    iDestruct "Hprivpw" as "[Hprivpw _]".
-    iDestruct "Hpub" as "[Hpubpw _]".
-    iDestruct ("Hprivpw" with "Hpubpw") as "contra".
-    1, 2: iDestruct "Hprivatep_u" as "[_ Hprivatep_u]";
-        iDestruct ("Hprivatep_u" with "contra") as "Hpubp_u";
-        iDestruct "Hprivatep_s" as "[_ Hprivatep_s]";
-        iDestruct ("Hprivatep_s" with "contra") as "Hpubp_s";
-        by do !iSplit => //; do ?iApply public_TExp => //; rewrite public_TInt.
+  (* A public envelope key is a public password, which makes both long-term
+     keys public. *)
+  iAssert (▷ □ public pw)%I as "#Hpubpw".
+  { iDestruct (public_THashE with "Hhashpred Hcompromise") as "[Hpub | [_ contra]]".
+    - rewrite public_of_list /=.
+      iDestruct "Hpub" as "[#? _]".
+      by iIntros "!> !>".
+    - by iNext; iDestruct "contra" as "[]". }
+  iDestruct "Hprivatep_u" as "[_ Hprivatep_u]".
+  iDestruct ("Hprivatep_u" with "Hpubpw") as "#Hpubp_u".
+  iDestruct "Hprivatep_s" as "[_ Hprivatep_s]".
+  iDestruct ("Hprivatep_s" with "Hpubpw") as "#Hpubp_s".
+  rewrite public_of_list /=.
+  by do !iSplit => //.
 - iExists p_u.
-  do !iSplit => //.
-  iApply public_TExp_exp_pred => //.
-    * by iApply public_TInt.
-    * iApply exp_pred_intro1.
-      iApply "Hexpp_u".
-      iNext; iModIntro; iPureIntro.
-      rewrite (_ : TExp g p_u = TExpN g [TNonce p_u]); last by rewrite /TExpN TMulN1.
-      by rewrite exps_TExpN //; exact: invs_canceled1.
+  by do !iSplit => //.
 Qed.
 
-Lemma wp_server_session (db c : val) (alist : gmap term val) φ :
+Lemma wp_server_session (db c : val) pw_of (alist : gmap term val) φ :
 {{{ cryptis_ctx
     ∗ opaque_ctx
     ∗ opaque_pred φ
     ∗ channel c
     ∗ AList.is_alist db alist
-    ∗ opaque_db alist
+    ∗ opaque_db pw_of alist
     ∗ (∀ si, term_token (si_sshare si) (↑opN.@"res") ={⊤}=∗
              φ si Init ∗ φ si Resp)
   }}}
@@ -162,13 +154,14 @@ Lemma wp_server_session (db c : val) (alist : gmap term val) φ :
             ⌜alist !! si_uid si =
              Some (Spec.of_list [TNonce k_s; TNonce p_s;
                                  si_skey si; si_ckey si; envelope] : val)⌝) ∗
-         □ (public (si_key si) ↔ ▷ □ False) ∗
+         session (pw_of (si_uid si)) si ∗
+         release_token (si_sshare si) ∗
          term_token (si_sshare si) (⊤ ∖ ↑opN) ∗
          φ si Resp) }}}.
 Proof.
 iIntros "%ϕ".
 rewrite /opaque_db big_sepM_forall.
-iIntros "(#Cryptis & (_ & #HpredA_s & _ & #HpredSK & #HpredK & _ & _)
+iIntros "(#Cryptis & (_ & #HpredA_s & #HpredA_u & #HpredSK & #HpredK & _ & _)
           & #N_φ & #Hc & Hdb & #Hmapcontents & res) Hhl".
 wp_lam; wp_pures.
 wp_apply (wp_recv with "Hc"); iIntros "%m1 #Hpubm1".
@@ -205,15 +198,21 @@ iAssert (minted X_u) as "#minX_u". by iApply public_minted.
 iAssert (minted P_s) as "#minP_s". by iApply public_minted.
 iAssert (minted (TExp g p_u)) as "#minP_u". by iApply public_minted.
 (* The fresh ephemeral comes with a token on the server's share, as in
-   [iso_dh]. *)
-wp_apply (wp_mk_nonce_freshN ∅ (fun _ => False)%I (fun t => dh_key_share t)%I
+   [iso_dh]; freshness against the peer's share keeps the two ephemerals
+   apart. *)
+wp_apply (wp_mk_nonce_freshN {[X_u]} (fun _ => False)%I (fun t => dh_key_share t)%I
             (fun t => {[TExp g t]})) => //.
-  by iIntros "% %contra".
+  by iIntros "%"; rewrite elem_of_singleton; iIntros "->".
   iIntros "%t"; rewrite big_sepS_singleton; iModIntro; iSplit.
   - iIntros "#?"; by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
   - rewrite (minted_TExp t) //; by iIntros "[_ ?]".
-iIntros "%x_s _ #Hmintedx_s #Hprivatex_s #Hexpx_s #Hexpx_sV tok_Xs".
+iIntros "%x_s %fresh_x_s #Hmintedx_s #Hprivatex_s #Hexpx_s #Hexpx_sV tok_Xs".
 rewrite big_sepS_singleton.
+have X_u_x_s : X_u ≠ TExp g x_s.
+  move=> e; apply: (fresh_x_s X_u); first by rewrite elem_of_singleton.
+  rewrite e; apply: subterm_exps.
+  by rewrite exps_TExp_g factors_Nmul // list_elem_of_singleton.
+iPoseProof (eph_seed_intro with "Hprivatex_s Hexpx_s") as "#eph_s".
 set si := server_si uid α X_u (TExp g p_u) p_s x_s.
 wp_pures.
 wp_apply wp_texp; wp_pures.
@@ -246,6 +245,8 @@ iDestruct (term_token_difference (TExp g x_s) (↑opN.@"res") with "tok_Xs")
   as "[tok_res tok_Xs]"; first solve_ndisj.
 iMod ("res" $! si with "tok_res") as "[res_I res_R]".
 iMod (opaque_ready_alloc with "N_φ res_I") as "#ready".
+iDestruct (term_token_difference (TExp g x_s) (↑opN.@"released") with "tok_Xs")
+  as "[tok_rel tok_Xs]"; first solve_ndisj.
 iDestruct (term_token_drop (⊤ ∖ ↑opN) with "tok_Xs") as "tok_Xs";
   first solve_ndisj.
 set m2 := (Spec.of_list [_; _; _; _]).
@@ -297,26 +298,67 @@ wp_apply wp_send => //.
       + iEval (rewrite minted_hash_result minted_of_list /=); do !iSplit => //;
         by iApply public_minted.
     iNext; iModIntro.
-    iExists si; rewrite /si /server_si /si_K /si_ssid /=.
+    iExists uid, α, X_u, p_u, p_s, x_s; rewrite /si_K /si_ssid /=.
     by do !iSplit => //.
 wp_pures.
 wp_apply (wp_recv with "Hc"); iIntros "%m3 #Hm3pub".
 wp_list; wp_apply wp_prf.
 wp_eq_term Heq; wp_pures; last first.
   by iApply ("Hhl" $! None); iModIntro; iFrame "Hdb"; iLeft.
+iAssert (public (hash_result "A_u" (Spec.of_list [si_K si; si_ssid si])))
+  as "#pubA_u"; first by rewrite -Heq.
+(* A valid [A_u] was either forged -- then the key is public, and with it the
+   password -- or produced by the honest client, which vouches for its
+   ephemeral. *)
+iAssert (public (Spec.of_list [si_K si; si_ssid si])
+         ∨ ▷ □ A_u_pred (Spec.of_list [si_K si; si_ssid si]))%I as "#auth".
+  by iDestruct (public_THashE with "HpredA_u pubA_u") as "[? | [_ ?]]"; eauto.
 wp_list; wp_term_of_list; wp_pures.
+have tags : "e"%string ≠ "d"%string by [].
+have [gf_ss [_ [in_ps in_pu]]] :=
+  @hmqv_key_gfactors p_s p_u x_s "e" "d" P_s X_u tags.
+have p_s_uT : TNonce p_s ≠ TNonce p_u by case=> /p_s_u.
+iAssert (session (pw_of uid) si) as "#sess".
+{ iDestruct "auth" as "[#p_t | #auth]".
+  - iAssert (public (si_key si)) as "#p_SK".
+    { iApply public_THash; iLeft. by iApply public_tag. }
+    iSplit => //.
+    iSplit; first by iIntros "!> _".
+    iLeft; iSplit => //.
+    rewrite public_of_list /=.
+    iDestruct "p_t" as "[p_K _]".
+    iDestruct (public_THashE with "HpredK p_K") as "[p_t | [_ contra]]";
+      last by iNext; iDestruct "contra" as "[]".
+    rewrite public_of_list /=.
+    iDestruct "p_t" as "(p_K' & _)".
+    iEval (rewrite public_gfactors) in "p_K'".
+    iDestruct "p_K'" as "[_ #fs]".
+    iAssert (▷ □ public (pw_of uid))%I as "#p_pw".
+    { iApply (public_dh_secret_gen _ p_s_uT in_ps in_pu with
+                "Hprivp_s Hexpp_s Hprivp_u Hexpp_u").
+      by iApply (big_sepL_elem_of with "fs"). }
+    by iNext.
+  - iDestruct "auth" as "(%si' & %x_u & %e & %ss' & %eX & #eph_u)".
+    have ss : server_session si by exists uid, α, X_u, p_u, p_s, x_s.
+    have ek : si_key si = si_key si' by rewrite {2}/si_key -e.
+    have [_ eXu] := server_session_key_inj ss ss' ek.
+    rewrite /si /= eX in eXu.
+    have x_u_s : x_u ≠ x_s.
+      by move=> e'; apply: X_u_x_s; rewrite eXu e'.
+    subst X_u.
+    iPoseProof (honest_session_ok uid α p_u p_s x_u_s
+                  with "HpredSK HpredK eph_u eph_s mintedSK") as "#[ok1 ok2]".
+    iSplit => //.
+    iSplit; first by iApply "ok2".
+    by iRight. }
 iModIntro.
 iApply ("Hhl" $! (Some (si_result si))).
 iFrame "Hdb".
 iRight; iExists si.
 have -> : si_sshare si = TExp g x_s by [].
-iFrame "tok_Xs res_R".
-(* Two group factors of the key survive whatever [X_u] the peer sent: the
-   static-static one, which carries secrecy, and the peer-static x
-   own-ephemeral one, which carries freshness. *)
-have tags : "e"%string ≠ "d"%string by [].
-have [gf_ss [gf_eph [in_ps in_pu]]] :=
-  @hmqv_key_gfactors p_s p_u x_s "e" "d" P_s X_u tags.
+have -> : si_uid si = uid by [].
+rewrite /release_token.
+iFrame "tok_Xs tok_rel res_R".
 iSplit; first by [].
 iSplit; first by iPureIntro; exists uid, α, X_u, p_u, p_s, x_s.
 iSplit.
@@ -324,21 +366,7 @@ iSplit.
 iSplit.
   iExists k_s, p_s, envelope; iPureIntro.
   by rewrite /si /server_si /= db_uid.
-iModIntro; iSplit; iIntros "#contra".
-- iDestruct (public_THashE with "HpredSK contra") as "[Hpub | [_ contra']]" => //.
-  rewrite public_of_list /=.
-  iDestruct "Hpub" as "[Hpub _]".
-  iDestruct (public_THashE with "HpredK Hpub") as "[Hpub' | [_ contra']]" => //.
-  rewrite public_of_list /=.
-  iDestruct "Hpub'" as "(contra' & _)".
-  iEval (rewrite public_gfactors) in "contra'".
-  iDestruct "contra'" as "[_ #fs]".
-  have p_s_uT : TNonce p_s ≠ TNonce p_u by case=> /p_s_u.
-  iApply (public_dh_secret_gen _ p_s_uT in_ps in_pu with
-            "Hprivp_s Hexpp_s Hprivp_u Hexpp_u").
-  by iApply (big_sepL_elem_of with "fs").
-- iApply (public_THashIS with "HpredSK [] contra").
-  by iEval (rewrite /si_key minted_hash_result) in "mintedSK".
+by iApply "sess".
 Qed.
 
 End Opaque.

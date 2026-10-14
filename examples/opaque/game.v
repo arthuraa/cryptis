@@ -25,7 +25,24 @@ Abbreviation iProp := (iProp Σ).
 
 Definition gameN := nroot.@"game".
 
-(** Postcondition after a party completes a handshake. *)
+(** What a role's specification gives the game when it completes. *)
+Definition raw_res pw (rl : role) (r : option term) : iProp :=
+  match r with
+  | None => True
+  | Some t =>
+      ∃ si, ⌜t = si_result si⌝ ∗
+            ⌜session_of rl si⌝ ∗
+            public (si_uid si) ∗
+            session pw si ∗
+            release_token (share_of rl si) ∗
+            term_token (share_of rl si) (⊤ ∖ ↑opN)
+  end.
+
+Definition raw_res' pw rl (x : val) : iProp :=
+  ∃ r : option term, ⌜x = repr r⌝ ∗ raw_res pw rl r.
+
+(** What the game keeps: the key stays secret, even after the password leaks,
+    because the game never releases its tokens. *)
 Definition session_res (rl : role) (r : option term) : iProp :=
   match r with
   | None => True
@@ -33,15 +50,29 @@ Definition session_res (rl : role) (r : option term) : iProp :=
       ∃ si, ⌜t = si_result si⌝ ∗
             ⌜session_of rl si⌝ ∗
             public (si_uid si) ∗
-            □ (public (si_key si) ↔ ▷ □ False) ∗
+            □ (public (si_key si) ↔ ▷ False) ∗
             term_token (share_of rl si) (↑gameN)
   end.
 
 Definition session_secret (r : option term) : iProp :=
   match r with
   | None => True
-  | Some t => ∃ si, ⌜t = si_result si⌝ ∗ □ (public (si_key si) ↔ ▷ □ False)
+  | Some t => ∃ si, ⌜t = si_result si⌝ ∗ □ (public (si_key si) ↔ ▷ False)
   end.
+
+(* The conversion needs the password to be secret at the time. *)
+Lemma raw_res_session_res pw rl r :
+  secret pw -∗ raw_res pw rl r ={⊤}=∗ secret pw ∗ ▷ ◇ session_res rl r.
+Proof.
+case: r => [t|] /=; iIntros "s_pw Hr"; last by iFrame "s_pw"; iIntros "!> !> !>".
+iDestruct "Hr" as "(%si & -> & %sh & #p_uid & #sess & rel & tok)".
+iMod (unrelease rl with "rel") as "#un".
+iPoseProof (secret_session with "s_pw sess") as "#ok".
+iFrame "s_pw". iIntros "!> !>". iMod "ok" as "#ok". iModIntro.
+iExists si. iSplit; first by []. iSplit; first by [].
+iSplit; first by []. iSplit; first by iApply (unreleased_key_secrecy with "un ok").
+iApply (term_token_drop with "tok"); solve_ndisj.
+Qed.
 
 #[global] Instance session_secret_persistent r : Persistent (session_secret r).
 Proof. by case: r => [t|] /=; apply _. Qed.
@@ -114,6 +145,9 @@ Definition game_round : val := λ: "c" "db" "uid" "pw",
   unguessable_option (Snd "SKs") "c";;
   "SKs".
 
+(** The game: two rounds, each tested while the password is secret; then a
+    password guess, which must fail; then the password leaks, and the last
+    round's keys must still be unguessable. *)
 Definition game : val := λ: "c",
   let: "uid" := mk_nonce #() in
   let: "pw" := mk_nonce #() in
@@ -124,10 +158,10 @@ Definition game : val := λ: "c",
   assert: (~ eq_term "pw" (recv "c")) ;;
   neq_options (Fst "SK1s") (Fst "SK2s") ;;
   neq_options (Snd "SK1s") (Snd "SK2s") ;;
+  send "c" "pw" ;;
+  unguessable_option (Fst "SK2s") "c" ;;
+  unguessable_option (Snd "SK2s") "c" ;;
   #().
-
-Definition session_res' rl (x : val) : iProp :=
-  ∃ r : option term, ⌜x = repr r⌝ ∗ session_res rl r.
 
 (** One round of the game: both roles run in parallel, and both results are
     tested against the attacker.  Each role's result is converted to
@@ -140,41 +174,44 @@ Lemma wp_game_round c db alist uid pw :
   opaque_pred (λ _ _, True)%I -∗
   public uid -∗
   minted pw -∗
-  □ (public pw ↔ ▷ □ False) -∗
-  opaque_db alist -∗
-  {{{ AList.is_alist db alist }}}
+  opaque_db (λ _, pw) alist -∗
+  {{{ AList.is_alist db alist ∗ secret pw }}}
     game_round c db uid pw
   {{{ (rs rc : option term), RET (repr rs, repr rc)%V;
       AList.is_alist db alist ∗
+      secret pw ∗
       session_res Resp rs ∗
       session_res Init rc }}}.
 Proof.
-iIntros "#? #Hchannel #ctx #N_φ #p_uid #m_pw #s_pw #Hdb %Φ !> Halist Hpost".
+iIntros "#? #Hchannel #ctx #N_φ #p_uid #m_pw #Hdb %Φ !> [Halist s_pw] Hpost".
 wp_lam. wp_pures.
-wp_apply (wp_par (λ x, session_res' Resp x ∗ AList.is_alist db alist)%I
-                 (λ x, session_res' Init x)%I with "[Halist]").
-- iApply (wp_server_session db c alist (λ _ _, True)%I with "[Halist]") => //.
+wp_apply (wp_par (λ x, raw_res' pw Resp x ∗ AList.is_alist db alist)%I
+                 (λ x, raw_res' pw Init x)%I with "[Halist]").
+- iApply (wp_server_session db c (λ _, pw) alist (λ _ _, True)%I
+            with "[Halist]") => //.
   { iFrame "Halist"; do !iSplit => //. by iIntros "%si _ !>". }
   iNext. iIntros "%r [Halist Hres]". iFrame "Halist".
   iExists r. iSplit; first by [].
   iDestruct "Hres" as "[-> | (%si & -> & %ss & (_ & #p_uid' & _ & _ & _)
-                                 & _ & #sec & tok & _)]" => //=.
+                                 & _ & #sess & rel & tok & _)]" => //=.
   iExists si. iSplit; first by []. iSplit; first by [].
   iSplit => //. iSplit => //.
-  rewrite /share_of /=.
-  iApply (term_token_drop with "tok"); solve_ndisj.
+  rewrite /share_of /=. iFrame.
 - iApply (wp_client_session uid pw c (λ _ _, True)%I) => //.
   { by do !iSplit => //. }
   iNext. iIntros "%r Hres".
   iExists r. iSplit; first by [].
   iDestruct "Hres" as "[-> | (%si & -> & (_ & #p_uid' & _ & _ & _)
-                                 & #sec & tok & _)]" => //=.
+                                 & #sess & rel & tok & _)]" => //=.
   iExists si. iSplit; first by []. iSplit; first by [].
   iSplit => //. iSplit => //.
-  rewrite /share_of /=.
-  iApply (term_token_drop with "tok"); solve_ndisj.
+  rewrite /share_of /=. iFrame.
 - iIntros "%vs %vc [[(%rs & -> & Hs) Halist] (%rc & -> & Hc)]".
-  iNext. wp_pures.
+  iNext.
+  iMod (raw_res_session_res with "s_pw Hs") as "[s_pw Hs]".
+  iMod (raw_res_session_res with "s_pw Hc") as "[s_pw Hc]".
+  wp_pures.
+  iMod "Hs" as "Hs". iMod "Hc" as "Hc".
   iDestruct (session_res_secret with "Hs") as "#sec_s".
   iDestruct (session_res_secret with "Hc") as "#sec_c".
   wp_bind (unguessable_option _ _).
@@ -201,8 +238,16 @@ iAssert (public uid) as "Hpubuid'".
 by iApply "Hpubuid".
 iClear "Hpubuid".
 wp_pures.
-wp_apply (wp_mk_nonce (fun _ => False)%I (fun _ => False)%I) => //.
-iIntros "%pw #Hminpw #Hprivpw #Hdhpw _ _".
+(* The password is a secret that the game itself leaks later. *)
+iMod pending_alloc as (γ) "pend".
+wp_apply (wp_mk_nonce (fun _ => shot γ 1)%I (fun _ => False)%I) => //.
+iIntros "%pw #Hminpw #Hpw_shot #Hdhpw _ _".
+iAssert (□ (public pw ↔ ▷ shot γ 1))%I as "#Hpw_shot'".
+{ iModIntro; iSplit.
+  - iIntros "#p". iDestruct ("Hpw_shot" with "p") as "#s". iNext.
+    by iDestruct "s" as "#s".
+  - iIntros "#s". iApply "Hpw_shot". iNext. by iModIntro. }
+iPoseProof (secret_alloc with "Hpw_shot' pend") as "s_pw".
 wp_pures.
 wp_bind (AList.new #()).
 iApply AList.wp_empty => //.
@@ -217,16 +262,18 @@ iApply (AList.wp_insert with "Halist").
 iNext.
 iIntros "Halist".
 wp_pures.
-iAssert (opaque_db (<[TNonce uid:=file]> ∅ : gmap term val)) as "#Hdb".
+iAssert (opaque_db (λ _, pw) (<[TNonce uid:=file]> ∅ : gmap term val)) as "#Hdb".
   iApply big_sepM_insert => //.
   by do !iSplit => //.
 wp_apply (wp_game_round
-            with "Hcryptis Hchannel ctx N_φ Hpubuid' Hminpw Hprivpw Hdb Halist").
-iIntros "%SKs1 %SKc1 (Halist & Hs1 & Hc1)".
+            with "Hcryptis Hchannel ctx N_φ Hpubuid' Hminpw Hdb [$Halist $s_pw]").
+iIntros "%SKs1 %SKc1 (Halist & s_pw & Hs1 & Hc1)".
 wp_pures.
 wp_apply (wp_game_round
-            with "Hcryptis Hchannel ctx N_φ Hpubuid' Hminpw Hprivpw Hdb Halist").
-iIntros "%SKs2 %SKc2 (Halist & Hs2 & Hc2)".
+            with "Hcryptis Hchannel ctx N_φ Hpubuid' Hminpw Hdb [$Halist $s_pw]").
+iIntros "%SKs2 %SKc2 (Halist & s_pw & Hs2 & Hc2)".
+iDestruct (session_res_secret with "Hs2") as "#sec_s".
+iDestruct (session_res_secret with "Hc2") as "#sec_c".
 wp_pures.
 wp_apply wp_assert.
 wp_apply wp_recv => //.
@@ -234,10 +281,9 @@ iIntros "%attack #Hpubattack".
 wp_bind (eq_term _ _).
 wp_eq_term H.
   rewrite H.
-  iDestruct "Hprivpw" as "[Hprivpw _]".
-  iDestruct ("Hprivpw" with "Hpubattack") as "Hcontra".
+  iDestruct (secret_not_public with "s_pw Hpubattack") as "Hcontra".
   wp_pures.
-  by iDestruct "Hcontra" as "%Hcontra".
+  by iDestruct "Hcontra" as "[]".
 wp_pures.
 iModIntro.
 iSplit => //.
@@ -248,6 +294,16 @@ iApply (wp_wand with "[Hs1 Hs2]"); first by iApply (wp_neq_options with "Hs1 Hs2
 iIntros "% _". wp_pures.
 wp_bind (neq_options _ _).
 iApply (wp_wand with "[Hc1 Hc2]"); first by iApply (wp_neq_options with "Hc1 Hc2").
+iIntros "% _". wp_pures.
+(* The leak.  The keys established before it stay secret. *)
+iMod (secret_public with "s_pw") as "#p_pw".
+wp_apply wp_send => //.
+wp_pures.
+wp_bind (unguessable_option _ _).
+iApply wp_wand; first by iApply (wp_unguessable_option with "Hchannel sec_s").
+iIntros "% _". wp_pures.
+wp_bind (unguessable_option _ _).
+iApply wp_wand; first by iApply (wp_unguessable_option with "Hchannel sec_c").
 iIntros "% _". by wp_pures.
 Qed.
 
