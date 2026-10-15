@@ -208,7 +208,7 @@ rewrite big_sepS_singleton.
 have X_u_x_s : X_u ≠ TExp g x_s.
   move=> e; apply: (fresh_x_s X_u); first by rewrite elem_of_singleton.
   rewrite e; apply: subterm_exps.
-  by rewrite (exps_TExp_g gNX gNm gNi) factors_Nmul // list_elem_of_singleton.
+  by rewrite exps_TExp_expN // factors_Nmul // list_elem_of_singleton.
 iPoseProof (eph_seed_intro with "Hprivatex_s Hexpx_s") as "#eph_s".
 set si := server_si uid α X_u (TExp g p_u) p_s x_s.
 wp_pures.

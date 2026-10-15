@@ -867,6 +867,14 @@ apply: unfold_term_inj; rewrite !unfold_expo unfold_TExp unfold_TMulN /=.
 by rewrite unfold_expo; apply: PreTerm.expo_exp.
 Qed.
 
+Lemma expo_TExp_expN b e :
+  negb (is_exp b) → negb (is_gmul b) → negb (is_ginv b) →
+  expo (TExp b e) = e.
+Proof.
+move=> gNX gNm gNi.
+by rewrite expo_TExp // expo_expN // TMulN_cat /= TMulN1.
+Qed.
+
 Lemma TExp_gfactors b e : TExp b e = TGMulN ((λ t, TExp t e) <$> gfactors b).
 Proof.
 apply: unfold_term_inj; rewrite unfold_TExp unfold_TGMulN.
@@ -935,6 +943,13 @@ exact: PreTerm.exp_ginv.
 Qed.
 
 Definition exps pt := factors (expo pt).
+
+Lemma exps_TExp_expN b e :
+  negb (is_exp b) → negb (is_gmul b) → negb (is_ginv b) →
+  exps (TExp b e) = factors e.
+Proof.
+by move=> gNX gNm gNi; rewrite /exps expo_TExp_expN //.
+Qed.
 
 Lemma Nginv_TExp b e :
   negb (is_gmul b) -> negb (is_ginv b) -> negb (is_ginv (TExp b e)).
