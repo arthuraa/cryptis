@@ -112,9 +112,8 @@ Definition hmqv_K (t_a t_b : string) (p_a x_a P_a X_a P_b X_b : term) : term :=
   TGMulN [TExp (hmqv_Y t_b P_a P_b X_b) x_a;
           TExp (hmqv_Y t_b P_a P_b X_b) (TMulN [hmqv_m t_a X_a P_b; p_a])].
 
-(* The static-static factor of
-   [hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b].  It is the only one built
-   from both static private keys, and the one the secrecy argument rests on. *)
+(** The largest factor of the HMQV key, measured in the number of exponents. *)
+
 Definition hmqv_ss (t_a t_b : string) (p_a P_a X_a p_b X_b : term) : term :=
   TExp g (TMulN [p_b; hmqv_m t_b X_b P_a; hmqv_m t_a X_a (TExp g p_b); p_a]).
 
@@ -204,19 +203,11 @@ Lemma hmqv_K_gfactor t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b s :
   let m_a := hmqv_m t_a X_a (TExp g p_b) in
   let m_b := hmqv_m t_b X_b P_a in
   t_a ≠ t_b ->
-  s = TMulN [TNonce p_b; m_b; TNonce x_a] \/
-  s = TMulN [TNonce p_b; m_b; m_a; TNonce p_a] ->
+  s = TMulN [TNonce p_b; m_b; TNonce x_a] ∨
+  s = TMulN [TNonce p_b; m_b; m_a; TNonce p_a] →
   TExp g s ∈ gfactors (hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b).
 Proof.
 move=> gNX gNm gNi m_a m_b tab Hs.
-have fa : negb (is_enon_free (TNonce p_a)) := Nenf_TNonce p_a.
-have fb : negb (is_enon_free (TNonce p_b)) := Nenf_TNonce p_b.
-have fx : negb (is_enon_free (TNonce x_a)) := Nenf_TNonce x_a.
-have fma : negb (is_enon_free m_a) := Nenf_THash _.
-have fmb : negb (is_enon_free m_b) := Nenf_THash _.
-have mb_a : m_b ≠ TNonce p_a by rewrite /m_b /hmqv_m.
-have mb_b : m_b ≠ TNonce p_b by rewrite /m_b /hmqv_m.
-have mb_x : m_b ≠ TNonce x_a by rewrite /m_b /hmqv_m.
 have mb_ma : m_b ≠ m_a.
   by rewrite /m_a /m_b => /hmqv_m_inj [] e _; apply: tab; congruence.
 (* [m_b] is an exponent of the factor, and of nothing [X_b] gets raised to. *)
@@ -247,13 +238,13 @@ Qed.
 Lemma hmqv_key_gfactors t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b :
   negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
   let m_b := hmqv_m t_b X_b P_a in
+  let ss := hmqv_ss t_a t_b p_a P_a X_a p_b X_b in
+  let K := hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b in
   t_a ≠ t_b ->
-  hmqv_ss t_a t_b p_a P_a X_a p_b X_b
-    ∈ gfactors (hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b)
-  /\ TExp g (TMulN [TNonce p_b; m_b; TNonce x_a])
-       ∈ gfactors (hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b)
-  /\ TNonce p_a ∈ exps (hmqv_ss t_a t_b p_a P_a X_a p_b X_b)
-  /\ TNonce p_b ∈ exps (hmqv_ss t_a t_b p_a P_a X_a p_b X_b).
+  ss ∈ gfactors K
+  ∧ TExp g (TMulN [TNonce p_b; m_b; TNonce x_a]) ∈ gfactors K
+  ∧ TNonce p_a ∈ exps ss
+  ∧ TNonce p_b ∈ exps ss.
 Proof.
 move=> gNX gNm gNi m_b tab; do !split.
 - rewrite /hmqv_ss; apply: hmqv_K_gfactor => //; by right.
