@@ -214,21 +214,13 @@ set si := server_si uid α X_u (TExp g p_u) p_s x_s.
 wp_pures.
 wp_apply wp_texp; wp_pures.
 wp_apply wp_texp; wp_pures.
-(* [d := H "d" [X_u; P_s]] and [e := H "e" [X_s; P_u]] *)
-wp_list; wp_apply wp_H; wp_pures.
-wp_list; wp_apply wp_H; wp_pures.
 wp_apply wp_hmqv_ke; wp_list; wp_apply wp_H; wp_list.
 wp_apply wp_H; wp_list.
 wp_apply wp_prf; wp_list.
 wp_apply wp_prf; wp_list.
 wp_term_of_list; wp_pures.
-iAssert (minted (hash_result "d" (Spec.of_list [X_u; P_s]))) as "#mintedd".
-{ iApply minted_hash_result; iApply minted_of_list => /=.
-  by do !iSplit => //. }
-iAssert (minted (hash_result "e" (Spec.of_list [TExp g x_s; TExp g p_u])))
-  as "#mintede".
-{ iApply minted_hash_result; iApply minted_of_list => /=; do !iSplit => //=.
-  by iApply all_minted_TExp; iSplit => //; iApply minted_TInt. }
+iAssert (minted (TExp g x_s)) as "#minX_s".
+{ by iApply all_minted_TExp; iSplit => //; iApply minted_TInt. }
 iAssert (minted (si_key si)) as "#mintedSK".
 { iApply minted_hash_result; iApply minted_of_list; rewrite /=; do !iSplit => //.
   - iApply minted_hash_result; rewrite minted_of_list /=; iSplit => //.
@@ -291,7 +283,7 @@ wp_apply wp_send => //.
       iEval (rewrite minted_of_list /=); do !iSplit => //.
       + iEval (rewrite minted_hash_result minted_of_list /=); iSplit => //.
         by iApply (minted_hmqv_K with
-                     "Hminp_s Hmintedx_s mintede minP_u minX_u mintedd").
+                     "Hminp_s Hmintedx_s minP_s minX_s minP_u minX_u").
       + iEval (rewrite minted_hash_result minted_of_list /=); do !iSplit => //;
         by iApply public_minted.
     iNext; iModIntro.
@@ -326,8 +318,9 @@ iAssert (session (pw_of uid) si) as "#sess".
     rewrite public_of_list /=.
     iDestruct "p_t" as "(p_K' & _)".
     iAssert (▷ □ public (pw_of uid))%I as "#p_pw".
-    { iDestruct (@public_hmqv_K_static _ _ _ opN g "e" "d" p_s x_s p_u P_s X_u
-                   gNX gNm gNi tags p_s_u with "Hexpp_s Hexpp_u p_K'")
+    { iDestruct (@public_hmqv_K_static _ _ _ opN g "e" "d" p_s x_s p_u
+                   P_s (TExp g x_s) X_u gNX gNm gNi tags p_s_u
+                   with "Hexpp_s Hexpp_u p_K'")
         as "[p|p]".
       - by iApply "Hprivp_s".
       - by iApply "Hprivp_u". }

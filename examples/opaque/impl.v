@@ -54,11 +54,10 @@ Definition session : val := λ: "uid" "c" "pw",
     bind: "envelope_dec" := AuthDec "rw" "envelope" in
     bind: "list_envelope_dec" := list_of_term "envelope_dec" in
     list_match: [ "p_u"; "P_u"; "P_s" ] := "list_envelope_dec" in
-    (* HMQV's [d = H̄(X_u, ÎdS)] and [e = H̄(X_s, ÎdU)], with the static public
-       keys standing in for the identities. *)
-    let: "d" := H "d" [ "X_u"; "P_s" ] in
-    let: "e" := H "e" [ "X_s"; "P_u" ] in
-    let: "K" := H "K" [hmqv_ke "p_u" "x_u" "d" "P_s" "X_s" "e"] in
+    (* The static public keys stand in for the identities in HMQV's multipliers
+       [d = H̄(X_u, ÎdS)] and [e = H̄(X_s, ÎdU)], computed inside [hmqv_ke]. *)
+    let: "K" :=
+      H "K" [hmqv_ke opN "d" "e" "p_u" "x_u" "P_u" "X_u" "P_s" "X_s"] in
     let: "ssid'" := H "ssid'" ["uid"; "α"] in
     let: "SK" := prf "SK" [ "K"; "ssid'" ] in
     guard: eq_term "A_s" (prf "A_s" [ "K"; "ssid'" ]) in
@@ -92,9 +91,8 @@ Definition session : val := λ: "db" "c",
     let: "x_s" := mk_nonce #() in
     let: "β" := texp "α" "k_s" in
     let: "X_s" := texp g "x_s" in
-    let: "d" := H "d" [ "X_u"; "P_s" ] in
-    let: "e" := H "e" [ "X_s"; "P_u" ] in
-    let: "K" := H "K" [hmqv_ke "p_s" "x_s" "e" "P_u" "X_u" "d"] in
+    let: "K" :=
+      H "K" [hmqv_ke opN "e" "d" "p_s" "x_s" "P_s" "X_s" "P_u" "X_u"] in
     let: "ssid'" := H "ssid'" [ "uid"; "α" ] in
     let: "SK" := prf "SK" [ "K"; "ssid'" ] in
     let: "A_s" := prf "A_s" [ "K"; "ssid'" ] in

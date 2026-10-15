@@ -88,6 +88,7 @@ iAssert (public (TExp g x_u)) as "#pubX_u".
     rewrite (_ : TExp g x_u = TExpN g [TNonce x_u]); last by rewrite /TExpN TMulN1.
     by rewrite exps_TExpN //; exact: invs_canceled1.
   - by rewrite public_TInt; auto. }
+iAssert (minted (TExp g x_u)) as "#mintedX_u"; first by iApply public_minted.
 wp_apply wp_H'; wp_apply wp_texp; wp_pures.
 wp_apply wp_texp; wp_list; wp_term_of_list; wp_pures.
 set m1 := Spec.of_list _.
@@ -153,9 +154,6 @@ iAssert (▷ public pw ∗ public p_u' ∗ public P_u' ∗ public P_s'
     iRight. iExists p_u. by do !iSplit => //. }
 iClear "env".
 wp_pures.
-(* [d := H "d" [X_u; P_s]] and [e := H "e" [X_s; P_u]] *)
-wp_list; wp_apply wp_H; wp_pures.
-wp_list; wp_apply wp_H; wp_pures.
 wp_apply wp_hmqv_ke => /=.
 wp_list.
 wp_apply wp_H => /=.
@@ -165,16 +163,8 @@ wp_list.
 wp_apply wp_prf => /=.
 wp_list.
 wp_apply wp_prf.
-iAssert (minted (hash_result "d" (Spec.of_list [TExp g x_u; P_s'])))
-  as "#mintedd".
-  rewrite minted_hash_result minted_of_list /=; do !iSplit => //.
-  by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
-iAssert (minted (hash_result "e" (Spec.of_list [X_s; P_u']))) as "#mintede".
-  iApply minted_hash_result; iApply minted_of_list => /=.
-  by do !iSplit.
-set d := hash_result "d" (Spec.of_list [TExp g x_u; P_s']).
-set e := hash_result "e" (Spec.of_list [X_s; P_u']).
-set K := hash_result "K" (Spec.of_list [hmqv_K p_u' x_u d P_s' X_s e]).
+set hK := hmqv_K opN "d" "e" p_u' x_u P_u' (TExp g x_u) P_s' X_s.
+set K := hash_result "K" (Spec.of_list [hK]).
 set ssid' := hash_result "ssid'" (Spec.of_list [uid; α]).
 set SK := hash_result "SK" (Spec.of_list [K; ssid']).
 iAssert (minted K) as "#mintedK".
@@ -236,7 +226,7 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
       iDestruct "p_t'" as "(p_K' & _)".
       iAssert (▷ □ public pw)%I as "#p_pw".
       { iDestruct (@public_hmqv_K_static _ _ _ opN g "d" "e" p_u x_u p_s
-                     (TExp g p_u) X_s gNX gNm gNi tags p_u_s
+                     (TExp g p_u) (TExp g x_u) X_s gNX gNm gNi tags p_u_s
                      with "pred_p_u pred_p_s p_K'") as "[p|p]".
         - by iApply "priv_p_u".
         - by iApply "priv_p_s". }
@@ -275,18 +265,7 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
         first solve_ndisj.
       iAssert (public (TNonce x_u)) as "#p_x_u".
       { iDestruct "Hprivatex_u" as "[_ s]". iApply "s". by iIntros "!> !>". }
-      iAssert (public d) as "#p_d".
-      { iApply public_THash; iLeft; iApply public_tag.
-        iApply public_of_list => /=. by do !iSplit => //. }
-      iAssert (public e) as "#p_e".
-      { iApply public_THash; iLeft; iApply public_tag.
-        iApply public_of_list => /=. by do !iSplit => //. }
-      iAssert (public (hmqv_K p_u' x_u d P_s' X_s e)) as "#p_hK".
-      { rewrite /hmqv_K /hmqv_Y.
-        iAssert (public (TGMulN [X_s; TExp P_s' e])) as "#p_Y".
-        { iApply public_TGMulN2 => //. by iApply public_TExp. }
-        iApply public_TGMulN2; iApply public_TExp => //.
-        by iApply public_TMulN2. }
+      iAssert (public hK) as "#p_hK"; first by iApply public_hmqv_K.
       iAssert (public K) as "#p_K".
       { iApply public_THash; iLeft; iApply public_tag.
         iApply public_of_list => /=. by do !iSplit => //. }

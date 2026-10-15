@@ -53,9 +53,10 @@ Unset Printing Implicit Defensive.
     the same security guarantees.
 
 
-    [hmqv_K p_a x_a m_a P_b X_b m_b] computes the key formula based on the public
-    and private keys of the two parties, as well as the multipliers. We prove the
-    following properties:
+    [hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b] computes the key formula from the
+    tags, a party's private keys [p_a] and [x_a], its own public keys [P_a] and
+    [X_a] and the peer's public keys [P_b] and [X_b].  The multipliers are
+    [hmqv_m t X P = H(t, X, P)].  We prove the following properties:
 
     - [hmqv_K_sym]: [hmqv_K] produces the same key for the two parties.  This
       property allows them to agree on a shared session key.
@@ -80,25 +81,28 @@ Section HMQV.
 Variable N : namespace.
 Variable g : term.
 
-Definition hash_result (tag : string) (val : term) : term :=
-  THash (Spec.tag (Tag $ N.@tag) val).
+(** The multiplier of a party whose ephemeral public key is [X] and whose peer
+    has long-term public key [P]. *)
 
-Lemma hash_result_inj (tag1 tag2 : string) t1 t2 :
-  hash_result tag1 t1 = hash_result tag2 t2 -> tag1 = tag2 /\ t1 = t2.
+Definition hmqv_m (t : string) (X P : term) : term :=
+  THash (Spec.tag (Tag $ N.@t) (Spec.of_list [X; P])).
+
+Lemma hmqv_m_inj t t' X X' P P' :
+  hmqv_m t X P = hmqv_m t' X' P' -> t = t' /\ X = X' /\ P = P'.
 Proof.
-rewrite /hash_result => - [] /Spec.tag_inj [] /Tag_inj c ->.
+rewrite /hmqv_m => - [] /Spec.tag_inj [] /Tag_inj c /Spec.of_list_inj [] -> ->.
 by case: (ndot_inj _ _ _ _ c).
 Qed.
 
-Lemma tsize_hash_result_lt tag t l :
-  t ∈ l -> tsize t < tsize (hash_result tag (Spec.of_list l)).
+Lemma tsize_hmqv_m_lt t X P : tsize X < tsize (hmqv_m t X P).
 Proof.
-move=> t_l; rewrite /hash_result [Spec.tag]unlock.
-have e : tsize (THash (TPair (Tag (N.@tag)) (Spec.of_list l)))
-       = S (S (tsize (Tag (N.@tag)) + tsize (Spec.of_list l))).
+rewrite /hmqv_m [Spec.tag]unlock.
+have e : tsize (THash (TPair (Tag (N.@t)) (Spec.of_list [X; P])))
+       = S (S (tsize (Tag (N.@t)) + tsize (Spec.of_list [X; P]))).
   by rewrite [tsize (THash _)]tsize_eq [tsize (TPair _ _)]tsize_eq.
 rewrite e.
-have := Spec.of_list_tsize t_l; lia.
+have X_in : X ∈ [X; P] by set_solver.
+have := Spec.of_list_tsize X_in; lia.
 Qed.
 
 Lemma expo_TExp_g :
@@ -117,23 +121,25 @@ Proof. move=> gNX gNm gNi s; by rewrite /exps (expo_TExp_g gNX gNm gNi). Qed.
 Lemma Ngmul_TExp_g : negb (is_gmul g) → ∀ s, negb (is_gmul (TExp g s)).
 Proof. by move=> gNm s; apply: Ngmul_TExp. Qed.
 
-Definition hmqv_Y (P_b X_b m_b : term) : term := TGMulN [X_b; TExp P_b m_b].
+Definition hmqv_Y (t_b : string) (P_a P_b X_b : term) : term :=
+  TGMulN [X_b; TExp P_b (hmqv_m t_b X_b P_a)].
 
-Definition hmqv_K (p_a x_a m_a P_b X_b m_b : term) : term :=
-  TGMulN [TExp (hmqv_Y P_b X_b m_b) x_a;
-          TExp (hmqv_Y P_b X_b m_b) (TMulN [m_a; p_a])].
+Definition hmqv_K (t_a t_b : string) (p_a x_a P_a X_a P_b X_b : term) : term :=
+  TGMulN [TExp (hmqv_Y t_b P_a P_b X_b) x_a;
+          TExp (hmqv_Y t_b P_a P_b X_b) (TMulN [hmqv_m t_a X_a P_b; p_a])].
 
-(* The static-static factor of the key.  It is the only one built from both
-   static private keys, and the one the secrecy argument rests on. *)
-Definition hmqv_ss (p_a m_a p_b m_b : term) : term :=
-  TExp g (TMulN [p_b; m_b; m_a; p_a]).
+(* The static-static factor of
+   [hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b].  It is the only one built
+   from both static private keys, and the one the secrecy argument rests on. *)
+Definition hmqv_ss (t_a t_b : string) (p_a P_a X_a p_b X_b : term) : term :=
+  TExp g (TMulN [p_b; hmqv_m t_b X_b P_a; hmqv_m t_a X_a (TExp g p_b); p_a]).
 
-Lemma hmqv_K_expand p_a x_a m_a p_b X_b m_b :
-  hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b
+Lemma hmqv_K_expand t_a t_b p_a x_a P_a X_a p_b X_b :
+  hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b
   = TGMulN [TExp X_b x_a;
-            TExp g (TMulN [p_b; m_b; x_a]);
-            TExp X_b (TMulN [m_a; p_a]);
-            hmqv_ss p_a m_a p_b m_b].
+            TExp g (TMulN [p_b; hmqv_m t_b X_b P_a; x_a]);
+            TExp X_b (TMulN [hmqv_m t_a X_a (TExp g p_b); p_a]);
+            hmqv_ss t_a t_b p_a P_a X_a p_b X_b].
 Proof.
 have flat2 : forall a ts, TMulN [a; TMulN ts] = TMulN (a :: ts).
   move=> a ts; rewrite Permutation_swap TMulN_cat.
@@ -145,9 +151,9 @@ rewrite /hmqv_K /hmqv_Y /hmqv_ss !TExp_TGMulN /= !TExpA !flat2 !flat4.
 by rewrite TGMulN_app.
 Qed.
 
-Lemma hmqv_K_sym p_a x_a m_a p_b x_b m_b :
-  hmqv_K p_a x_a m_a (TExp g p_b) (TExp g x_b) m_b
-  = hmqv_K p_b x_b m_b (TExp g p_a) (TExp g x_a) m_a.
+Lemma hmqv_K_sym t_a t_b p_a x_a p_b x_b :
+  hmqv_K t_a t_b p_a x_a (TExp g p_a) (TExp g x_a) (TExp g p_b) (TExp g x_b)
+  = hmqv_K t_b t_a p_b x_b (TExp g p_b) (TExp g x_b) (TExp g p_a) (TExp g x_a).
 Proof.
 have scal : forall ts1 ts2 : list term,
     (forall t, foldr Z.add 0%Z (count t <$> ts1)
@@ -158,6 +164,8 @@ have flat2 : forall a ts, TMulN [a; TMulN ts] = TMulN (a :: ts).
   move=> a ts; rewrite Permutation_swap TMulN_cat.
   by rewrite -Permutation_cons_append.
 rewrite !hmqv_K_expand /hmqv_ss !TExpA !flat2.
+set m_a := hmqv_m t_a (TExp g x_a) (TExp g p_b).
+set m_b := hmqv_m t_b (TExp g x_b) (TExp g p_a).
 have e1 : TMulN [x_b; x_a] = TMulN [x_a; x_b] by apply: scal => t /=; lia.
 have e2 : TMulN [p_b; m_b; x_a] = TMulN [x_a; m_b; p_b]
   by apply: scal => t /=; lia.
@@ -194,10 +202,10 @@ have := not_elem_of_gcount (TGInv (TExp g s1)) (TExp g s2) ne.
 rewrite gcount_TGInv_l; lia.
 Qed.
 
-Lemma exps_hmqv_ss (p_a p_b : nonce) tag_a tag_b v_a v_b :
+Lemma exps_hmqv_ss t_a t_b (p_a p_b : nonce) P_a X_a X_b :
   negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
-  exps (hmqv_ss p_a (hash_result tag_a v_a) p_b (hash_result tag_b v_b))
-  ≡ₚ [TNonce p_b; hash_result tag_b v_b; hash_result tag_a v_a; TNonce p_a].
+  exps (hmqv_ss t_a t_b p_a P_a X_a p_b X_b)
+  ≡ₚ [TNonce p_b; hmqv_m t_b X_b P_a; hmqv_m t_a X_a (TExp g p_b); TNonce p_a].
 Proof.
 move=> gNX gNm gNi.
 rewrite /hmqv_ss (exps_TExp_g gNX gNm gNi); apply: factors_TMulN; auto 6.
@@ -207,14 +215,14 @@ Qed.
     contains at least [g^(p_b ⋅ m_b ⋅ x_a)] and [g^(p_b ⋅ m_b ⋅ m_a ⋅ p_a)] as
     factors. *)
 
-Lemma hmqv_K_gfactor (p_a x_a p_b : nonce) tag_a tag_b P_a X_b s :
+Lemma hmqv_K_gfactor t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b s :
   negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
-  let m_a := hash_result tag_a (Spec.of_list [TExp g x_a; TExp g p_b]) in
-  let m_b := hash_result tag_b (Spec.of_list [X_b; P_a]) in
-  tag_a ≠ tag_b ->
+  let m_a := hmqv_m t_a X_a (TExp g p_b) in
+  let m_b := hmqv_m t_b X_b P_a in
+  t_a ≠ t_b ->
   s = TMulN [TNonce p_b; m_b; TNonce x_a] \/
   s = TMulN [TNonce p_b; m_b; m_a; TNonce p_a] ->
-  TExp g s ∈ gfactors (hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b).
+  TExp g s ∈ gfactors (hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b).
 Proof.
 move=> gNX gNm gNi m_a m_b tab Hs.
 have fa : negb (is_enon_free (TNonce p_a)) := Nenf_TNonce p_a.
@@ -222,11 +230,11 @@ have fb : negb (is_enon_free (TNonce p_b)) := Nenf_TNonce p_b.
 have fx : negb (is_enon_free (TNonce x_a)) := Nenf_TNonce x_a.
 have fma : negb (is_enon_free m_a) := Nenf_THash _.
 have fmb : negb (is_enon_free m_b) := Nenf_THash _.
-have mb_a : m_b ≠ TNonce p_a by rewrite /m_b /hash_result.
-have mb_b : m_b ≠ TNonce p_b by rewrite /m_b /hash_result.
-have mb_x : m_b ≠ TNonce x_a by rewrite /m_b /hash_result.
+have mb_a : m_b ≠ TNonce p_a by rewrite /m_b /hmqv_m.
+have mb_b : m_b ≠ TNonce p_b by rewrite /m_b /hmqv_m.
+have mb_x : m_b ≠ TNonce x_a by rewrite /m_b /hmqv_m.
 have mb_ma : m_b ≠ m_a.
-  by rewrite /m_a /m_b => /hash_result_inj [] e _; apply: tab; congruence.
+  by rewrite /m_a /m_b => /hmqv_m_inj [] e _; apply: tab; congruence.
 (* [m_b] is an exponent of the factor, and of nothing [X_b] gets raised to. *)
 have mb_s : m_b ∈ exps (TExp g s).
   rewrite (exps_TExp_g gNX gNm gNi); case: Hs => ->; rewrite Permutation_swap;
@@ -236,13 +244,13 @@ have mb_xa : m_b ∉ factors (TNonce x_a) by apply: not_elem_of_factors_Nenf.
 have mb_ma_pa : m_b ∉ factors (TMulN [m_a; TNonce p_a]).
   by apply: not_elem_of_factors_TMulN_Nenf => //;
      rewrite !Forall_cons Forall_nil; do !split => //.
-have ltX : tsize X_b < tsize m_b.
-  by rewrite /m_b; apply: tsize_hash_result_lt; set_solver.
+have ltX : tsize X_b < tsize m_b by exact: tsize_hmqv_m_lt.
 have z1 : gcount (TExp g s) (TExp X_b (TNonce x_a)) = 0%Z
   := gcount_TExp_eq0 X_b (TNonce x_a) (TExp g s) m_b mb_s mb_xa ltX.
 have z3 : gcount (TExp g s) (TExp X_b (TMulN [m_a; TNonce p_a])) = 0%Z
   := gcount_TExp_eq0 X_b (TMulN [m_a; TNonce p_a]) (TExp g s) m_b mb_s mb_ma_pa ltX.
-apply/gcount_gt0; rewrite hmqv_K_expand gcount_TGMulN /= /hmqv_ss z1 z3.
+apply/gcount_gt0.
+rewrite hmqv_K_expand gcount_TGMulN /= /hmqv_ss -/m_a -/m_b z1 z3.
 case: Hs => ->.
 - rewrite (gcount_TExp_g_diag gNm).
   have := @gcount_TExp_g_ge0 gNm (TMulN [TNonce p_b; m_b; TNonce x_a])
@@ -252,35 +260,38 @@ case: Hs => ->.
                                 (TMulN [TNonce p_b; m_b; TNonce x_a]); lia.
 Qed.
 
-Lemma hmqv_key_gfactors (p_a p_b x_a : nonce) tag_a tag_b P_a X_b :
+Lemma hmqv_key_gfactors t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b :
   negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
-  let m_a := hash_result tag_a (Spec.of_list [TExp g x_a; TExp g p_b]) in
-  let m_b := hash_result tag_b (Spec.of_list [X_b; P_a]) in
-  tag_a ≠ tag_b ->
-  hmqv_ss p_a m_a p_b m_b ∈ gfactors (hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b)
+  let m_b := hmqv_m t_b X_b P_a in
+  t_a ≠ t_b ->
+  hmqv_ss t_a t_b p_a P_a X_a p_b X_b
+    ∈ gfactors (hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b)
   /\ TExp g (TMulN [TNonce p_b; m_b; TNonce x_a])
-       ∈ gfactors (hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b)
-  /\ TNonce p_a ∈ exps (hmqv_ss p_a m_a p_b m_b)
-  /\ TNonce p_b ∈ exps (hmqv_ss p_a m_a p_b m_b).
+       ∈ gfactors (hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b)
+  /\ TNonce p_a ∈ exps (hmqv_ss t_a t_b p_a P_a X_a p_b X_b)
+  /\ TNonce p_b ∈ exps (hmqv_ss t_a t_b p_a P_a X_a p_b X_b).
 Proof.
-move=> gNX gNm gNi m_a m_b tab; do !split.
+move=> gNX gNm gNi m_b tab; do !split.
 - rewrite /hmqv_ss; apply: hmqv_K_gfactor => //; by right.
 - apply: hmqv_K_gfactor => //; by left.
-- by rewrite /m_a /m_b exps_hmqv_ss //; set_solver.
-- by rewrite /m_a /m_b exps_hmqv_ss //; set_solver.
+- by rewrite exps_hmqv_ss //; set_solver.
+- by rewrite exps_hmqv_ss //; set_solver.
 Qed.
 
 (** With an honest peer share, the ephemeral-ephemeral factor is in the key.
     This guarantees that the session key remains secret when the ephemeral
     private keys are. *)
 
-Lemma hmqv_K_gfactor_eph (p_a x_a p_b x_b : nonce) m_a m_b :
+Lemma hmqv_K_gfactor_eph t_a t_b (p_a x_a p_b x_b : nonce) P_a X_a :
   negb (is_gmul g) →
   TExp g (TMulN [TNonce x_b; TNonce x_a])
-    ∈ gfactors (hmqv_K p_a x_a m_a (TExp g p_b) (TExp g x_b) m_b).
+    ∈ gfactors (hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) (TExp g x_b)).
 Proof.
 move=> gNm.
-apply/gcount_gt0; rewrite hmqv_K_expand !TExpA gcount_TGMulN /=.
+set m_a := hmqv_m t_a X_a (TExp g p_b).
+set m_b := hmqv_m t_b (TExp g x_b) P_a.
+apply/gcount_gt0.
+rewrite hmqv_K_expand !TExpA gcount_TGMulN /= /hmqv_ss -/m_a -/m_b.
 rewrite (gcount_TExp_g_diag gNm).
 have := @gcount_TExp_g_ge0 gNm (TMulN [TNonce x_b; TNonce x_a])
                               (TMulN [TNonce p_b; m_b; TNonce x_a]).
@@ -288,7 +299,7 @@ have := @gcount_TExp_g_ge0 gNm (TMulN [TNonce x_b; TNonce x_a])
                               (TMulN [TNonce x_b; TMulN [m_a; TNonce p_a]]).
 have := @gcount_TExp_g_ge0 gNm (TMulN [TNonce x_b; TNonce x_a])
                               (TMulN [TNonce p_b; m_b; m_a; TNonce p_a]).
-rewrite /hmqv_ss; lia.
+lia.
 Qed.
 
 (** The following result is crucial to establish agreement.  It tells us that,
@@ -299,27 +310,32 @@ Qed.
     Note that the hypothesis [tsize X_b' < tsize m_b] is required.  Otherwise,
     we can set [p_a' = p_a], [x_a' = x_a], [p_b' = p_b] and
     [X_b' = g ^ (p_b ⋅ m_b)]. Even though [X_b' ≠ X_b], because of
-    [hmqv_K_expand], [hmqv_ss p_a m_a m_b p_b = X_b' ^ (p_a ⋅ m_a)] occurs in
-    [hmqv_K p_a' x_a' m_a' P_b' X_b' m_b'].  This won't be a problem when
-    proving agreement later because we can always this condition to hold.
+    [hmqv_K_expand], [hmqv_ss t_a t_b p_a P_a X_a p_b X_b = X_b' ^ (p_a ⋅ m_a)]
+    occurs in [hmqv_K t_a t_b p_a' x_a' P_a' X_a' P_b' X_b'].  This won't be a
+    problem when proving agreement later because we can always this condition
+    to hold.
 
 *)
 
-Lemma gcount_ss_hmqv_K tag_a tag_b (p_a x_a p_b p_a' x_a' p_b' : nonce)
-    X_b X_b' :
+Lemma gcount_ss_hmqv_K t_a t_b (p_a x_a p_b p_a' x_a' p_b' : nonce) X_b X_b' :
   negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
-  let m_a  := hash_result tag_a (Spec.of_list [TExp g x_a; TExp g p_b]) in
-  let m_b  := hash_result tag_b (Spec.of_list [X_b; TExp g p_a]) in
-  let m_a' := hash_result tag_a (Spec.of_list [TExp g x_a'; TExp g p_b']) in
-  let m_b' := hash_result tag_b (Spec.of_list [X_b'; TExp g p_a']) in
-  tag_a ≠ tag_b ->
+  let m_b := hmqv_m t_b X_b (TExp g p_a) in
+  t_a ≠ t_b ->
   tsize X_b' < tsize m_b ->
-  gcount (hmqv_ss p_a m_a p_b m_b)
-         (hmqv_K p_a' x_a' m_a' (TExp g p_b') X_b' m_b')
+  gcount (hmqv_ss t_a t_b p_a (TExp g p_a) (TExp g x_a) p_b X_b)
+         (hmqv_K t_a t_b p_a' x_a' (TExp g p_a') (TExp g x_a')
+                 (TExp g p_b') X_b')
   = if bool_decide (p_a = p_a' ∧ x_a = x_a' ∧ p_b = p_b' ∧ X_b = X_b')
     then 1%Z else 0%Z.
 Proof.
-move=> gNX gNm gNi m_a m_b m_a' m_b' tab ltX.
+move=> gNX gNm gNi m_b tab ltX.
+set m_a  := hmqv_m t_a (TExp g x_a) (TExp g p_b).
+set m_a' := hmqv_m t_a (TExp g x_a') (TExp g p_b').
+set m_b' := hmqv_m t_b X_b' (TExp g p_a').
+set ss   := hmqv_ss t_a t_b p_a (TExp g p_a) (TExp g x_a) p_b X_b.
+set ss'  := hmqv_ss t_a t_b p_a' (TExp g p_a') (TExp g x_a') p_b' X_b'.
+have ss_ge0 : forall s, (0 <= gcount ss (TExp g s))%Z
+  := fun s => @gcount_TExp_g_ge0 gNm _ s.
 have fa := Nenf_TNonce p_a; have fb := Nenf_TNonce p_b.
 have fa' := Nenf_TNonce p_a'; have fb' := Nenf_TNonce p_b'.
 have fx' := Nenf_TNonce x_a'.
@@ -327,56 +343,48 @@ have fma : negb (is_enon_free m_a) := Nenf_THash _.
 have fmb : negb (is_enon_free m_b) := Nenf_THash _.
 have fma' : negb (is_enon_free m_a') := Nenf_THash _.
 have fmb' : negb (is_enon_free m_b') := Nenf_THash _.
-have mb_x' : m_b ≠ TNonce x_a' by rewrite /m_b /hash_result.
-have mb_a' : m_b ≠ TNonce p_a' by rewrite /m_b /hash_result.
+have mb_x' : m_b ≠ TNonce x_a' by rewrite /m_b /hmqv_m.
+have mb_a' : m_b ≠ TNonce p_a' by rewrite /m_b /hmqv_m.
 have mb_ma' : m_b ≠ m_a'.
-  by rewrite /m_b /m_a' => /hash_result_inj [] e _; apply: tab; congruence.
-have ma_b' : m_a ≠ TNonce p_b' by rewrite /m_a /hash_result.
-have ma_a' : m_a ≠ TNonce p_a' by rewrite /m_a /hash_result.
-have ma_x' : m_a ≠ TNonce x_a' by rewrite /m_a /hash_result.
+  by rewrite /m_b /m_a' => /hmqv_m_inj [] e _; apply: tab; congruence.
+have ma_b' : m_a ≠ TNonce p_b' by rewrite /m_a /hmqv_m.
+have ma_a' : m_a ≠ TNonce p_a' by rewrite /m_a /hmqv_m.
+have ma_x' : m_a ≠ TNonce x_a' by rewrite /m_a /hmqv_m.
 have ma_mb' : m_a ≠ m_b'.
-  by rewrite /m_a /m_b' => /hash_result_inj [] e _; apply: tab; congruence.
-have mb_b' : m_b ≠ TNonce p_b' by rewrite /m_b /hash_result.
-have exps4 : exps (hmqv_ss p_a m_a p_b m_b) ≡ₚ [TNonce p_b; m_b; m_a; TNonce p_a].
-  by rewrite /m_a /m_b exps_hmqv_ss.
-have exps4' : exps (hmqv_ss p_a' m_a' p_b' m_b')
-              ≡ₚ [TNonce p_b'; m_b'; m_a'; TNonce p_a'].
-  by rewrite /m_a' /m_b' exps_hmqv_ss.
-have mb_4 : m_b ∈ exps (hmqv_ss p_a m_a p_b m_b) by rewrite exps4; set_solver.
-have ma_4 : m_a ∈ exps (hmqv_ss p_a m_a p_b m_b) by rewrite exps4; set_solver.
+  by rewrite /m_a /m_b' => /hmqv_m_inj [] e _; apply: tab; congruence.
+have mb_b' : m_b ≠ TNonce p_b' by rewrite /m_b /hmqv_m.
+have exps4 : exps ss ≡ₚ [TNonce p_b; m_b; m_a; TNonce p_a].
+  by rewrite /ss /m_a /m_b exps_hmqv_ss.
+have exps4' : exps ss' ≡ₚ [TNonce p_b'; m_b'; m_a'; TNonce p_a'].
+  by rewrite /ss' /m_a' /m_b' exps_hmqv_ss.
+have mb_4 : m_b ∈ exps ss by rewrite exps4; set_solver.
+have ma_4 : m_a ∈ exps ss by rewrite exps4; set_solver.
 (* The cross terms: [m_b] is an exponent of the counted factor, but of nothing
    [X_b'] gets raised to, and [X_b'] is smaller than it. *)
 have mb_x : m_b ∉ factors (TNonce x_a') by apply: not_elem_of_factors_Nenf.
 have mb_ma_pa : m_b ∉ factors (TMulN [m_a'; TNonce p_a']).
   by apply: not_elem_of_factors_TMulN_Nenf => //;
      rewrite !Forall_cons Forall_nil; do !split => //.
-have z1 : gcount (hmqv_ss p_a m_a p_b m_b) (TExp X_b' (TNonce x_a')) = 0%Z
+have z1 : gcount ss (TExp X_b' (TNonce x_a')) = 0%Z
   := gcount_TExp_eq0 X_b' (TNonce x_a') _ m_b mb_4 mb_x ltX.
-have z3 : gcount (hmqv_ss p_a m_a p_b m_b)
-                 (TExp X_b' (TMulN [m_a'; TNonce p_a'])) = 0%Z
+have z3 : gcount ss (TExp X_b' (TMulN [m_a'; TNonce p_a'])) = 0%Z
   := gcount_TExp_eq0 X_b' (TMulN [m_a'; TNonce p_a']) _ m_b mb_4 mb_ma_pa ltX.
 (* The ephemeral factor has three exponents, the counted one four. *)
-have z2 : gcount (hmqv_ss p_a m_a p_b m_b)
-                 (TExp g (TMulN [TNonce p_b'; m_b'; TNonce x_a'])) = 0%Z.
-  have ne : hmqv_ss p_a m_a p_b m_b
-            ≠ TExp g (TMulN [TNonce p_b'; m_b'; TNonce x_a']).
+have z2 : gcount ss (TExp g (TMulN [TNonce p_b'; m_b'; TNonce x_a'])) = 0%Z.
+  have ne : ss ≠ TExp g (TMulN [TNonce p_b'; m_b'; TNonce x_a']).
     move=> e; move: ma_4; rewrite e (exps_TExp_g gNX gNm gNi).
     by apply: not_elem_of_factors_TMulN_Nenf => //;
        rewrite !Forall_cons Forall_nil; do !split => //.
-  have nin : hmqv_ss p_a m_a p_b m_b
-             ∉ gfactors (TExp g (TMulN [TNonce p_b'; m_b'; TNonce x_a'])).
+  have nin : ss ∉ gfactors (TExp g (TMulN [TNonce p_b'; m_b'; TNonce x_a'])).
     by rewrite (gfactors_Ngmul _ (Ngmul_TExp_g gNm _)) list_elem_of_singleton.
   have := not_elem_of_gcount _ _ nin.
-  have := @gcount_TExp_g_ge0 gNm (TMulN [TNonce p_b; m_b; m_a; TNonce p_a])
-                                (TMulN [TNonce p_b'; m_b'; TNonce x_a']).
-  rewrite /hmqv_ss; lia.
-rewrite hmqv_K_expand gcount_TGMulN /= z1 z2 z3.
+  have := ss_ge0 (TMulN [TNonce p_b'; m_b'; TNonce x_a']); lia.
+rewrite hmqv_K_expand -/m_a' -/m_b' -/ss' gcount_TGMulN /= z1 z2 z3.
 case_bool_decide as cond.
 - case: cond => epa [exa [epb eXb]].
-  have -> : hmqv_ss p_a' m_a' p_b' m_b' = hmqv_ss p_a m_a p_b m_b.
-    by rewrite /m_a /m_b /m_a' /m_b' epa exa epb eXb.
-  by rewrite /hmqv_ss (gcount_TExp_g_diag gNm).
-- have ne : hmqv_ss p_a m_a p_b m_b ≠ hmqv_ss p_a' m_a' p_b' m_b'.
+  have -> : ss' = ss by rewrite /ss' /ss epa exa epb eXb.
+  by rewrite /ss /hmqv_ss (gcount_TExp_g_diag gNm).
+- have ne : ss ≠ ss'.
     move=> e4; apply: cond.
     have perm : [TNonce p_b; m_b; m_a; TNonce p_a]
                 ≡ₚ [TNonce p_b'; m_b'; m_a'; TNonce p_a'].
@@ -387,21 +395,19 @@ case_bool_decide as cond.
     have emb : m_b = m_b'.
       have : m_b ∈ [TNonce p_b'; m_b'; m_a'; TNonce p_a'] by rewrite -perm; set_solver.
       by rewrite !elem_of_cons elem_of_nil; case=> [|[|[|[|[]]]]].
-    move: (ema); rewrite /m_a /m_a' => /hash_result_inj [] _ /Spec.of_list_inj [] exa epb.
+    move: (ema); rewrite /m_a /m_a' => /hmqv_m_inj [] _ [] exa epb.
     move/(f_equal expo): exa; rewrite !(expo_TExp_g gNX gNm gNi); case=> exa.
     move/(f_equal expo): epb; rewrite !(expo_TExp_g gNX gNm gNi); case=> epb.
-    move: (emb); rewrite /m_b /m_b' => /hash_result_inj [] _ /Spec.of_list_inj [] eXb ePa.
-    move: perm; rewrite ema emb epb => perm.
-    change ([TNonce p_b'; m_b'; m_a'] ++ [TNonce p_a]
-            ≡ₚ [TNonce p_b'; m_b'; m_a'] ++ [TNonce p_a']) in perm.
-    apply Permutation_app_inv_l in perm.
-    by apply Permutation_singleton_inj in perm; case: perm => epa; do !split => //.
-  have nin : hmqv_ss p_a m_a p_b m_b ∉ gfactors (hmqv_ss p_a' m_a' p_b' m_b').
-    by rewrite /hmqv_ss (gfactors_Ngmul _ (Ngmul_TExp_g gNm _)) list_elem_of_singleton -/(hmqv_ss _ _ _ _) -/(hmqv_ss _ _ _ _).
+    move: (emb); rewrite /m_b /m_b' => /hmqv_m_inj [] _ [] eXb ePa.
+    move/(f_equal expo): ePa; rewrite !(expo_TExp_g gNX gNm gNi); case=> epa.
+    by do !split => //.
+  have nin : ss ∉ gfactors ss'.
+    rewrite /ss' /hmqv_ss (gfactors_Ngmul _ (Ngmul_TExp_g gNm _)).
+    by rewrite list_elem_of_singleton.
   have := not_elem_of_gcount _ _ nin.
-  have := @gcount_TExp_g_ge0 gNm (TMulN [TNonce p_b; m_b; m_a; TNonce p_a])
-                                (TMulN [TNonce p_b'; m_b'; m_a'; TNonce p_a']).
-  rewrite /hmqv_ss; lia.
+  have := ss_ge0 (TMulN [TNonce p_b'; m_b'; m_a'; TNonce p_a'])
+    : (0 <= gcount ss ss')%Z.
+  lia.
 Qed.
 
 (** The following lemma says that a session key uniquely determines which keys
@@ -411,46 +417,43 @@ Qed.
     long-term public key [P_a].  We have [Y_bk = X_bkP_bk^m_bk = 1], which
     implies that
 
-       hmqv_K p_a x_a1 m_a1 P_b1 X_b1 m_b1 =
-       hmqv_K p_a x_a2 m_a2 P_b2 X_b2 m_b1
+       hmqv_K t_a t_b p_a x_a1 P_a X_a1 P_b1 X_b1 =
+       hmqv_K t_a t_b p_a x_a2 P_a X_a2 P_b2 X_b2
 
     regardless of the ephemeral private key [x_a].  In other words, giving
     the attacker the flexibility to choose [P_b] leads to a session key that
     does not bind the ephemeral nor the other party's identity.
 *)
 
-Lemma hmqv_K_inj tag_a tag_b (p_a x_a p_b p_a' x_a' p_b' : nonce)
-    X_b X_b' :
+Lemma hmqv_K_inj t_a t_b (p_a x_a p_b p_a' x_a' p_b' : nonce) X_b X_b' :
   negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
-  let m_a  := hash_result tag_a (Spec.of_list [TExp g x_a; TExp g p_b]) in
-  let m_b  := hash_result tag_b (Spec.of_list [X_b; TExp g p_a]) in
-  let m_a' := hash_result tag_a (Spec.of_list [TExp g x_a'; TExp g p_b']) in
-  let m_b' := hash_result tag_b (Spec.of_list [X_b'; TExp g p_a']) in
-  tag_a ≠ tag_b ->
-  hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b
-  = hmqv_K p_a' x_a' m_a' (TExp g p_b') X_b' m_b' ->
+  t_a ≠ t_b ->
+  hmqv_K t_a t_b p_a x_a (TExp g p_a) (TExp g x_a) (TExp g p_b) X_b
+  = hmqv_K t_a t_b p_a' x_a' (TExp g p_a') (TExp g x_a') (TExp g p_b') X_b' ->
   p_a = p_a' /\ x_a = x_a' /\ p_b = p_b' /\ X_b = X_b'.
 Proof.
-move=> gNX gNm gNi m_a m_b m_a' m_b' tab eK.
-have in4 : (gcount (hmqv_ss p_a m_a p_b m_b)
-                   (hmqv_K p_a' x_a' m_a' (TExp g p_b') X_b' m_b') > 0)%Z.
+move=> gNX gNm gNi tab eK.
+set m_b  := hmqv_m t_b X_b (TExp g p_a).
+set m_b' := hmqv_m t_b X_b' (TExp g p_a').
+have in4 : (gcount (hmqv_ss t_a t_b p_a (TExp g p_a) (TExp g x_a) p_b X_b)
+                   (hmqv_K t_a t_b p_a' x_a' (TExp g p_a') (TExp g x_a')
+                           (TExp g p_b') X_b') > 0)%Z.
   apply/gcount_gt0; rewrite -eK; apply: hmqv_K_gfactor => //; by right.
-have in4' : (gcount (hmqv_ss p_a' m_a' p_b' m_b')
-                    (hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b) > 0)%Z.
+have in4' : (gcount (hmqv_ss t_a t_b p_a' (TExp g p_a') (TExp g x_a') p_b' X_b')
+                    (hmqv_K t_a t_b p_a x_a (TExp g p_a) (TExp g x_a)
+                            (TExp g p_b) X_b) > 0)%Z.
   apply/gcount_gt0; rewrite eK; apply: hmqv_K_gfactor => //; by right.
-have ltb : tsize X_b < tsize m_b.
-  by rewrite /m_b; apply: tsize_hash_result_lt; set_solver.
-have ltb' : tsize X_b' < tsize m_b'.
-  by rewrite /m_b'; apply: tsize_hash_result_lt; set_solver.
+have ltb : tsize X_b < tsize m_b by exact: tsize_hmqv_m_lt.
+have ltb' : tsize X_b' < tsize m_b' by exact: tsize_hmqv_m_lt.
 case: (decide (tsize X_b' < tsize m_b)) => [lt|le].
 - move: in4.
-  have E := @gcount_ss_hmqv_K tag_a tag_b p_a x_a p_b p_a' x_a' p_b'
+  have E := @gcount_ss_hmqv_K t_a t_b p_a x_a p_b p_a' x_a' p_b'
                               X_b X_b' gNX gNm gNi tab lt.
   cbv zeta in E; rewrite E; case_bool_decide as cond; last by lia.
   by case: cond => ? [? [? ?]].
 - move: in4'.
   have lt' : tsize X_b < tsize m_b' by lia.
-  have E := @gcount_ss_hmqv_K tag_a tag_b p_a' x_a' p_b' p_a x_a p_b
+  have E := @gcount_ss_hmqv_K t_a t_b p_a' x_a' p_b' p_a x_a p_b
                               X_b' X_b gNX gNm gNi tab lt'.
   cbv zeta in E; rewrite E; case_bool_decide as cond; last by lia.
   by case: cond => ? [? [? ?]].
@@ -465,33 +468,40 @@ Qed.
 
     Now, consider what happens when party [a] receives a message encrypted
     with a session key [K] exchanged with [b].  From [a]'s perspective, this
-    key is of the form [hmqv_K p_a x_a m_a P_b X_b m_b].  If the message's
-    encryption predicate guaranteed that this key were of the form
-    [hmqv_K p_a' x_a' m_a' P_b' X_b' m_b'], we could use [hmqv_K_inj] to prove
-    that these parameters are equal and that the message was indeed sent by
-    the other party.  However, [b] would be unable to prove such a predicate,
-    since, from their perspective, they don't know that such an [x_a'] exists:
-    all they know is that _some_ [X_a'] was used to compute [K].  Therefore,
-    [a] must be able to establish agreement even when the message's predicate
-    only guarantees that [K] is of the form
-    [kmqv_K p_b' x_b' m_b' P_a' X_a' m_a'].  This is the job of [hmqv_K_inj'],
-    whose proof relies on the following variant of [gcount_ss_hmqv_K].
+    key is of the form [hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b].  If the
+    message's encryption predicate guaranteed that this key were of the form
+    [hmqv_K t_a t_b p_a' x_a' P_a' X_a' P_b' X_b'], we could use [hmqv_K_inj]
+    to prove that these parameters are equal and that the message was indeed
+    sent by the other party.  However, [b] would be unable to prove such a
+    predicate, since, from their perspective, they don't know that such an
+    [x_a'] exists: all they know is that _some_ [X_a'] was used to compute
+    [K].  Therefore, [a] must be able to establish agreement even when the
+    message's predicate only guarantees that [K] is of the form
+    [hmqv_K t_b t_a p_b' x_b' P_b' X_b' P_a' X_a'].  This is the job of
+    [hmqv_K_inj'], whose proof relies on the following variant of
+    [gcount_ss_hmqv_K].
 *)
 
-Lemma gcount_ss_hmqv_K_cross tag_a tag_b (p_a x_a p_b p_a' x_b' p_b' : nonce)
+Lemma gcount_ss_hmqv_K_cross t_a t_b (p_a x_a p_b p_a' x_b' p_b' : nonce)
     X_b X_a' :
   negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
-  let m_a  := hash_result tag_a (Spec.of_list [TExp g x_a; TExp g p_b]) in
-  let m_b  := hash_result tag_b (Spec.of_list [X_b; TExp g p_a]) in
-  let m_b' := hash_result tag_b (Spec.of_list [TExp g x_b'; TExp g p_a']) in
-  let m_a' := hash_result tag_a (Spec.of_list [X_a'; TExp g p_b']) in
-  tag_a ≠ tag_b ->
+  let m_a  := hmqv_m t_a (TExp g x_a) (TExp g p_b) in
+  let m_b  := hmqv_m t_b X_b (TExp g p_a) in
+  let m_b' := hmqv_m t_b (TExp g x_b') (TExp g p_a') in
+  let m_a' := hmqv_m t_a X_a' (TExp g p_b') in
+  t_a ≠ t_b ->
   m_a ≠ m_a' -> m_b ≠ m_b' ->
   tsize X_a' < tsize m_b ->
-  gcount (hmqv_ss p_a m_a p_b m_b)
-         (hmqv_K p_b' x_b' m_b' (TExp g p_a') X_a' m_a') = 0%Z.
+  gcount (hmqv_ss t_a t_b p_a (TExp g p_a) (TExp g x_a) p_b X_b)
+         (hmqv_K t_b t_a p_b' x_b' (TExp g p_b') (TExp g x_b')
+                 (TExp g p_a') X_a')
+  = 0%Z.
 Proof.
 move=> gNX gNm gNi m_a m_b m_b' m_a' tab nea neb ltX.
+set ss  := hmqv_ss t_a t_b p_a (TExp g p_a) (TExp g x_a) p_b X_b.
+set ss' := hmqv_ss t_b t_a p_b' (TExp g p_b') (TExp g x_b') p_a' X_a'.
+have ss_ge0 : forall s, (0 <= gcount ss (TExp g s))%Z
+  := fun s => @gcount_TExp_g_ge0 gNm _ s.
 have fa := Nenf_TNonce p_a; have fb := Nenf_TNonce p_b.
 have fa' := Nenf_TNonce p_a'; have fb' := Nenf_TNonce p_b'.
 have fx' := Nenf_TNonce x_b'.
@@ -499,99 +509,94 @@ have fma : negb (is_enon_free m_a) := Nenf_THash _.
 have fmb : negb (is_enon_free m_b) := Nenf_THash _.
 have fma' : negb (is_enon_free m_a') := Nenf_THash _.
 have fmb' : negb (is_enon_free m_b') := Nenf_THash _.
-have mb_x' : m_b ≠ TNonce x_b' by rewrite /m_b /hash_result.
-have mb_b' : m_b ≠ TNonce p_b' by rewrite /m_b /hash_result.
-have ma_a' : m_a ≠ TNonce p_a' by rewrite /m_a /hash_result.
-have ma_b' : m_a ≠ TNonce p_b' by rewrite /m_a /hash_result.
-have ma_x' : m_a ≠ TNonce x_b' by rewrite /m_a /hash_result.
+have mb_x' : m_b ≠ TNonce x_b' by rewrite /m_b /hmqv_m.
+have mb_b' : m_b ≠ TNonce p_b' by rewrite /m_b /hmqv_m.
+have ma_a' : m_a ≠ TNonce p_a' by rewrite /m_a /hmqv_m.
+have ma_b' : m_a ≠ TNonce p_b' by rewrite /m_a /hmqv_m.
+have ma_x' : m_a ≠ TNonce x_b' by rewrite /m_a /hmqv_m.
 have ma_mb' : m_a ≠ m_b'.
-  by rewrite /m_a /m_b' => /hash_result_inj [] e _; apply: tab; congruence.
-have exps4 : exps (hmqv_ss p_a m_a p_b m_b) ≡ₚ [TNonce p_b; m_b; m_a; TNonce p_a].
-  by rewrite /m_a /m_b exps_hmqv_ss.
-have mb_4 : m_b ∈ exps (hmqv_ss p_a m_a p_b m_b) by rewrite exps4; set_solver.
-have ma_4 : m_a ∈ exps (hmqv_ss p_a m_a p_b m_b) by rewrite exps4; set_solver.
+  by rewrite /m_a /m_b' => /hmqv_m_inj [] e _; apply: tab; congruence.
+have exps4 : exps ss ≡ₚ [TNonce p_b; m_b; m_a; TNonce p_a].
+  by rewrite /ss /m_a /m_b exps_hmqv_ss.
+have mb_4 : m_b ∈ exps ss by rewrite exps4; set_solver.
+have ma_4 : m_a ∈ exps ss by rewrite exps4; set_solver.
 have mb_x : m_b ∉ factors (TNonce x_b') by apply: not_elem_of_factors_Nenf.
 have mb_mb_pb : m_b ∉ factors (TMulN [m_b'; TNonce p_b']).
   by apply: not_elem_of_factors_TMulN_Nenf => //;
      rewrite !Forall_cons Forall_nil; do !split => //.
-have z1 : gcount (hmqv_ss p_a m_a p_b m_b) (TExp X_a' (TNonce x_b')) = 0%Z
+have z1 : gcount ss (TExp X_a' (TNonce x_b')) = 0%Z
   := gcount_TExp_eq0 X_a' (TNonce x_b') _ m_b mb_4 mb_x ltX.
-have z3 : gcount (hmqv_ss p_a m_a p_b m_b)
-                 (TExp X_a' (TMulN [m_b'; TNonce p_b'])) = 0%Z
+have z3 : gcount ss (TExp X_a' (TMulN [m_b'; TNonce p_b'])) = 0%Z
   := gcount_TExp_eq0 X_a' (TMulN [m_b'; TNonce p_b']) _ m_b mb_4 mb_mb_pb ltX.
 (* [m_a] is an exponent of the counted factor but of neither remaining one. *)
-have z2 : gcount (hmqv_ss p_a m_a p_b m_b)
-                 (TExp g (TMulN [TNonce p_a'; m_a'; TNonce x_b'])) = 0%Z.
-  have ne : hmqv_ss p_a m_a p_b m_b
-            ≠ TExp g (TMulN [TNonce p_a'; m_a'; TNonce x_b']).
+have z2 : gcount ss (TExp g (TMulN [TNonce p_a'; m_a'; TNonce x_b'])) = 0%Z.
+  have ne : ss ≠ TExp g (TMulN [TNonce p_a'; m_a'; TNonce x_b']).
     move=> e; move: ma_4; rewrite e (exps_TExp_g gNX gNm gNi).
     by apply: not_elem_of_factors_TMulN_Nenf => //;
        rewrite !Forall_cons Forall_nil; do !split => //.
-  have nin : hmqv_ss p_a m_a p_b m_b
-             ∉ gfactors (TExp g (TMulN [TNonce p_a'; m_a'; TNonce x_b'])).
+  have nin : ss ∉ gfactors (TExp g (TMulN [TNonce p_a'; m_a'; TNonce x_b'])).
     by rewrite (gfactors_Ngmul _ (Ngmul_TExp_g gNm _)) list_elem_of_singleton.
   have := not_elem_of_gcount _ _ nin.
-  have := @gcount_TExp_g_ge0 gNm (TMulN [TNonce p_b; m_b; m_a; TNonce p_a])
-                                (TMulN [TNonce p_a'; m_a'; TNonce x_b']).
-  rewrite /hmqv_ss; lia.
-have z4 : gcount (hmqv_ss p_a m_a p_b m_b) (hmqv_ss p_b' m_b' p_a' m_a') = 0%Z.
-  have ne : hmqv_ss p_a m_a p_b m_b ≠ hmqv_ss p_b' m_b' p_a' m_a'.
-    move=> e; move: ma_4; rewrite e /hmqv_ss (exps_TExp_g gNX gNm gNi).
+  have := ss_ge0 (TMulN [TNonce p_a'; m_a'; TNonce x_b']); lia.
+have z4 : gcount ss ss' = 0%Z.
+  have ne : ss ≠ ss'.
+    move=> e; move: ma_4.
+    rewrite e /ss' /hmqv_ss -/m_a' -/m_b' (exps_TExp_g gNX gNm gNi).
     by apply: not_elem_of_factors_TMulN_Nenf => //;
        rewrite !Forall_cons Forall_nil; do !split => //.
-  have nin : hmqv_ss p_a m_a p_b m_b ∉ gfactors (hmqv_ss p_b' m_b' p_a' m_a').
-    by rewrite /hmqv_ss (gfactors_Ngmul _ (Ngmul_TExp_g gNm _)) list_elem_of_singleton
-       -/(hmqv_ss _ _ _ _) -/(hmqv_ss _ _ _ _).
+  have nin : ss ∉ gfactors ss'.
+    rewrite /ss' /hmqv_ss (gfactors_Ngmul _ (Ngmul_TExp_g gNm _)).
+    by rewrite list_elem_of_singleton.
   have := not_elem_of_gcount _ _ nin.
-  have := @gcount_TExp_g_ge0 gNm (TMulN [TNonce p_b; m_b; m_a; TNonce p_a])
-                                (TMulN [TNonce p_a'; m_a'; m_b'; TNonce p_b']).
-  rewrite /hmqv_ss; lia.
-rewrite hmqv_K_expand gcount_TGMulN /= z1 z2 z3 z4; lia.
+  have := ss_ge0 (TMulN [TNonce p_a'; m_a'; m_b'; TNonce p_b'])
+    : (0 <= gcount ss ss')%Z.
+  lia.
+rewrite hmqv_K_expand -/m_a' -/m_b' -/ss' gcount_TGMulN /= z1 z2 z3 z4; lia.
 Qed.
 
-Lemma hmqv_K_inj' tag_a tag_b (p_a x_a p_b p_a' x_b' p_b' : nonce) X_b X_a' :
+Lemma hmqv_K_inj' t_a t_b (p_a x_a p_b p_a' x_b' p_b' : nonce) X_b X_a' :
   negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
-  let m_a  := hash_result tag_a (Spec.of_list [TExp g x_a; TExp g p_b]) in
-  let m_b  := hash_result tag_b (Spec.of_list [X_b; TExp g p_a]) in
-  let m_b' := hash_result tag_b (Spec.of_list [TExp g x_b'; TExp g p_a']) in
-  let m_a' := hash_result tag_a (Spec.of_list [X_a'; TExp g p_b']) in
-  tag_a ≠ tag_b ->
-  hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b
-  = hmqv_K p_b' x_b' m_b' (TExp g p_a') X_a' m_a' ->
+  t_a ≠ t_b ->
+  hmqv_K t_a t_b p_a x_a (TExp g p_a) (TExp g x_a) (TExp g p_b) X_b
+  = hmqv_K t_b t_a p_b' x_b' (TExp g p_b') (TExp g x_b') (TExp g p_a') X_a' ->
   p_a = p_a' /\ p_b = p_b' /\ X_b = TExp g x_b' /\ X_a' = TExp g x_a.
 Proof.
-move=> gNX gNm gNi m_a m_b m_b' m_a' tab eK.
-have tba : tag_b ≠ tag_a by congruence.
+move=> gNX gNm gNi tab eK.
+set m_a  := hmqv_m t_a (TExp g x_a) (TExp g p_b).
+set m_b  := hmqv_m t_b X_b (TExp g p_a).
+set m_b' := hmqv_m t_b (TExp g x_b') (TExp g p_a').
+set m_a' := hmqv_m t_a X_a' (TExp g p_b').
+have tba : t_b ≠ t_a by congruence.
 case: (decide (m_a = m_a')) => [ema|nea].
-  move: (ema); rewrite /m_a /m_a' => /hash_result_inj [] _ /Spec.of_list_inj [] eXa epb.
+  move: (ema); rewrite /m_a /m_a' => /hmqv_m_inj [] _ [] eXa epb.
   move/(f_equal expo): epb; rewrite !(expo_TExp_g gNX gNm gNi); case=> epb.
-  rewrite -eXa hmqv_K_sym -ema -epb in eK.
-  have [epa [_ [_ eXb]]] := @hmqv_K_inj tag_a tag_b p_a x_a p_b p_a' x_a p_b
+  rewrite -eXa hmqv_K_sym -epb in eK.
+  have [epa [_ [_ eXb]]] := @hmqv_K_inj t_a t_b p_a x_a p_b p_a' x_a p_b
                                         X_b (TExp g x_b') gNX gNm gNi tab eK.
   by do !split => //.
 case: (decide (m_b = m_b')) => [emb|neb].
-  move: (emb); rewrite /m_b /m_b' => /hash_result_inj [] _ /Spec.of_list_inj [] eXb epa.
+  move: (emb); rewrite /m_b /m_b' => /hmqv_m_inj [] _ [] eXb epa.
   move/(f_equal expo): epa; rewrite !(expo_TExp_g gNX gNm gNi); case=> epa.
-  rewrite eXb hmqv_K_sym emb epa in eK.
-  have [epb [_ [_ eXa]]] := @hmqv_K_inj tag_b tag_a p_b x_b' p_a' p_b' x_b' p_a'
+  rewrite eXb hmqv_K_sym epa in eK.
+  have [epb [_ [_ eXa]]] := @hmqv_K_inj t_b t_a p_b x_b' p_a' p_b' x_b' p_a'
                                         (TExp g x_a) X_a' gNX gNm gNi tba eK.
   by do !split => //.
-have in4 : (gcount (hmqv_ss p_a m_a p_b m_b)
-                   (hmqv_K p_b' x_b' m_b' (TExp g p_a') X_a' m_a') > 0)%Z.
+have in4 : (gcount (hmqv_ss t_a t_b p_a (TExp g p_a) (TExp g x_a) p_b X_b)
+                   (hmqv_K t_b t_a p_b' x_b' (TExp g p_b') (TExp g x_b')
+                           (TExp g p_a') X_a') > 0)%Z.
   apply/gcount_gt0; rewrite -eK; apply: hmqv_K_gfactor => //; by right.
-have in4' : (gcount (hmqv_ss p_b' m_b' p_a' m_a')
-                    (hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b) > 0)%Z.
+have in4' : (gcount (hmqv_ss t_b t_a p_b' (TExp g p_b') (TExp g x_b') p_a' X_a')
+                    (hmqv_K t_a t_b p_a x_a (TExp g p_a) (TExp g x_a)
+                            (TExp g p_b) X_b) > 0)%Z.
   apply/gcount_gt0; rewrite eK; apply: hmqv_K_gfactor => //; by right.
-have ltb : tsize X_b < tsize m_b.
-  by rewrite /m_b; apply: tsize_hash_result_lt; set_solver.
-have lta' : tsize X_a' < tsize m_a'.
-  by rewrite /m_a'; apply: tsize_hash_result_lt; set_solver.
+have ltb : tsize X_b < tsize m_b by exact: tsize_hmqv_m_lt.
+have lta' : tsize X_a' < tsize m_a' by exact: tsize_hmqv_m_lt.
 case: (decide (tsize X_a' < tsize m_b)) => [lt|nlt].
-  have E := @gcount_ss_hmqv_K_cross tag_a tag_b p_a x_a p_b p_a' x_b' p_b'
+  have E := @gcount_ss_hmqv_K_cross t_a t_b p_a x_a p_b p_a' x_b' p_b'
                                     X_b X_a' gNX gNm gNi tab nea neb lt.
   by cbv zeta in E; move: in4; rewrite E; lia.
 case: (decide (tsize X_b < tsize m_a')) => [lt'|nlt']; last by lia.
-have E := @gcount_ss_hmqv_K_cross tag_b tag_a p_b' x_b' p_a' p_b x_a p_a
+have E := @gcount_ss_hmqv_K_cross t_b t_a p_b' x_b' p_a' p_b x_a p_a
                                   X_a' X_b gNX gNm gNi tba
                                   (not_eq_sym neb) (not_eq_sym nea) lt'.
 by cbv zeta in E; move: in4'; rewrite E; lia.
@@ -606,22 +611,58 @@ Abbreviation iProp := (iProp Σ).
 
 Implicit Types t : term.
 
-Lemma minted_hash_result N tag t : minted (hash_result N tag t) ⊣⊢ minted t.
-Proof. by rewrite /hash_result minted_THash minted_tag. Qed.
-
-Lemma minted_hmqv_K p_a x_a m_a P_b X_b m_b :
-  minted p_a -∗ minted x_a -∗ minted m_a -∗
-  minted P_b -∗ minted X_b -∗ minted m_b -∗
-  minted (hmqv_K p_a x_a m_a P_b X_b m_b).
+Lemma minted_hmqv_m N (t : string) X P :
+  minted X -∗ minted P -∗ minted (hmqv_m N t X P).
 Proof.
-iIntros "#mp #mx #mma #mP #mX #mmb".
-iAssert (minted (hmqv_Y P_b X_b m_b)) as "#mY".
+iIntros "#mX #mP"; rewrite /hmqv_m.
+iApply minted_THash; iApply minted_tag; iApply minted_of_list => /=.
+by do !iSplit => //.
+Qed.
+
+Lemma public_hmqv_m N (t : string) X P :
+  public X -∗ public P -∗ public (hmqv_m N t X P).
+Proof.
+iIntros "#pX #pP"; rewrite /hmqv_m.
+iApply public_THash; iLeft; iApply public_tag; iApply public_of_list => /=.
+by do !iSplit => //.
+Qed.
+
+Lemma minted_hmqv_K N t_a t_b p_a x_a P_a X_a P_b X_b :
+  minted p_a -∗ minted x_a -∗ minted P_a -∗ minted X_a -∗
+  minted P_b -∗ minted X_b -∗
+  minted (hmqv_K N t_a t_b p_a x_a P_a X_a P_b X_b).
+Proof.
+iIntros "#mp #mx #mP #mX #mP' #mX'".
+iAssert (minted (hmqv_m N t_a X_a P_b)) as "#mma".
+  by iApply minted_hmqv_m.
+iAssert (minted (hmqv_m N t_b X_b P_a)) as "#mmb".
+  by iApply minted_hmqv_m.
+iAssert (minted (hmqv_Y N t_b P_a P_b X_b)) as "#mY".
   rewrite /hmqv_Y; iApply all_minted_TGMulN; rewrite /=.
   by do !iSplit => //; iApply all_minted_TExp; iSplit.
-iAssert (minted (TMulN [m_a; p_a])) as "#mma_pa".
+iAssert (minted (TMulN [hmqv_m N t_a X_a P_b; p_a])) as "#mma_pa".
   by iApply all_minted_TMulN; rewrite /=; do !iSplit.
 rewrite /hmqv_K; iApply all_minted_TGMulN; rewrite /=.
 by do !iSplit => //; iApply all_minted_TExp; iSplit.
+Qed.
+
+(** Whoever knows all the inputs of the key formula can compute the key. *)
+
+Lemma public_hmqv_K N t_a t_b p_a x_a P_a X_a P_b X_b :
+  public p_a -∗ public x_a -∗ public P_a -∗ public X_a -∗
+  public P_b -∗ public X_b -∗
+  public (hmqv_K N t_a t_b p_a x_a P_a X_a P_b X_b).
+Proof.
+iIntros "#pp #px #pP #pX #pP' #pX'".
+iAssert (public (hmqv_m N t_a X_a P_b)) as "#pma".
+  by iApply public_hmqv_m.
+iAssert (public (hmqv_m N t_b X_b P_a)) as "#pmb".
+  by iApply public_hmqv_m.
+iAssert (public (hmqv_Y N t_b P_a P_b X_b)) as "#pY".
+  rewrite /hmqv_Y; iApply public_TGMulN2 => //.
+  by iApply public_TExp.
+rewrite /hmqv_K; iApply public_TGMulN2; iApply public_TExp => //.
+by iApply public_TMulN2.
 Qed.
 
 (** An honest party's ephemeral seed cannot be public and its [exp_pred_base]
@@ -644,12 +685,12 @@ Qed.
 (** A key exchanged using well-formed long-term and ephemeral keys cannot be
     public. *)
 
-Lemma public_hmqv_K_eph g (p_a x_a p_b x_b : nonce) m_a m_b :
+Lemma public_hmqv_K_eph N g t_a t_b (p_a x_a p_b x_b : nonce) P_a X_a :
   negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
   x_a ≠ x_b →
   eph_seed x_a -∗
   eph_seed x_b -∗
-  public (hmqv_K p_a x_a m_a (TExp g p_b) (TExp g x_b) m_b) -∗
+  public (hmqv_K N t_a t_b p_a x_a P_a X_a (TExp g p_b) (TExp g x_b)) -∗
   ▷ False.
 Proof.
 move=> gNX gNm gNi x_a_b; iIntros "#[s_a e_a] #[s_b e_b] #p_K".
@@ -674,20 +715,18 @@ Qed.
 (** A key exchanged between an arbitrary pair of parties with well-formed
     long-term keys is public only if one of the long-term keys was corrupted. *)
 
-Lemma public_hmqv_K_static N g tag_a tag_b (p_a x_a p_b : nonce) P_a X_b :
+Lemma public_hmqv_K_static N g t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b :
   negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
-  let m_a := hash_result N tag_a (Spec.of_list [TExp g x_a; TExp g p_b]) in
-  let m_b := hash_result N tag_b (Spec.of_list [X_b; P_a]) in
-  tag_a ≠ tag_b →
+  t_a ≠ t_b →
   p_a ≠ p_b →
   □ (∀ t, exp_pred_base p_a t ↔ ▷ □ dh_key_share t) -∗
   □ (∀ t, exp_pred_base p_b t ↔ ▷ □ dh_key_share t) -∗
-  public (hmqv_K p_a x_a m_a (TExp g p_b) X_b m_b) -∗
+  public (hmqv_K N t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b) -∗
   public p_a ∨ public p_b.
 Proof.
-move=> gNX gNm gNi m_a m_b tab p_a_b.
+move=> gNX gNm gNi tab p_a_b.
 have [gf [_ [in_pa in_pb]]] :=
-  @hmqv_key_gfactors N g p_a p_b x_a tag_a tag_b P_a X_b gNX gNm gNi tab.
+  @hmqv_key_gfactors N g t_a t_b p_a x_a p_b P_a X_a X_b gNX gNm gNi tab.
 have p_a_bT : TNonce p_a ≠ TNonce p_b by case=> /p_a_b.
 iIntros "#pred_a #pred_b #p_K".
 iEval (rewrite public_gfactors) in "p_K".
@@ -696,16 +735,21 @@ iApply (public_dh_secret_gen2 p_a_bT in_pa in_pb with "pred_a pred_b").
 by iApply (big_sepL_elem_of with "fs").
 Qed.
 
-Definition hmqv_ke : val := λ: "p_a" "x_a" "m_a" "P_b" "X_b" "m_b",
+Definition hmqv_ke N (t_a t_b : string) : val :=
+  λ: "p_a" "x_a" "P_a" "X_a" "P_b" "X_b",
+  let: "m_a" := hash (tag (Tag $ N.@t_a) (term_of_list ["X_a"; "P_b"])) in
+  let: "m_b" := hash (tag (Tag $ N.@t_b) (term_of_list ["X_b"; "P_a"])) in
   let: "Y" := tgmul "X_b" (texp "P_b" "m_b") in
   tgmul (texp "Y" "x_a") (texp "Y" (tmul "m_a" "p_a")).
 
-Lemma wp_hmqv_ke (p_a x_a m_a P_b X_b m_b : term) Ψ :
-  Ψ (repr (hmqv_K p_a x_a m_a P_b X_b m_b)) ⊢
-  WP hmqv_ke p_a x_a m_a P_b X_b m_b {{ Ψ }}.
+Lemma wp_hmqv_ke N t_a t_b (p_a x_a P_a X_a P_b X_b : term) Ψ :
+  Ψ (repr (hmqv_K N t_a t_b p_a x_a P_a X_a P_b X_b)) ⊢
+  WP hmqv_ke N t_a t_b p_a x_a P_a X_a P_b X_b {{ Ψ }}.
 Proof.
 iIntros "post".
 wp_lam; wp_pures.
+wp_list; wp_apply wp_term_of_list; wp_apply wp_tag; wp_apply wp_hash; wp_pures.
+wp_list; wp_apply wp_term_of_list; wp_apply wp_tag; wp_apply wp_hash; wp_pures.
 wp_apply wp_texp.
 wp_apply wp_tgmul.
 wp_pures.

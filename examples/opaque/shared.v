@@ -30,7 +30,15 @@ Unset Printing Implicit Defensive.
     password, and a completed session's key is public iff both parties release
     their tokens, unless the password was already public. *)
 
-Abbreviation hash_result := (hmqv.hash_result opN).
+Definition hash_result (tag : string) (val : term) : term :=
+  THash (Spec.tag (Tag $ opN.@tag) val).
+
+Lemma hash_result_inj (tag1 tag2 : string) t1 t2 :
+  hash_result tag1 t1 = hash_result tag2 t2 -> tag1 = tag2 /\ t1 = t2.
+Proof.
+rewrite /hash_result => - [] /Spec.tag_inj [] /Tag_inj c ->.
+by case: (ndot_inj _ _ _ _ c).
+Qed.
 
 Lemma gNX : negb (is_exp g). Proof. by []. Qed.
 Lemma gNm : negb (is_gmul g). Proof. by []. Qed.
@@ -60,19 +68,13 @@ Definition si_result si := Spec.of_list [si_uid si; si_key si].
 (** Build a [sess_info] record based on the values accessible by the server. *)
 Definition server_si (uid α X_u P_u p_s x_s : term) : sess_info :=
   SessInfo uid P_u (TExp g p_s) α X_u (TExp g x_s)
-    (hmqv_K p_s x_s
-       (hash_result "e" (Spec.of_list [TExp g x_s; P_u]))
-       P_u X_u
-       (hash_result "d" (Spec.of_list [X_u; TExp g p_s]))).
+    (hmqv_K opN "e" "d" p_s x_s (TExp g p_s) (TExp g x_s) P_u X_u).
 
 (** The record the client builds on its own when it cannot trust the server's,
     i.e. when the password was already public. *)
 Definition client_si (uid P_u P_s α x_u X_s p_u : term) : sess_info :=
   SessInfo uid P_u P_s α (TExp g x_u) X_s
-    (hmqv_K p_u x_u
-       (hash_result "d" (Spec.of_list [TExp g x_u; P_s]))
-       P_s X_s
-       (hash_result "e" (Spec.of_list [X_s; P_u]))).
+    (hmqv_K opN "d" "e" p_u x_u P_u (TExp g x_u) P_s X_s).
 
 (** The client mints a token on its blind [α]: the server keys the resource
     escrow on the [↑opN.@"ready"] slice and the client returns the rest to its
@@ -302,6 +304,9 @@ Definition wp_prf   := _wp_H_list.
 Definition wp_H     := _wp_H_list.
 Definition wp_H'    := _wp_H.
 
+Lemma minted_hash_result tag t : minted (hash_result tag t) ⊣⊢ minted t.
+Proof. by rewrite /hash_result minted_THash minted_tag. Qed.
+
 Lemma client_fresh_set_minted pw :
   minted pw -∗
   ∀ r : nonce, [∗ set] t' ∈ client_fresh_set pw r, □ (minted r ↔ minted t').
@@ -425,7 +430,7 @@ iModIntro; iSplit.
       last by iNext; iDestruct "contra" as "[]".
     rewrite public_of_list /=.
     iDestruct "p_t" as "[p_K' _]".
-    iDestruct (@public_hmqv_K_eph _ _ _ g p_s x_s p_u x_u _ _
+    iDestruct (@public_hmqv_K_eph _ _ _ opN g "e" "d" p_s x_s p_u x_u _ _
                  gNX gNm gNi (not_eq_sym x_u_s) with "eph_s eph_u p_K'")
       as ">[]".
   + iNext. iDestruct "rel" as "(%si' & %e & %ss' & #rel')".
