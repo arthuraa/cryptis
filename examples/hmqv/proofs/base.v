@@ -185,9 +185,6 @@ Definition hmqv_key (p : nonce) : iProp :=
 #[global] Instance hmqv_key_persistent (p : nonce) : Persistent (hmqv_key p).
 Proof. apply _. Qed.
 
-Definition hmqv_pk (P : term) : iProp :=
-  ∃ p : nonce, ⌜P = TExp g p⌝ ∗ hmqv_key p.
-
 Lemma hmqv_key_public (p : nonce) : hmqv_key p -∗ public (TExp g p).
 Proof.
 iIntros "[#m_p #pred_p]".
@@ -222,18 +219,6 @@ iPoseProof (secret_alloc with "s_p' pend") as "s".
 iAssert (hmqv_key p) as "#key"; first by iSplit.
 wp_pures. wp_apply wp_texp. wp_pures.
 iApply "post". iFrame. iModIntro. iSplit => //. by iApply hmqv_key_public.
-Qed.
-
-Lemma hmqv_pk_intro (p : nonce) : hmqv_key p -∗ hmqv_pk (TExp g p).
-Proof. iIntros "#?"; iExists p; by iSplit. Qed.
-
-(* The shape [wp_mem_list] wants for its equality test. *)
-Lemma wp_eq_term_spec (x y : term) :
-  {{{ True }}} eq_term x y {{{ RET #(bool_decide (x = y)); True }}}.
-Proof.
-iIntros "%Φ _ post".
-iApply (twp_wp_step with "post").
-iApply twp_eq_term. by iIntros "post"; iModIntro; iApply "post".
 Qed.
 
 Definition hmqv_token E : iProp :=

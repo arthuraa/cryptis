@@ -26,13 +26,12 @@ Implicit Types (N : namespace).
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); eauto.
 
-Lemma wp_responder_listen c p_b (pks : list term) :
-  {{{ channel c ∗ cryptis_ctx ∗ [∗ list] P ∈ pks, hmqv_pk P }}}
-    responder_listen c (TExp g p_b) (repr pks)
-  {{{ X_a p_a, RET (X_a, TExp g p_a);
-      public X_a ∗ hmqv_key p_a ∗ ⌜p_a ≠ p_b⌝ }}}.
+Lemma wp_responder_listen c :
+  {{{ channel c ∗ cryptis_ctx }}}
+    responder_listen c
+  {{{ X_a P_a, RET (X_a, P_a); public X_a ∗ public P_a }}}.
 Proof.
-iIntros "%Φ (#chan_c & #ctx & #pks) post". wp_lam. wp_pures.
+iIntros "%Φ (#chan_c & #ctx) post". wp_lam. wp_pures.
 iApply (wp_frame_wand with "post").
 wp_apply wp_do_until'. iIntros "!>".
 wp_pures. wp_apply wp_recv => //.
@@ -40,20 +39,14 @@ iIntros "%m1 #p_m1". wp_pures.
 wp_list_of_term m1; wp_pures; last by eauto.
 wp_list_match => [X_a P_a ->|_]; wp_pures; last by eauto.
 rewrite public_of_list /=. iDestruct "p_m1" as "(#p_Xa & #p_Pa & _)".
-wp_apply (wp_mem_list eq_term P_a pks _ wp_eq_term_spec) => //.
-iIntros "_".
-case: (bool_decide_reflect (P_a ∈ pks)) => [mem|_]; wp_pures; last by eauto.
-iDestruct (big_sepL_elem_of _ _ _ mem with "pks") as "(%p_a & -> & #key_a)".
-wp_eq_term e; first by wp_pures; eauto.
-have p_a_b : p_a ≠ p_b by move=> e'; apply: e; rewrite e'.
-wp_pures. iModIntro. iRight. iExists _; iSplit => //.
-iIntros "post". iApply "post". by do !iSplit => //.
+iModIntro. iRight. iExists _; iSplit => //.
+iIntros "post". iApply "post". by iSplit.
 Qed.
 
 Lemma wp_responder_confirm c p_a p_b X_a N φ :
   {{{ channel c ∗ cryptis_ctx ∗
       hmqv_ctx ∗ hmqv_pred N φ ∗
-      public X_a ∗ hmqv_key p_a ∗ hmqv_key p_b ∗ ⌜p_a ≠ p_b⌝ ∗
+      public X_a ∗ hmqv_key p_a ∗ hmqv_key p_b ∗
       (∀ x_b,
           let si := resp_si p_a X_a p_b x_b in
           term_token (si_resp_share si) (↑hmqvN.@"res") ={⊤}=∗
@@ -69,7 +62,7 @@ Lemma wp_responder_confirm c p_a p_b X_a N φ :
         φ p_a p_b si Resp }}}.
 Proof.
 iIntros "%Φ (#chan_c & #ctx & #(Hm2 & Hm3 & Hkey) & #N_φ &
-             #p_Xa & #key_a & #key_b & %p_a_b & res) Hpost".
+             #p_Xa & #key_a & #key_b & res) Hpost".
 iPoseProof "key_a" as "[#m_pa #pred_a]".
 iPoseProof "key_b" as "[#m_pb #pred_b]".
 iPoseProof (hmqv_key_public with "key_a") as "#p_Pa".
@@ -77,6 +70,9 @@ iPoseProof (hmqv_key_public with "key_b") as "#p_Pb".
 iPoseProof (public_minted with "p_Xa") as "#m_Xa".
 iAssert (public g) as "#p_g"; first by rewrite public_TInt.
 wp_lam. wp_pures.
+wp_eq_term e_ab; first by protocol_failure.
+have p_a_b : p_a ≠ p_b by move=> e; apply: e_ab; rewrite e.
+wp_pures.
 (* The fresh ephemeral comes with a token on the responder's share;
    freshness against the peer's share keeps the two ephemerals apart. *)
 wp_apply (wp_mk_nonce_freshN {[X_a]} (λ _, False)%I dh_key_share
@@ -165,7 +161,7 @@ Qed.
 Lemma wp_responder_confirm_weak c p_a p_b X_a N :
   {{{ channel c ∗ cryptis_ctx ∗
       hmqv_ctx ∗ hmqv_pred N (λ _ _ _ _, True)%I ∗
-      public X_a ∗ hmqv_key p_a ∗ hmqv_key p_b ∗ ⌜p_a ≠ p_b⌝ }}}
+      public X_a ∗ hmqv_key p_a ∗ hmqv_key p_b }}}
     responder_confirm c p_b (TExp g p_b) X_a (TExp g p_a) (Tag N)
   {{{ r, RET (repr r);
       ⌜r = None⌝ ∨ ∃ si,
@@ -173,63 +169,13 @@ Lemma wp_responder_confirm_weak c p_a p_b X_a N :
         session_weak p_a p_b si ∗
         term_token (si_resp_share si) (⊤ ∖ ↑hmqvN) }}}.
 Proof.
-iIntros "%Φ (#chan_c & #ctx & #? & #? & #p_Xa & #key_a & #key_b & %p_a_b)
-          Hpost".
+iIntros "%Φ (#chan_c & #ctx & #? & #? & #p_Xa & #key_a & #key_b) Hpost".
 iApply wp_fupd. wp_apply wp_responder_confirm.
 { do !iSplit => //. by iIntros "%x_b _ !>". }
 iIntros "%osi [->|Hsi]"; first by iApply ("Hpost" $! None); eauto.
 iDestruct "Hsi" as "(%si & -> & _ & #sess & rel & tok & _)".
 iMod (unrelease Resp with "rel") as "#un". iModIntro.
 iApply ("Hpost" $! (Some (si_key si))). iRight. iFrame. iSplit => //.
-by iApply unreleased_session_weak.
-Qed.
-
-Lemma wp_responder c p_b N (pks : list term) :
-  {{{ channel c ∗ cryptis_ctx ∗
-      hmqv_ctx ∗ hmqv_pred N (λ _ _ _ _, True)%I ∗
-      hmqv_key p_b ∗ [∗ list] P ∈ pks, hmqv_pk P }}}
-    responder c p_b (TExp g p_b) (Tag N) (repr pks)
-  {{{ r, RET (repr r);
-      ⌜r = None⌝ ∨ ∃ p_a si,
-        ⌜r = Some (TExp g p_a, si_key si)⌝ ∗
-        ⌜resp_session si⌝ ∗
-        session p_a p_b si ∗
-        release_token (si_resp_share si) ∗
-        term_token (si_resp_share si) (⊤ ∖ ↑hmqvN) }}}.
-Proof.
-iIntros "%Φ (#? & #? & #? & #? & #key_b & #pks) post".
-wp_lam; wp_pures.
-wp_apply wp_responder_listen; first by do !iSplit => //.
-iIntros "%X_a %p_a (#p_Xa & #key_a & %p_a_b)".
-wp_pures.
-wp_apply wp_responder_confirm.
-{ do !iSplit => //. by iIntros "%x_b _ !>". }
-iIntros "%osi [->|Hosi]"; wp_pures; first by iApply ("post" $! None); eauto.
-iDestruct "Hosi" as "(%si & -> & %ss & #sess & rel & token & _)".
-wp_pures.
-iModIntro. iApply ("post" $! (Some (TExp g p_a, si_key si))).
-iRight. iExists p_a, si. iFrame. by do !iSplit => //.
-Qed.
-
-Lemma wp_responder_weak c p_b N (pks : list term) :
-  channel c ∗ cryptis_ctx ∗ hmqv_ctx ∗
-  hmqv_pred N (λ _ _ _ _, True)%I ∗
-  hmqv_key p_b ∗ ([∗ list] P ∈ pks, hmqv_pk P) -∗
-  {{{ True }}}
-    responder c p_b (TExp g p_b) (Tag N) (repr pks)
-  {{{ r, RET (repr r);
-      ⌜r = None⌝ ∨ ∃ p_a si,
-        ⌜r = Some (TExp g p_a, si_key si)⌝ ∗
-        session_weak p_a p_b si ∗
-        term_token (si_resp_share si) (⊤ ∖ ↑hmqvN) }}}.
-Proof.
-iIntros "(#? & #? & #? & #? & #? & #?) !> %Φ _ post". iApply wp_fupd.
-wp_apply wp_responder; first by do !iSplit => //.
-iIntros "%osi [->|Hosi]"; first by iApply ("post" $! None); eauto.
-iDestruct "Hosi" as "(%p_a & %si & -> & _ & #? & rel & token)".
-iMod (unrelease Resp with "rel") as "#un".
-iModIntro. iApply ("post" $! (Some (TExp g p_a, si_key si))).
-iRight. iExists p_a, si. iFrame. iSplit => //.
 by iApply unreleased_session_weak.
 Qed.
 

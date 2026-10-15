@@ -56,16 +56,16 @@ Definition initiator : val := λ: "c" "p_a" "P_a" "P_b" "N",
   send "c" (H "m3" ["σ"]);;
   SOME (derive_senc_key (H "key" ["σ"])).
 
-(* A DH public key has no structure to check, so the responder only talks to
-   the identities in its list [pks]. *)
-Definition responder_listen : val := λ: "c" "P_b" "pks",
+(* A DH public key carries nothing to check, so whether to confirm with the
+   identity received here is the caller's decision. *)
+Definition responder_listen : val := λ: "c",
   do_until (λ: <>,
     bind: "m1" := list_of_term (recv "c") in
     list_match: ["X_a"; "P_a"] := "m1" in
-    guard: mem_list eq_term "P_a" "pks" && (~ eq_term "P_a" "P_b") in
     SOME ("X_a", "P_a")).
 
 Definition responder_confirm : val := λ: "c" "p_b" "P_b" "X_a" "P_a" "N",
+  guard: (~ eq_term "P_a" "P_b") in
   let: "x_b" := mk_nonce #() in
   let: "X_b" := texp g "x_b" in
   let: "σ" :=
@@ -74,10 +74,3 @@ Definition responder_confirm : val := λ: "c" "p_b" "P_b" "X_a" "P_a" "N",
   let: "A_a" := recv "c" in
   guard: eq_term "A_a" (H "m3" ["σ"]) in
   SOME (derive_senc_key (H "key" ["σ"])).
-
-Definition responder : val := λ: "c" "p_b" "P_b" "N" "pks",
-  let: "res" := responder_listen "c" "P_b" "pks" in
-  let: "X_a" := Fst "res" in
-  let: "P_a" := Snd "res" in
-  bind: "k" := responder_confirm "c" "p_b" "P_b" "X_a" "P_a" "N" in
-  SOME ("P_a", "k").
