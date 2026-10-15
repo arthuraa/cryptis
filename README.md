@@ -6,8 +6,8 @@ The material covered in the paper can be found in the following files:
 
 In the `cryptis` directory you will find:
 
-- `lib/*, lib`: General additions to Iris, MathComp, and stdpp; Diffie–Hellman and
-  ghost-state helpers; list-manipulation programs for HeapLang.
+- `lib/*, lib`: General additions to Iris, MathComp, and stdpp; Diffie–Hellman and HMQV
+  key-exchange and ghost-state helpers; list-manipulation programs for HeapLang.
 - `core/*`, `cryptis`: Core Cryptis components: cryptographic terms, the
   `public` predicate, encryption predicates, and term metadata.
 - `primitives/*`, `primitives`: HeapLang functions for manipulating

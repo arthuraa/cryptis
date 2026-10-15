@@ -3,7 +3,7 @@ From mathcomp Require Import ssreflect.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import par.
 From cryptis Require Import lib term cryptis primitives tactics role.
-From cryptis.lib Require Import dh.
+From cryptis.lib Require Import dh hmqv.
 
 From cryptis.examples Require Import alist.
 From cryptis.examples.opaque Require Import impl shared.
@@ -87,16 +87,13 @@ wp_list; wp_term_of_list.
 wp_lam; wp_pures.
 wp_apply wp_senc'.
 wp_list; wp_term_of_list.
-have NInt : negb (is_exp g) by [].
-have NIntM : negb (is_gmul g) by [].
-have NIntI : negb (is_ginv g) by [].
 have Nm_s : negb (is_mul (TNonce p_s)) by [].
 have Nm_u : negb (is_mul (TNonce p_u)) by [].
 iAssert (public g) as "#pubg"; first by iApply public_TInt.
 iAssert (public (TExp g p_s)) as "#pubP_s".
-  by iApply (public_dh_share NInt NIntM NIntI Nm_s with "pubg Hmintedp_s Hexpp_s").
+  by iApply (public_dh_share gNX gNm gNi Nm_s with "pubg Hmintedp_s Hexpp_s").
 iAssert (public (TExp g p_u)) as "#pubP_u".
-  by iApply (public_dh_share NInt NIntM NIntI Nm_u with "pubg Hmintedp_u Hexpp_u").
+  by iApply (public_dh_share gNX gNm gNi Nm_u with "pubg Hmintedp_u Hexpp_u").
 iApply "post".
 iExists k_s, p_s, (TExp g p_u), _.
 do !iSplit => //.
@@ -211,7 +208,7 @@ rewrite big_sepS_singleton.
 have X_u_x_s : X_u ≠ TExp g x_s.
   move=> e; apply: (fresh_x_s X_u); first by rewrite elem_of_singleton.
   rewrite e; apply: subterm_exps.
-  by rewrite exps_TExp_g factors_Nmul // list_elem_of_singleton.
+  by rewrite (exps_TExp_g gNX gNm gNi) factors_Nmul // list_elem_of_singleton.
 iPoseProof (eph_seed_intro with "Hprivatex_s Hexpx_s") as "#eph_s".
 set si := server_si uid α X_u (TExp g p_u) p_s x_s.
 wp_pures.
@@ -220,7 +217,7 @@ wp_apply wp_texp; wp_pures.
 (* [d := H "d" [X_u; P_s]] and [e := H "e" [X_s; P_u]] *)
 wp_list; wp_apply wp_H; wp_pures.
 wp_list; wp_apply wp_H; wp_pures.
-wp_apply wp_ke; wp_list.
+wp_apply wp_hmqv_ke; wp_list; wp_apply wp_H; wp_list.
 wp_apply wp_H; wp_list.
 wp_apply wp_prf; wp_list.
 wp_apply wp_prf; wp_list.
@@ -315,9 +312,6 @@ iAssert (public (Spec.of_list [si_K si; si_ssid si])
   by iDestruct (public_THashE with "HpredA_u pubA_u") as "[? | [_ ?]]"; eauto.
 wp_list; wp_term_of_list; wp_pures.
 have tags : "e"%string ≠ "d"%string by [].
-have [gf_ss [_ [in_ps in_pu]]] :=
-  @hmqv_key_gfactors p_s p_u x_s "e" "d" P_s X_u tags.
-have p_s_uT : TNonce p_s ≠ TNonce p_u by case=> /p_s_u.
 iAssert (session (pw_of uid) si) as "#sess".
 { iDestruct "auth" as "[#p_t | #auth]".
   - iAssert (public (si_key si)) as "#p_SK".
@@ -331,12 +325,12 @@ iAssert (session (pw_of uid) si) as "#sess".
       last by iNext; iDestruct "contra" as "[]".
     rewrite public_of_list /=.
     iDestruct "p_t" as "(p_K' & _)".
-    iEval (rewrite public_gfactors) in "p_K'".
-    iDestruct "p_K'" as "[_ #fs]".
     iAssert (▷ □ public (pw_of uid))%I as "#p_pw".
-    { iApply (public_dh_secret_gen _ p_s_uT in_ps in_pu with
-                "Hprivp_s Hexpp_s Hprivp_u Hexpp_u").
-      by iApply (big_sepL_elem_of with "fs"). }
+    { iDestruct (@public_hmqv_K_static _ _ _ opN g "e" "d" p_s x_s p_u P_s X_u
+                   gNX gNm gNi tags p_s_u with "Hexpp_s Hexpp_u p_K'")
+        as "[p|p]".
+      - by iApply "Hprivp_s".
+      - by iApply "Hprivp_u". }
     by iNext.
   - iDestruct "auth" as "(%si' & %x_u & %e & %ss' & %eX & #eph_u)".
     have ss : server_session si by exists uid, α, X_u, p_u, p_s, x_s.

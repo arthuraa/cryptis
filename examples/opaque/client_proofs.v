@@ -3,7 +3,7 @@ From mathcomp Require Import ssreflect.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import par.
 From cryptis Require Import lib term cryptis primitives tactics role.
-From cryptis.lib Require Import dh.
+From cryptis.lib Require Import dh hmqv.
 
 From cryptis.examples Require Import alist.
 From cryptis.examples.opaque Require Import impl shared.
@@ -156,7 +156,9 @@ wp_pures.
 (* [d := H "d" [X_u; P_s]] and [e := H "e" [X_s; P_u]] *)
 wp_list; wp_apply wp_H; wp_pures.
 wp_list; wp_apply wp_H; wp_pures.
-wp_apply wp_ke => /=.
+wp_apply wp_hmqv_ke => /=.
+wp_list.
+wp_apply wp_H => /=.
 wp_list.
 wp_apply wp_H => /=.
 wp_list.
@@ -228,19 +230,16 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
       (* The static-static factor is a group factor of the key, and its two
          exponents are the long-term keys, which are as secret as the
          password. *)
-      have [gf [_ [in_pu in_ps]]] :=
-        @hmqv_key_gfactors p_u p_s x_u "d" "e" (TExp g p_u) X_s tags.
-      have p_u_sT : TNonce p_u ≠ TNonce p_s by case=> /p_u_s.
       iDestruct (public_THashE with "HpredK p_K") as "[p_t' | [_ contra]]";
         last by iNext; iDestruct "contra" as "[]".
       iEval (rewrite public_of_list /=) in "p_t'".
       iDestruct "p_t'" as "(p_K' & _)".
-      iEval (rewrite public_gfactors) in "p_K'".
-      iDestruct "p_K'" as "[_ #fs]".
       iAssert (▷ □ public pw)%I as "#p_pw".
-      { iApply (public_dh_secret_gen _ p_u_sT in_pu in_ps with
-                  "priv_p_u pred_p_u priv_p_s pred_p_s").
-        by iApply (big_sepL_elem_of with "fs"). }
+      { iDestruct (@public_hmqv_K_static _ _ _ opN g "d" "e" p_u x_u p_s
+                     (TExp g p_u) X_s gNX gNm gNi tags p_u_s
+                     with "pred_p_u pred_p_s p_K'") as "[p|p]".
+        - by iApply "priv_p_u".
+        - by iApply "priv_p_s". }
       by iNext. }
     iModIntro.
     iExists (client_si uid P_u' P_s' α x_u X_s p_u').
@@ -312,7 +311,8 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
           & #priv_p_u & #priv_p_s)".
       subst P_s'.
       have [epa [epb [eXs eXu]]] :=
-        @hmqv_K_inj' "d" "e" p_u x_u p_s p_u_s x_s p_s_s X_s X_u_s tags eKK.
+        @hmqv_K_inj' opN g "d" "e" p_u x_u p_s p_u_s x_s p_s_s X_s X_u_s
+                    gNX gNm gNi tags eKK.
       iMod (term_meta_set (opN.@"failed") false with "tok_failed") as "#failed";
         first solve_ndisj.
       iAssert (eph_seed x_u) as "#eph_u".
