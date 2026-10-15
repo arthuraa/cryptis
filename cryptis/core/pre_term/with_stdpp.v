@@ -124,6 +124,8 @@ Definition nonce_eq_dec : EqDecision nonce := Eval hnf in def_eq_decision _.
 #[global] Existing Instance nonce_eq_dec.
 #[global] Instance nonce_countable : Countable nonce.
 Proof. exact: def_countable. Qed.
+#[global] Instance nonce_inhabited : Inhabited nonce :=
+  populate (Nonce inhabitant).
 
 Definition nonces_of_term_op0 o : gset nonce :=
   match o with

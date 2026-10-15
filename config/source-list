@@ -127,6 +127,16 @@ examples/opaque/server_proofs.v
 examples/opaque/game.v
 examples/opaque.v
 
+## HMQV
+
+examples/hmqv/impl.v
+examples/hmqv/proofs/base.v
+examples/hmqv/proofs/initiator.v
+examples/hmqv/proofs/responder.v
+examples/hmqv/proofs.v
+examples/hmqv/game.v
+examples/hmqv.v
+
 ## TLS 1.3
 
 examples/tls13/impl.v

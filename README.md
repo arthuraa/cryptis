@@ -32,6 +32,9 @@ In the `examples` directory you will find our case studies:
   including game and ISO-DH-style authentication and compromise (resource
   exchange, tokens on each party's key share, and a password that may leak:
   keys of completed sessions stay secret unless both tokens are released).
+- `hmqv`: standalone HMQV authenticated key exchange (three-message variant
+  with authenticators, built on `lib/hmqv.v`), with ISO-DH-style sessions,
+  compromise of long-term keys and game (in its own file).
 - `tls13`: TLS 1.3 handshake (partial; `impl.v` + per-component `proofs/`).
 - `challenge_response`, `composite_game`, `permanent`, `counter`: smaller
   single-file examples plus a composite security game.
