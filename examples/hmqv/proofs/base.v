@@ -15,10 +15,36 @@ Unset Printing Implicit Defensive.
 
 (** * HMQV: shared definitions
 
-    The session record, the long-term key predicate, the predicates of the
-    three tagged hashes, and the compromise and release machinery of ISO-DH
-    ([examples/iso_dh/proofs/base.v]).  The key algebra comes from
-    [cryptis/lib/hmqv.v]. *)
+    This file defines the main concepts used in the specification of the HMQV
+    protocol:
+
+    - [sess_info]: a record type containing all the information pertaining to
+      an established session.
+
+    - [session_of rl si]: the session [si] was computed by a party with role
+      [rl], either [Init] or [Resp].
+
+    - [session_of_key_inj]: a session created by a party is uniquely determined
+      by its key, hence by the parties' long-term and ephemeral keys.
+
+    - [hmqv_pred N φ]: When the parties authenticate under usage [N], they
+      should provide and receive resources given [φ].  To create these
+      assertions, use the [hmqv_token] resources provided when the protocol's
+      ghost state is initialized (cf. [hmqvGS_alloc]).
+
+    - [release_token X]: A resource for compromising session keys. When both
+      parties release these tokens, they can make their session key compromised.
+
+    - [session rl p_a p_b si]: This describes the confidentiality of the key of
+      the session [si] from the point of view of the role [rl].  Roughly, this
+      says that either there was a compromise during the handshake, or the
+      session key is public if and only if it was released (cf. above) or if one
+      party had all of its keys compromised.  We say that the handshake was
+      compromised for [rl] ([compromised rl si]) if the peer's long-term key was
+      public when the handshake completed, or both the party's keys were
+      compromised then.
+
+*)
 
 Definition hash_result (tag : string) (val : term) : term :=
   THash (Spec.tag (Tag $ hmqvN.@tag) val).
@@ -154,36 +180,19 @@ Implicit Types (si : sess_info).
 Implicit Types (N : namespace) (E : coPset).
 Implicit Types (φ : nonce → nonce → sess_info → role → iProp).
 
-Lemma _wp_H (tag : string) (val : term) Ψ :
-  Ψ (repr (hash_result tag val)) ⊢ WP _H tag val {{ Ψ }}.
+Lemma wp_H (c : string) (val : list term) Ψ :
+  Ψ (repr (hash_result c (Spec.of_list val))) ⊢
+  WP H c (repr val) {{ Ψ }}.
 Proof.
-iIntros "post".
-wp_lam.
+iIntros "post". wp_lam.
+wp_apply wp_term_of_list.
 wp_apply wp_tag.
 wp_apply wp_hash.
 by iApply "post".
 Qed.
 
-Lemma wp_H (tag : string) (val : list term) Ψ :
-  Ψ (repr (hash_result tag (Spec.of_list val))) ⊢
-  WP H tag (repr val) {{ Ψ }}.
-Proof.
-iIntros "post".
-wp_lam.
-wp_apply wp_term_of_list.
-by wp_apply _wp_H.
-Qed.
-
 Lemma minted_hash_result tag t : minted (hash_result tag t) ⊣⊢ minted t.
 Proof. by rewrite /hash_result minted_THash minted_tag. Qed.
-
-(** A long-term key pair [(p, g^p)].  Unlike [dh_seed], [p] may be
-    compromised later; all that is fixed is its use as a DH exponent. *)
-Definition hmqv_key (p : nonce) : iProp :=
-  minted p ∗ □ (∀ t, exp_pred_base p t ↔ ▷ □ dh_key_share t).
-
-#[global] Instance hmqv_key_persistent (p : nonce) : Persistent (hmqv_key p).
-Proof. apply _. Qed.
 
 Lemma hmqv_key_public (p : nonce) : hmqv_key p -∗ public (TExp g p).
 Proof.
@@ -243,23 +252,25 @@ Lemma hmqv_token_drop E1 E2 :
   hmqv_token E2 -∗ hmqv_token E1.
 Proof. exact: gmeta_token_drop. Qed.
 
-Definition hmqv_ready N p_a p_b si : iProp := ∀ φ,
+(** The resource a party escrows for its peer, redeemable once with the
+    [ready] slice of the peer's share token. *)
+Definition hmqv_ready N p_a p_b si rl : iProp := ∀ φ,
   hmqv_pred N φ →
-  term_token (si_init_share si) (↑hmqvN.@"ready") ={⊤}=∗
-    ▷ φ p_a p_b si Init.
+  term_token (si_share_of rl si) (↑hmqvN.@"ready") ={⊤}=∗
+    ▷ φ p_a p_b si rl.
 
-Lemma hmqv_ready_alloc N p_a p_b si φ :
+Lemma hmqv_ready_alloc N p_a p_b si rl φ :
   hmqv_pred N φ -∗
-  φ p_a p_b si Init ={⊤}=∗
-  □ hmqv_ready N p_a p_b si.
+  φ p_a p_b si rl ={⊤}=∗
+  □ hmqv_ready N p_a p_b si rl.
 Proof.
 iIntros "#N_φ φ_ts".
 iMod (escrowI nroot with "φ_ts []") as "#?".
-{ by iApply (term_token_switch (si_init_share si) (hmqvN.@"ready")). }
+{ by iApply (term_token_switch (si_share_of rl si) (hmqvN.@"ready")). }
 iIntros "!> !>  %φ' #N_φ' ready".
 iPoseProof (nown_valid_2 with "N_φ N_φ'") as "#valid".
 iPoseProof (saved_pred_op_validI with "valid") as "[_ #φ_eq]".
-iSpecialize ("φ_eq" $! (p_a, p_b, si, Init)).
+iSpecialize ("φ_eq" $! (p_a, p_b, si, rl)).
 iMod (escrowE with "[//] ready") as "res" => //.
 iIntros "!> !>". by iRewrite -"φ_eq".
 Qed.
@@ -278,12 +289,34 @@ iApply public_THash; iLeft; iApply public_tag.
 iApply public_of_list => /=. by do !iSplit => //.
 Qed.
 
-Definition compromised si : iProp :=
-  (public (si_init si) ∨ public (si_resp si)) ∗
-  public (si_key si).
+(** A party's whole state leaked: its long-term key and the private key
+    behind its share. *)
+Definition state_public (p : nonce) X : iProp := public p ∗ exp_public g X.
 
-Lemma compromised_public si : compromised si ⊢ public (si_key si).
-Proof. by iIntros "(_&?)". Qed.
+Definition states_public si : iProp :=
+  state_public (si_init si) (si_init_share si) ∨
+  state_public (si_resp si) (si_resp_share si).
+
+#[global] Instance states_public_persistent si :
+  Persistent (states_public si).
+Proof. apply _. Qed.
+
+Definition si_static rl :=
+  if rl is Init then si_init else si_resp.
+
+(** From a role's point of view, the peer's authenticator can be forged iff
+    the attacker holds the peer's long-term key or the role's whole state. *)
+Definition compromised rl si : iProp :=
+  public (si_static (swap_role rl) si) ∨
+  state_public (si_static rl si) (si_share_of rl si).
+
+#[global] Instance compromised_persistent rl si :
+  Persistent (compromised rl si).
+Proof. apply _. Qed.
+
+Lemma compromised_static rl si :
+  compromised rl si -∗ public (si_init si) ∨ public (si_resp si).
+Proof. case: rl; iIntros "[?|[? _]]"; eauto. Qed.
 
 Definition release_token share : iProp :=
   term_token share (↑hmqvN.@"released").
@@ -325,51 +358,52 @@ iApply (term_meta_token (L:=bool) with "token"); last by case: rl.
 by [].
 Qed.
 
-Definition session p_a p_b si : iProp :=
+Definition session rl p_a p_b si : iProp :=
   ⌜p_a = si_init si⌝ ∗ ⌜p_b = si_resp si⌝ ∗ minted (si_key si) ∗
-  □ (▷ released_session si → public (si_key si)) ∗
-  ((public (si_init si) ∨ public (si_resp si)) ∨
-    □ (public (si_key si) → ▷ released_session si)).
+  □ (▷ released_session si ∨ states_public si → public (si_key si)) ∗
+  (compromised rl si ∨
+    □ (public (si_key si) → ▷ released_session si ∨ states_public si)).
 
-Lemma session_minted p_a p_b si :
-  session p_a p_b si -∗
+Lemma session_minted rl p_a p_b si :
+  session rl p_a p_b si -∗
   minted (si_key si).
 Proof.
 by iIntros "(?&?&?&?)".
 Qed.
 
-#[global] Instance session_persistent p_a p_b si :
-  Persistent (session p_a p_b si).
+#[global] Instance session_persistent rl p_a p_b si :
+  Persistent (session rl p_a p_b si).
 Proof. apply _. Qed.
 
 Definition session_ok si : iProp :=
-  □ (public (si_key si) ↔ ▷ released_session si).
+  □ (public (si_key si) ↔ ▷ released_session si ∨ states_public si).
 
 #[global] Instance session_ok_persistent si : Persistent (session_ok si).
 Proof. apply _. Qed.
 
-Lemma secret_session p_a p_b si :
+Lemma secret_session rl p_a p_b si :
   secret p_a -∗
   secret p_b -∗
-  session p_a p_b si -∗
+  session rl p_a p_b si -∗
   ◇ session_ok si.
 Proof.
 iIntros "sI sR (-> & -> & _ & #comp1 & #comp2)".
-iDestruct "comp2" as "[[comp2|comp2]|comp2]".
-- by iDestruct (secret_not_public with "sI comp2") as ">[]".
-- by iDestruct (secret_not_public with "sR comp2") as ">[]".
+iDestruct "comp2" as "[#comp2|#comp2]".
+- iDestruct (compromised_static with "comp2") as "[c|c]".
+  + by iDestruct (secret_not_public with "sI c") as ">[]".
+  + by iDestruct (secret_not_public with "sR c") as ">[]".
 - iIntros "!> !>". by iSplit.
 Qed.
 
-Lemma session_released_session p_a p_b si :
-  session p_a p_b si -∗
+Lemma session_released_session rl p_a p_b si :
+  session rl p_a p_b si -∗
   ▷ released_session si -∗
   public (si_key si).
-Proof. iIntros "(_ & _ & _ & #H & _) #rel". by iApply "H". Qed.
+Proof. iIntros "(_ & _ & _ & #H & _) #rel". iApply "H". by iLeft. Qed.
 
-Lemma session_session_ok p_a p_b si :
-  session p_a p_b si -∗
-  (public (si_init si) ∨ public (si_resp si)) ∨ session_ok si.
+Lemma session_session_ok rl p_a p_b si :
+  session rl p_a p_b si -∗
+  compromised rl si ∨ session_ok si.
 Proof.
 iIntros "#(-> & -> & _ & #? & [?|#?])"; eauto. iRight. iModIntro. by iSplit.
 Qed.
@@ -377,22 +411,37 @@ Qed.
 Lemma unreleased_key_secrecy si :
   □ (¬ released_session si) -∗
   session_ok si -∗
-  □ (public (si_key si) ↔ ▷ False).
+  □ (public (si_key si) → ▷ states_public si).
 Proof.
-iIntros "#un #s_k !>".
-iApply (bi.iff_trans _ (▷ released_session si)). iSplit => //.
-iSplit; last by iIntros ">[]".
-iIntros "#re !>". by iApply "un".
+iIntros "#un #s_k !> #p_k".
+iDestruct ("s_k" with "p_k") as "[#rel|#st]"; last by iNext.
+iNext. by iDestruct ("un" with "rel") as "[]".
 Qed.
 
-Definition session_weak p_a p_b si : iProp :=
-  ⌜p_a = si_init si⌝ ∗ ⌜p_b = si_resp si⌝ ∗ minted (si_key si) ∗
-  ((public p_a ∨ public p_b) ∨ □ (public (si_key si) ↔ ▷ False)).
-
-Lemma unreleased_session_weak p_a p_b si :
-  session p_a p_b si -∗
+(** Once both ephemerals are known to stay secret, only release can publish
+    the key. *)
+Lemma frozen_key_secrecy si :
   □ (¬ released_session si) -∗
-  session_weak p_a p_b si.
+  exp_frozen g (si_init_share si) -∗
+  exp_frozen g (si_resp_share si) -∗
+  session_ok si -∗
+  □ (public (si_key si) → ▷ False).
+Proof.
+iIntros "#un #fr_a #fr_b #s_k !> #p_k".
+iDestruct ("s_k" with "p_k") as "[#rel|[[_ #x]|[_ #x]]]".
+- iNext. by iApply "un".
+- by iApply (exp_frozen_public with "fr_a x").
+- by iApply (exp_frozen_public with "fr_b x").
+Qed.
+
+Definition session_weak rl p_a p_b si : iProp :=
+  ⌜p_a = si_init si⌝ ∗ ⌜p_b = si_resp si⌝ ∗ minted (si_key si) ∗
+  (compromised rl si ∨ □ (public (si_key si) → ▷ states_public si)).
+
+Lemma unreleased_session_weak rl p_a p_b si :
+  session rl p_a p_b si -∗
+  □ (¬ released_session si) -∗
+  session_weak rl p_a p_b si.
 Proof.
 iIntros "(-> & -> & #m_k & #s_k1 & #s_k2) #un".
 do !iSplit => //. iDestruct "s_k2" as "[s_k2|#s_k2]"; eauto.
@@ -400,61 +449,24 @@ iRight. iApply unreleased_key_secrecy => //. iModIntro.
 by iSplit; eauto.
 Qed.
 
-Lemma release_token_key_secrecy rl si :
-  release_token (si_share_of rl si) -∗
-  session_ok si -∗
-  public (si_key si) -∗
-  ▷ False.
-Proof.
-iIntros "token #s_k #p_k".
-iPoseProof ("s_k" with "p_k") as "contra".
-iModIntro. by iApply (release_token_released_session with "token").
-Qed.
+(** Message predicates for the authenticators of the initiator and the responder. *)
 
-Lemma session_ok_compromised rl si :
-  session_ok si -∗
-  compromised si -∗
-  release_token (si_share_of rl si) -∗
-  ▷ False.
-Proof.
-iIntros "#ok [_ #comp] rel".
-iApply (release_token_key_secrecy with "rel ok comp").
-Qed.
-
-Lemma session_compromised p_a p_b rl si :
-  session p_a p_b si -∗
-  public (si_key si) -∗
-  release_token (si_share_of rl si) -∗
-  ◇ compromised si.
-Proof.
-iIntros "(-> & -> & _ & #comp1 & #[[comp2|comp2]|#comp2]) #p_k rel".
-- iSplit => //. by eauto.
-- iSplit => //. by eauto.
-- iSpecialize ("comp2" with "p_k").
-  iDestruct (release_token_released_session with "rel comp2") as ">[]".
-Qed.
-
-Lemma session_compromised' p_a p_b si :
-  session p_a p_b si -∗
-  compromised si -∗
-  public p_a ∨ public p_b.
-Proof. by iIntros "(-> & -> & _) (? & _)". Qed.
-
-(** The responder's authenticator vouches for its ephemeral and escrows the
-    initiator's resources; [N] is bound as under ISO-DH's signed [m2]. *)
 Definition m2_pred t : iProp :=
   ∃ p_a X_a p_b x_b N,
     let si := resp_si p_a X_a p_b x_b in
     ⌜t = Spec.of_list [si_secret si; Tag N]⌝ ∗
     ⌜X_a ≠ TExp g x_b⌝ ∗
-    eph_seed x_b ∗
-    hmqv_ready N p_a p_b si.
+    ⌜x_b ≠ p_a⌝ ∗
+    hmqv_key x_b ∗
+    hmqv_ready N p_a p_b si Init.
 
-(** The initiator's authenticator vouches for its ephemeral. *)
 Definition m3_pred t : iProp :=
-  ∃ p_a x_a p_b X_b,
-    ⌜t = Spec.of_list [si_secret (init_si p_a x_a p_b X_b)]⌝ ∗
-    eph_seed x_a.
+  ∃ p_a x_a p_b X_b N,
+    let si := init_si p_a x_a p_b X_b in
+    ⌜t = Spec.of_list [si_secret si; Tag N]⌝ ∗
+    ⌜x_a ≠ p_b⌝ ∗
+    hmqv_key x_a ∗
+    hmqv_ready N p_a p_b si Resp.
 
 (** The key hash: released sessions publish their key through it. *)
 Definition key_pred t : iProp :=
@@ -482,41 +494,56 @@ iMod (hash_pred_set (hmqvN.@"key") key_pred with "token")
 iApply (hash_pred_token_drop with "token"). solve_ndisj.
 Qed.
 
-(** Both roles conclude the same way once they know the peer's share is an
-    honest ephemeral: the ephemeral-ephemeral factor keeps the key secret
-    whatever happens to the long-term keys, so only release can publish it. *)
+(** FIXME: This statement is too cumbersome. *)
 Lemma honest_session_ok p_a p_b x_a x_b :
   let si := resp_si p_a (TExp g x_a) p_b x_b in
+  p_a ≠ p_b →
   x_a ≠ x_b →
+  x_a ≠ p_b →
+  x_b ≠ p_a →
   hash_pred (hmqvN.@"key") key_pred -∗
-  eph_seed x_a -∗
-  eph_seed x_b -∗
+  hmqv_key p_a -∗
+  hmqv_key p_b -∗
+  hmqv_key x_a -∗
+  hmqv_key x_b -∗
   minted (si_key si) -∗
   session_ok si.
 Proof.
-move=> si x_a_b.
-iIntros "#Hpred #eph_a #eph_b #m_k".
+move=> si p_a_b x_a_b x_a_pb x_b_pa.
+iIntros "#Hpred #key_pa #key_pb #key_xa #key_xb #m_k".
 have ss : resp_session si by exists p_a, (TExp g x_a), p_b, x_b.
+iPoseProof (hmqv_key_public with "key_pa") as "#p_Pa".
+iPoseProof (hmqv_key_public with "key_pb") as "#p_Pb".
+iPoseProof (hmqv_key_public with "key_xa") as "#p_Xa".
+iPoseProof (hmqv_key_public with "key_xb") as "#p_Xb".
 iModIntro; iSplit.
 - iIntros "#p_k".
   iEval (rewrite /si_key public_senc_key) in "p_k".
   iDestruct (public_THashE with "Hpred p_k") as "[p_t | [_ #rel]]".
   + rewrite public_of_list /=.
     iDestruct "p_t" as "[p_σ _]".
-    iDestruct (@public_hmqv_K_eph _ _ _ hmqvN g "resp" "init" p_b x_b p_a x_a
-                 (TExp g p_b) (TExp g x_b) gNX gNm gNi (not_eq_sym x_a_b)
-                 with "eph_b eph_a p_σ") as ">[]".
-  + iNext. iDestruct "rel" as "(%si' & %e & %ss' & #rel')".
+    iRight.
+    iDestruct (@public_hmqv_K_honest _ _ _ hmqvN g "resp" "init" p_b x_b p_a x_a
+                 gNX gNm gNi tags' (not_eq_sym p_a_b) (not_eq_sym x_a_b)
+                 x_b_pa x_a_pb with "key_pb key_xb key_pa key_xa p_σ")
+      as "[[#? #?]|[#? #?]]".
+    * iRight. iSplit => //. iExists x_b. by iSplit.
+    * iLeft. iSplit => //. iExists x_a. by iSplit.
+  + iLeft. iNext. iDestruct "rel" as "(%si' & %e & %ss' & #rel')".
     have ek : si_key si = si_key si' by rewrite /si_key e.
     by rewrite (session_of_key_inj (rl := Resp) ss ss' ek).
-- iIntros "#rel".
-  rewrite /si_key public_senc_key.
-  iApply (public_THashIS with "Hpred [] []").
-  + by iEval (rewrite /si_key minted_senc minted_hash_result) in "m_k".
-  + iNext; iModIntro; iExists si.
-    by do !iSplit => //.
+- iIntros "#[rel|st]".
+  + rewrite /si_key public_senc_key.
+    iApply (public_THashIS with "Hpred [] []").
+    * by iEval (rewrite /si_key minted_senc minted_hash_result) in "m_k".
+    * iNext; iModIntro; iExists si.
+      by do !iSplit => //.
+  + iApply public_si_key. iEval (rewrite /si /=).
+    iDestruct "st" as "[[#p_pa (%x & %e & #p_x)]|[#p_pb (%x & %e & #p_x)]]";
+      move/TExp_g_inj: e => <-.
+    * iEval (rewrite hmqv_K_sym). by iApply public_hmqv_K.
+    * by iApply public_hmqv_K.
 Qed.
-
 End Verif.
 
 Arguments hmqv_ctx_alloc {Σ _ _ _} E.

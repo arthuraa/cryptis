@@ -43,26 +43,28 @@ iModIntro. iRight. iExists _; iSplit => //.
 iIntros "post". iApply "post". by iSplit.
 Qed.
 
-Lemma wp_responder_confirm c p_a p_b X_a N φ :
+Lemma wp_responder_confirm c p_a p_b X_a N φ ψ :
   {{{ channel c ∗ cryptis_ctx ∗
       hmqv_ctx ∗ hmqv_pred N φ ∗
       public X_a ∗ hmqv_key p_a ∗ hmqv_key p_b ∗
       (∀ x_b,
           let si := resp_si p_a X_a p_b x_b in
+          secret x_b -∗
           term_token (si_resp_share si) (↑hmqvN.@"res") ={⊤}=∗
-           φ p_a p_b si Init ∗ φ p_a p_b si Resp) }}}
+          φ p_a p_b si Init ∗ ψ x_b) }}}
     responder_confirm c p_b (TExp g p_b) X_a (TExp g p_a) (Tag N)
   {{{ r, RET (repr r);
-      ⌜r = None⌝ ∨ ∃ si,
-        ⌜r = Some (si_key si)⌝ ∗
-        ⌜resp_session si⌝ ∗
-        session p_a p_b si ∗
+      ⌜r = None⌝ ∨ ∃ x_b,
+        let si := resp_si p_a X_a p_b x_b in
+        ⌜r = Some (si_key si, TNonce x_b)⌝ ∗
+        session Resp p_a p_b si ∗
         release_token (si_resp_share si) ∗
         term_token (si_resp_share si) (⊤ ∖ ↑hmqvN) ∗
-        φ p_a p_b si Resp }}}.
+        ψ x_b ∗
+        (public (si_key si) ∨ φ p_a p_b si Resp) }}}.
 Proof.
 iIntros "%Φ (#chan_c & #ctx & #(Hm2 & Hm3 & Hkey) & #N_φ &
-             #p_Xa & #key_a & #key_b & res) Hpost".
+             #p_Xa & #key_a & #key_b & hook) Hpost".
 iPoseProof "key_a" as "[#m_pa #pred_a]".
 iPoseProof "key_b" as "[#m_pb #pred_b]".
 iPoseProof (hmqv_key_public with "key_a") as "#p_Pa".
@@ -73,11 +75,13 @@ wp_lam. wp_pures.
 wp_eq_term e_ab; first by protocol_failure.
 have p_a_b : p_a ≠ p_b by move=> e; apply: e_ab; rewrite e.
 wp_pures.
-(* The fresh ephemeral comes with a token on the responder's share;
-   freshness against the peer's share keeps the two ephemerals apart. *)
-wp_apply (wp_mk_nonce_freshN {[X_a]} (λ _, False)%I dh_key_share
-            (λ x, {[TExp g x]})) => //.
-- by iIntros "%"; rewrite elem_of_singleton; iIntros "->".
+(* The ephemeral is a [secret] of its owner, fresh against the peer's share
+   and long-term key so that every factor binds two distinct exponents. *)
+iMod pending_alloc as (γ) "pend".
+wp_apply (wp_mk_nonce_freshN {[X_a; TNonce p_a]} (λ _, shot γ 1)%I
+            dh_key_share (λ x, {[TExp g x]})) => //.
+- iIntros "%t %t_in". move: t_in.
+  rewrite elem_of_union !elem_of_singleton. by case=> ->.
 - iIntros "%x"; rewrite big_sepS_singleton; iModIntro; iSplit.
   + iIntros "#?"; by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
   + rewrite (minted_TExp x) //; by iIntros "[_ ?]".
@@ -85,22 +89,33 @@ iIntros "%x_b %fresh_b #m_xb #s_xb #pred_xb _ tok_Xb".
 rewrite big_sepS_singleton.
 have Nm_xb : negb (is_mul (TNonce x_b)) by [].
 have X_a_xb : X_a ≠ TExp g x_b.
-  move=> e; apply: (fresh_b X_a); first by rewrite elem_of_singleton.
+  move=> e; apply: (fresh_b X_a); first by set_solver.
   rewrite e; apply: subterm_exps.
   by rewrite exps_TExp_expN // factors_Nmul // list_elem_of_singleton.
-iPoseProof (eph_seed_intro with "s_xb pred_xb") as "#eph_b".
+have x_b_pa : x_b ≠ p_a.
+  move=> e; apply: (fresh_b (TNonce p_a)); first by set_solver.
+  by rewrite e; apply: STRefl.
+iAssert (□ (public x_b ↔ ▷ shot γ 1))%I as "#s_xb'".
+{ iModIntro; iSplit.
+  - iIntros "#p". iDestruct ("s_xb" with "p") as "#s". iNext.
+    by iDestruct "s" as "#s".
+  - iIntros "#s". iApply "s_xb". iNext. by iModIntro. }
+iPoseProof (secret_alloc with "s_xb' pend") as "s".
+iAssert (hmqv_key x_b) as "#key_xb"; first by iSplit.
 set X_b := TExp g x_b.
 set si := resp_si p_a X_a p_b x_b.
 iAssert (public X_b) as "#p_Xb";
   first by iApply (public_dh_share gNX gNm gNi Nm_xb with "p_g m_xb pred_xb").
 iDestruct (release_tokenI with "tok_Xb") as "[tok_rel tok_Xb]";
   first solve_ndisj.
+iDestruct (term_token_difference X_b (↑hmqvN.@"ready") with "tok_Xb")
+  as "[tok_ready tok_Xb]"; first solve_ndisj.
 iDestruct (term_token_difference X_b (↑hmqvN.@"res") with "tok_Xb")
   as "[tok_res tok_Xb]"; first solve_ndisj.
 iDestruct (term_token_drop (⊤ ∖ ↑hmqvN) with "tok_Xb") as "tok_Xb";
   first solve_ndisj.
-iMod ("res" $! x_b with "tok_res") as "[res_I res_R]".
-iMod (hmqv_ready_alloc N p_a p_b si with "[//] res_I") as "#ready".
+iMod ("hook" $! x_b with "s tok_res") as "[gift ψ]".
+iMod (hmqv_ready_alloc N p_a p_b si Init with "[//] gift") as "#ready".
 wp_pures. wp_apply wp_texp. rewrite -/X_b. wp_pures.
 wp_apply wp_hmqv_ke. wp_pures.
 set σ := hmqv_K hmqvN "resp" "init" p_b x_b (TExp g p_b) X_b (TExp g p_a) X_a.
@@ -116,45 +131,62 @@ wp_pures. wp_apply wp_recv => //. iIntros "%A_a #p_Aa".
 wp_pures. wp_list. wp_apply wp_H.
 wp_eq_term e; last by protocol_failure.
 subst A_a.
-iAssert (public (Spec.of_list [σ]) ∨ ▷ □ m3_pred (Spec.of_list [σ]))%I
-  as "#auth".
+iAssert (public (Spec.of_list [σ; Tag N])
+         ∨ ▷ □ m3_pred (Spec.of_list [σ; Tag N]))%I as "#auth".
   by iDestruct (public_THashE with "Hm3 p_Aa") as "[? | [_ ?]]"; eauto.
 wp_pures.
 iAssert (minted (si_key si)) as "#m_k"; first by iApply minted_si_key.
-(* A valid [A_a] was either forged -- then the key is public, so a long-term
-   key leaked -- or produced by the honest initiator, which vouches for its
-   ephemeral. *)
-iAssert (session p_a p_b si) as "#sess".
+(* A valid [A_a] was either forged -- then the key is public, so the
+   initiator's long-term key or the responder's whole state leaked -- or
+   produced by the honest initiator, which vouches for its ephemeral and hands
+   over the escrowed resources. *)
+iAssert (|={⊤}=>
+           session Resp p_a p_b si ∗
+           (public (si_key si) ∨ ▷ φ p_a p_b si Resp))%I
+  with "[tok_ready]" as ">(#sess & res)".
 { iDestruct "auth" as "[#p_t | #auth]".
   - iEval (rewrite public_of_list /=) in "p_t".
     iDestruct "p_t" as "[#p_σ _]".
-    iDestruct (@public_hmqv_K_static _ _ _ hmqvN g "resp" "init" p_b x_b p_a
+    iDestruct (@public_hmqv_K_forged _ _ _ hmqvN g "resp" "init" p_b x_b p_a
                  (TExp g p_b) X_b X_a gNX gNm gNi tags' (not_eq_sym p_a_b)
-                 with "pred_b pred_a p_σ") as "#comp".
+                 x_b_pa with "key_b key_xb key_a p_σ") as "#comp".
     iAssert (public (si_key si)) as "#p_k"; first by iApply public_si_key.
+    iModIntro.
+    iSplit; last by iLeft.
     do 2!(iSplit; first by []).
     iSplit => //.
     iSplit; first by iIntros "!> _".
-    iLeft. iDestruct "comp" as "[c|c]"; [by iRight | by iLeft].
-  - iDestruct "auth" as "(%p_a' & %x_a' & %p_b' & %X_b' & %e' & #eph_a)".
-    move: e' => /Spec.of_list_inj [] eσ.
+    iLeft. iDestruct "comp" as "[?|[? ?]]"; first by iLeft.
+    iRight. iSplit => //. iExists x_b. by iSplit.
+  - iDestruct "auth"
+      as "(%p_a' & %x_a' & %p_b' & %X_b' & %N' & %e' & %x_a'_pb & #key_xa
+          & #ready_a)".
+    move: e' => /Spec.of_list_inj [] eσ /Tag_inj eN.
+    subst N'.
     have [epb [epa [eXa eXb]]] :=
       @hmqv_K_inj' hmqvN g "resp" "init" p_b x_b p_a p_b' x_a' p_a' X_a X_b'
                    gNX gNm gNi tags' eσ.
     subst p_a' p_b' X_a X_b'.
     have x_a_b : x_a' ≠ x_b by move=> e'; apply: X_a_xb; rewrite e'.
-    iPoseProof (honest_session_ok p_a p_b x_a_b with "Hkey eph_a eph_b m_k")
+    iPoseProof (honest_session_ok p_a_b x_a_b x_a'_pb x_b_pa
+                  with "Hkey key_a key_b key_xa key_xb m_k")
       as "#[ok1 ok2]".
+    have e_si : init_si p_a x_a' p_b X_b = si.
+      by rewrite /si /X_b init_resp_si.
+    iMod ("ready_a" with "N_φ tok_ready") as "res".
+    iEval (rewrite e_si) in "res".
+    iModIntro.
+    iSplit; last by iRight.
+
     do 2!(iSplit; first by []).
     iSplit => //.
     iSplit; first by iApply "ok2".
     by iRight. }
 wp_pures. wp_list. wp_apply wp_H.
 wp_apply wp_derive_senc_key. wp_pures.
-iApply ("Hpost" $! (Some (si_key si))). iModIntro.
-iRight. iExists si. iFrame "tok_rel tok_Xb res_R".
+iApply ("Hpost" $! (Some (si_key si, TNonce x_b))). iModIntro.
+iRight. iExists x_b. iFrame "tok_rel tok_Xb ψ res".
 iSplit; first by [].
-iSplit; first by iPureIntro; exists p_a, X_a, p_b, x_b.
 by iApply "sess".
 Qed.
 
@@ -164,19 +196,20 @@ Lemma wp_responder_confirm_weak c p_a p_b X_a N :
       public X_a ∗ hmqv_key p_a ∗ hmqv_key p_b }}}
     responder_confirm c p_b (TExp g p_b) X_a (TExp g p_a) (Tag N)
   {{{ r, RET (repr r);
-      ⌜r = None⌝ ∨ ∃ si,
-        ⌜r = Some (si_key si)⌝ ∗
-        session_weak p_a p_b si ∗
+      ⌜r = None⌝ ∨ ∃ x_b,
+        let si := resp_si p_a X_a p_b x_b in
+        ⌜r = Some (si_key si, TNonce x_b)⌝ ∗
+        session_weak Resp p_a p_b si ∗
         term_token (si_resp_share si) (⊤ ∖ ↑hmqvN) }}}.
 Proof.
 iIntros "%Φ (#chan_c & #ctx & #? & #? & #p_Xa & #key_a & #key_b) Hpost".
-iApply wp_fupd. wp_apply wp_responder_confirm.
-{ do !iSplit => //. by iIntros "%x_b _ !>". }
-iIntros "%osi [->|Hsi]"; first by iApply ("Hpost" $! None); eauto.
-iDestruct "Hsi" as "(%si & -> & _ & #sess & rel & tok & _)".
+iApply wp_fupd. wp_apply (wp_responder_confirm _ _ _ _ _ _ (λ _, True%I)).
+{ do !iSplit => //. by iIntros "%x_b _ _ !>". }
+iIntros "%r [->|Hr]"; first by iApply ("Hpost" $! None); eauto.
+iDestruct "Hr" as "(%x_b & -> & #sess & rel & tok & _ & _)".
 iMod (unrelease Resp with "rel") as "#un". iModIntro.
-iApply ("Hpost" $! (Some (si_key si))). iRight. iFrame. iSplit => //.
+iApply ("Hpost" $! (Some (si_key (resp_si p_a X_a p_b x_b), TNonce x_b))).
+iRight. iExists x_b. iFrame. iSplit => //.
 by iApply unreleased_session_weak.
 Qed.
-
 End Verif.

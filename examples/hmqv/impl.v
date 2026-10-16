@@ -16,27 +16,24 @@ Unset Printing Implicit Defensive.
 HMQV-C, the three-message variant of HMQV.  Each party [i] has a long-term
 key pair [p_i, P_i = g^p_i]; the public keys stand in for the identities.
 
-A --> B: g^a; P_A
-B --> A: g^b; H(σ, N)
-A --> B: H'(σ)
+  A --> B: g^a; P_A
+  B --> A: g^b; H(σ, N)
+  A --> B: H'(σ, N)
+  return (derive_key (H''(σ), X))
 
-σ is the HMQV element [(X_B P_B^e)^(a + d p_A) = (X_A P_A^d)^(b + e p_B)],
-with the multipliers [d = H(X_A, P_B)] and [e = H(X_B, P_A)] computed by
-[hmqv_ke].  The two hashes are the authenticators of the HMQV-C paper, keyed
-by σ; the responder's one also binds the resource namespace [N], as the
-signed second message of ISO-DH does.
-
-Result: derive_key (H''(σ))
+where σ is the HMQV secret computed from the parties' long-term and ephemeral
+keys (cf. [cryptis.lib.hmqv.hmqv_K]), and X is the generated ephemeral key.
+Checking the hashes H(σ, N) and H'(σ, N) proves that the other party was also
+capable of computing σ, hence that the key is authentic.  The namespace [N] is a
+_usage_ tag that allows us to distinguish different uses of the protocol, as in
+ISO-DH.
 
 *)
 
 Definition hmqvN := nroot.@"hmqv".
 
-Definition _H : string -> val :=
-  fun _tag => (λ: "val", hash (tag (Tag $ hmqvN.@_tag) "val"))%V.
-Definition _H_list : string -> val :=
-  fun _tag => (λ: "val", _H _tag (term_of_list "val"))%V.
-Definition H := _H_list.
+Definition H (c : string) : val := λ: "xs",
+  hash (tag (Tag $ hmqvN.@c) (term_of_list "xs")).
 Definition g := (TInt 0).
 
 Definition mk_lt_key : val := λ: <>,
@@ -53,8 +50,8 @@ Definition initiator : val := λ: "c" "p_a" "P_a" "P_b" "N",
   let: "σ" :=
     hmqv_ke hmqvN "init" "resp" "p_a" "x_a" "P_a" "X_a" "P_b" "X_b" in
   guard: eq_term "A_b" (H "m2" ["σ"; "N"]) in
-  send "c" (H "m3" ["σ"]);;
-  SOME (derive_senc_key (H "key" ["σ"])).
+  send "c" (H "m3" ["σ"; "N"]);;
+  SOME (derive_senc_key (H "key" ["σ"]), "x_a").
 
 (* A DH public key carries nothing to check, so whether to confirm with the
    identity received here is the caller's decision. *)
@@ -72,5 +69,6 @@ Definition responder_confirm : val := λ: "c" "p_b" "P_b" "X_a" "P_a" "N",
     hmqv_ke hmqvN "resp" "init" "p_b" "x_b" "P_b" "X_b" "P_a" "X_a" in
   send "c" (term_of_list ["X_b"; H "m2" ["σ"; "N"]]);;
   let: "A_a" := recv "c" in
-  guard: eq_term "A_a" (H "m3" ["σ"]) in
-  SOME (derive_senc_key (H "key" ["σ"])).
+  guard: eq_term "A_a" (H "m3" ["σ"; "N"]) in
+  SOME (derive_senc_key (H "key" ["σ"]), "x_b").
+

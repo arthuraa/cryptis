@@ -17,7 +17,7 @@ Section Opaque.
 Context `{!cryptisGS Σ, !heapGS Σ, !opaqueGS Σ}.
 Abbreviation iProp := (iProp Σ).
 
-Lemma wp_client_session (uid pw : term) (c : val) φ :
+Lemma wp_client_session (uid pw : term) (c : val) φ ψ :
   {{{
     cryptis_ctx
     ∗ opaque_ctx
@@ -25,32 +25,42 @@ Lemma wp_client_session (uid pw : term) (c : val) φ :
     ∗ channel c
     ∗ public uid
     ∗ minted pw
+    ∗ (∀ si (x_u : nonce),
+         ⌜si_cshare si = TExp g x_u⌝ -∗
+         secret x_u -∗
+         term_token (si_blind si) (↑opN.@"res") ={⊤}=∗
+         φ si Resp ∗ ψ x_u)
   }}} Client.session uid c pw
   {{{ r, RET (repr r);
-      ⌜r = None⌝ ∨ ∃ si,
+      ⌜r = None⌝ ∨ ∃ si (x_u : nonce),
         ⌜r = Some (si_result si)⌝ ∗
         opaque_session_for uid si ∗
         session pw si ∗
         release_token (si_blind si) ∗
         term_token (si_blind si) (⊤ ∖ ↑opN) ∗
+        (▷ public pw ∨ ⌜si_cshare si = TExp g x_u⌝ ∗ ψ x_u) ∗
         (public (si_key si) ∨ φ si Init) }}}.
 Proof.
 iIntros "%ϕ (#Cryptis & (#Hpredrw & #HpredA_s & #HpredA_u & #HpredSK & #HpredK
-  & #Hpredα & #SpredAuth) & #N_φ & #Hc & #pubuid & #mintedpw) Hhl".
+  & #Hpredα & #SpredAuth) & #N_φ & #Hc & #pubuid & #mintedpw & hook) Hhl".
 iAssert (minted uid) as "#minteduid"; first by iApply public_minted.
 wp_lam; wp_pures.
-wp_apply (wp_mk_nonce_freshN ∅
-            (fun x => term_meta (TExp g x) (opN.@"failed") true)%I
-            (fun t => dh_key_share t)%I
+(* The ephemeral is a [secret] of its owner. *)
+iMod pending_alloc as (γ) "pend".
+wp_apply (wp_mk_nonce_freshN ∅ (λ _, shot γ 1)%I dh_key_share
             (fun t => {[TExp g t]})) => //.
   by iIntros "% %contra".
   iIntros "%t"; rewrite big_sepS_singleton; iModIntro; iSplit.
   - iIntros "#?"; by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
   - rewrite (minted_TExp t) //; by iIntros "[_ ?]".
-iIntros "%x_u _ #Hmintedx_u #Hprivatex_u #Hexpx_u #Hexpx_uV tok_Xu".
-rewrite big_sepS_singleton.
-iDestruct (term_token_difference (TExp g x_u) (↑opN.@"failed") with "tok_Xu")
-  as "[tok_failed _]"; first solve_ndisj.
+iIntros "%x_u _ #Hmintedx_u #Hprivatex_u #Hexpx_u #Hexpx_uV _".
+iAssert (□ (public x_u ↔ ▷ shot γ 1))%I as "#s_xu'".
+{ iModIntro; iSplit.
+  - iIntros "#p". iDestruct ("Hprivatex_u" with "p") as "#s". iNext.
+    by iDestruct "s" as "#s".
+  - iIntros "#s". iApply "Hprivatex_u". iNext. by iModIntro. }
+iPoseProof (secret_alloc with "s_xu' pend") as "s_xu".
+iAssert (hmqv_key x_u) as "#key_xu"; first by iSplit.
 wp_pures.
 (* The blind [α] is the client's share: the server keys the resource escrow
    on its token, so it is minted together with [r]; the part outside [↑opN]
@@ -67,6 +77,8 @@ set α := TExp (hash_result "α" pw) r.
 wp_pures.
 iDestruct (term_token_difference α (↑opN.@"ready") with "tok_α")
   as "[tok_ready tok_α]"; first solve_ndisj.
+iDestruct (term_token_difference α (↑opN.@"res") with "tok_α")
+  as "[tok_res tok_α]"; first solve_ndisj.
 iDestruct (term_token_difference α (↑opN.@"released") with "tok_α")
   as "[tok_rel tok_α]"; first solve_ndisj.
 iDestruct (term_token_drop (⊤ ∖ ↑opN) with "tok_α") as "tok_α";
@@ -193,15 +205,17 @@ iAssert (public (Spec.of_list [K; ssid'])
 wp_pures; wp_list.
 wp_apply wp_prf.
 wp_pures.
-have tags : "d"%string ≠ "e"%string by [].
+have tags_c : "d"%string ≠ "e"%string by [].
 iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ ⌜α = si_blind si⌝ ∗
            public (si_ckey si) ∗ public (si_skey si) ∗
            session pw si ∗
            (public (si_key si) ∨ ▷ φ si Init) ∗
+           (▷ public pw ∨ ⌜si_cshare si = TExp g x_u⌝ ∗ ψ x_u) ∗
            (public (Spec.of_list [K; ssid'])
             ∨ ▷ □ A_u_pred (Spec.of_list [K; ssid'])))%I
-  with "[tok_ready tok_failed]"
-  as ">(%si & %eSK & %euid & %eα & #pubck & #pubsk & #sess & res & #authu)".
+  with "[tok_ready tok_res s_xu hook]"
+  as ">(%si & %eSK & %euid & %eα & #pubck & #pubsk & #sess & res & keep
+        & #authu)".
 { iDestruct "auth" as "[#p_t | #auth]".
   - (* Forged: the key is public. *)
     iAssert (public SK) as "#p_SK".
@@ -213,7 +227,7 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
     { iDestruct "env'" as "[(#? & _ & #? & #?) | (%p_u & %ep & %eP & #pubP_u & #pair)]";
         first by do !iSplit => //.
       iPoseProof "pair" as
-        "(%p_s & %eP_s & %p_u_s & #pubP_s & _ & _ & #pred_p_u & #pred_p_s
+        "(%p_s & %eP_s & %p_u_s & #pubP_s & #key_p_u & #key_p_s
           & #priv_p_u & #priv_p_s)".
       subst p_u' P_u' P_s'.
       iSplit; last by iSplit.
@@ -226,8 +240,8 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
       iDestruct "p_t'" as "(p_K' & _)".
       iAssert (▷ □ public pw)%I as "#p_pw".
       { iDestruct (@public_hmqv_K_static _ _ _ opN g "d" "e" p_u x_u p_s
-                     (TExp g p_u) (TExp g x_u) X_s gNX gNm gNi tags p_u_s
-                     with "pred_p_u pred_p_s p_K'") as "[p|p]".
+                     (TExp g p_u) (TExp g x_u) X_s gNX gNm gNi tags_c p_u_s
+                     with "key_p_u key_p_s p_K'") as "[p|p]".
         - by iApply "priv_p_u".
         - by iApply "priv_p_s". }
       by iNext. }
@@ -238,17 +252,21 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
     have e3 : si_skey (client_si uid P_u' P_s' α x_u X_s p_u') = P_s' by [].
     have e4 : si_uid (client_si uid P_u' P_s' α x_u X_s p_u') = uid by [].
     have e5 : si_blind (client_si uid P_u' P_s' α x_u X_s p_u') = α by [].
-    rewrite /session /compromised e1 e2 e3 e4 e5.
+    rewrite /session /compromised /states_pw e1 e2 e3 e4 e5.
     do 3?(iSplit; first by []).
     iSplit => //. iSplit => //.
     iSplit.
-    { iSplit => //. iSplit; first by iIntros "!> _".
+    { iSplit => //.
+      iSplit; first by iIntros "!> _"; iNext; iModIntro.
+      iSplit; first by iIntros "!> _".
       by iLeft; iSplit. }
-    iSplit; first by iLeft.
+    iSplitL ""; first by iLeft.
+    iSplitL ""; first by iLeft.
     by iLeft.
   - (* Honest server. *)
     iDestruct "auth" as "(%uid_s & %α_s & %X_u_s & %p_u_s & %p_s_s & %x_s
-                          & %e_si & %X_u_x_s & #eph_s & #pubck & #pubsk & #ready)".
+                          & %e_si & %X_u_x_s & %X_u_p_s & %x_s_pu
+                          & #key_xs & #pubck & #pubsk & #ready)".
     set si_s := server_si uid_s α_s X_u_s (TExp g p_u_s) p_s_s x_s.
     have eSK : si_key si_s = SK by rewrite /si_key /SK e_si.
     move: (e_si) => /Spec.of_list_inj /(f_equal (λ l, nth 0 l (TInt 0))) /= eK.
@@ -260,11 +278,9 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
     iDestruct "env'" as "[(#p_pw & #pubp_u' & #pubP_u' & #pubP_s')
                           | (%p_u & %ep & %eP & #pubP_u' & #pair)]".
     + (* Forged envelope: the password is public, so make the ephemeral public
-         too, and with it the key. *)
-      iMod (term_meta_set (opN.@"failed") true with "tok_failed") as "#failed";
-        first solve_ndisj.
-      iAssert (public (TNonce x_u)) as "#p_x_u".
-      { iDestruct "Hprivatex_u" as "[_ s]". iApply "s". by iIntros "!> !>". }
+         too, and with it the key: a forged envelope may carry an inconsistent
+         key pair, which the agreement argument cannot handle. *)
+      iMod (secret_public with "s_xu") as "#p_x_u".
       iAssert (public hK) as "#p_hK"; first by iApply public_hmqv_K.
       iAssert (public K) as "#p_K".
       { iApply public_THash; iLeft; iApply public_tag.
@@ -274,49 +290,57 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
         iApply public_of_list => /=. by do !iSplit => //. }
       iModIntro.
       iExists si_s.
-      rewrite /session /compromised eSK.
+      rewrite /session /compromised /states_pw eSK.
       do 3?(iSplit; first by []).
       iSplit => //. iSplit => //.
       iSplit.
-      { iSplit => //. iSplit; first by iIntros "!> _".
+      { iSplit => //.
+        iSplit; first by iIntros "!> _"; iNext; iModIntro.
+        iSplit; first by iIntros "!> _".
         by iLeft; iSplit. }
-      iSplit; first by iLeft.
+      iSplitL ""; first by iLeft.
+      iSplitL ""; first by iLeft.
       iLeft. iApply public_of_list => /=. by do !iSplit => //.
     + (* Honest envelope: both ephemerals are honest, so the key stays secret
-         whatever happens to the password. *)
+         unless a party's whole state leaks. *)
       subst p_u' P_u'.
       iPoseProof "pair" as
-        "(%p_s & %eP_s & %p_u_s' & #pubP_s' & _ & _ & #pred_p_u & #pred_p_s
+        "(%p_s & %eP_s & %p_u_s' & #pubP_s' & #key_p_u & #key_p_s
           & #priv_p_u & #priv_p_s)".
       subst P_s'.
       have [epa [epb [eXs eXu]]] :=
         @hmqv_K_inj' opN g "d" "e" p_u x_u p_s p_u_s x_s p_s_s X_s X_u_s
-                    gNX gNm gNi tags eKK.
-      iMod (term_meta_set (opN.@"failed") false with "tok_failed") as "#failed";
-        first solve_ndisj.
-      iAssert (eph_seed x_u) as "#eph_u".
-      { iSplit => //. iIntros "!> #p_x".
-        iDestruct "Hprivatex_u" as "[s _]".
-        iDestruct ("s" with "p_x") as "#contra". iNext.
-        by iPoseProof (term_meta_agree with "failed contra") as "%". }
+                    gNX gNm gNi tags_c eKK.
+      subst p_u_s p_s_s uid_s α_s X_u_s.
       have x_u_s : x_u ≠ x_s.
-        by move=> e'; apply: X_u_x_s; rewrite eXu e'.
-      subst X_u_s.
+        by move=> e'; apply: X_u_x_s; rewrite e'.
+      have x_u_ps : x_u ≠ p_s.
+        by move=> e'; apply: X_u_p_s; rewrite e'.
       iEval (rewrite -eSK) in "mintedSK".
-      iPoseProof (honest_session_ok uid_s α_s p_u_s p_s_s x_u_s
-                    with "HpredSK HpredK eph_u eph_s mintedSK") as "#[ok1 ok2]".
-      iMod ("ready" with "N_φ [tok_ready]") as "res" => //.
-        by rewrite /si_s /= -eα.
+      iPoseProof (honest_session_ok uid α p_u_s' x_u_s x_u_ps x_s_pu
+                    with "HpredSK HpredK pubuid pubα key_p_u key_p_s key_xu
+                          key_xs mintedSK") as "#[ok1 ok2]".
+      iMod ("ready" with "N_φ tok_ready") as "res".
+      iMod ("hook" $! si_s x_u with "[//] s_xu tok_res") as "[gift keep]".
+      iMod (opaque_ready_alloc si_s Resp with "N_φ gift") as "#ready_u".
       iModIntro.
       iExists si_s.
       do 3?(iSplit; first by []).
       iSplit => //. iSplit => //.
       iSplit.
-      { iSplit => //. iSplit; first by iApply "ok2". by iRight. }
-      iSplit; first by iRight.
+      { iSplit => //.
+        iSplit.
+        { by iApply (states_pw_intro (si := si_s) (p_u := p_u) (p_s := p_s)
+                       pw eq_refl eq_refl with "priv_p_u priv_p_s"). }
+
+        iSplit; first by iApply "ok2". by iRight. }
+      iSplitL "res"; first by iRight.
+      iSplitL "keep"; first by iRight; iSplit.
       iRight. iNext; iModIntro. iExists si_s, x_u.
+
       iSplit; first by [].
-      iSplit; first by iPureIntro; exists uid_s, α_s, (TExp g x_u), p_u_s, p_s_s, x_s.
+      iSplit; first by iPureIntro; exists uid, α, (TExp g x_u), p_u, p_s, x_s.
+      iSplit; first by [].
       by iSplit. }
 wp_apply wp_send => //.
   iDestruct "authu" as "[#p_t | #authu]".
@@ -327,15 +351,20 @@ wp_pures; wp_list; wp_term_of_list; wp_pures.
 have -> : Spec.of_list [uid; SK] = si_result si.
   by rewrite /si_result eSK -euid.
 iApply ("Hhl" $! (Some (si_result si))).
-iModIntro; iRight; iExists si.
+iModIntro; iRight; iExists si, x_u.
 rewrite -eα /release_token.
 iFrame "tok_α tok_rel res".
 iSplit; first by [].
 iSplit; first by rewrite /opaque_session_for -euid eSK; do !iSplit => //.
-(* The steps above stripped the later off [compromised]. *)
-iDestruct "sess" as "(#mSK & #rel & [[#p_pw #p_k] | #sec])".
-- iSplit => //. iSplit => //. iLeft. by iSplit => //.
-- iSplit => //. iSplit => //. by iRight.
+(* The steps above stripped the laters off [compromised] and off the leaked
+   password. *)
+iSplitR "keep"; last first.
+{ iDestruct "keep" as "[#p_pw|keep]"; first by iLeft; iNext.
+  by iRight. }
+iDestruct "sess" as "(#mSK & #st_pw & #rel & [[#p_pw #p_k] | #sec])".
+- iSplit => //. iSplit => //. iSplit => //. iLeft. by iSplit => //.
+- iSplit => //. iSplit => //. iSplit => //. by iRight.
 Qed.
+
 
 End Opaque.

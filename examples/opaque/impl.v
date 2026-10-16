@@ -88,7 +88,10 @@ Definition session : val := λ: "db" "c",
     bind: "file" := AList.find "db" "uid" in
     bind: "file_list" := list_of_term "file" in
     list_match: [ "k_s"; "p_s"; "P_s"; "P_u"; "envelope" ] := "file_list" in
+    (* To guarantee secrecy, the keys must differ. *)
+    guard: (~ eq_term "X_u" "P_s") in
     let: "x_s" := mk_nonce #() in
+
     let: "β" := texp "α" "k_s" in
     let: "X_s" := texp g "x_s" in
     let: "K" :=
