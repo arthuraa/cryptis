@@ -9,6 +9,7 @@ From iris.algebra Require Import max_prefix_list.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import lock ticket_lock.
 From cryptis Require Import lib term cryptis primitives tactics.
+From cryptis.lib Require Import hmqv.
 From cryptis.examples Require Import alist.
 
 Set Implicit Arguments.
@@ -35,24 +36,6 @@ Definition one := TGMulN [].
 Definition OPRF : val := λ: "k",
     λ: "x", H "rw" ["x"; (texp (H' "α" "x") "k")].
 
-(* The HMQV key exchange, as instantiated in the OPAQUE paper (Jarecki,
-   Krawczyk and Xu, Eurocrypt 2018).  With [m_a] the multiplier of one's own
-   static key and [m_b] the multiplier of the peer's, the paper's formula is
-
-     K = (X_b · P_b^m_b) ^ (x_a + m_a·p_a).
-
-   The term algebra has no addition in the exponent, but exponentiation *does*
-   distribute over the Diffie-Hellman group product, so the sum can be traded
-   for a product:
-
-     K = (X_b · P_b^m_b)^x_a · (X_b · P_b^m_b)^(m_a·p_a).
-
-   The client instantiates [(m_a, m_b) := (d, e)] and the server
-   [(m_a, m_b) := (e, d)]; both then compute the same group element. *)
-Definition KE : val := λ: "p_a" "x_a" "m_a" "P_b" "X_b" "m_b",
-    let: "Y" := tgmul "X_b" (texp "P_b" "m_b") in
-    H "K" [ tgmul (texp "Y" "x_a") (texp "Y" (tmul "m_a" "p_a")) ].
-
 Module Client.
 
 Section Client.
@@ -71,11 +54,10 @@ Definition session : val := λ: "uid" "c" "pw",
     bind: "envelope_dec" := AuthDec "rw" "envelope" in
     bind: "list_envelope_dec" := list_of_term "envelope_dec" in
     list_match: [ "p_u"; "P_u"; "P_s" ] := "list_envelope_dec" in
-    (* HMQV's [d = H̄(X_u, ÎdS)] and [e = H̄(X_s, ÎdU)], with the static public
-       keys standing in for the identities. *)
-    let: "d" := H "d" [ "X_u"; "P_s" ] in
-    let: "e" := H "e" [ "X_s"; "P_u" ] in
-    let: "K" := KE "p_u" "x_u" "d" "P_s" "X_s" "e" in
+    (* The static public keys stand in for the identities in HMQV's multipliers
+       [d = H̄(X_u, ÎdS)] and [e = H̄(X_s, ÎdU)], computed inside [hmqv_ke]. *)
+    let: "K" :=
+      H "K" [hmqv_ke opN "d" "e" "p_u" "x_u" "P_u" "X_u" "P_s" "X_s"] in
     let: "ssid'" := H "ssid'" ["uid"; "α"] in
     let: "SK" := prf "SK" [ "K"; "ssid'" ] in
     guard: eq_term "A_s" (prf "A_s" [ "K"; "ssid'" ]) in
@@ -92,7 +74,7 @@ Module Server.
 
 Section Server.
 
-(* OPRF and KE defined entirely in terms of other variables: defined elsewhere *)
+(* OPRF and hmqv_ke defined in terms of other variables: defined elsewhere *)
 (* enforce that other side is consistently the same person *)
 Definition session : val := λ: "db" "c",
     bind: "m1" := list_of_term (recv "c") in
@@ -107,11 +89,11 @@ Definition session : val := λ: "db" "c",
     bind: "file_list" := list_of_term "file" in
     list_match: [ "k_s"; "p_s"; "P_s"; "P_u"; "envelope" ] := "file_list" in
     let: "x_s" := mk_nonce #() in
+
     let: "β" := texp "α" "k_s" in
     let: "X_s" := texp g "x_s" in
-    let: "d" := H "d" [ "X_u"; "P_s" ] in
-    let: "e" := H "e" [ "X_s"; "P_u" ] in
-    let: "K" := KE "p_s" "x_s" "e" "P_u" "X_u" "d" in
+    let: "K" :=
+      H "K" [hmqv_ke opN "e" "d" "p_s" "x_s" "P_s" "X_s" "P_u" "X_u"] in
     let: "ssid'" := H "ssid'" [ "uid"; "α" ] in
     let: "SK" := prf "SK" [ "K"; "ssid'" ] in
     let: "A_s" := prf "A_s" [ "K"; "ssid'" ] in

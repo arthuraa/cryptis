@@ -7,6 +7,7 @@ cryptis/lib/term_set.v
 cryptis/lib/gen_adequacy.v
 cryptis/lib/adequacy.v
 cryptis/lib/dh.v
+cryptis/lib/hmqv.v
 cryptis/lib/replica.v
 cryptis/lib/gmeta.v
 cryptis/lib/nown.v
@@ -125,6 +126,17 @@ examples/opaque/client_proofs.v
 examples/opaque/server_proofs.v
 examples/opaque/game.v
 examples/opaque.v
+
+## HMQV
+
+examples/hmqv/impl.v
+examples/hmqv/proofs/base.v
+examples/hmqv/proofs/initiator.v
+examples/hmqv/proofs/responder.v
+examples/hmqv/proofs.v
+examples/hmqv/game.v
+examples/hmqv/kci.v
+examples/hmqv.v
 
 ## TLS 1.3
 

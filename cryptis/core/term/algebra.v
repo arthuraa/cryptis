@@ -254,6 +254,15 @@ move=> t1_t2; rewrite countE SMS.count_count_mem //.
 by case: (invs_canceled_factors _ _ t1_t2).
 Qed.
 
+Lemma count_mem_factors t1 t2 :
+  count_mem t1 (factors t2) = Z.to_nat (count t1 t2).
+Proof.
+case: (decide (t1 ∈ factors t2)) => t1_t2.
+  by rewrite (count_count_mem _ _ t1_t2) Nat2Z.id.
+have := not_elem_of_count _ _ t1_t2.
+move/not_elem_of_count_mem: t1_t2 => ->; lia.
+Qed.
+
 Lemma factors_TInv t : factors (TInv t) ≡ₚ TInv <$> factors t.
 Proof.
 have e: ∀ t0, t0 ∈ factors (TInv t) ↔ t0 ∈ (TInv <$> factors t).
@@ -867,6 +876,14 @@ apply: unfold_term_inj; rewrite !unfold_expo unfold_TExp unfold_TMulN /=.
 by rewrite unfold_expo; apply: PreTerm.expo_exp.
 Qed.
 
+Lemma expo_TExp_expN b e :
+  negb (is_exp b) → negb (is_gmul b) → negb (is_ginv b) →
+  expo (TExp b e) = e.
+Proof.
+move=> gNX gNm gNi.
+by rewrite expo_TExp // expo_expN // TMulN_cat /= TMulN1.
+Qed.
+
 Lemma TExp_gfactors b e : TExp b e = TGMulN ((λ t, TExp t e) <$> gfactors b).
 Proof.
 apply: unfold_term_inj; rewrite unfold_TExp unfold_TGMulN.
@@ -935,6 +952,13 @@ exact: PreTerm.exp_ginv.
 Qed.
 
 Definition exps pt := factors (expo pt).
+
+Lemma exps_TExp_expN b e :
+  negb (is_exp b) → negb (is_gmul b) → negb (is_ginv b) →
+  exps (TExp b e) = factors e.
+Proof.
+by move=> gNX gNm gNi; rewrite /exps expo_TExp_expN //.
+Qed.
 
 Lemma Nginv_TExp b e :
   negb (is_gmul b) -> negb (is_ginv b) -> negb (is_ginv (TExp b e)).

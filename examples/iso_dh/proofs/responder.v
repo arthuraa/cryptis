@@ -74,24 +74,23 @@ set pkR := Spec.pkey skR.
 iIntros "%Φ (#chan_c & #? & (#? & #?) & #N_φ &
              #p_ga & #m_skI & #m_skR & res & #failed) Hpost".
 wp_lam. wp_pures. wp_apply wp_pkey. wp_pures.
-wp_apply (wp_mk_nonce_freshN {[ga]}
+wp_apply (wp_mk_nonce_freshN ∅
           (λ b, ⌜failed⌝ ∨ released ga ∧ released (TExp (TInt 0) b))%I
           dh_key_share
           (λ b, {[TExp (TInt 0) b]}))
        => //.
-- iIntros "%". rewrite elem_of_singleton public_minted. by iIntros "->".
+- by iIntros "% %contra".
 - iIntros "%b".
   rewrite big_sepS_singleton minted_TExp //.
   rewrite minted_TInt /= bi.True_and.
   iModIntro. by iApply bi.equiv_iff.
-iIntros "%b %fresh_b #m_b #s_b #dh_gb _ token".
+iIntros "%b _ #m_b #s_b #dh_gb _ token".
 have Nm_b : negb (is_mul (TNonce b)) by [].
 (* [dh.v] takes the generator as a parameter; ISO-DH always uses [TInt 0]. *)
 have NInt : negb (is_exp (TInt 0)) by [].
 have NIntM : negb (is_gmul (TInt 0)) by [].
 have NIntI : negb (is_ginv (TInt 0)) by [].
 iAssert (public (TInt 0)) as "#p_g"; first by rewrite public_TInt.
-have {}fresh_b: ¬ subterm b ga by apply: fresh_b; exact/elem_of_singleton.
 rewrite bi.intuitionistic_intuitionistically.
 set gb := TExp (TInt 0) b.
 set gab := TExp ga b.
@@ -162,7 +161,7 @@ iAssert (|={⊤}=>
   iDestruct "inv" as "(%a & %gb' & %skR' & %e_m3 & comp)".
   case/Spec.of_list_inj: e_m3
     => -> <- /Spec.sign_pkey_inj <- {ga gb' skR'}
-    in fresh_b gb gab si *.
+    in gb gab si *.
   rewrite TExpC in gab si *.
   iDestruct "comp" as "[comp|comp]".
   - iMod (term_meta_set (iso_dhN.@"failed") true with "token_failed")

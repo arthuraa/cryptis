@@ -3,7 +3,7 @@ From mathcomp Require Import ssreflect.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import par.
 From cryptis Require Import lib term cryptis primitives tactics role.
-From cryptis.lib Require Import dh.
+From cryptis.lib Require Import dh hmqv.
 
 From cryptis.examples Require Import alist.
 From cryptis.examples.opaque Require Import impl shared.
@@ -68,18 +68,14 @@ wp_apply (wp_mk_nonce_freshN ∅ (fun _ => public pw)%I dh_key_share
 iIntros "%p_s _ #Hmintedp_s #Hprivatep_s #Hexpp_s #Hexpp_sV Htokenp_sV".
 rewrite big_sepS_singleton.
 wp_pures.
-(* Fresh against [p_s] itself: distinctness is all the pair predicate records. *)
-wp_apply (wp_mk_nonce_freshN {[TNonce p_s]} (fun _ => public pw)%I dh_key_share
-                                              (fun t =>  {[(TInv t)]})) => //.
-- by iIntros "%"; rewrite elem_of_singleton; iIntros "->".
+wp_apply (wp_mk_nonce_freshN ∅ (fun _ => public pw)%I dh_key_share
+                               (fun t =>  {[(TInv t)]})) => //.
+- by iIntros "%_ %contra".
 - iIntros "%t".
   rewrite big_sepS_singleton minted_TInv.
   by iModIntro; auto.
-iIntros "%p_u %Hfreshp_u #Hmintedp_u #Hprivatep_u #Hexpp_u #Hexpp_uV Htokenp_uV".
+iIntros "%p_u _ #Hmintedp_u #Hprivatep_u #Hexpp_u #Hexpp_uV Htokenp_uV".
 rewrite big_sepS_singleton.
-have Hneq : p_u ≠ p_s.
-  move=> e; apply: (Hfreshp_u (TNonce p_s)); first by rewrite elem_of_singleton.
-  by rewrite e.
 wp_pures.
 wp_apply wp_texp; wp_pures.
 wp_apply wp_texp.
@@ -87,16 +83,15 @@ wp_list; wp_term_of_list.
 wp_lam; wp_pures.
 wp_apply wp_senc'.
 wp_list; wp_term_of_list.
-have NInt : negb (is_exp g) by [].
-have NIntM : negb (is_gmul g) by [].
-have NIntI : negb (is_ginv g) by [].
 have Nm_s : negb (is_mul (TNonce p_s)) by [].
 have Nm_u : negb (is_mul (TNonce p_u)) by [].
 iAssert (public g) as "#pubg"; first by iApply public_TInt.
 iAssert (public (TExp g p_s)) as "#pubP_s".
-  by iApply (public_dh_share NInt NIntM NIntI Nm_s with "pubg Hmintedp_s Hexpp_s").
+  by iApply (public_dh_share (g := g) I I I Nm_s
+               with "pubg Hmintedp_s Hexpp_s").
 iAssert (public (TExp g p_u)) as "#pubP_u".
-  by iApply (public_dh_share NInt NIntM NIntI Nm_u with "pubg Hmintedp_u Hexpp_u").
+  by iApply (public_dh_share (g := g) I I I Nm_u
+               with "pubg Hmintedp_u Hexpp_u").
 iApply "post".
 iExists k_s, p_s, (TExp g p_u), _.
 do !iSplit => //.
@@ -133,22 +128,26 @@ do !iSplit => //.
   by do !iSplit => //.
 Qed.
 
-Lemma wp_server_session (db c : val) pw_of (alist : gmap term val) φ :
+Lemma wp_server_session (db c : val) pw_of (alist : gmap term val) φ ψ :
 {{{ cryptis_ctx
     ∗ opaque_ctx
     ∗ opaque_pred φ
     ∗ channel c
     ∗ AList.is_alist db alist
     ∗ opaque_db pw_of alist
-    ∗ (∀ si, term_token (si_sshare si) (↑opN.@"res") ={⊤}=∗
-             φ si Init ∗ φ si Resp)
+    ∗ (∀ si (x_s : nonce),
+         ⌜si_sshare si = TExp g x_s⌝ -∗
+         secret x_s -∗
+         term_token (si_sshare si) (↑opN.@"res") ={⊤}=∗
+         φ si Init ∗ ψ x_s)
   }}}
     Server.session db c
   {{{ r, RET (repr r);
       AList.is_alist db alist ∗
-      (⌜r = None⌝ ∨ ∃ si,
+      (⌜r = None⌝ ∨ ∃ si (x_s : nonce),
          ⌜r = Some (si_result si)⌝ ∗
          ⌜server_session si⌝ ∗
+         ⌜si_sshare si = TExp g x_s⌝ ∗
          opaque_session_for (si_uid si) si ∗
          (∃ (k_s p_s : nonce) envelope,
             ⌜alist !! si_uid si =
@@ -157,12 +156,13 @@ Lemma wp_server_session (db c : val) pw_of (alist : gmap term val) φ :
          session (pw_of (si_uid si)) si ∗
          release_token (si_sshare si) ∗
          term_token (si_sshare si) (⊤ ∖ ↑opN) ∗
-         φ si Resp) }}}.
+         ψ x_s ∗
+         (public (si_key si) ∨ φ si Resp)) }}}.
 Proof.
 iIntros "%ϕ".
 rewrite /opaque_db big_sepM_forall.
 iIntros "(#Cryptis & (_ & #HpredA_s & #HpredA_u & #HpredSK & #HpredK & _ & _)
-          & #N_φ & #Hc & Hdb & #Hmapcontents & res) Hhl".
+          & #N_φ & #Hc & Hdb & #Hmapcontents & hook) Hhl".
 wp_lam; wp_pures.
 wp_apply (wp_recv with "Hc"); iIntros "%m1 #Hpubm1".
 wp_list_of_term m1; wp_pures; last first.
@@ -178,9 +178,10 @@ case db_uid: (alist !! uid) => [file|]; wp_pures; last first.
 iDestruct ("Hmapcontents" $! uid file with "[//]") as
     "[_ (%k_s & %p_s & %P_u & %envelope &
          %e & #Hmk_s & #Hprivk_s & #Hexpk_s & #Hexpk_sV &
-         #HpubP_s & #Hpenvelope & %p_u & %HP_u & %p_s_u &
-         #HpubP_u & #Hminp_s & #Hminp_u & #Hexpp_s & #Hexpp_u & #Hprivp_s
-         & #Hprivp_u)]".
+         #HpubP_s & #Hpenvelope & %p_u & %HP_u &
+         #HpubP_u & #Hkeyp_s & #Hkeyp_u & #Hprivp_s & #Hprivp_u)]".
+iPoseProof "Hkeyp_s" as "[#Hminp_s #Hexpp_s]".
+iPoseProof "Hkeyp_u" as "[#Hminp_u #Hexpp_u]".
 set P_s := TExp g p_s.
 rewrite !subst_list_match /= e.
 wp_apply wp_list_of_term.
@@ -197,41 +198,35 @@ iAssert (minted α) as "#minα". by iApply public_minted.
 iAssert (minted X_u) as "#minX_u". by iApply public_minted.
 iAssert (minted P_s) as "#minP_s". by iApply public_minted.
 iAssert (minted (TExp g p_u)) as "#minP_u". by iApply public_minted.
-(* The fresh ephemeral comes with a token on the server's share, as in
-   [iso_dh]; freshness against the peer's share keeps the two ephemerals
-   apart. *)
-wp_apply (wp_mk_nonce_freshN {[X_u]} (fun _ => False)%I (fun t => dh_key_share t)%I
+(* The ephemeral is a [secret] of its owner, with a token on the server's
+   share as in [iso_dh]. *)
+iMod pending_alloc as (γ) "pend".
+wp_apply (wp_mk_nonce_freshN ∅ (λ _, shot γ 1)%I dh_key_share
             (fun t => {[TExp g t]})) => //.
-  by iIntros "%"; rewrite elem_of_singleton; iIntros "->".
+  by iIntros "% %contra".
   iIntros "%t"; rewrite big_sepS_singleton; iModIntro; iSplit.
   - iIntros "#?"; by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
   - rewrite (minted_TExp t) //; by iIntros "[_ ?]".
-iIntros "%x_s %fresh_x_s #Hmintedx_s #Hprivatex_s #Hexpx_s #Hexpx_sV tok_Xs".
+iIntros "%x_s _ #Hmintedx_s #Hprivatex_s #Hexpx_s #Hexpx_sV tok_Xs".
 rewrite big_sepS_singleton.
-have X_u_x_s : X_u ≠ TExp g x_s.
-  move=> e; apply: (fresh_x_s X_u); first by rewrite elem_of_singleton.
-  rewrite e; apply: subterm_exps.
-  by rewrite exps_TExp_g factors_Nmul // list_elem_of_singleton.
-iPoseProof (eph_seed_intro with "Hprivatex_s Hexpx_s") as "#eph_s".
+iAssert (□ (public x_s ↔ ▷ shot γ 1))%I as "#s_xs'".
+{ iModIntro; iSplit.
+  - iIntros "#p". iDestruct ("Hprivatex_s" with "p") as "#s". iNext.
+    by iDestruct "s" as "#s".
+  - iIntros "#s". iApply "Hprivatex_s". iNext. by iModIntro. }
+iPoseProof (secret_alloc with "s_xs' pend") as "s_xs".
+iAssert (hmqv_key x_s) as "#key_xs"; first by iSplit.
 set si := server_si uid α X_u (TExp g p_u) p_s x_s.
 wp_pures.
 wp_apply wp_texp; wp_pures.
 wp_apply wp_texp; wp_pures.
-(* [d := H "d" [X_u; P_s]] and [e := H "e" [X_s; P_u]] *)
-wp_list; wp_apply wp_H; wp_pures.
-wp_list; wp_apply wp_H; wp_pures.
-wp_apply wp_ke; wp_list.
+wp_apply wp_hmqv_ke; wp_list; wp_apply wp_H; wp_list.
 wp_apply wp_H; wp_list.
 wp_apply wp_prf; wp_list.
 wp_apply wp_prf; wp_list.
 wp_term_of_list; wp_pures.
-iAssert (minted (hash_result "d" (Spec.of_list [X_u; P_s]))) as "#mintedd".
-{ iApply minted_hash_result; iApply minted_of_list => /=.
-  by do !iSplit => //. }
-iAssert (minted (hash_result "e" (Spec.of_list [TExp g x_s; TExp g p_u])))
-  as "#mintede".
-{ iApply minted_hash_result; iApply minted_of_list => /=; do !iSplit => //=.
-  by iApply all_minted_TExp; iSplit => //; iApply minted_TInt. }
+iAssert (minted (TExp g x_s)) as "#minX_s".
+{ by iApply all_minted_TExp; iSplit => //; iApply minted_TInt. }
 iAssert (minted (si_key si)) as "#mintedSK".
 { iApply minted_hash_result; iApply minted_of_list; rewrite /=; do !iSplit => //.
   - iApply minted_hash_result; rewrite minted_of_list /=; iSplit => //.
@@ -239,12 +234,15 @@ iAssert (minted (si_key si)) as "#mintedSK".
   - iEval (rewrite minted_hash_result minted_of_list /=).
     by eauto. }
 (* The caller's resources for this session come from the [↑opN.@"res"] slice
-   of the token on the server's share; the client's copy is escrowed at once.
-   The part of the token outside [↑opN] goes back to the caller. *)
+   of the token on the server's share; the client's copy is escrowed at once,
+   and the [ready] slice will redeem the client's.  The part of the token
+   outside [↑opN] goes back to the caller. *)
 iDestruct (term_token_difference (TExp g x_s) (↑opN.@"res") with "tok_Xs")
   as "[tok_res tok_Xs]"; first solve_ndisj.
-iMod ("res" $! si with "tok_res") as "[res_I res_R]".
-iMod (opaque_ready_alloc with "N_φ res_I") as "#ready".
+iMod ("hook" $! si x_s with "[//] s_xs tok_res") as "[gift keep]".
+iMod (opaque_ready_alloc si Init with "N_φ gift") as "#ready".
+iDestruct (term_token_difference (TExp g x_s) (↑opN.@"ready") with "tok_Xs")
+  as "[tok_ready tok_Xs]"; first solve_ndisj.
 iDestruct (term_token_difference (TExp g x_s) (↑opN.@"released") with "tok_Xs")
   as "[tok_rel tok_Xs]"; first solve_ndisj.
 iDestruct (term_token_drop (⊤ ∖ ↑opN) with "tok_Xs") as "tok_Xs";
@@ -294,7 +292,7 @@ wp_apply wp_send => //.
       iEval (rewrite minted_of_list /=); do !iSplit => //.
       + iEval (rewrite minted_hash_result minted_of_list /=); iSplit => //.
         by iApply (minted_hmqv_K with
-                     "Hminp_s Hmintedx_s mintede minP_u minX_u mintedd").
+                     "Hminp_s Hmintedx_s minP_s minX_s minP_u minX_u").
       + iEval (rewrite minted_hash_result minted_of_list /=); do !iSplit => //;
         by iApply public_minted.
     iNext; iModIntro.
@@ -303,70 +301,87 @@ wp_apply wp_send => //.
 wp_pures.
 wp_apply (wp_recv with "Hc"); iIntros "%m3 #Hm3pub".
 wp_list; wp_apply wp_prf.
-wp_eq_term Heq; wp_pures; last first.
-  by iApply ("Hhl" $! None); iModIntro; iFrame "Hdb"; iLeft.
+wp_eq_term Heq; last first.
+  by wp_pures; iApply ("Hhl" $! None); iModIntro; iFrame "Hdb"; iLeft.
 iAssert (public (hash_result "A_u" (Spec.of_list [si_K si; si_ssid si])))
   as "#pubA_u"; first by rewrite -Heq.
 (* A valid [A_u] was either forged -- then the key is public, and with it the
    password -- or produced by the honest client, which vouches for its
-   ephemeral. *)
+   ephemeral and hands over the escrowed resources. *)
 iAssert (public (Spec.of_list [si_K si; si_ssid si])
          ∨ ▷ □ A_u_pred (Spec.of_list [si_K si; si_ssid si]))%I as "#auth".
   by iDestruct (public_THashE with "HpredA_u pubA_u") as "[? | [_ ?]]"; eauto.
-wp_list; wp_term_of_list; wp_pures.
-have tags : "e"%string ≠ "d"%string by [].
-have [gf_ss [_ [in_ps in_pu]]] :=
-  @hmqv_key_gfactors p_s p_u x_s "e" "d" P_s X_u tags.
-have p_s_uT : TNonce p_s ≠ TNonce p_u by case=> /p_s_u.
-iAssert (session (pw_of uid) si) as "#sess".
+wp_pures.
+iAssert (states_pw (pw_of uid) si) as "#st_pw".
+
+{ by iApply (states_pw_intro (si := si) (p_u := p_u) (p_s := p_s) (pw_of uid)
+               eq_refl eq_refl with "Hprivp_u Hprivp_s"). }
+
+iAssert (|={⊤}=> session (pw_of uid) si ∗
+                 (public (si_key si) ∨ ▷ φ si Resp))%I
+  with "[tok_ready]" as ">(#sess & res)".
 { iDestruct "auth" as "[#p_t | #auth]".
   - iAssert (public (si_key si)) as "#p_SK".
     { iApply public_THash; iLeft. by iApply public_tag. }
-    iSplit => //.
-    iSplit; first by iIntros "!> _".
-    iLeft; iSplit => //.
-    rewrite public_of_list /=.
-    iDestruct "p_t" as "[p_K _]".
-    iDestruct (public_THashE with "HpredK p_K") as "[p_t | [_ contra]]";
-      last by iNext; iDestruct "contra" as "[]".
-    rewrite public_of_list /=.
-    iDestruct "p_t" as "(p_K' & _)".
-    iEval (rewrite public_gfactors) in "p_K'".
-    iDestruct "p_K'" as "[_ #fs]".
     iAssert (▷ □ public (pw_of uid))%I as "#p_pw".
-    { iApply (public_dh_secret_gen _ p_s_uT in_ps in_pu with
-                "Hprivp_s Hexpp_s Hprivp_u Hexpp_u").
-      by iApply (big_sepL_elem_of with "fs"). }
-    by iNext.
-  - iDestruct "auth" as "(%si' & %x_u & %e & %ss' & %eX & #eph_u)".
+    { rewrite public_of_list /=.
+      iDestruct "p_t" as "[p_K _]".
+      iDestruct (public_THashE with "HpredK p_K") as "[p_t | [_ contra]]";
+        last by iNext; iDestruct "contra" as "[]".
+      rewrite public_of_list /=.
+      iDestruct "p_t" as "(p_K' & _)".
+      have tags : "e"%string ≠ "d"%string by [].
+      iDestruct (@public_hmqv_K_static _ _ _ opN g "e" "d" p_s x_s p_u
+                   P_s (TExp g x_s) X_u I I I tags
+                   with "Hkeyp_s Hkeyp_u p_K'")
+        as "[p|p]".
+      - by iApply "Hprivp_s".
+      - by iApply "Hprivp_u". }
+    iModIntro. iSplit; last by iLeft.
+    iSplit => //. iSplit => //.
+    iSplit; first by iIntros "!> _".
+    iLeft; iSplit => //. by iNext.
+  - iDestruct "auth" as "(%si' & %x_u & %e & %ss' & %eX & #key_xu & #ready_u)".
     have ss : server_session si by exists uid, α, X_u, p_u, p_s, x_s.
     have ek : si_key si = si_key si' by rewrite {2}/si_key -e.
-    have [_ eXu] := server_session_key_inj ss ss' ek.
-    rewrite /si /= eX in eXu.
-    have x_u_s : x_u ≠ x_s.
-      by move=> e'; apply: X_u_x_s; rewrite eXu e'.
+    have e_si := server_session_key_inj ss ss' ek.
+    have eXu : X_u = TExp g x_u by rewrite -eX -e_si.
     subst X_u.
-    iPoseProof (honest_session_ok uid α p_u p_s x_u_s
-                  with "HpredSK HpredK eph_u eph_s mintedSK") as "#[ok1 ok2]".
-    iSplit => //.
+    iPoseProof (honest_session_ok uid α p_u p_s x_u x_s
+                  with "HpredSK HpredK p_uid p_α Hkeyp_u Hkeyp_s key_xu key_xs
+                        mintedSK") as "#[ok1 ok2]".
+    subst si'.
+    iMod ("ready_u" with "N_φ tok_ready") as "res".
+
+    iModIntro. iSplit; last by iRight.
+    iSplit => //. iSplit => //.
     iSplit; first by iApply "ok2".
     by iRight. }
+wp_list; wp_term_of_list; wp_pures.
 iModIntro.
 iApply ("Hhl" $! (Some (si_result si))).
+
 iFrame "Hdb".
-iRight; iExists si.
+iRight; iExists si, x_s.
 have -> : si_sshare si = TExp g x_s by [].
 have -> : si_uid si = uid by [].
 rewrite /release_token.
-iFrame "tok_Xs tok_rel res_R".
+iFrame "tok_Xs tok_rel keep res".
 iSplit; first by [].
 iSplit; first by iPureIntro; exists uid, α, X_u, p_u, p_s, x_s.
+iSplit; first by [].
 iSplit.
+
   by do !iSplit => //.
 iSplit.
   iExists k_s, p_s, envelope; iPureIntro.
   by rewrite /si /server_si /= db_uid.
-by iApply "sess".
+(* The steps above stripped the later off [compromised]. *)
+iDestruct "sess" as "(#mSK & #st_pw' & #rel & [[#p_pw #p_k] | #sec])".
+- iSplit => //. iSplit => //. iSplit => //. iLeft. by iSplit => //.
+
+- iSplit => //. iSplit => //. iSplit => //. by iRight.
 Qed.
+
 
 End Opaque.

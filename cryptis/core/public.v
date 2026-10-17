@@ -7,6 +7,7 @@ From iris.bi Require Import fixpoint_mono.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib.
 From cryptis.lib Require Import gmeta nown saved_prop size_rec_pred sms.
+From cryptis.lib Require Import list_sort.
 From cryptis.core Require Import term minted term_meta.
 
 Set Implicit Arguments.
@@ -695,37 +696,60 @@ Qed.
 
 Lemma exp_pred_inv_gen ts t1 t2 :
   t1 ∈ ts →
+  ts ⊆+ exps t2 →
+  exp_pred t1 t2 -∗
+  ∃ t, ⌜t ∈ ts⌝ ∧ (
+    public t ∨
+    ∃ t3, ⌜base t3 = base t2⌝ ∧ ⌜ts ⊆+ exps t3⌝ ∧ exp_pred_base t t3).
+Proof.
+iIntros "%t1_ts %ts_t2 dh"; iRevert (ts t1_ts ts_t2); iRevert (t1 t2) "dh".
+iApply exp_pred_ind; eauto 10.
+- iIntros "!> %ts %t1 %t2 %atom_ts %ts_t2 #p_ts #base %ts' %t1_ts' %ts'_t2".
+  (* [t1 ∈ ts' ⊆+ exps t2] makes [t2] an exponential, hence atom-headed *)
+  have xt2 := is_exp_of_exps (elem_of_submseteq _ _ _ t1_ts' ts'_t2).
+  have Nm2 := is_exp_Ngmul _ xt2; have Ni2 := is_exp_Nginv _ xt2.
+  iExists t1; iSplit=> //; iRight; iExists (TExpN t2 ts).
+  have baseE : base (TExpN t2 ts) = base t2.
+    by rewrite /TExpN (base_TExp _ _ Nm2 Ni2).
+  rewrite baseE; do !iSplit => //; iPureIntro.
+  etrans; first exact: ts'_t2.
+  apply/submseteq_count_mem => t; rewrite /exps !count_mem_factors.
+  case: (decide (t ∈ factors (expo t2))) => [t_t2|/not_elem_of_count];
+    last lia.
+  have ts_t: ∀ t', t' ∈ ts → t ≠ TInv t'.
+    by move=> t' /ts_t2 t'_t2 t'_t; apply: t'_t2; rewrite -t'_t.
+  have := @exps_count_TExpNW t t2 ts Nm2 Ni2 atom_ts ts_t; lia.
+- iIntros "!> %t %t1 %t2 %Nm_t %Nm_t2 %Ni_t2 %t_t2".
+  iIntros "#dh_t1 IH_t1 #dh_t IH_t %ts %t1_ts %ts_t2'".
+  rewrite (base_TExp _ _ Nm_t2 Ni_t2).
+  case: (decide (t ∈ ts)) => t_ts; first by iApply "IH_t".
+  iApply "IH_t1"; iPureIntro => //.
+  apply/submseteq_count_mem => t3; move/submseteq_count_mem/(_ t3): ts_t2'.
+  rewrite /exps !count_mem_factors (count_expo_TExp _ _ _ Nm_t2 Ni_t2).
+  case: (decide (t3 ∈ ts)) => [t3_ts|/not_elem_of_count_mem ->]; last lia.
+  have t3_nin : t3 ∉ factors t.
+    by rewrite factors_Nmul // list_elem_of_singleton; congruence.
+  have := not_elem_of_count _ _ t3_nin; lia.
+Qed.
+
+Lemma exp_pred_inv_gen_set ts t1 t2 :
+  t1 ∈ ts →
   ts ⊆ exps t2 →
   exp_pred t1 t2 -∗
   ∃ t, ⌜t ∈ ts⌝ ∧ (
     public t ∨
     ∃ t3, ⌜base t3 = base t2⌝ ∧ ⌜ts ⊆ exps t3⌝ ∧ exp_pred_base t t3).
 Proof.
-iIntros "%t1_ts %ts_t2 dh"; iRevert (ts t1_ts ts_t2); iRevert (t1 t2) "dh".
-iApply exp_pred_ind; eauto 10.
-- iIntros "!> %ts %t1 %t2 %atom_ts %ts_t2 #p_ts #base %ts' %t1_ts' %ts'_t2".
-  (* [t1 ∈ ts' ⊆ exps t2] makes [t2] an exponential, hence atom-headed *)
-  have xt2 := is_exp_of_exps (ts'_t2 _ t1_ts').
-  have Nm2 := is_exp_Ngmul _ xt2; have Ni2 := is_exp_Nginv _ xt2.
-  iExists t1; iSplit=> //; iRight; iExists (TExpN t2 ts).
-  have baseE : base (TExpN t2 ts) = base t2.
-    by rewrite /TExpN (base_TExp _ _ Nm2 Ni2).
-  rewrite baseE; do !iSplit => //; iPureIntro => t t_ts'.
-  have ts_t: ∀ t', t' ∈ ts → t ≠ TInv t'.
-    by move=> t' /ts_t2 t'_t2 t'_t; apply: t'_t2; rewrite -t'_t; eauto.
-  move/ts'_t2: t_ts'; rewrite /exps -!count_gt0 => t_ts'.
-  have Hmono := @exps_count_TExpNW t t2 ts Nm2 Ni2 atom_ts ts_t.
-  move: t_ts' Hmono; lia.
-- iIntros "!> %t %t1 %t2 %Nm_t %Nm_t2 %Ni_t2 %t_t2".
-  iIntros "#dh_t1 IH_t1 #dh_t IH_t %ts %t1_ts %ts_t2'".
-  rewrite (base_TExp _ _ Nm_t2 Ni_t2).
-  case: (decide (t ∈ ts)) => t_ts; first by iApply "IH_t".
-  iApply "IH_t1"; iPureIntro => // t3 t3_ts.
-  have t3_nin : t3 ∉ factors t.
-    by rewrite factors_Nmul // list_elem_of_singleton; congruence.
-  have := not_elem_of_count _ _ t3_nin.
-  move: (ts_t2' _ t3_ts).
-  by rewrite /exps -!count_gt0 (count_expo_TExp _ _ _ Nm_t2 Ni_t2); lia.
+iIntros "%t1_ts %ts_t2 #dh".
+have t1_ts' : t1 ∈ remove_dups ts by rewrite elem_of_remove_dups.
+have ts_t2' : remove_dups ts ⊆+ exps t2.
+  apply: NoDup_submseteq; first exact: NoDup_remove_dups.
+  by move=> t /elem_of_remove_dups /ts_t2.
+iDestruct (exp_pred_inv_gen t1_ts' ts_t2' with "dh") as "(%t & %t_ts & #H)".
+rewrite elem_of_remove_dups in t_ts; iExists t; iSplit => //.
+iDestruct "H" as "[H|(%t3 & %e & %ts_t3 & #H)]"; first by iLeft.
+iRight; iExists t3; do !iSplit => //; iPureIntro => t' t'_ts.
+by apply: (elem_of_submseteq _ _ _ _ ts_t3); rewrite elem_of_remove_dups.
 Qed.
 
 Lemma exp_pred_inv t1 t2 :
@@ -734,7 +758,7 @@ Lemma exp_pred_inv t1 t2 :
   ∃ t, ⌜t ∈ exps t2⌝ ∧ (
     public t ∨
     ∃ t3, ⌜base t3 = base t2⌝ ∧ ⌜exps t2 ⊆ exps t3⌝ ∧ exp_pred_base t t3).
-Proof. by move=> t1_t2; iApply exp_pred_inv_gen. Qed.
+Proof. by move=> t1_t2; iApply exp_pred_inv_gen_set. Qed.
 
 Lemma exp_pred_inv_same t1 t2 :
   t1 ∈ exps t2 →
@@ -744,7 +768,7 @@ Lemma exp_pred_inv_same t1 t2 :
 Proof.
 iIntros "%t1_t2 #dh"; have {}t1_t2: [t1] ⊆ exps t2 by set_solver.
 have t1_t1: t1 ∈ [t1] by set_solver.
-iPoseProof (exp_pred_inv_gen t1_t1 t1_t2 with "dh") as "(%t & %t_t1 & H)".
+iPoseProof (exp_pred_inv_gen_set t1_t1 t1_t2 with "dh") as "(%t & %t_t1 & H)".
 move: t_t1; rewrite list_elem_of_singleton => {t} ->.
 iDestruct "H" as "[H|(%t3 & #? & %t1_t3 & #base)]"; first by eauto.
 iRight; iExists t3; iFrame "#"; iPureIntro; set_solver.
