@@ -41,7 +41,9 @@ In the `examples` directory you will find our case studies:
   owners and may leak; a session key is public only once a party's whole state
   (long-term and ephemeral key) has.  The game (in its own file) lets the
   attacker choose between learning the long-term keys and learning every
-  ephemeral.
+  ephemeral.  A second game (`kci.v`) checks resistance to key-compromise
+  impersonation: the attacker learns the long-term key of a party of its
+  choice, and that party's session key must still stay secret.
 
 - `tls13`: TLS 1.3 handshake (partial; `impl.v` + per-component `proofs/`).
 - `challenge_response`, `composite_game`, `permanent`, `counter`: smaller

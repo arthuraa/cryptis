@@ -135,6 +135,7 @@ examples/hmqv/proofs/initiator.v
 examples/hmqv/proofs/responder.v
 examples/hmqv/proofs.v
 examples/hmqv/game.v
+examples/hmqv/kci.v
 examples/hmqv.v
 
 ## TLS 1.3
