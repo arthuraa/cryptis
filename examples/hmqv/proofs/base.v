@@ -455,8 +455,6 @@ Definition m2_pred t : iProp :=
   ∃ p_a X_a p_b x_b N,
     let si := resp_si p_a X_a p_b x_b in
     ⌜t = Spec.of_list [si_secret si; Tag N]⌝ ∗
-    ⌜X_a ≠ TExp g x_b⌝ ∗
-    ⌜x_b ≠ p_a⌝ ∗
     hmqv_key x_b ∗
     hmqv_ready N p_a p_b si Init.
 
@@ -464,7 +462,6 @@ Definition m3_pred t : iProp :=
   ∃ p_a x_a p_b X_b N,
     let si := init_si p_a x_a p_b X_b in
     ⌜t = Spec.of_list [si_secret si; Tag N]⌝ ∗
-    ⌜x_a ≠ p_b⌝ ∗
     hmqv_key x_a ∗
     hmqv_ready N p_a p_b si Resp.
 
@@ -497,10 +494,6 @@ Qed.
 (** FIXME: This statement is too cumbersome. *)
 Lemma honest_session_ok p_a p_b x_a x_b :
   let si := resp_si p_a (TExp g x_a) p_b x_b in
-  p_a ≠ p_b →
-  x_a ≠ x_b →
-  x_a ≠ p_b →
-  x_b ≠ p_a →
   hash_pred (hmqvN.@"key") key_pred -∗
   hmqv_key p_a -∗
   hmqv_key p_b -∗
@@ -509,7 +502,7 @@ Lemma honest_session_ok p_a p_b x_a x_b :
   minted (si_key si) -∗
   session_ok si.
 Proof.
-move=> si p_a_b x_a_b x_a_pb x_b_pa.
+move=> si.
 iIntros "#Hpred #key_pa #key_pb #key_xa #key_xb #m_k".
 have ss : resp_session si by exists p_a, (TExp g x_a), p_b, x_b.
 iPoseProof (hmqv_key_public with "key_pa") as "#p_Pa".
@@ -524,8 +517,7 @@ iModIntro; iSplit.
     iDestruct "p_t" as "[p_σ _]".
     iRight.
     iDestruct (@public_hmqv_K_honest _ _ _ hmqvN g "resp" "init" p_b x_b p_a x_a
-                 gNX gNm gNi tags' (not_eq_sym p_a_b) (not_eq_sym x_a_b)
-                 x_b_pa x_a_pb with "key_pb key_xb key_pa key_xa p_σ")
+                 gNX gNm gNi tags' with "key_pb key_xb key_pa key_xa p_σ")
       as "[[#? #?]|[#? #?]]".
     * iRight. iSplit => //. iExists x_b. by iSplit.
     * iLeft. iSplit => //. iExists x_a. by iSplit.

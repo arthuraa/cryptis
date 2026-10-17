@@ -68,18 +68,14 @@ wp_apply (wp_mk_nonce_freshN ∅ (fun _ => public pw)%I dh_key_share
 iIntros "%p_s _ #Hmintedp_s #Hprivatep_s #Hexpp_s #Hexpp_sV Htokenp_sV".
 rewrite big_sepS_singleton.
 wp_pures.
-(* Fresh against [p_s] itself: distinctness is all the pair predicate records. *)
-wp_apply (wp_mk_nonce_freshN {[TNonce p_s]} (fun _ => public pw)%I dh_key_share
-                                              (fun t =>  {[(TInv t)]})) => //.
-- by iIntros "%"; rewrite elem_of_singleton; iIntros "->".
+wp_apply (wp_mk_nonce_freshN ∅ (fun _ => public pw)%I dh_key_share
+                               (fun t =>  {[(TInv t)]})) => //.
+- by iIntros "%_ %contra".
 - iIntros "%t".
   rewrite big_sepS_singleton minted_TInv.
   by iModIntro; auto.
-iIntros "%p_u %Hfreshp_u #Hmintedp_u #Hprivatep_u #Hexpp_u #Hexpp_uV Htokenp_uV".
+iIntros "%p_u _ #Hmintedp_u #Hprivatep_u #Hexpp_u #Hexpp_uV Htokenp_uV".
 rewrite big_sepS_singleton.
-have Hneq : p_u ≠ p_s.
-  move=> e; apply: (Hfreshp_u (TNonce p_s)); first by rewrite elem_of_singleton.
-  by rewrite e.
 wp_pures.
 wp_apply wp_texp; wp_pures.
 wp_apply wp_texp.
@@ -91,9 +87,11 @@ have Nm_s : negb (is_mul (TNonce p_s)) by [].
 have Nm_u : negb (is_mul (TNonce p_u)) by [].
 iAssert (public g) as "#pubg"; first by iApply public_TInt.
 iAssert (public (TExp g p_s)) as "#pubP_s".
-  by iApply (public_dh_share gNX gNm gNi Nm_s with "pubg Hmintedp_s Hexpp_s").
+  by iApply (public_dh_share (g := g) I I I Nm_s
+               with "pubg Hmintedp_s Hexpp_s").
 iAssert (public (TExp g p_u)) as "#pubP_u".
-  by iApply (public_dh_share gNX gNm gNi Nm_u with "pubg Hmintedp_u Hexpp_u").
+  by iApply (public_dh_share (g := g) I I I Nm_u
+               with "pubg Hmintedp_u Hexpp_u").
 iApply "post".
 iExists k_s, p_s, (TExp g p_u), _.
 do !iSplit => //.
@@ -180,7 +178,7 @@ case db_uid: (alist !! uid) => [file|]; wp_pures; last first.
 iDestruct ("Hmapcontents" $! uid file with "[//]") as
     "[_ (%k_s & %p_s & %P_u & %envelope &
          %e & #Hmk_s & #Hprivk_s & #Hexpk_s & #Hexpk_sV &
-         #HpubP_s & #Hpenvelope & %p_u & %HP_u & %p_s_u &
+         #HpubP_s & #Hpenvelope & %p_u & %HP_u &
          #HpubP_u & #Hkeyp_s & #Hkeyp_u & #Hprivp_s & #Hprivp_u)]".
 iPoseProof "Hkeyp_s" as "[#Hminp_s #Hexpp_s]".
 iPoseProof "Hkeyp_u" as "[#Hminp_u #Hexpp_u]".
@@ -193,8 +191,6 @@ rewrite subst_list_match /=.
 wp_list_match => [k_s' p_s' P_s' P_u' envelope' e' | ]; last first.
   by [].
 symmetry in e'; inversion e'; subst; clear e'.
-wp_eq_term X_u_P_s; wp_pures.
-  by iApply ("Hhl" $! None); iModIntro; iFrame "Hdb"; iLeft.
 rewrite public_of_list /=.
 iDestruct "Hpubm1" as "(#p_uid & #p_α & #p_X_u & _)".
 iAssert (minted uid) as "#minuid". by iApply public_minted.
@@ -203,25 +199,16 @@ iAssert (minted X_u) as "#minX_u". by iApply public_minted.
 iAssert (minted P_s) as "#minP_s". by iApply public_minted.
 iAssert (minted (TExp g p_u)) as "#minP_u". by iApply public_minted.
 (* The ephemeral is a [secret] of its owner, with a token on the server's
-   share as in [iso_dh]; freshness against the peer's share and long-term key
-   lets every factor of the key bind two distinct exponents. *)
+   share as in [iso_dh]. *)
 iMod pending_alloc as (γ) "pend".
-wp_apply (wp_mk_nonce_freshN {[X_u; TNonce p_u]} (λ _, shot γ 1)%I
-            dh_key_share (fun t => {[TExp g t]})) => //.
-  iIntros "%t %t_in". move: t_in.
-  rewrite elem_of_union !elem_of_singleton. by case=> ->.
+wp_apply (wp_mk_nonce_freshN ∅ (λ _, shot γ 1)%I dh_key_share
+            (fun t => {[TExp g t]})) => //.
+  by iIntros "% %contra".
   iIntros "%t"; rewrite big_sepS_singleton; iModIntro; iSplit.
   - iIntros "#?"; by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
   - rewrite (minted_TExp t) //; by iIntros "[_ ?]".
-iIntros "%x_s %fresh_x_s #Hmintedx_s #Hprivatex_s #Hexpx_s #Hexpx_sV tok_Xs".
+iIntros "%x_s _ #Hmintedx_s #Hprivatex_s #Hexpx_s #Hexpx_sV tok_Xs".
 rewrite big_sepS_singleton.
-have X_u_x_s : X_u ≠ TExp g x_s.
-  move=> e; apply: (fresh_x_s X_u); first by set_solver.
-  rewrite e; apply: subterm_exps.
-  by rewrite exps_TExp_expN // factors_Nmul // list_elem_of_singleton.
-have x_s_pu : x_s ≠ p_u.
-  move=> e; apply: (fresh_x_s (TNonce p_u)); first by set_solver.
-  by rewrite e; apply: STRefl.
 iAssert (□ (public x_s ↔ ▷ shot γ 1))%I as "#s_xs'".
 { iModIntro; iSplit.
   - iIntros "#p". iDestruct ("Hprivatex_s" with "p") as "#s". iNext.
@@ -343,8 +330,9 @@ iAssert (|={⊤}=> session (pw_of uid) si ∗
         last by iNext; iDestruct "contra" as "[]".
       rewrite public_of_list /=.
       iDestruct "p_t" as "(p_K' & _)".
+      have tags : "e"%string ≠ "d"%string by [].
       iDestruct (@public_hmqv_K_static _ _ _ opN g "e" "d" p_s x_s p_u
-                   P_s (TExp g x_s) X_u gNX gNm gNi tags p_s_u
+                   P_s (TExp g x_s) X_u I I I tags
                    with "Hkeyp_s Hkeyp_u p_K'")
         as "[p|p]".
       - by iApply "Hprivp_s".
@@ -358,12 +346,8 @@ iAssert (|={⊤}=> session (pw_of uid) si ∗
     have ek : si_key si = si_key si' by rewrite {2}/si_key -e.
     have e_si := server_session_key_inj ss ss' ek.
     have eXu : X_u = TExp g x_u by rewrite -eX -e_si.
-    have x_u_s : x_u ≠ x_s.
-      by move=> e'; apply: X_u_x_s; rewrite eXu e'.
-    have x_u_ps : x_u ≠ p_s.
-      by move=> e'; apply: X_u_P_s; rewrite eXu e'.
     subst X_u.
-    iPoseProof (honest_session_ok uid α (not_eq_sym p_s_u) x_u_s x_u_ps x_s_pu
+    iPoseProof (honest_session_ok uid α p_u p_s x_u x_s
                   with "HpredSK HpredK p_uid p_α Hkeyp_u Hkeyp_s key_xu key_xs
                         mintedSK") as "#[ok1 ok2]".
     subst si'.

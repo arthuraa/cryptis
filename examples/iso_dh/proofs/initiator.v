@@ -165,12 +165,11 @@ iAssert (|={⊤}=>
     iSplit; eauto. }
   iMod (lc_fupd_elim_later_pers with "H3 inv") as "{inv} #inv".
   iDestruct "inv"
-    as "(%ga' & %b & %pkI' & %N' & %e_m2 & s_b & pred_b &
-         %fresh_b & res)".
+    as "(%ga' & %b & %pkI' & %N' & %e_m2 & s_b & pred_b & res)".
   have Nm_b : negb (is_mul (TNonce b)) by [].
   case/Spec.of_list_inj: e_m2
       => <- -> /Spec.sign_pkey_inj <- /Tag_inj <- {ga' gb pkI' N'}
-    in fresh_b gab seed si *.
+    in gab seed si *.
   iDestruct "s_b" as "[?|s_b]".
   { iMod (term_meta_set (iso_dhN.@"failed") true with "failed_token")
       as "#?"; first by solve_ndisj.
@@ -190,20 +189,13 @@ iAssert (|={⊤}=>
   iRight. iIntros "!> {s_k1} #p_k".
   rewrite public_senc_key public_of_list /=.
   iDestruct "p_k" as "(_ & _ & _ & _ & p_gab & _)".
-  have b_a: TNonce b ≠ TNonce a.
-    move=> b_a; apply: fresh_b; rewrite /ga -b_a.
-    apply/subtermsP.
-    have ic_b : invs_canceled [TNonce b] := invs_canceled1 Nm_b.
-    rewrite (_ : TExp (TInt 0) b = TExpN (TInt 0) [TNonce b]); last by rewrite /TExpN TMulN1.
-    rewrite subtermsE //=.
-    rewrite [subterms b]subterms_nonce //; set_solver.
   have b_aV : TNonce b ≠ TInv a.
     move=> contra; have: is_inv (TInv a).
       by rewrite (is_inv_TInv (TNonce a) Nm_a).
     by rewrite -contra; case: (b) => //.
   iEval (rewrite /gab TExp2_TExpN) in "p_gab".
   iPoseProof (@public_dh_secret' _ _ _ (TInt 0) (TNonce b) (TNonce a) _
-                NInt NIntM NIntI Nm_b Nm_a b_a b_aV
+                NInt NIntM NIntI Nm_b Nm_a b_aV
                 with "s_b pred_b [] a_pred p_gab") as ">?".
   iModIntro. iApply bi.iff_trans. iSplit; first auto.
   iSplit; eauto. iIntros "[#contra|?]"; auto.

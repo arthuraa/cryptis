@@ -199,13 +199,13 @@ Definition SShare_wf ke : iProp :=
     minted psk ∧ public c_nonce ∧ public s_nonce
   | Dh g cn sn gx y =>
     ⌜negb (is_exp g)⌝ ∧ ⌜negb (is_gmul g)⌝ ∧ ⌜negb (is_ginv g)⌝ ∧ public g ∧ public cn ∧ public sn ∧ public gx ∧
-    ⌜∀ x, subterm x gx → y ≠ x ∧ y ≠ TInv x⌝ ∧
+    ⌜∀ x, subterm x gx → y ≠ TInv x⌝ ∧
     dh_seed (λ _, True)%I y
   | PskDh psk g cn sn gx y =>
     minted psk ∧
     ⌜negb (is_exp g)⌝ ∧ ⌜negb (is_gmul g)⌝ ∧ ⌜negb (is_ginv g)⌝ ∧ public g ∧ public cn ∧ public sn ∧
     public gx ∧
-    ⌜∀ x, subterm x gx → y ≠ x ∧ y ≠ TInv x⌝ ∧
+    ⌜∀ x, subterm x gx → y ≠ TInv x⌝ ∧
     dh_seed (λ _, True)%I y
   end.
 
@@ -247,7 +247,7 @@ case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
     rewrite minted_tag minted_of_list /=.
     by iDestruct "p_ke" as "(_ & _ & ? & _)".
   iIntros (a) "_ #pred_a _ _ %fresh_a"; wp_list.
-  have {}fresh_a: ∀ t, subterm t gx → a ≠ t ∧ a ≠ TInv t.
+  have {}fresh_a: ∀ t, subterm t gx → a ≠ TInv t.
     by move=> t; apply: fresh_a; set_solver.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
   iIntros (sn) "_ #p_sn _ _ token"; wp_list; wp_term_of_list.
@@ -264,7 +264,7 @@ case: ke => [psk' cn|g' cn gx|psk' g' cn gx] /= in e_check *; wp_pures.
     rewrite minted_tag minted_of_list /=.
     by iDestruct "p_ke" as "(_ & _ & _ & ? & _)".
   iIntros (a) "_ #pred_a _ _ %fresh_a"; wp_list.
-  have {}fresh_a: ∀ t, subterm t gx → a ≠ t ∧ a ≠ TInv t.
+  have {}fresh_a: ∀ t, subterm t gx → a ≠ TInv t.
     by move=> t; apply: fresh_a; set_solver.
   wp_bind (mk_nonce _); iApply (wp_mk_nonce (λ _, True)%I (λ _, True)%I) => //.
   iIntros (sn) "_ #p_sn _ _ token"; wp_list; wp_term_of_list.
@@ -402,8 +402,9 @@ case: c_kex e => [psk cn sn|g cn sn x gy|psk g cn sn x gy] /=.
   iPoseProof "dh_x" as "#dh_x2". iDestruct "dh_x2" as "(_ & %Nm_x & _)".
   move/negb_True: (gXN) => ?.
   iDestruct "wf2" as "#(_ & _ & _ & _ & _ & _ & p_gx & %fresh_y & dh_y)".
-  have [??]: y ≠ x ∧ y ≠ TInv x.
-    apply: fresh_y. rewrite (_ : TExp g x = TExpN g [x]); last by rewrite /TExpN TMulN1.
+  have ?: y ≠ TInv x.
+    apply: fresh_y.
+    rewrite (_ : TExp g x = TExpN g [x]); last by rewrite /TExpN TMulN1.
     apply: STExp2; eauto.
     - exact: invs_canceled1 Nm_x.
     - set_solver.
@@ -415,8 +416,9 @@ case: c_kex e => [psk cn sn|g cn sn x gy|psk g cn sn x gy] /=.
   iPoseProof "dh_x" as "#dh_x2". iDestruct "dh_x2" as "(_ & %Nm_x & _)".
   move/negb_True: (gXN) => ?.
   iDestruct "wf2" as "#(_ & _ & _ & _ & _ & _ & _ & p_gx & %fresh_y & dh_y)".
-  have [??]: y ≠ x ∧ y ≠ TInv x.
-    apply: fresh_y. rewrite (_ : TExp g x = TExpN g [x]); last by rewrite /TExpN TMulN1.
+  have ?: y ≠ TInv x.
+    apply: fresh_y.
+    rewrite (_ : TExp g x = TExpN g [x]); last by rewrite /TExpN TMulN1.
     apply: STExp2; eauto.
     - exact: invs_canceled1 Nm_x.
     - set_solver.

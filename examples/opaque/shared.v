@@ -381,7 +381,6 @@ Qed.
 Definition opaque_public_private_pair pw (a : nonce) A : iProp :=
   ∃ (a' : nonce),
     ⌜A = TExp g a'⌝ ∗
-    ⌜a ≠ a'⌝ ∗
     public A ∗
     hmqv_key a ∗
     hmqv_key a' ∗
@@ -398,15 +397,11 @@ Definition A_u_pred (t : term) : iProp :=
     hmqv_key x_u ∗
     opaque_ready si Resp.
 
-(** The server's does the same for the client, and records the distinctness
-    facts the client cannot check itself. *)
+(** The server's does the same for the client. *)
 Definition A_s_pred (t : term) : iProp :=
   ∃ uid α X_u (p_u p_s x_s : nonce),
     let si := server_si uid α X_u (TExp g p_u) p_s x_s in
     ⌜t = Spec.of_list [si_K si; si_ssid si]⌝ ∗
-    ⌜X_u ≠ TExp g x_s⌝ ∗
-    ⌜X_u ≠ TExp g p_s⌝ ∗
-    ⌜x_s ≠ p_u⌝ ∗
     hmqv_key x_s ∗
     public (si_ckey si) ∗ public (si_skey si) ∗
     opaque_ready si Init.
@@ -477,10 +472,6 @@ Qed.
     publish the key. *)
 Lemma honest_session_ok uid α (p_u p_s x_u x_s : nonce) :
   let si := server_si uid α (TExp g x_u) (TExp g p_u) p_s x_s in
-  p_u ≠ p_s →
-  x_u ≠ x_s →
-  x_u ≠ p_s →
-  x_s ≠ p_u →
   hash_pred (opN.@"SK") SK_pred -∗
   hash_pred (opN.@"K") (λ _ : term, False%I) -∗
   public uid -∗
@@ -492,7 +483,7 @@ Lemma honest_session_ok uid α (p_u p_s x_u x_s : nonce) :
   minted (si_key si) -∗
   session_ok si.
 Proof.
-move=> si p_u_s x_u_s x_u_ps x_s_pu.
+move=> si.
 iIntros "#HpredSK #HpredK #p_uid #p_α #key_pu #key_ps #key_xu #key_xs #m_SK".
 have ss : server_session si by exists uid, α, (TExp g x_u), p_u, p_s, x_s.
 iPoseProof (hmqv_key_public with "key_pu") as "#p_Pu".

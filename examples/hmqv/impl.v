@@ -41,7 +41,6 @@ Definition mk_lt_key : val := λ: <>,
   ("p", texp g "p").
 
 Definition initiator : val := λ: "c" "p_a" "P_a" "P_b" "N",
-  guard: (~ eq_term "P_a" "P_b") in
   let: "x_a" := mk_nonce #() in
   let: "X_a" := texp g "x_a" in
   send "c" (term_of_list ["X_a"; "P_a"]);;
@@ -62,7 +61,6 @@ Definition responder_listen : val := λ: "c",
     SOME ("X_a", "P_a")).
 
 Definition responder_confirm : val := λ: "c" "p_b" "P_b" "X_a" "P_a" "N",
-  guard: (~ eq_term "P_a" "P_b") in
   let: "x_b" := mk_nonce #() in
   let: "X_b" := texp g "x_b" in
   let: "σ" :=

@@ -72,29 +72,17 @@ iPoseProof (hmqv_key_public with "key_b") as "#p_Pb".
 iPoseProof (public_minted with "p_Xa") as "#m_Xa".
 iAssert (public g) as "#p_g"; first by rewrite public_TInt.
 wp_lam. wp_pures.
-wp_eq_term e_ab; first by protocol_failure.
-have p_a_b : p_a ≠ p_b by move=> e; apply: e_ab; rewrite e.
-wp_pures.
-(* The ephemeral is a [secret] of its owner, fresh against the peer's share
-   and long-term key so that every factor binds two distinct exponents. *)
+(* The ephemeral is a [secret] of its owner. *)
 iMod pending_alloc as (γ) "pend".
-wp_apply (wp_mk_nonce_freshN {[X_a; TNonce p_a]} (λ _, shot γ 1)%I
-            dh_key_share (λ x, {[TExp g x]})) => //.
-- iIntros "%t %t_in". move: t_in.
-  rewrite elem_of_union !elem_of_singleton. by case=> ->.
+wp_apply (wp_mk_nonce_freshN ∅ (λ _, shot γ 1)%I dh_key_share
+            (λ x, {[TExp g x]})) => //.
+- by iIntros "% %contra".
 - iIntros "%x"; rewrite big_sepS_singleton; iModIntro; iSplit.
   + iIntros "#?"; by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
   + rewrite (minted_TExp x) //; by iIntros "[_ ?]".
-iIntros "%x_b %fresh_b #m_xb #s_xb #pred_xb _ tok_Xb".
+iIntros "%x_b _ #m_xb #s_xb #pred_xb _ tok_Xb".
 rewrite big_sepS_singleton.
 have Nm_xb : negb (is_mul (TNonce x_b)) by [].
-have X_a_xb : X_a ≠ TExp g x_b.
-  move=> e; apply: (fresh_b X_a); first by set_solver.
-  rewrite e; apply: subterm_exps.
-  by rewrite exps_TExp_expN // factors_Nmul // list_elem_of_singleton.
-have x_b_pa : x_b ≠ p_a.
-  move=> e; apply: (fresh_b (TNonce p_a)); first by set_solver.
-  by rewrite e; apply: STRefl.
 iAssert (□ (public x_b ↔ ▷ shot γ 1))%I as "#s_xb'".
 { iModIntro; iSplit.
   - iIntros "#p". iDestruct ("s_xb" with "p") as "#s". iNext.
@@ -148,8 +136,8 @@ iAssert (|={⊤}=>
   - iEval (rewrite public_of_list /=) in "p_t".
     iDestruct "p_t" as "[#p_σ _]".
     iDestruct (@public_hmqv_K_forged _ _ _ hmqvN g "resp" "init" p_b x_b p_a
-                 (TExp g p_b) X_b X_a gNX gNm gNi tags' (not_eq_sym p_a_b)
-                 x_b_pa with "key_b key_xb key_a p_σ") as "#comp".
+                 (TExp g p_b) X_b X_a gNX gNm gNi tags'
+                 with "key_b key_xb key_a p_σ") as "#comp".
     iAssert (public (si_key si)) as "#p_k"; first by iApply public_si_key.
     iModIntro.
     iSplit; last by iLeft.
@@ -159,16 +147,14 @@ iAssert (|={⊤}=>
     iLeft. iDestruct "comp" as "[?|[? ?]]"; first by iLeft.
     iRight. iSplit => //. iExists x_b. by iSplit.
   - iDestruct "auth"
-      as "(%p_a' & %x_a' & %p_b' & %X_b' & %N' & %e' & %x_a'_pb & #key_xa
-          & #ready_a)".
+      as "(%p_a' & %x_a' & %p_b' & %X_b' & %N' & %e' & #key_xa & #ready_a)".
     move: e' => /Spec.of_list_inj [] eσ /Tag_inj eN.
     subst N'.
     have [epb [epa [eXa eXb]]] :=
       @hmqv_K_inj' hmqvN g "resp" "init" p_b x_b p_a p_b' x_a' p_a' X_a X_b'
                    gNX gNm gNi tags' eσ.
     subst p_a' p_b' X_a X_b'.
-    have x_a_b : x_a' ≠ x_b by move=> e'; apply: X_a_xb; rewrite e'.
-    iPoseProof (honest_session_ok p_a_b x_a_b x_a'_pb x_b_pa
+    iPoseProof (honest_session_ok p_a p_b x_a' x_b
                   with "Hkey key_a key_b key_xa key_xb m_k")
       as "#[ok1 ok2]".
     have e_si : init_si p_a x_a' p_b X_b = si.

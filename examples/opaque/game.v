@@ -225,7 +225,7 @@ wp_apply (wp_par (λ x, raw_res' pw Resp x ∗ AList.is_alist db alist)%I
   { iFrame "Halist"; do !iSplit => //.
     iIntros "%si %x_s %e s _". iMod (freeze_secret with "s") as "#s".
     iModIntro. iSplit => //. rewrite /game_pred /= e.
-    by iApply (exp_frozen_intro _ gNm gNi). }
+    by iApply exp_frozen_intro. }
   iNext. iIntros "%r [Halist Hres]". iFrame "Halist".
   iExists r. iSplit; first by [].
   iDestruct "Hres"
@@ -236,12 +236,12 @@ wp_apply (wp_par (λ x, raw_res' pw Resp x ∗ AList.is_alist db alist)%I
   iSplit => //. iSplit => //.
   rewrite /share_of /=. iFrame "rel tok".
   iSplitR "res"; last by iDestruct "res" as "[?|?]"; eauto.
-  iRight. rewrite /eph_share /= eX. by iApply (exp_frozen_intro _ gNm gNi).
+  iRight. rewrite /eph_share /= eX. by iApply exp_frozen_intro.
 - iApply (wp_client_session uid pw c game_pred keep) => //.
   { do !iSplit => //.
     iIntros "%si %x_u %e s _". iMod (freeze_secret with "s") as "#s".
     iModIntro. iSplit => //. rewrite /game_pred /= e.
-    by iApply (exp_frozen_intro _ gNm gNi). }
+    by iApply exp_frozen_intro. }
   iNext. iIntros "%r Hres".
   iExists r. iSplit; first by [].
   iDestruct "Hres" as "[-> | (%si & %x_u & -> & (_ & #p_uid' & _ & _ & _)
@@ -251,7 +251,7 @@ wp_apply (wp_par (λ x, raw_res' pw Resp x ∗ AList.is_alist db alist)%I
   rewrite /share_of /=. iFrame "rel tok".
   iSplitL "keep".
   { iDestruct "keep" as "[#p_pw|[%eX #keep]]"; first by iLeft.
-    iRight. rewrite /eph_share /= eX. by iApply (exp_frozen_intro _ gNm gNi). }
+    iRight. rewrite /eph_share /= eX. by iApply exp_frozen_intro. }
   by iDestruct "res" as "[?|?]"; eauto.
 - iIntros "%vs %vc [[(%rs & -> & Hs) Halist] (%rc & -> & Hc)]".
   iNext.

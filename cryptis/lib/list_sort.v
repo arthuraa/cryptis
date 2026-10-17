@@ -9,9 +9,10 @@
 
     - [count_mem x l] counts the occurrences of [x] in [l] (like mathcomp's
       [count_mem]).  stdpp has no list-counting function, so we define it and
-      prove the multiset characterisation of permutations
-      ([Permutation_count_mem]): two lists are a permutation of each other iff
-      every element occurs equally often.
+      prove the multiset characterisations of permutations
+      ([Permutation_count_mem]) and of inclusion ([submseteq_count_mem]): two
+      lists are a permutation of each other iff every element occurs equally
+      often, and [l1 ⊆+ l2] iff no element occurs more often in [l1].
 
     - lemmas relating [merge_sort R] (for an arbitrary decidable total order [R])
       to membership, [Forall], length and sortedness. *)
@@ -130,6 +131,21 @@ elim: l1 l2 => [|a l1 IH] l2 H.
   { apply/elem_of_count_mem. move: (H a) => /=.
     rewrite bool_decide_eq_true_2 //; lia. }
   rewrite (rem_Permutation Ha); apply: perm_skip.
+  apply: IH => x; rewrite (count_mem_rem x a l2).
+  move: (H x) => /=; case_bool_decide as Hxa; lia.
+Qed.
+
+Lemma submseteq_count_mem l1 l2 :
+  l1 ⊆+ l2 <-> forall x, count_mem x l1 <= count_mem x l2.
+Proof.
+split.
+- case/submseteq_Permutation=> k e x.
+  rewrite (count_mem_Permutation x _ _ e) count_mem_app; lia.
+- elim: l1 l2 => [|a l1 IH] l2 H; first exact: submseteq_nil_l.
+  have Ha : a ∈ l2.
+  { apply/elem_of_count_mem. move: (H a) => /=.
+    rewrite bool_decide_eq_true_2 //; lia. }
+  rewrite (rem_Permutation Ha); apply: submseteq_skip.
   apply: IH => x; rewrite (count_mem_rem x a l2).
   move: (H x) => /=; case_bool_decide as Hxa; lia.
 Qed.

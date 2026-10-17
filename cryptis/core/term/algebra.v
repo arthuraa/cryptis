@@ -254,6 +254,15 @@ move=> t1_t2; rewrite countE SMS.count_count_mem //.
 by case: (invs_canceled_factors _ _ t1_t2).
 Qed.
 
+Lemma count_mem_factors t1 t2 :
+  count_mem t1 (factors t2) = Z.to_nat (count t1 t2).
+Proof.
+case: (decide (t1 ∈ factors t2)) => t1_t2.
+  by rewrite (count_count_mem _ _ t1_t2) Nat2Z.id.
+have := not_elem_of_count _ _ t1_t2.
+move/not_elem_of_count_mem: t1_t2 => ->; lia.
+Qed.
+
 Lemma factors_TInv t : factors (TInv t) ≡ₚ TInv <$> factors t.
 Proof.
 have e: ∀ t0, t0 ∈ factors (TInv t) ↔ t0 ∈ (TInv <$> factors t).

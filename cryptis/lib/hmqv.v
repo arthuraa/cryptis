@@ -4,7 +4,7 @@ From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib term cryptis primitives tactics.
-From cryptis.lib Require Import dh.
+From cryptis.lib Require Import dh list_sort.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -262,14 +262,12 @@ Lemma hmqv_key_gfactors t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b :
   t_a ≠ t_b ->
   ss ∈ gfactors K
   ∧ TExp g (TMulN [TNonce p_b; m_b; TNonce x_a]) ∈ gfactors K
-  ∧ TNonce p_a ∈ exps ss
-  ∧ TNonce p_b ∈ exps ss.
+  ∧ [TNonce p_a; TNonce p_b] ⊆+ exps ss.
 Proof.
 move=> gNX gNm gNi m_b tab; do !split.
 - rewrite /hmqv_ss; apply: hmqv_K_gfactor => //; by right.
 - apply: hmqv_K_gfactor => //; by left.
-- by rewrite exps_hmqv_ss //; set_solver.
-- by rewrite exps_hmqv_ss //; set_solver.
+- by rewrite exps_hmqv_ss //; apply/submseteq_count_mem => x /=; lia.
 Qed.
 
 (** With an honest peer share, the ephemeral-ephemeral factor is in the key.
@@ -649,16 +647,14 @@ Proof. apply _. Qed.
 
 Lemma public_hmqv_K_eph N g t_a t_b (p_a x_a p_b x_b : nonce) P_a X_a :
   negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
-  x_a ≠ x_b →
   hmqv_key x_a -∗
   hmqv_key x_b -∗
   public (hmqv_K N t_a t_b p_a x_a P_a X_a (TExp g p_b) (TExp g x_b)) -∗
   public x_a ∨ public x_b.
 Proof.
-move=> gNX gNm gNi x_a_b; iIntros "#[_ e_a] #[_ e_b] #p_K".
+move=> gNX gNm gNi; iIntros "#[_ e_a] #[_ e_b] #p_K".
 have Nm_a : negb (is_mul (TNonce x_a)) by [].
 have Nm_b : negb (is_mul (TNonce x_b)) by [].
-have x_b_aT : TNonce x_b ≠ TNonce x_a by case=> e; apply: x_a_b; rewrite e.
 have x_b_aV : TNonce x_b ≠ TInv (TNonce x_a).
   by move=> e; apply: (TInv_Nenf_ne (t1 := TNonce x_a) (t2 := TNonce x_b)) => //;
      rewrite e.
@@ -668,7 +664,7 @@ iAssert (public (TExp g (TMulN [TNonce x_b; TNonce x_a]))) as "#p_eph".
   iApply (big_sepL_elem_of with "fs").
   exact: hmqv_K_gfactor_eph.
 iDestruct (@public_dh_secret2 _ _ _ g (TNonce x_b) (TNonce x_a)
-             gNX gNm gNi Nm_b Nm_a x_b_aT x_b_aV
+             gNX gNm gNi Nm_b Nm_a x_b_aV
              with "e_b e_a p_eph") as "[p_x | p_x]"; eauto.
 Qed.
 
@@ -678,20 +674,18 @@ Qed.
 Lemma public_hmqv_K_static N g t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b :
   negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
   t_a ≠ t_b →
-  p_a ≠ p_b →
   hmqv_key p_a -∗
   hmqv_key p_b -∗
   public (hmqv_K N t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b) -∗
   public p_a ∨ public p_b.
 Proof.
-move=> gNX gNm gNi tab p_a_b.
-have [gf [_ [in_pa in_pb]]] :=
+move=> gNX gNm gNi tab.
+have [gf [_ ab_ss]] :=
   @hmqv_key_gfactors N g t_a t_b p_a x_a p_b P_a X_a X_b gNX gNm gNi tab.
-have p_a_bT : TNonce p_a ≠ TNonce p_b by case=> /p_a_b.
 iIntros "#[_ pred_a] #[_ pred_b] #p_K".
 iEval (rewrite public_gfactors) in "p_K".
 iDestruct "p_K" as "[_ #fs]".
-iApply (public_dh_secret_gen2 p_a_bT in_pa in_pb with "pred_a pred_b").
+iApply (public_dh_secret_gen2 ab_ss with "pred_a pred_b").
 by iApply (big_sepL_elem_of with "fs").
 Qed.
 
@@ -701,47 +695,40 @@ Qed.
 Lemma public_hmqv_K_mixed N g t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b :
   negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
   t_a ≠ t_b →
-  x_a ≠ p_b →
   hmqv_key x_a -∗
   hmqv_key p_b -∗
   public (hmqv_K N t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b) -∗
   public x_a ∨ public p_b.
 Proof.
-move=> gNX gNm gNi tab x_a_pb.
+move=> gNX gNm gNi tab.
 have [_ [gf _]] :=
   @hmqv_key_gfactors N g t_a t_b p_a x_a p_b P_a X_a X_b gNX gNm gNi tab.
-have in_xa : TNonce x_a
-    ∈ exps (TExp g (TMulN [TNonce p_b; hmqv_m N t_b X_b P_a; TNonce x_a])).
-  by rewrite exps_hmqv_mixed //; set_solver.
-have in_pb : TNonce p_b
-    ∈ exps (TExp g (TMulN [TNonce p_b; hmqv_m N t_b X_b P_a; TNonce x_a])).
-  by rewrite exps_hmqv_mixed //; set_solver.
-have x_a_pbT : TNonce x_a ≠ TNonce p_b by case=> /x_a_pb.
+have ab_mixed : [TNonce x_a; TNonce p_b]
+    ⊆+ exps (TExp g (TMulN [TNonce p_b; hmqv_m N t_b X_b P_a; TNonce x_a])).
+  by rewrite exps_hmqv_mixed //; apply/submseteq_count_mem => x /=; lia.
 iIntros "#[_ pred_x] #[_ pred_p] #p_K".
 iEval (rewrite public_gfactors) in "p_K".
 iDestruct "p_K" as "[_ #fs]".
-iApply (public_dh_secret_gen2 x_a_pbT in_xa in_pb with "pred_x pred_p").
+iApply (public_dh_secret_gen2 ab_mixed with "pred_x pred_p").
 by iApply (big_sepL_elem_of with "fs").
 Qed.
 
 Lemma public_hmqv_K_forged N g t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b :
   negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
   t_a ≠ t_b →
-  p_a ≠ p_b →
-  x_a ≠ p_b →
   hmqv_key p_a -∗
   hmqv_key x_a -∗
   hmqv_key p_b -∗
   public (hmqv_K N t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b) -∗
   public p_b ∨ public p_a ∗ public x_a.
 Proof.
-move=> gNX gNm gNi tab p_a_b x_a_pb.
+move=> gNX gNm gNi tab.
 iIntros "#key_pa #key_xa #key_pb #p_K".
 iDestruct (@public_hmqv_K_static N g t_a t_b p_a x_a p_b P_a X_a X_b
-             gNX gNm gNi tab p_a_b with "key_pa key_pb p_K") as "[p_pa|p_pb]";
+             gNX gNm gNi tab with "key_pa key_pb p_K") as "[p_pa|p_pb]";
   last by iLeft.
 iDestruct (@public_hmqv_K_mixed N g t_a t_b p_a x_a p_b P_a X_a X_b
-             gNX gNm gNi tab x_a_pb with "key_xa key_pb p_K") as "[p_xa|p_pb]";
+             gNX gNm gNi tab with "key_xa key_pb p_K") as "[p_xa|p_pb]";
   last by iLeft.
 iRight. by iSplit.
 Qed.
@@ -749,10 +736,6 @@ Qed.
 Lemma public_hmqv_K_honest N g t_a t_b (p_a x_a p_b x_b : nonce) :
   negb (is_exp g) → negb (is_gmul g) → negb (is_ginv g) →
   t_a ≠ t_b →
-  p_a ≠ p_b →
-  x_a ≠ x_b →
-  x_a ≠ p_b →
-  x_b ≠ p_a →
   hmqv_key p_a -∗
   hmqv_key x_a -∗
   hmqv_key p_b -∗
@@ -761,21 +744,21 @@ Lemma public_hmqv_K_honest N g t_a t_b (p_a x_a p_b x_b : nonce) :
                  (TExp g p_b) (TExp g x_b)) -∗
   public p_a ∗ public x_a ∨ public p_b ∗ public x_b.
 Proof.
-move=> gNX gNm gNi tab p_a_b x_a_b x_a_pb x_b_pa.
+move=> gNX gNm gNi tab.
 have tba : t_b ≠ t_a by congruence.
 iIntros "#key_pa #key_xa #key_pb #key_xb #p_K".
 iDestruct (@public_hmqv_K_static N g t_a t_b p_a x_a p_b
-             (TExp g p_a) (TExp g x_a) (TExp g x_b) gNX gNm gNi tab p_a_b
+             (TExp g p_a) (TExp g x_a) (TExp g x_b) gNX gNm gNi tab
              with "key_pa key_pb p_K") as "#S".
 iDestruct (@public_hmqv_K_eph N g t_a t_b p_a x_a p_b x_b
-             (TExp g p_a) (TExp g x_a) gNX gNm gNi x_a_b
+             (TExp g p_a) (TExp g x_a) gNX gNm gNi
              with "key_xa key_xb p_K") as "#E".
 iDestruct (@public_hmqv_K_mixed N g t_a t_b p_a x_a p_b
-             (TExp g p_a) (TExp g x_a) (TExp g x_b) gNX gNm gNi tab x_a_pb
+             (TExp g p_a) (TExp g x_a) (TExp g x_b) gNX gNm gNi tab
              with "key_xa key_pb p_K") as "#M1".
 iEval (rewrite hmqv_K_sym) in "p_K".
 iDestruct (@public_hmqv_K_mixed N g t_b t_a p_b x_b p_a
-             (TExp g p_b) (TExp g x_b) (TExp g x_a) gNX gNm gNi tba x_b_pa
+             (TExp g p_b) (TExp g x_b) (TExp g x_a) gNX gNm gNi tba
              with "key_xb key_pa p_K") as "#M2".
 iDestruct "S" as "[?|?]".
 - iDestruct "M1" as "[?|?]"; first by iLeft; iSplit.

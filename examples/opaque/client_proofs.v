@@ -227,8 +227,8 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
     { iDestruct "env'" as "[(#? & _ & #? & #?) | (%p_u & %ep & %eP & #pubP_u & #pair)]";
         first by do !iSplit => //.
       iPoseProof "pair" as
-        "(%p_s & %eP_s & %p_u_s & #pubP_s & #key_p_u & #key_p_s
-          & #priv_p_u & #priv_p_s)".
+        "(%p_s & %eP_s & #pubP_s & #key_p_u & #key_p_s & #priv_p_u
+          & #priv_p_s)".
       subst p_u' P_u' P_s'.
       iSplit; last by iSplit.
       (* The static-static factor is a group factor of the key, and its two
@@ -240,7 +240,7 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
       iDestruct "p_t'" as "(p_K' & _)".
       iAssert (▷ □ public pw)%I as "#p_pw".
       { iDestruct (@public_hmqv_K_static _ _ _ opN g "d" "e" p_u x_u p_s
-                     (TExp g p_u) (TExp g x_u) X_s gNX gNm gNi tags_c p_u_s
+                     (TExp g p_u) (TExp g x_u) X_s I I I tags_c
                      with "key_p_u key_p_s p_K'") as "[p|p]".
         - by iApply "priv_p_u".
         - by iApply "priv_p_s". }
@@ -265,8 +265,7 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
     by iLeft.
   - (* Honest server. *)
     iDestruct "auth" as "(%uid_s & %α_s & %X_u_s & %p_u_s & %p_s_s & %x_s
-                          & %e_si & %X_u_x_s & %X_u_p_s & %x_s_pu
-                          & #key_xs & #pubck & #pubsk & #ready)".
+                          & %e_si & #key_xs & #pubck & #pubsk & #ready)".
     set si_s := server_si uid_s α_s X_u_s (TExp g p_u_s) p_s_s x_s.
     have eSK : si_key si_s = SK by rewrite /si_key /SK e_si.
     move: (e_si) => /Spec.of_list_inj /(f_equal (λ l, nth 0 l (TInt 0))) /= eK.
@@ -305,19 +304,15 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
          unless a party's whole state leaks. *)
       subst p_u' P_u'.
       iPoseProof "pair" as
-        "(%p_s & %eP_s & %p_u_s' & #pubP_s' & #key_p_u & #key_p_s
-          & #priv_p_u & #priv_p_s)".
+        "(%p_s & %eP_s & #pubP_s' & #key_p_u & #key_p_s & #priv_p_u
+          & #priv_p_s)".
       subst P_s'.
       have [epa [epb [eXs eXu]]] :=
         @hmqv_K_inj' opN g "d" "e" p_u x_u p_s p_u_s x_s p_s_s X_s X_u_s
-                    gNX gNm gNi tags_c eKK.
+                    I I I tags_c eKK.
       subst p_u_s p_s_s uid_s α_s X_u_s.
-      have x_u_s : x_u ≠ x_s.
-        by move=> e'; apply: X_u_x_s; rewrite e'.
-      have x_u_ps : x_u ≠ p_s.
-        by move=> e'; apply: X_u_p_s; rewrite e'.
       iEval (rewrite -eSK) in "mintedSK".
-      iPoseProof (honest_session_ok uid α p_u_s' x_u_s x_u_ps x_s_pu
+      iPoseProof (honest_session_ok uid α p_u p_s x_u x_s
                     with "HpredSK HpredK pubuid pubα key_p_u key_p_s key_xu
                           key_xs mintedSK") as "#[ok1 ok2]".
       iMod ("ready" with "N_φ tok_ready") as "res".
