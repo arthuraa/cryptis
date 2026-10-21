@@ -4,8 +4,6 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs";
     flake-parts.url = "github:hercules-ci/flake-parts";
-    nix-github-actions.url = "github:nix-community/nix-github-actions";
-    nix-github-actions.inputs.nixpkgs.follows = "nixpkgs";
     # nixpkgs has no coq-lsp for Rocq 9.2, and rocq-lsp has no 9.2 release yet;
     # build its v9.2 branch.
     rocq-lsp.url = "github:rocq-community/rocq-lsp/v9.2";
@@ -18,7 +16,7 @@
     rocq-mcp.inputs.nixpkgs.url = "github:NixOS/nixpkgs/8f21ecf6d80d56dd43f4c7c9191fb805aa8ac98f";
   };
 
-  outputs = inputs@{ self, flake-parts, nixpkgs, nix-github-actions, ... }:
+  outputs = inputs@{ self, flake-parts, nixpkgs, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
         # To import a flake module
@@ -69,10 +67,20 @@
         # agnostic ones like nixosModule and system-enumerating ones, although
         # those are more easily expressed in perSystem.
 
-        githubActions = nix-github-actions.lib.mkGithubMatrix {
-          checks = nixpkgs.lib.getAttrs
-            [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ]
-            self.checks;
+        # See github.com/actions/runner-images when these labels retire.
+        githubActions = let
+          runners = {
+            x86_64-linux = "ubuntu-26.04";
+            aarch64-linux = "ubuntu-26.04-arm";
+            aarch64-darwin = "macos-26";
+          };
+        in {
+          matrix.include = nixpkgs.lib.concatLists (nixpkgs.lib.mapAttrsToList
+            (system: os: map (name: {
+              inherit name system os;
+              attr = "checks.${system}.\"${name}\"";
+            }) (builtins.attrNames self.checks.${system}))
+            runners);
         };
 
         overlays.default = final: prev: {
