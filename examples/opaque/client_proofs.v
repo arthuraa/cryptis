@@ -41,8 +41,8 @@ Lemma wp_client_session (uid pw : term) (c : val) φ ψ :
         (▷ public pw ∨ ⌜si_cshare si = TExp g x_u⌝ ∗ ψ x_u) ∗
         (public (si_key si) ∨ φ si Init) }}}.
 Proof.
-iIntros "%ϕ (#Cryptis & (#Hpredrw & #HpredA_s & #HpredA_u & #HpredSK & #HpredK
-  & #Hpredα & #SpredAuth) & #N_φ & #Hc & #pubuid & #mintedpw & hook) Hhl".
+iIntros "%ϕ (#Cryptis & (#HpredH & #HpredA_s & #HpredA_u & #HpredSK
+  & #SpredAuth) & #N_φ & #Hc & #pubuid & #mintedpw & hook) Hhl".
 iAssert (minted uid) as "#minteduid"; first by iApply public_minted.
 wp_lam; wp_pures.
 (* The ephemeral is a [secret] of its owner. *)
@@ -71,9 +71,9 @@ wp_apply (wp_mk_nonce_freshN ∅ (fun _ => False)%I (fun _ => True)%I
 - by iApply client_fresh_set_minted.
 iIntros "%r _ #Hmintedr #Hprivater #Hexpr #HexprV tok_α".
 rewrite /client_fresh_set big_sepS_singleton.
-iAssert (minted (TExp (hash_result "α" pw) r)) as "#mintedα".
+iAssert (minted (TExp (hash_result "H" pw) r)) as "#mintedα".
   by iApply all_minted_TExp; iSplit => //; iApply minted_hash_result.
-set α := TExp (hash_result "α" pw) r.
+set α := TExp (hash_result "H" pw) r.
 wp_pures.
 iDestruct (term_token_difference α (↑opN.@"ready") with "tok_α")
   as "[tok_ready tok_α]"; first solve_ndisj.
@@ -90,7 +90,7 @@ iAssert (public α) as "#pubα".
   - iApply exp_pred_intro1.
     by iApply "Hexpr".
   - iModIntro; iIntros "#p".
-    by iApply (public_THashIS with "Hpredα") => //. }
+    iApply (public_THashIS with "HpredH mintedpw"). by iApply "Hprivater". }
 iAssert (public (TExp g x_u)) as "#pubX_u".
 { iApply public_TExp_iff => //.
   do !iSplit => //.
@@ -135,7 +135,7 @@ iAssert (▷ public pw ∗ public clear
 { iDestruct "decr" as "[#pubkey | #envpred]".
   - iLeft; iSplit; last by iApply "keyclear".
     iEval (rewrite /k public_senc_key) in "pubkey".
-    iDestruct (public_THashE with "Hpredrw pubkey") as "[p_l | [_ contra]]".
+    iDestruct (public_THashE with "HpredH pubkey") as "[p_l | [_ contra]]".
     + iEval (rewrite public_of_list /=) in "p_l".
       iDestruct "p_l" as "[#? _]". by iNext.
     + by iNext; iDestruct "contra" as "[]".
@@ -176,8 +176,8 @@ wp_apply wp_prf => /=.
 wp_list.
 wp_apply wp_prf.
 set hK := hmqv_K opN "d" "e" p_u' x_u P_u' (TExp g x_u) P_s' X_s.
-set K := hash_result "K" (Spec.of_list [hK]).
-set ssid' := hash_result "ssid'" (Spec.of_list [uid; α]).
+set K := hash_result "H" (Spec.of_list [hK]).
+set ssid' := hash_result "H" (Spec.of_list [uid; α]).
 set SK := hash_result "SK" (Spec.of_list [K; ssid']).
 iAssert (minted K) as "#mintedK".
   iApply minted_hash_result; iApply minted_of_list => /=.
@@ -234,7 +234,7 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
       (* The static-static factor is a group factor of the key, and its two
          exponents are the long-term keys, which are as secret as the
          password. *)
-      iDestruct (public_THashE with "HpredK p_K") as "[p_t' | [_ contra]]";
+      iDestruct (public_THashE with "HpredH p_K") as "[p_t' | [_ contra]]";
         last by iNext; iDestruct "contra" as "[]".
       iEval (rewrite public_of_list /=) in "p_t'".
       iDestruct "p_t'" as "(p_K' & _)".
@@ -313,7 +313,7 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
       subst p_u_s p_s_s uid_s α_s X_u_s.
       iEval (rewrite -eSK) in "mintedSK".
       iPoseProof (honest_session_ok uid α p_u p_s x_u x_s
-                    with "HpredSK HpredK pubuid pubα key_p_u key_p_s key_xu
+                    with "HpredSK HpredH pubuid pubα key_p_u key_p_s key_xu
                           key_xs mintedSK") as "#[ok1 ok2]".
       iMod ("ready" with "N_φ tok_ready") as "res".
       iMod ("hook" $! si_s x_u with "[//] s_xu tok_res") as "[gift keep]".

@@ -25,8 +25,9 @@ Abbreviation opN := (nroot.@"op").
 Definition _H : string -> val := fun _tag => (λ: "val", hash (tag (Tag $ opN.@_tag) "val"))%V.
 Definition _H_list : string -> val := fun _tag => (λ: "val", _H _tag (term_of_list "val"))%V.
 Definition prf  := _H_list.
-Definition H    := _H_list.
-Definition H'   := _H.
+(* These hashes leak only with their inputs, so they can share a tag. *)
+Definition H    := _H_list "H".
+Definition H'   := _H "H".
 Definition AuthEnc : val := λ: "key" "v", senc "key" (Tag $ opN.@"AuthEnc") "v".
 Definition AuthDec : val := λ: "key" "v", sdec "key" (Tag $ opN.@"AuthEnc") "v".
 Definition g := (TInt 0).
@@ -34,7 +35,7 @@ Definition g := (TInt 0).
 Definition one := TGMulN [].
 
 Definition OPRF : val := λ: "k",
-    λ: "x", H "rw" ["x"; (texp (H' "α" "x") "k")].
+    λ: "x", H ["x"; (texp (H' "x") "k")].
 
 Module Client.
 
@@ -43,22 +44,22 @@ Section Client.
 Definition session : val := λ: "uid" "c" "pw",
     let: "x_u" := mk_nonce #() in
     let: "r" := mk_nonce #() in
-    let: "α" := texp (H' "α" "pw") "r" in
+    let: "α" := texp (H' "pw") "r" in
     let: "X_u" := texp g "x_u" in
     let: "m1" := term_of_list [ "uid"; "α"; "X_u" ] in
     send "c" "m1" ;;
     bind: "m2" := list_of_term (recv "c") in
     list_match: [ "β"; "X_s"; "envelope"; "A_s" ] := "m2" in
     (* TODO: check β ∈ G *)
-    let: "rw" := derive_senc_key (H "rw" [ "pw"; (texp "β" (tinv "r")) ]) in
+    let: "rw" := derive_senc_key (H [ "pw"; (texp "β" (tinv "r")) ]) in
     bind: "envelope_dec" := AuthDec "rw" "envelope" in
     bind: "list_envelope_dec" := list_of_term "envelope_dec" in
     list_match: [ "p_u"; "P_u"; "P_s" ] := "list_envelope_dec" in
     (* The static public keys stand in for the identities in HMQV's multipliers
        [d = H̄(X_u, ÎdS)] and [e = H̄(X_s, ÎdU)], computed inside [hmqv_ke]. *)
     let: "K" :=
-      H "K" [hmqv_ke opN "d" "e" "p_u" "x_u" "P_u" "X_u" "P_s" "X_s"] in
-    let: "ssid'" := H "ssid'" ["uid"; "α"] in
+      H [hmqv_ke opN "d" "e" "p_u" "x_u" "P_u" "X_u" "P_s" "X_s"] in
+    let: "ssid'" := H ["uid"; "α"] in
     let: "SK" := prf "SK" [ "K"; "ssid'" ] in
     guard: eq_term "A_s" (prf "A_s" [ "K"; "ssid'" ]) in
     let: "A_u" := prf "A_u" [ "K"; "ssid'" ] in
@@ -93,8 +94,8 @@ Definition session : val := λ: "db" "c",
     let: "β" := texp "α" "k_s" in
     let: "X_s" := texp g "x_s" in
     let: "K" :=
-      H "K" [hmqv_ke opN "e" "d" "p_s" "x_s" "P_s" "X_s" "P_u" "X_u"] in
-    let: "ssid'" := H "ssid'" [ "uid"; "α" ] in
+      H [hmqv_ke opN "e" "d" "p_s" "x_s" "P_s" "X_s" "P_u" "X_u"] in
+    let: "ssid'" := H [ "uid"; "α" ] in
     let: "SK" := prf "SK" [ "K"; "ssid'" ] in
     let: "A_s" := prf "A_s" [ "K"; "ssid'" ] in
     let: "m2" := term_of_list [ "β"; "X_s"; "envelope"; "A_s" ] in
