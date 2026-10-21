@@ -56,15 +56,15 @@ Record sess_info := SessInfo {
   si_uid    : term;   (* client identity, public *)
   si_ckey   : term;   (* P_u = g^p_u, the client's long-term public key *)
   si_skey   : term;   (* P_s = g^p_s, the server's long-term public key *)
-  si_blind  : term;   (* α = (H' "α" pw)^r, the client's per-session share *)
+  si_blind  : term;   (* α = (H' pw)^r, the client's per-session share *)
   si_cshare : term;   (* X_u = g^x_u *)
   si_sshare : term;   (* X_s = g^x_s *)
   si_secret : term;   (* the HMQV group element *)
 }.
 
 Definition si_ssid si :=
-  hash_result "ssid'" (Spec.of_list [si_uid si; si_blind si]).
-Definition si_K si := hash_result "K" (Spec.of_list [si_secret si]).
+  hash_result "H" (Spec.of_list [si_uid si; si_blind si]).
+Definition si_K si := hash_result "H" (Spec.of_list [si_secret si]).
 Definition si_key si := hash_result "SK" (Spec.of_list [si_K si; si_ssid si]).
 Definition si_result si := Spec.of_list [si_uid si; si_key si].
 
@@ -84,7 +84,7 @@ Definition client_si (uid P_u P_s α x_u X_s p_u : term) : sess_info :=
     caller.  The server's own token is on its share [X_s], as in [iso_dh]. *)
 
 Definition client_fresh_set (pw : term) (t : nonce) : gset term :=
-  {[TExp (hash_result "α" pw) t]}.
+  {[TExp (hash_result "H" pw) t]}.
 
 (** The server's view of a session is determined by its key: this is what the
     game needs to tell two server sessions apart, and what each party needs to
@@ -373,7 +373,7 @@ rewrite big_sepS_singleton.
 iModIntro; iSplit.
 - iIntros "#?"; iApply all_minted_TExp; iSplit => //.
   by rewrite minted_hash_result.
-- rewrite (minted_TExp (t1 := hash_result "α" pw) (TNonce r) I I I).
+- rewrite (minted_TExp (t1 := hash_result "H" pw) (TNonce r) I I I).
   by iIntros "[_ ?]".
 Qed.
 
@@ -410,7 +410,7 @@ Definition A_s_pred (t : term) : iProp :=
 (* The key pins the password: the client compares it with its own. *)
 Definition envelope_pred (sk : senc_key) (t : term) : iProp :=
   ∃ pw β (p_u : nonce) P_s,
-      ⌜sk = SEncKey (hash_result "rw" (Spec.of_list [pw; β]))⌝ ∗
+      ⌜sk = SEncKey (hash_result "H" (Spec.of_list [pw; β]))⌝ ∗
       ⌜t = Spec.of_list [TNonce p_u; TExp g p_u; P_s]⌝ ∗
       public (TExp g p_u) ∗
       opaque_public_private_pair pw p_u P_s.
@@ -421,12 +421,10 @@ Definition SK_pred (t : term) : iProp :=
         released_session si.
 
 Definition opaque_ctx : iProp :=
-  hash_pred (opN.@"rw") (λ _ : term, False%I) ∗
+  hash_pred (opN.@"H") (λ _ : term, False%I) ∗
   hash_pred (opN.@"A_s") A_s_pred ∗
   hash_pred (opN.@"A_u") A_u_pred ∗
   hash_pred (opN.@"SK") SK_pred ∗
-  hash_pred (opN.@"K") (λ _ : term, False%I) ∗
-  hash_pred (opN.@"α") (λ _ : term, True%I) ∗
   senc_pred (opN.@"AuthEnc") envelope_pred.
 
 Lemma opaque_alloc E :
@@ -438,17 +436,13 @@ hash_pred_token (E ∖ ↑opN) ∗
 seal_pred_token SENC (E ∖ ↑opN).
 Proof.
 iIntros "%sub1 h_token s_token".
-iMod (hash_pred_set (opN.@"rw") (λ _ : term, False%I) with "h_token")
+iMod (hash_pred_set (opN.@"H") (λ _ : term, False%I) with "h_token")
 as "[? h_token]"; try solve_ndisj; iFrame.
 iMod (hash_pred_set (opN.@"A_s") A_s_pred with "h_token")
 as "[? h_token]"; try solve_ndisj; iFrame.
 iMod (hash_pred_set (opN.@"A_u") A_u_pred with "h_token")
 as "[? h_token]"; try solve_ndisj; iFrame.
 iMod (hash_pred_set (opN.@"SK") SK_pred with "h_token")
-as "[? h_token]"; try solve_ndisj; iFrame.
-iMod (hash_pred_set (opN.@"K") (λ _ : term, False%I) with "h_token")
-as "[? h_token]"; try solve_ndisj; iFrame.
-iMod (hash_pred_set (opN.@"α") (λ _ : term, True%I) with "h_token")
 as "[? h_token]"; try solve_ndisj; iFrame.
 iMod (senc_pred_set (N := opN.@"AuthEnc") envelope_pred with "s_token")
 as "[H s_token]"; try solve_ndisj; iFrame.
@@ -473,7 +467,7 @@ Qed.
 Lemma honest_session_ok uid α (p_u p_s x_u x_s : nonce) :
   let si := server_si uid α (TExp g x_u) (TExp g p_u) p_s x_s in
   hash_pred (opN.@"SK") SK_pred -∗
-  hash_pred (opN.@"K") (λ _ : term, False%I) -∗
+  hash_pred (opN.@"H") (λ _ : term, False%I) -∗
   public uid -∗
   public α -∗
   hmqv_key p_u -∗
@@ -484,7 +478,7 @@ Lemma honest_session_ok uid α (p_u p_s x_u x_s : nonce) :
   session_ok si.
 Proof.
 move=> si.
-iIntros "#HpredSK #HpredK #p_uid #p_α #key_pu #key_ps #key_xu #key_xs #m_SK".
+iIntros "#HpredSK #HpredH #p_uid #p_α #key_pu #key_ps #key_xu #key_xs #m_SK".
 have ss : server_session si by exists uid, α, (TExp g x_u), p_u, p_s, x_s.
 iPoseProof (hmqv_key_public with "key_pu") as "#p_Pu".
 iPoseProof (hmqv_key_public with "key_ps") as "#p_Ps".
@@ -495,7 +489,7 @@ iModIntro; iSplit.
   iDestruct (public_THashE with "HpredSK p_SK") as "[p_t | [_ #rel]]".
   + rewrite public_of_list /=.
     iDestruct "p_t" as "[p_K _]".
-    iDestruct (public_THashE with "HpredK p_K") as "[p_t | [_ contra]]";
+    iDestruct (public_THashE with "HpredH p_K") as "[p_t | [_ contra]]";
       last by iLeft; iNext; iDestruct "contra" as "[]".
 
     rewrite public_of_list /=.

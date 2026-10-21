@@ -44,7 +44,7 @@ Lemma wp_make_file (pw : term) :
   }}} Server.make_file pw {{{ file, RET (repr file); opaque_file pw file }}}.
 Proof.
 iIntros "%ϕ (#cryptis & #ctx & #Hmintedpw) post".
-iPoseProof "ctx" as "(#Hhashpred & _ & _ & _ & _ & _ & #Hsencpred)".
+iPoseProof "ctx" as "(#Hhashpred & _ & _ & _ & #Hsencpred)".
 wp_lam.
 wp_apply (wp_mk_nonce_freshN ∅ (fun _ => False)%I (fun _ => True)%I
                                (fun t =>  {[(TInv t)]})) => //.
@@ -103,7 +103,7 @@ do !iSplit => //.
   all: try by rewrite minted_THash minted_tag.
   all: try by iApply minted_TInt.
   iModIntro.
-  iExists pw, (TExp (hash_result "α" pw) k_s), p_u, (TExp g p_s).
+  iExists pw, (TExp (hash_result "H" pw) k_s), p_u, (TExp g p_s).
   do !iSplit => //.
   iExists p_s.
   by do !iSplit => //.
@@ -161,7 +161,7 @@ Lemma wp_server_session (db c : val) pw_of (alist : gmap term val) φ ψ :
 Proof.
 iIntros "%ϕ".
 rewrite /opaque_db big_sepM_forall.
-iIntros "(#Cryptis & (_ & #HpredA_s & #HpredA_u & #HpredSK & #HpredK & _ & _)
+iIntros "(#Cryptis & (#HpredH & #HpredA_s & #HpredA_u & #HpredSK & _)
           & #N_φ & #Hc & Hdb & #Hmapcontents & hook) Hhl".
 wp_lam; wp_pures.
 wp_apply (wp_recv with "Hc"); iIntros "%m1 #Hpubm1".
@@ -326,7 +326,7 @@ iAssert (|={⊤}=> session (pw_of uid) si ∗
     iAssert (▷ □ public (pw_of uid))%I as "#p_pw".
     { rewrite public_of_list /=.
       iDestruct "p_t" as "[p_K _]".
-      iDestruct (public_THashE with "HpredK p_K") as "[p_t | [_ contra]]";
+      iDestruct (public_THashE with "HpredH p_K") as "[p_t | [_ contra]]";
         last by iNext; iDestruct "contra" as "[]".
       rewrite public_of_list /=.
       iDestruct "p_t" as "(p_K' & _)".
@@ -348,7 +348,7 @@ iAssert (|={⊤}=> session (pw_of uid) si ∗
     have eXu : X_u = TExp g x_u by rewrite -eX -e_si.
     subst X_u.
     iPoseProof (honest_session_ok uid α p_u p_s x_u x_s
-                  with "HpredSK HpredK p_uid p_α Hkeyp_u Hkeyp_s key_xu key_xs
+                  with "HpredSK HpredH p_uid p_α Hkeyp_u Hkeyp_s key_xu key_xs
                         mintedSK") as "#[ok1 ok2]".
     subst si'.
     iMod ("ready_u" with "N_φ tok_ready") as "res".
