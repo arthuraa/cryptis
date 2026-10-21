@@ -23,9 +23,7 @@ Module Client.
 Section Client.
 
 Definition connect : val := λ: "c" "skA" "pkB",
-  let: "cs" := Sess.connect "c" "skA" "pkB" (Tag dbN) in
-  Sess.send "cs" (tag (Tag $ dbN.@"connect") (TInt 0));;
-  "cs".
+  Sess.connect "c" "skA" "pkB" (Tag dbN).
 
 Definition store : val := λ: "cs" "k" "v",
   Sess.send "cs" (tag (Tag $ dbN.@"store") (term_of_list ["k"; "v"]));; #().
@@ -78,7 +76,6 @@ Definition handle_create : val :=
   end.
 
 Definition conn_handler : val := λ: "cs" "db" "lock",
-  Sess.recv "cs";;
   let: "handlers" := [
     Sess.handle (Tag $ dbN.@"store") (λ: "req",
       handle_store "db" "req";; #true);
