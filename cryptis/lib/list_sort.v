@@ -15,7 +15,9 @@
       often, and [l1 ⊆+ l2] iff no element occurs more often in [l1].
 
     - lemmas relating [merge_sort R] (for an arbitrary decidable total order [R])
-      to membership, [Forall], length and sortedness. *)
+      to membership, [Forall], length and sortedness.
+
+    - [list_disjoint_dec] decides the disjointness [l1 ## l2] of lists. *)
 
 From mathcomp Require Import ssreflect.
 From stdpp Require Import sorting list numbers.
@@ -251,3 +253,10 @@ apply: (StronglySorted_unique RB).
 Qed.
 
 End MergeSortFmap.
+
+(* TODO: Upstream to stdpp. *)
+#[global] Program Instance list_disjoint_dec `{EqDecision A} :
+  RelDecision (##@{list A}) :=
+  λ l1 l2, cast_if (decide (Forall (λ x, x ∉ l2) l1)).
+Next Obligation. by move=> A ? l1 l2 /list.Forall_forall. Qed.
+Next Obligation. by move=> A ? l1 l2 + d; apply; apply/list.Forall_forall. Qed.

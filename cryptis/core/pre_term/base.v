@@ -60,14 +60,10 @@ HB.instance Definition _ := key_type_isOrder.
 
 Inductive term_op1 :=
 | O1Key of key_type
-| O1Hash
-| O1Inv
-| O1GInv.
+| O1Hash.
 
 Abbreviation TKey_tag := 0%Z.
 Abbreviation THash_tag := 1%Z.
-Abbreviation TInv_tag := 2%Z.
-Abbreviation TGInv_tag := 3%Z.
 
 Canonical term_op1_indDef := [indDef for term_op1_rect].
 Canonical term_op1_indType := IndType term_op1 term_op1_indDef.
@@ -139,15 +135,14 @@ Inductive pre_term :=
 | PT0 of term_op0
 | PT1 of term_op1 & pre_term
 | PT2 of term_op2 & pre_term & pre_term
-| PTN of term_opN & list pre_term.
+| PTN of term_opN & list pre_term & list pre_term.
 Set Elimination Schemes.
 
-(** Convenient shorthands for some operations *)
-Abbreviation PTInv e := (PT1 O1Inv e).
-Abbreviation PTGInv e := (PT1 O1GInv e).
+(** Convenient shorthands for some operations.  A product lists its positive
+    factors, then its negative ones. *)
 Abbreviation PTExp b e := (PT2 O2Exp b e).
-Abbreviation PTMul ts := (PTN ONMul ts).
-Abbreviation PTGMul ts := (PTN ONGMul ts).
+Abbreviation PTMul ps ns := (PTN ONMul ps ns).
+Abbreviation PTGMul ps ns := (PTN ONGMul ps ns).
 
 Definition pre_term_rect'
   (T1 : pre_term -> Type)
@@ -155,7 +150,7 @@ Definition pre_term_rect'
   (H1 : forall o, T1 (PT0 o))
   (H2 : forall o t1, T1 t1 -> T1 (PT1 o t1))
   (H3 : forall o t1, T1 t1 -> forall t2, T1 t2 -> T1 (PT2 o t1 t2))
-  (HN : forall o ts, T2 ts -> T1 (PTN o ts))
+  (HN : forall o ps, T2 ps -> forall ns, T2 ns -> T1 (PTN o ps ns))
   (H5 : T2 [::])
   (H6 : forall t, T1 t -> forall ts, T2 ts -> T2 (t :: ts)) :=
   fix loop1 t {struct t} : T1 t :=
@@ -163,13 +158,13 @@ Definition pre_term_rect'
     | PT0 o => H1 o
     | PT1 o t => H2 o t (loop1 t)
     | PT2 o t1 t2 => H3 o t1 (loop1 t1) t2 (loop1 t2)
-    | PTN o ts =>
+    | PTN o ps ns =>
       let fix loop2 ts {struct ts} : T2 ts :=
           match ts with
           | [::] => H5
           | t :: ts => H6 t (loop1 t) ts (loop2 ts)
           end in
-      HN o ts (loop2 ts)
+      HN o ps (loop2 ps) ns (loop2 ns)
     end.
 
 Definition list_pre_term_rect'
@@ -178,7 +173,7 @@ Definition list_pre_term_rect'
   (H1 : forall o, T1 (PT0 o))
   (H2 : forall o t1, T1 t1 -> T1 (PT1 o t1))
   (H3 : forall o t1, T1 t1 -> forall t2, T1 t2 -> T1 (PT2 o t1 t2))
-  (HN : forall o ts, T2 ts -> T1 (PTN o ts))
+  (HN : forall o ps, T2 ps -> forall ns, T2 ns -> T1 (PTN o ps ns))
   (H5 : T2 [::])
   (H6 : forall t, T1 t -> forall ts, T2 ts -> T2 (t :: ts)) :=
   fix loop2 ts {struct ts} : T2 ts :=
@@ -207,8 +202,9 @@ Definition pre_term_rect (T : pre_term -> Type)
   (H1 : forall o, T (PT0 o))
   (H2 : forall o t1, T t1 -> T (PT1 o t1))
   (H3 : forall o t1, T t1 -> forall t2, T t2 -> T (PT2 o t1 t2))
-  (HN : forall o ts, foldr (fun t R => T t * R)%type unit ts ->
-          T (PTN o ts)) t : T t.
+  (HN : forall o ps, foldr (fun t R => T t * R)%type unit ps ->
+          forall ns, foldr (fun t R => T t * R)%type unit ns ->
+          T (PTN o ps ns)) t : T t.
 Proof.
 exact: (@pre_term_rect' T (foldr (fun t R => T t * R)%type unit)).
 Defined.
@@ -229,7 +225,7 @@ Definition cons_num pt : Z :=
   | PT0 _ => TOp0_tag
   | PT1 _ _ => TOp1_tag
   | PT2 _ _ _ => TOp2_tag
-  | PTN _ _ => TOpN_tag
+  | PTN _ _ _ => TOpN_tag
   end.
 
 Open Scope order_scope.
@@ -257,16 +253,11 @@ Lemma op1_leqE (o1 o2 : term_op1) :
   match o1, o2 with
   | O1Key k1, O1Key k2 => (k1 <= k2)%O
   | O1Hash, O1Hash => true
-  | O1Inv, O1Inv => true
-  | O1GInv, O1GInv => true
   | O1Key _, _ => true
-  | O1Hash, O1Inv => true
-  | O1Hash, O1GInv => true
-  | O1Inv, O1GInv => true
   | _, _ => false
   end.
 Proof.
-case: o1 o2 => [k1| | |] [k2| | |] //=.
+case: o1 o2 => [k1|] [k2|] //=.
 by rewrite [RHS]le_alt.
 Qed.
 
@@ -281,28 +272,32 @@ Lemma leqE pt1 pt2 :
       if o1 == o2 then
         if t11 == t21 then (t12 <= t22)%O else (t11 <= t21)%O
       else (o1 <= o2)%O
-    | PTN o1 ts1, PTN o2 ts2 =>
-      if o1 == o2 then ((ts1 : seqlexi_with Order.default_display _) <= ts2)%O
+    | PTN o1 ps1 ns1, PTN o2 ps2 ns2 =>
+      if o1 == o2 then
+        if ps1 == ps2 then
+          ((ns1 : seqlexi_with Order.default_display _) <= ns2)%O
+        else ((ps1 : seqlexi_with Order.default_display _) <= ps2)%O
       else (o1 <= o2)%O
     | _, _ => false
     end
   else (cons_num pt1 <=? cons_num pt2)%Z.
 Proof.
-case: pt1 pt2
-    => [o1|o1 t1|o1 t11 t12|o1 ts1]
-       [o2|o2 t2|o2 t21 t22|o2 ts2] //=.
-- by rewrite [RHS]le_alt.
-- by rewrite [(t1 <= t2)%O]le_alt.
-- by rewrite (le_alt t12).
-have -> : ((ts1 : seqlexi_with Order.default_display _) <= ts2)%O =
-          ((ts1 : seq_pre_term) <= ts2)%O.
+have seqE (ts1 ts2 : seq pre_term) :
+    ((ts1 : seqlexi_with Order.default_display _) <= ts2)%O =
+    ((ts1 : seq_pre_term) <= ts2)%O.
   elim: ts1 ts2 => [|t1 ts1 IH] [|t2 ts2] //=.
   rewrite [LHS](_ : _ = if t1 == t2 then if ts1 == ts2 then true
                                          else ((ts1 : seq_pre_term) <= ts2)%O
                         else (t1 <= t2)%O) //.
   rewrite lexi_cons IH.
   case: ltgtP => //= _; exact: le_alt.
-by rewrite [(ts1 : seq_pre_term)  <= ts2]le_alt.
+case: pt1 pt2
+    => [o1|o1 t1|o1 t11 t12|o1 ps1 ns1]
+       [o2|o2 t2|o2 t21 t22|o2 ps2 ns2] //=.
+- by rewrite [RHS]le_alt.
+- by rewrite [(t1 <= t2)%O]le_alt.
+- by rewrite (le_alt t12).
+by rewrite !seqE [(ns1 : seq_pre_term) <= ns2]le_alt.
 Qed.
 
 Close Scope order_scope.

@@ -155,27 +155,18 @@ iIntros "!> !>". by iRewrite -"φ_eq".
 Qed.
 
 Definition nsl_dh_key_share skI skR t : iProp :=
-  (public skI ∨ public skR) ∧ ⌜length (exps t) = 1⌝.
+  (public skI ∨ public skR) ∧ ⌜length (elements (exps t)) = 1⌝.
 
-Lemma exps_TExp1 a : negb (is_mul a) -> exps (TExp (TInt 0) a) ≡ₚ [a].
-Proof.
-move=> Nm.
-rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [a]); last by rewrite /TExpN TMulN1.
-have NInt : negb (is_exp (TInt 0)) by [].
-have NIntM : negb (is_mul (TInt 0)) by [].
-have NIntI : negb (is_inv (TInt 0)) by [].
-by rewrite (exps_TExpN NInt NIntM NIntI (invs_canceled1 Nm)).
-Qed.
+Lemma exps_TExp1 a :
+  negb (is_mul a) -> exps (TExp (TInt 0) a) = {[+ a +]}.
+Proof. by move=> Nm; rewrite exps_TExp_expN // factors_Nmul. Qed.
 
 Lemma exps_TExp2 a b :
-  negb (is_mul a) -> negb (is_mul b) -> a ≠ TInv b ->
-  exps (TExpN (TInt 0) [a; b]) ≡ₚ [a; b].
+  negb (is_mul a) -> negb (is_mul b) ->
+  exps (TExp (TInt 0) (TMul {[+ a; b +]})) = SMS.make [a; b] [].
 Proof.
-move=> Nm_a Nm_b aVb.
-have NInt : negb (is_exp (TInt 0)) by [].
-have NIntM : negb (is_mul (TInt 0)) by [].
-have NIntI : negb (is_inv (TInt 0)) by [].
-by rewrite (exps_TExpN NInt NIntM NIntI (proj2 (invs_canceled2 Nm_a Nm_b) aVb)).
+move=> Nm_a Nm_b; rewrite exps_TExp_TMul // => u.
+by case/SMS.elem_of_disj_union => /SMS.elem_of_singleton ->.
 Qed.
 
 Definition si_key si : senc_key :=
@@ -555,11 +546,7 @@ iAssert (exp_pred_base a (TExp (TInt 0) a)) with "[corr]" as "#dp".
   { iNext. iDestruct "corr" as "#corr".
     iModIntro. rewrite /nsl_dh_key_share. iSplit => //.
     iPureIntro.
-    rewrite (_ : TExp (TInt 0) a = TExpN (TInt 0) [TNonce a]); last by rewrite /TExpN TMulN1.
-    have NInt : negb (is_exp (TInt 0)) by [].
-have NIntM : negb (is_mul (TInt 0)) by [].
-have NIntI : negb (is_inv (TInt 0)) by [].
-    by rewrite (exps_TExpN NInt NIntM NIntI (invs_canceled1 Nm)). }
+    by rewrite (exps_TExp1 Nm) SMS.elements_singleton. }
   by iDestruct ("pred_a" $! (TExp (TInt 0) a) with "ns") as "$". }
 rewrite /ga public_TExp_iff //.
 rewrite minted_TInt. do 3?[iSplit => //].

@@ -59,111 +59,109 @@ Proof. by rewrite unlock nonces_of_termE. Qed.
 Lemma minted_TGInv t : minted (TGInv t) ⊣⊢ minted t.
 Proof. by rewrite unlock nonces_of_termE. Qed.
 
-Lemma minted_TExpN t ts :
-  negb (is_exp t) -> negb (is_gmul t) -> negb (is_ginv t) ->
-  invs_canceled ts ->
-  minted (TExpN t ts) ⊣⊢ minted t ∧ [∗ list] t' ∈ ts, minted t'.
+Lemma minted_TMul s :
+  (∀ u, u ∈ s → negb (is_mul u)) ->
+  minted (TMul s) ⊣⊢ [∗ list] t ∈ elements s, minted t.
 Proof.
-move => nx nm ni ic.
-rewrite unlock (nonces_of_term_TExpN nx nm ni ic) big_sepS_union_pers.
+move => ic.
+rewrite unlock (nonces_of_term_TMul ic).
 by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
-Lemma minted_TMulN ts :
-  invs_canceled ts ->
-  minted (TMulN ts) ⊣⊢ [∗ list] t ∈ ts, minted t.
+Lemma minted_TGMul s :
+  (∀ u, u ∈ s → negb (is_gmul u)) ->
+  minted (TGMul s) ⊣⊢ [∗ list] t ∈ elements s, minted t.
 Proof.
 move => ic.
-rewrite unlock (nonces_of_term_TMulN ic).
-by rewrite big_sepS_union_list_pers big_sepL_fmap.
-Qed.
-
-Lemma minted_TGMulN ts :
-  ginvs_canceled ts ->
-  minted (TGMulN ts) ⊣⊢ [∗ list] t ∈ ts, minted t.
-Proof.
-move => ic.
-rewrite unlock (nonces_of_term_TGMulN ic).
+rewrite unlock (nonces_of_term_TGMul ic).
 by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
 (* Unconditional: [nonces_of_term_base_exps] holds for every [t], including a
-   product, where [base t = t] and [exps t = []]. *)
+   product, where [base t = t] and [exps t] is empty. *)
 Lemma minted_base_exps t :
-  minted t ⊣⊢ minted (base t) ∧ [∗ list] t' ∈ exps t, minted t'.
+  minted t ⊣⊢
+  minted (base t) ∧ [∗ list] t' ∈ elements (exps t), minted t'.
 Proof.
 rewrite unlock (nonces_of_term_base_exps t) big_sepS_union_pers.
 by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
-Lemma all_minted_TExpN t ts :
-  minted t ∧ ([∗ list] t' ∈ ts, minted t') ⊢ minted (TExpN t ts).
-Proof.
-rewrite unlock !big_sepS_forall.
-iIntros "[Ht Hts]" (l) "%l_in".
-have /elem_of_subseteq in_nonces := @nonces_of_term_TExpN_subseteq t ts.
-
-move: l_in => /(in_nonces l). rewrite elem_of_union elem_of_union_list.
-case => [?|]; first by iApply "Ht".
-case => _ [] /list_elem_of_fmap [] t' [] -> ??.
-rewrite big_sepL_elem_of // big_sepS_forall.
-by iApply "Hts".
-Qed.
-
-Lemma all_minted_TMulN ts :
-  ([∗ list] t ∈ ts, minted t) ⊢ minted (TMulN ts).
+Lemma all_minted_TMul s :
+  ([∗ list] t ∈ elements s, minted t) ⊢ minted (TMul s).
 Proof.
 rewrite unlock !big_sepS_forall.
 iIntros "Hts" (l) "%l_in".
-have /elem_of_subseteq in_nonces := @nonces_of_term_TMulN_subseteq ts.
+have /elem_of_subseteq in_nonces := @nonces_of_term_TMul_subseteq s.
 move: l_in => /(in_nonces l); rewrite elem_of_union_list.
 case => _ [] /list_elem_of_fmap [] t' [] -> ??.
 rewrite big_sepL_elem_of // big_sepS_forall.
 by iApply "Hts".
 Qed.
 
-Lemma all_minted_TGMulN ts :
-  ([∗ list] t ∈ ts, minted t) ⊢ minted (TGMulN ts).
+Lemma all_minted_TGMul s :
+  ([∗ list] t ∈ elements s, minted t) ⊢ minted (TGMul s).
 Proof.
 rewrite unlock !big_sepS_forall.
 iIntros "Hts" (l) "%l_in".
-have /elem_of_subseteq in_nonces := @nonces_of_term_TGMulN_subseteq ts.
+have /elem_of_subseteq in_nonces := @nonces_of_term_TGMul_subseteq s.
 move: l_in => /(in_nonces l); rewrite elem_of_union_list.
 case => _ [] /list_elem_of_fmap [] t' [] -> ??.
 rewrite big_sepL_elem_of // big_sepS_forall.
 by iApply "Hts".
+Qed.
+
+Lemma all_minted_TMul2 t1 t2 :
+  minted t1 ∧ minted t2 ⊢ minted (TMul {[+ t1; t2 +]}).
+Proof.
+iIntros "#[m1 m2]"; iApply all_minted_TMul.
+iApply big_sepL_intro; iIntros "!>" (k u Hk).
+move: (list_elem_of_lookup_2 _ _ _ Hk) => /SMS.elem_of_elements.
+by case/SMS.elem_of_disj_union => /SMS.elem_of_singleton ->.
+Qed.
+
+Lemma all_minted_TGMul2 t1 t2 :
+  minted t1 ∧ minted t2 ⊢ minted (TGMul {[+ t1; t2 +]}).
+Proof.
+iIntros "#[m1 m2]"; iApply all_minted_TGMul.
+iApply big_sepL_intro; iIntros "!>" (k u Hk).
+move: (list_elem_of_lookup_2 _ _ _ Hk) => /SMS.elem_of_elements.
+by case/SMS.elem_of_disj_union => /SMS.elem_of_singleton ->.
 Qed.
 
 Lemma minted_factors t :
-  minted t ⊣⊢ [∗ list] t' ∈ factors t, minted t'.
+  minted t ⊣⊢ [∗ list] t' ∈ elements (factors t), minted t'.
 Proof.
 rewrite unlock (nonces_of_term_factors t).
 by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
 Lemma minted_gfactors t :
-  minted t ⊣⊢ [∗ list] t' ∈ gfactors t, minted t'.
+  minted t ⊣⊢ [∗ list] t' ∈ elements (gfactors t), minted t'.
 Proof.
 rewrite unlock (nonces_of_term_gfactors t).
 by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
 Lemma minted_TExp t1 t2 :
-  negb (is_exp t1) -> negb (is_gmul t1) -> negb (is_ginv t1) ->
+  negb (is_exp t1) -> negb (is_gmul t1) ->
   minted (TExp t1 t2) ⊣⊢ minted t1 ∧ minted t2.
 Proof.
-move => nx nm ni.
-have -> : TExp t1 t2 = TExpN t1 (factors t2) by rewrite /TExpN factorsK.
-rewrite (minted_TExpN nx nm ni (invs_canceled_factors t2)).
-by rewrite -minted_factors.
+move => nx nm.
+rewrite (minted_factors t2) unlock (nonces_of_term_TExp _ nx nm).
+by rewrite big_sepS_union_pers big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
 Lemma all_minted_TExp t1 t2 :
   minted t1 ∧ minted t2 ⊢ minted (TExp t1 t2).
 Proof.
-have -> : TExp t1 t2 = TExpN t1 (factors t2) by rewrite /TExpN factorsK.
-rewrite (minted_factors t2).
-exact: (all_minted_TExpN t1 (factors t2)).
+rewrite unlock !big_sepS_forall.
+iIntros "[H1 H2]" (l) "%l_in".
+have sub : nonces_of_term (TExp t1 t2) ⊆
+           nonces_of_term t1 ∪ nonces_of_term t2.
+  rewrite ![nonces_of_term]unlock unfold_TExp.
+  exact: nonces_of_pre_term_exp_sub.
+by move: l_in => /sub /elem_of_union [?|?]; [iApply "H1"|iApply "H2"].
 Qed.
 
 Lemma minted_nonces_of_term t :

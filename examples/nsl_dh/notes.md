@@ -66,12 +66,14 @@ differences from ISO-DH.
 ### Library Lemmas Used
 
 - `public_TInt n : public (TInt n) ⊣⊢ True` — integers are always public
-- `public_TExpN` — decompose `public (TExpN t ts)` into structural/DH cases
-- `public_TExp_iff` — single-exponent case of `public_TExpN`
+- `public_exp_iff` — decompose `public t`, for an exponential `t`, into DH
+  cases
+- `public_TExp_iff` — single-exponent case of `public_exp_iff`
 - `public_TExp2_iff` — two-exponent case: three disjuncts (left-public,
   right-public, or both-dh-pred)
-- `minted_TExp`, `minted_TInt`, `minted_TExpN` — mintedness decomposition
-- `exps_TExpN` — `exps (TExpN t ts) = ts` (for non-exp `t`)
+- `minted_TExp`, `minted_TInt` — mintedness decomposition
+- `exps_TExp_TMul` — `exps (TExp t (TMul s)) = s` (for non-exp `t` and a
+  multiset `s` of non-products)
 
 ### 1. `public_dh_share` (line 350) — Proved
 
@@ -85,14 +87,14 @@ public (TExp (TInt 0) a)
 **Proof structure**: Same as ISO-DH but threads through the corruption
 hypothesis.
 
-1. `public_TExpN` decomposes the goal into left (public base ∧ public exp) or
+1. `public_TExp_iff` decomposes the goal into left (public base ∧ public exp) or
    right (minted ∧ dh_pred).
 2. Take right disjunct. Mintedness from `minted_TExp` + `minted_TInt` + `minted a`.
 3. For `dh_pred a (TExp (TInt 0) a)`: apply `pred_a` backward.
 4. Goal becomes `▷ □ nsl_dh_key_share skI skR (TExp (TInt 0) a)`.
 5. Under `▷ □`, unfold to `(public skI ∨ public skR) ∧ ⌜length [a] = 1⌝`.
 6. Split: corruption from hypothesis (persistent, survives under `▷ □`);
-   length from `exps_TExpN`.
+   length from `exps_TExp1`.
 
 ### 2. `public_dh_secret` (line 364) — Proved (statement modified)
 
@@ -100,10 +102,10 @@ hypothesis.
 ```
 minted a -∗ minted b -∗
 □ (∀ t, dh_pred a t ↔ ...) -∗ □ (∀ t, dh_pred b t ↔ ...) -∗
-(public (TExpN (TInt 0) [a; b]) ↔ ◇ (public a ∨ public b))
+(public (TExp (TInt 0) (TMul {[+ a; b +]})) ↔ ◇ (public a ∨ public b))
 ```
 
-**Issue**: The backward direction (`◇ (public a ∨ public b) → public (TExpN ...)`)
+**Issue**: The backward direction (`◇ (public a ∨ public b) → public (TExp ...)`)
 requires `public_dh_share` to construct `public (TExp (TInt 0) b)` from
 `public a`. But `public_dh_share` needs `(public skI ∨ public skR)`, which
 cannot be derived from the original hypotheses alone. In ISO-DH this wasn't
@@ -114,7 +116,7 @@ needed because `iso_dh_key_share` has no corruption guard.
 minted a -∗ minted b -∗
 □ (∀ t, dh_pred a t ↔ ...) -∗ □ (∀ t, dh_pred b t ↔ ...) -∗
 (public skI ∨ public skR) -∗
-(public (TExpN (TInt 0) [a; b]) ↔ ◇ (public a ∨ public b))
+(public (TExp (TInt 0) (TMul {[+ a; b +]})) ↔ ◇ (public a ∨ public b))
 ```
 
 This lemma is never used elsewhere, so the change has no downstream impact.
@@ -122,10 +124,10 @@ This lemma is never used elsewhere, so the change has no downstream impact.
 **Proof structure** (adapts ISO-DH):
 
 Forward direction (three cases from `public_TExp2_iff`):
-1. `public (TExpN (TInt 0) [a]) ∧ public b` → `◇ (... ∨ public b)` via right.
-2. `public (TExpN (TInt 0) [b]) ∧ public a` → `◇ (public a ∨ ...)` via left.
+1. `public (TExp (TInt 0) a) ∧ public b` → `◇ (... ∨ public b)` via right.
+2. `public (TExp (TInt 0) b) ∧ public a` → `◇ (public a ∨ ...)` via left.
 3. `minted ∧ dh_pred a ∧ dh_pred b` → contradiction.
-   Apply `pred_a` to get `▷ □ nsl_dh_key_share skI skR (TExpN (TInt 0) [a; b])`.
+   Apply `pred_a` to get `▷ □ nsl_dh_key_share skI skR (TExp (TInt 0) (TMul {[+ a; b +]}))`.
    Under `▷` then `□`, the key share predicate requires `⌜length [a; b] = 1⌝`
    but `length [a; b] = 2`, giving `▷ False`, hence `◇ P`.
 
@@ -134,7 +136,7 @@ Forward direction (three cases from `public_TExp2_iff`):
    iPoseProof ("pred_a" with "contra") as "#contra2".
    iAssert (▷ False)%I as ">[]".
    { iModIntro. iDestruct "contra2" as "[_ %contra]".
-     by rewrite /nsl_dh_key_share exps_TExpN /= in contra. }
+     by rewrite /nsl_dh_key_share exps_TExp2 /= in contra. }
    ```
    - Introduce `contra2` as **persistent** (`#`) — necessary because
      `iModIntro` drops spatial hypotheses.
@@ -155,7 +157,7 @@ Backward direction (three cases from `◇ = ▷ False ∨ _`):
 □ (∀ t, dh_pred a t ↔ ▷ □ nsl_dh_key_share skI skR t) -∗
 □ (public b ↔ P) -∗
 □ (∀ t, dh_pred b t ↔ ▷ □ nsl_dh_key_share skI skR t) -∗
-(public (TExpN (TInt 0) [a; b]) → ◇ P)
+(public (TExp (TInt 0) (TMul {[+ a; b +]})) → ◇ P)
 ```
 
 **Proof structure**: Identical to ISO-DH. Only the forward direction is needed.

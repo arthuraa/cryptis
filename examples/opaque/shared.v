@@ -373,7 +373,7 @@ rewrite big_sepS_singleton.
 iModIntro; iSplit.
 - iIntros "#?"; iApply all_minted_TExp; iSplit => //.
   by rewrite minted_hash_result.
-- rewrite (minted_TExp (t1 := hash_result "H" pw) (TNonce r) I I I).
+- rewrite (minted_TExp (t1 := hash_result "H" pw) (TNonce r) I I).
   by iIntros "[_ ?]".
 Qed.
 

@@ -58,13 +58,12 @@ Qed.
 
 Lemma gNX : negb (is_exp g). Proof. by []. Qed.
 Lemma gNm : negb (is_gmul g). Proof. by []. Qed.
-Lemma gNi : negb (is_ginv g). Proof. by []. Qed.
 
 Lemma tags : "init"%string ≠ "resp"%string. Proof. by []. Qed.
 Lemma tags' : "resp"%string ≠ "init"%string. Proof. by []. Qed.
 
 Lemma TExp_g_inj (p p' : nonce) : TExp g p = TExp g p' -> p = p'.
-Proof. by move/(@TExp_injr g _ _ gNm gNi) => - [] ->. Qed.
+Proof. by move/(@TExp_injr g _ _ gNm) => - [] ->. Qed.
 
 Record sess_info := SessInfo {
   si_init : nonce;         (* the initiator's long-term key *)
@@ -125,7 +124,7 @@ Proof.
 move/si_key_inj; rewrite /init_si /= => eK.
 have [-> [-> [-> ->]]] :=
   @hmqv_K_inj hmqvN g "init" "resp" p_a x_a p_b p_a' x_a' p_b' X_b X_b'
-              gNX gNm gNi tags eK.
+              gNX gNm tags eK.
 by [].
 Qed.
 
@@ -137,7 +136,7 @@ Proof.
 move/si_key_inj; rewrite /resp_si /= => eK.
 have [-> [-> [-> ->]]] :=
   @hmqv_K_inj hmqvN g "resp" "init" p_b x_b p_a p_b' x_b' p_a' X_a X_a'
-              gNX gNm gNi tags' eK.
+              gNX gNm tags' eK.
 by [].
 Qed.
 
@@ -198,7 +197,7 @@ Lemma hmqv_key_public (p : nonce) : hmqv_key p -∗ public (TExp g p).
 Proof.
 iIntros "[#m_p #pred_p]".
 have Nm : negb (is_mul (TNonce p)) by [].
-iApply (public_dh_share gNX gNm gNi Nm with "[] m_p pred_p").
+iApply (public_dh_share gNX gNm Nm with "[] m_p pred_p").
 by rewrite public_TInt.
 Qed.
 
@@ -517,7 +516,7 @@ iModIntro; iSplit.
     iDestruct "p_t" as "[p_σ _]".
     iRight.
     iDestruct (@public_hmqv_K_honest _ _ _ hmqvN g "resp" "init" p_b x_b p_a x_a
-                 gNX gNm gNi tags' with "key_pb key_xb key_pa key_xa p_σ")
+                 gNX gNm tags' with "key_pb key_xb key_pa key_xa p_σ")
       as "[[#? #?]|[#? #?]]".
     * iRight. iSplit => //. iExists x_b. by iSplit.
     * iLeft. iSplit => //. iExists x_a. by iSplit.

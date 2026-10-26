@@ -97,8 +97,7 @@ iAssert (public (TExp g x_u)) as "#pubX_u".
   - by iApply minted_TInt.
   - iApply exp_pred_intro1.
     iApply "Hexpx_u"; iPureIntro.
-    rewrite (_ : TExp g x_u = TExpN g [TNonce x_u]); last by rewrite /TExpN TMulN1.
-    by rewrite exps_TExpN //; exact: invs_canceled1.
+    by rewrite exps_TExp_expN // factors_Nmul // SMS.elements_singleton.
   - by rewrite public_TInt; auto. }
 iAssert (minted (TExp g x_u)) as "#mintedX_u"; first by iApply public_minted.
 wp_apply wp_H'; wp_apply wp_texp; wp_pures.
@@ -240,7 +239,7 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
       iDestruct "p_t'" as "(p_K' & _)".
       iAssert (▷ □ public pw)%I as "#p_pw".
       { iDestruct (@public_hmqv_K_static _ _ _ opN g "d" "e" p_u x_u p_s
-                     (TExp g p_u) (TExp g x_u) X_s I I I tags_c
+                     (TExp g p_u) (TExp g x_u) X_s I I tags_c
                      with "key_p_u key_p_s p_K'") as "[p|p]".
         - by iApply "priv_p_u".
         - by iApply "priv_p_s". }
@@ -309,7 +308,7 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
       subst P_s'.
       have [epa [epb [eXs eXu]]] :=
         @hmqv_K_inj' opN g "d" "e" p_u x_u p_s p_u_s x_s p_s_s X_s X_u_s
-                    I I I tags_c eKK.
+                    I I tags_c eKK.
       subst p_u_s p_s_s uid_s α_s X_u_s.
       iEval (rewrite -eSK) in "mintedSK".
       iPoseProof (honest_session_ok uid α p_u p_s x_u x_s

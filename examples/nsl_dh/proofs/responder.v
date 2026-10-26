@@ -196,7 +196,8 @@ iDestruct "inv_m3" as "[#p_gb|(#inv_m3 & _)]".
   rewrite public_TExp_iff //.
   iDestruct "p_gb" as "(_ & _ & #exp_b & _)".
   iPoseProof (exp_pred_inv_same with "exp_b") as "exp_b_inv";
-    first by rewrite (exps_TExp1 Nm_b); set_solver.
+    first by rewrite (exps_TExp1 Nm_b) /SMS.pos SMS.car_singleton;
+             set_solver.
   iDestruct "exp_b_inv" as "[#p_b | (%t3 & %base_t3 & %t3_sub & #base_b)]".
   + (* public b — contradiction with release_token *)
     iDestruct ("s_b" with "p_b") as "#later_ns".
