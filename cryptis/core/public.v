@@ -114,7 +114,7 @@ Definition exp_pred0_pre Plater P DH ts : iProp :=
     [∗ list] t ∈ elements (factors e), Plater t) ∨
   P ts.1 ∨
   ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ ⌜negb (is_mul t)⌝ ∗
-  ⌜negb (is_gmul t2')⌝ ∗ ⌜t ∉ SMS.neg (exps t2')⌝ ∗
+  ⌜negb (is_gmul t2')⌝ ∗ ⌜(0 ≤ count t (expo t2'))%Z⌝ ∗
   DH (ts.1, t2') ∗ DH (t, ts.2).
 
 #[local] Instance exp_pred0_pre_mono Plater P :
@@ -143,7 +143,7 @@ Lemma exp_pred0_unfold Plater P ts :
     [∗ list] t ∈ elements (factors e), Plater t) ∨
   P ts.1 ∨
   ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ ⌜negb (is_mul t)⌝ ∗
-  ⌜negb (is_gmul t2')⌝ ∗ ⌜t ∉ SMS.neg (exps t2')⌝ ∗
+  ⌜negb (is_gmul t2')⌝ ∗ ⌜(0 ≤ count t (expo t2'))%Z⌝ ∗
   exp_pred0 Plater P (ts.1, t2') ∗ exp_pred0 Plater P (t, ts.2).
 Proof. by rewrite exp_pred0_unseal /exp_pred0_def least_fixpoint_unfold. Qed.
 
@@ -223,8 +223,7 @@ iApply exp_pred0_ind; iIntros "!> %ts [H | [H | H]] %HP".
     rewrite e /exps -!count_gt0 (count_expo_TExp _ _ _ Nm2).
     have := @count_atom_ge0 t' t Nm; lia.
   + iApply "IH2"; iPureIntro => t' /= [->|t'_t2]; apply: HP; [right|by right].
-    move: t_t2'; rewrite e /exps -count_gt0 -count_lt0.
-    rewrite (count_expo_TExp_eq _ _ Nm Nm2); lia.
+    rewrite e /exps -count_gt0 (count_expo_TExp_eq _ _ Nm Nm2); lia.
 Qed.
 
 Lemma exp_pred0_proper' Plater P1 P2 ts :
@@ -662,7 +661,7 @@ iIntros "#dh"; iApply (exp_pred_intro1_gen _ compat).
 Qed.
 
 Lemma exp_pred_intro2 t t1 t2 :
-  negb (is_mul t) -> negb (is_gmul t2) -> t ∉ SMS.neg (exps t2) →
+  negb (is_mul t) -> negb (is_gmul t2) -> (0 ≤ count t (expo t2))%Z →
   exp_pred t1 t2 -∗ exp_pred t (TExp t2 t) -∗ exp_pred t1 (TExp t2 t).
 Proof.
 rewrite exp_pred_unseal /exp_pred_def (exp_pred0_unfold _ _ (t1, TExp t2 t)) /=.
@@ -682,7 +681,7 @@ Lemma exp_pred_ind (φ : term → term → iProp) :
     ([∗ list] t ∈ elements (factors e), ▷ public t) -∗
     exp_pred_base t1 (TExp t2 e) -∗ φ t1 t2) -∗
   (□ ∀ t t1 t2, ⌜negb (is_mul t)⌝ -∗ ⌜negb (is_gmul t2)⌝ -∗
-                ⌜t ∉ SMS.neg (exps t2)⌝ -∗
+                ⌜(0 ≤ count t (expo t2))%Z⌝ -∗
                 exp_pred t1 t2 -∗ □ φ t1 t2 -∗
                 exp_pred t (TExp t2 t) -∗ □ φ t (TExp t2 t) -∗
                 φ t1 (TExp t2 t)) -∗
@@ -1153,8 +1152,8 @@ iApply exp_pred_ind.
   rewrite TExpC; iApply exp_pred_intro2.
   + exact: Nm_y.
   + exact: (Ngmul_TExp _ _ Nm_t2).
-  + move: y_t2; rewrite /exps -!count_lt0 (count_expo_TExp _ _ _ Nm_t2).
-    by rewrite count_TInv (count_atom_ne Nm y_t); lia.
+  + rewrite (count_expo_TExp _ _ _ Nm_t2) count_TInv.
+    by rewrite (count_atom_ne Nm y_t); lia.
   + by iApply ("IH1" with "[//]").
   + rewrite -TExpC; iApply "IH2"; iPureIntro.
     exact: (Ngmul_TExp _ _ Nm_t2).
@@ -1168,14 +1167,14 @@ Lemma exp_pred_TExp_atom t1 t2 t :
   exp_pred t1 t2 -∗ public t -∗ exp_pred t1 (TExp t2 t).
 Proof.
 move=> Nm2 Nm; iIntros "dh #p".
-case: (decide (t ∈ SMS.neg (exps t2))) => t_t2; last first.
+case: (Z.lt_ge_cases (count t (expo t2)) 0) => t_t2; last first.
   by iApply (exp_pred_intro2 with "dh") => //; iApply exp_pred_intro3.
 iRevert (Nm2 t_t2); iRevert (t1 t2) "dh".
 iApply exp_pred_ind.
 - iIntros "!> %e %t1 %t2 %compat #p_e #dh %Nm2 %t_t2".
   have compat' : ∀ x, (0 < count x (expo (TExp t2 t)) →
                        0 ≤ count x (TMul {[+ e; TInv t +]}))%Z.
-    move: t_t2; rewrite /exps -count_lt0 => t_t2 x.
+    move=> x.
     rewrite (count_expo_TExp _ _ _ Nm2) count_TMul_disj_union !TMul_singleton.
     rewrite count_TInv.
     case: (decide (x = t)) => [->|ne].
@@ -1195,16 +1194,15 @@ iApply exp_pred_ind.
       by rewrite !TMul_singleton count_TInv; lia.
     by [].
 - iIntros "!> %y %t1 %t2 %Nm_y %Nm_t2 %y_t2 #dh1 #IH1 #dh2 #IH2 %Nm2 %t_t2".
-  have [y_t t_t2'] : y ≠ t ∧ t ∈ SMS.neg (exps t2).
-    move: t_t2 y_t2; rewrite /exps -!count_lt0 (count_expo_TExp _ _ _ Nm_t2).
+  have [y_t t_t2'] : y ≠ t ∧ (count t (expo t2) < 0)%Z.
+    move: t_t2 y_t2; rewrite (count_expo_TExp _ _ _ Nm_t2).
     case: (decide (y = t)) => [->|ne].
     + by rewrite count_atom_diag //; lia.
     + by rewrite (count_atom_ne Nm_y (not_eq_sym ne)); split => //; lia.
   rewrite TExpC; iApply exp_pred_intro2.
   + exact: Nm_y.
   + exact: (Ngmul_TExp _ _ Nm_t2).
-  + move: y_t2; rewrite /exps -!count_lt0 (count_expo_TExp _ _ _ Nm_t2).
-    by rewrite (count_atom_ne Nm y_t); lia.
+  + by rewrite (count_expo_TExp _ _ _ Nm_t2) (count_atom_ne Nm y_t); lia.
   + by iApply ("IH1" with "[//] [//]").
   + rewrite -TExpC; iApply ("IH2" with "[%] [//]").
     exact: (Ngmul_TExp _ _ Nm_t2).
@@ -1219,13 +1217,13 @@ Lemma public_TExp_Nmul t1 t2 :
 Proof.
 move=> Nm1 Nm2; move: t1 Nm1; elim/term_lt_ind => t1 IH Nm1.
 iIntros "#p1 #p2".
-case: (decide (t2 ∈ SMS.neg (exps t1))) => t2_t1.
+case: (Z.lt_ge_cases (count t2 (expo t1)) 0) => [/count_lt0 t2_t1|t2_t1].
   by iDestruct (public_exps_neg t2_t1 with "p1") as "[_ $]".
 have cntE x : count x (expo (TExp t1 t2)) = (count x (expo t1) + count x t2)%Z.
   exact: count_expo_TExp.
 have exp_t : is_exp (TExp t1 t2).
   apply: (@is_exp_of_exps _ t2); rewrite /exps; apply/count_neq0.
-  move: t2_t1; rewrite /exps -count_lt0 cntE count_atom_diag //; lia.
+  rewrite cntE count_atom_diag //; lia.
 rewrite [public (TExp _ _)]public_exp_iff //; iSplit.
   by iApply all_minted_TExp; iSplit; iApply public_minted.
 iSplit.
@@ -1512,7 +1510,7 @@ Qed.
 
 Lemma public_TExp_add t1 t2 :
   negb (is_gmul t1) → negb (is_mul t2) →
-  t2 ∉ SMS.neg (exps t1) →
+  (0 ≤ count t2 (expo t1))%Z →
   public t1 -∗
   minted t2 -∗
   exp_pred t2 (TExp t1 t2) -∗
@@ -1524,7 +1522,7 @@ have cntE x : count x (expo (TExp t1 t2)) = (count x (expo t1) + count x t2)%Z.
   exact: count_expo_TExp.
 have exp_t : is_exp (TExp t1 t2).
   apply: (@is_exp_of_exps _ t2); rewrite /exps; apply/count_neq0.
-  move: t2_t1; rewrite /exps -count_lt0 cntE count_atom_diag //; lia.
+  rewrite cntE count_atom_diag //; lia.
 rewrite [public (TExp _ _)]public_exp_iff //; iSplit.
   by iApply all_minted_TExp; iSplit => //; iApply public_minted.
 iSplit.
@@ -1539,9 +1537,9 @@ iSplit.
   iIntros "!> #p"; iSpecialize ("p1'" with "p").
   have lt : tsize (TExp t1 (TInv t)) < tsize t1.
     by case: (tsize_TExp_pos _ _ t_t1).
-  have t2_t' : t2 ∉ SMS.neg (exps (TExp t1 (TInv t))).
-    move: t2_t1; rewrite /exps -!count_lt0 (count_expo_TExp _ _ _ Nm1).
-    by rewrite count_TInv (count_atom_ne Nm_t (not_eq_sym t_t2)); lia.
+  have t2_t' : (0 ≤ count t2 (expo (TExp t1 (TInv t))))%Z.
+    rewrite (count_expo_TExp _ _ _ Nm1) count_TInv.
+    by rewrite (count_atom_ne Nm_t (not_eq_sym t_t2)); lia.
   rewrite TExpC; iApply (IH _ lt (Ngmul_TExp _ _ Nm1) t2_t' with "p1' m").
   rewrite TExpC.
   by iApply (exp_pred_TExp_inv _ (Ngmul_TExp _ _ Nm1) Nm_t with "dh p").
@@ -1554,8 +1552,8 @@ iSplit.
   have Nm_t := Nmul_factors _ _ (SMS.elem_of_neg _ _ t_t1).
   iDestruct (public_exps_neg t_t1 with "p1") as "[#pt #p]"; iSplit => //.
   have lt : tsize (TExp t1 t) < tsize t1 by case: (tsize_TExp_neg _ _ t_t1).
-  have t2_t' : t2 ∉ SMS.neg (exps (TExp t1 t)).
-    move: t2_t1; rewrite /exps -!count_lt0 (count_expo_TExp _ _ _ Nm1).
+  have t2_t' : (0 ≤ count t2 (expo (TExp t1 t)))%Z.
+    rewrite (count_expo_TExp _ _ _ Nm1).
     by rewrite (count_atom_ne Nm_t (not_eq_sym t_t2)); lia.
   rewrite TExpC; iApply (IH _ lt (Ngmul_TExp _ _ Nm1) t2_t' with "p m").
   rewrite TExpC.
@@ -1570,7 +1568,7 @@ Lemma public_TExp_exp_pred t1 t2 :
   public (TExp t1 t2).
 Proof.
 move=> Nm1 Nm2; iIntros "#p1 #m2 #dh".
-case: (decide (t2 ∈ SMS.neg (exps t1))) => t2_t1.
+case: (Z.lt_ge_cases (count t2 (expo t1)) 0) => [/count_lt0 t2_t1|t2_t1].
 - by iDestruct (public_exps_neg t2_t1 with "p1") as "[_ $]".
 - by iApply (public_TExp_add Nm1 Nm2 t2_t1 with "p1 m2 dh").
 Qed.
