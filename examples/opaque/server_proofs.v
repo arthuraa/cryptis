@@ -265,12 +265,12 @@ wp_apply wp_send => //.
     iAssert (public u) as "#p_u".
       by iApply (big_sepL_elem_of with "fs").
     iApply public_TExp_exp_pred => //.
-    iApply exp_pred_intro1.
+    iApply exp_pred_base_exp_pred.
     by iApply "Hexpk_s".
   - iApply public_TExp_iff => //.
     do !iSplit => //.
     + by iApply minted_TInt.
-    + iApply exp_pred_intro1.
+    + iApply exp_pred_base_exp_pred.
       iApply "Hexpx_s"; iPureIntro.
       by rewrite exps_TExp_expN // factors_Nmul // SMS.elements_singleton.
     + by rewrite public_TInt; auto.

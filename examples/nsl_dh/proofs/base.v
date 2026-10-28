@@ -550,7 +550,7 @@ iAssert (exp_pred_base a (TExp (TInt 0) a)) with "[corr]" as "#dp".
   by iDestruct ("pred_a" $! (TExp (TInt 0) a) with "ns") as "$". }
 rewrite /ga public_TExp_iff //.
 rewrite minted_TInt. do 3?[iSplit => //].
-- by iApply exp_pred_intro1.
+- by iApply exp_pred_base_exp_pred.
 - iIntros "!> _". by rewrite public_TInt.
 Qed.
 

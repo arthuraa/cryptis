@@ -101,9 +101,9 @@ inference rules:
     exp_pred t1 t2
 
 
-    ¬ is_mul t      ¬ is_gmul t2      0 ≤ count t (expo t2)
+    0 < count t (expo (TExp t2 t))
     exp_pred t1 t2     exp_pred t (TExp t2 t)
-    -------------------------------------------------------
+    ---------------------------------------------
     exp_pred t1 (TExp t2 t)
 
 *)
@@ -111,10 +111,9 @@ inference rules:
 Definition exp_pred0_pre Plater P DH ts : iProp :=
   (∃ e, exp_pred_base ts.1 (TExp ts.2 e) ∗
     ⌜∀ t, (0 < count t (expo ts.2) → 0 ≤ count t e)%Z⌝ ∗
-    [∗ list] t ∈ elements (factors e), Plater t) ∨
+    [∗ list] t ∈ elements (factors e), □ Plater t) ∨
   P ts.1 ∨
-  ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ ⌜negb (is_mul t)⌝ ∗
-  ⌜negb (is_gmul t2')⌝ ∗ ⌜(0 ≤ count t (expo t2'))%Z⌝ ∗
+  ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ ⌜(0 < count t (expo ts.2))%Z⌝ ∗
   DH (ts.1, t2') ∗ DH (t, ts.2).
 
 #[local] Instance exp_pred0_pre_mono Plater P :
@@ -123,7 +122,7 @@ Proof.
 constructor; last by move=> ??; solve_proper.
 iIntros (DH1 DH2 _ _) "#H %ts dh"; rewrite /exp_pred0_pre.
 iDestruct "dh" as "[? | [? | dh]]"; eauto.
-iDestruct "dh" as (t2 t') "(#p & #Nm & #Nm2 & #? & dh1 & dh2)".
+iDestruct "dh" as (t2 t') "(#p & #? & dh1 & dh2)".
 iRight; iRight; iExists t2, t'; iFrame "#".
 by iSplitL "dh1"; iApply "H".
 Qed.
@@ -140,10 +139,9 @@ Lemma exp_pred0_unfold Plater P ts :
   exp_pred0 Plater P ts ⊣⊢
   (∃ e, exp_pred_base ts.1 (TExp ts.2 e) ∗
     ⌜∀ t, (0 < count t (expo ts.2) → 0 ≤ count t e)%Z⌝ ∗
-    [∗ list] t ∈ elements (factors e), Plater t) ∨
+    [∗ list] t ∈ elements (factors e), □ Plater t) ∨
   P ts.1 ∨
-  ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ ⌜negb (is_mul t)⌝ ∗
-  ⌜negb (is_gmul t2')⌝ ∗ ⌜(0 ≤ count t (expo t2'))%Z⌝ ∗
+  ∃ t2' t, ⌜ts.2 = TExp t2' t⌝ ∗ ⌜(0 < count t (expo ts.2))%Z⌝ ∗
   exp_pred0 Plater P (ts.1, t2') ∗ exp_pred0 Plater P (t, ts.2).
 Proof. by rewrite exp_pred0_unseal /exp_pred0_def least_fixpoint_unfold. Qed.
 
@@ -175,16 +173,15 @@ by apply exp_pred0_ne => // ts'; apply equiv_dist; eauto.
 Qed.
 
 #[global] Instance exp_pred0_persistent Plater P :
-  (∀ ts, Persistent (Plater ts)) →
   (∀ ts, Persistent (P ts)) →
   ∀ ts, Persistent (exp_pred0 Plater P ts).
 Proof.
-rewrite {3}/Persistent => HPlater HP ts; iIntros "H".
+rewrite {2}/Persistent => HP ts; iIntros "H".
 iRevert (ts) "H".
 iApply exp_pred0_ind; iIntros "!> %ts [#H | [#H | H]]"; eauto.
 - rewrite exp_pred0_unfold; eauto.
 - rewrite exp_pred0_unfold; eauto.
-- iDestruct "H" as (t2' t) "(% & % & % & % & [#? _] & [#? _])".
+- iDestruct "H" as (t2' t) "(% & % & [#? _] & [#? _])".
   iModIntro; rewrite [exp_pred0 Plater P ts]exp_pred0_unfold.
   by iRight; iRight; iExists t2', t; iFrame "#".
 Qed.
@@ -199,9 +196,9 @@ iApply exp_pred0_ind; iIntros "!> %ts [H | [H | H]]"; eauto.
 - rewrite exp_pred0_unfold; iLeft.
   iDestruct "H" as (e) "(H & % & He)".
   iFrame; iSplit => //; iApply (big_sepL_impl with "He").
-  iIntros "!> % % %"; iApply "monolater".
+  by iIntros "!> % % % #?"; iModIntro; iApply "monolater".
 - by rewrite exp_pred0_unfold; iRight; iLeft; iApply "mono".
-- iDestruct "H" as (t2' t) "(% & % & % & % & [? _] & [? _])".
+- iDestruct "H" as (t2' t) "(% & % & [? _] & [? _])".
   rewrite [exp_pred0 Plater2 P2 ts]exp_pred0_unfold.
   by iRight; iRight; iExists t2', t; iFrame.
 Qed.
@@ -214,16 +211,18 @@ iIntros "%HP dh"; iRevert (HP); iRevert (ts) "dh".
 iApply exp_pred0_ind; iIntros "!> %ts [H | [H | H]] %HP".
 - by rewrite exp_pred0_unfold; eauto.
 - by rewrite exp_pred0_unfold HP; eauto.
-- iDestruct "H" as (t2' t e Nm Nm2 t_t2') "([IH1 _] & [IH2 _])".
+- iDestruct "H" as (t2' t e t_ts) "([IH1 _] & [IH2 _])".
+  have /count_expo_TExp_gt0 [Nm [Nm2 _]] : (0 < count t (expo (TExp t2' t)))%Z.
+    by rewrite -e.
   rewrite [exp_pred0 Plater P2 ts]exp_pred0_unfold.
   iRight; iRight; iExists t2', t.
-  do 4!iSplit => //; iSplitL "IH1".
+  do 2!iSplit => //; iSplitL "IH1".
   + iApply "IH1"; iPureIntro => t' /= [->|t'_t2']; eauto.
     apply: HP; right; move: t'_t2'.
     rewrite e /exps -!count_gt0 (count_expo_TExp _ _ _ Nm2).
     have := @count_atom_ge0 t' t Nm; lia.
   + iApply "IH2"; iPureIntro => t' /= [->|t'_t2]; apply: HP; [right|by right].
-    rewrite e /exps -count_gt0 (count_expo_TExp_eq _ _ Nm Nm2); lia.
+    by apply/count_gt0.
 Qed.
 
 Lemma exp_pred0_proper' Plater P1 P2 ts :
@@ -501,27 +500,26 @@ Qed.
 Proof. by move=> ????; apply: public_pre_aux_wf. Qed.
 
 Lemma public_pre_aux_persistent Plater P :
-  □ (∀ t, Plater t -∗ <pers> Plater t) -∗
   □ (∀ t, P t -∗ <pers> P t) -∗
   ∀ t, public_pre_aux Plater P t -∗ <pers> public_pre_aux Plater P t.
 Proof.
-iIntros "#wand1 #wand2 %t [#m [H | [H | [H | [H | H]]]]]"; iSplit => //.
+iIntros "#wand %t [#m [H | [H | [H | [H | H]]]]]"; iSplit => //.
 - iDestruct "H" as (T ?) "H"; iLeft; iExists T; iSplit; eauto.
   iAssert ([∗ set] t' ∈ T, <pers> P t')%I as "{H} #H".
   { iApply (big_sepS_impl with "H"); iIntros "!> %t' _".
-    by iApply "wand2". }
+    by iApply "wand". }
   by iModIntro; iApply (big_sepS_impl with "H"); eauto.
 - iDestruct "H" as "(% & H)"; iRight; iLeft.
   iAssert ([∗ list] t' ∈ elements (factors t), <pers> P t')%I
     as "{H} #H".
   { iApply (big_sepL_impl with "H"); iIntros "!> %k %t' _".
-    by iApply "wand2". }
+    by iApply "wand". }
   by iModIntro; iSplit => //; iApply (big_sepL_impl with "H"); eauto.
 - iDestruct "H" as "(% & H)"; iRight; iRight; iLeft.
   iAssert ([∗ list] t' ∈ elements (gfactors t), <pers> P t')%I
     as "{H} #H".
   { iApply (big_sepL_impl with "H"); iIntros "!> %k %t' _".
-    by iApply "wand2". }
+    by iApply "wand". }
   by iModIntro; iSplit => //; iApply (big_sepL_impl with "H"); eauto.
 - iDestruct "H" as "(% & H)"; iRight; iRight; iRight; iLeft.
   iAssert ([∗ list] t' ∈ SMS.pos (exps t),
@@ -529,16 +527,15 @@ iIntros "#wand1 #wand2 %t [#m [H | [H | [H | [H | H]]]]]"; iSplit => //.
     □ (P t' → P (TExp t (TInv t'))))%I with "[H]" as "#Hpos".
   { iDestruct "H" as "[H _]"; iApply (big_sepL_impl with "H").
     iIntros "!> %k %t' _ [dh #?]"; iSplit => //.
-    iAssert (exp_pred0 (λ t'', <pers> Plater t'')%I
-                      (λ t'', <pers> P t'')%I (t', t)) as "{dh} #dh".
-    { by iApply (exp_pred0_wand with "[] [] dh"); eauto. }
-    by iModIntro; iApply (exp_pred0_wand with "[] [] dh"); iIntros "!> % #?". }
+    iAssert (exp_pred0 Plater (λ t'', <pers> P t'')%I (t', t)) as "{dh} #dh".
+    { by iApply (exp_pred0_wand with "[] wand dh"); iIntros "!> % ?". }
+    by iModIntro; iApply (exp_pred0_wand with "[] [] dh"); iIntros "!> % ?". }
   iAssert ([∗ list] t' ∈ SMS.neg (exps t),
     <pers> P t' ∧ <pers> P (TExp t t'))%I with "[H]" as "#Hneg".
   { iDestruct "H" as "[_ H]"; iApply (big_sepL_impl with "H").
     iIntros "!> %k %t' _ H"; iSplit.
-    - by iDestruct "H" as "[H _]"; iApply "wand2".
-    - by iDestruct "H" as "[_ H]"; iApply "wand2". }
+    - by iDestruct "H" as "[H _]"; iApply "wand".
+    - by iDestruct "H" as "[_ H]"; iApply "wand". }
   iModIntro; iSplit => //; iSplit.
   + by iApply (big_sepL_impl with "Hpos"); iIntros "!> % % _ [#? #?]"; eauto.
   + by iApply (big_sepL_impl with "Hneg"); iIntros "!> % % _ [#? #?]"; eauto.
@@ -549,13 +546,11 @@ Lemma public_pre_unfold Plater t :
   public_pre Plater t ≡ public_pre_aux Plater (public_pre Plater) t.
 Proof. apply: size_rec_pred_unfold; exact: public_pre_aux_wf. Qed.
 
-Lemma public_pre_persistent Plater :
-  □ (∀ t, Plater t -∗ <pers> Plater t) -∗
-  ∀ t, public_pre Plater t -∗ <pers> public_pre Plater t.
+Lemma public_pre_persistent Plater t :
+  public_pre Plater t -∗ <pers> public_pre Plater t.
 Proof.
-iIntros "#HPlater"; rewrite /public_pre.
-iApply size_rec_pred_persistent.
-iIntros "!> %P #HP".
+rewrite /public_pre; iIntros "H".
+iApply (size_rec_pred_persistent with "[] H"); iIntros "!> %P #HP".
 by iApply public_pre_aux_persistent.
 Qed.
 
@@ -630,77 +625,139 @@ Qed.
 
 #[global] Instance Persistent_public t : Persistent (public t).
 Proof.
-rewrite /Persistent; rewrite public_unseal /public_def.
-iIntros "H"; iLöb as "IH" forall (t).
-rewrite (fixpoint_unfold public_pre' t) {3 4}/public_pre'.
-iApply (public_pre_persistent with "[] H").
-iIntros "!> % H"; rewrite -bi.later_persistently; iModIntro.
-by iApply "IH".
+rewrite /Persistent public_unseal /public_def; iIntros "H".
+rewrite (fixpoint_unfold public_pre' t) /public_pre'.
+by iApply public_pre_persistent.
 Qed.
 
 #[global] Instance Persistent_exp_pred t1 t2 : Persistent (exp_pred t1 t2).
 Proof. rewrite exp_pred_unseal /exp_pred_def. by apply _. Qed.
 
-Lemma exp_pred_intro1_gen t1 t2 e :
+#[local] Lemma exp_pred_base_exp_pred_gen t1 t2 e :
   (∀ t, 0 < count t (expo t2) → 0 ≤ count t e)%Z →
   ([∗ list] t ∈ elements (factors e), ▷ public t) -∗
   exp_pred_base t1 (TExp t2 e) -∗ exp_pred t1 t2.
 Proof.
 iIntros "%compat #p_e #dh".
 rewrite exp_pred_unseal /exp_pred_def exp_pred0_unfold /=.
-by eauto 10.
+iLeft; iExists e; do 2!iSplit => //.
+by iApply (big_sepL_impl with "p_e"); iIntros "!> % % _ #?"; iModIntro.
 Qed.
 
-Lemma exp_pred_intro1 t1 t2 : exp_pred_base t1 t2 -∗ exp_pred t1 t2.
+Lemma exp_pred_base_exp_pred t1 t2 : exp_pred_base t1 t2 -∗ exp_pred t1 t2.
 Proof.
 have compat : ∀ t, (0 < count t (expo t2) → 0 ≤ count t (TMul ∅))%Z.
   by move=> t _; rewrite count_TMul_empty.
-iIntros "#dh"; iApply (exp_pred_intro1_gen _ compat).
+iIntros "#dh"; iApply (exp_pred_base_exp_pred_gen _ compat).
 - by rewrite factors_TMul_empty SMS.elements_empty.
 - by rewrite TExp_unit.
 Qed.
 
-Lemma exp_pred_intro2 t t1 t2 :
-  negb (is_mul t) -> negb (is_gmul t2) -> (0 ≤ count t (expo t2))%Z →
+Lemma exp_pred_add t t1 t2 :
+  (0 < count t (expo (TExp t2 t)))%Z →
   exp_pred t1 t2 -∗ exp_pred t (TExp t2 t) -∗ exp_pred t1 (TExp t2 t).
 Proof.
 rewrite exp_pred_unseal /exp_pred_def (exp_pred0_unfold _ _ (t1, TExp t2 t)) /=.
-iIntros "%Nm %Nm2 % #H1 #H2".
+iIntros "% #H1 #H2".
 by iRight; iRight; iExists _, _; iFrame "#"; eauto.
 Qed.
 
-Lemma exp_pred_intro3 t1 t2 : public t1 -∗ exp_pred t1 t2.
+Lemma public_exp_pred t1 t2 : public t1 -∗ exp_pred t1 t2.
 Proof.
 rewrite exp_pred_unseal /exp_pred_def exp_pred0_unfold /=.
 by eauto.
 Qed.
 
 Lemma exp_pred_ind (φ : term → term → iProp) :
+  (□ ∀ t1 t2, exp_pred_base t1 t2 -∗ φ t1 t2) -∗
   (□ ∀ e t1 t2,
     ⌜∀ t, (0 < count t (expo t2) → 0 ≤ count t e)%Z⌝ -∗
     ([∗ list] t ∈ elements (factors e), ▷ public t) -∗
-    exp_pred_base t1 (TExp t2 e) -∗ φ t1 t2) -∗
-  (□ ∀ t t1 t2, ⌜negb (is_mul t)⌝ -∗ ⌜negb (is_gmul t2)⌝ -∗
-                ⌜(0 ≤ count t (expo t2))%Z⌝ -∗
+    exp_pred t1 (TExp t2 e) -∗ □ φ t1 (TExp t2 e) -∗ φ t1 t2) -∗
+  (□ ∀ t t1 t2, ⌜(0 < count t (expo (TExp t2 t)))%Z⌝ -∗
                 exp_pred t1 t2 -∗ □ φ t1 t2 -∗
                 exp_pred t (TExp t2 t) -∗ □ φ t (TExp t2 t) -∗
                 φ t1 (TExp t2 t)) -∗
   (□ ∀ t1 t2, public t1 -∗ φ t1 t2) -∗
   ∀ t1 t2, exp_pred t1 t2 -∗ φ t1 t2.
 Proof.
-iIntros "#H1 #H2 #H3 %t1 %t2 dh".
+iIntros "#H1 #H2 #H3 #H4 %t1 %t2 dh".
 iAssert (□ φ t1 t2)%I as "#?"; eauto.
+iAssert (□ ∀ t1 t2, exp_pred_base t1 t2 -∗ exp_pred t1 t2)%I as "#intro1".
+{ by iIntros "!> % % ?"; iApply exp_pred_base_exp_pred. }
 rewrite exp_pred_unseal /exp_pred_def; set ts := (t1, t2).
 rewrite -[t1]/ts.1 -[t2]/ts.2; move: ts => ts.
 iRevert (ts) "dh"; iApply exp_pred0_ind.
 iIntros "!> %ts [#H | [#H | #H]]".
-- iDestruct "H" as "(%e & #? & % & #?)"; iModIntro.
-  by iApply "H1"; eauto.
-- by iModIntro; iApply "H3".
-- iDestruct "H" as (t2' t)
-    "/= (-> & %Nm & %Nm2 & %tn & [#H11 #H12] & [#H21 #H22])".
+- iDestruct "H" as "(%e & #base & % & #p_e)"; iModIntro.
+  iApply ("H2" with "[//] [] [] []").
+  + by iApply (big_sepL_impl with "p_e"); iIntros "!> % % _ #?".
+  + by iApply "intro1".
+  + by iModIntro; iApply "H1".
+- by iModIntro; iApply "H4".
+- iDestruct "H" as (t2' t) "/= (-> & %t_ts & [#H11 #H12] & [#H21 #H22])".
   iModIntro.
-  by iApply ("H2" $! t ts.1 t2' with "[//] [//] [//] H12 H11 [$]").
+  by iApply ("H3" $! t ts.1 t2' with "[//] H12 H11 [$]").
+Qed.
+
+Lemma exp_pred_strip t1 t2 e :
+  (∀ t, 0 < count t (expo t2) → 0 ≤ count t e)%Z →
+  ([∗ list] t ∈ elements (factors e), ▷ public t) -∗
+  exp_pred t1 (TExp t2 e) -∗ exp_pred t1 t2.
+Proof.
+move=> compat; iIntros "#p_e dh".
+move e_u : (TExp t2 e) => u.
+iRevert (t2 e compat e_u) "p_e"; iRevert (t1 u) "dh".
+iApply exp_pred_ind.
+- iIntros "!> %t1 %u #base %t2 %e %compat %e_u #p_e".
+  by iApply (exp_pred_base_exp_pred_gen _ compat with "p_e"); rewrite e_u.
+- iIntros "!> %e' %t1 %u %compat' #p_e' #dh #IH %t2 %e %compat %e_u #p_e".
+  iApply ("IH" $! t2 (TMul {[+ e; e' +]}) with "[%] [%] []").
+  + move=> t t_t2.
+    have xt2 : is_exp t2.
+      by apply: (@is_exp_of_exps _ t); rewrite /exps; apply/count_neq0; lia.
+    have Nm2 := is_exp_Ngmul _ xt2.
+    have := compat t t_t2; have := compat' t.
+    rewrite -e_u (count_expo_TExp _ _ _ Nm2) count_TMul_disj_union.
+    rewrite !TMul_singleton; lia.
+  + by rewrite -TExpA e_u.
+  + iModIntro; iApply big_sepL_forall; iIntros (k x Hx).
+    have : x ∈ factors (TMul {[+ e; e' +]}).
+      by exact: list_elem_of_lookup_2 _ _ _ Hx.
+    case/elem_of_factors_TMul2 => x_in.
+    * by iApply (big_sepL_elem_of _ _ _ x_in with "p_e").
+    * by iApply (big_sepL_elem_of _ _ _ x_in with "p_e'").
+- iIntros "!> %t %t1 %u' %t_u #dh1 #IH1 #dh2 #IH2 %t2 %e %compat %e_u #p_e".
+  case/count_expo_TExp_gt0: (t_u) => Nm_t [Nm_u' _].
+  have Nm2 : negb (is_gmul t2).
+    by rewrite -(is_gmul_TExp t2 e) e_u is_gmul_TExp.
+  case: (Z.lt_ge_cases 0 (count t e)) => t_e.
+  + iApply ("IH1" $! t2 (TMul {[+ e; TInv t +]}) with "[%] [%] []").
+    * move=> x x_t2; rewrite count_TMul_disj_union !TMul_singleton count_TInv.
+      case: (decide (x = t)) => [->|ne].
+      - by rewrite count_atom_diag //; lia.
+      - by rewrite (count_atom_ne Nm_t ne); have := compat x x_t2; lia.
+    * by rewrite -TExpA e_u TExpK.
+    * iModIntro; iApply big_sepL_forall; iIntros (k x Hx).
+      have : x ∈ factors (TMul {[+ e; TInv t +]}).
+        by exact: list_elem_of_lookup_2 _ _ _ Hx.
+      case/elem_of_factors_TMul2 => [x_in|].
+        by iApply (big_sepL_elem_of _ _ _ x_in with "p_e").
+      rewrite elem_of_factors_TInv (elem_of_factors_Nmul _ Nm_t) => ->.
+      have t_in : t ∈ factors e by apply/count_neq0; lia.
+      by iApply (big_sepL_elem_of _ _ _ t_in with "p_e").
+  + have t_t2 : (0 < count t (expo t2))%Z.
+      by move: t_u; rewrite -e_u (count_expo_TExp _ _ _ Nm2); lia.
+    iPoseProof ("IH2" $! t2 e with "[//] [//] p_e") as "dh_t".
+    iPoseProof ("IH1" $! (TExp t2 (TInv t)) e with "[%] [%] p_e") as "dh_1".
+    * move=> x; rewrite (count_expo_TExp _ _ _ Nm2) count_TInv => x_t.
+      by apply: compat; have := @count_atom_ge0 x t Nm_t; lia.
+    * by rewrite TExpC e_u TExpK.
+    iEval (rewrite -(TExpKV t2 t)).
+    iApply (exp_pred_add with "dh_1").
+      by rewrite TExpKV.
+    by rewrite TExpKV.
+- by iIntros "!> %t1 %u #p %t2 %e % % _"; iApply public_exp_pred.
 Qed.
 
 Lemma exp_pred_inv_gen ts t1 t2 :
@@ -714,18 +771,18 @@ Lemma exp_pred_inv_gen ts t1 t2 :
 Proof.
 iIntros "%t1_ts %ts_t2 dh"; iRevert (ts t1_ts ts_t2); iRevert (t1 t2) "dh".
 iApply exp_pred_ind; eauto 10.
-- iIntros "!> %e %t1 %t2 %compat #p_e #base %ts' %t1_ts' %ts'_t2".
+- iIntros "!> %e %t1 %t2 %compat #p_e #dh #IH %ts' %t1_ts' %ts'_t2".
   (* [t1 ∈ ts' ⊆+ exps t2] makes [t2] an exponential, hence atom-headed *)
   have xt2 : is_exp t2.
     apply: (@is_exp_of_exps _ t1); apply: SMS.elem_of_pos.
     exact: elem_of_submseteq _ _ _ t1_ts' ts'_t2.
   have Nm2 := is_exp_Ngmul _ xt2.
-  iExists t1; iSplit=> //; iRight; iExists (TExp t2 e).
-  rewrite (base_TExp _ _ Nm2); do !iSplit => //; iPureIntro.
+  rewrite -(base_TExp _ e Nm2); iApply "IH"; iPureIntro => //.
   apply/submseteq_count_mem => t; move/submseteq_count_mem/(_ t): ts'_t2.
   have := count_mem_exps_pos t t2; have := count_mem_exps_pos t (TExp t2 e).
   rewrite (count_expo_TExp _ _ _ Nm2); have := compat t; lia.
-- iIntros "!> %t %t1 %t2 %Nm_t %Nm_t2 %t_t2".
+- iIntros "!> %t %t1 %t2 %t_t2".
+  case/count_expo_TExp_gt0: t_t2 => Nm_t [Nm_t2 _].
   iIntros "#dh_t1 IH_t1 #dh_t IH_t %ts %t1_ts %ts_t2'".
   rewrite (base_TExp _ _ Nm_t2).
   case: (decide (t ∈ ts)) => t_ts; first by iApply "IH_t".
@@ -1118,95 +1175,36 @@ iDestruct "p" as "(_ & _ & p)".
 by iApply (big_sepL_elem_of _ _ _ t2_t1 with "p").
 Qed.
 
-(* Dividing by a known atom keeps a justification: in the authorized case the
-   atom moves into the extra exponent. *)
 Lemma exp_pred_TExp_inv t1 t2 t :
-  negb (is_gmul t2) → negb (is_mul t) →
+  negb (is_mul t) →
   exp_pred t1 t2 -∗ public t -∗ exp_pred t1 (TExp t2 (TInv t)).
 Proof.
-move=> Nm2 Nm; iIntros "dh #p"; iRevert (Nm2); iRevert (t1 t2) "dh".
-iApply exp_pred_ind.
-- iIntros "!> %e %t1 %t2 %compat #p_e #dh %Nm2".
-  have compat' : ∀ x, (0 < count x (expo (TExp t2 (TInv t))) →
-                       0 ≤ count x (TMul {[+ e; t +]}))%Z.
-    move=> x; rewrite (count_expo_TExp _ _ _ Nm2) count_TInv.
-    rewrite count_TMul_disj_union !TMul_singleton.
-    case: (decide (x = t)) => [->|ne].
-    + rewrite count_atom_diag //; have := compat t; lia.
-    + rewrite (count_atom_ne Nm ne); have := compat x; lia.
-  iApply (exp_pred_intro1_gen _ compat').
-  + iApply big_sepL_forall; iIntros (k x Hx).
-    have : x ∈ factors (TMul {[+ e; t +]}).
-      by exact: list_elem_of_lookup_2 _ _ _ Hx.
-    case/elem_of_factors_TMul2 => [x_in|/(elem_of_factors_Nmul _ Nm) ->].
-    * by iApply (big_sepL_elem_of _ _ _ x_in with "p_e").
-    * by iModIntro.
-  + have -> : TExp (TExp t2 (TInv t)) (TMul {[+ e; t +]}) = TExp t2 e.
-      rewrite TExpA; congr TExp; apply: count_inj => x _.
-      rewrite count_TMul_disj_union !TMul_singleton count_TInv.
-      by rewrite count_TMul_disj_union !TMul_singleton; lia.
-    by [].
-- iIntros "!> %y %t1 %t2 %Nm_y %Nm_t2 %y_t2 #dh1 #IH1 #dh2 #IH2 %Nm2".
-  case: (decide (y = t)) => [->|y_t].
-    by rewrite TExpK.
-  rewrite TExpC; iApply exp_pred_intro2.
-  + exact: Nm_y.
-  + exact: (Ngmul_TExp _ _ Nm_t2).
-  + rewrite (count_expo_TExp _ _ _ Nm_t2) count_TInv.
-    by rewrite (count_atom_ne Nm y_t); lia.
-  + by iApply ("IH1" with "[//]").
-  + rewrite -TExpC; iApply "IH2"; iPureIntro.
-    exact: (Ngmul_TExp _ _ Nm_t2).
-- by iIntros "!> %t1 %t2 #p1 %Nm2"; iApply exp_pred_intro3.
+move=> Nm; iIntros "#dh #p"; iApply (@exp_pred_strip _ _ t).
+- by move=> x _; exact: count_atom_ge0.
+- rewrite factors_Nmul // SMS.elements_singleton big_sepL_singleton.
+  by iModIntro.
+- by rewrite TExpKV.
 Qed.
 
-(* Multiplying by a known atom keeps a justification too; when the atom
-   cancels a negative exponent it moves into the extra exponent, inverted. *)
 Lemma exp_pred_TExp_atom t1 t2 t :
   negb (is_gmul t2) → negb (is_mul t) →
   exp_pred t1 t2 -∗ public t -∗ exp_pred t1 (TExp t2 t).
 Proof.
-move=> Nm2 Nm; iIntros "dh #p".
-case: (Z.lt_ge_cases (count t (expo t2)) 0) => t_t2; last first.
-  by iApply (exp_pred_intro2 with "dh") => //; iApply exp_pred_intro3.
-iRevert (Nm2 t_t2); iRevert (t1 t2) "dh".
-iApply exp_pred_ind.
-- iIntros "!> %e %t1 %t2 %compat #p_e #dh %Nm2 %t_t2".
-  have compat' : ∀ x, (0 < count x (expo (TExp t2 t)) →
-                       0 ≤ count x (TMul {[+ e; TInv t +]}))%Z.
-    move=> x.
-    rewrite (count_expo_TExp _ _ _ Nm2) count_TMul_disj_union !TMul_singleton.
-    rewrite count_TInv.
+move=> Nm2 Nm; iIntros "#dh #p".
+case: (Z.lt_ge_cases (count t (expo t2)) 0) => t_t2.
+- iApply (@exp_pred_strip _ _ (TInv t)).
+  + move=> x; rewrite (count_expo_TExp _ _ _ Nm2) count_TInv.
     case: (decide (x = t)) => [->|ne].
-    + rewrite count_atom_diag //; lia.
-    + rewrite (count_atom_ne Nm ne); have := compat x; lia.
-  iApply (exp_pred_intro1_gen _ compat').
+      by rewrite count_atom_diag //; lia.
+    by rewrite (count_atom_ne Nm ne); lia.
   + iApply big_sepL_forall; iIntros (k x Hx).
-    have : x ∈ factors (TMul {[+ e; TInv t +]}).
-      by exact: list_elem_of_lookup_2 _ _ _ Hx.
-    case/elem_of_factors_TMul2 => [x_in|].
-      by iApply (big_sepL_elem_of _ _ _ x_in with "p_e").
+    have : x ∈ factors (TInv t) by exact: list_elem_of_lookup_2 _ _ _ Hx.
     rewrite elem_of_factors_TInv (elem_of_factors_Nmul _ Nm) => ->.
     by iModIntro.
-  + have -> : TExp (TExp t2 t) (TMul {[+ e; TInv t +]}) = TExp t2 e.
-      rewrite TExpA; congr TExp; apply: count_inj => x _.
-      rewrite count_TMul_disj_union !TMul_singleton count_TMul_disj_union.
-      by rewrite !TMul_singleton count_TInv; lia.
-    by [].
-- iIntros "!> %y %t1 %t2 %Nm_y %Nm_t2 %y_t2 #dh1 #IH1 #dh2 #IH2 %Nm2 %t_t2".
-  have [y_t t_t2'] : y ≠ t ∧ (count t (expo t2) < 0)%Z.
-    move: t_t2 y_t2; rewrite (count_expo_TExp _ _ _ Nm_t2).
-    case: (decide (y = t)) => [->|ne].
-    + by rewrite count_atom_diag //; lia.
-    + by rewrite (count_atom_ne Nm_y (not_eq_sym ne)); split => //; lia.
-  rewrite TExpC; iApply exp_pred_intro2.
-  + exact: Nm_y.
-  + exact: (Ngmul_TExp _ _ Nm_t2).
-  + by rewrite (count_expo_TExp _ _ _ Nm_t2) (count_atom_ne Nm y_t); lia.
-  + by iApply ("IH1" with "[//] [//]").
-  + rewrite -TExpC; iApply ("IH2" with "[%] [//]").
-    exact: (Ngmul_TExp _ _ Nm_t2).
-- by iIntros "!> %t1 %t2 #p1 %Nm2 %t_t2"; iApply exp_pred_intro3.
+  + by rewrite TExpK.
+- have ? : (0 < count t (expo (TExp t2 t)))%Z.
+    by rewrite count_expo_TExp_eq //; lia.
+  by iApply (exp_pred_add with "dh") => //; iApply public_exp_pred.
 Qed.
 
 Lemma public_TExp_Nmul t1 t2 :
@@ -1221,19 +1219,20 @@ case: (Z.lt_ge_cases (count t2 (expo t1)) 0) => [/count_lt0 t2_t1|t2_t1].
   by iDestruct (public_exps_neg t2_t1 with "p1") as "[_ $]".
 have cntE x : count x (expo (TExp t1 t2)) = (count x (expo t1) + count x t2)%Z.
   exact: count_expo_TExp.
+have t2_t : (0 < count t2 (expo (TExp t1 t2)))%Z.
+  by rewrite cntE count_atom_diag //; lia.
 have exp_t : is_exp (TExp t1 t2).
-  apply: (@is_exp_of_exps _ t2); rewrite /exps; apply/count_neq0.
-  rewrite cntE count_atom_diag //; lia.
+  by apply: (@is_exp_of_exps _ t2); rewrite /exps; apply/count_neq0; lia.
 rewrite [public (TExp _ _)]public_exp_iff //; iSplit.
   by iApply all_minted_TExp; iSplit; iApply public_minted.
 iSplit.
 - iApply big_sepL_forall; iIntros (? t t_t%list_elem_of_lookup_2).
   have [->|t_t2] := decide (t = t2).
-    by rewrite TExpK; iSplit; eauto; iApply exp_pred_intro3.
+    by rewrite TExpK; iSplit; eauto; iApply public_exp_pred.
   have t_t1 : t ∈ SMS.pos (exps t1).
     move: t_t; rewrite /exps -!count_gt0 cntE (count_atom_ne Nm2 t_t2); lia.
   iPoseProof (exp_pred_exps t_t1 with "p1") as "[dh #p]"; iSplit.
-    by iApply exp_pred_intro2 => //; iApply exp_pred_intro3.
+    by iApply exp_pred_add => //; iApply public_exp_pred.
   iIntros "!> #pt"; iSpecialize ("p" with "pt").
   rewrite TExpC; iApply (IH with "p p2").
   + by case: (tsize_TExp_pos _ _ t_t1).
@@ -1277,7 +1276,7 @@ iSplit.
     + rewrite count_atom_diag //; lia.
     + by rewrite (count_atom_ne Nm2 t_t2); split => //; lia.
   iPoseProof (exp_pred_exps t_t1 with "p1") as "[dh #p]"; iSplit.
-    by iApply (exp_pred_TExp_inv _ Nm1 Nm2 with "dh p2").
+    by iApply (exp_pred_TExp_inv _ _ Nm2 with "dh p2").
   iIntros "!> #pt"; iSpecialize ("p" with "pt").
   rewrite TExpC; iApply (IH with "p p2").
   + by case: (tsize_TExp_pos _ _ t_t1).
@@ -1520,9 +1519,10 @@ move=> Nm1 Nm2; move: t1 Nm1; elim/term_lt_ind => t1 IH Nm1.
 iIntros "%t2_t1 #p1 #m #dh".
 have cntE x : count x (expo (TExp t1 t2)) = (count x (expo t1) + count x t2)%Z.
   exact: count_expo_TExp.
+have t2_t : (0 < count t2 (expo (TExp t1 t2)))%Z.
+  by rewrite cntE count_atom_diag //; lia.
 have exp_t : is_exp (TExp t1 t2).
-  apply: (@is_exp_of_exps _ t2); rewrite /exps; apply/count_neq0.
-  rewrite cntE count_atom_diag //; lia.
+  by apply: (@is_exp_of_exps _ t2); rewrite /exps; apply/count_neq0; lia.
 rewrite [public (TExp _ _)]public_exp_iff //; iSplit.
   by iApply all_minted_TExp; iSplit => //; iApply public_minted.
 iSplit.
@@ -1533,7 +1533,7 @@ iSplit.
     move: t_t; rewrite /exps -!count_gt0 cntE (count_atom_ne Nm2 t_t2); lia.
   have Nm_t := Nmul_factors _ _ (SMS.elem_of_pos _ _ t_t1).
   iPoseProof (exp_pred_exps t_t1 with "p1") as "[dh_t #p1']".
-  iSplit; first by iApply exp_pred_intro2.
+  iSplit; first by iApply exp_pred_add.
   iIntros "!> #p"; iSpecialize ("p1'" with "p").
   have lt : tsize (TExp t1 (TInv t)) < tsize t1.
     by case: (tsize_TExp_pos _ _ t_t1).
@@ -1542,7 +1542,7 @@ iSplit.
     by rewrite (count_atom_ne Nm_t (not_eq_sym t_t2)); lia.
   rewrite TExpC; iApply (IH _ lt (Ngmul_TExp _ _ Nm1) t2_t' with "p1' m").
   rewrite TExpC.
-  by iApply (exp_pred_TExp_inv _ (Ngmul_TExp _ _ Nm1) Nm_t with "dh p").
+  by iApply (exp_pred_TExp_inv _ _ Nm_t with "dh p").
 - iApply big_sepL_forall; iIntros (k t t_t%list_elem_of_lookup_2).
   have [t_t2 t_t1] : t ≠ t2 ∧ t ∈ SMS.neg (exps t1).
     move: t_t t2_t1; rewrite /exps -!count_lt0 cntE.

@@ -132,7 +132,7 @@ Lemma dh_public_TExp g a :
 Proof.
 iIntros "%gXN %gNm #gP (#m & %Nm_a & #aP1 & #aP2 & _) #P_a".
 rewrite public_TExp_iff //; do !iSplit => //.
-- iApply exp_pred_intro1. iApply "aP2"; do 2!iModIntro; iSplit => //.
+- iApply exp_pred_base_exp_pred. iApply "aP2"; do 2!iModIntro; iSplit => //.
   iPureIntro.
   by rewrite (exps_TExp_expN _ _ gXN gNm) factors_Nmul.
 - iModIntro; iIntros "#p".
@@ -216,7 +216,8 @@ move=> gNx gNm Nm; iIntros "#p_g #m_a #pred_a".
 iPoseProof (public_minted with "p_g") as "#m_g".
 rewrite public_TExp_iff //.
 do !iSplit => //; last by iIntros "!> _".
-iApply exp_pred_intro1. iApply "pred_a". iPureIntro. rewrite /dh_key_share.
+iApply exp_pred_base_exp_pred.
+iApply "pred_a". iPureIntro. rewrite /dh_key_share.
 by rewrite (exps_TExp_expN _ _ gNx gNm) factors_Nmul // SMS.elements_singleton.
 Qed.
 

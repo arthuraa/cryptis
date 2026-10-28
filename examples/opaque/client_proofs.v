@@ -87,7 +87,7 @@ iAssert (public α) as "#pubα".
 { iApply public_TExp_iff => //.
   do !iSplit => //.
   - by rewrite minted_THash minted_tag.
-  - iApply exp_pred_intro1.
+  - iApply exp_pred_base_exp_pred.
     by iApply "Hexpr".
   - iModIntro; iIntros "#p".
     iApply (public_THashIS with "HpredH mintedpw"). by iApply "Hprivater". }
@@ -95,7 +95,7 @@ iAssert (public (TExp g x_u)) as "#pubX_u".
 { iApply public_TExp_iff => //.
   do !iSplit => //.
   - by iApply minted_TInt.
-  - iApply exp_pred_intro1.
+  - iApply exp_pred_base_exp_pred.
     iApply "Hexpx_u"; iPureIntro.
     by rewrite exps_TExp_expN // factors_Nmul // SMS.elements_singleton.
   - by rewrite public_TInt; auto. }

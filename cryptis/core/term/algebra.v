@@ -381,6 +381,13 @@ Qed.
 Lemma TExpKV u v : TExp (TExp u (TInv v)) v = u.
 Proof. by have := TExpK u (TInv v); rewrite TInvK. Qed.
 
+Lemma is_gmul_TExp b e : is_gmul (TExp b e) = is_gmul b.
+Proof.
+have := Ngmul_TExp b e; have := Ngmul_TExp (TExp b e) (TInv e).
+rewrite TExpK.
+by case: (is_gmul b); case: (is_gmul (TExp b e)) => //= /(_ I).
+Qed.
+
 (* Distributivity makes [TGMul ∅ ^ e = TGMul ∅] for every [e], so
    exponentiation is genuinely not injective in the exponent at the group
    unit; hence the group-atom premise. *)
@@ -464,6 +471,19 @@ Proof.
 move=> t'_t; apply/is_expE => e.
 move: t'_t; rewrite /exps e factors_TMul_empty.
 by rewrite SMS.elem_of_count SMS.count_empty.
+Qed.
+
+Lemma count_expo_TExp_gt0 t1 t2 :
+  (0 < count t1 (expo (TExp t2 t1)))%Z ↔
+  negb (is_mul t1) ∧ negb (is_gmul t2) ∧ (0 ≤ count t1 (expo t2))%Z.
+Proof.
+split; last by case=> Nm1 [Nm2 ?]; rewrite count_expo_TExp_eq //; lia.
+move=> pos; have t1_in : t1 ∈ exps (TExp t2 t1).
+  by rewrite /exps; apply/count_neq0; lia.
+have Nm1 := Nmul_factors _ _ t1_in.
+have Nm2 : negb (is_gmul t2).
+  rewrite -(is_gmul_TExp t2 t1); exact: is_exp_Ngmul _ (is_exp_of_exps t1_in).
+split=> //; split=> //; move: pos; rewrite count_expo_TExp_eq //; lia.
 Qed.
 
 Lemma TExp_TMul_cons_l t x X Y :
