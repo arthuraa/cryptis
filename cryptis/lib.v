@@ -48,6 +48,14 @@ Qed.
 Lemma sum_list_with_fmap {A B} (f : B → nat) (g : A → B) xs :
   sum_list_with f (g <$> xs) = sum_list_with (f ∘ g) xs.
 Proof. by elim: xs => //= x xs ->. Qed.
+
+Lemma union_list_fmap_mono `{SemiSet A C} {B} (f : B → C) (l1 l2 : list B) :
+  l1 ⊆ l2 → ⋃ (f <$> l1) ⊆ ⋃ (f <$> l2).
+Proof.
+move=> sub a /elem_of_union_list [Y [/list_elem_of_fmap [u [-> u_l1]] aY]].
+apply/elem_of_union_list; exists (f u); split => //.
+apply/list_elem_of_fmap; exists u; split => //; exact: sub.
+Qed.
 (* /UPSTREAM *)
 
 Section Escrow.

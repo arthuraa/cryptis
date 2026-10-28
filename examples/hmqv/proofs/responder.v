@@ -93,7 +93,7 @@ iAssert (hmqv_key x_b) as "#key_xb"; first by iSplit.
 set X_b := TExp g x_b.
 set si := resp_si p_a X_a p_b x_b.
 iAssert (public X_b) as "#p_Xb";
-  first by iApply (public_dh_share gNX gNm gNi Nm_xb with "p_g m_xb pred_xb").
+  first by iApply (public_dh_share gNX gNm Nm_xb with "p_g m_xb pred_xb").
 iDestruct (release_tokenI with "tok_Xb") as "[tok_rel tok_Xb]";
   first solve_ndisj.
 iDestruct (term_token_difference X_b (↑hmqvN.@"ready") with "tok_Xb")
@@ -136,7 +136,7 @@ iAssert (|={⊤}=>
   - iEval (rewrite public_of_list /=) in "p_t".
     iDestruct "p_t" as "[#p_σ _]".
     iDestruct (@public_hmqv_K_forged _ _ _ hmqvN g "resp" "init" p_b x_b p_a
-                 (TExp g p_b) X_b X_a gNX gNm gNi tags'
+                 (TExp g p_b) X_b X_a gNX gNm tags'
                  with "key_b key_xb key_a p_σ") as "#comp".
     iAssert (public (si_key si)) as "#p_k"; first by iApply public_si_key.
     iModIntro.
@@ -152,7 +152,7 @@ iAssert (|={⊤}=>
     subst N'.
     have [epb [epa [eXa eXb]]] :=
       @hmqv_K_inj' hmqvN g "resp" "init" p_b x_b p_a p_b' x_a' p_a' X_a X_b'
-                   gNX gNm gNi tags' eσ.
+                   gNX gNm tags' eσ.
     subst p_a' p_b' X_a X_b'.
     iPoseProof (honest_session_ok p_a p_b x_a' x_b
                   with "Hkey key_a key_b key_xa key_xb m_k")

@@ -89,7 +89,6 @@ have Nm_b : negb (is_mul (TNonce b)) by [].
 (* [dh.v] takes the generator as a parameter; ISO-DH always uses [TInt 0]. *)
 have NInt : negb (is_exp (TInt 0)) by [].
 have NIntM : negb (is_gmul (TInt 0)) by [].
-have NIntI : negb (is_ginv (TInt 0)) by [].
 iAssert (public (TInt 0)) as "#p_g"; first by rewrite public_TInt.
 rewrite bi.intuitionistic_intuitionistically.
 set gb := TExp (TInt 0) b.
@@ -104,7 +103,7 @@ iPoseProof (term_token_difference gb (↑iso_dhN.@"res") with "token")
 iMod ("res" $! (TNonce b) with "res_token") as "[resI resR]".
 iMod (iso_dh_ready_alloc N skI skR si with "[//] resI") as "#ready".
 iAssert (public gb) as "#p_gb";
-  first by iApply (public_dh_share NInt NIntM NIntI Nm_b).
+  first by iApply (public_dh_share NInt NIntM Nm_b).
 wp_pure _ credit:"H1".
 wp_pure _ credit:"H2".
 wp_apply wp_mk_keyshare => //.

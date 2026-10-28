@@ -206,7 +206,7 @@ iIntros "%Φ (#? & #? & keep) post". wp_lam. wp_pures.
 case: leak_eph; rewrite /keep.
 - iMod (secret_public with "keep") as "#p_x". wp_pures.
   wp_apply wp_send => //. by iApply "post".
-- wp_pures. iApply "post". by iApply (exp_frozen_intro _ gNm gNi).
+- wp_pures. iApply "post". by iApply (exp_frozen_intro _ gNm).
 Qed.
 
 (* Both honest parties only ever confirm sessions with each other, as a DH
@@ -276,7 +276,7 @@ wp_smart_apply (wp_initiator _ _ _ _ _ (keep leak_eph)) as "%ts [->|tsP]" => //.
   case: leak_eph.
   + iModIntro. iFrame "s". by iLeft.
   + iMod (freeze_secret with "s") as "#s". iModIntro.
-    iSplit => //. iRight. by iApply (exp_frozen_intro _ gNm gNi).
+    iSplit => //. iRight. by iApply (exp_frozen_intro _ gNm).
 - wp_pures. by iApply "Hpost".
 wp_pures.
 iDestruct "tsP" as "(%x_a & %X_b & -> & #s_k & rel & token & keep & res)".
@@ -366,7 +366,7 @@ wp_apply (wp_responder_confirm _ _ _ _ _ _ (keep leak_eph)).
   case: leak_eph.
   + iModIntro. iFrame "s". by iLeft.
   + iMod (freeze_secret with "s") as "#s". iModIntro.
-    iSplit => //. iRight. by iApply (exp_frozen_intro _ gNm gNi). }
+    iSplit => //. iRight. by iApply (exp_frozen_intro _ gNm). }
 iIntros "%r [->|Hr]"; wp_pures; first by iApply "Hpost".
 iDestruct "Hr" as "(%x_b & -> & #s_k & rel & token & keep & res)".
 set si := resp_si p_a X_a p_b x_b.

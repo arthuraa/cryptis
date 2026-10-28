@@ -27,7 +27,6 @@ Definition opaque_file (pw : term) (file : val) : iProp :=
     ⌜file = Spec.of_list [TNonce k_s; TNonce p_s; TExp g p_s; P_u; envelope]⌝
     ∗ minted k_s ∗ □(public k_s ↔ ▷ □ False) ∗
     □(∀ t' : term, exp_pred_base k_s t' ↔ ▷ □ True) ∗
-    □(∀ t' : term, exp_pred_base (TInv k_s) t' ↔ ▷ False) ∗
     public (TExp g p_s) ∗ public envelope ∗
     opaque_public_private_pair pw p_s P_u.
 
@@ -87,10 +86,10 @@ have Nm_s : negb (is_mul (TNonce p_s)) by [].
 have Nm_u : negb (is_mul (TNonce p_u)) by [].
 iAssert (public g) as "#pubg"; first by iApply public_TInt.
 iAssert (public (TExp g p_s)) as "#pubP_s".
-  by iApply (public_dh_share (g := g) I I I Nm_s
+  by iApply (public_dh_share (g := g) I I Nm_s
                with "pubg Hmintedp_s Hexpp_s").
 iAssert (public (TExp g p_u)) as "#pubP_u".
-  by iApply (public_dh_share (g := g) I I I Nm_u
+  by iApply (public_dh_share (g := g) I I Nm_u
                with "pubg Hmintedp_u Hexpp_u").
 iApply "post".
 iExists k_s, p_s, (TExp g p_u), _.
@@ -177,7 +176,7 @@ case db_uid: (alist !! uid) => [file|]; wp_pures; last first.
   by iApply ("Hhl" $! None); iModIntro; iFrame "Hdb"; iLeft.
 iDestruct ("Hmapcontents" $! uid file with "[//]") as
     "[_ (%k_s & %p_s & %P_u & %envelope &
-         %e & #Hmk_s & #Hprivk_s & #Hexpk_s & #Hexpk_sV &
+         %e & #Hmk_s & #Hprivk_s & #Hexpk_s &
          #HpubP_s & #Hpenvelope & %p_u & %HP_u &
          #HpubP_u & #Hkeyp_s & #Hkeyp_u & #Hprivp_s & #Hprivp_u)]".
 iPoseProof "Hkeyp_s" as "[#Hminp_s #Hexpp_s]".
@@ -260,33 +259,20 @@ wp_apply wp_send => //.
     iEval (rewrite public_gfactors) in "p_α".
     iDestruct "p_α" as "[_ #fs]".
     iApply big_sepL_forall; iIntros "%k %u %Hu".
-    have u_α : u ∈ gfactors α := list_elem_of_lookup_2 _ _ _ Hu.
+    have u_α : u ∈ gfactors α.
+      by exact: list_elem_of_lookup_2 _ _ _ Hu.
     have Nmu : negb (is_gmul u) := Ngmul_gfactors _ _ u_α.
     iAssert (public u) as "#p_u".
       by iApply (big_sepL_elem_of with "fs").
-    case Ei: (is_ginv u); last first.
-    + have Niu : negb (is_ginv u) by rewrite Ei.
-      iApply public_TExp_exp_pred => //.
-      iApply exp_pred_intro1.
-      by iApply "Hexpk_s".
-    + (* A group-inverse factor: [(v⁻¹) ^ k_s = (v ^ k_s)⁻¹], so peel it off. *)
-      have Nmv : negb (is_gmul (TGInv u)) by rewrite is_gmul_TGInv.
-      have Niv : negb (is_ginv (TGInv u)) by rewrite (is_ginv_TGInv _ Nmu) Ei.
-      have -> : TExp u k_s = TGInv (TExp (TGInv u) k_s).
-        by rewrite -TExp_TGInv TGInvK.
-      rewrite [public (TGInv (TExp _ _))]public_TGInv.
-      iAssert (public (TGInv u)) as "#p_Iu".
-        by rewrite [public (TGInv u)]public_TGInv.
-      iApply public_TExp_exp_pred => //.
-      iApply exp_pred_intro1.
-      by iApply "Hexpk_s".
+    iApply public_TExp_exp_pred => //.
+    iApply exp_pred_base_exp_pred.
+    by iApply "Hexpk_s".
   - iApply public_TExp_iff => //.
     do !iSplit => //.
     + by iApply minted_TInt.
-    + iApply exp_pred_intro1.
+    + iApply exp_pred_base_exp_pred.
       iApply "Hexpx_s"; iPureIntro.
-      rewrite (_ : TExp g x_s = TExpN g [TNonce x_s]); last by rewrite /TExpN TMulN1.
-      by rewrite exps_TExpN //; exact: invs_canceled1.
+      by rewrite exps_TExp_expN // factors_Nmul // SMS.elements_singleton.
     + by rewrite public_TInt; auto.
   - iApply public_THashIS => //.
       iEval (rewrite minted_of_list /=); do !iSplit => //.
@@ -332,7 +318,7 @@ iAssert (|={⊤}=> session (pw_of uid) si ∗
       iDestruct "p_t" as "(p_K' & _)".
       have tags : "e"%string ≠ "d"%string by [].
       iDestruct (@public_hmqv_K_static _ _ _ opN g "e" "d" p_s x_s p_u
-                   P_s (TExp g x_s) X_u I I I tags
+                   P_s (TExp g x_s) X_u I I tags
                    with "Hkeyp_s Hkeyp_u p_K'")
         as "[p|p]".
       - by iApply "Hprivp_s".

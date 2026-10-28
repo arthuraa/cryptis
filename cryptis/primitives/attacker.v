@@ -245,7 +245,7 @@ iIntros "%Ψ #c post". wp_lam.
 wp_apply wp_recv => //. iIntros "%t1 #p_t1". wp_pures.
 wp_apply wp_recv => //. iIntros "%t2 #p_t2". wp_pures.
 wp_apply wp_tmul. wp_apply wp_send => //; last by iApply "post".
-by iApply (public_TMulN2 with "p_t1 p_t2").
+by iApply (public_TMul2 with "p_t1 p_t2").
 Qed.
 
 Lemma wp_add_inv c :
@@ -272,7 +272,7 @@ iIntros "%Ψ #c post". wp_lam.
 wp_apply wp_recv => //. iIntros "%t1 #p_t1". wp_pures.
 wp_apply wp_recv => //. iIntros "%t2 #p_t2". wp_pures.
 wp_apply wp_tgmul. wp_apply wp_send => //; last by iApply "post".
-by iApply (public_TGMulN2 with "p_t1 p_t2").
+by iApply (public_TGMul2 with "p_t1 p_t2").
 Qed.
 
 Lemma wp_add_ginv c :

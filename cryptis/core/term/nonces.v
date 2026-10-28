@@ -39,220 +39,175 @@ Lemma nonces_of_term_fold pt :
   PreTerm.wf pt -> nonces_of_term (fold_term pt) = nonces_of_pre_term pt.
 Proof. move => wf. by rewrite [nonces_of_term]unlock (@fold_termK pt wf). Qed.
 
+Lemma nonces_elements_make_sub (X Y : list PreTerm.pre_term) :
+  ⋃ map nonces_of_pre_term (elements (SMS.make X Y)) ⊆
+  ⋃ map nonces_of_pre_term X ∪ ⋃ map nonces_of_pre_term Y.
+Proof.
+rewrite -union_list_app_L -map_app; apply: union_list_fmap_mono => u.
+by rewrite SMS.elem_of_elements => /SMS.elem_of_make.
+Qed.
+
+Lemma nonces_of_pre_term_factors_sub e :
+  ⋃ map nonces_of_pre_term (elements (PreTerm.factors e)) ⊆
+  nonces_of_pre_term e.
+Proof.
+case Em: (PreTerm.is_mul e).
+  case: e Em => [o|o1 e1|o2 e1 e2|[|] ps ns] // _.
+  exact: nonces_elements_make_sub.
+rewrite PreTerm.factors_Nmul ?Em // SMS.elements_singleton /=; set_solver.
+Qed.
+
 Lemma nonces_of_pre_term_factors e :
-  nonces_of_pre_term e = ⋃ map nonces_of_pre_term (PreTerm.factors e).
-Proof. by case: e => [o|o1 e1|o2 e1 e2|[|] es] //=; rewrite union_empty_r_L. Qed.
+  PreTerm.wf e →
+  nonces_of_pre_term e =
+  ⋃ map nonces_of_pre_term (elements (PreTerm.factors e)).
+Proof.
+case Em: (PreTerm.is_mul e) => wf_e; last first.
+  rewrite PreTerm.factors_Nmul ?Em // SMS.elements_singleton /=.
+  by rewrite union_empty_r_L.
+case: e Em wf_e => [o|o1 e1|o2 e1 e2|[|] ps ns] // _ wf_e.
+by rewrite PreTerm.elements_factors //= map_app union_list_app_L.
+Qed.
+
+Lemma nonces_bind_factors_sub s :
+  ⋃ map nonces_of_pre_term (elements (SMS.bind PreTerm.factors s)) ⊆
+  ⋃ map nonces_of_pre_term (elements s).
+Proof.
+move=> a /elem_of_union_list [Y [/list_elem_of_fmap [u [-> u_b]] a_u]].
+move: u_b; rewrite SMS.elem_of_elements => /SMS.elem_of_bind [v [v_s u_v]].
+apply/elem_of_union_list; exists (nonces_of_pre_term v); split.
+  by apply/list_elem_of_fmap; exists v; split => //;
+     rewrite SMS.elem_of_elements.
+apply: nonces_of_pre_term_factors_sub.
+apply/elem_of_union_list; exists (nonces_of_pre_term u); split => //.
+by apply/list_elem_of_fmap; exists u; split => //; rewrite SMS.elem_of_elements.
+Qed.
+
+Lemma nonces_of_pre_term_mul_aux s :
+  nonces_of_pre_term (PreTerm.mul_aux s) =
+  ⋃ map nonces_of_pre_term (elements s).
+Proof.
+case Es: (PreTerm.single (SMS.car s)).
+  have [t ->] := PreTerm.single_car s ltac:(by rewrite Es).
+  rewrite (PreTerm.mul_aux_single _ t) ?SMS.car_singleton //.
+  by rewrite SMS.elements_singleton /= union_empty_r_L.
+rewrite PreTerm.mul_aux_Nsingle ?Es //.
+by rewrite SMS.elements_pos_neg map_app union_list_app_L.
+Qed.
+
+Lemma nonces_of_pre_term_mul_sub s :
+  nonces_of_pre_term (PreTerm.mul s) ⊆ ⋃ map nonces_of_pre_term (elements s).
+Proof.
+rewrite /PreTerm.mul nonces_of_pre_term_mul_aux.
+exact: nonces_bind_factors_sub.
+Qed.
+
+Lemma nonces_of_pre_term_gfactors_sub e :
+  ⋃ map nonces_of_pre_term (elements (PreTerm.gfactors e)) ⊆
+  nonces_of_pre_term e.
+Proof.
+case Em: (PreTerm.is_gmul e).
+  case: e Em => [o|o1 e1|o2 e1 e2|[|] ps ns] // _.
+  exact: nonces_elements_make_sub.
+rewrite PreTerm.gfactors_Ngmul ?Em // SMS.elements_singleton /=; set_solver.
+Qed.
 
 Lemma nonces_of_pre_term_gfactors e :
-  nonces_of_pre_term e = ⋃ map nonces_of_pre_term (PreTerm.gfactors e).
-Proof. by case: e => [o|o1 e1|o2 e1 e2|[|] es] //=; rewrite union_empty_r_L. Qed.
-
-Lemma nonces_of_pre_term_inv_aux x :
-  nonces_of_pre_term (PreTerm.inv_aux x) = nonces_of_pre_term x.
-Proof. by case: x => [o|[kt|||] e|o e1 e2|[|] es] //=. Qed.
-
-Lemma nonces_of_pre_term_ginv_aux x :
-  nonces_of_pre_term (PreTerm.ginv_aux x) = nonces_of_pre_term x.
-Proof. by case: x => [o|[kt|||] e|o e1 e2|[|] es] //=. Qed.
-
-Lemma union_list_map_merge_sort {A X} `{Countable X} (f : A → gset X)
-  (R : relation A) `{!RelDecision R} l :
-  ⋃ map f (merge_sort R l) = ⋃ map f l.
+  PreTerm.wf e →
+  nonces_of_pre_term e =
+  ⋃ map nonces_of_pre_term (elements (PreTerm.gfactors e)).
 Proof.
-apply: union_list_permutation_proper_L; apply: Permutation_map.
-exact: (merge_sort_Permutation R l).
+case Em: (PreTerm.is_gmul e) => wf_e; last first.
+  rewrite PreTerm.gfactors_Ngmul ?Em // SMS.elements_singleton /=.
+  by rewrite union_empty_r_L.
+case: e Em wf_e => [o|o1 e1|o2 e1 e2|[|] ps ns] // _ wf_e.
+by rewrite PreTerm.elements_gfactors //= map_app union_list_app_L.
 Qed.
 
-Lemma union_list_map_to_pt {X} `{Countable X}
-  (f : PreTerm.pre_term → gset X) (i : PreTerm.pre_term → PreTerm.pre_term) l :
-  (forall x, x ∈ l -> i x ∉ l) ->
-  ⋃ map f (SMS.to pt_order i l) = ⋃ map f l.
+Lemma nonces_bind_gfactors_sub s :
+  ⋃ map nonces_of_pre_term (elements (SMS.bind PreTerm.gfactors s)) ⊆
+  ⋃ map nonces_of_pre_term (elements s).
 Proof.
-move=> nc; apply: union_list_permutation_proper_L; apply: Permutation_map.
-exact: (SMS.to_id_perm pt_order i l nc).
+move=> a /elem_of_union_list [Y [/list_elem_of_fmap [u [-> u_b]] a_u]].
+move: u_b; rewrite SMS.elem_of_elements => /SMS.elem_of_bind [v [v_s u_v]].
+apply/elem_of_union_list; exists (nonces_of_pre_term v); split.
+  by apply/list_elem_of_fmap; exists v; split => //;
+     rewrite SMS.elem_of_elements.
+apply: nonces_of_pre_term_gfactors_sub.
+apply/elem_of_union_list; exists (nonces_of_pre_term u); split => //.
+by apply/list_elem_of_fmap; exists u; split => //; rewrite SMS.elem_of_elements.
 Qed.
 
-Lemma nonces_of_pre_term_inv pt :
-  PreTerm.wf pt ->
-  nonces_of_pre_term (PreTerm.inv pt) = nonces_of_pre_term pt.
+Lemma nonces_of_pre_term_gmul_aux s :
+  nonces_of_pre_term (PreTerm.gmul_aux s) =
+  ⋃ map nonces_of_pre_term (elements s).
 Proof.
-case: pt => [o|o t|o t1 t2|[|] ts] wf;
-  try by rewrite PreTerm.inv_Nmul // nonces_of_pre_term_inv_aux.
-rewrite /PreTerm.inv /PreTerm.mul.
-have mulauxE : forall X, nonces_of_pre_term (PreTerm.mul_aux X)
-                       = ⋃ map nonces_of_pre_term X.
-  by case=> [|x [|y l]] //=; rewrite union_empty_r_L.
-have wfF : PreTerm.wf_factors ts by move: wf => /andb_True [].
-have wfx : forall x, x ∈ ts -> PreTerm.wf x.
-  by move=> x xin; apply: PreTerm.wf_factors_wf wfF xin.
-have sms : SMS.wf pt_order PreTerm.inv_aux ts by apply: PreTerm.wf_factors_sms wfF.
-have nopairs : forall x, x ∈ ts -> PreTerm.inv_aux x ∉ ts.
-  by apply: SMS.wf_no_pairs sms.
-have invol : forall x, x ∈ ts -> PreTerm.inv_aux (PreTerm.inv_aux x) = x.
-  by apply: SMS.wf_invol sms.
-have NmI : forall x, x ∈ ts -> negb (PreTerm.is_mul (PreTerm.inv_aux x)).
-  move=> x xin; have := wfx x xin.
-  by case: x {xin} => [o|[k| | |] t|o t1 t2|[|] ts'] //= /andb_True [] /andb_True [] _.
-have flat : forall l, (forall x, x ∈ l -> negb (PreTerm.is_mul x)) ->
-              mbind PreTerm.factors l = l.
-  elim=> [//|x l IH] H /=.
-  rewrite PreTerm.factors_Nmul; last by apply: H; apply/elem_of_cons; left.
-  by rewrite -/(mbind PreTerm.factors l) IH // => y yin; apply: H;
-     apply/elem_of_cons; right.
-have nopairsI : forall y, y ∈ (PreTerm.inv_aux <$> ts) ->
-                  PreTerm.inv_aux y ∉ (PreTerm.inv_aux <$> ts).
-  move=> _ /list_elem_of_fmap [x [-> xin]].
-  rewrite (invol x xin) => /list_elem_of_fmap [x' [e x'in]].
-  by apply: (nopairs x' x'in); rewrite -e.
-rewrite mulauxE /PreTerm.normalize_factors.
-rewrite flat; last by move=> _ /list_elem_of_fmap [x [-> xin]]; exact: NmI.
-rewrite (union_list_map_to_pt nonces_of_pre_term nopairsI) /=.
-by elim: ts {wf wfF wfx sms nopairs invol NmI flat nopairsI}
-  => [//|x l IH] /=; rewrite nonces_of_pre_term_inv_aux IH.
+case Es: (PreTerm.single (SMS.car s)).
+  have [t ->] := PreTerm.single_car s ltac:(by rewrite Es).
+  rewrite (PreTerm.gmul_aux_single _ t) ?SMS.car_singleton //.
+  by rewrite SMS.elements_singleton /= union_empty_r_L.
+rewrite PreTerm.gmul_aux_Nsingle ?Es //.
+by rewrite SMS.elements_pos_neg map_app union_list_app_L.
 Qed.
 
-Lemma nonces_of_pre_term_ginv pt :
-  PreTerm.wf pt ->
-  nonces_of_pre_term (PreTerm.ginv pt) = nonces_of_pre_term pt.
+Lemma nonces_of_pre_term_gmul_sub s :
+  nonces_of_pre_term (PreTerm.gmul s) ⊆ ⋃ map nonces_of_pre_term (elements s).
 Proof.
-case: pt => [o|o t|o t1 t2|[|] ts] wf;
-  try by rewrite PreTerm.ginv_Ngmul // nonces_of_pre_term_ginv_aux.
-rewrite /PreTerm.ginv /PreTerm.gmul.
-have gmulauxE : forall X, nonces_of_pre_term (PreTerm.gmul_aux X)
-                       = ⋃ map nonces_of_pre_term X.
-  by case=> [|x [|y l]] //=; rewrite union_empty_r_L.
-have wfF : PreTerm.wf_gfactors ts by move: wf => /andb_True [].
-have wfx : forall x, x ∈ ts -> PreTerm.wf x.
-  by move=> x xin; apply: PreTerm.wf_gfactors_wf wfF xin.
-have sms : SMS.wf pt_order PreTerm.ginv_aux ts by apply: PreTerm.wf_gfactors_sms wfF.
-have nopairs : forall x, x ∈ ts -> PreTerm.ginv_aux x ∉ ts.
-  by apply: SMS.wf_no_pairs sms.
-have invol : forall x, x ∈ ts -> PreTerm.ginv_aux (PreTerm.ginv_aux x) = x.
-  by apply: SMS.wf_invol sms.
-have NmI : forall x, x ∈ ts -> negb (PreTerm.is_gmul (PreTerm.ginv_aux x)).
-  move=> x xin; have := wfx x xin.
-  by case: x {xin} => [o|[k| | |] t|o t1 t2|[|] ts'] //= /andb_True [] /andb_True [] _.
-have flat : forall l, (forall x, x ∈ l -> negb (PreTerm.is_gmul x)) ->
-              mbind PreTerm.gfactors l = l.
-  elim=> [//|x l IH] H /=.
-  rewrite PreTerm.gfactors_Ngmul; last by apply: H; apply/elem_of_cons; left.
-  by rewrite -/(mbind PreTerm.gfactors l) IH // => y yin; apply: H;
-     apply/elem_of_cons; right.
-have nopairsI : forall y, y ∈ (PreTerm.ginv_aux <$> ts) ->
-                  PreTerm.ginv_aux y ∉ (PreTerm.ginv_aux <$> ts).
-  move=> _ /list_elem_of_fmap [x [-> xin]].
-  rewrite (invol x xin) => /list_elem_of_fmap [x' [e x'in]].
-  by apply: (nopairs x' x'in); rewrite -e.
-rewrite gmulauxE /PreTerm.normalize_gfactors.
-rewrite flat; last by move=> _ /list_elem_of_fmap [x [-> xin]]; exact: NmI.
-rewrite (union_list_map_to_pt nonces_of_pre_term nopairsI) /=.
-by elim: ts {wf wfF wfx sms nopairs invol NmI flat nopairsI}
-  => [//|x l IH] /=; rewrite nonces_of_pre_term_ginv_aux IH.
-Qed.
-
-Lemma nonces_of_term_TInv t : nonces_of_term (TInv t) = nonces_of_term t.
-Proof.
-rewrite ![nonces_of_term]unlock unfold_TInv.
-exact: nonces_of_pre_term_inv (wf_unfold_term t).
-Qed.
-
-Lemma nonces_of_term_TGInv t : nonces_of_term (TGInv t) = nonces_of_term t.
-Proof.
-rewrite ![nonces_of_term]unlock unfold_TGInv.
-exact: nonces_of_pre_term_ginv (wf_unfold_term t).
+rewrite /PreTerm.gmul nonces_of_pre_term_gmul_aux.
+exact: nonces_bind_gfactors_sub.
 Qed.
 
 Lemma nonces_of_term_factors t :
-  nonces_of_term t = ⋃ map nonces_of_term (factors t).
+  nonces_of_term t = ⋃ map nonces_of_term (elements (factors t)).
 Proof.
-have wfs : Forall PreTerm.wf (PreTerm.factors (unfold_term t)).
+have wfs : Forall PreTerm.wf (elements (PreTerm.factors (unfold_term t))).
   apply/Forall_forall => x xin.
-  by apply: PreTerm.wf_factors_wf
-       (PreTerm.wf_wf_factors _ (wf_unfold_term t)) xin.
-rewrite [nonces_of_term]unlock
-  (nonces_of_pre_term_factors (unfold_term t)) /factors.
-congr union_list.
-elim: (PreTerm.factors (unfold_term t)) wfs
-  => [//|pt pts IH] /Forall_cons [wpt wpts] /=.
+  exact: PreTerm.wf_factors_wf (PreTerm.wf_wf_factors _ (wf_unfold_term t)) xin.
+rewrite [nonces_of_term]unlock (nonces_of_pre_term_factors (wf_unfold_term t)).
+rewrite elements_factors; congr union_list.
+elim: (elements _) wfs => [//|pt pts IH] /Forall_cons [wpt wpts] /=.
+by rewrite (fold_termK pt wpt) (IH wpts).
+Qed.
+
+Lemma nonces_of_term_gfactors t :
+  nonces_of_term t = ⋃ map nonces_of_term (elements (gfactors t)).
+Proof.
+have wfs : Forall PreTerm.wf (elements (PreTerm.gfactors (unfold_term t))).
+  apply/Forall_forall => x xin.
+  exact: PreTerm.wf_gfactors_wf
+    (PreTerm.wf_wf_gfactors _ (wf_unfold_term t)) xin.
+rewrite [nonces_of_term]unlock (nonces_of_pre_term_gfactors (wf_unfold_term t)).
+rewrite elements_gfactors; congr union_list.
+elim: (elements _) wfs => [//|pt pts IH] /Forall_cons [wpt wpts] /=.
 by rewrite (fold_termK pt wpt) (IH wpts).
 Qed.
 
 Lemma nonces_of_pre_term_base_expo pt :
   nonces_of_pre_term pt =
   nonces_of_pre_term (PreTerm.base pt) ∪ nonces_of_pre_term (PreTerm.expo pt).
-Proof. by case: pt => [o|o1 e1|[||] e1 e2|[|] es] //=; rewrite union_empty_r_L. Qed.
+Proof.
+by case: pt => [o|o1 e1|[||] e1 e2|[|] ps ns] //=; set_solver.
+Qed.
 
 Lemma nonces_of_term_base_exps t :
-  nonces_of_term t = nonces_of_term (base t) ∪ ⋃ map nonces_of_term (exps t).
+  nonces_of_term t =
+  nonces_of_term (base t) ∪ ⋃ map nonces_of_term (elements (exps t)).
 Proof.
 rewrite /exps -(nonces_of_term_factors (expo t)).
 rewrite ![nonces_of_term]unlock unfold_base unfold_expo.
 exact: nonces_of_pre_term_base_expo.
 Qed.
 
-Lemma nonces_of_term_gfactors t :
-  nonces_of_term t = ⋃ map nonces_of_term (gfactors t).
+Lemma nonces_of_term_TInv t : nonces_of_term (TInv t) = nonces_of_term t.
 Proof.
-have wfs : Forall PreTerm.wf (PreTerm.gfactors (unfold_term t)).
-  apply/Forall_forall => x xin.
-  by apply: PreTerm.wf_gfactors_wf
-       (PreTerm.wf_wf_gfactors _ (wf_unfold_term t)) xin.
-rewrite [nonces_of_term]unlock
-  (nonces_of_pre_term_gfactors (unfold_term t)) /gfactors.
-congr union_list.
-elim: (PreTerm.gfactors (unfold_term t)) wfs
-  => [//|pt pts IH] /Forall_cons [wpt wpts] /=.
-by rewrite (fold_termK pt wpt) (IH wpts).
+rewrite nonces_of_term_factors factors_TInv [in RHS]nonces_of_term_factors.
+by rewrite SMS.elements_inv.
 Qed.
 
-Lemma nonces_flatten_gfactors us :
-  ⋃ map nonces_of_pre_term (mbind PreTerm.gfactors us) =
-  ⋃ map nonces_of_pre_term us.
+Lemma nonces_of_term_TGInv t : nonces_of_term (TGInv t) = nonces_of_term t.
 Proof.
-elim: us => [|u us IH] //=.
-by rewrite map_app union_list_app_L -(nonces_of_pre_term_gfactors u) IH.
-Qed.
-
-Lemma nonces_of_pre_term_gmul_sub us :
-  nonces_of_pre_term (PreTerm.gmul us) ⊆ ⋃ map nonces_of_pre_term us.
-Proof.
-have gmulauxE : forall X, nonces_of_pre_term (PreTerm.gmul_aux X)
-                        = ⋃ map nonces_of_pre_term X.
-  by case=> [|x [|y l]] //=; rewrite union_empty_r_L.
-rewrite /PreTerm.gmul /PreTerm.normalize_gfactors gmulauxE.
-set M := mbind PreTerm.gfactors us.
-have HM : ⋃ map nonces_of_pre_term M = ⋃ map nonces_of_pre_term us
-  by rewrite /M nonces_flatten_gfactors.
-rewrite -HM.
-move => a /elem_of_union_list [X [/list_elem_of_fmap [x [-> xL]] aX]].
-apply/elem_of_union_list; exists (nonces_of_pre_term x); split => //.
-apply/list_elem_of_fmap; exists x; split => //.
-exact: (SMS.elem_of_to pt_order PreTerm.ginv_aux x M xL).
-Qed.
-
-Lemma nonces_flatten_factors us :
-  ⋃ map nonces_of_pre_term (mbind PreTerm.factors us) =
-  ⋃ map nonces_of_pre_term us.
-Proof.
-elim: us => [|u us IH] //=.
-by rewrite map_app union_list_app_L -(nonces_of_pre_term_factors u) IH.
-Qed.
-
-Lemma nonces_of_pre_term_mul_sub us :
-  nonces_of_pre_term (PreTerm.mul us) ⊆ ⋃ map nonces_of_pre_term us.
-Proof.
-have mulauxE : forall X, nonces_of_pre_term (PreTerm.mul_aux X)
-                       = ⋃ map nonces_of_pre_term X.
-  by case=> [|x [|y l]] //=; rewrite union_empty_r_L.
-rewrite /PreTerm.mul /PreTerm.normalize_factors mulauxE.
-set M := mbind PreTerm.factors us.
-have HM : ⋃ map nonces_of_pre_term M = ⋃ map nonces_of_pre_term us
-  by rewrite /M nonces_flatten_factors.
-rewrite -HM.
-move => a /elem_of_union_list [X [/list_elem_of_fmap [x [-> xL]] aX]].
-apply/elem_of_union_list; exists (nonces_of_pre_term x); split => //.
-apply/list_elem_of_fmap; exists x; split => //.
-exact: (SMS.elem_of_to pt_order PreTerm.inv_aux x M xL).
+rewrite nonces_of_term_gfactors gfactors_TGInv [in RHS]nonces_of_term_gfactors.
+by rewrite SMS.elements_inv.
 Qed.
 
 Lemma nonces_of_pre_term_exp_aux_sub (pt pe : PreTerm.pre_term) :
@@ -262,23 +217,14 @@ Proof.
 have mk : forall X Y, nonces_of_pre_term (PreTerm.mk_exp X Y)
                     ⊆ nonces_of_pre_term X ∪ nonces_of_pre_term Y.
   by move=> X Y; rewrite /PreTerm.mk_exp; case: bool_decide => /=; set_solver.
-have main : forall u, nonces_of_pre_term
-                        (PreTerm.mk_exp (PreTerm.base u)
-                           (PreTerm.mul [PreTerm.expo u; pe]))
-                    ⊆ nonces_of_pre_term u ∪ nonces_of_pre_term pe.
-  move=> u.
-  have Hbe := nonces_of_pre_term_base_expo u.
-  have Hmul := @nonces_of_pre_term_mul_sub [PreTerm.expo u; pe].
-  have Hmk := mk (PreTerm.base u) (PreTerm.mul [PreTerm.expo u; pe]).
-  etrans; first exact: Hmk.
-  move: Hmul => /=; rewrite union_empty_r_L => Hmul'.
-  rewrite Hbe -union_assoc_L.
-  by apply: union_mono.
-case Ei: (PreTerm.is_ginv pt).
-  case: pt Ei => [o|[k| | |] u|o c d|[|] us] // _ /=.
-  rewrite nonces_of_pre_term_ginv_aux; exact: main.
-have Ni : negb (PreTerm.is_ginv pt) by rewrite Ei.
-rewrite (PreTerm.exp_aux_Nginv _ _ Ni); exact: main.
+rewrite /PreTerm.exp_aux.
+have Hbe := nonces_of_pre_term_base_expo pt.
+have Hmul := @nonces_of_pre_term_mul_sub (SMS.make [PreTerm.expo pt; pe] []).
+have Hmk :=
+  mk (PreTerm.base pt) (PreTerm.mul (SMS.make [PreTerm.expo pt; pe] [])).
+have Hel := @nonces_elements_make_sub [PreTerm.expo pt; pe] [].
+etrans; first exact: Hmk.
+rewrite Hbe; move: Hmul Hel => /=; set_solver.
 Qed.
 
 Lemma nonces_of_pre_term_exp_sub (pb pe : PreTerm.pre_term) :
@@ -287,126 +233,68 @@ Lemma nonces_of_pre_term_exp_sub (pb pe : PreTerm.pre_term) :
 Proof.
 rewrite /PreTerm.exp.
 etrans; first exact: nonces_of_pre_term_gmul_sub.
-rewrite (nonces_of_pre_term_gfactors pb).
-elim: (PreTerm.gfactors pb) => [|x xs IH] /=; first set_solver.
-have Hx := @nonces_of_pre_term_exp_aux_sub x pe.
-set_solver.
+move=> a /elem_of_union_list [Y [/list_elem_of_fmap [u [-> u_in]] a_u]].
+move: u_in; rewrite SMS.elem_of_elements => /SMS.elem_of_map [v [e_u v_pb]].
+subst u.
+have /elem_of_union [a_v|a_pe] := @nonces_of_pre_term_exp_aux_sub v pe a a_u.
+  apply/elem_of_union; left; apply: (@nonces_of_pre_term_gfactors_sub pb).
+  apply/elem_of_union_list; exists (nonces_of_pre_term v); split => //.
+  by apply/list_elem_of_fmap; exists v; split => //;
+     rewrite SMS.elem_of_elements.
+by apply/elem_of_union; right.
 Qed.
 
-Lemma nonces_of_term_TExpN_subseteq t ts :
-  nonces_of_term (TExpN t ts) ⊆ nonces_of_term t ∪ ⋃ map nonces_of_term ts.
+Lemma union_list_map_unfold ts :
+  ⋃ map nonces_of_term ts = ⋃ map nonces_of_pre_term (map unfold_term ts).
 Proof.
-have Hts : ⋃ map nonces_of_term ts = ⋃ map nonces_of_pre_term (map unfold_term ts).
-  congr union_list. elim: ts => [|t' ts IH] //=.
-  by rewrite IH [nonces_of_term]unlock.
-rewrite Hts ![nonces_of_term]unlock.
-have -> : unfold_term (TExpN t ts) =
-          PreTerm.exp (unfold_term t) (PreTerm.mul (map unfold_term ts)).
-  by rewrite /TExpN unfold_TExp unfold_TMulN.
-etrans; first exact: (@nonces_of_pre_term_exp_sub (unfold_term t)
-                        (PreTerm.mul (map unfold_term ts))).
-have Hmul := @nonces_of_pre_term_mul_sub (map unfold_term ts).
-set_solver.
+congr union_list; elim: ts => [|t' ts IH] //=.
+by rewrite IH [nonces_of_term]unlock.
 Qed.
 
-Lemma nonces_of_term_TMulN_subseteq ts :
-  nonces_of_term (TMulN ts) ⊆ ⋃ map nonces_of_term ts.
+Lemma nonces_of_term_TMul_subseteq s :
+  nonces_of_term (TMul s) ⊆ ⋃ map nonces_of_term (elements s).
 Proof.
-have Hts : ⋃ map nonces_of_term ts
-         = ⋃ map nonces_of_pre_term (map unfold_term ts).
-  congr union_list. elim: ts => [|t' ts IH] //=.
-  by rewrite IH [nonces_of_term]unlock.
-rewrite Hts [nonces_of_term]unlock unfold_TMulN.
-exact: nonces_of_pre_term_mul_sub.
+rewrite union_list_map_unfold [nonces_of_term]unlock unfold_TMul.
+etrans; first exact: nonces_of_pre_term_mul_sub.
+by rewrite (SMS.elements_map_inj _ _ unfold_term_inj).
 Qed.
 
-(* The [⊆] companion of [nonces_of_term_TGMulN], with no [ginvs_canceled] side
-   condition: cancellation only ever removes factors. *)
-Lemma nonces_of_term_TGMulN_subseteq ts :
-  nonces_of_term (TGMulN ts) ⊆ ⋃ map nonces_of_term ts.
+Lemma nonces_of_term_TGMul_subseteq s :
+  nonces_of_term (TGMul s) ⊆ ⋃ map nonces_of_term (elements s).
 Proof.
-have Hts : ⋃ map nonces_of_term ts
-         = ⋃ map nonces_of_pre_term (map unfold_term ts).
-  congr union_list. elim: ts => [|t' ts IH] //=.
-  by rewrite IH [nonces_of_term]unlock.
-rewrite Hts [nonces_of_term]unlock unfold_TGMulN.
-exact: nonces_of_pre_term_gmul_sub.
+rewrite union_list_map_unfold [nonces_of_term]unlock unfold_TGMul.
+etrans; first exact: nonces_of_pre_term_gmul_sub.
+by rewrite (SMS.elements_map_inj _ _ unfold_term_inj).
 Qed.
 
-Lemma nonces_of_term_TMulN ts :
-  invs_canceled ts ->
-  nonces_of_term (TMulN ts) = ⋃ map nonces_of_term ts.
+Lemma nonces_of_term_TExp_subseteq t e :
+  nonces_of_term (TExp t e) ⊆ nonces_of_term t ∪ nonces_of_term e.
 Proof.
-move=> ic.
-have Nm : forall x, x ∈ (unfold_term <$> ts) -> negb (PreTerm.is_mul x).
-  move=> _ /list_elem_of_fmap [t [-> tin]].
-  by rewrite -is_mul_unfold; case: (ic t tin).
-have nopairs : forall x, x ∈ (unfold_term <$> ts) ->
-                 PreTerm.inv_aux x ∉ (unfold_term <$> ts).
-  move=> _ /list_elem_of_fmap [t [-> tin]].
-  have [Vnin tNm] := ic t tin.
-  rewrite -PreTerm.inv_Nmul; last by rewrite -is_mul_unfold.
-  rewrite -unfold_TInv => /list_elem_of_fmap [t' [/unfold_term_inj e t'in]].
-  by apply: Vnin; rewrite e.
-have mulauxE : forall X, nonces_of_pre_term (PreTerm.mul_aux X)
-                       = ⋃ map nonces_of_pre_term X.
-  by case=> [|x [|y l]] //=; rewrite union_empty_r_L.
-have flat : forall l, (forall x, x ∈ l -> negb (PreTerm.is_mul x)) ->
-              mbind PreTerm.factors l = l.
-  elim=> [//|x l IH] H /=.
-  rewrite PreTerm.factors_Nmul; last by apply: H; apply/elem_of_cons; left.
-  by rewrite -/(mbind PreTerm.factors l) IH // => y yin; apply: H;
-     apply/elem_of_cons; right.
-rewrite [nonces_of_term]unlock unfold_TMulN.
-rewrite /PreTerm.mul /PreTerm.normalize_factors mulauxE flat //.
-rewrite (union_list_map_to_pt nonces_of_pre_term nopairs).
-by elim: ts {ic Nm nopairs} => [//|t l IH] /=; rewrite IH.
+rewrite ![nonces_of_term]unlock unfold_TExp.
+exact: nonces_of_pre_term_exp_sub.
 Qed.
 
-Lemma nonces_of_term_TGMulN ts :
-  ginvs_canceled ts ->
-  nonces_of_term (TGMulN ts) = ⋃ map nonces_of_term ts.
-Proof.
-move=> ic.
-have Nm : forall x, x ∈ (unfold_term <$> ts) -> negb (PreTerm.is_gmul x).
-  move=> _ /list_elem_of_fmap [t [-> tin]].
-  by rewrite -is_gmul_unfold; case: (ic t tin).
-have nopairs : forall x, x ∈ (unfold_term <$> ts) ->
-                 PreTerm.ginv_aux x ∉ (unfold_term <$> ts).
-  move=> _ /list_elem_of_fmap [t [-> tin]].
-  have [Vnin tNm] := ic t tin.
-  rewrite -PreTerm.ginv_Ngmul; last by rewrite -is_gmul_unfold.
-  rewrite -unfold_TGInv => /list_elem_of_fmap [t' [/unfold_term_inj e t'in]].
-  by apply: Vnin; rewrite e.
-have gmulauxE : forall X, nonces_of_pre_term (PreTerm.gmul_aux X)
-                       = ⋃ map nonces_of_pre_term X.
-  by case=> [|x [|y l]] //=; rewrite union_empty_r_L.
-have flat : forall l, (forall x, x ∈ l -> negb (PreTerm.is_gmul x)) ->
-              mbind PreTerm.gfactors l = l.
-  elim=> [//|x l IH] H /=.
-  rewrite PreTerm.gfactors_Ngmul; last by apply: H; apply/elem_of_cons; left.
-  by rewrite -/(mbind PreTerm.gfactors l) IH // => y yin; apply: H;
-     apply/elem_of_cons; right.
-rewrite [nonces_of_term]unlock unfold_TGMulN.
-rewrite /PreTerm.gmul /PreTerm.normalize_gfactors gmulauxE flat //.
-rewrite (union_list_map_to_pt nonces_of_pre_term nopairs).
-by elim: ts {ic Nm nopairs} => [//|t l IH] /=; rewrite IH.
-Qed.
+Lemma nonces_of_term_TMul s :
+  (∀ u, u ∈ s → negb (is_mul u)) ->
+  nonces_of_term (TMul s) = ⋃ map nonces_of_term (elements s).
+Proof. by move=> Hs; rewrite nonces_of_term_factors factors_TMul_atoms. Qed.
 
-Lemma nonces_of_term_TExpN t ts :
-  negb (is_exp t) -> negb (is_gmul t) -> negb (is_ginv t) ->
-  invs_canceled ts ->
-  nonces_of_term (TExpN t ts) = nonces_of_term t ∪ ⋃ map nonces_of_term ts.
+Lemma nonces_of_term_TGMul s :
+  (∀ u, u ∈ s → negb (is_gmul u)) ->
+  nonces_of_term (TGMul s) = ⋃ map nonces_of_term (elements s).
+Proof. by move=> Hs; rewrite nonces_of_term_gfactors gfactors_TGMul_atoms. Qed.
+
+Lemma nonces_of_term_TExp_TMul t s :
+  negb (is_exp t) -> negb (is_gmul t) ->
+  (∀ u, u ∈ s → negb (is_mul u)) ->
+  nonces_of_term (TExp t (TMul s)) =
+  nonces_of_term t ∪ ⋃ map nonces_of_term (elements s).
 Proof.
-move=> tNexp tNm tNi ic.
-rewrite (nonces_of_term_base_exps (TExpN t ts)).
-rewrite /TExpN (base_TExp _ _ tNm tNi) (base_expN _ tNexp).
-congr (_ ∪ _).
-rewrite /exps (expo_TExp _ _ tNm tNi) (expo_expN _ tNexp) TMulN_cat /= TMulN1.
-by rewrite -(nonces_of_term_factors (TMulN ts)) nonces_of_term_TMulN.
+move=> tNexp tNm Hs.
+rewrite (nonces_of_term_base_exps (TExp t (TMul s))).
+by rewrite (base_TExp _ _ tNm) (base_expN _ tNexp) exps_TExp_TMul.
 Qed.
 
 Definition nonces_of_termE :=
-  (nonces_of_term_TInv, nonces_of_term_TGInv, nonces_of_term_TExpN,
-   nonces_of_term_TMulN, nonces_of_term_TGMulN, nonces_of_termE').
-
+  (nonces_of_term_TInv, nonces_of_term_TGInv, nonces_of_term_TExp_TMul,
+   nonces_of_term_TMul, nonces_of_term_TGMul, nonces_of_termE').

@@ -4,26 +4,29 @@
 
    Every pure function of [normalize.v] has a counterpart here:
 
-     is_inv / is_ginv / is_exp             ->  hl_is_inv / hl_is_ginv /
-     is_mul / is_gmul / is_nonce               hl_is_exp / hl_is_mul /
+     is_exp / is_mul / is_gmul / is_nonce  ->  hl_is_exp / hl_is_mul /
                                                hl_is_gmul / hl_is_nonce
      base / expo                           ->  hl_base / hl_expo
      factors / gfactors                    ->  hl_factors / hl_gfactors
-     inv_aux / ginv_aux                    ->  hl_inv_aux / hl_ginv_aux
      mul_aux / gmul_aux                    ->  hl_mul_aux / hl_gmul_aux
-     normalize_factors                     ->  hl_normalize_factors
-     normalize_gfactors                    ->  hl_normalize_gfactors
-     mul / inv                             ->  hl_mul_list / hl_inv
-     gmul / ginv                           ->  hl_gmul_list / hl_ginv
+     SMS.Internal.flat                     ->  hl_flat
+     SMS.bind factors / SMS.bind gfactors  ->  hl_normalize_factors /
+                                               hl_normalize_gfactors
+     mul / gmul                            ->  hl_mul_pair / hl_gmul_pair
      mk_exp / exp_aux / exp                ->  hl_mk_exp / hl_exp_aux / hl_exp
+
+   Pairs of lists are represented as HeapLang pairs ([repr_prod]).
+   [hl_mul]/[hl_inv] (and [hl_gmul]/[hl_ginv]) are [hl_mul_pair] at
+   [([t1; t2], [])] and [([], [t])].
 
    [normalize] itself is not implemented: the HeapLang layer only ever builds
    pre-terms with the smart constructors, so it never needs to renormalise.
 
-   The product machinery is not reimplemented here.  [normalize_factors] is
-   [SMS.to pt_order inv_aux] applied to the flattened factor lists, so
-   [hl_normalize_factors] is just [sms_to] from [primitives/sms.v] instantiated
-   at [pt_order]/[PreTerm.inv_aux], and its spec is [twp_sms_to].
+   The product machinery is not reimplemented here.  [SMS.bind factors] is
+   [SMS.Internal.to SMS.Internal.le] applied to the flattened factor lists
+   ([car_bind_factors]), so [hl_normalize_factors] is just [sms_to] from
+   [primitives/sms.v] instantiated at the pre-term order, and its spec is
+   [twp_sms_to].
 
    These proofs take much longer to check than the rest of the development.
    Since they don't have many dependencies, they are left in their own file to
@@ -51,7 +54,7 @@ Definition eq_term_op1 : val := λ: "x" "y",
     let: "tag" := Fst "x" in
     if: "tag" = #TKey_tag then
       eq_key_type (Snd "x") (Snd "y")
-    else (* Hash / Inv *) #true
+    else (* Hash *) #true
   else #false.
 
 Definition eq_term_op2 : val := λ: "x" "y",
@@ -73,7 +76,8 @@ Definition eq_term : val := (rec: "eq" "x" "y" :=
       "eq" (Snd (Fst (Snd "x"))) (Snd (Fst (Snd "y"))) &&
       "eq" (Snd (Snd "x")) (Snd (Snd "y"))
     else if: "tag" = #TOpN_tag then
-      eq_term_opN (Fst (Snd "x")) (Fst (Snd "y")) &&
+      eq_term_opN (Fst (Fst (Snd "x"))) (Fst (Fst (Snd "y"))) &&
+      eq_list "eq" (Snd (Fst (Snd "x"))) (Snd (Fst (Snd "y"))) &&
       eq_list "eq" (Snd (Snd "x")) (Snd (Snd "y"))
     else #false
   else #false)%V.
@@ -92,7 +96,7 @@ Definition leq_term_op1 : val := λ: "x" "y",
   if: (Fst "x" < Fst "y") then #true
   else if: (Fst "x" = Fst "y") then
     if: Fst "x" = #TKey_tag then leq_key_type (Snd "x") (Snd "y")
-    else #true (* Hash / Inv *)
+    else #true (* Hash *)
   else #false.
 
 Definition leq_term_op2 : val := λ: "x" "y",
@@ -123,38 +127,36 @@ Definition leq_term : val := (rec: "loop" "t1" "t2" :=
          else "loop" (Snd (Fst "a1")) (Snd (Fst "a2")))
       else leq_term_op2 "o1" "o2"
     else if: "tag" = #TOpN_tag then
-      let: "o1" := Fst "a1" in
-      let: "o2" := Fst "a2" in
+      let: "o1" := Fst (Fst "a1") in
+      let: "o2" := Fst (Fst "a2") in
       if: eq_term_opN "o1" "o2" then
-        leq_list eq_term "loop" (Snd "a1") (Snd "a2")
+        (if: eq_list eq_term (Snd (Fst "a1")) (Snd (Fst "a2"))
+         then leq_list eq_term "loop" (Snd "a1") (Snd "a2")
+         else leq_list eq_term "loop" (Snd (Fst "a1")) (Snd (Fst "a2")))
       else leq_term_opN "o1" "o2"
     else #false
   else #false)%V.
 
 (** ** Recognisers *)
 
-Definition hl_is_inv : val := λ: "pt",
-  if: Fst "pt" = #TOp1_tag then Fst (Fst (Snd "pt")) = #TInv_tag else #false.
-
 Definition hl_is_exp : val := λ: "pt",
   if: Fst "pt" = #TOp2_tag then Fst (Fst (Snd "pt")) = #TExp_tag else #false.
 
-Definition hl_is_ginv : val := λ: "pt",
-  if: Fst "pt" = #TOp1_tag then Fst (Fst (Snd "pt")) = #TGInv_tag else #false.
-
 Definition hl_is_mul : val := λ: "pt",
-  if: Fst "pt" = #TOpN_tag then Fst (Snd "pt") = #TMul_tag else #false.
+  if: Fst "pt" = #TOpN_tag then Fst (Fst (Snd "pt")) = #TMul_tag else #false.
 
 Definition hl_is_gmul : val := λ: "pt",
-  if: Fst "pt" = #TOpN_tag then Fst (Snd "pt") = #TGMul_tag else #false.
+  if: Fst "pt" = #TOpN_tag then Fst (Fst (Snd "pt")) = #TGMul_tag else #false.
 
 Definition hl_is_nonce : val := λ: "pt",
   if: Fst "pt" = #TOp0_tag then Fst (Snd "pt") = #TNonce_tag else #false.
 
 (** ** Destructors *)
 
-(* [repr (PreTerm.PTMul [])], i.e. the unit of the product. *)
-Definition hl_one : val := (#TOpN_tag, (#TMul_tag, NILV))%V.
+(* [repr (PreTerm.PTMul [] [])], i.e. the unit of the product. *)
+Definition hl_one : val := (#TOpN_tag, (#TMul_tag, NILV, NILV))%V.
+
+Definition hl_gone : val := (#TOpN_tag, (#TGMul_tag, NILV, NILV))%V.
 
 Definition hl_base : val := λ: "pt",
   if: hl_is_exp "pt" then Snd (Fst (Snd "pt")) else "pt".
@@ -162,94 +164,90 @@ Definition hl_base : val := λ: "pt",
 Definition hl_expo : val := λ: "pt",
   if: hl_is_exp "pt" then Snd (Snd "pt") else hl_one.
 
-Definition hl_gone : val := (#TOpN_tag, (#TGMul_tag, NILV))%V.
-
 Definition hl_factors : val := λ: "pt",
-  if: hl_is_mul "pt" then Snd (Snd "pt") else "pt" :: NILV.
+  if: hl_is_mul "pt" then (Snd (Fst (Snd "pt")), Snd (Snd "pt"))
+  else ("pt" :: NILV, NILV).
 
 Definition hl_gfactors : val := λ: "pt",
-  if: hl_is_gmul "pt" then Snd (Snd "pt") else "pt" :: NILV.
+  if: hl_is_gmul "pt" then (Snd (Fst (Snd "pt")), Snd (Snd "pt"))
+  else ("pt" :: NILV, NILV).
 
 (** ** Smart constructors *)
 
-Definition hl_inv_aux : val := λ: "pt",
-  if: hl_is_inv "pt" then Snd (Snd "pt")
-  else (#TOp1_tag, (#TInv_tag, #(), "pt")).
-
-Definition hl_ginv_aux : val := λ: "pt",
-  if: hl_is_ginv "pt" then Snd (Snd "pt")
-  else (#TOp1_tag, (#TGInv_tag, #(), "pt")).
-
-Definition hl_mul_aux : val := λ: "c",
-  match: "c" with
-    NONE => hl_one
+Definition hl_mul_aux : val := λ: "A",
+  match: Fst "A" with
+    NONE => (#TOpN_tag, (#TMul_tag, Fst "A", Snd "A"))
   | SOME "x" =>
       match: Snd "x" with
-        NONE => Fst "x"
-      | SOME <> => (#TOpN_tag, (#TMul_tag, "c"))
+        NONE =>
+          match: Snd "A" with
+            NONE => Fst "x"
+          | SOME <> => (#TOpN_tag, (#TMul_tag, Fst "A", Snd "A"))
+          end
+      | SOME <> => (#TOpN_tag, (#TMul_tag, Fst "A", Snd "A"))
       end
   end.
 
-Definition hl_gmul_aux : val := λ: "c",
-  match: "c" with
-    NONE => hl_gone
+Definition hl_gmul_aux : val := λ: "A",
+  match: Fst "A" with
+    NONE => (#TOpN_tag, (#TGMul_tag, Fst "A", Snd "A"))
   | SOME "x" =>
       match: Snd "x" with
-        NONE => Fst "x"
-      | SOME <> => (#TOpN_tag, (#TGMul_tag, "c"))
+        NONE =>
+          match: Snd "A" with
+            NONE => Fst "x"
+          | SOME <> => (#TOpN_tag, (#TGMul_tag, Fst "A", Snd "A"))
+          end
+      | SOME <> => (#TOpN_tag, (#TGMul_tag, Fst "A", Snd "A"))
       end
   end.
 
-(* [mbind PreTerm.factors]: flatten the factor lists of a list of pre-terms. *)
-Definition hl_all_factors : val := λ: "ts",
-  foldr_list (λ: "t" "acc", append_lists (hl_factors "t") "acc") [] "ts".
+(* [mbind (λ t, (f t).1)] and [mbind (λ t, (f t).2)]. *)
+Definition hl_bind_fst : val := λ: "f" "l",
+  foldr_list (λ: "t" "acc", append_lists (Fst ("f" "t")) "acc") [] "l".
 
-Definition hl_all_gfactors : val := λ: "ts",
-  foldr_list (λ: "t" "acc", append_lists (hl_gfactors "t") "acc") [] "ts".
+Definition hl_bind_snd : val := λ: "f" "l",
+  foldr_list (λ: "t" "acc", append_lists (Snd ("f" "t")) "acc") [] "l".
 
-(* [PreTerm.normalize_factors] = [SMS.to pt_order inv_aux] of the flattened
-   factors, so this is [sms_to] at the pre-term instance. *)
-Definition hl_normalize_factors : val := λ: "ts",
-  sms_to leq_term eq_term hl_inv_aux (hl_all_factors "ts").
+Definition hl_flat : val := λ: "f" "A",
+  (append_lists (hl_bind_fst "f" (Fst "A")) (hl_bind_snd "f" (Snd "A")),
+   append_lists (hl_bind_snd "f" (Fst "A")) (hl_bind_fst "f" (Snd "A"))).
 
-Definition hl_normalize_gfactors : val := λ: "ts",
-  sms_to leq_term eq_term hl_ginv_aux (hl_all_gfactors "ts").
+(* [SMS.bind PreTerm.factors] is [SMS.Internal.to SMS.Internal.le] of the
+   flattened factors, so this is [sms_to] at the pre-term instance. *)
+Definition hl_normalize_factors : val := λ: "A",
+  sms_to leq_term eq_term (hl_flat hl_factors "A").
 
-Definition hl_mul_list : val := λ: "ts",
-  hl_mul_aux (hl_normalize_factors "ts").
+Definition hl_normalize_gfactors : val := λ: "A",
+  sms_to leq_term eq_term (hl_flat hl_gfactors "A").
 
-Definition hl_gmul_list : val := λ: "ts",
-  hl_gmul_aux (hl_normalize_gfactors "ts").
+Definition hl_mul_pair : val := λ: "A",
+  hl_mul_aux (hl_normalize_factors "A").
 
-Definition hl_mul : val := λ: "t1" "t2", hl_mul_list ("t1" :: "t2" :: NILV).
+Definition hl_gmul_pair : val := λ: "A",
+  hl_gmul_aux (hl_normalize_gfactors "A").
 
-Definition hl_gmul : val := λ: "t1" "t2", hl_gmul_list ("t1" :: "t2" :: NILV).
+Definition hl_mul : val := λ: "t1" "t2",
+  hl_mul_pair ("t1" :: "t2" :: NILV, NILV).
 
-Definition hl_inv : val := λ: "t",
-  if: hl_is_mul "t" then hl_mul_list (map_list hl_inv_aux (hl_factors "t"))
-  else hl_inv_aux "t".
+Definition hl_gmul : val := λ: "t1" "t2",
+  hl_gmul_pair ("t1" :: "t2" :: NILV, NILV).
 
-Definition hl_ginv : val := λ: "t",
-  if: hl_is_gmul "t" then hl_gmul_list (map_list hl_ginv_aux (hl_gfactors "t"))
-  else hl_ginv_aux "t".
+Definition hl_inv : val := λ: "t", hl_mul_pair (NILV, "t" :: NILV).
+
+Definition hl_ginv : val := λ: "t", hl_gmul_pair (NILV, "t" :: NILV).
 
 Definition hl_mk_exp : val := λ: "b" "e",
   if: eq_term "e" hl_one then "b" else (#TOp2_tag, (#TExp_tag, "b", "e")).
 
-(* [exp_aux]: on a [PTGInv] the group inverse is stripped with [hl_ginv_aux],
-   the exponent merged with the *scalar* [hl_mul_list], and the group inverse
-   put back -- mirroring the [PTGInv] branch of [PreTerm.exp_aux]. *)
 Definition hl_exp_aux : val := λ: "b" "e",
-  if: hl_is_ginv "b" then
-    let: "u" := hl_ginv_aux "b" in
-    hl_ginv_aux (hl_mk_exp (hl_base "u")
-                  (hl_mul_list (hl_expo "u" :: "e" :: NILV)))
-  else hl_mk_exp (hl_base "b") (hl_mul_list (hl_expo "b" :: "e" :: NILV)).
+  hl_mk_exp (hl_base "b") (hl_mul_pair (hl_expo "b" :: "e" :: NILV, NILV)).
 
-(* [exp] spreads [exp_aux] over the group factors, exactly as [hl_ginv] spreads
-   [hl_ginv_aux]. *)
+(* [exp] spreads [exp_aux] over the group factors. *)
 Definition hl_exp : val := λ: "b" "e",
-  hl_gmul_list (map_list (λ: "t", hl_exp_aux "t" "e") (hl_gfactors "b")).
+  let: "A" := hl_gfactors "b" in
+  let: "f" := (λ: "t", hl_exp_aux "t" "e") in
+  hl_gmul_pair (map_list "f" (Fst "A"), map_list "f" (Snd "A")).
 
 Definition texp : val := λ: "base" "exp", hl_exp "base" "exp".
 
@@ -284,7 +282,7 @@ Lemma twp_eq_term_op1 E (o1 o2 : term_op1) :
   ⊢ WP (eq_term_op1 (repr o1) (repr o2)) @ E
     [{ v, ⌜v = #(bool_decide (o1 = o2))⌝}].
 Proof.
-case: o1 o2 => [o1|||] [o2|||] /=. all: wp_lam; wp_pures => //.
+case: o1 o2 => [o1|] [o2|] /=. all: wp_lam; wp_pures => //.
 iApply twp_wand; first wp_apply twp_eq_key_type.
 iIntros (?) "->". iPureIntro.
 congr (# (LitBool _)). apply: bool_decide_ext.
@@ -301,12 +299,26 @@ Lemma twp_eq_term_opN E (o1 o2 : term_opN) :
     [{ v, ⌜v = #(bool_decide (o1 = o2))⌝}].
 Proof. case: o1 o2 => [|] [|] /=; wp_lam; wp_pures => //. Qed.
 
+#[local] Definition eq_term_spec E pt1 : Prop :=
+  ∀ pt2, ⊢ WP (eq_term (repr pt1) (repr pt2)) @ E
+              [{ v, ⌜v = #(bool_decide (pt1 = pt2))⌝ }].
+
 Lemma twp_eq_pre_term_aux E pt1 pt2 :
   ⊢ WP (eq_term (repr pt1) (repr pt2)) @ E
        [{ v, ⌜v = #(bool_decide (pt1 = pt2))⌝ }].
 Proof.
-elim: pt1 pt2 => [o1|o1 t1 IH1|o1 t11 IH1 t12 IH2|oN1 ts1 IHts1];
-case=> [o2|o2 t2|o2 t21 t22|oN2 ts2]; wp_rec; wp_pures=> //.
+have IHl (ts : list PreTerm.pre_term) :
+    foldr (λ t R, eq_term_spec E t * R)%type unit ts →
+    ∀ x1 x2 Ψ, x1 ∈ ts →
+      Ψ #(bool_decide (x1 = x2)) -∗
+      WP eq_term (repr x1) (repr x2) @ E [{ Ψ }].
+  elim: ts => [_ x1 x2 Ψ /elem_of_nil []|t ts IH [IHt /IH IHts] x1 x2 Ψ].
+  rewrite elem_of_cons; case=> [->|x1_in]; iIntros "post"; last first.
+    by iApply IHts.
+  iApply twp_wand; first iApply IHt; by iIntros (?) "->".
+move: pt2.
+elim: pt1 => [o1|o1 t1 IH1|o1 t11 IH1 t12 IH2|oN1 ps1 IHps1 ns1 IHns1];
+case=> [o2|o2 t2|o2 t21 t22|oN2 ps2 ns2]; wp_rec; wp_pures=> //.
 - iApply twp_wand; first by wp_apply twp_eq_term_op0.
   iIntros (?) "->". iPureIntro; congr (# (LitBool _)).
   apply: bool_decide_ext; intuition congruence.
@@ -337,16 +349,14 @@ case=> [o2|o2 t2|o2 t21 t22|oN2 ts2]; wp_rec; wp_pures=> //.
   iIntros (?) "->".
   case: (bool_decide_reflect (oN1 = oN2)) => eN; wp_pures; last first.
     by iPureIntro; congr (# (LitBool _)); rewrite bool_decide_false; congruence.
-    rewrite -!repr_list_val.
-  iApply (@twp_eq_list PreTerm.pre_term); last first.
-    iPureIntro; congr (# (LitBool _)); apply: bool_decide_ext.
-    by split; congruence.
-  elim: ts1 IHts1 => //= [|x1 ts1 IH].
-    by move=> *; exfalso; set_solver.
-  case=> IHx1 /IH IHts1 x1' x2' Ψ.
-  rewrite elem_of_cons; case=> [->|x1'_in]; iIntros "post"; last first.
-    by iApply IHts1.
-  iApply twp_wand; first iApply IHx1; by iIntros (?) "->".
+  rewrite -!repr_list_val.
+  wp_bind (eq_list _ _ _).
+  iApply (twp_eq_list (A := PreTerm.pre_term) _ _ _ _ _ (IHl _ IHps1)).
+  case: (bool_decide_reflect (ps1 = ps2)) => eP; wp_pures; last first.
+    by iPureIntro; congr (# (LitBool _)); rewrite bool_decide_false; congruence.
+  iApply (twp_eq_list (A := PreTerm.pre_term) _ _ _ _ _ (IHl _ IHns1)).
+  iPureIntro; congr (# (LitBool _)); apply: bool_decide_ext.
+  by split; congruence.
 Qed.
 
 (* Continuation form, with the argument order the [primitives/sms.v]
@@ -373,7 +383,7 @@ Proof. by case: o1 o2 => [n1|[l1]] [n2|[l2]] /=; wp_lam; wp_pures. Qed.
 Lemma twp_leq_term_op1 E (o1 o2 : term_op1) :
   ⊢ WP (leq_term_op1 (repr o1) (repr o2)) @ E [{ v, ⌜v = #(op1_le o1 o2)⌝}].
 Proof.
-case: o1 o2 => [k1|||] [k2|||] /=; wp_lam; wp_pures => //.
+case: o1 o2 => [k1|] [k2|] /=; wp_lam; wp_pures => //.
 iApply twp_wand; first by wp_apply twp_leq_key_type.
 by iIntros (?) "->".
 Qed.
@@ -386,12 +396,46 @@ Lemma twp_leq_term_opN E (o1 o2 : term_opN) :
   ⊢ WP (leq_term_opN (repr o1) (repr o2)) @ E [{ v, ⌜v = #(opN_le o1 o2)⌝}].
 Proof. by case: o1 o2 => [|] [|] /=; wp_lam; wp_pures. Qed.
 
+Lemma bool_decide_lexico_pair (ps1 ns1 ps2 ns2 : list PreTerm.pre_term) :
+  bool_decide ((ps1, ns1) = (ps2, ns2) ∨ lexico (ps1, ns1) (ps2, ns2)) =
+  if bool_decide (ps1 = ps2) then bool_decide (ns1 = ns2 ∨ lexico ns1 ns2)
+  else bool_decide (ps1 = ps2 ∨ lexico ps1 ps2).
+Proof.
+have E : lexico (ps1, ns1) (ps2, ns2) ↔
+         lexico ps1 ps2 ∨ ps1 = ps2 ∧ lexico ns1 ns2 by [].
+move: E; case: (bool_decide_reflect (ps1 = ps2)) => [<-|ne] E;
+  apply: bool_decide_ext; rewrite E; split.
+- case=> [[->]|[l|[_ l]]]; [by left|by case: (irreflexivity _ _ l)|by right].
+- by case=> [->|l]; [left|right; right].
+- by case=> [[e _]|[l|[e _]]]; [|right|].
+- by case=> [e|l]; [|right; left].
+Qed.
+
+#[local] Definition leq_term_spec E pt1 : Prop :=
+  ∀ pt2 Ψ, Ψ #(bool_decide (pt_order pt1 pt2)) ⊢
+           WP (leq_term (repr pt1) (repr pt2)) @ E [{ Ψ }].
+
 Lemma twp_leq_pre_term pt1 pt2 E Ψ :
   Ψ #(bool_decide (pt_order pt1 pt2)) ⊢
   WP (leq_term (repr pt1) (repr pt2)) @ E [{ Ψ }].
 Proof.
-elim: pt1 pt2 Ψ => [o1|o1 t1 IH1|o1 t11 IH1 t12 IH2|oN1 ts1 IHts1];
-case => [o2|o2 t2|o2 t21 t22|oN2 ts2] Ψ;
+have feqP (x1 x2 : PreTerm.pre_term) :
+    [[{ True }]] eq_term (repr x1) (repr x2) @ E
+    [[{ RET #(bool_decide (x1 = x2)); True }]].
+  by iIntros "%Φ _ post"; iApply twp_eq_pre_term; iApply "post".
+have IHl (ts : list PreTerm.pre_term) :
+    foldr (λ t R, leq_term_spec E t * R)%type unit ts →
+    ∀ x1 x2 : PreTerm.pre_term, x1 ∈ ts →
+    [[{ True }]] leq_term (repr x1) (repr x2) @ E
+    [[{ RET #(bool_decide (x1 = x2 ∨ lexico x1 x2)); True }]].
+  elim: ts => [_ x1 x2 /elem_of_nil []|y ts IH [IHy /IH IHts] x1 x2].
+  rewrite elem_of_cons => - [->|x1_in] Φ; iIntros "_ post".
+  + iApply IHy; rewrite (bool_decide_ext _ _ (pt_order_lexico _ _)).
+    by iApply "post".
+  + by iApply (IHts x1 x2 x1_in with "[//] post").
+move: pt2 Ψ.
+elim: pt1 => [o1|o1 t1 IH1|o1 t11 IH1 t12 IH2|oN1 ps1 IHps1 ns1 IHns1];
+case => [o2|o2 t2|o2 t21 t22|oN2 ps2 ns2] Ψ;
 iIntros "post"; rewrite pt_orderE /=; wp_rec; wp_pures; try by iApply "post".
 - iApply twp_wand; first by wp_apply twp_leq_term_op0.
   by iIntros "% ->".
@@ -418,35 +462,24 @@ iIntros "% ->".
 case: (bool_decide_reflect (oN1 = oN2)) => eN; wp_pures; last first.
   iApply twp_wand; first by wp_apply twp_leq_term_opN.
   by iIntros "% ->".
-rewrite -!repr_list_val.
-iApply twp_leq_list => //.
-- move=> x1 x2 Φ; iIntros "_ post".
-  by iApply twp_eq_pre_term; iApply "post".
-- elim: ts1 IHts1 => [|y ts1 IH] /=.
-    by move=> _ x1 x2 /elem_of_nil.
-  case=> IHy /IH IHts1 x1 x2; rewrite elem_of_cons => - [->|x1_in] Φ;
-    iIntros "_ post".
-  + iApply IHy; rewrite (bool_decide_ext _ _ (pt_order_lexico _ _)).
-    by iApply "post".
-  + by iApply (IHts1 x1 x2 x1_in with "[//] post").
-- by iIntros "_".
+rewrite -!repr_list_val bool_decide_lexico_pair.
+wp_bind (eq_list _ _ _).
+iApply (twp_eq_list (A := PreTerm.pre_term)).
+  by move=> x1 x2 Φ _; iIntros "post"; iApply twp_eq_pre_term.
+case: (bool_decide_reflect (ps1 = ps2)) => eP; wp_pures.
+- iApply (twp_leq_list _ _ _ _ _ feqP (IHl _ IHns1) with "[//]").
+  by iIntros "_".
+- iApply (twp_leq_list _ _ _ _ _ feqP (IHl _ IHps1) with "[//]").
+  by iIntros "_".
 Qed.
 
 (** ** Recognisers *)
-
-Lemma twp_hl_is_inv pt E Ψ :
-  Ψ #(PreTerm.is_inv pt) ⊢ WP hl_is_inv (repr pt) @ E [{ Ψ }].
-Proof.
-iIntros "HΨ"; wp_lam.
-case: pt => [o|o t|o t1 t2|[|] ts] /=; wp_pures; try by iApply "HΨ".
-by case: o => [k| | |] /=; wp_pures; iApply "HΨ".
-Qed.
 
 Lemma twp_hl_is_exp pt E Ψ :
   Ψ #(PreTerm.is_exp pt) ⊢ WP hl_is_exp (repr pt) @ E [{ Ψ }].
 Proof.
 iIntros "HΨ"; wp_lam.
-case: pt => [o|o t|o t1 t2|[|] ts]; try by (wp_pures; iApply "HΨ").
+case: pt => [o|o t|o t1 t2|[|] ps ns]; try by (wp_pures; iApply "HΨ").
 all: by case: o; wp_pures; iApply "HΨ".
 Qed.
 
@@ -454,339 +487,385 @@ Lemma twp_hl_is_mul pt E Ψ :
   Ψ #(PreTerm.is_mul pt) ⊢ WP hl_is_mul (repr pt) @ E [{ Ψ }].
 Proof.
 iIntros "HΨ"; wp_lam.
-by case: pt => [o|o t|o t1 t2|[|] ts] /=; wp_pures; iApply "HΨ".
-Qed.
-
-Lemma twp_hl_is_ginv pt E Ψ :
-  Ψ #(PreTerm.is_ginv pt) ⊢ WP hl_is_ginv (repr pt) @ E [{ Ψ }].
-Proof.
-iIntros "HΨ"; wp_lam.
-case: pt => [o|o t|o t1 t2|[|] ts] /=; wp_pures; try by iApply "HΨ".
-by case: o => [k| | |] /=; wp_pures; iApply "HΨ".
+by case: pt => [o|o t|o t1 t2|[|] ps ns] /=; wp_pures; iApply "HΨ".
 Qed.
 
 Lemma twp_hl_is_gmul pt E Ψ :
   Ψ #(PreTerm.is_gmul pt) ⊢ WP hl_is_gmul (repr pt) @ E [{ Ψ }].
 Proof.
 iIntros "HΨ"; wp_lam.
-by case: pt => [o|o t|o t1 t2|[|] ts] /=; wp_pures; iApply "HΨ".
+by case: pt => [o|o t|o t1 t2|[|] ps ns] /=; wp_pures; iApply "HΨ".
 Qed.
 
 Lemma twp_hl_is_nonce pt E Ψ :
   Ψ #(PreTerm.is_nonce pt) ⊢ WP hl_is_nonce (repr pt) @ E [{ Ψ }].
 Proof.
 iIntros "HΨ"; wp_lam.
-case: pt => [o|o t|o t1 t2|[|] ts]; try by (wp_pures; iApply "HΨ").
+case: pt => [o|o t|o t1 t2|[|] ps ns]; try by (wp_pures; iApply "HΨ").
 all: by case: o => [n|a]; wp_pures; iApply "HΨ".
 Qed.
 
 (** ** Destructors *)
+
+Lemma hl_oneE : hl_one = repr (PreTerm.PTMul [] []).
+Proof. by rewrite /hl_one /= [@repr_list]unlock. Qed.
+
+Lemma hl_goneE : hl_gone = repr (PreTerm.PTGMul [] []).
+Proof. by rewrite /hl_gone /= [@repr_list]unlock. Qed.
 
 Lemma twp_hl_base pt E Ψ :
   Ψ (repr (PreTerm.base pt)) ⊢ WP hl_base (repr pt) @ E [{ Ψ }].
 Proof.
 iIntros "HΨ"; wp_lam.
 wp_apply twp_hl_is_exp.
-case: pt => [o|o t|o t1 t2|[|] ts]; try by (wp_pures; iApply "HΨ").
+case: pt => [o|o t|o t1 t2|[|] ps ns]; try by (wp_pures; iApply "HΨ").
 all: by case: o; wp_pures; iApply "HΨ".
 Qed.
 
 Lemma twp_hl_expo pt E Ψ :
   Ψ (repr (PreTerm.expo pt)) ⊢ WP hl_expo (repr pt) @ E [{ Ψ }].
 Proof.
-have one : repr (PreTerm.PTMul []) = hl_one.
-  by rewrite /= [@repr_list]unlock.
 iIntros "HΨ"; wp_lam.
 wp_apply twp_hl_is_exp.
-rewrite /PreTerm.expo -?one.
-case: pt => [o|o t|o t1 t2|[|] ts]; try by (wp_pures; rewrite -?one; iApply "HΨ").
-all: by case: o; wp_pures; rewrite -?one; iApply "HΨ".
+rewrite /PreTerm.expo hl_oneE.
+case: pt => [o|o t|o t1 t2|[|] ps ns]; try by (wp_pures; iApply "HΨ").
+all: by case: o; wp_pures; iApply "HΨ".
 Qed.
 
+(* What [hl_factors] and [hl_gfactors] return: the factors before
+   normalization, which is the identity on well-formed pre-terms
+   ([PreTerm.car_factorsE]). *)
+Definition raw_factors pt :=
+  if pt is PreTerm.PTMul ps ns then (ps, ns) else ([pt], []).
+
+Definition raw_gfactors pt :=
+  if pt is PreTerm.PTGMul ps ns then (ps, ns) else ([pt], []).
+
 Lemma twp_hl_factors pt E Ψ :
-  Ψ (repr (PreTerm.factors pt)) ⊢ WP hl_factors (repr pt) @ E [{ Ψ }].
+  Ψ (repr (raw_factors pt)) ⊢ WP hl_factors (repr pt) @ E [{ Ψ }].
 Proof.
-have reprS : forall pt' : PreTerm.pre_term,
-    repr [pt'] = InjRV (repr pt', InjLV #()).
-  by move=> pt'; rewrite [@repr_list]unlock.
+have reprS : ∀ pt' : PreTerm.pre_term,
+    repr ([pt'], @nil PreTerm.pre_term) =
+    (InjRV (repr pt', InjLV #()), InjLV #())%V.
+  by move=> pt'; rewrite /= [@repr_list]unlock.
 iIntros "HΨ"; wp_lam.
 wp_apply twp_hl_is_mul.
-rewrite /PreTerm.factors.
-case: pt => [o|o t|o t1 t2|[|] ts]; wp_pures.
-1-3,5: rewrite /CONS; wp_pures; iEval (rewrite reprS /=) in "HΨ"; by iApply "HΨ".
-by rewrite -repr_list_val; iApply "HΨ".
+rewrite /raw_factors.
+case: pt => [o|o t|o t1 t2|[|] ps ns]; wp_pures.
+all: try (rewrite /CONS; wp_pures; iEval (rewrite reprS) in "HΨ";
+          by iApply "HΨ").
+by rewrite -!repr_list_val; iApply "HΨ".
 Qed.
 
 Lemma twp_hl_gfactors pt E Ψ :
-  Ψ (repr (PreTerm.gfactors pt)) ⊢ WP hl_gfactors (repr pt) @ E [{ Ψ }].
+  Ψ (repr (raw_gfactors pt)) ⊢ WP hl_gfactors (repr pt) @ E [{ Ψ }].
 Proof.
-have reprS : forall pt' : PreTerm.pre_term,
-    repr [pt'] = InjRV (repr pt', InjLV #()).
-  by move=> pt'; rewrite [@repr_list]unlock.
+have reprS : ∀ pt' : PreTerm.pre_term,
+    repr ([pt'], @nil PreTerm.pre_term) =
+    (InjRV (repr pt', InjLV #()), InjLV #())%V.
+  by move=> pt'; rewrite /= [@repr_list]unlock.
 iIntros "HΨ"; wp_lam.
 wp_apply twp_hl_is_gmul.
-rewrite /PreTerm.gfactors.
-case: pt => [o|o t|o t1 t2|[|] ts]; wp_pures.
-1-4: rewrite /CONS; wp_pures; iEval (rewrite reprS /=) in "HΨ"; by iApply "HΨ".
-by rewrite -repr_list_val; iApply "HΨ".
+rewrite /raw_gfactors.
+case: pt => [o|o t|o t1 t2|[|] ps ns]; wp_pures.
+all: try (rewrite /CONS; wp_pures; iEval (rewrite reprS) in "HΨ";
+          by iApply "HΨ").
+by rewrite -!repr_list_val; iApply "HΨ".
 Qed.
 
 (** ** Smart constructors *)
 
-Lemma twp_hl_inv_aux pt E Ψ :
-  Ψ (repr (PreTerm.inv_aux pt)) ⊢ WP hl_inv_aux (repr pt) @ E [{ Ψ }].
+Lemma twp_hl_mul_aux E (s : SMS.sms PreTerm.pre_term) Ψ :
+  Ψ (repr (PreTerm.mul_aux s)) ⊢ WP hl_mul_aux (repr s) @ E [{ Ψ }].
 Proof.
-iIntros "HΨ"; wp_lam.
-wp_apply twp_hl_is_inv.
-case: pt => [o|o t|o t1 t2|[|] ts]; try by (wp_pures; iApply "HΨ").
-all: by case: o => [k| | |]; wp_pures; iApply "HΨ".
+rewrite repr_smsE /PreTerm.mul_aux /SMS.pos /SMS.neg.
+case: (SMS.car s) => [ps ns] /=; iIntros "HΨ"; wp_lam.
+have mulE : (#TOpN_tag, (#TMul_tag, repr_list ps, repr_list ns))%V =
+            repr (PreTerm.PTMul ps ns).
+  by rewrite /= -!repr_list_val.
+rewrite /repr_prod /=.
+case: ps mulE => [|t [|u ps]] mulE.
+- rewrite ![repr_list []]repr_listE in mulE *; wp_pures.
+  by rewrite mulE; iApply "HΨ".
+- case: ns mulE => [|n ns] mulE.
+    rewrite ?[repr_list (_ :: _)]repr_listE /= ?[repr_list []]repr_listE.
+    by wp_pures; iApply "HΨ".
+  rewrite {1}[repr_list [t]]repr_listE; wp_pures.
+  rewrite {1}[repr_list []]repr_listE; wp_pures.
+  rewrite {1}[repr_list (n :: ns)]repr_listE; wp_pures.
+  by rewrite mulE; iApply "HΨ".
+- rewrite {1}[repr_list (t :: u :: ps)]repr_listE; wp_pures.
+  rewrite {1}[repr_list (u :: ps)]repr_listE; wp_pures.
+  by rewrite mulE; iApply "HΨ".
 Qed.
 
-Lemma wp_hl_inv_aux E pt Ψ :
-  Ψ (repr (PreTerm.inv_aux pt)) ⊢ WP hl_inv_aux (repr pt) @ E {{ Ψ }}.
-Proof. iIntros "HΨ"; iApply twp_wp; by wp_apply twp_hl_inv_aux. Qed.
-
-Lemma twp_hl_ginv_aux pt E Ψ :
-  Ψ (repr (PreTerm.ginv_aux pt)) ⊢ WP hl_ginv_aux (repr pt) @ E [{ Ψ }].
+Lemma twp_hl_gmul_aux E (s : SMS.sms PreTerm.pre_term) Ψ :
+  Ψ (repr (PreTerm.gmul_aux s)) ⊢ WP hl_gmul_aux (repr s) @ E [{ Ψ }].
 Proof.
-iIntros "HΨ"; wp_lam.
-wp_apply twp_hl_is_ginv.
-case: pt => [o|o t|o t1 t2|[|] ts]; try by (wp_pures; iApply "HΨ").
-all: by case: o => [k| | |]; wp_pures; iApply "HΨ".
+rewrite repr_smsE /PreTerm.gmul_aux /SMS.pos /SMS.neg.
+case: (SMS.car s) => [ps ns] /=; iIntros "HΨ"; wp_lam.
+have mulE : (#TOpN_tag, (#TGMul_tag, repr_list ps, repr_list ns))%V =
+            repr (PreTerm.PTGMul ps ns).
+  by rewrite /= -!repr_list_val.
+rewrite /repr_prod /=.
+case: ps mulE => [|t [|u ps]] mulE.
+- rewrite ![repr_list []]repr_listE in mulE *; wp_pures.
+  by rewrite mulE; iApply "HΨ".
+- case: ns mulE => [|n ns] mulE.
+    rewrite ?[repr_list (_ :: _)]repr_listE /= ?[repr_list []]repr_listE.
+    by wp_pures; iApply "HΨ".
+  rewrite {1}[repr_list [t]]repr_listE; wp_pures.
+  rewrite {1}[repr_list []]repr_listE; wp_pures.
+  rewrite {1}[repr_list (n :: ns)]repr_listE; wp_pures.
+  by rewrite mulE; iApply "HΨ".
+- rewrite {1}[repr_list (t :: u :: ps)]repr_listE; wp_pures.
+  rewrite {1}[repr_list (u :: ps)]repr_listE; wp_pures.
+  by rewrite mulE; iApply "HΨ".
 Qed.
 
-Lemma wp_hl_ginv_aux E pt Ψ :
-  Ψ (repr (PreTerm.ginv_aux pt)) ⊢ WP hl_ginv_aux (repr pt) @ E {{ Ψ }}.
-Proof. iIntros "HΨ"; iApply twp_wp; by wp_apply twp_hl_ginv_aux. Qed.
+Section Flat.
 
-Lemma twp_hl_gmul_aux E (ts : list PreTerm.pre_term) Ψ :
-  Ψ (repr (PreTerm.gmul_aux ts)) ⊢ WP hl_gmul_aux (repr ts) @ E [{ Ψ }].
-Proof.
-iIntros "HΨ"; rewrite /hl_gmul_aux /hl_gone; wp_lam.
-case: ts => [|t [|u ts]]; rewrite {1}[@repr_list]unlock /=; wp_pures.
-- iEval (rewrite [@repr_list]unlock /=) in "HΨ"; by iApply "HΨ".
-- by iApply "HΨ".
-- by rewrite [repr_list (t :: u :: ts)]repr_list_val; iApply "HΨ".
-Qed.
+Context (f : PreTerm.pre_term → list PreTerm.pre_term * list PreTerm.pre_term).
+Context (fv : val).
+Hypothesis fvP : ∀ pt E Ψ, Ψ (repr (f pt)) ⊢ WP fv (repr pt) @ E [{ Ψ }].
 
-Lemma twp_hl_mul_aux E (ts : list PreTerm.pre_term) Ψ :
-  Ψ (repr (PreTerm.mul_aux ts)) ⊢ WP hl_mul_aux (repr ts) @ E [{ Ψ }].
+Lemma twp_hl_bind_fst E (ts : list PreTerm.pre_term) Ψ :
+  Ψ (repr (mbind (λ t, (f t).1) ts)) ⊢
+  WP hl_bind_fst fv (repr ts) @ E [{ Ψ }].
 Proof.
-iIntros "HΨ"; rewrite /hl_mul_aux /hl_one; wp_lam.
-case: ts => [|t [|u ts]]; rewrite {1}[@repr_list]unlock /=; wp_pures.
-- iEval (rewrite [@repr_list]unlock /=) in "HΨ"; by iApply "HΨ".
-- by iApply "HΨ".
-- by rewrite [repr_list (t :: u :: ts)]repr_list_val; iApply "HΨ".
-Qed.
-
-Lemma twp_hl_all_factors E (ts : list PreTerm.pre_term) Ψ :
-  Ψ (repr (mbind PreTerm.factors ts)) ⊢ WP hl_all_factors (repr ts) @ E [{ Ψ }].
-Proof.
-iIntros "HΨ"; wp_lam.
-wp_pures; wp_apply twp_nil.
-wp_apply (twp_foldr_list (λ (t : PreTerm.pre_term) (acc : list PreTerm.pre_term),
-                           PreTerm.factors t ++ acc)) => //.
+iIntros "HΨ"; wp_lam; wp_pures; wp_apply twp_nil.
+wp_apply (twp_foldr_list (λ (t : PreTerm.pre_term) acc, (f t).1 ++ acc)) => //.
   iIntros "%b %a %Φ _ HΦ"; wp_pures.
-  wp_apply twp_hl_factors.
-  wp_apply twp_append_lists.
+  wp_apply fvP; wp_pures; wp_apply twp_append_lists.
   by iApply "HΦ".
-iIntros "_".
-by iApply "HΨ".
+iIntros "_"; by iApply "HΨ".
 Qed.
 
-Lemma twp_hl_all_gfactors E (ts : list PreTerm.pre_term) Ψ :
-  Ψ (repr (mbind PreTerm.gfactors ts)) ⊢ WP hl_all_gfactors (repr ts) @ E [{ Ψ }].
+Lemma twp_hl_bind_snd E (ts : list PreTerm.pre_term) Ψ :
+  Ψ (repr (mbind (λ t, (f t).2) ts)) ⊢
+  WP hl_bind_snd fv (repr ts) @ E [{ Ψ }].
 Proof.
-iIntros "HΨ"; wp_lam.
-wp_pures; wp_apply twp_nil.
-wp_apply (twp_foldr_list (λ (t : PreTerm.pre_term) (acc : list PreTerm.pre_term),
-                           PreTerm.gfactors t ++ acc)) => //.
+iIntros "HΨ"; wp_lam; wp_pures; wp_apply twp_nil.
+wp_apply (twp_foldr_list (λ (t : PreTerm.pre_term) acc, (f t).2 ++ acc)) => //.
   iIntros "%b %a %Φ _ HΦ"; wp_pures.
-  wp_apply twp_hl_gfactors.
-  wp_apply twp_append_lists.
+  wp_apply fvP; wp_pures; wp_apply twp_append_lists.
   by iApply "HΦ".
-iIntros "_".
+iIntros "_"; by iApply "HΨ".
+Qed.
+
+Lemma twp_hl_flat E (A : list PreTerm.pre_term * list PreTerm.pre_term) Ψ :
+  Ψ (repr (SMS.Internal.flat f A)) ⊢ WP hl_flat fv (repr A) @ E [{ Ψ }].
+Proof.
+iIntros "HΨ"; case: A => [ps ns]; rewrite /repr_prod /=; wp_lam; wp_pures.
+wp_apply (twp_hl_bind_fst _ ns); wp_pures; wp_apply (twp_hl_bind_snd _ ps).
+wp_apply twp_append_lists; wp_pures.
+wp_apply (twp_hl_bind_snd _ ns); wp_pures; wp_apply (twp_hl_bind_fst _ ps).
+wp_apply twp_append_lists.
+by wp_pures; iApply "HΨ".
+Qed.
+
+End Flat.
+
+Lemma twp_leq_pre_term_le pt1 pt2 E Ψ :
+  Ψ #(bool_decide (SMS.Internal.le pt1 pt2)) ⊢
+  WP (leq_term (repr pt1) (repr pt2)) @ E [{ Ψ }].
+Proof.
+rewrite (bool_decide_ext _ _ (iff_sym (pt_order_lexico pt1 pt2))).
+exact: twp_leq_pre_term.
+Qed.
+
+Lemma car_bind_factors A :
+  (∀ x, x ∈ SMS.Internal.elements A → PreTerm.wf x) →
+  SMS.car (SMS.bind PreTerm.factors (SMS.make A.1 A.2)) =
+  SMS.Internal.to SMS.Internal.le (SMS.Internal.flat raw_factors A).
+Proof.
+move=> wfA; rewrite SMS.car_bind SMS.car_make; apply/SMS.Internal.to_eq => z.
+rewrite SMS.Internal.count_flat_to -surjective_pairing.
+congr SMS.Internal.count; apply: SMS.Internal.flat_ext => x x_A.
+by rewrite PreTerm.car_factorsE //; apply: wfA.
+Qed.
+
+Lemma car_bind_gfactors A :
+  (∀ x, x ∈ SMS.Internal.elements A → PreTerm.wf x) →
+  SMS.car (SMS.bind PreTerm.gfactors (SMS.make A.1 A.2)) =
+  SMS.Internal.to SMS.Internal.le (SMS.Internal.flat raw_gfactors A).
+Proof.
+move=> wfA; rewrite SMS.car_bind SMS.car_make; apply/SMS.Internal.to_eq => z.
+rewrite SMS.Internal.count_flat_to -surjective_pairing.
+congr SMS.Internal.count; apply: SMS.Internal.flat_ext => x x_A.
+by rewrite PreTerm.car_gfactorsE //; apply: wfA.
+Qed.
+
+Lemma twp_hl_normalize_factors E A Ψ :
+  Ψ (repr (SMS.Internal.to SMS.Internal.le (SMS.Internal.flat raw_factors A)))
+  ⊢ WP hl_normalize_factors (repr A) @ E [{ Ψ }].
+Proof.
+iIntros "HΨ"; wp_lam.
+wp_apply (twp_hl_flat raw_factors _ twp_hl_factors).
+wp_apply (twp_sms_to SMS.Internal.le eq_term leq_term twp_eq_pre_term
+            twp_leq_pre_term_le).
 by iApply "HΨ".
 Qed.
 
-Lemma twp_hl_normalize_gfactors E (ts : list PreTerm.pre_term) Ψ :
-  Ψ (repr (PreTerm.normalize_gfactors ts)) ⊢
-  WP hl_normalize_gfactors (repr ts) @ E [{ Ψ }].
+Lemma twp_hl_normalize_gfactors E A Ψ :
+  Ψ (repr (SMS.Internal.to SMS.Internal.le (SMS.Internal.flat raw_gfactors A)))
+  ⊢ WP hl_normalize_gfactors (repr A) @ E [{ Ψ }].
 Proof.
 iIntros "HΨ"; wp_lam.
-wp_apply twp_hl_all_gfactors.
-wp_apply (twp_sms_to pt_order PreTerm.ginv_aux eq_term hl_ginv_aux leq_term
-            twp_eq_pre_term twp_hl_ginv_aux twp_leq_pre_term).
+wp_apply (twp_hl_flat raw_gfactors _ twp_hl_gfactors).
+wp_apply (twp_sms_to SMS.Internal.le eq_term leq_term twp_eq_pre_term
+            twp_leq_pre_term_le).
 by iApply "HΨ".
 Qed.
 
-Lemma twp_hl_gmul_list E (ts : list PreTerm.pre_term) Ψ :
-  Ψ (repr (PreTerm.gmul ts)) ⊢ WP hl_gmul_list (repr ts) @ E [{ Ψ }].
+Lemma twp_hl_mul_pair E A Ψ :
+  (∀ x, x ∈ SMS.Internal.elements A → PreTerm.wf x) →
+  Ψ (repr (PreTerm.mul (SMS.make A.1 A.2))) ⊢
+  WP hl_mul_pair (repr A) @ E [{ Ψ }].
 Proof.
-iIntros "HΨ"; wp_lam.
-wp_apply twp_hl_normalize_gfactors.
-wp_apply twp_hl_gmul_aux.
-by iApply "HΨ".
-Qed.
-
-Lemma twp_hl_gmul E pt1 pt2 Ψ :
-  Ψ (repr (PreTerm.gmul [pt1; pt2])) ⊢
-  WP hl_gmul (repr pt1) (repr pt2) @ E [{ Ψ }].
-Proof.
-iIntros "HΨ"; wp_lam; wp_pures.
-wp_apply twp_nil.
-wp_apply twp_cons.
-wp_apply twp_cons.
-wp_apply twp_hl_gmul_list.
-by iApply "HΨ".
-Qed.
-
-Lemma twp_hl_ginv E pt Ψ :
-  Ψ (repr (PreTerm.ginv pt)) ⊢ WP hl_ginv (repr pt) @ E [{ Ψ }].
-Proof.
-have invS : forall pt' : PreTerm.pre_term,
-    [[{ True }]] hl_ginv_aux (repr pt') @ E
-    [[{ RET repr (PreTerm.ginv_aux pt'); True }]].
-  by iIntros "%pt' %Φ _ HΦ"; wp_apply twp_hl_ginv_aux; iApply "HΦ".
-have mapE : forall T (f : PreTerm.pre_term -> T) (l : list PreTerm.pre_term),
-    map f l = f <$> l.
-  by move=> T f; elim=> [//|x l IH] /=; rewrite IH.
-have invE : PreTerm.is_gmul pt = true ->
-    PreTerm.ginv pt = PreTerm.gmul (PreTerm.ginv_aux <$> PreTerm.gfactors pt).
-  by case: pt => [o|o t|o t1 t2|[|] ts].
-iIntros "HΨ"; wp_lam.
-wp_apply twp_hl_is_gmul.
-case Em: (PreTerm.is_gmul pt); wp_pures.
-- rewrite (invE Em).
-  wp_apply twp_hl_gfactors.
-  wp_apply (twp_map_list PreTerm.ginv_aux hl_ginv_aux) => //.
-    by apply/Forall_forall => x _; exact: invS.
-  iIntros "_"; rewrite mapE.
-  wp_apply twp_hl_gmul_list.
-  by iApply "HΨ".
-- rewrite PreTerm.ginv_Ngmul; last by rewrite Em.
-  by wp_apply twp_hl_ginv_aux; iApply "HΨ".
-Qed.
-
-Lemma twp_hl_normalize_factors E (ts : list PreTerm.pre_term) Ψ :
-  Ψ (repr (PreTerm.normalize_factors ts)) ⊢
-  WP hl_normalize_factors (repr ts) @ E [{ Ψ }].
-Proof.
-iIntros "HΨ"; wp_lam.
-wp_apply twp_hl_all_factors.
-wp_apply (twp_sms_to pt_order PreTerm.inv_aux eq_term hl_inv_aux leq_term
-            twp_eq_pre_term twp_hl_inv_aux twp_leq_pre_term).
-by iApply "HΨ".
-Qed.
-
-Lemma twp_hl_mul_list E (ts : list PreTerm.pre_term) Ψ :
-  Ψ (repr (PreTerm.mul ts)) ⊢ WP hl_mul_list (repr ts) @ E [{ Ψ }].
-Proof.
-iIntros "HΨ"; wp_lam.
+move=> wfA; iIntros "HΨ"; wp_lam.
 wp_apply twp_hl_normalize_factors.
-wp_apply twp_hl_mul_aux.
+rewrite -(car_bind_factors A wfA).
+wp_apply (twp_hl_mul_aux _ (SMS.bind PreTerm.factors (SMS.make A.1 A.2))).
+by iApply "HΨ".
+Qed.
+
+Lemma twp_hl_gmul_pair E A Ψ :
+  (∀ x, x ∈ SMS.Internal.elements A → PreTerm.wf x) →
+  Ψ (repr (PreTerm.gmul (SMS.make A.1 A.2))) ⊢
+  WP hl_gmul_pair (repr A) @ E [{ Ψ }].
+Proof.
+move=> wfA; iIntros "HΨ"; wp_lam.
+wp_apply twp_hl_normalize_gfactors.
+rewrite -(car_bind_gfactors A wfA).
+wp_apply (twp_hl_gmul_aux _ (SMS.bind PreTerm.gfactors (SMS.make A.1 A.2))).
 by iApply "HΨ".
 Qed.
 
 Lemma twp_hl_mul E pt1 pt2 Ψ :
-  Ψ (repr (PreTerm.mul [pt1; pt2])) ⊢ WP hl_mul (repr pt1) (repr pt2) @ E [{ Ψ }].
+  PreTerm.wf pt1 → PreTerm.wf pt2 →
+  Ψ (repr (PreTerm.mul (SMS.make [pt1; pt2] []))) ⊢
+  WP hl_mul (repr pt1) (repr pt2) @ E [{ Ψ }].
 Proof.
-iIntros "HΨ"; wp_lam; wp_pures.
-wp_apply twp_nil.
-wp_apply twp_cons.
-wp_apply twp_cons.
-wp_apply twp_hl_mul_list.
-by iApply "HΨ".
+move=> wf1 wf2; iIntros "HΨ"; wp_lam; wp_pures; rewrite /CONS; wp_pures.
+rewrite (_ : (InjRV (val_of_pre_term pt1,
+                     InjRV (val_of_pre_term pt2, [])), [])%V =
+             repr ([pt1; pt2], @nil PreTerm.pre_term)); last first.
+  by rewrite /= [@repr_list]unlock.
+wp_apply twp_hl_mul_pair; last by iApply "HΨ".
+by move=> x; rewrite /SMS.Internal.elements /= elem_of_cons
+  list_elem_of_singleton => -[->|->].
+Qed.
+
+Lemma twp_hl_gmul E pt1 pt2 Ψ :
+  PreTerm.wf pt1 → PreTerm.wf pt2 →
+  Ψ (repr (PreTerm.gmul (SMS.make [pt1; pt2] []))) ⊢
+  WP hl_gmul (repr pt1) (repr pt2) @ E [{ Ψ }].
+Proof.
+move=> wf1 wf2; iIntros "HΨ"; wp_lam; wp_pures; rewrite /CONS; wp_pures.
+rewrite (_ : (InjRV (val_of_pre_term pt1,
+                     InjRV (val_of_pre_term pt2, [])), [])%V =
+             repr ([pt1; pt2], @nil PreTerm.pre_term)); last first.
+  by rewrite /= [@repr_list]unlock.
+wp_apply twp_hl_gmul_pair; last by iApply "HΨ".
+by move=> x; rewrite /SMS.Internal.elements /= elem_of_cons
+  list_elem_of_singleton => -[->|->].
 Qed.
 
 Lemma twp_hl_inv E pt Ψ :
-  Ψ (repr (PreTerm.inv pt)) ⊢ WP hl_inv (repr pt) @ E [{ Ψ }].
+  PreTerm.wf pt →
+  Ψ (repr (PreTerm.mul (SMS.make [] [pt]))) ⊢ WP hl_inv (repr pt) @ E [{ Ψ }].
 Proof.
-have invS : forall pt' : PreTerm.pre_term,
-    [[{ True }]] hl_inv_aux (repr pt') @ E [[{ RET repr (PreTerm.inv_aux pt'); True }]].
-  by iIntros "%pt' %Φ _ HΦ"; wp_apply twp_hl_inv_aux; iApply "HΦ".
-have mapE : forall T (f : PreTerm.pre_term -> T) (l : list PreTerm.pre_term),
-    map f l = f <$> l.
-  by move=> T f; elim=> [//|x l IH] /=; rewrite IH.
-have invE : PreTerm.is_mul pt = true ->
-    PreTerm.inv pt = PreTerm.mul (PreTerm.inv_aux <$> PreTerm.factors pt).
-  by case: pt => [o|o t|o t1 t2|[|] ts].
-iIntros "HΨ"; wp_lam.
-wp_apply twp_hl_is_mul.
-case Em: (PreTerm.is_mul pt); wp_pures.
-- rewrite (invE Em).
-  wp_apply twp_hl_factors.
-  wp_apply (twp_map_list PreTerm.inv_aux hl_inv_aux) => //.
-    by apply/Forall_forall => x _; exact: invS.
-  iIntros "_"; rewrite mapE.
-  wp_apply twp_hl_mul_list.
-  by iApply "HΨ".
-- rewrite PreTerm.inv_Nmul; last by rewrite Em.
-  by wp_apply twp_hl_inv_aux; iApply "HΨ".
+move=> wf_pt; iIntros "HΨ"; wp_lam; wp_pures; rewrite /CONS; wp_pures.
+rewrite (_ : ([], InjRV (val_of_pre_term pt, []))%V =
+             repr (@nil PreTerm.pre_term, [pt])); last first.
+  by rewrite /= [@repr_list]unlock.
+wp_apply twp_hl_mul_pair; last by iApply "HΨ".
+by move=> x; rewrite /SMS.Internal.elements /= list_elem_of_singleton => ->.
+Qed.
+
+Lemma twp_hl_ginv E pt Ψ :
+  PreTerm.wf pt →
+  Ψ (repr (PreTerm.gmul (SMS.make [] [pt]))) ⊢ WP hl_ginv (repr pt) @ E [{ Ψ }].
+Proof.
+move=> wf_pt; iIntros "HΨ"; wp_lam; wp_pures; rewrite /CONS; wp_pures.
+rewrite (_ : ([], InjRV (val_of_pre_term pt, []))%V =
+             repr (@nil PreTerm.pre_term, [pt])); last first.
+  by rewrite /= [@repr_list]unlock.
+wp_apply twp_hl_gmul_pair; last by iApply "HΨ".
+by move=> x; rewrite /SMS.Internal.elements /= list_elem_of_singleton => ->.
 Qed.
 
 Lemma twp_hl_mk_exp E (b e : PreTerm.pre_term) Ψ :
   Ψ (repr (PreTerm.mk_exp b e)) ⊢ WP hl_mk_exp (repr b) (repr e) @ E [{ Ψ }].
 Proof.
-have one : hl_one = repr (PreTerm.PTMul []).
-  by rewrite /hl_one /= [@repr_list]unlock.
-iIntros "HΨ"; wp_lam; wp_pures; rewrite one.
+iIntros "HΨ"; wp_lam; wp_pures; rewrite hl_oneE.
 wp_apply twp_eq_pre_term.
 rewrite /PreTerm.mk_exp.
-by case: (bool_decide (e = PreTerm.PTMul [])); wp_pures; iApply "HΨ".
+by case: (bool_decide (e = PreTerm.PTMul [] [])); wp_pures; iApply "HΨ".
 Qed.
 
-(* The body shared by both branches of [exp_aux]. *)
-Lemma twp_hl_exp_aux_body E (u e : PreTerm.pre_term) Ψ :
-  Ψ (repr (PreTerm.mk_exp (PreTerm.base u) (PreTerm.mul [PreTerm.expo u; e])))
-  ⊢ WP hl_mk_exp (hl_base (repr u))
-        (hl_mul_list (hl_expo (repr u) :: (repr e) :: NILV)) @ E [{ Ψ }].
+Lemma twp_hl_exp_aux E (b e : PreTerm.pre_term) Ψ :
+  PreTerm.wf b → PreTerm.wf e →
+  Ψ (repr (PreTerm.exp_aux b e)) ⊢ WP hl_exp_aux (repr b) (repr e) @ E [{ Ψ }].
 Proof.
-iIntros "HΨ".
-wp_apply twp_nil.
-wp_apply twp_cons.
-wp_apply twp_hl_expo.
-wp_apply twp_cons.
-wp_apply twp_hl_mul_list.
+move=> wf_b wf_e; iIntros "HΨ"; wp_lam; wp_pures; rewrite /CONS; wp_pures.
+wp_apply twp_hl_expo; wp_pures.
+rewrite (_ : (InjRV (repr (PreTerm.expo b),
+                     InjRV (val_of_pre_term e, [])), [])%V =
+             repr ([PreTerm.expo b; e], @nil PreTerm.pre_term)); last first.
+  by rewrite /= [@repr_list]unlock.
+wp_apply twp_hl_mul_pair.
+  move=> x; rewrite /SMS.Internal.elements /= elem_of_cons.
+  by rewrite list_elem_of_singleton => -[->|->] //; exact: PreTerm.wf_expo.
 wp_apply twp_hl_base.
 wp_apply twp_hl_mk_exp.
 by iApply "HΨ".
 Qed.
 
-Lemma twp_hl_exp_aux E (b e : PreTerm.pre_term) Ψ :
-  Ψ (repr (PreTerm.exp_aux b e)) ⊢ WP hl_exp_aux (repr b) (repr e) @ E [{ Ψ }].
-Proof.
-iIntros "HΨ"; wp_lam; wp_pures.
-wp_apply twp_hl_is_ginv.
-case Ei: (PreTerm.is_ginv b); wp_pures.
-- wp_apply twp_hl_ginv_aux; wp_pures.
-  wp_apply twp_hl_exp_aux_body.
-  wp_apply twp_hl_ginv_aux.
-  by case: b Ei => [o|[k| | |] u|o c d|[|] us] //= _; iApply "HΨ".
-- wp_apply twp_hl_exp_aux_body.
-  rewrite PreTerm.exp_aux_Nginv; last by rewrite Ei.
-  by iApply "HΨ".
-Qed.
-
 Lemma twp_hl_exp E (b e : PreTerm.pre_term) Ψ :
+  PreTerm.wf b → PreTerm.wf e →
   Ψ (repr (PreTerm.exp b e)) ⊢ WP hl_exp (repr b) (repr e) @ E [{ Ψ }].
 Proof.
-have expS : forall pt' : PreTerm.pre_term,
+move=> wf_b wf_e.
+have wfg := PreTerm.wf_wf_gfactors _ wf_b.
+have expS : ∀ pt' : PreTerm.pre_term, pt' ∈ PreTerm.gfactors b →
     [[{ True }]] (λ: "t", hl_exp_aux "t" (repr e))%V (repr pt') @ E
     [[{ RET repr (PreTerm.exp_aux pt' e); True }]].
-  iIntros "%pt' %Φ _ HΦ"; wp_pures.
-  by wp_apply twp_hl_exp_aux; iApply "HΦ".
-have mapE : forall T (f : PreTerm.pre_term -> T) (l : list PreTerm.pre_term),
+  iIntros "%pt' %pt'_b %Φ _ HΦ"; wp_pures.
+  wp_apply twp_hl_exp_aux; last by iApply "HΦ".
+  - exact: PreTerm.wf_gfactors_wf wfg pt'_b.
+  - exact: wf_e.
+have mapE : ∀ T (f : PreTerm.pre_term -> T) (l : list PreTerm.pre_term),
     map f l = f <$> l.
   by move=> T f; elim=> [//|x l IH] /=; rewrite IH.
 iIntros "HΨ"; wp_lam; wp_pures.
-wp_apply twp_hl_gfactors; wp_pures.
-wp_apply (twp_map_list (fun t => PreTerm.exp_aux t e)) => //.
-  by apply/Forall_forall => x _; exact: expS.
-iIntros "_"; rewrite mapE.
-wp_apply twp_hl_gmul_list.
-by iApply "HΨ".
+wp_apply twp_hl_gfactors.
+have rawE : raw_gfactors b = SMS.car (PreTerm.gfactors b).
+  by rewrite PreTerm.car_gfactorsE.
+rewrite /PreTerm.exp SMS.map_pos_neg /SMS.pos /SMS.neg rawE.
+have elemE x : x ∈ (SMS.car (PreTerm.gfactors b)).1 ∨
+               x ∈ (SMS.car (PreTerm.gfactors b)).2 → x ∈ PreTerm.gfactors b.
+  by rewrite -SMS.elem_of_elements SMS.elements_car elem_of_app.
+case: (SMS.car (PreTerm.gfactors b)) elemE => [ps ns] /= elemE.
+rewrite /repr_prod /=; wp_pures.
+wp_apply (twp_map_list (fun t => PreTerm.exp_aux t e) _ ns) => //.
+  by apply/Forall_forall => x x_ns; apply: expS; apply: elemE; right.
+iIntros "_"; wp_pures.
+wp_apply (twp_map_list (fun t => PreTerm.exp_aux t e) _ ps) => //.
+  by apply/Forall_forall => x x_ps; apply: expS; apply: elemE; left.
+iIntros "_"; wp_pures; rewrite !mapE.
+rewrite (_ : (repr ((λ t, PreTerm.exp_aux t e) <$> ps),
+              repr ((λ t, PreTerm.exp_aux t e) <$> ns))%V =
+             repr ((λ t, PreTerm.exp_aux t e) <$> ps,
+                   (λ t, PreTerm.exp_aux t e) <$> ns)) //.
+wp_apply twp_hl_gmul_pair; last by iApply "HΨ".
+move=> x; rewrite /SMS.Internal.elements /= elem_of_app.
+case=> /list_elem_of_fmap [u [-> u_in]];
+  (apply: PreTerm.wf_exp_aux => //;
+     [apply: (PreTerm.wf_gfactors_wf wfg)
+     |apply: (PreTerm.wf_gfactors_Ngmul wfg)];
+     apply: elemE; by [left|right]).
 Qed.
 
 End Proofs.
-

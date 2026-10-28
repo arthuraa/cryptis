@@ -144,7 +144,8 @@ iDestruct "inv" as "[#pub|inv_m2]".
   rewrite public_TExp_iff //.
   iDestruct "p_ga" as "(_ & _ & #exp_a & _)".
   iPoseProof (exp_pred_inv_same with "exp_a") as "exp_a_inv";
-    first by rewrite (exps_TExp1 Nm_a); set_solver.
+    first by rewrite (exps_TExp1 Nm_a) /SMS.pos SMS.car_singleton;
+             set_solver.
   iDestruct "exp_a_inv" as "[#p_a | (%t3 & %base_t3 & %t3_sub & #base_a)]".
   + (* Sub-case: public a — contradiction with peer_share_token *)
     iDestruct ("s_a" with "p_a") as "#later_ns".
@@ -188,21 +189,8 @@ iDestruct "inv" as "[#pub|inv_m2]".
   set gb := TExp (TInt 0) b.
   have b_a : TNonce b ≠ TNonce a.
   { move=> e. apply: b_ga. rewrite /ga -e.
-    apply/subtermsP.
-    have ic_b : invs_canceled [TNonce b] := invs_canceled1 Nm_b.
-    rewrite (_ : TExp (TInt 0) b = TExpN (TInt 0) [TNonce b]); last by rewrite /TExpN TMulN1.
-    rewrite subtermsE //=.
-    by rewrite [subterms b]subterms_nonce //; set_solver. }
-  have aV_b : TNonce a ≠ TInv b.
-  { move=> contra.
-    have inv_a : is_inv a.
-    { by rewrite contra (is_inv_TInv (TNonce b) Nm_b). }
-    by case: inv_a. }
-  have bV_a : TNonce b ≠ TInv a.
-  { move=> contra.
-    have inv_b : is_inv b.
-    { by rewrite contra (is_inv_TInv (TNonce a) Nm_a). }
-    by case: inv_b. }
+    apply: (@STExp2 _ _ (TNonce b)) => //.
+    by rewrite (elem_of_factors_Nmul _ Nm_b). }
   case: failed.
   + (* failed = true: corruption *)
     rewrite /=. iDestruct "failed_e" as "#corr".
@@ -275,14 +263,16 @@ iDestruct "inv" as "[#pub|inv_m2]".
         iRight. iIntros "!> #p_k".
         rewrite public_senc_key public_of_list /=.
         iDestruct "p_k" as "(_ & _ & _ & _ & #p_gab & _)".
-        have e_gab : gab = TExpN (TInt 0) [TNonce a; TNonce b] by rewrite /gab /gb TExp2_TExpN.
+        have e_gab : gab = TExp (TInt 0) (TMul {[+ TNonce a; TNonce b +]}).
+          by rewrite /gab /gb TExpC TExpA.
         rewrite e_gab public_TExp2_iff //.
         iDestruct "p_gab" as "(_ & #exp_a & _ & _ & _)".
+        have exps_share :
+            SMS.pos (exps (TExp (TInt 0) (TMul {[+ TNonce a; TNonce b +]})))
+            ≡ₚ [TNonce a; TNonce b].
+        { by rewrite (exps_TExp2 Nm_a Nm_b) SMS.pos_make_nil_r. }
         iPoseProof (exp_pred_inv with "exp_a") as "(%t & %t_in & H)";
-          first (apply: (elem_of_TExpN2l Nm_a Nm_b) => //;
-                 by rewrite /exps (expo_expN (TInt 0) I) factors_TMulN0 elem_of_nil; case).
-        have exps_share : exps (TExpN (TInt 0) [TNonce a; TNonce b]) ≡ₚ [TNonce a; TNonce b].
-        { exact: (exps_TExp2 Nm_a Nm_b aV_b). }
+          first by rewrite exps_share; set_solver.
         rewrite exps_share elem_of_cons list_elem_of_singleton in t_in.
         iDestruct "H" as "[#p_t|(%t3 & %base_t3 & %exps_sub & #base_t)]".
         { case: t_in => ->.
@@ -293,9 +283,12 @@ iDestruct "inv" as "[#pub|inv_m2]".
         { case: t_in => ->; [by iApply "pred_a" | by iApply "pred_b"]. }
         iAssert (▷ False)%I as ">[]".
         { iModIntro. iDestruct "ks" as "[_ %contra]". iPureIntro.
-          case e_t3 : (exps t3) => [|c [|??]] // in exps_sub contra.
-          have [a_c b_c] : TNonce a ∈ [c] ∧ TNonce b ∈ [c] by set_solver.
-          rewrite !list_elem_of_singleton in a_c b_c. congruence. } }
+          move: contra exps_sub.
+          rewrite SMS.elements_pos_neg /SMS.pos /SMS.neg length_app.
+          case: (SMS.car (exps t3)) => [[|c [|??]] ns] /= len sub; try lia.
+          - by have := sub (TNonce a); set_solver.
+          - have [a_c b_c] : TNonce a ∈ [c] ∧ TNonce b ∈ [c] by set_solver.
+            rewrite !list_elem_of_singleton in a_c b_c. congruence. } }
     iSplit.
     { by iIntros "!> []". }
     iSplit; first done.
@@ -310,8 +303,7 @@ iDestruct "inv" as "[#pub|inv_m2]".
         have e_b : b = b'.
         { rewrite /gb in e_gb'.
           have NmInt : negb (is_gmul (TInt 0)) by [].
-    have NiInt : negb (is_ginv (TInt 0)) by [].
-    have e := TExp_injr _ _ _ NmInt NiInt e_gb'. congruence. }
+    have e := TExp_injr _ _ _ NmInt e_gb'. congruence. }
         subst b'.
         iSplitR "".
         + (* ▷ (released ga ∧ released gb) → public ga *)
@@ -321,15 +313,18 @@ iDestruct "inv" as "[#pub|inv_m2]".
         + (* public (TExp ga b) ↔ ▷ (released ga ∧ released gb) *)
           iSplit.
           * iIntros "#p_gab".
-            have e_gab : TExp ga b = TExpN (TInt 0) [TNonce a; TNonce b].
-            { by rewrite /ga TExp2_TExpN TExpNC2. }
+            have e_gab :
+              TExp ga b = TExp (TInt 0) (TMul {[+ TNonce a; TNonce b +]}).
+            { by rewrite /ga TExpA. }
             rewrite e_gab public_TExp2_iff //.
             iDestruct "p_gab" as "(_ & #exp_a & _ & _ & _)".
+            have exps_share :
+                SMS.pos
+                  (exps (TExp (TInt 0) (TMul {[+ TNonce a; TNonce b +]})))
+                ≡ₚ [TNonce a; TNonce b].
+            { by rewrite (exps_TExp2 Nm_a Nm_b) SMS.pos_make_nil_r. }
             iPoseProof (exp_pred_inv with "exp_a") as "(%t & %t_in & H)";
-              first (apply: (elem_of_TExpN2l Nm_a Nm_b) => //;
-                 by rewrite /exps (expo_expN (TInt 0) I) factors_TMulN0 elem_of_nil; case).
-            have exps_share : exps (TExpN (TInt 0) [TNonce a; TNonce b]) ≡ₚ [TNonce a; TNonce b].
-            { exact: (exps_TExp2 Nm_a Nm_b aV_b). }
+              first by rewrite exps_share; set_solver.
             rewrite exps_share elem_of_cons list_elem_of_singleton in t_in.
             iDestruct "H" as "[#p_t|(%t3 & %base_t3 & %exps_sub & #base_t)]".
             { case: t_in => ->.
@@ -340,9 +335,14 @@ iDestruct "inv" as "[#pub|inv_m2]".
             { case: t_in => ->; [by iApply "pred_a" | by iApply "pred_b"]. }
             iAssert (▷ False)%I as ">[]".
             { iModIntro. iDestruct "ks" as "[_ %contra]". iPureIntro.
-              case e_t3 : (exps t3) => [|c [|??]] // in exps_sub contra.
-              have [a_c b_c] : TNonce a ∈ [c] ∧ TNonce b ∈ [c] by set_solver.
-              rewrite !list_elem_of_singleton in a_c b_c. congruence. }
+              move: contra exps_sub.
+              rewrite SMS.elements_pos_neg /SMS.pos /SMS.neg.
+              rewrite length_app.
+              case: (SMS.car (exps t3)) => [[|c [|??]] ns] /= len sub;
+                try lia.
+              - by have := sub (TNonce a); set_solver.
+              - have [a_c b_c] : TNonce a ∈ [c] ∧ TNonce b ∈ [c] by set_solver.
+                rewrite !list_elem_of_singleton in a_c b_c. congruence. }
           * iIntros "#[#r_ga #r_gb]".
             iAssert (public a) as "#p_a". { iApply "rel_a". iNext. by iSplit. }
             iAssert (public b) as "#p_b". { iApply "rel_b". iNext. by iSplit. }

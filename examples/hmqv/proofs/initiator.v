@@ -79,7 +79,7 @@ iPoseProof (secret_alloc with "s_xa' pend") as "s".
 iAssert (hmqv_key x_a) as "#key_xa"; first by iSplit.
 set X_a := TExp g x_a.
 iAssert (public X_a) as "#p_Xa";
-  first by iApply (public_dh_share gNX gNm gNi Nm_xa with "p_g m_xa pred_xa").
+  first by iApply (public_dh_share gNX gNm Nm_xa with "p_g m_xa pred_xa").
 iDestruct (release_tokenI with "tok_Xa") as "[tok_rel tok_Xa]";
   first solve_ndisj.
 iDestruct (term_token_difference X_a (↑hmqvN.@"ready") with "tok_Xa")
@@ -123,7 +123,7 @@ iAssert (|={⊤}=>
   - iEval (rewrite public_of_list /=) in "p_t".
     iDestruct "p_t" as "[#p_σ _]".
     iDestruct (@public_hmqv_K_forged _ _ _ hmqvN g "init" "resp" p_a x_a p_b
-                 (TExp g p_a) X_a X_b gNX gNm gNi tags
+                 (TExp g p_a) X_a X_b gNX gNm tags
                  with "key_a key_xa key_b p_σ") as "#comp".
     iAssert (public (si_key si)) as "#p_k"; first by iApply public_si_key.
     iModIntro.
@@ -139,7 +139,7 @@ iAssert (|={⊤}=>
     subst N'.
     have [epa [epb [eXb eXa]]] :=
       @hmqv_K_inj' hmqvN g "init" "resp" p_a x_a p_b p_a' x_b' p_b' X_b X_a'
-                   gNX gNm gNi tags eσ.
+                   gNX gNm tags eσ.
     subst p_a' p_b' X_b X_a'.
     have e_si : si = resp_si p_a (TExp g x_a) p_b x_b'.
       by rewrite /si init_resp_si.
