@@ -240,7 +240,7 @@ Qed.
 Definition dh_key skI skR (a : nonce) : iProp :=
   minted a ∧
   □ (public a ↔ ▷ □ nonce_secrecy a) ∧
-  □ (∀ t, exp_pred_base a t ↔ ▷ □ nsl_dh_key_share skI skR t).
+  □ (∀ t, exp_pred a t ↔ ▷ □ nsl_dh_key_share skI skR t).
 
 #[global] Instance dh_key_persistent skI skR a : Persistent (dh_key skI skR a).
 Proof. apply _. Qed.
@@ -540,7 +540,7 @@ Lemma public_dh_share skI skR (a : nonce) :
 Proof.
 iIntros (ga) "#(m_a & _ & #pred_a) corr".
 have Nm : negb (is_mul a) by [].
-iAssert (exp_pred_base a (TExp (TInt 0) a)) with "[corr]" as "#dp".
+iAssert (exp_pred a (TExp (TInt 0) a)) with "[corr]" as "#dp".
 { iAssert (▷ □ nsl_dh_key_share skI skR (TExp (TInt 0) a))%I
     with "[corr]" as "#ns".
   { iNext. iDestruct "corr" as "#corr".
@@ -550,7 +550,7 @@ iAssert (exp_pred_base a (TExp (TInt 0) a)) with "[corr]" as "#dp".
   by iDestruct ("pred_a" $! (TExp (TInt 0) a) with "ns") as "$". }
 rewrite /ga public_TExp_iff //.
 rewrite minted_TInt. do 3?[iSplit => //].
-- by iApply exp_pred_base_exp_pred.
+- by iRight.
 - iIntros "!> _". by rewrite public_TInt.
 Qed.
 

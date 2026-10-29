@@ -192,10 +192,8 @@ iAssert (minted (si_key si)) as "#m_k".
   do !iSplit => //.
   - by iApply all_minted_TExp; iSplit. }
 iDestruct "inv_m3" as "[#p_gb|(#inv_m3 & _)]".
-- (* public gb — case split via public_TExp_iff *)
-  rewrite public_TExp_iff //.
-  iDestruct "p_gb" as "(_ & _ & #exp_b & _)".
-  iPoseProof (exp_pred_inv_same with "exp_b") as "exp_b_inv";
+- (* public gb — case split via public_exp_inv_same *)
+  iPoseProof (public_exp_inv_same (t1 := b) with "p_gb") as "exp_b_inv";
     first by rewrite (exps_TExp1 Nm_b) /SMS.pos SMS.car_singleton;
              set_solver.
   iDestruct "exp_b_inv" as "[#p_b | (%t3 & %base_t3 & %t3_sub & #base_b)]".
@@ -206,7 +204,7 @@ iDestruct "inv_m3" as "[#p_gb|(#inv_m3 & _)]".
     iDestruct "ns" as "[#ps_none|(%ga' & #ps_some & #r_gb & _)]".
     * by iPoseProof (has_peer_share_agree with "ps_gb ps_none") as "%".
     * by iApply (term_meta_token with "rel r_gb").
-  + (* exp_pred_base b t3 — derive corruption *)
+  + (* exp_pred b t3 — derive corruption *)
     iPoseProof ("pred_b" $! t3 with "base_b") as "#later_ks".
     iMod (lc_fupd_elim_later_pers with "Hc1 later_ks") as "#[#corr _]".
     wp_bind (derive_senc_key _). iApply wp_derive_senc_key. iNext. wp_pures.

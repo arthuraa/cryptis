@@ -639,11 +639,11 @@ by iApply public_TMul2.
 Qed.
 
 (** The persistent part of a Diffie-Hellman private key, long-term or
-    ephemeral: its [exp_pred_base] lets it be used as a DH exponent.  Whether
+    ephemeral: its [exp_pred] lets it be used as a DH exponent.  Whether
     it stays secret is up to its owner. *)
 
 Definition hmqv_key (x : nonce) : iProp :=
-  minted x ∗ □ (∀ t, exp_pred_base x t ↔ ▷ □ dh_key_share t).
+  minted x ∗ □ (∀ t, exp_pred x t ↔ ▷ □ dh_key_share t).
 
 #[global] Instance hmqv_key_persistent (x : nonce) : Persistent (hmqv_key x).
 Proof. apply _. Qed.

@@ -300,7 +300,7 @@ Definition msg2_pred skR m2 : iProp :=
     let si := SessInfo skI skR ga gb gab in
     ⌜m2 = Spec.of_list [ga; gb; pkI; Tag N]⌝ ∧
     ((public skI ∨ public skR) ∨ (public b ↔ ▷ (released ga ∧ released gb))) ∧
-    (∀ t, exp_pred_base b t ↔ ▷ □ dh_key_share t) ∧
+    (∀ t, exp_pred b t ↔ ▷ □ dh_key_share t) ∧
     iso_dh_ready N skI skR si.
 
 Definition msg3_pred skI m3 : iProp :=
