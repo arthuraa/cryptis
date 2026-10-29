@@ -116,15 +116,6 @@ have := sum_list_with_in _ tsize _ t'_t.
 by case: (is_gmul t) Mt => //= _; lia.
 Qed.
 
-Lemma is_mul_TInv_atom t : negb (is_mul t) → is_mul (TInv t).
-Proof.
-move=> Nm; case E: (is_mul (TInv t)) => //.
-have Nmi : negb (is_mul (TInv t)) by rewrite E.
-have := factors_TInv t; rewrite (factors_Nmul _ Nmi) (factors_Nmul _ Nm).
-move=> /(f_equal (λ s, (SMS.car s).1)).
-by rewrite SMS.car_inv !SMS.car_singleton.
-Qed.
-
 Lemma tsize_TInv t : negb (is_mul t) → tsize (TInv t) = S (tsize t).
 Proof.
 move=> Nm; rewrite tsize_factorsE (_ : is_mul (TInv t) = true); last first.
@@ -275,10 +266,11 @@ Qed.
 
 Lemma tsize_lt_TExp_inv t1 t2 :
   negb (is_gmul t1) → negb (is_mul t2) → t2 ∉ SMS.pos (exps t1) →
-  tsize t1 < tsize (TExp t1 (TInv t2)) ∧ tsize t2 < tsize (TExp t1 (TInv t2)).
+  tsize t1 < tsize (TExp t1 (TInv t2)) ∧
+  tsize (TInv t2) < tsize (TExp t1 (TInv t2)).
 Proof.
-move=> Nm1 Nm2 t2_t1.
-have [] // := @tsize_lt_TExp_gen t1 (TInv t2) t2 Nm1; last lia.
+move=> Nm1 Nm2 t2_t1; rewrite tsize_TInv //.
+have [] // := @tsize_lt_TExp_gen t1 (TInv t2) t2 Nm1.
 by rewrite /exps (expo_TExp _ _ Nm1) elements_factors_TMul2_inv.
 Qed.
 
@@ -306,7 +298,7 @@ Qed.
 
 Lemma tsize_TExp_neg t n :
   n ∈ SMS.neg (exps t) →
-  tsize n < tsize t ∧ tsize (TExp t n) < tsize t.
+  tsize (TInv n) < tsize t ∧ tsize (TExp t n) < tsize t.
 Proof.
 move=> H.
 have n_t : n ∈ exps t := SMS.elem_of_neg _ _ H.
@@ -323,6 +315,14 @@ have n_t' : n ∉ SMS.pos (exps t').
   by case: is_mul Nmn => //= _; lia.
 have [lt1 lt2] := tsize_lt_TExp_inv t' n Nm' Nmn n_t'.
 by rewrite -tE in lt1 lt2; split; lia.
+Qed.
+
+Lemma tsize_satoms f t :
+  f ∈ satoms (exps t) → tsize f < tsize t ∧ tsize (TExp t (TInv f)) < tsize t.
+Proof.
+rewrite /satoms elem_of_app list_elem_of_fmap.
+case=> [|[n [-> n_t]]]; first exact: tsize_TExp_pos.
+by rewrite TInvK; exact: tsize_TExp_neg.
 Qed.
 
 Lemma term_lt_rect (T : term -> Type) :
