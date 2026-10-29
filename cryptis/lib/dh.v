@@ -24,7 +24,7 @@ Variable P : term → iProp.
 
 (** [t] is a Diffie-Hellman share or shared secret: it has exactly one
     exponent.  This is the whole of what the secrecy lemmas at the end of this
-    file read off a seed's [exp_pred_base], and [dh_publ] is it plus whatever
+    file read off a seed's [exp_pred], and [dh_publ] is it plus whatever
     invariant [P] the protocol wants to attach. *)
 Definition dh_key_share t : iProp :=
   ⌜length (elements (exps t)) = 1⌝.
@@ -36,8 +36,8 @@ Definition dh_seed t : iProp :=
   minted t ∧
   ⌜negb (is_mul t)⌝ ∧
   □ (public t ↔ ▷ False) ∧
-  □ (∀ t', exp_pred_base t t' ↔ ▷ □ dh_publ t') ∧
-  □ (∀ t', exp_pred_base (TInv t) t' ↔ ▷ False).
+  □ (∀ t', exp_pred t t' ↔ ▷ □ dh_publ t') ∧
+  □ (∀ t', exp_pred (TInv t) t' ↔ ▷ False).
 
 Lemma dh_seed_elim0 a :
   dh_seed a -∗
@@ -48,10 +48,10 @@ iIntros "#(_ & _ & aP & _) #p_t".
 by iApply "aP".
 Qed.
 
-Lemma dh_seed_exp_pred_base_elim a t :
+Lemma dh_seed_exp_pred_elim a t :
   a ∈ SMS.pos (exps t) →
   dh_seed a -∗
-  exp_pred_base a t -∗
+  exp_pred a t -∗
   □ ▷ (⌜t = TExp (base t) a⌝ ∗ P t).
 Proof.
 iIntros "%a_t (_ & %Nm_a & _ & #dh & _) #base".
@@ -75,16 +75,14 @@ Lemma dh_seed_elim1 g a :
 Proof.
 iIntros "%gNX %gNm #aP #p_t".
 iAssert ⌜negb (is_mul a)⌝%I as %Nm_a; first by iDestruct "aP" as "(_ & $ & _)".
-rewrite public_TExp_iff //.
-iDestruct "p_t" as "(_ & _ & p_t & _)".
 set t' := TExp g a.
 have a_t' : a ∈ SMS.pos (exps t').
   rewrite /t' (exps_TExp_expN _ _ gNX gNm) factors_Nmul //.
   by rewrite SMS.pos_singleton; set_solver.
-iPoseProof (exp_pred_inv_same with "p_t") as "[#contra|H]" => //.
+iPoseProof (public_exp_inv_same with "p_t") as "[#contra|H]" => //.
   by iDestruct (dh_seed_elim0 with "aP contra") as ">[]".
 iDestruct "H" as "(%t & %e_base & %a_t & H)".
-iDestruct (dh_seed_exp_pred_base_elim with "aP H")
+iDestruct (dh_seed_exp_pred_elim with "aP H")
   as "{H} #[>-> H]" => //; iNext.
 have -> : t' = TExp (base t) a; last by iApply "H".
 by rewrite /t' e_base (base_TExp _ _ gNm) base_expN.
@@ -106,10 +104,7 @@ have expsE : exps (TExp g (TMul {[+ a; b +]})) = SMS.make [a; b] [].
 have ab_t : [a; b] ⊆+ SMS.pos (exps (TExp g (TMul {[+ a; b +]}))).
   by apply: Permutation_submseteq; rewrite expsE SMS.pos_make_nil_r.
 have a_ab : a ∈ [a; b] by set_solver.
-have a_t : a ∈ SMS.pos (exps (TExp g (TMul {[+ a; b +]}))).
-  exact: elem_of_submseteq _ _ _ a_ab ab_t.
-iPoseProof (exp_pred_exps a_t with "p") as "[dh_a _]".
-iPoseProof (exp_pred_inv_gen a_ab ab_t with "dh_a") as "(%c & %c_ab & p_c)".
+iPoseProof (public_exp_inv_gen a_ab ab_t with "p") as "(%c & %c_ab & p_c)".
 rewrite elem_of_cons list_elem_of_singleton in c_ab.
 iDestruct "p_c" as "[p_c|(%t' & _ & %ab_t' & contra)]".
   case: c_ab => ->.
@@ -132,7 +127,7 @@ Lemma dh_public_TExp g a :
 Proof.
 iIntros "%gXN %gNm #gP (#m & %Nm_a & #aP1 & #aP2 & _) #P_a".
 rewrite public_TExp_iff //; do !iSplit => //.
-- iApply exp_pred_base_exp_pred. iApply "aP2"; do 2!iModIntro; iSplit => //.
+- iRight. iApply "aP2"; do 2!iModIntro; iSplit => //.
   iPureIntro.
   by rewrite (exps_TExp_expN _ _ gXN gNm) factors_Nmul.
 - iModIntro; iIntros "#p".
@@ -198,7 +193,7 @@ Implicit Types t : term.
     A protocol that does not want [dh_seed]'s "the seed is never public" clause
     -- ISO-DH and OPAQUE both need a weaker, conditional secrecy -- still gets
     the two facts that matter from the bare
-    [∀ t, exp_pred_base a t ↔ ▷ □ dh_key_share t]: its share [g^a] is public,
+    [∀ t, exp_pred a t ↔ ▷ □ dh_key_share t]: its share [g^a] is public,
     and [g^ab] stays secret as long as both seeds do. *)
 
 (* [dh_public_TExp] without [dh_seed]'s secrecy clause on [a].  That clause is
@@ -209,14 +204,14 @@ Lemma public_dh_share g a :
   negb (is_mul a) →
   public g -∗
   minted a -∗
-  □ (∀ t, exp_pred_base a t ↔ ▷ □ dh_key_share t) -∗
+  □ (∀ t, exp_pred a t ↔ ▷ □ dh_key_share t) -∗
   public (TExp g a).
 Proof.
 move=> gNx gNm Nm; iIntros "#p_g #m_a #pred_a".
 iPoseProof (public_minted with "p_g") as "#m_g".
 rewrite public_TExp_iff //.
 do !iSplit => //; last by iIntros "!> _".
-iApply exp_pred_base_exp_pred.
+iRight.
 iApply "pred_a". iPureIntro. rewrite /dh_key_share.
 by rewrite (exps_TExp_expN _ _ gNx gNm) factors_Nmul // SMS.elements_singleton.
 Qed.
@@ -229,8 +224,8 @@ Lemma public_dh_secret1 g a b :
   public g -∗
   minted a -∗
   minted b -∗
-  □ (∀ t, exp_pred_base a t ↔ ▷ □ dh_key_share t) -∗
-  □ (∀ t, exp_pred_base b t ↔ ▷ □ dh_key_share t) -∗
+  □ (∀ t, exp_pred a t ↔ ▷ □ dh_key_share t) -∗
+  □ (∀ t, exp_pred b t ↔ ▷ □ dh_key_share t) -∗
   public a ∨ public b -∗
   public (TExp g (TMul {[+ a; b +]})).
 Proof.
@@ -243,16 +238,16 @@ iIntros "#p_g #m_a #m_b #pred_a #pred_b #[H|H]".
 Qed.
 
 (* The general form of [public_dh_secret2]: [a] and [b] need only *occur* among
-   the exponents of [t], not exhaust them.  [exp_pred_inv_gen] already takes an
-   arbitrary sub-multiset of [exps t], so the other exponents -- which may well
-   be public, as HMQV's hash multipliers are -- are simply skipped.  A version
-   that concluded only "*some* exponent of [t] is public" would be vacuous
-   there.  Since multiplicities count, [a] may equal [b]: a share has a single
-   exponent, so it never contains [a] twice. *)
+   the exponents of [t], not exhaust them.  [public_exp_inv_gen] already takes
+   an arbitrary sub-multiset of [exps t], so the other exponents -- which may
+   well be public, as HMQV's hash multipliers are -- are simply skipped.  A
+   version that concluded only "*some* exponent of [t] is public" would be
+   vacuous there.  Since multiplicities count, [a] may equal [b]: a share has a
+   single exponent, so it never contains [a] twice. *)
 Lemma public_dh_secret_gen2 a b t :
   [a; b] ⊆+ SMS.pos (exps t) →
-  □ (∀ u, exp_pred_base a u ↔ ▷ □ dh_key_share u) -∗
-  □ (∀ u, exp_pred_base b u ↔ ▷ □ dh_key_share u) -∗
+  □ (∀ u, exp_pred a u ↔ ▷ □ dh_key_share u) -∗
+  □ (∀ u, exp_pred b u ↔ ▷ □ dh_key_share u) -∗
   public t -∗
   public a ∨ public b.
 Proof.
@@ -270,9 +265,8 @@ iAssert (minted a ∧ minted b)%I as "#[ma mb]".
 iAssert (◇ (public a ∨ public b))%I as "[H|H]"; first last.
 - by iRight; iApply except_0_public.
 - by iLeft; iApply except_0_public.
-iPoseProof (exp_pred_exps a_t with "p") as "[#dh_a _]".
 have a_ab : a ∈ [a; b] by set_solver.
-iPoseProof (exp_pred_inv_gen a_ab ab_t with "dh_a") as "(%c & %c_ab & H)".
+iPoseProof (public_exp_inv_gen a_ab ab_t with "p") as "(%c & %c_ab & H)".
 rewrite elem_of_cons list_elem_of_singleton in c_ab.
 iDestruct "H" as "[H|(%t3 & %e_base & %exps_sub & base)]".
   by case: c_ab => ->; eauto.
@@ -285,9 +279,9 @@ Qed.
 Lemma public_dh_secret_gen a b t (Q : iProp) :
   [a; b] ⊆+ SMS.pos (exps t) →
   □ (public a ↔ Q) -∗
-  □ (∀ u, exp_pred_base a u ↔ ▷ □ dh_key_share u) -∗
+  □ (∀ u, exp_pred a u ↔ ▷ □ dh_key_share u) -∗
   □ (public b ↔ Q) -∗
-  □ (∀ u, exp_pred_base b u ↔ ▷ □ dh_key_share u) -∗
+  □ (∀ u, exp_pred b u ↔ ▷ □ dh_key_share u) -∗
   (public t → Q).
 Proof.
 move=> ab_t.
@@ -300,8 +294,8 @@ Lemma public_dh_secret2 g a b :
   negb (is_exp g) → negb (is_gmul g) →
   negb (is_mul a) →
   negb (is_mul b) →
-  □ (∀ t, exp_pred_base a t ↔ ▷ □ dh_key_share t) -∗
-  □ (∀ t, exp_pred_base b t ↔ ▷ □ dh_key_share t) -∗
+  □ (∀ t, exp_pred a t ↔ ▷ □ dh_key_share t) -∗
+  □ (∀ t, exp_pred b t ↔ ▷ □ dh_key_share t) -∗
   public (TExp g (TMul {[+ a; b +]})) -∗
   public a ∨ public b.
 Proof.
@@ -319,9 +313,9 @@ Lemma public_dh_secret' g a b (Q : iProp) :
   negb (is_mul a) →
   negb (is_mul b) →
   □ (public a ↔ Q) -∗
-  □ (∀ t, exp_pred_base a t ↔ ▷ □ dh_key_share t) -∗
+  □ (∀ t, exp_pred a t ↔ ▷ □ dh_key_share t) -∗
   □ (public b ↔ Q) -∗
-  □ (∀ t, exp_pred_base b t ↔ ▷ □ dh_key_share t) -∗
+  □ (∀ t, exp_pred b t ↔ ▷ □ dh_key_share t) -∗
   (public (TExp g (TMul {[+ a; b +]})) → Q).
 Proof.
 move=> gNx gNm Nm_a Nm_b.
