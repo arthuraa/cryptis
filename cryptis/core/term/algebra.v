@@ -92,6 +92,15 @@ apply: count_inj => x _; rewrite count_TMul_empty.
 have := f_equal (count x) e; rewrite count_TInv; lia.
 Qed.
 
+Lemma is_mul_TInv_atom t : negb (is_mul t) → is_mul (TInv t).
+Proof.
+move=> Nm; case E: (is_mul (TInv t)) => //.
+have Nmi : negb (is_mul (TInv t)) by rewrite E.
+have := factors_TInv t; rewrite (factors_Nmul _ Nmi) (factors_Nmul _ Nm).
+move=> /(f_equal (λ s, (SMS.car s).1)).
+by rewrite SMS.car_inv !SMS.car_singleton.
+Qed.
+
 Lemma count_diag t : count t t = if is_mul t then 0%Z else 1%Z.
 Proof.
 case Em: (is_mul t); first by rewrite is_mul_count ?Em.
@@ -565,4 +574,89 @@ Lemma gcount_atom_ge0 t1 t2 : negb (is_gmul t2) -> (0 <= gcount t1 t2)%Z.
 Proof.
 move=> Nm2; rewrite /gcount gfactors_Ngmul // SMS.count_singleton.
 by case: bool_decide.
+Qed.
+
+(** ** Signed atoms *)
+
+(* The elements of [s] as signed atoms: [x] for a positive element [x],
+   [TInv x] for a negative one. *)
+Definition satoms (s : tsms) := SMS.pos s ++ (TInv <$> SMS.neg s).
+
+Definition scount f t := (count f t - count (TInv f) t)%Z.
+
+Lemma scount_TInv_l f t : scount (TInv f) t = (- scount f t)%Z.
+Proof. rewrite /scount TInvK; lia. Qed.
+
+Lemma scount_TInv_r f t : scount f (TInv t) = (- scount f t)%Z.
+Proof. rewrite /scount !count_TInv; lia. Qed.
+
+Lemma scount_Nmul f t : negb (is_mul f) → scount f t = count f t.
+Proof.
+by move=> Nm; rewrite /scount (is_mul_count _ _ (is_mul_TInv_atom _ Nm)); lia.
+Qed.
+
+Lemma scount_expo_TExp f t1 t2 :
+  negb (is_gmul t1) →
+  scount f (expo (TExp t1 t2)) = (scount f (expo t1) + scount f t2)%Z.
+Proof. by move=> Nm; rewrite /scount !(count_expo_TExp _ _ _ Nm); lia. Qed.
+
+Lemma elem_of_satoms f t : f ∈ satoms (factors t) ↔ (0 < scount f t)%Z.
+Proof.
+rewrite /satoms elem_of_app list_elem_of_fmap -count_gt0 /scount.
+case Em: (is_mul f).
+- have Mf : is_mul f by rewrite Em.
+  rewrite (is_mul_count _ _ Mf); split.
+  + case=> [|[x [-> /count_lt0 x_t]]]; first lia.
+    by rewrite TInvK; lia.
+  + move=> H; right; exists (TInv f); rewrite TInvK; split => //.
+    by apply/count_lt0; lia.
+- have Nm : negb (is_mul f) by rewrite Em.
+  rewrite (is_mul_count _ _ (is_mul_TInv_atom _ Nm)) Z.sub_0_r.
+  split; last by left.
+  case=> // [[x [Ex x_t]]].
+  have := is_mul_TInv_atom _ (Nmul_factors _ _ (SMS.elem_of_neg _ _ x_t)).
+  by rewrite -Ex Em.
+Qed.
+
+Lemma elem_of_satoms_TInv x t :
+  negb (is_mul x) → TInv x ∈ satoms (factors t) ↔ x ∈ SMS.neg (factors t).
+Proof.
+move=> Nm; rewrite elem_of_satoms scount_TInv_l scount_Nmul // -count_lt0; lia.
+Qed.
+
+Lemma is_exp_of_satoms f t : f ∈ satoms (exps t) → is_exp t.
+Proof.
+rewrite /satoms elem_of_app list_elem_of_fmap.
+case=> [f_t|[x [_ x_t]]].
+- exact: is_exp_of_exps (SMS.elem_of_pos _ _ f_t).
+- exact: is_exp_of_exps (SMS.elem_of_neg _ _ x_t).
+Qed.
+
+Lemma satoms_satom f t :
+  f ∈ satoms (factors t) → negb (is_mul f) ∨ negb (is_mul (TInv f)).
+Proof.
+rewrite /satoms elem_of_app list_elem_of_fmap.
+case=> [f_t|[x [-> x_t]]].
+  by left; exact: Nmul_factors _ _ (SMS.elem_of_pos _ _ f_t).
+by right; rewrite TInvK; exact: Nmul_factors _ _ (SMS.elem_of_neg _ _ x_t).
+Qed.
+
+Lemma scount_satom_diag f :
+  negb (is_mul f) ∨ negb (is_mul (TInv f)) → scount f f = 1%Z.
+Proof.
+case=> Nm; first by rewrite scount_Nmul // count_atom_diag.
+by rewrite -[f]TInvK scount_TInv_l scount_TInv_r scount_Nmul // count_atom_diag.
+Qed.
+
+Lemma scount_satom_ne g f :
+  negb (is_mul f) ∨ negb (is_mul (TInv f)) → g ≠ f → g ≠ TInv f →
+  scount g f = 0%Z.
+Proof.
+move=> Af gf gTf.
+have Tgf : TInv g ≠ f by move=> e; apply: gTf; rewrite -e TInvK.
+have TgTf : TInv g ≠ TInv f by move=> /(inj TInv).
+case: Af => Nm.
+  by rewrite /scount (count_atom_ne Nm gf) (count_atom_ne Nm Tgf).
+rewrite -[f]TInvK scount_TInv_r /scount.
+rewrite (count_atom_ne Nm gTf) (count_atom_ne Nm TgTf); lia.
 Qed.

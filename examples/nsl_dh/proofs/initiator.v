@@ -141,9 +141,7 @@ have Nm_a : negb (is_mul a) by [].
 iDestruct "inv" as "[#pub|inv_m2]".
 - (* Case 1: public plaintext — attacker forged message *)
   iDestruct "pub" as "(#p_ga & #p_gb)".
-  rewrite public_TExp_iff //.
-  iDestruct "p_ga" as "(_ & _ & #exp_a & _)".
-  iPoseProof (exp_pred_inv_same with "exp_a") as "exp_a_inv";
+  iPoseProof (public_exp_inv_same (t1 := a) with "p_ga") as "exp_a_inv";
     first by rewrite (exps_TExp1 Nm_a) /SMS.pos SMS.car_singleton;
              set_solver.
   iDestruct "exp_a_inv" as "[#p_a | (%t3 & %base_t3 & %t3_sub & #base_a)]".
@@ -154,7 +152,7 @@ iDestruct "inv" as "[#pub|inv_m2]".
     iDestruct "ns" as "[#ps_none|(%gb' & #ps_some & _)]".
     * by iApply (term_meta_token with "ptok ps_none").
     * by iApply (term_meta_token with "ptok ps_some").
-  + (* Sub-case: exp_pred_base a t3 — derive corruption *)
+  + (* Sub-case: exp_pred a t3 — derive corruption *)
     iPoseProof ("pred_a" $! t3 with "base_a") as "#later_ks".
     iMod (lc_fupd_elim_later_pers with "Hc1 later_ks") as "#[#corr _]".
     iMod (set_peer_share ga None with "ptok") as "#ps_none".
@@ -265,13 +263,13 @@ iDestruct "inv" as "[#pub|inv_m2]".
         iDestruct "p_k" as "(_ & _ & _ & _ & #p_gab & _)".
         have e_gab : gab = TExp (TInt 0) (TMul {[+ TNonce a; TNonce b +]}).
           by rewrite /gab /gb TExpC TExpA.
-        rewrite e_gab public_TExp2_iff //.
-        iDestruct "p_gab" as "(_ & #exp_a & _ & _ & _)".
+        rewrite e_gab.
         have exps_share :
             SMS.pos (exps (TExp (TInt 0) (TMul {[+ TNonce a; TNonce b +]})))
             ≡ₚ [TNonce a; TNonce b].
         { by rewrite (exps_TExp2 Nm_a Nm_b) SMS.pos_make_nil_r. }
-        iPoseProof (exp_pred_inv with "exp_a") as "(%t & %t_in & H)";
+        iPoseProof (public_exp_inv (t1 := a) with "p_gab")
+          as "(%t & %t_in & H)";
           first by rewrite exps_share; set_solver.
         rewrite exps_share elem_of_cons list_elem_of_singleton in t_in.
         iDestruct "H" as "[#p_t|(%t3 & %base_t3 & %exps_sub & #base_t)]".
@@ -316,14 +314,14 @@ iDestruct "inv" as "[#pub|inv_m2]".
             have e_gab :
               TExp ga b = TExp (TInt 0) (TMul {[+ TNonce a; TNonce b +]}).
             { by rewrite /ga TExpA. }
-            rewrite e_gab public_TExp2_iff //.
-            iDestruct "p_gab" as "(_ & #exp_a & _ & _ & _)".
+            rewrite e_gab.
             have exps_share :
                 SMS.pos
                   (exps (TExp (TInt 0) (TMul {[+ TNonce a; TNonce b +]})))
                 ≡ₚ [TNonce a; TNonce b].
             { by rewrite (exps_TExp2 Nm_a Nm_b) SMS.pos_make_nil_r. }
-            iPoseProof (exp_pred_inv with "exp_a") as "(%t & %t_in & H)";
+            iPoseProof (public_exp_inv (t1 := a) with "p_gab")
+              as "(%t & %t_in & H)";
               first by rewrite exps_share; set_solver.
             rewrite exps_share elem_of_cons list_elem_of_singleton in t_in.
             iDestruct "H" as "[#p_t|(%t3 & %base_t3 & %exps_sub & #base_t)]".

@@ -26,7 +26,7 @@ Definition opaque_file (pw : term) (file : val) : iProp :=
   ∃ (k_s : nonce) (p_s : nonce) P_u envelope,
     ⌜file = Spec.of_list [TNonce k_s; TNonce p_s; TExp g p_s; P_u; envelope]⌝
     ∗ minted k_s ∗ □(public k_s ↔ ▷ □ False) ∗
-    □(∀ t' : term, exp_pred_base k_s t' ↔ ▷ □ True) ∗
+    □(∀ t' : term, exp_pred k_s t' ↔ ▷ □ True) ∗
     public (TExp g p_s) ∗ public envelope ∗
     opaque_public_private_pair pw p_s P_u.
 
@@ -264,13 +264,12 @@ wp_apply wp_send => //.
     have Nmu : negb (is_gmul u) := Ngmul_gfactors _ _ u_α.
     iAssert (public u) as "#p_u".
       by iApply (big_sepL_elem_of with "fs").
-    iApply public_TExp_exp_pred => //.
-    iApply exp_pred_base_exp_pred.
-    by iApply "Hexpk_s".
+    iApply public_TExp_consent => //.
+    by iIntros "!> %t _"; iApply "Hexpk_s".
   - iApply public_TExp_iff => //.
     do !iSplit => //.
     + by iApply minted_TInt.
-    + iApply exp_pred_base_exp_pred.
+    + iRight.
       iApply "Hexpx_s"; iPureIntro.
       by rewrite exps_TExp_expN // factors_Nmul // SMS.elements_singleton.
     + by rewrite public_TInt; auto.
