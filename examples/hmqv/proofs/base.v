@@ -88,14 +88,17 @@ Definition init_si (p_a x_a p_b : nonce) X_b : sess_info :=
     (hmqv_K hmqvN "init" "resp" p_a x_a (TExp g p_a) (TExp g x_a)
             (TExp g p_b) X_b).
 
+(** The responder's HMQV element, computed with whatever long-term key [P_a]
+    its peer claimed. *)
+Definition resp_secret P_a X_a (p_b x_b : nonce) : term :=
+  hmqv_K hmqvN "resp" "init" p_b x_b (TExp g p_b) (TExp g x_b) P_a X_a.
+
 Definition resp_si (p_a : nonce) X_a (p_b x_b : nonce) : sess_info :=
-  SessInfo p_a p_b X_a (TExp g x_b)
-    (hmqv_K hmqvN "resp" "init" p_b x_b (TExp g p_b) (TExp g x_b)
-            (TExp g p_a) X_a).
+  SessInfo p_a p_b X_a (TExp g x_b) (resp_secret (TExp g p_a) X_a p_b x_b).
 
 Lemma init_resp_si (p_a x_a p_b x_b : nonce) :
   init_si p_a x_a p_b (TExp g x_b) = resp_si p_a (TExp g x_a) p_b x_b.
-Proof. by rewrite /init_si /resp_si hmqv_K_sym. Qed.
+Proof. by rewrite /init_si /resp_si /resp_secret hmqv_K_sym. Qed.
 
 Definition init_session si : Prop :=
   ∃ p_a x_a p_b X_b, si = init_si p_a x_a p_b X_b.
@@ -133,7 +136,7 @@ Lemma resp_si_inj (p_a : nonce) X_a (p_b x_b : nonce)
   si_key (resp_si p_a X_a p_b x_b) = si_key (resp_si p_a' X_a' p_b' x_b') →
   resp_si p_a X_a p_b x_b = resp_si p_a' X_a' p_b' x_b'.
 Proof.
-move/si_key_inj; rewrite /resp_si /= => eK.
+move/si_key_inj; rewrite /resp_si /resp_secret /= => eK.
 have [-> [-> [-> ->]]] :=
   @hmqv_K_inj hmqvN g "resp" "init" p_b x_b p_a p_b' x_b' p_a' X_a X_a'
               gNX gNm tags' eK.
@@ -188,6 +191,14 @@ wp_apply wp_term_of_list.
 wp_apply wp_tag.
 wp_apply wp_hash.
 by iApply "post".
+Qed.
+
+Lemma wp_session_key σ (Ψ : val → iProp) :
+  Ψ (SEncKey (hash_result "key" (Spec.of_list [σ])) : term) ⊢
+  WP session_key σ {{ Ψ }}.
+Proof.
+iIntros "post". wp_lam. wp_list. wp_apply wp_H.
+by wp_apply wp_derive_senc_key.
 Qed.
 
 Lemma minted_hash_result tag t : minted (hash_result tag t) ⊣⊢ minted t.
@@ -272,6 +283,26 @@ iPoseProof (saved_pred_op_validI with "valid") as "[_ #φ_eq]".
 iSpecialize ("φ_eq" $! (p_a, p_b, si, rl)).
 iMod (escrowE with "[//] ready") as "res" => //.
 iIntros "!> !>". by iRewrite -"φ_eq".
+Qed.
+
+(** The responder escrows its gift before learning who its peer is: the gift
+    is for whoever owns the long-term key [P_a] that the peer claimed. *)
+Lemma hmqv_ready_alloc_any N P_a X_a p_b x_b φ :
+  hmqv_pred N φ -∗
+  (∀ p_a, ⌜P_a = TExp g p_a⌝ → φ p_a p_b (resp_si p_a X_a p_b x_b) Init)
+  ={⊤}=∗
+  □ ∀ p_a, ⌜P_a = TExp g p_a⌝ →
+    hmqv_ready N p_a p_b (resp_si p_a X_a p_b x_b) Init.
+Proof.
+iIntros "#N_φ gift".
+iMod (escrowI nroot with "gift []") as "#?".
+{ by iApply (term_token_switch X_a (hmqvN.@"ready")). }
+iIntros "!> !> %p_a %e %φ' #N_φ' ready".
+iPoseProof (nown_valid_2 with "N_φ N_φ'") as "#valid".
+iPoseProof (saved_pred_op_validI with "valid") as "[_ #φ_eq]".
+iSpecialize ("φ_eq" $! (p_a, p_b, resp_si p_a X_a p_b x_b, Init)).
+iMod (escrowE with "[//] ready") as "gift" => //.
+iIntros "!> !>". iRewrite -"φ_eq". by iApply "gift".
 Qed.
 
 Lemma minted_si_key si : minted (si_secret si) -∗ minted (si_key si).
@@ -450,12 +481,16 @@ Qed.
 
 (** Message predicates for the authenticators of the initiator and the responder. *)
 
+(* The responder answers whatever long-term key [P_a] the first message claims;
+   its fresh ephemeral binds the key to [P_a] all the same (cf.
+   [hmqv_K_inj_fresh]). *)
 Definition m2_pred t : iProp :=
-  ∃ p_a X_a p_b x_b N,
-    let si := resp_si p_a X_a p_b x_b in
-    ⌜t = Spec.of_list [si_secret si; Tag N]⌝ ∗
+  ∃ P_a X_a p_b x_b N,
+    ⌜t = Spec.of_list [resp_secret P_a X_a p_b x_b; Tag N]⌝ ∗
+    ⌜¬ subterm (TNonce x_b) P_a ∧ ¬ subterm (TNonce x_b) X_a ∧ x_b ≠ p_b⌝ ∗
     hmqv_key x_b ∗
-    hmqv_ready N p_a p_b si Init.
+    ∀ p_a, ⌜P_a = TExp g p_a⌝ →
+      hmqv_ready N p_a p_b (resp_si p_a X_a p_b x_b) Init.
 
 Definition m3_pred t : iProp :=
   ∃ p_a x_a p_b X_b N,
@@ -529,7 +564,7 @@ iModIntro; iSplit.
     * by iEval (rewrite /si_key minted_senc minted_hash_result) in "m_k".
     * iNext; iModIntro; iExists si.
       by do !iSplit => //.
-  + iApply public_si_key. iEval (rewrite /si /=).
+  + iApply public_si_key. iEval (rewrite /si /= /resp_secret).
     iDestruct "st" as "[[#p_pa (%x & %e & #p_x)]|[#p_pb (%x & %e & #p_x)]]";
       move/TExp_g_inj: e => <-.
     * iEval (rewrite hmqv_K_sym). by iApply public_hmqv_K.

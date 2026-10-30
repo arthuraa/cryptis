@@ -24,29 +24,33 @@ Implicit Types (si : sess_info).
 Implicit Types (N : namespace).
 
 Ltac protocol_failure :=
-  by intros; wp_pures; iApply ("Hpost" $! None); eauto.
+  by intros; wp_pures; iApply ("Hpost" $! None); iLeft;
+     iDestruct "hook" as "[$ _]".
 
-Lemma wp_initiator c p_a p_b N φ ψ :
+(* The hook runs only if the session succeeds, so a caller that lends it [R]
+   gets [R] back otherwise. *)
+Lemma wp_initiator c p_a p_b N φ ψ R :
   channel c ∗
   cryptis_ctx ∗
   hmqv_ctx ∗
   hmqv_pred N φ ∗
   hmqv_key p_a ∗
   hmqv_key p_b -∗
-  {{{ ∀ x_a X_b,
+  {{{ R ∧
+      ∀ x_a X_b,
         let si := init_si p_a x_a p_b X_b in
         secret x_a -∗
         term_token (si_init_share si) (↑hmqvN.@"res") ={⊤}=∗
-        φ p_a p_b si Resp ∗ ψ x_a }}}
+        φ p_a p_b si Resp ∗ ψ x_a X_b }}}
     initiator c p_a (TExp g p_a) (TExp g p_b) (Tag N)
   {{{ r, RET (repr r);
-      ⌜r = None⌝ ∨ ∃ x_a X_b,
+      ⌜r = None⌝ ∗ R ∨ ∃ x_a X_b,
         let si := init_si p_a x_a p_b X_b in
         ⌜r = Some (si_key si, TNonce x_a)⌝ ∗
         session Init p_a p_b si ∗
         release_token (si_init_share si) ∗
         term_token (si_init_share si) (⊤ ∖ ↑hmqvN) ∗
-        ψ x_a ∗
+        ψ x_a X_b ∗
         (public (si_key si) ∨ φ p_a p_b si Init)
   }}}.
 Proof.
@@ -133,14 +137,16 @@ iAssert (|={⊤}=>
     iSplit; first by iIntros "!> _".
     iLeft. iDestruct "comp" as "[?|[? ?]]"; first by iLeft.
     iRight. iSplit => //. iExists x_a. by iSplit.
-  - iDestruct "auth"
-      as "(%p_a' & %X_a' & %p_b' & %x_b' & %N' & %e' & #key_xb & #ready)".
+  - iDestruct "auth" as "(%P_a' & %X_a' & %p_b' & %x_b' & %N' & %e' &
+                          %fresh & #key_xb & #ready)".
     move: e' => /Spec.of_list_inj [] eσ /Tag_inj eN.
     subst N'.
-    have [epa [epb [eXb eXa]]] :=
-      @hmqv_K_inj' hmqvN g "init" "resp" p_a x_a p_b p_a' x_b' p_b' X_b X_a'
-                   gNX gNm tags eσ.
-    subst p_a' p_b' X_b X_a'.
+    case: fresh => fr_Pa [fr_Xa ne_b].
+    have [ePa [epb [eXb eXa]]] :=
+      @hmqv_K_inj_fresh hmqvN g "init" "resp" p_a x_a p_b p_b' x_b' X_b P_a'
+                        X_a' gNX gNm tags fr_Pa fr_Xa ne_b eσ.
+    subst P_a' p_b' X_b X_a'.
+    iSpecialize ("ready" $! p_a with "[//]").
     have e_si : si = resp_si p_a (TExp g x_a) p_b x_b'.
       by rewrite /si init_resp_si.
     iEval (rewrite e_si) in "m_k".
@@ -155,6 +161,7 @@ iAssert (|={⊤}=>
     iSplit => //.
     iSplit; first by iApply "ok2".
     by iRight. }
+iDestruct "hook" as "[_ hook]".
 iMod ("hook" $! x_a X_b with "s tok_res") as "[gift ψ]".
 iMod (hmqv_ready_alloc N p_a p_b si Resp with "[//] gift") as "#ready_b".
 wp_list. wp_apply wp_H.
@@ -162,8 +169,7 @@ wp_apply wp_send => //.
 { iApply (public_THashIS with "Hm3 [] []").
   - iApply minted_of_list => /=. do !iSplit => //. by iApply minted_Tag.
   - iNext; iModIntro. iExists p_a, x_a, p_b, X_b, N. by do !iSplit => //. }
-wp_pures. wp_list. wp_apply wp_H.
-wp_apply wp_derive_senc_key. wp_pures.
+wp_pures. wp_apply wp_session_key. wp_pures.
 iApply ("Hpost" $! (Some (si_key si, TNonce x_a))).
 iRight. iExists x_a, X_b. iFrame. iModIntro.
 by do !iSplit => //.
@@ -188,9 +194,10 @@ Lemma wp_initiator_weak c p_a p_b N :
 Proof.
 iIntros "(#chan_c & #ctx & #? & #? & #key_a & #key_b) !> %Ψ _ Hpost".
 iApply wp_fupd.
-wp_apply (wp_initiator _ _ _ _ _ (λ _, True%I)) => //; first iFrame "#".
-{ by iIntros "%x_a %X_b _ _ !>". }
-iIntros "%r [->|Hr]"; first by iApply ("Hpost" $! None); eauto.
+wp_apply (wp_initiator _ _ _ _ _ (λ _ _, True%I) True%I) => //;
+  first iFrame "#".
+{ iSplit => //. by iIntros "%x_a %X_b _ _ !>". }
+iIntros "%r [[-> _]|Hr]"; first by iApply ("Hpost" $! None); eauto.
 iDestruct "Hr" as "(%x_a & %X_b & -> & #sess & rel & tok & _ & _)".
 iMod (unrelease Init with "rel") as "#un". iModIntro.
 iApply ("Hpost" $! (Some (si_key (init_si p_a x_a p_b X_b), TNonce x_a))).

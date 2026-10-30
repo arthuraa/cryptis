@@ -270,9 +270,10 @@ iLöb as "IH". iIntros "!> %Φ _ Hpost".
 wp_rec; wp_pures; wp_apply wp_fork.
 { by iApply "IH" => //. }
 wp_pures.
-wp_smart_apply (wp_initiator _ _ _ _ _ (keep leak_eph)) as "%ts [->|tsP]" => //.
+wp_smart_apply (wp_initiator _ _ _ _ _ (λ x _, keep leak_eph x) True%I)
+  as "%ts [[-> _]|tsP]" => //.
 - by iFrame "#".
-- iIntros "%x_a %X_b s _". rewrite /keep /game_pred /=.
+- iSplit => //. iIntros "%x_a %X_b s _". rewrite /keep /game_pred /=.
   case: leak_eph.
   + iModIntro. iFrame "s". by iLeft.
   + iMod (freeze_secret with "s") as "#s". iModIntro.

@@ -43,7 +43,12 @@ In the `examples` directory you will find our case studies:
   attacker choose between learning the long-term keys and learning every
   ephemeral.  A second game (`kci.v`) checks resistance to key-compromise
   impersonation: the attacker learns the long-term key of a party of its
-  choice, and that party's session key must still stay secret.
+  choice, and that party's session key must still stay secret.  A third game
+  (`agreement.v`) checks injective agreement: the parties run concurrent
+  sessions, the responder answering whatever identity the attacker claims and
+  keeping track of its sessions with the initiator.  In the end, every key the
+  responder saw confirmed is one of the initiator's, every key of the
+  initiator's is one the responder answered, and no key is recorded twice.
 
 - `tls13`: TLS 1.3 handshake (partial; `impl.v` + per-component `proofs/`).
 - `challenge_response`, `composite_game`, `permanent`, `counter`: smaller

@@ -40,6 +40,9 @@ Definition mk_lt_key : val := λ: <>,
   let: "p" := mk_nonce #() in
   ("p", texp g "p").
 
+Definition session_key : val := λ: "σ",
+  derive_senc_key (H "key" ["σ"]).
+
 Definition initiator : val := λ: "c" "p_a" "P_a" "P_b" "N",
   let: "x_a" := mk_nonce #() in
   let: "X_a" := texp g "x_a" in
@@ -50,7 +53,7 @@ Definition initiator : val := λ: "c" "p_a" "P_a" "P_b" "N",
     hmqv_ke hmqvN "init" "resp" "p_a" "x_a" "P_a" "X_a" "P_b" "X_b" in
   guard: eq_term "A_b" (H "m2" ["σ"; "N"]) in
   send "c" (H "m3" ["σ"; "N"]);;
-  SOME (derive_senc_key (H "key" ["σ"]), "x_a").
+  SOME (session_key "σ", "x_a").
 
 (* A DH public key carries nothing to check, so whether to confirm with the
    identity received here is the caller's decision. *)
@@ -60,13 +63,22 @@ Definition responder_listen : val := λ: "c",
     list_match: ["X_a"; "P_a"] := "m1" in
     SOME ("X_a", "P_a")).
 
-Definition responder_confirm : val := λ: "c" "p_b" "P_b" "X_a" "P_a" "N",
+(* The responder's key is fixed once it has answered, and the last message only
+   confirms it, so a caller may use the key before [responder_finish]. *)
+Definition responder_accept : val := λ: "c" "p_b" "P_b" "X_a" "P_a" "N",
   let: "x_b" := mk_nonce #() in
   let: "X_b" := texp g "x_b" in
   let: "σ" :=
     hmqv_ke hmqvN "resp" "init" "p_b" "x_b" "P_b" "X_b" "P_a" "X_a" in
   send "c" (term_of_list ["X_b"; H "m2" ["σ"; "N"]]);;
+  ("σ", "x_b").
+
+Definition responder_finish : val := λ: "c" "σ" "x_b" "N",
   let: "A_a" := recv "c" in
   guard: eq_term "A_a" (H "m3" ["σ"; "N"]) in
-  SOME (derive_senc_key (H "key" ["σ"]), "x_b").
+  SOME (session_key "σ", "x_b").
+
+Definition responder_confirm : val := λ: "c" "p_b" "P_b" "X_a" "P_a" "N",
+  let: "s" := responder_accept "c" "p_b" "P_b" "X_a" "P_a" "N" in
+  responder_finish "c" (Fst "s") (Snd "s") "N".
 

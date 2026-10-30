@@ -65,11 +65,11 @@ Lemma wp_kci_initiator c p_a p_b :
   WP initiator c p_a (TExp g p_a) (TExp g p_b) (Tag gameN) {{ kci_res p_b }}.
 Proof.
 iIntros "#? #? #? #? #? #?". iApply wp_fupd.
-wp_apply (wp_initiator _ _ _ _ _ (λ x, □ (public x ↔ ▷ False))%I)
-  as "%r [->|(%x_a & %X_b & -> & #sess & rel & _ & #s_xa & _)]".
+wp_apply (wp_initiator _ _ _ _ _ (λ x _, □ (public x ↔ ▷ False))%I True%I)
+  as "%r [[-> _]|(%x_a & %X_b & -> & #sess & rel & _ & #s_xa & _)]".
 - by iFrame "#".
-- iIntros "%x_a %X_b s _". iMod (freeze_secret with "s") as "#s".
-  by iModIntro; iSplit.
+- iSplit => //. iIntros "%x_a %X_b s _".
+  iMod (freeze_secret with "s") as "#s". by iModIntro; iSplit.
 - by iLeft.
 - iMod (unrelease Init with "rel") as "#un". iModIntro.
   iRight. iExists _, _. iSplit; first done.

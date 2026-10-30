@@ -68,6 +68,10 @@ Unset Printing Implicit Defensive.
       if ephemeral keys are used only once, this guarantees that session keys
       are fresh.
 
+    - [hmqv_K_inj_fresh]: the same binding for a responder that accepted
+      whatever long-term key its peer claimed, provided that its ephemeral
+      private key is fresh.
+
     - [public_hmqv_K_honest]: a forward secrecy guarantee. A key exchanged by
       two honest parties can only be compromised if one of the parties had both
       long-term and ephemeral secret keys compromised eventually.
@@ -573,6 +577,147 @@ have E := @gcount_ss_hmqv_K_cross t_b t_a p_b' x_b' p_a' p_b x_a p_a
                                   X_a' X_b gNX gNm tba
                                   (not_eq_sym neb) (not_eq_sym nea) lt'.
 by cbv zeta in E; move: in4'; rewrite E; lia.
+Qed.
+
+(** ** Binding a peer key that was not vetted
+
+    A responder may run the exchange with whatever long-term key [P] the first
+    message claims, so [hmqv_K_inj'] does not apply to its key.  Suppose its
+    ephemeral private key [x_b'] is fresh: it differs from its long-term
+    private key and occurs neither in [P] nor in the share [X_a'] it received.
+    Then an initiator that computes the same key still learns that [P] is its
+    own long-term key.  Freshness plays the role of the size argument of
+    [gcount_TExp_eq0]: a term that contains [x_b'] cannot occur in [P] or in
+    [X_a']. *)
+
+Lemma subterm_TExp_g (x : nonce) :
+  negb (is_exp g) → negb (is_gmul g) → subterm (TNonce x) (TExp g x).
+Proof.
+move=> gNX gNm; apply: (STExp2 gNX gNm (STRefl _)).
+by rewrite elem_of_factors_Nmul.
+Qed.
+
+Lemma subterm_hmqv_m n t X P :
+  subterm n X ∨ subterm n P → subterm n (hmqv_m t X P).
+Proof.
+move=> sub; apply: STHash; apply: subterm_tag; rewrite [Spec.of_list]unlock /=.
+by case: sub => ?; [apply: STPair1|apply: STPair2; apply: STPair1].
+Qed.
+
+Lemma gcount_TExp_fresh X c w u n :
+  u ∈ exps w -> u ∉ factors c -> subterm n u -> ¬ subterm n X ->
+  gcount w (TExp X c) = 0%Z.
+Proof.
+move=> u_w u_c n_u n_X; apply: not_elem_of_gcount.
+rewrite gfactors_TExp => /SMS.elem_of_map [v [e_w v_X]].
+have Nmv := Ngmul_gfactors X v v_X.
+move: u_w; rewrite /exps e_w (expo_TExp _ _ Nmv).
+case/elem_of_factors_TMul2 => [u_v|//].
+apply: n_X; apply: (subterm_gfactors v_X); transitivity u => //.
+exact: subterm_exps u_v.
+Qed.
+
+Lemma gcount_TExp_fresh_exp X c w u n :
+  u ∈ factors c -> u ∉ exps w -> subterm n u -> ¬ subterm n X ->
+  gcount w (TExp X c) = 0%Z.
+Proof.
+move=> u_c u_w n_u n_X; apply: not_elem_of_gcount.
+rewrite gfactors_TExp => /SMS.elem_of_map [v [e_w v_X]].
+have Nmv := Ngmul_gfactors X v v_X.
+apply: u_w; rewrite /exps e_w -count_neq0 (count_expo_TExp _ _ _ Nmv).
+have -> : count u (expo v) = 0%Z.
+  apply: not_elem_of_count => u_v; apply: n_X.
+  apply: (subterm_gfactors v_X); transitivity u => //.
+  exact: subterm_exps u_v.
+by move: u_c; rewrite -count_neq0; lia.
+Qed.
+
+Lemma hmqv_K_inj_fresh t_a t_b (p_a x_a p_b p_b' x_b' : nonce) X_b P X_a' :
+  negb (is_exp g) → negb (is_gmul g) →
+  t_a ≠ t_b ->
+  ¬ subterm (TNonce x_b') P -> ¬ subterm (TNonce x_b') X_a' -> x_b' ≠ p_b' ->
+  hmqv_K t_a t_b p_a x_a (TExp g p_a) (TExp g x_a) (TExp g p_b) X_b
+  = hmqv_K t_b t_a p_b' x_b' (TExp g p_b') (TExp g x_b') P X_a' ->
+  P = TExp g p_a /\ p_b = p_b' /\ X_b = TExp g x_b' /\ X_a' = TExp g x_a.
+Proof.
+move=> gNX gNm tab fr_P fr_Xa ne_x eK.
+suff eP : P = TExp g p_a.
+  move: eK; rewrite eP => eK.
+  have [_ [? [? ?]]] := @hmqv_K_inj' t_a t_b p_a x_a p_b p_a x_b' p_b'
+                                     X_b X_a' gNX gNm tab eK.
+  by do !split.
+set m_a  := hmqv_m t_a (TExp g x_a) (TExp g p_b).
+set m_b  := hmqv_m t_b X_b (TExp g p_a).
+set m_a' := hmqv_m t_a X_a' (TExp g p_b').
+set m_b' := hmqv_m t_b (TExp g x_b') P.
+case: (decide (m_b = m_b')) => [|neb].
+  by rewrite /m_b /m_b' => /hmqv_m_inj [] _ [] _ ->.
+exfalso.
+set ss := hmqv_ss t_a t_b p_a (TExp g p_a) (TExp g x_a) p_b X_b.
+have : (0 < gcount ss (hmqv_K t_b t_a p_b' x_b' (TExp g p_b') (TExp g x_b')
+                              P X_a'))%Z.
+  by apply/gcount_gt0; rewrite -eK; apply: hmqv_K_gfactor => //; right.
+rewrite /hmqv_K /hmqv_Y -/m_a' -/m_b'.
+rewrite !TExp_TGMul !SMS.map_disj_union !SMS.map_singleton !TExpA.
+rewrite -TGMul_disj_union !gcount_TGMul_disj_union !TGMul_singleton.
+have tags X X' Q Q' : hmqv_m t_a X Q ≠ hmqv_m t_b X' Q'.
+  by move=> /hmqv_m_inj [] e _; apply: tab.
+have exps_ss u :
+    u ∈ exps ss ↔ u = TNonce p_b ∨ u = m_b ∨ u = m_a ∨ u = TNonce p_a.
+  rewrite /ss exps_hmqv_ss // SMS.elem_of_make_nil_r.
+  by rewrite !elem_of_cons elem_of_nil; intuition.
+have mb_ma' : m_b ≠ m_a' := not_eq_sym (tags _ _ _ _).
+have mb'_ma' : m_b' ≠ m_a' := not_eq_sym (tags _ _ _ _).
+have ma_ma' : x_b' = p_b → m_a ≠ m_a'.
+  rewrite /m_a /m_a' => e_b /hmqv_m_inj [] _ [] _ /(@TExp_injr g _ _ gNm) [].
+  by move=> e_p; apply: ne_x; rewrite e_b.
+have mb'_ss : m_b' ∉ exps ss.
+  rewrite exps_ss => - [|[|[|]]] //.
+  by move=> e; apply: (tags _ _ _ _ (eq_sym e)).
+have x_mb' : subterm (TNonce x_b') m_b'.
+  by rewrite /m_b'; apply: subterm_hmqv_m; left; exact: subterm_TExp_g.
+(* If [x_b'] is one of the long-term keys in [ss], a multiplier of [ss]
+   contains [x_b'], so [X] cannot provide it. *)
+have zx X c :
+    ¬ subterm (TNonce x_b') X → TNonce x_b' ∈ factors c → m_b ∉ factors c →
+    (x_b' = p_b → m_a ∉ factors c) →
+    gcount ss (TExp X c) = 0%Z.
+  move=> fr x_c mb_c ma_c.
+  case: (decide (x_b' = p_a)) => [e|ne_a].
+    apply: (gcount_TExp_fresh (u := m_b) (n := TNonce x_b')) => //.
+      by rewrite exps_ss; eauto.
+    by rewrite /m_b -e; apply: subterm_hmqv_m; right; exact: subterm_TExp_g.
+  case: (decide (x_b' = p_b)) => [e|ne_b].
+    apply: (gcount_TExp_fresh (u := m_a) (n := TNonce x_b')) => //.
+    - by rewrite exps_ss; eauto.
+    - exact: ma_c.
+    - by rewrite /m_a -e; apply: subterm_hmqv_m; right; exact: subterm_TExp_g.
+  apply: (gcount_TExp_fresh_exp (u := TNonce x_b') (n := TNonce x_b')) => //.
+  by rewrite exps_ss => - [[]|[|[|[]]]].
+have z1 : gcount ss (TExp X_a' (TNonce x_b')) = 0%Z.
+  apply: zx => //; first by rewrite elem_of_factors_Nmul.
+  - exact: not_elem_of_factors_atom.
+  - by move=> _; exact: not_elem_of_factors_atom.
+have z2 : gcount ss (TExp P (TMul {[+ m_a'; TNonce x_b' +]})) = 0%Z.
+  apply: zx => //.
+  - rewrite -count_neq0 count_TMul_disj_union !TMul_singleton.
+    by rewrite count_atom_ne // count_atom_diag.
+  - apply: not_elem_of_factors_TMul => u.
+    by case/SMS.elem_of_disj_union => /SMS.elem_of_singleton ->.
+  - move=> /ma_ma' ?; apply: not_elem_of_factors_TMul => u.
+    by case/SMS.elem_of_disj_union => /SMS.elem_of_singleton ->.
+have z3 : gcount ss (TExp X_a' (TMul {[+ m_b'; TNonce p_b' +]})) = 0%Z.
+  apply: (gcount_TExp_fresh_exp (u := m_b') (n := TNonce x_b')) => //.
+  rewrite -count_neq0 count_TMul_disj_union !TMul_singleton.
+  by rewrite count_atom_diag // count_atom_ne.
+have z4 :
+    gcount ss (TExp P (TMul {[+ m_a'; TMul {[+ m_b'; TNonce p_b' +]} +]}))
+    = 0%Z.
+  apply: (gcount_TExp_fresh_exp (u := m_b') (n := TNonce x_b')) => //.
+  rewrite -count_neq0 !count_TMul_disj_union !TMul_singleton.
+  rewrite count_TMul_disj_union !TMul_singleton.
+  by rewrite count_atom_ne // count_atom_diag // count_atom_ne.
+by rewrite z1 z2 z3 z4; lia.
 Qed.
 
 End HMQV.
