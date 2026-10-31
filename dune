@@ -9,4 +9,5 @@
   (with-stdout-to flags.dune
    (pipe-stdout
     (cat config/flags)
-    (bash "grep '^[^#]\\+' || true")))))
+    (bash "grep '^[^#]\\+' || true")
+    (bash "sed -e \"s/^'\\([^']*\\)'$/\\1/\"")))))
