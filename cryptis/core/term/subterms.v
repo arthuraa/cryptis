@@ -366,6 +366,42 @@ right; rewrite elem_of_union_list; exists (subterms t1).
 by rewrite -subtermsP; split => //; apply/list_elem_of_fmap; eauto.
 Qed.
 
+Lemma subterm_TExp_g g (x : nonce) :
+  negb (is_exp g) → negb (is_gmul g) → subterm (TNonce x) (TExp g x).
+Proof.
+move=> gNX gNm; apply: (STExp2 gNX gNm (STRefl _)).
+by rewrite elem_of_factors_Nmul.
+Qed.
+
+(* Freshness in place of the size argument of [gcount_TExp_eq0]. *)
+Lemma gcount_TExp_fresh X c w u n :
+  u ∈ exps w -> u ∉ factors c -> subterm n u -> ¬ subterm n X ->
+  gcount w (TExp X c) = 0%Z.
+Proof.
+move=> u_w u_c n_u n_X; apply: not_elem_of_gcount.
+rewrite gfactors_TExp => /SMS.elem_of_map [v [e_w v_X]].
+have Nmv := Ngmul_gfactors X v v_X.
+move: u_w; rewrite /exps e_w (expo_TExp _ _ Nmv).
+case/elem_of_factors_TMul2 => [u_v|//].
+apply: n_X; apply: (subterm_gfactors v_X); transitivity u => //.
+exact: subterm_exps u_v.
+Qed.
+
+Lemma gcount_TExp_fresh_exp X c w u n :
+  u ∈ factors c -> u ∉ exps w -> subterm n u -> ¬ subterm n X ->
+  gcount w (TExp X c) = 0%Z.
+Proof.
+move=> u_c u_w n_u n_X; apply: not_elem_of_gcount.
+rewrite gfactors_TExp => /SMS.elem_of_map [v [e_w v_X]].
+have Nmv := Ngmul_gfactors X v v_X.
+apply: u_w; rewrite /exps e_w -count_neq0 (count_expo_TExp _ _ _ Nmv).
+have -> : count u (expo v) = 0%Z.
+  apply: not_elem_of_count => u_v; apply: n_X.
+  apply: (subterm_gfactors v_X); transitivity u => //.
+  exact: subterm_exps u_v.
+by move: u_c; rewrite -count_neq0; lia.
+Qed.
+
 Lemma nonces_of_term_TMul s :
   (∀ x, x ∈ s → negb (is_mul x)) →
   nonces_of_term (TMul s) = ⋃ map nonces_of_term (elements s).

@@ -46,6 +46,10 @@ Lemma count_TMul_disj_union t s1 s2 :
   count t (TMul (s1 ⊎ s2)) = (count t (TMul s1) + count t (TMul s2))%Z.
 Proof. by rewrite !count_TMul SMS.bind_disj_union SMS.count_disj_union. Qed.
 
+Lemma count_TMul2 t t1 t2 :
+  count t (TMul {[+ t1; t2 +]}) = (count t t1 + count t t2)%Z.
+Proof. by rewrite count_TMul_disj_union !TMul_singleton. Qed.
+
 Lemma count_TMul_inv t s : count t (TMul (SMS.inv s)) = (- count t (TMul s))%Z.
 Proof. by rewrite !count_TMul SMS.bind_inv SMS.count_inv. Qed.
 
@@ -397,32 +401,8 @@ rewrite TExpK.
 by case: (is_gmul b); case: (is_gmul (TExp b e)) => //= /(_ I).
 Qed.
 
-(* Distributivity makes [TGMul ∅ ^ e = TGMul ∅] for every [e], so
-   exponentiation is genuinely not injective in the exponent at the group
-   unit; hence the group-atom premise. *)
-Lemma TExp_injr t t1 t2 :
-  negb (is_gmul t) -> TExp t t1 = TExp t t2 -> t1 = t2.
-Proof.
-move=> Nm e; have /(f_equal expo) := e; rewrite !(expo_TExp _ _ Nm) => e'.
-apply: count_inj => x _; have := f_equal (count x) e'.
-rewrite !count_TMul_disj_union !TMul_singleton; lia.
-Qed.
-
-(* Exponentiation is injective in the base, once group products are excluded.
-   The group unit is the only base it collapses, and it is a group product. *)
-Lemma TExp_injl t1 t2 e :
-  negb (is_gmul t1) -> negb (is_gmul t2) ->
-  TExp t1 e = TExp t2 e -> t1 = t2.
-Proof.
-move=> Nm1 Nm2 E.
-have Eb : base t1 = base t2.
-  by rewrite -(base_TExp t1 e Nm1) -(base_TExp t2 e Nm2) E.
-have Ee : expo t1 = expo t2.
-  apply: count_inj => x _.
-  have := f_equal (count x) (f_equal expo E).
-  rewrite !expo_TExp // !count_TMul_disj_union !TMul_singleton; lia.
-by rewrite -(TExp_base_expo t1) -(TExp_base_expo t2) Eb Ee.
-Qed.
+Lemma TExp_injl e t1 t2 : TExp t1 e = TExp t2 e -> t1 = t2.
+Proof. by move=> E; rewrite -(TExpK t1 e) E TExpK. Qed.
 
 Lemma is_mul_TMul2 t1 t2 :
   negb (is_mul t1) -> negb (is_mul t2) -> is_mul (TMul {[+ t1; t2 +]}).
@@ -576,6 +556,23 @@ move=> Nm2; rewrite /gcount gfactors_Ngmul // SMS.count_singleton.
 by case: bool_decide.
 Qed.
 
+Lemma Ngmul_neq_unit t : negb (is_gmul t) → t ≠ TGMul ∅.
+Proof.
+move=> tNm /gtunitP; rewrite (gfactors_Ngmul _ tNm).
+move=> /(f_equal (SMS.count t)).
+by rewrite SMS.count_singleton SMS.count_empty bool_decide_eq_true_2.
+Qed.
+
+Lemma gcount_TExp_g_diag g :
+  negb (is_gmul g) → ∀ e, gcount (TExp g e) (TExp g e) = 1%Z.
+Proof.
+move=> gNm e; rewrite gcount_diag; by case: is_gmul (Ngmul_TExp _ e gNm).
+Qed.
+
+Lemma gcount_TExp_g_ge0 g :
+  negb (is_gmul g) → ∀ e1 e2, (0 <= gcount (TExp g e1) (TExp g e2))%Z.
+Proof. by move=> gNm e1 e2; apply: gcount_atom_ge0; apply: Ngmul_TExp. Qed.
+
 (** ** Signed atoms *)
 
 (* The elements of [s] as signed atoms: [x] for a positive element [x],
@@ -659,4 +656,102 @@ case: Af => Nm.
   by rewrite /scount (count_atom_ne Nm gf) (count_atom_ne Nm Tgf).
 rewrite -[f]TInvK scount_TInv_r /scount.
 rewrite (count_atom_ne Nm gTf) (count_atom_ne Nm TgTf); lia.
+Qed.
+
+(** ** Group factors of powers *)
+
+Lemma gcount_TExp_cong (z u c : term) :
+  gcount (TExp z c) (TExp u c) = gcount z u.
+Proof.
+rewrite /gcount gfactors_TExp.
+exact: (SMS.count_map_inj _ z (gfactors u) (TExp_injl c)).
+Qed.
+
+Lemma gcount_TExp_no_preimage Y c t :
+  (∀ u, u ∈ gfactors Y → TExp u c ≠ t) → gcount t (TExp Y c) = 0%Z.
+Proof.
+move=> H; apply: not_elem_of_gcount; rewrite gfactors_TExp.
+move=> /SMS.elem_of_map [u [et u_in]].
+by apply: (H u u_in); rewrite et.
+Qed.
+
+Lemma gcount_TExp_free h Y c t :
+  (∀ u, u ∈ gfactors Y → count h (expo u) = 0%Z) →
+  count h c ≠ count h (expo t) → gcount t (TExp Y c) = 0%Z.
+Proof.
+move=> fr ne; apply: gcount_TExp_no_preimage => u u_in eu; apply: ne.
+by rewrite -eu (count_expo_TExp _ _ _ (Ngmul_gfactors _ _ u_in)) (fr _ u_in).
+Qed.
+
+Lemma gfactors_nonempty t : t ≠ TGMul ∅ → ∃ u, u ∈ gfactors t.
+Proof.
+move=> nt; destruct (elements (gfactors t)) as [|w l] eqn:E.
+  by case: nt; apply/gtunitP; exact: SMS.elements_empty_inv.
+have w_in : w ∈ w :: l by left.
+by rewrite -E in w_in; exists w; apply/SMS.elem_of_elements.
+Qed.
+
+(* A leading factor of [Y]: the core of [TExp_injr] and [TExp_add_neq_unit]. *)
+Lemma gcount_TExp_max x Y :
+  Y ≠ TGMul ∅ →
+  ∃ w, w ∈ gfactors Y ∧ ∀ e1 e2,
+    (count x e1 < count x e2)%Z → gcount (TExp w e2) (TExp Y e1) = 0%Z.
+Proof.
+move=> nY.
+case: (SMS.max_or_empty (λ u, count x (expo u)) (gfactors Y))
+  => [[w [w_Y w_max]]|/gtunitP //].
+exists w; split=> // e1 e2 lt.
+apply: gcount_TExp_no_preimage => u u_Y /(f_equal (λ v, count x (expo v))) /=.
+rewrite (count_expo_TExp _ _ _ (Ngmul_gfactors _ _ u_Y)).
+rewrite (count_expo_TExp _ _ _ (Ngmul_gfactors _ _ w_Y)).
+have := w_max u u_Y; rewrite /=; lia.
+Qed.
+
+(* [TExp (TGMul ∅) e = TGMul ∅] for every [e], hence the premise. *)
+Lemma TExp_injr t t1 t2 : t ≠ TGMul ∅ → TExp t t1 = TExp t t2 → t1 = t2.
+Proof.
+move=> nt e; apply: count_inj => x _.
+have [w [w_t w_max]] := gcount_TExp_max x nt.
+have : gcount w t ≠ 0%Z by apply/gcount_neq0.
+case: (Z.lt_total (count x t1) (count x t2)) => [lt|[//|gt]].
+- by rewrite -(gcount_TExp_cong w t t2) -e (w_max _ _ lt).
+- by rewrite -(gcount_TExp_cong w t t1) e (w_max _ _ gt).
+Qed.
+
+(* [TGMul {[+ TExp t ea; TExp t eb +]}] is [t^(ea + eb)], and [ea + eb ≠ 0]. *)
+Lemma TExp_add_neq_unit t ea eb :
+  t ≠ TGMul ∅ → TGMul {[+ TExp t ea; TExp t eb +]} ≠ TGMul ∅.
+Proof.
+move=> nt e.
+have he u : (gcount u (TExp t ea) + gcount u (TExp t eb))%Z = 0%Z.
+  move: (f_equal (gcount u) e).
+  by rewrite gcount_TGMul_disj_union !TGMul_singleton gcount_TGMul_empty.
+have eab : ea = eb.
+  apply: count_inj => x _.
+  have [w [w_t w_max]] := gcount_TExp_max x nt.
+  have : gcount w t ≠ 0%Z by apply/gcount_neq0.
+  case: (Z.lt_total (count x ea) (count x eb)) => [lt|[//|gt]].
+  - by have := he (TExp w eb); rewrite (w_max _ _ lt) gcount_TExp_cong; lia.
+  - by have := he (TExp w ea); rewrite (w_max _ _ gt) gcount_TExp_cong; lia.
+subst eb; have [w w_t] := gfactors_nonempty nt.
+have := he (TExp w ea); rewrite gcount_TExp_cong.
+have : gcount w t ≠ 0%Z by apply/gcount_neq0.
+lia.
+Qed.
+
+Lemma TExp_add_injl ea eb t1 t2 :
+  TGMul {[+ TExp t1 ea; TExp t1 eb +]} = TGMul {[+ TExp t2 ea; TExp t2 eb +]} →
+  t1 = t2.
+Proof.
+move=> e; set t := TGMul {[+ t1; TGInv t2 +]}.
+have et : TGMul {[+ TExp t ea; TExp t eb +]} = TGMul ∅.
+  apply: gcount_inj => x _; move: (f_equal (gcount x) e).
+  rewrite /t !TExp_TGMul !SMS.map_disj_union !SMS.map_singleton !TExp_TGInv.
+  rewrite !(gcount_TGMul_disj_union, TGMul_singleton, gcount_TGInv).
+  rewrite gcount_TGMul_empty; lia.
+case: (decide (t = TGMul ∅)) => [e1|nt]; last first.
+  by case: (TExp_add_neq_unit nt et).
+apply: gcount_inj => x _; move: (f_equal (gcount x) e1).
+rewrite /t gcount_TGMul_disj_union !TGMul_singleton gcount_TGInv.
+rewrite gcount_TGMul_empty; lia.
 Qed.

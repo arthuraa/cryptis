@@ -301,7 +301,7 @@ iDestruct "inv" as "[#pub|inv_m2]".
         have e_b : b = b'.
         { rewrite /gb in e_gb'.
           have NmInt : negb (is_gmul (TInt 0)) by [].
-    have e := TExp_injr _ _ _ NmInt e_gb'. congruence. }
+    have e := TExp_injr (Ngmul_neq_unit NmInt) e_gb'. congruence. }
         subst b'.
         iSplitR "".
         + (* ▷ (released ga ∧ released gb) → public ga *)

@@ -28,23 +28,9 @@ In the `examples` directory you will find our case studies:
 - `rpc`: Remote procedure calls (built on `conn`).
 - `store`: Authenticated key-value store built on `rpc` (game is in its own file);
   `alist` is a supporting association-list module.
-- `opaque`: OPAQUE-style password-authenticated key exchange with HMQV,
-  including game and ISO-DH-style authentication and compromise (resource
-  exchange in both directions, tokens on each party's key share, ephemeral
-  keys owned by their creators, and a password that may leak: keys of
-  completed sessions stay secret unless both tokens are released or a party's
-  whole state leaks).
-
+- `opaque`: OPAQUE-style password-authenticated key exchange with HMQV.
 - `hmqv`: standalone HMQV authenticated key exchange (three-message variant
-  with authenticators, built on `lib/hmqv.v`), with ISO-DH-style sessions and
-  resource exchange in both directions.  Ephemeral keys are resources of their
-  owners and may leak; a session key is public only once a party's whole state
-  (long-term and ephemeral key) has.  The game (in its own file) lets the
-  attacker choose between learning the long-term keys and learning every
-  ephemeral.  A second game (`kci.v`) checks resistance to key-compromise
-  impersonation: the attacker learns the long-term key of a party of its
-  choice, and that party's session key must still stay secret.
-
+  with authenticators, built on `lib/hmqv.v`).
 - `tls13`: TLS 1.3 handshake (partial; `impl.v` + per-component `proofs/`).
 - `challenge_response`, `composite_game`, `permanent`, `counter`: smaller
   single-file examples plus a composite security game.

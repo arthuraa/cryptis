@@ -44,7 +44,7 @@ Qed.
 Lemma TExp_g_inj (p p' : nonce) : TExp g p = TExp g p' -> p = p'.
 Proof.
 move=> e; suff : p = p' :> term by case.
-exact: (@TExp_injr g).
+exact: (TExp_injr (Ngmul_neq_unit (t := g) I)).
 Qed.
 
 (** * Session information
@@ -100,9 +100,12 @@ rewrite /si_key /si_K /si_ssid /server_si /=.
 move/hash_result_inj => - [] _ /Spec.of_list_inj [] eK essid.
 move/Spec.tag_inj: eK => - [] _ /Spec.of_list_inj [] eK.
 move/Spec.tag_inj: essid => - [] _ /Spec.of_list_inj [] -> ->.
-have: p_s = p_s' ∧ x_s = x_s' ∧ p_u = p_u' ∧ X_u = X_u'.
-  by apply: hmqv_K_inj eK.
-case=> -> [] -> [] -> ->; congruence.
+have nP (p : nonce) : TExp g p ≠ TGMul ∅.
+  exact: Ngmul_neq_unit (Ngmul_TExp g _ I).
+have: p_s = p_s' ∧ x_s = x_s' ∧ TExp g p_u = TExp g p_u' ∧ X_u = X_u'.
+  apply: (hmqv_K_inj (g := g) I I _ (nP _) (nP _)
+            (hmqv_K_neq_unit (g := g) I I) eK) => //.
+case=> -> [] -> [] /TExp_g_inj -> ->; congruence.
 Qed.
 
 Definition server_session si : Prop :=

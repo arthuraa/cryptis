@@ -383,3 +383,11 @@ move: u_w; rewrite /exps e_w (expo_TExp _ _ Nmv).
 case/elem_of_factors_TMul2 => [u_v|//].
 have := tsize_exps_lt _ _ u_v; have := tsize_gfactors_le _ _ v_X; lia.
 Qed.
+
+Lemma count_expo_gfactors_big {h T u} :
+  u ∈ gfactors T → tsize T ≤ tsize h → count h (expo u) = 0%Z.
+Proof.
+move=> uT le; case: (decide (count h (expo u) = 0%Z)) => // ne.
+have h_in : h ∈ exps u by apply/count_neq0.
+have := tsize_exps_lt _ _ h_in; have := tsize_gfactors_le _ _ uT; lia.
+Qed.
