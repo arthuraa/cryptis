@@ -99,13 +99,13 @@ by wp_apply "IH"; eauto.
 Qed.
 
 (* The mode the game runs in, recorded on the initiator's public key. *)
-Definition mode p_a (leak_eph : bool) : iProp :=
-  term_meta (TExp g p_a) (gameN.@"mode") leak_eph.
+Definition mode P_a (leak_eph : bool) : iProp :=
+  term_meta P_a (gameN.@"mode") leak_eph.
 
 (* What a party receives from its peer: nothing when ephemerals leak,
    otherwise the promise that the peer's ephemeral stays secret. *)
-Definition game_pred p_a p_b si rl : iProp :=
-  mode p_a true ∨ exp_frozen g (si_share_of (swap_role rl) si).
+Definition game_pred si rl : iProp :=
+  mode (si_init si) true ∨ exp_frozen g (si_share_of (swap_role rl) si).
 
 (* What a party keeps of its own ephemeral: the secret, to leak it later, or
    the promise that it stays secret. *)
@@ -124,31 +124,35 @@ Proof. by case: leak_eph; apply _. Qed.
 Lemma wp_check_key_secrecy leak_eph c lcomp p_a p_b rl si :
   {{{ cryptis_ctx ∗
       channel c ∗
-      mode p_a leak_eph ∗
+      ⌜si_init si = TExp g p_a⌝ ∗ ⌜si_resp si = TExp g p_b⌝ ∗
+      hmqv_key p_a ∗ hmqv_key p_b ∗
+      mode (TExp g p_a) leak_eph ∗
       key_secrecy leak_eph lcomp p_a p_b ∗
-      session rl p_a p_b si ∗
+      session rl si ∗
       □ (¬ released_session si) ∗
       (if leak_eph then True
        else exp_frozen g (si_share_of rl si) ∗
-            (public (si_key si) ∨ game_pred p_a p_b si rl)) }}}
+            (compromised rl si ∨ session_ok si ∗ game_pred si rl)) }}}
     check_key_secrecy c #leak_eph #lcomp (si_key si)
   {{{ RET #(); True }}}.
 Proof.
-iIntros "%Φ (#? & #? & #mode & #ks & #s_sk & #un & frozen) post".
+iIntros "%Φ (#? & #? & %e_a & %e_b & #key_a & #key_b & #mode & #ks & #sess &
+             #un & frozen) post".
 rewrite /check_key_secrecy. wp_pures.
 case: leak_eph.
 { iDestruct "ks" as "[s_pa s_pb]".
 
   iAssert (□ (public (si_key si) → ▷ False))%I as "#sec".
   { iIntros "!> #p_k".
-    iDestruct "s_sk" as "(%e1 & %e2 & _ & _ & [#comp|#s_k])".
-    - iDestruct (compromised_static with "comp") as "[c|c]".
-      + iEval (rewrite -e1) in "c". by iApply "s_pa".
-      + iEval (rewrite -e2) in "c". by iApply "s_pb".
-    - iDestruct ("s_k" with "p_k") as "[#rel|[[#c _]|[#c _]]]".
+    iDestruct "sess" as "(_ & [#comp|[_ #ok]])".
+    - iDestruct (compromised_static rl e_a e_b with "key_a key_b comp")
+        as "[c|c]".
+      + by iApply "s_pa".
+      + by iApply "s_pb".
+    - iDestruct ("ok" with "p_k") as "[#rel|[[#c _]|[#c _]]]".
       + iNext. by iApply "un".
-      + iEval (rewrite -e1) in "c". by iApply "s_pa".
-      + iEval (rewrite -e2) in "c". by iApply "s_pb". }
+      + iEval (rewrite e_a exp_public_TExp) in "c". by iApply "s_pa".
+      + iEval (rewrite e_b exp_public_TExp) in "c". by iApply "s_pb". }
 
   wp_pures. wp_apply wp_recv => //.
   iIntros "%guess #p_guess". wp_pures.
@@ -156,7 +160,6 @@ case: leak_eph.
   { subst guess. iDestruct ("sec" with "p_guess") as ">[]". }
   wp_pures. iModIntro. iSplit => //. by iApply "post". }
 iDestruct "frozen" as "[#frozen_own gift]".
-iPoseProof "s_sk" as "(%e1 & %e2 & _)".
 wp_pures. wp_bind (!_)%E.
 
 iInv gameN as "(%bcomp & >Hcomp & inv)".
@@ -166,23 +169,19 @@ wp_load. case: bcomp.
 iDestruct "inv" as "[s_pa s_pb]".
 iAssert (|={⊤ ∖ ↑gameN}=> secret p_a ∗ secret p_b ∗
                           □ (public (si_key si) → ▷ False))%I
-  with "[s_pa s_pb gift]" as "{s_sk} >(s_pa & s_pb & #s_sk)".
-{ iPoseProof (secret_session with "s_pa s_pb [//]")
-    as "{s_sk} #>#s_sk".
-  iDestruct "gift" as "[#p_k|[#m|#frozen_peer]]".
-  - iDestruct ("s_sk" with "p_k") as "[#rel|[[#c _]|[#c _]]]".
-    + iAssert (▷ False)%I as ">[]". iNext. by iApply "un".
-    + iEval (rewrite -e1) in "c".
-      by iDestruct (secret_not_public with "s_pa c") as ">[]".
-    + iEval (rewrite -e2) in "c".
-      by iDestruct (secret_not_public with "s_pb c") as ">[]".
-
-  - by iPoseProof (term_meta_agree with "mode m") as "%".
+  with "[s_pa s_pb gift]" as ">(s_pa & s_pb & #s_sk)".
+{ iDestruct "gift" as "[#comp|[#ok [#m|#frozen_peer]]]".
+  - iDestruct (compromised_static rl e_a e_b with "key_a key_b comp")
+      as "[c|c]".
+    + by iDestruct (secret_not_public with "s_pa c") as ">[]".
+    + by iDestruct (secret_not_public with "s_pb c") as ">[]".
+  - iEval (rewrite e_a) in "m".
+    by iPoseProof (term_meta_agree with "mode m") as "%".
   - iAssert (exp_frozen g (si_init_share si) ∗
              exp_frozen g (si_resp_share si))%I as "#[frozen_a frozen_b]".
     { case: rl; by iSplit. }
     iFrame. iIntros "!>".
-    by iApply (frozen_key_secrecy with "un frozen_a frozen_b s_sk"). }
+    by iApply (frozen_key_secrecy with "un frozen_a frozen_b ok"). }
 
 iModIntro. iSplitR "post".
 { iExists false; iFrame. }
@@ -258,7 +257,7 @@ Lemma wp_do_init_loop leak_eph c lcomp vset p_a p_b :
   hmqv_pred gameN game_pred -∗
   hmqv_key p_a -∗
   hmqv_key p_b -∗
-  mode p_a leak_eph -∗
+  mode (TExp g p_a) leak_eph -∗
   key_secrecy leak_eph lcomp p_a p_b -∗
   is_lock_term_set (hmqv_game_inv Init) vset -∗
   {{{ True }}}
@@ -275,15 +274,14 @@ wp_smart_apply (wp_initiator _ _ _ _ _ (λ x _, keep leak_eph x) True%I)
 - iFrame "#". by iApply hmqv_key_public.
 - iSplit => //. iIntros "%x_a %X_b s _". rewrite /keep /game_pred /=.
   case: leak_eph.
-  + iModIntro. iFrame "s". iIntros "% _". by iLeft.
+  + iModIntro. iFrame "s". by iLeft.
   + iMod (freeze_secret with "s") as "#s". iModIntro.
-    iSplit => //. iIntros "% _". iRight. by iApply (exp_frozen_intro _ gNm).
+    iSplit => //. iRight. by iApply (exp_frozen_intro _ gNm).
 - wp_pures. by iApply "Hpost".
 wp_pures.
-iDestruct "tsP" as "(%k & %x_a & %X_b & -> & rel & token & keep & sess)".
-iDestruct ("sess" $! p_b with "[//] key_b") as "(-> & #s_k & res)".
-set si := init_si p_a x_a p_b X_b.
-have ss : init_session si by exists p_a, x_a, p_b, X_b.
+iDestruct "tsP" as "(%x_a & %X_b & -> & rel & token & keep & #s_k & res)".
+set si := init_si p_a x_a (TExp g p_b) X_b.
+have ss : init_session si := init_session_vetted p_a x_a p_b X_b.
 iPoseProof (hmqv_game_fresh (rl := Init) ss with "token")
   as "[fresh token]"; first solve_ndisj.
 iMod (unrelease Init si with "rel") as "#un".
@@ -293,7 +291,8 @@ wp_pures. wp_apply (wp_leak_ephemeral with "[$]"). iIntros "frozen".
 wp_pures.
 wp_apply (wp_check_key_secrecy leak_eph _ lcomp _ _ Init si
             with "[frozen res]").
-{ iFrame "#". case: leak_eph; first by [].
+{ iFrame "#". iSplit; first done. iSplit; first done.
+  case: leak_eph; first by [].
   iSplitL "frozen"; first by iExact "frozen".
   by iFrame. }
 iIntros "_". wp_pures.
@@ -307,7 +306,7 @@ Lemma wp_do_init leak_eph c lcomp p_a p_b :
   hmqv_pred gameN game_pred -∗
   hmqv_key p_a -∗
   hmqv_key p_b -∗
-  mode p_a leak_eph -∗
+  mode (TExp g p_a) leak_eph -∗
   key_secrecy leak_eph lcomp p_a p_b -∗
   {{{ True }}}
     do_init c #leak_eph #lcomp p_a (TExp g p_a) (TExp g p_b)
@@ -348,7 +347,7 @@ Lemma wp_do_resp_loop leak_eph c lcomp set p_a p_b :
   hmqv_pred gameN game_pred -∗
   hmqv_key p_a -∗
   hmqv_key p_b -∗
-  mode p_a leak_eph -∗
+  mode (TExp g p_a) leak_eph -∗
   key_secrecy leak_eph lcomp p_a p_b -∗
   is_lock_term_set (hmqv_game_inv Resp) set -∗
   {{{ True }}}
@@ -366,15 +365,13 @@ subst P_a'.
 wp_apply (wp_responder_confirm _ _ _ _ _ _ (keep leak_eph)).
 { iFrame "#". iIntros "%x_b s _". rewrite /keep /game_pred /=.
   case: leak_eph.
-  + iModIntro. iFrame "s". iIntros "%p %e". move/TExp_g_inj: e => <-.
-    by iLeft.
+  + iModIntro. iFrame "s". by iLeft.
   + iMod (freeze_secret with "s") as "#s". iModIntro.
-    iSplit => //. iIntros "% _". iRight. by iApply (exp_frozen_intro _ gNm). }
+    iSplit => //. iRight. by iApply (exp_frozen_intro _ gNm). }
 iIntros "%r [->|Hr]"; wp_pures; first by iApply "Hpost".
-iDestruct "Hr" as "(%k & %x_b & -> & rel & token & keep & sess)".
-iDestruct ("sess" $! p_a with "[//] key_a") as "(-> & #s_k & res)".
-set si := resp_si p_a X_a p_b x_b.
-have ss : resp_session si by exists p_a, X_a, p_b, x_b.
+iDestruct "Hr" as "(%x_b & -> & rel & token & keep & #s_k & res)".
+set si := resp_si (TExp g p_a) X_a p_b x_b.
+have ss : resp_session si := resp_session_vetted p_a X_a p_b x_b.
 wp_pures.
 iPoseProof (hmqv_game_fresh (rl := Resp) ss with "token")
   as "[fresh token]"; first solve_ndisj.
@@ -384,7 +381,8 @@ wp_pures. wp_apply (wp_leak_ephemeral with "[$]"). iIntros "frozen".
 wp_pures.
 wp_apply (wp_check_key_secrecy leak_eph _ lcomp _ _ Resp si
             with "[frozen res]").
-{ iFrame "#". case: leak_eph; first by [].
+{ iFrame "#". iSplit; first done. iSplit; first done.
+  case: leak_eph; first by [].
   iSplitL "frozen"; first by iExact "frozen".
   by iFrame. }
 iIntros "_". wp_pures. by iApply "Hpost".
@@ -397,7 +395,7 @@ Lemma wp_do_resp leak_eph c lcomp p_a p_b :
   hmqv_pred gameN game_pred -∗
   hmqv_key p_a -∗
   hmqv_key p_b -∗
-  mode p_a leak_eph -∗
+  mode (TExp g p_a) leak_eph -∗
   key_secrecy leak_eph lcomp p_a p_b -∗
   {{{ True }}}
     do_resp c #leak_eph #lcomp p_b (TExp g p_b) (TExp g p_a)

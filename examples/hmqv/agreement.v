@@ -65,9 +65,9 @@ Definition ledger N γ γw : iProp :=
 
 (* What a party receives from its peer: the peer's commitment to the key.  Each
    party only commits in the sessions that it runs with the other. *)
-Definition agree_pred γaw γbw p_a p_b p_a' p_b' si rl : iProp :=
-  (if rl is Resp then ⌜p_b' = p_b⌝ → committed γaw (si_key si)
-   else ⌜p_a' = p_a⌝ → committed γbw (si_key si))%I.
+Definition agree_pred γaw γbw P_a P_b si rl : iProp :=
+  (if rl is Resp then ⌜si_resp si = P_b⌝ → committed γaw (si_key si)
+   else ⌜si_init si = P_a⌝ → committed γbw (si_key si))%I.
 
 Lemma ledger_alloc N : ⊢ |={⊤}=> ∃ γ γw, ledger N γ γw ∗ commits γ 1 ∅.
 Proof.
@@ -161,24 +161,6 @@ iAssert ⌜k ∉ ks⌝%I as %k_ks.
 iDestruct (IH with "owns") as %?. iPureIntro. by constructor.
 Qed.
 
-Lemma honest_key_secrecy rl p_a p_b si :
-  □ (public p_a ↔ ▷ False) -∗
-  □ (public p_b ↔ ▷ False) -∗
-  □ (¬ released_session si) -∗
-  session rl p_a p_b si -∗
-  public (si_key si) -∗
-  ▷ False.
-Proof.
-iIntros "#s_pa #s_pb #un (-> & -> & _ & _ & [#comp|#s_k]) #p_k".
-- iDestruct (compromised_static with "comp") as "[c|c]".
-  + by iApply "s_pa".
-  + by iApply "s_pb".
-- iDestruct ("s_k" with "p_k") as "[#rel|[[#c _]|[#c _]]]".
-  + iNext. by iApply "un".
-  + by iApply "s_pa".
-  + by iApply "s_pb".
-Qed.
-
 Definition session_res {A} `{!Repr A} (R : list A → iProp) (Q : A → iProp)
   (v : val) : iProp :=
   ∃ o : option A, ⌜v = repr o⌝ ∗
@@ -199,7 +181,7 @@ Lemma wp_alice_session c γa γaw γbw p_a p_b q :
   channel c -∗
   cryptis_ctx -∗
   hmqv_ctx -∗
-  hmqv_pred gameN (agree_pred γaw γbw p_a p_b) -∗
+  hmqv_pred gameN (agree_pred γaw γbw (TExp g p_a) (TExp g p_b)) -∗
   hmqv_key p_a -∗
   hmqv_key p_b -∗
   □ (public p_a ↔ ▷ False) -∗
@@ -210,40 +192,42 @@ Lemma wp_alice_session c γa γaw γbw p_a p_b q :
     {{ session_res (λ ks, commits γa q (list_to_set ks))
          (λ k, owned Init k ∗ committed γbw k) }}.
 Proof.
-iIntros "#? #? #? #? #? #key_b #s_pa #s_pb #led frag". wp_lam. wp_pures.
+iIntros "#? #? #? #? #key_a #key_b #s_pa #s_pb #led frag". wp_lam. wp_pures.
 wp_apply wp_recv => //. iIntros "%P #p_P".
 wp_eq_term e; last first.
 { wp_pures.
   wp_apply (wp_initiator _ _ _ _ _ (λ _ _, True)%I True%I with "[] []").
   - by iFrame "#".
   - iSplit => //. iIntros "%x_a %X_b _ _ !>". iSplit => //.
-    iIntros "%p %eP". rewrite /agree_pred. iIntros "%ep". by subst.
+    rewrite /agree_pred /=. iIntros "%ep". by subst.
   iIntros "%r _". wp_pures. iModIntro. iExists None. by iFrame. }
 subst P. wp_pures.
 wp_apply (wp_initiator _ _ _ _ _
             (λ x_a X_b,
-               commits γa q {[si_key (init_si p_a x_a p_b X_b) : term]})
+               commits γa q
+                 {[si_key (init_si p_a x_a (TExp g p_b) X_b) : term]})
             (commits γa q ∅) with "[] [frag]")
-  as "%r [[-> frag]|(%k & %x_a & %X_b & -> & rel & tok & frag & sess)]".
+  as "%r [[-> frag]|(%x_a & %X_b & -> & _ & tok & frag & _ & gift)]".
 - by iFrame "#".
 - iSplit; first iExact "frag".
   iIntros "%x_a %X_b _ _".
-  iMod (commit _ _ _ _ (si_key (init_si p_a x_a p_b X_b)) with "led frag")
-    as "[frag #w]".
-  iModIntro. iFrame "frag". iIntros "%p %e". move/TExp_g_inj: e => <-.
-  by iIntros "_".
+  iMod (commit _ _ _ _ (si_key (init_si p_a x_a (TExp g p_b) X_b))
+          with "led frag") as "[frag #w]".
+  iModIntro. iFrame "frag". by iIntros "_".
 - wp_pures. iModIntro. iExists None. by iFrame.
-- iDestruct ("sess" $! p_b with "[//] key_b") as "(-> & #sess & gift)".
-  set si := init_si p_a x_a p_b X_b.
-  iMod (unrelease Init si with "rel") as "#un".
+- set si := init_si p_a x_a (TExp g p_b) X_b.
   iAssert (◇ committed γbw (si_key si))%I with "[gift]" as ">#w".
-  { rewrite /agree_pred. iDestruct "gift" as "[#p_k|w]".
-    - by iDestruct (honest_key_secrecy with "s_pa s_pb un sess p_k") as ">[]".
-    - iModIntro. by iApply "w". }
+  { iDestruct "gift" as "[#comp|[_ w]]"; last by iModIntro; iApply "w".
+    have e_a : si_init si = TExp g p_a by [].
+    have e_b : si_resp si = TExp g p_b by [].
+    iDestruct (compromised_static Init e_a e_b with "key_a key_b comp")
+      as "[c|c]".
+    - iAssert (▷ False)%I as ">[]". by iApply "s_pa".
+    - iAssert (▷ False)%I as ">[]". by iApply "s_pb". }
   wp_pures. iModIntro.
   iExists (Some (si_key si : term)). iSplit => //=.
   rewrite union_empty_r_L. iFrame "frag w". iExists si. iSplit => //.
-  iSplit; first by iPureIntro; exists p_a, x_a, p_b, X_b.
+  iSplit; first by iPureIntro; exact: init_session_vetted.
   iApply (term_token_drop with "tok"). solve_ndisj.
 Qed.
 
@@ -266,7 +250,7 @@ Lemma wp_bob_session c γb γaw γbw p_a p_b q :
   channel c -∗
   cryptis_ctx -∗
   hmqv_ctx -∗
-  hmqv_pred gameN (agree_pred γaw γbw p_a p_b) -∗
+  hmqv_pred gameN (agree_pred γaw γbw (TExp g p_a) (TExp g p_b)) -∗
   hmqv_key p_a -∗
   hmqv_key p_b -∗
   □ (public p_a ↔ ▷ False) -∗
@@ -277,42 +261,44 @@ Lemma wp_bob_session c γb γaw γbw p_a p_b q :
     {{ session_res (λ rs, commits γb q (list_to_set (map fst rs)))
          (λ r, owned Resp r.1 ∗ if r.2 then committed γaw r.1 else True) }}.
 Proof.
-iIntros "#? #? #? #? #key_a #? #s_pa #s_pb #led frag". wp_lam. wp_pures.
+iIntros "#? #? #? #? #key_a #key_b #s_pa #s_pb #led frag". wp_lam. wp_pures.
 wp_apply wp_responder_listen; first by iSplit.
 iIntros "%X %P [#p_X #p_P]". wp_pures.
 wp_eq_term e; last first.
 { wp_pures.
   wp_apply (wp_responder_confirm _ _ _ _ _ _ (λ _, True)%I).
   { iFrame "#". iIntros "%x_b _ _ !>". iSplit => //.
-    iIntros "%p %eP". rewrite /agree_pred. iIntros "%ep". by subst. }
+    rewrite /agree_pred /=. iIntros "%ep". by subst. }
   iIntros "%r _". wp_pures. iModIntro. iExists None. by iFrame. }
 subst P. wp_pures.
 wp_apply (wp_responder_accept _ (TExp g p_a) X p_b _ _
-            (λ x_b, commits γb q {[si_key (resp_si p_a X p_b x_b) : term]})
+            (λ x_b,
+               commits γb q {[si_key (resp_si (TExp g p_a) X p_b x_b) : term]})
             (commits γb q ∅) with "[frag]").
 { iFrame "#". iSplit; first iExact "frag". iIntros "%x_b _ _".
-  iMod (commit _ _ _ _ (si_key (resp_si p_a X p_b x_b)) with "led frag")
-    as "[frag #w]".
-  iModIntro. iFrame "frag". iIntros "%p %e". rewrite /agree_pred.
-  iIntros "%ep". subst p. iExact "w". }
-iIntros "%r [[-> frag]|(%x_b & -> & state & rel & tok & frag)]".
+  iMod (commit _ _ _ _ (si_key (resp_si (TExp g p_a) X p_b x_b))
+          with "led frag") as "[frag #w]".
+  iModIntro. iFrame "frag". by iIntros "_". }
+iIntros "%r [[-> frag]|(%x_b & -> & state & _ & tok & frag)]".
 { wp_pures. iModIntro. iExists None. by iFrame. }
-set si := resp_si p_a X p_b x_b.
+set si := resp_si (TExp g p_a) X p_b x_b.
 iAssert (owned Resp (si_key si)) with "[tok]" as "own".
 { iExists si. iSplit => //.
-  iSplit; first by iPureIntro; exists p_a, X, p_b, x_b.
+  iSplit; first by iPureIntro; exact: resp_session_vetted.
   iApply (term_token_drop with "tok"). solve_ndisj. }
 wp_pures. wp_apply wp_session_key. wp_pures.
 wp_apply (wp_responder_finish with "[$state]"); first by iFrame "#".
-iIntros "%r [->|(%k & -> & sess)]".
+iIntros "%r [->|(-> & _ & gift)]".
 - wp_pures. iModIntro. iExists (Some (si_key si : term, false)).
   iSplit => //=. rewrite union_empty_r_L. by iFrame.
-- iDestruct ("sess" $! p_a with "[//] key_a") as "(_ & #sess & gift)".
-  iMod (unrelease Resp si with "rel") as "#un".
-  iAssert (◇ committed γaw (si_key si))%I with "[gift]" as ">#w".
-  { rewrite /agree_pred /=.
-    iDestruct "gift" as "[#p_k|w]"; last by (iModIntro; iApply "w").
-    by iDestruct (honest_key_secrecy with "s_pa s_pb un sess p_k") as ">[]". }
+- iAssert (◇ committed γaw (si_key si))%I with "[gift]" as ">#w".
+  { iDestruct "gift" as "[#comp|[_ w]]"; last by iModIntro; iApply "w".
+    have e_a : si_init si = TExp g p_a by [].
+    have e_b : si_resp si = TExp g p_b by [].
+    iDestruct (compromised_static Resp e_a e_b with "key_a key_b comp")
+      as "[c|c]".
+    - iAssert (▷ False)%I as ">[]". by iApply "s_pa".
+    - iAssert (▷ False)%I as ">[]". by iApply "s_pb". }
   wp_pures. iModIntro. iExists (Some (si_key si : term, true)).
   iSplit => //=. rewrite union_empty_r_L. by iFrame.
 Qed.
@@ -494,9 +480,8 @@ iMod (freeze_secret with "s_pa") as "#s_pa".
 iMod (freeze_secret with "s_pb") as "#s_pb".
 iMod (ledger_alloc (gameN.@"alice")) as (γa γaw) "[#led_a frag_a]".
 iMod (ledger_alloc (gameN.@"bob")) as (γb γbw) "[#led_b frag_b]".
-iMod (hmqv_pred_set gameN (agree_pred γaw γbw p_a p_b) with "tok")
-  as "[#? _]";
-  first solve_ndisj.
+iMod (hmqv_pred_set gameN (agree_pred γaw γbw (TExp g p_a) (TExp g p_b))
+        with "tok") as "[#? _]"; first solve_ndisj.
 wp_apply wp_send => //. wp_pures.
 wp_apply wp_send => //. wp_pures.
 wp_apply (wp_par
