@@ -50,7 +50,7 @@ Definition hash_result (tag : string) (val : term) : term :=
   THash (Spec.tag (Tag $ hmqvN.@tag) val).
 
 Lemma hash_result_inj (tag1 tag2 : string) t1 t2 :
-  hash_result tag1 t1 = hash_result tag2 t2 -> tag1 = tag2 /\ t1 = t2.
+  hash_result tag1 t1 = hash_result tag2 t2 → tag1 = tag2 ∧ t1 = t2.
 Proof.
 rewrite /hash_result => - [] /Spec.tag_inj [] /Tag_inj c ->.
 by case: (ndot_inj _ _ _ _ c).
@@ -62,10 +62,10 @@ Lemma gNm : negb (is_gmul g). Proof. by []. Qed.
 Lemma tags : "init"%string ≠ "resp"%string. Proof. by []. Qed.
 Lemma tags' : "resp"%string ≠ "init"%string. Proof. by []. Qed.
 
-Lemma TExp_g_inj (p p' : nonce) : TExp g p = TExp g p' -> p = p'.
+Lemma TExp_g_inj (p p' : nonce) : TExp g p = TExp g p' → p = p'.
 Proof. by move/(TExp_injr (Ngmul_neq_unit gNm)) => - [] ->. Qed.
 
-Lemma TExp_g_neq_one (p : nonce) : TExp g p ≠ one.
+#[local] Lemma TExp_g_neq_one (p : nonce) : TExp g p ≠ one.
 Proof. exact: Ngmul_neq_unit (Ngmul_TExp _ _ gNm). Qed.
 
 Record sess_info := SessInfo {
@@ -128,7 +128,8 @@ rewrite /si_key => - [] /Spec.tag_inj [] _ /Spec.of_list_inj [].
 by [].
 Qed.
 
-Lemma init_si_inj (p_a x_a p_b : nonce) X_b (p_a' x_a' p_b' : nonce) X_b' :
+#[local] Lemma init_si_inj (p_a x_a p_b : nonce) X_b (p_a' x_a' p_b' : nonce)
+    X_b' :
   si_key (init_si p_a x_a p_b X_b) = si_key (init_si p_a' x_a' p_b' X_b') →
   init_si p_a x_a p_b X_b = init_si p_a' x_a' p_b' X_b'.
 Proof.
@@ -139,8 +140,8 @@ have [-> [-> [/TExp_g_inj -> ->]]] :=
 by [].
 Qed.
 
-Lemma resp_si_inj (p_a : nonce) X_a (p_b x_b : nonce)
-                  (p_a' : nonce) X_a' (p_b' x_b' : nonce) :
+#[local] Lemma resp_si_inj (p_a : nonce) X_a (p_b x_b : nonce)
+                           (p_a' : nonce) X_a' (p_b' x_b' : nonce) :
   si_key (resp_si p_a X_a p_b x_b) = si_key (resp_si p_a' X_a' p_b' x_b') →
   resp_si p_a X_a p_b x_b = resp_si p_a' X_a' p_b' x_b'.
 Proof.
@@ -277,25 +278,9 @@ Definition hmqv_ready N p_a p_b si rl : iProp := ∀ φ,
   term_token (si_share_of rl si) (↑hmqvN.@"ready") ={⊤}=∗
     ▷ φ p_a p_b si rl.
 
-Lemma hmqv_ready_alloc N p_a p_b si rl φ :
-  hmqv_pred N φ -∗
-  φ p_a p_b si rl ={⊤}=∗
-  □ hmqv_ready N p_a p_b si rl.
-Proof.
-iIntros "#N_φ φ_ts".
-iMod (escrowI nroot with "φ_ts []") as "#?".
-{ by iApply (term_token_switch (si_share_of rl si) (hmqvN.@"ready")). }
-iIntros "!> !>  %φ' #N_φ' ready".
-iPoseProof (nown_valid_2 with "N_φ N_φ'") as "#valid".
-iPoseProof (saved_pred_op_validI with "valid") as "[_ #φ_eq]".
-iSpecialize ("φ_eq" $! (p_a, p_b, si, rl)).
-iMod (escrowE with "[//] ready") as "res" => //.
-iIntros "!> !>". by iRewrite -"φ_eq".
-Qed.
-
 (** The responder escrows its gift before learning who its peer is: the gift
     is for whoever owns the long-term key [P_a] that the peer claimed. *)
-Lemma hmqv_ready_alloc_any_init N P_a X_a p_b x_b φ :
+Lemma hmqv_ready_alloc_init N P_a X_a p_b x_b φ :
   hmqv_pred N φ -∗
   (∀ p_a, ⌜P_a = TExp g p_a⌝ → φ p_a p_b (resp_si p_a X_a p_b x_b) Init)
   ={⊤}=∗
@@ -315,7 +300,7 @@ Qed.
 
 (** Likewise for an initiator, whose gift is for whoever owns the long-term key
     [P_b] that it uses for its peer. *)
-Lemma hmqv_ready_alloc_any_resp N p_a x_a P_b X_b φ :
+Lemma hmqv_ready_alloc_resp N p_a x_a P_b X_b φ :
   hmqv_pred N φ -∗
   (∀ p_b, ⌜P_b = TExp g p_b⌝ → φ p_a p_b (init_si p_a x_a p_b X_b) Resp)
   ={⊤}=∗

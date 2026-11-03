@@ -118,7 +118,7 @@ Definition hmqv_m (t : string) (X P : term) : term :=
   THash (Spec.tag (Tag $ N.@t) (Spec.of_list [X; P])).
 
 #[local] Lemma hmqv_m_inj t t' X X' P P' :
-  hmqv_m t X P = hmqv_m t' X' P' -> t = t' /\ X = X' /\ P = P'.
+  hmqv_m t X P = hmqv_m t' X' P' → t = t' ∧ X = X' ∧ P = P'.
 Proof.
 rewrite /hmqv_m => - [] /Spec.tag_inj [] /Tag_inj c /Spec.of_list_inj [] -> ->.
 by case: (ndot_inj _ _ _ _ c).
@@ -148,13 +148,6 @@ Qed.
 
 #[local] Lemma hmqv_m_Nmul t X P : negb (is_mul (hmqv_m t X P)).
 Proof. by rewrite /hmqv_m. Qed.
-
-#[local] Lemma hmqv_m_neq_nonce t X P (n : nonce) : hmqv_m t X P ≠ TNonce n.
-Proof. by rewrite /hmqv_m. Qed.
-
-#[local] Lemma hmqv_m_tag_ne t t' X X' P P' :
-  t ≠ t' → hmqv_m t X P ≠ hmqv_m t' X' P'.
-Proof. by move=> ne /hmqv_m_inj [e _]. Qed.
 
 Definition hmqv_Y (t_b : string) (P_a P_b X_b : term) : term :=
   TGMul {[+ X_b; TExp P_b (hmqv_m t_b X_b P_a) +]}.
@@ -198,7 +191,7 @@ Qed.
 
 #[local] Lemma count_hmqv_m_nonce t X P (n : nonce) :
   count (hmqv_m t X P) (TNonce n) = 0%Z.
-Proof. by apply: count_atom_ne => //; exact: hmqv_m_neq_nonce. Qed.
+Proof. by apply: count_atom_ne => //; rewrite /hmqv_m. Qed.
 
 #[local] Lemma count_hmqv_m_e h t X P (p : nonce) :
   count (hmqv_m t X P) (TMul {[+ h; TNonce p +]}) =
@@ -276,7 +269,7 @@ Qed.
   negb (is_exp g) → negb (is_gmul g) →
   let m_a := hmqv_m t_a X_a (TExp g p_b) in
   let m_b := hmqv_m t_b X_b P_a in
-  t_a ≠ t_b ->
+  t_a ≠ t_b →
   s = TMul {[+ TNonce p_b; m_b; TNonce x_a +]} ∨
   s = TMul {[+ TNonce p_b; m_b; m_a; TNonce p_a +]} →
   TExp g s
@@ -313,7 +306,7 @@ Qed.
   let m_b := hmqv_m t_b X_b P_a in
   let ss := hmqv_ss t_a t_b p_a P_a X_a p_b X_b in
   let K := hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b in
-  t_a ≠ t_b ->
+  t_a ≠ t_b →
   ss ∈ gfactors K
   ∧ TExp g (TMul {[+ TNonce p_b; m_b; TNonce x_a +]}) ∈ gfactors K
   ∧ [TNonce p_a; TNonce p_b] ⊆+ SMS.pos (exps ss).
@@ -633,9 +626,9 @@ have ltP : tsize P_b < tsize (hmqv_m t_a X_a P_b).
   by exact: tsize_hmqv_m_lt2.
 apply: (hmqv_K_m_ne _ _ neA nK eK).
 - move=> u u_in; apply: (count_expo_hmqv_Y_small u_in); try lia.
-  by apply: hmqv_m_tag_ne.
+  by case/hmqv_m_inj.
 - move=> u u_in; apply: (count_expo_hmqv_Y_small u_in); try lia.
-  by apply: hmqv_m_tag_ne.
+  by case/hmqv_m_inj.
 Qed.
 
 #[local] Lemma hmqv_K_inj_B t_a t_b (p_a x_a p_a' x_a' : nonce)
@@ -663,12 +656,12 @@ apply: (hmqv_Y_cell_ne (k := hmqv_m t_a X_a P_b)).
 - by move=> u u_in; apply: count_expo_gfactors_big u_in _; lia.
 - by move=> u u_in; apply: count_expo_gfactors_big u_in _; lia.
 - by move=> u u_in; apply: (count_expo_hmqv_Y_small u_in); try lia.
-- by rewrite count_hmqv_m_neq //; apply: hmqv_m_tag_ne.
+- by rewrite count_hmqv_m_neq //; case/hmqv_m_inj.
 - exact: count_hmqv_m_nonce.
-- by rewrite count_hmqv_m_e count_hmqv_m_neq //; apply: hmqv_m_tag_ne.
+- by rewrite count_hmqv_m_e count_hmqv_m_neq //; case/hmqv_m_inj.
 - by rewrite count_hmqv_m_nonce count_hmqv_m_e count_hmqv_m_diag.
 - exact: count_hmqv_m_nonce.
-- by rewrite count_hmqv_m_e count_hmqv_m_neq //; apply: hmqv_m_tag_ne.
+- by rewrite count_hmqv_m_e count_hmqv_m_neq //; case/hmqv_m_inj.
 - exact: nP.
 Qed.
 
@@ -696,15 +689,15 @@ have leP'A : tsize P_b' ≤ tsize (hmqv_m t_a X_a P_b) by lia.
 have tba : t_b ≠ t_a by congruence.
 have cBe : count (hmqv_m t_b X_b P_a)
              (TMul {[+ hmqv_m t_a X_a P_b; TNonce p_a +]}) = 0%Z.
-  by rewrite count_hmqv_m_e count_hmqv_m_neq //; apply: hmqv_m_tag_ne.
+  by rewrite count_hmqv_m_e count_hmqv_m_neq //; case/hmqv_m_inj.
 have cBe' : count (hmqv_m t_b X_b P_a)
               (TMul {[+ hmqv_m t_a X_a' P_b'; TNonce p_a' +]}) = 0%Z.
-  by rewrite count_hmqv_m_e count_hmqv_m_neq //; apply: hmqv_m_tag_ne.
+  by rewrite count_hmqv_m_e count_hmqv_m_neq //; case/hmqv_m_inj.
 have cAe' : count (hmqv_m t_a X_a P_b)
               (TMul {[+ hmqv_m t_a X_a' P_b'; TNonce p_a' +]}) = 0%Z.
   by rewrite count_hmqv_m_e count_hmqv_m_neq.
 have cAB : count (hmqv_m t_a X_a P_b) (hmqv_m t_b X_b P_a) = 0%Z.
-  by rewrite count_hmqv_m_neq //; apply: hmqv_m_tag_ne.
+  by rewrite count_hmqv_m_neq //; case/hmqv_m_inj.
 have [u0 u0_in] := gfactors_nonempty nP.
 have Nu0 := Ngmul_gfactors _ _ u0_in.
 have Nw0 := Ngmul_TExp _ (hmqv_m t_b X_b P_a) Nu0.
@@ -800,11 +793,11 @@ have lePA : tsize P_b ≤ tsize (hmqv_m t_a X_a P_b) by lia.
 have frY : ∀ u, u ∈ gfactors (hmqv_Y t_b P_a P_b X_b) →
     count (hmqv_m t_a X_a P_b) (expo u) = 0%Z.
   move=> u u_in; apply: (count_expo_hmqv_Y_small u_in); try lia.
-  by apply: hmqv_m_tag_ne.
+  by case/hmqv_m_inj.
 have frY' : ∀ u, u ∈ gfactors (hmqv_Y t_b P_a' P_b X_b') →
     count (hmqv_m t_a X_a P_b) (expo u) = 0%Z.
   move=> u u_in; apply: (count_expo_hmqv_Y_small u_in); try lia.
-  by apply: hmqv_m_tag_ne.
+  by case/hmqv_m_inj.
 have frX : ∀ u, u ∈ gfactors X_b →
     count (hmqv_m t_b X_b P_a) (expo u) = 0%Z.
   by move=> u u_in; apply: count_expo_gfactors_big u_in _; lia.
@@ -816,9 +809,9 @@ have cAe : ∀ p : nonce, count (hmqv_m t_a X_a P_b)
              (TMul {[+ hmqv_m t_a X_a P_b; TNonce p +]}) = 1%Z.
   by move=> p; rewrite count_hmqv_m_e count_hmqv_m_diag.
 have cAB : count (hmqv_m t_a X_a P_b) (hmqv_m t_b X_b P_a) = 0%Z.
-  by rewrite count_hmqv_m_neq //; apply: hmqv_m_tag_ne.
+  by rewrite count_hmqv_m_neq //; case/hmqv_m_inj.
 have cAB' : count (hmqv_m t_a X_a P_b) (hmqv_m t_b X_b' P_a') = 0%Z.
-  by rewrite count_hmqv_m_neq //; apply: hmqv_m_tag_ne.
+  by rewrite count_hmqv_m_neq //; case/hmqv_m_inj.
 case: (SMS.max_or_empty (λ u, count (hmqv_m t_b X_b P_a) (expo u))
          (gfactors P_b)) => [[um [umP um_ge]]|/gtunitP //].
 case: (SMS.max_or_empty (λ u, (- count (hmqv_m t_b X_b P_a) (expo u))%Z)
@@ -1051,10 +1044,11 @@ have lP : tsize P_b < tsize (hmqv_m t_a X_a P_b) by exact: tsize_hmqv_m_lt2.
 have lX : tsize X_b < tsize (hmqv_m t_b X_b P_a) by exact: tsize_hmqv_m_lt.
 have lY : tsize Y_a < tsize (hmqv_m t_a Y_a Q_b) by exact: tsize_hmqv_m_lt.
 have lQ : tsize Q_a < tsize (hmqv_m t_b Y_b Q_a) by exact: tsize_hmqv_m_lt2.
-apply: (hmqv_K_m_ne _ _ (hmqv_m_tag_ne tab) nK eK).
+apply: (hmqv_K_m_ne _ _ _ nK eK).
 - move=> u u_in; apply: (count_expo_hmqv_Y_small u_in); try lia.
-  by apply: hmqv_m_tag_ne.
+  by case/hmqv_m_inj.
 - by move=> u u_in; apply: (count_expo_hmqv_Y_small u_in); try lia.
+- by case/hmqv_m_inj.
 Qed.
 
 #[local] Lemma hmqv_K_inj_cross_B t_a t_b (p_a x_a p_b x_b : nonce)
@@ -1082,10 +1076,10 @@ apply: (hmqv_Y_cell_ne (k := hmqv_m t_a X_a P_b)).
 - by move=> u u_in; apply: count_expo_gfactors_big u_in _; lia.
 - by move=> u u_in; apply: count_expo_gfactors_big u_in _; lia.
 - move=> u u_in; apply: (count_expo_hmqv_Y_small u_in); try lia.
-  by apply: hmqv_m_tag_ne.
-- by rewrite count_hmqv_m_neq //; apply: hmqv_m_tag_ne.
+  by case/hmqv_m_inj.
+- by rewrite count_hmqv_m_neq //; case/hmqv_m_inj.
 - exact: count_hmqv_m_nonce.
-- by rewrite count_hmqv_m_e count_hmqv_m_neq //; apply: hmqv_m_tag_ne.
+- by rewrite count_hmqv_m_e count_hmqv_m_neq //; case/hmqv_m_inj.
 - by rewrite count_hmqv_m_nonce count_hmqv_m_e count_hmqv_m_diag.
 - exact: count_hmqv_m_nonce.
 - by rewrite count_hmqv_m_e count_hmqv_m_neq.
@@ -1121,23 +1115,24 @@ case: (Nat.le_ge_cases (tsize (hmqv_m t_b (TExp g x_b) Q_a))
   + move=> u u_in; apply: (count_expo_hmqv_Y_free u_in).
     * by move=> v v_in; apply: frg v_in.
     * by move=> v v_in; apply: count_expo_gfactors_big v_in _; lia.
-    * by apply: hmqv_m_tag_ne.
-  + by rewrite count_hmqv_m_neq //; apply: hmqv_m_tag_ne.
+    * by case/hmqv_m_inj.
+  + by rewrite count_hmqv_m_neq //; case/hmqv_m_inj.
   + exact: count_hmqv_m_nonce.
-  + by rewrite count_hmqv_m_e count_hmqv_m_neq //; apply: hmqv_m_tag_ne.
+  + by rewrite count_hmqv_m_e count_hmqv_m_neq //; case/hmqv_m_inj.
   + by rewrite count_hmqv_m_nonce count_hmqv_m_e count_hmqv_m_diag.
   + exact: count_hmqv_m_nonce.
   + by rewrite count_hmqv_m_e count_hmqv_m_neq.
   + exact: Ngmul_neq_unit (Ngmul_TExp _ _ gNm).
-- apply: (hmqv_K_m_ne _ _ (hmqv_m_tag_ne tba) _ (eq_sym eK)).
+- apply: (hmqv_K_m_ne _ _ _ _ (eq_sym eK)).
   + move=> u u_in; apply: (count_expo_hmqv_Y_free u_in).
     * by move=> v v_in; apply: frg v_in.
     * by move=> v v_in; apply: count_expo_gfactors_big v_in _; lia.
-    * by apply: hmqv_m_tag_ne.
+    * by case/hmqv_m_inj.
   + move=> u u_in; apply: (count_expo_hmqv_Y_free u_in).
     * by move=> v v_in; apply: count_expo_gfactors_big v_in _; lia.
     * by move=> v v_in; apply: frg v_in.
     * exact: not_eq_sym ne.
+  + by case/hmqv_m_inj.
   + by rewrite -eK.
 Qed.
 
@@ -1202,11 +1197,11 @@ Qed.
 
 Lemma hmqv_K_inj_fresh t_a t_b (p_a x_a p_b p_b' x_b' : nonce) X_b P X_a' :
   negb (is_exp g) → negb (is_gmul g) →
-  t_a ≠ t_b ->
-  ¬ subterm (TNonce x_b') P -> ¬ subterm (TNonce x_b') X_a' -> x_b' ≠ p_b' ->
+  t_a ≠ t_b →
+  ¬ subterm (TNonce x_b') P → ¬ subterm (TNonce x_b') X_a' → x_b' ≠ p_b' →
   hmqv_K t_a t_b p_a x_a (TExp g p_a) (TExp g x_a) (TExp g p_b) X_b
-  = hmqv_K t_b t_a p_b' x_b' (TExp g p_b') (TExp g x_b') P X_a' ->
-  P = TExp g p_a /\ p_b = p_b' /\ X_b = TExp g x_b' /\ X_a' = TExp g x_a.
+  = hmqv_K t_b t_a p_b' x_b' (TExp g p_b') (TExp g x_b') P X_a' →
+  P = TExp g p_a ∧ p_b = p_b' ∧ X_b = TExp g x_b' ∧ X_a' = TExp g x_a.
 Proof.
 move=> gNX gNm tab fr_P fr_Xa ne_x eK.
 have gN1 := Ngmul_neq_unit gNm.

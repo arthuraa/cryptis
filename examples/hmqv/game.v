@@ -272,20 +272,21 @@ wp_rec; wp_pures; wp_apply wp_fork.
 wp_pures.
 wp_smart_apply (wp_initiator _ _ _ _ _ (λ x _, keep leak_eph x) True%I)
   as "%ts [[-> _]|tsP]" => //.
-- by iFrame "#".
+- iFrame "#". by iApply hmqv_key_public.
 - iSplit => //. iIntros "%x_a %X_b s _". rewrite /keep /game_pred /=.
   case: leak_eph.
-  + iModIntro. iFrame "s". by iLeft.
+  + iModIntro. iFrame "s". iIntros "% _". by iLeft.
   + iMod (freeze_secret with "s") as "#s". iModIntro.
-    iSplit => //. iRight. by iApply (exp_frozen_intro _ gNm).
+    iSplit => //. iIntros "% _". iRight. by iApply (exp_frozen_intro _ gNm).
 - wp_pures. by iApply "Hpost".
 wp_pures.
-iDestruct "tsP" as "(%x_a & %X_b & -> & #s_k & rel & token & keep & res)".
+iDestruct "tsP" as "(%k & %x_a & %X_b & -> & rel & token & keep & sess)".
+iDestruct ("sess" $! p_b with "[//] key_b") as "(-> & #s_k & res)".
 set si := init_si p_a x_a p_b X_b.
 have ss : init_session si by exists p_a, x_a, p_b, X_b.
 iPoseProof (hmqv_game_fresh (rl := Init) ss with "token")
   as "[fresh token]"; first solve_ndisj.
-iMod (unrelease Init with "rel") as "#un".
+iMod (unrelease Init si with "rel") as "#un".
 wp_pures.
 wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
 wp_pures. wp_apply (wp_leak_ephemeral with "[$]"). iIntros "frozen".
@@ -363,19 +364,21 @@ iIntros "%X_a %P_a' [#p_Xa #p_Pa']".
 wp_pures. wp_eq_term e; wp_pures; last by iApply "Hpost".
 subst P_a'.
 wp_apply (wp_responder_confirm _ _ _ _ _ _ (keep leak_eph)).
-{ do !iSplit => //. iIntros "%x_b s _". rewrite /keep /game_pred /=.
+{ iFrame "#". iIntros "%x_b s _". rewrite /keep /game_pred /=.
   case: leak_eph.
-  + iModIntro. iFrame "s". by iLeft.
+  + iModIntro. iFrame "s". iIntros "%p %e". move/TExp_g_inj: e => <-.
+    by iLeft.
   + iMod (freeze_secret with "s") as "#s". iModIntro.
-    iSplit => //. iRight. by iApply (exp_frozen_intro _ gNm). }
+    iSplit => //. iIntros "% _". iRight. by iApply (exp_frozen_intro _ gNm). }
 iIntros "%r [->|Hr]"; wp_pures; first by iApply "Hpost".
-iDestruct "Hr" as "(%x_b & -> & #s_k & rel & token & keep & res)".
+iDestruct "Hr" as "(%k & %x_b & -> & rel & token & keep & sess)".
+iDestruct ("sess" $! p_a with "[//] key_a") as "(-> & #s_k & res)".
 set si := resp_si p_a X_a p_b x_b.
 have ss : resp_session si by exists p_a, X_a, p_b, x_b.
 wp_pures.
 iPoseProof (hmqv_game_fresh (rl := Resp) ss with "token")
   as "[fresh token]"; first solve_ndisj.
-iMod (unrelease Resp with "rel") as "#un".
+iMod (unrelease Resp si with "rel") as "#un".
 wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
 wp_pures. wp_apply (wp_leak_ephemeral with "[$]"). iIntros "frozen".
 wp_pures.
