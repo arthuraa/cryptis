@@ -61,37 +61,12 @@ iPoseProof "key_a" as "[#m_pa #pred_a]".
 iPoseProof "key_b" as "[#m_pb #pred_b]".
 iPoseProof (hmqv_key_public with "key_a") as "#p_Pa".
 iPoseProof (hmqv_key_public with "key_b") as "#p_Pb".
-iAssert (public g) as "#p_g"; first by rewrite public_TInt.
 wp_pures.
-(* The ephemeral is a [secret] of its owner. *)
-iMod pending_alloc as (γ) "pend".
-wp_apply (wp_mk_nonce_freshN ∅ (λ _, shot γ 1)%I dh_key_share
-            (λ x, {[TExp g x]})) => //.
-- by iIntros "% %contra".
-- iIntros "%x"; rewrite big_sepS_singleton; iModIntro; iSplit.
-  + iIntros "#?"; by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
-  + rewrite (minted_TExp x) //; by iIntros "[_ ?]".
-iIntros "%x_a _ #m_xa #s_xa #pred_xa _ tok_Xa".
-rewrite big_sepS_singleton.
-have Nm_xa : negb (is_mul (TNonce x_a)) by [].
-iAssert (□ (public x_a ↔ ▷ shot γ 1))%I as "#s_xa'".
-{ iModIntro; iSplit.
-  - iIntros "#p". iDestruct ("s_xa" with "p") as "#s". iNext.
-    by iDestruct "s" as "#s".
-  - iIntros "#s". iApply "s_xa". iNext. by iModIntro. }
-iPoseProof (secret_alloc with "s_xa' pend") as "s".
-iAssert (hmqv_key x_a) as "#key_xa"; first by iSplit.
+wp_eq_term eP; first by protocol_failure.
+wp_pures. wp_apply (wp_mk_ephemeral with "ctx").
+iIntros "%x_a s #key_xa #p_Xa tok_rel tok_ready tok_res tok_Xa".
+iPoseProof "key_xa" as "[#m_xa _]".
 set X_a := TExp g x_a.
-iAssert (public X_a) as "#p_Xa";
-  first by iApply (public_dh_share gNX gNm Nm_xa with "p_g m_xa pred_xa").
-iDestruct (release_tokenI with "tok_Xa") as "[tok_rel tok_Xa]";
-  first solve_ndisj.
-iDestruct (term_token_difference X_a (↑hmqvN.@"ready") with "tok_Xa")
-  as "[tok_ready tok_Xa]"; first solve_ndisj.
-iDestruct (term_token_difference X_a (↑hmqvN.@"res") with "tok_Xa")
-  as "[tok_res tok_Xa]"; first solve_ndisj.
-iDestruct (term_token_drop (⊤ ∖ ↑hmqvN) with "tok_Xa") as "tok_Xa";
-  first solve_ndisj.
 wp_pures. wp_apply wp_texp. rewrite -/X_a. wp_pures.
 wp_list. wp_term_of_list.
 wp_apply wp_send => //.
@@ -104,6 +79,8 @@ rewrite public_of_list /=. iDestruct "p_m2" as "(#p_Xb & #p_Ab & _)".
 iPoseProof (public_minted with "p_Xb") as "#m_Xb".
 wp_pures. wp_apply wp_hmqv_ke. wp_pures.
 set σ := hmqv_K hmqvN "init" "resp" p_a x_a (TExp g p_a) X_a (TExp g p_b) X_b.
+wp_eq_term nσ; first by protocol_failure.
+wp_pures.
 pose si := init_si p_a x_a p_b X_b.
 wp_list. wp_apply wp_H.
 wp_eq_term e'; last by protocol_failure.
@@ -138,13 +115,11 @@ iAssert (|={⊤}=>
     iLeft. iDestruct "comp" as "[?|[? ?]]"; first by iLeft.
     iRight. iSplit => //. iExists x_a. by iSplit.
   - iDestruct "auth" as "(%P_a' & %X_a' & %p_b' & %x_b' & %N' & %e' &
-                          %fresh & #key_xb & #ready)".
+                          %nPa' & #key_xb & #ready)".
     move: e' => /Spec.of_list_inj [] eσ /Tag_inj eN.
     subst N'.
-    case: fresh => fr_Pa [fr_Xa ne_b].
-    have [ePa [epb [eXb eXa]]] :=
-      @hmqv_K_inj_fresh hmqvN g "init" "resp" p_a x_a p_b p_b' x_b' X_b P_a'
-                        X_a' gNX gNm tags fr_Pa fr_Xa ne_b eσ.
+    have [/TExp_g_inj epb [eXb [ePa eXa]]] :=
+      hmqv_K_inj' gNX gNm tags eP nPa' nσ eσ.
     subst P_a' p_b' X_b X_a'.
     iSpecialize ("ready" $! p_a with "[//]").
     have e_si : si = resp_si p_a (TExp g x_a) p_b x_b'.
@@ -168,11 +143,73 @@ wp_list. wp_apply wp_H.
 wp_apply wp_send => //.
 { iApply (public_THashIS with "Hm3 [] []").
   - iApply minted_of_list => /=. do !iSplit => //. by iApply minted_Tag.
-  - iNext; iModIntro. iExists p_a, x_a, p_b, X_b, N. by do !iSplit => //. }
+  - iNext; iModIntro. iExists p_a, x_a, (TExp g p_b), X_b, N.
+    do !iSplit => //. iIntros "%p_b' %e". by move/TExp_g_inj: e => <-. }
 wp_pures. wp_apply wp_session_key. wp_pures.
 iApply ("Hpost" $! (Some (si_key si, TNonce x_a))).
 iRight. iExists x_a, X_b. iFrame. iModIntro.
 by do !iSplit => //.
+Qed.
+
+(** With a peer that need not be honest, the key comes with no guarantee; the
+    gift is for whoever owns [P_b], if anyone does. *)
+Lemma wp_initiator_any c p_a P_b N φ ψ R :
+  channel c ∗
+  cryptis_ctx ∗
+  hmqv_ctx ∗
+  hmqv_pred N φ ∗
+  hmqv_key p_a ∗
+  public P_b -∗
+  {{{ R ∧
+      ∀ x_a X_b,
+        secret x_a -∗
+        term_token (TExp g x_a) (↑hmqvN.@"res") ={⊤}=∗
+        (∀ p_b, ⌜P_b = TExp g p_b⌝ →
+           φ p_a p_b (init_si p_a x_a p_b X_b) Resp) ∗
+        ψ x_a X_b }}}
+    initiator c p_a (TExp g p_a) P_b (Tag N)
+  {{{ r, RET (repr r);
+      ⌜r = None⌝ ∗ R ∨
+      ∃ (k : senc_key) x_a X_b, ⌜r = Some (k, TNonce x_a)⌝ ∗ ψ x_a X_b }}}.
+Proof.
+rewrite /initiator.
+iIntros "(#chan_c & #ctx & #(Hm2 & Hm3 & Hkey) & #N_φ & #key_a & #p_Pb)".
+iIntros "!> %Ψ hook Hpost".
+iPoseProof "key_a" as "[#m_pa _]".
+iPoseProof (hmqv_key_public with "key_a") as "#p_Pa".
+wp_pures.
+wp_eq_term eP; first by protocol_failure.
+wp_pures. wp_apply (wp_mk_ephemeral with "ctx").
+iIntros "%x_a s #key_xa #p_Xa _ _ tok_res _".
+iPoseProof "key_xa" as "[#m_xa _]".
+wp_pures. wp_apply wp_texp. wp_pures.
+wp_list. wp_term_of_list.
+wp_apply wp_send => //.
+{ rewrite public_of_list /=. by do !iSplit => //. }
+wp_pures. wp_apply wp_recv => //.
+iIntros "%m2 #p_m2".
+wp_list_of_term m2; last by protocol_failure.
+wp_pures. wp_list_match => [X_b A_b -> {m2}|]; last by protocol_failure.
+rewrite public_of_list /=. iDestruct "p_m2" as "(#p_Xb & _ & _)".
+wp_pures. wp_apply wp_hmqv_ke. wp_pures.
+wp_eq_term nσ; first by protocol_failure.
+wp_pures.
+wp_list. wp_apply wp_H.
+wp_eq_term e'; last by protocol_failure.
+iDestruct "hook" as "[_ hook]".
+iMod ("hook" $! x_a X_b with "s tok_res") as "[gift ψ]".
+iMod (hmqv_ready_alloc_any_resp N p_a x_a P_b X_b with "[//] gift")
+  as "#ready_b".
+iAssert (minted (init_secret p_a x_a P_b X_b)) as "#m_σ".
+{ iApply minted_hmqv_K => //; by iApply public_minted. }
+wp_list. wp_apply wp_H.
+wp_apply wp_send => //.
+{ iApply (public_THashIS with "Hm3 [] []").
+  - iApply minted_of_list => /=. do !iSplit => //. by iApply minted_Tag.
+  - iNext; iModIntro. iExists p_a, x_a, P_b, X_b, N. by do !iSplit => //. }
+wp_pures. wp_apply wp_session_key. wp_pures.
+iApply ("Hpost" $! (Some (_, TNonce x_a))). iRight.
+iExists _, x_a, X_b. by iFrame.
 Qed.
 
 Lemma wp_initiator_weak c p_a p_b N :

@@ -306,9 +306,11 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
         "(%p_s & %eP_s & #pubP_s' & #key_p_u & #key_p_s & #priv_p_u
           & #priv_p_s)".
       subst P_s'.
-      have [epa [epb [eXs eXu]]] :=
-        @hmqv_K_inj' opN g "d" "e" p_u x_u p_s p_u_s x_s p_s_s X_s X_u_s
-                    I I tags_c eKK.
+      have nP (p : nonce) : TExp g p ≠ TGMul ∅.
+        exact: Ngmul_neq_unit (Ngmul_TExp g _ I).
+      have [/TExp_g_inj epb [eXs [/TExp_g_inj epa eXu]]] :=
+        hmqv_K_inj' (g := g) I I tags_c (nP _) (nP _)
+          (hmqv_K_neq_unit (g := g) I I) eKK.
       subst p_u_s p_s_s uid_s α_s X_u_s.
       iEval (rewrite -eSK) in "mintedSK".
       iPoseProof (honest_session_ok uid α p_u p_s x_u x_s

@@ -16,13 +16,15 @@ Unset Printing Implicit Defensive.
 (** * HMQV: injective agreement
 
     Alice, the initiator, and Bob, the responder, run sessions in parallel
-    until the attacker tells each of them to stop.  Alice only connects to Bob,
-    but Bob answers whatever identity the first message claims, and only keeps
-    track of the sessions that claim to come from Alice: he records the key of
-    each one as soon as he has answered, and notes whether Alice confirmed it.
-    Once all sessions are over, every key that Bob saw confirmed must be one of
-    Alice's keys, each of Alice's keys must be one that Bob recorded, and no
-    list may repeat a key.  So each session that Bob completes with Alice
+    until the attacker tells each of them to stop.  Each talks to whatever peer
+    the attacker picks -- Alice connects to the identity that the attacker
+    names, Bob answers the identity that the first message claims -- and only
+    keeps track of the sessions with the other: Alice records the key of each
+    session with Bob, and Bob records the key of each session with Alice as
+    soon as he has answered, noting whether Alice confirmed it.  Once all
+    sessions are over, every key that Bob saw confirmed must be one of Alice's
+    keys, each of Alice's keys must be one that Bob recorded, and no list may
+    repeat a key.  So each session that Bob completes with Alice
     matches one of hers, no two of his match the same one, and the keys that
     Alice has but Bob did not see confirmed come from sessions that Bob did run
     with her, but whose last message never reached him.
@@ -61,10 +63,10 @@ Definition commits γ q (X : gset term) : iProp := own γ (◯F{q} X).
 Definition ledger N γ γw : iProp :=
   inv N (∃ X : gset term, own γ (●F X) ∗ own γw (● X)).
 
-(* What a party receives from its peer: the peer's commitment to the key.  Bob
-   only commits in the sessions he runs with Alice. *)
-Definition agree_pred γaw γbw p_a p_a' (_ : nonce) si rl : iProp :=
-  (if rl is Resp then committed γaw (si_key si)
+(* What a party receives from its peer: the peer's commitment to the key.  Each
+   party only commits in the sessions that it runs with the other. *)
+Definition agree_pred γaw γbw p_a p_b p_a' p_b' si rl : iProp :=
+  (if rl is Resp then ⌜p_b' = p_b⌝ → committed γaw (si_key si)
    else ⌜p_a' = p_a⌝ → committed γbw (si_key si))%I.
 
 Lemma ledger_alloc N : ⊢ |={⊤}=> ∃ γ γw, ledger N γ γw ∗ commits γ 1 ∅.
@@ -182,15 +184,22 @@ Definition session_res {A} `{!Repr A} (R : list A → iProp) (Q : A → iProp)
   ∃ o : option A, ⌜v = repr o⌝ ∗
     (if o is Some x then R [x] ∗ Q x else R []).
 
+(** Alice contacts whatever identity the attacker names, but only records the
+    sessions with Bob. *)
 Definition alice_session : val := λ: "c" "p_a" "P_a" "P_b",
-  bind: "r" := initiator "c" "p_a" "P_a" "P_b" (Tag gameN) in
-  SOME (Fst "r").
+  let: "P" := recv "c" in
+  if: eq_term "P" "P_b" then
+    bind: "r" := initiator "c" "p_a" "P_a" "P_b" (Tag gameN) in
+    SOME (Fst "r")
+  else
+    initiator "c" "p_a" "P_a" "P" (Tag gameN);;
+    NONE.
 
 Lemma wp_alice_session c γa γaw γbw p_a p_b q :
   channel c -∗
   cryptis_ctx -∗
   hmqv_ctx -∗
-  hmqv_pred gameN (agree_pred γaw γbw p_a) -∗
+  hmqv_pred gameN (agree_pred γaw γbw p_a p_b) -∗
   hmqv_key p_a -∗
   hmqv_key p_b -∗
   □ (public p_a ↔ ▷ False) -∗
@@ -202,6 +211,15 @@ Lemma wp_alice_session c γa γaw γbw p_a p_b q :
          (λ k, owned Init k ∗ committed γbw k) }}.
 Proof.
 iIntros "#? #? #? #? #? #? #s_pa #s_pb #led frag". wp_lam. wp_pures.
+wp_apply wp_recv => //. iIntros "%P #p_P".
+wp_eq_term e; last first.
+{ wp_pures.
+  wp_apply (wp_initiator_any _ _ _ _ _ (λ _ _, True)%I True%I with "[] []").
+  - by iFrame "#".
+  - iSplit => //. iIntros "%x_a %X_b _ _ !>". iSplit => //.
+    iIntros "%p %eP". rewrite /agree_pred. iIntros "%ep". by subst.
+  iIntros "%r _". wp_pures. iModIntro. iExists None. by iFrame. }
+subst P. wp_pures.
 wp_apply (wp_initiator _ _ _ _ _
             (λ x_a X_b,
                commits γa q {[si_key (init_si p_a x_a p_b X_b) : term]})
@@ -211,8 +229,8 @@ wp_apply (wp_initiator _ _ _ _ _
 - iSplit; first iExact "frag".
   iIntros "%x_a %X_b _ _".
   iMod (commit _ _ _ _ (si_key (init_si p_a x_a p_b X_b)) with "led frag")
-    as "[frag w]".
-  by iFrame.
+    as "[frag #w]".
+  iModIntro. iFrame "frag". by iIntros "_".
 - wp_pures. iModIntro. iExists None. by iFrame.
 - set si := init_si p_a x_a p_b X_b.
   iMod (unrelease Init with "rel") as "#un".
@@ -234,7 +252,7 @@ Definition bob_session : val := λ: "c" "p_b" "P_b" "P_a",
   let: "X" := Fst "m1" in
   let: "P" := Snd "m1" in
   if: eq_term "P" "P_a" then
-    let: "s" := responder_accept "c" "p_b" "P_b" "X" "P_a" (Tag gameN) in
+    bind: "s" := responder_accept "c" "p_b" "P_b" "X" "P_a" (Tag gameN) in
     let: "k" := session_key (Fst "s") in
     let: "r" := responder_finish "c" (Fst "s") (Snd "s") (Tag gameN) in
     SOME ("k", match: "r" with NONE => #false | SOME <> => #true end)
@@ -246,7 +264,7 @@ Lemma wp_bob_session c γb γaw γbw p_a p_b q :
   channel c -∗
   cryptis_ctx -∗
   hmqv_ctx -∗
-  hmqv_pred gameN (agree_pred γaw γbw p_a) -∗
+  hmqv_pred gameN (agree_pred γaw γbw p_a p_b) -∗
   hmqv_key p_a -∗
   hmqv_key p_b -∗
   □ (public p_a ↔ ▷ False) -∗
@@ -269,13 +287,14 @@ wp_eq_term e; last first.
 subst P. wp_pures.
 wp_apply (wp_responder_accept _ (TExp g p_a) X p_b _ _
             (λ x_b, commits γb q {[si_key (resp_si p_a X p_b x_b) : term]})
-          with "[frag]").
-{ iFrame "#". iIntros "%x_b _ _".
+            (commits γb q ∅) with "[frag]").
+{ iFrame "#". iSplit; first iExact "frag". iIntros "%x_b _ _".
   iMod (commit _ _ _ _ (si_key (resp_si p_a X p_b x_b)) with "led frag")
     as "[frag #w]".
   iModIntro. iFrame "frag". iIntros "%p %e". rewrite /agree_pred.
   iIntros "%ep". subst p. iExact "w". }
-iIntros "%x_b (state & rel & tok & frag)".
+iIntros "%r [[-> frag]|(%x_b & -> & state & rel & tok & frag)]".
+{ wp_pures. iModIntro. iExists None. by iFrame. }
 set si := resp_si p_a X p_b x_b.
 iAssert (owned Resp (si_key si)) with "[tok]" as "own".
 { iExists si. iSplit => //.
@@ -288,7 +307,8 @@ iIntros "%r [->|(-> & #sess & gift)]".
   iSplit => //=. rewrite union_empty_r_L. by iFrame.
 - iMod (unrelease Resp si with "rel") as "#un".
   iAssert (◇ committed γaw (si_key si))%I with "[gift]" as ">#w".
-  { rewrite /agree_pred /=. iDestruct "gift" as "[#p_k|w]"; last by iModIntro.
+  { rewrite /agree_pred /=.
+    iDestruct "gift" as "[#p_k|w]"; last by (iModIntro; iApply "w").
     by iDestruct (honest_key_secrecy with "s_pa s_pb un sess p_k") as ">[]". }
   wp_pures. iModIntro. iExists (Some (si_key si : term, true)).
   iSplit => //=. rewrite union_empty_r_L. by iFrame.
@@ -471,7 +491,8 @@ iMod (freeze_secret with "s_pa") as "#s_pa".
 iMod (freeze_secret with "s_pb") as "#s_pb".
 iMod (ledger_alloc (gameN.@"alice")) as (γa γaw) "[#led_a frag_a]".
 iMod (ledger_alloc (gameN.@"bob")) as (γb γbw) "[#led_b frag_b]".
-iMod (hmqv_pred_set gameN (agree_pred γaw γbw p_a) with "tok") as "[#? _]";
+iMod (hmqv_pred_set gameN (agree_pred γaw γbw p_a p_b) with "tok")
+  as "[#? _]";
   first solve_ndisj.
 wp_apply wp_send => //. wp_pures.
 wp_apply wp_send => //. wp_pures.

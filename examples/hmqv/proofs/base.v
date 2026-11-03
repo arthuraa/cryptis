@@ -63,7 +63,10 @@ Lemma tags : "init"%string ≠ "resp"%string. Proof. by []. Qed.
 Lemma tags' : "resp"%string ≠ "init"%string. Proof. by []. Qed.
 
 Lemma TExp_g_inj (p p' : nonce) : TExp g p = TExp g p' -> p = p'.
-Proof. by move/(@TExp_injr g _ _ gNm) => - [] ->. Qed.
+Proof. by move/(TExp_injr (Ngmul_neq_unit gNm)) => - [] ->. Qed.
+
+Lemma TExp_g_neq_one (p : nonce) : TExp g p ≠ one.
+Proof. exact: Ngmul_neq_unit (Ngmul_TExp _ _ gNm). Qed.
 
 Record sess_info := SessInfo {
   si_init : nonce;         (* the initiator's long-term key *)
@@ -87,6 +90,11 @@ Definition init_si (p_a x_a p_b : nonce) X_b : sess_info :=
   SessInfo p_a p_b (TExp g x_a) X_b
     (hmqv_K hmqvN "init" "resp" p_a x_a (TExp g p_a) (TExp g x_a)
             (TExp g p_b) X_b).
+
+(** The initiator's HMQV element, computed with whatever long-term key [P_b]
+    it uses for its peer. *)
+Definition init_secret (p_a x_a : nonce) P_b X_b : term :=
+  hmqv_K hmqvN "init" "resp" p_a x_a (TExp g p_a) (TExp g x_a) P_b X_b.
 
 (** The responder's HMQV element, computed with whatever long-term key [P_a]
     its peer claimed. *)
@@ -125,9 +133,9 @@ Lemma init_si_inj (p_a x_a p_b : nonce) X_b (p_a' x_a' p_b' : nonce) X_b' :
   init_si p_a x_a p_b X_b = init_si p_a' x_a' p_b' X_b'.
 Proof.
 move/si_key_inj; rewrite /init_si /= => eK.
-have [-> [-> [-> ->]]] :=
-  @hmqv_K_inj hmqvN g "init" "resp" p_a x_a p_b p_a' x_a' p_b' X_b X_b'
-              gNX gNm tags eK.
+have [-> [-> [/TExp_g_inj -> ->]]] :=
+  hmqv_K_inj gNX gNm tags (@TExp_g_neq_one p_b) (@TExp_g_neq_one p_b')
+             (hmqv_K_neq_unit gNX gNm) eK.
 by [].
 Qed.
 
@@ -137,9 +145,9 @@ Lemma resp_si_inj (p_a : nonce) X_a (p_b x_b : nonce)
   resp_si p_a X_a p_b x_b = resp_si p_a' X_a' p_b' x_b'.
 Proof.
 move/si_key_inj; rewrite /resp_si /resp_secret /= => eK.
-have [-> [-> [-> ->]]] :=
-  @hmqv_K_inj hmqvN g "resp" "init" p_b x_b p_a p_b' x_b' p_a' X_a X_a'
-              gNX gNm tags' eK.
+have [-> [-> [/TExp_g_inj -> ->]]] :=
+  hmqv_K_inj gNX gNm tags' (@TExp_g_neq_one p_a) (@TExp_g_neq_one p_a')
+             (hmqv_K_neq_unit gNX gNm) eK.
 by [].
 Qed.
 
@@ -287,7 +295,7 @@ Qed.
 
 (** The responder escrows its gift before learning who its peer is: the gift
     is for whoever owns the long-term key [P_a] that the peer claimed. *)
-Lemma hmqv_ready_alloc_any N P_a X_a p_b x_b φ :
+Lemma hmqv_ready_alloc_any_init N P_a X_a p_b x_b φ :
   hmqv_pred N φ -∗
   (∀ p_a, ⌜P_a = TExp g p_a⌝ → φ p_a p_b (resp_si p_a X_a p_b x_b) Init)
   ={⊤}=∗
@@ -301,6 +309,26 @@ iIntros "!> !> %p_a %e %φ' #N_φ' ready".
 iPoseProof (nown_valid_2 with "N_φ N_φ'") as "#valid".
 iPoseProof (saved_pred_op_validI with "valid") as "[_ #φ_eq]".
 iSpecialize ("φ_eq" $! (p_a, p_b, resp_si p_a X_a p_b x_b, Init)).
+iMod (escrowE with "[//] ready") as "gift" => //.
+iIntros "!> !>". iRewrite -"φ_eq". by iApply "gift".
+Qed.
+
+(** Likewise for an initiator, whose gift is for whoever owns the long-term key
+    [P_b] that it uses for its peer. *)
+Lemma hmqv_ready_alloc_any_resp N p_a x_a P_b X_b φ :
+  hmqv_pred N φ -∗
+  (∀ p_b, ⌜P_b = TExp g p_b⌝ → φ p_a p_b (init_si p_a x_a p_b X_b) Resp)
+  ={⊤}=∗
+  □ ∀ p_b, ⌜P_b = TExp g p_b⌝ →
+    hmqv_ready N p_a p_b (init_si p_a x_a p_b X_b) Resp.
+Proof.
+iIntros "#N_φ gift".
+iMod (escrowI nroot with "gift []") as "#?".
+{ by iApply (term_token_switch X_b (hmqvN.@"ready")). }
+iIntros "!> !> %p_b %e %φ' #N_φ' ready".
+iPoseProof (nown_valid_2 with "N_φ N_φ'") as "#valid".
+iPoseProof (saved_pred_op_validI with "valid") as "[_ #φ_eq]".
+iSpecialize ("φ_eq" $! (p_a, p_b, init_si p_a x_a p_b X_b, Resp)).
 iMod (escrowE with "[//] ready") as "gift" => //.
 iIntros "!> !>". iRewrite -"φ_eq". by iApply "gift".
 Qed.
@@ -386,6 +414,49 @@ Proof.
 iIntros "token [#init #resp]".
 iApply (term_meta_token (L:=bool) with "token"); last by case: rl.
 by [].
+Qed.
+
+(** An ephemeral is a [secret] of its owner, and its share's token comes cut
+    into the slices that the protocol uses. *)
+Lemma wp_mk_ephemeral (Ψ : val → iProp) :
+  cryptis_ctx -∗
+  (∀ x : nonce,
+      secret x -∗ hmqv_key x -∗ public (TExp g x) -∗
+      release_token (TExp g x) -∗
+      term_token (TExp g x) (↑hmqvN.@"ready") -∗
+      term_token (TExp g x) (↑hmqvN.@"res") -∗
+      term_token (TExp g x) (⊤ ∖ ↑hmqvN) -∗
+      Ψ (TNonce x)) -∗
+  WP mk_nonce #() {{ Ψ }}.
+Proof.
+iIntros "#ctx post".
+iAssert (public g) as "#p_g"; first by rewrite public_TInt.
+iMod pending_alloc as (γ) "pend".
+wp_apply (wp_mk_nonce_freshN ∅ (λ _, shot γ 1)%I dh_key_share
+            (λ x, {[TExp g x]})) => //.
+- by iIntros "% %contra".
+- iIntros "%x"; rewrite big_sepS_singleton; iModIntro; iSplit.
+  + iIntros "#?"; by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
+  + rewrite (minted_TExp x) //; by iIntros "[_ ?]".
+iIntros "%x _ #m_x #s_x #pred_x _ tok".
+rewrite big_sepS_singleton.
+have Nm_x : negb (is_mul (TNonce x)) by [].
+iAssert (□ (public x ↔ ▷ shot γ 1))%I as "#s_x'".
+{ iModIntro; iSplit.
+  - iIntros "#p". iDestruct ("s_x" with "p") as "#s". iNext.
+    by iDestruct "s" as "#s".
+  - iIntros "#s". iApply "s_x". iNext. by iModIntro. }
+iPoseProof (secret_alloc with "s_x' pend") as "s".
+iAssert (hmqv_key x) as "#key_x"; first by iSplit.
+iDestruct (release_tokenI with "tok") as "[tok_rel tok]"; first solve_ndisj.
+iDestruct (term_token_difference _ (↑hmqvN.@"ready") with "tok")
+  as "[tok_ready tok]"; first solve_ndisj.
+iDestruct (term_token_difference _ (↑hmqvN.@"res") with "tok")
+  as "[tok_res tok]"; first solve_ndisj.
+iDestruct (term_token_drop (⊤ ∖ ↑hmqvN) with "tok") as "tok";
+  first solve_ndisj.
+iApply ("post" with "s key_x [] tok_rel tok_ready tok_res tok").
+by iApply (public_dh_share gNX gNm Nm_x with "p_g m_x pred_x").
 Qed.
 
 Definition session rl p_a p_b si : iProp :=
@@ -481,23 +552,24 @@ Qed.
 
 (** Message predicates for the authenticators of the initiator and the responder. *)
 
-(* The responder answers whatever long-term key [P_a] the first message claims;
-   its fresh ephemeral binds the key to [P_a] all the same (cf.
-   [hmqv_K_inj_fresh]). *)
+(* Either role may run the exchange with whatever long-term key it uses for its
+   peer; since that key is not the identity, the authenticator binds it all the
+   same (cf. [hmqv_K_inj']). *)
 Definition m2_pred t : iProp :=
   ∃ P_a X_a p_b x_b N,
     ⌜t = Spec.of_list [resp_secret P_a X_a p_b x_b; Tag N]⌝ ∗
-    ⌜¬ subterm (TNonce x_b) P_a ∧ ¬ subterm (TNonce x_b) X_a ∧ x_b ≠ p_b⌝ ∗
+    ⌜P_a ≠ one⌝ ∗
     hmqv_key x_b ∗
     ∀ p_a, ⌜P_a = TExp g p_a⌝ →
       hmqv_ready N p_a p_b (resp_si p_a X_a p_b x_b) Init.
 
 Definition m3_pred t : iProp :=
-  ∃ p_a x_a p_b X_b N,
-    let si := init_si p_a x_a p_b X_b in
-    ⌜t = Spec.of_list [si_secret si; Tag N]⌝ ∗
+  ∃ p_a x_a P_b X_b N,
+    ⌜t = Spec.of_list [init_secret p_a x_a P_b X_b; Tag N]⌝ ∗
+    ⌜P_b ≠ one⌝ ∗
     hmqv_key x_a ∗
-    hmqv_ready N p_a p_b si Resp.
+    ∀ p_b, ⌜P_b = TExp g p_b⌝ →
+      hmqv_ready N p_a p_b (init_si p_a x_a p_b X_b) Resp.
 
 (** The key hash: released sessions publish their key through it. *)
 Definition key_pred t : iProp :=

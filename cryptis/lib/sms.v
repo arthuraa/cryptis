@@ -782,6 +782,28 @@ Qed.
 Lemma elements_empty : elements (∅ : sms) = [].
 Proof. by rewrite elements_car car_make Internal.to_pos. Qed.
 
+Lemma elements_empty_inv s : elements s = [] → s = ∅.
+Proof.
+move=> Hs; apply: count_inj => z; rewrite count_empty.
+by apply: not_elem_of_count; rewrite -elem_of_elements Hs => /elem_of_nil.
+Qed.
+
+Lemma max_or_empty (f : T → Z) s :
+  (∃ x, x ∈ s ∧ ∀ y, y ∈ s → (f y ≤ f x)%Z) ∨ s = ∅.
+Proof.
+destruct (elements s) as [|w l] eqn:E.
+  by right; exact: elements_empty_inv.
+left; enough (∃ x, x ∈ w :: l ∧ ∀ y, y ∈ w :: l → (f y ≤ f x)%Z)
+  as [x [x_in x_max]].
+  by exists x; split=> [|y]; rewrite -elem_of_elements E //; exact: x_max.
+clear E; elim: l w => [|b l IH] w.
+  by exists w; split=> [|y /list_elem_of_singleton ->]; [left|lia].
+have [m [m_in m_max]] := IH b.
+case: (Z.le_ge_cases (f w) (f m)) => [le|ge].
+  by exists m; split=> [|y /elem_of_cons [->|/m_max]]; [right| |].
+by exists w; split=> [|y /elem_of_cons [->|/m_max]]; [left|lia|lia].
+Qed.
+
 Lemma elements_singleton x : elements ({[+ x +]} : sms) = [x].
 Proof. by rewrite elements_car car_singleton. Qed.
 

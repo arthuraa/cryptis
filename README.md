@@ -37,7 +37,9 @@ In the `examples` directory you will find our case studies:
 
 - `hmqv`: standalone HMQV authenticated key exchange (three-message variant
   with authenticators, built on `lib/hmqv.v`), with ISO-DH-style sessions and
-  resource exchange in both directions.  Ephemeral keys are resources of their
+  resource exchange in both directions.  Both roles reject a peer long-term
+  key or a shared secret equal to the group identity, which lets the key bind
+  peer keys that were never vetted.  Ephemeral keys are resources of their
   owners and may leak; a session key is public only once a party's whole state
   (long-term and ephemeral key) has.  The game (in its own file) lets the
   attacker choose between learning the long-term keys and learning every
@@ -45,10 +47,10 @@ In the `examples` directory you will find our case studies:
   impersonation: the attacker learns the long-term key of a party of its
   choice, and that party's session key must still stay secret.  A third game
   (`agreement.v`) checks injective agreement: the parties run concurrent
-  sessions, the responder answering whatever identity the attacker claims and
-  keeping track of its sessions with the initiator.  In the end, every key the
-  responder saw confirmed is one of the initiator's, every key of the
-  initiator's is one the responder answered, and no key is recorded twice.
+  sessions with whatever peers the attacker picks, each keeping track of its
+  sessions with the other.  In the end, every key the responder saw confirmed
+  is one of the initiator's, every key of the initiator's is one the responder
+  answered, and no key is recorded twice.
 
 - `tls13`: TLS 1.3 handshake (partial; `impl.v` + per-component `proofs/`).
 - `challenge_response`, `composite_game`, `permanent`, `counter`: smaller

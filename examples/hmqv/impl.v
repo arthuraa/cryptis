@@ -26,7 +26,9 @@ keys (cf. [cryptis.lib.hmqv.hmqv_K]), and X is the generated ephemeral key.
 Checking the hashes H(σ, N) and H'(σ, N) proves that the other party was also
 capable of computing σ, hence that the key is authentic.  The namespace [N] is a
 _usage_ tag that allows us to distinguish different uses of the protocol, as in
-ISO-DH.
+ISO-DH.  Each party aborts if the long-term key it uses for its peer, or σ, is
+the group identity: σ then binds the peer's keys even if that long-term key was
+not vetted (cf. [cryptis.lib.hmqv.hmqv_K_inj']).
 
 *)
 
@@ -35,6 +37,8 @@ Definition hmqvN := nroot.@"hmqv".
 Definition H (c : string) : val := λ: "xs",
   hash (tag (Tag $ hmqvN.@c) (term_of_list "xs")).
 Definition g := (TInt 0).
+(* The identity of the DH group. *)
+Definition one := TGMul ∅.
 
 Definition mk_lt_key : val := λ: <>,
   let: "p" := mk_nonce #() in
@@ -44,6 +48,7 @@ Definition session_key : val := λ: "σ",
   derive_senc_key (H "key" ["σ"]).
 
 Definition initiator : val := λ: "c" "p_a" "P_a" "P_b" "N",
+  guard: (~ eq_term "P_b" one) in
   let: "x_a" := mk_nonce #() in
   let: "X_a" := texp g "x_a" in
   send "c" (term_of_list ["X_a"; "P_a"]);;
@@ -51,12 +56,13 @@ Definition initiator : val := λ: "c" "p_a" "P_a" "P_b" "N",
   list_match: ["X_b"; "A_b"] := "m2" in
   let: "σ" :=
     hmqv_ke hmqvN "init" "resp" "p_a" "x_a" "P_a" "X_a" "P_b" "X_b" in
+  guard: (~ eq_term "σ" one) in
   guard: eq_term "A_b" (H "m2" ["σ"; "N"]) in
   send "c" (H "m3" ["σ"; "N"]);;
   SOME (session_key "σ", "x_a").
 
-(* A DH public key carries nothing to check, so whether to confirm with the
-   identity received here is the caller's decision. *)
+(* Nothing ties a claimed long-term key to its owner, so whether to confirm
+   with the identity received here is the caller's decision. *)
 Definition responder_listen : val := λ: "c",
   do_until (λ: <>,
     bind: "m1" := list_of_term (recv "c") in
@@ -66,12 +72,14 @@ Definition responder_listen : val := λ: "c",
 (* The responder's key is fixed once it has answered, and the last message only
    confirms it, so a caller may use the key before [responder_finish]. *)
 Definition responder_accept : val := λ: "c" "p_b" "P_b" "X_a" "P_a" "N",
+  guard: (~ eq_term "P_a" one) in
   let: "x_b" := mk_nonce #() in
   let: "X_b" := texp g "x_b" in
   let: "σ" :=
     hmqv_ke hmqvN "resp" "init" "p_b" "x_b" "P_b" "X_b" "P_a" "X_a" in
+  guard: (~ eq_term "σ" one) in
   send "c" (term_of_list ["X_b"; H "m2" ["σ"; "N"]]);;
-  ("σ", "x_b").
+  SOME ("σ", "x_b").
 
 Definition responder_finish : val := λ: "c" "σ" "x_b" "N",
   let: "A_a" := recv "c" in
@@ -79,6 +87,6 @@ Definition responder_finish : val := λ: "c" "σ" "x_b" "N",
   SOME (session_key "σ", "x_b").
 
 Definition responder_confirm : val := λ: "c" "p_b" "P_b" "X_a" "P_a" "N",
-  let: "s" := responder_accept "c" "p_b" "P_b" "X_a" "P_a" "N" in
+  bind: "s" := responder_accept "c" "p_b" "P_b" "X_a" "P_a" "N" in
   responder_finish "c" (Fst "s") (Snd "s") "N".
 
