@@ -361,29 +361,6 @@ move=> t'_t; have xt := is_exp_of_exps t'_t.
 have := tsize_expo_lt t xt; have := tsize_factors_le _ _ t'_t; lia.
 Qed.
 
-(** * Occurs-check: an exponent too big to be inside [X]
-
-    If [u] is an exponent of [w] and [u] is strictly bigger than [X], then no
-    group factor of [X ^ c] can be [w], so [w] survives in any group product
-    [X ^ c] is multiplied into.
-
-    This is the symbolic form of HMQV's argument: the multiplier [e = H(X, …)]
-    is built from [X], hence strictly bigger than it, so [X] cannot contain
-    [e] — and any group factor of [X ^ c] equal to [w] would have to. *)
-
-Lemma gcount_TExp_eq0 X c w u :
-  u ∈ exps w -> u ∉ factors c -> tsize X < tsize u ->
-  gcount w (TExp X c) = 0%Z.
-Proof.
-move=> u_w u_c ltX; apply: not_elem_of_gcount.
-rewrite gfactors_TExp.
-move=> /SMS.elem_of_map [v [e_w v_X]].
-have Nmv := Ngmul_gfactors X v v_X.
-move: u_w; rewrite /exps e_w (expo_TExp _ _ Nmv).
-case/elem_of_factors_TMul2 => [u_v|//].
-have := tsize_exps_lt _ _ u_v; have := tsize_gfactors_le _ _ v_X; lia.
-Qed.
-
 Lemma count_expo_gfactors_big {h T u} :
   u ∈ gfactors T → tsize T ≤ tsize h → count h (expo u) = 0%Z.
 Proof.

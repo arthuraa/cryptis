@@ -4,7 +4,10 @@
     operation, [inv] its inverse and [{[+ x +]}] its generators.  [count x s]
     is the signed multiplicity of [x] in [s], and equality is Leibniz
     ([count_inj]).  [make X Y] has the positive occurrences [X] and the negative
-    ones [Y]; [bind] substitutes signed multisets for elements.
+    ones [Y]; [bind] substitutes signed multisets for elements, and [filter]
+    keeps the elements that satisfy a predicate.  [sms_ind] is the induction
+    principle: a signed multiset is built from [∅] by adding or removing one
+    element at a time.
 
     [Internal] holds the representation: pairs of lists [A], with the positive
     occurrences in [A.1] and the negative ones in [A.2], so that
@@ -707,6 +710,13 @@ Qed.
 Lemma make_cons_l x X Y : make (x :: X) Y = {[+ x +]} ⊎ make X Y.
 Proof. by rewrite singleton_make disj_union_make. Qed.
 
+Lemma make_cons_r x X Y : make X (x :: Y) = inv {[+ x +]} ⊎ make X Y.
+Proof.
+apply: count_inj => z.
+rewrite count_disj_union count_inv count_singleton !count_make.
+rewrite Internal.count_cons2; lia.
+Qed.
+
 Lemma inv_make X Y : inv (make X Y) = make Y X.
 Proof.
 apply: count_inj => z; rewrite count_inv !count_make /Internal.count /=; lia.
@@ -856,6 +866,22 @@ rewrite -elem_of_elements elements_car car_make.
 exact: (Internal.elem_of_elements_to _ x).
 Qed.
 
+(** *** Induction *)
+
+Lemma sms_ind (P : sms → Prop) :
+  P ∅ →
+  (∀ x s, P s → P ({[+ x +]} ⊎ s)) →
+  (∀ x s, P s → P (inv {[+ x +]} ⊎ s)) →
+  ∀ s, P s.
+Proof.
+move=> P0 Ppos Pneg s; rewrite -(make_pos_neg s).
+move: (pos s) (neg s) => X Y.
+elim: Y => [|y Y IHY].
+  elim: X => [|x X IHX]; first exact: P0.
+  by rewrite make_cons_l; apply: Ppos.
+by rewrite make_cons_r; apply: Pneg.
+Qed.
+
 End SignedMultiset.
 
 Arguments sms T {_ _ _ _}.
@@ -863,7 +889,9 @@ Arguments sms T {_ _ _ _}.
 (** ** Binding
 
     [bind f s] substitutes [f x] for each element [x] of [s]: [sms] is the free
-    abelian group, and [bind] its monadic bind. *)
+    abelian group, and [bind] its monadic bind ([bind_singleton], [bind_unit],
+    [bind_bind]).  It is additive in [f] as well as in [s], and binds over two
+    signed multisets commute ([bind_comm]). *)
 
 Section Bind.
 
@@ -948,6 +976,32 @@ Proof.
 move=> fg; apply: count_inj => z; rewrite !count_bind.
 rewrite (Internal.flat_ext _ (λ x, car (g x))) //.
 by move=> x /fg ->.
+Qed.
+
+Lemma bind_disj_union_l (f g : T → sms U) s :
+  bind (λ x, f x ⊎ g x) s = bind f s ⊎ bind g s.
+Proof.
+elim/(sms_ind (T := T)): s => [|x s IH|x s IH];
+  rewrite ?bind_empty ?bind_disj_union ?bind_inv ?bind_singleton ?IH;
+  apply: count_inj => z;
+  rewrite !(count_disj_union, count_inv, count_empty); lia.
+Qed.
+
+Lemma bind_inv_l (f : T → sms U) s :
+  bind (λ x, inv (f x)) s = inv (bind f s).
+Proof.
+elim/(sms_ind (T := T)): s => [|x s IH|x s IH];
+  rewrite ?bind_empty ?bind_disj_union ?bind_inv ?bind_singleton ?IH;
+  apply: count_inj => z;
+  rewrite !(count_disj_union, count_inv, count_empty); lia.
+Qed.
+
+Lemma bind_empty_l s : bind (λ _, ∅ : sms U) s = ∅.
+Proof.
+elim/(sms_ind (T := T)): s => [|x s IH|x s IH];
+  rewrite ?bind_empty ?bind_disj_union ?bind_inv ?bind_singleton ?IH;
+  apply: count_inj => z;
+  rewrite !(count_disj_union, count_inv, count_empty); lia.
 Qed.
 
 Lemma car_map f s :
@@ -1071,6 +1125,76 @@ Lemma map_id_ext {T : Type}
     (f : T → T) (s : sms T) :
   (∀ x, x ∈ s → f x = x) → map f s = s.
 Proof. by move=> fs; rewrite -[RHS]bind_unit; apply: bind_ext => x /fs ->. Qed.
+
+Lemma bind_bind {T U V : Type}
+    `{EqDecision T, Lexico T, !StrictOrder (@lexico T _),
+      !TrichotomyT (@lexico T _)}
+    `{EqDecision U, Lexico U, !StrictOrder (@lexico U _),
+      !TrichotomyT (@lexico U _)}
+    `{EqDecision V, Lexico V, !StrictOrder (@lexico V _),
+      !TrichotomyT (@lexico V _)}
+    (f : U → sms V) (g : T → sms U) (s : sms T) :
+  bind f (bind g s) = bind (λ x, bind f (g x)) s.
+Proof.
+elim/(sms_ind (T := T)): s => [|x s IH|x s IH].
+- by rewrite !bind_empty.
+- by rewrite !bind_disj_union !bind_singleton IH.
+- by rewrite !bind_disj_union !bind_inv !bind_singleton IH.
+Qed.
+
+Lemma bind_comm {T U V : Type}
+    `{EqDecision T, Lexico T, !StrictOrder (@lexico T _),
+      !TrichotomyT (@lexico T _)}
+    `{EqDecision U, Lexico U, !StrictOrder (@lexico U _),
+      !TrichotomyT (@lexico U _)}
+    `{EqDecision V, Lexico V, !StrictOrder (@lexico V _),
+      !TrichotomyT (@lexico V _)}
+    (f : T → U → sms V) (s : sms T) (r : sms U) :
+  bind (λ x, bind (f x) r) s = bind (λ y, bind (λ x, f x y) s) r.
+Proof.
+elim/(sms_ind (T := T)): s => [|x s IH|x s IH].
+- rewrite bind_empty -{1}(bind_empty_l r); apply: bind_ext => y _.
+  by rewrite bind_empty.
+- rewrite bind_disj_union bind_singleton IH -bind_disj_union_l.
+  apply: bind_ext => y _.
+  by rewrite bind_disj_union bind_singleton.
+- rewrite bind_disj_union bind_inv bind_singleton IH.
+  rewrite -bind_inv_l -bind_disj_union_l; apply: bind_ext => y _.
+  by rewrite bind_disj_union bind_inv bind_singleton.
+Qed.
+
+(** ** Filtering *)
+
+Section Filter.
+
+Context {T : Type} `{EqDecision T, Lexico T}
+  `{!StrictOrder (@lexico T _), !TrichotomyT (@lexico T _)}.
+
+Implicit Types (z : T) (s : sms T).
+
+Definition filter (P : T → Prop) `{!∀ x, Decision (P x)} s : sms T :=
+  bind (λ x, if bool_decide (P x) then {[+ x +]} else ∅) s.
+
+Lemma count_filter (P : T → Prop) `{!∀ x, Decision (P x)} z s :
+  count z (filter P s) = if bool_decide (P z) then count z s else 0%Z.
+Proof.
+have cz x : count z (if bool_decide (P x) then {[+ x +]} else ∅)
+            = if bool_decide (P z) then Z.b2z (bool_decide (z = x)) else 0%Z.
+  case: (decide (z = x)) => [<-|ne].
+    by case: (bool_decide (P z)); rewrite ?count_singleton ?count_empty.
+  rewrite (bool_decide_eq_false_2 (z = x)) //.
+  by case: (bool_decide (P x)); case: (bool_decide (P z));
+    rewrite ?count_singleton ?count_empty ?bool_decide_eq_false_2.
+rewrite /filter; elim/(sms_ind (T := T)): s => [|x s IH|x s IH].
+- by rewrite bind_empty count_empty; case: (bool_decide (P z)).
+- rewrite bind_disj_union bind_singleton !count_disj_union cz IH.
+  by rewrite count_singleton; case: (bool_decide (P z)).
+- rewrite bind_disj_union bind_inv bind_singleton !count_disj_union.
+  rewrite count_inv cz IH count_inv count_singleton.
+  by case: (bool_decide (P z)); lia.
+Qed.
+
+End Filter.
 
 End SMS.
 
