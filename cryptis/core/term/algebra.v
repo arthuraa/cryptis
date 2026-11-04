@@ -563,16 +563,6 @@ move=> /(f_equal (SMS.count t)).
 by rewrite SMS.count_singleton SMS.count_empty bool_decide_eq_true_2.
 Qed.
 
-Lemma gcount_TExp_g_diag g :
-  negb (is_gmul g) → ∀ e, gcount (TExp g e) (TExp g e) = 1%Z.
-Proof.
-move=> gNm e; rewrite gcount_diag; by case: is_gmul (Ngmul_TExp _ e gNm).
-Qed.
-
-Lemma gcount_TExp_g_ge0 g :
-  negb (is_gmul g) → ∀ e1 e2, (0 <= gcount (TExp g e1) (TExp g e2))%Z.
-Proof. by move=> gNm e1 e2; apply: gcount_atom_ge0; apply: Ngmul_TExp. Qed.
-
 (** ** Signed atoms *)
 
 (* The elements of [s] as signed atoms: [x] for a positive element [x],
@@ -673,14 +663,6 @@ Proof.
 move=> H; apply: not_elem_of_gcount; rewrite gfactors_TExp.
 move=> /SMS.elem_of_map [u [et u_in]].
 by apply: (H u u_in); rewrite et.
-Qed.
-
-Lemma gcount_TExp_free h Y c t :
-  (∀ u, u ∈ gfactors Y → count h (expo u) = 0%Z) →
-  count h c ≠ count h (expo t) → gcount t (TExp Y c) = 0%Z.
-Proof.
-move=> fr ne; apply: gcount_TExp_no_preimage => u u_in eu; apply: ne.
-by rewrite -eu (count_expo_TExp _ _ _ (Ngmul_gfactors _ _ u_in)) (fr _ u_in).
 Qed.
 
 Lemma gfactors_nonempty t : t ≠ TGMul ∅ → ∃ u, u ∈ gfactors t.
