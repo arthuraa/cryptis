@@ -673,7 +673,7 @@ have w_in : w ∈ w :: l by left.
 by rewrite -E in w_in; exists w; apply/SMS.elem_of_elements.
 Qed.
 
-(* A leading factor of [Y]: the core of [TExp_injr] and [TExp_add_neq_unit]. *)
+(* A leading factor of [Y]: the core of [TExp_injr]. *)
 Lemma gcount_TExp_max x Y :
   Y ≠ TGMul ∅ →
   ∃ w, w ∈ gfactors Y ∧ ∀ e1 e2,
@@ -698,42 +698,4 @@ have : gcount w t ≠ 0%Z by apply/gcount_neq0.
 case: (Z.lt_total (count x t1) (count x t2)) => [lt|[//|gt]].
 - by rewrite -(gcount_TExp_cong w t t2) -e (w_max _ _ lt).
 - by rewrite -(gcount_TExp_cong w t t1) e (w_max _ _ gt).
-Qed.
-
-(* [TGMul {[+ TExp t ea; TExp t eb +]}] is [t^(ea + eb)], and [ea + eb ≠ 0]. *)
-Lemma TExp_add_neq_unit t ea eb :
-  t ≠ TGMul ∅ → TGMul {[+ TExp t ea; TExp t eb +]} ≠ TGMul ∅.
-Proof.
-move=> nt e.
-have he u : (gcount u (TExp t ea) + gcount u (TExp t eb))%Z = 0%Z.
-  move: (f_equal (gcount u) e).
-  by rewrite gcount_TGMul_disj_union !TGMul_singleton gcount_TGMul_empty.
-have eab : ea = eb.
-  apply: count_inj => x _.
-  have [w [w_t w_max]] := gcount_TExp_max x nt.
-  have : gcount w t ≠ 0%Z by apply/gcount_neq0.
-  case: (Z.lt_total (count x ea) (count x eb)) => [lt|[//|gt]].
-  - by have := he (TExp w eb); rewrite (w_max _ _ lt) gcount_TExp_cong; lia.
-  - by have := he (TExp w ea); rewrite (w_max _ _ gt) gcount_TExp_cong; lia.
-subst eb; have [w w_t] := gfactors_nonempty nt.
-have := he (TExp w ea); rewrite gcount_TExp_cong.
-have : gcount w t ≠ 0%Z by apply/gcount_neq0.
-lia.
-Qed.
-
-Lemma TExp_add_injl ea eb t1 t2 :
-  TGMul {[+ TExp t1 ea; TExp t1 eb +]} = TGMul {[+ TExp t2 ea; TExp t2 eb +]} →
-  t1 = t2.
-Proof.
-move=> e; set t := TGMul {[+ t1; TGInv t2 +]}.
-have et : TGMul {[+ TExp t ea; TExp t eb +]} = TGMul ∅.
-  apply: gcount_inj => x _; move: (f_equal (gcount x) e).
-  rewrite /t !TExp_TGMul !SMS.map_disj_union !SMS.map_singleton !TExp_TGInv.
-  rewrite !(gcount_TGMul_disj_union, TGMul_singleton, gcount_TGInv).
-  rewrite gcount_TGMul_empty; lia.
-case: (decide (t = TGMul ∅)) => [e1|nt]; last first.
-  by case: (TExp_add_neq_unit nt et).
-apply: gcount_inj => x _; move: (f_equal (gcount x) e1).
-rewrite /t gcount_TGMul_disj_union !TGMul_singleton gcount_TGInv.
-rewrite gcount_TGMul_empty; lia.
 Qed.

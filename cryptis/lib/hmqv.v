@@ -39,12 +39,11 @@ Unset Printing Implicit Defensive.
     communication that uses this key is implicitly authenticated.
 
     This file establishes basic results about the HMQV key exchange formula.
-    Cryptis currently does not support addition, so we compute [K] using the
-    equivalent formula:
+    Cryptis does not support addition of exponents, so we read [x_i + m_i ⋅ p_i]
+    as an extended exponent ([eexp.v]), a formal sum, and raise to it by
+    multiplying powers ([epow]):
 
-        K   = (Y_j^x_i) (Y_j^(m_i ⋅ p_i))
-            = (Y_i^x_j) (Y_i^(m_j ⋅ p_j))
-        Y_i = X_i P_i^m_i
+        K   = Y_j^(x_i + m_i ⋅ p_i) = (Y_j^x_i) (Y_j^(m_i ⋅ p_i))
         Y_j = X_j P_j^m_j,
 
     which only requires multiplication and exponentiation in the Diffie-Hellman
@@ -152,10 +151,11 @@ Proof. by rewrite /hmqv_m. Qed.
 Definition hmqv_Y (t_b : string) (P_a P_b X_b : term) : term :=
   TGMul {[+ X_b; TExp P_b (hmqv_m t_b X_b P_a) +]}.
 
+(** The scalar [x + m⋅p]. *)
+Definition hmqv_s (m p x : term) : eexp := {[+ x; TMul {[+ m; p +]} +]}.
+
 Definition hmqv_K (t_a t_b : string) (p_a x_a P_a X_a P_b X_b : term) : term :=
-  TGMul {[+ TExp (hmqv_Y t_b P_a P_b X_b) x_a;
-            TExp (hmqv_Y t_b P_a P_b X_b) (TMul {[+ hmqv_m t_a X_a P_b; p_a +]})
-         +]}.
+  epow (hmqv_Y t_b P_a P_b X_b) (hmqv_s (hmqv_m t_a X_a P_b) p_a x_a).
 
 (** The largest factor of the HMQV key, measured in the number of exponents. *)
 
@@ -184,9 +184,8 @@ Proof. by move=> ne; apply: count_atom_ne => //; exact: hmqv_m_Nmul. Qed.
 
 (** ** The key in extended exponents
 
-    In the language of [eexp.v], [hmqv_K] raises the base [Y = X_b + m_b⋅P_b]
-    ([hmqv_Y]) to the scalar [x_a + m_a⋅p_a] ([hmqv_s]).  Its logarithms are
-    thus products: for every base [b],
+    [hmqv_K] raises the base [Y = X_b + m_b⋅P_b] to the scalar
+    [x_a + m_a⋅p_a], so its logarithms are products: for every base [b],
 
         log b K = (log b X_b + log b P_b⋅m_b)⋅(x_a + m_a⋅p_a).
 
@@ -194,14 +193,12 @@ Proof. by move=> ne; apply: count_atom_ne => //; exact: hmqv_m_Nmul. Qed.
     [x_b + m_b⋅p_b], so the two parties raise [g] to the same product of
     scalars, in different orders ([hmqv_K_sym]). *)
 
-(** The scalar [x + m⋅p]. *)
-#[local] Definition hmqv_s (m p x : term) : eexp :=
-  {[+ x; TMul {[+ m; p +]} +]}.
-
-#[local] Lemma hmqv_K_epow t_a t_b p_a x_a P_a X_a P_b X_b :
-  hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b
-  = epow (hmqv_Y t_b P_a P_b X_b) (hmqv_s (hmqv_m t_a X_a P_b) p_a x_a).
-Proof. by rewrite /hmqv_s epow2. Qed.
+#[local] Lemma hmqv_s_neq0 m p x : hmqv_s m p x ≠ ∅.
+Proof.
+move=> /(f_equal (SMS.count x)); rewrite /hmqv_s SMS.count_disj_union.
+rewrite !SMS.count_singleton SMS.count_empty bool_decide_eq_true_2 //.
+by case: bool_decide => /=; lia.
+Qed.
 
 #[local] Lemma hmqv_Y_honest t_b P_a p_b x_b :
   hmqv_Y t_b P_a (TExp g p_b) (TExp g x_b)
@@ -211,7 +208,7 @@ Proof. by rewrite /hmqv_s epow2 /hmqv_Y TExpA (comm (⊎) {[+ p_b +]}). Qed.
 Lemma hmqv_K_sym t_a t_b p_a x_a p_b x_b :
   hmqv_K t_a t_b p_a x_a (TExp g p_a) (TExp g x_a) (TExp g p_b) (TExp g x_b)
   = hmqv_K t_b t_a p_b x_b (TExp g p_b) (TExp g x_b) (TExp g p_a) (TExp g x_a).
-Proof. by rewrite !hmqv_K_epow !hmqv_Y_honest !epowA emul_comm. Qed.
+Proof. by rewrite /hmqv_K !hmqv_Y_honest !epowA emul_comm. Qed.
 
 #[local] Lemma log_hmqv_Y b t_b P_a P_b X_b :
   log b (hmqv_Y t_b P_a P_b X_b)
@@ -221,7 +218,7 @@ Proof. by rewrite log_TGMul2 log_TExp. Qed.
 #[local] Lemma log_hmqv_K b t_a t_b p_a x_a P_a X_a P_b X_b :
   log b (hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b)
   = emul (log b (hmqv_Y t_b P_a P_b X_b)) (hmqv_s (hmqv_m t_a X_a P_b) p_a x_a).
-Proof. by rewrite hmqv_K_epow log_epow. Qed.
+Proof. exact: log_epow. Qed.
 
 #[local] Lemma log_TExp_g e :
   negb (is_exp g) → negb (is_gmul g) → log g (TExp g e) = {[+ e +]}.
@@ -429,8 +426,8 @@ Lemma hmqv_K_unit t_a t_b p_a x_a P_a X_a P_b X_b :
   hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b = TGMul ∅ →
   hmqv_Y t_b P_a P_b X_b = TGMul ∅.
 Proof.
-move=> eK; case: (decide (hmqv_Y t_b P_a P_b X_b = TGMul ∅)) => // nY.
-by case: (TExp_add_neq_unit nY eK).
+move=> eK; apply: (epow_injl (@hmqv_s_neq0 (hmqv_m t_a X_a P_b) p_a x_a)).
+by rewrite [RHS]epow_unit; exact: eK.
 Qed.
 
 (** If two peer ephemerals [X_b], [X_b'] yield the same session key against the
@@ -443,22 +440,15 @@ Lemma hmqv_K_inj_base t_a t_b p_a x_a P_a X_a P_b X_b X_b' :
   hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b
   = hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b' →
   hmqv_Y t_b P_a P_b X_b = hmqv_Y t_b P_a P_b X_b'.
-Proof. exact: TExp_add_injl. Qed.
-
-#[local] Lemma sigma_swap a b c :
-  TGMul {[+ TExp (TGMul {[+ TExp g a; TExp g b +]}) a;
-            TExp (TGMul {[+ TExp g a; TExp g b +]}) c +]}
-  = TGMul {[+ TExp (TGMul {[+ TExp g a; TExp g c +]}) a;
-              TExp (TGMul {[+ TExp g a; TExp g c +]}) b +]}.
-Proof. by rewrite -!epow2 !epowA emul_comm. Qed.
+Proof. exact: epow_injl (@hmqv_s_neq0 _ _ _). Qed.
 
 (** A non-trivial session key does NOT bind an *unvetted* peer long-term key.
     Take a degenerate [P_b = 1] on one side and, on the other, a reflected
-    ephemeral [X_b' = g^x_a] with [P_b'] chosen so the two bases coincide after
-    the swap of [sigma_swap].  Then two distinct peer-key pairs produce the same
-    key, which is moreover [≠ 1].  So excluding a trivial key does not suffice
-    to bind an unvetted peer; the collision uses [P_b = 1], and excluding that
-    too recovers injectivity ([hmqv_K_inj]). *)
+    ephemeral [X_b' = g^x_a] with [P_b'] chosen so that both keys raise [g] to
+    the same two scalars, in different orders.  Then two distinct peer-key
+    pairs produce the same key, which is moreover [≠ 1].  So excluding a
+    trivial key does not suffice to bind an unvetted peer; the collision uses
+    [P_b = 1], and excluding that too recovers injectivity ([hmqv_K_inj]). *)
 
 Lemma hmqv_K_inj_counterexample t_a t_b (p_a x_a : nonce) P_a X_a :
   negb (is_gmul g) →
@@ -467,8 +457,7 @@ Lemma hmqv_K_inj_counterexample t_a t_b (p_a x_a : nonce) P_a X_a :
   let m_b' := hmqv_m t_b X_b' P_a in
   let P_b' := TExp g (TMul {[+ m_a; TNonce p_a; TInv m_b' +]}) in
   let m_a' := hmqv_m t_a X_a P_b' in
-  let X_b  := TGMul {[+ TExp g (TNonce x_a);
-                        TExp g (TMul {[+ m_a'; TNonce p_a +]}) +]} in
+  let X_b  := epow g (hmqv_s m_a' p_a x_a) in
   hmqv_K t_a t_b p_a x_a P_a X_a (TGMul ∅) X_b
     = hmqv_K t_a t_b p_a x_a P_a X_a P_b' X_b'
   ∧ hmqv_K t_a t_b p_a x_a P_a X_a (TGMul ∅) X_b ≠ TGMul ∅.
@@ -481,14 +470,12 @@ have HP : TExp P_b' m_b' = TExp g (TMul {[+ m_a; TNonce p_a +]}).
 have HY1 : hmqv_Y t_b P_a (TGMul ∅) X_b = X_b.
   by rewrite /hmqv_Y TExp_gunit TGMul_unit_r.
 split.
-- have HY2 : hmqv_Y t_b P_a P_b' X_b'
-           = TGMul {[+ X_b'; TExp g (TMul {[+ m_a; TNonce p_a +]}) +]}.
-    by rewrite /hmqv_Y -/m_b' HP.
-  rewrite {1}/hmqv_K -/m_a HY1.
-  rewrite /hmqv_K -/m_a' HY2.
-  exact: sigma_swap.
-- move=> /hmqv_K_unit; rewrite HY1.
-  exact: TExp_add_neq_unit (Ngmul_neq_unit gNm).
+- have HY2 : hmqv_Y t_b P_a P_b' X_b' = epow g (hmqv_s m_a p_a x_a).
+    by rewrite /hmqv_Y -/m_b' HP /hmqv_s epow2.
+  by rewrite /hmqv_K -/m_a -/m_a' HY1 HY2 /X_b !epowA emul_comm.
+- move=> /hmqv_K_unit; rewrite HY1 => E; apply: (Ngmul_neq_unit gNm).
+  apply: (epow_injl (@hmqv_s_neq0 m_a' p_a x_a)).
+  by rewrite [RHS]epow_unit; exact: E.
 Qed.
 
 (** ** Binding peer keys
@@ -548,7 +535,7 @@ Qed.
 Proof.
 move=> hK' eK.
 enough (E : hmqv_Y t_b P_a P_b X_b = TGMul ∅).
-  by rewrite hmqv_K_epow E epow_unit.
+  by rewrite /hmqv_K E epow_unit.
 apply: log_eq0 => b.
 apply: (deg_emul_point (k := 0%Z) (deg_hmqv_s t_a X_a P_b p_a x_a)); first lia.
 by rewrite -log_hmqv_K eK.
@@ -1076,7 +1063,7 @@ iAssert (minted (hmqv_Y N t_b P_a P_b X_b)) as "#mY".
   by do !iSplit => //; iApply all_minted_TExp; iSplit.
 iAssert (minted (TMul {[+ hmqv_m N t_a X_a P_b; p_a +]})) as "#mma_pa".
   by iApply all_minted_TMul2; iSplit.
-rewrite /hmqv_K; iApply all_minted_TGMul2.
+rewrite /hmqv_K /hmqv_s epow2; iApply all_minted_TGMul2.
 by do !iSplit => //; iApply all_minted_TExp; iSplit.
 Qed.
 
@@ -1095,7 +1082,8 @@ iAssert (public (hmqv_m N t_b X_b P_a)) as "#pmb".
 iAssert (public (hmqv_Y N t_b P_a P_b X_b)) as "#pY".
   rewrite /hmqv_Y; iApply public_TGMul2 => //.
   by iApply public_TExp.
-rewrite /hmqv_K; iApply public_TGMul2; iApply public_TExp => //.
+rewrite /hmqv_K /hmqv_s epow2.
+iApply public_TGMul2; iApply public_TExp => //.
 by iApply public_TMul2.
 Qed.
 
@@ -1274,7 +1262,7 @@ Lemma wp_hmqv_ke N t_a t_b (p_a x_a P_a X_a P_b X_b : term) Ψ :
   Ψ (repr (hmqv_K N t_a t_b p_a x_a P_a X_a P_b X_b)) ⊢
   WP hmqv_ke N t_a t_b p_a x_a P_a X_a P_b X_b {{ Ψ }}.
 Proof.
-iIntros "post".
+rewrite /hmqv_K /hmqv_s epow2; iIntros "post".
 wp_lam; wp_pures.
 wp_list; wp_apply wp_term_of_list; wp_apply wp_tag; wp_apply wp_hash; wp_pures.
 wp_list; wp_apply wp_term_of_list; wp_apply wp_tag; wp_apply wp_hash; wp_pures.

@@ -29,9 +29,11 @@ Unset Printing Implicit Defensive.
     an atom [h] is the interval spanned by the numbers of occurrences of [h]
     in the monomials of [s], or [None] if [s] is [0].  Degrees add up when
     multiplying ([deg_emul]), since extended exponents have no zero divisors
-    ([emul_neq0]).  Adding two sums joins their degrees when their bounds
-    differ, since nothing cancels then ([deg_disj_union_apart]).  Three facts
-    make degrees useful:
+    ([emul_neq0]).  For the same reason, nonzero factors cancel ([emul_injr]),
+    so raising to a nonzero sum is injective in the base ([epow_injl]).
+    Adding two sums joins their degrees when their bounds differ, since
+    nothing cancels then ([deg_disj_union_apart]).  Three facts make degrees
+    useful:
 
     - The logarithms of a term have degree 0 in any atom at least as big as
       the term ([deg_log_small]), and in any atom with a subterm that the term
@@ -601,6 +603,23 @@ have ag q : (∀ m, m ∈ q → m ∈ elements s ++ elements r) → agree L q.
   by rewrite !z.
 move=> ns nr; apply: (emul_neq0_agree _ _ ns nr); apply: ag => m m_q;
   apply/elem_of_app; by [left|right].
+Qed.
+
+Lemma emul_injr s r1 r2 : s ≠ ∅ → emul s r1 = emul s r2 → r1 = r2.
+Proof.
+move=> ns E; apply: SMS.count_inj => m.
+case: (decide (SMS.count m (r1 ⊎ SMS.inv r2) = 0%Z)) => [|nz].
+  by rewrite SMS.count_disj_union SMS.count_inv; lia.
+have nr : r1 ⊎ SMS.inv r2 ≠ ∅.
+  by move=> E'; apply: nz; rewrite E' SMS.count_empty.
+case: (emul_neq0 ns nr).
+by rewrite emul_disj_union_r emul_inv_r E SMS.disj_union_inv_r.
+Qed.
+
+Lemma epow_injl s t1 t2 : s ≠ ∅ → epow t1 s = epow t2 s → t1 = t2.
+Proof.
+move=> ns E; apply: log_inj => g; apply: (emul_injr ns).
+by rewrite !(emul_comm s) -!log_epow E.
 Qed.
 
 Lemma deg_emul h s r : deg h (emul s r) = (deg h s + deg h r)%deg.
