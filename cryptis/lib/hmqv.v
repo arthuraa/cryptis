@@ -224,64 +224,87 @@ Proof. exact: log_epow. Qed.
   negb (is_exp g) → negb (is_gmul g) → log g (TExp g e) = {[+ e +]}.
 Proof. by move=> gNX gNm; rewrite log_TExp_atom // bool_decide_eq_true_2. Qed.
 
-(** *** Degrees in the multipliers *)
+(** *** Independence of the multipliers *)
 
-#[local] Lemma deg_log_hmqv_m t X P T :
+#[local] Lemma indep_log_hmqv_m t X P T :
   tsize T < tsize (hmqv_m t X P) →
-  ∀ b, deg (hmqv_m t X P) (log b T) ⊑ Some (0, 0)%Z.
-Proof. by move=> lt; apply: deg_log_small; lia. Qed.
+  ∀ b, ehom (hmqv_m t X P) 0 (log b T).
+Proof. by move=> lt; apply: ehom_log_small; lia. Qed.
 
-#[local] Lemma deg_log_TExp_g h b (n : nonce) :
+Arguments indep_log_hmqv_m {t X P T} _ b.
+
+#[local] Lemma indep_log_TExp_g h b (n : nonce) :
   negb (is_exp g) → negb (is_gmul g) → count h (TNonce n) = 0%Z →
-  deg h (log b (TExp g n)) ⊑ Some (0, 0)%Z.
+  ehom h 0 (log b (TExp g n)).
 Proof.
 move=> gNX gNm hn; rewrite log_TExp_atom //.
-by case: (bool_decide (g = b)); rewrite ?deg_singleton ?hn ?deg_empty.
+case: (bool_decide (g = b)); first by rewrite ehom_singleton hn.
+exact: ehom_empty.
 Qed.
 
-(** [x + m⋅p] has the degrees 0 and 1 in [m], and the degree 0 in other
-    multipliers. *)
-#[local] Lemma deg_hmqv_s t X P (p x : nonce) :
-  deg (hmqv_m t X P) (hmqv_s (hmqv_m t X P) p x) = Some (0, 1)%Z.
+(** Multiplication by the scalar is injective at zero: a highest monomial
+    survives one of its two shifts. *)
+#[local] Lemma hmqv_s_eq0 t X P (p x : nonce) s :
+  emul s (hmqv_s (hmqv_m t X P) p x) = ∅ → s = ∅.
 Proof.
-have c0 := count_hmqv_m_nonce t X P x.
-have c1 : count (hmqv_m t X P) (TMul {[+ hmqv_m t X P; TNonce p +]}) = 1%Z.
-  by rewrite count_hmqv_m_e count_hmqv_m_diag.
-rewrite /hmqv_s deg_disj_union_apart !deg_singleton ?c0 ?c1 //.
-by move=> ? ? ? ?; rewrite ?deg_singleton ?c0 ?c1 => - [<- <-] [<- <-].
+apply: (emul_binomial_eq0 (h := hmqv_m t X P)).
+by rewrite count_hmqv_m_nonce count_hmqv_m_e count_hmqv_m_diag; lia.
 Qed.
 
-#[local] Lemma deg_hmqv_s_ne t X P t' X' P' (p x : nonce) :
+#[local] Lemma hmqv_s_part t X P (p x p' x' : nonce) s r :
+  ehom (hmqv_m t X P) 0 s → ehom (hmqv_m t X P) 0 r →
+  emul s (hmqv_s (hmqv_m t X P) p x)
+    = emul r (hmqv_s (hmqv_m t X P) p' x') →
+  emul s {[+ TMul {[+ hmqv_m t X P; TNonce p +]} +]}
+    = emul r {[+ TMul {[+ hmqv_m t X P; TNonce p' +]} +]}.
+Proof.
+move=> hs hr E.
+have c0 (n : nonce) : ehom (hmqv_m t X P) 0 {[+ TNonce n +]}.
+  by rewrite ehom_singleton count_hmqv_m_nonce.
+have c1 (n : nonce) :
+    ehom (hmqv_m t X P) 1 {[+ TMul {[+ hmqv_m t X P; TNonce n +]} +]}.
+  by rewrite ehom_singleton count_hmqv_m_e count_hmqv_m_diag.
+apply: (ehom_split (h := hmqv_m t X P) (a := 0%Z) (b := 1%Z)
+  (s1 := emul s {[+ TNonce x +]}) (r1 := emul r {[+ TNonce x' +]})).
+- exact: ehom_emul hs (c0 _).
+- exact: ehom_emul hr (c0 _).
+- exact: ehom_emul hs (c1 _).
+- exact: ehom_emul hr (c1 _).
+- by [].
+- by rewrite -!emul_disj_union_r.
+Qed.
+
+#[local] Lemma indep_hmqv_s_ne t X P t' X' P' (p x : nonce) :
   hmqv_m t X P ≠ hmqv_m t' X' P' →
-  deg (hmqv_m t X P) (hmqv_s (hmqv_m t' X' P') p x) ⊑ Some (0, 0)%Z.
+  ehom (hmqv_m t X P) 0 (hmqv_s (hmqv_m t' X' P') p x).
 Proof.
-move=> ne; apply: deg_le_disj_union; rewrite deg_singleton.
+move=> ne; apply: ehom_add; rewrite ehom_singleton.
 - by rewrite count_hmqv_m_nonce.
 - by rewrite count_hmqv_m_e count_hmqv_m_neq.
 Qed.
 
-#[local] Lemma deg_log_hmqv_Y h b t_b P_a P_b X_b :
-  deg h (log b X_b) ⊑ Some (0, 0)%Z → deg h (log b P_b) ⊑ Some (0, 0)%Z →
+Arguments indep_hmqv_s_ne {t X P t' X' P'} p x _.
+
+#[local] Lemma indep_log_hmqv_Y h b t_b P_a P_b X_b :
+  ehom h 0 (log b X_b) → ehom h 0 (log b P_b) →
   count h (hmqv_m t_b X_b P_a) = 0%Z →
-  deg h (log b (hmqv_Y t_b P_a P_b X_b)) ⊑ Some (0, 0)%Z.
+  ehom h 0 (log b (hmqv_Y t_b P_a P_b X_b)).
 Proof.
-move=> hX hP hB; rewrite log_hmqv_Y; apply: deg_le_disj_union hX _.
-by apply: (deg_le_emul hP); rewrite deg_singleton hB.
+move=> hX hP hB; rewrite log_hmqv_Y; apply: ehom_add hX _.
+by apply: (ehom_emul hP); rewrite ehom_singleton hB.
 Qed.
 
-(* A key has degree 0 in a multiplier other than its own two if its peer keys
-   do. *)
-#[local] Lemma deg_log_hmqv_K t X P b t_a t_b (p_a x_a : nonce)
+(* A key is independent of any other multiplier if its peer keys are. *)
+#[local] Lemma indep_log_hmqv_K t X P b t_a t_b (p_a x_a : nonce)
     P_a X_a P_b X_b :
   hmqv_m t X P ≠ hmqv_m t_a X_a P_b → hmqv_m t X P ≠ hmqv_m t_b X_b P_a →
-  deg (hmqv_m t X P) (log b X_b) ⊑ Some (0, 0)%Z →
-  deg (hmqv_m t X P) (log b P_b) ⊑ Some (0, 0)%Z →
-  deg (hmqv_m t X P) (log b (hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b))
-    ⊑ Some (0, 0)%Z.
+  ehom (hmqv_m t X P) 0 (log b X_b) →
+  ehom (hmqv_m t X P) 0 (log b P_b) →
+  ehom (hmqv_m t X P) 0 (log b (hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b)).
 Proof.
 move=> nA nB hX hP; rewrite log_hmqv_K.
-have hY := deg_log_hmqv_Y hX hP (count_hmqv_m_neq nB).
-exact: deg_le_emul hY (deg_hmqv_s_ne _ _ nA).
+have hY := indep_log_hmqv_Y hX hP (count_hmqv_m_neq nB).
+exact: ehom_emul hY (indep_hmqv_s_ne _ _ nA).
 Qed.
 
 (** ** Group factors of the HMQV key
@@ -346,8 +369,8 @@ have nBA : hmqv_m t_b X_b P_a ≠ hmqv_m t_a X_a (TExp g p_b).
   by case/hmqv_m_inj => e' _; apply: tab; rewrite e'.
 have z : SMS.count e (emul (log g X_b)
            (hmqv_s (hmqv_m t_a X_a (TExp g p_b)) p_a x_a)) = 0%Z.
-  have hX := deg_log_hmqv_m (tsize_hmqv_m_lt t_b X_b P_a) g.
-  apply: (deg_count (deg_le_emul hX (deg_hmqv_s_ne p_a x_a nBA))).
+  have hX := indep_log_hmqv_m (tsize_hmqv_m_lt t_b X_b P_a) g.
+  apply: (ehom_count (ehom_emul hX (indep_hmqv_s_ne p_a x_a nBA))).
   by rewrite ce; lia.
 rewrite log_hmqv_K log_hmqv_Y log_TExp_g // emul_singleton emul_disj_union_l.
 rewrite SMS.count_disj_union z Z.add_0_l /hmqv_s emul_disj_union_r.
@@ -492,25 +515,25 @@ Qed.
 
         (α + β⋅m_b)⋅(x_a + m_a⋅p_a) = (α' + β'⋅m_b')⋅(x_a' + m_a'⋅p_a'),
 
-    where [α = log b X_b], [β = log b P_b], and so on.  A multiplier is bigger
-    than the keys it hashes, so their logarithms have degree 0 in it.  We take
-    the largest of the multipliers [m_a], [m_a'], [m_b] and [m_b'] and compare
-    degrees in it.
+    where [α = log b X_b], [β = log b P_b], and so on. Choose the largest
+    of the four multipliers. All four coefficients are independent of it,
+    since every public input is smaller than the multiplier hashing it.
 
-    - If it is [m_a] ([hmqv_K_inj_maxA]), every factor on the right but [m_a']
-      has degree 0 in [m_a], so the right-hand side has degree 0 unless
-      [m_a = m_a'], whereas multiplying by [x_a + m_a⋅p_a], of degrees 0 and
-      1, makes the degrees of the left-hand side span more than one integer
-      ([hmqv_K_own]).  Once [m_a = m_a'], and thus [β' = β], the parts of
-      degree 1 give [(α + β⋅m_b)⋅m_a⋅p_a = (α' + β⋅m_b')⋅m_a⋅p_a'].  Here [α]
-      and [α'] have degree 0 in the larger of [m_b] and [m_b'], but [β] need
-      not: two different shifts of [β] cannot agree up to terms of degree 0,
-      so [m_b = m_b'] ([hmqv_Y_inj]).
+    - If the largest is [m_a], its nonzero linear coefficient forces
+      [m_a = m_a'], hence [β = β']. Comparing those coefficients leaves
+      an independent remainder equal to a multiple of
+      [m_b⋅p_a - m_b'⋅p_a']. If [m_b ≠ m_b'], choose the larger, say [m_b],
+      and substitute [m_b := m_b'⋅p_a'/p_a]. The remainder vanishes;
+      cancellation then forces [β = 0], contradicting [P_b ≠ 1].
+      Thus [m_b = m_b'] as well ([hmqv_Y_inj], [emul_linear]).
 
-    - If it is [m_b] ([hmqv_K_inj_maxB]), the left-hand side has the part
-      [β⋅m_b⋅(x_a + m_a⋅p_a)] of degree 1, which the right-hand side lacks
-      unless [m_b = m_b'] ([hmqv_K_peer]).  Comparing these parts, and then
-      their degrees in the larger of [m_a] and [m_a'], gives [m_a = m_a']. *)
+    - If the largest is [m_b], its nonzero linear coefficient forces
+      [m_b = m_b']. Comparing those coefficients gives
+      [β⋅(x_a + m_a⋅p_a) = β'⋅(x_a' + m_a'⋅p_a')]. If [m_a ≠ m_a'],
+      the larger has a nonzero linear coefficient on only one side,
+      a contradiction.
+
+    Both hashes agree, so all four public inputs agree. *)
 
 Lemma hmqv_K_neq_unit t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b :
   negb (is_exp g) → negb (is_gmul g) →
@@ -520,60 +543,60 @@ move=> gNX gNm /hmqv_K_unit /(f_equal (log g)).
 rewrite log_unit log_hmqv_Y log_TExp_g // emul_singleton.
 set e := TMul {[+ TNonce p_b; hmqv_m t_b X_b P_a +]}.
 have ce : SMS.count e (log g X_b) = 0%Z.
-  apply: (deg_count (deg_log_hmqv_m (tsize_hmqv_m_lt t_b X_b P_a) g)).
+  apply: (ehom_count (indep_log_hmqv_m (tsize_hmqv_m_lt t_b X_b P_a) g)).
   by rewrite /e count_TMul2 count_hmqv_m_nonce count_hmqv_m_diag; lia.
 move=> /(f_equal (SMS.count e)).
 rewrite SMS.count_disj_union ce SMS.count_singleton SMS.count_empty.
 by rewrite bool_decide_eq_true_2.
 Qed.
 
-(** If the other key has degree 0 in [m_a], the base vanishes. *)
+(** Comparing the linear coefficient of the party's own multiplier. *)
 #[local] Lemma hmqv_K_own t_a t_b (p_a x_a : nonce) P_a X_a P_b X_b K' :
-  (∀ b, deg (hmqv_m t_a X_a P_b) (log b K') ⊑ Some (0, 0)%Z) →
+  (∀ b, ehom (hmqv_m t_a X_a P_b) 0 (log b (hmqv_Y t_b P_a P_b X_b))) →
+  (∀ b, ehom (hmqv_m t_a X_a P_b) 0 (log b K')) →
   hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b = K' →
   hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b = TGMul ∅.
 Proof.
-move=> hK' eK.
+move=> hY hK' eK.
 enough (E : hmqv_Y t_b P_a P_b X_b = TGMul ∅).
   by rewrite /hmqv_K E epow_unit.
 apply: log_eq0 => b.
-apply: (deg_emul_point (k := 0%Z) (deg_hmqv_s t_a X_a P_b p_a x_a)); first lia.
-by rewrite -log_hmqv_K eK.
+have E := f_equal (log b) eK; rewrite log_hmqv_K /hmqv_s in E.
+apply: (ehom_binomial_const (hY b) (hK' b) (count_hmqv_m_nonce _ _ _ _) _ E).
+by rewrite count_hmqv_m_e count_hmqv_m_diag.
 Qed.
 
-(** If the other key has degree 0 in [m_b], [P_b] vanishes. *)
+(** An unmatched peer multiplier has a nonzero linear coefficient unless
+    the claimed peer long-term key is the identity. *)
 #[local] Lemma hmqv_K_peer t_a t_b (p_a x_a : nonce) P_a X_a P_b X_b K' :
   t_a ≠ t_b →
-  (∀ b, deg (hmqv_m t_b X_b P_a) (log b P_b) ⊑ Some (0, 0)%Z) →
-  (∀ b, deg (hmqv_m t_b X_b P_a) (log b K') ⊑ Some (0, 0)%Z) →
+  (∀ b, ehom (hmqv_m t_b X_b P_a) 0 (log b P_b)) →
+  (∀ b, ehom (hmqv_m t_b X_b P_a) 0 (log b K')) →
   hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b = K' → P_b = TGMul ∅.
 Proof.
 move=> tab hP hK' eK; apply: log_eq0 => b.
 have nBA : hmqv_m t_b X_b P_a ≠ hmqv_m t_a X_a P_b.
   by case/hmqv_m_inj => e _; apply: tab; rewrite e.
-have hσ := deg_hmqv_s_ne p_a x_a nBA.
-have hX := deg_log_hmqv_m (tsize_hmqv_m_lt t_b X_b P_a) b.
-have hB : deg (hmqv_m t_b X_b P_a) {[+ hmqv_m t_b X_b P_a +]} ⊑ Some (1, 1)%Z.
-  by rewrite deg_singleton count_hmqv_m_diag.
+have hσ := indep_hmqv_s_ne p_a x_a nBA.
+have hX := indep_log_hmqv_m (tsize_hmqv_m_lt t_b X_b P_a) b.
+have hB : ehom (hmqv_m t_b X_b P_a) 1 {[+ hmqv_m t_b X_b P_a +]}.
+  by rewrite ehom_singleton count_hmqv_m_diag.
 apply: (emul1_eq0 (e := hmqv_m t_b X_b P_a)).
-apply: (deg_emul_point (k := 0%Z) (deg_hmqv_s t_a X_a P_b p_a x_a)); first lia.
-enough (E : emul (emul (log b P_b) {[+ hmqv_m t_b X_b P_a +]})
-              (hmqv_s (hmqv_m t_a X_a P_b) p_a x_a) = ∅).
-  by rewrite E deg_empty.
-(* The part of degree 1 in [m_b]. *)
-apply: (deg_split (h := hmqv_m t_b X_b P_a) (a := 0%Z) (b := 1%Z)
+apply: (hmqv_s_eq0 (t := t_a) (X := X_a) (P := P_b) (p := p_a) (x := x_a)).
+(* The linear part in [m_b]. *)
+apply: (ehom_split (h := hmqv_m t_b X_b P_a) (a := 0%Z) (b := 1%Z)
   (s1 := emul (log b X_b) (hmqv_s (hmqv_m t_a X_a P_b) p_a x_a))
   (r1 := log b K')).
-- exact: deg_le_emul hX hσ.
+- exact: ehom_emul hX hσ.
 - exact: hK'.
-- exact: deg_le_emul (deg_le_emul (hP b) hB) hσ.
-- by rewrite deg_empty.
+- exact: ehom_emul (ehom_emul (hP b) hB) hσ.
+- exact: ehom_empty.
 - by [].
 - by rewrite (right_id ∅ (⊎)) -eK log_hmqv_K log_hmqv_Y emul_disj_union_l.
 Qed.
 
-(* Two different shifts of [β = log b P_b] cannot agree up to terms of degree 0
-   in the larger multiplier [m_b]. *)
+(* Substitute [m_b := m_b'⋅p_a'/p_a] to annihilate the difference of
+   shifts of [β = log b P_b]; the independent remainder is unchanged. *)
 #[local] Lemma hmqv_Y_inj t_a t_b X_a P_b (p_a p_a' : nonce) P_a X_b P_a' X_b' :
   t_a ≠ t_b → P_b ≠ TGMul ∅ →
   tsize (hmqv_m t_b X_b' P_a') ≤ tsize (hmqv_m t_b X_b P_a) →
@@ -591,21 +614,21 @@ have nBA X P : hmqv_m t_b X P ≠ hmqv_m t_a X_a P_b.
 have hX X P : tsize X < tsize (hmqv_m t_b X P) →
     tsize (hmqv_m t_b X P) ≤ tsize (hmqv_m t_b X_b P_a) →
     ∀ b (p : nonce),
-    deg (hmqv_m t_b X_b P_a)
-      (emul (log b X) {[+ TMul {[+ hmqv_m t_a X_a P_b; TNonce p +]} +]})
-    ⊑ Some (0, 0)%Z.
+    ehom (hmqv_m t_b X_b P_a) 0 (emul (log b X) {[+ TMul {[+ hmqv_m t_a X_a P_b; TNonce p +]} +]}).
   move=> lX lB b p.
-  have hL : deg (hmqv_m t_b X_b P_a) (log b X) ⊑ Some (0, 0)%Z.
-    by apply: deg_log_hmqv_m; lia.
-  apply: (deg_le_emul hL).
-  by rewrite deg_singleton count_hmqv_m_e count_hmqv_m_neq.
+  have hL : ehom (hmqv_m t_b X_b P_a) 0 (log b X).
+    by apply: indep_log_hmqv_m; lia.
+  apply: (ehom_emul hL).
+  by rewrite ehom_singleton count_hmqv_m_e count_hmqv_m_neq.
 case: nP; apply: log_eq0 => b; move: (part b).
 rewrite !log_hmqv_Y !emul_disj_union_l !emul1A => E.
-apply: (emul_lead (h := hmqv_m t_b X_b P_a) (k := 0%Z) _ _ _ E).
+apply: (emul_linear (h := hmqv_m t_b X_b P_a) _ _ _ _ _ E).
+- exact: hmqv_m_Nmul.
+- by rewrite count_hmqv_m_e (count_hmqv_m_neq (nBA _ _)).
+- by rewrite count_TMul2 count_hmqv_m_e (count_hmqv_m_neq nB)
+    (count_hmqv_m_neq (nBA _ _)).
 - by apply: hX; [exact: tsize_hmqv_m_lt|].
 - by apply: hX; [exact: tsize_hmqv_m_lt|].
-- rewrite !count_TMul2 count_hmqv_m_diag (count_hmqv_m_neq nB).
-  rewrite !count_hmqv_m_nonce; lia.
 Qed.
 
 #[local] Lemma hmqv_K_inj_maxA t_a t_b (p_a x_a p_a' x_a' : nonce)
@@ -623,45 +646,31 @@ move=> tab nP lA' lB lB' nK eK.
 have lP' := tsize_hmqv_m_lt2 t_a X_a' P_b'.
 have lX  := tsize_hmqv_m_lt t_b X_b P_a.
 have lX' := tsize_hmqv_m_lt t_b X_b' P_a'.
-have eA : hmqv_m t_a X_a P_b = hmqv_m t_a X_a' P_b'.
-  case: (decide (hmqv_m t_a X_a P_b = hmqv_m t_a X_a' P_b')) => // nA.
-  case: nK; apply: (hmqv_K_own _ eK) => b.
-  apply: deg_log_hmqv_K.
-  - exact: nA.
-  - by case/hmqv_m_inj.
-  - by apply: deg_log_hmqv_m; lia.
-  - by apply: deg_log_hmqv_m; lia.
-case/hmqv_m_inj: (eA) => _ [eXa eP]; subst X_a' P_b'.
 have hY Q Z b :
     tsize (hmqv_m t_b Z Q) ≤ tsize (hmqv_m t_a X_a P_b) →
-    deg (hmqv_m t_a X_a P_b) (log b (hmqv_Y t_b Q P_b Z)) ⊑ Some (0, 0)%Z.
-  move=> le; apply: deg_log_hmqv_Y.
-  - by apply: deg_log_hmqv_m; have := tsize_hmqv_m_lt t_b Z Q; lia.
-  - by apply: deg_log_hmqv_m; have := tsize_hmqv_m_lt2 t_a X_a P_b; lia.
+    ehom (hmqv_m t_a X_a P_b) 0 (log b (hmqv_Y t_b Q P_b Z)).
+  move=> le; apply: indep_log_hmqv_Y.
+  - by apply: indep_log_hmqv_m; have := tsize_hmqv_m_lt t_b Z Q; lia.
+  - by apply: indep_log_hmqv_m; have := tsize_hmqv_m_lt2 t_a X_a P_b; lia.
   - by apply: count_hmqv_m_neq; case/hmqv_m_inj.
-(* The parts of degree 1 in [m_a]. *)
+have eA : hmqv_m t_a X_a P_b = hmqv_m t_a X_a' P_b'.
+  case: (decide (hmqv_m t_a X_a P_b = hmqv_m t_a X_a' P_b')) => // nA.
+  case: nK; apply: (hmqv_K_own (λ b, hY _ _ b lB) _ eK) => b.
+  apply: indep_log_hmqv_K.
+  - exact: nA.
+  - by case/hmqv_m_inj.
+  - by apply: indep_log_hmqv_m; lia.
+  - by apply: indep_log_hmqv_m; lia.
+case/hmqv_m_inj: (eA) => _ [eXa eP]; subst X_a' P_b'.
+(* Compare the linear parts in [m_a]. *)
 have part b :
     emul (log b (hmqv_Y t_b P_a P_b X_b))
       {[+ TMul {[+ hmqv_m t_a X_a P_b; TNonce p_a +]} +]}
     = emul (log b (hmqv_Y t_b P_a' P_b X_b'))
         {[+ TMul {[+ hmqv_m t_a X_a P_b; TNonce p_a' +]} +]}.
-  have c0 (n : nonce) :
-      deg (hmqv_m t_a X_a P_b) {[+ TNonce n +]} ⊑ Some (0, 0)%Z.
-    by rewrite deg_singleton count_hmqv_m_nonce.
-  have c1 (n : nonce) :
-      deg (hmqv_m t_a X_a P_b)
-        {[+ TMul {[+ hmqv_m t_a X_a P_b; TNonce n +]} +]} ⊑ Some (1, 1)%Z.
-    by rewrite deg_singleton count_hmqv_m_e count_hmqv_m_diag.
-  apply: (deg_split (h := hmqv_m t_a X_a P_b) (a := 0%Z) (b := 1%Z)
-    (s1 := emul (log b (hmqv_Y t_b P_a P_b X_b)) {[+ TNonce x_a +]})
-    (r1 := emul (log b (hmqv_Y t_b P_a' P_b X_b')) {[+ TNonce x_a' +]})).
-  - exact: deg_le_emul (hY _ _ b lB) (c0 _).
-  - exact: deg_le_emul (hY _ _ b lB') (c0 _).
-  - exact: deg_le_emul (hY _ _ b lB) (c1 _).
-  - exact: deg_le_emul (hY _ _ b lB') (c1 _).
-  - by [].
-  - move/(f_equal (log b)): eK.
-    by rewrite !log_hmqv_K /hmqv_s !emul_disj_union_r.
+  apply: (@hmqv_s_part t_a X_a P_b p_a x_a p_a' x_a' _ _
+    (hY _ _ b lB) (hY _ _ b lB')).
+  by move/(f_equal (log b)): eK; rewrite !log_hmqv_K.
 have [eXb ePa] : X_b = X_b' ∧ P_a = P_a'.
   case: (Nat.le_ge_cases (tsize (hmqv_m t_b X_b' P_a'))
                          (tsize (hmqv_m t_b X_b P_a))) => le.
@@ -686,65 +695,67 @@ have lP  := tsize_hmqv_m_lt2 t_a X_a P_b.
 have lP' := tsize_hmqv_m_lt2 t_a X_a' P_b'.
 have lX' := tsize_hmqv_m_lt t_b X_b' P_a'.
 have nAB X P X' P' : hmqv_m t_a X P ≠ hmqv_m t_b X' P' by case/hmqv_m_inj.
-have hP b : deg (hmqv_m t_b X_b P_a) (log b P_b) ⊑ Some (0, 0)%Z.
-  by apply: deg_log_hmqv_m; lia.
-have hP' b : deg (hmqv_m t_b X_b P_a) (log b P_b') ⊑ Some (0, 0)%Z.
-  by apply: deg_log_hmqv_m; lia.
+have hP b : ehom (hmqv_m t_b X_b P_a) 0 (log b P_b).
+  by apply: indep_log_hmqv_m; lia.
+have hP' b : ehom (hmqv_m t_b X_b P_a) 0 (log b P_b').
+  by apply: indep_log_hmqv_m; lia.
 have eB : hmqv_m t_b X_b P_a = hmqv_m t_b X_b' P_a'.
   case: (decide (hmqv_m t_b X_b P_a = hmqv_m t_b X_b' P_a')) => // nB.
   case: nP; apply: (hmqv_K_peer tab hP _ eK) => b.
-  apply: deg_log_hmqv_K.
+  apply: indep_log_hmqv_K.
   - exact: not_eq_sym (nAB _ _ _ _).
   - exact: nB.
-  - by apply: deg_log_hmqv_m; lia.
+  - by apply: indep_log_hmqv_m; lia.
   - exact: hP'.
 case/hmqv_m_inj: (eB) => _ [eXb ePa]; subst X_b' P_a'.
-(* The parts of degree 1 in [m_b]. *)
+(* Compare the linear parts in [m_b]. *)
 have part b :
     emul (emul (log b P_b) {[+ hmqv_m t_b X_b P_a +]})
       (hmqv_s (hmqv_m t_a X_a P_b) p_a x_a)
     = emul (emul (log b P_b') {[+ hmqv_m t_b X_b P_a +]})
         (hmqv_s (hmqv_m t_a X_a' P_b') p_a' x_a').
-  have hX := deg_log_hmqv_m (tsize_hmqv_m_lt t_b X_b P_a) b.
-  have hσ1 := deg_hmqv_s_ne p_a x_a (not_eq_sym (nAB X_a P_b X_b P_a)).
-  have hσ2 := deg_hmqv_s_ne p_a' x_a' (not_eq_sym (nAB X_a' P_b' X_b P_a)).
+  have hX := indep_log_hmqv_m (tsize_hmqv_m_lt t_b X_b P_a) b.
+  have hσ1 := indep_hmqv_s_ne p_a x_a (not_eq_sym (nAB X_a P_b X_b P_a)).
+  have hσ2 := indep_hmqv_s_ne p_a' x_a' (not_eq_sym (nAB X_a' P_b' X_b P_a)).
   have hB :
-      deg (hmqv_m t_b X_b P_a) {[+ hmqv_m t_b X_b P_a +]} ⊑ Some (1, 1)%Z.
-    by rewrite deg_singleton count_hmqv_m_diag.
-  apply: (deg_split (h := hmqv_m t_b X_b P_a) (a := 0%Z) (b := 1%Z)
+      ehom (hmqv_m t_b X_b P_a) 1 {[+ hmqv_m t_b X_b P_a +]}.
+    by rewrite ehom_singleton count_hmqv_m_diag.
+  apply: (ehom_split (h := hmqv_m t_b X_b P_a) (a := 0%Z) (b := 1%Z)
     (s1 := emul (log b X_b) (hmqv_s (hmqv_m t_a X_a P_b) p_a x_a))
     (r1 := emul (log b X_b) (hmqv_s (hmqv_m t_a X_a' P_b') p_a' x_a'))).
-  - exact: deg_le_emul hX hσ1.
-  - exact: deg_le_emul hX hσ2.
-  - exact: deg_le_emul (deg_le_emul (hP b) hB) hσ1.
-  - exact: deg_le_emul (deg_le_emul (hP' b) hB) hσ2.
+  - exact: ehom_emul hX hσ1.
+  - exact: ehom_emul hX hσ2.
+  - exact: ehom_emul (ehom_emul (hP b) hB) hσ1.
+  - exact: ehom_emul (ehom_emul (hP' b) hB) hσ2.
   - by [].
   - move/(f_equal (log b)): eK.
     by rewrite !log_hmqv_K !log_hmqv_Y !emul_disj_union_l.
-(* Their degrees in the larger of [m_a] and [m_a']. *)
+(* Compare the linear coefficients in the larger of [m_a] and [m_a']. *)
 have key X P X' P' (p x p' x' : nonce) Q Q' :
-    hmqv_m t_a X P ≠ hmqv_m t_a X' P' → tsize Q' < tsize (hmqv_m t_a X P) →
+    hmqv_m t_a X P ≠ hmqv_m t_a X' P' →
+    tsize Q < tsize (hmqv_m t_a X P) → tsize Q' < tsize (hmqv_m t_a X P) →
     (∀ b, emul (emul (log b Q) {[+ hmqv_m t_b X_b P_a +]})
             (hmqv_s (hmqv_m t_a X P) p x)
           = emul (emul (log b Q') {[+ hmqv_m t_b X_b P_a +]})
               (hmqv_s (hmqv_m t_a X' P') p' x')) →
     Q = TGMul ∅.
-  move=> nA lQ' E; apply: log_eq0 => b.
+  move=> nA lQ lQ' E; apply: log_eq0 => b.
+  have hQ R : tsize R < tsize (hmqv_m t_a X P) →
+      ehom (hmqv_m t_a X P) 0 (emul (log b R) {[+ hmqv_m t_b X_b P_a +]}).
+    move=> lt; apply: (ehom_emul (indep_log_hmqv_m lt b)).
+    by rewrite ehom_singleton (count_hmqv_m_neq (nAB _ _ _ _)).
   apply: (emul1_eq0 (e := hmqv_m t_b X_b P_a)).
-  apply: (deg_emul_point (k := 0%Z) (deg_hmqv_s t_a X P p x)); first lia.
-  have hQ : deg (hmqv_m t_a X P)
-      (emul (log b Q') {[+ hmqv_m t_b X_b P_a +]}) ⊑ Some (0, 0)%Z.
-    apply: (deg_le_emul (deg_log_hmqv_m lQ' b)).
-    by rewrite deg_singleton (count_hmqv_m_neq (nAB _ _ _ _)).
-  by rewrite E; exact: deg_le_emul hQ (deg_hmqv_s_ne _ _ nA).
+  apply: (ehom_binomial_const (hQ _ lQ)
+    (ehom_emul (hQ _ lQ') (indep_hmqv_s_ne _ _ nA))
+    (count_hmqv_m_nonce _ _ _ _) _ (E b)).
+  by rewrite count_hmqv_m_e count_hmqv_m_diag.
 have eA : hmqv_m t_a X_a P_b = hmqv_m t_a X_a' P_b'.
   case: (decide (hmqv_m t_a X_a P_b = hmqv_m t_a X_a' P_b')) => // nA.
   case: (Nat.le_ge_cases (tsize (hmqv_m t_a X_a' P_b'))
                          (tsize (hmqv_m t_a X_a P_b))) => le.
-  - case: nP; apply: (key _ _ _ _ p_a x_a p_a' x_a' P_b P_b' nA _ part).
-    lia.
+  - case: nP; apply: (key _ _ _ _ p_a x_a p_a' x_a' P_b P_b' nA _ _ part); lia.
   - case: nP'.
-    apply: (key _ _ _ _ p_a' x_a' p_a x_a P_b' P_b (not_eq_sym nA)); first lia.
+    apply: (key _ _ _ _ p_a' x_a' p_a x_a P_b' P_b (not_eq_sym nA)); try lia.
     by move=> b; rewrite part.
 by case/hmqv_m_inj: eA => _ [-> ->].
 Qed.
@@ -797,7 +808,7 @@ Qed.
     public keys [P] and [X] are of the form [g^p] and [g^x], but it cannot say
     the same about the other party in general.  Thus, if Bob wants to prove some
     message predicate involving the session (e.g., for the HMQV authenticator
-    hash), all that it say is that that session key was computed using his
+    hash), all it can say is that that session key was computed using his
     private keys and Alice's potentially ill-formed public keys.  When Alice
     receives this message, her perspective is the opposite: she knows that the
     session key was computed using her private keys and Bob's potentially
@@ -807,11 +818,12 @@ Qed.
     The proof compares logarithms, as for [hmqv_K_inj].  The multipliers [m_a]
     and [m_b] of the initiator's key have counterparts [m_a'] and [m_b'] in the
     responder's key, computed with the same tags.  A multiplier that equals its
-    counterpart makes the keys it hashes well formed, so their logarithms have
-    degree 0 in every other multiplier.  The other key thus has degree 0 in
-    the largest multiplier that differs from its counterpart, which forces a
-    key to [1]: the initiator's own key if it is [m_a], its claimed peer key
-    [P_b] if it is [m_b] ([hmqv_K_cross_max]). *)
+    counterpart makes the keys it hashes well formed, so their logarithms
+    are independent of every multiplier. Choose the largest unmatched
+    multiplier: all public-input coefficients are independent of it, but
+    its linear coefficient occurs on only one side. That forces a key to
+    [1]: the session key if it is [m_a], its claimed peer key [P_b] if it is
+    [m_b] ([hmqv_K_cross_max]). *)
 
 #[local] Lemma hmqv_K_cross_max t_a t_b (p_a x_a p_b x_b : nonce)
     P_b X_b Q_a Y_a h :
@@ -833,26 +845,32 @@ Qed.
 Proof.
 move=> gNX gNm tab nP nK eK hA hB hh.
 have tags X X' Q Q' : hmqv_m t_a X Q ≠ hmqv_m t_b X' Q' by case/hmqv_m_inj.
-have honest b (n : nonce) : deg h (log b (TExp g n)) ⊑ Some (0, 0)%Z.
-  apply: deg_log_TExp_g gNX gNm _.
+have honest b (n : nonce) : ehom h 0 (log b (TExp g n)).
+  apply: indep_log_TExp_g gNX gNm _.
   by case: hh => [[-> _]|[-> _]]; exact: count_hmqv_m_nonce.
-have fP b : deg h (log b P_b) ⊑ Some (0, 0)%Z.
+have fX b : ehom h 0 (log b X_b).
+  case: (hB) => [/hmqv_m_inj [_ [-> _]]|[lB _]]; first exact: honest.
+  apply: ehom_log_small _ b.
+  by have := tsize_hmqv_m_lt t_b X_b (TExp g p_a); lia.
+have fP b : ehom h 0 (log b P_b).
   case: (hA) => [/hmqv_m_inj [_ [_ ->]]|[lA _]]; first exact: honest.
-  apply: deg_log_small _ b.
+  apply: ehom_log_small _ b.
   by have := tsize_hmqv_m_lt2 t_a (TExp g x_a) P_b; lia.
-have fY b : deg h (log b Y_a) ⊑ Some (0, 0)%Z.
+have fY b : ehom h 0 (log b Y_a).
   case: (hA) => [/hmqv_m_inj [_ [<- _]]|[_ lA']]; first exact: honest.
-  apply: deg_log_small _ b.
+  apply: ehom_log_small _ b.
   by have := tsize_hmqv_m_lt t_a Y_a (TExp g p_b); lia.
-have fQ b : deg h (log b Q_a) ⊑ Some (0, 0)%Z.
+have fQ b : ehom h 0 (log b Q_a).
   case: (hB) => [/hmqv_m_inj [_ [_ <-]]|[_ lB']]; first exact: honest.
-  apply: deg_log_small _ b.
+  apply: ehom_log_small _ b.
   by have := tsize_hmqv_m_lt2 t_b (TExp g x_b) Q_a; lia.
 case: hh => [[eh nA]|[eh nB]]; subst h.
-- case: nK; apply: (hmqv_K_own _ eK) => b.
-  exact: deg_log_hmqv_K _ _ (tags _ _ _ _) nA (fY b) (fQ b).
+- case: nK; apply: (hmqv_K_own _ _ eK) => b.
+  + apply: indep_log_hmqv_Y (fX b) (fP b) _.
+    exact: count_hmqv_m_neq (tags _ _ _ _).
+  + exact: indep_log_hmqv_K _ _ (tags _ _ _ _) nA (fY b) (fQ b).
 - case: nP; apply: (hmqv_K_peer tab fP _ eK) => b.
-  exact: deg_log_hmqv_K _ _ nB (not_eq_sym (tags _ _ _ _)) (fY b) (fQ b).
+  exact: indep_log_hmqv_K _ _ nB (not_eq_sym (tags _ _ _ _)) (fY b) (fQ b).
 Qed.
 
 Lemma hmqv_K_inj' t_a t_b (p_a x_a p_b x_b : nonce) P_b X_b Q_a Y_a :
@@ -914,7 +932,7 @@ Qed.
     learns that [P] is its own long-term key.
 
     Freshness plays the role of size: the logarithms of [P] and [X_a'] have
-    degree 0 in every atom with the subterm [x_b'] ([deg_log_fresh]).  The
+    degree 0 in every atom with the subterm [x_b'] ([ehom_log_fresh]).  The
     logarithm of the responder's key is [y⋅x_b' + y⋅m_b'⋅p_b'], where [y] is
     the logarithm of its base, and each summand has a single degree in such
     an atom, other than that of the initiator's static-static monomial
@@ -983,10 +1001,10 @@ have : SMS.count μ (log g (hmqv_K t_a t_b p_a x_a (TExp g p_a) (TExp g x_a)
 (* The logarithms of the responder's base have degree 0 in every atom with
    the subterm [x_b'] but [m_a']. *)
 have hY h : subterm (TNonce x_b') h → h ≠ m_a' →
-    deg h (log g (hmqv_Y t_a (TExp g p_b') P X_a')) ⊑ Some (0, 0)%Z.
-  move=> x_h n_h; apply: deg_log_hmqv_Y.
-  - exact: deg_log_fresh x_h fr_Xa g.
-  - exact: deg_log_fresh x_h fr_P g.
+    ehom h 0 (log g (hmqv_Y t_a (TExp g p_b') P X_a')).
+  move=> x_h n_h; apply: indep_log_hmqv_Y.
+  - exact: ehom_log_fresh x_h fr_Xa g.
+  - exact: ehom_log_fresh x_h fr_P g.
   - exact: count_atom_ne (hmqv_m_Nmul _ _ _) n_h.
 have [h1 [x_h1 [n_h1 c_h1]]] : ∃ h1, subterm (TNonce x_b') h1 ∧ h1 ≠ m_a' ∧
     count h1 μ ≠ count h1 (TNonce x_b').
@@ -1009,14 +1027,14 @@ have [h1 [x_h1 [n_h1 c_h1]]] : ∃ h1, subterm (TNonce x_b') h1 ∧ h1 ≠ m_a' 
   rewrite cμ (cxn _ ne_b) (cxn _ ne_a) /m_b /m_a !cxm count_atom_diag //.
 have x_mb' : subterm (TNonce x_b') m_b'.
   by rewrite /m_b'; apply: subterm_hmqv_m; left; exact: subterm_TExp_g.
-have sh h e : deg h {[+ e +]} ⊑ Some (count h e, count h e).
-  by rewrite deg_singleton.
+have sh h e : ehom h (count h e) {[+ e +]}.
+  by rewrite ehom_singleton.
 have z1 : SMS.count μ (emul (log g (hmqv_Y t_a (TExp g p_b') P X_a'))
                          {[+ TNonce x_b' +]}) = 0%Z.
-  by apply: (deg_count (deg_le_emul (hY _ x_h1 n_h1) (sh _ _))); lia.
+  by apply: (ehom_count (ehom_emul (hY _ x_h1 n_h1) (sh _ _))); lia.
 have z2 : SMS.count μ (emul (log g (hmqv_Y t_a (TExp g p_b') P X_a'))
                          {[+ TMul {[+ m_b'; TNonce p_b' +]} +]}) = 0%Z.
-  apply: (deg_count (deg_le_emul (hY _ x_mb' (not_eq_sym (tags _ _ _ _)))
+  apply: (ehom_count (ehom_emul (hY _ x_mb' (not_eq_sym (tags _ _ _ _)))
                                  (sh _ _))).
   rewrite count_hmqv_m_e count_hmqv_m_diag cμ cb'b cb'a !cN; auto; lia.
 rewrite eK log_hmqv_K /hmqv_s emul_disj_union_r SMS.count_disj_union.

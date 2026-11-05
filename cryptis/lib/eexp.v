@@ -24,25 +24,20 @@ Unset Printing Implicit Defensive.
     [log_epow]), and they determine a term ([log_inj]); in particular, a term
     other than [1] has a logarithm other than [0] ([log_neq0]).
 
-    An equation between terms thus becomes an equation between their
-    logarithms, which we analyze with degrees.  The degree [deg h s] of [s] in
-    an atom [h] is the interval spanned by the numbers of occurrences of [h]
-    in the monomials of [s], or [None] if [s] is [0].  Degrees add up when
-    multiplying ([deg_emul]), since extended exponents have no zero divisors
-    ([emul_neq0]).  For the same reason, nonzero factors cancel ([emul_injr]),
-    so raising to a nonzero sum is injective in the base ([epow_injl]).
-    Adding two sums joins their degrees when their bounds differ, since
-    nothing cancels then ([deg_disj_union_apart]).  Three facts make degrees
-    useful:
+    Equations between terms become equations between their logarithms.
+    [ehom h k s] says that every monomial of [s] has exactly [k] occurrences
+    of [h]; [k = 0] means independence of [h]. Parts with different counts
+    can be compared separately ([ehom_split]). A term's logarithms are
+    independent of atoms too large to occur in its exponents, or containing
+    a fresh subterm ([ehom_log_small], [ehom_log_fresh]).
 
-    - The logarithms of a term have degree 0 in any atom at least as big as
-      the term ([deg_log_small]), and in any atom with a subterm that the term
-      lacks ([deg_log_fresh]).
-
-    - Parts of different degrees can be compared separately ([deg_split]).
-
-    - Leading parts do not cancel: two different shifts of a nonzero sum cannot
-      agree up to terms of a single degree ([emul_lead]). *)
+    For HMQV, the remaining algebraic step is [emul_linear]: an independent
+    remainder cannot be a multiple of [h*u-v]. Substituting [h := v/u]
+    annihilates the factor, and a highest monomial proves cancellation.
+    The same finite-support argument gives cancellation of a binomial
+    ([emul_binomial_eq0]). General products also have no zero divisors
+    ([emul_neq0]), so a nonzero sum can be cancelled ([emul_injr]) and
+    raising to it is injective in the base ([epow_injl]). *)
 
 Abbreviation eexp := tsms.
 
@@ -241,230 +236,194 @@ case: (bool_decide (u = g)); last exact: emul_empty_l.
 by rewrite emul_singleton TMul_unit_l.
 Qed.
 
-(** ** Degrees
+(** ** Homogeneous parts and substitution
 
-    Degrees are intervals of integers: [Some (a, b)] stands for the integers
-    from [a] to [b], and [None] for the empty interval.  They are ordered by
-    inclusion ([⊑]), joined by their convex hull ([⊔]) and added pointwise
-    ([+] in [deg_scope]). *)
+    A homogeneous sum: every monomial has exactly [k] occurrences of [h].
+    In particular, [ehom h 0 s] says that [s] is independent of [h]. *)
+Definition ehom h k s := ∀ m, m ∈ s → count h m = k.
 
-#[export] Instance deg_sqsubseteq : SqSubsetEq (option (Z * Z)) := λ I J,
-  match I, J with
-  | None, _ => True
-  | Some _, None => False
-  | Some (a1, b1), Some (a2, b2) => (a2 ≤ a1 ∧ b1 ≤ b2)%Z
-  end.
+Lemma ehom_empty h k : ehom h k ∅.
+Proof. by move=> m /SMS.elem_of_count; rewrite SMS.count_empty. Qed.
 
-#[export] Instance deg_join : Join (option (Z * Z)) := λ I J,
-  match I, J with
-  | None, _ => J
-  | _, None => I
-  | Some (a1, b1), Some (a2, b2) => Some (Z.min a1 a2, Z.max b1 b2)
-  end.
-
-Definition dadd (I J : option (Z * Z)) : option (Z * Z) :=
-  match I, J with
-  | Some (a1, b1), Some (a2, b2) => Some (a1 + a2, b1 + b2)%Z
-  | _, _ => None
-  end.
-
-Declare Scope deg_scope.
-Delimit Scope deg_scope with deg.
-Infix "+" := dadd : deg_scope.
-
-Lemma Some_sqsubseteq a1 b1 a2 b2 :
-  Some (a1, b1) ⊑ Some (a2, b2) ↔ (a2 ≤ a1 ∧ b1 ≤ b2)%Z.
-Proof. done. Qed.
-
-#[export] Instance deg_sqsubseteq_preorder : PreOrder (⊑@{option (Z * Z)}).
+Lemma ehom_singleton h k e : ehom h k {[+ e +]} ↔ count h e = k.
 Proof.
-split.
-- by case=> [[a b]|] //; rewrite Some_sqsubseteq; lia.
-- case=> [[a1 b1]|] [[a2 b2]|] [[a3 b3]|] //=; rewrite !Some_sqsubseteq; lia.
+split; first by move=> H; apply: H; apply/SMS.elem_of_singleton.
+by move=> he m /SMS.elem_of_singleton ->.
 Qed.
 
-Lemma join_Some a1 b1 a2 b2 :
-  Some (a1, b1) ⊔ Some (a2, b2) = Some (Z.min a1 a2, Z.max b1 b2).
-Proof. done. Qed.
+Lemma ehom_add h k s r : ehom h k s → ehom h k r → ehom h k (s ⊎ r).
+Proof. by move=> hs hr m /SMS.elem_of_disj_union [/hs|/hr]. Qed.
 
-Lemma join_None_r i : i ⊔ None = i.
-Proof. by case: i => [[]|]. Qed.
-
-#[local] Fixpoint ldeg h (l : list term) : option (Z * Z) :=
-  if l is m :: l then Some (count h m, count h m) ⊔ ldeg h l else None.
-
-(** The degree of [s] in [h]: the interval spanned by [count h m] over the
-    monomials [m] of [s]. *)
-Definition deg h s : option (Z * Z) := ldeg h (elements s).
-
-#[local] Lemma ldeg_spec h l :
-  match ldeg h l with
-  | Some (a, b) =>
-      (∀ m, m ∈ l → a ≤ count h m ≤ b)%Z ∧
-      (∃ m, m ∈ l ∧ count h m = a) ∧ (∃ m, m ∈ l ∧ count h m = b)
-  | None => l = []
-  end.
+Lemma ehom_emul h a b s r :
+  ehom h a s → ehom h b r → ehom h (a + b) (emul s r).
 Proof.
-elim: l => [|m l IH] //=; move: IH.
-case: (ldeg h l) => [[a b] [hb [[m1 [m1_l e1]] [m2 [m2_l e2]]]]|->];
-  rewrite ?join_Some ?join_None_r /=.
-- split; [|split].
-  + by move=> m' /elem_of_cons [->|/hb]; lia.
-  + case: (Z.le_ge_cases (count h m) a) => ?.
-      by exists m; split; [left|lia].
-    by exists m1; split; [right|lia].
-  + case: (Z.le_ge_cases b (count h m)) => ?.
-      by exists m; split; [left|lia].
-    by exists m2; split; [right|lia].
-- split; [|split]; try by exists m; split; [left|].
-  by move=> m' /list_elem_of_singleton ->; lia.
+move=> hs hr m /SMS.elem_of_bind [e [e_r /SMS.elem_of_map [m' [-> m'_s]]]].
+by rewrite count_TMul2 (hs _ m'_s) (hr _ e_r).
 Qed.
 
-#[local] Lemma deg_spec h s :
-  match deg h s with
-  | Some (a, b) =>
-      (∀ m, m ∈ s → a ≤ count h m ≤ b)%Z ∧
-      (∃ m, m ∈ s ∧ count h m = a) ∧ (∃ m, m ∈ s ∧ count h m = b)
-  | None => s = ∅
-  end.
-Proof.
-rewrite /deg; pose proof (ldeg_spec h (elements s)) as H.
-destruct (ldeg h (elements s)) as [[a b]|]; first exact H.
-exact: SMS.elements_empty_inv H.
-Qed.
+Lemma ehom_count h k s m : ehom h k s → count h m ≠ k → SMS.count m s = 0%Z.
+Proof. by move=> hs ne; apply: SMS.not_elem_of_count => /hs. Qed.
 
-Lemma deg_le h s a b :
-  deg h s ⊑ Some (a, b) ↔ ∀ m, m ∈ s → (a ≤ count h m ≤ b)%Z.
-Proof.
-have := deg_spec h s.
-case: (deg h s) => [[a' b'] [hb [[m1 [m1_s e1]] [m2 [m2_s e2]]]]|->].
-- rewrite Some_sqsubseteq; split; first by move=> ? m /hb; lia.
-  by move=> H; have := H _ m1_s; have := H _ m2_s; lia.
-- split=> // _ m /SMS.elem_of_count; rewrite SMS.count_empty.
-  by move=> /(_ eq_refl).
-Qed.
-
-Lemma deg_eq_None h s : deg h s = None ↔ s = ∅.
-Proof.
-split=> [|->]; last by rewrite /deg SMS.elements_empty.
-by have := deg_spec h s; case: (deg h s) => [[a b] _|].
-Qed.
-
-Lemma deg_empty h : deg h ∅ = None.
-Proof. by apply/deg_eq_None. Qed.
-
-Lemma deg_Some h s a b :
-  deg h s = Some (a, b) ↔
-  (∀ m, m ∈ s → a ≤ count h m ≤ b)%Z ∧
-  (∃ m, m ∈ s ∧ count h m = a) ∧ (∃ m, m ∈ s ∧ count h m = b).
-Proof.
-split=> [E|[hb [[m1 [m1_s e1]] [m2 [m2_s e2]]]]].
-  by have := deg_spec h s; rewrite E.
-have := deg_spec h s.
-case: (deg h s) => [[a' b'] [hb' [[m3 [m3_s e3]] [m4 [m4_s e4]]]]|E].
-- have := hb _ m3_s; have := hb _ m4_s; have := hb' _ m1_s.
-  have := hb' _ m2_s; move=> ? ? ? ?; do 2 f_equal; lia.
-- move: m1_s; rewrite E SMS.elem_of_count SMS.count_empty.
-  by move=> /(_ eq_refl).
-Qed.
-
-Lemma deg_bounds h s a b : deg h s = Some (a, b) → (a ≤ b)%Z.
-Proof. by case/deg_Some => hb [[m [m_s <-]] _]; have := hb _ m_s; lia. Qed.
-
-Lemma deg_singleton h e : deg h {[+ e +]} = Some (count h e, count h e).
-Proof. by rewrite /deg SMS.elements_singleton /= ?join_None_r. Qed.
-
-(* Unfolding [deg] while unifying computes over the elements of sums. *)
-#[global] Opaque deg.
-
-Lemma deg_count h s a b m :
-  deg h s ⊑ Some (a, b) → (count h m < a ∨ b < count h m)%Z →
-  SMS.count m s = 0%Z.
-Proof. by move=> /deg_le hs out; apply: SMS.not_elem_of_count => /hs; lia. Qed.
-
-#[local] Lemma deg_ext h s r : (∀ m, m ∈ s ↔ m ∈ r) → deg h s = deg h r.
-Proof.
-move=> sr; have := deg_spec h s; have := deg_spec h r.
-case: (deg h r) => [[a b] [hb [[m1 [m1_r e1]] [m2 [m2_r e2]]]] _|r0].
-  apply/deg_Some; split; [|split].
-  - by move=> m /sr /hb.
-  - by exists m1; rewrite sr.
-  - by exists m2; rewrite sr.
-case: (deg h s) => [[a b] [_ [[m [m_s _]] _]]|//].
-by move: m_s; rewrite sr r0 SMS.elem_of_count SMS.count_empty => /(_ eq_refl).
-Qed.
-
-Lemma deg_inv h s : deg h (SMS.inv s) = deg h s.
-Proof.
-apply: deg_ext => m; rewrite !SMS.elem_of_count SMS.count_inv.
-by split; lia.
-Qed.
-
-(** *** Sums *)
-
-#[local] Lemma elem_of_disj_union_l m s r : m ∈ s → m ∉ r → m ∈ s ⊎ r.
-Proof.
-move=> m_s m_r; apply/SMS.elem_of_count; rewrite SMS.count_disj_union.
-by rewrite (SMS.not_elem_of_count _ _ m_r) Z.add_0_r -SMS.elem_of_count.
-Qed.
-
-Lemma deg_le_disj_union h s r a b :
-  deg h s ⊑ Some (a, b) → deg h r ⊑ Some (a, b) →
-  deg h (s ⊎ r) ⊑ Some (a, b).
-Proof.
-by rewrite !deg_le => hs hr m /SMS.elem_of_disj_union [/hs|/hr].
-Qed.
-
-(** No cancellation occurs when the bounds of the two sums differ. *)
-Lemma deg_disj_union_apart h s r :
-  (∀ a1 b1 a2 b2, deg h s = Some (a1, b1) → deg h r = Some (a2, b2) →
-     a1 ≠ a2 ∧ b1 ≠ b2) →
-  deg h (s ⊎ r) = deg h s ⊔ deg h r.
-Proof.
-move=> apart.
-case Es: (deg h s) => [[a1 b1]|]; last first.
-  by move/deg_eq_None: Es => ->; rewrite (left_id ∅ (⊎)).
-case Er: (deg h r) => [[a2 b2]|]; last first.
-  by move/deg_eq_None: Er => ->; rewrite (right_id ∅ (⊎)) Es join_None_r.
-have [na nb] := apart _ _ _ _ Es Er.
-move/deg_Some: Es => [hs [[m1 [m1_s e1]] [m2 [m2_s e2]]]].
-move/deg_Some: Er => [hr [[m3 [m3_r e3]] [m4 [m4_r e4]]]].
-rewrite join_Some; apply/deg_Some; split; [|split].
-- by move=> m /SMS.elem_of_disj_union [/hs|/hr]; lia.
-- case: (Z.lt_total a1 a2) => [lt|[//|lt]].
-    exists m1; split; last lia.
-    by apply: elem_of_disj_union_l m1_s _ => /hr; lia.
-  exists m3; split; last lia.
-  by rewrite (comm (⊎)); apply: elem_of_disj_union_l m3_r _ => /hs; lia.
-- case: (Z.lt_total b1 b2) => [lt|[//|lt]].
-    exists m4; split; last lia.
-    by rewrite (comm (⊎)); apply: elem_of_disj_union_l m4_r _ => /hs; lia.
-  exists m2; split; last lia.
-  by apply: elem_of_disj_union_l m2_s _ => /hr; lia.
-Qed.
-
-Lemma deg_split h a b s1 s2 r1 r2 :
-  deg h s1 ⊑ Some (a, a) → deg h r1 ⊑ Some (a, a) →
-  deg h s2 ⊑ Some (b, b) → deg h r2 ⊑ Some (b, b) → a ≠ b →
+Lemma ehom_split h a b s1 s2 r1 r2 :
+  ehom h a s1 → ehom h a r1 → ehom h b s2 → ehom h b r2 → a ≠ b →
   s1 ⊎ s2 = r1 ⊎ r2 → s2 = r2.
 Proof.
 move=> hs1 hr1 hs2 hr2 ab E; apply: SMS.count_inj => m.
 move/(f_equal (SMS.count m)): E; rewrite !SMS.count_disj_union.
 case: (decide (count h m = b)) => e.
-- by rewrite (deg_count hs1) ?(deg_count hr1); lia.
-- by rewrite (deg_count hs2) ?(deg_count hr2); lia.
+- by rewrite (ehom_count hs1) ?(ehom_count hr1); lia.
+- by rewrite (ehom_count hs2) ?(ehom_count hr2); lia.
 Qed.
 
-(** *** Products *)
-
-Lemma deg_le_emul h s r a1 b1 a2 b2 :
-  deg h s ⊑ Some (a1, b1) → deg h r ⊑ Some (a2, b2) →
-  deg h (emul s r) ⊑ Some (a1 + a2, b1 + b2)%Z.
+Lemma ehom_binomial_const h s r e0 e1 :
+  ehom h 0 s → ehom h 0 r → count h e0 = 0%Z → count h e1 ≠ 0%Z →
+  emul s {[+ e0; e1 +]} = r → s = ∅.
 Proof.
-rewrite !deg_le => hs hr m.
-case/SMS.elem_of_bind => e [e_r /SMS.elem_of_map [m' [-> m'_s]]].
-by rewrite count_TMul2; have := hs _ m'_s; have := hr _ e_r; lia.
+move=> hs hr he0 he1 E; apply: (emul1_eq0 (e := e1)).
+apply: (ehom_split (h := h) (a := 0%Z) (b := count h e1)
+  (s1 := emul s {[+ e0 +]}) (r1 := r)).
+- apply: (ehom_emul hs); by rewrite ehom_singleton.
+- exact: hr.
+- apply: (ehom_emul hs); by rewrite ehom_singleton.
+- exact: ehom_empty.
+- congruence.
+- by rewrite -emul_disj_union_r E (right_id ∅ (⊎)).
 Qed.
+
+Lemma ehom_log h k g t :
+  (∀ u, u ∈ gfactors t → count h (expo u) = k) → ehom h k (log g t).
+Proof.
+move=> H m /SMS.elem_of_bind [u [u_t]].
+case: (bool_decide (base u = g));
+  last by rewrite SMS.elem_of_count SMS.count_empty.
+by move=> /SMS.elem_of_singleton ->; exact: H.
+Qed.
+
+Lemma ehom_log_small h t : tsize t ≤ tsize h → ∀ g, ehom h 0 (log g t).
+Proof.
+move=> le g; apply: ehom_log => u u_t.
+exact: count_expo_gfactors_big u_t le.
+Qed.
+
+Arguments ehom_log_small {h t} _ g.
+
+Lemma ehom_log_fresh n h t :
+  subterm n h → ¬ subterm n t → ∀ g, ehom h 0 (log g t).
+Proof.
+move=> n_h n_t g; apply: ehom_log => u u_t.
+apply: not_elem_of_count => h_u; apply: n_t.
+apply: (subterm_gfactors u_t); transitivity h => //.
+exact: subterm_exps h_u.
+Qed.
+
+Arguments ehom_log_fresh {n h t} _ _ g.
+
+(** A highest monomial survives the larger of two shifts. *)
+Lemma emul1_max h s :
+  (∃ m, m ∈ s ∧ ∀ e1 e2, (count h e1 < count h e2)%Z →
+    SMS.count (TMul {[+ m; e2 +]}) (emul s {[+ e1 +]}) = 0%Z) ∨ s = ∅.
+Proof.
+case: (SMS.max_or_empty (count h) s) => [[m [m_s hmax]]|->]; last by right.
+left; exists m; split=> // e1 e2 lt.
+rewrite count_emul1; apply: SMS.not_elem_of_count => /hmax.
+by rewrite !count_TMul2 count_TInv; lia.
+Qed.
+
+Lemma emul_binomial_eq0 h s e1 e2 :
+  count h e1 ≠ count h e2 → emul s {[+ e1; e2 +]} = ∅ → s = ∅.
+Proof.
+move=> ne E; case: (emul1_max h s) => [[m [m_s hmax]]|//].
+have nz : SMS.count m s ≠ 0%Z by apply/SMS.elem_of_count.
+rewrite emul_disj_union_r in E.
+case: (Z.lt_total (count h e1) (count h e2)) => [lt|[//|lt]].
+- move/(f_equal (SMS.count (TMul {[+ m; e2 +]}))): E.
+  rewrite SMS.count_disj_union (hmax _ _ lt) count_emul1 TMulK SMS.count_empty; lia.
+- move/(f_equal (SMS.count (TMul {[+ m; e1 +]}))): E.
+  rewrite SMS.count_disj_union (hmax _ _ lt) count_emul1 TMulK SMS.count_empty; lia.
+Qed.
+
+Lemma emul1_apart h s e1 e2 :
+  count h e1 ≠ count h e2 → emul s {[+ e1 +]} = emul s {[+ e2 +]} → s = ∅.
+Proof.
+move=> ne E; case: (emul1_max h s) => [[m [m_s hmax]]|//].
+have nz : SMS.count m s ≠ 0%Z by apply/SMS.elem_of_count.
+case: (Z.lt_total (count h e1) (count h e2)) => [lt|[//|lt]].
+- move/(f_equal (SMS.count (TMul {[+ m; e2 +]}))): E.
+  rewrite (hmax _ _ lt) count_emul1 TMulK; lia.
+- move/(f_equal (SMS.count (TMul {[+ m; e1 +]}))): E.
+  rewrite (hmax _ _ lt) count_emul1 TMulK; lia.
+Qed.
+
+(** Substitute an invertible monomial for one atom. Other atoms, including
+    hashes containing that atom in their inputs, remain unchanged. *)
+Definition msubst h u m :=
+  TMul (SMS.map (λ a, if bool_decide (a = h) then u else a) (factors m)).
+
+Definition esubst h u s := SMS.map (msubst h u) s.
+
+Lemma msubst_mul h u e1 e2 :
+  msubst h u (TMul {[+ e1; e2 +]}) = TMul {[+ msubst h u e1; msubst h u e2 +]}.
+Proof.
+by rewrite /msubst factors_TMul SMS.bind_disj_union !SMS.bind_singleton
+  SMS.map_disj_union TMul_disj_union.
+Qed.
+
+Lemma msubst_diag h u : negb (is_mul h) → msubst h u h = u.
+Proof.
+move=> Nh; rewrite /msubst factors_Nmul // SMS.map_singleton.
+by rewrite bool_decide_eq_true_2 // TMul_singleton.
+Qed.
+
+Lemma msubst_indep h u m : count h m = 0%Z → msubst h u m = m.
+Proof.
+move=> hm; rewrite /msubst -[RHS]factorsK; congr TMul.
+apply: SMS.map_id_ext => a a_m; rewrite bool_decide_eq_false_2 // => e; subst a.
+by move: a_m; rewrite -count_neq0 hm.
+Qed.
+
+Lemma esubst_indep h u s : ehom h 0 s → esubst h u s = s.
+Proof. move=> hs; apply: SMS.map_id_ext => m /hs; exact: msubst_indep. Qed.
+
+Lemma esubst_add h u s r : esubst h u (s ⊎ r) = esubst h u s ⊎ esubst h u r.
+Proof. exact: SMS.map_disj_union. Qed.
+
+Lemma esubst_emul1 h u s e :
+  esubst h u (emul s {[+ e +]}) = emul (esubst h u s) {[+ msubst h u e +]}.
+Proof.
+rewrite /esubst !emul1 !SMS.map_map; apply: SMS.map_ext => m _.
+exact: msubst_mul.
+Qed.
+
+(** An [h]-independent difference cannot be a multiple of [h*u-v].
+    Substitute [h := v/u] to equate the remainders, then cancel the two
+    distinct shifts using their highest monomial. *)
+Lemma emul_linear h u v s r1 r2 :
+  negb (is_mul h) → count h u = 0%Z → count h v = 0%Z →
+  ehom h 0 r1 → ehom h 0 r2 →
+  r1 ⊎ emul s {[+ TMul {[+ h; u +]} +]} = r2 ⊎ emul s {[+ v +]} → s = ∅.
+Proof.
+move=> Nh hu hv hr1 hr2 E.
+set w := TMul {[+ v; TInv u +]}.
+have sub : msubst h w (TMul {[+ h; u +]}) = v.
+  rewrite msubst_mul msubst_diag // msubst_indep // /w.
+  exact: TMulKV.
+have er : r1 = r2.
+  have := f_equal (esubst h w) E.
+  rewrite !esubst_add !esubst_emul1 sub (msubst_indep _ hv)
+    (esubst_indep _ hr1) (esubst_indep _ hr2) => E'.
+  apply: SMS.count_inj => m; move/(f_equal (SMS.count m)): E'.
+  rewrite !SMS.count_disj_union; lia.
+apply: (emul1_apart (h := h) (e1 := TMul {[+ h; u +]}) (e2 := v)).
+- by rewrite count_TMul2 count_atom_diag // hu hv; lia.
+- apply: SMS.count_inj => m; move/(f_equal (SMS.count m)): E.
+  rewrite er !SMS.count_disj_union; lia.
+Qed.
+
+(** ** Cancellation of general products
+
+    A nonzero product has a surviving highest part in each atom. We only
+    select an actual monomial attaining the maximum; no degree intervals
+    are needed. *)
 
 #[local] Definition dpart h k s : eexp := SMS.filter (λ m, count h m = k) s.
 
@@ -579,16 +538,16 @@ elim: L s r => [|a L IH] s r hs hr ns nr.
   move=> /(f_equal (SMS.count (TMul {[+ m; e +]}))).
   rewrite count_emul_mono // SMS.count_empty.
   by move: m_s e_r; rewrite !SMS.elem_of_count; nia.
-have := deg_spec a r; have := deg_spec a s.
-case: (deg a s) => [[a1 b1]|//]; case: (deg a r) => [[a2 b2]|//].
-move=> [bs [_ [ms [ms_s ems]]]] [br [_ [mr [mr_r emr]]]] E.
-apply: (IH (dpart a b1 s) (dpart a b2 r)).
+case: (SMS.max_or_empty (count a) s) => [[ms [ms_s hsmax]]|//].
+case: (SMS.max_or_empty (count a) r) => [[mr [mr_r hrmax]]|//].
+move=> E.
+apply: (IH (dpart a (count a ms) s) (dpart a (count a mr) r)).
 - exact: agree_dpart.
 - exact: agree_dpart.
-- exact: dpart_neq0 ms_s ems.
-- exact: dpart_neq0 mr_r emr.
+- exact: dpart_neq0 ms_s eq_refl.
+- exact: dpart_neq0 mr_r eq_refl.
 rewrite -dpart_emul ?E ?dpart_empty //.
-by move=> m e /bs ? /br ?; lia.
+by move=> m e /hsmax ? /hrmax ?; lia.
 Qed.
 
 (** Extended exponents have no zero divisors. *)
@@ -620,88 +579,4 @@ Lemma epow_injl s t1 t2 : s ≠ ∅ → epow t1 s = epow t2 s → t1 = t2.
 Proof.
 move=> ns E; apply: log_inj => g; apply: (emul_injr ns).
 by rewrite !(emul_comm s) -!log_epow E.
-Qed.
-
-Lemma deg_emul h s r : deg h (emul s r) = (deg h s + deg h r)%deg.
-Proof.
-have := deg_spec h r; have := deg_spec h s.
-case: (deg h s) => [[a1 b1] Hs|->]; last by rewrite emul_empty_l deg_empty.
-case: (deg h r) => [[a2 b2] Hr|->]; last by rewrite emul_empty_r deg_empty.
-move: Hs Hr => [hs [[m1 [m1_s e1]] [m2 [m2_s e2]]]].
-move=> [hr [[m3 [m3_r e3]] [m4 [m4_r e4]]]] /=.
-have part a b : (∀ m e, m ∈ s → e ∈ r →
-                   count h m + count h e = a + b → count h e = b)%Z →
-    (∃ m, m ∈ s ∧ count h m = a) → (∃ e, e ∈ r ∧ count h e = b) →
-    ∃ m, m ∈ emul s r ∧ count h m = (a + b)%Z.
-  move=> uniq [m [m_s em]] [e [e_r ee]].
-  have /sms_witness [m' /elem_of_dpart [? ?]] :
-      dpart h (a + b) (emul s r) ≠ ∅.
-    rewrite dpart_emul //.
-    exact: emul_neq0 (dpart_neq0 m_s em) (dpart_neq0 e_r ee).
-  by exists m'.
-apply/deg_Some; split; [|split].
-- move=> m /SMS.elem_of_bind [e [e_r /SMS.elem_of_map [m' [-> m'_s]]]].
-  by rewrite count_TMul2; have := hs _ m'_s; have := hr _ e_r; lia.
-- apply: part; [|by exists m1|by exists m3].
-  by move=> m e /hs ? /hr ?; lia.
-- apply: part; [|by exists m2|by exists m4].
-  by move=> m e /hs ? /hr ?; lia.
-Qed.
-
-Lemma deg_emul_point h s r a b k :
-  deg h r = Some (a, b) → (a < b)%Z → deg h (emul s r) ⊑ Some (k, k) →
-  s = ∅.
-Proof.
-move=> Er lt; case Es: (deg h s) => [[a' b']|]; last by move/deg_eq_None: Es.
-rewrite deg_emul Es Er /= Some_sqsubseteq => - [? ?]; exfalso.
-by have := deg_bounds Es; lia.
-Qed.
-
-(** Leading parts do not cancel: two different shifts of a nonzero sum differ
-    by a sum of degrees spanning more than one integer. *)
-Lemma emul_lead h β e1 e2 r1 r2 k :
-  deg h r1 ⊑ Some (k, k) → deg h r2 ⊑ Some (k, k) →
-  count h e1 ≠ count h e2 →
-  r1 ⊎ emul β {[+ e1 +]} = r2 ⊎ emul β {[+ e2 +]} → β = ∅.
-Proof.
-move=> hr1 hr2 ne E.
-case Eβ: (deg h β) => [[a b]|]; last by move/deg_eq_None: Eβ.
-have ab := deg_bounds Eβ; exfalso.
-have E' : emul β {[+ e1 +]} ⊎ SMS.inv (emul β {[+ e2 +]}) = r2 ⊎ SMS.inv r1.
-  apply: SMS.count_inj => m; move/(f_equal (SMS.count m)): E.
-  rewrite !SMS.count_disj_union !SMS.count_inv; lia.
-have : deg h (r2 ⊎ SMS.inv r1) ⊑ Some (k, k).
-  by apply: deg_le_disj_union; rewrite ?deg_inv.
-rewrite -E' deg_disj_union_apart deg_inv !deg_emul Eβ !deg_singleton /=.
-  by rewrite ?join_Some ?Some_sqsubseteq; lia.
-move=> ? ? ? ?; rewrite ?deg_inv ?deg_emul ?Eβ ?deg_singleton /=.
-by move=> - [<- <-] [<- <-]; lia.
-Qed.
-
-(** *** Degrees of logarithms *)
-
-#[local] Lemma deg_log0 h g t :
-  (∀ u, u ∈ gfactors t → count h (expo u) = 0%Z) →
-  deg h (log g t) ⊑ Some (0, 0)%Z.
-Proof.
-move=> H; apply/deg_le => m /SMS.elem_of_bind [u [u_t]].
-case: (bool_decide (base u = g));
-  last by rewrite SMS.elem_of_count SMS.count_empty.
-by move=> /SMS.elem_of_singleton ->; rewrite H //; lia.
-Qed.
-
-Lemma deg_log_small h t :
-  tsize t ≤ tsize h → ∀ g, deg h (log g t) ⊑ Some (0, 0)%Z.
-Proof.
-move=> le g; apply: deg_log0 => u u_t.
-exact: count_expo_gfactors_big u_t le.
-Qed.
-
-Lemma deg_log_fresh n h t :
-  subterm n h → ¬ subterm n t → ∀ g, deg h (log g t) ⊑ Some (0, 0)%Z.
-Proof.
-move=> n_h n_t g; apply: deg_log0 => u u_t.
-apply: not_elem_of_count => h_u; apply: n_t.
-apply: (subterm_gfactors u_t); transitivity h => //.
-exact: subterm_exps h_u.
 Qed.
