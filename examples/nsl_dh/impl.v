@@ -14,9 +14,9 @@ Unset Printing Implicit Defensive.
 
 A --> B: {g^a; pkA}@pkB                     (msg1)
 B --> A: {g^a; g^b; pkB; N}@pkA             (msg2)
-A --> B: {g^b; pkA}@pkB                     (msg3)
+A --> B: {g^b}@pkB                          (msg3)
 
-Result: derive_key [pkA; pkB; g^a; g^b; g^ab]
+Result: derive_key (H(pkA; pkB; g^a; g^b; g^ab))
 
 *)
 
@@ -26,6 +26,9 @@ Definition mk_dh_keys : val := λ: <>,
   let: "a"  := mk_nonce #() in
   let: "ga" := texp (tint #0) "a" in
   ("a", "ga").
+
+Definition session_key : val := λ: "secret",
+  derive_senc_key (hash (tag (Tag $ nsl_dhN.@"key") "secret")).
 
 (* Initiator subroutines *)
 
@@ -53,7 +56,7 @@ Definition initiator_send_msg3 : val := λ: "c" "skI" "pkR" "a" "ga" "gb",
   let: "secret" := term_of_list ["pkI"; "pkR"; "ga"; "gb"; "gab"] in
   let: "m3"     := aenc "pkR" (Tag $ nsl_dhN.@"m3") "gb" in
   send "c" "m3";;
-  derive_senc_key "secret".
+  session_key "secret".
 
 Definition initiator : val := λ: "c" "skI" "pkR" "N",
   let: "keys" := initiator_send_msg1 "c" "skI" "pkR" in
@@ -88,7 +91,8 @@ Definition responder_recv_msg3 : val := λ: "c" "skR" "pkI" "ga" "b" "gb",
   guard: eq_term "m3" "gb" in
   let: "gab"    := texp "ga" "b" in
   let: "secret" := term_of_list ["pkI"; "pkR"; "ga"; "gb"; "gab"] in
-  SOME (derive_senc_key "secret").
+  SOME (session_key "secret").
+
 
 Definition responder_listen := responder_recv_msg1.
 

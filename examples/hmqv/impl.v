@@ -19,16 +19,16 @@ key pair [p_i, P_i = g^p_i]; the public keys stand in for the identities.
   A --> B: g^a; P_A
   B --> A: g^b; H(σ, N)
   A --> B: H'(σ, N)
-  return (derive_key (H''(σ), X))
+  return derive_key (H''(σ))
 
 where σ is the HMQV secret computed from the parties' long-term and ephemeral
-keys (cf. [cryptis.lib.hmqv.hmqv_K]), and X is the generated ephemeral key.
-Checking the hashes H(σ, N) and H'(σ, N) proves that the other party was also
-capable of computing σ, hence that the key is authentic.  The namespace [N] is a
-_usage_ tag that allows us to distinguish different uses of the protocol, as in
-ISO-DH.  Each party aborts if the long-term key it uses for its peer, or σ, is
-the group identity: σ then binds the peer's keys even if that long-term key was
-not vetted (cf. [cryptis.lib.hmqv.hmqv_K_inj']).
+keys (cf. [cryptis.lib.hmqv.hmqv_K]).  The ephemeral private keys are deleted
+right away.  Checking the hashes H(σ, N) and H'(σ, N) proves that the other
+party was also capable of computing σ, hence that the key is authentic.  The
+namespace [N] is a _usage_ tag that allows us to distinguish different uses of
+the protocol, as in ISO-DH.  Each party aborts if the long-term key it uses for
+its peer, or σ, is the group identity: σ then binds the peer's keys even if
+that long-term key was not vetted (cf. [cryptis.lib.hmqv.hmqv_K_inj']).
 
 *)
 
@@ -59,7 +59,7 @@ Definition initiator : val := λ: "c" "p_a" "P_a" "P_b" "N",
   guard: (~ eq_term "σ" one) in
   guard: eq_term "A_b" (H "m2" ["σ"; "N"]) in
   send "c" (H "m3" ["σ"; "N"]);;
-  SOME (session_key "σ", "x_a").
+  SOME (session_key "σ").
 
 (* Nothing ties a claimed long-term key to its owner, so whether to confirm
    with the identity received here is the caller's decision. *)
@@ -79,14 +79,14 @@ Definition responder_accept : val := λ: "c" "p_b" "P_b" "X_a" "P_a" "N",
     hmqv_ke hmqvN "resp" "init" "p_b" "x_b" "P_b" "X_b" "P_a" "X_a" in
   guard: (~ eq_term "σ" one) in
   send "c" (term_of_list ["X_b"; H "m2" ["σ"; "N"]]);;
-  SOME ("σ", "x_b").
+  SOME "σ".
 
-Definition responder_finish : val := λ: "c" "σ" "x_b" "N",
+Definition responder_finish : val := λ: "c" "σ" "N",
   let: "A_a" := recv "c" in
   guard: eq_term "A_a" (H "m3" ["σ"; "N"]) in
-  SOME (session_key "σ", "x_b").
+  SOME (session_key "σ").
 
 Definition responder_confirm : val := λ: "c" "p_b" "P_b" "X_a" "P_a" "N",
-  bind: "s" := responder_accept "c" "p_b" "P_b" "X_a" "P_a" "N" in
-  responder_finish "c" (Fst "s") (Snd "s") "N".
+  bind: "σ" := responder_accept "c" "p_b" "P_b" "X_a" "P_a" "N" in
+  responder_finish "c" "σ" "N".
 

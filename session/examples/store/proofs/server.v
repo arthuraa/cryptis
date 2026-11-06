@@ -284,12 +284,12 @@ iDestruct (or_sep1 with "token disj") as "[#pub|[token car]]".
   iDestruct "car" as "(%db0 & %e_t & #Heq1 & token')".
   rewrite !later_equivI_1.
   iMod (db_update_token db with "token' token") as "(-> & _ & main & copy)".
-  iMod (cryptis.examples.iso_dh.proofs.base.release with "rel") as "#relR".
+  iMod (GenConn.release with "rel") as "#relR".
   wp_bind (Sess.send _ _).
   iApply (wp_send_msg _ _ _ _
             (iMsg_dual (MSG (TInt 0)
                {{ db_main' skI skR db ∗
-                  released (si_resp_share cs) }}; END)%msg) _
+                  GenConn.released (si_resp_share cs) }}; END)%msg) _
             (iProto_dual END)
            with "[conn main]").
   { iSplitL "conn".
@@ -315,7 +315,7 @@ Lemma wp_server_conn_handler skI skR cs vdb vlock γlock db :
   store_ctx -∗
   is_lock γlock vlock (server_db_disconnected skI skR vdb) -∗
   {{{ connected skI skR Resp cs (iProto_dual (db_st skI skR cs None)) ∗
-      release_token (si_resp_share cs) ∗
+      GenConn.release_token (si_resp_share cs) ∗
       (public (si_key cs) ∨ db_copy' skI skR db) ∗
       public_db db ∗
       AList.is_alist vdb (repr <$> db) ∗
@@ -379,7 +379,7 @@ iApply (wp_wand _ _ _ φ with "[conn rel sdc']"); last first.
 iApply (@wp_select _ _ _ _ _ skI skR Resp cs
           (iMsg_dual <$> db_arms skI skR cs (db_st skI skR cs) odb)
           handlers
-          (release_token (si_resp_share cs) ∗
+          (GenConn.release_token (si_resp_share cs) ∗
            server_db_connected' skI skR cs vdb odb db')%I
           φ
          with "[conn] [rel sdc'] [] []").

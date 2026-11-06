@@ -17,9 +17,8 @@ Unset Printing Implicit Defensive.
     but should not be able to impersonate anybody else to it.  In this game,
     the attacker picks whose long-term key leaks, the initiator's or the
     responder's.  One initiator and one responder session then run in
-    parallel, each party accepting only the other as its peer and keeping its
-    ephemeral key secret, and the key returned by the party whose long-term key
-    leaked must stay unguessable.
+    parallel, each party accepting only the other as its peer, and the key
+    returned by the party whose long-term key leaked must stay unguessable.
 
 *)
 
@@ -34,56 +33,39 @@ Definition gameN := nroot.@"game".
 
 (** KCI resistance: nothing is assumed of the party's own long-term key. *)
 Lemma kci_key_secrecy rl si (p : nonce) :
-  □ (¬ released_session si) -∗
-  exp_frozen g (si_share_of rl si) -∗
-  session rl si -∗
+  session (λ _, False%I) rl si -∗
   ⌜si_static (swap_role rl) si = TExp g p⌝ -∗
   hmqv_key p -∗
-  □ (public (si_key si) → ◇ public p).
+  □ (public (si_key si) → ▷ ▷ ◇ public p).
 Proof.
-iIntros "#un #fr (_ & [[_ #comp]|[_ #s_k]]) %e_p #key !> #p_k".
-- iDestruct ("comp" with "[]") as "[#P|[_ #x]]".
-  + rewrite e_p. by iApply hmqv_key_vetted.
-  + iEval (rewrite e_p exp_public_TExp) in "P". by iModIntro.
-  + by iDestruct (exp_frozen_public with "fr x") as ">[]".
-- iDestruct ("s_k" with "p_k") as "[#rel|#st]".
-    iAssert (▷ False)%I as ">[]". iNext. by iApply "un".
-  case: rl e_p => /= e_p.
-  + iDestruct "st" as "[[_ #x]|[#P _]]".
-    * by iDestruct (exp_frozen_public with "fr x") as ">[]".
-    * iEval (rewrite e_p exp_public_TExp) in "P". by iModIntro.
-  + iDestruct "st" as "[[#P _]|[_ #x]]".
-    * iEval (rewrite e_p exp_public_TExp) in "P". by iModIntro.
-    * by iDestruct (exp_frozen_public with "fr x") as ">[]".
+iIntros "#sess %e_p #key !> #p_k".
+iDestruct "sess" as "(_ & _ & [(_ & _ & #l)|(_ & #ok)])".
+- iNext. iNext. by iApply ("l" $! p with "[//] key").
+- iDestruct ("ok" with "p_k") as "f". iNext. iNext.
+  by iDestruct "f" as "#[]".
 Qed.
 
 Definition kci_res p (v : val) : iProp :=
   ⌜v = NONEV⌝ ∨
-  ∃ (sk : senc_key) (x : term),
-    ⌜v = repr (Some (sk, x))⌝ ∗ □ (public sk → ◇ public p).
+  ∃ sk : senc_key, ⌜v = repr (Some sk)⌝ ∗ □ (public sk → ▷ ▷ ◇ public p).
 
 Lemma wp_kci_initiator c p_a p_b :
   channel c -∗
   cryptis_ctx -∗
   hmqv_ctx -∗
-  hmqv_pred gameN (λ _ _, True)%I -∗
+  hmqv_pred gameN (λ _ _, True)%I (λ _, False)%I -∗
   hmqv_key p_a -∗
   hmqv_key p_b -∗
   WP initiator c p_a (TExp g p_a) (TExp g p_b) (Tag gameN) {{ kci_res p_b }}.
 Proof.
-iIntros "#? #? #? #? #? #key_b". iApply wp_fupd.
-wp_apply (wp_initiator _ _ _ _ _ (λ x _, □ (public x ↔ ▷ False))%I True%I)
-  as "%r [[-> _]|(%x_a & %X_b & -> & rel & _ & #s_xa & #sess & _)]".
+iIntros "#? #? #? #? #? #key_b".
+wp_apply (wp_initiator _ _ _ _ _ _ (λ _, True)%I True%I)
+  as "%r [[-> _]|(%x_a & %X_b & -> & #sess & _)]".
 - iFrame "#". by iApply hmqv_key_public.
-- iSplit => //. iIntros "%x_a %X_b s _".
-  iMod (freeze_secret with "s") as "#s". by iModIntro; iSplit.
+- iSplit => //. iIntros "%x_a %X_b _ !>". by iSplit.
 - by iLeft.
-- iMod (unrelease Init (init_si p_a x_a (TExp g p_b) X_b) with "rel")
-    as "#un".
-  iModIntro.
-  iRight. iExists _, _. iSplit; first done.
-  iApply (kci_key_secrecy with "un [] sess [//] key_b").
-  by iApply exp_frozen_intro.
+- iRight. iExists _. iSplit; first done.
+  by iApply (kci_key_secrecy with "sess [//] key_b").
 Qed.
 
 Definition responder : val := λ: "c" "p_b" "P_b" "P_a" "N",
@@ -95,7 +77,7 @@ Lemma wp_kci_responder c p_a p_b :
   channel c -∗
   cryptis_ctx -∗
   hmqv_ctx -∗
-  hmqv_pred gameN (λ _ _, True)%I -∗
+  hmqv_pred gameN (λ _ _, True)%I (λ _, False)%I -∗
   hmqv_key p_a -∗
   hmqv_key p_b -∗
   WP responder c p_b (TExp g p_b) (TExp g p_a) (Tag gameN) {{ kci_res p_a }}.
@@ -104,25 +86,20 @@ iIntros "#? #? #? #? #key_a #?". wp_lam. wp_pures.
 wp_apply wp_responder_listen; first by iSplit.
 iIntros "%X_a %P_a' [#p_Xa _]".
 wp_eq_term e; last by wp_pures; iLeft.
-subst P_a'. wp_pures. iApply wp_fupd.
-wp_apply (wp_responder_confirm _ _ _ _ _ _ (λ x, □ (public x ↔ ▷ False))%I).
+subst P_a'. wp_pures.
+wp_apply (wp_responder_confirm _ _ _ _ _ _ _ (λ _, True)%I).
 { iFrame "#". iSplit; first by iApply hmqv_key_public.
-  iIntros "%x_b s _". iMod (freeze_secret with "s") as "#s".
-  by iModIntro; iSplit. }
-iIntros "%r [->|(%x_b & -> & rel & _ & #s_xb & #sess & _)]".
+  iIntros "%x_b _ !>". by iSplit. }
+iIntros "%r [->|(%x_b & -> & #sess & _)]".
 - by iLeft.
-- iMod (unrelease Resp (resp_si (TExp g p_a) X_a p_b x_b) with "rel")
-    as "#un".
-  iModIntro.
-  iRight. iExists _, _. iSplit; first done.
-  iApply (kci_key_secrecy with "un [] sess [//] key_a").
-  by iApply exp_frozen_intro.
+- iRight. iExists _. iSplit; first done.
+  by iApply (kci_key_secrecy with "sess [//] key_a").
 Qed.
 
 Definition check_key_secrecy : val := λ: "c" "r",
-  bind: "r" := "r" in
+  bind: "sk" := "r" in
   let: "guess" := recv "c" in
-  assert: (~ eq_term (Fst "r") "guess").
+  assert: (~ eq_term "sk" "guess").
 
 Lemma wp_check_key_secrecy c p v :
   channel c -∗
@@ -130,10 +107,14 @@ Lemma wp_check_key_secrecy c p v :
   kci_res p v -∗
   WP check_key_secrecy c v {{ _, True }}.
 Proof.
-iIntros "#? #s_p [->|(%sk & %x & -> & #s_sk)]"; wp_lam; wp_pures => //.
-wp_apply wp_recv => //. iIntros "%guess #p_guess". wp_pures.
+iIntros "#? #s_p res". wp_lam. wp_pure _ credit:"c1".
+iDestruct "res" as "[->|(%sk & -> & #s_sk)]"; wp_pures => //.
+wp_apply wp_recv => //. iIntros "%guess #p_guess".
+wp_pure _ credit:"c2". wp_pures.
 wp_apply wp_assert. wp_eq_term e.
-- subst guess. iMod ("s_sk" with "p_guess") as "#p_p".
+- subst guess. iDestruct ("s_sk" with "p_guess") as "f".
+  iMod (lc_fupd_elim_later with "c1 f") as "f'".
+  iMod (lc_fupd_elim_later with "c2 f'") as ">#p_p".
   by iDestruct ("s_p" with "p_p") as ">[]".
 - wp_pures. iModIntro. by iSplit.
 Qed.
@@ -157,7 +138,7 @@ Lemma wp_game c :
   cryptis_ctx -∗
   channel c -∗
   hmqv_ctx -∗
-  hmqv_pred gameN (λ _ _, True)%I -∗
+  hmqv_pred gameN (λ _ _, True)%I (λ _, False)%I -∗
   WP game c {{ _, True }}.
 Proof.
 iIntros "#ctx #chan #? #?"; rewrite /game; wp_pures.
@@ -202,6 +183,7 @@ apply (adequate_not_stuck NotStuck _ _ (λ v _, True)) => //.
 apply: cryptis_adequacy.
 iIntros (? ? c) "#ctx #chan (_ & _ & _ & hash)".
 iMod (hmqvGS_alloc with "hash") as (?) "(#? & tok & _)"; eauto.
-iMod (hmqv_pred_set gameN (λ _ _, True)%I with "tok") as "[#? _]"; eauto.
+iMod (hmqv_pred_set gameN (λ _ _, True)%I (λ _, False)%I with "tok")
+  as "[#? _]"; eauto.
 by iApply (wp_game with "ctx [//]").
 Qed.

@@ -86,7 +86,7 @@ Definition db_disconnected skI skR : iProp := ∃ db,
   DB.db_state skI skR dbN db.
 
 Definition db_connected' skI skR cs : iProp := ∃ db,
-  (compromised cs ∨ db_client_ready skI skR db) ∗
+  (GenConn.compromised cs ∨ db_client_ready skI skR db) ∗
   DB.db_state skI skR dbN db.
 
 Definition db_connected skI skR cs : iProp :=
@@ -97,7 +97,7 @@ Lemma db_connected_ok skI skR cs :
   db_connected skI skR cs -∗
   secret skI -∗
   secret skR -∗
-  ◇ session_ok cs.
+  ◇ GenConn.session_ok cs.
 Proof.
 iIntros "(conn & _)".
 iApply (RPC.client_connected_ok with "conn").
@@ -105,8 +105,8 @@ Qed.
 
 Lemma db_connected_ok_compromised skI skR cs :
   db_connected skI skR cs -∗
-  session_ok cs -∗
-  compromised cs -∗
+  GenConn.session_ok cs -∗
+  GenConn.compromised cs -∗
   ▷ False.
 Proof.
 iIntros "(conn & _)".
@@ -167,7 +167,7 @@ Qed.
 Definition server_db_connected' skI skR cs vdb : iProp := ∃ db,
   public_db db ∗
   AList.is_alist vdb (repr <$> db) ∗
-  (compromised cs ∨ db_copy skI skR db).
+  (GenConn.compromised cs ∨ db_copy skI skR db).
 
 Definition server_db_connected skI skR cs vdb : iProp :=
   RPC.server_connected skI skR cs ∗
@@ -224,7 +224,7 @@ Definition store_resp_pred skI skR si t t' : iProp :=
   ∃ db, rep_sync skI skR dbN ∅ db.
 
 Lemma store_call t2' skI skR cs t1 t2 :
-  let P := compromised cs in
+  let P := GenConn.compromised cs in
   db_connected' skI skR cs -∗
   db_mapsto skI skR t1 t2 ==∗
   (P ∨ store_call_pred skI skR cs (Spec.of_list [t1; t2'])) ∗
@@ -250,7 +250,7 @@ iExists _. iFrame. iRight. iFrame.
 Qed.
 
 Lemma store_resp skI skR cs db t1 t2 :
-  let P := compromised cs in
+  let P := GenConn.compromised cs in
   (P ∨ db_copy skI skR db) -∗
   (P ∨ store_call_pred skI skR cs (Spec.of_list [t1; t2])) ==∗
   (P ∨ db_copy skI skR (<[t1 := t2]>db)) ∗
@@ -271,7 +271,7 @@ Definition create_resp_pred skI skR si t t' : iProp :=
   ∃ db, rep_sync skI skR dbN ∅ db.
 
 Lemma create_call t1 t2 skI skR cs :
-  let P := compromised cs in
+  let P := GenConn.compromised cs in
   db_connected' skI skR cs -∗
   db_free_at skI skR {[t1]} ==∗
   (P ∨ create_call_pred skI skR cs (Spec.of_list [t1; t2])) ∗
@@ -296,7 +296,7 @@ iExists _. iFrame. iRight. iFrame.
 Qed.
 
 Lemma create_resp skI skR cs db t1 t2 :
-  let P := compromised cs in
+  let P := GenConn.compromised cs in
   (P ∨ db_copy skI skR db) -∗
   (P ∨ create_call_pred skI skR cs (Spec.of_list [t1; t2])) ==∗
   (P ∨ db_copy skI skR (<[t1 := t2]>db)) ∗
@@ -317,7 +317,7 @@ Definition load_resp_pred skI skR si t1 t2 : iProp :=
   ∃ db, ⌜db !! t1 = Some t2⌝ ∗ rep_sync skI skR dbN ∅ db.
 
 Lemma load_call t1 t2 skI skR cs :
-  let P := compromised cs in
+  let P := GenConn.compromised cs in
   db_connected' skI skR cs -∗
   db_mapsto skI skR t1 t2 ==∗
   (P ∨ load_call_pred skI skR cs t1) ∗
@@ -343,7 +343,7 @@ iSplit; eauto. iExists _. iFrame. iRight. iFrame.
 Qed.
 
 Lemma load_resp skI skR cs db t1 :
-  let P := compromised cs in
+  let P := GenConn.compromised cs in
   let t2 := default (TInt 0) (db !! t1) in
   (P ∨ db_copy skI skR db) -∗
   (P ∨ load_call_pred skI skR cs t1) ==∗

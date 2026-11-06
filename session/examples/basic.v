@@ -58,7 +58,7 @@ Lemma wp_initiator_send42 c skI skR N :
     initiator_send42 c skI (Spec.pkey skR) (Tag N)
   {{{ cs, RET (repr cs);
       Sess.connected skI skR Init cs END ∗
-      release_token (si_init_share cs) ∗
+      GenConn.release_token (si_init_share cs) ∗
       (public (si_key cs) ∨ True) }}}.
 Proof.
   iIntros "#? #? #? #? #? % !> #P post".
@@ -231,7 +231,7 @@ Lemma wp_initiator_vote_yes c skI skR N :
     initiator_vote_yes c skI (Spec.pkey skR) (Tag N)
   {{{ cs, RET (repr cs);
       Sess.connected skI skR Init cs END ∗
-      release_token (si_init_share cs) ∗
+      GenConn.release_token (si_init_share cs) ∗
       (public (si_key cs) ∨ True) }}}.
 Proof.
   iIntros "#? #? #? #? #? %Φ !> #P post".
@@ -335,7 +335,7 @@ Lemma wp_db_client_store c skI skR N k v :
     db_client_store c skI (Spec.pkey skR) (Tag N) k v
   {{{ cs, RET (repr cs);
       Sess.connected skI skR Init cs END ∗
-      release_token (si_init_share cs) ∗
+      GenConn.release_token (si_init_share cs) ∗
       (public (si_key cs) ∨ True) }}}.
 Proof.
   iIntros "#? #? #? #? #? #pk #pv %Φ !> #P post".

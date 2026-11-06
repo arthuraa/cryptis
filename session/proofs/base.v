@@ -16,7 +16,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Abbreviation sessN := (iso_dhN.@"res".@"sess").
+Abbreviation sessN := (GenConn.connN.@"res".@"sess").
 
 Definition savedProtoR Σ V :=
   agreeR (laterO (iProto Σ V)).

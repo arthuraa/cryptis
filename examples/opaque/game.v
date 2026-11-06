@@ -26,15 +26,7 @@ Abbreviation iProp := (iProp Σ).
 
 Definition gameN := nroot.@"game".
 
-(** The game freezes every ephemeral and tells its peer so. *)
-Definition game_pred si rl : iProp :=
-  exp_frozen g (eph_share (swap_role rl) si).
-
-Definition keep (x : nonce) : iProp := □ (public x ↔ ▷ False).
-
-(** What a role's specification gives the game when it completes: besides the
-    session, its own frozen ephemeral and its peer's, unless the password or
-    the key leaked. *)
+(** What a role's specification gives the game when it completes. *)
 Definition raw_res pw (rl : role) (r : option term) : iProp :=
   match r with
   | None => True
@@ -42,18 +34,15 @@ Definition raw_res pw (rl : role) (r : option term) : iProp :=
       ∃ si, ⌜t = si_result si⌝ ∗
             ⌜session_of rl si⌝ ∗
             public (si_uid si) ∗
-            session pw si ∗
-            release_token (share_of rl si) ∗
-            term_token (share_of rl si) (⊤ ∖ ↑opN) ∗
-            (▷ public pw ∨ exp_frozen g (eph_share rl si)) ∗
-            (public (si_key si) ∨ exp_frozen g (eph_share (swap_role rl) si))
+            session pw (λ _, False)%I rl si ∗
+            term_token (share_of rl si) (↑gameN)
   end.
 
 Definition raw_res' pw rl (x : val) : iProp :=
   ∃ r : option term, ⌜x = repr r⌝ ∗ raw_res pw rl r.
 
 (** What the game keeps: the key stays secret, even after the password leaks,
-    because the game never releases its tokens. *)
+    because the game never releases a session. *)
 Definition session_res (rl : role) (r : option term) : iProp :=
   match r with
   | None => True
@@ -71,40 +60,19 @@ Definition session_secret (r : option term) : iProp :=
   | Some t => ∃ si, ⌜t = si_result si⌝ ∗ □ (public (si_key si) → ▷ False)
   end.
 
-(* The conversion needs the password to be secret at the time; the laters
-   come from the long-term keys' predicate, [▷ □ public pw]. *)
+(* The conversion needs the password to be secret at the time. *)
 Lemma raw_res_session_res pw rl r :
-  secret pw -∗ raw_res pw rl r ={⊤}=∗ secret pw ∗ ▷ ▷ ◇ session_res rl r.
+  secret pw -∗ raw_res pw rl r -∗ secret pw ∗ ◇ session_res rl r.
 Proof.
-case: r => [t|] /=; iIntros "s_pw Hr";
-  last by iFrame "s_pw"; iIntros "!> !> !> !>".
-iDestruct "Hr" as "(%si & -> & %sh & #p_uid & #sess & rel & tok & keep & gift)".
-iMod (unrelease rl with "rel") as "#un".
-iAssert (▷ ▷ ◇ False ∨
-         exp_frozen g (si_cshare si) ∗ exp_frozen g (si_sshare si))%I
-  as "#frozen".
-{ iDestruct "sess" as "(_ & #st_pw & _ & [[#p_pw _]|#sec])".
-  { iLeft. iNext. iDestruct (secret_not_public with "s_pw p_pw") as "contra".
-    iNext. by iDestruct "contra" as "[]". }
-  iDestruct "keep" as "[#p_pw|#own]".
-  { iLeft. iNext. iDestruct (secret_not_public with "s_pw p_pw") as "contra".
-    iNext. by iDestruct "contra" as "[]". }
-  iDestruct "gift" as "[#p_k|#peer]";
-    last by iRight; clear sh; case: rl; iSplit.
-
-  iLeft. iDestruct ("sec" with "p_k") as "[#rel|#st]".
-  - iNext. by iDestruct ("un" with "rel") as "[]".
-  - iDestruct ("st_pw" with "st") as "#p_pw". iNext.
-    iDestruct (secret_not_public with "s_pw p_pw") as "contra".
-    iNext. by iDestruct "contra" as "[]". }
-iPoseProof (secret_session with "s_pw sess") as "#ok".
-iFrame "s_pw". iIntros "!> !> !>".
-iDestruct "frozen" as "[>[]|[#fr_u #fr_s]]".
-iMod "ok" as "#ok". iModIntro.
-iExists si. iSplit; first by []. iSplit; first by [].
-iSplit; first by [].
-iSplit; first by iApply (frozen_key_secrecy with "un fr_u fr_s ok").
-iApply (term_token_drop with "tok"); solve_ndisj.
+case: r => [t|] /=; iIntros "s_pw Hr"; last by iFrame "s_pw".
+iDestruct "Hr" as "(%si & -> & %sh & #p_uid & #sess & tok)".
+iPoseProof (secret_session with "s_pw sess") as "#nc".
+iFrame "s_pw". iMod "nc" as "#nc".
+iPoseProof (session_ok with "sess nc") as "#ok".
+iModIntro. iExists si. iFrame "tok".
+do 3!(iSplit; first done).
+iIntros "!> #p". iDestruct ("ok" with "p") as "f". iNext.
+by iDestruct "f" as "#[]".
 Qed.
 
 #[global] Instance session_secret_persistent r : Persistent (session_secret r).
@@ -204,7 +172,7 @@ Lemma wp_game_round c db alist uid pw :
   cryptis_ctx -∗
   channel c -∗
   opaque_ctx -∗
-  opaque_pred game_pred -∗
+  opaque_pred (λ _ _, True)%I (λ _, False)%I -∗
   public uid -∗
   minted pw -∗
   opaque_db (λ _, pw) alist -∗
@@ -220,43 +188,32 @@ iIntros "#? #Hchannel #ctx #N_φ #p_uid #m_pw #Hdb %Φ !> [Halist s_pw] Hpost".
 wp_lam. wp_pures.
 wp_apply (wp_par (λ x, raw_res' pw Resp x ∗ AList.is_alist db alist)%I
                  (λ x, raw_res' pw Init x)%I with "[Halist]").
-- iApply (wp_server_session db c (λ _, pw) alist game_pred keep
+- iApply (wp_server_session db c (λ _, pw) alist (λ _ _, True)%I
+            (λ _, False)%I (λ si, term_token (si_sshare si) (↑gameN))
             with "[Halist]") => //.
   { iFrame "Halist"; do !iSplit => //.
-    iIntros "%si %x_s %e s _". iMod (freeze_secret with "s") as "#s".
-    iModIntro. iSplit => //. rewrite /game_pred /= e.
-    by iApply exp_frozen_intro. }
+    iIntros "%si tok !>". iSplit => //.
+    iApply (term_token_drop with "tok"). solve_ndisj. }
   iNext. iIntros "%r [Halist Hres]". iFrame "Halist".
   iExists r. iSplit; first by [].
   iDestruct "Hres"
-    as "[-> | (%si & %x_s & -> & %ss & %eX & (_ & #p_uid' & _ & _ & _)
-              & _ & #sess & rel & tok & #keep & res)]" => //=.
-
-  iExists si. iSplit; first by []. iSplit; first by [].
-  iSplit => //. iSplit => //.
-  rewrite /share_of /=. iFrame "rel tok".
-  iSplitR "res"; last by iDestruct "res" as "[?|?]"; eauto.
-  iRight. rewrite /eph_share /= eX. by iApply exp_frozen_intro.
-- iApply (wp_client_session uid pw c game_pred keep) => //.
+    as "[-> | (%si & -> & %ss & (_ & #p_uid' & _ & _ & _) & _ & #sess & tok
+               & _)]" => //=.
+  iExists si. by iFrame "p_uid' sess tok".
+- iApply (wp_client_session uid pw c (λ _ _, True)%I (λ _, False)%I
+            (λ si, term_token (si_blind si) (↑gameN)) True%I) => //.
   { do !iSplit => //.
-    iIntros "%si %x_u %e s _". iMod (freeze_secret with "s") as "#s".
-    iModIntro. iSplit => //. rewrite /game_pred /= e.
-    by iApply exp_frozen_intro. }
+    iIntros "%si tok !>". iSplit => //.
+    iApply (term_token_drop with "tok"). solve_ndisj. }
   iNext. iIntros "%r Hres".
   iExists r. iSplit; first by [].
-  iDestruct "Hres" as "[-> | (%si & %x_u & -> & (_ & #p_uid' & _ & _ & _)
-                                 & #sess & rel & tok & keep & res)]" => //=.
-  iExists si. iSplit; first by []. iSplit; first by [].
-  iSplit => //. iSplit => //.
-  rewrite /share_of /=. iFrame "rel tok".
-  iSplitL "keep".
-  { iDestruct "keep" as "[#p_pw|[%eX #keep]]"; first by iLeft.
-    iRight. rewrite /eph_share /= eX. by iApply exp_frozen_intro. }
-  by iDestruct "res" as "[?|?]"; eauto.
+  iDestruct "Hres" as "[[-> _] | (%si & -> & (_ & #p_uid' & _ & _ & _)
+                                    & #sess & tok & _)]" => //=.
+  iExists si. by iFrame "p_uid' sess tok".
 - iIntros "%vs %vc [[(%rs & -> & Hs) Halist] (%rc & -> & Hc)]".
   iNext.
-  iMod (raw_res_session_res with "s_pw Hs") as "[s_pw Hs]".
-  iMod (raw_res_session_res with "s_pw Hc") as "[s_pw Hc]".
+  iDestruct (raw_res_session_res with "s_pw Hs") as "[s_pw Hs]".
+  iDestruct (raw_res_session_res with "s_pw Hc") as "[s_pw Hc]".
   wp_pures.
   iMod "Hs" as "Hs". iMod "Hc" as "Hc".
   iDestruct (session_res_secret with "Hs") as "#sec_s".
@@ -274,7 +231,7 @@ Lemma wp_game c :
   cryptis_ctx -∗
   channel c -∗
   opaque_ctx -∗
-  opaque_pred game_pred -∗
+  opaque_pred (λ _ _, True)%I (λ _, False)%I -∗
   WP game c {{ _, True }}.
 Proof.
 iIntros "#Hcryptis #Hchannel #ctx #N_φ".
@@ -368,7 +325,7 @@ apply (adequate_not_stuck NotStuck _ _ (λ v _, True)) => //.
 apply: cryptis_adequacy.
 iIntros (? ? c) "#ctx #chan (_ & _ & senc & hash)".
 iMod (opaqueGS_alloc with "hash senc") as (?) "(#? & tok & _ & _)"; eauto.
-iMod (opaque_pred_set game_pred with "tok") as "[#? _]"; eauto.
+iMod (opaque_pred_set (λ _ _, True)%I (λ _, False)%I with "tok") as "#?".
 
 by iApply (wp_game with "ctx chan [//] [//]").
 Qed.

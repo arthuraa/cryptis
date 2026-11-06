@@ -37,6 +37,12 @@ Proof.
 iIntros "% _ post". wp_lam. wp_pures. by iApply "post".
 Qed.
 
+(** What the initiator keeps of its share when the key exchange completes. *)
+Definition init_keep (failed : bool) si : iProp :=
+  release_token (si_init_share si) ∗
+  term_token (si_init_share si) (⊤ ∖ ↑iso_dhN ∖ ↑connN) ∗
+  term_meta (si_init_share si) (connN.@"failed") failed.
+
 Lemma wp_connect P c skI skR N ps :
   channel c ∗
   cryptis_ctx ∗
@@ -54,30 +60,52 @@ Lemma wp_connect P c skI skR N ps :
 Proof.
 iIntros "(#? & #? & (#? & #? & #?) & #? & #?) % !> HP post".
 rewrite bi.or_alt. iDestruct "HP" as "(%failed & HP)".
-wp_lam. wp_pure _ credit:"c1". wp_pure _ credit:"c2".
-wp_pures. wp_bind (do_until _).
-iAssert (if failed then failure skI skR else True)%I as "#?".
+iAssert (if failed then failure skI skR else True)%I as "#fail".
 { by case: failed. }
-iCombine "HP post c1 c2" as "post". iApply (wp_frame_wand with "post").
+wp_lam. wp_pures. wp_bind (do_until _).
+iCombine "HP post" as "post". iApply (wp_frame_wand with "post").
 iApply wp_do_until'. iIntros "!>". wp_pures.
-wp_apply (wp_initiator failed with "[]") => //; first by iFrame "#".
-iIntros "%res [->|resP]"; first by eauto.
-iDestruct "resP" as "(%si & -> & #sess & #comp & rel & token & res)".
-iPoseProof "sess" as "(-> & -> & _)".
+wp_apply (wp_initiator _ _ _ _ _ _ (init_keep failed) True%I with "[]")
+  => //; first by iFrame "#".
+{ iSplit => //. iIntros "%a %gb tok".
+  rewrite (term_token_difference _ (↑connN)); last solve_ndisj.
+  iDestruct "tok" as "[tok_conn tok]".
+  iDestruct (term_token_difference _ (↑connN.@"failed") with "tok_conn")
+    as "[tok_failed tok_conn]"; first solve_ndisj.
+  iDestruct (term_token_difference _ (↑connN.@"released") with "tok_conn")
+    as "[tok_rel _]"; first solve_ndisj.
+  iMod (term_meta_set (connN.@"failed") failed with "tok_failed") as "#st";
+    first solve_ndisj.
+  iModIntro. iSplitR; last by iFrame.
+  by iExists failed; iSplit. }
+iIntros "%res [[-> _]|resP]"; first by eauto.
+iDestruct "resP" as "(%a & %gb & -> & #sess & (rel & token & #st) & res)".
+set si := SessInfo skI skR (TExp (TInt 0) a) gb (TExp gb a).
+iAssert (status (si_init_share si) si) as "#own".
+{ by iExists failed; iSplit. }
 iRight. iExists _. iSplit => //.
-iIntros "(dis & post & c1 & c2)".
+iIntros "(HP & post)".
 wp_pures.
 wp_alloc ts as "ts"; try lia. wp_pures. rewrite /=.
 pose cs := State si ts c Init.
 iApply ("post" $! cs).
-iModIntro. iFrame. rewrite or_sep2. iDestruct "res" as "[res1 res2]".
-iFrame.
-iSplit.
-{ do 6!iSplit => //. }
-iSplitR "token"; last first.
-{ iApply (term_token_drop with "token"). solve_ndisj. }
-case: failed; [|iRight]; iFrame.
-iLeft. by iApply "comp".
+(* A party that gave up publishes the key through [conn_rel]. *)
+iAssert (public (si_key si) ∨ P)%I with "[HP]" as "HP".
+{ case: failed; last by iRight.
+  iLeft. iApply (session_release with "sess"). iNext. iModIntro.
+  by iRight; iLeft. }
+iModIntro. iFrame "HP rel".
+iFrame "token".
+iDestruct "res" as "[#c|(init & cnt & #peer)]".
+- iDestruct (session_compromised with "sess c") as "[_ #p_k]".
+  iSplitL "ts"; last by iLeft.
+  do 5!(iSplit; first done).
+  iSplit; first by iSplit; [done|iSplit; [done|iLeft]].
+  iExists 0%nat, 0%nat. iFrame "ts". by iLeft.
+- iFrame "init".
+  do 5!(iSplit; first done).
+  iSplit; first by iSplit; [done|iSplit; [done|iRight]].
+  iExists 0%nat, 0%nat. iFrame "ts". by iRight.
 Qed.
 
 Lemma wp_listen c :
@@ -92,6 +120,14 @@ iIntros "#? #? % !> _ post". wp_lam.
 wp_apply wp_responder_listen; eauto.
 Qed.
 
+(** What the responder keeps of its share when the key exchange completes. *)
+Definition resp_keep ps (failed : bool) si : iProp :=
+  release_token (si_resp_share si) ∗
+  term_token (si_resp_share si) (⊤ ∖ ↑iso_dhN ∖ ↑connN) ∗
+  term_meta (si_resp_share si) (connN.@"failed") failed ∗
+  init_pred ps (si_init si) (si_resp si) si Resp ∗
+  counters (chan_inv ps) (si_init si) (si_resp si) si Resp 0 0.
+
 Lemma wp_confirm P ps c skI skR ga N :
   channel c ∗
   cryptis_ctx ∗
@@ -101,8 +137,7 @@ Lemma wp_confirm P ps c skI skR ga N :
           let gb := TExp (TInt 0) b in
           let gab := TExp ga b in
           let si := SessInfo skI skR ga gb gab in
-          term_token (si_resp_share si)
-            (↑iso_dhN.@"res" ∖ ↑iso_dhN.@"res".@"chan") ={⊤}=∗
+          term_token (si_resp_share si) (↑connN.@"res") ={⊤}=∗
             init_pred ps skI skR si Init ∗
             init_pred ps skI skR si Resp ∗
             chan_inv ps skI skR si [] []) ∗
@@ -119,37 +154,56 @@ iIntros "(#? & #ctx & (#? & #? & #?))".
 iIntros "!> %Φ (#p_ga & #p_pkA & #sign_skB & #mk & P) post".
 rewrite bi.or_alt. iDestruct "P" as "(%failed & P)".
 wp_lam. wp_pures.
-iAssert (if failed then failure skI skR else True)%I
-  as "#?".
+iAssert (if failed then failure skI skR else True)%I as "#fail".
 { by case: failed. }
 wp_bind (do_until _).
 iApply (wp_frame_wand with "post").
 iApply (wp_frame_wand with "P").
 iApply wp_do_until'. iIntros "!>".
-wp_pures. iApply (wp_responder_confirm failed).
+wp_pures.
+iApply (wp_responder_confirm _ _ _ _ _ _ _ (resp_keep ps failed)).
 { do !iSplit => //=.
-  iIntros "%gb token".
-  rewrite (term_token_difference _ (↑iso_dhN.@"res".@"chan"));
-    last solve_ndisj.
-  iDestruct "token" as "[chan token]".
-  iMod ("mk" with "token") as "(initI & initR & inv)".
+  iIntros "%b tok".
+  rewrite (term_token_difference _ (↑connN)); last solve_ndisj.
+  iDestruct "tok" as "[tok_conn tok]".
+  iDestruct (term_token_difference _ (↑connN.@"chan") with "tok_conn")
+    as "[tok_chan tok_conn]"; first solve_ndisj.
+  iDestruct (term_token_difference _ (↑connN.@"res") with "tok_conn")
+    as "[tok_res tok_conn]"; first solve_ndisj.
+  iDestruct (term_token_difference _ (↑connN.@"failed") with "tok_conn")
+    as "[tok_failed tok_conn]"; first solve_ndisj.
+  iDestruct (term_token_difference _ (↑connN.@"released") with "tok_conn")
+    as "[tok_rel _]"; first solve_ndisj.
   set si := SessInfo _ _ _ _ _.
-  iMod (counters_alloc _ _ _ si with "chan inv") as "[c1 c2]".
-  by iFrame. }
+  iMod ("mk" with "tok_res") as "(initI & initR & inv)".
+  iMod (counters_alloc _ _ _ si with "tok_chan inv") as "[c1 c2]".
+  iMod (term_meta_set (connN.@"failed") failed with "tok_failed") as "#st";
+    first solve_ndisj.
+  iModIntro. iFrame "initI c1 initR c2 tok_rel tok st".
+  by case: failed. }
 iIntros "!> %osi [->|res]"; first by eauto.
 iDestruct "res"
-  as "(%si & -> & #sess & #comp & rel & token & initR & res)".
-iPoseProof "sess" as "(-> & -> & _)".
+  as "(%b & -> & #sess & (rel & token & #st & initR & cnt) & res)".
+set si := SessInfo skI skR ga (TExp (TInt 0) b) (TExp ga b).
+iAssert (status (si_resp_share si) si) as "#own".
+{ by iExists failed; iSplit. }
 iRight. iExists _. iSplit => //.
 iIntros "P post".
 wp_pures.
 wp_alloc ts as "ts"; first lia.
 wp_pures.
 iApply ("post" $! (State si ts c Resp)).
-iModIntro. iFrame. rewrite /=. do 7?iSplit => //.
-iSplitR "token".
-{ case: failed; eauto. iLeft. by iApply "comp". }
-iApply (term_token_drop with "token"). solve_ndisj.
+iAssert (public (si_key si) ∨ P)%I with "[P]" as "P".
+{ case: failed; last by iRight.
+  iLeft. iApply (session_release with "sess"). iNext. iModIntro.
+  by iRight; iRight. }
+iModIntro. iFrame "P rel initR".
+iFrame "token".
+do 5!(iSplit; first done).
+iSplit.
+{ iSplit; first done. iSplit; first done.
+  by iDestruct "res" as "[?|?]"; [iLeft|iRight]. }
+iExists 0%nat, 0%nat. iFrame "ts". by iRight.
 Qed.
 
 Lemma wp_session_key cs :
@@ -204,7 +258,7 @@ wp_apply (counters_send with "[//] p_t counters upd").
 wp_pures. iIntros "!> inv".
 rewrite 2!or_sep2. iDestruct "inv" as "(counters & [Hφ #tP])".
 iModIntro. wp_pures. wp_apply wp_senc; eauto.
-- by iApply (session_minted with "sess").
+- iDestruct "sess" as "[#sess' _]". by iApply (session_minted with "sess'").
 - by iDestruct "tP" as "[tP|inv_t]"; eauto.
 iIntros "% #?". wp_pures. wp_apply wp_send => //. wp_pures.
 wp_apply (wp_load_offset with "state") => //.

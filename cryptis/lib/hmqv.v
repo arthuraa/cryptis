@@ -102,6 +102,8 @@ Unset Printing Implicit Defensive.
 
     Whether a private key is secret is up to its owner; the lemmas only assume
     the DH exponent predicate [hmqv_key] and conclude which keys are public.
+    [ephemeral x] adds that [x] never leaks, as for an ephemeral private key
+    deleted right away.
 
 *)
 
@@ -1115,6 +1117,13 @@ Definition hmqv_key (x : nonce) : iProp :=
 #[global] Instance hmqv_key_persistent (x : nonce) : Persistent (hmqv_key x).
 Proof. apply _. Qed.
 
+Definition ephemeral (x : nonce) : iProp :=
+  hmqv_key x ∗ □ (public x ↔ ▷ False).
+
+#[global] Instance ephemeral_persistent (x : nonce) :
+  Persistent (ephemeral x).
+Proof. apply _. Qed.
+
 (** With an honest peer share, the ephemeral-ephemeral factor binds the key to
     the two ephemeral private keys. *)
 
@@ -1238,35 +1247,6 @@ iDestruct "S" as "[?|?]".
   iDestruct "E" as "[?|?]"; [iLeft|iRight]; by iSplit.
 - iDestruct "M2" as "[?|?]"; first by iRight; iSplit.
   iDestruct "E" as "[?|?]"; [iLeft|iRight]; by iSplit.
-Qed.
-
-(** Facts about the private key behind a public key [X = g^x], stated on the
-    public key, which is all a session record keeps. *)
-
-Definition exp_public g X : iProp :=
-  ∃ x : nonce, ⌜X = TExp g x⌝ ∗ public x.
-
-Definition exp_frozen g X : iProp :=
-  ∀ x : nonce, ⌜X = TExp g x⌝ → □ (public x ↔ ▷ False).
-
-#[global] Instance exp_public_persistent g X : Persistent (exp_public g X).
-Proof. apply _. Qed.
-
-#[global] Instance exp_frozen_persistent g X : Persistent (exp_frozen g X).
-Proof. apply _. Qed.
-
-Lemma exp_frozen_intro g (x : nonce) :
-  negb (is_gmul g) →
-  □ (public x ↔ ▷ False) -∗ exp_frozen g (TExp g x).
-Proof.
-move=> gNm; iIntros "#s %x' %e".
-by move/(TExp_injr (Ngmul_neq_unit gNm)): e => - [] <-.
-Qed.
-
-Lemma exp_frozen_public g X : exp_frozen g X -∗ exp_public g X -∗ ▷ False.
-Proof.
-iIntros "#frozen (%x & -> & #p_x)".
-iDestruct ("frozen" $! x with "[//]") as "#s". by iApply "s".
 Qed.
 
 Definition hmqv_ke N (t_a t_b : string) : val :=

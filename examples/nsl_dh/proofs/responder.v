@@ -19,10 +19,9 @@ Abbreviation iProp := (iProp Σ).
 
 Implicit Types (rl : role) (t pkI pkR ga kS : term).
 Implicit Types (skI skR : aenc_key).
-Implicit Types (failed : bool).
-Implicit Types (si : sess_info) (osi : option sess_info).
-Implicit Types (N : namespace) (data : term).
-Implicit Types (ores : option (term * term)).
+Implicit Types (si : sess_info).
+Implicit Types (N : namespace).
+Implicit Types (φ : sess_info → role → iProp) (ρ : sess_info → iProp).
 
 Ltac protocol_failure :=
   by intros; wp_pures; iApply ("Hpost" $! None); eauto.
@@ -41,7 +40,7 @@ Lemma wp_responder_recv_msg1 c skR :
         minted ga ∗ minted skI ∗
         □ (public skI ∨ public skR → public ga) }}}.
 Proof.
-iIntros "%Ψ (#chan_c & #ctx & #(m1_pred & ? & ?) & #m_skR) Hpost".
+iIntros "%Ψ (#chan_c & #ctx & #(m1_pred & _) & #m_skR) Hpost".
 rewrite /responder_recv_msg1.
 wp_pures. wp_apply wp_pkey. wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m) "#p_m".
@@ -65,77 +64,75 @@ iDestruct "inv_m1" as "[#p_m1|[#inv_m1 _]]".
   done.
 Qed.
 
-Lemma wp_responder_send_msg2 c skI skR ga N φ failed :
+#[local] Lemma wp_responder_send_msg2 c skI skR ga N φ ρ ψ :
   {{{
     channel c ∗
     cryptis_ctx ∗
     nsl_dh_ctx ∗
-    nsl_dh_pred N φ ∗
+    nsl_dh_pred N φ ρ ∗
     minted skI ∗
     minted skR ∗
     minted ga ∗
     □ (public skI ∨ public skR → public ga) ∗
-    (∀ b,
-        let gb := TExp (TInt 0) b in
-        let gab := TExp ga b in
-        let si := SessInfo skI skR ga gb gab in
-        res_token (si_resp_share si) ={⊤}=∗
-        φ (si_init si) (si_resp si) si Init ∗
-        φ (si_init si) (si_resp si) si Resp) ∗
-    failed_early skI skR failed
+    (∀ b : nonce,
+        let si := SessInfo skI skR ga (TExp (TInt 0) b) (TExp ga b) in
+        term_token (si_resp_share si) (⊤ ∖ ↑nsl_dhN) ={⊤}=∗
+        φ si Init ∗ ψ si)
   }}}
     responder_send_msg2 c skR (Spec.pkey skI) (Tag N) ga
   {{{ (b : nonce), RET (TNonce b, TExp (TInt 0) b);
       let gb := TExp (TInt 0) b in
-      let gab := TExp ga b in
-      let si := SessInfo skI skR ga gb gab in
-      dh_key skI skR b ∗
-      has_peer_share gb (Some ga) ∗
-      release_token gb ∗
-      term_token gb (⊤ ∖ ↑nsl_dhN) ∗
-      φ skI skR si Resp }}}.
+      let si := SessInfo skI skR ga gb (TExp ga b) in
+      dh_key skI skR False b ∗
+      resp_peer gb skI ga ∗
+      usage gb N ∗
+      term_token gb (↑nsl_dhN.@"compromised") ∗
+      term_token gb (↑nsl_dhN.@"ready") ∗
+      ψ si }}}.
 Proof.
-iIntros "%Ψ (#chan & #ctx & #(m1_pred & m2_pred & m3_pred) & #N_φ &
-         #m_skI & #m_skR & #m_ga & #s_ga & φ_cb & failed_e) Hpost".
+iIntros "%Ψ (#chan & #ctx & #(m1_pred & m2_pred & _) & #N_φ &
+         #m_skI & #m_skR & #m_ga & #s_ga & hook) Hpost".
 rewrite /responder_send_msg2.
 wp_pures. wp_apply wp_pkey. wp_pures.
-wp_apply (wp_mk_dh_keys {[ga]} skI skR); first by iFrame "#".
+wp_apply (wp_mk_dh_keys {[ga]} skI skR (λ _, False%I)); first by iFrame "#".
 { iIntros "%t %t_in". rewrite elem_of_singleton in t_in. by subst t. }
-iIntros "%b %fresh_b #dh_b rel ptok rtok res tok".
+iIntros "%b %fresh_b #dh_b token".
 have b_ga : ¬ subterm b ga.
 { apply: fresh_b. by rewrite elem_of_singleton. }
 set gb := TExp (TInt 0) b.
+set si := SessInfo skI skR ga gb (TExp ga b).
 wp_pures.
-(* Set peer share for gb *)
-iMod (set_peer_share gb (Some ga) with "ptok") as "#ps_gb".
-(* Get φ from callback *)
-set gab := TExp ga b.
-set si := SessInfo skI skR ga gb gab.
-iMod ("φ_cb" $! (TNonce b) with "res") as "[φ_init φ_resp]".
-(* Allocate nsl_dh_ready *)
-iMod (nsl_dh_ready_alloc N skI skR si with "N_φ φ_init") as "#ready".
-(* Build and encrypt msg2 *)
+rewrite (term_token_difference gb (↑nsl_dhN)) //.
+iDestruct "token" as "[token_N token]".
+iDestruct (term_token_difference gb (↑nsl_dhN.@"compromised") with "token_N")
+  as "[comp_token token_N]"; first solve_ndisj.
+iDestruct (term_token_difference gb (↑nsl_dhN.@"ready") with "token_N")
+  as "[ready_token token_N]"; first solve_ndisj.
+iDestruct (term_token_difference gb (↑nsl_dhN.@"usage") with "token_N")
+  as "[use_token token_N]"; first solve_ndisj.
+iDestruct (term_token_difference gb (↑nsl_dhN.@"peer") with "token_N")
+  as "[peer_token _]"; first solve_ndisj.
+iMod (term_meta_set (nsl_dhN.@"usage") N with "use_token") as "#use";
+  first done.
+iMod (term_meta_set (nsl_dhN.@"peer") (skI, ga) with "peer_token")
+  as "#peer"; first done.
+iMod ("hook" $! b with "token") as "[gift ψ]".
+iMod (nsl_dh_ready_alloc N si Init with "N_φ gift") as "#ready".
 wp_list. wp_term_of_list. wp_pures.
-iDestruct "dh_b" as "(#m_b & #s_b & #pred_b)".
+iPoseProof "dh_b" as "(#m_b & #s_b & #pred_b)".
 wp_apply wp_aenc => //.
-{ (* minted plaintext *)
-  rewrite minted_of_list /= minted_pkey.
+{ rewrite minted_of_list /= minted_pkey.
   do !iSplit => //.
   - by iApply all_minted_TExp; rewrite minted_TInt; iSplit.
   - rewrite [Tag]unlock. by rewrite minted_TInt. }
-{ (* encryption invariant *)
-  iRight. iSplit.
-  - (* □ msg2_pred skI plaintext *)
-    iModIntro. iExists ga, gb, skR, N. iSplit => //.
-    iExists b. do !iSplit => //.
-  - (* □ (public skI → public plaintext) *)
-    iIntros "!> #p_skI".
+{ iRight. iSplit.
+  - iModIntro. iExists ga, gb, skR, N. iSplit => //.
+    iExists b. by do !iSplit.
+  - iIntros "!> #p_skI".
     rewrite public_of_list /=.
     do !iSplit => //.
     + by iApply "s_ga"; iLeft.
-    + iApply (public_dh_share with "[#]").
-      { do !iSplit; eauto. }
-      iModIntro. by iLeft.
+    + iApply (public_dh_share with "dh_b"). iModIntro. by iLeft.
     + by iApply public_aenc_key.
     + rewrite [Tag]unlock. by rewrite public_TInt. }
 iIntros "%m2 #p_m2". wp_pures.
@@ -143,159 +140,150 @@ wp_apply wp_send => //. wp_pures.
 iApply ("Hpost" $! b). by iFrame "∗ #".
 Qed.
 
-Lemma wp_responder_recv_msg3 c skI skR ga (b : nonce) :
+(* A forged [m3] reveals the responder's share, which only a leaked long-term
+   key explains.  Otherwise the initiator vouches for the session. *)
+#[local] Lemma wp_responder_recv_msg3 c skI skR ga (b : nonce) N φ ρ :
   let gb := TExp (TInt 0) b in
-  let gab := TExp ga b in
-  let si := SessInfo skI skR ga gb gab in
+  let si := SessInfo skI skR ga gb (TExp ga b) in
   {{{
     channel c ∗
     cryptis_ctx ∗
     nsl_dh_ctx ∗
+    nsl_dh_pred N φ ρ ∗
     minted skI ∗
     minted skR ∗
     minted ga ∗
-    □ (public skI ∨ public skR → public ga) ∗
-    dh_key skI skR b ∗
-    has_peer_share gb (Some ga) ∗
-    release_token gb
+    dh_key skI skR False b ∗
+    resp_peer gb skI ga ∗
+    usage gb N ∗
+    term_token gb (↑nsl_dhN.@"compromised") ∗
+    term_token gb (↑nsl_dhN.@"ready")
   }}}
     responder_recv_msg3 c skR (Spec.pkey skI) ga b gb
   {{{ r, RET (repr r);
       ⌜r = None⌝ ∨
       ⌜r = Some (si_key si)⌝ ∗
-      session skI skR si ∗
-      release_token gb }}}.
+      session ρ Resp si ∗
+      (compromised Resp si ∨ φ si Resp) }}}.
 Proof.
-move=> gb gab si.
-iIntros "%Ψ (#chan & #ctx & #(m1_pred & m2_pred & m3_pred) &
-         #m_skI & #m_skR & #m_ga & #s_ga & #dh_b & #ps_gb & rel) Hpost".
-iDestruct "dh_b" as "(#m_b & #s_b & #pred_b)".
+move=> gb si.
+iIntros "%Ψ (#chan & #ctx & #nsl_ctx & #N_φ & #m_skI & #m_skR & #m_ga &
+         #dh_b & #peer & #use & comp_token & ready_token) Hpost".
+iPoseProof "nsl_ctx" as "(_ & _ & m3_pred & _)".
+iPoseProof "dh_b" as "(#m_b & #s_b & #pred_b)".
 have Nm_b : negb (is_mul b) by [].
 rewrite /responder_recv_msg3. wp_pures.
 wp_apply wp_pkey. wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m) "#p_m".
 wp_apply wp_adec => //. iSplit; last by protocol_failure.
 iClear "p_m" => {m}. iIntros "%m3 #m_m3 #inv_m3".
-(* Check eq_term m3 gb *)
-wp_pure _ credit:"Hc1".
+wp_pure _ credit:"c1".
 wp_eq_term e; last by protocol_failure. subst m3.
 wp_pures.
-(* Compute gab and session key *)
 wp_bind (texp _ _). iApply wp_texp. wp_pures.
 wp_list. wp_term_of_list. wp_pures.
-(* Do case analysis and credit elimination while still in WP context *)
-iPoseProof (dh_key_public_released skI skR b ga
-             with "[#] ps_gb") as "#rel_b".
-{ do !iSplit; eauto. }
 iAssert (minted (si_key si)) as "#m_k".
-{ rewrite minted_senc minted_of_list /= !minted_pkey.
-  do !iSplit => //.
-  - by iApply all_minted_TExp; iSplit. }
-iDestruct "inv_m3" as "[#p_gb|(#inv_m3 & _)]".
-- (* public gb — case split via public_exp_inv_same *)
-  iPoseProof (public_exp_inv_same (t1 := b) with "p_gb") as "exp_b_inv";
-    first by rewrite (exps_TExp1 Nm_b) /SMS.pos SMS.car_singleton;
-             set_solver.
-  iDestruct "exp_b_inv" as "[#p_b | (%t3 & %base_t3 & %t3_sub & #base_b)]".
-  + (* public b — contradiction with release_token *)
-    iDestruct ("s_b" with "p_b") as "#later_ns".
-    iMod (lc_fupd_elim_later_pers with "Hc1 later_ns") as "#ns".
-    iExFalso.
-    iDestruct "ns" as "[#ps_none|(%ga' & #ps_some & #r_gb & _)]".
-    * by iPoseProof (has_peer_share_agree with "ps_gb ps_none") as "%".
-    * by iApply (term_meta_token with "rel r_gb").
-  + (* exp_pred b t3 — derive corruption *)
-    iPoseProof ("pred_b" $! t3 with "base_b") as "#later_ks".
-    iMod (lc_fupd_elim_later_pers with "Hc1 later_ks") as "#[#corr _]".
-    wp_bind (derive_senc_key _). iApply wp_derive_senc_key. iNext. wp_pures.
-    iApply ("Hpost" $! (Some (si_key si))). iRight. iModIntro. iSplit => //.
-    iFrame "rel". do !iSplit => //.
-    * (* released → public *)
-      iIntros "!> #[#r_ga #r_gb]".
-      iAssert (public b) as "#p_b".
-      { iApply "rel_b". iNext. by iSplit. }
-      iAssert (public ga) as "#p_ga".
-      { iApply "s_ga". done. }
-      rewrite public_senc_key public_of_list /=.
-      iSplit; [by iApply public_aenc_key|].
-      iSplit; [by iApply public_aenc_key|].
-      iSplit; [done|].
-      iSplit; [iApply public_TExp; [by rewrite public_TInt|done]|].
-      iSplit; [|done].
-      iApply public_TExp => //.
-    * by iLeft.
-- (* msg3_pred — honest case *)
-  iPoseProof ("inv_m3" $! ga b with "[%] ps_gb") as "[#rel_ga_gb #gab_iff]".
-  { done. }
-  wp_bind (derive_senc_key _). iApply wp_derive_senc_key. iNext. wp_pures.
-  iApply ("Hpost" $! (Some (si_key si))). iRight. iModIntro. iSplit => //.
-  iFrame "rel". do !iSplit => //.
-  * (* released → public *)
-    iIntros "!> #[#r_ga #r_gb]".
-    iAssert (public ga) as "#p_ga".
-    { iApply "rel_ga_gb". by iSplit. }
-    iAssert (public b) as "#p_b".
-    { iApply "rel_b". iNext. by iSplit. }
-    rewrite public_senc_key public_of_list /=.
-    iSplit; [by iApply public_aenc_key|].
-    iSplit; [by iApply public_aenc_key|].
-    iSplit; [done|].
-    iSplit; [iApply public_TExp; [by rewrite public_TInt|done]|].
-    iSplit; [|done].
-    iApply "gab_iff". by iSplit.
-  * (* public → released OR corruption *)
-    iRight. iIntros "!> #p_k".
-    rewrite public_senc_key public_of_list /=.
-    iDestruct "p_k" as "(_ & _ & _ & _ & #p_gab & _)".
-    by iApply "gab_iff".
+{ rewrite minted_si_key /si_seed minted_of_list /= !minted_pkey.
+  do !iSplit => //;
+    by iApply all_minted_TExp; rewrite ?minted_TInt; iSplit. }
+iPoseProof (key_release _ _ _ si with "nsl_ctx N_φ use m_k") as "#rel".
+
+iAssert (|={⊤}=> session ρ Resp si ∗ (compromised Resp si ∨ φ si Resp))%I
+  with "[c1 comp_token ready_token]" as "> [#sess res]".
+{ iDestruct "inv_m3" as "[#p_gb|[#inv_m3 _]]".
+  - iAssert (|={⊤}=> public skI ∨ public skR)%I with "[c1]" as "> #comp".
+    { iPoseProof (public_exp_inv_same (t1 := b) with "p_gb") as "[#p_b|H]";
+        first by rewrite (exps_TExp1 Nm_b) /SMS.pos SMS.car_singleton;
+                 set_solver.
+      - iDestruct ("s_b" with "p_b") as "#f".
+        by iMod (lc_fupd_elim_later_pers with "c1 f") as "#[]".
+      - iDestruct "H" as "(%t3 & _ & _ & #p)".
+        iPoseProof ("pred_b" $! t3 with "p") as "#ks".
+        iMod (lc_fupd_elim_later_pers with "c1 ks") as "#[comp _]".
+        by iModIntro. }
+    iMod (term_meta_set (nsl_dhN.@"compromised") true with "comp_token")
+      as "#c"; first solve_ndisj.
+    iModIntro. iSplit; last by iLeft.
+    iSplit; first done. iSplit; first done.
+    iLeft. iSplit; first done. by iSplit.
+  - iDestruct ("inv_m3" $! skI ga b with "[//] peer")
+      as "(%a & %e_ga & #dh_a & #nc & %N' & #use' & #ready)".
+    iPoseProof (term_meta_agree with "use use'") as "<-".
+    subst ga.
+    iDestruct (honest_session with "nsl_ctx N_φ dh_a dh_b nc use m_k")
+      as "[_ #ok]".
+    iMod (term_meta_set (nsl_dhN.@"compromised") false with "comp_token")
+      as "#nc_R"; first solve_ndisj.
+    iMod ("ready" with "N_φ ready_token") as "res".
+    iMod (lc_fupd_elim_later with "c1 res") as "res".
+    iModIntro. iSplit; last by iRight.
+    iSplit; first done. iSplit; first done.
+    iRight. iSplit; last done.
+    iIntros "!> #c". by iDestruct (term_meta_agree with "c nc_R") as %?. }
+wp_bind (session_key _). iApply (wp_session_key si). wp_pures.
+iApply ("Hpost" $! (Some (si_key si))). iRight. iModIntro. by iFrame "∗ #".
 Qed.
 
-Lemma wp_responder_simple c skR N :
-  {{{
-    channel c ∗
-    cryptis_ctx ∗
-    nsl_dh_ctx ∗
-    nsl_dh_pred N (λ _ _ _ _, True)%I ∗
-    minted skR
-  }}}
+Lemma wp_responder_confirm c skI skR ga N φ ρ ψ :
+  {{{ channel c ∗ cryptis_ctx ∗ nsl_dh_ctx ∗ nsl_dh_pred N φ ρ ∗
+      minted skI ∗ minted skR ∗ minted ga ∗
+      □ (public skI ∨ public skR → public ga) ∗
+      (∀ b : nonce,
+          let si := SessInfo skI skR ga (TExp (TInt 0) b) (TExp ga b) in
+          term_token (si_resp_share si) (⊤ ∖ ↑nsl_dhN) ={⊤}=∗
+          φ si Init ∗ ψ si) }}}
+    responder_confirm c skR (Spec.pkey skI) (Tag N) ga
+  {{{ r, RET (repr r);
+      ⌜r = None⌝ ∨ ∃ b : nonce,
+        let si := SessInfo skI skR ga (TExp (TInt 0) b) (TExp ga b) in
+        ⌜r = Some (si_key si)⌝ ∗
+        session ρ Resp si ∗ ψ si ∗
+        (compromised Resp si ∨ φ si Resp) }}}.
+Proof.
+iIntros "%Ψ (#chan & #ctx & #nsl_ctx & #N_φ & #m_skI & #m_skR & #m_ga &
+         #s_ga & hook) Hpost".
+rewrite /responder_confirm. wp_pures.
+wp_apply (wp_responder_send_msg2 _ _ _ _ _ _ _ ψ with "[hook]");
+  first by iFrame "∗ #".
+iIntros "%b (#dh_b & #peer & #use & comp_token & ready_token & ψ)".
+wp_pures.
+wp_apply (wp_responder_recv_msg3 with "[comp_token ready_token]");
+  first by iFrame "∗ #".
+iIntros "%r [->|(-> & #sess & res)]".
+{ iApply ("Hpost" $! None). by iLeft. }
+iApply ("Hpost" $! (Some _)). iRight. iExists b. iFrame. by iSplit.
+Qed.
+
+Lemma wp_responder c skR N φ ρ ψ :
+  {{{ channel c ∗ cryptis_ctx ∗ nsl_dh_ctx ∗ nsl_dh_pred N φ ρ ∗ minted skR ∗
+      (∀ skI ga (b : nonce),
+          let si := SessInfo skI skR ga (TExp (TInt 0) b) (TExp ga b) in
+          term_token (si_resp_share si) (⊤ ∖ ↑nsl_dhN) ={⊤}=∗
+          φ si Init ∗ ψ si) }}}
     responder c skR (Tag N)
   {{{ r, RET (repr r);
-      ⌜r = None⌝ ∨ ∃ skI si,
-      ⌜r = Some (Spec.pkey skI, si_key si)⌝ ∗
-      session skI skR si ∗
-      release_token (si_resp_share si) ∗
-      term_token (si_resp_share si) (⊤ ∖ ↑nsl_dhN)
-  }}}.
+      ⌜r = None⌝ ∨ ∃ skI ga (b : nonce),
+        let si := SessInfo skI skR ga (TExp (TInt 0) b) (TExp ga b) in
+        ⌜r = Some (Spec.pkey skI, si_key si)⌝ ∗
+        session ρ Resp si ∗ ψ si ∗
+        (compromised Resp si ∨ φ si Resp) }}}.
 Proof.
-iIntros "%Ψ (#chan & #ctx & #nsl_ctx & #N_φ & #m_skR) Hpost".
+iIntros "%Ψ (#chan & #ctx & #nsl_ctx & #N_φ & #m_skR & hook) Hpost".
 rewrite /responder /responder_listen. wp_pures.
-(* Step 1: recv msg1 *)
 wp_bind (responder_recv_msg1 _ _).
-wp_apply wp_responder_recv_msg1.
-{ by iFrame "#". }
+wp_apply wp_responder_recv_msg1; first by iFrame "#".
 iIntros "%r [->|(%ga & %skI & -> & #m_ga & #m_skI & #s_ga)]".
 { wp_pures. iApply ("Hpost" $! None). by iLeft. }
 wp_pures.
-(* Step 2: send msg2 via responder_confirm *)
-rewrite /responder_confirm. wp_pures.
-iAssert (failed_early skI skR false) as "fe". { done. }
-wp_apply (wp_responder_send_msg2 _ _ _ _ _ (λ _ _ _ _, True)%I false).
-{ iFrame "∗ #". iIntros "%b res".
-  iMod (term_meta_set (nsl_dhN.@"res") () with "res") as "#_"; first by solve_ndisj.
-  by iFrame. }
-iIntros "%b (#dh_b & #ps_gb & rel & tok & _)".
-set gb := TExp (TInt 0) b.
-wp_pures.
-(* Step 3: recv msg3 *)
-wp_apply (wp_responder_recv_msg3 c skI skR ga b with "[$]").
-iIntros "%r2 [->|(%e_r2 & #sess & rel2)]".
+wp_bind (responder_confirm _ _ _ _ _).
+wp_apply (wp_responder_confirm _ _ _ _ _ _ _ ψ with "[hook]").
+{ iFrame "#". iIntros "%b". iApply "hook". }
+iIntros "%r [->|(%b & -> & #sess & ψ & res)]".
 { wp_pures. iApply ("Hpost" $! None). by iLeft. }
-subst r2. wp_pures.
-set gab := TExp ga b.
-set si := SessInfo skI skR ga gb gab.
-iApply ("Hpost" $! (Some (Spec.pkey skI, si_key si))).
-iRight. iExists skI, si. iModIntro. iSplit => //.
-by iFrame "∗ #".
+wp_pures.
+iApply ("Hpost" $! (Some (Spec.pkey skI, si_key _))).
+iRight. iExists skI, ga, b. iFrame. iModIntro. by iSplit.
+
 Qed.
 
 End Verif.

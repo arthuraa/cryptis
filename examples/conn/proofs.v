@@ -45,7 +45,7 @@ Lemma wp_connect P c skI skR N ps :
   {{{ cs, RET (repr cs);
       connected ps skI skR Init cs ∗
       (public (si_key cs) ∨ P) ∗
-      release_token (si_init_share cs) ∗
+      GenConn.release_token (si_init_share cs) ∗
       term_token (si_init_share cs) (⊤ ∖ ↑iso_dhN ∖ ↑connN) }}}.
 Proof.
 iIntros "#(? & ? & ? & ? & ?) !> %Φ pre post".
@@ -73,7 +73,7 @@ Lemma wp_confirm P ps c skI skR ga N :
   {{{ cs, RET (repr cs);
       connected ps skI skR Resp cs ∗
       (public (si_key cs) ∨ P) ∗
-      release_token (si_resp_share cs) ∗
+      GenConn.release_token (si_resp_share cs) ∗
       term_token (si_resp_share cs) (⊤ ∖ ↑iso_dhN ∖ ↑connN) }}}.
 Proof.
 iIntros "#? !> %Φ (#p_ga & #p_pkA & #sign_skB & P) post".

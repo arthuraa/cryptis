@@ -60,7 +60,7 @@ Lemma wp_server_conn_handler skI skR cs vdb vlock γlock :
 Proof.
 iIntros "#lock #? #ctx".
 iIntros "!> %Φ ((conn & db) & locked) post".
-iPoseProof (RPC.server_connected_session with "conn") as "#sess".
+iPoseProof (RPC.server_connected_keyE with "conn") as "[%e_I %e_R]".
 iPoseProof (store_ctx_rpc_ctx with "[//]") as "?".
 wp_lam. wp_pures. wp_list.
 wp_apply wp_server_handle_create; eauto. iIntros "% #?". wp_list.
@@ -74,8 +74,8 @@ iIntros "(dis & %db & #p_db & vdb & ready)".
 wp_pures.
 wp_apply (release_spec with "[$locked dis vdb ready]") => //.
 iSplit => //. iFrame. iSplit => //.
-iDestruct "ready" as "[fail|?]"; eauto.
-iLeft. by iApply session_compromised'.
+iDestruct "ready" as "[[fail _]|?]"; eauto.
+iLeft. by rewrite e_I e_R.
 Qed.
 
 Lemma wp_server_find_client ss skI :

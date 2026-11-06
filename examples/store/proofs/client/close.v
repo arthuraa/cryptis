@@ -36,7 +36,7 @@ Proof.
 iIntros "(#? & (_ & _ & _ & #?))".
 iIntros "!> %Φ client post".
 iDestruct "client" as "(conn & %db & ready & state)".
-rewrite compromised_public.
+rewrite GenConn.compromised_public.
 iAssert (RPC.client_connected skI skR cs ∗
          ◇ (GenConn.failure skI skR ∨ db_client_ready skI skR db))%I
   with "[conn ready]" as "[conn >ready]".
