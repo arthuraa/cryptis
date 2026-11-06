@@ -141,14 +141,9 @@ Qed.
 
 (** ** Connect and confirm
 
-The hypothesis [□ (public skI → ▷ False)] for both keys flows to
-[□ (public (si_key cs) → False)] through the iso-DH key secrecy chain:
-  1. [freeze_secret] gives [□ (public sk ↔ ▷ False)] from [secret sk]
-  2. [secret_session] gives [session_ok si] from both keys being secret
-  3. [unreleased_key_secrecy] gives [□ (public (si_key si) ↔ ▷ False)]
-     from [session_ok si] and [□ (¬ released_session si)]
-The [▷] is eliminated using a later credit from the WP context of the
-connect/confirm operations themselves. *)
+The hypothesis [□ (public skI → ▷ False)] for both keys rules out the failure
+branch of [GenConn.connected_session_ok]; its [session_ok], together with
+[GenConn.unrelease], gives [□ (public (si_key cs) → ▷ False)]. *)
 
 Lemma trusted_wp_connect N p c skI skR :
   channel c -∗
@@ -171,20 +166,17 @@ eauto.
 (* { iDestruct "pre" as "[fail|_]"; eauto. } *)
 iIntros "!> %cs (conn & rel & disj)".
 iDestruct "conn" as "[gconn pub_or_own]".
-iDestruct "gconn" as "(#e1 & #e2 & #e3 & #base & #chan2 & #sess_cs & rest)".
-iAssert (GenConn.connected base.sess_ctx skI skR Init cs) with "[rest]" as "gconn".
-{ iFrame "#". iExact "rest". }
-iDestruct (session_session_ok with "sess_cs") as "[comp | #ok]".
-- iDestruct "comp" as "[p_si | p_sr]".
-  + iDestruct "e1" as %<-. iMod ("hon_I" with "p_si") as "[]".
-  + iDestruct "e2" as %<-. iMod ("hon_R" with "p_sr") as "[]".
-- iMod (unrelease Init cs with "rel") as "#un".
-  iDestruct (unreleased_key_secrecy with "un ok") as "#sec".
+iPoseProof (GenConn.connected_session_ok with "gconn") as "#ok".
+iDestruct "ok" as "[[p_si | p_sr] | #ok]".
+- iMod ("hon_I" with "p_si") as "[]".
+- iMod ("hon_R" with "p_sr") as "[]".
+- iMod (GenConn.unrelease Init cs with "rel") as "#un".
   iApply "post".
   rewrite /trusted_connected /Sess.connected.
   iSplitL "gconn pub_or_own".
   { iModIntro. iFrame "gconn pub_or_own". }
-  iModIntro. iIntros "!> #pub". by iApply "sec".
+  iModIntro. iIntros "!> #pub". iDestruct ("ok" with "pub") as "#r".
+  iNext. by iApply "un".
 Qed.
 
 Lemma trusted_wp_confirm N p c skI skR ga :
@@ -215,16 +207,11 @@ wp_apply (GenConn.wp_confirm True with "[]").
   iSplitL "ownR". { iExists (γl, γr). iFrame. by eauto. }
   iExists (γl, γr). iFrame. by eauto.
 iIntros "%cs (gconn & disj & proto & rel & token)".
-iDestruct "gconn" as "(#e1 & #e2 & #e3 & #base2 & #chan3 & #sess_cs & rest)".
-iAssert (gen_conn.proofs.base.connected (base.chan_inv (Sess.sess_params p)) skI skR Resp cs)
-  with "[rest]" as "gconn".
-{ iFrame "#". iExact "rest". }
-iDestruct (session_session_ok with "sess_cs") as "[comp | #ok]".
-- iDestruct "comp" as "[p_si | p_sr]".
-  + iDestruct "e1" as %<-. iMod ("hon_I" with "p_si") as "[]".
-  + iDestruct "e2" as %<-. iMod ("hon_R" with "p_sr") as "[]".
-- iMod (unrelease Resp (base.cs_si cs) with "rel") as "#un".
-  iDestruct (unreleased_key_secrecy with "un ok") as "#sec".
+iPoseProof (GenConn.connected_session_ok with "gconn") as "#ok".
+iDestruct "ok" as "[[p_si | p_sr] | #ok]".
+- iMod ("hon_I" with "p_si") as "[]".
+- iMod ("hon_R" with "p_sr") as "[]".
+- iMod (GenConn.unrelease Resp (base.cs_si cs) with "rel") as "#un".
   iApply "post".
   rewrite /trusted_connected /Sess.connected.
   iSplitL "gconn proto".
@@ -232,7 +219,8 @@ iDestruct (session_session_ok with "sess_cs") as "[comp | #ok]".
     iDestruct "proto" as "[#pub | own]".
     - iLeft. iExact "pub".
     - iRight. iExact "own". }
-  iModIntro. iIntros "!> #pub". by iApply "sec".
+  iModIntro. iIntros "!> #pub". iDestruct ("ok" with "pub") as "#r".
+  iNext. by iApply "un".
 Qed.
 
 (** **Select and branch *)

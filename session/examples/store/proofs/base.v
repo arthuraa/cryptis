@@ -136,7 +136,7 @@ Definition db_arms skI skR si
   {[dbN.@"close" :=
       (∃ db, MSG (TInt 0) {{ db_client_token skI skR odb db }};
          (<?> MSG (TInt 0) {{ db_main' skI skR db ∗
-                              released (si_resp_share si) }};
+                              GenConn.released (si_resp_share si) }};
           END)%proto)%msg]})).
 
 Definition db_st_aux skI skR si
@@ -169,11 +169,11 @@ Proof. rewrite db_st_unfold iProto_dual_tag //. Qed.
 
 Lemma connected_public_key_or' skI skR rl cs p P :
   Sess.connected skI skR rl cs p -∗
-  release_token (si_share_of rl cs) -∗
+  GenConn.release_token (si_share_of rl cs) -∗
   (public (si_key cs) ∨ P) -∗
   Sess.connected skI skR rl cs p ∗
-  release_token (si_share_of rl cs) ∗
-  ◇ (compromised cs ∨ P).
+  GenConn.release_token (si_share_of rl cs) ∗
+  ◇ (GenConn.compromised cs ∨ P).
 Proof.
 rewrite /Sess.connected. iIntros "[gc own] rel disj".
 iDestruct (GenConn.connected_public_key_or with "gc rel disj")
@@ -183,16 +183,16 @@ Qed.
 
 Lemma connected_compromised skI skR rl cs p q :
   Sess.connected skI skR rl cs p -∗
-  compromised cs -∗
+  GenConn.compromised cs -∗
   Sess.connected skI skR rl cs q.
 Proof.
 rewrite /Sess.connected. iIntros "[gc _] #comp". iFrame.
-iLeft. by iApply compromised_public.
+iLeft. by iApply GenConn.compromised_public.
 Qed.
 
 Lemma connected_failure' skI skR rl cs p :
   Sess.connected skI skR rl cs p -∗
-  compromised cs -∗
+  GenConn.compromised cs -∗
   GenConn.failure skI skR.
 Proof.
 rewrite /Sess.connected. iIntros "[gc _] #comp".
@@ -202,8 +202,8 @@ Qed.
 
 Lemma connected_released skI skR rl cs p :
   Sess.connected skI skR rl cs p -∗
-  released (si_init_share cs) -∗
-  released (si_resp_share cs) -∗
+  GenConn.released (si_init_share cs) -∗
+  GenConn.released (si_resp_share cs) -∗
   public (si_key cs).
 Proof.
 rewrite /Sess.connected. iIntros "[gc _] #r1 #r2".
@@ -254,7 +254,7 @@ Lemma db_arms_close skI skR si rec odb :
   db_arms skI skR si rec odb !! dbN.@"close" =
   Some (∃ db, MSG (TInt 0) {{ db_client_token skI skR odb db }};
           (<?> MSG (TInt 0) {{ db_main' skI skR db ∗
-                               released (si_resp_share si) }};
+                               GenConn.released (si_resp_share si) }};
            END)%proto)%msg.
 Proof.
 rewrite /db_arms lookup_insert_ne; last exact: db_store_close.
@@ -289,14 +289,14 @@ Definition db_connected' skI skR cs odb db : iProp :=
 
 Definition db_connected skI skR cs : iProp := ∃ odb db,
   Sess.connected skI skR Init cs (db_st skI skR cs odb) ∗
-  release_token (si_init_share cs) ∗
+  GenConn.release_token (si_init_share cs) ∗
   db_connected' skI skR cs odb db.
 
 Lemma db_connected_ok skI skR cs :
   db_connected skI skR cs -∗
   secret skI -∗
   secret skR -∗
-  ◇ session_ok cs.
+  ◇ GenConn.session_ok cs.
 Proof.
 iIntros "(%odb & %db & (gc & _) & _ & _ & _) s1 s2".
 by iApply (GenConn.connected_ok with "gc s1 s2").
@@ -304,12 +304,12 @@ Qed.
 
 Lemma db_connected_ok_compromised skI skR cs :
   db_connected skI skR cs -∗
-  session_ok cs -∗
-  compromised cs -∗
+  GenConn.session_ok cs -∗
+  GenConn.compromised cs -∗
   ▷ False.
 Proof.
 iIntros "(%odb & %db & _ & rel & _) ok comp".
-iApply (session_ok_compromised Init with "ok comp rel").
+iApply (GenConn.session_ok_compromised Init with "ok comp rel").
 Qed.
 
 Definition db_mapsto skI skR t1 t2 : iProp :=
@@ -364,7 +364,7 @@ Definition server_db_connected' skI skR cs vdb odb db : iProp :=
 
 Definition server_db_connected skI skR cs vdb : iProp := ∃ odb db,
   Sess.connected skI skR Resp cs (iProto_dual (db_st skI skR cs odb)) ∗
-  release_token (si_resp_share cs) ∗
+  GenConn.release_token (si_resp_share cs) ∗
   server_db_connected' skI skR cs vdb odb db.
 
 Definition server_db_disconnected skI skR vdb : iProp := ∃ db,
@@ -388,7 +388,7 @@ Qed.
 Definition server_handler skI skR cs vdb (h : handler) : iProp :=
   □ ∀ odb db (t : term) p,
     {{{ Sess.connected skI skR Resp cs p ∗
-        release_token (si_resp_share cs) ∗
+        GenConn.release_token (si_resp_share cs) ∗
         server_db_connected' skI skR cs vdb odb db ∗
         public t ∗
         (public (si_key cs) ∨

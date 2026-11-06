@@ -42,7 +42,7 @@ Lemma wp_connect P c skI skR :
     impl.connect c skI (Spec.pkey skR)
   {{{ cs, RET (repr cs);
       client_connected skI skR cs ∗
-      (compromised cs ∨ P) }}}.
+      (GenConn.compromised cs ∨ P) }}}.
 Proof.
 iIntros "#? #? [#? #?] #? #? % !> P post".
 wp_lam; wp_pures. iApply wp_fupd.
@@ -78,7 +78,7 @@ Lemma wp_confirm P c skI skR ga :
     impl.confirm c skR (ga, Spec.pkey skI)%V
   {{{ cs, RET (repr cs);
       server_connected skI skR cs ∗
-      (compromised cs ∨ P) }}}.
+      (GenConn.compromised cs ∨ P) }}}.
 Proof.
 iIntros "#? #ctx1 [#? #ctx2] !> %Φ (#p_ga & #m_skI & #m_skR & P) post".
 wp_lam; wp_pures. iApply wp_fupd.
@@ -143,15 +143,15 @@ Lemma wp_call N φ ψ skI skR cs t :
   {{{ cryptis_ctx ∗ ctx ∗ public t ∗
       rpc_pred N φ ψ ∗
       client_connected skI skR cs ∗
-      (compromised cs ∨ φ skI skR cs t) }}}
+      (GenConn.compromised cs ∨ φ skI skR cs t) }}}
     impl.call (repr cs) (Tag N) t
   {{{ t', RET (repr t');
       client_connected skI skR cs ∗
-      (compromised cs ∨ ψ skI skR cs t t') ∗
+      (GenConn.compromised cs ∨ ψ skI skR cs t t') ∗
       public t' }}}.
 Proof.
 iIntros "%Φ (#? & #ctx & #p_t & #N & (conn & rel & tok) & inv) post".
-rewrite [in (_ ∨ φ _ _ _ _)%I]compromised_public.
+rewrite [in (_ ∨ φ _ _ _ _)%I]GenConn.compromised_public.
 iApply wp_fupd.
 wp_apply (wp_call_gen with "[$conn $tok $inv]"); first by eauto.
 iIntros "%t' (conn & tok & res & #p_t')".
@@ -190,8 +190,8 @@ Lemma wp_handle_gen Φ N φ ψ skI skR cs (f : val) :
     ctx ∗
     □ (∀ t : term,
       {{{ ▷ public t ∗
-          ▷ (compromised cs ∨ φ skI skR cs t) ∗
-          release_token (si_resp_share cs) ∗
+          ▷ (GenConn.compromised cs ∨ φ skI skR cs t) ∗
+          GenConn.release_token (si_resp_share cs) ∗
           Φ }}}
         f (repr t)
       {{{ ores, RET (repr ores);
@@ -200,9 +200,9 @@ Lemma wp_handle_gen Φ N φ ψ skI skR cs (f : val) :
               public t' ∗
               if continue then
                 (public (si_key cs) ∨ ψ skI skR cs t t') ∗
-                release_token (si_resp_share cs)
-              else public (si_key cs) ∨ released_session cs
-          | None => release_token (si_resp_share cs)
+                GenConn.release_token (si_resp_share cs)
+              else public (si_key cs) ∨ GenConn.released_session cs
+          | None => GenConn.release_token (si_resp_share cs)
           end ∗
           Φ }}})
   }}}
@@ -218,7 +218,7 @@ wp_pure _ credit:"c1".
 wp_pures. wp_untag t; wp_pures; last by iApply ("post" $! None); iFrame.
 iAssert (|={⊤}=> (
   connected skI skR Resp cs ∗
-  release_token (si_resp_share cs) ∗
+  GenConn.release_token (si_resp_share cs) ∗
   (public (si_key cs) ∨ resp_pred_token cs N t ∗ φ skI skR cs t)))%I
   with "[c1 conn rel inv_t]" as ">(conn & rel & inv_t)".
 { iDestruct "inv_t" as "[#fail|inv_t]".
@@ -241,7 +241,8 @@ iDestruct "res" as "(#p_t' & inv_t')".
 iPoseProof (Conn.connected_released_session with "conn") as "#sess".
 iAssert ((if continue then (public (si_key cs) ∨ ψ skI skR cs t t')
           else public (si_key cs)) ∗
-         (if continue then release_token (si_resp_share cs) else public (si_key cs)))%I
+         (if continue then GenConn.release_token (si_resp_share cs)
+          else public (si_key cs)))%I
   with "[inv_t']" as "[inv_t' rel]".
 { case: continue; eauto.
   iDestruct "inv_t'" as "[?|inv_t']"; eauto.
@@ -264,14 +265,14 @@ Lemma wp_handle Φ N φ ψ skI skR cs (f : val) :
     ctx ∗
     □ (∀ t : term,
       {{{ ▷ public t ∗
-          ▷ (compromised cs ∨ φ skI skR cs t) ∗
+          ▷ (GenConn.compromised cs ∨ φ skI skR cs t) ∗
           Φ }}}
         f (repr t)
       {{{ ot', RET (repr ot');
           match ot' : option term with
           | Some t' =>
               public t' ∗
-              (compromised cs ∨ ψ skI skR cs t t')
+              (GenConn.compromised cs ∨ ψ skI skR cs t t')
           | None => True
           end ∗
           Φ }}})
@@ -287,7 +288,7 @@ wp_pures.
 wp_apply ("wp" with "[$inv_t $inv]") => //.
 iIntros ([t'|]) "[ot' inv]"; wp_pures; last by iApply ("post" $! None); iFrame.
 iApply ("post" $! (Some (true, t'))). iClear "wp".
-rewrite compromised_public. by iFrame.
+rewrite GenConn.compromised_public. by iFrame.
 Qed.
 
 Lemma wp_handle_close Φ skI skR cs :
@@ -300,10 +301,10 @@ wp_apply wp_handle_gen; last by eauto.
 iSplit; first by iDestruct "ctx" as "[??]".
 iSplit; eauto. clear Ξ.
 iIntros "!> %t %Ξ !> (#p_t & #inv_t & rel & inv) post".
-iMod (release with "rel") as "#?".
+iMod (GenConn.release with "rel") as "#?".
 wp_pures. iApply ("post" $! (Some (false, _))). iFrame.
 iModIntro. iSplit; eauto.
-rewrite compromised_public.
+rewrite GenConn.compromised_public.
 iDestruct "inv_t" as "[?|inv_t]"; eauto.
 iRight. by iSplit.
 Qed.
@@ -380,7 +381,7 @@ Lemma wp_close skI skR cs :
   {{{ RET #(); public (si_key cs) }}}.
 Proof.
 iIntros "%Φ (#? & #ctx & conn & rel & tok) post".
-iMod (release with "rel") as "#rel". wp_lam.
+iMod (GenConn.release with "rel") as "#rel". wp_lam.
 iPoseProof "ctx" as "[? ?]".
 wp_apply (wp_call_gen with "[$conn $tok]").
 { rewrite public_TInt. do ![iSplit; eauto]. }

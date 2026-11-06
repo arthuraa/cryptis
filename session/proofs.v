@@ -25,7 +25,7 @@ Implicit Types n : nat.
 Implicit Types γ : gname.
 Implicit Types v : val.
 
-Abbreviation sessN := (iso_dhN.@"res".@"sess").
+Abbreviation sessN := (GenConn.connN.@"res".@"sess").
 
 Lemma wp_connect P N p c skI skR :
   channel c -∗
@@ -37,7 +37,7 @@ Lemma wp_connect P N p c skI skR :
     impl.connect c skI (Spec.pkey skR) (Tag N)
   {{{ cs, RET (repr cs);
       connected skI skR Init cs (p skI skR cs) ∗
-      release_token (si_init_share cs) ∗
+      GenConn.release_token (si_init_share cs) ∗
       (public (si_key cs) ∨ P) }}}.
 Proof.
 iIntros "#? #? #? #? #? % !> P post".
@@ -69,7 +69,7 @@ Lemma wp_confirm P N p c skI skR ga :
     impl.confirm c skR (Tag N) (ga, Spec.pkey skI)%V
   {{{ cs, RET (repr cs);
       connected skI skR Resp cs (iProto_dual (p skI skR cs)) ∗
-      release_token (si_resp_share cs) ∗
+      GenConn.release_token (si_resp_share cs) ∗
       (public (si_key cs) ∨ P) }}}.
 Proof.
 iIntros "#? #ctx1 #? !> %Φ (#p_ga & #m_skI & #m_skR & P) post".

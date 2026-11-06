@@ -38,6 +38,14 @@ proving any obligations when [public (si_key cs)] holds.  Moreover, the
 responder of the protocol is required to initialize the channel invariant by
 using the tokens associated with its key share.
 
+The release of sessions is also handled here, through the release condition
+of the key exchange: each party gets a [release_token] on its share, and the
+key of a session becomes public once both parties released it.  A party that
+already knows that a long-term key leaked gives up on its session, which
+releases the key as well; it decides before its peer completes the session
+and tells it so, so that a session established between honest parties keeps
+its key secret.
+
 To actually send and receive messages, the preconditions of the communication
 functions assume that the agents are capable of updating the channel invariant
 [chan_inv] when adding or removing a message.

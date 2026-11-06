@@ -48,7 +48,7 @@ Lemma wp_connect' (P : iProp) c skI skR :
     Sess.connect c skI (Spec.pkey skR) (Tag dbN)
   {{{ cs, RET (repr cs);
       connected skI skR Init cs (db_st skI skR cs None) ∗
-      release_token (si_init_share cs) ∗
+      GenConn.release_token (si_init_share cs) ∗
       (public (si_key cs) ∨ P) }}}.
 Proof.
 iIntros "#? #? #? #? #? %Φ !> HP post".
@@ -81,7 +81,7 @@ iDestruct (connected_public_key_or' with "conn rel ready")
 iAssert (|==> (public (si_key cs) ∨ db_client_token skI skR None db))%I
   with "[ready]" as ">token".
 { iDestruct "ready" as "[#comp|ready]".
-  - iLeft. by iApply compromised_public.
+  - iLeft. by iApply GenConn.compromised_public.
   - iModIntro. iFrame. }
 iApply "post". iModIntro. iExists None, db. iFrame.
 Qed.

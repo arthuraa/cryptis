@@ -178,19 +178,22 @@ Definition client_tokens cs : iProp :=
 
 Definition client_connected kI kR cs : iProp :=
   connected kI kR Init cs ∗
-  release_token (si_init_share cs) ∗
+  GenConn.release_token (si_init_share cs) ∗
   client_tokens cs.
 
-Lemma client_connected_session kI kR cs :
+Lemma client_connected_keyE kI kR cs :
   client_connected kI kR cs -∗
-  session kI kR cs.
-Proof. iIntros "(? & _)". by iApply Conn.connected_session. Qed.
+  ⌜kI = si_init cs⌝ ∗ ⌜kR = si_resp cs⌝.
+Proof.
+iIntros "(conn & _)".
+by iDestruct (Conn.connected_keyE with "conn") as "(-> & -> & _)".
+Qed.
 
 Lemma client_public_key_or skI skR cs P :
   client_connected skI skR cs -∗
   (public (si_key cs) ∨ P) -∗
   client_connected skI skR cs ∗
-  ◇ (compromised cs ∨ P).
+  ◇ (GenConn.compromised cs ∨ P).
 Proof.
 iIntros "(conn & rel & ?) P".
 iPoseProof (Conn.connected_public_key_or with "conn rel P")
@@ -202,7 +205,7 @@ Lemma client_connected_ok skI skR cs :
   client_connected skI skR cs -∗
   secret skI -∗
   secret skR -∗
-  ◇ session_ok cs.
+  ◇ GenConn.session_ok cs.
 Proof.
 iIntros "(conn & _)".
 by iApply (Conn.connected_ok with "conn").
@@ -219,28 +222,31 @@ Qed.
 
 Lemma client_connected_ok_compromise skI skR cs :
   client_connected skI skR cs -∗
-  session_ok cs -∗
-  compromised cs -∗
+  GenConn.session_ok cs -∗
+  GenConn.compromised cs -∗
   ▷ False.
 Proof.
 iIntros "(_ & rel & _) ok comp".
-iApply (session_ok_compromised Init with "ok comp rel").
+iApply (GenConn.session_ok_compromised Init with "ok comp rel").
 Qed.
 
 Definition server_connected skI skR cs : iProp :=
   connected skI skR Resp cs ∗
-  release_token (si_resp_share cs).
+  GenConn.release_token (si_resp_share cs).
 
-Lemma server_connected_session kI kR cs :
+Lemma server_connected_keyE kI kR cs :
   server_connected kI kR cs -∗
-  session kI kR cs.
-Proof. iIntros "(? & _)". by iApply Conn.connected_session. Qed.
+  ⌜kI = si_init cs⌝ ∗ ⌜kR = si_resp cs⌝.
+Proof.
+iIntros "(conn & _)".
+by iDestruct (Conn.connected_keyE with "conn") as "(-> & -> & _)".
+Qed.
 
 Lemma server_public_compromised skI skR cs P :
   server_connected skI skR cs -∗
   (public (si_key cs) ∨ P) -∗
   server_connected skI skR cs ∗
-  ◇ (compromised cs ∨ P).
+  ◇ (GenConn.compromised cs ∨ P).
 Proof.
 iIntros "(conn & rel) [#fail|?]"; last by iFrame.
 iPoseProof (Conn.connected_public_key with "conn rel fail") as "#?".
@@ -251,7 +257,7 @@ Lemma server_connected_ok skI skR cs :
   server_connected skI skR cs -∗
   secret skI -∗
   secret skR -∗
-  ◇ session_ok cs.
+  ◇ GenConn.session_ok cs.
 Proof.
 iIntros "(conn & _)".
 by iApply (Conn.connected_ok with "conn").
@@ -259,18 +265,18 @@ Qed.
 
 Lemma server_connected_ok_compromise skI skR cs :
   server_connected skI skR cs -∗
-  session_ok cs -∗
-  compromised cs -∗
+  GenConn.session_ok cs -∗
+  GenConn.compromised cs -∗
   ▷ False.
 Proof.
 iIntros "(_ & rel) ok comp".
-iApply (session_ok_compromised Resp with "ok comp rel").
+iApply (GenConn.session_ok_compromised Resp with "ok comp rel").
 Qed.
 
 Definition ctx : iProp :=
   rpc_pred
     (rpcN.@"close")
-    (λ _ _ si _, released (si_init_share si))
+    (λ _ _ si _, GenConn.released (si_init_share si))
     (λ _ _ _ _ _, False)%I ∗
   Conn.ctx rpcN {| Conn.msg_inv := rpc_msg_pred |}.
 

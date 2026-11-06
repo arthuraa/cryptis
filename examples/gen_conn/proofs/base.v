@@ -71,20 +71,129 @@ Implicit Types (si : sess_info) (rl : role).
 Implicit Types (ci : sign_key → sign_key → sess_info → list term → list term → iProp).
 Implicit Types (ps : params Σ).
 
+(* The key exchange has its own [compromised]. *)
+#[local] Abbreviation dh_compromised := compromised.
+
 Definition failure skI skR : iProp :=
    public skI ∨ public skR.
 
-Definition wf_sess_info si : iProp :=
-  session (si_init si) (si_resp si) si.
+(** The release of a session, recorded by each party on its share. *)
+Definition release_token share : iProp :=
+  term_token share (↑connN.@"released").
 
-#[global]
-Instance wf_sess_info_persistent si : Persistent (wf_sess_info si).
+Definition released share : iProp :=
+  term_meta share (connN.@"released") true.
+
+Lemma release share : release_token share ==∗ released share.
+Proof. by apply term_meta_set. Qed.
+
+Definition released_session si : iProp :=
+  released (si_init_share si) ∧ released (si_resp_share si).
+
+Lemma unrelease rl si :
+  release_token (si_share_of rl si) ==∗ □ ¬ released_session si.
+Proof.
+iIntros "tok".
+iMod (term_meta_set (connN.@"released") false with "tok") as "#un" => //.
+iIntros "!> !> [#init #resp]".
+iAssert (released (si_share_of rl si)) as "r"; first by case: rl.
+by iPoseProof (term_meta_agree with "r un") as "%".
+Qed.
+
+Lemma release_token_released_session si rl :
+  release_token (si_share_of rl si) -∗
+  released_session si -∗
+  False.
+Proof.
+iIntros "token [#init #resp]".
+iApply (term_meta_token (L:=bool) with "token"); last by case: rl.
+by [].
+Qed.
+
+(** A party gives up on a session when it knows that a long-term key leaked.
+    It decides before its peer completes, and tells it through the gift. *)
+Definition status X si : iProp :=
+  ∃ b : bool, term_meta X (connN.@"failed") b ∗
+    (if b then failure (si_init si) (si_resp si) else True).
+
+#[global] Instance status_persistent X si : Persistent (status X si).
+Proof. apply: bi.exist_persistent => - [] /=; apply _. Qed.
+
+(** When the key of a session is released: when both parties released it, or
+    when one of them gave up on it. *)
+Definition conn_rel si : iProp :=
+  released_session si ∨
+  term_meta (si_init_share si) (connN.@"failed") true ∨
+  term_meta (si_resp_share si) (connN.@"failed") true.
+
+Lemma conn_rel_released si :
+  status (si_init_share si) si -∗
+  status (si_resp_share si) si -∗
+  failure (si_init si) (si_resp si) ∨
+  □ (conn_rel si → released_session si).
+Proof.
+iIntros "(%b1 & #m1 & #f1) (%b2 & #m2 & #f2)".
+case: b1; first by iLeft.
+case: b2; first by iLeft.
+iRight. iIntros "!> #[r|[#m|#m]]"; first done.
+- by iDestruct (term_meta_agree with "m1 m") as %?.
+- by iDestruct (term_meta_agree with "m2 m") as %?.
+Qed.
+
+(** What a party knows of its session: the key exchange, its own decision, and
+    its peer's when the exchange was not compromised. *)
+Definition conn_session rl si : iProp :=
+  session conn_rel rl si ∗
+  status (si_share_of rl si) si ∗
+  (dh_compromised rl si ∨ status (si_share_of (swap_role rl) si) si).
+
+#[global] Instance conn_session_persistent rl si :
+  Persistent (conn_session rl si).
 Proof. apply _. Qed.
 
-#[local] Abbreviation chanN := (iso_dhN.@"res".@"chan").
+#[local] Lemma conn_session_cases rl si :
+  conn_session rl si -∗
+  failure (si_init si) (si_resp si) ∨
+  □ (public (si_key si) → ▷ released_session si).
+Proof.
+iIntros "((_ & _ & [(_ & #l & _)|(#nc & #ok)]) & #own & #peer)";
+  first by iLeft.
+iDestruct "peer" as "[#c|#peer]"; first by iDestruct ("nc" with "c") as "[]".
+iAssert (status (si_init_share si) si ∗ status (si_resp_share si) si)%I
+  as "[#sI #sR]"; first by case: rl; iSplit.
+iDestruct (conn_rel_released with "sI sR") as "[#f|#rel]"; first by iLeft.
+iRight. iIntros "!> #p_k". iDestruct ("ok" with "p_k") as "#r". iNext.
+by iApply "rel".
+Qed.
+
+(** What [gen_conn] calls compromised: a long-term key leaked, and so did the
+    key of the session. *)
+Definition compromised si : iProp :=
+  failure (si_init si) (si_resp si) ∗ public (si_key si).
+
+Lemma compromised_public si : compromised si ⊢ public (si_key si).
+Proof. by iIntros "(_&?)". Qed.
+
+Definition session_ok si : iProp :=
+  □ (public (si_key si) ↔ ▷ released_session si).
+
+#[global] Instance session_ok_persistent si : Persistent (session_ok si).
+Proof. apply _. Qed.
+
+Lemma session_ok_compromised rl si :
+  session_ok si -∗
+  compromised si -∗
+  release_token (si_share_of rl si) -∗
+  ▷ False.
+Proof.
+iIntros "#ok [_ #p_k] rel".
+iPoseProof ("ok" with "p_k") as "contra".
+iModIntro. by iApply (release_token_released_session with "rel contra").
+Qed.
+
+#[local] Abbreviation chanN := (connN.@"chan").
 #[local] Abbreviation recvN := (chanN.@"recv").
 #[local] Abbreviation sentN := (chanN.@"sent").
-#[local] Abbreviation predN := (chanN.@"pred").
 
 Definition recv_count gb rl n : iProp :=
   term_own gb (recvN.@rl) (●{#1/2} MaxNat n).
@@ -352,7 +461,7 @@ Definition connected ci skI skR rl cs : iProp :=
   ⌜cs_role cs = rl⌝ ∗
   base_ctx ∗
   channel (cs_chan cs) ∗
-  wf_sess_info cs ∗
+  conn_session rl cs ∗
   ∃ n m, cs_ts cs ↦∗ [ #n; #m ] ∗
     (public (si_key cs) ∨ counters ci skI skR cs rl n m).
 
@@ -367,9 +476,12 @@ Lemma connected_public_key ci skI skR rl cs :
   public (si_key cs) -∗
   ◇ compromised cs.
 Proof.
-iIntros "conn rel #p_k".
-iPoseProof "conn" as "(_ & _ & <- & _ & _ & #sess & _)".
-by iApply (session_compromised with "sess p_k rel").
+iIntros "(_ & _ & <- & _ & _ & #sess & _) rel #p_k".
+iDestruct (conn_session_cases with "sess") as "[#f|#ok]".
+  by iModIntro; iSplit.
+iDestruct ("ok" with "p_k") as "#r".
+iAssert (▷ False)%I with "[rel]" as ">[]".
+iNext. by iApply (release_token_released_session with "rel r").
 Qed.
 
 Lemma connected_public_key_or ci skI skR rl cs P :
@@ -389,15 +501,8 @@ Lemma connected_released_session ci skI skR rl cs :
   connected ci skI skR rl cs -∗
   □ (▷ released_session cs → public (si_key cs)).
 Proof.
-iIntros "(_ & _ & _ & _ & _ & #sess & _)".
-iIntros "!> #rel". by iApply (session_released_session with "sess rel").
-Qed.
-
-Lemma connected_session ci skI skR rl cs :
-  connected ci skI skR rl cs -∗
-  session skI skR cs.
-Proof.
-by iIntros "(<- & <- & _ & _ & _ & #sess & _)".
+iIntros "(_ & _ & _ & _ & _ & ((_ & #rel & _) & _) & _) !> #r".
+iApply "rel". iNext. iModIntro. by iLeft.
 Qed.
 
 Lemma connected_keyE ci skI skR rl cs :
@@ -405,14 +510,28 @@ Lemma connected_keyE ci skI skR rl cs :
   ⌜skI = si_init cs⌝ ∗ ⌜skR = si_resp cs⌝ ∗ ⌜rl = cs_role cs⌝.
 Proof. by iIntros "(-> & -> & -> & _)". Qed.
 
+Lemma connected_session_ok ci skI skR rl cs :
+  connected ci skI skR rl cs -∗
+  failure skI skR ∨ session_ok cs.
+Proof.
+iIntros "(<- & <- & _ & _ & _ & #sess & _)".
+iDestruct (conn_session_cases with "sess") as "[#f|#ok]"; first by iLeft.
+iRight. iIntros "!>". iSplit; first done.
+iIntros "#r". iDestruct "sess" as "((_ & #rel & _) & _)".
+iApply "rel". iNext. iModIntro. by iLeft.
+Qed.
+
 Lemma connected_ok ci skI skR rl cs :
   connected ci skI skR rl cs -∗
   secret skI -∗
   secret skR -∗
   ◇ session_ok cs.
 Proof.
-iIntros "(<- & <- & <- & _ & _ & #sess & % & % & _ & _) s_kI s_kR".
-by iApply (secret_session with "s_kI s_kR sess").
+iIntros "conn sI sR".
+iDestruct (connected_session_ok with "conn") as "[[#p|#p]|#ok]".
+- by iDestruct (secret_not_public with "sI p") as ">[]".
+- by iDestruct (secret_not_public with "sR p") as ">[]".
+- by iModIntro.
 Qed.
 
 Lemma session_failed_failure si :
@@ -431,13 +550,19 @@ iMod (connected_public_key with "conn rel fail") as "fail".
 by iApply (session_failed_failure with "fail").
 Qed.
 
+(** The gifts: the responder hands the initiator its end of the channel, and
+    each party tells the other whether it gave up. *)
+Definition conn_gift ps si rl : iProp :=
+  (if rl is Init then
+     init_pred ps (si_init si) (si_resp si) si Init ∗
+     counters (chan_inv ps) (si_init si) (si_resp si) si Init 0 0 ∗
+     status (si_resp_share si) si
+   else status (si_init_share si) si)%I.
+
 Definition ctx `{!iso_dhGS Σ} N ps : iProp :=
   base_ctx ∗
   iso_dh_ctx ∗
-  iso_dh_pred N (λ skI skR si rl,
-    init_pred ps skI skR si rl ∗
-    counters (chan_inv ps) skI skR si rl 0 0
-  )%I.
+  iso_dh_pred N (conn_gift ps) conn_rel.
 
 Lemma ctx_alloc `{!iso_dhGS Σ} N ps E :
   ↑N ⊆ E →

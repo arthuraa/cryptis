@@ -53,40 +53,40 @@ Definition connected ps skI skR rl cs : iProp :=
 
 Lemma connected_public_key ps skI skR rl cs :
   connected ps skI skR rl cs -∗
-  release_token (si_share_of rl cs) -∗
+  GenConn.release_token (si_share_of rl cs) -∗
   public (si_key cs) -∗
-  ◇ compromised cs.
+  ◇ GenConn.compromised cs.
 Proof. exact: GenConn.connected_public_key. Qed.
 
 Lemma connected_public_key_or ps skI skR rl cs P :
   connected ps skI skR rl cs -∗
-  release_token (si_share_of rl cs) -∗
+  GenConn.release_token (si_share_of rl cs) -∗
   public (si_key cs) ∨ P -∗
   connected ps skI skR rl cs ∗
-  release_token (si_share_of rl cs) ∗
-  ◇ (compromised cs ∨ P).
+  GenConn.release_token (si_share_of rl cs) ∗
+  ◇ (GenConn.compromised cs ∨ P).
 Proof. exact: GenConn.connected_public_key_or. Qed.
 
 Lemma connected_released_session ps skI skR rl cs :
   connected ps skI skR rl cs -∗
-  □ (▷ released_session cs → public (si_key cs)).
+  □ (▷ GenConn.released_session cs → public (si_key cs)).
 Proof. exact: GenConn.connected_released_session. Qed.
 
-Lemma connected_session ps skI skR rl cs :
+Lemma connected_keyE ps skI skR rl cs :
   connected ps skI skR rl cs -∗
-  session skI skR cs.
-Proof. exact: GenConn.connected_session. Qed.
+  ⌜skI = si_init cs⌝ ∗ ⌜skR = si_resp cs⌝ ∗ ⌜rl = GenConn.cs_role cs⌝.
+Proof. exact: GenConn.connected_keyE. Qed.
 
 Lemma connected_ok ps skI skR rl cs :
   connected ps skI skR rl cs -∗
   secret skI -∗
   secret skR -∗
-  ◇ session_ok cs.
+  ◇ GenConn.session_ok cs.
 Proof. exact: GenConn.connected_ok. Qed.
 
 Lemma connected_failure ps skI skR rl cs :
   connected ps skI skR rl cs -∗
-  release_token (si_share_of rl cs) -∗
+  GenConn.release_token (si_share_of rl cs) -∗
   public (si_key cs) -∗
   ◇ GenConn.failure skI skR.
 Proof. exact: GenConn.connected_failure. Qed.

@@ -113,7 +113,7 @@ Lemma wp_environment c (skI1 skR1 : aenc_key) (skI2 skR2 : sign_key) (psk : term
   cryptis_ctx -∗
   channel c -∗
   nsl_dh_ctx -∗
-  nsl_dh_pred nslN (λ _ _ _ _, True)%I -∗
+  nsl_dh_pred nslN (λ _ _, True)%I (λ _, False)%I -∗
   cr_ctx crN trivP -∗
   tls_ctx tlsN -∗
   public skI1 -∗
@@ -138,13 +138,15 @@ wp_bind (fork_loop _); iApply wp_fork_loop; eauto.
   wp_apply wp_is_aenc_key; first by iApply public_minted.
   iSplit; last by wp_pures; eauto.
   iIntros "%skR' -> #m_skR'".
-  wp_pures. wp_apply wp_initiator_weak.
+  wp_pures. wp_apply (wp_initiator _ _ _ _ _ _ (λ _, True%I) True%I).
   { iFrame "#". by iApply public_minted. }
+  { iSplit => //. iIntros "%a %gb _ !>". by iSplit. }
   by iIntros "%r _".
 iIntros "!> _"; wp_pures; wp_bind (fork_loop _); iApply wp_fork_loop => //.
   iModIntro.
-  wp_apply wp_responder_simple.
-  { iFrame "#". by iApply public_minted. }
+  wp_apply (wp_responder _ _ _ _ _ (λ _, True%I)).
+  { iFrame "#". iSplit; first by iApply public_minted.
+    iIntros "%skI %ga %b _ !>". by iSplit. }
   by iIntros "%r _".
 iIntros "!> _"; wp_pures; wp_bind (fork_loop _); iApply wp_fork_loop => //.
   iModIntro; iApply (wp_cr_init); eauto.
@@ -233,12 +235,12 @@ Lemma wp_game :
   nsl_dh_token ⊤ ∗
   seal_pred_token SIGN ⊤ ∗
   seal_pred_token SENC ⊤ ∗
-  hash_pred_token ⊤ -∗
+  hash_pred_token (⊤ ∖ ↑nsl_dhN) -∗
   WP game #() {{ v, ⌜v = NONEV ∨ v = SOMEV #true⌝ }}.
 Proof.
 iIntros "(#ctx & #nsl_ctx & nsl_tok & sign_tok & senc_tok & hash_tok)".
 rewrite /game; wp_pures.
-iMod (nsl_dh_pred_set nslN (λ _ _ _ _, True)%I with "nsl_tok")
+iMod (nsl_dh_pred_set nslN (λ _ _, True)%I (λ _, False)%I with "nsl_tok")
   as "(#nsl_pred & nsl_tok)"; first solve_ndisj.
 iMod (cr_alloc crN trivP with "sign_tok") as "(#cr_ctx & sign_tok)"; first solve_ndisj.
 iMod (tls_ctx_alloc tlsN with "senc_tok sign_tok hash_tok")
@@ -286,7 +288,9 @@ apply (adequate_result NotStuck _ _ (λ v _, v = NONEV ∨ v = SOMEV #true)).
 apply: heap_adequacy.
 iIntros (?) "?".
 iMod (cryptisGS_alloc _) as (?) "(#ctx & aenc_tok & sign_tok & senc_tok & hash_tok)".
-iMod (nsl_dhGS_alloc with "aenc_tok") as (?) "(#nsl_ctx & nsl_tok & _)".
+iMod (nsl_dhGS_alloc with "aenc_tok hash_tok")
+  as (?) "(#nsl_ctx & nsl_tok & _ & hash_tok)".
+
 { solve_ndisj. }
 by iApply (wp_game) => //; iFrame "∗ #".
 Qed.

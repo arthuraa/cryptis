@@ -51,7 +51,9 @@ wp_bind (Sess.send _ _).
 iApply (wp_send_msg _ _ _ _
           (iMsg_tag (db_arms skI skR cs (db_st skI skR cs) odb)) _
           (<?> MSG (TInt 0) {{ db_main' skI skR db ∗
-                               released (si_resp_share cs) }}; END)%proto
+                               GenConn.released (si_resp_share cs) }};
+           END)%proto
+
           with "[conn token]").
 { iSplitL "conn".
   { iApply (connected_le with "conn"). iNext.
@@ -75,10 +77,10 @@ iDestruct "disj" as "[#comp|ack]".
   wp_apply (GenConn.wp_free with "gc"). iIntros "_".
   iApply "post". iSplitR "".
   { iExists db. iFrame "state". by iLeft. }
-  by iApply compromised_public.
+  by iApply GenConn.compromised_public.
 - rewrite iMsg_base_eq /=.
   iDestruct "ack" as "(_ & _ & ack & #rel_resp)".
-  iMod (release with "rel") as "#rel_init".
+  iMod (GenConn.release with "rel") as "#rel_init".
   iPoseProof (connected_released with "conn rel_init rel_resp") as "#p_k".
   wp_pures.
   iDestruct "conn" as "[gc _]".
