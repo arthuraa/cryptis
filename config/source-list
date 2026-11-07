@@ -135,9 +135,10 @@ examples/hmqv/proofs/base.v
 examples/hmqv/proofs/initiator.v
 examples/hmqv/proofs/responder.v
 examples/hmqv/proofs.v
-examples/hmqv/game.v
-examples/hmqv/kci.v
-examples/hmqv/agreement.v
+examples/hmqv/games/forward_secrecy.v
+examples/hmqv/games/kci.v
+examples/hmqv/games/agreement.v
+examples/hmqv/games/key_independence.v
 examples/hmqv.v
 
 ## TLS 1.3

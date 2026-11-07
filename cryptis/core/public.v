@@ -811,12 +811,14 @@ iRight; iExists t3; iFrame "#"; iPureIntro; set_solver.
 Qed.
 
 (* [f], an atom or the inverse of one, is the last exponent of [TExp t1 f],
-   added by the attacker or by the owner of [f]. *)
+   added by the attacker or by the owner of [f].  Stripping [t1] keeps its
+   base, so the owner need only consent for that base. *)
 #[local] Lemma public_TExp_last t1 f :
   negb (is_gmul t1) → negb (is_mul f) ∨ negb (is_mul (TInv f)) →
   TInv f ∉ satoms (exps t1) →
   minted f -∗
-  □ (∀ t, public t -∗ public f ∨ exp_pred f (TExp t f)) -∗
+  □ (∀ t, ⌜base t = base t1⌝ -∗ public t -∗
+          public f ∨ exp_pred f (TExp t f)) -∗
   public t1 -∗
   public (TExp t1 f).
 Proof.
@@ -833,7 +835,7 @@ iSplit.
   by iApply all_minted_TExp; iSplit => //; iApply public_minted.
 iSplit; last first.
   iLeft; iExists f; rewrite TExpK; iSplit => //.
-  by iSplit; [iApply "j"|].
+  by iSplit; [iApply ("j" with "[//] p1")|].
 iApply big_sepL_forall; iIntros (? g g_t%list_elem_of_lookup_2) "!> #pg".
 have [->|gf] := decide (g = f); first by rewrite TExpK.
 have gTf : g ≠ TInv f.
@@ -842,7 +844,10 @@ have gTf : g ≠ TInv f.
 have g_t1 : g ∈ satoms (exps t1).
   move: g_t; rewrite !elem_of_satoms cntE (scount_satom_ne Af gf gTf); lia.
 iPoseProof (public_satoms g_t1 with "p1 pg") as "p".
-rewrite TExpC; iApply (IH with "mf j p").
+iAssert (□ (∀ t, ⌜base t = base (TExp t1 (TInv g))⌝ -∗ public t -∗
+                 public f ∨ exp_pred f (TExp t f)))%I as "#j'".
+  by rewrite (base_TExp _ _ Nm1).
+rewrite TExpC; iApply (IH with "mf j' p").
 - by case: (tsize_satoms _ _ g_t1).
 - exact: Ngmul_TExp.
 - have Tfg : TInv f ≠ g by move=> e; apply: f_t1; rewrite e.
@@ -864,7 +869,7 @@ case: (decide (TInv f ∈ satoms (exps t1))) => f_t1.
   by iApply (public_satoms f_t1 with "p1"); rewrite public_TInv.
 iApply (public_TExp_last Nm1 Af f_t1 with "[] [] p1").
 - by iApply public_minted.
-- by iIntros "!> %t _"; iLeft.
+- by iIntros "!> %t _ _"; iLeft.
 Qed.
 
 Lemma public_TExp_make_intro t X Y :
@@ -1116,21 +1121,28 @@ rewrite scount_TInv_r (scount_satom_ne (satoms_satom f_t1) (not_eq_sym ne) t2f).
 by move: t2_t1'; rewrite elem_of_satoms; lia.
 Qed.
 
-(* The owner of [t2] raises any public term to [t2], as in an oblivious
-   PRF. *)
+(* The owner of [t2] raises a public term to [t2], as in an oblivious PRF.  It
+   need only consent for the terms with the base of a group factor of [t1]. *)
 Lemma public_TExp_consent t1 t2 :
-  negb (is_gmul t1) → negb (is_mul t2) →
+  negb (is_mul t2) →
   minted t2 -∗
-  □ (∀ t, public t -∗ exp_pred t2 (TExp t t2)) -∗
+  □ (∀ t, ⌜base t ∈ base <$> elements (gfactors t1)⌝ -∗ public t -∗
+          exp_pred t2 (TExp t t2)) -∗
   public t1 -∗
   public (TExp t1 t2).
 Proof.
-move=> Nm1 Nm2; iIntros "#m2 #c #p1".
-case: (decide (TInv t2 ∈ satoms (exps t1))) => t2_t1.
-  iApply (public_TExp_satom Nm1 (or_introl Nm2) with "p1").
-  by iApply (public_exps_neg with "p1"); rewrite -elem_of_satoms_TInv.
-iApply (public_TExp_last Nm1 (or_introl Nm2) t2_t1 with "m2 [] p1").
-by iIntros "!> %t #p"; iRight; iApply "c".
+move=> Nm2; iIntros "#m2 #c #p1".
+iEval (rewrite public_gfactors) in "p1"; iDestruct "p1" as "[_ #fs]".
+iApply public_TExp_gfactors; iApply big_sepL_forall.
+iIntros (? u u_t1%list_elem_of_lookup_2).
+have Nm1 := Ngmul_gfactors _ _ u_t1.
+iAssert (public u) as "#p_u"; first by iApply (big_sepL_elem_of with "fs").
+case: (decide (TInv t2 ∈ satoms (exps u))) => t2_u.
+  iApply (public_TExp_satom Nm1 (or_introl Nm2) with "p_u").
+  by iApply (public_exps_neg with "p_u"); rewrite -elem_of_satoms_TInv.
+iApply (public_TExp_last Nm1 (or_introl Nm2) t2_u with "m2 [] p_u").
+iIntros "!> %t %e #p"; iRight; iApply ("c" with "[] p"); iPureIntro.
+by rewrite e list_elem_of_fmap; exists u.
 Qed.
 
 Lemma public_to_list t ts :

@@ -2,6 +2,7 @@ From stdpp Require Import base gmap.
 From mathcomp Require Import ssreflect.
 From iris.heap_lang Require Import notation proofmode.
 From iris.heap_lang.lib Require Import par.
+From iris.algebra Require Import auth gset.
 From cryptis Require Import lib term cryptis primitives tactics role.
 From cryptis.lib Require Import dh hmqv gmeta nown saved_prop.
 
@@ -26,11 +27,11 @@ Unset Printing Implicit Defensive.
     We state authentication as for [examples/hmqv]: each party can send to its
     peer resources that pertain to the newly established session, and the
     usage of the protocol fixes when the key of a session is released.  The
-    password may become public, and the long-term keys are exactly as secret
-    as the password; the ephemeral private keys are deleted right away.  A
-    party that could not rule out a forged authenticator marks its session
-    compromised; otherwise the key of the session is public exactly when
-    released. *)
+    password may become public, and so may the server's file; the client's
+    long-term key is as secret as the password, and the ephemeral private keys
+    are deleted right away.  A party that could not rule out a forged
+    authenticator marks its session compromised; otherwise the key of the
+    session is public exactly when released. *)
 
 Definition hash_result (tag : string) (val : term) : term :=
   THash (Spec.tag (Tag $ opN.@tag) val).
@@ -151,6 +152,7 @@ Qed.
 Class opaqueGpreS Σ := OpaqueGPreS {
   #[local] opaqueGpreS_meta :: metaGS Σ;
   #[local] opaqueGpreS_pred :: savedPredG Σ (sess_info * role);
+  #[local] opaqueGpreS_log :: inG Σ (authR (gsetUR term));
 }.
 
 Class opaqueGS Σ := OpaqueGS {
@@ -160,7 +162,8 @@ Class opaqueGS Σ := OpaqueGS {
 
 Definition opaqueΣ := #[
   metaΣ;
-  savedPredΣ (sess_info * role)
+  savedPredΣ (sess_info * role);
+  GFunctor (authR (gsetUR term))
 ].
 
 #[global] Instance subG_opaqueGpreS Σ : subG opaqueΣ Σ → opaqueGpreS Σ.
@@ -231,10 +234,98 @@ Definition opaque_session_for uid si : iProp :=
   ⌜si_uid si = uid⌝ ∗ public (si_uid si) ∗ minted (si_key si) ∗
   public (si_ckey si) ∗ public (si_skey si).
 
+(** * The password file
+
+    The server's file for [pw] holds the server's long-term key and the OPRF
+    key, which are as secret as the file.  The OPRF key consents only to the
+    bases of the points the server evaluated, which it logs on [pw]. *)
+
+Definition stolen pw : iProp := term_meta pw (opN.@"stolen") true.
+
+#[global] Instance stolen_persistent pw : Persistent (stolen pw).
+Proof. apply _. Qed.
+
+#[global] Instance stolen_timeless pw : Timeless (stolen pw).
+Proof. apply _. Qed.
+
+(** Whoever holds this token decides when the file is stolen. *)
+Definition file_secret pw : iProp := term_token pw (↑opN.@"stolen").
+
+Lemma file_secret_stolen pw : file_secret pw -∗ stolen pw -∗ False.
+Proof. exact: term_meta_token. Qed.
+
+Lemma steal_file pw : file_secret pw ==∗ stolen pw.
+Proof. exact: term_meta_set. Qed.
+
+Definition oprf_log pw (B : gset term) : iProp :=
+  term_own pw (opN.@"log") (● B) ∗ [∗ set] b ∈ B, minted b.
+
+Definition oprf_queried pw b : iProp :=
+  term_own pw (opN.@"log") (◯ ({[b]} : gset term)).
+
+#[global] Instance oprf_queried_persistent pw b :
+  Persistent (oprf_queried pw b).
+Proof. apply _. Qed.
+
+Definition oprf_pred pw t : iProp := ∃ b, oprf_queried pw b ∗ ⌜base t = b⌝.
+
+Lemma oprf_log_alloc pw : term_token pw (↑opN.@"log") ==∗ oprf_log pw ∅.
+Proof.
+iIntros "tok".
+iMod (term_own_alloc (opN.@"log") (● (∅ : gset term)) with "tok")
+  as "[$ _]" => //.
+- by apply auth_auth_valid.
+- by rewrite big_sepS_empty.
+Qed.
+
+Lemma oprf_log_queried pw B b :
+  oprf_log pw B -∗ oprf_queried pw b -∗ ⌜b ∈ B⌝.
+Proof.
+iIntros "[auth _] frag".
+iDestruct (term_own_valid_2 with "auth frag")
+  as %[sub _]%auth_both_valid_discrete.
+iPureIntro. move: sub. rewrite gset_included. set_solver.
+Qed.
+
+Lemma oprf_log_query pw B B' :
+  ([∗ set] b ∈ B', minted b) -∗
+  oprf_log pw B ==∗
+  oprf_log pw (B' ∪ B) ∗ [∗ set] b ∈ B', oprf_queried pw b.
+Proof.
+iIntros "#m_B' [auth #m_B]".
+iMod (term_own_update (● (B' ∪ B) ⋅ ◯ B') with "auth") as "auth".
+{ apply: auth_update_alloc.
+  rewrite -{2}(union_empty_r_L B') -!gset_op.
+  by apply: op_local_update_discrete. }
+iDestruct (term_own_op with "auth") as "[auth #frag]".
+iModIntro. iSplitL "auth".
+- iFrame. rewrite big_sepS_union_pers. by iSplit.
+- iApply big_sepS_intro. iIntros "!> %b %b_B'".
+  iApply (term_own_mono with "frag").
+  apply: auth_frag_mono. rewrite gset_included. set_solver.
+Qed.
+
+(** Before the file is stolen, the attacker knows the OPRF at a point only if
+    the server evaluated it at that point. *)
+Lemma public_oprf pw (k_s : nonce) t :
+  negb (is_exp t) → negb (is_gmul t) →
+  □ (public k_s ↔ ▷ □ stolen pw) -∗
+  □ (∀ t', exp_pred k_s t' ↔ ▷ □ oprf_pred pw t') -∗
+  public (TExp t k_s) -∗
+  ▷ (stolen pw ∨ oprf_queried pw t).
+Proof.
+move=> Nx Nm; iIntros "#s_k #e_k #p".
+iEval (rewrite public_TExp_iff //) in "p".
+iDestruct "p" as "(_ & _ & [p|p] & _)".
+- iDestruct ("s_k" with "p") as "#s". iNext. by iLeft.
+- iDestruct ("e_k" with "p") as "#q". iNext.
+  iDestruct "q" as "(%b & q & %e)". iRight.
+  by rewrite base_TExp // base_expN // in e; subst b.
+Qed.
+
 (** * Compromise
 
-    The long-term keys are exactly as secret as the password, and the
-    ephemeral private keys are deleted right away. *)
+    Whoever stole the file can impersonate the server, but not the client. *)
 
 (** When [rl] completed [si], it could not rule out a forged authenticator. *)
 Definition compromised (rl : role) si : iProp :=
@@ -251,7 +342,8 @@ Proof. apply _. Qed.
 Definition session pw ρ (rl : role) si : iProp :=
   minted (si_key si) ∗
   □ (▷ □ ρ si → public (si_key si)) ∗
-  (compromised rl si ∗ public (si_key si) ∗ public pw ∨
+  (compromised rl si ∗ public (si_key si) ∗
+     (public pw ∨ ⌜rl = Init⌝ ∗ stolen pw) ∨
    □ (¬ compromised rl si) ∗ □ (public (si_key si) → ▷ □ ρ si)).
 
 #[global] Instance session_persistent pw ρ rl si :
@@ -278,17 +370,21 @@ Qed.
 Lemma session_compromised pw ρ rl si :
   session pw ρ rl si -∗
   compromised rl si -∗
-  public (si_key si) ∗ public pw.
+  public (si_key si) ∗ (public pw ∨ ⌜rl = Init⌝ ∗ stolen pw).
 Proof.
 iIntros "(_ & _ & [(_ & #p & #pw)|(#nc & _)]) #c"; first by iSplit.
 by iDestruct ("nc" with "c") as "[]".
 Qed.
 
 Lemma secret_session pw ρ rl si :
-  secret pw -∗ session pw ρ rl si -∗ ◇ □ (¬ compromised rl si).
+  secret pw -∗
+  (if rl is Init then file_secret pw else True) -∗
+  session pw ρ rl si -∗
+  ◇ □ (¬ compromised rl si).
 Proof.
-iIntros "s_pw (_ & _ & [(_ & _ & #p_pw)|(#nc & _)])".
+iIntros "s_pw s_file (_ & _ & [(_ & _ & [#p_pw|[-> #st]])|(#nc & _)])".
 - by iDestruct (secret_not_public with "s_pw p_pw") as ">[]".
+- by iDestruct (file_secret_stolen with "s_file st") as "[]".
 - by iIntros "!> !>".
 Qed.
 
@@ -333,15 +429,15 @@ iModIntro; iSplit.
   by iIntros "[_ ?]".
 Qed.
 
-(** The long-term keys are exactly as secret as the password. *)
-Definition opaque_public_private_pair pw (a : nonce) A : iProp :=
-  ∃ (a' : nonce),
-    ⌜A = TExp g a'⌝ ∗
-    public A ∗
-    hmqv_key a ∗
-    hmqv_key a' ∗
-    □ (public a ↔ ▷ □ public pw) ∗
-    □ (public a' ↔ ▷ □ public pw).
+(** The long-term keys registered with [pw]: the client's is as secret as the
+    password, and the server's as the file. *)
+Definition opaque_keys pw (p_u p_s : nonce) : iProp :=
+  hmqv_key p_u ∗ hmqv_key p_s ∗
+  □ (public p_u ↔ ▷ □ public pw) ∗ □ (public p_s ↔ ▷ □ stolen pw).
+
+#[global] Instance opaque_keys_persistent pw p_u p_s :
+  Persistent (opaque_keys pw p_u p_s).
+Proof. apply _. Qed.
 
 (** The client's authenticator vouches for its ephemeral and escrows the
     server's resources. *)
@@ -365,11 +461,10 @@ Definition A_s_pred (t : term) : iProp :=
 
 (* The key pins the password: the client compares it with its own. *)
 Definition envelope_pred (sk : senc_key) (t : term) : iProp :=
-  ∃ pw β (p_u : nonce) P_s,
+  ∃ pw β (p_u p_s : nonce),
       ⌜sk = SEncKey (hash_result "H" (Spec.of_list [pw; β]))⌝ ∗
-      ⌜t = Spec.of_list [TNonce p_u; TExp g p_u; P_s]⌝ ∗
-      public (TExp g p_u) ∗
-      opaque_public_private_pair pw p_u P_s.
+      ⌜t = Spec.of_list [TNonce p_u; TExp g p_u; TExp g p_s]⌝ ∗
+      opaque_keys pw p_u p_s.
 
 Definition opaque_ctx : iProp :=
   hash_pred (opN.@"H") (λ _ : term, False%I) ∗

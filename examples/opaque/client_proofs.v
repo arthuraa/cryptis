@@ -123,10 +123,9 @@ iIntros "%clear #minclear #decr #keyclear".
 (* Either the envelope key, hence the password, is public, or the envelope is
    the honest registration. *)
 iAssert (▷ public pw ∗ public clear
-         ∨ ∃ (p_u : nonce) P_s,
-             ⌜clear = Spec.of_list [TNonce p_u; TExp g p_u; P_s]⌝ ∗
-             public (TExp g p_u) ∗
-             opaque_public_private_pair pw p_u P_s)%I as "#env".
+         ∨ ∃ (p_u p_s : nonce),
+             ⌜clear = Spec.of_list [TNonce p_u; TExp g p_u; TExp g p_s]⌝ ∗
+             opaque_keys pw p_u p_s)%I as "#env".
 { iDestruct "decr" as "[#pubkey | #envpred]".
   - iLeft; iSplit; last by iApply "keyclear".
     iEval (rewrite /k public_senc_key) in "pubkey".
@@ -134,11 +133,10 @@ iAssert (▷ public pw ∗ public clear
     + iEval (rewrite public_of_list /=) in "p_l".
       iDestruct "p_l" as "[#? _]". by iNext.
     + by iNext; iDestruct "contra" as "[]".
-  - iDestruct "envpred"
-      as "(%pw' & %β' & %p_u & %P_s & %ek & %eclear & #pubP_u & #pair)".
+  - iDestruct "envpred" as "(%pw' & %β' & %p_u & %p_s & %ek & %eclear & #keys)".
     move: ek; rewrite /k; case=> /Spec.tag_inj [] _ /Spec.of_list_inj [] epw _.
     subst pw'.
-    iRight. iExists p_u, P_s. by do !iSplit => //. }
+    iRight. iExists p_u, p_s. by do !iSplit => //. }
 iClear "decr keyclear".
 wp_pures.
 wp_list_of_term_eq clear_l Hclear; last first.
@@ -153,14 +151,14 @@ have eclear : clear = Spec.of_list [p_u'; P_u'; P_s'].
 iEval (rewrite eclear minted_of_list /=) in "minclear".
 iDestruct "minclear" as "(minp_u & minP_u & minP_s & _)".
 iAssert (▷ public pw ∗ public p_u' ∗ public P_u' ∗ public P_s'
-         ∨ ∃ (p_u : nonce),
-             ⌜p_u' = TNonce p_u⌝ ∗ ⌜P_u' = TExp g p_u⌝ ∗
-             public P_u' ∗ opaque_public_private_pair pw p_u P_s')%I as "#env'".
-{ iDestruct "env" as "[[#p_pw #p_clear] | (%p_u & %P_s & %e & #pubP_u & #pair)]".
+         ∨ ∃ (p_u p_s : nonce),
+             ⌜p_u' = TNonce p_u⌝ ∗ ⌜P_u' = TExp g p_u⌝ ∗ ⌜P_s' = TExp g p_s⌝ ∗
+             opaque_keys pw p_u p_s)%I as "#env'".
+{ iDestruct "env" as "[[#p_pw #p_clear] | (%p_u & %p_s & %e & #keys)]".
   - iLeft. iEval (rewrite eclear public_of_list /=) in "p_clear".
     iDestruct "p_clear" as "(#? & #? & #? & _)". by do !iSplit => //.
   - move: e; rewrite eclear => /Spec.of_list_inj [] -> -> ->.
-    iRight. iExists p_u. by do !iSplit => //. }
+    iRight. iExists p_u, p_s. by do !iSplit => //. }
 iClear "env".
 wp_pures.
 wp_apply wp_hmqv_ke => /=.
@@ -220,29 +218,25 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
     { iApply public_THash; iLeft. by iApply public_tag. }
     iAssert (public K) as "#p_K".
     { iEval (rewrite public_of_list /=) in "p_t". by iDestruct "p_t" as "[#? _]". }
-    iAssert (▷ public pw ∗ public P_u' ∗ public P_s')%I
+    iAssert (▷ (public pw ∨ stolen pw) ∗ public P_u' ∗ public P_s')%I
       as "#(p_pw & pubP_u' & pubP_s')".
-    { iDestruct "env'" as "[(#? & _ & #? & #?) | (%p_u & %ep & %eP & #pubP_u & #pair)]";
-        first by do !iSplit => //.
-      iPoseProof "pair" as
-        "(%p_s & %eP_s & #pubP_s & #key_p_u & #key_p_s & #priv_p_u
-          & #priv_p_s)".
+    { iDestruct "env'"
+        as "[(#p & _ & #? & #?) | (%p_u & %p_s & %ep & %eP & %eP_s & #keys)]".
+      { iSplit; last by iSplit. iNext. by iLeft. }
+      iPoseProof "keys" as "(#key_p_u & #key_p_s & #priv_p_u & #priv_p_s)".
       subst p_u' P_u' P_s'.
-      iSplit; last by iSplit.
+      iSplit; last by iSplit; iApply hmqv_key_public.
       (* The static-static factor is a group factor of the key, and its two
-         exponents are the long-term keys, which are as secret as the
-         password. *)
+         exponents are the long-term keys. *)
       iDestruct (public_THashE with "HpredH p_K") as "[p_t' | [_ contra]]";
         last by iNext; iDestruct "contra" as "[]".
       iEval (rewrite public_of_list /=) in "p_t'".
       iDestruct "p_t'" as "(p_K' & _)".
-      iAssert (▷ □ public pw)%I as "#p_pw".
-      { iDestruct (@public_hmqv_K_static _ _ _ opN g "d" "e" p_u x_u p_s
-                     (TExp g p_u) (TExp g x_u) X_s I I tags_c
-                     with "key_p_u key_p_s p_K'") as "[p|p]".
-        - by iApply "priv_p_u".
-        - by iApply "priv_p_s". }
-      by iNext. }
+      iDestruct (@public_hmqv_K_static _ _ _ opN g "d" "e" p_u x_u p_s
+                   (TExp g p_u) (TExp g x_u) X_s I I tags_c
+                   with "key_p_u key_p_s p_K'") as "[p|p]".
+      - iDestruct ("priv_p_u" with "p") as "#p'". iNext. by iLeft.
+      - iDestruct ("priv_p_s" with "p") as "#p'". iNext. by iRight. }
     iMod (lc_fupd_elim_later with "cr p_pw") as "#p_pw'".
     set si := client_si uid P_u' P_s' α x_u X_s p_u'.
     iMod (term_meta_set (opN.@"compromised") true with "tok_comp")
@@ -252,7 +246,8 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
     do 5!(iSplit; first done).
     iSplit.
     { iSplit; first done. iSplit; first by iIntros "!> _".
-      iLeft. iSplit; first done. by iSplit. }
+      iLeft. iSplit; first done. iSplit; first done.
+      iDestruct "p_pw'" as "[?|?]"; [by iLeft|by iRight; iSplit]. }
     iSplitL ""; first by iLeft.
     by iLeft.
   - (* Honest server. *)
@@ -267,7 +262,7 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
     move: essid; rewrite /ssid' /si_ssid => /hash_result_inj [] _ /Spec.of_list_inj.
     move=> [] euid eα.
     iDestruct "env'" as "[(#p_pw & #pubp_u' & #pubP_u' & #pubP_s')
-                          | (%p_u & %ep & %eP & #pubP_u' & #pair)]".
+                          | (%p_u & %p_s & %ep & %eP & %eP_s & #keys)]".
     + (* Forged envelope: the password is public, so make the ephemeral public
          too, and with it the key: a forged envelope may carry an inconsistent
          key pair, which the agreement argument cannot handle. *)
@@ -288,16 +283,13 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
       iSplit.
       { iSplit; first by rewrite eSK.
         iSplit; first by iIntros "!> _"; rewrite eSK.
-        iLeft. iSplit; first done. iSplit; last done. by rewrite eSK. }
+        iLeft. iSplit; first done. iSplit; last by iLeft. by rewrite eSK. }
       iSplitL ""; first by iLeft.
       iLeft. iApply public_of_list => /=. by do !iSplit => //.
     + (* Honest envelope: both ephemerals are honest, so the key stays secret
          unless it is released. *)
-      subst p_u' P_u'.
-      iPoseProof "pair" as
-        "(%p_s & %eP_s & #pubP_s' & #key_p_u & #key_p_s & #priv_p_u
-          & #priv_p_s)".
-      subst P_s'.
+      subst p_u' P_u' P_s'.
+      iPoseProof "keys" as "(#key_p_u & #key_p_s & #priv_p_u & #priv_p_s)".
       have nP (p : nonce) : TExp g p ≠ TGMul ∅.
         exact: Ngmul_neq_unit (Ngmul_TExp g _ I).
       have [/TExp_g_inj epb [eXs [/TExp_g_inj epa eXu]]] :=
