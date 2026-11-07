@@ -28,9 +28,13 @@ In the `examples` directory you will find our case studies:
 - `rpc`: Remote procedure calls (built on `conn`).
 - `store`: Authenticated key-value store built on `rpc` (game is in its own file);
   `alist` is a supporting association-list module.
-- `opaque`: OPAQUE-style password-authenticated key exchange with HMQV.
+- `opaque`: OPAQUE-style password-authenticated key exchange with HMQV,
+  including game (password leak, theft of the server's file, OPRF
+  precomputation).
 - `hmqv`: standalone HMQV authenticated key exchange (three-message variant
-  with authenticators, built on `lib/hmqv.v`).
+  with authenticators, built on `lib/hmqv.v`); its games (secrecy,
+  key-compromise impersonation, injective agreement, key independence) are in
+  `hmqv/games`.
 - `tls13`: TLS 1.3 handshake (partial; `impl.v` + per-component `proofs/`).
 - `challenge_response`, `composite_game`, `permanent`, `counter`: smaller
   single-file examples plus a composite security game.

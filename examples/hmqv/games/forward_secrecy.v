@@ -4,21 +4,19 @@ From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.algebra Require Import numbers reservation_map.
 From iris.heap_lang Require Import notation proofmode adequacy.
-From iris.heap_lang.lib Require Import par assert ticket_lock.
+From iris.heap_lang.lib Require Import par assert.
 From cryptis Require Import lib cryptis primitives tactics role adequacy.
 From cryptis.examples Require Import hmqv.
-From cryptis.lib Require Import term_set hmqv.
+From cryptis.lib Require Import hmqv.
 From cryptis.primitives Require Import attacker.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Existing Instance ticket_lock.
-
 Section Game.
 
-Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ, !tlockG Σ, !hmqvGS Σ}.
+Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ, !hmqvGS Σ}.
 Abbreviation iProp := (iProp Σ).
 
 Implicit Types t : term.
@@ -139,78 +137,12 @@ Qed.
 (* Both honest parties only ever confirm sessions with each other, as a DH
    public key received off the network carries nothing else to check; every
    completed session is therefore tested for secrecy. *)
-Definition do_init_loop : val :=
-  rec: "loop" "c" "compromised" "set" "p_a" "P_a" "P_b" :=
-    Fork ("loop" "c" "compromised" "set" "p_a" "P_a" "P_b");;
+Definition do_init : val :=
+  rec: "loop" "c" "compromised" "p_a" "P_a" "P_b" :=
+    Fork ("loop" "c" "compromised" "p_a" "P_a" "P_b");;
     (bind: "sk" := initiator "c" "p_a" "P_a" "P_b" (Tag gameN) in
-     add_fresh_lock_term_set "sk" "set";;
      check_key_secrecy "c" "compromised" "sk");;
     #().
-
-Definition do_init : val :=
-  λ: "c" "compromised" "p_a" "P_a" "P_b",
-  let: "set" := new_lock_term_set #() in
-  do_init_loop "c" "compromised" "set" "p_a" "P_a" "P_b".
-
-Definition hmqv_game_inv rl x : iProp := ∃ si,
-  ⌜(si_key si : term) = x⌝ ∧
-  ⌜session_of rl si⌝ ∧
-  term_meta (si_share_of rl si) (gameN.@"fresh") ().
-
-Lemma hmqv_game_fresh rl si E :
-  session_of rl si →
-  ↑gameN.@"fresh" ⊆ E →
-  term_token (si_share_of rl si) E -∗
-  fresh_term (hmqv_game_inv rl) (si_key si) ∗
-  term_token (si_share_of rl si) (E ∖ ↑gameN.@"fresh").
-Proof.
-iIntros "%ss % token".
-iPoseProof (term_token_difference _ (↑gameN.@"fresh") with "token")
-  as "[token ?]" => //; iFrame. iSplit.
-- iIntros "# (%si' & %e & %ss' & #meta)".
-  move/term_of_senc_key_inj in e.
-  rewrite (session_of_key_inj ss' ss e).
-  by iDestruct (term_meta_token with "token meta") as "[]".
-- iMod (term_meta_set (gameN.@"fresh") () with "token") as "#meta" => //.
-  iIntros "!> !>". iExists si. by eauto.
-Qed.
-
-Lemma wp_do_init_loop c lcomp vset p_a p_b :
-  channel c -∗
-  cryptis_ctx -∗
-  hmqv_ctx -∗
-  hmqv_pred gameN (λ _ _, True)%I (λ _, False)%I -∗
-  hmqv_key p_a -∗
-  hmqv_key p_b -∗
-  inv gameN (game_inv lcomp p_a p_b) -∗
-  is_lock_term_set (hmqv_game_inv Init) vset -∗
-  {{{ True }}}
-    do_init_loop c #lcomp vset p_a (TExp g p_a) (TExp g p_b)
-  {{{ RET #(); True }}}.
-Proof.
-iIntros "#chan #? #? #? #key_a #key_b #inv #set".
-iLöb as "IH". iIntros "!> %Φ _ Hpost".
-wp_rec; wp_pures; wp_apply wp_fork.
-{ by iApply "IH" => //. }
-wp_pures.
-wp_smart_apply (wp_initiator _ _ _ _ _ _
-                  (λ si, term_token (si_init_share si) (⊤ ∖ ↑hmqvN)) True%I)
-  as "%r [[-> _]|(%x_a & %X_b & -> & #sess & tok & _)]" => //.
-- iFrame "#". by iApply hmqv_key_public.
-- iSplit => //. iIntros "%x_a %X_b tok !>". by iFrame.
-- wp_pures. by iApply "Hpost".
-wp_pures.
-set si := init_si p_a x_a (TExp g p_b) X_b.
-have ss : init_session si := init_session_vetted p_a x_a p_b X_b.
-iPoseProof (hmqv_game_fresh (rl := Init) ss with "tok")
-  as "[fresh tok]"; first solve_ndisj.
-wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
-wp_pures.
-wp_apply (wp_check_key_secrecy _ lcomp p_a p_b Init si).
-{ by iFrame "#". }
-iIntros "_". wp_pures.
-by iApply "Hpost".
-Qed.
 
 Lemma wp_do_init c lcomp p_a p_b :
   channel c -∗
@@ -224,67 +156,34 @@ Lemma wp_do_init c lcomp p_a p_b :
     do_init c #lcomp p_a (TExp g p_a) (TExp g p_b)
   {{{ RET #(); True }}}.
 Proof.
-iIntros "#chan #? #? #? #? #? #? %Φ _ !> post".
-wp_lam. wp_pures.
-wp_apply (wp_new_lock_term_set (hmqv_game_inv Init)) => //.
-iIntros "%set #set". wp_pures.
-wp_apply wp_do_init_loop => //.
+iIntros "#chan #? #? #? #key_a #key_b #inv".
+iLöb as "IH". iIntros "!> %Φ _ Hpost".
+wp_rec; wp_pures; wp_apply wp_fork.
+{ by iApply "IH" => //. }
+wp_pures.
+wp_smart_apply (wp_initiator _ _ _ _ _ _ (λ _, True)%I True%I)
+  as "%r [[-> _]|(%x_a & %X_b & -> & #sess & _)]" => //.
+- iFrame "#". by iApply hmqv_key_public.
+- iSplit => //. iIntros "%x_a %X_b _ !>". by iSplit.
+- wp_pures. by iApply "Hpost".
+wp_pures.
+set si := init_si p_a x_a (TExp g p_b) X_b.
+wp_apply (wp_check_key_secrecy _ lcomp p_a p_b Init si).
+{ by iFrame "#". }
+iIntros "_". wp_pures.
+by iApply "Hpost".
 Qed.
 
-Definition do_resp_loop : val :=
-  rec: "loop" "c" "compromised" "set" "p_b" "P_b" "P_a" :=
-    Fork ("loop" "c" "compromised" "set" "p_b" "P_b" "P_a");;
+Definition do_resp : val :=
+  rec: "loop" "c" "compromised" "p_b" "P_b" "P_a" :=
+    Fork ("loop" "c" "compromised" "p_b" "P_b" "P_a");;
     let: "res" := responder_listen "c" in
     let: "X_a" := Fst "res" in
     let: "P_a'" := Snd "res" in
     (guard: eq_term "P_a" "P_a'" in
      bind: "sk" := responder_confirm "c" "p_b" "P_b" "X_a" "P_a'" (Tag gameN) in
-     add_fresh_lock_term_set "sk" "set";;
      check_key_secrecy "c" "compromised" "sk");;
     #().
-
-Definition do_resp : val :=
-  λ: "c" "compromised" "p_b" "P_b" "P_a",
-  let: "set" := new_lock_term_set #() in
-  do_resp_loop "c" "compromised" "set" "p_b" "P_b" "P_a".
-
-Lemma wp_do_resp_loop c lcomp set p_a p_b :
-  channel c -∗
-  cryptis_ctx -∗
-  hmqv_ctx -∗
-  hmqv_pred gameN (λ _ _, True)%I (λ _, False)%I -∗
-  hmqv_key p_a -∗
-  hmqv_key p_b -∗
-  inv gameN (game_inv lcomp p_a p_b) -∗
-  is_lock_term_set (hmqv_game_inv Resp) set -∗
-  {{{ True }}}
-    do_resp_loop c #lcomp set p_b (TExp g p_b) (TExp g p_a)
-  {{{ RET #(); True }}}.
-Proof.
-iIntros "#chan #? #? #? #key_a #key_b #inv #set".
-iLöb as "IH". iIntros "!> %Φ _ Hpost".
-wp_rec; wp_pures; wp_apply wp_fork.
-{ iApply "IH" => //. }
-wp_pures. wp_apply wp_responder_listen; first by iSplit.
-iIntros "%X_a %P_a' [#p_Xa #p_Pa']".
-wp_pures. wp_eq_term e; wp_pures; last by iApply "Hpost".
-subst P_a'.
-wp_apply (wp_responder_confirm _ _ _ _ _ _ _
-            (λ si, term_token (si_resp_share si) (⊤ ∖ ↑hmqvN))).
-{ iFrame "#". iIntros "%x_b tok !>". by iFrame. }
-iIntros "%r [->|Hr]"; wp_pures; first by iApply "Hpost".
-iDestruct "Hr" as "(%x_b & -> & #sess & tok & _)".
-set si := resp_si (TExp g p_a) X_a p_b x_b.
-have ss : resp_session si := resp_session_vetted p_a X_a p_b x_b.
-wp_pures.
-iPoseProof (hmqv_game_fresh (rl := Resp) ss with "tok")
-  as "[fresh tok]"; first solve_ndisj.
-wp_apply (wp_add_fresh_lock_term_set with "[$]"). iIntros "_".
-wp_pures.
-wp_apply (wp_check_key_secrecy _ lcomp p_a p_b Resp si).
-{ by iFrame "#". }
-iIntros "_". wp_pures. by iApply "Hpost".
-Qed.
 
 Lemma wp_do_resp c lcomp p_a p_b :
   channel c -∗
@@ -298,11 +197,21 @@ Lemma wp_do_resp c lcomp p_a p_b :
     do_resp c #lcomp p_b (TExp g p_b) (TExp g p_a)
   {{{ RET #(); True }}}.
 Proof.
-iIntros "#? #? #? #? #? #? #? %Φ _ !> post".
-wp_lam. wp_pures.
-wp_apply (wp_new_lock_term_set (hmqv_game_inv Resp)) => //.
-iIntros "%set #set". wp_pures.
-by wp_apply wp_do_resp_loop => //.
+iIntros "#chan #? #? #? #key_a #key_b #inv".
+iLöb as "IH". iIntros "!> %Φ _ Hpost".
+wp_rec; wp_pures; wp_apply wp_fork.
+{ iApply "IH" => //. }
+wp_pures. wp_apply wp_responder_listen; first by iSplit.
+iIntros "%X_a %P_a' [#p_Xa #p_Pa']".
+wp_pures. wp_eq_term e; wp_pures; last by iApply "Hpost".
+subst P_a'.
+wp_apply (wp_responder_confirm _ _ _ _ _ _ _ (λ _, True)%I).
+{ iFrame "#". iIntros "%x_b _ !>". by iSplit. }
+iIntros "%r [->|(%x_b & -> & #sess & _)]"; wp_pures; first by iApply "Hpost".
+set si := resp_si (TExp g p_a) X_a p_b x_b.
+wp_apply (wp_check_key_secrecy _ lcomp p_a p_b Resp si).
+{ by iFrame "#". }
+iIntros "_". wp_pures. by iApply "Hpost".
 Qed.
 
 Definition game : val := λ: "c",
@@ -345,7 +254,7 @@ Qed.
 End Game.
 
 Definition F : gFunctors :=
-  #[heapΣ; spawnΣ; cryptisΣ; tlockΣ; hmqvΣ].
+  #[heapΣ; spawnΣ; cryptisΣ; hmqvΣ].
 
 Lemma hmqv_secure σ₁ σ₂ (v : val) t₂ e₂ :
   rtc erased_step ([run_network game], σ₁) (t₂, σ₂) →
