@@ -267,10 +267,10 @@ Proof. by iIntros "(_ & ? & _)". Qed.
 
 Lemma session_ok pw ρ rl si :
   session pw ρ rl si -∗
-  □ (¬ compromised rl si) -∗
+  ¬ compromised rl si -∗
   □ (public (si_key si) ↔ ▷ □ ρ si).
 Proof.
-iIntros "(_ & #rel & [(#c & _)|(_ & #ok)]) #nc".
+iIntros "(_ & #rel & [(#c & _)|(_ & #ok)]) nc".
 - by iDestruct ("nc" with "c") as "[]".
 - iModIntro. by iSplit.
 Qed.
