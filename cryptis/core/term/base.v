@@ -3,7 +3,7 @@ From elpi.apps Require Import locker.
 From mathcomp Require Import ssreflect.
 From Stdlib Require Import ZArith.ZArith Lia.
 From stdpp Require Import sorting gmap.
-From cryptis.lib Require Import list_sort mathcomp_compat sms.
+From cryptis.lib Require Import list_sort mathcomp_compat mset sms.
 From iris.heap_lang Require locations.
 From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
@@ -274,10 +274,10 @@ refine (λ t1 t2,
 abstract (exact: unfold_term_inj e).
 Defined.
 
-Abbreviation term_order := (@SMS.Internal.le term _).
+Abbreviation term_order := (@MSet.le term _).
 
 Lemma term_orderE t1 t2 :
-  term_order t1 t2 ↔ SMS.Internal.le (unfold_term t1) (unfold_term t2).
+  term_order t1 t2 ↔ MSet.le (unfold_term t1) (unfold_term t2).
 Proof.
 split; first by case=> [->|?]; [left|right].
 by case=> [/unfold_term_inj ->|?]; [left|right].
@@ -326,21 +326,13 @@ Qed.
 
 Lemma unfold_TMul_make X Y :
   unfold_term (TMul (SMS.make X Y)) =
-  PreTerm.mul (SMS.make (unfold_term <$> X) (unfold_term <$> Y)).
+  PreTerm.mul (SMS.make (MSet.map unfold_term X) (MSet.map unfold_term Y)).
 Proof. by rewrite unfold_TMul SMS.map_make. Qed.
 
 Lemma unfold_TGMul_make X Y :
   unfold_term (TGMul (SMS.make X Y)) =
-  PreTerm.gmul (SMS.make (unfold_term <$> X) (unfold_term <$> Y)).
+  PreTerm.gmul (SMS.make (MSet.map unfold_term X) (MSet.map unfold_term Y)).
 Proof. by rewrite unfold_TGMul SMS.map_make. Qed.
-
-Lemma smap_unfold_fold P :
-  (∀ x, x ∈ SMS.Internal.elements P → PreTerm.wf x) →
-  SMS.Internal.smap unfold_term (SMS.Internal.smap fold_term P) = P.
-Proof.
-move=> wfP; rewrite SMS.Internal.smap_smap SMS.Internal.smap_id //.
-by move=> x /wfP; exact: fold_termK.
-Qed.
 
 Lemma fold_termE pt :
   fold_term pt =
@@ -352,9 +344,12 @@ Lemma fold_termE pt :
   | PreTerm.PT2 O2Seal k pt => TSeal (fold_term k) (fold_term pt)
   | PreTerm.PT1 O1Hash pt => THash (fold_term pt)
   | PreTerm.PTExp b e => TExp (fold_term b) (fold_term e)
-  | PreTerm.PTMul ps ns => TMul (SMS.make (fold_term <$> ps) (fold_term <$> ns))
+  | PreTerm.PTMul ps ns =>
+    TMul (SMS.make (MSet.of_list (fold_term <$> ps))
+                   (MSet.of_list (fold_term <$> ns)))
   | PreTerm.PTGMul ps ns =>
-    TGMul (SMS.make (fold_term <$> ps) (fold_term <$> ns))
+    TGMul (SMS.make (MSet.of_list (fold_term <$> ps))
+                    (MSet.of_list (fold_term <$> ns)))
   end.
 Proof.
 have fmapE (ts : list PreTerm.pre_term) :
@@ -366,22 +361,12 @@ case: pt => /=;
   try by case =>> //=; rewrite !unfold_fold.
 - by move=> [] >; rewrite /= ?unfold_TExp !unfold_fold.
 - move=> [|] ps ns;
-  by rewrite unfold_fold ?unfold_TMul_make ?unfold_TGMul_make !fmapE.
+  rewrite unfold_fold ?unfold_TMul_make ?unfold_TGMul_make;
+  by rewrite !MSet.map_of_list !fmapE.
 Qed.
 
 Definition base t := fold_term (PreTerm.base (unfold_term t)).
 Definition expo t := fold_term (PreTerm.expo (unfold_term t)).
-
-Lemma wf_term_pair P :
-  (∀ x, x ∈ SMS.Internal.elements P → PreTerm.wf x) →
-  SMS.Internal.wf SMS.Internal.le P →
-  SMS.Internal.wf term_order (SMS.Internal.smap fold_term P).
-Proof.
-move=> wfP wfP'.
-apply/(SMS.Internal.wf_smap term_order SMS.Internal.le unfold_term _
-         unfold_term_inj); first exact: term_orderE.
-by rewrite smap_unfold_fold.
-Qed.
 
 Definition factors t : tsms :=
   SMS.map fold_term (PreTerm.factors (unfold_term t)).
@@ -418,38 +403,6 @@ Proof. rewrite /base fold_termK //; exact: PreTerm.wf_base. Qed.
 Lemma unfold_expo t : unfold_term (expo t) = PreTerm.expo (unfold_term t).
 Proof. rewrite /expo fold_termK //; exact: PreTerm.wf_expo. Qed.
 
-Lemma car_factors t :
-  SMS.car (factors t) =
-  SMS.Internal.smap fold_term (SMS.car (PreTerm.factors (unfold_term t))).
-Proof.
-rewrite /factors SMS.car_map SMS.Internal.to_id //.
-apply: wf_term_pair; last exact: SMS.wf_car.
-move=> x.
-exact: PreTerm.wf_factors_wf (PreTerm.wf_wf_factors _ (wf_unfold_term t)).
-Qed.
-
-Lemma car_gfactors t :
-  SMS.car (gfactors t) =
-  SMS.Internal.smap fold_term (SMS.car (PreTerm.gfactors (unfold_term t))).
-Proof.
-rewrite /gfactors SMS.car_map SMS.Internal.to_id //.
-apply: wf_term_pair; last exact: SMS.wf_car.
-move=> x.
-exact: PreTerm.wf_gfactors_wf (PreTerm.wf_wf_gfactors _ (wf_unfold_term t)).
-Qed.
-
-Lemma elements_factors t :
-  elements (factors t) =
-  fold_term <$> elements (PreTerm.factors (unfold_term t)).
-Proof. by rewrite !SMS.elements_car car_factors SMS.Internal.elements_smap. Qed.
-
-Lemma elements_gfactors t :
-  elements (gfactors t) =
-  fold_term <$> elements (PreTerm.gfactors (unfold_term t)).
-Proof.
-by rewrite !SMS.elements_car car_gfactors SMS.Internal.elements_smap.
-Qed.
-
 Lemma unfold_factors t :
   SMS.map unfold_term (factors t) = PreTerm.factors (unfold_term t).
 Proof.
@@ -465,26 +418,40 @@ exact: PreTerm.wf_gfactors_wf
          (PreTerm.wf_wf_gfactors _ (wf_unfold_term t)) pt_in.
 Qed.
 
+Lemma elements_factors t :
+  elements (factors t) =
+  fold_term <$> elements (PreTerm.factors (unfold_term t)).
+Proof.
+rewrite -unfold_factors (SMS.elements_map_mono _ _ unfold_term_inj
+  (λ a b h, proj1 (term_orderE a b) h)) -list_fmap_compose; symmetry.
+rewrite -{2}(list_fmap_id (elements (factors t))).
+apply: Forall_fmap_ext_1; apply/Forall_forall => x _ /=.
+exact: unfold_termK.
+Qed.
+
+Lemma elements_gfactors t :
+  elements (gfactors t) =
+  fold_term <$> elements (PreTerm.gfactors (unfold_term t)).
+Proof.
+rewrite -unfold_gfactors (SMS.elements_map_mono _ _ unfold_term_inj
+  (λ a b h, proj1 (term_orderE a b) h)) -list_fmap_compose; symmetry.
+rewrite -{2}(list_fmap_id (elements (gfactors t))).
+apply: Forall_fmap_ext_1; apply/Forall_forall => x _ /=.
+exact: unfold_termK.
+Qed.
+
 Lemma elem_of_factors_unfold x t :
   x ∈ factors t ↔ unfold_term x ∈ PreTerm.factors (unfold_term t).
 Proof.
-rewrite -!SMS.elem_of_elements !SMS.elements_car car_factors.
-rewrite SMS.Internal.elements_smap list_elem_of_fmap.
-have wfP := PreTerm.wf_wf_factors _ (wf_unfold_term t).
-split=> [[p [-> p_P]]|x_P].
-- by rewrite fold_termK //; apply: PreTerm.wf_factors_wf wfP p_P.
-- by exists (unfold_term x); rewrite unfold_termK.
+rewrite -unfold_factors !SMS.elem_of_count.
+by rewrite (SMS.count_map_inj _ _ _ unfold_term_inj).
 Qed.
 
 Lemma elem_of_gfactors_unfold x t :
   x ∈ gfactors t ↔ unfold_term x ∈ PreTerm.gfactors (unfold_term t).
 Proof.
-rewrite -!SMS.elem_of_elements !SMS.elements_car car_gfactors.
-rewrite SMS.Internal.elements_smap list_elem_of_fmap.
-have wfP := PreTerm.wf_wf_gfactors _ (wf_unfold_term t).
-split=> [[p [-> p_P]]|x_P].
-- by rewrite fold_termK //; apply: PreTerm.wf_gfactors_wf wfP p_P.
-- by exists (unfold_term x); rewrite unfold_termK.
+rewrite -unfold_gfactors !SMS.elem_of_count.
+by rewrite (SMS.count_map_inj _ _ _ unfold_term_inj).
 Qed.
 
 Lemma Nmul_factors t x : x ∈ factors t → negb (is_mul x).
@@ -691,25 +658,32 @@ elim: (unfold_term t) (wf_unfold_term t)=>
       move=> /andb_True [/andb_True [/forallb_True/list.Forall_forall H _] _];
       by move=> pt /H /andb_True [].
   have IHs := IH_elem_of _ (IH_app _ _ IHps IHns) wfl.
-  have {}wfl : forall x, x ∈ SMS.Internal.elements (ps, ns) -> PreTerm.wf x
-    by [].
   have Nsingle : negb (PreTerm.single (ps, ns)).
     by case: o wfpt => [|] /= /andb_True [].
-  have SMSwf : SMS.Internal.wf SMS.Internal.le (ps, ns).
+  have wfA : PreTerm.wf_lists (ps, ns).
     by case: o wfpt => [|] /=; case/andb_True=> /andb_True [].
-  have carA := SMS.Internal.to_id _ _ (wf_term_pair _ wfl SMSwf).
+  have ufE (l : list PreTerm.pre_term) : (∀ pt, pt ∈ l → PreTerm.wf pt) →
+      unfold_term <$> (fold_term <$> l) = l.
+    elim: l => [//|pt l IHl] wfl'.
+    have wpt : PreTerm.wf pt by apply: wfl'; set_solver.
+    have wl pt' : pt' ∈ l → PreTerm.wf pt' by move=> ?; apply: wfl'; set_solver.
+    by rewrite !fmap_cons fold_termK // (IHl wl).
   have elem_ofA x :
-      x ∈ SMS.make (fold_term <$> ps) (fold_term <$> ns) ->
+      x ∈ SMS.make (MSet.of_list (fold_term <$> ps))
+                   (MSet.of_list (fold_term <$> ns)) ->
       x ∈ fold_term <$> ps ++ ns.
-    by rewrite -SMS.elem_of_elements SMS.elements_car /= carA
-      SMS.Internal.elements_smap.
+    by rewrite fmap_app elem_of_app => /SMS.elem_of_make;
+      rewrite !MSet.elem_of_of_list.
   have Nsingle' x :
-      SMS.make (fold_term <$> ps) (fold_term <$> ns) ≠ {[+ x +]}.
-    move=> /(f_equal SMS.car); rewrite SMS.car_singleton.
-    rewrite /= carA /SMS.Internal.smap /=.
-    case=> /(f_equal length) + /(f_equal length); rewrite !length_fmap /=.
-    by case: ps ns Nsingle {IHps IHns IHs wfl SMSwf carA elem_ofA wfpt}
-      => [|? [|? ?]] [|? ?].
+      SMS.make (MSet.of_list (fold_term <$> ps))
+               (MSet.of_list (fold_term <$> ns)) ≠ {[+ x +]}.
+    have wps pt : pt ∈ ps → PreTerm.wf pt by move=> ?; apply: wfl; set_solver.
+    have wns pt : pt ∈ ns → PreTerm.wf pt by move=> ?; apply: wfl; set_solver.
+    move=> /(f_equal (SMS.map unfold_term)).
+    rewrite SMS.map_make SMS.map_singleton !MSet.map_of_list (ufE _ wps).
+    rewrite (ufE _ wns) => /(f_equal PreTerm.lists).
+    rewrite PreTerm.lists_make // PreTerm.lists_singleton => eA.
+    by move: Nsingle; rewrite eA.
   case: o wfpt => wfpt; rewrite fold_termE.
   + apply: H8 => //; first by move=> x /elem_ofA; exact: IHs.
     move=> x /elem_ofA /list_elem_of_fmap [pt [-> pt_in]].

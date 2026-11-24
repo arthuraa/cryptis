@@ -3,7 +3,7 @@ From elpi.apps Require Import locker.
 From mathcomp Require Import ssreflect.
 From Stdlib Require Import ZArith.ZArith Lia.
 From stdpp Require Import sorting gmap.
-From cryptis.lib Require Import list_sort mathcomp_compat sms.
+From cryptis.lib Require Import list_sort mathcomp_compat mset sms.
 From iris.heap_lang Require locations.
 From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
@@ -163,7 +163,7 @@ have he :
       (elements (PreTerm.factors (PreTerm.expo (unfold_term t)))) =
     ⋃ map subterms (elements (exps t)).
   rewrite /exps elements_factors unfold_expo.
-  apply: union_list_map_subterms_fold => x.
+  apply: union_list_map_subterms_fold => x /SMS.elem_of_elements.
   exact: PreTerm.wf_factors_wf
     (PreTerm.wf_wf_factors _ (PreTerm.wf_expo _ (wf_unfold_term t))).
 rewrite (subterms_via_pre t) (subterms_pre_base_exps (wf_unfold_term t)).
@@ -277,15 +277,18 @@ split.
   + move => t' t'' e Nexp Nm sub IH t''_e.
     rewrite subterms_TExp // !elem_of_union; right.
     rewrite elem_of_union_list; exists (subterms t''); split => //.
-    by rewrite list_elem_of_fmap; exists t''; split.
+    rewrite list_elem_of_fmap; exists t''; split=> //.
+    exact/SMS.elem_of_elements.
   + move => t'' s Hs sub IH t''_s.
     rewrite (subterms_TMul Hs) elem_of_union; right.
     rewrite elem_of_union_list; exists (subterms t''); split => //.
-    by rewrite list_elem_of_fmap; exists t''; split.
+    rewrite list_elem_of_fmap; exists t''; split=> //.
+    exact/SMS.elem_of_elements.
   + move => t'' s Hs sub IH t''_s.
     rewrite (subterms_TGMul Hs) elem_of_union; right.
     rewrite elem_of_union_list; exists (subterms t''); split => //.
-    by rewrite list_elem_of_fmap; exists t''; split.
+    rewrite list_elem_of_fmap; exists t''; split=> //.
+    exact/SMS.elem_of_elements.
 - elim/term_lt_ind: t2 => t2 IH.
   case: t2 IH => [n|ta tb|a|kt tt|kk tt|tt|pt wf nf] IH.
   + rewrite subtermsE' /=.
@@ -327,7 +330,8 @@ split.
          apply: STExp1; [exact: base_Nexp|exact: Nmb|].
          by apply: (IH (base t2') _ Hb); exact: (tsize_base_lt _ xt).
       -- move: He => /elem_of_union_list.
-         move=> [X [/list_elem_of_fmap [ee [-> ee_exps]] Hin]].
+         move=> [X [/list_elem_of_fmap [ee [-> /SMS.elem_of_elements ee_exps]]
+           Hin]].
          rewrite -(TExp_base_expo t2').
          apply: (STExp2 (base_Nexp t2') Nmb _ ee_exps).
          by apply: (IH ee _ Hin); exact: (tsize_exps_lt _ _ ee_exps).
@@ -337,7 +341,8 @@ split.
       rewrite -(factorsK t2') (subterms_TMul Hs).
       move => /elem_of_union [/elem_of_singleton -> | He].
       -- exact: STRefl.
-      -- move: He => /elem_of_union_list [X [/list_elem_of_fmap [ff [-> ff_facts]] Hin]].
+      -- move: He => /elem_of_union_list
+         [X [/list_elem_of_fmap [ff [-> /SMS.elem_of_elements ff_facts]] Hin]].
          apply: (STMul Hs _ ff_facts).
          apply: (IH ff _ Hin).
          exact: (tsize_factors_lt _ _ xt ff_facts).
@@ -348,7 +353,8 @@ split.
       rewrite -(gfactorsK t2') (subterms_TGMul Hs).
       move => /elem_of_union [/elem_of_singleton -> | He].
       -- exact: STRefl.
-      -- move: He => /elem_of_union_list [X [/list_elem_of_fmap [ff [-> ff_facts]] Hin]].
+      -- move: He => /elem_of_union_list
+         [X [/list_elem_of_fmap [ff [-> /SMS.elem_of_elements ff_facts]] Hin]].
          apply: (STGMul Hs _ ff_facts).
          apply: (IH ff _ Hin).
          exact: (tsize_gfactors_lt _ _ xt ff_facts).
@@ -361,7 +367,8 @@ Qed.
 
 Lemma subterm_exps t1 t2 : t1 ∈ exps t2 → subterm t1 t2.
 Proof.
-rewrite subtermsP subterms_base_exps !elem_of_union => t1_t2.
+rewrite subtermsP subterms_base_exps !elem_of_union.
+move=> /SMS.elem_of_elements t1_t2.
 right; rewrite elem_of_union_list; exists (subterms t1).
 by rewrite -subtermsP; split => //; apply/list_elem_of_fmap; eauto.
 Qed.
@@ -402,15 +409,18 @@ split.
   + move => t' t'' e Nexp Nm sub IH t''_e.
     rewrite nonces_of_term_TExp // elem_of_union; right.
     rewrite elem_of_union_list; exists (nonces_of_term t''); split => //.
-    by rewrite list_elem_of_fmap; exists t''; split.
+    rewrite list_elem_of_fmap; exists t''; split=> //.
+    exact/SMS.elem_of_elements.
   + move => t'' s Hs sub IH t''_s.
     rewrite (nonces_of_term_TMul Hs) elem_of_union_list.
     exists (nonces_of_term t''); split => //.
-    by rewrite list_elem_of_fmap; exists t''; split.
+    rewrite list_elem_of_fmap; exists t''; split=> //.
+    exact/SMS.elem_of_elements.
   + move => t'' s Hs sub IH t''_s.
     rewrite (nonces_of_term_TGMul Hs) elem_of_union_list.
     exists (nonces_of_term t''); split => //.
-    by rewrite list_elem_of_fmap; exists t''; split.
+    rewrite list_elem_of_fmap; exists t''; split=> //.
+    exact/SMS.elem_of_elements.
 - elim/term_lt_ind: t => t IH.
   case: t IH => [n|ta tb|a'|kt tt|kk tt|tt|pt wf nf] IH.
   + by rewrite nonces_of_termE' /=; move => /elem_of_empty [].
@@ -443,7 +453,8 @@ split.
          apply: STExp1; [exact: base_Nexp|exact: Nmb|].
          by apply: (IH (base t2') _ Hb); exact: (tsize_base_lt _ xt).
       -- move: He => /elem_of_union_list.
-         move=> [X [/list_elem_of_fmap [ee [-> ee_exps]] Hin]].
+         move=> [X [/list_elem_of_fmap [ee [-> /SMS.elem_of_elements ee_exps]]
+           Hin]].
          rewrite -(TExp_base_expo t2').
          apply: (STExp2 (base_Nexp t2') Nmb _ ee_exps).
          by apply: (IH ee _ Hin); exact: (tsize_exps_lt _ _ ee_exps).
@@ -451,7 +462,8 @@ split.
       have xt : is_mul t2' by [].
       have Hs : ∀ x, x ∈ factors t2' → negb (is_mul x) by apply: Nmul_factors.
       rewrite -(factorsK t2') (nonces_of_term_TMul Hs).
-      move => /elem_of_union_list [X [/list_elem_of_fmap [ff [-> ff_facts]] Hin]].
+      move=> /elem_of_union_list
+        [X [/list_elem_of_fmap [ff [-> /SMS.elem_of_elements ff_facts]] Hin]].
       apply: (STMul Hs _ ff_facts).
       apply: (IH ff _ Hin).
       exact: (tsize_factors_lt _ _ xt ff_facts).
@@ -460,7 +472,8 @@ split.
       have Hs : ∀ x, x ∈ gfactors t2' → negb (is_gmul x).
         by apply: Ngmul_gfactors.
       rewrite -(gfactorsK t2') (nonces_of_term_TGMul Hs).
-      move => /elem_of_union_list [X [/list_elem_of_fmap [ff [-> ff_facts]] Hin]].
+      move=> /elem_of_union_list
+        [X [/list_elem_of_fmap [ff [-> /SMS.elem_of_elements ff_facts]] Hin]].
       apply: (STGMul Hs _ ff_facts).
       apply: (IH ff _ Hin).
       exact: (tsize_gfactors_lt _ _ xt ff_facts).
@@ -476,7 +489,13 @@ have sub_union (u : term) (us : list term) :
   by rewrite list_elem_of_fmap; exists u; split.
 elim: t2 / => //; try by intros; rewrite [X in _ ⊆ X]nonces_of_termE; set_solver.
 - by move=> t' e Nexp Nm sub IH; rewrite nonces_of_term_TExp //; set_solver.
-- move => t' t'' e Nexp Nm sub IH t''_e.
+- move => t' t'' e Nexp Nm sub IH /SMS.elem_of_elements t''_e.
   rewrite nonces_of_term_TExp //.
   have := sub_union _ _ t''_e; set_solver.
+- move=> t'' s Hs sub IH /SMS.elem_of_elements t''_s.
+  rewrite (nonces_of_term_TMul Hs).
+  have := sub_union _ _ t''_s; set_solver.
+- move=> t'' s Hs sub IH /SMS.elem_of_elements t''_s.
+  rewrite (nonces_of_term_TGMul Hs).
+  have := sub_union _ _ t''_s; set_solver.
 Qed.

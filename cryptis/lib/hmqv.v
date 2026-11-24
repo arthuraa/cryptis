@@ -319,11 +319,12 @@ Qed.
   negb (is_exp g) → negb (is_gmul g) →
   exps (hmqv_ss t_a t_b p_a P_a X_a p_b X_b)
   = SMS.make
-      [TNonce p_b; hmqv_m t_b X_b P_a; hmqv_m t_a X_a (TExp g p_b); TNonce p_a]
-      [].
+      {[+ TNonce p_b; hmqv_m t_b X_b P_a; hmqv_m t_a X_a (TExp g p_b);
+          TNonce p_a +]}
+      ∅.
 Proof.
 move=> gNX gNm; rewrite /hmqv_ss (@exps_TExp_TMul g _ gNX gNm).
-  by rewrite !SMS.singleton_make !SMS.disj_union_make.
+  by rewrite !SMS.singleton_make !SMS.disj_union_make !(left_id ∅ (⊎)).
 by move=> u; repeat case/SMS.elem_of_disj_union;
    move=> /SMS.elem_of_singleton ->.
 Qed.
@@ -331,10 +332,10 @@ Qed.
 #[local] Lemma exps_hmqv_mixed t_b (p_b x_a : nonce) P_a X_b :
   negb (is_exp g) → negb (is_gmul g) →
   exps (TExp g (TMul {[+ TNonce p_b; hmqv_m t_b X_b P_a; TNonce x_a +]}))
-  = SMS.make [TNonce p_b; hmqv_m t_b X_b P_a; TNonce x_a] [].
+  = SMS.make {[+ TNonce p_b; hmqv_m t_b X_b P_a; TNonce x_a +]} ∅.
 Proof.
 move=> gNX gNm; rewrite (@exps_TExp_TMul g _ gNX gNm).
-  by rewrite !SMS.singleton_make !SMS.disj_union_make.
+  by rewrite !SMS.singleton_make !SMS.disj_union_make !(left_id ∅ (⊎)).
 by move=> u; repeat case/SMS.elem_of_disj_union;
    move=> /SMS.elem_of_singleton ->.
 Qed.
@@ -416,14 +417,15 @@ Qed.
   t_a ≠ t_b →
   ss ∈ gfactors K
   ∧ TExp g (TMul {[+ TNonce p_b; m_b; TNonce x_a +]}) ∈ gfactors K
-  ∧ [TNonce p_a; TNonce p_b] ⊆+ SMS.pos (exps ss).
+  ∧ {[+ TNonce p_a; TNonce p_b +]} ⊆ SMS.pos (exps ss).
 Proof.
 move=> gNX gNm m_b tab; do !split.
 - apply: SMS.elem_of_pos.
   rewrite /hmqv_ss; apply: hmqv_K_gfactor => //; by right.
 - apply: SMS.elem_of_pos; apply: hmqv_K_gfactor => //; by left.
-- rewrite exps_hmqv_ss // SMS.pos_make_nil_r.
-  by apply/submseteq_count_mem => x /=; lia.
+- rewrite exps_hmqv_ss // SMS.pos_make_empty_r => x.
+  rewrite !MSet.count_disj_union !MSet.count_singleton.
+  by repeat case_bool_decide; lia.
 Qed.
 
 (** With an honest peer share, the ephemeral-ephemeral factor is in the key:
@@ -1140,7 +1142,7 @@ have Nm_b : negb (is_mul (TNonce x_b)) by [].
 iEval (rewrite public_gfactors) in "p_K".
 iDestruct "p_K" as "[_ #fs]".
 iAssert (public (TExp g (TMul {[+ TNonce x_b; TNonce x_a +]}))) as "#p_eph".
-  iApply (big_sepL_elem_of with "fs").
+  iApply (big_sepL_elem_of with "fs"); apply/SMS.elem_of_elements.
   exact: hmqv_K_gfactor_eph.
 iDestruct (@public_dh_secret2 _ _ _ g (TNonce x_b) (TNonce x_a)
              gNX gNm Nm_b Nm_a
@@ -1165,7 +1167,7 @@ iIntros "#[_ pred_a] #[_ pred_b] #p_K".
 iEval (rewrite public_gfactors) in "p_K".
 iDestruct "p_K" as "[_ #fs]".
 iApply (public_dh_secret_gen2 ab_ss with "pred_a pred_b").
-by iApply (big_sepL_elem_of with "fs").
+by iApply (big_sepL_elem_of with "fs"); apply/SMS.elem_of_elements.
 Qed.
 
 (** Whatever the peer's share, the mixed factor binds the key to a party's
@@ -1182,17 +1184,18 @@ Proof.
 move=> gNX gNm tab.
 have [_ [gf _]] :=
   @hmqv_key_gfactors N g t_a t_b p_a x_a p_b P_a X_a X_b gNX gNm tab.
-have ab_mixed : [TNonce x_a; TNonce p_b]
-    ⊆+ SMS.pos
+have ab_mixed : {[+ TNonce x_a; TNonce p_b +]}
+    ⊆ SMS.pos
          (exps (TExp g (TMul {[+ TNonce p_b; hmqv_m N t_b X_b P_a;
                                   TNonce x_a +]}))).
-  rewrite exps_hmqv_mixed // SMS.pos_make_nil_r.
-  by apply/submseteq_count_mem => x /=; lia.
+  rewrite exps_hmqv_mixed // SMS.pos_make_empty_r => x.
+  rewrite !MSet.count_disj_union !MSet.count_singleton.
+  by repeat case_bool_decide; lia.
 iIntros "#[_ pred_x] #[_ pred_p] #p_K".
 iEval (rewrite public_gfactors) in "p_K".
 iDestruct "p_K" as "[_ #fs]".
 iApply (public_dh_secret_gen2 ab_mixed with "pred_x pred_p").
-by iApply (big_sepL_elem_of with "fs").
+by iApply (big_sepL_elem_of with "fs"); apply/SMS.elem_of_elements.
 Qed.
 
 Lemma public_hmqv_K_forged N g t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b :

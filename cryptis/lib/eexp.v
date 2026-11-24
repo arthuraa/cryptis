@@ -558,10 +558,11 @@ have ag q : (∀ m, m ∈ q → m ∈ elements s ++ elements r) → agree L q.
   move=> sub m1 m2 a m1_q m2_q _ aL.
   have z m : m ∈ q → count a m = 0%Z.
     move=> m_q; apply: not_elem_of_count => a_m; apply: aL.
-    by apply/list_elem_of_bind; exists m; split; last exact: sub.
+    apply/list_elem_of_bind; exists m; split; last exact: sub.
+    exact/SMS.elem_of_elements.
   by rewrite !z.
 move=> ns nr; apply: (emul_neq0_agree _ _ ns nr); apply: ag => m m_q;
-  apply/elem_of_app; by [left|right].
+  rewrite elem_of_app !SMS.elem_of_elements; by [left|right].
 Qed.
 
 Lemma emul_injr s r1 r2 : s ≠ ∅ → emul s r1 = emul s r2 → r1 = r2.

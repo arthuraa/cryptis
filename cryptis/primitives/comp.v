@@ -86,7 +86,7 @@ rewrite -[val_of_term t1]val_of_pre_term_unfold.
 rewrite -[val_of_term t2]val_of_pre_term_unfold.
 wp_apply (twp_hl_mul _ _ _ _ (wf_unfold_term _) (wf_unfold_term _)).
 rewrite (_ : PreTerm.mul _ = unfold_term (TMul {[+ t1; t2 +]})); last first.
-  by rewrite !SMS.singleton_make SMS.disj_union_make unfold_TMul_make.
+  by rewrite unfold_TMul SMS.map_disj_union !SMS.map_singleton.
 rewrite [repr _]val_of_pre_term_unfold.
 by iApply "HΨ".
 Qed.
@@ -104,7 +104,7 @@ iIntros "HΨ". rewrite /tinv; wp_lam; wp_pures.
 rewrite -[val_of_term t]val_of_pre_term_unfold.
 wp_apply (twp_hl_inv _ _ _ (wf_unfold_term _)).
 rewrite (_ : PreTerm.mul _ = unfold_term (TInv t)); last first.
-  by rewrite /TInv SMS.singleton_make SMS.inv_make unfold_TMul_make.
+  by rewrite /TInv unfold_TMul SMS.map_inv SMS.map_singleton.
 rewrite [repr _]val_of_pre_term_unfold.
 by iApply "HΨ".
 Qed.
@@ -143,7 +143,7 @@ rewrite -[val_of_term t1]val_of_pre_term_unfold.
 rewrite -[val_of_term t2]val_of_pre_term_unfold.
 wp_apply (twp_hl_gmul _ _ _ _ (wf_unfold_term _) (wf_unfold_term _)).
 rewrite (_ : PreTerm.gmul _ = unfold_term (TGMul {[+ t1; t2 +]})); last first.
-  by rewrite !SMS.singleton_make SMS.disj_union_make unfold_TGMul_make.
+  by rewrite unfold_TGMul SMS.map_disj_union !SMS.map_singleton.
 rewrite [repr _]val_of_pre_term_unfold.
 by iApply "HΨ".
 Qed.
@@ -161,7 +161,7 @@ iIntros "HΨ". rewrite /tginv; wp_lam; wp_pures.
 rewrite -[val_of_term t]val_of_pre_term_unfold.
 wp_apply (twp_hl_ginv _ _ _ (wf_unfold_term _)).
 rewrite (_ : PreTerm.gmul _ = unfold_term (TGInv t)); last first.
-  by rewrite /TGInv SMS.singleton_make SMS.inv_make unfold_TGMul_make.
+  by rewrite /TGInv unfold_TGMul SMS.map_inv SMS.map_singleton.
 rewrite [repr _]val_of_pre_term_unfold.
 by iApply "HΨ".
 Qed.

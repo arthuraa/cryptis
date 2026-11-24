@@ -308,11 +308,13 @@ f_equiv; last (f_equiv; last (f_equiv; last f_equiv)).
   apply: big_sepS_proper => t' T_t'.
   by move: (decompose_tsize T_t T_t') => ?; eauto.
 - apply: and_proper_L => mul_t.
-  apply: big_sepL_proper => _ t' /(list_elem_of_lookup_2 _ _ _) t'_in.
+  apply: big_sepL_proper => _ t' /(list_elem_of_lookup_2 _ _ _).
+  move=> /SMS.elem_of_elements t'_in.
   apply: HP.
   exact: (tsize_factors_lt t' t mul_t t'_in).
 - apply: and_proper_L => mul_t.
-  apply: big_sepL_proper => _ t' /(list_elem_of_lookup_2 _ _ _) t'_in.
+  apply: big_sepL_proper => _ t' /(list_elem_of_lookup_2 _ _ _).
+  move=> /SMS.elem_of_elements t'_in.
   apply: HP.
   exact: (tsize_gfactors_lt t' t mul_t t'_in).
 - apply: and_proper_L => exp_t.
@@ -723,32 +725,32 @@ iDestruct "p" as "(_ & p & _)".
 by iApply (big_sepL_elem_of _ _ _ f_t1 with "p").
 Qed.
 
-Lemma public_exp_inv_gen ts t1 t2 :
-  t1 ∈ ts →
-  ts ⊆+ SMS.pos (exps t2) →
+Lemma public_exp_inv_gen X t1 t2 :
+  t1 ∈ X →
+  X ⊆ SMS.pos (exps t2) →
   public t2 -∗
-  ∃ t, ⌜t ∈ ts⌝ ∧ (
+  ∃ t, ⌜t ∈ X⌝ ∧ (
     public t ∨
-    ∃ t3, ⌜base t3 = base t2⌝ ∧ ⌜ts ⊆+ SMS.pos (exps t3)⌝ ∧
+    ∃ t3, ⌜base t3 = base t2⌝ ∧ ⌜X ⊆ SMS.pos (exps t3)⌝ ∧
       exp_pred t t3).
 Proof.
-move=> t1_ts; elim/term_lt_ind: t2 => t2 IH ts_t2; iIntros "#p".
-have t1_t2 : t1 ∈ SMS.pos (exps t2).
-  exact: elem_of_submseteq _ _ _ t1_ts ts_t2.
+move=> t1_X; elim/term_lt_ind: t2 => t2 IH X_t2; iIntros "#p".
+have t1_t2 := MSet.elem_of_subseteq _ _ _ X_t2 t1_X.
 have xt2 := is_exp_of_exps (SMS.elem_of_pos _ _ t1_t2).
 have Nm2 := is_exp_Ngmul _ xt2.
 iEval (rewrite public_exp_iff //) in "p".
 iDestruct "p" as "(_ & _ & [#last | #all])"; last first.
-  have t1_t2' : t1 ∈ satoms (exps t2) by rewrite /satoms elem_of_app; left.
+  have t1_t2' : t1 ∈ satoms (exps t2).
+    by rewrite /satoms elem_of_app MSet.elem_of_elements; left.
   iExists t1; iSplit => //; iRight; iExists t2; do 2!iSplit => //.
   by iApply (big_sepL_elem_of _ _ _ t1_t2' with "all").
 iDestruct "last" as (t) "(%t_t2 & #j & #p)".
-case: (decide (t ∈ ts)) => t_ts.
+case: (decide (t ∈ X)) => t_X.
   iExists t; iSplit => //; iDestruct "j" as "[j|j]"; first by iLeft.
   by iRight; iExists t2; iFrame "j".
-have cnt u : u ∈ ts → (count u t <= 0)%Z.
-  move=> u_ts; have u_t : u ≠ t by move=> e; apply: t_ts; rewrite -e.
-  have u_t2 := elem_of_submseteq _ _ _ u_ts ts_t2.
+have cnt u : u ∈ X → (count u t <= 0)%Z.
+  move=> u_X; have u_t : u ≠ t by move=> e; apply: t_X; rewrite -e.
+  have u_t2 := MSet.elem_of_subseteq _ _ _ X_t2 u_X.
   have := Nmul_factors _ _ (SMS.elem_of_pos _ _ u_t2).
   move=> /(scount_Nmul t) <-; have At := satoms_satom t_t2.
   case: (decide (u = TInv t)) => [->|?].
@@ -756,32 +758,11 @@ have cnt u : u ∈ ts → (count u t <= 0)%Z.
   by rewrite scount_satom_ne //; lia.
 have [_ lt] := tsize_satoms _ _ t_t2.
 rewrite -(base_TExp _ (TInv t) Nm2); iApply (IH _ lt with "p").
-apply/submseteq_count_mem => u; move/submseteq_count_mem/(_ u): ts_t2.
-have := count_mem_exps_pos u t2.
-have := count_mem_exps_pos u (TExp t2 (TInv t)).
+move=> u; move/(_ u): X_t2.
+have := count_exps_pos u t2.
+have := count_exps_pos u (TExp t2 (TInv t)).
 rewrite (count_expo_TExp _ _ _ Nm2) count_TInv.
-case: (decide (u ∈ ts)) => [/cnt|/not_elem_of_count_mem ->]; lia.
-Qed.
-
-Lemma public_exp_inv_gen_set ts t1 t2 :
-  t1 ∈ ts →
-  ts ⊆ SMS.pos (exps t2) →
-  public t2 -∗
-  ∃ t, ⌜t ∈ ts⌝ ∧ (
-    public t ∨
-    ∃ t3, ⌜base t3 = base t2⌝ ∧ ⌜ts ⊆ SMS.pos (exps t3)⌝ ∧
-      exp_pred t t3).
-Proof.
-iIntros "%t1_ts %ts_t2 #p".
-have t1_ts' : t1 ∈ remove_dups ts by rewrite elem_of_remove_dups.
-have ts_t2' : remove_dups ts ⊆+ SMS.pos (exps t2).
-  apply: NoDup_submseteq; first exact: NoDup_remove_dups.
-  by move=> t /elem_of_remove_dups /ts_t2.
-iDestruct (public_exp_inv_gen t1_ts' ts_t2' with "p") as "(%t & %t_ts & #H)".
-rewrite elem_of_remove_dups in t_ts; iExists t; iSplit => //.
-iDestruct "H" as "[H|(%t3 & %e & %ts_t3 & #H)]"; first by iLeft.
-iRight; iExists t3; do !iSplit => //; iPureIntro => t' t'_ts.
-by apply: (elem_of_submseteq _ _ _ _ ts_t3); rewrite elem_of_remove_dups.
+case: (decide (u ∈ X)) => [/cnt|/MSet.not_elem_of_count ->]; lia.
 Qed.
 
 Lemma public_exp_inv t1 t2 :
@@ -792,7 +773,7 @@ Lemma public_exp_inv t1 t2 :
     ∃ t3, ⌜base t3 = base t2⌝ ∧
       ⌜SMS.pos (exps t2) ⊆ SMS.pos (exps t3)⌝ ∧
       exp_pred t t3).
-Proof. by move=> t1_t2; iApply public_exp_inv_gen_set. Qed.
+Proof. move=> t1_t2; exact: public_exp_inv_gen t1_t2 (reflexivity _). Qed.
 
 Lemma public_exp_inv_same t1 t2 :
   t1 ∈ SMS.pos (exps t2) →
@@ -802,12 +783,14 @@ Lemma public_exp_inv_same t1 t2 :
     exp_pred t1 t2'.
 Proof.
 iIntros "%t1_t2 #p".
-have {}t1_t2: [t1] ⊆ SMS.pos (exps t2) by set_solver.
-have t1_t1: t1 ∈ [t1] by set_solver.
-iPoseProof (public_exp_inv_gen_set t1_t1 t1_t2 with "p") as "(%t & %t_t1 & H)".
-move: t_t1; rewrite list_elem_of_singleton => {t} ->.
+have t1_t1 : t1 ∈ ({[+ t1 +]} : MSet.mset term).
+  exact/MSet.elem_of_singleton.
+move/MSet.singleton_subseteq: t1_t2 => t1_t2.
+iPoseProof (public_exp_inv_gen t1_t1 t1_t2 with "p") as "(%t & %t_t1 & H)".
+move: t_t1; rewrite MSet.elem_of_singleton => {t} ->.
 iDestruct "H" as "[H|(%t3 & #? & %t1_t3 & #base)]"; first by eauto.
-iRight; iExists t3; iFrame "#"; iPureIntro; set_solver.
+iRight; iExists t3; iFrame "#"; iPureIntro.
+exact/MSet.singleton_subseteq.
 Qed.
 
 (* [f], an atom or the inverse of one, is the last exponent of [TExp t1 f],
@@ -873,25 +856,34 @@ iApply (public_TExp_last Nm1 Af f_t1 with "[] [] p1").
 Qed.
 
 Lemma public_TExp_make_intro t X Y :
-  negb (is_gmul t) ->
-  Forall (λ u, negb (is_mul u)) (X ++ Y) ->
-  public t -∗ ([∗ list] t' ∈ X ++ Y, public t') -∗
+  negb (is_gmul t) →
+  (∀ u, u ∈ X ∨ u ∈ Y → negb (is_mul u)) →
+  public t -∗ □ (∀ u, ⌜u ∈ X ∨ u ∈ Y⌝ → public u) -∗
   public (TExp t (TMul (SMS.make X Y))).
 Proof.
-move=> Nm; elim: X => [|x X IHX] /=.
-- elim: Y => [|y Y IHY] HY; iIntros "#p #pY"; first by rewrite TExp_unit.
-  move: HY => /Forall_cons [Ny HY].
-  iEval (rewrite big_sepL_cons) in "pY"; iDestruct "pY" as "[#py #pY']".
-  have Ay : negb (is_mul (TInv y)) ∨ negb (is_mul (TInv (TInv y))).
-    by right; rewrite TInvK.
-  rewrite TExp_TMul_cons_r.
-  iApply (public_TExp_satom (Ngmul_TExp _ _ Nm) Ay with "[] [py]").
-    by iApply (IHY HY with "p pY'").
-  by rewrite public_TInv.
-- move=> /Forall_cons [Nx HXY]; iIntros "#p #pXY".
-  iDestruct "pXY" as "[#px #pXY']"; rewrite TExp_TMul_cons_l.
-  iApply (public_TExp_satom (Ngmul_TExp _ _ Nm) (or_introl Nx) with "[] px").
-  by iApply (IHX HXY with "p pXY'").
+have inE x (X' : MSet.mset term) u : u ∈ {[+ x +]} ⊎ X' ↔ u = x ∨ u ∈ X'.
+  by rewrite MSet.elem_of_disj_union MSet.elem_of_singleton.
+move=> Nm; elim/MSet.mset_ind: X => [|x X IHX].
+- elim/MSet.mset_ind: Y => [|y Y IHY] HY; iIntros "#p #pY".
+    by rewrite TExp_unit.
+  have Ny : negb (is_mul (TInv (TInv y))).
+    by rewrite TInvK; apply: HY; right; apply/inE; left.
+  have HY' u : u ∈ (∅ : MSet.mset term) ∨ u ∈ Y → negb (is_mul u).
+    by case=> ?; apply: HY; [left|right; apply/inE; right].
+  rewrite TExp_TMul_singleton_r.
+  iApply (public_TExp_satom (Ngmul_TExp _ _ Nm) (or_intror Ny) with "[] []").
+  + iApply (IHY HY' with "p"); iIntros "!> %u %u_Y"; iApply "pY".
+    by iPureIntro; case: u_Y => ?; [left|right; apply/inE; right].
+  + by rewrite public_TInv; iApply "pY"; iPureIntro; right; apply/inE; left.
+- move=> HXY; iIntros "#p #pXY".
+  have Nx : negb (is_mul x) by apply: HXY; left; apply/inE; left.
+  have HXY' u : u ∈ X ∨ u ∈ Y → negb (is_mul u).
+    by case=> ?; apply: HXY; [left; apply/inE; right|right].
+  rewrite TExp_TMul_singleton_l.
+  iApply (public_TExp_satom (Ngmul_TExp _ _ Nm) (or_introl Nx) with "[] []").
+  + iApply (IHX HXY' with "p"); iIntros "!> %u %u_XY"; iApply "pXY".
+    by iPureIntro; case: u_XY => ?; [left; apply/inE; right|right].
+  + by iApply "pXY"; iPureIntro; left; apply/inE; left.
 Qed.
 
 (* Unconditional in both arguments.  A group product base distributes, and every
@@ -907,24 +899,22 @@ case Em: (is_gmul t1).
     by iApply all_minted_TExp; iSplit; iApply public_minted.
   rewrite big_sepL_forall; iIntros (k x Hx).
   have x_in : x ∈ gfactors (TExp t1 t2).
-    by exact: list_elem_of_lookup_2 _ _ _ Hx.
+    by apply/SMS.elem_of_elements; exact: list_elem_of_lookup_2 _ _ _ Hx.
   move: x_in; rewrite gfactors_TExp.
   move=> /SMS.elem_of_map [u [-> u_t1]].
   iApply (IH u (tsize_gfactors_lt _ _ Xm u_t1) with "[] p2").
   rewrite (public_gfactors t1); iDestruct "p1" as "[_ #fs]".
-  by iApply (big_sepL_elem_of with "fs").
+  iApply (big_sepL_elem_of with "fs"); exact/SMS.elem_of_elements.
 have Nm : negb (is_gmul t1) by rewrite Em.
-have Hfs : Forall (λ u, negb (is_mul u))
-              (SMS.pos (factors t2) ++ SMS.neg (factors t2)).
-  apply/Forall_forall => x /elem_of_app [] x_in.
-  - exact: Nmul_factors _ _ (SMS.elem_of_pos _ _ x_in).
-  - exact: Nmul_factors _ _ (SMS.elem_of_neg _ _ x_in).
+have Hfs u :
+    u ∈ SMS.pos (factors t2) ∨ u ∈ SMS.neg (factors t2) → negb (is_mul u).
+  by move=> /SMS.elem_of_pos_neg; exact: Nmul_factors.
 iDestruct (public_factors t2 with "p2") as "[_ #fs]".
-iEval (rewrite SMS.elements_pos_neg) in "fs".
 have -> : TExp t1 t2 =
   TExp t1 (TMul (SMS.make (SMS.pos (factors t2)) (SMS.neg (factors t2)))).
   by rewrite SMS.make_pos_neg factorsK.
-by iApply (public_TExp_make_intro Nm Hfs with "p1 fs").
+iApply (public_TExp_make_intro Nm Hfs with "p1"); iIntros "!> %u %u_t2".
+by iApply (big_sepL_elem_of with "fs"); apply/SMS.elem_of_elements.
 Qed.
 
 (* Distributivity, as a publicity principle: [TExp t1 t2] is the group product
@@ -937,15 +927,16 @@ Lemma public_TExp_gfactors t1 t2 :
   public (TExp t1 t2).
 Proof.
 iIntros "#H".
-have factE : forall x, x ∈ gfactors (TExp t1 t2) ->
+have factE : forall x, x ∈ elements (gfactors (TExp t1 t2)) ->
     exists u, x = TExp u t2 /\ u ∈ gfactors t1.
-  move=> x; rewrite gfactors_TExp.
+  move=> x; rewrite SMS.elem_of_elements gfactors_TExp.
   by move=> /SMS.elem_of_map [u [-> u_t1]]; eauto.
 rewrite [public (TExp t1 t2)]public_gfactors [minted (TExp t1 t2)]minted_gfactors.
 iSplit; iApply big_sepL_forall; iIntros (k x Hx);
   case: (factE x (list_elem_of_lookup_2 _ _ _ Hx)) => u [-> u_t1].
-- by iApply public_minted; iApply (big_sepL_elem_of with "H").
-- by iApply (big_sepL_elem_of with "H").
+- iApply public_minted; iApply (big_sepL_elem_of with "H").
+  exact/SMS.elem_of_elements.
+- iApply (big_sepL_elem_of with "H"); exact/SMS.elem_of_elements.
 Qed.
 
 Lemma public_TMul_intro s :
@@ -965,10 +956,10 @@ Lemma big_sepL_factors_TMul2 (Φ : term → iProp) `{!∀ t, Persistent (Φ t)}
   [∗ list] t' ∈ elements (factors (TMul {[+ t1; t2 +]})), Φ t'.
 Proof.
 iIntros "#H1 #H2"; iApply big_sepL_intro; iIntros "!>" (k u Hk).
-move: (elem_of_factors_TMul2 _ _ _ (list_elem_of_lookup_2 _ _ _ Hk)).
-case=> [Hin|Hin].
-- by iApply (big_sepL_elem_of with "H1").
-- by iApply (big_sepL_elem_of with "H2").
+move: (list_elem_of_lookup_2 _ _ _ Hk) => /SMS.elem_of_elements Hu.
+case: (elem_of_factors_TMul2 _ _ _ Hu) => Hin.
+- by iApply (big_sepL_elem_of with "H1"); apply/SMS.elem_of_elements.
+- by iApply (big_sepL_elem_of with "H2"); apply/SMS.elem_of_elements.
 Qed.
 
 Lemma public_TMul2 t1 t2 :
@@ -1008,10 +999,10 @@ Lemma big_sepL_gfactors_TGMul2
   [∗ list] t' ∈ elements (gfactors (TGMul {[+ t1; t2 +]})), Φ t'.
 Proof.
 iIntros "#H1 #H2"; iApply big_sepL_intro; iIntros "!>" (k u Hk).
-move: (elem_of_gfactors_TGMul2 _ _ _ (list_elem_of_lookup_2 _ _ _ Hk)).
-case=> [Hin|Hin].
-- by iApply (big_sepL_elem_of with "H1").
-- by iApply (big_sepL_elem_of with "H2").
+move: (list_elem_of_lookup_2 _ _ _ Hk) => /SMS.elem_of_elements Hu.
+case: (elem_of_gfactors_TGMul2 _ _ _ Hu) => Hin.
+- by iApply (big_sepL_elem_of with "H1"); apply/SMS.elem_of_elements.
+- by iApply (big_sepL_elem_of with "H2"); apply/SMS.elem_of_elements.
 Qed.
 
 Lemma public_TGMul2 t1 t2 :
@@ -1067,17 +1058,15 @@ elim: t.
   rewrite public_factors minted_factors (factors_TMul_atoms _ Hs).
   iIntros "#ms #contra"; iSplit => //.
   iApply big_sepL_forall; iIntros (k x Hx).
-  have x_s : x ∈ s.
-    by exact: list_elem_of_lookup_2 _ _ _ Hx.
-  iApply (IH x x_s with "[] contra").
+  have x_s : x ∈ elements s by exact: list_elem_of_lookup_2 _ _ _ Hx.
+  iApply (IH x (proj1 (SMS.elem_of_elements _ _) x_s) with "[] contra").
   by iApply (big_sepL_elem_of with "ms").
 - move=> s IH Hs _.
   rewrite public_gfactors minted_gfactors (gfactors_TGMul_atoms _ Hs).
   iIntros "#ms #contra"; iSplit => //.
   iApply big_sepL_forall; iIntros (k x Hx).
-  have x_s : x ∈ s.
-    by exact: list_elem_of_lookup_2 _ _ _ Hx.
-  iApply (IH x x_s with "[] contra").
+  have x_s : x ∈ elements s by exact: list_elem_of_lookup_2 _ _ _ Hx.
+  iApply (IH x (proj1 (SMS.elem_of_elements _ _) x_s) with "[] contra").
   by iApply (big_sepL_elem_of with "ms").
 Qed.
 
@@ -1135,7 +1124,7 @@ move=> Nm2; iIntros "#m2 #c #p1".
 iEval (rewrite public_gfactors) in "p1"; iDestruct "p1" as "[_ #fs]".
 iApply public_TExp_gfactors; iApply big_sepL_forall.
 iIntros (? u u_t1%list_elem_of_lookup_2).
-have Nm1 := Ngmul_gfactors _ _ u_t1.
+have Nm1 := Ngmul_gfactors _ _ (proj1 (SMS.elem_of_elements _ _) u_t1).
 iAssert (public u) as "#p_u"; first by iApply (big_sepL_elem_of with "fs").
 case: (decide (TInv t2 ∈ satoms (exps u))) => t2_u.
   iApply (public_TExp_satom Nm1 (or_introl Nm2) with "p_u").

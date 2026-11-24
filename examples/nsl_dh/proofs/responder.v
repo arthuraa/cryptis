@@ -193,8 +193,8 @@ iAssert (|={⊤}=> session ρ Resp si ∗ (compromised Resp si ∨ φ si Resp))%
 { iDestruct "inv_m3" as "[#p_gb|[#inv_m3 _]]".
   - iAssert (|={⊤}=> public skI ∨ public skR)%I with "[c1]" as "> #comp".
     { iPoseProof (public_exp_inv_same (t1 := b) with "p_gb") as "[#p_b|H]";
-        first by rewrite (exps_TExp1 Nm_b) /SMS.pos SMS.car_singleton;
-                 set_solver.
+        first by rewrite (exps_TExp1 Nm_b) SMS.pos_singleton
+                         MSet.elem_of_singleton.
       - iDestruct ("s_b" with "p_b") as "#f".
         by iMod (lc_fupd_elim_later_pers with "c1 f") as "#[]".
       - iDestruct "H" as "(%t3 & _ & _ & #p)".

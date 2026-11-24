@@ -49,8 +49,8 @@
 
     This file establishes the normalization machinery and the pre-term forms of
     the exponentiation laws ([exp_unit], [exp_base_expo], [exp_gmul], ...).
-    Products are signed multisets ([SMS]) and [SMS.Internal.to] is their
-    canonical form, so the group laws follow from those of [SMS.sms].  The
+    Products are signed multisets ([SMS]), whose sides a product pre-term
+    lists ([lists]), so the group laws follow from those of [SMS.sms].  The
     derived equations are proved for terms in [core/term/].
 
     The predicate [wf : pre_term -> bool] characterizes normal forms.  We have
@@ -64,7 +64,7 @@
 
 From stdpp Require Import sorting list numbers.
 From cryptis Require Import lib.
-From cryptis.lib Require Import list_sort sms.
+From cryptis.lib Require Import list_sort mset sms.
 From mathcomp Require Import ssreflect.
 From Stdlib Require Import Lia.
 From cryptis.core.pre_term Require Export base with_stdpp.
@@ -115,10 +115,20 @@ Proof. by case: pt => [o|o t|[||] t1 t2|[|] ps ns]. Qed.
 
 Definition base pt := if pt is PTExp b _ then b else pt.
 Definition expo pt := if pt is PTExp _ e then e else PTMul [] [].
+(* A product pre-term stores the sides of its signed multiset of factors as
+   sorted lists. *)
+Definition lists (s : SMS.sms pre_term) : list pre_term * list pre_term :=
+  (elements (SMS.pos s), elements (SMS.neg s)).
+
+Definition wf_lists (A : list pre_term * list pre_term) : bool :=
+  MSet.wf A.1 && MSet.wf A.2 && bool_decide (A.1 ## A.2).
+
 Definition factors pt : SMS.sms pre_term :=
-  if pt is PTMul ps ns then SMS.make ps ns else {[+ pt +]}.
+  if pt is PTMul ps ns then SMS.make (MSet.of_list ps) (MSet.of_list ns)
+  else {[+ pt +]}.
 Definition gfactors pt : SMS.sms pre_term :=
-  if pt is PTGMul ps ns then SMS.make ps ns else {[+ pt +]}.
+  if pt is PTGMul ps ns then SMS.make (MSet.of_list ps) (MSet.of_list ns)
+  else {[+ pt +]}.
 
 (** We now define smart constructors for the operations that validate
     non-trivial equations.  Products are signed multisets ([SMS.sms]): [mul s]
@@ -135,10 +145,10 @@ Definition single (A : list pre_term * list pre_term) :=
   if A is ([_], []) then true else false.
 
 Definition mul_aux (s : SMS.sms pre_term) :=
-  if SMS.car s is ([t], []) then t else PTMul (SMS.pos s) (SMS.neg s).
+  if lists s is ([t], []) then t else PTMul (lists s).1 (lists s).2.
 
 Definition gmul_aux (s : SMS.sms pre_term) :=
-  if SMS.car s is ([t], []) then t else PTGMul (SMS.pos s) (SMS.neg s).
+  if lists s is ([t], []) then t else PTGMul (lists s).1 (lists s).2.
 
 Definition mul s := mul_aux (SMS.bind factors s).
 
@@ -147,7 +157,7 @@ Definition gmul s := gmul_aux (SMS.bind gfactors s).
 Definition mk_exp b e :=
   if bool_decide (e = PTMul [] []) then b else PTExp b e.
 
-Definition exp_aux b e := mk_exp (base b) (mul (SMS.make [expo b; e] [])).
+Definition exp_aux b e := mk_exp (base b) (mul {[+ expo b; e +]}).
 
 Definition exp b e := gmul (SMS.map (λ t, exp_aux t e) (gfactors b)).
 
@@ -157,8 +167,12 @@ Fixpoint normalize pt :=
   | PT1 o t => PT1 o (normalize t)
   | PTExp b e => exp (normalize b) (normalize e)
   | PT2 o t1 t2 => PT2 o (normalize t1) (normalize t2)
-  | PTMul ps ns => mul (SMS.make (normalize <$> ps) (normalize <$> ns))
-  | PTGMul ps ns => gmul (SMS.make (normalize <$> ps) (normalize <$> ns))
+  | PTMul ps ns =>
+    mul (SMS.make (MSet.of_list (normalize <$> ps))
+                  (MSet.of_list (normalize <$> ns)))
+  | PTGMul ps ns =>
+    gmul (SMS.make (MSet.of_list (normalize <$> ps))
+                   (MSet.of_list (normalize <$> ns)))
   end.
 
 Fixpoint wf (pt : pre_term) : bool :=
@@ -171,11 +185,11 @@ Fixpoint wf (pt : pre_term) : bool :=
   | PTMul ps ns =>
     forallb (λ t, wf t && negb (is_mul t)) ps
     && forallb (λ t, wf t && negb (is_mul t)) ns
-    && SMS.Internal.wf SMS.Internal.le (ps, ns) && negb (single (ps, ns))
+    && wf_lists (ps, ns) && negb (single (ps, ns))
   | PTGMul ps ns =>
     forallb (λ t, wf t && negb (is_gmul t)) ps
     && forallb (λ t, wf t && negb (is_gmul t)) ns
-    && SMS.Internal.wf SMS.Internal.le (ps, ns) && negb (single (ps, ns))
+    && wf_lists (ps, ns) && negb (single (ps, ns))
   end.
 
 Definition wf_factors (s : SMS.sms pre_term) :=
@@ -187,25 +201,25 @@ Definition wf_gfactors (s : SMS.sms pre_term) :=
 Lemma wf_mulE ps ns :
   wf (PTMul ps ns) =
   forallb (λ t, wf t && negb (is_mul t)) (ps ++ ns)
-  && SMS.Internal.wf SMS.Internal.le (ps, ns) && negb (single (ps, ns)).
+  && wf_lists (ps, ns) && negb (single (ps, ns)).
 Proof. by rewrite /= forallb_app. Qed.
 
 Lemma wf_gmulE ps ns :
   wf (PTGMul ps ns) =
   forallb (λ t, wf t && negb (is_gmul t)) (ps ++ ns)
-  && SMS.Internal.wf SMS.Internal.le (ps, ns) && negb (single (ps, ns)).
+  && wf_lists (ps, ns) && negb (single (ps, ns)).
 Proof. by rewrite /= forallb_app. Qed.
 
 Lemma wf_factorsP s : wf_factors s ↔ ∀ t, t ∈ s → wf t ∧ negb (is_mul t).
 Proof.
 rewrite /wf_factors forallb_True list.Forall_forall.
-by split=> H t /H /andb_True.
+by split=> H t /SMS.elem_of_elements /H /andb_True.
 Qed.
 
 Lemma wf_gfactorsP s : wf_gfactors s ↔ ∀ t, t ∈ s → wf t ∧ negb (is_gmul t).
 Proof.
 rewrite /wf_gfactors forallb_True list.Forall_forall.
-by split=> H t /H /andb_True.
+by split=> H t /SMS.elem_of_elements /H /andb_True.
 Qed.
 
 Lemma wf_factors_wf {s t} : wf_factors s → t ∈ s → wf t.
@@ -232,41 +246,76 @@ Proof. by case: pt => [o|o t|o t1 t2|[|] ps ns]. Qed.
 Lemma gfactors_Ngmul pt : negb (is_gmul pt) → gfactors pt = {[+ pt +]}.
 Proof. by case: pt => [o|o t|o t1 t2|[|] ps ns]. Qed.
 
-Lemma car_factors ps ns :
-  wf (PTMul ps ns) → SMS.car (factors (PTMul ps ns)) = (ps, ns).
+Lemma factors_PTMul ps ns :
+  factors (PTMul ps ns) = SMS.make (MSet.of_list ps) (MSet.of_list ns).
+Proof. done. Qed.
+
+Lemma gfactors_PTGMul ps ns :
+  gfactors (PTGMul ps ns) = SMS.make (MSet.of_list ps) (MSet.of_list ns).
+Proof. done. Qed.
+
+Lemma elements_lists s : elements s = (lists s).1 ++ (lists s).2.
+Proof. done. Qed.
+
+Lemma wf_lists_lists s : wf_lists (lists s).
+Proof.
+apply/andb_True; split; first (apply/andb_True; split).
+- exact: (MSet.wf_car (SMS.pos s)).
+- exact: (MSet.wf_car (SMS.neg s)).
+- apply: bool_decide_pack; exact: (SMS.pos_neg_disj s).
+Qed.
+
+Lemma lists_singleton t : lists {[+ t +]} = ([t], []).
+Proof.
+rewrite /lists SMS.pos_singleton SMS.neg_singleton.
+by rewrite MSet.elements_singleton MSet.elements_empty.
+Qed.
+
+Lemma lists_make ps ns :
+  wf_lists (ps, ns) →
+  lists (SMS.make (MSet.of_list ps) (MSet.of_list ns)) = (ps, ns).
+Proof.
+case/andb_True => /andb_True [wps wns] /bool_decide_unpack d.
+rewrite /lists SMS.pos_make SMS.neg_make.
+rewrite !MSet.difference_disjoint_l ?MSet.elements_of_list_wf //;
+  apply: MSet.of_list_disjoint => // x h1 h2; exact: d x h2 h1.
+Qed.
+
+Lemma lists_factors ps ns :
+  wf (PTMul ps ns) → lists (factors (PTMul ps ns)) = (ps, ns).
 Proof.
 rewrite wf_mulE => /andb_True [/andb_True [_ wfA] _].
-by rewrite /= SMS.Internal.to_id.
+by rewrite factors_PTMul lists_make.
 Qed.
 
-Lemma car_gfactors ps ns :
-  wf (PTGMul ps ns) → SMS.car (gfactors (PTGMul ps ns)) = (ps, ns).
+Lemma lists_gfactors ps ns :
+  wf (PTGMul ps ns) → lists (gfactors (PTGMul ps ns)) = (ps, ns).
 Proof.
 rewrite wf_gmulE => /andb_True [/andb_True [_ wfA] _].
-by rewrite /= SMS.Internal.to_id.
+by rewrite gfactors_PTGMul lists_make.
 Qed.
 
-Lemma car_factorsE pt :
+Lemma lists_factorsE pt :
   wf pt →
-  SMS.car (factors pt) = if pt is PTMul ps ns then (ps, ns) else ([pt], []).
+  lists (factors pt) = if pt is PTMul ps ns then (ps, ns) else ([pt], []).
 Proof.
-case: pt => [o|o t|o t1 t2|[|] ps ns] wf_pt; try exact: SMS.car_singleton.
-exact: car_factors.
+case: pt => [o|o t|o t1 t2|[|] ps ns] wf_pt; try exact: lists_singleton.
+exact: lists_factors.
 Qed.
 
-Lemma car_gfactorsE pt :
+Lemma lists_gfactorsE pt :
   wf pt →
-  SMS.car (gfactors pt) = if pt is PTGMul ps ns then (ps, ns) else ([pt], []).
+  lists (gfactors pt) = if pt is PTGMul ps ns then (ps, ns) else ([pt], []).
 Proof.
-case: pt => [o|o t|o t1 t2|[|] ps ns] wf_pt; try exact: SMS.car_singleton.
-exact: car_gfactors.
+case: pt => [o|o t|o t1 t2|[|] ps ns] wf_pt; try exact: lists_singleton.
+exact: lists_gfactors.
 Qed.
 
 Lemma elements_factors pt :
   wf pt → elements (factors pt) = if pt is PTMul ps ns then ps ++ ns else [pt].
 Proof.
 case: pt => [o|o t|o t1 t2|[|] ps ns] wf_pt; try exact: SMS.elements_singleton.
-by rewrite SMS.elements_car car_factors.
+by rewrite elements_lists lists_factors.
 Qed.
 
 Lemma elements_gfactors pt :
@@ -274,7 +323,7 @@ Lemma elements_gfactors pt :
   elements (gfactors pt) = if pt is PTGMul ps ns then ps ++ ns else [pt].
 Proof.
 case: pt => [o|o t|o t1 t2|[|] ps ns] wf_pt; try exact: SMS.elements_singleton.
-by rewrite SMS.elements_car car_gfactors.
+by rewrite elements_lists lists_gfactors.
 Qed.
 
 Lemma wf_wf_factors pt : wf pt → wf_factors (factors pt).
@@ -283,7 +332,7 @@ case E: (is_mul pt) => wf_pt; last first.
   rewrite factors_Nmul ?E //; apply/wf_factorsP => t /SMS.elem_of_singleton ->.
   by rewrite E.
 case: pt E wf_pt => [o|o t|o t1 t2|[|] ps ns] // _ wf_pt.
-rewrite /wf_factors SMS.elements_car car_factors //.
+rewrite /wf_factors elements_lists lists_factors //.
 by move: wf_pt; rewrite wf_mulE => /andb_True [/andb_True [] ].
 Qed.
 
@@ -294,85 +343,94 @@ case E: (is_gmul pt) => wf_pt; last first.
   apply/wf_gfactorsP => t /SMS.elem_of_singleton ->.
   by rewrite E.
 case: pt E wf_pt => [o|o t|o t1 t2|[|] ps ns] // _ wf_pt.
-rewrite /wf_gfactors SMS.elements_car car_gfactors //.
+rewrite /wf_gfactors elements_lists lists_gfactors //.
 by move: wf_pt; rewrite wf_gmulE => /andb_True [/andb_True [] ].
 Qed.
 
 Lemma mul_aux_Nsingle s :
-  negb (single (SMS.car s)) → mul_aux s = PTMul (SMS.pos s) (SMS.neg s).
-Proof. by rewrite /mul_aux; case: (SMS.car s) => [[|? [|??]] [|??]]. Qed.
+  negb (single (lists s)) → mul_aux s = PTMul (lists s).1 (lists s).2.
+Proof. by rewrite /mul_aux; case: (lists s) => [[|? [|??]] [|??]]. Qed.
 
 Lemma gmul_aux_Nsingle s :
-  negb (single (SMS.car s)) → gmul_aux s = PTGMul (SMS.pos s) (SMS.neg s).
-Proof. by rewrite /gmul_aux; case: (SMS.car s) => [[|? [|??]] [|??]]. Qed.
+  negb (single (lists s)) → gmul_aux s = PTGMul (lists s).1 (lists s).2.
+Proof. by rewrite /gmul_aux; case: (lists s) => [[|? [|??]] [|??]]. Qed.
 
-Lemma mul_aux_single s t : SMS.car s = ([t], []) → mul_aux s = t.
+Lemma mul_aux_single s t : lists s = ([t], []) → mul_aux s = t.
 Proof. by rewrite /mul_aux => ->. Qed.
 
-Lemma gmul_aux_single s t : SMS.car s = ([t], []) → gmul_aux s = t.
+Lemma gmul_aux_single s t : lists s = ([t], []) → gmul_aux s = t.
 Proof. by rewrite /gmul_aux => ->. Qed.
 
-Lemma single_car s : single (SMS.car s) → ∃ t, s = {[+ t +]}.
+Lemma single_lists s : single (lists s) → ∃ t, s = {[+ t +]}.
 Proof.
-case Es: (SMS.car s) => [[|t [|??]] [|??]] // _; exists t.
-by apply: SMS.car_inj; rewrite Es SMS.car_singleton.
+case Es: (lists s) => [[|t [|??]] [|??]] // _; exists t.
+move: Es; rewrite /lists => - [eP eN]; apply: SMS.sms_eq.
+- by rewrite SMS.pos_singleton -(MSet.of_list_elements (SMS.pos s)) eP.
+- by rewrite SMS.neg_singleton -(MSet.of_list_elements (SMS.neg s)) eN.
 Qed.
 
 Lemma wf_mul_aux s : wf_factors s → wf (mul_aux s).
 Proof.
-move=> wfs; case Es: (single (SMS.car s)).
-  have [t e] := single_car s ltac:(by rewrite Es); rewrite e in wfs *.
-  rewrite (mul_aux_single _ t) ?SMS.car_singleton //.
+move=> wfs; case Es: (single (lists s)).
+  have [t e] := single_lists s ltac:(by rewrite Es); rewrite e in wfs *.
+  rewrite (mul_aux_single _ t) ?lists_singleton //.
   by apply: (wf_factors_wf wfs); rewrite SMS.elem_of_singleton.
-rewrite mul_aux_Nsingle ?Es // wf_mulE /SMS.pos /SMS.neg -surjective_pairing.
+rewrite mul_aux_Nsingle ?Es // wf_mulE -surjective_pairing.
 rewrite Es; apply/andb_True; split; last done.
-by apply/andb_True; split; [exact: wfs|exact: SMS.wf_car].
+by apply/andb_True; split; [exact: wfs|exact: wf_lists_lists].
 Qed.
 
 Lemma wf_gmul_aux s : wf_gfactors s → wf (gmul_aux s).
 Proof.
-move=> wfs; case Es: (single (SMS.car s)).
-  have [t e] := single_car s ltac:(by rewrite Es); rewrite e in wfs *.
-  rewrite (gmul_aux_single _ t) ?SMS.car_singleton //.
+move=> wfs; case Es: (single (lists s)).
+  have [t e] := single_lists s ltac:(by rewrite Es); rewrite e in wfs *.
+  rewrite (gmul_aux_single _ t) ?lists_singleton //.
   by apply: (wf_gfactors_wf wfs); rewrite SMS.elem_of_singleton.
-rewrite gmul_aux_Nsingle ?Es // wf_gmulE /SMS.pos /SMS.neg -surjective_pairing.
+rewrite gmul_aux_Nsingle ?Es // wf_gmulE -surjective_pairing.
 rewrite Es; apply/andb_True; split; last done.
-by apply/andb_True; split; [exact: wfs|exact: SMS.wf_car].
+by apply/andb_True; split; [exact: wfs|exact: wf_lists_lists].
+Qed.
+
+Lemma make_lists s :
+  SMS.make (MSet.of_list (lists s).1) (MSet.of_list (lists s).2) = s.
+Proof.
+rewrite /lists; cbn [fst snd].
+by rewrite !MSet.of_list_elements SMS.make_pos_neg.
 Qed.
 
 Lemma mul_auxK s : wf_factors s → factors (mul_aux s) = s.
 Proof.
-move=> wfs; case Es: (single (SMS.car s)).
-  have [t e] := single_car s ltac:(by rewrite Es); rewrite e in wfs *.
-  rewrite (mul_aux_single _ t) ?SMS.car_singleton // factors_Nmul //.
+move=> wfs; case Es: (single (lists s)).
+  have [t e] := single_lists s ltac:(by rewrite Es); rewrite e in wfs *.
+  rewrite (mul_aux_single _ t) ?lists_singleton // factors_Nmul //.
   by apply: (wf_factors_Nmul wfs); rewrite SMS.elem_of_singleton.
-by rewrite mul_aux_Nsingle ?Es //; exact: SMS.make_pos_neg.
+by rewrite mul_aux_Nsingle ?Es // factors_PTMul make_lists.
 Qed.
 
 Lemma gmul_auxK s : wf_gfactors s → gfactors (gmul_aux s) = s.
 Proof.
-move=> wfs; case Es: (single (SMS.car s)).
-  have [t e] := single_car s ltac:(by rewrite Es); rewrite e in wfs *.
-  rewrite (gmul_aux_single _ t) ?SMS.car_singleton // gfactors_Ngmul //.
+move=> wfs; case Es: (single (lists s)).
+  have [t e] := single_lists s ltac:(by rewrite Es); rewrite e in wfs *.
+  rewrite (gmul_aux_single _ t) ?lists_singleton // gfactors_Ngmul //.
   by apply: (wf_gfactors_Ngmul wfs); rewrite SMS.elem_of_singleton.
-by rewrite gmul_aux_Nsingle ?Es //; exact: SMS.make_pos_neg.
+by rewrite gmul_aux_Nsingle ?Es // gfactors_PTGMul make_lists.
 Qed.
 
 Lemma factorsK t : wf t → mul_aux (factors t) = t.
 Proof.
 case E: (is_mul t) => wf_t; last first.
-  by rewrite factors_Nmul ?E // (mul_aux_single _ t) // SMS.car_singleton.
+  by rewrite factors_Nmul ?E // (mul_aux_single _ t) // lists_singleton.
 case: t E wf_t => [o|o t|o t1 t2|[|] ps ns] // _ wf_t.
-rewrite mul_aux_Nsingle /SMS.pos /SMS.neg car_factors //.
+rewrite mul_aux_Nsingle (lists_factors _ _ wf_t) //.
 by move: wf_t; rewrite wf_mulE => /andb_True [].
 Qed.
 
 Lemma gfactorsK t : wf t → gmul_aux (gfactors t) = t.
 Proof.
 case E: (is_gmul t) => wf_t; last first.
-  by rewrite gfactors_Ngmul ?E // (gmul_aux_single _ t) // SMS.car_singleton.
+  by rewrite gfactors_Ngmul ?E // (gmul_aux_single _ t) // lists_singleton.
 case: t E wf_t => [o|o t|o t1 t2|[|] ps ns] // _ wf_t.
-rewrite gmul_aux_Nsingle /SMS.pos /SMS.neg car_gfactors //.
+rewrite gmul_aux_Nsingle (lists_gfactors _ _ wf_t) //.
 by move: wf_t; rewrite wf_gmulE => /andb_True [].
 Qed.
 
@@ -415,16 +473,16 @@ Proof. by move=> wf_t; rewrite /mul SMS.bind_singleton factorsK. Qed.
 Lemma gmul1 t : wf t → gmul {[+ t +]} = t.
 Proof. by move=> wf_t; rewrite /gmul SMS.bind_singleton gfactorsK. Qed.
 
-Lemma mul_unit_l t : mul (SMS.make [PTMul [] []; t] []) = mul {[+ t +]}.
+Lemma mul_unit_l t : mul {[+ PTMul [] []; t +]} = mul {[+ t +]}.
 Proof.
-rewrite /mul !SMS.bind_make_cons_l SMS.bind_empty.
-by rewrite (right_id ∅ (⊎)) (left_id ∅ (⊎)).
+rewrite /mul SMS.bind_disj_union !SMS.bind_singleton.
+by rewrite (_ : factors (PTMul [] []) = ∅) // (left_id ∅ (⊎)).
 Qed.
 
-Lemma mul_unit_r t : wf t → mul (SMS.make [t; PTMul [] []] []) = t.
+Lemma mul_unit_r t : wf t → mul {[+ t; PTMul [] [] +]} = t.
 Proof.
-move=> wf_t; rewrite /mul !SMS.bind_make_cons_l SMS.bind_empty.
-by rewrite !(right_id ∅ (⊎)) factorsK.
+move=> wf_t; rewrite /mul SMS.bind_disj_union !SMS.bind_singleton.
+by rewrite (_ : factors (PTMul [] []) = ∅) // (right_id ∅ (⊎)) factorsK.
 Qed.
 
 Lemma wf_mk_exp b e :
@@ -478,8 +536,8 @@ Proof.
 move=> wf_t Nm wf_e; apply: wf_mk_exp.
 - exact: base_Ngnf.
 - exact: wf_base.
-- apply: wf_mul => u /SMS.elem_of_make_nil_r.
-  by rewrite elem_of_cons list_elem_of_singleton => -[->|->] //; exact: wf_expo.
+- apply: wf_mul => u /SMS.elem_of_disj_union.
+  by case=> /SMS.elem_of_singleton -> //; exact: wf_expo.
 Qed.
 
 Lemma exp_aux_Ngmul t e :
@@ -536,7 +594,8 @@ elim: pt => //=.
     |exact: (wf_exp _ _ IH1 IH2)].
 - move=> [|] ps /(foldr_Forall _ _) IHps ns /(foldr_Forall _ _) IHns;
     [apply: wf_mul|apply: wf_gmul] => t /SMS.elem_of_make;
-    rewrite -fmap_app => /list_elem_of_fmap [u [-> u_in]];
+    rewrite !MSet.elem_of_of_list -elem_of_app -fmap_app
+      => /list_elem_of_fmap [u [-> u_in]];
     by move: u u_in; apply/list.Forall_forall/Forall_app.
 Qed.
 Hint Resolve wf_normalize : core.
@@ -620,7 +679,7 @@ Qed.
 
 Lemma expo_exp b e :
   wf b → wf e → negb (is_gmul b) →
-  expo (exp b e) = mul (SMS.make [expo b; e] []).
+  expo (exp b e) = mul {[+ expo b; e +]}.
 Proof.
 move=> wf_b wf_e Nm.
 rewrite (exp_Ngmul _ _ wf_b wf_e Nm) /exp_aux /mk_exp.
