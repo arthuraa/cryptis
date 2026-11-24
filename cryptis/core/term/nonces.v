@@ -3,7 +3,7 @@ From elpi.apps Require Import locker.
 From mathcomp Require Import ssreflect.
 From Stdlib Require Import ZArith.ZArith Lia.
 From stdpp Require Import sorting gmap.
-From cryptis.lib Require Import list_sort mathcomp_compat sms.
+From cryptis.lib Require Import list_sort mathcomp_compat mset sms.
 From iris.heap_lang Require locations.
 From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
@@ -40,11 +40,13 @@ Lemma nonces_of_term_fold pt :
 Proof. move => wf. by rewrite [nonces_of_term]unlock (@fold_termK pt wf). Qed.
 
 Lemma nonces_elements_make_sub (X Y : list PreTerm.pre_term) :
-  ⋃ map nonces_of_pre_term (elements (SMS.make X Y)) ⊆
+  ⋃ map nonces_of_pre_term
+      (elements (SMS.make (MSet.of_list X) (MSet.of_list Y))) ⊆
   ⋃ map nonces_of_pre_term X ∪ ⋃ map nonces_of_pre_term Y.
 Proof.
 rewrite -union_list_app_L -map_app; apply: union_list_fmap_mono => u.
-by rewrite SMS.elem_of_elements => /SMS.elem_of_make.
+rewrite SMS.elem_of_elements elem_of_app => /SMS.elem_of_make.
+by rewrite !MSet.elem_of_of_list.
 Qed.
 
 Lemma nonces_of_pre_term_factors_sub e :
@@ -87,9 +89,9 @@ Lemma nonces_of_pre_term_mul_aux s :
   nonces_of_pre_term (PreTerm.mul_aux s) =
   ⋃ map nonces_of_pre_term (elements s).
 Proof.
-case Es: (PreTerm.single (SMS.car s)).
-  have [t ->] := PreTerm.single_car s ltac:(by rewrite Es).
-  rewrite (PreTerm.mul_aux_single _ t) ?SMS.car_singleton //.
+case Es: (PreTerm.single (PreTerm.lists s)).
+  have [t ->] := PreTerm.single_lists s ltac:(by rewrite Es).
+  rewrite (PreTerm.mul_aux_single _ t) ?PreTerm.lists_singleton //.
   by rewrite SMS.elements_singleton /= union_empty_r_L.
 rewrite PreTerm.mul_aux_Nsingle ?Es //.
 by rewrite SMS.elements_pos_neg map_app union_list_app_L.
@@ -142,9 +144,9 @@ Lemma nonces_of_pre_term_gmul_aux s :
   nonces_of_pre_term (PreTerm.gmul_aux s) =
   ⋃ map nonces_of_pre_term (elements s).
 Proof.
-case Es: (PreTerm.single (SMS.car s)).
-  have [t ->] := PreTerm.single_car s ltac:(by rewrite Es).
-  rewrite (PreTerm.gmul_aux_single _ t) ?SMS.car_singleton //.
+case Es: (PreTerm.single (PreTerm.lists s)).
+  have [t ->] := PreTerm.single_lists s ltac:(by rewrite Es).
+  rewrite (PreTerm.gmul_aux_single _ t) ?PreTerm.lists_singleton //.
   by rewrite SMS.elements_singleton /= union_empty_r_L.
 rewrite PreTerm.gmul_aux_Nsingle ?Es //.
 by rewrite SMS.elements_pos_neg map_app union_list_app_L.
@@ -161,7 +163,7 @@ Lemma nonces_of_term_factors t :
   nonces_of_term t = ⋃ map nonces_of_term (elements (factors t)).
 Proof.
 have wfs : Forall PreTerm.wf (elements (PreTerm.factors (unfold_term t))).
-  apply/Forall_forall => x xin.
+  apply/Forall_forall => x /SMS.elem_of_elements xin.
   exact: PreTerm.wf_factors_wf (PreTerm.wf_wf_factors _ (wf_unfold_term t)) xin.
 rewrite [nonces_of_term]unlock (nonces_of_pre_term_factors (wf_unfold_term t)).
 rewrite elements_factors; congr union_list.
@@ -173,7 +175,7 @@ Lemma nonces_of_term_gfactors t :
   nonces_of_term t = ⋃ map nonces_of_term (elements (gfactors t)).
 Proof.
 have wfs : Forall PreTerm.wf (elements (PreTerm.gfactors (unfold_term t))).
-  apply/Forall_forall => x xin.
+  apply/Forall_forall => x /SMS.elem_of_elements xin.
   exact: PreTerm.wf_gfactors_wf
     (PreTerm.wf_wf_gfactors _ (wf_unfold_term t)) xin.
 rewrite [nonces_of_term]unlock (nonces_of_pre_term_gfactors (wf_unfold_term t)).
@@ -219,12 +221,24 @@ have mk : forall X Y, nonces_of_pre_term (PreTerm.mk_exp X Y)
   by move=> X Y; rewrite /PreTerm.mk_exp; case: bool_decide => /=; set_solver.
 rewrite /PreTerm.exp_aux.
 have Hbe := nonces_of_pre_term_base_expo pt.
-have Hmul := @nonces_of_pre_term_mul_sub (SMS.make [PreTerm.expo pt; pe] []).
-have Hmk :=
-  mk (PreTerm.base pt) (PreTerm.mul (SMS.make [PreTerm.expo pt; pe] [])).
-have Hel := @nonces_elements_make_sub [PreTerm.expo pt; pe] [].
-etrans; first exact: Hmk.
-rewrite Hbe; move: Hmul Hel => /=; set_solver.
+pose proof (@nonces_of_pre_term_mul_sub {[+ PreTerm.expo pt; pe +]}) as Hmul.
+have Hel :
+    ⋃ map nonces_of_pre_term
+        (elements ({[+ PreTerm.expo pt; pe +]} : SMS.sms _)) ⊆
+    nonces_of_pre_term (PreTerm.expo pt) ∪ nonces_of_pre_term pe.
+  trans (⋃ map nonces_of_pre_term [PreTerm.expo pt; pe]).
+  - apply: (union_list_fmap_mono nonces_of_pre_term
+      (elements ({[+ PreTerm.expo pt; pe +]} : SMS.sms _))
+      [PreTerm.expo pt; pe]) => u.
+    rewrite SMS.elem_of_elements => /SMS.elem_of_disj_union.
+    case=> /SMS.elem_of_singleton ->; first exact: list_elem_of_here.
+    by apply: list_elem_of_further; exact: list_elem_of_here.
+  - by rewrite /= union_empty_r_L.
+pose proof (transitivity Hmul Hel) as H; clear Hmul Hel.
+etrans; first exact: mk.
+rewrite Hbe; move: H.
+move: (nonces_of_pre_term (PreTerm.mul {[+ PreTerm.expo pt; pe +]})) => X.
+clear mk Hbe; set_solver.
 Qed.
 
 Lemma nonces_of_pre_term_exp_sub (pb pe : PreTerm.pre_term) :

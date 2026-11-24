@@ -3,563 +3,127 @@
     [sms T] is the free abelian group on [T]: [∅] is its unit, [⊎] its
     operation, [inv] its inverse and [{[+ x +]}] its generators.  [count x s]
     is the signed multiplicity of [x] in [s], and equality is Leibniz
-    ([count_inj]).  [make X Y] has the positive occurrences [X] and the negative
-    ones [Y]; [bind] substitutes signed multisets for elements, and [filter]
-    keeps the elements that satisfy a predicate.  [sms_ind] is the induction
-    principle: a signed multiset is built from [∅] by adding or removing one
-    element at a time.
+    ([count_inj]).  [bind] substitutes signed multisets for elements, and
+    [filter] keeps the elements that satisfy a predicate.  [sms_ind] is the
+    induction principle: a signed multiset is built from [∅] by adding or
+    removing one element at a time.
 
     A signed multiset is a pair of disjoint multisets ([MSet.mset]): its
-    positive occurrences [posm s] and its negative ones [negm s].  [make X Y]
-    cancels common occurrences by taking [X ∖ Y] and [Y ∖ X], and [inv] swaps
-    the sides, so no element needs an inverse.  [car s] lists both sides.
-
-    [Internal] works on such pairs of lists [A], with the positive occurrences
-    in [A.1] and the negative ones in [A.2], so that
-
-        count x A = count_mem x A.1 - count_mem x A.2   (in Z).
-
-    A pair is well-formed ([wf]) when both sides are sorted and disjoint.  [to]
-    computes the lists of [make A.1 A.2]; it is the canonical form:
-
-      (1) [wf MSet.le (to A)];
-      (2) [to A = to B <-> forall z, count z A = count z B]. *)
+    positive occurrences [pos s] and its negative ones [neg s].  [make X Y]
+    has the positive occurrences [X] and the negative ones [Y]; its sides are
+    [to X Y], which cancels the common occurrences by taking [X ∖ Y] and
+    [Y ∖ X].  [inv] swaps the sides, so no element needs an inverse. *)
 
 From mathcomp Require Import ssreflect.
-From stdpp Require Import sorting list numbers proof_irrel.
+From stdpp Require Import list numbers proof_irrel.
 From Stdlib Require Import ZArith Lia.
 From cryptis.lib Require Import list_sort mset.
 
 Module SMS.
 
-Module Internal.
-
-Section SignedMultiset.
-
-Context {T : Type} `{EqDecision T}.
-Context (R : relation T)
-  `{!RelDecision R, !Transitive R, !Total R, !AntiSymm (=@{T}) R}.
-
-Implicit Types (x y z : T) (X Y : list T) (A B : list T * list T).
-
-(** ** Definitions *)
-
-Definition count x A : Z :=
-  (Z.of_nat (count_mem x A.1) - Z.of_nat (count_mem x A.2))%Z.
-
-Definition wf A : bool :=
-  bool_decide (StronglySorted R A.1) && bool_decide (StronglySorted R A.2)
-  && bool_decide (A.1 ## A.2).
-
-Definition swap A := (A.2, A.1).
-
-Definition app A B := (A.1 ++ B.1, A.2 ++ B.2).
-
-Definition elements A := A.1 ++ A.2.
-
-(** ** Signed counts *)
-
-Lemma count_perm z A B : A.1 ≡ₚ B.1 → A.2 ≡ₚ B.2 → count z A = count z B.
-Proof.
-move=> e1 e2; rewrite /count.
-by rewrite (count_mem_Permutation z _ _ e1) (count_mem_Permutation z _ _ e2).
-Qed.
-
-Lemma count_cons1 z x X Y :
-  count z (x :: X, Y) = (count z (X, Y) + Z.b2z (bool_decide (z = x)))%Z.
-Proof. rewrite /count /=; case_bool_decide; simpl; lia. Qed.
-
-Lemma count_cons2 z x X Y :
-  count z (X, x :: Y) = (count z (X, Y) - Z.b2z (bool_decide (z = x)))%Z.
-Proof. rewrite /count /=; case_bool_decide; simpl; lia. Qed.
-
-Lemma count_app z A B : count z (app A B) = (count z A + count z B)%Z.
-Proof. rewrite /count /= !count_mem_app; lia. Qed.
-
-Lemma count_swap z A : count z (swap A) = (- count z A)%Z.
-Proof. rewrite /count /=; lia. Qed.
-
-Lemma not_elem_of_count x A : x ∉ A.1 → x ∉ A.2 → count x A = 0%Z.
-Proof. by rewrite !not_elem_of_count_mem /count => -> ->. Qed.
-
-Lemma not_elem_of_count1 x A : x ∉ A.1 → (count x A ≤ 0)%Z.
-Proof. rewrite not_elem_of_count_mem /count => ->; lia. Qed.
-
-Lemma not_elem_of_count2 x A : x ∉ A.2 → (0 ≤ count x A)%Z.
-Proof. rewrite not_elem_of_count_mem /count => ->; lia. Qed.
-
-Lemma count_count_mem x A : x ∉ A.2 → count x A = Z.of_nat (count_mem x A.1).
-Proof. rewrite not_elem_of_count_mem /count => ->; lia. Qed.
-
-Lemma count_eq0_elem_of x A : count x A = 0%Z → x ∈ A.1 ↔ x ∈ A.2.
-Proof.
-rewrite /count => e0; have e : count_mem x A.1 = count_mem x A.2 by lia.
-by rewrite !elem_of_count_mem e.
-Qed.
-
-Lemma count_mem_disjoint z A :
-  A.1 ## A.2 →
-  Z.of_nat (count_mem z A.1) = Z.max 0 (count z A) ∧
-  Z.of_nat (count_mem z A.2) = Z.max 0 (- count z A).
-Proof.
-move=> dA; rewrite /count.
-case: (decide (z ∈ A.1)) => zA.
-- rewrite (proj1 (not_elem_of_count_mem z A.2) (dA z zA)); lia.
-- rewrite (proj1 (not_elem_of_count_mem z A.1) zA); lia.
-Qed.
-
-(** ** Well-formedness *)
-
-Lemma wf_sorted A : wf A → StronglySorted R A.1 ∧ StronglySorted R A.2.
-Proof.
-by case/andb_True=> /andb_True [/bool_decide_unpack ? /bool_decide_unpack ?] _.
-Qed.
-
-Lemma wf_disjoint A : wf A → A.1 ## A.2.
-Proof. by case/andb_True=> _ /bool_decide_unpack. Qed.
-
-Lemma wf_intro A :
-  StronglySorted R A.1 → StronglySorted R A.2 → A.1 ## A.2 → wf A.
-Proof.
-move=> s1 s2 d; apply/andb_True; split; last exact: bool_decide_pack.
-by apply/andb_True; split; exact: bool_decide_pack.
-Qed.
-
-Lemma wf_nil : wf ([], []).
-Proof. apply: wf_intro; [constructor|constructor|by move=> ? /elem_of_nil]. Qed.
-
-Lemma wf_singleton1 x : wf ([x], []).
-Proof.
-apply: wf_intro; [by repeat constructor|constructor|by move=> ? _ /elem_of_nil].
-Qed.
-
-Lemma wf_singleton2 x : wf ([], [x]).
-Proof.
-apply: wf_intro; [constructor|by repeat constructor|by move=> ? /elem_of_nil].
-Qed.
-
-Lemma wf_swap A : wf A → wf (swap A).
-Proof.
-move=> wfA; have [s1 s2] := wf_sorted A wfA.
-apply: wf_intro => // x x2 x1; exact: wf_disjoint A wfA x x1 x2.
-Qed.
-
-Lemma wf_count_gt0 x A : wf A → (count x A > 0)%Z ↔ x ∈ A.1.
-Proof.
-move=> /wf_disjoint /(count_mem_disjoint x) [e1 _].
-rewrite elem_of_count_mem; lia.
-Qed.
-
-Lemma wf_count_lt0 x A : wf A → (count x A < 0)%Z ↔ x ∈ A.2.
-Proof.
-move=> /wf_disjoint /(count_mem_disjoint x) [_ e2].
-rewrite elem_of_count_mem; lia.
-Qed.
-
-(** ** Canonical forms *)
-
-Lemma wf_count_inj A B :
-  wf A → wf B → (∀ z, count z A = count z B) → A = B.
-Proof.
-move=> wfA wfB e.
-have [sA1 sA2] := wf_sorted A wfA; have [sB1 sB2] := wf_sorted B wfB.
-have dA := wf_disjoint A wfA; have dB := wf_disjoint B wfB.
-have e1 : A.1 = B.1.
-  apply: (StronglySorted_unique R) => //; apply: Permutation_count_mem => z.
-  apply: Nat2Z.inj.
-  by rewrite (proj1 (count_mem_disjoint z A dA))
-             (proj1 (count_mem_disjoint z B dB)) e.
-have e2 : A.2 = B.2.
-  apply: (StronglySorted_unique R) => //; apply: Permutation_count_mem => z.
-  apply: Nat2Z.inj.
-  by rewrite (proj2 (count_mem_disjoint z A dA))
-             (proj2 (count_mem_disjoint z B dB)) e.
-by rewrite (surjective_pairing A) (surjective_pairing B) e1 e2.
-Qed.
-
-(** ** Elements *)
-
-Lemma count_elements x A : x ∉ elements A → count x A = 0%Z.
-Proof.
-rewrite /elements elem_of_app => /Decidable.not_or [x1 x2].
-exact: not_elem_of_count.
-Qed.
-
-Lemma wf_elem_of_elements x A : wf A → x ∈ elements A ↔ count x A ≠ 0%Z.
-Proof.
-move=> wfA; rewrite /elements elem_of_app -(wf_count_gt0 x A wfA).
-rewrite -(wf_count_lt0 x A wfA); lia.
-Qed.
-
-Lemma wf_count_mem_elements x A :
-  wf A → Z.of_nat (count_mem x (elements A)) = Z.abs (count x A).
-Proof.
-move=> /wf_disjoint /(count_mem_disjoint x) [e1 e2].
-rewrite /elements count_mem_app Nat2Z.inj_add e1 e2; lia.
-Qed.
-
-Lemma elements_swap A : elements (swap A) ≡ₚ elements A.
-Proof. exact: Permutation_app_comm. Qed.
-
-End SignedMultiset.
-
-(** ** Mapping
-
-    No injectivity is needed: cancelling [x] against [x] cancels [f x] against
-    [f x]. *)
-
-Definition smap {T U} (f : T → U) (A : list T * list T) :=
-  (f <$> A.1, f <$> A.2).
-
-Lemma elements_smap {T U} (f : T → U) A :
-  elements (smap f A) = f <$> elements A.
-Proof. by rewrite /elements /smap /= fmap_app. Qed.
-
-Lemma smap_ext {T U} (f g : T → U) A :
-  (∀ x, x ∈ elements A → f x = g x) → smap f A = smap g A.
-Proof.
-case: A => X Y; rewrite /elements /smap /= => H.
-congr pair; apply/Forall_fmap_ext/list.Forall_forall => x x_in; apply: H;
-  rewrite elem_of_app; by [left|right].
-Qed.
-
-Lemma smap_id {T} (f : T → T) (A : list T * list T) :
-  (∀ x, x ∈ elements A → f x = x) → smap f A = A.
-Proof.
-case: A => X Y; rewrite /elements /smap /= => H.
-congr pair; rewrite -[RHS]list_fmap_id; apply/Forall_fmap_ext/list.Forall_forall
-  => x x_in; apply: H; rewrite elem_of_app; by [left|right].
-Qed.
-
-Lemma smap_smap {T U V} (f : T → U) (g : U → V) A :
-  smap g (smap f A) = smap (λ x, g (f x)) A.
-Proof. by rewrite /smap /= -!list_fmap_compose. Qed.
-
-Lemma wf_smap {T U} `{EqDecision T, EqDecision U}
-    (R : relation T) (S : relation U) `{!RelDecision R, !RelDecision S}
-    (f : T → U) A :
-  (∀ a b, f a = f b → a = b) → (∀ x y, R x y ↔ S (f x) (f y)) →
-  wf S (smap f A) ↔ wf R A.
-Proof.
-move=> finj fRS.
-have sorted (l : list T) : StronglySorted S (f <$> l) ↔ StronglySorted R l.
-  elim: l => [|x l IH] /=; first by split=> _; constructor.
-  split=> H; case: (StronglySorted_inv H) => H1 H2; constructor;
-    try by apply/IH.
-  - by move/Forall_fmap: H2; apply: Forall_impl => y /fRS.
-  - by apply/Forall_fmap; apply: Forall_impl H2 => y /fRS.
-have mem x (l : list T) : f x ∈ f <$> l ↔ x ∈ l.
-  split; last exact: list_elem_of_fmap_2.
-  by move=> /list_elem_of_fmap [y [/finj -> ?]].
-split=> wfA.
-- have [s1 s2] := wf_sorted S _ wfA.
-  apply: wf_intro; [by apply/sorted|by apply/sorted|].
-  move=> x x1 x2; apply: (wf_disjoint S _ wfA (f x)); rewrite /smap /= mem //.
-- have [s1 s2] := wf_sorted R _ wfA.
-  apply: wf_intro; [by apply/sorted|by apply/sorted|].
-  move=> _ /list_elem_of_fmap [x [-> x1]] /mem x2.
-  exact: (wf_disjoint R _ wfA x x1 x2).
-Qed.
-
-Lemma count_smap_inj {T U} `{EqDecision T} `{EqDecision U}
-    (f : T → U) x A :
-  (∀ a b, f a = f b → a = b) → count (f x) (smap f A) = count x A.
-Proof. by move=> finj; rewrite /count /= !(count_mem_fmap f x _ finj). Qed.
-
-(** ** Flattening
-
-    [flat f A] multiplies out the elements of [A] through [f], swapping the
-    sides of the image of a negative element. *)
-
-Definition flat {T U} (f : T → list U * list U) (A : list T * list T) :=
-  (mbind (λ t, (f t).1) A.1 ++ mbind (λ t, (f t).2) A.2,
-   mbind (λ t, (f t).2) A.1 ++ mbind (λ t, (f t).1) A.2).
-
-Lemma flat_ext {T U} (f g : T → list U * list U) A :
-  (∀ x, x ∈ elements A → f x = g x) → flat f A = flat g A.
-Proof.
-case: A => X Y; rewrite /elements /flat /= => H.
-have e l : (∀ x, x ∈ l → f x = g x) →
-    mbind (λ t, (f t).1) l = mbind (λ t, (g t).1) l ∧
-    mbind (λ t, (f t).2) l = mbind (λ t, (g t).2) l.
-  elim: l => [//|x l IH] Hl.
-  rewrite !bind_cons (Hl x); first exact: list_elem_of_here.
-  by case: IH => [u u_l|-> ->] //; apply: Hl; apply: list_elem_of_further.
-have [-> ->] : mbind (λ t, (f t).1) X = mbind (λ t, (g t).1) X ∧
-               mbind (λ t, (f t).2) X = mbind (λ t, (g t).2) X.
-  by apply: e => x x_X; apply: H; rewrite elem_of_app; left.
-have [-> ->] : mbind (λ t, (f t).1) Y = mbind (λ t, (g t).1) Y ∧
-               mbind (λ t, (f t).2) Y = mbind (λ t, (g t).2) Y.
-  by apply: e => x x_Y; apply: H; rewrite elem_of_app; right.
-done.
-Qed.
-
-Lemma flat_singletons {T U} (f : T → U) A :
-  flat (λ x, ([f x], [])) A = smap f A.
-Proof.
-case: A => X Y; rewrite /flat /smap /=.
-have e l : mbind (λ t, [f t]) l = f <$> l ∧ mbind (λ t : T, @nil U) l = [].
-  by elim: l => [//|x l [IH1 IH2]]; rewrite !bind_cons IH1 IH2.
-by case: (e X) => -> ->; case: (e Y) => -> ->; rewrite app_nil_r.
-Qed.
-
-Lemma flat_atoms {T} (f : T → list T * list T) A :
-  (∀ t, t ∈ elements A → f t = ([t], [])) → flat f A = A.
-Proof.
-move=> H; rewrite (flat_ext _ (λ t, ([id t], []))) // flat_singletons.
-by rewrite smap_id.
-Qed.
-
-Lemma elem_of_flat {T U} (f : T → list U * list U) A u :
-  u ∈ elements (flat f A) → ∃ t, t ∈ elements A ∧ u ∈ elements (f t).
-Proof.
-case: A => ps ns; rewrite /elements /flat /= !elem_of_app.
-by case=> [[]|[]] /list_elem_of_bind [t [u_t t_in]]; exists t;
-  rewrite !elem_of_app; eauto.
-Qed.
-
-Lemma flat_smap {T U V} (f : U → list V * list V) (g : T → U) A :
-  flat f (smap g A) = flat (λ t, f (g t)) A.
-Proof. by rewrite /flat /smap /= !list_fmap_bind. Qed.
-
-Lemma smap_flat {T U V} (g : U → V) (f : T → list U * list U) A :
-  smap g (flat f A) = flat (λ t, smap g (f t)) A.
-Proof. by rewrite /flat /smap /= !fmap_app !list_bind_fmap. Qed.
-
-Section Flat.
-
-Context {T U : Type} `{EqDecision U} (f : T → list U * list U).
-
-Implicit Types (z : U) (x : T) (X Y : list T) (A B : list T * list T).
-
-Lemma count_flat_nil z : count z (flat f ([], [])) = 0%Z.
-Proof. by []. Qed.
-
-Lemma count_flat_cons1 z x X Y :
-  count z (flat f (x :: X, Y)) = (count z (f x) + count z (flat f (X, Y)))%Z.
-Proof.
-rewrite /count /flat; cbn [fst snd]; rewrite !bind_cons !count_mem_app; lia.
-Qed.
-
-Lemma count_flat_cons2 z x X Y :
-  count z (flat f (X, x :: Y)) = (count z (flat f (X, Y)) - count z (f x))%Z.
-Proof.
-rewrite /count /flat; cbn [fst snd]; rewrite !bind_cons !count_mem_app; lia.
-Qed.
-
-Lemma count_flat_perm z A B :
-  A.1 ≡ₚ B.1 → A.2 ≡ₚ B.2 → count z (flat f A) = count z (flat f B).
-Proof. by move=> e1 e2; apply: count_perm; rewrite /flat /= e1 e2. Qed.
-
-Lemma count_flat_app z A B :
-  count z (flat f (app A B)) = (count z (flat f A) + count z (flat f B))%Z.
-Proof. rewrite /count /flat /app /= !bind_app !count_mem_app; lia. Qed.
-
-Lemma count_flat_swap z A :
-  count z (flat f (swap A)) = (- count z (flat f A))%Z.
-Proof. rewrite /count /flat /swap /= !count_mem_app; lia. Qed.
-
-End Flat.
-
-Lemma count_flat_ext_count {T U} `{EqDecision U}
-    (f g : T → list U * list U) z A :
-  (∀ x, count z (f x) = count z (g x)) →
-  count z (flat f A) = count z (flat g A).
-Proof.
-move=> e; case: A => X Y; elim: X => [|x X IH].
-  elim: Y => [|y Y IH]; first by rewrite !count_flat_nil.
-  by rewrite !count_flat_cons2 IH e.
-by rewrite !count_flat_cons1 IH e.
-Qed.
-
-(** ** The canonical form *)
-
-Section Canonical.
-
-Context {T : Type} `{EqDecision T, Lexico T}
-  `{!StrictOrder (@lexico T _), !TrichotomyT (@lexico T _)}.
-
-Implicit Types (z : T) (X : list T) (A B : list T * list T).
-
-Definition to A : list T * list T :=
-  (MSet.car (MSet.of_list A.1 ∖ MSet.of_list A.2),
-   MSet.car (MSet.of_list A.2 ∖ MSet.of_list A.1)).
-
-#[local] Lemma count_mem_car z (P : MSet.mset T) :
-  count_mem z (MSet.car P) = MSet.count z P.
-Proof. done. Qed.
-
-Lemma count_to z A : count z (to A) = count z A.
-Proof.
-rewrite /count /to; cbn [fst snd]; rewrite !count_mem_car.
-rewrite !MSet.count_difference !MSet.count_of_list; lia.
-Qed.
-
-Lemma wf_to A : wf MSet.le (to A).
-Proof.
-rewrite /to; apply: wf_intro; cbn [fst snd].
-- exact: (MSet.elements_sorted (MSet.of_list A.1 ∖ MSet.of_list A.2)).
-- exact: (MSet.elements_sorted (MSet.of_list A.2 ∖ MSet.of_list A.1)).
-- exact: (MSet.difference_disjoint (MSet.of_list A.1) (MSet.of_list A.2)).
-Qed.
-
-Lemma to_eq A B : to A = to B ↔ ∀ z, count z A = count z B.
-Proof.
-split=> [e z|e]; first by rewrite -(count_to z A) -(count_to z B) e.
-apply: (wf_count_inj MSet.le); [exact: wf_to|exact: wf_to|] => z.
-by rewrite !count_to.
-Qed.
-
-Lemma to_id A : wf MSet.le A → to A = A.
-Proof.
-move=> wfA; apply: (wf_count_inj MSet.le) => //; first exact: wf_to.
-move=> z; exact: count_to.
-Qed.
-
-Lemma to_pos X : to (X, []) = (merge_sort MSet.le X, []).
-Proof.
-apply: (wf_count_inj MSet.le); first exact: wf_to.
-  apply: wf_intro; [exact: merge_sort_sorted|constructor|].
-  by move=> ? _ /elem_of_nil.
-move=> z; rewrite count_to; apply: count_perm => //=.
-by rewrite merge_sort_Permutation.
-Qed.
-
-Lemma to_split A : ∃ I, A.1 ≡ₚ (to A).1 ++ I ∧ A.2 ≡ₚ (to A).2 ++ I.
-Proof.
-exists (MSet.car (MSet.of_list A.1 ∖ (MSet.of_list A.1 ∖ MSet.of_list A.2))).
-rewrite /to; cbn [fst snd].
-split; apply: Permutation_count_mem => z;
-  rewrite count_mem_app !count_mem_car !MSet.count_difference
-    !MSet.count_of_list; lia.
-Qed.
-
-Lemma count_smap_to {U} `{EqDecision U} (f : T → U) (z : U) A :
-  count z (smap f (to A)) = count z (smap f A).
-Proof.
-have [I [e1 e2]] := to_split A.
-rewrite /count /smap; cbn [fst snd].
-rewrite (count_mem_Permutation z (f <$> A.1) _ (fmap_Permutation f _ _ e1)).
-rewrite (count_mem_Permutation z (f <$> A.2) _ (fmap_Permutation f _ _ e2)).
-rewrite !fmap_app !count_mem_app; lia.
-Qed.
-
-Lemma count_flat_to {U} `{EqDecision U} (f : T → list U * list U) (z : U) A :
-  count z (flat f (to A)) = count z (flat f A).
-Proof.
-have [I [e1 e2]] := to_split A.
-rewrite (count_flat_perm f z A (app (to A) (I, I)) e1 e2) count_flat_app.
-have -> : count z (flat f (I, I)) = 0%Z.
-  by rewrite /count /flat /= !count_mem_app; lia.
-lia.
-Qed.
-
-Lemma elem_of_elements_to z A : z ∈ elements (to A) → z ∈ elements A.
-Proof.
-have [I [e1 e2]] := to_split A.
-rewrite /elements e1 e2 !elem_of_app; tauto.
-Qed.
-
-End Canonical.
-
-End Internal.
-
-(** ** Signed multisets
-
-    Equality is Leibniz, and the group laws hold because [Internal.to] is
-    canonical. *)
-
 Section SignedMultiset.
 
 Context {T : Type} `{EqDecision T, Lexico T}
   `{!StrictOrder (@lexico T _), !TrichotomyT (@lexico T _)}.
+
+Implicit Types (x y z : T) (X Y : MSet.mset T).
+
+Definition to X Y : MSet.mset T * MSet.mset T := (X ∖ Y, Y ∖ X).
+
+Lemma to_disjoint X Y : (to X Y).1 ## (to X Y).2.
+Proof. exact: MSet.difference_disjoint. Qed.
 
 Record sms := mk {
-  posm : MSet.mset T;
-  negm : MSet.mset T;
-  posm_negm_disjoint : bool_decide (posm ## negm);
+  pos : MSet.mset T;
+  neg : MSet.mset T;
+  pos_neg_disjoint : bool_decide (pos ## neg);
 }.
 
-Implicit Types (x y z : T) (X Y : list T) (s : sms).
+Implicit Types (s : sms).
 
-#[local] Lemma disjoint_swap (P N : MSet.mset T) : P ## N → N ## P.
-Proof. by move=> d x xN xP; exact: d x xP xN. Qed.
+#[local] Lemma disjoint_swap X Y : X ## Y → Y ## X.
+Proof. by move=> d x xY xX; exact: d x xX xY. Qed.
 
 Definition make X Y :=
-  mk (MSet.of_list X ∖ MSet.of_list Y) (MSet.of_list Y ∖ MSet.of_list X)
-     (bool_decide_pack _ (MSet.difference_disjoint _ _)).
+  mk (to X Y).1 (to X Y).2 (bool_decide_pack _ (to_disjoint X Y)).
 Definition inv s :=
-  mk (negm s) (posm s)
+  mk (neg s) (pos s)
      (bool_decide_pack _
-        (disjoint_swap _ _ (bool_decide_unpack _ (posm_negm_disjoint s)))).
-Definition car s := (elements (posm s), elements (negm s)).
-#[global] Arguments car : simpl never.
-Definition count x s := Internal.count x (car s).
-Definition pos s := (car s).1.
-Definition neg s := (car s).2.
+        (disjoint_swap _ _ (bool_decide_unpack _ (pos_neg_disjoint s)))).
+Definition count x s : Z :=
+  (Z.of_nat (MSet.count x (pos s)) - Z.of_nat (MSet.count x (neg s)))%Z.
 
-#[global] Instance empty_instance : Empty sms := make [] [].
-#[global] Instance singleton_instance : SingletonMS T sms := λ x, make [x] [].
+#[global] Instance empty_instance : Empty sms := make ∅ ∅.
+#[global] Instance singleton_instance : SingletonMS T sms :=
+  λ x, make {[+ x +]} ∅.
 #[global] Instance disj_union_instance : DisjUnion sms :=
-  λ s1 s2, make (pos s1 ++ pos s2) (neg s1 ++ neg s2).
-#[global] Instance elements_instance : Elements T sms := λ s, pos s ++ neg s.
-#[global] Instance elem_of_instance : ElemOf T sms := λ x s, x ∈ elements s.
+  λ s1 s2, make (pos s1 ⊎ pos s2) (neg s1 ⊎ neg s2).
+#[global] Instance elements_instance : Elements T sms :=
+  λ s, elements (pos s) ++ elements (neg s).
+#[global] Instance elem_of_instance : ElemOf T sms :=
+  λ x s, x ∈ pos s ∨ x ∈ neg s.
 #[global] Instance elem_of_dec x s : Decision (x ∈ s) :=
-  decide (x ∈ elements s).
+  decide (x ∈ pos s ∨ x ∈ neg s).
 
-Lemma car_inj s1 s2 : car s1 = car s2 → s1 = s2.
+Lemma sms_eq s1 s2 : pos s1 = pos s2 → neg s1 = neg s2 → s1 = s2.
 Proof.
-case: s1 s2 => [P1 N1 w1] [P2 N2 w2]; rewrite /car => - [e1 e2].
-have ? := MSet.car_inj P1 P2 e1; have ? := MSet.car_inj N1 N2 e2; subst.
+case: s1 s2 => [P1 N1 w1] [P2 N2 w2] /= eP eN; subst.
 by rewrite (proof_irrel w1 w2).
 Qed.
 
-Lemma wf_car s : Internal.wf MSet.le (car s).
-Proof.
-apply: Internal.wf_intro.
-- exact: (MSet.elements_sorted (posm s)).
-- exact: (MSet.elements_sorted (negm s)).
-- exact: (bool_decide_unpack _ (posm_negm_disjoint s)).
-Qed.
+Lemma pos_neg_disj s : pos s ## neg s.
+Proof. exact: (bool_decide_unpack _ (pos_neg_disjoint s)). Qed.
+
+#[local] Lemma count_pos_neg x s :
+  MSet.count x (pos s) = 0 ∨ MSet.count x (neg s) = 0.
+Proof. exact: (proj1 (MSet.disjoint_count _ _) (pos_neg_disj s) x). Qed.
+
+Lemma count_pos_max x s :
+  Z.of_nat (MSet.count x (pos s)) = Z.max 0 (count x s).
+Proof. rewrite /count; have := count_pos_neg x s; lia. Qed.
+
+Lemma count_neg_max x s :
+  Z.of_nat (MSet.count x (neg s)) = Z.max 0 (- count x s).
+Proof. rewrite /count; have := count_pos_neg x s; lia. Qed.
 
 Lemma count_inj s1 s2 : (∀ z, count z s1 = count z s2) → s1 = s2.
 Proof.
-move=> e; apply: car_inj.
-by apply: (Internal.wf_count_inj MSet.le); [exact: wf_car..|].
+move=> e; apply: sms_eq; apply: MSet.count_inj => z; apply: Nat2Z.inj.
+- by rewrite !count_pos_max e.
+- by rewrite !count_neg_max e.
 Qed.
 
-Lemma car_make X Y : car (make X Y) = Internal.to (X, Y).
+Lemma pos_make X Y : pos (make X Y) = X ∖ Y.
 Proof. done. Qed.
 
-Lemma count_make z X Y : count z (make X Y) = Internal.count z (X, Y).
-Proof. exact: (Internal.count_to z (X, Y)). Qed.
+Lemma neg_make X Y : neg (make X Y) = Y ∖ X.
+Proof. done. Qed.
 
-#[global] Instance make_proper : Proper ((≡ₚ) ==> (≡ₚ) ==> (=)) make.
+Lemma count_make z X Y :
+  count z (make X Y) =
+  (Z.of_nat (MSet.count z X) - Z.of_nat (MSet.count z Y))%Z.
+Proof. rewrite /count pos_make neg_make !MSet.count_difference; lia. Qed.
+
+Lemma make_eq X Y X' Y' : X ⊎ Y' = X' ⊎ Y → make X Y = make X' Y'.
 Proof.
-move=> X1 X2 eX Y1 Y2 eY; apply: count_inj => z.
-by rewrite !count_make; apply: Internal.count_perm.
+move=> e; apply: count_inj => z; rewrite !count_make.
+have := f_equal (MSet.count z) e; rewrite !MSet.count_disj_union; lia.
 Qed.
 
 Lemma make_pos_neg s : make (pos s) (neg s) = s.
 Proof.
-apply: car_inj; rewrite car_make /pos /neg -surjective_pairing.
-exact: Internal.to_id _ (wf_car s).
+apply: sms_eq; rewrite ?pos_make ?neg_make; apply: MSet.count_inj => z;
+  rewrite MSet.count_difference; have := count_pos_neg z s; lia.
 Qed.
 
-Lemma singleton_make x : {[+ x +]} = make [x] [].
+Lemma singleton_make x : {[+ x +]} = make {[+ x +]} ∅.
 Proof. done. Qed.
 
-Lemma car_singleton x : car {[+ x +]} = ([x], []).
-Proof. rewrite car_make Internal.to_id //; exact: Internal.wf_singleton1. Qed.
+Lemma pos_singleton x : pos {[+ x +]} = {[+ x +]}.
+Proof. rewrite singleton_make pos_make; MSet.mset_solver. Qed.
 
-Lemma car_inv s : car (inv s) = Internal.swap (car s).
-Proof. done. Qed.
-
-Lemma pos_singleton x : pos {[+ x +]} = [x].
-Proof. by rewrite /pos car_singleton. Qed.
-
-Lemma neg_singleton x : neg {[+ x +]} = [].
-Proof. by rewrite /neg car_singleton. Qed.
+Lemma neg_singleton x : neg {[+ x +]} = ∅.
+Proof. rewrite singleton_make neg_make; MSet.mset_solver. Qed.
 
 Lemma pos_inv s : pos (inv s) = neg s.
 Proof. done. Qed.
@@ -567,50 +131,54 @@ Proof. done. Qed.
 Lemma neg_inv s : neg (inv s) = pos s.
 Proof. done. Qed.
 
-Lemma elements_car s : elements s = Internal.elements (car s).
+Lemma elements_pos_neg s : elements s = elements (pos s) ++ elements (neg s).
 Proof. done. Qed.
 
-Lemma elements_pos_neg s : elements s = pos s ++ neg s.
+Lemma elem_of_pos_neg x s : x ∈ s ↔ x ∈ pos s ∨ x ∈ neg s.
 Proof. done. Qed.
 
 (** *** Counts *)
 
 Lemma count_empty z : count z ∅ = 0%Z.
-Proof. by rewrite count_make. Qed.
+Proof. by rewrite count_make MSet.count_empty. Qed.
 
 Lemma count_singleton z x : count z {[+ x +]} = Z.b2z (bool_decide (z = x)).
-Proof. by rewrite count_make Internal.count_cons1. Qed.
+Proof.
+rewrite count_make MSet.count_singleton MSet.count_empty.
+by case_bool_decide.
+Qed.
 
 Lemma count_disj_union z s1 s2 :
   count z (s1 ⊎ s2) = (count z s1 + count z s2)%Z.
-Proof.
-rewrite count_make /count /pos /neg /Internal.count /= !count_mem_app; lia.
-Qed.
+Proof. rewrite count_make !MSet.count_disj_union /count; lia. Qed.
 
 Lemma count_inv z s : count z (inv s) = (- count z s)%Z.
-Proof. exact: (Internal.count_swap z (car s)). Qed.
+Proof. rewrite /count pos_inv neg_inv; lia. Qed.
 
 Lemma disj_union_make X1 Y1 X2 Y2 :
-  make X1 Y1 ⊎ make X2 Y2 = make (X1 ++ X2) (Y1 ++ Y2).
+  make X1 Y1 ⊎ make X2 Y2 = make (X1 ⊎ X2) (Y1 ⊎ Y2).
 Proof.
-apply: count_inj => z; rewrite count_disj_union !count_make /Internal.count /=.
-rewrite !count_mem_app; lia.
+apply: count_inj => z; rewrite count_disj_union !count_make.
+rewrite !MSet.count_disj_union; lia.
 Qed.
 
-Lemma make_cons_l x X Y : make (x :: X) Y = {[+ x +]} ⊎ make X Y.
-Proof. by rewrite singleton_make disj_union_make. Qed.
-
-Lemma make_cons_r x X Y : make X (x :: Y) = inv {[+ x +]} ⊎ make X Y.
+Lemma make_singleton_l x X Y : make ({[+ x +]} ⊎ X) Y = {[+ x +]} ⊎ make X Y.
 Proof.
-apply: count_inj => z.
-rewrite count_disj_union count_inv count_singleton !count_make.
-rewrite Internal.count_cons2; lia.
+apply: count_inj => z; rewrite count_disj_union count_singleton !count_make.
+rewrite MSet.count_disj_union MSet.count_singleton.
+case_bool_decide; simpl; lia.
+Qed.
+
+Lemma make_singleton_r y X Y :
+  make X ({[+ y +]} ⊎ Y) = inv {[+ y +]} ⊎ make X Y.
+Proof.
+apply: count_inj => z; rewrite count_disj_union count_inv count_singleton.
+rewrite !count_make MSet.count_disj_union MSet.count_singleton.
+case_bool_decide; simpl; lia.
 Qed.
 
 Lemma inv_make X Y : inv (make X Y) = make Y X.
-Proof.
-apply: count_inj => z; rewrite count_inv !count_make /Internal.count /=; lia.
-Qed.
+Proof. apply: count_inj => z; rewrite count_inv !count_make; lia. Qed.
 
 (** *** Group laws *)
 
@@ -643,44 +211,41 @@ Proof. apply: count_inj => z; rewrite !count_inv; lia. Qed.
 (** *** Elements *)
 
 Lemma elem_of_elements x s : x ∈ elements s ↔ x ∈ s.
-Proof. done. Qed.
+Proof.
+rewrite elements_pos_neg elem_of_app !MSet.elem_of_elements.
+reflexivity.
+Qed.
 
 Lemma elem_of_count x s : x ∈ s ↔ count x s ≠ 0%Z.
-Proof. exact: (Internal.wf_elem_of_elements _ x _ (wf_car s)). Qed.
+Proof.
+rewrite elem_of_pos_neg !MSet.elem_of_count /count.
+have := count_pos_neg x s; lia.
+Qed.
 
 Lemma not_elem_of_count x s : x ∉ s → count x s = 0%Z.
 Proof. by rewrite elem_of_count; lia. Qed.
 
 Lemma count_pos x s : (0 < count x s)%Z ↔ x ∈ pos s.
-Proof.
-by rewrite /pos /count -(Internal.wf_count_gt0 _ x _ (wf_car s)); split; lia.
-Qed.
+Proof. rewrite MSet.elem_of_count /count; have := count_pos_neg x s; lia. Qed.
 
 Lemma count_neg x s : (count x s < 0)%Z ↔ x ∈ neg s.
-Proof. exact: (Internal.wf_count_lt0 _ x _ (wf_car s)). Qed.
+Proof. rewrite MSet.elem_of_count /count; have := count_pos_neg x s; lia. Qed.
 
 Lemma elem_of_pos x s : x ∈ pos s → x ∈ s.
-Proof. by rewrite -count_pos elem_of_count; lia. Qed.
+Proof. by move=> ?; left. Qed.
 
 Lemma elem_of_neg x s : x ∈ neg s → x ∈ s.
-Proof. by rewrite -count_neg elem_of_count; lia. Qed.
+Proof. by move=> ?; right. Qed.
 
 Lemma count_mem_elements x s :
   Z.of_nat (count_mem x (elements s)) = Z.abs (count x s).
-Proof. exact: (Internal.wf_count_mem_elements _ x _ (wf_car s)). Qed.
-
-Lemma count_mem_pos x s :
-  Z.of_nat (count_mem x (pos s)) = Z.max 0 (count x s).
 Proof.
-rewrite /pos /count /Internal.count.
-case: (decide (x ∈ (car s).1)) => x_s.
-- have /not_elem_of_count_mem -> := Internal.wf_disjoint _ _ (wf_car s) x x_s.
-  lia.
-- move/not_elem_of_count_mem: x_s => ->; lia.
+rewrite elements_pos_neg count_mem_app !MSet.count_mem_elements /count.
+have := count_pos_neg x s; lia.
 Qed.
 
 Lemma elements_empty : elements (∅ : sms) = [].
-Proof. by rewrite elements_car car_make Internal.to_pos. Qed.
+Proof. done. Qed.
 
 Lemma elements_empty_inv s : elements s = [] → s = ∅.
 Proof.
@@ -705,10 +270,10 @@ by exists w; split=> [|y /elem_of_cons [->|/m_max]]; [left|lia|lia].
 Qed.
 
 Lemma elements_singleton x : elements ({[+ x +]} : sms) = [x].
-Proof. by rewrite elements_car car_singleton. Qed.
+Proof. done. Qed.
 
 Lemma elements_inv s : elements (inv s) ≡ₚ elements s.
-Proof. by rewrite !elements_car car_inv Internal.elements_swap. Qed.
+Proof. exact: Permutation_app_comm. Qed.
 
 Lemma elements_disj_union s1 s2 :
   pos s1 ## neg s2 → neg s1 ## pos s2 →
@@ -734,26 +299,29 @@ Proof.
 by rewrite -elem_of_elements elements_singleton list_elem_of_singleton.
 Qed.
 
-Lemma pos_make_nil_r X : pos (make X []) ≡ₚ X.
+Lemma pos_make_empty_r X : pos (make X ∅) = X.
+Proof. rewrite pos_make; MSet.mset_solver. Qed.
+
+Lemma neg_make_empty_r X : neg (make X ∅) = ∅.
+Proof. rewrite neg_make; MSet.mset_solver. Qed.
+
+Lemma elements_make_empty_r X : elements (make X ∅) = elements X.
 Proof.
-rewrite /pos car_make Internal.to_pos; exact: merge_sort_Permutation.
+rewrite elements_pos_neg pos_make_empty_r neg_make_empty_r.
+by rewrite MSet.elements_empty app_nil_r.
 Qed.
 
-Lemma neg_make_nil_r X : neg (make X []) = [].
-Proof. by rewrite /neg car_make Internal.to_pos. Qed.
-
-Lemma elements_make_nil_r X : elements (make X []) ≡ₚ X.
+Lemma elem_of_make_empty_r x X : x ∈ make X ∅ ↔ x ∈ X.
 Proof.
-by rewrite elements_pos_neg neg_make_nil_r app_nil_r pos_make_nil_r.
+rewrite elem_of_pos_neg pos_make_empty_r neg_make_empty_r.
+split; last by left.
+by case=> // h; case: (MSet.not_elem_of_empty x h).
 Qed.
 
-Lemma elem_of_make_nil_r x X : x ∈ make X [] ↔ x ∈ X.
-Proof. by rewrite -elem_of_elements elements_make_nil_r. Qed.
-
-Lemma elem_of_make {x X Y} : x ∈ make X Y → x ∈ X ++ Y.
+Lemma elem_of_make {x X Y} : x ∈ make X Y → x ∈ X ∨ x ∈ Y.
 Proof.
-rewrite -elem_of_elements elements_car car_make.
-exact: (Internal.elem_of_elements_to x).
+rewrite elem_of_pos_neg pos_make neg_make !MSet.elem_of_difference.
+by case=> ?; [left|right]; apply/MSet.elem_of_count; lia.
 Qed.
 
 (** *** Induction *)
@@ -766,10 +334,10 @@ Lemma sms_ind (P : sms → Prop) :
 Proof.
 move=> P0 Ppos Pneg s; rewrite -(make_pos_neg s).
 move: (pos s) (neg s) => X Y.
-elim: Y => [|y Y IHY].
-  elim: X => [|x X IHX]; first exact: P0.
-  by rewrite make_cons_l; apply: Ppos.
-by rewrite make_cons_r; apply: Pneg.
+elim/(MSet.mset_ind (T := T)): Y => [|y Y IHY].
+  elim/(MSet.mset_ind (T := T)): X => [|x X IHX]; first exact: P0.
+  by rewrite make_singleton_l; apply: Ppos.
+by rewrite make_singleton_r; apply: Pneg.
 Qed.
 
 End SignedMultiset.
@@ -791,81 +359,97 @@ Context `{EqDecision T, Lexico T}
 Context `{EqDecision U, Lexico U}
   `{!StrictOrder (@lexico U _), !TrichotomyT (@lexico U _)}.
 
-Implicit Types (x : T) (X Y : list T) (s : sms T).
+Implicit Types (x : T) (X Y : MSet.mset T) (s : sms T).
 
 Definition bind (f : T → sms U) s : sms U :=
-  make ((pos s ≫= λ x, pos (f x)) ++ (neg s ≫= λ x, neg (f x)))
-       ((pos s ≫= λ x, neg (f x)) ++ (neg s ≫= λ x, pos (f x))).
+  make
+    (MSet.bind (λ x, pos (f x)) (pos s) ⊎ MSet.bind (λ x, neg (f x)) (neg s))
+    (MSet.bind (λ x, neg (f x)) (pos s) ⊎ MSet.bind (λ x, pos (f x)) (neg s)).
 
 Definition map (f : T → U) s : sms U := bind (λ x, {[+ f x +]}) s.
 
-Lemma car_bind f s :
-  car (bind f s) =
-  Internal.to (Internal.flat (λ x, car (f x)) (car s)).
-Proof. reflexivity. Qed.
-
 Lemma count_bind (z : U) f s :
   count z (bind f s) =
-  Internal.count z (Internal.flat (λ x, car (f x)) (car s)).
-Proof. by rewrite /count car_bind Internal.count_to. Qed.
+  (Z.of_nat (MSet.count z (MSet.bind (λ x, pos (f x)) (pos s))) +
+   Z.of_nat (MSet.count z (MSet.bind (λ x, neg (f x)) (neg s))) -
+   Z.of_nat (MSet.count z (MSet.bind (λ x, neg (f x)) (pos s))) -
+   Z.of_nat (MSet.count z (MSet.bind (λ x, pos (f x)) (neg s))))%Z.
+Proof. rewrite /bind count_make !MSet.count_disj_union; lia. Qed.
 
+(** [bind] ignores the cancellations of [make]. *)
 Lemma bind_make f X Y :
   bind f (make X Y) =
-  make ((X ≫= λ x, pos (f x)) ++ (Y ≫= λ x, neg (f x)))
-       ((X ≫= λ x, neg (f x)) ++ (Y ≫= λ x, pos (f x))).
+  make (MSet.bind (λ x, pos (f x)) X ⊎ MSet.bind (λ x, neg (f x)) Y)
+       (MSet.bind (λ x, neg (f x)) X ⊎ MSet.bind (λ x, pos (f x)) Y).
 Proof.
-apply: count_inj => z; rewrite count_bind car_make Internal.count_flat_to.
-by rewrite count_make.
+have eX : X = (X ∖ Y) ⊎ (X ∖ (X ∖ Y)) by MSet.mset_solver.
+have eY : Y = (Y ∖ X) ⊎ (X ∖ (X ∖ Y)) by MSet.mset_solver.
+apply: count_inj => z; rewrite count_bind count_make pos_make neg_make.
+have cX g : MSet.count z (MSet.bind g X) =
+    MSet.count z (MSet.bind g (X ∖ Y)) +
+    MSet.count z (MSet.bind g (X ∖ (X ∖ Y))).
+  by rewrite -MSet.count_disj_union -MSet.bind_disj_union -eX.
+have cY g : MSet.count z (MSet.bind g Y) =
+    MSet.count z (MSet.bind g (Y ∖ X)) +
+    MSet.count z (MSet.bind g (X ∖ (X ∖ Y))).
+  by rewrite -MSet.count_disj_union -MSet.bind_disj_union -eY.
+rewrite !MSet.count_disj_union (cX (λ x, pos (f x))) (cX (λ x, neg (f x))).
+rewrite (cY (λ x, pos (f x))) (cY (λ x, neg (f x))); lia.
 Qed.
 
-Lemma bind_make_cons_l f x X Y :
-  bind f (make (x :: X) Y) = f x ⊎ bind f (make X Y).
+Lemma bind_make_singleton_l f x X Y :
+  bind f (make ({[+ x +]} ⊎ X) Y) = f x ⊎ bind f (make X Y).
 Proof.
-apply: count_inj => z; rewrite [RHS]count_disj_union !count_bind !car_make.
-by rewrite !Internal.count_flat_to Internal.count_flat_cons1.
+apply: count_inj => z; rewrite count_disj_union !bind_make !count_make.
+by rewrite !MSet.bind_disj_union !MSet.bind_singleton
+  !MSet.count_disj_union /count; lia.
 Qed.
 
-Lemma bind_make_cons_r f y X Y :
-  bind f (make X (y :: Y)) = inv (f y) ⊎ bind f (make X Y).
+Lemma bind_make_singleton_r f y X Y :
+  bind f (make X ({[+ y +]} ⊎ Y)) = inv (f y) ⊎ bind f (make X Y).
 Proof.
-apply: count_inj => z; rewrite [RHS]count_disj_union count_inv !count_bind.
-rewrite !car_make !Internal.count_flat_to Internal.count_flat_cons2 /count; lia.
+apply: count_inj => z; rewrite count_disj_union count_inv !bind_make.
+by rewrite !count_make !MSet.bind_disj_union !MSet.bind_singleton
+  !MSet.count_disj_union /count; lia.
 Qed.
 
 Lemma elem_of_bind {f s} {y : U} : y ∈ bind f s → ∃ x, x ∈ s ∧ y ∈ f x.
 Proof.
-rewrite -elem_of_elements elements_car car_bind.
-move=> /(Internal.elem_of_elements_to y) /(Internal.elem_of_flat _ _ y).
-by case=> x [x_s y_x]; exists x.
+rewrite /bind => /elem_of_make.
+rewrite !MSet.elem_of_disj_union !MSet.elem_of_bind.
+by case=> [[]|[]] [x [xs yx]]; exists x; split; first [by left|by right].
 Qed.
 
 Lemma bind_singleton f x : bind f {[+ x +]} = f x.
 Proof.
-apply: count_inj => z; rewrite count_bind car_singleton.
-by rewrite Internal.count_flat_cons1 Internal.count_flat_nil Z.add_0_r.
+rewrite singleton_make bind_make !MSet.bind_singleton !MSet.bind_empty.
+by rewrite !(right_id ∅ (⊎)) make_pos_neg.
 Qed.
 
 Lemma bind_empty f : bind f ∅ = ∅.
-Proof. by rewrite bind_make. Qed.
+Proof. by rewrite bind_make !MSet.bind_empty !(left_id ∅ (⊎)). Qed.
 
 Lemma bind_disj_union f s1 s2 : bind f (s1 ⊎ s2) = bind f s1 ⊎ bind f s2.
 Proof.
-apply: count_inj => z; rewrite [RHS]count_disj_union !count_bind car_make.
-rewrite Internal.count_flat_to.
-exact: (Internal.count_flat_app _ z (car s1) (car s2)).
+rewrite bind_make; apply: count_inj => z.
+rewrite count_make count_disj_union !count_bind !MSet.bind_disj_union.
+rewrite !MSet.count_disj_union; lia.
 Qed.
 
 Lemma bind_inv f s : bind f (inv s) = inv (bind f s).
 Proof.
-apply: count_inj => z; rewrite [RHS]count_inv !count_bind car_inv.
-exact: Internal.count_flat_swap.
+apply: count_inj => z; rewrite count_inv !count_bind pos_inv neg_inv; lia.
 Qed.
 
 Lemma bind_ext f g s : (∀ x, x ∈ s → f x = g x) → bind f s = bind g s.
 Proof.
-move=> fg; apply: count_inj => z; rewrite !count_bind.
-rewrite (Internal.flat_ext _ (λ x, car (g x))) //.
-by move=> x /fg ->.
+move=> e; rewrite /bind.
+have eb W : (∀ x, x ∈ W → x ∈ s) →
+    MSet.bind (λ x, pos (f x)) W = MSet.bind (λ x, pos (g x)) W ∧
+    MSet.bind (λ x, neg (f x)) W = MSet.bind (λ x, neg (g x)) W.
+  by move=> sub; split; apply: MSet.bind_ext => x /sub /e ->.
+have [-> ->] := eb (pos s) (λ x h, or_introl h).
+by have [-> ->] := eb (neg s) (λ x h, or_intror h).
 Qed.
 
 Lemma bind_disj_union_l (f g : T → sms U) s :
@@ -894,32 +478,33 @@ elim/(sms_ind (T := T)): s => [|x s IH|x s IH];
   rewrite !(count_disj_union, count_inv, count_empty); lia.
 Qed.
 
-Lemma car_map f s :
-  car (map f s) = Internal.to (Internal.smap f (car s)).
+Lemma map_make f X Y : map f (make X Y) = make (MSet.map f X) (MSet.map f Y).
 Proof.
-rewrite -Internal.flat_singletons -(Internal.flat_ext (λ x, car {[+ f x +]})).
-  by move=> x _; rewrite car_singleton.
-reflexivity.
+rewrite /map bind_make.
+have ep W : MSet.bind (λ x, pos {[+ f x +]}) W = MSet.map f W.
+  rewrite -MSet.bind_singletons; apply: MSet.bind_ext => x _.
+  exact: pos_singleton.
+have en W : MSet.bind (λ x, neg {[+ f x +]}) W = ∅.
+  rewrite -(MSet.bind_empty_r W); apply: MSet.bind_ext => x _.
+  exact: neg_singleton.
+by rewrite !ep !en (right_id ∅ (⊎)) (left_id ∅ (⊎)).
 Qed.
+
+Lemma map_pos_neg f s :
+  map f s = make (MSet.map f (pos s)) (MSet.map f (neg s)).
+Proof. by rewrite -{1}(make_pos_neg s) map_make. Qed.
 
 Lemma count_map_inj f x s :
   (∀ a b, f a = f b → a = b) → count (f x) (map f s) = count x s.
 Proof.
-move=> finj.
-by rewrite /count car_map Internal.count_to Internal.count_smap_inj.
-Qed.
-
-Lemma map_make f X Y : map f (make X Y) = make (f <$> X) (f <$> Y).
-Proof.
-apply: count_inj => z; rewrite [RHS]count_make /count car_map car_make.
-by rewrite Internal.count_to Internal.count_smap_to.
+move=> finj; rewrite map_pos_neg count_make.
+by rewrite !(MSet.count_map_inj f x _ finj).
 Qed.
 
 Lemma elem_of_map {f s} {y : U} : y ∈ map f s → ∃ x, y = f x ∧ x ∈ s.
 Proof.
-rewrite -elem_of_elements elements_car car_map.
-move=> /(Internal.elem_of_elements_to y); rewrite Internal.elements_smap.
-by move=> /list_elem_of_fmap [x [-> x_s]]; exists x.
+rewrite map_pos_neg => /elem_of_make.
+by case=> /MSet.elem_of_map [x [-> xs]]; exists x; split=> //; [left|right].
 Qed.
 
 Lemma elements_map_inj f s :
@@ -934,8 +519,18 @@ move=> /list_elem_of_fmap [x [ex x_s]]; apply: ny; rewrite ex.
 by rewrite elem_of_count count_map_inj // -elem_of_count -elem_of_elements.
 Qed.
 
-Lemma map_pos_neg f s : map f s = make (f <$> pos s) (f <$> neg s).
-Proof. by rewrite -{1}(make_pos_neg s) map_make. Qed.
+Lemma elements_map_mono f s :
+  (∀ a b, f a = f b → a = b) → (∀ a b, MSet.le a b → MSet.le (f a) (f b)) →
+  elements (map f s) = f <$> elements s.
+Proof.
+move=> finj mono.
+have dm : MSet.map f (pos s) ## MSet.map f (neg s).
+  exact: MSet.map_disjoint finj (pos_neg_disj s).
+rewrite map_pos_neg elements_pos_neg pos_make neg_make.
+rewrite MSet.difference_disjoint_l // MSet.difference_disjoint_l.
+  by move=> y h1 h2; exact: dm y h2 h1.
+by rewrite !MSet.elements_map // -fmap_app.
+Qed.
 
 Lemma map_singleton f x : map f {[+ x +]} = {[+ f x +]}.
 Proof. exact: bind_singleton. Qed.
@@ -964,8 +559,8 @@ Lemma map_map {T U V : Type}
     (f : T → U) (g : U → V) (s : sms T) :
   map g (map f s) = map (λ x, g (f x)) s.
 Proof.
-apply: count_inj => z; rewrite /count !car_map !Internal.count_to.
-by rewrite Internal.count_smap_to Internal.smap_smap.
+rewrite [map f s]map_pos_neg map_make !MSet.map_map.
+by rewrite [map (λ x, g (f x)) s]map_pos_neg.
 Qed.
 
 Lemma bind_map {T U V : Type}
@@ -978,8 +573,11 @@ Lemma bind_map {T U V : Type}
     (f : U → sms V) (g : T → U) (s : sms T) :
   bind f (map g s) = bind (λ x, f (g x)) s.
 Proof.
-apply: count_inj => z; rewrite !count_bind car_map Internal.count_flat_to.
-by rewrite Internal.flat_smap.
+elim/(sms_ind (T := T)): s => [|x s IH|x s IH].
+- by rewrite map_empty !bind_empty.
+- by rewrite map_disj_union map_singleton !bind_disj_union !bind_singleton IH.
+- by rewrite map_disj_union map_inv map_singleton !bind_disj_union !bind_inv
+    !bind_singleton IH.
 Qed.
 
 Lemma map_bind {T U V : Type}
@@ -992,10 +590,11 @@ Lemma map_bind {T U V : Type}
     (f : U → V) (g : T → sms U) (s : sms T) :
   map f (bind g s) = bind (λ x, map f (g x)) s.
 Proof.
-apply: count_inj => z; rewrite [RHS]count_bind /count car_map Internal.count_to.
-rewrite car_bind Internal.count_smap_to Internal.smap_flat.
-apply: Internal.count_flat_ext_count => x.
-by rewrite car_map Internal.count_to.
+elim/(sms_ind (T := T)): s => [|x s IH|x s IH].
+- by rewrite !bind_empty map_empty.
+- by rewrite !bind_disj_union !bind_singleton map_disj_union IH.
+- by rewrite !bind_disj_union !bind_inv !bind_singleton map_disj_union
+    map_inv IH.
 Qed.
 
 Lemma bind_unit {T : Type}
@@ -1004,9 +603,10 @@ Lemma bind_unit {T : Type}
     (s : sms T) :
   bind (λ x, {[+ x +]}) s = s.
 Proof.
-apply: count_inj => z; rewrite count_bind.
-by rewrite (Internal.flat_ext _ (λ x, ([id x], []))) ?Internal.flat_singletons
-  ?Internal.smap_id.
+elim/(sms_ind (T := T)): s => [|x s IH|x s IH].
+- exact: bind_empty.
+- by rewrite bind_disj_union bind_singleton IH.
+- by rewrite bind_disj_union bind_inv bind_singleton IH.
 Qed.
 
 Lemma map_id_ext {T : Type}
@@ -1087,6 +687,3 @@ Qed.
 End Filter.
 
 End SMS.
-
-#[global] Arguments SMS.Internal.to : simpl never.
-#[global] Arguments SMS.Internal.wf : simpl never.

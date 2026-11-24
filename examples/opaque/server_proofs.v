@@ -261,7 +261,8 @@ wp_apply wp_send => //.
     iExists (base t). iSplit.
     + iApply (big_sepS_elem_of with "queried").
       by rewrite elem_of_list_to_set.
-    + move: e_t; rewrite list_elem_of_fmap => - [u [e_t /Ngmul_gfactors Nm_u]].
+    + move: e_t; rewrite list_elem_of_fmap => - [u [e_t u_in]].
+      have Nm_u := Ngmul_gfactors _ _ (proj1 (SMS.elem_of_elements _ _) u_in).
       have Nm_t : negb (is_gmul t) by rewrite -is_gmul_base e_t is_gmul_base.
       by rewrite base_TExp.
   - iApply public_TExp_iff => //.

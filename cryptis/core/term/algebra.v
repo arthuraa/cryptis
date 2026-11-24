@@ -3,7 +3,7 @@ From elpi.apps Require Import locker.
 From mathcomp Require Import ssreflect.
 From Stdlib Require Import ZArith.ZArith Lia.
 From stdpp Require Import sorting gmap.
-From cryptis.lib Require Import list_sort mathcomp_compat sms.
+From cryptis.lib Require Import list_sort mathcomp_compat mset sms.
 From iris.heap_lang Require locations.
 From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
@@ -101,8 +101,9 @@ Proof.
 move=> Nm; case E: (is_mul (TInv t)) => //.
 have Nmi : negb (is_mul (TInv t)) by rewrite E.
 have := factors_TInv t; rewrite (factors_Nmul _ Nmi) (factors_Nmul _ Nm).
-move=> /(f_equal (λ s, (SMS.car s).1)).
-by rewrite SMS.car_inv !SMS.car_singleton.
+move=> /(f_equal (λ s, elements (SMS.pos s))).
+by rewrite SMS.pos_inv SMS.pos_singleton SMS.neg_singleton
+  MSet.elements_singleton MSet.elements_empty.
 Qed.
 
 Lemma count_diag t : count t t = if is_mul t then 0%Z else 1%Z.
@@ -293,7 +294,7 @@ Lemma expo_TExp b e :
 Proof.
 rewrite is_gmul_unfold => Nm.
 apply: unfold_term_inj; rewrite !unfold_expo unfold_TExp.
-rewrite !SMS.singleton_make SMS.disj_union_make unfold_TMul_make /= unfold_expo.
+rewrite unfold_TMul SMS.map_disj_union !SMS.map_singleton unfold_expo.
 exact: PreTerm.expo_exp.
 Qed.
 
@@ -342,9 +343,9 @@ Proof. by rewrite TExp_TGMul SMS.map_empty. Qed.
 
 Definition exps t := factors (expo t).
 
-Lemma count_mem_exps_pos x t :
-  Z.of_nat (count_mem x (SMS.pos (exps t))) = Z.max 0 (count x (expo t)).
-Proof. exact: SMS.count_mem_pos. Qed.
+Lemma count_exps_pos x t :
+  Z.of_nat (MSet.count x (SMS.pos (exps t))) = Z.max 0 (count x (expo t)).
+Proof. exact: SMS.count_pos_max. Qed.
 
 Lemma exps_TExp_expN b e :
   negb (is_exp b) → negb (is_gmul b) → exps (TExp b e) = factors e.
@@ -413,8 +414,11 @@ have H : factors (TMul {[+ t1; t2 +]}) = {[+ t1; t2 +]}.
   apply: factors_TMul_atoms => x.
   by case/SMS.elem_of_disj_union => /SMS.elem_of_singleton ->.
 move: H; rewrite (factors_Nmul _ Nm) => /(f_equal (λ s, length (elements s))).
-rewrite SMS.elements_singleton !SMS.singleton_make SMS.disj_union_make /=.
-by rewrite (Permutation_length (SMS.elements_make_nil_r _)).
+rewrite SMS.elements_singleton.
+rewrite (Permutation_length (SMS.elements_disj_union _ _ _ _));
+  rewrite ?SMS.neg_singleton ?length_app ?SMS.elements_singleton //;
+  by move=> y h1 h2; first [exact: MSet.not_elem_of_empty y h1
+                           |exact: MSet.not_elem_of_empty y h2].
 Qed.
 
 Lemma count_expo_TExp t1 t2 t3 :
@@ -475,21 +479,23 @@ have Nm2 : negb (is_gmul t2).
 split=> //; split=> //; move: pos; rewrite count_expo_TExp_eq //; lia.
 Qed.
 
-Lemma TExp_TMul_cons_l t x X Y :
-  TExp t (TMul (SMS.make (x :: X) Y)) = TExp (TExp t (TMul (SMS.make X Y))) x.
+Lemma TExp_TMul_singleton_l t x X Y :
+  TExp t (TMul (SMS.make ({[+ x +]} ⊎ X) Y)) =
+  TExp (TExp t (TMul (SMS.make X Y))) x.
 Proof.
 rewrite TExpA; congr TExp; apply: count_inj => z _.
-rewrite count_TMul_disj_union !TMul_singleton !count_TMul SMS.bind_make_cons_l.
-rewrite SMS.count_disj_union /count; lia.
+rewrite count_TMul_disj_union !TMul_singleton !count_TMul.
+rewrite SMS.bind_make_singleton_l SMS.count_disj_union /count; lia.
 Qed.
 
-Lemma TExp_TMul_cons_r t y X Y :
-  TExp t (TMul (SMS.make X (y :: Y))) =
+Lemma TExp_TMul_singleton_r t y X Y :
+  TExp t (TMul (SMS.make X ({[+ y +]} ⊎ Y))) =
   TExp (TExp t (TMul (SMS.make X Y))) (TInv y).
 Proof.
 rewrite TExpA; congr TExp; apply: count_inj => z _.
 rewrite count_TMul_disj_union !TMul_singleton count_TInv !count_TMul.
-rewrite SMS.bind_make_cons_r SMS.count_disj_union SMS.count_inv /count; lia.
+rewrite SMS.bind_make_singleton_r SMS.count_disj_union SMS.count_inv /count.
+lia.
 Qed.
 
 Lemma exps_TExp_TMul t s :
@@ -567,7 +573,8 @@ Qed.
 
 (* The elements of [s] as signed atoms: [x] for a positive element [x],
    [TInv x] for a negative one. *)
-Definition satoms (s : tsms) := SMS.pos s ++ (TInv <$> SMS.neg s).
+Definition satoms (s : tsms) :=
+  elements (SMS.pos s) ++ (TInv <$> elements (SMS.neg s)).
 
 Definition scount f t := (count f t - count (TInv f) t)%Z.
 
@@ -589,7 +596,8 @@ Proof. by move=> Nm; rewrite /scount !(count_expo_TExp _ _ _ Nm); lia. Qed.
 
 Lemma elem_of_satoms f t : f ∈ satoms (factors t) ↔ (0 < scount f t)%Z.
 Proof.
-rewrite /satoms elem_of_app list_elem_of_fmap -count_gt0 /scount.
+rewrite /satoms elem_of_app list_elem_of_fmap MSet.elem_of_elements -count_gt0.
+rewrite /scount.
 case Em: (is_mul f).
 - have Mf : is_mul f by rewrite Em.
   rewrite (is_mul_count _ _ Mf); split.

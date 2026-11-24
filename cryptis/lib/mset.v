@@ -90,6 +90,9 @@ Definition count x X : nat := count_mem x (car X).
   λ X Y, car X ## car Y.
 #[global] Instance disjoint_dec : RelDecision (##@{mset}) :=
   λ X Y, decide (car X ## car Y).
+#[global] Instance subseteq_instance : SubsetEq mset :=
+  λ X Y, ∀ x, count x X ≤ count x Y.
+#[global] Instance size_instance : Size mset := λ X, length (car X).
 
 Lemma car_inj X Y : car X = car Y → X = Y.
 Proof.
@@ -220,6 +223,63 @@ Qed.
 Lemma difference_disjoint X Y : X ∖ Y ## Y ∖ X.
 Proof. apply/disjoint_count => x; rewrite !count_difference; lia. Qed.
 
+Lemma difference_disjoint_l X Y : X ## Y → X ∖ Y = X.
+Proof.
+move=> /disjoint_count d; apply: count_inj => x.
+by rewrite count_difference; have := d x; lia.
+Qed.
+
+Lemma of_list_disjoint l1 l2 : l1 ## l2 → of_list l1 ## of_list l2.
+Proof.
+by move=> d x /elem_of_of_list h1 /elem_of_of_list h2; exact: d x h1 h2.
+Qed.
+
+Lemma elements_of_list_wf l : wf l → elements (of_list l) = l.
+Proof. by move=> /bool_decide_unpack; exact: merge_sort_id. Qed.
+
+(** *** Inclusion *)
+
+#[global] Instance subseteq_preorder : PreOrder (⊆@{mset}).
+Proof.
+split; first by move=> X x.
+by move=> X Y W h1 h2 x; move: (h1 x) (h2 x); lia.
+Qed.
+
+Lemma subseteq_count X Y : X ⊆ Y ↔ ∀ x, count x X ≤ count x Y.
+Proof. done. Qed.
+
+Lemma elem_of_subseteq x X Y : X ⊆ Y → x ∈ X → x ∈ Y.
+Proof. by rewrite !elem_of_count => /(_ x); lia. Qed.
+
+Lemma singleton_subseteq x X : {[+ x +]} ⊆ X ↔ x ∈ X.
+Proof.
+rewrite elem_of_count; split.
+- by move=> /(_ x); rewrite count_singleton bool_decide_eq_true_2 //; lia.
+- by move=> h y; rewrite count_singleton; case_bool_decide; subst; lia.
+Qed.
+
+(** *** Size *)
+
+Lemma size_elements X : size X = length (elements X).
+Proof. done. Qed.
+
+Lemma size_singleton x : size ({[+ x +]} : mset) = 1.
+Proof. by rewrite size_elements elements_singleton. Qed.
+
+Lemma size_disj_union X Y : size (X ⊎ Y) = size X + size Y.
+Proof.
+rewrite !size_elements (Permutation_length (elements_disj_union X Y)).
+exact: length_app.
+Qed.
+
+Lemma subseteq_size X Y : X ⊆ Y → size X ≤ size Y.
+Proof.
+move=> h; have -> : Y = X ⊎ (Y ∖ X).
+  apply: count_inj => x; rewrite count_disj_union count_difference.
+  by have := h x; lia.
+rewrite size_disj_union; lia.
+Qed.
+
 End MultiSet.
 
 Arguments mset T {_ _ _ _}.
@@ -269,5 +329,134 @@ by rewrite of_list_cons; apply: PS.
 Qed.
 
 End Laws.
+
+(** ** Binding and mapping *)
+
+Section Bind.
+
+Context {T U : Type}.
+Context `{EqDecision T, Lexico T}
+  `{!StrictOrder (@lexico T _), !TrichotomyT (@lexico T _)}.
+Context `{EqDecision U, Lexico U}
+  `{!StrictOrder (@lexico U _), !TrichotomyT (@lexico U _)}.
+
+Implicit Types (x : T) (y : U) (X Y : mset T).
+
+Definition bind (f : T → mset U) X : mset U :=
+  of_list (elements X ≫= λ x, elements (f x)).
+
+Definition map (f : T → U) X : mset U := of_list (f <$> elements X).
+
+Lemma count_bind y f X :
+  count y (bind f X) = sum_list_with (λ x, count y (f x)) (elements X).
+Proof.
+rewrite count_of_list; elim: (elements X) => [|x l IH] //=.
+by rewrite count_mem_app IH.
+Qed.
+
+Lemma bind_empty f : bind f ∅ = ∅.
+Proof. done. Qed.
+
+Lemma bind_singleton f x : bind f {[+ x +]} = f x.
+Proof.
+apply: count_inj => y; rewrite count_bind elements_singleton /=; lia.
+Qed.
+
+Lemma bind_disj_union f X Y : bind f (X ⊎ Y) = bind f X ⊎ bind f Y.
+Proof.
+apply: count_inj => y; rewrite count_disj_union !count_bind.
+rewrite (sum_list_with_Permutation _ _ _ (elements_disj_union X Y)).
+exact: sum_list_with_app.
+Qed.
+
+Lemma bind_ext f g X : (∀ x, x ∈ X → f x = g x) → bind f X = bind g X.
+Proof.
+move=> e; apply: count_inj => y; rewrite !count_bind.
+have {}e x : x ∈ elements X → f x = g x by move=> /elem_of_elements /e.
+elim: (elements X) e => [|x l IH] e //=.
+rewrite (e x (list_elem_of_here _ _)) IH // => x' x'l.
+exact: e x' (list_elem_of_further _ _ _ x'l).
+Qed.
+
+Lemma bind_empty_r X : bind (λ _, ∅ : mset U) X = ∅.
+Proof.
+apply: count_inj => y; rewrite count_bind.
+by elim: (elements X) => [|x l IH] //=; rewrite IH.
+Qed.
+
+Lemma elem_of_bind f X y : y ∈ bind f X ↔ ∃ x, x ∈ X ∧ y ∈ f x.
+Proof.
+rewrite /bind elem_of_of_list list_elem_of_bind.
+by split=> -[x [h1 h2]]; exists x; split.
+Qed.
+
+Lemma count_map_inj f x X :
+  (∀ a b, f a = f b → a = b) → count (f x) (map f X) = count x X.
+Proof. move=> finj; rewrite count_of_list; exact: count_mem_fmap. Qed.
+
+Lemma elem_of_map f X y : y ∈ map f X ↔ ∃ x, y = f x ∧ x ∈ X.
+Proof. by rewrite elem_of_of_list list_elem_of_fmap. Qed.
+
+Lemma map_empty f : map f ∅ = ∅.
+Proof. done. Qed.
+
+Lemma map_singleton f x : map f {[+ x +]} = {[+ f x +]}.
+Proof. done. Qed.
+
+Lemma map_disj_union f X Y : map f (X ⊎ Y) = map f X ⊎ map f Y.
+Proof.
+apply: count_inj => y; rewrite count_disj_union !count_of_list.
+rewrite -count_mem_app -fmap_app; apply: count_mem_Permutation.
+apply: fmap_Permutation; exact: elements_disj_union.
+Qed.
+
+Lemma bind_singletons f X : bind (λ x, {[+ f x +]}) X = map f X.
+Proof. done. Qed.
+
+Lemma bind_of_list f l :
+  bind f (of_list l) = of_list (l ≫= λ x, elements (f x)).
+Proof.
+apply: count_inj => y; rewrite count_bind count_of_list.
+rewrite (sum_list_with_Permutation _ _ _ (elements_of_list l)).
+by elim: l => [|x l IH] //=; rewrite count_mem_app IH.
+Qed.
+
+Lemma map_of_list f l : map f (of_list l) = of_list (f <$> l).
+Proof.
+apply: count_inj => y; rewrite /map !count_of_list.
+apply: count_mem_Permutation; apply: fmap_Permutation; exact: elements_of_list.
+Qed.
+
+Lemma elements_map f X :
+  (∀ a b, le a b → le (f a) (f b)) → elements (map f X) = f <$> elements X.
+Proof.
+move=> mono; rewrite /map; apply: elements_of_list_wf; apply: bool_decide_pack.
+apply: (StronglySorted_fmap f le le) => //; exact: elements_sorted.
+Qed.
+
+Lemma map_disjoint f X Y :
+  (∀ a b, f a = f b → a = b) → X ## Y → map f X ## map f Y.
+Proof.
+move=> finj d y /elem_of_map [a [-> aX]] /elem_of_map [b [eb bY]].
+by apply: (d a aX); rewrite (finj _ _ eb).
+Qed.
+
+End Bind.
+
+Lemma map_map {T U V : Type}
+    `{EqDecision T, Lexico T, !StrictOrder (@lexico T _),
+      !TrichotomyT (@lexico T _)}
+    `{EqDecision U, Lexico U, !StrictOrder (@lexico U _),
+      !TrichotomyT (@lexico U _)}
+    `{EqDecision V, Lexico V, !StrictOrder (@lexico V _),
+      !TrichotomyT (@lexico V _)}
+    (f : T → U) (g : U → V) (X : mset T) :
+  map g (map f X) = map (λ x, g (f x)) X.
+Proof.
+apply: count_inj => z; rewrite /map !count_of_list.
+apply: count_mem_Permutation; transitivity (g <$> (f <$> elements X)).
+- apply: fmap_Permutation; exact: elements_of_list.
+- by rewrite -list_fmap_compose.
+Qed.
 
 End MSet.

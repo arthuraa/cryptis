@@ -149,8 +149,8 @@ iDestruct "inv" as "[[#p_ga #p_gb]|inv]".
              term_token ga (↑nsl_dhN.@"compromised"))%I
     with "[c1 comp_token]" as "> [#comp comp_token]".
   { iPoseProof (public_exp_inv_same (t1 := a) with "p_ga") as "[#p_a|H]";
-      first by rewrite (exps_TExp1 Nm_a) /SMS.pos SMS.car_singleton;
-               set_solver.
+      first by rewrite (exps_TExp1 Nm_a) SMS.pos_singleton
+                       MSet.elem_of_singleton.
     - iDestruct ("s_a" with "p_a") as "#c".
       iMod (lc_fupd_elim_later_pers with "c1 c") as "#c'".
       by iDestruct (term_meta_token with "comp_token c'") as "[]".

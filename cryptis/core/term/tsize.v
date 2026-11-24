@@ -3,7 +3,7 @@ From elpi.apps Require Import locker.
 From mathcomp Require Import ssreflect.
 From Stdlib Require Import ZArith.ZArith Lia.
 From stdpp Require Import sorting gmap.
-From cryptis.lib Require Import list_sort mathcomp_compat sms.
+From cryptis.lib Require Import list_sort mathcomp_compat mset sms.
 From iris.heap_lang Require locations.
 From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
@@ -51,17 +51,17 @@ Lemma tsize_factorsE t :
   (if is_mul t then 1 else 0) +
   sum_list_with tsize (elements (factors t)).
 Proof.
-rewrite SMS.elements_car car_factors is_mul_unfold.
+rewrite elements_factors is_mul_unfold.
 case Em: (PreTerm.is_mul (unfold_term t)); last first.
-  rewrite PreTerm.factors_Nmul ?Em // SMS.car_singleton /= unfold_termK /=.
+  rewrite PreTerm.factors_Nmul ?Em // SMS.elements_singleton /= unfold_termK /=.
   lia.
 have := wf_unfold_term t; rewrite /tsize.
 case: (unfold_term t) Em => // -[] // ps ns _ wf_pt.
-rewrite PreTerm.car_factors //.
+rewrite PreTerm.elements_factors //.
 move: wf_pt; rewrite PreTerm.wf_mulE.
 move=> /andb_True [/andb_True [/forallb_True/list.Forall_forall H _] _].
 have wfl p : p ∈ ps ++ ns → PreTerm.wf p by move=> /H /andb_True [].
-rewrite /SMS.Internal.elements /= sum_list_with_app !sum_list_with_fold //.
+rewrite fmap_app sum_list_with_app !sum_list_with_fold //.
 - apply/list.Forall_forall => p p_ns; apply: wfl.
   by rewrite elem_of_app; right.
 - apply/list.Forall_forall => p p_ps; apply: wfl.
@@ -73,17 +73,18 @@ Lemma tsize_gfactorsE t :
   (if is_gmul t then 1 else 0) +
   sum_list_with tsize (elements (gfactors t)).
 Proof.
-rewrite SMS.elements_car car_gfactors is_gmul_unfold.
+rewrite elements_gfactors is_gmul_unfold.
 case Em: (PreTerm.is_gmul (unfold_term t)); last first.
-  rewrite PreTerm.gfactors_Ngmul ?Em // SMS.car_singleton /= unfold_termK /=.
+  rewrite PreTerm.gfactors_Ngmul ?Em // SMS.elements_singleton /=.
+  rewrite unfold_termK /=.
   lia.
 have := wf_unfold_term t; rewrite /tsize.
 case: (unfold_term t) Em => // -[] // ps ns _ wf_pt.
-rewrite PreTerm.car_gfactors //.
+rewrite PreTerm.elements_gfactors //.
 move: wf_pt; rewrite PreTerm.wf_gmulE.
 move=> /andb_True [/andb_True [/forallb_True/list.Forall_forall H _] _].
 have wfl p : p ∈ ps ++ ns → PreTerm.wf p by move=> /H /andb_True [].
-rewrite /SMS.Internal.elements /= sum_list_with_app !sum_list_with_fold //.
+rewrite fmap_app sum_list_with_app !sum_list_with_fold //.
 - apply/list.Forall_forall => p p_ns; apply: wfl.
   by rewrite elem_of_app; right.
 - apply/list.Forall_forall => p p_ps; apply: wfl.
@@ -93,26 +94,30 @@ Qed.
 Lemma tsize_factors_le t t' : t ∈ factors t' → tsize t ≤ tsize t'.
 Proof.
 move=> t_t'; rewrite (tsize_factorsE t').
-have := sum_list_with_in _ tsize _ t_t'; lia.
+have := sum_list_with_in _ tsize _
+  (proj2 (SMS.elem_of_elements _ _) t_t'); lia.
 Qed.
 
 Lemma tsize_factors_lt t' t : is_mul t → t' ∈ factors t → tsize t' < tsize t.
 Proof.
 move=> Mt t'_t; rewrite (tsize_factorsE t).
-have := sum_list_with_in _ tsize _ t'_t.
+have := sum_list_with_in _ tsize _
+  (proj2 (SMS.elem_of_elements _ _) t'_t).
 by case: (is_mul t) Mt => //= _; lia.
 Qed.
 
 Lemma tsize_gfactors_le t t' : t ∈ gfactors t' → tsize t ≤ tsize t'.
 Proof.
 move=> t_t'; rewrite (tsize_gfactorsE t').
-have := sum_list_with_in _ tsize _ t_t'; lia.
+have := sum_list_with_in _ tsize _
+  (proj2 (SMS.elem_of_elements _ _) t_t'); lia.
 Qed.
 
 Lemma tsize_gfactors_lt t' t : is_gmul t → t' ∈ gfactors t → tsize t' < tsize t.
 Proof.
 move=> Mt t'_t; rewrite (tsize_gfactorsE t).
-have := sum_list_with_in _ tsize _ t'_t.
+have := sum_list_with_in _ tsize _
+  (proj2 (SMS.elem_of_elements _ _) t'_t).
 by case: (is_gmul t) Mt => //= _; lia.
 Qed.
 
@@ -129,8 +134,9 @@ Proof.
 move=> Nm; case E: (is_gmul (TGInv t)) => //.
 have Nmi : negb (is_gmul (TGInv t)) by rewrite E.
 have := gfactors_TGInv t; rewrite (gfactors_Ngmul _ Nmi) (gfactors_Ngmul _ Nm).
-move=> /(f_equal (λ s, (SMS.car s).1)).
-by rewrite SMS.car_inv !SMS.car_singleton.
+move=> /(f_equal (λ s, elements (SMS.pos s))).
+by rewrite SMS.pos_inv SMS.pos_singleton SMS.neg_singleton
+  MSet.elements_singleton MSet.elements_empty.
 Qed.
 
 Lemma tsize_TGInv t : negb (is_gmul t) → tsize (TGInv t) = S (tsize t).
@@ -190,8 +196,9 @@ Proof.
 move=> Nm t_e; rewrite factors_TMul SMS.bind_disj_union !SMS.bind_singleton.
 rewrite (factors_Nmul _ Nm) SMS.elements_disj_union.
 - by rewrite SMS.elements_singleton Permutation_app_comm.
-- by rewrite SMS.neg_singleton; set_solver.
-- by rewrite SMS.pos_singleton; set_solver.
+- by rewrite SMS.neg_singleton => y _ h; exact: MSet.not_elem_of_empty y h.
+- rewrite SMS.pos_singleton => y yN /MSet.elem_of_singleton ey.
+  by apply: t_e; rewrite -ey.
 Qed.
 
 Lemma elements_factors_TMul2_inv e t :
@@ -202,8 +209,10 @@ Proof.
 move=> Nm t_e; rewrite factors_TMul SMS.bind_disj_union !SMS.bind_singleton.
 rewrite factors_TInv (factors_Nmul _ Nm) SMS.elements_disj_union.
 - by rewrite SMS.elements_inv SMS.elements_singleton Permutation_app_comm.
-- by rewrite SMS.neg_inv SMS.pos_singleton; set_solver.
-- by rewrite SMS.pos_inv SMS.neg_singleton; set_solver.
+- rewrite SMS.neg_inv SMS.pos_singleton => y yP /MSet.elem_of_singleton ey.
+  by apply: t_e; rewrite -ey.
+- by rewrite SMS.pos_inv SMS.neg_singleton => y _ h;
+    exact: MSet.not_elem_of_empty y h.
 Qed.
 
 Lemma elements_factors_nil e :
