@@ -64,7 +64,7 @@
 
 From stdpp Require Import sorting list numbers.
 From cryptis Require Import lib.
-From cryptis.lib Require Import list_sort sms.
+From cryptis.lib Require Import list_sort mset sms.
 From mathcomp Require Import ssreflect.
 From Stdlib Require Import Lia.
 From cryptis.core.pre_term Require Export base with_stdpp.
@@ -171,11 +171,11 @@ Fixpoint wf (pt : pre_term) : bool :=
   | PTMul ps ns =>
     forallb (λ t, wf t && negb (is_mul t)) ps
     && forallb (λ t, wf t && negb (is_mul t)) ns
-    && SMS.Internal.wf SMS.Internal.le (ps, ns) && negb (single (ps, ns))
+    && SMS.Internal.wf MSet.le (ps, ns) && negb (single (ps, ns))
   | PTGMul ps ns =>
     forallb (λ t, wf t && negb (is_gmul t)) ps
     && forallb (λ t, wf t && negb (is_gmul t)) ns
-    && SMS.Internal.wf SMS.Internal.le (ps, ns) && negb (single (ps, ns))
+    && SMS.Internal.wf MSet.le (ps, ns) && negb (single (ps, ns))
   end.
 
 Definition wf_factors (s : SMS.sms pre_term) :=
@@ -187,13 +187,13 @@ Definition wf_gfactors (s : SMS.sms pre_term) :=
 Lemma wf_mulE ps ns :
   wf (PTMul ps ns) =
   forallb (λ t, wf t && negb (is_mul t)) (ps ++ ns)
-  && SMS.Internal.wf SMS.Internal.le (ps, ns) && negb (single (ps, ns)).
+  && SMS.Internal.wf MSet.le (ps, ns) && negb (single (ps, ns)).
 Proof. by rewrite /= forallb_app. Qed.
 
 Lemma wf_gmulE ps ns :
   wf (PTGMul ps ns) =
   forallb (λ t, wf t && negb (is_gmul t)) (ps ++ ns)
-  && SMS.Internal.wf SMS.Internal.le (ps, ns) && negb (single (ps, ns)).
+  && SMS.Internal.wf MSet.le (ps, ns) && negb (single (ps, ns)).
 Proof. by rewrite /= forallb_app. Qed.
 
 Lemma wf_factorsP s : wf_factors s ↔ ∀ t, t ∈ s → wf t ∧ negb (is_mul t).
@@ -236,14 +236,14 @@ Lemma car_factors ps ns :
   wf (PTMul ps ns) → SMS.car (factors (PTMul ps ns)) = (ps, ns).
 Proof.
 rewrite wf_mulE => /andb_True [/andb_True [_ wfA] _].
-by rewrite /= SMS.Internal.to_id.
+by rewrite /= SMS.car_make SMS.Internal.to_id.
 Qed.
 
 Lemma car_gfactors ps ns :
   wf (PTGMul ps ns) → SMS.car (gfactors (PTGMul ps ns)) = (ps, ns).
 Proof.
 rewrite wf_gmulE => /andb_True [/andb_True [_ wfA] _].
-by rewrite /= SMS.Internal.to_id.
+by rewrite /= SMS.car_make SMS.Internal.to_id.
 Qed.
 
 Lemma car_factorsE pt :

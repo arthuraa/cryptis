@@ -23,7 +23,7 @@
    pre-terms with the smart constructors, so it never needs to renormalise.
 
    The product machinery is not reimplemented here.  [SMS.bind factors] is
-   [SMS.Internal.to SMS.Internal.le] applied to the flattened factor lists
+   [SMS.Internal.to] applied to the flattened factor lists
    ([car_bind_factors]), so [hl_normalize_factors] is just [sms_to] from
    [primitives/sms.v] instantiated at the pre-term order, and its spec is
    [twp_sms_to].
@@ -35,7 +35,7 @@
 From mathcomp Require Import ssreflect.
 From stdpp Require Import list sorting lexico.
 From iris.heap_lang Require Import notation proofmode.
-From cryptis.lib Require Import repr list list_sort sms.
+From cryptis.lib Require Import repr list list_sort mset sms.
 From cryptis.core Require Import pre_term.
 From cryptis.primitives Require Import sms.
 
@@ -213,7 +213,7 @@ Definition hl_flat : val := λ: "f" "A",
   (append_lists (hl_bind_fst "f" (Fst "A")) (hl_bind_snd "f" (Snd "A")),
    append_lists (hl_bind_snd "f" (Fst "A")) (hl_bind_fst "f" (Snd "A"))).
 
-(* [SMS.bind PreTerm.factors] is [SMS.Internal.to SMS.Internal.le] of the
+(* [SMS.bind PreTerm.factors] is [SMS.Internal.to] of the
    flattened factors, so this is [sms_to] at the pre-term instance. *)
 Definition hl_normalize_factors : val := λ: "A",
   sms_to leq_term eq_term (hl_flat hl_factors "A").
@@ -667,7 +667,7 @@ Qed.
 End Flat.
 
 Lemma twp_leq_pre_term_le pt1 pt2 E Ψ :
-  Ψ #(bool_decide (SMS.Internal.le pt1 pt2)) ⊢
+  Ψ #(bool_decide (MSet.le pt1 pt2)) ⊢
   WP (leq_term (repr pt1) (repr pt2)) @ E [{ Ψ }].
 Proof.
 rewrite (bool_decide_ext _ _ (iff_sym (pt_order_lexico pt1 pt2))).
@@ -677,7 +677,7 @@ Qed.
 Lemma car_bind_factors A :
   (∀ x, x ∈ SMS.Internal.elements A → PreTerm.wf x) →
   SMS.car (SMS.bind PreTerm.factors (SMS.make A.1 A.2)) =
-  SMS.Internal.to SMS.Internal.le (SMS.Internal.flat raw_factors A).
+  SMS.Internal.to (SMS.Internal.flat raw_factors A).
 Proof.
 move=> wfA; rewrite SMS.car_bind SMS.car_make; apply/SMS.Internal.to_eq => z.
 rewrite SMS.Internal.count_flat_to -surjective_pairing.
@@ -688,7 +688,7 @@ Qed.
 Lemma car_bind_gfactors A :
   (∀ x, x ∈ SMS.Internal.elements A → PreTerm.wf x) →
   SMS.car (SMS.bind PreTerm.gfactors (SMS.make A.1 A.2)) =
-  SMS.Internal.to SMS.Internal.le (SMS.Internal.flat raw_gfactors A).
+  SMS.Internal.to (SMS.Internal.flat raw_gfactors A).
 Proof.
 move=> wfA; rewrite SMS.car_bind SMS.car_make; apply/SMS.Internal.to_eq => z.
 rewrite SMS.Internal.count_flat_to -surjective_pairing.
@@ -697,23 +697,23 @@ by rewrite PreTerm.car_gfactorsE //; apply: wfA.
 Qed.
 
 Lemma twp_hl_normalize_factors E A Ψ :
-  Ψ (repr (SMS.Internal.to SMS.Internal.le (SMS.Internal.flat raw_factors A)))
+  Ψ (repr (SMS.Internal.to (SMS.Internal.flat raw_factors A)))
   ⊢ WP hl_normalize_factors (repr A) @ E [{ Ψ }].
 Proof.
 iIntros "HΨ"; wp_lam.
 wp_apply (twp_hl_flat raw_factors _ twp_hl_factors).
-wp_apply (twp_sms_to SMS.Internal.le eq_term leq_term twp_eq_pre_term
+wp_apply (twp_sms_to eq_term leq_term twp_eq_pre_term
             twp_leq_pre_term_le).
 by iApply "HΨ".
 Qed.
 
 Lemma twp_hl_normalize_gfactors E A Ψ :
-  Ψ (repr (SMS.Internal.to SMS.Internal.le (SMS.Internal.flat raw_gfactors A)))
+  Ψ (repr (SMS.Internal.to (SMS.Internal.flat raw_gfactors A)))
   ⊢ WP hl_normalize_gfactors (repr A) @ E [{ Ψ }].
 Proof.
 iIntros "HΨ"; wp_lam.
 wp_apply (twp_hl_flat raw_gfactors _ twp_hl_gfactors).
-wp_apply (twp_sms_to SMS.Internal.le eq_term leq_term twp_eq_pre_term
+wp_apply (twp_sms_to eq_term leq_term twp_eq_pre_term
             twp_leq_pre_term_le).
 by iApply "HΨ".
 Qed.

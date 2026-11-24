@@ -3,7 +3,7 @@ From elpi.apps Require Import locker.
 From mathcomp Require Import ssreflect.
 From Stdlib Require Import ZArith.ZArith Lia.
 From stdpp Require Import sorting gmap.
-From cryptis.lib Require Import list_sort mathcomp_compat sms.
+From cryptis.lib Require Import list_sort mathcomp_compat mset sms.
 From iris.heap_lang Require locations.
 From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
@@ -274,10 +274,10 @@ refine (λ t1 t2,
 abstract (exact: unfold_term_inj e).
 Defined.
 
-Abbreviation term_order := (@SMS.Internal.le term _).
+Abbreviation term_order := (@MSet.le term _).
 
 Lemma term_orderE t1 t2 :
-  term_order t1 t2 ↔ SMS.Internal.le (unfold_term t1) (unfold_term t2).
+  term_order t1 t2 ↔ MSet.le (unfold_term t1) (unfold_term t2).
 Proof.
 split; first by case=> [->|?]; [left|right].
 by case=> [/unfold_term_inj ->|?]; [left|right].
@@ -374,11 +374,11 @@ Definition expo t := fold_term (PreTerm.expo (unfold_term t)).
 
 Lemma wf_term_pair P :
   (∀ x, x ∈ SMS.Internal.elements P → PreTerm.wf x) →
-  SMS.Internal.wf SMS.Internal.le P →
+  SMS.Internal.wf MSet.le P →
   SMS.Internal.wf term_order (SMS.Internal.smap fold_term P).
 Proof.
 move=> wfP wfP'.
-apply/(SMS.Internal.wf_smap term_order SMS.Internal.le unfold_term _
+apply/(SMS.Internal.wf_smap term_order MSet.le unfold_term _
          unfold_term_inj); first exact: term_orderE.
 by rewrite smap_unfold_fold.
 Qed.
@@ -695,18 +695,18 @@ elim: (unfold_term t) (wf_unfold_term t)=>
     by [].
   have Nsingle : negb (PreTerm.single (ps, ns)).
     by case: o wfpt => [|] /= /andb_True [].
-  have SMSwf : SMS.Internal.wf SMS.Internal.le (ps, ns).
+  have SMSwf : SMS.Internal.wf MSet.le (ps, ns).
     by case: o wfpt => [|] /=; case/andb_True=> /andb_True [].
-  have carA := SMS.Internal.to_id _ _ (wf_term_pair _ wfl SMSwf).
+  have carA := SMS.Internal.to_id _ (wf_term_pair _ wfl SMSwf).
   have elem_ofA x :
       x ∈ SMS.make (fold_term <$> ps) (fold_term <$> ns) ->
       x ∈ fold_term <$> ps ++ ns.
-    by rewrite -SMS.elem_of_elements SMS.elements_car /= carA
+    by rewrite -SMS.elem_of_elements SMS.elements_car SMS.car_make /= carA
       SMS.Internal.elements_smap.
   have Nsingle' x :
       SMS.make (fold_term <$> ps) (fold_term <$> ns) ≠ {[+ x +]}.
     move=> /(f_equal SMS.car); rewrite SMS.car_singleton.
-    rewrite /= carA /SMS.Internal.smap /=.
+    rewrite SMS.car_make /= carA /SMS.Internal.smap /=.
     case=> /(f_equal length) + /(f_equal length); rewrite !length_fmap /=.
     by case: ps ns Nsingle {IHps IHns IHs wfl SMSwf carA elem_ofA wfpt}
       => [|? [|? ?]] [|? ?].
