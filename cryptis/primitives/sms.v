@@ -32,6 +32,9 @@ Proof. done. Qed.
 Definition sms_to : val := λ: "eq" "X" "Y",
   (mset_difference "eq" "X" "Y", mset_difference "eq" "Y" "X").
 
+Definition sms_eq : val := λ: "eq" "s1" "s2",
+  mset_eq "eq" (Fst "s1") (Fst "s2") && mset_eq "eq" (Snd "s1") (Snd "s2").
+
 Definition sms_inv : val := λ: "s", (Snd "s", Fst "s").
 
 Definition sms_disj_union : val := λ: "eq" "le" "s1" "s2",
@@ -82,6 +85,24 @@ iIntros "HΨ"; wp_lam; wp_pures.
 wp_apply (twp_mset_difference eqv eqvP).
 wp_apply (twp_mset_difference eqv eqvP).
 wp_pures; by iApply "HΨ".
+Qed.
+
+Lemma twp_sms_eq s1 s2 E Ψ :
+  Ψ #(bool_decide (s1 = s2)) ⊢ WP sms_eq eqv (repr s1) (repr s2) @ E [{ Ψ }].
+Proof.
+have -> : bool_decide (s1 = s2) =
+    bool_decide (SMS.pos s1 = SMS.pos s2) &&
+    bool_decide (SMS.neg s1 = SMS.neg s2).
+  case: (bool_decide_reflect (s1 = s2)) => [->|ne].
+    by rewrite !bool_decide_eq_true_2.
+  case: (bool_decide_reflect (SMS.pos s1 = SMS.pos s2)) => // ep.
+  case: (bool_decide_reflect (SMS.neg s1 = SMS.neg s2)) => // en.
+  by case: ne; apply: SMS.sms_eq.
+rewrite [repr s1]repr_smsE [repr s2]repr_smsE /repr_prod /=.
+iIntros "HΨ"; wp_lam; wp_pures.
+wp_apply (twp_mset_eq eqv eqvP).
+case: bool_decide; wp_pures; last by iApply "HΨ".
+by wp_apply (twp_mset_eq eqv eqvP).
 Qed.
 
 Lemma twp_sms_inv s E Ψ :

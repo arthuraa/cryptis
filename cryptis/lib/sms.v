@@ -3,10 +3,10 @@
     [sms T] is the free abelian group on [T]: [∅] is its unit, [⊎] its
     operation, [inv] its inverse and [{[+ x +]}] its generators.  [count x s]
     is the signed multiplicity of [x] in [s], and equality is Leibniz
-    ([count_inj]).  [bind] substitutes signed multisets for elements, and
-    [filter] keeps the elements that satisfy a predicate.  [sms_ind] is the
-    induction principle: a signed multiset is built from [∅] by adding or
-    removing one element at a time.
+    ([count_inj]) and decidable.  [bind] substitutes signed multisets for
+    elements, and [filter] keeps the elements that satisfy a predicate.
+    [sms_ind] is the induction principle: a signed multiset is built from [∅]
+    by adding or removing one element at a time.
 
     A signed multiset is a pair of disjoint multisets ([MSet.mset]): its
     positive occurrences [pos s] and its negative ones [neg s].  [make X Y]
@@ -70,6 +70,12 @@ Proof.
 case: s1 s2 => [P1 N1 w1] [P2 N2 w2] /= eP eN; subst.
 by rewrite (proof_irrel w1 w2).
 Qed.
+
+#[global] Instance eq_dec : EqDecision sms := λ s1 s2,
+  match decide ((pos s1, neg s1) = (pos s2, neg s2)) with
+  | left e => left (sms_eq s1 s2 (f_equal fst e) (f_equal snd e))
+  | right n => right (λ e, n (f_equal (λ s, (pos s, neg s)) e))
+  end.
 
 Lemma pos_neg_disj s : pos s ## neg s.
 Proof. exact: (bool_decide_unpack _ (pos_neg_disjoint s)). Qed.

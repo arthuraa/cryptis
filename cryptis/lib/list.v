@@ -126,6 +126,17 @@ Definition foldr_list : val := rec: "loop" "f" "seed" "l" :=
     | NONE => "seed"
   end.
 
+Definition replicate_list : val := rec: "loop" "n" "x" :=
+  if: "n" ≤ #0 then NONE else SOME ("x", "loop" ("n" - #1) "x").
+
+Definition remove_dups_list : val := rec: "loop" "eq" "l" :=
+  match: "l" with
+    NONE => NONE
+  | SOME "p" =>
+      let: "t" := "loop" "eq" (Snd "p") in
+      if: mem_list "eq" (Fst "p") (Snd "p") then "t" else SOME (Fst "p", "t")
+  end.
+
 Definition insert_sorted : val := rec: "loop" "le" "x" "l" :=
   match: "l" with
     NONE => SOME ("x", NONE)
@@ -365,6 +376,20 @@ wp_apply IH; wp_apply twp_f; first done; iIntros "_".
 iApply "HΦ".
 Qed.
 
+Lemma twp_replicate_list E (n : Z) x Ψ :
+  Ψ (repr (replicate (Z.to_nat n) x)) ⊢
+  WP replicate_list #n (repr x) @ E [{ Ψ }].
+Proof.
+rewrite [@repr_list]unlock /=.
+move e: (Z.to_nat n) => k; elim: k n e Ψ => [|k IH] n e Ψ; iIntros "HΨ";
+  wp_rec; wp_pures.
+- rewrite bool_decide_eq_true_2; last by lia.
+  by wp_pures.
+- rewrite bool_decide_eq_false_2; last by lia.
+  wp_pures; wp_apply (IH (n - 1)%Z); first by lia.
+  by wp_pures.
+Qed.
+
 End ListLemmas.
 
 Section ListLemmasEq.
@@ -438,6 +463,26 @@ rewrite (_ : bool_decide (v = x) = bool_decide (x = v)); last first.
 case: (bool_decide (x = v)) => /=; wp_pures; first by iApply "HΦ".
 wp_apply IH; iIntros "_".
 wp_pures; by iApply "HΦ".
+Qed.
+
+Lemma twp_remove_dups_list (eqImpl : val) l E :
+  (∀ x y : A, [[{ True }]]
+    eqImpl (repr x) (repr y) @ E
+  [[{ RET #(bool_decide (x = y)); True }]]) →
+  [[{ True }]]
+    remove_dups_list eqImpl (repr l) @ E
+  [[{ RET repr (remove_dups l); True }]].
+Proof.
+iIntros "%eqP %Φ _ HΦ"; iStopProof.
+elim: l Φ => [|x l IH] Φ; iIntros "HΦ".
+- rewrite !repr_listE /=; wp_rec; wp_pures.
+  by iApply "HΦ".
+- rewrite [repr (x :: l)]repr_listE /=; wp_rec; wp_pures.
+  wp_apply IH; iIntros "_"; wp_pures.
+  wp_apply (twp_mem_list eqImpl) => //; iIntros "_".
+  rewrite /= decide_bool_decide.
+  case: bool_decide; wp_pures; first by iApply "HΦ".
+  by rewrite [@repr_list]unlock /=; iApply "HΦ".
 Qed.
 
 Lemma wp_rem_list (eqImpl : val) v l E :

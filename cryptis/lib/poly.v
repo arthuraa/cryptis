@@ -5,14 +5,22 @@
     monomial and [{[+ x; x; y +]}] is [x²y].  A polynomial [poly T] wraps a
     signed multiset of monomials ([SMS.sms (MSet.mset T)]): the signed
     multiplicity of a monomial is its coefficient ([coeff]), and equality is
-    Leibniz ([coeff_inj]).
+    Leibniz ([coeff_inj]) and decidable.
 
     [add] and [opp] are the group operations of the signed multiset, and [mul]
     multiplies every monomial of one polynomial by every monomial of the other
     by adding up their variables.  Polynomials form a commutative ring with
     [zero] and [one].  [mono m] is the monomial [m] with coefficient [1], and
     [poly_ind] builds a polynomial by adding or subtracting one monomial at a
-    time. *)
+    time.
+
+    [gcd p q] computes a greatest common divisor one variable at a time, and
+    [div] computes exact quotients.  [cancel p q] divides [p] and [q] by
+    [gcd p q] to remove their common factors.  [cancel_spec] proves that it
+    only divides out a common factor.  [poly_gcd.v] proves that [gcd] is a
+    greatest common divisor, that [div] is exact, and that [cancel] leaves no
+    common factor besides [1] and [-1] and maps equal fractions to the same
+    pair. *)
 
 From mathcomp Require Import ssreflect.
 From stdpp Require Import list numbers.
@@ -48,6 +56,12 @@ Proof. by case: p q => [s1] [s2] /= ->. Qed.
 
 Lemma coeff_inj p q : (∀ m, coeff m p = coeff m q) → p = q.
 Proof. by move=> e; apply: car_inj; apply: SMS.count_inj. Qed.
+
+#[global] Instance eq_dec : EqDecision poly := λ p q,
+  match decide (car p = car q) with
+  | left e => left (car_inj p q e)
+  | right n => right (λ e, n (f_equal car e))
+  end.
 
 (** *** Coefficients *)
 
@@ -87,6 +101,9 @@ Lemma add_opp_r p : add p (opp p) = zero.
 Proof.
 apply: coeff_inj => m; rewrite coeff_add coeff_opp coeff_zero; lia.
 Qed.
+
+Lemma opp_opp p : opp (opp p) = p.
+Proof. apply: coeff_inj => m; rewrite !coeff_opp; lia. Qed.
 
 (** *** Multiplication *)
 
@@ -159,6 +176,145 @@ elim/(SMS.sms_ind (T := MSet.mset T)): s => [|m s IH|m s IH].
 - exact: P0.
 - exact: Ppos m (mk s) IH.
 - exact: Pneg m (mk s) IH.
+Qed.
+
+(** *** Constants and subtraction *)
+
+Definition const (n : Z) : poly :=
+  mk (SMS.make (MSet.of_list (replicate (Z.to_nat n) ∅))
+               (MSet.of_list (replicate (Z.to_nat (- n)) ∅))).
+
+Definition sub p q : poly := add p (opp q).
+
+Lemma coeff_const m z :
+  coeff m (const z) = if bool_decide (m = ∅) then z else 0%Z.
+Proof.
+have e k : MSet.count m (MSet.of_list (replicate k ∅)) =
+           if bool_decide (m = ∅) then k else 0.
+  rewrite MSet.count_of_list.
+  by elim: k => [|k IH] /=; rewrite ?IH; case_bool_decide.
+rewrite /coeff SMS.count_make !e; case_bool_decide; lia.
+Qed.
+
+Lemma coeff_sub m p q : coeff m (sub p q) = (coeff m p - coeff m q)%Z.
+Proof. rewrite coeff_add coeff_opp; lia. Qed.
+
+(** *** Polynomials in one variable
+
+    A polynomial is a polynomial in [x] whose coefficients do not contain
+    [x]: [coeffx x k p] is the coefficient of [x^k] and [lcx x p] the leading
+    one. *)
+
+Definition vpow x k : MSet.mset T := MSet.of_list (replicate k x).
+
+Definition deg x p : nat := max_list (MSet.count x <$> elements (car p)).
+
+Definition coeffx x k p : poly :=
+  mk (SMS.bind (λ m, if bool_decide (MSet.count x m = k)
+                     then {[+ m ∖ vpow x k +]} else ∅) (car p)).
+
+Definition lcx x p : poly := coeffx x (deg x p) p.
+
+Definition vars p : list T := remove_dups (elements (car p) ≫= elements).
+
+(** *** Greatest common divisors
+
+    The gcd is computed one variable at a time: the gcd of two polynomials
+    in [x] is the gcd of their contents, the gcds of their coefficients
+    computed over the remaining variables, times the gcd of their primitive
+    parts, computed by a pseudo-remainder sequence.  Pseudo-remainders scale
+    by leading coefficients instead of dividing by them, since coefficients
+    do not form a field.  [ops vs] holds the gcd and the exact division of
+    polynomials over the variables [vs].  Fuels are written [n + 1] rather
+    than [S n] so that [simpl] does not unfold the loops. *)
+
+Fixpoint prem_loop x b d l fuel r : poly :=
+  match fuel with
+  | O => r
+  | S fuel =>
+      if bool_decide (r = zero) || (deg x r <? d)%nat then r else
+      let t := mul (lcx x r) (mono (vpow x (deg x r - d))) in
+      prem_loop x b d l fuel (sub (mul l r) (mul t b))
+  end.
+
+Definition prem x a b : poly :=
+  prem_loop x b (deg x b) (lcx x b) (deg x a + 1) a.
+
+Fixpoint div_loop x (dv : poly → poly → poly) g d l fuel r q :=
+  match fuel with
+  | O => q
+  | S fuel =>
+      if bool_decide (r = zero) then q else
+      let c := mul (dv (lcx x r) l) (mono (vpow x (deg x r - d))) in
+      div_loop x dv g d l fuel (sub r (mul c g)) (add q c)
+  end.
+
+Definition div_lvl x dv p g : poly :=
+  div_loop x dv g (deg x g) (lcx x g) (deg x p + 1) p zero.
+
+Definition cont x (gc : poly → poly → poly) p : poly :=
+  foldr gc zero ((λ k, coeffx x k p) <$> seq 0 (deg x p + 1)).
+
+Fixpoint prs x gc dv fuel a b : poly :=
+  match fuel with
+  | O => a
+  | S fuel =>
+      if bool_decide (b = zero) then a else
+      let r := prem x a b in
+      prs x gc dv fuel b (div_lvl x dv r (cont x gc r))
+  end.
+
+Definition gcd_lvl x gc dv p q : poly :=
+  if bool_decide (p = zero) then q else
+  if bool_decide (q = zero) then p else
+  let cp := cont x gc p in
+  let cq := cont x gc q in
+  let a := div_lvl x dv p cp in
+  let b := div_lvl x dv q cq in
+  let g := if (deg x a <? deg x b)%nat then prs x gc dv (deg x a + 2) b a
+           else prs x gc dv (deg x b + 2) a b in
+  mul (gc cp cq) g.
+
+Fixpoint ops (vs : list T) :
+    (poly → poly → poly) * (poly → poly → poly) :=
+  match vs with
+  | [] => (λ p q, const (Z.gcd (coeff ∅ p) (coeff ∅ q)),
+           λ p q, const (Z.quot (coeff ∅ p) (coeff ∅ q)))
+  | x :: vs => let o := ops vs in (gcd_lvl x o.1 o.2, div_lvl x o.2)
+  end.
+
+Definition gcd p q : poly := (ops (remove_dups (vars p ++ vars q))).1 p q.
+
+Definition div p q : poly := (ops (remove_dups (vars p ++ vars q))).2 p q.
+
+(** *** Cancelling common factors
+
+    [cancel p q] divides [p] and [q] by [gcd p q], and fixes the sign by
+    making the first coefficient of the second component positive.  The
+    divisions are checked, so [cancel] is sound however [gcd] behaves. *)
+
+Definition first_neg p : bool :=
+  match elements (SMS.pos (car p) ⊎ SMS.neg (car p)) with
+  | m :: _ => bool_decide (coeff m p < 0)%Z
+  | [] => false
+  end.
+
+Definition cancel_with g p q p' q' : poly * poly :=
+  if bool_decide (mul g p' = p ∧ mul g q' = q) then
+    if first_neg q' then (opp p', opp q') else (p', q')
+  else (p, q).
+
+Definition cancel p q : poly * poly :=
+  let g := gcd p q in cancel_with g p q (div p g) (div q g).
+
+Lemma cancel_spec p q :
+  ∃ g, p = mul g (cancel p q).1 ∧ q = mul g (cancel p q).2.
+Proof.
+rewrite /cancel; move: (gcd p q) => g; move: (div p g) (div q g) => p' q'.
+rewrite /cancel_with; case: bool_decide_reflect => [[ep eq]|_]; last first.
+  by exists one; rewrite !(left_id one mul).
+case: (first_neg q'); last by exists g.
+by exists (opp g); rewrite /= !mul_opp_l !mul_opp_r !opp_opp.
 Qed.
 
 End Polynomial.
