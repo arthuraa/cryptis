@@ -121,13 +121,22 @@ examples/nsl_auth.v
 
 examples/challenge_response.v
 
+## Agreement games
+
+examples/agreement_lib.v
+
 ## Opaque verification
 
 examples/opaque/impl.v
 examples/opaque/shared.v
 examples/opaque/client_proofs.v
 examples/opaque/server_proofs.v
-examples/opaque/game.v
+examples/opaque/games/base.v
+examples/opaque/games/forward_secrecy.v
+examples/opaque/games/kci.v
+examples/opaque/games/key_independence.v
+examples/opaque/games/agreement.v
+examples/opaque/games/stolen_file.v
 examples/opaque.v
 
 ## HMQV
