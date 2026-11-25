@@ -137,6 +137,7 @@ examples/opaque/games/kci.v
 examples/opaque/games/key_independence.v
 examples/opaque/games/agreement.v
 examples/opaque/games/stolen_file.v
+examples/opaque/games/offline_guessing.v
 examples/opaque.v
 
 ## HMQV

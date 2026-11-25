@@ -58,15 +58,15 @@ Lemma wp_mk_password :
   {{{ cryptis_ctx }}}
     mk_password #()
   {{{ (pw : nonce), RET (TNonce pw : val);
-      minted pw ∗ secret pw ∗ file_secret pw ∗ term_token pw (↑opN.@"log") }}}.
+      minted pw ∗ secret pw ∗ file_secret pw ∗ term_token pw (↑opN.@"log" ∪ ↑opN.@"key") }}}.
 Proof.
 iIntros "%Φ #ctx post". wp_lam.
 iMod pending_alloc as (γ) "pend".
 wp_apply (wp_mk_nonce (λ _, shot γ 1)%I (λ _, False)%I) => //.
 iIntros "%pw #m_pw #s_pw _ _ tok".
-iDestruct (term_token_difference pw (↑opN.@"log") with "tok")
+iDestruct (term_token_difference pw (↑opN.@"log" ∪ ↑opN.@"key") with "tok")
   as "[tok_log tok]"; first solve_ndisj.
-iDestruct (term_token_drop (↑opN.@"stolen") with "tok") as "s_file";
+iDestruct (term_token_drop (↑opN.@"stolen" ∪ ↑opN.@"oracle") with "tok") as "s_file";
   first solve_ndisj.
 iAssert (□ (public pw ↔ ▷ shot γ 1))%I as "#s_pw'".
 { iModIntro; iSplit.
@@ -83,7 +83,7 @@ Lemma wp_register db alist pw_of (uid pw : term) :
   alist !! uid = None →
   pw_of uid = pw →
   {{{ cryptis_ctx ∗ opaque_ctx ∗ public uid ∗ minted pw ∗
-      term_token pw (↑opN.@"log") ∗
+      term_token pw (↑opN.@"log" ∪ ↑opN.@"key") ∗
       AList.is_alist db alist ∗ opaque_logs pw_of alist ∗
       opaque_db pw_of alist }}}
     register db uid pw
@@ -193,7 +193,7 @@ Proof.
 iIntros "s_pw s_file #sess".
 iPoseProof "sess" as "(_ & _ & [(_ & _ & [#p_pw|[-> #st]])|(_ & #ok)])".
 - by iDestruct (secret_not_public with "s_pw p_pw") as ">[]".
-- by iDestruct (file_secret_stolen with "s_file st") as "[]".
+- by iDestruct (file_secret_impersonable with "s_file st") as "[]".
 - iModIntro. iFrame. iModIntro. iSplit; first done.
   by iApply (session_release with "sess").
 Qed.

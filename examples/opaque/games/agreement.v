@@ -110,7 +110,7 @@ wp_apply (wp_client_session (TInt 0) pw_a c (agree_pred γaw γbw)
     iDestruct (session_compromised with "sess comp") as "[_ [#p|[_ #st]]]".
     - by iDestruct ("s_pa" with "p") as ">[]".
     - iInv "inv_f" as ">s_file".
-      by iDestruct (file_secret_stolen with "s_file st") as "[]". }
+      by iDestruct (file_secret_impersonable with "s_file st") as "[]". }
   iModIntro. iExists (Some (si_result si)). iSplit => //=.
   rewrite union_empty_r_L. iFrame "frag w". iExists si. iSplit => //.
   iSplit => //. iApply (term_token_drop with "tok"). solve_ndisj.

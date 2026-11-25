@@ -321,17 +321,19 @@ Lemma wp_oprf_challenge c pw file B :
 Proof.
 iIntros "#? #Hchannel #(HpredH & _) #Hfile %Φ !> [[auth #m_B] s_file] Hpost".
 iDestruct "Hfile"
-  as "(%k_s & %p_s & %p_u & %envelope & -> & _ & #s_k & #e_k & _)".
+  as "(%k_s & %p_s & %p_u & %envelope & -> & _ & _ & #s_k & #e_k & _)".
 wp_lam. wp_pures.
 wp_apply wp_list_of_term. rewrite Spec.of_listK. wp_pures.
 rewrite subst_list_match /=.
 wp_list_match => [k_s' p_s' P_s' P_u' envelope' e' | ]; last by [].
 symmetry in e'; inversion e'; subst; clear e'.
 (* The candidate is fresh with respect to the bases the server evaluated. *)
-wp_apply (wp_mk_nonce_freshN B (λ _, True)%I (λ _, False)%I (λ _, ∅)) => //.
+wp_apply (wp_mk_nonce_freshN B (λ _, True)%I (λ _, False)%I
+            (λ t, {[TNonce t]})) => //.
 - iIntros "%t %t_B". by iApply (big_sepS_elem_of with "m_B").
-- by iIntros "%t"; rewrite big_sepS_empty.
-iIntros "%w %fresh #m_w #p_w _ _ _".
+- iIntros "%t". rewrite big_sepS_singleton. iIntros "!>"; iSplit; by iIntros "?".
+iIntros "%w %fresh #m_w #p_w _ _ tok_w".
+rewrite big_sepS_singleton.
 wp_pures. wp_apply wp_send => //.
   by iApply "p_w"; iIntros "!> !>".
 wp_pures. wp_apply wp_assert.
@@ -340,8 +342,11 @@ wp_apply wp_H'; wp_apply wp_texp; wp_list; wp_apply wp_H.
 wp_apply wp_recv => //. iIntros "%y #p_y".
 wp_eq_term Hy.
 - subst y.
-  iDestruct (public_THashE with "HpredH p_y") as "[p | [_ contra]]";
-    last by wp_pures; iDestruct "contra" as "[]".
+  iDestruct (public_THashE with "HpredH p_y") as "[p | [_ contra]]"; last first.
+  { (* The oracle was never used at the fresh candidate. *)
+    iAssert (▷ False)%I with "[tok_w]" as ">[]".
+    iNext. iDestruct (H_pred_oracle_used with "contra") as "used".
+    iApply (term_meta_token with "tok_w used"). solve_ndisj. }
   iEval (rewrite public_of_list /=) in "p".
   iDestruct "p" as "(_ & p & _)".
   have Nx : negb (is_exp (hash_result "H" w)) by [].
@@ -374,9 +379,9 @@ wp_pures.
 iMod pending_alloc as (γ) "pend".
 wp_apply (wp_mk_nonce (fun _ => shot γ 1)%I (fun _ => False)%I) => //.
 iIntros "%pw #Hminpw #Hpw_shot #Hdhpw _ tok_pw".
-iDestruct (term_token_difference pw (↑opN.@"log") with "tok_pw")
+iDestruct (term_token_difference pw (↑opN.@"log" ∪ ↑opN.@"key") with "tok_pw")
   as "[tok_log tok_pw]"; first solve_ndisj.
-iDestruct (term_token_drop (↑opN.@"stolen") with "tok_pw") as "s_file";
+iDestruct (term_token_drop (↑opN.@"stolen" ∪ ↑opN.@"oracle") with "tok_pw") as "s_file";
   first solve_ndisj.
 iAssert (□ (public pw ↔ ▷ shot γ 1))%I as "#Hpw_shot'".
 { iModIntro; iSplit.

@@ -26,7 +26,7 @@ Definition opaque_file (pw : term) (file : val) : iProp :=
   ∃ (k_s p_s p_u : nonce) envelope,
     ⌜file = Spec.of_list [TNonce k_s; TNonce p_s; TExp g p_s; TExp g p_u;
                           envelope]⌝ ∗
-    minted k_s ∗ □ (public k_s ↔ ▷ □ stolen pw) ∗
+    minted k_s ∗ oprf_key pw k_s ∗ □ (public k_s ↔ ▷ □ stolen pw) ∗
     □ (∀ t', exp_pred k_s t' ↔ ▷ □ oprf_pred pw t') ∗
     public envelope ∗ opaque_keys pw p_u p_s.
 
@@ -41,7 +41,7 @@ Definition opaque_logs (pw_of : term → term) (db : gmap term val) : iProp :=
 Lemma public_opaque_file pw file :
   opaque_file pw file -∗ stolen pw -∗ ∃ t : term, ⌜file = t⌝ ∗ public t.
 Proof.
-iIntros "(%k_s & %p_s & %p_u & %envelope & -> & _ & #s_k & _ & #p_env &
+iIntros "(%k_s & %p_s & %p_u & %envelope & -> & _ & _ & #s_k & _ & #p_env &
           #keys) #st".
 iPoseProof "keys" as "(#key_u & #key_s & _ & #s_s)".
 iExists _; iSplit; first done.
@@ -58,11 +58,13 @@ Lemma wp_make_file (pw : term) :
     cryptis_ctx
     ∗ opaque_ctx
     ∗ minted pw
-    ∗ term_token pw (↑opN.@"log")
+    ∗ term_token pw (↑opN.@"log" ∪ ↑opN.@"key")
   }}} Server.make_file pw
   {{{ file, RET (repr file); opaque_file pw file ∗ oprf_log pw ∅ }}}.
 Proof.
-iIntros "%ϕ (#cryptis & #ctx & #Hmintedpw & tok_log) post".
+iIntros "%ϕ (#cryptis & #ctx & #Hmintedpw & tok) post".
+iDestruct (term_token_difference pw (↑opN.@"log") with "tok")
+  as "[tok_log tok_key]"; first set_solver.
 iMod (oprf_log_alloc with "tok_log") as "log".
 iPoseProof "ctx" as "(#Hhashpred & _ & _ & #Hsencpred)".
 wp_lam.
@@ -73,6 +75,8 @@ wp_apply (wp_mk_nonce_freshN ∅ (fun _ => stolen pw)%I (oprf_pred pw)
   rewrite big_sepS_singleton minted_TInv.
   by iModIntro; auto.
 iIntros "%k_s _ #Hmintedk_s #Hprivatek_s #Hexpk_s #Hexpk_sV Htokenk_sV".
+iMod (term_meta_set (opN.@"key") (TNonce k_s) with "tok_key") as "#key";
+  first solve_ndisj.
 rewrite big_sepS_singleton.
 wp_pures; wp_lam; wp_pures.
 wp_apply wp_H'; wp_apply wp_texp; wp_list; wp_apply wp_H.
@@ -107,7 +111,7 @@ iPoseProof (hmqv_key_public p_s with "[]") as "#pubP_s"; first by iSplit.
 iPoseProof (hmqv_key_public p_u with "[]") as "#pubP_u"; first by iSplit.
 iApply "post". iFrame "log".
 iExists k_s, p_s, p_u, _.
-do 4!(iSplit; first done). iSplit; last done.
+do 5!(iSplit; first done). iSplit; last done.
 iApply (public_sencIS _ (opN.@"AuthEnc") envelope_pred _) => //.
 - rewrite minted_senc minted_THash minted_tag minted_of_list /=.
   do !iSplit => //. iApply minted_TExp => //.
@@ -124,7 +128,7 @@ iAssert (▷ □ public pw)%I as "#Hpubpw".
   - rewrite public_of_list /=.
     iDestruct "Hpub" as "[#? _]".
     by iIntros "!> !>".
-  - by iNext; iDestruct "contra" as "[]". }
+  - by iNext; iDestruct (H_pred_oprf_key with "key contra") as "[]". }
 iDestruct "Hprivatep_u" as "[_ Hprivatep_u]".
 iDestruct ("Hprivatep_u" with "Hpubpw") as "#Hpubp_u".
 rewrite public_of_list /=.
@@ -197,7 +201,7 @@ case db_uid: (alist !! uid) => [file|]; wp_pures; last first.
   by iApply "Hhl"; iModIntro; iFrame "Hdb Hlogs"; iLeft;
      iDestruct "hook" as "[$ _]".
 iDestruct ("Hmapcontents" $! uid file with "[//]") as
-    "[_ (%k_s & %p_s & %p_u & %envelope & %e & #Hmk_s & #Hprivk_s & #Hexpk_s
+    "[_ (%k_s & %p_s & %p_u & %envelope & %e & #Hmk_s & _ & #Hprivk_s & #Hexpk_s
          & #Hpenvelope & #Hkeyp_u & #Hkeyp_s & #Hprivp_u & #Hprivp_s)]".
 iPoseProof (hmqv_key_public with "Hkeyp_s") as "#HpubP_s".
 iPoseProof (hmqv_key_public with "Hkeyp_u") as "#HpubP_u".
@@ -363,7 +367,7 @@ iAssert (|={⊤}=> session (pw_of uid) ρ Resp si ∗
     { rewrite public_of_list /=.
       iDestruct "p_t" as "[p_K _]".
       iDestruct (public_THashE with "HpredH p_K") as "[p_t | [_ contra]]";
-        last by iNext; iDestruct "contra" as "[]".
+        last by iNext; iDestruct (H_pred_single with "contra") as "[]".
       rewrite public_of_list /=.
       iDestruct "p_t" as "(p_K' & _)".
       have tags : "e"%string ≠ "d"%string by [].
