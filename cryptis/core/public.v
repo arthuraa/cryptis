@@ -475,12 +475,8 @@ iIntros "[_ [publ | [ [_ Hfs] | [ [%gmul_t _] | [ (%exp_t & _) | Hstr ]]]]]".
 - iDestruct "publ" as (T) "[%dec _]".
   by case: (is_mul t) (decompose_Nmul dec) mul_t.
 - by iApply "Hfs".
-- by move: mul_t gmul_t;
-     rewrite is_mul_unfold is_gmul_unfold;
-     case: (unfold_term t) => [|||[|] ? ?].
-- by move: mul_t exp_t;
-     rewrite is_mul_unfold is_exp_unfold;
-     case: (unfold_term t) => [|||[|] ? ?].
+- by case: (is_gmul t) (is_mul_Ngmul _ mul_t) gmul_t.
+- by case: (is_exp t) (is_mul_Nexp _ mul_t) exp_t.
 - by case: (t) mul_t => // *; iDestruct "Hstr" as "[]".
 Qed.
 
@@ -514,13 +510,9 @@ move=> mul_t; rewrite public_eq.
 iIntros "[_ [publ | [ [%mul_t' _] | [ [_ Hfs] | [ (%exp_t & _) | Hstr ]]]]]".
 - iDestruct "publ" as (T) "[%dec _]".
   by case: (is_gmul t) (decompose_Ngmul dec) mul_t.
-- by move: mul_t mul_t';
-     rewrite is_mul_unfold is_gmul_unfold;
-     case: (unfold_term t) => [|||[|] ? ?].
+- by case: (is_gmul t) (is_mul_Ngmul _ mul_t') mul_t.
 - by iApply "Hfs".
-- by move: mul_t exp_t;
-     rewrite is_gmul_unfold is_exp_unfold;
-     case: (unfold_term t) => [|||[|] ? ?].
+- by case: (is_gmul t) (is_exp_Ngmul _ exp_t) mul_t.
 - by case: (t) mul_t => // *; iDestruct "Hstr" as "[]".
 Qed.
 
@@ -676,13 +668,9 @@ move => expt; apply: anti_symm; last first.
   + iDestruct "c1" as (T) "[%dec _]".
     by case: (is_exp t) (decompose_Nexp dec) expt.
   + iDestruct "c2" as "(%mul_c & _)".
-    by move: expt mul_c;
-       rewrite is_exp_unfold is_mul_unfold;
-       case: (unfold_term t) => [|||[|] ? ?].
+    by case: (is_mul t) (is_exp_Nmul _ expt) mul_c.
   + iDestruct "c2'" as "(%mul_c & _)".
-    by move: expt mul_c;
-       rewrite is_exp_unfold is_gmul_unfold;
-       case: (unfold_term t) => [|||[|] ? ?].
+    by case: (is_gmul t) (is_exp_Ngmul _ expt) mul_c.
   + by iDestruct "c3" as "(_ & $)".
   + by case: (t) expt => // *; iDestruct "c4" as "[]".
 Qed.

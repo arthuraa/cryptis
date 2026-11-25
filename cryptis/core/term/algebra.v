@@ -254,24 +254,16 @@ Qed.
 
 (* The three non-free heads are mutually exclusive. *)
 Lemma is_exp_Nmul t : is_exp t -> negb (is_mul t).
-Proof.
-rewrite is_exp_unfold is_mul_unfold; by case: (unfold_term t) => [|||[|] ??].
-Qed.
+Proof. rewrite is_exp_unfold is_mul_unfold; exact: PreTerm.is_exp_Nmul. Qed.
 
 Lemma is_exp_Ngmul t : is_exp t -> negb (is_gmul t).
-Proof.
-rewrite is_exp_unfold is_gmul_unfold; by case: (unfold_term t) => [|||[|] ??].
-Qed.
+Proof. rewrite is_exp_unfold is_gmul_unfold; exact: PreTerm.is_exp_Ngmul. Qed.
 
 Lemma is_mul_Ngmul t : is_mul t -> negb (is_gmul t).
-Proof.
-rewrite is_mul_unfold is_gmul_unfold; by case: (unfold_term t) => [|||[|] ??].
-Qed.
+Proof. rewrite is_mul_unfold is_gmul_unfold; exact: PreTerm.is_mul_Ngmul. Qed.
 
 Lemma is_mul_Nexp t : is_mul t -> negb (is_exp t).
-Proof.
-rewrite is_mul_unfold is_exp_unfold; by case: (unfold_term t) => [|||[|] ??].
-Qed.
+Proof. rewrite is_mul_unfold is_exp_unfold; by case: (unfold_term t). Qed.
 
 Lemma is_gmul_base t : is_gmul (base t) = is_gmul t.
 Proof. rewrite !is_gmul_unfold unfold_base; exact: PreTerm.is_gmul_base. Qed.
@@ -446,11 +438,10 @@ rewrite is_exp_unfold.
 have ->: expo t ≠ TMul ∅ ↔ unfold_term (expo t) ≠ unfold_term (TMul ∅).
   split; last congruence.
   by move=> n1 contra; apply: n1; apply: inj contra.
-rewrite unfold_expo unfold_TMul_make.
-rewrite -[PreTerm.mul _]/(PreTerm.PTMul [] []).
-case: unfold_term (wf_unfold_term t) => /=; try by intuition congruence.
-case; try by intuition congruence.
-by move=> t1 t2; rewrite !andb_True bool_decide_spec; case; intuition.
+rewrite unfold_expo unfold_TMul SMS.map_empty PreTerm.mul_empty.
+case: (PreTerm.is_expP (unfold_term t)) (wf_unfold_term t) => [b e ->|_ _ ->].
+- by move=> /PreTerm.wf_dh_single [_ [_ [_ ne]]]; split.
+- by move=> _; split=> // /(_ eq_refl).
 Qed.
 
 Lemma is_expNE t : negb (is_exp t) ↔ expo t = TMul ∅.

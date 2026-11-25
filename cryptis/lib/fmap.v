@@ -10,9 +10,10 @@
     [{[k := v]}] maps [k] to [v] and every other key to [d], [<[k:=v]> m]
     sets [k] to [v], and [delete k m] resets [k] to [d].  [merge f m1 m2]
     combines two maps pointwise with [f] and has default [f d1 d2]; [map f m]
-    applies [f] to every value and has default [f d].  [to_list m] lists the
-    keys whose value is not [d] with their values, sorted by keys, and
-    [fmap_ind] builds a map by inserting one key at a time.  When [S] is
+    applies [f] to every value and has default [f d].  [cast e m] moves [m]
+    to an equal default [e : d1 = d2].  [to_list m] lists the keys whose
+    value is not [d] with their values, sorted by keys, and [fmap_ind] builds
+    a map by inserting one key at a time.  When [S] is
     ordered by a [Lexico] instance, so are finite maps, by their lists of
     bindings, so they can be keys of finite maps and elements of multisets. *)
 
@@ -340,6 +341,12 @@ have /bool_decide_unpack [s vs] := wf_car m.
 exact: lookup_list_elem_of.
 Qed.
 
+Lemma to_list_singleton k v : v ≠ d → to_list {[k := v]} = [(k, v)].
+Proof.
+move=> nv; rewrite /to_list /singletonM /singleton_instance /= /cons_nd.
+by rewrite bool_decide_false.
+Qed.
+
 End FMap.
 
 Arguments fmap T {_ _ _} S {_} d.
@@ -421,6 +428,27 @@ Lemma lookup_map f m k : map f m !!! k = f (m !!! k).
 Proof. exact: lookup_merge. Qed.
 
 End Map.
+
+Section Cast.
+
+Context {T : Type} `{EqDecision T, Lexico T}
+  `{!StrictOrder (@lexico T _), !TrichotomyT (@lexico T _)}.
+Context {S : Type} `{EqDecision S}.
+
+(* Only the proof field mentions [e], so the bindings still compute. *)
+Definition cast {d1 d2 : S} (e : d1 = d2) (m : fmap T S d1) : fmap T S d2 :=
+  mk (car m)
+    (match e in _ = d return wf d (car m) with eq_refl => wf_car m end).
+
+Lemma to_list_cast d1 d2 (e : d1 = d2) (m : fmap T S d1) :
+  to_list (cast e m) = to_list m.
+Proof. done. Qed.
+
+Lemma lookup_cast d1 d2 (e : d1 = d2) (m : fmap T S d1) k :
+  cast e m !!! k = m !!! k.
+Proof. by case: d2 / e. Qed.
+
+End Cast.
 
 Section Lexico.
 

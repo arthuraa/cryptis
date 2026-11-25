@@ -124,7 +124,7 @@ rewrite (_ : (NILV, NILV)%V =
   last by rewrite /= [@repr_list]unlock.
 wp_apply (twp_hl_mul_aux E ∅).
 rewrite (_ : PreTerm.mul_aux ∅ = unfold_term (TMul ∅));
-  last by rewrite unfold_TMul SMS.map_empty /PreTerm.mul SMS.bind_empty.
+  last by rewrite unfold_TMul SMS.map_empty PreTerm.mulE SMS.bind_empty.
 rewrite [repr _]val_of_pre_term_unfold.
 by iApply "HΨ".
 Qed.

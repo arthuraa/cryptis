@@ -6,7 +6,10 @@
     ([count_inj]) and decidable.  [bind] substitutes signed multisets for
     elements, and [filter] keeps the elements that satisfy a predicate.
     [sms_ind] is the induction principle: a signed multiset is built from [∅]
-    by adding or removing one element at a time.
+    by adding or removing one element at a time.  A signed multiset of pairs
+    is a finite map ([FMap.fmap]) from first components to signed multisets
+    of second components: [curry] and [uncurry] are inverse ([curryK],
+    [uncurryK]).
 
     A signed multiset is a pair of disjoint multisets ([MSet.mset]): its
     positive occurrences [pos s] and its negative ones [neg s].  [make X Y]
@@ -15,9 +18,9 @@
     [Y ∖ X].  [inv] swaps the sides, so no element needs an inverse. *)
 
 From mathcomp Require Import ssreflect.
-From stdpp Require Import list numbers proof_irrel.
+From stdpp Require Import list numbers proof_irrel sorting.
 From Stdlib Require Import ZArith Lia.
-From cryptis.lib Require Import list_sort mset.
+From cryptis.lib Require Import list_sort fmap mset.
 
 Module SMS.
 
@@ -691,5 +694,127 @@ rewrite /filter; elim/(sms_ind (T := T)): s => [|x s IH|x s IH].
 Qed.
 
 End Filter.
+
+Section Curry.
+
+Context {T U : Type}.
+Context `{EqDecision T, Lexico T}
+  `{!StrictOrder (@lexico T _), !TrichotomyT (@lexico T _)}.
+Context `{EqDecision U, Lexico U}
+  `{!StrictOrder (@lexico U _), !TrichotomyT (@lexico U _)}.
+
+Implicit Types (k : T) (v : U) (P : sms (T * U)).
+Implicit Types (m : FMap.fmap T (sms U) ∅).
+
+Definition curry_add k (s : sms U) m : FMap.fmap T (sms U) ∅ :=
+  <[k := m !!! k ⊎ s]> m.
+
+Definition curry_list (f : U → sms U) (ps : list (T * U)) m :=
+  foldr (λ p m, curry_add p.1 (f p.2) m) m ps.
+
+Definition curry P : FMap.fmap T (sms U) ∅ :=
+  curry_list (λ v, {[+ v +]}) (elements (pos P))
+    (curry_list (λ v, inv {[+ v +]}) (elements (neg P)) ∅).
+
+Definition uncurry_list (l : list (T * sms U)) : sms (T * U) :=
+  foldr (λ p s, map (λ v, (p.1, v)) p.2 ⊎ s) ∅ l.
+
+Definition uncurry m : sms (T * U) := uncurry_list (FMap.to_list m).
+
+Lemma curryE P :
+  curry P =
+  curry_list (λ v, {[+ v +]}) (elements (pos P))
+    (curry_list (λ v, inv {[+ v +]}) (elements (neg P)) ∅).
+Proof. done. Qed.
+
+Lemma lookup_curry_add k k' s m :
+  curry_add k' s m !!! k =
+  if bool_decide (k = k') then m !!! k ⊎ s else m !!! k.
+Proof.
+rewrite /curry_add FMap.lookup_insert.
+by case: (bool_decide_reflect (k = k')) => [->|].
+Qed.
+
+Lemma count_curry_list (c : Z) f ps m k v :
+  (∀ u, count v (f u) = c * Z.b2z (bool_decide (v = u)))%Z →
+  count v (curry_list f ps m !!! k) =
+  (count v (m !!! k) + c * Z.of_nat (count_mem (k, v) ps))%Z.
+Proof.
+move=> fP; elim: ps => [|[k' u] ps IH] /=; first lia.
+rewrite lookup_curry_add.
+case: (bool_decide_reflect (k = k')) => [<-|nk].
+- rewrite count_disj_union IH fP.
+  case: (bool_decide_reflect (v = u)) => [<-|nv].
+  + rewrite bool_decide_eq_true_2 //=; lia.
+  + rewrite bool_decide_eq_false_2 /=; [by case|lia].
+- rewrite IH bool_decide_eq_false_2 /=; [by case|lia].
+Qed.
+
+Lemma count_curry P k v : count v (curry P !!! k) = count (k, v) P.
+Proof.
+have cp u : count v {[+ u +]} = (1 * Z.b2z (bool_decide (v = u)))%Z.
+  by rewrite count_singleton; lia.
+have cn u : count v (inv {[+ u +]}) = (-1 * Z.b2z (bool_decide (v = u)))%Z.
+  by rewrite count_inv count_singleton; lia.
+rewrite curryE (count_curry_list _ _ _ _ _ _ cp).
+rewrite (count_curry_list _ _ _ _ _ _ cn) FMap.lookup_empty count_empty.
+rewrite !MSet.count_mem_elements /count; lia.
+Qed.
+
+Lemma count_uncurry_list l k v :
+  StronglySorted lexico (FMap.keys l) →
+  count (k, v) (uncurry_list l) = count v (FMap.lookup_list ∅ k l).
+Proof.
+elim: l => [|[k' s] l IH] /=; first by rewrite !count_empty.
+move=> /StronglySorted_cons [lb sl].
+rewrite count_disj_union IH //.
+case: (bool_decide_reflect (k = k')) => [->|nk].
+- have inj : ∀ a b : U, (k', a) = (k', b) → a = b by move=> ?? [].
+  rewrite (count_map_inj (λ v, (k', v)) v s inj).
+  rewrite FMap.lookup_list_lexico // count_empty; lia.
+- rewrite not_elem_of_count /=; last lia.
+  by move=> /elem_of_map [u [[/nk]]].
+Qed.
+
+Lemma count_uncurry m k v : count (k, v) (uncurry m) = count v (m !!! k).
+Proof.
+rewrite /uncurry count_uncurry_list //.
+rewrite FMap.keys_fmap; exact: FMap.to_list_sorted.
+Qed.
+
+Lemma curryK P : uncurry (curry P) = P.
+Proof. apply: count_inj => -[k v]; by rewrite count_uncurry count_curry. Qed.
+
+Lemma uncurryK m : curry (uncurry m) = m.
+Proof.
+apply: FMap.lookup_inj => k; apply: count_inj => v.
+by rewrite count_curry count_uncurry.
+Qed.
+
+Lemma elem_of_curry P k v : v ∈ curry P !!! k ↔ (k, v) ∈ P.
+Proof. by rewrite !elem_of_count count_curry. Qed.
+
+Lemma elem_of_uncurry m k v : (k, v) ∈ uncurry m ↔ v ∈ m !!! k.
+Proof. by rewrite !elem_of_count count_uncurry. Qed.
+
+Lemma curry_singleton k v : curry {[+ (k, v) +]} = {[k := {[+ v +]}]}.
+Proof.
+apply: FMap.lookup_inj => k'; rewrite FMap.lookup_singleton.
+(* Both sides compute to the same count, so plain [rewrite] would also hit the
+   right-hand side. *)
+apply: count_inj => v'; rewrite {1}count_curry {1}count_singleton.
+case: (bool_decide_reflect (k' = k)) => [->|nk] /=.
+- rewrite count_singleton.
+  case: (bool_decide_reflect (v' = v)) => [->|nv].
+  + by rewrite bool_decide_eq_true_2.
+  + by rewrite bool_decide_eq_false_2 //; case.
+- by rewrite count_empty bool_decide_eq_false_2 //; case.
+Qed.
+
+End Curry.
+
+(* Tactics that reduce a goal to head normal form, such as ssreflect's [apply:],
+   would otherwise unfold [curry] through all its map updates. *)
+#[global] Opaque curry.
 
 End SMS.

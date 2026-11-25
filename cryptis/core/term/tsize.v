@@ -22,7 +22,8 @@ Definition tsize t := PreTerm.tsize (unfold_term t).
 
 Lemma tsize_gt0 t : 0 < tsize t.
 Proof.
-by rewrite /tsize; case: unfold_term => [o|o t'|o t1 t2|[] ps ns] /=; lia.
+rewrite /tsize; case: unfold_term => [o|o t'|o t1 t2|ps ns|l] /=; try lia.
+by case: l => [|[b [[|e [|??]] [|??]]] [|??]] /=; lia.
 Qed.
 
 Lemma tsize_eq t :
@@ -56,7 +57,7 @@ case Em: (PreTerm.is_mul (unfold_term t)); last first.
   rewrite PreTerm.factors_Nmul ?Em // SMS.elements_singleton /= unfold_termK /=.
   lia.
 have := wf_unfold_term t; rewrite /tsize.
-case: (unfold_term t) Em => // -[] // ps ns _ wf_pt.
+case: (unfold_term t) Em => // ps ns _ wf_pt.
 rewrite PreTerm.elements_factors //.
 move: wf_pt; rewrite PreTerm.wf_mulE.
 move=> /andb_True [/andb_True [/forallb_True/list.Forall_forall H _] _].
@@ -79,16 +80,14 @@ case Em: (PreTerm.is_gmul (unfold_term t)); last first.
   rewrite unfold_termK /=.
   lia.
 have := wf_unfold_term t; rewrite /tsize.
-case: (unfold_term t) Em => // -[] // ps ns _ wf_pt.
-rewrite PreTerm.elements_gfactors //.
-move: wf_pt; rewrite PreTerm.wf_gmulE.
-move=> /andb_True [/andb_True [/forallb_True/list.Forall_forall H _] _].
-have wfl p : p ∈ ps ++ ns → PreTerm.wf p by move=> /H /andb_True [].
-rewrite fmap_app sum_list_with_app !sum_list_with_fold //.
-- apply/list.Forall_forall => p p_ns; apply: wfl.
-  by rewrite elem_of_app; right.
-- apply/list.Forall_forall => p p_ps; apply: wfl.
-  by rewrite elem_of_app; left.
+case: (unfold_term t) Em => // l Em wf_pt.
+have elemsE := PreTerm.elements_gfactors _ wf_pt.
+have wfg := PreTerm.wf_wf_gfactors _ wf_pt.
+rewrite (PreTerm.tsize_gmul_dh l); last by rewrite Em.
+rewrite (sum_list_with_Permutation _ _ _ (fmap_Permutation _ _ _ elemsE)).
+rewrite sum_list_with_fold //.
+apply/list.Forall_forall => p; rewrite -elemsE SMS.elem_of_elements.
+exact: PreTerm.wf_gfactors_wf wfg.
 Qed.
 
 Lemma tsize_factors_le t t' : t ∈ factors t' → tsize t ≤ tsize t'.
@@ -160,7 +159,7 @@ rewrite /PreTerm.exp_aux (PreTerm.base_expN _ Nx1) (PreTerm.expo_expN _ Nx1).
 rewrite PreTerm.mul_unit_l PreTerm.mul1; last exact: wf_unfold_term.
 rewrite /PreTerm.mk_exp bool_decide_eq_false_2 //.
 move=> e; apply: N12; apply: (inj unfold_term).
-by rewrite unfold_TMul_make e.
+by rewrite unfold_TMul SMS.map_empty PreTerm.mul_empty e.
 Qed.
 
 (* The negative check the group/exponent split exists to make true: a *scalar*
@@ -352,16 +351,14 @@ Proof. exact: term_lt_rect. Qed.
 
 Lemma tsize_base_lt t : is_exp t → tsize (base t) < tsize t.
 Proof.
-rewrite is_exp_unfold => xt.
-rewrite /tsize unfold_base; move: xt.
-by case: (unfold_term t) => [o|o t'|[||] t1 t2|[] ps ns] //= _; lia.
+rewrite /tsize is_exp_unfold unfold_base.
+by case: (PreTerm.is_expP (unfold_term t)) => [b e ->|_ _ _] //= _; lia.
 Qed.
 
 Lemma tsize_expo_lt t : is_exp t → tsize (expo t) < tsize t.
 Proof.
 rewrite /tsize is_exp_unfold unfold_expo.
-case: unfold_term (wf_unfold_term t) => //=; try lia.
-case=> //=; try lia.
+by case: (PreTerm.is_expP (unfold_term t)) => [b e ->|_ _ _] //= _; lia.
 Qed.
 
 Lemma tsize_exps_lt t' t : t' ∈ exps t → tsize t' < tsize t.
