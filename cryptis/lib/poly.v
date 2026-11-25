@@ -227,8 +227,9 @@ Proof. rewrite coeff_add coeff_opp; lia. Qed.
 
 (** *** Ring structure *)
 
-(* [Add Ring] does not outlive its section, so clients declare the ring from
-   this theory in their own sections. *)
+(* [ring] finds a ring by its exact carrier, and [poly T] for a variable [T]
+   exists only where [T] is bound, so clients declare the ring in their own
+   sections. *)
 Lemma poly_ring_theory : ring_theory zero one add mul sub opp eq.
 Proof.
 split.

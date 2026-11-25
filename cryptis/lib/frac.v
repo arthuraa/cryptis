@@ -335,8 +335,9 @@ split.
 - exact: add_opp_r.
 Qed.
 
-(* [Add Field] does not outlive its section, so clients declare the field from
-   this theory in their own sections. *)
+(* [field] finds a field by its exact carrier, and [frac T] for a variable [T]
+   exists only where [T] is bound, so clients declare the field in their own
+   sections. *)
 Lemma frac_field_theory : field_theory zero one add mul sub opp div inv eq.
 Proof.
 split.
