@@ -27,9 +27,10 @@ Unset Printing Implicit Defensive.
     We state authentication as for [examples/hmqv]: each party can send to its
     peer resources that pertain to the newly established session, and the
     usage of the protocol fixes when the key of a session is released.  The
-    password may become public, and so may the server's file; the client's
-    long-term key is as secret as the password, and the ephemeral private keys
-    are deleted right away.  A party that could not rule out a forged
+    password may become public, and so may the server's file; before the file
+    leaks, the attacker may also learn the OPRF at the password under keys of
+    its choice (cf. [oracle_ok]).  The client's long-term key is as secret as
+    the password, and the ephemeral private keys are deleted right away.  A party that could not rule out a forged
     authenticator marks its session compromised; otherwise the key of the
     session is public exactly when released. *)
 
@@ -248,14 +249,97 @@ Proof. apply _. Qed.
 #[global] Instance stolen_timeless pw : Timeless (stolen pw).
 Proof. apply _. Qed.
 
-(** Whoever holds this token decides when the file is stolen. *)
-Definition file_secret pw : iProp := term_token pw (↑opN.@"stolen").
+(** * The OPRF oracle
+
+    The offline-guessing game lets the attacker evaluate the OPRF at the
+    password under keys of its choice, but not under the server's key [k_s],
+    which the file records on the password.  Whoever evaluated the OPRF at the
+    password can impersonate the server to the client, as if it had stolen the
+    file. *)
+
+Definition oprf_key pw (k_s : nonce) : iProp :=
+  term_meta pw (opN.@"key") (TNonce k_s).
+
+Definition oracle_used pw : iProp := term_meta pw (opN.@"oracle") ().
+
+#[global] Instance oracle_used_persistent pw : Persistent (oracle_used pw).
+Proof. apply _. Qed.
+
+#[global] Instance oracle_used_timeless pw : Timeless (oracle_used pw).
+Proof. apply _. Qed.
+
+(** The attacker knows [F_k(pw)]: the oracle evaluated it with a key other than
+    the server's. *)
+Definition oracle_ok pw k : iProp :=
+  oracle_used pw ∗ ∃ k_s : nonce, oprf_key pw k_s ∗ ⌜k ≠ TNonce k_s⌝.
+
+(** The client cannot tell the server from whoever stole its file or used the
+    oracle at its password. *)
+Definition impersonable pw : iProp := stolen pw ∨ oracle_used pw.
+
+#[global] Instance impersonable_persistent pw : Persistent (impersonable pw).
+Proof. apply _. Qed.
+
+#[global] Instance impersonable_timeless pw : Timeless (impersonable pw).
+Proof. apply _. Qed.
+
+(** Whoever holds this token decides when the file is stolen, and whether the
+    oracle may be used. *)
+Definition file_secret pw : iProp :=
+  term_token pw (↑opN.@"stolen" ∪ ↑opN.@"oracle").
 
 Lemma file_secret_stolen pw : file_secret pw -∗ stolen pw -∗ False.
-Proof. exact: term_meta_token. Qed.
+Proof. apply: term_meta_token. set_solver. Qed.
+
+Lemma file_secret_impersonable pw :
+  file_secret pw -∗ impersonable pw -∗ False.
+Proof.
+iIntros "tok [st|or]"; first by iApply (file_secret_stolen with "tok st").
+iApply (term_meta_token with "tok or"). set_solver.
+Qed.
 
 Lemma steal_file pw : file_secret pw ==∗ stolen pw.
-Proof. exact: term_meta_set. Qed.
+Proof. apply: term_meta_set. set_solver. Qed.
+
+(** Enabling the oracle keeps the right to steal the file. *)
+Lemma use_oracle pw :
+  file_secret pw ==∗ oracle_used pw ∗ term_token pw (↑opN.@"stolen").
+Proof.
+iIntros "tok".
+iMod (term_meta_set' (N := opN.@"oracle") () with "tok") as "[$ tok]";
+  first set_solver.
+iModIntro. iApply (term_token_drop with "tok"). solve_ndisj.
+Qed.
+
+(** The hash [H] leaks only with its input, except for the oracle's outputs. *)
+Definition H_pred (t : term) : iProp :=
+  ∃ p k, ⌜t = Spec.of_list [p; TExp (hash_result "H" p) k]⌝ ∗ oracle_ok p k.
+
+Lemma H_pred_single t : H_pred (Spec.of_list [t]) -∗ False.
+Proof. by iIntros "(%p & %k & %e & _)"; move/Spec.of_list_inj: e. Qed.
+
+(** The oracle never evaluates the OPRF under the server's key... *)
+Lemma H_pred_oprf_key pw (k_s : nonce) :
+  oprf_key pw k_s -∗
+  H_pred (Spec.of_list [pw; TExp (hash_result "H" pw) k_s]) -∗
+  False.
+Proof.
+iIntros "#key (%p & %k & %e & _ & %k_s' & #key' & %ne)".
+case/Spec.of_list_inj: e => ? ek; subst p.
+have {}ek : TNonce k_s = k.
+  by apply: (TExp_injr _ ek); apply: Ngmul_neq_unit.
+iPoseProof (term_meta_agree with "key key'") as "%e".
+subst k. case: ne. by case: e => ->.
+Qed.
+
+(** ... and whoever learns an OPRF output at the password through the oracle
+    used it. *)
+Lemma H_pred_oracle_used pw t :
+  H_pred (Spec.of_list [pw; t]) -∗ oracle_used pw.
+Proof.
+iIntros "(%p & %k & %e & #used & _)".
+by case/Spec.of_list_inj: e => <- _.
+Qed.
 
 Definition oprf_log pw (B : gset term) : iProp :=
   term_own pw (opN.@"log") (● B) ∗ [∗ set] b ∈ B, minted b.
@@ -325,7 +409,8 @@ Qed.
 
 (** * Compromise
 
-    Whoever stole the file can impersonate the server, but not the client. *)
+    Whoever stole the file, or evaluated the OPRF at the password through the
+    oracle, can impersonate the server, but not the client. *)
 
 (** When [rl] completed [si], it could not rule out a forged authenticator. *)
 Definition compromised (rl : role) si : iProp :=
@@ -343,7 +428,7 @@ Definition session pw ρ (rl : role) si : iProp :=
   minted (si_key si) ∗
   □ (▷ □ ρ si → public (si_key si)) ∗
   (compromised rl si ∗ public (si_key si) ∗
-     (public pw ∨ ⌜rl = Init⌝ ∗ stolen pw) ∨
+     (public pw ∨ ⌜rl = Init⌝ ∗ impersonable pw) ∨
    □ (¬ compromised rl si) ∗ □ (public (si_key si) → ▷ □ ρ si)).
 
 #[global] Instance session_persistent pw ρ rl si :
@@ -370,7 +455,7 @@ Qed.
 Lemma session_compromised pw ρ rl si :
   session pw ρ rl si -∗
   compromised rl si -∗
-  public (si_key si) ∗ (public pw ∨ ⌜rl = Init⌝ ∗ stolen pw).
+  public (si_key si) ∗ (public pw ∨ ⌜rl = Init⌝ ∗ impersonable pw).
 Proof.
 iIntros "(_ & _ & [(_ & #p & #pw)|(#nc & _)]) #c"; first by iSplit.
 by iDestruct ("nc" with "c") as "[]".
@@ -384,7 +469,7 @@ Lemma secret_session pw ρ rl si :
 Proof.
 iIntros "s_pw s_file (_ & _ & [(_ & _ & [#p_pw|[-> #st]])|(#nc & _)])".
 - by iDestruct (secret_not_public with "s_pw p_pw") as ">[]".
-- by iDestruct (file_secret_stolen with "s_file st") as "[]".
+- by iDestruct (file_secret_impersonable with "s_file st") as "[]".
 - by iIntros "!> !>".
 Qed.
 
@@ -467,7 +552,7 @@ Definition envelope_pred (sk : senc_key) (t : term) : iProp :=
       opaque_keys pw p_u p_s.
 
 Definition opaque_ctx : iProp :=
-  hash_pred (opN.@"H") (λ _ : term, False%I) ∗
+  hash_pred (opN.@"H") H_pred ∗
   hash_pred (opN.@"A_s") A_s_pred ∗
   hash_pred (opN.@"A_u") A_u_pred ∗
   senc_pred (opN.@"AuthEnc") envelope_pred.
@@ -484,7 +569,7 @@ Proof.
 iIntros "%sub h_token s_token".
 rewrite (hash_pred_token_difference (↑opN) E) //.
 iDestruct "h_token" as "[h_token $]".
-iMod (hash_pred_set (opN.@"H") (λ _ : term, False%I) with "h_token")
+iMod (hash_pred_set (opN.@"H") H_pred with "h_token")
   as "[? h_token]"; try solve_ndisj; iFrame.
 iMod (hash_pred_set (opN.@"A_s") A_s_pred with "h_token")
   as "[? h_token]"; try solve_ndisj; iFrame.
@@ -507,7 +592,7 @@ Qed.
 Lemma honest_session uid α (p_u p_s x_u x_s : nonce) φ ρ :
   let si := server_si uid α (TExp g x_u) (TExp g p_u) p_s x_s in
   opaque_pred φ ρ -∗
-  hash_pred (opN.@"H") (λ _ : term, False%I) -∗
+  hash_pred (opN.@"H") H_pred -∗
   public uid -∗
   public α -∗
   hmqv_key p_u -∗
@@ -527,7 +612,7 @@ iModIntro; iSplit.
   + rewrite public_of_list /=.
     iDestruct "p_t" as "[p_K _]".
     iDestruct (public_THashE with "HpredH p_K") as "[p_t | [_ contra]]";
-      last by iNext; iDestruct "contra" as "[]".
+      last by iNext; iDestruct (H_pred_single with "contra") as "[]".
     rewrite public_of_list /=.
     iDestruct "p_t" as "[p_K' _]".
     iAssert (public p_s ∗ public x_s ∨ public p_u ∗ public x_u)%I

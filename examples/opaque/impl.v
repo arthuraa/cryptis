@@ -75,9 +75,11 @@ Module Server.
 
 Section Server.
 
-(* OPRF and hmqv_ke defined in terms of other variables: defined elsewhere *)
-(* enforce that other side is consistently the same person *)
-Definition session : val := λ: "db" "c",
+(* The server's result is fixed once it has answered, and the last message only
+   confirms it, so a caller may use the result before [finish].  [accept]
+   returns the result along with what [finish] needs to check the client's
+   authenticator. *)
+Definition accept : val := λ: "db" "c",
     bind: "m1" := list_of_term (recv "c") in
     list_match: [ "uid"; "α"; "X_u" ] := "m1" in
     (* TODO: check α ∈ G *)
@@ -100,10 +102,21 @@ Definition session : val := λ: "db" "c",
     let: "A_s" := prf "A_s" [ "K"; "ssid'" ] in
     let: "m2" := term_of_list [ "β"; "X_s"; "envelope"; "A_s" ] in
     send "c" "m2" ;;
+    SOME (term_of_list ["uid"; "SK"], ("K", "ssid'")).
+
+Definition result : val := λ: "st", Fst "st".
+
+Definition finish : val := λ: "c" "st",
+    let: "K" := Fst (Snd "st") in
+    let: "ssid'" := Snd (Snd "st") in
     let: "m3" := recv "c" in
     let: "A_u" := "m3" in
     guard: eq_term "A_u" (prf "A_u" [ "K"; "ssid'" ]) in
-    SOME (term_of_list ["uid"; "SK"]).
+    SOME (result "st").
+
+Definition session : val := λ: "db" "c",
+    bind: "st" := accept "db" "c" in
+    finish "c" "st".
 
 Definition make_file : val := λ: "pw",
     let: "k_s" := mk_nonce #() in
