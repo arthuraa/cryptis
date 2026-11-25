@@ -2,6 +2,7 @@
 
 cryptis/lib/mathcomp_compat.v
 cryptis/lib/list_sort.v
+cryptis/lib/fmap.v
 cryptis/lib/mset.v
 cryptis/lib/sms.v
 cryptis/lib/poly.v
@@ -44,6 +45,7 @@ cryptis/cryptis.v
 cryptis/primitives/notations.v
 cryptis/primitives/mset.v
 cryptis/primitives/sms.v
+cryptis/primitives/fmap.v
 cryptis/primitives/poly.v
 cryptis/primitives/pre_term.v
 cryptis/primitives/comp.v
