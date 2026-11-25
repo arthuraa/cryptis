@@ -8,10 +8,13 @@
 
     [count x X] is the multiplicity of [x] in [X], and [of_list] sorts a list
     into a multiset.  [mset_solver] proves equations between multisets built
-    from [∅], [{[+ x +]}], [⊎], [∖] and [of_list] by comparing counts. *)
+    from [∅], [{[+ x +]}], [⊎], [∖] and [of_list] by comparing counts.
+    Multisets are themselves ordered by their sorted lists, so they can be
+    elements of multisets and signed multisets, as the monomials of
+    [Poly.poly] are. *)
 
 From mathcomp Require Import ssreflect.
-From stdpp Require Import sorting list numbers proof_irrel.
+From stdpp Require Import sorting list numbers proof_irrel lexico.
 From Stdlib Require Import Lia.
 From cryptis.lib Require Import list_sort.
 
@@ -105,6 +108,26 @@ Qed.
   | left e => left (car_inj X Y e)
   | right n => right (λ e, n (f_equal car e))
   end.
+
+#[global] Instance lexico_instance : Lexico mset :=
+  λ X Y, lexico (car X) (car Y).
+
+#[global] Instance lexico_strict : StrictOrder (@lexico mset _).
+Proof.
+split; first by move=> X; exact: (irreflexivity lexico (car X)).
+move=> X Y W; exact: (@transitivity _ (@lexico (list T) _) _).
+Qed.
+
+#[global] Instance lexico_trichotomyT : TrichotomyT (@lexico mset _).
+Proof.
+refine (λ X Y,
+  match trichotomyT lexico (car X) (car Y) with
+  | inleft (left p) => inleft (left p)
+  | inleft (right e) => inleft (right _)
+  | inright p => inright p
+  end).
+abstract (exact: car_inj e).
+Defined.
 
 Lemma elements_sorted X : StronglySorted le (elements X).
 Proof. exact: bool_decide_unpack _ (wf_car X). Qed.
