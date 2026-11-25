@@ -31,8 +31,8 @@ In the `examples` directory you will find our case studies:
 - `opaque`: OPAQUE-style password-authenticated key exchange with HMQV; its
   games are in `opaque/games`: the counterparts of the `hmqv` games (forward
   secrecy, key-compromise impersonation, injective agreement, key
-  independence), `stolen_file.v` (password leak, theft of the server's
-  file, OPRF precomputation), and `offline_guessing.v` (an OPRF oracle on a
+  independence), `oprf_evaluation.v` (the attacker cannot evaluate the
+  server's OPRF on its own), and `offline_guessing.v` (an OPRF oracle on a
   dictionary containing the password, closed when the file leaks; the
   envelope key stays unguessable).
 - `hmqv`: standalone HMQV authenticated key exchange (three-message variant
