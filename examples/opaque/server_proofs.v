@@ -131,7 +131,29 @@ rewrite public_of_list /=.
 by do !iSplit => //.
 Qed.
 
-Lemma wp_server_session (db c : val) pw_of (alist : gmap term val) φ ρ ψ :
+(** What the server keeps between its two messages. *)
+Definition server_state_val si : val :=
+  (si_result si, (si_K si, si_ssid si))%V.
+
+Definition server_state pw_of si : iProp :=
+  ∃ uid α X_u (p_u p_s x_s : nonce),
+    ⌜si = server_si uid α X_u (TExp g p_u) p_s x_s⌝ ∗
+    public uid ∗ public α ∗
+    opaque_keys (pw_of uid) p_u p_s ∗ ephemeral x_s ∗
+    minted (si_key si) ∗
+    term_token (TExp g x_s) (↑opN.@"ready") ∗
+    term_token (TExp g x_s) (↑opN.@"compromised").
+
+Lemma wp_server_result si :
+  {{{ True }}}
+    Server.result (server_state_val si)
+  {{{ RET (repr (si_result si)); True }}}.
+Proof. iIntros "%Φ _ post". wp_lam. wp_pures. by iApply "post". Qed.
+
+(** The server answers whichever user the first message claims.  The hook runs
+    only if the server answers, so a caller that lends it [R] gets [R] back
+    otherwise. *)
+Lemma wp_server_accept (db c : val) pw_of (alist : gmap term val) φ ρ ψ R :
 {{{ cryptis_ctx
     ∗ opaque_ctx
     ∗ opaque_pred φ ρ
@@ -139,21 +161,20 @@ Lemma wp_server_session (db c : val) pw_of (alist : gmap term val) φ ρ ψ :
     ∗ AList.is_alist db alist
     ∗ opaque_logs pw_of alist
     ∗ opaque_db pw_of alist
-    ∗ (∀ si, term_token (si_sshare si) (⊤ ∖ ↑opN) ={⊤}=∗ φ si Init ∗ ψ si)
+    ∗ (R ∧ ∀ si, term_token (si_sshare si) (⊤ ∖ ↑opN) ={⊤}=∗ φ si Init ∗ ψ si)
   }}}
-    Server.session db c
-  {{{ r, RET (repr r);
+    Server.accept db c
+  {{{ v, RET v;
       AList.is_alist db alist ∗ opaque_logs pw_of alist ∗
-      (⌜r = None⌝ ∨ ∃ si,
-         ⌜r = Some (si_result si)⌝ ∗
+      (⌜v = NONEV⌝ ∗ R ∨ ∃ si,
+         ⌜v = SOMEV (server_state_val si)⌝ ∗
          ⌜server_session si⌝ ∗
          opaque_session_for (si_uid si) si ∗
          (∃ (k_s p_s : nonce) envelope,
             ⌜alist !! si_uid si =
              Some (Spec.of_list [TNonce k_s; TNonce p_s;
                                  si_skey si; si_ckey si; envelope] : val)⌝) ∗
-         session (pw_of (si_uid si)) ρ Resp si ∗ ψ si ∗
-         (compromised Resp si ∨ φ si Resp)) }}}.
+         server_state pw_of si ∗ ψ si) }}}.
 Proof.
 iIntros "%ϕ".
 rewrite /opaque_db big_sepM_forall.
@@ -162,15 +183,19 @@ iIntros "(#Cryptis & (#HpredH & #HpredA_s & #HpredA_u & _)
 wp_lam; wp_pures.
 wp_apply (wp_recv with "Hc"); iIntros "%m1 #Hpubm1".
 wp_list_of_term m1; wp_pures; last first.
-  by iApply ("Hhl" $! None); iModIntro; iFrame "Hdb Hlogs"; iLeft.
+  by iApply "Hhl"; iModIntro; iFrame "Hdb Hlogs"; iLeft;
+     iDestruct "hook" as "[$ _]".
 rewrite !subst_list_match /=.
 wp_list_match => [uid α X_u -> | _]; last first.
-  by wp_pures; iApply ("Hhl" $! None); iModIntro; iFrame "Hdb Hlogs"; iLeft.
+  by wp_pures; iApply "Hhl"; iModIntro; iFrame "Hdb Hlogs"; iLeft;
+     iDestruct "hook" as "[$ _]".
 wp_eq_term X_u_one; wp_pures.
-  by iApply ("Hhl" $! None); iModIntro; iFrame "Hdb Hlogs"; iLeft.
+  by iApply "Hhl"; iModIntro; iFrame "Hdb Hlogs"; iLeft;
+     iDestruct "hook" as "[$ _]".
 wp_bind (AList.find _ _); iApply (AList.wp_find with "Hdb"); iIntros "!> Hdb".
 case db_uid: (alist !! uid) => [file|]; wp_pures; last first.
-  by iApply ("Hhl" $! None); iModIntro; iFrame "Hdb Hlogs"; iLeft.
+  by iApply "Hhl"; iModIntro; iFrame "Hdb Hlogs"; iLeft;
+     iDestruct "hook" as "[$ _]".
 iDestruct ("Hmapcontents" $! uid file with "[//]") as
     "[_ (%k_s & %p_s & %p_u & %envelope & %e & #Hmk_s & #Hprivk_s & #Hexpk_s
          & #Hpenvelope & #Hkeyp_u & #Hkeyp_s & #Hprivp_u & #Hprivp_s)]".
@@ -235,6 +260,7 @@ iDestruct (term_token_difference (TExp g x_s) (↑opN.@"compromised")
              with "tok_Xs") as "[tok_comp tok_Xs]"; first solve_ndisj.
 iDestruct (term_token_drop (⊤ ∖ ↑opN) with "tok_Xs") as "tok_Xs";
   first solve_ndisj.
+iDestruct "hook" as "[_ hook]".
 iMod ("hook" $! si with "tok_Xs") as "[gift ψ]".
 iMod (opaque_ready_alloc si Init with "N_φ gift") as "#ready".
 (* The OPRF key consents only to the bases the server logs. *)
@@ -283,10 +309,41 @@ wp_apply wp_send => //.
     iExists uid, α, X_u, p_u, p_s, x_s; rewrite /si_K /si_ssid /=.
     by do !iSplit => //.
 wp_pures.
+wp_list; wp_term_of_list. wp_pures.
+iApply ("Hhl" $! (SOMEV (server_state_val si))). iModIntro.
+iFrame "Hdb Hlogs". iRight. iExists si. iFrame "ψ".
+have -> : si_uid si = uid by [].
+iSplit; first done.
+iSplit; first by iPureIntro; exists uid, α, X_u, p_u, p_s, x_s.
+iSplit; first by do !iSplit => //.
+iSplit.
+{ iExists k_s, p_s, envelope; iPureIntro. by rewrite /si /server_si /= db_uid. }
+iExists uid, α, X_u, p_u, p_s, x_s. iFrame "tok_ready tok_comp".
+by do !iSplit => //.
+Qed.
+
+Lemma wp_server_finish c pw_of si φ ρ :
+  {{{ cryptis_ctx ∗ opaque_ctx ∗ opaque_pred φ ρ ∗ channel c ∗
+      server_state pw_of si }}}
+    Server.finish c (server_state_val si)
+  {{{ r, RET (repr r);
+      ⌜r = None⌝ ∨
+      ⌜r = Some (si_result si)⌝ ∗
+      session (pw_of (si_uid si)) ρ Resp si ∗
+      (compromised Resp si ∨ φ si Resp) }}}.
+Proof.
+iIntros "%ϕ (#Cryptis & (#HpredH & #HpredA_s & #HpredA_u & _) & #N_φ & #Hc &
+             (%uid & %α & %X_u & %p_u & %p_s & %x_s & -> & #p_uid & #p_α &
+              #keys & #eph_xs & #mintedSK & tok_ready & tok_comp)) Hhl".
+iPoseProof "keys" as "(#Hkeyp_u & #Hkeyp_s & #Hprivp_u & _)".
+iPoseProof "eph_xs" as "[#key_xs _]".
+set P_s := TExp g p_s.
+set si := server_si uid α X_u (TExp g p_u) p_s x_s.
+wp_lam. wp_pures.
 wp_apply (wp_recv with "Hc"); iIntros "%m3 #Hm3pub".
 wp_list; wp_apply wp_prf.
 wp_eq_term Heq; last first.
-  by wp_pures; iApply ("Hhl" $! None); iModIntro; iFrame "Hdb Hlogs"; iLeft.
+  by wp_pures; iApply ("Hhl" $! None); iModIntro; iLeft.
 iAssert (public (hash_result "A_u" (Spec.of_list [si_K si; si_ssid si])))
   as "#pubA_u"; first by rewrite -Heq.
 (* A valid [A_u] was either forged -- then the key is public, and with it the
@@ -344,18 +401,48 @@ iAssert (|={⊤}=> session (pw_of uid) ρ Resp si ∗
     + iIntros "!> #c".
       by iDestruct (term_meta_agree with "c ncomp") as %?.
     + iIntros "!> #p". by iApply "ok". }
-wp_list; wp_term_of_list; wp_pures.
+wp_lam. wp_pures.
 iModIntro.
 iApply ("Hhl" $! (Some (si_result si))).
-iFrame "Hdb Hlogs".
-iRight; iExists si.
-have -> : si_uid si = uid by [].
-iFrame "ψ res sess".
-iSplit; first by [].
-iSplit; first by iPureIntro; exists uid, α, X_u, p_u, p_s, x_s.
-iSplit; first by do !iSplit => //.
-iExists k_s, p_s, envelope; iPureIntro.
-by rewrite /si /server_si /= db_uid.
+iRight. by iFrame "res sess".
+Qed.
+
+Lemma wp_server_session (db c : val) pw_of (alist : gmap term val) φ ρ ψ :
+{{{ cryptis_ctx
+    ∗ opaque_ctx
+    ∗ opaque_pred φ ρ
+    ∗ channel c
+    ∗ AList.is_alist db alist
+    ∗ opaque_logs pw_of alist
+    ∗ opaque_db pw_of alist
+    ∗ (∀ si, term_token (si_sshare si) (⊤ ∖ ↑opN) ={⊤}=∗ φ si Init ∗ ψ si)
+  }}}
+    Server.session db c
+  {{{ r, RET (repr r);
+      AList.is_alist db alist ∗ opaque_logs pw_of alist ∗
+      (⌜r = None⌝ ∨ ∃ si,
+         ⌜r = Some (si_result si)⌝ ∗
+         ⌜server_session si⌝ ∗
+         opaque_session_for (si_uid si) si ∗
+         (∃ (k_s p_s : nonce) envelope,
+            ⌜alist !! si_uid si =
+             Some (Spec.of_list [TNonce k_s; TNonce p_s;
+                                 si_skey si; si_ckey si; envelope] : val)⌝) ∗
+         session (pw_of (si_uid si)) ρ Resp si ∗ ψ si ∗
+         (compromised Resp si ∨ φ si Resp)) }}}.
+Proof.
+iIntros "%Φ (#ctx & #octx & #N_φ & #chan & db & logs & #odb & hook) post".
+wp_lam. wp_pures.
+wp_apply (wp_server_accept db c pw_of alist φ ρ ψ True%I
+            with "[$db $logs hook]").
+{ iFrame "#". by iSplit. }
+iIntros "%v (db & logs & [[-> _]|(%si & -> & %ss & #sf & #lk & st & ψ)])";
+  wp_pures.
+  by iApply ("post" $! None); iFrame; iLeft.
+wp_apply (wp_server_finish with "[$st]"); first by iFrame "#".
+iIntros "%r [->|(-> & #sess & res)]".
+- iApply ("post" $! None). iFrame. by iLeft.
+- iApply "post". iFrame. iRight. iExists si. by iFrame "∗ #".
 Qed.
 
 

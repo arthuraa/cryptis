@@ -196,63 +196,6 @@ iIntros "%r [->|(-> & #sess & gift)]".
   iSplit => //=. rewrite union_empty_r_L. by iFrame.
 Qed.
 
-(** Bob's records pair a key with whether Alice confirmed it. *)
-Definition rec_key : val := λ: "r", Fst "r".
-Definition rec_confirmed : val := λ: "r", Snd "r".
-
-Definition answered : val := λ: "rs", map_list rec_key "rs".
-
-Definition confirmed : val := λ: "rs",
-  map_list rec_key (filter_list rec_confirmed "rs").
-
-Lemma wp_answered rs :
-  {{{ True }}} answered (repr rs) {{{ RET (repr (map fst rs)); True }}}.
-Proof.
-iIntros "%Φ _ post". wp_lam. iApply twp_wp.
-iApply (twp_map_list fst with "[//]"); last by iIntros "_"; iApply "post".
-apply/Forall_forall => - [k b] _. iIntros "%Ψ _ post". wp_lam. wp_pures.
-by iApply "post".
-Qed.
-
-Lemma wp_confirmed rs :
-  {{{ True }}}
-    confirmed (repr rs)
-  {{{ RET (repr (map fst (List.filter snd rs))); True }}}.
-Proof.
-iIntros "%Φ _ post". wp_lam.
-wp_apply (wp_filter_list snd) => //.
-{ move=> - [k b]. iIntros "%Ψ _ post". wp_lam. wp_pures. by iApply "post". }
-iIntros "_". iApply twp_wp.
-iApply (twp_map_list fst with "[//]"); last by iIntros "_"; iApply "post".
-apply/Forall_forall => - [k b] _. iIntros "%Ψ _ post". wp_lam. wp_pures.
-by iApply "post".
-Qed.
-
-Lemma NoDup_confirmed rs :
-  NoDup (map fst rs) → NoDup (map fst (List.filter snd rs)).
-Proof.
-elim: rs => [|[k b] rs IH] //= /NoDup_cons [k_rs /IH nd].
-case: b => //=. apply: NoDup_cons_2 => // k_conf. apply: k_rs.
-move: k_conf; rewrite !list_elem_of_In !in_map_iff.
-case=> - [k' b'] [/= <- /filter_In [in_rs _]]. by exists (k', b').
-Qed.
-
-Lemma owned_answered rs :
-  ([∗ list] r ∈ rs, owned Resp r.1) -∗ [∗ list] k ∈ map fst rs, owned Resp k.
-Proof.
-elim: rs => [|r rs IH] /=; first by iIntros.
-iIntros "[$ ?]". by iApply IH.
-Qed.
-
-Lemma committed_confirmed γw rs :
-  ([∗ list] r ∈ rs, if (r : term * bool).2 then committed γw r.1 else True) -∗
-  [∗ list] k ∈ map fst (List.filter snd rs), committed γw k.
-Proof.
-elim: rs => [|[k [] ] rs IH] /=; first by iIntros.
-- iIntros "[$ ?]". by iApply IH.
-- iIntros "[_ ?]". by iApply IH.
-Qed.
-
 Definition game : val := λ: "c",
   let: "k_a" := mk_lt_key #() in
   let: "k_b" := mk_lt_key #() in
@@ -317,9 +260,9 @@ wp_apply (wp_par
   rewrite !big_sepL_sep.
   iDestruct "owns_a" as "[owns_a ws_a]". iDestruct "owns_b" as "[owns_b ws_b]".
   iDestruct (owned_NoDup with "owns_a") as %nd_a.
-  iDestruct (owned_answered with "owns_b") as "owns_b".
+  iDestruct (big_sepL_answered with "owns_b") as "owns_b".
   iDestruct (owned_NoDup with "owns_b") as %nd_b.
-  iDestruct (committed_confirmed with "ws_b") as "ws_b".
+  iDestruct (big_sepL_confirmed with "ws_b") as "ws_b".
   iMod (commits_full with "led_a frag_a ws_b") as %sub_a.
   iMod (commits_full with "led_b frag_b ws_a") as %sub_b.
   wp_pures. wp_apply wp_answered => //. iIntros "_".

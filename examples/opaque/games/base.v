@@ -18,10 +18,9 @@ Unset Printing Implicit Defensive.
     secrets are the password, for the client, and the password file, for the
     server.  This file sets up the passwords and the server's database.
 
-    [Server.session] owns the database and the OPRF logs for the whole session,
-    so the games that run server sessions in parallel serialize them behind a
-    lock ([locked_server]).  Client sessions still run concurrently with each
-    other and with the server. *)
+    [Server.accept] owns the database and the OPRF logs, so the games that run
+    server sessions in parallel take a lock around it ([locked_accept]).  The
+    rest of a session, [Server.finish], runs concurrently with the others. *)
 
 #[local] Existing Instance ticket_lock.
 
@@ -34,11 +33,15 @@ Definition register : val := λ: "db" "uid" "pw",
 
 Definition new_server_lock : val := λ: <>, newlock #().
 
-Definition locked_server : val := λ: "lk" "db" "c",
+Definition locked_accept : val := λ: "lk" "db" "c",
   acquire "lk";;
-  let: "r" := Server.session "db" "c" in
+  let: "r" := Server.accept "db" "c" in
   release "lk";;
   "r".
+
+Definition locked_server : val := λ: "lk" "db" "c",
+  bind: "st" := locked_accept "lk" "db" "c" in
+  Server.finish "c" "st".
 
 Section Base.
 
@@ -118,6 +121,34 @@ wp_apply (newlock_spec with "res"). iIntros "%lk %γ #lock".
 iApply "post". by iExists γ.
 Qed.
 
+(** [wp_server_accept], with the database behind the lock. *)
+Lemma wp_locked_accept lk db c pw_of alist φ ρ ψ R :
+  {{{ cryptis_ctx ∗ opaque_ctx ∗ opaque_pred φ ρ ∗ channel c ∗
+      server_lock lk db pw_of alist ∗ opaque_db pw_of alist ∗
+      (R ∧ ∀ si, term_token (si_sshare si) (⊤ ∖ ↑opN) ={⊤}=∗
+                 φ si Init ∗ ψ si) }}}
+    locked_accept lk db c
+  {{{ v, RET v;
+      ⌜v = NONEV⌝ ∗ R ∨ ∃ si,
+        ⌜v = SOMEV (server_state_val si)⌝ ∗
+        ⌜server_session si⌝ ∗
+        opaque_session_for (si_uid si) si ∗
+        server_state pw_of si ∗ ψ si }}}.
+Proof.
+iIntros "%Φ (#ctx & #octx & #N_φ & #chan & (%γ & #lock) & #odb & hook) post".
+wp_lam. wp_pures.
+wp_apply (acquire_spec with "lock"). iIntros "(locked & db & logs)".
+wp_pures.
+wp_apply (wp_server_accept db c pw_of alist φ ρ ψ R
+            with "[$db $logs $hook]"); first by iFrame "#".
+iIntros "%v (db & logs & res)". wp_pures.
+wp_apply (release_spec with "[$lock $locked $db $logs]"). iIntros "_".
+wp_pures. iApply "post". iModIntro.
+iDestruct "res" as "[res|(%si & -> & %ss & #sess_for & _ & res)]";
+  first by iLeft.
+iRight. iExists si. by iFrame "sess_for res".
+Qed.
+
 (** [wp_server_session], with the database behind the lock. *)
 Lemma wp_locked_server lk db c pw_of alist φ ρ ψ :
   {{{ cryptis_ctx ∗ opaque_ctx ∗ opaque_pred φ ρ ∗ channel c ∗
@@ -132,18 +163,16 @@ Lemma wp_locked_server lk db c pw_of alist φ ρ ψ :
         session (pw_of (si_uid si)) ρ Resp si ∗ ψ si ∗
         (compromised Resp si ∨ φ si Resp) }}}.
 Proof.
-iIntros "%Φ (#ctx & #octx & #N_φ & #chan & (%γ & #lock) & #odb & hook) post".
+iIntros "%Φ (#ctx & #octx & #N_φ & #chan & #lock & #odb & hook) post".
 wp_lam. wp_pures.
-wp_apply (acquire_spec with "lock"). iIntros "(locked & db & logs)".
-wp_pures.
-wp_apply (wp_server_session db c pw_of alist φ ρ ψ
-            with "[$db $logs $hook]"); first by iFrame "#".
-iIntros "%r (db & logs & res)". wp_pures.
-wp_apply (release_spec with "[$lock $locked $db $logs]"). iIntros "_".
-wp_pures. iApply "post". iModIntro.
-iDestruct "res" as "[->|(%si & -> & %ss & #sess_for & _ & res)]";
-  first by iLeft.
-iRight. iExists si. by iFrame "sess_for res".
+wp_apply (wp_locked_accept lk db c pw_of alist φ ρ ψ True%I with "[hook]").
+{ iFrame "#". by iSplit. }
+iIntros "%v [[-> _]|(%si & -> & %ss & #sf & st & ψ)]"; wp_pures.
+  by iApply ("post" $! None); iLeft.
+wp_apply (wp_server_finish with "[$st]"); first by iFrame "#".
+iIntros "%r [->|(-> & #sess & res)]".
+- iApply ("post" $! None). by iLeft.
+- iApply "post". iRight. iExists si. by iFrame "∗ #".
 Qed.
 
 (** The key of a session is public if its result is. *)

@@ -22,7 +22,9 @@ Unset Printing Implicit Defensive.
     - [sessions c f], which runs [f] in parallel as many times as the attacker
       wants and collects the results; and
 
-    - list checks on terms ([all_in], [no_dups]), and [excl_NoDup], which
+    - list checks on terms ([all_in], [no_dups]), the projections of a
+      responder's records of which sessions were confirmed ([answered],
+      [confirmed]), and [excl_NoDup], which
       discharges [no_dups] for keys owned through exclusive tokens.
 
 *)
@@ -43,7 +45,7 @@ Section AgreementLib.
 Context `{!cryptisGS Σ, !heapGS Σ, !spawnG Σ, !commitG Σ}.
 Abbreviation iProp := (iProp Σ).
 
-Implicit Types (k : term) (ks : list term) (q : Qp).
+Implicit Types (k : term) (ks : list term) (rs : list (term * bool)) (q : Qp).
 
 (** Each party commits to the keys of its sessions in a ledger.  The witnesses
     [committed γw k] are persistent, and the fragments [commits γ q X] are split
@@ -229,6 +231,64 @@ elim: ks => [|k ks IH] nd; iIntros "%Φ _ post".
   wp_apply (wp_mem_list (A := term) teq k ks); [exact: wp_teq|done|].
   iIntros "_". rewrite bool_decide_eq_false_2 //. wp_pures.
   by wp_apply IH.
+Qed.
+
+(** A responder's records pair a key with whether the initiator confirmed
+    it. *)
+Definition rec_key : val := λ: "r", Fst "r".
+Definition rec_confirmed : val := λ: "r", Snd "r".
+
+Definition answered : val := λ: "rs", map_list rec_key "rs".
+
+Definition confirmed : val := λ: "rs",
+  map_list rec_key (filter_list rec_confirmed "rs").
+
+Lemma wp_answered rs :
+  {{{ True }}} answered (repr rs) {{{ RET (repr (map fst rs)); True }}}.
+Proof.
+iIntros "%Φ _ post". wp_lam. iApply twp_wp.
+iApply (twp_map_list fst with "[//]"); last by iIntros "_"; iApply "post".
+apply/Forall_forall => - [k b] _. iIntros "%Ψ _ post". wp_lam. wp_pures.
+by iApply "post".
+Qed.
+
+Lemma wp_confirmed rs :
+  {{{ True }}}
+    confirmed (repr rs)
+  {{{ RET (repr (map fst (List.filter snd rs))); True }}}.
+Proof.
+iIntros "%Φ _ post". wp_lam.
+wp_apply (wp_filter_list snd) => //.
+{ move=> - [k b]. iIntros "%Ψ _ post". wp_lam. wp_pures. by iApply "post". }
+iIntros "_". iApply twp_wp.
+iApply (twp_map_list fst with "[//]"); last by iIntros "_"; iApply "post".
+apply/Forall_forall => - [k b] _. iIntros "%Ψ _ post". wp_lam. wp_pures.
+by iApply "post".
+Qed.
+
+Lemma NoDup_confirmed rs :
+  NoDup (map fst rs) → NoDup (map fst (List.filter snd rs)).
+Proof.
+elim: rs => [|[k b] rs IH] //= /NoDup_cons [k_rs /IH nd].
+case: b => //=. apply: NoDup_cons_2 => // k_conf. apply: k_rs.
+move: k_conf; rewrite !list_elem_of_In !in_map_iff.
+case=> - [k' b'] [/= <- /filter_In [in_rs _]]. by exists (k', b').
+Qed.
+
+Lemma big_sepL_answered (P : term → iProp) (rs : list (term * bool)) :
+  ([∗ list] r ∈ rs, P r.1) -∗ [∗ list] k ∈ map fst rs, P k.
+Proof.
+elim: rs => [|r rs IH] /=; first by iIntros.
+iIntros "[$ ?]". by iApply IH.
+Qed.
+
+Lemma big_sepL_confirmed (P : term → iProp) (rs : list (term * bool)) :
+  ([∗ list] r ∈ rs, if (r : term * bool).2 then P r.1 else True) -∗
+  [∗ list] k ∈ map fst (List.filter snd rs), P k.
+Proof.
+elim: rs => [|[k [] ] rs IH] /=; first by iIntros.
+- iIntros "[$ ?]". by iApply IH.
+- iIntros "[_ ?]". by iApply IH.
 Qed.
 
 End AgreementLib.
