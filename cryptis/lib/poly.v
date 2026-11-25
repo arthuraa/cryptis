@@ -10,9 +10,11 @@
     [add] and [opp] are the group operations of the signed multiset, and [mul]
     multiplies every monomial of one polynomial by every monomial of the other
     by adding up their variables.  Polynomials form a commutative ring with
-    [zero] and [one].  [mono m] is the monomial [m] with coefficient [1], and
-    [poly_ind] builds a polynomial by adding or subtracting one monomial at a
-    time.
+    [zero] and [one] ([poly_ring_theory]), and [p + q], [p - q], [p * q] and
+    [- p] denote the ring operations in [poly_scope], delimited by [%P].
+    [mono m] is the monomial [m] with coefficient [1], [const z] is the
+    constant [z], and [poly_ind] builds a polynomial by adding or subtracting
+    one monomial at a time.
 
     [gcd p q] computes a greatest common divisor one variable at a time, and
     [div] computes exact quotients.  [cancel p q] divides [p] and [q] by
@@ -24,7 +26,7 @@
 
 From mathcomp Require Import ssreflect.
 From stdpp Require Import list numbers.
-From Stdlib Require Import ZArith Lia.
+From Stdlib Require Import ZArith Lia Ring.
 From cryptis.lib Require Import mset sms.
 
 Module Poly.
@@ -83,6 +85,18 @@ Proof. exact: SMS.count_disj_union. Qed.
 Lemma coeff_opp m p : coeff m (opp p) = (- coeff m p)%Z.
 Proof. exact: SMS.count_inv. Qed.
 
+Lemma coeff_mono_eq m n : coeff m (mono n) ≠ 0%Z ↔ m = n.
+Proof. rewrite coeff_mono; case_bool_decide; naive_solver. Qed.
+
+Lemma coeff_neq0_elem m p : coeff m p ≠ 0%Z ↔ m ∈ car p.
+Proof. by rewrite SMS.elem_of_count. Qed.
+
+Lemma one_neq0 : one ≠ zero.
+Proof.
+move=> /(f_equal (coeff ∅)).
+by rewrite coeff_one coeff_zero bool_decide_eq_true_2.
+Qed.
+
 (** *** Addition *)
 
 #[global] Instance add_comm : Comm (=@{poly}) add.
@@ -104,6 +118,9 @@ Qed.
 
 Lemma opp_opp p : opp (opp p) = p.
 Proof. apply: coeff_inj => m; rewrite !coeff_opp; lia. Qed.
+
+Lemma opp_zero : opp zero = zero.
+Proof. by apply: coeff_inj => m; rewrite coeff_opp coeff_zero. Qed.
 
 (** *** Multiplication *)
 
@@ -178,6 +195,15 @@ elim/(SMS.sms_ind (T := MSet.mset T)): s => [|m s IH|m s IH].
 - exact: Pneg m (mk s) IH.
 Qed.
 
+Lemma poly_ind_add (P : poly → Prop) :
+  P zero → (∀ m, P (mono m)) → (∀ p q, P p → P q → P (add p q)) →
+  (∀ p, P p → P (opp p)) → ∀ p, P p.
+Proof.
+move=> P0 Pm Padd Popp; elim/poly_ind => [//|m p IH|m p IH].
+- exact: Padd (Pm m) IH.
+- exact: Padd (Popp _ (Pm m)) IH.
+Qed.
+
 (** *** Constants and subtraction *)
 
 Definition const (n : Z) : poly :=
@@ -198,6 +224,59 @@ Qed.
 
 Lemma coeff_sub m p q : coeff m (sub p q) = (coeff m p - coeff m q)%Z.
 Proof. rewrite coeff_add coeff_opp; lia. Qed.
+
+(** *** Ring structure *)
+
+(* [Add Ring] does not outlive its section, so clients declare the ring from
+   this theory in their own sections. *)
+Lemma poly_ring_theory : ring_theory zero one add mul sub opp eq.
+Proof.
+split.
+- exact: (left_id zero add).
+- exact: (comm add).
+- move=> a b c; exact: (assoc add).
+- exact: (left_id one mul).
+- exact: (comm mul).
+- move=> a b c; exact: (assoc mul).
+- exact: mul_add_l.
+- done.
+- exact: add_opp_r.
+Qed.
+
+Add Ring poly_ring : poly_ring_theory.
+
+Lemma const_add a b : const (a + b) = add (const a) (const b).
+Proof.
+by apply: coeff_inj => m; rewrite coeff_add !coeff_const; case_bool_decide.
+Qed.
+
+Lemma const_opp a : const (- a) = opp (const a).
+Proof.
+by apply: coeff_inj => m; rewrite coeff_opp !coeff_const; case_bool_decide.
+Qed.
+
+Lemma const_zero : const 0 = zero.
+Proof. done. Qed.
+
+Lemma const_one : const 1 = one.
+Proof. done. Qed.
+
+Lemma const_mul a b : const (a * b) = mul (const a) (const b).
+Proof.
+induction a as [|a IH|a IH] using Z.peano_ind.
+- by rewrite Z.mul_0_l const_zero (left_absorb zero mul).
+- rewrite Z.mul_succ_l const_add IH (_ : Z.succ a = a + 1)%Z //.
+  by rewrite const_add const_one; ring.
+- rewrite Z.mul_pred_l (_ : Z.pred a = a + - (1))%Z //.
+  rewrite (_ : (a * b - b = a * b + - b)%Z) //.
+  by rewrite !const_add !const_opp IH const_one; ring.
+Qed.
+
+Lemma const_inj a b : const a = const b → a = b.
+Proof.
+move=> /(f_equal (coeff ∅)); rewrite !coeff_const.
+by rewrite bool_decide_eq_true_2.
+Qed.
 
 (** *** Polynomials in one variable
 
@@ -322,3 +401,10 @@ End Polynomial.
 Arguments poly T {_ _ _ _}.
 
 End Poly.
+
+Declare Scope poly_scope.
+Delimit Scope poly_scope with P.
+Infix "+" := Poly.add : poly_scope.
+Infix "-" := Poly.sub : poly_scope.
+Infix "*" := Poly.mul : poly_scope.
+Notation "- p" := (Poly.opp p) : poly_scope.

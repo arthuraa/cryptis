@@ -6,6 +6,7 @@ cryptis/lib/mset.v
 cryptis/lib/sms.v
 cryptis/lib/poly.v
 cryptis/lib/poly_gcd.v
+cryptis/lib/frac.v
 cryptis/lib/term_set.v
 cryptis/lib/gen_adequacy.v
 cryptis/lib/adequacy.v

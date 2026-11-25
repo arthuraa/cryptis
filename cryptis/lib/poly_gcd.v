@@ -9,7 +9,10 @@
     [cancel] picks a canonical representative of the fraction [p / q]:
     when [q] and [q'] are nonzero, [cancel p q = cancel p' q'] exactly when
     [p * q' = p' * q] ([cancel_canon]), and the second component is never
-    [first_neg] ([cancel_first_neg]).
+    [first_neg] ([cancel_first_neg]).  These representatives are the pairs
+    that [cancel] leaves unchanged: [cancel p q = (p, q)] when [q] is
+    nonzero, not [first_neg], and has no common divisor with [p] besides
+    units ([cancel_id]).
 
     The proof follows [Poly.ops] one variable at a time ([gcd_spec_cons]).
     At each level, a polynomial is a polynomial in [x] whose coefficients
@@ -35,30 +38,9 @@ Context {T : Type} `{EqDecision T, Lexico T}
 
 Local Abbreviation poly := (Poly.poly T).
 
-Declare Scope poly_scope.
-Delimit Scope poly_scope with P.
-Local Infix "+" := add : poly_scope.
-Local Infix "-" := sub : poly_scope.
-Local Infix "*" := mul : poly_scope.
-Local Notation "- p" := (opp p) : poly_scope.
-
 Implicit Types (x y : T) (m n : MSet.mset T) (p q r : poly).
 
-Lemma poly_ring_theory : ring_theory (zero : poly) one add mul sub opp eq.
-Proof.
-split.
-- exact: (left_id zero add).
-- exact: (comm add).
-- move=> a b c; exact: (assoc add).
-- exact: (left_id one mul).
-- exact: (comm mul).
-- move=> a b c; exact: (assoc mul).
-- exact: mul_add_l.
-- done.
-- exact: add_opp_r.
-Qed.
-
-Add Ring poly_ring : poly_ring_theory.
+Add Ring poly_ring : (poly_ring_theory (T := T)).
 
 (** ** Coefficients in one variable *)
 
@@ -121,18 +103,6 @@ elim/poly_ind: p => [|n p IH|n p IH].
 - rewrite coeffx_add coeffx_opp !coeff_add !coeff_opp IH key; case_bool_decide;
     lia.
 Qed.
-
-Lemma poly_ind_add (P : poly → Prop) :
-  P zero → (∀ m, P (mono m)) → (∀ p q, P p → P q → P (p + q)%P) →
-  (∀ p, P p → P (- p)%P) → ∀ p, P p.
-Proof.
-move=> P0 Pm Padd Popp; elim/poly_ind => [//|m p IH|m p IH].
-- exact: Padd (Pm m) IH.
-- exact: Padd (Popp _ (Pm m)) IH.
-Qed.
-
-Lemma coeff_mono_eq m n : coeff m (mono n) ≠ 0%Z ↔ m = n.
-Proof. rewrite coeff_mono; case_bool_decide; naive_solver. Qed.
 
 (** *** Degrees *)
 
@@ -230,9 +200,6 @@ Proof. by move=> /coeffx0_free <-; rewrite coeffx_mul_coeffx0. Qed.
 Lemma vpow_add x a b : vpow x a ⊎ vpow x b = vpow x (a + b).
 Proof. mset_solver. Qed.
 
-Lemma opp_zero : (- zero)%P = (zero : poly).
-Proof. by apply: coeff_inj => m; rewrite coeff_opp coeff_zero. Qed.
-
 Lemma coeffx_shift x k e p :
   coeffx x k (p * mono (vpow x e))%P =
   if bool_decide (e ≤ k) then coeffx x (k - e) p else zero.
@@ -265,9 +232,6 @@ case: (bool_decide_reflect (k = e)) => ek.
 - rewrite (bool_decide_eq_true_2 (e = k)) // /one; congr mono; mset_solver.
 - by rewrite (bool_decide_eq_false_2 (e = k)) //; lia.
 Qed.
-
-Lemma coeff_neq0_elem m p : coeff m p ≠ 0%Z ↔ m ∈ car p.
-Proof. by rewrite SMS.elem_of_count. Qed.
 
 Lemma deg_zero x : deg x zero = 0.
 Proof. by apply/Nat.le_0_r/deg_le => m; rewrite coeff_zero. Qed.
@@ -319,41 +283,6 @@ Proof.
 apply/Nat.le_0_r/deg_le => m; rewrite coeff_const.
 case_bool_decide as e; last done.
 by rewrite e MSet.count_empty.
-Qed.
-
-(** *** Constants *)
-
-Lemma const_add a b : const (a + b) = (const a + const b)%P.
-Proof.
-by apply: coeff_inj => m; rewrite coeff_add !coeff_const; case_bool_decide.
-Qed.
-
-Lemma const_opp a : const (- a) = (- const a)%P.
-Proof.
-by apply: coeff_inj => m; rewrite coeff_opp !coeff_const; case_bool_decide.
-Qed.
-
-Lemma const_zero : const 0 = (zero : poly).
-Proof. done. Qed.
-
-Lemma const_one : const 1 = (one : poly).
-Proof. done. Qed.
-
-Lemma const_mul a b : const (a * b) = (const a * const b)%P.
-Proof.
-induction a as [|a IH|a IH] using Z.peano_ind.
-- by rewrite Z.mul_0_l const_zero (left_absorb zero mul).
-- rewrite Z.mul_succ_l const_add IH (_ : Z.succ a = a + 1)%Z //.
-  by rewrite const_add const_one; ring.
-- rewrite Z.mul_pred_l (_ : Z.pred a = a + - (1))%Z //.
-  rewrite (_ : (a * b - b = a * b + - b)%Z) //.
-  by rewrite !const_add !const_opp IH const_one; ring.
-Qed.
-
-Lemma const_inj a b : const a = (const b : poly) → a = b.
-Proof.
-move=> /(f_equal (coeff ∅)); rewrite !coeff_const.
-by rewrite bool_decide_eq_true_2.
 Qed.
 
 (** *** Leading coefficients *)
@@ -615,12 +544,6 @@ Proof. move=> [a ->] [b ->]; exists (a * b)%P; ring. Qed.
 
 Lemma dvd_zero_l q : dvd zero q → q = zero.
 Proof. by move=> [a ->]; rewrite (left_absorb zero mul). Qed.
-
-Lemma one_neq0 : one ≠ (zero : poly).
-Proof.
-move=> /(f_equal (coeff ∅)).
-by rewrite coeff_one coeff_zero bool_decide_eq_true_2.
-Qed.
 
 Lemma mul_cancel_l c a b : c ≠ zero → (c * a)%P = (c * b)%P → a = b.
 Proof.
@@ -1461,6 +1384,26 @@ move=> nq; have [g [a [b [ng [Ep [Eq [cop ->]]]]]]] := cancel_norm p q nq.
 have nb : b ≠ zero.
   by move=> eb; apply: nq; rewrite Eq eb (right_absorb zero mul).
 case E: (first_neg b) => /=; [by rewrite (first_neg_opp b nb) E | done].
+Qed.
+
+Lemma cancel_den_neq0 p q : q ≠ zero → (cancel p q).2 ≠ zero.
+Proof.
+move=> nq e; apply: nq; have [g [_ ->]] := cancel_spec p q.
+by rewrite e (right_absorb zero mul).
+Qed.
+
+Lemma cancel_id p q : q ≠ zero → (∀ u, dvd u p → dvd u q → dvd u one) →
+  first_neg q = false → cancel p q = (p, q).
+Proof.
+move=> nq cop fq.
+have cop' : ∀ u, dvd u (cancel p q).1 → dvd u (cancel p q).2 → dvd u one.
+  by move=> u; apply: cancel_coprime; right.
+have fc := cancel_first_neg p q nq.
+have [g [Ep Eq]] := cancel_spec p q.
+move: (cancel p q) cop' fc Ep Eq => [a b] /= cop' fc Ep Eq.
+have E : (p * b = a * q)%P by rewrite Ep Eq; ring.
+case: (coprime_unique p q a b nq cop cop' E) => [[-> ->] //|[_ eb]].
+by move: fc; rewrite eb (first_neg_opp q nq) fq.
 Qed.
 
 End Gcd.
