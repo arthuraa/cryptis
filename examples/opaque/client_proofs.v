@@ -48,7 +48,8 @@ wp_apply (wp_mk_nonce_freshN ∅ (λ _, shot γ 1)%I dh_key_share
   by iIntros "% %contra".
   iIntros "%t"; rewrite big_sepS_singleton; iModIntro; iSplit.
   - iIntros "#?"; by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
-  - rewrite (minted_TExp t) //; by iIntros "[_ ?]".
+  - rewrite (minted_TExp (t2 := t)) //; last by apply: atom_frac_neq0.
+    by iIntros "[_ ?]".
 iIntros "%x_u _ #Hmintedx_u #Hprivatex_u #Hexpx_u #Hexpx_uV _".
 iAssert (□ (public x_u ↔ ▷ shot γ 1))%I as "#s_xu'".
 { iModIntro; iSplit.
@@ -93,7 +94,8 @@ iAssert (public (TExp g x_u)) as "#pubX_u".
   - by iApply minted_TInt.
   - iRight.
     iApply "Hexpx_u"; iPureIntro.
-    by rewrite exps_TExp_expN // factors_Nmul // SMS.elements_singleton.
+    rewrite (exps_TExp_expN _ _ (mono_num_atom (TNonce x_u) I)) //.
+    by rewrite factors_Nmod // SMS.elements_singleton.
   - by rewrite public_TInt; auto. }
 iAssert (minted (TExp g x_u)) as "#mintedX_u"; first by iApply public_minted.
 wp_apply wp_H'; wp_apply wp_texp; wp_pures.
@@ -299,7 +301,8 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
       subst p_u' P_u' P_s'.
       iPoseProof "keys" as "(#key_p_u & #key_p_s & #priv_p_u & #priv_p_s)".
       have nP (p : nonce) : TExp g p ≠ TGMul ∅.
-        exact: Ngmul_neq_unit (Ngmul_TExp g _ I).
+        exact: Ngmul_neq_unit
+          (Ngmul_TExp (b := g) I (mono_num_atom (TNonce p) I)).
       have [/TExp_g_inj epb [eXs [/TExp_g_inj epa eXu]]] :=
         hmqv_K_inj' (g := g) I I tags_c (nP _) (nP _)
           (hmqv_K_neq_unit (g := g) I I) eKK.

@@ -74,7 +74,7 @@ wp_apply wp_send => //.
     iApply public_THash; iLeft. by iApply public_tag.
   - iApply (public_THashIS with "HpredH").
     + rewrite minted_of_list /=. do !iSplit => //.
-      iApply minted_TExp => //. iSplit; last by iApply public_minted.
+      iApply all_minted_TExp. iSplit; last by iApply public_minted.
       by rewrite minted_hash_result.
     + iIntros "!> !>". iExists pw, k. by iSplit. }
 wp_pures. iApply ("IH" with "[] post").

@@ -3,7 +3,8 @@ From elpi.apps Require Import locker.
 From mathcomp Require Import ssreflect.
 From Stdlib Require Import ZArith.ZArith Lia.
 From stdpp Require Import sorting gmap.
-From cryptis.lib Require Import list_sort mathcomp_compat mset sms.
+From cryptis.lib Require Import list_sort mathcomp_compat fmap mset sms.
+From cryptis.lib Require Import poly poly_gcd frac.
 From iris.heap_lang Require locations.
 From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
@@ -21,9 +22,7 @@ Implicit Types (t k : term) (ts : list term).
 Definition tsize t := PreTerm.tsize (unfold_term t).
 
 Lemma tsize_gt0 t : 0 < tsize t.
-Proof.
-by rewrite /tsize; case: unfold_term => [o|o t'|o t1 t2|[] ps ns] /=; lia.
-Qed.
+Proof. exact: PreTerm.tsize_pos. Qed.
 
 Lemma tsize_eq t :
   tsize t =
@@ -38,301 +37,46 @@ Lemma tsize_eq t :
   end.
 Proof. by case: t. Qed.
 
-Lemma sum_list_with_fold ps :
-  Forall (λ p, PreTerm.wf p) ps →
-  sum_list_with tsize (fold_term <$> ps) = sum_list_with PreTerm.tsize ps.
-Proof.
-elim: ps => [//|p ps IH] /Forall_cons [wfp /IH {}IH] /=.
-by rewrite /tsize fold_termK // IH.
-Qed.
-
-Lemma tsize_factorsE t :
-  tsize t =
-  (if is_mul t then 1 else 0) +
-  sum_list_with tsize (elements (factors t)).
-Proof.
-rewrite elements_factors is_mul_unfold.
-case Em: (PreTerm.is_mul (unfold_term t)); last first.
-  rewrite PreTerm.factors_Nmul ?Em // SMS.elements_singleton /= unfold_termK /=.
-  lia.
-have := wf_unfold_term t; rewrite /tsize.
-case: (unfold_term t) Em => // -[] // ps ns _ wf_pt.
-rewrite PreTerm.elements_factors //.
-move: wf_pt; rewrite PreTerm.wf_mulE.
-move=> /andb_True [/andb_True [/forallb_True/list.Forall_forall H _] _].
-have wfl p : p ∈ ps ++ ns → PreTerm.wf p by move=> /H /andb_True [].
-rewrite fmap_app sum_list_with_app !sum_list_with_fold //.
-- apply/list.Forall_forall => p p_ns; apply: wfl.
-  by rewrite elem_of_app; right.
-- apply/list.Forall_forall => p p_ps; apply: wfl.
-  by rewrite elem_of_app; left.
-Qed.
-
-Lemma tsize_gfactorsE t :
-  tsize t =
-  (if is_gmul t then 1 else 0) +
-  sum_list_with tsize (elements (gfactors t)).
-Proof.
-rewrite elements_gfactors is_gmul_unfold.
-case Em: (PreTerm.is_gmul (unfold_term t)); last first.
-  rewrite PreTerm.gfactors_Ngmul ?Em // SMS.elements_singleton /=.
-  rewrite unfold_termK /=.
-  lia.
-have := wf_unfold_term t; rewrite /tsize.
-case: (unfold_term t) Em => // -[] // ps ns _ wf_pt.
-rewrite PreTerm.elements_gfactors //.
-move: wf_pt; rewrite PreTerm.wf_gmulE.
-move=> /andb_True [/andb_True [/forallb_True/list.Forall_forall H _] _].
-have wfl p : p ∈ ps ++ ns → PreTerm.wf p by move=> /H /andb_True [].
-rewrite fmap_app sum_list_with_app !sum_list_with_fold //.
-- apply/list.Forall_forall => p p_ns; apply: wfl.
-  by rewrite elem_of_app; right.
-- apply/list.Forall_forall => p p_ps; apply: wfl.
-  by rewrite elem_of_app; left.
-Qed.
-
-Lemma tsize_factors_le t t' : t ∈ factors t' → tsize t ≤ tsize t'.
-Proof.
-move=> t_t'; rewrite (tsize_factorsE t').
-have := sum_list_with_in _ tsize _
-  (proj2 (SMS.elem_of_elements _ _) t_t'); lia.
-Qed.
-
-Lemma tsize_factors_lt t' t : is_mul t → t' ∈ factors t → tsize t' < tsize t.
-Proof.
-move=> Mt t'_t; rewrite (tsize_factorsE t).
-have := sum_list_with_in _ tsize _
-  (proj2 (SMS.elem_of_elements _ _) t'_t).
-by case: (is_mul t) Mt => //= _; lia.
-Qed.
+Definition tsizeE := tsize_eq.
 
 Lemma tsize_gfactors_le t t' : t ∈ gfactors t' → tsize t ≤ tsize t'.
 Proof.
-move=> t_t'; rewrite (tsize_gfactorsE t').
-have := sum_list_with_in _ tsize _
-  (proj2 (SMS.elem_of_elements _ _) t_t'); lia.
+move=> /elem_of_gfactors_unfold h; rewrite /tsize.
+exact: (PreTerm.tsize_gfactors_le _ _ (wf_unfold_term _) h).
 Qed.
 
 Lemma tsize_gfactors_lt t' t : is_gmul t → t' ∈ gfactors t → tsize t' < tsize t.
 Proof.
-move=> Mt t'_t; rewrite (tsize_gfactorsE t).
-have := sum_list_with_in _ tsize _
-  (proj2 (SMS.elem_of_elements _ _) t'_t).
-by case: (is_gmul t) Mt => //= _; lia.
+rewrite is_gmul_unfold => Mt /elem_of_gfactors_unfold h; rewrite /tsize.
+exact: (PreTerm.tsize_gfactors_lt _ _ (wf_unfold_term _) Mt h).
 Qed.
 
-Lemma tsize_TInv t : negb (is_mul t) → tsize (TInv t) = S (tsize t).
+Lemma tsize_atoms_lt x t : is_mod t → x ∈ atoms t → tsize x < tsize t.
 Proof.
-move=> Nm; rewrite tsize_factorsE (_ : is_mul (TInv t) = true); last first.
-  by case: (is_mul (TInv t)) (is_mul_TInv_atom t Nm).
-rewrite factors_TInv (sum_list_with_Permutation _ _ _ (SMS.elements_inv _)).
-rewrite (factors_Nmul _ Nm) SMS.elements_singleton /=; lia.
+rewrite is_mod_unfold => Mt /elem_of_atoms [y [-> yt]].
+have [wy _] := PreTerm.atoms_wf _ _ (wf_unfold_term t) yt.
+rewrite /tsize fold_termK //; exact: PreTerm.tsize_atoms_lt.
 Qed.
 
-Lemma is_gmul_TGInv_atom t : negb (is_gmul t) → is_gmul (TGInv t).
+Lemma tsize_factors_lt t' t :
+  laurent t → is_mod t → t' ∈ factors t → tsize t' < tsize t.
 Proof.
-move=> Nm; case E: (is_gmul (TGInv t)) => //.
-have Nmi : negb (is_gmul (TGInv t)) by rewrite E.
-have := gfactors_TGInv t; rewrite (gfactors_Ngmul _ Nmi) (gfactors_Ngmul _ Nm).
-move=> /(f_equal (λ s, elements (SMS.pos s))).
-by rewrite SMS.pos_inv SMS.pos_singleton SMS.neg_singleton
-  MSet.elements_singleton MSet.elements_empty.
+move=> L Mt t't; apply: (tsize_atoms_lt _ _ Mt).
+exact: (factors_atoms t't (L _ t't)).
 Qed.
 
-Lemma tsize_TGInv t : negb (is_gmul t) → tsize (TGInv t) = S (tsize t).
+Lemma tsize_exp_term t :
+  is_exp t → tsize t = S (tsize (base t) + tsize (expo t)).
 Proof.
-move=> Nm; rewrite tsize_gfactorsE (_ : is_gmul (TGInv t) = true); last first.
-  by case: (is_gmul (TGInv t)) (is_gmul_TGInv_atom t Nm).
-rewrite gfactors_TGInv (sum_list_with_Permutation _ _ _ (SMS.elements_inv _)).
-rewrite (gfactors_Ngmul _ Nm) SMS.elements_singleton /=; lia.
+rewrite is_exp_unfold => xt.
+by rewrite /tsize unfold_base unfold_expo PreTerm.tsize_exp.
 Qed.
 
-(* The base must not be a group product: [TExp] distributes over those, and
-   the result is not an exponential at all.  A *scalar* product in the base is
-   fine — it is an atom. *)
-Lemma tsize_TExp t1 t2 :
-  negb (is_exp t1) → negb (is_gmul t1) → t2 ≠ TMul ∅ →
-  tsize (TExp t1 t2) = S (tsize t1 + tsize t2).
-Proof.
-rewrite /tsize is_exp_unfold is_gmul_unfold unfold_TExp => Nx1 Nm1 N12.
-rewrite (PreTerm.exp_Ngmul _ _ (wf_unfold_term _) (wf_unfold_term _) Nm1).
-rewrite /PreTerm.exp_aux (PreTerm.base_expN _ Nx1) (PreTerm.expo_expN _ Nx1).
-rewrite PreTerm.mul_unit_l PreTerm.mul1; last exact: wf_unfold_term.
-rewrite /PreTerm.mk_exp bool_decide_eq_false_2 //.
-move=> e; apply: N12; apply: (inj unfold_term).
-by rewrite unfold_TMul_make e.
-Qed.
+Lemma tsize_base_lt t : is_exp t → tsize (base t) < tsize t.
+Proof. by move=> xt; rewrite (tsize_exp_term _ xt); lia. Qed.
 
-(* The negative check the group/exponent split exists to make true: a *scalar*
-   product in a base is an atom.  [TExp] does not distribute over it, so
-   [TExp (t1 * t2) e] is a genuine exponential node whose size is the sum.  The
-   same statement with [TGMul] in place of [TMul] is false --- there [TExp]
-   distributes, and at the group unit it even collapses ([TExp_gunit]). *)
-Lemma tsize_TExp_TMul2 t1 t2 e :
-  negb (is_mul t1) -> negb (is_mul t2) -> e ≠ TMul ∅ ->
-  tsize (TExp (TMul {[+ t1; t2 +]}) e)
-  = S (tsize (TMul {[+ t1; t2 +]}) + tsize e).
-Proof.
-move=> Nm1 Nm2 eN0.
-have Xm : is_mul (TMul {[+ t1; t2 +]}) := is_mul_TMul2 _ _ Nm1 Nm2.
-by apply: tsize_TExp => //; [exact: is_mul_Nexp | exact: is_mul_Ngmul].
-Qed.
-
-Lemma tsize_TMul s :
-  (∀ u, u ∈ s → negb (is_mul u)) →
-  tsize (TMul s) =
-  (if is_mul (TMul s) then 1 else 0) + sum_list_with tsize (elements s).
-Proof. by move=> Hs; rewrite tsize_factorsE factors_TMul_atoms. Qed.
-
-Definition tsizeE :=
-  (tsize_TInv, tsize_TGInv, tsize_TExp, tsize_TMul, tsize_eq).
-
-(* Adding an exponent factor that does not cancel grows the exponent. *)
-Lemma elements_factors_TMul2 e t :
-  negb (is_mul t) → t ∉ SMS.neg (factors e) →
-  elements (factors (TMul {[+ e; t +]})) ≡ₚ
-  t :: elements (factors e).
-Proof.
-move=> Nm t_e; rewrite factors_TMul SMS.bind_disj_union !SMS.bind_singleton.
-rewrite (factors_Nmul _ Nm) SMS.elements_disj_union.
-- by rewrite SMS.elements_singleton Permutation_app_comm.
-- by rewrite SMS.neg_singleton => y _ h; exact: MSet.not_elem_of_empty y h.
-- rewrite SMS.pos_singleton => y yN /MSet.elem_of_singleton ey.
-  by apply: t_e; rewrite -ey.
-Qed.
-
-Lemma elements_factors_TMul2_inv e t :
-  negb (is_mul t) → t ∉ SMS.pos (factors e) →
-  elements (factors (TMul {[+ e; TInv t +]})) ≡ₚ
-  t :: elements (factors e).
-Proof.
-move=> Nm t_e; rewrite factors_TMul SMS.bind_disj_union !SMS.bind_singleton.
-rewrite factors_TInv (factors_Nmul _ Nm) SMS.elements_disj_union.
-- by rewrite SMS.elements_inv SMS.elements_singleton Permutation_app_comm.
-- rewrite SMS.neg_inv SMS.pos_singleton => y yP /MSet.elem_of_singleton ey.
-  by apply: t_e; rewrite -ey.
-- by rewrite SMS.pos_inv SMS.neg_singleton => y _ h;
-    exact: MSet.not_elem_of_empty y h.
-Qed.
-
-Lemma elements_factors_nil e :
-  elements (factors e) = [] → e = TMul ∅.
-Proof.
-move=> E; apply: count_inj => x _; rewrite count_TMul_empty.
-apply: not_elem_of_count; rewrite -SMS.elem_of_elements E.
-exact: not_elem_of_nil.
-Qed.
-
-Lemma tsize_factors_cons_lt e t u :
-  elements (factors u) ≡ₚ t :: elements (factors e) →
-  tsize t ≤ tsize u ∧ (e ≠ TMul ∅ → tsize e < tsize u).
-Proof.
-move=> E; split.
-  apply: tsize_factors_le; rewrite -SMS.elem_of_elements E.
-  exact: list_elem_of_here.
-move=> eN1; rewrite (tsize_factorsE u) (tsize_factorsE e).
-rewrite (sum_list_with_Permutation _ _ _ E) /=.
-have ? := tsize_gt0 t.
-case Mu: (is_mul u); first by case: (is_mul e); lia.
-have Nmu : negb (is_mul u) by rewrite Mu.
-have := Permutation_length E.
-rewrite (factors_Nmul _ Nmu) SMS.elements_singleton /=.
-move=> [] H0.
-have := nil_length_inv _ (eq_sym H0).
-by move=> /elements_factors_nil /eN1.
-Qed.
-
-(* [t1] must not be a group product: [TExp (TGMul ∅) t2 = TGMul ∅], so the
-   strict inequality fails at the group unit. *)
-Lemma tsize_lt_TExp_gen t1 e2 a :
-  negb (is_gmul t1) →
-  elements (exps (TExp t1 e2)) ≡ₚ a :: elements (exps t1) →
-  tsize t1 < tsize (TExp t1 e2) ∧ S (tsize a) < tsize (TExp t1 e2).
-Proof.
-move=> Nm1 E.
-have [le1 lt2] := tsize_factors_cons_lt _ _ _ E.
-have xN1 : expo (TExp t1 e2) ≠ TMul ∅.
-  by move=> e; move: E;
-     rewrite /exps e factors_TMul_empty => /Permutation_length.
-have Nx : negb (is_exp (base t1)) := base_Nexp t1.
-have Nmb : negb (is_gmul (base t1)) by rewrite is_gmul_base.
-rewrite -[TExp t1 e2]TExp_base_expo base_TExp //.
-rewrite (tsize_TExp _ _ Nx Nmb xN1).
-have ? := tsize_gt0 (base t1); split; last lia.
-rewrite -{1}[t1]TExp_base_expo.
-case: (decide (expo t1 = TMul ∅)) => [->|n1]; first by rewrite TExp_unit; lia.
-have := lt2 n1; rewrite (tsize_TExp _ _ Nx Nmb n1); lia.
-Qed.
-
-Lemma tsize_lt_TExp t1 t2 :
-  negb (is_gmul t1) → negb (is_mul t2) → t2 ∉ SMS.neg (exps t1) →
-  tsize t1 < tsize (TExp t1 t2) ∧ tsize t2 < tsize (TExp t1 t2).
-Proof.
-move=> Nm1 Nm2 t2_t1.
-have [] // := @tsize_lt_TExp_gen t1 t2 t2 Nm1; last lia.
-by rewrite /exps (expo_TExp _ _ Nm1) elements_factors_TMul2.
-Qed.
-
-Lemma tsize_lt_TExp_inv t1 t2 :
-  negb (is_gmul t1) → negb (is_mul t2) → t2 ∉ SMS.pos (exps t1) →
-  tsize t1 < tsize (TExp t1 (TInv t2)) ∧
-  tsize (TInv t2) < tsize (TExp t1 (TInv t2)).
-Proof.
-move=> Nm1 Nm2 t2_t1; rewrite tsize_TInv //.
-have [] // := @tsize_lt_TExp_gen t1 (TInv t2) t2 Nm1.
-by rewrite /exps (expo_TExp _ _ Nm1) elements_factors_TMul2_inv.
-Qed.
-
-(* Removing an exponent factor shrinks an exponential. *)
-Lemma tsize_TExp_pos t p :
-  p ∈ SMS.pos (exps t) →
-  tsize p < tsize t ∧ tsize (TExp t (TInv p)) < tsize t.
-Proof.
-move=> H.
-have p_t : p ∈ exps t := SMS.elem_of_pos _ _ H.
-have Nmp : negb (is_mul p) := Nmul_factors _ _ p_t.
-have xt : is_exp t := is_exp_of_exps p_t.
-have Nmt := is_exp_Ngmul _ xt.
-set t' := TExp t (TInv p).
-have tE : t = TExp t' p by rewrite /t' TExpKV.
-have Nm' : negb (is_gmul t') := Ngmul_TExp _ _ Nmt.
-have p_t' : p ∉ SMS.neg (exps t').
-  move=> /count_lt0; move: H => /count_gt0.
-  rewrite /exps /t' (expo_TExp _ _ Nmt) count_TMul_disj_union !TMul_singleton.
-  rewrite count_TInv count_diag.
-  by case: is_mul Nmp => //= _; lia.
-have [lt1 lt2] := tsize_lt_TExp t' p Nm' Nmp p_t'.
-by rewrite -tE in lt1 lt2; split; lia.
-Qed.
-
-Lemma tsize_TExp_neg t n :
-  n ∈ SMS.neg (exps t) →
-  tsize (TInv n) < tsize t ∧ tsize (TExp t n) < tsize t.
-Proof.
-move=> H.
-have n_t : n ∈ exps t := SMS.elem_of_neg _ _ H.
-have Nmn : negb (is_mul n) := Nmul_factors _ _ n_t.
-have xt : is_exp t := is_exp_of_exps n_t.
-have Nmt := is_exp_Ngmul _ xt.
-set t' := TExp t n.
-have tE : t = TExp t' (TInv n) by rewrite /t' TExpK.
-have Nm' : negb (is_gmul t') := Ngmul_TExp _ _ Nmt.
-have n_t' : n ∉ SMS.pos (exps t').
-  move=> /count_gt0; move: H => /count_lt0.
-  rewrite /exps /t' (expo_TExp _ _ Nmt) count_TMul_disj_union !TMul_singleton.
-  rewrite count_diag.
-  by case: is_mul Nmn => //= _; lia.
-have [lt1 lt2] := tsize_lt_TExp_inv t' n Nm' Nmn n_t'.
-by rewrite -tE in lt1 lt2; split; lia.
-Qed.
-
-Lemma tsize_satoms f t :
-  f ∈ satoms (exps t) → tsize f < tsize t ∧ tsize (TExp t (TInv f)) < tsize t.
-Proof.
-rewrite /satoms elem_of_app list_elem_of_fmap.
-case=> [|[n [-> n_t]]]; first exact: tsize_TExp_pos.
-by rewrite TInvK; exact: tsize_TExp_neg.
-Qed.
+Lemma tsize_expo_lt t : is_exp t → tsize (expo t) < tsize t.
+Proof. by move=> xt; rewrite (tsize_exp_term _ xt); lia. Qed.
 
 Lemma term_lt_rect (T : term -> Type) :
   (forall t, (forall t', (tsize t' < tsize t) -> T t') -> T t) ->
@@ -350,30 +94,234 @@ Lemma term_lt_ind (T : term -> Prop) :
   forall t, T t.
 Proof. exact: term_lt_rect. Qed.
 
-Lemma tsize_base_lt t : is_exp t → tsize (base t) < tsize t.
+(** The default induction principle.  Exponents are taken apart through their
+    atoms, powers through their base and exponent, and group products through
+    their factors. *)
+Lemma term_rect (T : term -> Type)
+  (H1 : forall n, T (TInt n))
+  (H2 : forall t1, T t1 -> forall t2, T t2 -> T (TPair t1 t2))
+  (H3 : forall a, T (TNonce a))
+  (H4 : forall kt t, T t -> T (TKey kt t))
+  (H5 : forall k, T k -> forall t, T t -> T (TSeal k t))
+  (H6 : forall t, T t -> T (THash t))
+  (H7 : forall t, is_exp t -> T (base t) -> T (expo t) -> T t)
+  (H8 : forall t, is_mod t -> (forall x, x ∈ atoms t -> T x) -> T t)
+  (H8g : forall s, (forall t, t ∈ s -> T t) ->
+                   (forall t, t ∈ s -> negb (is_gmul t)) ->
+                   (forall t, s ≠ {[+ t +]}) ->
+        T (TGMul s)) :
+  forall t, T t.
 Proof.
-rewrite is_exp_unfold => xt.
-rewrite /tsize unfold_base; move: xt.
-by case: (unfold_term t) => [o|o t'|[||] t1 t2|[] ps ns] //= _; lia.
+apply: term_lt_rect => t IH.
+case Ex: (is_exp t).
+  have xt : is_exp t by rewrite Ex.
+  by apply: H7 => //; apply: IH; [exact: tsize_base_lt|exact: tsize_expo_lt].
+case Em: (is_mod t).
+  have mt : is_mod t by rewrite Em.
+  by apply: H8 => // x xt; apply: IH; exact: tsize_atoms_lt.
+case Eg: (is_gmul t).
+  have gt : is_gmul t by rewrite Eg.
+  rewrite -(gfactorsK t); apply: H8g.
+  - by move=> u ut; apply: IH; exact: tsize_gfactors_lt.
+  - by move=> u /Ngmul_gfactors.
+  - move=> u e; have Nu : negb (is_gmul u).
+      by apply: (Ngmul_gfactors t); rewrite e SMS.elem_of_singleton.
+    have : is_gmul t = is_gmul u.
+      by rewrite -(gfactorsK t) e -(gfactors_Ngmul _ Nu) gfactorsK.
+    by rewrite Eg; case: (is_gmul u) Nu.
+case: t IH Ex Em Eg => [n|t1 t2|a|kt t1|k t1|t1|pt wpt npt] IH Ex Em Eg.
+- exact: H1.
+- by apply: H2; apply: IH; rewrite [tsize (TPair _ _)]tsize_eq; lia.
+- exact: H3.
+- by apply: H4; apply: IH; rewrite [tsize (TKey _ _)]tsize_eq; lia.
+- by apply: H5; apply: IH; rewrite [tsize (TSeal _ _)]tsize_eq; lia.
+- by apply: H6; apply: IH; rewrite [tsize (THash _)]tsize_eq; lia.
+- exfalso; clear IH; move: Ex Em Eg => /= Ex Em Eg.
+  by move: npt; rewrite /is_non_free Ex Em Eg.
 Qed.
 
-Lemma tsize_expo_lt t : is_exp t → tsize (expo t) < tsize t.
+Register Scheme term_rect as rect_dep for term.
+
+Definition term_ind (P : term -> Prop) := @term_rect P.
+
+Register Scheme term_ind as ind_dep for term.
+
+(** ** Stripping exponents
+
+    The exponent of a power [t] is a fraction [M / D] with a monomial numerator
+    [M] ([PreTerm.mono_num_expo]).  Its factors are the atoms of [M]
+    (positively) and the atoms of the monomial content and the unit part of [D]
+    (negatively); removing any of them from the exponent shrinks [t]
+    ([tsize_satoms]). *)
+
+Lemma tsize_TInv_le x :
+  tsize (TInv x) ≤
+  S (PreTerm.poly_size (PreTerm.poly_lists_of
+       (Frac.num (Frac.inv (PreTerm.frac_of (unfold_term x))))) +
+     PreTerm.poly_size (PreTerm.poly_lists_of
+       (Frac.den (Frac.inv (PreTerm.frac_of (unfold_term x)))))).
 Proof.
-rewrite /tsize is_exp_unfold unfold_expo.
-case: unfold_term (wf_unfold_term t) => //=; try lia.
-case=> //=; try lia.
+rewrite /tsize -(PreTerm.mod_of_frac_frac_of _ (wf_unfold_term (TInv x))).
+rewrite pre_frac_TInv; exact: PreTerm.tsize_mod_of_frac_le.
 Qed.
 
-Lemma tsize_exps_lt t' t : t' ∈ exps t → tsize t' < tsize t.
+Lemma tsize_satoms f t :
+  f ∈ satoms (exps t) → tsize f < tsize t ∧ tsize (TExp t (TInv f)) < tsize t.
 Proof.
-move=> t'_t; have xt := is_exp_of_exps t'_t.
-have := tsize_expo_lt t xt; have := tsize_factors_le _ _ t'_t; lia.
+move=> ft; have xt := is_exp_of_satoms ft.
+have Et := tsize_exp_term _ xt.
+have gb := tsize_gt0 (base t).
+have Nt' : negb (PreTerm.is_gmul (unfold_term t)).
+  by rewrite -is_gmul_unfold; exact: is_exp_Ngmul.
+have we := PreTerm.wf_expo _ (wf_unfold_term t).
+set r := PreTerm.frac_of (PreTerm.expo (unfold_term t)).
+have [M eM] : Frac.mono_num r := PreTerm.mono_num_expo _ (wf_unfold_term t) Nt'.
+have nD : Frac.den r ≠ Poly.zero := Frac.den_neq0 r.
+have A := PreTerm.frac_of_atoms _ we.
+have cnt y : count y (expo t) =
+    (Z.of_nat (MSet.count (unfold_term y) M) -
+     Z.of_nat (MSet.count (unfold_term y)
+                (PolyGcd.content (Frac.den r) ⊎ PreTerm.unit_factors
+                  (Frac.den r))))%Z.
+  rewrite count_unfold unfold_expo (PreTerm.factors_mono_num _ _ eM).
+  exact: SMS.count_make.
+have bound e' n' :
+    Frac.num (Frac.mul r (PreTerm.frac_of (unfold_term e'))) = Poly.mono n' →
+    tsize (TExp t e') ≤
+    S (tsize (base t) +
+       S (PreTerm.poly_size (PreTerm.poly_lists_of
+            (Frac.num (Frac.mul r (PreTerm.frac_of (unfold_term e'))))) +
+          PreTerm.poly_size (PreTerm.poly_lists_of
+            (Frac.den (Frac.mul r (PreTerm.frac_of (unfold_term e'))))))).
+  move=> en.
+  have nz : Frac.mul r (PreTerm.frac_of (unfold_term e')) ≠ Frac.zero.
+    by apply: Frac.mono_num_neq0; exists n'.
+  rewrite /tsize unfold_TExp /PreTerm.exp.
+  rewrite (PreTerm.exp_frac_Ngmul _ _ (wf_unfold_term t) Nt' nz) unfold_base.
+  rewrite -/r.
+  have := PreTerm.tsize_mk_exp_le (PreTerm.base (unfold_term t)) _ _ en.
+  have := PreTerm.tsize_mod_of_frac_le
+    (Frac.mul r (PreTerm.frac_of (unfold_term e'))).
+  lia.
+case Me: (is_mod (expo t)); last first.
+  have Ne : negb (is_mod (expo t)) by rewrite Me.
+  move: ft; rewrite /satoms /exps (factors_Nmod _ Ne) SMS.pos_singleton.
+  rewrite SMS.neg_singleton MSet.elements_singleton MSet.elements_empty /=.
+  move=> /list_elem_of_singleton ->.
+  split; first by rewrite Et; lia.
+  rewrite -[t in TExp t _]TExp_base_expo (TExpK _ (atom_frac_neq0 Ne)).
+  exact: tsize_base_lt.
+have Te : tsize (expo t) =
+    S (PreTerm.poly_size (PreTerm.poly_lists_of (Frac.num r)) +
+       PreTerm.poly_size (PreTerm.poly_lists_of (Frac.den r))).
+  move: Me we; rewrite /tsize /r is_mod_unfold unfold_expo.
+  case: (PreTerm.expo (unfold_term t)) => // F _.
+  rewrite PreTerm.wf_modE => /andb_True [/andb_True [_ cF] _].
+  rewrite PreTerm.tsize_mod [PreTerm.frac_of _]/=.
+  by rewrite -{1 2}(PreTerm.frac_lists_ofK _ cF).
+have psM : PreTerm.poly_size (PreTerm.poly_lists_of (Frac.num r)) =
+           PreTerm.mono_size (MSet.car M) by rewrite eM PreTerm.poly_size_monoE.
+rewrite Et Te psM; move: ft; rewrite /satoms elem_of_app list_elem_of_fmap.
+case=> [/MSet.elem_of_elements fp|[x [-> /MSet.elem_of_elements xn]]].
+- have fM : unfold_term f ∈ M.
+    move/count_gt0: fp; rewrite cnt => h; apply/MSet.elem_of_count; lia.
+  have [wa na] : PreTerm.wf (unfold_term f) ∧
+                 negb (PreTerm.is_mod (unfold_term f)).
+    apply/andb_True; apply: (A M) fM; left.
+    by rewrite eM Poly.car_mono; apply/SMS.elem_of_singleton.
+  have ha : tsize f ≤ PreTerm.mono_size (MSet.car M).
+    exact: (sum_list_with_in _ PreTerm.tsize _ fM).
+  split; first lia.
+  have ef : PreTerm.frac_of (unfold_term (TInv f)) =
+            Frac.inv (Frac.var (unfold_term f)).
+    by rewrite pre_frac_TInv PreTerm.frac_of_var.
+  have [en ed] := Frac.mul_inv_var_canon r M (unfold_term f) eM fM.
+  have en' : Frac.num (Frac.mul r (PreTerm.frac_of (unfold_term (TInv f)))) =
+             Poly.mono (M ∖ {[+ unfold_term f +]}) by rewrite ef en.
+  have EM : M = {[+ unfold_term f +]} ⊎ (M ∖ {[+ unfold_term f +]}).
+    apply: MSet.count_inj => y.
+    rewrite MSet.count_disj_union MSet.count_difference MSet.count_singleton.
+    have := proj1 (MSet.elem_of_count _ _) fM.
+    by case: bool_decide_reflect => [->|]; lia.
+  have W : PreTerm.mono_size (MSet.car M) =
+           tsize f + PreTerm.mono_size (MSet.car (M ∖ {[+ unfold_term f +]})).
+    rewrite {1}EM PreTerm.mono_size_disj_union MSet.car_singleton /=.
+    rewrite -/(tsize f); lia.
+  have := bound (TInv f) _ en'; rewrite ef en ed PreTerm.poly_size_monoE.
+  have := tsize_gt0 f; lia.
+- have xY : unfold_term x ∈
+            PolyGcd.content (Frac.den r) ⊎ PreTerm.unit_factors (Frac.den r).
+    move/count_lt0: xn; rewrite cnt => h; apply/MSet.elem_of_count; lia.
+  rewrite TInvK; case/MSet.elem_of_disj_union: xY => [xc|xu].
+  + have [n [nD' xn']] := PolyGcd.elem_of_content _ _ xc.
+    have [wc nc] : PreTerm.wf (unfold_term x) ∧
+                   negb (PreTerm.is_mod (unfold_term x)).
+      by apply/andb_True; apply: (A n) xn'; right.
+    have hc : tsize x ≤ PreTerm.poly_size (PreTerm.poly_lists_of (Frac.den r)).
+      have : tsize x ≤ PreTerm.mono_size (MSet.car n).
+        exact: (sum_list_with_in _ PreTerm.tsize _ xn').
+      have := PreTerm.poly_size_ge _ _ nD'; lia.
+    have ef : PreTerm.frac_of (unfold_term x) = Frac.var (unfold_term x).
+      exact: PreTerm.frac_of_var.
+    split.
+    * have := tsize_TInv_le x; rewrite ef.
+      have [en ed] := Frac.inv_var_canon (unfold_term x).
+      rewrite en ed PreTerm.poly_size_one Poly.varE PreTerm.poly_size_monoE
+        MSet.car_singleton /=.
+      rewrite -/(tsize x); lia.
+    * have [en [ed eD]] := Frac.mul_var_content_canon r M (unfold_term x) eM xc.
+      have en' : Frac.num (Frac.mul r (PreTerm.frac_of (unfold_term x))) =
+                 Poly.mono M by rewrite ef en.
+      set Dc := PolyGcd.div_mono {[+ unfold_term x +]} (Frac.den r) in ed eD.
+      have nDc : Dc ≠ Poly.zero.
+        move=> e; apply: nD; rewrite -eD e.
+        exact: (right_absorb Poly.zero Poly.mul).
+      have hD : PreTerm.poly_size (PreTerm.poly_lists_of (Frac.den r)) =
+                PreTerm.poly_size (PreTerm.poly_lists_of Dc) +
+                PreTerm.poly_length Dc * tsize x.
+        rewrite -eD PreTerm.poly_size_mul_monoE MSet.car_singleton /=.
+        rewrite -/(tsize x); lia.
+      have := PreTerm.poly_length_pos _ nDc.
+      have := tsize_gt0 x.
+      have := bound x _ en'; rewrite ef en ed PreTerm.poly_size_monoE.
+      nia.
+  + have U1 : PolyGcd.unit_part (Frac.den r) ≠ Poly.one.
+      move: xu; rewrite /PreTerm.unit_factors;
+        case: bool_decide_reflect => // _.
+      by move=> e; case: (MSet.not_elem_of_empty _ e).
+    have hat : ∀ m y, m ∈ Poly.car (Frac.den r) → y ∈ m →
+        negb (PreTerm.is_mod y).
+      by move=> m y mD ym; have /andb_True [] := A m y (or_intror mD) ym.
+    have ef : PreTerm.frac_of (unfold_term x) =
+              Frac.of_poly (PolyGcd.unit_part (Frac.den r)).
+      exact: PreTerm.frac_of_unit_factors hat xu.
+    have fU := Frac.first_neg_unit_part r.
+    have nU := PolyGcd.unit_part_neq0 _ nD.
+    have hD := PreTerm.poly_size_mul_monoE (PolyGcd.content (Frac.den r))
+                 (PolyGcd.unit_part (Frac.den r)).
+    rewrite PolyGcd.content_unitK in hD.
+    have pU := PreTerm.poly_size_pos_nonunit _ nU U1 fU.
+    have := PreTerm.poly_length_pos _ nU.
+    split.
+    * have := tsize_TInv_le x; rewrite ef.
+      have [en ed] := Frac.inv_of_poly_canon _ nU fU.
+      rewrite en ed PreTerm.poly_size_one; nia.
+    * have [en ed] := Frac.mul_unit_part_canon r M eM.
+      have en' : Frac.num (Frac.mul r (PreTerm.frac_of (unfold_term x))) =
+                 Poly.mono M by rewrite ef en.
+      have := bound x _ en'; rewrite ef en ed !PreTerm.poly_size_monoE.
+      nia.
 Qed.
 
-Lemma count_expo_gfactors_big {h T u} :
-  u ∈ gfactors T → tsize T ≤ tsize h → count h (expo u) = 0%Z.
+Lemma tsize_exps_lt t' t :
+  t' ∈ exps t → negb (is_mod t') → tsize t' < tsize t.
 Proof.
-move=> uT le; case: (decide (count h (expo u) = 0%Z)) => // ne.
-have h_in : h ∈ exps u by apply/count_neq0.
-have := tsize_exps_lt _ _ h_in; have := tsize_gfactors_le _ _ uT; lia.
+move=> t't Nt'; have xt := is_exp_of_exps t't.
+have := tsize_expo_lt _ xt.
+have a_t' := factors_atoms t't Nt'.
+case Me: (is_mod (expo t)).
+  have := tsize_atoms_lt _ _ (ltac:(by rewrite Me) : is_mod (expo t)) a_t'.
+  lia.
+have Ne : negb (is_mod (expo t)) by rewrite Me.
+by move: a_t'; rewrite (atoms_atom _ _ Ne) => ->.
 Qed.

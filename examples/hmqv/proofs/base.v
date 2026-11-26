@@ -25,8 +25,10 @@ Unset Printing Implicit Defensive.
     - [session_of rl si]: the session [si] was computed by a party with role
       [rl], either [Init] or [Resp].
 
-    - [session_of_key_inj]: a session created by a party is uniquely determined
-      by its key, hence by the parties' long-term and ephemeral keys.
+    - [session_of_key_share]: a session created by a party determines, by its
+      key, that party's ephemeral share, so the party's token on the share
+      makes the session unique.  [resp_si_inj_vetted]: with a vetted peer
+      long-term key, the key determines the whole session.
 
     - [hmqv_pred N φ ρ]: the usage [N] of the protocol.  [φ si rl] is what the
       party with role [rl] receives from its peer in [si], and [ρ si] releases
@@ -59,7 +61,7 @@ Lemma TExp_g_inj (p p' : nonce) : TExp g p = TExp g p' → p = p'.
 Proof. by move/(TExp_injr (Ngmul_neq_unit gNm)) => - [] ->. Qed.
 
 #[local] Lemma TExp_g_neq_one (p : nonce) : TExp g p ≠ one.
-Proof. exact: Ngmul_neq_unit (Ngmul_TExp _ _ gNm). Qed.
+Proof. exact: Ngmul_neq_unit (Ngmul_TExp gNm (mono_num_atom (TNonce p) I)). Qed.
 
 Record sess_info := SessInfo {
   si_init : term;          (* the initiator's long-term public key *)
@@ -134,38 +136,35 @@ rewrite /si_key => - [] /Spec.tag_inj [] _ /Spec.of_list_inj [].
 by [].
 Qed.
 
-#[local] Lemma init_si_inj (p_a x_a : nonce) P_b X_b (p_a' x_a' : nonce)
-    P_b' X_b' :
-  P_b ≠ one → P_b' ≠ one → si_secret (init_si p_a x_a P_b X_b) ≠ one →
-  si_key (init_si p_a x_a P_b X_b) = si_key (init_si p_a' x_a' P_b' X_b') →
-  init_si p_a x_a P_b X_b = init_si p_a' x_a' P_b' X_b'.
-Proof.
-move=> nP nP' nK /si_key_inj; rewrite /init_si /= => eK.
-have [-> [-> [-> ->]]] := hmqv_K_inj gNX gNm tags nP nP' nK eK.
-by [].
-Qed.
-
-#[local] Lemma resp_si_inj P_a X_a (p_b x_b : nonce) P_a' X_a'
-    (p_b' x_b' : nonce) :
-  P_a ≠ one → P_a' ≠ one → si_secret (resp_si P_a X_a p_b x_b) ≠ one →
-  si_key (resp_si P_a X_a p_b x_b) = si_key (resp_si P_a' X_a' p_b' x_b') →
-  resp_si P_a X_a p_b x_b = resp_si P_a' X_a' p_b' x_b'.
-Proof.
-move=> nP nP' nK /si_key_inj; rewrite /resp_si /= => eK.
-have [-> [-> [-> ->]]] := hmqv_K_inj gNX gNm tags' nP nP' nK eK.
-by [].
-Qed.
-
-(** ISO-DH's [session_agree], restricted to the sessions a role can build. *)
-Lemma session_of_key_inj rl si1 si2 :
+(** The key of a session determines the share of the party that built it.
+    It need not determine the peer's share: a rogue peer long-term key can
+    give two peer shares the same key for one ephemeral private key. *)
+Lemma session_of_key_share rl si1 si2 :
   session_of rl si1 → session_of rl si2 →
-  si_key si1 = si_key si2 → si1 = si2.
+  si_key si1 = si_key si2 → si_share_of rl si1 = si_share_of rl si2.
 Proof.
 case: rl => /=.
 - move=> [? [? [? [? [-> [nP nK]]]]]] [? [? [? [? [-> [nP' _]]]]]].
-  exact: init_si_inj nP nP' nK.
+  move=> /si_key_inj; rewrite /init_si /= => eK.
+  by have [_ [-> _]] := hmqv_K_inj gNX gNm tags nP nP' nK eK.
 - move=> [? [? [? [? [-> [nP nK]]]]]] [? [? [? [? [-> [nP' _]]]]]].
-  exact: resp_si_inj nP nP' nK.
+  move=> /si_key_inj; rewrite /resp_si /= => eK.
+  by have [_ [-> _]] := hmqv_K_inj gNX gNm tags' nP nP' nK eK.
+Qed.
+
+(** With a vetted initiator long-term key, the key of a responder's session
+    determines the session. *)
+Lemma resp_si_inj_vetted (p_a : nonce) X_a (p_b x_b : nonce) si :
+  resp_session si →
+  si_key (resp_si (TExp g p_a) X_a p_b x_b) = si_key si →
+  resp_si (TExp g p_a) X_a p_b x_b = si.
+Proof.
+move=> [P_a' [X_a' [p_b' [x_b' [-> [nP' _]]]]]] /si_key_inj.
+rewrite /resp_si /= => eK.
+have [? [? eP]] := hmqv_K_inj gNX gNm tags' (@TExp_g_neq_one p_a) nP'
+                     (hmqv_K_neq_unit gNX gNm) eK.
+subst p_b' x_b' P_a'.
+by have [_ [_ [_ ->]]] := hmqv_K_inj_vetted gNX gNm tags' eK.
 Qed.
 
 Class hmqvGpreS Σ := HmqvGPreS {
@@ -223,7 +222,7 @@ Proof. by rewrite /hash_result minted_THash minted_tag. Qed.
 Lemma hmqv_key_public (p : nonce) : hmqv_key p -∗ public (TExp g p).
 Proof.
 iIntros "[#m_p #pred_p]".
-have Nm : negb (is_mul (TNonce p)) by [].
+have Nm : negb (is_mod (TNonce p)) by [].
 iApply (public_dh_share gNX gNm Nm with "[] m_p pred_p").
 by rewrite public_TInt.
 Qed.
@@ -242,7 +241,8 @@ wp_apply (wp_mk_nonce_freshN ∅ (λ _, shot γ 1)%I dh_key_share
 - by iIntros "% %contra".
 - iIntros "%x"; rewrite big_sepS_singleton; iModIntro; iSplit.
   + iIntros "#?"; by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
-  + rewrite (minted_TExp x) //; by iIntros "[_ ?]".
+  + rewrite (minted_TExp (t2 := x)) //; last by apply: atom_frac_neq0.
+    by iIntros "[_ ?]".
 iIntros "%p _ #m_p #s_p #pred_p _ tok".
 rewrite big_sepS_singleton.
 iAssert (□ (public p ↔ ▷ shot γ 1))%I as "#s_p'".
@@ -350,10 +350,11 @@ wp_apply (wp_mk_nonce_freshN ∅ (λ _, False)%I dh_key_share
 - by iIntros "% %contra".
 - iIntros "%x"; rewrite big_sepS_singleton; iModIntro; iSplit.
   + iIntros "#?"; by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
-  + rewrite (minted_TExp x) //; by iIntros "[_ ?]".
+  + rewrite (minted_TExp (t2 := x)) //; last by apply: atom_frac_neq0.
+    by iIntros "[_ ?]".
 iIntros "%x _ #m_x #s_x #pred_x _ tok".
 rewrite big_sepS_singleton.
-have Nm_x : negb (is_mul (TNonce x)) by [].
+have Nm_x : negb (is_mod (TNonce x)) by [].
 iAssert (ephemeral x) as "#eph".
 { iSplit; first by iSplit. iIntros "!>". iSplit.
   - iIntros "#p". iDestruct ("s_x" with "p") as "#f". iNext.
@@ -526,7 +527,7 @@ iSplit; iModIntro.
     iDestruct "rel" as "(%si' & %N' & %φ' & %ρ' & %e & %ss' & #use' & #N_φ'
                          & #r)".
     have ek : si_key si = si_key si' by rewrite /si_key e.
-    have esi := session_of_key_inj (rl := Resp) ss ss' ek.
+    have esi := resp_si_inj_vetted ss' ek.
     subst si'.
     iPoseProof (term_meta_agree with "use use'") as "<-".
     iDestruct (hmqv_pred_agree with "N_φ N_φ'") as "[_ #ρ_eq]".

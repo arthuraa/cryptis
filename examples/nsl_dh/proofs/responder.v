@@ -171,7 +171,7 @@ iIntros "%Ψ (#chan & #ctx & #nsl_ctx & #N_φ & #m_skI & #m_skR & #m_ga &
          #dh_b & #peer & #use & comp_token & ready_token) Hpost".
 iPoseProof "nsl_ctx" as "(_ & _ & m3_pred & _)".
 iPoseProof "dh_b" as "(#m_b & #s_b & #pred_b)".
-have Nm_b : negb (is_mul b) by [].
+have Nm_b : negb (is_mod b) by [].
 rewrite /responder_recv_msg3. wp_pures.
 wp_apply wp_pkey. wp_pures.
 wp_bind (recv _); iApply wp_recv => //; iIntros (m) "#p_m".

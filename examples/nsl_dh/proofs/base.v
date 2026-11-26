@@ -123,15 +123,18 @@ Definition nsl_dh_key_share skI skR t : iProp :=
   (public skI ∨ public skR) ∧ ⌜length (elements (exps t)) = 1⌝.
 
 Lemma exps_TExp1 a :
-  negb (is_mul a) -> exps (TExp (TInt 0) a) = {[+ a +]}.
-Proof. by move=> Nm; rewrite exps_TExp_expN // factors_Nmul. Qed.
+  negb (is_mod a) -> exps (TExp (TInt 0) a) = {[+ a +]}.
+Proof.
+move=> Nm.
+by rewrite (@exps_TExp_expN (TInt 0) a I I (mono_num_atom _ Nm)) factors_Nmod.
+Qed.
 
 Lemma exps_TExp2 a b :
-  negb (is_mul a) -> negb (is_mul b) ->
+  negb (is_mod a) -> negb (is_mod b) ->
   exps (TExp (TInt 0) (TMul {[+ a; b +]})) = SMS.make {[+ a; b +]} ∅.
 Proof.
 move=> Nm_a Nm_b.
-have Nab u : u ∈ ({[+ a; b +]} : tsms) → negb (is_mul u).
+have Nab u : u ∈ ({[+ a; b +]} : tsms) → negb (is_mod u).
   by case/SMS.elem_of_disj_union => /SMS.elem_of_singleton ->.
 by rewrite exps_TExp_TMul // !SMS.singleton_make SMS.disj_union_make
   (left_id ∅ (⊎)).
@@ -270,7 +273,7 @@ wp_apply (wp_mk_nonce_freshN T (λ a, P (TExp (TInt 0) a))
             (nsl_dh_key_share skI skR)
             (λ a, {[TExp (TInt 0) a]})) => //.
 - iIntros "%a".
-  rewrite big_sepS_singleton minted_TExp //.
+  rewrite big_sepS_singleton minted_TExp //; last by apply: atom_frac_neq0.
   rewrite minted_TInt /= bi.True_and.
   iModIntro. by iApply bi.equiv_iff.
 iIntros "%a %fresh_a #m_a #s_a #dh_a _ token_ga".
@@ -289,7 +292,7 @@ Lemma public_dh_share skI skR P (a : nonce) :
   public (TExp (TInt 0) a).
 Proof.
 iIntros "#(m_a & _ & #pred_a) corr".
-have Nm : negb (is_mul a) by [].
+have Nm : negb (is_mod a) by [].
 iAssert (exp_pred a (TExp (TInt 0) a)) with "[corr]" as "#dp".
 { iAssert (▷ □ nsl_dh_key_share skI skR (TExp (TInt 0) a))%I
     with "[corr]" as "#ns".
@@ -312,8 +315,8 @@ Lemma public_dh_secret skI skR P_a P_b (a b : nonce) :
   ▷ □ (P_a ∨ P_b).
 Proof.
 iIntros "#(_ & s_a & pred_a) #(_ & s_b & pred_b) #p".
-have Nm_a : negb (is_mul (TNonce a)) by [].
-have Nm_b : negb (is_mul (TNonce b)) by [].
+have Nm_a : negb (is_mod (TNonce a)) by [].
+have Nm_b : negb (is_mod (TNonce b)) by [].
 rewrite TExpA.
 have ab : {[+ TNonce a; TNonce b +]} ⊆
     SMS.pos (exps (TExp (TInt 0) (TMul {[+ TNonce a; TNonce b +]}))).

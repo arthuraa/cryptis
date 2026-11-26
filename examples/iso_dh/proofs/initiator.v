@@ -68,10 +68,11 @@ wp_apply (wp_mk_nonce_freshN ∅ (init_secrecy ρ skI skR) dh_key_share
             (λ a, {[TExp (TInt 0) a]})) => //.
 - iIntros "% ?". by rewrite elem_of_empty.
 - iIntros "%a".
-  rewrite big_sepS_singleton minted_TExp //. rewrite minted_TInt bi.True_and.
+  rewrite big_sepS_singleton minted_TExp //; last by apply: atom_frac_neq0.
+  rewrite minted_TInt bi.True_and.
   iIntros "!>"; iSplit; eauto; by iIntros "(_ & ?)".
 iIntros "%a %fresh #m_a #s_a #a_pred _ token_ga".
-have Nm_a : negb (is_mul (TNonce a)) by [].
+have Nm_a : negb (is_mod (TNonce a)) by [].
 (* [dh.v] takes the generator as a parameter; ISO-DH always uses [TInt 0]. *)
 have NInt : negb (is_exp (TInt 0)) by [].
 have NIntM : negb (is_gmul (TInt 0)) by [].
@@ -156,7 +157,7 @@ iAssert (|={⊤}=>
   - iDestruct "inv"
       as "(%ga' & %b & %skI' & %N' & %φ' & %ρ' & %e_m2 & #N_φ' & #s_b
            & #pred_b & #use & #ready)".
-    have Nm_b : negb (is_mul (TNonce b)) by [].
+    have Nm_b : negb (is_mod (TNonce b)) by [].
     case/Spec.of_list_inj: e_m2
         => <- -> /Spec.sign_pkey_inj <- /Tag_inj <- {ga' gb skI' N'}
       in gab si *.
