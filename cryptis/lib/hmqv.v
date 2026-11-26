@@ -158,36 +158,15 @@ Definition hmqv_K (t_a t_b : string) (p_a x_a P_a X_a P_b X_b : term) : term :=
 
 (** ** Fractions and atoms *)
 
-#[local] Lemma free_TSum2 h a b :
-  h ∉ atoms a → h ∉ atoms b → h ∉ atoms (TSum {[+ a; b +]}).
-Proof.
-move=> ha hb /atoms_TSum_sub [u [/SMS.elem_of_disj_union []
-  /SMS.elem_of_singleton -> hu]] //.
-Qed.
-
-#[local] Lemma free_TMul2 h a b :
-  h ∉ atoms a → h ∉ atoms b → h ∉ atoms (TMul {[+ a; b +]}).
-Proof.
-move=> ha hb /atoms_TMul_sub [u [/SMS.elem_of_disj_union []
-  /SMS.elem_of_singleton -> hu]] //.
-Qed.
-
-#[local] Lemma free_atom h a : negb (is_mod a) → h ≠ a → h ∉ atoms a.
-Proof. by move=> na ne; rewrite atoms_atom. Qed.
-
-#[local] Lemma free_zero h : h ∉ atoms (TSum ∅).
-Proof.
-by move=> /atoms_TSum_sub [u [/SMS.elem_of_count]]; rewrite SMS.count_empty.
-Qed.
-
 #[local] Lemma free_nonce t X P (n : nonce) : hmqv_m t X P ∉ atoms (TNonce n).
-Proof. exact: free_atom. Qed.
+Proof. exact: not_elem_of_atoms_atom. Qed.
 
 #[local] Lemma free_hmqv_s t X P m (p x : nonce) :
   hmqv_m t X P ≠ m → negb (is_mod m) → hmqv_m t X P ∉ atoms (hmqv_s m p x).
 Proof.
-move=> ne nm; apply: free_TSum2; first exact: free_nonce.
-by apply: free_TMul2; [exact: free_atom|exact: free_nonce].
+move=> ne nm; apply: not_elem_of_atoms_TSum2; first exact: free_nonce.
+by apply: not_elem_of_atoms_TMul2;
+  [exact: not_elem_of_atoms_atom|exact: free_nonce].
 Qed.
 
 #[local] Lemma frac_hmqv_s m p x :
@@ -198,43 +177,20 @@ by rewrite /hmqv_s frac_of_TSum Frac.ssum_disj_union !Frac.ssum_singleton
   frac_of_TMul2.
 Qed.
 
-#[local] Lemma nonce_neq0 (n : nonce) : frac_of (TNonce n) ≠ Frac.zero.
-Proof. exact: atom_frac_neq0. Qed.
-
-#[local] Lemma mul_eq0_l (f r : tfrac) :
-  Frac.mul f r = Frac.zero → r ≠ Frac.zero → f = Frac.zero.
-Proof.
-move=> e nr; case: (decide (f = Frac.zero)) => // nf.
-by case: (Frac.mul_neq0 _ _ nf nr).
-Qed.
-
-#[local] Lemma mul_inj_r (f f' r : tfrac) :
-  r ≠ Frac.zero → Frac.mul f r = Frac.mul f' r → f = f'.
-Proof.
-move=> nr e.
-have e0 : Frac.mul (Frac.sub f f') r = Frac.zero.
-  transitivity (Frac.sub (Frac.mul f r) (Frac.mul f' r)); first ring.
-  by rewrite e; ring.
-have e1 := mul_eq0_l e0 nr.
-transitivity (Frac.add (Frac.sub f f') f'); first ring.
-by rewrite e1; ring.
-Qed.
-
-#[local] Lemma zeroE (u : term) : frac_of u = Frac.zero → u = TSum ∅.
-Proof. by move=> e; apply: frac_of_inj; rewrite e frac_of_TSum_empty. Qed.
-
 #[local] Lemma hmqv_s_neq0 t X P (p x : nonce) :
   frac_of (hmqv_s (hmqv_m t X P) p x) ≠ Frac.zero.
 Proof.
 set m := hmqv_m t X P; rewrite frac_hmqv_s => e.
 have [ex _] : TNonce x = TSum ∅ ∧ TNonce p = TSum ∅.
-  apply: (frac_lin (h := m)); try exact: free_nonce; try exact: free_zero.
+  apply: (frac_lin (h := m)); try exact: free_nonce; try
+    exact: not_elem_of_atoms_TSum_empty.
   - exact: hmqv_m_Nmod.
   - rewrite frac_of_TSum_empty.
     transitivity (Frac.add (frac_of (TNonce x))
                     (Frac.mul (frac_of m) (frac_of (TNonce p)))); first ring.
     by rewrite e; ring.
-by move/(f_equal frac_of): ex; rewrite frac_of_TSum_empty; exact: nonce_neq0.
+by move/(f_equal frac_of): ex; rewrite frac_of_TSum_empty;
+  exact: (atom_frac_neq0 (t := TNonce _) I).
 Qed.
 
 (** ** The key formula *)
@@ -259,8 +215,9 @@ Proof. exact: log_TExp. Qed.
   hmqv_m t X P ≠ hmqv_m t_b X_b P_a →
   hmqv_m t X P ∉ atoms (log b (hmqv_Y t_b P_a P_b X_b)).
 Proof.
-move=> hX hP hm; rewrite log_hmqv_Y; apply: free_TSum2 hX _.
-by apply: free_TMul2 hP _; apply: free_atom; [exact: hmqv_m_Nmod|].
+move=> hX hP hm; rewrite log_hmqv_Y; apply: not_elem_of_atoms_TSum2 hX _.
+by apply: not_elem_of_atoms_TMul2 hP _;
+  apply: not_elem_of_atoms_atom; [exact: hmqv_m_Nmod|].
 Qed.
 
 #[local] Lemma free_log_hmqv_K t X P b t_a t_b (p_a x_a : nonce)
@@ -270,7 +227,7 @@ Qed.
   hmqv_m t X P ∉ atoms (log b (hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b)).
 Proof.
 move=> hX hP hB hA; rewrite log_hmqv_K.
-apply: free_TMul2; first exact: free_log_hmqv_Y.
+apply: not_elem_of_atoms_TMul2; first exact: free_log_hmqv_Y.
 by apply: free_hmqv_s => //; exact: hmqv_m_Nmod.
 Qed.
 
@@ -293,10 +250,10 @@ Lemma hmqv_K_unit t_a t_b (p_a x_a : nonce) P_a X_a P_b X_b :
   hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b = TGMul ∅ →
   hmqv_Y t_b P_a P_b X_b = TGMul ∅.
 Proof.
-move=> eK; apply: log_eq0 => b; apply: zeroE.
+move=> eK; apply: log_eq0 => b; apply: frac_of_eq0.
 move/(f_equal (λ u, frac_of (log b u))): eK.
 rewrite /= log_unit log_hmqv_K frac_of_TMul2 frac_of_TSum_empty => e.
-exact: mul_eq0_l e (@hmqv_s_neq0 _ _ _ _ _).
+exact: Frac.mul_eq0_l _ _ e (@hmqv_s_neq0 _ _ _ _ _).
 Qed.
 
 (** If two peer ephemerals [X_b], [X_b'] yield the same session key against the
@@ -310,7 +267,7 @@ Proof.
 move=> eK; apply: log_inj => b; apply: frac_of_inj.
 move/(f_equal (λ u, frac_of (log b u))): eK.
 rewrite /= !log_hmqv_K !frac_of_TMul2.
-exact: mul_inj_r (@hmqv_s_neq0 _ _ _ _ _).
+exact: Frac.mul_inj_r _ _ _ (@hmqv_s_neq0 _ _ _ _ _).
 Qed.
 
 Lemma hmqv_K_neq_unit t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b :
@@ -321,14 +278,15 @@ move=> gNX gNm /hmqv_K_unit /(f_equal (log g)).
 rewrite log_unit log_hmqv_Y log_TExp_g //.
 set m := hmqv_m t_b X_b P_a => e.
 have [_ ep] : log g X_b = TSum ∅ ∧ TNonce p_b = TSum ∅.
-  apply: (frac_lin (h := m)); try exact: free_zero.
+  apply: (frac_lin (h := m)); try exact: not_elem_of_atoms_TSum_empty.
   - exact: hmqv_m_Nmod.
   - exact: log_small (tsize_hmqv_m_lt _ _ _).
   - exact: free_nonce.
   - move/(f_equal frac_of): e.
     rewrite frac_of_TSum Frac.ssum_disj_union !Frac.ssum_singleton.
     by rewrite frac_of_TMul2 !frac_of_TSum_empty => ->; ring.
-by move/(f_equal frac_of): ep; rewrite frac_of_TSum_empty; exact: nonce_neq0.
+by move/(f_equal frac_of): ep; rewrite frac_of_TSum_empty;
+  exact: (atom_frac_neq0 (t := TNonce _) I).
 Qed.
 
 (** *** Comparing coefficients of a multiplier *)
@@ -351,16 +309,16 @@ have [_ e] : TMul {[+ y; TNonce x_a +]} = log b K' ∧
              TMul {[+ y; TNonce p_a +]} = TSum ∅.
   apply: (frac_lin (h := m)).
   - exact: hmqv_m_Nmod.
-  - by apply: free_TMul2 (hY b) _; exact: free_nonce.
-  - by apply: free_TMul2 (hY b) _; exact: free_nonce.
+  - by apply: not_elem_of_atoms_TMul2 (hY b) _; exact: free_nonce.
+  - by apply: not_elem_of_atoms_TMul2 (hY b) _; exact: free_nonce.
   - exact: hK'.
-  - exact: free_zero.
+  - exact: not_elem_of_atoms_TSum_empty.
   - move/(f_equal (λ u, frac_of (log b u))): eK.
     rewrite /= log_hmqv_K -/m -/y frac_of_TMul2 frac_hmqv_s => <-.
     by rewrite !frac_of_TMul2 frac_of_TSum_empty; ring.
-apply: zeroE; move/(f_equal frac_of): e.
+apply: frac_of_eq0; move/(f_equal frac_of): e.
 rewrite frac_of_TMul2 frac_of_TSum_empty => e.
-exact: mul_eq0_l e (@nonce_neq0 _).
+exact: Frac.mul_eq0_l _ _ e (atom_frac_neq0 (t := TNonce _) I).
 Qed.
 
 (** An unmatched peer multiplier that the other key and the claimed peer key
@@ -382,28 +340,19 @@ have [_ e] : TMul {[+ log b X_b; s +]} = log b K' ∧
              TMul {[+ log b P_b; s +]} = TSum ∅.
   apply: (frac_lin (h := m)).
   - exact: hmqv_m_Nmod.
-  - exact: free_TMul2.
-  - exact: free_TMul2 (hP b) hs.
+  - exact: not_elem_of_atoms_TMul2.
+  - exact: not_elem_of_atoms_TMul2 (hP b) hs.
   - exact: hK'.
-  - exact: free_zero.
+  - exact: not_elem_of_atoms_TSum_empty.
   - move/(f_equal (λ u, frac_of (log b u))): eK.
     rewrite /= log_hmqv_K log_hmqv_Y -/m -/s => <-.
     rewrite !frac_of_TMul2 frac_of_TSum Frac.ssum_disj_union.
     by rewrite !Frac.ssum_singleton frac_of_TMul2 frac_of_TSum_empty; ring.
-apply: zeroE; move/(f_equal frac_of): e.
+apply: frac_of_eq0; move/(f_equal frac_of): e.
 rewrite frac_of_TMul2 frac_of_TSum_empty => e.
-exact: mul_eq0_l e (@hmqv_s_neq0 _ _ _ _ _).
+exact: Frac.mul_eq0_l _ _ e (@hmqv_s_neq0 _ _ _ _ _).
 Qed.
 
-
-#[local] Lemma TExp_unit_inv t e :
-  frac_of e ≠ Frac.zero → TExp t e = TGMul ∅ → t = TGMul ∅.
-Proof.
-move=> ne et; apply: log_eq0 => b; apply: zeroE.
-move/(f_equal (λ u, frac_of (log b u))): et.
-rewrite /= log_unit log_TExp frac_of_TMul2 frac_of_TSum_empty => e'.
-exact: mul_eq0_l e' ne.
-Qed.
 
 (** A non-trivial session key does NOT bind an *unvetted* peer long-term key.
     Take a degenerate [P_b = 1] on one side and, on the other, a reflected
@@ -511,10 +460,10 @@ have part b : TMul {[+ log b P_b; s +]} = TMul {[+ log b P_b'; s' +]}.
                TMul {[+ log b P_b; s +]} = TMul {[+ log b P_b'; s' +]}.
     apply: (frac_lin (h := B)).
     - exact: hmqv_m_Nmod.
-    - exact: free_TMul2.
-    - by apply: free_TMul2 => //; apply: log_small; lia.
-    - exact: free_TMul2.
-    - by apply: free_TMul2 => //; apply: log_small; lia.
+    - exact: not_elem_of_atoms_TMul2.
+    - by apply: not_elem_of_atoms_TMul2 => //; apply: log_small; lia.
+    - exact: not_elem_of_atoms_TMul2.
+    - by apply: not_elem_of_atoms_TMul2 => //; apply: log_small; lia.
     - move/(f_equal (λ u, frac_of (log b u))): eK.
       rewrite /= !log_hmqv_K !log_hmqv_Y !frac_of_TMul2 !frac_of_TSum.
       rewrite !Frac.ssum_disj_union !Frac.ssum_singleton !frac_of_TMul2.
@@ -536,16 +485,16 @@ have key X P X' P' (p x p' x' : nonce) Q Q' :
                TMul {[+ log b Q; TNonce p +]} = TSum ∅.
     apply: (frac_lin (h := A)).
     - exact: hmqv_m_Nmod.
-    - by apply: free_TMul2; [apply: log_small|exact: free_nonce].
-    - by apply: free_TMul2; [apply: log_small|exact: free_nonce].
-    - apply: free_TMul2; first by apply: log_small.
+    - by apply: not_elem_of_atoms_TMul2; [apply: log_small|exact: free_nonce].
+    - by apply: not_elem_of_atoms_TMul2; [apply: log_small|exact: free_nonce].
+    - apply: not_elem_of_atoms_TMul2; first by apply: log_small.
       by apply: free_hmqv_s; [|exact: hmqv_m_Nmod].
-    - exact: free_zero.
+    - exact: not_elem_of_atoms_TSum_empty.
     - move/(f_equal frac_of): (E b); rewrite !frac_of_TMul2 frac_hmqv_s => <-.
       by rewrite frac_of_TSum_empty; ring.
-  apply: zeroE; move/(f_equal frac_of): e.
+  apply: frac_of_eq0; move/(f_equal frac_of): e.
   rewrite frac_of_TMul2 frac_of_TSum_empty => e.
-  exact: mul_eq0_l e (@nonce_neq0 _).
+  exact: Frac.mul_eq0_l _ _ e (atom_frac_neq0 (t := TNonce _) I).
 case: (Nat.le_ge_cases (tsize (hmqv_m t_a X_a' P_b'))
                        (tsize (hmqv_m t_a X_a P_b))) => le.
 - apply: nP.
@@ -640,22 +589,23 @@ case=> [[h1 h2]|[[h1 h2]|[h1 h2]]].
                  TMul {[+ y; TNonce p_a +]} = TMul {[+ y'; TNonce p_a' +]}.
     apply: (frac_lin (h := A)).
     - exact: hmqv_m_Nmod.
-    - by apply: free_TMul2 => //; exact: free_nonce.
-    - by apply: free_TMul2 => //; exact: free_nonce.
-    - by apply: free_TMul2 => //; exact: free_nonce.
-    - by apply: free_TMul2 => //; exact: free_nonce.
+    - by apply: not_elem_of_atoms_TMul2 => //; exact: free_nonce.
+    - by apply: not_elem_of_atoms_TMul2 => //; exact: free_nonce.
+    - by apply: not_elem_of_atoms_TMul2 => //; exact: free_nonce.
+    - by apply: not_elem_of_atoms_TMul2 => //; exact: free_nonce.
     - move/(f_equal (λ u, frac_of (log b u))): eK.
       rewrite /= !log_hmqv_K -/A -/y -/y' !frac_of_TMul2 !frac_hmqv_s => e.
       by apply: (eq_trans _ (eq_trans e _)); ring.
   have eyy : frac_of y = frac_of y'.
     move/(f_equal frac_of): e0; rewrite !frac_of_TMul2.
-    exact: mul_inj_r (@nonce_neq0 _).
-  apply: zeroE; move/(f_equal frac_of): e1; rewrite !frac_of_TMul2 -eyy => e1.
+    exact: Frac.mul_inj_r _ _ _ (atom_frac_neq0 (t := TNonce _) I).
+  apply: frac_of_eq0; move/(f_equal frac_of): e1;
+    rewrite !frac_of_TMul2 -eyy => e1.
   case: (decide (frac_of y = Frac.zero)) => // ny.
   exfalso; apply: np.
   have : frac_of (TNonce p_a) = frac_of (TNonce p_a').
     rewrite (comm Frac.mul (frac_of y)) (comm Frac.mul (frac_of y)) in e1.
-    exact: mul_inj_r ny e1.
+    exact: Frac.mul_inj_r _ _ _ ny e1.
   by move/frac_of_inj => - [].
 - (* The peer multiplier of the first key is the largest and unmatched. *)
   apply: nP; apply: (hmqv_K_peer tab _ _ eK) => b.
@@ -684,7 +634,7 @@ Proof.
 move=> gNX gNm tab eK.
 have gN1 := Ngmul_neq_unit gNm.
 have nP (p : nonce) : TExp g p ≠ TGMul ∅.
-  exact: Ngmul_neq_unit (Ngmul_TExp gNm (monic_atom (TNonce p) I)).
+  exact: Ngmul_neq_unit (Ngmul_TExp gNm (mono_num_atom (TNonce p) I)).
 have [ep [ex eP]] :=
   hmqv_K_inj gNX gNm tab (nP _) (nP _) (hmqv_K_neq_unit gNX gNm) eK.
 subst p_a' x_a'.
@@ -708,16 +658,18 @@ have key X X' (C C' : term) :
                TNonce p_b = TSum ∅.
     apply: (frac_lin (h := C)) => //.
     - by apply: log_small; lia.
-    - by apply: free_atom => //; exact: hC.
-    - apply: free_TSum2; first by apply: log_small; lia.
-      apply: free_TMul2; first by apply: free_atom => //; exact: hC.
-      exact: free_atom.
-    - exact: free_zero.
+    - by apply: not_elem_of_atoms_atom => //; exact: hC.
+    - apply: not_elem_of_atoms_TSum2; first by apply: log_small; lia.
+      apply: not_elem_of_atoms_TMul2;
+        first by apply: not_elem_of_atoms_atom => //; exact: hC.
+      exact: not_elem_of_atoms_atom.
+    - exact: not_elem_of_atoms_TSum_empty.
     - move/(f_equal frac_of): E.
       rewrite !frac_of_TSum !Frac.ssum_disj_union !Frac.ssum_singleton.
       rewrite Frac.ssum_empty !frac_of_TMul2 => e.
       by apply: (eq_trans _ (eq_trans e _)); ring.
-  by move/(f_equal frac_of): e; rewrite frac_of_TSum_empty; exact: nonce_neq0.
+  by move/(f_equal frac_of): e; rewrite frac_of_TSum_empty;
+    exact: (atom_frac_neq0 (t := TNonce _) I).
 case: (Nat.le_ge_cases (tsize B') (tsize B)) => le.
 - by apply: (key X_b X_b' B B') => //; exact: hmqv_m_Nmod.
 - by apply: (key X_b' X_b B' B (not_eq_sym nB)) => //; exact: hmqv_m_Nmod.
@@ -748,8 +700,9 @@ move=> gNX gNm tab nP nK eK hA hB hh.
 have tags X X' Q Q' : hmqv_m t_a X Q ≠ hmqv_m t_b X' Q' by case/hmqv_m_inj.
 have hN (n : nonce) : h ≠ TNonce n by case: hh => [[-> _]|[-> _]].
 have honest b (n : nonce) : h ∉ atoms (log b (TExp g n)).
-  rewrite log_TExp_atom //; case: bool_decide; last exact: free_zero.
-  by apply: free_atom => //; exact: hN.
+  rewrite log_TExp_atom //; case: bool_decide;
+    last exact: not_elem_of_atoms_TSum_empty.
+  by apply: not_elem_of_atoms_atom => //; exact: hN.
 have fX b : h ∉ atoms (log b X_b).
   case: (hB) => [/hmqv_m_inj [_ [-> _]]|[lB _]]; first exact: honest.
   by apply: log_small; have := tsize_hmqv_m_lt t_b X_b (TExp g p_a); lia.
@@ -836,109 +789,9 @@ Add Ring kf_ring : (Frac.frac_ring_theory (T := PreTerm.pre_term)).
 Add Field kf_field : (Frac.frac_field_theory (T := PreTerm.pre_term)).
 Add Ring kf_pring : (Poly.poly_ring_theory (T := PreTerm.pre_term)).
 
-#[local] Lemma pfrac_TMul2 a b :
-  pfrac (TMul {[+ a; b +]}) = Frac.mul (pfrac a) (pfrac b).
-Proof.
-by rewrite -!unfold_frac_of frac_of_TMul2 (Frac.map_mul _ unfold_term_inj).
-Qed.
-
-#[local] Lemma pfrac_TSum2 a b :
-  pfrac (TSum {[+ a; b +]}) = Frac.add (pfrac a) (pfrac b).
-Proof.
-rewrite -!unfold_frac_of frac_of_TSum Frac.ssum_disj_union.
-by rewrite !Frac.ssum_singleton (Frac.map_add _ unfold_term_inj).
-Qed.
-
-#[local] Lemma pfrac_atom a :
-  negb (is_mod a) → pfrac a = Frac.of_poly (Poly.var (unfold_term a)).
-Proof. by move=> na; apply: PreTerm.frac_of_Nmod; rewrite -is_mod_unfold. Qed.
-
-#[local] Lemma free_pfrac h t :
-  h ∉ atoms t → PreTerm.atoms_all (λ z, z ≠ unfold_term h) (pfrac t).
-Proof.
-move=> ht; apply/PreTerm.atoms_all_vars => z zt ez; apply: ht.
-apply/elem_of_atoms; exists z; split; last exact: zt.
-by rewrite ez unfold_termK.
-Qed.
-
-#[local] Lemma coeff_mono_mul_in (μ ρ : MSet.mset PreTerm.pre_term)
-    (Q : Poly.poly PreTerm.pre_term) :
-  Poly.coeff (μ ⊎ ρ) (Poly.mul (Poly.mono μ) Q) = Poly.coeff ρ Q.
-Proof.
-rewrite !Poly.coeffE Poly.car_mul_mono.
-apply: (SMS.count_map_inj (λ n, μ ⊎ n)) => a b e.
-apply: MSet.count_inj => z; move/(f_equal (MSet.count z)): e.
-rewrite !MSet.count_disj_union; lia.
-Qed.
-
-#[local] Lemma coeff_mono_mul_out (μ ρ : MSet.mset PreTerm.pre_term)
-    (Q : Poly.poly PreTerm.pre_term) y :
-  y ∈ μ → y ∉ ρ → Poly.coeff ρ (Poly.mul (Poly.mono μ) Q) = 0%Z.
-Proof.
-move=> yμ yρ; rewrite Poly.coeffE Poly.car_mul_mono.
-apply: SMS.not_elem_of_count => /SMS.elem_of_map [n [en _]].
-by apply: yρ; rewrite en; apply/MSet.elem_of_disj_union; left.
-Qed.
-
-#[local] Lemma content_le_deg z (D : Poly.poly PreTerm.pre_term) :
-  D ≠ Poly.zero → MSet.count z (PolyGcd.content D) ≤ Poly.deg z D.
-Proof.
-move=> nD; have [δ [cδ _]] := PolyGcd.deg_witness z D nD.
-have := PolyGcd.count_le_deg z δ D cδ.
-have := proj1 (MSet.subseteq_count _ _)
-  (PolyGcd.content_sub D δ (proj1 (Poly.coeff_neq0_elem _ _) cδ)) z.
-lia.
-Qed.
-
-#[local] Lemma count_expo_gfactor t u k ν y :
-  gfactor_of t u k ν → negb (is_mod y) →
-  count y (expo u) =
-  (Z.of_nat (MSet.count (unfold_term y) ν) -
-   Z.of_nat (MSet.count (unfold_term y)
-               (PolyGcd.content (Frac.den (tdh t !!! k)))))%Z.
-Proof.
-move=> G ny; have lu := lg_gfactor G.
-case: G => nr [νr eu].
-set r := tdh t !!! k in nr νr eu lu *.
-have nD := Frac.den_neq0 r.
-have [h [hν [en eD]]] := make_mono_canon ν nD (Frac.den_first_neg r).
-have nden := Frac.den_neq0 (Frac.make (Poly.mono ν) (Frac.den r)).
-have CD : PolyGcd.content (Frac.den r) =
-          h ⊎ PolyGcd.content (Frac.den (Frac.make (Poly.mono ν) (Frac.den r))).
-  rewrite -[in LHS]eD (PolyGcd.content_mul _ _ (PolyGcd.mono_neq0 _) nden).
-  by rewrite PolyGcd.content_mono.
-rewrite (@count_expo u y (ν ∖ h)); last by rewrite lu en.
-rewrite lu MSet.count_difference MSet.count_disj_union CD MSet.count_disj_union.
-have -> : MSet.count (unfold_term y)
-            (PreTerm.units (Frac.den (Frac.make (Poly.mono ν) (Frac.den r))))
-          = 0.
-  apply/MSet.not_elem_of_count => /PreTerm.units_mod.
-  by rewrite -is_mod_unfold; move: ny; case: (is_mod y).
-have := proj1 (MSet.subseteq_count _ _) hν (unfold_term y); lia.
-Qed.
-
-#[local] Lemma pos_exps_two u (a b : term) :
-  (1 + (if bool_decide (a = b) then 1 else 0) ≤ count a (expo u))%Z →
-  (1 ≤ count b (expo u))%Z →
-  {[+ a; b +]} ⊆ SMS.pos (exps u).
-Proof.
-move=> ca cb; apply/MSet.subseteq_count => z.
-have E := count_exps_pos z u.
-rewrite MSet.count_disj_union !MSet.count_singleton.
-case: (decide (z = a)) => [ez|za].
-  subst z; rewrite bool_decide_eq_true_2 //.
-  case: (bool_decide_reflect (a = b)) => [e|ne].
-  - by rewrite (bool_decide_eq_true_2 _ e) in ca; lia.
-  - by rewrite (bool_decide_eq_false_2 _ ne) in ca; lia.
-rewrite bool_decide_eq_false_2 //.
-case: (decide (z = b)) => [ez|zb]; first by subst z; rewrite
-  bool_decide_eq_true_2 //; lia.
-by rewrite bool_decide_eq_false_2 //; lia.
-Qed.
-
 #[local] Lemma lin_parts (r A : Frac.frac PreTerm.pre_term)
     (Q S : Poly.poly PreTerm.pre_term) y :
-  PreTerm.atoms_all (λ z, z ≠ y) A →
+  Frac.all_vars (λ z, z ≠ y) A →
   (∀ m, m ∈ Poly.car Q → y ∉ m) → (∀ m, m ∈ Poly.car S → y ∉ m) →
   r = Frac.mul (Frac.add A (Frac.mul (Frac.of_poly Q)
                                      (Frac.of_poly (Poly.var y))))
@@ -960,13 +813,13 @@ have Dfree : ∀ m, m ∈ Poly.car D → y ∉ m.
   move=> m mD ym.
   have yD : y ∈ Poly.vars (Frac.den r) by apply/Poly.elem_of_vars; exists m.
   rewrite er in yD.
-  case: (PolyRestrict.vars_den_mul _ _ _ yD) => [yAQ|yS]; last exact: no1 yS.
-  case: (PolyRestrict.vars_den_add _ _ _ yAQ) => [yA|yQ].
-  - have := proj1 (PreTerm.atoms_all_vars _ _) hA y.
-    by apply; rewrite // /PreTerm.frac_vars; apply/elem_of_app; right.
+  case: (Frac.vars_den_mul _ _ _ yD) => [yAQ|yS]; last exact: no1 yS.
+  case: (Frac.vars_den_add _ _ _ yAQ) => [yA|yQ].
+  - have := proj1 (Frac.all_vars_iff _ _) hA y.
+    by apply; rewrite // /Frac.vars; apply/elem_of_app; right.
   - by move: yQ; rewrite -Frac.of_poly_mul; apply: no1.
 have poly_free p : (∀ m, m ∈ Poly.car p → y ∉ m) →
-    PreTerm.atoms_all (λ z, z ≠ y) (Frac.of_poly p).
+    Frac.all_vars (λ z, z ≠ y) (Frac.of_poly p).
   move=> hp m x [mp|mp] xm ex; subst x.
   - by move: mp; rewrite Frac.num_of_poly => /hp.
   - move: mp; rewrite Frac.den_of_poly Poly.oneE Poly.car_mono.
@@ -985,20 +838,20 @@ have eP0 : Frac.of_poly P0 = Frac.mul A (Frac.of_poly (S * D)%P).
   rewrite /P0 /P1 Frac.of_poly_add Frac.of_poly_opp !Frac.of_poly_mul eN er.
   by rewrite -Poly.varE; ring.
 have P0free : ∀ ρ, ρ ∈ Poly.car P0 → y ∉ ρ.
-  have : PreTerm.atoms_all (λ z, z ≠ y) (Frac.of_poly P0).
-    rewrite eP0; apply: PreTerm.atoms_all_mul hA _.
-    rewrite Frac.of_poly_mul; apply: PreTerm.atoms_all_mul; exact: poly_free.
+  have : Frac.all_vars (λ z, z ≠ y) (Frac.of_poly P0).
+    rewrite eP0; apply: Frac.all_vars_mul hA _.
+    rewrite Frac.of_poly_mul; apply: Frac.all_vars_mul; exact: poly_free.
   move=> h ρ ρP yρ; apply: (h ρ y) => //; left; by rewrite Frac.num_of_poly.
 split=> //; split.
   move=> ρ ρP1; apply/Poly.coeff_neq0_elem.
-  rewrite eNP Poly.coeff_add coeff_mono_mul_in.
+  rewrite eNP Poly.coeff_add Poly.coeff_mono_mul_in.
   have -> : Poly.coeff ({[+ y +]} ⊎ ρ) P0 = 0%Z.
     case: (decide (Poly.coeff ({[+ y +]} ⊎ ρ) P0 = 0%Z)) => //.
     move=> /Poly.coeff_neq0_elem /P0free []; apply/MSet.elem_of_disj_union.
     by left; apply/MSet.elem_of_singleton.
   by rewrite Z.add_0_l; apply/Poly.coeff_neq0_elem.
 exists P0; split=> // ρ ρP; apply/Poly.coeff_neq0_elem.
-rewrite eNP Poly.coeff_add (@coeff_mono_mul_out {[+ y +]} ρ _ y) ?Z.add_0_r.
+rewrite eNP Poly.coeff_add (Poly.coeff_mono_mul_out {[+ y +]} ρ _ y) ?Z.add_0_r.
 - exact/Poly.coeff_neq0_elem.
 - exact/MSet.elem_of_singleton.
 - exact: P0free.
@@ -1042,25 +895,28 @@ set ux := unfold_term (TNonce x_a); set up := unfold_term (TNonce p_a).
 set ub := unfold_term (TNonce p_b); set ua := unfold_term (TNonce a).
 set um := unfold_term mA.
 set sp := (Poly.var ux + Poly.var um * Poly.var up)%P.
-set r := tdh K !!! unfold_term g.
+set r := dh_map K !!! unfold_term g.
 have hash_nonce (n : nonce) t X P : unfold_term (hmqv_m t X P) ≠
                                     unfold_term (TNonce n).
   by move/unfold_term_inj.
 have yum : y ≠ um.
   by move/unfold_term_inj/hmqv_m_inj => [] e _; apply: tab.
-have er : r = Frac.mul (Frac.add (pfrac (log g X_b))
+have er : r = Frac.mul (Frac.add (pre_frac (log g X_b))
                          (Frac.mul (Frac.of_poly (Poly.var ub))
                                    (Frac.of_poly (Poly.var y))))
                        (Frac.of_poly sp).
-  rewrite /r -pfrac_log /K log_hmqv_K log_hmqv_Y log_TExp_g //.
-  rewrite pfrac_TMul2 pfrac_TSum2 pfrac_TMul2 /hmqv_s pfrac_TSum2 pfrac_TMul2.
-  rewrite (pfrac_atom (a := TNonce p_b)) // (pfrac_atom (a := mB));
+  rewrite /r -pre_frac_log /K log_hmqv_K log_hmqv_Y log_TExp_g //.
+  rewrite pre_frac_TMul2 pre_frac_TSum2 pre_frac_TMul2 /hmqv_s pre_frac_TSum2
+    pre_frac_TMul2.
+  rewrite (pre_frac_atom (a := TNonce p_b)) // (pre_frac_atom (a := mB));
     last exact: hmqv_m_Nmod.
-  rewrite (pfrac_atom (a := TNonce x_a)) // (pfrac_atom (a := TNonce p_a)) //.
-  rewrite (pfrac_atom (a := mA)); last exact: hmqv_m_Nmod.
+  rewrite (pre_frac_atom (a := TNonce x_a)) // (pre_frac_atom (a := TNonce p_a))
+    //.
+  rewrite (pre_frac_atom (a := mA)); last exact: hmqv_m_Nmod.
   by rewrite /sp Frac.of_poly_add Frac.of_poly_mul.
-have hA : PreTerm.atoms_all (λ z, z ≠ y) (pfrac (log g X_b)).
-  by apply: free_pfrac; apply: log_small; exact: tsize_hmqv_m_lt.
+have hA : Frac.all_vars (λ z, z ≠ y) (pre_frac (log g X_b)).
+  by apply: not_elem_of_atoms_pre_frac; apply: log_small;
+    exact: tsize_hmqv_m_lt.
 have hQ : ∀ m, m ∈ Poly.car (Poly.var ub) → y ∉ m.
   move=> m; rewrite Poly.varE Poly.car_mono => /SMS.elem_of_singleton ->.
   by move=> /MSet.elem_of_singleton; apply: hash_nonce.
@@ -1115,7 +971,7 @@ have ya : ua ≠ y.
   by move=> e; exact: (hash_nonce a t_b X_b P_a (eq_sym e)).
 have yb : ub ≠ y.
   by move=> e; exact: (hash_nonce p_b t_b X_b P_a (eq_sym e)).
-have Dle := content_le_deg ua nD.
+have Dle := PolyGcd.content_le_deg ua _ nD.
 have dSD := PolyGcd.deg_mul ua _ _ nsp nD.
 have cSD := proj1 (MSet.subseteq_count _ _)
   (PolyGcd.content_sub _ ρ' ρ'SD) ub.
@@ -1160,18 +1016,21 @@ set ux := unfold_term (TNonce x_a); set up := unfold_term (TNonce p_a).
 set ub := unfold_term (TNonce p_b); set uxb := unfold_term (TNonce x_b).
 set um := unfold_term mA.
 set sp := (Poly.var ux + Poly.var um * Poly.var up)%P.
-set r := tdh K !!! unfold_term g.
+set r := dh_map K !!! unfold_term g.
 have hash_nonce (n : nonce) t X P : unfold_term (hmqv_m t X P) ≠
                                     unfold_term (TNonce n).
   by move/unfold_term_inj.
 have er : r = Frac.of_poly
                 ((Poly.var uxb + Poly.var ub * Poly.var y) * sp)%P.
-  rewrite /r -pfrac_log /K log_hmqv_K log_hmqv_Y !log_TExp_g //.
-  rewrite pfrac_TMul2 pfrac_TSum2 pfrac_TMul2 /hmqv_s pfrac_TSum2 pfrac_TMul2.
-  rewrite (pfrac_atom (a := TNonce x_b)) // (pfrac_atom (a := TNonce p_b)) //.
-  rewrite (pfrac_atom (a := mB)); last exact: hmqv_m_Nmod.
-  rewrite (pfrac_atom (a := TNonce x_a)) // (pfrac_atom (a := TNonce p_a)) //.
-  rewrite (pfrac_atom (a := mA)); last exact: hmqv_m_Nmod.
+  rewrite /r -pre_frac_log /K log_hmqv_K log_hmqv_Y !log_TExp_g //.
+  rewrite pre_frac_TMul2 pre_frac_TSum2 pre_frac_TMul2 /hmqv_s pre_frac_TSum2
+    pre_frac_TMul2.
+  rewrite (pre_frac_atom (a := TNonce x_b)) // (pre_frac_atom (a := TNonce p_b))
+    //.
+  rewrite (pre_frac_atom (a := mB)); last exact: hmqv_m_Nmod.
+  rewrite (pre_frac_atom (a := TNonce x_a)) // (pre_frac_atom (a := TNonce p_a))
+    //.
+  rewrite (pre_frac_atom (a := mA)); last exact: hmqv_m_Nmod.
   by rewrite /sp !Frac.of_poly_mul !Frac.of_poly_add !Frac.of_poly_mul.
 pose (ν := ({[+ uxb +]} ⊎ {[+ ux +]} : MSet.mset PreTerm.pre_term)).
 have uxm : ux ≠ um.
@@ -1182,7 +1041,8 @@ assert (νN : ν ∈ Poly.car (Frac.num r)).
             (Poly.mul (Poly.mono {[+ uxb +]}) sp +
              Poly.mul (Poly.mono ({[+ ub +]} ⊎ {[+ y +]})) sp)%P.
     by rewrite !Poly.varE -Poly.mul_mono; ring.
-  rewrite Poly.coeff_add coeff_mono_mul_in (@coeff_mono_mul_out _ ν _ y).
+  rewrite Poly.coeff_add Poly.coeff_mono_mul_in
+    (Poly.coeff_mono_mul_out _ ν _ y).
   - by rewrite Z.add_0_r; apply: coeff_scalar => //; left.
   - by apply/MSet.elem_of_disj_union; right; apply/MSet.elem_of_singleton.
   - case/MSet.elem_of_disj_union => /MSet.elem_of_singleton e.

@@ -43,11 +43,11 @@ Definition mset_eq : val := λ: "eq" "X" "Y", eq_list "eq" "X" "Y".
 
 Definition mset_le : val := λ: "eq" "le" "X" "Y", leq_list "eq" "le" "X" "Y".
 
-(* [MSet.glt] and its least element ([MSet.gmin_list]). *)
+(* [MSet.grlex_lt] and its least element ([MSet.grlex_min]). *)
 Definition mset_size : val := λ: "X",
   foldr_list (λ: <> "n", "n" + #1) #0 "X".
 
-Definition mset_glt : val := λ: "eq" "le" "X" "Y",
+Definition mset_grlex_lt : val := λ: "eq" "le" "X" "Y",
   let: "sX" := mset_size "X" in
   let: "sY" := mset_size "Y" in
   if: "sX" < "sY" then #true
@@ -55,11 +55,12 @@ Definition mset_glt : val := λ: "eq" "le" "X" "Y",
     if: mset_eq "eq" "X" "Y" then #false else mset_le "eq" "le" "X" "Y"
   else #false.
 
-Definition mset_gmin : val := λ: "eq" "le" "Xs",
+Definition mset_grlex_min : val := λ: "eq" "le" "Xs",
   foldr_list (λ: "X" "acc",
     match: "acc" with
       NONE => SOME "X"
-    | SOME "Y" => if: mset_glt "eq" "le" "Y" "X" then SOME "Y" else SOME "X"
+    | SOME "Y" => if: mset_grlex_lt "eq" "le" "Y" "X" then SOME "Y" else SOME
+      "X"
     end) NONE "Xs".
 
 (** ** Specifications *)
@@ -191,9 +192,9 @@ have -> : foldr (λ (_ : T) (n : Z), (n + 1)%Z) 0%Z (elements X) =
 by iApply "HΨ".
 Qed.
 
-Lemma twp_mset_glt X Y E Ψ :
-  Ψ #(bool_decide (MSet.glt X Y)) ⊢
-  WP mset_glt eqv lev (repr X) (repr Y) @ E [{ Ψ }].
+Lemma twp_mset_grlex_lt X Y E Ψ :
+  Ψ #(bool_decide (MSet.grlex_lt X Y)) ⊢
+  WP mset_grlex_lt eqv lev (repr X) (repr Y) @ E [{ Ψ }].
 Proof.
 iIntros "HΨ"; wp_lam; wp_pures.
 wp_apply twp_mset_size; wp_pures; wp_apply twp_mset_size; wp_pures.
@@ -204,10 +205,12 @@ wp_pures.
 case: (bool_decide_reflect (#(Z.of_nat (size X)) = #(Z.of_nat (size Y)))).
 - move=> [e]; wp_pures; wp_apply twp_mset_eq.
   case: (bool_decide_reflect (X = Y)) => [->|nXY]; wp_pures.
-    by rewrite bool_decide_eq_false_2; [iApply "HΨ"|exact: MSet.glt_irrefl].
+    by rewrite bool_decide_eq_false_2;
+      [iApply "HΨ"|exact: MSet.grlex_lt_irrefl].
   wp_apply twp_mset_le.
-  rewrite (bool_decide_ext (MSet.le X Y) (MSet.glt X Y)); first by iApply "HΨ".
-  rewrite /MSet.le /MSet.glt; split.
+  rewrite (bool_decide_ext (MSet.le X Y) (MSet.grlex_lt X Y));
+    first by iApply "HΨ".
+  rewrite /MSet.le /MSet.grlex_lt; split.
   + by case=> // l; right; split=> //; lia.
   + by case=> [|[_ l]]; [lia|right].
 - move=> ne; wp_pures.
@@ -215,28 +218,28 @@ case: (bool_decide_reflect (#(Z.of_nat (size X)) = #(Z.of_nat (size Y)))).
   by case=> [|[e _]]; [lia|apply: ne; rewrite e].
 Qed.
 
-Definition gmin_step (X : MSet.mset T) (acc : option (MSet.mset T)) :
+Definition grlex_min_step (X : MSet.mset T) (acc : option (MSet.mset T)) :
     option (MSet.mset T) :=
   match acc with
   | None => Some X
-  | Some Y => if bool_decide (MSet.glt Y X) then Some Y else Some X
+  | Some Y => if bool_decide (MSet.grlex_lt Y X) then Some Y else Some X
   end.
 
-Lemma twp_mset_gmin (Xs : list (MSet.mset T)) E Ψ :
-  Ψ (repr (MSet.gmin_list Xs)) ⊢
-  WP mset_gmin eqv lev (repr Xs) @ E [{ Ψ }].
+Lemma twp_mset_grlex_min (Xs : list (MSet.mset T)) E Ψ :
+  Ψ (repr (MSet.grlex_min Xs)) ⊢
+  WP mset_grlex_min eqv lev (repr Xs) @ E [{ Ψ }].
 Proof.
 iIntros "HΨ"; wp_lam; wp_pures.
-set f := gmin_step.
+set f := grlex_min_step.
 wp_apply (twp_foldr_list f _ Xs None) => //.
-  move=> b [a|]; rewrite /f /gmin_step; iIntros "%Φ _ HΦ"; wp_pures.
-    wp_apply twp_mset_glt.
+  move=> b [a|]; rewrite /f /grlex_min_step; iIntros "%Φ _ HΦ"; wp_pures.
+    wp_apply twp_mset_grlex_lt.
     by case: bool_decide; wp_pures; iApply "HΦ".
   by iApply "HΦ".
 iIntros "_".
-have -> : foldr f None Xs = MSet.gmin_list Xs.
-  rewrite /f; elim: Xs => //= X Xs ->; rewrite /gmin_step.
-  by case: (MSet.gmin_list Xs) => [Y|] //; case: bool_decide.
+have -> : foldr f None Xs = MSet.grlex_min Xs.
+  rewrite /f; elim: Xs => //= X Xs ->; rewrite /grlex_min_step.
+  by case: (MSet.grlex_min Xs) => [Y|] //; case: bool_decide.
 by iApply "HΨ".
 Qed.
 

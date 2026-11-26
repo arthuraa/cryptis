@@ -18,6 +18,10 @@ Unset Printing Implicit Defensive.
 #[global] Instance repr_prod {A B} `{!Repr A, !Repr B} : Repr (A * B) :=
   λ p, (repr p.1, repr p.2)%V.
 
+Lemma repr_pair {A B} `{!Repr A, !Repr B} (a : A) (b : B) :
+  repr (a, b) = (repr a, repr b)%V.
+Proof. done. Qed.
+
 #[global] Instance repr_sms {T} `{!Repr T, EqDecision T, Lexico T}
   `{!StrictOrder (@lexico T _), !TrichotomyT (@lexico T _)} :
   Repr (SMS.sms T) := λ s, repr (SMS.pos s, SMS.neg s).

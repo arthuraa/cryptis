@@ -61,7 +61,7 @@ Lemma TExp_g_inj (p p' : nonce) : TExp g p = TExp g p' → p = p'.
 Proof. by move/(TExp_injr (Ngmul_neq_unit gNm)) => - [] ->. Qed.
 
 #[local] Lemma TExp_g_neq_one (p : nonce) : TExp g p ≠ one.
-Proof. exact: Ngmul_neq_unit (Ngmul_TExp gNm (monic_atom (TNonce p) I)). Qed.
+Proof. exact: Ngmul_neq_unit (Ngmul_TExp gNm (mono_num_atom (TNonce p) I)). Qed.
 
 Record sess_info := SessInfo {
   si_init : term;          (* the initiator's long-term public key *)

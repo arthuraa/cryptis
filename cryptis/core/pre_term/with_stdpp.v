@@ -245,7 +245,7 @@ rewrite /PreTerm.cmp_ord; case: (Z.compare_spec n1 n2) => [->|lt|gt].
   by have -> : (n1 <= n2)%O = false by apply/Z.leb_nle; lia.
 Qed.
 
-Lemma le_alt d (T : orderType d) (x y : T) :
+#[local] Lemma le_alt d (T : orderType d) (x y : T) :
   (x <= y)%O = if x == y then true else (x <= y)%O.
 Proof. by case: (ltgtP x y). Qed.
 
@@ -335,23 +335,6 @@ Proof. by case: o1; case: o2. Qed.
 
 End OpCmp.
 
-Lemma list_all_Forall (P : PreTerm.pre_term → Prop) l :
-  PreTerm.list_all P l → Forall P l.
-Proof. by elim: l => [|x l IH] /= => [_|[Px /IH]]; constructor. Qed.
-
-Lemma monos_all_Forall (P : PreTerm.pre_term → Prop) ms :
-  PreTerm.monos_all P ms → Forall (Forall P) ms.
-Proof.
-elim: ms => [|m ms IH] /= => [_|[/list_all_Forall Pm /IH]]; by constructor.
-Qed.
-
-Lemma entries_all_Forall (P : PreTerm.pre_term → Prop) l :
-  PreTerm.entries_all P l →
-  Forall (λ e, P e.1 ∧ inhabited (PreTerm.frac_all P e.2)) l.
-Proof.
-elim: l => [|e l IH] /= => [_|[[Pb Pf] /IH Hl]]; constructor => //.
-Qed.
-
 #[global] Instance repr_term_op0_inj : Inj (=) (=) (@repr term_op0 _).
 Proof. by case=> [?|[?]] [?|[?]] //= [<-]. Qed.
 
@@ -377,7 +360,7 @@ Proof.
 have M ms : PreTerm.monos_all (λ x, ∀ y, v x = v y → x = y) ms →
     ∀ ms', repr_list (map (val_mono v) ms) =
            repr_list (map (val_mono v) ms') → ms = ms'.
-  move=> /monos_all_Forall Hms; apply: repr_list_map_inj.
+  move=> /PreTerm.monos_all_Forall Hms; apply: repr_list_map_inj.
   apply: (Forall_impl _ _ _ Hms) => m Hm m'; exact: repr_list_map_inj.
 case: F => [[ps ns] [qs rs]] [[Hps Hns] [Hqs Hrs]] [[ps' ns'] [qs' rs']].
 rewrite /val_frac /val_poly /= => H; injection H.
@@ -393,7 +376,8 @@ move=> t1; elim: t1 => [o1|o1 t1 IH|o1 t11 IH1 t12 IH2|f1 IH|l1 IH].
 - case=> //= f2 E; congr PreTerm.PTMod; apply: (val_frac_inj _ _ IH).
   congruence.
 - case=> //= l2 [] /(repr_list_map_inj _ l1) -> //.
-  apply: (Forall_impl _ _ _ (entries_all_Forall _ _ IH)) => -[b F] [Hb [HF]].
+  apply: (Forall_impl _ _ _ (PreTerm.entries_all_Forall IH)) => -[b F]
+    [Hb [HF]].
   rewrite /= in Hb HF; case=> b' F' /= E.
   have [Eb EF] : val_of_pre_term b = val_of_pre_term b' ∧
                  val_frac val_of_pre_term F = val_frac val_of_pre_term F'.

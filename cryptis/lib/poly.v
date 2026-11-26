@@ -460,13 +460,13 @@ Proof. by rewrite [div]unlock. Qed.
 
     [cancel p q] divides [p] and [q] by [gcd p q], and fixes the sign by
     making the coefficient of the least monomial of the second component
-    positive ([first_neg]).  Monomials are compared by [MSet.glt], which is
+    positive ([first_neg]).  Monomials are compared by [MSet.grlex_lt], which is
     compatible with products, so this sign is multiplicative
     ([first_neg_mul]).  The divisions are checked, so [cancel] is sound
     however [gcd] behaves. *)
 
 lock Definition first_neg p : bool :=
-  match MSet.gmin_list (elements (SMS.pos (car p) ⊎ SMS.neg (car p))) with
+  match MSet.grlex_min (elements (SMS.pos (car p) ⊎ SMS.neg (car p))) with
   | Some m => bool_decide (coeff m p < 0)%Z
   | None => false
   end.
@@ -499,18 +499,18 @@ Qed.
 
 Lemma first_neg_spec p :
   p ≠ zero →
-  ∃ m, m ∈ car p ∧ (∀ n, n ∈ car p → n = m ∨ MSet.glt m n) ∧
+  ∃ m, m ∈ car p ∧ (∀ n, n ∈ car p → n = m ∨ MSet.grlex_lt m n) ∧
        first_neg p = bool_decide (coeff m p < 0)%Z.
 Proof.
 move=> np; rewrite [first_neg]unlock.
-case E: (MSet.gmin_list _) => [m|].
-- have [ml hm] := MSet.gmin_list_spec _ _ E.
+case E: (MSet.grlex_min _) => [m|].
+- have [ml hm] := MSet.grlex_min_spec _ _ E.
   exists m; split; first exact/elem_of_monos.
   by split=> // n /elem_of_monos; exact: hm.
 - exfalso; apply: np; apply: car_inj; rewrite car_zero.
   apply: SMS.count_inj => m; rewrite SMS.count_empty.
   apply: SMS.not_elem_of_count => /elem_of_monos.
-  by rewrite (MSet.gmin_list_None _ E) => /elem_of_nil.
+  by rewrite (MSet.grlex_min_None _ E) => /elem_of_nil.
 Qed.
 
 Lemma first_neg_zero : first_neg zero = false.
@@ -519,13 +519,13 @@ rewrite [first_neg]unlock car_zero SMS.pos_empty SMS.neg_empty.
 by rewrite (left_id ∅ (⊎)) MSet.elements_empty.
 Qed.
 
-Lemma glt_min_unique (s : SMS.sms (MSet.mset T)) m m' :
-  m ∈ s → (∀ n, n ∈ s → n = m ∨ MSet.glt m n) →
-  m' ∈ s → (∀ n, n ∈ s → n = m' ∨ MSet.glt m' n) → m = m'.
+Lemma grlex_lt_min_unique (s : SMS.sms (MSet.mset T)) m m' :
+  m ∈ s → (∀ n, n ∈ s → n = m ∨ MSet.grlex_lt m n) →
+  m' ∈ s → (∀ n, n ∈ s → n = m' ∨ MSet.grlex_lt m' n) → m = m'.
 Proof.
 move=> ms hm ms' hm'.
 case: (hm m' ms') => [->//|lt1]; case: (hm' m ms) => [//|lt2].
-by case: (MSet.glt_irrefl m); exact: MSet.glt_trans lt1 lt2.
+by case: (MSet.grlex_lt_irrefl m); exact: MSet.grlex_lt_trans lt1 lt2.
 Qed.
 
 Lemma first_neg_opp p : p ≠ zero → first_neg (opp p) = negb (first_neg p).
@@ -539,7 +539,7 @@ have E n : n ∈ car (opp p) ↔ n ∈ car p.
 have [m [mp [hm ->]]] := first_neg_spec _ np.
 have [m' [mp' [hm' ->]]] := first_neg_spec _ np'.
 have em : m' = m.
-  apply: (glt_min_unique (car p)) => //; first exact/E.
+  apply: (grlex_lt_min_unique (car p)) => //; first exact/E.
   by move=> n /E; exact: hm'.
 rewrite em coeff_opp.
 have nz := proj2 (coeff_neq0_elem m p) mp.
@@ -567,21 +567,21 @@ Qed.
 (** The least monomial of a product is the product of the least monomials,
     and nothing cancels it. *)
 Lemma coeff_mul_min p q mp mq :
-  mp ∈ car p → (∀ n, n ∈ car p → n = mp ∨ MSet.glt mp n) →
-  mq ∈ car q → (∀ n, n ∈ car q → n = mq ∨ MSet.glt mq n) →
+  mp ∈ car p → (∀ n, n ∈ car p → n = mp ∨ MSet.grlex_lt mp n) →
+  mq ∈ car q → (∀ n, n ∈ car q → n = mq ∨ MSet.grlex_lt mq n) →
   coeff (mp ⊎ mq) (mul p q) = (coeff mp p * coeff mq q)%Z ∧
-  ∀ n, n ∈ car (mul p q) → n = mp ⊎ mq ∨ MSet.glt (mp ⊎ mq) n.
+  ∀ n, n ∈ car (mul p q) → n = mp ⊎ mq ∨ MSet.grlex_lt (mp ⊎ mq) n.
 Proof.
 move=> pp hp qq hq.
 have strict m n' : m ∈ car p → n' ∈ car q → m ≠ mp ∨ n' ≠ mq →
-    MSet.glt (mp ⊎ mq) (m ⊎ n').
+    MSet.grlex_lt (mp ⊎ mq) (m ⊎ n').
   move=> mc nc ne.
   case: (hp m mc) => [em|lt1]; case: (hq n' nc) => [en|lt2].
   - by case: ne.
-  - by rewrite em; exact: MSet.glt_disj_union_l.
-  - by rewrite en; exact: MSet.glt_disj_union_r.
-  - apply: MSet.glt_trans (MSet.glt_disj_union_r _ _ _ lt1) _.
-    exact: MSet.glt_disj_union_l.
+  - by rewrite em; exact: MSet.grlex_lt_disj_union_l.
+  - by rewrite en; exact: MSet.grlex_lt_disj_union_r.
+  - apply: MSet.grlex_lt_trans (MSet.grlex_lt_disj_union_r _ _ _ lt1) _.
+    exact: MSet.grlex_lt_disj_union_l.
 have inj : ∀ a b, mp ⊎ a = mp ⊎ b → a = b.
   move=> a b e; apply: MSet.count_inj => x.
   by have := f_equal (MSet.count x) e; rewrite !MSet.count_disj_union; lia.
@@ -591,7 +591,7 @@ split.
     move=> mc nm; apply: SMS.not_elem_of_count.
     move=> /SMS.elem_of_map [n' [e nc]].
     have := strict m n' mc nc (or_introl nm); rewrite -e.
-    exact: MSet.glt_irrefl.
+    exact: MSet.grlex_lt_irrefl.
   rewrite !coeffE car_mul (SMS.count_bind_single _ _ _ _ Z).
   by rewrite (SMS.count_map_inj (λ n, mp ⊎ n) mq (car q) inj).
 - move=> n; rewrite car_mul => /SMS.elem_of_bind [m [mc /SMS.elem_of_map]].
@@ -641,7 +641,7 @@ have npq : mul p q ≠ zero.
   by move=> e; apply: cpq; rewrite e coeff_zero.
 have [m [mpq [hmpq ->]]] := first_neg_spec _ npq.
 have -> : m = mp ⊎ mq.
-  exact: (glt_min_unique (car (mul p q))).
+  exact: (grlex_lt_min_unique (car (mul p q))).
 by rewrite ec sign_mul.
 Qed.
 
@@ -651,6 +651,34 @@ move=> e; have : coeff a (mono a) ≠ 0%Z.
   by rewrite coeff_mono (bool_decide_eq_true_2 (a = a)).
 case: e => ->; first by move/coeff_mono_eq.
 by rewrite coeff_opp => h; apply/coeff_mono_eq; lia.
+Qed.
+
+Lemma vars_one x : x ∉ vars one.
+Proof.
+move=> /elem_of_vars [m []]; rewrite oneE car_mono.
+by move=> /SMS.elem_of_singleton -> xm; case: (MSet.not_elem_of_empty _ xm).
+Qed.
+
+Lemma coeff_mono_mul_in m n q : coeff (m ⊎ n) (mul (mono m) q) = coeff n q.
+Proof.
+rewrite !coeffE car_mul_mono.
+apply: (SMS.count_map_inj (λ n', m ⊎ n')) => a b e.
+apply: MSet.count_inj => z; move/(f_equal (MSet.count z)): e.
+rewrite !MSet.count_disj_union; lia.
+Qed.
+
+Lemma coeff_mono_mul_out m n q x :
+  x ∈ m → x ∉ n → coeff n (mul (mono m) q) = 0%Z.
+Proof.
+move=> xm xn; rewrite coeffE car_mul_mono.
+apply: SMS.not_elem_of_count => /SMS.elem_of_map [n' [en _]].
+by apply: xn; rewrite en; apply/MSet.elem_of_disj_union; left.
+Qed.
+
+Lemma mono_neq_opp m : mono m ≠ opp (mono m).
+Proof.
+move=> e; have := first_neg_mono m.
+by rewrite {1}e first_neg_opp_mono.
 Qed.
 
 End Polynomial.

@@ -370,16 +370,22 @@ elim: (elements X) => [|x l IH]; first exact: P0.
 by rewrite of_list_cons; apply: PS.
 Qed.
 
+Lemma empty_neq_singleton (a : T) : (∅ : mset T) ≠ {[+ a +]}.
+Proof.
+move=> /(f_equal (count a)).
+by rewrite count_empty count_singleton bool_decide_eq_true_2.
+Qed.
+
 End Laws.
 
 (** ** The graded order
 
-    [glt] compares multisets by size, and multisets of equal size by
+    [grlex_lt] compares multisets by size, and multisets of equal size by
     [lexico].  Unlike [lexico] (where [∅] comes before [{[+ y +]}], but
     [{[+ y +]}] after [{[+ x; y +]}] when [x] comes before [y]), it is
-    compatible with [⊎] ([glt_disj_union_l]): on multisets of equal size,
+    compatible with [⊎] ([grlex_lt_disj_union_l]): on multisets of equal size,
     [lexico] compares counts from the least element up ([lexico_count]).
-    [gmin_list] picks the least multiset of a list. *)
+    [grlex_min] picks the least multiset of a list. *)
 
 Section Graded.
 
@@ -472,23 +478,24 @@ split.
   + by move: cx; rewrite -!count_mem_elements.
 Qed.
 
-Definition glt X Y : Prop := size X < size Y ∨ size X = size Y ∧ lexico X Y.
+Definition grlex_lt X Y :
+  Prop := size X < size Y ∨ size X = size Y ∧ lexico X Y.
 
-#[global] Instance glt_dec : RelDecision glt.
-Proof. move=> X Y; rewrite /glt; apply _. Defined.
+#[global] Instance grlex_lt_dec : RelDecision grlex_lt.
+Proof. move=> X Y; rewrite /grlex_lt; apply _. Defined.
 
-Lemma glt_irrefl X : ¬ glt X X.
+Lemma grlex_lt_irrefl X : ¬ grlex_lt X X.
 Proof. by case=> [|[_ /(irreflexivity lexico X)]]; lia. Qed.
 
-Lemma glt_trans X Y Z : glt X Y → glt Y Z → glt X Z.
+Lemma grlex_lt_trans X Y Z : grlex_lt X Y → grlex_lt Y Z → grlex_lt X Z.
 Proof.
-rewrite /glt => -[h1|[e1 l1]] [h2|[e2 l2]]; try by left; lia.
+rewrite /grlex_lt => -[h1|[e1 l1]] [h2|[e2 l2]]; try by left; lia.
 by right; split; [lia|trans Y].
 Qed.
 
-Lemma glt_total X Y : glt X Y ∨ X = Y ∨ glt Y X.
+Lemma grlex_lt_total X Y : grlex_lt X Y ∨ X = Y ∨ grlex_lt Y X.
 Proof.
-rewrite /glt; case: (Nat.lt_trichotomy (size X) (size Y)) => [h|[e|h]].
+rewrite /grlex_lt; case: (Nat.lt_trichotomy (size X) (size Y)) => [h|[e|h]].
 - by left; left.
 - case: (trichotomy lexico X Y) => [l|[->|l]].
   + by left; right.
@@ -497,9 +504,9 @@ rewrite /glt; case: (Nat.lt_trichotomy (size X) (size Y)) => [h|[e|h]].
 - by right; right; left.
 Qed.
 
-Lemma glt_disj_union_l Z X Y : glt X Y → glt (Z ⊎ X) (Z ⊎ Y).
+Lemma grlex_lt_disj_union_l Z X Y : grlex_lt X Y → grlex_lt (Z ⊎ X) (Z ⊎ Y).
 Proof.
-rewrite /glt !size_disj_union => -[h|[e l]]; first by left; lia.
+rewrite /grlex_lt !size_disj_union => -[h|[e l]]; first by left; lia.
 right; split; first lia.
 have e' : size (Z ⊎ X) = size (Z ⊎ Y) by rewrite !size_disj_union; lia.
 apply/(lexico_count _ _ e').
@@ -509,22 +516,24 @@ exists x; split.
 - by rewrite !count_disj_union; lia.
 Qed.
 
-Lemma glt_disj_union_r Z X Y : glt X Y → glt (X ⊎ Z) (Y ⊎ Z).
-Proof. by rewrite !(comm (⊎) _ Z); exact: glt_disj_union_l. Qed.
+Lemma grlex_lt_disj_union_r Z X Y : grlex_lt X Y → grlex_lt (X ⊎ Z) (Y ⊎ Z).
+Proof. by rewrite !(comm (⊎) _ Z); exact: grlex_lt_disj_union_l. Qed.
 
-Fixpoint gmin_list (ms : list (mset T)) : option (mset T) :=
+Fixpoint grlex_min (ms : list (mset T)) : option (mset T) :=
   match ms with
   | [] => None
   | X :: ms =>
-    Some (if gmin_list ms is Some Y then if bool_decide (glt Y X) then Y else X
+    Some
+      (if grlex_min ms is Some Y then if bool_decide (grlex_lt Y X) then Y else
+        X
           else X)
   end.
 
-Lemma gmin_list_spec ms X :
-  gmin_list ms = Some X → X ∈ ms ∧ ∀ Y, Y ∈ ms → Y = X ∨ glt X Y.
+Lemma grlex_min_spec ms X :
+  grlex_min ms = Some X → X ∈ ms ∧ ∀ Y, Y ∈ ms → Y = X ∨ grlex_lt X Y.
 Proof.
 elim: ms X => [//|Z ms IH] X /=.
-case E: (gmin_list ms) => [Y|] [<-].
+case E: (grlex_min ms) => [Y|] [<-].
 - have [Yl hY] := IH Y E.
   case: bool_decide_reflect => [YZ|nYZ].
   + split; first by right.
@@ -532,25 +541,16 @@ case E: (gmin_list ms) => [Y|] [<-].
     by case: (hY W Wl) => [->|YW]; [left|right].
   + split; first by left.
     move=> W /elem_of_cons [->|Wl]; first by left.
-    case: (glt_total Z Y) => [ZY|[eZY|YZ]]; last by case: nYZ.
-    * by case: (hY W Wl) => [->|YW]; right => //; exact: glt_trans ZY YW.
+    case: (grlex_lt_total Z Y) => [ZY|[eZY|YZ]]; last by case: nYZ.
+    * by case: (hY W Wl) => [->|YW]; right => //; exact: grlex_lt_trans ZY YW.
     * by subst Y; exact: hY.
 - have -> : ms = [] by clear IH; case: ms E.
   split; first by left.
   by move=> W /elem_of_cons [->|/elem_of_nil []]; left.
 Qed.
 
-Lemma gmin_list_None ms : gmin_list ms = None → ms = [].
+Lemma grlex_min_None ms : grlex_min ms = None → ms = [].
 Proof. by case: ms. Qed.
-
-Lemma glt_unique (ms : list (mset T)) X Y :
-  X ∈ ms → (∀ W, W ∈ ms → W = X ∨ glt X W) →
-  Y ∈ ms → (∀ W, W ∈ ms → W = Y ∨ glt Y W) → X = Y.
-Proof.
-move=> Xm hX Ym hY.
-case: (hX Y Ym) => [//|XY]; case: (hY X Xm) => [//|YX].
-by case: (glt_irrefl X); exact: glt_trans XY YX.
-Qed.
 
 End Graded.
 

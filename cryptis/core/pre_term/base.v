@@ -472,23 +472,34 @@ Section PtCmpLaws.
 
 Implicit Types (x y z : pre_term) (c : pre_term → pre_term → comparison).
 
-Lemma list_all_Forall' (P : pre_term → Prop) l : list_all P l → Forall P l.
+Lemma list_all_Forall (P : pre_term → Prop) l : list_all P l → Forall P l.
 Proof. by elim: l => [|x l IH] /= => [_|[Px /IH]]; constructor. Qed.
 
-Lemma monos_all_Forall' (P : pre_term → Prop) (Q : list pre_term → Prop) ms :
+Lemma monos_all_Forall_impl (P : pre_term → Prop) (Q : list pre_term → Prop) ms
+  :
   (∀ m, Forall P m → Q m) → monos_all P ms → Forall Q ms.
 Proof.
-move=> PQ; elim: ms => [|m ms IH] /= => [_|[/list_all_Forall' Pm /IH]].
+move=> PQ; elim: ms => [|m ms IH] /= => [_|[/list_all_Forall Pm /IH]].
   by constructor.
 by constructor; [exact: PQ|].
 Qed.
 
-Lemma entries_all_Forall' (P : pre_term → Prop) (Q : frac_lists → Prop) l :
+Lemma entries_all_Forall_impl (P : pre_term → Prop) (Q : frac_lists → Prop) l :
   (∀ F, frac_all P F → Q F) → entries_all P l → Forall (λ e, P e.1 ∧ Q e.2) l.
 Proof.
 move=> PQ; elim: l => [|e l IH] /= => [_|[[Pb Pf] /IH Hl]].
   by constructor.
 by constructor => //; split=> //; exact: PQ.
+Qed.
+
+Lemma monos_all_Forall (P : pre_term → Prop) ms :
+  monos_all P ms → Forall (Forall P) ms.
+Proof. exact: monos_all_Forall_impl. Qed.
+
+Lemma entries_all_Forall (P : pre_term → Prop) l :
+  entries_all P l → Forall (λ e, P e.1 ∧ inhabited (frac_all P e.2)) l.
+Proof.
+elim: l => [|e l IH] /= => [_|[[Pb Pf] /IH Hl]]; constructor => //.
 Qed.
 
 Lemma cmp_frac_eq c F :
@@ -498,7 +509,7 @@ Proof.
 case: F => [[ps ns] [qs rs]] [[Hps Hns] [Hqs Hrs]].
 have M ms : monos_all (λ x, ∀ y, c x y = Eq ↔ x = y) ms →
     ∀ ms', cmp_list (cmp_list c) ms ms' = Eq ↔ ms = ms'.
-  move=> H; apply: cmp_list_eq; apply: monos_all_Forall' H => m Hm.
+  move=> H; apply: cmp_list_eq; apply: monos_all_Forall_impl H => m Hm.
   exact: cmp_list_eq.
 by apply: cmp_pair_eq; apply: cmp_pair_eq; apply: M.
 Qed.
@@ -511,7 +522,7 @@ case: F => [[ps ns] [qs rs]] [[Hps Hns] [Hqs Hrs]].
 have M ms : monos_all (λ x, ∀ y, c y x = CompOpp (c x y)) ms →
     ∀ ms', cmp_list (cmp_list c) ms' ms =
            CompOpp (cmp_list (cmp_list c) ms ms').
-  move=> H; apply: cmp_list_opp; apply: monos_all_Forall' H => m Hm.
+  move=> H; apply: cmp_list_opp; apply: monos_all_Forall_impl H => m Hm.
   exact: cmp_list_opp.
 by apply: cmp_pair_opp; apply: cmp_pair_opp; apply: M.
 Qed.
@@ -538,7 +549,7 @@ elim: x y => [o1|o1 t1 IH|o1 a1 IHa b1 IHb|f1 IH|l1 IH]
 - rewrite (cmp_frac_eq IH); by split=> [->|[->]].
 - have F : Forall (λ e, ∀ e', cmp_pair pt_cmp (cmp_frac pt_cmp) e e' = Eq ↔
                               e = e') l1.
-    move: (entries_all_Forall' (@cmp_frac_eq pt_cmp) IH).
+    move: (entries_all_Forall_impl (@cmp_frac_eq pt_cmp) IH).
     by apply: Forall_impl => -[b F] [Hb HF]; apply: cmp_pair_eq.
   by rewrite (cmp_list_eq F); split=> [->|[->]].
 Qed.
@@ -553,7 +564,7 @@ elim: x y => [o1|o1 t1 IH|o1 a1 IHa b1 IHb|f1 IH|l1 IH]
   by rewrite IHa; case: (pt_cmp a1 a2) => //=; exact: IHb.
 - exact: cmp_frac_opp IH f2.
 - apply: cmp_list_opp.
-  move: (entries_all_Forall' (@cmp_frac_opp pt_cmp) IH).
+  move: (entries_all_Forall_impl (@cmp_frac_opp pt_cmp) IH).
   by apply: Forall_impl => -[b F] [Hb HF]; apply: cmp_pair_opp.
 Qed.
 
@@ -591,7 +602,7 @@ have M ms : monos_all (λ x, ∀ y z, c x y = Lt → c y z = Lt → c x z = Lt) 
     ∀ ms' ms'', cmp_list (cmp_list c) ms ms' = Lt →
     cmp_list (cmp_list c) ms' ms'' = Lt → cmp_list (cmp_list c) ms ms'' = Lt.
   move=> H; apply: (cmp_list_trans E1).
-  apply: monos_all_Forall' H => m Hm m' m''.
+  apply: monos_all_Forall_impl H => m Hm m' m''.
   by apply: (cmp_list_trans _ Hm) => u v /Hc.
 have P ps' ns' : monos_all (λ x, ∀ y z, c x y = Lt → c y z = Lt → c x z = Lt)
                    ps' →
@@ -633,7 +644,7 @@ elim: x y z => [o1|o1 t1 IH|o1 a1 IHa b1 IHb|f1 IH|l1 IH]
     case: e => b F.
     by move/(cmp_pair_eq (@pt_cmp_eq b) (cmp_frac_eq_all pt_cmp_eq F)).
   apply: (cmp_list_trans HeqE).
-  move: (entries_all_Forall'
+  move: (entries_all_Forall_impl
            (fun F => @cmp_frac_trans pt_cmp F pt_cmp_eq) IH).
   apply: Forall_impl => -[b F] [Hb HF] e' e''.
   exact: (cmp_pair_trans Eeq EF Hb HF).

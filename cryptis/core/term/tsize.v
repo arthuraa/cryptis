@@ -58,19 +58,11 @@ have [wy _] := PreTerm.atoms_wf _ _ (wf_unfold_term t) yt.
 rewrite /tsize fold_termK //; exact: PreTerm.tsize_atoms_lt.
 Qed.
 
-Lemma factors_atoms t x : x ∈ factors t → negb (is_mod x) → x ∈ atoms t.
-Proof.
-move=> /elem_of_factors_unfold h; rewrite is_mod_unfold => nx.
-apply/elem_of_atoms; exists (unfold_term x); split.
-  by rewrite unfold_termK.
-exact: PreTerm.factors_atoms.
-Qed.
-
 Lemma tsize_factors_lt t' t :
   laurent t → is_mod t → t' ∈ factors t → tsize t' < tsize t.
 Proof.
 move=> L Mt t't; apply: (tsize_atoms_lt _ _ Mt).
-exact: (factors_atoms _ _ t't (L _ t't)).
+exact: (factors_atoms t't (L _ t't)).
 Qed.
 
 Lemma tsize_exp_term t :
@@ -157,40 +149,21 @@ Register Scheme term_ind as ind_dep for term.
 (** ** Stripping exponents
 
     The exponent of a power [t] is a fraction [M / D] with a monomial numerator
-    [M] ([PreTerm.mnum_expo]).  Its factors are the atoms of [M] (positively)
-    and the atoms of the monomial content and the unit part of [D]
+    [M] ([PreTerm.mono_num_expo]).  Its factors are the atoms of [M]
+    (positively) and the atoms of the monomial content and the unit part of [D]
     (negatively); removing any of them from the exponent shrinks [t]
     ([tsize_satoms]). *)
 
-Lemma efrac_TInv t :
-  PreTerm.frac_of (unfold_term (TInv t)) =
-  Frac.inv (PreTerm.frac_of (unfold_term t)).
-Proof.
-rewrite -unfold_frac_of frac_of_TInv.
-by rewrite (Frac.map_inv unfold_term unfold_term_inj) unfold_frac_of.
-Qed.
-
 Lemma tsize_TInv_le x :
   tsize (TInv x) ≤
-  S (PreTerm.psize (PreTerm.poly_lists_of
+  S (PreTerm.poly_size (PreTerm.poly_lists_of
        (Frac.num (Frac.inv (PreTerm.frac_of (unfold_term x))))) +
-     PreTerm.psize (PreTerm.poly_lists_of
+     PreTerm.poly_size (PreTerm.poly_lists_of
        (Frac.den (Frac.inv (PreTerm.frac_of (unfold_term x)))))).
 Proof.
-rewrite /tsize -(PreTerm.mod_aux_frac_of _ (wf_unfold_term (TInv x))).
-rewrite efrac_TInv; exact: PreTerm.tsize_mod_aux_le.
+rewrite /tsize -(PreTerm.mod_of_frac_frac_of _ (wf_unfold_term (TInv x))).
+rewrite pre_frac_TInv; exact: PreTerm.tsize_mod_of_frac_le.
 Qed.
-
-Lemma psize_one : PreTerm.psize (PreTerm.poly_lists_of Poly.one) = 0.
-Proof.
-by rewrite Poly.oneE PreTerm.poly_lists_mono PreTerm.psize_mono_lists
-  MSet.car_empty.
-Qed.
-
-Lemma psize_monoE X :
-  PreTerm.psize (PreTerm.poly_lists_of (Poly.mono X)) =
-  PreTerm.wsize (MSet.car X).
-Proof. by rewrite PreTerm.poly_lists_mono PreTerm.psize_mono_lists. Qed.
 
 Lemma tsize_satoms f t :
   f ∈ satoms (exps t) → tsize f < tsize t ∧ tsize (TExp t (TInv f)) < tsize t.
@@ -202,31 +175,32 @@ have Nt' : negb (PreTerm.is_gmul (unfold_term t)).
   by rewrite -is_gmul_unfold; exact: is_exp_Ngmul.
 have we := PreTerm.wf_expo _ (wf_unfold_term t).
 set r := PreTerm.frac_of (PreTerm.expo (unfold_term t)).
-have [M eM] : PreTerm.mnum r := PreTerm.mnum_expo _ (wf_unfold_term t) Nt'.
+have [M eM] : Frac.mono_num r := PreTerm.mono_num_expo _ (wf_unfold_term t) Nt'.
 have nD : Frac.den r ≠ Poly.zero := Frac.den_neq0 r.
 have A := PreTerm.frac_of_atoms _ we.
 have cnt y : count y (expo t) =
     (Z.of_nat (MSet.count (unfold_term y) M) -
      Z.of_nat (MSet.count (unfold_term y)
-                (PolyGcd.content (Frac.den r) ⊎ PreTerm.units (Frac.den r))))%Z.
+                (PolyGcd.content (Frac.den r) ⊎ PreTerm.unit_factors
+                  (Frac.den r))))%Z.
   rewrite count_unfold unfold_expo (PreTerm.factors_mono_num _ _ eM).
   exact: SMS.count_make.
 have bound e' n' :
     Frac.num (Frac.mul r (PreTerm.frac_of (unfold_term e'))) = Poly.mono n' →
     tsize (TExp t e') ≤
     S (tsize (base t) +
-       S (PreTerm.psize (PreTerm.poly_lists_of
+       S (PreTerm.poly_size (PreTerm.poly_lists_of
             (Frac.num (Frac.mul r (PreTerm.frac_of (unfold_term e'))))) +
-          PreTerm.psize (PreTerm.poly_lists_of
+          PreTerm.poly_size (PreTerm.poly_lists_of
             (Frac.den (Frac.mul r (PreTerm.frac_of (unfold_term e'))))))).
   move=> en.
   have nz : Frac.mul r (PreTerm.frac_of (unfold_term e')) ≠ Frac.zero.
-    by apply: PreTerm.mnum_neq0; exists n'.
+    by apply: Frac.mono_num_neq0; exists n'.
   rewrite /tsize unfold_TExp /PreTerm.exp.
   rewrite (PreTerm.exp_frac_Ngmul _ _ (wf_unfold_term t) Nt' nz) unfold_base.
   rewrite -/r.
   have := PreTerm.tsize_mk_exp_le (PreTerm.base (unfold_term t)) _ _ en.
-  have := PreTerm.tsize_mod_aux_le
+  have := PreTerm.tsize_mod_of_frac_le
     (Frac.mul r (PreTerm.frac_of (unfold_term e'))).
   lia.
 case Me: (is_mod (expo t)); last first.
@@ -238,15 +212,15 @@ case Me: (is_mod (expo t)); last first.
   rewrite -[t in TExp t _]TExp_base_expo (TExpK _ (atom_frac_neq0 Ne)).
   exact: tsize_base_lt.
 have Te : tsize (expo t) =
-    S (PreTerm.psize (PreTerm.poly_lists_of (Frac.num r)) +
-       PreTerm.psize (PreTerm.poly_lists_of (Frac.den r))).
+    S (PreTerm.poly_size (PreTerm.poly_lists_of (Frac.num r)) +
+       PreTerm.poly_size (PreTerm.poly_lists_of (Frac.den r))).
   move: Me we; rewrite /tsize /r is_mod_unfold unfold_expo.
   case: (PreTerm.expo (unfold_term t)) => // F _.
   rewrite PreTerm.wf_modE => /andb_True [/andb_True [_ cF] _].
   rewrite PreTerm.tsize_mod [PreTerm.frac_of _]/=.
-  by rewrite -{1 2}(PreTerm.lists_of_lists _ cF).
-have psM : PreTerm.psize (PreTerm.poly_lists_of (Frac.num r)) =
-           PreTerm.wsize (MSet.car M) by rewrite eM psize_monoE.
+  by rewrite -{1 2}(PreTerm.frac_lists_ofK _ cF).
+have psM : PreTerm.poly_size (PreTerm.poly_lists_of (Frac.num r)) =
+           PreTerm.mono_size (MSet.car M) by rewrite eM PreTerm.poly_size_monoE.
 rewrite Et Te psM; move: ft; rewrite /satoms elem_of_app list_elem_of_fmap.
 case=> [/MSet.elem_of_elements fp|[x [-> /MSet.elem_of_elements xn]]].
 - have fM : unfold_term f ∈ M.
@@ -255,12 +229,12 @@ case=> [/MSet.elem_of_elements fp|[x [-> /MSet.elem_of_elements xn]]].
                  negb (PreTerm.is_mod (unfold_term f)).
     apply/andb_True; apply: (A M) fM; left.
     by rewrite eM Poly.car_mono; apply/SMS.elem_of_singleton.
-  have ha : tsize f ≤ PreTerm.wsize (MSet.car M).
+  have ha : tsize f ≤ PreTerm.mono_size (MSet.car M).
     exact: (sum_list_with_in _ PreTerm.tsize _ fM).
   split; first lia.
   have ef : PreTerm.frac_of (unfold_term (TInv f)) =
             Frac.inv (Frac.var (unfold_term f)).
-    by rewrite efrac_TInv PreTerm.frac_of_var.
+    by rewrite pre_frac_TInv PreTerm.frac_of_var.
   have [en ed] := Frac.mul_inv_var_canon r M (unfold_term f) eM fM.
   have en' : Frac.num (Frac.mul r (PreTerm.frac_of (unfold_term (TInv f)))) =
              Poly.mono (M ∖ {[+ unfold_term f +]}) by rewrite ef en.
@@ -269,71 +243,73 @@ case=> [/MSet.elem_of_elements fp|[x [-> /MSet.elem_of_elements xn]]].
     rewrite MSet.count_disj_union MSet.count_difference MSet.count_singleton.
     have := proj1 (MSet.elem_of_count _ _) fM.
     by case: bool_decide_reflect => [->|]; lia.
-  have W : PreTerm.wsize (MSet.car M) =
-           tsize f + PreTerm.wsize (MSet.car (M ∖ {[+ unfold_term f +]})).
-    rewrite {1}EM PreTerm.wsize_disj_union MSet.car_singleton /=.
+  have W : PreTerm.mono_size (MSet.car M) =
+           tsize f + PreTerm.mono_size (MSet.car (M ∖ {[+ unfold_term f +]})).
+    rewrite {1}EM PreTerm.mono_size_disj_union MSet.car_singleton /=.
     rewrite -/(tsize f); lia.
-  have := bound (TInv f) _ en'; rewrite ef en ed psize_monoE.
+  have := bound (TInv f) _ en'; rewrite ef en ed PreTerm.poly_size_monoE.
   have := tsize_gt0 f; lia.
 - have xY : unfold_term x ∈
-            PolyGcd.content (Frac.den r) ⊎ PreTerm.units (Frac.den r).
+            PolyGcd.content (Frac.den r) ⊎ PreTerm.unit_factors (Frac.den r).
     move/count_lt0: xn; rewrite cnt => h; apply/MSet.elem_of_count; lia.
   rewrite TInvK; case/MSet.elem_of_disj_union: xY => [xc|xu].
-  + have [n [nD' xn']] := PreTerm.elem_of_content _ _ xc.
+  + have [n [nD' xn']] := PolyGcd.elem_of_content _ _ xc.
     have [wc nc] : PreTerm.wf (unfold_term x) ∧
                    negb (PreTerm.is_mod (unfold_term x)).
       by apply/andb_True; apply: (A n) xn'; right.
-    have hc : tsize x ≤ PreTerm.psize (PreTerm.poly_lists_of (Frac.den r)).
-      have : tsize x ≤ PreTerm.wsize (MSet.car n).
+    have hc : tsize x ≤ PreTerm.poly_size (PreTerm.poly_lists_of (Frac.den r)).
+      have : tsize x ≤ PreTerm.mono_size (MSet.car n).
         exact: (sum_list_with_in _ PreTerm.tsize _ xn').
-      have := PreTerm.psize_ge _ _ nD'; lia.
+      have := PreTerm.poly_size_ge _ _ nD'; lia.
     have ef : PreTerm.frac_of (unfold_term x) = Frac.var (unfold_term x).
       exact: PreTerm.frac_of_var.
     split.
     * have := tsize_TInv_le x; rewrite ef.
       have [en ed] := Frac.inv_var_canon (unfold_term x).
-      rewrite en ed psize_one Poly.varE psize_monoE MSet.car_singleton /=.
+      rewrite en ed PreTerm.poly_size_one Poly.varE PreTerm.poly_size_monoE
+        MSet.car_singleton /=.
       rewrite -/(tsize x); lia.
     * have [en [ed eD]] := Frac.mul_var_content_canon r M (unfold_term x) eM xc.
       have en' : Frac.num (Frac.mul r (PreTerm.frac_of (unfold_term x))) =
                  Poly.mono M by rewrite ef en.
-      set Dc := PolyGcd.unmono {[+ unfold_term x +]} (Frac.den r) in ed eD.
+      set Dc := PolyGcd.div_mono {[+ unfold_term x +]} (Frac.den r) in ed eD.
       have nDc : Dc ≠ Poly.zero.
         move=> e; apply: nD; rewrite -eD e.
         exact: (right_absorb Poly.zero Poly.mul).
-      have hD : PreTerm.psize (PreTerm.poly_lists_of (Frac.den r)) =
-                PreTerm.psize (PreTerm.poly_lists_of Dc) +
-                PreTerm.nentries Dc * tsize x.
-        rewrite -eD PreTerm.psize_mul_monoE MSet.car_singleton /=.
+      have hD : PreTerm.poly_size (PreTerm.poly_lists_of (Frac.den r)) =
+                PreTerm.poly_size (PreTerm.poly_lists_of Dc) +
+                PreTerm.poly_length Dc * tsize x.
+        rewrite -eD PreTerm.poly_size_mul_monoE MSet.car_singleton /=.
         rewrite -/(tsize x); lia.
-      have := PreTerm.nentries_pos _ nDc.
+      have := PreTerm.poly_length_pos _ nDc.
       have := tsize_gt0 x.
-      have := bound x _ en'; rewrite ef en ed psize_monoE.
+      have := bound x _ en'; rewrite ef en ed PreTerm.poly_size_monoE.
       nia.
   + have U1 : PolyGcd.unit_part (Frac.den r) ≠ Poly.one.
-      move: xu; rewrite /PreTerm.units; case: bool_decide_reflect => // _.
+      move: xu; rewrite /PreTerm.unit_factors;
+        case: bool_decide_reflect => // _.
       by move=> e; case: (MSet.not_elem_of_empty _ e).
     have hat : ∀ m y, m ∈ Poly.car (Frac.den r) → y ∈ m →
         negb (PreTerm.is_mod y).
       by move=> m y mD ym; have /andb_True [] := A m y (or_intror mD) ym.
     have ef : PreTerm.frac_of (unfold_term x) =
               Frac.of_poly (PolyGcd.unit_part (Frac.den r)).
-      exact: PreTerm.frac_of_units hat xu.
+      exact: PreTerm.frac_of_unit_factors hat xu.
     have fU := Frac.first_neg_unit_part r.
     have nU := PolyGcd.unit_part_neq0 _ nD.
-    have hD := PreTerm.psize_mul_monoE (PolyGcd.content (Frac.den r))
+    have hD := PreTerm.poly_size_mul_monoE (PolyGcd.content (Frac.den r))
                  (PolyGcd.unit_part (Frac.den r)).
     rewrite PolyGcd.content_unitK in hD.
-    have pU := PreTerm.psize_pos_nonunit _ nU U1 fU.
-    have := PreTerm.nentries_pos _ nU.
+    have pU := PreTerm.poly_size_pos_nonunit _ nU U1 fU.
+    have := PreTerm.poly_length_pos _ nU.
     split.
     * have := tsize_TInv_le x; rewrite ef.
       have [en ed] := Frac.inv_of_poly_canon _ nU fU.
-      rewrite en ed psize_one; nia.
+      rewrite en ed PreTerm.poly_size_one; nia.
     * have [en ed] := Frac.mul_unit_part_canon r M eM.
       have en' : Frac.num (Frac.mul r (PreTerm.frac_of (unfold_term x))) =
                  Poly.mono M by rewrite ef en.
-      have := bound x _ en'; rewrite ef en ed !psize_monoE.
+      have := bound x _ en'; rewrite ef en ed !PreTerm.poly_size_monoE.
       nia.
 Qed.
 
@@ -342,19 +318,10 @@ Lemma tsize_exps_lt t' t :
 Proof.
 move=> t't Nt'; have xt := is_exp_of_exps t't.
 have := tsize_expo_lt _ xt.
-have a_t' := factors_atoms _ _ t't Nt'.
+have a_t' := factors_atoms t't Nt'.
 case Me: (is_mod (expo t)).
   have := tsize_atoms_lt _ _ (ltac:(by rewrite Me) : is_mod (expo t)) a_t'.
   lia.
 have Ne : negb (is_mod (expo t)) by rewrite Me.
 by move: a_t'; rewrite (atoms_atom _ _ Ne) => ->.
-Qed.
-
-Lemma count_expo_gfactors_big {h T u} :
-  negb (is_mod h) → u ∈ gfactors T → tsize T ≤ tsize h →
-  count h (expo u) = 0%Z.
-Proof.
-move=> Nh uT le; case: (decide (count h (expo u) = 0%Z)) => // ne.
-have h_in : h ∈ exps u by apply/count_neq0.
-have := tsize_exps_lt _ _ h_in Nh; have := tsize_gfactors_le _ _ uT; lia.
 Qed.

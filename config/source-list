@@ -7,8 +7,8 @@ cryptis/lib/mset.v
 cryptis/lib/sms.v
 cryptis/lib/poly.v
 cryptis/lib/poly_gcd.v
-cryptis/lib/poly_restrict.v
 cryptis/lib/frac.v
+cryptis/lib/poly_restrict.v
 cryptis/lib/term_set.v
 cryptis/lib/gen_adequacy.v
 cryptis/lib/adequacy.v
@@ -26,13 +26,17 @@ cryptis/lib.v
 cryptis/role.v
 
 cryptis/core/pre_term/base.v
-cryptis/core/pre_term/normalize.v
 cryptis/core/pre_term/with_stdpp.v
+cryptis/core/pre_term/normalize.v
+cryptis/core/pre_term/gfactors.v
+cryptis/core/pre_term/factors.v
+cryptis/core/pre_term/tsize.v
 cryptis/core/pre_term.v
 cryptis/core/term/base.v
 cryptis/core/term/algebra.v
 cryptis/core/term/tsize.v
 cryptis/core/term/powers.v
+cryptis/core/term/log.v
 cryptis/core/term/repr.v
 cryptis/core/term/nonces.v
 cryptis/core/term/subterms.v

@@ -1,4 +1,4 @@
 From cryptis.lib Require Export mset sms.
 From cryptis.core Require Export pre_term.
-From cryptis.core.term Require Export base algebra tsize powers repr nonces
+From cryptis.core.term Require Export base algebra tsize powers log repr nonces
   subterms spec.

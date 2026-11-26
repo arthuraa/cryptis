@@ -496,6 +496,10 @@ Proof. by move=> e; rewrite -(gfactorsK t1) e gfactorsK. Qed.
 Definition frac_of t : tfrac :=
   Frac.map fold_term (PreTerm.frac_of (unfold_term t)).
 
+Abbreviation pre_frac t := (PreTerm.frac_of (unfold_term t)).
+
+Definition expo_frac u := PreTerm.frac_of (PreTerm.expo (unfold_term u)).
+
 Lemma unfold_frac_of t :
   Frac.map unfold_term (frac_of t) = PreTerm.frac_of (unfold_term t).
 Proof.
@@ -506,7 +510,7 @@ Qed.
 Lemma frac_of_inj t1 t2 : frac_of t1 = frac_of t2 → t1 = t2.
 Proof.
 move=> /(f_equal (Frac.map unfold_term)); rewrite !unfold_frac_of.
-move=> /(f_equal PreTerm.mod_aux); rewrite !PreTerm.mod_aux_frac_of //.
+move=> /(f_equal PreTerm.mod_of_frac); rewrite !PreTerm.mod_of_frac_frac_of //.
 exact: unfold_term_inj.
 Qed.
 
@@ -540,6 +544,23 @@ Qed.
 
 Lemma frac_of_TInv t : frac_of (TInv t) = Frac.inv (frac_of t).
 Proof. by rewrite /TInv frac_of_TMul Frac.sprod_inv Frac.sprod_singleton. Qed.
+
+Lemma pre_frac_TInv t :
+  PreTerm.frac_of (unfold_term (TInv t)) =
+  Frac.inv (PreTerm.frac_of (unfold_term t)).
+Proof.
+rewrite -unfold_frac_of frac_of_TInv.
+by rewrite (Frac.map_inv unfold_term unfold_term_inj) unfold_frac_of.
+Qed.
+
+Lemma pre_frac_TMul s :
+  PreTerm.frac_of (unfold_term (TMul s)) =
+  Frac.sprod (λ u, PreTerm.frac_of (unfold_term u)) s.
+Proof.
+rewrite -unfold_frac_of frac_of_TMul.
+rewrite (Frac.map_sprod unfold_term unfold_term_inj).
+by apply: Frac.sprod_ext => u _; rewrite unfold_frac_of.
+Qed.
 
 Lemma TInvK t : TInv (TInv t) = t.
 Proof. by apply: frac_of_inj; rewrite !frac_of_TInv Frac.inv_inv. Qed.
@@ -594,11 +615,11 @@ by rewrite /count -unfold_factors (SMS.count_map_inj _ _ _ unfold_term_inj).
 Qed.
 
 (** On atoms, [count] is the valuation of the fraction. *)
-Lemma count_vx x t :
+Lemma count_valuation x t :
   negb (is_mod x) →
-  count x t = Frac.vx (unfold_term x) (PreTerm.frac_of (unfold_term t)).
+  count x t = Frac.valuation (unfold_term x) (PreTerm.frac_of (unfold_term t)).
 Proof.
-rewrite is_mod_unfold count_unfold => nx; exact: PreTerm.count_vx.
+rewrite is_mod_unfold count_unfold => nx; exact: PreTerm.count_valuation.
 Qed.
 
 Lemma is_gmul_gcount x t : is_gmul x → gcount x t = 0%Z.
@@ -646,13 +667,14 @@ Qed.
 (** A group element has Laurent logarithms when each of its logarithms has a
     monomial denominator.  On such elements, [gfactors] is a homomorphism into
     the free abelian group on non-products ([gfactors_TGMul]). *)
-Definition glaurent t := PreTerm.llogs (unfold_term t).
+Definition mono_den_logs t := PreTerm.mono_den_logs (unfold_term t).
 
 Lemma gfactors_TGMul s :
-  (∀ x, x ∈ s → glaurent x) → gfactors (TGMul s) = SMS.bind gfactors s.
+  (∀ x, x ∈ s → mono_den_logs x) → gfactors (TGMul s) = SMS.bind gfactors s.
 Proof.
 move=> L.
-have H : ∀ y, y ∈ SMS.map unfold_term s → PreTerm.wf y ∧ PreTerm.llogs y.
+have H : ∀ y, y ∈ SMS.map unfold_term s → PreTerm.wf y ∧
+  PreTerm.mono_den_logs y.
   by move=> y /SMS.elem_of_map [x [-> /L lx]].
 rewrite {1}/gfactors unfold_TGMul (PreTerm.gfactors_gmul _ H).
 by rewrite SMS.bind_map SMS.map_bind.
@@ -672,6 +694,6 @@ Proof. by rewrite /gcount gfactors_TGInv SMS.count_inv. Qed.
 
 Lemma count_TInv x t : negb (is_mod x) → count x (TInv t) = (- count x t)%Z.
 Proof.
-move=> nx; rewrite !count_vx // -!unfold_frac_of frac_of_TInv.
-by rewrite (Frac.map_inv unfold_term unfold_term_inj) Frac.vx_inv.
+move=> nx; rewrite !count_valuation // -!unfold_frac_of frac_of_TInv.
+by rewrite (Frac.map_inv unfold_term unfold_term_inj) Frac.valuation_inv.
 Qed.

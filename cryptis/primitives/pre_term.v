@@ -5,7 +5,7 @@
    [cmp_term] compares two pre-terms as [PreTerm.pt_cmp] does, by constructor
    and then lexicographically ([cmp_list], [cmp_poly], [cmp_frac]);
    [eq_term] and [leq_term] are its equality and order tests.  Exponents are
-   computed through their fractions ([hl_frac_of], [hl_mod_aux]) with the
+   computed through their fractions ([hl_frac_of], [hl_mod_of_frac]) with the
    operations of [primitives/frac.v], and group elements through their
    Diffie-Hellman maps ([hl_dh_map], [hl_dh_of]) with those of
    [primitives/fmap.v]. *)
@@ -147,7 +147,7 @@ Definition hl_lone_atom : val := λ: "r",
     end
   end.
 
-Definition hl_mod_aux : val := λ: "r",
+Definition hl_mod_of_frac : val := λ: "r",
   match: hl_lone_atom "r" with
     SOME "x" => "x"
   | NONE => (#TMod_tag, "r")
@@ -178,16 +178,16 @@ Definition hl_dh_scale : val := λ: "r" "m",
   fmap_map eq_frac (λ: "f", mul_frac "f" "r") frac_zero "m".
 
 Definition hl_mul : val := λ: "t1" "t2",
-  hl_mod_aux (mul_frac (hl_frac_of "t1") (hl_frac_of "t2")).
+  hl_mod_of_frac (mul_frac (hl_frac_of "t1") (hl_frac_of "t2")).
 
-Definition hl_inv : val := λ: "t", hl_mod_aux (inv_frac (hl_frac_of "t")).
+Definition hl_inv : val := λ: "t", hl_mod_of_frac (inv_frac (hl_frac_of "t")).
 
 Definition hl_one : val := (#TMod_tag, frac_one).
 
 Definition hl_sum : val := λ: "t1" "t2",
-  hl_mod_aux (add_frac (hl_frac_of "t1") (hl_frac_of "t2")).
+  hl_mod_of_frac (add_frac (hl_frac_of "t1") (hl_frac_of "t2")).
 
-Definition hl_opp : val := λ: "t", hl_mod_aux (frac_opp (hl_frac_of "t")).
+Definition hl_opp : val := λ: "t", hl_mod_of_frac (frac_opp (hl_frac_of "t")).
 
 Definition hl_zero : val := (#TMod_tag, frac_zero).
 
@@ -204,33 +204,6 @@ Definition hl_exp : val := λ: "b" "e",
 Definition texp : val := λ: "base" "exp", hl_exp "base" "exp".
 
 (** ** Pure facts *)
-
-Lemma dh_sum_pair (t1 t2 : PreTerm.pre_term) :
-  PreTerm.dh_sum {[+ t1; t2 +]} =
-  PreTerm.dh_add (PreTerm.dh_map t1) (PreTerm.dh_map t2).
-Proof.
-apply/FMap.fmap_eq => k.
-by rewrite PreTerm.lookup_dh_sum_ssum Frac.ssum_disj_union
-  !Frac.ssum_singleton PreTerm.lookup_dh_add.
-Qed.
-
-Lemma mul_empty : PreTerm.mul ∅ = PreTerm.one.
-Proof.
-by rewrite /PreTerm.mul Frac.sprod_empty /PreTerm.mod_aux PreTerm.lists_one.
-Qed.
-
-Lemma sum_empty : PreTerm.sum ∅ = PreTerm.PTMod PreTerm.zero_lists.
-Proof.
-by rewrite /PreTerm.sum Frac.ssum_empty /PreTerm.mod_aux PreTerm.lists_zero.
-Qed.
-
-Lemma gmul_empty : PreTerm.gmul ∅ = PreTerm.PTDH [].
-Proof.
-rewrite /PreTerm.gmul; have -> : PreTerm.dh_sum ∅ = ∅.
-  apply/FMap.fmap_eq => k.
-  by rewrite PreTerm.lookup_dh_sum_ssum Frac.ssum_empty FMap.lookup_empty.
-by rewrite /PreTerm.dh_of /PreTerm.entries FMap.to_listE.
-Qed.
 
 Section Proofs.
 
@@ -341,7 +314,7 @@ case: A A' => [ps ns] [ps' ns'] [Hps Hns] /=.
 have M ms : PreTerm.monos_all (cmp_spec repr c cv) ms →
     Forall (cmp_spec (val_mono val_of_pre_term) (PreTerm.cmp_list c)
               (λ: "m" "n", cmp_list cv "m" "n")) ms.
-  apply: PreTerm.monos_all_Forall' => m Hm m' E' Φ; iIntros "HΦ".
+  apply: PreTerm.monos_all_Forall_impl => m Hm m' E' Φ; iIntros "HΦ".
   wp_pures; iApply (twp_cmp_list with "HΦ"); exact: Hm.
 iIntros "HΨ"; rewrite /val_poly /=; wp_lam; wp_pures.
 wp_apply (twp_cmp_list _ _ _ ps ps'); first exact: M.
@@ -398,7 +371,7 @@ elim: x y E Ψ => [o1|o1 t1 IH|o1 a1 IHa b1 IHb|F1 IH|l1 IH]
         WP cmp_frac cmp_term (val_frac val_of_pre_term F)
                              (val_frac val_of_pre_term F') @ E [{ Ψ }].
     by move=> HF F' E' Φ; iIntros "HΦ"; iApply (twp_cmp_frac with "HΦ").
-  apply: Forall_impl (PreTerm.entries_all_Forall' HF IH) _.
+  apply: Forall_impl (PreTerm.entries_all_Forall_impl HF IH) _.
   move=> - [b F] /= [Hb {}HF] [b' F'] E' Φ; iIntros "HΦ".
   wp_pures; wp_lam; wp_pures.
   wp_apply Hb; rewrite /PreTerm.cmp_pair.
@@ -433,17 +406,6 @@ Qed.
 
 (** *** Encodings *)
 
-#[local] Lemma repr_pairE {A B} `{!Repr A, !Repr B} (a : A) (b : B) :
-  repr (a, b) = (repr a, repr b)%V.
-Proof. done. Qed.
-
-#[local] Lemma repr_nil {A} `{!Repr A} : repr ([] : list A) = NONEV.
-Proof. by rewrite repr_listE. Qed.
-
-#[local] Lemma repr_cons {A} `{!Repr A} (x : A) (xs : list A) :
-  repr (x :: xs) = SOMEV (repr x, repr xs).
-Proof. by rewrite repr_listE. Qed.
-
 Lemma repr_mono_car (m : MSet.mset PreTerm.pre_term) :
   repr m = val_mono val_of_pre_term (MSet.car m).
 Proof.
@@ -461,11 +423,11 @@ Qed.
 
 Lemma repr_poly_lists (p : Poly.poly PreTerm.pre_term) :
   repr p = val_poly val_of_pre_term (PreTerm.poly_lists_of p).
-Proof. by rewrite repr_polyE repr_smsE repr_pairE !repr_msetE !repr_monos. Qed.
+Proof. by rewrite repr_polyE repr_smsE repr_pair !repr_msetE !repr_monos. Qed.
 
 Lemma repr_frac_lists (r : Frac.frac PreTerm.pre_term) :
-  repr r = val_frac val_of_pre_term (PreTerm.lists r).
-Proof. by rewrite repr_fracE repr_pairE !repr_poly_lists. Qed.
+  repr r = val_frac val_of_pre_term (PreTerm.frac_lists_of r).
+Proof. by rewrite repr_fracE repr_pair !repr_poly_lists. Qed.
 
 Lemma repr_dhmap (m : PreTerm.dhmap) :
   repr m = repr_list (map (λ e, (val_of_pre_term e.1,
@@ -474,14 +436,8 @@ Lemma repr_dhmap (m : PreTerm.dhmap) :
 Proof.
 rewrite repr_fmapE /PreTerm.entries [@repr_list]unlock /=.
 elim: (FMap.to_list m) => //= - [b r] l -> /=.
-by rewrite -[repr_prod (b, r)]/(repr (b, r)) repr_pairE repr_frac_lists.
+by rewrite -[repr_prod (b, r)]/(repr (b, r)) repr_pair repr_frac_lists.
 Qed.
-
-Lemma repr_fzero : repr (Frac.zero : Frac.frac PreTerm.pre_term) = frac_zero.
-Proof. exact: repr_frac_zero. Qed.
-
-Lemma repr_fone : repr (Frac.one : Frac.frac PreTerm.pre_term) = frac_one.
-Proof. exact: repr_frac_one. Qed.
 
 Lemma hl_oneE : hl_one = repr PreTerm.one.
 Proof. by rewrite /= /val_frac /val_poly /val_mono [@repr_list]unlock. Qed.
@@ -525,7 +481,7 @@ Qed.
 Lemma twp_is_one_frac (f : Frac.frac PreTerm.pre_term) E Ψ :
   Ψ #(bool_decide (f = Frac.one)) ⊢ WP is_one_frac (repr f) @ E [{ Ψ }].
 Proof.
-iIntros "HΨ"; wp_lam; rewrite -repr_fone.
+iIntros "HΨ"; wp_lam; rewrite -(repr_frac_one (T := PreTerm.pre_term)).
 by wp_apply (twp_frac_eq eq_term twp_eq_pre_term).
 Qed.
 
@@ -535,10 +491,8 @@ Lemma twp_hl_is_mod pt E Ψ :
   Ψ #(PreTerm.is_mod pt) ⊢ WP hl_is_mod (repr pt) @ E [{ Ψ }].
 Proof. by case: pt => *; iIntros "HΨ"; wp_lam; wp_pures. Qed.
 
-Definition is_dh pt := if pt is PreTerm.PTDH _ then true else false.
-
 Lemma twp_hl_is_dh pt E Ψ :
-  Ψ #(is_dh pt) ⊢ WP hl_is_dh (repr pt) @ E [{ Ψ }].
+  Ψ #(PreTerm.is_dh pt) ⊢ WP hl_is_dh (repr pt) @ E [{ Ψ }].
 Proof. by case: pt => *; iIntros "HΨ"; wp_lam; wp_pures. Qed.
 
 Lemma twp_hl_lone_atom (F : PreTerm.frac_lists) E Ψ :
@@ -559,11 +513,11 @@ case: qs => [|? ?] /=; wp_pures; try by iApply "HΨ".
 by case: rs => [|? ?] /=; wp_pures; iApply "HΨ".
 Qed.
 
-Lemma twp_hl_mod_aux (r : Frac.frac PreTerm.pre_term) E Ψ :
-  Ψ (repr (PreTerm.mod_aux r)) ⊢ WP hl_mod_aux (repr r) @ E [{ Ψ }].
+Lemma twp_hl_mod_of_frac (r : Frac.frac PreTerm.pre_term) E Ψ :
+  Ψ (repr (PreTerm.mod_of_frac r)) ⊢ WP hl_mod_of_frac (repr r) @ E [{ Ψ }].
 Proof.
-rewrite repr_frac_lists /PreTerm.mod_aux /PreTerm.mod_of_lists.
-move: (PreTerm.lists r) => F.
+rewrite repr_frac_lists /PreTerm.mod_of_frac /PreTerm.mod_of_lists.
+move: (PreTerm.frac_lists_of r) => F.
 case eF: (PreTerm.lone_atom F) => [x|]; iIntros "HΨ"; wp_lam;
   wp_apply twp_hl_lone_atom; rewrite eF /=; wp_pures; by iApply "HΨ".
 Qed.
@@ -577,7 +531,7 @@ case Em: (PreTerm.is_mod pt); wp_pures.
 - case: pt wf_pt Em => // F wf_F _; wp_pures.
   have cF : PreTerm.canonical F.
     by move: wf_F => /= /andb_True [/andb_True [_ ?] _].
-  iEval (rewrite repr_frac_lists /= PreTerm.lists_of_lists //) in "HΨ".
+  iEval (rewrite repr_frac_lists /= PreTerm.frac_lists_ofK //) in "HΨ".
   by iApply "HΨ".
 - iEval (rewrite PreTerm.frac_of_var ?Em //) in "HΨ".
   by wp_apply twp_frac_var.
@@ -588,14 +542,15 @@ Lemma twp_hl_dh_map pt E Ψ :
   Ψ (repr (PreTerm.dh_map pt)) ⊢ WP hl_dh_map (repr pt) @ E [{ Ψ }].
 Proof.
 move=> wf_pt.
-case Ed: (is_dh pt).
+case Ed: (PreTerm.is_dh pt).
 - case: pt wf_pt Ed => // l wf_l _.
   rewrite repr_dhmap /= PreTerm.entries_of_entries //.
   iIntros "HΨ"; wp_lam; wp_apply (twp_hl_is_dh (PreTerm.PTDH l)); wp_pures.
   by iApply "HΨ".
 - have -> : PreTerm.dh_map pt = {[pt := Frac.one]} by case: pt Ed {wf_pt}.
   iIntros "HΨ"; wp_lam; wp_apply twp_hl_is_dh; rewrite Ed; wp_pures.
-  rewrite -repr_fzero -repr_fone.
+  rewrite -(repr_frac_zero (T := PreTerm.pre_term))
+    -(repr_frac_one (T := PreTerm.pre_term)).
   by wp_apply (twp_fmap_singleton Frac.zero eq_frac twp_eq_frac).
 Qed.
 
@@ -611,10 +566,10 @@ case E': (FMap.to_list m) => [|[b r] [|e' l]].
   by iIntros "HΨ"; wp_lam; wp_pures; iApply "HΨ".
 - have -> : PreTerm.dh_of m = PreTerm.mk_exp b r.
     by rewrite /PreTerm.dh_of E'.
-  have Ee : PreTerm.entries m = [(b, PreTerm.lists r)].
+  have Ee : PreTerm.entries m = [(b, PreTerm.frac_lists_of r)].
     by rewrite /PreTerm.entries E'.
-  rewrite Ee [repr m]repr_fmapE E' repr_cons repr_nil repr_pairE in e.
-  rewrite /PreTerm.mk_exp [repr m]repr_fmapE E' repr_cons repr_nil repr_pairE.
+  rewrite Ee [repr m]repr_fmapE E' repr_cons repr_nil repr_pair in e.
+  rewrite /PreTerm.mk_exp [repr m]repr_fmapE E' repr_cons repr_nil repr_pair.
   case: bool_decide_reflect => [er|ne].
   + iIntros "HΨ"; wp_lam; wp_pures; wp_apply twp_is_one_frac.
     by rewrite bool_decide_eq_true_2 //; wp_pures; iApply "HΨ".
@@ -631,7 +586,8 @@ Lemma twp_hl_dh_add (m1 m2 : PreTerm.dhmap) E Ψ :
   WP hl_dh_add (repr m1) (repr m2) @ E [{ Ψ }].
 Proof.
 rewrite /PreTerm.dh_add repr_fmapE FMap.to_list_cast -repr_fmapE.
-iIntros "HΨ"; wp_lam; wp_pures; rewrite -repr_fzero.
+iIntros "HΨ"; wp_lam; wp_pures;
+  rewrite -(repr_frac_zero (T := PreTerm.pre_term)).
 wp_apply (twp_fmap_merge eq_term leq_term twp_eq_pre_term twp_leq_pre_term
             Frac.zero Frac.zero eq_frac twp_eq_frac Frac.add); last done.
 move=> a b E' Φ; iIntros "HΦ"; by wp_apply twp_add_frac.
@@ -641,7 +597,7 @@ Lemma twp_hl_dh_opp (m : PreTerm.dhmap) E Ψ :
   Ψ (repr (PreTerm.dh_opp m)) ⊢ WP hl_dh_opp (repr m) @ E [{ Ψ }].
 Proof.
 rewrite /PreTerm.dh_opp repr_fmapE FMap.to_list_cast -repr_fmapE.
-iIntros "HΨ"; wp_lam; rewrite -repr_fzero.
+iIntros "HΨ"; wp_lam; rewrite -(repr_frac_zero (T := PreTerm.pre_term)).
 wp_apply (twp_fmap_map Frac.zero eq_frac twp_eq_frac Frac.opp); last done.
 move=> a E' Φ; iIntros "HΦ"; by wp_apply twp_frac_opp.
 Qed.
@@ -652,7 +608,8 @@ Lemma twp_hl_dh_scale (r : Frac.frac PreTerm.pre_term) (m : PreTerm.dhmap)
   WP hl_dh_scale (repr r) (repr m) @ E [{ Ψ }].
 Proof.
 rewrite /PreTerm.dh_scale repr_fmapE FMap.to_list_cast -repr_fmapE.
-iIntros "HΨ"; wp_lam; wp_pures; rewrite -repr_fzero.
+iIntros "HΨ"; wp_lam; wp_pures;
+  rewrite -(repr_frac_zero (T := PreTerm.pre_term)).
 wp_apply (twp_fmap_map Frac.zero eq_frac twp_eq_frac
             (λ f, Frac.mul f r)); last done.
 move=> a E' Φ; iIntros "HΦ"; wp_pures; by wp_apply twp_mul_frac.
@@ -668,7 +625,7 @@ Proof.
 move=> wf1 wf2; rewrite /PreTerm.mul Frac.sprod_pair.
 iIntros "HΨ"; wp_lam; wp_pures.
 wp_apply (twp_hl_frac_of pt2 _ _ wf2); wp_apply (twp_hl_frac_of pt1 _ _ wf1).
-by wp_apply twp_mul_frac; wp_apply twp_hl_mod_aux.
+by wp_apply twp_mul_frac; wp_apply twp_hl_mod_of_frac.
 Qed.
 
 Lemma twp_hl_inv pt E Ψ :
@@ -678,7 +635,7 @@ Lemma twp_hl_inv pt E Ψ :
 Proof.
 move=> wf_pt; rewrite /PreTerm.mul Frac.sprod_inv Frac.sprod_singleton.
 iIntros "HΨ"; wp_lam; wp_apply (twp_hl_frac_of pt _ _ wf_pt).
-by wp_apply twp_inv_frac; wp_apply twp_hl_mod_aux.
+by wp_apply twp_inv_frac; wp_apply twp_hl_mod_of_frac.
 Qed.
 
 Lemma twp_hl_sum pt1 pt2 E Ψ :
@@ -690,7 +647,7 @@ move=> wf1 wf2.
 rewrite /PreTerm.sum Frac.ssum_disj_union !Frac.ssum_singleton.
 iIntros "HΨ"; wp_lam; wp_pures.
 wp_apply (twp_hl_frac_of pt2 _ _ wf2); wp_apply (twp_hl_frac_of pt1 _ _ wf1).
-by wp_apply twp_add_frac; wp_apply twp_hl_mod_aux.
+by wp_apply twp_add_frac; wp_apply twp_hl_mod_of_frac.
 Qed.
 
 Lemma twp_hl_opp pt E Ψ :
@@ -700,7 +657,7 @@ Lemma twp_hl_opp pt E Ψ :
 Proof.
 move=> wf_pt; rewrite /PreTerm.sum Frac.ssum_inv Frac.ssum_singleton.
 iIntros "HΨ"; wp_lam; wp_apply (twp_hl_frac_of pt _ _ wf_pt).
-by wp_apply twp_frac_opp; wp_apply twp_hl_mod_aux.
+by wp_apply twp_frac_opp; wp_apply twp_hl_mod_of_frac.
 Qed.
 
 Lemma twp_hl_gmul pt1 pt2 E Ψ :
@@ -708,7 +665,7 @@ Lemma twp_hl_gmul pt1 pt2 E Ψ :
   Ψ (repr (PreTerm.gmul {[+ pt1; pt2 +]})) ⊢
   WP hl_gmul (repr pt1) (repr pt2) @ E [{ Ψ }].
 Proof.
-move=> wf1 wf2; rewrite /PreTerm.gmul dh_sum_pair.
+move=> wf1 wf2; rewrite /PreTerm.gmul PreTerm.dh_sum_pair.
 iIntros "HΨ"; wp_lam; wp_pures.
 wp_apply (twp_hl_dh_map pt2 _ _ wf2); wp_apply (twp_hl_dh_map pt1 _ _ wf1).
 by wp_apply twp_hl_dh_add; wp_apply twp_hl_dh_of.

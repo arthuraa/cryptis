@@ -175,8 +175,8 @@ Lemma twp_tzero E Ψ :
   WP tzero #() @ E [{ Ψ }].
 Proof.
 have e : hl_zero = TSum ∅.
-  by rewrite -val_of_pre_term_unfold unfold_TSum SMS.map_empty sum_empty
-    hl_zeroE.
+  by rewrite -val_of_pre_term_unfold unfold_TSum SMS.map_empty
+    PreTerm.sum_empty hl_zeroE.
 by iIntros "HΨ"; rewrite /tzero; wp_pures; rewrite e.
 Qed.
 
@@ -227,8 +227,8 @@ Lemma twp_tgone E Ψ :
   WP tgone #() @ E [{ Ψ }].
 Proof.
 have e : hl_gone = TGMul ∅.
-  by rewrite -val_of_pre_term_unfold unfold_TGMul SMS.map_empty gmul_empty
-    hl_goneE.
+  by rewrite -val_of_pre_term_unfold unfold_TGMul SMS.map_empty
+    PreTerm.gmul_empty hl_goneE.
 by iIntros "HΨ"; rewrite /tgone; wp_pures; rewrite e.
 Qed.
 

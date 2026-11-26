@@ -193,7 +193,8 @@ Definition poly_div : val := λ: "eq" "le" "p" "q",
 
 Definition poly_first_neg : val := λ: "eq" "le" "p",
   let: "mle" := λ: "X" "Y", mset_le "eq" "le" "X" "Y" in
-  match: mset_gmin "eq" "le" (mset_disj_union "mle" (Fst "p") (Snd "p")) with
+  match: mset_grlex_min "eq" "le" (mset_disj_union "mle" (Fst "p") (Snd "p"))
+    with
     NONE => #false
   | SOME "m" => poly_coeff "eq" "m" "p" < #0
   end.
@@ -626,8 +627,8 @@ Lemma twp_poly_first_neg p E Ψ :
 Proof.
 iIntros "HΨ"; wp_lam; wp_pures; wp_apply (twp_mset_disj_union _ mleP).
 rewrite [Poly.first_neg]unlock /repr_mset.
-wp_apply (twp_mset_gmin eqv lev eqvP levP).
-case: (MSet.gmin_list _) => [m|]; wp_pures; last by iApply "HΨ".
+wp_apply (twp_mset_grlex_min eqv lev eqvP levP).
+case: (MSet.grlex_min _) => [m|]; wp_pures; last by iApply "HΨ".
 by wp_apply twp_poly_coeff; wp_pures.
 Qed.
 

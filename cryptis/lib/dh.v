@@ -80,7 +80,7 @@ iIntros "%gNX %gNm #aP #p_t".
 iAssert ⌜negb (is_mod a)⌝%I as %Nm_a; first by iDestruct "aP" as "(_ & $ & _)".
 set t' := TExp g a.
 have a_t' : a ∈ SMS.pos (exps t').
-  rewrite /t' (exps_TExp_expN gNX gNm (monic_atom _ Nm_a)).
+  rewrite /t' (exps_TExp_expN gNX gNm (mono_num_atom _ Nm_a)).
   rewrite factors_Nmod //.
   by rewrite SMS.pos_singleton MSet.elem_of_singleton.
 iPoseProof (public_exp_inv_same with "p_t") as "[#contra|H]" => //.
@@ -89,7 +89,7 @@ iDestruct "H" as "(%t & %e_base & %a_t & H)".
 iDestruct (dh_seed_exp_pred_elim with "aP H")
   as "{H} #[>-> H]" => //; iNext.
 have -> : t' = TExp (base t) a; last by iApply "H".
-by rewrite /t' e_base (base_TExp gNm (monic_atom _ Nm_a))
+by rewrite /t' e_base (base_TExp gNm (mono_num_atom _ Nm_a))
   base_expN.
 Qed.
 
@@ -144,7 +144,7 @@ iIntros "%gXN %gNm #gP (#m & %Nm_a & #aP1 & #aP2 & _) #P_a".
 rewrite public_TExp_iff //; do !iSplit => //.
 - iRight. iApply "aP2"; do 2!iModIntro; iSplit => //.
   iPureIntro.
-  rewrite (exps_TExp_expN gXN gNm (monic_atom _ Nm_a)).
+  rewrite (exps_TExp_expN gXN gNm (mono_num_atom _ Nm_a)).
   by rewrite factors_Nmod // SMS.elements_singleton.
 - iModIntro; iIntros "#p".
   by iApply False_public; last iApply "aP1".
@@ -180,7 +180,7 @@ have Nm_a : negb (is_mod a) by [].
 have a_ga : TNonce a ≠ TExp g a.
   move=> contra; have : is_exp (TExp g a); last by rewrite -contra.
   apply: (@is_exp_of_exps _ (TNonce a)).
-  rewrite (exps_TExp_expN gNX gNm (monic_atom _ Nm_a)).
+  rewrite (exps_TExp_expN gNX gNm (mono_num_atom _ Nm_a)).
   by rewrite factors_Nmod // SMS.elem_of_singleton.
 rewrite big_sepS_union ?big_sepS_singleton; last set_solver.
 iDestruct "token" as "[t1 t3]".
@@ -230,7 +230,7 @@ rewrite public_TExp_iff //.
 do !iSplit => //; last by iIntros "!> _".
 iRight.
 iApply "pred_a". iPureIntro. rewrite /dh_key_share.
-rewrite (exps_TExp_expN gNx gNm (monic_atom _ Nm)).
+rewrite (exps_TExp_expN gNx gNm (mono_num_atom _ Nm)).
 by rewrite factors_Nmod // SMS.elements_singleton.
 Qed.
 

@@ -613,6 +613,16 @@ Proof. by move=> fg; rewrite [map]unlock; apply: bind_ext => x /fg ->. Qed.
 Lemma map_inv f s : map f (inv s) = inv (map f s).
 Proof. rewrite [map]unlock; exact: bind_inv. Qed.
 
+Lemma pos_map_inj (f : T → U) s :
+  (∀ a b, f a = f b → a = b) →
+  pos (map f s) = MSet.map f (pos s) ∧ neg (map f s) = MSet.map f (neg s).
+Proof.
+move=> finj; have d := MSet.map_disjoint f _ _ finj (pos_neg_disj s).
+rewrite map_pos_neg pos_make neg_make.
+rewrite MSet.difference_disjoint_l // MSet.difference_disjoint_l //.
+by move=> y h1 h2; exact: d y h2 h1.
+Qed.
+
 End Bind.
 
 Lemma map_map {T U V : Type}

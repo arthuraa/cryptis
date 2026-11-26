@@ -126,7 +126,7 @@ Lemma exps_TExp1 a :
   negb (is_mod a) -> exps (TExp (TInt 0) a) = {[+ a +]}.
 Proof.
 move=> Nm.
-by rewrite (@exps_TExp_expN (TInt 0) a I I (monic_atom _ Nm)) factors_Nmod.
+by rewrite (@exps_TExp_expN (TInt 0) a I I (mono_num_atom _ Nm)) factors_Nmod.
 Qed.
 
 Lemma exps_TExp2 a b :

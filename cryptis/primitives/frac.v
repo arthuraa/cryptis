@@ -67,9 +67,6 @@ Hypothesis levP : ∀ (x y : T) E Ψ,
 
 Implicit Types (x : T) (p q : Poly.poly T) (f g : Frac.frac T).
 
-#[local] Lemma repr_pairE p q : repr (p, q) = (repr p, repr q)%V.
-Proof. done. Qed.
-
 Lemma repr_poly_one : repr (Poly.one : Poly.poly T) = poly_one.
 Proof.
 rewrite Poly.oneE repr_polyE Poly.car_mono repr_smsE SMS.pos_singleton.
@@ -79,13 +76,13 @@ Qed.
 
 Lemma repr_frac_zero : repr (Frac.zero : Frac.frac T) = frac_zero.
 Proof.
-by rewrite repr_fracE Frac.num_zero Frac.den_zero repr_pairE repr_poly_zero
+by rewrite repr_fracE Frac.num_zero Frac.den_zero repr_pair repr_poly_zero
   repr_poly_one.
 Qed.
 
 Lemma repr_frac_one : repr (Frac.one : Frac.frac T) = frac_one.
 Proof.
-by rewrite repr_fracE Frac.num_one Frac.den_one repr_pairE repr_poly_one.
+by rewrite repr_fracE Frac.num_one Frac.den_one repr_pair repr_poly_one.
 Qed.
 
 Lemma twp_frac_zero E Ψ :
@@ -100,7 +97,7 @@ Lemma twp_frac_var x E Ψ :
   Ψ (repr (Frac.var x)) ⊢ WP frac_var (repr x) @ E [{ Ψ }].
 Proof.
 rewrite repr_fracE Frac.varE Frac.num_of_poly Frac.den_of_poly.
-rewrite repr_pairE repr_poly_one.
+rewrite repr_pair repr_poly_one.
 iIntros "HΨ"; wp_lam; wp_apply twp_poly_var; wp_pures.
 by iApply "HΨ".
 Qed.
@@ -121,7 +118,7 @@ Qed.
 Lemma twp_frac_opp f E Ψ :
   Ψ (repr (Frac.opp f)) ⊢ WP frac_opp (repr f) @ E [{ Ψ }].
 Proof.
-rewrite !repr_fracE Frac.num_opp Frac.den_opp !repr_pairE.
+rewrite !repr_fracE Frac.num_opp Frac.den_opp !repr_pair.
 iIntros "HΨ"; wp_lam; wp_pures; wp_apply twp_poly_opp; wp_pures.
 by iApply "HΨ".
 Qed.
@@ -130,7 +127,7 @@ Lemma twp_frac_add f g E Ψ :
   Ψ (repr (Frac.add f g)) ⊢
   WP frac_add eqv lev (repr f) (repr g) @ E [{ Ψ }].
 Proof.
-rewrite Frac.addE [repr f]repr_fracE [repr g]repr_fracE !repr_pairE.
+rewrite Frac.addE [repr f]repr_fracE [repr g]repr_fracE !repr_pair.
 iIntros "HΨ"; wp_lam; wp_pures.
 wp_apply (twp_poly_mul eqv lev eqvP levP); wp_pures.
 wp_apply (twp_poly_mul eqv lev eqvP levP); wp_pures.
@@ -143,7 +140,7 @@ Lemma twp_frac_mul f g E Ψ :
   Ψ (repr (Frac.mul f g)) ⊢
   WP frac_mul eqv lev (repr f) (repr g) @ E [{ Ψ }].
 Proof.
-rewrite Frac.mulE [repr f]repr_fracE [repr g]repr_fracE !repr_pairE.
+rewrite Frac.mulE [repr f]repr_fracE [repr g]repr_fracE !repr_pair.
 iIntros "HΨ"; wp_lam; wp_pures.
 wp_apply (twp_poly_mul eqv lev eqvP levP); wp_pures.
 wp_apply (twp_poly_mul eqv lev eqvP levP).
@@ -153,7 +150,7 @@ Qed.
 Lemma twp_frac_inv f E Ψ :
   Ψ (repr (Frac.inv f)) ⊢ WP frac_inv eqv lev (repr f) @ E [{ Ψ }].
 Proof.
-rewrite Frac.invE [repr f]repr_fracE repr_pairE.
+rewrite Frac.invE [repr f]repr_fracE repr_pair.
 by iIntros "HΨ"; wp_lam; wp_pures; wp_apply twp_frac_make.
 Qed.
 
@@ -165,7 +162,7 @@ have -> : bool_decide (f = g) =
           bool_decide (Frac.den f = Frac.den g).
   rewrite -bool_decide_and; apply: bool_decide_ext.
   by split=> [->|[]]; [|exact: Frac.num_den_inj].
-rewrite !repr_fracE !repr_pairE.
+rewrite !repr_fracE !repr_pair.
 iIntros "HΨ"; wp_lam; wp_pures.
 wp_apply (twp_poly_eq eqv eqvP).
 case: bool_decide; wp_pures; last by iApply "HΨ".

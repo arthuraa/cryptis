@@ -295,13 +295,13 @@ wp_apply wp_send => //.
     + move: e_t; rewrite list_elem_of_fmap => - [u [e_t u_in]].
       have Nm_u := Ngmul_gfactors _ _ (proj1 (SMS.elem_of_elements _ _) u_in).
       have Nm_t : negb (is_gmul t) by rewrite -is_gmul_base e_t is_gmul_base.
-      by rewrite (base_TExp Nm_t (monic_atom (TNonce k_s) I)).
+      by rewrite (base_TExp Nm_t (mono_num_atom (TNonce k_s) I)).
   - iApply public_TExp_iff => //.
     do !iSplit => //.
     + by iApply minted_TInt.
     + iRight.
       iApply "Hexpx_s"; iPureIntro.
-      rewrite (exps_TExp_expN _ _ (monic_atom (TNonce x_s) I)) //.
+      rewrite (exps_TExp_expN _ _ (mono_num_atom (TNonce x_s) I)) //.
       by rewrite factors_Nmod // SMS.elements_singleton.
     + by rewrite public_TInt; auto.
   - iApply public_THashIS => //.

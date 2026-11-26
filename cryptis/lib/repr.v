@@ -44,3 +44,10 @@ Lemma repr_listE `{Repr A} (l : list A) :
 Proof.
 rewrite /= [@repr_list]unlock. by case: l.
 Qed.
+
+Lemma repr_nil `{Repr A} : repr ([] : list A) = NONEV.
+Proof. by rewrite repr_listE. Qed.
+
+Lemma repr_cons `{Repr A} (x : A) (xs : list A) :
+  repr (x :: xs) = SOMEV (repr x, repr xs).
+Proof. by rewrite repr_listE. Qed.

@@ -155,7 +155,7 @@ by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
 Lemma minted_TGMul s :
-  (∀ u, u ∈ s → negb (is_gmul u)) → (∀ u, u ∈ s → glaurent u) →
+  (∀ u, u ∈ s → negb (is_gmul u)) → (∀ u, u ∈ s → mono_den_logs u) →
   minted (TGMul s) ⊣⊢ [∗ list] t ∈ elements s, minted t.
 Proof.
 move=> Ng L; rewrite minted_gfactors (gfactors_TGMul _ L).

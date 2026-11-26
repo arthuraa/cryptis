@@ -94,7 +94,7 @@ iAssert (public (TExp g x_u)) as "#pubX_u".
   - by iApply minted_TInt.
   - iRight.
     iApply "Hexpx_u"; iPureIntro.
-    rewrite (exps_TExp_expN _ _ (monic_atom (TNonce x_u) I)) //.
+    rewrite (exps_TExp_expN _ _ (mono_num_atom (TNonce x_u) I)) //.
     by rewrite factors_Nmod // SMS.elements_singleton.
   - by rewrite public_TInt; auto. }
 iAssert (minted (TExp g x_u)) as "#mintedX_u"; first by iApply public_minted.
@@ -301,7 +301,8 @@ iAssert (|={⊤}=> ∃ si, ⌜si_key si = SK⌝ ∗ ⌜uid = si_uid si⌝ ∗ �
       subst p_u' P_u' P_s'.
       iPoseProof "keys" as "(#key_p_u & #key_p_s & #priv_p_u & #priv_p_s)".
       have nP (p : nonce) : TExp g p ≠ TGMul ∅.
-        exact: Ngmul_neq_unit (Ngmul_TExp (b := g) I (monic_atom (TNonce p) I)).
+        exact: Ngmul_neq_unit
+          (Ngmul_TExp (b := g) I (mono_num_atom (TNonce p) I)).
       have [/TExp_g_inj epb [eXs [/TExp_g_inj epa eXu]]] :=
         hmqv_K_inj' (g := g) I I tags_c (nP _) (nP _)
           (hmqv_K_neq_unit (g := g) I I) eKK.

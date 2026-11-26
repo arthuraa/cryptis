@@ -8,7 +8,7 @@ From iris.heap_lang Require locations.
 From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
 From cryptis.core Require Export pre_term.
-From cryptis.core.term Require Import base algebra tsize powers repr nonces.
+From cryptis.core.term Require Import base algebra tsize log repr nonces.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -68,7 +68,8 @@ Lemma subterm_TExp_g g (x : nonce) :
   negb (is_exp g) → negb (is_gmul g) → subterm (TNonce x) (TExp g x).
 Proof.
 move=> gNX gNm; apply: (@STExpo _ _ (TNonce x)) => //.
-rewrite (expo_TExp_expN gNX gNm); last exact: laurent_monic (laurent_atom _ _).
+rewrite (expo_TExp_expN gNX gNm);
+  last exact: laurent_mono_num (laurent_atom _ _).
 exact/atoms_atom.
 Qed.
 
@@ -163,7 +164,7 @@ elim: t2 / => //.
     by move: t''_e IH; rewrite atoms_atom ?Em // => ->; lia.
   move: t''_e; rewrite expo_expN ?Ex // => /elem_of_atoms [y [_]].
   rewrite /PreTerm.atoms unfold_TMul_empty PreTerm.frac_of_one => yo.
-  by case: (frac_vars_one yo).
+  by case: (Frac.vars_one y yo).
 - move=> t' t'' t''_t' _ IH.
   by have := tsize_gfactors_le _ _ t''_t'; lia.
 Qed.
@@ -171,14 +172,14 @@ Qed.
 Lemma subterm_log x k t : x ∈ atoms (log k t) → subterm x t.
 Proof.
 move=> /elem_of_atoms [y [-> yl]].
-move: yl; rewrite /PreTerm.atoms pfrac_log.
-have -> : tdh t !!! unfold_term k =
-          Frac.ssum (λ u, tdh u !!! unfold_term k) (gfactors t).
-  by rewrite -tdh_TGMul gfactorsK.
-move=> /frac_vars_ssum [u [ut yu]].
+move: yl; rewrite /PreTerm.atoms pre_frac_log.
+have -> : dh_map t !!! unfold_term k =
+          Frac.ssum (λ u, dh_map u !!! unfold_term k) (gfactors t).
+  by rewrite -dh_map_TGMul gfactorsK.
+move=> /(Frac.vars_ssum _ (gfactors t) y) [u [ut yu]].
 have Nu := Ngmul_gfactors _ _ ut.
-move: yu; rewrite (tdh_Ngmul Nu) FMap.lookup_singleton.
-case: bool_decide; last by move=> yz; case: (frac_vars_zero yz).
+move: yu; rewrite (dh_map_Ngmul Nu) FMap.lookup_singleton.
+case: bool_decide; last by move=> yz; case: (Frac.vars_zero y yz).
 move=> yu; apply: (@STGFactor _ _ u ut).
 apply: (@STExpo _ _ (fold_term y)); last exact: STRefl.
 apply/elem_of_atoms; exists y; split=> //.

@@ -401,7 +401,7 @@ iDestruct "p" as "(_ & _ & [p|p] & _)".
 - iDestruct ("s_k" with "p") as "#s". iNext. by iLeft.
 - iDestruct ("e_k" with "p") as "#q". iNext.
   iDestruct "q" as "(%b & q & %e)". iRight.
-  rewrite (base_TExp Nm (monic_atom (TNonce k_s) I)) (base_expN Nx) in e.
+  rewrite (base_TExp Nm (mono_num_atom (TNonce k_s) I)) (base_expN Nx) in e.
   by subst b.
 Qed.
 

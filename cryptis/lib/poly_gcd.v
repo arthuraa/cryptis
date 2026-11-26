@@ -1501,9 +1501,9 @@ lock Definition content p : MSet.mset T :=
   | m :: ms => foldr meet m ms
   end.
 
-lock Definition unmono m p : poly := mk (SMS.map (λ n, n ∖ m) (car p)).
+lock Definition div_mono m p : poly := mk (SMS.map (λ n, n ∖ m) (car p)).
 
-lock Definition unit_part p : poly := unmono (content p) p.
+lock Definition unit_part p : poly := div_mono (content p) p.
 
 Lemma contentE p : content p =
   match elements (car p) with
@@ -1512,10 +1512,10 @@ Lemma contentE p : content p =
   end.
 Proof. by rewrite [content]unlock. Qed.
 
-Lemma car_unmono m p : car (unmono m p) = SMS.map (λ n, n ∖ m) (car p).
-Proof. by rewrite [unmono]unlock. Qed.
+Lemma car_div_mono m p : car (div_mono m p) = SMS.map (λ n, n ∖ m) (car p).
+Proof. by rewrite [div_mono]unlock. Qed.
 
-Lemma unit_partE p : unit_part p = unmono (content p) p.
+Lemma unit_partE p : unit_part p = div_mono (content p) p.
 Proof. by rewrite [unit_part]unlock. Qed.
 
 Lemma mono_neq0 m : mono m ≠ zero.
@@ -1566,10 +1566,10 @@ have /MSet.subseteq_count := h n ltac:(by rewrite -SMS.elem_of_elements E).
 by apply.
 Qed.
 
-Lemma unmonoK m p : (∀ n, n ∈ car p → m ⊆ n) → (mono m * unmono m p)%P = p.
+Lemma unmonoK m p : (∀ n, n ∈ car p → m ⊆ n) → (mono m * div_mono m p)%P = p.
 Proof.
 move=> h; apply: car_inj.
-rewrite car_mul_mono car_unmono SMS.map_map.
+rewrite car_mul_mono car_div_mono SMS.map_map.
 apply: SMS.map_id_ext => n hn; apply: MSet.count_inj => x.
 rewrite MSet.count_disj_union MSet.count_difference.
 by have /MSet.subseteq_count := h n hn; move=> /(_ x); lia.
@@ -1577,7 +1577,7 @@ Qed.
 
 Lemma dvd_mono_iff m p : dvd (mono m) p ↔ ∀ n, n ∈ car p → m ⊆ n.
 Proof.
-split; last by move=> h; exists (unmono m p); rewrite unmonoK.
+split; last by move=> h; exists (div_mono m p); rewrite unmonoK.
 move=> [r ->] n; rewrite car_mul_mono.
 move=> /SMS.elem_of_map [n' [-> _]].
 apply/MSet.subseteq_count => x; rewrite MSet.count_disj_union; lia.
@@ -1603,7 +1603,7 @@ Proof. by rewrite contentE car_zero SMS.elements_empty. Qed.
 
 Lemma unit_part_zero : unit_part zero = zero.
 Proof.
-by apply: car_inj; rewrite unit_partE car_unmono car_zero SMS.map_empty.
+by apply: car_inj; rewrite unit_partE car_div_mono car_zero SMS.map_empty.
 Qed.
 
 Lemma var_dvd_content x p : p ≠ zero → dvd (var x) p ↔ x ∈ content p.
@@ -1712,6 +1712,95 @@ have cm : content (mono m * u)%P = m.
 split=> //.
 apply: (mul_cancel_l (mono m)); first exact: mono_neq0.
 by rewrite -{1}cm content_unitK.
+Qed.
+
+Lemma vars_mul_sub p q y :
+  y ∈ Poly.vars (p * q)%P → y ∈ Poly.vars p ∨ y ∈ Poly.vars q.
+Proof.
+move=> /Poly.elem_of_vars [m]; rewrite car_mul.
+case=> /SMS.elem_of_bind [m1 [m1p /SMS.elem_of_map [m2 [-> m2q]]]].
+case/MSet.elem_of_disj_union=> ym; [left|right]; apply/Poly.elem_of_vars.
+- by exists m1.
+- by exists m2.
+Qed.
+
+Lemma vars_divisor g s y :
+  g ≠ zero → y ∈ Poly.vars s → y ∈ Poly.vars (g * s)%P.
+Proof.
+move=> ng ys.
+have o := over_quot _ g s (over_vars (g * s)%P) ng.
+case: (decide (y ∈ Poly.vars (g * s)%P)) => // yp.
+have d0 := o y yp.
+move/Poly.elem_of_vars: ys => [m [ms ym]].
+have := count_le_deg y m s (proj2 (coeff_neq0_elem m s) ms).
+have := proj1 (MSet.elem_of_count _ _) ym; lia.
+Qed.
+
+Lemma elem_of_content x (p : poly) :
+  x ∈ content p → ∃ m, m ∈ Poly.car p ∧ x ∈ m.
+Proof.
+case: (decide (p = Poly.zero)) => [->|np].
+  by rewrite content_zero => h; case: (MSet.not_elem_of_empty _ h).
+move=> xc; destruct (elements (Poly.car p)) as [|m ms] eqn:E.
+  by case: np; apply: Poly.car_inj; rewrite Poly.car_zero;
+    exact: SMS.elements_empty_inv.
+have mp : m ∈ Poly.car p by rewrite -SMS.elem_of_elements E; left.
+by exists m; split=> //; apply: MSet.elem_of_subseteq xc;
+  exact: content_sub.
+Qed.
+
+Lemma elem_of_unit_part x (p : poly) m :
+  m ∈ Poly.car (unit_part p) → x ∈ m →
+  ∃ m', m' ∈ Poly.car p ∧ x ∈ m'.
+Proof.
+rewrite unit_partE car_div_mono.
+move=> /SMS.elem_of_map [m' [-> mp]] /MSet.elem_of_difference h.
+by exists m'; split=> //; apply/MSet.elem_of_count; lia.
+Qed.
+
+Lemma content_vars (D : poly) y :
+  y ∈ content D → y ∈ Poly.vars D.
+Proof.
+move=> /elem_of_content [m [mD ym]].
+by apply/Poly.elem_of_vars; exists m.
+Qed.
+
+Lemma unit_part_vars (D : poly) y :
+  y ∈ Poly.vars (unit_part D) → y ∈ Poly.vars D.
+Proof.
+move=> yU; rewrite -(content_unitK D).
+apply: vars_divisor yU; exact: mono_neq0.
+Qed.
+
+Lemma content_le_deg z (D : poly) :
+  D ≠ Poly.zero → MSet.count z (content D) ≤ Poly.deg z D.
+Proof.
+move=> nD; have [δ [cδ _]] := deg_witness z D nD.
+have := count_le_deg z δ D cδ.
+have := proj1 (MSet.subseteq_count _ _)
+  (content_sub D δ (proj1 (Poly.coeff_neq0_elem _ _) cδ)) z.
+lia.
+Qed.
+
+Lemma over_intro vs p :
+  (∀ m x, m ∈ Poly.car p → x ∈ m → x ∈ vs) → over vs p.
+Proof.
+move=> h y yn; case: (decide (Poly.deg y p = 0)) => // nd; exfalso.
+have np : p ≠ Poly.zero by move=> e; apply: nd; rewrite e deg_zero.
+have [m [cm em]] := deg_witness y p np.
+apply: yn; apply: (h m); first exact/Poly.coeff_neq0_elem.
+apply/MSet.elem_of_count; lia.
+Qed.
+
+Lemma vars_split D y :
+  y ∈ Poly.vars D →
+  y ∈ content D ∨ y ∈ Poly.vars (unit_part D).
+Proof.
+move=> /Poly.elem_of_vars [m [mD ym]].
+move: mD; rewrite -{1}(content_unitK D) Poly.car_mul_mono.
+move=> /SMS.elem_of_map [n [em nZ]]; rewrite em in ym.
+case/MSet.elem_of_disj_union: ym => [yC|yn]; first by left.
+by right; apply/Poly.elem_of_vars; exists n.
 Qed.
 
 End Gcd.
