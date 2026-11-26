@@ -55,7 +55,7 @@ set ga := TExp (TInt 0) a.
 wp_pures. wp_list. wp_term_of_list. wp_pures.
 wp_apply wp_aenc => //.
 { iDestruct "dh_a" as "(#m_a & _)".
-  rewrite minted_of_list /= minted_TExp //.
+  rewrite minted_of_list /= minted_TExp //; last by apply: atom_frac_neq0.
   rewrite minted_TInt /= minted_pkey.
   by do !iSplit. }
 { iRight. iSplit.
@@ -136,7 +136,7 @@ Proof.
 move=> ga si.
 iIntros "c1 c2 #ctx #N_φ #m_skI #m_skR #dh_a token hook inv".
 iPoseProof "dh_a" as "(#m_a & #s_a & #pred_a)".
-have Nm_a : negb (is_mul a) by [].
+have Nm_a : negb (is_mod a) by [].
 rewrite (term_token_difference ga (↑nsl_dhN)) //.
 iDestruct "token" as "[token_N token]".
 iDestruct (term_token_difference ga (↑nsl_dhN.@"compromised") with "token_N")
@@ -185,7 +185,8 @@ iDestruct "inv" as "[[#p_ga #p_gb]|inv]".
   iMod (nsl_dh_ready_alloc N si Resp with "N_φ gift") as "#ready_R".
   iAssert (minted gb) as "#m_gb".
   { iDestruct "dh_b" as "[m_b _]".
-    by rewrite minted_TExp // minted_TInt /=; iSplit. }
+    rewrite minted_TExp //; last by apply: atom_frac_neq0.
+    by rewrite minted_TInt /=; iSplit. }
   iAssert (minted (si_key si)) as "#m_k".
   { rewrite minted_si_key /si_seed minted_of_list /= !minted_pkey.
     do !iSplit => //.

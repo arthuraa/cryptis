@@ -56,7 +56,7 @@ Lemma owned_excl rl k : owned rl k -∗ owned rl k -∗ False.
 Proof.
 iIntros "(%si1 & -> & %s1 & tok1) (%si2 & %e & %s2 & tok2)".
 move/term_of_senc_key_inj: e => e.
-have ? := session_of_key_inj s1 s2 e; subst si2.
+rewrite (session_of_key_share s1 s2 e).
 iDestruct (term_token_disj with "tok1 tok2") as %dis.
 pose proof (nclose_non_empty gameN). set_solver.
 Qed.

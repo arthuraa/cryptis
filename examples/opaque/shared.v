@@ -103,12 +103,9 @@ rewrite /si_key /si_K /si_ssid /server_si /=.
 move/hash_result_inj => - [] _ /Spec.of_list_inj [] eK essid.
 move/Spec.tag_inj: eK => - [] _ /Spec.of_list_inj [] eK.
 move/Spec.tag_inj: essid => - [] _ /Spec.of_list_inj [] -> ->.
-have nP (p : nonce) : TExp g p ≠ TGMul ∅.
-  exact: Ngmul_neq_unit (Ngmul_TExp g _ I).
-have: p_s = p_s' ∧ x_s = x_s' ∧ TExp g p_u = TExp g p_u' ∧ X_u = X_u'.
-  apply: (hmqv_K_inj (g := g) I I _ (nP _) (nP _)
-            (hmqv_K_neq_unit (g := g) I I) eK) => //.
-case=> -> [] -> [] /TExp_g_inj -> ->; congruence.
+have: p_s = p_s' ∧ x_s = x_s' ∧ p_u = p_u' ∧ X_u = X_u'.
+  by apply: (hmqv_K_inj_vetted (g := g) I I _ eK).
+case=> -> [] -> [] -> ->; congruence.
 Qed.
 
 Definition server_session si : Prop :=
@@ -404,7 +401,8 @@ iDestruct "p" as "(_ & _ & [p|p] & _)".
 - iDestruct ("s_k" with "p") as "#s". iNext. by iLeft.
 - iDestruct ("e_k" with "p") as "#q". iNext.
   iDestruct "q" as "(%b & q & %e)". iRight.
-  by rewrite base_TExp // base_expN // in e; subst b.
+  rewrite (base_TExp Nm (monic_atom (TNonce k_s) I)) (base_expN Nx) in e.
+  by subst b.
 Qed.
 
 (** * Compromise
@@ -510,7 +508,8 @@ rewrite big_sepS_singleton.
 iModIntro; iSplit.
 - iIntros "#?"; iApply all_minted_TExp; iSplit => //.
   by rewrite minted_hash_result.
-- rewrite (minted_TExp (t1 := hash_result "H" pw) (TNonce r) I I).
+- rewrite (minted_TExp (t1 := hash_result "H" pw) (t2 := TNonce r) I I);
+    last by apply: atom_frac_neq0.
   by iIntros "[_ ?]".
 Qed.
 

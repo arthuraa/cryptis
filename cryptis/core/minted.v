@@ -6,6 +6,7 @@ From iris.algebra Require Import functions.
 From iris.base_logic.lib Require Import saved_prop invariants.
 From iris.heap_lang Require Import notation proofmode.
 From cryptis Require Import lib.
+From cryptis.lib Require Import sms frac.
 From cryptis.core Require Import term.
 
 Set Implicit Arguments.
@@ -60,7 +61,7 @@ Lemma minted_TGInv t : minted (TGInv t) ⊣⊢ minted t.
 Proof. by rewrite unlock nonces_of_termE. Qed.
 
 Lemma minted_TMul s :
-  (∀ u, u ∈ s → negb (is_mul u)) ->
+  (∀ u, u ∈ s → negb (is_mod u)) ->
   minted (TMul s) ⊣⊢ [∗ list] t ∈ elements s, minted t.
 Proof.
 move => ic.
@@ -68,17 +69,6 @@ rewrite unlock (nonces_of_term_TMul ic).
 by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
-Lemma minted_TGMul s :
-  (∀ u, u ∈ s → negb (is_gmul u)) ->
-  minted (TGMul s) ⊣⊢ [∗ list] t ∈ elements s, minted t.
-Proof.
-move => ic.
-rewrite unlock (nonces_of_term_TGMul ic).
-by rewrite big_sepS_union_list_pers big_sepL_fmap.
-Qed.
-
-(* Unconditional: [nonces_of_term_base_exps] holds for every [t], including a
-   product, where [base t = t] and [exps t] is empty. *)
 Lemma minted_base_exps t :
   minted t ⊣⊢
   minted (base t) ∧ [∗ list] t' ∈ elements (exps t), minted t'.
@@ -93,6 +83,18 @@ Proof.
 rewrite unlock !big_sepS_forall.
 iIntros "Hts" (l) "%l_in".
 have /elem_of_subseteq in_nonces := @nonces_of_term_TMul_subseteq s.
+move: l_in => /(in_nonces l); rewrite elem_of_union_list.
+case => _ [] /list_elem_of_fmap [] t' [] -> ??.
+rewrite big_sepL_elem_of // big_sepS_forall.
+by iApply "Hts".
+Qed.
+
+Lemma all_minted_TSum s :
+  ([∗ list] t ∈ elements s, minted t) ⊢ minted (TSum s).
+Proof.
+rewrite unlock !big_sepS_forall.
+iIntros "Hts" (l) "%l_in".
+have /elem_of_subseteq in_nonces := @nonces_of_term_TSum_subseteq s.
 move: l_in => /(in_nonces l); rewrite elem_of_union_list.
 case => _ [] /list_elem_of_fmap [] t' [] -> ??.
 rewrite big_sepL_elem_of // big_sepS_forall.
@@ -115,6 +117,15 @@ Lemma all_minted_TMul2 t1 t2 :
   minted t1 ∧ minted t2 ⊢ minted (TMul {[+ t1; t2 +]}).
 Proof.
 iIntros "#[m1 m2]"; iApply all_minted_TMul.
+iApply big_sepL_intro; iIntros "!>" (k u Hk).
+move: (list_elem_of_lookup_2 _ _ _ Hk) => /SMS.elem_of_elements.
+by case/SMS.elem_of_disj_union => /SMS.elem_of_singleton ->.
+Qed.
+
+Lemma all_minted_TSum2 t1 t2 :
+  minted t1 ∧ minted t2 ⊢ minted (TSum {[+ t1; t2 +]}).
+Proof.
+iIntros "#[m1 m2]"; iApply all_minted_TSum.
 iApply big_sepL_intro; iIntros "!>" (k u Hk).
 move: (list_elem_of_lookup_2 _ _ _ Hk) => /SMS.elem_of_elements.
 by case/SMS.elem_of_disj_union => /SMS.elem_of_singleton ->.
@@ -143,13 +154,28 @@ rewrite unlock (nonces_of_term_gfactors t).
 by rewrite big_sepS_union_list_pers big_sepL_fmap.
 Qed.
 
+Lemma minted_TGMul s :
+  (∀ u, u ∈ s → negb (is_gmul u)) → (∀ u, u ∈ s → glaurent u) →
+  minted (TGMul s) ⊣⊢ [∗ list] t ∈ elements s, minted t.
+Proof.
+move=> Ng L; rewrite minted_gfactors (gfactors_TGMul _ L).
+rewrite (SMS.bind_ext _ (λ u, {[+ u +]})) ?SMS.bind_unit //.
+by move=> u us; rewrite gfactors_Ngmul //; exact: Ng.
+Qed.
+
+Lemma minted_atoms t :
+  minted t ⊣⊢ [∗ list] t' ∈ atoms t, minted t'.
+Proof.
+rewrite unlock (nonces_of_term_atoms t).
+by rewrite big_sepS_union_list_pers big_sepL_fmap.
+Qed.
+
 Lemma minted_TExp t1 t2 :
-  negb (is_exp t1) -> negb (is_gmul t1) ->
+  negb (is_exp t1) -> negb (is_gmul t1) -> frac_of t2 ≠ Frac.zero ->
   minted (TExp t1 t2) ⊣⊢ minted t1 ∧ minted t2.
 Proof.
-move => nx nm.
-rewrite (minted_factors t2) unlock (nonces_of_term_TExp _ nx nm).
-by rewrite big_sepS_union_pers big_sepS_union_list_pers big_sepL_fmap.
+move => nx nm ne.
+by rewrite unlock (nonces_of_term_TExp nx nm ne) big_sepS_union_pers.
 Qed.
 
 Lemma all_minted_TExp t1 t2 :
@@ -157,11 +183,9 @@ Lemma all_minted_TExp t1 t2 :
 Proof.
 rewrite unlock !big_sepS_forall.
 iIntros "[H1 H2]" (l) "%l_in".
-have sub : nonces_of_term (TExp t1 t2) ⊆
-           nonces_of_term t1 ∪ nonces_of_term t2.
-  rewrite ![nonces_of_term]unlock unfold_TExp.
-  exact: nonces_of_pre_term_exp_sub.
-by move: l_in => /sub /elem_of_union [?|?]; [iApply "H1"|iApply "H2"].
+move: l_in => /nonces_of_term_TExp_subseteq /elem_of_union [?|?].
+- by iApply "H1".
+- by iApply "H2".
 Qed.
 
 Lemma minted_nonces_of_term t :

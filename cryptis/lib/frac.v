@@ -16,8 +16,16 @@
     [make p q = div (of_poly p) (of_poly q)] ([make_div]).  The operations
     form a field ([frac_field_theory]), and [f + g], [f - g], [f * g],
     [f / g], [- f] and [/ f] denote them in [frac_scope], delimited by
-    [%F]. *)
+    [%F].
 
+    [over vs f] says that the variables of [f] are among [vs].  [map f r]
+    renames variables, [eval φ p] substitutes [φ x] for every variable [x] of
+    a polynomial (a ring morphism), and [bind φ r] substitutes in a fraction
+    by dividing the evaluated numerator by the evaluated denominator.  The
+    operations are locked, since computing with them in proofs is slow;
+    [unlock] exposes their definitions. *)
+
+From elpi.apps Require Import locker.
 From mathcomp Require Import ssreflect.
 From stdpp Require Import list numbers proof_irrel.
 From Stdlib Require Import ZArith Lia Ring Field.
@@ -94,7 +102,7 @@ Proof.
 apply bool_decide_pack; split; first exact: Poly.one_neq0.
 apply: PolyGcd.cancel_id; first exact: Poly.one_neq0.
 - by move=> u _.
-- done.
+- by rewrite Poly.oneE Poly.first_neg_mono.
 Qed.
 
 Lemma wf_opp f : wf (- num f)%P (den f).
@@ -107,32 +115,78 @@ Qed.
 
 (** *** Operations *)
 
-Definition of_poly p : frac := mk p Poly.one (wf_of_poly p).
-Definition zero : frac := of_poly Poly.zero.
-Definition one : frac := of_poly Poly.one.
+lock Definition of_poly p : frac := mk p Poly.one (wf_of_poly p).
+lock Definition zero : frac := of_poly Poly.zero.
+lock Definition one : frac := of_poly Poly.one.
 
-Definition make p q : frac :=
+lock Definition make p q : frac :=
   match decide (q = Poly.zero) with
   | left _ => zero
   | right nq => mk _ _ (wf_cancel p q nq)
   end.
 
-Definition opp f : frac := mk _ _ (wf_opp f).
-Definition add f g : frac :=
+lock Definition opp f : frac := mk _ _ (wf_opp f).
+lock Definition add f g : frac :=
   make (num f * den g + num g * den f)%P (den f * den g)%P.
-Definition sub f g : frac := add f (opp g).
-Definition mul f g : frac := make (num f * num g)%P (den f * den g)%P.
-Definition inv f : frac := make (den f) (num f).
-Definition div f g : frac := mul f (inv g).
+lock Definition sub f g : frac := add f (opp g).
+lock Definition mul f g : frac := make (num f * num g)%P (den f * den g)%P.
+lock Definition inv f : frac := make (den f) (num f).
+lock Definition div f g : frac := mul f (inv g).
+
+Lemma num_of_poly p : num (of_poly p) = p.
+Proof. by rewrite [of_poly]unlock. Qed.
+
+Lemma den_of_poly p : den (of_poly p) = Poly.one.
+Proof. by rewrite [of_poly]unlock. Qed.
+
+Lemma zeroE : zero = of_poly Poly.zero.
+Proof. by rewrite [zero]unlock. Qed.
+
+Lemma oneE : one = of_poly Poly.one.
+Proof. by rewrite [one]unlock. Qed.
+
+Lemma num_zero : num zero = Poly.zero.
+Proof. by rewrite zeroE num_of_poly. Qed.
+
+Lemma den_zero : den zero = Poly.one.
+Proof. by rewrite zeroE den_of_poly. Qed.
+
+Lemma num_one : num one = Poly.one.
+Proof. by rewrite oneE num_of_poly. Qed.
+
+Lemma den_one : den one = Poly.one.
+Proof. by rewrite oneE den_of_poly. Qed.
+
+Lemma num_opp f : num (opp f) = (- num f)%P.
+Proof. by rewrite [opp]unlock. Qed.
+
+Lemma den_opp f : den (opp f) = den f.
+Proof. by rewrite [opp]unlock. Qed.
+
+Lemma addE f g :
+  add f g = make (num f * den g + num g * den f)%P (den f * den g)%P.
+Proof. by rewrite [add]unlock. Qed.
+
+Lemma subE f g : sub f g = add f (opp g).
+Proof. by rewrite [sub]unlock. Qed.
+
+Lemma mulE f g : mul f g = make (num f * num g)%P (den f * den g)%P.
+Proof. by rewrite [mul]unlock. Qed.
+
+Lemma invE f : inv f = make (den f) (num f).
+Proof. by rewrite [inv]unlock. Qed.
+
+Lemma divE f g : div f g = mul f (inv g).
+Proof. by rewrite [div]unlock. Qed.
 
 (** *** Fractions *)
 
 Lemma make_cancel p q : q ≠ Poly.zero →
   num (make p q) = (Poly.cancel p q).1 ∧ den (make p q) = (Poly.cancel p q).2.
-Proof. by move=> nq; rewrite /make; case_decide. Qed.
+Proof. by move=> nq; rewrite [make]unlock; case_decide. Qed.
 
 Lemma make_den0 p : make p Poly.zero = zero.
-Proof. by rewrite /make; case_decide. Qed.
+Proof. by rewrite [make]unlock; case_decide. Qed.
 
 Lemma make_spec p q : q ≠ Poly.zero →
   (num (make p q) * q = p * den (make p q))%P.
@@ -170,13 +224,23 @@ Lemma frac_ind (P : frac → Prop) :
 Proof. by move=> h f; rewrite -(make_num_den f); apply: h; apply: den_neq0. Qed.
 
 Lemma of_poly_make p : make p Poly.one = of_poly p.
-Proof. exact: make_num_den (of_poly p). Qed.
+Proof.
+by have := make_num_den (of_poly p); rewrite num_of_poly den_of_poly.
+Qed.
 
 Lemma make_num0 q : make Poly.zero q = zero.
 Proof.
 case: (decide (q = Poly.zero)) => [->|nq]; first exact: make_den0.
-rewrite /zero -of_poly_make.
+rewrite !zeroE -of_poly_make.
 apply: make_eq; [done|exact: Poly.one_neq0|ring].
+Qed.
+
+Lemma make_neq0 p q : p ≠ Poly.zero → q ≠ Poly.zero → make p q ≠ zero.
+Proof.
+move=> np nq e; have := make_spec p q nq; rewrite e num_zero => E.
+case: (PolyGcd.domain p (den zero)); first by rewrite -E; ring.
+- exact: np.
+- exact: den_neq0.
 Qed.
 
 Lemma opp_make p q : q ≠ Poly.zero → opp (make p q) = make (- p)%P q.
@@ -184,14 +248,15 @@ Proof.
 move=> nq; rewrite -[LHS]make_num_den.
 apply: make_eq => //; first exact: den_neq0.
 have := make_spec p q nq; move: (make p q) => f e.
-transitivity (- (num f * q))%P; first by rewrite /=; ring.
-by rewrite e /=; ring.
+rewrite num_opp den_opp.
+transitivity (- (num f * q))%P; first ring.
+by rewrite e; ring.
 Qed.
 
 Lemma add_make p q p' q' : q ≠ Poly.zero → q' ≠ Poly.zero →
   add (make p q) (make p' q') = make (p * q' + p' * q)%P (q * q')%P.
 Proof.
-move=> nq nq'; rewrite /add.
+move=> nq nq'; rewrite !addE.
 have e := make_spec p q nq; have e' := make_spec p' q' nq'.
 move: (make p q) (make p' q') e e' => f f' e e'.
 apply: make_eq.
@@ -205,7 +270,7 @@ Qed.
 Lemma mul_make p q p' q' : q ≠ Poly.zero → q' ≠ Poly.zero →
   mul (make p q) (make p' q') = make (p * p')%P (q * q')%P.
 Proof.
-move=> nq nq'; rewrite /mul.
+move=> nq nq'; rewrite !mulE.
 have e := make_spec p q nq; have e' := make_spec p' q' nq'.
 move: (make p q) (make p' q') e e' => f f' e e'.
 apply: make_eq.
@@ -216,13 +281,13 @@ by rewrite e e'; ring.
 Qed.
 
 Lemma inv_zero : inv zero = zero.
-Proof. exact: make_den0. Qed.
+Proof. by rewrite invE num_zero make_den0. Qed.
 
 Lemma inv_make p q : q ≠ Poly.zero → inv (make p q) = make q p.
 Proof.
 move=> nq; case: (decide (p = Poly.zero)) => [->|np].
   by rewrite make_num0 make_den0 inv_zero.
-rewrite /inv; have := make_spec p q nq; move: (make p q) => f e.
+rewrite !invE; have := make_spec p q nq; move: (make p q) => f e.
 have nf : num f ≠ Poly.zero.
   move=> ef; rewrite ef (left_absorb Poly.zero Poly.mul) in e.
   case: (PolyGcd.domain _ _ (eq_sym e)) => //; exact: den_neq0.
@@ -236,7 +301,7 @@ Qed.
 #[global] Instance add_left_id : LeftId (=@{frac}) zero add.
 Proof.
 elim/frac_ind=> p q nq.
-rewrite /zero -of_poly_make (add_make _ _ _ _ Poly.one_neq0 nq).
+rewrite !zeroE -of_poly_make (add_make _ _ _ _ Poly.one_neq0 nq).
 apply: make_eq => //; [exact: PolyGcd.mul_neq0 Poly.one_neq0 nq|ring].
 Qed.
 
@@ -267,7 +332,7 @@ Qed.
 #[global] Instance mul_left_id : LeftId (=@{frac}) one mul.
 Proof.
 elim/frac_ind=> p q nq.
-rewrite /one -of_poly_make (mul_make _ _ _ _ Poly.one_neq0 nq).
+rewrite !oneE -of_poly_make (mul_make _ _ _ _ Poly.one_neq0 nq).
 apply: make_eq => //; [exact: PolyGcd.mul_neq0 Poly.one_neq0 nq|ring].
 Qed.
 
@@ -302,19 +367,21 @@ apply: make_eq; [exact: PolyGcd.mul_neq0|exact: PolyGcd.mul_neq0|ring].
 Qed.
 
 Lemma one_neq0 : one ≠ zero.
-Proof. by move=> /(f_equal num); exact: Poly.one_neq0. Qed.
+Proof.
+by move=> /(f_equal num); rewrite num_one num_zero; exact: Poly.one_neq0.
+Qed.
 
 Lemma mul_inv_l f : f ≠ zero → mul (inv f) f = one.
 Proof.
 elim/frac_ind: f => p q nq nf.
 have np : p ≠ Poly.zero by move=> ep; apply: nf; rewrite ep make_num0.
-rewrite (inv_make _ _ nq) (mul_make _ _ _ _ np nq) /one -of_poly_make.
+rewrite (inv_make _ _ nq) (mul_make _ _ _ _ np nq) !oneE -of_poly_make.
 apply: make_eq; [exact: PolyGcd.mul_neq0|exact: Poly.one_neq0|ring].
 Qed.
 
 Lemma div_zero f : div f zero = zero.
 Proof.
-elim/frac_ind: f => p q nq; rewrite /div inv_zero -(make_num0 Poly.one).
+elim/frac_ind: f => p q nq; rewrite !divE inv_zero -(make_num0 Poly.one).
 rewrite (mul_make _ _ _ _ nq Poly.one_neq0).
 apply: make_eq; first exact: PolyGcd.mul_neq0 nq Poly.one_neq0.
 - exact: Poly.one_neq0.
@@ -331,7 +398,7 @@ split.
 - exact: (comm mul).
 - move=> f g h; exact: (assoc mul).
 - exact: mul_add_l.
-- done.
+- exact: subE.
 - exact: add_opp_r.
 Qed.
 
@@ -343,14 +410,14 @@ Proof.
 split.
 - exact: frac_ring_theory.
 - exact: one_neq0.
-- done.
+- exact: divE.
 - exact: mul_inv_l.
 Qed.
 
 (** *** Polynomials *)
 
 Lemma of_poly_inj p q : of_poly p = of_poly q → p = q.
-Proof. by move=> /(f_equal num). Qed.
+Proof. by move=> /(f_equal num); rewrite !num_of_poly. Qed.
 
 Lemma of_poly_add p q : of_poly (p + q)%P = add (of_poly p) (of_poly q).
 Proof.
@@ -370,7 +437,7 @@ Qed.
 
 Lemma make_div p q : make p q = div (of_poly p) (of_poly q).
 Proof.
-rewrite /div -!of_poly_make (inv_make _ _ Poly.one_neq0).
+rewrite !divE -!of_poly_make (inv_make _ _ Poly.one_neq0).
 case: (decide (q = Poly.zero)) => [->|nq].
   rewrite !make_den0 -(make_num0 Poly.one).
   rewrite (mul_make _ _ _ _ Poly.one_neq0 Poly.one_neq0).
@@ -382,9 +449,1376 @@ apply: make_eq => //; first exact: PolyGcd.mul_neq0 Poly.one_neq0 nq.
 ring.
 Qed.
 
+Lemma of_poly_opp p : of_poly (- p)%P = opp (of_poly p).
+Proof.
+by apply: num_den_inj; rewrite ?num_opp ?den_opp ?num_of_poly ?den_of_poly.
+Qed.
+
+Lemma opp_opp f : opp (opp f) = f.
+Proof. by apply: num_den_inj; rewrite ?num_opp ?den_opp ?Poly.opp_opp. Qed.
+
+Lemma opp_zero : opp zero = zero.
+Proof. by rewrite !zeroE -of_poly_opp Poly.opp_zero. Qed.
+
+Lemma mul_zero_l f : mul zero f = zero.
+Proof.
+elim/frac_ind: f => p q nq.
+rewrite {1}zeroE -of_poly_make (mul_make _ _ _ _ Poly.one_neq0 nq).
+by rewrite (left_absorb Poly.zero Poly.mul) make_num0.
+Qed.
+
+(** *** Variables *)
+
+(** [over vs f]: the variables of [f] are among [vs]. *)
+Definition over (vs : list T) f :=
+  PolyGcd.over vs (num f) ∧ PolyGcd.over vs (den f).
+
+Lemma over_make vs p q :
+  PolyGcd.over vs p → PolyGcd.over vs q → over vs (make p q).
+Proof.
+move=> op oq; case: (decide (q = Poly.zero)) => [->|nq].
+  rewrite make_den0 /over num_zero den_zero.
+  split; [exact: PolyGcd.over_zero|exact: PolyGcd.over_one].
+have [e1 e2] := make_cancel p q nq; rewrite /over e1 e2.
+have [g [Ep Eq]] := Poly.cancel_spec p q.
+have ng : g ≠ Poly.zero.
+  by move=> eg; apply: nq; rewrite Eq eg (left_absorb Poly.zero Poly.mul).
+split.
+- by apply: (PolyGcd.over_quot _ g) => //; rewrite -Ep.
+- by apply: (PolyGcd.over_quot _ g) => //; rewrite -Eq.
+Qed.
+
+Lemma over_of_poly vs p : PolyGcd.over vs p → over vs (of_poly p).
+Proof.
+by move=> op; rewrite /over num_of_poly den_of_poly; split=> //;
+  exact: PolyGcd.over_one.
+Qed.
+
+Lemma over_zero vs : over vs zero.
+Proof. rewrite zeroE; exact: over_of_poly (PolyGcd.over_zero vs). Qed.
+
+Lemma over_one vs : over vs one.
+Proof. rewrite oneE; exact: over_of_poly (PolyGcd.over_one vs). Qed.
+
+Lemma over_opp vs f : over vs f → over vs (opp f).
+Proof.
+by case=> on od; rewrite /over num_opp den_opp; split=> //;
+  exact: PolyGcd.over_opp.
+Qed.
+
+Lemma over_add vs f g : over vs f → over vs g → over vs (add f g).
+Proof.
+move=> [nf df] [ng dg]; rewrite addE; apply: over_make.
+- by apply: PolyGcd.over_add; apply: PolyGcd.over_mul.
+- exact: PolyGcd.over_mul.
+Qed.
+
+Lemma over_mul vs f g : over vs f → over vs g → over vs (mul f g).
+Proof.
+by move=> [nf df] [ng dg]; rewrite mulE; apply: over_make;
+  apply: PolyGcd.over_mul.
+Qed.
+
+Lemma over_inv vs f : over vs f → over vs (inv f).
+Proof. by move=> [nf df]; rewrite invE; apply: over_make. Qed.
+
+Lemma over_sub vs f g : over vs f → over vs g → over vs (sub f g).
+Proof.
+by move=> hf hg; rewrite subE; apply: over_add => //; apply: over_opp.
+Qed.
+
+Lemma over_div vs f g : over vs f → over vs g → over vs (div f g).
+Proof.
+by move=> hf hg; rewrite divE; apply: over_mul => //; apply: over_inv.
+Qed.
+
+Lemma over_elem vs f m x :
+  over vs f → m ∈ Poly.car (num f) ∨ m ∈ Poly.car (den f) → x ∈ m → x ∈ vs.
+Proof.
+move=> [on od] mf xm; case: (decide (x ∈ vs)) => // nx; exfalso.
+have cx : 0 < MSet.count x m by apply/MSet.elem_of_count.
+case: mf => /(proj2 (Poly.coeff_neq0_elem _ _)) mf.
+- have := PolyGcd.count_le_deg x m (num f) mf.
+  by rewrite (on x nx); lia.
+- have := PolyGcd.count_le_deg x m (den f) mf.
+  by rewrite (od x nx); lia.
+Qed.
+
+(** *** Variables and valuations
+
+    [vx x f] is the [x]-adic valuation of [f]: the multiplicity of [x] in the
+    monomial content of the numerator minus that of the denominator.  It is
+    additive on nonzero fractions ([vx_mul]). *)
+
+lock Definition var x : frac := of_poly (Poly.var x).
+
+Lemma varE x : var x = of_poly (Poly.var x).
+Proof. by rewrite [var]unlock. Qed.
+
+Lemma var_neq0 x : var x ≠ zero.
+Proof. rewrite varE zeroE => /of_poly_inj; exact: PolyGcd.var_neq0. Qed.
+
+Lemma num_eq0 f : num f = Poly.zero → f = zero.
+Proof.
+move=> e.
+have : PolyGcd.dvd (den f) Poly.one.
+  apply: num_den_coprime; last exact: PolyGcd.dvd_refl.
+  by rewrite e; exact: PolyGcd.dvd_zero.
+case/PolyGcd.unit_pm1 => ed.
+  by apply: num_den_inj; rewrite ?e ?ed ?num_zero ?den_zero.
+have := den_first_neg f.
+rewrite ed Poly.first_neg_opp; first exact: Poly.one_neq0.
+by rewrite Poly.oneE Poly.first_neg_mono.
+Qed.
+
+Lemma num_neq0 f : f ≠ zero → num f ≠ Poly.zero.
+Proof. by move=> nf e; apply: nf; apply: num_eq0. Qed.
+
+Lemma mul_neq0 f g : f ≠ zero → g ≠ zero → mul f g ≠ zero.
+Proof.
+move=> nf ng; rewrite mulE; apply: make_neq0; apply: PolyGcd.mul_neq0;
+  by [apply: num_neq0|apply: den_neq0].
+Qed.
+
+Lemma make_coprime p q : q ≠ Poly.zero →
+  (∀ u, PolyGcd.dvd u p → PolyGcd.dvd u q → PolyGcd.dvd u Poly.one) →
+  Poly.first_neg q = false → num (make p q) = p ∧ den (make p q) = q.
+Proof.
+move=> nq cop fq; have [-> ->] := make_cancel p q nq.
+by rewrite PolyGcd.cancel_id.
+Qed.
+
+Lemma make_cross p q p' q' : q ≠ Poly.zero → q' ≠ Poly.zero →
+  make p q = make p' q' → (p * q' = p' * q)%P.
+Proof.
+move=> nq nq' e.
+have E1 := make_spec p q nq; have E2 := make_spec p' q' nq'.
+rewrite -e in E2; move: (make p q) E1 E2 => r E1 E2.
+apply: (PolyGcd.mul_cancel_l (den r)); first exact: den_neq0.
+transitivity (num r * q * q')%P; first by rewrite E1; ring.
+transitivity (num r * q' * q)%P; first ring.
+by rewrite E2; ring.
+Qed.
+
+Lemma inv_one : inv one = one.
+Proof. by rewrite oneE -of_poly_make (inv_make _ _ Poly.one_neq0). Qed.
+
+Lemma inv_inv f : inv (inv f) = f.
+Proof.
+case: (decide (f = zero)) => [->|nf]; first by rewrite !inv_zero.
+by rewrite [inv f]invE inv_make; [exact: num_neq0|exact: make_num_den].
+Qed.
+
+lock Definition vx x f : Z :=
+  (Z.of_nat (MSet.count x (PolyGcd.content (num f))) -
+   Z.of_nat (MSet.count x (PolyGcd.content (den f))))%Z.
+
+Lemma vxE x f : vx x f =
+  (Z.of_nat (MSet.count x (PolyGcd.content (num f))) -
+   Z.of_nat (MSet.count x (PolyGcd.content (den f))))%Z.
+Proof. by rewrite [vx]unlock. Qed.
+
+Lemma vx_make x p q : p ≠ Poly.zero → q ≠ Poly.zero →
+  vx x (make p q) =
+  (Z.of_nat (MSet.count x (PolyGcd.content p)) -
+   Z.of_nat (MSet.count x (PolyGcd.content q)))%Z.
+Proof.
+move=> np nq.
+have nm : num (make p q) ≠ Poly.zero by apply: num_neq0; exact: make_neq0.
+have nd := den_neq0 (make p q).
+have := f_equal (λ r, MSet.count x (PolyGcd.content r)) (make_spec p q nq).
+rewrite /= !PolyGcd.content_mul // !MSet.count_disj_union vxE; lia.
+Qed.
+
+Lemma vx_of_poly x p :
+  vx x (of_poly p) = Z.of_nat (MSet.count x (PolyGcd.content p)).
+Proof.
+rewrite !vxE num_of_poly den_of_poly Poly.oneE PolyGcd.content_mono.
+rewrite MSet.count_empty; lia.
+Qed.
+
+Lemma vx_zero x : vx x zero = 0%Z.
+Proof. by rewrite zeroE vx_of_poly PolyGcd.content_zero MSet.count_empty. Qed.
+
+Lemma vx_one x : vx x one = 0%Z.
+Proof.
+by rewrite oneE vx_of_poly Poly.oneE PolyGcd.content_mono
+  MSet.count_empty.
+Qed.
+
+Lemma vx_var x y : vx x (var y) = if bool_decide (x = y) then 1%Z else 0%Z.
+Proof.
+rewrite varE vx_of_poly Poly.varE PolyGcd.content_mono MSet.count_singleton.
+by case: bool_decide.
+Qed.
+
+Lemma vx_mul x f g : f ≠ zero → g ≠ zero →
+  vx x (mul f g) = (vx x f + vx x g)%Z.
+Proof.
+move=> nf ng; have nnf := num_neq0 _ nf; have nng := num_neq0 _ ng.
+have ndf := den_neq0 f; have ndg := den_neq0 g.
+rewrite !mulE vx_make; try exact: PolyGcd.mul_neq0.
+rewrite !PolyGcd.content_mul // !MSet.count_disj_union !vxE; lia.
+Qed.
+
+Lemma vx_inv x f : vx x (inv f) = (- vx x f)%Z.
+Proof.
+case: (decide (f = zero)) => [->|nf]; first by rewrite inv_zero vx_zero.
+have nd := den_neq0 f; have nn := num_neq0 _ nf.
+rewrite !invE vx_make // !vxE; lia.
+Qed.
+
 End Frac.
 
 Arguments frac T {_ _ _ _}.
+
+(** ** Renaming variables
+
+    [map f r] renames the variables of [r] with [f], and [map g] undoes it
+    when [g] undoes [f] on the variables of [r] ([map_cancel]). *)
+
+Section Map.
+
+Context {T U : Type}.
+Context `{EqDecision T, Lexico T}
+  `{!StrictOrder (@lexico T _), !TrichotomyT (@lexico T _)}.
+Context `{EqDecision U, Lexico U}
+  `{!StrictOrder (@lexico U _), !TrichotomyT (@lexico U _)}.
+
+Add Ring poly_ring_T : (Poly.poly_ring_theory (T := T)).
+
+lock Definition map (f : T → U) (r : frac T) : frac U :=
+  make (Poly.map f (num r)) (Poly.map f (den r)).
+
+Lemma mapE f r : map f r = make (Poly.map f (num r)) (Poly.map f (den r)).
+Proof. by rewrite [map]unlock. Qed.
+
+Lemma map_of_poly f p : map f (of_poly p) = of_poly (Poly.map f p).
+Proof. by rewrite mapE num_of_poly den_of_poly Poly.map_one of_poly_make. Qed.
+
+Lemma map_zero f : map f zero = zero.
+Proof. by rewrite !zeroE map_of_poly Poly.map_zero. Qed.
+
+Lemma map_one f : map f one = one.
+Proof. by rewrite !oneE map_of_poly Poly.map_one. Qed.
+
+Lemma map_var f x : map f (var x) = var (f x).
+Proof. by rewrite !varE map_of_poly Poly.map_var. Qed.
+
+(** Renaming by an injective function is a field morphism. *)
+Section Inj.
+
+Variable f : T → U.
+Hypothesis finj : ∀ a b, f a = f b → a = b.
+
+Lemma map_neq0 p : p ≠ Poly.zero → Poly.map f p ≠ Poly.zero.
+Proof.
+move=> np e; apply: np; apply: (Poly.map_inj f); first exact: finj.
+by rewrite e Poly.map_zero.
+Qed.
+
+Lemma map_make p q : map f (make p q) = make (Poly.map f p) (Poly.map f q).
+Proof.
+case: (decide (q = Poly.zero)) => [->|nq].
+  by rewrite make_den0 map_zero Poly.map_zero make_den0.
+rewrite !mapE; apply: make_eq.
+- exact: map_neq0 (den_neq0 _).
+- exact: map_neq0.
+- by rewrite -!Poly.map_mul make_spec.
+Qed.
+
+Lemma map_mul r g : map f (mul r g) = mul (map f r) (map f g).
+Proof.
+rewrite [mul r g]mulE map_make !Poly.map_mul [map f r]mapE [map f g]mapE.
+by rewrite mul_make //; exact: map_neq0 (den_neq0 _).
+Qed.
+
+Lemma map_add r g : map f (add r g) = add (map f r) (map f g).
+Proof.
+rewrite [add r g]addE map_make Poly.map_add !Poly.map_mul.
+rewrite [map f r]mapE [map f g]mapE.
+by rewrite add_make //; exact: map_neq0 (den_neq0 _).
+Qed.
+
+Lemma map_opp r : map f (opp r) = opp (map f r).
+Proof.
+rewrite [map f (opp r)]mapE num_opp den_opp Poly.map_opp [map f r]mapE.
+rewrite opp_make //; exact: map_neq0 (den_neq0 _).
+Qed.
+
+Lemma map_inv r : map f (inv r) = inv (map f r).
+Proof.
+case: (decide (r = zero)) => [->|nr].
+  by rewrite inv_zero map_zero inv_zero.
+rewrite [inv r]invE map_make [map f r]mapE inv_make //.
+exact: map_neq0 (den_neq0 _).
+Qed.
+
+Lemma map_sub r g : map f (sub r g) = sub (map f r) (map f g).
+Proof. by rewrite !subE map_add map_opp. Qed.
+
+Lemma map_div r g : map f (div r g) = div (map f r) (map f g).
+Proof. by rewrite !divE map_mul map_inv. Qed.
+
+Lemma map_inj r g : map f r = map f g → r = g.
+Proof.
+move=> e; apply/frac_eq; apply: (Poly.map_inj f) => //.
+rewrite !Poly.map_mul; move: e; rewrite !mapE.
+by apply: make_cross; exact: map_neq0 (den_neq0 _).
+Qed.
+
+End Inj.
+
+End Map.
+
+Section MapCancel.
+
+Context {T U : Type}.
+Context `{EqDecision T, Lexico T}
+  `{!StrictOrder (@lexico T _), !TrichotomyT (@lexico T _)}.
+Context `{EqDecision U, Lexico U}
+  `{!StrictOrder (@lexico U _), !TrichotomyT (@lexico U _)}.
+
+Add Ring poly_ring_T' : (Poly.poly_ring_theory (T := T)).
+
+Lemma map_cancel (f : T → U) (g : U → T) r :
+  (∀ m x, m ∈ Poly.car (num r) ∨ m ∈ Poly.car (den r) → x ∈ m →
+     g (f x) = x) →
+  map g (map f r) = r.
+Proof.
+move=> gf.
+have Q p : p = num r ∨ p = den r → Poly.map g (Poly.map f p) = p.
+  move=> ep; rewrite Poly.map_map; apply: Poly.map_id_ext => m x mp xm.
+  by apply: (gf m x) => //; case: ep => ?; subst p; [left|right].
+have nq : Poly.map f (den r) ≠ Poly.zero.
+  move=> e; apply: (den_neq0 r).
+  by rewrite -(Q (den r) (or_intror eq_refl)) e Poly.map_zero.
+set p := Poly.map f (num r); set q := Poly.map f (den r).
+have [c [Ep Eq]] := Poly.cancel_spec p q.
+have [e1 e2] := make_cancel p q nq.
+rewrite !mapE -/p -/q e1 e2 -[RHS]make_num_den.
+move: (Poly.cancel p q) Ep Eq => [p' q'] /= Ep Eq.
+have Qp : Poly.map g p = num r by apply: Q; left.
+have Qq : Poly.map g q = den r by apply: Q; right.
+have nq' : Poly.map g q' ≠ Poly.zero.
+  move=> e0; apply: (den_neq0 r).
+  by rewrite -Qq Eq Poly.map_mul e0 (right_absorb Poly.zero Poly.mul).
+apply: make_eq => //; first exact: den_neq0.
+by rewrite -Qp -Qq Ep Eq !Poly.map_mul; ring.
+Qed.
+
+End MapCancel.
+
+Lemma map_id {T : Type} `{EqDecision T, Lexico T}
+    `{!StrictOrder (@lexico T _), !TrichotomyT (@lexico T _)} (r : frac T) :
+  map (λ x, x) r = r.
+Proof.
+rewrite !mapE !Poly.map_id_ext //; exact: make_num_den.
+Qed.
+
+(** ** Substitution
+
+    [eval φ p] substitutes the fraction [φ x] for every variable [x] of the
+    polynomial [p]; it is a ring morphism ([eval_add], [eval_mul]).
+    [bind φ r] substitutes in a fraction by dividing the evaluated numerator
+    by the evaluated denominator, so that substituting variables for
+    variables renames them ([bind_var_map]). *)
+
+Section Eval.
+
+Context {T U : Type}.
+Context `{EqDecision T, Lexico T}
+  `{!StrictOrder (@lexico T _), !TrichotomyT (@lexico T _)}.
+Context `{EqDecision U, Lexico U}
+  `{!StrictOrder (@lexico U _), !TrichotomyT (@lexico U _)}.
+
+Add Ring frac_ring_U : (frac_ring_theory (T := U)).
+Add Field frac_field_U : (frac_field_theory (T := U)).
+
+Implicit Types (φ : T → frac U) (p q : Poly.poly T) (m n : MSet.mset T).
+
+lock Definition fsum (l : list (frac U)) : frac U := foldr add zero l.
+lock Definition fprod (l : list (frac U)) : frac U := foldr mul one l.
+
+(** The value of a monomial and the sum of the values of a multiset of
+    monomials. *)
+lock Definition mono_val φ m : frac U := fprod (φ <$> elements m).
+lock Definition msum φ (X : MSet.mset (MSet.mset T)) : frac U :=
+  fsum (mono_val φ <$> elements X).
+
+lock Definition eval φ p : frac U :=
+  sub (msum φ (SMS.pos (Poly.car p))) (msum φ (SMS.neg (Poly.car p))).
+
+lock Definition bind φ (r : frac T) : frac U :=
+  div (eval φ (num r)) (eval φ (den r)).
+
+Lemma fsum_nil : fsum [] = zero.
+Proof. by rewrite [fsum]unlock. Qed.
+
+Lemma fsum_cons f l : fsum (f :: l) = add f (fsum l).
+Proof. by rewrite [fsum]unlock. Qed.
+
+Lemma fprod_nil : fprod [] = one.
+Proof. by rewrite [fprod]unlock. Qed.
+
+Lemma fprod_cons f l : fprod (f :: l) = mul f (fprod l).
+Proof. by rewrite [fprod]unlock. Qed.
+
+Lemma mono_valE φ m : mono_val φ m = fprod (φ <$> elements m).
+Proof. by rewrite [mono_val]unlock. Qed.
+
+Lemma msumE φ X : msum φ X = fsum (mono_val φ <$> elements X).
+Proof. by rewrite [msum]unlock. Qed.
+
+Lemma evalE φ p :
+  eval φ p =
+  sub (msum φ (SMS.pos (Poly.car p))) (msum φ (SMS.neg (Poly.car p))).
+Proof. by rewrite [eval]unlock. Qed.
+
+Lemma bindE φ r : bind φ r = div (eval φ (num r)) (eval φ (den r)).
+Proof. by rewrite [bind]unlock. Qed.
+
+Lemma fsum_app l1 l2 : fsum (l1 ++ l2) = add (fsum l1) (fsum l2).
+Proof.
+elim: l1 => [|f l IH] /=; first by rewrite fsum_nil; ring.
+by rewrite !fsum_cons IH; ring.
+Qed.
+
+Lemma fsum_perm l1 l2 : l1 ≡ₚ l2 → fsum l1 = fsum l2.
+Proof.
+elim=> [//|f l1' l2' _ IH|f g l|l1' l2' l3 _ IH1 _ IH2].
+- by rewrite !fsum_cons IH.
+- by rewrite !fsum_cons; ring.
+- by rewrite IH1 IH2.
+Qed.
+
+Lemma fsum_mul_l c (l : list (frac U)) :
+  fsum ((λ f, mul c f) <$> l) = mul c (fsum l).
+Proof.
+elim: l => [|f l IH] /=; first by rewrite fsum_nil; ring.
+by rewrite !fsum_cons IH; ring.
+Qed.
+
+Lemma fprod_app l1 l2 : fprod (l1 ++ l2) = mul (fprod l1) (fprod l2).
+Proof.
+elim: l1 => [|f l IH] /=; first by rewrite fprod_nil; ring.
+by rewrite !fprod_cons IH; ring.
+Qed.
+
+Lemma fprod_perm l1 l2 : l1 ≡ₚ l2 → fprod l1 = fprod l2.
+Proof.
+elim=> [//|f l1' l2' _ IH|f g l|l1' l2' l3 _ IH1 _ IH2].
+- by rewrite !fprod_cons IH.
+- by rewrite !fprod_cons; ring.
+- by rewrite IH1 IH2.
+Qed.
+
+Lemma mono_val_empty φ : mono_val φ ∅ = one.
+Proof. by rewrite !mono_valE MSet.elements_empty fprod_nil. Qed.
+
+Lemma mono_val_singleton φ x : mono_val φ {[+ x +]} = φ x.
+Proof.
+rewrite !mono_valE MSet.elements_singleton /= fprod_cons fprod_nil; ring.
+Qed.
+
+Lemma mono_val_disj_union φ m n :
+  mono_val φ (m ⊎ n) = mul (mono_val φ m) (mono_val φ n).
+Proof.
+rewrite !mono_valE -fprod_app -fmap_app; apply: fprod_perm.
+apply: fmap_Permutation; exact: MSet.elements_disj_union.
+Qed.
+
+Lemma msum_empty φ : msum φ ∅ = zero.
+Proof. by rewrite !msumE MSet.elements_empty fsum_nil. Qed.
+
+Lemma msum_singleton φ m : msum φ {[+ m +]} = mono_val φ m.
+Proof.
+rewrite !msumE MSet.elements_singleton /= fsum_cons fsum_nil; ring.
+Qed.
+
+Lemma msum_disj_union φ X Y : msum φ (X ⊎ Y) = add (msum φ X) (msum φ Y).
+Proof.
+rewrite !msumE -fsum_app -fmap_app; apply: fsum_perm.
+apply: fmap_Permutation; exact: MSet.elements_disj_union.
+Qed.
+
+Lemma msum_mul φ m X :
+  msum φ (MSet.map (λ n, m ⊎ n) X) = mul (mono_val φ m) (msum φ X).
+Proof.
+rewrite !msumE -fsum_mul_l -list_fmap_compose; apply: fsum_perm.
+transitivity (mono_val φ <$> ((λ n, m ⊎ n) <$> elements X)).
+  apply: fmap_Permutation; exact: MSet.elements_map_perm.
+rewrite -list_fmap_compose; apply: Permutation_refl'.
+apply: list_fmap_ext => i n _ /=; exact: mono_val_disj_union.
+Qed.
+
+Lemma eval_make φ X Y :
+  eval φ (Poly.mk (SMS.make X Y)) = sub (msum φ X) (msum φ Y).
+Proof.
+rewrite !evalE SMS.pos_make SMS.neg_make.
+have EX : X = (X ∖ Y) ⊎ (X ∖ (X ∖ Y)).
+  apply: MSet.count_inj => m.
+  rewrite MSet.count_disj_union !MSet.count_difference; lia.
+have EY : Y = (Y ∖ X) ⊎ (X ∖ (X ∖ Y)).
+  apply: MSet.count_inj => m.
+  rewrite MSet.count_disj_union !MSet.count_difference; lia.
+rewrite [in RHS]EX [in msum φ Y]EY !msum_disj_union; ring.
+Qed.
+
+Lemma eval_add φ p q : eval φ (Poly.add p q) = add (eval φ p) (eval φ q).
+Proof.
+have -> : Poly.add p q =
+    Poly.mk (SMS.make (SMS.pos (Poly.car p) ⊎ SMS.pos (Poly.car q))
+                      (SMS.neg (Poly.car p) ⊎ SMS.neg (Poly.car q))).
+  by apply: Poly.car_inj; rewrite Poly.car_add.
+rewrite eval_make !msum_disj_union !evalE; ring.
+Qed.
+
+Lemma eval_opp φ p : eval φ (Poly.opp p) = opp (eval φ p).
+Proof. rewrite !evalE Poly.car_opp SMS.pos_inv SMS.neg_inv; ring. Qed.
+
+Lemma eval_zero φ : eval φ Poly.zero = zero.
+Proof.
+rewrite -(Poly.add_opp_r Poly.zero) eval_add eval_opp; ring.
+Qed.
+
+Lemma eval_mono φ m : eval φ (Poly.mono m) = mono_val φ m.
+Proof.
+have -> : Poly.mono m = Poly.mk (SMS.make {[+ m +]} ∅).
+  by apply: Poly.car_inj; rewrite Poly.car_mono.
+rewrite eval_make msum_singleton msum_empty; ring.
+Qed.
+
+Lemma eval_one φ : eval φ Poly.one = one.
+Proof. by rewrite Poly.oneE eval_mono mono_val_empty. Qed.
+
+Lemma eval_var φ x : eval φ (Poly.var x) = φ x.
+Proof. by rewrite Poly.varE eval_mono mono_val_singleton. Qed.
+
+Lemma eval_sub φ p q : eval φ (Poly.sub p q) = sub (eval φ p) (eval φ q).
+Proof. by rewrite Poly.subE eval_add eval_opp subE. Qed.
+
+Lemma eval_mono_mul φ m q :
+  eval φ (Poly.mul (Poly.mono m) q) = mul (mono_val φ m) (eval φ q).
+Proof.
+have -> : Poly.mul (Poly.mono m) q =
+    Poly.mk (SMS.make (MSet.map (λ n, m ⊎ n) (SMS.pos (Poly.car q)))
+                      (MSet.map (λ n, m ⊎ n) (SMS.neg (Poly.car q)))).
+  by apply: Poly.car_inj; rewrite Poly.car_mul_mono SMS.map_pos_neg.
+rewrite eval_make.
+rewrite !msum_mul !evalE; ring.
+Qed.
+
+Lemma eval_mul φ p q : eval φ (Poly.mul p q) = mul (eval φ p) (eval φ q).
+Proof.
+elim/(Poly.poly_ind (T := T)): p => [|m p IH|m p IH].
+- rewrite (left_absorb Poly.zero Poly.mul) eval_zero.
+  by move: (eval φ q) => b; ring.
+- rewrite Poly.mul_add_l eval_add eval_mono_mul IH eval_add eval_mono.
+  by move: (mono_val φ m) (eval φ p) (eval φ q) => a b c; ring.
+- rewrite Poly.mul_add_l Poly.mul_opp_l !eval_add !eval_opp eval_mono_mul IH.
+  rewrite eval_mono.
+  by move: (mono_val φ m) (eval φ p) (eval φ q) => a b c; ring.
+Qed.
+
+Lemma mono_val_var (f : T → U) m :
+  mono_val (λ x, of_poly (Poly.var (f x))) m =
+  of_poly (Poly.mono (MSet.map f m)).
+Proof.
+elim/(MSet.mset_ind (T := T)): m => [|x m IH].
+  by rewrite mono_val_empty MSet.map_empty oneE Poly.oneE.
+rewrite mono_val_disj_union mono_val_singleton IH -of_poly_mul.
+by rewrite MSet.map_disj_union MSet.map_singleton -Poly.mul_mono Poly.varE.
+Qed.
+
+Lemma eval_var_map (f : T → U) p :
+  eval (λ x, of_poly (Poly.var (f x))) p = of_poly (Poly.map f p).
+Proof.
+elim/(Poly.poly_ind (T := T)): p => [|m p IH|m p IH].
+- by rewrite eval_zero Poly.map_zero zeroE.
+- rewrite eval_add Poly.map_add of_poly_add IH eval_mono Poly.map_mono.
+  by rewrite mono_val_var.
+- rewrite eval_add eval_opp Poly.map_add Poly.map_opp !of_poly_add IH.
+  by rewrite eval_mono Poly.map_mono mono_val_var of_poly_opp.
+Qed.
+
+Lemma bind_var_map (f : T → U) r :
+  bind (λ x, of_poly (Poly.var (f x))) r = map f r.
+Proof. by rewrite !bindE !eval_var_map !mapE make_div. Qed.
+
+Lemma bind_of_poly φ p : bind φ (of_poly p) = eval φ p.
+Proof.
+rewrite !bindE num_of_poly den_of_poly.
+by rewrite eval_one; move: (eval φ p) => a; field; exact: one_neq0.
+Qed.
+
+Lemma eval_ext φ ψ p :
+  (∀ m x, m ∈ Poly.car p → x ∈ m → φ x = ψ x) → eval φ p = eval ψ p.
+Proof.
+move=> h; rewrite !evalE !msumE.
+have M s : s = SMS.pos (Poly.car p) ∨ s = SMS.neg (Poly.car p) →
+    fsum (mono_val φ <$> elements s) = fsum (mono_val ψ <$> elements s).
+  move=> es; congr fsum; apply: list_fmap_ext => i m hm.
+  have /MSet.elem_of_elements ms := list_elem_of_lookup_2 _ _ _ hm.
+  rewrite !mono_valE; congr fprod.
+  apply: list_fmap_ext => j x hx; apply: (h m).
+  - by apply/SMS.elem_of_pos_neg; case: es => ?; subst s; [left|right].
+  - exact/MSet.elem_of_elements/(list_elem_of_lookup_2 _ _ _ hx).
+by rewrite (M _ (or_introl eq_refl)) (M _ (or_intror eq_refl)).
+Qed.
+
+Lemma bind_ext φ ψ r :
+  (∀ m x, m ∈ Poly.car (num r) ∨ m ∈ Poly.car (den r) → x ∈ m →
+     φ x = ψ x) →
+  bind φ r = bind ψ r.
+Proof.
+move=> h; rewrite !bindE.
+rewrite (eval_ext φ ψ (num r)); first by move=> m x mr; apply: h; left.
+rewrite (eval_ext φ ψ (den r)) //; by move=> m x mr; apply: h; right.
+Qed.
+
+(** *** Variables *)
+
+Lemma over_fsum vs l : Forall (over vs) l → over vs (fsum l).
+Proof.
+elim=> [|f l' hf _ IH]; rewrite ?fsum_nil ?fsum_cons;
+  [exact: over_zero|exact: over_add].
+Qed.
+
+Lemma over_fprod vs l : Forall (over vs) l → over vs (fprod l).
+Proof.
+elim=> [|f l' hf _ IH]; rewrite ?fprod_nil ?fprod_cons;
+  [exact: over_one|exact: over_mul].
+Qed.
+
+Lemma over_eval vs φ p :
+  (∀ m x, m ∈ Poly.car p → x ∈ m → over vs (φ x)) → over vs (eval φ p).
+Proof.
+move=> h; have hm s : s = SMS.pos (Poly.car p) ∨ s = SMS.neg (Poly.car p) →
+    over vs (msum φ s).
+  move=> es; rewrite msumE; apply: over_fsum.
+  apply/Forall_fmap/list.Forall_forall.
+  move=> m /MSet.elem_of_elements m_s /=; rewrite mono_valE; apply: over_fprod.
+  apply/Forall_fmap/list.Forall_forall => x /MSet.elem_of_elements x_m /=.
+  apply: (h m x) => //; apply/SMS.elem_of_pos_neg.
+  by case: es => ?; subst s; [left|right].
+rewrite evalE; apply: over_sub; apply: hm; by [left|right].
+Qed.
+
+Lemma over_bind vs φ r :
+  (∀ m x, m ∈ Poly.car (num r) ∨ m ∈ Poly.car (den r) → x ∈ m →
+     over vs (φ x)) →
+  over vs (bind φ r).
+Proof.
+move=> h; rewrite bindE; apply: over_div; apply: over_eval => m x mr;
+  apply: h; by [left|right].
+Qed.
+
+Lemma num_make_mono m (q : Poly.poly T) : q ≠ Poly.zero →
+  ∃ n, n ⊆ m ∧ (num (make (Poly.mono m) q) = Poly.mono n ∨
+                num (make (Poly.mono m) q) = (- Poly.mono n)%P).
+Proof.
+move=> nq; have [e1 _] := make_cancel (Poly.mono m) q nq; rewrite e1.
+have [g [Ep _]] := Poly.cancel_spec (Poly.mono m) q.
+apply: PolyGcd.dvd_mono; exists g; rewrite {1}Ep.
+exact: (comm Poly.mul).
+Qed.
+
+(** Since [Poly.first_neg] is multiplicative, reducing [m / q] for a monomial
+    [m] and a denominator [q] in canonical form leaves a monomial numerator. *)
+Lemma num_make_mono_pos m (q : Poly.poly T) :
+  q ≠ Poly.zero → Poly.first_neg q = false →
+  ∃ n, num (make (Poly.mono m) q) = Poly.mono n.
+Proof.
+move=> nq fq.
+have [n [_ [e|e]]] := num_make_mono m q nq; first by exists n.
+exfalso.
+have E := make_spec (Poly.mono m) q nq; rewrite e in E.
+have nn : (- Poly.mono n)%P ≠ Poly.zero.
+  move=> h; apply: (PolyGcd.mono_neq0 n).
+  by rewrite -(Poly.opp_opp (Poly.mono n)) h Poly.opp_zero.
+have := f_equal Poly.first_neg E.
+rewrite (Poly.first_neg_mul _ _ nn nq).
+rewrite (Poly.first_neg_mul _ _ (PolyGcd.mono_neq0 m) (den_neq0 _)).
+by rewrite Poly.first_neg_opp_mono Poly.first_neg_mono den_first_neg fq.
+Qed.
+
+Lemma num_mul_mono r1 r2 n1 n2 :
+  num r1 = Poly.mono n1 → num r2 = Poly.mono n2 →
+  ∃ n, num (mul r1 r2) = Poly.mono n.
+Proof.
+move=> e1 e2; rewrite mulE e1 e2 Poly.mul_mono.
+apply: num_make_mono_pos.
+  by apply: PolyGcd.mul_neq0; exact: den_neq0.
+by rewrite Poly.first_neg_mul ?den_first_neg //; exact: den_neq0.
+Qed.
+
+End Eval.
+
+(** ** Signed sums
+
+    [ssum g s] adds up [g x] over a signed multiset [s], subtracting the
+    negative elements; it does not depend on how [s] is written
+    ([ssum_make]). *)
+
+Section SSum.
+
+Context {A U : Type}.
+Context `{EqDecision A, Lexico A}
+  `{!StrictOrder (@lexico A _), !TrichotomyT (@lexico A _)}.
+Context `{EqDecision U, Lexico U}
+  `{!StrictOrder (@lexico U _), !TrichotomyT (@lexico U _)}.
+
+Add Ring frac_ring_U' : (frac_ring_theory (T := U)).
+
+Implicit Types (g : A → frac U) (s : SMS.sms A).
+
+lock Definition ssum g s : frac U :=
+  sub (fsum (g <$> elements (SMS.pos s))) (fsum (g <$> elements (SMS.neg s))).
+
+Lemma ssumE g s : ssum g s =
+  sub (fsum (g <$> elements (SMS.pos s))) (fsum (g <$> elements (SMS.neg s))).
+Proof. by rewrite [ssum]unlock. Qed.
+
+Lemma fsum_disj_union g (X Y : MSet.mset A) :
+  fsum (g <$> elements (X ⊎ Y)) =
+  add (fsum (g <$> elements X)) (fsum (g <$> elements Y)).
+Proof.
+rewrite -fsum_app -fmap_app; apply: fsum_perm.
+apply: fmap_Permutation; exact: MSet.elements_disj_union.
+Qed.
+
+Lemma ssum_make g X Y :
+  ssum g (SMS.make X Y) =
+  sub (fsum (g <$> elements X)) (fsum (g <$> elements Y)).
+Proof.
+rewrite !ssumE SMS.pos_make SMS.neg_make.
+have EX : X = (X ∖ Y) ⊎ (X ∖ (X ∖ Y)).
+  apply: MSet.count_inj => x.
+  rewrite MSet.count_disj_union !MSet.count_difference; lia.
+have EY : Y = (Y ∖ X) ⊎ (X ∖ (X ∖ Y)).
+  apply: MSet.count_inj => x.
+  rewrite MSet.count_disj_union !MSet.count_difference; lia.
+rewrite [in RHS]EX [in fsum (g <$> elements Y)]EY !fsum_disj_union.
+by move: (fsum _) (fsum _) (fsum _) => a b c; ring.
+Qed.
+
+Lemma ssum_empty g : ssum g ∅ = zero.
+Proof.
+rewrite (_ : ∅ = SMS.make ∅ ∅) // ssum_make MSet.elements_empty fsum_nil.
+ring.
+Qed.
+
+Lemma ssum_singleton g x : ssum g {[+ x +]} = g x.
+Proof.
+rewrite (SMS.singleton_make x) ssum_make MSet.elements_singleton.
+rewrite MSet.elements_empty /= fsum_cons !fsum_nil.
+by move: (g x) => a; ring.
+Qed.
+
+Lemma ssum_disj_union g s1 s2 :
+  ssum g (s1 ⊎ s2) = add (ssum g s1) (ssum g s2).
+Proof.
+change (s1 ⊎ s2) with
+  (SMS.make (SMS.pos s1 ⊎ SMS.pos s2) (SMS.neg s1 ⊎ SMS.neg s2)).
+rewrite ssum_make !fsum_disj_union !ssumE.
+by move: (fsum _) (fsum _) (fsum _) (fsum _) => a b c d; ring.
+Qed.
+
+Lemma ssum_inv g s : ssum g (SMS.inv s) = opp (ssum g s).
+Proof.
+rewrite !ssumE SMS.pos_inv SMS.neg_inv.
+by move: (fsum _) (fsum _) => a b; ring.
+Qed.
+
+Lemma ssum_ext g h s : (∀ x, x ∈ s → g x = h x) → ssum g s = ssum h s.
+Proof.
+move=> e; rewrite !ssumE.
+have M (X : MSet.mset A) : (∀ x, x ∈ X → g x = h x) →
+    fsum (g <$> elements X) = fsum (h <$> elements X).
+  move=> eX; congr fsum; apply: list_fmap_ext => i x hx.
+  by apply: eX; apply/MSet.elem_of_elements/(list_elem_of_lookup_2 _ _ _ hx).
+rewrite (M (SMS.pos s)); first by move=> x xp; apply: e; apply: SMS.elem_of_pos.
+by rewrite (M (SMS.neg s)) // => x xn; apply: e; apply: SMS.elem_of_neg.
+Qed.
+
+Lemma ssum_mul_r g c s :
+  ssum (λ x, mul (g x) c) s = mul (ssum g s) c.
+Proof.
+elim/(SMS.sms_ind (T := A)): s => [|x s IH|x s IH].
+- by rewrite !ssum_empty; ring.
+- rewrite !ssum_disj_union !ssum_singleton IH.
+  by move: (g x) (ssum g s) => a b; ring.
+- rewrite !ssum_disj_union !ssum_inv !ssum_singleton IH.
+  by move: (g x) (ssum g s) => a b; ring.
+Qed.
+
+End SSum.
+
+Lemma ssum_bind {A B U : Type}
+    `{EqDecision A, Lexico A, !StrictOrder (@lexico A _),
+      !TrichotomyT (@lexico A _)}
+    `{EqDecision B, Lexico B, !StrictOrder (@lexico B _),
+      !TrichotomyT (@lexico B _)}
+    `{EqDecision U, Lexico U, !StrictOrder (@lexico U _),
+      !TrichotomyT (@lexico U _)}
+    (g : B → frac U) (f : A → SMS.sms B) (s : SMS.sms A) :
+  ssum g (SMS.bind f s) = ssum (λ x, ssum g (f x)) s.
+Proof.
+elim/(SMS.sms_ind (T := A)): s => [|x s IH|x s IH].
+- by rewrite SMS.bind_empty !ssum_empty.
+- by rewrite SMS.bind_disj_union SMS.bind_singleton !ssum_disj_union
+    ssum_singleton IH.
+- by rewrite SMS.bind_disj_union SMS.bind_inv SMS.bind_singleton
+    !ssum_disj_union !ssum_inv ssum_singleton IH.
+Qed.
+
+(** ** Field facts *)
+
+Section FracField.
+
+Context {T : Type} `{EqDecision T, Lexico T}
+  `{!StrictOrder (@lexico T _), !TrichotomyT (@lexico T _)}.
+
+Add Ring frac_ring_F : (frac_ring_theory (T := T)).
+Add Field frac_field_F : (frac_field_theory (T := T)).
+
+Implicit Types (f g h : frac T).
+
+Lemma mul_zero_r f : mul f zero = zero.
+Proof. by rewrite (comm mul) mul_zero_l. Qed.
+
+Lemma inv_mul f g : inv (mul f g) = mul (inv f) (inv g).
+Proof.
+case: (decide (f = zero)) => [->|nf].
+  by rewrite mul_zero_l inv_zero mul_zero_l.
+case: (decide (g = zero)) => [->|ng].
+  by rewrite mul_zero_r inv_zero ?mul_zero_r.
+by field; split.
+Qed.
+
+Lemma div_cancel_r f g h : h ≠ zero → div (mul f h) (mul g h) = div f g.
+Proof.
+move=> nh; case: (decide (g = zero)) => [->|ng].
+  by rewrite mul_zero_l !div_zero.
+by field; split.
+Qed.
+
+Lemma fprod_neq0 (l : list (frac T)) :
+  Forall (λ f, f ≠ zero) l → fprod l ≠ zero.
+Proof.
+elim=> [|f l' nf _ IH]; rewrite ?fprod_nil ?fprod_cons;
+  [exact: one_neq0|exact: mul_neq0].
+Qed.
+
+End FracField.
+
+(** ** Signed products
+
+    [sprod g s] multiplies [g x] over a signed multiset [s], dividing by the
+    negative elements.  Since [s ⊎ s'] cancels opposite elements, it is
+    multiplicative only away from zero ([sprod_disj_union]). *)
+
+Section SProd.
+
+Context {A U : Type}.
+Context `{EqDecision A, Lexico A}
+  `{!StrictOrder (@lexico A _), !TrichotomyT (@lexico A _)}.
+Context `{EqDecision U, Lexico U}
+  `{!StrictOrder (@lexico U _), !TrichotomyT (@lexico U _)}.
+
+Add Ring frac_ring_P : (frac_ring_theory (T := U)).
+Add Field frac_field_P : (frac_field_theory (T := U)).
+
+Implicit Types (g : A → frac U) (s : SMS.sms A).
+
+lock Definition sprod g s : frac U :=
+  div (fprod (g <$> elements (SMS.pos s))) (fprod (g <$> elements (SMS.neg s))).
+
+Lemma sprodE g s : sprod g s =
+  div (fprod (g <$> elements (SMS.pos s))) (fprod (g <$> elements (SMS.neg s))).
+Proof. by rewrite [sprod]unlock. Qed.
+
+Lemma fprod_disj_union g (X Y : MSet.mset A) :
+  fprod (g <$> elements (X ⊎ Y)) =
+  mul (fprod (g <$> elements X)) (fprod (g <$> elements Y)).
+Proof.
+rewrite -fprod_app -fmap_app; apply: fprod_perm.
+apply: fmap_Permutation; exact: MSet.elements_disj_union.
+Qed.
+
+Lemma sprod_empty g : sprod g ∅ = one.
+Proof.
+rewrite sprodE (_ : ∅ = SMS.make ∅ ∅) // SMS.pos_make SMS.neg_make.
+rewrite (_ : (∅ : MSet.mset A) ∖ ∅ = ∅); first by MSet.mset_solver.
+by rewrite MSet.elements_empty fprod_nil; field; exact: one_neq0.
+Qed.
+
+Lemma sprod_pair g x y : sprod g {[+ x; y +]} = mul (g x) (g y).
+Proof.
+have E : ({[+ x; y +]} : SMS.sms A) = SMS.make ({[+ x +]} ⊎ {[+ y +]}) ∅.
+  apply: SMS.count_inj => z.
+  rewrite SMS.count_disj_union !SMS.count_singleton SMS.count_make.
+  rewrite MSet.count_disj_union !MSet.count_singleton MSet.count_empty.
+  by case: bool_decide; case: bool_decide => /=; lia.
+rewrite E sprodE SMS.pos_make_empty_r SMS.neg_make_empty_r.
+rewrite fprod_disj_union MSet.elements_empty !MSet.elements_singleton /=.
+by rewrite !fprod_cons !fprod_nil divE inv_one; ring.
+Qed.
+
+Lemma sprod_singleton g x : sprod g {[+ x +]} = g x.
+Proof.
+rewrite !sprodE SMS.pos_singleton SMS.neg_singleton MSet.elements_singleton.
+rewrite MSet.elements_empty /= fprod_cons !fprod_nil.
+by move: (g x) => a; field; exact: one_neq0.
+Qed.
+
+Lemma sprod_inv g s : sprod g (SMS.inv s) = inv (sprod g s).
+Proof.
+rewrite !sprodE SMS.pos_inv SMS.neg_inv !divE inv_mul inv_inv.
+by move: (fprod _) (fprod _) => a b; ring.
+Qed.
+
+Lemma sprod_ext g h s : (∀ x, x ∈ s → g x = h x) → sprod g s = sprod h s.
+Proof.
+move=> e; rewrite !sprodE.
+have M (X : MSet.mset A) : (∀ x, x ∈ X → g x = h x) →
+    fprod (g <$> elements X) = fprod (h <$> elements X).
+  move=> eX; congr fprod; apply: list_fmap_ext => i x hx.
+  by apply: eX; apply/MSet.elem_of_elements/(list_elem_of_lookup_2 _ _ _ hx).
+rewrite (M (SMS.pos s)); first by move=> x xp; apply: e; apply: SMS.elem_of_pos.
+by rewrite (M (SMS.neg s)) // => x xn; apply: e; apply: SMS.elem_of_neg.
+Qed.
+
+Lemma sprod_make g X Y : (∀ x, x ∈ X → x ∈ Y → g x ≠ zero) →
+  sprod g (SMS.make X Y) =
+  div (fprod (g <$> elements X)) (fprod (g <$> elements Y)).
+Proof.
+move=> hz; rewrite !sprodE SMS.pos_make SMS.neg_make.
+have EX : X = (X ∖ Y) ⊎ (X ∖ (X ∖ Y)).
+  apply: MSet.count_inj => x.
+  rewrite MSet.count_disj_union !MSet.count_difference; lia.
+have EY : Y = (Y ∖ X) ⊎ (X ∖ (X ∖ Y)).
+  apply: MSet.count_inj => x.
+  rewrite MSet.count_disj_union !MSet.count_difference; lia.
+have nI : fprod (g <$> elements (X ∖ (X ∖ Y))) ≠ zero.
+  apply: fprod_neq0; apply/list.Forall_forall => f /list_elem_of_fmap.
+  move=> [x [-> /MSet.elem_of_elements /MSet.elem_of_difference hx]].
+  rewrite !MSet.count_difference in hx.
+  by apply: hz; apply/MSet.elem_of_count; lia.
+rewrite [in RHS]EX [in fprod (g <$> elements Y)]EY !fprod_disj_union.
+by rewrite div_cancel_r.
+Qed.
+
+Lemma sprod_disj_union g s1 s2 : (∀ x, x ∈ s1 → x ∈ s2 → g x ≠ zero) →
+  sprod g (s1 ⊎ s2) = mul (sprod g s1) (sprod g s2).
+Proof.
+move=> hz.
+change (s1 ⊎ s2) with
+  (SMS.make (SMS.pos s1 ⊎ SMS.pos s2) (SMS.neg s1 ⊎ SMS.neg s2)).
+rewrite sprod_make.
+  move=> x /MSet.elem_of_disj_union hp /MSet.elem_of_disj_union hn.
+  have d1 := SMS.pos_neg_disj s1; have d2 := SMS.pos_neg_disj s2.
+  case: hp hn => hp [] hn.
+  - by case: (d1 x hp hn).
+  - by apply: hz; [apply: SMS.elem_of_pos hp|apply: SMS.elem_of_neg hn].
+  - by apply: hz; [apply: SMS.elem_of_neg hn|apply: SMS.elem_of_pos hp].
+  - by case: (d2 x hp hn).
+rewrite !fprod_disj_union !sprodE !divE inv_mul.
+by move: (fprod _) (fprod _) (fprod _) (fprod _) => a b c d; ring.
+Qed.
+
+End SProd.
+
+(** Flattening a signed multiset of signed multisets multiplies the products
+    out, unless an element is zero (and could cancel against itself). *)
+
+Section SBind.
+
+Context {A B U : Type}.
+Context `{EqDecision A, Lexico A}
+  `{!StrictOrder (@lexico A _), !TrichotomyT (@lexico A _)}.
+Context `{EqDecision B, Lexico B}
+  `{!StrictOrder (@lexico B _), !TrichotomyT (@lexico B _)}.
+Context `{EqDecision U, Lexico U}
+  `{!StrictOrder (@lexico U _), !TrichotomyT (@lexico U _)}.
+
+Add Ring frac_ring_B : (frac_ring_theory (T := U)).
+
+Lemma fprod_mbind (g : B → frac U) (f : A → MSet.mset B) X :
+  fprod (g <$> elements (MSet.bind f X)) =
+  fprod ((λ x, fprod (g <$> elements (f x))) <$> elements X).
+Proof.
+elim/(MSet.mset_ind (T := A)): X => [|x X IH].
+  by rewrite MSet.bind_empty !MSet.elements_empty.
+rewrite MSet.bind_disj_union MSet.bind_singleton !fprod_disj_union IH.
+rewrite MSet.elements_singleton fmap_cons fmap_nil fprod_cons fprod_nil.
+by move: (fprod _) (fprod _) => a b; ring.
+Qed.
+
+Lemma fprod_fmap_div (P N : A → frac U) (l : list A) :
+  fprod ((λ x, div (P x) (N x)) <$> l) =
+  div (fprod (P <$> l)) (fprod (N <$> l)).
+Proof.
+elim: l => [|x l IH].
+  by rewrite !fmap_nil !fprod_nil divE inv_one; ring.
+by rewrite !fmap_cons !fprod_cons IH !divE inv_mul; ring.
+Qed.
+
+Lemma sprod_bind (g : B → frac U) (f : A → SMS.sms B) (s : SMS.sms A) :
+  (∀ x y, x ∈ s → y ∈ f x → g y ≠ zero) →
+  sprod g (SMS.bind f s) = sprod (λ x, sprod g (f x)) s.
+Proof.
+move=> nz.
+set X := MSet.bind (λ x, SMS.pos (f x)) (SMS.pos s) ⊎
+         MSet.bind (λ x, SMS.neg (f x)) (SMS.neg s).
+set Y := MSet.bind (λ x, SMS.neg (f x)) (SMS.pos s) ⊎
+         MSet.bind (λ x, SMS.pos (f x)) (SMS.neg s).
+have E : SMS.bind f s = SMS.make X Y.
+  by rewrite -{1}(SMS.make_pos_neg s) SMS.bind_make.
+have D : ∀ y, y ∈ X → y ∈ Y → g y ≠ zero.
+  move=> y /MSet.elem_of_disj_union [] /MSet.elem_of_bind [x [xs yx]] _.
+  - by apply: (nz x); [exact: SMS.elem_of_pos xs|exact: SMS.elem_of_pos yx].
+  - by apply: (nz x); [exact: SMS.elem_of_neg xs|exact: SMS.elem_of_neg yx].
+have S l : fprod ((λ x, sprod g (f x)) <$> l) =
+    div (fprod ((λ x, fprod (g <$> elements (SMS.pos (f x)))) <$> l))
+        (fprod ((λ x, fprod (g <$> elements (SMS.neg (f x)))) <$> l)).
+  rewrite -fprod_fmap_div; congr fprod.
+  by apply: list_fmap_ext => i x _; rewrite sprodE.
+rewrite E (sprod_make _ _ _ D) /X /Y !fprod_disj_union !fprod_mbind.
+rewrite [in RHS]sprodE !S !divE !inv_mul !inv_inv; cbv beta.
+by move: (fprod _) (fprod _) (fprod _) (fprod _) => a b c d; ring.
+Qed.
+
+End SBind.
+
+(** ** Substituting into variables *)
+
+Section BindVar.
+
+Context {T U : Type}.
+Context `{EqDecision T, Lexico T}
+  `{!StrictOrder (@lexico T _), !TrichotomyT (@lexico T _)}.
+Context `{EqDecision U, Lexico U}
+  `{!StrictOrder (@lexico U _), !TrichotomyT (@lexico U _)}.
+
+Add Ring poly_ring_V : (Poly.poly_ring_theory (T := T)).
+Add Ring frac_ring_V : (frac_ring_theory (T := U)).
+
+Implicit Types (φ : T → frac U) (s : SMS.sms T).
+
+Lemma bind_var φ x : bind φ (var x) = φ x.
+Proof. by rewrite !varE bind_of_poly eval_var. Qed.
+
+Lemma fprod_var (X : MSet.mset T) :
+  fprod (var <$> elements X) = of_poly (Poly.mono X).
+Proof.
+transitivity (mono_val var X); first by rewrite mono_valE.
+rewrite -eval_mono (_ : var = λ x, of_poly (Poly.var ((λ y : T, y) x))).
+  by rewrite [var]unlock.
+by rewrite eval_var_map Poly.map_id_ext.
+Qed.
+
+Lemma sprod_var_canon s :
+  num (sprod var s) = Poly.mono (SMS.pos s) ∧
+  den (sprod var s) = Poly.mono (SMS.neg s).
+Proof.
+rewrite !sprodE !fprod_var -make_div; apply: make_coprime.
+- exact: PolyGcd.mono_neq0.
+- move=> u /PolyGcd.dvd_mono [m1 [s1 E1]] /PolyGcd.dvd_mono [m2 [s2 E2]].
+  have e12 : m1 = m2.
+    apply: Poly.mono_pm_inj.
+    have opp_inj : ∀ a b : Poly.poly T, (- a)%P = (- b)%P → a = b.
+      by move=> a b e; rewrite -(Poly.opp_opp a) e Poly.opp_opp.
+    case: E1 => E1; case: E2 => E2; rewrite E1 in E2.
+    - by left.
+    - by right.
+    - by right; rewrite -E2 Poly.opp_opp.
+    - by left; apply: opp_inj.
+  have m0 : m1 = ∅.
+    apply: MSet.count_inj => x; rewrite MSet.count_empty.
+    have c1 := proj1 (MSet.subseteq_count _ _) s1 x.
+    have c2 := proj1 (MSet.subseteq_count _ _) s2 x.
+    rewrite -e12 in c2.
+    case: (decide (x ∈ m1)) => hx.
+      2: by move: hx; rewrite MSet.elem_of_count; lia.
+    exfalso; move/MSet.elem_of_count: hx => hx.
+    by apply: (SMS.pos_neg_disj s x); apply/MSet.elem_of_count; lia.
+  case: E1 => ->; rewrite m0 -Poly.oneE; first exact: PolyGcd.dvd_refl.
+  by exists (- Poly.one)%P; ring.
+- exact: Poly.first_neg_mono.
+Qed.
+
+Lemma bind_sprod_var φ s : bind φ (sprod var s) = sprod φ s.
+Proof.
+have [en ed] := sprod_var_canon s.
+by rewrite !bindE en ed !eval_mono !mono_valE [sprod φ s]sprodE.
+Qed.
+
+(** The polynomial [Σ s]: one monomial per element. *)
+lock Definition spoly s : Poly.poly T := Poly.mk (SMS.map (λ x, {[+ x +]}) s).
+
+Lemma eval_spoly φ s : eval φ (spoly s) = ssum φ s.
+Proof.
+rewrite [spoly]unlock SMS.map_pos_neg eval_make ssumE !msumE.
+have M (X : MSet.mset T) :
+    fsum (mono_val φ <$> elements (MSet.map (λ x, {[+ x +]}) X)) =
+    fsum (φ <$> elements X).
+  rewrite (fsum_perm _ (mono_val φ <$> ((λ x, {[+ x +]}) <$> elements X))).
+    by apply: fmap_Permutation; exact: MSet.elements_map_perm.
+  rewrite -list_fmap_compose; congr fsum; apply: list_fmap_ext => i x _.
+  exact: mono_val_singleton.
+by rewrite !M.
+Qed.
+
+End BindVar.
+
+Lemma ssum_var {T : Type}
+    `{EqDecision T, Lexico T, !StrictOrder (@lexico T _),
+      !TrichotomyT (@lexico T _)} (s : SMS.sms T) :
+  ssum var s = of_poly (spoly s).
+Proof.
+rewrite -(eval_spoly var) (_ : var = λ x, of_poly (Poly.var ((λ y, y) x))).
+  by rewrite [var]unlock.
+by rewrite eval_var_map Poly.map_id_ext.
+Qed.
+
+Lemma bind_ssum_var {T U : Type}
+    `{EqDecision T, Lexico T, !StrictOrder (@lexico T _),
+      !TrichotomyT (@lexico T _)}
+    `{EqDecision U, Lexico U, !StrictOrder (@lexico U _),
+      !TrichotomyT (@lexico U _)} (φ : T → frac U) (s : SMS.sms T) :
+  bind φ (ssum var s) = ssum φ s.
+Proof. by rewrite ssum_var bind_of_poly eval_spoly. Qed.
+
+(** ** Renaming and substitution *)
+
+Section MapEval.
+
+Context {T U V : Type}.
+Context `{EqDecision T, Lexico T}
+  `{!StrictOrder (@lexico T _), !TrichotomyT (@lexico T _)}.
+Context `{EqDecision U, Lexico U}
+  `{!StrictOrder (@lexico U _), !TrichotomyT (@lexico U _)}.
+Context `{EqDecision V, Lexico V}
+  `{!StrictOrder (@lexico V _), !TrichotomyT (@lexico V _)}.
+
+Variable g : U → V.
+Hypothesis ginj : ∀ a b, g a = g b → a = b.
+
+Lemma map_fsum (l : list (frac U)) : map g (fsum l) = fsum (map g <$> l).
+Proof.
+elim: l => [|f l IH] /=; first by rewrite !fsum_nil; exact: map_zero.
+by rewrite !fsum_cons map_add // IH.
+Qed.
+
+Lemma map_fprod (l : list (frac U)) : map g (fprod l) = fprod (map g <$> l).
+Proof.
+elim: l => [|f l IH] /=; first by rewrite !fprod_nil; exact: map_one.
+by rewrite !fprod_cons map_mul // IH.
+Qed.
+
+Lemma map_mono_val (φ : T → frac U) m :
+  map g (mono_val φ m) = mono_val (λ x, map g (φ x)) m.
+Proof. by rewrite !mono_valE map_fprod -list_fmap_compose. Qed.
+
+Lemma map_eval (φ : T → frac U) p :
+  map g (eval φ p) = eval (λ x, map g (φ x)) p.
+Proof.
+have E (X : MSet.mset (MSet.mset T)) :
+    (map g ∘ mono_val φ) <$> elements X =
+    mono_val (λ x, map g (φ x)) <$> elements X.
+  by apply: list_fmap_ext => i m _; exact: map_mono_val.
+by rewrite !evalE map_sub // !msumE !map_fsum -!list_fmap_compose !E.
+Qed.
+
+Lemma map_bind (φ : T → frac U) r :
+  map g (bind φ r) = bind (λ x, map g (φ x)) r.
+Proof. by rewrite !bindE map_div // !map_eval. Qed.
+
+Lemma map_sprod (h : T → frac U) s :
+  map g (sprod h s) = sprod (λ x, map g (h x)) s.
+Proof.
+by rewrite !sprodE map_div // !map_fprod -!list_fmap_compose.
+Qed.
+
+Lemma map_ssum (h : T → frac U) s :
+  map g (ssum h s) = ssum (λ x, map g (h x)) s.
+Proof.
+by rewrite !ssumE map_sub // !map_fsum -!list_fmap_compose.
+Qed.
+
+End MapEval.
+
+(** Renaming the elements of a signed multiset: sums commute with any
+    renaming, products with injective ones (which do not cancel). *)
+
+Section SMap.
+
+Context {A B U : Type}.
+Context `{EqDecision A, Lexico A}
+  `{!StrictOrder (@lexico A _), !TrichotomyT (@lexico A _)}.
+Context `{EqDecision B, Lexico B}
+  `{!StrictOrder (@lexico B _), !TrichotomyT (@lexico B _)}.
+Context `{EqDecision U, Lexico U}
+  `{!StrictOrder (@lexico U _), !TrichotomyT (@lexico U _)}.
+
+Variable f : A → B.
+
+Lemma fsum_map (g : B → frac U) X :
+  fsum (g <$> elements (MSet.map f X)) = fsum ((λ x, g (f x)) <$> elements X).
+Proof.
+rewrite (fsum_perm _ _ (fmap_Permutation g _ _ (MSet.elements_map_perm f X))).
+by rewrite -list_fmap_compose.
+Qed.
+
+Lemma fprod_map (g : B → frac U) X :
+  fprod (g <$> elements (MSet.map f X)) =
+  fprod ((λ x, g (f x)) <$> elements X).
+Proof.
+rewrite (fprod_perm _ _ (fmap_Permutation g _ _ (MSet.elements_map_perm f X))).
+by rewrite -list_fmap_compose.
+Qed.
+
+Lemma ssum_map (g : B → frac U) s :
+  ssum g (SMS.map f s) = ssum (λ x, g (f x)) s.
+Proof. by rewrite SMS.map_pos_neg ssum_make !fsum_map ssumE. Qed.
+
+Lemma sprod_map (g : B → frac U) s :
+  (∀ a b, f a = f b → a = b) →
+  sprod g (SMS.map f s) = sprod (λ x, g (f x)) s.
+Proof.
+move=> finj.
+have D : ∀ y, y ∈ MSet.map f (SMS.pos s) → y ∈ MSet.map f (SMS.neg s) →
+    g y ≠ zero.
+  move=> y /MSet.elem_of_map [x1 [-> x1p]] /MSet.elem_of_map [x2 [e x2n]].
+  rewrite -(finj _ _ e) in x2n.
+  by case: (SMS.pos_neg_disj s x1).
+by rewrite SMS.map_pos_neg (sprod_make _ _ _ D) !fprod_map sprodE.
+Qed.
+
+End SMap.
+
+(** ** Stripping atoms from monic fractions
+
+    Let [r] have a monomial numerator [M] and denominator [D].  Dividing [r] by
+    an atom of [M], multiplying it by an atom of the monomial content of [D],
+    or multiplying it by the unit part of [D] yields the expected canonical
+    form, because [Poly.first_neg] is multiplicative. *)
+
+Section Strip.
+
+Context {T : Type} `{EqDecision T, Lexico T}
+  `{!StrictOrder (@lexico T _), !TrichotomyT (@lexico T _)}.
+
+Add Ring poly_ring_S : (Poly.poly_ring_theory (T := T)).
+
+Implicit Types (r : frac T).
+
+Lemma inv_of_poly_canon (U : Poly.poly T) :
+  U ≠ Poly.zero → Poly.first_neg U = false →
+  num (inv (of_poly U)) = Poly.one ∧ den (inv (of_poly U)) = U.
+Proof.
+move=> nU fU; rewrite -of_poly_make (inv_make _ _ Poly.one_neq0).
+by apply: make_coprime => // u h _.
+Qed.
+
+Lemma inv_var_canon x :
+  num (inv (var x)) = Poly.one ∧ den (inv (var x)) = Poly.var x.
+Proof.
+rewrite varE; apply: inv_of_poly_canon; first exact: PolyGcd.var_neq0.
+by rewrite Poly.varE Poly.first_neg_mono.
+Qed.
+
+Lemma first_neg_unit_part r :
+  Poly.first_neg (PolyGcd.unit_part (den r)) = false.
+Proof.
+have E := PolyGcd.content_unitK (den r).
+have nU := PolyGcd.unit_part_neq0 _ (den_neq0 r).
+have := den_first_neg r; rewrite -{1}E.
+rewrite (Poly.first_neg_mul _ _ (PolyGcd.mono_neq0 _) nU).
+by rewrite Poly.first_neg_mono.
+Qed.
+
+Lemma mul_inv_var_canon r M a :
+  num r = Poly.mono M → a ∈ M →
+  num (mul r (inv (var a))) = Poly.mono (M ∖ {[+ a +]}) ∧
+  den (mul r (inv (var a))) = den r.
+Proof.
+move=> eM aM.
+have EM : Poly.mono M = (Poly.mono (M ∖ {[+ a +]}) * Poly.var a)%P.
+  rewrite Poly.varE Poly.mul_mono; congr Poly.mono.
+  apply: MSet.count_inj => x.
+  rewrite MSet.count_disj_union MSet.count_difference MSet.count_singleton.
+  have := proj1 (MSet.elem_of_count a M) aM.
+  by case: bool_decide_reflect => [->|]; lia.
+have nq := PolyGcd.mul_neq0 _ _ (den_neq0 r) (PolyGcd.var_neq0 a).
+have E : mul r (inv (var a)) = make (Poly.mono (M ∖ {[+ a +]})) (den r).
+  rewrite -[r in LHS]make_num_den eM varE -of_poly_make.
+  rewrite (inv_make _ _ Poly.one_neq0).
+  rewrite (mul_make _ _ _ _ (den_neq0 r) (PolyGcd.var_neq0 a)).
+  apply: make_eq nq (den_neq0 r) _.
+  by rewrite EM; ring.
+rewrite E; apply: make_coprime; first exact: den_neq0.
+- move=> u hu hd; apply: (num_den_coprime r) => //.
+  rewrite eM EM; apply: PolyGcd.dvd_trans hu _; exact: PolyGcd.dvd_mul_l.
+- exact: den_first_neg.
+Qed.
+
+Lemma mul_var_content_canon r M c :
+  num r = Poly.mono M → c ∈ PolyGcd.content (den r) →
+  num (mul r (var c)) = Poly.mono M ∧
+  den (mul r (var c)) = PolyGcd.unmono {[+ c +]} (den r) ∧
+  (Poly.mono {[+ c +]} * PolyGcd.unmono {[+ c +]} (den r))%P = den r.
+Proof.
+move=> eM cD.
+set Dc := PolyGcd.unmono {[+ c +]} (den r).
+have ED : (Poly.mono {[+ c +]} * Dc)%P = den r.
+  apply: PolyGcd.unmonoK => n nD; apply/MSet.subseteq_count => x.
+  have := proj1 (MSet.subseteq_count _ _) (PolyGcd.content_sub _ _ nD) x.
+  have := proj1 (MSet.elem_of_count c _) cD.
+  by rewrite MSet.count_singleton; case: bool_decide_reflect => [->|]; lia.
+have nDc : Dc ≠ Poly.zero.
+  by move=> e; apply: (den_neq0 r); rewrite -ED e; ring.
+have E : mul r (var c) = make (Poly.mono M) Dc.
+  rewrite -[r in LHS]make_num_den eM varE -of_poly_make.
+  rewrite (mul_make _ _ _ _ (den_neq0 r) Poly.one_neq0).
+  apply: make_eq (PolyGcd.mul_neq0 _ _ (den_neq0 r) Poly.one_neq0) nDc _.
+  by rewrite -ED Poly.varE; ring.
+have [en ed] : num (make (Poly.mono M) Dc) = Poly.mono M ∧
+               den (make (Poly.mono M) Dc) = Dc.
+  apply: make_coprime => //.
+  - move=> u hu hd; apply: (num_den_coprime r); first by rewrite eM.
+    by rewrite -ED; apply: PolyGcd.dvd_trans hd _; exact: PolyGcd.dvd_mul_r.
+  - have := den_first_neg r; rewrite -ED.
+    by rewrite (Poly.first_neg_mul _ _ (PolyGcd.mono_neq0 _) nDc)
+      Poly.first_neg_mono.
+by rewrite E en ed.
+Qed.
+
+Lemma mul_unit_part_canon r M :
+  num r = Poly.mono M →
+  num (mul r (of_poly (PolyGcd.unit_part (den r)))) = Poly.mono M ∧
+  den (mul r (of_poly (PolyGcd.unit_part (den r)))) =
+  Poly.mono (PolyGcd.content (den r)).
+Proof.
+move=> eM.
+set C := PolyGcd.content (den r); set U := PolyGcd.unit_part (den r).
+have ED : (Poly.mono C * U)%P = den r := PolyGcd.content_unitK (den r).
+have nU : U ≠ Poly.zero := PolyGcd.unit_part_neq0 _ (den_neq0 r).
+have E : mul r (of_poly U) = make (Poly.mono M) (Poly.mono C).
+  rewrite -[r in LHS]make_num_den eM -of_poly_make.
+  rewrite (mul_make _ _ _ _ (den_neq0 r) Poly.one_neq0).
+  apply: make_eq (PolyGcd.mul_neq0 _ _ (den_neq0 r) Poly.one_neq0)
+    (PolyGcd.mono_neq0 _) _.
+  by rewrite -ED; ring.
+rewrite E; apply: make_coprime; first exact: PolyGcd.mono_neq0.
+- move=> u hu hd; apply: (num_den_coprime r); first by rewrite eM.
+  by rewrite -ED; apply: PolyGcd.dvd_trans hd _; exact: PolyGcd.dvd_mul_l.
+- exact: Poly.first_neg_mono.
+Qed.
+
+End Strip.
 
 End Frac.
 

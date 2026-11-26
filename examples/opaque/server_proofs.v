@@ -114,7 +114,7 @@ iExists k_s, p_s, p_u, _.
 do 5!(iSplit; first done). iSplit; last done.
 iApply (public_sencIS _ (opN.@"AuthEnc") envelope_pred _) => //.
 - rewrite minted_senc minted_THash minted_tag minted_of_list /=.
-  do !iSplit => //. iApply minted_TExp => //.
+  do !iSplit => //. iApply all_minted_TExp.
   iSplit => //. by rewrite minted_hash_result.
 - iApply minted_of_list. rewrite /=. do !iSplit => //; by iApply public_minted.
 - iModIntro. iExists pw, (TExp (hash_result "H" pw) k_s), p_u, p_s.
@@ -229,7 +229,8 @@ wp_apply (wp_mk_nonce_freshN ∅ (λ _, False)%I dh_key_share
   by iIntros "% %contra".
   iIntros "%t"; rewrite big_sepS_singleton; iModIntro; iSplit.
   - iIntros "#?"; by iApply all_minted_TExp; iSplit => //; iApply minted_TInt.
-  - rewrite (minted_TExp t) //; by iIntros "[_ ?]".
+  - rewrite (minted_TExp (t2 := t)) //; last by apply: atom_frac_neq0.
+    by iIntros "[_ ?]".
 iIntros "%x_s _ #Hmintedx_s #Hprivatex_s #Hexpx_s #Hexpx_sV tok_Xs".
 rewrite big_sepS_singleton.
 iAssert (ephemeral x_s) as "#eph_xs".
@@ -294,13 +295,14 @@ wp_apply wp_send => //.
     + move: e_t; rewrite list_elem_of_fmap => - [u [e_t u_in]].
       have Nm_u := Ngmul_gfactors _ _ (proj1 (SMS.elem_of_elements _ _) u_in).
       have Nm_t : negb (is_gmul t) by rewrite -is_gmul_base e_t is_gmul_base.
-      by rewrite base_TExp.
+      by rewrite (base_TExp Nm_t (monic_atom (TNonce k_s) I)).
   - iApply public_TExp_iff => //.
     do !iSplit => //.
     + by iApply minted_TInt.
     + iRight.
       iApply "Hexpx_s"; iPureIntro.
-      by rewrite exps_TExp_expN // factors_Nmul // SMS.elements_singleton.
+      rewrite (exps_TExp_expN _ _ (monic_atom (TNonce x_s) I)) //.
+      by rewrite factors_Nmod // SMS.elements_singleton.
     + by rewrite public_TInt; auto.
   - iApply public_THashIS => //.
       iEval (rewrite minted_of_list /=); do !iSplit => //.

@@ -193,9 +193,9 @@ Definition poly_div : val := λ: "eq" "le" "p" "q",
 
 Definition poly_first_neg : val := λ: "eq" "le" "p",
   let: "mle" := λ: "X" "Y", mset_le "eq" "le" "X" "Y" in
-  match: mset_disj_union "mle" (Fst "p") (Snd "p") with
+  match: mset_gmin "eq" "le" (mset_disj_union "mle" (Fst "p") (Snd "p")) with
     NONE => #false
-  | SOME "c" => poly_coeff "eq" (Fst "c") "p" < #0
+  | SOME "m" => poly_coeff "eq" "m" "p" < #0
   end.
 
 Definition poly_cancel_with : val := λ: "eq" "le" "g" "p" "q" "p'" "q'",
@@ -238,7 +238,7 @@ Proof. iIntros "HΨ"; wp_pures; by wp_apply (twp_mset_le eqv lev eqvP levP). Qed
 Lemma twp_poly_coeff m p E Ψ :
   Ψ #(Poly.coeff m p) ⊢ WP poly_coeff eqv (repr m) (repr p) @ E [{ Ψ }].
 Proof.
-rewrite repr_polyE; iIntros "HΨ"; wp_lam; wp_pures.
+rewrite repr_polyE Poly.coeffE; iIntros "HΨ"; wp_lam; wp_pures.
 by wp_apply (twp_sms_count _ meqP).
 Qed.
 
@@ -246,14 +246,18 @@ Lemma twp_poly_mono m E Ψ :
   Ψ (repr (Poly.mono m)) ⊢ WP poly_mono (repr m) @ E [{ Ψ }].
 Proof.
 have -> : repr (Poly.mono m) = (SOMEV (repr m, NONEV), NONEV)%V.
-  by rewrite repr_polyE repr_smsE /repr_prod /= /repr_mset [@repr_list]unlock.
+  rewrite repr_polyE Poly.car_mono repr_smsE SMS.pos_singleton.
+  rewrite SMS.neg_singleton.
+  rewrite /repr_prod /= /repr_mset MSet.elements_singleton MSet.elements_empty.
+  by rewrite [@repr_list]unlock.
 iIntros "HΨ"; wp_lam; rewrite /CONS; wp_pures.
 by iApply "HΨ".
 Qed.
 
 Lemma repr_poly_zero : repr (Poly.zero : Poly.poly T) = poly_zero.
 Proof.
-by rewrite repr_polyE repr_smsE /repr_prod /= /repr_mset [@repr_list]unlock.
+rewrite repr_polyE Poly.car_zero repr_smsE SMS.pos_empty SMS.neg_empty.
+by rewrite /repr_prod /= /repr_mset MSet.elements_empty [@repr_list]unlock.
 Qed.
 
 Lemma twp_poly_zero E Ψ :
@@ -264,7 +268,9 @@ Lemma twp_poly_one E Ψ :
   Ψ (repr (Poly.one : Poly.poly T)) ⊢ WP Val poly_one @ E [{ Ψ }].
 Proof.
 have -> : repr (Poly.one : Poly.poly T) = poly_one.
-  by rewrite repr_polyE repr_smsE /repr_prod /= /repr_mset [@repr_list]unlock.
+  rewrite Poly.oneE repr_polyE Poly.car_mono repr_smsE SMS.pos_singleton.
+  rewrite SMS.neg_singleton /repr_prod /= /repr_mset MSet.elements_singleton.
+  by rewrite MSet.elements_empty [@repr_list]unlock /= MSet.elements_empty.
 by iIntros "HΨ"; wp_pures.
 Qed.
 
@@ -272,8 +278,8 @@ Lemma twp_poly_var x E Ψ :
   Ψ (repr (Poly.var x)) ⊢ WP poly_var (repr x) @ E [{ Ψ }].
 Proof.
 have e : SOMEV (repr x, NONEV)%V = repr ({[+ x +]} : MSet.mset T).
-  by rewrite /repr_mset [@repr_list]unlock.
-iIntros "HΨ"; wp_lam; rewrite /CONS; wp_pures; rewrite e.
+  by rewrite repr_msetE MSet.elements_singleton [@repr_list]unlock.
+rewrite Poly.varE; iIntros "HΨ"; wp_lam; rewrite /CONS; wp_pures; rewrite e.
 by wp_apply twp_poly_mono.
 Qed.
 
@@ -281,19 +287,22 @@ Lemma twp_poly_add p q E Ψ :
   Ψ (repr (Poly.add p q)) ⊢
   WP poly_add eqv lev (repr p) (repr q) @ E [{ Ψ }].
 Proof.
-rewrite !repr_polyE; iIntros "HΨ"; wp_lam; wp_pures.
+rewrite !repr_polyE Poly.car_add; iIntros "HΨ"; wp_lam; wp_pures.
 by wp_apply (twp_sms_disj_union _ _ meqP mleP).
 Qed.
 
 Lemma twp_poly_opp p E Ψ :
   Ψ (repr (Poly.opp p)) ⊢ WP poly_opp (repr p) @ E [{ Ψ }].
-Proof. rewrite !repr_polyE; iIntros "HΨ"; wp_lam; by wp_apply twp_sms_inv. Qed.
+Proof.
+rewrite !repr_polyE Poly.car_opp; iIntros "HΨ"; wp_lam.
+by wp_apply twp_sms_inv.
+Qed.
 
 Lemma twp_poly_mul p q E Ψ :
   Ψ (repr (Poly.mul p q)) ⊢
   WP poly_mul eqv lev (repr p) (repr q) @ E [{ Ψ }].
 Proof.
-rewrite !repr_polyE; iIntros "HΨ"; wp_lam; wp_pures.
+rewrite !repr_polyE Poly.car_mul; iIntros "HΨ"; wp_lam; wp_pures.
 wp_apply (twp_sms_bind _ _ meqP mleP
             (λ m, SMS.map (λ n, m ⊎ n) (Poly.car q))) => //.
 move=> m E' Φ; iIntros "HΦ"; wp_pures.
@@ -316,8 +325,9 @@ Lemma twp_poly_const z E Ψ :
   WP poly_const eqv lev #z @ E [{ Ψ }].
 Proof.
 have eN : NILV = repr (∅ : MSet.mset T).
-  by rewrite /repr_mset /= [@repr_list]unlock.
-rewrite repr_polyE; iIntros "HΨ"; wp_lam; wp_pures; rewrite eN.
+  by rewrite repr_msetE MSet.elements_empty [@repr_list]unlock.
+rewrite repr_polyE [Poly.const]unlock; cbn [Poly.car]; rewrite repr_sms_make.
+iIntros "HΨ"; wp_lam; wp_pures; rewrite eN.
 wp_apply (twp_replicate_list _ _ (∅ : MSet.mset T)).
 wp_apply (twp_mset_of_list _ mleP).
 wp_apply (twp_replicate_list _ _ (∅ : MSet.mset T)).
@@ -329,7 +339,7 @@ Lemma twp_poly_sub p q E Ψ :
   Ψ (repr (Poly.sub p q)) ⊢
   WP poly_sub eqv lev (repr p) (repr q) @ E [{ Ψ }].
 Proof.
-iIntros "HΨ"; wp_lam; wp_pures; wp_apply twp_poly_opp.
+rewrite Poly.subE; iIntros "HΨ"; wp_lam; wp_pures; wp_apply twp_poly_opp.
 by wp_apply twp_poly_add.
 Qed.
 
@@ -337,6 +347,7 @@ Lemma twp_poly_vpow x (k : Z) E Ψ :
   Ψ (repr (Poly.vpow x (Z.to_nat k))) ⊢
   WP poly_vpow lev (repr x) #k @ E [{ Ψ }].
 Proof.
+rewrite Poly.vpowE.
 iIntros "HΨ"; wp_lam; wp_pures; wp_apply (twp_replicate_list _ _ x).
 by wp_apply (twp_mset_of_list lev levP).
 Qed.
@@ -349,7 +360,7 @@ set f := λ m (z : Z),
 have e l : foldr f 0%Z l = Z.of_nat (max_list (MSet.count x <$> l)).
   elim: l => [|m l IH] //=; rewrite IH /f; set k := max_list _.
   case_bool_decide; lia.
-rewrite /Poly.deg -e repr_polyE [repr (Poly.car p)]repr_smsE /repr_prod /=.
+rewrite Poly.degE -e repr_polyE [repr (Poly.car p)]repr_smsE /repr_prod /=.
 iIntros "HΨ"; wp_lam; wp_pures; wp_apply twp_append_lists; wp_pures.
 wp_apply (twp_foldr_list f _ _ 0%Z) => //.
   iIntros "%m %z %Φ _ HΦ"; wp_pures; wp_apply (twp_mset_count eqv eqvP).
@@ -361,7 +372,7 @@ Lemma twp_poly_coeffx x (k : nat) p E Ψ :
   Ψ (repr (Poly.coeffx x k p)) ⊢
   WP poly_coeffx eqv lev (repr x) #k (repr p) @ E [{ Ψ }].
 Proof.
-rewrite !repr_polyE; iIntros "HΨ"; wp_lam; wp_pures.
+rewrite !repr_polyE Poly.car_coeffx; iIntros "HΨ"; wp_lam; wp_pures.
 wp_apply (twp_poly_vpow x (Z.of_nat k)); rewrite Nat2Z.id; wp_pures.
 wp_apply (twp_sms_bind _ _ meqP mleP
             (λ m, if bool_decide (MSet.count x m = k)
@@ -371,8 +382,9 @@ wp_apply (twp_mset_count eqv eqvP); wp_pures.
 rewrite [bool_decide (LitV _ = _)](bool_decide_ext _ (MSet.count x m = k)).
   case: bool_decide; wp_pures.
     wp_apply (twp_mset_difference eqv eqvP).
-    by wp_apply twp_poly_mono.
-  by rewrite -repr_poly_zero; iApply "HΦ".
+    wp_apply twp_poly_mono; rewrite repr_polyE Poly.car_mono.
+    by iApply "HΦ".
+  by rewrite -repr_poly_zero repr_polyE Poly.car_zero; iApply "HΦ".
 by split=> [[/Nat2Z.inj]|->].
 Qed.
 
@@ -380,7 +392,7 @@ Lemma twp_poly_lcx x p E Ψ :
   Ψ (repr (Poly.lcx x p)) ⊢
   WP poly_lcx eqv lev (repr x) (repr p) @ E [{ Ψ }].
 Proof.
-iIntros "HΨ"; wp_lam; wp_pures; wp_apply twp_poly_deg.
+rewrite Poly.lcxE; iIntros "HΨ"; wp_lam; wp_pures; wp_apply twp_poly_deg.
 by wp_apply twp_poly_coeffx.
 Qed.
 
@@ -390,7 +402,7 @@ Proof.
 have eN : NILV = repr ([] : list T) by rewrite repr_listE.
 set f := λ (m : MSet.mset T) l, elements m ++ l.
 have eb ms : foldr f [] ms = ms ≫= elements by elim: ms => //= m ms ->.
-rewrite /Poly.vars -eb repr_polyE [repr (Poly.car p)]repr_smsE /repr_prod /=.
+rewrite Poly.varsE -eb repr_polyE [repr (Poly.car p)]repr_smsE /repr_prod /=.
 iIntros "HΨ"; wp_lam; wp_pures; rewrite eN.
 wp_apply twp_append_lists.
 wp_apply (twp_foldr_list f _ _ []) => //.
@@ -427,6 +439,7 @@ Lemma twp_poly_prem x a b E Ψ :
   Ψ (repr (Poly.prem x a b)) ⊢
   WP poly_prem eqv lev (repr x) (repr a) (repr b) @ E [{ Ψ }].
 Proof.
+rewrite Poly.premE.
 iIntros "HΨ"; wp_lam; wp_pures; wp_apply twp_poly_deg; wp_pures.
 wp_apply twp_poly_lcx; wp_apply twp_poly_deg.
 rewrite (_ : (Poly.deg x a + 1)%Z = Z.of_nat (Poly.deg x a + 1)); last lia.
@@ -466,6 +479,7 @@ Lemma twp_poly_div_lvl x p g E Ψ :
   Ψ (repr (Poly.div_lvl x dv p g)) ⊢
   WP poly_div_lvl eqv lev dvv (repr x) (repr p) (repr g) @ E [{ Ψ }].
 Proof.
+rewrite Poly.div_lvlE.
 iIntros "HΨ"; wp_lam; wp_pures; rewrite -repr_poly_zero.
 wp_apply twp_poly_deg; wp_pures; wp_apply twp_poly_lcx; wp_apply twp_poly_deg.
 rewrite (_ : (Poly.deg x p + 1)%Z = Z.of_nat (Poly.deg x p + 1)); last lia.
@@ -488,6 +502,7 @@ Lemma twp_poly_cont x p E Ψ :
   Ψ (repr (Poly.cont x gc p)) ⊢
   WP poly_cont eqv lev gcv (repr x) (repr p) @ E [{ Ψ }].
 Proof.
+rewrite Poly.contE.
 iIntros "HΨ"; wp_lam; wp_pures; wp_apply twp_poly_deg; wp_pures.
 rewrite (_ : (Poly.deg x p + 1)%Z = Z.of_nat (Poly.deg x p + 1)); last lia.
 by wp_apply (twp_poly_cont_loop x p 0).
@@ -512,7 +527,7 @@ Lemma twp_poly_gcd_lvl x p q E Ψ :
   WP poly_gcd_lvl eqv lev gcv dvv (repr x) (repr p) (repr q) @ E [{ Ψ }].
 Proof.
 have h2 k : (Z.of_nat k + 2)%Z = Z.of_nat (k + 2) by lia.
-iIntros "HΨ"; wp_lam; wp_pures; rewrite -repr_poly_zero /Poly.gcd_lvl.
+iIntros "HΨ"; wp_lam; wp_pures; rewrite -repr_poly_zero [Poly.gcd_lvl]unlock /=.
 wp_apply twp_poly_eq; case: bool_decide; wp_pures; first by iApply "HΨ".
 wp_apply twp_poly_eq; case: bool_decide; wp_pures; first by iApply "HΨ".
 wp_apply twp_poly_cont; wp_pures; wp_apply twp_poly_cont; wp_pures.
@@ -553,7 +568,7 @@ Lemma twp_poly_div_vs (vs : list T) p q E Ψ :
   WP poly_div_vs eqv lev (repr vs) (repr p) (repr q) @ E [{ Ψ }].
 Proof.
 have eN : NILV = repr (∅ : MSet.mset T).
-  by rewrite /repr_mset /= [@repr_list]unlock.
+  by rewrite repr_msetE MSet.elements_empty [@repr_list]unlock.
 elim: vs p q E Ψ => [|x vs IH] p q E Ψ; iIntros "HΨ".
   rewrite repr_listE /=; wp_rec; wp_pures; rewrite eN.
   wp_apply twp_poly_coeff; wp_apply twp_poly_coeff; wp_pures.
@@ -569,7 +584,7 @@ Lemma twp_poly_gcd_vs (vs : list T) p q E Ψ :
   WP poly_gcd_vs eqv lev (repr vs) (repr p) (repr q) @ E [{ Ψ }].
 Proof.
 have eN : NILV = repr (∅ : MSet.mset T).
-  by rewrite /repr_mset /= [@repr_list]unlock.
+  by rewrite repr_msetE MSet.elements_empty [@repr_list]unlock.
 elim: vs p q E Ψ => [|x vs IH] p q E Ψ; iIntros "HΨ".
   rewrite repr_listE /=; wp_rec; wp_pures; rewrite eN.
   wp_apply twp_poly_coeff; wp_apply twp_poly_coeff; wp_apply twp_int_gcd.
@@ -586,7 +601,7 @@ Lemma twp_poly_gcd p q E Ψ :
   Ψ (repr (Poly.gcd p q)) ⊢
   WP poly_gcd eqv lev (repr p) (repr q) @ E [{ Ψ }].
 Proof.
-iIntros "HΨ"; wp_lam; wp_pures.
+rewrite Poly.gcdE; iIntros "HΨ"; wp_lam; wp_pures.
 wp_apply twp_poly_vars; wp_apply twp_poly_vars; wp_apply twp_append_lists.
 wp_apply (twp_remove_dups_list eqv) => //.
   by iIntros "%a %b %Φ _ HΦ"; wp_apply eqvP; iApply "HΦ".
@@ -598,7 +613,7 @@ Lemma twp_poly_div p q E Ψ :
   Ψ (repr (Poly.div p q)) ⊢
   WP poly_div eqv lev (repr p) (repr q) @ E [{ Ψ }].
 Proof.
-iIntros "HΨ"; wp_lam; wp_pures.
+rewrite Poly.divE; iIntros "HΨ"; wp_lam; wp_pures.
 wp_apply twp_poly_vars; wp_apply twp_poly_vars; wp_apply twp_append_lists.
 wp_apply (twp_remove_dups_list eqv) => //.
   by iIntros "%a %b %Φ _ HΦ"; wp_apply eqvP; iApply "HΦ".
@@ -610,9 +625,9 @@ Lemma twp_poly_first_neg p E Ψ :
   Ψ #(Poly.first_neg p) ⊢ WP poly_first_neg eqv lev (repr p) @ E [{ Ψ }].
 Proof.
 iIntros "HΨ"; wp_lam; wp_pures; wp_apply (twp_mset_disj_union _ mleP).
-rewrite /Poly.first_neg /repr_mset.
-case: (elements (SMS.pos (Poly.car p) ⊎ SMS.neg (Poly.car p))) => [|m ms];
-  rewrite repr_listE /=; wp_pures; first by iApply "HΨ".
+rewrite [Poly.first_neg]unlock /repr_mset.
+wp_apply (twp_mset_gmin eqv lev eqvP levP).
+case: (MSet.gmin_list _) => [m|]; wp_pures; last by iApply "HΨ".
 by wp_apply twp_poly_coeff; wp_pures.
 Qed.
 
@@ -621,7 +636,8 @@ Lemma twp_poly_cancel_with g p q p' q' E Ψ :
   WP poly_cancel_with eqv lev (repr g) (repr p) (repr q) (repr p') (repr q')
     @ E [{ Ψ }].
 Proof.
-iIntros "HΨ"; wp_lam; wp_pures; rewrite /Poly.cancel_with bool_decide_and.
+iIntros "HΨ"; wp_lam; wp_pures.
+rewrite [Poly.cancel_with]unlock /= bool_decide_and.
 wp_apply twp_poly_mul; wp_apply twp_poly_eq.
 case: bool_decide; wp_pures; last by iApply "HΨ".
 wp_apply twp_poly_mul; wp_apply twp_poly_eq.
@@ -636,6 +652,7 @@ Lemma twp_poly_cancel p q E Ψ :
   Ψ (repr (Poly.cancel p q)) ⊢
   WP poly_cancel eqv lev (repr p) (repr q) @ E [{ Ψ }].
 Proof.
+rewrite [Poly.cancel]unlock /=.
 iIntros "HΨ"; wp_lam; wp_pures; wp_apply twp_poly_gcd; wp_pures.
 wp_apply twp_poly_div; wp_apply twp_poly_div.
 by wp_apply twp_poly_cancel_with.

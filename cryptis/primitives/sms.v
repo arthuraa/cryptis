@@ -78,6 +78,10 @@ Hypothesis levP : ∀ (x y : T) E Ψ,
 
 Implicit Types (x : T) (s : SMS.sms T).
 
+Lemma repr_sms_make (X Y : MSet.mset T) :
+  repr (SMS.make X Y) = repr (SMS.to X Y).
+Proof. by rewrite repr_smsE SMS.pos_make SMS.neg_make. Qed.
+
 Lemma twp_sms_to (X Y : MSet.mset T) E Ψ :
   Ψ (repr (SMS.to X Y)) ⊢ WP sms_to eqv (repr X) (repr Y) @ E [{ Ψ }].
 Proof.
@@ -108,7 +112,8 @@ Qed.
 Lemma twp_sms_inv s E Ψ :
   Ψ (repr (SMS.inv s)) ⊢ WP sms_inv (repr s) @ E [{ Ψ }].
 Proof.
-rewrite [repr s]repr_smsE /repr_prod /=; iIntros "HΨ"; wp_lam; wp_pures.
+rewrite [repr s]repr_smsE [repr (SMS.inv s)]repr_smsE SMS.pos_inv SMS.neg_inv.
+rewrite /repr_prod /=; iIntros "HΨ"; wp_lam; wp_pures.
 by iApply "HΨ".
 Qed.
 
@@ -116,6 +121,8 @@ Lemma twp_sms_disj_union s1 s2 E Ψ :
   Ψ (repr (s1 ⊎ s2)) ⊢
   WP sms_disj_union eqv lev (repr s1) (repr s2) @ E [{ Ψ }].
 Proof.
+rewrite (_ : s1 ⊎ s2 = SMS.make (SMS.pos s1 ⊎ SMS.pos s2)
+                                (SMS.neg s1 ⊎ SMS.neg s2)) // repr_sms_make.
 rewrite [repr s1]repr_smsE [repr s2]repr_smsE /repr_prod /=.
 iIntros "HΨ"; wp_lam; wp_pures.
 wp_apply (twp_mset_disj_union lev levP); wp_pures.
@@ -126,7 +133,8 @@ Qed.
 Lemma twp_sms_count x s E Ψ :
   Ψ #(SMS.count x s) ⊢ WP sms_count eqv (repr x) (repr s) @ E [{ Ψ }].
 Proof.
-rewrite [repr s]repr_smsE /repr_prod /=; iIntros "HΨ"; wp_lam; wp_pures.
+rewrite [repr s]repr_smsE /repr_prod /= SMS.countE.
+iIntros "HΨ"; wp_lam; wp_pures.
 wp_apply (twp_mset_count eqv eqvP); wp_pures.
 wp_apply (twp_mset_count eqv eqvP); wp_pures.
 by iApply "HΨ".
@@ -178,7 +186,8 @@ Lemma twp_sms_bind (f : T → SMS.sms U) (fv : val) s E Ψ :
   (∀ x E Ψ, Ψ (repr (f x)) ⊢ WP fv (repr x) @ E [{ Ψ }]) →
   Ψ (repr (SMS.bind f s)) ⊢ WP sms_bind eqv lev fv (repr s) @ E [{ Ψ }].
 Proof.
-move=> fvP; rewrite /SMS.bind /MSet.bind -!MSet.of_list_app.
+move=> fvP; rewrite [SMS.bind]unlock [MSet.bind]unlock -!MSet.of_list_app.
+rewrite repr_sms_make.
 rewrite [repr s]repr_smsE /repr_prod /=; iIntros "HΨ"; wp_lam; wp_pures.
 wp_apply (twp_sms_flat f fv _ _ _ fvP); wp_pures.
 wp_apply (twp_sms_flat f fv _ _ _ fvP); wp_pures.
@@ -191,7 +200,7 @@ Lemma twp_sms_map (f : T → U) (fv : val) s E Ψ :
   (∀ x E Ψ, Ψ (repr (f x)) ⊢ WP fv (repr x) @ E [{ Ψ }]) →
   Ψ (repr (SMS.map f s)) ⊢ WP sms_map eqv lev fv (repr s) @ E [{ Ψ }].
 Proof.
-move=> fvP; rewrite SMS.map_pos_neg /MSet.map.
+move=> fvP; rewrite SMS.map_pos_neg repr_sms_make ![MSet.map]unlock.
 have fvT l :
     Forall (λ x, [[{ True }]] fv (repr x) @ E [[{ RET repr (f x); True }]]) l.
   by apply/Forall_forall => x _ Φ; iIntros "_ HΦ"; wp_apply fvP; iApply "HΦ".

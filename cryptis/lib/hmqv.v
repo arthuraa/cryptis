@@ -3,8 +3,9 @@ From mathcomp Require Import ssreflect.
 From stdpp Require Import namespaces.
 From iris.algebra Require Import agree auth csum gset gmap excl frac.
 From iris.heap_lang Require Import notation proofmode.
+From Stdlib Require Import ZArith Lia Field.
 From cryptis Require Import lib term cryptis primitives tactics.
-From cryptis.lib Require Import dh list_sort eexp.
+From cryptis.lib Require Import dh list_sort poly poly_gcd poly_restrict frac.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -39,17 +40,9 @@ Unset Printing Implicit Defensive.
     communication that uses this key is implicitly authenticated.
 
     This file establishes basic results about the HMQV key exchange formula.
-    Cryptis does not support addition of exponents, so we read [x_i + m_i ⋅ p_i]
-    as an extended exponent ([eexp.v]), a formal sum, and raise to it by
-    multiplying powers ([epow]):
-
-        K   = Y_j^(x_i + m_i ⋅ p_i) = (Y_j^x_i) (Y_j^(m_i ⋅ p_i))
-        Y_j = X_j P_j^m_j,
-
-    which only requires multiplication and exponentiation in the Diffie-Hellman
-    group and exponent multiplication.  Though this is less efficient than the
-    original formula, which requires two exponentiation operations, it offers
-    the same security guarantees.
+    Exponents form a field, so the key raises [Y_j = X_j P_j^m_j] to the
+    scalar [x_i + m_i ⋅ p_i] ([hmqv_s]), and the proofs compare the
+    logarithms of keys ([log]) as fractions.
 
 
     [hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b] computes the key formula from the
@@ -60,20 +53,22 @@ Unset Printing Implicit Defensive.
     - [hmqv_K_sym]: [hmqv_K] produces the same key for the two parties.  This
       property allows them to agree on a shared session key.
 
-    - [hmqv_K_inj] and [hmqv_K_inj']: the session key [K] uniquely determines
-      which long-term and ephemeral keys were used, for two keys of the same
-      role and for an initiator's and a responder's key, respectively.  The
+    - [hmqv_K_inj']: the session key [K] of an initiator and that of a
+      responder determine which long-term and ephemeral keys were used.  The
       long-term keys that the parties accepted for their peers need not be
       vetted, but neither they nor [K] may be the group identity; a vetted
       long-term key is not, and neither is a key computed with it
       ([hmqv_K_neq_unit]).  If the agents' long-term keys represent their
       identity, this means that the key binds who participated in the key
-      exchange, an authentication guarantee.  Moreover, if ephemeral keys are
-      used only once, this guarantees that session keys are fresh.
+      exchange, an authentication guarantee.
 
-    - [hmqv_K_inj_fresh]: the crossed binding for a responder that accepted
-      whatever long-term key its peer claimed, the identity included, provided
-      that its ephemeral private key is fresh.
+    - [hmqv_K_inj]: two keys of the same role, under the same conditions,
+      have the same private keys and the same claimed peer long-term key, but
+      not necessarily the same peer ephemeral: a rogue long-term key
+      [(X_b ⋅ X_b'⁻¹)^(1/(m_b' - m_b))] makes two peer ephemerals give the
+      same key for one ephemeral private key.  Thus, if ephemeral keys are used
+      only once, the key determines the session.  [hmqv_K_inj_vetted]: a vetted
+      peer long-term key also binds the peer ephemeral.
 
     - [hmqv_K_unit]: if the session key is the group identity, then so is the
       base [hmqv_Y] that the party exponentiated, whatever (unvetted) peer keys
@@ -112,6 +107,8 @@ Section HMQV.
 Variable N : namespace.
 Variable g : term.
 
+Add Field hmqv_field : (Frac.frac_field_theory (T := term)).
+
 (** The multiplier of a party whose ephemeral public key is [X] and whose peer
     has long-term public key [P]. *)
 
@@ -147,327 +144,266 @@ have P_in : P ∈ [X; P] by set_solver.
 have := Spec.of_list_tsize P_in; lia.
 Qed.
 
-#[local] Lemma hmqv_m_Nmul t X P : negb (is_mul (hmqv_m t X P)).
+#[local] Lemma hmqv_m_Nmod t X P : negb (is_mod (hmqv_m t X P)).
 Proof. by rewrite /hmqv_m. Qed.
 
 Definition hmqv_Y (t_b : string) (P_a P_b X_b : term) : term :=
   TGMul {[+ X_b; TExp P_b (hmqv_m t_b X_b P_a) +]}.
 
 (** The scalar [x + m⋅p]. *)
-Definition hmqv_s (m p x : term) : eexp := {[+ x; TMul {[+ m; p +]} +]}.
+Definition hmqv_s (m p x : term) : term := TSum {[+ x; TMul {[+ m; p +]} +]}.
 
 Definition hmqv_K (t_a t_b : string) (p_a x_a P_a X_a P_b X_b : term) : term :=
-  epow (hmqv_Y t_b P_a P_b X_b) (hmqv_s (hmqv_m t_a X_a P_b) p_a x_a).
+  TExp (hmqv_Y t_b P_a P_b X_b) (hmqv_s (hmqv_m t_a X_a P_b) p_a x_a).
 
-(** The largest factor of the HMQV key, measured in the number of exponents. *)
+(** ** Fractions and atoms *)
 
-#[local] Definition hmqv_ss (t_a t_b : string) (p_a P_a X_a p_b X_b : term) :
-  term :=
-  TExp g (TMul {[+ p_b; hmqv_m t_b X_b P_a; hmqv_m t_a X_a (TExp g p_b);
-                   p_a +]}).
-
-#[local] Lemma count_hmqv_m_nonce t X P (n : nonce) :
-  count (hmqv_m t X P) (TNonce n) = 0%Z.
-Proof. by apply: count_atom_ne => //; rewrite /hmqv_m. Qed.
-
-#[local] Lemma count_hmqv_m_e h t X P (p : nonce) :
-  count (hmqv_m t X P) (TMul {[+ h; TNonce p +]}) =
-  count (hmqv_m t X P) h.
-Proof. by rewrite count_TMul2 count_hmqv_m_nonce; lia. Qed.
-
-#[local] Lemma count_hmqv_m_diag t X P :
-  count (hmqv_m t X P) (hmqv_m t X P) = 1%Z.
-Proof. by apply: count_atom_diag; exact: hmqv_m_Nmul. Qed.
-
-#[local] Lemma count_hmqv_m_neq t X P t' X' P' :
-  hmqv_m t X P ≠ hmqv_m t' X' P' →
-  count (hmqv_m t X P) (hmqv_m t' X' P') = 0%Z.
-Proof. by move=> ne; apply: count_atom_ne => //; exact: hmqv_m_Nmul. Qed.
-
-(** ** The key in extended exponents
-
-    [hmqv_K] raises the base [Y = X_b + m_b⋅P_b] to the scalar
-    [x_a + m_a⋅p_a], so its logarithms are products: for every base [b],
-
-        log b K = (log b X_b + log b P_b⋅m_b)⋅(x_a + m_a⋅p_a).
-
-    For well-formed peer keys, the base is [g] raised to the scalar
-    [x_b + m_b⋅p_b], so the two parties raise [g] to the same product of
-    scalars, in different orders ([hmqv_K_sym]). *)
-
-#[local] Lemma hmqv_s_neq0 m p x : hmqv_s m p x ≠ ∅.
+#[local] Lemma free_TSum2 h a b :
+  h ∉ atoms a → h ∉ atoms b → h ∉ atoms (TSum {[+ a; b +]}).
 Proof.
-move=> /(f_equal (SMS.count x)); rewrite /hmqv_s SMS.count_disj_union.
-rewrite !SMS.count_singleton SMS.count_empty bool_decide_eq_true_2 //.
-by case: bool_decide => /=; lia.
+move=> ha hb /atoms_TSum_sub [u [/SMS.elem_of_disj_union []
+  /SMS.elem_of_singleton -> hu]] //.
+Qed.
+
+#[local] Lemma free_TMul2 h a b :
+  h ∉ atoms a → h ∉ atoms b → h ∉ atoms (TMul {[+ a; b +]}).
+Proof.
+move=> ha hb /atoms_TMul_sub [u [/SMS.elem_of_disj_union []
+  /SMS.elem_of_singleton -> hu]] //.
+Qed.
+
+#[local] Lemma free_atom h a : negb (is_mod a) → h ≠ a → h ∉ atoms a.
+Proof. by move=> na ne; rewrite atoms_atom. Qed.
+
+#[local] Lemma free_zero h : h ∉ atoms (TSum ∅).
+Proof.
+by move=> /atoms_TSum_sub [u [/SMS.elem_of_count]]; rewrite SMS.count_empty.
+Qed.
+
+#[local] Lemma free_nonce t X P (n : nonce) : hmqv_m t X P ∉ atoms (TNonce n).
+Proof. exact: free_atom. Qed.
+
+#[local] Lemma free_hmqv_s t X P m (p x : nonce) :
+  hmqv_m t X P ≠ m → negb (is_mod m) → hmqv_m t X P ∉ atoms (hmqv_s m p x).
+Proof.
+move=> ne nm; apply: free_TSum2; first exact: free_nonce.
+by apply: free_TMul2; [exact: free_atom|exact: free_nonce].
+Qed.
+
+#[local] Lemma frac_hmqv_s m p x :
+  frac_of (hmqv_s m p x) =
+  Frac.add (frac_of x) (Frac.mul (frac_of m) (frac_of p)).
+Proof.
+by rewrite /hmqv_s frac_of_TSum Frac.ssum_disj_union !Frac.ssum_singleton
+  frac_of_TMul2.
+Qed.
+
+#[local] Lemma nonce_neq0 (n : nonce) : frac_of (TNonce n) ≠ Frac.zero.
+Proof. exact: atom_frac_neq0. Qed.
+
+#[local] Lemma mul_eq0_l (f r : tfrac) :
+  Frac.mul f r = Frac.zero → r ≠ Frac.zero → f = Frac.zero.
+Proof.
+move=> e nr; case: (decide (f = Frac.zero)) => // nf.
+by case: (Frac.mul_neq0 _ _ nf nr).
+Qed.
+
+#[local] Lemma mul_inj_r (f f' r : tfrac) :
+  r ≠ Frac.zero → Frac.mul f r = Frac.mul f' r → f = f'.
+Proof.
+move=> nr e.
+have e0 : Frac.mul (Frac.sub f f') r = Frac.zero.
+  transitivity (Frac.sub (Frac.mul f r) (Frac.mul f' r)); first ring.
+  by rewrite e; ring.
+have e1 := mul_eq0_l e0 nr.
+transitivity (Frac.add (Frac.sub f f') f'); first ring.
+by rewrite e1; ring.
+Qed.
+
+#[local] Lemma zeroE (u : term) : frac_of u = Frac.zero → u = TSum ∅.
+Proof. by move=> e; apply: frac_of_inj; rewrite e frac_of_TSum_empty. Qed.
+
+#[local] Lemma hmqv_s_neq0 t X P (p x : nonce) :
+  frac_of (hmqv_s (hmqv_m t X P) p x) ≠ Frac.zero.
+Proof.
+set m := hmqv_m t X P; rewrite frac_hmqv_s => e.
+have [ex _] : TNonce x = TSum ∅ ∧ TNonce p = TSum ∅.
+  apply: (frac_lin (h := m)); try exact: free_nonce; try exact: free_zero.
+  - exact: hmqv_m_Nmod.
+  - rewrite frac_of_TSum_empty.
+    transitivity (Frac.add (frac_of (TNonce x))
+                    (Frac.mul (frac_of m) (frac_of (TNonce p)))); first ring.
+    by rewrite e; ring.
+by move/(f_equal frac_of): ex; rewrite frac_of_TSum_empty; exact: nonce_neq0.
+Qed.
+
+(** ** The key formula *)
+
+#[local] Lemma log_TExp_g e :
+  negb (is_exp g) → negb (is_gmul g) → log g (TExp g e) = e.
+Proof. by move=> gNX gNm; rewrite log_TExp_atom // bool_decide_eq_true_2. Qed.
+
+#[local] Lemma log_hmqv_Y b t_b P_a P_b X_b :
+  log b (hmqv_Y t_b P_a P_b X_b) =
+  TSum {[+ log b X_b; TMul {[+ log b P_b; hmqv_m t_b X_b P_a +]} +]}.
+Proof. by rewrite log_TGMul2 log_TExp. Qed.
+
+#[local] Lemma log_hmqv_K b t_a t_b p_a x_a P_a X_a P_b X_b :
+  log b (hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b) =
+  TMul {[+ log b (hmqv_Y t_b P_a P_b X_b);
+           hmqv_s (hmqv_m t_a X_a P_b) p_a x_a +]}.
+Proof. exact: log_TExp. Qed.
+
+#[local] Lemma free_log_hmqv_Y t X P b t_b P_a P_b X_b :
+  hmqv_m t X P ∉ atoms (log b X_b) → hmqv_m t X P ∉ atoms (log b P_b) →
+  hmqv_m t X P ≠ hmqv_m t_b X_b P_a →
+  hmqv_m t X P ∉ atoms (log b (hmqv_Y t_b P_a P_b X_b)).
+Proof.
+move=> hX hP hm; rewrite log_hmqv_Y; apply: free_TSum2 hX _.
+by apply: free_TMul2 hP _; apply: free_atom; [exact: hmqv_m_Nmod|].
+Qed.
+
+#[local] Lemma free_log_hmqv_K t X P b t_a t_b (p_a x_a : nonce)
+    P_a X_a P_b X_b :
+  hmqv_m t X P ∉ atoms (log b X_b) → hmqv_m t X P ∉ atoms (log b P_b) →
+  hmqv_m t X P ≠ hmqv_m t_b X_b P_a → hmqv_m t X P ≠ hmqv_m t_a X_a P_b →
+  hmqv_m t X P ∉ atoms (log b (hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b)).
+Proof.
+move=> hX hP hB hA; rewrite log_hmqv_K.
+apply: free_TMul2; first exact: free_log_hmqv_Y.
+by apply: free_hmqv_s => //; exact: hmqv_m_Nmod.
 Qed.
 
 #[local] Lemma hmqv_Y_honest t_b P_a p_b x_b :
   hmqv_Y t_b P_a (TExp g p_b) (TExp g x_b)
-  = epow g (hmqv_s (hmqv_m t_b (TExp g x_b) P_a) p_b x_b).
-Proof. by rewrite /hmqv_s epow2 /hmqv_Y TExpA (comm (⊎) {[+ p_b +]}). Qed.
+  = TExp g (hmqv_s (hmqv_m t_b (TExp g x_b) P_a) p_b x_b).
+Proof.
+by rewrite /hmqv_Y TExpA /hmqv_s TExp_TSum2 (comm (⊎) {[+ p_b +]}).
+Qed.
 
 Lemma hmqv_K_sym t_a t_b p_a x_a p_b x_b :
   hmqv_K t_a t_b p_a x_a (TExp g p_a) (TExp g x_a) (TExp g p_b) (TExp g x_b)
   = hmqv_K t_b t_a p_b x_b (TExp g p_b) (TExp g x_b) (TExp g p_a) (TExp g x_a).
-Proof. by rewrite /hmqv_K !hmqv_Y_honest !epowA emul_comm. Qed.
-
-#[local] Lemma log_hmqv_Y b t_b P_a P_b X_b :
-  log b (hmqv_Y t_b P_a P_b X_b)
-  = log b X_b ⊎ emul (log b P_b) {[+ hmqv_m t_b X_b P_a +]}.
-Proof. by rewrite log_TGMul2 log_TExp. Qed.
-
-#[local] Lemma log_hmqv_K b t_a t_b p_a x_a P_a X_a P_b X_b :
-  log b (hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b)
-  = emul (log b (hmqv_Y t_b P_a P_b X_b)) (hmqv_s (hmqv_m t_a X_a P_b) p_a x_a).
-Proof. exact: log_epow. Qed.
-
-#[local] Lemma log_TExp_g e :
-  negb (is_exp g) → negb (is_gmul g) → log g (TExp g e) = {[+ e +]}.
-Proof. by move=> gNX gNm; rewrite log_TExp_atom // bool_decide_eq_true_2. Qed.
-
-(** *** Independence of the multipliers *)
-
-#[local] Lemma indep_log_hmqv_m t X P T :
-  tsize T < tsize (hmqv_m t X P) →
-  ∀ b, ehom (hmqv_m t X P) 0 (log b T).
-Proof. by move=> lt; apply: ehom_log_small; lia. Qed.
-
-Arguments indep_log_hmqv_m {t X P T} _ b.
-
-#[local] Lemma indep_log_TExp_g h b (n : nonce) :
-  negb (is_exp g) → negb (is_gmul g) → count h (TNonce n) = 0%Z →
-  ehom h 0 (log b (TExp g n)).
-Proof.
-move=> gNX gNm hn; rewrite log_TExp_atom //.
-case: (bool_decide (g = b)); first by rewrite ehom_singleton hn.
-exact: ehom_empty.
-Qed.
-
-(** Multiplication by the scalar is injective at zero: a highest monomial
-    survives one of its two shifts. *)
-#[local] Lemma hmqv_s_eq0 t X P (p x : nonce) s :
-  emul s (hmqv_s (hmqv_m t X P) p x) = ∅ → s = ∅.
-Proof.
-apply: (emul_binomial_eq0 (h := hmqv_m t X P)).
-by rewrite count_hmqv_m_nonce count_hmqv_m_e count_hmqv_m_diag; lia.
-Qed.
-
-#[local] Lemma hmqv_s_part t X P (p x p' x' : nonce) s r :
-  ehom (hmqv_m t X P) 0 s → ehom (hmqv_m t X P) 0 r →
-  emul s (hmqv_s (hmqv_m t X P) p x)
-    = emul r (hmqv_s (hmqv_m t X P) p' x') →
-  emul s {[+ TMul {[+ hmqv_m t X P; TNonce p +]} +]}
-    = emul r {[+ TMul {[+ hmqv_m t X P; TNonce p' +]} +]}.
-Proof.
-move=> hs hr E.
-have c0 (n : nonce) : ehom (hmqv_m t X P) 0 {[+ TNonce n +]}.
-  by rewrite ehom_singleton count_hmqv_m_nonce.
-have c1 (n : nonce) :
-    ehom (hmqv_m t X P) 1 {[+ TMul {[+ hmqv_m t X P; TNonce n +]} +]}.
-  by rewrite ehom_singleton count_hmqv_m_e count_hmqv_m_diag.
-apply: (ehom_split (h := hmqv_m t X P) (a := 0%Z) (b := 1%Z)
-  (s1 := emul s {[+ TNonce x +]}) (r1 := emul r {[+ TNonce x' +]})).
-- exact: ehom_emul hs (c0 _).
-- exact: ehom_emul hr (c0 _).
-- exact: ehom_emul hs (c1 _).
-- exact: ehom_emul hr (c1 _).
-- by [].
-- by rewrite -!emul_disj_union_r.
-Qed.
-
-#[local] Lemma indep_hmqv_s_ne t X P t' X' P' (p x : nonce) :
-  hmqv_m t X P ≠ hmqv_m t' X' P' →
-  ehom (hmqv_m t X P) 0 (hmqv_s (hmqv_m t' X' P') p x).
-Proof.
-move=> ne; apply: ehom_add; rewrite ehom_singleton.
-- by rewrite count_hmqv_m_nonce.
-- by rewrite count_hmqv_m_e count_hmqv_m_neq.
-Qed.
-
-Arguments indep_hmqv_s_ne {t X P t' X' P'} p x _.
-
-#[local] Lemma indep_log_hmqv_Y h b t_b P_a P_b X_b :
-  ehom h 0 (log b X_b) → ehom h 0 (log b P_b) →
-  count h (hmqv_m t_b X_b P_a) = 0%Z →
-  ehom h 0 (log b (hmqv_Y t_b P_a P_b X_b)).
-Proof.
-move=> hX hP hB; rewrite log_hmqv_Y; apply: ehom_add hX _.
-by apply: (ehom_emul hP); rewrite ehom_singleton hB.
-Qed.
-
-(* A key is independent of any other multiplier if its peer keys are. *)
-#[local] Lemma indep_log_hmqv_K t X P b t_a t_b (p_a x_a : nonce)
-    P_a X_a P_b X_b :
-  hmqv_m t X P ≠ hmqv_m t_a X_a P_b → hmqv_m t X P ≠ hmqv_m t_b X_b P_a →
-  ehom (hmqv_m t X P) 0 (log b X_b) →
-  ehom (hmqv_m t X P) 0 (log b P_b) →
-  ehom (hmqv_m t X P) 0 (log b (hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b)).
-Proof.
-move=> nA nB hX hP; rewrite log_hmqv_K.
-have hY := indep_log_hmqv_Y hX hP (count_hmqv_m_neq nB).
-exact: ehom_emul hY (indep_hmqv_s_ne _ _ nA).
-Qed.
-
-(** ** Group factors of the HMQV key
-
-    The HMQV formula guarantees the secrecy of the exchanged key.  To prove
-    this property, we need to reason about which factors of the Diffie-Hellman
-    group appear in the formula. *)
-
-#[local] Lemma exps_hmqv_ss t_a t_b (p_a p_b : nonce) P_a X_a X_b :
-  negb (is_exp g) → negb (is_gmul g) →
-  exps (hmqv_ss t_a t_b p_a P_a X_a p_b X_b)
-  = SMS.make
-      {[+ TNonce p_b; hmqv_m t_b X_b P_a; hmqv_m t_a X_a (TExp g p_b);
-          TNonce p_a +]}
-      ∅.
-Proof.
-move=> gNX gNm; rewrite /hmqv_ss (@exps_TExp_TMul g _ gNX gNm).
-  by rewrite !SMS.singleton_make !SMS.disj_union_make !(left_id ∅ (⊎)).
-by move=> u; repeat case/SMS.elem_of_disj_union;
-   move=> /SMS.elem_of_singleton ->.
-Qed.
-
-#[local] Lemma exps_hmqv_mixed t_b (p_b x_a : nonce) P_a X_b :
-  negb (is_exp g) → negb (is_gmul g) →
-  exps (TExp g (TMul {[+ TNonce p_b; hmqv_m t_b X_b P_a; TNonce x_a +]}))
-  = SMS.make {[+ TNonce p_b; hmqv_m t_b X_b P_a; TNonce x_a +]} ∅.
-Proof.
-move=> gNX gNm; rewrite (@exps_TExp_TMul g _ gNX gNm).
-  by rewrite !SMS.singleton_make !SMS.disj_union_make !(left_id ∅ (⊎)).
-by move=> u; repeat case/SMS.elem_of_disj_union;
-   move=> /SMS.elem_of_singleton ->.
-Qed.
-
-(** Whatever the peer's share [X_b], the HMQV key contains the mixed factor
-    [g^(p_b ⋅ m_b ⋅ x_a)] and the static-static factor
-    [g^(p_b ⋅ m_b ⋅ m_a ⋅ p_a)]: their exponents make up the part of degree 1
-    in [m_b] of its logarithm, which [X_b] is too small to cancel. *)
-
-#[local] Lemma TMul3 a b c :
-  TMul {[+ a; b; c +]} = TMul {[+ TMul {[+ a; b +]}; c +]}.
-Proof.
-by apply: count_inj => z _; rewrite !(count_TMul_disj_union, TMul_singleton).
-Qed.
-
-#[local] Lemma TMul4 a b c d :
-  TMul {[+ a; b; c; d +]} = TMul {[+ TMul {[+ a; b +]}; TMul {[+ c; d +]} +]}.
-Proof.
-apply: count_inj => z _; rewrite !(count_TMul_disj_union, TMul_singleton).
-lia.
-Qed.
-
-#[local] Lemma count_log_hmqv_K t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b e :
-  negb (is_exp g) → negb (is_gmul g) → t_a ≠ t_b →
-  count (hmqv_m t_b X_b P_a) e = 1%Z →
-  SMS.count e (log g (hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b))
-  = SMS.count e
-      {[+ TMul {[+ TNonce p_b; hmqv_m t_b X_b P_a; TNonce x_a +]};
-          TMul {[+ TNonce p_b; hmqv_m t_b X_b P_a; hmqv_m t_a X_a (TExp g p_b);
-                   TNonce p_a +]} +]}.
-Proof.
-move=> gNX gNm tab ce.
-have nBA : hmqv_m t_b X_b P_a ≠ hmqv_m t_a X_a (TExp g p_b).
-  by case/hmqv_m_inj => e' _; apply: tab; rewrite e'.
-have z : SMS.count e (emul (log g X_b)
-           (hmqv_s (hmqv_m t_a X_a (TExp g p_b)) p_a x_a)) = 0%Z.
-  have hX := indep_log_hmqv_m (tsize_hmqv_m_lt t_b X_b P_a) g.
-  apply: (ehom_count (ehom_emul hX (indep_hmqv_s_ne p_a x_a nBA))).
-  by rewrite ce; lia.
-rewrite log_hmqv_K log_hmqv_Y log_TExp_g // emul_singleton emul_disj_union_l.
-rewrite SMS.count_disj_union z Z.add_0_l /hmqv_s emul_disj_union_r.
-by rewrite !emul_singleton TMul3 TMul4.
-Qed.
-
-#[local] Lemma hmqv_K_gfactor t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b s :
-  negb (is_exp g) → negb (is_gmul g) →
-  let m_a := hmqv_m t_a X_a (TExp g p_b) in
-  let m_b := hmqv_m t_b X_b P_a in
-  t_a ≠ t_b →
-  s = TMul {[+ TNonce p_b; m_b; TNonce x_a +]} ∨
-  s = TMul {[+ TNonce p_b; m_b; m_a; TNonce p_a +]} →
-  TExp g s
-    ∈ SMS.pos (gfactors (hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b)).
-Proof.
-move=> gNX gNm /= tab Hs.
-have nba : hmqv_m t_b X_b P_a ≠ hmqv_m t_a X_a (TExp g p_b).
-  by case/hmqv_m_inj => e _; apply: tab; rewrite e.
-have ne : TMul {[+ TNonce p_b; hmqv_m t_b X_b P_a; TNonce x_a +]}
-          ≠ TMul {[+ TNonce p_b; hmqv_m t_b X_b P_a;
-                     hmqv_m t_a X_a (TExp g p_b); TNonce p_a +]}.
-  move=> /(f_equal (count (hmqv_m t_a X_a (TExp g p_b)))).
-  rewrite !(count_TMul_disj_union, TMul_singleton) count_hmqv_m_diag.
-  by rewrite !count_hmqv_m_nonce count_hmqv_m_neq //; exact: not_eq_sym nba.
-apply/gcount_gt0; rewrite -count_log // count_log_hmqv_K //; last first.
-  case: Hs => ->; rewrite !(count_TMul_disj_union, TMul_singleton).
-  - by rewrite count_hmqv_m_diag !count_hmqv_m_nonce.
-  - by rewrite count_hmqv_m_diag !count_hmqv_m_nonce count_hmqv_m_neq.
-rewrite SMS.count_disj_union !SMS.count_singleton.
-case: Hs => ->.
-- by rewrite bool_decide_eq_true_2 // bool_decide_eq_false_2.
-- by rewrite bool_decide_eq_false_2 ?bool_decide_eq_true_2.
-Qed.
-
-#[local] Lemma hmqv_key_gfactors t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b :
-  negb (is_exp g) → negb (is_gmul g) →
-  let m_b := hmqv_m t_b X_b P_a in
-  let ss := hmqv_ss t_a t_b p_a P_a X_a p_b X_b in
-  let K := hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b in
-  t_a ≠ t_b →
-  ss ∈ gfactors K
-  ∧ TExp g (TMul {[+ TNonce p_b; m_b; TNonce x_a +]}) ∈ gfactors K
-  ∧ {[+ TNonce p_a; TNonce p_b +]} ⊆ SMS.pos (exps ss).
-Proof.
-move=> gNX gNm m_b tab; do !split.
-- apply: SMS.elem_of_pos.
-  rewrite /hmqv_ss; apply: hmqv_K_gfactor => //; by right.
-- apply: SMS.elem_of_pos; apply: hmqv_K_gfactor => //; by left.
-- rewrite exps_hmqv_ss // SMS.pos_make_empty_r => x.
-  rewrite !MSet.count_disj_union !MSet.count_singleton.
-  by repeat case_bool_decide; lia.
-Qed.
-
-(** With an honest peer share, the ephemeral-ephemeral factor is in the key:
-    the logarithm of the key is a sum of four monomials with positive
-    coefficients, so none of them cancels.  This guarantees that the session
-    key remains secret when the ephemeral private keys are. *)
-
-#[local] Lemma hmqv_K_gfactor_eph t_a t_b (p_a x_a p_b x_b : nonce) P_a X_a :
-  negb (is_exp g) → negb (is_gmul g) →
-  TExp g (TMul {[+ TNonce x_b; TNonce x_a +]})
-    ∈ gfactors (hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) (TExp g x_b)).
-Proof.
-move=> gNX gNm; apply: SMS.elem_of_pos; apply/gcount_gt0.
-rewrite -count_log // log_hmqv_K log_hmqv_Y !log_TExp_g // emul_singleton.
-rewrite /hmqv_s !emul_disj_union_l !emul_disj_union_r !emul_singleton.
-rewrite !SMS.count_disj_union !SMS.count_singleton bool_decide_eq_true_2 //.
-by repeat case: (bool_decide _) => /=; lia.
-Qed.
+Proof. by rewrite /hmqv_K !hmqv_Y_honest !TExpA (comm (⊎)). Qed.
 
 (** If the shared secret [hmqv_K] degenerates to the group identity, then so
     does the base [hmqv_Y] the party exponentiates, whatever the (unvetted)
     peer keys [P_b] and [X_b] were. *)
-
-Lemma hmqv_K_unit t_a t_b p_a x_a P_a X_a P_b X_b :
+Lemma hmqv_K_unit t_a t_b (p_a x_a : nonce) P_a X_a P_b X_b :
   hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b = TGMul ∅ →
   hmqv_Y t_b P_a P_b X_b = TGMul ∅.
 Proof.
-move=> eK; apply: (epow_injl (@hmqv_s_neq0 (hmqv_m t_a X_a P_b) p_a x_a)).
-by rewrite [RHS]epow_unit; exact: eK.
+move=> eK; apply: log_eq0 => b; apply: zeroE.
+move/(f_equal (λ u, frac_of (log b u))): eK.
+rewrite /= log_unit log_hmqv_K frac_of_TMul2 frac_of_TSum_empty => e.
+exact: mul_eq0_l e (@hmqv_s_neq0 _ _ _ _ _).
 Qed.
 
 (** If two peer ephemerals [X_b], [X_b'] yield the same session key against the
     same claimed [P_b], the initiator exponentiated the same base [hmqv_Y]: the
-    key determines that base.  (Together with [hmqv_K_unit] for the degenerate
-    key, this is the initiator-side injectivity in its own, unvetted peer
-    input.) *)
-
-Lemma hmqv_K_inj_base t_a t_b p_a x_a P_a X_a P_b X_b X_b' :
+    key determines that base. *)
+Lemma hmqv_K_inj_base t_a t_b (p_a x_a : nonce) P_a X_a P_b X_b X_b' :
   hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b
   = hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b' →
   hmqv_Y t_b P_a P_b X_b = hmqv_Y t_b P_a P_b X_b'.
-Proof. exact: epow_injl (@hmqv_s_neq0 _ _ _). Qed.
+Proof.
+move=> eK; apply: log_inj => b; apply: frac_of_inj.
+move/(f_equal (λ u, frac_of (log b u))): eK.
+rewrite /= !log_hmqv_K !frac_of_TMul2.
+exact: mul_inj_r (@hmqv_s_neq0 _ _ _ _ _).
+Qed.
+
+Lemma hmqv_K_neq_unit t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b :
+  negb (is_exp g) → negb (is_gmul g) →
+  hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b ≠ TGMul ∅.
+Proof.
+move=> gNX gNm /hmqv_K_unit /(f_equal (log g)).
+rewrite log_unit log_hmqv_Y log_TExp_g //.
+set m := hmqv_m t_b X_b P_a => e.
+have [_ ep] : log g X_b = TSum ∅ ∧ TNonce p_b = TSum ∅.
+  apply: (frac_lin (h := m)); try exact: free_zero.
+  - exact: hmqv_m_Nmod.
+  - exact: log_small (tsize_hmqv_m_lt _ _ _).
+  - exact: free_nonce.
+  - move/(f_equal frac_of): e.
+    rewrite frac_of_TSum Frac.ssum_disj_union !Frac.ssum_singleton.
+    by rewrite frac_of_TMul2 !frac_of_TSum_empty => ->; ring.
+by move/(f_equal frac_of): ep; rewrite frac_of_TSum_empty; exact: nonce_neq0.
+Qed.
+
+(** *** Comparing coefficients of a multiplier *)
+
+(** A multiplier that the base and the other key avoid: its coefficient
+    [y⋅p_a] vanishes, so the base is [1]. *)
+#[local] Lemma hmqv_K_own t_a t_b (p_a x_a : nonce) P_a X_a P_b X_b K' :
+  (∀ b, hmqv_m t_a X_a P_b ∉ atoms (log b (hmqv_Y t_b P_a P_b X_b))) →
+  (∀ b, hmqv_m t_a X_a P_b ∉ atoms (log b K')) →
+  hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b = K' →
+  hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b = TGMul ∅.
+Proof.
+move=> hY hK' eK.
+set m := hmqv_m t_a X_a P_b in hY hK' eK *.
+enough (E : hmqv_Y t_b P_a P_b X_b = TGMul ∅).
+  by rewrite /hmqv_K E TExp_gunit.
+apply: log_eq0 => b.
+set y := log b (hmqv_Y t_b P_a P_b X_b) in hY *.
+have [_ e] : TMul {[+ y; TNonce x_a +]} = log b K' ∧
+             TMul {[+ y; TNonce p_a +]} = TSum ∅.
+  apply: (frac_lin (h := m)).
+  - exact: hmqv_m_Nmod.
+  - by apply: free_TMul2 (hY b) _; exact: free_nonce.
+  - by apply: free_TMul2 (hY b) _; exact: free_nonce.
+  - exact: hK'.
+  - exact: free_zero.
+  - move/(f_equal (λ u, frac_of (log b u))): eK.
+    rewrite /= log_hmqv_K -/m -/y frac_of_TMul2 frac_hmqv_s => <-.
+    by rewrite !frac_of_TMul2 frac_of_TSum_empty; ring.
+apply: zeroE; move/(f_equal frac_of): e.
+rewrite frac_of_TMul2 frac_of_TSum_empty => e.
+exact: mul_eq0_l e (@nonce_neq0 _).
+Qed.
+
+(** An unmatched peer multiplier that the other key and the claimed peer key
+    avoid: its coefficient [β⋅σ] vanishes, so the claimed key is [1]. *)
+#[local] Lemma hmqv_K_peer t_a t_b (p_a x_a : nonce) P_a X_a P_b X_b K' :
+  t_a ≠ t_b →
+  (∀ b, hmqv_m t_b X_b P_a ∉ atoms (log b P_b)) →
+  (∀ b, hmqv_m t_b X_b P_a ∉ atoms (log b K')) →
+  hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b = K' → P_b = TGMul ∅.
+Proof.
+move=> tab hP hK' eK; apply: log_eq0 => b.
+set m := hmqv_m t_b X_b P_a in hP hK' eK *.
+set s := hmqv_s (hmqv_m t_a X_a P_b) p_a x_a.
+have hs : m ∉ atoms s.
+  apply: free_hmqv_s; last exact: hmqv_m_Nmod.
+  by case/hmqv_m_inj => e _; apply: tab; rewrite e.
+have hX : m ∉ atoms (log b X_b) by apply: log_small; exact: tsize_hmqv_m_lt.
+have [_ e] : TMul {[+ log b X_b; s +]} = log b K' ∧
+             TMul {[+ log b P_b; s +]} = TSum ∅.
+  apply: (frac_lin (h := m)).
+  - exact: hmqv_m_Nmod.
+  - exact: free_TMul2.
+  - exact: free_TMul2 (hP b) hs.
+  - exact: hK'.
+  - exact: free_zero.
+  - move/(f_equal (λ u, frac_of (log b u))): eK.
+    rewrite /= log_hmqv_K log_hmqv_Y -/m -/s => <-.
+    rewrite !frac_of_TMul2 frac_of_TSum Frac.ssum_disj_union.
+    by rewrite !Frac.ssum_singleton frac_of_TMul2 frac_of_TSum_empty; ring.
+apply: zeroE; move/(f_equal frac_of): e.
+rewrite frac_of_TMul2 frac_of_TSum_empty => e.
+exact: mul_eq0_l e (@hmqv_s_neq0 _ _ _ _ _).
+Qed.
+
+
+#[local] Lemma TExp_unit_inv t e :
+  frac_of e ≠ Frac.zero → TExp t e = TGMul ∅ → t = TGMul ∅.
+Proof.
+move=> ne et; apply: log_eq0 => b; apply: zeroE.
+move/(f_equal (λ u, frac_of (log b u))): et.
+rewrite /= log_unit log_TExp frac_of_TMul2 frac_of_TSum_empty => e'.
+exact: mul_eq0_l e' ne.
+Qed.
 
 (** A non-trivial session key does NOT bind an *unvetted* peer long-term key.
     Take a degenerate [P_b = 1] on one side and, on the other, a reflected
@@ -475,8 +411,7 @@ Proof. exact: epow_injl (@hmqv_s_neq0 _ _ _). Qed.
     the same two scalars, in different orders.  Then two distinct peer-key
     pairs produce the same key, which is moreover [≠ 1].  So excluding a
     trivial key does not suffice to bind an unvetted peer; the collision uses
-    [P_b = 1], and excluding that too recovers injectivity ([hmqv_K_inj]). *)
-
+    [P_b = 1], and excluding that too gives the binding of [hmqv_K_inj]. *)
 Lemma hmqv_K_inj_counterexample t_a t_b (p_a x_a : nonce) P_a X_a :
   negb (is_gmul g) →
   let m_a  := hmqv_m t_a X_a (TGMul ∅) in
@@ -484,300 +419,155 @@ Lemma hmqv_K_inj_counterexample t_a t_b (p_a x_a : nonce) P_a X_a :
   let m_b' := hmqv_m t_b X_b' P_a in
   let P_b' := TExp g (TMul {[+ m_a; TNonce p_a; TInv m_b' +]}) in
   let m_a' := hmqv_m t_a X_a P_b' in
-  let X_b  := epow g (hmqv_s m_a' p_a x_a) in
+  let X_b  := TExp g (hmqv_s m_a' p_a x_a) in
   hmqv_K t_a t_b p_a x_a P_a X_a (TGMul ∅) X_b
     = hmqv_K t_a t_b p_a x_a P_a X_a P_b' X_b'
   ∧ hmqv_K t_a t_b p_a x_a P_a X_a (TGMul ∅) X_b ≠ TGMul ∅.
 Proof.
 move=> gNm m_a X_b' m_b' P_b' m_a' X_b.
+have nb : frac_of m_b' ≠ Frac.zero.
+  by apply: atom_frac_neq0; exact: hmqv_m_Nmod.
 have HP : TExp P_b' m_b' = TExp g (TMul {[+ m_a; TNonce p_a +]}).
-  rewrite /P_b' TExpA; congr TExp.
-  apply: count_inj => z _.
-  by rewrite !(count_TMul_disj_union, TMul_singleton) count_TInv; lia.
+  rewrite /P_b' TExpA; congr TExp; apply: frac_of_inj.
+  rewrite !frac_of_TMul2 frac_of_TMul Frac.sprod_disj_union; last first.
+    move=> x _ /SMS.elem_of_singleton ->.
+    exact: frac_of_TInv_neq0.
+  rewrite Frac.sprod_pair Frac.sprod_singleton frac_of_TInv.
+  by field.
 have HY1 : hmqv_Y t_b P_a (TGMul ∅) X_b = X_b.
   by rewrite /hmqv_Y TExp_gunit TGMul_unit_r.
+have HY2 : hmqv_Y t_b P_a P_b' X_b' = TExp g (hmqv_s m_a p_a x_a).
+  by rewrite /hmqv_Y -/m_b' HP /hmqv_s TExp_TSum2.
 split.
-- have HY2 : hmqv_Y t_b P_a P_b' X_b' = epow g (hmqv_s m_a p_a x_a).
-    by rewrite /hmqv_Y -/m_b' HP /hmqv_s epow2.
-  by rewrite /hmqv_K -/m_a -/m_a' HY1 HY2 /X_b !epowA emul_comm.
-- move=> /hmqv_K_unit; rewrite HY1 => E; apply: (Ngmul_neq_unit gNm).
-  apply: (epow_injl (@hmqv_s_neq0 m_a' p_a x_a)).
-  by rewrite [RHS]epow_unit; exact: E.
+- by rewrite /hmqv_K -/m_a -/m_a' HY1 HY2 /X_b !TExpA (comm (⊎)).
+- move=> /hmqv_K_unit; rewrite HY1 => /TExp_unit_inv E.
+  exact: (Ngmul_neq_unit gNm) (E (@hmqv_s_neq0 _ _ _ _ _)).
 Qed.
 
-(** ** Binding peer keys
+(** *** Binding the own multiplier
 
-    The session key binds both of the peer's public keys, provided that the key
-    is not the identity and that neither long-term key is.  Both conditions are
-    needed: the key is the identity exactly when its base is ([hmqv_K_unit]),
-    and [hmqv_K_inj_counterexample] collides two keys [≠ 1] using [P_b = 1].
-    The two keys may come from different initiators: the key binds all four
-    public inputs ([hmqv_K_inj_gen]), hence, for well-formed initiator keys, the
-    initiator's private keys as well ([hmqv_K_inj]).
+    Equal keys of the same role have the same own multiplier: otherwise
+    the largest multiplier is unmatched, and every public input is smaller
+    than the multiplier that hashes it. *)
 
-    We compare the logarithms of two equal keys: for every base [b],
-
-        (α + β⋅m_b)⋅(x_a + m_a⋅p_a) = (α' + β'⋅m_b')⋅(x_a' + m_a'⋅p_a'),
-
-    where [α = log b X_b], [β = log b P_b], and so on. Choose the largest
-    of the four multipliers. All four coefficients are independent of it,
-    since every public input is smaller than the multiplier hashing it.
-
-    - If the largest is [m_a], its nonzero linear coefficient forces
-      [m_a = m_a'], hence [β = β']. Comparing those coefficients leaves
-      an independent remainder equal to a multiple of
-      [m_b⋅p_a - m_b'⋅p_a']. If [m_b ≠ m_b'], choose the larger, say [m_b],
-      and substitute [m_b := m_b'⋅p_a'/p_a]. The remainder vanishes;
-      cancellation then forces [β = 0], contradicting [P_b ≠ 1].
-      Thus [m_b = m_b'] as well ([hmqv_Y_inj], [emul_linear]).
-
-    - If the largest is [m_b], its nonzero linear coefficient forces
-      [m_b = m_b']. Comparing those coefficients gives
-      [β⋅(x_a + m_a⋅p_a) = β'⋅(x_a' + m_a'⋅p_a')]. If [m_a ≠ m_a'],
-      the larger has a nonzero linear coefficient on only one side,
-      a contradiction.
-
-    Both hashes agree, so all four public inputs agree. *)
-
-Lemma hmqv_K_neq_unit t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b :
-  negb (is_exp g) → negb (is_gmul g) →
-  hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b ≠ TGMul ∅.
-Proof.
-move=> gNX gNm /hmqv_K_unit /(f_equal (log g)).
-rewrite log_unit log_hmqv_Y log_TExp_g // emul_singleton.
-set e := TMul {[+ TNonce p_b; hmqv_m t_b X_b P_a +]}.
-have ce : SMS.count e (log g X_b) = 0%Z.
-  apply: (ehom_count (indep_log_hmqv_m (tsize_hmqv_m_lt t_b X_b P_a) g)).
-  by rewrite /e count_TMul2 count_hmqv_m_nonce count_hmqv_m_diag; lia.
-move=> /(f_equal (SMS.count e)).
-rewrite SMS.count_disj_union ce SMS.count_singleton SMS.count_empty.
-by rewrite bool_decide_eq_true_2.
-Qed.
-
-(** Comparing the linear coefficient of the party's own multiplier. *)
-#[local] Lemma hmqv_K_own t_a t_b (p_a x_a : nonce) P_a X_a P_b X_b K' :
-  (∀ b, ehom (hmqv_m t_a X_a P_b) 0 (log b (hmqv_Y t_b P_a P_b X_b))) →
-  (∀ b, ehom (hmqv_m t_a X_a P_b) 0 (log b K')) →
-  hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b = K' →
-  hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b = TGMul ∅.
-Proof.
-move=> hY hK' eK.
-enough (E : hmqv_Y t_b P_a P_b X_b = TGMul ∅).
-  by rewrite /hmqv_K E epow_unit.
-apply: log_eq0 => b.
-have E := f_equal (log b) eK; rewrite log_hmqv_K /hmqv_s in E.
-apply: (ehom_binomial_const (hY b) (hK' b) (count_hmqv_m_nonce _ _ _ _) _ E).
-by rewrite count_hmqv_m_e count_hmqv_m_diag.
-Qed.
-
-(** An unmatched peer multiplier has a nonzero linear coefficient unless
-    the claimed peer long-term key is the identity. *)
-#[local] Lemma hmqv_K_peer t_a t_b (p_a x_a : nonce) P_a X_a P_b X_b K' :
-  t_a ≠ t_b →
-  (∀ b, ehom (hmqv_m t_b X_b P_a) 0 (log b P_b)) →
-  (∀ b, ehom (hmqv_m t_b X_b P_a) 0 (log b K')) →
-  hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b = K' → P_b = TGMul ∅.
-Proof.
-move=> tab hP hK' eK; apply: log_eq0 => b.
-have nBA : hmqv_m t_b X_b P_a ≠ hmqv_m t_a X_a P_b.
-  by case/hmqv_m_inj => e _; apply: tab; rewrite e.
-have hσ := indep_hmqv_s_ne p_a x_a nBA.
-have hX := indep_log_hmqv_m (tsize_hmqv_m_lt t_b X_b P_a) b.
-have hB : ehom (hmqv_m t_b X_b P_a) 1 {[+ hmqv_m t_b X_b P_a +]}.
-  by rewrite ehom_singleton count_hmqv_m_diag.
-apply: (emul1_eq0 (e := hmqv_m t_b X_b P_a)).
-apply: (hmqv_s_eq0 (t := t_a) (X := X_a) (P := P_b) (p := p_a) (x := x_a)).
-(* The linear part in [m_b]. *)
-apply: (ehom_split (h := hmqv_m t_b X_b P_a) (a := 0%Z) (b := 1%Z)
-  (s1 := emul (log b X_b) (hmqv_s (hmqv_m t_a X_a P_b) p_a x_a))
-  (r1 := log b K')).
-- exact: ehom_emul hX hσ.
-- exact: hK'.
-- exact: ehom_emul (ehom_emul (hP b) hB) hσ.
-- exact: ehom_empty.
-- by [].
-- by rewrite (right_id ∅ (⊎)) -eK log_hmqv_K log_hmqv_Y emul_disj_union_l.
-Qed.
-
-(* Substitute [m_b := m_b'⋅p_a'/p_a] to annihilate the difference of
-   shifts of [β = log b P_b]; the independent remainder is unchanged. *)
-#[local] Lemma hmqv_Y_inj t_a t_b X_a P_b (p_a p_a' : nonce) P_a X_b P_a' X_b' :
-  t_a ≠ t_b → P_b ≠ TGMul ∅ →
-  tsize (hmqv_m t_b X_b' P_a') ≤ tsize (hmqv_m t_b X_b P_a) →
-  (∀ b,
-    emul (log b (hmqv_Y t_b P_a P_b X_b))
-      {[+ TMul {[+ hmqv_m t_a X_a P_b; TNonce p_a +]} +]}
-    = emul (log b (hmqv_Y t_b P_a' P_b X_b'))
-        {[+ TMul {[+ hmqv_m t_a X_a P_b; TNonce p_a' +]} +]}) →
-  hmqv_m t_b X_b P_a = hmqv_m t_b X_b' P_a'.
-Proof.
-move=> tab nP le part.
-case: (decide (hmqv_m t_b X_b P_a = hmqv_m t_b X_b' P_a')) => // nB.
-have nBA X P : hmqv_m t_b X P ≠ hmqv_m t_a X_a P_b.
-  by case/hmqv_m_inj => e _; apply: tab; rewrite e.
-have hX X P : tsize X < tsize (hmqv_m t_b X P) →
-    tsize (hmqv_m t_b X P) ≤ tsize (hmqv_m t_b X_b P_a) →
-    ∀ b (p : nonce),
-    ehom (hmqv_m t_b X_b P_a) 0 (emul (log b X) {[+ TMul {[+ hmqv_m t_a X_a P_b; TNonce p +]} +]}).
-  move=> lX lB b p.
-  have hL : ehom (hmqv_m t_b X_b P_a) 0 (log b X).
-    by apply: indep_log_hmqv_m; lia.
-  apply: (ehom_emul hL).
-  by rewrite ehom_singleton count_hmqv_m_e count_hmqv_m_neq.
-case: nP; apply: log_eq0 => b; move: (part b).
-rewrite !log_hmqv_Y !emul_disj_union_l !emul1A => E.
-apply: (emul_linear (h := hmqv_m t_b X_b P_a) _ _ _ _ _ E).
-- exact: hmqv_m_Nmul.
-- by rewrite count_hmqv_m_e (count_hmqv_m_neq (nBA _ _)).
-- by rewrite count_TMul2 count_hmqv_m_e (count_hmqv_m_neq nB)
-    (count_hmqv_m_neq (nBA _ _)).
-- by apply: hX; [exact: tsize_hmqv_m_lt|].
-- by apply: hX; [exact: tsize_hmqv_m_lt|].
-Qed.
-
-#[local] Lemma hmqv_K_inj_maxA t_a t_b (p_a x_a p_a' x_a' : nonce)
+#[local] Lemma hmqv_K_maxA t_a t_b (p_a x_a p_a' x_a' : nonce)
     P_a X_a P_b X_b P_a' X_a' P_b' X_b' :
-  t_a ≠ t_b → P_b ≠ TGMul ∅ →
+  t_a ≠ t_b →
+  hmqv_m t_a X_a P_b ≠ hmqv_m t_a X_a' P_b' →
   tsize (hmqv_m t_a X_a' P_b') ≤ tsize (hmqv_m t_a X_a P_b) →
   tsize (hmqv_m t_b X_b P_a) ≤ tsize (hmqv_m t_a X_a P_b) →
   tsize (hmqv_m t_b X_b' P_a') ≤ tsize (hmqv_m t_a X_a P_b) →
   hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b ≠ TGMul ∅ →
   hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b
-  = hmqv_K t_a t_b p_a' x_a' P_a' X_a' P_b' X_b' →
-  P_a = P_a' ∧ X_a = X_a' ∧ P_b = P_b' ∧ X_b = X_b'.
+  = hmqv_K t_a t_b p_a' x_a' P_a' X_a' P_b' X_b' → False.
 Proof.
-move=> tab nP lA' lB lB' nK eK.
-have lP' := tsize_hmqv_m_lt2 t_a X_a' P_b'.
-have lX  := tsize_hmqv_m_lt t_b X_b P_a.
-have lX' := tsize_hmqv_m_lt t_b X_b' P_a'.
-have hY Q Z b :
-    tsize (hmqv_m t_b Z Q) ≤ tsize (hmqv_m t_a X_a P_b) →
-    ehom (hmqv_m t_a X_a P_b) 0 (log b (hmqv_Y t_b Q P_b Z)).
-  move=> le; apply: indep_log_hmqv_Y.
-  - by apply: indep_log_hmqv_m; have := tsize_hmqv_m_lt t_b Z Q; lia.
-  - by apply: indep_log_hmqv_m; have := tsize_hmqv_m_lt2 t_a X_a P_b; lia.
-  - by apply: count_hmqv_m_neq; case/hmqv_m_inj.
-have eA : hmqv_m t_a X_a P_b = hmqv_m t_a X_a' P_b'.
-  case: (decide (hmqv_m t_a X_a P_b = hmqv_m t_a X_a' P_b')) => // nA.
-  case: nK; apply: (hmqv_K_own (λ b, hY _ _ b lB) _ eK) => b.
-  apply: indep_log_hmqv_K.
-  - exact: nA.
-  - by case/hmqv_m_inj.
-  - by apply: indep_log_hmqv_m; lia.
-  - by apply: indep_log_hmqv_m; lia.
-case/hmqv_m_inj: (eA) => _ [eXa eP]; subst X_a' P_b'.
-(* Compare the linear parts in [m_a]. *)
-have part b :
-    emul (log b (hmqv_Y t_b P_a P_b X_b))
-      {[+ TMul {[+ hmqv_m t_a X_a P_b; TNonce p_a +]} +]}
-    = emul (log b (hmqv_Y t_b P_a' P_b X_b'))
-        {[+ TMul {[+ hmqv_m t_a X_a P_b; TNonce p_a' +]} +]}.
-  apply: (@hmqv_s_part t_a X_a P_b p_a x_a p_a' x_a' _ _
-    (hY _ _ b lB) (hY _ _ b lB')).
-  by move/(f_equal (log b)): eK; rewrite !log_hmqv_K.
-have [eXb ePa] : X_b = X_b' ∧ P_a = P_a'.
-  case: (Nat.le_ge_cases (tsize (hmqv_m t_b X_b' P_a'))
-                         (tsize (hmqv_m t_b X_b P_a))) => le.
-  - by case/hmqv_m_inj: (hmqv_Y_inj tab nP le part) => _ [-> ->].
-  - have part' b := eq_sym (part b).
-    by case/hmqv_m_inj: (hmqv_Y_inj tab nP le part') => _ [-> ->].
-by subst.
+move=> tab nA lA' lB lB' nK eK.
+have tags X P X' P' : hmqv_m t_a X P ≠ hmqv_m t_b X' P' by case/hmqv_m_inj.
+have := tsize_hmqv_m_lt t_b X_b P_a; have := tsize_hmqv_m_lt t_b X_b' P_a'.
+have := tsize_hmqv_m_lt2 t_a X_a P_b; have := tsize_hmqv_m_lt2 t_a X_a' P_b'.
+move=> lP' lP lX' lX.
+apply: nK; apply: (hmqv_K_own _ _ eK) => b.
+- by apply: free_log_hmqv_Y; [apply: log_small; lia|apply: log_small; lia|].
+- apply: free_log_hmqv_K => //; by apply: log_small; lia.
 Qed.
 
-#[local] Lemma hmqv_K_inj_maxB t_a t_b (p_a x_a p_a' x_a' : nonce)
+#[local] Lemma hmqv_K_maxB t_a t_b (p_a x_a p_a' x_a' : nonce)
     P_a X_a P_b X_b P_a' X_a' P_b' X_b' :
   t_a ≠ t_b → P_b ≠ TGMul ∅ → P_b' ≠ TGMul ∅ →
+  hmqv_m t_a X_a P_b ≠ hmqv_m t_a X_a' P_b' →
   tsize (hmqv_m t_a X_a P_b) ≤ tsize (hmqv_m t_b X_b P_a) →
   tsize (hmqv_m t_a X_a' P_b') ≤ tsize (hmqv_m t_b X_b P_a) →
   tsize (hmqv_m t_b X_b' P_a') ≤ tsize (hmqv_m t_b X_b P_a) →
   hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b
-  = hmqv_K t_a t_b p_a' x_a' P_a' X_a' P_b' X_b' →
-  P_a = P_a' ∧ X_a = X_a' ∧ P_b = P_b' ∧ X_b = X_b'.
+  = hmqv_K t_a t_b p_a' x_a' P_a' X_a' P_b' X_b' → False.
 Proof.
-move=> tab nP nP' lA lA' lB' eK.
-have lP  := tsize_hmqv_m_lt2 t_a X_a P_b.
-have lP' := tsize_hmqv_m_lt2 t_a X_a' P_b'.
+move=> tab nP nP' nA lA lA' lB' eK.
+have tags X P X' P' : hmqv_m t_a X P ≠ hmqv_m t_b X' P' by case/hmqv_m_inj.
+have lX := tsize_hmqv_m_lt t_b X_b P_a.
 have lX' := tsize_hmqv_m_lt t_b X_b' P_a'.
-have nAB X P X' P' : hmqv_m t_a X P ≠ hmqv_m t_b X' P' by case/hmqv_m_inj.
-have hP b : ehom (hmqv_m t_b X_b P_a) 0 (log b P_b).
-  by apply: indep_log_hmqv_m; lia.
-have hP' b : ehom (hmqv_m t_b X_b P_a) 0 (log b P_b').
-  by apply: indep_log_hmqv_m; lia.
-have eB : hmqv_m t_b X_b P_a = hmqv_m t_b X_b' P_a'.
-  case: (decide (hmqv_m t_b X_b P_a = hmqv_m t_b X_b' P_a')) => // nB.
-  case: nP; apply: (hmqv_K_peer tab hP _ eK) => b.
-  apply: indep_log_hmqv_K.
-  - exact: not_eq_sym (nAB _ _ _ _).
+have lP := tsize_hmqv_m_lt2 t_a X_a P_b.
+have lP' := tsize_hmqv_m_lt2 t_a X_a' P_b'.
+case: (decide (hmqv_m t_b X_b P_a = hmqv_m t_b X_b' P_a')) => [eB|nB];
+    last first.
+  apply: nP; apply: (hmqv_K_peer tab _ _ eK) => b.
+    by apply: log_small; lia.
+  apply: free_log_hmqv_K.
+  - by apply: log_small; lia.
+  - by apply: log_small; lia.
   - exact: nB.
-  - by apply: indep_log_hmqv_m; lia.
-  - exact: hP'.
+  - exact: not_eq_sym (tags _ _ _ _).
 case/hmqv_m_inj: (eB) => _ [eXb ePa]; subst X_b' P_a'.
-(* Compare the linear parts in [m_b]. *)
-have part b :
-    emul (emul (log b P_b) {[+ hmqv_m t_b X_b P_a +]})
-      (hmqv_s (hmqv_m t_a X_a P_b) p_a x_a)
-    = emul (emul (log b P_b') {[+ hmqv_m t_b X_b P_a +]})
-        (hmqv_s (hmqv_m t_a X_a' P_b') p_a' x_a').
-  have hX := indep_log_hmqv_m (tsize_hmqv_m_lt t_b X_b P_a) b.
-  have hσ1 := indep_hmqv_s_ne p_a x_a (not_eq_sym (nAB X_a P_b X_b P_a)).
-  have hσ2 := indep_hmqv_s_ne p_a' x_a' (not_eq_sym (nAB X_a' P_b' X_b P_a)).
-  have hB :
-      ehom (hmqv_m t_b X_b P_a) 1 {[+ hmqv_m t_b X_b P_a +]}.
-    by rewrite ehom_singleton count_hmqv_m_diag.
-  apply: (ehom_split (h := hmqv_m t_b X_b P_a) (a := 0%Z) (b := 1%Z)
-    (s1 := emul (log b X_b) (hmqv_s (hmqv_m t_a X_a P_b) p_a x_a))
-    (r1 := emul (log b X_b) (hmqv_s (hmqv_m t_a X_a' P_b') p_a' x_a'))).
-  - exact: ehom_emul hX hσ1.
-  - exact: ehom_emul hX hσ2.
-  - exact: ehom_emul (ehom_emul (hP b) hB) hσ1.
-  - exact: ehom_emul (ehom_emul (hP' b) hB) hσ2.
-  - by [].
-  - move/(f_equal (log b)): eK.
-    by rewrite !log_hmqv_K !log_hmqv_Y !emul_disj_union_l.
-(* Compare the linear coefficients in the larger of [m_a] and [m_a']. *)
+set B := hmqv_m t_b X_b P_a in eB lA lA' lB' lX *.
+set s := hmqv_s (hmqv_m t_a X_a P_b) p_a x_a.
+set s' := hmqv_s (hmqv_m t_a X_a' P_b') p_a' x_a'.
+(* The linear coefficients in [B] agree. *)
+have part b : TMul {[+ log b P_b; s +]} = TMul {[+ log b P_b'; s' +]}.
+  have hs : B ∉ atoms s.
+    apply: free_hmqv_s; [exact: not_eq_sym (tags _ _ _ _)|exact: hmqv_m_Nmod].
+  have hs' : B ∉ atoms s'.
+    apply: free_hmqv_s; [exact: not_eq_sym (tags _ _ _ _)|exact: hmqv_m_Nmod].
+  have hX : B ∉ atoms (log b X_b) by apply: log_small; lia.
+  have [_ e] : TMul {[+ log b X_b; s +]} = TMul {[+ log b X_b; s' +]} ∧
+               TMul {[+ log b P_b; s +]} = TMul {[+ log b P_b'; s' +]}.
+    apply: (frac_lin (h := B)).
+    - exact: hmqv_m_Nmod.
+    - exact: free_TMul2.
+    - by apply: free_TMul2 => //; apply: log_small; lia.
+    - exact: free_TMul2.
+    - by apply: free_TMul2 => //; apply: log_small; lia.
+    - move/(f_equal (λ u, frac_of (log b u))): eK.
+      rewrite /= !log_hmqv_K !log_hmqv_Y !frac_of_TMul2 !frac_of_TSum.
+      rewrite !Frac.ssum_disj_union !Frac.ssum_singleton !frac_of_TMul2.
+      rewrite ?frac_hmqv_s => e; rewrite /B.
+      by apply: (eq_trans _ (eq_trans e _)); ring.
+  exact: e.
+(* Comparing the linear coefficients in the larger own multiplier makes a
+   claimed peer key [1]. *)
 have key X P X' P' (p x p' x' : nonce) Q Q' :
     hmqv_m t_a X P ≠ hmqv_m t_a X' P' →
     tsize Q < tsize (hmqv_m t_a X P) → tsize Q' < tsize (hmqv_m t_a X P) →
-    (∀ b, emul (emul (log b Q) {[+ hmqv_m t_b X_b P_a +]})
-            (hmqv_s (hmqv_m t_a X P) p x)
-          = emul (emul (log b Q') {[+ hmqv_m t_b X_b P_a +]})
-              (hmqv_s (hmqv_m t_a X' P') p' x')) →
+    (∀ b, TMul {[+ log b Q; hmqv_s (hmqv_m t_a X P) p x +]}
+          = TMul {[+ log b Q'; hmqv_s (hmqv_m t_a X' P') p' x' +]}) →
     Q = TGMul ∅.
-  move=> nA lQ lQ' E; apply: log_eq0 => b.
-  have hQ R : tsize R < tsize (hmqv_m t_a X P) →
-      ehom (hmqv_m t_a X P) 0 (emul (log b R) {[+ hmqv_m t_b X_b P_a +]}).
-    move=> lt; apply: (ehom_emul (indep_log_hmqv_m lt b)).
-    by rewrite ehom_singleton (count_hmqv_m_neq (nAB _ _ _ _)).
-  apply: (emul1_eq0 (e := hmqv_m t_b X_b P_a)).
-  apply: (ehom_binomial_const (hQ _ lQ)
-    (ehom_emul (hQ _ lQ') (indep_hmqv_s_ne _ _ nA))
-    (count_hmqv_m_nonce _ _ _ _) _ (E b)).
-  by rewrite count_hmqv_m_e count_hmqv_m_diag.
-have eA : hmqv_m t_a X_a P_b = hmqv_m t_a X_a' P_b'.
-  case: (decide (hmqv_m t_a X_a P_b = hmqv_m t_a X_a' P_b')) => // nA.
-  case: (Nat.le_ge_cases (tsize (hmqv_m t_a X_a' P_b'))
-                         (tsize (hmqv_m t_a X_a P_b))) => le.
-  - case: nP; apply: (key _ _ _ _ p_a x_a p_a' x_a' P_b P_b' nA _ _ part); lia.
-  - case: nP'.
-    apply: (key _ _ _ _ p_a' x_a' p_a x_a P_b' P_b (not_eq_sym nA)); try lia.
-    by move=> b; rewrite part.
-by case/hmqv_m_inj: eA => _ [-> ->].
+  move=> nA' lQ lQ' E; apply: log_eq0 => b.
+  set A := hmqv_m t_a X P in nA' lQ lQ' E *.
+  have [_ e] : TMul {[+ log b Q; TNonce x +]} =
+               TMul {[+ log b Q'; hmqv_s (hmqv_m t_a X' P') p' x' +]} ∧
+               TMul {[+ log b Q; TNonce p +]} = TSum ∅.
+    apply: (frac_lin (h := A)).
+    - exact: hmqv_m_Nmod.
+    - by apply: free_TMul2; [apply: log_small|exact: free_nonce].
+    - by apply: free_TMul2; [apply: log_small|exact: free_nonce].
+    - apply: free_TMul2; first by apply: log_small.
+      by apply: free_hmqv_s; [|exact: hmqv_m_Nmod].
+    - exact: free_zero.
+    - move/(f_equal frac_of): (E b); rewrite !frac_of_TMul2 frac_hmqv_s => <-.
+      by rewrite frac_of_TSum_empty; ring.
+  apply: zeroE; move/(f_equal frac_of): e.
+  rewrite frac_of_TMul2 frac_of_TSum_empty => e.
+  exact: mul_eq0_l e (@nonce_neq0 _).
+case: (Nat.le_ge_cases (tsize (hmqv_m t_a X_a' P_b'))
+                       (tsize (hmqv_m t_a X_a P_b))) => le.
+- apply: nP.
+  by apply: (key _ _ _ _ p_a x_a p_a' x_a' P_b P_b' nA _ _ part); lia.
+- apply: nP'.
+  apply: (key _ _ _ _ p_a' x_a' p_a x_a P_b' P_b (not_eq_sym nA)); try lia.
+  by move=> b; rewrite part.
 Qed.
 
-#[local] Lemma hmqv_K_inj_gen t_a t_b (p_a x_a p_a' x_a' : nonce)
+#[local] Lemma hmqv_K_own_match t_a t_b (p_a x_a p_a' x_a' : nonce)
     P_a X_a P_b X_b P_a' X_a' P_b' X_b' :
   t_a ≠ t_b → P_b ≠ TGMul ∅ → P_b' ≠ TGMul ∅ →
   hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b ≠ TGMul ∅ →
   hmqv_K t_a t_b p_a x_a P_a X_a P_b X_b
   = hmqv_K t_a t_b p_a' x_a' P_a' X_a' P_b' X_b' →
-  P_a = P_a' ∧ X_a = X_a' ∧ P_b = P_b' ∧ X_b = X_b'.
+  hmqv_m t_a X_a P_b = hmqv_m t_a X_a' P_b'.
 Proof.
 move=> tab nP nP' nK eK.
+case: (decide (hmqv_m t_a X_a P_b = hmqv_m t_a X_a' P_b')) => // nA.
+exfalso.
 have nK' : hmqv_K t_a t_b p_a' x_a' P_a' X_a' P_b' X_b' ≠ TGMul ∅.
   by rewrite -eK.
-have sym : P_a' = P_a ∧ X_a' = X_a ∧ P_b' = P_b ∧ X_b' = X_b →
-    P_a = P_a' ∧ X_a = X_a' ∧ P_b = P_b' ∧ X_b = X_b'.
-  by case=> -> [-> [-> ->]].
 set a  := tsize (hmqv_m t_a X_a P_b).
 set a' := tsize (hmqv_m t_a X_a' P_b').
 set b  := tsize (hmqv_m t_b X_b P_a).
@@ -785,49 +575,156 @@ set b' := tsize (hmqv_m t_b X_b' P_a').
 have : (a' ≤ a ∧ b ≤ a ∧ b' ≤ a) ∨ (a ≤ a' ∧ b ≤ a' ∧ b' ≤ a') ∨
        (a ≤ b ∧ a' ≤ b ∧ b' ≤ b) ∨ (a ≤ b' ∧ a' ≤ b' ∧ b ≤ b') by lia.
 case=> [[h1 [h2 h3]]|[[h1 [h2 h3]]|[[h1 [h2 h3]]|[h1 [h2 h3]]]]].
-- exact: hmqv_K_inj_maxA tab nP h1 h2 h3 nK eK.
-- exact: sym (hmqv_K_inj_maxA tab nP' h1 h3 h2 nK' (eq_sym eK)).
-- exact: hmqv_K_inj_maxB tab nP nP' h1 h2 h3 eK.
-- exact: sym (hmqv_K_inj_maxB tab nP' nP h2 h1 h3 (eq_sym eK)).
+- exact: hmqv_K_maxA tab nA h1 h2 h3 nK eK.
+- exact: hmqv_K_maxA tab (not_eq_sym nA) h1 h3 h2 nK' (eq_sym eK).
+- exact: hmqv_K_maxB tab nP nP' nA h1 h2 h3 eK.
+- exact: hmqv_K_maxB tab nP' nP (not_eq_sym nA) h2 h1 h3 (eq_sym eK).
 Qed.
 
-Lemma hmqv_K_inj t_a t_b (p_a x_a p_a' x_a' : nonce)
-    P_b X_b P_b' X_b' :
+(** The key binds the private keys and the claimed peer long-term key of a
+    party with well-formed keys, though not the peer's ephemeral: a rogue
+    long-term key can make two peer ephemerals give the same key for the
+    same ephemeral private key.  Fresh ephemerals, or a vetted peer key
+    ([hmqv_K_inj_vetted]), bind the peer's ephemeral too. *)
+Lemma hmqv_K_inj t_a t_b (p_a x_a p_a' x_a' : nonce) P_b X_b P_b' X_b' :
   negb (is_exp g) → negb (is_gmul g) → t_a ≠ t_b →
   P_b ≠ TGMul ∅ → P_b' ≠ TGMul ∅ →
   hmqv_K t_a t_b p_a x_a (TExp g p_a) (TExp g x_a) P_b X_b ≠ TGMul ∅ →
   hmqv_K t_a t_b p_a x_a (TExp g p_a) (TExp g x_a) P_b X_b
   = hmqv_K t_a t_b p_a' x_a' (TExp g p_a') (TExp g x_a') P_b' X_b' →
-  p_a = p_a' ∧ x_a = x_a' ∧ P_b = P_b' ∧ X_b = X_b'.
+  p_a = p_a' ∧ x_a = x_a' ∧ P_b = P_b'.
 Proof.
 move=> gNX gNm tab nP nP' nK eK.
-have [ePa [eXa [-> ->]]] := hmqv_K_inj_gen tab nP nP' nK eK.
-move/(f_equal expo): ePa; rewrite !expo_TExp_expN //; case=> ->.
-by move/(f_equal expo): eXa; rewrite !expo_TExp_expN //; case=> ->.
+have gN1 := Ngmul_neq_unit gNm.
+have [_ [eX eP]] := hmqv_m_inj (hmqv_K_own_match tab nP nP' nK eK).
+move/(TExp_injr gN1): eX => - [] ex; subst x_a' P_b'.
+split; last by [].
+case: (decide (p_a = p_a')) => // np; exfalso.
+have tags X P X' P' : hmqv_m t_a X P ≠ hmqv_m t_b X' P' by case/hmqv_m_inj.
+have nB : hmqv_m t_b X_b (TExp g p_a) ≠ hmqv_m t_b X_b' (TExp g p_a').
+  by case/hmqv_m_inj => _ [_ /(TExp_injr gN1) [] e]; apply: np.
+have lX := tsize_hmqv_m_lt t_b X_b (TExp g p_a).
+have lX' := tsize_hmqv_m_lt t_b X_b' (TExp g p_a').
+have lP := tsize_hmqv_m_lt2 t_a (TExp g x_a) P_b.
+have : (tsize (hmqv_m t_b X_b (TExp g p_a)) ≤
+          tsize (hmqv_m t_a (TExp g x_a) P_b) ∧
+        tsize (hmqv_m t_b X_b' (TExp g p_a')) ≤
+          tsize (hmqv_m t_a (TExp g x_a) P_b)) ∨
+       (tsize (hmqv_m t_a (TExp g x_a) P_b) ≤
+          tsize (hmqv_m t_b X_b (TExp g p_a)) ∧
+        tsize (hmqv_m t_b X_b' (TExp g p_a')) ≤
+          tsize (hmqv_m t_b X_b (TExp g p_a))) ∨
+       (tsize (hmqv_m t_a (TExp g x_a) P_b) ≤
+          tsize (hmqv_m t_b X_b' (TExp g p_a')) ∧
+        tsize (hmqv_m t_b X_b (TExp g p_a)) ≤
+          tsize (hmqv_m t_b X_b' (TExp g p_a'))) by lia.
+case=> [[h1 h2]|[[h1 h2]|[h1 h2]]].
+- (* The own multiplier is the largest: comparing its coefficients cancels
+     the base. *)
+  apply: nK.
+  enough (E : hmqv_Y t_b (TExp g p_a) P_b X_b = TGMul ∅).
+    by rewrite /hmqv_K E TExp_gunit.
+  apply: log_eq0 => b.
+  have fy : hmqv_m t_a (TExp g x_a) P_b ∉
+            atoms (log b (hmqv_Y t_b (TExp g p_a) P_b X_b)).
+    apply: free_log_hmqv_Y; [apply: log_small; lia|exact: log_small|].
+    exact: tags.
+  have fy' : hmqv_m t_a (TExp g x_a) P_b ∉
+             atoms (log b (hmqv_Y t_b (TExp g p_a') P_b X_b')).
+    apply: free_log_hmqv_Y; [apply: log_small; lia|exact: log_small|].
+    exact: tags.
+  set A := hmqv_m t_a (TExp g x_a) P_b in fy fy' eK *.
+  set y := log b (hmqv_Y t_b (TExp g p_a) P_b X_b) in fy *.
+  set y' := log b (hmqv_Y t_b (TExp g p_a') P_b X_b') in fy' *.
+  have [e0 e1] : TMul {[+ y; TNonce x_a +]} = TMul {[+ y'; TNonce x_a +]} ∧
+                 TMul {[+ y; TNonce p_a +]} = TMul {[+ y'; TNonce p_a' +]}.
+    apply: (frac_lin (h := A)).
+    - exact: hmqv_m_Nmod.
+    - by apply: free_TMul2 => //; exact: free_nonce.
+    - by apply: free_TMul2 => //; exact: free_nonce.
+    - by apply: free_TMul2 => //; exact: free_nonce.
+    - by apply: free_TMul2 => //; exact: free_nonce.
+    - move/(f_equal (λ u, frac_of (log b u))): eK.
+      rewrite /= !log_hmqv_K -/A -/y -/y' !frac_of_TMul2 !frac_hmqv_s => e.
+      by apply: (eq_trans _ (eq_trans e _)); ring.
+  have eyy : frac_of y = frac_of y'.
+    move/(f_equal frac_of): e0; rewrite !frac_of_TMul2.
+    exact: mul_inj_r (@nonce_neq0 _).
+  apply: zeroE; move/(f_equal frac_of): e1; rewrite !frac_of_TMul2 -eyy => e1.
+  case: (decide (frac_of y = Frac.zero)) => // ny.
+  exfalso; apply: np.
+  have : frac_of (TNonce p_a) = frac_of (TNonce p_a').
+    rewrite (comm Frac.mul (frac_of y)) (comm Frac.mul (frac_of y)) in e1.
+    exact: mul_inj_r ny e1.
+  by move/frac_of_inj => - [].
+- (* The peer multiplier of the first key is the largest and unmatched. *)
+  apply: nP; apply: (hmqv_K_peer tab _ _ eK) => b.
+    by apply: log_small; lia.
+  apply: free_log_hmqv_K.
+  + by apply: log_small; lia.
+  + by apply: log_small; lia.
+  + exact: nB.
+  + exact: not_eq_sym (tags _ _ _ _).
+- (* The peer multiplier of the second key is the largest and unmatched. *)
+  apply: nP; apply: (hmqv_K_peer tab _ _ (eq_sym eK)) => b.
+    by apply: log_small; lia.
+  apply: free_log_hmqv_K.
+  + by apply: log_small; lia.
+  + by apply: log_small; lia.
+  + exact: not_eq_sym nB.
+  + exact: not_eq_sym (tags _ _ _ _).
 Qed.
 
-(** ** Identity binding when receiving messages
+Lemma hmqv_K_inj_vetted t_a t_b (p_a x_a p_a' x_a' p_b p_b' : nonce) X_b X_b' :
+  negb (is_exp g) → negb (is_gmul g) → t_a ≠ t_b →
+  hmqv_K t_a t_b p_a x_a (TExp g p_a) (TExp g x_a) (TExp g p_b) X_b
+  = hmqv_K t_a t_b p_a' x_a' (TExp g p_a') (TExp g x_a') (TExp g p_b') X_b' →
+  p_a = p_a' ∧ x_a = x_a' ∧ p_b = p_b' ∧ X_b = X_b'.
+Proof.
+move=> gNX gNm tab eK.
+have gN1 := Ngmul_neq_unit gNm.
+have nP (p : nonce) : TExp g p ≠ TGMul ∅.
+  exact: Ngmul_neq_unit (Ngmul_TExp gNm (monic_atom (TNonce p) I)).
+have [ep [ex eP]] :=
+  hmqv_K_inj gNX gNm tab (nP _) (nP _) (hmqv_K_neq_unit gNX gNm) eK.
+subst p_a' x_a'.
+move/(TExp_injr gN1): (eP) => - [] epb; subst p_b'.
+do 3!split=> //.
+have eY := hmqv_K_inj_base eK.
+set B := hmqv_m t_b X_b (TExp g p_a) in eY.
+set B' := hmqv_m t_b X_b' (TExp g p_a) in eY.
+case: (decide (B = B')) => [/hmqv_m_inj [_ [? _]] //|nB]; exfalso.
+move/(f_equal (log g)): eY; rewrite !log_hmqv_Y !log_TExp_g // -/B -/B' => eY.
+have lX := tsize_hmqv_m_lt t_b X_b (TExp g p_a).
+have lX' := tsize_hmqv_m_lt t_b X_b' (TExp g p_a).
+have key X X' (C C' : term) :
+    C ≠ C' → negb (is_mod C) → negb (is_mod C') → tsize C' ≤ tsize C →
+    tsize X < tsize C → tsize X' < tsize C' →
+    (∀ (n : nonce), C ≠ TNonce n) → (∀ (n : nonce), C' ≠ TNonce n) →
+    TSum {[+ log g X; TMul {[+ TNonce p_b; C +]} +]} =
+    TSum {[+ log g X'; TMul {[+ TNonce p_b; C' +]} +]} → False.
+  move=> nC mC mC' le lx lx' hC hC' E.
+  have [_ e] : log g X = TSum {[+ log g X'; TMul {[+ TNonce p_b; C' +]} +]} ∧
+               TNonce p_b = TSum ∅.
+    apply: (frac_lin (h := C)) => //.
+    - by apply: log_small; lia.
+    - by apply: free_atom => //; exact: hC.
+    - apply: free_TSum2; first by apply: log_small; lia.
+      apply: free_TMul2; first by apply: free_atom => //; exact: hC.
+      exact: free_atom.
+    - exact: free_zero.
+    - move/(f_equal frac_of): E.
+      rewrite !frac_of_TSum !Frac.ssum_disj_union !Frac.ssum_singleton.
+      rewrite Frac.ssum_empty !frac_of_TMul2 => e.
+      by apply: (eq_trans _ (eq_trans e _)); ring.
+  by move/(f_equal frac_of): e; rewrite frac_of_TSum_empty; exact: nonce_neq0.
+case: (Nat.le_ge_cases (tsize B') (tsize B)) => le.
+- by apply: (key X_b X_b' B B') => //; exact: hmqv_m_Nmod.
+- by apply: (key X_b' X_b B' B (not_eq_sym nB)) => //; exact: hmqv_m_Nmod.
+Qed.
 
-    Suppose that Alice and Bob are authenticating.  Each party knows that its
-    public keys [P] and [X] are of the form [g^p] and [g^x], but it cannot say
-    the same about the other party in general.  Thus, if Bob wants to prove some
-    message predicate involving the session (e.g., for the HMQV authenticator
-    hash), all it can say is that that session key was computed using his
-    private keys and Alice's potentially ill-formed public keys.  When Alice
-    receives this message, her perspective is the opposite: she knows that the
-    session key was computed using her private keys and Bob's potentially
-    ill-formed public keys.  The following set of lemmas, culminating in
-    [hmqv_K_inj'], allow the parties to agree on their identities.
 
-    The proof compares logarithms, as for [hmqv_K_inj].  The multipliers [m_a]
-    and [m_b] of the initiator's key have counterparts [m_a'] and [m_b'] in the
-    responder's key, computed with the same tags.  A multiplier that equals its
-    counterpart makes the keys it hashes well formed, so their logarithms
-    are independent of every multiplier. Choose the largest unmatched
-    multiplier: all public-input coefficients are independent of it, but
-    its linear coefficient occurs on only one side. That forces a key to
-    [1]: the session key if it is [m_a], its claimed peer key [P_b] if it is
-    [m_b] ([hmqv_K_cross_max]). *)
+(** ** Identity binding across roles *)
 
 #[local] Lemma hmqv_K_cross_max t_a t_b (p_a x_a p_b x_b : nonce)
     P_b X_b Q_a Y_a h :
@@ -849,32 +746,30 @@ Qed.
 Proof.
 move=> gNX gNm tab nP nK eK hA hB hh.
 have tags X X' Q Q' : hmqv_m t_a X Q ≠ hmqv_m t_b X' Q' by case/hmqv_m_inj.
-have honest b (n : nonce) : ehom h 0 (log b (TExp g n)).
-  apply: indep_log_TExp_g gNX gNm _.
-  by case: hh => [[-> _]|[-> _]]; exact: count_hmqv_m_nonce.
-have fX b : ehom h 0 (log b X_b).
+have hN (n : nonce) : h ≠ TNonce n by case: hh => [[-> _]|[-> _]].
+have honest b (n : nonce) : h ∉ atoms (log b (TExp g n)).
+  rewrite log_TExp_atom //; case: bool_decide; last exact: free_zero.
+  by apply: free_atom => //; exact: hN.
+have fX b : h ∉ atoms (log b X_b).
   case: (hB) => [/hmqv_m_inj [_ [-> _]]|[lB _]]; first exact: honest.
-  apply: ehom_log_small _ b.
-  by have := tsize_hmqv_m_lt t_b X_b (TExp g p_a); lia.
-have fP b : ehom h 0 (log b P_b).
+  by apply: log_small; have := tsize_hmqv_m_lt t_b X_b (TExp g p_a); lia.
+have fP b : h ∉ atoms (log b P_b).
   case: (hA) => [/hmqv_m_inj [_ [_ ->]]|[lA _]]; first exact: honest.
-  apply: ehom_log_small _ b.
-  by have := tsize_hmqv_m_lt2 t_a (TExp g x_a) P_b; lia.
-have fY b : ehom h 0 (log b Y_a).
+  by apply: log_small; have := tsize_hmqv_m_lt2 t_a (TExp g x_a) P_b; lia.
+have fY b : h ∉ atoms (log b Y_a).
   case: (hA) => [/hmqv_m_inj [_ [<- _]]|[_ lA']]; first exact: honest.
-  apply: ehom_log_small _ b.
-  by have := tsize_hmqv_m_lt t_a Y_a (TExp g p_b); lia.
-have fQ b : ehom h 0 (log b Q_a).
+  by apply: log_small; have := tsize_hmqv_m_lt t_a Y_a (TExp g p_b); lia.
+have fQ b : h ∉ atoms (log b Q_a).
   case: (hB) => [/hmqv_m_inj [_ [_ <-]]|[_ lB']]; first exact: honest.
-  apply: ehom_log_small _ b.
-  by have := tsize_hmqv_m_lt2 t_b (TExp g x_b) Q_a; lia.
+  by apply: log_small; have := tsize_hmqv_m_lt2 t_b (TExp g x_b) Q_a; lia.
 case: hh => [[eh nA]|[eh nB]]; subst h.
 - case: nK; apply: (hmqv_K_own _ _ eK) => b.
-  + apply: indep_log_hmqv_Y (fX b) (fP b) _.
-    exact: count_hmqv_m_neq (tags _ _ _ _).
-  + exact: indep_log_hmqv_K _ _ (tags _ _ _ _) nA (fY b) (fQ b).
+  + by apply: free_log_hmqv_Y (fX b) (fP b) _; exact: tags.
+  + apply: free_log_hmqv_K (fY b) (fQ b) nA _.
+    exact: tags.
 - case: nP; apply: (hmqv_K_peer tab fP _ eK) => b.
-  exact: indep_log_hmqv_K _ _ nB (not_eq_sym (tags _ _ _ _)) (fY b) (fQ b).
+  apply: free_log_hmqv_K (fY b) (fQ b) _ nB.
+  exact: not_eq_sym (tags _ _ _ _).
 Qed.
 
 Lemma hmqv_K_inj' t_a t_b (p_a x_a p_b x_b : nonce) P_b X_b Q_a Y_a :
@@ -926,123 +821,391 @@ case: (decide (m_a = m_a')) => eA; case: (decide (m_b = m_b')) => eB.
     by split; last exact: not_eq_sym eB.
 Qed.
 
-(** ** Binding a claimed key by freshness
 
-    [hmqv_K_inj'] binds a responder's key to the long-term key [P] that its
-    peer claimed only if [P] is not the identity.  Freshness can replace that
-    check.  Suppose the responder's ephemeral private key [x_b'] differs from
-    its long-term private key and occurs neither in [P] nor in the share
-    [X_a'] it received.  Then an initiator that computes the same key still
-    learns that [P] is its own long-term key.
+(** ** Group factors of the key
 
-    Freshness plays the role of size: the logarithms of [P] and [X_a'] have
-    degree 0 in every atom with the subterm [x_b'] ([ehom_log_fresh]).  The
-    logarithm of the responder's key is [y⋅x_b' + y⋅m_b'⋅p_b'], where [y] is
-    the logarithm of its base, and each summand has a single degree in such
-    an atom, other than that of the initiator's static-static monomial
-    [μ = p_b⋅m_b⋅m_a⋅p_a]: the second in [m_b'], and the first in [x_b'] or,
-    if [x_b'] is one of the initiator's long-term keys [p_a] or [p_b], in the
-    multiplier [m_b] or [m_a] that hashes the corresponding public key.  So
-    [μ] occurs in the initiator's key but not in the responder's. *)
+    The logarithm of the key at [g] is [(α + p_b⋅m_b)⋅σ] for a well-formed
+    claimed long-term key [g^p_b], where [α] is that of the peer share and
+    [σ = x_a + m_a⋅p_a].  With [D] its denominator, its numerator is the
+    part [α⋅σ⋅D], free of [m_b], plus [m_b⋅p_b⋅σ⋅D].  A monomial of the second
+    part with the most occurrences of [x_a] (or [p_a]) survives in the
+    numerator, and gives a group factor with [x_a] (or [p_a]) and [p_b] in
+    its exponent. *)
 
-#[local] Lemma subterm_hmqv_m n t X P :
-  subterm n X ∨ subterm n P → subterm n (hmqv_m t X P).
+Add Ring kf_ring : (Frac.frac_ring_theory (T := PreTerm.pre_term)).
+Add Field kf_field : (Frac.frac_field_theory (T := PreTerm.pre_term)).
+Add Ring kf_pring : (Poly.poly_ring_theory (T := PreTerm.pre_term)).
+
+#[local] Lemma pfrac_TMul2 a b :
+  pfrac (TMul {[+ a; b +]}) = Frac.mul (pfrac a) (pfrac b).
 Proof.
-move=> sub; apply: STHash; apply: subterm_tag; rewrite [Spec.of_list]unlock /=.
-by case: sub => ?; [apply: STPair1|apply: STPair2; apply: STPair1].
+by rewrite -!unfold_frac_of frac_of_TMul2 (Frac.map_mul _ unfold_term_inj).
 Qed.
 
-Lemma hmqv_K_inj_fresh t_a t_b (p_a x_a p_b p_b' x_b' : nonce) X_b P X_a' :
-  negb (is_exp g) → negb (is_gmul g) →
-  t_a ≠ t_b →
-  ¬ subterm (TNonce x_b') P → ¬ subterm (TNonce x_b') X_a' → x_b' ≠ p_b' →
-  hmqv_K t_a t_b p_a x_a (TExp g p_a) (TExp g x_a) (TExp g p_b) X_b
-  = hmqv_K t_b t_a p_b' x_b' (TExp g p_b') (TExp g x_b') P X_a' →
-  P = TExp g p_a ∧ p_b = p_b' ∧ X_b = TExp g x_b' ∧ X_a' = TExp g x_a.
+#[local] Lemma pfrac_TSum2 a b :
+  pfrac (TSum {[+ a; b +]}) = Frac.add (pfrac a) (pfrac b).
 Proof.
-move=> gNX gNm tab fr_P fr_Xa ne_x eK.
-have gN1 := Ngmul_neq_unit gNm.
-suff eP : P = TExp g p_a.
-  move: eK; rewrite eP => eK.
-  have nP (p : nonce) : TExp g p ≠ TGMul ∅.
-    exact: Ngmul_neq_unit (Ngmul_TExp _ _ gNm).
-  have [epb [? [_ ?]]] := hmqv_K_inj' gNX gNm tab (nP p_b) (nP p_a)
-                            (hmqv_K_neq_unit gNX gNm) eK.
-  by move/(TExp_injr gN1): epb => - [] ?; do !split.
-case: (decide (hmqv_m t_b X_b (TExp g p_a) = hmqv_m t_b (TExp g x_b') P))
-  => [/hmqv_m_inj [_ [_ ->]] //|neb].
-exfalso.
-have tags X X' Q Q' : hmqv_m t_a X Q ≠ hmqv_m t_b X' Q'.
-  by move=> /hmqv_m_inj [] e _; apply: tab.
-set m_a  := hmqv_m t_a (TExp g x_a) (TExp g p_b).
-set m_b  := hmqv_m t_b X_b (TExp g p_a).
-set m_a' := hmqv_m t_a X_a' (TExp g p_b').
-set m_b' := hmqv_m t_b (TExp g x_b') P.
-have cN h (n : nonce) : h = m_a ∨ h = m_b ∨ h = m_b' → count h (TNonce n) = 0%Z.
-  by case=> [->|[->|->]]; exact: count_hmqv_m_nonce.
-have caa : count m_a m_a = 1%Z by exact: count_hmqv_m_diag.
-have cbb : count m_b m_b = 1%Z by exact: count_hmqv_m_diag.
-have cab : count m_a m_b = 0%Z by apply: count_hmqv_m_neq; exact: tags.
-have cba : count m_b m_a = 0%Z.
-  by apply: count_hmqv_m_neq; exact: not_eq_sym (tags _ _ _ _).
-have cb'a : count m_b' m_a = 0%Z.
-  by apply: count_hmqv_m_neq; exact: not_eq_sym (tags _ _ _ _).
-have cb'b : count m_b' m_b = 0%Z.
-  by apply: count_hmqv_m_neq; exact: not_eq_sym neb.
-set μ := TMul {[+ TNonce p_b; m_b; m_a; TNonce p_a +]}.
-have cμ h : count h μ = (count h (TNonce p_b) + count h m_b + count h m_a
-                         + count h (TNonce p_a))%Z.
-  by rewrite /μ !(count_TMul_disj_union, TMul_singleton).
-(* [μ] occurs once in the initiator's key. *)
-have cbμ : count m_b μ = 1%Z by rewrite cμ cbb cba !cN //; auto.
-have : SMS.count μ (log g (hmqv_K t_a t_b p_a x_a (TExp g p_a) (TExp g x_a)
-                              (TExp g p_b) X_b)) = 1%Z.
-  rewrite (count_log_hmqv_K _ _ _ _ gNX gNm tab cbμ) -/m_a -/m_b.
-  rewrite SMS.count_disj_union !SMS.count_singleton.
-  rewrite bool_decide_eq_false_2 ?bool_decide_eq_true_2 //.
-  move=> /(f_equal (count m_a)).
-  rewrite cμ !(count_TMul_disj_union, TMul_singleton) caa !cN; auto; lia.
-(* The logarithms of the responder's base have degree 0 in every atom with
-   the subterm [x_b'] but [m_a']. *)
-have hY h : subterm (TNonce x_b') h → h ≠ m_a' →
-    ehom h 0 (log g (hmqv_Y t_a (TExp g p_b') P X_a')).
-  move=> x_h n_h; apply: indep_log_hmqv_Y.
-  - exact: ehom_log_fresh x_h fr_Xa g.
-  - exact: ehom_log_fresh x_h fr_P g.
-  - exact: count_atom_ne (hmqv_m_Nmul _ _ _) n_h.
-have [h1 [x_h1 [n_h1 c_h1]]] : ∃ h1, subterm (TNonce x_b') h1 ∧ h1 ≠ m_a' ∧
-    count h1 μ ≠ count h1 (TNonce x_b').
-  case: (decide (x_b' = p_a)) => [e|ne_a].
-    exists m_b; split; [|split].
-    - rewrite /m_b -e; apply: subterm_hmqv_m; right; exact: subterm_TExp_g.
-    - exact: not_eq_sym (tags _ _ _ _).
-    - by rewrite cbμ cN; auto.
-  case: (decide (x_b' = p_b)) => [e|ne_b].
-    exists m_a; split; [|split].
-    - rewrite /m_a -e; apply: subterm_hmqv_m; right; exact: subterm_TExp_g.
-    - rewrite /m_a /m_a' => /hmqv_m_inj [_ [_ /(TExp_injr gN1) [e']]].
-      by apply: ne_x; rewrite e e'.
-    - by rewrite cμ cab caa !cN; auto.
-  exists (TNonce x_b'); split; [by []|split; first by rewrite /m_a'].
-  have cxn (n : nonce) : x_b' ≠ n → count (TNonce x_b') (TNonce n) = 0%Z.
-    by move=> ne; apply: count_atom_ne => // - [] /ne.
-  have cxm t X Q : count (TNonce x_b') (hmqv_m t X Q) = 0%Z.
-    by apply: count_atom_ne; [exact: hmqv_m_Nmul|rewrite /hmqv_m].
-  rewrite cμ (cxn _ ne_b) (cxn _ ne_a) /m_b /m_a !cxm count_atom_diag //.
-have x_mb' : subterm (TNonce x_b') m_b'.
-  by rewrite /m_b'; apply: subterm_hmqv_m; left; exact: subterm_TExp_g.
-have sh h e : ehom h (count h e) {[+ e +]}.
-  by rewrite ehom_singleton.
-have z1 : SMS.count μ (emul (log g (hmqv_Y t_a (TExp g p_b') P X_a'))
-                         {[+ TNonce x_b' +]}) = 0%Z.
-  by apply: (ehom_count (ehom_emul (hY _ x_h1 n_h1) (sh _ _))); lia.
-have z2 : SMS.count μ (emul (log g (hmqv_Y t_a (TExp g p_b') P X_a'))
-                         {[+ TMul {[+ m_b'; TNonce p_b' +]} +]}) = 0%Z.
-  apply: (ehom_count (ehom_emul (hY _ x_mb' (not_eq_sym (tags _ _ _ _)))
-                                 (sh _ _))).
-  rewrite count_hmqv_m_e count_hmqv_m_diag cμ cb'b cb'a !cN; auto; lia.
-rewrite eK log_hmqv_K /hmqv_s emul_disj_union_r SMS.count_disj_union.
-by rewrite z1 z2.
+rewrite -!unfold_frac_of frac_of_TSum Frac.ssum_disj_union.
+by rewrite !Frac.ssum_singleton (Frac.map_add _ unfold_term_inj).
+Qed.
+
+#[local] Lemma pfrac_atom a :
+  negb (is_mod a) → pfrac a = Frac.of_poly (Poly.var (unfold_term a)).
+Proof. by move=> na; apply: PreTerm.frac_of_Nmod; rewrite -is_mod_unfold. Qed.
+
+#[local] Lemma free_pfrac h t :
+  h ∉ atoms t → PreTerm.atoms_all (λ z, z ≠ unfold_term h) (pfrac t).
+Proof.
+move=> ht; apply/PreTerm.atoms_all_vars => z zt ez; apply: ht.
+apply/elem_of_atoms; exists z; split; last exact: zt.
+by rewrite ez unfold_termK.
+Qed.
+
+#[local] Lemma coeff_mono_mul_in (μ ρ : MSet.mset PreTerm.pre_term)
+    (Q : Poly.poly PreTerm.pre_term) :
+  Poly.coeff (μ ⊎ ρ) (Poly.mul (Poly.mono μ) Q) = Poly.coeff ρ Q.
+Proof.
+rewrite !Poly.coeffE Poly.car_mul_mono.
+apply: (SMS.count_map_inj (λ n, μ ⊎ n)) => a b e.
+apply: MSet.count_inj => z; move/(f_equal (MSet.count z)): e.
+rewrite !MSet.count_disj_union; lia.
+Qed.
+
+#[local] Lemma coeff_mono_mul_out (μ ρ : MSet.mset PreTerm.pre_term)
+    (Q : Poly.poly PreTerm.pre_term) y :
+  y ∈ μ → y ∉ ρ → Poly.coeff ρ (Poly.mul (Poly.mono μ) Q) = 0%Z.
+Proof.
+move=> yμ yρ; rewrite Poly.coeffE Poly.car_mul_mono.
+apply: SMS.not_elem_of_count => /SMS.elem_of_map [n [en _]].
+by apply: yρ; rewrite en; apply/MSet.elem_of_disj_union; left.
+Qed.
+
+#[local] Lemma content_le_deg z (D : Poly.poly PreTerm.pre_term) :
+  D ≠ Poly.zero → MSet.count z (PolyGcd.content D) ≤ Poly.deg z D.
+Proof.
+move=> nD; have [δ [cδ _]] := PolyGcd.deg_witness z D nD.
+have := PolyGcd.count_le_deg z δ D cδ.
+have := proj1 (MSet.subseteq_count _ _)
+  (PolyGcd.content_sub D δ (proj1 (Poly.coeff_neq0_elem _ _) cδ)) z.
+lia.
+Qed.
+
+#[local] Lemma count_expo_gfactor t u k ν y :
+  gfactor_of t u k ν → negb (is_mod y) →
+  count y (expo u) =
+  (Z.of_nat (MSet.count (unfold_term y) ν) -
+   Z.of_nat (MSet.count (unfold_term y)
+               (PolyGcd.content (Frac.den (tdh t !!! k)))))%Z.
+Proof.
+move=> G ny; have lu := lg_gfactor G.
+case: G => nr [νr eu].
+set r := tdh t !!! k in nr νr eu lu *.
+have nD := Frac.den_neq0 r.
+have [h [hν [en eD]]] := make_mono_canon ν nD (Frac.den_first_neg r).
+have nden := Frac.den_neq0 (Frac.make (Poly.mono ν) (Frac.den r)).
+have CD : PolyGcd.content (Frac.den r) =
+          h ⊎ PolyGcd.content (Frac.den (Frac.make (Poly.mono ν) (Frac.den r))).
+  rewrite -[in LHS]eD (PolyGcd.content_mul _ _ (PolyGcd.mono_neq0 _) nden).
+  by rewrite PolyGcd.content_mono.
+rewrite (@count_expo u y (ν ∖ h)); last by rewrite lu en.
+rewrite lu MSet.count_difference MSet.count_disj_union CD MSet.count_disj_union.
+have -> : MSet.count (unfold_term y)
+            (PreTerm.units (Frac.den (Frac.make (Poly.mono ν) (Frac.den r))))
+          = 0.
+  apply/MSet.not_elem_of_count => /PreTerm.units_mod.
+  by rewrite -is_mod_unfold; move: ny; case: (is_mod y).
+have := proj1 (MSet.subseteq_count _ _) hν (unfold_term y); lia.
+Qed.
+
+#[local] Lemma pos_exps_two u (a b : term) :
+  (1 + (if bool_decide (a = b) then 1 else 0) ≤ count a (expo u))%Z →
+  (1 ≤ count b (expo u))%Z →
+  {[+ a; b +]} ⊆ SMS.pos (exps u).
+Proof.
+move=> ca cb; apply/MSet.subseteq_count => z.
+have E := count_exps_pos z u.
+rewrite MSet.count_disj_union !MSet.count_singleton.
+case: (decide (z = a)) => [ez|za].
+  subst z; rewrite bool_decide_eq_true_2 //.
+  case: (bool_decide_reflect (a = b)) => [e|ne].
+  - by rewrite (bool_decide_eq_true_2 _ e) in ca; lia.
+  - by rewrite (bool_decide_eq_false_2 _ ne) in ca; lia.
+rewrite bool_decide_eq_false_2 //.
+case: (decide (z = b)) => [ez|zb]; first by subst z; rewrite
+  bool_decide_eq_true_2 //; lia.
+by rewrite bool_decide_eq_false_2 //; lia.
+Qed.
+
+#[local] Lemma lin_parts (r A : Frac.frac PreTerm.pre_term)
+    (Q S : Poly.poly PreTerm.pre_term) y :
+  PreTerm.atoms_all (λ z, z ≠ y) A →
+  (∀ m, m ∈ Poly.car Q → y ∉ m) → (∀ m, m ∈ Poly.car S → y ∉ m) →
+  r = Frac.mul (Frac.add A (Frac.mul (Frac.of_poly Q)
+                                     (Frac.of_poly (Poly.var y))))
+               (Frac.of_poly S) →
+  (∀ m, m ∈ Poly.car (Frac.den r) → y ∉ m) ∧
+  (∀ ρ, ρ ∈ Poly.car (Q * (S * Frac.den r))%P →
+        ({[+ y +]} ⊎ ρ) ∈ Poly.car (Frac.num r)) ∧
+  ∃ P0, Frac.of_poly P0 = Frac.mul A (Frac.of_poly (S * Frac.den r)%P) ∧
+        ∀ ρ, ρ ∈ Poly.car P0 → ρ ∈ Poly.car (Frac.num r).
+Proof.
+move=> hA hQ hS er.
+set D := Frac.den r; set Nn := Frac.num r.
+have nD : D ≠ Poly.zero := Frac.den_neq0 r.
+have no1 p : y ∉ Poly.vars (Frac.den (Frac.of_poly p)).
+  rewrite Frac.den_of_poly Poly.oneE => /Poly.elem_of_vars [n [+ yn]].
+  rewrite Poly.car_mono => /SMS.elem_of_singleton en; rewrite en in yn.
+  by case: (MSet.not_elem_of_empty _ yn).
+have Dfree : ∀ m, m ∈ Poly.car D → y ∉ m.
+  move=> m mD ym.
+  have yD : y ∈ Poly.vars (Frac.den r) by apply/Poly.elem_of_vars; exists m.
+  rewrite er in yD.
+  case: (PolyRestrict.vars_den_mul _ _ _ yD) => [yAQ|yS]; last exact: no1 yS.
+  case: (PolyRestrict.vars_den_add _ _ _ yAQ) => [yA|yQ].
+  - have := proj1 (PreTerm.atoms_all_vars _ _) hA y.
+    by apply; rewrite // /PreTerm.frac_vars; apply/elem_of_app; right.
+  - by move: yQ; rewrite -Frac.of_poly_mul; apply: no1.
+have poly_free p : (∀ m, m ∈ Poly.car p → y ∉ m) →
+    PreTerm.atoms_all (λ z, z ≠ y) (Frac.of_poly p).
+  move=> hp m x [mp|mp] xm ex; subst x.
+  - by move: mp; rewrite Frac.num_of_poly => /hp.
+  - move: mp; rewrite Frac.den_of_poly Poly.oneE Poly.car_mono.
+    move=> /SMS.elem_of_singleton em; rewrite em in xm.
+    by case: (MSet.not_elem_of_empty _ xm).
+have nD' : Frac.of_poly D ≠ Frac.zero.
+  move=> e; apply: nD; move/(f_equal Frac.num): e.
+  by rewrite Frac.num_of_poly Frac.num_zero.
+have eN : Frac.of_poly Nn = Frac.mul r (Frac.of_poly D).
+  rewrite -(Frac.make_num_den r) Frac.make_div -/Nn -/D Frac.divE.
+  by field.
+set P1 := (Q * (S * D))%P.
+set P0 := (Nn + - (Poly.mono {[+ y +]} * P1))%P.
+have eNP : Nn = (P0 + Poly.mono {[+ y +]} * P1)%P by rewrite /P0; ring.
+have eP0 : Frac.of_poly P0 = Frac.mul A (Frac.of_poly (S * D)%P).
+  rewrite /P0 /P1 Frac.of_poly_add Frac.of_poly_opp !Frac.of_poly_mul eN er.
+  by rewrite -Poly.varE; ring.
+have P0free : ∀ ρ, ρ ∈ Poly.car P0 → y ∉ ρ.
+  have : PreTerm.atoms_all (λ z, z ≠ y) (Frac.of_poly P0).
+    rewrite eP0; apply: PreTerm.atoms_all_mul hA _.
+    rewrite Frac.of_poly_mul; apply: PreTerm.atoms_all_mul; exact: poly_free.
+  move=> h ρ ρP yρ; apply: (h ρ y) => //; left; by rewrite Frac.num_of_poly.
+split=> //; split.
+  move=> ρ ρP1; apply/Poly.coeff_neq0_elem.
+  rewrite eNP Poly.coeff_add coeff_mono_mul_in.
+  have -> : Poly.coeff ({[+ y +]} ⊎ ρ) P0 = 0%Z.
+    case: (decide (Poly.coeff ({[+ y +]} ⊎ ρ) P0 = 0%Z)) => //.
+    move=> /Poly.coeff_neq0_elem /P0free []; apply/MSet.elem_of_disj_union.
+    by left; apply/MSet.elem_of_singleton.
+  by rewrite Z.add_0_l; apply/Poly.coeff_neq0_elem.
+exists P0; split=> // ρ ρP; apply/Poly.coeff_neq0_elem.
+rewrite eNP Poly.coeff_add (@coeff_mono_mul_out {[+ y +]} ρ _ y) ?Z.add_0_r.
+- exact/Poly.coeff_neq0_elem.
+- exact/MSet.elem_of_singleton.
+- exact: P0free.
+Qed.
+
+#[local] Lemma car_scalar (x m p : PreTerm.pre_term) n :
+  n ∈ Poly.car (Poly.var x + Poly.var m * Poly.var p)%P →
+  n = {[+ x +]} ∨ n = {[+ m +]} ⊎ {[+ p +]}.
+Proof.
+rewrite Poly.car_add !Poly.varE Poly.mul_mono !Poly.car_mono.
+by case/SMS.elem_of_disj_union => /SMS.elem_of_singleton; tauto.
+Qed.
+
+#[local] Lemma coeff_scalar (x m p : PreTerm.pre_term) n :
+  x ≠ m → (n = {[+ x +]} ∨ n = {[+ m +]} ⊎ {[+ p +]}) →
+  Poly.coeff n (Poly.var x + Poly.var m * Poly.var p)%P ≠ 0%Z.
+Proof.
+move=> xm hn.
+have ne : ({[+ x +]} : MSet.mset PreTerm.pre_term) ≠ {[+ m +]} ⊎ {[+ p +]}.
+  move/(f_equal (MSet.count m)); rewrite MSet.count_disj_union.
+  rewrite !MSet.count_singleton bool_decide_eq_false_2 1?bool_decide_eq_true_2;
+    [lia|done|exact: not_eq_sym].
+rewrite Poly.coeff_add !Poly.varE Poly.mul_mono !Poly.coeff_mono.
+case: hn => ->.
+- by rewrite bool_decide_eq_true_2 // bool_decide_eq_false_2.
+- rewrite bool_decide_eq_false_2; last exact: not_eq_sym.
+  by rewrite bool_decide_eq_true_2.
+Qed.
+
+#[local] Lemma hmqv_K_gfactor_peer t_a t_b (p_a x_a p_b a : nonce) P_a X_a X_b :
+  negb (is_exp g) → negb (is_gmul g) → t_a ≠ t_b → a = x_a ∨ a = p_a →
+  ∃ u, u ∈ gfactors (hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b) ∧
+       {[+ TNonce a; TNonce p_b +]} ⊆ SMS.pos (exps u).
+Proof.
+move=> gNX gNm tab ha.
+set K := hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b.
+set mA := hmqv_m t_a X_a (TExp g p_b).
+set mB := hmqv_m t_b X_b P_a.
+set y := unfold_term mB.
+set ux := unfold_term (TNonce x_a); set up := unfold_term (TNonce p_a).
+set ub := unfold_term (TNonce p_b); set ua := unfold_term (TNonce a).
+set um := unfold_term mA.
+set sp := (Poly.var ux + Poly.var um * Poly.var up)%P.
+set r := tdh K !!! unfold_term g.
+have hash_nonce (n : nonce) t X P : unfold_term (hmqv_m t X P) ≠
+                                    unfold_term (TNonce n).
+  by move/unfold_term_inj.
+have yum : y ≠ um.
+  by move/unfold_term_inj/hmqv_m_inj => [] e _; apply: tab.
+have er : r = Frac.mul (Frac.add (pfrac (log g X_b))
+                         (Frac.mul (Frac.of_poly (Poly.var ub))
+                                   (Frac.of_poly (Poly.var y))))
+                       (Frac.of_poly sp).
+  rewrite /r -pfrac_log /K log_hmqv_K log_hmqv_Y log_TExp_g //.
+  rewrite pfrac_TMul2 pfrac_TSum2 pfrac_TMul2 /hmqv_s pfrac_TSum2 pfrac_TMul2.
+  rewrite (pfrac_atom (a := TNonce p_b)) // (pfrac_atom (a := mB));
+    last exact: hmqv_m_Nmod.
+  rewrite (pfrac_atom (a := TNonce x_a)) // (pfrac_atom (a := TNonce p_a)) //.
+  rewrite (pfrac_atom (a := mA)); last exact: hmqv_m_Nmod.
+  by rewrite /sp Frac.of_poly_add Frac.of_poly_mul.
+have hA : PreTerm.atoms_all (λ z, z ≠ y) (pfrac (log g X_b)).
+  by apply: free_pfrac; apply: log_small; exact: tsize_hmqv_m_lt.
+have hQ : ∀ m, m ∈ Poly.car (Poly.var ub) → y ∉ m.
+  move=> m; rewrite Poly.varE Poly.car_mono => /SMS.elem_of_singleton ->.
+  by move=> /MSet.elem_of_singleton; apply: hash_nonce.
+have hS : ∀ m, m ∈ Poly.car sp → y ∉ m.
+  move=> m /car_scalar [->|->].
+  - by move=> /MSet.elem_of_singleton; apply: hash_nonce.
+  - case/MSet.elem_of_disj_union => /MSet.elem_of_singleton e.
+    + exact: yum e.
+    + exact: hash_nonce e.
+have [Dfree [Lin _]] := lin_parts hA hQ hS er.
+set D := Frac.den r in Dfree Lin.
+have nD : D ≠ Poly.zero := Frac.den_neq0 r.
+have xm : ux ≠ um.
+  by move=> e; exact: (hash_nonce x_a t_a X_a (TExp g p_b) (eq_sym e)).
+have pm : up ≠ um.
+  by move=> e; exact: (hash_nonce p_a t_a X_a (TExp g p_b) (eq_sym e)).
+have nsp : sp ≠ Poly.zero.
+  move=> e; apply: (@coeff_scalar ux um up {[+ ux +]} xm (or_introl eq_refl)).
+  by rewrite -/sp e Poly.coeff_zero.
+have nSD : (sp * D)%P ≠ Poly.zero := PolyGcd.mul_neq0 _ _ nsp nD.
+(* A monomial of [sp⋅D] with the most occurrences of [a]. *)
+have [ρ' [cρ' dρ']] := PolyGcd.deg_witness ua (sp * D)%P nSD.
+have ρ'SD := proj1 (Poly.coeff_neq0_elem _ _) cρ'.
+have dsp : 1 ≤ Poly.deg ua sp.
+  case: ha => ea.
+  - have := PolyGcd.count_le_deg ua {[+ ux +]} sp
+              (@coeff_scalar ux um up _ xm (or_introl eq_refl)).
+    by rewrite /ua ea MSet.count_singleton bool_decide_eq_true_2.
+  - have := PolyGcd.count_le_deg ua ({[+ um +]} ⊎ {[+ up +]}) sp
+              (@coeff_scalar ux um up _ xm (or_intror eq_refl)).
+    rewrite /ua ea MSet.count_disj_union !MSet.count_singleton.
+    by rewrite bool_decide_eq_false_2 ?bool_decide_eq_true_2.
+set ν := {[+ y +]} ⊎ ({[+ ub +]} ⊎ ρ').
+have νN : ν ∈ Poly.car (Frac.num r).
+  apply: Lin; rewrite Poly.varE Poly.car_mul_mono; apply/SMS.elem_of_count.
+  rewrite (SMS.count_map_inj (λ n, {[+ ub +]} ⊎ n)).
+  - exact/SMS.elem_of_count.
+  - move=> m1 m2 e; apply: MSet.count_inj => z.
+    by move/(f_equal (MSet.count z)): e; rewrite !MSet.count_disj_union; lia.
+have nr : r ≠ Frac.zero.
+  move=> e; move: νN; rewrite e Frac.num_zero Poly.car_zero.
+  by move/SMS.elem_of_count; rewrite SMS.count_empty.
+have [u [uK G]] := gfactors_of_log nr νN.
+exists u; split; first exact: uK.
+have ca := count_expo_gfactor G (y := TNonce a) I.
+have cb := count_expo_gfactor G (y := TNonce p_b) I.
+rewrite -/r -/D -/ua in ca; rewrite -/r -/D -/ub in cb.
+have cy z : z ≠ y → MSet.count z ν = MSet.count z ({[+ ub +]} ⊎ ρ').
+  move=> zy; rewrite /ν MSet.count_disj_union MSet.count_singleton.
+  by rewrite bool_decide_eq_false_2.
+have ya : ua ≠ y.
+  by move=> e; exact: (hash_nonce a t_b X_b P_a (eq_sym e)).
+have yb : ub ≠ y.
+  by move=> e; exact: (hash_nonce p_b t_b X_b P_a (eq_sym e)).
+have Dle := content_le_deg ua nD.
+have dSD := PolyGcd.deg_mul ua _ _ nsp nD.
+have cSD := proj1 (MSet.subseteq_count _ _)
+  (PolyGcd.content_sub _ ρ' ρ'SD) ub.
+rewrite (PolyGcd.content_mul _ _ nsp nD) MSet.count_disj_union in cSD.
+apply: pos_exps_two.
+- rewrite ca (cy _ ya) MSet.count_disj_union MSet.count_singleton.
+  case: (bool_decide_reflect (TNonce a = TNonce p_b)) => [e|ne].
+    rewrite bool_decide_eq_true_2; last by rewrite /ua /ub e.
+    lia.
+  rewrite bool_decide_eq_false_2; last by move=> /unfold_term_inj.
+  lia.
+- rewrite cb (cy _ yb) MSet.count_disj_union MSet.count_singleton.
+  rewrite bool_decide_eq_true_2 //; lia.
+Qed.
+
+Lemma hmqv_K_gfactor_mixed t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b :
+  negb (is_exp g) → negb (is_gmul g) → t_a ≠ t_b →
+  ∃ u, u ∈ gfactors (hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b) ∧
+       {[+ TNonce x_a; TNonce p_b +]} ⊆ SMS.pos (exps u).
+Proof. by move=> gNX gNm tab; apply: hmqv_K_gfactor_peer => //; left. Qed.
+
+Lemma hmqv_K_gfactor_static t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b :
+  negb (is_exp g) → negb (is_gmul g) → t_a ≠ t_b →
+  ∃ u, u ∈ gfactors (hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) X_b) ∧
+       {[+ TNonce p_a; TNonce p_b +]} ⊆ SMS.pos (exps u).
+Proof. by move=> gNX gNm tab; apply: hmqv_K_gfactor_peer => //; right. Qed.
+
+(** With honest shares, the logarithm of the key at [g] is a polynomial, and
+    its monomial [x_b⋅x_a] survives. *)
+Lemma hmqv_K_gfactor_eph t_a t_b (p_a x_a p_b x_b : nonce) P_a X_a :
+  negb (is_exp g) → negb (is_gmul g) →
+  ∃ u, u ∈ gfactors (hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b)
+                            (TExp g x_b)) ∧
+       {[+ TNonce x_a; TNonce x_b +]} ⊆ SMS.pos (exps u).
+Proof.
+move=> gNX gNm.
+set K := hmqv_K t_a t_b p_a x_a P_a X_a (TExp g p_b) (TExp g x_b).
+set mA := hmqv_m t_a X_a (TExp g p_b).
+set mB := hmqv_m t_b (TExp g x_b) P_a.
+set y := unfold_term mB.
+set ux := unfold_term (TNonce x_a); set up := unfold_term (TNonce p_a).
+set ub := unfold_term (TNonce p_b); set uxb := unfold_term (TNonce x_b).
+set um := unfold_term mA.
+set sp := (Poly.var ux + Poly.var um * Poly.var up)%P.
+set r := tdh K !!! unfold_term g.
+have hash_nonce (n : nonce) t X P : unfold_term (hmqv_m t X P) ≠
+                                    unfold_term (TNonce n).
+  by move/unfold_term_inj.
+have er : r = Frac.of_poly
+                ((Poly.var uxb + Poly.var ub * Poly.var y) * sp)%P.
+  rewrite /r -pfrac_log /K log_hmqv_K log_hmqv_Y !log_TExp_g //.
+  rewrite pfrac_TMul2 pfrac_TSum2 pfrac_TMul2 /hmqv_s pfrac_TSum2 pfrac_TMul2.
+  rewrite (pfrac_atom (a := TNonce x_b)) // (pfrac_atom (a := TNonce p_b)) //.
+  rewrite (pfrac_atom (a := mB)); last exact: hmqv_m_Nmod.
+  rewrite (pfrac_atom (a := TNonce x_a)) // (pfrac_atom (a := TNonce p_a)) //.
+  rewrite (pfrac_atom (a := mA)); last exact: hmqv_m_Nmod.
+  by rewrite /sp !Frac.of_poly_mul !Frac.of_poly_add !Frac.of_poly_mul.
+pose (ν := ({[+ uxb +]} ⊎ {[+ ux +]} : MSet.mset PreTerm.pre_term)).
+have uxm : ux ≠ um.
+  by move=> e; exact: (hash_nonce x_a t_a X_a (TExp g p_b) (eq_sym e)).
+assert (νN : ν ∈ Poly.car (Frac.num r)).
+  rewrite er Frac.num_of_poly; apply/Poly.coeff_neq0_elem.
+  have -> : ((Poly.var uxb + Poly.var ub * Poly.var y) * sp)%P =
+            (Poly.mul (Poly.mono {[+ uxb +]}) sp +
+             Poly.mul (Poly.mono ({[+ ub +]} ⊎ {[+ y +]})) sp)%P.
+    by rewrite !Poly.varE -Poly.mul_mono; ring.
+  rewrite Poly.coeff_add coeff_mono_mul_in (@coeff_mono_mul_out _ ν _ y).
+  - by rewrite Z.add_0_r; apply: coeff_scalar => //; left.
+  - by apply/MSet.elem_of_disj_union; right; apply/MSet.elem_of_singleton.
+  - case/MSet.elem_of_disj_union => /MSet.elem_of_singleton e.
+    + exact: (hash_nonce x_b t_b (TExp g x_b) P_a e).
+    + exact: (hash_nonce x_a t_b (TExp g x_b) P_a e).
+have nr : r ≠ Frac.zero.
+  move=> e; move: νN; rewrite e Frac.num_zero Poly.car_zero.
+  by move/SMS.elem_of_count; rewrite SMS.count_empty.
+have [u [uK G]] := gfactors_of_log nr νN.
+exists u; split; first exact: uK.
+have c0 z : MSet.count z (PolyGcd.content (Frac.den r)) = 0.
+  rewrite er Frac.den_of_poly Poly.oneE PolyGcd.content_mono.
+  exact: MSet.count_empty.
+have ca := count_expo_gfactor G (y := TNonce x_a) I.
+have cb := count_expo_gfactor G (y := TNonce x_b) I.
+rewrite -/r c0 /ν MSet.count_disj_union !MSet.count_singleton -/ux in ca.
+rewrite -/r c0 /ν MSet.count_disj_union !MSet.count_singleton -/uxb in cb.
+have exb : bool_decide (ux = uxb) = bool_decide (TNonce x_a = TNonce x_b).
+  apply: bool_decide_ext; split=> [/unfold_term_inj //|e].
+  by rewrite /ux /uxb e.
+rewrite (bool_decide_eq_true_2 (ux = ux)) // exb in ca.
+rewrite (bool_decide_eq_true_2 (uxb = uxb)) // in cb.
+apply: pos_exps_two; rewrite ?ca ?cb; case: bool_decide => /=; lia.
 Qed.
 
 End HMQV.
@@ -1083,10 +1246,9 @@ iAssert (minted (hmqv_m N t_b X_b P_a)) as "#mmb".
 iAssert (minted (hmqv_Y N t_b P_a P_b X_b)) as "#mY".
   rewrite /hmqv_Y; iApply all_minted_TGMul2.
   by do !iSplit => //; iApply all_minted_TExp; iSplit.
-iAssert (minted (TMul {[+ hmqv_m N t_a X_a P_b; p_a +]})) as "#mma_pa".
-  by iApply all_minted_TMul2; iSplit.
-rewrite /hmqv_K /hmqv_s epow2; iApply all_minted_TGMul2.
-by do !iSplit => //; iApply all_minted_TExp; iSplit.
+rewrite /hmqv_K /hmqv_s; iApply all_minted_TExp; iSplit => //.
+iApply all_minted_TSum2; iSplit => //.
+by iApply all_minted_TMul2; iSplit.
 Qed.
 
 (** Whoever knows all the inputs of the key formula can compute the key. *)
@@ -1104,8 +1266,8 @@ iAssert (public (hmqv_m N t_b X_b P_a)) as "#pmb".
 iAssert (public (hmqv_Y N t_b P_a P_b X_b)) as "#pY".
   rewrite /hmqv_Y; iApply public_TGMul2 => //.
   by iApply public_TExp.
-rewrite /hmqv_K /hmqv_s epow2.
-iApply public_TGMul2; iApply public_TExp => //.
+rewrite /hmqv_K /hmqv_s; iApply public_TExp => //.
+iApply public_TSum2 => //.
 by iApply public_TMul2.
 Qed.
 
@@ -1137,16 +1299,12 @@ Lemma public_hmqv_K_eph N g t_a t_b (p_a x_a p_b x_b : nonce) P_a X_a :
   public x_a ∨ public x_b.
 Proof.
 move=> gNX gNm; iIntros "#[_ e_a] #[_ e_b] #p_K".
-have Nm_a : negb (is_mul (TNonce x_a)) by [].
-have Nm_b : negb (is_mul (TNonce x_b)) by [].
+have [u [uK sub]] :=
+  @hmqv_K_gfactor_eph N g t_a t_b p_a x_a p_b x_b P_a X_a gNX gNm.
 iEval (rewrite public_gfactors) in "p_K".
 iDestruct "p_K" as "[_ #fs]".
-iAssert (public (TExp g (TMul {[+ TNonce x_b; TNonce x_a +]}))) as "#p_eph".
-  iApply (big_sepL_elem_of with "fs"); apply/SMS.elem_of_elements.
-  exact: hmqv_K_gfactor_eph.
-iDestruct (@public_dh_secret2 _ _ _ g (TNonce x_b) (TNonce x_a)
-             gNX gNm Nm_b Nm_a
-             with "e_b e_a p_eph") as "[p_x | p_x]"; eauto.
+iApply (public_dh_secret_gen2 sub with "e_a e_b").
+by iApply (big_sepL_elem_of with "fs"); apply/SMS.elem_of_elements.
 Qed.
 
 (** A key exchanged between an arbitrary pair of parties with well-formed
@@ -1161,8 +1319,8 @@ Lemma public_hmqv_K_static N g t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b :
   public p_a ∨ public p_b.
 Proof.
 move=> gNX gNm tab.
-have [gf [_ ab_ss]] :=
-  @hmqv_key_gfactors N g t_a t_b p_a x_a p_b P_a X_a X_b gNX gNm tab.
+have [u [uK ab_ss]] :=
+  @hmqv_K_gfactor_static N g t_a t_b p_a x_a p_b P_a X_a X_b gNX gNm tab.
 iIntros "#[_ pred_a] #[_ pred_b] #p_K".
 iEval (rewrite public_gfactors) in "p_K".
 iDestruct "p_K" as "[_ #fs]".
@@ -1182,15 +1340,8 @@ Lemma public_hmqv_K_mixed N g t_a t_b (p_a x_a p_b : nonce) P_a X_a X_b :
   public x_a ∨ public p_b.
 Proof.
 move=> gNX gNm tab.
-have [_ [gf _]] :=
-  @hmqv_key_gfactors N g t_a t_b p_a x_a p_b P_a X_a X_b gNX gNm tab.
-have ab_mixed : {[+ TNonce x_a; TNonce p_b +]}
-    ⊆ SMS.pos
-         (exps (TExp g (TMul {[+ TNonce p_b; hmqv_m N t_b X_b P_a;
-                                  TNonce x_a +]}))).
-  rewrite exps_hmqv_mixed // SMS.pos_make_empty_r => x.
-  rewrite !MSet.count_disj_union !MSet.count_singleton.
-  by repeat case_bool_decide; lia.
+have [u [uK ab_mixed]] :=
+  @hmqv_K_gfactor_mixed N g t_a t_b p_a x_a p_b P_a X_a X_b gNX gNm tab.
 iIntros "#[_ pred_x] #[_ pred_p] #p_K".
 iEval (rewrite public_gfactors) in "p_K".
 iDestruct "p_K" as "[_ #fs]".
@@ -1257,13 +1408,13 @@ Definition hmqv_ke N (t_a t_b : string) : val :=
   let: "m_a" := hash (tag (Tag $ N.@t_a) (term_of_list ["X_a"; "P_b"])) in
   let: "m_b" := hash (tag (Tag $ N.@t_b) (term_of_list ["X_b"; "P_a"])) in
   let: "Y" := tgmul "X_b" (texp "P_b" "m_b") in
-  tgmul (texp "Y" "x_a") (texp "Y" (tmul "m_a" "p_a")).
+  texp "Y" (tadd "x_a" (tmul "m_a" "p_a")).
 
 Lemma wp_hmqv_ke N t_a t_b (p_a x_a P_a X_a P_b X_b : term) Ψ :
   Ψ (repr (hmqv_K N t_a t_b p_a x_a P_a X_a P_b X_b)) ⊢
   WP hmqv_ke N t_a t_b p_a x_a P_a X_a P_b X_b {{ Ψ }}.
 Proof.
-rewrite /hmqv_K /hmqv_s epow2; iIntros "post".
+rewrite /hmqv_K /hmqv_s; iIntros "post".
 wp_lam; wp_pures.
 wp_list; wp_apply wp_term_of_list; wp_apply wp_tag; wp_apply wp_hash; wp_pures.
 wp_list; wp_apply wp_term_of_list; wp_apply wp_tag; wp_apply wp_hash; wp_pures.
@@ -1271,9 +1422,8 @@ wp_apply wp_texp.
 wp_apply wp_tgmul.
 wp_pures.
 wp_apply wp_tmul.
-wp_apply wp_texp.
-wp_apply wp_texp.
-by wp_apply wp_tgmul.
+wp_apply wp_tadd.
+by wp_apply wp_texp.
 Qed.
 
 End HMQVIris.

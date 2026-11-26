@@ -19,14 +19,21 @@ Definition tmul : val := λ: "t1" "t2", hl_mul "t1" "t2".
 
 Definition tinv : val := λ: "t", hl_inv "t".
 
-Definition tone : val := λ: <>, hl_mul_aux (NILV, NILV).
+Definition tone : val := λ: <>, hl_one.
+
+(* The ring operations of exponents. *)
+Definition tadd : val := λ: "t1" "t2", hl_sum "t1" "t2".
+
+Definition topp : val := λ: "t", hl_opp "t".
+
+Definition tzero : val := λ: <>, hl_zero.
 
 (* The Diffie-Hellman group operations. *)
 Definition tgmul : val := λ: "t1" "t2", hl_gmul "t1" "t2".
 
 Definition tginv : val := λ: "t", hl_ginv "t".
 
-Definition tgone : val := λ: <>, hl_gmul_aux (NILV, NILV).
+Definition tgone : val := λ: <>, hl_gone.
 
 Section Proofs.
 
@@ -43,13 +50,11 @@ Lemma twp_eq_term E t1 t2 Ψ :
   Ψ #(bool_decide (t1 = t2)) ⊢
   WP (eq_term t1 t2) @ E [{ Ψ }].
 Proof.
-iIntros "H".
-rewrite -!val_of_pre_term_unfold.
-iApply twp_wand; first iApply twp_eq_pre_term_aux.
-iIntros (?) "->".
 rewrite (_ : bool_decide (t1 = t2) =
-             bool_decide (unfold_term t1 = unfold_term t2)) //.
-by apply: bool_decide_ext; split => [->|/unfold_term_inj] //.
+             bool_decide (unfold_term t1 = unfold_term t2)); last first.
+  by apply: bool_decide_ext; split => [->|/unfold_term_inj].
+rewrite -!val_of_pre_term_unfold.
+exact: twp_eq_pre_term.
 Qed.
 
 Lemma wp_eq_term E t1 t2 Ψ :
@@ -118,21 +123,67 @@ Lemma twp_tone E Ψ :
   Ψ (TMul ∅) ⊢
   WP tone #() @ E [{ Ψ }].
 Proof.
-iIntros "HΨ". rewrite /tone; wp_pures.
-rewrite (_ : (NILV, NILV)%V =
-             repr ([] : list PreTerm.pre_term, [] : list PreTerm.pre_term));
-  last by rewrite /= [@repr_list]unlock.
-wp_apply (twp_hl_mul_aux E ∅).
-rewrite (_ : PreTerm.mul_aux ∅ = unfold_term (TMul ∅));
-  last by rewrite unfold_TMul SMS.map_empty PreTerm.mulE SMS.bind_empty.
-rewrite [repr _]val_of_pre_term_unfold.
-by iApply "HΨ".
+have e : hl_one = TMul ∅.
+  by rewrite -val_of_pre_term_unfold unfold_TMul_empty hl_oneE.
+by iIntros "HΨ"; rewrite /tone; wp_pures; rewrite e.
 Qed.
 
 Lemma wp_tone E Ψ :
   Ψ (TMul ∅) ⊢
   WP tone #() @ E {{ Ψ }}.
 Proof. by iIntros "post"; iApply twp_wp; iApply twp_tone. Qed.
+
+Lemma twp_tadd E t1 t2 Ψ :
+  Ψ (TSum {[+ t1; t2 +]}) ⊢
+  WP tadd t1 t2 @ E [{ Ψ }].
+Proof.
+iIntros "HΨ". rewrite /tadd; wp_lam; wp_pures.
+rewrite -[val_of_term t1]val_of_pre_term_unfold.
+rewrite -[val_of_term t2]val_of_pre_term_unfold.
+wp_apply (twp_hl_sum _ _ _ _ (wf_unfold_term _) (wf_unfold_term _)).
+rewrite (_ : PreTerm.sum _ = unfold_term (TSum {[+ t1; t2 +]})); last first.
+  by rewrite unfold_TSum SMS.map_disj_union !SMS.map_singleton.
+rewrite [repr _]val_of_pre_term_unfold.
+by iApply "HΨ".
+Qed.
+
+Lemma wp_tadd E t1 t2 Ψ :
+  Ψ (TSum {[+ t1; t2 +]}) ⊢
+  WP tadd t1 t2 @ E {{ Ψ }}.
+Proof. by iIntros "post"; iApply twp_wp; iApply twp_tadd. Qed.
+
+Lemma twp_topp E t Ψ :
+  Ψ (TSum (SMS.inv {[+ t +]})) ⊢
+  WP topp t @ E [{ Ψ }].
+Proof.
+iIntros "HΨ". rewrite /topp; wp_lam; wp_pures.
+rewrite -[val_of_term t]val_of_pre_term_unfold.
+wp_apply (twp_hl_opp _ _ _ (wf_unfold_term _)).
+rewrite (_ : PreTerm.sum _ = unfold_term (TSum (SMS.inv {[+ t +]})));
+  last by rewrite unfold_TSum SMS.map_inv SMS.map_singleton.
+rewrite [repr _]val_of_pre_term_unfold.
+by iApply "HΨ".
+Qed.
+
+Lemma wp_topp E t Ψ :
+  Ψ (TSum (SMS.inv {[+ t +]})) ⊢
+  WP topp t @ E {{ Ψ }}.
+Proof. by iIntros "post"; iApply twp_wp; iApply twp_topp. Qed.
+
+Lemma twp_tzero E Ψ :
+  Ψ (TSum ∅) ⊢
+  WP tzero #() @ E [{ Ψ }].
+Proof.
+have e : hl_zero = TSum ∅.
+  by rewrite -val_of_pre_term_unfold unfold_TSum SMS.map_empty sum_empty
+    hl_zeroE.
+by iIntros "HΨ"; rewrite /tzero; wp_pures; rewrite e.
+Qed.
+
+Lemma wp_tzero E Ψ :
+  Ψ (TSum ∅) ⊢
+  WP tzero #() @ E {{ Ψ }}.
+Proof. by iIntros "post"; iApply twp_wp; iApply twp_tzero. Qed.
 
 Lemma twp_tgmul E t1 t2 Ψ :
   Ψ (TGMul {[+ t1; t2 +]}) ⊢
@@ -175,15 +226,10 @@ Lemma twp_tgone E Ψ :
   Ψ (TGMul ∅) ⊢
   WP tgone #() @ E [{ Ψ }].
 Proof.
-iIntros "HΨ". rewrite /tgone; wp_pures.
-rewrite (_ : (NILV, NILV)%V =
-             repr ([] : list PreTerm.pre_term, [] : list PreTerm.pre_term));
-  last by rewrite /= [@repr_list]unlock.
-wp_apply (twp_hl_gmul_aux E ∅).
-rewrite (_ : PreTerm.gmul_aux ∅ = unfold_term (TGMul ∅));
-  last by rewrite unfold_TGMul SMS.map_empty /PreTerm.gmul SMS.bind_empty.
-rewrite [repr _]val_of_pre_term_unfold.
-by iApply "HΨ".
+have e : hl_gone = TGMul ∅.
+  by rewrite -val_of_pre_term_unfold unfold_TGMul SMS.map_empty gmul_empty
+    hl_goneE.
+by iIntros "HΨ"; rewrite /tgone; wp_pures; rewrite e.
 Qed.
 
 Lemma wp_tgone E Ψ :

@@ -1,9 +1,10 @@
 From cryptis Require Import lib.
 From elpi.apps Require Import locker.
 From mathcomp Require Import ssreflect.
-From Stdlib Require Import ZArith.ZArith Lia.
+From Stdlib Require Import ZArith.ZArith Lia Ring Field.
 From stdpp Require Import sorting gmap.
-From cryptis.lib Require Import list_sort mathcomp_compat mset sms.
+From cryptis.lib Require Import list_sort mathcomp_compat fmap mset sms.
+From cryptis.lib Require Import poly poly_gcd frac.
 From iris.heap_lang Require locations.
 From iris.heap_lang Require Import notation.
 From iris.heap_lang Require Import primitive_laws.
@@ -12,17 +13,17 @@ From cryptis.core.term Require Import base.
 
 Implicit Types (t k : term) (ts : list term) (s : tsms).
 
-(** * Products
+(** * Exponents
 
-    [factors] is an injective homomorphism into the free abelian group
-    [SMS.sms] ([factors_inj], [factors_TMul]), so the laws of products follow
-    by comparing signed counts ([count_inj]). *)
+    Exponents form a field: [frac_of] is injective and turns [TMul], [TSum]
+    and [TInv] into field operations, so identities between exponents follow
+    from field identities.  On Laurent monomials, [factors] is moreover a
+    homomorphism into the free abelian group on atoms ([factors_TMul]), so
+    their laws also follow by comparing counts ([count_inj]). *)
 
-Lemma count_unfold x t :
-  count x t = SMS.count (unfold_term x) (PreTerm.factors (unfold_term t)).
-Proof.
-rewrite /count -unfold_factors SMS.count_map_inj //; exact: unfold_term_inj.
-Qed.
+Section Exponents.
+
+Add Field tfrac_field : (Frac.frac_field_theory (T := term)).
 
 Lemma gcount_unfold x t :
   gcount x t = SMS.count (unfold_term x) (PreTerm.gfactors (unfold_term t)).
@@ -30,48 +31,172 @@ Proof.
 rewrite /gcount -unfold_gfactors SMS.count_map_inj //; exact: unfold_term_inj.
 Qed.
 
-Lemma factors_TMul_empty : factors (TMul ∅) = ∅.
-Proof. by rewrite factors_TMul SMS.bind_empty. Qed.
+Lemma frac_of_TMul_empty : frac_of (TMul ∅) = Frac.one.
+Proof. by rewrite frac_of_TMul Frac.sprod_empty. Qed.
+
+Lemma frac_of_TSum_empty : frac_of (TSum ∅) = Frac.zero.
+Proof. by rewrite frac_of_TSum Frac.ssum_empty. Qed.
+
+Lemma frac_of_TMul2 t1 t2 :
+  frac_of (TMul {[+ t1; t2 +]}) = Frac.mul (frac_of t1) (frac_of t2).
+Proof. by rewrite frac_of_TMul Frac.sprod_pair. Qed.
 
 Lemma TMul_singleton t : TMul {[+ t +]} = t.
-Proof. by apply: factors_inj; rewrite factors_TMul SMS.bind_singleton. Qed.
+Proof. by apply: frac_of_inj; rewrite frac_of_TMul Frac.sprod_singleton. Qed.
 
-Lemma count_TMul t s : count t (TMul s) = SMS.count t (SMS.bind factors s).
-Proof. by rewrite /count factors_TMul. Qed.
-
-Lemma count_TMul_empty t : count t (TMul ∅) = 0%Z.
-Proof. by rewrite /count factors_TMul_empty SMS.count_empty. Qed.
-
-Lemma count_TMul_disj_union t s1 s2 :
-  count t (TMul (s1 ⊎ s2)) = (count t (TMul s1) + count t (TMul s2))%Z.
-Proof. by rewrite !count_TMul SMS.bind_disj_union SMS.count_disj_union. Qed.
-
-Lemma count_TMul2 t t1 t2 :
-  count t (TMul {[+ t1; t2 +]}) = (count t t1 + count t t2)%Z.
-Proof. by rewrite count_TMul_disj_union !TMul_singleton. Qed.
-
-Lemma count_TMul_inv t s : count t (TMul (SMS.inv s)) = (- count t (TMul s))%Z.
-Proof. by rewrite !count_TMul SMS.bind_inv SMS.count_inv. Qed.
-
-Lemma TMul_disj_union s1 s2 : TMul (s1 ⊎ s2) = TMul {[+ TMul s1; TMul s2 +]}.
-Proof.
-apply: factors_inj; rewrite !factors_TMul !SMS.bind_disj_union.
-by rewrite !SMS.bind_singleton !factors_TMul.
-Qed.
+Lemma TSum_singleton t : TSum {[+ t +]} = t.
+Proof. by apply: frac_of_inj; rewrite frac_of_TSum Frac.ssum_singleton. Qed.
 
 Lemma TMul_unit_l t : TMul {[+ TMul ∅; t +]} = t.
 Proof.
-apply: count_inj => x _.
-by rewrite count_TMul_disj_union !TMul_singleton count_TMul_empty.
+by apply: frac_of_inj; rewrite frac_of_TMul2 frac_of_TMul_empty; ring.
 Qed.
 
 Lemma TMul_unit_r t : TMul {[+ t; TMul ∅ +]} = t.
 Proof. by rewrite (comm (⊎)) TMul_unit_l. Qed.
 
-Lemma TMul_inv_r t : TMul {[+ TInv t; t +]} = TMul ∅.
+Lemma TMul_inv_r t :
+  frac_of t ≠ Frac.zero → TMul {[+ TInv t; t +]} = TMul ∅.
 Proof.
-apply: count_inj => x _.
-rewrite count_TMul_disj_union !TMul_singleton count_TInv count_TMul_empty; lia.
+move=> nt; apply: frac_of_inj.
+by rewrite frac_of_TMul2 frac_of_TInv frac_of_TMul_empty; field.
+Qed.
+
+Lemma TMul_disj_union s1 s2 :
+  (∀ x, x ∈ s1 → x ∈ s2 → frac_of x ≠ Frac.zero) →
+  TMul (s1 ⊎ s2) = TMul {[+ TMul s1; TMul s2 +]}.
+Proof.
+move=> nz; apply: frac_of_inj.
+by rewrite frac_of_TMul2 !frac_of_TMul (Frac.sprod_disj_union _ _ _ nz).
+Qed.
+
+#[global] Instance TInv_inj : Inj (=) (=) TInv.
+Proof. by move=> x y e; rewrite -(TInvK x) e TInvK. Qed.
+
+Lemma TInv_TMul s : TInv (TMul s) = TMul (SMS.inv s).
+Proof.
+by apply: frac_of_inj; rewrite frac_of_TInv !frac_of_TMul Frac.sprod_inv.
+Qed.
+
+Lemma frac_of_TInv_neq0 t :
+  frac_of t ≠ Frac.zero → frac_of (TInv t) ≠ Frac.zero.
+Proof.
+move=> nt; rewrite frac_of_TInv => e; apply: nt.
+by rewrite -(Frac.inv_inv (frac_of t)) e Frac.inv_zero.
+Qed.
+
+End Exponents.
+
+(** ** Laurent monomials *)
+
+Lemma factors_TMul_empty : factors (TMul ∅) = ∅.
+Proof.
+apply: factors_TMul_atoms => x.
+by rewrite SMS.elem_of_count SMS.count_empty => /(_ eq_refl).
+Qed.
+
+Lemma laurent_TMul s : (∀ x, x ∈ s → laurent x) → laurent (TMul s).
+Proof.
+move=> L x; rewrite factors_TMul // => /SMS.elem_of_bind [y [ys xy]].
+exact: L ys x xy.
+Qed.
+
+Lemma laurent_TMul_empty : laurent (TMul ∅).
+Proof.
+move=> x; rewrite factors_TMul_empty SMS.elem_of_count SMS.count_empty.
+by move=> /(_ eq_refl).
+Qed.
+
+Lemma laurent_TInv t : laurent t → laurent (TInv t).
+Proof.
+move=> L x; rewrite factors_TInv // SMS.elem_of_count SMS.count_inv => h.
+by apply: L; apply/SMS.elem_of_count; lia.
+Qed.
+
+Lemma laurent_pair t1 t2 :
+  laurent t1 → laurent t2 → ∀ x, x ∈ ({[+ t1; t2 +]} : tsms) → laurent x.
+Proof.
+by move=> L1 L2 x /SMS.elem_of_disj_union [] /SMS.elem_of_singleton ->.
+Qed.
+
+Lemma laurent_TMul2 t1 t2 :
+  laurent t1 → laurent t2 → laurent (TMul {[+ t1; t2 +]}).
+Proof. by move=> L1 L2; apply: laurent_TMul; exact: laurent_pair. Qed.
+
+Lemma laurent_frac_neq0 t : laurent t → frac_of t ≠ Frac.zero.
+Proof.
+move=> L e; have := f_equal frac_of (factorsK t).
+rewrite e frac_of_TMul.
+have E : Frac.sprod frac_of (factors t) = Frac.sprod Frac.var (factors t).
+  by apply: Frac.sprod_ext => x /L; exact: frac_of_Nmod.
+rewrite E => /(f_equal Frac.num); rewrite Frac.num_zero.
+have [en _] := Frac.sprod_var_canon (factors t).
+rewrite en; exact: PolyGcd.mono_neq0.
+Qed.
+
+Lemma laurent_unfold t : laurent t ↔ PreTerm.laurent (unfold_term t).
+Proof.
+split=> L x.
+- move=> xt; have wx := PreTerm.wf_factors _ _ (wf_unfold_term t) xt.
+  rewrite -(fold_termK _ wx) -is_mod_unfold; apply: L.
+  by rewrite elem_of_factors_unfold fold_termK.
+- by rewrite elem_of_factors_unfold is_mod_unfold => /L.
+Qed.
+
+Lemma laurent_mfrac t :
+  laurent t → PreTerm.mfrac (PreTerm.frac_of (unfold_term t)).
+Proof.
+by move=> /laurent_unfold /(PreTerm.laurent_mfrac _ (wf_unfold_term t)).
+Qed.
+
+(** An exponent is monic when the numerator of its fraction is a monomial
+    with coefficient [1].  A non-product raised to a monic exponent is a power
+    ([TExp_Ngmul]). *)
+Definition monic e := PreTerm.mnum (PreTerm.frac_of (unfold_term e)).
+
+Lemma laurent_monic e : laurent e → monic e.
+Proof. by move=> /laurent_mfrac; exact: PreTerm.mfrac_mnum. Qed.
+
+Lemma monic_atom e : negb (is_mod e) → monic e.
+Proof. by move=> /laurent_atom; exact: laurent_monic. Qed.
+
+Lemma count_TMul t s :
+  (∀ x, x ∈ s → laurent x) →
+  count t (TMul s) = SMS.count t (SMS.bind factors s).
+Proof. by move=> L; rewrite /count factors_TMul. Qed.
+
+Lemma count_TMul_empty t : count t (TMul ∅) = 0%Z.
+Proof. by rewrite /count factors_TMul_empty SMS.count_empty. Qed.
+
+Lemma count_TMul_disj_union t s1 s2 :
+  (∀ x, x ∈ s1 → laurent x) → (∀ x, x ∈ s2 → laurent x) →
+  count t (TMul (s1 ⊎ s2)) = (count t (TMul s1) + count t (TMul s2))%Z.
+Proof.
+move=> L1 L2.
+have L : ∀ x, x ∈ s1 ⊎ s2 → laurent x.
+  by move=> x /SMS.elem_of_disj_union [/L1|/L2].
+rewrite (count_TMul _ _ L) (count_TMul _ _ L1) (count_TMul _ _ L2).
+by rewrite SMS.bind_disj_union SMS.count_disj_union.
+Qed.
+
+Lemma count_TMul2 t t1 t2 :
+  laurent t1 → laurent t2 →
+  count t (TMul {[+ t1; t2 +]}) = (count t t1 + count t t2)%Z.
+Proof.
+move=> L1 L2; rewrite (count_TMul _ _ (laurent_pair _ _ L1 L2)).
+by rewrite SMS.bind_disj_union !SMS.bind_singleton SMS.count_disj_union.
+Qed.
+
+Lemma count_TMul_inv t s :
+  (∀ x, x ∈ s → laurent x) →
+  count t (TMul (SMS.inv s)) = (- count t (TMul s))%Z.
+Proof.
+move=> L.
+have L' : ∀ x, x ∈ SMS.inv s → laurent x.
+  move=> x /SMS.elem_of_count; rewrite SMS.count_inv => h.
+  by apply: L; apply/SMS.elem_of_count; lia.
+rewrite (count_TMul _ _ L') (count_TMul _ _ L).
+by rewrite SMS.bind_inv SMS.count_inv.
 Qed.
 
 Lemma tunitP t : t = TMul ∅ ↔ factors t = ∅.
@@ -80,37 +205,15 @@ split; first by move=> ->; exact: factors_TMul_empty.
 by move=> e; apply: factors_inj; rewrite e factors_TMul_empty.
 Qed.
 
-#[global] Instance TInv_inj : Inj (=) (=) TInv.
-Proof. by move=> x y e; rewrite -(TInvK x) e TInvK. Qed.
-
-Lemma TInv_TMul s : TInv (TMul s) = TMul (SMS.inv s).
+Lemma is_mod_TInv_atom t : negb (is_mod t) → is_mod (TInv t).
 Proof.
-by apply: factors_inj; rewrite factors_TInv !factors_TMul SMS.bind_inv.
-Qed.
-
-Lemma TInv_fixed t : TInv t = t ↔ t = TMul ∅.
-Proof.
-split=> [e|->]; last first.
-  by apply: count_inj => x _; rewrite count_TInv count_TMul_empty.
-apply: count_inj => x _; rewrite count_TMul_empty.
-have := f_equal (count x) e; rewrite count_TInv; lia.
-Qed.
-
-Lemma is_mul_TInv_atom t : negb (is_mul t) → is_mul (TInv t).
-Proof.
-move=> Nm; case E: (is_mul (TInv t)) => //.
-have Nmi : negb (is_mul (TInv t)) by rewrite E.
-have := factors_TInv t; rewrite (factors_Nmul _ Nmi) (factors_Nmul _ Nm).
+move=> Nm; case E: (is_mod (TInv t)) => //.
+have Nmi : negb (is_mod (TInv t)) by rewrite E.
+have := factors_TInv t (laurent_atom _ Nm).
+rewrite (factors_Nmod _ Nmi) (factors_Nmod _ Nm).
 move=> /(f_equal (λ s, elements (SMS.pos s))).
 by rewrite SMS.pos_inv SMS.pos_singleton SMS.neg_singleton
   MSet.elements_singleton MSet.elements_empty.
-Qed.
-
-Lemma count_diag t : count t t = if is_mul t then 0%Z else 1%Z.
-Proof.
-case Em: (is_mul t); first by rewrite is_mul_count ?Em.
-rewrite /count factors_Nmul ?Em // SMS.count_singleton.
-by rewrite bool_decide_eq_true_2.
 Qed.
 
 Lemma count_neq0 t t' : count t t' ≠ 0%Z ↔ t ∈ factors t'.
@@ -125,49 +228,149 @@ Proof. exact: SMS.count_neg. Qed.
 Lemma not_elem_of_count t t' : t ∉ factors t' → count t t' = 0%Z.
 Proof. exact: SMS.not_elem_of_count. Qed.
 
-Lemma elem_of_factors_TInv x t : x ∈ factors (TInv t) ↔ x ∈ factors t.
-Proof. by rewrite -!count_neq0 count_TInv; split; lia. Qed.
+Lemma elem_of_factors_TInv x t :
+  negb (is_mod x) → x ∈ factors (TInv t) ↔ x ∈ factors t.
+Proof. by move=> nx; rewrite -!count_neq0 count_TInv //; split; lia. Qed.
 
 Lemma elem_of_factors_TMul2 t1 t2 t' :
+  laurent t1 → laurent t2 →
   t' ∈ factors (TMul {[+ t1; t2 +]}) → t' ∈ factors t1 ∨ t' ∈ factors t2.
 Proof.
-rewrite -!count_neq0 count_TMul_disj_union !TMul_singleton.
+move=> L1 L2; rewrite -!count_neq0 count_TMul2 //.
 case: (decide (count t' t1 = 0%Z)) => ?; [right|left]; lia.
 Qed.
 
-(** ** The group *)
+Lemma is_mod_TMul2 t1 t2 :
+  negb (is_mod t1) -> negb (is_mod t2) -> is_mod (TMul {[+ t1; t2 +]}).
+Proof.
+move=> Nm1 Nm2; case E: (is_mod (TMul {[+ t1; t2 +]})) => //.
+have Nm : negb (is_mod (TMul {[+ t1; t2 +]})) by rewrite E.
+have H : factors (TMul {[+ t1; t2 +]}) = {[+ t1; t2 +]}.
+  apply: factors_TMul_atoms => x.
+  by case/SMS.elem_of_disj_union => /SMS.elem_of_singleton ->.
+have D1 : SMS.pos ({[+ t1 +]} : tsms) ## SMS.neg ({[+ t2 +]} : tsms).
+  by rewrite SMS.neg_singleton => y _ e; case: (MSet.not_elem_of_empty _ e).
+have D2 : SMS.neg ({[+ t1 +]} : tsms) ## SMS.pos ({[+ t2 +]} : tsms).
+  by rewrite SMS.neg_singleton => y e _; case: (MSet.not_elem_of_empty _ e).
+move: H; rewrite (factors_Nmod _ Nm) => /(f_equal (λ s, length (elements s))).
+rewrite (Permutation_length (SMS.elements_disj_union _ _ D1 D2)).
+by rewrite length_app !SMS.elements_singleton.
+Qed.
 
-Lemma gfactors_TGMul_empty : gfactors (TGMul ∅) = ∅.
-Proof. by rewrite gfactors_TGMul SMS.bind_empty. Qed.
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
+(** ** Atoms *)
+
+Lemma count_atom_ne t1 t2 :
+  negb (is_mod t2) -> t1 ≠ t2 -> count t1 t2 = 0%Z.
+Proof.
+move=> Nm2 ne; rewrite /count factors_Nmod // SMS.count_singleton.
+by rewrite bool_decide_eq_false_2.
+Qed.
+
+Lemma count_atom_ge0 t1 t2 : negb (is_mod t2) -> (0 <= count t1 t2)%Z.
+Proof.
+move=> Nm2; rewrite /count factors_Nmod // SMS.count_singleton.
+by case: bool_decide.
+Qed.
+
+Lemma count_atom_diag t : negb (is_mod t) -> count t t = 1%Z.
+Proof.
+move=> Nm; rewrite /count factors_Nmod // SMS.count_singleton.
+by rewrite bool_decide_eq_true_2.
+Qed.
+
+Lemma count_TMul_atoms x s :
+  (∀ u, u ∈ s → negb (is_mod u)) → count x (TMul s) = SMS.count x s.
+Proof. by move=> Hs; rewrite /count factors_TMul_atoms. Qed.
+
+Lemma count_TMul_atoms_ne t s :
+  (∀ u, u ∈ s → negb (is_mod u) ∧ t ≠ u) → count t (TMul s) = 0%Z.
+Proof.
+move=> H; rewrite count_TMul_atoms; last by move=> u /H [].
+by apply: SMS.not_elem_of_count => /H [_ []].
+Qed.
+
+Lemma not_elem_of_factors_TMul t s :
+  (∀ u, u ∈ s → negb (is_mod u) ∧ t ≠ u) → t ∉ factors (TMul s).
+Proof. by move=> H /count_neq0; rewrite (count_TMul_atoms_ne H). Qed.
+
+Lemma not_elem_of_factors_atom t1 t2 :
+  negb (is_mod t2) -> t1 ≠ t2 -> t1 ∉ factors t2.
+Proof. by move=> f2 ne /count_neq0; rewrite (count_atom_ne f2 ne). Qed.
+
+Lemma elem_of_factors_Nmod x t : negb (is_mod t) -> x ∈ factors t ↔ x = t.
+Proof.
+by move=> Nm; rewrite factors_Nmod // SMS.elem_of_singleton.
+Qed.
+
+Lemma atom_frac_neq0 t : negb (is_mod t) → frac_of t ≠ Frac.zero.
+Proof. by move=> Nm; apply: laurent_frac_neq0; exact: laurent_atom. Qed.
+
+(** * The group
+
+    [TGMul] is a group operation: its laws follow from the logarithms of the
+    Diffie-Hellman map ([tdh]).  On elements with Laurent logarithms,
+    [gfactors] is moreover a homomorphism ([gfactors_TGMul]). *)
+
+Definition tdh t : PreTerm.dhmap := PreTerm.dh_map (unfold_term t).
+
+Section Group.
+
+Add Ring dh_ring : (Frac.frac_ring_theory (T := PreTerm.pre_term)).
+Add Field dh_field : (Frac.frac_field_theory (T := PreTerm.pre_term)).
+
+Lemma tdh_inj t1 t2 : tdh t1 = tdh t2 → t1 = t2.
+Proof.
+move=> e; apply: unfold_term_inj.
+exact: (PreTerm.dh_map_inj _ _ (wf_unfold_term _) (wf_unfold_term _) e).
+Qed.
+
+Lemma tdh_TGMul s (k : PreTerm.pre_term) :
+  tdh (TGMul s) !!! k = Frac.ssum (λ t, tdh t !!! k) s.
+Proof.
+have W : ∀ pt, pt ∈ SMS.map unfold_term s → PreTerm.wf pt.
+  by move=> pt /SMS.elem_of_map [t [-> _]].
+rewrite /tdh unfold_TGMul (PreTerm.dh_map_gmul _ W).
+by rewrite PreTerm.lookup_dh_sum_ssum Frac.ssum_map.
+Qed.
+
+Lemma tdh_TExp b e (k : PreTerm.pre_term) :
+  tdh (TExp b e) !!! k =
+  Frac.mul (tdh b !!! k) (Frac.map unfold_term (frac_of e)).
+Proof.
+by rewrite /tdh unfold_TExp PreTerm.dh_map_exp // PreTerm.lookup_dh_scale
+  unfold_frac_of.
+Qed.
+
+Lemma tdh_TGMul_empty (k : PreTerm.pre_term) : tdh (TGMul ∅) !!! k = Frac.zero.
+Proof. by rewrite tdh_TGMul Frac.ssum_empty. Qed.
+
+Lemma map_unfold_TMul_empty :
+  Frac.map unfold_term (frac_of (TMul ∅)) = Frac.one.
+Proof. by rewrite frac_of_TMul_empty Frac.map_one. Qed.
 
 Lemma TGMul_singleton t : TGMul {[+ t +]} = t.
-Proof. by apply: gfactors_inj; rewrite gfactors_TGMul SMS.bind_singleton. Qed.
-
-Lemma gcount_TGMul t s : gcount t (TGMul s) = SMS.count t (SMS.bind gfactors s).
-Proof. by rewrite /gcount gfactors_TGMul. Qed.
-
-Lemma gcount_TGMul_empty t : gcount t (TGMul ∅) = 0%Z.
-Proof. by rewrite /gcount gfactors_TGMul_empty SMS.count_empty. Qed.
-
-Lemma gcount_TGMul_disj_union t s1 s2 :
-  gcount t (TGMul (s1 ⊎ s2)) = (gcount t (TGMul s1) + gcount t (TGMul s2))%Z.
-Proof. by rewrite !gcount_TGMul SMS.bind_disj_union SMS.count_disj_union. Qed.
-
-Lemma gcount_TGMul_inv t s :
-  gcount t (TGMul (SMS.inv s)) = (- gcount t (TGMul s))%Z.
-Proof. by rewrite !gcount_TGMul SMS.bind_inv SMS.count_inv. Qed.
+Proof.
+apply: tdh_inj; apply/FMap.fmap_eq => k.
+by rewrite tdh_TGMul Frac.ssum_singleton.
+Qed.
 
 Lemma TGMul_disj_union s1 s2 :
   TGMul (s1 ⊎ s2) = TGMul {[+ TGMul s1; TGMul s2 +]}.
 Proof.
-apply: gfactors_inj; rewrite !gfactors_TGMul !SMS.bind_disj_union.
-by rewrite !SMS.bind_singleton !gfactors_TGMul.
+apply: tdh_inj; apply/FMap.fmap_eq => k.
+rewrite !tdh_TGMul !Frac.ssum_disj_union !Frac.ssum_singleton.
+by rewrite !tdh_TGMul.
 Qed.
 
 Lemma TGMul_unit_l t : TGMul {[+ TGMul ∅; t +]} = t.
 Proof.
-apply: gcount_inj => x _.
-by rewrite gcount_TGMul_disj_union !TGMul_singleton gcount_TGMul_empty.
+apply: tdh_inj; apply/FMap.fmap_eq => k.
+rewrite tdh_TGMul Frac.ssum_disj_union !Frac.ssum_singleton.
+by rewrite tdh_TGMul_empty; move: (tdh t !!! k) => a; ring.
 Qed.
 
 Lemma TGMul_unit_r t : TGMul {[+ t; TGMul ∅ +]} = t.
@@ -175,9 +378,16 @@ Proof. by rewrite (comm (⊎)) TGMul_unit_l. Qed.
 
 Lemma TGMul_inv_r t : TGMul {[+ TGInv t; t +]} = TGMul ∅.
 Proof.
-apply: gcount_inj => x _.
-rewrite gcount_TGMul_disj_union !TGMul_singleton gcount_TGInv.
-rewrite gcount_TGMul_empty; lia.
+apply: tdh_inj; apply/FMap.fmap_eq => k.
+rewrite tdh_TGMul Frac.ssum_disj_union !Frac.ssum_singleton tdh_TGMul_empty.
+rewrite /TGInv tdh_TGMul Frac.ssum_inv Frac.ssum_singleton.
+by move: (tdh t !!! k) => a; ring.
+Qed.
+
+Lemma gfactors_TGMul_empty : gfactors (TGMul ∅) = ∅.
+Proof.
+rewrite gfactors_TGMul ?SMS.bind_empty // => x.
+by rewrite SMS.elem_of_count SMS.count_empty => /(_ eq_refl).
 Qed.
 
 Lemma gtunitP t : t = TGMul ∅ ↔ gfactors t = ∅.
@@ -191,15 +401,31 @@ Proof. by move=> x y e; rewrite -(TGInvK x) e TGInvK. Qed.
 
 Lemma TGInv_TGMul s : TGInv (TGMul s) = TGMul (SMS.inv s).
 Proof.
-by apply: gfactors_inj; rewrite gfactors_TGInv !gfactors_TGMul SMS.bind_inv.
+apply: tdh_inj; apply/FMap.fmap_eq => k.
+rewrite /TGInv !tdh_TGMul Frac.ssum_inv Frac.ssum_singleton tdh_TGMul.
+by rewrite Frac.ssum_inv.
 Qed.
 
-Lemma TGInv_fixed t : TGInv t = t ↔ t = TGMul ∅.
+Lemma gcount_TGMul t s :
+  (∀ x, x ∈ s → glaurent x) →
+  gcount t (TGMul s) = SMS.count t (SMS.bind gfactors s).
+Proof. by move=> L; rewrite /gcount gfactors_TGMul. Qed.
+
+Lemma gcount_TGMul_empty t : gcount t (TGMul ∅) = 0%Z.
+Proof. by rewrite /gcount gfactors_TGMul_empty SMS.count_empty. Qed.
+
+Lemma glaurent_pair t1 t2 :
+  glaurent t1 → glaurent t2 → ∀ x, x ∈ ({[+ t1; t2 +]} : tsms) → glaurent x.
 Proof.
-split=> [e|->]; last first.
-  by apply: gcount_inj => x _; rewrite gcount_TGInv gcount_TGMul_empty.
-apply: gcount_inj => x _; rewrite gcount_TGMul_empty.
-have := f_equal (gcount x) e; rewrite gcount_TGInv; lia.
+by move=> L1 L2 x /SMS.elem_of_disj_union [] /SMS.elem_of_singleton ->.
+Qed.
+
+Lemma gcount_TGMul2 t t1 t2 :
+  glaurent t1 → glaurent t2 →
+  gcount t (TGMul {[+ t1; t2 +]}) = (gcount t t1 + gcount t t2)%Z.
+Proof.
+move=> L1 L2; rewrite (gcount_TGMul _ (glaurent_pair L1 L2)).
+by rewrite SMS.bind_disj_union !SMS.bind_singleton SMS.count_disj_union.
 Qed.
 
 Lemma gcount_diag t : gcount t t = if is_gmul t then 0%Z else 1%Z.
@@ -222,327 +448,15 @@ Lemma not_elem_of_gcount t t' : t ∉ gfactors t' → gcount t t' = 0%Z.
 Proof. exact: SMS.not_elem_of_count. Qed.
 
 Lemma elem_of_gfactors_TGMul2 t1 t2 t' :
+  glaurent t1 → glaurent t2 →
   t' ∈ gfactors (TGMul {[+ t1; t2 +]}) → t' ∈ gfactors t1 ∨ t' ∈ gfactors t2.
 Proof.
-rewrite -!gcount_neq0 gcount_TGMul_disj_union !TGMul_singleton.
+move=> L1 L2; rewrite -!gcount_neq0 gcount_TGMul2 //.
 case: (decide (gcount t' t1 = 0%Z)) => ?; [right|left]; lia.
 Qed.
 
-(** * Exponentiation *)
-
-Lemma Ngmul_TExp b e : negb (is_gmul b) -> negb (is_gmul (TExp b e)).
-Proof.
-rewrite !is_gmul_unfold unfold_TExp => Nm.
-exact: PreTerm.Ngmul_exp.
-Qed.
-
-Lemma base_idem pt : base (base pt) = base pt.
-Proof.
-apply: unfold_term_inj; rewrite !unfold_base.
-rewrite PreTerm.base_expN //; exact: PreTerm.base_Nexp.
-Qed.
-
-Lemma base_Nexp t : negb (is_exp (base t)).
-Proof. rewrite is_exp_unfold unfold_base; exact: PreTerm.base_Nexp. Qed.
-
-Lemma expo_expN t : negb (is_exp t) → expo t = TMul ∅.
-Proof.
-rewrite is_exp_unfold => tNx; apply: unfold_term_inj.
-rewrite unfold_expo unfold_TMul_make.
-exact: PreTerm.expo_expN.
-Qed.
-
-(* The three non-free heads are mutually exclusive. *)
-Lemma is_exp_Nmul t : is_exp t -> negb (is_mul t).
-Proof. rewrite is_exp_unfold is_mul_unfold; exact: PreTerm.is_exp_Nmul. Qed.
-
-Lemma is_exp_Ngmul t : is_exp t -> negb (is_gmul t).
-Proof. rewrite is_exp_unfold is_gmul_unfold; exact: PreTerm.is_exp_Ngmul. Qed.
-
-Lemma is_mul_Ngmul t : is_mul t -> negb (is_gmul t).
-Proof. rewrite is_mul_unfold is_gmul_unfold; exact: PreTerm.is_mul_Ngmul. Qed.
-
-Lemma is_mul_Nexp t : is_mul t -> negb (is_exp t).
-Proof. rewrite is_mul_unfold is_exp_unfold; by case: (unfold_term t). Qed.
-
-Lemma is_gmul_base t : is_gmul (base t) = is_gmul t.
-Proof. rewrite !is_gmul_unfold unfold_base; exact: PreTerm.is_gmul_base. Qed.
-
-Lemma base_expN t : negb (is_exp t) → base t = t.
-Proof.
-rewrite is_exp_unfold => tNx; apply: unfold_term_inj.
-rewrite unfold_base; exact: PreTerm.base_expN.
-Qed.
-
-Lemma base_TExp b e : negb (is_gmul b) -> base (TExp b e) = base b.
-Proof.
-rewrite is_gmul_unfold => Nm.
-apply: unfold_term_inj; rewrite !unfold_base unfold_TExp.
-exact: PreTerm.base_exp.
-Qed.
-
-Lemma expo_TExp b e :
-  negb (is_gmul b) -> expo (TExp b e) = TMul {[+ expo b; e +]}.
-Proof.
-rewrite is_gmul_unfold => Nm.
-apply: unfold_term_inj; rewrite !unfold_expo unfold_TExp.
-rewrite unfold_TMul SMS.map_disj_union !SMS.map_singleton unfold_expo.
-exact: PreTerm.expo_exp.
-Qed.
-
-Lemma expo_TExp_expN b e :
-  negb (is_exp b) → negb (is_gmul b) → expo (TExp b e) = e.
-Proof. by move=> gNX gNm; rewrite expo_TExp // expo_expN // TMul_unit_l. Qed.
-
-Lemma TExp_gfactors b e :
-  TExp b e =
-  TGMul (SMS.map (λ u, TExp u e) (gfactors b)).
-Proof.
-apply: unfold_term_inj.
-rewrite unfold_TExp unfold_TGMul /PreTerm.exp -unfold_gfactors.
-rewrite (SMS.map_map unfold_term _ (gfactors b)).
-rewrite (SMS.map_map _ unfold_term (gfactors b)).
-congr PreTerm.gmul; apply: SMS.map_ext => u u_b /=.
-rewrite unfold_TExp PreTerm.exp_Ngmul //; try exact: wf_unfold_term.
-by rewrite -is_gmul_unfold; exact: (Ngmul_gfactors _ _ u_b).
-Qed.
-
-Lemma gfactors_TExp b e :
-  gfactors (TExp b e) =
-  SMS.map (λ u, TExp u e) (gfactors b).
-Proof.
-rewrite {1}(TExp_gfactors b e) gfactors_TGMul_atoms // => x.
-move=> /SMS.elem_of_map [u [-> u_b]].
-by apply: Ngmul_TExp; apply: Ngmul_gfactors u_b.
-Qed.
-
-Lemma TExp_TGMul s e : TExp (TGMul s) e = TGMul (SMS.map (λ u, TExp u e) s).
-Proof.
-apply: gfactors_inj; rewrite gfactors_TExp !gfactors_TGMul.
-rewrite SMS.map_bind SMS.bind_map.
-by apply: SMS.bind_ext => u _; rewrite gfactors_TExp.
-Qed.
-
-Lemma TExp_TGInv t e : TExp (TGInv t) e = TGInv (TExp t e).
-Proof.
-apply: gfactors_inj.
-rewrite gfactors_TExp !gfactors_TGInv gfactors_TExp.
-exact: SMS.map_inv.
-Qed.
-
-Lemma TExp_gunit e : TExp (TGMul ∅) e = TGMul ∅.
-Proof. by rewrite TExp_TGMul SMS.map_empty. Qed.
-
-Definition exps t := factors (expo t).
-
-Lemma count_exps_pos x t :
-  Z.of_nat (MSet.count x (SMS.pos (exps t))) = Z.max 0 (count x (expo t)).
-Proof. exact: SMS.count_pos_max. Qed.
-
-Lemma exps_TExp_expN b e :
-  negb (is_exp b) → negb (is_gmul b) → exps (TExp b e) = factors e.
-Proof. by move=> gNX gNm; rewrite /exps expo_TExp_expN. Qed.
-
-Lemma TExp_base_expo t : TExp (base t) (expo t) = t.
-Proof.
-apply: unfold_term_inj; rewrite unfold_TExp unfold_base unfold_expo.
-exact: PreTerm.exp_base_expo.
-Qed.
-
-Lemma TExpA b e1 e2 : TExp (TExp b e1) e2 = TExp b (TMul {[+ e1; e2 +]}).
-Proof.
-wlog: b / negb (is_gmul b).
-  move=> Hb.
-  rewrite [in LHS](TExp_gfactors b e1) TExp_TGMul.
-  rewrite [in RHS](TExp_gfactors b (TMul {[+ e1; e2 +]})) SMS.map_map.
-  congr TGMul; apply: SMS.map_ext => u u_b.
-  by apply: Hb; apply: Ngmul_gfactors u_b.
-move=> Nm.
-have Nm1 := Ngmul_TExp b e1 Nm.
-rewrite -[LHS]TExp_base_expo -[RHS]TExp_base_expo.
-rewrite !(base_TExp _ _ Nm1) !(expo_TExp _ _ Nm1).
-rewrite !(base_TExp _ _ Nm) !(expo_TExp _ _ Nm).
-congr TExp; apply: count_inj => x _.
-rewrite !count_TMul_disj_union !TMul_singleton !count_TMul_disj_union.
-rewrite !TMul_singleton; lia.
-Qed.
-
-Lemma TExpE b e : TExp b e = TExp (base b) (TMul {[+ expo b; e +]}).
-Proof. by rewrite -{1}(TExp_base_expo b) TExpA. Qed.
-
-Lemma TExp_unit b : TExp b (TMul ∅) = b.
-Proof.
-by rewrite -{1}(TExp_base_expo b) TExpA TMul_unit_r TExp_base_expo.
-Qed.
-
-Lemma base_expsK t : TExp (base t) (TMul (exps t)) = t.
-Proof. by rewrite /exps factorsK TExp_base_expo. Qed.
-
-Lemma TExpK u v : TExp (TExp u v) (TInv v) = u.
-Proof.
-rewrite TExpA (_ : TMul {[+ v; TInv v +]} = TMul ∅) ?TExp_unit //.
-by rewrite (comm (⊎)) TMul_inv_r.
-Qed.
-
-Lemma TExpKV u v : TExp (TExp u (TInv v)) v = u.
-Proof. by have := TExpK u (TInv v); rewrite TInvK. Qed.
-
-Lemma is_gmul_TExp b e : is_gmul (TExp b e) = is_gmul b.
-Proof.
-have := Ngmul_TExp b e; have := Ngmul_TExp (TExp b e) (TInv e).
-rewrite TExpK.
-by case: (is_gmul b); case: (is_gmul (TExp b e)) => //= /(_ I).
-Qed.
-
-Lemma TExp_injl e t1 t2 : TExp t1 e = TExp t2 e -> t1 = t2.
-Proof. by move=> E; rewrite -(TExpK t1 e) E TExpK. Qed.
-
-Lemma is_mul_TMul2 t1 t2 :
-  negb (is_mul t1) -> negb (is_mul t2) -> is_mul (TMul {[+ t1; t2 +]}).
-Proof.
-move=> Nm1 Nm2; case E: (is_mul (TMul {[+ t1; t2 +]})) => //.
-have Nm : negb (is_mul (TMul {[+ t1; t2 +]})) by rewrite E.
-have H : factors (TMul {[+ t1; t2 +]}) = {[+ t1; t2 +]}.
-  apply: factors_TMul_atoms => x.
-  by case/SMS.elem_of_disj_union => /SMS.elem_of_singleton ->.
-move: H; rewrite (factors_Nmul _ Nm) => /(f_equal (λ s, length (elements s))).
-rewrite SMS.elements_singleton.
-rewrite (Permutation_length (SMS.elements_disj_union _ _ _ _));
-  rewrite ?SMS.neg_singleton ?length_app ?SMS.elements_singleton //;
-  by move=> y h1 h2; first [exact: MSet.not_elem_of_empty y h1
-                           |exact: MSet.not_elem_of_empty y h2].
-Qed.
-
-Lemma count_expo_TExp t1 t2 t3 :
-  negb (is_gmul t2) ->
-  count t1 (expo (TExp t2 t3)) = (count t1 (expo t2) + count t1 t3)%Z.
-Proof.
-by move=> Nm; rewrite (expo_TExp _ _ Nm) count_TMul_disj_union !TMul_singleton.
-Qed.
-
-Lemma count_expo_TExp_eq t1 t2 :
-  negb (is_mul t1) -> negb (is_gmul t2) ->
-  count t1 (expo (TExp t2 t1)) = (count t1 (expo t2) + 1)%Z.
-Proof.
-move=> Nm1 Nm2; rewrite (count_expo_TExp _ _ _ Nm2) count_diag.
-by case: is_mul Nm1.
-Qed.
-
-Set Implicit Arguments.
-Unset Strict Implicit.
-Unset Printing Implicit Defensive.
-
-Lemma is_expE t : is_exp t ↔ expo t ≠ TMul ∅.
-Proof.
-rewrite is_exp_unfold.
-have ->: expo t ≠ TMul ∅ ↔ unfold_term (expo t) ≠ unfold_term (TMul ∅).
-  split; last congruence.
-  by move=> n1 contra; apply: n1; apply: inj contra.
-rewrite unfold_expo unfold_TMul SMS.map_empty PreTerm.mul_empty.
-case: (PreTerm.is_expP (unfold_term t)) (wf_unfold_term t) => [b e ->|_ _ ->].
-- by move=> /PreTerm.wf_dh_single [_ [_ [_ ne]]]; split.
-- by move=> _; split=> // /(_ eq_refl).
-Qed.
-
-Lemma is_expNE t : negb (is_exp t) ↔ expo t = TMul ∅.
-Proof.
-rewrite negb_True is_expE; split; eauto.
-exact: dec_stable.
-Qed.
-
-Lemma is_exp_of_exps t t' : t' ∈ exps t -> is_exp t.
-Proof.
-move=> t'_t; apply/is_expE => e.
-move: t'_t; rewrite /exps e factors_TMul_empty.
-by rewrite SMS.elem_of_count SMS.count_empty.
-Qed.
-
-Lemma count_expo_TExp_gt0 t1 t2 :
-  (0 < count t1 (expo (TExp t2 t1)))%Z ↔
-  negb (is_mul t1) ∧ negb (is_gmul t2) ∧ (0 ≤ count t1 (expo t2))%Z.
-Proof.
-split; last by case=> Nm1 [Nm2 ?]; rewrite count_expo_TExp_eq //; lia.
-move=> pos; have t1_in : t1 ∈ exps (TExp t2 t1).
-  by rewrite /exps; apply/count_neq0; lia.
-have Nm1 := Nmul_factors _ _ t1_in.
-have Nm2 : negb (is_gmul t2).
-  rewrite -(is_gmul_TExp t2 t1); exact: is_exp_Ngmul _ (is_exp_of_exps t1_in).
-split=> //; split=> //; move: pos; rewrite count_expo_TExp_eq //; lia.
-Qed.
-
-Lemma TExp_TMul_singleton_l t x X Y :
-  TExp t (TMul (SMS.make ({[+ x +]} ⊎ X) Y)) =
-  TExp (TExp t (TMul (SMS.make X Y))) x.
-Proof.
-rewrite TExpA; congr TExp; apply: count_inj => z _.
-rewrite count_TMul_disj_union !TMul_singleton !count_TMul.
-rewrite SMS.bind_make_singleton_l SMS.count_disj_union /count; lia.
-Qed.
-
-Lemma TExp_TMul_singleton_r t y X Y :
-  TExp t (TMul (SMS.make X ({[+ y +]} ⊎ Y))) =
-  TExp (TExp t (TMul (SMS.make X Y))) (TInv y).
-Proof.
-rewrite TExpA; congr TExp; apply: count_inj => z _.
-rewrite count_TMul_disj_union !TMul_singleton count_TInv !count_TMul.
-rewrite SMS.bind_make_singleton_r SMS.count_disj_union SMS.count_inv /count.
-lia.
-Qed.
-
-Lemma exps_TExp_TMul t s :
-  negb (is_exp t) -> negb (is_gmul t) ->
-  (∀ u, u ∈ s → negb (is_mul u)) →
-  exps (TExp t (TMul s)) = s.
-Proof.
-by move=> tNexp tNm Hs; rewrite /exps expo_TExp_expN // factors_TMul_atoms.
-Qed.
-
-Lemma TExpC g a b : TExp (TExp g a) b = TExp (TExp g b) a.
-Proof. by rewrite !TExpA (comm (⊎)). Qed.
-
-(** ** Atoms *)
-
-Lemma count_atom_ne t1 t2 :
-  negb (is_mul t2) -> t1 ≠ t2 -> count t1 t2 = 0%Z.
-Proof.
-move=> Nm2 ne; rewrite /count factors_Nmul // SMS.count_singleton.
-by rewrite bool_decide_eq_false_2.
-Qed.
-
-Lemma count_atom_ge0 t1 t2 : negb (is_mul t2) -> (0 <= count t1 t2)%Z.
-Proof.
-move=> Nm2; rewrite /count factors_Nmul // SMS.count_singleton.
-by case: bool_decide.
-Qed.
-
-Lemma count_TMul_atoms x s :
-  (∀ u, u ∈ s → negb (is_mul u)) → count x (TMul s) = SMS.count x s.
-Proof. by move=> Hs; rewrite /count factors_TMul_atoms. Qed.
-
-Lemma count_TMul_atoms_ne t s :
-  (∀ u, u ∈ s → negb (is_mul u) ∧ t ≠ u) → count t (TMul s) = 0%Z.
-Proof.
-move=> H; rewrite count_TMul_atoms; last by move=> u /H [].
-by apply: SMS.not_elem_of_count => /H [_ []].
-Qed.
-
-Lemma not_elem_of_factors_TMul t s :
-  (∀ u, u ∈ s → negb (is_mul u) ∧ t ≠ u) → t ∉ factors (TMul s).
-Proof. by move=> H /count_neq0; rewrite (count_TMul_atoms_ne H). Qed.
-
-Lemma not_elem_of_factors_atom t1 t2 :
-  negb (is_mul t2) -> t1 ≠ t2 -> t1 ∉ factors t2.
-Proof. by move=> f2 ne /count_neq0; rewrite (count_atom_ne f2 ne). Qed.
-
-Lemma count_atom_diag t : negb (is_mul t) -> count t t = 1%Z.
-Proof. by rewrite count_diag; case: is_mul. Qed.
-
-Lemma elem_of_factors_Nmul x t : negb (is_mul t) -> x ∈ factors t ↔ x = t.
-Proof.
-by move=> Nm; rewrite factors_Nmul // SMS.elem_of_singleton.
-Qed.
-
-Lemma elem_of_gfactors_Ngmul x t : negb (is_gmul t) -> x ∈ gfactors t ↔ x = t.
+Lemma elem_of_gfactors_Ngmul x t :
+  negb (is_gmul t) -> x ∈ gfactors t ↔ x = t.
 Proof.
 by move=> Nm; rewrite gfactors_Ngmul // SMS.elem_of_singleton.
 Qed.
@@ -560,6 +474,350 @@ move=> /(f_equal (SMS.count t)).
 by rewrite SMS.count_singleton SMS.count_empty bool_decide_eq_true_2.
 Qed.
 
+(** * Exponentiation *)
+
+Lemma TExpA b e1 e2 : TExp (TExp b e1) e2 = TExp b (TMul {[+ e1; e2 +]}).
+Proof.
+apply: tdh_inj; apply/FMap.fmap_eq => k; rewrite !tdh_TExp frac_of_TMul2.
+rewrite (Frac.map_mul unfold_term unfold_term_inj).
+by move: (tdh b !!! k) (Frac.map _ (frac_of e1)) (Frac.map _ (frac_of e2))
+  => x y z; ring.
+Qed.
+
+Lemma TExpC g a b : TExp (TExp g a) b = TExp (TExp g b) a.
+Proof. by rewrite !TExpA (comm (⊎)). Qed.
+
+Lemma TExp_unit b : TExp b (TMul ∅) = b.
+Proof.
+apply: tdh_inj; apply/FMap.fmap_eq => k.
+by rewrite tdh_TExp map_unfold_TMul_empty; move: (tdh b !!! k) => a; ring.
+Qed.
+
+Lemma TExpK u v : frac_of v ≠ Frac.zero → TExp (TExp u v) (TInv v) = u.
+Proof.
+move=> nv; rewrite TExpA (comm (⊎)) TMul_inv_r //; exact: TExp_unit.
+Qed.
+
+Lemma TExpKV u v : frac_of v ≠ Frac.zero → TExp (TExp u (TInv v)) v = u.
+Proof.
+move=> nv; have := TExpK u (frac_of_TInv_neq0 _ nv).
+by rewrite TInvK.
+Qed.
+
+Lemma TExp_injl e t1 t2 :
+  frac_of e ≠ Frac.zero → TExp t1 e = TExp t2 e -> t1 = t2.
+Proof. by move=> ne E; rewrite -(TExpK t1 ne) E TExpK. Qed.
+
+Lemma TExp_TGMul s e : TExp (TGMul s) e = TGMul (SMS.map (λ u, TExp u e) s).
+Proof.
+apply: tdh_inj; apply/FMap.fmap_eq => k.
+rewrite tdh_TExp !tdh_TGMul Frac.ssum_map -Frac.ssum_mul_r.
+by apply: Frac.ssum_ext => u _; rewrite tdh_TExp.
+Qed.
+
+Lemma TExp_gfactors b e :
+  TExp b e = TGMul (SMS.map (λ u, TExp u e) (gfactors b)).
+Proof. by rewrite -TExp_TGMul gfactorsK. Qed.
+
+Lemma TExp_TGInv t e : TExp (TGInv t) e = TGInv (TExp t e).
+Proof. by rewrite /TGInv TExp_TGMul SMS.map_inv SMS.map_singleton. Qed.
+
+Lemma TExp_gunit e : TExp (TGMul ∅) e = TGMul ∅.
+Proof. by rewrite TExp_TGMul SMS.map_empty. Qed.
+
+Lemma TExp_injr t t1 t2 : t ≠ TGMul ∅ → TExp t t1 = TExp t t2 → t1 = t2.
+Proof.
+move=> nt e.
+have [k nk] : ∃ k : PreTerm.pre_term, tdh t !!! k ≠ Frac.zero.
+  destruct (FMap.to_list (tdh t)) as [|[k v] l] eqn:El.
+  - exfalso; apply: nt; apply: tdh_inj; apply/FMap.fmap_eq => k.
+    by rewrite tdh_TGMul_empty PreTerm.lookup_to_list El.
+  - have /FMap.elem_of_to_list [ek nv] : (k, v) ∈ FMap.to_list (tdh t).
+      by rewrite El; left.
+    by exists k; rewrite ek.
+have E : tdh (TExp t t1) !!! k = tdh (TExp t t2) !!! k by rewrite e.
+rewrite !tdh_TExp in E.
+apply: frac_of_inj; apply: (Frac.map_inj unfold_term unfold_term_inj).
+move: (tdh t !!! k) nk E => l nl.
+move: (Frac.map _ (frac_of t1)) (Frac.map _ (frac_of t2)) => a b E.
+have Ea : a = Frac.mul (Frac.inv l) (Frac.mul l a) by field.
+have Eb : b = Frac.mul (Frac.inv l) (Frac.mul l b) by field.
+by rewrite Ea Eb E.
+Qed.
+
+End Group.
+
+(** ** Laurent logarithms *)
+
+Lemma lfrac_fsum (l : list (Frac.frac PreTerm.pre_term)) :
+  Forall PreTerm.lfrac l → PreTerm.lfrac (Frac.fsum l).
+Proof.
+elim: l => [_|r l IH /Forall_cons_iff [hr hl]].
+  by rewrite Frac.fsum_nil; exact: PreTerm.lfrac_zero.
+rewrite Frac.fsum_cons.
+exact: proj1 (PreTerm.lfactors_add PreTerm.one _ _ hr (IH hl)).
+Qed.
+
+Lemma glaurent_TGMul s : (∀ x, x ∈ s → glaurent x) → glaurent (TGMul s).
+Proof.
+move=> L k; rewrite -/(tdh (TGMul s)) tdh_TGMul Frac.ssumE Frac.subE.
+have F : ∀ X : MSet.mset term, (∀ x, x ∈ X → x ∈ s) →
+    PreTerm.lfrac (Frac.fsum ((λ t, tdh t !!! k) <$> elements X)).
+  move=> X hX; apply: lfrac_fsum; apply/Forall_fmap/list.Forall_forall.
+  by move=> x /MSet.elem_of_elements /hX /L /(_ k).
+exact: proj1 (PreTerm.lfactors_add PreTerm.one _ _
+         (F _ (λ x hx, SMS.elem_of_pos _ _ hx))
+         (PreTerm.lfrac_opp _ (F _ (λ x hx, SMS.elem_of_neg _ _ hx)))).
+Qed.
+
+Lemma glaurent_TExp b e : glaurent b → laurent e → glaurent (TExp b e).
+Proof.
+move=> Lb Le k; rewrite -/(tdh (TExp b e)) tdh_TExp unfold_frac_of.
+apply: PreTerm.lfrac_mul; first exact: Lb.
+exact: PreTerm.mfrac_lfrac (laurent_mfrac _ Le).
+Qed.
+
+Lemma glaurent_Ngnf t : negb (is_exp t) → negb (is_gmul t) → glaurent t.
+Proof.
+rewrite is_exp_unfold is_gmul_unfold => Ne Ng k.
+have G : negb (PreTerm.is_gnon_free (unfold_term t)).
+  rewrite /PreTerm.is_gnon_free; move: Ne Ng.
+  by case: (PreTerm.is_exp (unfold_term t));
+    case: (PreTerm.is_gmul (unfold_term t)).
+rewrite (PreTerm.dh_map_Ngnf _ G) FMap.lookup_singleton.
+by case: bool_decide; [exact: PreTerm.lfrac_one|exact: PreTerm.lfrac_zero].
+Qed.
+
+Lemma glaurent_TGInv t : glaurent t → glaurent (TGInv t).
+Proof.
+move=> L; apply: glaurent_TGMul => x.
+move=> /SMS.elem_of_count; rewrite SMS.count_inv => h.
+have : x ∈ ({[+ t +]} : tsms) by apply/SMS.elem_of_count; lia.
+by move/SMS.elem_of_singleton => ->.
+Qed.
+
+Lemma glaurent_gfactors b u :
+  glaurent b → u ∈ gfactors b → glaurent u ∧ laurent (expo u).
+Proof.
+move=> L /elem_of_gfactors_unfold ub.
+have [_ [Lu mu]] := PreTerm.gfactors_llogs _ _ (wf_unfold_term b) L ub.
+split; first exact: Lu.
+apply/laurent_unfold; rewrite unfold_expo.
+exact/(PreTerm.laurent_mfrac _ (PreTerm.wf_expo _ (wf_unfold_term u))).
+Qed.
+
+(** ** Powers of non-products *)
+
+Lemma unfold_TMul_empty : unfold_term (TMul ∅) = PreTerm.one.
+Proof.
+rewrite unfold_TMul SMS.map_empty /PreTerm.mul Frac.sprod_empty.
+by rewrite /PreTerm.mod_aux PreTerm.lists_one.
+Qed.
+
+Lemma is_exp_Nmod t : is_exp t -> negb (is_mod t).
+Proof. rewrite is_exp_unfold is_mod_unfold; exact: PreTerm.is_exp_Nmod. Qed.
+
+Lemma is_exp_Ngmul t : is_exp t -> negb (is_gmul t).
+Proof. rewrite is_exp_unfold is_gmul_unfold; exact: PreTerm.is_exp_Ngmul. Qed.
+
+Lemma is_mod_Ngmul t : is_mod t -> negb (is_gmul t).
+Proof. rewrite is_mod_unfold is_gmul_unfold; exact: PreTerm.is_mod_Ngmul. Qed.
+
+Lemma is_mod_Nexp t : is_mod t -> negb (is_exp t).
+Proof. rewrite is_mod_unfold is_exp_unfold; by case: (unfold_term t). Qed.
+
+Lemma is_gmul_Nexp t : is_gmul t → negb (is_exp t).
+Proof. rewrite is_gmul_unfold is_exp_unfold; exact: PreTerm.is_gmul_Nexp. Qed.
+
+Lemma base_expN t : negb (is_exp t) → base t = t.
+Proof.
+rewrite is_exp_unfold => tNx; apply: unfold_term_inj.
+rewrite unfold_base; exact: PreTerm.base_expN.
+Qed.
+
+Lemma expo_expN t : negb (is_exp t) → expo t = TMul ∅.
+Proof.
+rewrite is_exp_unfold => tNx; apply: unfold_term_inj.
+rewrite unfold_expo unfold_TMul_empty; exact: PreTerm.expo_expN.
+Qed.
+
+Lemma base_Nexp t : negb (is_exp (base t)).
+Proof.
+rewrite is_exp_unfold unfold_base.
+case E: (PreTerm.is_exp (unfold_term t)).
+  case: (PreTerm.is_expP (unfold_term t)) E (wf_unfold_term t)
+    => [b m d -> _ /PreTerm.wf_exp_entry [_ [gb _]]|//].
+  exact: PreTerm.Ngnf_Nexp gb.
+have nE : negb (PreTerm.is_exp (unfold_term t)) by rewrite E.
+by rewrite (PreTerm.base_expN _ nE).
+Qed.
+
+Lemma base_idem t : base (base t) = base t.
+Proof. exact: base_expN (base_Nexp t). Qed.
+
+Lemma is_gmul_base t : is_gmul (base t) = is_gmul t.
+Proof.
+rewrite !is_gmul_unfold unfold_base.
+case E: (PreTerm.is_exp (unfold_term t)).
+  case: (PreTerm.is_expP (unfold_term t)) E (wf_unfold_term t)
+    => [b m d -> _ /PreTerm.wf_exp_entry [_ [gb _]]|//].
+  move: (PreTerm.Ngnf_Ngmul _ gb)
+        (PreTerm.is_exp_Ngmul (PreTerm.PTDH [(b, (([m], []), d))]) I).
+  rewrite [PreTerm.base _]/=.
+  by case: (PreTerm.is_gmul b); case: (PreTerm.is_gmul (PreTerm.PTDH _)).
+have nE : negb (PreTerm.is_exp (unfold_term t)) by rewrite E.
+by rewrite (PreTerm.base_expN _ nE).
+Qed.
+
+Lemma unfold_TExp_Ngmul b e :
+  negb (is_gmul b) → monic e →
+  unfold_term (TExp b e) =
+  PreTerm.mk_exp (PreTerm.base (unfold_term b))
+    (Frac.mul (PreTerm.frac_of (PreTerm.expo (unfold_term b)))
+              (PreTerm.frac_of (unfold_term e))).
+Proof.
+rewrite is_gmul_unfold => Nb me.
+have mb := PreTerm.mnum_expo _ (wf_unfold_term b) Nb.
+rewrite unfold_TExp /PreTerm.exp.
+rewrite (PreTerm.exp_frac_Ngmul _ _ (wf_unfold_term b) Nb) //.
+exact: PreTerm.mnum_neq0 (PreTerm.mnum_mul _ _ mb me).
+Qed.
+
+(** Raising a power of a base to a monic exponent multiplies its exponent;
+    with other exponents, such as sums, the result is a group product. *)
+Lemma TExp_Ngmul b e :
+  negb (is_gmul b) → monic e →
+  negb (is_gmul (TExp b e)) ∧ base (TExp b e) = base b ∧
+  expo (TExp b e) = TMul {[+ expo b; e +]}.
+Proof.
+move=> Nb me.
+have Nb' : negb (PreTerm.is_gmul (unfold_term b)) by rewrite -is_gmul_unfold.
+have mb := PreTerm.mnum_expo _ (wf_unfold_term b) Nb'.
+have [N [B X]] := PreTerm.mk_exp_mnum _ _
+  (PreTerm.base_Ngnf _ (wf_unfold_term b) Nb') (PreTerm.mnum_mul _ _ mb me).
+have U := unfold_TExp_Ngmul Nb me.
+split; first by rewrite is_gmul_unfold U.
+split; first by apply: unfold_term_inj; rewrite !unfold_base U B.
+apply: unfold_term_inj; rewrite unfold_expo U X unfold_TMul.
+rewrite SMS.map_disj_union !SMS.map_singleton /PreTerm.mul Frac.sprod_pair.
+by rewrite unfold_expo.
+Qed.
+
+Lemma Ngmul_TExp b e :
+  negb (is_gmul b) → monic e → negb (is_gmul (TExp b e)).
+Proof. by move=> Nb me; case: (TExp_Ngmul Nb me). Qed.
+
+Lemma base_TExp b e :
+  negb (is_gmul b) → monic e → base (TExp b e) = base b.
+Proof. by move=> Nb me; case: (TExp_Ngmul Nb me) => _ []. Qed.
+
+Lemma expo_TExp b e :
+  negb (is_gmul b) → monic e → expo (TExp b e) = TMul {[+ expo b; e +]}.
+Proof. by move=> Nb me; case: (TExp_Ngmul Nb me) => _ []. Qed.
+
+Lemma laurent_expo_expN t : negb (is_exp t) → laurent (expo t).
+Proof. by move=> nE; rewrite expo_expN //; exact: laurent_TMul_empty. Qed.
+
+Lemma expo_TExp_expN b e :
+  negb (is_exp b) → negb (is_gmul b) → monic e → expo (TExp b e) = e.
+Proof.
+by move=> nE nG me; rewrite (expo_TExp nG me) (expo_expN nE) TMul_unit_l.
+Qed.
+
+Lemma TExp_base_expo t : TExp (base t) (expo t) = t.
+Proof.
+case G: (is_gmul t).
+  have nE : negb (is_exp t) by apply: is_gmul_Nexp; rewrite G.
+  by rewrite (base_expN nE) (expo_expN nE) TExp_unit.
+have Nt : negb (PreTerm.is_gmul (unfold_term t)) by rewrite -is_gmul_unfold G.
+apply: tdh_inj; apply/FMap.fmap_eq => k.
+rewrite tdh_TExp unfold_frac_of /tdh unfold_base unfold_expo.
+rewrite (PreTerm.dh_map_Ngmul _ (wf_unfold_term t) Nt).
+rewrite (PreTerm.dh_map_Ngnf _ (PreTerm.base_Ngnf _ (wf_unfold_term t) Nt)).
+rewrite !FMap.lookup_singleton.
+case: bool_decide; first exact: (left_id Frac.one Frac.mul).
+exact: Frac.mul_zero_l.
+Qed.
+
+Definition exps t := factors (expo t).
+
+Lemma count_exps_pos x t :
+  Z.of_nat (MSet.count x (SMS.pos (exps t))) = Z.max 0 (count x (expo t)).
+Proof. exact: SMS.count_pos_max. Qed.
+
+Lemma base_expsK t : TExp (base t) (TMul (exps t)) = t.
+Proof. by rewrite /exps factorsK TExp_base_expo. Qed.
+
+Lemma exps_TExp_expN b e :
+  negb (is_exp b) → negb (is_gmul b) → monic e → exps (TExp b e) = factors e.
+Proof. by move=> gNX gNm me; rewrite /exps expo_TExp_expN. Qed.
+
+Lemma exps_TExp_TMul t s :
+  negb (is_exp t) -> negb (is_gmul t) ->
+  (∀ u, u ∈ s → negb (is_mod u)) → exps (TExp t (TMul s)) = s.
+Proof.
+move=> tNexp tNm Hs.
+have Ls := laurent_monic _ (laurent_TMul_atoms _ Hs).
+by rewrite /exps (expo_TExp_expN tNexp tNm Ls) factors_TMul_atoms.
+Qed.
+
+Lemma is_exp_of_exps t t' : t' ∈ exps t -> is_exp t.
+Proof.
+case E: (is_exp t) => //.
+have nE : negb (is_exp t) by rewrite E.
+rewrite /exps (expo_expN nE) factors_TMul_empty SMS.elem_of_count.
+by rewrite SMS.count_empty => /(_ eq_refl).
+Qed.
+
+Lemma count_expo_TExp t1 t2 t3 :
+  negb (is_gmul t2) → laurent (expo t2) → laurent t3 →
+  count t1 (expo (TExp t2 t3)) = (count t1 (expo t2) + count t1 t3)%Z.
+Proof.
+by move=> Nm L2 L3; rewrite (expo_TExp Nm (laurent_monic _ L3)) count_TMul2.
+Qed.
+
+Lemma count_expo_TExp_eq t1 t2 :
+  negb (is_mod t1) → negb (is_gmul t2) → laurent (expo t2) →
+  count t1 (expo (TExp t2 t1)) = (count t1 (expo t2) + 1)%Z.
+Proof.
+move=> Nm1 Nm2 L2.
+by rewrite (count_expo_TExp _ Nm2 L2 (laurent_atom _ Nm1)) count_atom_diag.
+Qed.
+
+Section ExpSingletons.
+
+Add Field tfrac_field' : (Frac.frac_field_theory (T := term)).
+
+Lemma TExp_TMul_singleton_l t x X Y :
+  (∀ y, y ∈ Y → frac_of y ≠ Frac.zero) →
+  TExp t (TMul (SMS.make ({[+ x +]} ⊎ X) Y)) =
+  TExp (TExp t (TMul (SMS.make X Y))) x.
+Proof.
+move=> nY; rewrite TExpA; congr TExp; apply: frac_of_inj.
+rewrite frac_of_TMul2 !frac_of_TMul.
+rewrite (Frac.sprod_make _ _ _ (λ y _ hy, nY y hy)).
+rewrite (Frac.sprod_make _ _ _ (λ y _ hy, nY y hy)).
+rewrite Frac.fprod_disj_union MSet.elements_singleton fmap_cons fmap_nil.
+rewrite Frac.fprod_cons Frac.fprod_nil !Frac.divE.
+by move: (Frac.fprod _) (Frac.fprod _) => a c; ring.
+Qed.
+
+Lemma TExp_TMul_singleton_r t y X Y :
+  (∀ z, z ∈ X → frac_of z ≠ Frac.zero) →
+  TExp t (TMul (SMS.make X ({[+ y +]} ⊎ Y))) =
+  TExp (TExp t (TMul (SMS.make X Y))) (TInv y).
+Proof.
+move=> nX; rewrite TExpA; congr TExp; apply: frac_of_inj.
+rewrite frac_of_TMul2 frac_of_TInv !frac_of_TMul.
+rewrite (Frac.sprod_make _ _ _ (λ z hz _, nX z hz)).
+rewrite (Frac.sprod_make _ _ _ (λ z hz _, nX z hz)).
+rewrite Frac.fprod_disj_union MSet.elements_singleton fmap_cons fmap_nil.
+rewrite Frac.fprod_cons Frac.fprod_nil !Frac.divE !Frac.inv_mul Frac.inv_one.
+by move: (Frac.fprod _) (Frac.fprod _) => a c; ring.
+Qed.
+
+End ExpSingletons.
+
 (** ** Signed atoms *)
 
 (* The elements of [s] as signed atoms: [x] for a positive element [x],
@@ -569,45 +827,60 @@ Definition satoms (s : tsms) :=
 
 Definition scount f t := (count f t - count (TInv f) t)%Z.
 
+Lemma is_mod_count_laurent x t : is_mod x → laurent t → count x t = 0%Z.
+Proof.
+move=> Mx L; apply: not_elem_of_count => /L.
+by case: (is_mod x) Mx.
+Qed.
+
 Lemma scount_TInv_l f t : scount (TInv f) t = (- scount f t)%Z.
 Proof. rewrite /scount TInvK; lia. Qed.
 
-Lemma scount_TInv_r f t : scount f (TInv t) = (- scount f t)%Z.
-Proof. rewrite /scount !count_TInv; lia. Qed.
-
-Lemma scount_Nmul f t : negb (is_mul f) → scount f t = count f t.
+Lemma scount_TInv_r f t : laurent t → scount f (TInv t) = (- scount f t)%Z.
 Proof.
-by move=> Nm; rewrite /scount (is_mul_count _ _ (is_mul_TInv_atom _ Nm)); lia.
+by move=> L; rewrite /scount /count !factors_TInv // !SMS.count_inv; lia.
+Qed.
+
+Lemma scount_Nmod f t : negb (is_mod f) → laurent t → scount f t = count f t.
+Proof.
+move=> Nm L.
+by rewrite /scount (is_mod_count_laurent (is_mod_TInv_atom _ Nm) L); lia.
 Qed.
 
 Lemma scount_expo_TExp f t1 t2 :
-  negb (is_gmul t1) →
+  negb (is_gmul t1) → laurent (expo t1) → laurent t2 →
   scount f (expo (TExp t1 t2)) = (scount f (expo t1) + scount f t2)%Z.
-Proof. by move=> Nm; rewrite /scount !(count_expo_TExp _ _ _ Nm); lia. Qed.
-
-Lemma elem_of_satoms f t : f ∈ satoms (factors t) ↔ (0 < scount f t)%Z.
 Proof.
+by move=> Nm L1 L2; rewrite /scount !(count_expo_TExp _ Nm L1 L2); lia.
+Qed.
+
+Lemma elem_of_satoms f t :
+  laurent t → f ∈ satoms (factors t) ↔ (0 < scount f t)%Z.
+Proof.
+move=> L.
 rewrite /satoms elem_of_app list_elem_of_fmap MSet.elem_of_elements -count_gt0.
 rewrite /scount.
-case Em: (is_mul f).
-- have Mf : is_mul f by rewrite Em.
-  rewrite (is_mul_count _ _ Mf); split.
+case Em: (is_mod f).
+- have Mf : is_mod f by rewrite Em.
+  rewrite (is_mod_count_laurent Mf L); split.
   + case=> [|[x [-> /count_lt0 x_t]]]; first lia.
     by rewrite TInvK; lia.
   + move=> H; right; exists (TInv f); rewrite TInvK; split => //.
     by apply/count_lt0; lia.
-- have Nm : negb (is_mul f) by rewrite Em.
-  rewrite (is_mul_count _ _ (is_mul_TInv_atom _ Nm)) Z.sub_0_r.
+- have Nm : negb (is_mod f) by rewrite Em.
+  rewrite (is_mod_count_laurent (is_mod_TInv_atom _ Nm) L) Z.sub_0_r.
   split; last by left.
   case=> // [[x [Ex x_t]]].
-  have := is_mul_TInv_atom _ (Nmul_factors _ _ (SMS.elem_of_neg _ _ x_t)).
+  have := is_mod_TInv_atom _ (L _ (SMS.elem_of_neg _ _ x_t)).
   by rewrite -Ex Em.
 Qed.
 
 Lemma elem_of_satoms_TInv x t :
-  negb (is_mul x) → TInv x ∈ satoms (factors t) ↔ x ∈ SMS.neg (factors t).
+  negb (is_mod x) → laurent t →
+  TInv x ∈ satoms (factors t) ↔ x ∈ SMS.neg (factors t).
 Proof.
-move=> Nm; rewrite elem_of_satoms scount_TInv_l scount_Nmul // -count_lt0; lia.
+move=> Nm L; rewrite elem_of_satoms // scount_TInv_l scount_Nmod //.
+rewrite -count_lt0; lia.
 Qed.
 
 Lemma is_exp_of_satoms f t : f ∈ satoms (exps t) → is_exp t.
@@ -619,23 +892,35 @@ case=> [f_t|[x [_ x_t]]].
 Qed.
 
 Lemma satoms_satom f t :
-  f ∈ satoms (factors t) → negb (is_mul f) ∨ negb (is_mul (TInv f)).
+  laurent t →
+  f ∈ satoms (factors t) → negb (is_mod f) ∨ negb (is_mod (TInv f)).
 Proof.
-rewrite /satoms elem_of_app list_elem_of_fmap.
+move=> L; rewrite /satoms elem_of_app list_elem_of_fmap.
 case=> [f_t|[x [-> x_t]]].
-  by left; exact: Nmul_factors _ _ (SMS.elem_of_pos _ _ f_t).
-by right; rewrite TInvK; exact: Nmul_factors _ _ (SMS.elem_of_neg _ _ x_t).
+  by left; exact: L _ (SMS.elem_of_pos _ _ f_t).
+by right; rewrite TInvK; exact: L _ (SMS.elem_of_neg _ _ x_t).
+Qed.
+
+Lemma count_TInv_atom_self f : negb (is_mod f) → count (TInv f) f = 0%Z.
+Proof.
+move=> Nm.
+have ne : TInv f ≠ f.
+  by move=> e; move: (is_mod_TInv_atom _ Nm); rewrite e; case: (is_mod f) Nm.
+exact: count_atom_ne Nm ne.
 Qed.
 
 Lemma scount_satom_diag f :
-  negb (is_mul f) ∨ negb (is_mul (TInv f)) → scount f f = 1%Z.
+  negb (is_mod f) ∨ negb (is_mod (TInv f)) → scount f f = 1%Z.
 Proof.
-case=> Nm; first by rewrite scount_Nmul // count_atom_diag.
-by rewrite -[f]TInvK scount_TInv_l scount_TInv_r scount_Nmul // count_atom_diag.
+case=> Nm.
+  by rewrite /scount count_atom_diag // count_TInv_atom_self.
+have La := laurent_atom _ Nm.
+rewrite -[f]TInvK scount_TInv_l (scount_TInv_r _ La) (scount_Nmod Nm La).
+by rewrite count_atom_diag //; lia.
 Qed.
 
 Lemma scount_satom_ne g f :
-  negb (is_mul f) ∨ negb (is_mul (TInv f)) → g ≠ f → g ≠ TInv f →
+  negb (is_mod f) ∨ negb (is_mod (TInv f)) → g ≠ f → g ≠ TInv f →
   scount g f = 0%Z.
 Proof.
 move=> Af gf gTf.
@@ -643,25 +928,25 @@ have Tgf : TInv g ≠ f by move=> e; apply: gTf; rewrite -e TInvK.
 have TgTf : TInv g ≠ TInv f by move=> /(inj TInv).
 case: Af => Nm.
   by rewrite /scount (count_atom_ne Nm gf) (count_atom_ne Nm Tgf).
-rewrite -[f]TInvK scount_TInv_r /scount.
+have La := laurent_atom _ Nm.
+rewrite -[f]TInvK (scount_TInv_r _ La) /scount.
 rewrite (count_atom_ne Nm gTf) (count_atom_ne Nm TgTf); lia.
 Qed.
 
 (** ** Group factors of powers *)
 
-Lemma gcount_TExp_cong (z u c : term) :
-  gcount (TExp z c) (TExp u c) = gcount z u.
+Lemma gfactors_TExp b e :
+  glaurent b → laurent e →
+  gfactors (TExp b e) = SMS.map (λ u, TExp u e) (gfactors b).
 Proof.
-rewrite /gcount gfactors_TExp.
-exact: (SMS.count_map_inj _ z (gfactors u) (TExp_injl c)).
-Qed.
-
-Lemma gcount_TExp_no_preimage Y c t :
-  (∀ u, u ∈ gfactors Y → TExp u c ≠ t) → gcount t (TExp Y c) = 0%Z.
-Proof.
-move=> H; apply: not_elem_of_gcount; rewrite gfactors_TExp.
-move=> /SMS.elem_of_map [u [et u_in]].
-by apply: (H u u_in); rewrite et.
+move=> Lb Le.
+have G : ∀ x, x ∈ SMS.map (λ u, TExp u e) (gfactors b) → glaurent x.
+  move=> x /SMS.elem_of_map [u [-> ub]].
+  by apply: glaurent_TExp Le; case: (glaurent_gfactors Lb ub).
+rewrite {1}(TExp_gfactors b e) (gfactors_TGMul _ G) SMS.bind_map.
+rewrite [SMS.map]unlock.
+apply: SMS.bind_ext => u ub; apply: gfactors_Ngmul.
+exact: Ngmul_TExp (Ngmul_gfactors _ _ ub) (laurent_monic _ Le).
 Qed.
 
 Lemma gfactors_nonempty t : t ≠ TGMul ∅ → ∃ u, u ∈ gfactors t.
@@ -670,31 +955,4 @@ move=> nt; destruct (elements (gfactors t)) as [|w l] eqn:E.
   by case: nt; apply/gtunitP; exact: SMS.elements_empty_inv.
 have w_in : w ∈ w :: l by left.
 by rewrite -E in w_in; exists w; apply/SMS.elem_of_elements.
-Qed.
-
-(* A leading factor of [Y]: the core of [TExp_injr]. *)
-Lemma gcount_TExp_max x Y :
-  Y ≠ TGMul ∅ →
-  ∃ w, w ∈ gfactors Y ∧ ∀ e1 e2,
-    (count x e1 < count x e2)%Z → gcount (TExp w e2) (TExp Y e1) = 0%Z.
-Proof.
-move=> nY.
-case: (SMS.max_or_empty (λ u, count x (expo u)) (gfactors Y))
-  => [[w [w_Y w_max]]|/gtunitP //].
-exists w; split=> // e1 e2 lt.
-apply: gcount_TExp_no_preimage => u u_Y /(f_equal (λ v, count x (expo v))) /=.
-rewrite (count_expo_TExp _ _ _ (Ngmul_gfactors _ _ u_Y)).
-rewrite (count_expo_TExp _ _ _ (Ngmul_gfactors _ _ w_Y)).
-have := w_max u u_Y; rewrite /=; lia.
-Qed.
-
-(* [TExp (TGMul ∅) e = TGMul ∅] for every [e], hence the premise. *)
-Lemma TExp_injr t t1 t2 : t ≠ TGMul ∅ → TExp t t1 = TExp t t2 → t1 = t2.
-Proof.
-move=> nt e; apply: count_inj => x _.
-have [w [w_t w_max]] := gcount_TExp_max x nt.
-have : gcount w t ≠ 0%Z by apply/gcount_neq0.
-case: (Z.lt_total (count x t1) (count x t2)) => [lt|[//|gt]].
-- by rewrite -(gcount_TExp_cong w t t2) -e (w_max _ _ lt).
-- by rewrite -(gcount_TExp_cong w t t1) e (w_max _ _ gt).
 Qed.

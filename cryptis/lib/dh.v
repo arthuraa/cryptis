@@ -34,7 +34,7 @@ Definition dh_publ t : iProp :=
 
 Definition dh_seed t : iProp :=
   minted t ∧
-  ⌜negb (is_mul t)⌝ ∧
+  ⌜negb (is_mod t)⌝ ∧
   □ (public t ↔ ▷ False) ∧
   □ (∀ t', exp_pred t t' ↔ ▷ □ dh_publ t') ∧
   □ (∀ t', exp_pred (TInv t) t' ↔ ▷ False).
@@ -67,7 +67,7 @@ have -> : exps t = {[+ a +]}.
   apply: SMS.sms_eq; rewrite ?SMS.pos_singleton ?SMS.neg_singleton.
   - by rewrite -(MSet.of_list_elements (SMS.pos _)) EP.
   - exact: MSet.elements_empty_inv.
-by rewrite -(factors_Nmul _ Nm_a) factorsK.
+by rewrite -(factors_Nmod _ Nm_a) factorsK.
 Qed.
 
 Lemma dh_seed_elim1 g a :
@@ -77,10 +77,11 @@ Lemma dh_seed_elim1 g a :
   ▷ P (TExp g a).
 Proof.
 iIntros "%gNX %gNm #aP #p_t".
-iAssert ⌜negb (is_mul a)⌝%I as %Nm_a; first by iDestruct "aP" as "(_ & $ & _)".
+iAssert ⌜negb (is_mod a)⌝%I as %Nm_a; first by iDestruct "aP" as "(_ & $ & _)".
 set t' := TExp g a.
 have a_t' : a ∈ SMS.pos (exps t').
-  rewrite /t' (exps_TExp_expN _ _ gNX gNm) factors_Nmul //.
+  rewrite /t' (exps_TExp_expN gNX gNm (monic_atom _ Nm_a)).
+  rewrite factors_Nmod //.
   by rewrite SMS.pos_singleton MSet.elem_of_singleton.
 iPoseProof (public_exp_inv_same with "p_t") as "[#contra|H]" => //.
   by iDestruct (dh_seed_elim0 with "aP contra") as ">[]".
@@ -88,15 +89,16 @@ iDestruct "H" as "(%t & %e_base & %a_t & H)".
 iDestruct (dh_seed_exp_pred_elim with "aP H")
   as "{H} #[>-> H]" => //; iNext.
 have -> : t' = TExp (base t) a; last by iApply "H".
-by rewrite /t' e_base (base_TExp _ _ gNm) base_expN.
+by rewrite /t' e_base (base_TExp gNm (monic_atom _ Nm_a))
+  base_expN.
 Qed.
 
 #[local] Lemma pos_exps_TExp_pair g a b :
-  negb (is_exp g) → negb (is_gmul g) → negb (is_mul a) → negb (is_mul b) →
+  negb (is_exp g) → negb (is_gmul g) → negb (is_mod a) → negb (is_mod b) →
   SMS.pos (exps (TExp g (TMul {[+ a; b +]}))) = {[+ a; b +]}.
 Proof.
 move=> gNX gNm Nm_a Nm_b.
-have Nab u : u ∈ ({[+ a; b +]} : tsms) → negb (is_mul u).
+have Nab u : u ∈ ({[+ a; b +]} : tsms) → negb (is_mod u).
   by case/SMS.elem_of_disj_union => /SMS.elem_of_singleton ->.
 rewrite exps_TExp_TMul // !SMS.singleton_make SMS.disj_union_make.
 by rewrite (left_id ∅ (⊎)) SMS.pos_make_empty_r.
@@ -110,8 +112,8 @@ Lemma dh_seed_elim2 g a b :
   ▷ False.
 Proof.
 iIntros "%gXN %gNm #aP #bP #p".
-iAssert ⌜negb (is_mul a)⌝%I as %Nm_a; first by iDestruct "aP" as "(_ & $ & _)".
-iAssert ⌜negb (is_mul b)⌝%I as %Nm_b; first by iDestruct "bP" as "(_ & $ & _)".
+iAssert ⌜negb (is_mod a)⌝%I as %Nm_a; first by iDestruct "aP" as "(_ & $ & _)".
+iAssert ⌜negb (is_mod b)⌝%I as %Nm_b; first by iDestruct "bP" as "(_ & $ & _)".
 have ab_t : {[+ a; b +]} ⊆ SMS.pos (exps (TExp g (TMul {[+ a; b +]}))).
   by rewrite pos_exps_TExp_pair //; reflexivity.
 have a_ab : a ∈ ({[+ a; b +]} : MSet.mset term).
@@ -142,7 +144,8 @@ iIntros "%gXN %gNm #gP (#m & %Nm_a & #aP1 & #aP2 & _) #P_a".
 rewrite public_TExp_iff //; do !iSplit => //.
 - iRight. iApply "aP2"; do 2!iModIntro; iSplit => //.
   iPureIntro.
-  by rewrite (exps_TExp_expN _ _ gXN gNm) factors_Nmul.
+  rewrite (exps_TExp_expN gXN gNm (monic_atom _ Nm_a)).
+  by rewrite factors_Nmod // SMS.elements_singleton.
 - iModIntro; iIntros "#p".
   by iApply False_public; last iApply "aP1".
 Qed.
@@ -169,17 +172,16 @@ iApply (wp_mk_nonce_freshN T (λ _, False%I) dh_publ
   iIntros "%t".
   rewrite big_sepS_forall; iIntros (t').
   rewrite elem_of_union !elem_of_singleton; iIntros "[->|->]"; eauto.
-  rewrite minted_TExp //; iIntros "!>"; iSplit; eauto.
+  rewrite minted_TExp //; last by apply: atom_frac_neq0.
+  iIntros "!>"; iSplit; eauto.
   by iIntros "[??]".
 iIntros (a) "%a_T #m_a #aP #? #? token".
-have Nm_a : negb (is_mul a) by [].
-have a_g : TNonce a ∉ SMS.neg (exps g).
-  move=> a_g; have := SMS.elem_of_neg _ _ a_g.
-  rewrite /exps (expo_expN _ gNX) factors_TMul_empty.
-  by rewrite SMS.elem_of_count SMS.count_empty.
-have [_ a_ga] := tsize_lt_TExp _ _ gNm Nm_a a_g.
-have {}a_ga : TNonce a ≠ TExp g a.
-  move=> contra; rewrite -contra in a_ga; lia.
+have Nm_a : negb (is_mod a) by [].
+have a_ga : TNonce a ≠ TExp g a.
+  move=> contra; have : is_exp (TExp g a); last by rewrite -contra.
+  apply: (@is_exp_of_exps _ (TNonce a)).
+  rewrite (exps_TExp_expN gNX gNm (monic_atom _ Nm_a)).
+  by rewrite factors_Nmod // SMS.elem_of_singleton.
 rewrite big_sepS_union ?big_sepS_singleton; last set_solver.
 iDestruct "token" as "[t1 t3]".
 iApply ("post" with "[$] [] [$] [$]") => //.
@@ -188,8 +190,8 @@ iApply ("post" with "[$] [] [$] [$]") => //.
 iPureIntro => t t' t_T t'_t contra.
 rewrite -[t']TInvK -contra in t'_t.
 apply: (a_T _ t_T); apply: subterm_trans t'_t.
-apply: (@subterm_factors _ _ (TNonce a)); last exact: STRefl.
-by rewrite elem_of_factors_TInv (elem_of_factors_Nmul _ Nm_a).
+apply: (@subterm_factors _ _ (TNonce a)) => //.
+by rewrite elem_of_factors_TInv // (elem_of_factors_Nmod _ Nm_a).
 Qed.
 
 End DH.
@@ -216,7 +218,7 @@ Implicit Types t : term.
    generator has to be public -- which it always is. *)
 Lemma public_dh_share g a :
   negb (is_exp g) → negb (is_gmul g) →
-  negb (is_mul a) →
+  negb (is_mod a) →
   public g -∗
   minted a -∗
   □ (∀ t, exp_pred a t ↔ ▷ □ dh_key_share t) -∗
@@ -228,14 +230,15 @@ rewrite public_TExp_iff //.
 do !iSplit => //; last by iIntros "!> _".
 iRight.
 iApply "pred_a". iPureIntro. rewrite /dh_key_share.
-by rewrite (exps_TExp_expN _ _ gNx gNm) factors_Nmul // SMS.elements_singleton.
+rewrite (exps_TExp_expN gNx gNm (monic_atom _ Nm)).
+by rewrite factors_Nmod // SMS.elements_singleton.
 Qed.
 
 (* Either seed being public makes the shared secret public. *)
 Lemma public_dh_secret1 g a b :
   negb (is_exp g) → negb (is_gmul g) →
-  negb (is_mul a) →
-  negb (is_mul b) →
+  negb (is_mod a) →
+  negb (is_mod b) →
   public g -∗
   minted a -∗
   minted b -∗
@@ -309,8 +312,8 @@ Qed.
 
 Lemma public_dh_secret2 g a b :
   negb (is_exp g) → negb (is_gmul g) →
-  negb (is_mul a) →
-  negb (is_mul b) →
+  negb (is_mod a) →
+  negb (is_mod b) →
   □ (∀ t, exp_pred a t ↔ ▷ □ dh_key_share t) -∗
   □ (∀ t, exp_pred b t ↔ ▷ □ dh_key_share t) -∗
   public (TExp g (TMul {[+ a; b +]})) -∗
@@ -324,8 +327,8 @@ Qed.
 
 Lemma public_dh_secret' g a b (Q : iProp) :
   negb (is_exp g) → negb (is_gmul g) →
-  negb (is_mul a) →
-  negb (is_mul b) →
+  negb (is_mod a) →
+  negb (is_mod b) →
   □ (public a ↔ Q) -∗
   □ (∀ t, exp_pred a t ↔ ▷ □ dh_key_share t) -∗
   □ (public b ↔ Q) -∗

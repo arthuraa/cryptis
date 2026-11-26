@@ -15,8 +15,11 @@
     value is not [d] with their values, sorted by keys, and [fmap_ind] builds
     a map by inserting one key at a time.  When [S] is
     ordered by a [Lexico] instance, so are finite maps, by their lists of
-    bindings, so they can be keys of finite maps and elements of multisets. *)
+    bindings, so they can be keys of finite maps and elements of multisets.
+    The operations are locked, since computing with them in proofs is slow;
+    [unlock] exposes their definitions. *)
 
+From elpi.apps Require Import locker.
 From mathcomp Require Import ssreflect.
 From stdpp Require Import sorting list proof_irrel lexico.
 
@@ -279,9 +282,7 @@ Record fmap := mk { car : list (T * S); wf_car : wf d car }.
 
 Implicit Types (m : fmap).
 
-Definition lookup k m : S := lookup_list d k (car m).
-
-#[global] Arguments lookup : simpl never.
+lock Definition lookup k m : S := lookup_list d k (car m).
 
 #[global] Instance lookup_total_instance : LookupTotal T S fmap := lookup.
 
@@ -291,12 +292,15 @@ case: m1 m2 => [l1 w1] [l2 w2] /= e; subst l2.
 by rewrite (proof_irrel w1 w2).
 Qed.
 
+Lemma lookupE k m : m !!! k = lookup_list d k (car m).
+Proof. by rewrite /lookup_total /lookup_total_instance [lookup]unlock. Qed.
+
 Lemma lookup_inj m1 m2 : (∀ k, m1 !!! k = m2 !!! k) → m1 = m2.
 Proof.
 move=> e; apply: car_inj; apply: (lookup_list_inj d).
 - exact: wf_car.
 - exact: wf_car.
-- exact: e.
+- by move=> k; rewrite -!lookupE.
 Qed.
 
 Lemma fmap_eq m1 m2 : m1 = m2 ↔ ∀ k, m1 !!! k = m2 !!! k.
@@ -318,32 +322,40 @@ Qed.
 #[global] Instance empty_instance : Empty fmap :=
   mk [] (bool_decide_pack _ (conj (SSorted_nil _) (Forall_nil _))).
 
-#[global] Instance singleton_instance : SingletonM T S fmap :=
-  λ k v, mk (cons_nd d k v []) (wf_singleton k v).
+lock Definition singleton k v : fmap :=
+  mk (cons_nd d k v []) (wf_singleton k v).
+
+#[global] Instance singleton_instance : SingletonM T S fmap := singleton.
 
 Lemma lookup_empty k : (∅ : fmap) !!! k = d.
-Proof. done. Qed.
+Proof. by rewrite lookupE. Qed.
+
+Lemma car_singleton k v : car {[k := v]} = cons_nd d k v [].
+Proof. by rewrite /singletonM /singleton_instance [singleton]unlock. Qed.
 
 Lemma lookup_singleton k k' v :
   ({[k' := v]} : fmap) !!! k = if bool_decide (k = k') then v else d.
-Proof.
-by rewrite /lookup_total /lookup_total_instance /lookup /= lookup_cons_nd.
-Qed.
+Proof. by rewrite lookupE car_singleton lookup_cons_nd. Qed.
 
-Definition to_list m : list (T * S) := car m.
+lock Definition to_list m : list (T * S) := car m.
+
+Lemma to_listE m : to_list m = car m.
+Proof. by rewrite [to_list]unlock. Qed.
 
 Lemma to_list_sorted m : StronglySorted lexico (to_list m).*1.
-Proof. by rewrite -keys_fmap; have /bool_decide_unpack [] := wf_car m. Qed.
+Proof.
+by rewrite to_listE -keys_fmap; have /bool_decide_unpack [] := wf_car m.
+Qed.
 
 Lemma elem_of_to_list m k v : (k, v) ∈ to_list m ↔ m !!! k = v ∧ v ≠ d.
 Proof.
 have /bool_decide_unpack [s vs] := wf_car m.
-exact: lookup_list_elem_of.
+rewrite to_listE lookupE; exact: lookup_list_elem_of.
 Qed.
 
 Lemma to_list_singleton k v : v ≠ d → to_list {[k := v]} = [(k, v)].
 Proof.
-move=> nv; rewrite /to_list /singletonM /singleton_instance /= /cons_nd.
+move=> nv; rewrite to_listE car_singleton /cons_nd.
 by rewrite bool_decide_false.
 Qed.
 
@@ -358,8 +370,8 @@ Context {T : Type} `{EqDecision T, Lexico T}
 Context {S1 S2 S3 : Type} `{EqDecision S1, EqDecision S2, EqDecision S3}.
 Context {d1 : S1} {d2 : S2}.
 
-Definition merge (f : S1 → S2 → S3) (m1 : fmap T S1 d1) (m2 : fmap T S2 d2) :
-    fmap T S3 (f d1 d2) :=
+lock Definition merge (f : S1 → S2 → S3) (m1 : fmap T S1 d1)
+    (m2 : fmap T S2 d2) : fmap T S3 (f d1 d2) :=
   mk (merge_list d1 d2 f (car m1) (car m2))
     (wf_merge_list d1 d2 f _ _ (wf_car m1) (wf_car m2)).
 
@@ -368,7 +380,7 @@ Lemma lookup_merge f m1 m2 k :
 Proof.
 have /bool_decide_unpack [s1 _] := wf_car m1.
 have /bool_decide_unpack [s2 _] := wf_car m2.
-exact: lookup_merge_list.
+rewrite !lookupE [merge]unlock; exact: lookup_merge_list.
 Qed.
 
 End Merge.
@@ -408,9 +420,8 @@ have /bool_decide_unpack [/= /StronglySorted_cons [lb s]] := w.
 move=> /Forall_cons_iff [/= nv vs].
 have w' : wf d l by apply bool_decide_pack.
 have -> : mk ((k, v) :: l) w = <[k:=v]> (mk l w').
-  apply: lookup_inj => k'; rewrite lookup_insert.
-  by rewrite /lookup_total /lookup_total_instance /lookup.
-apply: PS; [exact: (lookup_list_lexico d k l)|done|exact: IH].
+  by apply: lookup_inj => k'; rewrite lookup_insert !lookupE.
+apply: PS; [rewrite lookupE; exact: (lookup_list_lexico d k l)|done|exact: IH].
 Qed.
 
 End Insert.
@@ -421,11 +432,11 @@ Context {T : Type} `{EqDecision T, Lexico T}
   `{!StrictOrder (@lexico T _), !TrichotomyT (@lexico T _)}.
 Context {S1 S2 : Type} `{EqDecision S1, EqDecision S2} {d1 : S1}.
 
-Definition map (f : S1 → S2) (m : fmap T S1 d1) : fmap T S2 (f d1) :=
+lock Definition map (f : S1 → S2) (m : fmap T S1 d1) : fmap T S2 (f d1) :=
   merge (λ a (_ : unit), f a) m (∅ : fmap T unit tt).
 
 Lemma lookup_map f m k : map f m !!! k = f (m !!! k).
-Proof. exact: lookup_merge. Qed.
+Proof. rewrite [map]unlock; exact: lookup_merge. Qed.
 
 End Map.
 
@@ -435,18 +446,18 @@ Context {T : Type} `{EqDecision T, Lexico T}
   `{!StrictOrder (@lexico T _), !TrichotomyT (@lexico T _)}.
 Context {S : Type} `{EqDecision S}.
 
-(* Only the proof field mentions [e], so the bindings still compute. *)
-Definition cast {d1 d2 : S} (e : d1 = d2) (m : fmap T S d1) : fmap T S d2 :=
+lock Definition cast {d1 d2 : S} (e : d1 = d2) (m : fmap T S d1) :
+    fmap T S d2 :=
   mk (car m)
     (match e in _ = d return wf d (car m) with eq_refl => wf_car m end).
 
 Lemma to_list_cast d1 d2 (e : d1 = d2) (m : fmap T S d1) :
   to_list (cast e m) = to_list m.
-Proof. done. Qed.
+Proof. by rewrite !to_listE [@cast]unlock. Qed.
 
 Lemma lookup_cast d1 d2 (e : d1 = d2) (m : fmap T S d1) k :
   cast e m !!! k = m !!! k.
-Proof. by case: d2 / e. Qed.
+Proof. by rewrite !lookupE [@cast]unlock; case: d2 / e. Qed.
 
 End Cast.
 
@@ -474,7 +485,7 @@ refine (λ m1 m2,
   | inleft (right e) => inleft (right _)
   | inright p => inright p
   end).
-abstract (exact: car_inj e).
+abstract (by apply: car_inj; rewrite -!to_listE).
 Defined.
 
 End Lexico.

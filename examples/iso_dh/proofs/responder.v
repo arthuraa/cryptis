@@ -74,11 +74,11 @@ wp_apply (wp_mk_nonce_freshN ∅
        => //.
 - by iIntros "% %contra".
 - iIntros "%b".
-  rewrite big_sepS_singleton minted_TExp //.
+  rewrite big_sepS_singleton minted_TExp //; last by apply: atom_frac_neq0.
   rewrite minted_TInt /= bi.True_and.
   iModIntro. by iApply bi.equiv_iff.
 iIntros "%b _ #m_b #s_b #dh_gb _ token".
-have Nm_b : negb (is_mul (TNonce b)) by [].
+have Nm_b : negb (is_mod (TNonce b)) by [].
 (* [dh.v] takes the generator as a parameter; ISO-DH always uses [TInt 0]. *)
 have NInt : negb (is_exp (TInt 0)) by [].
 have NIntM : negb (is_gmul (TInt 0)) by [].

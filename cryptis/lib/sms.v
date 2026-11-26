@@ -15,8 +15,11 @@
     positive occurrences [pos s] and its negative ones [neg s].  [make X Y]
     has the positive occurrences [X] and the negative ones [Y]; its sides are
     [to X Y], which cancels the common occurrences by taking [X ∖ Y] and
-    [Y ∖ X].  [inv] swaps the sides, so no element needs an inverse. *)
+    [Y ∖ X].  [inv] swaps the sides, so no element needs an inverse.  The
+    operations are locked, since computing with them in proofs is slow;
+    [unlock] exposes their definitions. *)
 
+From elpi.apps Require Import locker.
 From mathcomp Require Import ssreflect.
 From stdpp Require Import list numbers proof_irrel sorting.
 From Stdlib Require Import ZArith Lia.
@@ -47,13 +50,13 @@ Implicit Types (s : sms).
 #[local] Lemma disjoint_swap X Y : X ## Y → Y ## X.
 Proof. by move=> d x xY xX; exact: d x xX xY. Qed.
 
-Definition make X Y :=
+lock Definition make X Y :=
   mk (to X Y).1 (to X Y).2 (bool_decide_pack _ (to_disjoint X Y)).
-Definition inv s :=
+lock Definition inv s :=
   mk (neg s) (pos s)
      (bool_decide_pack _
         (disjoint_swap _ _ (bool_decide_unpack _ (pos_neg_disjoint s)))).
-Definition count x s : Z :=
+lock Definition count x s : Z :=
   (Z.of_nat (MSet.count x (pos s)) - Z.of_nat (MSet.count x (neg s)))%Z.
 
 #[global] Instance empty_instance : Empty sms := make ∅ ∅.
@@ -87,13 +90,17 @@ Proof. exact: (bool_decide_unpack _ (pos_neg_disjoint s)). Qed.
   MSet.count x (pos s) = 0 ∨ MSet.count x (neg s) = 0.
 Proof. exact: (proj1 (MSet.disjoint_count _ _) (pos_neg_disj s) x). Qed.
 
+Lemma countE x s : count x s =
+  (Z.of_nat (MSet.count x (pos s)) - Z.of_nat (MSet.count x (neg s)))%Z.
+Proof. by rewrite [count]unlock. Qed.
+
 Lemma count_pos_max x s :
   Z.of_nat (MSet.count x (pos s)) = Z.max 0 (count x s).
-Proof. rewrite /count; have := count_pos_neg x s; lia. Qed.
+Proof. rewrite countE; have := count_pos_neg x s; lia. Qed.
 
 Lemma count_neg_max x s :
   Z.of_nat (MSet.count x (neg s)) = Z.max 0 (- count x s).
-Proof. rewrite /count; have := count_pos_neg x s; lia. Qed.
+Proof. rewrite countE; have := count_pos_neg x s; lia. Qed.
 
 Lemma count_inj s1 s2 : (∀ z, count z s1 = count z s2) → s1 = s2.
 Proof.
@@ -103,15 +110,15 @@ move=> e; apply: sms_eq; apply: MSet.count_inj => z; apply: Nat2Z.inj.
 Qed.
 
 Lemma pos_make X Y : pos (make X Y) = X ∖ Y.
-Proof. done. Qed.
+Proof. by rewrite [make]unlock. Qed.
 
 Lemma neg_make X Y : neg (make X Y) = Y ∖ X.
-Proof. done. Qed.
+Proof. by rewrite [make]unlock. Qed.
 
 Lemma count_make z X Y :
   count z (make X Y) =
   (Z.of_nat (MSet.count z X) - Z.of_nat (MSet.count z Y))%Z.
-Proof. rewrite /count pos_make neg_make !MSet.count_difference; lia. Qed.
+Proof. rewrite countE pos_make neg_make !MSet.count_difference; lia. Qed.
 
 Lemma make_eq X Y X' Y' : X ⊎ Y' = X' ⊎ Y → make X Y = make X' Y'.
 Proof.
@@ -134,11 +141,21 @@ Proof. rewrite singleton_make pos_make; MSet.mset_solver. Qed.
 Lemma neg_singleton x : neg {[+ x +]} = ∅.
 Proof. rewrite singleton_make neg_make; MSet.mset_solver. Qed.
 
+Lemma pos_empty : pos ∅ = ∅.
+Proof.
+by rewrite (_ : ∅ = make ∅ ∅) // pos_make; MSet.mset_solver.
+Qed.
+
+Lemma neg_empty : neg ∅ = ∅.
+Proof.
+by rewrite (_ : ∅ = make ∅ ∅) // neg_make; MSet.mset_solver.
+Qed.
+
 Lemma pos_inv s : pos (inv s) = neg s.
-Proof. done. Qed.
+Proof. by rewrite [inv]unlock. Qed.
 
 Lemma neg_inv s : neg (inv s) = pos s.
-Proof. done. Qed.
+Proof. by rewrite [inv]unlock. Qed.
 
 Lemma elements_pos_neg s : elements s = elements (pos s) ++ elements (neg s).
 Proof. done. Qed.
@@ -159,10 +176,10 @@ Qed.
 
 Lemma count_disj_union z s1 s2 :
   count z (s1 ⊎ s2) = (count z s1 + count z s2)%Z.
-Proof. rewrite count_make !MSet.count_disj_union /count; lia. Qed.
+Proof. rewrite count_make !MSet.count_disj_union !countE; lia. Qed.
 
 Lemma count_inv z s : count z (inv s) = (- count z s)%Z.
-Proof. rewrite /count pos_inv neg_inv; lia. Qed.
+Proof. rewrite !countE pos_inv neg_inv; lia. Qed.
 
 Lemma disj_union_make X1 Y1 X2 Y2 :
   make X1 Y1 ⊎ make X2 Y2 = make (X1 ⊎ X2) (Y1 ⊎ Y2).
@@ -227,7 +244,7 @@ Qed.
 
 Lemma elem_of_count x s : x ∈ s ↔ count x s ≠ 0%Z.
 Proof.
-rewrite elem_of_pos_neg !MSet.elem_of_count /count.
+rewrite elem_of_pos_neg !MSet.elem_of_count countE.
 have := count_pos_neg x s; lia.
 Qed.
 
@@ -235,10 +252,10 @@ Lemma not_elem_of_count x s : x ∉ s → count x s = 0%Z.
 Proof. by rewrite elem_of_count; lia. Qed.
 
 Lemma count_pos x s : (0 < count x s)%Z ↔ x ∈ pos s.
-Proof. rewrite MSet.elem_of_count /count; have := count_pos_neg x s; lia. Qed.
+Proof. rewrite MSet.elem_of_count countE; have := count_pos_neg x s; lia. Qed.
 
 Lemma count_neg x s : (count x s < 0)%Z ↔ x ∈ neg s.
-Proof. rewrite MSet.elem_of_count /count; have := count_pos_neg x s; lia. Qed.
+Proof. rewrite MSet.elem_of_count countE; have := count_pos_neg x s; lia. Qed.
 
 Lemma elem_of_pos x s : x ∈ pos s → x ∈ s.
 Proof. by move=> ?; left. Qed.
@@ -249,12 +266,15 @@ Proof. by move=> ?; right. Qed.
 Lemma count_mem_elements x s :
   Z.of_nat (count_mem x (elements s)) = Z.abs (count x s).
 Proof.
-rewrite elements_pos_neg count_mem_app !MSet.count_mem_elements /count.
+rewrite elements_pos_neg count_mem_app !MSet.count_mem_elements countE.
 have := count_pos_neg x s; lia.
 Qed.
 
 Lemma elements_empty : elements (∅ : sms) = [].
-Proof. done. Qed.
+Proof.
+rewrite elements_pos_neg (_ : ∅ = make ∅ ∅) // pos_make neg_make.
+by rewrite (_ : ∅ ∖ ∅ = ∅) ?MSet.elements_empty //; MSet.mset_solver.
+Qed.
 
 Lemma elements_empty_inv s : elements s = [] → s = ∅.
 Proof.
@@ -279,10 +299,15 @@ by exists w; split=> [|y /elem_of_cons [->|/m_max]]; [left|lia|lia].
 Qed.
 
 Lemma elements_singleton x : elements ({[+ x +]} : sms) = [x].
-Proof. done. Qed.
+Proof.
+by rewrite elements_pos_neg pos_singleton neg_singleton MSet.elements_singleton
+  MSet.elements_empty.
+Qed.
 
 Lemma elements_inv s : elements (inv s) ≡ₚ elements s.
-Proof. exact: Permutation_app_comm. Qed.
+Proof.
+rewrite !elements_pos_neg pos_inv neg_inv; exact: Permutation_app_comm.
+Qed.
 
 Lemma elements_disj_union s1 s2 :
   pos s1 ## neg s2 → neg s1 ## pos s2 →
@@ -370,12 +395,12 @@ Context `{EqDecision U, Lexico U}
 
 Implicit Types (x : T) (X Y : MSet.mset T) (s : sms T).
 
-Definition bind (f : T → sms U) s : sms U :=
+lock Definition bind (f : T → sms U) s : sms U :=
   make
     (MSet.bind (λ x, pos (f x)) (pos s) ⊎ MSet.bind (λ x, neg (f x)) (neg s))
     (MSet.bind (λ x, neg (f x)) (pos s) ⊎ MSet.bind (λ x, pos (f x)) (neg s)).
 
-Definition map (f : T → U) s : sms U := bind (λ x, {[+ f x +]}) s.
+lock Definition map (f : T → U) s : sms U := bind (λ x, {[+ f x +]}) s.
 
 Lemma count_bind (z : U) f s :
   count z (bind f s) =
@@ -383,7 +408,39 @@ Lemma count_bind (z : U) f s :
    Z.of_nat (MSet.count z (MSet.bind (λ x, neg (f x)) (neg s))) -
    Z.of_nat (MSet.count z (MSet.bind (λ x, neg (f x)) (pos s))) -
    Z.of_nat (MSet.count z (MSet.bind (λ x, pos (f x)) (neg s))))%Z.
-Proof. rewrite /bind count_make !MSet.count_disj_union; lia. Qed.
+Proof. rewrite [bind]unlock count_make !MSet.count_disj_union; lia. Qed.
+
+(** When a single element [x0] of [s] contributes to [z], the count of [z]
+    is that contribution times the count of [x0]. *)
+Lemma count_bind_single (z : U) f s x0 :
+  (∀ x, x ∈ s → x ≠ x0 → count z (f x) = 0%Z) →
+  count z (bind f s) = (count x0 s * count z (f x0))%Z.
+Proof.
+move=> h.
+have Z0 x : x ∈ s → x ≠ x0 →
+    MSet.count z (pos (f x)) = 0 ∧ MSet.count z (neg (f x)) = 0.
+  move=> xs nx; have := h x xs nx; rewrite countE.
+  have := count_pos_neg z (f x); lia.
+have S (X : MSet.mset T) (g : T → MSet.mset U) :
+    (∀ x, x ∈ X → x ∈ s) → (∀ x, x ∈ s → x ≠ x0 → MSet.count z (g x) = 0) →
+    MSet.count z (MSet.bind g X) = MSet.count x0 X * MSet.count z (g x0).
+  move=> hX hg; rewrite MSet.count_bind -MSet.count_mem_elements.
+  have hl : ∀ x, x ∈ elements X → x ≠ x0 → MSet.count z (g x) = 0.
+    by move=> x /MSet.elem_of_elements /hX xs; exact: hg.
+  elim: (elements X) hl => [//|x l IH] hl /=.
+  have hl' : ∀ y, y ∈ l → y ≠ x0 → MSet.count z (g y) = 0.
+    by move=> y yl; apply: hl; right.
+  rewrite (IH hl'); case: bool_decide_reflect => [->|nx]; first lia.
+  by rewrite (hl x (list_elem_of_here _ _) (λ e, nx (eq_sym e))); lia.
+have Pp : ∀ x, x ∈ pos s → x ∈ s by move=> x; exact: elem_of_pos.
+have Pn : ∀ x, x ∈ neg s → x ∈ s by move=> x; exact: elem_of_neg.
+have Zp : ∀ x, x ∈ s → x ≠ x0 → MSet.count z (pos (f x)) = 0.
+  by move=> x xs nx; case: (Z0 x xs nx).
+have Zn : ∀ x, x ∈ s → x ≠ x0 → MSet.count z (neg (f x)) = 0.
+  by move=> x xs nx; case: (Z0 x xs nx).
+rewrite count_bind (S _ _ Pp Zp) (S _ _ Pn Zn) (S _ _ Pp Zn) (S _ _ Pn Zp).
+rewrite !countE !Nat2Z.inj_mul; ring.
+Qed.
 
 (** [bind] ignores the cancellations of [make]. *)
 Lemma bind_make f X Y :
@@ -411,7 +468,7 @@ Lemma bind_make_singleton_l f x X Y :
 Proof.
 apply: count_inj => z; rewrite count_disj_union !bind_make !count_make.
 by rewrite !MSet.bind_disj_union !MSet.bind_singleton
-  !MSet.count_disj_union /count; lia.
+  !MSet.count_disj_union !countE; lia.
 Qed.
 
 Lemma bind_make_singleton_r f y X Y :
@@ -419,12 +476,12 @@ Lemma bind_make_singleton_r f y X Y :
 Proof.
 apply: count_inj => z; rewrite count_disj_union count_inv !bind_make.
 by rewrite !count_make !MSet.bind_disj_union !MSet.bind_singleton
-  !MSet.count_disj_union /count; lia.
+  !MSet.count_disj_union !countE; lia.
 Qed.
 
 Lemma elem_of_bind {f s} {y : U} : y ∈ bind f s → ∃ x, x ∈ s ∧ y ∈ f x.
 Proof.
-rewrite /bind => /elem_of_make.
+rewrite [bind]unlock => /elem_of_make.
 rewrite !MSet.elem_of_disj_union !MSet.elem_of_bind.
 by case=> [[]|[]] [x [xs yx]]; exists x; split; first [by left|by right].
 Qed.
@@ -452,7 +509,7 @@ Qed.
 
 Lemma bind_ext f g s : (∀ x, x ∈ s → f x = g x) → bind f s = bind g s.
 Proof.
-move=> e; rewrite /bind.
+move=> e; rewrite [bind]unlock.
 have eb W : (∀ x, x ∈ W → x ∈ s) →
     MSet.bind (λ x, pos (f x)) W = MSet.bind (λ x, pos (g x)) W ∧
     MSet.bind (λ x, neg (f x)) W = MSet.bind (λ x, neg (g x)) W.
@@ -489,7 +546,7 @@ Qed.
 
 Lemma map_make f X Y : map f (make X Y) = make (MSet.map f X) (MSet.map f Y).
 Proof.
-rewrite /map bind_make.
+rewrite [map]unlock bind_make.
 have ep W : MSet.bind (λ x, pos {[+ f x +]}) W = MSet.map f W.
   rewrite -MSet.bind_singletons; apply: MSet.bind_ext => x _.
   exact: pos_singleton.
@@ -507,7 +564,7 @@ Lemma count_map_inj f x s :
   (∀ a b, f a = f b → a = b) → count (f x) (map f s) = count x s.
 Proof.
 move=> finj; rewrite map_pos_neg count_make.
-by rewrite !(MSet.count_map_inj f x _ finj).
+by rewrite !(MSet.count_map_inj f x _ finj) countE.
 Qed.
 
 Lemma elem_of_map {f s} {y : U} : y ∈ map f s → ∃ x, y = f x ∧ x ∈ s.
@@ -542,19 +599,19 @@ by rewrite !MSet.elements_map // -fmap_app.
 Qed.
 
 Lemma map_singleton f x : map f {[+ x +]} = {[+ f x +]}.
-Proof. exact: bind_singleton. Qed.
+Proof. rewrite [map]unlock; exact: bind_singleton. Qed.
 
 Lemma map_empty f : map f ∅ = ∅.
-Proof. exact: bind_empty. Qed.
+Proof. rewrite [map]unlock; exact: bind_empty. Qed.
 
 Lemma map_disj_union f s1 s2 : map f (s1 ⊎ s2) = map f s1 ⊎ map f s2.
-Proof. exact: bind_disj_union. Qed.
+Proof. rewrite [map]unlock; exact: bind_disj_union. Qed.
 
 Lemma map_ext f g s : (∀ x, x ∈ s → f x = g x) → map f s = map g s.
-Proof. by move=> fg; apply: bind_ext => x /fg ->. Qed.
+Proof. by move=> fg; rewrite [map]unlock; apply: bind_ext => x /fg ->. Qed.
 
 Lemma map_inv f s : map f (inv s) = inv (map f s).
-Proof. exact: bind_inv. Qed.
+Proof. rewrite [map]unlock; exact: bind_inv. Qed.
 
 End Bind.
 
@@ -623,7 +680,10 @@ Lemma map_id_ext {T : Type}
       !TrichotomyT (@lexico T _)}
     (f : T → T) (s : sms T) :
   (∀ x, x ∈ s → f x = x) → map f s = s.
-Proof. by move=> fs; rewrite -[RHS]bind_unit; apply: bind_ext => x /fs ->. Qed.
+Proof.
+move=> fs; rewrite [map]unlock -[RHS]bind_unit.
+by apply: bind_ext => x /fs ->.
+Qed.
 
 Lemma bind_bind {T U V : Type}
     `{EqDecision T, Lexico T, !StrictOrder (@lexico T _),
@@ -671,7 +731,7 @@ Context {T : Type} `{EqDecision T, Lexico T}
 
 Implicit Types (z : T) (s : sms T).
 
-Definition filter (P : T → Prop) `{!∀ x, Decision (P x)} s : sms T :=
+lock Definition filter (P : T → Prop) `{!∀ x, Decision (P x)} s : sms T :=
   bind (λ x, if bool_decide (P x) then {[+ x +]} else ∅) s.
 
 Lemma count_filter (P : T → Prop) `{!∀ x, Decision (P x)} z s :
@@ -684,7 +744,7 @@ have cz x : count z (if bool_decide (P x) then {[+ x +]} else ∅)
   rewrite (bool_decide_eq_false_2 (z = x)) //.
   by case: (bool_decide (P x)); case: (bool_decide (P z));
     rewrite ?count_singleton ?count_empty ?bool_decide_eq_false_2.
-rewrite /filter; elim/(sms_ind (T := T)): s => [|x s IH|x s IH].
+rewrite [filter]unlock; elim/(sms_ind (T := T)): s => [|x s IH|x s IH].
 - by rewrite bind_empty count_empty; case: (bool_decide (P z)).
 - rewrite bind_disj_union bind_singleton !count_disj_union cz IH.
   by rewrite count_singleton; case: (bool_decide (P z)).
@@ -712,20 +772,20 @@ Definition curry_add k (s : sms U) m : FMap.fmap T (sms U) ∅ :=
 Definition curry_list (f : U → sms U) (ps : list (T * U)) m :=
   foldr (λ p m, curry_add p.1 (f p.2) m) m ps.
 
-Definition curry P : FMap.fmap T (sms U) ∅ :=
+lock Definition curry P : FMap.fmap T (sms U) ∅ :=
   curry_list (λ v, {[+ v +]}) (elements (pos P))
     (curry_list (λ v, inv {[+ v +]}) (elements (neg P)) ∅).
 
 Definition uncurry_list (l : list (T * sms U)) : sms (T * U) :=
   foldr (λ p s, map (λ v, (p.1, v)) p.2 ⊎ s) ∅ l.
 
-Definition uncurry m : sms (T * U) := uncurry_list (FMap.to_list m).
+lock Definition uncurry m : sms (T * U) := uncurry_list (FMap.to_list m).
 
 Lemma curryE P :
   curry P =
   curry_list (λ v, {[+ v +]}) (elements (pos P))
     (curry_list (λ v, inv {[+ v +]}) (elements (neg P)) ∅).
-Proof. done. Qed.
+Proof. by rewrite [curry]unlock. Qed.
 
 Lemma lookup_curry_add k k' s m :
   curry_add k' s m !!! k =
@@ -758,7 +818,7 @@ have cn u : count v (inv {[+ u +]}) = (-1 * Z.b2z (bool_decide (v = u)))%Z.
   by rewrite count_inv count_singleton; lia.
 rewrite curryE (count_curry_list _ _ _ _ _ _ cp).
 rewrite (count_curry_list _ _ _ _ _ _ cn) FMap.lookup_empty count_empty.
-rewrite !MSet.count_mem_elements /count; lia.
+rewrite !MSet.count_mem_elements countE; lia.
 Qed.
 
 Lemma count_uncurry_list l k v :
@@ -778,8 +838,9 @@ Qed.
 
 Lemma count_uncurry m k v : count (k, v) (uncurry m) = count v (m !!! k).
 Proof.
-rewrite /uncurry count_uncurry_list //.
-rewrite FMap.keys_fmap; exact: FMap.to_list_sorted.
+rewrite [uncurry]unlock count_uncurry_list.
+  by rewrite FMap.keys_fmap; exact: FMap.to_list_sorted.
+by rewrite FMap.lookupE FMap.to_listE.
 Qed.
 
 Lemma curryK P : uncurry (curry P) = P.
@@ -815,6 +876,5 @@ End Curry.
 
 (* Tactics that reduce a goal to head normal form, such as ssreflect's [apply:],
    would otherwise unfold [curry] through all its map updates. *)
-#[global] Opaque curry.
 
 End SMS.

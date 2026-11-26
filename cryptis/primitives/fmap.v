@@ -136,7 +136,7 @@ Hypothesis eqsvP : ∀ (x y : S) E Ψ,
 Implicit Types (k : T) (v : S) (l : list (T * S)) (m : FMap.fmap T S d).
 
 Lemma repr_fmap_empty : repr (∅ : FMap.fmap T S d) = fmap_empty.
-Proof. by rewrite repr_fmapE /= [@repr_list]unlock. Qed.
+Proof. by rewrite repr_fmapE FMap.to_listE /= [@repr_list]unlock. Qed.
 
 Lemma twp_fmap_empty E Ψ :
   Ψ (repr (∅ : FMap.fmap T S d)) ⊢ WP Val fmap_empty @ E [{ Ψ }].
@@ -146,7 +146,8 @@ Lemma twp_fmap_lookup k m E Ψ :
   Ψ (repr (m !!! k)) ⊢
   WP fmap_lookup eqv (repr d) (repr k) (repr m) @ E [{ Ψ }].
 Proof.
-have -> : m !!! k = FMap.lookup_list d k (FMap.to_list m) by [].
+have -> : m !!! k = FMap.lookup_list d k (FMap.to_list m).
+  by rewrite FMap.lookupE FMap.to_listE.
 rewrite repr_fmapE [@repr_list]unlock.
 elim: (FMap.to_list m) Ψ => [|[k' v] l IH] Ψ /=; iIntros "HΨ"; wp_rec; wp_pures.
   by iApply "HΨ".
@@ -168,6 +169,7 @@ Lemma twp_fmap_singleton k v E Ψ :
   WP fmap_singleton eqsv (repr d) (repr k) (repr v) @ E [{ Ψ }].
 Proof.
 have e : NONEV = repr ([] : list (T * S)) by rewrite repr_listE.
+rewrite repr_fmapE FMap.to_listE FMap.car_singleton.
 iIntros "HΨ"; wp_lam; wp_pures; rewrite e.
 by wp_apply twp_fmap_cons_nd.
 Qed.
@@ -178,7 +180,8 @@ Lemma twp_fmap_eq m1 m2 E Ψ :
 Proof.
 have -> : bool_decide (m1 = m2) =
     bool_decide (FMap.to_list m1 = FMap.to_list m2).
-  by apply: bool_decide_ext; split=> [->|/FMap.car_inj].
+  by apply: bool_decide_ext; rewrite !FMap.to_listE;
+    split=> [->|/FMap.car_inj].
 rewrite !repr_fmapE; iIntros "HΨ"; wp_lam; wp_pures.
 iApply (twp_eq_list with "HΨ") => -[k1 v1] [k2 v2] Φ _.
 iIntros "HΦ"; wp_pures; wp_apply eqvP.
@@ -255,7 +258,8 @@ Lemma twp_fmap_merge (f : S1 → S2 → S3) (fv : val)
   WP fmap_merge eqv lev eqsv fv (repr d1) (repr d2) (repr m1) (repr m2)
     @ E [{ Ψ }].
 Proof.
-move=> fvP; rewrite !repr_fmapE; iIntros "HΨ"; wp_lam; wp_pures.
+move=> fvP; rewrite !repr_fmapE !FMap.to_listE [FMap.merge]unlock /=.
+iIntros "HΨ"; wp_lam; wp_pures.
 wp_apply fvP; wp_pures.
 wp_apply (twp_fmap_merge_loop f fv); first exact: fvP.
   move=> k v l E' Φ; iIntros "HΦ"; wp_pures.
@@ -279,7 +283,8 @@ Lemma twp_fmap_insert k v m E Ψ :
 Proof.
 have e : (SOMEV ((repr k, SOMEV (repr v)), NONEV))%V =
     repr ({[k := Some v]} : FMap.fmap T (option S) None).
-  rewrite repr_fmapE /= /FMap.cons_nd bool_decide_false //.
+  rewrite repr_fmapE FMap.to_listE FMap.car_singleton /FMap.cons_nd.
+  rewrite bool_decide_false //.
   by rewrite [@repr_list]unlock.
 iIntros "HΨ"; wp_lam; wp_pures; rewrite e.
 wp_apply (twp_fmap_merge d None eqsv eqsvP (λ a o, default a o)).
@@ -319,7 +324,8 @@ Lemma twp_fmap_map (f : S1 → S2) (fv : val) (m : FMap.fmap T S1 d1) E Ψ :
   (∀ a E Ψ, Ψ (repr (f a)) ⊢ WP fv (repr a) @ E [{ Ψ }]) →
   Ψ (repr (FMap.map f m)) ⊢ WP fmap_map eqsv fv (repr d1) (repr m) @ E [{ Ψ }].
 Proof.
-move=> fvP; rewrite !repr_fmapE; iIntros "HΨ"; wp_lam; wp_pures.
+move=> fvP; rewrite !repr_fmapE !FMap.to_listE [FMap.map]unlock.
+rewrite [FMap.merge]unlock /=; iIntros "HΨ"; wp_lam; wp_pures.
 wp_apply fvP; wp_pures.
 wp_apply (twp_fmap_map_loop f fv); first exact: fvP.
   move=> k v l E' Φ; iIntros "HΦ"; wp_pures.
@@ -347,7 +353,8 @@ have -> : bool_decide (MSet.le m1 m2) =
     bool_decide (FMap.to_list m1 = FMap.to_list m2 ∨
                  lexico (FMap.to_list m1) (FMap.to_list m2)).
   apply: bool_decide_ext; rewrite /MSet.le.
-  by split=> -[e|l]; [left; rewrite e|right|left; exact: FMap.car_inj|right].
+  split=> -[e|l]; [left; rewrite e|right|left|right] => //.
+  by apply: FMap.car_inj; rewrite -!FMap.to_listE.
 rewrite !repr_fmapE; iIntros "HΨ"; wp_lam; wp_pures.
 wp_apply (twp_leq_list _ _ (FMap.to_list m1) (FMap.to_list m2)).
 - move=> [k1 v1] [k2 v2] Φ; iIntros "_ HΦ"; wp_pures; wp_apply eqvP.

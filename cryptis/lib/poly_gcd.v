@@ -22,6 +22,7 @@
     pseudo-remainder sequence keeps the primitive common divisors
     ([prs_spec]). *)
 
+From elpi.apps Require Import locker.
 From mathcomp Require Import ssreflect.
 From stdpp Require Import list numbers.
 From Stdlib Require Import ZArith Lia Ring.
@@ -47,7 +48,7 @@ Add Ring poly_ring : (poly_ring_theory (T := T)).
 Lemma count_vpow y x k :
   MSet.count y (vpow x k) = if bool_decide (y = x) then k else 0.
 Proof.
-rewrite /vpow MSet.count_of_list.
+rewrite vpowE MSet.count_of_list.
 elim: k => [|k IH] /=; first by case_bool_decide.
 rewrite IH; case_bool_decide; lia.
 Qed.
@@ -60,24 +61,26 @@ Ltac mset_solver :=
 
 Lemma coeffx_add x k p q :
   coeffx x k (p + q)%P = (coeffx x k p + coeffx x k q)%P.
-Proof. by apply: car_inj; rewrite /coeffx /= SMS.bind_disj_union. Qed.
+Proof.
+by apply: car_inj; rewrite !(car_coeffx, car_add) SMS.bind_disj_union.
+Qed.
 
 Lemma coeffx_opp x k p : coeffx x k (- p)%P = (- coeffx x k p)%P.
-Proof. by apply: car_inj; rewrite /coeffx /= SMS.bind_inv. Qed.
+Proof. by apply: car_inj; rewrite !(car_coeffx, car_opp) SMS.bind_inv. Qed.
 
 Lemma coeffx_zero x k : coeffx x k zero = zero.
-Proof. by apply: car_inj; rewrite /coeffx /= SMS.bind_empty. Qed.
+Proof. by apply: car_inj; rewrite car_coeffx car_zero SMS.bind_empty. Qed.
 
 Lemma coeffx_sub x k p q :
   coeffx x k (p - q)%P = (coeffx x k p - coeffx x k q)%P.
-Proof. by rewrite /sub coeffx_add coeffx_opp. Qed.
+Proof. by rewrite !subE coeffx_add coeffx_opp. Qed.
 
 Lemma coeffx_mono x k m :
   coeffx x k (mono m) =
   if bool_decide (MSet.count x m = k) then mono (m ∖ vpow x k) else zero.
 Proof.
-apply: car_inj; rewrite /coeffx /= SMS.bind_singleton.
-by case_bool_decide.
+apply: car_inj; rewrite car_coeffx car_mono SMS.bind_singleton.
+by case_bool_decide; rewrite ?car_mono ?car_zero.
 Qed.
 
 Lemma coeff_coeffx x k m p :
@@ -108,31 +111,31 @@ Qed.
 
 Lemma count_le_deg x m p : coeff m p ≠ 0%Z → MSet.count x m ≤ deg x p.
 Proof.
-move=> h; apply: max_list_elem_of_le; apply/list_elem_of_fmap.
-exists m; split => //; apply/SMS.elem_of_elements; exact/SMS.elem_of_count.
+move=> h; rewrite degE; apply: max_list_elem_of_le; apply/list_elem_of_fmap.
+exists m; split => //; apply/SMS.elem_of_elements; exact/coeff_neq0_elem.
 Qed.
 
 Lemma deg_le x p d :
   (∀ m, coeff m p ≠ 0%Z → MSet.count x m ≤ d) → deg x p ≤ d.
 Proof.
-move=> h; rewrite /deg.
+move=> h; rewrite degE.
 case E: (MSet.count x <$> elements (car p)) => [|c cs]; first by simpl; lia.
 have : max_list (c :: cs) ∈ c :: cs by apply: max_list_elem_of.
 rewrite -E => /list_elem_of_fmap [m [->]].
-move=> /SMS.elem_of_elements /SMS.elem_of_count.
+move=> /SMS.elem_of_elements /coeff_neq0_elem.
 exact: h.
 Qed.
 
 Lemma deg_witness x p :
   p ≠ zero → ∃ m, coeff m p ≠ 0%Z ∧ MSet.count x m = deg x p.
 Proof.
-move=> nz; rewrite /deg.
+move=> nz; rewrite degE.
 case E: (MSet.count x <$> elements (car p)) => [|c cs].
-  case: nz; apply: car_inj; apply: SMS.elements_empty_inv.
+  case: nz; apply: car_inj; rewrite car_zero; apply: SMS.elements_empty_inv.
   by move: E; case: (elements (car p)).
 have : max_list (c :: cs) ∈ c :: cs by apply: max_list_elem_of.
 rewrite -E => /list_elem_of_fmap [m [e]].
-move=> /SMS.elem_of_elements /SMS.elem_of_count.
+move=> /SMS.elem_of_elements /coeff_neq0_elem.
 by exists m.
 Qed.
 
@@ -150,7 +153,7 @@ move=> /(deg_witness x) [m [cm em]] e.
 have c0 : MSet.count x (m ∖ vpow x (deg x p)) = 0.
   by rewrite MSet.count_difference count_vpow bool_decide_eq_true_2 //; lia.
 have : coeff (m ∖ vpow x (deg x p)) (lcx x p) ≠ 0%Z.
-  rewrite /lcx coeff_coeffx bool_decide_eq_true_2 //.
+  rewrite lcxE coeff_coeffx bool_decide_eq_true_2 //.
   by rewrite (_ : m ∖ vpow x (deg x p) ⊎ vpow x (deg x p) = m) //; mset_solver.
 by rewrite e coeff_zero.
 Qed.
@@ -180,7 +183,7 @@ Proof.
 elim/poly_ind_add: s => [|n|s1 s2 IH1 IH2|s1 IH].
 - by rewrite coeffx_zero !(left_absorb zero mul) coeffx_zero.
 - elim/poly_ind_add: p => [|m|p1 p2 IH1 IH2|p1 IH].
-  + by rewrite !(right_absorb zero mul) coeffx_zero.
+  + by rewrite coeffx_zero !(right_absorb zero mul) coeffx_zero.
   + rewrite coeffx_mono vpow0 diff_empty_r.
     case: (bool_decide_reflect (MSet.count x n = 0)) => [n0|n0];
       last by rewrite !(left_absorb zero mul) coeffx_zero.
@@ -229,7 +232,7 @@ Lemma coeffx_vpow x k e :
 Proof.
 rewrite coeffx_mono count_vpow (bool_decide_eq_true_2 (x = x)) //.
 case: (bool_decide_reflect (k = e)) => ek.
-- rewrite (bool_decide_eq_true_2 (e = k)) // /one; congr mono; mset_solver.
+- rewrite (bool_decide_eq_true_2 (e = k)) // oneE; congr mono; mset_solver.
 - by rewrite (bool_decide_eq_false_2 (e = k)) //; lia.
 Qed.
 
@@ -253,12 +256,12 @@ apply: Nat.le_antisymm; apply: deg_le => m; rewrite ?coeff_opp => h.
 Qed.
 
 Lemma deg_sub_le x p q : deg x (p - q)%P ≤ max (deg x p) (deg x q).
-Proof. rewrite /sub; have := deg_add_le x p (- q)%P; rewrite deg_opp; lia. Qed.
+Proof. rewrite subE; have := deg_add_le x p (- q)%P; rewrite deg_opp; lia. Qed.
 
 Lemma deg_mul_le x p q : deg x (p * q)%P ≤ deg x p + deg x q.
 Proof.
 apply: deg_le => m /coeff_neq0_elem.
-rewrite /mul /= => /SMS.elem_of_bind [a [ap /SMS.elem_of_map [b [-> bq]]]].
+rewrite car_mul => /SMS.elem_of_bind [a [ap /SMS.elem_of_map [b [-> bq]]]].
 rewrite MSet.count_disj_union.
 have := count_le_deg x a p (proj2 (coeff_neq0_elem a p) ap).
 have := count_le_deg x b q (proj2 (coeff_neq0_elem b q) bq).
@@ -276,7 +279,7 @@ Lemma deg_vpow x e : deg x (mono (vpow x e)) = e.
 Proof. by rewrite deg_mono count_vpow bool_decide_eq_true_2. Qed.
 
 Lemma deg_one x : deg x one = 0.
-Proof. by rewrite /one deg_mono MSet.count_empty. Qed.
+Proof. by rewrite oneE deg_mono MSet.count_empty. Qed.
 
 Lemma deg_const x c : deg x (const c) = 0.
 Proof.
@@ -293,7 +296,7 @@ Lemma rest_eq x p : p = (lcx x p * mono (vpow x (deg x p)) + rest x p)%P.
 Proof. rewrite /rest; ring. Qed.
 
 Lemma deg_lcx x p : deg x (lcx x p) = 0.
-Proof. exact: deg_coeffx. Qed.
+Proof. rewrite lcxE; exact: deg_coeffx. Qed.
 
 Lemma coeffx_rest x k p :
   coeffx x k (rest x p) =
@@ -301,7 +304,7 @@ Lemma coeffx_rest x k p :
 Proof.
 rewrite /rest coeffx_sub (coeffx_mulf _ _ _ _ (deg_lcx x p)) coeffx_vpow.
 case_bool_decide as e.
-- rewrite e (right_id one mul) /lcx; ring.
+- rewrite e (right_id one mul) lcxE; ring.
 - rewrite (right_absorb zero mul); ring.
 Qed.
 
@@ -310,7 +313,7 @@ Proof.
 case: (decide (rest x p = zero)) => [|nz]; [by left|right].
 have := lcx_neq0 x (rest x p) nz.
 case: (Nat.lt_ge_cases (deg x (rest x p)) (deg x p)) => // le.
-rewrite /lcx coeffx_rest; case_bool_decide => //.
+rewrite lcxE coeffx_rest; case_bool_decide => //.
 have h : deg x p < deg x (rest x p) by lia.
 by rewrite (coeffx_above _ _ _ h).
 Qed.
@@ -318,11 +321,8 @@ Qed.
 Lemma deg_mul0 x s t : deg x s = 0 → deg x t = 0 → deg x (s * t)%P = 0.
 Proof. move=> hs ht; have := deg_mul_le x s t; lia. Qed.
 
-Lemma lcxE x p : lcx x p = coeffx x (deg x p) p.
-Proof. done. Qed.
-
-(* From here on, unfolding these operations only slows down unification. *)
-Local Opaque add mul opp sub coeffx mono lcx deg rest zero one const vpow.
+(* From here on, unfolding [rest] only slows down unification. *)
+Local Opaque rest.
 
 Lemma coeffx_mul_top x p q :
   coeffx x (deg x p + deg x q) (p * q)%P = (lcx x p * lcx x q)%P.
@@ -448,7 +448,7 @@ Proof.
 move=> y yn; case: (decide (deg y p = 0)) => // nd; exfalso; apply: yn.
 have nz : p ≠ zero by move=> e; apply: nd; rewrite e deg_zero.
 have [m [cm em]] := deg_witness y p nz.
-rewrite /vars elem_of_remove_dups; apply/list_elem_of_bind.
+rewrite varsE elem_of_remove_dups; apply/list_elem_of_bind.
 exists m; split.
 - apply/MSet.elem_of_elements/MSet.elem_of_count; lia.
 - by apply/SMS.elem_of_elements/coeff_neq0_elem.
@@ -716,12 +716,14 @@ exact: over_coeffx.
 Qed.
 
 Lemma cont_over p : over (x :: vs) p → over vs (cont x gc p).
-Proof. by move=> op; apply: foldr_gc_over; apply: cont_coeffs_over. Qed.
+Proof.
+by move=> op; rewrite contE; apply: foldr_gc_over; apply: cont_coeffs_over.
+Qed.
 
 Lemma cont_dvd p k : over (x :: vs) p → dvd (cont x gc p) (coeffx x k p).
 Proof.
 move=> op; case: (Nat.le_gt_cases k (deg x p)) => [le|lt].
-- apply: foldr_gc_dvd; first exact: cont_coeffs_over.
+- rewrite contE; apply: foldr_gc_dvd; first exact: cont_coeffs_over.
   apply/list_elem_of_fmap; exists k; split => //.
   apply/elem_of_seq; lia.
 - by rewrite (coeffx_above _ _ _ lt); apply: dvd_zero.
@@ -730,7 +732,7 @@ Qed.
 Lemma dvd_cont u p :
   over (x :: vs) p → (∀ k, dvd u (coeffx x k p)) → dvd u (cont x gc p).
 Proof.
-move=> op hu; apply: dvd_foldr_gc; first exact: cont_coeffs_over.
+move=> op hu; rewrite contE; apply: dvd_foldr_gc; first exact: cont_coeffs_over.
 by apply/list.Forall_forall => s /list_elem_of_fmap [k [-> _]].
 Qed.
 
@@ -789,7 +791,7 @@ Qed.
 Lemma div_lvl_spec p g : over (x :: vs) p → over (x :: vs) g → g ≠ zero →
   dvd g p → p = (g * div_lvl x dv p g)%P.
 Proof.
-move=> op og ng [s Es]; rewrite /div_lvl.
+move=> op og ng [s Es]; rewrite div_lvlE.
 apply: (div_loop_spec g p og ng _ p zero s) => //.
 - by apply: (over_quot _ g) => //; rewrite -Es.
 - by rewrite (left_absorb zero mul) (left_id zero add).
@@ -797,7 +799,7 @@ apply: (div_loop_spec g p og ng _ p zero s) => //.
 Qed.
 
 Lemma div_lvl_zero g : div_lvl x dv zero g = zero.
-Proof. by rewrite /div_lvl Nat.add_1_r /= bool_decide_eq_true_2. Qed.
+Proof. by rewrite div_lvlE Nat.add_1_r /= bool_decide_eq_true_2. Qed.
 
 (** *** Primitive parts and Gauss's lemma *)
 
@@ -989,8 +991,8 @@ Lemma prem_spec a b : over (x :: vs) a → over (x :: vs) b → b ≠ zero →
   (prem x a b = zero ∨ deg x (prem x a b) < deg x b) ∧
   ∃ c Q, over vs c ∧ c ≠ zero ∧ (c * a = Q * b + prem x a b)%P.
 Proof.
-move=> oa ob nb; rewrite /prem.
-apply: (prem_loop_spec a b oa ob nb _ a one zero) => //.
+move=> oa ob nb; rewrite premE.
+apply: (prem_loop_spec a b oa ob nb _ a one zero oa (over_one _) one_neq0).
 - by rewrite (left_id one mul) (left_absorb zero mul) (left_id zero add).
 - by right; lia.
 Qed.
@@ -1058,7 +1060,7 @@ Lemma gcd_lvl_spec p q : over (x :: vs) p → over (x :: vs) q →
   dvd (gcd_lvl x gc dv p q) p ∧ dvd (gcd_lvl x gc dv p q) q ∧
   ∀ u, dvd u p → dvd u q → dvd u (gcd_lvl x gc dv p q).
 Proof.
-move=> op oq; rewrite /gcd_lvl.
+move=> op oq; rewrite [gcd_lvl]unlock /=.
 case: bool_decide_reflect => [->|np].
   by split; [exact: dvd_zero | split; [exact: dvd_refl | move=> u]].
 case: bool_decide_reflect => [->|nq].
@@ -1189,28 +1191,28 @@ Theorem gcd_dvdl p q : dvd (gcd p q) p.
 Proof.
 have [op oq] := over_vars2 p q.
 have [h _] := ops_spec _ (NoDup_remove_dups (vars p ++ vars q)).
-exact: h.
+rewrite gcdE; exact: h.
 Qed.
 
 Theorem gcd_dvdr p q : dvd (gcd p q) q.
 Proof.
 have [op oq] := over_vars2 p q.
 have [_ [h _]] := ops_spec _ (NoDup_remove_dups (vars p ++ vars q)).
-exact: h.
+rewrite gcdE; exact: h.
 Qed.
 
 Theorem dvd_gcd u p q : dvd u p → dvd u q → dvd u (gcd p q).
 Proof.
 have [op oq] := over_vars2 p q.
 have [_ [_ [h _]]] := ops_spec _ (NoDup_remove_dups (vars p ++ vars q)).
-exact: h.
+rewrite gcdE; exact: h.
 Qed.
 
 Theorem div_spec p q : q ≠ zero → dvd q p → p = (q * div p q)%P.
 Proof.
 have [op oq] := over_vars2 p q.
 have [_ [_ [_ h]]] := ops_spec _ (NoDup_remove_dups (vars p ++ vars q)).
-exact: h.
+rewrite divE; exact: h.
 Qed.
 
 Lemma unit_pm1 u : dvd u one → u = one ∨ u = (- one)%P.
@@ -1236,7 +1238,7 @@ Proof.
 move=> ng Ep Eq hg.
 have hc : bool_decide ((g * p')%P = p ∧ (g * q')%P = q) = true.
   by apply: bool_decide_eq_true_2; split; symmetry.
-rewrite /cancel_with hc.
+rewrite [cancel_with]unlock /= hc.
 have key : dvd u p' → dvd u q' → dvd u one.
   move=> up uq.
   have : dvd (g * u)%P (g * one)%P.
@@ -1255,37 +1257,13 @@ Proof.
 move=> npq; have ng : gcd p q ≠ zero.
   move=> e; have := gcd_dvdl p q; have := gcd_dvdr p q.
   by rewrite e => /dvd_zero_l eq /dvd_zero_l ep; case: npq.
-apply: cancel_with_coprime => //.
+rewrite [cancel]unlock /=; apply: cancel_with_coprime => //.
 - by apply: div_spec => //; apply: gcd_dvdl.
 - by apply: div_spec => //; apply: gcd_dvdr.
 - by move=> v vp vq; apply: dvd_gcd.
 Qed.
 
 (** ** Canonical forms *)
-
-Lemma car_opp p : car (- p)%P = SMS.inv (car p).
-Proof. done. Qed.
-
-Lemma first_neg_opp b : b ≠ zero → first_neg (- b)%P = negb (first_neg b).
-Proof.
-move=> nb; rewrite /first_neg.
-have -> : (SMS.pos (car (- b)%P) ⊎ SMS.neg (car (- b)%P)) =
-          (SMS.pos (car b) ⊎ SMS.neg (car b)).
-  by rewrite car_opp SMS.pos_inv SMS.neg_inv (comm (⊎)).
-case E: (elements (SMS.pos (car b) ⊎ SMS.neg (car b))) => [|m ms].
-- exfalso; apply: nb; apply: coeff_inj => m; rewrite coeff_zero.
-  case: (decide (coeff m b = 0%Z)) => // nz; exfalso.
-  have : m ∈ SMS.pos (car b) ⊎ SMS.neg (car b).
-    apply/MSet.elem_of_disj_union.
-    have [lt|gt] : (coeff m b < 0 ∨ 0 < coeff m b)%Z by lia.
-    + by right; apply/SMS.count_neg.
-    + by left; apply/SMS.count_pos.
-  by rewrite -MSet.elem_of_elements E => /elem_of_nil.
-- have : m ∈ SMS.pos (car b) ⊎ SMS.neg (car b).
-    by rewrite -MSet.elem_of_elements E; apply: list_elem_of_here.
-  move=> /MSet.elem_of_disj_union [/SMS.count_pos|/SMS.count_neg] h;
-    rewrite coeff_opp /coeff; do 2 case_bool_decide => //; exfalso; lia.
-Qed.
 
 Lemma euclid a b c : (∀ u, dvd u a → dvd u b → dvd u one) →
   dvd a (b * c)%P → dvd a c.
@@ -1347,13 +1325,12 @@ have cop : ∀ u, dvd u (div p (gcd p q)) → dvd u (div q (gcd p q)) →
     - by rewrite [X in dvd _ X]Ep; apply: dvd_mul2 => //; apply: dvd_refl.
     - by rewrite [X in dvd _ X]Eq; apply: dvd_mul2 => //; apply: dvd_refl.
   exact: dvd_cancel_l.
-change (cancel p q) with
-  (cancel_with (gcd p q) p q (div p (gcd p q)) (div q (gcd p q))).
+rewrite [cancel]unlock /=.
 move: (gcd p q) ng Ep Eq cop => g ng Ep Eq cop.
 move: (div p g) (div q g) Ep Eq cop => a b Ep Eq cop.
 have hc : bool_decide ((g * a)%P = p ∧ (g * b)%P = q) = true.
   by apply: bool_decide_eq_true_2; split; symmetry.
-by exists g, a, b; rewrite /cancel_with hc.
+by exists g, a, b; rewrite [cancel_with]unlock /= hc.
 Qed.
 
 Theorem cancel_canon p q p' q' : q ≠ zero → q' ≠ zero →
@@ -1404,6 +1381,337 @@ move: (cancel p q) cop' fc Ep Eq => [a b] /= cop' fc Ep Eq.
 have E : (p * b = a * q)%P by rewrite Ep Eq; ring.
 case: (coprime_unique p q a b nq cop cop' E) => [[-> ->] //|[_ eb]].
 by move: fc; rewrite eb (first_neg_opp q nq) fq.
+Qed.
+
+(** ** Divisors of monomials
+
+    A variable is prime ([dvd_var_or_coprime]), so a divisor of a monomial is a
+    monomial up to sign ([dvd_mono]). *)
+
+Lemma coeff_const_mul c t m : coeff m (const c * t)%P = (c * coeff m t)%Z.
+Proof.
+induction c as [|c IH|c IH] using Z.peano_ind.
+- by rewrite const_zero (left_absorb zero mul) coeff_zero.
+- rewrite (_ : Z.succ c = c + 1)%Z; first lia.
+  rewrite const_add const_one mul_add_l (left_id one mul) coeff_add IH; ring.
+- rewrite (_ : Z.pred c = c + - (1))%Z; first lia.
+  rewrite const_add const_opp const_one mul_add_l mul_opp_l (left_id one mul).
+  rewrite coeff_add coeff_opp IH; ring.
+Qed.
+
+Lemma dvd_const_mono c m : dvd (const c) (mono m) → c = 1%Z ∨ c = (- (1))%Z.
+Proof.
+move=> [t Et]; apply: Z.divide_1_r; exists (coeff m t).
+have := f_equal (coeff m) Et.
+rewrite coeff_const_mul coeff_mono bool_decide_eq_true_2 //= => ->.
+exact: Z.mul_comm.
+Qed.
+
+Lemma const_pm1 c :
+  c = 1%Z ∨ c = (- (1))%Z → const c = one ∨ const c = (- one)%P.
+Proof.
+by case=> ->; [left; exact: const_one|right; rewrite const_opp const_one].
+Qed.
+
+Lemma var_neq0 x : var x ≠ zero.
+Proof.
+move=> /(f_equal (coeff {[+ x +]})).
+by rewrite coeff_var coeff_zero bool_decide_eq_true_2.
+Qed.
+
+Lemma deg_var y x : deg y (var x) = if bool_decide (y = x) then 1 else 0.
+Proof. by rewrite varE deg_mono MSet.count_singleton; case_bool_decide. Qed.
+
+Lemma dvd_var x u :
+  dvd u (var x) → (u = one ∨ u = (- one)%P) ∨ (u = var x ∨ u = (- var x)%P).
+Proof.
+move=> [t Et].
+have nu : u ≠ zero.
+  by move=> e; apply: (var_neq0 x); rewrite Et e (left_absorb zero mul).
+have nt : t ≠ zero.
+  by move=> e; apply: (var_neq0 x); rewrite Et e (right_absorb zero mul).
+have D y : deg y u + deg y t = if bool_decide (y = x) then 1 else 0.
+  by rewrite -deg_mul // -Et deg_var.
+have const_of p : (∀ y, deg y p = 0) → p = const (coeff ∅ p).
+  by move=> h; apply: over_nil => y _; exact: h.
+case: (Nat.eq_dec (deg x u) 0) => dux.
+- left; have Eu : u = const (coeff ∅ u).
+    apply: const_of => y; case: (decide (y = x)) => [->|ne] //.
+    by have := D y; rewrite bool_decide_eq_false_2 //; lia.
+  rewrite Eu; apply: const_pm1; apply: (dvd_const_mono _ {[+ x +]}).
+  by rewrite -Eu -varE; exists t.
+- right; have Et' : t = const (coeff ∅ t).
+    apply: const_of => y; case: (decide (y = x)) => [->|ne].
+      by have := D x; rewrite bool_decide_eq_true_2 //; lia.
+    by have := D y; rewrite bool_decide_eq_false_2 //; lia.
+  have : dvd (const (coeff ∅ t)) (mono {[+ x +]}).
+    by exists u; rewrite -varE Et {1}Et'; ring.
+  move=> /dvd_const_mono hc; move: Et; rewrite Et'.
+  by case: hc => ->; rewrite ?const_opp const_one => ->; [left|right]; ring.
+Qed.
+
+Lemma dvd_var_or_coprime x r :
+  dvd (var x) r ∨ (∀ u, dvd u (var x) → dvd u r → dvd u one).
+Proof.
+case: (decide (r = (var x * div r (var x))%P)) => [e|ne].
+  by left; exists (div r (var x)).
+right=> u ux ur; case: (dvd_var _ _ ux) => [[->|->]|[ex|ex]].
+- exact: dvd_refl.
+- by exists (- one)%P; ring.
+- by exfalso; apply: ne; apply: div_spec; [exact: var_neq0|rewrite -ex].
+- exfalso; apply: ne; apply: div_spec; first exact: var_neq0.
+  rewrite -(opp_opp (var x)) -ex; apply: (dvd_trans (- u)%P u r) => //.
+  by exists (- one)%P; ring.
+Qed.
+
+Lemma dvd_mono r m :
+  dvd r (mono m) → ∃ n, n ⊆ m ∧ (r = mono n ∨ r = (- mono n)%P).
+Proof.
+move: r; elim/(MSet.mset_ind (T := T)): m => [|x m IH] r.
+  rewrite -oneE => /unit_pm1 [->|->]; exists ∅; (split; first done);
+    rewrite oneE; [by left|by right].
+rewrite -mul_mono -varE => hr.
+case: (dvd_var_or_coprime x r) => [[r1 Er]|cop].
+- subst r; have : dvd r1 (mono m) by apply: (dvd_cancel_l (var x)) => //;
+    exact: var_neq0.
+  move=> /IH [n [nm E]]; exists ({[+ x +]} ⊎ n); split.
+    apply/MSet.subseteq_count => y; rewrite !MSet.count_disj_union.
+    by have /MSet.subseteq_count := nm; move=> /(_ y); lia.
+  by case: E => ->; [left|right]; rewrite varE ?mul_opp_r mul_mono.
+- have cop' : ∀ u, dvd u r → dvd u (var x) → dvd u one.
+    by move=> u ur ux; exact: cop u ux ur.
+  have /IH [n [nm E]] := euclid r (var x) (mono m) cop' hr.
+  exists n; split=> //; apply/MSet.subseteq_count => y.
+  rewrite MSet.count_disj_union.
+  by have /MSet.subseteq_count := nm; move=> /(_ y); lia.
+Qed.
+
+(** ** Monomial content
+
+    [content p] is the largest monomial dividing [p] ([dvd_mono_content]) and
+    [unit_part p] its cofactor, which no variable divides
+    ([content_unit_part]).  Since variables are prime, contents multiply
+    ([content_mul]). *)
+
+Definition meet m n : MSet.mset T := m ∖ (m ∖ n).
+
+lock Definition content p : MSet.mset T :=
+  match elements (car p) with
+  | [] => ∅
+  | m :: ms => foldr meet m ms
+  end.
+
+lock Definition unmono m p : poly := mk (SMS.map (λ n, n ∖ m) (car p)).
+
+lock Definition unit_part p : poly := unmono (content p) p.
+
+Lemma contentE p : content p =
+  match elements (car p) with
+  | [] => ∅
+  | m :: ms => foldr meet m ms
+  end.
+Proof. by rewrite [content]unlock. Qed.
+
+Lemma car_unmono m p : car (unmono m p) = SMS.map (λ n, n ∖ m) (car p).
+Proof. by rewrite [unmono]unlock. Qed.
+
+Lemma unit_partE p : unit_part p = unmono (content p) p.
+Proof. by rewrite [unit_part]unlock. Qed.
+
+Lemma mono_neq0 m : mono m ≠ zero.
+Proof.
+move=> /(f_equal (coeff m)); rewrite coeff_mono coeff_zero.
+by rewrite bool_decide_eq_true_2.
+Qed.
+
+Lemma count_meet x m n :
+  MSet.count x (meet m n) = Nat.min (MSet.count x m) (MSet.count x n).
+Proof. rewrite /meet !MSet.count_difference; lia. Qed.
+
+Lemma foldr_meet_le x m ms n :
+  n ∈ m :: ms → MSet.count x (foldr meet m ms) ≤ MSet.count x n.
+Proof.
+elim: ms n => [|m' ms IH] n /=; first by move=> /list_elem_of_singleton ->.
+rewrite count_meet => /elem_of_cons [->|/elem_of_cons [->|h]].
+- have := IH _ (list_elem_of_here _ _); lia.
+- lia.
+- have := IH _ (list_elem_of_further _ _ _ h); lia.
+Qed.
+
+Lemma foldr_meet_ge x m ms k :
+  (∀ n, n ∈ m :: ms → k ≤ MSet.count x n) →
+  k ≤ MSet.count x (foldr meet m ms).
+Proof.
+elim: ms => [|m' ms IH] /= h; first by apply: h; left.
+rewrite count_meet; apply: Nat.min_glb; first by apply: h; right; left.
+apply: IH => n /elem_of_cons [->|hn]; apply: h; first by left.
+by right; right.
+Qed.
+
+Lemma content_sub p n : n ∈ car p → content p ⊆ n.
+Proof.
+move=> hn; apply/MSet.subseteq_count => x; move: hn.
+rewrite contentE -SMS.elem_of_elements; case: (elements (car p)) => [|m ms].
+  by move=> /elem_of_nil.
+exact: foldr_meet_le.
+Qed.
+
+Lemma sub_content p m : p ≠ zero → (∀ n, n ∈ car p → m ⊆ n) → m ⊆ content p.
+Proof.
+move=> np h; apply/MSet.subseteq_count => x; rewrite contentE.
+case E: (elements (car p)) => [|m0 ms].
+  by case: np; apply: car_inj; rewrite car_zero; exact: SMS.elements_empty_inv.
+apply: foldr_meet_ge => n hn.
+have /MSet.subseteq_count := h n ltac:(by rewrite -SMS.elem_of_elements E).
+by apply.
+Qed.
+
+Lemma unmonoK m p : (∀ n, n ∈ car p → m ⊆ n) → (mono m * unmono m p)%P = p.
+Proof.
+move=> h; apply: car_inj.
+rewrite car_mul_mono car_unmono SMS.map_map.
+apply: SMS.map_id_ext => n hn; apply: MSet.count_inj => x.
+rewrite MSet.count_disj_union MSet.count_difference.
+by have /MSet.subseteq_count := h n hn; move=> /(_ x); lia.
+Qed.
+
+Lemma dvd_mono_iff m p : dvd (mono m) p ↔ ∀ n, n ∈ car p → m ⊆ n.
+Proof.
+split; last by move=> h; exists (unmono m p); rewrite unmonoK.
+move=> [r ->] n; rewrite car_mul_mono.
+move=> /SMS.elem_of_map [n' [-> _]].
+apply/MSet.subseteq_count => x; rewrite MSet.count_disj_union; lia.
+Qed.
+
+Lemma dvd_mono_content m p : p ≠ zero → dvd (mono m) p ↔ m ⊆ content p.
+Proof.
+move=> np; rewrite dvd_mono_iff; split; first exact: sub_content.
+by move=> mc n hn; transitivity (content p) => //; exact: content_sub.
+Qed.
+
+Lemma content_unitK p : (mono (content p) * unit_part p)%P = p.
+Proof. by rewrite unit_partE; apply: unmonoK => n; exact: content_sub. Qed.
+
+Lemma unit_part_neq0 p : p ≠ zero → unit_part p ≠ zero.
+Proof.
+move=> np e; apply: np; rewrite -(content_unitK p) e.
+exact: (right_absorb zero mul).
+Qed.
+
+Lemma content_zero : content zero = ∅.
+Proof. by rewrite contentE car_zero SMS.elements_empty. Qed.
+
+Lemma unit_part_zero : unit_part zero = zero.
+Proof.
+by apply: car_inj; rewrite unit_partE car_unmono car_zero SMS.map_empty.
+Qed.
+
+Lemma var_dvd_content x p : p ≠ zero → dvd (var x) p ↔ x ∈ content p.
+Proof.
+move=> np; rewrite varE dvd_mono_content // MSet.elem_of_count.
+rewrite MSet.subseteq_count; split.
+  by move=> /(_ x); rewrite MSet.count_singleton bool_decide_eq_true_2 //; lia.
+move=> h y; rewrite MSet.count_singleton.
+by case: bool_decide_reflect => [->|_]; lia.
+Qed.
+
+Lemma content_unit_part p : content (unit_part p) = ∅.
+Proof.
+case: (decide (p = zero)) => [->|np].
+  by rewrite unit_part_zero content_zero.
+have nu := unit_part_neq0 _ np.
+apply: MSet.count_inj => x; rewrite MSet.count_empty.
+case: (decide (x ∈ content (unit_part p))) => h; last first.
+  by move: h; rewrite MSet.elem_of_count; lia.
+exfalso; move/(var_dvd_content _ _ nu): h => h.
+have : dvd (mono ({[+ x +]} ⊎ content p)) p.
+  rewrite -mul_mono -{2}(content_unitK p) (comm mul (mono {[+ x +]})).
+  by apply: dvd_mul2; [exact: dvd_refl|rewrite -varE; exact: h].
+move=> /(dvd_mono_content _ _ np) /MSet.subseteq_count /(_ x).
+rewrite MSet.count_disj_union MSet.count_singleton bool_decide_eq_true_2 //.
+lia.
+Qed.
+
+Lemma content_mul p q : p ≠ zero → q ≠ zero →
+  content (p * q)%P = content p ⊎ content q.
+Proof.
+move=> np nq; have npq := mul_neq0 _ _ np nq.
+set c := content p ⊎ content q.
+have E : (p * q)%P = (mono c * (unit_part p * unit_part q))%P.
+  rewrite /c -mul_mono -{1}(content_unitK p) -{1}(content_unitK q); ring.
+have cc : c ⊆ content (p * q)%P.
+  apply/(dvd_mono_content _ _ npq); rewrite E; exact: dvd_mul_l.
+apply: MSet.count_inj => x; apply: Nat.le_antisymm; last first.
+  by have /MSet.subseteq_count := cc; apply.
+case: (Nat.le_gt_cases (MSet.count x (content (p * q)%P)) (MSet.count x c))
+  => // gt.
+exfalso.
+have h1 : dvd (mono ({[+ x +]} ⊎ c)) (p * q)%P.
+  apply/(dvd_mono_content _ _ npq)/MSet.subseteq_count => y.
+  rewrite MSet.count_disj_union MSet.count_singleton.
+  case: bool_decide_reflect => [->|_]; first lia.
+  by have /MSet.subseteq_count := cc; move=> /(_ y); lia.
+have h2 : dvd (var x) (unit_part p * unit_part q)%P.
+  apply: (dvd_cancel_l (mono c)); first exact: mono_neq0.
+  by rewrite -E (comm mul (mono c)) varE mul_mono.
+have nup := unit_part_neq0 _ np; have nuq := unit_part_neq0 _ nq.
+case: (dvd_var_or_coprime x (unit_part p)) => [hp|cop].
+  move/(var_dvd_content _ _ nup): hp; rewrite content_unit_part.
+  exact: MSet.not_elem_of_empty.
+move/(var_dvd_content _ _ nuq): (euclid _ _ _ cop h2).
+rewrite content_unit_part; exact: MSet.not_elem_of_empty.
+Qed.
+
+Lemma unit_part_mul p q : p ≠ zero → q ≠ zero →
+  unit_part (p * q)%P = (unit_part p * unit_part q)%P.
+Proof.
+move=> np nq.
+apply: (mul_cancel_l (mono (content (p * q)%P))); first exact: mono_neq0.
+rewrite content_unitK content_mul // -mul_mono.
+rewrite -{1}(content_unitK p) -{1}(content_unitK q); ring.
+Qed.
+
+Lemma content_opp p : content (- p)%P = content p.
+Proof.
+case: (decide (p = zero)) => [->|np].
+  by rewrite (_ : (- zero)%P = zero) //; ring.
+have nop : (- p)%P ≠ zero.
+  by move=> e; apply: np; rewrite -(opp_opp p) e; ring.
+apply: MSet.count_inj => x; apply: Nat.le_antisymm.
+- have : dvd (mono (content (- p)%P)) p.
+    rewrite -{2}(opp_opp p); apply: dvd_opp.
+    by apply/(dvd_mono_content _ _ nop).
+  by move=> /(dvd_mono_content _ _ np) /MSet.subseteq_count /(_ x).
+- have : dvd (mono (content p)) (- p)%P.
+    by apply: dvd_opp; apply/(dvd_mono_content _ _ np).
+  by move=> /(dvd_mono_content _ _ nop) /MSet.subseteq_count /(_ x).
+Qed.
+
+Lemma unit_part_opp p : unit_part (- p)%P = (- unit_part p)%P.
+Proof.
+apply: (mul_cancel_l (mono (content p))); first exact: mono_neq0.
+rewrite -{1}(content_opp p) content_unitK -{1}(content_unitK p); ring.
+Qed.
+
+Lemma content_mono m : content (mono m) = m.
+Proof. by rewrite contentE car_mono SMS.elements_singleton. Qed.
+
+Lemma unit_part_mono m : unit_part (mono m) = one.
+Proof.
+apply: (mul_cancel_l (mono m)); first exact: mono_neq0.
+by have := content_unitK (mono m); rewrite content_mono => ->; ring.
+Qed.
+
+Lemma content_unique m u p : p = (mono m * u)%P → u ≠ zero →
+  content u = ∅ → content p = m ∧ unit_part p = u.
+Proof.
+move=> -> nu cu.
+have cm : content (mono m * u)%P = m.
+  rewrite content_mul ?content_mono ?cu ?(right_id ∅ (⊎)) //.
+  exact: mono_neq0.
+split=> //.
+apply: (mul_cancel_l (mono m)); first exact: mono_neq0.
+by rewrite -{1}cm content_unitK.
 Qed.
 
 End Gcd.
