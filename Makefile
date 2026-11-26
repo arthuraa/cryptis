@@ -33,8 +33,9 @@ clean: Makefile.rocq
 .PHONY: clean
 
 # Create Rocq Makefile.
+# Need to work around https://github.com/rocq-prover/rocq/issues/22597.
 Makefile.rocq: _RocqProject Makefile
-	"$(COQBIN)rocq" makefile -f _RocqProject -o Makefile.rocq $(EXTRA_COQFILES)
+	"$(COQBIN)rocq" makefile -f _RocqProject -o Makefile.rocq $(EXTRA_COQFILES) $(shell if rocq makefile --no-rocq-package-warning -v >/dev/null 2>&1; then echo --no-rocq-package-warning; fi)
 
 # Install build-dependencies
 OPAMFILES=$(wildcard *.opam)

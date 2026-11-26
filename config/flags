@@ -1,6 +1,8 @@
 # Specification for custom Rocq compilation flags (turns into `-arg` values in `_RocqProject`).
 # Syntax:
 # - One flag per line with no leading/trailing blanks.
+# - Internal whitespace is allowed, will be passed verbatim to Rocq.
+# - Quotes (single/double) are not allowed.
 # - Empty lines and lines starting with '#' are ignored.
 
 # We sometimes want to locally override notation, and there is no good way to do
