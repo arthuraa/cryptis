@@ -24,8 +24,9 @@
     - [g ^ 1 = g]
     - [(u ⋅ v) ^ x = u^x ⋅ v^x]
 
-    Normal forms are the pre-terms that [normalize] fixes ([wf]); [canon]
-    characterizes them structurally.  We have the following properties:
+    Normal forms are the pre-terms that [normalize] fixes ([wf]).  Their
+    atoms satisfy [wf_atom], their fractions [wf_frac] and their
+    Diffie-Hellman maps [wf_dh].  We have the following properties:
 
    - [normalize_wf : wf t -> normalize t = t]
    - [wf_normalize : wf (normalize t)]
@@ -59,8 +60,6 @@ Implicit Types (t u : pre_term).
 
 Definition dhmap := FMap.fmap pre_term frac Frac.zero.
 
-Definition fvar t : frac := Frac.of_poly (Poly.var t).
-
 Definition is_mod t : bool :=
   match t with
   | PT0 O0Zero | PT0 O0One | PT1 O1Opp _ | PT1 O1Inv _
@@ -82,7 +81,7 @@ Fixpoint frac_of t : frac :=
   | PT1 O1Inv t1 => Frac.inv (frac_of t1)
   | PT2 O2Add t1 t2 => Frac.add (frac_of t1) (frac_of t2)
   | PT2 O2Mul t1 t2 => Frac.mul (frac_of t1) (frac_of t2)
-  | _ => fvar t
+  | _ => Frac.var t
   end.
 
 Definition dh_add (m1 m2 : dhmap) : dhmap :=
@@ -220,7 +219,7 @@ Add Ring flat_frac_ring : (Frac.frac_ring_theory (T := pre_term)).
 
 Implicit Types (r : frac) (m : dhmap) (p : Poly.poly pre_term).
 
-Lemma frac_of_atom t : is_mod t = false → frac_of t = fvar t.
+#[local] Lemma frac_of_atom t : is_mod t = false → frac_of t = Frac.var t.
 Proof. by case: t => [[]|[] ?|[] ? ?]. Qed.
 
 Lemma dh_map_base t : is_dh t = false → dh_map t = {[t := Frac.one]}.
@@ -237,6 +236,14 @@ Lemma lookup_dh_scale r m k : dh_scale r m !!! k = Frac.mul (m !!! k) r.
 Proof.
 rewrite /dh_scale FMap.lookup_cast.
 exact: (FMap.lookup_map (λ f, Frac.mul f r)).
+Qed.
+
+Lemma lookup_dh_add_neq0 m1 m2 k : dh_add m1 m2 !!! k ≠ Frac.zero →
+  m1 !!! k ≠ Frac.zero ∨ m2 !!! k ≠ Frac.zero.
+Proof.
+rewrite lookup_dh_add.
+case: (decide (m1 !!! k = Frac.zero)) => [->|]; last by left.
+by move=> nz; right=> e2; apply: nz; rewrite e2; ring.
 Qed.
 
 Lemma vars_num r x : x ∈ Poly.vars (Frac.num r) → x ∈ Frac.vars r.
@@ -276,7 +283,7 @@ by rewrite lookup_dh_add IH !Frac.fsum_cons.
 Qed.
 
 Definition mono_frac (M : MSet.mset pre_term) : frac :=
-  Frac.fprod (fvar <$> elements M).
+  Frac.fprod (Frac.var <$> elements M).
 
 Lemma frac_of_encode_mono M :
   (∀ x, x ∈ elements M → is_mod x = false) →
@@ -317,7 +324,7 @@ by rewrite eP eN.
 Qed.
 
 Lemma fsum_mono_frac (X : MSet.mset (MSet.mset pre_term)) :
-  Frac.fsum (mono_frac <$> elements X) = Frac.msum fvar X.
+  Frac.fsum (mono_frac <$> elements X) = Frac.msum Frac.var X.
 Proof.
 rewrite Frac.msumE; congr Frac.fsum.
 by apply: list_fmap_ext => i M _; rewrite Frac.mono_valE.
@@ -338,12 +345,12 @@ rewrite /encode_poly frac_of_encode_signed; first last.
 - by apply: hX => M MX; right.
 - by apply: hX => M MX; left.
 rewrite !fsum_mono_frac -Frac.subE -Frac.evalE.
-have -> : Frac.eval fvar p =
-  Frac.eval (λ x, Frac.of_poly (Poly.var (id x))) p by [].
+rewrite (Frac.eval_ext _ (λ x, Frac.of_poly (Poly.var (id x)))); last first.
+  by move=> *; rewrite Frac.varE.
 by rewrite Frac.eval_var_map Poly.map_id_ext.
 Qed.
 
-Lemma frac_of_mod_of_frac_atoms r :
+#[local] Lemma frac_of_mod_of_frac_atoms r :
   (∀ x, x ∈ Frac.vars r → is_mod x = false) →
   frac_of (mod_of_frac r) = r.
 Proof.
@@ -370,7 +377,7 @@ rewrite Frac.fsum_cons IH //; case: bool_decide_reflect => [->|_].
 by ring.
 Qed.
 
-Lemma dh_map_dh_of_atoms m :
+#[local] Lemma dh_map_dh_of_atoms m :
   (∀ k, m !!! k ≠ Frac.zero → is_dh k = false) →
   (∀ k x, x ∈ Frac.vars (m !!! k) → is_mod x = false) →
   dh_map (dh_of m) = m.
@@ -393,9 +400,9 @@ rewrite fsum_lookup_list ?FMap.lookupE ?FMap.to_listE //.
 by rewrite FMap.keys_fmap -FMap.to_listE; exact: FMap.to_list_sorted.
 Qed.
 
-Lemma mod_of_frac_var a : mod_of_frac (fvar a) = a.
+Lemma mod_of_frac_var a : mod_of_frac (Frac.var a) = a.
 Proof.
-rewrite /mod_of_frac /fvar Frac.den_of_poly bool_decide_true //.
+rewrite /mod_of_frac Frac.varE Frac.den_of_poly bool_decide_true //.
 rewrite /encode_poly Frac.num_of_poly.
 have -> : Poly.car (Poly.var a) = {[+ {[+ a +]} +]}.
   by rewrite -(Frac.car_num_var a) Frac.num_of_poly.
@@ -435,8 +442,8 @@ Fixpoint gall (Pb Pe : pre_term → Prop) t : Prop :=
   | _ => Pb t
   end.
 
-Definition fixed_atom a := normalize a = a ∧ is_mod a = false.
-Definition fixed_base b := normalize b = b ∧ is_dh b = false.
+#[local] Definition fixed_atom a := normalize a = a ∧ is_mod a = false.
+#[local] Definition fixed_base b := normalize b = b ∧ is_dh b = false.
 
 Section NormalForms.
 
@@ -473,9 +480,10 @@ Proof. by case: t => [[]|[] ?|[] ? ?]. Qed.
 Lemma gall_leaf Pb Pe t : is_dh t = false → gall Pb Pe t = Pb t.
 Proof. by case: t => [[]|[] ?|[] ? ?]. Qed.
 
-Lemma vars_fvar a x : x ∈ Frac.vars (fvar a) ↔ x = a.
+Lemma vars_var a x : x ∈ Frac.vars (Frac.var a) ↔ x = a.
 Proof.
-rewrite /Frac.vars elem_of_app !Poly.elem_of_vars /fvar Frac.car_den_of_poly.
+rewrite /Frac.vars elem_of_app !Poly.elem_of_vars Frac.varE.
+rewrite Frac.car_den_of_poly.
 rewrite Frac.car_num_var; split.
 - case=> [] [M [MS xM]]; move/SMS.elem_of_singleton: MS xM => ->.
     by move/MSet.elem_of_singleton.
@@ -525,18 +533,15 @@ elim: t => [o|o t IH|o t1 IH1 t2 IH2].
     by move=> nk; apply: k1 => e; apply: nk; rewrite e Frac.opp_zero.
   exact: Frac.all_vars_opp.
 - case: o => [| | | | |]; try by move=> h; apply: gall_ok_leaf.
-  + move=> [/IH1 [k1 v1] /IH2 [k2 v2]]; split=> k.
-      rewrite dh_map_gmul2 lookup_dh_add.
-      case: (decide (dh_map t1 !!! k = Frac.zero)) => [z1|n1];
-        last by move=> _; apply: k1.
-      by rewrite z1 => n2; apply: k2 => z2; apply: n2; rewrite z2; ring.
-    rewrite dh_map_gmul2 lookup_dh_add; exact: Frac.all_vars_add.
+  + move=> [/IH1 [k1 v1] /IH2 [k2 v2]]; split=> k; rewrite dh_map_gmul2.
+      by case/lookup_dh_add_neq0; [apply: k1|apply: k2].
+    rewrite lookup_dh_add; exact: Frac.all_vars_add.
   + move=> [/IH1 [k1 v1] fe]; split=> k; rewrite dh_map_exp2 lookup_dh_scale.
       by move=> nk; apply: k1 => z; apply: nk; rewrite z Frac.mul_zero_l.
     by apply: Frac.all_vars_mul => //; apply: fall_vars.
 Qed.
 
-Lemma normalize_frac_of s :
+#[local] Lemma normalize_frac_of s :
   fall fixed_atom s → frac_of (normalize s) = frac_of s.
 Proof.
 have R : ∀ r, Frac.all_vars fixed_atom r → frac_of (mod_of_frac r) = r.
@@ -557,7 +562,7 @@ elim: s => [o|o s IH|o s1 IH1 s2 IH2].
     by apply: Frac.all_vars_mul; apply: fall_vars.
 Qed.
 
-Lemma normalize_mod s : is_mod s = true → fall fixed_atom s →
+#[local] Lemma normalize_mod s : is_mod s = true → fall fixed_atom s →
   normalize s = mod_of_frac (frac_of s).
 Proof.
 case: s => [[]|[] s1|[] s1 s2] //= _.
@@ -567,7 +572,7 @@ case: s => [[]|[] s1|[] s1 s2] //= _.
 - by move=> [h1 h2]; rewrite !normalize_frac_of.
 Qed.
 
-Lemma normalize_dh_map s :
+#[local] Lemma normalize_dh_map s :
   gall fixed_base fixed_atom s → dh_map (normalize s) = dh_map s.
 Proof.
 have R : ∀ m,
@@ -591,11 +596,8 @@ elim: s => [o|o s IH|o s1 IH1 s2 IH2].
 - case: o => [| | | | |]; try by move=> [h _]; rewrite h.
   + move=> [h1 h2]; rewrite normalize_gmul dh_map_gmul2 (IH1 h1) (IH2 h2).
     have [k1 v1] := gall_ok _ _ _ h1; have [k2 v2] := gall_ok _ _ _ h2.
-    apply: R => k; rewrite lookup_dh_add.
-      case: (decide (dh_map s1 !!! k = Frac.zero)) => [z1|n1].
-        by rewrite z1 => n2; apply: k2 => z2; apply: n2; rewrite z2; ring.
-      by move=> _; apply: k1.
-    exact: Frac.all_vars_add.
+    apply: R => k; first by case/lookup_dh_add_neq0; [apply: k1|apply: k2].
+    rewrite lookup_dh_add; exact: Frac.all_vars_add.
   + move=> [h1 h2].
     rewrite normalize_exp dh_map_exp2 (IH1 h1) (normalize_frac_of _ h2).
     have [k1 v1] := gall_ok _ _ _ h1.
@@ -604,7 +606,7 @@ elim: s => [o|o s IH|o s1 IH1 s2 IH2].
     by apply: Frac.all_vars_mul => //; apply: fall_vars.
 Qed.
 
-Lemma normalize_dh s : is_dh s = true → gall fixed_base fixed_atom s →
+#[local] Lemma normalize_dh s : is_dh s = true → gall fixed_base fixed_atom s →
   normalize s = dh_of (dh_map s).
 Proof.
 case: s => [[]|[] s1|[] s1 s2] //= _.
@@ -673,7 +675,7 @@ split; first exact: hf (list_elem_of_here _ _).
 by apply: IH => e'' he''; apply: hf; apply: list_elem_of_further.
 Qed.
 
-Lemma normalize_mod_of_frac r :
+#[local] Lemma normalize_mod_of_frac r :
   (∀ x, x ∈ Frac.vars r → fixed_atom x) →
   normalize (mod_of_frac r) = mod_of_frac r.
 Proof.
@@ -683,13 +685,13 @@ have fe : fall fixed_atom (mod_of_frac r).
   by apply: fall_mod_of_frac => x xr; split; [apply: h|apply: hf].
 case E: (is_mod (mod_of_frac r)).
   by rewrite normalize_mod // frac_of_mod_of_frac_atoms.
-have er : r = fvar (mod_of_frac r).
+have er : r = Frac.var (mod_of_frac r).
   by rewrite -{1}(frac_of_mod_of_frac_atoms r hf) frac_of_atom.
-have : mod_of_frac r ∈ Frac.vars r by rewrite {2}er; apply/vars_fvar.
+have : mod_of_frac r ∈ Frac.vars r by rewrite {2}er; apply/vars_var.
 by move=> /h [].
 Qed.
 
-Lemma normalize_dh_of m :
+#[local] Lemma normalize_dh_of m :
   (∀ k, m !!! k ≠ Frac.zero → fixed_base k) →
   (∀ k x, x ∈ Frac.vars (m !!! k) → fixed_atom x) →
   normalize (dh_of m) = dh_of m.
@@ -713,6 +715,18 @@ have : m !!! dh_of m ≠ Frac.zero.
   exact: Frac.one_neq0.
 by move=> /hk [].
 Qed.
+
+End NormalForms.
+
+(* Idempotence needs an invariant on the leaves of the readings, since the
+   subterms of a normal form need not be normal forms; [wf] replaces it once
+   [normalize_idem] holds. *)
+Module Internal.
+Section Canon.
+
+Add Ring flat_frac_ring_canon : (Frac.frac_ring_theory (T := pre_term)).
+
+Implicit Types (r : frac) (m : dhmap).
 
 (** [canon] characterizes normal forms: free nodes over normal forms, and
     encodings of values whose atoms and bases are normal forms. *)
@@ -750,7 +764,7 @@ Proof.
 move=> cn fn gn nn; rewrite /nf_props frac_of_atom // dh_map_base //.
 rewrite mod_of_frac_var dh_of_single.
 split=> //; split=> //; split=> //; split.
-  by move=> x /vars_fvar ->.
+  by move=> x /vars_var ->.
 split=> k; rewrite FMap.lookup_singleton.
   by case: bool_decide_reflect => [->|].
 move=> x xv; exfalso; move: xv; apply: vars_one_zero.
@@ -783,8 +797,8 @@ elim=> {n}.
       exact: canon_frac.
     move=> x xv; exfalso; move: xv; apply: vars_one_zero.
     by case: bool_decide; [left|right].
-  have er : r = fvar (mod_of_frac r) by rewrite -{1}pr frac_of_atom.
-  by apply: IH; rewrite {2}er; apply/vars_fvar.
+  have er : r = Frac.var (mod_of_frac r) by rewrite -{1}pr frac_of_atom.
+  by apply: IH; rewrite {2}er; apply/vars_var.
 - move=> m ck IHk gk cv IHv fv.
   have pm := dh_map_dh_of_atoms m gk fv.
   have nm : normalize (dh_of m) = dh_of m.
@@ -796,7 +810,7 @@ elim=> {n}.
   case E: (is_dh (dh_of m)).
     rewrite /nf_props pm frac_of_atom ?dh_not_mod // mod_of_frac_var.
     split=> //; split=> //; split=> //; split.
-      move=> x /vars_fvar ->; split; last exact: dh_not_mod.
+      move=> x /vars_var ->; split; last exact: dh_not_mod.
       exact: canon_dh.
     by split=> [k nk|k x xv]; split;
       [apply: ck|apply: gk|apply: cv xv|apply: fv xv].
@@ -849,22 +863,22 @@ elim: t => [o|o t IH|o t1 IH1 t2 IH2].
     by apply: Frac.all_vars_add; apply: av.
   + apply: frac_case; apply/Frac.all_vars_iff.
     by apply: Frac.all_vars_mul; apply: av.
-  + apply: dh_case => k; rewrite lookup_dh_add.
-      case: (decide (dh_map (normalize t1) !!! k = Frac.zero)) => [z1|n1].
-        rewrite z1 => n2; apply: (dk _ IH2) => z2; apply: n2.
-        by rewrite z2; ring.
-      by move=> _; apply: (dk _ IH1).
-    by apply: Frac.all_vars_add; apply: dv.
+  + apply: dh_case => k.
+      by case/lookup_dh_add_neq0; [apply: (dk _ IH1)|apply: (dk _ IH2)].
+    by rewrite lookup_dh_add; apply: Frac.all_vars_add; apply: dv.
   + apply: dh_case => k; rewrite lookup_dh_scale.
       move=> nk; apply: (dk _ IH1) => z; apply: nk.
       by rewrite z Frac.mul_zero_l.
     by apply: Frac.all_vars_mul; [apply: dv|apply: av].
 Qed.
 
+End Canon.
+End Internal.
+Import Internal.
+
 Theorem normalize_idem t : normalize (normalize t) = normalize t.
 Proof. exact: (proj1 (canon_props _ (canon_normalize t))). Qed.
 
-End NormalForms.
 
 (** ** Recognizers *)
 
@@ -881,52 +895,20 @@ Definition is_exp pt :=
 Definition is_gmul pt := is_dh pt && negb (is_exp pt).
 Definition is_nonce pt := if pt is PT0 (O0Nonce _) then true else false.
 
-(** [is_non_free] collects the heads that [term] represents indirectly, and is
-    what [core/term/base.v] uses for [TNonFree].  [is_gnon_free] collects the
-    heads a normal-form base may not have: an exponent in a base is an atom,
-    since [exp] does not distribute over it. *)
-Definition is_non_free pt := is_exp pt || is_mod pt || is_gmul pt.
+(** [is_non_free] recognizes the heads that [term] represents indirectly
+    ([TNonFree] in [core/term/base.v]). *)
+Definition is_non_free pt := is_mod pt || is_dh pt.
 
-Definition is_gnon_free pt := is_exp pt || is_gmul pt.
+Lemma is_dh_exp_gmul pt : is_dh pt = is_exp pt || is_gmul pt.
+Proof.
+by rewrite /is_gmul; case: pt => [[]|[] ?|[] ? ?] //=; case: is_mono_poly.
+Qed.
 
-Lemma is_exp_dh pt : is_exp pt → is_dh pt.
+Lemma Ndh_Nexp pt : negb (is_dh pt) → negb (is_exp pt).
 Proof. by case: pt => [[]|[] ?|[] ? ?]. Qed.
 
-Lemma is_gnon_freeE pt : is_gnon_free pt = is_dh pt.
-Proof.
-rewrite /is_gnon_free /is_gmul.
-by case: pt => [[]|[] ?|[] ? ?] //=; case: is_mono_poly.
-Qed.
-
-Lemma is_non_freeE pt : is_non_free pt = is_mod pt || is_dh pt.
-Proof.
-rewrite /is_non_free /is_gmul.
-by case: pt => [[]|[] ?|[] ? ?] //=; case: is_mono_poly.
-Qed.
-
-Lemma Nnf_Nexp pt : negb (is_non_free pt) → negb (is_exp pt).
-Proof.
-by rewrite /is_non_free; case: (is_exp pt); case: (is_mod pt);
-  case: (is_gmul pt).
-Qed.
-
-Lemma Nnf_Ngmul pt : negb (is_non_free pt) → negb (is_gmul pt).
-Proof.
-by rewrite /is_non_free; case: (is_exp pt); case: (is_mod pt);
-  case: (is_gmul pt).
-Qed.
-
-Lemma Nnf_Ngnf pt : negb (is_non_free pt) → negb (is_gnon_free pt).
-Proof.
-by rewrite /is_non_free /is_gnon_free; case: (is_exp pt); case: (is_mod pt);
-  case: (is_gmul pt).
-Qed.
-
-Lemma Ngnf_Nexp pt : negb (is_gnon_free pt) → negb (is_exp pt).
-Proof. by rewrite /is_gnon_free; case: (is_exp pt); case: (is_gmul pt). Qed.
-
-Lemma Ngnf_Ngmul pt : negb (is_gnon_free pt) → negb (is_gmul pt).
-Proof. by rewrite /is_gnon_free; case: (is_exp pt); case: (is_gmul pt). Qed.
+Lemma Ndh_Ngmul pt : negb (is_dh pt) → negb (is_gmul pt).
+Proof. by rewrite /is_gmul; case: (is_dh pt). Qed.
 
 Lemma is_exp_Ngmul pt : is_exp pt → negb (is_gmul pt).
 Proof. by rewrite /is_gmul; case: (is_exp pt); case: (is_dh pt). Qed.
@@ -939,12 +921,6 @@ Proof. by case: pt => [[]|[] ?|[] ? ?]. Qed.
 
 Lemma is_mod_Ngmul pt : is_mod pt → negb (is_gmul pt).
 Proof. by case: pt => [[]|[] ?|[] ? ?]. Qed.
-
-Lemma is_dh_non_free pt : is_dh pt → is_non_free pt.
-Proof. by rewrite is_non_freeE; case: (is_mod pt); case: (is_dh pt). Qed.
-
-Lemma is_mod_non_free pt : is_mod pt → is_non_free pt.
-Proof. by rewrite is_non_freeE; case: (is_mod pt). Qed.
 
 Lemma Is_true_negb b : negb b ↔ b = false.
 Proof. by case: b. Qed.
@@ -996,6 +972,12 @@ Definition expo pt :=
 (** [wf] recognizes the normal forms. *)
 Definition wf pt : bool := bool_decide (normalize pt = pt).
 
+(** The atoms of normal forms are normal forms that are not field
+    operations. *)
+Definition wf_atom x : bool := wf x && negb (is_mod x).
+
+Definition wf_frac (r : frac) : Prop := Frac.all_vars wf_atom r.
+
 Section API.
 
 Add Ring frac_ring_api : (Frac.frac_ring_theory (T := pre_term)).
@@ -1005,7 +987,7 @@ Implicit Types (r : frac) (m : dhmap) (s : SMS.sms pre_term).
 Lemma wfP pt : wf pt ↔ normalize pt = pt.
 Proof. exact: bool_decide_spec. Qed.
 
-Lemma wf_canon pt : wf pt ↔ canon pt.
+#[local] Lemma wf_canon pt : wf pt ↔ canon pt.
 Proof.
 rewrite wfP; split=> [<-|/canon_props [//]]; exact: canon_normalize.
 Qed.
@@ -1035,27 +1017,25 @@ rewrite !wfP.
 by case: o => //= _ _; split=> [[-> ->]|[-> ->]].
 Qed.
 
-Lemma canon_wf_atoms r :
-  Frac.all_vars (λ x, wf x && negb (is_mod x)) r →
+#[local] Lemma canon_wf_atoms r :
+  wf_frac r →
   ∀ x, x ∈ Frac.vars r → canon x ∧ is_mod x = false.
 Proof.
 move=> /Frac.all_vars_iff h x /h /andb_True [/wf_canon cx /Is_true_negb fx].
 by split.
 Qed.
 
-Lemma frac_of_Nmod pt :
-  negb (is_mod pt) → frac_of pt = Frac.of_poly (Poly.var pt).
+Lemma frac_of_Nmod pt : negb (is_mod pt) → frac_of pt = Frac.var pt.
 Proof. by move=> /Is_true_negb; exact: frac_of_atom. Qed.
 
-Lemma frac_of_mod_of_frac r :
-  Frac.all_vars (λ x, negb (is_mod x)) r → frac_of (mod_of_frac r) = r.
+Lemma frac_of_mod_of_frac r : wf_frac r → frac_of (mod_of_frac r) = r.
 Proof.
 move=> /Frac.all_vars_iff h; apply: frac_of_mod_of_frac_atoms => x /h.
-by move=> /Is_true_negb.
+by move=> /andb_True [_ /Is_true_negb].
 Qed.
 
 Lemma wf_mod_of_frac r :
-  Frac.all_vars (λ x, wf x && negb (is_mod x)) r → wf (mod_of_frac r).
+  wf_frac r → wf (mod_of_frac r).
 Proof.
 move=> /canon_wf_atoms h; apply/wf_canon; apply: canon_frac => x /h [] //.
 Qed.
@@ -1064,28 +1044,11 @@ Lemma mod_of_frac_frac_of pt : wf pt → mod_of_frac (frac_of pt) = pt.
 Proof. by move=> /wf_canon /canon_props [_ []]. Qed.
 
 Lemma frac_of_atoms pt :
-  wf pt → Frac.all_vars (λ x, wf x && negb (is_mod x)) (frac_of pt).
+  wf pt → wf_frac (frac_of pt).
 Proof.
 move=> /wf_canon /canon_props [_ [_ [_ [h _]]]]; apply/Frac.all_vars_iff.
 move=> x /h [cx fx]; apply/andb_True; split; first exact/wf_canon.
 exact/Is_true_negb.
-Qed.
-
-Lemma frac_of_mod_of_frac_wf r :
-  Frac.all_vars (λ x, wf x && negb (is_mod x)) r → frac_of (mod_of_frac r) = r.
-Proof.
-move=> h; apply: frac_of_mod_of_frac; apply: Frac.all_vars_impl h => x.
-by move=> /andb_True [].
-Qed.
-
-Lemma bind_frac_of_id r :
-  Frac.all_vars (λ x, negb (is_mod x)) r → Frac.bind frac_of r = r.
-Proof.
-move=> h.
-have E : ∀ M x, M ∈ Poly.car (Frac.num r) ∨ M ∈ Poly.car (Frac.den r) →
-    x ∈ M → frac_of x = Frac.of_poly (Poly.var x).
-  move=> M x Mr xM; exact: frac_of_Nmod _ (h M x Mr xM).
-by rewrite (Frac.bind_ext _ _ _ E) Frac.bind_var_map Frac.map_id.
 Qed.
 
 Lemma frac_of_one : frac_of one = Frac.one.
@@ -1118,29 +1081,29 @@ Proof. by rewrite FMap.lookupE FMap.to_listE. Qed.
     normal atoms. *)
 Definition wf_dh m : Prop :=
   ∀ k, m !!! k ≠ Frac.zero →
-    wf k ∧ negb (is_gnon_free k) ∧
-    Frac.all_vars (λ x, wf x && negb (is_mod x)) (m !!! k).
+    wf k ∧ negb (is_dh k) ∧
+    wf_frac (m !!! k).
 
 Lemma wf_dh_atoms m k :
-  wf_dh m → Frac.all_vars (λ x, wf x && negb (is_mod x)) (m !!! k).
+  wf_dh m → wf_frac (m !!! k).
 Proof.
 move=> w; case: (decide (m !!! k = Frac.zero)) => [->|nk].
   exact: Frac.all_vars_zero.
 by have [_ [_ h]] := w k nk.
 Qed.
 
-Lemma wf_dh_canon m : wf_dh m →
+#[local] Lemma wf_dh_canon m : wf_dh m →
   (∀ k, m !!! k ≠ Frac.zero → canon k ∧ is_dh k = false) ∧
   (∀ k x, x ∈ Frac.vars (m !!! k) → canon x ∧ is_mod x = false).
 Proof.
 move=> w; split.
   move=> k nk; have [/wf_canon ck [gk _]] := w k nk.
-  by split=> //; move: gk; rewrite is_gnon_freeE => /Is_true_negb.
+  by split=> //; move: gk => /Is_true_negb.
 by move=> k x; apply: canon_wf_atoms; apply: wf_dh_atoms.
 Qed.
 
-Lemma dh_map_Ngnf b : negb (is_gnon_free b) → dh_map b = {[b := Frac.one]}.
-Proof. by rewrite is_gnon_freeE => /Is_true_negb; exact: dh_map_base. Qed.
+Lemma dh_map_Ndh b : negb (is_dh b) → dh_map b = {[b := Frac.one]}.
+Proof. by move=> /Is_true_negb; exact: dh_map_base. Qed.
 
 Lemma wf_dh_of m : wf_dh m → wf (dh_of m).
 Proof.
@@ -1162,7 +1125,7 @@ Lemma wf_dh_map pt : wf pt → wf_dh (dh_map pt).
 Proof.
 move=> /wf_canon /canon_props [_ [_ [_ [_ [hk hv]]]]] k nk.
 have [ck gk] := hk k nk; split; first exact/wf_canon.
-split; first by rewrite is_gnon_freeE; apply/Is_true_negb.
+split; first by apply/Is_true_negb.
 apply/Frac.all_vars_iff => x /hv [cx fx]; apply/andb_True.
 by split; [exact/wf_canon|exact/Is_true_negb].
 Qed.
@@ -1172,14 +1135,10 @@ Proof. by move=> k; rewrite FMap.lookup_empty. Qed.
 
 Lemma wf_dh_add m1 m2 : wf_dh m1 → wf_dh m2 → wf_dh (dh_add m1 m2).
 Proof.
-move=> w1 w2 k; rewrite lookup_dh_add => nz.
-have [n1|n2] : m1 !!! k ≠ Frac.zero ∨ m2 !!! k ≠ Frac.zero.
-  case: (decide (m1 !!! k = Frac.zero)) => [e1|]; last by left.
-  right=> e2; apply: nz; rewrite e1 e2; exact: (left_id Frac.zero Frac.add).
-- have [wk [gk _]] := w1 k n1; split=> //; split=> //.
+move=> w1 w2 k nz; rewrite lookup_dh_add.
+have A : wf_frac (Frac.add (m1 !!! k) (m2 !!! k)).
   by apply: Frac.all_vars_add; apply: wf_dh_atoms.
-- have [wk [gk _]] := w2 k n2; split=> //; split=> //.
-  by apply: Frac.all_vars_add; apply: wf_dh_atoms.
+by case/lookup_dh_add_neq0: nz => [/w1|/w2] [wk [gk _]].
 Qed.
 
 Lemma wf_dh_opp m : wf_dh m → wf_dh (dh_opp m).
@@ -1191,7 +1150,7 @@ exact: Frac.all_vars_opp.
 Qed.
 
 Lemma wf_dh_scale r m :
-  Frac.all_vars (λ x, wf x && negb (is_mod x)) r → wf_dh m →
+  wf_frac r → wf_dh m →
     wf_dh (dh_scale r m).
 Proof.
 move=> ar w k; rewrite lookup_dh_scale => nz.
@@ -1219,7 +1178,7 @@ Lemma wf_gmul s : (∀ t, t ∈ s → wf t) → wf (gmul s).
 Proof. by move=> h; apply wf_dh_of; apply: wf_dh_sum. Qed.
 
 Lemma wf_exp_frac b r :
-  wf b → Frac.all_vars (λ x, wf x && negb (is_mod x)) r → wf (exp_frac b r).
+  wf b → wf_frac r → wf (exp_frac b r).
 Proof.
 by move=> wb ar; apply wf_dh_of; apply: wf_dh_scale => //; apply: wf_dh_map.
 Qed.
@@ -1228,35 +1187,21 @@ Lemma wf_exp b e : wf b → wf e → wf (exp b e).
 Proof. by move=> wb we; apply wf_exp_frac => //; apply: frac_of_atoms. Qed.
 
 Lemma dh_map_mk_exp b r :
-  negb (is_gnon_free b) → Frac.all_vars (λ x, negb (is_mod x)) r →
+  negb (is_dh b) → wf_frac r →
   r ≠ Frac.zero → dh_map (mk_exp b r) = {[b := r]}.
 Proof.
 move=> gb ar nr; rewrite /mk_exp; case: bool_decide_reflect => [->|n1].
-  exact: dh_map_Ngnf.
+  exact: dh_map_Ndh.
 apply/FMap.fmap_eq => k.
-rewrite dh_map_exp2 lookup_dh_scale (dh_map_Ngnf _ gb) frac_of_mod_of_frac //.
+rewrite dh_map_exp2 lookup_dh_scale (dh_map_Ndh _ gb) frac_of_mod_of_frac //.
 rewrite !FMap.lookup_singleton.
 by case: bool_decide;
   [exact: (left_id Frac.one Frac.mul)|exact: Frac.mul_zero_l].
 Qed.
 
-Lemma dh_scale_singleton b r :
-  dh_scale r {[b := Frac.one]} = {[b := r]}.
-Proof.
-apply/FMap.fmap_eq => k; rewrite lookup_dh_scale !FMap.lookup_singleton.
-case: bool_decide; [exact: (left_id Frac.one Frac.mul)|exact: Frac.mul_zero_l].
-Qed.
-
 Lemma dh_of_singleton b r :
   r ≠ Frac.zero → dh_of {[b := r]} = mk_exp b r.
 Proof. by move=> nr; rewrite /dh_of FMap.to_list_singleton. Qed.
-
-Lemma exp_frac_atom b r :
-  negb (is_gnon_free b) → r ≠ Frac.zero → exp_frac b r = mk_exp b r.
-Proof.
-move=> gb nr.
-by rewrite /exp_frac (dh_map_Ngnf _ gb) dh_scale_singleton dh_of_singleton.
-Qed.
 
 Lemma mod_of_frac_zero : mod_of_frac Frac.zero = PT0 O0Zero.
 Proof.
@@ -1327,8 +1272,8 @@ have [mk nv] := hl k v (list_elem_of_here _ _).
 have [_ [gk av]] := wm k ltac:(by rewrite mk).
 rewrite mk in av.
 rewrite /mk_exp; case: bool_decide_reflect => [v1|n1] ek.
-  by move: gk; rewrite ek is_gnon_freeE.
-case: ek => <- <-; rewrite frac_of_mod_of_frac_wf //.
+  by move: gk; rewrite ek.
+case: ek => <- <-; rewrite frac_of_mod_of_frac //.
 split=> //; apply/FMap.fmap_eq => k'.
 by rewrite lookup_to_list E FMap.lookup_singleton /=; case: bool_decide.
 Qed.
@@ -1336,15 +1281,15 @@ Qed.
 Lemma wf_exp_parts pt b e : wf pt → pt = PT2 O2Exp b e →
   dh_map pt = {[b := frac_of e]} ∧ frac_of e ≠ Frac.one ∧
   frac_of e ≠ Frac.zero ∧ e = mod_of_frac (frac_of e) ∧
-  wf b ∧ negb (is_gnon_free b) ∧
-  Frac.all_vars (λ x, wf x && negb (is_mod x)) (frac_of e).
+  wf b ∧ negb (is_dh b) ∧
+  wf_frac (frac_of e).
 Proof.
 move=> wpt ept; have wm := wf_dh_map _ wpt.
 have [em [n1 [n0 ee]]] :=
   dh_of_exp_shape _ _ _ wm (eq_trans (dh_of_dh_map _ wpt) ept).
 have [wb [gb ab]] :
-  wf b ∧ negb (is_gnon_free b) ∧
-  Frac.all_vars (λ x, wf x && negb (is_mod x)) (dh_map pt !!! b).
+  wf b ∧ negb (is_dh b) ∧
+  wf_frac (dh_map pt !!! b).
   by apply: wm; rewrite em FMap.lookup_singleton bool_decide_true.
 by rewrite em FMap.lookup_singleton bool_decide_true // in ab.
 Qed.

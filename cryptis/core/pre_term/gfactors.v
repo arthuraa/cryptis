@@ -32,27 +32,14 @@ Lemma lookup_dh_sum_ssum s k :
 Proof. by rewrite lookup_dh_sum Frac.ssumE. Qed.
 
 Lemma lookup_dh_map_mk_exp b r k :
-  negb (is_gnon_free b) → Frac.all_vars (λ x, negb (is_mod x)) r →
+  negb (is_dh b) → wf_frac r →
   r ≠ Frac.zero →
   dh_map (mk_exp b r) !!! k = if bool_decide (k = b) then r else Frac.zero.
 Proof. by move=> gb ar nr; rewrite dh_map_mk_exp // FMap.lookup_singleton. Qed.
 
-Lemma all_vars_Nmod (r : frac) :
-  Frac.all_vars (λ x, wf x && negb (is_mod x)) r →
-  Frac.all_vars (λ x, negb (is_mod x)) r.
-Proof. by apply: Frac.all_vars_impl => x /andb_True []. Qed.
-
-Lemma all_vars_make_mono_Nmod (r : frac) n :
-  n ∈ Poly.car (Frac.num r) →
-  Frac.all_vars (λ x, wf x && negb (is_mod x)) r →
-  Frac.all_vars (λ x, negb (is_mod x)) (Frac.make (Poly.mono n) (Frac.den r)).
-Proof.
-by move=> nr ar; apply: all_vars_Nmod; apply: Frac.all_vars_make_mono.
-Qed.
-
 Lemma ssum_exp_factor b q n k :
-  negb (is_gnon_free b) → q ≠ Poly.zero →
-  Frac.all_vars (λ x, negb (is_mod x)) (Frac.make (Poly.mono n) q) →
+  negb (is_dh b) → q ≠ Poly.zero →
+  wf_frac (Frac.make (Poly.mono n) q) →
   Frac.ssum (λ t, dh_map t !!! k) (exp_factor b q n) =
   if bool_decide (k = b) then Frac.make (Poly.mono n) q else Frac.zero.
 Proof.
@@ -143,7 +130,7 @@ have E : ∀ n, n ∈ Poly.car (Frac.num r) →
     if bool_decide (k = b) then Frac.make (Poly.mono n) (Frac.den r)
     else Frac.zero.
   move=> n nr'; apply: ssum_exp_factor => //; first exact: Frac.den_neq0.
-  exact: all_vars_make_mono_Nmod.
+  exact: Frac.all_vars_make_mono.
 rewrite Frac.ssum_bind (Frac.ssum_ext _ _ _ E).
 case: bool_decide => /=; last exact: ssum_const_zero.
 by rewrite ssum_make_mono ?Frac.make_num_den //; exact: Frac.den_neq0.
@@ -166,8 +153,8 @@ Lemma gfactorsK t : wf t → gmul (gfactors t) = t.
 Proof. by move=> wt; rewrite /gmul dh_sum_gfactors // dh_of_dh_map. Qed.
 
 Lemma wf_mk_exp b r :
-  wf b → negb (is_gnon_free b) → r ≠ Frac.zero →
-  Frac.all_vars (λ x, wf x && negb (is_mod x)) r → wf (mk_exp b r).
+  wf b → negb (is_dh b) → r ≠ Frac.zero →
+  wf_frac r → wf (mk_exp b r).
 Proof.
 move=> wb gb nr ar.
 have wm : wf_dh {[b := r]}.
@@ -177,7 +164,7 @@ by have := wf_dh_of _ wm; rewrite dh_of_singleton.
 Qed.
 
 Lemma is_exp_mk_exp b r :
-  r ≠ Frac.one → Frac.all_vars (λ x, negb (is_mod x)) r →
+  r ≠ Frac.one → wf_frac r →
   is_exp (mk_exp b r) = is_mono_poly (Frac.num r).
 Proof.
 move=> n1 ar; rewrite /mk_exp bool_decide_eq_false_2 //.
@@ -191,11 +178,11 @@ by rewrite MSet.elements_singleton MSet.elements_empty.
 Qed.
 
 Lemma mk_exp_Ngmul b r n :
-  negb (is_gnon_free b) → Frac.all_vars (λ x, negb (is_mod x)) r →
+  negb (is_dh b) → wf_frac r →
   Frac.num r = Poly.mono n → negb (is_gmul (mk_exp b r)).
 Proof.
 move=> gb ar nr; case: (decide (r = Frac.one)) => [e1|n1].
-  by rewrite /mk_exp bool_decide_eq_true_2 //; exact: Ngnf_Ngmul.
+  by rewrite /mk_exp bool_decide_eq_true_2 //; exact: Ndh_Ngmul.
 rewrite /is_gmul (is_exp_mk_exp _ _ n1 ar) nr.
 by rewrite is_mono_poly_mono; case: is_dh.
 Qed.
@@ -264,9 +251,9 @@ have [r' [n' [-> [Er' Hr']]]] := elem_of_exp_factor b (Frac.den r) n x nq xe.
 have nr0 : Frac.make (Poly.mono n) (Frac.den r) ≠ Frac.zero.
   exact: Frac.make_neq0 (PolyGcd.mono_neq0 n) nq.
 have ar0 := Frac.all_vars_make_mono _ _ _ nr ar.
-have ar' : Frac.all_vars (λ x, wf x && negb (is_mod x)) r'.
+have ar' : wf_frac r'.
   by case: Hr' => ->; last exact: Frac.all_vars_opp.
-split; last exact: mk_exp_Ngmul gb (all_vars_Nmod _ ar') Er'.
+split; last exact: mk_exp_Ngmul gb ar' Er'.
 case: Hr' ar' => -> ar'.
 - exact: wf_mk_exp.
 - apply: wf_mk_exp => //.
@@ -300,7 +287,7 @@ Proof.
 move=> wpt; case E: (is_exp pt).
   case: (is_expP pt) E => [b e ept me|//] _.
   have [_ [_ [_ [_ [_ [gb _]]]]]] := wf_exp_parts _ _ _ wpt ept.
-  by rewrite ept base_exp //; exact: Ngnf_Nexp.
+  by rewrite ept base_exp //; exact: Ndh_Nexp.
 by rewrite (base_expN pt ltac:(by rewrite E)) E.
 Qed.
 
@@ -311,11 +298,11 @@ move=> wpt; case E: (is_exp pt); last first.
 have /Is_true_negb -> := is_exp_Ngmul pt ltac:(by rewrite E).
 case: (is_expP pt) E => [b e ept me|//] _.
 have [_ [_ [_ [_ [_ [gb _]]]]]] := wf_exp_parts _ _ _ wpt ept.
-by rewrite ept base_exp //; apply/Is_true_negb; exact: Ngnf_Ngmul.
+by rewrite ept base_exp //; apply/Is_true_negb; exact: Ndh_Ngmul.
 Qed.
 
 Lemma base_mk_exp b r n :
-  r ≠ Frac.one → Frac.all_vars (λ x, negb (is_mod x)) r →
+  r ≠ Frac.one → wf_frac r →
   Frac.num r = Poly.mono n → base (mk_exp b r) = b.
 Proof.
 move=> n1 ar nr; rewrite /base (is_exp_mk_exp _ _ n1 ar) nr.
@@ -323,7 +310,7 @@ by rewrite /mk_exp bool_decide_eq_false_2 // is_mono_poly_mono.
 Qed.
 
 Lemma expo_mk_exp b r n :
-  r ≠ Frac.one → Frac.all_vars (λ x, negb (is_mod x)) r →
+  r ≠ Frac.one → wf_frac r →
   Frac.num r = Poly.mono n → expo (mk_exp b r) = mod_of_frac r.
 Proof.
 move=> n1 ar nr; rewrite /expo (is_exp_mk_exp _ _ n1 ar) nr.
@@ -350,7 +337,7 @@ Lemma dh_map_gmul s : (∀ t, t ∈ s → wf t) → dh_map (gmul s) = dh_sum s.
 Proof. by move=> h; apply: dh_map_dh_of; apply: wf_dh_sum. Qed.
 
 Lemma dh_map_exp_frac b r :
-  wf b → Frac.all_vars (λ x, wf x && negb (is_mod x)) r →
+  wf b → wf_frac r →
   dh_map (exp_frac b r) = dh_scale r (dh_map b).
 Proof.
 by move=> wb ar; apply: dh_map_dh_of; apply: wf_dh_scale => //;
@@ -456,22 +443,22 @@ by rewrite mono_den_factors_scale_r mono_den_factors_scale.
 Qed.
 
 Lemma base_entry_factors b r y :
-  negb (is_gnon_free b) → Frac.all_vars (λ x, negb (is_mod x)) r →
+  negb (is_dh b) → wf_frac r →
   y ∈ entry_factors b r → base y = b.
 Proof.
 move=> gb ar /SMS.elem_of_bind [n [nr yn]].
 have [r' [n' [-> [nr' Hr']]]] :=
   elem_of_exp_factor b (Frac.den r) n y (Frac.den_neq0 r) yn.
-have ar' : Frac.all_vars (λ x, negb (is_mod x)) r'.
+have ar' : wf_frac r'.
   have M := Frac.all_vars_make_mono _ _ _ nr ar.
   by case: Hr' => ->; [exact: M|exact: Frac.all_vars_opp].
 case: (decide (r' = Frac.one)) => [->|n1].
   2: exact: base_mk_exp n1 ar' nr'.
-by rewrite /mk_exp bool_decide_eq_true_2 // base_expN //; exact: Ngnf_Nexp.
+by rewrite /mk_exp bool_decide_eq_true_2 // base_expN //; exact: Ndh_Nexp.
 Qed.
 
 Lemma count_entry_factors_ne b r z :
-  negb (is_gnon_free b) → Frac.all_vars (λ x, negb (is_mod x)) r →
+  negb (is_dh b) → wf_frac r →
   base z ≠ b → SMS.count z (entry_factors b r) = 0%Z.
 Proof.
 move=> gb ar nz; case: (decide (z ∈ entry_factors b r)).
@@ -488,10 +475,10 @@ Lemma count_dh_factors m z :
 Proof.
 move=> wm; rewrite lookup_to_list.
 have K : ∀ k r, (k, r) ∈ FMap.to_list m →
-    negb (is_gnon_free k) ∧ Frac.all_vars (λ x, negb (is_mod x)) r.
+    negb (is_dh k) ∧ wf_frac r.
   move=> k r /FMap.elem_of_to_list [mk nr].
   have [_ [gk ar]] := wm k ltac:(by rewrite mk).
-  by rewrite mk in ar; split=> //; apply: all_vars_Nmod.
+  by rewrite mk in ar.
 have S := FMap.to_list_sorted m.
 rewrite /dh_factors.
 change (foldr _ ∅ (FMap.to_list m)) with
@@ -501,7 +488,7 @@ elim: (FMap.to_list m) K S => [|[k r] l IH] K /=.
 move=> /StronglySorted_cons [lk sl].
 have [gk ak] := K k r ltac:(by left).
 have Kl : ∀ k' r', (k', r') ∈ l →
-    negb (is_gnon_free k') ∧ Frac.all_vars (λ x, negb (is_mod x)) r'.
+    negb (is_dh k') ∧ wf_frac r'.
   by move=> k' r' h; apply: (K k' r'); right.
 rewrite SMS.count_disj_union.
 case: (bool_decide_reflect (base z = k)) => [ek|nk].
@@ -510,7 +497,7 @@ case: (bool_decide_reflect (base z = k)) => [ek|nk].
       by move=> _ _; rewrite SMS.count_empty.
     move=> /Forall_cons_iff [kk' lk'] Kl'.
     have Kl'' : ∀ k0 r0, (k0, r0) ∈ l' →
-        negb (is_gnon_free k0) ∧ Frac.all_vars (λ x, negb (is_mod x)) r0.
+        negb (is_dh k0) ∧ wf_frac r0.
       by move=> k0 r0 h0; apply: (Kl' k0 r0); right.
     have [gk' ak'] := Kl' k' r' ltac:(by left).
     have nz : base z ≠ k'.
@@ -587,7 +574,7 @@ by rewrite SMS.count_disj_union entry_factors_opp SMS.count_inv ep en; lia.
 Qed.
 
 Lemma entry_factors_mk_exp b r n :
-  negb (is_gnon_free b) → r ≠ Frac.zero → Frac.num r = Poly.mono n →
+  negb (is_dh b) → r ≠ Frac.zero → Frac.num r = Poly.mono n →
   entry_factors b r = {[+ mk_exp b r +]}.
 Proof.
 move=> gb nr er.
@@ -603,7 +590,7 @@ by rewrite (right_id ∅ (⊎)).
 Qed.
 
 Lemma dh_factors_atom b :
-  negb (is_gnon_free b) → dh_factors {[b := Frac.one]} = {[+ b +]}.
+  negb (is_dh b) → dh_factors {[b := Frac.one]} = {[+ b +]}.
 Proof.
 move=> gb; have n1 : (Frac.one : frac) ≠ Frac.zero by apply: Frac.one_neq0.
 have e1 : Frac.num (Frac.one : frac) = Poly.mono ∅.
@@ -616,8 +603,8 @@ Lemma gfactors_dh t : wf t → gfactors t = dh_factors (dh_map t).
 Proof.
 move=> wt; rewrite /gfactors; case: (is_expP t) => [b e et me|_ _]; last first.
   case D: (is_dh t) => //.
-  have gt : negb (is_gnon_free t) by rewrite is_gnon_freeE D.
-  by rewrite (dh_map_Ngnf _ gt) (dh_factors_atom _ gt).
+  have gt : negb (is_dh t) by rewrite D.
+  by rewrite (dh_map_Ndh _ gt) (dh_factors_atom _ gt).
 have [em [n1 [n0 [ee [wb [gb ae]]]]]] := wf_exp_parts _ _ _ wt et.
 have [n en] : ∃ n, Frac.num (frac_of e) = Poly.mono n.
   by apply/is_mono_polyP; rewrite me.
@@ -687,7 +674,7 @@ have nr' : r' ≠ Frac.zero.
   exact: (PolyGcd.mono_neq0 _ (eq_sym e')).
 exists b, r'; rewrite mb; split=> //; split.
   apply: dh_map_mk_exp => //; rewrite mb in ar.
-  have M := all_vars_make_mono_Nmod _ _ nr ar.
+  have M := Frac.all_vars_make_mono _ _ _ nr ar.
   by case: Hr' => ->; [exact: M|exact: Frac.all_vars_opp].
 split=> // y.
 have P : Frac.all_vars (λ y, y ∈ Frac.vars r) r.
@@ -703,14 +690,14 @@ Qed.
     A non-product is a power of a base that is neither a power nor a product;
     raising it to a Laurent monomial yields another such power. *)
 
-Lemma base_Ngnf pt :
-  wf pt → negb (is_gmul pt) → negb (is_gnon_free (base pt)).
+Lemma base_Ndh pt :
+  wf pt → negb (is_gmul pt) → negb (is_dh (base pt)).
 Proof.
 move=> wpt; rewrite /is_gmul /base.
 case: (is_expP pt) => [b e ept _|_ _] Ng.
   have [_ [_ [_ [_ [_ [gb _]]]]]] := wf_exp_parts _ _ _ wpt ept.
   by rewrite ept.
-by rewrite is_gnon_freeE; move: Ng; case: (is_dh pt).
+by move: Ng; case: (is_dh pt).
 Qed.
 
 Lemma mono_num_expo pt :
@@ -727,7 +714,7 @@ Proof.
 move=> wpt; rewrite /is_gmul /base /expo.
 case: (is_expP pt) => [b e ept _|_ _] Ng.
   by have [em _] := wf_exp_parts _ _ _ wpt ept; rewrite em ept.
-rewrite frac_of_one dh_map_Ngnf // is_gnon_freeE.
+rewrite frac_of_one dh_map_Ndh //.
 by move: Ng; case: (is_dh pt).
 Qed.
 
@@ -745,14 +732,14 @@ exact: dh_of_singleton.
 Qed.
 
 Lemma mk_exp_mono_num b r :
-  negb (is_gnon_free b) → Frac.all_vars (λ x, negb (is_mod x)) r →
+  negb (is_dh b) → wf_frac r →
   Frac.mono_num r →
   negb (is_gmul (mk_exp b r)) ∧ base (mk_exp b r) = b ∧
   expo (mk_exp b r) = mod_of_frac r.
 Proof.
 move=> gb ar [n en]; split; first exact: (mk_exp_Ngmul _ _ _ gb ar en).
 case: (decide (r = Frac.one)) => [->|n1].
-- have nb := Ngnf_Nexp _ gb.
+- have nb := Ndh_Nexp _ gb.
   rewrite /mk_exp bool_decide_eq_true_2 // (base_expN _ nb) (expo_expN _ nb).
   by rewrite mod_of_frac_one.
 - by rewrite (base_mk_exp _ _ _ n1 ar en) (expo_mk_exp _ _ _ n1 ar en).
@@ -778,7 +765,7 @@ have /FMap.elem_of_to_list [mb r0] := br.
 have [wb [gb ar]] := wf_dh_map _ wpt b ltac:(by rewrite mb).
 rewrite mb in ar.
 have [Q eQ] := L b; rewrite mb in eQ.
-have ar' : Frac.all_vars (λ x, wf x && negb (is_mod x))
+have ar' : wf_frac
              (Frac.make (Poly.mono n) (Poly.mono Q)).
   by rewrite -eQ; apply: Frac.all_vars_make_mono nr ar.
 move: ue; rewrite eQ exp_factor_mono => /SMS.elem_of_singleton ->.
@@ -786,13 +773,13 @@ have mr := Frac.laurent_make_mono n Q.
 have nr' := Frac.laurent_neq0 _ mr.
 split; first exact: wf_mk_exp.
 split.
-- move=> k; rewrite (dh_map_mk_exp _ _ gb (all_vars_Nmod _ ar') nr').
+- move=> k; rewrite (dh_map_mk_exp _ _ gb ar' nr').
   rewrite FMap.lookup_singleton.
   by case: bool_decide;
     [exact: Frac.laurent_mono_den|exact: Frac.mono_den_zero].
-- have [_ [_ ->]] := mk_exp_mono_num _ _ gb (all_vars_Nmod _ ar')
+- have [_ [_ ->]] := mk_exp_mono_num _ _ gb ar'
     (Frac.laurent_mono_num _ mr).
-  by rewrite frac_of_mod_of_frac_wf.
+  by rewrite frac_of_mod_of_frac.
 Qed.
 
 End GFactors.

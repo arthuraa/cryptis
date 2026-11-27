@@ -12,8 +12,9 @@
     combines two maps pointwise with [f] and has default [f d1 d2]; [map f m]
     applies [f] to every value and has default [f d].  [cast e m] moves [m]
     to an equal default [e : d1 = d2].  [to_list m] lists the keys whose
-    value is not [d] with their values, sorted by keys, and [fmap_ind] builds
-    a map by inserting one key at a time.  When [S] is
+    value is not [d] with their values, sorted by keys, [supp m] is the set
+    of these keys when [T] is countable, and [fmap_ind] builds a map by
+    inserting one key at a time.  When [S] is
     ordered by a [Lexico] instance, so are finite maps, by their lists of
     bindings, so they can be keys of finite maps and elements of multisets.
     The operations are locked, since computing with them in proofs is slow;
@@ -21,7 +22,7 @@
 
 From elpi.apps Require Import locker.
 From mathcomp Require Import ssreflect.
-From stdpp Require Import sorting list proof_irrel lexico.
+From stdpp Require Import gmap sorting list proof_irrel lexico.
 
 Module FMap.
 
@@ -460,6 +461,35 @@ Lemma lookup_cast d1 d2 (e : d1 = d2) (m : fmap T S d1) k :
 Proof. by rewrite !lookupE [@cast]unlock; case: d2 / e. Qed.
 
 End Cast.
+
+Section Support.
+
+Context {T : Type} `{EqDecision T, Countable T, Lexico T}
+  `{!StrictOrder (@lexico T _), !TrichotomyT (@lexico T _)}.
+Context {S : Type} `{EqDecision S} {d : S}.
+
+Implicit Types (k : T) (m : fmap T S d).
+
+Lemma NoDup_to_list m : NoDup (to_list m).*1.
+Proof.
+elim: (to_list_sorted m) => [|k l _ IH kl]; first exact: NoDup_nil_2.
+apply: NoDup_cons_2 => // kl'.
+exact: (lexico_neq _ _ (proj1 (list.Forall_forall _ _) kl k kl') eq_refl).
+Qed.
+
+Definition supp m : gset T := list_to_set (to_list m).*1.
+
+Lemma elem_of_supp m k : k ∈ supp m ↔ m !!! k ≠ d.
+Proof.
+rewrite /supp elem_of_list_to_set list_elem_of_fmap; split.
+- by move=> [[k' v] [/= -> /elem_of_to_list [-> ?]]].
+- move=> nk; exists (k, m !!! k); split=> //; exact/elem_of_to_list.
+Qed.
+
+Lemma elements_supp m : elements (supp m) ≡ₚ (to_list m).*1.
+Proof. exact: elements_list_to_set (NoDup_to_list m). Qed.
+
+End Support.
 
 Section Lexico.
 

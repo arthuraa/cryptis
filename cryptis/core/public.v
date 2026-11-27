@@ -805,7 +805,7 @@ case: t IH Ex Em Eg => [n|t1 t2|a|kt t|k t|t|pt wf nf] IH Ex Em Eg.
   + iApply (IH with "m2 contra"); rewrite [tsize (TSeal _ _)]tsize_eq; lia.
 - rewrite public_THash; iEval (rewrite minted_THash) in "m"; iLeft.
   iApply (IH with "m contra"); rewrite [tsize (THash _)]tsize_eq; lia.
-- have : PreTerm.is_exp pt || PreTerm.is_mod pt || PreTerm.is_gmul pt := nf.
+- have := nf; rewrite /is_non_free PreTerm.is_dh_exp_gmul.
   by move: Ex Em Eg; rewrite /is_mod /is_exp /is_gmul /= => -> -> ->.
 Qed.
 
@@ -1183,16 +1183,16 @@ by iApply (public_den_unit_intro with "pw pl"); exact: Ngmul_gfactors ut.
 Qed.
 
 Lemma public_den_vars t k y :
-  dh_map t !!! k ≠ Frac.zero → y ∈ Poly.vars (Frac.den (dh_map t !!! k)) →
+  y ∈ Poly.vars (Frac.den (dh_map t !!! k)) →
   public t -∗ public (fold_term y).
 Proof.
-move=> nr yD.
+move=> yD; have nr := Frac.den_vars_neq0 _ _ yD.
 set r := dh_map t !!! k in nr yD *.
 iIntros "#pt".
 have [ν νN] := Frac.num_car_exists _ nr.
 case: (PolyGcd.vars_split _ _ yD) => [yC|yU].
 - have [ν' [ν'N yν']] := Frac.content_den_missing _ _ nr yC.
-  have [u [ut G]] := gfactors_of_log nr ν'N.
+  have [u [ut G]] := gfactors_of_log ν'N.
   have [yn [ny ey]] := gfactor_content_neg G yC yν'.
   have [Nu _] := gfactor_of_spec G.
   iDestruct (public_gfactor_parts ut with "pt") as "[_ pl]".
@@ -1206,7 +1206,7 @@ case: (PolyGcd.vars_split _ _ yD) => [yC|yU].
   have yl : fold_term y ∈ SMS.neg (exps (laurent_part u)).
     by rewrite /exps -elem_of_satoms_TInv //; exact: satoms_laurent_part.
   by iApply (public_exps_neg Ll yl with "pl").
-- have [u [ut G]] := gfactors_of_log nr νN.
+- have [u [ut G]] := gfactors_of_log νN.
   have [Nu [_ [Eu _]]] := gfactor_of_spec G.
   iDestruct (public_gfactor_parts ut with "pt") as "[pw _]".
   iEval (rewrite public_atoms_iff) in "pw".
@@ -1218,7 +1218,7 @@ Qed.
 
 Lemma public_laurent_part_shift t' k μ v ν C (A : list PreTerm.pre_term) :
   let pub y := bool_decide (y ∈ A) in
-  dh_map t' !!! k ≠ Frac.zero → μ ∈ Poly.car (Frac.num (dh_map t' !!! k)) →
+  μ ∈ Poly.car (Frac.num (dh_map t' !!! k)) →
   dh_map v = {[k := Frac.make (Poly.mono ν) (Poly.mono C)]} →
   PolyRestrict.secret_part pub μ = PolyRestrict.secret_part pub ν →
   (∀ y, y ∈ Poly.vars (Frac.den (dh_map t' !!! k)) → y ∈ A) →
@@ -1226,8 +1226,9 @@ Lemma public_laurent_part_shift t' k μ v ν C (A : list PreTerm.pre_term) :
   (∀ y, y ∈ ν ∨ y ∈ C → PreTerm.wf y && negb (PreTerm.is_mod y)) →
   public t' -∗ □ (∀ y, ⌜y ∈ A⌝ → public (fold_term y)) -∗ public v.
 Proof.
-move=> pub nr μr ev es hD hC hw; iIntros "#pt #pA".
-have [w [wt G]] := gfactors_of_log nr μr.
+move=> pub μr ev es hD hC hw; iIntros "#pt #pA".
+have nr := Frac.num_car_neq0 _ _ μr.
+have [w [wt G]] := gfactors_of_log μr.
 have [Nw [_ [_ Elw]]] := gfactor_of_spec G.
 iDestruct (public_gfactor_parts wt with "pt") as "[_ pl]".
 set r := dh_map t' !!! k in nr μr hD Elw.
@@ -1260,7 +1261,7 @@ iIntros "#p1 #p2"; iApply public_dh_intro.
 iIntros "!> %u %ut".
 have [k [ν G]] := elem_of_gfactors_log ut.
 have [Nu [_ [Eu El]]] := gfactor_of_spec G.
-have [nr [νr _]] := G.
+have [νr _] := G; have nr := Frac.num_car_neq0 _ _ νr.
 set r := dh_map (TGMul {[+ t1; t2 +]}) !!! k in nr νr Eu El.
 set r1 := dh_map t1 !!! k; set r2 := dh_map t2 !!! k.
 have Er : r = Frac.add r1 r2.
@@ -1272,12 +1273,8 @@ have vD y : y ∈ Poly.vars (Frac.den r) → y ∈ A.
     apply/elem_of_app; [left|right].
 iAssert (□ ∀ y, ⌜y ∈ A⌝ → public (fold_term y))%I as "#pA".
 { iIntros "!> %y %yA"; case/elem_of_app: yA => yA.
-  - have nr1 : r1 ≠ Frac.zero.
-      by move=> e; move: yA; rewrite e Frac.den_zero => /(Poly.vars_one y).
-    by iApply (public_den_vars nr1 yA with "p1").
-  - have nr2 : r2 ≠ Frac.zero.
-      by move=> e; move: yA; rewrite e Frac.den_zero => /(Poly.vars_one y).
-    by iApply (public_den_vars nr2 yA with "p2"). }
+  - by iApply (public_den_vars yA with "p1").
+  - by iApply (public_den_vars yA with "p2"). }
 set pub := λ y, bool_decide (y ∈ A).
 have opub D : (∀ y, y ∈ Poly.vars D → y ∈ A) → PolyRestrict.over_pub pub D.
   move=> h; apply: PolyRestrict.over_pub_vars => y /h yA.
@@ -1311,10 +1308,8 @@ iSplit.
     by move=> y yD; apply/elem_of_app; right.
   case: (PolyRestrict.restrict_add_frac _ _ _ _ o1 o2 res)
     => /PolyRestrict.restrict_neq0 [μ [μN eμ]].
-  + by iApply (public_laurent_part_shift (Frac.num_car_neq0 _ _ μN) μN El eμ
-                 hD1 hC hw with "p1 pA").
-  + by iApply (public_laurent_part_shift (Frac.num_car_neq0 _ _ μN) μN El eμ
-                 hD2 hC hw with "p2 pA").
+  + by iApply (public_laurent_part_shift μN El eμ hD1 hC hw with "p1 pA").
+  + by iApply (public_laurent_part_shift μN El eμ hD2 hC hw with "p2 pA").
 Qed.
 
 (* Unconditional in both arguments. *)
@@ -1326,7 +1321,7 @@ iIntros "#p1 #p2"; iApply public_dh_intro.
 iIntros "!> %u %ut".
 have [k [ν G]] := elem_of_gfactors_log ut.
 have [Nu [_ [Eu El]]] := gfactor_of_spec G.
-have [nr [νr _]] := G.
+have [νr _] := G; have nr := Frac.num_car_neq0 _ _ νr.
 set r := dh_map (TExp t1 t2) !!! k in nr νr Eu El.
 set r1 := dh_map t1 !!! k; set ε := pre_frac t2.
 have Er : r = Frac.mul r1 ε by rewrite /r dh_map_TExp unfold_frac_of.
@@ -1338,9 +1333,7 @@ have vD y : y ∈ Poly.vars (Frac.den r) → y ∈ A.
   by rewrite /Frac.vars; apply/elem_of_app; right.
 iAssert (□ ∀ y, ⌜y ∈ A⌝ → public (fold_term y))%I as "#pA".
 { iIntros "!> %y %yA"; case/elem_of_app: yA => yA.
-  - have nr1 : r1 ≠ Frac.zero.
-      by move=> e; move: yA; rewrite e Frac.den_zero => /(Poly.vars_one y).
-    by iApply (public_den_vars nr1 yA with "p1").
+  - by iApply (public_den_vars yA with "p1").
   - iEval (rewrite public_atoms_iff) in "p2".
     iApply (big_sepL_elem_of with "p2").
     by apply/elem_of_atoms; exists y. }
@@ -1379,8 +1372,7 @@ iSplit.
     by move=> y yD; apply/elem_of_app; left.
   move: (PolyRestrict.restrict_mul_frac _ _ _ _ o1 on od res).
   move=> /PolyRestrict.restrict_neq0 [μ [μN eμ]].
-  by iApply (public_laurent_part_shift (Frac.num_car_neq0 _ _ μN) μN El eμ
-               hD1 hC hw with "p1 pA").
+  by iApply (public_laurent_part_shift μN El eμ hD1 hC hw with "p1 pA").
 Qed.
 
 (* The owner of [t2] raises a public term to [t2], as in an oblivious PRF.  It
@@ -1398,11 +1390,11 @@ move=> Nm2; iIntros "#m2 #c #p1"; iApply public_dh_intro.
 iIntros "!> %u %ut".
 have [k [ν G]] := elem_of_gfactors_log ut.
 have [Nu [_ [Eu El]]] := gfactor_of_spec G.
-have [nr [νr _]] := G.
+have [νr _] := G; have nr := Frac.num_car_neq0 _ _ νr.
 set r := dh_map (TExp t1 t2) !!! k in nr νr Eu El.
 set r1 := dh_map t1 !!! k; set x := unfold_term t2.
 have ex : pre_frac t2 = Frac.var x.
-  by apply: PreTerm.frac_of_var; rewrite -is_mod_unfold.
+  by apply: PreTerm.frac_of_Nmod; rewrite -is_mod_unfold.
 have Er : r = Frac.mul r1 (Frac.var x)
   by rewrite /r dh_map_TExp unfold_frac_of ex.
 set A := Poly.vars (Frac.den r1).
@@ -1412,9 +1404,7 @@ have vD y : y ∈ Poly.vars (Frac.den r) → y ∈ A.
   by move: yx; rewrite Frac.varE Frac.den_of_poly => /(Poly.vars_one y).
 iAssert (□ ∀ y, ⌜y ∈ A⌝ → public (fold_term y))%I as "#pA".
 { iIntros "!> %y %yA".
-  have nr1 : r1 ≠ Frac.zero.
-    by move=> e; move: yA; rewrite /A e Frac.den_zero => /(Poly.vars_one y).
-  by iApply (public_den_vars nr1 yA with "p1"). }
+  by iApply (public_den_vars yA with "p1"). }
 set pub := λ y, bool_decide (y ∈ A).
 have [wk [gk ar]] := PreTerm.wf_dh_map _ (wf_unfold_term _) k nr.
 iSplit.
@@ -1437,7 +1427,7 @@ move: (PolyRestrict.restrict_mul_frac_num _ _ _ _ o1 od res).
 rewrite Frac.varE Frac.num_of_poly Poly.varE (comm Poly.mul).
 move=> /PolyRestrict.restrict_mul_mono [μ [μN eμ]].
 have nr1 : r1 ≠ Frac.zero := Frac.num_car_neq0 _ _ μN.
-have [w [wt Gw]] := gfactors_of_log nr1 μN.
+have [w [wt Gw]] := gfactors_of_log μN.
 have [Nw [_ [_ Elw]]] := gfactor_of_spec Gw.
 iDestruct (public_gfactor_parts wt with "p1") as "[_ pl]".
 have [Nl [Bl _]] := laurent_part_spec Nw.

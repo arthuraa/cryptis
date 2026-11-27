@@ -504,8 +504,8 @@ Lemma twp_hl_mk2 o pt1 pt2 E Ψ :
 Proof. by iIntros "HΨ"; wp_lam; wp_pures. Qed.
 
 Lemma twp_hl_frac_atom pt E Ψ :
-  Ψ (repr (PreTerm.fvar pt)) ⊢ WP frac_var (repr pt) @ E [{ Ψ }].
-Proof. by rewrite /PreTerm.fvar -Frac.varE; exact: twp_frac_var. Qed.
+  Ψ (repr (Frac.var pt)) ⊢ WP frac_var (repr pt) @ E [{ Ψ }].
+Proof. exact: twp_frac_var. Qed.
 
 Lemma twp_hl_frac_of pt E Ψ :
   Ψ (repr (PreTerm.frac_of pt)) ⊢ WP hl_frac_of (repr pt) @ E [{ Ψ }].

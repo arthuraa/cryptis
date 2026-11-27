@@ -201,7 +201,7 @@ apply: gall_nonces; apply: PreTerm.gall_dh_of.
 - move=> k nk; split.
     by move=> y yk; apply/elem_of_dh_nonces; exists k; split=> //; left.
   have [_ [gk _]] := PreTerm.wf_dh_map _ wpt k nk.
-  by apply/PreTerm.Is_true_negb; rewrite -PreTerm.is_gnon_freeE.
+  by apply/PreTerm.Is_true_negb.
 - move=> k y yk.
   have nk : PreTerm.dh_map pt !!! k ≠ Frac.zero.
     by move=> e; move: yk; rewrite e => /(Frac.vars_zero y).
@@ -346,8 +346,8 @@ Proof.
 move=> Nx Ng ne; apply: leibniz_equiv => x; split.
   exact: nonces_of_term_TExp_subseteq.
 have Ht : dh_map t = {[unfold_term t := Frac.one]}.
-  rewrite /dh_map PreTerm.dh_map_Ngnf //.
-  rewrite /PreTerm.is_gnon_free -is_exp_unfold -is_gmul_unfold.
+  rewrite /dh_map PreTerm.dh_map_Ndh //.
+  rewrite PreTerm.is_dh_exp_gmul -is_exp_unfold -is_gmul_unfold.
   by move: Nx Ng; case: (is_exp t); case: (is_gmul t).
 have re : PreTerm.frac_of (unfold_term e) ≠ Frac.zero.
   rewrite -unfold_frac_of => h; apply: ne.

@@ -580,11 +580,11 @@ Lemma mono_den_logs_Ngnf t :
   negb (is_exp t) → negb (is_gmul t) → mono_den_logs t.
 Proof.
 rewrite is_exp_unfold is_gmul_unfold => Ne Ng k.
-have G : negb (PreTerm.is_gnon_free (unfold_term t)).
-  rewrite /PreTerm.is_gnon_free; move: Ne Ng.
+have G : negb (PreTerm.is_dh (unfold_term t)).
+  rewrite PreTerm.is_dh_exp_gmul; move: Ne Ng.
   by case: (PreTerm.is_exp (unfold_term t));
     case: (PreTerm.is_gmul (unfold_term t)).
-rewrite (PreTerm.dh_map_Ngnf _ G) FMap.lookup_singleton.
+rewrite (PreTerm.dh_map_Ndh _ G) FMap.lookup_singleton.
 by case: bool_decide; [exact: Frac.mono_den_one|exact: Frac.mono_den_zero].
 Qed.
 
@@ -677,12 +677,12 @@ Proof.
 move=> Nb me.
 have Nb' : negb (PreTerm.is_gmul (unfold_term b)) by rewrite -is_gmul_unfold.
 have mb := PreTerm.mono_num_expo _ (wf_unfold_term b) Nb'.
-have ar : Frac.all_vars (λ x, negb (PreTerm.is_mod x))
+have ar : PreTerm.wf_frac
     (Frac.mul (PreTerm.frac_of (PreTerm.expo (unfold_term b))) (pre_frac e)).
-  apply: Frac.all_vars_mul; apply: PreTerm.all_vars_Nmod;
-    apply: PreTerm.frac_of_atoms => //; exact: PreTerm.wf_expo.
+  apply: Frac.all_vars_mul; apply: PreTerm.frac_of_atoms => //.
+  exact: PreTerm.wf_expo.
 have [N [B X]] := PreTerm.mk_exp_mono_num _ _
-  (PreTerm.base_Ngnf _ (wf_unfold_term b) Nb') ar (Frac.mono_num_mul _ _ mb me).
+  (PreTerm.base_Ndh _ (wf_unfold_term b) Nb') ar (Frac.mono_num_mul _ _ mb me).
 have U := unfold_TExp_Ngmul Nb me.
 split; first by rewrite is_gmul_unfold U.
 split; first by apply: unfold_term_inj; rewrite !unfold_base U B.
@@ -721,7 +721,7 @@ have Nt : negb (PreTerm.is_gmul (unfold_term t)) by rewrite -is_gmul_unfold G.
 apply: dh_map_inj; apply/FMap.fmap_eq => k.
 rewrite dh_map_TExp unfold_frac_of /dh_map unfold_base unfold_expo.
 rewrite (PreTerm.dh_map_Ngmul _ (wf_unfold_term t) Nt).
-rewrite (PreTerm.dh_map_Ngnf _ (PreTerm.base_Ngnf _ (wf_unfold_term t) Nt)).
+rewrite (PreTerm.dh_map_Ndh _ (PreTerm.base_Ndh _ (wf_unfold_term t) Nt)).
 rewrite !FMap.lookup_singleton.
 case: bool_decide; first exact: (left_id Frac.one Frac.mul).
 exact: Frac.mul_zero_l.
@@ -1034,7 +1034,10 @@ Qed.
 
 Lemma pre_frac_atom a :
   negb (is_mod a) → pre_frac a = Frac.of_poly (Poly.var (unfold_term a)).
-Proof. by move=> na; apply: PreTerm.frac_of_Nmod; rewrite -is_mod_unfold. Qed.
+Proof.
+by move=> na; rewrite -Frac.varE; apply: PreTerm.frac_of_Nmod;
+  rewrite -is_mod_unfold.
+Qed.
 
 Lemma frac_of_eq0 (u : term) : frac_of u = Frac.zero → u = TSum ∅.
 Proof. by move=> e; apply: frac_of_inj; rewrite e frac_of_TSum_empty. Qed.

@@ -81,12 +81,6 @@ where "x ∼ y" := (term_equiv x y).
 Definition fval t : frac := frac_of (normalize t).
 Definition gval t : dhmap := dh_map (normalize t).
 
-Definition atom_ok x := canon x ∧ is_mod x = false.
-Definition base_ok k := canon k ∧ is_dh k = false.
-Definition dh_ok (m : dhmap) : Prop :=
-  (∀ k, m !!! k ≠ Frac.zero → base_ok k) ∧
-  ∀ k, Frac.all_vars atom_ok (m !!! k).
-
 Section Values.
 
 Add Ring flat_frac_ring'' : (Frac.frac_ring_theory (T := pre_term)).
@@ -94,122 +88,75 @@ Add Field flat_frac_field : (Frac.frac_field_theory (T := pre_term)).
 
 Implicit Types (r : frac) (m : dhmap).
 
-Lemma normalize_props t : nf_props (normalize t).
-Proof. exact: canon_props (canon_normalize t). Qed.
-
 Lemma normalize_fvalE t : normalize t = mod_of_frac (fval t).
-Proof. by have [_ [e _]] := normalize_props t; rewrite /fval e. Qed.
+Proof. by rewrite /fval mod_of_frac_frac_of //; exact: wf_normalize. Qed.
 
 Lemma normalize_gvalE t : normalize t = dh_of (gval t).
-Proof. by have [_ [_ [e _]]] := normalize_props t; rewrite /gval e. Qed.
+Proof. by rewrite /gval dh_of_dh_map //; exact: wf_normalize. Qed.
 
-Lemma fval_ok t : Frac.all_vars atom_ok (fval t).
-Proof.
-by have [_ [_ [_ [h _]]]] := normalize_props t; apply/Frac.all_vars_iff.
-Qed.
+Lemma fval_ok t : wf_frac (fval t).
+Proof. exact: frac_of_atoms (wf_normalize t). Qed.
 
-Lemma gval_ok t : dh_ok (gval t).
-Proof.
-have [_ [_ [_ [_ [hk hv]]]]] := normalize_props t.
-by split=> // k; apply/Frac.all_vars_iff; exact: hv k.
-Qed.
-
-Lemma parse_frac_encode_ok r :
-  Frac.all_vars atom_ok r → frac_of (mod_of_frac r) = r.
-Proof.
-by move=> /Frac.all_vars_iff h; apply: frac_of_mod_of_frac_atoms => x /h [].
-Qed.
-
-Lemma parse_dh_encode_ok m : dh_ok m → dh_map (dh_of m) = m.
-Proof.
-move=> [hk hv]; apply: dh_map_dh_of_atoms; first by move=> k /hk [].
-by move=> k x /(proj1 (Frac.all_vars_iff _ _) (hv k)) [].
-Qed.
-
-Lemma dh_ok_empty : dh_ok ∅.
-Proof.
-by split=> k; rewrite FMap.lookup_empty //; exact: Frac.all_vars_zero.
-Qed.
-
-Lemma dh_ok_add m1 m2 : dh_ok m1 → dh_ok m2 → dh_ok (dh_add m1 m2).
-Proof.
-move=> [k1 v1] [k2 v2]; split=> k; rewrite lookup_dh_add.
-  case: (decide (m1 !!! k = Frac.zero)) => [z1|n1]; last by move=> _; apply: k1.
-  by rewrite z1 => n2; apply: k2 => z2; apply: n2; rewrite z2; ring.
-exact: Frac.all_vars_add.
-Qed.
-
-Lemma dh_ok_opp m : dh_ok m → dh_ok (dh_opp m).
-Proof.
-move=> [k1 v1]; split=> k; rewrite lookup_dh_opp; last exact: Frac.all_vars_opp.
-by move=> nk; apply: k1 => e; apply: nk; rewrite e Frac.opp_zero.
-Qed.
-
-Lemma dh_ok_scale r m :
-  Frac.all_vars atom_ok r → dh_ok m → dh_ok (dh_scale r m).
-Proof.
-move=> hr [k1 v1]; split=> k; rewrite lookup_dh_scale.
-  by move=> nk; apply: k1 => z; apply: nk; rewrite z Frac.mul_zero_l.
-exact: Frac.all_vars_mul.
-Qed.
+Lemma gval_ok t : wf_dh (gval t).
+Proof. exact: wf_dh_map (wf_normalize t). Qed.
 
 Lemma fval_zero : fval PZero = Frac.zero.
 Proof.
-rewrite /fval normalize_zero parse_frac_encode_ok //.
+rewrite /fval normalize_zero frac_of_mod_of_frac //.
 exact: Frac.all_vars_zero.
 Qed.
 
 Lemma fval_one : fval POne = Frac.one.
 Proof.
-rewrite /fval normalize_one parse_frac_encode_ok //.
+rewrite /fval normalize_one frac_of_mod_of_frac //.
 exact: Frac.all_vars_one.
 Qed.
 
 Lemma fval_opp t : fval (POpp t) = Frac.opp (fval t).
 Proof.
-rewrite /fval normalize_opp parse_frac_encode_ok //.
+rewrite /fval normalize_opp frac_of_mod_of_frac //.
 by apply: Frac.all_vars_opp; apply: fval_ok.
 Qed.
 
 Lemma fval_inv t : fval (PInv t) = Frac.inv (fval t).
 Proof.
-rewrite /fval normalize_inv parse_frac_encode_ok //.
+rewrite /fval normalize_inv frac_of_mod_of_frac //.
 by apply: Frac.all_vars_inv; apply: fval_ok.
 Qed.
 
 Lemma fval_add t1 t2 : fval (PAdd t1 t2) = Frac.add (fval t1) (fval t2).
 Proof.
-rewrite /fval normalize_add parse_frac_encode_ok //.
+rewrite /fval normalize_add frac_of_mod_of_frac //.
 by apply: Frac.all_vars_add; apply: fval_ok.
 Qed.
 
 Lemma fval_mul t1 t2 : fval (PMul t1 t2) = Frac.mul (fval t1) (fval t2).
 Proof.
-rewrite /fval normalize_mul parse_frac_encode_ok //.
+rewrite /fval normalize_mul frac_of_mod_of_frac //.
 by apply: Frac.all_vars_mul; apply: fval_ok.
 Qed.
 
 Lemma gval_gone : gval PGOne = ∅.
 Proof.
-rewrite /gval normalize_gone parse_dh_encode_ok //; exact: dh_ok_empty.
+rewrite /gval normalize_gone dh_map_dh_of //; exact: wf_dh_empty.
 Qed.
 
 Lemma gval_ginv t : gval (PGInv t) = dh_opp (gval t).
 Proof.
-rewrite /gval normalize_ginv parse_dh_encode_ok //.
-by apply: dh_ok_opp; apply: gval_ok.
+rewrite /gval normalize_ginv dh_map_dh_of //.
+by apply: wf_dh_opp; apply: gval_ok.
 Qed.
 
 Lemma gval_gmul t1 t2 : gval (PGMul t1 t2) = dh_add (gval t1) (gval t2).
 Proof.
-rewrite /gval normalize_gmul parse_dh_encode_ok //.
-by apply: dh_ok_add; apply: gval_ok.
+rewrite /gval normalize_gmul dh_map_dh_of //.
+by apply: wf_dh_add; apply: gval_ok.
 Qed.
 
 Lemma gval_exp t1 t2 : gval (PExp t1 t2) = dh_scale (fval t2) (gval t1).
 Proof.
-rewrite /gval normalize_exp parse_dh_encode_ok //.
-by apply: dh_ok_scale; [apply: fval_ok|apply: gval_ok].
+rewrite /gval normalize_exp dh_map_dh_of //.
+by apply: wf_dh_scale; [apply: fval_ok|apply: gval_ok].
 Qed.
 
 Lemma fval_sound x y : fval x = fval y → normalize x = normalize y.
@@ -403,20 +350,22 @@ Definition cq r : pre_term :=
   PMul (encode_poly (Frac.num r)) (PInv (encode_poly (Frac.den r))).
 
 Lemma fval_encode_poly p :
-  (∀ x, x ∈ Poly.vars p → atom_ok x) → fval (encode_poly p) = Frac.of_poly p.
+  (∀ x, x ∈ Poly.vars p → wf_atom x) → fval (encode_poly p) = Frac.of_poly p.
 Proof.
 move=> h.
-have hf : ∀ x, x ∈ Poly.vars p → is_mod x = false by move=> x /h [].
-rewrite /fval normalize_frac_of; first exact: frac_of_encode_poly.
-apply: fall_encode_poly => x xp; split=> //; last exact: hf.
-by split; [exact: (proj1 (canon_props _ (proj1 (h x xp))))|exact: hf].
+have hp : wf_frac (Frac.of_poly p).
+  apply: Frac.all_vars_of_poly => m x mp xm; apply: h.
+  by apply/Poly.elem_of_vars; exists m.
+have -> : encode_poly p = mod_of_frac (Frac.of_poly p).
+  by rewrite /mod_of_frac Frac.den_of_poly bool_decide_true // Frac.num_of_poly.
+by rewrite /fval normalize_wf ?frac_of_mod_of_frac //; exact: wf_mod_of_frac.
 Qed.
 
 Lemma fval_neq0 t : fval t ≠ Frac.zero → normalize t ≠ normalize PZero.
 Proof. by move=> nz e; apply: nz; rewrite /fval e -/(fval PZero) fval_zero. Qed.
 
 Lemma qp_unit p :
-  (∀ x, x ∈ Poly.vars p → atom_ok x) → p ≠ Poly.zero →
+  (∀ x, x ∈ Poly.vars p → wf_atom x) → p ≠ Poly.zero →
   PMul (encode_poly p) (PInv (encode_poly p)) ∼ POne.
 Proof.
 move=> h np; apply: E_mul_inv; apply: fval_neq0.
@@ -424,14 +373,14 @@ rewrite fval_encode_poly // => e; apply: np; apply: Frac.of_poly_inj.
 by rewrite e Frac.zeroE.
 Qed.
 
-Lemma den_unit r : Frac.all_vars atom_ok r →
+Lemma den_unit r : wf_frac r →
   PMul (encode_poly (Frac.den r)) (PInv (encode_poly (Frac.den r))) ∼ POne.
 Proof.
 move=> /Frac.all_vars_iff h; apply: qp_unit; last exact: Frac.den_neq0.
 by move=> x xd; apply: h; apply: vars_den.
 Qed.
 
-Lemma num_unit r : Frac.all_vars atom_ok r → r ≠ Frac.zero →
+Lemma num_unit r : wf_frac r → r ≠ Frac.zero →
   PMul (encode_poly (Frac.num r)) (PInv (encode_poly (Frac.num r))) ∼ POne.
 Proof.
 move=> /Frac.all_vars_iff h nr; apply: qp_unit; last exact: Frac.num_neq0.
@@ -469,7 +418,7 @@ by rewrite bw; ring.
 Qed.
 
 Lemma cq_make P Q a w :
-  Frac.all_vars atom_ok (Frac.make P Q) → Q ≠ Poly.zero →
+  wf_frac (Frac.make P Q) → Q ≠ Poly.zero →
   a ∼ encode_poly P → PMul (encode_poly Q) w ∼ POne →
   PMul a w ∼ cq (Frac.make P Q).
 Proof.
@@ -487,7 +436,7 @@ transitivity (PMul (PMul b1 (PInv b1)) (PMul b2 (PInv b2))); first ring.
 by rewrite u1 u2; ring.
 Qed.
 
-Lemma cq_add r1 r2 : Frac.all_vars atom_ok r1 → Frac.all_vars atom_ok r2 →
+Lemma cq_add r1 r2 : wf_frac r1 → wf_frac r2 →
   PAdd (cq r1) (cq r2) ∼ cq (Frac.add r1 r2).
 Proof.
 move=> h1 h2; have := Frac.all_vars_add _ _ _ h1 h2; rewrite Frac.addE => h3.
@@ -512,7 +461,7 @@ apply: cq_make => //.
 - by rewrite qp_mul; apply: inv_unit2.
 Qed.
 
-Lemma cq_mul r1 r2 : Frac.all_vars atom_ok r1 → Frac.all_vars atom_ok r2 →
+Lemma cq_mul r1 r2 : wf_frac r1 → wf_frac r2 →
   PMul (cq r1) (cq r2) ∼ cq (Frac.mul r1 r2).
 Proof.
 move=> h1 h2; have := Frac.all_vars_mul _ _ _ h1 h2; rewrite Frac.mulE => h3.
@@ -532,7 +481,7 @@ Qed.
 Lemma cq_opp r : POpp (cq r) ∼ cq (Frac.opp r).
 Proof. by rewrite /cq Frac.num_opp Frac.den_opp qp_opp; ring. Qed.
 
-Lemma fval_cq r : Frac.all_vars atom_ok r → fval (cq r) = r.
+Lemma fval_cq r : wf_frac r → fval (cq r) = r.
 Proof.
 move=> /Frac.all_vars_iff h.
 rewrite /cq fval_mul fval_inv !fval_encode_poly; first last.
@@ -541,7 +490,7 @@ rewrite /cq fval_mul fval_inv !fval_encode_poly; first last.
 by rewrite -Frac.divE -Frac.make_div Frac.make_num_den.
 Qed.
 
-Lemma cq_inv r : Frac.all_vars atom_ok r → PInv (cq r) ∼ cq (Frac.inv r).
+Lemma cq_inv r : wf_frac r → PInv (cq r) ∼ cq (Frac.inv r).
 Proof.
 move=> h; case: (decide (r = Frac.zero)) => [->|nr].
   rewrite Frac.inv_zero /cq Frac.num_zero Frac.den_zero qp_zero qp_one inv_one.
@@ -569,18 +518,18 @@ transitivity
 by rewrite uc; ring.
 Qed.
 
-Lemma ef_add r1 r2 : Frac.all_vars atom_ok r1 → Frac.all_vars atom_ok r2 →
+Lemma ef_add r1 r2 : wf_frac r1 → wf_frac r2 →
   PAdd (mod_of_frac r1) (mod_of_frac r2) ∼ mod_of_frac (Frac.add r1 r2).
 Proof. by move=> h1 h2; rewrite !encode_frac_cq; apply: cq_add. Qed.
 
-Lemma ef_mul r1 r2 : Frac.all_vars atom_ok r1 → Frac.all_vars atom_ok r2 →
+Lemma ef_mul r1 r2 : wf_frac r1 → wf_frac r2 →
   PMul (mod_of_frac r1) (mod_of_frac r2) ∼ mod_of_frac (Frac.mul r1 r2).
 Proof. by move=> h1 h2; rewrite !encode_frac_cq; apply: cq_mul. Qed.
 
 Lemma ef_opp r : POpp (mod_of_frac r) ∼ mod_of_frac (Frac.opp r).
 Proof. by rewrite !encode_frac_cq; apply: cq_opp. Qed.
 
-Lemma ef_inv r : Frac.all_vars atom_ok r →
+Lemma ef_inv r : wf_frac r →
   PInv (mod_of_frac r) ∼ mod_of_frac (Frac.inv r).
 Proof. by move=> h; rewrite !encode_frac_cq; apply: cq_inv. Qed.
 
@@ -590,8 +539,6 @@ End FieldClosure.
 
 Definition gprod_keys (K : list pre_term) (f : pre_term → frac) : pre_term :=
   PolyEval.fold_op PGOne PGMul ((λ k, PExp k (mod_of_frac (f k))) <$> K).
-
-Definition supp (m : dhmap) : list pre_term := (FMap.to_list m).*1.
 
 Section GroupClosure.
 
@@ -652,7 +599,7 @@ by rewrite (IH (λ k' kK, e k' (list_elem_of_further _ _ _ kK))).
 Qed.
 
 Lemma gprod_keys_mul K f g h :
-  (∀ k, Frac.all_vars atom_ok (f k)) → (∀ k, Frac.all_vars atom_ok (g k)) →
+  (∀ k, wf_frac (f k)) → (∀ k, wf_frac (g k)) →
   (∀ k, h k = Frac.add (f k) (g k)) →
   PGMul (gprod_keys K f) (gprod_keys K g) ∼ gprod_keys K h.
 Proof.
@@ -669,7 +616,7 @@ rewrite !gprod_keys_cons ginv_mul IH eh -ef_opp exp_opp; reflexivity.
 Qed.
 
 Lemma gprod_keys_exp K f r h :
-  (∀ k, Frac.all_vars atom_ok (f k)) → Frac.all_vars atom_ok r →
+  (∀ k, wf_frac (f k)) → wf_frac r →
   (∀ k, h k = Frac.mul (f k) r) →
   PExp (gprod_keys K f) (mod_of_frac r) ∼ gprod_keys K h.
 Proof.
@@ -678,9 +625,10 @@ rewrite !gprod_keys_cons E_exp_gmul IH E_exp_exp eh -(ef_mul _ _ (hf k) hr).
 reflexivity.
 Qed.
 
-Lemma encode_dh_gprod m : dh_of m ∼ gprod_keys (supp m) (λ k, m !!! k).
+Lemma encode_dh_gprod m :
+  dh_of m ∼ gprod_keys (FMap.to_list m).*1 (λ k, m !!! k).
 Proof.
-rewrite /dh_of /gprod_keys /supp fold_tree_foldr; last exact: gmul_one_r.
+rewrite /dh_of /gprod_keys fold_tree_foldr; last exact: gmul_one_r.
 rewrite /PolyEval.fold_op -list_fmap_compose.
 apply: foldr_equiv => [[k v]] /FMap.elem_of_to_list [kv nv].
 rewrite /mk_exp /=; case: bool_decide_reflect => [e|_].
@@ -688,76 +636,55 @@ rewrite /mk_exp /=; case: bool_decide_reflect => [e|_].
 by rewrite kv; reflexivity.
 Qed.
 
-Lemma elem_of_supp m k : k ∈ supp m ↔ m !!! k ≠ Frac.zero.
+(** Keys outside the support contribute [1G]. *)
+Lemma encode_dh_sub m (X : gset pre_term) f :
+  FMap.supp m ⊆ X → (∀ k, f k = m !!! k) →
+  dh_of m ∼ gprod_keys (elements X) f.
 Proof.
-rewrite /supp list_elem_of_fmap; split.
-- by move=> [[k' v] [/= -> /FMap.elem_of_to_list [-> ?]]].
-- move=> nk; exists (k, m !!! k); split=> //.
-  exact/FMap.elem_of_to_list.
-Qed.
-
-Lemma NoDup_supp m : NoDup (supp m).
-Proof.
-rewrite /supp; elim: (FMap.to_list_sorted m) => [|k l _ IH kl].
-  exact: NoDup_nil_2.
-apply: NoDup_cons_2 => // kl'.
-exact: (FMap.lexico_neq _ _ (proj1 (list.Forall_forall _ _) kl k kl') eq_refl).
-Qed.
-
-Lemma encode_dh_sub m K f :
-  NoDup K → (∀ k, m !!! k ≠ Frac.zero → k ∈ K) → (∀ k, f k = m !!! k) →
-  dh_of m ∼ gprod_keys K f.
-Proof.
-move=> nK hK ef.
-have [R eR] : ∃ R, K ≡ₚ supp m ++ R.
-  apply: submseteq_Permutation; apply: NoDup_submseteq; first exact: NoDup_supp.
-  by move=> k /elem_of_supp; apply: hK.
-have hR : ∀ k, k ∈ R → f k = Frac.zero.
-  move=> k kR; rewrite ef.
-  case: (decide (m !!! k = Frac.zero)) => // nk.
-  have : NoDup (supp m ++ R) by rewrite -eR.
-  move=> /NoDup_app [_ [/(_ k) hk _]].
-  by case: (hk (proj2 (elem_of_supp m k) nk) kR).
-have E1 : gprod_keys K f ∼ PGMul (gprod_keys (supp m) f) (gprod_keys R f).
+move=> sX ef.
+have hR : ∀ k, k ∈ X ∖ FMap.supp m → f k = Frac.zero.
+  move=> k /elem_of_difference [_ nk]; rewrite ef.
+  case: (decide (m !!! k = Frac.zero)) => // n.
+  by case: nk; apply/FMap.elem_of_supp.
+have E1 : gprod_keys (elements X) f ∼
+          PGMul (gprod_keys (elements (FMap.supp m)) f)
+                (gprod_keys (elements (X ∖ FMap.supp m)) f).
   rewrite /gprod_keys -PolyEval.fold_op_app -fmap_app.
-  apply: PolyEval.fold_op_perm; exact: fmap_Permutation.
-have E2 : gprod_keys R f ∼ PGOne.
+  apply: PolyEval.fold_op_perm; apply: fmap_Permutation.
+  rewrite -elements_disj_union; last set_solver.
+  by rewrite -union_difference_L.
+have E2 : gprod_keys (elements (X ∖ FMap.supp m)) f ∼ PGOne.
   rewrite /gprod_keys; apply: PolyEval.fold_op_unit.
-  move=> u /list_elem_of_fmap [k [-> kR]].
+  move=> u /list_elem_of_fmap [k [-> /elem_of_elements kR]].
   by rewrite hR // mod_of_frac_zero; apply: exp_zero.
 rewrite E1 E2 gmul_one_r encode_dh_gprod.
-rewrite (gprod_keys_ext _ f (λ k, m !!! k) (λ k _, ef k)); reflexivity.
+rewrite (gprod_keys_ext _ f (λ k, m !!! k) (λ k _, ef k)) /gprod_keys.
+apply: PolyEval.fold_op_perm; apply: fmap_Permutation.
+by symmetry; apply: FMap.elements_supp.
 Qed.
 
 Lemma encode_dh_zero m : (∀ k, m !!! k = Frac.zero) → PGOne ∼ dh_of m.
 Proof.
-move=> z; symmetry; apply: (encode_dh_sub m [] (λ k, m !!! k)) => //.
-- exact: NoDup_nil_2.
-- by move=> k; rewrite z.
+move=> z; symmetry.
+transitivity (gprod_keys (elements (∅ : gset pre_term)) (λ k, m !!! k)).
+  by apply: encode_dh_sub => // k /FMap.elem_of_supp nk; case: nk; apply: z.
+by rewrite elements_empty; reflexivity.
 Qed.
 
-Lemma ed_mul m1 m2 m3 : dh_ok m1 → dh_ok m2 →
+Lemma ed_mul m1 m2 m3 : wf_dh m1 → wf_dh m2 →
   (∀ k, m3 !!! k = Frac.add (m1 !!! k) (m2 !!! k)) →
   PGMul (dh_of m1) (dh_of m2) ∼ dh_of m3.
 Proof.
-move=> [_ h1] [_ h2] e3.
-have [K [nK eK]] : ∃ K, NoDup K ∧ ∀ k, k ∈ K ↔ k ∈ supp m1 ++ supp m2.
-  exists (remove_dups (supp m1 ++ supp m2)).
-  by split; [apply: NoDup_remove_dups|move=> k; apply: elem_of_remove_dups].
-have inK m : (∀ k, m !!! k ≠ Frac.zero →
-               m1 !!! k ≠ Frac.zero ∨ m2 !!! k ≠ Frac.zero) →
-    ∀ k, m !!! k ≠ Frac.zero → k ∈ K.
-  move=> hm k nk; rewrite eK elem_of_app !elem_of_supp.
-  exact: hm k nk.
+move=> w1 w2 e3; set X := FMap.supp m1 ∪ FMap.supp m2.
 transitivity
-  (PGMul (gprod_keys K (λ k, m1 !!! k)) (gprod_keys K (λ k, m2 !!! k))).
-  apply: E_PT2; apply: encode_dh_sub => //.
-  - by apply: inK => k nk; left.
-  - by apply: inK => k nk; right.
-transitivity (gprod_keys K (λ k, m3 !!! k)); first exact: gprod_keys_mul.
-symmetry; apply: encode_dh_sub => //.
-apply: inK => k nk.
-case: (decide (m1 !!! k = Frac.zero)) => [z1|n1]; last by left.
+  (PGMul (gprod_keys (elements X) (λ k, m1 !!! k))
+         (gprod_keys (elements X) (λ k, m2 !!! k))).
+  by apply: E_PT2; apply: encode_dh_sub => //; rewrite /X; set_solver.
+transitivity (gprod_keys (elements X) (λ k, m3 !!! k)).
+  by apply: gprod_keys_mul => k; [exact: wf_dh_atoms|exact: wf_dh_atoms|].
+symmetry; apply: encode_dh_sub => // k /FMap.elem_of_supp nk.
+rewrite /X elem_of_union !FMap.elem_of_supp.
+case: (decide (m1 !!! k = Frac.zero)) => [z1|]; last by left.
 by right => z2; apply: nk; rewrite e3 z1 z2; ring.
 Qed.
 
@@ -765,23 +692,21 @@ Lemma ed_inv m1 m3 : (∀ k, m3 !!! k = Frac.opp (m1 !!! k)) →
   PGInv (dh_of m1) ∼ dh_of m3.
 Proof.
 move=> e3.
-have sub : ∀ k, m3 !!! k ≠ Frac.zero → k ∈ supp m1.
-  move=> k nk; apply/elem_of_supp => z1; apply: nk.
-  by rewrite e3 z1 Frac.opp_zero.
-rewrite encode_dh_gprod (gprod_keys_inv _ _ (λ k, m3 !!! k) e3).
-by symmetry; apply: encode_dh_sub => //; apply: NoDup_supp.
+rewrite (encode_dh_sub m1 (FMap.supp m1) (λ k, m1 !!! k)) //.
+rewrite (gprod_keys_inv _ _ (λ k, m3 !!! k) e3).
+symmetry; apply: encode_dh_sub => // k /FMap.elem_of_supp nk.
+by apply/FMap.elem_of_supp => z1; apply: nk; rewrite e3 z1 Frac.opp_zero.
 Qed.
 
-Lemma ed_exp m1 r m3 : dh_ok m1 → Frac.all_vars atom_ok r →
+Lemma ed_exp m1 r m3 : wf_dh m1 → wf_frac r →
   (∀ k, m3 !!! k = Frac.mul (m1 !!! k) r) →
   PExp (dh_of m1) (mod_of_frac r) ∼ dh_of m3.
 Proof.
-move=> [_ h1] hr e3.
-have sub : ∀ k, m3 !!! k ≠ Frac.zero → k ∈ supp m1.
-  move=> k nk; apply/elem_of_supp => z1; apply: nk.
-  by rewrite e3 z1 Frac.mul_zero_l.
-rewrite encode_dh_gprod (gprod_keys_exp _ _ _ (λ k, m3 !!! k) h1 hr e3).
-by symmetry; apply: encode_dh_sub => //; apply: NoDup_supp.
+move=> w1 hr e3.
+rewrite (encode_dh_sub m1 (FMap.supp m1) (λ k, m1 !!! k)) //.
+rewrite (gprod_keys_exp _ _ _ (λ k, m3 !!! k) (λ k, wf_dh_atoms _ k w1) hr e3).
+symmetry; apply: encode_dh_sub => // k /FMap.elem_of_supp nk.
+by apply/FMap.elem_of_supp => z1; apply: nk; rewrite e3 z1 Frac.mul_zero_l.
 Qed.
 
 End GroupClosure.

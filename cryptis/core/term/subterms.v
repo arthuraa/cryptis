@@ -137,7 +137,7 @@ case: t IH Em Ex Eg => [n|ta tb|a'|kt tt|kk tt|tt|pt wf nf] IH Em Ex Eg.
 - rewrite nonces_of_termE' /= => H.
   apply: STHash; apply: (IH tt _ H).
   by rewrite [tsize (THash tt)]tsize_eq; lia.
-- have : PreTerm.is_exp pt || PreTerm.is_mod pt || PreTerm.is_gmul pt := nf.
+- have := nf; rewrite /is_non_free PreTerm.is_dh_exp_gmul.
   by move: Em Ex Eg; rewrite /is_mod /is_exp /is_gmul /= => -> -> ->.
 Qed.
 

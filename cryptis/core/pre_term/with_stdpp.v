@@ -96,6 +96,7 @@ Definition int_of_term_op2 (o : term_op2) : Z :=
   end.
 
 Instance repr_term_op2 : Repr term_op2 := λ o, #(int_of_term_op2 o).
+Arguments repr_term_op2 /.
 
 Section ValOfPreTerm.
 

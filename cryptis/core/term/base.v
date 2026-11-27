@@ -11,9 +11,7 @@ From cryptis.core Require Export pre_term.
 
 (* The "non-free" operations -- arithmetic on exponents, the group product
    and exponentiation -- are represented indirectly, by a well-formed pre-term
-   whose head is a field or group operation.  [is_non_free] recognises exactly
-   those heads; it lives in [PreTerm] alongside [is_gnon_free], which
-   recognises the group heads. *)
+   whose head is a field or group operation, which [is_non_free] recognises. *)
 Abbreviation is_non_free := PreTerm.is_non_free.
 
 Unset Elimination Schemes.
@@ -169,15 +167,12 @@ elim: pt => [o|o t IH|o t1 IH1 t2 IH2] w.
 - case N: (is_non_free (PreTerm.PT1 o t)).
     by rewrite (fold_predef_NonFree w ltac:(by rewrite N)).
   have wt : PreTerm.wf t.
-    by move: N; rewrite PreTerm.is_non_freeE => /orb_false_elim [M D];
-      apply/(PreTerm.wf_free1 _ _ M D).
+    by move: N => /orb_false_elim [M D]; apply/(PreTerm.wf_free1 _ _ M D).
   by case: o w N => [kt| | | |] w N //=; rewrite IH.
 - case N: (is_non_free (PreTerm.PT2 o t1 t2)).
     by rewrite (fold_predef_NonFree w ltac:(by rewrite N)).
   have [w1 w2] : PreTerm.wf t1 ∧ PreTerm.wf t2.
-    by move: N; rewrite PreTerm.is_non_freeE => /orb_false_elim [M D];
-      apply/(PreTerm.wf_free2 _ _ _ M D).
-  rewrite PreTerm.is_non_freeE in N.
+    by move: N => /orb_false_elim [M D]; apply/(PreTerm.wf_free2 _ _ _ M D).
   by case: o w N => [| | | | |] w N //=; rewrite IH1 // IH2.
 Qed.
 
@@ -528,7 +523,7 @@ Lemma frac_of_Nmod t : negb (is_mod t) → frac_of t = Frac.var t.
 Proof.
 rewrite is_mod_unfold => nt.
 apply: (Frac.map_inj unfold_term unfold_term_inj).
-by rewrite unfold_frac_of Frac.map_var PreTerm.frac_of_var.
+by rewrite unfold_frac_of Frac.map_var PreTerm.frac_of_Nmod.
 Qed.
 
 Lemma frac_of_TMul s : frac_of (TMul s) = Frac.sprod frac_of s.
