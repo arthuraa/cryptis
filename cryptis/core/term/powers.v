@@ -41,7 +41,7 @@ Definition den_unit u : term :=
 Definition laurent_part u := TExp u (den_unit u).
 
 Lemma expo_frac_atoms u :
-  Frac.all_vars (λ x, PreTerm.wf x && negb (PreTerm.is_mod x)) (expo_frac u).
+  PreTerm.wf_frac (expo_frac u).
 Proof.
 exact: PreTerm.frac_of_atoms (PreTerm.wf_expo _ (wf_unfold_term u)).
 Qed.
@@ -65,15 +65,18 @@ have E : unfold_term (TExp u e) =
          PreTerm.mk_exp (PreTerm.base (unfold_term u))
                         (Frac.mul (expo_frac u) (pre_frac e)).
   by rewrite unfold_TExp /PreTerm.exp (PreTerm.exp_frac_Ngmul _ _ wu Nu' nz).
-have gb := PreTerm.base_Ngnf _ wu Nu'.
-have [N [B X]] := PreTerm.mk_exp_mono_num _ _ gb mr.
+have gb := PreTerm.base_Ndh _ wu Nu'.
+have ar : PreTerm.wf_frac
+            (Frac.mul (expo_frac u) (pre_frac e)).
+  apply: Frac.all_vars_mul; first exact: expo_frac_atoms.
+  exact: PreTerm.frac_of_atoms (wf_unfold_term e).
+have [N [B X]] :=
+  PreTerm.mk_exp_mono_num _ _ gb ar mr.
 split; first by rewrite is_gmul_unfold E.
 split.
   apply: unfold_term_inj; rewrite !unfold_base E B.
   by [].
-rewrite /expo_frac E X; apply: PreTerm.frac_of_mod_of_frac_wf.
-apply: Frac.all_vars_mul; first exact: expo_frac_atoms.
-exact: PreTerm.frac_of_atoms (wf_unfold_term e).
+by rewrite /expo_frac E X; apply: PreTerm.frac_of_mod_of_frac.
 Qed.
 
 Lemma count_expo u y M :
@@ -89,7 +92,7 @@ exact: SMS.count_make.
 Qed.
 
 Lemma atoms_unit_part u :
-  Frac.all_vars (λ x, PreTerm.wf x && negb (PreTerm.is_mod x))
+  PreTerm.wf_frac
     (Frac.of_poly (PolyGcd.unit_part (Frac.den (expo_frac u)))).
 Proof.
 move=> m x; rewrite Frac.num_of_poly Frac.den_of_poly Poly.oneE Poly.car_mono.
@@ -105,7 +108,7 @@ Lemma pre_frac_den_unit u :
 Proof.
 rewrite /den_unit fold_termK;
   last exact: PreTerm.wf_mod_of_frac (@atoms_unit_part u).
-exact: PreTerm.frac_of_mod_of_frac_wf (@atoms_unit_part u).
+exact: PreTerm.frac_of_mod_of_frac (@atoms_unit_part u).
 Qed.
 
 Lemma den_unit_frac_neq0 u : frac_of (den_unit u) ≠ Frac.zero.
@@ -253,7 +256,7 @@ case=> [h|[x [-> h]]] nf.
     apply/andb_True; apply: (A M) fM; left.
     by rewrite eM Poly.car_mono; apply/SMS.elem_of_singleton.
   have ef : pre_frac (TInv f) = Frac.inv (Frac.var (unfold_term f)).
-    by rewrite pre_frac_TInv PreTerm.frac_of_var.
+    by rewrite pre_frac_TInv PreTerm.frac_of_Nmod.
   have [en ed] := Frac.mul_inv_var_canon (expo_frac u) M (unfold_term f) eM fM.
   have mr : Frac.mono_num (Frac.mul (expo_frac u) (pre_frac (TInv f))).
     by exists (M ∖ {[+ unfold_term f +]}); rewrite ef en.
@@ -269,7 +272,7 @@ case=> [h|[x [-> h]]] nf.
                  negb (PreTerm.is_mod (unfold_term x)).
     by apply/andb_True; apply: (A n) xn; right.
   have ef : pre_frac (TInv (TInv x)) = Frac.var (unfold_term x).
-    by rewrite TInvK PreTerm.frac_of_var.
+    by rewrite TInvK PreTerm.frac_of_Nmod.
   have [en [ed eD]] :=
     Frac.mul_var_content_canon (expo_frac u) M (unfold_term x) eM xc.
   have mr : Frac.mono_num (Frac.mul (expo_frac u) (pre_frac (TInv (TInv x)))).
@@ -295,7 +298,7 @@ have E1 : Frac.num (pre_frac (TInv (den_unit u))) = Poly.one.
     (Frac.inv_of_poly_canon _ nU (Frac.first_neg_unit_part (expo_frac u))).
 have E2 : Frac.num (pre_frac (TNonce a)) = Poly.var (unfold_term (TNonce a)).
   rewrite (PreTerm.frac_of_Nmod (unfold_term (TNonce a))) //.
-  by rewrite Frac.num_of_poly.
+  by rewrite Frac.varE Frac.num_of_poly.
 move=> e; rewrite e E2 Poly.varE Poly.oneE in E1.
 have ne : (∅ : MSet.mset PreTerm.pre_term) ≠ {[+ unfold_term (TNonce a) +]}.
   move=> /(f_equal (MSet.count (unfold_term (TNonce a)))).
@@ -309,7 +312,7 @@ Add Ring poly_ring_P : (Poly.poly_ring_theory (T := PreTerm.pre_term)).
 (** The power [k ^ (ν / D)] of a group factor, for a monomial [ν] of the
     numerator of the logarithm at [k] and its denominator [D]. *)
 Definition gfactor_of t u k ν :=
-  dh_map t !!! k ≠ Frac.zero ∧ ν ∈ Poly.car (Frac.num (dh_map t !!! k)) ∧
+  ν ∈ Poly.car (Frac.num (dh_map t !!! k)) ∧
   unfold_term u =
   PreTerm.mk_exp k (Frac.make (Poly.mono ν) (Frac.den (dh_map t !!! k))).
 
@@ -320,7 +323,7 @@ move=> /elem_of_gfactors_unfold.
 rewrite (PreTerm.gfactors_dh _ (wf_unfold_term t)) -/(dh_map t).
 move=> /PreTerm.elem_of_dh_factors [k [r [ν [kr [νr ue]]]]].
 have /FMap.elem_of_to_list [mk nr] := kr.
-exists k, ν; rewrite /gfactor_of mk; split=> //; split=> //.
+exists k, ν; rewrite /gfactor_of mk; split=> //.
 have nD := Frac.den_neq0 r.
 have [r' [n' [-> [Er' Hr']]]] := PreTerm.elem_of_exp_factor k _ ν _ nD ue.
 have [h [_ [en _]]] := Frac.make_mono_canon ν _ nD (Frac.den_first_neg r).
@@ -350,7 +353,7 @@ Lemma gfactor_of_spec t u k ν :
   {[k := Frac.make (Poly.mono ν)
            (Poly.mono (PolyGcd.content (Frac.den (dh_map t !!! k))))]}.
 Proof.
-case=> nr [νr eu].
+case=> νr eu; have nr := Frac.num_car_neq0 _ _ νr.
 set r := dh_map t !!! k in nr νr eu *.
 set D := Frac.den r in eu *.
 have [wk [gk ar]] := PreTerm.wf_dh_map _ (wf_unfold_term t) k nr.
@@ -359,17 +362,19 @@ have [h [hν [en eD]]] := Frac.make_mono_canon ν _ nD (Frac.den_first_neg r).
 set r' := Frac.make (Poly.mono ν) D in en eD eu *.
 have mr : Frac.mono_num r' by exists (ν ∖ h).
 have nr' : r' ≠ Frac.zero := Frac.mono_num_neq0 _ mr.
-have [Nk [Bk Xk]] := PreTerm.mk_exp_mono_num _ _ gk mr.
 have ar' := Frac.all_vars_make_mono _ _ _ νr ar.
+have [Nk [Bk Xk]] :=
+  PreTerm.mk_exp_mono_num _ _ gk ar' mr.
 have Nu : negb (is_gmul u) by rewrite is_gmul_unfold eu.
 have lu : expo_frac u = r'.
-  by rewrite /expo_frac eu Xk; exact: PreTerm.frac_of_mod_of_frac_wf.
+  by rewrite /expo_frac eu Xk; exact: PreTerm.frac_of_mod_of_frac.
 have UD : PolyGcd.unit_part (Frac.den r') = PolyGcd.unit_part D.
   rewrite -[in RHS]eD.
   rewrite (PolyGcd.unit_part_mul _ _ (PolyGcd.mono_neq0 _) (Frac.den_neq0 r')).
   by rewrite PolyGcd.unit_part_mono (left_id Poly.one Poly.mul).
 split=> //; split.
-  by rewrite /dh_map eu (PreTerm.dh_map_mk_exp _ _ gk nr').
+  by rewrite /dh_map eu
+    (PreTerm.dh_map_mk_exp _ _ gk ar' nr').
 split; first by rewrite pre_frac_den_unit lu UD.
 have [Nl [Bl [nl dl]]] := laurent_part_spec Nu.
 rewrite (dh_map_Ngmul Nl) Bl unfold_base eu Bk; congr {[_ := _]}.
@@ -386,10 +391,10 @@ have := proj1 (MSet.subseteq_count _ _) hν x; lia.
 Qed.
 
 Lemma gfactors_of_log t k ν :
-  dh_map t !!! k ≠ Frac.zero → ν ∈ Poly.car (Frac.num (dh_map t !!! k)) →
+  ν ∈ Poly.car (Frac.num (dh_map t !!! k)) →
   ∃ u, u ∈ gfactors t ∧ gfactor_of t u k ν.
 Proof.
-move=> nr νr.
+move=> νr; have nr := Frac.num_car_neq0 _ _ νr.
 have wd := PreTerm.wf_dh_map _ (wf_unfold_term t).
 have [wk [gk ar]] := wd k nr.
 set r := dh_map t !!! k in nr νr ar *.
@@ -409,7 +414,8 @@ split; last by rewrite /gfactor_of ez; do !split.
 apply/elem_of_gfactors_unfold.
 rewrite ez (PreTerm.gfactors_dh _ (wf_unfold_term t)) -/(dh_map t).
 apply/SMS.elem_of_count.
-have [Nk [Bk Xk]] := PreTerm.mk_exp_mono_num _ _ gk mr.
+have [Nk [Bk Xk]] :=
+  PreTerm.mk_exp_mono_num _ _ gk ar' mr.
 rewrite (PreTerm.count_dh_factors _ _ wd) Bk -/r /PreTerm.entry_factors.
 have Z0 : ∀ ν', ν' ∈ Poly.car (Frac.num r) → ν' ≠ ν →
     SMS.count (PreTerm.mk_exp k r') (PreTerm.exp_factor k D ν') = 0%Z.
@@ -417,12 +423,13 @@ have Z0 : ∀ ν', ν' ∈ Poly.car (Frac.num r) → ν' ≠ ν →
   rewrite bool_decide_eq_false_2 // => e.
   have [h' [_ [en' _]]] := Frac.make_mono_canon ν' _ nD fD.
   have mr'' : Frac.mono_num (Frac.make (Poly.mono ν') D) by exists (ν' ∖ h').
-  have [_ [_ X'']] := PreTerm.mk_exp_mono_num _ _ gk mr''.
   have ar'' := Frac.all_vars_make_mono _ _ _ ν'r ar.
+  have [_ [_ X'']] :=
+    PreTerm.mk_exp_mono_num _ _ gk ar'' mr''.
   have e' : r' = Frac.make (Poly.mono ν') D.
     have := f_equal (λ pt, PreTerm.frac_of (PreTerm.expo pt)) e; cbv beta.
-    rewrite Xk X'' (PreTerm.frac_of_mod_of_frac_wf _ ar').
-    by rewrite (PreTerm.frac_of_mod_of_frac_wf _ ar'').
+    rewrite Xk X'' (PreTerm.frac_of_mod_of_frac _ ar').
+    by rewrite (PreTerm.frac_of_mod_of_frac _ ar'').
   have := Frac.make_cross _ _ _ _ nD nD e'.
   rewrite ![(_ * D)%P](comm Poly.mul) => /(PolyGcd.mul_cancel_l _ _ _ nD) em.
   by apply: ne; apply: (Poly.mono_pm_inj ν' ν); left; rewrite em.
@@ -436,16 +443,17 @@ Lemma expo_frac_gfactor t u k ν :
   gfactor_of t u k ν →
   expo_frac u = Frac.make (Poly.mono ν) (Frac.den (dh_map t !!! k)).
 Proof.
-case=> nr [νr eu].
+case=> νr eu; have nr := Frac.num_car_neq0 _ _ νr.
 have [wk [gk ar]] := PreTerm.wf_dh_map _ (wf_unfold_term t) k nr.
 set r := dh_map t !!! k in nr νr eu ar *.
 have nD := Frac.den_neq0 r.
 have [h [_ [en _]]] := Frac.make_mono_canon ν _ nD (Frac.den_first_neg r).
 have mr : Frac.mono_num (Frac.make (Poly.mono ν) (Frac.den r)).
   by exists (ν ∖ h).
-have [_ [_ Xk]] := PreTerm.mk_exp_mono_num _ _ gk mr.
-rewrite /expo_frac eu Xk; apply: PreTerm.frac_of_mod_of_frac_wf.
-exact: Frac.all_vars_make_mono _ _ _ νr ar.
+have ar' := Frac.all_vars_make_mono _ _ _ νr ar.
+have [_ [_ Xk]] :=
+  PreTerm.mk_exp_mono_num _ _ gk ar' mr.
+by rewrite /expo_frac eu Xk; apply: PreTerm.frac_of_mod_of_frac.
 Qed.
 
 Lemma gfactor_content_neg t u k ν a :
@@ -455,7 +463,7 @@ Lemma gfactor_content_neg t u k ν a :
   unfold_term (fold_term a) = a.
 Proof.
 move=> G aD aν; have lu := expo_frac_gfactor G.
-case: G => nr [νr eu].
+case: G => νr eu; have nr := Frac.num_car_neq0 _ _ νr.
 have [wk [gk ar]] := PreTerm.wf_dh_map _ (wf_unfold_term t) k nr.
 set r := dh_map t !!! k in nr νr eu ar aD lu.
 have nD := Frac.den_neq0 r.
@@ -485,12 +493,9 @@ Lemma is_mod_den_unit u : is_mod (den_unit u).
 Proof.
 rewrite is_mod_unfold /den_unit fold_termK; last first.
   exact: PreTerm.wf_mod_of_frac (@atoms_unit_part u).
-rewrite /PreTerm.mod_of_frac /PreTerm.mod_of_lists.
-case E: (PreTerm.lone_atom _) => [x|] //.
-move/PreTerm.lone_atom_Some: E => E; exfalso.
-set Z := PolyGcd.unit_part (Frac.den (expo_frac u)) in E.
-have EZ : Frac.of_poly Z = Frac.of_poly (Poly.var x).
-  by apply: PreTerm.frac_lists_of_inj; rewrite PreTerm.frac_lists_of_var.
+set Z := PolyGcd.unit_part (Frac.den (expo_frac u)).
+case E: (PreTerm.is_mod (PreTerm.mod_of_frac (Frac.of_poly Z))) => //.
+exfalso; have [x [EZ _]] := PreTerm.mod_of_frac_Nmod _ E.
 have := PolyGcd.content_unit_part (Frac.den (expo_frac u)).
 rewrite -/Z (Frac.of_poly_inj _ _ EZ) Poly.varE PolyGcd.content_mono.
 by move=> e; apply: (MSet.empty_neq_singleton x); rewrite e.
@@ -515,7 +520,7 @@ case=> [h|[x [-> h]]] yf.
     apply/andb_True; apply: (A M) fM; left.
     by rewrite eM Poly.car_mono; apply/SMS.elem_of_singleton.
   have ef : pre_frac (TInv f) = Frac.inv (Frac.var (unfold_term f)).
-    by rewrite pre_frac_TInv PreTerm.frac_of_var.
+    by rewrite pre_frac_TInv PreTerm.frac_of_Nmod.
   have [en ed] := Frac.mul_inv_var_canon (expo_frac t) M (unfold_term f) eM fM.
   have mr : Frac.mono_num (Frac.mul (expo_frac t) (pre_frac (TInv f))).
     by exists (M ∖ {[+ unfold_term f +]}); rewrite ef en.
@@ -551,7 +556,7 @@ case=> [h|[x [-> h]]] yf.
                     negb (PreTerm.is_mod (unfold_term x)).
       by apply/andb_True; apply: (A n) xn; right.
     have ex' : pre_frac x = Frac.var (unfold_term x).
-      by rewrite PreTerm.frac_of_var.
+      by rewrite PreTerm.frac_of_Nmod.
     have [en [ed eD]] :=
       Frac.mul_var_content_canon (expo_frac t) M (unfold_term x) eM xc.
     have mr : Frac.mono_num (Frac.mul (expo_frac t) (pre_frac x)).
@@ -606,7 +611,7 @@ set Y := PolyRestrict.public_part pub μ ⊎ C'.
 have pp z m : z ∈ PolyRestrict.public_part pub m → z ∈ m.
   move=> /MSet.elem_of_count; rewrite PolyRestrict.count_public_part.
   by case: (pub z) => h; [apply/MSet.elem_of_count|lia].
-have AW : Frac.all_vars (λ x, PreTerm.wf x && negb (PreTerm.is_mod x))
+have AW : PreTerm.wf_frac
             (Frac.make (Poly.mono X) (Poly.mono Y)).
   apply: atoms_make_monos => y.
   case=> /MSet.elem_of_disj_union [/pp yp|yc]; apply: hw; tauto.
@@ -614,7 +619,7 @@ have wπ := PreTerm.wf_mod_of_frac _ AW.
 set π := fold_term
   (PreTerm.mod_of_frac (Frac.make (Poly.mono X) (Poly.mono Y))).
 have eπ : pre_frac π = Frac.make (Poly.mono X) (Poly.mono Y).
-  by rewrite /π fold_termK // PreTerm.frac_of_mod_of_frac_wf.
+  by rewrite /π fold_termK // PreTerm.frac_of_mod_of_frac.
 exists π; split.
   apply/laurent_unfold.
   apply/(PreTerm.laurent_frac_of _ (wf_unfold_term _)); rewrite eπ.
@@ -658,7 +663,7 @@ Lemma count_expo_gfactor t u k ν y :
                (PolyGcd.content (Frac.den (dh_map t !!! k)))))%Z.
 Proof.
 move=> G ny; have lu := expo_frac_gfactor G.
-case: G => nr [νr eu].
+case: G => νr eu; have nr := Frac.num_car_neq0 _ _ νr.
 set r := dh_map t !!! k in nr νr eu lu *.
 have nD := Frac.den_neq0 r.
 have [h [hν [en eD]]] := Frac.make_mono_canon ν _ nD (Frac.den_first_neg r).

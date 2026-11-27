@@ -956,10 +956,7 @@ have νN : ν ∈ Poly.car (Frac.num r).
   - exact/SMS.elem_of_count.
   - move=> m1 m2 e; apply: MSet.count_inj => z.
     by move/(f_equal (MSet.count z)): e; rewrite !MSet.count_disj_union; lia.
-have nr : r ≠ Frac.zero.
-  move=> e; move: νN; rewrite e Frac.num_zero Poly.car_zero.
-  by move/SMS.elem_of_count; rewrite SMS.count_empty.
-have [u [uK G]] := gfactors_of_log nr νN.
+have [u [uK G]] := gfactors_of_log νN.
 exists u; split; first exact: uK.
 have ca := count_expo_gfactor G (y := TNonce a) I.
 have cb := count_expo_gfactor G (y := TNonce p_b) I.
@@ -1048,10 +1045,7 @@ assert (νN : ν ∈ Poly.car (Frac.num r)).
   - case/MSet.elem_of_disj_union => /MSet.elem_of_singleton e.
     + exact: (hash_nonce x_b t_b (TExp g x_b) P_a e).
     + exact: (hash_nonce x_a t_b (TExp g x_b) P_a e).
-have nr : r ≠ Frac.zero.
-  move=> e; move: νN; rewrite e Frac.num_zero Poly.car_zero.
-  by move/SMS.elem_of_count; rewrite SMS.count_empty.
-have [u [uK G]] := gfactors_of_log nr νN.
+have [u [uK G]] := gfactors_of_log νN.
 exists u; split; first exact: uK.
 have c0 z : MSet.count z (PolyGcd.content (Frac.den r)) = 0.
   rewrite er Frac.den_of_poly Poly.oneE PolyGcd.content_mono.

@@ -800,9 +800,9 @@ Lemma all_vars_impl (P Q : T → Prop) f :
   (∀ x, P x → Q x) → all_vars P f → all_vars Q f.
 Proof. by move=> PQ h m x mr xm; apply: PQ; apply: h mr xm. Qed.
 
-Lemma all_vars_var (P : T → Prop) x : P x → all_vars P (of_poly (Poly.var x)).
+Lemma all_vars_var (P : T → Prop) x : P x → all_vars P (var x).
 Proof.
-move=> Px m y; rewrite car_num_var car_den_of_poly.
+move=> Px m y; rewrite varE car_num_var car_den_of_poly.
 move=> [/SMS.elem_of_singleton ->|/SMS.elem_of_singleton ->].
 - by move=> /MSet.elem_of_singleton ->.
 - by move=> ym; case: (MSet.not_elem_of_empty y).
@@ -834,6 +834,9 @@ Proof.
 move=> mf e; move: mf; rewrite e num_zero Poly.car_zero.
 by move=> /SMS.elem_of_count; rewrite SMS.count_empty.
 Qed.
+
+Lemma den_vars_neq0 f y : y ∈ Poly.vars (den f) → f ≠ zero.
+Proof. by move=> yf e; move: yf; rewrite e den_zero => /(Poly.vars_one y). Qed.
 
 Lemma num_car_exists f : f ≠ zero → ∃ m, m ∈ Poly.car (num f).
 Proof.

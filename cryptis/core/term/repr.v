@@ -48,7 +48,7 @@ Lemma val_of_pre_term_unfold t :
   val_of_pre_term (unfold_term t) = val_of_term t.
 Proof.
 rewrite [val_of_term]unlock.
-elim/term_ind': t => //=; try by move=> *; congruence.
+elim/term_ind': t => //=; congruence.
 Qed.
 
 End ValOfTerm.

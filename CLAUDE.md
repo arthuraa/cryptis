@@ -60,9 +60,9 @@ nix develop .#ai --command rocq-mcp                            # MCP server for 
 ## Building times
 
 Building is slow (Iris typechecking dominates). Foundational files — the
-`core/term/` layer (especially `base.v` and `algebra.v`), `core/public.v`,
-`cryptis.v` — cascade a rebuild through much of the tree, so an edit there costs
-minutes.
+`core/pre_term/` layer (especially `normalize.v`), the `core/term/` layer
+(especially `base.v` and `algebra.v`), `core/public.v`, `cryptis.v` — cascade a
+rebuild through much of the tree, so an edit there costs minutes.
 
 
 

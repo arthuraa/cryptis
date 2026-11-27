@@ -39,10 +39,8 @@ Definition factors pt : SMS.sms pre_term :=
 
 Definition count x pt : Z := SMS.count x (factors pt).
 
-Lemma sum_empty : sum ∅ = PTMod zero_lists.
-Proof.
-by rewrite /sum Frac.ssum_empty /mod_of_frac frac_lists_of_zero.
-Qed.
+Lemma sum_empty : sum ∅ = PT0 O0Zero.
+Proof. by rewrite /sum Frac.ssum_empty mod_of_frac_zero. Qed.
 
 Lemma all_vars_fprod_frac_of P (l : list pre_term) :
   (∀ x, x ∈ l → Frac.all_vars P (frac_of x)) →
@@ -95,14 +93,14 @@ Qed.
 Lemma frac_of_mul s :
   (∀ x, x ∈ s → wf x) → frac_of (mul s) = Frac.sprod frac_of s.
 Proof.
-move=> h; apply: frac_of_mod_of_frac_wf.
+move=> h; apply: frac_of_mod_of_frac.
 by apply: all_vars_sprod_frac_of => x /h; exact: frac_of_atoms.
 Qed.
 
 Lemma frac_of_sum s :
   (∀ x, x ∈ s → wf x) → frac_of (sum s) = Frac.ssum frac_of s.
 Proof.
-move=> h; apply: frac_of_mod_of_frac_wf.
+move=> h; apply: frac_of_mod_of_frac.
 by apply: all_vars_ssum_frac_of => x /h; exact: frac_of_atoms.
 Qed.
 
@@ -110,12 +108,9 @@ Lemma unit_factors_mod (p : poly) y : y ∈ unit_factors p → is_mod y.
 Proof.
 rewrite /unit_factors; case: bool_decide_reflect => [_|nu].
   by move=> h; case: (MSet.not_elem_of_empty _ h).
-move=> /MSet.elem_of_singleton ->; rewrite /mod_of_frac /mod_of_lists.
-case E: (lone_atom (frac_lists_of (Frac.of_poly (PolyGcd.unit_part p)))) => [z|]
-  //.
-exfalso.
-have Er : Frac.of_poly (PolyGcd.unit_part p) = Frac.of_poly (Poly.var z).
-  by apply: frac_lists_of_inj; rewrite frac_lists_of_var; apply/lone_atom_Some.
+move=> /MSet.elem_of_singleton ->.
+case E: (is_mod (mod_of_frac (Frac.of_poly (PolyGcd.unit_part p)))) => //.
+exfalso; have [z [Er _]] := mod_of_frac_Nmod _ E.
 have := PolyGcd.content_unit_part p.
 rewrite (Frac.of_poly_inj _ _ Er) Poly.varE PolyGcd.content_mono.
 move=> /(f_equal (MSet.count z)); rewrite MSet.count_singleton MSet.count_empty.
@@ -123,7 +118,7 @@ by rewrite bool_decide_eq_true_2.
 Qed.
 
 Lemma frac_of_unit_factors (p : poly) y :
-  (∀ m x, m ∈ Poly.car p → x ∈ m → negb (is_mod x)) →
+  (∀ m x, m ∈ Poly.car p → x ∈ m → wf_atom x) →
   y ∈ unit_factors p → frac_of y = Frac.of_poly (PolyGcd.unit_part p).
 Proof.
 move=> h; rewrite /unit_factors; case: bool_decide_reflect => [_|_].
@@ -167,7 +162,8 @@ Qed.
 Lemma factors_atom pt : negb (is_mod pt) → factors pt = {[+ pt +]}.
 Proof.
 move=> npt.
-rewrite /factors (frac_of_Nmod _ npt) Frac.num_of_poly Frac.den_of_poly.
+rewrite /factors (frac_of_Nmod _ npt) Frac.varE Frac.num_of_poly
+  Frac.den_of_poly.
 rewrite Poly.varE Poly.oneE !PolyGcd.content_mono /unit_factors.
 rewrite !PolyGcd.unit_part_mono bool_decide_eq_true_2 //.
 by rewrite !(right_id ∅ (⊎)) -SMS.singleton_make.
@@ -185,21 +181,18 @@ rewrite /count /factors SMS.count_make !MSet.count_disj_union !U
 lia.
 Qed.
 
-Lemma frac_of_var pt : negb (is_mod pt) → frac_of pt = Frac.var pt.
-Proof. by rewrite Frac.varE; exact: frac_of_Nmod. Qed.
-
 Lemma fprod_frac_of_var (l : list pre_term) :
   (∀ x, x ∈ l → negb (is_mod x)) →
   Frac.fprod (frac_of <$> l) = Frac.fprod (Frac.var <$> l).
 Proof.
 elim: l => [|x l IH] h; first by [].
 have hl : ∀ y, y ∈ l → negb (is_mod y) by move=> y yl; apply: h; right.
-rewrite !fmap_cons !Frac.fprod_cons (IH hl) frac_of_var //.
+rewrite !fmap_cons !Frac.fprod_cons (IH hl) frac_of_Nmod //.
 by apply: h; left.
 Qed.
 
 Lemma frac_of_unit_part (p : poly) :
-  (∀ m x, m ∈ Poly.car p → x ∈ m → negb (is_mod x)) →
+  (∀ m x, m ∈ Poly.car p → x ∈ m → wf_atom x) →
   frac_of (mod_of_frac (Frac.of_poly (PolyGcd.unit_part p))) =
   Frac.of_poly (PolyGcd.unit_part p).
 Proof.
@@ -209,7 +202,7 @@ exact: h m'p xm'.
 Qed.
 
 Lemma fprod_unit_factors (p : poly) :
-  (∀ m x, m ∈ Poly.car p → x ∈ m → negb (is_mod x)) →
+  (∀ m x, m ∈ Poly.car p → x ∈ m → wf_atom x) →
   Frac.fprod (frac_of <$> elements (unit_factors p)) =
   Frac.of_poly (PolyGcd.unit_part p).
 Proof.
@@ -221,25 +214,25 @@ by rewrite (comm Frac.mul) (left_id Frac.one Frac.mul).
 Qed.
 
 Lemma fprod_content_unit_factors (p : poly) :
-  (∀ m x, m ∈ Poly.car p → x ∈ m → negb (is_mod x)) →
+  (∀ m x, m ∈ Poly.car p → x ∈ m → wf_atom x) →
   Frac.fprod (frac_of <$> elements (PolyGcd.content p ⊎ unit_factors p)) =
   Frac.of_poly p.
 Proof.
 move=> h.
 have C : ∀ x, x ∈ elements (PolyGcd.content p) → negb (is_mod x).
   move=> x /MSet.elem_of_elements /(PolyGcd.elem_of_content x) [m [mp xm]].
-  exact: h mp xm.
+  by have /andb_True [] := h _ _ mp xm.
 rewrite Frac.fprod_disj_union fprod_unit_factors // (fprod_frac_of_var _ C).
 by rewrite Frac.fprod_var -Frac.of_poly_mul PolyGcd.content_unitK.
 Qed.
 
 Lemma frac_of_unit_factors_neq0 (p : poly) y :
-  (∀ m x, m ∈ Poly.car p → x ∈ m → negb (is_mod x)) → p ≠ Poly.zero →
+  (∀ m x, m ∈ Poly.car p → x ∈ m → wf_atom x) → p ≠ Poly.zero →
   y ∈ PolyGcd.content p ⊎ unit_factors p → frac_of y ≠ Frac.zero.
 Proof.
 move=> h np /MSet.elem_of_disj_union [].
 - move=> /(PolyGcd.elem_of_content y) [m [mp xm]].
-  rewrite frac_of_var; last exact: h mp xm.
+  rewrite frac_of_Nmod; last by have /andb_True [] := h _ _ mp xm.
   exact: Frac.var_neq0.
 - move=> yu; rewrite (frac_of_unit_factors p y h yu) Frac.zeroE
     => /Frac.of_poly_inj.
@@ -249,12 +242,10 @@ Qed.
 Lemma factorsK pt : wf pt → mul (factors pt) = pt.
 Proof.
 move=> wpt; have A := frac_of_atoms pt wpt.
-have hn : ∀ m x, m ∈ Poly.car (Frac.num (frac_of pt)) → x ∈ m →
-    negb (is_mod x).
-  by move=> m x mr xm; have /andb_True [] := A m x (or_introl mr) xm.
-have hd : ∀ m x, m ∈ Poly.car (Frac.den (frac_of pt)) → x ∈ m →
-    negb (is_mod x).
-  by move=> m x mr xm; have /andb_True [] := A m x (or_intror mr) xm.
+have hn : ∀ m x, m ∈ Poly.car (Frac.num (frac_of pt)) → x ∈ m → wf_atom x.
+  by move=> m x mr xm; exact: A m x (or_introl mr) xm.
+have hd : ∀ m x, m ∈ Poly.car (Frac.den (frac_of pt)) → x ∈ m → wf_atom x.
+  by move=> m x mr xm; exact: A m x (or_intror mr) xm.
 have S : ∀ x, x ∈ PolyGcd.content (Frac.num (frac_of pt)) ⊎
                   unit_factors (Frac.num (frac_of pt)) →
               x ∈ PolyGcd.content (Frac.den (frac_of pt)) ⊎
@@ -275,7 +266,7 @@ Proof.
 move=> h.
 have W : ∀ x, x ∈ s → wf x by move=> x /h [].
 have E : Frac.sprod frac_of s = Frac.sprod Frac.var s.
-  by apply: Frac.sprod_ext => x /h [_ nx]; exact: frac_of_var.
+  by apply: Frac.sprod_ext => x /h [_ nx]; exact: frac_of_Nmod.
 have [en ed] := Frac.sprod_var_canon s.
 rewrite /factors (frac_of_mul _ W) E en ed !PolyGcd.content_mono
   !unit_factors_mono.
@@ -301,7 +292,7 @@ Qed.
 
 Lemma atoms_atom pt x : negb (is_mod pt) → x ∈ atoms pt ↔ x = pt.
 Proof.
-move=> npt; rewrite elem_of_atoms (frac_of_Nmod _ npt).
+move=> npt; rewrite elem_of_atoms (frac_of_Nmod _ npt) Frac.varE.
 rewrite Frac.car_num_var Frac.car_den_of_poly; split.
 - case=> m [[/SMS.elem_of_singleton ->|/SMS.elem_of_singleton ->]].
     by move/MSet.elem_of_singleton.
@@ -330,7 +321,7 @@ move=> wpt; split.
 - move=> L; rewrite -(factorsK _ wpt).
   rewrite (frac_of_mul _ (λ x hx, wf_factors _ _ wpt hx)).
   have E : Frac.sprod frac_of (factors pt) = Frac.sprod Frac.var (factors pt).
-    by apply: Frac.sprod_ext => x /L; exact: frac_of_var.
+    by apply: Frac.sprod_ext => x /L; exact: frac_of_Nmod.
   rewrite E; exact: Frac.laurent_sprod_var.
 - move=> [n [Q [en eQ]]] x; rewrite /factors en eQ !PolyGcd.content_mono.
   rewrite !unit_factors_mono !(right_id ∅ (⊎)) => /SMS.elem_of_make hx.
@@ -385,7 +376,9 @@ have S (p : Poly.poly pre_term) :
   - have [m [mp um]] := PolyGcd.elem_of_content _ _ uc.
     move: yu; rewrite (atoms_atom _ _ (N m u mp um)) => ->.
     by apply/elem_of_atoms; exists m; split=> //; apply: hp.
-  - move: yu; rewrite /atoms (frac_of_unit_factors p u N uu).
+  - have W m x : m ∈ Poly.car p → x ∈ m → wf_atom x.
+      by move=> /hp mp xm; exact: A m x mp xm.
+    move: yu; rewrite /atoms (frac_of_unit_factors p u W uu).
     rewrite /Frac.vars elem_of_app !Poly.elem_of_vars.
     rewrite Frac.num_of_poly Frac.den_of_poly Poly.oneE Poly.car_mono.
     case=> -[m [mu ym]]; last first.

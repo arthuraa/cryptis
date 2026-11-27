@@ -42,9 +42,9 @@ Lemma pre_frac_log k t : pre_frac (log k t) = dh_map t !!! unfold_term k.
 Proof.
 rewrite /log fold_termK; last exact: wf_mod_of_frac_dh_map.
 case: (decide (dh_map t !!! unfold_term k = Frac.zero)) => [->|nz].
-  by apply: PreTerm.frac_of_mod_of_frac_wf; exact: Frac.all_vars_zero.
+  by apply: PreTerm.frac_of_mod_of_frac; exact: Frac.all_vars_zero.
 have [_ [_ ar]] := PreTerm.wf_dh_map _ (wf_unfold_term t) _ nz.
-exact: PreTerm.frac_of_mod_of_frac_wf.
+exact: PreTerm.frac_of_mod_of_frac.
 Qed.
 
 Lemma log_eq k t u : dh_map t !!! unfold_term k = pre_frac u → log k t = u.
@@ -136,7 +136,7 @@ have I c : h ∉ atoms c → Frac.all_vars (λ z, z ≠ y) (pre_frac c).
   apply/elem_of_atoms; exists z; split; last exact: zc.
   by rewrite ez /y unfold_termK.
 have eH : pre_frac h = Frac.of_poly (Poly.var y).
-  by apply: PreTerm.frac_of_Nmod; rewrite -is_mod_unfold.
+  by rewrite -Frac.varE; apply: PreTerm.frac_of_Nmod; rewrite -is_mod_unfold.
 have inj c d : pre_frac c = pre_frac d → c = d.
   move=> e; apply: frac_of_inj.
   apply: (Frac.map_inj unfold_term unfold_term_inj).
