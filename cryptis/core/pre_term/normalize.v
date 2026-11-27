@@ -29,6 +29,9 @@
     - [g ^ 1 = g]
     - [(u ⋅ v) ^ x = u^x ⋅ v^x]
 
+    [core/term/presentation.v] proves this characterization for terms
+    ([term_equiv_iff]).
+
     Bases are group atoms: neither group products nor exponentials.  A single
     base with logarithm [1] is the base itself.  An exponential ([is_exp]) is
     a single base whose logarithm has a single monomial with coefficient [1]

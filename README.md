@@ -9,7 +9,8 @@ In the `cryptis` directory you will find:
 - `lib/*, lib`: General additions to Iris, MathComp, and stdpp; polynomials,
   fractions and finite maps; Diffie–Hellman and HMQV key-exchange and
   ghost-state helpers; list-manipulation programs for HeapLang.
-- `core/*`, `cryptis`: Core Cryptis components: cryptographic terms, the
+- `core/*`, `cryptis`: Core Cryptis components: cryptographic terms and an
+  equational presentation of their algebra (`core/term/presentation.v`), the
   `public` predicate, encryption predicates, and term metadata.
 - `primitives/*`, `primitives`: HeapLang functions for manipulating
   cryptographic terms.  Definition of the attacker.

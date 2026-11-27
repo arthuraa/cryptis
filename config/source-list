@@ -7,6 +7,7 @@ cryptis/lib/mset.v
 cryptis/lib/sms.v
 cryptis/lib/poly.v
 cryptis/lib/poly_gcd.v
+cryptis/lib/poly_eval.v
 cryptis/lib/frac.v
 cryptis/lib/poly_restrict.v
 cryptis/lib/term_set.v
@@ -42,6 +43,7 @@ cryptis/core/term/nonces.v
 cryptis/core/term/subterms.v
 cryptis/core/term/spec.v
 cryptis/core/term.v
+cryptis/core/term/presentation.v
 cryptis/core/minted.v
 cryptis/core/term_meta.v
 cryptis/core/public.v
