@@ -44,55 +44,84 @@ Proof. move => wf. by rewrite [nonces_of_term]unlock (@fold_termK pt wf). Qed.
 
 (** ** Atoms *)
 
-Lemma elem_of_nonces_of_frac (n : PreTerm.pre_term → gset nonce) F x :
-  x ∈ nonces_of_frac n F ↔ ∃ y, PreTerm.in_lists F y ∧ x ∈ n y.
+(* The nonces of a pre-term are those of the leaves of its field ([fall]) or
+   group ([gall]) structure; for a normal form, these leaves are the atoms of
+   its reading. *)
+Lemma fall_nonces_sub (N : gset nonce) pt :
+  nonces_of_pre_term pt ⊆ N →
+  PreTerm.fall (λ y, nonces_of_pre_term y ⊆ N) pt.
 Proof.
-have M (ms : list (list PreTerm.pre_term)) :
-    x ∈ ⋃ map (λ m, ⋃ map n m) ms ↔ ∃ m y, m ∈ ms ∧ y ∈ m ∧ x ∈ n y.
-  rewrite elem_of_union_list; split.
-  - case=> X [/list_elem_of_fmap [m [-> mms]]] /elem_of_union_list.
-    by case=> Y [/list_elem_of_fmap [y [-> ym]] xy]; exists m, y.
-  - case=> m [y [mms [ym xy]]]; exists (⋃ map n m); split.
-      exact: (list_elem_of_fmap_2 (λ m, ⋃ map n m) ms m mms).
-    apply/elem_of_union_list; exists (n y); split=> //.
-    exact: (list_elem_of_fmap_2 n m y ym).
-rewrite /nonces_of_frac !elem_of_union !M; split.
-- by case=> [[[|]|]|] [m [y [hm [ym xy]]]]; exists y; split=> //; exists m;
-    split=> //; tauto.
-- case=> y [[m [hm ym]] xy].
-  by case: hm => [h|[h|[h|h]]];
-    [left; left; left|left; left; right|left; right|right]; exists m, y.
+elim: pt => [o|o t IH|o t1 IH1 t2 IH2] h.
+- by case: o h.
+- by case: o h => [kt| | | |] h //=; apply: IH.
+- case: o h => [| | | | |] h //=;
+    by split; [apply: IH1|apply: IH2]; set_solver.
 Qed.
 
-Lemma nonces_of_pre_term_mod_of_frac r :
-  nonces_of_pre_term (PreTerm.mod_of_frac r) ≡
-  ⋃ map nonces_of_pre_term (Frac.vars r).
+Lemma fall_nonces (N : gset nonce) pt :
+  PreTerm.fall (λ y, nonces_of_pre_term y ⊆ N) pt →
+  nonces_of_pre_term pt ⊆ N.
 Proof.
-move=> x; rewrite elem_of_union_list.
-have R : x ∈ nonces_of_pre_term (PreTerm.PTMod (PreTerm.frac_lists_of r)) ↔
-         ∃ X, X ∈ map nonces_of_pre_term (Frac.vars r) ∧ x ∈ X.
-  rewrite [nonces_of_pre_term _]/= elem_of_nonces_of_frac; split.
-  - case=> y [/PreTerm.in_lists_frac_lists_of yr xy]; exists
-      (nonces_of_pre_term y).
-    by split=> //; exact: (list_elem_of_fmap_2 nonces_of_pre_term _ y yr).
-  - case=> X [/list_elem_of_fmap [y [-> yr]] xy]; exists y.
-    by split=> //; exact/PreTerm.in_lists_frac_lists_of.
-rewrite /PreTerm.mod_of_frac /PreTerm.mod_of_lists.
-case E: (PreTerm.lone_atom (PreTerm.frac_lists_of r)) => [z|]; last exact: R.
-have Ez : PreTerm.frac_lists_of r = (([[z]], []), ([[]], [])).
-  exact/PreTerm.lone_atom_Some.
-rewrite -R Ez /= /nonces_of_frac /=.
-set_solver.
+elim: pt => [o|o t IH|o t1 IH1 t2 IH2].
+- by case: o => //= _; set_solver.
+- by case: o => //= /IH.
+- by case: o => //= [[/IH1 h1 /IH2 h2]|[/IH1 h1 /IH2 h2]]; set_solver.
+Qed.
+
+Lemma gall_nonces_sub (N : gset nonce) pt :
+  nonces_of_pre_term pt ⊆ N →
+  PreTerm.gall (λ y, nonces_of_pre_term y ⊆ N)
+    (λ y, nonces_of_pre_term y ⊆ N) pt.
+Proof.
+elim: pt => [o|o t IH|o t1 IH1 t2 IH2] h.
+- by case: o h.
+- by case: o h => [kt| | | |] h //=; apply: IH.
+- case: o h => [| | | | |] h //=; split.
+  + by apply: IH1; set_solver.
+  + by apply: IH2; set_solver.
+  + by apply: IH1; set_solver.
+  + by apply: fall_nonces_sub; set_solver.
+Qed.
+
+Lemma gall_nonces (N : gset nonce) pt :
+  PreTerm.gall (λ y, nonces_of_pre_term y ⊆ N)
+    (λ y, nonces_of_pre_term y ⊆ N) pt →
+  nonces_of_pre_term pt ⊆ N.
+Proof.
+elim: pt => [o|o t IH|o t1 IH1 t2 IH2].
+- by case: o => //= _; set_solver.
+- by case: o => //= /IH.
+- case: o => //=.
+  + by case=> /IH1 h1 /IH2 h2; set_solver.
+  + by case=> /IH1 h1 /fall_nonces h2; set_solver.
+Qed.
+
+Lemma nonces_of_pre_term_atoms pt :
+  PreTerm.wf pt →
+  nonces_of_pre_term pt ≡
+  ⋃ map nonces_of_pre_term (Frac.vars (PreTerm.frac_of pt)).
+Proof.
+move=> wpt; apply/set_equiv_subseteq; split.
+- rewrite -{1}(PreTerm.mod_of_frac_frac_of _ wpt).
+  apply: fall_nonces; apply: PreTerm.fall_mod_of_frac => x xr; split.
+    move=> y yx; apply/elem_of_union_list; exists (nonces_of_pre_term x).
+    by split=> //; exact: list_elem_of_fmap_2.
+  have := proj1 (Frac.all_vars_iff _ _) (PreTerm.frac_of_atoms _ wpt) x xr.
+  by move=> /andb_True [_ /PreTerm.Is_true_negb].
+- move=> y /elem_of_union_list [X [/list_elem_of_fmap [x [-> xr]] yx]].
+  have := PreTerm.fall_vars _ _
+    (@fall_nonces_sub (nonces_of_pre_term pt) pt ltac:(reflexivity)).
+  by move=> /Frac.all_vars_iff /(_ x xr); apply.
 Qed.
 
 Lemma nonces_of_term_atoms t :
   nonces_of_term t = ⋃ map nonces_of_term (atoms t).
 Proof.
 apply: leibniz_equiv.
-have E : nonces_of_term t =
-    nonces_of_pre_term (PreTerm.mod_of_frac (PreTerm.frac_of (unfold_term t))).
-  by rewrite [nonces_of_term]unlock PreTerm.mod_of_frac_frac_of.
-rewrite E nonces_of_pre_term_mod_of_frac => x; rewrite !elem_of_union_list.
+have E : nonces_of_term t ≡
+    ⋃ map nonces_of_pre_term (Frac.vars (PreTerm.frac_of (unfold_term t))).
+  by rewrite [nonces_of_term]unlock; apply: nonces_of_pre_term_atoms.
+rewrite E => x; rewrite !elem_of_union_list.
 split.
 - case=> X [/list_elem_of_fmap [y [-> yr]] xy].
   have [wy _] := PreTerm.atoms_wf _ _ (wf_unfold_term t) yr.
@@ -159,28 +188,29 @@ Lemma nonces_of_pre_term_dh pt x :
   PreTerm.wf pt →
   x ∈ nonces_of_pre_term pt ↔ x ∈ dh_nonces (PreTerm.dh_map pt).
 Proof.
-case: pt => [o|o t|o t1 t2|F|l] wpt; try by rewrite [PreTerm.dh_map _]/=
-  dh_nonces_atom.
-have El := PreTerm.entries_of_entries _ wpt.
-rewrite [PreTerm.dh_map _]/= [nonces_of_pre_term _]/= -{1}El.
-set m := PreTerm.of_entries l.
-rewrite elem_of_union_list elem_of_dh_nonces; split.
-- case=> X [/list_elem_of_fmap [[k F] [-> /PreTerm.elem_of_entries [-> nk]]]].
-  rewrite /= elem_of_union elem_of_nonces_of_frac => h.
-  exists k; split=> //; case: h
-    => [|[y [/PreTerm.in_lists_frac_lists_of yr xy]]]; first tauto.
-  by right; exists y.
-- case=> k [nk h].
-  exists (nonces_of_pre_term k ∪
-          nonces_of_frac nonces_of_pre_term (PreTerm.frac_lists_of (m !!! k))).
+move=> wpt; case D: (PreTerm.is_dh pt).
+  2: by rewrite (PreTerm.dh_map_base _ D) dh_nonces_atom.
+split; last first.
+  have [K V] := PreTerm.gall_ok _ _ _
+    (@gall_nonces_sub (nonces_of_pre_term pt) pt ltac:(reflexivity)).
+  move=> /elem_of_dh_nonces [k [nk [xk|[y [yr xy]]]]].
+    exact: K k nk x xk.
+  exact: (proj1 (Frac.all_vars_iff _ _) (V k) y yr x xy).
+move: x; rewrite -{1}(PreTerm.dh_of_dh_map _ wpt).
+apply: gall_nonces; apply: PreTerm.gall_dh_of.
+- move=> k nk; split.
+    by move=> y yk; apply/elem_of_dh_nonces; exists k; split=> //; left.
+  have [_ [gk _]] := PreTerm.wf_dh_map _ wpt k nk.
+  by apply/PreTerm.Is_true_negb; rewrite -PreTerm.is_gnon_freeE.
+- move=> k y yk.
+  have nk : PreTerm.dh_map pt !!! k ≠ Frac.zero.
+    by move=> e; move: yk; rewrite e => /(Frac.vars_zero y).
   split.
-    apply: (list_elem_of_fmap_2 (λ e : PreTerm.entry,
-      nonces_of_pre_term e.1 ∪ nonces_of_frac nonces_of_pre_term e.2)
-      _ (k, PreTerm.frac_lists_of (m !!! k))).
-    exact/PreTerm.elem_of_entries.
-  rewrite elem_of_union elem_of_nonces_of_frac.
-  case: h => [|[y [yr xy]]]; first tauto.
-  by right; exists y; split=> //; exact/PreTerm.in_lists_frac_lists_of.
+    move=> z zy; apply/elem_of_dh_nonces; exists k; split=> //.
+    by right; exists y.
+  have [_ [_ ak]] := PreTerm.wf_dh_map _ wpt k nk.
+  have := proj1 (Frac.all_vars_iff _ _) ak y yk.
+  by move=> /andb_True [_ /PreTerm.Is_true_negb].
 Qed.
 
 Lemma nonces_of_term_dh t x :
@@ -354,9 +384,8 @@ have EB : nonces_of_term (base t) =
 have EE : x ∈ nonces_of_term (expo t) ↔
     ∃ y, y ∈ Frac.vars (PreTerm.frac_of (PreTerm.expo (unfold_term t)))
          ∧ x ∈ nonces_of_pre_term y.
-  rewrite [nonces_of_term]unlock unfold_expo
-    -{1}(PreTerm.mod_of_frac_frac_of _ we).
-  rewrite nonces_of_pre_term_mod_of_frac elem_of_union_list; split.
+  rewrite [nonces_of_term]unlock unfold_expo (nonces_of_pre_term_atoms we).
+  rewrite elem_of_union_list; split.
   - by case=> X [/list_elem_of_fmap [y [-> yr]] xy]; exists y.
   - case=> y [yr xy]; exists (nonces_of_pre_term y); split=> //.
     exact: list_elem_of_fmap_2.

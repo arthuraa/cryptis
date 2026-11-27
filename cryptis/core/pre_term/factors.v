@@ -39,10 +39,8 @@ Definition factors pt : SMS.sms pre_term :=
 
 Definition count x pt : Z := SMS.count x (factors pt).
 
-Lemma sum_empty : sum ∅ = PTMod zero_lists.
-Proof.
-by rewrite /sum Frac.ssum_empty /mod_of_frac frac_lists_of_zero.
-Qed.
+Lemma sum_empty : sum ∅ = PT0 O0Zero.
+Proof. by rewrite /sum Frac.ssum_empty mod_of_frac_zero. Qed.
 
 Lemma all_vars_fprod_frac_of P (l : list pre_term) :
   (∀ x, x ∈ l → Frac.all_vars P (frac_of x)) →
@@ -110,12 +108,9 @@ Lemma unit_factors_mod (p : poly) y : y ∈ unit_factors p → is_mod y.
 Proof.
 rewrite /unit_factors; case: bool_decide_reflect => [_|nu].
   by move=> h; case: (MSet.not_elem_of_empty _ h).
-move=> /MSet.elem_of_singleton ->; rewrite /mod_of_frac /mod_of_lists.
-case E: (lone_atom (frac_lists_of (Frac.of_poly (PolyGcd.unit_part p)))) => [z|]
-  //.
-exfalso.
-have Er : Frac.of_poly (PolyGcd.unit_part p) = Frac.of_poly (Poly.var z).
-  by apply: frac_lists_of_inj; rewrite frac_lists_of_var; apply/lone_atom_Some.
+move=> /MSet.elem_of_singleton ->.
+case E: (is_mod (mod_of_frac (Frac.of_poly (PolyGcd.unit_part p)))) => //.
+exfalso; have [z [Er _]] := mod_of_frac_Nmod _ E.
 have := PolyGcd.content_unit_part p.
 rewrite (Frac.of_poly_inj _ _ Er) Poly.varE PolyGcd.content_mono.
 move=> /(f_equal (MSet.count z)); rewrite MSet.count_singleton MSet.count_empty.

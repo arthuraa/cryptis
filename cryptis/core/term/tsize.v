@@ -35,7 +35,10 @@ Lemma tsize_eq t :
   | THash t => S (tsize t)
   | TNonFree pt _ _ => PreTerm.tsize pt
   end.
-Proof. by case: t. Qed.
+Proof.
+by case: t => [n|t1 t2|a|kt t|k t|t|pt wpt npt] //;
+  rewrite /tsize PreTerm.tsize_free.
+Qed.
 
 Definition tsizeE := tsize_eq.
 
@@ -162,7 +165,9 @@ Lemma tsize_TInv_le x :
        (Frac.den (Frac.inv (PreTerm.frac_of (unfold_term x)))))).
 Proof.
 rewrite /tsize -(PreTerm.mod_of_frac_frac_of _ (wf_unfold_term (TInv x))).
-rewrite pre_frac_TInv; exact: PreTerm.tsize_mod_of_frac_le.
+rewrite pre_frac_TInv; apply: PreTerm.tsize_mod_of_frac_le.
+apply: Frac.all_vars_inv; apply: PreTerm.all_vars_Nmod.
+exact: PreTerm.frac_of_atoms.
 Qed.
 
 Lemma tsize_satoms f t :
@@ -196,12 +201,15 @@ have bound e' n' :
   move=> en.
   have nz : Frac.mul r (PreTerm.frac_of (unfold_term e')) ≠ Frac.zero.
     by apply: Frac.mono_num_neq0; exists n'.
+  have ar : Frac.all_vars (λ x, negb (PreTerm.is_mod x))
+              (Frac.mul r (PreTerm.frac_of (unfold_term e'))).
+    by apply: Frac.all_vars_mul; apply: PreTerm.all_vars_Nmod;
+      apply: PreTerm.frac_of_atoms.
   rewrite /tsize unfold_TExp /PreTerm.exp.
   rewrite (PreTerm.exp_frac_Ngmul _ _ (wf_unfold_term t) Nt' nz) unfold_base.
   rewrite -/r.
-  have := PreTerm.tsize_mk_exp_le (PreTerm.base (unfold_term t)) _ _ en.
-  have := PreTerm.tsize_mod_of_frac_le
-    (Frac.mul r (PreTerm.frac_of (unfold_term e'))).
+  have := PreTerm.tsize_mk_exp_le (PreTerm.base (unfold_term t)) _ _ ar en.
+  have := PreTerm.tsize_mod_of_frac_le _ ar.
   lia.
 case Me: (is_mod (expo t)); last first.
   have Ne : negb (is_mod (expo t)) by rewrite Me.
@@ -214,11 +222,9 @@ case Me: (is_mod (expo t)); last first.
 have Te : tsize (expo t) =
     S (PreTerm.poly_size (PreTerm.poly_lists_of (Frac.num r)) +
        PreTerm.poly_size (PreTerm.poly_lists_of (Frac.den r))).
-  move: Me we; rewrite /tsize /r is_mod_unfold unfold_expo.
-  case: (PreTerm.expo (unfold_term t)) => // F _.
-  rewrite PreTerm.wf_modE => /andb_True [/andb_True [_ cF] _].
-  rewrite PreTerm.tsize_mod [PreTerm.frac_of _]/=.
-  by rewrite -{1 2}(PreTerm.frac_lists_ofK _ cF).
+  have Me' : PreTerm.is_mod (PreTerm.expo (unfold_term t)).
+    by rewrite -unfold_expo -is_mod_unfold Me.
+  by rewrite /tsize unfold_expo (PreTerm.tsize_mod _ Me').
 have psM : PreTerm.poly_size (PreTerm.poly_lists_of (Frac.num r)) =
            PreTerm.mono_size (MSet.car M) by rewrite eM PreTerm.poly_size_monoE.
 rewrite Et Te psM; move: ft; rewrite /satoms elem_of_app list_elem_of_fmap.

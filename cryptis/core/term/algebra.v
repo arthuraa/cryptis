@@ -611,7 +611,7 @@ Qed.
 Lemma unfold_TMul_empty : unfold_term (TMul ∅) = PreTerm.one.
 Proof.
 rewrite unfold_TMul SMS.map_empty /PreTerm.mul Frac.sprod_empty.
-by rewrite /PreTerm.mod_of_frac PreTerm.frac_lists_of_one.
+exact: PreTerm.mod_of_frac_one.
 Qed.
 
 Lemma is_exp_Nmod t : is_exp t -> negb (is_mod t).
@@ -624,7 +624,10 @@ Lemma is_mod_Ngmul t : is_mod t -> negb (is_gmul t).
 Proof. rewrite is_mod_unfold is_gmul_unfold; exact: PreTerm.is_mod_Ngmul. Qed.
 
 Lemma is_mod_Nexp t : is_mod t -> negb (is_exp t).
-Proof. rewrite is_mod_unfold is_exp_unfold; by case: (unfold_term t). Qed.
+Proof.
+rewrite is_mod_unfold is_exp_unfold.
+by case: (unfold_term t) => [[]|[] ?|[] ? ?].
+Qed.
 
 Lemma is_gmul_Nexp t : is_gmul t → negb (is_exp t).
 Proof. rewrite is_gmul_unfold is_exp_unfold; exact: PreTerm.is_gmul_Nexp. Qed.
@@ -642,32 +645,13 @@ rewrite unfold_expo unfold_TMul_empty; exact: PreTerm.expo_expN.
 Qed.
 
 Lemma base_Nexp t : negb (is_exp (base t)).
-Proof.
-rewrite is_exp_unfold unfold_base.
-case E: (PreTerm.is_exp (unfold_term t)).
-  case: (PreTerm.is_expP (unfold_term t)) E (wf_unfold_term t)
-    => [b m d -> _ /PreTerm.wf_exp_entry [_ [gb _]]|//].
-  exact: PreTerm.Ngnf_Nexp gb.
-have nE : negb (PreTerm.is_exp (unfold_term t)) by rewrite E.
-by rewrite (PreTerm.base_expN _ nE).
-Qed.
+Proof. rewrite is_exp_unfold unfold_base; exact: PreTerm.base_Nexp. Qed.
 
 Lemma base_idem t : base (base t) = base t.
 Proof. exact: base_expN (base_Nexp t). Qed.
 
 Lemma is_gmul_base t : is_gmul (base t) = is_gmul t.
-Proof.
-rewrite !is_gmul_unfold unfold_base.
-case E: (PreTerm.is_exp (unfold_term t)).
-  case: (PreTerm.is_expP (unfold_term t)) E (wf_unfold_term t)
-    => [b m d -> _ /PreTerm.wf_exp_entry [_ [gb _]]|//].
-  move: (PreTerm.Ngnf_Ngmul _ gb)
-        (PreTerm.is_exp_Ngmul (PreTerm.PTDH [(b, (([m], []), d))]) I).
-  rewrite [PreTerm.base _]/=.
-  by case: (PreTerm.is_gmul b); case: (PreTerm.is_gmul (PreTerm.PTDH _)).
-have nE : negb (PreTerm.is_exp (unfold_term t)) by rewrite E.
-by rewrite (PreTerm.base_expN _ nE).
-Qed.
+Proof. rewrite !is_gmul_unfold unfold_base; exact: PreTerm.is_gmul_base. Qed.
 
 Lemma unfold_TExp_Ngmul b e :
   negb (is_gmul b) → mono_num e →
@@ -693,8 +677,12 @@ Proof.
 move=> Nb me.
 have Nb' : negb (PreTerm.is_gmul (unfold_term b)) by rewrite -is_gmul_unfold.
 have mb := PreTerm.mono_num_expo _ (wf_unfold_term b) Nb'.
+have ar : Frac.all_vars (λ x, negb (PreTerm.is_mod x))
+    (Frac.mul (PreTerm.frac_of (PreTerm.expo (unfold_term b))) (pre_frac e)).
+  apply: Frac.all_vars_mul; apply: PreTerm.all_vars_Nmod;
+    apply: PreTerm.frac_of_atoms => //; exact: PreTerm.wf_expo.
 have [N [B X]] := PreTerm.mk_exp_mono_num _ _
-  (PreTerm.base_Ngnf _ (wf_unfold_term b) Nb') (Frac.mono_num_mul _ _ mb me).
+  (PreTerm.base_Ngnf _ (wf_unfold_term b) Nb') ar (Frac.mono_num_mul _ _ mb me).
 have U := unfold_TExp_Ngmul Nb me.
 split; first by rewrite is_gmul_unfold U.
 split; first by apply: unfold_term_inj; rewrite !unfold_base U B.
